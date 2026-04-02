@@ -217,7 +217,7 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "def conv_bn(x, w, gamma, beta, stride=(1,1), padding='SAME'):\n" ++
       "    x = jax.lax.conv_general_dilated(x, w, stride, padding,\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
-      "    # Instance normalization (per-sample, spatial stats) — matches S4TF book\n" ++
+      "    # Instance normalization (per-sample, spatial stats)\n" ++
       "    mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
       "    var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
