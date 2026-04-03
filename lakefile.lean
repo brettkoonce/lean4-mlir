@@ -40,3 +40,6 @@ lean_exe «squeezenet» where
 
 lean_exe «vgg16bn» where
   root := `MainVgg
+
+lean_exe «vit-tiny» where
+  root := `MainVit

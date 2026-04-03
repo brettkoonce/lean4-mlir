@@ -34,6 +34,8 @@ inductive Layer where
   | mbConv (ic oc expand kSize stride nBlocks : Nat) (useSE : Bool)
   | mbConvV3 (ic oc expandCh kSize stride : Nat) (useSE useHSwish : Bool)
   | fireModule (ic squeeze expand1x1 expand3x3 : Nat)
+  | patchEmbed (ic dim patchSize nPatches : Nat)
+  | transformerEncoder (dim heads mlpDim nBlocks : Nat)
 deriving Repr
 
 structure NetSpec where
@@ -127,13 +129,24 @@ def Layer.nParams : Layer → Nat
       expandP + dwP + seP + projP
   | .fireModule ic sq e1 e3 =>
       (sq * ic + 2 * sq) + (e1 * sq + 2 * e1) + (e3 * sq * 9 + 2 * e3)
+  | .patchEmbed ic dim p nP =>
+      -- conv: dim * ic * p * p + dim (bias), cls_token: dim, pos_embed: (nP+1) * dim
+      dim * ic * p * p + dim + dim + (nP + 1) * dim
+  | .transformerEncoder dim _heads mlpDim nBlocks =>
+      let perBlock := 2 * dim                       -- LN1
+                    + 3 * (dim * dim + dim)          -- Q, K, V
+                    + (dim * dim + dim)              -- attn output proj
+                    + 2 * dim                        -- LN2
+                    + (dim * mlpDim + mlpDim)        -- MLP fc1
+                    + (mlpDim * dim + dim)           -- MLP fc2
+      nBlocks * perBlock + 2 * dim                   -- + final LN
   | _                        => 0
 
 def NetSpec.totalParams (s : NetSpec) : Nat :=
   s.layers.foldl (fun acc l => acc + l.nParams) 0
 
 def NetSpec.hasConv (s : NetSpec) : Bool :=
-  s.layers.any fun | .conv2d .. => true | .convBn .. => true | .residualBlock .. => true | .bottleneckBlock .. => true | .separableConv .. => true | .invertedResidual .. => true | .mbConv .. => true | .mbConvV3 .. => true | .fireModule .. => true | _ => false
+  s.layers.any fun | .conv2d .. => true | .convBn .. => true | .residualBlock .. => true | .bottleneckBlock .. => true | .separableConv .. => true | .invertedResidual .. => true | .mbConv .. => true | .mbConvV3 .. => true | .fireModule .. => true | .patchEmbed .. => true | _ => false
 
 def NetSpec.hasPool (s : NetSpec) : Bool :=
   s.layers.any fun | .maxPool .. => true | _ => false
@@ -159,6 +172,9 @@ def NetSpec.hasMbConv (s : NetSpec) : Bool :=
 def NetSpec.hasGlobalAvgPool (s : NetSpec) : Bool :=
   s.layers.any fun | .globalAvgPool => true | _ => false
 
+def NetSpec.hasTransformer (s : NetSpec) : Bool :=
+  s.layers.any fun | .transformerEncoder .. => true | _ => false
+
 def NetSpec.numClasses (s : NetSpec) : Nat :=
   match s.layers.getLast? with
   | some (.dense _ fo _) => fo
@@ -182,7 +198,9 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .mbConv ic oc e k s n useSE      => s!"MB{n}({ic}→{oc},e{e},k{k},s{s}" ++ (if useSE then ",SE" else "") ++ ")"
     | .mbConvV3 ic oc exp k s useSE hs => s!"V3({ic}→{oc},{exp},k{k},s{s}" ++
         (if useSE then ",SE" else "") ++ (if hs then ",HS" else ",RE") ++ ")"
-    | .fireModule ic sq e1 e3 => s!"Fire({ic}→{e1 + e3},sq{sq})")
+    | .fireModule ic sq e1 e3 => s!"Fire({ic}→{e1 + e3},sq{sq})"
+    | .patchEmbed ic dim p _     => s!"Patch({ic}→{dim},{p}x{p})"
+    | .transformerEncoder dim h _ n => s!"Trans({n}x[{h}h,{dim}])")
 
 -- ===========================================================================
 -- § 3  JAX Code Generator
@@ -495,6 +513,37 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
     code := code ++
       "def global_avg_pool(x):\n" ++
       "    return jnp.mean(x, axis=(2, 3))\n\n"
+  if spec.hasTransformer then
+    code := code ++
+      "def layer_norm(x, gamma, beta):\n" ++
+      "    mean = jnp.mean(x, axis=-1, keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=-1, keepdims=True)\n" ++
+      "    return (x - mean) / jnp.sqrt(var + 1e-5) * gamma + beta\n\n" ++
+      "def mhsa(x, wq, bq, wk, bk, wv, bv, wo, bo, n_heads):\n" ++
+      "    B, N, D = x.shape\n" ++
+      "    head_dim = D // n_heads\n" ++
+      "    q = (x @ wq.T + bq).reshape(B, N, n_heads, head_dim).transpose(0, 2, 1, 3)\n" ++
+      "    k = (x @ wk.T + bk).reshape(B, N, n_heads, head_dim).transpose(0, 2, 1, 3)\n" ++
+      "    v = (x @ wv.T + bv).reshape(B, N, n_heads, head_dim).transpose(0, 2, 1, 3)\n" ++
+      "    scale = jnp.sqrt(jnp.float32(head_dim))\n" ++
+      "    attn = jax.nn.softmax(q @ k.transpose(0, 1, 3, 2) / scale, axis=-1)\n" ++
+      "    out = (attn @ v).transpose(0, 2, 1, 3).reshape(B, N, D)\n" ++
+      "    return out @ wo.T + bo\n\n" ++
+      "def transformer_block(params, x, idx, n_heads):\n" ++
+      "    g1, b1 = params[idx]\n" ++
+      "    x2 = layer_norm(x, g1, b1)\n" ++
+      "    wq, bq = params[idx+1]\n" ++
+      "    wk, bk = params[idx+2]\n" ++
+      "    wv, bv = params[idx+3]\n" ++
+      "    wo, bo = params[idx+4]\n" ++
+      "    x = x + mhsa(x2, wq, bq, wk, bk, wv, bv, wo, bo, n_heads)\n" ++
+      "    g2, b2 = params[idx+5]\n" ++
+      "    x2 = layer_norm(x, g2, b2)\n" ++
+      "    w1, b1m = params[idx+6]\n" ++
+      "    w2, b2m = params[idx+7]\n" ++
+      "    h = jax.nn.gelu(x2 @ w1.T + b1m)\n" ++
+      "    x = x + (h @ w2.T + b2m)\n" ++
+      "    return x\n\n"
   code
 
 -- Helper: emit init code for one conv+BN param group (w, gamma, beta)
@@ -507,6 +556,19 @@ private def emitConvBnInit (comment : String) (ic oc k : Nat) (zeroGamma : Bool 
   "    params.append((random.uniform(k_, (" ++ toString oc ++ ", " ++ toString ic ++ ", " ++
     toString k ++ ", " ++ toString k ++ "), minval=-scale, maxval=scale),\n" ++
   "                   " ++ gammaInit ++ ", jnp.zeros(" ++ toString oc ++ ")))\n"
+
+-- Helper: emit init code for layer norm (gamma, beta)
+private def emitLNInit (comment : String) (dim : Nat) : String :=
+  "    # " ++ comment ++ "\n" ++
+  "    params.append((jnp.ones(" ++ toString dim ++ "), jnp.zeros(" ++ toString dim ++ ")))\n"
+
+-- Helper: emit init code for dense layer (weight, bias) with Xavier uniform
+private def emitDenseInit (comment : String) (fanIn fanOut : Nat) : String :=
+  "    # " ++ comment ++ "\n" ++
+  "    key, k_ = random.split(key)\n" ++
+  "    scale = jnp.sqrt(6.0 / " ++ toString (fanIn + fanOut) ++ ")\n" ++
+  "    params.append((random.uniform(k_, (" ++ toString fanOut ++ ", " ++ toString fanIn ++
+    "), minval=-scale, maxval=scale), jnp.zeros(" ++ toString fanOut ++ ")))\n"
 
 private def emitInitParams (spec : NetSpec) : String := Id.run do
   let mut code :=
@@ -672,6 +734,38 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
       code := code ++ emitConvBnInit s!"Fire squeeze {ic}→{sq}" ic sq 1
       code := code ++ emitConvBnInit s!"Fire expand1x1 {sq}→{e1}" sq e1 1
       code := code ++ emitConvBnInit s!"Fire expand3x3 {sq}→{e3}" sq e3 3
+    | .patchEmbed ic dim p _nP =>
+      -- Patch embedding conv
+      let fanOut := dim * p * p
+      code := code ++
+        "    # Patch embedding conv " ++ toString ic ++ "→" ++ toString dim ++ ", " ++ toString p ++ "x" ++ toString p ++ "\n" ++
+        "    key, k_ = random.split(key)\n" ++
+        "    scale = jnp.sqrt(6.0 / " ++ toString fanOut ++ ")\n" ++
+        "    params.append((random.uniform(k_, (" ++ toString dim ++ ", " ++ toString ic ++ ", " ++
+          toString p ++ ", " ++ toString p ++ "), minval=-scale, maxval=scale),\n" ++
+        "                   jnp.zeros(" ++ toString dim ++ ")))\n"
+      -- CLS token
+      code := code ++
+        "    # CLS token\n" ++
+        "    key, k_ = random.split(key)\n" ++
+        "    params.append((random.normal(k_, (" ++ toString dim ++ ",)) * 0.02,))\n"
+      -- Positional embeddings
+      let nTokens := _nP + 1
+      code := code ++
+        "    # Positional embedding (" ++ toString nTokens ++ ", " ++ toString dim ++ ")\n" ++
+        "    key, k_ = random.split(key)\n" ++
+        "    params.append((random.normal(k_, (" ++ toString nTokens ++ ", " ++ toString dim ++ ")) * 0.02,))\n"
+    | .transformerEncoder dim _heads mlpDim nBlocks =>
+      for i in List.range nBlocks do
+        code := code ++ emitLNInit s!"Transformer block {i} LN1" dim
+        code := code ++ emitDenseInit s!"Transformer block {i} Q {dim}→{dim}" dim dim
+        code := code ++ emitDenseInit s!"Transformer block {i} K {dim}→{dim}" dim dim
+        code := code ++ emitDenseInit s!"Transformer block {i} V {dim}→{dim}" dim dim
+        code := code ++ emitDenseInit s!"Transformer block {i} Out {dim}→{dim}" dim dim
+        code := code ++ emitLNInit s!"Transformer block {i} LN2" dim
+        code := code ++ emitDenseInit s!"Transformer block {i} MLP fc1 {dim}→{mlpDim}" dim mlpDim
+        code := code ++ emitDenseInit s!"Transformer block {i} MLP fc2 {mlpDim}→{dim}" mlpDim dim
+      code := code ++ emitLNInit "Final LN" dim
     | _ => pure ()
   code := code ++ "    return params\n\n"
   code
@@ -684,6 +778,9 @@ private def emitForward (spec : NetSpec) : String := Id.run do
     code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
       toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
   | some (.convBn ic _ _ _ _) =>
+    code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
+      toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
+  | some (.patchEmbed ic _ _ _) =>
     code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
       toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
   | _ => pure ()
@@ -783,6 +880,31 @@ private def emitForward (spec : NetSpec) : String := Id.run do
     | .fireModule _ _ _ _ =>
       code := code ++ "    x = fire_module(params, x, " ++ toString pidx ++ ")\n"
       pidx := pidx + 3
+    | .patchEmbed _ic dim p _nP =>
+      -- Conv patch embedding
+      code := code ++ "    x = jax.lax.conv_general_dilated(x, params[" ++ toString pidx ++ "][0], (" ++
+        toString p ++ "," ++ toString p ++ "), 'VALID',\n" ++
+        "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n"
+      code := code ++ "    x = x + params[" ++ toString pidx ++ "][1].reshape(1, -1, 1, 1)\n"
+      pidx := pidx + 1
+      -- Reshape from (B, dim, H', W') to (B, nPatches, dim)
+      code := code ++ "    x = x.reshape(x.shape[0], " ++ toString dim ++ ", -1).transpose(0, 2, 1)\n"
+      -- Prepend CLS token
+      code := code ++ "    cls = jnp.broadcast_to(params[" ++ toString pidx ++ "][0], (x.shape[0], 1, " ++ toString dim ++ "))\n"
+      pidx := pidx + 1
+      code := code ++ "    x = jnp.concatenate([cls, x], axis=1)\n"
+      -- Add positional embedding
+      code := code ++ "    x = x + params[" ++ toString pidx ++ "][0]\n"
+      pidx := pidx + 1
+    | .transformerEncoder _dim heads _mlpDim nBlocks =>
+      for _ in List.range nBlocks do
+        code := code ++ "    x = transformer_block(params, x, " ++ toString pidx ++ ", " ++ toString heads ++ ")\n"
+        pidx := pidx + 8
+      -- Final layer norm
+      code := code ++ "    x = layer_norm(x, params[" ++ toString pidx ++ "][0], params[" ++ toString pidx ++ "][1])\n"
+      pidx := pidx + 1
+      -- Extract CLS token
+      code := code ++ "    x = x[:, 0]\n"
   code := code ++ "    return x\n\n"
   code
 
