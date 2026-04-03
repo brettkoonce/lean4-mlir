@@ -498,14 +498,15 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
   code
 
 -- Helper: emit init code for one conv+BN param group (w, gamma, beta)
-private def emitConvBnInit (comment : String) (ic oc k : Nat) : String :=
+private def emitConvBnInit (comment : String) (ic oc k : Nat) (zeroGamma : Bool := false) : String :=
   let fanOut := oc * k * k
+  let gammaInit := if zeroGamma then "jnp.zeros(" ++ toString oc ++ ")" else "jnp.ones(" ++ toString oc ++ ")"
   "    # " ++ comment ++ "\n" ++
   "    key, k_ = random.split(key)\n" ++
   "    scale = jnp.sqrt(6.0 / " ++ toString fanOut ++ ")\n" ++
   "    params.append((random.uniform(k_, (" ++ toString oc ++ ", " ++ toString ic ++ ", " ++
     toString k ++ ", " ++ toString k ++ "), minval=-scale, maxval=scale),\n" ++
-  "                   jnp.ones(" ++ toString oc ++ "), jnp.zeros(" ++ toString oc ++ ")))\n"
+  "                   " ++ gammaInit ++ ", jnp.zeros(" ++ toString oc ++ ")))\n"
 
 private def emitInitParams (spec : NetSpec) : String := Id.run do
   let mut code :=
@@ -553,16 +554,16 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
       if needsProj then
         code := code ++ emitConvBnInit s!"Bottleneck ↓ 1x1 {ic}→{mid}" ic mid 1
         code := code ++ emitConvBnInit s!"Bottleneck ↓ 3x3 {mid}→{mid}" mid mid 3
-        code := code ++ emitConvBnInit s!"Bottleneck ↓ 1x1 {mid}→{oc}" mid oc 1
+        code := code ++ emitConvBnInit s!"Bottleneck ↓ 1x1 {mid}→{oc}" mid oc 1 (zeroGamma := true)
         code := code ++ emitConvBnInit s!"Bottleneck ↓ proj {ic}→{oc}" ic oc 1
       else
         code := code ++ emitConvBnInit s!"Bottleneck 1x1 {oc}→{mid}" oc mid 1
         code := code ++ emitConvBnInit s!"Bottleneck 3x3 {mid}→{mid}" mid mid 3
-        code := code ++ emitConvBnInit s!"Bottleneck 1x1 {mid}→{oc}" mid oc 1
+        code := code ++ emitConvBnInit s!"Bottleneck 1x1 {mid}→{oc}" mid oc 1 (zeroGamma := true)
       for _ in List.range (n - 1) do
         code := code ++ emitConvBnInit s!"Bottleneck 1x1 {oc}→{mid}" oc mid 1
         code := code ++ emitConvBnInit s!"Bottleneck 3x3 {mid}→{mid}" mid mid 3
-        code := code ++ emitConvBnInit s!"Bottleneck 1x1 {mid}→{oc}" mid oc 1
+        code := code ++ emitConvBnInit s!"Bottleneck 1x1 {mid}→{oc}" mid oc 1 (zeroGamma := true)
     | .separableConv ic oc _ =>
       -- Depthwise: weight shape (ic, 1, 3, 3), Kaiming init
       let dwFanOut := 9
