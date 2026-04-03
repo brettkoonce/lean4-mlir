@@ -34,3 +34,6 @@ lean_exe «efficientnet-b0» where
 
 lean_exe «mobilenet-v3» where
   root := `MainMobilenetV3
+
+lean_exe «squeezenet» where
+  root := `MainSqueezeNet

@@ -33,6 +33,7 @@ inductive Layer where
   | invertedResidual (ic oc expand stride nBlocks : Nat)
   | mbConv (ic oc expand kSize stride nBlocks : Nat) (useSE : Bool)
   | mbConvV3 (ic oc expandCh kSize stride : Nat) (useSE useHSwish : Bool)
+  | fireModule (ic squeeze expand1x1 expand3x3 : Nat)
 deriving Repr
 
 structure NetSpec where
@@ -124,19 +125,21 @@ def Layer.nParams : Layer → Nat
       let seP := if useSE then (seMid * expandCh + seMid) + (expandCh * seMid + expandCh) else 0
       let projP := oc * expandCh + 2 * oc
       expandP + dwP + seP + projP
+  | .fireModule ic sq e1 e3 =>
+      (sq * ic + 2 * sq) + (e1 * sq + 2 * e1) + (e3 * sq * 9 + 2 * e3)
   | _                        => 0
 
 def NetSpec.totalParams (s : NetSpec) : Nat :=
   s.layers.foldl (fun acc l => acc + l.nParams) 0
 
 def NetSpec.hasConv (s : NetSpec) : Bool :=
-  s.layers.any fun | .conv2d .. => true | .convBn .. => true | .residualBlock .. => true | .bottleneckBlock .. => true | .separableConv .. => true | .invertedResidual .. => true | .mbConv .. => true | .mbConvV3 .. => true | _ => false
+  s.layers.any fun | .conv2d .. => true | .convBn .. => true | .residualBlock .. => true | .bottleneckBlock .. => true | .separableConv .. => true | .invertedResidual .. => true | .mbConv .. => true | .mbConvV3 .. => true | .fireModule .. => true | _ => false
 
 def NetSpec.hasPool (s : NetSpec) : Bool :=
   s.layers.any fun | .maxPool .. => true | _ => false
 
 def NetSpec.hasBn (s : NetSpec) : Bool :=
-  s.layers.any fun | .convBn .. => true | .residualBlock .. => true | .bottleneckBlock .. => true | .separableConv .. => true | .invertedResidual .. => true | .mbConv .. => true | .mbConvV3 .. => true | _ => false
+  s.layers.any fun | .convBn .. => true | .residualBlock .. => true | .bottleneckBlock .. => true | .separableConv .. => true | .invertedResidual .. => true | .mbConv .. => true | .mbConvV3 .. => true | .fireModule .. => true | _ => false
 
 def NetSpec.hasResidual (s : NetSpec) : Bool :=
   s.layers.any fun | .residualBlock .. => true | .bottleneckBlock .. => true | _ => false
@@ -178,7 +181,8 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .invertedResidual ic oc e s n     => s!"IR{n}({ic}→{oc},e{e},s{s})"
     | .mbConv ic oc e k s n useSE      => s!"MB{n}({ic}→{oc},e{e},k{k},s{s}" ++ (if useSE then ",SE" else "") ++ ")"
     | .mbConvV3 ic oc exp k s useSE hs => s!"V3({ic}→{oc},{exp},k{k},s{s}" ++
-        (if useSE then ",SE" else "") ++ (if hs then ",HS" else ",RE") ++ ")")
+        (if useSE then ",SE" else "") ++ (if hs then ",HS" else ",RE") ++ ")"
+    | .fireModule ic sq e1 e3 => s!"Fire({ic}→{e1 + e3},sq{sq})")
 
 -- ===========================================================================
 -- § 3  JAX Code Generator
@@ -476,6 +480,17 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    if residual.shape == x.shape and stride == 1:\n" ++
       "        x = x + residual\n" ++
       "    return x\n\n"
+  if spec.layers.any fun | .fireModule .. => true | _ => false then
+    code := code ++
+      "def fire_module(params, x, idx):\n" ++
+      "    \"\"\"Fire: squeeze 1x1 → expand (1x1 || 3x3) → concat.\"\"\"\n" ++
+      "    sq = conv_bn(x, params[idx][0], params[idx][1], params[idx][2])\n" ++
+      "    sq = jax.nn.relu(sq)\n" ++
+      "    e1 = conv_bn(sq, params[idx+1][0], params[idx+1][1], params[idx+1][2])\n" ++
+      "    e1 = jax.nn.relu(e1)\n" ++
+      "    e3 = conv_bn(sq, params[idx+2][0], params[idx+2][1], params[idx+2][2])\n" ++
+      "    e3 = jax.nn.relu(e3)\n" ++
+      "    return jnp.concatenate([e1, e3], axis=1)\n\n"
   if spec.hasGlobalAvgPool then
     code := code ++
       "def global_avg_pool(x):\n" ++
@@ -652,6 +667,10 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
             ", 1, 1), minval=-scale, maxval=scale), jnp.zeros(" ++ toString expandCh ++ ")))\n"
       -- Project
       code := code ++ emitConvBnInit s!"V3 project {expandCh}→{oc}" expandCh oc 1
+    | .fireModule ic sq e1 e3 =>
+      code := code ++ emitConvBnInit s!"Fire squeeze {ic}→{sq}" ic sq 1
+      code := code ++ emitConvBnInit s!"Fire expand1x1 {sq}→{e1}" sq e1 1
+      code := code ++ emitConvBnInit s!"Fire expand3x3 {sq}→{e3}" sq e3 3
     | _ => pure ()
   code := code ++ "    return params\n\n"
   code
@@ -760,6 +779,9 @@ private def emitForward (spec : NetSpec) : String := Id.run do
         (if useSE then "True" else "False") ++ ", " ++
         (if useHSwish then "True" else "False") ++ ")\n"
       pidx := pidx + nP
+    | .fireModule _ _ _ _ =>
+      code := code ++ "    x = fire_module(params, x, " ++ toString pidx ++ ")\n"
+      pidx := pidx + 3
   code := code ++ "    return x\n\n"
   code
 
