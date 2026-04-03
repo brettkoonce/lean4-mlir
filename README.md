@@ -200,14 +200,41 @@ auto-dispatches to GPU when one is available:
 # CUDA (NVIDIA)
 pip install jax[cuda12]
 
-# ROCm (AMD)
-pip install jax[rocm]
+# ROCm (AMD) — requires manual install, see below
+pip install jax==0.9.2 jax-rocm7-plugin==0.9.1.post3 jax-rocm7-pjrt==0.9.1.post3
 ```
 
 **Multi-GPU data parallelism** is automatic via `jax.sharding`. The codegen
 emits a `Mesh` + `NamedSharding` setup that detects all available GPUs,
 replicates params, and shards batches across devices. No changes to the
 Lean spec or training config — just add more GPUs.
+
+### ROCm status (April 2026)
+
+Tested on 2× RX 7900 XTX (gfx1100) with ROCm 7.2.0:
+
+| Model | ROCm status | Notes |
+|-------|-------------|-------|
+| MNIST MLP | JIT works, 17s (1 GPU) | Matmul-only models work with JIT |
+| MNIST CNN | Eager only, 350s | Conv+flatten+dense backward segfaults under JIT |
+| CIFAR-10 CNN | Eager only, 659s | Same conv fusion bug |
+
+**Known issues:**
+- **Conv JIT segfault** — `jax.jit(value_and_grad(f))` segfaults when `f`
+  combines conv + reshape (flatten) + matmul in the backward pass. Affects all
+  conv models. Workaround: `JAX_DISABLE_JIT=1` (eager mode, ~15× slower).
+  See [`bug_report.md`](bug_report.md) for minimal reproducer and details.
+- **Multi-GPU sharding hangs** — `jax.sharding.Mesh` causes XLA compilation
+  to hang indefinitely on gfx1100. Workaround: `HIP_VISIBLE_DEVICES=0`.
+- **`jax[rocm]` pip extra broken** — JAX 0.9.2 defines `rocm7-local` but
+  requires `jax-rocm7-plugin==0.9.2.*` which doesn't exist yet. Install
+  the 0.9.1.post3 packages manually.
+
+Run conv models on ROCm with:
+```bash
+LLVM_PATH=/opt/rocm/llvm HIP_VISIBLE_DEVICES=0 JAX_DISABLE_JIT=1 \
+  .lake/build/bin/mnist-cnn
+```
 
 ## Why Lean → JAX?
 
