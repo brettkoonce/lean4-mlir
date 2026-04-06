@@ -17,12 +17,14 @@ private def inputFlatDim (spec : NetSpec) : Nat :=
   match spec.layers.head? with
   | some (.dense fanIn _ _) => fanIn
   | some (.conv2d ic _ _ _ _) => ic * spec.imageH * spec.imageW
+  | some (.convBn ic _ _ _ _) => ic * spec.imageH * spec.imageW
   | _ => spec.imageH * spec.imageW
 
-/-- If the first layer is conv, returns the NCHW input channels. -/
+/-- If the first layer is conv/convBn, returns the NCHW input channels. -/
 private def inputChannels (spec : NetSpec) : Option Nat :=
   match spec.layers.head? with
   | some (.conv2d ic _ _ _ _) => some ic
+  | some (.convBn ic _ _ _ _) => some ic
   | _ => none
 
 /-- Render tensor type: `tensor<128x1x28x28xf32>`. -/
@@ -32,6 +34,21 @@ private def tensorTy (dims : List Nat) : String :=
 /-- Sanitize a string for use as an MLIR identifier. -/
 private def sanitize (s : String) : String :=
   s.toLower.map (fun c => if c.isAlphanum then c else '_')
+
+/-- Standard conv attribute block (NCHW/OIHW). -/
+private def convAttrBlock (pad : Nat) : String :=
+  "        batch_group_count = 1 : i64,\n" ++
+  "        dimension_numbers = #stablehlo.conv<raw\n" ++
+  "          input_batch_dimension = 0, input_feature_dimension = 1,\n" ++
+  "          input_spatial_dimensions = [2, 3],\n" ++
+  "          kernel_output_feature_dimension = 0, kernel_input_feature_dimension = 1,\n" ++
+  "          kernel_spatial_dimensions = [2, 3],\n" ++
+  "          output_batch_dimension = 0, output_feature_dimension = 1,\n" ++
+  "          output_spatial_dimensions = [2, 3]>,\n" ++
+  "        feature_group_count = 1 : i64,\n" ++
+  s!"        padding = dense<[[{pad}, {pad}], [{pad}, {pad}]]> : tensor<2x2xi64>,\n" ++
+  "        rhs_dilation = array<i64: 1, 1>,\n" ++
+  "        window_strides = array<i64: 1, 1>\n"
 
 /-- Emit a conv2d + bias + activation block. Returns (code, newSSA, newShape).
     Assumes NCHW input [b, ic, h, w], produces [b, oc, h, w] for SAME padding,
@@ -74,13 +91,88 @@ private def emitConv2d (pidx : Nat) (curSSA : String) (curShape : List Nat)
     | .relu6 => return (s, s!"%cva{pidx}", newShape)
   | _ => return ("    // conv2d error: expected rank-4 NCHW shape\n", curSSA, curShape)
 
-/-- Emit max pool with window size × stride (assumes both equal).
-    Halves (or rounds-down divides) spatial dims. -/
-private def emitMaxPool (pos : Nat) (curSSA : String) (curShape : List Nat)
-    (size _stride : Nat) : String × String × List Nat := Id.run do
+/-- Emit convBn: conv (possibly strided) + instance norm + ReLU.
+    Params: W{pidx} (kernel), g{pidx} (gamma/scale), bt{pidx} (beta/shift).
+    Instance norm: per-sample, per-channel spatial statistics. -/
+private def emitConvBn (pidx : Nat) (curSSA : String) (curShape : List Nat)
+    (ic oc kSize stride : Nat) : String × String × List Nat := Id.run do
+  match curShape with
+  | [b, _, h, w] =>
+    let oH := if stride == 1 then h else (h + 1) / stride  -- SAME with stride
+    let oW := if stride == 1 then w else (w + 1) / stride
+    let newShape := [b, oc, oH, oW]
+    let pad := (kSize - 1) / 2
+    let mut s := ""
+    -- Conv
+    s := s ++ s!"    %cbn{pidx} = \"stablehlo.convolution\"({curSSA}, %W{pidx}) " ++ "{\n"
+    s := s ++ convAttrBlock pad
+    -- Override strides for strided conv
+    if stride != 1 then
+      -- Remove the default strides line and add strided version
+      s := s.replace "window_strides = array<i64: 1, 1>" s!"window_strides = array<i64: {stride}, {stride}>"
+    s := s ++ s!"      " ++ "}" ++ s!" : ({tensorTy curShape}, {tensorTy [oc, ic, kSize, kSize]}) -> {tensorTy newShape}\n"
+    -- Instance norm: mean over spatial dims
+    let spatialN := oH * oW
+    s := s ++ s!"    %cbn_zf{pidx} = stablehlo.constant dense<0.0> : tensor<f32>\n"
+    s := s ++ s!"    %cbn_sum{pidx} = stablehlo.reduce(%cbn{pidx} init: %cbn_zf{pidx}) applies stablehlo.add across dimensions = [2, 3]\n"
+    s := s ++ s!"          : ({tensorTy newShape}, tensor<f32>) -> {tensorTy [b, oc]}\n"
+    s := s ++ s!"    %cbn_N{pidx} = stablehlo.constant dense<{spatialN}.0> : {tensorTy [b, oc]}\n"
+    s := s ++ s!"    %cbn_mean{pidx} = stablehlo.divide %cbn_sum{pidx}, %cbn_N{pidx} : {tensorTy [b, oc]}\n"
+    s := s ++ s!"    %cbn_mean_bc{pidx} = stablehlo.broadcast_in_dim %cbn_mean{pidx}, dims = [0, 1] : ({tensorTy [b, oc]}) -> {tensorTy newShape}\n"
+    s := s ++ s!"    %cbn_diff{pidx} = stablehlo.subtract %cbn{pidx}, %cbn_mean_bc{pidx} : {tensorTy newShape}\n"
+    -- Variance
+    s := s ++ s!"    %cbn_sq{pidx} = stablehlo.multiply %cbn_diff{pidx}, %cbn_diff{pidx} : {tensorTy newShape}\n"
+    s := s ++ s!"    %cbn_vsum{pidx} = stablehlo.reduce(%cbn_sq{pidx} init: %cbn_zf{pidx}) applies stablehlo.add across dimensions = [2, 3]\n"
+    s := s ++ s!"          : ({tensorTy newShape}, tensor<f32>) -> {tensorTy [b, oc]}\n"
+    s := s ++ s!"    %cbn_var{pidx} = stablehlo.divide %cbn_vsum{pidx}, %cbn_N{pidx} : {tensorTy [b, oc]}\n"
+    -- Normalize
+    s := s ++ s!"    %cbn_eps{pidx} = stablehlo.constant dense<1.0e-5> : {tensorTy [b, oc]}\n"
+    s := s ++ s!"    %cbn_ve{pidx} = stablehlo.add %cbn_var{pidx}, %cbn_eps{pidx} : {tensorTy [b, oc]}\n"
+    s := s ++ s!"    %cbn_istd{pidx} = stablehlo.rsqrt %cbn_ve{pidx} : {tensorTy [b, oc]}\n"
+    s := s ++ s!"    %cbn_istd_bc{pidx} = stablehlo.broadcast_in_dim %cbn_istd{pidx}, dims = [0, 1] : ({tensorTy [b, oc]}) -> {tensorTy newShape}\n"
+    s := s ++ s!"    %cbn_norm{pidx} = stablehlo.multiply %cbn_diff{pidx}, %cbn_istd_bc{pidx} : {tensorTy newShape}\n"
+    -- Affine: gamma * norm + beta
+    s := s ++ s!"    %cbn_g_bc{pidx} = stablehlo.broadcast_in_dim %g{pidx}, dims = [1] : ({tensorTy [oc]}) -> {tensorTy newShape}\n"
+    s := s ++ s!"    %cbn_gn{pidx} = stablehlo.multiply %cbn_norm{pidx}, %cbn_g_bc{pidx} : {tensorTy newShape}\n"
+    s := s ++ s!"    %cbn_bt_bc{pidx} = stablehlo.broadcast_in_dim %bt{pidx}, dims = [1] : ({tensorTy [oc]}) -> {tensorTy newShape}\n"
+    let preSSA := s!"%cbn_pre{pidx}"
+    s := s ++ s!"    {preSSA} = stablehlo.add %cbn_gn{pidx}, %cbn_bt_bc{pidx} : {tensorTy newShape}\n"
+    -- ReLU
+    s := s ++ s!"    %cbn_z{pidx} = stablehlo.constant dense<0.0> : {tensorTy newShape}\n"
+    s := s ++ s!"    %cbn_out{pidx} = stablehlo.maximum {preSSA}, %cbn_z{pidx} : {tensorTy newShape}\n"
+    return (s, s!"%cbn_out{pidx}", newShape)
+  | _ => return ("    // convBn error\n", curSSA, curShape)
+
+/-- Emit global average pool: (b, c, h, w) -> (b, c). -/
+private def emitGlobalAvgPool (pos : Nat) (curSSA : String) (curShape : List Nat)
+    : String × String × List Nat := Id.run do
   match curShape with
   | [b, c, h, w] =>
-    let newShape := [b, c, h / size, w / size]
+    let newShape := [b, c]
+    let spatialN := h * w
+    let mut s := ""
+    s := s ++ s!"    %gap_zf{pos} = stablehlo.constant dense<0.0> : tensor<f32>\n"
+    s := s ++ s!"    %gap_sum{pos} = stablehlo.reduce({curSSA} init: %gap_zf{pos}) applies stablehlo.add across dimensions = [2, 3]\n"
+    s := s ++ s!"          : ({tensorTy curShape}, tensor<f32>) -> {tensorTy newShape}\n"
+    s := s ++ s!"    %gap_N{pos} = stablehlo.constant dense<{spatialN}.0> : {tensorTy newShape}\n"
+    s := s ++ s!"    %gap{pos} = stablehlo.divide %gap_sum{pos}, %gap_N{pos} : {tensorTy newShape}\n"
+    return (s, s!"%gap{pos}", newShape)
+  | _ => return ("    // globalAvgPool error\n", curSSA, curShape)
+
+/-- Emit max pool. Handles kSize != stride (e.g., 3/2 in ResNet). -/
+private def emitMaxPool (pos : Nat) (curSSA : String) (curShape : List Nat)
+    (size stride : Nat) : String × String × List Nat := Id.run do
+  match curShape with
+  | [b, c, h, w] =>
+    let oH := (h + stride - 1) / stride  -- ceil div for SAME
+    let oW := (w + stride - 1) / stride
+    let newShape := [b, c, oH, oW]
+    -- Padding for SAME pooling
+    let padNeeded := (oH - 1) * stride + size
+    let padH := if padNeeded > h then padNeeded - h else 0
+    let padW := if padNeeded > w then padNeeded - w else 0
+    let padH0 := padH / 2; let padH1 := padH - padH0
+    let padW0 := padW / 2; let padW1 := padW - padW0
     let mut s := ""
     s := s ++ s!"    %pli{pos} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
     s := s ++ s!"    %pl{pos} = \"stablehlo.reduce_window\"({curSSA}, %pli{pos}) (" ++ "{\n"
@@ -89,7 +181,11 @@ private def emitMaxPool (pos : Nat) (curSSA : String) (curShape : List Nat)
     s := s ++ s!"        \"stablehlo.return\"(%rwm{pos}) : (tensor<f32>) -> ()\n"
     s := s ++ "      }) " ++ "{\n"
     s := s ++ s!"        window_dimensions = array<i64: 1, 1, {size}, {size}>,\n"
-    s := s ++ s!"        window_strides    = array<i64: 1, 1, {size}, {size}>\n"
+    s := s ++ s!"        window_strides    = array<i64: 1, 1, {stride}, {stride}>"
+    -- Add padding if needed (for pool kSize 3 stride 2)
+    if padH > 0 || padW > 0 then
+      s := s ++ s!",\n        padding = dense<[[0, 0], [0, 0], [{padH0}, {padH1}], [{padW0}, {padW1}]]> : tensor<4x2xi64>"
+    s := s ++ "\n"
     s := s ++ s!"      " ++ "}" ++ s!" : ({tensorTy curShape}, tensor<f32>) -> {tensorTy newShape}\n"
     return (s, s!"%pl{pos}", newShape)
   | _ => return ("    // maxPool error: expected rank-4 input\n", curSSA, curShape)
@@ -164,6 +260,17 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat) : String := Id.ru
       code := code ++ snip
       curSSA := newSSA
       curShape := newShape
+    | .convBn ic oc kSize stride _ =>
+      let (snip, newSSA, newShape) := emitConvBn pidx curSSA curShape ic oc kSize stride
+      code := code ++ snip
+      curSSA := newSSA
+      curShape := newShape
+      pidx := pidx + 1
+    | .globalAvgPool =>
+      let (snip, newSSA, newShape) := emitGlobalAvgPool pos curSSA curShape
+      code := code ++ snip
+      curSSA := newSSA
+      curShape := newShape
     | _ =>
       code := code ++ "    // UNSUPPORTED LAYER\n"
     pos := pos + 1
@@ -195,9 +302,28 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
       | _ => pure ()
       outShape := curShape
       pidx := pidx + 1
-    | .maxPool size _ =>
+    | .convBn ic oc kSize stride _ =>
+      -- convBn has 3 params: W, gamma, beta
+      params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, ic, kSize, kSize]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
       match curShape with
-      | [b, c, h, w] => curShape := [b, c, h / size, w / size]
+      | [b, _, h, w] =>
+        let oH := if stride == 1 then h else (h + 1) / stride
+        let oW := if stride == 1 then w else (w + 1) / stride
+        curShape := [b, oc, oH, oW]
+      | _ => pure ()
+      outShape := curShape
+      pidx := pidx + 1
+    | .maxPool size stride =>
+      match curShape with
+      | [b, c, h, w] =>
+        let oH := (h + stride - 1) / stride
+        let oW := (w + stride - 1) / stride
+        curShape := [b, c, oH, oW]
+      | _ => pure ()
+      outShape := curShape
+    | .globalAvgPool =>
+      match curShape with
+      | [b, c, _, _] => curShape := [b, c]
       | _ => pure ()
       outShape := curShape
     | .flatten =>
@@ -236,21 +362,6 @@ instance : Inhabited FwdRec where
   default := { layer := .flatten, pidx := none, pos := 0,
                inputSSA := "", preActSSA := "", outputSSA := "",
                inShape := [], outShape := [] }
-
-/-- Standard conv attribute block (NCHW/OIHW). -/
-private def convAttrBlock (pad : Nat) : String :=
-  "        batch_group_count = 1 : i64,\n" ++
-  "        dimension_numbers = #stablehlo.conv<raw\n" ++
-  "          input_batch_dimension = 0, input_feature_dimension = 1,\n" ++
-  "          input_spatial_dimensions = [2, 3],\n" ++
-  "          kernel_output_feature_dimension = 0, kernel_input_feature_dimension = 1,\n" ++
-  "          kernel_spatial_dimensions = [2, 3],\n" ++
-  "          output_batch_dimension = 0, output_feature_dimension = 1,\n" ++
-  "          output_spatial_dimensions = [2, 3]>,\n" ++
-  "        feature_group_count = 1 : i64,\n" ++
-  s!"        padding = dense<[[{pad}, {pad}], [{pad}, {pad}]]> : tensor<2x2xi64>,\n" ++
-  "        rhs_dilation = array<i64: 1, 1>,\n" ++
-  "        window_strides = array<i64: 1, 1>\n"
 
 /-- Emit softmax cross-entropy loss + initial gradient d_logits.
     Input: logits SSA name, batch size. Output shape is always (B, 10). -/
