@@ -101,3 +101,21 @@ def lossIdx : Nat := nParams
 def shapesBA : ByteArray := packShapes paramShapes
 def xShape (batch : Nat) : ByteArray := packXShape #[batch, 784]
 end CnnLayout
+
+namespace CifarLayout
+def paramShapes : Array (Array Nat) := #[
+  #[32, 3, 3, 3], #[32],          -- conv0: 3→32
+  #[32, 32, 3, 3], #[32],         -- conv1: 32→32
+  #[64, 32, 3, 3], #[64],         -- conv2: 32→64
+  #[64, 64, 3, 3], #[64],         -- conv3: 64→64
+  #[4096, 512], #[512],           -- dense0
+  #[512, 512], #[512],            -- dense1
+  #[512, 10], #[10]               -- dense2
+]
+def nParams : Nat :=
+  32*3*3*3 + 32 + 32*32*3*3 + 32 + 64*32*3*3 + 64 + 64*64*3*3 + 64 +
+  4096*512 + 512 + 512*512 + 512 + 512*10 + 10  -- 2430018
+def lossIdx : Nat := nParams
+def shapesBA : ByteArray := packShapes paramShapes
+def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
+end CifarLayout

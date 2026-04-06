@@ -61,3 +61,59 @@ def sliceLabels (labels : ByteArray) (start count : Nat) : ByteArray := Id.run d
   return out
 
 end MnistData
+
+/-! CIFAR-10 binary loader.
+    Each batch file: 10000 records × (1 byte label + 3072 bytes pixels).
+    Pixels are CHW (R×1024, G×1024, B×1024). We normalize to [0,1]. -/
+
+namespace CifarData
+
+/-- Load one CIFAR-10 binary batch file. Returns (images: FloatArray, labels: ByteArray int32 LE, count). -/
+def loadBatch (path : String) : IO (FloatArray × ByteArray × Nat) := do
+  let raw ← IO.FS.readBinFile path
+  let recordSize := 3073  -- 1 label + 3072 pixels
+  let n := raw.size / recordSize
+  let mut images : FloatArray := .empty
+  let mut labels : ByteArray := .empty
+  for i in [:n] do
+    let off := i * recordSize
+    -- label: 1 byte → int32 LE
+    let lbl := raw[off]!
+    labels := labels.push lbl
+    labels := labels.push 0
+    labels := labels.push 0
+    labels := labels.push 0
+    -- pixels: 3072 bytes → float32 normalized
+    for j in [:3072] do
+      images := images.push (raw[off + 1 + j]!.toNat.toFloat / 255.0)
+  return (images, labels, n)
+
+/-- Load all 5 training batches + 1 test batch. Returns (trainImg, trainLbl, nTrain, testImg, testLbl, nTest). -/
+def loadAll (dir : String) : IO (FloatArray × ByteArray × Nat × FloatArray × ByteArray × Nat) := do
+  let mut trainImg : FloatArray := .empty
+  let mut trainLbl : ByteArray := .empty
+  let mut nTrain : Nat := 0
+  for i in [1:6] do
+    let (img, lbl, n) ← loadBatch (dir ++ "/data_batch_" ++ toString i ++ ".bin")
+    -- Push element by element (no toList to avoid GC pressure on large arrays)
+    for j in [:img.size] do trainImg := trainImg.push img[j]!
+    trainLbl := trainLbl.append lbl
+    nTrain := nTrain + n
+  let (testImg, testLbl, nTest) ← loadBatch (dir ++ "/test_batch.bin")
+  return (trainImg, trainLbl, nTrain, testImg, testLbl, nTest)
+
+/-- Slice images: batch of `count` images each 3072 floats. -/
+def sliceImages (images : FloatArray) (start count : Nat) : FloatArray := Id.run do
+  let mut out : FloatArray := .empty
+  for i in [:count * 3072] do
+    out := out.push images[start * 3072 + i]!
+  return out
+
+/-- Slice labels from int32 LE ByteArray. -/
+def sliceLabels (labels : ByteArray) (start count : Nat) : ByteArray := Id.run do
+  let mut out : ByteArray := .empty
+  for i in [:count * 4] do
+    out := out.push labels[start * 4 + i]!
+  return out
+
+end CifarData
