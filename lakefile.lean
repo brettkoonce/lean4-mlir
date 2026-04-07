@@ -105,6 +105,12 @@ lean_exe «test-train» where
     "-Wl,-rpath,/home/skoonce/lean/claude_max/lean4-jax/ffi",
     "-Wl,--allow-shlib-undefined"]
 
+lean_exe «mnist-cnn-train» where
+  root := `MainMnistCnnTrain
+  moreLinkArgs := #["-L", "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/ffi",
+    "-liree_ffi", "-Wl,-rpath,/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/ffi",
+    "-Wl,--allow-shlib-undefined"]
+
 lean_exe «test-iree-load» where
   root := `TestIreeLoad
   moreLinkArgs := #["-L", "/home/skoonce/lean/claude_max/lean4-jax/ffi",
@@ -146,14 +152,6 @@ lean_exe «cifar-cnn-train-f32» where
 
 lean_exe «cifar-cnn-train» where
   root := `MainCifarTrain
-  moreLinkArgs := #[
-    "-L/home/skoonce/lean/claude_max/lean4-jax/ffi",
-    "-liree_ffi",
-    "-Wl,-rpath,/home/skoonce/lean/claude_max/lean4-jax/ffi",
-    "-Wl,--allow-shlib-undefined"]
-
-lean_exe «mnist-cnn-train» where
-  root := `MainCnnTrain
   moreLinkArgs := #[
     "-L/home/skoonce/lean/claude_max/lean4-jax/ffi",
     "-liree_ffi",
