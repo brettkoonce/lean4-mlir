@@ -167,3 +167,33 @@ def main (args : List String) : IO Unit := do
     let t1 ← IO.monoMsNow
     let avgLoss := epochLoss / bpE.toFloat
     IO.eprintln s!"Epoch {epoch+1}/{epochs}: loss={avgLoss} lr={lr} ({t1-t0}ms)"
+
+    -- Eval on val set every 10 epochs
+    if (epoch + 1) % 10 == 0 || epoch + 1 == epochs then
+      let fwdVmfb := ".lake/build/resnet34_fwd.vmfb"
+      let fwdExists ← System.FilePath.pathExists fwdVmfb
+      if fwdExists then
+        let evalSess ← IreeSession.create fwdVmfb
+        let (valImg, valLbl, nVal) ← F32.loadImagenette (dataDir ++ "/val.bin")
+        let evalBatch := 16
+        let evalSteps := nVal / evalBatch
+        let paramShapes := packShapes ResnetLayout.paramShapes
+        let evalXSh := ResnetLayout.xShape evalBatch
+        let mut correct : Nat := 0
+        let mut total : Nat := 0
+        for bi in [:evalSteps] do
+          let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch pixelsPerImage
+          let logits ← IreeSession.forwardF32 evalSess "resnet_34.forward"
+                          p paramShapes xba evalXSh evalBatch.toUSize 10
+          let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch
+          for i in [:evalBatch] do
+            let pred := F32.argmax10 logits (i * 10).toUSize
+            let label := lblSlice.data[i * 4]!.toNat
+            if pred.toNat == label then correct := correct + 1
+            total := total + 1
+        let acc := correct.toFloat / total.toFloat * 100.0
+        IO.eprintln s!"  val accuracy: {correct}/{total} = {acc}%"
+  -- Save final params
+  IO.FS.writeBinFile ".lake/build/resnet34_params.bin" p
+  IO.FS.writeBinFile ".lake/build/resnet34_velocity.bin" v
+  IO.eprintln s!"Saved params to .lake/build/resnet34_params.bin"

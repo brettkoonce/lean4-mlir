@@ -61,6 +61,15 @@ opaque trainStepF32
   (y : @& ByteArray)
   (lr : Float) (batch : USize) : IO ByteArray
 
+/-- Zero-copy f32 forward pass. Pushes x then param tensors, returns logits.
+    For inference/eval — no y, lr, or velocity inputs. -/
+@[extern "lean_iree_forward_f32"]
+opaque forwardF32
+  (sess : @& IreeSession) (fnName : @& String)
+  (params : @& ByteArray) (shapes : @& ByteArray)
+  (x : @& ByteArray) (xShape : @& ByteArray)
+  (batch : USize) (nClasses : USize) : IO ByteArray
+
 end IreeSession
 
 /- Sizes for the packed-params layout. -/

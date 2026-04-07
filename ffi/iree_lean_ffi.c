@@ -347,3 +347,80 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_f32(
   rp[total_params] = loss_f;
   return lean_io_result_mk_ok(result);
 }
+
+// ---- Zero-copy f32 generic forward pass ----
+// Pushes x first, then param tensors. Returns logits as ByteArray.
+// Forward signature: forward(x, W0, g0, bt0, W1, ...) -> logits
+LEAN_EXPORT lean_obj_res lean_iree_forward_f32(
+    b_lean_obj_arg sess_obj,
+    b_lean_obj_arg fn_name_obj,
+    b_lean_obj_arg params_ba,
+    b_lean_obj_arg shapes_ba,
+    b_lean_obj_arg x_ba,
+    b_lean_obj_arg x_shape_ba,
+    size_t batch, size_t n_classes, lean_obj_arg world) {
+  (void)world;
+  iree_ffi_session_t* sess =
+      (iree_ffi_session_t*)lean_get_external_data(sess_obj);
+  const char* fn_name = lean_string_cstr(fn_name_obj);
+
+  // Parse param shapes
+  const int32_t* sp = (const int32_t*)lean_sarray_cptr(shapes_ba);
+  int n_params = sp[0];
+  int sp_idx = 1;
+  int64_t total_params = 0;
+
+  // Count total inputs: 1 (x) + n_params
+  int n_inputs = 1 + n_params;
+  int32_t* input_ranks = (int32_t*)malloc(n_inputs * sizeof(int32_t));
+  size_t max_dims = lean_sarray_size(shapes_ba) / 4 + 8;
+  int64_t* input_dims_flat = (int64_t*)malloc(max_dims * sizeof(int64_t));
+  const float** input_data = (const float**)malloc(n_inputs * sizeof(float*));
+
+  // First input: x
+  const int32_t* xsp = (const int32_t*)lean_sarray_cptr(x_shape_ba);
+  int x_rank = xsp[0];
+  input_ranks[0] = x_rank;
+  int dims_idx = 0;
+  for (int i = 0; i < x_rank; i++)
+    input_dims_flat[dims_idx++] = (int64_t)xsp[1+i];
+  input_data[0] = (const float*)lean_sarray_cptr(x_ba);
+
+  // Remaining inputs: param tensors
+  const float* p_f = (const float*)lean_sarray_cptr(params_ba);
+  int64_t data_off = 0;
+  for (int i = 0; i < n_params; i++) {
+    int rank = sp[sp_idx++];
+    input_ranks[1+i] = rank;
+    int64_t sz = 1;
+    for (int d = 0; d < rank; d++) {
+      input_dims_flat[dims_idx] = (int64_t)sp[sp_idx++];
+      sz *= input_dims_flat[dims_idx];
+      dims_idx++;
+    }
+    input_data[1+i] = p_f + data_off;
+    data_off += sz;
+    total_params += sz;
+  }
+
+  // Output: logits (batch x n_classes)
+  int64_t logits_total = (int64_t)(batch * n_classes);
+  size_t out_bytes = logits_total * 4;
+  lean_object* result = lean_alloc_sarray(1, out_bytes, out_bytes);
+  float* logits = (float*)lean_sarray_cptr(result);
+
+  int64_t out_totals[1] = {logits_total};
+  float* outputs[1] = {logits};
+
+  int rc = iree_ffi_invoke_f32(sess, fn_name,
+      n_inputs, input_ranks, input_dims_flat, input_data,
+      1, out_totals, outputs);
+
+  free(input_ranks); free(input_dims_flat); free(input_data);
+  if (rc != 0) {
+    lean_dec_ref(result);
+    return lean_io_result_mk_error(
+        lean_mk_io_user_error(lean_mk_string("f32 forward failed")));
+  }
+  return lean_io_result_mk_ok(result);
+}

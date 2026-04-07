@@ -48,6 +48,18 @@ lean_exe «resnet34-train» where
     "-liree_ffi", "-Wl,-rpath,/home/skoonce/lean/claude_max/lean4-jax/ffi",
     "-Wl,--allow-shlib-undefined"]
 
+lean_exe «test-forward» where
+  root := `TestForward
+  moreLinkArgs := #["-L", "/home/skoonce/lean/claude_max/lean4-jax/ffi",
+    "-liree_ffi", "-Wl,-rpath,/home/skoonce/lean/claude_max/lean4-jax/ffi",
+    "-Wl,--allow-shlib-undefined"]
+
+lean_exe «bench-resnet» where
+  root := `BenchResnet
+  moreLinkArgs := #["-L", "/home/skoonce/lean/claude_max/lean4-jax/ffi",
+    "-liree_ffi", "-Wl,-rpath,/home/skoonce/lean/claude_max/lean4-jax/ffi",
+    "-Wl,--allow-shlib-undefined"]
+
 lean_exe «resnet50» where
   root := `MainResnet50
 
