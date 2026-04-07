@@ -7,7 +7,16 @@
 #include <string.h>
 
 #include "iree/runtime/api.h"
-#include "iree/hal/drivers/cuda/registration/driver_module.h"
+
+#ifdef USE_HIP
+  #include "iree/hal/drivers/hip/registration/driver_module.h"
+  #define IREE_REGISTER_DRIVER iree_hal_hip_driver_module_register
+  #define IREE_DEVICE_NAME "hip"
+#else
+  #include "iree/hal/drivers/cuda/registration/driver_module.h"
+  #define IREE_REGISTER_DRIVER iree_hal_cuda_driver_module_register
+  #define IREE_DEVICE_NAME "cuda"
+#endif
 
 // ---- Opaque session handle ----
 struct iree_ffi_session_t {
@@ -30,13 +39,13 @@ iree_ffi_session_t* iree_ffi_session_create(const char* vmfb_path) {
   iree_ffi_session_t* sess = calloc(1, sizeof(iree_ffi_session_t));
   if (!sess) return NULL;
 
-  // Register CUDA driver (idempotent; only the first session does this).
+  // Register GPU driver (idempotent; only the first session does this).
   static int driver_registered = 0;
   iree_status_t status = iree_ok_status();
   if (!driver_registered) {
-    status = iree_hal_cuda_driver_module_register(
+    status = IREE_REGISTER_DRIVER(
         iree_hal_driver_registry_default());
-    if (!iree_status_is_ok(status)) { print_status("cuda_register", status); goto fail; }
+    if (!iree_status_is_ok(status)) { print_status("driver_register", status); goto fail; }
     driver_registered = 1;
   }
 
@@ -48,9 +57,9 @@ iree_ffi_session_t* iree_ffi_session_create(const char* vmfb_path) {
                                         iree_allocator_system(), &sess->instance);
   if (!iree_status_is_ok(status)) { print_status("instance_create", status); goto fail; }
 
-  // Create CUDA device (first available).
+  // Create GPU device (first available).
   status = iree_runtime_instance_try_create_default_device(
-      sess->instance, iree_make_cstring_view("cuda"), &sess->device);
+      sess->instance, iree_make_cstring_view(IREE_DEVICE_NAME), &sess->device);
   if (!iree_status_is_ok(status)) { print_status("device_create", status); goto fail; }
 
   // Create session.

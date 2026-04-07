@@ -23,7 +23,7 @@ def resnet34 : NetSpec where
 def compile (src out : String) : IO Bool := do
   let r ← IO.Process.output {
     cmd := ".venv/bin/iree-compile"
-    args := #[src, "--iree-hal-target-backends=cuda", "--iree-cuda-target=sm_86", "-o", out]
+    args := #[src, "--iree-hal-target-backends=rocm", "--iree-rocm-target=gfx1100", "-o", out]
   }
   if r.exitCode != 0 then
     IO.eprintln s!"Compile FAILED:\n{r.stderr.take 3000}"

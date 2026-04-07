@@ -30,8 +30,8 @@ def main : IO Unit := do
   IO.println s!"  wrote {mlirPath} ({mlir.length} chars)"
 
   let args := #[mlirPath,
-                "--iree-hal-target-backends=cuda",
-                "--iree-cuda-target=sm_86",
+                "--iree-hal-target-backends=rocm",
+                "--iree-rocm-target=gfx1100",
                 "-o", vmfbPath]
   let r ← IO.Process.output { cmd := ".venv/bin/iree-compile", args := args }
   if r.exitCode != 0 then

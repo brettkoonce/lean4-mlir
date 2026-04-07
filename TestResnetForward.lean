@@ -30,7 +30,7 @@ def main : IO Unit := do
   IO.println s!"Generated {mlir.length} chars"
 
   let compileArgs := #[".lake/build/resnet34_fwd.mlir",
-    "--iree-hal-target-backends=cuda", "--iree-cuda-target=sm_86",
+    "--iree-hal-target-backends=rocm", "--iree-rocm-target=gfx1100",
     "-o", ".lake/build/resnet34_fwd.vmfb"]
   let r ← IO.Process.output { cmd := ".venv/bin/iree-compile", args := compileArgs }
   if r.exitCode != 0 then

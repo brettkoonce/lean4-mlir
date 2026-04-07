@@ -33,8 +33,8 @@ def main : IO Unit := do
   -- blocks sm_89 compilation on this box; PTX JITs forward to Ada at load.
   let ireeCompile := ".venv/bin/iree-compile"
   let args := #[mlirPath,
-                "--iree-hal-target-backends=cuda",
-                "--iree-cuda-target=sm_86",
+                "--iree-hal-target-backends=rocm",
+                "--iree-rocm-target=gfx1100",
                 "-o", vmfbPath]
   IO.println s!"  $ {ireeCompile} {String.intercalate " " args.toList}"
   let r ← IO.Process.output { cmd := ireeCompile, args := args }

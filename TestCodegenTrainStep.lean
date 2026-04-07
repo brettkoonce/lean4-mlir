@@ -38,7 +38,7 @@ def main : IO Unit := do
                         ("CNN", ".lake/build/gen_cnn_train_step.mlir")] do
     let r ← IO.Process.output {
       cmd := ".venv/bin/iree-compile",
-      args := #[path, "--iree-hal-target-backends=cuda", "--iree-cuda-target=sm_86",
+      args := #[path, "--iree-hal-target-backends=rocm", "--iree-rocm-target=gfx1100",
                 "-o", path.replace ".mlir" ".vmfb"]
     }
     if r.exitCode != 0 then

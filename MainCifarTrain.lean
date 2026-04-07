@@ -59,7 +59,7 @@ def main : IO Unit := do
   IO.FS.createDirAll ".lake/build"
   IO.FS.writeFile ".lake/build/cifar_cnn.mlir" fwdMlir
   let compileArgs := #[".lake/build/cifar_cnn.mlir",
-    "--iree-hal-target-backends=cuda", "--iree-cuda-target=sm_86",
+    "--iree-hal-target-backends=rocm", "--iree-rocm-target=gfx1100",
     "-o", ".lake/build/cifar_cnn.vmfb"]
   let r ← IO.Process.output { cmd := ".venv/bin/iree-compile", args := compileArgs }
   if r.exitCode != 0 then
