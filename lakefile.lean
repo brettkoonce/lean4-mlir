@@ -63,6 +63,12 @@ lean_exe «bench-resnet» where
 lean_exe «resnet50» where
   root := `MainResnet50
 
+lean_exe «resnet50-train» where
+  root := `MainResnet50Train
+  moreLinkArgs := #["-L", "/home/skoonce/lean/claude_max/lean4-jax/ffi",
+    "-liree_ffi", "-Wl,-rpath,/home/skoonce/lean/claude_max/lean4-jax/ffi",
+    "-Wl,--allow-shlib-undefined"]
+
 lean_exe «mobilenet-v1» where
   root := `MainMobilenet
 

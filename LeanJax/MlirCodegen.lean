@@ -266,6 +266,42 @@ private def emitResidualBlock (startPidx : Nat) (curSSA : String) (curShape : Li
     ssa := s!"%rb_out{startPidx}_{bi}"
   return (code, ssa, shape, p)
 
+/-- Emit a bottleneck block stage: nBlocks bottleneck blocks (1x1→3x3→1x1).
+    mid = oc / 4 is the bottleneck channels. First block may downsample. -/
+private def emitBottleneckBlock (startPidx : Nat) (curSSA : String) (curShape : List Nat)
+    (ic oc nBlocks firstStride : Nat) : String × String × List Nat × Nat := Id.run do
+  let mid := oc / 4
+  let needsProj := !(ic == oc && firstStride == 1)
+  let mut code := ""
+  let mut ssa := curSSA
+  let mut shape := curShape
+  let mut p := startPidx
+  for bi in [:nBlocks] do
+    let blockIn := ssa
+    let blockInShape := shape
+    let stride := if bi == 0 then firstStride else 1
+    let blockIc := if bi == 0 then ic else oc
+    -- conv1: 1×1, stride 1, relu (reduce channels)
+    let (s1, out1, sh1) := emitConvBn p ssa shape blockIc mid 1 1 true
+    code := code ++ s1; ssa := out1; shape := sh1; p := p + 1
+    -- conv2: 3×3, stride, relu
+    let (s2, out2, sh2) := emitConvBn p ssa shape mid mid 3 stride true
+    code := code ++ s2; ssa := out2; shape := sh2; p := p + 1
+    -- conv3: 1×1, stride 1, NO relu (expand channels)
+    let (s3, out3, _sh3) := emitConvBn p ssa shape mid oc 1 1 false
+    code := code ++ s3; ssa := out3; p := p + 1
+    -- Skip connection
+    let mut skipSSA := blockIn
+    if bi == 0 && needsProj then
+      let (sp, outp, _) := emitConvBn p blockIn blockInShape ic oc 1 firstStride false
+      code := code ++ sp; skipSSA := outp; p := p + 1
+    -- Add + ReLU
+    code := code ++ s!"    %bn_add{startPidx}_{bi} = stablehlo.add {ssa}, {skipSSA} : {tensorTy shape}\n"
+    code := code ++ s!"    %bn_rz{startPidx}_{bi} = stablehlo.constant dense<0.0> : {tensorTy shape}\n"
+    code := code ++ s!"    %bn_out{startPidx}_{bi} = stablehlo.maximum %bn_add{startPidx}_{bi}, %bn_rz{startPidx}_{bi} : {tensorTy shape}\n"
+    ssa := s!"%bn_out{startPidx}_{bi}"
+  return (code, ssa, shape, p)
+
 /-- Emit a dense layer. Assumes (batch, fanIn) input. -/
 private def emitDense (pidx : Nat) (curSSA : String) (batchSize fanIn fanOut : Nat)
     (act : Activation) : String × String := Id.run do
@@ -342,6 +378,12 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat) : String := Id.ru
       curSSA := newSSA
       curShape := newShape
       pidx := newPidx
+    | .bottleneckBlock ic oc nBlocks firstStride =>
+      let (snip, newSSA, newShape, newPidx) := emitBottleneckBlock pidx curSSA curShape ic oc nBlocks firstStride
+      code := code ++ snip
+      curSSA := newSSA
+      curShape := newShape
+      pidx := newPidx
     | _ =>
       code := code ++ "    // UNSUPPORTED LAYER\n"
     pos := pos + 1
@@ -390,6 +432,28 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
           params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, blockIc, 3, 3]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
           pidx := pidx + 1
           params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, oc, 3, 3]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
+          pidx := pidx + 1
+          if bi == 0 && needsProj then
+            params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, ic, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
+            pidx := pidx + 1
+        curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
+      | _ => pure ()
+      outShape := curShape
+    | .bottleneckBlock ic oc nBlocks firstStride =>
+      let mid := oc / 4
+      let needsProj := !(ic == oc && firstStride == 1)
+      match curShape with
+      | [b, _, h, w] =>
+        for bi in [:nBlocks] do
+          let blockIc := if bi == 0 then ic else oc
+          -- 1x1 reduce
+          params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, blockIc, 1, 1]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
+          pidx := pidx + 1
+          -- 3x3
+          params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, mid, 3, 3]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
+          pidx := pidx + 1
+          -- 1x1 expand
+          params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, mid, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
           pidx := pidx + 1
           if bi == 0 && needsProj then
             params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, ic, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
@@ -857,6 +921,57 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           -- Store projection info in addSkipGrad field: "proj:{projPidx}" or "identity"
           addSkipGrad := if bi == 0 && needsProj then s!"proj:{pidx - 1}" else "identity"
         }
+
+    | .bottleneckBlock ic oc nBlocks firstStride =>
+      let mid := oc / 4
+      let needsProj := !(ic == oc && firstStride == 1)
+      for bi in [:nBlocks] do
+        let blockIn := curSSA
+        let blockInShape := curShape
+        let stride := if bi == 0 then firstStride else 1
+        let blockIc := if bi == 0 then ic else oc
+        -- conv1: 1×1 reduce, relu
+        let (s1, rec1) := emitConvBnTrain pidx pos curSSA curShape blockIc mid 1 1 true
+        code := code ++ s1; curSSA := rec1.outputSSA; curShape := rec1.outShape
+        records := records.push rec1; pidx := pidx + 1
+        -- conv2: 3×3, stride, relu
+        let (s2, rec2) := emitConvBnTrain pidx pos curSSA curShape mid mid 3 stride true
+        code := code ++ s2; curSSA := rec2.outputSSA; curShape := rec2.outShape
+        records := records.push rec2; pidx := pidx + 1
+        -- conv3: 1×1 expand, NO relu
+        let (s3, rec3) := emitConvBnTrain pidx pos curSSA curShape mid oc 1 1 false
+        code := code ++ s3; curSSA := rec3.outputSSA; curShape := rec3.outShape
+        records := records.push rec3; pidx := pidx + 1
+        -- Projection (if needed)
+        let mut skipSSA := blockIn
+        if bi == 0 && needsProj then
+          let (sp, recp) := emitConvBnTrain pidx pos blockIn blockInShape ic oc 1 firstStride false
+          code := code ++ sp; skipSSA := recp.outputSSA
+          records := records.push recp; pidx := pidx + 1
+        -- Add + ReLU
+        let addId := s!"bn{pidx}_{bi}"
+        code := code ++ s!"    %rb_add{addId} = stablehlo.add {curSSA}, {skipSSA} : {tensorTy curShape}\n"
+        code := code ++ s!"    %rb_rz{addId} = stablehlo.constant dense<0.0> : {tensorTy curShape}\n"
+        code := code ++ s!"    %rb_out{addId} = stablehlo.maximum %rb_add{addId}, %rb_rz{addId} : {tensorTy curShape}\n"
+        curSSA := s!"%rb_out{addId}"
+        let skipGradSSA := s!"%rb_dskip{addId}"
+        -- Mark the first convBn of this block to accumulate skip grad
+        -- bottleneck: 3 convs + optional proj
+        let firstIdx := if bi == 0 && needsProj then records.size - 4 else records.size - 3
+        let firstRec := records[firstIdx]!
+        records := records.set! firstIdx { firstRec with addSkipGrad := skipGradSSA }
+        records := records.push {
+          layer := .globalAvgPool
+          pidx := none, pos
+          inputSSA := blockIn
+          preActSSA := s!"%rb_add{addId}"
+          outputSSA := curSSA
+          inShape := blockInShape
+          outShape := curShape
+          hasRelu := true
+          addSkipGrad := if bi == 0 && needsProj then s!"proj:{pidx - 1}" else "identity"
+        }
+
     | _ => code := code ++ "    // UNSUPPORTED\n"
     pos := pos + 1
 
@@ -1166,6 +1281,39 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat) : String := Id.r
       match curShape with
       | [b, _, h, w] => curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
       | _ => pure ()
+    | .bottleneckBlock ic oc nBlocks firstStride =>
+      let mid := oc / 4
+      let needsProj := !(ic == oc && firstStride == 1)
+      let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
+      for bi in [:nBlocks] do
+        let blockIc := if bi == 0 then ic else oc
+        -- 1x1 reduce
+        let wTy1 := tensorTy [mid, blockIc, 1, 1]
+        params := params ++ s!"      %W{pidx}: {wTy1}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
+        paramRetTypes := paramRetTypes.push wTy1 |>.push gTyM |>.push gTyM
+        velRetTypes := velRetTypes.push wTy1 |>.push gTyM |>.push gTyM
+        pidx := pidx + 1
+        -- 3x3
+        let wTy2 := tensorTy [mid, mid, 3, 3]
+        params := params ++ s!"      %W{pidx}: {wTy2}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
+        paramRetTypes := paramRetTypes.push wTy2 |>.push gTyM |>.push gTyM
+        velRetTypes := velRetTypes.push wTy2 |>.push gTyM |>.push gTyM
+        pidx := pidx + 1
+        -- 1x1 expand
+        let wTy3 := tensorTy [oc, mid, 1, 1]
+        params := params ++ s!"      %W{pidx}: {wTy3}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
+        paramRetTypes := paramRetTypes.push wTy3 |>.push gTyO |>.push gTyO
+        velRetTypes := velRetTypes.push wTy3 |>.push gTyO |>.push gTyO
+        pidx := pidx + 1
+        if bi == 0 && needsProj then
+          let pTy := tensorTy [oc, ic, 1, 1]
+          params := params ++ s!"      %W{pidx}: {pTy}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
+          paramRetTypes := paramRetTypes.push pTy |>.push gTyO |>.push gTyO
+          velRetTypes := velRetTypes.push pTy |>.push gTyO |>.push gTyO
+          pidx := pidx + 1
+      match curShape with
+      | [b, _, h, w] => curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
+      | _ => pure ()
     | .maxPool _size stride =>
       match curShape with
       | [b, c, h, w] => curShape := [b, c, (h + stride - 1) / stride, (w + stride - 1) / stride]
@@ -1199,6 +1347,20 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat) : String := Id.r
         params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, blockIc, 3, 3]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
         vpidx2 := vpidx2 + 1
         params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, oc, 3, 3]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
+        vpidx2 := vpidx2 + 1
+        if bi == 0 && needsProj then
+          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, 1, 1]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
+          vpidx2 := vpidx2 + 1
+    | .bottleneckBlock ic oc nBlocks firstStride =>
+      let mid := oc / 4
+      let needsProj := !(ic == oc && firstStride == 1)
+      for bi in [:nBlocks] do
+        let blockIc := if bi == 0 then ic else oc
+        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, blockIc, 1, 1]}, %v_g{vpidx2}: {tensorTy [mid]}, %v_bt{vpidx2}: {tensorTy [mid]},\n"
+        vpidx2 := vpidx2 + 1
+        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, mid, 3, 3]}, %v_g{vpidx2}: {tensorTy [mid]}, %v_bt{vpidx2}: {tensorTy [mid]},\n"
+        vpidx2 := vpidx2 + 1
+        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, mid, 1, 1]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
         vpidx2 := vpidx2 + 1
         if bi == 0 && needsProj then
           params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, 1, 1]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
