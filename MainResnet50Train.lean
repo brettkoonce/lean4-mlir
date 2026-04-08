@@ -70,7 +70,18 @@ def main (args : List String) : IO Unit := do
   IO.FS.writeFile ".lake/build/resnet50_train_step.mlir" mlir
   IO.eprintln s!"  {mlir.length} chars"
 
-  IO.eprintln "Compiling vmfb..."
+  -- Also generate forward vmfb for eval
+  let fwdMlir := MlirCodegen.generate resnet50 16
+  IO.FS.writeFile ".lake/build/resnet50_fwd.mlir" fwdMlir
+
+  IO.eprintln "Compiling vmfbs..."
+  let fwdCompileArgs ← ireeCompileArgs ".lake/build/resnet50_fwd.mlir" ".lake/build/resnet50_fwd.vmfb"
+  let rf ← IO.Process.output { cmd := ".venv/bin/iree-compile", args := fwdCompileArgs }
+  if rf.exitCode != 0 then
+    IO.eprintln s!"forward compile failed: {rf.stderr.take 1000}"
+  else
+    IO.eprintln "  forward compiled"
+
   let compileArgs ← ireeCompileArgs ".lake/build/resnet50_train_step.mlir" ".lake/build/resnet50_train_step.vmfb"
   let r ← IO.Process.output { cmd := ".venv/bin/iree-compile", args := compileArgs }
   if r.exitCode != 0 then
@@ -151,6 +162,31 @@ def main (args : List String) : IO Unit := do
     let t1 ← IO.monoMsNow
     let avgLoss := epochLoss / bpE.toFloat
     IO.eprintln s!"Epoch {epoch+1}/{epochs}: loss={avgLoss} lr={lr} ({t1-t0}ms)"
+
+    -- Val eval every 10 epochs
+    if (epoch + 1) % 10 == 0 || epoch + 1 == epochs then
+      let fwdVmfb := ".lake/build/resnet50_fwd.vmfb"
+      if ← System.FilePath.pathExists fwdVmfb then
+        let evalSess ← IreeSession.create fwdVmfb
+        let (valImg, valLbl, nVal) ← F32.loadImagenette (dataDir ++ "/val.bin")
+        let evalBatch := 16
+        let evalSteps := nVal / evalBatch
+        let paramShapesBA := packShapes R50Layout.paramShapes
+        let evalXSh := R50Layout.xShape evalBatch
+        let mut correct : Nat := 0
+        let mut total : Nat := 0
+        for bi in [:evalSteps] do
+          let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch pixelsPerImage
+          let logits ← IreeSession.forwardF32 evalSess "resnet_50.forward"
+                          params paramShapesBA xba evalXSh evalBatch.toUSize 10
+          let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch
+          for i in [:evalBatch] do
+            let pred := F32.argmax10 logits (i * 10).toUSize
+            let label := lblSlice.data[i * 4]!.toNat
+            if pred.toNat == label then correct := correct + 1
+            total := total + 1
+        let acc := correct.toFloat / total.toFloat * 100.0
+        IO.eprintln s!"  val accuracy: {correct}/{total} = {acc}%"
 
   IO.FS.writeBinFile ".lake/build/resnet50_params.bin" params
   IO.eprintln "Saved params."
