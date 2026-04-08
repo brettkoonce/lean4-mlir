@@ -288,8 +288,8 @@ private def emitBottleneckBlock (startPidx : Nat) (curSSA : String) (curShape : 
     let (s2, out2, sh2) := emitConvBn p ssa shape mid mid 3 stride true
     code := code ++ s2; ssa := out2; shape := sh2; p := p + 1
     -- conv3: 1×1, stride 1, NO relu (expand channels)
-    let (s3, out3, _sh3) := emitConvBn p ssa shape mid oc 1 1 false
-    code := code ++ s3; ssa := out3; p := p + 1
+    let (s3, out3, sh3) := emitConvBn p ssa shape mid oc 1 1 false
+    code := code ++ s3; ssa := out3; shape := sh3; p := p + 1
     -- Skip connection
     let mut skipSSA := blockIn
     if bi == 0 && needsProj then
