@@ -61,6 +61,16 @@ opaque trainStepF32
   (y : @& ByteArray)
   (lr : Float) (batch : USize) : IO ByteArray
 
+/-- Adam train step (f32). Like trainStepF32 but also passes step counter t
+    for bias correction. Params = weights ++ m (1st moment) ++ v (2nd moment). -/
+@[extern "lean_iree_train_step_adam_f32"]
+opaque trainStepAdamF32
+  (sess : @& IreeSession) (fnName : @& String)
+  (params : @& ByteArray) (shapes : @& ByteArray)
+  (x : @& ByteArray) (xShape : @& ByteArray)
+  (y : @& ByteArray)
+  (lr : Float) (t : Float) (batch : USize) : IO ByteArray
+
 /-- Zero-copy f32 forward pass. Pushes x then param tensors, returns logits.
     For inference/eval — no y, lr, or velocity inputs. -/
 @[extern "lean_iree_forward_f32"]

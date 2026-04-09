@@ -50,9 +50,10 @@ def paramShapes : Array (Array Nat) := Id.run do
     | _ => pure ()
   return shapes
 
-def allShapes : Array (Array Nat) := paramShapes ++ paramShapes
+-- Full shapes: params ++ m (1st moment) ++ v (2nd moment) for Adam
+def allShapes : Array (Array Nat) := paramShapes ++ paramShapes ++ paramShapes
 def shapesBA : ByteArray := packShapes allShapes
-def nTotal : Nat := 2 * nParams
+def nTotal : Nat := 3 * nParams  -- params + m + v
 
 def xShape (batch : Nat) : ByteArray :=
   packXShape #[batch, 3 * 224 * 224]
@@ -66,12 +67,13 @@ def main (args : List String) : IO Unit := do
   -- Generate + compile train step
   IO.FS.createDirAll ".lake/build"
   IO.eprintln "Generating train step MLIR..."
-  let mlir := MlirCodegen.generateTrainStep resnet50 16 "jit_resnet50_train_step"
+  let batchN : Nat := 32
+  let mlir := MlirCodegen.generateTrainStep resnet50 batchN "jit_resnet50_train_step"
   IO.FS.writeFile ".lake/build/resnet50_train_step.mlir" mlir
   IO.eprintln s!"  {mlir.length} chars"
 
   -- Also generate forward vmfb for eval
-  let fwdMlir := MlirCodegen.generate resnet50 16
+  let fwdMlir := MlirCodegen.generate resnet50 batchN
   IO.FS.writeFile ".lake/build/resnet50_fwd.mlir" fwdMlir
 
   IO.eprintln "Compiling vmfbs..."
@@ -92,7 +94,7 @@ def main (args : List String) : IO Unit := do
   let sess ← IreeSession.create ".lake/build/resnet50_train_step.vmfb"
   IO.eprintln "  session loaded"
 
-  let (trainImg, trainLbl, nTrain) ← F32.loadImagenette (dataDir ++ "/train.bin")
+  let (trainImg, trainLbl, nTrain) ← F32.loadImagenetteSized (dataDir ++ "/train.bin") 256
   IO.eprintln s!"  data: {nTrain} images"
 
   -- Init params + velocity
@@ -121,43 +123,54 @@ def main (args : List String) : IO Unit := do
     else
       si := si + 1
   let p := F32.concat paramParts
-  let v ← F32.const (F32.size p).toUSize 0.0
-  IO.eprintln s!"  {F32.size p} params + {F32.size v} velocity ({(p.size + v.size) / 1024 / 1024} MB)"
+  -- Adam state: m (1st moment) and v (2nd moment), both zero-initialized
+  let adamM ← F32.const (F32.size p).toUSize 0.0
+  let adamV ← F32.const (F32.size p).toUSize 0.0
+  IO.eprintln s!"  {F32.size p} params + m + v ({(p.size + adamM.size + adamV.size) / 1024 / 1024} MB)"
 
-  let batchN : Nat := 16
-  let batch : USize := 16
+  let batch : USize := 32
   let epochs := 80
   let bpE := nTrain / batchN
-  let pixelsPerImage := 3 * 224 * 224
+  let trainPixels := 3 * 256 * 256
   let allShapes := R50Layout.shapesBA
   let xSh := R50Layout.xShape batchN
   let nP := R50Layout.nParams
   let nT := R50Layout.nTotal
+  let baseLR : Float := 0.001
 
-  IO.eprintln s!"training: {bpE} batches/epoch, batch={batchN}, momentum=0.9"
+  IO.eprintln s!"training: {bpE} batches/epoch, batch={batchN}, Adam, lr={baseLR}, cosine, label_smooth=0.1, wd=1e-4"
   let mut params := p
-  let mut vel := v
+  let mut m := adamM
+  let mut v := adamV
   let mut curImg := trainImg
   let mut curLbl := trainLbl
+  let mut globalStep : Nat := 0
   for epoch in [:epochs] do
-    let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize pixelsPerImage.toUSize (epoch + 42).toUSize
+    let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPixels.toUSize (epoch + 42).toUSize
     curImg := sImg; curLbl := sLbl
-    let lr : Float := 0.002 * (1.0 - epoch.toFloat / epochs.toFloat)
+    -- Cosine LR with 3-epoch warmup
+    let lr : Float := if epoch < 3 then
+      baseLR * (epoch.toFloat + 1.0) / 3.0
+    else
+      baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (epoch.toFloat - 3.0) / (epochs.toFloat - 3.0)))
     let mut epochLoss : Float := 0.0
     let t0 ← IO.monoMsNow
     for bi in [:bpE] do
-      let xba0 := F32.sliceImages curImg (bi * batchN) batchN pixelsPerImage
-      let xba ← F32.randomHFlip xba0 batch 3 224 224 (epoch * 10000 + bi).toUSize
+      globalStep := globalStep + 1
+      let xba256 := F32.sliceImages curImg (bi * batchN) batchN trainPixels
+      let xbaCropped ← F32.randomCrop xba256 batch 3 256 256 224 224 (epoch * 10000 + bi).toUSize
+      let xba ← F32.randomHFlip xbaCropped batch 3 224 224 (epoch * 10000 + bi + 7777).toUSize
       let yb := F32.sliceLabels curLbl (bi * batchN) batchN
-      let packed := params.append vel
+      let packed := (params.append m).append v
       let ts0 ← IO.monoMsNow
-      let out ← IreeSession.trainStepF32 sess "jit_resnet50_train_step.main"
-                  packed allShapes xba xSh yb lr batch
+      let out ← IreeSession.trainStepAdamF32 sess "jit_resnet50_train_step.main"
+                  packed allShapes xba xSh yb lr globalStep.toFloat batch
       let ts1 ← IO.monoMsNow
       let loss := F32.extractLoss out nT
       epochLoss := epochLoss + loss
       params := F32.slice out 0 nP
-      vel := F32.slice out nP nP
+      m := F32.slice out nP nP
+      v := F32.slice out (2 * nP) nP
       if bi < 3 || bi % 100 == 0 then
         IO.eprintln s!"  step {bi}/{bpE}: loss={loss} ({ts1-ts0}ms)"
     let t1 ← IO.monoMsNow
@@ -170,14 +183,14 @@ def main (args : List String) : IO Unit := do
       if ← System.FilePath.pathExists fwdVmfb then
         let evalSess ← IreeSession.create fwdVmfb
         let (valImg, valLbl, nVal) ← F32.loadImagenette (dataDir ++ "/val.bin")
-        let evalBatch := 16
+        let evalBatch := batchN
         let evalSteps := nVal / evalBatch
         let paramShapesBA := packShapes R50Layout.paramShapes
         let evalXSh := R50Layout.xShape evalBatch
         let mut correct : Nat := 0
         let mut total : Nat := 0
         for bi in [:evalSteps] do
-          let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch pixelsPerImage
+          let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch (3 * 224 * 224)
           let logits ← IreeSession.forwardF32 evalSess "resnet_50.forward"
                           params paramShapesBA xba evalXSh evalBatch.toUSize 10
           let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch

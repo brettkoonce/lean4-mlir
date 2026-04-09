@@ -51,10 +51,10 @@ def paramShapes : Array (Array Nat) := Id.run do
     | _ => pure ()
   return shapes
 
--- Full shapes: all param shapes then all velocity shapes (same shapes repeated)
-def allShapes : Array (Array Nat) := paramShapes ++ paramShapes
+-- Full shapes: params ++ m (1st moment) ++ v (2nd moment) for Adam
+def allShapes : Array (Array Nat) := paramShapes ++ paramShapes ++ paramShapes
 def shapesBA : ByteArray := packShapes allShapes
-def nTotal : Nat := 2 * nParams  -- params + velocities
+def nTotal : Nat := 3 * nParams  -- params + m + v
 
 def xShape (batch : Nat) : ByteArray :=
   packXShape #[batch, 3 * 224 * 224]
@@ -62,36 +62,45 @@ def xShape (batch : Nat) : ByteArray :=
 end ResnetLayout
 
 def main (args : List String) : IO Unit := do
-  IO.eprintln "step 1"
   let dataDir := args.head? |>.getD "data/imagenette"
-  IO.println s!"ResNet-34: {ResnetLayout.nParams} params"
+  IO.eprintln s!"ResNet-34: {ResnetLayout.nParams} params"
 
-  -- Pre-compile: run TestResnetResidual first to generate .vmfb
-  let vmfbPath := ".lake/build/resnet34_train_step.vmfb"
-  let vmfbExists ← System.FilePath.pathExists vmfbPath
-  if !vmfbExists then
-    IO.eprintln "ERROR: .vmfb not found. Run test-resnet-residual first to generate it."
+  let batchN : Nat := 32
+  let batch : USize := 32
+
+  -- Generate + compile train step MLIR (self-compile like R50)
+  IO.FS.createDirAll ".lake/build"
+  IO.eprintln "Generating train step MLIR..."
+  let mlir := MlirCodegen.generateTrainStep resnet34 batchN "jit_resnet34_train_step"
+  IO.FS.writeFile ".lake/build/resnet34_train_step.mlir" mlir
+  IO.eprintln s!"  {mlir.length} chars"
+
+  let fwdMlir := MlirCodegen.generate resnet34 batchN
+  IO.FS.writeFile ".lake/build/resnet34_fwd.mlir" fwdMlir
+
+  IO.eprintln "Compiling vmfbs..."
+  let fwdCompileArgs ← ireeCompileArgs ".lake/build/resnet34_fwd.mlir" ".lake/build/resnet34_fwd.vmfb"
+  let rf ← IO.Process.output { cmd := ".venv/bin/iree-compile", args := fwdCompileArgs }
+  if rf.exitCode != 0 then
+    IO.eprintln s!"forward compile failed: {rf.stderr.take 1000}"
+  else
+    IO.eprintln "  forward compiled"
+
+  let compileArgs ← ireeCompileArgs ".lake/build/resnet34_train_step.mlir" ".lake/build/resnet34_train_step.vmfb"
+  let r ← IO.Process.output { cmd := ".venv/bin/iree-compile", args := compileArgs }
+  if r.exitCode != 0 then
+    IO.eprintln s!"compile failed: {r.stderr.take 3000}"
     IO.Process.exit 1
+  IO.eprintln "  compiled"
 
-  IO.eprintln "step 2: load IREE session"
-  let t0 ← IO.monoMsNow
-
-  -- Load IREE session
-  IO.eprintln "  creating session..."
   let sess ← IreeSession.create ".lake/build/resnet34_train_step.vmfb"
-  let t1 ← IO.monoMsNow
-  IO.eprintln s!"  session loaded ({t1 - t0}ms)"
+  IO.eprintln "  session loaded"
 
-  -- Load Imagenette data
-  IO.eprintln s!"step 3: load data from {dataDir}"
-  let (trainImg, trainLbl, nTrain) ← F32.loadImagenette (dataDir ++ "/train.bin")
-  IO.eprintln s!"  train: {nTrain} images ({F32.size trainImg} floats)"
-  let t2 ← IO.monoMsNow
-  IO.eprintln s!"  loaded ({t2 - t1}ms)"
+  -- Load Imagenette data (train at 256×256 for random crop, val at 224×224)
+  let (trainImg, trainLbl, nTrain) ← F32.loadImagenetteSized (dataDir ++ "/train.bin") 256
+  IO.eprintln s!"  train: {nTrain} images (256×256)"
 
   -- Initialize params: He init for weights, 1.0 for gamma, 0.0 for beta/bias
-  -- paramShapes order: convBn → [W(4D), gamma(1D), beta(1D)], dense → [W(2D), bias(1D)]
-  IO.eprintln "step 4: init params"
   let mut paramParts : Array ByteArray := #[]
   let mut seed : USize := 42
   let shapes := ResnetLayout.paramShapes
@@ -100,92 +109,95 @@ def main (args : List String) : IO Unit := do
     let shape := shapes[si]!
     let n := shape.foldl (· * ·) 1
     if shape.size >= 2 then
-      -- Weight tensor: He init
       let fanIn := if shape.size == 4 then shape[1]! * shape[2]! * shape[3]! else shape[0]!
       paramParts := paramParts.push (← F32.heInit seed n.toUSize (Float.sqrt (2.0 / fanIn.toFloat)))
       seed := seed + 1
       si := si + 1
-      -- Next 1D params: check if it's a convBn triple (gamma + beta) or dense pair (bias)
       if si < shapes.size && shapes[si]!.size == 1 then
         let n1 := shapes[si]![0]!
         if si + 1 < shapes.size && shapes[si + 1]!.size == 1 then
-          -- convBn: gamma=1.0, beta=0.0
           paramParts := paramParts.push (← F32.const n1.toUSize 1.0)
           si := si + 1
           paramParts := paramParts.push (← F32.const (shapes[si]![0]!).toUSize 0.0)
           si := si + 1
         else
-          -- dense: bias=0.0
           paramParts := paramParts.push (← F32.const n1.toUSize 0.0)
           si := si + 1
     else
       si := si + 1
   let params := F32.concat paramParts
-  -- Initialize velocity buffers to zero (same size as params)
-  let velocity ← F32.const (F32.size params).toUSize 0.0
-  IO.eprintln s!"  {F32.size params} params + {F32.size velocity} velocity ({(params.size + velocity.size) / 1024 / 1024} MB)"
+  -- Adam state: m (1st moment) and v (2nd moment), both zero-initialized
+  let adamM ← F32.const (F32.size params).toUSize 0.0
+  let adamV ← F32.const (F32.size params).toUSize 0.0
+  IO.eprintln s!"  {F32.size params} params + m + v ({(params.size + adamM.size + adamV.size) / 1024 / 1024} MB)"
 
-  -- Training loop: pack params++velocity, pass through FFI, unpack
-  let batchN : Nat := 16
-  let batch : USize := 16
+  -- Training loop: Adam optimizer, cosine LR schedule, batch 32
   let epochs := 80
   let bpE := nTrain / batchN
-  let pixelsPerImage := 3 * 224 * 224
-  let shapes := ResnetLayout.shapesBA
+  let trainPixels := 3 * 256 * 256
+  let allShapes := ResnetLayout.shapesBA
   let xSh := ResnetLayout.xShape batchN
   let nP := ResnetLayout.nParams
-  let nT := ResnetLayout.nTotal  -- params + velocities
+  let nT := ResnetLayout.nTotal  -- params + m + v
+  let baseLR : Float := 0.001
 
-  IO.eprintln s!"step 5: training ({bpE} batches/epoch, batch={batchN}, BN, momentum=0.9)"
+  IO.eprintln s!"training: {bpE} batches/epoch, batch={batchN}, Adam, lr={baseLR}, cosine, label_smooth=0.1, wd=1e-4"
   let mut p := params
-  let mut v := velocity
+  let mut m := adamM
+  let mut v := adamV
   let mut curImg := trainImg
   let mut curLbl := trainLbl
+  let mut globalStep : Nat := 0
   for epoch in [:epochs] do
-    -- Shuffle training data each epoch
-    let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize pixelsPerImage.toUSize (epoch + 42).toUSize
+    let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPixels.toUSize (epoch + 42).toUSize
     curImg := sImg; curLbl := sLbl
-    let lr : Float := 0.002 * (1.0 - epoch.toFloat / epochs.toFloat)
+    -- Cosine LR with 3-epoch warmup
+    let lr : Float := if epoch < 3 then
+      baseLR * (epoch.toFloat + 1.0) / 3.0
+    else
+      baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (epoch.toFloat - 3.0) / (epochs.toFloat - 3.0)))
     let mut epochLoss : Float := 0.0
     let t0 ← IO.monoMsNow
     for bi in [:bpE] do
-      let xba0 := F32.sliceImages curImg (bi * batchN) batchN pixelsPerImage
-      let xba ← F32.randomHFlip xba0 batch 3 224 224 (epoch * 10000 + bi).toUSize
+      globalStep := globalStep + 1
+      let xba256 := F32.sliceImages curImg (bi * batchN) batchN trainPixels
+      let xbaCropped ← F32.randomCrop xba256 batch 3 256 256 224 224 (epoch * 10000 + bi).toUSize
+      let xba ← F32.randomHFlip xbaCropped batch 3 224 224 (epoch * 10000 + bi + 7777).toUSize
       let yb := F32.sliceLabels curLbl (bi * batchN) batchN
-      -- Pack params ++ velocity into one ByteArray
-      let packed := p.append v
+      -- Pack params ++ m ++ v
+      let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
-      let out ← IreeSession.trainStepF32 sess "jit_resnet34_train_step.main"
-                  packed shapes xba xSh yb lr batch
+      let out ← IreeSession.trainStepAdamF32 sess "jit_resnet34_train_step.main"
+                  packed allShapes xba xSh yb lr globalStep.toFloat batch
       let ts1 ← IO.monoMsNow
       let loss := F32.extractLoss out nT
       epochLoss := epochLoss + loss
-      -- Unpack: first nP floats = updated params, next nP = updated velocity
+      -- Unpack: params, m, v
       p := F32.slice out 0 nP
-      v := F32.slice out nP nP
+      m := F32.slice out nP nP
+      v := F32.slice out (2 * nP) nP
       if bi < 3 || bi % 100 == 0 then
         IO.eprintln s!"  step {bi}/{bpE}: loss={loss} ({ts1-ts0}ms)"
     let t1 ← IO.monoMsNow
     let avgLoss := epochLoss / bpE.toFloat
     IO.eprintln s!"Epoch {epoch+1}/{epochs}: loss={avgLoss} lr={lr} ({t1-t0}ms)"
 
-    -- Eval on val set every 10 epochs
+    -- Val eval every 10 epochs
     if (epoch + 1) % 10 == 0 || epoch + 1 == epochs then
       let fwdVmfb := ".lake/build/resnet34_fwd.vmfb"
-      let fwdExists ← System.FilePath.pathExists fwdVmfb
-      if fwdExists then
+      if ← System.FilePath.pathExists fwdVmfb then
         let evalSess ← IreeSession.create fwdVmfb
         let (valImg, valLbl, nVal) ← F32.loadImagenette (dataDir ++ "/val.bin")
-        let evalBatch := 16
+        let evalBatch := batchN
         let evalSteps := nVal / evalBatch
-        let paramShapes := packShapes ResnetLayout.paramShapes
+        let paramShapesBA := packShapes ResnetLayout.paramShapes
         let evalXSh := ResnetLayout.xShape evalBatch
         let mut correct : Nat := 0
         let mut total : Nat := 0
         for bi in [:evalSteps] do
-          let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch pixelsPerImage
+          let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch (3 * 224 * 224)
           let logits ← IreeSession.forwardF32 evalSess "resnet_34.forward"
-                          p paramShapes xba evalXSh evalBatch.toUSize 10
+                          p paramShapesBA xba evalXSh evalBatch.toUSize 10
           let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch
           for i in [:evalBatch] do
             let pred := F32.argmax10 logits (i * 10).toUSize
@@ -194,7 +206,5 @@ def main (args : List String) : IO Unit := do
             total := total + 1
         let acc := correct.toFloat / total.toFloat * 100.0
         IO.eprintln s!"  val accuracy: {correct}/{total} = {acc}%"
-  -- Save final params
   IO.FS.writeBinFile ".lake/build/resnet34_params.bin" p
-  IO.FS.writeBinFile ".lake/build/resnet34_velocity.bin" v
-  IO.eprintln s!"Saved params to .lake/build/resnet34_params.bin"
+  IO.eprintln "Saved params."

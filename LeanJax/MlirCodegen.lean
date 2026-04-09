@@ -701,38 +701,65 @@ private def emitConvBnBackward (r : FwdRec) (gradSSA : String) : String × Strin
     s := s ++ s!"      " ++ "}" ++ s!" : ({outTy}, {tensorTy [ic, oc, kSize, kSize]}) -> {tensorTy r.inShape}\n"
   return (s, s!"%cbg_dx{p}", s!"%d_W{p}")
 
-/-- Emit SGD+momentum for one param: v_new = mu*v + grad; W_new = W - lr*v_new. -/
-private def emitMomentumUpdate (paramSSA gradSSA velSSA : String) (shape : List Nat) (tag : String)
-    (applyWeightDecay : Bool := false) : String × String × String := Id.run do
+/-- Emit Adam update for one param.
+    m_new = β1*m + (1-β1)*grad
+    v_new = β2*v + (1-β2)*grad²
+    m_hat = m_new / bc1    (bc1 = 1 - β1^t, precomputed)
+    v_hat = v_new / bc2    (bc2 = 1 - β2^t, precomputed)
+    w_new = w - lr * m_hat / (sqrt(v_hat) + ε)
+    + optional decoupled weight decay: w_new = w_new - wd*lr*w -/
+private def emitAdamUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : List Nat) (tag : String)
+    (applyWeightDecay : Bool := false) : String × String × String × String := Id.run do
   let ty := tensorTy shape
   let mut s := ""
-  s := s ++ s!"    %mu_{tag} = stablehlo.broadcast_in_dim %mu, dims = [] : (tensor<f32>) -> {ty}\n"
-  s := s ++ s!"    %vs_{tag} = stablehlo.multiply %mu_{tag}, {velSSA} : {ty}\n"
-  s := s ++ s!"    %vn_{tag} = stablehlo.add %vs_{tag}, {gradSSA} : {ty}\n"
+  -- m_new = β1*m + (1-β1)*grad
+  s := s ++ s!"    %b1_{tag} = stablehlo.broadcast_in_dim %beta1, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %ob1_{tag} = stablehlo.broadcast_in_dim %one_minus_b1, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %ms_{tag} = stablehlo.multiply %b1_{tag}, {mSSA} : {ty}\n"
+  s := s ++ s!"    %mg_{tag} = stablehlo.multiply %ob1_{tag}, {gradSSA} : {ty}\n"
+  s := s ++ s!"    %mn_{tag} = stablehlo.add %ms_{tag}, %mg_{tag} : {ty}\n"
+  -- v_new = β2*v + (1-β2)*grad²
+  s := s ++ s!"    %b2_{tag} = stablehlo.broadcast_in_dim %beta2, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %ob2_{tag} = stablehlo.broadcast_in_dim %one_minus_b2, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %vsc_{tag} = stablehlo.multiply %b2_{tag}, {vSSA} : {ty}\n"
+  s := s ++ s!"    %g2_{tag} = stablehlo.multiply {gradSSA}, {gradSSA} : {ty}\n"
+  s := s ++ s!"    %vg_{tag} = stablehlo.multiply %ob2_{tag}, %g2_{tag} : {ty}\n"
+  s := s ++ s!"    %vn_{tag} = stablehlo.add %vsc_{tag}, %vg_{tag} : {ty}\n"
+  -- Bias correction: m_hat = m_new / bc1, v_hat = v_new / bc2
+  s := s ++ s!"    %bc1_{tag} = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %bc2_{tag} = stablehlo.broadcast_in_dim %bc2, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %mh_{tag} = stablehlo.divide %mn_{tag}, %bc1_{tag} : {ty}\n"
+  s := s ++ s!"    %vh_{tag} = stablehlo.divide %vn_{tag}, %bc2_{tag} : {ty}\n"
+  -- w_new = w - lr * m_hat / (sqrt(v_hat) + ε)
   s := s ++ s!"    %lr_{tag} = stablehlo.broadcast_in_dim %lr, dims = [] : (tensor<f32>) -> {ty}\n"
-  s := s ++ s!"    %up_{tag} = stablehlo.multiply %lr_{tag}, %vn_{tag} : {ty}\n"
-  s := s ++ s!"    %sub_{tag} = stablehlo.subtract {paramSSA}, %up_{tag} : {ty}\n"
+  s := s ++ s!"    %eps_{tag} = stablehlo.broadcast_in_dim %adam_eps, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %sqv_{tag} = stablehlo.sqrt %vh_{tag} : {ty}\n"
+  s := s ++ s!"    %den_{tag} = stablehlo.add %sqv_{tag}, %eps_{tag} : {ty}\n"
+  s := s ++ s!"    %rat_{tag} = stablehlo.divide %mh_{tag}, %den_{tag} : {ty}\n"
+  s := s ++ s!"    %upd_{tag} = stablehlo.multiply %lr_{tag}, %rat_{tag} : {ty}\n"
+  s := s ++ s!"    %sub_{tag} = stablehlo.subtract {paramSSA}, %upd_{tag} : {ty}\n"
   if applyWeightDecay then
-    -- Decoupled weight decay: w = w - lr*v - wd*lr*w
+    -- Decoupled weight decay: w = w - lr*m_hat/(sqrt(v_hat)+ε) - wd*lr*w
     s := s ++ s!"    %wd_{tag} = stablehlo.broadcast_in_dim %wdecay, dims = [] : (tensor<f32>) -> {ty}\n"
     s := s ++ s!"    %wdlr_{tag} = stablehlo.multiply %wd_{tag}, %lr_{tag} : {ty}\n"
     s := s ++ s!"    %wdp_{tag} = stablehlo.multiply %wdlr_{tag}, {paramSSA} : {ty}\n"
     s := s ++ s!"    %new_{tag} = stablehlo.subtract %sub_{tag}, %wdp_{tag} : {ty}\n"
-  return (s, if applyWeightDecay then s!"%new_{tag}" else s!"%sub_{tag}", s!"%vn_{tag}")
+  return (s, if applyWeightDecay then s!"%new_{tag}" else s!"%sub_{tag}", s!"%mn_{tag}", s!"%vn_{tag}")
 
-/-- Emit SGD+momentum for a convBn layer (W, gamma, beta). -/
-private def emitConvBnSGD (p ic oc kSize : Nat) : String × Array String × Array String := Id.run do
+/-- Emit Adam update for a convBn layer (W, gamma, beta). -/
+private def emitConvBnAdam (p ic oc kSize : Nat) : String × Array String × Array String := Id.run do
   let wShape := [oc, ic, kSize, kSize]
   let bShape := [oc]
   let mut s := ""
-  let (s1, wNew, vwNew) := emitMomentumUpdate s!"%W{p}" s!"%d_W{p}" s!"%v_W{p}" wShape s!"W{p}" (applyWeightDecay := true)
+  let (s1, wNew, mwNew, vwNew) := emitAdamUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"W{p}" (applyWeightDecay := true)
   s := s ++ s1
-  let (s2, gNew, vgNew) := emitMomentumUpdate s!"%g{p}" s!"%d_g{p}" s!"%v_g{p}" bShape s!"g{p}"
+  let (s2, gNew, mgNew, vgNew) := emitAdamUpdate s!"%g{p}" s!"%d_g{p}" s!"%m_g{p}" s!"%v_g{p}" bShape s!"g{p}"
   s := s ++ s2
-  let (s3, btNew, vbtNew) := emitMomentumUpdate s!"%bt{p}" s!"%d_bt{p}" s!"%v_bt{p}" bShape s!"bt{p}"
+  let (s3, btNew, mbtNew, vbtNew) := emitAdamUpdate s!"%bt{p}" s!"%d_bt{p}" s!"%m_bt{p}" s!"%v_bt{p}" bShape s!"bt{p}"
   s := s ++ s3
-  let retNames := #[wNew, gNew, btNew, vwNew, vgNew, vbtNew]
+  let retNames := #[wNew, gNew, btNew, mwNew, mgNew, mbtNew, vwNew, vgNew, vbtNew]
   let retTypes := #[tensorTy wShape, tensorTy bShape, tensorTy bShape,
+                    tensorTy wShape, tensorTy bShape, tensorTy bShape,
                     tensorTy wShape, tensorTy bShape, tensorTy bShape]
   return (s, retNames, retTypes)
 
@@ -743,8 +770,19 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   let mut code : String := ""
   code := code ++ "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n"
   code := code ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
-  code := code ++ "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n"
-  code := code ++ "    %wdecay = stablehlo.constant dense<1.0e-04> : tensor<f32>\n\n"
+  code := code ++ "    // Adam constants\n"
+  code := code ++ "    %beta1 = stablehlo.constant dense<0.9> : tensor<f32>\n"
+  code := code ++ "    %beta2 = stablehlo.constant dense<0.999> : tensor<f32>\n"
+  code := code ++ "    %one_minus_b1 = stablehlo.constant dense<0.1> : tensor<f32>\n"
+  code := code ++ "    %one_minus_b2 = stablehlo.constant dense<0.001> : tensor<f32>\n"
+  code := code ++ "    %adam_eps = stablehlo.constant dense<1.0e-08> : tensor<f32>\n"
+  code := code ++ "    %wdecay = stablehlo.constant dense<1.0e-04> : tensor<f32>\n"
+  code := code ++ "    // Bias correction: bc1 = 1 - β1^t, bc2 = 1 - β2^t\n"
+  code := code ++ "    %one_scalar = stablehlo.constant dense<1.0> : tensor<f32>\n"
+  code := code ++ "    %b1t = stablehlo.power %beta1, %t : tensor<f32>\n"
+  code := code ++ "    %bc1 = stablehlo.subtract %one_scalar, %b1t : tensor<f32>\n"
+  code := code ++ "    %b2t = stablehlo.power %beta2, %t : tensor<f32>\n"
+  code := code ++ "    %bc2 = stablehlo.subtract %one_scalar, %b2t : tensor<f32>\n\n"
 
   -- ═══════════════ FORWARD PASS ═══════════════
   code := code ++ "    // ======================== FORWARD ========================\n"
@@ -1002,8 +1040,11 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   code := code ++ s!"    %y_b = stablehlo.broadcast_in_dim %y, dims = [0] : ({tensorTy [B]}".replace "xf32>" "xi32>" ++ s!") -> {tensorTy [B, NC]}".replace "xf32>" "xi32>" ++ "\n"
   let i1Ty := s!"tensor<{B}x{NC}xi1>"
   code := code ++ s!"    %mask = stablehlo.compare EQ, %iota, %y_b : ({tensorTy [B, NC]}".replace "xf32>" "xi32>" ++ s!", {tensorTy [B, NC]}".replace "xf32>" "xi32>" ++ s!") -> {i1Ty}\n"
-  code := code ++ s!"    %onef = stablehlo.constant dense<1.0> : {tensorTy [B, NC]}\n"
-  code := code ++ s!"    %zerof = stablehlo.constant dense<0.0> : {tensorTy [B, NC]}\n"
+  let epsilon := 0.1
+  let smoothOn := 1.0 - epsilon + epsilon / nClasses.toFloat
+  let smoothOff := epsilon / nClasses.toFloat
+  code := code ++ s!"    %onef = stablehlo.constant dense<{smoothOn}> : {tensorTy [B, NC]}\n"
+  code := code ++ s!"    %zerof = stablehlo.constant dense<{smoothOff}> : {tensorTy [B, NC]}\n"
   code := code ++ s!"    %onehot = stablehlo.select %mask, %onef, %zerof : {i1Ty}, {tensorTy [B, NC]}\n"
   code := code ++ s!"    %weighted = stablehlo.multiply %log_p, %onehot : {tensorTy [B, NC]}\n"
   code := code ++ s!"    %total = stablehlo.reduce(%weighted init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
@@ -1174,12 +1215,14 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
 
     | _ => pure ()
 
-  -- ═══════════════ SGD+MOMENTUM UPDATES ═══════════════
-  code := code ++ "\n    // ================ SGD+MOMENTUM UPDATES ================\n"
+  -- ═══════════════ ADAM UPDATES ═══════════════
+  code := code ++ "\n    // ================ ADAM UPDATES ================\n"
   let mut paramRetNames : Array String := #[]
   let mut paramRetTypes : Array String := #[]
-  let mut velRetNames : Array String := #[]
-  let mut velRetTypes : Array String := #[]
+  let mut mRetNames : Array String := #[]
+  let mut mRetTypes : Array String := #[]
+  let mut vRetNames : Array String := #[]
+  let mut vRetTypes : Array String := #[]
   let mut processedPidx : Array Nat := #[]
   for r in records do
     match r.pidx with
@@ -1191,35 +1234,41 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         match r.layer with
         | .conv2d ic oc kSize _ _ =>
           let wShape := [oc, ic, kSize, kSize]; let bShape := [oc]
-          let (s1, wN, vwN) := emitMomentumUpdate s!"%W{p}" s!"%d_W{p}" s!"%v_W{p}" wShape s!"cW{p}" (applyWeightDecay := true)
-          let (s2, bN, vbN) := emitMomentumUpdate s!"%b{p}" s!"%d_b{p}" s!"%v_b{p}" bShape s!"cb{p}"
+          let (s1, wN, mwN, vwN) := emitAdamUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"cW{p}" (applyWeightDecay := true)
+          let (s2, bN, mbN, vbN) := emitAdamUpdate s!"%b{p}" s!"%d_b{p}" s!"%m_b{p}" s!"%v_b{p}" bShape s!"cb{p}"
           code := code ++ s1 ++ s2
           paramRetNames := paramRetNames.push wN |>.push bN
           paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-          velRetNames := velRetNames.push vwN |>.push vbN
-          velRetTypes := velRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
+          mRetNames := mRetNames.push mwN |>.push mbN
+          mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
+          vRetNames := vRetNames.push vwN |>.push vbN
+          vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
         | .dense fanIn fanOut _ =>
           let wShape := [fanIn, fanOut]; let bShape := [fanOut]
-          let (s1, wN, vwN) := emitMomentumUpdate s!"%W{p}" s!"%d_W{p}" s!"%v_W{p}" wShape s!"dW{p}" (applyWeightDecay := true)
-          let (s2, bN, vbN) := emitMomentumUpdate s!"%b{p}" s!"%d_b{p}" s!"%v_b{p}" bShape s!"db{p}"
+          let (s1, wN, mwN, vwN) := emitAdamUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"dW{p}" (applyWeightDecay := true)
+          let (s2, bN, mbN, vbN) := emitAdamUpdate s!"%b{p}" s!"%d_b{p}" s!"%m_b{p}" s!"%v_b{p}" bShape s!"db{p}"
           code := code ++ s1 ++ s2
           paramRetNames := paramRetNames.push wN |>.push bN
           paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-          velRetNames := velRetNames.push vwN |>.push vbN
-          velRetTypes := velRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
+          mRetNames := mRetNames.push mwN |>.push mbN
+          mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
+          vRetNames := vRetNames.push vwN |>.push vbN
+          vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
         | .convBn ic oc kSize _ _ =>
-          let (sgdCode, sgdNames, sgdTypes) := emitConvBnSGD p ic oc kSize
-          code := code ++ sgdCode
-          -- convBnSGD returns [wNew, gNew, btNew, vwNew, vgNew, vbtNew]
-          paramRetNames := paramRetNames ++ sgdNames[:3]
-          paramRetTypes := paramRetTypes ++ sgdTypes[:3]
-          velRetNames := velRetNames ++ sgdNames[3:]
-          velRetTypes := velRetTypes ++ sgdTypes[3:]
+          let (adamCode, adamNames, adamTypes) := emitConvBnAdam p ic oc kSize
+          code := code ++ adamCode
+          -- emitConvBnAdam returns [wNew, gNew, btNew, mwNew, mgNew, mbtNew, vwNew, vgNew, vbtNew]
+          paramRetNames := paramRetNames ++ adamNames[:3]
+          paramRetTypes := paramRetTypes ++ adamTypes[:3]
+          mRetNames := mRetNames ++ adamNames[3:6]
+          mRetTypes := mRetTypes ++ adamTypes[3:6]
+          vRetNames := vRetNames ++ adamNames[6:]
+          vRetTypes := vRetTypes ++ adamTypes[6:]
         | _ => pure ()
     | none => pure ()
-  -- Return order: all params, then all velocities, then loss (matches input order)
-  let retNames := paramRetNames ++ velRetNames |>.push "%loss"
-  let retTypes := paramRetTypes ++ velRetTypes |>.push "tensor<f32>"
+  -- Return order: all params, then all m (1st moment), then all v (2nd moment), then loss
+  let retNames := paramRetNames ++ mRetNames ++ vRetNames |>.push "%loss"
+  let retTypes := paramRetTypes ++ mRetTypes ++ vRetTypes |>.push "tensor<f32>"
 
   code := code ++ s!"    return {String.intercalate ", " retNames.toList}\n"
   code := code ++ s!"      : {String.intercalate ", " retTypes.toList}\n"
@@ -1232,35 +1281,53 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat) : String := Id.r
   let inDim := inputFlatDim spec
   let mut params : String := ""
   let mut paramRetTypes : Array String := #[]
-  let mut velRetTypes : Array String := #[]
+  let mut mRetTypes : Array String := #[]
+  let mut vRetTypes : Array String := #[]
   let mut pidx : Nat := 0
   let mut curShape : List Nat := [B, inDim]
   match inputChannels spec with
   | some ic => curShape := [B, ic, spec.imageH, spec.imageW]
   | none => pure ()
-  for l in spec.layers do
+  -- Helper: emit param block for one layer (used for params, m_, and v_)
+  let emitLayerParams := fun (pfx : String) (l : Layer) (idx : Nat) (retTypes : Array String) =>
     match l with
     | .conv2d ic oc kSize _ _ =>
       let wTy := tensorTy [oc, ic, kSize, kSize]; let bTy := tensorTy [oc]
-      params := params ++ s!"      %W{pidx}: {wTy}, %b{pidx}: {bTy},\n"
-      paramRetTypes := paramRetTypes.push wTy |>.push bTy
-      velRetTypes := velRetTypes.push wTy |>.push bTy
+      (s!"      %{pfx}W{idx}: {wTy}, %{pfx}b{idx}: {bTy},\n",
+       retTypes.push wTy |>.push bTy)
+    | .dense fanIn fanOut _ =>
+      let wTy := tensorTy [fanIn, fanOut]; let bTy := tensorTy [fanOut]
+      (s!"      %{pfx}W{idx}: {wTy}, %{pfx}b{idx}: {bTy},\n",
+       retTypes.push wTy |>.push bTy)
+    | .convBn ic oc kSize _ _ =>
+      let wTy := tensorTy [oc, ic, kSize, kSize]; let gTy := tensorTy [oc]
+      (s!"      %{pfx}W{idx}: {wTy}, %{pfx}g{idx}: {gTy}, %{pfx}bt{idx}: {gTy},\n",
+       retTypes.push wTy |>.push gTy |>.push gTy)
+    | _ => ("", retTypes)
+  -- Walk layers to build param/m/v argument lists
+  for l in spec.layers do
+    match l with
+    | .conv2d ic oc kSize _ _ =>
+      let (pStr, pTys) := emitLayerParams "" l pidx paramRetTypes
+      params := params ++ pStr; paramRetTypes := pTys
+      mRetTypes := (emitLayerParams "" l pidx mRetTypes).2
+      vRetTypes := (emitLayerParams "" l pidx vRetTypes).2
       match curShape with
       | [b, _, h, w] => curShape := [b, oc, h, w]
       | _ => pure ()
       pidx := pidx + 1
     | .dense fanIn fanOut _ =>
-      let wTy := tensorTy [fanIn, fanOut]; let bTy := tensorTy [fanOut]
-      params := params ++ s!"      %W{pidx}: {wTy}, %b{pidx}: {bTy},\n"
-      paramRetTypes := paramRetTypes.push wTy |>.push bTy
-      velRetTypes := velRetTypes.push wTy |>.push bTy
+      let (pStr, pTys) := emitLayerParams "" l pidx paramRetTypes
+      params := params ++ pStr; paramRetTypes := pTys
+      mRetTypes := (emitLayerParams "" l pidx mRetTypes).2
+      vRetTypes := (emitLayerParams "" l pidx vRetTypes).2
       curShape := [B, fanOut]
       pidx := pidx + 1
     | .convBn ic oc kSize stride _ =>
-      let wTy := tensorTy [oc, ic, kSize, kSize]; let gTy := tensorTy [oc]
-      params := params ++ s!"      %W{pidx}: {wTy}, %g{pidx}: {gTy}, %bt{pidx}: {gTy},\n"
-      paramRetTypes := paramRetTypes.push wTy |>.push gTy |>.push gTy
-      velRetTypes := velRetTypes.push wTy |>.push gTy |>.push gTy
+      let (pStr, pTys) := emitLayerParams "" l pidx paramRetTypes
+      params := params ++ pStr; paramRetTypes := pTys
+      mRetTypes := (emitLayerParams "" l pidx mRetTypes).2
+      vRetTypes := (emitLayerParams "" l pidx vRetTypes).2
       match curShape with
       | [b, _, h, w] => curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
       | _ => pure ()
@@ -1273,18 +1340,21 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat) : String := Id.r
         let wTy1 := tensorTy [oc, blockIc, 3, 3]
         params := params ++ s!"      %W{pidx}: {wTy1}, %g{pidx}: {gTy}, %bt{pidx}: {gTy},\n"
         paramRetTypes := paramRetTypes.push wTy1 |>.push gTy |>.push gTy
-        velRetTypes := velRetTypes.push wTy1 |>.push gTy |>.push gTy
+        mRetTypes := mRetTypes.push wTy1 |>.push gTy |>.push gTy
+        vRetTypes := vRetTypes.push wTy1 |>.push gTy |>.push gTy
         pidx := pidx + 1
         let wTy2 := tensorTy [oc, oc, 3, 3]
         params := params ++ s!"      %W{pidx}: {wTy2}, %g{pidx}: {gTy}, %bt{pidx}: {gTy},\n"
         paramRetTypes := paramRetTypes.push wTy2 |>.push gTy |>.push gTy
-        velRetTypes := velRetTypes.push wTy2 |>.push gTy |>.push gTy
+        mRetTypes := mRetTypes.push wTy2 |>.push gTy |>.push gTy
+        vRetTypes := vRetTypes.push wTy2 |>.push gTy |>.push gTy
         pidx := pidx + 1
         if bi == 0 && needsProj then
           let pTy := tensorTy [oc, ic, 1, 1]
           params := params ++ s!"      %W{pidx}: {pTy}, %g{pidx}: {gTy}, %bt{pidx}: {gTy},\n"
           paramRetTypes := paramRetTypes.push pTy |>.push gTy |>.push gTy
-          velRetTypes := velRetTypes.push pTy |>.push gTy |>.push gTy
+          mRetTypes := mRetTypes.push pTy |>.push gTy |>.push gTy
+          vRetTypes := vRetTypes.push pTy |>.push gTy |>.push gTy
           pidx := pidx + 1
       match curShape with
       | [b, _, h, w] => curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
@@ -1295,29 +1365,30 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat) : String := Id.r
       let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
       for bi in [:nBlocks] do
         let blockIc := if bi == 0 then ic else oc
-        -- 1x1 reduce
         let wTy1 := tensorTy [mid, blockIc, 1, 1]
         params := params ++ s!"      %W{pidx}: {wTy1}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
         paramRetTypes := paramRetTypes.push wTy1 |>.push gTyM |>.push gTyM
-        velRetTypes := velRetTypes.push wTy1 |>.push gTyM |>.push gTyM
+        mRetTypes := mRetTypes.push wTy1 |>.push gTyM |>.push gTyM
+        vRetTypes := vRetTypes.push wTy1 |>.push gTyM |>.push gTyM
         pidx := pidx + 1
-        -- 3x3
         let wTy2 := tensorTy [mid, mid, 3, 3]
         params := params ++ s!"      %W{pidx}: {wTy2}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
         paramRetTypes := paramRetTypes.push wTy2 |>.push gTyM |>.push gTyM
-        velRetTypes := velRetTypes.push wTy2 |>.push gTyM |>.push gTyM
+        mRetTypes := mRetTypes.push wTy2 |>.push gTyM |>.push gTyM
+        vRetTypes := vRetTypes.push wTy2 |>.push gTyM |>.push gTyM
         pidx := pidx + 1
-        -- 1x1 expand
         let wTy3 := tensorTy [oc, mid, 1, 1]
         params := params ++ s!"      %W{pidx}: {wTy3}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
         paramRetTypes := paramRetTypes.push wTy3 |>.push gTyO |>.push gTyO
-        velRetTypes := velRetTypes.push wTy3 |>.push gTyO |>.push gTyO
+        mRetTypes := mRetTypes.push wTy3 |>.push gTyO |>.push gTyO
+        vRetTypes := vRetTypes.push wTy3 |>.push gTyO |>.push gTyO
         pidx := pidx + 1
         if bi == 0 && needsProj then
           let pTy := tensorTy [oc, ic, 1, 1]
           params := params ++ s!"      %W{pidx}: {pTy}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
           paramRetTypes := paramRetTypes.push pTy |>.push gTyO |>.push gTyO
-          velRetTypes := velRetTypes.push pTy |>.push gTyO |>.push gTyO
+          mRetTypes := mRetTypes.push pTy |>.push gTyO |>.push gTyO
+          vRetTypes := vRetTypes.push pTy |>.push gTyO |>.push gTyO
           pidx := pidx + 1
       match curShape with
       | [b, _, h, w] => curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
@@ -1335,48 +1406,78 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat) : String := Id.r
       | [b, c, h, w] => curShape := [b, c * h * w]
       | _ => pure ()
     | _ => pure ()
-  -- Velocity params (same shapes, v_ prefix) — emitted after all param tensors
-  let mut vpidx2 : Nat := 0
+  -- m_ params (1st moment, same shapes)
+  let mut mpidx : Nat := 0
   for l in spec.layers do
+    let (pStr, _) := emitLayerParams "m_" l mpidx #[]
+    if pStr != "" then
+      params := params ++ pStr; mpidx := mpidx + 1
+    -- Handle residual/bottleneck blocks manually
     match l with
-    | .conv2d ic oc kSize _ _ =>
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, kSize, kSize]}, %v_b{vpidx2}: {tensorTy [oc]},\n"
-      vpidx2 := vpidx2 + 1
-    | .dense fanIn fanOut _ =>
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [fanIn, fanOut]}, %v_b{vpidx2}: {tensorTy [fanOut]},\n"
-      vpidx2 := vpidx2 + 1
-    | .convBn ic oc kSize _ _ =>
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, kSize, kSize]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
-      vpidx2 := vpidx2 + 1
     | .residualBlock ic oc nBlocks firstStride =>
       let needsProj := !(ic == oc && firstStride == 1)
+      let gTy := tensorTy [oc]
       for bi in [:nBlocks] do
         let blockIc := if bi == 0 then ic else oc
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, blockIc, 3, 3]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
+        params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, blockIc, 3, 3]}, %m_g{mpidx}: {gTy}, %m_bt{mpidx}: {gTy},\n"
+        mpidx := mpidx + 1
+        params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, oc, 3, 3]}, %m_g{mpidx}: {gTy}, %m_bt{mpidx}: {gTy},\n"
+        mpidx := mpidx + 1
+        if bi == 0 && needsProj then
+          params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, ic, 1, 1]}, %m_g{mpidx}: {gTy}, %m_bt{mpidx}: {gTy},\n"
+          mpidx := mpidx + 1
+    | .bottleneckBlock ic oc nBlocks firstStride =>
+      let mid := oc / 4; let needsProj := !(ic == oc && firstStride == 1)
+      let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
+      for bi in [:nBlocks] do
+        let blockIc := if bi == 0 then ic else oc
+        params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, blockIc, 1, 1]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
+        mpidx := mpidx + 1
+        params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, mid, 3, 3]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
+        mpidx := mpidx + 1
+        params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, mid, 1, 1]}, %m_g{mpidx}: {gTyO}, %m_bt{mpidx}: {gTyO},\n"
+        mpidx := mpidx + 1
+        if bi == 0 && needsProj then
+          params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, ic, 1, 1]}, %m_g{mpidx}: {gTyO}, %m_bt{mpidx}: {gTyO},\n"
+          mpidx := mpidx + 1
+    | _ => pure ()
+  -- v_ params (2nd moment, same shapes)
+  let mut vpidx2 : Nat := 0
+  for l in spec.layers do
+    let (pStr, _) := emitLayerParams "v_" l vpidx2 #[]
+    if pStr != "" then
+      params := params ++ pStr; vpidx2 := vpidx2 + 1
+    match l with
+    | .residualBlock ic oc nBlocks firstStride =>
+      let needsProj := !(ic == oc && firstStride == 1)
+      let gTy := tensorTy [oc]
+      for bi in [:nBlocks] do
+        let blockIc := if bi == 0 then ic else oc
+        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, blockIc, 3, 3]}, %v_g{vpidx2}: {gTy}, %v_bt{vpidx2}: {gTy},\n"
         vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, oc, 3, 3]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
+        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, oc, 3, 3]}, %v_g{vpidx2}: {gTy}, %v_bt{vpidx2}: {gTy},\n"
         vpidx2 := vpidx2 + 1
         if bi == 0 && needsProj then
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, 1, 1]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
+          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, 1, 1]}, %v_g{vpidx2}: {gTy}, %v_bt{vpidx2}: {gTy},\n"
           vpidx2 := vpidx2 + 1
     | .bottleneckBlock ic oc nBlocks firstStride =>
-      let mid := oc / 4
-      let needsProj := !(ic == oc && firstStride == 1)
+      let mid := oc / 4; let needsProj := !(ic == oc && firstStride == 1)
+      let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
       for bi in [:nBlocks] do
         let blockIc := if bi == 0 then ic else oc
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, blockIc, 1, 1]}, %v_g{vpidx2}: {tensorTy [mid]}, %v_bt{vpidx2}: {tensorTy [mid]},\n"
+        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, blockIc, 1, 1]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
         vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, mid, 3, 3]}, %v_g{vpidx2}: {tensorTy [mid]}, %v_bt{vpidx2}: {tensorTy [mid]},\n"
+        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, mid, 3, 3]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
         vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, mid, 1, 1]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
+        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, mid, 1, 1]}, %v_g{vpidx2}: {gTyO}, %v_bt{vpidx2}: {gTyO},\n"
         vpidx2 := vpidx2 + 1
         if bi == 0 && needsProj then
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, 1, 1]}, %v_g{vpidx2}: {tensorTy [oc]}, %v_bt{vpidx2}: {tensorTy [oc]},\n"
+          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, 1, 1]}, %v_g{vpidx2}: {gTyO}, %v_bt{vpidx2}: {gTyO},\n"
           vpidx2 := vpidx2 + 1
     | _ => pure ()
   params := params ++ s!"      %x_flat: {tensorTy [B, inDim]}, %y: tensor<{B}xi32>,\n"
-  params := params ++ "      %lr: tensor<f32>"
-  let retTypes := paramRetTypes ++ velRetTypes |>.push "tensor<f32>"
+  params := params ++ "      %lr: tensor<f32>, %t: tensor<f32>"
+  let retTypes := paramRetTypes ++ mRetTypes ++ vRetTypes |>.push "tensor<f32>"
   pure s!"  func.func @main(\n{params}\n    ) -> ({String.intercalate ", " retTypes.toList})"
 
 /-- Generate a full train_step MLIR module with VJPs. -/

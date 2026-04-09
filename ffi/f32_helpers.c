@@ -156,15 +156,14 @@ LEAN_EXPORT lean_obj_res lean_f32_load_idx_labels(b_lean_obj_arg path_obj, lean_
 // ---- Imagenette binary -> f32 ByteArray (ImageNet mean/std normalized) ----
 // Binary: 4-byte count (LE u32), per-sample: 1 byte label + 224*224*3 bytes (CHW, uint8)
 // Returns (images ByteArray, labels ByteArray, count Nat)
-LEAN_EXPORT lean_obj_res lean_f32_load_imagenette(b_lean_obj_arg path_obj, lean_obj_arg w) {
-    (void)w;
-    const char* path = lean_string_cstr(path_obj);
+// Internal loader parameterized by image size
+static lean_obj_res load_imagenette_sized(const char* path, size_t img_size) {
     FILE* f = fopen(path, "rb");
     if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open imagenette file")));
     uint32_t file_count;
     if (fread(&file_count, 4, 1, f) != 1) { fclose(f); return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("bad header"))); }
     uint32_t count = file_count;
-    const size_t pix = 3 * 224 * 224;
+    const size_t pix = 3 * img_size * img_size;
     size_t img_bytes = (size_t)count * pix * 4;
     size_t lbl_bytes = (size_t)count * 4;
     lean_object* img_ba = lean_alloc_sarray(1, img_bytes, img_bytes);
@@ -179,14 +178,15 @@ LEAN_EXPORT lean_obj_res lean_f32_load_imagenette(b_lean_obj_arg path_obj, lean_
             return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("short read"))); }
         lbl[i*4]=buf[0]; lbl[i*4+1]=0; lbl[i*4+2]=0; lbl[i*4+3]=0;
         float* dst = img + (size_t)i * pix;
+        size_t hw = img_size * img_size;
         for (int ch = 0; ch < 3; ch++) {
             float m = mean[ch], s = istd[ch];
-            for (int j = 0; j < 224*224; j++)
-                dst[ch*224*224+j] = (buf[1+ch*224*224+j]/255.0f - m) * s;
+            for (size_t j = 0; j < hw; j++)
+                dst[ch*hw+j] = (buf[1+ch*hw+j]/255.0f - m) * s;
         }
     }
     free(buf); fclose(f);
-    // ByteArray × ByteArray × Nat = Prod ByteArray (Prod ByteArray Nat)
+
     lean_object* inner = lean_alloc_ctor(0, 2, 0);
     lean_ctor_set(inner, 0, lbl_ba);
     lean_ctor_set(inner, 1, lean_usize_to_nat((size_t)count));
@@ -194,6 +194,16 @@ LEAN_EXPORT lean_obj_res lean_f32_load_imagenette(b_lean_obj_arg path_obj, lean_
     lean_ctor_set(outer, 0, img_ba);
     lean_ctor_set(outer, 1, inner);
     return lean_io_result_mk_ok(outer);
+}
+
+LEAN_EXPORT lean_obj_res lean_f32_load_imagenette(b_lean_obj_arg path_obj, lean_obj_arg w) {
+    (void)w;
+    return load_imagenette_sized(lean_string_cstr(path_obj), 224);
+}
+
+LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_sized(b_lean_obj_arg path_obj, size_t img_size, lean_obj_arg w) {
+    (void)w;
+    return load_imagenette_sized(lean_string_cstr(path_obj), img_size);
 }
 
 // ---- Shuffle images + labels in-place (Fisher-Yates) ----
@@ -230,6 +240,44 @@ LEAN_EXPORT lean_obj_res lean_f32_shuffle(lean_obj_arg img_obj, lean_obj_arg lbl
     lean_ctor_set(pair, 0, img_obj);
     lean_ctor_set(pair, 1, lbl_obj);
     return lean_io_result_mk_ok(pair);
+}
+
+// ---- Random crop: batch of NCHW images from src_size to crop_size ----
+// Input: batch * C * src_h * src_w floats (already normalized).
+// Output: batch * C * crop_h * crop_w floats (random offset per image).
+LEAN_EXPORT lean_obj_res lean_f32_random_crop(
+    b_lean_obj_arg ba, size_t batch, size_t channels,
+    size_t src_h, size_t src_w, size_t crop_h, size_t crop_w,
+    size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t out_pixels = channels * crop_h * crop_w;
+    size_t out_nbytes = batch * out_pixels * 4;
+    size_t src_pixels = channels * src_h * src_w;
+    lean_object* out = lean_alloc_sarray(1, out_nbytes, out_nbytes);
+    float* dst = (float*)lean_sarray_cptr(out);
+    const float* src = (const float*)lean_sarray_cptr(ba);
+
+    size_t max_y = src_h - crop_h;
+    size_t max_x = src_w - crop_w;
+    uint64_t s = seed + 1;
+    for (size_t i = 0; i < batch; i++) {
+        // xorshift64 for random offsets
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        size_t y0 = (max_y > 0) ? (s % (max_y + 1)) : 0;
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        size_t x0 = (max_x > 0) ? (s % (max_x + 1)) : 0;
+
+        const float* img_src = src + i * src_pixels;
+        float* img_dst = dst + i * out_pixels;
+        for (size_t c = 0; c < channels; c++) {
+            for (size_t h = 0; h < crop_h; h++) {
+                memcpy(img_dst + c * crop_h * crop_w + h * crop_w,
+                       img_src + c * src_h * src_w + (y0 + h) * src_w + x0,
+                       crop_w * sizeof(float));
+            }
+        }
+    }
+    return lean_io_result_mk_ok(out);
 }
 
 // ---- Random horizontal flip for a batch of NCHW images (in-place on copy) ----

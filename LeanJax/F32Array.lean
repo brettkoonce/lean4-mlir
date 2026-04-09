@@ -76,10 +76,20 @@ opaque cifarBatch (raw : @& ByteArray) (start : USize) (count : USize) : IO Byte
 @[extern "lean_f32_load_imagenette"]
 opaque loadImagenette (path : @& String) : IO (ByteArray × ByteArray × Nat)
 
+/-- Load Imagenette with explicit image size (e.g. 256 for train, 224 for val). -/
+@[extern "lean_f32_load_imagenette_sized"]
+opaque loadImagenetteSized (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArray × Nat)
+
 /-- Shuffle images and labels in-place (Fisher-Yates). Returns (shuffled images, shuffled labels). -/
 @[extern "lean_f32_shuffle"]
 opaque shuffle (images : ByteArray) (labels : ByteArray)
     (n : USize) (pixelsPerImage : USize) (seed : USize) : IO (ByteArray × ByteArray)
+
+/-- Random crop: batch of NCHW images from src_size to crop_size. -/
+@[extern "lean_f32_random_crop"]
+opaque randomCrop (images : @& ByteArray) (batch : USize) (channels : USize)
+    (srcH : USize) (srcW : USize) (cropH : USize) (cropW : USize)
+    (seed : USize) : IO ByteArray
 
 /-- Random horizontal flip for a batch of NCHW images (50% per image). -/
 @[extern "lean_f32_random_hflip"]

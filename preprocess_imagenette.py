@@ -31,10 +31,12 @@ CLASS_MAP = {
     'n03888257': 9,  # parachute
 }
 
-SIZE = 224
+TRAIN_SIZE = 256  # train at 256, random crop to 224 at train time
+VAL_SIZE = 224    # val center-cropped to 224
 
-def process_split(src_dir, out_path):
+def process_split(src_dir, out_path, size=VAL_SIZE):
     records = []
+    import numpy as np
     for class_dir in sorted(os.listdir(src_dir)):
         if class_dir not in CLASS_MAP:
             continue
@@ -45,14 +47,13 @@ def process_split(src_dir, out_path):
                 continue
             fpath = os.path.join(class_path, fname)
             try:
-                img = Image.open(fpath).convert('RGB').resize((SIZE, SIZE), Image.BILINEAR)
+                img = Image.open(fpath).convert('RGB').resize((size, size), Image.BILINEAR)
             except Exception as e:
                 print(f"  skipping {fpath}: {e}")
                 continue
             # Channel-first: R plane, G plane, B plane (like CIFAR)
-            import numpy as np
-            arr = np.array(img, dtype=np.uint8)  # (224, 224, 3) HWC
-            arr = arr.transpose(2, 0, 1)  # (3, 224, 224) CHW
+            arr = np.array(img, dtype=np.uint8)  # (H, W, 3) HWC
+            arr = arr.transpose(2, 0, 1)  # (3, H, W) CHW
             records.append((label, arr.tobytes()))
 
     print(f"  {len(records)} images → {out_path}")
@@ -71,11 +72,11 @@ def main():
     dst = sys.argv[2]
     os.makedirs(dst, exist_ok=True)
 
-    print("Processing training split...")
-    process_split(os.path.join(src, 'train'), os.path.join(dst, 'train.bin'))
+    print("Processing training split (256×256 for random crop)...")
+    process_split(os.path.join(src, 'train'), os.path.join(dst, 'train.bin'), size=TRAIN_SIZE)
 
-    print("Processing validation split...")
-    process_split(os.path.join(src, 'val'), os.path.join(dst, 'val.bin'))
+    print("Processing validation split (224×224 center crop)...")
+    process_split(os.path.join(src, 'val'), os.path.join(dst, 'val.bin'), size=VAL_SIZE)
 
     print("Done.")
 
