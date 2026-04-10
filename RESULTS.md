@@ -12,8 +12,8 @@ Hardware: AMD Radeon 7900 XTX (gfx1100) via ROCm 7.2 / IREE.
 
 | Model | Params | Val accuracy | Notes |
 |---|---|---|---|
-| ResNet-34 | 21.3M | **90.29%** | basic + bottleneck residual blocks |
-| ResNet-50 | 23.5M | **89.40%** | bottleneck residual blocks |
+| ResNet-34 | 21.3M | **90.29%** | basic residual blocks (3x3 + 3x3) |
+| ResNet-50 | 23.5M | **89.40%** | bottleneck blocks (1x1 → 3x3 → 1x1) |
 | MobileNetV2 | 2.2M | **87.09%** | depthwise separable + inverted residual |
 | MobileNetV3-Large | 3.0M | _in progress_ | exact h-swish + h-sigmoid SE |
 | EfficientNet-B0 | 7.2M | _in progress_ | MBConv with swish + sigmoid SE |
