@@ -4,7 +4,7 @@ import LeanJax.Types
 import LeanJax.Spec
 import LeanJax.MlirCodegen
 
-/-! EfficientNet-B0 on Imagenette — MBConv blocks, Swish, (SE not yet).
+/-! EfficientNet-B0 on Imagenette — MBConv blocks, Swish, SE enabled.
     ~4.0M params, 224×224, 10 classes. -/
 
 def efficientNetB0 : NetSpec where
@@ -13,13 +13,13 @@ def efficientNetB0 : NetSpec where
   imageW := 224
   layers := [
     .convBn 3 32 3 2 .same,                          -- 224→112
-    .mbConv  32  16 1 3 1 1 false,                    -- 112 (SE disabled for phase 1)
-    .mbConv  16  24 6 3 2 2 false,                    -- 112→56
-    .mbConv  24  40 6 5 2 2 false,                    -- 56→28
-    .mbConv  40  80 6 3 2 3 false,                    -- 28→14
-    .mbConv  80 112 6 5 1 3 false,                    -- 14
-    .mbConv 112 192 6 5 2 4 false,                    -- 14→7
-    .mbConv 192 320 6 3 1 1 false,                    -- 7
+    .mbConv  32  16 1 3 1 1 true,                     -- 112
+    .mbConv  16  24 6 3 2 2 true,                     -- 112→56
+    .mbConv  24  40 6 5 2 2 true,                     -- 56→28
+    .mbConv  40  80 6 3 2 3 true,                     -- 28→14
+    .mbConv  80 112 6 5 1 3 true,                     -- 14
+    .mbConv 112 192 6 5 2 4 true,                     -- 14→7
+    .mbConv 192 320 6 3 1 1 true,                     -- 7
     .convBn 320 1280 1 1 .same,                       -- 1x1 head
     .globalAvgPool,
     .dense 1280 10 .identity
@@ -37,13 +37,19 @@ def paramShapes : Array (Array Nat) := Id.run do
       shapes := shapes.push #[oc, ic, k, k] |>.push #[oc] |>.push #[oc]
     | .dense fi fo _ =>
       shapes := shapes.push #[fi, fo] |>.push #[fo]
-    | .mbConv ic oc expand kSize _ n _ =>
+    | .mbConv ic oc expand kSize _ n useSE =>
       for bi in [:n] do
         let blockIc := if bi == 0 then ic else oc
         let mid := blockIc * expand
+        let seMid := Nat.max 1 (mid / 4)
         if expand != 1 then
           shapes := shapes.push #[mid, blockIc, 1, 1] |>.push #[mid] |>.push #[mid]
         shapes := shapes.push #[mid, 1, kSize, kSize] |>.push #[mid] |>.push #[mid]
+        if useSE then
+          -- SE reduce: W [seMid, mid, 1, 1], b [seMid]
+          shapes := shapes.push #[seMid, mid, 1, 1] |>.push #[seMid]
+          -- SE expand: W [mid, seMid, 1, 1], b [mid]
+          shapes := shapes.push #[mid, seMid, 1, 1] |>.push #[mid]
         shapes := shapes.push #[oc, mid, 1, 1] |>.push #[oc] |>.push #[oc]
     | _ => pure ()
   return shapes
