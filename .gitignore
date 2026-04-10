@@ -2,6 +2,9 @@
 .venv/
 data/
 
+# Training logs
+*.log
+
 # FFI build artifacts
 ffi/*.o
 ffi/*.so
