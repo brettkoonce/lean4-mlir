@@ -1,9 +1,45 @@
-# Lean 4 → JAX
+# Lean 4 → MLIR → GPU
 
 Lean 4 as a specification language for neural networks. Declare architecture
-and training config in Lean, generate idiomatic JAX Python, run training.
+in Lean, generate StableHLO MLIR, compile to GPU via IREE, train end-to-end.
 
 Replicating the models from [Convolutional Neural Networks with Swift for TensorFlow](https://doi.org/10.1007/978-1-4842-6168-2) (Apress).
+
+## Three phases
+
+This project went through three implementations of the same idea — "Lean 4 as a
+specification language for deep learning" — each shedding more dependencies
+than the last.
+
+**Phase 1 — Pure Lean 4.** [mnist-lean4](../mnist-lean4): everything in Lean,
+`Float64` as the only datatype, hand-written gradients, C FFI to OpenBLAS /
+hipBLAS for the matmuls. Worked end-to-end on MNIST through ResNet-34 but
+performance was poor — every operation crossed the FFI boundary, no fusion,
+no autodiff, no JIT.
+
+**Phase 2 — Lean → JAX.** Lean as a metaprogramming layer that emits
+idiomatic JAX Python (`LeanJax/Codegen.lean`, ~1100 lines). The generated
+script gets `value_and_grad` autodiff and XLA JIT for free, runs on any
+JAX-supported device. Trades the pure-Lean story for a working stack and
+real GPU performance.
+
+**Phase 3 — Lean → StableHLO → MLIR → device.** No Python runtime at all.
+Lean directly emits StableHLO MLIR (forward + loss + backward + optimizer
+all in one fused function), IREE compiles it to a GPU flatbuffer, a thin
+C FFI loads and runs it. The pure-math version of phase 2 — autodiff is
+done at codegen time in Lean (`LeanJax/MlirCodegen.lean`, ~5000 lines), not
+at runtime by a framework. See [`RESULTS.md`](RESULTS.md) for the
+ResNet/MobileNet/EfficientNet/ViT/MobileNetV4 numbers from this path.
+
+The proofs that the generated MLIR is mathematically correct live in
+[`LeanJax/Proofs/`](LeanJax/Proofs/) — chapter-by-chapter VJP correctness
+proofs for tensor ops, MLP, CNN, residual, batch norm, depthwise, SE,
+LayerNorm, and attention. The codegen and the proofs were written
+independently and arrived at the same decomposition: every backward pass
+factors through the standalone gradient of one new primitive per
+architecture (softmax for attention, the spatial reductions for BN, the
+rank-1 collapse for SE), and everything else is composition via the chain
+rule on tools from earlier chapters.
 
 ## Models
 
