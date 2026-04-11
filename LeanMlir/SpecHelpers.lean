@@ -165,9 +165,10 @@ def evalShapesBA (spec : NetSpec) : ByteArray :=
   packShapes spec.evalShapes
 
 /-- Packed input-tensor shape for a flat-image batch (NCHW collapsed
-    to `[batch, 3*H*W]`). -/
+    to `[batch, channels*H*W]`). Channel count comes from the first
+    conv-style layer; defaults to 1 for pure-MLP specs. -/
 def xShape (spec : NetSpec) (batch : Nat) : ByteArray :=
-  packXShape #[batch, 3 * spec.imageH * spec.imageW]
+  packXShape #[batch, MlirCodegen.inputFlatDim spec]
 
 /-- Sanitized base name for the spec — same transformation the codegen
     applies when generating MLIR module names. -/

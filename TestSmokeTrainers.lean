@@ -153,6 +153,68 @@ def vgg16bn : NetSpec where
     .globalAvgPool, .dense 512 10 .identity
   ]
 
+-- Smaller specs (the previously-broken trainers).
+
+def mnistMlp : NetSpec where
+  name := "MNIST-MLP"
+  imageH := 28
+  imageW := 28
+  layers := [
+    .dense 784 512 .relu,
+    .dense 512 512 .relu,
+    .dense 512  10 .identity
+  ]
+
+def mnistCnn : NetSpec where
+  name := "MNIST-CNN"
+  imageH := 28
+  imageW := 28
+  layers := [
+    .convBn 1 32 3 1 .same,
+    .convBn 32 32 3 1 .same,
+    .maxPool 2 2,
+    .convBn 32 64 3 1 .same,
+    .convBn 64 64 3 1 .same,
+    .maxPool 2 2,
+    .flatten,
+    .dense 3136 512 .relu,
+    .dense 512 10 .identity
+  ]
+
+def cifarCnnBn : NetSpec where
+  name := "CIFAR-10-BN"
+  imageH := 32
+  imageW := 32
+  layers := [
+    .convBn  3 32 3 1 .same,
+    .convBn 32 32 3 1 .same,
+    .maxPool 2 2,
+    .convBn 32 64 3 1 .same,
+    .convBn 64 64 3 1 .same,
+    .maxPool 2 2,
+    .flatten,
+    .dense 4096 512 .relu,
+    .dense 512 512 .relu,
+    .dense 512 10 .identity
+  ]
+
+def cifarCnn : NetSpec where
+  name := "CIFAR-10-CNN"
+  imageH := 32
+  imageW := 32
+  layers := [
+    .conv2d  3 32 3 .same .relu,
+    .conv2d 32 32 3 .same .relu,
+    .maxPool 2 2,
+    .conv2d 32 64 3 .same .relu,
+    .conv2d 64 64 3 .same .relu,
+    .maxPool 2 2,
+    .flatten,
+    .dense 4096 512 .relu,
+    .dense 512 512 .relu,
+    .dense 512 10 .identity
+  ]
+
 end Smoke
 
 /-- Count occurrences of `needle` in `haystack`. -/
@@ -181,7 +243,11 @@ def main : IO Unit := do
     ("EfficientNet-B0",    Smoke.efficientNetB0),
     ("EfficientNetV2-S",   Smoke.efficientNetV2S),
     ("ViT-Tiny",           Smoke.vitTiny),
-    ("VGG-16-BN",          Smoke.vgg16bn)
+    ("VGG-16-BN",          Smoke.vgg16bn),
+    ("MNIST-MLP",          Smoke.mnistMlp),
+    ("MNIST-CNN",          Smoke.mnistCnn),
+    ("CIFAR-10-BN",        Smoke.cifarCnnBn),
+    ("CIFAR-10-CNN",       Smoke.cifarCnn)
   ]
 
   let mut ok := true

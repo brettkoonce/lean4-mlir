@@ -17,7 +17,7 @@ namespace MlirCodegen
 
 /-- Total flat input size: for CNN, ic * imageH * imageW; for MLP, first
     dense layer's fanIn. -/
-private def inputFlatDim (spec : NetSpec) : Nat :=
+def inputFlatDim (spec : NetSpec) : Nat :=
   match spec.layers.head? with
   | some (.dense fanIn _ _) => fanIn
   | some (.conv2d ic _ _ _ _) => ic * spec.imageH * spec.imageW
@@ -28,7 +28,7 @@ private def inputFlatDim (spec : NetSpec) : Nat :=
   | _ => spec.imageH * spec.imageW
 
 /-- If the first layer is conv/convBn, returns the NCHW input channels. -/
-private def inputChannels (spec : NetSpec) : Option Nat :=
+def inputChannels (spec : NetSpec) : Option Nat :=
   match spec.layers.head? with
   | some (.conv2d ic _ _ _ _) => some ic
   | some (.convBn ic _ _ _ _) => some ic

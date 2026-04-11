@@ -105,23 +105,106 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig) : IO String := do
     IO.Process.exit 1
   return s!"{pfx}_train_step.vmfb"
 
-/-- Adam + cosine-LR + running-BN-stats training loop. Assumes:
-    - Imagenette-style data layout (3-channel, 256×256 train binary
-      with random crop to 224×224, 224×224 val binary)
-    - 10-class classification
-    - The spec has been compiled via `compileVmfbs`
+/-- Dataset-specific I/O: where the training/val data lives, how big each
+    image is on disk, and what augmentation to apply per batch. Each
+    dataset (Imagenette / CIFAR-10 / MNIST) constructs one of these and
+    `runTraining` consumes it. -/
+private structure DatasetIO where
+  /-- Pixels per training image as stored on disk (before any crop). -/
+  trainPixels : Nat
+  /-- Pixels per val image as stored on disk. -/
+  valPixels : Nat
+  /-- Channels (1 for MNIST, 3 for CIFAR/Imagenette). -/
+  channels : Nat
+  loadTrain : String → IO (ByteArray × ByteArray × Nat)
+  loadVal   : String → IO (ByteArray × ByteArray × Nat)
+  /-- Apply augmentation to a slice of training data. Receives the raw
+      slice, the batch size, and a seed (epoch * 10000 + bi). Must
+      return a buffer matching `inputFlatDim spec` floats per image. -/
+  augmentBatch : (raw : ByteArray) → (batch : USize) → (seed : Nat) → IO ByteArray
 
-    Loads data, inits params, trains for `cfg.epochs` epochs, runs
-    a val eval every 10 epochs (and at the final epoch), and saves
-    `params.bin` + `bn_stats.bin`. -/
-def runImagenetteTraining (spec : NetSpec) (cfg : TrainConfig) (dataDir : String)
-    (sess : IreeSession) : IO Unit := do
+/-- Imagenette: 256×256 train, 224×224 val, random-crop-to-224 + hflip. -/
+private def imagenetteIO : DatasetIO where
+  trainPixels := 3 * 256 * 256
+  valPixels   := 3 * 224 * 224
+  channels    := 3
+  loadTrain   := fun dir => F32.loadImagenetteSized (dir ++ "/train.bin") 256
+  loadVal     := fun dir => F32.loadImagenette (dir ++ "/val.bin")
+  augmentBatch := fun raw batch seed => do
+    let cropped ← F32.randomCrop raw batch 3 256 256 224 224 seed.toUSize
+    F32.randomHFlip cropped batch 3 224 224 (seed + 7777).toUSize
+
+/-- MNIST: 28×28 IDX format, no augmentation. -/
+private def mnistIO : DatasetIO where
+  trainPixels := 1 * 28 * 28
+  valPixels   := 1 * 28 * 28
+  channels    := 1
+  loadTrain := fun dir => do
+    let (imgs, n) ← F32.loadIdxImages (dir ++ "/train-images-idx3-ubyte")
+    let (lbls, _) ← F32.loadIdxLabels (dir ++ "/train-labels-idx1-ubyte")
+    return (imgs, lbls, n)
+  loadVal := fun dir => do
+    let (imgs, n) ← F32.loadIdxImages (dir ++ "/t10k-images-idx3-ubyte")
+    let (lbls, _) ← F32.loadIdxLabels (dir ++ "/t10k-labels-idx1-ubyte")
+    return (imgs, lbls, n)
+  augmentBatch := fun raw _ _ => return raw
+
+/-- CIFAR-10: 5 train batches concatenated, 1 test batch, random hflip. -/
+private def cifar10IO : DatasetIO where
+  trainPixels := 3 * 32 * 32
+  valPixels   := 3 * 32 * 32
+  channels    := 3
+  loadTrain := fun dir => do
+    let mut raw : ByteArray := .empty
+    let mut labels : ByteArray := .empty
+    let mut nTotal : Nat := 0
+    for i in [1:6] do
+      let batchRaw ← IO.FS.readBinFile s!"{dir}/cifar-10/data_batch_{i}.bin"
+      let n := batchRaw.size / 3073
+      for j in [:n] do
+        labels := labels.push batchRaw[j * 3073]!
+        labels := labels.push 0
+        labels := labels.push 0
+        labels := labels.push 0
+      raw := raw.append batchRaw
+      nTotal := nTotal + n
+    let imgs ← F32.cifarBatch raw 0 nTotal.toUSize
+    return (imgs, labels, nTotal)
+  loadVal := fun dir => do
+    let raw ← IO.FS.readBinFile s!"{dir}/cifar-10/test_batch.bin"
+    let n := raw.size / 3073
+    let mut labels : ByteArray := .empty
+    for j in [:n] do
+      labels := labels.push raw[j * 3073]!
+      labels := labels.push 0
+      labels := labels.push 0
+      labels := labels.push 0
+    let imgs ← F32.cifarBatch raw 0 n.toUSize
+    return (imgs, labels, n)
+  augmentBatch := fun raw batch seed =>
+    F32.randomHFlip raw batch 3 32 32 seed.toUSize
+
+private def datasetIO : DatasetKind → DatasetIO
+  | .imagenette => imagenetteIO
+  | .mnist      => mnistIO
+  | .cifar10    => cifar10IO
+
+/-- Adam + cosine-LR + running-BN-stats training loop, generic over
+    `DatasetKind`. The dataset specifies how to load the train/val
+    data and what augmentation to apply per batch; everything else
+    (init, optimizer, BN EMA, val eval, save) is identical across
+    datasets.
+
+    `spec` must have been compiled via `compileVmfbs` first. -/
+def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
+    (dataDir : String) (sess : IreeSession) : IO Unit := do
   let pfx := spec.buildPrefix
   let batchN : Nat := cfg.batchSize
   let batch  : USize := cfg.batchSize.toUSize
+  let dio := datasetIO ds
 
-  let (trainImg, trainLbl, nTrain) ← F32.loadImagenetteSized (dataDir ++ "/train.bin") 256
-  IO.eprintln s!"  train: {nTrain} images (256×256)"
+  let (trainImg, trainLbl, nTrain) ← dio.loadTrain dataDir
+  IO.eprintln s!"  train: {nTrain} images ({dio.trainPixels} floats/image)"
 
   let params ← spec.heInitParams
   let adamM ← F32.const (F32.size params).toUSize 0.0
@@ -129,11 +212,11 @@ def runImagenetteTraining (spec : NetSpec) (cfg : TrainConfig) (dataDir : String
   IO.eprintln s!"  {F32.size params} params + m + v ({(params.size + adamM.size + adamV.size) / 1024 / 1024} MB)"
 
   let bpE := nTrain / batchN
-  let trainPixels := 3 * 256 * 256
+  let trainPixels := dio.trainPixels
   let allShapes := spec.shapesBA
   let xSh := spec.xShape batchN
   let nP := spec.totalParams
-  let nT := 3 * nP            -- params + m + v
+  let nT := 3 * nP
   let baseLR : Float := cfg.learningRate
   let warmup : Nat := cfg.warmupEpochs
   let epochs : Nat := cfg.epochs
@@ -166,9 +249,8 @@ def runImagenetteTraining (spec : NetSpec) (cfg : TrainConfig) (dataDir : String
     let t0 ← IO.monoMsNow
     for bi in [:bpE] do
       globalStep := globalStep + 1
-      let xba256 := F32.sliceImages curImg (bi * batchN) batchN trainPixels
-      let xbaCropped ← F32.randomCrop xba256 batch 3 256 256 224 224 (epoch * 10000 + bi).toUSize
-      let xba ← F32.randomHFlip xbaCropped batch 3 224 224 (epoch * 10000 + bi + 7777).toUSize
+      let xbaRaw := F32.sliceImages curImg (bi * batchN) batchN trainPixels
+      let xba ← dio.augmentBatch xbaRaw batch (epoch * 10000 + bi)
       let yb := F32.sliceLabels curLbl (bi * batchN) batchN
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
@@ -193,7 +275,7 @@ def runImagenetteTraining (spec : NetSpec) (cfg : TrainConfig) (dataDir : String
       let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
       if ← System.FilePath.pathExists evalVmfb then
         let evalSess ← IreeSession.create evalVmfb
-        let (valImg, valLbl, nVal) ← F32.loadImagenette (dataDir ++ "/val.bin")
+        let (valImg, valLbl, nVal) ← dio.loadVal dataDir
         let evalBatch := batchN
         let evalSteps := nVal / evalBatch
         let evalXSh := spec.xShape evalBatch
@@ -202,7 +284,7 @@ def runImagenetteTraining (spec : NetSpec) (cfg : TrainConfig) (dataDir : String
         let mut correct : Nat := 0
         let mut total : Nat := 0
         for bi in [:evalSteps] do
-          let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch (3 * 224 * 224)
+          let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch dio.valPixels
           let logits ← IreeSession.forwardF32 evalSess spec.evalFnName
                           evalParams evalShapesBA xba evalXSh evalBatch.toUSize nClasses
           let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch
@@ -219,13 +301,16 @@ def runImagenetteTraining (spec : NetSpec) (cfg : TrainConfig) (dataDir : String
   IO.eprintln "Saved params + BN stats."
 
 /-- End-to-end: compile all three vmfbs, load the train-step session,
-    and run the Imagenette training loop. The high-level entry point
-    that every Main*Train.lean now calls. -/
-def train (spec : NetSpec) (cfg : TrainConfig) (dataDir : String) : IO Unit := do
+    and run the training loop on the chosen dataset. The high-level
+    entry point that every Main*Train.lean now calls.
+
+    Defaults to Imagenette so existing trainers don't have to change. -/
+def train (spec : NetSpec) (cfg : TrainConfig) (dataDir : String)
+    (ds : DatasetKind := .imagenette) : IO Unit := do
   IO.eprintln s!"{spec.name}: {spec.totalParams} params"
   let trainVmfb ← spec.compileVmfbs cfg
   let sess ← IreeSession.create trainVmfb
   IO.eprintln "  session loaded"
-  spec.runImagenetteTraining cfg dataDir sess
+  spec.runTraining cfg ds dataDir sess
 
 end NetSpec
