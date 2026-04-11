@@ -30,6 +30,14 @@ Hardware: AMD Radeon 7900 XTX (gfx1100) via ROCm 7.2 / IREE.
 |---|---|---|---|
 | MNIST-CNN | 1.7M | **99.50%** | 4× convBn + 2× dense, batch 128, 15 epochs |
 
+## CIFAR-10 (10 classes, 32×32 RGB)
+
+50K train / 10K test. Augmentation: random horizontal flip.
+
+| Model | Params | Val accuracy | Notes |
+|---|---|---|---|
+| CIFAR-10-BN | 3.7M | **83.50%** | 4× convBn + 3× dense + 2 max pools, batch 128, 30 epochs |
+
 ## Per-epoch eval history (running BN stats)
 
 ### ResNet-34
