@@ -1,14 +1,15 @@
-# Imagenette Training Results
+# Training Results
 
-All models trained on Imagenette (10 classes, ~9.5K train / 3.9K val) at 224×224
-input via the Lean → MLIR → IREE pipeline. Training: Adam, batch 32, cosine LR
-schedule with 3-epoch warmup, label smoothing 0.1, weight decay 1e-4, random
-crop (256→224) + horizontal flip. Eval uses running BN statistics (EMA momentum
-0.1) — not batch statistics.
+All models trained via the Lean → MLIR → IREE pipeline using
+`LeanMlir.Train.train` (the unified training loop). Adam, cosine LR
+with linear warmup, label smoothing 0.1, weight decay 1e-4. Eval uses
+running BN statistics (EMA momentum 0.1) — not batch statistics.
 
 Hardware: AMD Radeon 7900 XTX (gfx1100) via ROCm 7.2 / IREE.
 
-## Final accuracies
+## Imagenette (10 classes, 224×224)
+
+~9.5K train / 3.9K val. Augmentation: random crop 256→224 + horizontal flip.
 
 | Model | Params | Val accuracy | Notes |
 |---|---|---|---|
@@ -20,6 +21,14 @@ Hardware: AMD Radeon 7900 XTX (gfx1100) via ROCm 7.2 / IREE.
 | MobileNetV3-Large | 3.0M | **86.48%** | exact h-swish + h-sigmoid SE |
 | MobileNetV4-Medium | 4.1M | **84.58%** | Universal Inverted Bottleneck (15 blocks, 4 variants from 1 primitive) |
 | ViT-Tiny | 5.5M | **71.70%** | patch embed + 12 transformer blocks (data-hungry) |
+
+## MNIST (10 classes, 28×28 grayscale)
+
+60K train / 10K test. No augmentation.
+
+| Model | Params | Val accuracy | Notes |
+|---|---|---|---|
+| MNIST-CNN | 1.7M | **99.50%** | 4× convBn + 2× dense, batch 128, 15 epochs |
 
 ## Per-epoch eval history (running BN stats)
 
