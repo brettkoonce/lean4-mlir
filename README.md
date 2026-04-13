@@ -275,7 +275,7 @@ ROCm 7.2.0 / gfx1100.
 ```bibtex
 @software{koonce2026leanmlir,
   author  = {Brett Koonce and Claude Code},
-  title   = {Image Recognition with Lean 4},
+  title   = {Verified Deep Learning with Lean4: Formal Backpropagation from MLP to Attention, via MLIR},
   url     = {https://github.com/brettkoonce/lean4-mlir},
   version = {0.1},
   year    = {2026},
