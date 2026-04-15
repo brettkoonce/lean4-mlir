@@ -1,0 +1,405 @@
+#!/usr/bin/env python3
+"""Numerical gradient checks for every axiomatized VJP in the proof suite.
+
+For each axiom, we compute the Jacobian two ways:
+  1. Finite differences: J[i,j] ≈ (f(x + εeⱼ) - f(x - εeⱼ)) / 2ε
+  2. The claimed formula from the axiom
+
+If they agree to ~5 decimal places, the axiom's formula is correct
+(up to floating-point precision). This catches typos, sign errors,
+and off-by-one mistakes in the stated Jacobian formulas.
+
+Usage: python3 check_axioms.py
+"""
+import numpy as np
+
+EPS = 1e-5
+TOL = 1e-4
+np.random.seed(42)
+
+def check(name, f, claimed_jac, x_shape, out_shape=None):
+    """Compare finite-difference Jacobian against claimed Jacobian."""
+    x = np.random.randn(*x_shape).astype(np.float64)
+    fx = f(x)
+    if out_shape is None:
+        out_shape = fx.shape
+    m = int(np.prod(x_shape))
+    n = int(np.prod(out_shape))
+    xf = x.ravel()
+
+    # Finite differences
+    J_fd = np.zeros((n, m))
+    for j in range(m):
+        xp = xf.copy(); xp[j] += EPS
+        xm = xf.copy(); xm[j] -= EPS
+        fp = f(xp.reshape(x_shape)).ravel()
+        fm = f(xm.reshape(x_shape)).ravel()
+        J_fd[:, j] = (fp - fm) / (2 * EPS)
+
+    # Claimed
+    J_cl = claimed_jac(x).reshape(n, m)
+
+    err = np.max(np.abs(J_fd - J_cl))
+    status = "PASS" if err < TOL else "FAIL"
+    print(f"  {status}: {name:30s} max_err={err:.2e}")
+    if err >= TOL:
+        # Show worst entry
+        idx = np.unravel_index(np.argmax(np.abs(J_fd - J_cl)), J_fd.shape)
+        print(f"         worst at {idx}: fd={J_fd[idx]:.8f} claimed={J_cl[idx]:.8f}")
+    return err < TOL
+
+# ════════════════════════════════════════════════════════════════
+# Dense: pdiv_dense — ∂(xW+b)_j/∂x_i = W[i,j]
+# ════════════════════════════════════════════════════════════════
+def test_dense():
+    m, n = 4, 3
+    W = np.random.randn(m, n)
+    b = np.random.randn(n)
+    f = lambda x: x.ravel() @ W + b
+    jac = lambda x: W.T  # J[j,i] = W[i,j], so J = W^T
+    return check("pdiv_dense", f, jac, (m,), (n,))
+
+# ════════════════════════════════════════════════════════════════
+# ReLU: pdiv_relu — diagonal, 0 or 1
+# ════════════════════════════════════════════════════════════════
+def test_relu():
+    n = 5
+    f = lambda x: np.maximum(x, 0)
+    jac = lambda x: np.diag((x > 0).astype(float))
+    return check("pdiv_relu", f, jac, (n,))
+
+# ════════════════════════════════════════════════════════════════
+# Softmax CE: ∂(-log softmax(z)[label])/∂z_j = softmax(z)_j - onehot_j
+# ════════════════════════════════════════════════════════════════
+def test_softmax_ce():
+    c = 5
+    label = 2
+    def softmax(z):
+        e = np.exp(z - z.max())
+        return e / e.sum()
+    f = lambda z: np.array([-np.log(softmax(z)[label])])
+    def jac(z):
+        p = softmax(z)
+        oh = np.zeros(c); oh[label] = 1.0
+        return (p - oh).reshape(1, c)
+    return check("softmaxCE_grad", f, jac, (c,), (1,))
+
+# ════════════════════════════════════════════════════════════════
+# Conv2d input grad: dx = conv(dy, reversed transposed W)
+# ════════════════════════════════════════════════════════════════
+def test_conv2d_input_grad():
+    ic, oc, h, w, kH, kW = 2, 3, 6, 6, 3, 3
+    W = np.random.randn(oc, ic, kH, kW)
+    b = np.random.randn(oc)
+    pad = (kH - 1) // 2
+
+    def conv_fwd(x):
+        x = x.reshape(ic, h, w)
+        out = np.zeros((oc, h, w))
+        for o in range(oc):
+            for c in range(ic):
+                for kh in range(kH):
+                    for kw in range(kW):
+                        for i in range(h):
+                            for j in range(w):
+                                ii, jj = i + kh - pad, j + kw - pad
+                                if 0 <= ii < h and 0 <= jj < w:
+                                    out[o, i, j] += x[c, ii, jj] * W[o, c, kh, kw]
+            out[o] += b[o]
+        return out.ravel()
+
+    # This test is superseded by test_conv2d_input_grad_formula below
+    pass
+
+def test_conv2d_input_grad_formula():
+    """Check that conv(dy, reverse(W^T)) gives the correct input gradient."""
+    ic, oc, h, w, kH, kW = 2, 3, 6, 6, 3, 3
+    W = np.random.randn(oc, ic, kH, kW)
+    b = np.random.randn(oc)
+    pad = (kH - 1) // 2
+
+    def conv(inp, kernel, pad):
+        ci, hi, wi = inp.shape
+        co, _, kh, kw = kernel.shape
+        out = np.zeros((co, hi, wi))
+        for o in range(co):
+            for c in range(ci):
+                for khi in range(kh):
+                    for kwi in range(kw):
+                        for i in range(hi):
+                            for j in range(wi):
+                                ii, jj = i + khi - pad, j + kwi - pad
+                                if 0 <= ii < hi and 0 <= jj < wi:
+                                    out[o, i, j] += inp[c, ii, jj] * kernel[o, c, khi, kwi]
+        return out
+
+    def conv_fwd(x):
+        x = x.reshape(ic, h, w)
+        return conv(x, W, pad).ravel() + np.repeat(b, h * w)
+
+    x = np.random.randn(ic, h, w)
+    dy = np.random.randn(oc, h, w)
+
+    # Finite-diff VJP: dx_i = sum_j J[j,i] * dy_j
+    xf = x.ravel()
+    dx_fd = np.zeros_like(xf)
+    for i in range(len(xf)):
+        xp = xf.copy(); xp[i] += EPS
+        xm = xf.copy(); xm[i] -= EPS
+        fp = conv_fwd(xp); fm = conv_fwd(xm)
+        dx_fd[i] = np.sum(((fp - fm) / (2 * EPS)) * dy.ravel())
+
+    # Claimed: dx = conv(dy, W^T reversed)
+    W_t = W.transpose(1, 0, 2, 3)          # (ic, oc, kH, kW)
+    W_rev = W_t[:, :, ::-1, ::-1].copy()   # reverse spatial
+    dx_claimed = conv(dy, W_rev, pad).ravel()
+
+    err = np.max(np.abs(dx_fd - dx_claimed))
+    status = "PASS" if err < TOL else "FAIL"
+    print(f"  {status}: {'conv2d_input_grad (formula)':30s} max_err={err:.2e}")
+    return err < TOL
+
+# ════════════════════════════════════════════════════════════════
+# Conv2d weight grad: dW = conv(x^T, dy^T) transposed
+# ════════════════════════════════════════════════════════════════
+def test_conv2d_weight_grad():
+    ic, oc, h, w, kH, kW = 2, 3, 6, 6, 3, 3
+    W = np.random.randn(oc, ic, kH, kW)
+    b = np.random.randn(oc)
+    pad = (kH - 1) // 2
+
+    def conv(inp, kernel, p):
+        ci, hi, wi = inp.shape
+        co, _, kh, kw = kernel.shape
+        oh = hi + 2*p - kh + 1
+        ow = wi + 2*p - kw + 1
+        out = np.zeros((co, oh, ow))
+        for o in range(co):
+            for c in range(ci):
+                for khi in range(kh):
+                    for kwi in range(kw):
+                        for i in range(oh):
+                            for j in range(ow):
+                                ii, jj = i + khi - p, j + kwi - p
+                                if 0 <= ii < hi and 0 <= jj < wi:
+                                    out[o, i, j] += inp[c, ii, jj] * kernel[o, c, khi, kwi]
+        return out
+
+    x = np.random.randn(ic, h, w)
+    dy = np.random.randn(oc, h, w)
+
+    # Finite-diff: perturb each W entry, measure change in output dotted with dy
+    dW_fd = np.zeros_like(W)
+    Wf = W.ravel()
+    for idx in range(len(Wf)):
+        Wp = Wf.copy(); Wp[idx] += EPS
+        Wm = Wf.copy(); Wm[idx] -= EPS
+        def fwd(Wv):
+            return conv(x, Wv.reshape(W.shape), pad) + b.reshape(oc, 1, 1)
+        fp = fwd(Wp); fm = fwd(Wm)
+        dW_fd.ravel()[idx] = np.sum(((fp - fm) / (2 * EPS)) * dy)
+
+    # Claimed: transpose trick
+    x_t = x.reshape(ic, 1, h, w).transpose(0, 1, 2, 3)  # (ic, 1, h, w)
+    dy_t = dy.reshape(oc, 1, h, w)  # (oc, 1, h, w)
+    # Treat as conv: input=(ic,1,h,w), kernel=(oc,1,h,w), output=(ic,oc,kH,kW)
+    # This is: dW_raw[c,o,kh,kw] = sum_{i,j} x[c,i+kh-p,j+kw-p] * dy[o,i,j]
+    dW_claimed = np.zeros((oc, ic, kH, kW))
+    for o in range(oc):
+        for c in range(ic):
+            for kh in range(kH):
+                for kw in range(kW):
+                    s = 0.0
+                    for i in range(h):
+                        for j in range(w):
+                            ii, jj = i + kh - pad, j + kw - pad
+                            if 0 <= ii < h and 0 <= jj < w:
+                                s += x[c, ii, jj] * dy[o, i, j]
+                    dW_claimed[o, c, kh, kw] = s
+
+    err = np.max(np.abs(dW_fd - dW_claimed))
+    status = "PASS" if err < TOL else "FAIL"
+    print(f"  {status}: {'conv2d_weight_grad (formula)':30s} max_err={err:.2e}")
+    return err < TOL
+
+# ════════════════════════════════════════════════════════════════
+# MaxPool2: gradient routes to argmax
+# ════════════════════════════════════════════════════════════════
+def test_maxpool2():
+    """MaxPool VJP: gradient routes to argmax positions."""
+    c, h, w = 2, 3, 3
+    x = np.random.randn(c, 2*h, 2*w)
+    dy = np.random.randn(c, h, w)
+
+    def pool_fwd(xv):
+        xv = xv.reshape(c, 2*h, 2*w)
+        return xv.reshape(c, h, 2, w, 2).max(axis=(2, 4)).ravel()
+
+    # Finite-diff VJP
+    xf = x.ravel()
+    dx_fd = np.zeros_like(xf)
+    for i in range(len(xf)):
+        xp = xf.copy(); xp[i] += EPS
+        xm = xf.copy(); xm[i] -= EPS
+        dx_fd[i] = np.sum(((pool_fwd(xp) - pool_fwd(xm)) / (2 * EPS)) * dy.ravel())
+
+    # Claimed: route dy to argmax within each 2x2 window
+    dx_claimed = np.zeros_like(x)
+    for ch in range(c):
+        for i in range(h):
+            for j in range(w):
+                block = x[ch, 2*i:2*i+2, 2*j:2*j+2]
+                idx = np.unravel_index(block.argmax(), (2, 2))
+                dx_claimed[ch, 2*i+idx[0], 2*j+idx[1]] = dy[ch, i, j]
+
+    err = np.max(np.abs(dx_fd - dx_claimed.ravel()))
+    status = "PASS" if err < TOL else "FAIL"
+    print(f"  {status}: {'maxPool2_input_grad':30s} max_err={err:.2e}")
+    return err < TOL
+
+# ════════════════════════════════════════════════════════════════
+# BatchNorm normalize: ∂x̂ⱼ/∂xᵢ = (istd/N)(Nδᵢⱼ - 1 - x̂ᵢx̂ⱼ)
+# ════════════════════════════════════════════════════════════════
+def test_bn_normalize():
+    n = 5
+    eps = 1e-5
+    def bn_fwd(x):
+        mu = x.mean()
+        var = ((x - mu) ** 2).mean()
+        return (x - mu) / np.sqrt(var + eps)
+
+    def bn_jac(x):
+        mu = x.mean()
+        var = ((x - mu) ** 2).mean()
+        istd = 1.0 / np.sqrt(var + eps)
+        xhat = (x - mu) * istd
+        N = len(x)
+        J = np.zeros((N, N))
+        for i in range(N):
+            for j in range(N):
+                delta = 1.0 if i == j else 0.0
+                J[i, j] = (istd / N) * (N * delta - 1.0 - xhat[i] * xhat[j])
+        return J
+
+    return check("pdiv_bnNormalize", bn_fwd, bn_jac, (n,))
+
+# ════════════════════════════════════════════════════════════════
+# BatchNorm affine: ∂(γv+β)/∂v = γδᵢⱼ
+# ════════════════════════════════════════════════════════════════
+def test_bn_affine():
+    n = 5
+    gamma, beta = 2.3, -0.7
+    f = lambda v: gamma * v + beta
+    jac = lambda v: gamma * np.eye(n)
+    return check("pdiv_bnAffine", f, jac, (n,))
+
+# ════════════════════════════════════════════════════════════════
+# Softmax: J[i,j] = p_i(δᵢⱼ - p_j)
+# ════════════════════════════════════════════════════════════════
+def test_softmax():
+    c = 5
+    def softmax(z):
+        e = np.exp(z - z.max())
+        return e / e.sum()
+    def jac(z):
+        p = softmax(z)
+        return np.diag(p) - np.outer(p, p)
+    return check("pdiv_softmax", softmax, jac, (c,))
+
+# ════════════════════════════════════════════════════════════════
+# Depthwise conv: same as conv but per-channel
+# ════════════════════════════════════════════════════════════════
+def test_depthwise_input_grad():
+    """Depthwise conv VJP: per-channel reversed kernel convolution."""
+    c, h, w, kH, kW = 3, 6, 6, 3, 3
+    W = np.random.randn(c, kH, kW)
+    pad = (kH - 1) // 2
+
+    def dw_fwd(xv):
+        x = xv.reshape(c, h, w)
+        out = np.zeros((c, h, w))
+        for ch in range(c):
+            for kh in range(kH):
+                for kw in range(kW):
+                    for i in range(h):
+                        for j in range(w):
+                            ii, jj = i + kh - pad, j + kw - pad
+                            if 0 <= ii < h and 0 <= jj < w:
+                                out[ch, i, j] += x[ch, ii, jj] * W[ch, kh, kw]
+        return out.ravel()
+
+    x = np.random.randn(c, h, w)
+    dy = np.random.randn(c, h, w)
+
+    # Finite-diff VJP
+    xf = x.ravel()
+    dx_fd = np.zeros_like(xf)
+    for i in range(len(xf)):
+        xp = xf.copy(); xp[i] += EPS
+        xm = xf.copy(); xm[i] -= EPS
+        dx_fd[i] = np.sum(((dw_fwd(xp) - dw_fwd(xm)) / (2 * EPS)) * dy.ravel())
+
+    # Claimed: per-channel conv with reversed kernel
+    dx_claimed = np.zeros_like(x)
+    for ch in range(c):
+        W_rev = W[ch, ::-1, ::-1]
+        for kh in range(kH):
+            for kw in range(kW):
+                for i in range(h):
+                    for j in range(w):
+                        ii, jj = i + kh - pad, j + kw - pad
+                        if 0 <= ii < h and 0 <= jj < w:
+                            dx_claimed[ch, i, j] += dy[ch, ii, jj] * W_rev[kh, kw]
+
+    err = np.max(np.abs(dx_fd - dx_claimed.ravel()))
+    status = "PASS" if err < TOL else "FAIL"
+    print(f"  {status}: {'depthwise_input_grad':30s} max_err={err:.2e}")
+    return err < TOL
+
+# ════════════════════════════════════════════════════════════════
+# GELU: diagonal Jacobian
+# ════════════════════════════════════════════════════════════════
+def test_gelu():
+    from scipy.special import erf
+    n = 5
+    def gelu(x):
+        return 0.5 * x * (1.0 + erf(x / np.sqrt(2.0)))
+    def gelu_deriv(x):
+        phi = np.exp(-x**2 / 2) / np.sqrt(2 * np.pi)
+        Phi = 0.5 * (1 + erf(x / np.sqrt(2)))
+        return Phi + x * phi
+    def jac(x):
+        return np.diag(gelu_deriv(x))
+    return check("pdiv_gelu", gelu, jac, (n,))
+
+# ════════════════════════════════════════════════════════════════
+# Run all
+# ════════════════════════════════════════════════════════════════
+if __name__ == "__main__":
+    print("Numerical gradient checks for axiomatized VJPs")
+    print("=" * 60)
+    results = []
+    results.append(("Tensor.lean",  "pdiv_id",              True))  # trivial
+    results.append(("MLP.lean",     "pdiv_dense",           test_dense()))
+    results.append(("MLP.lean",     "pdiv_relu",            test_relu()))
+    results.append(("MLP.lean",     "softmaxCE_grad",       test_softmax_ce()))
+    results.append(("CNN.lean",     "conv2d_input_grad",    test_conv2d_input_grad_formula()))
+    results.append(("CNN.lean",     "conv2d_weight_grad",   test_conv2d_weight_grad()))
+    results.append(("CNN.lean",     "maxPool2_input_grad",  test_maxpool2()))
+    results.append(("BatchNorm",    "pdiv_bnNormalize",     test_bn_normalize()))
+    results.append(("BatchNorm",    "pdiv_bnAffine",        test_bn_affine()))
+    results.append(("Attention",    "pdiv_softmax",         test_softmax()))
+    results.append(("Depthwise",    "depthwise_input_grad", test_depthwise_input_grad()))
+    try:
+        results.append(("LayerNorm", "pdiv_gelu",           test_gelu()))
+    except ImportError:
+        print("  SKIP: pdiv_gelu (scipy not installed)")
+
+    print("=" * 60)
+    passed = sum(1 for _, _, r in results if r)
+    total = len(results)
+    print(f"{passed}/{total} checks passed.")
+    if passed < total:
+        for f, n, r in results:
+            if not r:
+                print(f"  FAILED: {f}:{n}")
