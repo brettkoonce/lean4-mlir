@@ -211,28 +211,7 @@ noncomputable def bn_grad_input
    gradient" into "per-parameter gradient."
 -/
 
-/-- **BN input gradient correctness — the headline result.**
-
-    The consolidated three-term formula `bn_grad_input` is the correct
-    VJP of `bnForward` with respect to its input `x`.
-
-    The proof is the derivation in the comment block above:
-      • differentiate the affine to get `dx̂`
-      • differentiate `bnXhat` using the three sub-derivatives
-        (∂x/∂x, ∂μ/∂x, ∂σ²/∂x → ∂istd/∂x)
-      • contract with `dx̂`
-      • observe that the cross terms collapse via the cancellations
-        `Σ(xⱼ−μ) = 0` and the rearrangement of the double sum.
-
-    The `sorry` is real algebra, not a placeholder for a missing concept.
-    A reader with paper and pencil can verify it; the value of stating it
-    in Lean is that the **claim is unambiguous**: this exact function,
-    on this exact input, returns this exact value. -/
-theorem bn_input_grad_correct (n : Nat) (ε γ β : ℝ)
-    (x : Vec n) (dy : Vec n) (i : Fin n) :
-    bn_grad_input n ε γ x dy i =
-    ∑ j : Fin n, pdiv (bnForward n ε γ β) x i j * dy j := by
-  sorry
+-- See `bn_input_grad_correct` below `bn_has_vjp` for the headline correctness theorem.
 
 -- ════════════════════════════════════════════════════════════════
 -- § Decomposition: bn = affine ∘ xhat
@@ -281,6 +260,13 @@ axiom pdiv_bnAffine (n : Nat) (γ β : ℝ)
     pdiv (bnAffine n γ β) v i j =
       if i = j then γ else 0
 
+/-- The normalize Jacobian (the "hard" derivative):
+    `∂x̂ⱼ/∂xᵢ = (istd / N) · (N · δᵢⱼ − 1 − x̂ᵢ · x̂ⱼ)` -/
+axiom pdiv_bnNormalize (n : Nat) (ε : ℝ) (x : Vec n) (i j : Fin n) :
+    pdiv (bnNormalize n ε) x i j =
+      bnIstd n x ε / (n : ℝ) *
+        ((n : ℝ) * (if i = j then 1 else 0) - 1 - bnXhat n ε x i * bnXhat n ε x j)
+
 /-- **Affine VJP** (the easy half): `back(v, dy)ᵢ = γ · dyᵢ`.
 
     Each input enters one output multiplied by `γ`; the gradient comes
@@ -307,7 +293,29 @@ noncomputable def bnNormalize_has_vjp (n : Nat) (ε : ℝ) :
       invN * s * ((n : ℝ) * dxhat i - sumDx - xh i * sumXhatDx)
   correct := by
     intro x dxhat i
-    sorry  -- the derivation in the long comment above
+    simp only [pdiv_bnNormalize]
+    set s := bnIstd n x ε
+    set xh := bnXhat n ε x
+    -- LHS: (1/n) * s * (n * dxhat i - Σ dxhat - xh i * Σ(xh·dxhat))
+    -- RHS: ∑ j, s/n * (n*δᵢⱼ - 1 - xh i * xh j) * dxhat j
+    -- Step 1: rewrite each summand to separate the three contributions
+    have hterm : ∀ j : Fin n,
+        s / ↑n * (↑n * (if i = j then (1:ℝ) else 0) - 1 - xh i * xh j) * dxhat j =
+        s / ↑n * (↑n * (if i = j then dxhat j else 0) - dxhat j - xh i * (xh j * dxhat j)) := by
+      intro j
+      by_cases h : i = j
+      · subst h; simp; ring
+      · simp [h]; ring
+    simp_rw [hterm]
+    -- Step 2: factor s/n out, distribute the sum
+    rw [← Finset.mul_sum, Finset.sum_sub_distrib, Finset.sum_sub_distrib]
+    -- Step 3: Kronecker delta
+    rw [show ∑ j : Fin n, ↑n * (if i = j then dxhat j else 0) = ↑n * dxhat i from by
+      simp [Finset.sum_ite_eq', Finset.mem_univ]]
+    -- Step 4: factor xh i out
+    rw [show ∑ j : Fin n, xh i * (xh j * dxhat j) =
+        xh i * ∑ j : Fin n, xh j * dxhat j from by rw [← Finset.mul_sum]]
+    ring
 
 /-- **The BN VJP from the composition** — chain rule glues affine ∘ normalize.
 
@@ -328,5 +336,13 @@ noncomputable def bn_has_vjp (n : Nat) (ε γ β : ℝ) :
   rw [bnForward_eq_compose]
   exact vjp_comp (bnNormalize n ε) (bnAffine n γ β)
     (bnNormalize_has_vjp n ε) (bnAffine_has_vjp n γ β)
+
+/-- The standalone end-to-end theorem: `bn_grad_input` is the correct VJP
+    of `bnForward`. Follows from `bn_has_vjp` by definitional unfolding. -/
+theorem bn_input_grad_correct (n : Nat) (ε γ β : ℝ)
+    (x : Vec n) (dy : Vec n) (i : Fin n) :
+    bn_grad_input n ε γ x dy i =
+    ∑ j : Fin n, pdiv (bnForward n ε γ β) x i j * dy j := by
+  exact (bn_has_vjp n ε γ β).correct x dy i
 
 end Proofs
