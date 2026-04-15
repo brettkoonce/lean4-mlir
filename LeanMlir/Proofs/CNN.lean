@@ -41,8 +41,7 @@ namespace Proofs
 -- § Tensor types for CNN
 -- ════════════════════════════════════════════════════════════════
 
-/-- A 3D feature map: channels × height × width (single sample). -/
-abbrev Tensor3 (c h w : Nat) := Fin c → Fin h → Fin w → ℝ
+-- Tensor3 is imported from Tensor.lean
 
 /-- A conv kernel: out_channels × in_channels × kH × kW.
     This is the OIHW layout used by StableHLO and IREE. -/
@@ -257,6 +256,42 @@ axiom unflatten {c h w : Nat} (v : Vec (c * h * w)) : Tensor3 c h w
     transpose trick). Once you accept those two tricks, the entire CNN
     backprop fits in a page.
 -/
-example : True := trivial  -- placeholder so the file isn't empty after the doc
+example : True := trivial  -- anchor for the docstring above
+
+-- ════════════════════════════════════════════════════════════════
+-- § HasVJP3 instances — wiring axioms into the framework
+-- ════════════════════════════════════════════════════════════════
+
+/-- Conv2d Jacobian. -/
+axiom pdiv3_conv2d {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (x : Tensor3 ic h w)
+    (ci : Fin ic) (hi : Fin h) (wi : Fin w)
+    (co : Fin oc) (ho : Fin h) (wo : Fin w) :
+    pdiv3 (conv2d W b) x ci hi wi co ho wo =
+    conv2d_input_grad W b x (fun _o _y _x =>
+      if co = _o ∧ ho = _y ∧ wo = _x then 1 else 0) ci hi wi
+
+/-- **Conv2d VJP** — backward is conv with reversed transposed kernel. -/
+noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    HasVJP3 (conv2d W b : Tensor3 ic h w → Tensor3 oc h w) where
+  backward := fun x dy => conv2d_input_grad W b x dy
+  correct := by intro x dy ci hi wi; simp [pdiv3_conv2d]; sorry
+
+/-- MaxPool2 Jacobian. -/
+axiom pdiv3_maxPool2 {c h w : Nat}
+    (x : Tensor3 c (2*h) (2*w))
+    (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w))
+    (co : Fin c) (ho : Fin h) (wo : Fin w) :
+    pdiv3 maxPool2 x ci hi wi co ho wo =
+    maxPool2_input_grad x (fun _c _y _x =>
+      if co = _c ∧ ho = _y ∧ wo = _x then 1 else 0) ci hi wi
+
+/-- **MaxPool2 VJP** — gradient routes to argmax positions. -/
+noncomputable def maxPool2_has_vjp3 {c h w : Nat} :
+    HasVJP3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w) where
+  backward := fun x dy => maxPool2_input_grad x dy
+  correct := by intro x dy ci hi wi; simp [pdiv3_maxPool2]; sorry
 
 end Proofs
