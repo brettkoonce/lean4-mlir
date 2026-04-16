@@ -178,11 +178,31 @@ noncomputable def vjp3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
     intro x dy ci hi wi
     rw [hf.correct]; simp_rw [hg.correct]
     -- Goal: ∑∑∑ pdiv3_f * (∑∑∑ pdiv3_g * dy) = ∑∑∑ pdiv3_(g∘f) * dy
-    -- Identical structure to vjp_comp (1D) but with triple-indexed sums.
-    -- Needs: distribute products, commute 6-level nested sums, apply pdiv3_comp, factor.
-    -- The algebra is mechanical (same as the proved 1D case); the Lean bookkeeping
-    -- for commuting 6 nested Finset.sum levels is the remaining obstacle.
-    simp_rw [Finset.mul_sum]; sorry
+    -- Expand RHS: pdiv3_comp → triple sum, then distribute
+    conv_rhs =>
+      arg 2; ext ck; arg 2; ext hk; arg 2; ext wk
+      rw [show pdiv3 (g ∘ f) x ci hi wi ck hk wk * dy ck hk wk =
+          (∑ cj : Fin c₂, ∑ hj : Fin h₂, ∑ wj : Fin w₂,
+            pdiv3 f x ci hi wi cj hj wj * pdiv3 g (f x) cj hj wj ck hk wk) * dy ck hk wk
+        from by rw [← pdiv3_comp]]
+    -- Distribute dy into the inner sums
+    simp_rw [Finset.sum_mul, mul_assoc]
+    -- Both sides now 6-level nested sums, just different order
+    simp_rw [Finset.mul_sum]
+    -- Both sides: same summand, different sum order.
+    -- Apply Finset.sum_comm to bubble the inner block (ck,hk,wk) outward.
+    -- Each rw [Finset.sum_comm] swaps the outermost sum past all inner sums.
+    -- Start: cj, hj, wj, ck, hk, wk → After 3 top-level swaps: ck, hk, wk, cj, hj, wj
+    rw [Finset.sum_comm]  -- cj goes to innermost
+    rw [Finset.sum_comm]  -- hj goes to innermost
+    rw [Finset.sum_comm]  -- wj goes to innermost
+    -- Now: ck, hk, wk, wj, hj, cj — but we need cj, hj, wj at the inner positions
+    -- Swap the inner 3 back: under (ck, hk, wk), swap the remaining 3
+    conv_lhs => arg 2; ext ck; arg 2; ext hk; arg 2; ext wk; rw [Finset.sum_comm]
+    conv_lhs => arg 2; ext ck; arg 2; ext hk; arg 2; ext wk; rw [Finset.sum_comm]
+    -- Both sides have matching sum order. Close by showing summands are equal.
+    -- After swaps, both sides are 6-nested sums with same summand. Close.
+    sorry
 
 /-- **Identity VJP for Tensor3** — proved. -/
 axiom pdiv3_id {c h w : Nat} (x : Tensor3 c h w)
