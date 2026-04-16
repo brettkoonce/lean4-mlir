@@ -10,8 +10,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 REPO = Path(__file__).resolve().parent.parent
-LOG_NOBN = REPO / "ablation_cifar-lite-nobn-sgd002.log"
-LOG_BN   = REPO / "ablation_cifar-lite-bn-sgd002.log"
+LOG_NOBN = REPO / "logs" / "ablation_cifar-lite-nobn-sgd002.log"
+LOG_BN   = REPO / "logs" / "ablation_cifar-lite-bn-sgd002.log"
 OUT      = REPO / "figures" / "cifar_lite_bn_vs_nobn.png"
 
 LOSS_RE = re.compile(r"^Epoch\s+(\d+)/\d+: loss=([\d.]+)")

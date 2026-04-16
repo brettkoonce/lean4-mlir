@@ -2,8 +2,9 @@
 .venv/
 data/
 
-# Training logs
+# Training logs — ignore at root, curated ones live under logs/
 *.log
+!logs/*.log
 
 # Documents
 *.docx
