@@ -1,6 +1,7 @@
 .lake/
 .venv/
 data/
+__pycache__/
 
 # Training logs — ignore at root, curated ones live under logs/
 *.log
