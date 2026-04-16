@@ -494,15 +494,60 @@ noncomputable def transpose_has_vjp {m n : Nat} :
 /-- A 3D feature map: channels × height × width (single sample). -/
 abbrev Tensor3 (c h w : Nat) := Fin c → Fin h → Fin w → ℝ
 
-/-- Partial derivative of a 3D→3D function, indexed by (input, output) triples. -/
-axiom pdiv3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+namespace Tensor3
+
+/-- Row-major flatten: `Tensor3 c h w → Vec (c * h * w)`. Two nested
+    `finProdFinEquiv` calls: first bundle `(ci, hi)` into `Fin (c*h)`,
+    then bundle with `wi` into `Fin ((c*h)*w) = Fin (c*h*w)`. -/
+noncomputable def flatten {c h w : Nat} (T : Tensor3 c h w) : Vec (c * h * w) :=
+  fun k =>
+    let ch_w := finProdFinEquiv.symm k      -- : Fin (c*h) × Fin w
+    let c_h := finProdFinEquiv.symm ch_w.1  -- : Fin c × Fin h
+    T c_h.1 c_h.2 ch_w.2
+
+/-- Row-major unflatten: inverse of `flatten`. -/
+noncomputable def unflatten {c h w : Nat} (v : Vec (c * h * w)) : Tensor3 c h w :=
+  fun ci hi wi => v (finProdFinEquiv (finProdFinEquiv (ci, hi), wi))
+
+theorem unflatten_flatten {c h w : Nat} (T : Tensor3 c h w) :
+    unflatten (flatten T) = T := by
+  funext ci hi wi
+  unfold unflatten flatten
+  simp [Equiv.symm_apply_apply]
+
+theorem flatten_unflatten {c h w : Nat} (v : Vec (c * h * w)) :
+    flatten (unflatten v) = v := by
+  funext k
+  change v (finProdFinEquiv
+    (finProdFinEquiv (finProdFinEquiv.symm (finProdFinEquiv.symm k).1),
+     (finProdFinEquiv.symm k).2)) = v k
+  rw [Equiv.apply_symm_apply]
+  -- Now: v (finProdFinEquiv ((finProdFinEquiv.symm k).1, (finProdFinEquiv.symm k).2)) = v k
+  rw [show ((finProdFinEquiv.symm k).1, (finProdFinEquiv.symm k).2) = finProdFinEquiv.symm k
+        from rfl]
+  rw [Equiv.apply_symm_apply]
+
+end Tensor3
+
+/-- **3D partial derivative** — now a definition via the triple-nested
+    flatten bijection, no longer an axiom. The four structural rules
+    (comp / add / id) follow as theorems. Local Jacobian axioms
+    (`pdiv3_conv2d_vjp`, `pdiv3_maxPool2_vjp`, `pdiv3_depthwise_vjp`)
+    remain — those state specific Jacobian values, not framework. -/
+noncomputable def pdiv3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
     (x : Tensor3 c₁ h₁ w₁)
     (ci : Fin c₁) (hi : Fin h₁) (wi : Fin w₁)
-    (co : Fin c₂) (ho : Fin h₂) (wo : Fin w₂) : ℝ
+    (co : Fin c₂) (ho : Fin h₂) (wo : Fin w₂) : ℝ :=
+  pdiv (fun v : Vec (c₁ * h₁ * w₁) =>
+          Tensor3.flatten (f (Tensor3.unflatten v)))
+    (Tensor3.flatten x)
+    (finProdFinEquiv (finProdFinEquiv (ci, hi), wi))
+    (finProdFinEquiv (finProdFinEquiv (co, ho), wo))
 
-/-- Chain rule for 3D functions. -/
-axiom pdiv3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
+/-- **Chain rule for 3D partial derivatives** — theorem, via `pdiv_comp`
+    and two applications of `Fintype.sum_equiv + sum_prod_type`. -/
+theorem pdiv3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
     (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
     (g : Tensor3 c₂ h₂ w₂ → Tensor3 c₃ h₃ w₃)
     (x : Tensor3 c₁ h₁ w₁)
@@ -510,7 +555,48 @@ axiom pdiv3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
     (ck : Fin c₃) (hk : Fin h₃) (wk : Fin w₃) :
     pdiv3 (g ∘ f) x ci hi wi ck hk wk =
     ∑ cj : Fin c₂, ∑ hj : Fin h₂, ∑ wj : Fin w₂,
-      pdiv3 f x ci hi wi cj hj wj * pdiv3 g (f x) cj hj wj ck hk wk
+      pdiv3 f x ci hi wi cj hj wj * pdiv3 g (f x) cj hj wj ck hk wk := by
+  unfold pdiv3
+  -- Flatten turns 3D composition into Vec composition (unflatten ∘ flatten = id).
+  have h_compose :
+      (fun v : Vec (c₁ * h₁ * w₁) =>
+        Tensor3.flatten ((g ∘ f) (Tensor3.unflatten v))) =
+      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u))) ∘
+      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v))) := by
+    funext v
+    simp [Function.comp, Tensor3.unflatten_flatten]
+  rw [h_compose, pdiv_comp]
+  -- Substitute the "middle point" F' (flatten x) = flatten (f x).
+  have h_mid :
+      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
+        (Tensor3.flatten x) = Tensor3.flatten (f x) := by
+    simp [Tensor3.unflatten_flatten]
+  simp_rw [h_mid]
+  -- Two-stage collapse of the Fin ((c₂*h₂)*w₂) sum into ∑ cj ∑ hj ∑ wj.
+  -- Abbreviate the double-indexed summand as `F r`:
+  set F : Fin (c₂ * h₂ * w₂) → ℝ := fun r =>
+    pdiv (fun v => Tensor3.flatten (f (Tensor3.unflatten v))) (Tensor3.flatten x)
+      (finProdFinEquiv (finProdFinEquiv (ci, hi), wi)) r *
+    pdiv (fun u => Tensor3.flatten (g (Tensor3.unflatten u))) (Tensor3.flatten (f x))
+      r (finProdFinEquiv (finProdFinEquiv (ck, hk), wk)) with hF
+  -- Stage 1: split Fin((c₂*h₂)*w₂) → Fin(c₂*h₂) × Fin w₂ via finProdFinEquiv.
+  rw [Fintype.sum_equiv finProdFinEquiv.symm F
+      (fun pw : Fin (c₂ * h₂) × Fin w₂ => F (finProdFinEquiv pw))
+      (fun r => by
+        show F r = F (finProdFinEquiv (finProdFinEquiv.symm r))
+        rw [Equiv.apply_symm_apply])]
+  rw [Fintype.sum_prod_type]
+  -- Goal now: ∑ p : Fin(c₂*h₂), ∑ wj : Fin w₂, F (fPF (p, wj)) = ∑ cj, ∑ hj, ∑ wj, F (...)
+  -- Stage 2: split outer Fin(c₂*h₂) → Fin c₂ × Fin h₂ via finProdFinEquiv.
+  rw [Fintype.sum_equiv finProdFinEquiv.symm
+      (fun p : Fin (c₂ * h₂) => ∑ wj : Fin w₂, F (finProdFinEquiv (p, wj)))
+      (fun ch : Fin c₂ × Fin h₂ =>
+        ∑ wj : Fin w₂, F (finProdFinEquiv (finProdFinEquiv ch, wj)))
+      (fun p => by
+        show (∑ wj : Fin w₂, F (finProdFinEquiv (p, wj))) =
+             (∑ wj : Fin w₂, F (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv.symm p), wj)))
+        rw [Equiv.apply_symm_apply])]
+  rw [Fintype.sum_prod_type]
 
 /-- VJP for 3D→3D functions. -/
 structure HasVJP3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
@@ -551,12 +637,33 @@ noncomputable def vjp3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
          _ = _ := Finset.sum_comm
          _ = _ := by simp_rw [Finset.sum_product]
 
-/-- **Identity VJP for Tensor3** — proved. -/
-axiom pdiv3_id {c h w : Nat} (x : Tensor3 c h w)
+/-- **Identity Jacobian for Tensor3** — theorem, via `pdiv_id` and
+    injectivity of the nested `finProdFinEquiv`. -/
+theorem pdiv3_id {c h w : Nat} (x : Tensor3 c h w)
     (ci : Fin c) (hi : Fin h) (wi : Fin w)
     (co : Fin c) (ho : Fin h) (wo : Fin w) :
     pdiv3 (fun (t : Tensor3 c h w) => t) x ci hi wi co ho wo =
-      if ci = co ∧ hi = ho ∧ wi = wo then 1 else 0
+      if ci = co ∧ hi = ho ∧ wi = wo then 1 else 0 := by
+  unfold pdiv3
+  -- flatten ∘ id ∘ unflatten = id on Vec (c*h*w)
+  have h_id : (fun v : Vec (c * h * w) =>
+                Tensor3.flatten (Tensor3.unflatten v)) =
+              (fun v : Vec (c * h * w) => v) := by
+    funext v; exact Tensor3.flatten_unflatten v
+  rw [h_id, pdiv_id]
+  -- Goal: (if A = B then 1 else 0) = if C then 1 else 0
+  -- where A, B are doubly-nested finProdFinEquiv outputs.
+  by_cases h : ci = co ∧ hi = ho ∧ wi = wo
+  · obtain ⟨hc, hh, hw⟩ := h
+    subst hc; subst hh; subst hw; simp
+  · rw [if_neg h, if_neg]
+    intro heq
+    apply h
+    -- heq : finProdFinEquiv (fPF (ci, hi), wi) = finProdFinEquiv (fPF (co, ho), wo)
+    have step1 := finProdFinEquiv.injective heq
+    have hw_eq : wi = wo := (Prod.mk.inj step1).2
+    have step2 := finProdFinEquiv.injective (Prod.mk.inj step1).1
+    exact ⟨(Prod.mk.inj step2).1, (Prod.mk.inj step2).2, hw_eq⟩
 
 def identity3_has_vjp (c h w : Nat) : HasVJP3 (fun (x : Tensor3 c h w) => x) where
   backward := fun _x dy => dy
@@ -580,14 +687,24 @@ def identity3_has_vjp (c h w : Nat) : HasVJP3 (fun (x : Tensor3 c h w) => x) whe
     rw [Finset.sum_eq_single wi (by intro wo _ hne; simp [Ne.symm hne]) (by simp)]
     simp
 
-/-- **Additive fan-in for Tensor3** — proved. -/
-axiom pdiv3_add {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+/-- **Sum rule for Tensor3 partial derivatives** — theorem, via `pdiv_add`. -/
+theorem pdiv3_add {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (f g : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
     (x : Tensor3 c₁ h₁ w₁)
     (ci : Fin c₁) (hi : Fin h₁) (wi : Fin w₁)
     (co : Fin c₂) (ho : Fin h₂) (wo : Fin w₂) :
     pdiv3 (fun y c h w => f y c h w + g y c h w) x ci hi wi co ho wo
-    = pdiv3 f x ci hi wi co ho wo + pdiv3 g x ci hi wi co ho wo
+    = pdiv3 f x ci hi wi co ho wo + pdiv3 g x ci hi wi co ho wo := by
+  unfold pdiv3
+  have h_flat : (fun v : Vec (c₁ * h₁ * w₁) =>
+                  Tensor3.flatten ((fun y c h w => f y c h w + g y c h w)
+                    (Tensor3.unflatten v))) =
+                (fun v k => (fun w => Tensor3.flatten (f (Tensor3.unflatten w))) v k +
+                            (fun w => Tensor3.flatten (g (Tensor3.unflatten w))) v k) := by
+    funext v k
+    unfold Tensor3.flatten
+    rfl
+  rw [h_flat, pdiv_add]
 
 @[reducible] noncomputable def biPath3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (f g : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂) :

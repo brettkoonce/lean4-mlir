@@ -70,19 +70,24 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Build Statistics" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| File | Theorems | Axioms | Lines |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|----------|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Theorems / Defs | Axioms | Lines |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-----------------|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          # Count all top-level theorems and (noncomputable) defs — broader
+          # than a VJP-keyword filter, catches structural lemmas too.
+          THM_PAT='^(theorem|noncomputable def|def) '
+          TOTAL_THMS=0
+          TOTAL_AXMS=0
           for f in LeanMlir/Proofs/Tensor.lean LeanMlir/Proofs/MLP.lean LeanMlir/Proofs/CNN.lean LeanMlir/Proofs/BatchNorm.lean LeanMlir/Proofs/Residual.lean LeanMlir/Proofs/Depthwise.lean LeanMlir/Proofs/SE.lean LeanMlir/Proofs/LayerNorm.lean LeanMlir/Proofs/Attention.lean; do
             name=$(basename "$f")
-            thms=$(grep -cE "^(theorem|noncomputable def|def) .*(HasVJP|_has_vjp|_correct|_grad)" "$f" || true)
+            thms=$(grep -cE "$THM_PAT" "$f" || true)
             axms=$(grep -c "^axiom " "$f" || true)
             lines=$(wc -l < "$f")
             echo "| \`${name}\` | ${thms} | ${axms} | ${lines} |" >> $GITHUB_STEP_SUMMARY
+            TOTAL_THMS=$((TOTAL_THMS + thms))
+            TOTAL_AXMS=$((TOTAL_AXMS + axms))
           done
-          TOTAL_THMS=$(grep -rcE "^(theorem|noncomputable def|def) .*(HasVJP|_has_vjp|_correct|_grad)" LeanMlir/Proofs/ || true)
-          TOTAL_AXMS=$(grep -rc "^axiom " LeanMlir/Proofs/ || true)
           TOTAL_LINES=$(cat LeanMlir/Proofs/*.lean | wc -l)
-          echo "| **Total** | **$(echo "$TOTAL_THMS" | wc -l)** | **$(echo "$TOTAL_AXMS" | wc -l)** | **${TOTAL_LINES}** |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total** | **${TOTAL_THMS}** | **${TOTAL_AXMS}** | **${TOTAL_LINES}** |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Numerical Gradient Checks" >> $GITHUB_STEP_SUMMARY

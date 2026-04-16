@@ -56,19 +56,17 @@ All axiom declarations across the proof suite, grouped by file:
 | `pdivMat_rowIndep` | Row-independent function ⇒ block-diagonal Jacobian |
 | `pdivMat_scalarScale` | ∂(s·A')/∂A' = s·δ |
 | `pdivMat_transpose` | ∂(A'^T)/∂A' — swap-indices Kronecker delta |
-| `pdiv3` | 3D-tensor partial derivative |
-| `pdiv3_comp` | 3D chain rule |
-| `pdiv3_id` | 3D identity Jacobian |
-| `pdiv3_add` | 3D sum rule |
 
-> **Phase 4**: `pdivMat`, `pdivMat_comp`, `pdivMat_add`, `pdivMat_id`
-> used to be axioms. They are now a **definition** (`pdivMat`) and
-> three **theorems** derived from the corresponding `pdiv` axioms via
-> the row-major `Mat ≃ Vec (m*n)` bijection (`Mat.flatten` /
-> `Mat.unflatten`). The five remaining `pdivMat_*` axioms state
-> specific Jacobian *values* for concrete operations (matmul,
-> scalarScale, transpose, rowIndep) — genuine local calculus facts,
-> not framework plumbing.
+> **Phases 4–5**: `pdivMat`, `pdivMat_comp`, `pdivMat_add`, `pdivMat_id`
+> and the entire `pdiv3` family (`pdiv3`, `pdiv3_comp`, `pdiv3_id`,
+> `pdiv3_add`) used to be axioms parallel to `pdiv`. They are now
+> **definitions** (`pdivMat`, `pdiv3`) and **theorems** derived from
+> `pdiv` axioms via the row-major bijections
+> `Mat.flatten : Mat m n ≃ Vec (m*n)` and
+> `Tensor3.flatten : Tensor3 c h w ≃ Vec (c*h*w)`. The five remaining
+> `pdivMat_*` axioms state specific Jacobian *values* for concrete
+> operations (matmul, scalarScale, transpose, rowIndep) — genuine
+> local calculus facts, not framework plumbing.
 
 **MLP.lean** — dense layers:
 | Axiom | What it says |
@@ -126,8 +124,8 @@ All axiom declarations across the proof suite, grouped by file:
 Plus three Lean core axioms (`propext`, `Classical.choice`, `Quot.sound`)
 present in every nontrivial Lean program.
 
-Total: 15 (Tensor) + 3 (MLP) + 9 (CNN) + 2 (BatchNorm) + 4 (Depthwise)
-+ 3 (LayerNorm) + 1 (Attention) = **37 axioms**.
+Total: 11 (Tensor) + 3 (MLP) + 9 (CNN) + 2 (BatchNorm) + 4 (Depthwise)
++ 3 (LayerNorm) + 1 (Attention) = **33 axioms**.
 
 Everything else — every `HasVJP` instance, every composition,
 every correctness theorem — is proved from these axioms by
