@@ -107,43 +107,42 @@ noncomputable abbrev conv2d_input_grad {ic oc h w kH kW : Nat}
     (x : Tensor3 ic h w) (dy : Tensor3 oc h w) : Tensor3 ic h w :=
   (conv2d_has_vjp3 W b).backward x dy
 
-/-- **Conv2d weight gradient** — the transpose trick.
+/-! ### Weight gradient (codegen interface, not axiomatized here)
+
+The conv weight gradient implements the **transpose trick**:
 
     `dW[o, c, kh, kw] = Σ_{h, w} x[c, h+kh−p, w+kw−p] · dy[o, h, w]`
 
-    Here's the slick observation: this *is* a convolution, with the input
-    and gradient playing the roles of "input" and "kernel" respectively.
-    Concretely:
+Here's the slick observation: this *is* a convolution, with the input
+and gradient playing the roles of "input" and "kernel" respectively.
 
-    - View the input `x : (ic, H, W)` as `(ic, 1, H, W)` (treat channels as
-      batch).
-    - View the gradient `dy : (oc, H, W)` as `(oc, 1, H, W)` (same trick).
-    - Now do a standard convolution: input shape `(ic, 1, H, W)`, kernel
-      shape `(oc, 1, H, W)`. The "spatial" dims of the kernel are H×W (the
-      whole image), so the output is the small `(ic, oc, kH, kW)` weight
-      gradient — produced by sliding the gradient as a giant kernel.
-    - Transpose the output `(ic, oc, kH, kW) → (oc, ic, kH, kW)` to match
-      the kernel layout.
+- View the input `x : (ic, H, W)` as `(ic, 1, H, W)` (treat channels as batch).
+- View the gradient `dy : (oc, H, W)` as `(oc, 1, H, W)` (same trick).
+- Now do a standard convolution: input shape `(ic, 1, H, W)`, kernel
+  shape `(oc, 1, H, W)`. The "spatial" dims of the kernel are H×W (the
+  whole image), so the output is the small `(ic, oc, kH, kW)` weight
+  gradient — produced by sliding the gradient as a giant kernel.
+- Transpose the output `(ic, oc, kH, kW) → (oc, ic, kH, kW)` to match
+  the kernel layout.
 
-    This avoids needing a separate "convolution-with-funny-dimension-numbers"
-    op; we use the same forward conv operator, just with shapes reinterpreted.
-    Critical for backends like IREE that don't accept non-standard
-    `dimension_numbers` (see `iree-org/iree#21955`).
+This avoids needing a separate "convolution-with-funny-dimension-numbers"
+op; we use the same forward conv operator, just with shapes reinterpreted.
+Critical for backends like IREE that don't accept non-standard
+`dimension_numbers` (see `iree-org/iree#21955`).
 
-    MLIR (Conv 1 backward — exactly this trick):
-      %x_t      = stablehlo.transpose %x, dims = [1, 0, 2, 3]      -- (1,128,28,28)
-      %dh0p_t   = stablehlo.transpose %d_h0pre, dims = [1, 0, 2, 3] -- (32,128,28,28)
-      %d_W0_raw = "stablehlo.convolution"(%x_t, %dh0p_t) ...        -- (1,32,3,3)
-      %d_W0     = stablehlo.transpose %d_W0_raw, dims = [1, 0, 2, 3] -- (32,1,3,3)
+MLIR (Conv 1 backward — exactly this trick):
+    %x_t      = stablehlo.transpose %x, dims = [1, 0, 2, 3]      -- (1,128,28,28)
+    %dh0p_t   = stablehlo.transpose %d_h0pre, dims = [1, 0, 2, 3] -- (32,128,28,28)
+    %d_W0_raw = "stablehlo.convolution"(%x_t, %dh0p_t) ...        -- (1,32,3,3)
+    %d_W0     = stablehlo.transpose %d_W0_raw, dims = [1, 0, 2, 3] -- (32,1,3,3)
 
-    **Note** — this is a **shape-only** axiom: it asserts a weight-gradient
-    function exists, but the `HasVJP3` framework only covers input→output
-    VJPs. A formal correctness claim would require a parameterized
-    `HasVJP3_params` variant, which we don't yet have. The function name
-    and signature document the codegen interface. -/
-axiom conv2d_weight_grad {ic oc h w kH kW : Nat}
-    (x : Tensor3 ic h w) (dy : Tensor3 oc h w) :
-    Kernel4 oc ic kH kW
+**Why no axiom here.** The `HasVJP3` framework only covers input→output
+VJPs. Stating correctness for a weight gradient requires a parameterized
+variant (`HasVJP3_params` or similar) that we don't yet have. Rather
+than introduce a vacuous shape-only axiom (asserting a function
+exists without any correctness claim), we document the formula here
+and defer the formal statement to when the parameterized framework
+arrives. -/
 
 /-- **Conv2d bias gradient** — sum the output cotangent over all spatial cells.
 
@@ -254,11 +253,11 @@ for the mutual-inverse proofs. -/
         d_pool    = unflatten d_d₀in                              [flatten VJP = unflatten]
         d_h₁      = maxPool2_input_grad h₁ d_pool                 [maxPool2_input_grad]
         d_h₁pre   = relu_back h₁pre d_h₁                          [relu_has_vjp, lifted to T3]
-        d_W1      = conv2d_weight_grad h₀ d_h₁pre                 [conv2d_weight_grad]  ← transpose trick
+        d_W1      = (weight-grad formula above)                   ← transpose trick (documented, not axiomatized)
         d_b1      = conv2d_bias_grad d_h₁pre                      [conv2d_bias_grad]
-        d_h₀      = conv2d_input_grad W₁ b₁ h₀ d_h₁pre            [conv2d_input_grad]   ← reversed kernel
+        d_h₀      = conv2d_input_grad W₁ b₁ h₀ d_h₁pre            [conv2d_has_vjp3]     ← reversed kernel
         d_h₀pre   = relu_back h₀pre d_h₀                          [relu_has_vjp, lifted to T3]
-        d_W0      = conv2d_weight_grad x d_h₀pre                  [conv2d_weight_grad]
+        d_W0      = (weight-grad formula above)                   ← transpose trick
         d_b0      = conv2d_bias_grad d_h₀pre                      [conv2d_bias_grad]
 
     Each line of the backward pass corresponds to a single line in
@@ -281,14 +280,16 @@ example : True := trivial  -- anchor for the docstring above
 - `conv2d_has_vjp3`, `maxPool2_has_vjp3` — the input-path VJPs, each
   packaging both the backward function and its correctness into a
   single `HasVJP3` axiom.
-- `conv2d_weight_grad` — shape-only axiom for the weight gradient
-  (no correctness claim; see its docstring).
 
 Derived (not axioms):
 - `conv2d_input_grad`, `maxPool2_input_grad` — named accessors, defined
   as `.backward` of the corresponding `HasVJP3`.
 - `conv2d_bias_grad` — concrete sum-over-spatial formula.
 - 3D reshape (`Tensor3.flatten` / `Tensor3.unflatten`) is imported from
-  `Tensor.lean` as a proved bijection. -/
+  `Tensor.lean` as a proved bijection.
+
+Documented but not axiomatized:
+- Weight gradient (`dW`) — transpose-trick formula in the docstring
+  above. Awaits a parameterized `HasVJP3_params` framework. -/
 
 end Proofs

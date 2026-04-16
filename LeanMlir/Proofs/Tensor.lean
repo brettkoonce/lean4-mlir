@@ -72,8 +72,6 @@ axiom pdiv_mul {m n : Nat} (f g : Vec m → Vec n) (x : Vec m)
 axiom pdiv_id {n : Nat} (x : Vec n) (i j : Fin n) :
     pdiv (fun y : Vec n => y) x i j = if i = j then 1 else 0
 
-axiom sdiv {m : Nat} (f : Vec m → ℝ) (x : Vec m) (i : Fin m) : ℝ
-
 -- ════════════════════════════════════════════════════════════════
 -- § VJP Framework
 -- ════════════════════════════════════════════════════════════════

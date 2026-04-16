@@ -46,7 +46,6 @@ All axiom declarations across the proof suite, grouped by file:
 | Axiom | What it says |
 |-------|-------------|
 | `pdiv` | Partial derivative function (existence) |
-| `sdiv` | Scalar derivative function |
 | `pdiv_id` | ∂xᵢ/∂xⱼ = δᵢⱼ |
 | `pdiv_comp` | Chain rule |
 | `pdiv_add` | Sum rule |
@@ -80,9 +79,13 @@ All axiom declarations across the proof suite, grouped by file:
 |-------|-------------|
 | `conv2d` | Conv forward (opaque function) |
 | `conv2d_has_vjp3` | Conv2d input-VJP (function + correctness bundled) |
-| `conv2d_weight_grad` | dW = input ⊗ grad (shape-only; no correctness claim) |
 | `maxPool2` | MaxPool forward (opaque function) |
 | `maxPool2_has_vjp3` | MaxPool2 input-VJP (function + correctness bundled) |
+
+> The weight-gradient formula (transpose trick) is documented in
+> `CNN.lean` but not axiomatized — stating its correctness requires a
+> parameterized VJP framework (`HasVJP3_params`) we don't have yet.
+> We prefer missing documentation over a vacuous shape-only axiom.
 
 **BatchNorm.lean** — the hard one:
 | Axiom | What it says |
@@ -95,7 +98,9 @@ All axiom declarations across the proof suite, grouped by file:
 |-------|-------------|
 | `depthwiseConv2d` | Depthwise conv forward (opaque function) |
 | `depthwise_has_vjp3` | Depthwise input-VJP (function + correctness bundled) |
-| `depthwiseConv2d_weight_grad` | dW per-channel (shape-only; no correctness) |
+
+> Depthwise weight gradient documented in-file, not axiomatized (same
+> rationale as `conv2d_weight_grad`).
 
 **LayerNorm.lean** — layer norm and GELU:
 | Axiom | What it says |
@@ -120,8 +125,8 @@ All axiom declarations across the proof suite, grouped by file:
 Plus three Lean core axioms (`propext`, `Classical.choice`, `Quot.sound`)
 present in every nontrivial Lean program.
 
-Total: 11 (Tensor) + 3 (MLP) + 5 (CNN) + 2 (BatchNorm) + 3 (Depthwise)
-+ 3 (LayerNorm) + 1 (Attention) = **28 axioms**.
+Total: 10 (Tensor) + 3 (MLP) + 4 (CNN) + 2 (BatchNorm) + 2 (Depthwise)
++ 3 (LayerNorm) + 1 (Attention) = **25 axioms**.
 
 Everything else — every `HasVJP` instance, every composition,
 every correctness theorem — is proved from these axioms by
