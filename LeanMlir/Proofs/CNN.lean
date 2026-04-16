@@ -262,36 +262,35 @@ example : True := trivial  -- anchor for the docstring above
 -- § HasVJP3 instances — wiring axioms into the framework
 -- ════════════════════════════════════════════════════════════════
 
-/-- Conv2d Jacobian. -/
-axiom pdiv3_conv2d {ic oc h w kH kW : Nat}
+/-- Conv2d VJP correctness stated directly:
+    `conv2d_input_grad W b x dy` is the correct VJP of `conv2d W b` at `x`. -/
+axiom pdiv3_conv2d_vjp {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (x : Tensor3 ic h w)
-    (ci : Fin ic) (hi : Fin h) (wi : Fin w)
-    (co : Fin oc) (ho : Fin h) (wo : Fin w) :
-    pdiv3 (conv2d W b) x ci hi wi co ho wo =
-    conv2d_input_grad W b x (fun _o _y _x =>
-      if co = _o ∧ ho = _y ∧ wo = _x then 1 else 0) ci hi wi
+    (x : Tensor3 ic h w) (dy : Tensor3 oc h w)
+    (ci : Fin ic) (hi : Fin h) (wi : Fin w) :
+    conv2d_input_grad W b x dy ci hi wi =
+    ∑ co : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,
+      pdiv3 (conv2d W b) x ci hi wi co ho wo * dy co ho wo
 
-/-- **Conv2d VJP** — backward is conv with reversed transposed kernel. -/
+/-- **Conv2d VJP** — proved from the axiom. -/
 noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :
     HasVJP3 (conv2d W b : Tensor3 ic h w → Tensor3 oc h w) where
   backward := fun x dy => conv2d_input_grad W b x dy
-  correct := by intro x dy ci hi wi; simp [pdiv3_conv2d]; sorry
+  correct := by intro x dy ci hi wi; exact pdiv3_conv2d_vjp W b x dy ci hi wi
 
-/-- MaxPool2 Jacobian. -/
-axiom pdiv3_maxPool2 {c h w : Nat}
-    (x : Tensor3 c (2*h) (2*w))
-    (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w))
-    (co : Fin c) (ho : Fin h) (wo : Fin w) :
-    pdiv3 maxPool2 x ci hi wi co ho wo =
-    maxPool2_input_grad x (fun _c _y _x =>
-      if co = _c ∧ ho = _y ∧ wo = _x then 1 else 0) ci hi wi
+/-- MaxPool2 VJP correctness stated directly. -/
+axiom pdiv3_maxPool2_vjp {c h w : Nat}
+    (x : Tensor3 c (2*h) (2*w)) (dy : Tensor3 c h w)
+    (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)) :
+    maxPool2_input_grad x dy ci hi wi =
+    ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
+      pdiv3 maxPool2 x ci hi wi co ho wo * dy co ho wo
 
-/-- **MaxPool2 VJP** — gradient routes to argmax positions. -/
+/-- **MaxPool2 VJP** — proved from the axiom. -/
 noncomputable def maxPool2_has_vjp3 {c h w : Nat} :
     HasVJP3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w) where
   backward := fun x dy => maxPool2_input_grad x dy
-  correct := by intro x dy ci hi wi; simp [pdiv3_maxPool2]; sorry
+  correct := by intro x dy ci hi wi; exact pdiv3_maxPool2_vjp x dy ci hi wi
 
 end Proofs

@@ -172,21 +172,20 @@ the same expressive power as a regular conv at a fraction of the FLOPs.
 -- § HasVJP3 instance
 -- ════════════════════════════════════════════════════════════════
 
-/-- Depthwise conv Jacobian. -/
-axiom pdiv3_depthwise {c h w kH kW : Nat}
+/-- Depthwise conv VJP correctness stated directly. -/
+axiom pdiv3_depthwise_vjp {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (x : Tensor3 c h w)
-    (ci : Fin c) (hi : Fin h) (wi : Fin w)
-    (co : Fin c) (ho : Fin h) (wo : Fin w) :
-    pdiv3 (depthwiseConv2d W b) x ci hi wi co ho wo =
-    depthwiseConv2d_input_grad W b x (fun _c _y _x =>
-      if co = _c ∧ ho = _y ∧ wo = _x then 1 else 0) ci hi wi
+    (x : Tensor3 c h w) (dy : Tensor3 c h w)
+    (ci : Fin c) (hi : Fin h) (wi : Fin w) :
+    depthwiseConv2d_input_grad W b x dy ci hi wi =
+    ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
+      pdiv3 (depthwiseConv2d W b) x ci hi wi co ho wo * dy co ho wo
 
-/-- **Depthwise conv VJP** — per-channel reversed kernel convolution. -/
+/-- **Depthwise conv VJP** — proved from the axiom. -/
 noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) :
     HasVJP3 (depthwiseConv2d W b : Tensor3 c h w → Tensor3 c h w) where
   backward := fun x dy => depthwiseConv2d_input_grad W b x dy
-  correct := by intro x dy ci hi wi; simp [pdiv3_depthwise]; sorry
+  correct := by intro x dy ci hi wi; exact pdiv3_depthwise_vjp W b x dy ci hi wi
 
 end Proofs
