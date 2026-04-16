@@ -133,17 +133,120 @@ def identity_has_vjp (n : Nat) : HasVJP (fun (x : Vec n) => x) where
     simp [Finset.mem_univ]
 
 -- ════════════════════════════════════════════════════════════════
--- § Matrix-level partial derivative
+-- § Matrix-level differentiation (axiomatized)
 -- ════════════════════════════════════════════════════════════════
 
 /-! `pdivMat` is the matrix analogue of `pdiv`: the partial derivative of a
-matrix-valued function of a matrix. Introduced here (Phase 1) purely to give
-multi-matrix-input functions like SDPA a way to *state* correctness claims.
-The full composition framework (chain rule / sum rule / `HasVJPMat`) is
-Phase 2 work — this minimal axiom is enough to stop using a vacuous
-type-only axiom for `sdpa`. -/
+matrix-valued function of a matrix. The axioms here mirror the `Vec`
+family (`pdiv_comp`, `pdiv_add`, `pdiv_id`) — they are theorems of real
+analysis, just lifted to rank-2 indices. Introduced for multi-matrix-input
+functions like SDPA where the `Vec` framework doesn't suffice. -/
+
 axiom pdivMat {a b c d : Nat} (f : Mat a b → Mat c d) (A : Mat a b)
     (i : Fin a) (j : Fin b) (k : Fin c) (l : Fin d) : ℝ
+
+axiom pdivMat_comp {a b c d e f : Nat}
+    (F : Mat a b → Mat c d) (G : Mat c d → Mat e f)
+    (A : Mat a b) (i : Fin a) (j : Fin b) (k : Fin e) (l : Fin f) :
+    pdivMat (G ∘ F) A i j k l =
+    ∑ p : Fin c, ∑ q : Fin d,
+      pdivMat F A i j p q * pdivMat G (F A) p q k l
+
+axiom pdivMat_add {a b c d : Nat}
+    (F G : Mat a b → Mat c d) (A : Mat a b)
+    (i : Fin a) (j : Fin b) (k : Fin c) (l : Fin d) :
+    pdivMat (fun M r s => F M r s + G M r s) A i j k l
+    = pdivMat F A i j k l + pdivMat G A i j k l
+
+axiom pdivMat_id {a b : Nat} (A : Mat a b)
+    (i : Fin a) (j : Fin b) (k : Fin a) (l : Fin b) :
+    pdivMat (fun M : Mat a b => M) A i j k l =
+    if i = k ∧ j = l then 1 else 0
+
+-- ════════════════════════════════════════════════════════════════
+-- § Matrix VJP Framework
+-- ════════════════════════════════════════════════════════════════
+
+/-- Matrix-level VJP: given a matrix-valued function of a matrix, a
+    correct backward function contracts the `pdivMat` Jacobian against
+    the output cotangent. Mirrors `HasVJP` for `Vec`. -/
+structure HasVJPMat {a b c d : Nat} (f : Mat a b → Mat c d) where
+  backward : Mat a b → Mat c d → Mat a b
+  correct : ∀ (A : Mat a b) (dY : Mat c d) (i : Fin a) (j : Fin b),
+    backward A dY i j = ∑ k : Fin c, ∑ l : Fin d,
+      pdivMat f A i j k l * dY k l
+
+/-- **Chain rule for matrix VJPs** — proved, no sorry.
+    Direct transcription of `vjp_comp` to rank-2 indices. -/
+noncomputable def vjpMat_comp {a b c d e f : Nat}
+    (F : Mat a b → Mat c d) (G : Mat c d → Mat e f)
+    (hF : HasVJPMat F) (hG : HasVJPMat G) :
+    HasVJPMat (G ∘ F) where
+  backward := fun A dY => hF.backward A (hG.backward (F A) dY)
+  correct := by
+    intro A dY i j
+    rw [hF.correct]
+    simp_rw [hG.correct]
+    -- Goal: ∑∑ pdivMat F A · (∑∑ pdivMat G (F A) · dY) = ∑∑ pdivMat (G∘F) A · dY
+    -- Expand RHS via pdivMat_comp, then swap sums.
+    conv_rhs =>
+      arg 2; ext k; arg 2; ext l
+      rw [show pdivMat (G ∘ F) A i j k l * dY k l =
+          (∑ p : Fin c, ∑ q : Fin d,
+            pdivMat F A i j p q * pdivMat G (F A) p q k l) * dY k l
+        from by rw [← pdivMat_comp]]
+    simp_rw [Finset.sum_mul, mul_assoc, Finset.mul_sum]
+    -- LHS: ∑p ∑q, pdivMat F · ∑k ∑l, pdivMat G · dY
+    -- RHS: ∑k ∑l ∑p ∑q, pdivMat F · pdivMat G · dY
+    -- Pack (p,q) and (k,l) into products, swap, unpack.
+    calc _ = ∑ pq ∈ Finset.univ ×ˢ Finset.univ,
+             ∑ kl ∈ Finset.univ ×ˢ Finset.univ,
+               pdivMat F A i j pq.1 pq.2 *
+                 (pdivMat G (F A) pq.1 pq.2 kl.1 kl.2 * dY kl.1 kl.2) := by
+             simp_rw [Finset.sum_product]
+         _ = ∑ kl ∈ Finset.univ ×ˢ Finset.univ,
+             ∑ pq ∈ Finset.univ ×ˢ Finset.univ,
+               pdivMat F A i j pq.1 pq.2 *
+                 (pdivMat G (F A) pq.1 pq.2 kl.1 kl.2 * dY kl.1 kl.2) :=
+             Finset.sum_comm
+         _ = _ := by simp_rw [Finset.sum_product]
+
+/-- **Additive fan-in for matrices** — proved, no sorry. -/
+@[reducible] noncomputable def biPathMat {a b c d : Nat}
+    (F G : Mat a b → Mat c d) : Mat a b → Mat c d :=
+  fun M r s => F M r s + G M r s
+
+noncomputable def biPathMat_has_vjp {a b c d : Nat}
+    (F G : Mat a b → Mat c d) (hF : HasVJPMat F) (hG : HasVJPMat G) :
+    HasVJPMat (biPathMat F G) where
+  backward := fun A dY i j => hF.backward A dY i j + hG.backward A dY i j
+  correct := by
+    intro A dY i j
+    rw [hF.correct, hG.correct, ← Finset.sum_add_distrib]
+    congr 1; ext k
+    rw [← Finset.sum_add_distrib]
+    congr 1; ext l
+    rw [pdivMat_add]; ring
+
+/-- **Identity VJP for matrices** — proved, no sorry. -/
+noncomputable def identityMat_has_vjp (a b : Nat) :
+    HasVJPMat (fun (M : Mat a b) => M) where
+  backward := fun _A dY => dY
+  correct := by
+    intro A dY i j
+    -- ∑ k ∑ l, (if i=k ∧ j=l then 1 else 0) * dY k l = dY i j
+    simp_rw [pdivMat_id]
+    -- Collapse the two-dimensional Kronecker sum to dY i j.
+    have : ∀ (k : Fin a) (l : Fin b),
+        (if i = k ∧ j = l then (1 : ℝ) else 0) * dY k l =
+        (if i = k then (if j = l then dY k l else 0) else 0) := by
+      intro k l
+      by_cases hik : i = k <;> by_cases hjl : j = l <;> simp [hik, hjl]
+    simp_rw [this]
+    rw [Finset.sum_eq_single i (by intro k _ hne; simp [Ne.symm hne]) (by simp)]
+    simp only [if_true]
+    rw [Finset.sum_eq_single j (by intro l _ hne; simp [Ne.symm hne]) (by simp)]
+    simp
 
 -- ════════════════════════════════════════════════════════════════
 -- § 3D Tensor VJP Framework (for CNN / Depthwise)

@@ -51,7 +51,10 @@ All axiom declarations across the proof suite, grouped by file:
 | `pdiv_comp` | Chain rule |
 | `pdiv_add` | Sum rule |
 | `pdiv_mul` | Product rule |
-| `pdivMat` | Matrix-level partial derivative (for multi-matrix-input fns) |
+| `pdivMat` | Matrix-level partial derivative |
+| `pdivMat_comp` | Matrix chain rule |
+| `pdivMat_add` | Matrix sum rule |
+| `pdivMat_id` | Matrix identity Jacobian |
 | `pdiv3` | 3D-tensor partial derivative |
 | `pdiv3_comp` | 3D chain rule |
 | `pdiv3_id` | 3D identity Jacobian |
@@ -116,8 +119,8 @@ All axiom declarations across the proof suite, grouped by file:
 Plus three Lean core axioms (`propext`, `Classical.choice`, `Quot.sound`)
 present in every nontrivial Lean program.
 
-Total: 11 (Tensor) + 3 (MLP) + 9 (CNN) + 2 (BatchNorm) + 4 (Depthwise)
-+ 3 (LayerNorm) + 4 (Attention) = **36 axioms**.
+Total: 14 (Tensor) + 3 (MLP) + 9 (CNN) + 2 (BatchNorm) + 4 (Depthwise)
++ 3 (LayerNorm) + 4 (Attention) = **39 axioms**.
 
 Everything else — every `HasVJP` instance, every composition,
 every correctness theorem — is proved from these axioms by
@@ -132,6 +135,9 @@ vjp_comp               → pdiv, pdiv_comp
 biPath_has_vjp         → pdiv, pdiv_add
 elemwiseProduct_has_vjp → pdiv, pdiv_mul
 identity_has_vjp       → pdiv, pdiv_id
+vjpMat_comp            → pdivMat, pdivMat_comp
+biPathMat_has_vjp      → pdivMat, pdivMat_add
+identityMat_has_vjp    → pdivMat, pdivMat_id
 dense_has_vjp          → pdiv, pdiv_dense
 bn_has_vjp             → pdiv, pdiv_bnAffine, pdiv_bnNormalize, pdiv_comp
 bn_input_grad_correct  → pdiv, pdiv_bnAffine, pdiv_bnNormalize, pdiv_comp
