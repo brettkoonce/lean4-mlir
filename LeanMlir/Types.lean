@@ -49,6 +49,16 @@ inductive Layer where
   -- channel count (from the previous decoder or bottleneck); `oc` is
   -- both the output channel count and the expected skip channel count.
   | unetUp (ic oc : Nat)
+  -- Transformer decoder stack (DETR-style): N blocks of self-attention
+  -- on `nQueries` learned object queries + cross-attention with the
+  -- encoder output + FFN. The object-query embedding is part of this
+  -- layer's parameters.
+  | transformerDecoder (dim heads mlpDim nBlocks nQueries : Nat)
+  -- DETR prediction heads, applied independently to each of the
+  -- decoder's `nQueries` output tokens: class head (dim → nClasses+1,
+  -- with the +1 being the "no object" slot) + box head (3-layer MLP
+  -- dim → dim → dim → 4, predicting (cx, cy, w, h)).
+  | detrHeads (dim nClasses : Nat)
 deriving Repr
 
 structure NetSpec where

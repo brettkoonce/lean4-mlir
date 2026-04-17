@@ -125,6 +125,18 @@ def Layer.nParams : Layer → Nat
       -- Transposed-conv 2×2 upsample (ic→oc) + concat(2·oc) + 2 × (conv3x3 + BN)
       -- 2oc→oc, then oc→oc.
       (4 * ic * oc + oc) + (9 * 2 * oc * oc + 2 * oc) + (9 * oc * oc + 2 * oc)
+  | .transformerDecoder dim _heads mlpDim nBlocks nQueries =>
+      -- Per block: 3 LayerNorms, self-attn Q/K/V/O (4·dim²+4·dim),
+      -- cross-attn Q/K/V/O (4·dim²+4·dim), FFN (2·dim·mlpDim + dim + mlpDim).
+      let perBlock := 3 * 2 * dim
+                    + 2 * (4 * (dim * dim + dim))
+                    + (dim * mlpDim + mlpDim) + (mlpDim * dim + dim)
+      nBlocks * perBlock + nQueries * dim  -- + object queries embedding
+  | .detrHeads dim nClasses =>
+      -- Class head: linear dim → (nClasses + 1) [+1 is "no object"]
+      -- Box head: 3-layer MLP dim → dim → dim → 4, shared across queries.
+      (dim * (nClasses + 1) + (nClasses + 1))
+      + (dim * dim + dim) + (dim * dim + dim) + (dim * 4 + 4)
   | _                        => 0
 
 def NetSpec.totalParams (s : NetSpec) : Nat :=
@@ -193,7 +205,9 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .swinStage dim h _ ws n    => s!"Swin{n}(dim={dim},heads={h},win={ws})"
     | .patchMerging i o          => s!"PatchMerge({i}→{o})"
     | .unetDown ic oc            => s!"UNetDown({ic}→{oc})"
-    | .unetUp ic oc              => s!"UNetUp({ic}→{oc})")
+    | .unetUp ic oc              => s!"UNetUp({ic}→{oc})"
+    | .transformerDecoder dim h _ n nq => s!"Dec{n}x[{h}h,{dim}],{nq}q"
+    | .detrHeads dim c           => s!"DETR-heads({dim}→cls{c+1}+box4)")
 
 -- ===========================================================================
 -- Validation: catch channel/dimension mismatches at `lake build` time
@@ -220,6 +234,8 @@ def Layer.outChannels : Layer → Nat
   | .patchMerging _ outDim          => outDim
   | .unetDown _ oc                  => oc
   | .unetUp _ oc                    => oc
+  | .transformerDecoder dim _ _ _ _ => dim
+  | .detrHeads _ nClasses           => nClasses + 1  -- class-head output width (informational)
   | _                               => 0  -- pool/flatten/GAP: pass-through
 
 /-- Input channels expected by a layer. Returns 0 for layers that accept any input. -/
@@ -243,6 +259,8 @@ def Layer.inChannels : Layer → Nat
   | .patchMerging inDim _           => inDim
   | .unetDown ic _                  => ic
   | .unetUp ic _                    => ic
+  | .transformerDecoder dim _ _ _ _ => dim
+  | .detrHeads dim _                => dim
   | _                               => 0  -- pool/flatten/GAP: accept anything
 
 /-- Validate that channel dimensions chain correctly through the spec.
@@ -276,6 +294,8 @@ def NetSpec.validate (s : NetSpec) : Option String := Id.run do
     | .patchMerging _ outDim =>
         prevOc := outDim
         afterGAP := false; afterFlatten := false; afterTransformer := false
+    -- Transformer decoder: same dim in / dim out, same afterTransformer treatment.
+    | .transformerDecoder .. => afterTransformer := true
     | _ =>
       let oc := l.outChannels
       if oc > 0 then
