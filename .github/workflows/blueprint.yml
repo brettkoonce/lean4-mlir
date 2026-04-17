@@ -79,18 +79,28 @@ jobs:
             texlive-luatex texlive-bibtex-extra latexmk
           # Bump this `version` to force a cache refresh (e.g. when we
           # need a newer texlive package).
-          version: 2
+          version: 3
+          # Run package postinst scripts after cache restore. Required for
+          # texlive-xetex: its postinst is what writes xelatex into
+          # fmtutil.cnf and triggers fmtutil-sys to build xelatex.fmt.
+          # Without this, xelatex dies at startup with "I can't find the
+          # format file `xelatex.fmt'!" and no print.log is ever produced.
+          execute_install_scripts: true
 
-      - name: Regenerate TeX format files (xelatex.fmt etc.)
-        # cache-apt-pkgs-action restores files but skips postinst hooks, so
-        # fmtutil never registers xelatex / never writes xelatex.fmt. Without
-        # this step, xelatex fails immediately with "I can't find the format
-        # file `xelatex.fmt'!" and the PDF build bails before writing a log.
+      - name: Verify xelatex format is available
+        # Belt-and-suspenders sanity check + last-resort rebuild. If
+        # execute_install_scripts did its job the format file is already
+        # on disk; if not, rebuild it here via fmtutil before the PDF step.
         run: |
-          sudo update-fmtutil --sys || true
-          sudo fmtutil-sys --all 2>&1 | tail -n 50 || true
-          # Sanity check: xelatex should now resolve its format.
-          kpsewhich xelatex.fmt || echo "::warning::xelatex.fmt still missing"
+          echo "--- kpsewhich xelatex.fmt ---"
+          if ! kpsewhich xelatex.fmt; then
+            echo "xelatex.fmt missing; rebuilding via fmtutil-sys"
+            sudo update-fmtutil --sys || true
+            sudo fmtutil-sys --byfmt=xelatex 2>&1 | tail -n 30 || true
+            kpsewhich xelatex.fmt || echo "::warning::xelatex.fmt still missing after rebuild"
+          fi
+          echo "--- xelatex -v ---"
+          xelatex -v | head -3 || true
 
       - name: Cache pip
         uses: actions/cache@v4
