@@ -55,7 +55,7 @@ All axiom declarations across the proof suite, grouped by file:
 | `pdiv_reindex` | Gather Jacobian: `∂y_{σ(k)}/∂y_i = δ_{i,σ(k)}` |
 | `pdivMat_rowIndep` | Row-independent function ⇒ block-diagonal Jacobian |
 
-> **Progression** — axioms 41 → 26 over several phases:
+> **Progression** — axioms 41 → 28 over several phases:
 > - **Phases 4–5**: `pdivMat`, `pdivMat_comp`, `pdivMat_add`,
 >   `pdivMat_id` and the whole `pdiv3` family collapsed to
 >   definitions + theorems via the `Mat.flatten` / `Tensor3.flatten`
@@ -64,7 +64,7 @@ All axiom declarations across the proof suite, grouped by file:
 >   and both `pdivMat_matmul_{left,right}_const` derived from
 >   `pdiv_const` + `pdiv_reindex` + `pdiv_finset_sum` (itself a
 >   theorem, via `Finset.induction_on` over `pdiv_add` + `pdiv_const`).
-> - **Phase 7** (this commit): **Weight-gradient correctness**, closing
+> - **Phase 7**: **Weight-gradient correctness**, closing
 >   the gap where `conv2d_weight_grad` and `depthwise_weight_grad` were
 >   documented in prose but had no formal axiom. Two new bundled VJP
 >   axioms (`conv2d_weight_grad_has_vjp`, `depthwise_weight_grad_has_vjp3`),
@@ -76,6 +76,19 @@ All axiom declarations across the proof suite, grouped by file:
 >   bijection mirroring `Mat.flatten` / `Tensor3.flatten`, so the
 >   4D weight tensor can be plumbed through the plain `HasVJP` on `Vec`
 >   instead of introducing a parallel 4D framework.
+> - **Phase 8** (this commit): **The ViT finale**. The prior transformer
+>   section narrated "multi-head is just parallel SDPA + reshape" and
+>   "transformer block is composition" in prose but never actually
+>   assembled the proofs. Phase 8 closes that: add one bundled axiom
+>   `mhsa_has_vjp_mat` for full multi-head attention (the one primitive
+>   — vmap over the head/column axis — we don't factor through existing
+>   theorems), and then prove as **theorems** the per-token lift
+>   `rowwise_has_vjp_mat` (generalizing `rowSoftmax_has_vjp_mat` to any
+>   `HasVJP` row function), `transformerMlp_has_vjp_mat`,
+>   `transformerBlock_has_vjp_mat`, `transformerTower_has_vjp_mat`
+>   (any depth via induction on k), and `vit_body_has_vjp_mat`. The book's
+>   claim that "a transformer block uses the same tools as a ResNet block"
+>   is now machine-checked end-to-end.
 >
 > Remaining Mat-level axiom: only `pdivMat_rowIndep` — the
 > genuinely-new-primitive that ties Mat-row structure to Vec-level
@@ -149,6 +162,7 @@ All axiom declarations across the proof suite, grouped by file:
 | Axiom | What it says |
 |-------|-------------|
 | `pdiv_softmax` | Softmax Jacobian (rank-1 correction) |
+| `mhsa_has_vjp_mat` | Multi-head self-attention VJP (bundled, Phase 8) |
 
 > All three `sdpa_back_*_correct` statements are now **theorems**, not
 > axioms (Phase 3). Each is proved by constructing a `HasVJPMat` for
@@ -158,11 +172,22 @@ All axiom declarations across the proof suite, grouped by file:
 > formula. The old `sdpa_has_vjp` axiom (a vacuous type declaration)
 > is gone entirely.
 
+> Phase 8: `mhsa_has_vjp_mat` bundles multi-head self-attention (Q/K/V
+> projections + per-head SDPA + output projection) as one `HasVJPMat`
+> axiom. The per-head parallelism is the one "vmap over a column axis"
+> primitive that doesn't factor through existing theorems — we
+> axiomatize it directly (numerically gradient-checkable) rather than
+> build a parallel column-indep framework. With this axiom in hand,
+> `transformerBlock_has_vjp_mat`, `transformerTower_has_vjp_mat`
+> (any depth), and `vit_body_has_vjp_mat` are all **theorems** —
+> compositions of already-proved `HasVJPMat` instances. The book's
+> prior "transformer = composition" claim is now machine-checked.
+
 Plus three Lean core axioms (`propext`, `Classical.choice`, `Quot.sound`)
 present in every nontrivial Lean program.
 
 Total: 8 (Tensor) + 4 (MLP) + 5 (CNN) + 3 (BatchNorm) + 3 (Depthwise)
-+ 3 (LayerNorm) + 1 (Attention) = **27 axioms**.
++ 3 (LayerNorm) + 2 (Attention) = **28 axioms**.
 
 Everything else — every `HasVJP` instance, every composition,
 every correctness theorem — is proved from these axioms by
@@ -197,6 +222,11 @@ dense_weight_grad_correct → pdiv, pdiv_dense_W          (Phase 7 — one new a
 dense_bias_grad_correct   → pdiv, pdiv_add, pdiv_const, pdiv_id  (Phase 7 — zero new axioms)
 conv2d_weight_grad     → pdiv, conv2d, conv2d_weight_grad_has_vjp     (Phase 7)
 depthwiseConv2d_weight_grad → pdiv, depthwiseConv2d, depthwise_weight_grad_has_vjp3  (Phase 7)
+rowwise_has_vjp_mat    → pdiv, pdivMat_rowIndep                       (Phase 8 — zero new axioms)
+transformerBlock_has_vjp_mat → pdiv, pdivMat_rowIndep, mhsa_has_vjp_mat, pdiv_comp, pdiv_add,
+                               pdiv_id, pdiv_dense, pdiv_gelu, pdiv_bn{Affine,Centered,IstdBroadcast}  (Phase 8)
+transformerTower_has_vjp_mat → (same as transformerBlock)             (Phase 8)
+vit_body_has_vjp_mat   → (same as transformerBlock)                   (Phase 8 — the finale)
 bn_has_vjp             → pdiv, pdiv_bnAffine, pdiv_bnCentered, pdiv_bnIstdBroadcast, pdiv_comp, pdiv_mul
 bn_input_grad_correct  → (same as bn_has_vjp)
 bnNormalize_has_vjp    → pdiv, pdiv_bnCentered, pdiv_bnIstdBroadcast, pdiv_mul

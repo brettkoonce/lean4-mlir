@@ -570,6 +570,36 @@ axiom pdivMat_rowIndep {m n p : Nat} (g : Vec n → Vec p)
     pdivMat (fun M : Mat m n => fun r => g (M r)) A i j k l =
     if i = k then pdiv g (A i) j l else 0
 
+/-- **Row-wise lifting of a `HasVJP`** (Phase 8, Tensor-level).
+
+    Given any `g : Vec n → Vec p` with a proved `HasVJP`, applying `g`
+    independently to each row of a matrix `A : Mat m n` gives a
+    `HasVJPMat` on `Mat m n → Mat m p`. The backward is just `g.backward`
+    applied per row. Generalizes `rowSoftmax_has_vjp_mat`: any per-token
+    operation (LayerNorm, GELU, dense, activation) lifts to a per-sequence
+    matrix operation via this one helper. -/
+noncomputable def rowwise_has_vjp_mat {m n p : Nat} {g : Vec n → Vec p}
+    (hg : HasVJP g) :
+    HasVJPMat (fun A : Mat m n => fun r => g (A r)) where
+  backward := fun A dY => fun r c => hg.backward (A r) (dY r) c
+  correct := by
+    intro A dY i j
+    -- Replace pdivMat of the row-independent fn with its row/vector form.
+    simp_rw [pdivMat_rowIndep]
+    -- Push the *dY through the if-else, then pull the if-else out of the inner sum.
+    have h : ∀ k : Fin m,
+        (∑ l : Fin p, (if i = k then pdiv g (A i) j l else 0) * dY k l) =
+        if i = k then ∑ l : Fin p, pdiv g (A i) j l * dY k l else 0 := by
+      intro k
+      by_cases hik : i = k
+      · simp [hik]
+      · simp [hik]
+    simp_rw [h]
+    rw [Finset.sum_ite_eq Finset.univ i
+        (fun k => ∑ l : Fin p, pdiv g (A i) j l * dY k l)]
+    simp only [Finset.mem_univ, if_true]
+    exact hg.correct (A i) (dY i) j
+
 /-- **Scalar-scale Jacobian** — theorem, derived from `pdiv_mul` +
     `pdiv_const` + `pdiv_id` via the flatten bijection.
     `∂(s · A')_{kl} / ∂A'_{ij} = s · δ_{ik,jl}`. -/

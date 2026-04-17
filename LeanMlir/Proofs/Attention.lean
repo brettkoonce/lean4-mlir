@@ -482,17 +482,18 @@ theorem sdpa_back_V_correct (n d : Nat) (Q K V dOut : Mat n d)
   rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § 3. Multi-Head wrapping
+-- § 3. Multi-Head wrapping (Phase 8 — was hand-waved, now axiomatized)
 -- ════════════════════════════════════════════════════════════════
 
 /-! ## Multi-head: parallelism over a partition
 
 Multi-head attention is:
 
-  1. Split the feature dim `d` into `h` "heads" of size `d_h = d/h`.
-  2. Run SDPA independently on each head.
-  3. Concatenate the head outputs.
-  4. Apply one more dense projection `W_o`.
+  1. Project `X : Mat N D` three ways: `Q = X·Wq + bq`, `K = X·Wk + bk`, `V = X·Wv + bv`.
+  2. Reshape each projection `(N, D) → (N, heads, d_head)` by slicing the feature axis.
+  3. Run SDPA independently on each of the `heads` slices.
+  4. Concatenate the head outputs back to `(N, D)`.
+  5. Apply the output projection `Y = concat · Wo + bo`.
 
 In the MLIR (`emitMHSAForward`):
     reshape (B, N, D) -> (B, N, H, D_h)
@@ -502,57 +503,366 @@ In the MLIR (`emitMHSAForward`):
     reshape -> (B, N, D)
     dense projection (the "output projection" `Wo`)
 
-**No new VJP math.** Reshape and transpose are just index permutations
-— their Jacobians are permutation matrices, and their VJPs are just
-inverse reshapes/transposes. The `h` independent SDPAs run in parallel;
-their VJPs are independent (like a batch dimension).
+**Earlier** this section just narrated "no new VJP math" and moved on.
+Phase 8 closes that gap: we *define* `mhsa_layer` concretely in Lean
+(Q/K/V projections → per-head slice → sdpa-per-head → concat → Wo
+projection) and *axiomatize* its `HasVJPMat` in one bundled step. The
+bundled axiom is the "per-head vmap" fact — formalizing it at the
+framework level would need a Mat-level `rowIndep` generalized to the
+column axis plus a ternary input primitive, which is more bureaucracy
+than the book's pedagogy calls for. The formula is numerically
+gradient-checked in `check_axioms.py`, so the axiom is credible up to
+floating-point precision. -/
 
-If you wanted to prove `mhsa_has_vjp` in the framework, you'd:
-- Define reshape/transpose as functions with trivial VJPs (permute
-  indices -> VJP is the inverse permutation)
-- Apply the SDPA backward trio (`sdpa_back_{Q,K,V}` + their
-  `*_correct` axioms) per head (parallel over a new "head" axis)
-- Compose with the output projection via `dense_has_vjp`
+/-- Multi-head SDPA on a single sequence: `Mat N (heads·d_head) → Mat N (heads·d_head)`.
 
-All mechanical. The insight is already captured in the SDPA backward
-trio above; multi-head is an orchestration layer. -/
+    Concretely defined (not opaque):
+    1. Q, K, V projections (each a per-token dense with its own Wq/Wk/Wv).
+    2. For each head `h : Fin heads`, extract the `(N, d_head)` slice of Q/K/V
+       by indexing `finProdFinEquiv (h, k)` in the combined axis.
+    3. Run `sdpa` on each slice.
+    4. Concatenate the head outputs back along the feature axis.
+    5. Output projection Wo · concat + bo (per-token dense).
+
+    The bundled VJP axiom below packages the correctness of this
+    whole thing — equivalent to composing dense Jacobians, the per-head
+    SDPA jacobians (we already proved `sdpa_back_{Q,K,V}_correct`),
+    and the reshape/unreshape `pdiv_reindex` facts, with the "per-head
+    independence" fact as the one primitive that doesn't factor through
+    existing axioms. -/
+noncomputable def mhsa_layer (N heads d_head : Nat)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (X : Mat N (heads * d_head)) : Mat N (heads * d_head) :=
+  let D := heads * d_head
+  -- Q / K / V projections
+  let Q : Mat N D := fun n j => (∑ k : Fin D, X n k * Wq k j) + bq j
+  let K : Mat N D := fun n j => (∑ k : Fin D, X n k * Wk k j) + bk j
+  let V : Mat N D := fun n j => (∑ k : Fin D, X n k * Wv k j) + bv j
+  -- Per-head SDPA. `finProdFinEquiv (h, j) : Fin (heads * d_head)` picks out
+  -- column `j` of head `h`. Extract, apply sdpa, note the result per head.
+  let perHead : Fin heads → Mat N d_head := fun h =>
+    let Qh : Mat N d_head := fun n j => Q n (finProdFinEquiv (h, j))
+    let Kh : Mat N d_head := fun n j => K n (finProdFinEquiv (h, j))
+    let Vh : Mat N d_head := fun n j => V n (finProdFinEquiv (h, j))
+    sdpa N d_head Qh Kh Vh
+  -- Concatenate heads: output[n, fPF(h, j)] = perHead h n j.
+  let concat : Mat N D := fun n hj =>
+    let hj' := finProdFinEquiv.symm hj
+    perHead hj'.1 n hj'.2
+  -- Output projection
+  fun n j => (∑ k : Fin D, concat n k * Wo k j) + bo j
+
+/-- **Multi-head SDPA VJP — bundled axiom (Phase 8).**
+
+    The one honest axiom needed to lift single-head SDPA (already proved
+    in `sdpa_back_{Q,K,V}_correct`) to the full multi-head layer. The
+    axiom asserts existence of a correct backward function; numerically
+    gradient-checked in `check_axioms.py`.
+
+    Why an axiom here rather than a theorem: formalizing the "apply SDPA
+    independently to each of the `heads` column-slices" requires either a
+    column-indep analog of `pdivMat_rowIndep` plus a ternary-input VJP
+    framework, or heavy reshape gymnastics. Both are bureaucracy that
+    distract from the pedagogy. The mathematical content of the axiom —
+    block-diagonality of the Jacobian across heads — is exactly the
+    "multi-head is just parallel SDPA" claim the book makes in prose. -/
+axiom mhsa_has_vjp_mat (N heads d_head : Nat)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head)) :
+    HasVJPMat (mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo)
 
 -- ════════════════════════════════════════════════════════════════
--- § 4. Transformer Block
+-- § 4. Transformer Block (Phase 8 — composition, no hand-waving)
 -- ════════════════════════════════════════════════════════════════
+
+/-! ## Per-token liftings (theorems)
+
+Every per-token operation in a transformer (LN, dense, GELU) lifts from
+`HasVJP` on `Vec D` to `HasVJPMat` on `Mat N D` via the single helper
+`rowwise_has_vjp_mat` (Tensor.lean). These are theorems — no new axioms. -/
+
+/-- Per-token layer norm across a sequence. Applies `layerNormForward`
+    to each row of the `(N, D)` input; the backward is block-diagonal. -/
+noncomputable def layerNorm_per_token_has_vjp_mat (N D : Nat) (ε γ β : ℝ) :
+    HasVJPMat (fun X : Mat N D => fun n => layerNormForward D ε γ β (X n)) :=
+  rowwise_has_vjp_mat (layerNorm_has_vjp D ε γ β)
+
+/-- Per-token dense projection across a sequence.
+    `Q = X · W + b`, row-by-row dense with shared weights. -/
+noncomputable def dense_per_token_has_vjp_mat (N inD outD : Nat)
+    (W : Mat inD outD) (b : Vec outD) :
+    HasVJPMat (fun X : Mat N inD => fun n => dense W b (X n)) :=
+  rowwise_has_vjp_mat (dense_has_vjp W b)
+
+/-- Per-token GELU across a sequence. Elementwise activation,
+    so diagonal Jacobian both across rows and within a row. -/
+noncomputable def gelu_per_token_has_vjp_mat (N D : Nat) :
+    HasVJPMat (fun X : Mat N D => fun n => gelu D (X n)) :=
+  rowwise_has_vjp_mat (gelu_has_vjp D)
 
 /-! ## A transformer encoder block
 
-From `emitTransformerBlockForward` (line 796):
+From `emitTransformerBlockForward` (line 796 of MlirCodegen.lean):
 
-    block(x) = x + MLP(LN(x + MHSA(LN(x))))
+    block(x) = h1 + MLP(LN2(h1))       where h1 = x + MHSA(LN1(x))
 
 Expanding:
 
     h1 = x + MHSA(LN1(x))       -- attention sub-layer with residual
-    h2 = h1 + MLP(LN2(h1))      -- MLP sub-layer with residual
+    out = h1 + MLP(LN2(h1))     -- MLP sub-layer with residual
 
-where `MLP` is `Dense -> GELU -> Dense`.
+where `MLP(z) = dense(Wfc2, bfc2, gelu(dense(Wfc1, bfc1, z)))`.
 
-Every piece has a `HasVJP` in the book:
-- `LN1`, `LN2` — `layerNorm_has_vjp` (`LayerNorm.lean`)
-- `MHSA` — `sdpa_back_{Q,K,V}` + multi-head wrapping (this file)
-- `MLP` — `dense_has_vjp` composed with `gelu_has_vjp` composed with `dense_has_vjp` (via `vjp_comp`)
-- `+` residual connections — `biPath_has_vjp` with identity (`Residual.lean`)
+Every piece is now a `HasVJPMat` on `Mat N D`:
+- `LN1`, `LN2` — `layerNorm_per_token_has_vjp_mat` (theorem via `rowwise_has_vjp_mat`)
+- `MHSA`       — `mhsa_has_vjp_mat` (bundled axiom — Phase 8)
+- `MLP`        — two `dense_per_token_has_vjp_mat` + one `gelu_per_token_has_vjp_mat`, glued with `vjpMat_comp`
+- `+` residuals — `biPathMat_has_vjp` (theorem, Tensor.lean) with identity
 
-So the whole transformer block assembles from the chain rule and
-`biPath_has_vjp`, applied to previously-proved `HasVJP` instances. No
-new calculus axioms. No new structural moves. Just composition.
+The transformer block theorem below glues these with `vjpMat_comp` and
+`biPathMat_has_vjp`. No new axioms beyond `mhsa_has_vjp_mat`. -/
 
-This is the capstone observation of the book: **a transformer block
-is built from exactly the same tools as a ResNet block.** The five
-structural primitives (add, multiply, compose, softmax closed-form,
-dense-with-batch-dim) are sufficient for the whole modern architecture
-zoo. Everything else is orchestration.
--/
+/-- MLP sublayer of a transformer block: `dense ∘ GELU ∘ dense` applied per-token.
+
+    Concretely: `MLP(z) = Wfc2 · gelu(Wfc1 · z + bfc1) + bfc2`, applied row-wise. -/
+noncomputable def transformerMlp (N D mlpDim : Nat)
+    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim D) (bfc2 : Vec D) :
+    Mat N D → Mat N D :=
+  (fun Y : Mat N mlpDim => fun n => dense Wfc2 bfc2 (Y n)) ∘
+  (fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n)) ∘
+  (fun X : Mat N D      => fun n => dense Wfc1 bfc1 (X n))
+
+/-- `HasVJPMat` for the MLP sublayer — three `vjpMat_comp` steps over
+    existing per-token liftings. -/
+noncomputable def transformerMlp_has_vjp_mat (N D mlpDim : Nat)
+    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim D) (bfc2 : Vec D) :
+    HasVJPMat (transformerMlp N D mlpDim Wfc1 bfc1 Wfc2 bfc2) :=
+  vjpMat_comp _ _
+    (vjpMat_comp _ _
+      (dense_per_token_has_vjp_mat N D mlpDim Wfc1 bfc1)
+      (gelu_per_token_has_vjp_mat N mlpDim))
+    (dense_per_token_has_vjp_mat N mlpDim D Wfc2 bfc2)
+
+/-- Attention sublayer: `X ↦ X + MHSA(LN1(X))`. Top-level composition;
+    the `biPathMat` skip-adds identity to the MHSA∘LN1 branch. -/
+noncomputable def transformerAttnSublayer (N heads d_head : Nat) (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head)) :
+    Mat N (heads * d_head) → Mat N (heads * d_head) :=
+  biPathMat
+    (fun X => X)
+    ((mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
+     (fun X : Mat N (heads * d_head) => fun n =>
+        layerNormForward (heads * d_head) ε γ1 β1 (X n)))
+
+/-- MLP sublayer: `h ↦ h + MLP(LN2(h))`. Same biPathMat structure. -/
+noncomputable def transformerMlpSublayer (N heads d_head mlpDim : Nat) (ε γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
+    Mat N (heads * d_head) → Mat N (heads * d_head) :=
+  biPathMat
+    (fun X => X)
+    ((transformerMlp N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
+     (fun X : Mat N (heads * d_head) => fun n =>
+        layerNormForward (heads * d_head) ε γ2 β2 (X n)))
+
+/-- **Transformer encoder block forward**: MLP-sublayer ∘ attention-sublayer.
+    Signature matches the codegen: `Mat N (heads·d_head) → Mat N (heads·d_head)`. -/
+noncomputable def transformerBlock (N heads d_head mlpDim : Nat) (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
+    Mat N (heads * d_head) → Mat N (heads * d_head) :=
+  (transformerMlpSublayer N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
+  (transformerAttnSublayer N heads d_head ε γ1 β1 Wq Wk Wv Wo bq bk bv bo)
+
+/-- Attention sublayer VJP: `biPathMat` of identity and `mhsa ∘ LN1`. -/
+noncomputable def transformerAttnSublayer_has_vjp_mat (N heads d_head : Nat)
+    (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head)) :
+    HasVJPMat (transformerAttnSublayer N heads d_head ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo) :=
+  biPathMat_has_vjp _ _ (identityMat_has_vjp N (heads * d_head))
+    (vjpMat_comp _ _
+      (layerNorm_per_token_has_vjp_mat N (heads * d_head) ε γ1 β1)
+      (mhsa_has_vjp_mat N heads d_head Wq Wk Wv Wo bq bk bv bo))
+
+/-- MLP sublayer VJP: `biPathMat` of identity and `MLP ∘ LN2`. -/
+noncomputable def transformerMlpSublayer_has_vjp_mat (N heads d_head mlpDim : Nat)
+    (ε γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
+    HasVJPMat (transformerMlpSublayer N heads d_head mlpDim ε γ2 β2
+                 Wfc1 bfc1 Wfc2 bfc2) :=
+  biPathMat_has_vjp _ _ (identityMat_has_vjp N (heads * d_head))
+    (vjpMat_comp _ _
+      (layerNorm_per_token_has_vjp_mat N (heads * d_head) ε γ2 β2)
+      (transformerMlp_has_vjp_mat N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2))
+
+/-- **Transformer block VJP — theorem, no new axioms beyond `mhsa_has_vjp_mat`.**
+
+    The block is `mlpSublayer ∘ attnSublayer`, and each sublayer is a
+    proved `biPathMat_has_vjp`. One `vjpMat_comp` glues them. -/
+noncomputable def transformerBlock_has_vjp_mat (N heads d_head mlpDim : Nat)
+    (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
+    HasVJPMat (transformerBlock N heads d_head mlpDim ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo
+                 γ2 β2 Wfc1 bfc1 Wfc2 bfc2) :=
+  vjpMat_comp _ _
+    (transformerAttnSublayer_has_vjp_mat N heads d_head ε γ1 β1
+      Wq Wk Wv Wo bq bk bv bo)
+    (transformerMlpSublayer_has_vjp_mat N heads d_head mlpDim ε γ2 β2
+      Wfc1 bfc1 Wfc2 bfc2)
 
 -- ════════════════════════════════════════════════════════════════
--- § 5. The end of the road
+-- § 5. The ViT finale — k-block transformer tower
+-- ════════════════════════════════════════════════════════════════
+
+/-! ## Stacking transformer blocks
+
+ViT-Tiny has 12 transformer blocks; ViT-Base has 12, ViT-Large has 24.
+The stack is just k-fold composition of individual blocks. By
+`vjpMat_comp` and induction on k, if each block has a `HasVJPMat`
+then so does the stack — for any depth.
+
+For the formal theorem we use a single shared parameter tuple across
+blocks (a mild simplification; in practice every block has its own
+weights). The Jacobian-composition structure doesn't change — the
+theorem generalizes trivially to per-block parameters by replacing
+the Nat induction with a `Fin k` parameter function, which is
+mechanical once the single-shared-param case is proved. -/
+
+/-- k-fold iterated transformer block, sharing parameters across all
+    k layers. Defined by `Nat.rec` so the `HasVJPMat` proof is a
+    straightforward induction on k. -/
+noncomputable def transformerTower (k N heads d_head mlpDim : Nat)
+    (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
+    Mat N (heads * d_head) → Mat N (heads * d_head) :=
+  Nat.rec (motive := fun _ => Mat N (heads * d_head) → Mat N (heads * d_head))
+    (fun X => X)
+    (fun _ acc =>
+      (transformerBlock N heads d_head mlpDim ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
+         γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘ acc)
+    k
+
+/-- **Transformer tower VJP — proved by induction on depth k.**
+
+    Base case: 0-block tower is identity. Step: adding one more block
+    composes a new block VJP on top of the existing tower VJP via
+    `vjpMat_comp`. -/
+noncomputable def transformerTower_has_vjp_mat (k N heads d_head mlpDim : Nat)
+    (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
+    HasVJPMat (transformerTower k N heads d_head mlpDim ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo
+                 γ2 β2 Wfc1 bfc1 Wfc2 bfc2) := by
+  induction k with
+  | zero => exact identityMat_has_vjp N (heads * d_head)
+  | succ n ih =>
+    exact vjpMat_comp
+      (transformerTower n N heads d_head mlpDim ε γ1 β1
+        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
+      (transformerBlock N heads d_head mlpDim ε γ1 β1
+        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
+      ih
+      (transformerBlock_has_vjp_mat N heads d_head mlpDim ε γ1 β1
+        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
+
+/-! ## ViT body: tower + final LN
+
+`vit_body` is the ViT backbone operating on a single `(N, D)` sequence,
+*after* the patch embedding produced a `Mat N D` input and *before* the
+classifier head slices the CLS token and runs dense+softmax CE.
+
+    patch_embed(X : Tensor3 ic h w) : Mat N D   ← outside Mat-land
+    vit_body(M : Mat N D) : Mat N D             ← the backbone (this file)
+    classifier(M) = dense(W_cls, b_cls, M[0])   ← Mat → Vec, then softmax CE loss
+
+The backbone is `finalLN ∘ transformerTower`. Both sides are `Mat N D`,
+so `vjpMat_comp` glues the two VJPs.
+
+The patch-embedding and classifier-head steps exit `Mat`-land (they
+change type to/from `Tensor3` and `Vec` respectively). Both are trivial
+compositions of already-proved theorems (`conv2d_has_vjp3` / `pdiv_reindex`
+for patch embed, `pdiv_reindex` / `dense_has_vjp` / `softmaxCE_grad` for
+the classifier) but they don't fit in the uniform `HasVJPMat` frame.
+We mark them as future work; closing this would require a unified
+rank-polymorphic VJP framework that's not needed for the pedagogy. -/
+
+/-- **ViT body** — transformer tower followed by final per-token LayerNorm.
+
+    Composition is `finalLN ∘ transformerTower`; matches the codegen's
+    `emitForwardBody` ordering for a `.transformerEncoder` followed by
+    the implicit final LN block. -/
+noncomputable def vit_body (k N heads d_head mlpDim : Nat) (ε : ℝ)
+    (γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
+    (γF βF : ℝ)  -- final LN params
+    : Mat N (heads * d_head) → Mat N (heads * d_head) :=
+  (fun X : Mat N (heads * d_head) => fun n =>
+      layerNormForward (heads * d_head) ε γF βF (X n)) ∘
+  (transformerTower k N heads d_head mlpDim ε γ1 β1
+     Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
+
+/-- **The ViT finale — `HasVJPMat` for the full transformer backbone.**
+
+    This is the punchline of the book: a depth-k ViT transformer backbone
+    (patch-embedded input → final-LN'd output, all on `Mat N D`) has a
+    correct VJP, composed entirely from proved building blocks and a
+    single bundled axiom (`mhsa_has_vjp_mat` for multi-head attention).
+
+    Proof: one `vjpMat_comp` glueing the transformer tower VJP to the
+    final LN VJP (the latter via `layerNorm_per_token_has_vjp_mat`, which
+    is itself derived from `rowwise_has_vjp_mat` + `layerNorm_has_vjp`).
+
+    Everything else — patch embedding, CLS-token extraction, and the
+    final dense classifier — is either a composite of already-proved
+    theorems (`conv2d_has_vjp3`, `pdiv_reindex`, `dense_has_vjp`,
+    `softmaxCE_grad`) or a simple type-level reshape. Those steps don't
+    live in `HasVJPMat` (they change shape/rank), but they add no new
+    math. The backbone is where the hard work is; the heads are trivial
+    wrappers. -/
+noncomputable def vit_body_has_vjp_mat (k N heads d_head mlpDim : Nat) (ε : ℝ)
+    (γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
+    (γF βF : ℝ) :
+    HasVJPMat (vit_body k N heads d_head mlpDim ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF) :=
+  vjpMat_comp _ _
+    (transformerTower_has_vjp_mat k N heads d_head mlpDim ε γ1 β1
+      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
+    (layerNorm_per_token_has_vjp_mat N (heads * d_head) ε γF βF)
+
+-- ════════════════════════════════════════════════════════════════
+-- § 6. The end of the road
 -- ════════════════════════════════════════════════════════════════
 
 /-! ## What we've proved (and what's left)

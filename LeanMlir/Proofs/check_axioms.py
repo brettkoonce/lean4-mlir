@@ -501,6 +501,19 @@ def test_depthwise_weight_grad():
     return err < TOL
 
 # ════════════════════════════════════════════════════════════════
+# NOTE — Phase 8: `mhsa_has_vjp_mat` (Attention.lean) is a bundled
+# existence axiom (HasVJPMat), not a specific-formula claim. It's a
+# composition of primitives that ARE tested here individually:
+# - Q/K/V/O projections → gradient-checked via pdiv_dense / pdiv_dense_W
+# - per-head SDPA       → gradient-checked via sdpa_back_Q/K/V below
+# - reshape / concat    → sparse pdiv_reindex, non-falsifiable at the
+#                         formula level (just index permutations)
+# So we intentionally don't add a direct mhsa gradient check — the axiom's
+# content is "the per-head vmap is consistent with the single-head proof,"
+# and the single-head proof (sdpa) is already numerically verified below.
+# ════════════════════════════════════════════════════════════════
+
+# ════════════════════════════════════════════════════════════════
 # SDPA backwards: sdpa_back_Q / sdpa_back_K / sdpa_back_V
 #
 # These mirror the concrete definitions in Attention.lean. We check
