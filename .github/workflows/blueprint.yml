@@ -81,6 +81,17 @@ jobs:
           # need a newer texlive package).
           version: 2
 
+      - name: Regenerate TeX format files (xelatex.fmt etc.)
+        # cache-apt-pkgs-action restores files but skips postinst hooks, so
+        # fmtutil never registers xelatex / never writes xelatex.fmt. Without
+        # this step, xelatex fails immediately with "I can't find the format
+        # file `xelatex.fmt'!" and the PDF build bails before writing a log.
+        run: |
+          sudo update-fmtutil --sys || true
+          sudo fmtutil-sys --all 2>&1 | tail -n 50 || true
+          # Sanity check: xelatex should now resolve its format.
+          kpsewhich xelatex.fmt || echo "::warning::xelatex.fmt still missing"
+
       - name: Cache pip
         uses: actions/cache@v4
         with:
