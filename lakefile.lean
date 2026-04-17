@@ -161,4 +161,7 @@ lean_exe «bestiary-detr» where
 lean_exe «bestiary-yolo» where
   root := `Bestiary.YOLO
 
+lean_exe «bestiary-shufflenet» where
+  root := `Bestiary.ShuffleNet
+
 require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"

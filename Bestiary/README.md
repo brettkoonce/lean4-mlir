@@ -16,6 +16,7 @@ like in ~20 lines of Lean."
 | `UNet.lean`      | UNet                      | original / RGB / small / tiny | Encoder-decoder with skip connections; diffusion backbone |
 | `DETR.lean`      | DETR                      | R50 / R101 / tiny | Object detection as set prediction; learned queries + cross-attention |
 | `YOLO.lean`      | YOLOv1                    | full / fast / tiny | Old-school one-shot detection; conv stack + 2 FCs, no new primitives |
+| `ShuffleNet.lean`| ShuffleNet v1             | 0.5× / 1× / 2× / tiny | Mobile CNN: grouped 1×1 convs + channel shuffle |
 
 ## Adding a new entry
 

@@ -137,6 +137,22 @@ def Layer.nParams : Layer → Nat
       -- Box head: 3-layer MLP dim → dim → dim → 4, shared across queries.
       (dim * (nClasses + 1) + (nClasses + 1))
       + (dim * dim + dim) + (dim * dim + dim) + (dim * 4 + 4)
+  | .shuffleBlock ic oc groups nUnits =>
+      -- Bottleneck width is oc/4; grouped 1×1 convs reduce params by `groups`.
+      -- First unit downsamples (stride-2 DWConv, avg-pool skip path).
+      let g := Nat.max 1 groups
+      let mid := Nat.max 1 (oc / 4)
+      -- 1×1 grouped conv ic → mid + BN: (ic*mid)/g + 2*mid
+      -- 3×3 depthwise mid → mid + BN: 9*mid + 2*mid
+      -- 1×1 grouped conv mid → oc + BN: (mid*oc)/g + 2*oc
+      let firstUnit := ((ic * mid) / g + 2 * mid)
+                     + (9 * mid + 2 * mid)
+                     + ((mid * oc) / g + 2 * oc)
+      -- Identity-skip units: ic = oc for the inner block.
+      let restUnit  := ((oc * mid) / g + 2 * mid)
+                     + (9 * mid + 2 * mid)
+                     + ((mid * oc) / g + 2 * oc)
+      firstUnit + (nUnits - 1) * restUnit
   | _                        => 0
 
 def NetSpec.totalParams (s : NetSpec) : Nat :=
@@ -207,7 +223,8 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .unetDown ic oc            => s!"UNetDown({ic}→{oc})"
     | .unetUp ic oc              => s!"UNetUp({ic}→{oc})"
     | .transformerDecoder dim h _ n nq => s!"Dec{n}x[{h}h,{dim}],{nq}q"
-    | .detrHeads dim c           => s!"DETR-heads({dim}→cls{c+1}+box4)")
+    | .detrHeads dim c           => s!"DETR-heads({dim}→cls{c+1}+box4)"
+    | .shuffleBlock ic oc g n    => s!"Shuffle{n}({ic}→{oc},g{g})")
 
 -- ===========================================================================
 -- Validation: catch channel/dimension mismatches at `lake build` time
@@ -236,6 +253,7 @@ def Layer.outChannels : Layer → Nat
   | .unetUp _ oc                    => oc
   | .transformerDecoder dim _ _ _ _ => dim
   | .detrHeads _ nClasses           => nClasses + 1  -- class-head output width (informational)
+  | .shuffleBlock _ oc _ _          => oc
   | _                               => 0  -- pool/flatten/GAP: pass-through
 
 /-- Input channels expected by a layer. Returns 0 for layers that accept any input. -/
@@ -261,6 +279,7 @@ def Layer.inChannels : Layer → Nat
   | .unetUp ic _                    => ic
   | .transformerDecoder dim _ _ _ _ => dim
   | .detrHeads dim _                => dim
+  | .shuffleBlock ic _ _ _          => ic
   | _                               => 0  -- pool/flatten/GAP: accept anything
 
 /-- Validate that channel dimensions chain correctly through the spec.

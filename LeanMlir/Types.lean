@@ -59,6 +59,12 @@ inductive Layer where
   -- with the +1 being the "no object" slot) + box head (3-layer MLP
   -- dim → dim → dim → 4, predicting (cx, cy, w, h)).
   | detrHeads (dim nClasses : Nat)
+  -- ShuffleNet v1 stage: `nUnits` shuffle units at a given (ic, oc) pair,
+  -- the first being a stride-2 downsampling unit (avg-pool skip) and the
+  -- rest being residual units. Internally: 1×1 grouped conv → channel
+  -- shuffle → 3×3 depthwise → 1×1 grouped conv, with `groups` channel
+  -- partitions driving the grouped convs.
+  | shuffleBlock (ic oc groups nUnits : Nat)
 deriving Repr
 
 structure NetSpec where
