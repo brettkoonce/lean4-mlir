@@ -15,6 +15,7 @@ like in ~20 lines of Lean."
 | `SwinT.lean`     | Swin Transformer          | Swin-T / Swin-S / Swin-B / tiny | Hierarchical ViT, windowed + shifted attention |
 | `UNet.lean`      | UNet                      | original / RGB / small / tiny | Encoder-decoder with skip connections; diffusion backbone |
 | `DETR.lean`      | DETR                      | R50 / R101 / tiny | Object detection as set prediction; learned queries + cross-attention |
+| `YOLO.lean`      | YOLOv1                    | full / fast / tiny | Old-school one-shot detection; conv stack + 2 FCs, no new primitives |
 
 ## Adding a new entry
 
