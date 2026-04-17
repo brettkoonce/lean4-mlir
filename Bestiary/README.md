@@ -6,29 +6,79 @@ a catalogue of famous neural-network architectures expressed as pure
 as a read-only fixture showing "here's what this architecture looks
 like in ~20 lines of Lean."
 
-## Entries
+The entries are grouped by task domain. If you've read Part 1 (the VJP
+proof suite), the **Familiar territory** block is where Part 1's
+primitives show up at real-world scale — every layer you see has
+already been VJP'd. The later blocks pick up the new task domains
+(detection, segmentation, RL) and the non-vision outliers (language,
+audio, 3D, multimodal, science).
+
+## Familiar territory — vision classifiers from Part 1's primitives
+
+All of these are image-classification backbones built out of
+conv / pool / batch-norm / residual / attention / patch-embed —
+the exact layer kit VJP'd in Part 1. Reading them should feel like
+Part 1 at scale.
 
 | File | Architecture | Variants | Notes |
 |------|--------------|----------|-------|
-| `AlphaZero.lean` | AlphaZero / AlphaGo Zero | original Go, chess, tiny | Two-headed (policy + value) |
-| `Mamba.lean`     | Mamba (selective SSM)     | 130M / 370M / 790M / tiny | Language model, linear-time alternative to attention |
-| `SwinT.lean`     | Swin Transformer          | Swin-T / Swin-S / Swin-B / tiny | Hierarchical ViT, windowed + shifted attention |
-| `UNet.lean`      | UNet                      | original / RGB / small / tiny | Encoder-decoder with skip connections; diffusion backbone |
-| `DETR.lean`      | DETR                      | R50 / R101 / tiny | Object detection as set prediction; learned queries + cross-attention |
-| `YOLO.lean`      | YOLOv1                    | full / fast / tiny | Old-school one-shot detection; conv stack + 2 FCs, no new primitives |
+| `LeNet.lean`     | LeNet                     | LeNet-5 / LeNet-300-100 | The 1998 original; 60K params, still the template |
+| `AlexNet.lean`   | AlexNet                   | canonical / tiny | 2012 ImageNet winner; restarted modern deep learning |
+| `SqueezeNet.lean`| SqueezeNet                | 1.0 / 1.1 / tiny | Fire modules: squeeze-then-parallel-expand, AlexNet @ 1.25M params |
+| `Inception.lean` | Inception family          | GoogLeNet (v1) / v3 / v4 | Multi-scale parallel convs; 1×1 dimension-reducer invented here |
+| `Xception.lean`  | Xception                  | canonical / tiny | Extreme Inception — every conv is depthwise-separable |
 | `ShuffleNet.lean`| ShuffleNet v1             | 0.5× / 1× / 2× / tiny | Mobile CNN: grouped 1×1 convs + channel shuffle |
-| `Evoformer.lean` | AlphaFold 2 Evoformer     | full / mini / tiny | Dual-representation (MSA + pair) via triangle updates |
-| `MuZero.lean`    | MuZero                    | Go / Atari / tiny | AlphaZero + learned dynamics; three networks (rep + dyn + pred) |
 | `MobileViT.lean` | MobileViT                 | S / XS / XXS / tiny | Hybrid CNN + transformer-across-patches for mobile |
 | `ConvNeXt.lean`  | ConvNeXt                  | T / S / B / L / tiny | Modernized CNN; the "can pure convs still compete" answer |
+| `SwinT.lean`     | Swin Transformer          | Swin-T / Swin-S / Swin-B / tiny | Hierarchical ViT, windowed + shifted attention |
+
+## Object detection
+
+Localize *and* classify. Detection heads are where the linear `NetSpec`
+shape starts to creak — multi-scale FPN outputs need a graph, not a
+list — but the bestiary shows the single-scale view and links to the
+multi-head refactor in the Limitations section below.
+
+| File | Architecture | Variants | Notes |
+|------|--------------|----------|-------|
+| `YOLO.lean`      | YOLO v1/v3/v5/v8/v11      | full / fast / tiny, v3/v5s/v5m/v8n/v8s/v11 | One-shot detection; v1 raw convs+FCs, later versions layer CSP/Darknet blocks |
+| `DETR.lean`      | DETR                      | R50 / R101 / tiny | Detection as set prediction; learned queries + cross-attention |
+
+## Semantic segmentation
+
+Pixel-level labeling. Symmetric encoder/decoder with skip connections
+is the recurring pattern; UNet is the canonical instance.
+
+| File | Architecture | Variants | Notes |
+|------|--------------|----------|-------|
+| `UNet.lean`      | UNet                      | original / RGB / small / tiny | Encoder-decoder with skip connections; diffusion backbone |
+
+## Reinforcement learning
+
+Two-headed (policy + value) networks wrapped in a self-play / MCTS
+outer loop. The architectural side is pure CNNs; the complexity lives
+in the outer loop.
+
+| File | Architecture | Variants | Notes |
+|------|--------------|----------|-------|
+| `AlphaZero.lean` | AlphaZero / AlphaGo Zero  | original Go, chess, tiny | Two-headed (policy + value) |
+| `MuZero.lean`    | MuZero                    | Go / Atari / tiny | AlphaZero + learned dynamics; three networks (rep + dyn + pred) |
+
+## Beyond vision
+
+Architectures where the task domain is not a 2D image: language,
+audio, 3D scene reconstruction, multimodal embedding, scientific.
+Several of these (NeRF, CLIP) have essentially *no* architectural
+novelty — the interesting work lives in the data, loss, or training
+procedure, and the bestiary entry exists to make that point.
+
+| File | Architecture | Variants | Notes |
+|------|--------------|----------|-------|
+| `Mamba.lean`     | Mamba (selective SSM)     | 130M / 370M / 790M / tiny | Language model, linear-time alternative to attention |
 | `WaveNet.lean`   | WaveNet                   | speech / 3-stack / music / tiny | Dilated causal convs for audio; exponential receptive field |
 | `NeRF.lean`      | NeRF                      | canonical / fast / tiny | 3D scene as an MLP; the magic is in positional encoding |
 | `CLIP.lean`      | CLIP                      | RN50 / ViT-B/32 / ViT-L/14 / tiny | Dual encoder + contrastive; zero new primitives |
-| `SqueezeNet.lean`| SqueezeNet                | 1.0 / 1.1 / tiny | Fire modules: squeeze-then-parallel-expand, AlexNet @ 1.25M params |
-| `LeNet.lean`     | LeNet                     | LeNet-5 / LeNet-300-100 | The 1998 original; 60K params, still the template |
-| `Inception.lean` | Inception family          | GoogLeNet (v1) / v3 / v4 | Multi-scale parallel convs; 1×1 dimension-reducer invented here |
-| `Xception.lean`  | Xception                  | canonical / tiny | Extreme Inception — every conv is depthwise-separable |
-| `AlexNet.lean`   | AlexNet                   | canonical / tiny | 2012 ImageNet winner; restarted modern deep learning |
+| `Evoformer.lean` | AlphaFold 2 Evoformer     | full / mini / tiny | Dual-representation (MSA + pair) via triangle updates |
 
 ## Adding a new entry
 
