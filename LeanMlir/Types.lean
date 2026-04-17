@@ -103,6 +103,19 @@ inductive Layer where
   -- connection + separate 1×1 conv producing a skipCh vector (summed
   -- into the final output head).
   | waveNetBlock (residualCh skipCh nLayers : Nat)
+  -- Sinusoidal positional encoding (Vaswani 2017 / NeRF 2020):
+  -- γ(p) = (sin(2⁰πp), cos(2⁰πp), ..., sin(2^(L-1)πp), cos(2^(L-1)πp)).
+  -- Parameter-free — just a deterministic frequency basis. Output dim
+  -- = inputDim · 2 · numFrequencies.
+  | positionalEncoding (inputDim numFrequencies : Nat)
+  -- NeRF MLP core (Mildenhall et al. 2020): 8 hidden layers of `hiddenDim`
+  -- with ReLU, a mid-skip concatenating the positional encoding at layer 5,
+  -- dual output heads (1-dim volume density σ + 3-dim RGB via a direction-
+  -- conditioned branch). Signature params:
+  --   encodedPosDim — dim of γ(x), typically 60 (=3·2·10)
+  --   encodedDirDim — dim of γ(d), typically 24 (=2·2·6)  [view direction]
+  --   hiddenDim     — MLP width (paper: 256)
+  | nerfMLP (encodedPosDim encodedDirDim hiddenDim : Nat)
 deriving Repr
 
 structure NetSpec where

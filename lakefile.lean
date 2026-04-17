@@ -179,4 +179,7 @@ lean_exe «bestiary-convnext» where
 lean_exe «bestiary-wavenet» where
   root := `Bestiary.WaveNet
 
+lean_exe «bestiary-nerf» where
+  root := `Bestiary.NeRF
+
 require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"

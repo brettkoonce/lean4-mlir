@@ -214,6 +214,29 @@ def Layer.nParams : Layer → Nat
       let skip := skipCh
       let perBlock := 4 * res * res + 2 * res + res * res + res + res * skip + skip
       nLayers * perBlock
+  | .positionalEncoding _inputDim _numFrequencies =>
+      -- Deterministic sinusoidal basis — zero trainable parameters.
+      0
+  | .nerfMLP encodedPosDim encodedDirDim hiddenDim =>
+      let eP := encodedPosDim
+      let eD := encodedDirDim
+      let h  := hiddenDim
+      -- Layer 1: γ(x) (eP) → h, with bias
+      let l1 := eP * h + h
+      -- Layers 2-4: 3 × (h → h)
+      let l2to4 := 3 * (h * h + h)
+      -- Layer 5: (h + eP) → h  [skip-concat with positional encoding]
+      let l5 := (h + eP) * h + h
+      -- Layers 6-8: 3 × (h → h)
+      let l6to8 := 3 * (h * h + h)
+      -- Density head: h → 1
+      let densHead := h * 1 + 1
+      -- Feature projection before direction branch: h → h
+      let featProj := h * h + h
+      -- Direction branch: (h + eD) → 128, then 128 → 3
+      let dirLayer := (h + eD) * 128 + 128
+      let rgbHead  := 128 * 3 + 3
+      l1 + l2to4 + l5 + l6to8 + densHead + featProj + dirLayer + rgbHead
   | _                        => 0
 
 def NetSpec.totalParams (s : NetSpec) : Nat :=
@@ -291,7 +314,9 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .mobileVitBlock ic d h m n => s!"MobileViT(ic={ic},d={d},h={h},mlp={m},L={n})"
     | .convNextStage c n         => s!"ConvNeXt{n}(c={c})"
     | .convNextDownsample i o    => s!"CNXDown({i}→{o})"
-    | .waveNetBlock r s n        => s!"WaveNet{n}(res={r},skip={s})")
+    | .waveNetBlock r s n        => s!"WaveNet{n}(res={r},skip={s})"
+    | .positionalEncoding d L    => s!"PE({d}→{d * 2 * L},L={L})"
+    | .nerfMLP eP eD h           => s!"NeRF-MLP(p={eP},d={eD},h={h})")
 
 -- ===========================================================================
 -- Validation: catch channel/dimension mismatches at `lake build` time
@@ -327,6 +352,8 @@ def Layer.outChannels : Layer → Nat
   | .convNextStage c _              => c      -- stage preserves channels
   | .convNextDownsample _ oc        => oc
   | .waveNetBlock _ skipCh _        => skipCh     -- skip-sum is what flows to the head
+  | .positionalEncoding inputDim numFreq => inputDim * 2 * numFreq
+  | .nerfMLP _ _ _                  => 4    -- 1-dim density + 3-dim RGB (flattened)
   | _                               => 0  -- pool/flatten/GAP: pass-through
 
 /-- Input channels expected by a layer. Returns 0 for layers that accept any input. -/
@@ -359,6 +386,8 @@ def Layer.inChannels : Layer → Nat
   | .convNextStage c _              => c
   | .convNextDownsample ic _        => ic
   | .waveNetBlock residualCh _ _    => residualCh
+  | .positionalEncoding inputDim _  => inputDim
+  | .nerfMLP encodedPosDim _ _      => encodedPosDim
   | _                               => 0  -- pool/flatten/GAP: accept anything
 
 /-- Validate that channel dimensions chain correctly through the spec.
