@@ -74,11 +74,12 @@ jobs:
           packages: >-
             graphviz libgraphviz-dev pkg-config
             texlive-latex-base texlive-latex-extra texlive-fonts-extra
-            texlive-xetex texlive-science texlive-pictures
-            texlive-plain-generic texlive-font-utils latexmk
+            texlive-fonts-recommended texlive-xetex texlive-science
+            texlive-pictures texlive-plain-generic texlive-font-utils
+            texlive-luatex texlive-bibtex-extra latexmk
           # Bump this `version` to force a cache refresh (e.g. when we
           # need a newer texlive package).
-          version: 1.0
+          version: 2
 
       - name: Cache pip
         uses: actions/cache@v4
@@ -100,19 +101,30 @@ jobs:
           leanblueprint checkdecls
 
       - name: Build blueprint PDF
-        # Don't block the web deploy if PDF fails, but do show the full
-        # latexmk log in the CI output so we can see what broke.
+        # Don't block the web deploy if PDF fails, but surface detailed
+        # diagnostics so we can fix it.
         continue-on-error: true
         run: |
           set +e
           leanblueprint pdf
           status=$?
+          echo "=========================================="
+          echo "leanblueprint pdf exit status: $status"
+          echo "=========================================="
+          echo "--- blueprint/src contents ---"
+          ls -la blueprint/src 2>/dev/null || true
+          echo "--- blueprint/print contents ---"
+          ls -la blueprint/print 2>/dev/null || true
+          echo "--- blueprint top contents ---"
+          ls -la blueprint 2>/dev/null || true
+          echo "--- latexmk log tail (blueprint/src/print.log) ---"
+          tail -n 200 blueprint/src/print.log 2>/dev/null || echo "no print.log"
+          echo "--- latexmk log tail (blueprint/print.log) ---"
+          tail -n 200 blueprint/print.log 2>/dev/null || echo "no blueprint/print.log"
+          echo "--- latexmk log tail (blueprint/src/print.fls) ---"
+          tail -n 80 blueprint/src/print.fls 2>/dev/null || echo "no print.fls"
           if [ $status -ne 0 ]; then
             echo "::warning::PDF build failed (status $status); web version still ships."
-            echo "--- latexmk log tail ---"
-            tail -n 100 blueprint/src/print.log 2>/dev/null || true
-            echo "--- print directory ---"
-            ls -la blueprint/print 2>/dev/null || true
           fi
           exit 0
 
@@ -125,8 +137,20 @@ jobs:
           # Blueprint web
           mkdir -p public/blueprint
           cp -r blueprint/web/* public/blueprint/ 2>/dev/null || true
-          # Blueprint PDF (if built)
-          cp blueprint/print/print.pdf public/blueprint.pdf 2>/dev/null || true
+          # Blueprint PDF — try multiple known paths, log what we find.
+          if [ -f blueprint/print/print.pdf ]; then
+            cp blueprint/print/print.pdf public/blueprint.pdf
+            echo "Copied PDF from blueprint/print/print.pdf"
+          elif [ -f blueprint/print.pdf ]; then
+            cp blueprint/print.pdf public/blueprint.pdf
+            echo "Copied PDF from blueprint/print.pdf"
+          elif [ -f blueprint/src/print.pdf ]; then
+            cp blueprint/src/print.pdf public/blueprint.pdf
+            echo "Copied PDF from blueprint/src/print.pdf"
+          else
+            echo "::warning::No PDF found at any expected path; blueprint.pdf will 404."
+            find blueprint -name "*.pdf" -maxdepth 3 2>/dev/null || true
+          fi
           # Keep the standalone graphviz DAG as an alt artifact
           cp LeanMlir/Proofs/blueprint.svg public/deps.svg 2>/dev/null || true
           ls -la public/
