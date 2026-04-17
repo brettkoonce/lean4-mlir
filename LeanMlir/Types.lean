@@ -128,6 +128,14 @@ inductive Layer where
   -- exact inner block varies across YOLO versions (C3, C2f, C3k2);
   -- this primitive approximates them all at the same abstraction level.
   | cspBlock (ic oc nBlocks : Nat)
+  -- Inception module (Szegedy et al. 2014, GoogLeNet). Four parallel
+  -- branches concatenated along the channel axis:
+  --   b1: 1×1 conv (ic → b1out)
+  --   b2: 1×1 (ic → b2reduce) + 3×3 (b2reduce → b2out)
+  --   b3: 1×1 (ic → b3reduce) + 5×5 (b3reduce → b3out)
+  --   b4: 3×3 maxPool + 1×1 (ic → b4out)
+  -- Output channels = b1out + b2out + b3out + b4out.
+  | inceptionModule (ic b1out b2reduce b2out b3reduce b3out b4out : Nat)
 deriving Repr
 
 structure NetSpec where

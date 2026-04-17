@@ -25,6 +25,9 @@ like in ~20 lines of Lean."
 | `NeRF.lean`      | NeRF                      | canonical / fast / tiny | 3D scene as an MLP; the magic is in positional encoding |
 | `CLIP.lean`      | CLIP                      | RN50 / ViT-B/32 / ViT-L/14 / tiny | Dual encoder + contrastive; zero new primitives |
 | `SqueezeNet.lean`| SqueezeNet                | 1.0 / 1.1 / tiny | Fire modules: squeeze-then-parallel-expand, AlexNet @ 1.25M params |
+| `LeNet.lean`     | LeNet                     | LeNet-5 / LeNet-300-100 | The 1998 original; 60K params, still the template |
+| `Inception.lean` | Inception family          | GoogLeNet (v1) / v3 / v4 | Multi-scale parallel convs; 1×1 dimension-reducer invented here |
+| `Xception.lean`  | Xception                  | canonical / tiny | Extreme Inception — every conv is depthwise-separable |
 
 ## Adding a new entry
 

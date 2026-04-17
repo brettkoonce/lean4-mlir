@@ -247,6 +247,18 @@ def Layer.nParams : Layer → Nat
       let bottleneckPart := nBlocks * (5 * half * half + 3 * half)
       let outPart := ic * oc + 2 * oc
       splitPart + bottleneckPart + outPart
+  | .inceptionModule ic b1 b2r b2 b3r b3 b4 =>
+      -- Four parallel branches. BN terms (2·c) included since Inception-v2+
+      -- uses BN; original GoogLeNet predates BN but the delta is ~1%.
+      --   b1: 1×1 ic → b1 + BN
+      --   b2: 1×1 ic → b2r + BN + 3×3 b2r → b2 + BN
+      --   b3: 1×1 ic → b3r + BN + 5×5 b3r → b3 + BN
+      --   b4: pool (no params) + 1×1 ic → b4 + BN
+      let br1 := (ic * b1 + 2 * b1)
+      let br2 := (ic * b2r + 2 * b2r) + (9 * b2r * b2 + 2 * b2)
+      let br3 := (ic * b3r + 2 * b3r) + (25 * b3r * b3 + 2 * b3)
+      let br4 := (ic * b4 + 2 * b4)
+      br1 + br2 + br3 + br4
   | _                        => 0
 
 def NetSpec.totalParams (s : NetSpec) : Nat :=
@@ -328,7 +340,9 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .positionalEncoding d L    => s!"PE({d}→{d * 2 * L},L={L})"
     | .nerfMLP eP eD h           => s!"NeRF-MLP(p={eP},d={eD},h={h})"
     | .darknetBlock c n          => s!"Dark{n}(c={c})"
-    | .cspBlock i o n            => s!"CSP{n}({i}→{o})")
+    | .cspBlock i o n            => s!"CSP{n}({i}→{o})"
+    | .inceptionModule ic b1 _ b2 _ b3 b4 =>
+        s!"Inc({ic}→{b1 + b2 + b3 + b4})")
 
 -- ===========================================================================
 -- Validation: catch channel/dimension mismatches at `lake build` time
@@ -368,6 +382,7 @@ def Layer.outChannels : Layer → Nat
   | .nerfMLP _ _ _                  => 4    -- 1-dim density + 3-dim RGB (flattened)
   | .darknetBlock c _               => c    -- preserves channels
   | .cspBlock _ oc _                => oc
+  | .inceptionModule _ b1 _ b2 _ b3 b4 => b1 + b2 + b3 + b4  -- concat of branches
   | _                               => 0  -- pool/flatten/GAP: pass-through
 
 /-- Input channels expected by a layer. Returns 0 for layers that accept any input. -/
@@ -404,6 +419,7 @@ def Layer.inChannels : Layer → Nat
   | .nerfMLP encodedPosDim _ _      => encodedPosDim
   | .darknetBlock c _               => c
   | .cspBlock ic _ _                => ic
+  | .inceptionModule ic _ _ _ _ _ _ => ic
   | _                               => 0  -- pool/flatten/GAP: accept anything
 
 /-- Validate that channel dimensions chain correctly through the spec.

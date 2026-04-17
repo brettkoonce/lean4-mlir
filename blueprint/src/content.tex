@@ -866,6 +866,20 @@ goal is pedagogical shape + parameter accounting, not training runs.
   \texttt{cspBlock (ic oc nBlocks : Nat)}.
 \end{definition}
 
+\begin{definition}[Inception module]
+  \label{layer:inceptionModule}
+  \lean{Layer.inceptionModule}
+  \leanok
+  The GoogLeNet parallel-branch module (Szegedy et al.\ 2014). Four
+  branches computed in parallel: 1$\times$1 conv (b1 channels); 1$\times$1
+  reduce then 3$\times$3 (b2); 1$\times$1 reduce then 5$\times$5 (b3);
+  3$\times$3 maxPool then 1$\times$1 (b4). Concat along channels for
+  \texttt{b1 + b2 + b3 + b4} outputs. The 1$\times$1 dimension reducers on
+  branches 2 and 3 are the paper's trick --- they make the expensive
+  3$\times$3 and 5$\times$5 convs operate on reduced channel counts.
+  Signature: \texttt{inceptionModule (ic b1 b2reduce b2 b3reduce b3 b4 : Nat)}.
+\end{definition}
+
 \section{Bestiary entries}
 \label{sec:bestiary_entries}
 
@@ -975,5 +989,29 @@ already in \texttt{Types.lean}. AlexNet-level accuracy in 1.25M params
 via the fire module: squeeze 1$\times$1 conv followed by parallel
 expand 1$\times$1 + 3$\times$3 convs concatenated. The early
 efficiency-CNN family alongside MobileNet and ShuffleNet. Variants:
-SqueezeNet 1.0 (1.25M, paper-exact), 1.1 (1.24M — earlier downsample),
+SqueezeNet 1.0 (1.25M, paper-exact), 1.1 (1.24M --- earlier downsample),
 tiny fixture.
+
+\subsection*{LeNet (\texttt{Bestiary/LeNet.lean})}
+The 1998 original. Zero new primitives --- just \texttt{conv2d}
+$+$ \texttt{maxPool} $+$ \texttt{dense}. Variants: LeNet-5 (61K params,
+the canonical CNN) and LeNet-300-100 (266K params, pure-MLP baseline).
+Historical importance; still the ground-truth pattern every later CNN
+riffs on.
+
+\subsection*{Inception v1 / v3 / v4 (\texttt{Bestiary/Inception.lean})}
+Uses \S~\ref{layer:inceptionModule}. GoogLeNet's parallel multi-scale
+conv-branches concatenated along channels; the 1$\times$1 dimension
+reducer was invented here. Variants: GoogLeNet (7M, paper-exact),
+Inception-v3 (23.8M, paper 23M), Inception-v4 (33M, paper 42M ---
+a bit low because our unified module approximates v3/v4's richer
+module catalog). Auxiliary classifiers (v1) and asymmetric
+factorizations (v3/v4) are bestiary omissions.
+
+\subsection*{Xception (\texttt{Bestiary/Xception.lean})}
+Zero new primitives --- reuses existing \texttt{.separableConv}.
+``Extreme Inception'': every conv is a depthwise-separable conv. The
+design choice that made MobileNet possible a year later. Variants:
+Xception (21.9M, paper-exact at 22M), tiny fixture. Residual skips
+around each block-of-three-sep-convs are implicit in the linear
+NetSpec.

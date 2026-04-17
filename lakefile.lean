@@ -188,4 +188,13 @@ lean_exe «bestiary-clip» where
 lean_exe «bestiary-squeezenet» where
   root := `Bestiary.SqueezeNet
 
+lean_exe «bestiary-lenet» where
+  root := `Bestiary.LeNet
+
+lean_exe «bestiary-inception» where
+  root := `Bestiary.Inception
+
+lean_exe «bestiary-xception» where
+  root := `Bestiary.Xception
+
 require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"
