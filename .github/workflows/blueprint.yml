@@ -68,14 +68,23 @@ jobs:
                      LeanMlir.Proofs.SE LeanMlir.Proofs.LayerNorm \
                      LeanMlir.Proofs.Attention
 
-      - name: Install system build deps (graphviz + TeX Live)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            graphviz libgraphviz-dev pkg-config \
-            texlive-latex-base texlive-latex-extra texlive-fonts-extra \
-            texlive-xetex texlive-science texlive-pictures \
+      - name: Install + cache apt packages (graphviz + TeX Live)
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: >-
+            graphviz libgraphviz-dev pkg-config
+            texlive-latex-base texlive-latex-extra texlive-fonts-extra
+            texlive-xetex texlive-science texlive-pictures
             texlive-plain-generic texlive-font-utils latexmk
+          # Bump this `version` to force a cache refresh (e.g. when we
+          # need a newer texlive package).
+          version: 1.0
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-leanblueprint-v1
 
       - name: Install leanblueprint
         run: |
