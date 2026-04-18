@@ -153,6 +153,21 @@ def Layer.nParams : Layer → Nat
                      + (9 * mid + 2 * mid)
                      + ((mid * oc) / g + 2 * oc)
       firstUnit + (nUnits - 1) * restUnit
+  | .shuffleV2Block ic oc nUnits =>
+      -- Downsample unit (stride 2, ic → oc, both branches full input):
+      --   left : DW 3×3 (ic → ic) + BN  + 1×1 (ic → oc/2) + BN
+      --        = (9·ic + ic) + 2·ic + (ic·oc/2 + oc/2) + 2·(oc/2)
+      --        = 12·ic + ic·oc/2 + 1.5·oc
+      --   right: 1×1 (ic → oc/2) + BN + DW 3×3 (oc/2 → oc/2) + BN
+      --        + 1×1 (oc/2 → oc/2) + BN
+      --        = ic·oc/2 + (oc/2)² + 9.5·oc
+      --   concat + shuffle: 0 params; output doubles to oc.
+      let downsample := 12 * ic + (ic * oc) + 11 * oc + (oc * oc) / 4
+      -- Basic unit (stride 1, oc → oc, channel-split so ops on oc/2 half):
+      --   right branch: 1×1 (c→c) + BN + DW 3×3 (c→c) + BN + 1×1 (c→c) + BN
+      --   with c = oc/2 → 2c² + 19c = oc²/2 + 19·oc/2 params.
+      let basicUnit := (oc * oc) / 2 + (19 * oc) / 2
+      downsample + (nUnits - 1) * basicUnit
   | .evoformerBlock msaChannels pairChannels nBlocks =>
       -- Per-block breakdown (approx, matching AlphaFold 2 supplementary):
       --   MSA row-attn w/ pair bias:   ~ 4·cm²          (Q/K/V/O on MSA channels)
@@ -331,6 +346,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .transformerDecoder dim h _ n nq => s!"Dec{n}x[{h}h,{dim}],{nq}q"
     | .detrHeads dim c           => s!"DETR-heads({dim}→cls{c+1}+box4)"
     | .shuffleBlock ic oc g n    => s!"Shuffle{n}({ic}→{oc},g{g})"
+    | .shuffleV2Block ic oc n    => s!"ShuffleV2{n}({ic}→{oc})"
     | .evoformerBlock cm cz n    => s!"Evoformer{n}(msa={cm},pair={cz})"
     | .structureModule cs cz n   => s!"StructMod{n}(s={cs},z={cz})"
     | .mobileVitBlock ic d h m n => s!"MobileViT(ic={ic},d={d},h={h},mlp={m},L={n})"
@@ -372,6 +388,7 @@ def Layer.outChannels : Layer → Nat
   | .transformerDecoder dim _ _ _ _ => dim
   | .detrHeads _ nClasses           => nClasses + 1  -- class-head output width (informational)
   | .shuffleBlock _ oc _ _          => oc
+  | .shuffleV2Block _ oc _          => oc
   | .evoformerBlock msaCh _ _       => msaCh  -- MSA channels as the "main" dim
   | .structureModule sCh _ _        => sCh    -- single-repr channels
   | .mobileVitBlock ic _ _ _ _      => ic     -- block is ic → ic
@@ -409,6 +426,7 @@ def Layer.inChannels : Layer → Nat
   | .transformerDecoder dim _ _ _ _ => dim
   | .detrHeads dim _                => dim
   | .shuffleBlock ic _ _ _          => ic
+  | .shuffleV2Block ic _ _          => ic
   | .evoformerBlock msaCh _ _       => msaCh
   | .structureModule sCh _ _        => sCh
   | .mobileVitBlock ic _ _ _ _      => ic

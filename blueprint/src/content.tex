@@ -1039,6 +1039,21 @@ goal is pedagogical shape + parameter accounting, not training runs.
   \texttt{shuffleBlock (ic oc groups nUnits : Nat)}.
 \end{definition}
 
+\begin{definition}[ShuffleNet v2 stage]
+  \label{layer:shuffleV2Block}
+  \lean{Layer.shuffleV2Block}
+  \leanok
+  \texttt{nUnits} v2 units (Ma et al.\ 2018). Basic unit (stride 1):
+  channel-split $[X_1, X_2]$, leave $X_1$ alone, run $X_2$ through
+  $1\times 1 \to 3\times 3$ DW $\to 1\times 1$ at half-width, concat, then
+  channel-shuffle. Downsample unit (stride 2): both branches see the
+  full input; left does DW-3$\times$3-stride-2 $+$ 1$\times$1, right does
+  1$\times$1 $+$ DW-3$\times$3-stride-2 $+$ 1$\times$1; concat doubles
+  channels. v2 throws out v1's grouped 1$\times$1 convs (G2) and
+  skip-add (G4) per the paper's practical guidelines. Signature:
+  \texttt{shuffleV2Block (ic oc nUnits : Nat)}.
+\end{definition}
+
 \begin{definition}[Evoformer block (AlphaFold 2)]
   \label{layer:evoformerBlock}
   \lean{Layer.evoformerBlock}
@@ -1241,6 +1256,18 @@ NetSpec.
 \subsection*{ShuffleNet (\texttt{Bestiary/ShuffleNet.lean})}
 Uses \S~\ref{layer:shuffleBlock}. Variants: ShuffleNet 0.5$\times$ /
 1.0$\times$ / 2.0$\times$ at $g=3$, plus a tiny fixture.
+
+\subsection*{ShuffleNet v2 (\texttt{Bestiary/ShuffleNetV2.lean})}
+Uses \S~\ref{layer:shuffleV2Block}. The efficient-CNN paper that
+called out FLOPs as a bad latency proxy: measured memory-access cost
+(MAC) directly and derived four practical guidelines (equal channel
+widths, avoid grouped convs, avoid fragmentation, avoid element-wise
+ops). v2's architecture throws out everything in v1 that violated
+those rules --- no grouped 1$\times$1 convs, no skip-add --- in
+favor of channel-split + identity + concat + channel-shuffle.
+Variants: 0.5$\times$ (1.37M, paper 1.4M), 1.0$\times$ (2.29M, paper
+2.3M), 1.5$\times$ (3.52M, paper 3.5M), 2.0$\times$ (7.41M,
+paper-exact), tiny fixture. All widths within 2\% of paper.
 
 \subsection*{MobileViT (\texttt{Bestiary/MobileViT.lean})}
 Uses \S~\ref{layer:mobileVitBlock} plus existing

@@ -65,6 +65,15 @@ inductive Layer where
   -- shuffle → 3×3 depthwise → 1×1 grouped conv, with `groups` channel
   -- partitions driving the grouped convs.
   | shuffleBlock (ic oc groups nUnits : Nat)
+  -- ShuffleNet v2 stage (Ma et al.\ 2018): `nUnits` v2 units at a given
+  -- (ic, oc) pair, the first being a stride-2 downsampling unit and the
+  -- rest being stride-1 basic units. v2 is architecturally different from
+  -- v1: no grouped 1×1 convs (violates G2), no element-wise adds (G4).
+  -- Basic unit (stride 1): channel split into two halves, identity-skip
+  -- the first, (1×1 → 3×3 DW → 1×1) on the second, concat, channel-shuffle.
+  -- Downsample unit: both branches see the full input; left does DW-stride-2
+  -- + 1×1, right does 1×1 + DW-stride-2 + 1×1; concat doubles channels.
+  | shuffleV2Block (ic oc nUnits : Nat)
   -- AlphaFold-2 Evoformer block stack. Operates on a DUAL representation
   -- (MSA: s × r × msaChannels, pair: r × r × pairChannels) and updates
   -- both jointly. Per-block: MSA row attention with pair bias + MSA col

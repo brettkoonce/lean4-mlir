@@ -28,6 +28,7 @@ Part 1 at scale.
 | `Inception.lean` | Inception family          | GoogLeNet (v1) / v3 / v4 | Multi-scale parallel convs; 1×1 dimension-reducer invented here |
 | `Xception.lean`  | Xception                  | canonical / tiny | Extreme Inception — every conv is depthwise-separable |
 | `ShuffleNet.lean`| ShuffleNet v1             | 0.5× / 1× / 2× / tiny | Mobile CNN: grouped 1×1 convs + channel shuffle |
+| `ShuffleNetV2.lean` | ShuffleNet v2          | 0.5× / 1× / 1.5× / 2× / tiny | FLOPs-vs-MAC practical guidelines; channel split, no groups |
 | `MobileViT.lean` | MobileViT                 | S / XS / XXS / tiny | Hybrid CNN + transformer-across-patches for mobile |
 | `ConvNeXt.lean`  | ConvNeXt                  | T / S / B / L / tiny | Modernized CNN; the "can pure convs still compete" answer |
 | `SwinT.lean`     | Swin Transformer          | Swin-T / Swin-S / Swin-B / tiny | Hierarchical ViT, windowed + shifted attention |
