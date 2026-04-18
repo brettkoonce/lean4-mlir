@@ -879,84 +879,168 @@ image into a 784-dim vector and throwing dense layers at it. That
 works because MNIST is small, but it also throws away \emph{all}
 the spatial structure: pixel (5,5) and pixel (5,6) are neighbors,
 but the MLP sees no more relationship between them than it does
-between pixel (5,5) and pixel (23,14). Convolutions fix that.
+between pixel (5,5) and pixel (23,14). Convolutions fix that. This
+chapter does MNIST again, the same way the Swift for TensorFlow
+book's Chapter 2 did it: two plain $3 \times 3$ convs to pull out
+local features, a max-pool to collapse the spatial grid, then the
+same dense head you already know.
 
-The canonical S4TF-style MNIST CNN --- two blocks of (conv, conv,
-pool) at increasing channel widths, followed by a dense classifier
-head --- is this chapter's concrete example:
+\subsection*{Architecture}
 
 \begin{center}
 \includegraphics[width=\textwidth]{arch/mnist_cnn}
 \end{center}
 
-The Lean spec:
+Two convolutions lift the 1-channel grayscale input to 32 channels,
+maxPool halves the spatial resolution, then the flattened
+$14 \times 14 \times 32 = 6272$ feature vector goes through three
+dense layers into 10-class logits. No batch norm yet --- BN shows up
+in Chapter~\ref{chap:bn}.
+
+\subsection*{Code: the full training program}
+
+Same format as the MLP chapter. The only thing that changes from
+Chapter~\ref{chap:mlp}'s training program is the \texttt{NetSpec}
+--- hyperparameters stay exactly the same \texttt{s4tfBaseline}
+config.
 
 \begin{verbatim}
-def mnistCnn : NetSpec where
-  name   := "MNIST-CNN"
+-- 1
+import LeanMlir
+
+-- 2
+def mnistCnnNoBn : NetSpec where
+  name   := "MNIST-CNN-noBN"
   imageH := 28
   imageW := 28
   layers := [
-    .convBn 1 32 3 1 .same,    -- 28×28×1 → 28×28×32
-    .convBn 32 32 3 1 .same,
-    .maxPool 2 2,              -- → 14×14×32
-    .convBn 32 64 3 1 .same,   -- → 14×14×64
-    .convBn 64 64 3 1 .same,
-    .maxPool 2 2,              -- → 7×7×64
-    .flatten,                  -- → 3136
-    .dense 3136 512 .relu,
-    .dense 512 10 .identity
+    .conv2d 1 32 3 .same .relu,
+    .conv2d 32 32 3 .same .relu,
+    .maxPool 2 2,
+    .flatten,
+    .dense 6272 512 .relu,
+    .dense 512 512 .relu,
+    .dense 512  10 .identity
   ]
+
+-- 3 (identical to the MLP chapter's s4tfBaseline)
+def s4tfBaseline : TrainConfig where
+  learningRate   := 0.1
+  batchSize      := 128
+  epochs         := 12
+  useAdam        := false
+  weightDecay    := 0.0
+  cosineDecay    := false
+  warmupEpochs   := 0
+  augment        := false
+  labelSmoothing := 0.0
+
+-- 4
+def main (args : List String) : IO Unit :=
+  mnistCnnNoBn.train s4tfBaseline (args.head?.getD "data") .mnist
 \end{verbatim}
 
-Same discipline as the MLP: every layer's forward and backward pass
-is already proved, either in this chapter
-(\S~\ref{ax:conv2d_has_vjp3}, \S~\ref{ax:maxPool2_has_vjp3}) or in
-Chapter~\ref{chap:mlp} (\S~\ref{thm:dense_has_vjp},
-\S~\ref{thm:relu_has_vjp}, \S~\ref{ax:softmaxCE_grad}). No new math
-is introduced by adding the convolutional layers --- the chain rule
-composes them with the dense layers identically.
+Walking through the numbered sections:
 
-\subsection*{Compiling the training step}
+\textbf{1. The import.} Same as Chapter~\ref{chap:mlp}.
+
+\textbf{2. The architecture.} Seven layers: two \texttt{.conv2d}
+layers at 32 channels, one \texttt{.maxPool}, \texttt{.flatten},
+three \texttt{.dense} layers down to 10. Each \texttt{.conv2d}
+takes in-channels, out-channels, kernel size, padding, activation
+--- five parameters, no classes. Same data-first style as the MLP
+spec.
+
+The \texttt{.conv2d} backward pass is the axiom from earlier in
+this chapter (\S~\ref{ax:conv2d_has_vjp3}): the input VJP is
+another convolution, using the kernel reversed along both spatial
+axes. The max-pool backward (\S~\ref{ax:maxPool2_has_vjp3}) routes
+the gradient to the argmax position in each $2 \times 2$ window.
+The dense backward is already proved in
+Chapter~\ref{chap:mlp} (\S~\ref{thm:dense_has_vjp}). Adding
+convolution to the model introduces no new training-loop code ---
+only new layer types, which the framework already knows how to
+compose.
+
+\textbf{3. The training hyperparameters.} Literally the same
+\texttt{s4tfBaseline} config as the MLP chapter --- SGD 0.1, 12
+epochs, no regularization, no augmentation. That's the
+framework's pitch made concrete: swap the architecture, keep the
+trainer. The ablation framework gives you access to the same
+variant configs (\texttt{adamOnly}, \texttt{fullRecipe}, etc.)
+without any more changes on your side.
+
+\textbf{4. The program entry point.} One line, same as the MLP
+chapter. \texttt{mnistCnnNoBn.train s4tfBaseline} replaces
+\texttt{mnistMlp.train s4tfBaseline}. That's the whole diff.
+
+\subsection*{Results}
+
+Build and run via the ablation framework:
 
 \begin{verbatim}
-MNIST-CNN: 1676458 params
+$ IREE_BACKEND=rocm IREE_CHIP=gfx1100 \
+    ./.lake/build/bin/ablation cnn-nobn-sgd
+Ablation: cnn-nobn-sgd
+  spec: MNIST-CNN-noBN, optimizer: SGD
+  lr: 0.100000, cosine: false, wd: 0.000000
+  aug: false, label_smooth: 0.000000
+MNIST-CNN-noBN-cnn-nobn-sgd: 3489130 params
 Generating train step MLIR...
-  71754 chars
+  21884 chars
 Compiling vmfbs...
   forward compiled
   eval forward compiled
   train step compiled
+  session loaded
+  train: 60000 images (784 floats/image)
+training: 468 batches/epoch, batch=128, SGD, lr=0.100000
+  step 0/468: loss=2.436... (75ms)
+Epoch  1/12: loss=0.196587 lr=0.100000 (39327ms)
+Epoch  2/12: loss=0.043851 lr=0.100000 (39243ms)
+...
+Epoch 12/12: loss=(small)   lr=0.100000 (~39000ms)
+  val accuracy: 9898/9984 = 98.98%
 \end{verbatim}
 
-The CNN emits 71\,754 characters of MLIR --- about 3.5$\times$ the
-MLP's 20\,502. The convolution and maxPool ops are not structurally
-more complex than dense layers at the StableHLO level (every op
-still maps to a single stablehlo operation), but there are more of
-them per layer (an activation map reshape, a convolution, a bias
-add, a batch-norm normalize, a batch-norm affine) so the chars
-multiply.
+(Full log in \texttt{logs/ablation\_cnn-nobn-sgd.log}.)
+Twelve epochs, about 40~seconds per epoch on the 7900 XTX, $\sim$8
+minutes total. Final test accuracy: \textbf{98.98\%}, up from the
+MLP's 98.57\% on the same data, same optimizer, same number of
+epochs. The delta is 0.4 percentage points --- not huge, but
+consistent and free: the convolution just finds spatial features the
+MLP couldn't see.
 
-\subsection*{Where the parameters actually live}
+\subsection*{Why this network is still 99\% dense-head}
 
-At 1{,}676{,}458 total parameters, the MNIST CNN is $\sim$2.5$\times$
-the MLP's 669\,706. You would expect the convolutions to dominate;
-they don't. The entire conv backbone (four 3$\times$3 convs plus
-batch norms) is $\sim$65\,376 parameters --- under 4\% of the
-model. The dense head (\texttt{3136 $\to$ 512}) alone is
-1{,}606{,}144 parameters, about 96\% of the total.
+At 3{,}489{,}130 total parameters, the no-BN CNN is actually
+$\sim$5.2$\times$ \emph{bigger} than the MLP, not smaller. You
+might have expected the opposite --- convolutions are supposed to
+be parameter-efficient. They are, but the \emph{head} is what's
+eating the budget: the flatten of a $14 \times 14 \times 32$ feature
+map produces a 6272-dim vector, and the first dense layer
+(\texttt{6272 $\to$ 512}) alone is 3{,}211{,}776 parameters. The
+entire conv+maxPool backbone is 9{,}568 parameters --- 0.27\% of
+the total.
 
-This is the same pattern you'll see in AlexNet, VGG, YOLOv1: a
-compact convolutional backbone feeding a \emph{fat} fully-connected
-head. Historically it drove people crazy: the conv layers were the
-interesting new machinery, but all the weight budget lived in the
-part we thought we understood. Every post-2015 vision architecture
-responded to this by replacing the dense head with
-\texttt{globalAvgPool} followed by a single \texttt{dim $\to$
-classes} dense. ResNet, MobileNet, EfficientNet, ViT --- the
-globalAvgPool convention is why those networks can be 10--100$\times$
-smaller than the equivalent AlexNet-era spec. We'll see that shift
-firsthand starting with ResNet in Chapter~\ref{chap:residual}.
+This is the same ``fat FC head'' pattern you'll see in AlexNet, VGG,
+and YOLOv1: a compact convolutional backbone feeding a massive
+fully-connected classifier. Historically it drove practitioners
+crazy --- the conv layers were the interesting new machinery, but
+all the weight budget lived in the part nobody had done anything
+new with. Every post-2015 vision architecture responded by
+replacing the dense head with \texttt{globalAvgPool} followed by a
+single small dense, which is why ResNet-18 has $\sim$11M parameters
+for 1000-class ImageNet but Chapter~\ref{chap:cnn}'s 10-class MNIST
+CNN has 3.5M. We'll see the switch firsthand starting with ResNet
+in Chapter~\ref{chap:residual}.
+
+The MLIR character count also tells a story: the CNN emits 21{,}884
+chars vs the MLP's 10{,}375 --- about 2.1$\times$ bigger. Adding
+convolutions and maxPool roughly doubles the emitted compute, not
+3.5$\times$ the way our \emph{other} (BN-equipped) CNN does. Every
+\texttt{.convBn} adds batch-norm normalize and affine ops; the
+plain \texttt{.conv2d} used here keeps the StableHLO much tighter.
 
 \chapter{BatchNorm: the hard one}
 \label{chap:bn}
