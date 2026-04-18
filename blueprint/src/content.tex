@@ -619,6 +619,66 @@ The workhorse: \(y = Wx + b\) plus ReLU and softmax cross-entropy loss.
   \uses{ax:pdiv_relu}
 \end{theorem}
 
+\section{Example: MNIST MLP}
+\label{sec:mlp_mnist_example}
+
+The theorems above are the calculus. Here is a concrete architecture
+built from those pieces: a three-layer fully-connected classifier for
+28$\times$28 MNIST digits.
+
+\begin{center}
+\includegraphics[width=0.85\textwidth]{arch/mnist_mlp}
+\end{center}
+
+The \texttt{NetSpec} for this model is three lines of Lean, one per
+dense layer:
+
+\begin{verbatim}
+def mnistMlp : NetSpec where
+  name   := "MNIST-MLP"
+  imageH := 28
+  imageW := 28
+  layers := [
+    .dense 784 512 .relu,
+    .dense 512 512 .relu,
+    .dense 512  10 .identity
+  ]
+\end{verbatim}
+
+Every layer's forward and backward pass is one of the theorems already
+stated above (\S~\ref{thm:dense_has_vjp}, \S~\ref{thm:dense_weight_grad_correct},
+\S~\ref{thm:dense_bias_grad_correct}, \S~\ref{thm:relu_has_vjp}) plus
+the softmax-cross-entropy axiom (\S~\ref{ax:softmaxCE_grad}). That is
+the full content of the training algorithm for this network --- no
+additional math has to be introduced.
+
+\subsection*{Compiling the training step}
+
+Running \texttt{lake exe mnist-mlp-train-f32 data/} generates an MLIR
+module for the whole training step (forward + loss + backward +
+optimizer update), compiles it via IREE, and then executes it per
+mini-batch. The first few lines of output confirm the pipeline:
+
+\begin{verbatim}
+MNIST-MLP: 669706 params
+Generating train step MLIR...
+  20502 chars
+Compiling vmfbs...
+  forward compiled
+  eval forward compiled
+  train step compiled
+\end{verbatim}
+
+The 669{,}706 parameter count is the sum of the three dense layers:
+$784 \cdot 512 + 512 = 401{,}920$ for layer 1,
+$512 \cdot 512 + 512 = 262{,}656$ for layer 2,
+$512 \cdot 10 + 10 = 5{,}130$ for layer 3. The 20\,502 characters of
+emitted MLIR is the entire training-step program as a sequence of
+\texttt{stablehlo} operations; IREE compiles it once, then executes
+it per mini-batch with no additional translation cost. Subsequent
+chapters show the per-layer MLIR fragments this code is assembled
+from.
+
 \chapter{CNN: Convolution and Pooling}
 \label{chap:cnn}
 

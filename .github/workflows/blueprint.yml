@@ -109,6 +109,21 @@ jobs:
           echo "--- xelatex -v ---"
           xelatex -v | head -3 || true
 
+      - name: Render architecture diagrams from .dot sources
+        # The sandbox graphviz build we use locally is stripped-down and
+        # doesn't emit PDF/PNG, only SVG. CI's apt-installed graphviz has
+        # full format support, so we regenerate both SVG (for web) and PDF
+        # (for xelatex \includegraphics) from every .dot in the figures
+        # tree here, before blueprint builds consume them.
+        run: |
+          find blueprint/src/figures -name "*.dot" | while read dot; do
+            dir=$(dirname "$dot")
+            base=$(basename "$dot" .dot)
+            dot -Tsvg "$dot" -o "$dir/$base.svg"
+            dot -Tpdf "$dot" -o "$dir/$base.pdf"
+            echo "rendered: $dir/$base.{svg,pdf}"
+          done
+
       - name: Cache pip
         uses: actions/cache@v4
         with:

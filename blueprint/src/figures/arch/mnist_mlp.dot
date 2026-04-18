@@ -1,0 +1,32 @@
+// MNIST MLP architecture — 784 → 512 → 512 → 10
+// Generated for blueprint Chapter "MLP: Dense Layer" — 669,706 params total
+// Render: dot -Tpdf mnist_mlp.dot -o mnist_mlp.pdf
+//         dot -Tsvg mnist_mlp.dot -o mnist_mlp.svg
+digraph mnist_mlp {
+  rankdir=LR;
+  graph [fontname="Helvetica", fontsize=11, nodesep=0.4, ranksep=0.6,
+         label="MNIST MLP — 669,706 params",
+         labelloc=b, fontsize=13];
+  node [fontname="Helvetica", fontsize=10, style="rounded,filled"];
+  edge [color="#888888", arrowsize=0.6, penwidth=0.8];
+
+  // Input: flattened 28×28 image
+  input [shape=ellipse, fillcolor="#e8f0ff", color="#4060a0",
+         label="Input\n28×28 flatten\n→ 784"];
+
+  // Hidden dense + ReLU layers
+  d1 [shape=box, fillcolor="#fff0e8", color="#c07040",
+      label="Dense\n784 → 512\nReLU\n401,920 params"];
+  d2 [shape=box, fillcolor="#fff0e8", color="#c07040",
+      label="Dense\n512 → 512\nReLU\n262,656 params"];
+
+  // Output dense (identity, softmax in loss)
+  d3 [shape=box, fillcolor="#ffe8e8", color="#c04040",
+      label="Dense\n512 → 10\n(identity)\n5,130 params"];
+
+  // Logits
+  out [shape=ellipse, fillcolor="#e8ffe8", color="#40a060",
+       label="Logits\n10 classes"];
+
+  input -> d1 -> d2 -> d3 -> out;
+}
