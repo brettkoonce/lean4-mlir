@@ -180,6 +180,14 @@ def Layer.nParams : Layer → Nat
       -- Fusion: concat(5·oc) + 1×1 → oc + BN
       let fusion := 5 * oc * oc + oc + 2 * oc
       b1 + b234 + b5 + fusion
+  | .fpnModule c2 c3 c4 c5 target =>
+      -- Four lateral 1×1 convs (no BN in Mask R-CNN's FPN):
+      --   each stage → target channels
+      let lateral := (c2 + c3 + c4 + c5) * target + 4 * target
+      -- Four 3×3 smoothing convs (one per pyramid level):
+      let smoothing := 4 * (9 * target * target + target)
+      -- Top-down upsample + elementwise add at each level: parameter-free.
+      lateral + smoothing
   | .evoformerBlock msaChannels pairChannels nBlocks =>
       -- Per-block breakdown (approx, matching AlphaFold 2 supplementary):
       --   MSA row-attn w/ pair bias:   ~ 4·cm²          (Q/K/V/O on MSA channels)
@@ -360,6 +368,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .shuffleBlock ic oc g n    => s!"Shuffle{n}({ic}→{oc},g{g})"
     | .shuffleV2Block ic oc n    => s!"ShuffleV2{n}({ic}→{oc})"
     | .asppModule ic oc          => s!"ASPP({ic}→{oc})"
+    | .fpnModule c2 c3 c4 c5 t   => s!"FPN({c2}/{c3}/{c4}/{c5}→{t})"
     | .evoformerBlock cm cz n    => s!"Evoformer{n}(msa={cm},pair={cz})"
     | .structureModule cs cz n   => s!"StructMod{n}(s={cs},z={cz})"
     | .mobileVitBlock ic d h m n => s!"MobileViT(ic={ic},d={d},h={h},mlp={m},L={n})"
@@ -403,6 +412,7 @@ def Layer.outChannels : Layer → Nat
   | .shuffleBlock _ oc _ _          => oc
   | .shuffleV2Block _ oc _          => oc
   | .asppModule _ oc                => oc
+  | .fpnModule _ _ _ _ target       => target
   | .evoformerBlock msaCh _ _       => msaCh  -- MSA channels as the "main" dim
   | .structureModule sCh _ _        => sCh    -- single-repr channels
   | .mobileVitBlock ic _ _ _ _      => ic     -- block is ic → ic
@@ -442,6 +452,7 @@ def Layer.inChannels : Layer → Nat
   | .shuffleBlock ic _ _ _          => ic
   | .shuffleV2Block ic _ _          => ic
   | .asppModule ic _                => ic
+  | .fpnModule _ _ _ c5 _            => c5     -- "input" is the deepest stage
   | .evoformerBlock msaCh _ _       => msaCh
   | .structureModule sCh _ _        => sCh
   | .mobileVitBlock ic _ _ _ _      => ic

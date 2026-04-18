@@ -158,6 +158,18 @@ inductive Layer where
   -- which is why the paper could drop the encoder's last-stage stride
   -- and keep the output resolution high.
   | asppModule (ic oc : Nat)
+  -- Feature Pyramid Network (Lin et al.\ 2017, FPN). Takes the last
+  -- four stage feature maps of a backbone (with channels c2, c3, c4,
+  -- c5 at progressively deeper stages), applies 1×1 lateral convs to
+  -- project each to `target` channels, merges via top-down addition
+  -- after 2× upsampling, then applies a 3×3 smoothing conv at each
+  -- level. Output: four pyramid levels, each with `target` channels,
+  -- at the spatial resolutions of C2/C3/C4/C5. The cross-scale
+  -- addition is implicit in the bundled primitive (doesn't fit a
+  -- linear NetSpec layer-by-layer). Used as the detection-and-
+  -- segmentation feature backbone in Mask R-CNN, RetinaNet, and most
+  -- 2-stage detection families.
+  | fpnModule (c2 c3 c4 c5 target : Nat)
 deriving Repr
 
 structure NetSpec where

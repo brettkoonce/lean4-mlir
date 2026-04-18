@@ -1180,6 +1180,23 @@ goal is pedagogical shape + parameter accounting, not training runs.
   \texttt{cspBlock (ic oc nBlocks : Nat)}.
 \end{definition}
 
+\begin{definition}[Feature Pyramid Network]
+  \label{layer:fpnModule}
+  \lean{Layer.fpnModule}
+  \leanok
+  Lin et al.\ 2017. Takes the four stage outputs of a CNN backbone
+  (channels \texttt{c2}/\texttt{c3}/\texttt{c4}/\texttt{c5} at strides
+  $4/8/16/32$), projects each to \texttt{target} channels with a
+  $1\times 1$ lateral conv, merges them top-down (upsample-2$\times$
+  then elementwise add), and applies a $3\times 3$ smoothing conv at
+  each merged level. Output: four feature maps, each
+  \texttt{target}-wide, at the original spatial resolutions. Bundled
+  because the cross-scale add doesn't fit a linear NetSpec. Standard
+  kit in 2-stage detectors (Mask R-CNN, Cascade R-CNN) and
+  single-stage detectors (RetinaNet). Signature:
+  \texttt{fpnModule (c2 c3 c4 c5 target : Nat)}.
+\end{definition}
+
 \begin{definition}[Atrous Spatial Pyramid Pooling]
   \label{layer:asppModule}
   \lean{Layer.asppModule}
@@ -1320,6 +1337,21 @@ tiny, YOLOv3 (40M backbone), YOLOv5s/m (3M/8M single-scale), YOLOv8n/s
 (0.7M/2.9M single-scale), YOLOv11n/m (backbone only). Multi-scale FPN
 detection heads don't linearize --- same skip-connection problem as
 UNet; all entries show a single-scale view.
+
+\subsection*{Mask R-CNN (\texttt{Bestiary/MaskRCNN.lean})}
+Uses \S~\ref{layer:fpnModule}. The canonical two-stage detector +
+instance segmentation reference (He et al.\ 2017). Five architectural
+pieces: ResNet-FPN backbone, RPN for anchor-box proposals, ROI-Align
+for per-proposal feature extraction (an orchestration step, not a
+layer), a 2-layer FC box head for classification + bbox regression,
+and a 4-conv + transposed-conv mask head for per-class $28 \times
+28$ masks. Shown as separate NetSpecs per head (SAM-style
+decomposition). Param totals: backbone+FPN 45.8M, box head 14.3M,
+mask head 2.6M, RPN 0.6M --- $\sim$63M in total, matching paper. The
+FPN cross-scale add is the one thing that demanded a new bundled
+primitive; everything else reuses existing ResNet / conv / dense
+primitives. DETR is its end-to-end transformer-era cousin; Mask2Former
+is the DETR-style instance-segmentation successor.
 
 \subsection*{DETR (\texttt{Bestiary/DETR.lean})}
 Uses \S~\ref{layer:transformerDecoder} and \S~\ref{layer:detrHeads},

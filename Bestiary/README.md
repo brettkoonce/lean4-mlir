@@ -44,6 +44,7 @@ multi-head refactor in the Limitations section below.
 |------|--------------|----------|-------|
 | `YOLO.lean`      | YOLO v1/v3/v5/v8/v11      | full / fast / tiny, v3/v5s/v5m/v8n/v8s/v11 | One-shot detection; v1 raw convs+FCs, later versions layer CSP/Darknet blocks |
 | `DETR.lean`      | DETR                      | R50 / R101 / tiny | Detection as set prediction; learned queries + cross-attention |
+| `MaskRCNN.lean`  | Mask R-CNN                | backbone+FPN / RPN / box head / mask head / tiny | Two-stage detection + instance segmentation; the canonical reference |
 
 ## Semantic segmentation
 
