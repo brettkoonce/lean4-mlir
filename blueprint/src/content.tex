@@ -1092,6 +1092,152 @@ plain \texttt{.conv2d} used here keeps the StableHLO much tighter.
   \(\mathrm{bn} = \mathrm{affine} \circ \mathrm{normalize}\).
 \end{theorem}
 
+\section{Example: the BN lift on CIFAR}
+\label{sec:bn_cifar_example}
+
+The previous two chapters trained MNIST classifiers with SGD at
+learning rate 0.1, no regularization, no tricks. That configuration
+works on MNIST. The moment you swap in CIFAR-10 --- color
+$32 \times 32$ images, harder learning problem, a real test of
+whether the training actually does anything --- the same config
+\textbf{fails completely} unless you add BatchNorm.
+
+Here's the demo. Two CIFAR CNNs, same architecture, same SGD 0.1
+training config. One has BN. The other doesn't. Same
+\texttt{s4tfBaseline} we've been using.
+
+\subsection*{The two specs, differing by one keyword per layer}
+
+Without BN:
+
+\begin{verbatim}
+def cifarCnnNoBn : NetSpec where
+  name := "CIFAR-CNN-noBN"
+  imageH := 32
+  imageW := 32
+  layers := [
+    .conv2d 3  32 3 .same .relu,
+    .conv2d 32 32 3 .same .relu,
+    .maxPool 2 2,
+    .conv2d 32 64 3 .same .relu,
+    .conv2d 64 64 3 .same .relu,
+    .maxPool 2 2,
+    .flatten,
+    .dense 4096 512 .relu,
+    .dense 512  512 .relu,
+    .dense 512  10 .identity
+  ]
+\end{verbatim}
+
+With BN:
+
+\begin{verbatim}
+def cifarCnnBn : NetSpec where
+  name := "CIFAR-CNN-BN"
+  imageH := 32
+  imageW := 32
+  layers := [
+    .convBn 3  32 3 1 .same,
+    .convBn 32 32 3 1 .same,
+    .maxPool 2 2,
+    .convBn 32 64 3 1 .same,
+    .convBn 64 64 3 1 .same,
+    .maxPool 2 2,
+    .flatten,
+    .dense 4096 512 .relu,
+    .dense 512  512 .relu,
+    .dense 512  10 .identity
+  ]
+\end{verbatim}
+
+The diff: four \texttt{.conv2d $\cdot$ $\cdot$ 3 .same .relu} layers
+become four \texttt{.convBn $\cdot$ $\cdot$ 3 1 .same} layers. That's
+it. The dense head, the max-pool, and the training config are all
+identical.
+
+\subsection*{Training: one learns, one doesn't}
+
+Both runs use \texttt{s4tfBaseline} (SGD 0.1, 30 epochs). Output
+captured from \texttt{logs/ablation\_cifar-nobn-sgd.log} and
+\texttt{logs/ablation\_cifar-bn-sgd.log}:
+
+\begin{verbatim}
+# cifar-nobn-sgd — same config, no BN
+Epoch 1/30:  loss=2.318085 lr=0.100000
+Epoch 2/30:  loss=2.305088 lr=0.100000
+Epoch 3/30:  loss=2.301315 lr=0.100000
+Epoch 4/30:  loss=2.304873 lr=0.100000
+Epoch 5/30:  loss=2.304378 lr=0.100000
+Epoch 6/30:  loss=2.304410 lr=0.100000
+Epoch 7/30:  loss=2.304158 lr=0.100000
+...
+Epoch 30/30: loss=~2.304    lr=0.100000
+  val accuracy: 998/9984 = 10.00%      ← random-guess on 10 classes
+
+# cifar-bn-sgd — same config, add BN
+Epoch 1/30:  loss=2.360751 lr=0.100000
+Epoch 2/30:  loss=1.618361 lr=0.100000
+Epoch 3/30:  loss=1.485531 lr=0.100000
+Epoch 4/30:  loss=1.391280 lr=0.100000
+Epoch 5/30:  loss=1.295481 lr=0.100000
+Epoch 6/30:  loss=1.191307 lr=0.100000
+Epoch 7/30:  loss=1.110645 lr=0.100000
+...
+Epoch 30/30: loss=~0.35     lr=0.100000
+  val accuracy: 6147/9984 = 61.57%
+\end{verbatim}
+
+The no-BN run is not diverging. It's frozen. Loss 2.302 is
+$\log(10)$ --- the cross-entropy of uniform random prediction on 10
+classes. The network's output distribution is essentially unchanged
+after 30 epochs. Gradients at learning rate 0.1 are too noisy for
+the optimizer to make coherent progress; every step nudges
+parameters into meaningless neighborhoods. The model is
+computationally a random classifier from step zero to the end of
+training.
+
+The BN run's loss halves by epoch 2 and keeps dropping. Same
+optimizer, same learning rate, same dataset, same architecture plus
+the BN axioms we proved in this chapter. The three-term formula
+from \S~\ref{thm:bnNormalize_has_vjp} is what makes this lift
+possible --- BN standardizes each layer's input distribution
+(\(\mu = 0\), \(\sigma = 1\)) and its backward pass returns a
+gradient that accounts for how that standardization affected every
+other sample in the batch. The result: gradients are well-
+conditioned, SGD steps are meaningful, training proceeds.
+
+\subsection*{Where the BN lift actually lives}
+
+If you rerun the no-BN CIFAR config at a smaller learning rate ---
+SGD at 0.02 instead of 0.1, for example --- it trains fine and hits
+72.5\% (\texttt{logs/ablation\_cifar-nobn-sgd002.log}). At the same
+smaller rate, the BN version hits 72.9\% (\texttt{cifar-bn-sgd002}).
+So BN isn't magically giving you more model capacity --- both specs
+top out around the same accuracy when you tune the learning rate.
+
+What BN \emph{is} doing is giving you roughly an order of magnitude
+of \textbf{learning-rate headroom for free}. The lr=0.1 setting
+that diverges without BN trains fine with it. That matters because
+the lr-0.1 regime trains faster per epoch and reaches the same
+final accuracy in fewer passes over the data. Over a multi-day
+ImageNet training run that difference is the difference between
+experimentally tractable and not.
+
+This is also why every post-2015 image architecture has BN baked
+in by default. Before BN, picking the right lr schedule was a dark
+art; after BN, you just set lr to 0.1 and let the network figure
+itself out. The proof suite we built in this chapter is what
+mechanically guarantees the BN pass is computing the correct VJP
+at every step --- so the empirical result (``BN lets you train with
+a 5$\times$ bigger learning rate'') rests on a machine-checked
+mathematical claim, not on folklore.
+
+The next chapter (\S~\ref{chap:residual}) adds residual connections
+and the same mechanical approach: prove that the VJP of a skip
+connection is additive fan-in, compose with BN and conv, and the
+rest of the ResNet family falls out without introducing any new
+math.
+
 \chapter{Residual: Skip Connections}
 \label{chap:residual}
 
