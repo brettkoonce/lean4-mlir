@@ -54,6 +54,7 @@ is the recurring pattern; UNet is the canonical instance.
 |------|--------------|----------|-------|
 | `UNet.lean`      | UNet                      | original / RGB / small / tiny | Encoder-decoder with skip connections; diffusion backbone |
 | `SAM.lean`       | SAM (Segment Anything)    | ViT-B / L / H encoders + mask decoder + tiny | Promptable segmentation; ViT backbone does 99% of the work |
+| `SegFormer.lean` | SegFormer                 | B0 / B2 / B5 + decoder + tiny | Hierarchical transformer pyramid + trivial MLP decoder |
 
 ## Image generation
 
@@ -64,6 +65,7 @@ it becomes a plausible sample from a learned distribution.
 
 | File | Architecture | Variants | Notes |
 |------|--------------|----------|-------|
+| `VAE.lean`       | VAE (vanilla)             | MNIST MLP + CIFAR conv + tiny | Classical variational autoencoder; encoder outputs (μ, log σ²) |
 | `Diffusion.lean` | DDPM                   | CIFAR / 256 / tiny + timestep-embed | Denoising diffusion; the denoiser IS a UNet, rest is training loop |
 | `StableDiffusion.lean` | Stable Diffusion 1.5 | VAE enc/dec + text enc + UNet + spatial-transformer + tiny | Latent diffusion + text cross-attention; 3 pretrained components, 1 trained |
 

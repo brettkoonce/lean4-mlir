@@ -224,4 +224,10 @@ lean_exe «bestiary-llava» where
 lean_exe «bestiary-stable-diffusion» where
   root := `Bestiary.StableDiffusion
 
+lean_exe «bestiary-segformer» where
+  root := `Bestiary.SegFormer
+
+lean_exe «bestiary-vae» where
+  root := `Bestiary.VAE
+
 require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"

@@ -1327,6 +1327,24 @@ pairs with the $i$-th \texttt{unetDown} from the top. Variants:
 original (1-channel, 2-class), RGB, small, tiny. Original lands at 31M
 params matching Ronneberger.
 
+\subsection*{SegFormer (\texttt{Bestiary/SegFormer.lean})}
+\emph{Zero} new primitives. Semantic segmentation via a hierarchical
+transformer pyramid (MiT encoder: 4 stages of
+\texttt{.transformerEncoder} glued by \texttt{.patchMerging}) and a
+lightweight MLP decoder (a handful of \texttt{.dense} calls). The
+decoder stays trivially small across all B0--B5 encoder sizes --- the
+design argument of the paper is precisely that a good pretrained
+transformer feature pyramid makes the segmentation head cheap.
+Variants: MiT-B0 encoder (2.6M, paper 3.7M), B2 (19M, paper 25M),
+B5 (61M, paper 82M), shared MLP decoder (1M single-scale approx),
+tiny fixture. Uniform $\sim$25\% undercount across all encoder sizes
+because real MiT uses depthwise convs inside the FFN and overlapping
+patch embeddings at inter-stage transitions; our
+\texttt{.transformerEncoder} and \texttt{.patchMerging} approximate
+the shape without those details. Comparison to DeepLab v3+: SegFormer's
+decoder is $\sim$3M params across all sizes, DeepLab's ASPP module
+is $\sim$15M and needs per-receptive-field tuning.
+
 \subsection*{SAM (\texttt{Bestiary/SAM.lean})}
 \emph{Zero} new primitives. Promptable segmentation (Kirillov et
 al.\ 2023): a ViT image encoder runs once per image, a tiny prompt
@@ -1346,6 +1364,24 @@ EfficientSAM (Xiong et al.\ 2023) focused its distillation there.
 Networks whose output is a novel image. Backbones overlap heavily with
 segmentation (UNet again), but the training objective is generative:
 denoise a random input until it becomes a plausible sample.
+
+\subsection*{VAE (\texttt{Bestiary/VAE.lean})}
+\emph{Zero} new primitives. The classical variational autoencoder
+(Kingma \& Welling 2013): encoder outputs
+$(\mu, \log \sigma^2)$ (represented as a single tensor with doubled
+final width), the reparameterization trick
+$z = \mu + \sigma \odot \epsilon$ samples $z$ in training code, the
+decoder reconstructs. KL divergence between the learned latent
+distribution and a standard normal is the regularizer. Variants:
+MNIST MLP VAE (20-dim latent, textbook example), CIFAR conv VAE
+($4 \times 4 \times 4$ spatial latent, SD-style), tiny fixture. All
+shown as encoder + decoder pairs. Training-code details (the actual
+sampling step, the KL loss) live outside the NetSpec. The same
+architectural template scales up to Stable Diffusion's VAE (see
+\texttt{StableDiffusion.lean}); 2013's 20-dim MNIST latent and
+2022's $64 \times 64 \times 4$ SD latent are the same idea at
+different scales. VQ-VAE (discrete-codebook variant) and $\beta$-VAE
+(scaled KL) are mentioned in the prose notes.
 
 \subsection*{DDPM (\texttt{Bestiary/Diffusion.lean})}
 \emph{Zero} new primitives. The denoiser is a UNet --- literally the
