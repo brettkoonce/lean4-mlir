@@ -108,6 +108,16 @@ jobs:
         run: |
           pip install leanblueprint
 
+      - name: Build Lean API docs (doc-gen4)
+        # Generates HTML documentation for the Lean library + its transitive
+        # imports (Mathlib, etc.). Output lands at .lake/build/doc/. The
+        # `-Kenv=dev` flag activates the conditional doc-gen4 require in
+        # lakefile.lean. First run is slow (pulls + builds doc-gen4); the
+        # .lake cache from earlier steps above covers most of Mathlib.
+        run: |
+          lake -R -Kenv=dev update doc-gen4
+          lake -R -Kenv=dev build LeanMlir:docs
+
       - name: Build blueprint web version
         run: |
           # Generates blueprint/lean_decls as a side effect (used by checkdecls).
@@ -162,6 +172,12 @@ jobs:
           # Blueprint web
           mkdir -p public/blueprint
           cp -r blueprint/web/* public/blueprint/ 2>/dev/null || true
+          # doc-gen4 Lean API docs, so blueprint's \dochome links resolve.
+          # Output from `lake ... build LeanMlir:docs` lands at
+          # .lake/build/doc/ with declarations under /find/, /Proofs/, etc.
+          mkdir -p public/docs
+          cp -r .lake/build/doc/* public/docs/ 2>/dev/null || \
+            echo "::warning::No doc-gen4 output at .lake/build/doc/; docs/ will 404."
           # Blueprint PDF — try multiple known paths, log what we find.
           if [ -f blueprint/print/print.pdf ]; then
             cp blueprint/print/print.pdf public/blueprint.pdf

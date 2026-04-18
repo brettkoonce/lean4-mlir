@@ -8,6 +8,15 @@ package «lean4-jax» where
 require mathlib from git
   "https://github.com/leanprover-community/mathlib4"
 
+-- doc-gen4 is a conditional dependency only activated when the CI
+-- (or a local user) passes `-Kenv=dev`. Without that flag, this
+-- require is inert, so normal `lake build` invocations don't pull it
+-- in. Standard pattern used by Mathlib, PrimeNumberTheoremAnd,
+-- Carleson, FLT, etc.
+meta if get_config? env = some "dev" then
+require «doc-gen4» from git
+  "https://github.com/leanprover/doc-gen4" @ "main"
+
 lean_lib «LeanMlir» where
   roots := #[`LeanMlir]
 
