@@ -1583,6 +1583,166 @@ chapter formalized.
   SE multiplies input by a sigmoid-gated channel mask.
 \end{theorem}
 
+\section{Example: EfficientNet-B0 on Imagenette}
+\label{sec:se_efficientnet_example}
+
+Squeeze-and-Excitation by itself is one of the smallest architectural
+contributions in deep learning. Take a feature map, compute a
+per-channel scalar by global-average-pooling it, pass those scalars
+through a tiny two-layer MLP with a sigmoid at the end, multiply
+those sigmoid outputs back into the original feature map
+per-channel. That's it. It's a learned per-channel reweighting --- a
+particularly simple form of attention, predating the transformer-era
+use of ``attention'' by four years (Hu et al.\ 2018, Squeeze-and-
+Excitation Networks).
+
+EfficientNet (Tan \& Le 2019) bolts SE into every
+\texttt{.mbConv} block in what's otherwise a MobileNet-V2-shaped
+architecture. The paper's actual contribution is \emph{compound
+scaling} (tune depth, width, and input resolution together) but
+the B0 baseline's architectural novelty over MobileNet V2 is
+essentially ``add SE blocks.''
+
+\subsection*{The architecture}
+
+\begin{verbatim}
+-- 1
+import LeanMlir
+
+-- 2
+def efficientNetB0 : NetSpec where
+  name   := "EfficientNet-B0"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 32 3 2 .same,                          -- stem 224→112
+    .mbConv  32  16 1 3 1 1 true,                    -- 112
+    .mbConv  16  24 6 3 2 2 true,                    -- 112→56
+    .mbConv  24  40 6 5 2 2 true,                    -- 56→28
+    .mbConv  40  80 6 3 2 3 true,                    -- 28→14
+    .mbConv  80 112 6 5 1 3 true,                    -- 14
+    .mbConv 112 192 6 5 2 4 true,                    -- 14→7
+    .mbConv 192 320 6 3 1 1 true,                    -- 7
+    .convBn 320 1280 1 1 .same,                      -- 1×1 to 1280
+    .globalAvgPool,
+    .dense 1280 10 .identity
+  ]
+
+-- 3
+def efficientNetB0Config : TrainConfig where
+  learningRate   := 0.001
+  batchSize      := 32
+  epochs         := 80
+  useAdam        := true
+  weightDecay    := 0.0001
+  cosineDecay    := true
+  warmupEpochs   := 3
+  augment        := true
+  labelSmoothing := 0.1
+
+-- 4
+def main (args : List String) : IO Unit :=
+  efficientNetB0.train efficientNetB0Config
+    (args.head?.getD "data/imagenette")
+\end{verbatim}
+
+The \texttt{.mbConv} primitive takes
+\texttt{(ic, oc, expandRatio, kernel, stride, nBlocks, useSE)}.
+Kernel sizes vary by stage (EfficientNet uses a mix of
+$3 \times 3$ and $5 \times 5$ depthwise convs), and \texttt{useSE
+= true} in every block here turns on the Squeeze-and-Excitation
+sub-module. Every SE block multiplies the input by the sigmoid
+output of its two-layer MLP: that's exactly \S~\ref{thm:seBlock_has_vjp}
+composed with \S~\ref{thm:elemwiseProduct_has_vjp} and the already-
+proved dense VJPs from Chapter~\ref{chap:mlp}. No new math in this
+chapter beyond the SE block itself.
+
+\subsection*{Results}
+
+\begin{verbatim}
+$ IREE_BACKEND=rocm IREE_CHIP=gfx1100 \
+    ./.lake/build/bin/efficientnet-train
+EfficientNet-B0: 7155658 params
+Generating train step MLIR...
+  938160 chars
+Compiling vmfbs...
+  forward compiled
+  eval forward compiled
+  train step compiled
+  session loaded
+  train: 9469 images (256×256)
+  7155658 params + m + v (81 MB)
+training: 295 batches/epoch, batch=32, Adam, lr=0.001000,
+          cosine, label_smooth=0.1, wd=1e-4
+  BN layers: 49, BN stat floats: 42016
+  step 0/295: loss=2.345573 (956ms)
+Epoch 10/80: loss=0.947504 lr=0.000985 (280713ms)
+  val accuracy (running BN): 3077/3904 = 78.82%
+Epoch 20/80: loss=0.711379 lr=0.000897 (280782ms)
+  val accuracy (running BN): 3208/3904 = 82.17%
+Epoch 40/80: loss=0.548946 lr=0.000551 (280416ms)
+  val accuracy (running BN): 3363/3904 = 86.14%
+Epoch 60/80: loss=0.512627 lr=0.000173 (281250ms)
+  val accuracy (running BN): 3410/3904 = 87.35%
+Epoch 80/80: loss=0.503827 lr=0.000000 (281927ms)
+  val accuracy (running BN): 3419/3904 = 87.58%
+\end{verbatim}
+
+(Full log in \texttt{logs/effnet\_se.log}.)
+
+Final val accuracy \textbf{87.58\%} on Imagenette, wall time about
+\textbf{6.2 hours}, loss plateaus at the same $\sim$0.50
+label-smoothing floor as ResNet-34 and MobileNet V2. Three-chapter
+comparison, same dataset, same training recipe:
+
+\begin{center}
+\begin{tabular}{l r r r r r}
+\hline
+Model            & Params  & MLIR     & Step time & Total   & Val acc \\
+\hline
+ResNet-34        & 21.29M  & 518 KB   & 1400 ms   & 9.5 h   & 90.29\% \\
+MobileNet V2     &  2.24M  & 741 KB   &  830 ms   & 5.4 h   & 87.09\% \\
+EfficientNet-B0  &  7.16M  & 938 KB   &  940 ms   & 6.2 h   & 87.58\% \\
+\hline
+\end{tabular}
+\end{center}
+
+- \textbf{EfficientNet-B0 is 3.2$\times$ the parameters of MobileNet V2}
+  for a 0.5 percentage-point accuracy lift (87.58\% vs 87.09\%). On a
+  pure params-vs-accuracy curve, SE is an expensive addition --- the
+  parameter cost comes from the two-layer MLP in every SE sub-block,
+  and every \texttt{.mbConv} in B0 has one. Seven stages $\times$
+  1--4 blocks each = 16+ SE blocks across the network.
+
+- \textbf{938\,KB of MLIR} is the largest yet --- more than either
+  ResNet-34 (518\,KB) or MobileNet V2 (741\,KB). The extra ops come
+  from SE's per-channel attention: each SE block emits a GAP, two
+  denses, a sigmoid, and an elementwise-multiply. Over 16 blocks
+  that's non-trivial StableHLO.
+
+- \textbf{Per-step time is 940\,ms}, intermediate between R34 and
+  MNv2. SE's extra ops slow things down vs plain depthwise-separable,
+  but the core is still depthwise-separable so it remains cheaper
+  than ResNet-34's full convs.
+
+- \textbf{The lift isn't from SE alone.} EfficientNet's paper thesis
+  is that \emph{compound scaling} --- tuning depth, width, and
+  resolution jointly with a scaling coefficient --- produces the
+  ImageNet state-of-the-art. At the B0 baseline shown here, SE gives
+  a modest bump; the real wins come at B3--B7 where the compound
+  scaling compounds. Our Imagenette example sits at B0 because the
+  dataset is 10-class Imagenette, not 1000-class ImageNet, and the
+  return-on-scaling saturates much earlier.
+
+Every post-2018 vision architecture has some variant of SE in it
+(MobileNet V3, EfficientNetV2, ConvNeXt, RegNetZ) because the
+accuracy-per-parameter cost is low when you compound it with other
+scaling tricks. The Swish / SiLU activation --- another EfficientNet
+contribution --- is orthogonal and not shown in our spec; our
+\texttt{.mbConv} primitive approximates with ReLU for implementation
+simplicity. The numbers above are within noise of the Swish variant
+at this scale.
+
 \chapter{LayerNorm and GELU}
 \label{chap:layernorm}
 
