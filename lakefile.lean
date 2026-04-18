@@ -245,4 +245,7 @@ lean_exe «bestiary-cyclegan» where
 lean_exe «bestiary-alphago» where
   root := `Bestiary.AlphaGo
 
+lean_exe «bestiary-pix2pix» where
+  root := `Bestiary.Pix2Pix
+
 require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"

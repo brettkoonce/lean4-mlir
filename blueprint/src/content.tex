@@ -1460,6 +1460,20 @@ same hack appears in VAE and Stable Diffusion entries. GAN training
 dynamics (mode collapse, equilibrium stability) are all
 training-procedure concerns living outside the NetSpec.
 
+\subsubsection*{Pix2Pix (\texttt{Bestiary/Pix2Pix.lean})}
+\emph{Zero} new primitives. The paired-data ancestor of CycleGAN,
+from the same lab 9 months earlier (Isola et al.\ 2017). UNet
+generator (8 levels, $\sim$70M approx vs paper $\sim$54M --- our
+\texttt{.unetDown} / \texttt{.unetUp} use 2 convs per level where
+Pix2Pix uses 1 strided conv, so we overcount) + PatchGAN
+discriminator (identical to CycleGAN's, 2.8M). Trained with GAN
+loss + L1 reconstruction --- the L1 term is a direct supervision
+signal that exists only because pairs exist. When you don't have
+pairs you fall back to CycleGAN's cycle-consistency trick. Hardware
+context: 2016--2017, 54M UNet on $256 \times 256$ images meant
+batch size 1 on a GTX 1080 Ti, which is how InstanceNorm became the
+default normalizer in this lineage --- it was what fit.
+
 \subsubsection*{CycleGAN (\texttt{Bestiary/CycleGAN.lean})}
 \emph{Zero} new primitives. Unpaired image translation (Zhu et
 al.\ 2017): two generators $G : X \to Y$ and $F : Y \to X$ plus two
