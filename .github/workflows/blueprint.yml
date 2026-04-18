@@ -125,6 +125,19 @@ jobs:
             echo "rendered: $dir/$base.{svg,pdf}"
           done
 
+      - name: Regenerate training-curve PNGs from ablation logs
+        # Training-curve figures are committed PNGs for reliability, but
+        # we regenerate them in CI so any log change automatically
+        # updates the figure. matplotlib + numpy are the only deps.
+        run: |
+          pip install --quiet matplotlib
+          cd figures
+          for script in plot_mnist_mlp.py plot_mnist_mlp_vs_cnn.py plot_cifar_bn_vs_nobn.py; do
+            if [ -f "$script" ]; then
+              python3 "$script"
+            fi
+          done
+
       - name: Cache pip
         uses: actions/cache@v4
         with:

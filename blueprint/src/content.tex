@@ -795,6 +795,10 @@ a neural network by 2020s standards. The matching CPU run via the
 Docker image in Appendix~\ref{app:getting_started} takes about 5
 minutes and lands at the same accuracy.
 
+\begin{center}
+\includegraphics[width=\textwidth]{curves/mnist_mlp_training}
+\end{center}
+
 Notice that the emitted MLIR is only 10\,375 characters --- about
 half of what the Adam variant would emit. Plain SGD's per-step
 update is a single \texttt{param = param - lr * grad} subtraction,
@@ -1011,6 +1015,10 @@ epochs. The delta is 0.4 percentage points --- not huge, but
 consistent and free: the convolution just finds spatial features the
 MLP couldn't see.
 
+\begin{center}
+\includegraphics[width=\textwidth]{curves/mnist_mlp_vs_cnn}
+\end{center}
+
 \subsection*{Why this network is still 99\% dense-head}
 
 At 3{,}489{,}130 total parameters, the no-BN CNN is actually
@@ -1195,6 +1203,10 @@ the optimizer to make coherent progress; every step nudges
 parameters into meaningless neighborhoods. The model is
 computationally a random classifier from step zero to the end of
 training.
+
+\begin{center}
+\includegraphics[width=\textwidth]{curves/cifar_bn_vs_nobn}
+\end{center}
 
 The BN run's loss halves by epoch 2 and keeps dropping. Same
 optimizer, same learning rate, same dataset, same architecture plus
