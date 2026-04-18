@@ -728,6 +728,93 @@ from.
   Routes gradient to the argmax position within each pooling window.
 \end{axiom}
 
+\section{Example: MNIST 2D CNN}
+\label{sec:cnn_mnist_example}
+
+The MLP in Chapter~\ref{chap:mlp} crushed MNIST by flattening the
+image into a 784-dim vector and throwing dense layers at it. That
+works because MNIST is small, but it also throws away \emph{all}
+the spatial structure: pixel (5,5) and pixel (5,6) are neighbors,
+but the MLP sees no more relationship between them than it does
+between pixel (5,5) and pixel (23,14). Convolutions fix that.
+
+The canonical S4TF-style MNIST CNN --- two blocks of (conv, conv,
+pool) at increasing channel widths, followed by a dense classifier
+head --- is this chapter's concrete example:
+
+\begin{center}
+\includegraphics[width=\textwidth]{arch/mnist_cnn}
+\end{center}
+
+The Lean spec:
+
+\begin{verbatim}
+def mnistCnn : NetSpec where
+  name   := "MNIST-CNN"
+  imageH := 28
+  imageW := 28
+  layers := [
+    .convBn 1 32 3 1 .same,    -- 28×28×1 → 28×28×32
+    .convBn 32 32 3 1 .same,
+    .maxPool 2 2,              -- → 14×14×32
+    .convBn 32 64 3 1 .same,   -- → 14×14×64
+    .convBn 64 64 3 1 .same,
+    .maxPool 2 2,              -- → 7×7×64
+    .flatten,                  -- → 3136
+    .dense 3136 512 .relu,
+    .dense 512 10 .identity
+  ]
+\end{verbatim}
+
+Same discipline as the MLP: every layer's forward and backward pass
+is already proved, either in this chapter
+(\S~\ref{ax:conv2d_has_vjp3}, \S~\ref{ax:maxPool2_has_vjp3}) or in
+Chapter~\ref{chap:mlp} (\S~\ref{thm:dense_has_vjp},
+\S~\ref{thm:relu_has_vjp}, \S~\ref{ax:softmaxCE_grad}). No new math
+is introduced by adding the convolutional layers --- the chain rule
+composes them with the dense layers identically.
+
+\subsection*{Compiling the training step}
+
+\begin{verbatim}
+MNIST-CNN: 1676458 params
+Generating train step MLIR...
+  71754 chars
+Compiling vmfbs...
+  forward compiled
+  eval forward compiled
+  train step compiled
+\end{verbatim}
+
+The CNN emits 71\,754 characters of MLIR --- about 3.5$\times$ the
+MLP's 20\,502. The convolution and maxPool ops are not structurally
+more complex than dense layers at the StableHLO level (every op
+still maps to a single stablehlo operation), but there are more of
+them per layer (an activation map reshape, a convolution, a bias
+add, a batch-norm normalize, a batch-norm affine) so the chars
+multiply.
+
+\subsection*{Where the parameters actually live}
+
+At 1{,}676{,}458 total parameters, the MNIST CNN is $\sim$2.5$\times$
+the MLP's 669\,706. You would expect the convolutions to dominate;
+they don't. The entire conv backbone (four 3$\times$3 convs plus
+batch norms) is $\sim$65\,376 parameters --- under 4\% of the
+model. The dense head (\texttt{3136 $\to$ 512}) alone is
+1{,}606{,}144 parameters, about 96\% of the total.
+
+This is the same pattern you'll see in AlexNet, VGG, YOLOv1: a
+compact convolutional backbone feeding a \emph{fat} fully-connected
+head. Historically it drove people crazy: the conv layers were the
+interesting new machinery, but all the weight budget lived in the
+part we thought we understood. Every post-2015 vision architecture
+responded to this by replacing the dense head with
+\texttt{globalAvgPool} followed by a single \texttt{dim $\to$
+classes} dense. ResNet, MobileNet, EfficientNet, ViT --- the
+globalAvgPool convention is why those networks can be 10--100$\times$
+smaller than the equivalent AlexNet-era spec. We'll see that shift
+firsthand starting with ResNet in Chapter~\ref{chap:residual}.
+
 \chapter{BatchNorm: the hard one}
 \label{chap:bn}
 

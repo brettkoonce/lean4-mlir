@@ -1,0 +1,47 @@
+// MNIST 2D CNN (S4TF-style) architecture
+// Generated for blueprint Chapter "CNN: Convolution and Pooling" — 1,676,458 params total
+// 4 × convBn + 2 × maxPool + flatten + 2 × dense. Dense head dominates at ~96%.
+// Render: dot -Tpdf mnist_cnn.dot -o mnist_cnn.pdf
+//         dot -Tsvg mnist_cnn.dot -o mnist_cnn.svg
+digraph mnist_cnn {
+  rankdir=LR;
+  graph [fontname="Helvetica", fontsize=11, nodesep=0.3, ranksep=0.5,
+         label="MNIST 2D CNN (S4TF-style) — 1,676,458 params",
+         labelloc=b, fontsize=13];
+  node [fontname="Helvetica", fontsize=9, style="rounded,filled"];
+  edge [color="#888888", arrowsize=0.6, penwidth=0.8];
+
+  // Input: 28×28×1 grayscale image
+  input [shape=ellipse, fillcolor="#e8f0ff", color="#4060a0",
+         label="Input\n28×28×1"];
+
+  // First conv block — 2 × convBn at 32 ch, then maxPool
+  c1 [shape=box, fillcolor="#fff0e8", color="#c07040",
+      label="convBn\n1 → 32 ch\n3×3\n384 p"];
+  c2 [shape=box, fillcolor="#fff0e8", color="#c07040",
+      label="convBn\n32 → 32 ch\n3×3\n9,312 p"];
+  p1 [shape=box, fillcolor="#e8f0ff", color="#4060a0",
+      label="maxPool\n2×2\n28→14"];
+
+  // Second conv block — 2 × convBn at 64 ch, then maxPool
+  c3 [shape=box, fillcolor="#fff0e8", color="#c07040",
+      label="convBn\n32 → 64 ch\n3×3\n18,624 p"];
+  c4 [shape=box, fillcolor="#fff0e8", color="#c07040",
+      label="convBn\n64 → 64 ch\n3×3\n37,056 p"];
+  p2 [shape=box, fillcolor="#e8f0ff", color="#4060a0",
+      label="maxPool\n2×2\n14→7"];
+
+  // Head: flatten + 2 dense
+  fl [shape=box, fillcolor="#f0e8ff", color="#6040a0",
+      label="flatten\n7×7×64\n→ 3136"];
+  d1 [shape=box, fillcolor="#ffe8e8", color="#c04040",
+      label="Dense\n3136 → 512\nReLU\n1,606,144 p"];
+  d2 [shape=box, fillcolor="#ffe8e8", color="#c04040",
+      label="Dense\n512 → 10\n(identity)\n5,130 p"];
+
+  // Output: class logits
+  out [shape=ellipse, fillcolor="#e8ffe8", color="#40a060",
+       label="Logits\n10 classes"];
+
+  input -> c1 -> c2 -> p1 -> c3 -> c4 -> p2 -> fl -> d1 -> d2 -> out;
+}
