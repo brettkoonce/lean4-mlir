@@ -236,4 +236,10 @@ lean_exe «bestiary-deeplab» where
 lean_exe «bestiary-maskrcnn» where
   root := `Bestiary.MaskRCNN
 
+lean_exe «bestiary-dcgan» where
+  root := `Bestiary.DCGAN
+
+lean_exe «bestiary-cyclegan» where
+  root := `Bestiary.CycleGAN
+
 require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"

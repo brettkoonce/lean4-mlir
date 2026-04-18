@@ -1445,6 +1445,36 @@ architectural template scales up to Stable Diffusion's VAE (see
 different scales. VQ-VAE (discrete-codebook variant) and $\beta$-VAE
 (scaled KL) are mentioned in the prose notes.
 
+\subsection*{DCGAN (\texttt{Bestiary/DCGAN.lean})}
+\emph{Zero} new primitives. Deep Convolutional GAN (Radford et
+al.\ 2015) --- the paper that made GAN training reliably work. Eight
+design guidelines (strided convs instead of pooling, BN everywhere
+except $G$'s output / $D$'s input, no hidden FC layers, ReLU in $G$
+/ LeakyReLU in $D$, Adam with specific hyperparams) that became the
+default for every GAN paper since. Three NetSpecs: noise projector
+(dense $100 \to 4 \times 4 \times 1024$, 1.65M), generator convs
+(11M, paper $\sim$12M), discriminator (11M, paper-exact). Transposed
+convs in $G$ are approximated by standard convs of matching kernel
+and channels (same params, spatial doubling is forward-pass-only);
+same hack appears in VAE and Stable Diffusion entries. GAN training
+dynamics (mode collapse, equilibrium stability) are all
+training-procedure concerns living outside the NetSpec.
+
+\subsection*{CycleGAN (\texttt{Bestiary/CycleGAN.lean})}
+\emph{Zero} new primitives. Unpaired image translation (Zhu et
+al.\ 2017): two generators $G : X \to Y$ and $F : Y \to X$ plus two
+PatchGAN discriminators, trained with adversarial loss + cycle
+consistency loss $\|F(G(x)) - x\|_1$. The cycle constraint is what
+makes unpaired training work --- without it, $G$ could mode-collapse
+every $x$ to one target. Generator is a Johnson-style ResNet:
+convs down + 9 \texttt{.residualBlock}s at 256 channels + convs up
+(11.4M, paper $\sim$11M). Discriminator is a PatchGAN: 5 strided
+convs with a $70 \times 70$ receptive field, outputs an $N \times N$
+grid of patch real/fake logits (2.8M, paper $\sim$2.8M). Four-network
+pattern shown as two specs ($G$ and $D$); the other $F$ and
+$D_X$ are architecturally identical copies. The ``one clever loss''
+does the work --- the architecture is quite ordinary.
+
 \subsection*{DDPM (\texttt{Bestiary/Diffusion.lean})}
 \emph{Zero} new primitives. The denoiser is a UNet --- literally the
 same \S~\ref{layer:unetDown} and \S~\ref{layer:unetUp} Ronneberger

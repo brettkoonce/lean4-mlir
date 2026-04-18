@@ -68,6 +68,8 @@ it becomes a plausible sample from a learned distribution.
 | File | Architecture | Variants | Notes |
 |------|--------------|----------|-------|
 | `VAE.lean`       | VAE (vanilla)             | MNIST MLP + CIFAR conv + tiny | Classical variational autoencoder; encoder outputs (μ, log σ²) |
+| `DCGAN.lean`     | DCGAN                     | generator + discriminator + projector + tiny | Deep Convolutional GAN; Radford's eight guidelines made GANs trainable |
+| `CycleGAN.lean`  | CycleGAN                  | generator + PatchGAN discriminator + tiny | Unpaired image translation via cycle consistency; 2 Gs + 2 Ds |
 | `Diffusion.lean` | DDPM                   | CIFAR / 256 / tiny + timestep-embed | Denoising diffusion; the denoiser IS a UNet, rest is training loop |
 | `StableDiffusion.lean` | Stable Diffusion 1.5 | VAE enc/dec + text enc + UNet + spatial-transformer + tiny | Latent diffusion + text cross-attention; 3 pretrained components, 1 trained |
 
