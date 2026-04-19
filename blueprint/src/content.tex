@@ -1556,13 +1556,16 @@ all live in \texttt{TrainConfig} or training code. They don't touch
 the network, but they're what moves a scratch-trained model from
 $\sim$60\% accuracy to 90\%.
 
-\textbf{Adam} (Kingma \& Ba, 2014). Replaces vanilla SGD. Maintains
+\textbf{Adam} (Kingma \& Ba, 2014,
+\href{https://arxiv.org/abs/1412.6980}{arXiv:1412.6980}). Replaces
+vanilla SGD. Maintains
 per-parameter running estimates of the first and second moments of
 the gradient and uses them for an adaptive per-parameter learning
 rate. Much faster convergence than SGD on most tasks, much more
 forgiving of learning-rate choice.
 
-\textbf{Cosine learning-rate schedule} (Loshchilov \& Hutter, 2016).
+\textbf{Cosine learning-rate schedule} (Loshchilov \& Hutter, 2016,
+\href{https://arxiv.org/abs/1608.03983}{arXiv:1608.03983}).
 After warmup, the learning rate decays from its peak to near-zero
 following $\mathrm{lr}(t) = \mathrm{lr}_{\max} \cdot \tfrac{1}{2}(1 +
 \cos(\pi t / T))$. Smoother than step schedules; consistently produces
@@ -1571,7 +1574,9 @@ the winning recipe at Stanford's DAWNBench in 2018; the lineage traces
 back to Leslie Smith's cyclical learning rates (Smith 2015,
 \href{https://arxiv.org/abs/1506.01186}{arXiv:1506.01186}).
 
-\textbf{Warmup}. Linearly ramps the learning rate from zero to its
+\textbf{Warmup} (Goyal et al., 2017,
+\href{https://arxiv.org/abs/1706.02677}{arXiv:1706.02677}). Linearly
+ramps the learning rate from zero to its
 peak over the first few epochs (3 for ResNet-34). Stabilizes early
 training when gradients are still reorganizing randomly-initialized
 weights. Becomes essential for larger models and larger batches --- by
@@ -1580,17 +1585,22 @@ ViT-Tiny in Chapter~\ref{chap:attention} it's a necessity.
 \textbf{Weight decay}. Adds a small L2 shrink to all trainable weights
 each step: $w \leftarrow w - \eta \lambda w$. Regularizer, discourages
 weights from growing without bound. Loshchilov \& Hutter's
-``decoupled'' variant (\textbf{AdamW}) is what actually ships in modern
+``decoupled'' variant (\textbf{AdamW}, 2017,
+\href{https://arxiv.org/abs/1711.05101}{arXiv:1711.05101}) is what
+actually ships in modern
 pipelines, and it's what \texttt{TrainConfig.weightDecay} implements.
 
 \textbf{Augmentation}. Random crops, horizontal flips, and color jitter
 applied to training images before they enter the network. Modern
-pipelines package these as \textbf{RandAugment} (Cubuk et al., 2020):
+pipelines package these as \textbf{RandAugment} (Cubuk et al., 2020,
+\href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}):
 sample $N$ transforms from a fixed pool at a common magnitude $M$,
 tunable as two scalars. Indispensable at Imagenette's 9K-image scale.
 Lives in the data pipeline, not the network.
 
-\textbf{Label smoothing} (Szegedy et al., 2016). Replaces the one-hot
+\textbf{Label smoothing} (Szegedy et al., 2016,
+\href{https://arxiv.org/abs/1512.00567}{arXiv:1512.00567}). Replaces
+the one-hot
 target with a smoothed $(\varepsilon / (K-1), \ldots, 1 - \varepsilon,
 \ldots)$. Stops the network from producing arbitrarily large logits on
 the correct class, which keeps training stable and improves calibration.
