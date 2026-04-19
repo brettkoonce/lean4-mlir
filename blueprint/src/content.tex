@@ -1590,13 +1590,14 @@ weights from growing without bound. Loshchilov \& Hutter's
 actually ships in modern
 pipelines, and it's what \texttt{TrainConfig.weightDecay} implements.
 
-\textbf{Augmentation}. Random crops, horizontal flips, and color jitter
-applied to training images before they enter the network. Modern
-pipelines package these as \textbf{RandAugment} (Cubuk et al., 2020,
-\href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}):
-sample $N$ transforms from a fixed pool at a common magnitude $M$,
-tunable as two scalars. Indispensable at Imagenette's 9K-image scale.
-Lives in the data pipeline, not the network.
+\textbf{Augmentation}. Our pipeline does random crops ($256 \to 224$)
+and random horizontal flips on Imagenette; hflip only on CIFAR;
+nothing on MNIST. For the more systematic modern treatment the paper
+to read is \textbf{RandAugment} (Cubuk et al.\ 2020,
+\href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}): sample $N$
+transforms from a fixed pool at a common magnitude $M$, tunable as
+two scalars. Indispensable at Imagenette's 9K-image scale. Lives in
+the data pipeline, not the network.
 
 \textbf{Label smoothing} (Szegedy et al., 2016,
 \href{https://arxiv.org/abs/1512.00567}{arXiv:1512.00567}). Replaces
