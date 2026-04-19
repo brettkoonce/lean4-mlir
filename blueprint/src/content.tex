@@ -241,8 +241,11 @@ to training MNIST in one command.
 
 \section*{How this book is organized}
 
-\textbf{Basics.} We build the framework from scratch using simple
-architectures:
+\textbf{Part 1: The framework (Chapters 2--10).} One new primitive per
+chapter, proved correct as we go. The first half pins down the
+composition rules --- chain, additive fan-in, product --- on dense
+layers, convolution, and normalization. The second half climbs the
+ladder to ViT.
 
 \begin{itemize}
   \item \textbf{Chapter 2: Tensor Calculus} --- Axioms.
@@ -256,12 +259,6 @@ architectures:
     never have to derive it again.
   \item \textbf{Chapter 6: ResNet-34} --- Residual connections. Gradients from
     two paths add at the input.
-\end{itemize}
-
-\textbf{Spanning models.} We walk up the architecture ladder, one new
-primitive per chapter:
-
-\begin{itemize}
   \item \textbf{Chapter 7: MobileNetV2} --- Depthwise convolution. Same as
     regular conv, but diagonal in the channel dimension.
   \item \textbf{Chapter 8: EfficientNet} --- Squeeze-and-excitation. The
@@ -273,16 +270,11 @@ primitive per chapter:
     capstone.
 \end{itemize}
 
-\textbf{The bestiary.} A catalog of $\sim$20 additional architectures,
-from U-Net to Mamba to diffusion models, each decomposed into the
-framework's primitives in $\sim$2 pages.
-
-\begin{itemize}
-  \item \textbf{Chapter 11: The Bestiary} --- Organized by the question
-    you're asking: ``how do I do detection?'', ``how do I do generation?'',
-    etc. Plus a micro-design appendix for decoding the latest LLM
-    training tricks.
-\end{itemize}
+\textbf{Part 2: The bestiary (Chapter 11).} A catalog of $\sim$37
+additional architectures, from U-Net to Mamba to diffusion models,
+each decomposed into the framework's primitives. Organized by the
+question you're asking: ``how do I do detection?'', ``how do I do
+generation?'', etc.
 
 \textbf{Appendices.} Toolchain setup (A) and the complete proof framework
 as a reference (B).
