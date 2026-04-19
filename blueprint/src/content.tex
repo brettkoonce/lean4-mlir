@@ -311,11 +311,13 @@ Let's find out.
 \chapter{The backward pass: axioms}
 \label{chap:tensor}
 
-The algebraic framework: 1D \(\mathsf{Vec}\), 2D \(\mathsf{Mat}\), 3D
-\(\mathsf{Tensor3}\) types, the partial-derivative function \(\pdiv\) and
-its structural rules, and three VJP record types (\(\HasVJP\),
-\(\HasVJPMat\), \(\HasVJPthree\)) that package a backward function together
-with its correctness claim.
+A VJP (vector-Jacobian product) is the backward function for a layer:
+takes an upstream gradient, returns the downstream one. Every backward
+function in this book is a VJP built by composing the axioms here ---
+the partial-derivative function \(\pdiv\), its three structural rules
+(chain, sum, product), and three VJP record types (\(\HasVJP\),
+\(\HasVJPMat\), \(\HasVJPthree\), one per tensor rank) that bundle a
+backward function with its correctness claim.
 
 \begin{axiom}[Partial derivative]
   \label{ax:pdiv}
@@ -2236,7 +2238,7 @@ a modern architecture would be an asymptote we don't approach.
 \section{Bestiary-only \texttt{Layer} primitives}
 \label{sec:bestiary_primitives}
 
-Ten new \texttt{Layer} constructors were added by the bestiary chapters.
+Twenty-two new \texttt{Layer} constructors were added by the bestiary chapters.
 None are codegen-backed (MlirCodegen emits \texttt{// UNSUPPORTED}); the
 goal is pedagogical shape + parameter accounting, not training runs.
 
