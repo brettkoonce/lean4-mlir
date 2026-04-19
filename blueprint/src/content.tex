@@ -2539,6 +2539,23 @@ the canonical CNN) and LeNet-300-100 (266K params, pure-MLP baseline).
 Historical importance; still the ground-truth pattern every later CNN
 riffs on.
 
+\begin{verbatim}
+def leNet5 : NetSpec where
+  name   := "LeNet-5"
+  imageH := 32
+  imageW := 32
+  layers := [
+    .conv2d 1 6 5 .valid .relu,           -- 32×32 → 28×28
+    .maxPool 2 2,                         -- 28×28 → 14×14
+    .conv2d 6 16 5 .valid .relu,          -- 14×14 → 10×10
+    .maxPool 2 2,                         -- 10×10 → 5×5
+    .flatten,
+    .dense (16 * 5 * 5) 120 .relu,        -- 400 → 120
+    .dense 120 84 .relu,
+    .dense 84 10 .identity                -- 10-class MNIST output
+  ]
+\end{verbatim}
+
 \subsubsection*{AlexNet (\texttt{Bestiary/AlexNet.lean})}
 Zero new primitives --- five convs, three FCs, pools. The 2012
 ImageNet winner that restarted modern deep learning. Variants:
@@ -2547,6 +2564,27 @@ the 62M live in the three FC layers, which is precisely why every
 post-2015 CNN dropped FC stacks for \texttt{globalAvgPool} + one final
 dense. LRN is omitted (replaced in the field by BatchNorm in 2015);
 dropout is training-time only.
+
+\begin{verbatim}
+def alexNet : NetSpec where
+  name   := "AlexNet (Krizhevsky 2012)"
+  imageH := 227
+  imageW := 227
+  layers := [
+    .convBn 3 96 11 4 .same,              -- 11×11 stride 4
+    .maxPool 2 2,                         -- 3×3 stride 2 in paper
+    .conv2d 96 256 5 .same .relu,
+    .maxPool 2 2,
+    .conv2d 256 384 3 .same .relu,
+    .conv2d 384 384 3 .same .relu,
+    .conv2d 384 256 3 .same .relu,
+    .maxPool 2 2,
+    .flatten,
+    .dense (6 * 6 * 256) 4096 .relu,      -- ~95% of params live here
+    .dense 4096 4096 .relu,
+    .dense 4096 1000 .identity
+  ]
+\end{verbatim}
 
 \subsubsection*{SqueezeNet (\texttt{Bestiary/SqueezeNet.lean})}
 \emph{Zero} new primitives --- the \texttt{.fireModule} constructor was
@@ -2557,6 +2595,29 @@ efficiency-CNN family alongside MobileNet and ShuffleNet. Variants:
 SqueezeNet 1.0 (1.25M, paper-exact), 1.1 (1.24M --- earlier downsample),
 tiny fixture.
 
+\begin{verbatim}
+def squeezeNet1_0 : NetSpec where
+  name   := "SqueezeNet 1.0"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 96 7 2 .same,                     -- stem
+    .maxPool 2 2,
+    .fireModule 96  16 64  64,                  -- Fire2  → 128
+    .fireModule 128 16 64  64,                  -- Fire3
+    .fireModule 128 32 128 128,                 -- Fire4  → 256
+    .maxPool 2 2,
+    .fireModule 256 32 128 128,                 -- Fire5
+    .fireModule 256 48 192 192,                 -- Fire6  → 384
+    .fireModule 384 48 192 192,                 -- Fire7
+    .fireModule 384 64 256 256,                 -- Fire8  → 512
+    .maxPool 2 2,
+    .fireModule 512 64 256 256,                 -- Fire9
+    .conv2d 512 1000 1 .same .relu,             -- 1×1 to classes
+    .globalAvgPool                              -- GAP emits 1000 logits
+  ]
+\end{verbatim}
+
 \subsubsection*{Inception v1 / v3 / v4 (\texttt{Bestiary/Inception.lean})}
 Uses \S~\ref{layer:inceptionModule}. GoogLeNet's parallel multi-scale
 conv-branches concatenated along channels; the 1$\times$1 dimension
@@ -2566,6 +2627,37 @@ a bit low because our unified module approximates v3/v4's richer
 module catalog). Auxiliary classifiers (v1) and asymmetric
 factorizations (v3/v4) are bestiary omissions.
 
+\begin{verbatim}
+def googLeNet : NetSpec where
+  name   := "GoogLeNet (Inception v1)"
+  imageH := 224
+  imageW := 224
+  layers := [
+    -- Stem
+    .convBn 3 64 7 2 .same,
+    .maxPool 2 2,                               -- 56×56
+    .convBn 64 64 1 1 .same,
+    .convBn 64 192 3 1 .same,
+    .maxPool 2 2,                               -- 28×28
+    -- Inception 3a, 3b
+    .inceptionModule 192 64 96 128 16 32 32,    -- → 256
+    .inceptionModule 256 128 128 192 32 96 64,  -- → 480
+    .maxPool 2 2,                               -- 14×14
+    -- Inception 4a..4e
+    .inceptionModule 480 192 96  208 16 48  64,  -- 512
+    .inceptionModule 512 160 112 224 24 64  64,  -- 512
+    .inceptionModule 512 128 128 256 24 64  64,  -- 512
+    .inceptionModule 512 112 144 288 32 64  64,  -- 528
+    .inceptionModule 528 256 160 320 32 128 128, -- 832
+    .maxPool 2 2,                                -- 7×7
+    -- Inception 5a, 5b
+    .inceptionModule 832 256 160 320 32 128 128, -- 832
+    .inceptionModule 832 384 192 384 48 128 128, -- 1024
+    .globalAvgPool,
+    .dense 1024 1000 .identity
+  ]
+\end{verbatim}
+
 \subsubsection*{Xception (\texttt{Bestiary/Xception.lean})}
 Zero new primitives --- reuses existing \texttt{.separableConv}.
 ``Extreme Inception'': every conv is a depthwise-separable conv. The
@@ -2574,9 +2666,60 @@ Xception (21.9M, paper-exact at 22M), tiny fixture. Residual skips
 around each block-of-three-sep-convs are implicit in the linear
 NetSpec.
 
+\begin{verbatim}
+def xception : NetSpec where
+  name   := "Xception"
+  imageH := 299
+  imageW := 299
+  layers := [
+    -- Entry flow
+    .convBn 3 32 3 2 .same,
+    .convBn 32 64 3 1 .same,
+    .separableConv 64 128 1, .separableConv 128 128 1,
+    .maxPool 2 2,
+    .separableConv 128 256 1, .separableConv 256 256 1,
+    .maxPool 2 2,
+    .separableConv 256 728 1, .separableConv 728 728 1,
+    .maxPool 2 2,
+    -- Middle flow: 8× (3 sep-convs + implicit residual), linearized
+    .separableConv 728 728 1, .separableConv 728 728 1, .separableConv 728 728 1,
+    .separableConv 728 728 1, .separableConv 728 728 1, .separableConv 728 728 1,
+    .separableConv 728 728 1, .separableConv 728 728 1, .separableConv 728 728 1,
+    .separableConv 728 728 1, .separableConv 728 728 1, .separableConv 728 728 1,
+    .separableConv 728 728 1, .separableConv 728 728 1, .separableConv 728 728 1,
+    .separableConv 728 728 1, .separableConv 728 728 1, .separableConv 728 728 1,
+    .separableConv 728 728 1, .separableConv 728 728 1, .separableConv 728 728 1,
+    .separableConv 728 728 1, .separableConv 728 728 1, .separableConv 728 728 1,
+    -- Exit flow
+    .separableConv 728 728  1,
+    .separableConv 728 1024 1,
+    .maxPool 2 2,
+    .separableConv 1024 1536 1,
+    .separableConv 1536 2048 1,
+    .globalAvgPool,
+    .dense 2048 1000 .identity
+  ]
+\end{verbatim}
+
 \subsubsection*{ShuffleNet (\texttt{Bestiary/ShuffleNet.lean})}
 Uses \S~\ref{layer:shuffleBlock}. Variants: ShuffleNet 0.5$\times$ /
 1.0$\times$ / 2.0$\times$ at $g=3$, plus a tiny fixture.
+
+\begin{verbatim}
+def shuffleNet1x : NetSpec where
+  name   := "ShuffleNet 1.0× (g=3)"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 24 3 2 .same,                     -- stem
+    .maxPool 2 2,
+    .shuffleBlock 24  240 3 4,                  -- stage 2
+    .shuffleBlock 240 480 3 8,                  -- stage 3
+    .shuffleBlock 480 960 3 4,                  -- stage 4
+    .globalAvgPool,
+    .dense 960 1000 .identity
+  ]
+\end{verbatim}
 
 \subsubsection*{ShuffleNet v2 (\texttt{Bestiary/ShuffleNetV2.lean})}
 Uses \S~\ref{layer:shuffleV2Block}. The efficient-CNN paper that
@@ -2590,12 +2733,53 @@ Variants: 0.5$\times$ (1.37M, paper 1.4M), 1.0$\times$ (2.29M, paper
 2.3M), 1.5$\times$ (3.52M, paper 3.5M), 2.0$\times$ (7.41M,
 paper-exact), tiny fixture. All widths within 2\% of paper.
 
+\begin{verbatim}
+def shuffleV2_1_0 : NetSpec where
+  name   := "ShuffleNet v2 1.0×"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 24 3 2 .same,                     -- stem
+    .maxPool 2 2,
+    .shuffleV2Block  24 116 4,                  -- stage 2
+    .shuffleV2Block 116 232 8,                  -- stage 3
+    .shuffleV2Block 232 464 4,                  -- stage 4
+    .conv2d 464 1024 1 .same .relu,             -- 1×1 head conv
+    .globalAvgPool,
+    .dense 1024 1000 .identity
+  ]
+\end{verbatim}
+
 \subsubsection*{MobileViT (\texttt{Bestiary/MobileViT.lean})}
 Uses \S~\ref{layer:mobileVitBlock} plus existing
 \texttt{invertedResidual} for the MV2 stages. Hybrid mobile backbone:
 MobileNet V2 body with MobileViT blocks replacing some of the deeper
 inverted-residual stages. Variants: MobileViT-S (5.6M, paper-exact),
 XS (2.3M), XXS (1.3M), tiny fixture.
+
+\begin{verbatim}
+def mobileViTS : NetSpec where
+  name   := "MobileViT-S"
+  imageH := 256
+  imageW := 256
+  layers := [
+    .convBn 3 16 3 2 .same,                     -- stem
+    .invertedResidual 16 32 4 1 1,              -- stage 1: MV2
+    .invertedResidual 32 64 4 2 3,              -- stage 2: 3× MV2 + downsample
+    -- Stage 3: MV2 downsample + MobileViT (d=144, L=2)
+    .invertedResidual 64 96 4 2 1,
+    .mobileVitBlock 96 144 4 288 2,
+    -- Stage 4: MV2 downsample + MobileViT (d=192, L=4)
+    .invertedResidual 96 128 4 2 1,
+    .mobileVitBlock 128 192 4 384 4,
+    -- Stage 5: MV2 downsample + MobileViT (d=240, L=3)
+    .invertedResidual 128 160 4 2 1,
+    .mobileVitBlock 160 240 4 480 3,
+    .conv2d 160 640 1 .same .relu,              -- 1×1 expansion
+    .globalAvgPool,
+    .dense 640 1000 .identity
+  ]
+\end{verbatim}
 
 \subsubsection*{ConvNeXt (\texttt{Bestiary/ConvNeXt.lean})}
 Uses \S~\ref{layer:convNextStage} and \S~\ref{layer:convNextDownsample}.
@@ -2605,10 +2789,48 @@ downsamples. Proof-by-construction that CNNs didn't need to die in
 2021. Variants: T (28M), S (50M), B (89M), L (198M), tiny fixture ---
 all matching the paper within 1\%.
 
+\begin{verbatim}
+def convNextT : NetSpec where
+  name   := "ConvNeXt-T"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 96 4 4 .same,                     -- patchify stem: 4×4 stride 4
+    .convNextStage 96 3,                        -- stage 1: 3 blocks
+    .convNextDownsample 96 192,
+    .convNextStage 192 3,                       -- stage 2: 3 blocks
+    .convNextDownsample 192 384,
+    .convNextStage 384 9,                       -- stage 3: 9 blocks (the deep one)
+    .convNextDownsample 384 768,
+    .convNextStage 768 3,                       -- stage 4: 3 blocks
+    .globalAvgPool,
+    .dense 768 1000 .identity
+  ]
+\end{verbatim}
+
 \subsubsection*{Swin Transformer (\texttt{Bestiary/SwinT.lean})}
 Uses \S~\ref{layer:swinStage} and \S~\ref{layer:patchMerging}. Variants:
 Swin-T / -S / -B / tiny. Swin-T lands at 28M params matching the paper
 exactly.
+
+\begin{verbatim}
+def swinT : NetSpec where
+  name   := "Swin-T"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .patchEmbed 3 96 4 3136,                    -- 56×56 patches, dim 96
+    .swinStage 96 3 384 7 2,                    -- stage 1: 2 blocks
+    .patchMerging 96 192,                       -- 56×56×96 → 28×28×192
+    .swinStage 192 6 768 7 2,                   -- stage 2: 2 blocks
+    .patchMerging 192 384,                      -- 28×28×192 → 14×14×384
+    .swinStage 384 12 1536 7 6,                 -- stage 3: 6 blocks
+    .patchMerging 384 768,                      -- 14×14×384 → 7×7×768
+    .swinStage 768 24 3072 7 2,                 -- stage 4: 2 blocks
+    .globalAvgPool,
+    .dense 768 1000 .identity
+  ]
+\end{verbatim}
 
 \subsection{Object detection}
 
