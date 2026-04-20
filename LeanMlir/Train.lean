@@ -218,6 +218,14 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   IO.eprintln s!"  train: {nTrain} images ({dio.trainPixels} floats/image)"
 
   let params ← spec.heInitParams
+  -- If LEAN_MLIR_INIT_DUMP is set, save the raw init-params buffer to disk.
+  -- Used by phase 2 (jax/) to load bit-identical initial parameters for
+  -- step-level cross-compiler diffing. See traces/TRACE_FORMAT.md.
+  match (← IO.getEnv "LEAN_MLIR_INIT_DUMP") with
+  | some path => do
+      IO.FS.writeBinFile path params
+      IO.eprintln s!"  init-dump  : {path} ({params.size} bytes)"
+  | none => pure ()
   let adamM ← F32.const (F32.size params).toUSize 0.0
   let adamV ← F32.const (F32.size params).toUSize 0.0
   IO.eprintln s!"  {F32.size params} params + m + v ({(params.size + adamM.size + adamV.size) / 1024 / 1024} MB)"
@@ -282,9 +290,15 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let mut curLbl := trainLbl
   let mut globalStep : Nat := 0
 
+  -- LEAN_MLIR_NO_SHUFFLE=1 disables per-epoch shuffling — used for
+  -- phase-2/phase-3 cross-verification where both sides need to see
+  -- batches in the same order.
+  let skipShuffle := (← IO.getEnv "LEAN_MLIR_NO_SHUFFLE").isSome
+
   for epoch in [:epochs] do
-    let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPixels.toUSize (epoch + 42).toUSize
-    curImg := sImg; curLbl := sLbl
+    if !skipShuffle then
+      let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPixels.toUSize (epoch + 42).toUSize
+      curImg := sImg; curLbl := sLbl
 
     let lr : Float := if cfg.cosineDecay then
       if epoch < warmup then

@@ -696,6 +696,27 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
       code := code ++ emitLNInit "Final LN" dim
     | _ => pure ()
   code := code ++ "    return params\n\n"
+  -- Init-from-file path: load a flat float32 buffer produced by phase 3
+  -- (LEAN_MLIR_INIT_DUMP=...). Used for step-level cross-compiler diff.
+  -- Currently only supports dense layers (MNIST MLP). Falls back to JAX
+  -- random init for any other layer type.
+  code := code ++
+    "def init_params_from_file(path):\n" ++
+    "    buf = np.frombuffer(open(path, 'rb').read(), dtype=np.float32)\n" ++
+    "    idx = 0\n" ++
+    "    params = []\n"
+  for l in spec.layers do
+    match l with
+    | .dense fi fo _ =>
+      let nW := fi * fo
+      code := code ++
+        s!"    # dense {fi} → {fo}\n" ++
+        s!"    W = jnp.array(buf[idx:idx+{nW}].reshape({fi}, {fo}).T); idx += {nW}\n" ++
+        s!"    b = jnp.array(buf[idx:idx+{fo}]); idx += {fo}\n" ++
+        "    params.append((W, b))\n"
+    | _ =>
+      code := code ++ "    raise NotImplementedError('init_params_from_file: non-dense layer')\n"
+  code := code ++ "    return params\n\n"
   code
 
 private def emitForward (spec : NetSpec) : String := Id.run do
@@ -995,7 +1016,13 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "    print(\"lr=" ++ lr ++ "  batch_size=\" + str(BATCH_SIZE) + \" (\" + str(n_devices) + \" devices x \" + str(BATCH_SIZE // n_devices) + \")  epochs=\" + str(EPOCHS) + \"  params=" ++ nParams ++ "\")\n" ++
   "    print(\"backend=\" + str(jax.default_backend()) + \"  devices=\" + str(jax.devices()))\n" ++
   "    print(\"Starting training...\")\n\n" ++
-  "    params = init_params(random.PRNGKey(" ++ seed ++ "))\n" ++
+  -- Init: load phase-3 dump if LEAN_MLIR_INIT_LOAD set, else JAX random.
+  "    _init_load = os.environ.get('LEAN_MLIR_INIT_LOAD')\n" ++
+  "    if _init_load:\n" ++
+  "        print(f'Loading phase-3 init from {_init_load}')\n" ++
+  "        params = init_params_from_file(_init_load)\n" ++
+  "    else:\n" ++
+  "        params = init_params(random.PRNGKey(" ++ seed ++ "))\n" ++
   "    params = jax.device_put(params, replicated_sharding)\n" ++
   "    rng = np.random.RandomState(42)\n" ++
   let useAdam := cfg.useAdam
@@ -1058,9 +1085,15 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "        lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * epoch / EPOCHS)))\n")
   else
   "        lr = jnp.float32(LR)\n") ++
-  "        perm = rng.permutation(len(train_images))\n" ++
-  "        shuf_images = train_images[perm]\n" ++
-  "        shuf_labels = train_labels[perm]\n" ++
+  -- LEAN_MLIR_NO_SHUFFLE=1 disables per-epoch shuffling (matches phase 3
+  -- under the same env var). Used for cross-phase step-level diffing.
+  "        if os.environ.get('LEAN_MLIR_NO_SHUFFLE'):\n" ++
+  "            shuf_images = train_images\n" ++
+  "            shuf_labels = train_labels\n" ++
+  "        else:\n" ++
+  "            perm = rng.permutation(len(train_images))\n" ++
+  "            shuf_images = train_images[perm]\n" ++
+  "            shuf_labels = train_labels[perm]\n" ++
   let ic := match spec.layers.head? with
     | some (.conv2d ic ..) => ic | some (.convBn ic ..) => ic | _ => 3
   (if ¬preStage then  -- large images: random horizontal flip
