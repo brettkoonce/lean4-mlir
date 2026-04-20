@@ -17,7 +17,7 @@ private def emitImports : String :=
   "from jax import random, jit, value_and_grad\n" ++
   "from jax.sharding import Mesh, NamedSharding, PartitionSpec as P\n" ++
   "import numpy as np\n" ++
-  "import struct, os, time\n\n"
+  "import struct, os, time, json\n\n"
 
 private def emitDataLoading (ds : DatasetKind) : String :=
   match ds with
@@ -850,6 +850,11 @@ private def emitForward (spec : NetSpec) : String := Id.run do
       pidx := pidx + 1
       -- Extract CLS token
       code := code ++ "    x = x[:, 0]\n"
+    | _ =>
+      -- Bestiary-only primitives (mambaBlock, swinStage, unetDown/Up,
+      -- transformerDecoder, etc.) are not supported by phase-2 codegen;
+      -- they're bestiary-only and emit UNSUPPORTED on phase-3 too.
+      code := code ++ "    # UNSUPPORTED layer in phase-2 codegen\n"
   code := code ++ "    return x\n\n"
   code
 
@@ -1011,6 +1016,35 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "    # Data stays on CPU; batches transferred to GPU on the fly\n\n") ++
   let warmup := toString cfg.warmupEpochs
   let hasCosine := cfg.cosineDecay
+  "    # Trace emission (opt-in via LEAN_MLIR_TRACE_OUT env var). Matches\n" ++
+  "    # the phase-3 format so cross-phase diffs work with tests/diff_traces.py.\n" ++
+  "    _trace_path = os.environ.get('LEAN_MLIR_TRACE_OUT')\n" ++
+  "    _trace_f = open(_trace_path, 'w') if _trace_path else None\n" ++
+  "    if _trace_f:\n" ++
+  "        _hdr = {\n" ++
+  "            'kind': 'header', 'phase': 'phase2',\n" ++
+  "            'netspec_name': " ++ "\"" ++ spec.name ++ "\"" ++ ",\n" ++
+  "            'config': {\n" ++
+  "                'lr': " ++ lr ++ ",\n" ++
+  "                'batch_size': " ++ bs ++ ",\n" ++
+  "                'epochs': " ++ ep ++ ",\n" ++
+  "                'use_adam': " ++ (if cfg.useAdam then "True" else "False") ++ ",\n" ++
+  "                'weight_decay': " ++ toString cfg.weightDecay ++ ",\n" ++
+  "                'cosine': " ++ (if cfg.cosineDecay then "True" else "False") ++ ",\n" ++
+  "                'warmup_epochs': " ++ toString cfg.warmupEpochs ++ ",\n" ++
+  "                'augment': " ++ (if cfg.augment then "True" else "False") ++ ",\n" ++
+  "                'label_smoothing': " ++ toString cfg.labelSmoothing ++ ",\n" ++
+  "                'seed': " ++ seed ++ ",\n" ++
+  "            },\n" ++
+  "            'total_params': " ++ nParams ++ ",\n" ++
+  "            'dataset': " ++ (match ds with
+                                | .mnist => "'mnist'"
+                                | .cifar10 => "'cifar10'"
+                                | .imagenette => "'imagenette'") ++ ",\n" ++
+  "            'emitter_version': '1',\n" ++
+  "        }\n" ++
+  "        _trace_f.write(json.dumps(_hdr) + '\\n')\n" ++
+  "    _global_step = 0\n" ++
   "    t0 = time.time()\n" ++
   "    for epoch in range(EPOCHS):\n" ++
   (if hasCosine then
@@ -1053,7 +1087,13 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   else
   "            params, loss = train_step(params, x, y, lr)\n") ++
   "            epoch_loss += float(loss)\n" ++
-  "            n_batches += 1\n\n" ++
+  "            n_batches += 1\n" ++
+  "            _global_step += 1\n" ++
+  "            if _trace_f:\n" ++
+  "                _trace_f.write(json.dumps({\n" ++
+  "                    'kind': 'step', 'step': _global_step, 'epoch': epoch,\n" ++
+  "                    'loss': float(loss), 'lr': float(lr),\n" ++
+  "                }) + '\\n')\n\n" ++
   "        correct, total, test_loss = evaluate(params, test_images, test_labels)\n" ++
   "        accuracy = correct / total\n" ++
   "        elapsed = time.time() - t0\n" ++
@@ -1062,7 +1102,8 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "              \" (\" + str(round(accuracy, 4)) + \") Loss: \" + str(round(test_loss, 4)) +\n" ++
   "              \"  [\" + str(round(elapsed, 1)) + \"s]\")\n\n" ++
   "    print(\"\")\n" ++
-  "    print(\"Done. Total time: \" + str(round(time.time() - t0, 1)) + \"s\")\n"
+  "    print(\"Done. Total time: \" + str(round(time.time() - t0, 1)) + \"s\")\n" ++
+  "    if _trace_f: _trace_f.close()\n"
 
 private def emitShardingSetup : String :=
   "# ═══════════════════════════════════════════════════════════════════════\n" ++
