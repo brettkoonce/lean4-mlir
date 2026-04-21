@@ -141,15 +141,15 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "def sep_conv(x, dw, dw_g, dw_b, pw, pw_g, pw_b, stride=(1,1)):\n" ++
       "    \"\"\"Depthwise 3x3 + BN + ReLU6, then pointwise 1x1 + BN + ReLU6.\"\"\"\n" ++
       "    x = depthwise_conv(x, dw, stride=stride)\n" ++
-      "    mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "    var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * dw_g.reshape(1, -1, 1, 1) + dw_b.reshape(1, -1, 1, 1)\n" ++
       "    x = jnp.minimum(jax.nn.relu(x), 6.0)\n" ++
       "    x = jax.lax.conv_general_dilated(x, pw, (1,1), 'SAME',\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
-      "    mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "    var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * pw_g.reshape(1, -1, 1, 1) + pw_b.reshape(1, -1, 1, 1)\n" ++
       "    return jnp.minimum(jax.nn.relu(x), 6.0)\n\n"
@@ -163,16 +163,16 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "        # Expand\n" ++
       "        x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
       "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
-      "        mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "        var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "        mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "        var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "        x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "        x = jnp.minimum(jax.nn.relu(x), 6.0)\n" ++
       "        i += 1\n" ++
       "    # Depthwise\n" ++
       "    x = depthwise_conv(x, params[i][0], stride=(stride,stride))\n" ++
-      "    mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "    var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "    x = jnp.minimum(jax.nn.relu(x), 6.0)\n" ++
@@ -180,8 +180,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    # Project (linear, no activation)\n" ++
       "    x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
-      "    mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "    var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "    if use_skip:\n" ++
@@ -204,8 +204,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    if expand > 1:\n" ++
       "        x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
       "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
-      "        mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "        var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "        mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "        var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "        x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "        x = swish(x)\n" ++
@@ -215,8 +215,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'),\n" ++
       "          feature_group_count=x.shape[1])\n" ++
-      "    mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "    var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "    x = swish(x)\n" ++
@@ -238,8 +238,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    # Project (linear)\n" ++
       "    x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
-      "    mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "    var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "    if residual.shape == x.shape and stride == 1:\n" ++
@@ -253,8 +253,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    pad = ((ksize - 1) // 2, (ksize - 1) // 2)\n" ++
       "    x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
-      "    mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "    var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "    x = swish(x)\n" ++
@@ -277,8 +277,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    if expand > 1:\n" ++
       "        x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
       "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
-      "        mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "        var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "        mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "        var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "        x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "    if residual.shape == x.shape and stride == 1:\n" ++
@@ -295,8 +295,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    if expand_ch != ic:\n" ++
       "        x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
       "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
-      "        mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "        var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "        mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "        var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "        x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "        x = act(x)\n" ++
@@ -306,8 +306,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'),\n" ++
       "          feature_group_count=x.shape[1])\n" ++
-      "    mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "    var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "    x = act(x)\n" ++
@@ -328,8 +328,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    # Project (linear)\n" ++
       "    x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
-      "    mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "    var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "    if residual.shape == x.shape and stride == 1:\n" ++
@@ -347,8 +347,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "        x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
       "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'),\n" ++
       "              feature_group_count=x.shape[1])\n" ++
-      "        mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "        var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "        mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "        var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "        x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "        x = jax.nn.relu(x)\n" ++
@@ -364,8 +364,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "        x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
       "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'),\n" ++
       "              feature_group_count=x.shape[1])\n" ++
-      "        mean = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
-      "        var = jnp.var(x, axis=(2, 3), keepdims=True)\n" ++
+      "        mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
+      "        var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "        x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "        x = jax.nn.relu(x)\n" ++
@@ -438,6 +438,18 @@ private def emitConvBnInit (comment : String) (ic oc k : Nat) (zeroGamma : Bool 
 private def emitLNInit (comment : String) (dim : Nat) : String :=
   "    # " ++ comment ++ "\n" ++
   "    params.append((jnp.ones(" ++ toString dim ++ "), jnp.zeros(" ++ toString dim ++ ")))\n"
+
+-- Helper: emit init_params_from_file code for one convBn param group.
+-- Reads W[oc,ic,k,k] + γ[oc] + β[oc] from `buf` in the order
+-- LeanMlir.SpecHelpers.paramShapes emits them and appends a 3-tuple to
+-- `params`.
+private def emitConvBnFromBuf (comment : String) (ic oc k : Nat) : String :=
+  let nW := oc * ic * k * k
+  s!"    # {comment} (W, γ, β)\n" ++
+  s!"    W = jnp.array(buf[idx:idx+{nW}].reshape({oc}, {ic}, {k}, {k})); idx += {nW}\n" ++
+  s!"    gamma = jnp.array(buf[idx:idx+{oc}]); idx += {oc}\n" ++
+  s!"    beta = jnp.array(buf[idx:idx+{oc}]); idx += {oc}\n" ++
+  "    params.append((W, gamma, beta))\n"
 
 -- Helper: emit init code for dense layer (weight, bias) with Xavier uniform
 private def emitDenseInit (comment : String) (fanIn fanOut : Nat) : String :=
@@ -724,13 +736,30 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
         s!"    b = jnp.array(buf[idx:idx+{oc}]); idx += {oc}\n" ++
         "    params.append((W, b))\n"
     | .convBn ic oc k _ _ =>
-      let nW := oc * ic * k * k
-      code := code ++
-        s!"    # convBn {ic}→{oc}, {k}×{k} (W, γ, β)\n" ++
-        s!"    W = jnp.array(buf[idx:idx+{nW}].reshape({oc}, {ic}, {k}, {k})); idx += {nW}\n" ++
-        s!"    gamma = jnp.array(buf[idx:idx+{oc}]); idx += {oc}\n" ++
-        s!"    beta = jnp.array(buf[idx:idx+{oc}]); idx += {oc}\n" ++
-        "    params.append((W, gamma, beta))\n"
+      code := code ++ emitConvBnFromBuf s!"convBn {ic}→{oc}, {k}×{k}" ic oc k
+    | .residualBlock ic oc nBlocks firstStride =>
+      -- Order matches LeanMlir.SpecHelpers.paramShapes: for each sub-block,
+      -- (conv1 W,γ,β) + (conv2 W,γ,β), plus projection (W,γ,β) on sub-block 0
+      -- iff ic != oc or firstStride != 1.
+      let needsProj := !(ic == oc && firstStride == 1)
+      for bi in [:nBlocks] do
+        let blockIc := if bi == 0 then ic else oc
+        code := code ++ emitConvBnFromBuf s!"resBlock[{bi}] conv1 {blockIc}→{oc}" blockIc oc 3
+        code := code ++ emitConvBnFromBuf s!"resBlock[{bi}] conv2 {oc}→{oc}" oc oc 3
+        if bi == 0 && needsProj then
+          code := code ++ emitConvBnFromBuf s!"resBlock[{bi}] proj {ic}→{oc}" ic oc 1
+    | .invertedResidual ic oc expand _stride n =>
+      -- Order: for each sub-block, (expand 1×1 convBn if expand != 1)
+      -- + (depthwise 3×3 convBn, W[mid,1,3,3]) + (project 1×1 convBn).
+      for bi in [:n] do
+        let blockIc := if bi == 0 then ic else oc
+        let mid := blockIc * expand
+        if expand != 1 then
+          code := code ++ emitConvBnFromBuf s!"invRes[{bi}] expand {blockIc}→{mid}" blockIc mid 1
+        -- Depthwise weight shape is (mid, 1, 3, 3); emitConvBnFromBuf handles
+        -- it by setting ic=1 and oc=mid so the reshape comes out right.
+        code := code ++ emitConvBnFromBuf s!"invRes[{bi}] depthwise {mid}" 1 mid 3
+        code := code ++ emitConvBnFromBuf s!"invRes[{bi}] project {mid}→{oc}" mid oc 1
     | .maxPool _ _ | .globalAvgPool | .flatten =>
       pure ()  -- no params
     | _ =>

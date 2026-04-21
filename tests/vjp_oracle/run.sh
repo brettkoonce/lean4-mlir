@@ -34,7 +34,7 @@ fi
 if [ "$#" -gt 0 ]; then
   CASES=("$@")
 else
-  CASES=(dense dense-relu conv convbn conv-pool)
+  CASES=(dense dense-relu conv convbn conv-pool residual depthwise)
 fi
 FAIL=0
 
@@ -80,6 +80,7 @@ for name in "${CASES[@]}"; do
   case "$name" in
     conv-pool) tol=1e-3 ;;
     convbn)    tol=1e-4 ;;  # BN variance reductions ≲ 1e-4
+    depthwise) tol=1e-4 ;;  # 4 stacked BN passes (stem+expand+dw+proj)
     *)
       if [ "$CUDA_HOST" = "1" ]; then
         tol=2e-4

@@ -69,3 +69,9 @@ lean_exe «vjp-oracle-convbn» where
 
 lean_exe «vjp-oracle-conv-pool» where
   root := `MainVjpOracleConvPool
+
+lean_exe «vjp-oracle-residual» where
+  root := `MainVjpOracleResidual
+
+lean_exe «vjp-oracle-depthwise» where
+  root := `MainVjpOracleDepthwise

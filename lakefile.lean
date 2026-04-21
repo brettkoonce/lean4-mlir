@@ -134,6 +134,14 @@ lean_exe «vjp-oracle-conv-pool» where
   root := `MainVjpOracleConvPool
   moreLinkArgs := ireeLink
 
+lean_exe «vjp-oracle-residual» where
+  root := `MainVjpOracleResidual
+  moreLinkArgs := ireeLink
+
+lean_exe «vjp-oracle-depthwise» where
+  root := `MainVjpOracleDepthwise
+  moreLinkArgs := ireeLink
+
 -- ═══════════════════════════════════════════════════════════════════
 -- Tests + benchmarks
 -- ═══════════════════════════════════════════════════════════════════

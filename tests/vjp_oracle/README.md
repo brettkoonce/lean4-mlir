@@ -45,6 +45,8 @@ it up from the environment.
 | `conv` | `conv2d_has_vjp` + `flatten_has_vjp` | 1e-5 | 2.24e-07 |
 | `convbn` | `convBn_has_vjp` (conv + BN + ReLU) | 1e-4 | 2.18e-06 |
 | `conv-pool` | `maxPool_has_vjp` | 1e-3 | 1.18e-04 |
+| `residual` | `biPath_has_vjp` (additive fan-in VJP) | 1e-5 | 3.06e-07 |
+| `depthwise` | depthwise-conv VJP via `.invertedResidual` | 1e-4 | 1.11e-05 |
 
 Why tolerances differ:
 - Dense / relu / conv: step-2 Δ sits at or below 1 ULP. 1e-5 is comfortable headroom.
@@ -56,9 +58,11 @@ Why tolerances differ:
   routing gradient mass to different input positions. Mathematically
   valid either way but produces ~1e-4 step-2 Δ. 1e-3 keeps headroom.
 
-More to add: `residual`, `se_block`, `layernorm`, `attention` — each
-requires a matching `init_params_from_file` extension in
-`jax/Jax/Codegen.lean` for its param layout.
+More to add: `se_block`, `layernorm`, `attention`/ViT — each requires a
+matching `init_params_from_file` extension in `jax/Jax/Codegen.lean`
+for its param layout. Attention in particular needs `patchEmbed` (conv
++ CLS token + positional embedding) plus `transformerEncoder`
+(LN×2 + Q/K/V + output + MLP×2 per block).
 
 ## Adding a case
 
