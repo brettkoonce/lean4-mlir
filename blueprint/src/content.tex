@@ -767,7 +767,7 @@ scrutiny of a formal backward pass.
 Concretely, that means:
 
 \begin{itemize}
-\item \textbf{The architecture introductions in chapters 3-10 will
+\item \textbf{The architecture introductions in chapters 3-8 will
   feel redundant.} You can skim past the forward-pass descriptions
   --- they're first-book content, kept here so the chapters stay
   self-contained --- and head straight for the
@@ -780,16 +780,17 @@ Concretely, that means:
   gradients get formalized. If you only read one chapter thoroughly,
   make it this one.
 
-\item \textbf{Training recipe upgraded.} Book 1's codegen trained
-  with plain SGD at learning rate 0.002 and no other tricks. This
-  book adopts the modern recipe --- Adam, cosine decay, linear
-  warmup, weight decay, label smoothing --- which is how the
-  accuracy numbers in this book's results table were achieved.
-  The full recipe and each component's contribution are detailed
-  in Chapter~\ref{chap:residual} (ResNet), where the ablation
-  comparisons live.
+\item \textbf{Training recipe upgraded.} The first book's codegen
+  trained with SGD (momentum 0.9, learning rate 0.002) and no other
+  tricks --- one recipe held constant across architectures for
+  consistency. This book adopts the modern recipe --- Adam, cosine
+  decay, linear warmup, weight decay, label smoothing --- which is
+  how the accuracy numbers in this book's results table were
+  achieved. The full recipe and each component's contribution are
+  detailed in Chapter~\ref{chap:residual} (ResNet), where the
+  ablation comparisons live.
 
-\item \textbf{The codegen is new.} Book 1's Swift-for-TensorFlow
+\item \textbf{The codegen is new.} The first book's Swift-for-TensorFlow
   pipeline is replaced with Lean 4 \(\to\) StableHLO MLIR \(\to\) IREE
   \(\to\) GPU. Mostly doesn't affect the math; it changes where the
   gradients are computed (at codegen time in Lean, not at runtime
