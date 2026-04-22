@@ -134,11 +134,11 @@ Tested on 2× RX 7900 XTX (gfx1100) with ROCm 7.2.0:
 - **Conv JIT segfault** — `jax.jit(value_and_grad(f))` segfaults when `f`
   combines conv + reshape (flatten) + matmul in the backward pass. Affects all
   conv models. Workaround: `JAX_DISABLE_JIT=1` (eager mode, ~15× slower).
-  See [`../bug_report.md`](../bug_report.md) for minimal reproducer and details.
+  See [`../upstream-issues/2026-04-jax-jit-conv-backward-segv/`](../upstream-issues/2026-04-jax-jit-conv-backward-segv/) for minimal reproducer and details.
   Reported upstream: [ROCm/jax#745](https://github.com/ROCm/jax/issues/745).
 - **Multi-GPU sharding hangs** — `jax.sharding.Mesh` causes XLA compilation
   to hang indefinitely on gfx1100, even for trivial MLP models. Workaround:
-  `ROCR_VISIBLE_DEVICES=0`. See [`../bug_report_sharding.md`](../bug_report_sharding.md) for reproducer.
+  `ROCR_VISIBLE_DEVICES=0`. See [`../upstream-issues/2026-04-jax-rocm-multigpu-mesh-hang/`](../upstream-issues/2026-04-jax-rocm-multigpu-mesh-hang/) for reproducer.
 - **`jax[rocm]` pip extra broken** — JAX 0.9.2 defines `rocm7-local` but
   requires `jax-rocm7-plugin==0.9.2.*` which doesn't exist yet. Install
   the 0.9.1.post3 packages manually.

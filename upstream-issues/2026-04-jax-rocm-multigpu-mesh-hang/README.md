@@ -59,7 +59,7 @@ val, g = jit(value_and_grad(loss_fn))(params, x, y)
 | MLP JIT, 2 GPUs visible | 2 | none | **OK** |
 | MLP JIT, 2 GPUs + Mesh | 2 | `P('batch')` | **HANGS** |
 | MLP eager, 2 GPUs + Mesh | 2 | `P('batch')` | **OK** (with `JAX_DISABLE_JIT=1`) |
-| CNN JIT, 1 GPU | 1 | none | SEGFAULT (separate bug, see [conv backward bug report](bug_report.md)) |
+| CNN JIT, 1 GPU | 1 | none | SEGFAULT (separate bug, see [conv backward bug report](../2026-04-jax-jit-conv-backward-segv/README.md)) |
 
 The model complexity is irrelevant — even a 2-layer MLP with 675 parameters hangs when sharded across 2 devices.
 
@@ -81,7 +81,7 @@ The model complexity is irrelevant — even a 2-layer MLP with 675 parameters ha
 
 This was discovered while running Lean 4 → JAX generated training scripts (https://github.com/brettkoonce/lean4-mlir). The codegen produces multi-GPU data-parallel training by default using `Mesh` + `NamedSharding`. All models (MLP, CNN, ResNet, etc.) hang on gfx1100 when using this pattern.
 
-Separately, single-GPU CNN models also crash with a JIT segfault during conv backward pass compilation — that is a different bug tracked in our [conv backward report](bug_report.md).
+Separately, single-GPU CNN models also crash with a JIT segfault during conv backward pass compilation — that is a different bug tracked in our [conv backward report](../2026-04-jax-jit-conv-backward-segv/README.md).
 
 ## Where to report
 
