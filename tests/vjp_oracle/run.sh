@@ -80,7 +80,16 @@ for name in "${CASES[@]}"; do
   case "$name" in
     conv-pool) tol=1e-3 ;;
     convbn)    tol=1e-4 ;;  # BN variance reductions ≲ 1e-4
-    depthwise) tol=1e-4 ;;  # 4 stacked BN passes (stem+expand+dw+proj)
+    depthwise)
+      # 4 stacked BN passes (stem+expand+dw+proj). On CUDA, cuDNN's
+      # depthwise conv kernel lands step-2 Δ around 5e-4 — same 5×
+      # pattern as dense/conv. Loosen to 7e-4 on NVIDIA.
+      if [ "$CUDA_HOST" = "1" ]; then
+        tol=7e-4
+      else
+        tol=1e-4
+      fi
+      ;;
     *)
       if [ "$CUDA_HOST" = "1" ]; then
         tol=2e-4
