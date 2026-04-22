@@ -612,40 +612,40 @@ reuse. Running total: 8 axioms, 20 theorems.
 
 \textbf{Chapter 3 (MLP)} adds 4 axioms (dense Jacobian in both
 arguments, ReLU diagonal, softmax cross-entropy gradient) and 4
-theorems stitching them together via the chain rule. Running total:
-12 / 24.
+theorems stitching them together via the chain rule. Running
+total: 12 axioms, 24 theorems.
 
 \textbf{Chapter 4 (CNN)} adds 6 axioms for the \texttt{conv2d} bundle
 (weight, bias, and input Jacobians in their 2D and 3D forms) and 0
 new theorems --- the gradient flow for conv is composition-only, so
-nothing new needs stating. Running total: 18 / 24.
+nothing new needs stating. Running total: 18 axioms, 24 theorems.
 
 \textbf{Chapter 5 (BN)} adds 3 axioms for the spatial-reduction trio
 (mean Jacobian, variance Jacobian, BN affine) and 3 theorems that
 stack them into the composed \(\mathtt{bn\_has\_vjp}\) that phase-3's
-codegen emits. Running total: 21 / 27.
+codegen emits. Running total: 21 axioms, 27 theorems.
 
 \textbf{Chapter 6 (Residual)} adds zero new axioms and just 1 theorem
 (the \(\mathtt{biPath}\) additive-fan-in VJP, built entirely from
 chapter 2's kit). That's the scaling claim in miniature --- new
-architecture, no new calculus. Running total: 21 / 28.
+architecture, no new calculus. Running total: 21 axioms, 28 theorems.
 
 \textbf{Chapter 7 (Depthwise)} adds 4 axioms (depthwise conv2d in its
 2D and 3D forms, weight and bias Jacobians each) and zero new
 theorems. The stacking is standard convolutional composition; the
-bespoke content is the depthwise primitive itself. Running total:
-25 / 28.
+bespoke content is the depthwise primitive itself. Running
+total: 25 axioms, 28 theorems.
 
 \textbf{Chapter 8 (SE)} adds zero axioms and 1 theorem
 (\(\mathtt{elemwiseProduct\_has\_vjp}\)). Squeeze-and-excitation is
 global-avg-pool plus two 1\(\times\)1 convs plus the elementwise
 product; every piece except the product was already proved elsewhere.
-Running total: 25 / 29.
+Running total: 25 axioms, 29 theorems.
 
 \textbf{Chapter 9 (LN + GELU)} adds 3 axioms (GELU Jacobian and the
 two LayerNorm pieces) and 2 theorems packaging them up as
 \(\mathtt{gelu\_has\_vjp}\) and \(\mathtt{layerNorm\_has\_vjp}\).
-Running total: 28 / 31.
+Running total: 28 axioms, 31 theorems.
 
 \textbf{Chapter 10 (Attention)} adds 2 axioms (softmax rank-1 Jacobian
 plus the bundled multi-head-self-attention existence claim) and 14
@@ -655,8 +655,8 @@ transpose, rowwise softmax, left/right-constant matmul, scalar
 scaling --- finally gets called, and the transformer block factors
 through every one of them. Those matrix-composition theorems weren't
 proved on demand when attention needed them; they were sitting in
-Tensor.lean from the start, waiting for a caller. Running total:
-30 / 45.
+Tensor.lean from the start, waiting for a caller. Running
+total: 30 axioms, 45 theorems.
 
 Two observations worth pulling out. First, \textbf{chapters 6 and 8
 add zero axioms}: residual connections and squeeze-and-excitation
