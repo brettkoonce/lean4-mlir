@@ -41,15 +41,10 @@ The MLIR is identical — only the compile target changes:
 lake build test-resnet-residual
 ```
 
-But before running, edit `TestResnetResidual.lean` to change the compile flags:
-
-```
--- CUDA (original):
-"--iree-hal-target-backends=cuda", "--iree-cuda-target=sm_86"
-
--- ROCm (AMD):
-"--iree-hal-target-backends=rocm", "--iree-rocm-target-chip=gfx1100"
-```
+The backend is now picked via the `IREE_BACKEND` env var — no source edits
+needed. Set `IREE_BACKEND=rocm` (default is `cuda`) and everything
+downstream (iree-compile flags, target-chip selection, HAL device setup)
+routes through that single env var. See `LeanMlir/Train.lean:44`.
 
 Or compile manually:
 ```bash
@@ -174,32 +169,27 @@ pip install Pillow numpy
 python3 preprocess_imagenette.py data/imagenette/imagenette2-320 data/imagenette
 ```
 
-## Step 7: Update compile flags in training binary
-
-In `MainResnetTrain.lean` and `TestResnetResidual.lean`, change:
-```
-"--iree-hal-target-backends=cuda", "--iree-cuda-target=sm_86"
-```
-to:
-```
-"--iree-hal-target-backends=rocm", "--iree-rocm-target-chip=gfx1100"
-```
-
-## Step 8: Build and run
+## Step 7: Build and run
 
 ```bash
-# Build everything
+# Build the trainer
 lake build resnet34-train
 
-# Delete old vmfb (forces recompile for ROCm)
-rm -f .lake/build/resnet34_train_step.vmfb
-
-# Generate + compile MLIR for ROCm
-lake build test-resnet-residual && .lake/build/bin/test-resnet-residual
-
-# Train
-.lake/build/bin/resnet34-train data/imagenette
+# Train. IREE_BACKEND=rocm tells iree-compile to target ROCm/gfx1100;
+# HIP_VISIBLE_DEVICES=0 pins to a single GPU (multi-GPU JAX-ROCm has a
+# known hang on gfx1100 — see upstream-issues/).
+IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
+  .lake/build/bin/resnet34-train data/imagenette
 ```
+
+Equivalent via the shell wrapper, which sets the env vars for you:
+```bash
+./run.sh resnet34 0 rocm
+```
+
+The first run compiles the vmfbs (~10-15 min for ResNet-sized models).
+Subsequent runs reuse the cached vmfb unless `.lake/build/` is cleared
+or the MLIR hash changes.
 
 ## Expected performance
 
