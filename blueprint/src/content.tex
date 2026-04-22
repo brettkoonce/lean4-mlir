@@ -596,43 +596,79 @@ with the chain, fan-in, and product rules from this chapter.
 
 One pattern, scaled up.
 
-\subsection*{Axiom budget per chapter}
+\subsection*{Axiom and theorem budget per chapter}
 
-If you're planning how much of the book to read, here's the axiom
-cost per architecture. Every later chapter adds zero or a few bundled
-primitives; the 8 structural axioms from this chapter get reused
-forever.
+If you're planning how much of the book to read, here's the per-chapter
+cost in both directions: new axioms (unproved starting facts we take
+as given) and new theorems (proven compositions Lean's typechecker
+verified). The totals across the book are 30 axioms and 45 theorems,
+with zero \texttt{sorry}s.
 
-\begin{center}
-\begin{tabular}{l r r l}
-\hline
-Chapter & New axioms & Cumulative & Architectures unlocked \\
-\hline
-2 (this chapter)       &   8  &  8 / 30 & foundation \\
-3 (MLP)                &   4  & 12 / 30 & MLP \\
-4 (CNN)                &   6  & 18 / 30 & $+$ CNN \\
-5 (BN)                 &   3  & 21 / 30 & $+$ BN-nets \\
-6 (Residual)           &   0  & 21 / 30 & $+$ ResNet-34 \\
-7 (Depthwise)          &   4  & 25 / 30 & $+$ MobileNet V2 \\
-8 (SE)                 &   0  & 25 / 30 & $+$ EfficientNet \\
-9 (LN + GELU)          &   3  & 28 / 30 & $+$ transformer infra \\
-10 (Attention)         &   2  & 30 / 30 & $+$ ViT \\
-\hline
-\end{tabular}
-\end{center}
+\textbf{This chapter (2, Tensor calculus)} does the structural heavy
+lifting: 8 axioms --- the chain rule, additive and multiplicative
+fan-in, identity, reindexing, and three structural supports --- and
+20 theorems that compose them into the VJPs every later chapter will
+reuse. Running total: 8 axioms, 20 theorems.
 
-Two things worth noticing.
+\textbf{Chapter 3 (MLP)} adds 4 axioms (dense Jacobian in both
+arguments, ReLU diagonal, softmax cross-entropy gradient) and 4
+theorems stitching them together via the chain rule. Running total:
+12 / 24.
 
-\textbf{Chapters 6 and 8 add zero axioms.} Residual connections and
-squeeze-and-excitation are \emph{pure composition theorems} --- every
-proof there is built from axioms that already exist. That's exactly
-the scaling claim the book is making: new architectures, no new
-calculus.
+\textbf{Chapter 4 (CNN)} adds 6 axioms for the \texttt{conv2d} bundle
+(weight, bias, and input Jacobians in their 2D and 3D forms) and 0
+new theorems --- the gradient flow for conv is composition-only, so
+nothing new needs stating. Running total: 18 / 24.
 
-\textbf{This chapter's 8 axioms get reused forever.} $\pdiv\_comp$,
-$\pdiv\_add$, $\pdiv\_mul$, and the five structural supports show up
-in every later chapter's proofs. Learn them once, done with them;
-everything after piles layer-specific primitives on top.
+\textbf{Chapter 5 (BN)} adds 3 axioms for the spatial-reduction trio
+(mean Jacobian, variance Jacobian, BN affine) and 3 theorems that
+stack them into the composed \(\mathtt{bn\_has\_vjp}\) that phase-3's
+codegen emits. Running total: 21 / 27.
+
+\textbf{Chapter 6 (Residual)} adds zero new axioms and just 1 theorem
+(the \(\mathtt{biPath}\) additive-fan-in VJP, built entirely from
+chapter 2's kit). That's the scaling claim in miniature --- new
+architecture, no new calculus. Running total: 21 / 28.
+
+\textbf{Chapter 7 (Depthwise)} adds 4 axioms (depthwise conv2d in its
+2D and 3D forms, weight and bias Jacobians each) and zero new
+theorems. The stacking is standard convolutional composition; the
+bespoke content is the depthwise primitive itself. Running total:
+25 / 28.
+
+\textbf{Chapter 8 (SE)} adds zero axioms and 1 theorem
+(\(\mathtt{elemwiseProduct\_has\_vjp}\)). Squeeze-and-excitation is
+global-avg-pool plus two 1\(\times\)1 convs plus the elementwise
+product; every piece except the product was already proved elsewhere.
+Running total: 25 / 29.
+
+\textbf{Chapter 9 (LN + GELU)} adds 3 axioms (GELU Jacobian and the
+two LayerNorm pieces) and 2 theorems packaging them up as
+\(\mathtt{gelu\_has\_vjp}\) and \(\mathtt{layerNorm\_has\_vjp}\).
+Running total: 28 / 31.
+
+\textbf{Chapter 10 (Attention)} adds 2 axioms (softmax rank-1 Jacobian
+plus the bundled multi-head-self-attention existence claim) and 14
+theorems. The theorem count spikes here because the whole
+2D-tensor-composition kit --- matrix chain rule, matrix fan-in,
+transpose, rowwise softmax, left/right-constant matmul, scalar
+scaling --- finally gets called, and the transformer block factors
+through every one of them. Those matrix-composition theorems weren't
+proved on demand when attention needed them; they were sitting in
+Tensor.lean from the start, waiting for a caller. Running total:
+30 / 45.
+
+Two observations worth pulling out. First, \textbf{chapters 6 and 8
+add zero axioms}: residual connections and squeeze-and-excitation
+are pure composition over primitives that already exist. That's the
+scaling claim the book is making --- new architectures, no new
+calculus --- in its cleanest form. Second, \textbf{chapter 10 owes
+most of its 14 theorems to chapter 2's matrix-composition kit.} The
+theorems weren't proven on demand when attention needed them; they
+were waiting in \texttt{Tensor.lean} from the start. That's the
+sequencing the book recommends: invest in the general machinery
+early, and the per-architecture cost stays bounded at 2--4 axioms
+plus a small bespoke theorem count for every subsequent chapter.
 
 \chapter{MLP: Dense Layer}
 \label{chap:mlp}
