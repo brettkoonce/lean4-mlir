@@ -157,43 +157,43 @@ lean_exe «vjp-oracle-mbconv» where
 -- ═══════════════════════════════════════════════════════════════════
 
 lean_exe «test-forward» where
-  root := `TestForward
+  root := `tests.TestForward
   moreLinkArgs := ireeLink
 
 lean_exe «test-iree» where
-  root := `TestIreeRuntime
+  root := `tests.TestIreeRuntime
   moreLinkArgs := ireeLink
 
 lean_exe «test-train» where
-  root := `TestTrainStep
+  root := `tests.TestTrainStep
   moreLinkArgs := ireeLink
 
 lean_exe «test-iree-load» where
-  root := `TestIreeLoad
+  root := `tests.TestIreeLoad
   moreLinkArgs := ireeLink
 
 lean_exe «test-f32» where
-  root := `TestF32
+  root := `tests.TestF32
   moreLinkArgs := ireeLink
 
 lean_exe «bench-resnet» where
-  root := `BenchResnet
+  root := `tests.BenchResnet
   moreLinkArgs := ireeLink
 
 lean_exe «test-resnet-fwd» where
-  root := `TestResnetForward
+  root := `tests.TestResnetForward
 
 lean_exe «test-resnet-residual» where
-  root := `TestResnetResidual
+  root := `tests.TestResnetResidual
 
 lean_exe «test-spec-helpers» where
-  root := `TestSpecHelpers
+  root := `tests.TestSpecHelpers
 
 lean_exe «test-smoke-trainers» where
-  root := `TestSmokeTrainers
+  root := `tests.TestSmokeTrainers
 
 lean_exe «test-codegen-ts» where
-  root := `TestCodegenTrainStep
+  root := `tests.TestCodegenTrainStep
 
 -- ════════════════════════════════════════════════════════════════
 -- Bestiary: architecture-only NetSpec examples (print, no training)
