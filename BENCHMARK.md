@@ -22,7 +22,7 @@ Delete any existing `.vmfb` files first so compile is fresh.
 
 ```bash
 rm -f .lake/build/train_step.vmfb
-time IREE_BACKEND=rocm .lake/build/bin/mnist-mlp-train-f32
+time IREE_BACKEND=rocm .lake/build/bin/mnist-mlp-train
 ```
 
 Report: epoch time (ms), final loss after 12 epochs.
@@ -31,7 +31,7 @@ Report: epoch time (ms), final loss after 12 epochs.
 
 ```bash
 rm -f .lake/build/cifar_cnn.vmfb .lake/build/cifar_train_step.vmfb
-time IREE_BACKEND=rocm .lake/build/bin/cifar-cnn-train-f32
+time IREE_BACKEND=rocm .lake/build/bin/cifar-cnn-train
 ```
 
 Report: epoch time (ms), final loss after 25 epochs.
@@ -72,7 +72,7 @@ Report: ms/step, epoch time, loss curve.
 |---|---|---|---|
 | MNIST MLP (12 ep) | ~90s | ~192ms | 0.006 |
 
-Usage: `IREE_BACKEND=llvm-cpu IREE_DEVICE=local-task .lake/build/bin/mnist-mlp-train-f32`
+Usage: `IREE_BACKEND=llvm-cpu IREE_DEVICE=local-task .lake/build/bin/mnist-mlp-train`
 
 ## Notes
 

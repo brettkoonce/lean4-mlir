@@ -300,10 +300,10 @@ lean4-mlir/
 │   ├── MainEfficientNetV2Train.lean
 │   ├── MainVitTrain.lean
 │   ├── MainVggTrain.lean
-│   ├── MainMlpTrainF32.lean
+│   ├── MainMnistMlpTrain.lean
 │   ├── MainMnistCnnTrain.lean
 │   ├── MainCifarCnnBnTrain.lean
-│   ├── MainCifarTrainF32.lean
+│   ├── MainCifarCnnTrain.lean
 │   └── MainAblation.lean
 │
 ├── tests/                  -- unit tests + smoke tests + differential tests

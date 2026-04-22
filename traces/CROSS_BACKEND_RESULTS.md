@@ -5,7 +5,7 @@ the training config, pin the initial parameters (via `heInit` → `init.bin`
 handshake), disable batch shuffling, emit a JSON-Lines trace of every
 step, then diff.
 
-- **MLP** (`MainMlpTrainF32.lean` ↔ `jax/MainMlp.lean`) — pure dense,
+- **MLP** (`MainMnistMlpTrain.lean` ↔ `jax/MainMlp.lean`) — pure dense,
   670k params. Sections below up to "How to reproduce".
 - **CNN** (`MainMnistCnnTrain.lean` ↔ `jax/MainCnn.lean`) — 4× conv-BN +
   2× dense, 1.67M params, with instance-order-preserving batch norm.
@@ -77,7 +77,7 @@ Run on any machine with both phases built (Lean+IREE+JAX-on-CUDA-or-ROCm-or-CPU)
 LEAN_MLIR_INIT_DUMP=traces/mnist_mlp.init.bin \
 LEAN_MLIR_NO_SHUFFLE=1 \
 LEAN_MLIR_TRACE_OUT=traces/mnist_mlp.phase3-noshuf-<machine>.jsonl \
-  lake exe mnist-mlp-train-f32 data
+  lake exe mnist-mlp-train data
 
 # Phase 2 with init load + no shuffle:
 LEAN_MLIR_INIT_LOAD=traces/mnist_mlp.init.bin \

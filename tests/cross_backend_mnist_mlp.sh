@@ -27,13 +27,13 @@ mkdir -p $TRACES_DIR
 echo "▶ Phase 3 training, llvm-cpu backend"
 IREE_BACKEND=llvm-cpu \
 LEAN_MLIR_TRACE_OUT="$CPU_TRACE" \
-  lake exe mnist-mlp-train-f32 data/mnist
+  lake exe mnist-mlp-train data/mnist
 
 echo
 echo "▶ Phase 3 training, rocm backend"
 IREE_BACKEND=rocm IREE_CHIP="${IREE_CHIP:-gfx1100}" \
 LEAN_MLIR_TRACE_OUT="$ROCM_TRACE" \
-  lake exe mnist-mlp-train-f32 data/mnist
+  lake exe mnist-mlp-train data/mnist
 
 echo
 echo "▶ Comparing traces"

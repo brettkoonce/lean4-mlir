@@ -1,8 +1,10 @@
 import LeanMlir
 
 /-! MNIST MLP — phase-3 unified training pipeline.
-    Pure dense network, no convolutions, ~670K params. The "f32" in the
-    filename is historical (it predates everything being f32). -/
+    Pure dense network, no convolutions, ~670K params. Reaches ~98.4%
+    val accuracy after 12 epochs. Also the anchor for the MLP branch
+    of the cross-backend trace diff (see traces/CROSS_BACKEND_RESULTS.md)
+    and the smallest non-trivial VJP-oracle cases in tests/vjp_oracle/. -/
 
 def mnistMlp : NetSpec where
   name := "MNIST-MLP"

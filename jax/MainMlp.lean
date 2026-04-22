@@ -13,7 +13,7 @@ def mnistMlp : NetSpec where
     .dense 512  10 .identity
   ]
 
--- Matches phase 3 MainMlpTrainF32.lean config so the two phases' traces
+-- Matches phase 3 MainMnistMlpTrain.lean config so the two phases' traces
 -- can be diffed against each other via tests/diff_traces.py.
 def mnistConfig : TrainConfig where
   learningRate := 0.001

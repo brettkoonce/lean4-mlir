@@ -102,12 +102,12 @@ lean_exe «cifar-bn-train» where
   root := `MainCifarCnnBnTrain
   moreLinkArgs := ireeLink
 
-lean_exe «mnist-mlp-train-f32» where
-  root := `MainMlpTrainF32
+lean_exe «mnist-mlp-train» where
+  root := `MainMnistMlpTrain
   moreLinkArgs := ireeLink
 
-lean_exe «cifar-cnn-train-f32» where
-  root := `MainCifarTrainF32
+lean_exe «cifar-cnn-train» where
+  root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink
 
 -- ═══════════════════════════════════════════════════════════════════

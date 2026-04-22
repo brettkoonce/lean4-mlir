@@ -1,8 +1,16 @@
 import LeanMlir
 
 /-! CIFAR-10 plain CNN (no batch norm) — phase-3 unified pipeline.
-    32×32 RGB, 10 classes. The "F32" in the filename is historical
-    (predates the all-float32 pipeline). -/
+    32×32 RGB, 10 classes.
+
+    **Pedagogical trainer — read this if it's your first run.** This
+    is the CIFAR CNN *before* batch norm, kept around as a pair with
+    `MainCifarCnnBnTrain.lean` to show what BN buys you. Expect
+    slower convergence, more sensitivity to learning rate, and a
+    lower final accuracy ceiling (~75-80% val) vs the BN variant
+    (~85%+). If your goal is "best CIFAR result," run
+    `cifar-bn-train` instead; this file exists so the book chapter
+    on BN can demonstrate the improvement side by side. -/
 
 def cifarCnn : NetSpec where
   name := "CIFAR-10-CNN"

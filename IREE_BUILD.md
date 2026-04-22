@@ -217,8 +217,8 @@ calls `iree-compile`, and starts training. Just build + run:
 
 ```bash
 ./download_mnist.sh                        # → data/*-ubyte
-lake build mnist-mlp-train-f32             # links -liree_ffi from ./ffi
-.lake/build/bin/mnist-mlp-train-f32 data   # generates vmfbs + trains
+lake build mnist-mlp-train             # links -liree_ffi from ./ffi
+.lake/build/bin/mnist-mlp-train data   # generates vmfbs + trains
 ```
 
 Expected output: 12 epochs, ~14-16 s/epoch on a modest GPU (or ~90
@@ -243,7 +243,7 @@ from the repo root (not from `.lake/build/bin/`).
 **Note:** the historical `mnist-mlp-train` (without the `-f32` suffix)
 in `historical/MainMlpTrain.lean` is a pre-codegen artifact that still
 uses hand-authored MLIR and a custom FFI. It's kept for reference but
-is not the recommended path. Use `mnist-mlp-train-f32` instead — it
+is not the recommended path. Use `mnist-mlp-train` instead — it
 uses the same unified `spec.train` loop as every other architecture.
 
 ## Common failure modes
