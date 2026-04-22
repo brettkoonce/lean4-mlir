@@ -34,7 +34,8 @@ fi
 if [ "$#" -gt 0 ]; then
   CASES=("$@")
 else
-  CASES=(dense dense-relu conv convbn conv-pool residual depthwise attention mbconv)
+  CASES=(dense dense-relu conv convbn conv-pool residual depthwise attention mbconv \
+         global-avg-pool bottleneck mbconv-v3 fused-mbconv uib)
 fi
 FAIL=0
 
@@ -80,6 +81,12 @@ for name in "${CASES[@]}"; do
   case "$name" in
     conv-pool) tol=1e-3 ;;
     convbn)    tol=1e-4 ;;  # BN variance reductions ≲ 1e-4
+    # Stacked-BN blocks: each convBn pass contributes ≲ 1e-6 of rounding
+    # noise; a 3-5 convBn composition lands at 1e-5 to 1e-4 step-2 Δ.
+    bottleneck)   tol=1e-4 ;;  # 3 convBn per block (reduce/3x3/expand)
+    mbconv-v3)    tol=1e-4 ;;  # 4 convBn (expand/dw/project) + SE + h-swish
+    fused-mbconv) tol=1e-4 ;;  # stem + fused k×k convBn + project
+    uib)          tol=1e-4 ;;  # preDW + expand + postDW + project (4 convBn)
     depthwise)
       # 4 stacked BN passes (stem+expand+dw+proj). On CUDA, cuDNN's
       # depthwise conv kernel lands step-2 Δ around 5e-4 — same 5×

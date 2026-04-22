@@ -299,6 +299,68 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
       parts := parts.push Wp |>.push gp |>.push bp
       s := sp
     return (parts, s)
+  | .mbConvV3 ic oc expandCh kSize _stride useSE _useHSwish =>
+    let mid := expandCh
+    let seMid := Nat.max 1 (mid / 4)
+    let mut parts : Array ByteArray := #[]
+    let mut s := seed
+    if expandCh != ic then
+      let (W, g, b, s') ← heConvBn mid ic 1 s
+      parts := parts.push W |>.push g |>.push b
+      s := s'
+    let (Wdw, gdw, bdw, s') ← heConvBn mid 1 kSize s
+    parts := parts.push Wdw |>.push gdw |>.push bdw
+    s := s'
+    if useSE then
+      let (Wsq, bsq, s'') ← heConvB seMid mid 1 s
+      parts := parts.push Wsq |>.push bsq
+      s := s''
+      let (Wex, bex, s''') ← heConvB mid seMid 1 s
+      parts := parts.push Wex |>.push bex
+      s := s'''
+    let (Wp, gp, bp, sp) ← heConvBn oc mid 1 s
+    parts := parts.push Wp |>.push gp |>.push bp
+    return (parts, sp)
+  | .fusedMbConv ic oc expand kSize _stride n useSE =>
+    let mut parts : Array ByteArray := #[]
+    let mut s := seed
+    for bi in [:n] do
+      let blockIc := if bi == 0 then ic else oc
+      let mid := if expand == 1 then oc else blockIc * expand
+      let seMid := Nat.max 1 (mid / 4)
+      let (Wf, gf, bf, s') ← heConvBn mid blockIc kSize s
+      parts := parts.push Wf |>.push gf |>.push bf
+      s := s'
+      if useSE then
+        let (Wsq, bsq, s'') ← heConvB seMid mid 1 s
+        parts := parts.push Wsq |>.push bsq
+        s := s''
+        let (Wex, bex, s''') ← heConvB mid seMid 1 s
+        parts := parts.push Wex |>.push bex
+        s := s'''
+      if expand != 1 then
+        let (Wp, gp, bp, sp) ← heConvBn oc mid 1 s
+        parts := parts.push Wp |>.push gp |>.push bp
+        s := sp
+    return (parts, s)
+  | .uib ic oc expand _stride preDWk postDWk =>
+    let mid := ic * expand
+    let mut parts : Array ByteArray := #[]
+    let mut s := seed
+    if preDWk > 0 then
+      let (Wp, gp, bp, s') ← heConvBn ic 1 preDWk s
+      parts := parts.push Wp |>.push gp |>.push bp
+      s := s'
+    let (We, ge, be, s2) ← heConvBn mid ic 1 s
+    parts := parts.push We |>.push ge |>.push be
+    s := s2
+    if postDWk > 0 then
+      let (Wp2, gp2, bp2, s3) ← heConvBn mid 1 postDWk s
+      parts := parts.push Wp2 |>.push gp2 |>.push bp2
+      s := s3
+    let (Wj, gj, bj, s4) ← heConvBn oc mid 1 s
+    parts := parts.push Wj |>.push gj |>.push bj
+    return (parts, s4)
   | .patchEmbed ic dim p nP =>
     -- Conv W, bias=0, cls=0, pos=He init (fan-in is nP+1).
     let W ← F32.heInit seed (dim*ic*p*p).toUSize (Float.sqrt (2.0 / (ic*p*p).toFloat))

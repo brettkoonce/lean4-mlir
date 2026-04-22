@@ -83,3 +83,18 @@ lean_exe «vjp-oracle-attention» where
 
 lean_exe «vjp-oracle-mbconv» where
   root := `tests.vjp_oracle.phase2.MainVjpOracleMbConv
+
+lean_exe «vjp-oracle-global-avg-pool» where
+  root := `tests.vjp_oracle.phase2.MainVjpOracleGlobalAvgPool
+
+lean_exe «vjp-oracle-bottleneck» where
+  root := `tests.vjp_oracle.phase2.MainVjpOracleBottleneck
+
+lean_exe «vjp-oracle-mbconv-v3» where
+  root := `tests.vjp_oracle.phase2.MainVjpOracleMbConvV3
+
+lean_exe «vjp-oracle-fused-mbconv» where
+  root := `tests.vjp_oracle.phase2.MainVjpOracleFusedMb
+
+lean_exe «vjp-oracle-uib» where
+  root := `tests.vjp_oracle.phase2.MainVjpOracleUib

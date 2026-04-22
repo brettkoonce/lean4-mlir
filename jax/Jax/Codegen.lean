@@ -805,6 +805,65 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
             s!"    b = jnp.array(buf[idx:idx+{mid}]); idx += {mid}\n" ++
             "    params.append((W, b))\n"
         code := code ++ emitConvBnFromBuf s!"mbConv[{bi}] project {mid}→{oc}" mid oc 1
+    | .bottleneckBlock ic oc nBlocks firstStride =>
+      let mid := oc / 4
+      let needsProj := !(ic == oc && firstStride == 1)
+      for bi in [:nBlocks] do
+        let blockIc := if bi == 0 then ic else oc
+        code := code ++ emitConvBnFromBuf s!"bneck[{bi}] 1x1 reduce {blockIc}→{mid}" blockIc mid 1
+        code := code ++ emitConvBnFromBuf s!"bneck[{bi}] 3x3 mid {mid}→{mid}" mid mid 3
+        code := code ++ emitConvBnFromBuf s!"bneck[{bi}] 1x1 expand {mid}→{oc}" mid oc 1
+        if bi == 0 && needsProj then
+          code := code ++ emitConvBnFromBuf s!"bneck[{bi}] proj {ic}→{oc}" ic oc 1
+    | .mbConvV3 ic oc expandCh kSize _stride useSE _useHSwish =>
+      let mid := expandCh
+      let seMid := Nat.max 1 (mid / 4)
+      if expandCh != ic then
+        code := code ++ emitConvBnFromBuf s!"mbConvV3 expand {ic}→{mid}" ic mid 1
+      code := code ++ emitConvBnFromBuf s!"mbConvV3 depthwise {mid} k={kSize}" 1 mid kSize
+      if useSE then
+        let nSq := seMid * mid
+        code := code ++
+          s!"    # mbConvV3 SE squeeze {mid}→{seMid} (W, b)\n" ++
+          s!"    W = jnp.array(buf[idx:idx+{nSq}].reshape({seMid}, {mid}, 1, 1)); idx += {nSq}\n" ++
+          s!"    b = jnp.array(buf[idx:idx+{seMid}]); idx += {seMid}\n" ++
+          "    params.append((W, b))\n"
+        let nEx := mid * seMid
+        code := code ++
+          s!"    # mbConvV3 SE excite {seMid}→{mid} (W, b)\n" ++
+          s!"    W = jnp.array(buf[idx:idx+{nEx}].reshape({mid}, {seMid}, 1, 1)); idx += {nEx}\n" ++
+          s!"    b = jnp.array(buf[idx:idx+{mid}]); idx += {mid}\n" ++
+          "    params.append((W, b))\n"
+      code := code ++ emitConvBnFromBuf s!"mbConvV3 project {mid}→{oc}" mid oc 1
+    | .fusedMbConv ic oc expand kSize _stride n useSE =>
+      for bi in [:n] do
+        let blockIc := if bi == 0 then ic else oc
+        let mid := if expand == 1 then oc else blockIc * expand
+        let seMid := Nat.max 1 (mid / 4)
+        code := code ++ emitConvBnFromBuf s!"fusedMb[{bi}] fused {blockIc}→{mid} k={kSize}" blockIc mid kSize
+        if useSE then
+          let nSq := seMid * mid
+          code := code ++
+            s!"    # fusedMb[{bi}] SE squeeze {mid}→{seMid} (W, b)\n" ++
+            s!"    W = jnp.array(buf[idx:idx+{nSq}].reshape({seMid}, {mid}, 1, 1)); idx += {nSq}\n" ++
+            s!"    b = jnp.array(buf[idx:idx+{seMid}]); idx += {seMid}\n" ++
+            "    params.append((W, b))\n"
+          let nEx := mid * seMid
+          code := code ++
+            s!"    # fusedMb[{bi}] SE excite {seMid}→{mid} (W, b)\n" ++
+            s!"    W = jnp.array(buf[idx:idx+{nEx}].reshape({mid}, {seMid}, 1, 1)); idx += {nEx}\n" ++
+            s!"    b = jnp.array(buf[idx:idx+{mid}]); idx += {mid}\n" ++
+            "    params.append((W, b))\n"
+        if expand != 1 then
+          code := code ++ emitConvBnFromBuf s!"fusedMb[{bi}] project {mid}→{oc}" mid oc 1
+    | .uib ic oc expand _stride preDWk postDWk =>
+      let mid := ic * expand
+      if preDWk > 0 then
+        code := code ++ emitConvBnFromBuf s!"uib preDW {ic} k={preDWk}" 1 ic preDWk
+      code := code ++ emitConvBnFromBuf s!"uib expand {ic}→{mid}" ic mid 1
+      if postDWk > 0 then
+        code := code ++ emitConvBnFromBuf s!"uib postDW {mid} k={postDWk}" 1 mid postDWk
+      code := code ++ emitConvBnFromBuf s!"uib project {mid}→{oc}" mid oc 1
     | .patchEmbed ic dim p nP =>
       -- Conv W[dim, ic, p, p] + b[dim], then CLS token [dim], then
       -- positional embedding [nP+1, dim] — three tuples total.

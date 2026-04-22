@@ -152,6 +152,26 @@ lean_exe «vjp-oracle-mbconv» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleMbConv
   moreLinkArgs := ireeLink
 
+lean_exe «vjp-oracle-global-avg-pool» where
+  root := `tests.vjp_oracle.phase3.MainVjpOracleGlobalAvgPool
+  moreLinkArgs := ireeLink
+
+lean_exe «vjp-oracle-bottleneck» where
+  root := `tests.vjp_oracle.phase3.MainVjpOracleBottleneck
+  moreLinkArgs := ireeLink
+
+lean_exe «vjp-oracle-mbconv-v3» where
+  root := `tests.vjp_oracle.phase3.MainVjpOracleMbConvV3
+  moreLinkArgs := ireeLink
+
+lean_exe «vjp-oracle-fused-mbconv» where
+  root := `tests.vjp_oracle.phase3.MainVjpOracleFusedMb
+  moreLinkArgs := ireeLink
+
+lean_exe «vjp-oracle-uib» where
+  root := `tests.vjp_oracle.phase3.MainVjpOracleUib
+  moreLinkArgs := ireeLink
+
 -- ═══════════════════════════════════════════════════════════════════
 -- Tests + benchmarks
 -- ═══════════════════════════════════════════════════════════════════

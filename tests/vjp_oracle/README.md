@@ -49,6 +49,11 @@ it up from the environment.
 | `depthwise` | depthwise-conv VJP via `.invertedResidual` | 1e-4 | 1.11e-05 |
 | `attention` | ViT block: `patchEmbed` + `transformerBlock_has_vjp_mat` + classifier | 1e-5 | 1.81e-07 |
 | `mbconv` | `elemwiseProduct_has_vjp` (SE gate) + MBConv composition | 1e-5 | 1.56e-06 |
+| `global-avg-pool` | `globalAvgPool` spatial-mean VJP | 1e-5 | 1.35e-06 |
+| `bottleneck` | `.bottleneckBlock` (ResNet-50 1×1-3×3-1×1 + skip) | 1e-4 | 8.78e-06 |
+| `mbconv-v3` | `.mbConvV3` with h-swish + h-sigmoid SE | 1e-4 | 5.81e-06 |
+| `fused-mbconv` | `.fusedMbConv` (EfficientNet V2 block) | 1e-4 | 8.09e-07 |
+| `uib` | `.uib` (MobileNet V4 universal inverted bottleneck) | 1e-4 | 1.13e-05 |
 
 Why tolerances differ:
 - Dense / relu / conv: step-2 Δ sits at or below 1 ULP. 1e-5 is comfortable headroom.
