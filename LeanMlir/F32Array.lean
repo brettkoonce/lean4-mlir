@@ -95,6 +95,12 @@ opaque randomCrop (images : @& ByteArray) (batch : USize) (channels : USize)
     (srcH : USize) (srcW : USize) (cropH : USize) (cropW : USize)
     (seed : USize) : IO ByteArray
 
+/-- Deterministic center crop: same window (y0=x0=max/2) for every image in
+    the batch. No RNG. Used as the augment=false preprocessing fallback. -/
+@[extern "lean_f32_center_crop"]
+opaque centerCrop (images : @& ByteArray) (batch : USize) (channels : USize)
+    (srcH : USize) (srcW : USize) (cropH : USize) (cropW : USize) : IO ByteArray
+
 /-- Random horizontal flip for a batch of NCHW images (50% per image). -/
 @[extern "lean_f32_random_hflip"]
 opaque randomHFlip (images : @& ByteArray) (batch : USize) (channels : USize)

@@ -133,8 +133,16 @@ private structure DatasetIO where
       slice, the batch size, and a seed (epoch * 10000 + bi). Must
       return a buffer matching `inputFlatDim spec` floats per image. -/
   augmentBatch : (raw : ByteArray) → (batch : USize) → (seed : Nat) → IO ByteArray
+  /-- Deterministic preprocessing used when cfg.augment=false. Datasets
+      whose on-disk image size differs from the model's input size (e.g.
+      Imagenette: 256 stored, 224 expected) override this to do a
+      center-crop. MNIST and CIFAR default to identity since their
+      stored size already matches the input. -/
+  preprocessBatch : (raw : ByteArray) → (batch : USize) → IO ByteArray := fun raw _ => return raw
 
-/-- Imagenette: 256×256 train, 224×224 val, random-crop-to-224 + hflip. -/
+/-- Imagenette: 256×256 train, 224×224 val, random-crop-to-224 + hflip.
+    When augment=false, falls back to deterministic center-crop 256→224
+    so the model still receives correctly-shaped input. -/
 private def imagenetteIO : DatasetIO where
   trainPixels := 3 * 256 * 256
   valPixels   := 3 * 224 * 224
@@ -144,6 +152,8 @@ private def imagenetteIO : DatasetIO where
   augmentBatch := fun raw batch seed => do
     let cropped ← F32.randomCrop raw batch 3 256 256 224 224 seed.toUSize
     F32.randomHFlip cropped batch 3 224 224 (seed + 7777).toUSize
+  preprocessBatch := fun raw batch =>
+    F32.centerCrop raw batch 3 256 256 224 224
 
 /-- MNIST: 28×28 IDX format, no augmentation. -/
 private def mnistIO : DatasetIO where
@@ -313,7 +323,8 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     for bi in [:bpE] do
       globalStep := globalStep + 1
       let xbaRaw := F32.sliceImages curImg (bi * batchN) batchN trainPixels
-      let xba ← if cfg.augment then dio.augmentBatch xbaRaw batch (epoch * 10000 + bi) else pure xbaRaw
+      let xba ← if cfg.augment then dio.augmentBatch xbaRaw batch (epoch * 10000 + bi)
+                                else dio.preprocessBatch xbaRaw batch
       let yb := F32.sliceLabels curLbl (bi * batchN) batchN
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow

@@ -297,6 +297,39 @@ LEAN_EXPORT lean_obj_res lean_f32_random_crop(
     return lean_io_result_mk_ok(out);
 }
 
+// ---- Deterministic center crop for a batch of NCHW images ----
+// Same shape as random_crop but y0/x0 are fixed to (max/2) — same crop
+// window for every image, no RNG. Used as the no-augment fallback for
+// Imagenette (stored 256x256, model input 224x224) so training gets the
+// expected tensor shape even when cfg.augment=false.
+LEAN_EXPORT lean_obj_res lean_f32_center_crop(
+    b_lean_obj_arg ba, size_t batch, size_t channels,
+    size_t src_h, size_t src_w, size_t crop_h, size_t crop_w,
+    lean_obj_arg w) {
+    (void)w;
+    size_t out_pixels = channels * crop_h * crop_w;
+    size_t out_nbytes = batch * out_pixels * 4;
+    size_t src_pixels = channels * src_h * src_w;
+    lean_object* out = lean_alloc_sarray(1, out_nbytes, out_nbytes);
+    float* dst = (float*)lean_sarray_cptr(out);
+    const float* src = (const float*)lean_sarray_cptr(ba);
+
+    size_t y0 = (src_h > crop_h) ? (src_h - crop_h) / 2 : 0;
+    size_t x0 = (src_w > crop_w) ? (src_w - crop_w) / 2 : 0;
+    for (size_t i = 0; i < batch; i++) {
+        const float* img_src = src + i * src_pixels;
+        float* img_dst = dst + i * out_pixels;
+        for (size_t c = 0; c < channels; c++) {
+            for (size_t h = 0; h < crop_h; h++) {
+                memcpy(img_dst + c * crop_h * crop_w + h * crop_w,
+                       img_src + c * src_h * src_w + (y0 + h) * src_w + x0,
+                       crop_w * sizeof(float));
+            }
+        }
+    }
+    return lean_io_result_mk_ok(out);
+}
+
 // ---- Random horizontal flip for a batch of NCHW images (in-place on copy) ----
 // pixels_per_image = C * H * W, width = W, 50% chance per image.
 LEAN_EXPORT lean_obj_res lean_f32_random_hflip(
