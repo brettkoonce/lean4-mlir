@@ -784,7 +784,8 @@ Concretely, that means:
   trained with SGD (momentum 0.9, learning rate 0.002) and no other
   tricks --- one recipe held constant across architectures for
   consistency. This book adopts the modern recipe --- Adam, cosine
-  decay, linear warmup, weight decay, label smoothing --- which is
+  decay, linear warmup, weight decay, label smoothing, and basic
+  data augmentation --- which is
   how the accuracy numbers in this book's results table were
   achieved. The full recipe and each component's contribution are
   detailed in Chapter~\ref{chap:residual} (ResNet), where the
@@ -971,8 +972,10 @@ schedule, no warmup, no augmentation, no label smoothing. This is
 the deliberately minimal ``Chapter 1'' baseline --- the Swift for
 TensorFlow book shipped exactly this config as its reference
 example, and it's a pedagogically useful starting point because
-every later chapter's tweak (Adam, cosine, BN, residuals, augmentation)
-then has a clean baseline to measure against. The repo's
+every later chapter's tweak --- training-recipe (Adam, cosine,
+warmup, weight decay, augmentation, label smoothing) and
+architectural (BN, residuals) --- then has a clean baseline to
+measure against. The repo's
 \texttt{MainAblation.lean} ships a dozen other configs beside this
 one so you can run each ablation and see the delta.
 
@@ -1058,8 +1061,9 @@ the emitted compute.
 
 Chapter 2 (\texttt{MNIST 2D CNN}) runs the same \texttt{s4tfBaseline}
 config against a CNN architecture for a direct apples-to-apples
-comparison. Later chapters switch to Adam + cosine + weight decay
-once we can benchmark the deltas against this baseline.
+comparison. Later chapters switch to the modern recipe (Adam + cosine + warmup
++ weight decay + label smoothing + data augmentation) once we can
+benchmark the deltas against this baseline.
 
 \subsection*{What is actually in those ``20\,502 chars''}
 
