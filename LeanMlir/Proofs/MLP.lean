@@ -20,9 +20,51 @@ namespace Proofs
 noncomputable def dense {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) : Vec n :=
   fun j => (∑ i : Fin m, x i * W i j) + b j
 
-axiom pdiv_dense {m n : Nat} (W : Mat m n) (b : Vec n)
+/-- **Dense Jacobian** — `∂(W·x + b)_j/∂x_i = W_{ij}`. Now a theorem,
+    derived from the foundation axioms (`pdiv_add`, `pdiv_const`,
+    `pdiv_finset_sum`, `pdiv_mul`, `pdiv_reindex`). The proof factors
+    `dense W b` into `(∑ i', x i' * W i' j) + b j`, distributes pdiv
+    over the outer sum and finset sum, applies the product rule per
+    summand, and collapses the Kronecker δ. -/
+theorem pdiv_dense {m n : Nat} (W : Mat m n) (b : Vec n)
     (x : Vec m) (i : Fin m) (j : Fin n) :
-    pdiv (dense W b) x i j = W i j
+    pdiv (dense W b) x i j = W i j := by
+  unfold dense
+  -- Step 1: rewrite as `(sum x' * W) + (constant b)` to apply pdiv_add.
+  rw [show (fun x' : Vec m => fun j' : Fin n =>
+              (∑ i' : Fin m, x' i' * W i' j') + b j') =
+        (fun x' j' =>
+          (fun y : Vec m => fun j'' : Fin n => ∑ i' : Fin m, y i' * W i' j'') x' j' +
+          (fun _ : Vec m => b) x' j') from rfl]
+  rw [pdiv_add, pdiv_const, add_zero]
+  -- Step 2: distribute pdiv over the finset sum.
+  rw [pdiv_finset_sum (Finset.univ : Finset (Fin m))
+      (fun i' x' j'' => x' i' * W i' j'') x i j]
+  -- Step 3: each summand is `(fun x' _ => x' i') * (fun _ _ => W i' j)`. Apply pdiv_mul.
+  have hterm : ∀ i' : Fin m,
+      pdiv (fun x' : Vec m => fun j' : Fin n => x' i' * W i' j') x i j =
+      if i = i' then W i' j else 0 := by
+    intro i'
+    rw [show (fun x' : Vec m => fun j' : Fin n => x' i' * W i' j') =
+          (fun x' j' =>
+            (fun y : Vec m => fun j'' : Fin n => y i') x' j' *
+            (fun _ : Vec m => fun j'' : Fin n => W i' j'') x' j') from rfl]
+    rw [pdiv_mul]
+    -- The reindex factor: `fun y j'' => y i'` = reindex via `fun _ : Fin n => i'`.
+    rw [show (fun y : Vec m => fun j'' : Fin n => y i') =
+          (fun y => fun j'' => y ((fun _ : Fin n => i') j'')) from rfl]
+    rw [pdiv_reindex (fun _ : Fin n => i')]
+    -- The const factor: pdiv = 0.
+    rw [show pdiv (fun _ : Vec m => fun j'' : Fin n => W i' j'') x i j = 0
+        from pdiv_const _ _ _ _]
+    -- Goal: (if i = i' then 1 else 0) * W i' j + x i' * 0 = if i = i' then W i' j else 0
+    by_cases h : i = i'
+    · rw [if_pos h, if_pos h]; ring
+    · rw [if_neg h, if_neg h]; ring
+  simp_rw [hterm]
+  -- Step 4: collapse the Kronecker sum.
+  rw [Finset.sum_ite_eq Finset.univ i (fun i' => W i' j)]
+  simp
 
 /-- **Jacobian of dense wrt W** (new, Phase 7).
 
