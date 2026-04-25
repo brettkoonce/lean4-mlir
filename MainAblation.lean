@@ -418,6 +418,21 @@ def r34NoAug : TrainConfig where
   augment      := false
   labelSmoothing := 0.1
 
+-- Plain SGD + momentum, no other tricks. Establishes the
+-- "what does the modern recipe actually buy us?" baseline
+-- alongside the leave-one-out runs.
+def r34Bare : TrainConfig where
+  learningRate := 0.01
+  batchSize    := 32
+  epochs       := 80
+  useAdam      := false
+  momentum     := 0.9
+  weightDecay  := 0.0
+  cosineDecay  := false
+  warmupEpochs := 0
+  augment      := false
+  labelSmoothing := 0.0
+
 -- ═══════════════════════════════════════════════════════════════════
 -- Ablation registry
 -- ═══════════════════════════════════════════════════════════════════
@@ -506,7 +521,8 @@ def ablations : List (String × AblationRun) := [
   ("r34-no-warmup", ⟨resnet34Spec, r34NoWarmup, .imagenette, "data/imagenette"⟩),
   ("r34-no-wd",     ⟨resnet34Spec, r34NoWd,     .imagenette, "data/imagenette"⟩),
   ("r34-no-smooth", ⟨resnet34Spec, r34NoSmooth, .imagenette, "data/imagenette"⟩),
-  ("r34-no-aug",    ⟨resnet34Spec, r34NoAug,    .imagenette, "data/imagenette"⟩)
+  ("r34-no-aug",    ⟨resnet34Spec, r34NoAug,    .imagenette, "data/imagenette"⟩),
+  ("r34-bare",      ⟨resnet34Spec, r34Bare,     .imagenette, "data/imagenette"⟩)
 ]
 
 def main (args : List String) : IO Unit := do
