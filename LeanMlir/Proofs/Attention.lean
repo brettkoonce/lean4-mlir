@@ -228,10 +228,83 @@ like BatchNorm did.
 
     `d(softmax(z))_j/dz_i = softmax(z)_j * (delta_{ij} - softmax(z)_i)`
 
-    Standard calculus; axiomatized to stay in our `pdiv` framework. -/
-axiom pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
+    Proved (was an axiom). The j-th coord of `softmax c z` is
+    `Real.exp (z j) / S` with `S := Σ_k Real.exp (z k) > 0`, so the j-th
+    output coord function `z' ↦ exp(z' j) * (Σ_k exp(z' k))⁻¹` has
+    `HasFDerivAt` derivative built from `HasFDerivAt.exp`,
+    `HasFDerivAt.fun_sum`, `(hasDerivAt_inv ·).comp_hasFDerivAt`, and
+    `HasFDerivAt.mul`. Evaluating that CLM at `basisVec i` and
+    collapsing `Σ_k exp(z k) · δ_{ki} = exp(z i)` gives the formula. -/
+theorem pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
     pdiv (softmax c) z i j =
-    softmax c z j * ((if i = j then 1 else 0) - softmax c z i)
+    softmax c z j * ((if i = j then 1 else 0) - softmax c z i) := by
+  cases c with
+  | zero => exact j.elim0
+  | succ c' =>
+  unfold pdiv
+  -- Convert (fderiv ℝ softmax z) (basisVec i) j → fderiv of the j-th coord function.
+  have h_swap : fderiv ℝ (softmax (c' + 1)) z (basisVec i) j =
+                fderiv ℝ (fun z' : Vec (c' + 1) => softmax (c' + 1) z' j) z (basisVec i) := by
+    rw [fderiv_apply (softmax_diff (c' + 1) z) j]
+    rfl
+  rw [h_swap]
+  rw [show (fun z' : Vec (c' + 1) => softmax (c' + 1) z' j) =
+         (fun z' => Real.exp (z' j) * (∑ k : Fin (c' + 1), Real.exp (z' k))⁻¹) from by
+    funext z'
+    show Real.exp (z' j) / (∑ k : Fin (c' + 1), Real.exp (z' k)) = _
+    rw [div_eq_mul_inv]]
+  set S : ℝ := ∑ k : Fin (c' + 1), Real.exp (z k) with hS_def
+  have hS_pos : (0 : ℝ) < S :=
+    Finset.sum_pos (fun k _ => Real.exp_pos _) Finset.univ_nonempty
+  have hS_ne : S ≠ 0 := hS_pos.ne'
+  -- HasFDerivAt building blocks
+  have h_proj : ∀ k : Fin (c' + 1),
+      HasFDerivAt (fun z' : Vec (c' + 1) => z' k)
+                  (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ) z :=
+    fun k => (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ).hasFDerivAt
+  have h_exp : ∀ k : Fin (c' + 1),
+      HasFDerivAt (fun z' : Vec (c' + 1) => Real.exp (z' k))
+                  (Real.exp (z k) • (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ)) z :=
+    fun k => (h_proj k).exp
+  have h_sum : HasFDerivAt
+      (fun z' : Vec (c' + 1) => ∑ k : Fin (c' + 1), Real.exp (z' k))
+      (∑ k : Fin (c' + 1), Real.exp (z k) •
+          (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ)) z :=
+    HasFDerivAt.fun_sum (fun k _ => h_exp k)
+  have h_inv : HasFDerivAt
+      (fun z' : Vec (c' + 1) => (∑ k : Fin (c' + 1), Real.exp (z' k))⁻¹)
+      ((-(S ^ 2)⁻¹) • (∑ k : Fin (c' + 1), Real.exp (z k) •
+          (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ))) z :=
+    (hasDerivAt_inv hS_ne).comp_hasFDerivAt z h_sum
+  have h_mul : HasFDerivAt
+      (fun z' : Vec (c' + 1) =>
+          Real.exp (z' j) * (∑ k : Fin (c' + 1), Real.exp (z' k))⁻¹)
+      (Real.exp (z j) • ((-(S ^ 2)⁻¹) • (∑ k : Fin (c' + 1), Real.exp (z k) •
+            (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ))) +
+       S⁻¹ • (Real.exp (z j) • (ContinuousLinearMap.proj j : Vec (c' + 1) →L[ℝ] ℝ))) z :=
+    (h_exp j).mul h_inv
+  rw [h_mul.fderiv]
+  -- Evaluate the resulting CLM at basisVec i and simplify.
+  simp only [ContinuousLinearMap.add_apply, ContinuousLinearMap.smul_apply, smul_eq_mul,
+             ContinuousLinearMap.sum_apply, ContinuousLinearMap.proj_apply, basisVec_apply]
+  -- Collapse the Kronecker sum: Σ_k exp(z k) * (if k = i then 1 else 0) = exp(z i).
+  rw [show (∑ k : Fin (c' + 1), Real.exp (z k) * (if k = i then (1 : ℝ) else 0)) =
+        Real.exp (z i) from by
+      rw [Finset.sum_eq_single i]
+      · rw [if_pos rfl, mul_one]
+      · intros b _ hb; rw [if_neg hb, mul_zero]
+      · intro h; exact absurd (Finset.mem_univ i) h]
+  -- Unfold softmax on the RHS and convert `if j = i` to `if i = j`.
+  show Real.exp (z j) * (-(S ^ 2)⁻¹ * Real.exp (z i)) +
+       S⁻¹ * (Real.exp (z j) * (if j = i then (1 : ℝ) else 0)) =
+       (Real.exp (z j) / S) * ((if i = j then (1 : ℝ) else 0) - Real.exp (z i) / S)
+  have h_if : (if j = i then (1 : ℝ) else 0) = (if i = j then (1 : ℝ) else 0) := by
+    by_cases h : i = j
+    · rw [if_pos h, if_pos h.symm]
+    · rw [if_neg h, if_neg (fun heq => h heq.symm)]
+  rw [h_if]
+  field_simp
+  ring
 
 /-- **Softmax VJP — the closed-form collapse.**
 
