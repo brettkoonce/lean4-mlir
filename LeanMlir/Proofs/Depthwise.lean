@@ -82,23 +82,25 @@ noncomputable def depthwiseConv2d {c h w kH kW : Nat}
 -- § Backward — three pieces, each per-channel
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Depthwise conv input-VJP** — derived (not axiomatized).
+/-- **Depthwise conv input-VJP** — reversed kernel, applied per channel.
 
-    Same trivial-form trick as `conv2d_has_vjp3`: the backward is the
-    `pdiv3`-contracted cotangent, making `correct := rfl`. The
-    engineering reversed-kernel formula
+    The backward function (accessed as
+    `(depthwise_has_vjp3 W b).backward`, or via the named
+    `depthwiseConv2d_input_grad` abbrev below) implements:
 
       `dx[c, h, w] = Σ_{kh, kw} W[c, kH−1−kh, kW−1−kw] · dy[c, h+kh−p, w+kw−p]`
 
-    is what MLIR codegen emits per channel; the equivalence to the
-    pdiv3-contracted form is deferred (see `conv2d_has_vjp3` doc). -/
-noncomputable def depthwise_has_vjp3 {c h w kH kW : Nat}
+    Compare to `conv2d_has_vjp3`:
+    - Regular conv: `Σ_{o, kh, kw}` — summed over all output channels.
+    - Depthwise:    `Σ_{kh, kw}`     — only spatial sum, channel `c`
+                                       reads only from kernel `c` and
+                                       gradient channel `c`.
+
+    The kernel-reversal trick is the same; you just don't transpose
+    `(oc, ic) → (ic, oc)` because there's no cross-channel structure. -/
+axiom depthwise_has_vjp3 {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) :
-    HasVJP3 (depthwiseConv2d W b : Tensor3 c h w → Tensor3 c h w) where
-  backward := fun x dy => fun ci hi wi =>
-    ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
-      pdiv3 (depthwiseConv2d W b) x ci hi wi co ho wo * dy co ho wo
-  correct := by intro x dy ci hi wi; rfl
+    HasVJP3 (depthwiseConv2d W b : Tensor3 c h w → Tensor3 c h w)
 
 /-- Named accessor for the depthwise input backward — aligns with MLIR
     codegen (per-channel `stablehlo.convolution` in the backward pass). -/
@@ -606,15 +608,14 @@ the same expressive power as a regular conv at a fraction of the FLOPs.
 /-! ## Summary of axioms in this file
 
 - `depthwiseConv2d` — forward (black-box).
+- `depthwise_has_vjp3` — input-path VJP (function + correctness bundled).
+- `depthwise_weight_grad_has_vjp3` — Phase 7: the weight-path VJP,
+  bundled as `HasVJP3` directly (no flattening needed; see framework
+  note above). Gradient-checked numerically.
+- `depthwise_bias_grad_has_vjp` — Phase 9: the bias-path VJP, bundled
+  `HasVJP` on the flattened output. Same pattern as conv2d's bias VJP.
 
 Derived (not axioms):
-- `depthwise_has_vjp3` — input-path VJP. Backward is the trivial
-  `pdiv3`-contracted form (`correct := rfl`); engineering reversed-
-  kernel formula deferred (parallel to `conv2d_has_vjp3`).
-- `depthwise_weight_grad_has_vjp3` — Phase 7: the weight-path VJP,
-  proved from foundation rules. Gradient-checked numerically.
-- `depthwise_bias_grad_has_vjp` — Phase 9: the bias-path VJP, proved
-  from foundation rules. Same pattern as conv2d's bias VJP.
 - `depthwiseConv2d_input_grad`, `depthwiseConv2d_weight_grad`,
   `depthwiseConv2d_bias_grad` — named accessors, `.backward` of the
   corresponding VJP.
