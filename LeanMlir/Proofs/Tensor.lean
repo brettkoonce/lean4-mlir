@@ -565,6 +565,28 @@ theorem pdivFDMat_transpose {m n : Nat} (A : Mat m n)
       exact ⟨(Prod.mk.inj this).2, (Prod.mk.inj this).1⟩
     rw [if_neg hne, if_neg h]
 
+/-- **Sum rule for `pdivFDMat`** — proved from `pdivFD_add_of_diff` via
+    the flatten bijection. Requires both `F` and `G` (in their flattened
+    forms) to be differentiable at `flatten A`. Mirrors `pdivMat_add`. -/
+theorem pdivFDMat_add_of_diff {a b c d : Nat}
+    (F G : Mat a b → Mat c d) (A : Mat a b)
+    (hF_diff : DifferentiableAt ℝ
+      (fun v : Vec (a * b) => Mat.flatten (F (Mat.unflatten v))) (Mat.flatten A))
+    (hG_diff : DifferentiableAt ℝ
+      (fun v : Vec (a * b) => Mat.flatten (G (Mat.unflatten v))) (Mat.flatten A))
+    (i : Fin a) (j : Fin b) (k : Fin c) (l : Fin d) :
+    pdivFDMat (fun M r s => F M r s + G M r s) A i j k l
+    = pdivFDMat F A i j k l + pdivFDMat G A i j k l := by
+  unfold pdivFDMat
+  have h_flat : (fun v : Vec (a * b) =>
+                  Mat.flatten ((fun M r s => F M r s + G M r s) (Mat.unflatten v))) =
+                (fun v k => (fun w => Mat.flatten (F (Mat.unflatten w))) v k +
+                            (fun w => Mat.flatten (G (Mat.unflatten w))) v k) := by
+    funext v k
+    unfold Mat.flatten
+    rfl
+  rw [h_flat, pdivFD_add_of_diff _ _ _ hF_diff hG_diff]
+
 -- ════════════════════════════════════════════════════════════════
 -- § Matrix VJP Framework
 -- ════════════════════════════════════════════════════════════════
