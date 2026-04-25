@@ -495,6 +495,77 @@ theorem pdivMat_id {a b : Nat} (A : Mat a b)
     exact ⟨(Prod.mk.inj this).1, (Prod.mk.inj this).2⟩
 
 -- ════════════════════════════════════════════════════════════════
+-- § Matrix-level pdivFD (parallel to pdivMat, Mathlib-grounded)
+--
+-- Mirrors `pdivMat` but built on `pdivFD` rather than the axiomatic
+-- `pdiv`. The unconditional rules (`_id`, `_transpose`) are proven
+-- here; conditional rules will follow as `_of_diff` versions. At the
+-- atomic flip moment (when `pdiv` becomes `pdivFD`'s definition),
+-- `pdivFDMat` becomes identical to `pdivMat` and these theorems
+-- become validated reference implementations of the post-flip
+-- `pdivMat_*` theorems.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Matrix partial derivative using `pdivFD` (Mathlib's `fderiv`)
+    as the underlying scalar derivative. Same shape as `pdivMat`. -/
+noncomputable def pdivFDMat {a b c d : Nat} (f : Mat a b → Mat c d) (A : Mat a b)
+    (i : Fin a) (j : Fin b) (k : Fin c) (l : Fin d) : ℝ :=
+  pdivFD (fun v : Vec (a * b) => Mat.flatten (f (Mat.unflatten v)))
+    (Mat.flatten A) (finProdFinEquiv (i, j)) (finProdFinEquiv (k, l))
+
+/-- **Identity Jacobian for `pdivFDMat`** — proved from `pdivFD_id`.
+    Mirrors `pdivMat_id`; would be its post-flip implementation. -/
+theorem pdivFDMat_id {a b : Nat} (A : Mat a b)
+    (i : Fin a) (j : Fin b) (k : Fin a) (l : Fin b) :
+    pdivFDMat (fun M : Mat a b => M) A i j k l =
+    if i = k ∧ j = l then 1 else 0 := by
+  unfold pdivFDMat
+  have h_id : (fun v : Vec (a * b) => Mat.flatten (Mat.unflatten v)) =
+              (fun v : Vec (a * b) => v) := by
+    funext v; exact Mat.flatten_unflatten v
+  rw [h_id, pdivFD_id]
+  by_cases h : i = k ∧ j = l
+  · obtain ⟨hik, hjl⟩ := h
+    subst hik; subst hjl
+    simp
+  · rw [if_neg h, if_neg]
+    intro heq
+    apply h
+    have := finProdFinEquiv.injective heq
+    exact ⟨(Prod.mk.inj this).1, (Prod.mk.inj this).2⟩
+
+/-- **Transpose Jacobian for `pdivFDMat`** — proved from `pdivFD_reindex`.
+    Mirrors `pdivMat_transpose`. -/
+theorem pdivFDMat_transpose {m n : Nat} (A : Mat m n)
+    (i : Fin m) (j : Fin n) (k : Fin n) (l : Fin m) :
+    pdivFDMat (fun M : Mat m n => Mat.transpose M) A i j k l =
+    if j = k ∧ i = l then 1 else 0 := by
+  unfold pdivFDMat
+  have h_reduces :
+      (fun v : Vec (m * n) =>
+        Mat.flatten ((fun M : Mat m n => Mat.transpose M) (Mat.unflatten v))) =
+      (fun v : Vec (m * n) => fun idx : Fin (n * m) =>
+        v (finProdFinEquiv
+              ((finProdFinEquiv.symm idx).2, (finProdFinEquiv.symm idx).1))) := by
+    funext v idx
+    show Mat.transpose (Mat.unflatten v)
+           (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2 = _
+    unfold Mat.transpose Mat.unflatten
+    rfl
+  rw [h_reduces, pdivFD_reindex]
+  simp only [Equiv.symm_apply_apply]
+  by_cases h : j = k ∧ i = l
+  · obtain ⟨hjk, hil⟩ := h
+    subst hjk; subst hil
+    simp
+  · have hne : finProdFinEquiv (i, j) ≠ finProdFinEquiv (l, k) := by
+      intro heq
+      apply h
+      have := finProdFinEquiv.injective heq
+      exact ⟨(Prod.mk.inj this).2, (Prod.mk.inj this).1⟩
+    rw [if_neg hne, if_neg h]
+
+-- ════════════════════════════════════════════════════════════════
 -- § Matrix VJP Framework
 -- ════════════════════════════════════════════════════════════════
 
