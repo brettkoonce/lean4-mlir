@@ -154,15 +154,108 @@ noncomputable abbrev depthwiseConv2d_weight_grad {c h w kH kW : Nat}
     (x : Tensor3 c h w) (dy : Tensor3 c h w) : DepthwiseKernel c kH kW :=
   (depthwise_weight_grad_has_vjp3 b x).backward W dy
 
-/-- **Depthwise bias-VJP** — bundled axiom on the `b`-flattened function (Phase 9).
-
-    Same pattern as `conv2d_bias_grad_has_vjp`: view `depthwiseConv2d W b x`
-    as a function of `b` (with `W`, `x` closed over), flatten the Tensor3
-    output, and claim a `HasVJP`. The expected backward is the per-channel
-    spatial-sum formula documented below as `depthwiseConv2d_bias_grad_formula`. -/
-axiom depthwise_bias_grad_has_vjp {c h w kH kW : Nat}
+/-- **Depthwise bias-VJP** — proved from foundation rules. Same shape
+    as `conv2d_bias_grad_has_vjp`, just simpler: depthwise has no
+    Σ over input channels (input channel = output channel). The
+    function `b ↦ flatten(depthwiseConv2d W b x)` decomposes as
+    `(channel-reindex from b) + (W,x term constant in b)`, exactly
+    like conv2d's case. -/
+noncomputable def depthwise_bias_grad_has_vjp {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w) :
-    HasVJP (fun b : Vec c => Tensor3.flatten (depthwiseConv2d W b x))
+    HasVJP (fun b : Vec c => Tensor3.flatten (depthwiseConv2d W b x)) where
+  backward := fun _b dy => fun cc =>
+    ∑ hi : Fin h, ∑ wi : Fin w,
+      dy (finProdFinEquiv (finProdFinEquiv (cc, hi), wi))
+  correct := by
+    intro b dy cc
+    have h_pdiv : ∀ idx : Fin (c * h * w),
+        pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d W b' x)) b cc idx =
+        (if cc = (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1
+          then (1:ℝ) else 0) := by
+      intro idx
+      rw [show (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d W b' x)) =
+            (fun b' k =>
+              (fun y : Vec c => fun k' : Fin (c * h * w) =>
+                y ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)) b' k +
+              (fun (_ : Vec c) (k' : Fin (c * h * w)) =>
+                ∑ kh : Fin kH, ∑ kw : Fin kW,
+                  W ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) kh kw *
+                    (let pH := (kH - 1) / 2
+                     let pW := (kW - 1) / 2
+                     let hh := kh.val + (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
+                     let ww := kw.val + (finProdFinEquiv.symm k').2.val
+                     if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
+                       x ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)
+                         ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
+                     else 0)) b' k) from by
+        funext b' k
+        unfold Tensor3.flatten depthwiseConv2d
+        rfl]
+      rw [pdiv_add]
+      rw [show (fun y : Vec c => fun k' : Fin (c * h * w) =>
+                  y ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)) =
+            (fun y => fun k' => y ((fun k'' : Fin (c * h * w) =>
+                (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1) k')) from rfl]
+      rw [pdiv_reindex (fun k'' : Fin (c * h * w) =>
+            (finProdFinEquiv.symm (finProdFinEquiv.symm k'').1).1)]
+      rw [show pdiv (fun (_ : Vec c) (k' : Fin (c * h * w)) =>
+                  ∑ kh : Fin kH, ∑ kw : Fin kW,
+                    W ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1) kh kw *
+                      (let pH := (kH - 1) / 2
+                       let pW := (kW - 1) / 2
+                       let hh := kh.val + (finProdFinEquiv.symm (finProdFinEquiv.symm k').1).2.val
+                       let ww := kw.val + (finProdFinEquiv.symm k').2.val
+                       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
+                         x ((finProdFinEquiv.symm (finProdFinEquiv.symm k').1).1)
+                           ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
+                       else 0))
+                  b cc idx = 0
+          from pdiv_const _ _ _ _]
+      ring
+    simp_rw [h_pdiv]
+    rw [Fintype.sum_equiv finProdFinEquiv.symm
+        (fun idx : Fin (c * h * w) =>
+          (if cc = (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1 then (1:ℝ) else 0)
+          * dy idx)
+        (fun pair : Fin (c * h) × Fin w =>
+          (if cc = (finProdFinEquiv.symm pair.1).1 then (1:ℝ) else 0)
+          * dy (finProdFinEquiv pair))
+        (fun idx => by
+          show _ * _ = _ * _
+          rw [Equiv.apply_symm_apply])]
+    rw [Fintype.sum_prod_type]
+    rw [Fintype.sum_equiv finProdFinEquiv.symm
+        (fun pair_h : Fin (c * h) =>
+          ∑ wi : Fin w,
+            (if cc = (finProdFinEquiv.symm pair_h).1 then (1:ℝ) else 0)
+            * dy (finProdFinEquiv (pair_h, wi)))
+        (fun ch_pair : Fin c × Fin h =>
+          ∑ wi : Fin w,
+            (if cc = ch_pair.1 then (1:ℝ) else 0)
+            * dy (finProdFinEquiv (finProdFinEquiv ch_pair, wi)))
+        (fun pair_h => by
+          have h_inv : finProdFinEquiv (finProdFinEquiv.symm pair_h
+                : Fin c × Fin h) = pair_h :=
+            Equiv.apply_symm_apply _ _
+          simp_rw [h_inv])]
+    rw [Fintype.sum_prod_type]
+    have h_pull : ∀ cc' : Fin c,
+        (∑ hi : Fin h, ∑ wi : Fin w,
+          (if cc = cc' then (1:ℝ) else 0)
+          * dy (finProdFinEquiv (finProdFinEquiv (cc', hi), wi))) =
+        (if cc = cc' then (1:ℝ) else 0) *
+          ∑ hi : Fin h, ∑ wi : Fin w,
+            dy (finProdFinEquiv (finProdFinEquiv (cc', hi), wi)) := by
+      intro cc'
+      rw [Finset.mul_sum]
+      apply Finset.sum_congr rfl
+      intro hi _
+      rw [Finset.mul_sum]
+    simp_rw [h_pull, ite_mul, one_mul, zero_mul]
+    rw [Finset.sum_ite_eq Finset.univ cc (fun cc' =>
+        ∑ hi : Fin h, ∑ wi : Fin w,
+          dy (finProdFinEquiv (finProdFinEquiv (cc', hi), wi)))]
+    simp
 
 /-- Named accessor for the depthwise bias backward via the VJP framework. -/
 noncomputable def depthwiseConv2d_bias_grad {c h w kH kW : Nat}
