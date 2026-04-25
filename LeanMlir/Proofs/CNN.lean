@@ -257,16 +257,23 @@ noncomputable def conv2d_bias_grad_formula {oc h w : Nat}
 -- § MaxPool
 -- ════════════════════════════════════════════════════════════════
 
-/-- **MaxPool 2×2 stride 2 forward**.
+/-- **MaxPool 2×2 stride 2 forward** — concrete definition.
 
     Each output cell is the maximum of a 2×2 window of input cells:
-    `y[c, h, w] = max{ x[c, 2h+a, 2w+b] : a, b ∈ {0,1} }`
+    `y[c, h, w] = max{ x[c, 2h+a, 2w+b] : a, b ∈ {0,1} }`. No longer
+    an axiom — replaced with the explicit four-way max.
 
     MLIR:
       %pool = "stablehlo.reduce_window"(%h1, %neginf) ({
         ^bb0(%a, %b): stablehlo.return (stablehlo.maximum %a, %b)
       }) {window_dimensions = [1, 1, 2, 2], window_strides = [1, 1, 2, 2]} -/
-axiom maxPool2 {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) : Tensor3 c h w
+noncomputable def maxPool2 {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) : Tensor3 c h w :=
+  fun ch hi wi =>
+    let i0 : Fin (2*h) := ⟨2*hi.val,     by have := hi.isLt; omega⟩
+    let i1 : Fin (2*h) := ⟨2*hi.val + 1, by have := hi.isLt; omega⟩
+    let j0 : Fin (2*w) := ⟨2*wi.val,     by have := wi.isLt; omega⟩
+    let j1 : Fin (2*w) := ⟨2*wi.val + 1, by have := wi.isLt; omega⟩
+    max (max (x ch i0 j0) (x ch i1 j0)) (max (x ch i0 j1) (x ch i1 j1))
 
 /-- **MaxPool2 input-VJP** — gradient routes only to the argmax positions.
 
