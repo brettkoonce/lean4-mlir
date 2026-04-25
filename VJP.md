@@ -1,14 +1,18 @@
-# VJP.md — Foundation Flip Landed; Mechanical Follow-ups Done
+# VJP.md — Foundation Flip Landed; Floor Reached at 10 Axioms
 
-**Branch:** `attention-diff-threading` (4 commits past `main` head `2d4e92e`).
-Cumulative across the foundation-flip + this branch: **23 → 13 project axioms.**
+**Branch:** `attention-diff-threading` (7 commits past `main` head `2d4e92e`).
+Cumulative across the foundation-flip + this branch: **23 → 10 project axioms.**
 
 > **Strategy summary.** Foundation flip (attempt #3, "guarded ReLU") landed
 > on `main` and preserved the soundness analysis from attempts #1 and #2
-> (still load-bearing; see "Soundness analysis" below). This branch then
-> walked down the mechanical follow-ups (A–E from the original VJP.md
-> roadmap) and proved everything that wasn't a genuine subgradient/
-> opaque-codegen convention.
+> (still load-bearing; see "Soundness analysis" below). This branch walked
+> down the mechanical follow-ups (A–E from the original VJP.md roadmap)
+> and the three "tackleable but multi-hour" closed-form derivative proofs
+> (`pdiv_softmax`, `softmaxCE_grad`, `pdiv_bnIstdBroadcast`). The remaining
+> 10 axioms are all the "stays axiomatic" set: subgradient conventions,
+> non-smooth/boundary handlers, vmap-VJP framework bundles, and
+> opaque-codegen interfaces — every one needs a project-wide framework
+> change to remove.
 
 ---
 
@@ -43,31 +47,31 @@ Cumulative across the foundation-flip + this branch: **23 → 13 project axioms.
 | `5532d15` | **Follow-ups B + C + Real.tanh.** `rowSoftmax_flat_diff` (`exp · (sum-exp)⁻¹`, `Differentiable.inv` with `Finset.sum_pos`); `bnIstdBroadcast_diff` (`Differentiable.sqrt` + `Differentiable.inv` over `bnVar + ε > 0`); `gelu_per_token_flat_diff` promoted via a new `Real.differentiable_tanh` `@[fun_prop]` lemma derived from `Real.tanh_eq_sinh_div_cosh` + `Real.cosh_pos`. | −3 |
 | `f8ac5b1` | **Follow-up D + free-rider.** `pdivMat_rowIndep` (was unconditional axiom; **was technically unsound** — counterexample below): now a theorem requiring `Differentiable ℝ g`, proved via `fderiv_apply` + chain rule with `reindexCLM` row-projection + `(rowProj k) (basisVec (i, j)) = basisVec j` if `i = k`, else `0`. Cascade: `rowwise_has_vjp_mat` takes new `hg_diff` hypothesis; new Vec-level `softmax_diff`/`gelu_diff`/`layerNorm_diff`/`dense_diff` lemmas to discharge it. Free-rider: `layerNorm_per_token_flat_diff` axiom → theorem via the same row-projection CLM trick. | −2 |
 | `6f65ba3` | **Follow-up E (first half).** `pdiv_gelu`: `gelu n` has diagonal Jacobian by `fderiv_apply` + chain rule with `geluScalar ∘ ContinuousLinearMap.proj j`, then `fderiv_eq_smul_deriv` to convert scalar `fderiv` ↔ `deriv`. Moves `Real.differentiable_tanh` + `gelu_diff` from Attention.lean to LayerNorm.lean (next to `gelu`'s definition). | −1 |
+| `1a95799` | **`pdiv_softmax`** — closed-form softmax Jacobian. `fderiv_apply` extracts the j-th coord function `z' ↦ exp(z' j) · (Σ_k exp(z' k))⁻¹`. `HasFDerivAt` chain via `.exp` + `.fun_sum` + `(hasDerivAt_inv).comp_hasFDerivAt` + `.mul`. Resulting CLM at `basisVec i` collapses through `Σ_k exp(z k) · δ_{ki} = exp(z i)`; `field_simp; ring` closes. | −1 |
+| `38c3782` | **`softmaxCE_grad`** — chain-rule on `-log ∘ softmax_label`. Relocated from MLP.lean to Attention.lean (`pdiv_softmax` lives there). `HasFDerivAt.log` (with `softmax z label > 0` from exp positivity) composed with `softmax_diff`, then `.neg`. Evaluating at `basisVec j` and applying `pdiv_softmax` reduces to `p[j] - oneHot[j]` after `field_simp; ring` cancels `p[label]`. | −1 |
+| `ba93ab2` | **`pdiv_bnIstdBroadcast`** — closed-form `∂istd/∂xᵢ = -istd³ · (xᵢ - μ)/n`. Centering CLM `C k = proj k - (1/N) Σ_i proj i` (linear, fderiv = self); `(C k)²` via `.mul`; `bnVar = (Σ_k (C k)²)/N` via `.fun_sum + .mul_const`; `.add_const ε`; `.sqrt` (with `bnVar+ε > 0`); `(hasDerivAt_inv).comp_hasFDerivAt`. At `basisVec i`, the centered sum collapses via `Σ_k (x_k - μ) = 0`. Adds `hε : 0 < ε` hypothesis (matches `bnIstdBroadcast_diff`); threads through `pdiv_bnNormalize` call site. | −1 |
 
-**Net for the branch: −10 axioms (23 → 13).**
+**Net for the branch: −13 axioms (23 → 10). Floor reached.**
 
 ---
 
-## Project axiom inventory (13)
+## Project axiom inventory (10)
 
-**MLP / activations (4):**
+**MLP / activations (3):**
 - `pdiv_relu` — guarded subgradient axiom (DL convention).
 - `relu_has_vjp` — existence at non-smooth points.
 - `mlp_has_vjp` — composes through ReLU.
-- `softmaxCE_grad` — gradient of cross-entropy loss. Provable via chain rule on `-log ∘ softmax_label` if `pdiv_softmax` is available.
 
 **CNN-family (3):**
 - `conv2d_has_vjp3` — input-path VJP through padding boundary.
 - `maxPool2_has_vjp3` — argmax routing convention.
 - `depthwise_has_vjp3` — input-path VJP, parallel to conv2d.
 
-**Closed-form derivative formulas (2):**
-- `pdiv_softmax` — `∂(exp(z j) / Σ exp(z k))/∂z i`. Quotient-rule formula.
-- `pdiv_bnIstdBroadcast` — `∂(1/√(σ²+ε))/∂x_i = -istd³ · (xᵢ - μ) / n`.
-
-**Attention bundles (4):**
+**Attention bundles (2):**
 - `mhsa_has_vjp_mat` — multi-head SDPA bundled.
 - `mhsa_layer_flat_diff` — Diff sibling.
+
+**Opaque-codegen interfaces (2):**
 - `patchEmbed_flat_has_vjp` — opaque-codegen patch embedding.
 - `patchEmbed_flat_diff` — Diff sibling.
 
@@ -75,39 +79,39 @@ Cumulative across the foundation-flip + this branch: **23 → 13 project axioms.
 
 ## What's still tackleable (and what isn't)
 
-### Tackleable but multi-hour (the realistic next session)
+### Tackleable: NONE remaining at the standard-calculus level.
 
-**`pdiv_softmax`** — closed-form derivative.
+The three "tackleable but multi-hour" closed-form-derivative axioms
+identified after Follow-up E (`pdiv_softmax`, `softmaxCE_grad`,
+`pdiv_bnIstdBroadcast`) all landed on this branch. Notes on the
+chosen approaches:
 
-The mathematically-clean approach is the 1D directional-derivative reduction:
-1. `fderiv f z (basisVec i) j = fderiv (fun z' => softmax c z' j) z (basisVec i)` via `fderiv_apply`.
-2. Match with `HasDerivAt (fun t => softmax c (z + t • basisVec i) j) (rhs) 0` via `HasFDerivAt.comp_hasDerivAt_of_eq` + `HasDerivAt.unique`.
-3. The 1D function unfolds to `Real.exp (z j + t · δ_j) / Σ_k Real.exp (z k + t · δ_k)` where `δ_k = if k = i then 1 else 0`.
-4. Apply Mathlib's 1D `HasDerivAt.div` (well-supported), `HasDerivAt.fun_sum`, `Real.hasDerivAt_exp`.
-5. `Σ_k Real.exp (z k) · δ_k` collapses to `Real.exp (z i)` via `Finset.sum_ite_eq`.
-6. Algebra to match `softmax z j · ((if i = j then 1 else 0) - softmax z i)`.
+- **`pdiv_softmax` — went multi-dimensional, not 1D.** The earlier
+  attempted-and-reverted plan was a 1D directional-derivative reduction.
+  This branch took the simpler multi-dimensional route: chain
+  `HasFDerivAt.exp`, `.fun_sum`, `(hasDerivAt_inv).comp_hasFDerivAt`,
+  `.mul` directly on the j-th coord function `z' ↦ exp(z' j) ·
+  (Σ_k exp(z' k))⁻¹`. Final algebra is two `Finset.sum_eq_single`
+  collapses + `field_simp; ring`. ~70 lines.
+- **`softmaxCE_grad` — chain on log ∘ softmax_label.** Relocated from
+  MLP.lean to Attention.lean (depends on the now-theorem `pdiv_softmax`).
+  `HasFDerivAt.log` is the key lemma; positivity from exp. ~50 lines.
+- **`pdiv_bnIstdBroadcast` — centering CLM trick.** The trick that made
+  the bnVar derivative tractable: define `C k = proj k - (1/N) Σ_i proj i`
+  as a CLM (linear ⇒ self-fderiv), then `bnVar = (Σ_k (C k)²) / N`.
+  Square via `.mul`, sum via `.fun_sum`, scale via `.mul_const`, add
+  ε, sqrt, inv-compose. The `Σ_k (x_k - μ) = 0` identity collapses
+  one of the two sums after evaluation at `basisVec i`. ~120 lines —
+  the longest of the three.
 
-Attempted on this branch (uncommitted, reverted). Tripping points:
-- `congr 1` over-reduces in the function-equality step (massaging `fun t => softmax c (z + t • v) j` into the explicit quotient form).
-- `Finset.sum_ite_eq` vs `'` direction for collapsing `Σ_k (if k = i then ... else 0)`.
-- `show`-statement type unification at the `t = 0` substitution points (`0 * δ k` not auto-reducing inside the goal that survives `convert h_div using 1`).
-
-Each fixable individually; combined proof likely **~80 lines, 2-3 focused hours**.
-
-**`softmaxCE_grad`** — chain rule on `-log ∘ softmax_label`. Provable via `pdiv_comp` on the composition + `Real.deriv_log` at `softmax label > 0` + `pdiv_softmax`. **Estimated 1-2 hours**, conditional on `pdiv_softmax` (theorem) — or it can stay axiom-conditional on the still-axiomatic `pdiv_softmax`.
-
-**`pdiv_bnIstdBroadcast`** — `1/√(σ²+ε)` derivative. Chain through `Real.sqrt`, `Inv.inv`, and `bnVar`'s product-rule derivative `(2/n) · (xᵢ - μ)`. **Estimated 3-4 hours**. Same shape as `pdiv_softmax` (1D directional approach is right) but deeper algebra in the inner `bnVar` step.
-
-**Realistic floor after follow-up E:** 13 → 10 axioms.
-
-### Stays axiomatic (10 of the current 13)
+### Stays axiomatic (all 10 of the current 10)
 
 - **Subgradient conventions (3):** `pdiv_relu`, `relu_has_vjp`, `mlp_has_vjp`. Could be derived only by weakening `HasVJP.correct` to a "smooth subset only" formulation — project-wide rewrite, separate multi-week effort.
 - **Non-smooth/boundary conventions (3):** `conv2d_has_vjp3`, `maxPool2_has_vjp3`, `depthwise_has_vjp3`. Same weakening would unlock these, modulo a shared boundary-handling axiom.
 - **Bundled vmap-VJP (2):** `mhsa_has_vjp_mat`, `mhsa_layer_flat_diff`. Need a column-axis analog of `pdivMat_rowIndep` plus a ternary-input VJP framework lemma.
 - **Opaque-codegen interfaces (2):** `patchEmbed_flat_has_vjp`, `patchEmbed_flat_diff`. The actual computation lives in MLIR; we axiomatize the forward+backward consistency.
 
-Below ~10 axioms, every remaining axiom is "the ML framework treats this op's gradient by convention X" or "this opaque codegen forward and backward are mutually consistent" — neither is provable from standard analysis without weakening the framework.
+At 10 axioms, every remaining axiom is "the ML framework treats this op's gradient by convention X" or "this opaque codegen forward and backward are mutually consistent" — neither is provable from standard analysis without weakening the framework.
 
 ---
 
@@ -245,17 +249,15 @@ hypothesis explicit at every call site.
 
 ## Time estimate for remaining follow-up
 
-- **`pdiv_softmax`:** 2-3 hours. Skeleton drafted; pitfalls cataloged.
-- **`softmaxCE_grad`:** 1-2 hours, conditional on `pdiv_softmax`
-  (theorem) — chain rule on `-log ∘ softmax_label`.
-- **`pdiv_bnIstdBroadcast`:** 3-4 hours. Same 1D approach as
-  `pdiv_softmax`, plus `bnVar` derivative algebra.
-
-**Total to reach the floor:** ~one focused session of 6-9 hours.
+None at the standard-calculus level. The pre-flip estimate of "6-9
+focused hours to reach the floor" turned out to be approximately
+correct in aggregate, though the individual proof shapes differed
+from the original plan (multi-dimensional `HasFDerivAt` chains
+beat 1D directional-derivative reductions for all three).
 
 ---
 
-## After the floor (10 axioms)
+## At the floor (10 axioms)
 
 10 axioms, broken down:
 - 3 ReLU subgradient conventions (`pdiv_relu`, `relu_has_vjp`, `mlp_has_vjp`).
@@ -273,3 +275,44 @@ Below 10 starts requiring framework-level changes:
 
 Both are project-wide rewrites — separate multi-week efforts, not
 this branch's continuation.
+
+---
+
+## Lessons from the three closed-form derivative proofs
+
+1. **Pick the form `HasFDerivAt` is happiest with.** All three proofs
+   started with `fderiv_apply` to extract a scalar (`Vec → ℝ`) coord
+   function, then built `HasFDerivAt` from `Real.exp/sqrt/log/inv` +
+   linear projections. The 1D directional reduction (`HasDerivAt`-based)
+   was anticipated but never used: the multi-dimensional chain composes
+   more cleanly with Mathlib's `HasFDerivAt.{exp, log, sqrt, mul,
+   fun_sum, comp_hasFDerivAt}`.
+
+2. **CLM-as-fderiv for linear functionals.** For `pdiv_bnIstdBroadcast`,
+   defining the centering map `C k = proj k - (1/N) Σ_i proj i` *as a
+   CLM* (not a function) gave us `(C k).hasFDerivAt : HasFDerivAt (C k)
+   (C k) x` for free. This collapsed the inner bnVar derivative work,
+   which would otherwise require manual product-rule chains over the
+   centering term.
+
+3. **Lambda-form mismatch is a recurring tax.** The `comp_hasFDerivAt`
+   composition of `hasDerivAt_inv` produces `HasFDerivAt (Inv.inv ∘ f)
+   ...`. Lean does not auto-eta to `HasFDerivAt (fun z' => (f z')⁻¹)
+   ...` for unification with downstream consumers. Workaround: use
+   explicit type ascription on the `have` so the elaborator inserts the
+   eta-expansion. This was the same lesson as Pitfall #1 below; it
+   re-occurred for both `pdiv_softmax` and `pdiv_bnIstdBroadcast`.
+
+4. **`fderiv_apply` direction matters.** `fderiv_apply h_diff k` rewrites
+   `fderiv (fun x' => f x' k) x = (proj k).comp (fderiv f x)`. It only
+   fires when the goal contains the lambda form on the LHS. When the
+   goal has the projection form (`fderiv f x v k`), use a `have h_swap
+   : ... := by show ...; rw [fderiv_apply ...]; rfl` bridge. All three
+   proofs used this idiom (also `pdiv_gelu` from `6f65ba3`).
+
+5. **`field_simp` clears most of the algebra; `ring` finishes.** Once
+   the CLM is evaluated at `basisVec i` and the Kronecker / centering
+   sums collapse, the remaining identities are field-arithmetic. With
+   one `≠ 0` hypothesis in scope, `field_simp; ring` consistently
+   closed each of the three. No need for hand-rolled `mul_inv_cancel₀`
+   / `pow_eq_*` lemma searches.
