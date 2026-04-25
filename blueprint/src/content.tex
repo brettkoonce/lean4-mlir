@@ -1938,6 +1938,9 @@ resizing} (Howard et al., 2018), this was the winning recipe at
 Stanford's DAWNBench in 2018; the lineage traces back to Leslie
 Smith's cyclical learning rates (Smith 2015,
 \href{https://arxiv.org/abs/1506.01186}{arXiv:1506.01186}).
+Popularized for ImageNet-scale training by He et al.\ 2018's
+``Bag of Tricks''
+(\href{https://arxiv.org/abs/1812.01187}{arXiv:1812.01187}).
 
 \textbf{Warmup} (Goyal et al., 2017,
 \href{https://arxiv.org/abs/1706.02677}{arXiv:1706.02677}). Linearly
@@ -1957,8 +1960,8 @@ pipelines, and it's what \texttt{TrainConfig.weightDecay} implements.
 
 \textbf{Augmentation}. Our pipeline does random crops ($256 \to 224$)
 and random horizontal flips on Imagenette; hflip only on CIFAR;
-nothing on MNIST. For the more systematic modern treatment the paper
-to read is \textbf{RandAugment} (Cubuk et al.\ 2020,
+nothing on MNIST. For a systematic modern treatment read
+\textbf{RandAugment} (Cubuk et al.\ 2020,
 \href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}): sample $N$
 transforms from a fixed pool at a common magnitude $M$, tunable as
 two scalars. Indispensable at Imagenette's 9K-image scale. Lives in
