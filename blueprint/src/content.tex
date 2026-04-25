@@ -1829,8 +1829,8 @@ Some numbers worth noticing:
 
 Six ingredients first appear here, none of which are layers --- they
 all live in \texttt{TrainConfig} or training code. They don't touch
-the network, but they're what moves a scratch-trained model from
-$\sim$60\% accuracy [TODO: stable ablation] to 90\%.
+the network, but they're what moves a scratch-trained model from 72.82\%
+(plain SGD + momentum, no other tricks) to 90.29\%.
 
 \textbf{Adam} (Kingma \& Ba, 2014,
 \href{https://arxiv.org/abs/1412.6980}{arXiv:1412.6980}). Replaces
@@ -1906,8 +1906,10 @@ than the order-dependent story you'd get from an additive ladder.
 Run & Val accuracy & $\Delta$ vs full \\
 \hline
 Full recipe             & 90.29\% & --- \\
+Bare recipe (plain SGD + momentum, no other tricks) & 72.82\% & $-$17.47 \\
+Full minus augmentation & 82.71\% & $-$7.58 \\
 Full minus cosine decay & 86.81\% & $-$3.48 \\
-Full minus Adam (SGD + 0.9 momentum, lr 0.01) & 87.04\% & $-$3.25 \\
+Full minus Adam (vanilla SGD, lr 0.01) & 87.04\% & $-$3.25 \\
 Full minus warmup       & 88.88\% & $-$1.41 \\
 Full minus label smoothing & 89.24\% & $-$1.05 \\
 Full minus weight decay & 89.68\% & $-$0.61 \\
@@ -1915,33 +1917,40 @@ Full minus weight decay & 89.68\% & $-$0.61 \\
 \end{tabular}
 \end{center}
 
-Two observations worth naming:
+Three observations worth naming:
 
-\textbf{Cosine decay and Adam are roughly tied for largest single
-contribution} ($-$3.48 and $-$3.25 points respectively). They operate
-on different axes --- cosine shapes the learning-rate trajectory,
-Adam shapes the per-parameter update magnitude --- but their
-late-training influence on val accuracy is comparable. Either
-alone-missing costs roughly 3 percentage points.
+\textbf{Augmentation is by far the largest single contribution}
+($-$7.58 points, more than 2$\times$ any other knob). Imagenette
+has just 9469 training images for a 21M-parameter network, so
+without augmentation the model overfits hard --- training loss
+drops below $0.001$ while val accuracy stalls. Augmentation is
+doing most of the work that the rest of the recipe gets credit
+for.
 
-\textbf{Weight decay and label smoothing are small but real}
-($-$0.61 and $-$1.05). Both are regularizers; both help the most
-in the mid-training phase where overfitting starts to show, then
-their effect narrows as cosine decay drives the learning rate to
-zero. The ablation runs briefly show larger gaps in the middle of
-training (e.g., no-WD lands $-$6 points at epoch 10 before the gap
-narrows to $-$0.6 by epoch 80), which is the usual
-overfit-then-catch-up signature.
+\textbf{Cosine decay and Adam are roughly tied for largest
+non-augmentation contribution} ($-$3.48 and $-$3.25 points). They
+operate on different axes --- cosine shapes the learning-rate
+trajectory, Adam shapes the per-parameter update magnitude --- but
+their late-training influence on val accuracy is comparable.
 
-The no-augmentation row is still running as of this writing; the
-updated table will land in a revision once the result is in.
+\textbf{The contributions are essentially additive.} Sum of all
+six leave-one-out deltas: $-17.38$ points. Bare-recipe delta vs
+full: $-17.47$ points. The two agree to within rounding, suggesting
+the modern recipe's ingredients aren't significantly interacting ---
+each one buys roughly the same lift independently of which others
+are present. Weight decay and label smoothing are the smallest
+contributors ($-$0.61 and $-$1.05) but show the
+overfit-then-catch-up signature mid-training (e.g., no-WD lands
+$-$6 points at epoch 10 before the gap narrows by epoch 80).
 
-The note on $-$3.25 for the Adam ablation: running ``SGD + 0.9
-momentum'' at Adam's 0.001 learning rate would have undershot purely
-on LR mismatch, so the ablation uses 0.01 --- a standard SGD learning
-rate for ResNet-scale training. The comparison is between the full
-recipe and a ``SGD-appropriate recipe'' variant, not a strict
-identity swap.
+A note on the SGD configs: \texttt{r34-no-adam} replaces Adam with
+vanilla SGD at lr=0.01 (no momentum), keeping everything else from
+the full recipe. \texttt{r34-bare} uses SGD with momentum 0.9 at
+lr=0.01 and turns \emph{all} other tricks off. The two SGD configs
+therefore differ on momentum as well as on the recipe ingredients,
+so the bare row should be read as a ``what does the modern recipe
+buy us total'' baseline rather than a strict additive component of
+the leave-one-out chain.
 
 \chapter{Depthwise Convolution}
 \label{chap:depthwise}
