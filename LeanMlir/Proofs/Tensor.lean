@@ -1675,6 +1675,64 @@ theorem pdivFD3_id {c h w : Nat} (x : Tensor3 c h w)
     have step2 := finProdFinEquiv.injective (Prod.mk.inj step1).1
     exact ⟨(Prod.mk.inj step2).1, (Prod.mk.inj step2).2, hw_eq⟩
 
+/-- **Chain rule for `pdivFD3`** — proved from `pdivFD_comp_of_diff` plus
+    two-stage `Fintype.sum_equiv` reduction over the flatten bijection.
+    Mirrors `pdiv3_comp`. -/
+theorem pdivFD3_comp_of_diff {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
+    (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
+    (g : Tensor3 c₂ h₂ w₂ → Tensor3 c₃ h₃ w₃)
+    (x : Tensor3 c₁ h₁ w₁)
+    (hf_diff : DifferentiableAt ℝ
+      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
+      (Tensor3.flatten x))
+    (hg_diff : DifferentiableAt ℝ
+      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u)))
+      (Tensor3.flatten (f x)))
+    (ci : Fin c₁) (hi : Fin h₁) (wi : Fin w₁)
+    (ck : Fin c₃) (hk : Fin h₃) (wk : Fin w₃) :
+    pdivFD3 (g ∘ f) x ci hi wi ck hk wk =
+    ∑ cj : Fin c₂, ∑ hj : Fin h₂, ∑ wj : Fin w₂,
+      pdivFD3 f x ci hi wi cj hj wj * pdivFD3 g (f x) cj hj wj ck hk wk := by
+  unfold pdivFD3
+  have h_compose :
+      (fun v : Vec (c₁ * h₁ * w₁) =>
+        Tensor3.flatten ((g ∘ f) (Tensor3.unflatten v))) =
+      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u))) ∘
+      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v))) := by
+    funext v
+    simp [Function.comp, Tensor3.unflatten_flatten]
+  have h_mid :
+      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
+        (Tensor3.flatten x) = Tensor3.flatten (f x) := by
+    simp [Tensor3.unflatten_flatten]
+  have hg_diff' : DifferentiableAt ℝ
+      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u)))
+      ((fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
+        (Tensor3.flatten x)) := by
+    rw [h_mid]; exact hg_diff
+  rw [h_compose, pdivFD_comp_of_diff _ _ _ _ _ hf_diff hg_diff']
+  simp_rw [h_mid]
+  set F : Fin (c₂ * h₂ * w₂) → ℝ := fun r =>
+    pdivFD (fun v => Tensor3.flatten (f (Tensor3.unflatten v))) (Tensor3.flatten x)
+      (finProdFinEquiv (finProdFinEquiv (ci, hi), wi)) r *
+    pdivFD (fun u => Tensor3.flatten (g (Tensor3.unflatten u))) (Tensor3.flatten (f x))
+      r (finProdFinEquiv (finProdFinEquiv (ck, hk), wk)) with hF
+  rw [Fintype.sum_equiv finProdFinEquiv.symm F
+      (fun pw : Fin (c₂ * h₂) × Fin w₂ => F (finProdFinEquiv pw))
+      (fun r => by
+        show F r = F (finProdFinEquiv (finProdFinEquiv.symm r))
+        rw [Equiv.apply_symm_apply])]
+  rw [Fintype.sum_prod_type]
+  rw [Fintype.sum_equiv finProdFinEquiv.symm
+      (fun p : Fin (c₂ * h₂) => ∑ wj : Fin w₂, F (finProdFinEquiv (p, wj)))
+      (fun ch : Fin c₂ × Fin h₂ =>
+        ∑ wj : Fin w₂, F (finProdFinEquiv (finProdFinEquiv ch, wj)))
+      (fun p => by
+        show (∑ wj : Fin w₂, F (finProdFinEquiv (p, wj))) =
+             (∑ wj : Fin w₂, F (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv.symm p), wj)))
+        rw [Equiv.apply_symm_apply])]
+  rw [Fintype.sum_prod_type]
+
 /-- **Sum rule for `pdivFD3`** — proved from `pdivFD_add_of_diff` via
     `Tensor3.flatten`. Requires both `f` and `g` (in their flattened
     forms) to be differentiable at `flatten x`. Mirrors `pdiv3_add`. -/
