@@ -5,6 +5,7 @@ import LeanMlir.Proofs.Residual
 import LeanMlir.Proofs.SE
 import LeanMlir.Proofs.LayerNorm
 import Mathlib.Analysis.SpecialFunctions.ExpDeriv
+import Mathlib.Analysis.SpecialFunctions.Log.Deriv
 import Mathlib.Analysis.Calculus.Deriv.Inv
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 import Mathlib.Analysis.Complex.Trigonometric
@@ -360,6 +361,80 @@ noncomputable def softmax_has_vjp (c : Nat) : HasVJP (softmax c) where
     · simp [mul_ite, ite_mul, mul_one, mul_zero, zero_mul]
     -- Second sum: factor p i out
     · rw [Finset.mul_sum]; congr 1; ext j; ring
+
+/-- **Softmax cross-entropy scalar gradient** — proved (was an axiom in
+    MLP.lean; relocated here to use `pdiv_softmax`).
+
+    `∂(-log softmax(z)[label])/∂z_j = softmax(z)_j - onehot(label)_j`
+
+    Stated using `pdiv` on a `Vec 1`-valued wrapper (cross-entropy is
+    naturally scalar, but `pdiv` is defined for `Vec → Vec`; we just
+    take the only output index). Proof: `fderiv_apply` extracts the
+    only coord, then `HasFDerivAt.log` (with `softmax z label > 0`)
+    composed with `softmax_diff` gives the derivative of the inner
+    `Real.log`. Negating and evaluating at `basisVec j` reduces via
+    `pdiv_softmax` to the expected formula. -/
+theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
+    pdiv (fun (z : Vec c) (_ : Fin 1) => crossEntropy c z label) logits j 0
+    = softmax c logits j - oneHot c label j := by
+  cases c with
+  | zero => exact label.elim0
+  | succ c' =>
+  have h_softmax_pos : ∀ z : Vec (c' + 1), 0 < softmax (c' + 1) z label := fun z =>
+    div_pos (Real.exp_pos _)
+      (Finset.sum_pos (fun k _ => Real.exp_pos _) Finset.univ_nonempty)
+  have hp_ne : softmax (c' + 1) logits label ≠ 0 := (h_softmax_pos logits).ne'
+  -- Differentiability infrastructure.
+  have h_softmax_label_diff : Differentiable ℝ
+      (fun z : Vec (c' + 1) => softmax (c' + 1) z label) :=
+    fun z => differentiableAt_pi.mp ((softmax_diff (c' + 1)) z) label
+  have h_log_diff : Differentiable ℝ
+      (fun z : Vec (c' + 1) => Real.log (softmax (c' + 1) z label)) :=
+    fun z => (h_softmax_label_diff z).log (h_softmax_pos z).ne'
+  have h_ce_pi_diff : Differentiable ℝ
+      (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label) := by
+    rw [differentiable_pi]
+    intro _
+    show Differentiable ℝ (fun z => -(Real.log (softmax (c' + 1) z label)))
+    exact h_log_diff.neg
+  unfold pdiv
+  -- Step 1: extract the single (0-th) coord of the Vec 1-valued function.
+  rw [show fderiv ℝ (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label)
+                  logits (basisVec j) 0
+        = fderiv ℝ (fun z : Vec (c' + 1) => crossEntropy (c' + 1) z label)
+                  logits (basisVec j) from by
+    rw [fderiv_apply (h_ce_pi_diff logits) 0]; rfl]
+  -- Step 2: HasFDerivAt chain for crossEntropy = -log ∘ softmax_label.
+  have h_softmax_at : HasFDerivAt (fun z : Vec (c' + 1) => softmax (c' + 1) z label)
+      (fderiv ℝ (fun z => softmax (c' + 1) z label) logits) logits :=
+    (h_softmax_label_diff logits).hasFDerivAt
+  have h_log_at : HasFDerivAt
+      (fun z : Vec (c' + 1) => Real.log (softmax (c' + 1) z label))
+      ((softmax (c' + 1) logits label)⁻¹ •
+        fderiv ℝ (fun z => softmax (c' + 1) z label) logits) logits :=
+    h_softmax_at.log hp_ne
+  have h_ce_at : HasFDerivAt
+      (fun z : Vec (c' + 1) => crossEntropy (c' + 1) z label)
+      (-((softmax (c' + 1) logits label)⁻¹ •
+          fderiv ℝ (fun z => softmax (c' + 1) z label) logits)) logits := by
+    show HasFDerivAt (fun z => -(Real.log (softmax (c' + 1) z label))) _ logits
+    exact h_log_at.neg
+  rw [h_ce_at.fderiv]
+  -- Step 3: simplify CLM application at basisVec j.
+  simp only [ContinuousLinearMap.neg_apply, ContinuousLinearMap.smul_apply, smul_eq_mul]
+  -- Step 4: rewrite fderiv of `softmax z label` (in z) as pdiv softmax, then apply pdiv_softmax.
+  rw [show fderiv ℝ (fun z : Vec (c' + 1) => softmax (c' + 1) z label) logits (basisVec j)
+        = pdiv (softmax (c' + 1)) logits j label from by
+    show _ = fderiv ℝ (softmax (c' + 1)) logits (basisVec j) label
+    rw [fderiv_apply ((softmax_diff (c' + 1)) logits) label]; rfl]
+  rw [pdiv_softmax]
+  -- Step 5: oneHot unfolds to `if j = label then 1 else 0`; algebra cancels p[label].
+  show -((softmax (c' + 1) logits label)⁻¹ *
+        (softmax (c' + 1) logits label *
+          ((if j = label then (1 : ℝ) else 0) - softmax (c' + 1) logits j))) =
+       softmax (c' + 1) logits j - (if j = label then (1 : ℝ) else 0)
+  field_simp
+  ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § 2. Scaled Dot-Product Attention

@@ -319,17 +319,9 @@ noncomputable def oneHot (c : Nat) (label : Fin c) : Vec c :=
 noncomputable def crossEntropy (c : Nat) (logits : Vec c) (label : Fin c) : ℝ :=
   -(Real.log (softmax c logits label))
 
-/-- **Cross-entropy-with-softmax scalar gradient**.
-
-    `∂(-log softmax(z)[label])/∂z_j = softmax(z)_j - onehot(label)_j`
-
-    Stated using `pdiv` on a `Vec 1`-valued wrapper (cross-entropy is
-    naturally scalar, but `pdiv` is defined for `Vec → Vec`; we just
-    take the only output index).  This lets us get away without a
-    separate `sdiv` primitive. -/
-axiom softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
-    pdiv (fun (z : Vec c) (_ : Fin 1) => crossEntropy c z label) logits j 0
-    = softmax c logits j - oneHot c label j
+-- `softmaxCE_grad` is proved in `Attention.lean` (after `pdiv_softmax` is
+-- available). Its statement and proof live there; this file keeps only
+-- `softmax`, `oneHot`, and `crossEntropy` definitions used downstream.
 
 -- ════════════════════════════════════════════════════════════════
 -- § MLP Composition
