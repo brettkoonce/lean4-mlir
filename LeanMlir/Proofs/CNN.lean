@@ -124,9 +124,19 @@ end Kernel4
         padding = dense<[[1, 1], [1, 1]]>, ...
       }
       %h0pre = stablehlo.add %cv0, broadcast(%b0) -/
-axiom conv2d {ic oc h w kH kW : Nat}
+noncomputable def conv2d {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (x : Tensor3 ic h w) : Tensor3 oc h w
+    (x : Tensor3 ic h w) : Tensor3 oc h w :=
+  fun o hi wi =>
+    b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
+      W o c kh kw *
+        (let pH := (kH - 1) / 2
+         let pW := (kW - 1) / 2
+         let hh := kh.val + hi.val
+         let ww := kw.val + wi.val
+         if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
+           x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
+         else 0)
 
 /-- **Conv2d input-VJP** — one axiom bundling the backward function and its
     correctness.  A `HasVJP3` record carries both the backward function
