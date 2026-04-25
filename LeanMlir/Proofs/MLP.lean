@@ -66,17 +66,80 @@ theorem pdiv_dense {m n : Nat} (W : Mat m n) (b : Vec n)
   rw [Finset.sum_ite_eq Finset.univ i (fun i' => W i' j)]
   simp
 
-/-- **Jacobian of dense wrt W** (new, Phase 7).
-
-    `∂ dense(W, b, x)_j / ∂ W_{i', j'} = x_{i'} · δ(j, j')`
-
-    Stated over the `Mat.flatten` bijection so we can reuse the `pdiv`
-    framework on `Vec (m*n)`. Symmetric counterpart to `pdiv_dense`. -/
-axiom pdiv_dense_W {m n : Nat} (b : Vec n) (x : Vec m) (W : Mat m n)
+/-- **Jacobian of dense wrt W** — `∂dense(W, b, x)_j/∂W_{i, j'} = x_i·δ(j, j')`.
+    Now a theorem, derived from foundation axioms (`pdiv_add`,
+    `pdiv_const`, `pdiv_finset_sum`, `pdiv_mul`, `pdiv_reindex`) over
+    the flatten bijection. Symmetric counterpart to `pdiv_dense`. -/
+theorem pdiv_dense_W {m n : Nat} (b : Vec n) (x : Vec m) (W : Mat m n)
     (i : Fin m) (j' : Fin n) (j : Fin n) :
     pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
          (Mat.flatten W) (finProdFinEquiv (i, j')) j =
-      if j = j' then x i else 0
+      if j = j' then x i else 0 := by
+  -- Step 1: unfold dense + unflatten to an explicit Vec (m*n) → Vec n form.
+  rw [show (fun v : Vec (m * n) => dense (Mat.unflatten v) b x) =
+        (fun v : Vec (m * n) => fun jo : Fin n =>
+          (∑ i' : Fin m, x i' * v (finProdFinEquiv (i', jo))) + b jo) from by
+      funext v jo; unfold dense Mat.unflatten; rfl]
+  -- Step 2: split into (sum) + (constant bias) and apply pdiv_add + pdiv_const.
+  rw [show (fun v : Vec (m * n) => fun jo : Fin n =>
+              (∑ i' : Fin m, x i' * v (finProdFinEquiv (i', jo))) + b jo) =
+        (fun v jo =>
+          (fun w : Vec (m * n) => fun jo' : Fin n =>
+              ∑ i' : Fin m, x i' * w (finProdFinEquiv (i', jo'))) v jo +
+          (fun _ : Vec (m * n) => b) v jo) from rfl]
+  rw [pdiv_add, pdiv_const, add_zero]
+  -- Step 3: distribute pdiv over the finset sum (over Fin m).
+  rw [pdiv_finset_sum (Finset.univ : Finset (Fin m))
+      (fun i' v jo => x i' * v (finProdFinEquiv (i', jo)))
+      (Mat.flatten W) (finProdFinEquiv (i, j')) j]
+  -- Step 4: each summand is (const x_i') × (reindex v at (i', jo)). Apply pdiv_mul.
+  have hterm : ∀ i' : Fin m,
+      pdiv (fun v : Vec (m * n) => fun jo : Fin n =>
+              x i' * v (finProdFinEquiv (i', jo)))
+           (Mat.flatten W) (finProdFinEquiv (i, j')) j =
+      if i = i' ∧ j' = j then x i else 0 := by
+    intro i'
+    rw [show (fun v : Vec (m * n) => fun jo : Fin n =>
+                x i' * v (finProdFinEquiv (i', jo))) =
+          (fun v jo =>
+            (fun (_ : Vec (m * n)) (_ : Fin n) => x i') v jo *
+            (fun (w : Vec (m * n)) (jo' : Fin n) =>
+                w (finProdFinEquiv (i', jo'))) v jo) from rfl]
+    rw [pdiv_mul]
+    -- Const factor pdiv = 0.
+    rw [show pdiv (fun (_ : Vec (m * n)) (_ : Fin n) => x i') (Mat.flatten W)
+              (finProdFinEquiv (i, j')) j = 0
+        from pdiv_const _ _ _ _]
+    -- Reindex factor via pdiv_reindex with σ = `fun jo => finProdFinEquiv (i', jo)`.
+    rw [show (fun (w : Vec (m * n)) (jo' : Fin n) =>
+                w (finProdFinEquiv (i', jo'))) =
+          (fun w => fun jo' =>
+            w ((fun jo'' : Fin n => finProdFinEquiv (i', jo'')) jo')) from rfl]
+    rw [pdiv_reindex (fun jo'' : Fin n => finProdFinEquiv (i', jo''))]
+    -- Goal: 0 * x i' + x i' * (if (fPF (i, j')) = fPF (i', j) then 1 else 0)
+    --       = if i = i' ∧ j' = j then x i else 0
+    by_cases h : i = i' ∧ j' = j
+    · obtain ⟨hii', hj'j⟩ := h
+      subst hii'; subst hj'j
+      simp
+    · have hne : finProdFinEquiv (i, j') ≠ finProdFinEquiv (i', j) := by
+        intro heq
+        apply h
+        have := finProdFinEquiv.injective heq
+        exact ⟨(Prod.mk.inj this).1, (Prod.mk.inj this).2⟩
+      rw [if_neg hne, if_neg h]
+      ring
+  simp_rw [hterm]
+  -- Step 5: collapse the sum over i'. ∑ i', if i = i' ∧ j' = j then x i else 0.
+  by_cases hj'j : j' = j
+  · subst hj'j
+    simp only [and_true]
+    rw [Finset.sum_ite_eq Finset.univ i (fun _ => x i)]
+    simp
+  · rw [if_neg (fun h => hj'j h.symm)]
+    simp_rw [show ∀ i' : Fin m, (i = i' ∧ j' = j) ↔ False from
+      fun i' => ⟨fun h => hj'j h.2, False.elim⟩]
+    simp
 
 /-- Dense VJP — proved. -/
 noncomputable def dense_has_vjp {m n : Nat} (W : Mat m n) (b : Vec n) :
