@@ -1,8 +1,8 @@
-# VJP.md — Foundation Flip Landed; Floor at 8 Axioms After Phase 3
+# VJP.md — Foundation Flip Landed; Floor at 7 Axioms After Phase 4
 
 **Branches:** `attention-diff-threading` + `colslab-vmap-framework`.
-Cumulative: **23 → 8 project axioms** (10 → 8 from Phase 3 — multi-head
-SDPA framework no longer axiomatic).
+Cumulative: **23 → 7 project axioms** (8 → 7 from Phase 4 —
+`conv2d_has_vjp3` no longer axiomatic).
 
 > **Strategy summary.** Foundation flip (attempt #3, "guarded ReLU") landed
 > on `main` and preserved the soundness analysis from attempts #1 and #2
@@ -13,9 +13,11 @@ SDPA framework no longer axiomatic).
 > reaching 10 axioms. The `colslab-vmap-framework` branch then built the
 > column-stack-SDPA framework that lifts `sdpa_has_vjp_mat3` to the full
 > multi-head layer, removing `mhsa_has_vjp_mat` and `mhsa_layer_flat_diff`
-> (Phase 3, ~600 LOC). The remaining 8 axioms are subgradient conventions,
-> non-smooth/boundary handlers, and opaque-codegen interfaces — every one
-> needs a project-wide framework change to remove.
+> (Phase 3, ~600 LOC); then proved `conv2d_has_vjp3` from foundation rules
+> using the per-coord pdiv chain plus a custom `pdiv_pi_pad_eval` helper
+> for the dependent-if pattern (Phase 4, ~470 LOC). The remaining 7
+> axioms are subgradient conventions, the still-tackleable
+> `depthwise_has_vjp3`, and opaque-codegen interfaces.
 
 ---
 
@@ -58,21 +60,32 @@ SDPA framework no longer axiomatic).
 
 ---
 
-## Project axiom inventory (8)
+## Project axiom inventory (7)
 
 **MLP / activations (3):**
 - `pdiv_relu` — guarded subgradient axiom (DL convention).
 - `relu_has_vjp` — existence at non-smooth points.
 - `mlp_has_vjp` — composes through ReLU.
 
-**CNN-family (3):**
-- `conv2d_has_vjp3` — input-path VJP through padding boundary.
+**CNN-family (2):**
 - `maxPool2_has_vjp3` — argmax routing convention.
-- `depthwise_has_vjp3` — input-path VJP, parallel to conv2d.
+- `depthwise_has_vjp3` — input-path VJP, parallel to conv2d (still
+  tackleable: same proof pattern as `conv2d_has_vjp3` minus the
+  cross-channel sum; ~300 LOC).
 
 **Opaque-codegen interfaces (2):**
 - `patchEmbed_flat_has_vjp` — opaque-codegen patch embedding.
 - `patchEmbed_flat_diff` — Diff sibling.
+
+**Removed in Phase 4 (`colslab-vmap-framework` branch):**
+- ~~`conv2d_has_vjp3`~~ — now a theorem with backward
+  `conv2d_input_grad_formula` (sum over `(co, ho, wo)` with reconstructed
+  kernel offsets). Proved via per-coord pdiv lemma using a custom
+  `pdiv_pi_pad_eval` helper for the dependent-`if hpad : pad then v(σ hpad) else 0`
+  pattern that `fun_prop` cannot directly handle. Then triple-distribute
+  via `pdiv_finset_sum`, per-summand `pdiv_const_mul_pi_pad_eval` for the
+  W-times-pad-cond shape, then collapse via three nested `Finset.sum_eq_single`
+  on `(c, kh, kw)` matching `idx_in`'s decoded `(ci, hi, wi)`.
 
 **Removed in Phase 3 (`colslab-vmap-framework` branch):**
 - ~~`mhsa_has_vjp_mat`~~ — now a theorem composing
@@ -86,7 +99,14 @@ SDPA framework no longer axiomatic).
 
 ## What's still tackleable (and what isn't)
 
-### Tackleable: NONE remaining at the standard-calculus level.
+### Tackleable: `depthwise_has_vjp3` (standard calculus, ~300 LOC).
+
+Same proof pattern as `conv2d_has_vjp3` (Phase 4) but simpler — depthwise
+has no cross-channel sum, so the triple `Σ c kh kw` collapses to a double
+`Σ kh kw`. The `pdiv_pi_pad_eval` and `pdiv_const_mul_pi_pad_eval`
+helpers are reusable. Estimated: ~6–8 hours per `conv2d.md`.
+
+### Removed at the standard-calculus level (Phase 4): `conv2d_has_vjp3`.
 
 The three "tackleable but multi-hour" closed-form-derivative axioms
 identified after Follow-up E (`pdiv_softmax`, `softmaxCE_grad`,
