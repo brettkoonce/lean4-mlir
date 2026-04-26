@@ -1,19 +1,18 @@
 # mhsa.md — plan for removing the multi-head attention axioms
 
-**Status:** deferred. Two axioms remain on `main` (commit `89c923c`):
+**Status:** ✅ LANDED. All three phases on branch `colslab-vmap-framework`.
+Both `mhsa_has_vjp_mat` and `mhsa_layer_flat_diff` are now theorems with
+pure-Mathlib closure (`propext`, `Classical.choice`, `Quot.sound`).
 
-1. `mhsa_has_vjp_mat` (Attention.lean:1002) — bundled VJP correctness for
-   the multi-head SDPA layer.
-2. `mhsa_layer_flat_diff` (Attention.lean:1013) — `Differentiable ℝ` for
-   the flattened layer.
+Final axiom count: **10 → 8**. The remaining 8 are subgradient conventions
+(ReLU/conv/maxpool family) and opaque-codegen interfaces (patchEmbed) —
+neither tackleable without framework-level changes.
 
-Both are honest "vmap-over-heads" deferrals: the math is exactly "multi-head
-attention is `heads`-many parallel SDPAs, decoupled by column slabs," and
-the framework to formalize that decoupling needs to be built from scratch.
-
-> **One-line summary.** Removing these axioms is a real ~600–800 LOC
-> framework-development effort, not a quick proof. Plan it as its own
-> branch with the colIndep half landing as a standalone PR first.
+> **One-line summary.** Phase 3 worked. The column-stack SDPA approach
+> (`mhsa_g : Mat n (3*d_head) → Mat n d_head`) plus the chain-rule
+> "freezing" lemma `pdivMat_mhsa_g_split` reduced the ternary problem
+> to a unary `colSlabApply` problem, allowing reuse of the Phase 1
+> framework. Total ~600 LOC.
 
 ---
 
@@ -218,38 +217,60 @@ These tripped the attempt and will trip the next one. Pre-mitigate.
 
 ---
 
-## Suggested execution order
-
-To minimize the rework risk:
+## Execution history
 
 1. **Phase 1 (~265 LOC) — ✅ LANDED.** `pdivMat_colIndep` +
    `colSlabApply` + `colSlabwise_has_vjp_mat` on branch
    `colslab-vmap-framework` (commit `6259cae`). Pure-Mathlib closure on
-   all three. Doesn't change axiom counts; reusable foundation for
-   Phase 3.
+   all three. Reusable foundation for Phase 3.
 2. **Phase 2 (~48 LOC) — ✅ LANDED.** `HasVJPMat3` struct +
    `sdpa_has_vjp_mat3` (bundle of existing `sdpa_back_{Q,K,V}_correct`
    theorems) on the same branch (commit `bccf241`). Pure-Mathlib closure.
-   Doesn't change axiom counts; this is the ternary half of the
-   framework. **Note**: the original plan included a
-   `colSlabwise_has_vjp_mat3` ternary lift (~150 LOC), but in practice
-   it's not strictly needed — Phase 3 can use Phase 1's `pdivMat_colIndep`
-   directly with custom per-input chain rule expansions, avoiding the
-   need for a ternary lift abstraction.
-3. **Phase 3 (~400-500 LOC) — DEFERRED.** Combine Phases 1 + 2 into
-   `mhsa_has_vjp_mat` and `mhsa_layer_flat_diff`. The blocker:
-   joint differentiability of `sdpa` in `(Q, K, V)` doesn't follow from
-   the existing one-variable-at-a-time `*_flat_diff` lemmas. Needs a
-   new `sdpa_diff_jointly` helper (~150 LOC) plus the integration
-   chain (~200-350 LOC). See "Phase 3 attempt notes" below.
-4. **VJP.md update + commits**, mirroring the
-   `attention-diff-threading` discipline (one commit per landed piece).
+   The ternary half of the framework. (Plan originally included a
+   `colSlabwise_has_vjp_mat3` ternary lift (~150 LOC), but Phase 3
+   sidestepped that abstraction via column-stacking.)
+3. **Phase 3 (~600 LOC) — ✅ LANDED.** `mhsa_g`, `mhsa_g_flat_diff`,
+   `pdivMat_mhsa_g_split`, `mhsa_g_has_vjp_mat`, `mhsa_qkv_W`/`mhsa_qkv_b`,
+   `mhsa_layer_eq_compose`, `mhsa_has_vjp_mat`, `mhsa_layer_flat_diff`.
+   Both axioms gone; `#print axioms` confirms pure-Mathlib closure.
 
-After Phase 3, axiom count drops 10 → 8. The remaining 8 are pure
+After Phase 3: **axiom count 10 → 8**. The remaining 8 are
 "framework convention" axioms (ReLU subgradient cluster + opaque
 codegen).
 
-### Phase 3 attempt notes (the blocker)
+### Phase 3 design — what worked
+
+Two earlier attempts (notes preserved as historical record below) hit
+the joint-diff and ternary-VJP blockers. The successful Phase 3 approach
+sidestepped both via **column-stacking**:
+
+1. **Define `mhsa_g : Mat n (3 * d_head) → Mat n d_head`** as the unary
+   view of SDPA where the input slab is `(Q | K | V)` interleaved
+   per-column with `c : Fin 3` selecting Q/K/V. This makes SDPA a
+   *unary* function on a wider matrix, sidestepping the ternary
+   framework requirement.
+2. **Joint diff** (`mhsa_g_flat_diff`) factors as: pre-softmax matmul
+   (fun_prop after unfolds) → rowSoftmax composition (existing
+   `rowSoftmax_flat_diff`) → final matmul-with-V (per-coord sum of
+   products of two diff scalars via `differentiable_pi`).
+3. **`pdivMat_mhsa_g_split`** is the freezing lemma: changes in the
+   c-th column-third of `slab` only perturb the c-th input of SDPA.
+   Proved via the chain rule on `mhsa_g ∘ mhsa_embed_c = freeze_c`
+   where `mhsa_embed_c` is affine with linear part `mhsa_lift_c_CLM`
+   (built from `ContinuousLinearMap.pi` + per-coord `proj`/`0`).
+4. **`mhsa_g_has_vjp_mat`** column-stacks `(sdpa_back_Q, sdpa_back_K,
+   sdpa_back_V)` per-c. Correctness uses `pdivMat_mhsa_g_split` to
+   case-split on c, then `sdpa_has_vjp_mat3.correct_*` for each
+   per-input theorem.
+5. **`mhsa_qkv_W` and `mhsa_qkv_b`** stack `Wq | Wk | Wv` and `bq | bk |
+   bv` with the per-head interleave layout, so the three Q/K/V dense
+   projections become a single per-token dense `qkv_stack_dense`.
+6. **Final composition**: `mhsa_layer = output_dense ∘
+   colSlabApply mhsa_g ∘ qkv_stack_dense`. Each piece has `HasVJPMat`
+   and `_flat_diff`; `vjpMat_comp` glues them; `mhsa_layer_eq_compose`
+   verifies the forward equality via `funext` + `simp_rw [mhsa_qkv_W_eq{0,1,2}]`.
+
+### Historical: Phase 3 attempt notes (the original blockers)
 
 Tried two approaches in a follow-up session:
 
@@ -258,43 +279,34 @@ analog of Phase 1's `colSlabwise_has_vjp_mat`. Hit immediate trouble:
 the function `fun A' => colSlabApply3 g A' B C` (with B, C fixed) is
 NOT of the form `colSlabApply g_unary` for any uniform per-slab `g_unary`,
 because the per-slab function depends on h via the (slab h B, slab h C)
-context. Would need a more general `pdivMat_colIndep_general` allowing
-the per-slab function to vary with h. Doable but adds ~80 LOC of
-generalization for one specific use.
+context.
 
 **Attempt B: `mhsa_layer_flat_diff` standalone.** Tried to prove just
-the differentiability sibling (~80 LOC estimated). Hit the joint
-differentiability blocker: SDPA's flat form is
-`(qkv) ↦ matmul(rowSoftmax(scalarScale(matmul(Q, K^T))), V)`, with
-`Q, K, V` all functions of `qkv`. Existing `matmul_left_const_flat_diff`
-/ `matmul_right_const_flat_diff` / `rowSoftmax_flat_diff` /
-`scalarScale_flat_diff` only treat one matrix as the variable; for
-joint diff we'd either:
-- Tag `rowSoftmax_flat_diff` with `@[fun_prop]` and hope `fun_prop`
-  chains through after `unfold sdpa Mat.mul Mat.transpose` — but the
-  inner softmax denominator's positivity isn't auto-discharged.
-- Build a `sdpa_diff_jointly` helper from scratch using
-  `Differentiable.comp`, `Differentiable.prodMk`, and `IsBoundedBilinearMap`
-  for matrix multiplication. Real cost ~150 LOC.
+the differentiability sibling. Hit the joint differentiability blocker:
+SDPA's flat form is `(qkv) ↦ matmul(rowSoftmax(scalarScale(matmul(Q, K^T))), V)`,
+with `Q, K, V` all functions of `qkv`. Existing per-input `_flat_diff`
+lemmas only treat one matrix as the variable.
 
-**Conclusion:** Phase 3 needs the `sdpa_diff_jointly` helper as a
-prerequisite. That helper plus the integration chain is ~400-500 LOC,
-genuine framework work, not a quick win.
+**What unlocked Phase 3 (in retrospect):** column-stack `(Q | K | V)`
+into `Mat n (3 * d_head)` and treat sdpa as unary on that. Joint diff
+becomes single-input flat-diff, and the ternary VJP framework isn't
+needed — a unary `colSlabApply` on `mhsa_g` suffices.
 
 ---
 
 ## Time budget
 
 - ~~Phase 1: 4–6 hours~~ — actual: ~1 hour.
-- ~~Phase 2: 4–6 hours~~ — actual: ~30 minutes (the structure +
-  bundling, not the full ternary `colSlabwise` lift).
-- Phase 3: 6–10 hours (the `sdpa_diff_jointly` helper is the real
-  surprise — it requires either tagging Mathlib lemmas, building
-  `IsBoundedBilinearMap` instances for matrix multiplication, or a
-  manual chain through each sdpa step. Plus the integration chain
-  itself).
+- ~~Phase 2: 4–6 hours~~ — actual: ~30 minutes.
+- ~~Phase 3: 6–10 hours~~ — actual: a single focused session.
+  Column-stacking turned the joint-diff problem into a single-input
+  problem (`mhsa_g`), which made `mhsa_g_flat_diff` straightforward
+  via `differentiable_pi` and existing `rowSoftmax_flat_diff`. The
+  one technical step was `pdivMat_mhsa_g_split` (freezing via chain
+  rule), which the `mhsa_embed_c`/`mhsa_lift_c_CLM` formulation made
+  routine.
 
-**Remaining: ~6–10 focused hours, ~1–1.5 working days.**
+**Done.**
 
 ---
 

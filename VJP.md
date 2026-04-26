@@ -1,18 +1,21 @@
-# VJP.md — Foundation Flip Landed; Floor Reached at 10 Axioms
+# VJP.md — Foundation Flip Landed; Floor at 8 Axioms After Phase 3
 
-**Branch:** `attention-diff-threading` (7 commits past `main` head `2d4e92e`).
-Cumulative across the foundation-flip + this branch: **23 → 10 project axioms.**
+**Branches:** `attention-diff-threading` + `colslab-vmap-framework`.
+Cumulative: **23 → 8 project axioms** (10 → 8 from Phase 3 — multi-head
+SDPA framework no longer axiomatic).
 
 > **Strategy summary.** Foundation flip (attempt #3, "guarded ReLU") landed
 > on `main` and preserved the soundness analysis from attempts #1 and #2
-> (still load-bearing; see "Soundness analysis" below). This branch walked
-> down the mechanical follow-ups (A–E from the original VJP.md roadmap)
-> and the three "tackleable but multi-hour" closed-form derivative proofs
-> (`pdiv_softmax`, `softmaxCE_grad`, `pdiv_bnIstdBroadcast`). The remaining
-> 10 axioms are all the "stays axiomatic" set: subgradient conventions,
-> non-smooth/boundary handlers, vmap-VJP framework bundles, and
-> opaque-codegen interfaces — every one needs a project-wide framework
-> change to remove.
+> (still load-bearing; see "Soundness analysis" below). The
+> `attention-diff-threading` branch walked the mechanical follow-ups
+> (A–E from the original VJP.md roadmap) and three closed-form derivative
+> proofs (`pdiv_softmax`, `softmaxCE_grad`, `pdiv_bnIstdBroadcast`),
+> reaching 10 axioms. The `colslab-vmap-framework` branch then built the
+> column-stack-SDPA framework that lifts `sdpa_has_vjp_mat3` to the full
+> multi-head layer, removing `mhsa_has_vjp_mat` and `mhsa_layer_flat_diff`
+> (Phase 3, ~600 LOC). The remaining 8 axioms are subgradient conventions,
+> non-smooth/boundary handlers, and opaque-codegen interfaces — every one
+> needs a project-wide framework change to remove.
 
 ---
 
@@ -55,7 +58,7 @@ Cumulative across the foundation-flip + this branch: **23 → 10 project axioms.
 
 ---
 
-## Project axiom inventory (10)
+## Project axiom inventory (8)
 
 **MLP / activations (3):**
 - `pdiv_relu` — guarded subgradient axiom (DL convention).
@@ -67,13 +70,17 @@ Cumulative across the foundation-flip + this branch: **23 → 10 project axioms.
 - `maxPool2_has_vjp3` — argmax routing convention.
 - `depthwise_has_vjp3` — input-path VJP, parallel to conv2d.
 
-**Attention bundles (2):**
-- `mhsa_has_vjp_mat` — multi-head SDPA bundled.
-- `mhsa_layer_flat_diff` — Diff sibling.
-
 **Opaque-codegen interfaces (2):**
 - `patchEmbed_flat_has_vjp` — opaque-codegen patch embedding.
 - `patchEmbed_flat_diff` — Diff sibling.
+
+**Removed in Phase 3 (`colslab-vmap-framework` branch):**
+- ~~`mhsa_has_vjp_mat`~~ — now a theorem composing
+  `mhsa_g_has_vjp_mat` (column-stacked SDPA) + `colSlabwise_has_vjp_mat`
+  (per-head vmap) + per-token dense framework.
+- ~~`mhsa_layer_flat_diff`~~ — now a theorem via the same composition,
+  with `mhsa_g_flat_diff` proving joint differentiability of column-stacked
+  SDPA through `rowSoftmax_flat_diff`.
 
 ---
 
@@ -104,14 +111,13 @@ chosen approaches:
   one of the two sums after evaluation at `basisVec i`. ~120 lines —
   the longest of the three.
 
-### Stays axiomatic (all 10 of the current 10)
+### Stays axiomatic (all 8 of the current 8)
 
 - **Subgradient conventions (3):** `pdiv_relu`, `relu_has_vjp`, `mlp_has_vjp`. Could be derived only by weakening `HasVJP.correct` to a "smooth subset only" formulation — project-wide rewrite, separate multi-week effort.
 - **Non-smooth/boundary conventions (3):** `conv2d_has_vjp3`, `maxPool2_has_vjp3`, `depthwise_has_vjp3`. Same weakening would unlock these, modulo a shared boundary-handling axiom.
-- **Bundled vmap-VJP (2):** `mhsa_has_vjp_mat`, `mhsa_layer_flat_diff`. Need a column-axis analog of `pdivMat_rowIndep` plus a ternary-input VJP framework lemma.
 - **Opaque-codegen interfaces (2):** `patchEmbed_flat_has_vjp`, `patchEmbed_flat_diff`. The actual computation lives in MLIR; we axiomatize the forward+backward consistency.
 
-At 10 axioms, every remaining axiom is "the ML framework treats this op's gradient by convention X" or "this opaque codegen forward and backward are mutually consistent" — neither is provable from standard analysis without weakening the framework.
+At 8 axioms, every remaining axiom is "the ML framework treats this op's gradient by convention X" or "this opaque codegen forward and backward are mutually consistent" — neither is provable from standard analysis without weakening the framework.
 
 ---
 
@@ -257,24 +263,28 @@ beat 1D directional-derivative reductions for all three).
 
 ---
 
-## At the floor (10 axioms)
+## At the floor (8 axioms)
 
-10 axioms, broken down:
+8 axioms, broken down:
 - 3 ReLU subgradient conventions (`pdiv_relu`, `relu_has_vjp`, `mlp_has_vjp`).
 - 3 non-smooth/boundary conventions (`conv2d_has_vjp3`, `maxPool2_has_vjp3`, `depthwise_has_vjp3`).
-- 2 vmap-VJP framework bundles (`mhsa_has_vjp_mat`, `mhsa_layer_flat_diff`).
 - 2 opaque-codegen interfaces (`patchEmbed_flat_has_vjp`, `patchEmbed_flat_diff`).
 
-Below 10 starts requiring framework-level changes:
+Below 8 starts requiring framework-level changes:
 - **Weakening `HasVJP.correct`** to a "smooth subset" formulation so the
   ReLU/conv/depthwise/maxpool subgradient axioms can be deduced from
   smaller base axioms.
-- **A column-axis `pdivMat_rowIndep` analog** plus a ternary-input VJP
-  framework so `mhsa_has_vjp_mat` follows from the single-head SDPA
-  proof (`sdpa_back_{Q,K,V}_correct`, already proved as theorems on `main`).
 
-Both are project-wide rewrites — separate multi-week efforts, not
-this branch's continuation.
+The mhsa axioms (previously the second-largest "tackleable" category)
+came down on `colslab-vmap-framework`: the column-stack SDPA
+formulation `mhsa_g : Mat n (3*d_head) → Mat n d_head` factors the
+per-head sdpa into a single unary slab function, which then composes
+cleanly with `colSlabwise_has_vjp_mat` (Phase 1) and the per-token
+dense framework. The key technical step was `pdivMat_mhsa_g_split`,
+proving that perturbing the c-th third of the qkv-slab only affects
+the c-th input of sdpa — formalized via the chain rule
+`mhsa_g ∘ mhsa_embed_c = freeze_c` and `mhsa_lift_c_CLM` (linear part
+of the embedding).
 
 ---
 
