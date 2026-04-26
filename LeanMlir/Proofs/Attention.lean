@@ -929,7 +929,7 @@ noncomputable def sdpa_has_vjp_mat3 (n d : Nat) :
   correct_3 := sdpa_back_V_correct n d
 
 -- ════════════════════════════════════════════════════════════════
--- § 3. Multi-Head wrapping (Phase 8 — was hand-waved, now axiomatized)
+-- § 3. Multi-Head wrapping (Phase 3 — proved via column-stacking)
 -- ════════════════════════════════════════════════════════════════
 
 /-! ## Multi-head: parallelism over a partition
@@ -951,15 +951,13 @@ In the MLIR (`emitMHSAForward`):
     dense projection (the "output projection" `Wo`)
 
 **Earlier** this section just narrated "no new VJP math" and moved on.
-Phase 8 closes that gap: we *define* `mhsa_layer` concretely in Lean
-(Q/K/V projections → per-head slice → sdpa-per-head → concat → Wo
-projection) and *axiomatize* its `HasVJPMat` in one bundled step. The
-bundled axiom is the "per-head vmap" fact — formalizing it at the
-framework level would need a Mat-level `rowIndep` generalized to the
-column axis plus a ternary input primitive, which is more bureaucracy
-than the book's pedagogy calls for. The formula is numerically
-gradient-checked in `check_axioms.py`, so the axiom is credible up to
-floating-point precision. -/
+The current state proves `mhsa_has_vjp_mat` end-to-end: we *define*
+`mhsa_layer` concretely in Lean (Q/K/V projections → per-head slice
+→ sdpa-per-head → concat → Wo projection), then prove its `HasVJPMat`
+via the new `pdivMat_colIndep` + `colSlabwise_has_vjp_mat` framework
+(Phase 3, Apr 2026), which lifts the per-head SDPA backward over the
+head axis. Formula remains numerically gradient-checked in
+`check_axioms.py` for cross-validation. -/
 
 /-- Multi-head SDPA on a single sequence: `Mat N (heads·d_head) → Mat N (heads·d_head)`.
 

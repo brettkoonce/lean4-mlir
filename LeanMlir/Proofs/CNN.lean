@@ -763,7 +763,7 @@ noncomputable abbrev conv2d_input_grad {ic oc h w kH kW : Nat}
     (x : Tensor3 ic h w) (dy : Tensor3 oc h w) : Tensor3 ic h w :=
   (conv2d_has_vjp3 W b).backward x dy
 
-/-! ### Weight gradient (Phase 7 — now axiomatized)
+/-! ### Weight gradient (now proved from foundation via `unfold + fun_prop`)
 
 The conv weight gradient implements the **transpose trick**:
 

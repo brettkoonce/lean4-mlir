@@ -17,19 +17,20 @@ import Mathlib.Analysis.Calculus.FDeriv.Linear
 Vectors, matrices, and operations over `ℝ`, using Mathlib's `Finset.sum`.
 
 Partial derivatives (`pdiv`) and their composition rules (chain rule,
-linearity, product rule) are axiomatized — they are theorems of real
-analysis. Everything else is proved.
+linearity, product rule) are now **defined and proved** from Mathlib's
+Fréchet derivative `fderiv`. The post-foundation-flip definition is
 
-**Mathlib consistency proof.** After the axiom block we expose a
-parallel definition `pdivFD f x i j := fderiv ℝ f x (basisVec i) j`
-and prove all six axiom statements as Mathlib-grounded theorems
-(`pdivFD_id`, `pdivFD_const`, `pdivFD_reindex` unconditional; the
-three bilinear rules `pdivFD_add_of_diff`, `pdivFD_comp_of_diff`,
-`pdivFD_mul_of_diff` with the natural `DifferentiableAt`
-hypotheses). This demonstrates that the axiomatic `pdiv` framework
-has at least one concrete model (Mathlib's Fréchet derivative), and
-sketches the migration path: swap `pdiv` for `pdivFD` and thread
-`Differentiable` hypotheses through downstream theorems.
+  `pdiv f x i j := fderiv ℝ f x (basisVec i) j`
+
+and every former axiom (`pdiv_id`, `pdiv_const`, `pdiv_reindex`,
+`pdiv_add`, `pdiv_comp`, `pdiv_mul`) is now a theorem proved against
+Mathlib's API. The bilinear rules carry `Differentiable` hypotheses
+that propagate through every downstream chapter.
+
+The post-flip path: every claim downstream of this file is either a
+definition Lean unfolds or a theorem typechecked against Mathlib —
+no project axioms remain. `#print axioms vit_full_has_vjp` lists only
+Lean core (`propext`, `Classical.choice`, `Quot.sound`).
 -/
 
 open Finset BigOperators
