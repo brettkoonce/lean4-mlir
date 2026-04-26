@@ -218,8 +218,22 @@ jobs:
         # and skips regenerating, leaving stale axiom/theorem labels and
         # source-link commit hashes on the deployed site even though the
         # workflow reports success. Mathlib doc HTML stays cached.
+        #
+        # Note: do NOT delete .lake/build/doc/declarations/ — that
+        # directory holds the global declaration-data.bmp index that
+        # /find/ reads, and `lake build LeanMlir:docs` does NOT
+        # regenerate it (only doc-gen4 full builds do). Deleting it
+        # leaves the deployed find/ page broken.
+        #
+        # Also nuke .lake/build/doc-data/LeanMlir--library.docs_built*
+        # — these are lake's task-tracking markers. Deleting just the
+        # output HTML directory isn't enough: lake sees the marker and
+        # "Replays" the target instead of "Builds" it (no-op). The
+        # marker plus the HTML directory must both go for the build
+        # message to flip from "Replayed" to "Built".
         run: |
-          rm -rf .lake/build/doc/LeanMlir/ .lake/build/doc/declarations/
+          rm -rf .lake/build/doc/LeanMlir/
+          rm -f .lake/build/doc-data/LeanMlir--library.docs_built*
           lake -R -Kenv=dev build LeanMlir:docs
 
       - name: Build blueprint web version
