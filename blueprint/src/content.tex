@@ -1037,6 +1037,144 @@ If you're unsure: read the first half of this chapter carefully
 second half. You can always come back for it when you're ready to
 tackle attention.
 
+\begin{figure}[ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  >={Stealth[length=2.5mm]},
+  every node/.style={font=\sffamily\footnotesize},
+  group/.style={
+    draw, rounded corners=2pt, fill=blue!6,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=1cm
+  },
+  primitive/.style={
+    draw=orange!60!black, rounded corners=2pt, fill=orange!10,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.95cm
+  },
+  composed/.style={
+    draw=purple!60!black, rounded corners=2pt, fill=purple!8,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm
+  },
+  final/.style={
+    draw=green!50!black, rounded corners=2pt, fill=green!12,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm,
+    very thick
+  },
+  arr/.style={->, thick, gray!65, shorten >=1pt},
+  shared/.style={->, thick, gray!50, dashed, shorten >=1pt}
+]
+
+% Top row: Ch 2
+\node[group] (found) at (-1.5, 0) {
+  \textbf{Ch~2: foundation calculus}\\
+  \texttt{pdiv\_comp/add/mul/id} \\
+  \texttt{pdiv\_finset\_sum}
+};
+\node[group] (matkit) at (8.0, 0) {
+  \textbf{Ch~2: matrix kit} \\
+  \texttt{pdivMat\_comp} \\
+  \texttt{matmul\_left\_const} \\
+  \texttt{rowwise\_has\_vjp\_mat}
+};
+
+% Left pillar: ResNet-34
+\node[primitive] (cnn) at (-9.0, -2.3) {
+  \textbf{Ch~4: CNN} \\
+  \texttt{conv2d\_has\_vjp3} \\
+  \texttt{maxPool2\_has\_vjp3\_correct}
+};
+\node[primitive] (bn)  at (-9.0, -4.0) {
+  \textbf{Ch~5: BatchNorm} \\
+  \texttt{pdiv\_bnNormalize} \\
+  \texttt{pdiv\_bnAffine}
+};
+\node[primitive] (res) at (-9.0, -5.7) {
+  \textbf{Ch~6: residual skip} \\
+  \texttt{residual\_has\_vjp\_correct}
+};
+\node[final] (r34) at (-9.0, -7.7) {
+  \textbf{Full ResNet-34} \\
+  (NetSpec composition)
+};
+
+% Middle pillar: EfficientNet
+\node[primitive] (dw) at (-4.0, -2.3) {
+  \textbf{Ch~7: depthwise conv} \\
+  \texttt{depthwise\_has\_vjp3\_correct}
+};
+\node[primitive] (se) at (-4.0, -4.0) {
+  \textbf{Ch~8: SE block} \\
+  \texttt{seBlock\_has\_vjp\_correct}
+};
+\node[final] (enet) at (-4.0, -7.7) {
+  \textbf{Full EfficientNet-B0} \\
+  (NetSpec composition)
+};
+
+% Right pillar: ViT
+\node[primitive] (lngelu) at (3.5, -2.3) {
+  \textbf{Ch~9: LayerNorm \& GELU} \\
+  \texttt{layerNorm\_has\_vjp\_correct} \\
+  \texttt{gelu\_has\_vjp\_correct}
+};
+\node[primitive] (attn) at (8.0, -2.3) {
+  \textbf{Ch~10: attention primitives} \\
+  \texttt{pdiv\_softmax} \\
+  \texttt{sdpa\_back\_\{Q,K,V\}\_correct}
+};
+\node[composed] (mhsa) at (8.0, -4.5) {
+  \textbf{Ch~10: multi-head attention} \\
+  \texttt{mhsa\_has\_vjp\_mat\_correct}
+};
+\node[composed] (block) at (5.75, -6.4) {
+  \textbf{Ch~10: transformer block} \\
+  \texttt{transformerBlock\_has\_vjp\_mat\_correct}
+};
+\node[final] (body) at (5.75, -8.0) {
+  \textbf{Ch~10: ViT body} \\
+  \texttt{vit\_body\_has\_vjp\_mat}
+};
+\node[final] (vit) at (5.75, -9.4) {
+  \textbf{Full ViT} \\
+  \texttt{vit\_full\_has\_vjp}
+};
+
+% Foundation -> R34 primitives
+\draw[arr] (found.south west) to[out=-160, in=80] (cnn.north);
+\draw[arr] (found.south west) to[out=-130, in=70] (bn.north east);
+\draw[arr] (found.south west) to[out=-110, in=60] (res.north east);
+% Foundation -> ENet primitives
+\draw[arr] (found.south) to[out=-100, in=70] (dw.north east);
+\draw[arr] (found.south) to[out=-80, in=60] (se.north east);
+% Foundation -> ViT primitives
+\draw[arr] (found.south east) to[out=-30, in=180] (lngelu.west);
+\draw[arr] (found.south east) to[out=-20, in=170] (attn.north west);
+% Matrix kit -> ViT side
+\draw[arr] (matkit.south) to[out=-100, in=40] (attn.north);
+\draw[arr] (matkit.south east) to[out=-60, in=20] (mhsa.east);
+
+% R34 down-flow
+\draw[arr] (cnn) -- (bn);
+\draw[arr] (bn)  -- (res);
+\draw[arr] (res) -- (r34);
+
+% ENet path
+\draw[arr] (dw) -- (se);
+\draw[arr] (se) -- (enet);
+\draw[shared] (cnn.east) to[out=-10, in=130] (enet.north west);
+\draw[shared] (bn.east)  to[out=-10, in=140] (enet.west);
+
+% ViT down-flow
+\draw[arr] (attn) -- (mhsa);
+\draw[arr] (mhsa.south) to[out=-100, in=20] (block.north east);
+\draw[arr] (lngelu.south) to[out=-90, in=160] (block.north west);
+\draw[arr] (block) -- (body);
+\draw[arr] (body)  -- (vit);
+\end{tikzpicture}}
+\caption{Three architecture spines, all the way down to Ch~2 foundation. ResNet-34 (left) needs only the foundation calculus and Chs~4--6 primitives. EfficientNet-B0 (middle) adds Ch~7's depthwise conv and Ch~8's SE block; dashed arrows mark Chs~4 (CNN) and 5 (BN), shared with R34. ViT (right) is the only path that needs the matrix kit; its longer chain runs through MHSA and the transformer block before bundling into the full ViT VJP. Every node is a Lean theorem.}
+\label{fig:spines}
+\end{figure}
+
 \subsection*{For readers of the first book}
 
 If you're coming to this book from \emph{Convolutional Neural
