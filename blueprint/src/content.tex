@@ -704,6 +704,85 @@ benefit is that every claim downstream of this chapter is either
 a definition Lean unfolds or a theorem typechecked against
 Mathlib --- no thumb on the scale.
 
+\subsection*{Why VJPs, not Jacobians?}
+
+If you've taken multivariable calculus, the natural object to track
+through a network is the \emph{Jacobian}. For
+$f : \Vect{n} \to \Vect{m}$, that's the $m \times n$ matrix of
+partial derivatives $J_{i,j} = \pdiv\, f\, x\, i\, j$. The chain rule
+for a composition $h = g \circ f$ is matrix multiplication:
+$J_h = J_g \cdot J_f$. So if your network is $L$ layers stacked, the
+Jacobian of the output with respect to the input is the matrix
+product $J_L \cdot J_{L-1} \cdots J_1$.
+
+This is correct and totally impractical. For a 512-dimensional hidden
+layer, each $J_k$ is a $512 \times 512$ matrix; multiplying two of
+them is $\sim 1.3 \times 10^8$ flops. ResNet-34 has 34 of these
+layers, ViT has more. You'd be materializing intermediate matrices
+that are bigger than the network itself, and most of whose entries
+you never need.
+
+The fix is to notice what you actually want. Training minimizes a
+scalar loss $\mathcal{L}$, so the only output gradient you ever need
+is $\nabla \mathcal{L} \in \Vect{m}$ --- a single vector. Apply that
+vector to the chain on the left:
+\[
+  (\nabla \mathcal{L})^T \cdot J_L \cdot J_{L-1} \cdots J_1.
+\]
+Read this right-to-left. Start with one $m$-dimensional vector.
+Multiply on the right by $J_L$, get a vector. Multiply by $J_{L-1}$,
+get a vector. Continue. At every step you carry a vector --- never a
+matrix --- and its dimension matches the layer's input or output
+shape.
+
+The single step
+\[
+  v \mapsto v^T \cdot J_f
+\]
+is the \emph{vector--Jacobian product}, or \textbf{VJP}. It takes the
+gradient flowing in from above and produces the gradient flowing out
+below. The cost is $O(mn)$ per layer instead of $O(d^3)$ for a
+matrix--matrix product, and you never form $J_f$ at all --- you just
+need a function that, given $v$, returns $v^T J_f$. That function
+is the \textbf{backward function}; together with $f$ itself, it
+implements one layer's contribution to backpropagation.
+
+This is what reverse-mode automatic differentiation does, mechanically,
+for any program. The same right-to-left vector-pass story --- forward
+to compute activations, backward to compute gradients, both linear in
+the number of layers.
+
+\textbf{What \(\HasVJP\) packages.} A \(\HasVJP\) record for $f$ holds
+two things:
+\begin{itemize}
+  \item a \texttt{backward} function $\Vect{m} \to \Vect{n}$;
+  \item a \texttt{correct} field --- a proof that
+  $\mathrm{backward}(v)_j = \sum_i v_i \cdot \pdiv\, f\, x\, i\, j$,
+  i.e. that the function really does compute $v^T J_f$.
+\end{itemize}
+In Lean that's exactly four lines:
+\begin{verbatim}
+structure HasVJP (f : Vec m → Vec n) where
+  backward : Vec m → Vec n → Vec m
+  correct  : ∀ x dy i, backward x dy i = ∑ j, pdiv f x i j * dy j
+\end{verbatim}
+A structure with two fields: a function, and a proof obligation about
+that function. Constructing a \(\HasVJP\) for some $f$ means writing
+both --- you don't get the record without the proof.
+
+The correctness field is the whole point: the backward function
+\emph{is} the kernel that ships into the codegen, and the proof is the
+guarantee that what it computes matches what its name claims. Every
+later chapter proves a closed-form \(\HasVJP\) for a layer family
+(dense, conv, BN, attention, $\ldots$). Unlike autograd, which records
+each forward op on a tape and replays its derivative at backward time,
+we ship the closed form: codegen reads off the \texttt{backward}
+field and emits a single fused StableHLO kernel --- no tape, no
+replay.
+
+The next subsection unpacks this on the simplest possible example: the
+dense layer, $f(x) = W x + b$.
+
 \subsection*{Worked example: the dense layer}
 
 The theorems above look abstract on their own. Here's how they
