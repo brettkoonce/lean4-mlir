@@ -581,6 +581,70 @@ def convNextMiniReluSpec : NetSpec where
     .dense 64 10 .identity
   ]
 
+-- BN variants: same architecture, only the per-block norm differs
+-- (per-channel BN over batch+spatial vs per-spatial LN over channels).
+-- Completes the 2D activation × normalization ablation cell.
+
+def convNextTinyBnGeluSpec : NetSpec where
+  name := "ConvNeXt-T-BN-GELU"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 96 4 4 .same,
+    .convNextStage 96 3 .bn .gelu,
+    .convNextDownsample 96 192 .bn,
+    .convNextStage 192 3 .bn .gelu,
+    .convNextDownsample 192 384 .bn,
+    .convNextStage 384 9 .bn .gelu,
+    .convNextDownsample 384 768 .bn,
+    .convNextStage 768 3 .bn .gelu,
+    .globalAvgPool,
+    .dense 768 10 .identity
+  ]
+
+def convNextTinyBnReluSpec : NetSpec where
+  name := "ConvNeXt-T-BN-ReLU"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 96 4 4 .same,
+    .convNextStage 96 3 .bn .relu,
+    .convNextDownsample 96 192 .bn,
+    .convNextStage 192 3 .bn .relu,
+    .convNextDownsample 192 384 .bn,
+    .convNextStage 384 9 .bn .relu,
+    .convNextDownsample 384 768 .bn,
+    .convNextStage 768 3 .bn .relu,
+    .globalAvgPool,
+    .dense 768 10 .identity
+  ]
+
+def convNextMiniBnGeluSpec : NetSpec where
+  name := "ConvNeXt-Mini-BN-GELU"
+  imageH := 32
+  imageW := 32
+  layers := [
+    .convBn 3 32 2 2 .same,
+    .convNextStage 32 2 .bn .gelu,
+    .convNextDownsample 32 64 .bn,
+    .convNextStage 64 2 .bn .gelu,
+    .globalAvgPool,
+    .dense 64 10 .identity
+  ]
+
+def convNextMiniBnReluSpec : NetSpec where
+  name := "ConvNeXt-Mini-BN-ReLU"
+  imageH := 32
+  imageW := 32
+  layers := [
+    .convBn 3 32 2 2 .same,
+    .convNextStage 32 2 .bn .relu,
+    .convNextDownsample 32 64 .bn,
+    .convNextStage 64 2 .bn .relu,
+    .globalAvgPool,
+    .dense 64 10 .identity
+  ]
+
 def convNextMiniConfig : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
@@ -692,10 +756,14 @@ def ablations : List (String × AblationRun) := [
   -- Chapter 9: ConvNeXt-Tiny activation ablation (GELU vs ReLU, both
   -- with LN). The full paper recipe on Imagenette (224×224); a CIFAR
   -- "mini" pair at 32×32 doubles as a fast-compile smoke variant.
-  ("convnext-tiny-gelu", ⟨convNextTinyGeluSpec, convNextTinyConfig, .imagenette, "data/imagenette"⟩),
-  ("convnext-tiny-relu", ⟨convNextTinyReluSpec, convNextTinyConfig, .imagenette, "data/imagenette"⟩),
-  ("convnext-mini-gelu", ⟨convNextMiniGeluSpec, convNextMiniConfig, .cifar10,    "data"⟩),
-  ("convnext-mini-relu", ⟨convNextMiniReluSpec, convNextMiniConfig, .cifar10,    "data"⟩)
+  ("convnext-tiny-gelu",    ⟨convNextTinyGeluSpec,   convNextTinyConfig, .imagenette, "data/imagenette"⟩),
+  ("convnext-tiny-relu",    ⟨convNextTinyReluSpec,   convNextTinyConfig, .imagenette, "data/imagenette"⟩),
+  ("convnext-tiny-bn-gelu", ⟨convNextTinyBnGeluSpec, convNextTinyConfig, .imagenette, "data/imagenette"⟩),
+  ("convnext-tiny-bn-relu", ⟨convNextTinyBnReluSpec, convNextTinyConfig, .imagenette, "data/imagenette"⟩),
+  ("convnext-mini-gelu",    ⟨convNextMiniGeluSpec,   convNextMiniConfig, .cifar10,    "data"⟩),
+  ("convnext-mini-relu",    ⟨convNextMiniReluSpec,   convNextMiniConfig, .cifar10,    "data"⟩),
+  ("convnext-mini-bn-gelu", ⟨convNextMiniBnGeluSpec, convNextMiniConfig, .cifar10,    "data"⟩),
+  ("convnext-mini-bn-relu", ⟨convNextMiniBnReluSpec, convNextMiniConfig, .cifar10,    "data"⟩)
 ]
 
 def main (args : List String) : IO Unit := do

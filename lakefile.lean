@@ -219,6 +219,10 @@ lean_exe «test-convnext-train-step» where
   root := `tests.TestConvNextTrainStep
   moreLinkArgs := ireeLink
 
+lean_exe «test-convnext-bn-train-step» where
+  root := `tests.TestConvNextBnTrainStep
+  moreLinkArgs := ireeLink
+
 lean_exe «test-convnext-ablation-smoke» where
   root := `tests.TestConvNextAblationSmoke
   moreLinkArgs := ireeLink

@@ -931,6 +931,62 @@ private def emitLayerNormForwardNCHW (tag : String) (xSSA : String) (shape : Lis
     return (s, s!"%lnc_out{tag}", s!"%lnc_norm{tag}", s!"%lnc_istd{tag}", s!"%lnc_mean{tag}")
   | _ => return ("    // layerNormNCHW error\n", xSSA, "", "", "")
 
+/-- Standalone BatchNorm over an NCHW tensor — γ/β per channel, mean/var
+    aggregated over batch+spatial. Uses the same `%cbn_*` SSA naming as
+    `emitConvBn` so the existing BN-stats output machinery (collectBnLayers,
+    train-step BN-stat returns, eval-forward fixed-BN params) all just
+    work when this primitive is registered with the right pidx.
+
+    Reductions are over `[0, 2, 3]` — the well-supported pattern that
+    `convBn` already uses (and that IREE distributes cleanly on ROCm,
+    unlike LN-NCHW's channel-axis reduction).
+
+    Returns `(code, outSSA, normSSA, meanBcSSA, istdBcSSA)`. `meanBcSSA`
+    and `istdBcSSA` are the broadcast-to-NCHW versions used by the
+    matching backward. -/
+private def emitBatchNormForwardNCHW (pidx : Nat) (xSSA : String) (shape : List Nat)
+    (gammaSSA betaSSA : String) (fixedBN : Bool := false)
+    : String × String × String × String × String := Id.run do
+  match shape with
+  | [b, c, h, w] =>
+    let ty := tensorTy shape
+    let cTy := tensorTy [c]
+    let bcTy := tensorTy [b, c]
+    let bnN := b * h * w
+    let mut s := ""
+    if fixedBN then
+      s := s ++ s!"    %cbn_mean_bc{pidx} = stablehlo.broadcast_in_dim %bn_mean{pidx}, dims = [1] : ({cTy}) -> {ty}\n"
+      s := s ++ s!"    %cbn_diff{pidx} = stablehlo.subtract {xSSA}, %cbn_mean_bc{pidx} : {ty}\n"
+      s := s ++ s!"    %cbn_eps{pidx} = stablehlo.constant dense<1.0e-5> : {cTy}\n"
+      s := s ++ s!"    %cbn_ve{pidx} = stablehlo.add %bn_var{pidx}, %cbn_eps{pidx} : {cTy}\n"
+    else
+      s := s ++ s!"    %cbn_zf{pidx} = stablehlo.constant dense<0.0> : tensor<f32>\n"
+      s := s ++ s!"    %cbn_ssp{pidx} = stablehlo.reduce({xSSA} init: %cbn_zf{pidx}) applies stablehlo.add across dimensions = [2, 3]\n"
+      s := s ++ s!"          : ({ty}, tensor<f32>) -> {bcTy}\n"
+      s := s ++ s!"    %cbn_sum{pidx} = stablehlo.reduce(%cbn_ssp{pidx} init: %cbn_zf{pidx}) applies stablehlo.add across dimensions = [0]\n"
+      s := s ++ s!"          : ({bcTy}, tensor<f32>) -> {cTy}\n"
+      s := s ++ s!"    %cbn_N{pidx} = stablehlo.constant dense<{bnN}.0> : {cTy}\n"
+      s := s ++ s!"    %cbn_mean{pidx} = stablehlo.divide %cbn_sum{pidx}, %cbn_N{pidx} : {cTy}\n"
+      s := s ++ s!"    %cbn_mean_bc{pidx} = stablehlo.broadcast_in_dim %cbn_mean{pidx}, dims = [1] : ({cTy}) -> {ty}\n"
+      s := s ++ s!"    %cbn_diff{pidx} = stablehlo.subtract {xSSA}, %cbn_mean_bc{pidx} : {ty}\n"
+      s := s ++ s!"    %cbn_sq{pidx} = stablehlo.multiply %cbn_diff{pidx}, %cbn_diff{pidx} : {ty}\n"
+      s := s ++ s!"    %cbn_vssp{pidx} = stablehlo.reduce(%cbn_sq{pidx} init: %cbn_zf{pidx}) applies stablehlo.add across dimensions = [2, 3]\n"
+      s := s ++ s!"          : ({ty}, tensor<f32>) -> {bcTy}\n"
+      s := s ++ s!"    %cbn_vsum{pidx} = stablehlo.reduce(%cbn_vssp{pidx} init: %cbn_zf{pidx}) applies stablehlo.add across dimensions = [0]\n"
+      s := s ++ s!"          : ({bcTy}, tensor<f32>) -> {cTy}\n"
+      s := s ++ s!"    %cbn_var{pidx} = stablehlo.divide %cbn_vsum{pidx}, %cbn_N{pidx} : {cTy}\n"
+      s := s ++ s!"    %cbn_eps{pidx} = stablehlo.constant dense<1.0e-5> : {cTy}\n"
+      s := s ++ s!"    %cbn_ve{pidx} = stablehlo.add %cbn_var{pidx}, %cbn_eps{pidx} : {cTy}\n"
+    s := s ++ s!"    %cbn_istd{pidx} = stablehlo.rsqrt %cbn_ve{pidx} : {cTy}\n"
+    s := s ++ s!"    %cbn_istd_bc{pidx} = stablehlo.broadcast_in_dim %cbn_istd{pidx}, dims = [1] : ({cTy}) -> {ty}\n"
+    s := s ++ s!"    %cbn_norm{pidx} = stablehlo.multiply %cbn_diff{pidx}, %cbn_istd_bc{pidx} : {ty}\n"
+    s := s ++ s!"    %cbn_g_bc{pidx} = stablehlo.broadcast_in_dim {gammaSSA}, dims = [1] : ({cTy}) -> {ty}\n"
+    s := s ++ s!"    %cbn_gn{pidx} = stablehlo.multiply %cbn_norm{pidx}, %cbn_g_bc{pidx} : {ty}\n"
+    s := s ++ s!"    %cbn_bt_bc{pidx} = stablehlo.broadcast_in_dim {betaSSA}, dims = [1] : ({cTy}) -> {ty}\n"
+    s := s ++ s!"    %cbn_pre{pidx} = stablehlo.add %cbn_gn{pidx}, %cbn_bt_bc{pidx} : {ty}\n"
+    return (s, s!"%cbn_pre{pidx}", s!"%cbn_norm{pidx}", s!"%cbn_mean_bc{pidx}", s!"%cbn_istd_bc{pidx}")
+  | _ => return ("    // batchNormNCHW error\n", xSSA, "", "", "")
+
 /-- Emit GELU forward (tanh form, exact) for a tensor of given shape.
     Returns (code, outSSA, tanhSSA) where tanhSSA is saved for backward. -/
 private def emitGeluForward (tag : String) (xSSA : String) (shape : List Nat)
@@ -1191,12 +1247,13 @@ private def emitDense (pidx : Nat) (curSSA : String) (batchSize fanIn fanOut : N
     return (s ++ sa, oa)
 
 /-- Emit a ConvNeXt stage (forward inference): `nBlocks` repeats of
-    DW7×7-raw → LN(channel-axis) → 1×1 expand (×4) → activation → 1×1 project
+    DW7×7-raw → norm(channel-axis) → 1×1 expand (×4) → activation → 1×1 project
     → LayerScale → residual add. Five pidx slots per block, in the order:
-    DW (W, b), LN (γ, β), expand (W, b), project (W, b), LayerScale (γ).
+    DW (W, b), norm (γ, β), expand (W, b), project (W, b), LayerScale (γ).
+    `norm` selects LN (default, paper) or BN (running stats fed in eval).
     Caller must already have emitted any preceding downsample. -/
 private def emitConvNextStage (startPidx : Nat) (curSSA : String) (curShape : List Nat)
-    (channels nBlocks : Nat) (act : Activation)
+    (channels nBlocks : Nat) (norm : Normalization) (act : Activation) (fixedBN : Bool := false)
     : String × String × List Nat × Nat := Id.run do
   let mut code := ""
   let mut ssa := curSSA
@@ -1210,10 +1267,17 @@ private def emitConvNextStage (startPidx : Nat) (curSSA : String) (curShape : Li
     let (dwCode, dwOut, dwShape) := emitDepthwiseConvRaw p ssa shape channels 7 1
     code := code ++ dwCode
     ssa := dwOut; shape := dwShape; p := p + 1
-    -- 2) LayerNorm over channels (pidx p), uses %W{p} as γ and %b{p} as β
-    let (lnCode, lnOut, _, _, _) := emitLayerNormForwardNCHW tag ssa shape s!"%W{p}" s!"%b{p}"
-    code := code ++ lnCode
-    ssa := lnOut; p := p + 1
+    -- 2) Norm over channels (pidx p): LN over channel axis (per-spatial)
+    --    or BN per-channel (over batch+spatial). Both consume %W{p}=γ, %b{p}=β.
+    let (normCode, normOut) := match norm with
+      | .ln =>
+        let (c0, out, _, _, _) := emitLayerNormForwardNCHW tag ssa shape s!"%W{p}" s!"%b{p}"
+        (c0, out)
+      | .bn =>
+        let (c0, out, _, _, _) := emitBatchNormForwardNCHW p ssa shape s!"%W{p}" s!"%b{p}" (fixedBN := fixedBN)
+        (c0, out)
+    code := code ++ normCode
+    ssa := normOut; p := p + 1
     -- 3) 1×1 expand conv c → 4c (pidx p)
     let (exCode, exOut, exShape) := emitConv2d p ssa shape channels (4 * channels) 1 .identity
     code := code ++ exCode
@@ -1237,19 +1301,27 @@ private def emitConvNextStage (startPidx : Nat) (curSSA : String) (curShape : Li
     ssa := s!"%cn_res{tag}"
   return (code, ssa, shape, p)
 
-/-- Emit a ConvNeXt downsample (forward inference): LN(channel-axis) on
+/-- Emit a ConvNeXt downsample (forward inference): norm(channel-axis) on
     `ic`-channel input, then a 2×2 stride-2 valid-pad conv `ic → oc`.
-    Two pidx slots: LN (γ, β), conv (W, b). -/
+    Two pidx slots: norm (γ, β), conv (W, b). `norm` selects LN/BN. -/
 private def emitConvNextDownsample (startPidx : Nat) (curSSA : String) (curShape : List Nat)
-    (ic oc : Nat) : String × String × List Nat × Nat := Id.run do
+    (ic oc : Nat) (norm : Normalization) (fixedBN : Bool := false)
+    : String × String × List Nat × Nat := Id.run do
   match curShape with
   | [b, _, h, w] =>
     let mut code := ""
     let mut p := startPidx
     let tag := s!"{startPidx}"
-    -- 1) LayerNorm over channels (pidx p), γ = %W{p}, β = %b{p}
-    let (lnCode, lnOut, _, _, _) := emitLayerNormForwardNCHW s!"ds{tag}" curSSA curShape s!"%W{p}" s!"%b{p}"
-    code := code ++ lnCode
+    -- 1) Norm over channels (pidx p), γ = %W{p}, β = %b{p}
+    let (normCode, normOut) := match norm with
+      | .ln =>
+        let (c0, out, _, _, _) := emitLayerNormForwardNCHW s!"ds{tag}" curSSA curShape s!"%W{p}" s!"%b{p}"
+        (c0, out)
+      | .bn =>
+        let (c0, out, _, _, _) := emitBatchNormForwardNCHW p curSSA curShape s!"%W{p}" s!"%b{p}" (fixedBN := fixedBN)
+        (c0, out)
+    code := code ++ normCode
+    let lnOut := normOut
     p := p + 1
     -- 2) 2×2 stride-2 valid-pad conv ic → oc (pidx p)
     let oH := h / 2
@@ -1361,14 +1433,16 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat) (fixedBN : Bool :
       curSSA := newSSA
       curShape := newShape
       pidx := newPidx
-    | .convNextStage channels nBlocks _norm act =>
-      let (snip, newSSA, newShape, newPidx) := emitConvNextStage pidx curSSA curShape channels nBlocks act
+    | .convNextStage channels nBlocks norm act =>
+      let (snip, newSSA, newShape, newPidx) :=
+        emitConvNextStage pidx curSSA curShape channels nBlocks norm act (fixedBN := fixedBN)
       code := code ++ snip
       curSSA := newSSA
       curShape := newShape
       pidx := newPidx
-    | .convNextDownsample ic oc _norm =>
-      let (snip, newSSA, newShape, newPidx) := emitConvNextDownsample pidx curSSA curShape ic oc
+    | .convNextDownsample ic oc norm =>
+      let (snip, newSSA, newShape, newPidx) :=
+        emitConvNextDownsample pidx curSSA curShape ic oc norm (fixedBN := fixedBN)
       code := code ++ snip
       curSSA := newSSA
       curShape := newShape
@@ -1808,6 +1882,18 @@ def collectBnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
       -- Project BN: oc = oc
       result := result.push (pidx, oc)
       pidx := pidx + 1
+    | .convNextStage channels nBlocks norm _act =>
+      -- 5 pidx slots per block: DW, norm, expand, project, LayerScale.
+      -- BN slot is at basePidx + 1 (per block); LN variant has no BN.
+      for _ in [:nBlocks] do
+        if norm == .bn then
+          result := result.push (pidx + 1, channels)
+        pidx := pidx + 5
+    | .convNextDownsample ic _oc norm =>
+      -- 2 pidx slots: norm, conv. BN slot is at basePidx + 0.
+      if norm == .bn then
+        result := result.push (pidx, ic)
+      pidx := pidx + 2
     | _ => pure ()
   return result
 
@@ -2175,17 +2261,24 @@ private structure FwdRec where
   clsInSSA        : String := ""
   -- ═════════ ConvNeXt block intermediates ═════════
   -- One FwdRec per ConvNeXt block with `isConvNextBlock := true`. Five
-  -- pidx slots from `cnbBasePidx`: DW (W,b), LN (γ,β), expand (W,b),
-  -- project (W,b), LayerScale (γ).
+  -- pidx slots from `cnbBasePidx`: DW (W,b), norm (γ,β), expand (W,b),
+  -- project (W,b), LayerScale (γ). `cnbNorm` selects LN vs BN — saved
+  -- intermediates land in different fields per branch.
   isConvNextBlock : Bool := false
   cnbBasePidx     : Nat := 0
   cnbChannels     : Nat := 0
   cnbAct          : Activation := .gelu
+  cnbNorm         : Normalization := .ln
   cnbBlockInSSA   : String := ""    -- input to the block (residual root)
-  cnbDwOutSSA     : String := ""    -- DW + bias output, pre-LN
-  cnbLnNormSSA    : String := ""    -- (x − μ)·istd over channels
-  cnbLnIstdSSA    : String := ""    -- 1/σ on shape [b, h, w]
-  cnbLnOutSSA     : String := ""    -- post-LN, into 1×1 expand
+  cnbDwOutSSA     : String := ""    -- DW + bias output, pre-norm
+  -- LN-mode (norm-axis = channels, transposed view): see emitLayerNormForwardNCHW
+  cnbLnNormSSA    : String := ""    -- normalized [b, h*w, c]
+  cnbLnIstdSSA    : String := ""    -- 1/σ on shape [b, h*w]
+  cnbLnOutSSA     : String := ""    -- post-LN, into 1×1 expand (NCHW)
+  -- BN-mode (per-channel stats over batch+spatial; tensors stay NCHW)
+  cnbBnNormSSA    : String := ""    -- normalized [b, c, h, w]
+  cnbBnMeanBcSSA  : String := ""    -- broadcast mean [b, c, h, w]
+  cnbBnIstdBcSSA  : String := ""    -- broadcast istd [b, c, h, w]
   cnbExpandOutSSA : String := ""    -- pre-activation (channels = 4c)
   cnbActOutSSA    : String := ""    -- post-activation, into project
   cnbActTanhSSA   : String := ""    -- saved tanh value for GELU backward
@@ -2195,10 +2288,14 @@ private structure FwdRec where
   cndBasePidx     : Nat := 0
   cndIc           : Nat := 0
   cndOc           : Nat := 0
-  cndInSSA        : String := ""    -- pre-LN
-  cndLnNormSSA    : String := ""
-  cndLnIstdSSA    : String := ""
-  cndLnOutSSA     : String := ""    -- post-LN, into 2×2 stride-2 conv
+  cndNorm         : Normalization := .ln
+  cndInSSA        : String := ""    -- pre-norm
+  cndLnNormSSA    : String := ""    -- LN-mode: [b, h*w, ic]
+  cndLnIstdSSA    : String := ""    -- LN-mode: [b, h*w]
+  cndLnOutSSA     : String := ""    -- post-norm, into 2×2 stride-2 conv (NCHW)
+  cndBnNormSSA    : String := ""    -- BN-mode: [b, ic, h, w]
+  cndBnMeanBcSSA  : String := ""    -- BN-mode: [b, ic, h, w]
+  cndBnIstdBcSSA  : String := ""    -- BN-mode: [b, ic, h, w]
 instance : Inhabited FwdRec where
   default := { layer := .flatten, pidx := none, pos := 0,
                inputSSA := "", preActSSA := "", outputSSA := "",
@@ -3694,8 +3791,8 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           addSkipGrad := "identity"
         }
 
-    | .convNextStage channels nBlocks _norm act =>
-      -- Per block: DW raw → LN-NCHW → 1×1 expand → activation → 1×1 project → LayerScale → residual.
+    | .convNextStage channels nBlocks norm act =>
+      -- Per block: DW raw → norm-NCHW → 1×1 expand → activation → 1×1 project → LayerScale → residual.
       -- One FwdRec per block with `isConvNextBlock := true`; backward uses saved intermediates.
       for bi in [:nBlocks] do
         match curShape with
@@ -3723,9 +3820,19 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           code := code ++ s!"    %dwr_out{pidx} = stablehlo.add %dwr_cv{pidx}, %dwr_bb{pidx} : {blockTy}\n"
           let dwOut := s!"%dwr_out{pidx}"
           pidx := pidx + 1
-          -- 2) LN-NCHW (pidx)
-          let (lnCode, lnOut, lnNorm, lnIstd, _) := emitLayerNormForwardNCHW tag dwOut blockShape s!"%W{pidx}" s!"%b{pidx}"
-          code := code ++ lnCode
+          -- 2) Norm (pidx): LN over channel axis OR BN per-channel.
+          let mut lnOut : String := ""
+          let mut lnNorm : String := ""    -- LN: [b, hw, c]; BN: [b, c, h, w]
+          let mut lnIstd : String := ""    -- LN: [b, hw];     BN: [b, c, h, w] (broadcast)
+          let mut bnMeanBc : String := ""
+          let mut bnIstdBc : String := ""
+          match norm with
+          | .ln =>
+            let (lc, out, nm, ist, _) := emitLayerNormForwardNCHW tag dwOut blockShape s!"%W{pidx}" s!"%b{pidx}"
+            code := code ++ lc; lnOut := out; lnNorm := nm; lnIstd := ist
+          | .bn =>
+            let (bc, out, nm, mbc, ibc) := emitBatchNormForwardNCHW pidx dwOut blockShape s!"%W{pidx}" s!"%b{pidx}"
+            code := code ++ bc; lnOut := out; lnNorm := nm; bnMeanBc := mbc; bnIstdBc := ibc
           pidx := pidx + 1
           -- 3) 1×1 expand c → 4c (pidx)
           code := code ++ s!"    %cnx_cv{pidx} = \"stablehlo.convolution\"({lnOut}, %W{pidx}) " ++ "{\n"
@@ -3771,13 +3878,15 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           -- Push fat record for backward
           let mut cnRec : FwdRec := default
           cnRec := { cnRec with layer := l, pidx := none, pos, inputSSA := blockIn, outputSSA := blockOut, inShape := blockShape, outShape := blockShape }
-          cnRec := { cnRec with isConvNextBlock := true, cnbBasePidx := basePidx, cnbChannels := c, cnbAct := act }
-          cnRec := { cnRec with cnbBlockInSSA := blockIn, cnbDwOutSSA := dwOut, cnbLnNormSSA := lnNorm, cnbLnIstdSSA := lnIstd, cnbLnOutSSA := lnOut }
+          cnRec := { cnRec with isConvNextBlock := true, cnbBasePidx := basePidx, cnbChannels := c, cnbAct := act, cnbNorm := norm }
+          cnRec := { cnRec with cnbBlockInSSA := blockIn, cnbDwOutSSA := dwOut, cnbLnOutSSA := lnOut }
+          cnRec := { cnRec with cnbLnNormSSA := lnNorm, cnbLnIstdSSA := lnIstd }
+          cnRec := { cnRec with cnbBnNormSSA := lnNorm, cnbBnMeanBcSSA := bnMeanBc, cnbBnIstdBcSSA := bnIstdBc }
           cnRec := { cnRec with cnbExpandOutSSA := expandOut, cnbActOutSSA := actOut, cnbActTanhSSA := actTanh, cnbProjectOutSSA := projectOut }
           records := records.push cnRec
         | _ => pure ()
 
-    | .convNextDownsample ic oc _norm =>
+    | .convNextDownsample ic oc norm =>
       match curShape with
       | [b, _, h, w] =>
         let inSSA0 := curSSA
@@ -3785,9 +3894,19 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         let basePidx := pidx
         let tag := s!"cnds{pos}"
         let outShape := [b, oc, h / 2, w / 2]
-        -- 1) LN-NCHW (pidx)
-        let (lnCode, lnOut, lnNorm, lnIstd, _) := emitLayerNormForwardNCHW tag inSSA0 inSh s!"%W{pidx}" s!"%b{pidx}"
-        code := code ++ lnCode
+        -- 1) Norm (pidx): LN OR BN
+        let mut lnOut : String := ""
+        let mut lnNorm : String := ""
+        let mut lnIstd : String := ""
+        let mut bnMeanBc : String := ""
+        let mut bnIstdBc : String := ""
+        match norm with
+        | .ln =>
+          let (lc, out, nm, ist, _) := emitLayerNormForwardNCHW tag inSSA0 inSh s!"%W{pidx}" s!"%b{pidx}"
+          code := code ++ lc; lnOut := out; lnNorm := nm; lnIstd := ist
+        | .bn =>
+          let (bc, out, nm, mbc, ibc) := emitBatchNormForwardNCHW pidx inSSA0 inSh s!"%W{pidx}" s!"%b{pidx}"
+          code := code ++ bc; lnOut := out; lnNorm := nm; bnMeanBc := mbc; bnIstdBc := ibc
         pidx := pidx + 1
         -- 2) 2×2 stride-2 valid-pad conv (pidx)
         code := code ++ s!"    %cnds_cv{pidx} = \"stablehlo.convolution\"({lnOut}, %W{pidx}) " ++ "{\n"
@@ -3806,8 +3925,10 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         curShape := outShape
         let mut cnRec : FwdRec := default
         cnRec := { cnRec with layer := l, pidx := none, pos, inputSSA := inSSA0, outputSSA := dsOut, inShape := inSh, outShape := outShape }
-        cnRec := { cnRec with isConvNextDs := true, cndBasePidx := basePidx, cndIc := ic, cndOc := oc }
-        cnRec := { cnRec with cndInSSA := inSSA0, cndLnNormSSA := lnNorm, cndLnIstdSSA := lnIstd, cndLnOutSSA := lnOut }
+        cnRec := { cnRec with isConvNextDs := true, cndBasePidx := basePidx, cndIc := ic, cndOc := oc, cndNorm := norm }
+        cnRec := { cnRec with cndInSSA := inSSA0, cndLnOutSSA := lnOut }
+        cnRec := { cnRec with cndLnNormSSA := lnNorm, cndLnIstdSSA := lnIstd }
+        cnRec := { cnRec with cndBnNormSSA := lnNorm, cndBnMeanBcSSA := bnMeanBc, cndBnIstdBcSSA := bnIstdBc }
         records := records.push cnRec
       | _ => pure ()
 
@@ -4650,41 +4771,81 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           code := code ++ s!"    %{tag}_dlnout = \"stablehlo.convolution\"({dExpandSSA}, %{tag}_exWrev) " ++ "{\n"
           code := code ++ convAttrBlock 0
           code := code ++ s!"      " ++ "}" ++ s!" : ({expTy}, {tensorTy [c, 4*c, 1, 1]}) -> {blockTy}\n"
-          -- 6) LN-NCHW backward (three-term over inner axis after transpose).
-          --    Saved norm/istd are in [b, hw, c] / [b, hw]; transpose dy to NHWC,
-          --    reshape to [b, hw, c] so the reduction lands on the inner axis
-          --    (the easy case for IREE GPU codegen). Reshape+transpose result
-          --    back to NCHW to feed the DW backward.
-          let nhwcTy := tensorTy [b, h, w, c]
-          let nhcTy  := tensorTy [b, h*w, c]
-          let bnTy   := tensorTy [b, h*w]
-          code := code ++ s!"    %{tag}_dyt = stablehlo.transpose %{tag}_dlnout, dims = [0, 2, 3, 1] : ({blockTy}) -> {nhwcTy}\n"
-          code := code ++ s!"    %{tag}_dyi = stablehlo.reshape %{tag}_dyt : ({nhwcTy}) -> {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lngn = stablehlo.multiply %{tag}_dyi, {r.cnbLnNormSSA} : {nhcTy}\n"
-          code := code ++ s!"    %d_b{pLn} = stablehlo.reduce(%{tag}_dyi init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
-          code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {cTy}\n"
-          code := code ++ s!"    %d_W{pLn} = stablehlo.reduce(%{tag}_lngn init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
-          code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {cTy}\n"
-          code := code ++ s!"    %{tag}_lngbc = stablehlo.broadcast_in_dim %W{pLn}, dims = [2] : ({cTy}) -> {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lndn = stablehlo.multiply %{tag}_dyi, %{tag}_lngbc : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnsdn = stablehlo.reduce(%{tag}_lndn init: %zf) applies stablehlo.add across dimensions = [2]\n"
-          code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {bnTy}\n"
-          code := code ++ s!"    %{tag}_lndnn = stablehlo.multiply %{tag}_lndn, {r.cnbLnNormSSA} : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnsdnn = stablehlo.reduce(%{tag}_lndnn init: %zf) applies stablehlo.add across dimensions = [2]\n"
-          code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {bnTy}\n"
-          code := code ++ s!"    %{tag}_lnsdnbc = stablehlo.broadcast_in_dim %{tag}_lnsdn, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnsdnnbc = stablehlo.broadcast_in_dim %{tag}_lnsdnn, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnNc = stablehlo.constant dense<{cF}> : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnt1 = stablehlo.multiply %{tag}_lnNc, %{tag}_lndn : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnt2 = stablehlo.subtract %{tag}_lnt1, %{tag}_lnsdnbc : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnt3 = stablehlo.multiply {r.cnbLnNormSSA}, %{tag}_lnsdnnbc : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnt4 = stablehlo.subtract %{tag}_lnt2, %{tag}_lnt3 : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnistdbc = stablehlo.broadcast_in_dim {r.cnbLnIstdSSA}, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lninvN = stablehlo.constant dense<{1.0 / cF}> : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnscale = stablehlo.multiply %{tag}_lnistdbc, %{tag}_lninvN : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_ddwi = stablehlo.multiply %{tag}_lnscale, %{tag}_lnt4 : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_ddwr = stablehlo.reshape %{tag}_ddwi : ({nhcTy}) -> {nhwcTy}\n"
-          code := code ++ s!"    %{tag}_ddwout = stablehlo.transpose %{tag}_ddwr, dims = [0, 3, 1, 2] : ({nhwcTy}) -> {blockTy}\n"
+          -- 6) Norm backward: branch on `cnbNorm`.
+          match r.cnbNorm with
+          | .ln =>
+            -- Three-term LN over inner axis after transpose. Saved norm/istd
+            -- are in [b, hw, c] / [b, hw]; transpose dy to NHWC, reshape, do
+            -- the math on the inner axis (IREE-friendly), reshape+transpose
+            -- the result back to NCHW for the DW backward.
+            let nhwcTy := tensorTy [b, h, w, c]
+            let nhcTy  := tensorTy [b, h*w, c]
+            let bnTy   := tensorTy [b, h*w]
+            code := code ++ s!"    %{tag}_dyt = stablehlo.transpose %{tag}_dlnout, dims = [0, 2, 3, 1] : ({blockTy}) -> {nhwcTy}\n"
+            code := code ++ s!"    %{tag}_dyi = stablehlo.reshape %{tag}_dyt : ({nhwcTy}) -> {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lngn = stablehlo.multiply %{tag}_dyi, {r.cnbLnNormSSA} : {nhcTy}\n"
+            code := code ++ s!"    %d_b{pLn} = stablehlo.reduce(%{tag}_dyi init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
+            code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {cTy}\n"
+            code := code ++ s!"    %d_W{pLn} = stablehlo.reduce(%{tag}_lngn init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
+            code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {cTy}\n"
+            code := code ++ s!"    %{tag}_lngbc = stablehlo.broadcast_in_dim %W{pLn}, dims = [2] : ({cTy}) -> {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lndn = stablehlo.multiply %{tag}_dyi, %{tag}_lngbc : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnsdn = stablehlo.reduce(%{tag}_lndn init: %zf) applies stablehlo.add across dimensions = [2]\n"
+            code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {bnTy}\n"
+            code := code ++ s!"    %{tag}_lndnn = stablehlo.multiply %{tag}_lndn, {r.cnbLnNormSSA} : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnsdnn = stablehlo.reduce(%{tag}_lndnn init: %zf) applies stablehlo.add across dimensions = [2]\n"
+            code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {bnTy}\n"
+            code := code ++ s!"    %{tag}_lnsdnbc = stablehlo.broadcast_in_dim %{tag}_lnsdn, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnsdnnbc = stablehlo.broadcast_in_dim %{tag}_lnsdnn, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnNc = stablehlo.constant dense<{cF}> : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnt1 = stablehlo.multiply %{tag}_lnNc, %{tag}_lndn : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnt2 = stablehlo.subtract %{tag}_lnt1, %{tag}_lnsdnbc : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnt3 = stablehlo.multiply {r.cnbLnNormSSA}, %{tag}_lnsdnnbc : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnt4 = stablehlo.subtract %{tag}_lnt2, %{tag}_lnt3 : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnistdbc = stablehlo.broadcast_in_dim {r.cnbLnIstdSSA}, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lninvN = stablehlo.constant dense<{1.0 / cF}> : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnscale = stablehlo.multiply %{tag}_lnistdbc, %{tag}_lninvN : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_ddwi = stablehlo.multiply %{tag}_lnscale, %{tag}_lnt4 : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_ddwr = stablehlo.reshape %{tag}_ddwi : ({nhcTy}) -> {nhwcTy}\n"
+            code := code ++ s!"    %{tag}_ddwout = stablehlo.transpose %{tag}_ddwr, dims = [0, 3, 1, 2] : ({nhwcTy}) -> {blockTy}\n"
+          | .bn =>
+            -- BN-NCHW three-term backward. Reductions split into 2-step
+            -- `[2, 3]` then `[0]` (mirroring `convBn`'s pattern) so the
+            -- four BN reductions in this block don't fuse into a single
+            -- IREE dispatch shape that fails to distribute on ROCm.
+            let bnN := b * h * w
+            let bnNF := bnN.toFloat
+            let bcTy := tensorTy [b, c]
+            code := code ++ s!"    %{tag}_bgn = stablehlo.multiply %{tag}_dlnout, {r.cnbBnNormSSA} : {blockTy}\n"
+            code := code ++ s!"    %{tag}_dbsp = stablehlo.reduce(%{tag}_dlnout init: %zf) applies stablehlo.add across dimensions = [2, 3]\n"
+            code := code ++ s!"          : ({blockTy}, tensor<f32>) -> {bcTy}\n"
+            code := code ++ s!"    %d_b{pLn} = stablehlo.reduce(%{tag}_dbsp init: %zf) applies stablehlo.add across dimensions = [0]\n"
+            code := code ++ s!"          : ({bcTy}, tensor<f32>) -> {cTy}\n"
+            code := code ++ s!"    %{tag}_dWsp = stablehlo.reduce(%{tag}_bgn init: %zf) applies stablehlo.add across dimensions = [2, 3]\n"
+            code := code ++ s!"          : ({blockTy}, tensor<f32>) -> {bcTy}\n"
+            code := code ++ s!"    %d_W{pLn} = stablehlo.reduce(%{tag}_dWsp init: %zf) applies stablehlo.add across dimensions = [0]\n"
+            code := code ++ s!"          : ({bcTy}, tensor<f32>) -> {cTy}\n"
+            code := code ++ s!"    %{tag}_bgbc = stablehlo.broadcast_in_dim %W{pLn}, dims = [1] : ({cTy}) -> {blockTy}\n"
+            code := code ++ s!"    %{tag}_bdn = stablehlo.multiply %{tag}_dlnout, %{tag}_bgbc : {blockTy}\n"
+            code := code ++ s!"    %{tag}_bsdnsp = stablehlo.reduce(%{tag}_bdn init: %zf) applies stablehlo.add across dimensions = [2, 3]\n"
+            code := code ++ s!"          : ({blockTy}, tensor<f32>) -> {bcTy}\n"
+            code := code ++ s!"    %{tag}_bsdn = stablehlo.reduce(%{tag}_bsdnsp init: %zf) applies stablehlo.add across dimensions = [0]\n"
+            code := code ++ s!"          : ({bcTy}, tensor<f32>) -> {cTy}\n"
+            code := code ++ s!"    %{tag}_bdnn = stablehlo.multiply %{tag}_bdn, {r.cnbBnNormSSA} : {blockTy}\n"
+            code := code ++ s!"    %{tag}_bsdnnsp = stablehlo.reduce(%{tag}_bdnn init: %zf) applies stablehlo.add across dimensions = [2, 3]\n"
+            code := code ++ s!"          : ({blockTy}, tensor<f32>) -> {bcTy}\n"
+            code := code ++ s!"    %{tag}_bsdnn = stablehlo.reduce(%{tag}_bsdnnsp init: %zf) applies stablehlo.add across dimensions = [0]\n"
+            code := code ++ s!"          : ({bcTy}, tensor<f32>) -> {cTy}\n"
+            code := code ++ s!"    %{tag}_bsdnbc = stablehlo.broadcast_in_dim %{tag}_bsdn, dims = [1] : ({cTy}) -> {blockTy}\n"
+            code := code ++ s!"    %{tag}_bsdnnbc = stablehlo.broadcast_in_dim %{tag}_bsdnn, dims = [1] : ({cTy}) -> {blockTy}\n"
+            code := code ++ s!"    %{tag}_bNc = stablehlo.constant dense<{bnNF}> : {blockTy}\n"
+            code := code ++ s!"    %{tag}_bt1 = stablehlo.multiply %{tag}_bNc, %{tag}_bdn : {blockTy}\n"
+            code := code ++ s!"    %{tag}_bt2 = stablehlo.subtract %{tag}_bt1, %{tag}_bsdnbc : {blockTy}\n"
+            code := code ++ s!"    %{tag}_bt3 = stablehlo.multiply {r.cnbBnNormSSA}, %{tag}_bsdnnbc : {blockTy}\n"
+            code := code ++ s!"    %{tag}_bt4 = stablehlo.subtract %{tag}_bt2, %{tag}_bt3 : {blockTy}\n"
+            code := code ++ s!"    %{tag}_binvN = stablehlo.constant dense<{1.0 / bnNF}> : {blockTy}\n"
+            code := code ++ s!"    %{tag}_bscale = stablehlo.multiply {r.cnbBnIstdBcSSA}, %{tag}_binvN : {blockTy}\n"
+            code := code ++ s!"    %{tag}_ddwout = stablehlo.multiply %{tag}_bscale, %{tag}_bt4 : {blockTy}\n"
           -- 7) DW raw 7×7 stride-1 same-pad backward.
           let pad : Nat := 3
           code := code ++ s!"    %d_b{pDw} = stablehlo.reduce(%{tag}_ddwout init: %zf) applies stablehlo.add across dimensions = [0, 2, 3]\n"
@@ -4764,39 +4925,76 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           code := code ++ "        rhs_dilation = array<i64: 1, 1>,\n"
           code := code ++ "        window_strides = array<i64: 1, 1>\n"
           code := code ++ s!"      " ++ "}" ++ s!" : ({outTy}, {tensorTy [ic, oc, 2, 2]}) -> {inTy}\n"
-          -- 2) LN-NCHW backward (channels = ic). Saved norm/istd are in
-          --    [b, hw, ic] / [b, hw]; transpose dy to NHWC, reshape, do the
-          --    three-term math over the inner axis, transpose result back.
-          let nhwcTy := tensorTy [b, h, w, ic]
-          let nhcTy  := tensorTy [b, h*w, ic]
-          let bnTy   := tensorTy [b, h*w]
-          code := code ++ s!"    %{tag}_dyt = stablehlo.transpose %{tag}_dlnout, dims = [0, 2, 3, 1] : ({inTy}) -> {nhwcTy}\n"
-          code := code ++ s!"    %{tag}_dyi = stablehlo.reshape %{tag}_dyt : ({nhwcTy}) -> {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lngn = stablehlo.multiply %{tag}_dyi, {r.cndLnNormSSA} : {nhcTy}\n"
-          code := code ++ s!"    %d_b{pLn} = stablehlo.reduce(%{tag}_dyi init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
-          code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {icTy}\n"
-          code := code ++ s!"    %d_W{pLn} = stablehlo.reduce(%{tag}_lngn init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
-          code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {icTy}\n"
-          code := code ++ s!"    %{tag}_lngbc = stablehlo.broadcast_in_dim %W{pLn}, dims = [2] : ({icTy}) -> {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lndn = stablehlo.multiply %{tag}_dyi, %{tag}_lngbc : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnsdn = stablehlo.reduce(%{tag}_lndn init: %zf) applies stablehlo.add across dimensions = [2]\n"
-          code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {bnTy}\n"
-          code := code ++ s!"    %{tag}_lndnn = stablehlo.multiply %{tag}_lndn, {r.cndLnNormSSA} : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnsdnn = stablehlo.reduce(%{tag}_lndnn init: %zf) applies stablehlo.add across dimensions = [2]\n"
-          code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {bnTy}\n"
-          code := code ++ s!"    %{tag}_lnsdnbc = stablehlo.broadcast_in_dim %{tag}_lnsdn, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnsdnnbc = stablehlo.broadcast_in_dim %{tag}_lnsdnn, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnNc = stablehlo.constant dense<{icF}> : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnt1 = stablehlo.multiply %{tag}_lnNc, %{tag}_lndn : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnt2 = stablehlo.subtract %{tag}_lnt1, %{tag}_lnsdnbc : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnt3 = stablehlo.multiply {r.cndLnNormSSA}, %{tag}_lnsdnnbc : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnt4 = stablehlo.subtract %{tag}_lnt2, %{tag}_lnt3 : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnistdbc = stablehlo.broadcast_in_dim {r.cndLnIstdSSA}, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lninvN = stablehlo.constant dense<{1.0 / icF}> : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_lnscale = stablehlo.multiply %{tag}_lnistdbc, %{tag}_lninvN : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_dxi = stablehlo.multiply %{tag}_lnscale, %{tag}_lnt4 : {nhcTy}\n"
-          code := code ++ s!"    %{tag}_dxr = stablehlo.reshape %{tag}_dxi : ({nhcTy}) -> {nhwcTy}\n"
-          code := code ++ s!"    %{tag}_dx = stablehlo.transpose %{tag}_dxr, dims = [0, 3, 1, 2] : ({nhwcTy}) -> {inTy}\n"
+          -- 2) Norm backward (channels = ic): branch on `cndNorm`.
+          match r.cndNorm with
+          | .ln =>
+            -- Three-term LN over inner axis after transpose.
+            let nhwcTy := tensorTy [b, h, w, ic]
+            let nhcTy  := tensorTy [b, h*w, ic]
+            let bnTy   := tensorTy [b, h*w]
+            code := code ++ s!"    %{tag}_dyt = stablehlo.transpose %{tag}_dlnout, dims = [0, 2, 3, 1] : ({inTy}) -> {nhwcTy}\n"
+            code := code ++ s!"    %{tag}_dyi = stablehlo.reshape %{tag}_dyt : ({nhwcTy}) -> {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lngn = stablehlo.multiply %{tag}_dyi, {r.cndLnNormSSA} : {nhcTy}\n"
+            code := code ++ s!"    %d_b{pLn} = stablehlo.reduce(%{tag}_dyi init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
+            code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {icTy}\n"
+            code := code ++ s!"    %d_W{pLn} = stablehlo.reduce(%{tag}_lngn init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
+            code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {icTy}\n"
+            code := code ++ s!"    %{tag}_lngbc = stablehlo.broadcast_in_dim %W{pLn}, dims = [2] : ({icTy}) -> {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lndn = stablehlo.multiply %{tag}_dyi, %{tag}_lngbc : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnsdn = stablehlo.reduce(%{tag}_lndn init: %zf) applies stablehlo.add across dimensions = [2]\n"
+            code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {bnTy}\n"
+            code := code ++ s!"    %{tag}_lndnn = stablehlo.multiply %{tag}_lndn, {r.cndLnNormSSA} : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnsdnn = stablehlo.reduce(%{tag}_lndnn init: %zf) applies stablehlo.add across dimensions = [2]\n"
+            code := code ++ s!"          : ({nhcTy}, tensor<f32>) -> {bnTy}\n"
+            code := code ++ s!"    %{tag}_lnsdnbc = stablehlo.broadcast_in_dim %{tag}_lnsdn, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnsdnnbc = stablehlo.broadcast_in_dim %{tag}_lnsdnn, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnNc = stablehlo.constant dense<{icF}> : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnt1 = stablehlo.multiply %{tag}_lnNc, %{tag}_lndn : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnt2 = stablehlo.subtract %{tag}_lnt1, %{tag}_lnsdnbc : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnt3 = stablehlo.multiply {r.cndLnNormSSA}, %{tag}_lnsdnnbc : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnt4 = stablehlo.subtract %{tag}_lnt2, %{tag}_lnt3 : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnistdbc = stablehlo.broadcast_in_dim {r.cndLnIstdSSA}, dims = [0, 1] : ({bnTy}) -> {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lninvN = stablehlo.constant dense<{1.0 / icF}> : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_lnscale = stablehlo.multiply %{tag}_lnistdbc, %{tag}_lninvN : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_dxi = stablehlo.multiply %{tag}_lnscale, %{tag}_lnt4 : {nhcTy}\n"
+            code := code ++ s!"    %{tag}_dxr = stablehlo.reshape %{tag}_dxi : ({nhcTy}) -> {nhwcTy}\n"
+            code := code ++ s!"    %{tag}_dx = stablehlo.transpose %{tag}_dxr, dims = [0, 3, 1, 2] : ({nhwcTy}) -> {inTy}\n"
+          | .bn =>
+            -- BN three-term backward — 2-step reductions `[2, 3]` then `[0]`
+            -- to dodge IREE's distribute issue with stacked `[0, 2, 3]` reductions.
+            let bnN := b * h * w
+            let bnNF := bnN.toFloat
+            let bcTy := tensorTy [b, ic]
+            code := code ++ s!"    %{tag}_bgn = stablehlo.multiply %{tag}_dlnout, {r.cndBnNormSSA} : {inTy}\n"
+            code := code ++ s!"    %{tag}_dbsp = stablehlo.reduce(%{tag}_dlnout init: %zf) applies stablehlo.add across dimensions = [2, 3]\n"
+            code := code ++ s!"          : ({inTy}, tensor<f32>) -> {bcTy}\n"
+            code := code ++ s!"    %d_b{pLn} = stablehlo.reduce(%{tag}_dbsp init: %zf) applies stablehlo.add across dimensions = [0]\n"
+            code := code ++ s!"          : ({bcTy}, tensor<f32>) -> {icTy}\n"
+            code := code ++ s!"    %{tag}_dWsp = stablehlo.reduce(%{tag}_bgn init: %zf) applies stablehlo.add across dimensions = [2, 3]\n"
+            code := code ++ s!"          : ({inTy}, tensor<f32>) -> {bcTy}\n"
+            code := code ++ s!"    %d_W{pLn} = stablehlo.reduce(%{tag}_dWsp init: %zf) applies stablehlo.add across dimensions = [0]\n"
+            code := code ++ s!"          : ({bcTy}, tensor<f32>) -> {icTy}\n"
+            code := code ++ s!"    %{tag}_bgbc = stablehlo.broadcast_in_dim %W{pLn}, dims = [1] : ({icTy}) -> {inTy}\n"
+            code := code ++ s!"    %{tag}_bdn = stablehlo.multiply %{tag}_dlnout, %{tag}_bgbc : {inTy}\n"
+            code := code ++ s!"    %{tag}_bsdnsp = stablehlo.reduce(%{tag}_bdn init: %zf) applies stablehlo.add across dimensions = [2, 3]\n"
+            code := code ++ s!"          : ({inTy}, tensor<f32>) -> {bcTy}\n"
+            code := code ++ s!"    %{tag}_bsdn = stablehlo.reduce(%{tag}_bsdnsp init: %zf) applies stablehlo.add across dimensions = [0]\n"
+            code := code ++ s!"          : ({bcTy}, tensor<f32>) -> {icTy}\n"
+            code := code ++ s!"    %{tag}_bdnn = stablehlo.multiply %{tag}_bdn, {r.cndBnNormSSA} : {inTy}\n"
+            code := code ++ s!"    %{tag}_bsdnnsp = stablehlo.reduce(%{tag}_bdnn init: %zf) applies stablehlo.add across dimensions = [2, 3]\n"
+            code := code ++ s!"          : ({inTy}, tensor<f32>) -> {bcTy}\n"
+            code := code ++ s!"    %{tag}_bsdnn = stablehlo.reduce(%{tag}_bsdnnsp init: %zf) applies stablehlo.add across dimensions = [0]\n"
+            code := code ++ s!"          : ({bcTy}, tensor<f32>) -> {icTy}\n"
+            code := code ++ s!"    %{tag}_bsdnbc = stablehlo.broadcast_in_dim %{tag}_bsdn, dims = [1] : ({icTy}) -> {inTy}\n"
+            code := code ++ s!"    %{tag}_bsdnnbc = stablehlo.broadcast_in_dim %{tag}_bsdnn, dims = [1] : ({icTy}) -> {inTy}\n"
+            code := code ++ s!"    %{tag}_bNc = stablehlo.constant dense<{bnNF}> : {inTy}\n"
+            code := code ++ s!"    %{tag}_bt1 = stablehlo.multiply %{tag}_bNc, %{tag}_bdn : {inTy}\n"
+            code := code ++ s!"    %{tag}_bt2 = stablehlo.subtract %{tag}_bt1, %{tag}_bsdnbc : {inTy}\n"
+            code := code ++ s!"    %{tag}_bt3 = stablehlo.multiply {r.cndBnNormSSA}, %{tag}_bsdnnbc : {inTy}\n"
+            code := code ++ s!"    %{tag}_bt4 = stablehlo.subtract %{tag}_bt2, %{tag}_bt3 : {inTy}\n"
+            code := code ++ s!"    %{tag}_binvN = stablehlo.constant dense<{1.0 / bnNF}> : {inTy}\n"
+            code := code ++ s!"    %{tag}_bscale = stablehlo.multiply {r.cndBnIstdBcSSA}, %{tag}_binvN : {inTy}\n"
+            code := code ++ s!"    %{tag}_dx = stablehlo.multiply %{tag}_bscale, %{tag}_bt4 : {inTy}\n"
           gradSSA := s!"%{tag}_dx"
           gradShape := r.inShape
         | _ => pure ()
