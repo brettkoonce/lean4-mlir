@@ -122,35 +122,6 @@ def mnistCnnBn : NetSpec where
     .dense 512 10 .identity
   ]
 
--- Chapter 2 (R34-aligned variant): [Conv+Conv+MaxPool] → GAP → Dense(128→10).
--- One "block" of the CIFAR-lite pattern (which repeats it twice).
--- The MaxPool bridges to VGG and halves the activation count after
--- the first conv, so training runs ~4× faster too.
-def mnistCnnLite : NetSpec where
-  name := "MNIST-CNN-Lite"
-  imageH := 28
-  imageW := 28
-  layers := [
-    .conv2d 1 128 3 .same .relu,
-    .conv2d 128 128 3 .same .relu,
-    .maxPool 2 2,
-    .globalAvgPool,
-    .dense 128 10 .identity
-  ]
-
--- BN variant for the BN vs no-BN comparison in Ch 2 prep material.
-def mnistCnnLiteBn : NetSpec where
-  name := "MNIST-CNN-Lite-BN"
-  imageH := 28
-  imageW := 28
-  layers := [
-    .convBn 1 128 3 1 .same,
-    .convBn 128 128 3 1 .same,
-    .maxPool 2 2,
-    .globalAvgPool,
-    .dense 128 10 .identity
-  ]
-
 -- Chapter 3: CNN on CIFAR (no BN)
 def cifarCnnNoBn : NetSpec where
   name := "CIFAR-CNN-noBN"
@@ -770,16 +741,12 @@ def ablations : List (String × AblationRun) := [
   ("shallow-adam",     ⟨mnistShallow, adamOnly 15,      .mnist, "data"⟩),
 
   -- Width ablation: single hidden layer MLP, SGD 0.002
-  ("width-h32",        ⟨mnistHidden 32,  sgdLowLr2 15, .mnist, "data"⟩),
   ("width-h64",        ⟨mnistHidden 64,  sgdLowLr2 15, .mnist, "data"⟩),
   ("width-h128",       ⟨mnistHidden 128, sgdLowLr2 15, .mnist, "data"⟩),
-  ("width-h256",       ⟨mnistHidden 256, sgdLowLr2 15, .mnist, "data"⟩),
   ("width-h512",       ⟨mnistHidden 512, sgdLowLr2 15, .mnist, "data"⟩),
 
   -- Width ablation: MNIST CNN (no BN), SGD 0.002
   ("width-cnn-f8",     ⟨mnistCnnWidth 8,  sgdLowLr2 15, .mnist, "data"⟩),
-  ("width-cnn-f16",    ⟨mnistCnnWidth 16, sgdLowLr2 15, .mnist, "data"⟩),
-  ("width-cnn-f32",    ⟨mnistCnnWidth 32, sgdLowLr2 15, .mnist, "data"⟩),
   ("width-cnn-f64",    ⟨mnistCnnWidth 64, sgdLowLr2 15, .mnist, "data"⟩),
 
   -- Width ablation: CIFAR CNN (with BN), SGD 0.002
@@ -796,21 +763,10 @@ def ablations : List (String × AblationRun) := [
 
   -- Chapter 2: CNN on MNIST (no BN, S4TF architecture)
   ("cnn-nobn-sgd",     ⟨mnistCnnNoBn, s4tfBaseline 12, .mnist, "data"⟩),
-  ("cnn-nobn-adam",    ⟨mnistCnnNoBn, adamOnly 15,     .mnist, "data"⟩),
 
   -- Chapter 2: CNN on MNIST (with BN, our architecture)
   ("cnn-bn-sgd",       ⟨mnistCnnBn,   s4tfBaseline 15, .mnist, "data"⟩),
-  ("cnn-bn-adam",      ⟨mnistCnnBn,   adamOnly 15,     .mnist, "data"⟩),
   ("cnn-bn-full",      ⟨mnistCnnBn,   fullRecipe 0.001 15 128, .mnist, "data"⟩),
-
-  -- Chapter 2 (R34-aligned, GAP + single-FC head, 128-dim feature).
-  -- MNIST needs a higher LR than CIFAR — SGD 0.1 is the book default here.
-  ("cnn-lite-nobn-sgd",    ⟨mnistCnnLite,   s4tfBaseline 15, .mnist, "data"⟩),
-  ("cnn-lite-bn-sgd",      ⟨mnistCnnLiteBn, s4tfBaseline 15, .mnist, "data"⟩),
-  -- Kept as a "what if we used CIFAR's LR?" data point — trains slowly,
-  -- not the chapter default.
-  ("cnn-lite-nobn-sgd002", ⟨mnistCnnLite,   sgdLowLr2 15, .mnist, "data"⟩),
-  ("cnn-lite-bn-sgd002",   ⟨mnistCnnLiteBn, sgdLowLr2 15, .mnist, "data"⟩),
 
   -- Chapter 3: CIFAR (no BN — should struggle)
   ("cifar-nobn-sgd",   ⟨cifarCnnNoBn, s4tfBaseline 30, .cifar10, "data"⟩),
