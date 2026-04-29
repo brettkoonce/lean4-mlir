@@ -3857,6 +3857,53 @@ def alexNet : NetSpec where
   ]
 \end{verbatim}
 
+\subsubsection*{Highway Networks (\texttt{Bestiary/Highway.lean})}
+\emph{Zero} new math --- the architecture is built entirely from the
+product rule and additive fan-in (Chapter~\ref{chap:tensor}'s
+toolkit) applied to two parallel dense / conv paths. \emph{One}
+shape-only primitive, \texttt{.highwayBlock ic oc}, bundling the
+two paths and the gate-blend (Srivastava, Greff, Schmidhuber 2015,
+\href{https://arxiv.org/abs/1505.00387}{arXiv:1505.00387}). Variants:
+canonical 50-layer Highway-MLP, deeper 100-layer fixture, tiny.
+
+A two-headed network: a \emph{main path} $H(x)$ (any transformation,
+typically dense $+$ ReLU) and a \emph{transform gate} $T(x)$ (its own
+dense $+$ sigmoid, output in $[0, 1]$). The output blends the two:
+\[
+  y = T(x) \cdot H(x) + \bigl(1 - T(x)\bigr) \cdot x.
+\]
+$T$ learned per element gives the network a continuous knob between
+``pass through'' ($T \to 0$) and ``transform fully'' ($T \to 1$). The
+gradient through the blend is exactly product rule + additive
+fan-in --- both already in Chapter~\ref{chap:tensor}'s VJP kit ---
+so no new derivation is needed.
+
+\begin{verbatim}
+def highwayMain : NetSpec where
+  name   := "Highway block — main path H(x)"
+  imageH := 1
+  imageW := 1
+  layers := [
+    .dense 50 50 .relu                           -- H(x)
+  ]
+
+def highwayGate : NetSpec where
+  name   := "Highway block — transform gate T(x)"
+  imageH := 1
+  imageW := 1
+  layers := [
+    .dense 50 50 .identity                       -- T(x), sigmoid applied at blend
+  ]
+\end{verbatim}
+
+The pedagogical hook: ResNet (Chapter~\ref{chap:residual}) is the
+special case where $T$ is fixed at $1$ on the transform side and the
+carry path becomes a constant identity. Highway showed in 2015 that
+some kind of bypass made very deep networks trainable; ResNet showed
+six months later that the gate could be a constant and you'd save the
+parameters. ResNet won by simplifying away $T$, but the underlying
+calculus is identical --- product + additive fan-in either way.
+
 \subsubsection*{SqueezeNet (\texttt{Bestiary/SqueezeNet.lean})}
 \emph{Zero} new primitives --- the \texttt{.fireModule} constructor was
 already in \texttt{Types.lean}. AlexNet-level accuracy in 1.25M params

@@ -261,6 +261,9 @@ lean_exe «test-diff-sanity» where
 lean_exe «bestiary-alphazero» where
   root := `Bestiary.AlphaZero
 
+lean_exe «bestiary-highway» where
+  root := `Bestiary.Highway
+
 lean_exe «bestiary-mamba» where
   root := `Bestiary.Mamba
 
