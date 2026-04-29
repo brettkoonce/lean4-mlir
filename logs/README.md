@@ -51,9 +51,7 @@ Two conv blocks + two dense. BatchNorm and optimizer variants:
 | Log | Config | Final val acc |
 |-----|--------|---------------|
 | `ablation_cnn-nobn-sgd.log`  | SGD 0.1, no BN                    | 98.98% |
-| `ablation_cnn-nobn-adam.log` | Adam 0.001, no BN                 | 99.00% |
 | `ablation_cnn-bn-sgd.log`    | SGD 0.1 + BN                      | 99.06% |
-| `ablation_cnn-bn-adam.log`   | Adam 0.001 + BN                   | 99.31% |
 | `ablation_cnn-bn-full.log`   | Adam + BN + cosine + wd + aug     | 99.50% |
 
 ### CNN-lite (~150K params, shallower)
@@ -63,11 +61,7 @@ Variants used for the width/pooling/BN-effect ablation chapters.
 | Log | Config | Final val acc |
 |-----|--------|---------------|
 | `ablation_cnn-lite-bn-sgd.log`         | SGD 0.1 + BN                        | 95.95% |
-| `ablation_cnn-lite-bn-sgd002.log`      | SGD 0.02 + BN                       | 78.53% |
-| `ablation_cnn-lite-bn-sgd_nopool.log`  | SGD 0.1 + BN, no maxpool            | 94.84% |
 | `ablation_cnn-lite-nobn-sgd.log`       | SGD 0.1, no BN                      | 95.70% |
-| `ablation_cnn-lite-nobn-sgd002.log`    | SGD 0.02, no BN                     | 55.03% |
-| `ablation_cnn-lite-nobn-sgd_nopool.log`| SGD 0.1, no BN, no maxpool          | 95.41% |
 
 ---
 
@@ -81,12 +75,7 @@ dramatic.
 |-----|--------|---------------|
 | `ablation_cifar-nobn-sgd.log`    | SGD 0.1, no BN                   | 10.0% (diverged) |
 | `ablation_cifar-nobn-sgd002.log` | SGD 0.02, no BN                  | 72.5% |
-| `ablation_cifar-nobn-adam.log`   | Adam 0.001, no BN                | 72.8% |
 | `ablation_cifar-bn-sgd.log`      | SGD 0.1 + BN                     | 61.6% |
-| `ablation_cifar-bn-sgd002.log`   | SGD 0.02 + BN                    | 72.9% |
-| `ablation_cifar-bn-adam.log`     | Adam 0.001 + BN                  | 76.5% |
-| `ablation_cifar-bn-cosine.log`   | Adam + BN + cosine               | 79.6% |
-| `ablation_cifar-bn-aug.log`      | Adam + BN + aug                  | 82.7% |
 | `ablation_cifar-bn-full.log`     | Adam + BN + cosine + wd + aug    | 82.0% |
 
 `cifar-lite-*` — same ablations against the lite-CNN architecture.
@@ -109,10 +98,8 @@ the hidden size.
 
 | Log | Hidden width | Final val acc |
 |-----|--------------|---------------|
-| `ablation_width-h32.log`   | 32  | 93.98% |
 | `ablation_width-h64.log`   | 64  | 94.34% |
 | `ablation_width-h128.log`  | 128 | 94.72% |
-| `ablation_width-h256.log`  | 256 | 94.88% |
 | `ablation_width-h512.log`  | 512 | 95.12% |
 
 Diminishing returns after h=128. Chapter on "how much width you
@@ -123,8 +110,6 @@ actually need" uses this data.
 | Log | Channels | Final val acc |
 |-----|----------|---------------|
 | `ablation_width-cnn-f8.log`  | base 8  | 98.34% |
-| `ablation_width-cnn-f16.log` | base 16 | 98.35% |
-| `ablation_width-cnn-f32.log` | base 32 | 98.72% |
 | `ablation_width-cnn-f64.log` | base 64 | 98.90% |
 
 ### CNN channel width (CIFAR)
