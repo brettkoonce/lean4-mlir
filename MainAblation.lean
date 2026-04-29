@@ -158,39 +158,6 @@ def cifarCnnBn : NetSpec where
     .dense 512 10 .identity
   ]
 
--- Chapter 3 (R34-aligned variant): GAP + single-FC head, matching the
--- classifier pattern we'll use all the way up to ResNet. Conv trunk
--- bumped to 64→128 to echo R34's first two stages.  ~262k params
--- (vs. 2.43M for the dense-head version above).
-def cifarCnnLiteNoBn : NetSpec where
-  name := "CIFAR-Lite-noBN"
-  imageH := 32
-  imageW := 32
-  layers := [
-    .conv2d 3 64 3 .same .relu,
-    .conv2d 64 64 3 .same .relu,
-    .maxPool 2 2,
-    .conv2d 64 128 3 .same .relu,
-    .conv2d 128 128 3 .same .relu,
-    .maxPool 2 2,
-    .globalAvgPool,
-    .dense 128 10 .identity
-  ]
-
-def cifarCnnLiteBn : NetSpec where
-  name := "CIFAR-Lite-BN"
-  imageH := 32
-  imageW := 32
-  layers := [
-    .convBn 3 64 3 1 .same,
-    .convBn 64 64 3 1 .same,
-    .maxPool 2 2,
-    .convBn 64 128 3 1 .same,
-    .convBn 128 128 3 1 .same,
-    .maxPool 2 2,
-    .globalAvgPool,
-    .dense 128 10 .identity
-  ]
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Configs (each ablation strips one thing from the full recipe)
@@ -278,6 +245,49 @@ def adamCosineAug (epochs : Nat := 30) : TrainConfig where
   cosineDecay  := true
   warmupEpochs := 2
   augment      := true
+  labelSmoothing := 0.0
+
+-- ═══════════════════════════════════════════════════════════════════
+-- Chapter 5: CIFAR-CNN-BN — leave-one-out recipe ablation.
+-- Same flag exposure as the R34 chapter (Adam / cosine / warmup / wd /
+-- smooth / aug), so the recipe story stays consistent across scales.
+-- Reuses `fullRecipe 0.001 30 128` as the baseline with all knobs on.
+-- ═══════════════════════════════════════════════════════════════════
+
+def cifarBnFull : TrainConfig := fullRecipe 0.001 30 128
+
+-- Full minus Adam (→ SGD + 0.9 momentum). LR bumped to 0.01 to keep
+-- the comparison fair — at Adam's 0.001 SGD undershoots structurally.
+def cifarBnNoAdam : TrainConfig :=
+  { fullRecipe 0.001 30 128 with
+      learningRate := 0.01, useAdam := false, momentum := 0.9 }
+
+def cifarBnNoCosine : TrainConfig :=
+  { fullRecipe 0.001 30 128 with cosineDecay := false }
+
+def cifarBnNoWarmup : TrainConfig :=
+  { fullRecipe 0.001 30 128 with warmupEpochs := 0 }
+
+def cifarBnNoWd : TrainConfig :=
+  { fullRecipe 0.001 30 128 with weightDecay := 0.0 }
+
+def cifarBnNoSmooth : TrainConfig :=
+  { fullRecipe 0.001 30 128 with labelSmoothing := 0.0 }
+
+def cifarBnNoAug : TrainConfig :=
+  { fullRecipe 0.001 30 128 with augment := false }
+
+-- Plain SGD + momentum, no other tricks. Mirror of `r34Bare`.
+def cifarBnBare : TrainConfig where
+  learningRate := 0.01
+  batchSize    := 128
+  epochs       := 30
+  useAdam      := false
+  momentum     := 0.9
+  weightDecay  := 0.0
+  cosineDecay  := false
+  warmupEpochs := 0
+  augment      := false
   labelSmoothing := 0.0
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -751,8 +761,6 @@ def ablations : List (String × AblationRun) := [
 
   -- Width ablation: CIFAR CNN (with BN), SGD 0.002
   ("width-cifar-f8",   ⟨cifarCnnWidth 8,  sgdLowLr2 30, .cifar10, "data"⟩),
-  ("width-cifar-f16",  ⟨cifarCnnWidth 16, sgdLowLr2 30, .cifar10, "data"⟩),
-  ("width-cifar-f32",  ⟨cifarCnnWidth 32, sgdLowLr2 30, .cifar10, "data"⟩),
   ("width-cifar-f64",  ⟨cifarCnnWidth 64, sgdLowLr2 30, .cifar10, "data"⟩),
 
   -- Chapter 1: 3-layer MLP (~670K params)
@@ -768,22 +776,21 @@ def ablations : List (String × AblationRun) := [
   ("cnn-bn-sgd",       ⟨mnistCnnBn,   s4tfBaseline 15, .mnist, "data"⟩),
   ("cnn-bn-full",      ⟨mnistCnnBn,   fullRecipe 0.001 15 128, .mnist, "data"⟩),
 
-  -- Chapter 3: CIFAR (no BN — should struggle)
+  -- Chapter 3: CIFAR (no BN — should struggle). Direct s4tf baseline
+  -- match: SGD 0.1, no augmentation, no recipe tricks.
   ("cifar-nobn-sgd",   ⟨cifarCnnNoBn, s4tfBaseline 30, .cifar10, "data"⟩),
-  ("cifar-nobn-sgd002",⟨cifarCnnNoBn, sgdLowLr2 30,   .cifar10, "data"⟩),
-  ("cifar-nobn-adam",  ⟨cifarCnnNoBn, adamOnly 30,     .cifar10, "data"⟩),
 
-  -- Chapter 3: CIFAR (with BN — the unlock)
-  ("cifar-bn-sgd",     ⟨cifarCnnBn,   s4tfBaseline 30, .cifar10, "data"⟩),
-  ("cifar-bn-sgd002",  ⟨cifarCnnBn,   sgdLowLr2 30,   .cifar10, "data"⟩),
-  ("cifar-bn-adam",    ⟨cifarCnnBn,   adamOnly 30,     .cifar10, "data"⟩),
-  ("cifar-bn-cosine",  ⟨cifarCnnBn,   adamCosine 30,   .cifar10, "data"⟩),
-  ("cifar-bn-aug",     ⟨cifarCnnBn,   adamCosineAug 30, .cifar10, "data"⟩),
-  ("cifar-bn-full",    ⟨cifarCnnBn,   fullRecipe 0.001 30 128, .cifar10, "data"⟩),
-
-  -- Chapter 3 (R34-aligned, GAP + single-FC head): does BN matter here?
-  ("cifar-lite-nobn-sgd002", ⟨cifarCnnLiteNoBn, sgdLowLr2 30, .cifar10, "data"⟩),
-  ("cifar-lite-bn-sgd002",   ⟨cifarCnnLiteBn,   sgdLowLr2 30, .cifar10, "data"⟩),
+  -- Chapter 5: CIFAR-CNN-BN leave-one-out recipe ablation. Same flag
+  -- exposure as the R34 chapter; cifar-bn-full has all knobs on, each
+  -- cifar-bn-no-X removes one ingredient. Compare rows to measure lift.
+  ("cifar-bn-bare",      ⟨cifarCnnBn, cifarBnBare,     .cifar10, "data"⟩),
+  ("cifar-bn-no-adam",   ⟨cifarCnnBn, cifarBnNoAdam,   .cifar10, "data"⟩),
+  ("cifar-bn-no-cosine", ⟨cifarCnnBn, cifarBnNoCosine, .cifar10, "data"⟩),
+  ("cifar-bn-no-warmup", ⟨cifarCnnBn, cifarBnNoWarmup, .cifar10, "data"⟩),
+  ("cifar-bn-no-wd",     ⟨cifarCnnBn, cifarBnNoWd,     .cifar10, "data"⟩),
+  ("cifar-bn-no-smooth", ⟨cifarCnnBn, cifarBnNoSmooth, .cifar10, "data"⟩),
+  ("cifar-bn-no-aug",    ⟨cifarCnnBn, cifarBnNoAug,    .cifar10, "data"⟩),
+  ("cifar-bn-full",      ⟨cifarCnnBn, cifarBnFull,     .cifar10, "data"⟩),
 
   -- Chapter 6: ResNet-34 Imagenette leave-one-out recipe ablation.
   -- r34-full is the headline; each r34-no-X removes one ingredient
