@@ -646,10 +646,10 @@ ladder to ViT.
   \item \textbf{Chapter 2: You Are Here} --- Chain rule, sum rule, product
     rule for partial derivatives. Every backward function in the book is
     a VJP (vector-Jacobian product) built by composing these.
-  \item \textbf{Chapter 3: MNIST 1D MLP} --- Dense layers, ReLU, softmax CE,
+  \item \textbf{Chapter 3: MNIST: 1D MLP} --- Dense layers, ReLU, softmax CE,
     the chain rule. The most important chapter: everything after is
     adding more layers.
-  \item \textbf{Chapter 4: MNIST 2D CNN} --- Convolution, max pooling. The
+  \item \textbf{Chapter 4: MNIST: 2D CNN} --- Convolution, max pooling. The
     backward pass of conv is another conv with a reversed kernel.
   \item \textbf{Chapter 5: CIFAR with BatchNorm} --- The first dense Jacobian
     with a clean closed form. Three terms, one cancellation, and you
@@ -660,8 +660,8 @@ ladder to ViT.
     regular conv, but diagonal in the channel dimension.
   \item \textbf{Chapter 8: EfficientNet} --- Squeeze-and-excitation. The
     product rule: main path times gate, gradients from both paths add.
-  \item \textbf{Chapter 9: LayerNorm and GELU} --- Batchnorm in disguise.
-    Activation functions.
+  \item \textbf{Chapter 9: ConvNeXt} --- LayerNorm, Batchnorm in
+    disguise. GELU activation function. Data augmentation strategies.
   \item \textbf{Chapter 10: Vision Transformer} --- Self-attention. Softmax
     in the middle of the network, three-way fan-in at the input. The
     capstone.
@@ -884,46 +884,46 @@ additive and multiplicative fan-in, identity, reindexing,
 row-independence for matrices, and the matrix-/ 3-tensor-level
 lifts. Plus \(\pdiv\) itself as a definition over \(\fderiv\).
 
-\textbf{Chapter 3 (MLP)} adds 7 theorems plus 2 definitions.
+\textbf{Chapter 3 (MNIST: 1D)} adds 7 theorems plus 2 definitions.
 The guarded ReLU Jacobian \(\pdiv\_\texttt{relu}\) is now proved
 via local-diagonal-CLM transport; \(\texttt{relu\_has\_vjp}\)
 and \(\texttt{mlp\_has\_vjp}\) are \texttt{noncomputable def}s
 over the canonical pdiv-derived witness, with
 \texttt{HasVJP.correct} holding by \texttt{rfl}.
 
-\textbf{Chapter 4 (CNN)} adds 3 theorems and 3 definitions.
+\textbf{Chapter 4 (MNIST: 2D)} adds 3 theorems and 3 definitions.
 \(\texttt{conv2d}\) and \(\texttt{maxPool2}\) are concrete
 forward defs; the weight, bias, and (Phase 1) input-side conv
 VJPs are proved from foundation.
 \(\texttt{maxPool2\_has\_vjp3}\) is a \texttt{def} over the
 canonical pdiv-derived witness.
 
-\textbf{Chapter 5 (BN)} adds 7 theorems. The inverse-stddev
+\textbf{Chapter 5 (CIFAR: BN)} adds 7 theorems. The inverse-stddev
 broadcast Jacobian and its smoothness lemma under
 \(\varepsilon > 0\) are proved from foundation, as are the
 BN affine and centering Jacobians.
 
-\textbf{Chapter 6 (Residual)} adds just 1 theorem (the
+\textbf{Chapter 6 (ResNet-34)} adds just 1 theorem (the
 residual additive-fan-in VJP, built entirely from Chapter~2's
 kit). That's the scaling claim in miniature --- new
 architecture, no new calculus.
 
-\textbf{Chapter 7 (Depthwise)} adds 3 theorems and 1 definition.
+\textbf{Chapter 7 (MobileNetV2)} adds 3 theorems and 1 definition.
 Phase 2 closed the depthwise input VJP using the same recipe
 as Ch~4 with one fewer summation level (no cross-channel mixing).
 
-\textbf{Chapter 8 (SE)} adds 1 theorem
+\textbf{Chapter 8 (EfficientNet)} adds 1 theorem
 (\(\texttt{seBlock\_has\_vjp}\)). Squeeze-and-excitation is
 global-avg-pool plus two 1\(\times\)1 convs plus the elementwise
 product; every piece was already proved elsewhere.
 
-\textbf{Chapter 9 (LN + GELU)} adds 3 theorems plus 2 definitions.
+\textbf{Chapter 9 (ConvNeXt)} adds 3 theorems plus 2 definitions.
 The GELU Jacobian is proved via \(\fderiv\) and
 \texttt{Real.differentiable\_tanh}; \(\texttt{geluScalar}\) and
 its derivative are concrete defs; LayerNorm reuses the BN
 proof template.
 
-\textbf{Chapter 10 (Attention)} adds 20 theorems.
+\textbf{Chapter 10 (ViT)} adds 20 theorems.
 Phase 3 proved multi-head SDPA via column-stacking (lifting the
 single-head SDPA backward over the head axis using a new
 \(\pdivMat\_\texttt{colIndep}\) +
@@ -939,17 +939,17 @@ one of them.
 \begin{center}
 \begin{tabular}{l c c r l}
 \hline
-Chapter & New (th + def) & Cumulative & Last \# & Architectures unlocked \\
+Chapter & New (th + def) & Cumulative & Last \# & Math primitive added \\
 \hline
-2 (You Are Here)       & 27 + 1  & 27 + 1 & 28 & foundation \\
-3 (MLP)                & 7 + 2   & 34 + 3 & 37 & MLP \\
-4 (CNN)                & 3 + 3   & 37 + 6 & 43 & $+$ CNN \\
-5 (BN)                 & 7 + 0   & 44 + 6 & 50 & $+$ BN-nets \\
-6 (Residual)           & 1 + 0   & 45 + 6 & 51 & $+$ ResNet-34 \\
-7 (Depthwise)          & 3 + 1   & 48 + 7 & 55 & $+$ MobileNet V2 \\
-8 (SE)                 & 1 + 0   & 49 + 7 & 56 & $+$ EfficientNet \\
-9 (LN + GELU)          & 3 + 2   & 52 + 9 & 61 & $+$ transformer infra \\
-10 (Attention)         & 20 + 0  & 72 + 9 & 81 & $+$ ViT \\
+2 (You Are Here)       & 27 + 1  & 27 + 1 & 28 & chain / fan-in / product rules \\
+3 (MNIST: 1D)          & 7 + 2   & 34 + 3 & 37 & $+$ Dense $+$ ReLU $+$ softmax CE \\
+4 (MNIST: 2D)          & 3 + 3   & 37 + 6 & 43 & $+$ Conv $+$ MaxPool \\
+5 (CIFAR: BN)          & 7 + 0   & 44 + 6 & 50 & $+$ BatchNorm Jacobian \\
+6 (ResNet-34)          & 1 + 0   & 45 + 6 & 51 & $+$ Residual fan-in \\
+7 (MobileNetV2)        & 3 + 1   & 48 + 7 & 55 & $+$ Depthwise \\
+8 (EfficientNet)       & 1 + 0   & 49 + 7 & 56 & $+$ SE (mult. fan-in) \\
+9 (ConvNeXt)           & 3 + 2   & 52 + 9 & 61 & $+$ LN $+$ GELU \\
+10 (ViT)               & 20 + 0  & 72 + 9 & 81 & $+$ Attention \\
 \hline
 \end{tabular}
 \end{center}
@@ -1239,7 +1239,7 @@ slowly, then skim the rest at the pace of ``forward pass I know
 \(\to\) new \texttt{*\_has\_vjp} theorem \(\to\) see what theorems it
 cites \(\to\) move on.'' The dependency DAG is your friend.
 
-\chapter{MLP: Dense Layer}
+\chapter{MNIST: 1D MLP}
 \label{chap:mlp}
 
 The workhorse: \(y = Wx + b\) plus ReLU and softmax cross-entropy loss.
@@ -1752,7 +1752,7 @@ layer at a time), every architecture in the book and every
 architecture in the bestiary runs through it with no further
 infrastructure code.
 
-\chapter{CNN: Convolution and Pooling}
+\chapter{MNIST: 2D CNN}
 \label{chap:cnn}
 
 \begin{definition}[Conv2d forward]
@@ -2000,7 +2000,7 @@ convolutions and maxPool roughly doubles the emitted compute, not
 \texttt{.convBn} adds batch-norm normalize and affine ops; the
 plain \texttt{.conv2d} used here keeps the StableHLO much tighter.
 
-\chapter{BatchNorm: the hard one}
+\chapter{CIFAR with BatchNorm}
 \label{chap:bn}
 
 \begin{theorem}[BN affine step Jacobian]
@@ -2253,7 +2253,7 @@ connection is additive fan-in, compose with BN and conv, and the
 rest of the ResNet family falls out without introducing any new
 math.
 
-\chapter{Residual: Skip Connections}
+\chapter{ResNet-34}
 \label{chap:residual}
 
 \begin{theorem}[Residual block VJP]
@@ -2534,7 +2534,7 @@ so the bare row should be read as a ``what does the modern recipe
 buy us total'' baseline rather than a strict additive component of
 the leave-one-out chain.
 
-\chapter{Depthwise Convolution}
+\chapter{MobileNetV2}
 \label{chap:depthwise}
 
 \begin{definition}[Depthwise conv forward]
@@ -2729,7 +2729,7 @@ modifications on top (SE blocks, Swish activations, compound scaling)
 but the core depthwise-separable scaffolding is exactly what this
 chapter formalized.
 
-\chapter{Squeeze-and-Excitation}
+\chapter{EfficientNet}
 \label{chap:se}
 
 \begin{theorem}[SE block VJP]
@@ -2901,100 +2901,7 @@ Every post-2018 vision architecture has some variant of SE in it
 accuracy-per-parameter cost is low when you compound it with other
 scaling tricks. The other architectural contribution
 EfficientNet shipped --- the \emph{Swish} activation
-$\mathrm{swish}(x) = x \cdot \sigma(x)$ --- is orthogonal to SE and
-worth measuring on its own. The next section ablates it directly.
-
-\section{Ablation: Swish vs ReLU activation}
-\label{sec:enet_swish_ablation}
-
-The original EfficientNet paper (Tan \& Le 2019) claims roughly a
-$0.6$-point ImageNet lift from switching ReLU $\to$ Swish at the B0
-baseline. The interesting question is whether that lift survives at
-the Imagenette scale (10 classes, 9469 training images), where the
-model's capacity ceiling is much closer to its random-init floor.
-
-\subsection*{The proof side}
-
-Both activations follow the same diagonal-Jacobian template as ReLU
-and GELU --- elementwise scalar function, $\pdiv$ collapses to a
-single coordinate. \texttt{swish\_has\_vjp\_correct} (in
-\texttt{Proofs/LayerNorm.lean}) is proved against Mathlib's
-\(\fderiv\): the denominator $1 + e^{-x}$ is bounded below by 1, so
-\texttt{swishScalar} is smooth everywhere and \texttt{fun\_prop}
-discharges differentiability automatically. The closed-form
-derivative is $\sigma(x) \cdot (1 + x \cdot (1 - \sigma(x)))$; the
-codegen emits \texttt{stablehlo.logistic + multiply} for forward
-and the closed-form derivative for backward.
-\texttt{\#print axioms swish\_has\_vjp\_correct} confirms only the
-three Lean core axioms (\texttt{propext}, \texttt{Quot.sound},
-\texttt{Classical.choice}) --- no project axioms.
-
-\subsection*{The empirical side}
-
-Two configs in \texttt{MainAblation.lean}, identical except for the
-\texttt{.act} field on every \texttt{.mbConv} block:
-
-\begin{verbatim}
-def enetB0SwishSpec : NetSpec where
-  ...
-  .mbConv  32  16 1 3 1 1 true (act := .swish),
-  ...
-
-def enetB0ReluSpec : NetSpec where
-  ...
-  .mbConv  32  16 1 3 1 1 true (act := .relu),
-  ...
-\end{verbatim}
-
-Same init seed, batch order, optimizer (Adam @ 0.001), cosine
-schedule, warmup, augmentation, label smoothing. 80 epochs each.
-Run with \texttt{./.lake/build/bin/ablation enet-b0-swish} and
-\texttt{enet-b0-relu}.
-
-\begin{center}
-\begin{tabular}{l r r}
-\hline
-Run                          & Val accuracy & $\Delta$ vs Swish \\
-\hline
-\texttt{enet-b0-swish}       & $87.58\%$ (3419/3904) & --- \\
-\texttt{enet-b0-relu}        & $87.78\%$ (3427/3904) & $+0.20$ \\
-\hline
-\end{tabular}
-\end{center}
-
-The full step-by-step logs for both runs are archived at
-\texttt{runs/2026-04-28-enet-b0-imagenette/}.
-
-What the codegen emits per activation site:
-
-\begin{center}
-\begin{tabular}{l l}
-\hline
-\texttt{.swish} & \texttt{logistic + multiply} (smooth, two ops)\\
-\texttt{.relu}  & \texttt{maximum} against constant 0 (one op)\\
-\hline
-\end{tabular}
-\end{center}
-
-The result: ReLU edges Swish by $0.20$ points --- sign-flipped from
-the paper's $+0.6$ ImageNet lift in Swish's favor. Both numbers are
-well within seed noise at this scale (one seed each, $9469$ training
-images, $80$ epochs), so we read this as a wash rather than as
-evidence ReLU is better. The takeaway is the standard one for
-activation-function tweaks: at the Imagenette scale the
-\emph{activation} choice is swamped by larger sources of variance
-(init, augmentation, schedule, optimizer hyperparameters), and the
-$0.6$-point ImageNet lift the paper claims doesn't transfer down.
-
-Per-epoch wall clock on the RX~7900~XTX (ROCm/HIP) was $4.83$ min for
-Swish and $4.96$ min for ReLU. The ReLU run was on GPU~1 of a 2-GPU
-node and the Swish run on GPU~0; the small wall-clock gap reflects
-that asymmetry, not a Swish/ReLU cost difference. Per-op count, Swish
-emits two ops (\texttt{logistic + multiply}) vs ReLU's one
-(\texttt{maximum}), but on a saturated GPU the second op fuses into
-the surrounding pipeline and the per-step cost ends up nearly
-identical. Practically, the activation choice neither helps accuracy
-nor materially changes throughput at this scale.
+$\mathrm{swish}(x) = x \cdot \sigma(x)$ --- is orthogonal to SE.
 
 \section{Side quests}
 \label{sec:enet_side_quests}
@@ -3045,7 +2952,7 @@ missing is the surrounding scaffolding --- a data pipeline for
 Noisy Student, a multi-scale head plus detection loss for
 EfficientDet.
 
-\chapter{LayerNorm and GELU}
+\chapter{ConvNeXt}
 \label{chap:layernorm}
 
 \begin{definition}[GELU scalar function]
@@ -3123,7 +3030,23 @@ in transformers. Diagonal activation Jacobian, same family as ReLU.
 
 Chapter~\ref{chap:attention} uses both to define ViT.
 
-\chapter{Attention and the ViT finale}
+\section{Data Augmentation}
+
+ConvNeXt's headline accuracy depends on a heavy augmentation pack
+inherited from DeiT: Mixup (Zhang et al.\ 2017,
+\href{https://arxiv.org/abs/1710.09412}{arXiv:1710.09412}), CutMix
+(Yun et al.\ 2019, \href{https://arxiv.org/abs/1905.04899}{arXiv:1905.04899}),
+Random Erasing (Zhong et al.\ 2017,
+\href{https://arxiv.org/abs/1708.04896}{arXiv:1708.04896}), and
+RandAugment (Cubuk et al.\ 2019,
+\href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}). All four
+are implemented as data-only kernels that mutate the input tensor
+before the graph sees it --- tier 1 in our codegen scope, no MLIR
+plumbing required. Mixup and CutMix route through a soft-label
+train-step variant since they produce fractional labels; Random
+Erasing and RandAugment leave labels alone.
+
+\chapter{Vision Transformer}
 \label{chap:attention}
 
 \begin{theorem}[Softmax Jacobian]
