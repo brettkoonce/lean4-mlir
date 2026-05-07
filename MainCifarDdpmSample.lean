@@ -4,17 +4,17 @@ import LeanMlir
     Mirrors `MainMnistDdpmSample` but for 3-channel RGB. -/
 
 def tinyCifarDdpm : NetSpec where
-  name := "tiny DDPM UNet T-cond (CIFAR 32x32x3)"
+  name := "DDPM UNet T-cond base48 centered (CIFAR 32x32x3)"
   imageH := 32
   imageW := 32
   layers := [
-    .unetDown 4 16,
-    .unetDown 16 32,
-    .convBn 32 64 3 1 .same,
-    .convBn 64 64 3 1 .same,
-    .unetUp 64 32,
-    .unetUp 32 16,
-    .conv2d 16 3 1 .same .identity
+    .unetDown 4 48,
+    .unetDown 48 96,
+    .convBn 96 192 3 1 .same,
+    .convBn 192 192 3 1 .same,
+    .unetUp 192 96,
+    .unetUp 96 48,
+    .conv2d 48 3 1 .same .identity
   ]
 
 private def runIree (mlirPath outPath : String) : IO Bool := do
@@ -27,8 +27,11 @@ private def runIree (mlirPath outPath : String) : IO Bool := do
     return false
   return true
 
+/-- Map [-1, 1] (DDPM-centered training data) back to [0, 255] uint8
+    for rendering. Clamp guards anything that escaped that range. -/
 private def floatToU8 (v : Float) : UInt8 :=
-  let p := if v < 0.0 then 0.0 else if v > 1.0 then 1.0 else v
+  let scaled := (v + 1.0) * 0.5
+  let p := if scaled < 0.0 then 0.0 else if scaled > 1.0 then 1.0 else scaled
   (p * 255.0).toUInt8
 
 def main (args : List String) : IO Unit := do

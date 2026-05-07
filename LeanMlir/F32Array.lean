@@ -101,6 +101,12 @@ opaque maskU8ToI32 (mask : @& ByteArray) : IO ByteArray
 opaque shuffle (images : ByteArray) (labels : ByteArray)
     (n : USize) (pixelsPerImage : USize) (seed : USize) : IO (ByteArray × ByteArray)
 
+/-- Affine map of every element: `out[i] = scale * in[i] + shift`.
+    Used to center [0,1] data to [-1,1] (scale=2, shift=-1) for DDPM
+    training, and to invert for rendering. -/
+@[extern "lean_f32_scale_shift"]
+opaque scaleShift (ba : @& ByteArray) (scale : Float) (shift : Float) : IO ByteArray
+
 /-- EMA update: running = (1-momentum)*running + momentum*batch. -/
 @[extern "lean_f32_ema"]
 opaque ema (running : @& ByteArray) (batch : @& ByteArray) (momentum : Float) : IO ByteArray

@@ -358,6 +358,23 @@ LEAN_EXPORT lean_obj_res lean_ddpm_step_inputs(
     return lean_io_result_mk_ok(outer);
 }
 
+// ---- Affine map of every element: out[i] = scale · in[i] + shift ----
+// One pure-elementwise pass; common uses are centering [0,1] data to
+// [-1,1] (scale=2, shift=-1) and the inverse for rendering (scale=0.5,
+// shift=0.5).
+LEAN_EXPORT lean_obj_res lean_f32_scale_shift(
+    b_lean_obj_arg ba, double scale, double shift, lean_obj_arg w) {
+    (void)w;
+    size_t n = lean_sarray_size(ba) / 4;
+    size_t nbytes = n * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const float* in = (const float*)lean_sarray_cptr(ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    float s = (float)scale; float sh = (float)shift;
+    for (size_t i = 0; i < n; i++) o[i] = s * in[i] + sh;
+    return lean_io_result_mk_ok(out);
+}
+
 // ---- Prepend a constant t-channel to each image ----
 // Input:  xt   [B, C*H*W] f32 (the noised image, C channels)
 //         t_ba [B]        int32 (per-image timestep ∈ [0, T_max))

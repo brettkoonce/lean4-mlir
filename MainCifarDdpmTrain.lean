@@ -16,18 +16,23 @@ import LeanMlir
     Usage: lake exe cifar-ddpm-train [data] [epochs]
 -/
 
+/-- Base 48 (~1M params), depth 2 + bottleneck. ~8× the original
+    "tiny" spec; the capacity bump is the biggest single quality
+    lever for CIFAR per `planning/ddpm_demo.md`. Data is centered
+    to [-1, 1] in the trainer (and inverted in the sampler), which
+    is the standard DDPM convention. -/
 def tinyCifarDdpm : NetSpec where
-  name := "tiny DDPM UNet T-cond (CIFAR 32x32x3)"
+  name := "DDPM UNet T-cond base48 centered (CIFAR 32x32x3)"
   imageH := 32
   imageW := 32
   layers := [
-    .unetDown 4 16,                 -- 4 input channels (3 RGB + 1 t)
-    .unetDown 16 32,
-    .convBn 32 64 3 1 .same,
-    .convBn 64 64 3 1 .same,
-    .unetUp 64 32,
-    .unetUp 32 16,
-    .conv2d 16 3 1 .same .identity  -- 3 RGB output channels
+    .unetDown 4 48,                 -- 4 input channels (3 RGB + 1 t)
+    .unetDown 48 96,
+    .convBn 96 192 3 1 .same,
+    .convBn 192 192 3 1 .same,
+    .unetUp 192 96,
+    .unetUp 96 48,
+    .conv2d 48 3 1 .same .identity  -- 3 RGB output channels
   ]
 
 def cifarDdpmConfig : TrainConfig where
@@ -91,8 +96,11 @@ def main (args : List String) : IO Unit := do
   IO.eprintln "  train step compiled"
 
   IO.eprintln "Loading CIFAR-10..."
-  let (trainImg, nTrain) ← loadCifar dataDir
-  IO.eprintln s!"  train: {nTrain} images"
+  let (trainImgRaw, nTrain) ← loadCifar dataDir
+  -- DDPM standard: center data to [-1, 1] so the SNR of N(0, I) noise
+  -- isn't biased by an off-center signal.
+  let trainImg ← F32.scaleShift trainImgRaw 2.0 (-1.0)
+  IO.eprintln s!"  train: {nTrain} images (centered to [-1, 1])"
 
   let params ← spec.heInitParams
   let nP := spec.totalParams
