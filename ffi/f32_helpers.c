@@ -359,29 +359,30 @@ LEAN_EXPORT lean_obj_res lean_ddpm_step_inputs(
 }
 
 // ---- Prepend a constant t-channel to each image ----
-// Input:  xt   [B, H*W] f32 (the noised image)
-//         t_ba [B]      int32 (per-image timestep ∈ [0, T_max))
-// Output: [B, 2, H, W] f32 packed as a flat [B, 2*H*W] array, where
-//   out[i, 0, :, :] = xt[i]
-//   out[i, 1, :, :] = (t[i] / T_max) · ones(H, W)
-// Used to feed the timestep into the UNet as a second input channel
+// Input:  xt   [B, C*H*W] f32 (the noised image, C channels)
+//         t_ba [B]        int32 (per-image timestep ∈ [0, T_max))
+// Output: [B, C+1, H, W] f32 packed as a flat array, where channels
+// 0..C-1 are the input image and channel C is filled with t[i]/T_max.
+// Used to feed the timestep into the UNet as an extra input channel
 // without a new codegen primitive.
 LEAN_EXPORT lean_obj_res lean_ddpm_prepend_t_channel(
     b_lean_obj_arg xt_ba, b_lean_obj_arg t_ba,
-    size_t B, size_t H, size_t W, size_t T_max, lean_obj_arg w) {
+    size_t B, size_t C, size_t H, size_t W, size_t T_max, lean_obj_arg w) {
     (void)w;
     size_t hw = H * W;
-    size_t nbytes = B * 2 * hw * 4;
+    size_t img_floats = C * hw;
+    size_t per_out = (C + 1) * hw;
+    size_t nbytes = B * per_out * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
     const float* xt = (const float*)lean_sarray_cptr(xt_ba);
     const int32_t* t = (const int32_t*)lean_sarray_cptr(t_ba);
     float* o = (float*)lean_sarray_cptr(out);
     float invT = 1.0f / (float)T_max;
     for (size_t i = 0; i < B; i++) {
-        float* base = o + i * 2 * hw;
-        memcpy(base, xt + i * hw, hw * 4);
+        float* base = o + i * per_out;
+        memcpy(base, xt + i * img_floats, img_floats * 4);
         float tn = ((float)t[i]) * invT;
-        for (size_t k = 0; k < hw; k++) base[hw + k] = tn;
+        for (size_t k = 0; k < hw; k++) base[img_floats + k] = tn;
     }
     return lean_io_result_mk_ok(out);
 }
@@ -391,18 +392,20 @@ LEAN_EXPORT lean_obj_res lean_ddpm_prepend_t_channel(
 // vector.
 LEAN_EXPORT lean_obj_res lean_ddpm_prepend_t_channel_scalar(
     b_lean_obj_arg xt_ba,
-    size_t B, size_t H, size_t W, size_t t, size_t T_max, lean_obj_arg w) {
+    size_t B, size_t C, size_t H, size_t W, size_t t, size_t T_max, lean_obj_arg w) {
     (void)w;
     size_t hw = H * W;
-    size_t nbytes = B * 2 * hw * 4;
+    size_t img_floats = C * hw;
+    size_t per_out = (C + 1) * hw;
+    size_t nbytes = B * per_out * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
     const float* xt = (const float*)lean_sarray_cptr(xt_ba);
     float* o = (float*)lean_sarray_cptr(out);
     float tn = (float)t / (float)T_max;
     for (size_t i = 0; i < B; i++) {
-        float* base = o + i * 2 * hw;
-        memcpy(base, xt + i * hw, hw * 4);
-        for (size_t k = 0; k < hw; k++) base[hw + k] = tn;
+        float* base = o + i * per_out;
+        memcpy(base, xt + i * img_floats, img_floats * 4);
+        for (size_t k = 0; k < hw; k++) base[img_floats + k] = tn;
     }
     return lean_io_result_mk_ok(out);
 }

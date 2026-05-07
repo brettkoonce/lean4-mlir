@@ -1,41 +1,36 @@
 import LeanMlir
 
-/-! Tiny DDPM trainer on MNIST — DDPM demo Phase 1 smoke test.
+/-! Tiny DDPM trainer on CIFAR-10 — DDPM demo Phase 3.
 
-    Architecture: tiny UNet (1-channel 28×28, 2 encoder/decoder pairs,
-    base 16 channels, ~250K params). The model is trained to predict
-    the noise ε that was added to a clean image x_0:
+    Same shape as the MNIST DDPM trainer, but on 32×32 RGB:
+      input = 3 image channels + 1 t-channel = 4 channels
+      output = 3 channels (predicted ε per RGB channel)
 
-        x_t = √ᾱ_t · x_0 + √(1-ᾱ_t) · ε
-        loss = || ε_θ(x_t) - ε ||²  (per-pixel MSE, mean over B·C·H·W)
+    Tiny UNet, ~120K params. Loss is per-pixel MSE. CIFAR-10 is
+    significantly harder than MNIST (real photos, not centered
+    geometric shapes), so this run is honestly a "does the pipeline
+    handle multi-channel" check more than a "produces sharp samples"
+    expectation. With only 50 epochs and a 120K model, expect
+    blurry-but-coherent CIFAR-style chromatic blobs.
 
-    No time conditioning yet — the model has no idea which `t` the
-    input came from. Generated samples will be coarser than the
-    canonical DDPM but the pipeline correctness can still be verified
-    from training loss decreasing.
-
-    Usage:
-      lake exe mnist-ddpm-train [data/mnist]
+    Usage: lake exe cifar-ddpm-train [data] [epochs]
 -/
 
-/-- 2-channel input: image + a scalar t/T_max timestep encoding tiled
-    to the same spatial dims. The model output stays single-channel
-    (predicted ε for the image). -/
-def tinyDdpmUnet : NetSpec where
-  name := "tiny DDPM UNet T-cond (MNIST 28x28x1)"
-  imageH := 28
-  imageW := 28
+def tinyCifarDdpm : NetSpec where
+  name := "tiny DDPM UNet T-cond (CIFAR 32x32x3)"
+  imageH := 32
+  imageW := 32
   layers := [
-    .unetDown 2 16,
+    .unetDown 4 16,                 -- 4 input channels (3 RGB + 1 t)
     .unetDown 16 32,
     .convBn 32 64 3 1 .same,
     .convBn 64 64 3 1 .same,
     .unetUp 64 32,
     .unetUp 32 16,
-    .conv2d 16 1 1 .same .identity
+    .conv2d 16 3 1 .same .identity  -- 3 RGB output channels
   ]
 
-def tinyDdpmConfig : TrainConfig where
+def cifarDdpmConfig : TrainConfig where
   learningRate := 0.0005
   batchSize    := 32
   epochs       := 3
@@ -45,20 +40,32 @@ def tinyDdpmConfig : TrainConfig where
   warmupEpochs := 0
   augment      := false
 
+/-- Inline CIFAR-10 loader. Reads the 5 train .bin files and returns
+    the f32 image buffer + count. No labels (DDPM is unconditional). -/
+private def loadCifar (dataDir : String) : IO (ByteArray × Nat) := do
+  let mut raw : ByteArray := .empty
+  let mut nTotal : Nat := 0
+  for i in [1:6] do
+    let batchRaw ← IO.FS.readBinFile s!"{dataDir}/cifar-10/data_batch_{i}.bin"
+    let n := batchRaw.size / 3073
+    raw := raw.append batchRaw
+    nTotal := nTotal + n
+  let imgs ← F32.cifarBatch raw 0 nTotal.toUSize
+  return (imgs, nTotal)
+
 def main (args : List String) : IO Unit := do
-  let dataDir := args.head?.getD "data/mnist"
+  let dataDir := args.head?.getD "data"
   let epochsOverride : Option Nat := match args with
     | _ :: e :: _ => e.toNat?
     | _ => none
-  let spec := tinyDdpmUnet
-  let cfg := { tinyDdpmConfig with
-    epochs := epochsOverride.getD tinyDdpmConfig.epochs }
+  let spec := tinyCifarDdpm
+  let cfg := { cifarDdpmConfig with
+    epochs := epochsOverride.getD cifarDdpmConfig.epochs }
   IO.eprintln s!"{spec.name}: {spec.totalParams} params (epochs={cfg.epochs})"
 
-  -- ── Compile vmfbs (forward + train_step with useDdpm) ──
   IO.FS.createDirAll ".lake/build"
   let pfx := spec.buildPrefix
-  let outShape : List Nat := [cfg.batchSize, 1, spec.imageH, spec.imageW]
+  let outShape : List Nat := [cfg.batchSize, 3, spec.imageH, spec.imageW]
 
   IO.eprintln "Generating train step MLIR..."
   let trainMlir := MlirCodegen.generateTrainStep spec cfg.batchSize
@@ -69,7 +76,6 @@ def main (args : List String) : IO Unit := do
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"
 
-  -- iree-compile train step
   IO.eprintln "Compiling vmfb..."
   let compileMlir : String → String → IO Bool := fun mlirPath outPath => do
     let args ← ireeCompileArgs mlirPath outPath
@@ -84,29 +90,23 @@ def main (args : List String) : IO Unit := do
   unless (← compileMlir s!"{pfx}_train_step.mlir" vmfbPath) do IO.Process.exit 1
   IO.eprintln "  train step compiled"
 
-  -- ── Load MNIST (60K × 28×28 f32 in [0, 1]) ──
-  IO.eprintln "Loading MNIST..."
-  let (trainImg, nTrain) ← F32.loadIdxImages s!"{dataDir}/train-images-idx3-ubyte"
+  IO.eprintln "Loading CIFAR-10..."
+  let (trainImg, nTrain) ← loadCifar dataDir
   IO.eprintln s!"  train: {nTrain} images"
 
-  -- ── Init params + Adam state ──
   let params ← spec.heInitParams
   let nP := spec.totalParams
   let adamM ← F32.const nP.toUSize 0.0
   let adamV ← F32.const nP.toUSize 0.0
   IO.eprintln s!"  {nP} params, {(params.size + adamM.size + adamV.size) / 1024 / 1024} MB"
 
-  -- ── DDPM schedule (precomputed once) ──
   let alphaBar ← Ddpm.cosineSchedule 1000
 
-  -- ── Training session ──
   let sess ← IreeSession.create vmfbPath
   IO.eprintln "  session loaded"
 
-  -- Per-image element count for the IMAGE channel (1 channel pre-conditioning).
-  -- After `prependTChannel` this doubles to 2 * H * W for the network input.
-  let nPix : Nat := 1 * spec.imageH * spec.imageW
-  let nPixCond : Nat := 2 * spec.imageH * spec.imageW
+  -- Per-image element count: 3 channels × 32 × 32 = 3072 floats.
+  let nPix : Nat := 3 * spec.imageH * spec.imageW
   let Tmax : Nat := 1000
   let bpE := nTrain / cfg.batchSize
   let allShapes := spec.shapesBA
@@ -114,7 +114,7 @@ def main (args : List String) : IO Unit := do
   let xSh := spec.xShape cfg.batchSize
   let nT := 3 * nP
   let batch : USize := cfg.batchSize.toUSize
-  let outC : USize := 1
+  let imgC : USize := 3
   let outH : USize := spec.imageH.toUSize
   let outW : USize := spec.imageW.toUSize
 
@@ -130,22 +130,17 @@ def main (args : List String) : IO Unit := do
     let mut epochLoss : Float := 0.0
     for bi in [:bpE] do
       globalStep := globalStep + 1
-      -- x_0 batch (already [0, 1]; not centered to [-1, 1] for MVP)
       let x0 := F32.sliceImages trainImg (bi * cfg.batchSize) cfg.batchSize nPix
-      -- Sample (x_t, eps, t) for this batch
       let stepSeed : USize := (epoch * 1000000 + bi).toUSize
       let (xt, ddpmRest) ← Ddpm.stepInputs x0 alphaBar batch nPix.toUSize stepSeed
       let (eps, tba) := ddpmRest
-      -- Time conditioning: prepend a t/T_max-filled second channel so
-      -- the network can see which timestep it's denoising. Output is
-      -- [B, 2, H, W] flat = [B, 2*H*W].
-      let xtCond ← Ddpm.prependTChannel xt tba batch (1 : USize) outH outW Tmax.toUSize
+      let xtCond ← Ddpm.prependTChannel xt tba batch imgC outH outW Tmax.toUSize
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
       let out ← IreeSession.trainStepAdamF32Ddpm sess spec.trainFnName
                   packed allShapes xtCond xSh eps
                   cfg.learningRate globalStep.toFloat
-                  bnShapes batch outC outH outW
+                  bnShapes batch imgC outH outW
       let ts1 ← IO.monoMsNow
       let loss := F32.extractLoss out nT
       epochLoss := epochLoss + loss
@@ -155,7 +150,7 @@ def main (args : List String) : IO Unit := do
       let batchBnStats := out.extract ((nT + 1) * 4) ((nT + 1 + spec.nBnStats) * 4)
       let bnMom : Float := if globalStep == 1 then 1.0 else 0.1
       runningBnStats ← F32.ema runningBnStats batchBnStats bnMom
-      if bi < 3 || bi % 100 == 0 then
+      if bi < 3 || bi % 200 == 0 then
         IO.eprintln s!"  step {bi}/{bpE}: loss={loss} ({ts1-ts0}ms)"
     let t1 ← IO.monoMsNow
     IO.eprintln s!"Epoch {epoch+1}/{cfg.epochs}: avg loss={epochLoss / bpE.toFloat} ({t1-t0}ms)"
