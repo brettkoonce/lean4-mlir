@@ -358,6 +358,55 @@ LEAN_EXPORT lean_obj_res lean_ddpm_step_inputs(
     return lean_io_result_mk_ok(outer);
 }
 
+// ---- Prepend a constant t-channel to each image ----
+// Input:  xt   [B, H*W] f32 (the noised image)
+//         t_ba [B]      int32 (per-image timestep ∈ [0, T_max))
+// Output: [B, 2, H, W] f32 packed as a flat [B, 2*H*W] array, where
+//   out[i, 0, :, :] = xt[i]
+//   out[i, 1, :, :] = (t[i] / T_max) · ones(H, W)
+// Used to feed the timestep into the UNet as a second input channel
+// without a new codegen primitive.
+LEAN_EXPORT lean_obj_res lean_ddpm_prepend_t_channel(
+    b_lean_obj_arg xt_ba, b_lean_obj_arg t_ba,
+    size_t B, size_t H, size_t W, size_t T_max, lean_obj_arg w) {
+    (void)w;
+    size_t hw = H * W;
+    size_t nbytes = B * 2 * hw * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const float* xt = (const float*)lean_sarray_cptr(xt_ba);
+    const int32_t* t = (const int32_t*)lean_sarray_cptr(t_ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    float invT = 1.0f / (float)T_max;
+    for (size_t i = 0; i < B; i++) {
+        float* base = o + i * 2 * hw;
+        memcpy(base, xt + i * hw, hw * 4);
+        float tn = ((float)t[i]) * invT;
+        for (size_t k = 0; k < hw; k++) base[hw + k] = tn;
+    }
+    return lean_io_result_mk_ok(out);
+}
+
+// Same as above but `t` is a single scalar broadcast to all images.
+// Caller (sampler) has one timestep per DDIM step rather than a [B]
+// vector.
+LEAN_EXPORT lean_obj_res lean_ddpm_prepend_t_channel_scalar(
+    b_lean_obj_arg xt_ba,
+    size_t B, size_t H, size_t W, size_t t, size_t T_max, lean_obj_arg w) {
+    (void)w;
+    size_t hw = H * W;
+    size_t nbytes = B * 2 * hw * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const float* xt = (const float*)lean_sarray_cptr(xt_ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    float tn = (float)t / (float)T_max;
+    for (size_t i = 0; i < B; i++) {
+        float* base = o + i * 2 * hw;
+        memcpy(base, xt + i * hw, hw * 4);
+        for (size_t k = 0; k < hw; k++) base[hw + k] = tn;
+    }
+    return lean_io_result_mk_ok(out);
+}
+
 // ---- DDIM update step (deterministic, η=0) ----
 //   x_0_pred = (x_t - √(1-ᾱ_t)·ε) / √ᾱ_t
 //   x_{t-1}  = √ᾱ_{t-1}·x_0_pred + √(1-ᾱ_{t-1})·ε

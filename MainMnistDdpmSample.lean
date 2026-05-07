@@ -25,11 +25,11 @@ Usage:
 -/
 
 def tinyDdpmUnet : NetSpec where
-  name := "tiny DDPM UNet (MNIST 28x28x1)"
+  name := "tiny DDPM UNet T-cond (MNIST 28x28x1)"
   imageH := 28
   imageW := 28
   layers := [
-    .unetDown 1 16,
+    .unetDown 2 16,
     .unetDown 16 32,
     .convBn 32 64 3 1 .same,
     .convBn 64 64 3 1 .same,
@@ -109,10 +109,14 @@ def main (args : List String) : IO Unit := do
   for k in [:nSteps] do
     let t := stepTs[k]!
     let tPrev : Nat := if k + 1 < nSteps then stepTs[k + 1]! else 0
-    -- Forward: ε_θ = model(x_t). nClasses = nPix because model output is
-    -- [B, 1, 28, 28] = B * 784 floats per batch.
+    -- Time conditioning: prepend a constant t/T-channel to each image.
+    -- Output is [B, 2, H, W] flat = the 2-channel input the network expects.
+    let xCond ← Ddpm.prependTChannelScalar x B.toUSize spec.imageH.toUSize
+                  spec.imageW.toUSize t.toUSize T.toUSize
+    -- Forward: ε_θ = model(x_t conditioned on t). nClasses = nPix because
+    -- model output is [B, 1, 28, 28] = B * 784 floats per batch.
     let eps ← IreeSession.forwardF32 sess spec.evalFnName
-                evalParams evalShapes x xShape B.toUSize nPix.toUSize
+                evalParams evalShapes xCond xShape B.toUSize nPix.toUSize
     -- DDIM coefs
     let aBarT := alphaBarF t
     let aBarP := if k + 1 < nSteps then alphaBarF tPrev else 0.9999

@@ -40,6 +40,22 @@ opaque sampleNoise (n : USize) (seed : USize) : IO ByteArray
 opaque ddimStep (xt : @& ByteArray) (eps : @& ByteArray)
     (a : Float) (b : Float) (n : USize) : IO ByteArray
 
+/-- Prepend a timestep-encoding channel to each image. Output is
+    `[B, 2, H, W]` (flat) where channel 0 is the input image and
+    channel 1 is filled with `t[i] / T_max`. Lets the UNet condition
+    on the diffusion timestep without a new codegen primitive — it
+    just sees a 2-channel input. `t` is a `[B]` int32 array (one
+    timestep per image). -/
+@[extern "lean_ddpm_prepend_t_channel"]
+opaque prependTChannel (xt : @& ByteArray) (t : @& ByteArray)
+    (B : USize) (H : USize) (W : USize) (Tmax : USize) : IO ByteArray
+
+/-- Scalar variant of `prependTChannel` for the sampler — broadcasts
+    a single timestep to all images in the batch. -/
+@[extern "lean_ddpm_prepend_t_channel_scalar"]
+opaque prependTChannelScalar (xt : @& ByteArray)
+    (B : USize) (H : USize) (W : USize) (t : USize) (Tmax : USize) : IO ByteArray
+
 /-- Per training step: sample `t_b ∈ [0, T)` per image, sample ε,
     compute `x_t`. Returns `(x_t, ε, t)` where:
       - `x_t` is `[B, npixels]` f32

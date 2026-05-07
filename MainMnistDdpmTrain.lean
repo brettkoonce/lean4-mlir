@@ -18,12 +18,15 @@ import LeanMlir
       lake exe mnist-ddpm-train [data/mnist]
 -/
 
+/-- 2-channel input: image + a scalar t/T_max timestep encoding tiled
+    to the same spatial dims. The model output stays single-channel
+    (predicted ε for the image). -/
 def tinyDdpmUnet : NetSpec where
-  name := "tiny DDPM UNet (MNIST 28x28x1)"
+  name := "tiny DDPM UNet T-cond (MNIST 28x28x1)"
   imageH := 28
   imageW := 28
   layers := [
-    .unetDown 1 16,
+    .unetDown 2 16,
     .unetDown 16 32,
     .convBn 32 64 3 1 .same,
     .convBn 64 64 3 1 .same,
@@ -44,9 +47,13 @@ def tinyDdpmConfig : TrainConfig where
 
 def main (args : List String) : IO Unit := do
   let dataDir := args.head?.getD "data/mnist"
+  let epochsOverride : Option Nat := match args with
+    | _ :: e :: _ => e.toNat?
+    | _ => none
   let spec := tinyDdpmUnet
-  let cfg := tinyDdpmConfig
-  IO.eprintln s!"{spec.name}: {spec.totalParams} params"
+  let cfg := { tinyDdpmConfig with
+    epochs := epochsOverride.getD tinyDdpmConfig.epochs }
+  IO.eprintln s!"{spec.name}: {spec.totalParams} params (epochs={cfg.epochs})"
 
   -- ── Compile vmfbs (forward + train_step with useDdpm) ──
   IO.FS.createDirAll ".lake/build"
@@ -96,7 +103,11 @@ def main (args : List String) : IO Unit := do
   let sess ← IreeSession.create vmfbPath
   IO.eprintln "  session loaded"
 
+  -- Per-image element count for the IMAGE channel (1 channel pre-conditioning).
+  -- After `prependTChannel` this doubles to 2 * H * W for the network input.
   let nPix : Nat := 1 * spec.imageH * spec.imageW
+  let nPixCond : Nat := 2 * spec.imageH * spec.imageW
+  let Tmax : Nat := 1000
   let bpE := nTrain / cfg.batchSize
   let allShapes := spec.shapesBA
   let bnShapes := spec.bnShapesBA
@@ -124,11 +135,15 @@ def main (args : List String) : IO Unit := do
       -- Sample (x_t, eps, t) for this batch
       let stepSeed : USize := (epoch * 1000000 + bi).toUSize
       let (xt, ddpmRest) ← Ddpm.stepInputs x0 alphaBar batch nPix.toUSize stepSeed
-      let (eps, _tba) := ddpmRest
+      let (eps, tba) := ddpmRest
+      -- Time conditioning: prepend a t/T_max-filled second channel so
+      -- the network can see which timestep it's denoising. Output is
+      -- [B, 2, H, W] flat = [B, 2*H*W].
+      let xtCond ← Ddpm.prependTChannel xt tba batch outH outW Tmax.toUSize
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
       let out ← IreeSession.trainStepAdamF32Ddpm sess spec.trainFnName
-                  packed allShapes xt xSh eps
+                  packed allShapes xtCond xSh eps
                   cfg.learningRate globalStep.toFloat
                   bnShapes batch outC outH outW
       let ts1 ← IO.monoMsNow
