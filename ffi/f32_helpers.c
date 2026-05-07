@@ -262,6 +262,147 @@ LEAN_EXPORT lean_obj_res lean_f32_load_pets(b_lean_obj_arg path_obj, lean_obj_ar
     return lean_io_result_mk_ok(outer);
 }
 
+// ============================================================
+// DDPM noise plumbing
+// ============================================================
+// Forward noising:  x_t = √ᾱ_t · x_0 + √(1-ᾱ_t) · ε
+// `cosine_schedule` precomputes ᾱ once; `step_inputs` is called per
+// training batch and produces (x_t, ε, t) — the model is trained to
+// predict ε from x_t (per-pixel MSE, useDdpm codegen branch).
+
+// Cosine ᾱ schedule (Nichol & Dhariwal 2021). Returns a [T] f32
+// ByteArray of ᾱ_t with s = 0.008. ᾱ_t = cos²((t/T+s)/(1+s) · π/2)
+// normalized so ᾱ_0 = 1. Clamped to [1e-4, 0.9999] so the sampler's
+// `√ᾱ_t / √ᾱ_{t-1}` ratio stays bounded near t = T (where the
+// unclamped ᾱ would underflow to ~0).
+LEAN_EXPORT lean_obj_res lean_ddpm_cosine_schedule(size_t T, lean_obj_arg w) {
+    (void)w;
+    size_t nbytes = T * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    float* o = (float*)lean_sarray_cptr(out);
+    const double s = 0.008;
+    const double half_pi = 1.5707963267948966;
+    double f0_arg = (0.0 / (double)T + s) / (1.0 + s) * half_pi;
+    double f0 = cos(f0_arg); f0 = f0 * f0;
+    for (size_t t = 0; t < T; t++) {
+        double arg = ((double)t / (double)T + s) / (1.0 + s) * half_pi;
+        double c = cos(arg);
+        double abar = (c * c) / f0;
+        if (abar < 1e-4) abar = 1e-4;
+        if (abar > 0.9999) abar = 0.9999;
+        o[t] = (float)abar;
+    }
+    return lean_io_result_mk_ok(out);
+}
+
+// xorshift64 inline for the rest of this section.
+static inline uint64_t f32_xs64(uint64_t* s) {
+    uint64_t x = *s;
+    x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+    *s = x;
+    return x;
+}
+
+// Per training step: sample t per image, sample ε, compute x_t.
+// Returns Prod ByteArray (Prod ByteArray ByteArray) — i.e. (x_t, ε, t).
+LEAN_EXPORT lean_obj_res lean_ddpm_step_inputs(
+    b_lean_obj_arg x0_ba, b_lean_obj_arg alphaBar_ba,
+    size_t B, size_t npixels, size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t T = lean_sarray_size(alphaBar_ba) / 4;
+    size_t total = B * npixels;
+    size_t nb_total = total * 4;
+    lean_object* xt = lean_alloc_sarray(1, nb_total, nb_total);
+    lean_object* eps = lean_alloc_sarray(1, nb_total, nb_total);
+    lean_object* tba = lean_alloc_sarray(1, B * 4, B * 4);
+    const float* x0 = (const float*)lean_sarray_cptr(x0_ba);
+    const float* abar = (const float*)lean_sarray_cptr(alphaBar_ba);
+    float* xtp = (float*)lean_sarray_cptr(xt);
+    float* epsp = (float*)lean_sarray_cptr(eps);
+    int32_t* tp = (int32_t*)lean_sarray_cptr(tba);
+    uint64_t s = (uint64_t)seed ^ 0xddcc1f7e9c3a4ULL; if (s == 0) s = 1;
+    for (size_t b = 0; b < B; b++) {
+        // Sample timestep
+        size_t t = (size_t)(f32_xs64(&s) % T);
+        tp[b] = (int32_t)t;
+        double abar_t = (double)abar[t];
+        double sq_a = sqrt(abar_t);
+        double sq_b = sqrt(1.0 - abar_t);
+        // Sample ε ~ N(0, 1) for this image's npixels via Box–Muller, two at a time.
+        size_t base = b * npixels;
+        for (size_t i = 0; i < npixels; i += 2) {
+            uint64_t r1 = f32_xs64(&s);
+            uint64_t r2 = f32_xs64(&s);
+            double u1 = (double)(r1 >> 11) / (double)(1ULL << 53);
+            double u2 = (double)(r2 >> 11) / (double)(1ULL << 53);
+            if (u1 < 1e-12) u1 = 1e-12;
+            double r = sqrt(-2.0 * log(u1));
+            double ang = 2.0 * 3.14159265358979323846 * u2;
+            double e0 = r * cos(ang);
+            double e1 = r * sin(ang);
+            epsp[base + i] = (float)e0;
+            xtp[base + i] = (float)(sq_a * x0[base + i] + sq_b * e0);
+            if (i + 1 < npixels) {
+                epsp[base + i + 1] = (float)e1;
+                xtp[base + i + 1] = (float)(sq_a * x0[base + i + 1] + sq_b * e1);
+            }
+        }
+    }
+    // Pack as Prod ByteArray (Prod ByteArray ByteArray): (x_t, (ε, t))
+    lean_object* inner = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(inner, 0, eps);
+    lean_ctor_set(inner, 1, tba);
+    lean_object* outer = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(outer, 0, xt);
+    lean_ctor_set(outer, 1, inner);
+    return lean_io_result_mk_ok(outer);
+}
+
+// ---- DDIM update step (deterministic, η=0) ----
+//   x_0_pred = (x_t - √(1-ᾱ_t)·ε) / √ᾱ_t
+//   x_{t-1}  = √ᾱ_{t-1}·x_0_pred + √(1-ᾱ_{t-1})·ε
+// Algebra: x_{t-1} = a·x_t + b·ε  with
+//   a = √ᾱ_{t-1} / √ᾱ_t
+//   b = √(1-ᾱ_{t-1}) - a·√(1-ᾱ_t)
+// One pure-elementwise pass; caller passes a, b precomputed.
+LEAN_EXPORT lean_obj_res lean_ddim_step(
+    b_lean_obj_arg xt_ba, b_lean_obj_arg eps_ba,
+    double a, double b, size_t n, lean_obj_arg w) {
+    (void)w;
+    size_t nbytes = n * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const float* xt = (const float*)lean_sarray_cptr(xt_ba);
+    const float* eps = (const float*)lean_sarray_cptr(eps_ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    float af = (float)a; float bf = (float)b;
+    for (size_t i = 0; i < n; i++) o[i] = af * xt[i] + bf * eps[i];
+    return lean_io_result_mk_ok(out);
+}
+
+// ---- N(0, 1) sample of `n` floats via Box–Muller ----
+// Used by the sampler at inference time (training noise goes through
+// `step_inputs` above). Two normals per Box–Muller iteration; for
+// odd `n` we keep one of the two.
+LEAN_EXPORT lean_obj_res lean_ddpm_sample_noise(size_t n, size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t nbytes = n * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    float* o = (float*)lean_sarray_cptr(out);
+    uint64_t s = (uint64_t)seed ^ 0xddcc1f7e9c3a4ULL; if (s == 0) s = 1;
+    for (size_t i = 0; i < n; i += 2) {
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        double u1 = (double)(s >> 11) / (double)(1ULL << 53);
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        double u2 = (double)(s >> 11) / (double)(1ULL << 53);
+        if (u1 < 1e-12) u1 = 1e-12;
+        double r = sqrt(-2.0 * log(u1));
+        double a = 2.0 * 3.14159265358979323846 * u2;
+        o[i] = (float)(r * cos(a));
+        if (i + 1 < n) o[i + 1] = (float)(r * sin(a));
+    }
+    return lean_io_result_mk_ok(out);
+}
+
 // ---- uint8 mask → int32 LE mask ByteArray ----
 // Pets `loadPets` returns per-pixel class labels packed as one byte per pixel.
 // `trainStepAdamF32Seg` expects an int32 LE buffer (one 4-byte little-endian

@@ -100,6 +100,19 @@ opaque trainStepAdamF32Seg
   (bnShapes : @& ByteArray)
   (batch : USize) (H : USize) (W : USize) : IO ByteArray
 
+/-- DDPM variant: `yDdpm` is a `[batch, C, H, W]` f32 tensor — the
+    target ε noise the model learns to predict. Routes to the codegen
+    produced with `useDdpm := true`. Loss is per-pixel MSE. -/
+@[extern "lean_iree_train_step_adam_f32_ddpm"]
+opaque trainStepAdamF32Ddpm
+  (sess : @& IreeSession) (fnName : @& String)
+  (params : @& ByteArray) (shapes : @& ByteArray)
+  (x : @& ByteArray) (xShape : @& ByteArray)
+  (yDdpm : @& ByteArray)
+  (lr : Float) (t : Float)
+  (bnShapes : @& ByteArray)
+  (batch : USize) (outC : USize) (outH : USize) (outW : USize) : IO ByteArray
+
 /-- Zero-copy f32 forward pass. Pushes x then param tensors, returns logits.
     For inference/eval — no y, lr, or velocity inputs. -/
 @[extern "lean_iree_forward_f32"]

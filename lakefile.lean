@@ -126,6 +126,14 @@ lean_exe «pets-predict» where
   root := `MainPetsPredict
   moreLinkArgs := ireeLink
 
+lean_exe «mnist-ddpm-train» where
+  root := `MainMnistDdpmTrain
+  moreLinkArgs := ireeLink
+
+lean_exe «mnist-ddpm-sample» where
+  root := `MainMnistDdpmSample
+  moreLinkArgs := ireeLink
+
 -- ═══════════════════════════════════════════════════════════════════
 -- VJP oracle — one binary per axiom under test.
 -- Trainers live in tests/vjp_oracle/phase3/ so the root isn't crowded
@@ -221,6 +229,10 @@ lean_exe «test-resnet-fwd» where
 
 lean_exe «test-unet-forward» where
   root := `tests.TestUnetForward
+
+lean_exe «test-ddpm-train-emit» where
+  root := `tests.TestDdpmTrainEmit
+  moreLinkArgs := ireeLink
 
 lean_exe «test-convnext-fwd-emit» where
   root := `tests.TestConvNextForwardEmit
