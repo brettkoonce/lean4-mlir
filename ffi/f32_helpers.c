@@ -1221,6 +1221,134 @@ static inline double rand_factor(double m, uint64_t* s) {
     return 1.0 + sign * strength * 0.5;
 }
 
+// ---- GradCAM (Zhou-2016 closed form) ----
+// For a network ending in (globalAvgPool → dense), the GradCAM
+// heatmap collapses to:
+//     heat[i, j] = ReLU( Σ_k denseW[k, tgt] · lastConv[k, i, j] )
+// Up to a positive constant, that is exactly Zhou et al. 2016 CAM.
+// Inputs:
+//     dense_w   : f32 [C, NC] row-major  (final dense weights)
+//     last_conv : f32 [B, C, H, W] NCHW  (pre-GAP feature maps)
+//     batch_idx : which batch element to extract (typically 0)
+//     C, H, W, NC, tgt
+// Output: f32 [H, W] heatmap, ReLU-clamped, max-normalized to [0,1].
+// (If max < 1e-6 we leave the buffer at 0 — a flat zero-attention map.)
+LEAN_EXPORT lean_obj_res lean_f32_cam_compute(
+    b_lean_obj_arg dense_w_ba, b_lean_obj_arg last_conv_ba,
+    size_t batch_idx, size_t C, size_t H, size_t W, size_t NC,
+    size_t tgt, lean_obj_arg w_io) {
+    (void)w_io;
+    const float* W_dense = (const float*)lean_sarray_cptr(dense_w_ba);
+    const float* A = (const float*)lean_sarray_cptr(last_conv_ba);
+    size_t plane = H * W;
+    const float* A_b = A + batch_idx * C * plane;  // [C, H, W] for this image
+    size_t nbytes = plane * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    float* heat = (float*)lean_sarray_cptr(out);
+    // Σ_k W[k, tgt] · A[k, i, j], then ReLU.
+    float mx = 0.0f;
+    for (size_t i = 0; i < H; i++) {
+        for (size_t j = 0; j < W; j++) {
+            float s = 0.0f;
+            for (size_t k = 0; k < C; k++) {
+                s += W_dense[k * NC + tgt] * A_b[k * plane + i * W + j];
+            }
+            if (s < 0.0f) s = 0.0f;
+            heat[i * W + j] = s;
+            if (s > mx) mx = s;
+        }
+    }
+    if (mx > 1e-6f) {
+        float inv = 1.0f / mx;
+        for (size_t k = 0; k < plane; k++) heat[k] *= inv;
+    } else {
+        for (size_t k = 0; k < plane; k++) heat[k] = 0.0f;
+    }
+    return lean_io_result_mk_ok(out);
+}
+
+// ---- Recompute logits from captured pre-GAP activation ----
+// Used by the GradCAM exe when class selection is "auto" (argmax).
+// logits[c] = Σ_k W[k, c] · gap_k + bias[c],  gap_k = (1/HW) Σ_ij A[k,i,j]
+// Inputs:
+//     dense_w   : f32 [C, NC] row-major
+//     dense_b   : f32 [NC]
+//     last_conv : f32 [B, C, H, W] NCHW
+//     batch_idx : which batch element (typically 0)
+// Output: f32 [NC] logits.
+LEAN_EXPORT lean_obj_res lean_f32_cam_logits(
+    b_lean_obj_arg dense_w_ba, b_lean_obj_arg dense_b_ba,
+    b_lean_obj_arg last_conv_ba,
+    size_t batch_idx, size_t C, size_t H, size_t W, size_t NC,
+    lean_obj_arg w_io) {
+    (void)w_io;
+    const float* W_dense = (const float*)lean_sarray_cptr(dense_w_ba);
+    const float* B_dense = (const float*)lean_sarray_cptr(dense_b_ba);
+    const float* A = (const float*)lean_sarray_cptr(last_conv_ba);
+    size_t plane = H * W;
+    const float* A_b = A + batch_idx * C * plane;
+    size_t nbytes = NC * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    float* logits = (float*)lean_sarray_cptr(out);
+    // Compute global avg pool.
+    float* gap = (float*)malloc(C * sizeof(float));
+    float invHW = 1.0f / (float)plane;
+    for (size_t k = 0; k < C; k++) {
+        float s = 0.0f;
+        for (size_t p = 0; p < plane; p++) s += A_b[k * plane + p];
+        gap[k] = s * invHW;
+    }
+    for (size_t c = 0; c < NC; c++) {
+        float s = B_dense[c];
+        for (size_t k = 0; k < C; k++) s += W_dense[k * NC + c] * gap[k];
+        logits[c] = s;
+    }
+    free(gap);
+    return lean_io_result_mk_ok(out);
+}
+
+// ---- Bilinear upsample a single 2D plane (no channels) ----
+// Input  : f32 [Hin, Win]   (e.g. 7x7 GradCAM heatmap)
+// Output : f32 [Hout, Wout] (e.g. 224x224 to overlay on the image)
+// Aligns corners (so first/last rows and cols map exactly), which is
+// the standard Pillow / OpenCV behavior for visualization. Out-of-range
+// indices are clamped to the edge.
+LEAN_EXPORT lean_obj_res lean_f32_bilinear_upsample_2d(
+    b_lean_obj_arg in_ba, size_t Hin, size_t Win, size_t Hout, size_t Wout,
+    lean_obj_arg w_io) {
+    (void)w_io;
+    const float* in = (const float*)lean_sarray_cptr(in_ba);
+    size_t nbytes = Hout * Wout * 4;
+    lean_object* out_obj = lean_alloc_sarray(1, nbytes, nbytes);
+    float* out = (float*)lean_sarray_cptr(out_obj);
+    if (Hin == 0 || Win == 0) {
+        memset(out, 0, nbytes);
+        return lean_io_result_mk_ok(out_obj);
+    }
+    double sy = (Hout > 1) ? (double)(Hin - 1) / (double)(Hout - 1) : 0.0;
+    double sx = (Wout > 1) ? (double)(Win - 1) / (double)(Wout - 1) : 0.0;
+    for (size_t i = 0; i < Hout; i++) {
+        double yy = (double)i * sy;
+        size_t y0 = (size_t)yy;
+        size_t y1 = y0 + 1; if (y1 >= Hin) y1 = Hin - 1;
+        double dy = yy - (double)y0;
+        for (size_t j = 0; j < Wout; j++) {
+            double xx = (double)j * sx;
+            size_t x0 = (size_t)xx;
+            size_t x1 = x0 + 1; if (x1 >= Win) x1 = Win - 1;
+            double dx = xx - (double)x0;
+            float v00 = in[y0 * Win + x0];
+            float v01 = in[y0 * Win + x1];
+            float v10 = in[y1 * Win + x0];
+            float v11 = in[y1 * Win + x1];
+            double v0 = v00 + (v01 - v00) * dx;
+            double v1 = v10 + (v11 - v10) * dx;
+            out[i * Wout + j] = (float)(v0 + (v1 - v0) * dy);
+        }
+    }
+    return lean_io_result_mk_ok(out_obj);
+}
+
 LEAN_EXPORT lean_obj_res lean_f32_rand_augment(
     b_lean_obj_arg images, size_t batch, size_t channels,
     size_t height, size_t width, size_t n_ops, double m,

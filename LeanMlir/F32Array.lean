@@ -200,6 +200,28 @@ opaque emaSq (running : @& ByteArray) (batch : @& ByteArray) (momentum : Float) 
 @[extern "lean_f32_subtract"]
 opaque subtract (a : @& ByteArray) (b : @& ByteArray) : IO ByteArray
 
+/-- GradCAM closed-form (Zhou 2016 CAM). For nets ending GAP+dense,
+    `heat[i,j] = ReLU(Σ_k W[k, tgt] · A[k, i, j])`, max-normalized to
+    [0, 1]. `denseW` is `[C, NC]` row-major, `lastConv` is `[B, C, H, W]`
+    NCHW. Returns `[H, W]` f32 for the chosen `batchIdx`. -/
+@[extern "lean_f32_cam_compute"]
+opaque camCompute (denseW : @& ByteArray) (lastConv : @& ByteArray)
+    (batchIdx : USize) (C H W NC : USize) (tgt : USize) : IO ByteArray
+
+/-- Recompute logits from a pre-GAP activation. Returns `[NC]` f32 for
+    a single image (batchIdx). Used so the GradCAM exe can pick a class
+    via argmax without running the full forward a second time. -/
+@[extern "lean_f32_cam_logits"]
+opaque camLogits (denseW : @& ByteArray) (denseB : @& ByteArray)
+    (lastConv : @& ByteArray) (batchIdx : USize) (C H W NC : USize)
+    : IO ByteArray
+
+/-- Bilinear upsample a single 2D plane `[Hin, Win]` to `[Hout, Wout]`,
+    align-corners. Returns the upsampled f32 ByteArray. -/
+@[extern "lean_f32_bilinear_upsample_2d"]
+opaque bilinearUpsample2D (img : @& ByteArray)
+    (Hin Win Hout Wout : USize) : IO ByteArray
+
 /-- SWAG sample weights (Maddox et al. 2019). Given the SWA mean,
     SWA-of-θ² (for diagonal variance), and the K most-recent per-epoch
     deviation snapshots packed row-major as `K × nParams` f32, draw

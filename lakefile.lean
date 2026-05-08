@@ -126,6 +126,10 @@ lean_exe «pets-predict» where
   root := `MainPetsPredict
   moreLinkArgs := ireeLink
 
+lean_exe «gradcam» where
+  root := `MainGradCAM
+  moreLinkArgs := ireeLink
+
 lean_exe «mnist-ddpm-train» where
   root := `MainMnistDdpmTrain
   moreLinkArgs := ireeLink
@@ -256,6 +260,10 @@ lean_exe «test-focal-emit» where
 
 lean_exe «test-randaugment» where
   root := `tests.TestRandAugment
+  moreLinkArgs := ireeLink
+
+lean_exe «test-cam» where
+  root := `tests.TestCam
   moreLinkArgs := ireeLink
 
 lean_exe «inspect-convnext-bn» where

@@ -1448,8 +1448,14 @@ private def emitConvNextDownsample (startPidx : Nat) (curSSA : String) (curShape
     return (code, s!"%cnds_out{tag}", outShape, p)
   | _ => return ("    // convNextDownsample error\n", curSSA, curShape, startPidx)
 
-/-- Emit the `@forward` function body walking layers in order. -/
-private def emitForwardBody (spec : NetSpec) (batchSize : Nat) (fixedBN : Bool := false) : String := Id.run do
+/-- Emit the `@forward` function body walking layers in order. When
+    `stopAtGAP` is true (GradCAM mode), the walk halts at the first
+    `.globalAvgPool` it encounters: instead of emitting GAP+dense, we
+    reshape the pre-GAP activation `[B, C, H, W]` to flat `[B, C*H*W]`
+    and return that. CAM math is then done in Lean against the dense
+    head's weights. -/
+private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
+    (fixedBN : Bool := false) (stopAtGAP : Bool := false) : String := Id.run do
   let mut code : String := ""
   let mut curSSA : String := "%x"
   let mut curShape : List Nat := [batchSize, inputFlatDim spec]
@@ -1505,10 +1511,23 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat) (fixedBN : Bool :
       curShape := newShape
       pidx := pidx + 1
     | .globalAvgPool =>
-      let (snip, newSSA, newShape) := emitGlobalAvgPool pos curSSA curShape
-      code := code ++ snip
-      curSSA := newSSA
-      curShape := newShape
+      if stopAtGAP then
+        match curShape with
+        | [b, c, h, w] =>
+          let flat := c * h * w
+          let flatShape := [b, flat]
+          code := code ++ s!"    %lc_flat{pos} = stablehlo.reshape {curSSA} : ({tensorTy curShape}) -> {tensorTy flatShape}\n"
+          curSSA := s!"%lc_flat{pos}"
+          curShape := flatShape
+          break
+        | _ =>
+          code := code ++ "    // forward_cam: pre-GAP shape not rank-4\n"
+          break
+      else
+        let (snip, newSSA, newShape) := emitGlobalAvgPool pos curSSA curShape
+        code := code ++ snip
+        curSSA := newSSA
+        curShape := newShape
     | .residualBlock ic oc nBlocks firstStride =>
       let (snip, newSSA, newShape, newPidx) := emitResidualBlock pidx curSSA curShape ic oc nBlocks firstStride (fixedBN := fixedBN)
       code := code ++ snip
@@ -2380,6 +2399,138 @@ def generateEval (spec : NetSpec) (batchSize : Nat) : String :=
   s!"module @{sanitize spec.name}_eval " ++ "{\n" ++
   "  " ++ emitForwardEvalSig spec batchSize ++ " {\n" ++
   emitForwardBody spec batchSize (fixedBN := true) ++
+  "  }\n" ++
+  "}\n"
+
+/-- Shape walker: returns `(C, H, W)` of the activation immediately before
+    the LAST `.globalAvgPool` in the spec — i.e. the last conv feature
+    map, the input to the GAP+dense head. Returns `none` for specs
+    without a `globalAvgPool` (those are not CAM-eligible). Mirrors the
+    shape transitions in `emitForwardEvalSig`; kept focused (no param
+    bookkeeping) so it stays readable. -/
+def preGAPShape (spec : NetSpec) : Option (Nat × Nat × Nat) := Id.run do
+  let mut curShape : List Nat := [1, inputFlatDim spec]
+  match inputChannels spec with
+  | some ic => curShape := [1, ic, spec.imageH, spec.imageW]
+  | none => pure ()
+  let mut found : Option (Nat × Nat × Nat) := none
+  for l in spec.layers do
+    -- Capture pre-GAP (the shape at the layer's INPUT, before GAP runs).
+    match l with
+    | .globalAvgPool =>
+      match curShape with
+      | [_, c, h, w] => found := some (c, h, w)
+      | _ => pure ()
+    | _ => pure ()
+    -- Update curShape based on this layer.
+    match l with
+    | .dense _ fanOut _ =>
+      match curShape with
+      | [b, _] => curShape := [b, fanOut]
+      | _ => pure ()
+    | .conv2d _ oc _ _ _ =>
+      match curShape with
+      | [b, _, h, w] => curShape := [b, oc, h, w]
+      | _ => pure ()
+    | .convBn _ oc _ stride _ =>
+      match curShape with
+      | [b, _, h, w] =>
+        curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
+      | _ => pure ()
+    | .maxPool _ stride =>
+      match curShape with
+      | [b, c, h, w] =>
+        curShape := [b, c, (h + stride - 1) / stride, (w + stride - 1) / stride]
+      | _ => pure ()
+    | .globalAvgPool =>
+      match curShape with
+      | [b, c, _, _] => curShape := [b, c]
+      | _ => pure ()
+    | .flatten =>
+      match curShape with
+      | [b, c, h, w] => curShape := [b, c * h * w]
+      | _ => pure ()
+    | .residualBlock _ oc _ firstStride =>
+      match curShape with
+      | [b, _, h, w] =>
+        curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
+      | _ => pure ()
+    | .bottleneckBlock _ oc _ firstStride =>
+      match curShape with
+      | [b, _, h, w] =>
+        curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
+      | _ => pure ()
+    | .invertedResidual _ oc _ stride _ =>
+      match curShape with
+      | [b, _, h, w] =>
+        curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
+      | _ => pure ()
+    | .mbConv _ oc _ _ stride _ _ _ =>
+      match curShape with
+      | [b, _, h, w] =>
+        curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
+      | _ => pure ()
+    | .mbConvV3 _ oc _ _ stride _ _ =>
+      match curShape with
+      | [b, _, h, w] =>
+        curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
+      | _ => pure ()
+    | .fusedMbConv _ oc _ _ stride _ _ =>
+      match curShape with
+      | [b, _, h, w] =>
+        curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
+      | _ => pure ()
+    | .uib _ oc _ stride _ _ =>
+      match curShape with
+      | [b, _, h, w] =>
+        curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
+      | _ => pure ()
+    | .convNextStage _ _ _ _ => pure ()  -- channels & spatial preserved
+    | .convNextDownsample _ oc _ =>
+      match curShape with
+      | [b, _, h, w] => curShape := [b, oc, h / 2, w / 2]
+      | _ => pure ()
+    | .bilinearUpsample scale =>
+      match curShape with
+      | [b, c, h, w] => curShape := [b, c, h * scale, w * scale]
+      | _ => pure ()
+    | _ => pure ()
+  return found
+
+/-- Forward-with-capture signature: same params as `emitForwardEvalSig`
+    but returns the flat pre-GAP feature map `[batch, C*H*W]` instead of
+    the logits `[batch, NC]`. -/
+private def emitForwardCamSig (spec : NetSpec) (batchSize : Nat) : String := Id.run do
+  -- Reuse eval-sig generation, then rewrite the function name and the
+  -- return type. Cheaper than duplicating ~250 lines of param emission.
+  let evalSig := emitForwardEvalSig spec batchSize
+  let (c, h, w) := (preGAPShape spec).getD (0, 0, 0)
+  let flat := c * h * w
+  let camOutTy := tensorTy [batchSize, flat]
+  -- The eval sig ends with `) -> tensor<...x...xf32>`; replace the
+  -- trailing return type with the flat lastConv shape.
+  let renamed := evalSig.replace "func.func @forward_eval" "func.func @forward_cam"
+  -- Strip trailing return-type substring. The eval sig builds it as
+  -- `) -> {tensorTy outShape}` where outShape is `[batchSize, NC]`.
+  let nc := match spec.layers.getLast? with
+    | some (.dense _ fo _) => fo
+    | _ => 0
+  let evalOutTy := tensorTy [batchSize, nc]
+  let needle := s!") -> {evalOutTy}"
+  let replacement := s!") -> {camOutTy}"
+  pure (renamed.replace needle replacement)
+
+/-- Generate a StableHLO MLIR module for forward-with-capture (CAM mode).
+    Module name `<sanitized>_cam`, function `@forward_cam`. Walks the
+    network up through the last conv feature map, reshapes it to flat
+    `[batch, C*H*W]`, and returns. The Lean side recomputes logits and
+    the CAM heatmap from the dense-head weights. -/
+def generateForwardCam (spec : NetSpec) (batchSize : Nat) : String :=
+  s!"// {spec.name} forward_cam — Generated by Lean 4 → MLIR (StableHLO)\n" ++
+  s!"// Batch size: {batchSize}, stops at globalAvgPool, returns flat last-conv\n\n" ++
+  s!"module @{sanitize spec.name}_cam " ++ "{\n" ++
+  "  " ++ emitForwardCamSig spec batchSize ++ " {\n" ++
+  emitForwardBody spec batchSize (fixedBN := true) (stopAtGAP := true) ++
   "  }\n" ++
   "}\n"
 
