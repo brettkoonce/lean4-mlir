@@ -6,6 +6,99 @@ with verified gradients. The "framework can do generative" demo,
 parallel to UNet ("framework can do segmentation") and YOLO/BiFPN
 ("framework can do detection").
 
+## Status (2026-05-08)
+
+**Phase 1 ✓ + Phase 2 ✓ shipped in 2 sessions.** MNIST produces
+legible digits from noise; CIFAR-10 produces recognizable cars /
+birds / horses from noise. Plan below estimated 4-6 weeks; the
+simplified path landed in ~12 hours of human-active code work plus
+a couple of overnight runs.
+
+What was simplified vs. the original plan:
+
+- **No proper sin/cos time embedding.** The plan called for sinusoidal
+  encoding through a small dense MLP added to each block's feature
+  map. We instead prepend a single tiled `t/T_max` channel to the
+  network input. Zero new codegen primitives, ~15 lines of FFI; the
+  model gets a coarser t signal but it's enough to produce legible
+  outputs. Files: `LeanMlir/Ddpm.lean`, `ffi/f32_helpers.c`
+  (`lean_ddpm_prepend_t_channel{,_scalar}`).
+- **No bottleneck self-attention.** Plan called for transformer
+  attention at 8×8/16×16 spatial resolutions. We skipped it; the
+  existing `transformerEncoder` primitive could plug in there once
+  a `[B,C,H,W] ↔ [B,H*W,C]` reshape primitive lands. **This is the
+  biggest known quality gap**, especially on CIFAR.
+- **No FID.** Visual inspection only. PPM grids of 16 samples each.
+
+What's actually built and working:
+
+| Piece | File | Notes |
+|---|---|---|
+| Cosine α schedule | `ffi/f32_helpers.c::lean_ddpm_cosine_schedule` | T=1000, clamped [1e-4, 0.9999] |
+| Per-step noise application | `lean_ddpm_step_inputs` | Returns (x_t, ε, t) per batch |
+| t-channel prepend | `lean_ddpm_prepend_t_channel{,_scalar}` | Generalized to arbitrary C |
+| Per-pixel MSE loss + gradient | `MlirCodegen.lean` `useDdpm` flag | Parallel to `useSeg` / `useSoftLabels` |
+| Adam train-step ABI | `iree_ffi_train_step_adam_ddpm` | f32 [B, C, H, W] target |
+| DDIM η=0 sampler | `lean_ddim_step` | One affine pass |
+| Data centering | `F32.scaleShift` | Generic affine — `out = scale·in + shift` |
+| MNIST trainer/sampler | `MainMnistDdpm{Train,Sample}.lean` | 1 image channel |
+| CIFAR trainer/sampler | `MainCifarDdpm{Train,Sample}.lean` | 3 RGB channels |
+
+### Run-by-run results
+
+| Run | Spec | Params | Epochs | Wall time | End loss | Visual |
+|---|---|---|---|---|---|---|
+| MNIST no-tcond | base 16 (1ch in) | 118K | 3 | ~5 min | 0.054 | Blob shapes (no t signal) |
+| MNIST tcond | base 16 (2ch in) | 118K | 3 | ~5 min | 0.054 | Same — t-cond hadn't trained |
+| MNIST tcond long | base 16 (2ch in) | 118K | 50 | ~65 min | 0.032 | **Legible digits 0-9** (`runs/2026-05-07-mnist-ddpm-tcond/samples_50ep.png`) |
+| CIFAR base16 | base 16 [0,1] | 120K | 50 | ~70 min | 0.047 | Mean blob collapse |
+| CIFAR base48 centered | base 48 [-1,1] | 1M | 100 | ~5 hr | 0.063 | Diverse soft structure |
+| CIFAR base80 centered | base 80 [-1,1] | 3M | 70 | ~7 hr | 0.062 | **Recognizable cars/birds/animals** (`runs/2026-05-08-cifar-ddpm-base80/samples_70ep.png`) |
+
+Key empirical finding: **MSE plateaus while sample quality keeps
+improving**. base48 → base80 had only a 0.001 loss difference but a
+dramatic visual quality jump from "soft chromatic shapes" to
+"recognizable categories". Don't rely on MSE as a sample-quality proxy.
+
+### Commits (DDPM stack)
+
+```
+3053fc3 CIFAR base80 spec for overnight run
+62d5ce4 CIFAR base48 + data centering for quality bump
+ef48460 CIFAR-10 trainer + sampler (multi-channel)
+c1a998a time conditioning + 50-epoch run produces legible digits
+452ce6b Phase 1 plumbing + MNIST smoke test
+```
+
+### What's left to push CIFAR quality further
+
+Ranked by impact-per-hour-of-code:
+
+1. **Bottleneck self-attention** (~3 hr code + overnight run) —
+   biggest known quality lever. Needs a new spatial-flatten primitive
+   `[B,C,H,W] ↔ [B,H*W,C]` (forward + VJP + FD verify); then plug
+   the existing `transformerEncoder` at the bottleneck. The pairing
+   logic already in the codegen handles the bottleneck position
+   without disturbing unetDown/unetUp skip pairing.
+2. **Proper sin/cos time embedding** (~1-2 hr code) — replace the
+   tile-channel with sinusoidal embedding through a dense MLP added
+   to each block. Existing dense primitive suffices.
+3. **More capacity** (free; existing code) — base 80 → 96 or 128.
+   Per-step time scales quadratically with channel base; base 128
+   would be ~500ms/step vs base 80's 230ms. ~50 epochs of base 128
+   = ~13 hours.
+4. **Class-conditional generation** (~1-2 hr code) — embed CIFAR
+   labels as a one-hot channel alongside the t channel. "Free
+   performance" because labels give the model a strong prior, but
+   changes the demo's framing from unconditional to conditional.
+
+The plan as originally written (sin/cos + bottleneck attention +
+800K iter + larger model) would close the gap to paper FID 3.17;
+that's ~weeks of compute and is out of scope unless someone wants
+to actually compete on benchmarks.
+
+---
+
 ## The rule
 
 DDPM (Ho, Jain, Abbeel 2020) is **a UNet trained to denoise**.
