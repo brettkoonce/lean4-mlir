@@ -200,6 +200,23 @@ opaque emaSq (running : @& ByteArray) (batch : @& ByteArray) (momentum : Float) 
 @[extern "lean_f32_subtract"]
 opaque subtract (a : @& ByteArray) (b : @& ByteArray) : IO ByteArray
 
+/-- Load a flat int32 LE token-stream file (e.g. `data/shakespeare/train.bin`).
+    Returns (raw token bytes, token count). -/
+@[extern "lean_f32_load_token_stream"]
+opaque loadTokenStream (path : @& String) : IO (ByteArray × USize)
+
+/-- Sample `batch` random sequences of length `seqLen` from a token stream.
+    Returns a single flat ByteArray of size `2 * batch * seqLen * 4`
+    containing input IDs followed by next-token target IDs (both int32 LE). -/
+@[extern "lean_f32_sample_chunks"]
+opaque sampleChunks (tokens : @& ByteArray) (nTokens batch seqLen seed : USize)
+    : IO ByteArray
+
+/-- One-hot encode `[batch, seqLen]` int32 token IDs into a flat f32
+    tensor of shape `[batch, seqLen * vocab]` row-major in (b, t, v). -/
+@[extern "lean_f32_token_one_hot"]
+opaque tokenOneHot (ids : @& ByteArray) (batch seqLen vocab : USize) : IO ByteArray
+
 /-- GradCAM closed-form (Zhou 2016 CAM). For nets ending GAP+dense,
     `heat[i,j] = ReLU(Σ_k W[k, tgt] · A[k, i, j])`, max-normalized to
     [0, 1]. `denseW` is `[C, NC]` row-major, `lastConv` is `[B, C, H, W]`

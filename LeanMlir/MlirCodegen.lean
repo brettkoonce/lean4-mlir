@@ -26,6 +26,7 @@ def inputFlatDim (spec : NetSpec) : Nat :=
   | some (.mbConv ic _ _ _ _ _ _) => ic * spec.imageH * spec.imageW
   | some (.patchEmbed ic _ _ _) => ic * spec.imageH * spec.imageW
   | some (.unetDown ic _) => ic * spec.imageH * spec.imageW
+  | some (.tokenPositionEmbed v t _) => v * t
   | _ => spec.imageH * spec.imageW
 
 /-- If the first layer is conv/convBn, returns the NCHW input channels. -/
@@ -1139,6 +1140,7 @@ private def emitDense3D (tag : String) (xSSA : String) (shape : List Nat)
     Returns (code, outSSA, saved Q,K,V,softmax,preProj SSAs). -/
 private def emitMHSAForward (tag : String) (xSSA : String) (shape : List Nat)
     (heads : Nat) (wqSSA bqSSA wkSSA bkSSA wvSSA bvSSA woSSA boSSA : String)
+    (causalMask : Bool := false)
     : String × String × String × String × String × String × String := Id.run do
   match shape with
   | [b, n, d] =>
@@ -1171,7 +1173,23 @@ private def emitMHSAForward (tag : String) (xSSA : String) (shape : List Nat)
     -- Scale by 1/sqrt(dh)
     let invSqrtDh : Float := 1.0 / Float.sqrt dh.toFloat
     s := s ++ s!"    %mh_scale{tag} = stablehlo.constant dense<{invSqrtDh}> : {sTy}\n"
-    s := s ++ s!"    %mh_ss{tag} = stablehlo.multiply %mh_sc{tag}, %mh_scale{tag} : {sTy}\n"
+    s := s ++ s!"    %mh_ss_pre{tag} = stablehlo.multiply %mh_sc{tag}, %mh_scale{tag} : {sTy}\n"
+    -- Optional causal mask: add a `[N, N]` triangular mask (-inf above the
+    -- diagonal, 0 elsewhere) broadcast across (B, heads). Done before
+    -- softmax so the masked entries become exactly 0 after exp+normalize.
+    if causalMask then
+      let nnTy := tensorTy [n, n]
+      s := s ++ s!"    %mh_iotaR{tag} = stablehlo.iota dim = 0 : {nnTy}\n"
+      s := s ++ s!"    %mh_iotaC{tag} = stablehlo.iota dim = 1 : {nnTy}\n"
+      s := s ++ s!"    %mh_cmp{tag} = stablehlo.compare GE, %mh_iotaR{tag}, %mh_iotaC{tag}, FLOAT : ({nnTy}, {nnTy}) -> tensor<{n}x{n}xi1>\n"
+      s := s ++ s!"    %mh_zmask{tag} = stablehlo.constant dense<0.0> : {nnTy}\n"
+      s := s ++ s!"    %mh_ninfmask{tag} = stablehlo.constant dense<0xFF800000> : {nnTy}\n"
+      s := s ++ s!"    %mh_mask{tag} = stablehlo.select %mh_cmp{tag}, %mh_zmask{tag}, %mh_ninfmask{tag} : (tensor<{n}x{n}xi1>, {nnTy}, {nnTy}) -> {nnTy}\n"
+      s := s ++ s!"    %mh_mask_bc{tag} = stablehlo.broadcast_in_dim %mh_mask{tag}, dims = [2, 3] : ({nnTy}) -> {sTy}\n"
+      s := s ++ s!"    %mh_ss{tag} = stablehlo.add %mh_ss_pre{tag}, %mh_mask_bc{tag} : {sTy}\n"
+    else
+      s := s ++ s!"    %mh_ss_zc{tag} = stablehlo.constant dense<0.0> : {sTy}\n"
+      s := s ++ s!"    %mh_ss{tag} = stablehlo.add %mh_ss_pre{tag}, %mh_ss_zc{tag} : {sTy}\n"
     -- Softmax: max, shift, exp, sum, divide
     let bhnTy := tensorTy [b, heads, n]
     s := s ++ s!"    %mh_neginf{tag} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
@@ -1206,7 +1224,7 @@ private def emitMHSAForward (tag : String) (xSSA : String) (shape : List Nat)
     LN1(g,b), Wq,bq, Wk,bk, Wv,bv, Wo,bo, LN2(g,b), Wfc1,bfc1, Wfc2,bfc2.
     Returns (code, outSSA, newPidx). -/
 private def emitTransformerBlockForward (tag : String) (startP : Nat) (xSSA : String) (shape : List Nat)
-    (heads mlpDim : Nat) : String × String × Nat := Id.run do
+    (heads mlpDim : Nat) (causalMask : Bool := false) : String × String × Nat := Id.run do
   match shape with
   | [_b, _n, d] =>
     let ty := tensorTy shape
@@ -1221,7 +1239,7 @@ private def emitTransformerBlockForward (tag : String) (startP : Nat) (xSSA : St
     let wk := s!"%W{p}"; let bk := s!"%b{p}"; p := p + 1
     let wv := s!"%W{p}"; let bv := s!"%b{p}"; p := p + 1
     let wo := s!"%W{p}"; let bo := s!"%b{p}"; p := p + 1
-    let (mhsaCode, mhsaOut, _, _, _, _, _) := emitMHSAForward s!"{tag}_mh" ln1Out shape heads wq bq wk bk wv bv wo bo
+    let (mhsaCode, mhsaOut, _, _, _, _, _) := emitMHSAForward s!"{tag}_mh" ln1Out shape heads wq bq wk bk wv bv wo bo causalMask
     s := s ++ mhsaCode
     -- Residual
     s := s ++ s!"    %tb_r1{tag} = stablehlo.add {xSSA}, {mhsaOut} : {ty}\n"
@@ -1593,11 +1611,11 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       code := code ++ snip
       curSSA := newSSA
       curShape := newShape
-    | .transformerEncoder dim heads mlpDim nBlocks =>
+    | .transformerEncoder dim heads mlpDim nBlocks causalMask =>
       let mut cs := curSSA
       let mut p := pidx
       for bi in [:nBlocks] do
-        let (snip, newSSA, newP) := emitTransformerBlockForward s!"{pos}_{bi}" p cs curShape heads mlpDim
+        let (snip, newSSA, newP) := emitTransformerBlockForward s!"{pos}_{bi}" p cs curShape heads mlpDim causalMask
         code := code ++ snip
         cs := newSSA
         p := newP
@@ -1606,16 +1624,20 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       let (lnCode, lnOut, _, _, _) := emitLayerNormForward s!"{pos}_finalln" cs curShape g bS
       code := code ++ lnCode
       cs := lnOut
-      -- Slice CLS token: x[:, 0, :] → (B, D)
-      match curShape with
-      | [b, _, _] =>
-        let clsShape := [b, 1, dim]
-        let outShape := [b, dim]
-        code := code ++ s!"    %te_cls{pos} = \"stablehlo.slice\"({cs}) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0>, limit_indices = array<i64: {b}, 1, {dim}>, strides = array<i64: 1, 1, 1>" ++ "}" ++ s!" : ({tensorTy curShape}) -> {tensorTy clsShape}\n"
-        code := code ++ s!"    %te_out{pos} = stablehlo.reshape %te_cls{pos} : ({tensorTy clsShape}) -> {tensorTy outShape}\n"
-        curSSA := s!"%te_out{pos}"
-        curShape := outShape
-      | _ => pure ()
+      if causalMask then
+        -- Autoregressive: keep the full [B, T, D] sequence for the LM head.
+        curSSA := cs
+      else
+        -- ViT: slice the CLS token [B, 0, :] -> (B, D) for the classification head.
+        match curShape with
+        | [b, _, _] =>
+          let clsShape := [b, 1, dim]
+          let outShape := [b, dim]
+          code := code ++ s!"    %te_cls{pos} = \"stablehlo.slice\"({cs}) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0>, limit_indices = array<i64: {b}, 1, {dim}>, strides = array<i64: 1, 1, 1>" ++ "}" ++ s!" : ({tensorTy curShape}) -> {tensorTy clsShape}\n"
+          code := code ++ s!"    %te_out{pos} = stablehlo.reshape %te_cls{pos} : ({tensorTy clsShape}) -> {tensorTy outShape}\n"
+          curSSA := s!"%te_out{pos}"
+          curShape := outShape
+        | _ => pure ()
       let _ := dim
       pidx := p
     | .unetDown ic oc =>
@@ -1651,6 +1673,43 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
         curShape := sh4
       | [] =>
         code := code ++ "    // unetUp: skip stack empty (no matching unetDown above)\n"
+    | .tokenPositionEmbed v t d =>
+      -- Input is flat [B, V*T] one-hot; reshape to [B, T, V], embed via
+      -- dot with W [V, D] → [B, T, D], then add learnable position [T, D]
+      -- broadcast over batch.
+      match curShape with
+      | [b, _] =>
+        let btv := [b, t, v]
+        let btd := [b, t, d]
+        let pW := s!"%W{pidx}"            -- [V, D] embedding matrix (no bias)
+        let pPos := s!"%W{pidx + 1}"      -- [T, D] positional embedding
+        code := code ++ s!"    %tpe_r{pos} = stablehlo.reshape {curSSA} : ({tensorTy curShape}) -> {tensorTy btv}\n"
+        code := code ++ s!"    %tpe_emb{pos} = stablehlo.dot_general %tpe_r{pos}, {pW},\n"
+        code := code ++ "              contracting_dims = [2] x [0],\n"
+        code := code ++ "              precision = [DEFAULT, DEFAULT]\n"
+        code := code ++ s!"            : ({tensorTy btv}, {tensorTy [v, d]}) -> {tensorTy btd}\n"
+        code := code ++ s!"    %tpe_pbc{pos} = stablehlo.broadcast_in_dim {pPos}, dims = [1, 2] : ({tensorTy [t, d]}) -> {tensorTy btd}\n"
+        code := code ++ s!"    %tpe_out{pos} = stablehlo.add %tpe_emb{pos}, %tpe_pbc{pos} : {tensorTy btd}\n"
+        curSSA := s!"%tpe_out{pos}"
+        curShape := btd
+        pidx := pidx + 2
+      | _ => code := code ++ "    // tokenPositionEmbed error: input not [B, _]\n"
+    | .lmHead d v t =>
+      -- Per-position dense [B, T, D] → [B, T, V] via dot_general + bias,
+      -- then reshape to flat [B, T*V] so the existing CE machinery accepts it.
+      match curShape with
+      | [b, _, _] =>
+        let btv := [b, t, v]
+        let outShape := [b, t * v]
+        let pW := s!"%W{pidx}"
+        let pB := s!"%b{pidx}"
+        let (snip, denseOut, _) := emitDense3D s!"_lmh{pos}" curSSA curShape pW pB v
+        code := code ++ snip
+        code := code ++ s!"    %lmh_r{pos} = stablehlo.reshape {denseOut} : ({tensorTy btv}) -> {tensorTy outShape}\n"
+        curSSA := s!"%lmh_r{pos}"
+        curShape := outShape
+        pidx := pidx + 1
+      | _ => code := code ++ "    // lmHead error: input not [B, T, D]\n"
     | _ =>
       code := code ++ "    // UNSUPPORTED LAYER\n"
     pos := pos + 1
@@ -1924,7 +1983,7 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
       outShape := curShape
-    | .transformerEncoder dim _heads mlpDim nBlocks =>
+    | .transformerEncoder dim _heads mlpDim nBlocks causalMask =>
       for _bi in [:nBlocks] do
         -- LN1
         params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
@@ -1953,8 +2012,24 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
       -- Final LN
       params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
       pidx := pidx + 1
+      if !causalMask then
+        match curShape with
+        | [b, _, _] => curShape := [b, dim]
+        | _ => pure ()
+      outShape := curShape
+    | .tokenPositionEmbed v t d =>
+      -- Embedding W [V, D] (named %W{pidx}, no bias) + positional [T, D] (%W{pidx+1}).
+      params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}, %W{pidx + 1}: {tensorTy [t, d]}"
+      pidx := pidx + 2
       match curShape with
-      | [b, _, _] => curShape := [b, dim]
+      | [b, _] => curShape := [b, t, d]
+      | _ => pure ()
+      outShape := curShape
+    | .lmHead d v t =>
+      params := params ++ s!",\n    %W{pidx}: {tensorTy [d, v]}, %b{pidx}: {tensorTy [v]}"
+      pidx := pidx + 1
+      match curShape with
+      | [b, _, _] => curShape := [b, t * v]
       | _ => pure ()
       outShape := curShape
     | _ => pure ()
@@ -2361,7 +2436,7 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
       outShape := curShape
-    | .transformerEncoder dim _heads mlpDim nBlocks =>
+    | .transformerEncoder dim _heads mlpDim nBlocks causalMask =>
       for _bi in [:nBlocks] do
         params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
         pidx := pidx + 1
@@ -2381,9 +2456,10 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
         pidx := pidx + 1
       params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
       pidx := pidx + 1
-      match curShape with
-      | [b, _, _] => curShape := [b, dim]
-      | _ => pure ()
+      if !causalMask then
+        match curShape with
+        | [b, _, _] => curShape := [b, dim]
+        | _ => pure ()
       outShape := curShape
     | _ => pure ()
   -- Append bn_mean / bn_var params for each BN layer

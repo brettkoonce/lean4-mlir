@@ -1221,6 +1221,98 @@ static inline double rand_factor(double m, uint64_t* s) {
     return 1.0 + sign * strength * 0.5;
 }
 
+// ---- Token corpus loader ----
+// Read a flat int32 LE token-ID file into a ByteArray. Returns
+// (token_count : Nat) for the Lean side to slice from.
+LEAN_EXPORT lean_obj_res lean_f32_load_token_stream(
+    b_lean_obj_arg path_obj, lean_obj_arg w) {
+    (void)w;
+    const char* path = lean_string_cstr(path_obj);
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        return lean_io_result_mk_error(
+            lean_mk_io_user_error(lean_mk_string("token stream file not found")));
+    }
+    fseek(f, 0, SEEK_END);
+    long bytes = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (bytes < 0 || (bytes % 4) != 0) {
+        fclose(f);
+        return lean_io_result_mk_error(
+            lean_mk_io_user_error(lean_mk_string("token stream not int32-aligned")));
+    }
+    lean_object* ba = lean_alloc_sarray(1, (size_t)bytes, (size_t)bytes);
+    size_t got = fread(lean_sarray_cptr(ba), 1, (size_t)bytes, f);
+    fclose(f);
+    if (got != (size_t)bytes) {
+        lean_dec_ref(ba);
+        return lean_io_result_mk_error(
+            lean_mk_io_user_error(lean_mk_string("short read on token stream")));
+    }
+    size_t n_tokens = (size_t)bytes / 4;
+    // Return (ba, n_tokens) as a Lean `(ByteArray × Nat)` pair.
+    lean_object* tup = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(tup, 0, ba);
+    lean_ctor_set(tup, 1, lean_box_usize(n_tokens));
+    return lean_io_result_mk_ok(tup);
+}
+
+// ---- Random-chunk batch sampler for autoregressive language modeling ----
+// Pick `batch` random offsets in [0, n_tokens - seq_len - 1] and copy
+// (tokens[off..off+T], tokens[off+1..off+T+1]) into two int32 tensors.
+// Returns (input_ids : [B*T*4 bytes], next_ids : [B*T*4 bytes]) packed
+// into a single ByteArray of size 2*B*T*4 — first half input, second
+// half target. The Lean caller slices.
+LEAN_EXPORT lean_obj_res lean_f32_sample_chunks(
+    b_lean_obj_arg tokens_ba, size_t n_tokens, size_t batch, size_t seq_len,
+    size_t seed, lean_obj_arg w) {
+    (void)w;
+    if (n_tokens < seq_len + 1) {
+        return lean_io_result_mk_error(
+            lean_mk_io_user_error(lean_mk_string("n_tokens < seq_len + 1")));
+    }
+    const int32_t* tokens = (const int32_t*)lean_sarray_cptr(tokens_ba);
+    size_t per_chunk = seq_len * 4;
+    size_t out_bytes = 2 * batch * per_chunk;
+    lean_object* out = lean_alloc_sarray(1, out_bytes, out_bytes);
+    int32_t* input = (int32_t*)lean_sarray_cptr(out);
+    int32_t* target = input + batch * seq_len;
+    uint64_t s = (uint64_t)seed ^ 0xa6b8c4d2e3f10987ULL; if (s == 0) s = 1;
+    size_t max_off = n_tokens - seq_len - 1;
+    for (size_t b = 0; b < batch; b++) {
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        size_t off = (size_t)(s % (max_off + 1));
+        memcpy(input + b * seq_len, tokens + off, per_chunk);
+        memcpy(target + b * seq_len, tokens + off + 1, per_chunk);
+    }
+    return lean_io_result_mk_ok(out);
+}
+
+// ---- One-hot encode int32 token IDs into a flat f32 tensor ----
+// Input  : int32 [B*T] token IDs (raw bytes from sample_chunks).
+// Output : f32 [B, T*V] flat (one-hot per position, row-major in (b, t, v)).
+// V = vocab_size. The flat layout matches inputFlatDim for a tinyGPT spec
+// whose first layer is the token+position embedding.
+LEAN_EXPORT lean_obj_res lean_f32_token_one_hot(
+    b_lean_obj_arg ids_ba, size_t batch, size_t seq_len, size_t vocab,
+    lean_obj_arg w) {
+    (void)w;
+    const int32_t* ids = (const int32_t*)lean_sarray_cptr(ids_ba);
+    size_t per_token = vocab * 4;
+    size_t out_bytes = batch * seq_len * per_token;
+    lean_object* out = lean_alloc_sarray(1, out_bytes, out_bytes);
+    float* f = (float*)lean_sarray_cptr(out);
+    memset(f, 0, out_bytes);
+    for (size_t b = 0; b < batch; b++) {
+        for (size_t t = 0; t < seq_len; t++) {
+            int32_t id = ids[b * seq_len + t];
+            if (id < 0 || (size_t)id >= vocab) continue;  // silently clamp OOV
+            f[(b * seq_len + t) * vocab + (size_t)id] = 1.0f;
+        }
+    }
+    return lean_io_result_mk_ok(out);
+}
+
 // ---- GradCAM (Zhou-2016 closed form) ----
 // For a network ending in (globalAvgPool → dense), the GradCAM
 // heatmap collapses to:

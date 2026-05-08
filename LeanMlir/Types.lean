@@ -39,7 +39,11 @@ inductive Layer where
   | uib (ic oc expand stride : Nat) (preDWk postDWk : Nat)  -- Universal Inverted Bottleneck; k=0 means no DW
   | fireModule (ic squeeze expand1x1 expand3x3 : Nat)
   | patchEmbed (ic dim patchSize nPatches : Nat)
+  -- `causalMask` (default false) adds a triangular −∞ mask to the QK^T
+  -- scores before softmax. ViT and other vision transformers leave it
+  -- false; autoregressive language models like tinyGPT set it true.
   | transformerEncoder (dim heads mlpDim nBlocks : Nat)
+                       (causalMask : Bool := false)
   -- Selective state-space block (Mamba / S6); dim = hidden, stateSize = N,
   -- expand = inner-dim multiplier. Not codegen-backed yet — used by the
   -- Bestiary as a shape-only primitive for language-model architectures.
@@ -206,6 +210,18 @@ inductive Layer where
   -- (ic → oc) + 2×2 average pool stride 2. Halves spatial resolution
   -- and (typically) halves channel count to compress feature reuse.
   | transitionLayer (ic oc : Nat)
+  -- Token + learned-position embedding for autoregressive language
+  -- models (tinyGPT). Input: flat `[B, seqLen * vocabSize]` one-hot
+  -- (built in C from int32 token IDs). Output: `[B, seqLen, dModel]`.
+  -- Params: token-embedding W `[vocabSize, dModel]` + learnable
+  -- positional embedding `[seqLen, dModel]`. Vocab=65 keeps the
+  -- one-hot path cheap (no gather primitive needed).
+  | tokenPositionEmbed (vocabSize seqLen dModel : Nat)
+  -- Language-modeling head: per-position logits. Input `[B, seqLen,
+  -- dModel]`, output `[B, seqLen * vocabSize]` (flat) so existing
+  -- per-pixel CE loss machinery handles `[B, V, T, 1]`-shaped logits
+  -- by reshape. Params: dense W `[dModel, vocabSize]` + bias.
+  | lmHead (dModel vocabSize seqLen : Nat)
 deriving Repr
 
 structure NetSpec where

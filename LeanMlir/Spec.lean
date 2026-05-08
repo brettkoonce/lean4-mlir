@@ -83,7 +83,7 @@ def Layer.nParams : Layer → Nat
       (sq * ic + 2 * sq) + (e1 * sq + 2 * e1) + (e3 * sq * 9 + 2 * e3)
   | .patchEmbed ic dim p nP =>
       dim * ic * p * p + dim + dim + (nP + 1) * dim
-  | .transformerEncoder dim _heads mlpDim nBlocks =>
+  | .transformerEncoder dim _heads mlpDim nBlocks _causal =>
       let perBlock := 2 * dim
                     + 3 * (dim * dim + dim)
                     + (dim * dim + dim)
@@ -312,6 +312,12 @@ def Layer.nParams : Layer → Nat
   | .transitionLayer ic oc =>
       -- BN(ic) γ/β + 1×1 (ic → oc) + bias. Avg pool has no params.
       2 * ic + ic * oc + oc
+  | .tokenPositionEmbed v t d =>
+      -- Token-embedding W [V, D] (no bias) + learnable position embedding [T, D].
+      v * d + t * d
+  | .lmHead d v _ =>
+      -- Dense W [D, V] + bias [V].
+      d * v + v
   | _                        => 0
 
 def NetSpec.totalParams (s : NetSpec) : Nat :=
@@ -385,7 +391,9 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .uib ic oc e s pDW poDW => s!"UIB({ic}→{oc},e{e},s{s},dw{pDW}/{poDW})"
     | .fireModule ic sq e1 e3 => s!"Fire({ic}→{e1 + e3},sq{sq})"
     | .patchEmbed ic dim p _     => s!"Patch({ic}→{dim},{p}x{p})"
-    | .transformerEncoder dim h _ n => s!"Trans({n}x[{h}h,{dim}])"
+    | .transformerEncoder dim h _ n cm =>
+      let tag := if cm then "TransCausal" else "Trans"
+      s!"{tag}({n}x[{h}h,{dim}])"
     | .mambaBlock dim st exp n   => s!"Mamba{n}(dim={dim},state={st},exp={exp})"
     | .swinStage dim h _ ws n    => s!"Swin{n}(dim={dim},heads={h},win={ws})"
     | .patchMerging i o          => s!"PatchMerge({i}→{o})"
@@ -411,7 +419,9 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .inceptionModule ic b1 _ b2 _ b3 b4 =>
         s!"Inc({ic}→{b1 + b2 + b3 + b4})"
     | .denseBlock ic gr n         => s!"Dense{n}({ic}→{ic + n * gr},gr={gr})"
-    | .transitionLayer ic oc      => s!"Trans({ic}→{oc})")
+    | .transitionLayer ic oc      => s!"Trans({ic}→{oc})"
+    | .tokenPositionEmbed v t d   => s!"TokPos({v}→{d},T={t})"
+    | .lmHead d v t               => s!"LMHead({d}→{v},T={t})")
 
 -- ===========================================================================
 -- Validation: catch channel/dimension mismatches at `lake build` time
@@ -432,7 +442,7 @@ def Layer.outChannels : Layer → Nat
   | .uib _ oc _ _ _ _               => oc
   | .fireModule _ _ e1 e3           => e1 + e3
   | .patchEmbed _ dim _ _           => dim
-  | .transformerEncoder dim _ _ _   => dim
+  | .transformerEncoder dim _ _ _ _ => dim
   | .mambaBlock dim _ _ _           => dim
   | .swinStage dim _ _ _ _          => dim
   | .patchMerging _ outDim          => outDim
@@ -457,6 +467,8 @@ def Layer.outChannels : Layer → Nat
   | .inceptionModule _ b1 _ b2 _ b3 b4 => b1 + b2 + b3 + b4  -- concat of branches
   | .denseBlock ic gr nLayers       => ic + nLayers * gr  -- concat grows by gr per layer
   | .transitionLayer _ oc           => oc
+  | .tokenPositionEmbed _ _ d       => d  -- output is [B, T, D]; D acts as the channel dim downstream
+  | .lmHead _ v t                   => t * v  -- flat output [B, T*V] for the loss head
   | _                               => 0  -- pool/flatten/GAP: pass-through
 
 /-- Input channels expected by a layer. Returns 0 for layers that accept any input. -/
@@ -474,7 +486,7 @@ def Layer.inChannels : Layer → Nat
   | .uib ic _ _ _ _ _               => ic
   | .fireModule ic _ _ _            => ic
   | .patchEmbed ic _ _ _            => ic
-  | .transformerEncoder dim _ _ _   => dim
+  | .transformerEncoder dim _ _ _ _ => dim
   | .mambaBlock dim _ _ _           => dim
   | .swinStage dim _ _ _ _          => dim
   | .patchMerging inDim _           => inDim
@@ -499,6 +511,8 @@ def Layer.inChannels : Layer → Nat
   | .inceptionModule ic _ _ _ _ _ _ => ic
   | .denseBlock ic _ _              => ic
   | .transitionLayer ic _           => ic
+  | .tokenPositionEmbed v t _       => v * t  -- input is flat [B, V*T] one-hot
+  | .lmHead d _ _                   => d
   | _                               => 0  -- pool/flatten/GAP: accept anything
 
 /-- Validate that channel dimensions chain correctly through the spec.
@@ -524,7 +538,13 @@ def NetSpec.validate (s : NetSpec) : Option String := Id.run do
     match l with
     | .globalAvgPool => afterGAP := true
     | .flatten       => afterFlatten := true
-    | .transformerEncoder .. => afterTransformer := true
+    | .transformerEncoder dim _ _ _ causalMask =>
+        if !causalMask then
+          afterTransformer := true  -- ViT-style: CLS slice produces [B, dim]
+        -- causal: shape stays [B, T, D], handled by outChannels=D
+    | .tokenPositionEmbed _ _ d =>
+        prevOc := d
+        afterTransformer := false; afterFlatten := false; afterGAP := false
     -- Mamba behaves like transformer for shape-chaining: (L, D) in, (L, D) out.
     | .mambaBlock .. => afterTransformer := true
     -- Swin stage: (H·W, D) in, same out. Patch merging updates prevOc to outDim.
