@@ -83,7 +83,7 @@ def Layer.nParams : Layer → Nat
       (sq * ic + 2 * sq) + (e1 * sq + 2 * e1) + (e3 * sq * 9 + 2 * e3)
   | .patchEmbed ic dim p nP =>
       dim * ic * p * p + dim + dim + (nP + 1) * dim
-  | .transformerEncoder dim _heads mlpDim nBlocks _causal =>
+  | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq =>
       let perBlock := 2 * dim
                     + 3 * (dim * dim + dim)
                     + (dim * dim + dim)
@@ -392,8 +392,8 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .uib ic oc e s pDW poDW => s!"UIB({ic}→{oc},e{e},s{s},dw{pDW}/{poDW})"
     | .fireModule ic sq e1 e3 => s!"Fire({ic}→{e1 + e3},sq{sq})"
     | .patchEmbed ic dim p _     => s!"Patch({ic}→{dim},{p}x{p})"
-    | .transformerEncoder dim h _ n cm =>
-      let tag := if cm then "TransCausal" else "Trans"
+    | .transformerEncoder dim h _ n cm ks =>
+      let tag := if cm then "TransCausal" else if ks then "TransSeq" else "Trans"
       s!"{tag}({n}x[{h}h,{dim}])"
     | .mambaBlock dim st exp n   => s!"Mamba{n}(dim={dim},state={st},exp={exp})"
     | .swinStage dim h _ ws n    => s!"Swin{n}(dim={dim},heads={h},win={ws})"
@@ -422,7 +422,9 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .denseBlock ic gr n         => s!"Dense{n}({ic}→{ic + n * gr},gr={gr})"
     | .transitionLayer ic oc      => s!"Trans({ic}→{oc})"
     | .tokenPositionEmbed v t d   => s!"TokPos({v}→{d},T={t})"
-    | .lmHead d v t               => s!"LMHead({d}→{v},T={t})")
+    | .lmHead d v t               => s!"LMHead({d}→{v},T={t})"
+    | .spatialFlatten             => "SpFlat"
+    | .spatialUnflatten c h w     => s!"SpUnflat({c},{h}x{w})")
 
 -- ===========================================================================
 -- Validation: catch channel/dimension mismatches at `lake build` time
@@ -470,6 +472,8 @@ def Layer.outChannels : Layer → Nat
   | .transitionLayer _ oc           => oc
   | .tokenPositionEmbed _ _ d       => d  -- output is [B, T, D]; D acts as the channel dim downstream
   | .lmHead _ v t                   => t * v  -- flat output [B, T*V] for the loss head
+  | .spatialFlatten                 => 0  -- pass-through (channel count unchanged on rank-3 reshape)
+  | .spatialUnflatten c _ _         => c
   | _                               => 0  -- pool/flatten/GAP: pass-through
 
 /-- Input channels expected by a layer. Returns 0 for layers that accept any input. -/
@@ -514,6 +518,8 @@ def Layer.inChannels : Layer → Nat
   | .transitionLayer ic _           => ic
   | .tokenPositionEmbed v t _       => v * t  -- input is flat [B, V*T] one-hot
   | .lmHead d _ _                   => d
+  | .spatialFlatten                 => 0  -- accepts any [B, C, H, W]
+  | .spatialUnflatten c _ _         => c
   | _                               => 0  -- pool/flatten/GAP: accept anything
 
 /-- Validate that channel dimensions chain correctly through the spec.
@@ -539,12 +545,20 @@ def NetSpec.validate (s : NetSpec) : Option String := Id.run do
     match l with
     | .globalAvgPool => afterGAP := true
     | .flatten       => afterFlatten := true
-    | .transformerEncoder dim _ _ _ causalMask =>
-        if !causalMask then
+    | .transformerEncoder _dim _ _ _ causalMask keepSeq =>
+        if !causalMask && !keepSeq then
           afterTransformer := true  -- ViT-style: CLS slice produces [B, dim]
-        -- causal: shape stays [B, T, D], handled by outChannels=D
+        -- causal or keepSeq: shape stays [B, T, D], handled by outChannels=D
     | .tokenPositionEmbed _ _ d =>
         prevOc := d
+        afterTransformer := false; afterFlatten := false; afterGAP := false
+    | .spatialFlatten =>
+        -- Channel count preserved on the new rank-3 axis; downstream
+        -- (transformerEncoder) treats it as `dim` and we want
+        -- `transformerEncoder.dim == prevOc`.
+        afterTransformer := true
+    | .spatialUnflatten c _ _ =>
+        prevOc := c
         afterTransformer := false; afterFlatten := false; afterGAP := false
     -- Mamba behaves like transformer for shape-chaining: (L, D) in, (L, D) out.
     | .mambaBlock .. => afterTransformer := true

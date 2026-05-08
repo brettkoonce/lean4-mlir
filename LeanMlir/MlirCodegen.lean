@@ -1611,7 +1611,7 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       code := code ++ snip
       curSSA := newSSA
       curShape := newShape
-    | .transformerEncoder dim heads mlpDim nBlocks causalMask =>
+    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence =>
       let mut cs := curSSA
       let mut p := pidx
       for bi in [:nBlocks] do
@@ -1624,8 +1624,9 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       let (lnCode, lnOut, _, _, _) := emitLayerNormForward s!"{pos}_finalln" cs curShape g bS
       code := code ++ lnCode
       cs := lnOut
-      if causalMask then
-        -- Autoregressive: keep the full [B, T, D] sequence for the LM head.
+      if causalMask || keepSequence then
+        -- Causal/sequence mode: keep the full [B, T, D] for autoregressive
+        -- LM heads or for downstream `.spatialUnflatten` back to NCHW.
         curSSA := cs
       else
         -- ViT: slice the CLS token [B, 0, :] -> (B, D) for the classification head.
@@ -1710,6 +1711,28 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
         curShape := outShape
         pidx := pidx + 1
       | _ => code := code ++ "    // lmHead error: input not [B, T, D]\n"
+    | .spatialFlatten =>
+      -- [B, C, H, W] → transpose [0, 2, 3, 1] → [B, H, W, C] → reshape → [B, H*W, C]
+      match curShape with
+      | [b, c, h, w] =>
+        let bhwc := [b, h, w, c]
+        let bnc := [b, h * w, c]
+        code := code ++ s!"    %sf_t{pos} = stablehlo.transpose {curSSA}, dims = [0, 2, 3, 1] : ({tensorTy curShape}) -> {tensorTy bhwc}\n"
+        code := code ++ s!"    %sf_r{pos} = stablehlo.reshape %sf_t{pos} : ({tensorTy bhwc}) -> {tensorTy bnc}\n"
+        curSSA := s!"%sf_r{pos}"
+        curShape := bnc
+      | _ => code := code ++ "    // spatialFlatten error: expected rank-4 NCHW input\n"
+    | .spatialUnflatten c h w =>
+      -- [B, H*W, C] → reshape → [B, H, W, C] → transpose [0, 3, 1, 2] → [B, C, H, W]
+      match curShape with
+      | [b, _, _] =>
+        let bhwc := [b, h, w, c]
+        let bchw := [b, c, h, w]
+        code := code ++ s!"    %su_r{pos} = stablehlo.reshape {curSSA} : ({tensorTy curShape}) -> {tensorTy bhwc}\n"
+        code := code ++ s!"    %su_t{pos} = stablehlo.transpose %su_r{pos}, dims = [0, 3, 1, 2] : ({tensorTy bhwc}) -> {tensorTy bchw}\n"
+        curSSA := s!"%su_t{pos}"
+        curShape := bchw
+      | _ => code := code ++ "    // spatialUnflatten error: expected rank-3 input\n"
     | _ =>
       code := code ++ "    // UNSUPPORTED LAYER\n"
     pos := pos + 1
@@ -1983,7 +2006,7 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
       outShape := curShape
-    | .transformerEncoder dim _heads mlpDim nBlocks causalMask =>
+    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence =>
       for _bi in [:nBlocks] do
         -- LN1
         params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
@@ -2012,7 +2035,7 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
       -- Final LN
       params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
       pidx := pidx + 1
-      if !causalMask then
+      if !causalMask && !keepSequence then
         match curShape with
         | [b, _, _] => curShape := [b, dim]
         | _ => pure ()
@@ -2030,6 +2053,16 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
       pidx := pidx + 1
       match curShape with
       | [b, _, _] => curShape := [b, t * v]
+      | _ => pure ()
+      outShape := curShape
+    | .spatialFlatten =>
+      match curShape with
+      | [b, c, h, w] => curShape := [b, h * w, c]
+      | _ => pure ()
+      outShape := curShape
+    | .spatialUnflatten c h w =>
+      match curShape with
+      | [b, _, _] => curShape := [b, c, h, w]
       | _ => pure ()
       outShape := curShape
     | _ => pure ()
@@ -2177,6 +2210,18 @@ def collectBnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
       pidx := pidx + 1
       result := result.push (pidx, oc)
       pidx := pidx + 1
+    | .patchEmbed _ _ _ _ =>
+      -- patchEmbed claims 3 pidx slots (W+b, cls, pos). No BN.
+      pidx := pidx + 3
+    | .transformerEncoder _dim _heads _mlpDim nBlocks _causal _keepSeq =>
+      -- 8 param pairs per block + 1 for the final LN. No BN.
+      pidx := pidx + 8 * nBlocks + 1
+    | .tokenPositionEmbed _ _ _ =>
+      -- 2 slots (W_emb, W_pos). No BN.
+      pidx := pidx + 2
+    | .lmHead _ _ _ =>
+      pidx := pidx + 1
+    -- spatialFlatten / spatialUnflatten: no params, no pidx advance.
     | _ => pure ()
   return result
 
@@ -2436,7 +2481,7 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
       outShape := curShape
-    | .transformerEncoder dim _heads mlpDim nBlocks causalMask =>
+    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence =>
       for _bi in [:nBlocks] do
         params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
         pidx := pidx + 1
@@ -2456,7 +2501,7 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
         pidx := pidx + 1
       params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
       pidx := pidx + 1
-      if !causalMask then
+      if !causalMask && !keepSequence then
         match curShape with
         | [b, _, _] => curShape := [b, dim]
         | _ => pure ()
@@ -2473,6 +2518,16 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
       pidx := pidx + 1
       match curShape with
       | [b, _, _] => curShape := [b, t * v]
+      | _ => pure ()
+      outShape := curShape
+    | .spatialFlatten =>
+      match curShape with
+      | [b, c, h, w] => curShape := [b, h * w, c]
+      | _ => pure ()
+      outShape := curShape
+    | .spatialUnflatten c h w =>
+      match curShape with
+      | [b, _, _] => curShape := [b, c, h, w]
       | _ => pure ()
       outShape := curShape
     | _ => pure ()
@@ -4511,7 +4566,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       curShape := newShape
       pidx := pidx + 3
 
-    | .transformerEncoder dim heads mlpDim nBlocks causalMask =>
+    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence =>
       for bi in [:nBlocks] do
         let blockIn := curSSA
         let blockShape := curShape
@@ -4573,7 +4628,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       flnRec := { flnRec with isFinalLn := true, finalLnPidx := finalLnPidxV, finalLnNormSSA := lnfNorm, finalLnIstdSSA := lnfIstd, finalLnInSSA := curSSA, finalLnOutSSA := lnfOut }
       records := records.push flnRec
       curSSA := lnfOut
-      if !causalMask then
+      if !causalMask && !keepSequence then
         -- ViT: slice the CLS token and reduce to [B, dim] for the classifier head.
         match curShape with
         | [b, _, _] =>
@@ -4616,6 +4671,33 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         curShape := btd
         pidx := pidx + 2
       | _ => code := code ++ "    // tokenPositionEmbed train: input not [B, _]\n"
+
+    | .spatialFlatten =>
+      match curShape with
+      | [b, c, h, w] =>
+        let bhwc := [b, h, w, c]
+        let bnc := [b, h * w, c]
+        let inSSA := curSSA
+        code := code ++ s!"    %sf_t{pos} = stablehlo.transpose {curSSA}, dims = [0, 2, 3, 1] : ({tensorTy curShape}) -> {tensorTy bhwc}\n"
+        code := code ++ s!"    %sf_r{pos} = stablehlo.reshape %sf_t{pos} : ({tensorTy bhwc}) -> {tensorTy bnc}\n"
+        let outSSA := s!"%sf_r{pos}"
+        records := records.push { layer := l, pidx := none, pos, inputSSA := inSSA, preActSSA := "", outputSSA := outSSA, inShape := curShape, outShape := bnc }
+        curSSA := outSSA
+        curShape := bnc
+      | _ => code := code ++ "    // spatialFlatten train: input not [B, C, H, W]\n"
+    | .spatialUnflatten c h w =>
+      match curShape with
+      | [b, _, _] =>
+        let bhwc := [b, h, w, c]
+        let bchw := [b, c, h, w]
+        let inSSA := curSSA
+        code := code ++ s!"    %su_r{pos} = stablehlo.reshape {curSSA} : ({tensorTy curShape}) -> {tensorTy bhwc}\n"
+        code := code ++ s!"    %su_t{pos} = stablehlo.transpose %su_r{pos}, dims = [0, 3, 1, 2] : ({tensorTy bhwc}) -> {tensorTy bchw}\n"
+        let outSSA := s!"%su_t{pos}"
+        records := records.push { layer := l, pidx := none, pos, inputSSA := inSSA, preActSSA := "", outputSSA := outSSA, inShape := curShape, outShape := bchw }
+        curSSA := outSSA
+        curShape := bchw
+      | _ => code := code ++ "    // spatialUnflatten train: input not [B, _, _]\n"
 
     | .lmHead d v t =>
       -- Forward: [B, T, D] → dense3D D→V → [B, T, V] → transpose [B, V, T] →
@@ -5258,7 +5340,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           gradShape := r.inShape
         | _ => pure ()
       else pure ()
-    | .transformerEncoder _dim _heads _mlpDim _nBlocks _causal =>
+    | .transformerEncoder _dim _heads _mlpDim _nBlocks _causal _keepSeq =>
       -- For records emitted during forward of a transformerEncoder layer:
       -- CLS slice, final LN, or transformer block (each discriminated by flags).
       if r.isClsSlice then
@@ -5901,6 +5983,29 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           gradShape := r.inShape
         | _ => pure ()
       else pure ()
+
+    | .spatialFlatten =>
+      -- Backward = inverse shape transformation. inShape is [B, C, H, W],
+      -- outShape is [B, H*W, C]. The incoming gradSSA is on outShape.
+      match r.inShape, r.outShape with
+      | [b, c, h, w], _ =>
+        let bhwc := [b, h, w, c]
+        code := code ++ s!"    %sfb_r{r.pos} = stablehlo.reshape {gradSSA} : ({tensorTy r.outShape}) -> {tensorTy bhwc}\n"
+        code := code ++ s!"    %sfb_t{r.pos} = stablehlo.transpose %sfb_r{r.pos}, dims = [0, 3, 1, 2] : ({tensorTy bhwc}) -> {tensorTy r.inShape}\n"
+        gradSSA := s!"%sfb_t{r.pos}"
+        gradShape := r.inShape
+      | _, _ => pure ()
+
+    | .spatialUnflatten _ _ _ =>
+      -- Backward = inverse. inShape is [B, H*W, C], outShape is [B, C, H, W].
+      match r.inShape, r.outShape with
+      | _, [b, c, h, w] =>
+        let bhwc := [b, h, w, c]
+        code := code ++ s!"    %sub_t{r.pos} = stablehlo.transpose {gradSSA}, dims = [0, 2, 3, 1] : ({tensorTy r.outShape}) -> {tensorTy bhwc}\n"
+        code := code ++ s!"    %sub_r{r.pos} = stablehlo.reshape %sub_t{r.pos} : ({tensorTy bhwc}) -> {tensorTy r.inShape}\n"
+        gradSSA := s!"%sub_r{r.pos}"
+        gradShape := r.inShape
+      | _, _ => pure ()
 
     | .tokenPositionEmbed v t d =>
       if r.isTokenPosEmbed then
@@ -6656,7 +6761,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       match curShape with
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]
@@ -6885,7 +6990,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       mpidx := mpidx + 1
       params := params ++ s!"      %m_W{mpidx}: {tensorTy [nP + 1, dim]},\n"
       mpidx := mpidx + 1
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]
@@ -7058,7 +7163,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       vpidx2 := vpidx2 + 1
       params := params ++ s!"      %v_W{vpidx2}: {tensorTy [nP + 1, dim]},\n"
       vpidx2 := vpidx2 + 1
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]

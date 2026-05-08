@@ -42,8 +42,13 @@ inductive Layer where
   -- `causalMask` (default false) adds a triangular −∞ mask to the QK^T
   -- scores before softmax. ViT and other vision transformers leave it
   -- false; autoregressive language models like tinyGPT set it true.
+  -- `keepSequence` (default false) skips the ViT-style CLS-token slice
+  -- at the end. tinyGPT sets it implicitly via causalMask; DDPM
+  -- bottleneck attention sets it explicitly to keep the [B, N, D]
+  -- token shape so it can flow into a `spatialUnflatten` back to NCHW.
   | transformerEncoder (dim heads mlpDim nBlocks : Nat)
                        (causalMask : Bool := false)
+                       (keepSequence : Bool := false)
   -- Selective state-space block (Mamba / S6); dim = hidden, stateSize = N,
   -- expand = inner-dim multiplier. Not codegen-backed yet — used by the
   -- Bestiary as a shape-only primitive for language-model architectures.
@@ -210,6 +215,20 @@ inductive Layer where
   -- (ic → oc) + 2×2 average pool stride 2. Halves spatial resolution
   -- and (typically) halves channel count to compress feature reuse.
   | transitionLayer (ic oc : Nat)
+  -- Spatial-flatten / unflatten primitives — the "gateway op" for hybrid
+  -- CNN-transformer architectures (DDPM bottleneck attention, SegFormer,
+  -- MobileViT, CCT, etc.). Convert NCHW ↔ token-stream shape with no
+  -- params. Forward and backward are paired transposes + reshapes; the
+  -- backward is a no-op on params (these layers carry none) and just
+  -- inverts the shape transformation on the gradient.
+  --   `spatialFlatten`     : [B, C, H, W] → [B, H*W, C]  (channel axis last)
+  --   `spatialUnflatten C H W` : [B, H*W, C] → [B, C, H, W]
+  -- The unflatten variant carries explicit (C, H, W) because the
+  -- post-attention rank-3 shape doesn't preserve enough info to recover
+  -- (H, W) on its own. Pair them around any rank-3 token-stream op
+  -- (typically `transformerEncoder`) embedded in an NCHW pipeline.
+  | spatialFlatten
+  | spatialUnflatten (channels height width : Nat)
   -- Token + learned-position embedding for autoregressive language
   -- models (tinyGPT). Input: flat `[B, seqLen * vocabSize]` one-hot
   -- (built in C from int32 token IDs). Output: `[B, seqLen, dModel]`.

@@ -154,6 +154,14 @@ lean_exe «cifar-ddpm-sample» where
   root := `MainCifarDdpmSample
   moreLinkArgs := ireeLink
 
+lean_exe «cifar-ddpm-attn-train» where
+  root := `MainCifarDdpmAttnTrain
+  moreLinkArgs := ireeLink
+
+lean_exe «cifar-ddpm-attn-sample» where
+  root := `MainCifarDdpmAttnSample
+  moreLinkArgs := ireeLink
+
 -- ═══════════════════════════════════════════════════════════════════
 -- VJP oracle — one binary per axiom under test.
 -- Trainers live in tests/vjp_oracle/phase3/ so the root isn't crowded
