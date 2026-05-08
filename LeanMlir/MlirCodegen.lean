@@ -2461,6 +2461,20 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
         | [b, _, _] => curShape := [b, dim]
         | _ => pure ()
       outShape := curShape
+    | .tokenPositionEmbed v t d =>
+      params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}, %W{pidx + 1}: {tensorTy [t, d]}"
+      pidx := pidx + 2
+      match curShape with
+      | [b, _] => curShape := [b, t, d]
+      | _ => pure ()
+      outShape := curShape
+    | .lmHead d v t =>
+      params := params ++ s!",\n    %W{pidx}: {tensorTy [d, v]}, %b{pidx}: {tensorTy [v]}"
+      pidx := pidx + 1
+      match curShape with
+      | [b, _, _] => curShape := [b, t * v]
+      | _ => pure ()
+      outShape := curShape
     | _ => pure ()
   -- Append bn_mean / bn_var params for each BN layer
   let bnLayers := collectBnLayers spec
@@ -2751,6 +2765,25 @@ private structure FwdRec where
   isUnetUpConcat  : Bool := false
   unetSkipShape   : List Nat := []
   unetEncoderIdx  : Nat := 0
+  -- ═════════ tinyGPT layers ═════════
+  -- tokenPositionEmbed (sets these on its forward record):
+  --   tpePidx = base param index (W_emb, then W_pos)
+  --   tpeBtv  = SSA name of the [B, T, V] one-hot reshape (used for d_W backward)
+  isTokenPosEmbed : Bool := false
+  tpePidx         : Nat := 0
+  tpeV            : Nat := 0
+  tpeT            : Nat := 0
+  tpeD            : Nat := 0
+  tpeBtvSSA       : String := ""
+  -- lmHead (sets these on its forward record):
+  --   lmhPidx = param index for W [D, V] + b [V]
+  --   lmhBtv  = SSA name of the post-dense [B, T, V] tensor (pre-transpose)
+  isLmHead        : Bool := false
+  lmhPidx         : Nat := 0
+  lmhD            : Nat := 0
+  lmhV            : Nat := 0
+  lmhT            : Nat := 0
+  lmhBtvSSA       : String := ""
 instance : Inhabited FwdRec where
   default := { layer := .flatten, pidx := none, pos := 0,
                inputSSA := "", preActSSA := "", outputSSA := "",
@@ -4478,7 +4511,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       curShape := newShape
       pidx := pidx + 3
 
-    | .transformerEncoder dim heads mlpDim nBlocks =>
+    | .transformerEncoder dim heads mlpDim nBlocks causalMask =>
       for bi in [:nBlocks] do
         let blockIn := curSSA
         let blockShape := curShape
@@ -4495,7 +4528,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         let wk := s!"%W{pidx}"; let bk := s!"%b{pidx}"; pidx := pidx + 1
         let wv := s!"%W{pidx}"; let bv := s!"%b{pidx}"; pidx := pidx + 1
         let wo := s!"%W{pidx}"; let bo := s!"%b{pidx}"; pidx := pidx + 1
-        let (mhCode, mhOut, mhQ, mhK, mhV, mhSm, mhPp) := emitMHSAForward s!"{tag}_mh" ln1Out blockShape heads wq bq wk bk wv bv wo bo
+        let (mhCode, mhOut, mhQ, mhK, mhV, mhSm, mhPp) := emitMHSAForward s!"{tag}_mh" ln1Out blockShape heads wq bq wk bk wv bv wo bo causalMask
         code := code ++ mhCode
         -- Residual
         code := code ++ s!"    %tb_r1{tag} = stablehlo.add {blockIn}, {mhOut} : {ty}\n"
@@ -4540,21 +4573,80 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       flnRec := { flnRec with isFinalLn := true, finalLnPidx := finalLnPidxV, finalLnNormSSA := lnfNorm, finalLnIstdSSA := lnfIstd, finalLnInSSA := curSSA, finalLnOutSSA := lnfOut }
       records := records.push flnRec
       curSSA := lnfOut
-      -- CLS slice
+      if !causalMask then
+        -- ViT: slice the CLS token and reduce to [B, dim] for the classifier head.
+        match curShape with
+        | [b, _, _] =>
+          let clsShape := [b, 1, dim]
+          let outShape := [b, dim]
+          code := code ++ s!"    %te_cls{pos} = \"stablehlo.slice\"({curSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0>, limit_indices = array<i64: {b}, 1, {dim}>, strides = array<i64: 1, 1, 1>" ++ "}" ++ s!" : ({tensorTy curShape}) -> {tensorTy clsShape}\n"
+          code := code ++ s!"    %te_out{pos} = stablehlo.reshape %te_cls{pos} : ({tensorTy clsShape}) -> {tensorTy outShape}\n"
+          let clsOut := s!"%te_out{pos}"
+          let mut csRec : FwdRec := default
+          csRec := { csRec with layer := l, pidx := none, pos, inputSSA := curSSA, outputSSA := clsOut, inShape := curShape, outShape := outShape }
+          csRec := { csRec with isClsSlice := true, clsInShape := curShape, clsInSSA := curSSA }
+          records := records.push csRec
+          curSSA := clsOut
+          curShape := outShape
+        | _ => pure ()
+
+    | .tokenPositionEmbed v t d =>
+      -- Forward: flat [B, V*T] one-hot → reshape [B, T, V] → matmul W [V, D]
+      -- → [B, T, D] → add learnable position [T, D] (broadcast over batch).
+      match curShape with
+      | [b, _] =>
+        let btv := [b, t, v]
+        let btd := [b, t, d]
+        let inSSA := curSSA
+        let pW := s!"%W{pidx}"          -- [V, D] embed (no bias)
+        let pPos := s!"%W{pidx + 1}"    -- [T, D] position
+        code := code ++ s!"    %tpe_r{pos} = stablehlo.reshape {curSSA} : ({tensorTy curShape}) -> {tensorTy btv}\n"
+        code := code ++ s!"    %tpe_emb{pos} = stablehlo.dot_general %tpe_r{pos}, {pW},\n"
+        code := code ++ "              contracting_dims = [2] x [0],\n"
+        code := code ++ "              precision = [DEFAULT, DEFAULT]\n"
+        code := code ++ s!"            : ({tensorTy btv}, {tensorTy [v, d]}) -> {tensorTy btd}\n"
+        code := code ++ s!"    %tpe_pbc{pos} = stablehlo.broadcast_in_dim {pPos}, dims = [1, 2] : ({tensorTy [t, d]}) -> {tensorTy btd}\n"
+        code := code ++ s!"    %tpe_out{pos} = stablehlo.add %tpe_emb{pos}, %tpe_pbc{pos} : {tensorTy btd}\n"
+        let outSSA := s!"%tpe_out{pos}"
+        let mut tpeRec : FwdRec := default
+        tpeRec := { tpeRec with layer := l, pidx := none, pos, inputSSA := inSSA, outputSSA := outSSA, inShape := curShape, outShape := btd }
+        tpeRec := { tpeRec with isTokenPosEmbed := true, tpePidx := pidx, tpeV := v, tpeT := t, tpeD := d, tpeBtvSSA := s!"%tpe_r{pos}" }
+        records := records.push tpeRec
+        curSSA := outSSA
+        curShape := btd
+        pidx := pidx + 2
+      | _ => code := code ++ "    // tokenPositionEmbed train: input not [B, _]\n"
+
+    | .lmHead d v t =>
+      -- Forward: [B, T, D] → dense3D D→V → [B, T, V] → transpose [B, V, T] →
+      -- reshape [B, V, T, 1].  The 4-D output drops into the existing useSeg
+      -- per-pixel CE machinery directly (NCHW with H=T, W=1).
       match curShape with
       | [b, _, _] =>
-        let clsShape := [b, 1, dim]
-        let outShape := [b, dim]
-        code := code ++ s!"    %te_cls{pos} = \"stablehlo.slice\"({curSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0>, limit_indices = array<i64: {b}, 1, {dim}>, strides = array<i64: 1, 1, 1>" ++ "}" ++ s!" : ({tensorTy curShape}) -> {tensorTy clsShape}\n"
-        code := code ++ s!"    %te_out{pos} = stablehlo.reshape %te_cls{pos} : ({tensorTy clsShape}) -> {tensorTy outShape}\n"
-        let clsOut := s!"%te_out{pos}"
-        let mut csRec : FwdRec := default
-        csRec := { csRec with layer := l, pidx := none, pos, inputSSA := curSSA, outputSSA := clsOut, inShape := curShape, outShape := outShape }
-        csRec := { csRec with isClsSlice := true, clsInShape := curShape, clsInSSA := curSSA }
-        records := records.push csRec
-        curSSA := clsOut
-        curShape := outShape
-      | _ => pure ()
+        let inSSA := curSSA
+        let inShape := curShape
+        let btv := [b, t, v]
+        let bvt := [b, v, t]
+        let bvt1 := [b, v, t, 1]
+        let pW := s!"%W{pidx}"
+        let pB := s!"%b{pidx}"
+        code := code ++ s!"    %lmh_mm{pos} = stablehlo.dot_general {curSSA}, {pW},\n"
+        code := code ++ "              contracting_dims = [2] x [0],\n"
+        code := code ++ "              precision = [DEFAULT, DEFAULT]\n"
+        code := code ++ s!"            : ({tensorTy curShape}, {tensorTy [d, v]}) -> {tensorTy btv}\n"
+        code := code ++ s!"    %lmh_bbc{pos} = stablehlo.broadcast_in_dim {pB}, dims = [2] : ({tensorTy [v]}) -> {tensorTy btv}\n"
+        code := code ++ s!"    %lmh_btv{pos} = stablehlo.add %lmh_mm{pos}, %lmh_bbc{pos} : {tensorTy btv}\n"
+        code := code ++ s!"    %lmh_t{pos} = stablehlo.transpose %lmh_btv{pos}, dims = [0, 2, 1] : ({tensorTy btv}) -> {tensorTy bvt}\n"
+        code := code ++ s!"    %lmh_out{pos} = stablehlo.reshape %lmh_t{pos} : ({tensorTy bvt}) -> {tensorTy bvt1}\n"
+        let outSSA := s!"%lmh_out{pos}"
+        let mut lmhRec : FwdRec := default
+        lmhRec := { lmhRec with layer := l, pidx := none, pos, inputSSA := inSSA, outputSSA := outSSA, inShape := inShape, outShape := bvt1 }
+        lmhRec := { lmhRec with isLmHead := true, lmhPidx := pidx, lmhD := d, lmhV := v, lmhT := t, lmhBtvSSA := s!"%lmh_btv{pos}" }
+        records := records.push lmhRec
+        curSSA := outSSA
+        curShape := bvt1
+        pidx := pidx + 1
+      | _ => code := code ++ "    // lmHead train: input not [B, T, D]\n"
 
     | .unetDown ic oc =>
       -- 2× convBn (ic→oc, oc→oc) → push pre-pool feature on encoder stack →
@@ -5166,7 +5258,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           gradShape := r.inShape
         | _ => pure ()
       else pure ()
-    | .transformerEncoder _dim _heads _mlpDim _nBlocks =>
+    | .transformerEncoder _dim _heads _mlpDim _nBlocks _causal =>
       -- For records emitted during forward of a transformerEncoder layer:
       -- CLS slice, final LN, or transformer block (each discriminated by flags).
       if r.isClsSlice then
@@ -5774,6 +5866,67 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         | _ => pure ()
       else pure ()
 
+    | .lmHead d v t =>
+      if r.isLmHead then
+        match r.inShape with
+        | [b, _, _] =>
+          let pIdx := r.lmhPidx
+          let btv := [b, t, v]
+          let bvt := [b, v, t]
+          let bvt1 := [b, v, t, 1]
+          let inBtdTy := tensorTy r.inShape
+          let btvTy := tensorTy btv
+          let bvtTy := tensorTy bvt
+          let bvt1Ty := tensorTy bvt1
+          let tag := s!"lmh{r.pos}"
+          code := code ++ s!"    // ─── lmHead backward: reshape -> transpose -> dense3D backward ───\n"
+          -- Undo reshape [B, V, T, 1] -> [B, V, T]
+          code := code ++ s!"    %{tag}_g3 = stablehlo.reshape {gradSSA} : ({bvt1Ty}) -> {bvtTy}\n"
+          -- Undo transpose [B, V, T] -> [B, T, V]
+          code := code ++ s!"    %{tag}_gbtv = stablehlo.transpose %{tag}_g3, dims = [0, 2, 1] : ({bvtTy}) -> {btvTy}\n"
+          -- d_b = sum d_btv over (B, T) -> [V]
+          code := code ++ s!"    %d_b{pIdx} = stablehlo.reduce(%{tag}_gbtv init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
+          code := code ++ s!"          : ({btvTy}, tensor<f32>) -> {tensorTy [v]}\n"
+          -- d_W = input^T @ d_btv (contract over batch+time): [D, V]
+          code := code ++ s!"    %d_W{pIdx} = stablehlo.dot_general {r.inputSSA}, %{tag}_gbtv,\n"
+          code := code ++ s!"              contracting_dims = [0, 1] x [0, 1],\n"
+          code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+          code := code ++ s!"            : ({inBtdTy}, {btvTy}) -> {tensorTy [d, v]}\n"
+          -- d_input = d_btv @ W^T -> [B, T, D]
+          code := code ++ s!"    %{tag}_din = stablehlo.dot_general %{tag}_gbtv, %W{pIdx},\n"
+          code := code ++ s!"              contracting_dims = [2] x [1],\n"
+          code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+          code := code ++ s!"            : ({btvTy}, {tensorTy [d, v]}) -> {inBtdTy}\n"
+          gradSSA := s!"%{tag}_din"
+          gradShape := r.inShape
+        | _ => pure ()
+      else pure ()
+
+    | .tokenPositionEmbed v t d =>
+      if r.isTokenPosEmbed then
+        match r.inShape with
+        | [b, _] =>
+          let pIdx := r.tpePidx          -- W_emb at pIdx, W_pos at pIdx + 1
+          let btd := [b, t, d]
+          let btv := [b, t, v]
+          let btdTy := tensorTy btd
+          let btvTy := tensorTy btv
+          let tag := s!"tpe{r.pos}"
+          code := code ++ s!"    // ─── tokenPositionEmbed backward: position grad = sum batch; emb grad = btv^T @ d_out ───\n"
+          -- d_position [T, D] = sum over batch of grad
+          code := code ++ s!"    %d_W{pIdx + 1} = stablehlo.reduce({gradSSA} init: %zf) applies stablehlo.add across dimensions = [0]\n"
+          code := code ++ s!"          : ({btdTy}, tensor<f32>) -> {tensorTy [t, d]}\n"
+          -- d_emb [V, D] = btv^T @ d_out (contract over batch+time): [V, D]
+          code := code ++ s!"    %d_W{pIdx} = stablehlo.dot_general {r.tpeBtvSSA}, {gradSSA},\n"
+          code := code ++ s!"              contracting_dims = [0, 1] x [0, 1],\n"
+          code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+          code := code ++ s!"            : ({btvTy}, {btdTy}) -> {tensorTy [v, d]}\n"
+          -- No d_input needed: input is one-hot from Lean side, no gradient flows further.
+          gradSSA := s!"// no_grad_needed_after_tokenPositionEmbed"
+          gradShape := r.inShape
+        | _ => pure ()
+      else pure ()
+
     | _ => pure ()
 
   -- ═══════════════ OPTIMIZER UPDATES ═══════════════
@@ -6026,6 +6179,34 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         mRetTypes := mRetTypes.push (tensorTy cvShape) |>.push (tensorTy ocShape)
         vRetNames := vRetNames.push vwN |>.push vbN
         vRetTypes := vRetTypes.push (tensorTy cvShape) |>.push (tensorTy ocShape)
+      -- tinyGPT token+position embedding: 2 param tensors, no biases.
+      if r.isTokenPosEmbed then
+        let pIdx := r.tpePidx
+        let v := r.tpeV; let t := r.tpeT; let d := r.tpeD
+        let wShape := [v, d]; let posShape := [t, d]
+        let (sa1, wN, mwN, vwN) := emitUpdate s!"%W{pIdx}" s!"%d_W{pIdx}" s!"%m_W{pIdx}" s!"%v_W{pIdx}" wShape s!"tpeW{pIdx}" wdActive
+        let (sa2, posN, mposN, vposN) := emitUpdate s!"%W{pIdx + 1}" s!"%d_W{pIdx + 1}" s!"%m_W{pIdx + 1}" s!"%v_W{pIdx + 1}" posShape s!"tpePos{pIdx}" false
+        code := code ++ sa1 ++ sa2
+        paramRetNames := paramRetNames.push wN |>.push posN
+        paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy posShape)
+        mRetNames := mRetNames.push mwN |>.push mposN
+        mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy posShape)
+        vRetNames := vRetNames.push vwN |>.push vposN
+        vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy posShape)
+      -- tinyGPT LM head: 1 dense pair (W [D, V], b [V]).
+      if r.isLmHead then
+        let pIdx := r.lmhPidx
+        let d := r.lmhD; let v := r.lmhV
+        let wShape := [d, v]; let bShape := [v]
+        let (sa1, wN, mwN, vwN) := emitUpdate s!"%W{pIdx}" s!"%d_W{pIdx}" s!"%m_W{pIdx}" s!"%v_W{pIdx}" wShape s!"lmhW{pIdx}" wdActive
+        let (sa2, bN, mbN, vbN) := emitUpdate s!"%b{pIdx}" s!"%d_b{pIdx}" s!"%m_b{pIdx}" s!"%v_b{pIdx}" bShape s!"lmhb{pIdx}" false
+        code := code ++ sa1 ++ sa2
+        paramRetNames := paramRetNames.push wN |>.push bN
+        paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
+        mRetNames := mRetNames.push mwN |>.push mbN
+        mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
+        vRetNames := vRetNames.push vwN |>.push vbN
+        vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
   -- Return order: params, m, v, loss, then BN stats (mean0, var0, mean1, var1, ...)
   let mut retNames := paramRetNames ++ mRetNames ++ vRetNames |>.push "%loss"
   let mut retTypes := paramRetTypes ++ mRetTypes ++ vRetTypes |>.push "tensor<f32>"
@@ -6475,7 +6656,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       match curShape with
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
-    | .transformerEncoder dim _heads mlpDim nBlocks =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]
@@ -6538,6 +6719,28 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       pidx := pidx + 1
       match curShape with
       | [b, _, _] => curShape := [b, dim]
+      | _ => pure ()
+    | .tokenPositionEmbed v t d =>
+      let wTy := tensorTy [v, d]
+      let posTy := tensorTy [t, d]
+      params := params ++ s!"      %W{pidx}: {wTy}, %W{pidx + 1}: {posTy},\n"
+      paramRetTypes := paramRetTypes.push wTy |>.push posTy
+      mRetTypes := mRetTypes.push wTy |>.push posTy
+      vRetTypes := vRetTypes.push wTy |>.push posTy
+      pidx := pidx + 2
+      match curShape with
+      | [b, _] => curShape := [b, t, d]
+      | _ => pure ()
+    | .lmHead d v t =>
+      let wTy := tensorTy [d, v]
+      let bTy := tensorTy [v]
+      params := params ++ s!"      %W{pidx}: {wTy}, %b{pidx}: {bTy},\n"
+      paramRetTypes := paramRetTypes.push wTy |>.push bTy
+      mRetTypes := mRetTypes.push wTy |>.push bTy
+      vRetTypes := vRetTypes.push wTy |>.push bTy
+      pidx := pidx + 1
+      match curShape with
+      | [b, _, _] => curShape := [b, v, t, 1]
       | _ => pure ()
     | _ => pure ()
   -- m_ params (1st moment, same shapes)
@@ -6682,7 +6885,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       mpidx := mpidx + 1
       params := params ++ s!"      %m_W{mpidx}: {tensorTy [nP + 1, dim]},\n"
       mpidx := mpidx + 1
-    | .transformerEncoder dim _heads mlpDim nBlocks =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]
@@ -6706,6 +6909,12 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
         params := params ++ s!"      %m_W{mpidx}: {fc2Ty}, %m_b{mpidx}: {dTy},\n"
         mpidx := mpidx + 1
       params := params ++ s!"      %m_W{mpidx}: {dTy}, %m_b{mpidx}: {dTy},\n"
+      mpidx := mpidx + 1
+    | .tokenPositionEmbed v t d =>
+      params := params ++ s!"      %m_W{mpidx}: {tensorTy [v, d]}, %m_W{mpidx + 1}: {tensorTy [t, d]},\n"
+      mpidx := mpidx + 2
+    | .lmHead d v _ =>
+      params := params ++ s!"      %m_W{mpidx}: {tensorTy [d, v]}, %m_b{mpidx}: {tensorTy [v]},\n"
       mpidx := mpidx + 1
     | _ => pure ()
   -- v_ params (2nd moment, same shapes)
@@ -6849,7 +7058,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       vpidx2 := vpidx2 + 1
       params := params ++ s!"      %v_W{vpidx2}: {tensorTy [nP + 1, dim]},\n"
       vpidx2 := vpidx2 + 1
-    | .transformerEncoder dim _heads mlpDim nBlocks =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]
@@ -6873,6 +7082,12 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
         params := params ++ s!"      %v_W{vpidx2}: {fc2Ty}, %v_b{vpidx2}: {dTy},\n"
         vpidx2 := vpidx2 + 1
       params := params ++ s!"      %v_W{vpidx2}: {dTy}, %v_b{vpidx2}: {dTy},\n"
+      vpidx2 := vpidx2 + 1
+    | .tokenPositionEmbed v t d =>
+      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [v, d]}, %v_W{vpidx2 + 1}: {tensorTy [t, d]},\n"
+      vpidx2 := vpidx2 + 2
+    | .lmHead d v _ =>
+      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [d, v]}, %v_b{vpidx2}: {tensorTy [v]},\n"
       vpidx2 := vpidx2 + 1
     | _ => pure ()
   if useDdpm then

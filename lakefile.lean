@@ -134,6 +134,10 @@ lean_exe «bigram-shakespeare» where
   root := `MainBigramShakespeare
   moreLinkArgs := ireeLink
 
+lean_exe «tinygpt-shakespeare» where
+  root := `MainTinyGptShakespeare
+  moreLinkArgs := ireeLink
+
 lean_exe «mnist-ddpm-train» where
   root := `MainMnistDdpmTrain
   moreLinkArgs := ireeLink

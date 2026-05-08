@@ -420,7 +420,7 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
     let (gLN, bLN) ← heLN ic
     let (Wcv, bcv, s') ← heConvB oc ic 2 seed
     return (#[gLN, bLN, Wcv, bcv], s')
-  | .transformerEncoder dim _heads mlpDim nBlocks =>
+  | .transformerEncoder dim _heads mlpDim nBlocks _causal =>
     let mut parts : Array ByteArray := #[]
     let mut s := seed
     for _bi in [:nBlocks] do

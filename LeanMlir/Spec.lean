@@ -356,8 +356,9 @@ def NetSpec.hasTransformer (s : NetSpec) : Bool :=
 
 def NetSpec.numClasses (s : NetSpec) : Nat :=
   match s.layers.getLast? with
-  | some (.dense _ fo _) => fo
-  | _                     => 0
+  | some (.dense _ fo _)  => fo
+  | some (.lmHead _ v _)  => v
+  | _                      => 0
 
 def NetSpec.archStr (s : NetSpec) : String :=
   " → ".intercalate (s.layers.map fun l =>
