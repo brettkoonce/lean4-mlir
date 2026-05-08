@@ -19,12 +19,15 @@ import LeanMlir
     Usage: lake exe cifar-ddpm-attn-train [data] [epochs]
 -/
 
+def nFreq : Nat := 4   -- 4 frequencies → 8 sin/cos channels prepended
+def inCh  : Nat := 3 + 2 * nFreq   -- 3 RGB + 2·nFreq t-channels = 11
+
 def tinyCifarDdpm : NetSpec where
-  name := "DDPM UNet T-cond base64 bottleneck-attn (CIFAR 32x32x3)"
+  name := "DDPM UNet sincos-t bottleneck-attn (CIFAR 32x32x3)"
   imageH := 32
   imageW := 32
   layers := [
-    .unetDown 4 64,                                                -- 32×32 → 16×16, 64 ch
+    .unetDown inCh 64,                                             -- 11 → 64 ch (sincos t-embed)
     .unetDown 64 128,                                              -- 16×16 → 8×8, 128 ch
     .convBn 128 256 3 1 .same,                                     -- 8×8×256
     .spatialFlatten,                                               -- [B, 256, 8, 8] → [B, 64, 256]
@@ -144,7 +147,7 @@ def main (args : List String) : IO Unit := do
       let stepSeed : USize := (epoch * 1000000 + bi).toUSize
       let (xt, ddpmRest) ← Ddpm.stepInputs x0 alphaBar batch nPix.toUSize stepSeed
       let (eps, tba) := ddpmRest
-      let xtCond ← Ddpm.prependTChannel xt tba batch imgC outH outW Tmax.toUSize
+      let xtCond ← Ddpm.prependSinCosT xt tba batch imgC outH outW nFreq.toUSize Tmax.toUSize
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
       let out ← IreeSession.trainStepAdamF32Ddpm sess spec.trainFnName

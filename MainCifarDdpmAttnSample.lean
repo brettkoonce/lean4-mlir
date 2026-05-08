@@ -3,12 +3,15 @@ import LeanMlir
 /-! Sample CIFAR-style images from a trained tiny DDPM checkpoint.
     Mirrors `MainMnistDdpmSample` but for 3-channel RGB. -/
 
+def nFreq : Nat := 4
+def inCh  : Nat := 3 + 2 * nFreq
+
 def tinyCifarDdpm : NetSpec where
-  name := "DDPM UNet T-cond base64 bottleneck-attn (CIFAR 32x32x3)"
+  name := "DDPM UNet sincos-t bottleneck-attn (CIFAR 32x32x3)"
   imageH := 32
   imageW := 32
   layers := [
-    .unetDown 4 64,
+    .unetDown inCh 64,
     .unetDown 64 128,
     .convBn 128 256 3 1 .same,
     .spatialFlatten,
@@ -89,8 +92,9 @@ def main (args : List String) : IO Unit := do
   for k in [:nSteps] do
     let t := stepTs[k]!
     let tPrev : Nat := if k + 1 < nSteps then stepTs[k + 1]! else 0
-    let xCond ← Ddpm.prependTChannelScalar x B.toUSize imgC.toUSize
-                  spec.imageH.toUSize spec.imageW.toUSize t.toUSize T.toUSize
+    let xCond ← Ddpm.prependSinCosTScalar x B.toUSize imgC.toUSize
+                  spec.imageH.toUSize spec.imageW.toUSize t.toUSize
+                  nFreq.toUSize T.toUSize
     let eps ← IreeSession.forwardF32 sess spec.evalFnName
                 evalParams evalShapes xCond xShape B.toUSize nPix.toUSize
     let aBarT := alphaBarF t

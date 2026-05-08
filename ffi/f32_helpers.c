@@ -404,6 +404,98 @@ LEAN_EXPORT lean_obj_res lean_ddpm_prepend_t_channel(
     return lean_io_result_mk_ok(out);
 }
 
+// ---- Sinusoidal time embedding, prepended as multiple spatial channels ----
+// Replaces the single-channel `t/T_max` tile with `2 * n_freq` channels
+// of [sin(t · ω_k), cos(t · ω_k)] at log-spaced frequencies, broadcast
+// spatially. This gives the model frequency information at multiple
+// scales — the standard "Transformer/NeRF-style" positional embedding
+// applied to the diffusion timestep.
+//
+// Frequencies follow the Vaswani 2017 / Mildenhall 2020 convention:
+//     ω_k = 1 / max_period^(2k / (2 * n_freq))   for k = 0..n_freq-1
+// max_period defaults to T_max (1000) so the largest period is the
+// full diffusion horizon.
+//
+// Channel layout (output [B, C+2*n_freq, H, W]):
+//     channels [0..C)        = original image
+//     channels [C..C+n_freq) = sin(t · ω_k) for k = 0..n_freq-1
+//     channels [C+n_freq..)  = cos(t · ω_k) for k = 0..n_freq-1
+//
+// Caller picks `n_freq`; 4 frequencies → 8 t-channels is a reasonable
+// default for CIFAR-scale diffusion.
+LEAN_EXPORT lean_obj_res lean_ddpm_prepend_sincos_t(
+    b_lean_obj_arg xt_ba, b_lean_obj_arg t_ba,
+    size_t B, size_t C, size_t H, size_t W,
+    size_t n_freq, size_t T_max, lean_obj_arg w) {
+    (void)w;
+    size_t hw = H * W;
+    size_t img_floats = C * hw;
+    size_t out_C = C + 2 * n_freq;
+    size_t per_out = out_C * hw;
+    size_t nbytes = B * per_out * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const float* xt = (const float*)lean_sarray_cptr(xt_ba);
+    const int32_t* t = (const int32_t*)lean_sarray_cptr(t_ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    double max_period = (double)T_max;
+    double inv_n = 1.0 / (double)(2 * n_freq);
+    for (size_t i = 0; i < B; i++) {
+        float* base = o + i * per_out;
+        memcpy(base, xt + i * img_floats, img_floats * 4);
+        double tv = (double)t[i];
+        for (size_t k = 0; k < n_freq; k++) {
+            double omega = 1.0 / pow(max_period, (double)(2 * k) * inv_n);
+            float s = (float)sin(tv * omega);
+            float c = (float)cos(tv * omega);
+            float* sin_ch = base + img_floats + k * hw;
+            float* cos_ch = base + img_floats + (n_freq + k) * hw;
+            for (size_t p = 0; p < hw; p++) sin_ch[p] = s;
+            for (size_t p = 0; p < hw; p++) cos_ch[p] = c;
+        }
+    }
+    return lean_io_result_mk_ok(out);
+}
+
+// Scalar variant: `t` is a single timestep, broadcast to all images.
+// Used by the sampler.
+LEAN_EXPORT lean_obj_res lean_ddpm_prepend_sincos_t_scalar(
+    b_lean_obj_arg xt_ba,
+    size_t B, size_t C, size_t H, size_t W,
+    size_t t, size_t n_freq, size_t T_max, lean_obj_arg w) {
+    (void)w;
+    size_t hw = H * W;
+    size_t img_floats = C * hw;
+    size_t out_C = C + 2 * n_freq;
+    size_t per_out = out_C * hw;
+    size_t nbytes = B * per_out * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const float* xt = (const float*)lean_sarray_cptr(xt_ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    double max_period = (double)T_max;
+    double inv_n = 1.0 / (double)(2 * n_freq);
+    double tv = (double)t;
+    // Precompute the sin/cos values once (same for all images).
+    float* sins = (float*)malloc(n_freq * sizeof(float));
+    float* coss = (float*)malloc(n_freq * sizeof(float));
+    for (size_t k = 0; k < n_freq; k++) {
+        double omega = 1.0 / pow(max_period, (double)(2 * k) * inv_n);
+        sins[k] = (float)sin(tv * omega);
+        coss[k] = (float)cos(tv * omega);
+    }
+    for (size_t i = 0; i < B; i++) {
+        float* base = o + i * per_out;
+        memcpy(base, xt + i * img_floats, img_floats * 4);
+        for (size_t k = 0; k < n_freq; k++) {
+            float* sin_ch = base + img_floats + k * hw;
+            float* cos_ch = base + img_floats + (n_freq + k) * hw;
+            for (size_t p = 0; p < hw; p++) sin_ch[p] = sins[k];
+            for (size_t p = 0; p < hw; p++) cos_ch[p] = coss[k];
+        }
+    }
+    free(sins); free(coss);
+    return lean_io_result_mk_ok(out);
+}
+
 // Same as above but `t` is a single scalar broadcast to all images.
 // Caller (sampler) has one timestep per DDIM step rather than a [B]
 // vector.

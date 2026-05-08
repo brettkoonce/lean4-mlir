@@ -56,6 +56,22 @@ opaque prependTChannel (xt : @& ByteArray) (t : @& ByteArray)
 opaque prependTChannelScalar (xt : @& ByteArray)
     (B : USize) (C : USize) (H : USize) (W : USize) (t : USize) (Tmax : USize) : IO ByteArray
 
+/-- Sinusoidal time embedding: prepend `2 * nFreq` channels of
+    `[sin(t · ω_k), cos(t · ω_k)]` at log-spaced frequencies
+    (Vaswani / NeRF convention). Replaces the cruder single-channel
+    `t/T_max` tile with multi-frequency information.
+    Output: `[B, C + 2·nFreq, H, W]` flat. -/
+@[extern "lean_ddpm_prepend_sincos_t"]
+opaque prependSinCosT (xt : @& ByteArray) (t : @& ByteArray)
+    (B : USize) (C : USize) (H : USize) (W : USize)
+    (nFreq : USize) (Tmax : USize) : IO ByteArray
+
+/-- Scalar variant of `prependSinCosT` for the sampler. -/
+@[extern "lean_ddpm_prepend_sincos_t_scalar"]
+opaque prependSinCosTScalar (xt : @& ByteArray)
+    (B : USize) (C : USize) (H : USize) (W : USize)
+    (t : USize) (nFreq : USize) (Tmax : USize) : IO ByteArray
+
 /-- Per training step: sample `t_b ∈ [0, T)` per image, sample ε,
     compute `x_t`. Returns `(x_t, ε, t)` where:
       - `x_t` is `[B, npixels]` f32
