@@ -130,6 +130,10 @@ lean_exe «gradcam» where
   root := `MainGradCAM
   moreLinkArgs := ireeLink
 
+lean_exe «bigram-shakespeare» where
+  root := `MainBigramShakespeare
+  moreLinkArgs := ireeLink
+
 lean_exe «mnist-ddpm-train» where
   root := `MainMnistDdpmTrain
   moreLinkArgs := ireeLink
