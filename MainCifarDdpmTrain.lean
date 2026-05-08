@@ -16,23 +16,23 @@ import LeanMlir
     Usage: lake exe cifar-ddpm-train [data] [epochs]
 -/
 
-/-- Base 48 (~1M params), depth 2 + bottleneck. ~8× the original
-    "tiny" spec; the capacity bump is the biggest single quality
-    lever for CIFAR per `planning/ddpm_demo.md`. Data is centered
-    to [-1, 1] in the trainer (and inverted in the sampler), which
-    is the standard DDPM convention. -/
+/-- Base 80 (~3M params). 2.8× the base-48 capacity; previous base-48
+    run plateaued in MSE around epoch 30, suggesting capacity was
+    the binding constraint. Per-step ~280ms vs 100ms; 70 epochs
+    targets an 8-9 hour overnight run. Data is centered to [-1, 1]
+    in the trainer (inverted in the sampler), standard DDPM. -/
 def tinyCifarDdpm : NetSpec where
-  name := "DDPM UNet T-cond base48 centered (CIFAR 32x32x3)"
+  name := "DDPM UNet T-cond base80 centered (CIFAR 32x32x3)"
   imageH := 32
   imageW := 32
   layers := [
-    .unetDown 4 48,                 -- 4 input channels (3 RGB + 1 t)
-    .unetDown 48 96,
-    .convBn 96 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .unetUp 192 96,
-    .unetUp 96 48,
-    .conv2d 48 3 1 .same .identity  -- 3 RGB output channels
+    .unetDown 4 80,                 -- 4 input channels (3 RGB + 1 t)
+    .unetDown 80 160,
+    .convBn 160 320 3 1 .same,
+    .convBn 320 320 3 1 .same,
+    .unetUp 320 160,
+    .unetUp 160 80,
+    .conv2d 80 3 1 .same .identity  -- 3 RGB output channels
   ]
 
 def cifarDdpmConfig : TrainConfig where

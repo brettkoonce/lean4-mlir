@@ -4,17 +4,17 @@ import LeanMlir
     Mirrors `MainMnistDdpmSample` but for 3-channel RGB. -/
 
 def tinyCifarDdpm : NetSpec where
-  name := "DDPM UNet T-cond base48 centered (CIFAR 32x32x3)"
+  name := "DDPM UNet T-cond base80 centered (CIFAR 32x32x3)"
   imageH := 32
   imageW := 32
   layers := [
-    .unetDown 4 48,
-    .unetDown 48 96,
-    .convBn 96 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .unetUp 192 96,
-    .unetUp 96 48,
-    .conv2d 48 3 1 .same .identity
+    .unetDown 4 80,
+    .unetDown 80 160,
+    .convBn 160 320 3 1 .same,
+    .convBn 320 320 3 1 .same,
+    .unetUp 320 160,
+    .unetUp 160 80,
+    .conv2d 80 3 1 .same .identity
   ]
 
 private def runIree (mlirPath outPath : String) : IO Bool := do
