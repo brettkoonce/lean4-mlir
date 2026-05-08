@@ -5,6 +5,115 @@ the "this framework only does vision" gap. Pairs with the five
 existing vision-side demos (`unet`, `ddpm`, `bifpn`, `yolo`,
 `nerf`); this is the **NLP / sequence-modeling** entry.
 
+## Status (2026-05-08)
+
+**Phase 1 ✓ + Phase 2 ✓ + Phase 3 ✓ shipped in 1 session.** A
+212K-param char-level transformer (V=65, T=64, D=64, 2 heads, 4
+blocks, causal mask) trains end-to-end on tinyshakespeare on rocm
+gfx1100; autoregressive sampling produces text with real Shakespeare
+character names (ROMEO, KING RICHARD III, KING HENRY VI, ISABELLA,
+POMPEY, PRINCE, SICINIUS, SOMMERSET), plot-vocabulary fragments
+(Claudio from *Measure for Measure*), coherent multi-line dialog,
+and proper cadence/punctuation. Plan below estimated 3-4 weeks; the
+actual path landed in ~5 hours of human-active code work plus
+2 minutes (Phase 2 smoke) + 11 minutes (Phase 3 full) of training.
+
+What was simplified vs. the original plan:
+
+- **One-hot token embedding instead of gather.** Plan called for
+  either a real gather primitive or a one-hot workaround "for the
+  demo, ~1 day." We took the workaround: a C helper produces flat
+  `[B, V*T]` one-hot from int32 token IDs, the model reshapes to
+  `[B, T, V]` and applies a 3D dot with a learnable `[V, D]` matrix.
+  Wasteful at large vocab (V=65 makes it cheap); upgrading to a
+  proper gather is deferred until BPE-tokenized models become a goal.
+- **No final positional embedding sweep / dropout.** Position is a
+  learnable `[T, D]` added inside `tokenPositionEmbed`; no dropout in
+  the transformer blocks (mixup-equivalent regularizer not yet in the
+  codegen). Sample quality is fine without either.
+- **Loss plumbing rides `useSeg`.** The plan implied a fresh
+  per-token CE codegen path. Instead the lmHead's forward emits its
+  output as `[B, V, T, 1]` (NCHW with NC=V, H=T, W=1) and the
+  existing per-pixel softmax-CE machinery for segmentation handles
+  per-token CE natively. Zero new loss code.
+- **Char-level only; no BPE.** Vocab=65 raw bytes. Defers TinyStories
+  / larger corpora.
+- **No perplexity eval.** Loss-on-train tracked only. Visual sample
+  inspection is the quality bar.
+
+What's actually built and working:
+
+| Piece | File | Notes |
+|---|---|---|
+| Char-level tokenizer + binary packer | `preprocess_shakespeare.py` | 65-byte vocab, 1M train + 111K val tokens |
+| Token-stream loader | `ffi/f32_helpers.c::lean_f32_load_token_stream` | Returns (ByteArray, n_tokens) |
+| Random-chunk batch sampler | `lean_f32_sample_chunks` | Returns input + shifted targets, packed |
+| One-hot encoder | `lean_f32_token_one_hot` | int32 IDs → f32 [B, T*V] |
+| Causal attention mask | `MlirCodegen.lean::emitMHSAForward` | iota+select+broadcast → -inf above diagonal |
+| `tokenPositionEmbed` Layer kind | `LeanMlir/Types.lean` + codegen arms | Forward + backward + Adam updates |
+| `lmHead` Layer kind | `LeanMlir/Types.lean` + codegen arms | [B, T, D] → [B, V, T, 1] for useSeg |
+| Per-token CE loss | reuses `useSeg` path | Drops in by output-shape match |
+| TinyGPT trainer/sampler | `MainTinyGptShakespeare.lean` | train + sample subcommands |
+| Bigram baseline | `MainBigramShakespeare.lean` | Validates data pipeline; ships its own sample |
+
+### Run-by-run results
+
+| Run | Steps | Wall time | End loss (nats/char) | Bits/char | Sample quality |
+|---|---|---|---|---|---|
+| Bigram baseline | 30 epochs × 200 | ~30 s | 2.46 | 3.55 | Speaker tags, English-ish word fragments |
+| TinyGPT smoke | 50 | ~10 s | NaN (debug) | — | (ABI shakedown — found a `transformerEncoder` pattern bug that silently wildcarded several arms) |
+| TinyGPT 100 | 100 | ~12 s | 2.65 | 3.83 | Worse than bigram still (200K params, untrained) |
+| TinyGPT 2K | 2,000 | 2m14s | 1.63 | 2.36 | First **recognizable Shakespeare**: speaker tags, real words, dialog format |
+| TinyGPT 10K | 10,000 | ~11 min | 1.45 | 2.10 | Real Shakespeare names + Claudio reference + multi-line dialog (`blueprint/src/figures/tinygpt/tinygpt_sample.txt`) |
+
+Random uniform over 65 chars: 4.17 nats/char (6.02 bits). Paper-quality
+char-level GPT (much bigger models) lands ~1.0 bits/char. We're about
+halfway between the bigram baseline (3.55 bits) and paper quality.
+
+### Commits (TinyGPT stack)
+
+```
+e5d7080 10K-step training: cleaner Shakespeare sample
+1b33f13 Phase 2: backward + per-token CE + working trainer/sampler
+549dfc9 Bigram Shakespeare demo: text generation end-to-end
+ba916f5 Phase 1: forward-only nano-GPT codegen + Shakespeare data pipeline
+```
+
+### Sample (10K-step run)
+
+```
+ROMEO:
+I prately I head.
+
+LORD CAY:
+God the goodness hath storn, so given to my love
+To request and of the faces; with sun
+Do not only to witness musrer Claudio.
+
+POMPEY:
+Alack, perpeal to amend my heart desires,
+That one you to thine more, would I know,
+And spuress and the seals destaint in heirs;
+is more news, that she now to Lamentio.
+```
+
+### What's left to push quality further
+
+Ranked by impact-per-hour-of-code:
+
+1. **Wider model + longer training** (~30 min, ~1 hr) — D=128, 6
+   blocks, 4 heads, 30K steps. Should land near 1.7 bits/char and
+   produce noticeably more coherent text.
+2. **Longer context window** (~1 hr code if T=128 fits memory) —
+   doubles the receptive field. Should help past the current
+   ~50-char semantic-coherence cliff.
+3. **Real gather primitive + BPE tokenizer** (1-2 days) — drops the
+   one-hot quadratic cost and unlocks TinyStories / larger corpora.
+4. **Cosine-decay LR + warmup** (~30 min) — already wired in
+   `TrainConfig`; the trainer just needs to thread it through.
+5. **Validation perplexity reporting** (~30 min) — runs forward on
+   val.bin every N steps, reports nats/char.
+
 ## The rule
 
 A GPT-style autoregressive transformer is **the same transformer
