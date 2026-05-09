@@ -68,9 +68,14 @@ def main (args : List String) : IO Unit := do
   let epochsOverride : Option Nat := match args with
     | _ :: e :: _ => e.toNat?
     | _ => none
+  -- Optional: third arg is LR x 1e6, e.g. 100 → 1e-4. Default 500 → 5e-4.
+  let lrOverride : Option Float := match args with
+    | _ :: _ :: lr :: _ => lr.toNat?.map fun n => n.toFloat * 1.0e-6
+    | _ => none
   let spec := tinyCifarDdpm
   let cfg := { cifarDdpmConfig with
-    epochs := epochsOverride.getD cifarDdpmConfig.epochs }
+    epochs := epochsOverride.getD cifarDdpmConfig.epochs,
+    learningRate := lrOverride.getD cifarDdpmConfig.learningRate }
   IO.eprintln s!"{spec.name}: {spec.totalParams} params (epochs={cfg.epochs})"
 
   IO.FS.createDirAll ".lake/build"
