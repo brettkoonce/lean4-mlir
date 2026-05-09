@@ -3,14 +3,31 @@ import LeanMlir
 /-! CIFAR-10 plain CNN (no batch norm) — phase-3 unified pipeline.
     32×32 RGB, 10 classes.
 
-    **Pedagogical trainer — read this if it's your first run.** This
-    is the CIFAR CNN *before* batch norm, kept around as a pair with
-    `MainCifarCnnBnTrain.lean` to show what BN buys you. Expect
-    slower convergence, more sensitivity to learning rate, and a
-    lower final accuracy ceiling (~75-80% val) vs the BN variant
-    (~85%+). If your goal is "best CIFAR result," run
-    `cifar-bn-train` instead; this file exists so the book chapter
-    on BN can demonstrate the improvement side by side. -/
+    **Heads-up if you got here from Chapter 5 of the blueprint.**
+    Chapter 5's headline demonstration is that this exact spec
+    (no-BN CIFAR CNN) **fails to train** under SGD lr=0.1 — loss
+    sits at log(10) ≈ 2.302 (random guess on 10 classes) for the
+    full run. That failure is what motivates batch normalization
+    in the chapter. **This exe does NOT reproduce that failure** —
+    it uses Adam at lr=1e-3 with cosine + warmup + augmentation,
+    a much more forgiving optimizer that masks the LR-headroom
+    issue BN was designed to solve. Under Adam the no-BN spec
+    trains fine and reaches ~72% val accuracy, comparable to the
+    BN variant under the same recipe.
+
+    To reproduce Chapter 5's failure / lift, run the ablation
+    cells `cifar-nobn-sgd` and `cifar-bn-sgd` instead — those
+    use `s4tfBaseline` (SGD lr=0.1, no recipe tricks), which is
+    the apples-to-apples comparison the chapter is built around.
+    The smaller-LR pair `cifar-nobn-sgd002` / `cifar-bn-sgd002`
+    shows the same architectures top out around the same accuracy
+    (~72-73%) once the LR is tuned — confirming BN's lift is LR
+    headroom, not capacity.
+
+    This exe exists for the "modern recipe under Adam" datapoint
+    and as a smoke test that the no-BN spec compiles + trains
+    end-to-end. If you're chasing Chapter-5 pedagogy, use the
+    ablation harness. -/
 
 def cifarCnn : NetSpec where
   name := "CIFAR-10-CNN"
