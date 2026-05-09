@@ -115,59 +115,59 @@ lean_exe «cifar-cnn-train» where
   moreLinkArgs := ireeLink
 
 lean_exe «autoencoder-pets-train» where
-  root := `MainAutoencoderPetsTrain
+  root := `demos.MainAutoencoderPetsTrain
   moreLinkArgs := ireeLink
 
 lean_exe «unet-pets-train» where
-  root := `MainUnetPetsTrain
+  root := `demos.MainUnetPetsTrain
   moreLinkArgs := ireeLink
 
 lean_exe «pets-predict» where
-  root := `MainPetsPredict
+  root := `demos.MainPetsPredict
   moreLinkArgs := ireeLink
 
 lean_exe «gradcam» where
-  root := `MainGradCAM
+  root := `demos.MainGradCAM
   moreLinkArgs := ireeLink
 
 lean_exe «bigram-shakespeare» where
-  root := `MainBigramShakespeare
+  root := `demos.MainBigramShakespeare
   moreLinkArgs := ireeLink
 
 lean_exe «tinygpt-shakespeare» where
-  root := `MainTinyGptShakespeare
+  root := `demos.MainTinyGptShakespeare
   moreLinkArgs := ireeLink
 
 lean_exe «mnist-ddpm-train» where
-  root := `MainMnistDdpmTrain
+  root := `demos.MainMnistDdpmTrain
   moreLinkArgs := ireeLink
 
 lean_exe «mnist-ddpm-sample» where
-  root := `MainMnistDdpmSample
+  root := `demos.MainMnistDdpmSample
   moreLinkArgs := ireeLink
 
 lean_exe «cifar-ddpm-train» where
-  root := `MainCifarDdpmTrain
+  root := `demos.MainCifarDdpmTrain
   moreLinkArgs := ireeLink
 
 lean_exe «cifar-ddpm-sample» where
-  root := `MainCifarDdpmSample
+  root := `demos.MainCifarDdpmSample
   moreLinkArgs := ireeLink
 
 lean_exe «cifar-ddpm-attn-train» where
-  root := `MainCifarDdpmAttnTrain
+  root := `demos.MainCifarDdpmAttnTrain
   moreLinkArgs := ireeLink
 
 lean_exe «cifar-ddpm-attn-sample» where
-  root := `MainCifarDdpmAttnSample
+  root := `demos.MainCifarDdpmAttnSample
   moreLinkArgs := ireeLink
 
 lean_exe «cifar-ddpm-sincos-train» where
-  root := `MainCifarDdpmSincosTrain
+  root := `demos.MainCifarDdpmSincosTrain
   moreLinkArgs := ireeLink
 
 lean_exe «cifar-ddpm-sincos-sample» where
-  root := `MainCifarDdpmSincosSample
+  root := `demos.MainCifarDdpmSincosSample
   moreLinkArgs := ireeLink
 
 -- ═══════════════════════════════════════════════════════════════════
