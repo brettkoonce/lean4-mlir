@@ -6,7 +6,7 @@ with verified gradients. The "framework can do generative" demo,
 parallel to UNet ("framework can do segmentation") and YOLO/BiFPN
 ("framework can do detection").
 
-## Status (2026-05-08)
+## Status (2026-05-09)
 
 **Phase 1 ✓ + Phase 2 ✓ shipped in 2 sessions.** MNIST produces
 legible digits from noise; CIFAR-10 produces recognizable cars /
@@ -14,20 +14,37 @@ birds / horses from noise. Plan below estimated 4-6 weeks; the
 simplified path landed in ~12 hours of human-active code work plus
 a couple of overnight runs.
 
+**Bottleneck self-attention + sin/cos time embedding attempted
+(2026-05-08 → 2026-05-09): codegen primitives ship, recipe doesn't
+beat baseline yet.** See "Phase 3 partial" below for the full
+narrative — the layers compile and train, but at this CIFAR scale
+the model collapses to a low-MSE-but-monotone-blob solution that's
+worse than the plain base80 baseline. Real fix needs architectural
+surgery beyond a config knob.
+
 What was simplified vs. the original plan:
 
-- **No proper sin/cos time embedding.** The plan called for sinusoidal
-  encoding through a small dense MLP added to each block's feature
-  map. We instead prepend a single tiled `t/T_max` channel to the
-  network input. Zero new codegen primitives, ~15 lines of FFI; the
-  model gets a coarser t signal but it's enough to produce legible
-  outputs. Files: `LeanMlir/Ddpm.lean`, `ffi/f32_helpers.c`
-  (`lean_ddpm_prepend_t_channel{,_scalar}`).
-- **No bottleneck self-attention.** Plan called for transformer
-  attention at 8×8/16×16 spatial resolutions. We skipped it; the
-  existing `transformerEncoder` primitive could plug in there once
-  a `[B,C,H,W] ↔ [B,H*W,C]` reshape primitive lands. **This is the
-  biggest known quality gap**, especially on CIFAR.
+- **Sin/cos time embedding partially landed (2026-05-09).** Original
+  plan called for sinusoidal encoding fed through a dense MLP and
+  added to *each block's* feature map. The first session shipped a
+  cruder single-channel `t/T_max` tile; a follow-up session shipped
+  multi-channel sincos-at-log-spaced-frequencies tile (Vaswani / NeRF
+  convention), but **still tile-only — no per-block MLP injection.**
+  Files: `LeanMlir/Ddpm.lean::prependSinCosT{,Scalar}`,
+  `ffi/f32_helpers.c::lean_ddpm_prepend_sincos_t{,_scalar}`. Per-block
+  conditioning remains future work and is now suspected to be one of
+  the missing pieces for the bottleneck-attention recipe (see Phase 3
+  partial below).
+- **Bottleneck self-attention codegen ✓, recipe ✗ (2026-05-09).**
+  Spatial-flatten primitives (`spatialFlatten`, `spatialUnflatten C H W`)
+  shipped as Layer kinds with full forward+backward emit, plus a
+  `keepSequence : Bool := false` flag on `transformerEncoder` so
+  ViT specs (slice CLS) and DDPM specs (preserve [B,N,D]) can share
+  the same primitive. Two training runs (50 ep at lr=5e-4; 30 ep at
+  lr=1e-4) both produce monotone-blob samples despite low MSE
+  (0.063-0.068 — same range as the plain base80 baseline at 70 ep).
+  See "Phase 3 partial" below for the failure mode and remaining
+  hypotheses.
 - **No FID.** Visual inspection only. PPM grids of 16 samples each.
 
 What's actually built and working:
@@ -60,9 +77,95 @@ improving**. base48 → base80 had only a 0.001 loss difference but a
 dramatic visual quality jump from "soft chromatic shapes" to
 "recognizable categories". Don't rely on MSE as a sample-quality proxy.
 
+### Phase 3 partial: bottleneck attention attempted (2026-05-08 → 09)
+
+The planning doc flagged bottleneck self-attention as the #1 quality
+lever. Implementation went in cleanly. Training results did not.
+
+What shipped (codegen — these primitives are real and reusable):
+- `spatialFlatten` / `spatialUnflatten C H W` Layer kinds:
+  `[B,C,H,W] ↔ [B,H·W,C]` via paired transpose+reshape. No params.
+  Forward + backward + train-step plumbing all clean.
+- `transformerEncoder` gained a `keepSequence : Bool := false` flag,
+  decoupling "no CLS slice" from "causal mask". ViT default false
+  (slice CLS for the classifier head); DDPM uses `keepSequence := true`
+  to preserve the [B,N,D] sequence flowing into a downstream
+  `spatialUnflatten`; tinyGPT continues to set `causalMask := true`
+  which implicitly preserves the sequence.
+- `prependSinCosT{,Scalar}` C helpers: replaces the cruder single
+  `t/T_max` tile with `2·n_freq` channels of sin/cos at log-spaced
+  frequencies (Vaswani / NeRF convention).
+- `collectBnLayers` pidx accounting fixed for transformerEncoder /
+  tokenPositionEmbed / lmHead / patchEmbed (the existing fall-through
+  was silently corrupting BN-stat indexing on any spec mixing convBn
+  with these layers — an old latent bug we tripped here).
+
+Three training runs, two architectures, all converge in MSE but
+collapse in samples:
+
+| Spec | Epochs | LR | Loss | Sample |
+|---|---|---|---|---|
+| base 64 + attn (plain `t/T` tile) | 20 | 5e-4 | 0.068 | dark-red monotone blobs |
+| base 64 + attn + sincos t-channels | 50 | 5e-4 | 0.064 | dark-red monotone blobs |
+| base 64 + attn + sincos, lower LR | 30 | 1e-4 | 0.068 | orange-yellow monotone blobs |
+| **base 80 plain conv (baseline)** | **70** | **5e-4** | **0.062** | **recognizable cars/birds/animals** |
+
+Failure signature: low MSE + structural collapse. Same MSE range as
+the working baseline, completely different visual outcome. The model
+finds a degenerate minimum that satisfies per-pixel MSE locally
+without learning the data manifold.
+
+Most plausible root cause (untested): pre-norm + residual skip lets
+the network bypass attention entirely. With small init, MHSA and FC2
+outputs are ~zero, residuals route around them, and the model
+effectively trains a base-64 conv UNet — *smaller capacity than the
+base80 baseline*, which directly explains the worse-than-baseline
+quality. The transformer block sits dormant at init and never lights
+up because the rest of the network can already reach a low-MSE
+plateau without it.
+
+Remaining hypotheses, ordered by likelihood (untested):
+
+1. **Per-block time-MLP conditioning is missing.** Standard DDPM
+   architectures route the time embedding through a small MLP per
+   block, scaled and added to feature maps. Our sincos channels
+   only enter at the input, so the bottleneck attention has no
+   strong per-block time signal. Effort: ~3-5 hr (need a new "add
+   time projection" primitive or a cleaner per-block emit path).
+2. **Layer-scale init.** ConvNeXt / DiT both initialize transformer
+   block contributions at ~zero (a learnable scalar γ multiplied
+   onto MHSA/FFN outputs) so the residual path dominates at init,
+   then the block gradually "turns on" as γ grows. We use uniform
+   He-init which gives the block real magnitude immediately, but
+   apparently it doesn't train through. Effort: ~1-2 hr (one new
+   per-channel γ param plus a multiply in the block emit).
+3. **Post-norm instead of pre-norm.** Pre-norm is the modern default
+   but post-norm forces the gradient through the LN+block instead of
+   skipping. Old transformers used post-norm successfully. Effort:
+   ~2-3 hr (re-order ops in `emitTransformerBlockForward` and the
+   matching backward; touches every existing transformer use site).
+4. **Stronger attention position (16×16 instead of 8×8).** Counter-
+   intuitive: more tokens means each spatial location resolves more,
+   but compute scales with N². Worth trying once one of the above
+   works. Effort: 0 (just spec edit).
+5. **More attention blocks (1 → 2 or 4).** If a single block is
+   bypassed, two might force more useful work. ~0 effort, but adds
+   train time.
+
+For now, the codegen primitives are checked in (commits below).
+A revisit needs at least one of the architectural surgery items
+landed first. The investment isn't wasted — these primitives also
+unlock SegFormer / MobileViT / CCT promotion from shape-only to
+codegen-backed.
+
 ### Commits (DDPM stack)
 
 ```
+5c1bb88 attn debug: LR=1e-4 not the lever (still monotone)
+fbddb13 attn+sincos 50-epoch run: pipeline works, samples don't beat baseline
+2f80d25 polish: sin/cos time embedding (replaces tile-channel)
+a713f32 attention 20-epoch run: preliminary samples (loss 0.068)
+2c28523 bottleneck attention: spatialFlatten/Unflatten primitives + new spec
 3053fc3 CIFAR base80 spec for overnight run
 62d5ce4 CIFAR base48 + data centering for quality bump
 ef48460 CIFAR-10 trainer + sampler (multi-channel)
@@ -72,17 +175,20 @@ c1a998a time conditioning + 50-epoch run produces legible digits
 
 ### What's left to push CIFAR quality further
 
-Ranked by impact-per-hour-of-code:
+Ranked by impact-per-hour-of-code (revised after the 2026-05-09
+attention-experiment results):
 
-1. **Bottleneck self-attention** (~3 hr code + overnight run) —
-   biggest known quality lever. Needs a new spatial-flatten primitive
-   `[B,C,H,W] ↔ [B,H*W,C]` (forward + VJP + FD verify); then plug
-   the existing `transformerEncoder` at the bottleneck. The pairing
-   logic already in the codegen handles the bottleneck position
-   without disturbing unetDown/unetUp skip pairing.
-2. **Proper sin/cos time embedding** (~1-2 hr code) — replace the
-   tile-channel with sinusoidal embedding through a dense MLP added
-   to each block. Existing dense primitive suffices.
+1. **Make bottleneck attention actually train** — codegen ✓, recipe ✗.
+   Pick one or more from the Phase-3-partial hypotheses above. Best
+   bang-for-effort is probably **layer-scale init (~1-2 hr)** because
+   it's a one-line change and directly addresses the suspected
+   "attention sits dormant at init" failure mode. If layer-scale
+   alone doesn't fix it, layer in **per-block time-MLP conditioning
+   (~3-5 hr)**, then iterate.
+2. **Tile-only sincos t-embedding ✓ shipped 2026-05-09.** Per-block
+   MLP injection still missing; deferred until #1 is solved (the
+   two are coupled — per-block time conditioning is one of the
+   suspected fixes for the attention-collapse).
 3. **More capacity** (free; existing code) — base 80 → 96 or 128.
    Per-step time scales quadratically with channel base; base 128
    would be ~500ms/step vs base 80's 230ms. ~50 epochs of base 128
