@@ -15,12 +15,17 @@ simplified path landed in ~12 hours of human-active code work plus
 a couple of overnight runs.
 
 **Bottleneck self-attention + sin/cos time embedding attempted
-(2026-05-08 → 2026-05-09): codegen primitives ship, recipe doesn't
-beat baseline yet.** See "Phase 3 partial" below for the full
-narrative — the layers compile and train, but at this CIFAR scale
-the model collapses to a low-MSE-but-monotone-blob solution that's
-worse than the plain base80 baseline. Real fix needs architectural
-surgery beyond a config knob.
+(2026-05-08 → 2026-05-09): codegen primitives ship, neither recipe
+is a quality win.** See "Phase 3 partial" below for the full
+narrative — five training runs, definitive 50-ep A/B diagnostic.
+Verdict: (a) bottleneck attention collapses to a degenerate
+low-MSE solution, real fix needs architectural surgery (layer-scale
+init or per-block time-MLP); (b) sincos t-channels alone are a
+small *negative* vs the plain `t/T_max` tile at matched budget;
+(c) the codegen changes did not regress the existing path. The
+spatialFlatten/Unflatten primitives, keepSequence flag, and sincos
+helpers are real reusable infrastructure, but neither directly
+improves the demo's sample quality at the current training budget.
 
 What was simplified vs. the original plan:
 
@@ -100,29 +105,58 @@ What shipped (codegen — these primitives are real and reusable):
   was silently corrupting BN-stat indexing on any spec mixing convBn
   with these layers — an old latent bug we tripped here).
 
-Three training runs, two architectures, all converge in MSE but
-collapse in samples:
+Five training runs across three architectures, plus a 50-ep
+A/B-diagnostic on the proven baseline:
 
 | Spec | Epochs | LR | Loss | Sample |
 |---|---|---|---|---|
 | base 64 + attn (plain `t/T` tile) | 20 | 5e-4 | 0.068 | dark-red monotone blobs |
 | base 64 + attn + sincos t-channels | 50 | 5e-4 | 0.064 | dark-red monotone blobs |
 | base 64 + attn + sincos, lower LR | 30 | 1e-4 | 0.068 | orange-yellow monotone blobs |
-| **base 80 plain conv (baseline)** | **70** | **5e-4** | **0.062** | **recognizable cars/birds/animals** |
+| base 80 + sincos (no attn) | 50 | 5e-4 | 0.062 | orange blobs, less structure |
+| base 80 plain (diagnostic A/B) | 50 | 5e-4 | 0.062 | yellow blobs, animal-ish silhouettes |
+| **base 80 plain conv (reference)** | **70** | **5e-4** | **0.062** | **recognizable cars/birds/animals** |
 
-Failure signature: low MSE + structural collapse. Same MSE range as
-the working baseline, completely different visual outcome. The model
-finds a degenerate minimum that satisfies per-pixel MSE locally
-without learning the data manifold.
+Failure signature: low MSE + structural collapse. Same MSE range
+across all five runs, dramatically different visual outcomes. The
+model finds a low-MSE plateau without learning the data manifold;
+sample quality lives in the residual fluctuations that MSE doesn't
+distinguish.
 
-Most plausible root cause (untested): pre-norm + residual skip lets
-the network bypass attention entirely. With small init, MHSA and FC2
-outputs are ~zero, residuals route around them, and the model
-effectively trains a base-64 conv UNet — *smaller capacity than the
-base80 baseline*, which directly explains the worse-than-baseline
-quality. The transformer block sits dormant at init and never lights
-up because the rest of the network can already reach a low-MSE
-plateau without it.
+Three reads from the table (post-diagnostic 2026-05-09):
+
+1. **Training-budget hypothesis: confirmed in part.** The proven
+   baseline is *also* worse at 50 ep than at 70 ep (yellow
+   animal-ish blobs vs the reference's clean recognizable cars).
+   The reference checkpoint crosses a quality threshold around
+   epoch 60-70 that pure MSE doesn't capture. So part of the
+   gap on every 50-ep run is just budget.
+
+2. **Sincos t-channels are a small negative, not a win.** Same
+   architecture (base80 plain conv), same training budget (50 ep,
+   lr=5e-4), same MSE (0.062 both) — the sincos variant produces
+   *less* structure than the single-channel `t/T_max` tile. The 8
+   sincos channels apparently confuse the early conv layers more
+   than they help. So the planning doc's `#2 — proper sin/cos time
+   embedding` was tested and isn't a near-term lever; it likely
+   needs the per-block MLP injection that didn't ship.
+
+3. **Codegen changes did not regress the existing path.** The
+   diagnostic 50-ep base80 plain run uses the modified codegen
+   (collectBnLayers pidx accounting, transformerEncoder arity bump,
+   spatialFlatten arms) and still produces structured samples. So
+   the bottleneck-attention failure is genuinely architectural,
+   not a side-effect bug in shared codegen.
+
+Most plausible root cause for the attention failure (still
+untested): pre-norm + residual skip lets the network bypass
+attention entirely. With small init, MHSA and FC2 outputs are
+~zero, residuals route around them, and the model effectively
+trains a base-64 conv UNet — *smaller capacity than the base80
+baseline*, which directly explains the worse-than-baseline
+quality. The transformer block sits dormant at init and never
+lights up because the rest of the network can already reach a
+low-MSE plateau without it.
 
 Remaining hypotheses, ordered by likelihood (untested):
 
@@ -161,6 +195,10 @@ codegen-backed.
 ### Commits (DDPM stack)
 
 ```
+45808ac diagnostic: base80 plain at 50ep — answers the A/B question
+042261a sincos baseline 50-ep: loss matches baseline, samples don't
+1554211 sincos baseline: base80 plain conv + sincos t-embed (no attn)
+70e7b3a plan: capture bottleneck-attention attempt (codegen ✓, recipe ✗)
 5c1bb88 attn debug: LR=1e-4 not the lever (still monotone)
 fbddb13 attn+sincos 50-epoch run: pipeline works, samples don't beat baseline
 2f80d25 polish: sin/cos time embedding (replaces tile-channel)
@@ -185,10 +223,14 @@ attention-experiment results):
    "attention sits dormant at init" failure mode. If layer-scale
    alone doesn't fix it, layer in **per-block time-MLP conditioning
    (~3-5 hr)**, then iterate.
-2. **Tile-only sincos t-embedding ✓ shipped 2026-05-09.** Per-block
-   MLP injection still missing; deferred until #1 is solved (the
-   two are coupled — per-block time conditioning is one of the
-   suspected fixes for the attention-collapse).
+2. **Tile-only sincos t-embedding ✓ shipped 2026-05-09 — small negative
+   on its own.** A/B'd against the plain `t/T_max` tile at the same
+   architecture and training budget (base80, 50 ep). Sincos variant
+   produces *less* structure than the single-channel tile — the 8
+   sincos channels apparently mostly add noise to the early conv
+   layers without compensating signal. Per-block MLP injection still
+   missing and is the next thing to try; sincos channels at the
+   input alone aren't the right primitive at this depth.
 3. **More capacity** (free; existing code) — base 80 → 96 or 128.
    Per-step time scales quadratically with channel base; base 128
    would be ~500ms/step vs base 80's 230ms. ~50 epochs of base 128
