@@ -295,7 +295,7 @@ lean_exe «inspect-convnext-bn» where
   moreLinkArgs := ireeLink
 
 lean_exe «inspect-convnext» where
-  root := `MainInspectConvNeXt
+  root := `demos.MainInspectConvNeXt
   moreLinkArgs := ireeLink
 
 lean_exe «test-convnext-train-step» where
