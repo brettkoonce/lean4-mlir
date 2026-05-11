@@ -1358,7 +1358,134 @@ possible. Part 2 is deliberately patterned on your practice.
 \chapter{MNIST: 1D MLP}
 \label{chap:mlp}
 
-The workhorse: \(y = Wx + b\) plus ReLU and softmax cross-entropy loss.
+\section*{The pdiv we built last chapter, now applied}
+
+In Chapter \ref{chap:tensor} we defined a function \(\pdiv\) that
+captures the partial derivative of any sufficiently smooth function.
+We proved that three structural rules---chain, sum, product---suffice
+to compose new partials out of old ones. That was machinery without
+a target. This chapter picks the target: we're going to compute
+the partial derivative of every component of a small image classifier,
+end-to-end, and the goal is for that classifier to come out the other
+side able to recognize handwritten digits.
+
+To say the same thing more concretely: a neural network is a long
+chain of functions, and ``training'' means using the partials of
+those functions to nudge their parameters in a direction that
+reduces a loss. Every theorem in this chapter is the answer to
+the same question, asked about a different building block:
+\emph{if I jiggle this input by} \(\varepsilon\), \emph{how does the
+output jiggle?}
+
+\section*{The Jacobian as multidimensional ``how does it jiggle?''}
+
+For a scalar function \(f : \mathbb{R} \to \mathbb{R}\) the answer
+is a single number: the derivative. For our networks, no function
+is scalar-in scalar-out. The smallest layer maps an input vector
+to an output vector---\(n\) numbers in, \(m\) numbers out. ``Jiggle
+the input'' now means: pick a direction in \(\mathbb{R}^n\) and
+push slightly along it. ``The output jiggles'' now means: a vector
+in \(\mathbb{R}^m\). The full picture of \emph{how every output
+coordinate responds to every input coordinate} is an \(m \times n\)
+table of numbers, one slope per (output, input) pair. That table
+is the \textbf{Jacobian}. There is nothing more to it. It is
+just the multidimensional generalization of ``the derivative is
+the slope.''
+
+The previous chapter's \(\pdiv\) is the \emph{one entry} of this
+table at a chosen \((i, j)\). The Jacobian is \(\pdiv\) applied
+across both indices at once, organized so it can be multiplied
+into other matrices later.
+
+\section*{The dense layer's Jacobian is the weight matrix}
+
+Our smallest building block is a dense (or ``fully connected'')
+layer: \(y = Wx + b\), where \(W\) is an \(m \times n\) weight
+matrix, \(x\) is an \(n\)-vector, and \(b\) is an \(m\)-vector.
+Pick any output coordinate \(y_j\) and write it out:
+
+\[
+y_j = \sum_{k=1}^{n} W_{jk}\, x_k + b_j.
+\]
+
+Now jiggle \(x_i\) by \(\varepsilon\). Of the \(n\) terms in the
+sum, only the \(k = i\) term notices, and it changes by
+\(W_{ji}\,\varepsilon\). So \(\partial y_j / \partial x_i = W_{ji}\).
+The Jacobian of \(y = Wx + b\) with respect to \(x\) \emph{is the
+weight matrix \(W\) itself}. No new structure, no surprise---the
+Jacobian of a linear map is the linear map, written as a matrix.
+
+We will do the same exercise for the partial with respect to \(W\),
+and we will get an analogous answer: the dependence is local, the
+entries of the Jacobian are just \(x_{i'}\, \delta_{jj'}\). These
+two---input-Jacobian and weight-Jacobian---are the only objects
+we need for a dense layer. Theorems \ref{ax:pdiv_dense} and
+\ref{ax:pdiv_dense_W} below formalize them; we have already done
+the substantive work.
+
+\section*{ReLU: the piecewise case}
+
+ReLU is the function \(\mathrm{relu}(x) = \max(x, 0)\) applied
+coordinatewise. Its Jacobian is a diagonal matrix: each output
+coordinate depends only on the matching input coordinate. The
+diagonal entry is \(1\) where \(x_i > 0\) and \(0\) where
+\(x_i < 0\). At \(x_i = 0\) the function is not differentiable in
+the classical sense---the slope jumps from \(0\) to \(1\). For
+our purposes this matters less than you might fear. Theorem
+\ref{ax:pdiv_relu} states the Jacobian at smooth points; the
+codegen substitutes the standard subgradient convention at the
+kink and we move on. The kink is the only place in the chapter
+where ``differentiable'' becomes slightly subtle.
+
+\section*{Softmax cross-entropy: where vectors collapse to a scalar}
+
+The last building block is the loss: softmax cross-entropy between
+the model's output \(z \in \mathbb{R}^{10}\) and the true class
+label \(y \in \{0, \ldots, 9\}\). The full computation is
+
+\[
+L(z, y) = -\log \frac{e^{z_y}}{\sum_k e^{z_k}}.
+\]
+
+The loss is a scalar, so its Jacobian with respect to \(z\) is a
+\emph{vector}, not a matrix. Working through the algebra (chain
+rule on \(-\log \circ \mathrm{softmax}\) at the label index)
+produces a remarkably clean answer:
+
+\[
+\frac{\partial L}{\partial z} = \mathrm{softmax}(z) - \mathrm{onehot}(y).
+\]
+
+The gradient of the loss is the difference between the model's
+predicted distribution and the truth. Theorem
+\ref{ax:softmaxCE_grad} makes this formal.
+
+\section*{From Jacobians to VJPs}
+
+Training does not multiply Jacobians together directly. The loss
+is a scalar, and the quantity we actually want is ``how does
+\emph{each} parameter affect that scalar?'' That quantity is the
+Jacobian of the loss with respect to the parameters \emph{transposed}
+and applied to the upstream gradient---a \textbf{vector-Jacobian
+product}, or VJP. Concretely: the upstream gradient is a vector
+\(dy\), and we want to compute the corresponding \(dx\) and \(dW\).
+For a dense layer the answers fall out by transposing the picture
+we already have:
+
+\[
+dx = W^\top dy, \qquad dW = dy \otimes x, \qquad db = dy.
+\]
+
+The remaining theorems in this chapter
+(\ref{thm:dense_has_vjp} through \ref{ax:mlp_has_vjp}) are the
+formalizations of these identities, plus the proof that VJPs of
+composed layers are themselves VJPs obtained by composing the
+building blocks in reverse order. That last claim is what makes a
+3-layer MLP's backward pass exactly three transposed matrix
+multiplies---no more, no fewer---and it is the structural fact
+that the rest of the book leans on.
+
+\section*{The theorems}
 
 \begin{theorem}[Dense Jacobian wrt input]
   \label{ax:pdiv_dense}
