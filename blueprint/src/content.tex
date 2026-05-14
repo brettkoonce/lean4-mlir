@@ -1821,6 +1821,158 @@ fragments this code is assembled from.
 \chapter{MNIST: 2D CNN}
 \label{chap:cnn}
 
+\section*{The MLP wastes information; we can do better}
+
+Chapter \ref{chap:mlp}'s MLP recognized digits by flattening every
+28$\times$28 image into a 784-dim vector and feeding it through
+three dense layers. It worked. But it worked by ignoring something
+the data was telling us. Pixel \((5, 5)\) and pixel \((5, 6)\) are
+neighbors: they were next to each other on the page where the digit
+was drawn. Pixel \((5, 5)\) and pixel \((23, 14)\) are not. The
+dense layer has no idea. It treats every input coordinate as an
+independent feature; its weight matrix has no notion that some
+pairs of pixels are geometrically close. A trained MLP eventually
+learns to compensate, but it has to learn it from the data, with
+the data, by paying the full price for each unrelated feature pair.
+
+A handwritten ``5'' drawn in the top-left of the image and the
+same ``5'' drawn in the bottom-right are the same digit. The MLP
+sees them as completely unrelated vectors. It can be trained to
+classify both, but each is its own learning problem; nothing it
+learned about one transfers to the other for free.
+
+Convolutional networks fix this by building three priors directly
+into the architecture---priors that the data has but the MLP
+threw away.
+
+\section*{Three properties baked into a convolution}
+
+\begin{enumerate}
+\item \textbf{Locality.} Each output value depends on only a small
+  neighborhood of inputs. A convolution with a \(3 \times 3\) kernel
+  computes each output pixel as a weighted sum of its 9 neighbors.
+  Faraway pixels do not enter directly; the network only learns to
+  combine them later, by stacking convolutions and letting receptive
+  fields grow.
+
+\item \textbf{Translation invariance.} The same weights are applied
+  at every spatial position. A feature detector that recognizes the
+  bottom-left curve of a ``5'' uses the same parameters whether the
+  curve appears at row 5 or row 25. The architecture imposes the
+  symmetry; the data does not have to teach it.
+
+\item \textbf{Parameter sharing.} A \(3 \times 3 \times 1 \to 32\)
+  convolution has \(3 \times 3 \times 1 \times 32 + 32 = 320\)
+  parameters total, regardless of image size. The matching
+  fully-connected layer on a 28$\times$28 image would have
+  \(28^2 \times 28^2 \times 32 \approx 20\) million. The
+  convolution gets the same expressive power with four orders of
+  magnitude fewer parameters because it reuses them.
+\end{enumerate}
+
+Concretely, a convolution computes
+
+\[
+y_{c_{\text{out}},\, i,\, j}
+\;=\;
+\sum_{c_{\text{in}},\, k_h,\, k_w}\,
+W_{c_{\text{out}},\, c_{\text{in}},\, k_h,\, k_w}
+\cdot
+x_{c_{\text{in}},\, i + k_h,\, j + k_w}
+\;+\;
+b_{c_{\text{out}}}.
+\]
+
+Each output cell is a small dot product between the kernel \(W\)
+and a window of the input. The sum is over a tiny \(3 \times 3\)
+spatial region and over input channels---usually a handful of
+terms, not the 784 a dense layer touches.
+
+\section*{The Jacobian is sparse and structured}
+
+The Jacobian of a convolution looks like a giant matrix, but it
+isn't a generic giant matrix---it's mostly zeros. Specifically,
+\(\partial y_{c_{\text{out}}, i, j} / \partial x_{c_{\text{in}}, i', j'}\)
+is zero unless \((i', j')\) falls inside the kernel window centered
+at \((i, j)\). When it does, the entry is just the corresponding
+weight \(W_{c_{\text{out}}, c_{\text{in}}, k_h, k_w}\).
+
+So a convolution is a linear map---like a dense layer---but its
+Jacobian is highly structured: each row has only \(k^2 \times C_{\text{in}}\)
+nonzero entries, and those entries are reused across many rows
+because the same kernel is used at every spatial position. The
+forward picture from Chapter \ref{chap:mlp} ``the Jacobian of a
+linear map is the linear map'' still holds. The Jacobian is just
+written in a different basis: instead of one big dense matrix it
+is a list of kernel weights plus a rule for where each one lives.
+
+\section*{The backward of a convolution is another convolution}
+
+This is the part that surprises a first reader, and it is the
+single most important fact in the chapter. We want \(dx\)---how a
+small jiggle in each input pixel changes the loss---given an upstream
+\(dy\). Plugging into the Jacobian above and grinding through the
+algebra, the answer is:
+
+\[
+dx_{c_{\text{in}}, i', j'}
+\;=\;
+\sum_{c_{\text{out}},\, k_h,\, k_w}\,
+W_{c_{\text{out}},\, c_{\text{in}},\, k_h,\, k_w}
+\cdot
+dy_{c_{\text{out}},\, i' - k_h,\, j' - k_w}.
+\]
+
+That is itself a convolution. Specifically, it is a convolution
+of the upstream gradient \(dy\) against the same kernel \(W\),
+but with the spatial axes \emph{reversed} and the input/output
+channel axes \emph{swapped}---a ``transposed convolution''. The
+backward of a CNN block reuses the same kind of operation as the
+forward; no new primitive is needed.
+
+The weight gradient \(dW\) similarly works out to a convolution,
+this time of the saved input \(x\) against the upstream gradient
+\(dy\) (the ``transpose trick''). The bias gradient \(db\) is just
+\(dy\) summed over spatial positions per channel. Theorems
+\ref{ax:conv2d_has_vjp3}, \ref{ax:conv2d_weight_grad_has_vjp}, and
+\ref{ax:conv2d_bias_grad_has_vjp} formalize each of these.
+
+\section*{Max pooling: the winner gets the gradient}
+
+The other new primitive in this chapter is max pooling. A
+\(2 \times 2\) max pool collapses each \(2 \times 2\) block of the
+input into a single output value: the max of the four. It has no
+parameters; its purpose is to halve the spatial resolution while
+keeping the strongest local response.
+
+The Jacobian of \(\max\) is degenerate. At a generic point, only one
+of the four inputs is the maximum, and the output's slope is \(1\)
+with respect to that one input and \(0\) with respect to the
+other three. ``Jiggle the max'' moves the output; ``jiggle a
+non-max'' does nothing. So the backward of max pool routes the
+upstream gradient back to whichever input was the winner in each
+window, and zeros out the rest. At ties the codegen breaks
+deterministically (same convention as ReLU's kink). Definition
+\ref{ax:maxPool2_has_vjp3} states this formally.
+
+\section*{The rest of the network is Chapter 3}
+
+After two convolutions and a max pool, the feature map is
+\(14 \times 14 \times 32\). At that point we \texttt{flatten} the
+\(14 \cdot 14 \cdot 32 = 6272\)-dim feature vector and feed it into
+the same three-dense-layer head from Chapter \ref{chap:mlp},
+ending in 10-class logits. The backward through the dense head and
+the softmax-CE loss is exactly the calculation we did in the
+previous chapter---we do not re-prove it here. The composition rule
+from Chapter \ref{chap:tensor} guarantees that the full network's
+VJP is just the per-layer VJPs strung together in reverse order:
+softmax-CE backward, dense backward $\times 3$, flatten backward,
+max-pool backward, conv2d backward $\times 2$. Each piece is its
+own theorem; together they form a working trainer for MNIST that
+respects the image's 2-D structure.
+
+\section*{The theorems}
+
 \begin{definition}[Conv2d forward]
   \label{ax:conv2d}
   \lean{Proofs.conv2d}
