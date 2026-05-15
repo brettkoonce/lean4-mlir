@@ -2249,6 +2249,142 @@ rest of the book. \textbf{Ch~\ref{chap:residual} (ResNet-34) is
 the easiest chapter in the book and follows immediately --- this
 is a localized difficulty spike, not the new normal.}
 
+\section*{What BN actually is}
+
+BatchNorm (Ioffe \& Szegedy, 2015) takes a batch of activations,
+\(x\), and does three things in sequence. Each is one line of code;
+together they are the layer.
+
+\begin{enumerate}
+\item \textbf{Center.} Compute the batch mean
+  \(\mu = \frac{1}{n} \sum_k x_k\) and subtract it from every sample:
+  \(x - \mu\). Output has mean zero.
+\item \textbf{Normalize.} Compute the batch variance \(\sigma^2\),
+  add a small \(\varepsilon\) for numerical safety, and divide:
+  \(\hat{x} = (x - \mu)/\sqrt{\sigma^2 + \varepsilon}\). Output has
+  unit variance.
+\item \textbf{Affine.} Scale and shift with learnable per-channel
+  parameters \(\gamma\) and \(\beta\): \(\mathrm{bn}(x) = \gamma \hat{x} + \beta\).
+\end{enumerate}
+
+The chapter's first six theorems are the Jacobian of each step
+and the VJPs that fall out of them. Theorem
+\ref{thm:bn_has_vjp} closes the loop by composing them. The
+forward is three steps, so the chain rule from
+Chapter~\ref{chap:tensor} gives us three Jacobians to multiply,
+and the famous ``BN three-term backward'' is exactly that
+product written out.
+
+\section*{The centering term has an indirect path}
+
+Here is the first place a careful reader can trip. When you
+jiggle a single input \(x_i\), you do not only jiggle \(x_i\)---you
+also jiggle the batch mean \(\mu\), and \(\mu\) appears in every
+sample's centered value \(x_k - \mu\). So jiggling \(x_i\) by
+\(\varepsilon\) shifts every centered value by \(-\varepsilon/n\)
+\emph{plus} the direct \(\varepsilon\) on the \(i\)th sample.
+
+\[
+\frac{\partial (x_j - \mu)}{\partial x_i} \;=\; \delta_{ij} - \frac{1}{n}.
+\]
+
+The \(\delta_{ij}\) is the direct effect; the \(-1/n\) is the
+indirect effect through \(\mu\). Theorem \ref{ax:pdiv_bnCentered}
+states this formally. Forgetting the \(-1/n\) is the most common
+hand-derivation mistake on BN, and is exactly what the formal
+proof prevents.
+
+\section*{The inverse-stddev term is the hard part}
+
+The normalize step divides by \(\sqrt{\sigma^2 + \varepsilon}\),
+where \(\sigma^2 = \frac{1}{n} \sum_k (x_k - \mu)^2\) is itself a
+function of every input. Jiggle \(x_i\) by \(\varepsilon\) and
+\(\sigma^2\) changes, which means the divisor changes, which means
+\emph{every} output \(\hat{x}_j\) changes, not just \(\hat{x}_i\).
+
+Working through the chain rule (\(x \mapsto x^2 \mapsto \text{mean}
+\mapsto \sqrt{\cdot + \varepsilon} \mapsto 1/\cdot\)) gives
+
+\[
+\frac{\partial}{\partial x_i} \frac{1}{\sqrt{\sigma^2 + \varepsilon}}
+\;=\; -\frac{1}{(\sigma^2 + \varepsilon)^{3/2}} \cdot \frac{x_i - \mu}{n}
+\;=\; -\,\mathrm{istd}^3 \cdot \frac{x_i - \mu}{n}.
+\]
+
+That \(\mathrm{istd}^3\) is what makes the BN backward expensive:
+the gradient of one sample depends on \emph{every} sample's
+centered value, scaled by the cube of the inverse standard
+deviation. Theorem \ref{ax:pdiv_bnIstdBroadcast} states this.
+
+Notice what happens to the formula as \(\sigma^2 \to 0\):
+\(\mathrm{istd} \to 1/\sqrt{\varepsilon}\), bounded; without \(\varepsilon\)
+the gradient diverges. Theorem \ref{ax:bnIstdBroadcast_diff} is
+the formal statement that \(\varepsilon > 0\) is sufficient to
+make this term differentiable. This is the \emph{one place in
+the book} where the math actually requires real-analysis machinery
+beyond chain-sum-product; everything else in the framework reduces
+to those three rules.
+
+\section*{The famous three-term backward}
+
+Compose the three forward steps and apply the product rule on
+\(\hat{x} = (x - \mu) \cdot \mathrm{istd}\). The cross-terms collapse
+(the centered sum \(\sum_k (x_k - \mu) = 0\) is what saves us) and
+what falls out is a one-line backward:
+
+\[
+dx \;=\; \frac{\mathrm{istd} \cdot \gamma}{n}\, \Bigl(\, n\,dy
+  \;-\; \textstyle\sum_k dy_k
+  \;-\; \hat{x} \cdot \textstyle\sum_k (dy_k \,\hat{x}_k)\, \Bigr).
+\]
+
+Three terms inside the parentheses, one per forward step's
+indirect effect:
+
+\begin{itemize}
+\item \(n\,dy\)---the direct effect, every sample's upstream gradient.
+\item \(-\sum_k dy_k\)---the centering correction, subtracts the
+  total upstream gradient because shifting the mean shifts every
+  sample.
+\item \(-\hat{x} \cdot \sum_k (dy_k\,\hat{x}_k)\)---the normalization
+  correction, subtracts the projection of the upstream gradient onto
+  \(\hat{x}\), because rescaling by the inverse stddev couples
+  every sample's gradient through the shared divisor.
+\end{itemize}
+
+Theorem \ref{thm:bnNormalize_has_vjp} formalizes this. Every
+production BN implementation (PyTorch, JAX, TensorFlow, custom
+CUDA kernels) computes this exact expression. The \emph{value} of
+the formal proof is not that we discovered the formula---it has
+been known since 2015---but that the Lean kernel mechanically
+verifies we are computing the right thing at every training step.
+
+\section*{The affine step is just dense-with-broadcasting}
+
+The third step, \(\gamma \hat{x} + \beta\), is structurally a
+dense layer applied per-channel. Its Jacobian
+\(\partial(\gamma v + \beta)/\partial v_i = \gamma \delta_{ij}\) is
+exactly the dense-Jacobian computation from
+Chapter~\ref{chap:mlp}, just lifted to a tensor shape and
+broadcast across spatial dimensions. Theorem
+\ref{ax:pdiv_bnAffine} and Theorem \ref{thm:bnAffine_has_vjp}
+are essentially corollaries of the dense theorems; the new content
+here is zero.
+
+\section*{Putting it together}
+
+Theorem \ref{thm:bn_has_vjp} is the composition:
+\(\mathrm{bn} = \mathrm{affine} \circ \mathrm{normalize}\), with VJPs
+chained via the same \(\mathrm{vjp\_comp}\) rule from
+Chapter~\ref{chap:tensor}. The 3-term backward is the
+centerpiece; affine is a corollary; composition is a one-line
+proof. The structural story of the chapter is: one new
+Mathlib-level analytic dependency (sqrt and recip
+differentiability), one famous formula, and the rest is the same
+chain rule we already had.
+
+\section*{The theorems}
+
 \begin{theorem}[BN affine step Jacobian]
   \label{ax:pdiv_bnAffine}
   \lean{Proofs.pdiv_bnAffine}
