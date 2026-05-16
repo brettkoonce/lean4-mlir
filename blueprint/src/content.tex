@@ -4086,6 +4086,121 @@ noise; the $+2.9\%$ delta from CutMix is well above.
 \chapter{Vision Transformer}
 \label{chap:attention}
 
+\section*{Where Part 1 has been heading}
+
+Every previous chapter has introduced a new architectural primitive
+and proved its backward pass. Convolution, BatchNorm, residual,
+depthwise, SE, LayerNorm, GELU---each one slotted into the
+\texttt{NetSpec} type and earned its own \texttt{has\_vjp} theorem.
+This chapter does the same for attention, but it also does
+something larger: it composes \emph{every} layer the framework has
+proved so far into one machine-checked backward pass over a
+complete state-of-the-art image classifier.
+
+The destination is Theorem~\ref{thm:vit_body_has_vjp_mat} at the
+end of the chapter. It says, roughly: the full ViT
+backbone---patch embedding, twelve transformer blocks, final
+LayerNorm---is a \(\HasVJPMat\). The proof composes everything
+this chapter introduces, plus most of what the previous chapters
+introduced, into a single tower of \texttt{vjpMat\_comp}
+applications. Read the proof's dependency list and you see a tour
+of Part 1: dense, residual, layer norm, GELU, softmax, matrix
+multiply, plus the eight or ten matrix-machinery lemmas this
+chapter sets up. None of them is new in its own right; what's new
+is how high the composition rule can be pushed.
+
+\section*{What attention is, in one screen}
+
+A transformer encoder block does two things to its input sequence
+\(X \in \mathbb{R}^{N \times d}\) (think of \(N\) image patches,
+each represented as a \(d\)-vector):
+
+\begin{enumerate}
+\item \textbf{Multi-head self-attention} (MHSA): each output row
+  is a weighted average of \emph{all} input rows, where the weights
+  are computed from the input itself.
+\item \textbf{Per-token MLP}: a small two-layer MLP applied
+  independently to every row.
+\end{enumerate}
+
+Both halves are wrapped in a LayerNorm + residual sandwich
+(exactly the same template as ConvNeXt's blocks from
+Chapter~\ref{chap:layernorm}; the layout transferred to convnets
+in 2022 actually came from transformers in 2017).
+
+The interesting half is the first one. \emph{Scaled dot-product
+attention} computes, for queries \(Q\), keys \(K\), and values
+\(V\) (all linear projections of \(X\)):
+
+\[
+\mathrm{Attention}(Q, K, V) \;=\; \mathrm{softmax}\!\left(\frac{Q K^\top}{\sqrt{d_h}}\right) V.
+\]
+
+In words: every row of \(Q\) is compared to every row of \(K\) via
+inner product (the \(QK^\top\) matrix is \(N \times N\), one
+entry per query-key pair). Each row of that \(N \times N\) matrix
+is passed through softmax to get a probability distribution over
+the keys (which positions to attend to). Those probabilities then
+weight the rows of \(V\) to produce the output. The
+\(1 / \sqrt{d_h}\) scaling keeps the softmax from saturating at
+large \(d_h\). \emph{Multi-head} attention just runs several copies
+of this in parallel on lower-dimensional projections, concatenating
+the outputs.
+
+Each token---meaning each row of \(X\)---ends up looking at every
+other token. That's the qualitative break from CNNs:
+convolutions look only at a local neighborhood, attention looks
+everywhere. The receptive field is global from the first layer.
+
+\section*{Why this chapter has thirty theorems}
+
+The math of attention is matrix algebra. Chapter~\ref{chap:tensor}'s
+foundation rules---chain, sum, product, identity---were stated and
+proved for \emph{vector} functions. Before we can prove backward
+passes through \(Q K^\top\) and the row-wise softmax, we need the
+matrix-level lifts of those rules: chain rule on matrices,
+additive fan-in on matrices, identity on matrices, plus matrix-specific
+moves like transpose, matmul-with-one-factor-fixed, and scalar
+scale. That's the first section of theorems below
+(\textbf{Matrix-level machinery}, \(\sim\)15 theorems). Every one of them
+is a mechanical lift of a vector-level theorem from
+Chapter~\ref{chap:tensor}, proved via the row-projection
+\(\mathrm{ContinuousLinearMap}\) and the existing chain rule. Pay
+the cost once, reuse forever.
+
+The second section (\textbf{Attention proofs}, \(\sim\)15 theorems)
+applies the matrix machinery to the actual attention math. Row-wise
+softmax---a per-row softmax applied to the \(N \times N\) score
+matrix---has the well-known closed-form Jacobian \(p_i(\delta_{ij}
+- p_i)\); we prove the row-wise lifting that says this holds across
+matrices. Scaled dot-product attention's backward decomposes into
+three matmul-backward applications (one for each of \(Q\), \(K\),
+\(V\)) plus the row-wise softmax backward; we prove each. Then
+multi-head, then the attention sublayer (with residual), then the
+MLP sublayer (with residual), then a single transformer block,
+then a \(k\)-deep transformer tower, then the full ViT body. Each
+step is one or two compositions of the previous step. The chain
+that started at \texttt{vjp\_comp} in Chapter~\ref{chap:tensor}
+reaches all the way to a 5.5M-parameter image classifier here.
+
+\section*{What's actually proved}
+
+That's the framework-side payoff of this chapter: \textbf{every
+architectural piece used by any Part-1 network has a machine-checked
+backward}. Once we land Theorem~\ref{thm:vit_body_has_vjp_mat}, the
+sentence ``the gradient computed by this trainer is the
+mathematically correct one'' is no longer a hope or a folklore
+result---it is a theorem the Lean kernel verifies on every
+build.
+
+The empirical-side payoff comes after the theorems, in the Example
+section: ViT-Tiny trained on Imagenette underperforms the
+ConvNets, fairly dramatically, because 9{,}469 training images is
+too small for a transformer's lack of inductive bias. That's
+informative on its own terms (the data-hungry-transformer story
+made concrete) and sets up the augmentation ablation that closes
+the chapter.
+
 \section{Matrix-level machinery}
 \label{sec:matrix_machinery}
 
