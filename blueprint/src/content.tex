@@ -2638,6 +2638,115 @@ math.
 \chapter{ResNet-34}
 \label{chap:residual}
 
+\section*{Deeper networks used to stop training}
+
+Before 2015, the dominant assumption in image classification was
+``deeper is better, up to a point.'' The ``up to a point'' part was
+not metaphorical. If you took a 20-layer CNN that trained to 70\%
+val accuracy and added 12 more convolutional layers, you didn't
+get a 32-layer model with 72\% accuracy. You got a 32-layer model
+that, after the same training budget, fit the \emph{training set}
+worse than the 20-layer one did. The 32-layer model had strictly
+more capacity. It still trained worse. Something about deep stacks
+of convolutions made gradient flow degrade in a way that the
+optimizer couldn't navigate around.
+
+He et al.\ 2015 had the right observation:\footnote{He, Zhang,
+Ren, Sun. \emph{Deep Residual Learning for Image Recognition}.
+\href{https://arxiv.org/abs/1512.03385}{arXiv:1512.03385}.} if the
+12 extra layers in the deeper network were \emph{initialized to
+compute the identity}, the 32-layer network would have at least
+the 20-layer's performance, because it could replicate it
+exactly. So the question was not ``can a deep network represent
+what a shallow one represents?''---it provably could. The question
+was: why is optimizing 12 free-form layers to recover identity
+so much harder than just leaving identity there?
+
+\section*{The residual block: ask for the difference, not the function}
+
+Their fix was a one-line architectural change. Instead of asking
+each block to learn a function \(y = f(x)\), ask it to learn a
+function \(y = f(x) + x\). The block's job is no longer to
+\emph{become} the new representation. Its job is to learn what to
+\emph{add} to the current representation. At initialization, with
+randomly-small \(f\), each block is approximately the identity,
+and a stack of 16 such blocks is approximately a stack of
+16 identities---which is to say, approximately the input. The
+network starts out near-identity at every depth and only gradually
+takes on structure as \(f\) trains. The optimization problem
+becomes ``what residual should each block add'' instead of ``what
+function should each block be,'' and the former turns out to be
+dramatically easier.
+
+The change to the architecture is one \texttt{+} sign. The change
+to the training dynamics is the difference between ``18 layers is
+about as deep as we can go'' and ``152 layers trains stably; let
+us also add another zero on the ImageNet leaderboard.''
+
+\section*{Why the proof is a one-liner}
+
+From the framework's perspective, what is a residual block?
+\(\mathrm{residual}(x) = f(x) + \mathrm{id}(x)\)---a sum of two
+functions sharing the same input. We already proved in
+Chapter~\ref{chap:tensor} that the VJP of an additive fan-in is
+``send the upstream gradient through both branches and add.'' We
+already proved that the VJP of \(\mathrm{id}\) is the identity on
+the gradient (and that the VJP of \(f\) is whatever the inner
+block's machinery gives us). Composition is just
+\(\mathrm{vjp\_comp}\). So the residual VJP is the additive
+fan-in lemma, with \(\mathrm{id}\) plugged into one slot.
+
+That is Theorem~\ref{thm:residual_has_vjp} below, and its proof
+is one line. This chapter has \emph{exactly one theorem}, and
+that theorem is mechanical. The engineering revolution was not
+in the math---it was in the realization that this trivially
+provable operation was the missing piece for training deep
+networks. The fact that the framework absorbs the new
+architecture without any new math is the value proposition: once
+the foundation rules are in place, the next decade of image
+recognition follows from composing them.
+
+\section*{ResNet-34 is sixteen of these blocks, stacked}
+
+ResNet-34 (the smallest ``deep'' variant in the original paper)
+is built from 16 residual blocks arranged in four stages of
+depths 3, 4, 6, 3, at channel widths 64, 128, 256, 512. Each
+stage starts with a stride-2 downsample (halving spatial
+resolution) before its stack of stride-1 blocks. The stages are
+glued together by a stem (a 7$\times$7 conv at stride 2 plus a
+max-pool, taking 224$\times$224$\times$3 input to 56$\times$56$\times$64
+features) and a head (global average pool plus a 512-to-10
+dense layer). Total: 34 weight-bearing layers, 21.3M parameters.
+
+Two pieces of this template are new and worth naming:
+
+\begin{enumerate}
+\item \textbf{The 7$\times$7 stride-2 stem.} Earlier chapters'
+  networks operated at full input resolution; ResNet aggressively
+  downsamples at the input so the bulk of compute happens at lower
+  spatial resolution. The stem is one big conv that gets us from
+  224$\times$224 to 56$\times$56 in a single step.
+
+\item \textbf{Global average pool instead of flatten-plus-dense.}
+  Chapters \ref{chap:cnn} and \ref{chap:bn} ended in a
+  \texttt{.flatten} followed by a $\sim$4096-to-512 dense layer
+  that contained tens of millions of parameters. ResNet collapses
+  the final 7$\times$7$\times$512 feature map to a 512-vector
+  by spatial averaging, then runs a single 512-to-10 dense. No
+  flatten layer. The architectural move alone drops the model
+  from what would have been a $\sim$200M-parameter AlexNet-era
+  spec down to 21.3M.
+\end{enumerate}
+
+Every chapter after this one is a variation on this template.
+ConvNeXt swaps in different blocks. MobileNetV2 swaps in
+depthwise-separable blocks. EfficientNet adds compound scaling.
+ViT replaces the whole convolutional spine with patches and
+attention. The stem-stages-head template, and the residual
+fan-in pattern, persist.
+
+\section*{The theorem}
+
 \begin{theorem}[Residual block VJP]
   \label{thm:residual_has_vjp}
   \lean{Proofs.residual_has_vjp}
