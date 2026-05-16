@@ -3702,6 +3702,137 @@ EfficientDet.
 \chapter{ConvNeXt}
 \label{chap:layernorm}
 
+\section*{ConvNets strike back}
+
+By 2022 the conventional read on image recognition had flipped.
+ResNet had been the default backbone for six years. Then in late
+2020 ViT (Dosovitskiy et al.,
+\href{https://arxiv.org/abs/2010.11929}{arXiv:2010.11929}) showed
+that a pure transformer could match or beat ResNet on ImageNet at
+sufficient scale, and a year later Swin (Liu et al.\ 2021,
+\href{https://arxiv.org/abs/2103.14030}{arXiv:2103.14030}) layered
+in hierarchical attention to win COCO/ADE20K on top of that. The
+research community's working assumption became ``transformers
+beat convnets for vision now.''
+
+ConvNeXt (Liu et al.\ 2022,
+\href{https://arxiv.org/abs/2201.03545}{arXiv:2201.03545}) was a
+deliberate stress test of that assumption. The authors started
+from a standard ResNet-50 and asked: which of the design
+differences between ResNet and Swin is actually doing the work?
+They proceeded by applying transformer-era choices to the
+\emph{ResNet} one at a time and measuring each contribution
+in isolation. The full list:
+
+\begin{enumerate}
+\item Training recipe modernization (300 epochs, AdamW, RandAug,
+  Mixup, CutMix, label smoothing, stochastic depth, layer scale)
+\item Stage compute ratio change (from (3, 4, 6, 3) to (3, 3, 9, 3),
+  matching Swin)
+\item ``Patchify'' stem (replace the 7$\times$7 stride-2 conv with
+  a 4$\times$4 stride-4 conv, matching ViT's patch embedding)
+\item Depthwise convolutions (split spatial and channel mixing, as
+  in MobileNetV2)
+\item Inverted bottleneck (1$\times$1 expand 4$\times$, depthwise,
+  1$\times$1 project, MobileNetV2-style)
+\item Larger kernel (depthwise 7$\times$7 instead of 3$\times$3, to
+  approximate Swin's window attention receptive field)
+\item Fewer activations and norms (one per block instead of one
+  per layer, again matching transformer blocks)
+\item LayerNorm instead of BatchNorm
+\item GELU instead of ReLU
+\end{enumerate}
+
+The result: a model that's pure convolution top to bottom, doesn't
+contain a single attention operation, and matches or beats Swin-T
+on ImageNet at the same compute budget. The conclusion of the
+paper isn't ``convolutions are back''---it's ``the architectural
+gap between ResNet and Swin was mostly the training recipe, not
+the receptive field.'' Most of what looked like transformer
+superiority was modernization that hadn't been back-ported to the
+convnet baseline.
+
+\section*{Two new primitives}
+
+ConvNeXt requires two activations / normalizations that the
+chapters so far haven't needed:
+
+\textbf{LayerNorm} (Ba, Kiros, Hinton 2016,
+\href{https://arxiv.org/abs/1607.06450}{arXiv:1607.06450}). BatchNorm
+normalizes per-feature across a batch: it relies on the batch having
+enough samples for the mean and variance to be stable. That fails for
+small batches (memory-constrained training) and for variable-length
+sequences (where ``the batch axis'' isn't a clean concept). LayerNorm
+solves both by flipping the axis: normalize per-sample across the
+feature dimension instead. Same three-term Jacobian cancellation as
+BN (Chapter~\ref{chap:bn}), same closed-form backward; just a
+different reduction axis. Theorem~\ref{thm:layerNorm_has_vjp} states
+this formally.
+
+\textbf{GELU} (Hendrycks \& Gimpel 2016,
+\href{https://arxiv.org/abs/1606.08415}{arXiv:1606.08415}). A smooth
+approximation of ReLU: \(\mathrm{GELU}(x) = x \cdot \Phi(x)\), where
+\(\Phi\) is the standard-normal CDF. ReLU has a kink at zero, which
+forces the codegen to substitute a subgradient convention
+(Chapter~\ref{chap:mlp}). GELU is differentiable everywhere, with a
+soft-gate behavior near zero that empirically helps transformers
+(and, it turns out, modernized CNNs). Diagonal activation Jacobian,
+same family as ReLU's diagonal, just with a smooth scalar derivative
+instead of an indicator. Theorems
+\ref{ax:geluScalar}--\ref{thm:gelu_has_vjp} provide the scalar
+function, its derivative, the Jacobian, and the assembled VJP.
+
+Both primitives are used by the upcoming Vision Transformer chapter
+(Chapter~\ref{chap:attention}) without modification. ConvNeXt
+introduces them here so they're available before ViT needs them.
+
+\section*{The ConvNeXt block}
+
+Each ConvNeXt block stacks the modernization items into a single
+residual unit:
+
+\[
+\text{DW } 7 \times 7 \;\to\; \text{LN} \;\to\;
+1 \times 1\ \text{expand } 4\times \;\to\; \text{GELU} \;\to\;
+1 \times 1\ \text{project} \;\to\; \text{LayerScale} \;\to\; +\,\text{residual}.
+\]
+
+Two pieces are worth naming. The \emph{inverted bottleneck}
+($1 \times 1$ expand 4$\times$, depthwise spatial conv at the wide
+point, $1 \times 1$ project) is exactly the MobileNetV2 inverted
+residual from Chapter~\ref{chap:depthwise}---ConvNeXt is paying the
+MobileNet idea forward. \emph{LayerScale} (Touvron et al.\ 2021) is
+a learnable per-channel scalar \(\gamma\) initialized to \(10^{-6}\)
+that multiplies the block's contribution before the residual add,
+keeping the block near-identity at init in the same spirit as
+ResNet's residual. The spec's \texttt{.convNextStage} primitive
+emits \(N\) of these blocks at fixed channel width; the
+\texttt{.convNextDownsample} primitive emits the LN + $2 \times 2$
+stride-2 conv that transitions between stages.
+
+\section*{ConvNeXt-T is four stages, ResNet-style}
+
+The full ConvNeXt-T spec is the same stem--stages--head template
+as ResNet-34: a $4 \times 4$ stride-4 ``patchify'' stem replaces
+the $7 \times 7$ stride-2 stem; four stages with block counts
+\((3, 3, 9, 3)\) at channel widths \((96, 192, 384, 768)\) replace
+the ResNet stages; a final global-average-pool plus 768-to-10
+dense replaces the head. Total: 27.8M parameters, comparable to
+ResNet-50. Every architectural primitive in the spec is now
+codegen-backed and has a proved VJP; none of the math in this
+chapter is genuinely new beyond the LayerNorm-axis rotation and
+the GELU smoothness.
+
+The bigger pedagogical point---and the one the example section
+below makes concrete---is that with a modernized convnet
+backbone, the dominant axis of variation between runs becomes the
+\emph{training recipe}, not the architecture. The chapter
+finishes with a CutMix-vs-bare-vs-RandAugment ablation that lifts
+ConvNeXt-T's Imagenette accuracy by 2.9 points without touching
+a single weight.
+
+\section*{The theorems}
+
 \begin{definition}[GELU scalar function]
   \label{ax:geluScalar}
   \lean{Proofs.geluScalar}
@@ -3756,26 +3887,6 @@ Mechanical; see \leandocref{Proofs.layerNorm\_has\_vjp}.
 \leanok
 Mechanical; see \leandocref{Proofs.gelu\_has\_vjp}.
 \end{proof}
-
-Two primitives transformers need that CNNs don't.
-
-\textbf{LayerNorm} (Ba, Kiros, Hinton 2016,
-\href{https://arxiv.org/abs/1607.06450}{arXiv:1607.06450}) is BatchNorm
-on a different axis: normalizes per-sample across the feature dimension
-rather than per-feature across a batch. Sidesteps BN's small-batch /
-variable-sequence-length failure mode, which is why every transformer
-uses it instead. The proof is the same three-term Jacobian cancellation
-BN uses (Chapter~\ref{chap:bn}) applied to a different axis; see
-\S~\ref{thm:layerNorm_has_vjp}.
-
-\textbf{GELU} (Hendrycks \& Gimpel 2016,
-\href{https://arxiv.org/abs/1606.08415}{arXiv:1606.08415}) is a smooth
-approximation of ReLU: $\mathrm{GELU}(x) = x \cdot \Phi(x)$ where
-$\Phi$ is the standard-normal CDF. Differentiable everywhere; the
-``soft gate'' behavior near zero is a measurable accuracy improvement
-in transformers. Diagonal activation Jacobian, same family as ReLU.
-
-Chapter~\ref{chap:attention} uses both to define ViT.
 
 \section{Example: ConvNeXt-T on Imagenette}
 \label{sec:convnext_example}
