@@ -3356,6 +3356,129 @@ chapter formalized.
 \chapter{EfficientNet}
 \label{chap:se}
 
+\section*{A convolution treats every channel equally}
+
+By the time a feature map reaches a deep stage of a CNN, each
+channel is a learned ``feature detector'' for something specific---a
+headlight, a curve, a fur texture, a leaf edge. A standard
+\(3 \times 3\) convolution that consumes this feature map treats
+every one of those channels as equally important contributors to
+every output channel. Its kernel learns a fixed mixing recipe
+that's applied to every spatial position of every input image,
+regardless of what's actually in the image.
+
+That's wasteful in a particular way. A ``headlight'' channel is
+useful when there's a car in the image and useless on a beach. A
+``leaf-edge'' channel is useful in a tree-heavy region and useless
+in the sky. The network has no built-in way to say ``for this
+image, dial channel 47 up and channel 112 down.'' Hu et al.\ 2018
+(\href{https://arxiv.org/abs/1709.01507}{arXiv:1709.01507})
+designed a tiny module that lets the network do exactly that:
+look at the global content of the feature map, produce a
+per-channel gain, and rescale every channel by its gain before
+passing the feature map forward.
+
+That module is the \textbf{Squeeze-and-Excitation block}, and at
+its core it is a learned per-channel attention mechanism that
+predates the transformer-era ``attention'' by four years and
+informs every post-2018 vision architecture.
+
+\section*{Three steps, one tensor product}
+
+An SE block on a feature map \(x \in \mathbb{R}^{B \times C \times H \times W}\)
+runs three operations in sequence:
+
+\begin{enumerate}
+\item \textbf{Squeeze.} Global-average-pool across spatial
+  dimensions: \(s_c = \frac{1}{HW} \sum_{i,j} x_{c, i, j}\). Result
+  is a \(B \times C\) tensor---one scalar per image per channel,
+  summarizing the channel's overall activity.
+
+\item \textbf{Excite.} Push \(s\) through a tiny two-layer MLP with
+  a bottleneck:
+  \(g = \sigma(W_2\, \mathrm{ReLU}(W_1 s))\), where \(W_1\) is
+  \(C \to C/r\) and \(W_2\) is \(C/r \to C\) for a reduction ratio
+  \(r\) (typically 16). The sigmoid squashes each output to
+  \([0, 1]\). Result: \(g \in \mathbb{R}^{B \times C}\), a per-channel
+  gate value.
+
+\item \textbf{Apply.} Multiply the original feature map by the
+  gates, broadcast across the spatial axes:
+  \(y_{c, i, j} = g_c \cdot x_{c, i, j}\). Channels with gate near
+  1 pass through; channels with gate near 0 are suppressed.
+\end{enumerate}
+
+That's it. The MLP operates on a \([B, C]\) tensor, not
+\([B, C, H, W]\), so it's tiny---\(C^2 / r + C/r + C\) parameters
+per block, vs millions for a standard conv at the same width.
+
+\section*{From the framework: it's an elementwise product}
+
+What is the SE block, as a function? Up to a learned scalar
+factor per channel, it's just an \emph{elementwise product} of
+the input with a side branch:
+
+\[
+\mathrm{se}(x) \;=\; x \;\odot\; g(\mathrm{gap}(x)),
+\]
+
+where the gate \(g\) is built from the saved input \(x\) via two
+dense layers and a sigmoid. We already proved the VJP of an
+elementwise product (Chapter~\ref{chap:tensor}). We already
+proved the VJP of dense (Chapter~\ref{chap:mlp}). We already
+proved the VJP of identity, and an additive fan-in collapses to
+the same product-rule structure as elementwise. Theorem
+\ref{thm:seBlock_has_vjp} is one line of composition; it
+introduces no new analytic dependencies.
+
+\section*{This is attention, in disguise, before transformers}
+
+The mechanism is worth naming clearly: SE \emph{looks at the entire
+feature map}, produces \emph{a content-dependent re-weighting}, and
+\emph{applies it back to the data}. That is a learned attention
+operation in the standard sense. The reduction is over the spatial
+axes (so each token-equivalent is a channel, not a patch), but the
+shape is the same: a query (GAP summary) attending over a
+collection (the channels) to produce weights, weights gating the
+original signal.
+
+The transformer's self-attention (Vaswani et al.\ 2017) generalizes
+the same pattern from a fixed query (the GAP) to a learned
+sequence of queries (the token positions) and from a fixed
+key/value (the channels) to a learned key/value (per-token
+features). SE is the bare minimum version of that idea. Every
+post-2018 vision architecture has SE or one of its descendants
+(CBAM, ECA, GE) bolted in, because the accuracy-per-parameter
+cost is low and the operation composes cleanly with anything
+else.
+
+\section*{EfficientNet-B0: MobileNet-V2 with SE everywhere}
+
+EfficientNet-B0 (Tan \& Le 2019,
+\href{https://arxiv.org/abs/1905.11946}{arXiv:1905.11946}) is, at
+the architectural level, MobileNet-V2 with two changes:
+
+\begin{enumerate}
+\item Every \texttt{.mbConv} block contains an SE sub-module after
+  the depthwise conv. That's the \texttt{useSE = true} flag in the
+  spec.
+\item Swish (\(x \cdot \sigma(x)\)) replaces ReLU as the activation.
+  Smoother gradient, modest empirical lift, no new VJP structure---
+  just chain rule through a sigmoid.
+\end{enumerate}
+
+The paper's \emph{actual} thesis is \textbf{compound scaling}:
+jointly scale depth, width, and input resolution by a single
+coefficient \(\phi\) and you get the EfficientNet family
+B0 through B7, with B7 reaching ImageNet state-of-the-art at the
+time. At the B0 baseline (the one in this book), the architectural
+lift over MobileNet-V2 is essentially SE plus Swish; the compound
+scaling story lives in the B0$\to$B7 progression that we don't
+fit on Imagenette because the dataset is too small for the
+return-on-scaling to show up.
+
+\section*{The theorem}
+
 \begin{theorem}[SE block VJP]
   \label{thm:seBlock_has_vjp}
   \lean{Proofs.seBlock_has_vjp}
