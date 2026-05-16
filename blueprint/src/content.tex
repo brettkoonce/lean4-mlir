@@ -3024,6 +3024,143 @@ the leave-one-out chain.
 \chapter{MobileNetV2}
 \label{chap:depthwise}
 
+\section*{A standard conv does two jobs at once}
+
+A standard 3$\times$3 convolution from \(C_\text{in}\) channels to
+\(C_\text{out}\) channels computes, for every output cell:
+
+\[
+y_{c_\text{out},\,i,\,j}
+\;=\;
+\sum_{c_\text{in},\,k_h,\,k_w}
+W_{c_\text{out},\,c_\text{in},\,k_h,\,k_w}
+\cdot
+x_{c_\text{in},\,i+k_h,\,j+k_w}.
+\]
+
+That sum is doing two things. The \(k_h, k_w\) part is
+\emph{spatial mixing}: it combines a pixel with its neighbors. The
+\(c_\text{in}\) part is \emph{cross-channel mixing}: it combines
+the \(C_\text{in}\) channels into each of \(C_\text{out}\) new
+channels. Both happen inside the same kernel and at the same cost
+\(C_\text{in} \times C_\text{out} \times k^2\) weights per layer.
+
+Howard et al.\ 2017 (MobileNetV1, then V2 in
+\href{https://arxiv.org/abs/1801.04381}{arXiv:1801.04381})
+asked: what if we factored those two responsibilities and only
+paid the full cost of one of them? The spatial mixing is locally
+information-rich and benefits from a real \(3 \times 3\)
+neighborhood. The channel mixing can be approximated by a much
+cheaper operation. If we separate them, we get parameter
+efficiency without losing much expressive power.
+
+\section*{Depthwise: one kernel per channel, no cross-channel sum}
+
+A \emph{depthwise} convolution does the spatial half on its own,
+per channel. Each output channel comes from one input channel, with
+its own \(k \times k\) kernel:
+
+\[
+y_{c,\,i,\,j}
+\;=\;
+\sum_{k_h,\,k_w}
+W_{c,\,k_h,\,k_w}
+\cdot
+x_{c,\,i+k_h,\,j+k_w}.
+\]
+
+Only one summation level (over the kernel positions), not two. No
+mixing between channels at all---channel \(c\) of the output only
+ever looks at channel \(c\) of the input. The weight tensor is
+shape \([C, k, k]\) instead of \([C_\text{out}, C_\text{in}, k, k]\):
+
+\[
+\text{depthwise weights: } C \times 3 \times 3
+\quad\text{vs}\quad
+\text{standard weights: } C_\text{out} \times C_\text{in} \times 3 \times 3.
+\]
+
+For a typical \(C_\text{in} = C_\text{out} = 64\) layer, that's 576
+weights vs 36{,}864 weights---a 64$\times$ reduction. The Jacobian
+from Chapter \ref{chap:cnn} simplifies in step: one fewer \(\Sigma\)
+level means the depthwise input-VJP is a slightly simpler
+reversed-kernel convolution, the weight VJP is a slightly simpler
+transpose-trick, and the bias VJP is the same per-channel sum.
+Theorems \ref{ax:depthwise_has_vjp3} through
+\ref{ax:depthwise_bias_grad_has_vjp} prove the depthwise VJPs.
+
+\section*{The depthwise-separable sandwich}
+
+A depthwise conv alone never lets channels see each other. That's
+a problem---the whole point of stacking convolutions is to build
+hierarchical features that combine information across channels.
+The fix is to follow each depthwise with a \emph{pointwise}
+\(1 \times 1\) convolution, which is purely cross-channel mixing
+(no spatial structure---each output pixel is a learned linear
+combination of the same input pixel's channels). That two-step
+combination,
+
+\[
+\text{depthwise}\ 3 \times 3
+\quad \longrightarrow \quad
+\text{pointwise}\ 1 \times 1,
+\]
+
+is called a \emph{depthwise-separable convolution}, and it's what
+replaces the standard \(3 \times 3\) conv in MobileNet and
+everywhere downstream. A standard \(3 \times 3\) over 64$\to$64
+costs 36{,}864 weights; the separable version costs 576 (depthwise)
++ 4{,}096 (pointwise) = 4{,}672. Eight times fewer.
+
+\section*{Inverted residual: depthwise at the wide point}
+
+MobileNetV2 wraps the separable block in one more idea. ResNet's
+bottleneck block is wide $\to$ narrow $\to$ wide (project down for
+the expensive spatial conv, project back up for the residual).
+MobileNetV2 flips it: \emph{narrow $\to$ wide $\to$ narrow}, with
+the depthwise spatial conv at the wide expansion. The intuition
+is that depthwise is so cheap that you can afford to make it
+\emph{wider}; the narrow bottleneck channels carry the actual
+information across the residual.
+
+Concretely, an inverted-residual block with input channels \(C_\text{in}\),
+output channels \(C_\text{out}\), and expansion ratio \(t\):
+
+\begin{enumerate}
+\item \(1 \times 1\) conv \(C_\text{in} \to t \cdot C_\text{in}\)
+  (the expand)
+\item \(3 \times 3\) depthwise at \(t \cdot C_\text{in}\) channels
+  (the spatial mix at the wide point)
+\item \(1 \times 1\) conv \(t \cdot C_\text{in} \to C_\text{out}\)
+  (the project, narrowing back down)
+\item Residual skip when \(C_\text{in} = C_\text{out}\) and stride
+  equals 1
+\end{enumerate}
+
+This is the \texttt{.invertedResidual ic oc t stride n} primitive
+in the spec---one Layer constructor that emits all three convs,
+the BN+ReLU between them, and the conditional residual add. The
+VJP for the whole block composes the depthwise VJP from this
+chapter with the standard conv2d VJPs from
+Chapter~\ref{chap:cnn}, the BN VJP from
+Chapter~\ref{chap:bn}, and the additive fan-in for the residual
+from Chapter~\ref{chap:residual}. Once again, no new math beyond
+the foundation rules---just the depthwise primitive plus
+composition.
+
+\section*{Stacking the blocks}
+
+MobileNetV2 stacks 17 inverted-residual blocks across seven stages
+(at depths 1, 2, 3, 4, 3, 3, 1) with widths progressing from 16 to
+320 channels, then a final \(1 \times 1\) to 1280 channels, global
+average pool, and a 1280-to-10 dense head---the same stem-stages-head
+template as ResNet-34. Total: 2.24M parameters, 9.5$\times$ fewer
+than ResNet-34, at a modest accuracy cost (87\% vs 90\% on
+Imagenette in the example below). For mobile and embedded
+deployment that trade is the whole reason MobileNet exists.
+
+\section*{The theorems}
+
 \begin{definition}[Depthwise conv forward]
   \label{ax:depthwiseConv2d}
   \lean{Proofs.depthwiseConv2d}
