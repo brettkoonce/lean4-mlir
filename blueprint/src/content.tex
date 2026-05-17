@@ -6545,13 +6545,70 @@ def muZeroGoPredictionValue : NetSpec where
   ]
 \end{verbatim}
 
-\subsection{Beyond vision}
+\subsection{Natural language processing}
 
-Architectures where the task domain is not a 2D image: language,
-audio, 3D scene reconstruction, multimodal embedding, scientific.
-Several of these (NeRF, CLIP) have essentially \emph{no} architectural
-novelty --- the interesting work lives in the data, loss, or training
-procedure, and the bestiary entry exists to make that point.
+The architectures here all consume a sequence of token IDs and emit
+either a sequence of next-token logits (decoder-only: GPT) or a single
+classification head (encoder-only: BERT). At the layer level they
+reduce to one of three shapes: a stack of \texttt{.transformerEncoder}
+(with or without a causal mask), a state-space stack
+(\texttt{.mambaBlock}), or a conv/attention hybrid
+(\texttt{.separableConv} plus \texttt{.transformerEncoder}, QANet).
+What's different from the vision side of the bestiary isn't the layer
+kit --- the kit is the same set of primitives Ch~\ref{chap:attention}
+introduced --- it's everything \emph{around} the layers: the data
+pipeline, the loss, and the inference loop.
+
+\paragraph{TinyGPT, in passing.} The
+\texttt{demos/MainTinyGptShakespeare.lean} trainer in this repo is a
+working char-level transformer at 212K params ($T{=}64$, $D{=}64$,
+4 layers, 2 heads). It trains in $\sim$11 minutes on gfx1100 for 10K
+Adam steps, hits 1.45 nats/char on Karpathy's tinyshakespeare, and
+sampling after that produces recognizable Shakespeare cadence with
+proper character names (KING RICHARD, ROMEO, POMPEY) and multi-line
+dialog. Three things change relative to the image trainers shown
+throughout Part~2, and they capture what NLP training \emph{is}:
+
+\begin{itemize}
+  \item \textbf{Input is a vocabulary index, not a pixel.} The first
+    layer of every NLP spec is \texttt{.tokenPositionEmbed} (one-hot
+    $\to$ learnable token embedding $+$ learnable position embedding).
+    Image stacks open with \texttt{.conv2d} or \texttt{.patchEmbed}
+    acting on $H \times W \times 3$ floats; the NLP stack starts with
+    vocabulary IDs flowing through a lookup table. Replace patches
+    with tokens and the rest of a ViT is shape-identical to a GPT.
+  \item \textbf{Loss is per-token, averaged over the sequence.} Image
+    classifiers compute one cross-entropy at the end of the network:
+    pool to a vector, dense to logits, compare to one ground-truth
+    class. Language models compute cross-entropy at \emph{every}
+    position --- each of the $T$ tokens predicts the next one, and the
+    per-token losses are averaged. Our trainer reuses the same
+    cross-entropy path through a flag (\texttt{useSeg} in
+    \texttt{TrainConfig}) that switches the loss from ``one vector
+    versus one class'' to ``$T$ vectors versus $T$ classes.'' No new
+    VJP machinery; the per-token softmax-CE backward is the same one
+    Ch~\ref{chap:mlp} derived, applied $T$ times in parallel.
+  \item \textbf{Inference is autoregressive.} The training loop is a
+    single forward pass per batch, just like image classification, but
+    \emph{inference} is a $T$-step loop: the network predicts token
+    $t{+}1$ from tokens $[0..t]$, the sampled token is appended to the
+    context, and the network runs again for $t{+}2$. Our
+    \texttt{tinygpt-shakespeare sample} executable implements exactly
+    this loop --- $\sim$30 lines of plain Lean, no proof machinery,
+    calling the same compiled vmfb the trainer used. The architectural
+    cost is the causal mask: during training, attention at position
+    $t$ must not see positions $t{+}1$ onward, or the model would
+    trivially predict the answer it can see. We expose this via the
+    \texttt{causalMask} flag on \texttt{.transformerEncoder}; the rest
+    of the kit is shared with ViT.
+\end{itemize}
+
+That's the entire delta. Same Adam optimizer, same VJP machinery, same
+compile-to-IREE pipeline. The bestiary entries below all reduce to
+either ``GPT shape'' (decoder-only, causal mask, autoregressive
+sampling) or ``BERT shape'' (encoder-only, bidirectional attention,
+classification head); the architectural differences between them are
+smaller than the chapter-to-chapter deltas in Part~2.
 
 \subsubsection*{Mamba (\texttt{Bestiary/Mamba.lean})}
 \emph{One} new primitive (\S~\ref{layer:mambaBlock}). Variants: Mamba-130M / 370M / 790M /
@@ -6705,6 +6762,15 @@ def nystromformerBase : NetSpec where
     .transformerEncoder 768 12 3072 12
   ]
 \end{verbatim}
+
+\subsection{Beyond vision}
+
+Architectures where the task domain is neither a 2D image nor a token
+sequence: audio, 3D scene reconstruction, multimodal embedding,
+scientific. Several of these (NeRF, CLIP) have essentially
+\emph{no} architectural novelty --- the interesting work lives in the
+data, loss, or training procedure, and the bestiary entry exists to
+make that point.
 
 \subsubsection*{WaveNet (\texttt{Bestiary/WaveNet.lean})}
 \emph{One} new primitive (\S~\ref{layer:waveNetBlock}). Dilated causal
