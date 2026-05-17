@@ -560,7 +560,12 @@ them (one new operator VJP); Ch~\ref{chap:cnn} swaps the dense
 forward for conv2d (one new operator VJP); Ch~\ref{chap:bn} adds
 BatchNorm (one new operator VJP); Ch~\ref{chap:residual} adds the
 residual skip (additive fan-in, Theorem~\ref{thm:biPath_has_vjp},
-no new operator); Ch~\ref{chap:layernorm} replaces ReLU with GELU
+no new operator); Ch~\ref{chap:depthwise} factors standard conv
+into depthwise plus pointwise (one new operator VJP, recombined
+through the chain rule); Ch~\ref{chap:se} adds the SE
+channel-attention block (elementwise product plus GAP plus dense,
+one new VJP composed from pieces we already have);
+Ch~\ref{chap:layernorm} replaces ReLU with GELU
 (one new operator); Ch~\ref{chap:attention} adds attention (new
 matrix-level machinery plus softmax-VJP chains). The structural
 rules from this chapter \emph{never change}; later chapters add
