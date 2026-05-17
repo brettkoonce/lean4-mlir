@@ -6034,6 +6034,58 @@ Pixel-level labeling. Symmetric encoder/decoder with skip connections
 is the recurring pattern; UNet is the canonical instance, and the same
 shape later became the diffusion-model backbone.
 
+\paragraph{UNet on Pets, in passing.} The
+\texttt{demos/MainUnetPetsTrain.lean} trainer in this repo is a working
+encoder-decoder UNet at 7.85M params on Oxford-IIIT Pets
+($224 \times 224$ RGB $\to$ 3-class trimap: animal, background,
+boundary). After $\sim$50 epochs the predicted masks track ground-truth
+shapes closely on held-out validation images (see
+\texttt{demos/README.md} for the rendered grid). The two codegen
+primitives that make it work --- bilinear upsample (forward + VJP) and
+channel concat --- are exposed at the \texttt{Layer} level as
+\texttt{.unetDown} and \texttt{.unetUp}, which the canonical bestiary
+UNet below also uses. Three things change relative to the image
+\emph{classifiers} of Part~2:
+
+\begin{itemize}
+  \item \textbf{The label is a tensor, not a scalar.} Classifiers emit
+    one logit vector per image (shape $B \times K$) and compare it to
+    one ground-truth class. Segmentation networks emit one logit
+    vector per \emph{pixel} (shape $B \times K \times H \times W$, with
+    $H \times W$ matching the input) and compare against a
+    shape-identical ground-truth mask. Cross-entropy is computed per
+    pixel, averaged spatially. This rides the same \texttt{useSeg} flag
+    in \texttt{TrainConfig} that the NLP subsection's TinyGPT uses for
+    per-token loss, applied across the spatial axes instead of the
+    token axis --- no new VJP machinery; the per-pixel softmax-CE
+    backward is the same one Ch~\ref{chap:mlp} derived, fired $HW$
+    times in parallel.
+  \item \textbf{The network has to give spatial resolution back.}
+    A classifier downsamples aggressively (input $224^2$, bottleneck
+    $7^2$, GAP, $K$-way logits) and discards spatial structure on
+    purpose. A segmentation network downsamples \emph{and then
+    upsamples}, with \emph{skip connections} from each encoder stage
+    spliced into the matching decoder stage so the output recovers
+    pixel-level detail the bottleneck threw away. That symmetry is
+    exactly what \texttt{.unetUp}'s body bundles --- bilinear upsample
+    + channel concat with the saved skip + two convs --- and it is the
+    only architectural piece this section's backbones add to the Part~2
+    kit.
+  \item \textbf{Inference is one forward pass; post-processing
+    differs.} Segmentation doesn't autoregress; one network call
+    produces every pixel label simultaneously. What changes is what
+    you do with the logits: \texttt{argmax} per pixel and render as a
+    colored mask. The \texttt{pets-predict} executable is the smallest
+    example of that path --- same vmfb the trainer produced, plus a
+    small C colormap routine.
+\end{itemize}
+
+The encoder-decoder-with-skips shape is not specific to segmentation
+either: it later became the diffusion-model backbone (DDPM, Stable
+Diffusion, in ``Image generation'' below), and the same two primitives
+carry that subsection's generative pipeline. The layer kit is shared;
+only the loss and the inference procedure change.
+
 \subsubsection*{UNet (\texttt{Bestiary/UNet.lean})}
 \emph{Two} new primitives (\S~\ref{layer:unetDown},
 \S~\ref{layer:unetUp}). Skip connections are implicit --- the $i$-th \texttt{unetUp} from the bottom
