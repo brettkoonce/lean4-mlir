@@ -51,7 +51,7 @@ All foundational definitions and proofs live in `Tensor.lean`:
   - `elemwiseProduct f g` — pointwise product of two vector functions
   - `elemwiseProduct_has_vjp` — the bi-cotangent VJP (proved, no sorry)
   - `identity_has_vjp` — identity backward is passthrough (proved)
-  - `pdiv_mul` — product rule for partial derivatives (axiom)
+  - `pdiv_mul` — product rule for partial derivatives (theorem)
 
 This file specializes to the SE pattern: `f = identity`, `g = gate`.
 The gate is left abstract (you only need `HasVJP gate`); we sketch the

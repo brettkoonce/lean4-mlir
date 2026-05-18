@@ -308,9 +308,10 @@ def identity_has_vjp (n : Nat) : HasVJP (fun (x : Vec n) => x) where
 /-! `Mat m n` and `Vec (m * n)` are in bijection by row-major flattening.
 This bijection lets us **define** `pdivMat` in terms of `pdiv` rather
 than introducing parallel axioms, and so **derive** the rank-2 chain,
-sum, and identity rules as theorems. The 5 local Jacobian axioms
-(matmul, scalarScale, transpose, rowIndep) remain — they're genuine
-calculus facts about specific operations, not structural framework. -/
+sum, and identity rules as theorems. The 5 local Jacobian theorems
+(matmul, scalarScale, transpose, rowIndep) are likewise derived from
+foundation rules — they state genuine calculus facts about specific
+operations, not structural framework. -/
 
 namespace Mat
 
@@ -597,7 +598,7 @@ noncomputable def hasVJPMat_to_hasVJP {a b c d : Nat} {f : Mat a b → Mat c d}
 -- § Matrix VJP Building Blocks (matmul, row-independent functions)
 -- ════════════════════════════════════════════════════════════════
 
-/-! The three axioms here are local Jacobians for the operations that
+/-! The three theorems here are local Jacobians for the operations that
 appear in scaled dot-product attention's backward pass:
 
 1. **`pdivMat_matmul_left_const`** — right-factor varies, left factor fixed:
@@ -1469,9 +1470,10 @@ end Tensor3
 
 /-- **3D partial derivative** — now a definition via the triple-nested
     flatten bijection, no longer an axiom. The four structural rules
-    (comp / add / id) follow as theorems. Local Jacobian axioms
-    (`pdiv3_conv2d_vjp`, `pdiv3_maxPool2_vjp`, `pdiv3_depthwise_vjp`)
-    remain — those state specific Jacobian values, not framework. -/
+    (comp / add / id) follow as theorems. Operator-specific VJPs at
+    rank 3 (`conv2d_has_vjp3`, `maxPool2_has_vjp3`, `depthwise_has_vjp3`)
+    are bundled `HasVJP3` defs in their respective files — those state
+    specific Jacobian values, not framework. -/
 noncomputable def pdiv3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
     (x : Tensor3 c₁ h₁ w₁)

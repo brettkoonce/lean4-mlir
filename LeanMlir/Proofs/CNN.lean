@@ -28,9 +28,10 @@ Two specific tricks appear in the MLIR:
 2. **Weight-gradient via the transpose trick**: `dW = conv(xᵀ, dyᵀ)`,
    where the spatial dims of the gradient become the "kernel".
 
-We state the VJP formulas as axioms (the proofs are standard matrix
-calculus on cross-correlations), and the commentary explains why each
-formula has the form it does.
+We bundle the VJP formulas as `HasVJP3` / `HasVJP` defs whose
+`.correct` fields are proved (the proofs are standard matrix calculus
+on cross-correlations), and the commentary explains why each formula
+has the form it does.
 -/
 
 open Finset BigOperators Classical
@@ -795,10 +796,11 @@ MLIR (Conv 1 backward — exactly this trick):
 **Framework.** `HasVJP3` covered only input→output VJPs. For the
 weight gradient we reuse the plain `HasVJP` on `Vec` by flattening
 both the kernel (`Kernel4.flatten : Kernel4 → Vec (oc*ic*kH*kW)`) and
-the output (`Tensor3.flatten : Tensor3 → Vec (oc*h*w)`). The axiom
-asserts existence of a correct backward for the flattened function;
-the user-facing `conv2d_weight_grad` wrapper does the flatten / unflatten
-housekeeping so callers see the natural `Kernel4` type.
+the output (`Tensor3.flatten : Tensor3 → Vec (oc*h*w)`). The bundled
+`HasVJP` def packages a correct backward for the flattened function
+together with its proof; the user-facing `conv2d_weight_grad` wrapper
+does the flatten / unflatten housekeeping so callers see the natural
+`Kernel4` type.
 
 Numerical validation: `check_jacobians.py:test_conv2d_weight_grad`
 gradient-checks the transpose-trick formula against finite differences. -/
@@ -1592,7 +1594,7 @@ for the mutual-inverse proofs. -/
 -/
 example : True := trivial  -- anchor for the docstring above
 
-/-! ## Summary of axioms in this file
+/-! ## Summary of derivations in this file
 
 - `conv2d`, `maxPool2` — forward operations (black-box forward).
 - `maxPool2_has_vjp3` — input-path VJP for maxPool2 (argmax-routing

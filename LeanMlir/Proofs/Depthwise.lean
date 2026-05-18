@@ -1169,7 +1169,7 @@ the same expressive power as a regular conv at a fraction of the FLOPs.
   optional Squeeze-and-Excitation. See `SE.lean` for the SE part.
 -/
 
-/-! ## Summary of axioms in this file
+/-! ## Summary of derivations in this file
 
 **None.** The forward `depthwiseConv2d` is a concrete definition (not a
 black-box), and all three VJPs are theorems proved from the foundation

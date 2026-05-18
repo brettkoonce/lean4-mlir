@@ -1924,7 +1924,7 @@ where `MLP(z) = dense(Wfc2, bfc2, gelu(dense(Wfc1, bfc1, z)))`.
 
 Every piece is now a `HasVJPMat` on `Mat N D`:
 - `LN1`, `LN2` — `layerNorm_per_token_has_vjp_mat` (theorem via `rowwise_has_vjp_mat`)
-- `MHSA`       — `mhsa_has_vjp_mat` (bundled axiom — Phase 8)
+- `MHSA`       — `mhsa_has_vjp_mat` (bundled `HasVJPMat` def — Phase 8)
 - `MLP`        — two `dense_per_token_has_vjp_mat` + one `gelu_per_token_has_vjp_mat`, glued with `vjpMat_comp`
 - `+` residuals — `biPathMat_has_vjp` (theorem, Tensor.lean) with identity
 

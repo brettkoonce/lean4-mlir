@@ -42,7 +42,7 @@ because it's faster than the exact erf form.
 
 Same template as ReLU/Swish/h-swish: elementwise -> diagonal Jacobian.
 Derivative is messier but it's still just a number you compute and
-multiply. One more `pdiv_*` axiom, one more `HasVJP` instance.
+multiply. One more `pdiv_*` theorem, one more `HasVJP` instance.
 -/
 
 open Finset BigOperators Classical

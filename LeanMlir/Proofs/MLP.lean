@@ -20,9 +20,9 @@ namespace Proofs
 noncomputable def dense {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) : Vec n :=
   fun j => (∑ i : Fin m, x i * W i j) + b j
 
-/-- **Dense Jacobian** — `∂(W·x + b)_j/∂x_i = W_{ij}`. Now a theorem,
-    derived from the foundation axioms (`pdiv_add`, `pdiv_const`,
-    `pdiv_finset_sum`, `pdiv_mul`, `pdiv_reindex`). The proof factors
+/-- **Dense Jacobian** — `∂(W·x + b)_j/∂x_i = W_{ij}`. Derived from the
+    foundation theorems (`pdiv_add`, `pdiv_const`, `pdiv_finset_sum`,
+    `pdiv_mul`, `pdiv_reindex`). The proof factors
     `dense W b` into `(∑ i', x i' * W i' j) + b j`, distributes pdiv
     over the outer sum and finset sum, applies the product rule per
     summand, and collapses the Kronecker δ. -/
@@ -93,9 +93,9 @@ theorem pdiv_dense {m n : Nat} (W : Mat m n) (b : Vec n)
   simp
 
 /-- **Jacobian of dense wrt W** — `∂dense(W, b, x)_j/∂W_{i, j'} = x_i·δ(j, j')`.
-    Now a theorem, derived from foundation axioms (`pdiv_add`,
-    `pdiv_const`, `pdiv_finset_sum`, `pdiv_mul`, `pdiv_reindex`) over
-    the flatten bijection. Symmetric counterpart to `pdiv_dense`. -/
+    Derived from foundation theorems (`pdiv_add`, `pdiv_const`,
+    `pdiv_finset_sum`, `pdiv_mul`, `pdiv_reindex`) over the flatten
+    bijection. Symmetric counterpart to `pdiv_dense`. -/
 theorem pdiv_dense_W {m n : Nat} (b : Vec n) (x : Vec m) (W : Mat m n)
     (i : Fin m) (j' : Fin n) (j : Fin n) :
     pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
