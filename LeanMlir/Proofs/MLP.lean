@@ -374,11 +374,48 @@ theorem pdiv_relu (n : Nat) (x : Vec n)
     formula `if x > 0 then dy else 0` instead, which agrees with the
     canonical witness at smooth points and differs at the kinks (the
     convention `relu'(0) := 0` used by every ML framework). The
-    Lean-vs-codegen gap at the kinks is the codegen trust boundary —
-    see `LeanMlir/Proofs/README.md`. -/
+    smooth-point agreement is formal: see
+    `relu_codegen_matches_canonical` below. The Lean-vs-codegen gap at
+    the kinks is the codegen trust boundary — see
+    `LeanMlir/Proofs/README.md`. -/
 noncomputable def relu_has_vjp (n : Nat) : HasVJP (relu n) where
   backward x dy i := ∑ j : Fin n, pdiv (relu n) x i j * dy j
   correct _ _ _  := rfl
+
+/-- **Bridge: `relu_has_vjp`'s canonical backward matches the codegen
+    formula at smooth points.**
+
+    At any point where no coordinate of `x` is zero, the canonical
+    `pdiv`-derived backward `∑ j, pdiv (relu n) x i j * dy j` collapses
+    to the framework subgradient `if x i > 0 then dy i else 0` that
+    `MlirCodegen.lean` actually emits. Closes the smooth-point half of
+    the codegen trust boundary — what's left is just the kink
+    convention. -/
+theorem relu_codegen_matches_canonical (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) (i : Fin n) :
+    (relu_has_vjp n).backward x dy i = if x i > 0 then dy i else 0 := by
+  show ∑ j : Fin n, pdiv (relu n) x i j * dy j = _
+  simp_rw [pdiv_relu n x h_smooth i]
+  rw [Finset.sum_eq_single i
+      (fun j _ hne => by rw [if_neg (Ne.symm hne)]; ring)
+      (fun h => absurd (Finset.mem_univ i) h)]
+  rw [if_pos rfl]
+  by_cases hx : x i > 0
+  · rw [if_pos hx, if_pos hx]; ring
+  · rw [if_neg hx, if_neg hx]; ring
+
+/-- **Diagonal-indicator restatement of the smooth-point bridge.**
+    `relu_has_vjp.backward x dy i = 1_{x i > 0} · dy i` at smooth
+    points — same content as `relu_codegen_matches_canonical`,
+    factored as ``(indicator) · dy i`` for downstream use. -/
+theorem relu_canonical_diagonal (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) (i : Fin n) :
+    (relu_has_vjp n).backward x dy i =
+    (if x i > 0 then (1 : ℝ) else 0) * dy i := by
+  rw [relu_codegen_matches_canonical n x h_smooth dy i]
+  by_cases hx : x i > 0
+  · rw [if_pos hx, if_pos hx]; ring
+  · rw [if_neg hx, if_neg hx]; ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § Softmax Cross-Entropy Loss
