@@ -1761,9 +1761,9 @@ def identity3_has_vjp (c h w : Nat) : HasVJP3 (fun (x : Tensor3 c h w) => x) whe
     -- Each sum is: ∑ x, if a = x then f x else 0
     -- Use Finset.sum_eq_single to collapse
     rw [Finset.sum_eq_single ci (by intro co _ hne; simp [Ne.symm hne]) (by simp)]
-    simp only [eq_self_iff_true, ite_true]
+    simp only [ite_true]
     rw [Finset.sum_eq_single hi (by intro ho _ hne; simp [Ne.symm hne]) (by simp)]
-    simp only [eq_self_iff_true, ite_true]
+    simp only [ite_true]
     rw [Finset.sum_eq_single wi (by intro wo _ hne; simp [Ne.symm hne]) (by simp)]
     simp
 
