@@ -2011,6 +2011,24 @@ theorem maxPool2_codegen_matches_canonical {c h w : Nat}
   · rw [if_neg (fun ⟨_, _, _, h⟩ => h_arg h), if_neg h_arg]
     ring
 
+/-- **MaxPool2 pointwise VJP — no canonical-witness escape.**
+
+    `HasVJPAt3 maxPool2 x` under `MaxPool2Smooth x`. The backward is
+    the codegen `select_and_scatter` formula directly; the `correct`
+    field is `maxPool2_codegen_matches_canonical` flipped, not `rfl`.
+    Companion of `relu_has_vjp_at` in MLP.lean — together they let
+    `mlp_has_vjp_at` and (future) `cnn_has_vjp_at3` discharge the chain
+    rule through every kinked operator without the global vacuous
+    witness. -/
+noncomputable def maxPool2_has_vjp_at3 {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x) :
+    HasVJPAt3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w) x where
+  backward dy ci hi_in wi_in :=
+    if MaxPool2IsArgmax x ci hi_in wi_in
+    then dy ci (winRow hi_in) (winCol wi_in) else 0
+  correct dy ci hi_in wi_in :=
+    (maxPool2_codegen_matches_canonical x h_smooth dy ci hi_in wi_in).symm
+
 -- ════════════════════════════════════════════════════════════════
 -- § Flatten
 -- ════════════════════════════════════════════════════════════════

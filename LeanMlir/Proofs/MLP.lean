@@ -208,6 +208,40 @@ noncomputable def dense_has_vjp {m n : Nat} (W : Mat m n) (b : Vec n) :
     simp only [Mat.mulVec]
     congr 1; ext j; rw [pdiv_dense]
 
+/-- **Dense is everywhere differentiable.** `dense W b` is affine in
+    `x`, hence smooth; this is the underlying `Differentiable ℝ`
+    statement that `vjp_comp_at` needs when composing through dense
+    layers. -/
+theorem dense_differentiable {m n : Nat} (W : Mat m n) (b : Vec n) :
+    Differentiable ℝ (dense W b) := by
+  intro x
+  unfold dense
+  rw [show (fun x' : Vec m => fun j' : Fin n =>
+              (∑ i' : Fin m, x' i' * W i' j') + b j') =
+        (fun x' j' =>
+          (fun y : Vec m => fun j'' : Fin n => ∑ i' : Fin m, y i' * W i' j'') x' j' +
+          (fun _ : Vec m => b) x' j') from rfl]
+  have h_summand_diff : ∀ i' ∈ (Finset.univ : Finset (Fin m)),
+      DifferentiableAt ℝ
+        (fun (x' : Vec m) (j'' : Fin n) => x' i' * W i' j'') x := by
+    intro i' _
+    have h_y : DifferentiableAt ℝ (fun (y : Vec m) (_ : Fin n) => y i') x :=
+      (reindexCLM (fun _ : Fin n => i')).differentiableAt
+    have h_W : DifferentiableAt ℝ (fun (_ : Vec m) (j'' : Fin n) => W i' j'') x :=
+      differentiableAt_const _
+    exact h_y.mul h_W
+  have h_sum_diff : DifferentiableAt ℝ
+      (fun (y : Vec m) (j'' : Fin n) => ∑ i' : Fin m, y i' * W i' j'') x := by
+    have : (fun (y : Vec m) (j'' : Fin n) => ∑ i' : Fin m, y i' * W i' j'') =
+           (fun y : Vec m => ∑ i' : Fin m,
+             fun j'' : Fin n => y i' * W i' j'') := by
+      funext y j''; rw [Finset.sum_apply]
+    rw [this]
+    exact DifferentiableAt.fun_sum (fun i' _ => h_summand_diff i' (Finset.mem_univ i'))
+  have h_const_diff : DifferentiableAt ℝ (fun _ : Vec m => b) x :=
+    differentiableAt_const _
+  exact h_sum_diff.add h_const_diff
+
 /-- **Dense weight gradient is the outer product** — theorem (Phase 7).
 
     `Mat.outer x dy` is the cotangent-contracted Jacobian of `dense(W, b, x)`
@@ -277,38 +311,36 @@ def dense_bias_grad {n : Nat} (dy : Vec n) : Vec n := dy
 noncomputable def relu (n : Nat) (x : Vec n) : Vec n :=
   fun i => if x i > 0 then x i else 0
 
-/-- **ReLU partial derivative — proved via local-diagonal-CLM transport.**
+/-- **ReLU's local linear part at a smooth point** — the diagonal
+    indicator CLM. At each coordinate `k`, projects to `y k` if
+    `x k > 0`, otherwise zero. Two smooth points with the same sign
+    pattern share this same CLM. -/
+noncomputable def reluLinearPart (n : Nat) (x : Vec n) : Vec n →L[ℝ] Vec n :=
+  ContinuousLinearMap.pi fun k =>
+    if x k > 0 then ContinuousLinearMap.proj k else (0 : Vec n →L[ℝ] ℝ)
 
-    At a smooth point (`∀ k, x k ≠ 0`), `relu n` agrees with a fixed
-    diagonal indicator CLM on `Metric.ball x r` for `r := min |x k|` —
-    every coordinate keeps its sign in that ball. `EventuallyEq`
-    transports `fderiv` from the CLM (which is itself, since CLMs are
-    their own `fderiv`) to ReLU, and direct evaluation at `basisVec i`
-    reads off the entry. -/
-theorem pdiv_relu (n : Nat) (x : Vec n)
-    (h_smooth : ∀ k, x k ≠ 0)
-    (i j : Fin n) :
-    pdiv (relu n) x i j =
-      if i = j then (if x i > 0 then 1 else 0) else 0 := by
-  -- Local diagonal indicator CLM at x.
-  let phi : Vec n →L[ℝ] Vec n :=
-    ContinuousLinearMap.pi fun k =>
-      if x k > 0 then ContinuousLinearMap.proj k else (0 : Vec n →L[ℝ] ℝ)
-  -- Coordinate evaluation: phi y k = if x k > 0 then y k else 0.
-  have h_phi_eval : ∀ y : Vec n, ∀ k : Fin n,
-      phi y k = if x k > 0 then y k else 0 := by
-    intro y k
-    show (ContinuousLinearMap.pi (fun k' =>
-            if x k' > 0 then ContinuousLinearMap.proj k'
-                        else (0 : Vec n →L[ℝ] ℝ))) y k = _
-    rw [ContinuousLinearMap.pi_apply]
-    by_cases hxk : x k > 0
-    · rw [if_pos hxk, if_pos hxk]; rfl
-    · rw [if_neg hxk, if_neg hxk]; rfl
-  -- n = 0: Fin 0 is empty, vacuously true.
+@[simp] theorem reluLinearPart_apply (n : Nat) (x y : Vec n) (k : Fin n) :
+    reluLinearPart n x y k = if x k > 0 then y k else 0 := by
+  show (ContinuousLinearMap.pi (fun k' =>
+          if x k' > 0 then ContinuousLinearMap.proj k'
+                      else (0 : Vec n →L[ℝ] ℝ))) y k = _
+  rw [ContinuousLinearMap.pi_apply]
+  by_cases hxk : x k > 0
+  · rw [if_pos hxk, if_pos hxk]; rfl
+  · rw [if_neg hxk, if_neg hxk]; rfl
+
+/-- **ReLU is differentiable at smooth points.** Within `Metric.ball x r`
+    for `r := min |x k|`, every coordinate keeps its sign — so `relu n`
+    agrees with `reluLinearPart n x` on a neighborhood. `EventuallyEq`
+    promotes the CLM's `HasFDerivAt` to ReLU's. -/
+theorem relu_hasFDerivAt (n : Nat) (x : Vec n) (h_smooth : ∀ k, x k ≠ 0) :
+    HasFDerivAt (relu n) (reluLinearPart n x) x := by
   rcases Nat.eq_zero_or_pos n with hn0 | hn_pos
-  · subst hn0; exact i.elim0
-  -- Pick r := min |x k|.
+  · subst hn0
+    -- Vec 0 is a singleton; relu and reluLinearPart agree pointwise.
+    have h_eq : (relu 0 : Vec 0 → Vec 0) = (⇑(reluLinearPart 0 x) : Vec 0 → Vec 0) := by
+      funext _ k; exact k.elim0
+    rw [h_eq]; exact (reluLinearPart 0 x).hasFDerivAt
   haveI : Nonempty (Fin n) := ⟨⟨0, hn_pos⟩⟩
   let r : ℝ := Finset.univ.inf' Finset.univ_nonempty (fun k : Fin n => |x k|)
   have hr_pos : 0 < r := by
@@ -316,8 +348,7 @@ theorem pdiv_relu (n : Nat) (x : Vec n)
     intro k _; exact abs_pos.mpr (h_smooth k)
   have hr_le : ∀ k : Fin n, r ≤ |x k| := fun k =>
     Finset.inf'_le _ (Finset.mem_univ k)
-  -- Local agreement: relu n y = phi y on Metric.ball x r.
-  have h_local : Set.EqOn (relu n) (⇑phi) (Metric.ball x r) := by
+  have h_local : Set.EqOn (relu n) (⇑(reluLinearPart n x)) (Metric.ball x r) := by
     intro y hy
     have hy_norm : ‖y - x‖ < r := by
       rw [Metric.mem_ball, dist_eq_norm] at hy; exact hy
@@ -328,33 +359,41 @@ theorem pdiv_relu (n : Nat) (x : Vec n)
         rw [Real.norm_eq_abs] at h2
         exact h2
       linarith [hr_le k]
-    show (relu n y) k = phi y k
-    rw [h_phi_eval]
+    show (relu n y) k = (reluLinearPart n x) y k
+    rw [reluLinearPart_apply]
     show (if y k > 0 then y k else 0) = if x k > 0 then y k else 0
     rcases lt_or_gt_of_ne (h_smooth k) with hxk_neg | hxk_pos
-    · -- x k < 0 ⇒ y k < 0 (within radius |x k|).
-      have hyk_neg : y k < 0 := by
+    · have hyk_neg : y k < 0 := by
         have h_abs : |y k - x k| < -x k := by rwa [abs_of_neg hxk_neg] at h_close
         have h_lt : y k - x k < -x k := (abs_lt.mp h_abs).2
         linarith
       rw [if_neg (not_lt.mpr hyk_neg.le), if_neg (not_lt.mpr hxk_neg.le)]
-    · -- x k > 0 ⇒ y k > 0.
-      have hyk_pos : 0 < y k := by
+    · have hyk_pos : 0 < y k := by
         have h_abs : |y k - x k| < x k := by rwa [abs_of_pos hxk_pos] at h_close
         have h_lt : -(x k) < y k - x k := (abs_lt.mp h_abs).1
         linarith
       rw [if_pos hyk_pos, if_pos hxk_pos]
-  -- Promote to EventuallyEq at x.
-  have h_evt : (relu n) =ᶠ[nhds x] (⇑phi : Vec n → Vec n) :=
+  have h_evt : (relu n) =ᶠ[nhds x] (⇑(reluLinearPart n x) : Vec n → Vec n) :=
     h_local.eventuallyEq_of_mem (Metric.ball_mem_nhds x hr_pos)
-  -- Transport: HasFDerivAt (relu n) phi x.
-  have h_fderiv : HasFDerivAt (relu n) phi x :=
-    (phi.hasFDerivAt).congr_of_eventuallyEq h_evt
-  -- Compute pdiv directly.
+  exact (reluLinearPart n x).hasFDerivAt.congr_of_eventuallyEq h_evt
+
+/-- **ReLU is `DifferentiableAt` at smooth points.** Corollary of
+    `relu_hasFDerivAt`; lets `vjp_comp_at` chain through ReLU. -/
+theorem relu_differentiableAt_of_smooth (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0) : DifferentiableAt ℝ (relu n) x :=
+  (relu_hasFDerivAt n x h_smooth).differentiableAt
+
+/-- **ReLU partial derivative** — proved via `relu_hasFDerivAt` and
+    direct evaluation at `basisVec i`. -/
+theorem pdiv_relu (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0)
+    (i j : Fin n) :
+    pdiv (relu n) x i j =
+      if i = j then (if x i > 0 then 1 else 0) else 0 := by
+  rcases Nat.eq_zero_or_pos n with hn0 | hn_pos
+  · subst hn0; exact i.elim0
   unfold pdiv
-  rw [h_fderiv.fderiv, h_phi_eval, basisVec_apply]
-  -- Goal: (if x j > 0 then (if j = i then 1 else 0) else 0)
-  --     = if i = j then (if x i > 0 then 1 else 0) else 0
+  rw [(relu_hasFDerivAt n x h_smooth).fderiv, reluLinearPart_apply, basisVec_apply]
   by_cases hij : i = j
   · subst hij; rw [if_pos rfl, if_pos rfl]
   · rw [if_neg (fun h : j = i => hij h.symm), if_neg hij]
@@ -417,6 +456,26 @@ theorem relu_canonical_diagonal (n : Nat) (x : Vec n)
   · rw [if_pos hx, if_pos hx]; ring
   · rw [if_neg hx, if_neg hx]; ring
 
+/-- **ReLU pointwise VJP — no canonical-witness escape.**
+
+    Constructs `HasVJPAt (relu n) x` at a smooth point. The backward
+    is the codegen-shape `if x i > 0 then dy i else 0` directly; the
+    `correct` field is a real proof via `pdiv_relu` (the smooth-point
+    Jacobian) + sum-collapse, not `rfl`. -/
+noncomputable def relu_has_vjp_at (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0) : HasVJPAt (relu n) x where
+  backward dy i := if x i > 0 then dy i else 0
+  correct := by
+    intro dy i
+    simp_rw [pdiv_relu n x h_smooth]
+    rw [Finset.sum_eq_single i
+        (fun j _ hne => by rw [if_neg (Ne.symm hne)]; ring)
+        (fun h => absurd (Finset.mem_univ i) h)]
+    rw [if_pos rfl]
+    by_cases hxi : x i > 0
+    · rw [if_pos hxi, if_pos hxi]; ring
+    · rw [if_neg hxi, if_neg hxi]; ring
+
 -- ════════════════════════════════════════════════════════════════
 -- § Softmax Cross-Entropy Loss
 -- ════════════════════════════════════════════════════════════════
@@ -464,6 +523,60 @@ noncomputable def mlp_has_vjp {d₀ d₁ d₂ d₃ : Nat}
   backward x dy i :=
     ∑ j : Fin d₃, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j
   correct _ _ _  := rfl
+
+/-- **MLP pointwise VJP — no canonical-witness escape.**
+
+    Constructs `HasVJPAt (mlpForward …) x` by chaining `vjp_comp_at`
+    through `dense → relu_at → dense → relu_at → dense`. Requires the
+    intermediate pre-activations `dense W₀ b₀ x` and `dense W₁ b₁ z₀`
+    to avoid zero (no coordinate ties the ReLU kink) — exactly the
+    "smooth input" condition. Replaces the vacuous
+    `mlp_has_vjp.correct := rfl` with a real chain-rule proof at
+    smooth inputs. -/
+noncomputable def mlp_has_vjp_at {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
+    (x : Vec d₀)
+    (h_smooth_0 : ∀ k, dense W₀ b₀ x k ≠ 0)
+    (h_smooth_1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0) :
+    HasVJPAt (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x := by
+  unfold mlpForward
+  -- relu d₁ ∘ dense W₀ b₀
+  have step1 : HasVJPAt (relu d₁ ∘ dense W₀ b₀) x :=
+    vjp_comp_at (dense W₀ b₀) (relu d₁) x
+      ((dense_differentiable W₀ b₀) x)
+      (relu_differentiableAt_of_smooth d₁ _ h_smooth_0)
+      ((dense_has_vjp W₀ b₀).toHasVJPAt x)
+      (relu_has_vjp_at d₁ _ h_smooth_0)
+  have step1_diff : DifferentiableAt ℝ (relu d₁ ∘ dense W₀ b₀) x :=
+    (relu_differentiableAt_of_smooth d₁ _ h_smooth_0).comp x
+      ((dense_differentiable W₀ b₀) x)
+  -- dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀
+  have step2 : HasVJPAt (dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) x :=
+    vjp_comp_at (relu d₁ ∘ dense W₀ b₀) (dense W₁ b₁) x
+      step1_diff
+      ((dense_differentiable W₁ b₁) _)
+      step1
+      ((dense_has_vjp W₁ b₁).toHasVJPAt _)
+  have step2_diff : DifferentiableAt ℝ (dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) x :=
+    ((dense_differentiable W₁ b₁) _).comp x step1_diff
+  -- relu d₂ ∘ dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀
+  have step3 : HasVJPAt (relu d₂ ∘ dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) x :=
+    vjp_comp_at (dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) (relu d₂) x
+      step2_diff
+      (relu_differentiableAt_of_smooth d₂ _ h_smooth_1)
+      step2
+      (relu_has_vjp_at d₂ _ h_smooth_1)
+  have step3_diff : DifferentiableAt ℝ
+      (relu d₂ ∘ dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) x :=
+    (relu_differentiableAt_of_smooth d₂ _ h_smooth_1).comp x step2_diff
+  -- dense W₂ b₂ ∘ (above)
+  exact vjp_comp_at (relu d₂ ∘ dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) (dense W₂ b₂) x
+    step3_diff
+    ((dense_differentiable W₂ b₂) _)
+    step3
+    ((dense_has_vjp W₂ b₂).toHasVJPAt _)
 
 /-! ## Public correctness theorems for the canonical-witness defs
 

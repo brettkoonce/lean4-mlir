@@ -82,3 +82,9 @@ open Proofs
 -- Codegen smooth-point bridge theorems (CNN.lean / MaxPool2)
 #print axioms pdiv3_maxPool2_smooth
 #print axioms maxPool2_codegen_matches_canonical
+
+-- HasVJPAt pointwise framework (E.5) — kills `correct := rfl` escape
+-- at the three kinked operators (relu, mlp, maxPool2) at smooth points.
+#print axioms relu_has_vjp_at
+#print axioms mlp_has_vjp_at
+#print axioms maxPool2_has_vjp_at3

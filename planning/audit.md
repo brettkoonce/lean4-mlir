@@ -1,7 +1,7 @@
-# Audit follow-ups (E.5) — clean-session handoff
+# Audit follow-ups — wrap-up
 
-Parallel-agent audit (`tests/AUDIT_REPORT.md`) flagged five proposed patches.
-Four have landed; one (E.5) remains for a future focused session.
+Parallel-agent audit (`tests/AUDIT_REPORT.md`) flagged five proposed
+patches. **All five have landed.** This doc is now historical record.
 
 ## Status snapshot
 
@@ -10,10 +10,10 @@ Four have landed; one (E.5) remains for a future focused session.
 | E.3   | ✅ Landed   | `281598f` | 12 doc-drift fixes across 7 files; 1 broken xref     |
 | E.1   | ✅ Landed   | `1c6d18c` | `relu_codegen_matches_canonical` + diagonal restate  |
 | E.4   | ✅ Landed   | `122f487` | CI three-axiom closure check; 49/49 conforming       |
-| E.2   | ✅ Landed   | (this PR) | `maxPool2_codegen_matches_canonical` + smooth pdiv3  |
-| E.5   | ⏸ Deferred | —         | `HasVJPAt` pointwise framework (this doc)            |
+| E.2   | ✅ Landed   | `957b389` | `maxPool2_codegen_matches_canonical` + smooth pdiv3  |
+| E.5   | ✅ Landed   | (this PR) | `HasVJPAt` pointwise framework + 3 kinked instances  |
 
-CI is green; the three-axiom closure invariant is now permanent (now 51/51).
+CI is green; the three-axiom closure invariant now stands at **54/54**.
 
 ---
 
@@ -222,83 +222,43 @@ theorem maxPool2_codegen_matches_canonical {c h w : Nat}
 
 ---
 
-## E.5 — `HasVJPAt` pointwise framework
+## E.5 — `HasVJPAt` pointwise framework ✅ Landed
 
-**Goal.** Eliminate the canonical-witness `correct := rfl` escape for
-the three operators that use it problematically (`relu_has_vjp`,
-`mlp_has_vjp`, `maxPool2_has_vjp3`). Introduces a pointwise-smoothness
-variant of the entire VJP framework. The user's framing: "same
-load-bearing structure, reached a more formal/defensible way."
+**Outcome.** Kills the vacuous `correct := rfl` escape at the three
+problematic kinked operators (`relu_has_vjp`, `mlp_has_vjp`,
+`maxPool2_has_vjp3`) by introducing pointwise-smoothness variants.
+~265 lines across `Tensor.lean`, `MLP.lean`, `CNN.lean`,
+`tests/AuditAxioms.lean`.
 
-### Estimated effort
+**Shipped:**
 
-**~200–500 lines new framework, 1–2 days.** Additive — doesn't break
-existing proofs. Smooth-operator HasVJP instances (~40 of them: dense,
-BatchNorm, GELU, etc.) keep their `correct := rfl` pattern because
-there it's non-vacuous.
+- `HasVJPAt` (Vec) and `HasVJPAt3` (Tensor3) structures —
+  same pdiv-sum contract as `HasVJP` / `HasVJP3`, but only at a chosen
+  smooth point.
+- `HasVJP.toHasVJPAt` / `HasVJP3.toHasVJPAt3` — trivial lift, lets the
+  ~40 globally-smooth instances participate without modification.
+- `vjp_comp_at` — chain rule under `DifferentiableAt` (not global
+  `Differentiable`). The piece that lets composition pass through
+  ReLU at smooth inputs.
+- `reluLinearPart` + `relu_hasFDerivAt` (refactored out of
+  `pdiv_relu`) + `relu_differentiableAt_of_smooth`.
+- `dense_differentiable` (global) — clears the chain-rule diff
+  obligations for the dense layers.
+- `relu_has_vjp_at` — backward is the codegen `if x i > 0 then dy i
+  else 0` directly; `correct` is `pdiv_relu` + sum-collapse, not `rfl`.
+- `mlp_has_vjp_at` — four nested `vjp_comp_at` calls through
+  `dense → relu_at → dense → relu_at → dense`. No `rfl` in `correct`.
+- `maxPool2_has_vjp_at3` — backward is the `select_and_scatter`
+  formula directly; `correct` is `maxPool2_codegen_matches_canonical`
+  flipped, not `rfl`.
 
-### What remains after E.5
+**Not shipped (audit Step 5, marked optional):**
 
-`correct := rfl` is **still** load-bearing wherever the pdiv-sum IS the
-chain-rule answer (~40 smooth-operator instances). What disappears is
-the **use of `correct := rfl` to dodge a real proof obligation** at
-points where the operator isn't differentiable. The framework's
-invariant becomes stronger: every `correct` field either (a) chains
-through `fderiv` at a smooth operator where the pdiv-sum is the chain-
-rule answer, or (b) discharges under an explicit pointwise smoothness
-hypothesis. No more "true but vacuous" hiding in the middle.
-
-### Recipe
-
-#### Step 1 — Core structure (~20 lines)
-
-```lean
-structure HasVJPAt {α β} [NormedAddCommGroup α] [NormedSpace ℝ α]
-    [NormedAddCommGroup β] [NormedSpace ℝ β]
-    (f : α → β) (x : α) where
-  backward : β → α
-  correct  : ∀ dy, /* the same pdiv-equality but only at x */
-```
-
-Probably belongs in a new file `LeanMlir/Proofs/HasVJPAt.lean`.
-
-#### Step 2 — Chain rule and structural lemmas (~80 lines)
-
-- `vjp_comp_at : HasVJPAt f x → HasVJPAt g (f x) →
-    DifferentiableAt ℝ f x → DifferentiableAt ℝ g (f x) →
-    HasVJPAt (g ∘ f) x`. Mirror of `vjp_comp` but with `DifferentiableAt`.
-- `vjp_id_at`, `vjp_const_at` — trivial.
-- `biPath_has_vjp_at`, `elemwiseProduct_has_vjp_at` — fan-in / fan-out
-  analogues for pointwise smoothness.
-
-#### Step 3 — Pointwise analogues for kinked operators (~50 lines)
-
-- `relu_has_vjp_at x (h : ∀ k, x k ≠ 0)` — real proof via `pdiv_relu`,
-  no canonical witness. The bridge theorem
-  `relu_codegen_matches_canonical` becomes a property of this `_at`
-  instance.
-- `maxPool2_has_vjp3_at x (h : MaxPool2Smooth x)` — requires E.2 first
-  (uses `pdiv3_maxPool2_at_smooth` from E.2).
-
-#### Step 4 — `mlp_has_vjp_at` composed (~30 lines)
-
-`HasVJPAt (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x` under input smoothness,
-composed via `vjp_comp_at` through dense→relu→dense→relu→dense. No
-canonical-witness escape. Replaces the vacuous `mlp_has_vjp.correct`
-at smooth inputs with a real proof.
-
-#### Step 5 — Trickle through Part 2 chapter proofs (~20 lines)
-
-Optional: add `_at` variants of `cnn_has_vjp3`, `bn_has_vjp`, etc., to
-restore composition through ReLU/maxpool in the larger chains. Most
-likely scoped per-architecture as needed rather than blanket coverage.
-
-### Dependency
-
-E.2 must land before E.5's `maxPool2_has_vjp3_at` step. The `_at`
-analogues of other kinked operators (just maxpool, really — dense /
-softmax / layernorm / GELU are globally smooth) all reduce to the
-same pattern.
+- `vjp_comp_at3` (Tensor3 chain rule under DifferentiableAt) and a
+  full `cnn_has_vjp_at3` composing every CNN layer. Would need
+  smoothness propagation through `conv2d` as well — a separate lift.
+  The three kinked-operator instances above are the load-bearing fix
+  the audit called for; the Tensor3 chain rule is additive on top.
 
 ---
 
@@ -312,15 +272,16 @@ same pattern.
   of the ReLU smooth-point bridge (mirrors what landed in MLP.lean)
 - `tests/AuditSanity.lean` — concrete-instance pinning examples
 
-**Production code (touched by E.1 / E.2 / E.3):**
-- `LeanMlir/Proofs/MLP.lean:382` — `relu_codegen_matches_canonical` +
-  `relu_canonical_diagonal` (E.1)
-- `LeanMlir/Proofs/CNN.lean` — `maxPool2_has_vjp3` (still
-  canonical-witness `correct := rfl`), now joined by
-  `pdiv3_maxPool2_smooth` + `maxPool2_codegen_matches_canonical`
-  and friends (E.2)
-- `LeanMlir/Proofs/Tensor.lean:1441` — `Tensor3.flatten` (the A1 path
-  was not needed in the end; left as a marker for E.5)
+**Production code (touched by E.1 / E.2 / E.3 / E.5):**
+- `LeanMlir/Proofs/Tensor.lean` — `HasVJPAt` / `HasVJPAt3` structures,
+  `vjp_comp_at` chain rule, lift helpers (E.5)
+- `LeanMlir/Proofs/MLP.lean` — `relu_codegen_matches_canonical` +
+  `relu_canonical_diagonal` (E.1); `reluLinearPart` +
+  `relu_hasFDerivAt` + `relu_differentiableAt_of_smooth` +
+  `dense_differentiable` + `relu_has_vjp_at` + `mlp_has_vjp_at` (E.5)
+- `LeanMlir/Proofs/CNN.lean` — `maxPool2_has_vjp3` (kept; canonical
+  witness), `pdiv3_maxPool2_smooth` + `maxPool2_codegen_matches_canonical`
+  + supporting infra (E.2); `maxPool2_has_vjp_at3` (E.5)
 
 **CI:**
 - `.github/workflows/proofs.yml` — three-axiom closure check via
@@ -330,19 +291,3 @@ same pattern.
   ```
   Must match the total `depends on axioms:` line count.
 
----
-
-## When you come back (for E.5)
-
-E.2 unblocked E.5. Pick it up by:
-
-1. Read E.5 above; the framework structure stands.
-2. Use `MaxPool2Smooth` / `MaxPool2IsArgmax` already in
-   `CNN.lean` as the hypothesis shape for the `_at` variant of
-   `maxPool2_has_vjp3`.
-3. `lake env lean` against a scratch file is the fast iteration target;
-   only port to production once clean.
-
-Standing rules (from memory) still apply: pause for explicit
-`yes push` on every commit; rebuild blueprint PDF only if blueprint
-files change (this work is pure Lean).

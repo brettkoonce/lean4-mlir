@@ -302,6 +302,62 @@ def identity_has_vjp (n : Nat) : HasVJP (fun (x : Vec n) => x) where
     simp [Finset.mem_univ]
 
 -- ════════════════════════════════════════════════════════════════
+-- § Pointwise VJP — same load-bearing structure, single input point
+-- ════════════════════════════════════════════════════════════════
+
+/-! **Why a separate `HasVJPAt`.** The global `HasVJP` framework
+delivers a *single* backward function that's correct at *every* input.
+For non-smooth operators (`relu`, `maxPool2`, …) the only honest
+`correct` witness is the canonical `pdiv`-derived sum, which gives a
+trivially-`rfl`-true contract that doesn't pin down behavior at the
+kinks. `HasVJPAt f x` carries the same contract but only at a chosen
+smooth point `x` — exactly enough to discharge the chain rule under
+`DifferentiableAt` and to plug in real per-operator Jacobian formulas
+(`pdiv_relu`, `pdiv3_maxPool2_smooth`, …) instead of `correct := rfl`.
+
+Smooth operators (`dense`, `add`, `mul`, `softmax`, `batchNorm`, …)
+keep their global `HasVJP` instances; we trivially lift to `HasVJPAt`
+at any point via `HasVJP.toHasVJPAt` when composing. -/
+
+structure HasVJPAt {m n : Nat} (f : Vec m → Vec n) (x : Vec m) where
+  backward : Vec n → Vec m
+  correct : ∀ (dy : Vec n) (i : Fin m),
+    backward dy i = ∑ j : Fin n, pdiv f x i j * dy j
+
+/-- Trivial lift: a global `HasVJP` gives a `HasVJPAt` at any point. -/
+def HasVJP.toHasVJPAt {m n : Nat} {f : Vec m → Vec n}
+    (hf : HasVJP f) (x : Vec m) : HasVJPAt f x where
+  backward dy := hf.backward x dy
+  correct := hf.correct x
+
+/-- **Identity pointwise VJP** — trivial. -/
+def identity_has_vjp_at (n : Nat) (x : Vec n) :
+    HasVJPAt (fun (y : Vec n) => y) x :=
+  (identity_has_vjp n).toHasVJPAt x
+
+/-- **Chain rule for pointwise VJPs.** Same shape as `vjp_comp`, but
+    only requires `DifferentiableAt` at the relevant points (not
+    everywhere). The pointwise analogue is what lets us compose
+    through `relu` at smooth inputs. -/
+noncomputable def vjp_comp_at {m n p : Nat}
+    (f : Vec m → Vec n) (g : Vec n → Vec p) (x : Vec m)
+    (hf_diff : DifferentiableAt ℝ f x)
+    (hg_diff : DifferentiableAt ℝ g (f x))
+    (hf : HasVJPAt f x) (hg : HasVJPAt g (f x)) :
+    HasVJPAt (g ∘ f) x where
+  backward dy := hf.backward (hg.backward dy)
+  correct := by
+    intro dy i
+    rw [hf.correct]
+    simp_rw [hg.correct]
+    simp_rw [Finset.mul_sum]
+    rw [Finset.sum_comm]
+    congr 1; ext k
+    rw [pdiv_comp _ _ _ hf_diff hg_diff]
+    simp_rw [← mul_assoc]
+    rw [← Finset.sum_mul]
+
+-- ════════════════════════════════════════════════════════════════
 -- § Matrix ↔ Vector flattening (row-major)
 -- ════════════════════════════════════════════════════════════════
 
@@ -1599,6 +1655,30 @@ noncomputable def vjp3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
                dy kk.1 kk.2.1 kk.2.2) := by simp_rw [Finset.sum_product]
          _ = _ := Finset.sum_comm
          _ = _ := by simp_rw [Finset.sum_product]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Pointwise VJP3 — Tensor3 analogue of HasVJPAt
+-- ════════════════════════════════════════════════════════════════
+
+/-- Tensor3 analogue of `HasVJPAt`: the same `pdiv3`-sum contract, but
+    only required at the chosen smooth point `x`. The natural home for
+    `maxPool2_has_vjp_at3` and any other kinked Tensor3 operator. -/
+structure HasVJPAt3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
+    (x : Tensor3 c₁ h₁ w₁) where
+  backward : Tensor3 c₂ h₂ w₂ → Tensor3 c₁ h₁ w₁
+  correct : ∀ (dy : Tensor3 c₂ h₂ w₂)
+    (ci : Fin c₁) (hi : Fin h₁) (wi : Fin w₁),
+    backward dy ci hi wi =
+    ∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
+      pdiv3 f x ci hi wi co ho wo * dy co ho wo
+
+/-- Trivial lift: a global `HasVJP3` gives a `HasVJPAt3` at any point. -/
+def HasVJP3.toHasVJPAt3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂}
+    (hf : HasVJP3 f) (x : Tensor3 c₁ h₁ w₁) : HasVJPAt3 f x where
+  backward dy := hf.backward x dy
+  correct := hf.correct x
 
 /-- **Identity Jacobian for Tensor3** — theorem, via `pdiv_id` and
     injectivity of the nested `finProdFinEquiv`. -/
