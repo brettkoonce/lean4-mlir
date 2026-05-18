@@ -40,6 +40,36 @@ jobs:
                      LeanMlir.Proofs.LayerNorm \
                      LeanMlir.Proofs.Attention
 
+      - name: Three-axiom closure check
+        run: |
+          set -e
+          out=$(lake env lean tests/AuditAxioms.lean 2>&1)
+          total=$(echo "$out" | grep -c "depends on axioms:" || true)
+          ok=$(echo "$out" | grep -cE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true)
+
+          echo "Total #print axioms lines:        $total"
+          echo "Lines matching {propext, Classical.choice, Quot.sound}: $ok"
+
+          if [ "$total" -eq 0 ]; then
+            echo "::error::tests/AuditAxioms.lean produced no #print axioms output"
+            echo "$out"
+            exit 1
+          fi
+
+          if [ "$total" -ne "$ok" ]; then
+            echo "::error::Some theorems depend on axioms outside [propext, Classical.choice, Quot.sound]:"
+            echo "$out" | grep "depends on axioms:" \
+              | grep -vE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true
+            exit 1
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Three-Axiom Closure" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **All ${total} headline theorems closed under [\`propext\`, \`Classical.choice\`, \`Quot.sound\`]**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Verified by \`tests/AuditAxioms.lean\` (no \`sorryAx\`, no project axioms)." >> $GITHUB_STEP_SUMMARY
+
       - name: Summary
         run: |
           echo "## Proof Verification" >> $GITHUB_STEP_SUMMARY
