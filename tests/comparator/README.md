@@ -1,6 +1,6 @@
 # Comparator-based independent kernel re-check
 
-This directory holds an end-to-end verification of 38 theorems from the
+This directory holds an end-to-end verification of 41 theorems from the
 proof suite using
 [leanprover/comparator](https://github.com/leanprover/comparator) — the
 trustworthy-judge tool the Lean Zulip community recommended for projects
@@ -16,15 +16,15 @@ opinion.
 
 ## What gets verified
 
-The 38 theorems span foundation rules, every chapter's headline
+The 41 theorems span foundation rules, every chapter's headline
 Jacobian, and the public `*_has_vjp_correct` wrappers:
 
 | Bucket | Theorems |
 |---|---|
 | Foundation calculus rules | `pdiv_comp`, `pdiv_add`, `pdiv_mul`, `pdiv_id`, `pdiv_const`, `pdiv_reindex`, `pdiv_finset_sum`, `pdivMat_rowIndep` |
 | Mat-level structural rules | `pdivMat_comp`, `pdivMat_matmul_left_const`, `pdivMat_scalarScale`, `pdivMat_transpose` |
-| Ch 3 MLP | `pdiv_dense`, `pdiv_dense_W`, `pdiv_dense_b`, `dense_weight_grad_correct`, `dense_bias_grad_correct`, `relu_has_vjp_correct`, `mlp_has_vjp_correct` |
-| Ch 4 CNN | `maxPool2_has_vjp3_correct` |
+| Ch 3 MLP | `pdiv_dense`, `pdiv_dense_W`, `pdiv_dense_b`, `dense_weight_grad_correct`, `dense_bias_grad_correct`, `relu_has_vjp_correct`, `mlp_has_vjp_correct`, `relu_has_vjp_at_correct`, `mlp_has_vjp_at_correct` |
+| Ch 4 CNN | `maxPool2_has_vjp3_correct`, `maxPool2_has_vjp_at3_correct` |
 | Ch 5 BN | `pdiv_bnAffine`, `pdiv_bnCentered`, `pdiv_bnIstdBroadcast`, `pdiv_bnNormalize` (the famous 3-term cancellation) |
 | Ch 6 Residual | `residual_has_vjp_correct`, `residualProj_has_vjp_correct` |
 | Ch 7 Depthwise | `depthwise_has_vjp3_correct` |
@@ -41,6 +41,12 @@ For each, comparator confirms:
    closure.
 3. The Solution typechecks against Lean's kernel, re-run from the
    compiled `.olean` independently of the elaborator.
+
+The last three entries (`_at_correct`) are pointwise (smooth-input)
+variants whose underlying `.correct` field is a real proof rather than
+`rfl` — closing the kink-rfl-escape at smooth inputs for ReLU, the
+composed MLP, and MaxPool2. See `LeanMlir/Proofs/README.md`'s codegen
+trust boundary section for the math.
 
 ## Prerequisites (one-time)
 

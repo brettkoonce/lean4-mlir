@@ -604,4 +604,32 @@ theorem mlp_has_vjp_correct {d₀ d₁ d₂ d₃ : Nat}
     ∑ j : Fin d₃, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
   (mlp_has_vjp W₀ b₀ W₁ b₁ W₂ b₂).correct x dy i
 
+/-- **Public correctness theorem for `relu_has_vjp_at`** — the
+pointwise (smooth-input) variant. Unlike `relu_has_vjp_correct`, this
+wrapper's underlying `.correct` field is a real proof
+(`pdiv_relu` + sum-collapse), not `rfl`; the wrapper exposes it as
+a top-level proposition for `tests/comparator/` re-verification. -/
+theorem relu_has_vjp_at_correct (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) (i : Fin n) :
+    (relu_has_vjp_at n x h_smooth).backward dy i =
+    ∑ j : Fin n, pdiv (relu n) x i j * dy j :=
+  (relu_has_vjp_at n x h_smooth).correct dy i
+
+/-- **Public correctness theorem for `mlp_has_vjp_at`** — the
+pointwise variant composed via `vjp_comp_at` through
+`dense → relu_at → dense → relu_at → dense`. The underlying
+`.correct` field chains real chain-rule proofs (no `rfl` escape at
+the ReLU kinks). -/
+theorem mlp_has_vjp_at_correct {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
+    (x : Vec d₀)
+    (h_smooth_0 : ∀ k, dense W₀ b₀ x k ≠ 0)
+    (h_smooth_1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0)
+    (dy : Vec d₃) (i : Fin d₀) :
+    (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).backward dy i =
+    ∑ j : Fin d₃, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
+  (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).correct dy i
+
 end Proofs

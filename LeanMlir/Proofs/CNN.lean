@@ -2156,4 +2156,18 @@ theorem maxPool2_has_vjp3_correct {c h w : Nat}
             x ci hi wi co ho wo * dy co ho wo :=
   maxPool2_has_vjp3.correct x dy ci hi wi
 
+/-- **Public correctness theorem for `maxPool2_has_vjp_at3`** — the
+pointwise variant under `MaxPool2Smooth`. The underlying `.correct`
+field is `maxPool2_codegen_matches_canonical` flipped (a real proof),
+not `rfl`; this wrapper exposes it for comparator re-verification. -/
+theorem maxPool2_has_vjp_at3_correct {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x)
+    (dy : Tensor3 c h w)
+    (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)) :
+    (maxPool2_has_vjp_at3 x h_smooth).backward dy ci hi wi =
+    ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
+      pdiv3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)
+            x ci hi wi co ho wo * dy co ho wo :=
+  (maxPool2_has_vjp_at3 x h_smooth).correct dy ci hi wi
+
 end Proofs

@@ -434,3 +434,42 @@ theorem chk_transformerBlock_has_vjp_mat_correct
       pdivMat (transformerBlock N heads d_head mlpDim ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
               X i j k l * dY k l := by sorry
+
+-- Pointwise (`_at`) variants — closures of the smooth-point bridge ──
+
+/-- **`relu_has_vjp_at` contract**: the pointwise (smooth-input)
+variant — backward equals the `pdiv`-contracted Jacobian. Unlike the
+global `chk_relu_has_vjp_correct`, this instance's underlying
+`.correct` is a real proof (`pdiv_relu` + sum-collapse), not `rfl`. -/
+theorem chk_relu_has_vjp_at_correct (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) (i : Fin n) :
+    (relu_has_vjp_at n x h_smooth).backward dy i =
+    ∑ j : Fin n, pdiv (relu n) x i j * dy j := by sorry
+
+/-- **`mlp_has_vjp_at` contract**: pointwise MLP backward via
+`vjp_comp_at` through `dense → relu_at → … → dense`. No `rfl` escape
+at the ReLU kinks; smoothness required on every intermediate
+pre-activation. -/
+theorem chk_mlp_has_vjp_at_correct {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
+    (x : Vec d₀)
+    (h_smooth_0 : ∀ k, dense W₀ b₀ x k ≠ 0)
+    (h_smooth_1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0)
+    (dy : Vec d₃) (i : Fin d₀) :
+    (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).backward dy i =
+    ∑ j : Fin d₃, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j := by sorry
+
+/-- **`maxPool2_has_vjp_at3` contract**: pointwise MaxPool2 backward
+under `MaxPool2Smooth x`. The `correct` field collapses to the
+codegen `select`-shape via `maxPool2_codegen_matches_canonical`, not
+`rfl`. -/
+theorem chk_maxPool2_has_vjp_at3_correct {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x)
+    (dy : Tensor3 c h w)
+    (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)) :
+    (maxPool2_has_vjp_at3 x h_smooth).backward dy ci hi wi =
+    ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
+      pdiv3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)
+            x ci hi wi co ho wo * dy co ho wo := by sorry
