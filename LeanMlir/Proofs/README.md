@@ -188,9 +188,13 @@ canonical backward at the kinks. Instead it emits the standard ML-
 framework subgradient conventions:
 
 - ReLU: `if x > 0 then dy else 0` (the `relu'(0) := 0` convention).
-- MaxPool: `stablehlo.select_and_scatter` with GE-selector + add-
-  scatter (route the gradient to the argmax position; ties broken
-  by the GE comparator).
+- MaxPool: **tile-compare-select** — the gradient is tiled to the
+  input shape, compared against the pooled output with `stablehlo.compare EQ`,
+  and `stablehlo.select`-ed through the resulting mask. The codegen
+  avoids `stablehlo.select_and_scatter` because IREE does not support
+  it (see `MlirCodegen.lean` near the maxPool backward case). At
+  argmax ties, the EQ-mask routes the gradient to *every* tied input
+  cell, matching the PyTorch/JAX semantics.
 
 These match the canonical Lean witness at smooth points and differ
 only at the kinks. The verification gap is intrinsic to backward

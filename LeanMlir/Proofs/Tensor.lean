@@ -1680,6 +1680,43 @@ def HasVJP3.toHasVJPAt3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
   backward dy := hf.backward x dy
   correct := hf.correct x
 
+/-- **Chain rule for pointwise Tensor3 VJPs.** Tensor3 analogue of
+    `vjp_comp_at`. Requires `DifferentiableAt` only at the relevant
+    points (on the flattened forms), which is what `vjp3_comp_at`
+    consumers built from `_at` instances of kinked operators can
+    actually supply. -/
+noncomputable def vjp3_comp_at {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
+    (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
+    (g : Tensor3 c₂ h₂ w₂ → Tensor3 c₃ h₃ w₃)
+    (x : Tensor3 c₁ h₁ w₁)
+    (hf_diff : DifferentiableAt ℝ
+      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
+      (Tensor3.flatten x))
+    (hg_diff : DifferentiableAt ℝ
+      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u)))
+      (Tensor3.flatten (f x)))
+    (hf : HasVJPAt3 f x) (hg : HasVJPAt3 g (f x)) :
+    HasVJPAt3 (g ∘ f) x where
+  backward dy := hf.backward (hg.backward dy)
+  correct := by
+    intro dy ci hi wi
+    rw [hf.correct]; simp_rw [hg.correct]
+    conv_rhs =>
+      arg 2; ext ck; arg 2; ext hk; arg 2; ext wk
+      rw [show pdiv3 (g ∘ f) x ci hi wi ck hk wk * dy ck hk wk =
+          (∑ cj : Fin c₂, ∑ hj : Fin h₂, ∑ wj : Fin w₂,
+            pdiv3 f x ci hi wi cj hj wj * pdiv3 g (f x) cj hj wj ck hk wk) * dy ck hk wk
+        from by rw [← pdiv3_comp _ _ _ hf_diff hg_diff]]
+    simp_rw [Finset.sum_mul, mul_assoc, Finset.mul_sum]
+    show ∑ cj, ∑ hj, ∑ wj, ∑ ck, ∑ hk, ∑ wk, _ = ∑ ck, ∑ hk, ∑ wk, ∑ cj, ∑ hj, ∑ wj, _
+    calc _ = ∑ jj ∈ Finset.univ ×ˢ Finset.univ ×ˢ Finset.univ,
+             ∑ kk ∈ Finset.univ ×ˢ Finset.univ ×ˢ Finset.univ,
+             pdiv3 f x ci hi wi jj.1 jj.2.1 jj.2.2 *
+               (pdiv3 g (f x) jj.1 jj.2.1 jj.2.2 kk.1 kk.2.1 kk.2.2 *
+               dy kk.1 kk.2.1 kk.2.2) := by simp_rw [Finset.sum_product]
+         _ = _ := Finset.sum_comm
+         _ = _ := by simp_rw [Finset.sum_product]
+
 /-- **Identity Jacobian for Tensor3** — theorem, via `pdiv_id` and
     injectivity of the nested `finProdFinEquiv`. -/
 theorem pdiv3_id {c h w : Nat} (x : Tensor3 c h w)
