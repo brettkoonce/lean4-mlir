@@ -1505,7 +1505,9 @@ noncomputable def maxPool2 {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) : Tensor3 c
     agrees with `fderiv`'s junk default of `0` and the canonical
     witness is also `0` there. The codegen emits the
     `select_and_scatter` formula above instead — see
-    `LeanMlir/Proofs/README.md` for the trust-boundary discussion. -/
+    `LeanMlir/Proofs/README.md` for the trust-boundary discussion.
+    Smooth-point agreement is formal: see
+    `maxPool2_codegen_matches_canonical` below. -/
 noncomputable def maxPool2_has_vjp3 {c h w : Nat} :
     HasVJP3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w) where
   backward x dy ci hi wi :=
@@ -1519,6 +1521,495 @@ noncomputable def maxPool2_has_vjp3 {c h w : Nat} :
 noncomputable abbrev maxPool2_input_grad {c h w : Nat}
     (x : Tensor3 c (2*h) (2*w)) (dy : Tensor3 c h w) : Tensor3 c (2*h) (2*w) :=
   maxPool2_has_vjp3.backward x dy
+
+-- ════════════════════════════════════════════════════════════════
+-- § MaxPool2 smooth-point bridge to codegen
+-- ════════════════════════════════════════════════════════════════
+
+/-! ## Smooth-point codegen bridge for MaxPool2
+
+Closes the smooth-point half of the codegen trust boundary at MaxPool2.
+At points where every 2×2 window has a unique strict argmax, the
+canonical pdiv-derived backward in `maxPool2_has_vjp3` collapses to
+"route `dy` to the argmax position, zero elsewhere" — the formula that
+`MlirCodegen.lean` emits via `stablehlo.select_and_scatter`. Mirrors
+`relu_codegen_matches_canonical` in `MLP.lean`, but the local
+linearization is per-2×2-window rather than per-coordinate. -/
+
+-- Window-index helpers --------------------------------------------
+
+/-- Row of the 2×2 window that contains input row `hi_in`. -/
+def winRow {h : Nat} (hi_in : Fin (2 * h)) : Fin h :=
+  ⟨hi_in.val / 2, by have := hi_in.isLt; omega⟩
+
+/-- Position within the window's row (0 = top, 1 = bottom). -/
+def winRowMod {h : Nat} (hi_in : Fin (2 * h)) : Fin 2 :=
+  ⟨hi_in.val % 2, by omega⟩
+
+def winCol {w : Nat} (wi_in : Fin (2 * w)) : Fin w :=
+  ⟨wi_in.val / 2, by have := wi_in.isLt; omega⟩
+
+def winColMod {w : Nat} (wi_in : Fin (2 * w)) : Fin 2 :=
+  ⟨wi_in.val % 2, by omega⟩
+
+/-- Row index of position `a ∈ Fin 2` inside output window `hi_out`. -/
+def winRowInv {h : Nat} (hi_out : Fin h) (a : Fin 2) : Fin (2 * h) :=
+  ⟨2 * hi_out.val + a.val, by have := hi_out.isLt; have := a.isLt; omega⟩
+
+def winColInv {w : Nat} (wi_out : Fin w) (b : Fin 2) : Fin (2 * w) :=
+  ⟨2 * wi_out.val + b.val, by have := wi_out.isLt; have := b.isLt; omega⟩
+
+theorem winRowInv_winRow {h : Nat} (hi_in : Fin (2 * h)) :
+    winRowInv (winRow hi_in) (winRowMod hi_in) = hi_in := by
+  apply Fin.ext; show 2 * (hi_in.val / 2) + hi_in.val % 2 = hi_in.val; omega
+
+theorem winColInv_winCol {w : Nat} (wi_in : Fin (2 * w)) :
+    winColInv (winCol wi_in) (winColMod wi_in) = wi_in := by
+  apply Fin.ext; show 2 * (wi_in.val / 2) + wi_in.val % 2 = wi_in.val; omega
+
+theorem winRow_winRowInv {h : Nat} (ho : Fin h) (a : Fin 2) :
+    winRow (winRowInv ho a) = ho := by
+  apply Fin.ext
+  show (2 * ho.val + a.val) / 2 = ho.val
+  have := a.isLt; omega
+
+theorem winRowMod_winRowInv {h : Nat} (ho : Fin h) (a : Fin 2) :
+    winRowMod (winRowInv ho a) = a := by
+  apply Fin.ext
+  show (2 * ho.val + a.val) % 2 = a.val
+  have := a.isLt; omega
+
+theorem winCol_winColInv {w : Nat} (wo : Fin w) (b : Fin 2) :
+    winCol (winColInv wo b) = wo := by
+  apply Fin.ext
+  show (2 * wo.val + b.val) / 2 = wo.val
+  have := b.isLt; omega
+
+theorem winColMod_winColInv {w : Nat} (wo : Fin w) (b : Fin 2) :
+    winColMod (winColInv wo b) = b := by
+  apply Fin.ext
+  show (2 * wo.val + b.val) % 2 = b.val
+  have := b.isLt; omega
+
+theorem winRowInv_zero {h : Nat} (ho : Fin h) :
+    winRowInv ho (0 : Fin 2) =
+      (⟨2 * ho.val, by have := ho.isLt; omega⟩ : Fin (2 * h)) := by
+  apply Fin.ext; show 2 * ho.val + 0 = 2 * ho.val; omega
+
+theorem winRowInv_one {h : Nat} (ho : Fin h) :
+    winRowInv ho (1 : Fin 2) =
+      (⟨2 * ho.val + 1, by have := ho.isLt; omega⟩ : Fin (2 * h)) := by
+  apply Fin.ext; show 2 * ho.val + 1 = 2 * ho.val + 1; rfl
+
+theorem winColInv_zero {w : Nat} (wo : Fin w) :
+    winColInv wo (0 : Fin 2) =
+      (⟨2 * wo.val, by have := wo.isLt; omega⟩ : Fin (2 * w)) := by
+  apply Fin.ext; show 2 * wo.val + 0 = 2 * wo.val; omega
+
+theorem winColInv_one {w : Nat} (wo : Fin w) :
+    winColInv wo (1 : Fin 2) =
+      (⟨2 * wo.val + 1, by have := wo.isLt; omega⟩ : Fin (2 * w)) := by
+  apply Fin.ext; show 2 * wo.val + 1 = 2 * wo.val + 1; rfl
+
+-- Smoothness / argmax predicates ----------------------------------
+
+/-- **Smoothness:** every 2×2 window of `x` has pairwise-distinct
+    values (so a unique strict argmax). The natural domain on which
+    `maxPool2` is differentiable. -/
+def MaxPool2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
+  ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w)
+    (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
+    x ci (winRowInv hi_out ab.1) (winColInv wi_out ab.2) ≠
+    x ci (winRowInv hi_out ab'.1) (winColInv wi_out ab'.2)
+
+/-- Input position `(ci, hi_in, wi_in)` attains the max of its window. -/
+def MaxPool2IsArgmax {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
+    (ci : Fin c) (hi_in : Fin (2 * h)) (wi_in : Fin (2 * w)) : Prop :=
+  ∀ a b : Fin 2,
+    x ci (winRowInv (winRow hi_in) a) (winColInv (winCol wi_in) b) ≤
+    x ci hi_in wi_in
+
+-- Argmax extractor + window-max characterization -----------------
+
+/-- A (not necessarily unique) argmax of the 2×2 window at output
+    position `(co, ho, wo)`. Unique under `MaxPool2Smooth`. -/
+noncomputable def maxPool2Argmax {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w))
+    (co : Fin c) (ho : Fin h) (wo : Fin w) : Fin 2 × Fin 2 :=
+  Classical.choose
+    ((Finset.univ : Finset (Fin 2 × Fin 2)).exists_max_image
+      (fun ab => x co (winRowInv ho ab.1) (winColInv wo ab.2))
+      Finset.univ_nonempty)
+
+theorem maxPool2Argmax_max {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w))
+    (co : Fin c) (ho : Fin h) (wo : Fin w) (ab : Fin 2 × Fin 2) :
+    x co (winRowInv ho ab.1) (winColInv wo ab.2) ≤
+    x co (winRowInv ho (maxPool2Argmax x co ho wo).1)
+          (winColInv wo (maxPool2Argmax x co ho wo).2) :=
+  (Classical.choose_spec
+    ((Finset.univ : Finset (Fin 2 × Fin 2)).exists_max_image
+      (fun ab' => x co (winRowInv ho ab'.1) (winColInv wo ab'.2))
+      Finset.univ_nonempty)).2 ab (Finset.mem_univ ab)
+
+/-- If `(a, b)` dominates every other window cell, the max-pool output
+    equals the value at `(a, b)`. No smoothness needed. -/
+theorem maxPool2_eq_at_max {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w))
+    (co : Fin c) (ho : Fin h) (wo : Fin w)
+    (a : Fin 2) (b : Fin 2)
+    (h_max : ∀ a' b' : Fin 2,
+      x co (winRowInv ho a') (winColInv wo b') ≤
+      x co (winRowInv ho a) (winColInv wo b)) :
+    maxPool2 x co ho wo =
+      x co (winRowInv ho a) (winColInv wo b) := by
+  have h00 := h_max 0 0
+  have h10 := h_max 1 0
+  have h01 := h_max 0 1
+  have h11 := h_max 1 1
+  rw [winRowInv_zero, winColInv_zero] at h00
+  rw [winRowInv_one, winColInv_zero] at h10
+  rw [winRowInv_zero, winColInv_one] at h01
+  rw [winRowInv_one, winColInv_one] at h11
+  show max (max _ _) (max _ _) = _
+  apply le_antisymm
+  · exact max_le (max_le h00 h10) (max_le h01 h11)
+  · fin_cases a <;> fin_cases b <;> dsimp only
+    · show x co (winRowInv ho 0) (winColInv wo 0) ≤ _
+      rw [winRowInv_zero, winColInv_zero]
+      exact le_max_of_le_left (le_max_left _ _)
+    · show x co (winRowInv ho 0) (winColInv wo 1) ≤ _
+      rw [winRowInv_zero, winColInv_one]
+      exact le_max_of_le_right (le_max_left _ _)
+    · show x co (winRowInv ho 1) (winColInv wo 0) ≤ _
+      rw [winRowInv_one, winColInv_zero]
+      exact le_max_of_le_left (le_max_right _ _)
+    · show x co (winRowInv ho 1) (winColInv wo 1) ≤ _
+      rw [winRowInv_one, winColInv_one]
+      exact le_max_of_le_right (le_max_right _ _)
+
+theorem maxPool2_eq_argmax_value {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w))
+    (co : Fin c) (ho : Fin h) (wo : Fin w) :
+    maxPool2 x co ho wo =
+      x co (winRowInv ho (maxPool2Argmax x co ho wo).1)
+            (winColInv wo (maxPool2Argmax x co ho wo).2) :=
+  maxPool2_eq_at_max x co ho wo _ _ (fun a' b' =>
+    maxPool2Argmax_max x co ho wo (a', b'))
+
+/-- Under smoothness, the argmax of any window is unique: two positions
+    that both dominate the window coincide. -/
+theorem maxPool2_argmax_unique {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x)
+    (ci : Fin c) (ho : Fin h) (wo : Fin w)
+    (ab ab' : Fin 2 × Fin 2)
+    (h_ab : ∀ cd : Fin 2 × Fin 2,
+      x ci (winRowInv ho cd.1) (winColInv wo cd.2) ≤
+      x ci (winRowInv ho ab.1) (winColInv wo ab.2))
+    (h_ab' : ∀ cd : Fin 2 × Fin 2,
+      x ci (winRowInv ho cd.1) (winColInv wo cd.2) ≤
+      x ci (winRowInv ho ab'.1) (winColInv wo ab'.2)) :
+    ab = ab' := by
+  by_contra h_ne
+  have h1 := h_ab' ab
+  have h2 := h_ab ab'
+  exact h_smooth ci ho wo ab ab' h_ne (le_antisymm h1 h2)
+
+/-- Under smoothness, `MaxPool2IsArgmax` pins `maxPool2Argmax` to the
+    `(winRowMod, winColMod)` position of the witness. -/
+theorem maxPool2Argmax_eq_of_isArgmax {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x)
+    (ci : Fin c) (hi_in : Fin (2 * h)) (wi_in : Fin (2 * w))
+    (h_arg : MaxPool2IsArgmax x ci hi_in wi_in) :
+    maxPool2Argmax x ci (winRow hi_in) (winCol wi_in) =
+      (winRowMod hi_in, winColMod wi_in) := by
+  apply maxPool2_argmax_unique x h_smooth ci (winRow hi_in) (winCol wi_in)
+  · intro cd; exact maxPool2Argmax_max x ci _ _ cd
+  · intro cd
+    have h_rhs :
+        x ci (winRowInv (winRow hi_in) (winRowMod hi_in, winColMod wi_in).1)
+              (winColInv (winCol wi_in) (winRowMod hi_in, winColMod wi_in).2) =
+        x ci hi_in wi_in := by
+      simp only [winRowInv_winRow, winColInv_winCol]
+    rw [h_rhs]
+    exact h_arg cd.1 cd.2
+
+-- Local linearization (reindex σ) --------------------------------
+
+/-- For each output flat index `k_out` (decoded to `(co, ho, wo)`), the
+    flat index of the argmax's input position in `Vec (c * (2*h) * (2*w))`.
+    Used as the carrier of the local-linearization `reindexCLM`. -/
+noncomputable def maxPool2LocalReindex {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w))
+    (k_out : Fin (c * h * w)) : Fin (c * (2 * h) * (2 * w)) :=
+  let r1 := finProdFinEquiv.symm k_out
+  let wo : Fin w := r1.2
+  let r2 := finProdFinEquiv.symm r1.1
+  let co : Fin c := r2.1
+  let ho : Fin h := r2.2
+  let ab := maxPool2Argmax x co ho wo
+  finProdFinEquiv (finProdFinEquiv (co, winRowInv ho ab.1), winColInv wo ab.2)
+
+/-- **Smooth-point local-linearization for max-pool.** On a metric ball
+    around `flatten x`, the flattened max-pool agrees with the reindex
+    `y ↦ y ∘ σ` where σ routes each output position to its argmax's
+    input position. Promoted via `EventuallyEq`. -/
+theorem maxPool2_flat_hasFDerivAt {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w))
+    (h_smooth : MaxPool2Smooth x)
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
+    HasFDerivAt
+      (fun v : Vec (c * (2 * h) * (2 * w)) =>
+        Tensor3.flatten (maxPool2 (Tensor3.unflatten v)))
+      (reindexCLM (maxPool2LocalReindex x))
+      (Tensor3.flatten x) := by
+  haveI : Nonempty (Fin c) := ⟨⟨0, hc⟩⟩
+  haveI : Nonempty (Fin h) := ⟨⟨0, hh⟩⟩
+  haveI : Nonempty (Fin w) := ⟨⟨0, hw⟩⟩
+  -- Per-window gap function: positive everywhere under smoothness.
+  let gap : Fin c × Fin h × Fin w × (Fin 2 × Fin 2) × (Fin 2 × Fin 2) → ℝ :=
+    fun p => if p.2.2.2.1 = p.2.2.2.2 then 1
+             else |x p.1 (winRowInv p.2.1 p.2.2.2.1.1) (winColInv p.2.2.1 p.2.2.2.1.2)
+                  - x p.1 (winRowInv p.2.1 p.2.2.2.2.1) (winColInv p.2.2.1 p.2.2.2.2.2)|
+  have hgap_pos : ∀ p, 0 < gap p := by
+    intro ⟨co, ho, wo, ab, ab'⟩
+    show 0 < (if ab = ab' then (1 : ℝ) else _)
+    by_cases hab : ab = ab'
+    · rw [if_pos hab]; norm_num
+    · rw [if_neg hab]
+      exact abs_pos.mpr (sub_ne_zero.mpr (h_smooth co ho wo ab ab' hab))
+  -- Radius = (inf gap) / 4 — leaves slack 2r < r_raw for the diff argument.
+  let univ_S : Finset (Fin c × Fin h × Fin w × (Fin 2 × Fin 2) × (Fin 2 × Fin 2)) :=
+    Finset.univ
+  set r_raw := univ_S.inf' Finset.univ_nonempty gap with hr_raw_def
+  have hr_raw_pos : 0 < r_raw := by
+    refine (Finset.lt_inf'_iff _).mpr ?_
+    intro p _; exact hgap_pos p
+  set r := r_raw / 4 with hr_def
+  have hr_pos : 0 < r := by show 0 < r_raw / 4; linarith
+  have hgap_le : ∀ co ho wo ab ab',
+      gap (co, ho, wo, ab, ab') ≥ r_raw := fun co ho wo ab ab' =>
+    Finset.inf'_le _ (Finset.mem_univ _)
+  have h_local : Set.EqOn
+      (fun v : Vec (c * (2 * h) * (2 * w)) =>
+        Tensor3.flatten (maxPool2 (Tensor3.unflatten v)))
+      (reindexCLM (maxPool2LocalReindex x) : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w))
+      (Metric.ball (Tensor3.flatten x) r) := by
+    intro y hy
+    have hy_norm : ‖y - Tensor3.flatten x‖ < r := by
+      rwa [Metric.mem_ball, dist_eq_norm] at hy
+    have hy_coord : ∀ k, |y k - Tensor3.flatten x k| < r := by
+      intro k
+      have h1 : ‖(y - Tensor3.flatten x) k‖ ≤ ‖y - Tensor3.flatten x‖ :=
+        norm_le_pi_norm (y - Tensor3.flatten x) k
+      rw [Real.norm_eq_abs] at h1
+      have : |y k - Tensor3.flatten x k| ≤ ‖y - Tensor3.flatten x‖ := by
+        show |(y - Tensor3.flatten x) k| ≤ _
+        exact h1
+      linarith
+    funext k_out
+    set r1 := finProdFinEquiv.symm k_out with hr1
+    set wo : Fin w := r1.2 with hwo
+    set r2 := finProdFinEquiv.symm r1.1 with hr2
+    set co : Fin c := r2.1 with hco
+    set ho : Fin h := r2.2 with hho
+    set ab := maxPool2Argmax x co ho wo with hab
+    have h_max_y : ∀ a' b' : Fin 2,
+        Tensor3.unflatten y co (winRowInv ho a') (winColInv wo b') ≤
+        Tensor3.unflatten y co (winRowInv ho ab.1) (winColInv wo ab.2) := by
+      intro a' b'
+      by_cases h_eq : (a', b') = ab
+      · have ha : a' = ab.1 := congrArg Prod.fst h_eq
+        have hb : b' = ab.2 := congrArg Prod.snd h_eq
+        rw [ha, hb]
+      · have h_le_x : x co (winRowInv ho a') (winColInv wo b') ≤
+                      x co (winRowInv ho ab.1) (winColInv wo ab.2) :=
+          maxPool2Argmax_max x co ho wo (a', b')
+        have h_ne_x : x co (winRowInv ho a') (winColInv wo b') ≠
+                      x co (winRowInv ho ab.1) (winColInv wo ab.2) :=
+          h_smooth co ho wo (a', b') ab h_eq
+        have h_strict_x : x co (winRowInv ho a') (winColInv wo b') <
+                          x co (winRowInv ho ab.1) (winColInv wo ab.2) :=
+          lt_of_le_of_ne h_le_x h_ne_x
+        have h_diff_x : x co (winRowInv ho ab.1) (winColInv wo ab.2) -
+                        x co (winRowInv ho a') (winColInv wo b') ≥ r_raw := by
+          have h_gap := hgap_le co ho wo (a', b') ab
+          have h_gap_expanded : gap (co, ho, wo, (a', b'), ab) =
+              |x co (winRowInv ho a') (winColInv wo b') -
+               x co (winRowInv ho ab.1) (winColInv wo ab.2)| := by
+            show (if (a', b') = ab then (1 : ℝ) else _) = _
+            rw [if_neg h_eq]
+          rw [h_gap_expanded] at h_gap
+          rw [abs_sub_comm] at h_gap
+          have h_pos : 0 ≤ x co (winRowInv ho ab.1) (winColInv wo ab.2) -
+                       x co (winRowInv ho a') (winColInv wo b') := by linarith
+          rwa [abs_of_nonneg h_pos] at h_gap
+        set k_ab : Fin (c * (2 * h) * (2 * w)) :=
+          finProdFinEquiv (finProdFinEquiv (co, winRowInv ho ab.1), winColInv wo ab.2)
+        set k_ab' : Fin (c * (2 * h) * (2 * w)) :=
+          finProdFinEquiv (finProdFinEquiv (co, winRowInv ho a'), winColInv wo b')
+        have h_unflat_ab : Tensor3.unflatten y co (winRowInv ho ab.1) (winColInv wo ab.2)
+                          = y k_ab := rfl
+        have h_unflat_ab' : Tensor3.unflatten y co (winRowInv ho a') (winColInv wo b')
+                           = y k_ab' := rfl
+        have h_flat_x_ab : Tensor3.flatten x k_ab =
+            x co (winRowInv ho ab.1) (winColInv wo ab.2) := by
+          show x (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab).1).1
+                  (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab).1).2
+                  (finProdFinEquiv.symm k_ab).2 = _
+          simp [k_ab, Equiv.symm_apply_apply]
+        have h_flat_x_ab' : Tensor3.flatten x k_ab' =
+            x co (winRowInv ho a') (winColInv wo b') := by
+          show x (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab').1).1
+                  (finProdFinEquiv.symm (finProdFinEquiv.symm k_ab').1).2
+                  (finProdFinEquiv.symm k_ab').2 = _
+          simp [k_ab', Equiv.symm_apply_apply]
+        rw [h_unflat_ab, h_unflat_ab']
+        have hy_ab := hy_coord k_ab
+        have hy_ab' := hy_coord k_ab'
+        rw [h_flat_x_ab] at hy_ab
+        rw [h_flat_x_ab'] at hy_ab'
+        have h_lhs_ge : y k_ab - y k_ab' ≥
+            (x co (winRowInv ho ab.1) (winColInv wo ab.2) -
+             x co (winRowInv ho a') (winColInv wo b')) - 2 * r := by
+          have h1 := abs_sub_lt_iff.mp hy_ab
+          have h2 := abs_sub_lt_iff.mp hy_ab'
+          linarith
+        have h_2r_lt : 2 * r < r_raw := by show 2 * (r_raw / 4) < r_raw; linarith
+        linarith
+    show maxPool2 (Tensor3.unflatten y) co ho wo = y (maxPool2LocalReindex x k_out)
+    rw [maxPool2_eq_at_max (Tensor3.unflatten y) co ho wo ab.1 ab.2 h_max_y]
+    show Tensor3.unflatten y co (winRowInv ho ab.1) (winColInv wo ab.2) =
+         y (maxPool2LocalReindex x k_out)
+    rfl
+  exact (reindexCLM (maxPool2LocalReindex x)).hasFDerivAt.congr_of_eventuallyEq
+    (h_local.eventuallyEq_of_mem (Metric.ball_mem_nhds _ hr_pos))
+
+/-- **MaxPool2 smooth-point Jacobian.** At a smooth point, `pdiv3` of
+    `maxPool2` is a sparse 0/1 indicator: 1 exactly when the output
+    `(co, ho, wo)` is the window of the input `(ci, hi_in, wi_in)` AND
+    that input is the argmax of its window. -/
+theorem pdiv3_maxPool2_smooth {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x)
+    (ci : Fin c) (hi_in : Fin (2 * h)) (wi_in : Fin (2 * w))
+    (co : Fin c) (ho : Fin h) (wo : Fin w) :
+    pdiv3 maxPool2 x ci hi_in wi_in co ho wo =
+      (if co = ci ∧ ho = winRow hi_in ∧ wo = winCol wi_in
+          ∧ MaxPool2IsArgmax x ci hi_in wi_in
+        then (1 : ℝ) else 0) := by
+  have hc : 0 < c := Fin.pos ci
+  have hh : 0 < h := Fin.pos ho
+  have hw : 0 < w := Fin.pos wo
+  have h_fderiv := maxPool2_flat_hasFDerivAt x h_smooth hc hh hw
+  unfold pdiv3 pdiv
+  rw [h_fderiv.fderiv]
+  show reindexCLM (maxPool2LocalReindex x)
+        (basisVec (finProdFinEquiv (finProdFinEquiv (ci, hi_in), wi_in)))
+        (finProdFinEquiv (finProdFinEquiv (co, ho), wo)) = _
+  rw [reindexCLM_apply]
+  dsimp only
+  rw [basisVec_apply]
+  have h_sigma :
+      maxPool2LocalReindex x (finProdFinEquiv (finProdFinEquiv (co, ho), wo)) =
+      finProdFinEquiv (finProdFinEquiv (co, winRowInv ho (maxPool2Argmax x co ho wo).1),
+                       winColInv wo (maxPool2Argmax x co ho wo).2) := by
+    show finProdFinEquiv
+          (finProdFinEquiv
+            ((finProdFinEquiv.symm (finProdFinEquiv.symm
+              (finProdFinEquiv (finProdFinEquiv (co, ho), wo))).1).1,
+             winRowInv (finProdFinEquiv.symm (finProdFinEquiv.symm
+              (finProdFinEquiv (finProdFinEquiv (co, ho), wo))).1).2
+                       (maxPool2Argmax x _ _ _).1),
+            winColInv (finProdFinEquiv.symm
+              (finProdFinEquiv (finProdFinEquiv (co, ho), wo))).2
+                      (maxPool2Argmax x _ _ _).2) = _
+    simp [Equiv.symm_apply_apply]
+  rw [h_sigma]
+  congr 1
+  apply propext
+  constructor
+  · intro hA
+    have h1 := finProdFinEquiv.injective hA
+    have h2 := Prod.mk.inj h1
+    have h3 := finProdFinEquiv.injective h2.1
+    have h4 := Prod.mk.inj h3
+    have h_ho_eq : ho = winRow hi_in := by
+      have := congrArg winRow h4.2
+      rwa [winRow_winRowInv] at this
+    have h_wo_eq : wo = winCol wi_in := by
+      have := congrArg winCol h2.2
+      rwa [winCol_winColInv] at this
+    refine ⟨h4.1, h_ho_eq, h_wo_eq, ?_⟩
+    intro a b
+    have h_arg : x co (winRowInv ho a) (winColInv wo b) ≤
+                 x co (winRowInv ho (maxPool2Argmax x co ho wo).1)
+                       (winColInv wo (maxPool2Argmax x co ho wo).2) :=
+      maxPool2Argmax_max x co ho wo (a, b)
+    have h_val : x co (winRowInv ho (maxPool2Argmax x co ho wo).1)
+                      (winColInv wo (maxPool2Argmax x co ho wo).2) =
+                 x ci hi_in wi_in := by
+      rw [h4.2, h2.2, h4.1]
+    rw [h_val] at h_arg
+    rw [h4.1] at h_arg
+    rw [← h_ho_eq, ← h_wo_eq]
+    exact h_arg
+  · rintro ⟨hco_eq, hho_eq, hwo_eq, h_arg⟩
+    subst hco_eq
+    have h_argmax : maxPool2Argmax x co (winRow hi_in) (winCol wi_in) =
+                    (winRowMod hi_in, winColMod wi_in) :=
+      maxPool2Argmax_eq_of_isArgmax x h_smooth co hi_in wi_in h_arg
+    rw [hho_eq, hwo_eq, h_argmax]
+    show finProdFinEquiv (finProdFinEquiv (co, winRowInv (winRow hi_in) (winRowMod hi_in)),
+                          winColInv (winCol wi_in) (winColMod wi_in)) = _
+    rw [winRowInv_winRow, winColInv_winCol]
+
+/-- **Bridge: `maxPool2_has_vjp3`'s canonical backward matches the
+    codegen formula at smooth points.**
+
+    At points where every 2×2 window has a unique strict argmax, the
+    canonical `pdiv3`-derived backward collapses to "`dy` at the
+    window's output position, but only at the argmax input cell" — the
+    `select_and_scatter` formula `MlirCodegen.lean` emits. Closes the
+    smooth-point half of the codegen trust boundary; what remains is
+    the kink convention at argmax-tie boundaries. -/
+theorem maxPool2_codegen_matches_canonical {c h w : Nat}
+    (x : Tensor3 c (2 * h) (2 * w))
+    (h_smooth : MaxPool2Smooth x) (dy : Tensor3 c h w)
+    (ci : Fin c) (hi_in : Fin (2 * h)) (wi_in : Fin (2 * w)) :
+    (maxPool2_has_vjp3 :
+        HasVJP3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)).backward
+        x dy ci hi_in wi_in
+    = (if MaxPool2IsArgmax x ci hi_in wi_in
+       then dy ci (winRow hi_in) (winCol wi_in) else 0) := by
+  show ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
+        pdiv3 maxPool2 x ci hi_in wi_in co ho wo * dy co ho wo = _
+  simp_rw [pdiv3_maxPool2_smooth x h_smooth ci hi_in wi_in]
+  rw [Finset.sum_eq_single ci
+      (fun co _ hne_co => by
+        rw [Finset.sum_eq_zero]
+        intro ho _
+        rw [Finset.sum_eq_zero]
+        intro wo _
+        rw [if_neg (fun ⟨h1, _, _, _⟩ => hne_co h1)]
+        ring)
+      (fun h => absurd (Finset.mem_univ ci) h)]
+  rw [Finset.sum_eq_single (winRow hi_in)
+      (fun ho _ hne_ho => by
+        rw [Finset.sum_eq_zero]
+        intro wo _
+        rw [if_neg (fun ⟨_, h2, _, _⟩ => hne_ho h2)]
+        ring)
+      (fun h => absurd (Finset.mem_univ _) h)]
+  rw [Finset.sum_eq_single (winCol wi_in)
+      (fun wo _ hne_wo => by
+        rw [if_neg (fun ⟨_, _, h3, _⟩ => hne_wo h3)]
+        ring)
+      (fun h => absurd (Finset.mem_univ _) h)]
+  by_cases h_arg : MaxPool2IsArgmax x ci hi_in wi_in
+  · rw [if_pos ⟨rfl, rfl, rfl, h_arg⟩, if_pos h_arg]
+    ring
+  · rw [if_neg (fun ⟨_, _, _, h⟩ => h_arg h), if_neg h_arg]
+    ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § Flatten

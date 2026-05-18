@@ -78,3 +78,7 @@ open Proofs
 -- Codegen smooth-point bridge theorems (MLP.lean)
 #print axioms relu_codegen_matches_canonical
 #print axioms relu_canonical_diagonal
+
+-- Codegen smooth-point bridge theorems (CNN.lean / MaxPool2)
+#print axioms pdiv3_maxPool2_smooth
+#print axioms maxPool2_codegen_matches_canonical

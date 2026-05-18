@@ -1,7 +1,7 @@
-# Audit follow-ups (E.2 / E.5) — clean-session handoff
+# Audit follow-ups (E.5) — clean-session handoff
 
 Parallel-agent audit (`tests/AUDIT_REPORT.md`) flagged five proposed patches.
-Three landed on **2026-05-18**. Two remain for a future focused session.
+Four have landed; one (E.5) remains for a future focused session.
 
 ## Status snapshot
 
@@ -10,22 +10,24 @@ Three landed on **2026-05-18**. Two remain for a future focused session.
 | E.3   | ✅ Landed   | `281598f` | 12 doc-drift fixes across 7 files; 1 broken xref     |
 | E.1   | ✅ Landed   | `1c6d18c` | `relu_codegen_matches_canonical` + diagonal restate  |
 | E.4   | ✅ Landed   | `122f487` | CI three-axiom closure check; 49/49 conforming       |
-| E.2   | ⏸ Deferred | —         | MaxPool2 smooth-point bridge (this doc)              |
+| E.2   | ✅ Landed   | (this PR) | `maxPool2_codegen_matches_canonical` + smooth pdiv3  |
 | E.5   | ⏸ Deferred | —         | `HasVJPAt` pointwise framework (this doc)            |
 
-CI is green; the three-axiom closure invariant is now permanent.
+CI is green; the three-axiom closure invariant is now permanent (now 51/51).
 
 ---
 
-## E.2 — `maxPool2_codegen_matches_canonical`
+## E.2 — `maxPool2_codegen_matches_canonical` ✅ Landed
 
-**Goal.** Prove that at points where every 2×2 window of `x` has a
-unique strict argmax, the canonical pdiv-derived backward in
-`maxPool2_has_vjp3` (in `LeanMlir/Proofs/CNN.lean:1509`) collapses to
-the codegen formula ("route `dy` to the argmax position, zero
-elsewhere"). Mirrors `relu_codegen_matches_canonical` (in
-`LeanMlir/Proofs/MLP.lean:382`), but the local linearization is
-per-2×2-window rather than per-coordinate.
+**Outcome.** Landed as `pdiv3_maxPool2_smooth` +
+`maxPool2_codegen_matches_canonical` in `LeanMlir/Proofs/CNN.lean`,
+plus the supporting infrastructure (window helpers, `MaxPool2Smooth`,
+`MaxPool2IsArgmax`, `maxPool2Argmax`, `maxPool2LocalReindex`,
+`maxPool2_flat_hasFDerivAt`). ~493 lines. Used path A2 (Vec-level
+`reindexCLM` directly) — self-contained, didn't need the Tensor3-flatten
+CLM detour A1 had been sketched for.
+
+**Recipe for historical reference** (the path that worked):
 
 ### Why E.1 was 30 lines and E.2 isn't
 
@@ -310,13 +312,15 @@ same pattern.
   of the ReLU smooth-point bridge (mirrors what landed in MLP.lean)
 - `tests/AuditSanity.lean` — concrete-instance pinning examples
 
-**Production code (touched by E.1 / E.3):**
+**Production code (touched by E.1 / E.2 / E.3):**
 - `LeanMlir/Proofs/MLP.lean:382` — `relu_codegen_matches_canonical` +
   `relu_canonical_diagonal` (E.1)
-- `LeanMlir/Proofs/CNN.lean:1509` — `maxPool2_has_vjp3` (still
-  canonical-witness `correct := rfl`; E.2 target)
-- `LeanMlir/Proofs/Tensor.lean:1441` — `Tensor3.flatten` (E.2 path A1's
-  CLM target)
+- `LeanMlir/Proofs/CNN.lean` — `maxPool2_has_vjp3` (still
+  canonical-witness `correct := rfl`), now joined by
+  `pdiv3_maxPool2_smooth` + `maxPool2_codegen_matches_canonical`
+  and friends (E.2)
+- `LeanMlir/Proofs/Tensor.lean:1441` — `Tensor3.flatten` (the A1 path
+  was not needed in the end; left as a marker for E.5)
 
 **CI:**
 - `.github/workflows/proofs.yml` — three-axiom closure check via
@@ -326,22 +330,18 @@ same pattern.
   ```
   Must match the total `depends on axioms:` line count.
 
-**Local scratch (NOT in repo, regenerable from this doc):**
-- `tests/AuditMaxPoolBridge.lean` — left as 90-line framework with a
-  trailing `sorry` from the deferred E.2 session
-
 ---
 
-## When you come back
+## When you come back (for E.5)
 
-1. Read this doc top to bottom (5 min).
-2. Recreate `tests/AuditMaxPoolBridge.lean` from the framework block
-   above (or pull the untracked file from local if still there).
-3. Pick E.2 path: **A1 (flatten as CLM) is preferred** because it's
-   reusable.
-4. Implement Steps 3–8 in the scratch file. `lake env lean` is your
-   fast iteration target; only port to `CNN.lean` once clean.
-5. After E.2 lands, E.5 unblocks; do that as a separate session.
+E.2 unblocked E.5. Pick it up by:
+
+1. Read E.5 above; the framework structure stands.
+2. Use `MaxPool2Smooth` / `MaxPool2IsArgmax` already in
+   `CNN.lean` as the hypothesis shape for the `_at` variant of
+   `maxPool2_has_vjp3`.
+3. `lake env lean` against a scratch file is the fast iteration target;
+   only port to production once clean.
 
 Standing rules (from memory) still apply: pause for explicit
 `yes push` on every commit; rebuild blueprint PDF only if blueprint
