@@ -5465,25 +5465,27 @@ calculus is identical --- product + additive fan-in either way.
 
 \subsubsection*{ResNet (\texttt{Bestiary/ResNet.lean})}
 \emph{One} new primitive (\texttt{.bottleneckBlock}). Chapter
-\ref{chap:residual} introduces residual networks via the basic-
-block variant ResNet-34; this entry covers the deeper bottleneck
-variants
-\textbf{ResNet-50 / ResNet-101 / ResNet-152} (He et al.\ 2015,
-\href{https://arxiv.org/abs/1512.03385}{arXiv:1512.03385}). Each
-bottleneck block is $1\times 1$ reduce $\to$ $3\times 3$ work
-$\to$ $1\times 1$ expand around a residual skip --- three convs
-per block instead of basic-block's two, but the expensive
-$3\times 3$ now runs at $1/4$ the input channels, so per-block
-parameter count actually \emph{drops}.
+\ref{chap:residual} walks through the basic-block variant
+ResNet-34 in detail; this entry catalogs the standard ResNet
+family (He et al.\ 2015,
+\href{https://arxiv.org/abs/1512.03385}{arXiv:1512.03385}). The
+basic-block variants (R18, R34) stack two $3\times 3$ convs per
+residual unit; the bottleneck variants (R50, R101, R152) use
+$1\times 1$ reduce $\to$ $3\times 3$ work $\to$ $1\times 1$ expand
+around a residual skip --- three convs per block instead of two,
+but the expensive $3\times 3$ now runs at $1/4$ the input channels,
+so per-block parameter count actually \emph{drops}.
 
 \begin{center}
-\begin{tabular}{l c r}
+\begin{tabular}{l l c r}
 \hline
-Name & Stage block counts & Params \\
+Name & Block & Stage block counts & Params \\
 \hline
-ResNet-50  & (3, 4, 6, 3)  & 25.6M (paper 25.6M) \\
-ResNet-101 & (3, 4, 23, 3) & 44.5M (paper 44.5M) \\
-ResNet-152 & (3, 8, 36, 3) & 60.2M (paper 60.2M) \\
+ResNet-18  & basic      & (2, 2, 2, 2)  & 11.7M (paper 11.7M) \\
+ResNet-34  & basic      & (3, 4, 6, 3)  & 21.3M (paper 21.8M) \\
+ResNet-50  & bottleneck & (3, 4, 6, 3)  & 25.6M (paper 25.6M) \\
+ResNet-101 & bottleneck & (3, 4, 23, 3) & 44.5M (paper 44.5M) \\
+ResNet-152 & bottleneck & (3, 8, 36, 3) & 60.2M (paper 60.2M) \\
 \hline
 \end{tabular}
 \end{center}

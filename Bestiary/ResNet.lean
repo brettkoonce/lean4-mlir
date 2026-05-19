@@ -1,12 +1,13 @@
 import LeanMlir
 
-/-! # ResNet — Bestiary entry (R-50 / R-101 / R-152)
+/-! # ResNet — Bestiary entry (R-18 / R-50 / R-101 / R-152)
 
 ResNet (He et al.\ 2015,
 [arXiv:1512.03385](https://arxiv.org/abs/1512.03385)) is the residual
 revolution. Chapter 6 covers ResNet-34 (the basic-block variant —
-two 3×3 convs per block + skip). This entry covers the **bottleneck
-variants**: ResNet-50, -101, -152, where each block is
+two 3×3 convs per block + skip). This entry covers the smaller
+basic-block sibling **ResNet-18** plus the deeper **bottleneck
+variants** ResNet-50 / -101 / -152, where each bottleneck block is
 
     1×1 conv (c → c/4)  →  3×3 conv (c/4 → c/4)  →  1×1 conv (c/4 → c)
 
@@ -14,32 +15,54 @@ with a residual skip. The 1×1 reduce/expand sandwich around a 3×3
 keeps the parameter count manageable when going deeper, since the
 expensive 3×3 conv runs at 1/4 the input channels.
 
-Why three sizes? The paper's headline finding is that residual
-connections let you keep training as you go deeper, well past the
-point where a plain CNN would degrade. R-50 / R-101 / R-152 demonstrate
-that on ImageNet: each successive depth tier adds 1-2 points of top-1
-accuracy at proportional compute cost. The plateau eventually arrives
+Why these sizes? R-18 / R-34 are the basic-block family — fast to
+train, plenty of accuracy for small datasets, common as feature-
+extraction backbones. R-50 / R-101 / R-152 demonstrate the paper's
+headline finding on ImageNet: residual connections let you keep
+training as you go deeper, well past the point where a plain CNN would
+degrade. Each successive depth tier adds 1-2 points of top-1 accuracy
+at proportional compute cost. The plateau eventually arrives
 (R-200 is roughly equivalent to R-152), but the residual primitive
 doesn't degrade gracefully — it *just keeps working*.
 
 ResNet-34 is in Chapter 6 because it's the cleanest residual block to
-follow through the math (no bottleneck). ResNet-50 onwards goes here
-because the bottleneck is a tweak on the same residual primitive — same
-chain rule, same fan-in, just three convs per block instead of two.
+follow through the math (no bottleneck). ResNet-18 and the bottleneck
+variants go here because they're the same residual primitive at
+different depths — same chain rule, same fan-in.
 
 ## Variants
 
-| Name        | Stage block counts   | Params | ImageNet top-1 |
-|-------------|----------------------|--------|---------------|
-| ResNet-50   | (3, 4, 6, 3)         | 25.6M  | 76.0          |
-| ResNet-101  | (3, 4, 23, 3)        | 44.5M  | 77.4          |
-| ResNet-152  | (3, 8, 36, 3)        | 60.2M  | 78.3          |
+| Name        | Block      | Stage block counts | Params | ImageNet top-1 |
+|-------------|------------|--------------------|--------|---------------|
+| ResNet-18   | basic      | (2, 2, 2, 2)       | 11.7M  | 69.8          |
+| ResNet-50   | bottleneck | (3, 4, 6, 3)       | 25.6M  | 76.0          |
+| ResNet-101  | bottleneck | (3, 4, 23, 3)      | 44.5M  | 77.4          |
+| ResNet-152  | bottleneck | (3, 8, 36, 3)      | 60.2M  | 78.3          |
 
-All three share the same stem (7×7 stride-2 conv + 3×3 stride-2 max
-pool), the same 4-stage layout (channels 256 → 512 → 1024 → 2048),
-and the same GAP + single-FC head. They differ only in how many
-bottleneck blocks each stage has.
+All four share the same stem (7×7 stride-2 conv + 3×3 stride-2 max
+pool) and GAP + single-FC head. The basic-block variant tops out at
+512 channels in stage 4; the bottleneck variants run 256 → 512 →
+1024 → 2048.
 -/
+
+-- ════════════════════════════════════════════════════════════════
+-- § ResNet-18 (smallest basic-block variant)
+-- ════════════════════════════════════════════════════════════════
+
+def resNet18 : NetSpec where
+  name := "ResNet-18"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 64 7 2 .same,                    -- stem 7×7 stride 2 → 112
+    .maxPool 3 2,                              -- → 56
+    .residualBlock  64  64 2 1,                -- stage 1: 2 blocks @ 56
+    .residualBlock  64 128 2 2,                -- stage 2: 2 blocks @ 28 (stride 2 first)
+    .residualBlock 128 256 2 2,                -- stage 3: 2 blocks @ 14
+    .residualBlock 256 512 2 2,                -- stage 4: 2 blocks @ 7
+    .globalAvgPool,
+    .dense 512 1000 .identity
+  ]
 
 -- ════════════════════════════════════════════════════════════════
 -- § ResNet-50 (paper canonical bottleneck variant)
@@ -133,11 +156,12 @@ private def summarize (spec : NetSpec) : IO Unit := do
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
-  IO.println "  Bestiary — ResNet (R-50 / R-101 / R-152)"
+  IO.println "  Bestiary — ResNet (R-18 / R-50 / R-101 / R-152)"
   IO.println "════════════════════════════════════════════════════════════════"
-  IO.println "  Bottleneck residual blocks (1×1 reduce → 3×3 → 1×1 expand)."
-  IO.println "  ResNet-34 with basic blocks lives in Chapter 6 of the book."
+  IO.println "  Basic-block (R-18) and bottleneck (R-50/101/152) residual"
+  IO.println "  variants. ResNet-34 lives in Chapter 6 of the book."
 
+  summarize resNet18
   summarize resNet50
   summarize resNet101
   summarize resNet152
