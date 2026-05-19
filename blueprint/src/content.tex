@@ -2829,9 +2829,20 @@ def main (args : List String) : IO Unit :=
 First chapter that uses the full production recipe (Adam + cosine
 + warmup + weight decay + augmentation + label smoothing) rather
 than the s4tfBaseline. Also the first chapter where
-\texttt{.globalAvgPool} replaces the flatten-plus-fat-dense head --- the
+\texttt{.globalAvgPool} replaces the flatten-plus-fat-dense head.
+\emph{Global average pooling} (GAP) collapses each
+\(C \times H \times W\) feature map to a length-\(C\) vector by
+averaging over the spatial dimensions,
+\[
+  \mathrm{gap}(x)_c \;=\; \frac{1}{HW} \sum_{i, j} x_{c, i, j},
+\]
+so the classifier head sees one summary scalar per channel instead
+of the full \(C \cdot H \cdot W\) flattened activation. That's the
 architectural move that drops ResNet-34 from what would have been a
-$\sim$200M parameter AlexNet-era spec down to 21.3M.
+$\sim$200M parameter AlexNet-era spec down to 21.3M. We'll see GAP
+again as the ``Squeeze'' step inside the squeeze-and-excitation
+block in Chapter~\ref{chap:se}, and at the head of every
+post-2015 vision architecture in the bestiary.
 
 \subsection*{Results}
 
