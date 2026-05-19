@@ -2663,9 +2663,9 @@ more capacity. It still trained worse. Something about deep stacks
 of convolutions made gradient flow degrade in a way that the
 optimizer couldn't navigate around.
 
-He et al.\ 2015 had the right observation:\footnote{He, Zhang,
-Ren, Sun. \emph{Deep Residual Learning for Image Recognition}.
-\href{https://arxiv.org/abs/1512.03385}{arXiv:1512.03385}.} if the
+He et al.\ 2015
+(\href{https://arxiv.org/abs/1512.03385}{arXiv:1512.03385}) had the
+right observation: if the
 12 extra layers in the deeper network were \emph{initialized to
 compute the identity}, the 32-layer network would have at least
 the 20-layer's performance, because it could replicate it
