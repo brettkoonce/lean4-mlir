@@ -1734,11 +1734,12 @@ one so you can run each ablation and see the delta.
 \textbf{4. The program entry point.} One line. Call
 \texttt{mnistMlp.train} with the config, the data directory (default
 \texttt{data/}), and the dataset kind (\texttt{.mnist}). Everything
-inside \texttt{.train} --- data loading, mini-batching, forward-pass
-MLIR generation, IREE compilation, gradient-descent loop, evaluation
-loop, logging --- is already formalized in the framework. The
-user-facing program is just ``specify the network, specify the
-knobs, run.''
+inside \texttt{.train} (walked through in
+Section~\ref{sec:mlp_inside_train}) --- data loading, mini-batching,
+forward-pass MLIR generation, IREE compilation, gradient-descent
+loop, evaluation loop, logging --- is already formalized in the
+framework. The user-facing program is just ``specify the network,
+specify the knobs, run.''
 
 That's the whole thing. The parts people usually have to write by
 hand every time (the training loop, the eval loop, the gradient-
