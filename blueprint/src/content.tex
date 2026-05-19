@@ -6235,9 +6235,10 @@ def samEncoderH : NetSpec where
 
 \subsection{Image generation}
 
-Networks whose output is a novel image. Backbones overlap heavily with
-segmentation (UNet again), but the training objective is generative:
-denoise a random input until it becomes a plausible sample.
+Networks whose output is a novel image. Two families covered here:
+variational autoencoders and GANs. Backbones overlap heavily with
+segmentation (UNet again). Diffusion models, also generative, get
+their own subsection further down.
 
 \subsubsection*{VAE (\texttt{Bestiary/VAE.lean})}
 \emph{One} new primitive (\S~\ref{layer:unetUp}). The classical variational autoencoder
@@ -6365,88 +6366,6 @@ def cycleganGenerator : NetSpec where
     .convBn 256 128 3 1 .same,                    -- upsample stand-in
     .convBn 128  64 3 1 .same,
     .conv2d 64 3 7 .same .identity                -- 7×7 to RGB
-  ]
-\end{verbatim}
-
-\subsubsection*{DDPM (\texttt{Bestiary/Diffusion.lean})}
-\emph{Three} new primitives (\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}, \S~\ref{layer:positionalEncoding}). The denoiser in Ho et al.'s DDPM (2020,
-\href{https://arxiv.org/abs/2006.11239}{arXiv:2006.11239}) is a UNet
---- literally the same \S~\ref{layer:unetDown} and
-\S~\ref{layer:unetUp} Ronneberger shipped in 2015. Everything ``diffusion'' lives in the training loop:
-a forward noise schedule adds Gaussian noise over $T$ steps, a reverse
-process learns to predict the added noise, sampling iterates the
-reverse from pure noise back to a clean image. None of that is a
-layer. The timestep conditioning MLP (sinusoidal $\to$ dense $\to$
-dense) is shown as a standalone \texttt{NetSpec} that reuses
-\texttt{positionalEncoding} from NeRF. Variants: CIFAR config (32x32
-backbone), 256x256 high-res config, tiny fixture, timestep embed.
-Our simplified backbone undercounts vs paper (paper DDPM adds
-residual blocks, GroupNorm, attention-at-low-res, and per-block
-time-embedding projection on top of the UNet); the spec's value is
-showing the architectural shape, not an exact param match. The
-lesson is the same one CLIP and NeRF taught: the novelty lives in
-the training procedure, not in layer design.
-
-\begin{verbatim}
-def ddpmCifar : NetSpec where
-  name   := "DDPM (CIFAR-10, backbone approx)"
-  imageH := 32
-  imageW := 32
-  layers := [
-    -- Encoder: 32 → 16 → 8 → 4
-    .unetDown 3   128,                            -- 32 → 16
-    .unetDown 128 256,                            -- 16 →  8
-    .unetDown 256 256,                            --  8 →  4
-    .convBn 256 256 3 1 .same,                    -- bottleneck
-    .convBn 256 256 3 1 .same,
-    -- Decoder: 4 → 8 → 16 → 32
-    .unetUp 256 256, .unetUp 256 256, .unetUp 256 128,
-    .conv2d 128 3 1 .same .identity               -- predict added noise (3-ch)
-  ]
-\end{verbatim}
-
-\subsubsection*{Stable Diffusion (\texttt{Bestiary/StableDiffusion.lean})}
-\emph{Three} new primitives (\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}, \S~\ref{layer:transformerDecoder}). The paper that made generative image
-models consumer-reachable (Rombach et al.\ 2022,
-\href{https://arxiv.org/abs/2112.10752}{arXiv:2112.10752}). Two architectural
-moves over DDPM, each individually small: (a) \emph{latent diffusion}
---- run the diffusion process on 64$\times$64$\times$4 VAE latents
-instead of 512$\times$512 pixels, cutting spatial work $\sim$64$\times$;
-(b) \emph{text conditioning via cross-attention} --- at each interior
-UNet resolution, insert a spatial transformer block that cross-attends
-from image tokens to CLIP text embeddings. Shown as six separate
-NetSpecs: VAE encoder, VAE decoder, CLIP text encoder (123M, matches
-CLIP ViT-L/14 exactly), UNet backbone (202M backbone approx; real
-SD 1.5 UNet is 865M, missing $\sim$650M is the interleaved
-cross-attention), an explicit spatial-transformer-block spec (uses
-\texttt{.transformerDecoder} with \texttt{nQueries = 0} --- same
-primitive Whisper's decoder uses, same mechanism as DETR's decoder
-applied at image-feature resolution), and a tiny end-to-end fixture.
-Three components are pretrained and frozen during SD's main training
-(VAE + text encoder) or constrained-frozen
-(CLIP); only the UNet trains. SDXL scales the UNet to 2.6B; SD 3
-switches the UNet for a DiT transformer. The latent-diffusion plus
-text-conditioning template is the same.
-
-\begin{verbatim}
-def sdUNet15 : NetSpec where
-  name   := "SD 1.5 UNet denoiser (backbone approx)"
-  imageH := 64                                    -- latent resolution, not pixel
-  imageW := 64
-  layers := [
-    .conv2d 4 320 3 .same .identity,              -- stem (latent → channels)
-    -- Encoder: 64 → 32 → 16 → 8
-    .unetDown 320  640,
-    .unetDown 640  1280,
-    .unetDown 1280 1280,
-    -- Bottleneck at 8×8 (real SD inserts a spatial transformer here)
-    .convBn 1280 1280 3 1 .same,
-    .convBn 1280 1280 3 1 .same,
-    -- Decoder: 8 → 16 → 32 → 64
-    .unetUp 1280 1280,
-    .unetUp 1280 1280,
-    .unetUp 1280 640,
-    .conv2d 640 4 3 .same .identity               -- predict noise (4-ch latent)
   ]
 \end{verbatim}
 
@@ -6826,6 +6745,96 @@ def nystromformerBase : NetSpec where
     -- lives inside the attention kernel, not the NetSpec.
     .dense 30522 768 .identity,
     .transformerEncoder 768 12 3072 12
+  ]
+\end{verbatim}
+
+\subsection{Diffusion}
+
+Generative models that predict the noise added to a clean image,
+with inference iterating the reverse (noise in, image out). The
+architecture is a UNet --- often with cross-attention bolted in for
+text conditioning. The novelty lives in the noise schedule and the
+sampling loop, not in layer design.
+
+\subsubsection*{DDPM (\texttt{Bestiary/Diffusion.lean})}
+\emph{Three} new primitives (\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}, \S~\ref{layer:positionalEncoding}). The denoiser in Ho et al.'s DDPM (2020,
+\href{https://arxiv.org/abs/2006.11239}{arXiv:2006.11239}) is a UNet
+--- literally the same \S~\ref{layer:unetDown} and
+\S~\ref{layer:unetUp} Ronneberger shipped in 2015. Everything ``diffusion'' lives in the training loop:
+a forward noise schedule adds Gaussian noise over $T$ steps, a reverse
+process learns to predict the added noise, sampling iterates the
+reverse from pure noise back to a clean image. None of that is a
+layer. The timestep conditioning MLP (sinusoidal $\to$ dense $\to$
+dense) is shown as a standalone \texttt{NetSpec} that reuses
+\texttt{positionalEncoding} from NeRF. Variants: CIFAR config (32x32
+backbone), 256x256 high-res config, tiny fixture, timestep embed.
+Our simplified backbone undercounts vs paper (paper DDPM adds
+residual blocks, GroupNorm, attention-at-low-res, and per-block
+time-embedding projection on top of the UNet); the spec's value is
+showing the architectural shape, not an exact param match. The
+lesson is the same one CLIP and NeRF taught: the novelty lives in
+the training procedure, not in layer design.
+
+\begin{verbatim}
+def ddpmCifar : NetSpec where
+  name   := "DDPM (CIFAR-10, backbone approx)"
+  imageH := 32
+  imageW := 32
+  layers := [
+    -- Encoder: 32 → 16 → 8 → 4
+    .unetDown 3   128,                            -- 32 → 16
+    .unetDown 128 256,                            -- 16 →  8
+    .unetDown 256 256,                            --  8 →  4
+    .convBn 256 256 3 1 .same,                    -- bottleneck
+    .convBn 256 256 3 1 .same,
+    -- Decoder: 4 → 8 → 16 → 32
+    .unetUp 256 256, .unetUp 256 256, .unetUp 256 128,
+    .conv2d 128 3 1 .same .identity               -- predict added noise (3-ch)
+  ]
+\end{verbatim}
+
+\subsubsection*{Stable Diffusion (\texttt{Bestiary/StableDiffusion.lean})}
+\emph{Three} new primitives (\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}, \S~\ref{layer:transformerDecoder}). The paper that made generative image
+models consumer-reachable (Rombach et al.\ 2022,
+\href{https://arxiv.org/abs/2112.10752}{arXiv:2112.10752}). Two architectural
+moves over DDPM, each individually small: (a) \emph{latent diffusion}
+--- run the diffusion process on 64$\times$64$\times$4 VAE latents
+instead of 512$\times$512 pixels, cutting spatial work $\sim$64$\times$;
+(b) \emph{text conditioning via cross-attention} --- at each interior
+UNet resolution, insert a spatial transformer block that cross-attends
+from image tokens to CLIP text embeddings. Shown as six separate
+NetSpecs: VAE encoder, VAE decoder, CLIP text encoder (123M, matches
+CLIP ViT-L/14 exactly), UNet backbone (202M backbone approx; real
+SD 1.5 UNet is 865M, missing $\sim$650M is the interleaved
+cross-attention), an explicit spatial-transformer-block spec (uses
+\texttt{.transformerDecoder} with \texttt{nQueries = 0} --- same
+primitive Whisper's decoder uses, same mechanism as DETR's decoder
+applied at image-feature resolution), and a tiny end-to-end fixture.
+Three components are pretrained and frozen during SD's main training
+(VAE + text encoder) or constrained-frozen
+(CLIP); only the UNet trains. SDXL scales the UNet to 2.6B; SD 3
+switches the UNet for a DiT transformer. The latent-diffusion plus
+text-conditioning template is the same.
+
+\begin{verbatim}
+def sdUNet15 : NetSpec where
+  name   := "SD 1.5 UNet denoiser (backbone approx)"
+  imageH := 64                                    -- latent resolution, not pixel
+  imageW := 64
+  layers := [
+    .conv2d 4 320 3 .same .identity,              -- stem (latent → channels)
+    -- Encoder: 64 → 32 → 16 → 8
+    .unetDown 320  640,
+    .unetDown 640  1280,
+    .unetDown 1280 1280,
+    -- Bottleneck at 8×8 (real SD inserts a spatial transformer here)
+    .convBn 1280 1280 3 1 .same,
+    .convBn 1280 1280 3 1 .same,
+    -- Decoder: 8 → 16 → 32 → 64
+    .unetUp 1280 1280,
+    .unetUp 1280 1280,
+    .unetUp 1280 640,
+    .conv2d 640 4 3 .same .identity               -- predict noise (4-ch latent)
   ]
 \end{verbatim}
 
