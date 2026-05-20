@@ -1734,8 +1734,8 @@ one so you can run each ablation and see the delta.
 \textbf{4. The program entry point.} One line. Call
 \texttt{mnistMlp.train} with the config, the data directory (default
 \texttt{data/}), and the dataset kind (\texttt{.mnist}). Everything
-inside \texttt{.train} (walked through in
-Section~\ref{sec:mlp_inside_train}) --- data loading, mini-batching,
+inside \texttt{.train} (walked through in Chapter~\ref{chap:tensor},
+``What's inside \texttt{.train}?'') --- data loading, mini-batching,
 forward-pass MLIR generation, IREE compilation, gradient-descent
 loop, evaluation loop, logging --- is already formalized in the
 framework. The user-facing program is just ``specify the network,
