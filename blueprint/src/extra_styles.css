@@ -32,3 +32,14 @@ pre {
 	overflow-x: auto;
 	font-size: 0.9em;
 }
+
+/* Mobile viewport fix (issue #2): the leanblueprint theme sets
+ * `body { height: 100vh; overflow: hidden }`, which clips the bottom
+ * of content on Android Chrome and iOS Safari because mobile `vh`
+ * units include the collapsible URL-bar's max height. `100dvh`
+ * (dynamic viewport height) tracks the current visible viewport;
+ * browsers that don't recognize it fall back to the theme's
+ * `100vh`. */
+body {
+	height: 100dvh;
+}
