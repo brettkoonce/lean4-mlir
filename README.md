@@ -14,7 +14,27 @@ in Lean.
 Companion code for the upcoming book *Verified Deep Learning with Lean4*
 (follow-up to [Convolutional Neural Networks with Swift for TensorFlow](https://doi.org/10.1007/978-1-4842-6168-2), Apress).
 
-**Current version: `v0.5.6`** — Chapter 9 lands its ConvNeXt-T
+**Current version: `v0.5.7`** — Two parallel-agent audits closed.
+The "canonical `correct := rfl`" pattern at non-smooth operators
+(ReLU, the composed MLP, MaxPool2) now has machine-checked
+smooth-point bridges: `relu_codegen_matches_canonical` and
+`maxPool2_codegen_matches_canonical` prove the canonical-witness
+backward equals the codegen formula wherever every coordinate
+avoids the kink. A `HasVJPAt` pointwise framework provides
+smooth-input variants of the three kinked-operator instances
+whose `correct` field is a real chain-rule proof rather than
+`rfl`. The comparator suite extends from 38 → 41 theorems
+independently kernel-rechecked against `[propext, Quot.sound,
+Classical.choice]`. Blueprint gets a half-dozen flow improvements
+(GAP defined at first material use in Ch 6, Diffusion split into
+its own Bestiary subsection, ResNet entry expanded to the full
+standard family including R-18, Tomáš Skřivan's *Scientific
+Computing in Lean* credited at the top of the acknowledgments).
+Android bottom-cutoff bug fixed (issue #2); Umami cookieless
+analytics replaces planned GA. First Zenodo deposit lands with
+this release.
+
+The `v0.5.6` headline still holds: Chapter 9 lands its ConvNeXt-T
 worked example (84.94% val on Imagenette, paper-faithful recipe);
 Chapter 10 gets a Data Augmentation section with a 9-row ViT
 recipe ablation table — CutMix is the load-bearing knob at 9.5K
@@ -36,19 +56,16 @@ theorems via public `*_has_vjp_correct` wrappers, and Ch 2's
 "Why VJPs, not Jacobians?" bridge + canonical-pdiv witness
 explainer + three-pillar TikZ spine diagram.
 
-The `v0.5.4` headline still holds: MNIST MLP *and* CNN training
-traces agree at the **float32 ULP floor** between two independent
-compilation pipelines (Lean→IREE→GPU vs Lean→JAX→XLA) on both
-NVIDIA and AMD hardware. See
-[`traces/CROSS_BACKEND_RESULTS.md`](traces/CROSS_BACKEND_RESULTS.md)
-for the full four-corner verification tables.
-
 On top of that, a differential-test suite in
 [`tests/vjp_oracle/`](tests/vjp_oracle/) uses JAX's `value_and_grad`
 as an oracle for the hand-derived VJPs in `LeanMlir/Proofs/`. Nine
 test cases cover every axiom family — dense, conv, BN, maxPool,
 residual (biPath), depthwise, SE (elementwise product), attention,
 and the transformer block — each verified to 1–2 ULP of JAX autodiff.
+The ULP-floor cross-backend agreement (Lean→IREE→GPU vs Lean→JAX→XLA
+on both NVIDIA and AMD) established in v0.5.4 still holds; see
+[`traces/CROSS_BACKEND_RESULTS.md`](traces/CROSS_BACKEND_RESULTS.md)
+for the four-corner verification tables.
 
 ## Three phases
 
@@ -406,7 +423,7 @@ ROCm 7.2.0 / gfx1100.
   author  = {Brett Koonce},
   title   = {Verified Deep Learning with Lean4: Formal Backpropagation from MLP to Attention, via MLIR},
   url     = {https://github.com/brettkoonce/lean4-mlir},
-  version = {0.5.6},
+  version = {0.5.7},
   year    = {2026},
 }
 ```
