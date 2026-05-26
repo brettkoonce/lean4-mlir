@@ -1,0 +1,56 @@
+{
+  "title": "Verified Deep Learning with Lean 4",
+  "description": "A formal verification of the math of modern deep learning, written as a Lean 4 blueprint project. Mathlib's fderiv as the foundation; VJPs derived rather than asserted; theorems for dense, ReLU, softmax cross-entropy, 2D convolution backward, max-pool, batch norm's three-term backward, residual blocks, depthwise/inverted residuals, squeeze-excitation, layer norm, and a 30-theorem treatment of multi-head self-attention. Eleven chapters span MLP through Vision Transformer, plus a Bestiary chapter mapping the same primitives across vision classifiers, semantic segmentation, image generation, reinforcement learning, NLP, diffusion, and beyond-vision domains (audio, 3D scene reconstruction, scientific). Each chapter pairs proofs with a worked Lean 4 NetSpec that emits StableHLO MLIR -- compiled by IREE for end-to-end training on GPU and CPU -- and is cross-checked against a parallel JAX pipeline. The proof suite contains zero project axioms; every headline theorem closes under exactly {propext, Quot.sound, Classical.choice}, with 41 of those independently kernel-rechecked by leanprover/comparator. Builds on the architectural coverage of 'Convolutional Neural Networks with Swift for TensorFlow' (Apress, 2021), extending through ConvNeXt and ViT and adding formal proofs throughout.",
+  "creators": [
+    {
+      "name": "Koonce, Brett",
+      "orcid": "0009-0001-1381-1705",
+      "affiliation": "Independent"
+    }
+  ],
+  "license": "BSD-3-Clause",
+  "keywords": [
+    "Lean 4",
+    "Mathlib",
+    "formal verification",
+    "interactive theorem proving",
+    "deep learning",
+    "neural networks",
+    "automatic differentiation",
+    "vector-Jacobian product",
+    "Fréchet derivative",
+    "JAX",
+    "MLIR",
+    "IREE",
+    "convolutional neural networks",
+    "vision transformer",
+    "batch normalization",
+    "ResNet",
+    "MobileNet",
+    "EfficientNet",
+    "ConvNeXt"
+  ],
+  "upload_type": "software",
+  "language": "eng",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "identifier": "10.1007/978-1-4842-6168-2",
+      "relation": "isDerivedFrom",
+      "resource_type": "publication-book",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "https://github.com/brettkoonce/lean4-mlir",
+      "relation": "isSupplementTo",
+      "resource_type": "software",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://brettkoonce.github.io/lean4-mlir/blueprint/",
+      "relation": "isDocumentedBy",
+      "resource_type": "publication-book",
+      "scheme": "url"
+    }
+  ]
+}
