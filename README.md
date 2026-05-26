@@ -14,6 +14,8 @@ in Lean.
 Companion code for the upcoming book *Verified Deep Learning with Lean4*
 (follow-up to [Convolutional Neural Networks with Swift for TensorFlow](https://doi.org/10.1007/978-1-4842-6168-2), Apress).
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg)](https://doi.org/10.5281/zenodo.20402133)
+
 **Current version: `v0.5.7`** — Two parallel-agent audits closed.
 The "canonical `correct := rfl`" pattern at non-smooth operators
 (ReLU, the composed MLP, MaxPool2) now has machine-checked
@@ -423,6 +425,7 @@ ROCm 7.2.0 / gfx1100.
   author  = {Brett Koonce},
   title   = {Verified Deep Learning with Lean4: Formal Backpropagation from MLP to Attention, via MLIR},
   url     = {https://github.com/brettkoonce/lean4-mlir},
+  doi     = {10.5281/zenodo.20402133},
   version = {0.5.7},
   year    = {2026},
 }
