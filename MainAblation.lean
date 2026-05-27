@@ -671,6 +671,14 @@ def convNextTinyCutmixConfig : TrainConfig :=
 def convNextTinyRandAugConfig : TrainConfig :=
   { convNextTinyConfig with useRandAugment := true, randAugmentN := 2, randAugmentM := 9.0 }
 
+-- Mixup on ConvNeXt-T (alpha=0.8, matching the ViT-Tiny ablation in Ch 10).
+def convNextTinyMixupConfig : TrainConfig :=
+  { convNextTinyConfig with useMixup := true, mixupAlpha := 0.8 }
+
+-- Random Erasing on ConvNeXt-T (prob=0.25, default; no soft-label plumbing needed).
+def convNextTinyEraseConfig : TrainConfig :=
+  { convNextTinyConfig with randomErasing := true }
+
 -- Mini CIFAR-sized ConvNeXt: one stage at 32 channels and one at 64.
 -- Same primitives, fast to compile, useful for the activation ablation
 -- on CIFAR-10 if Imagenette compute isn't available.
@@ -885,6 +893,8 @@ def ablations : List (String × AblationRun) := [
   ("convnext-tiny-gelu",         ⟨convNextTinyGeluSpec, convNextTinyConfig,         .imagenette, "data/imagenette"⟩),
   ("convnext-tiny-gelu-cutmix",  ⟨convNextTinyGeluSpec, convNextTinyCutmixConfig,   .imagenette, "data/imagenette"⟩),
   ("convnext-tiny-gelu-randaug", ⟨convNextTinyGeluSpec, convNextTinyRandAugConfig,  .imagenette, "data/imagenette"⟩),
+  ("convnext-tiny-gelu-mixup",   ⟨convNextTinyGeluSpec, convNextTinyMixupConfig,    .imagenette, "data/imagenette"⟩),
+  ("convnext-tiny-gelu-erase",   ⟨convNextTinyGeluSpec, convNextTinyEraseConfig,    .imagenette, "data/imagenette"⟩),
   ("convnext-tiny-relu",    ⟨convNextTinyReluSpec,   convNextTinyConfig, .imagenette, "data/imagenette"⟩),
   ("convnext-tiny-bn-gelu", ⟨convNextTinyBnGeluSpec, convNextTinyConfig, .imagenette, "data/imagenette"⟩),
   ("convnext-tiny-bn-relu", ⟨convNextTinyBnReluSpec, convNextTinyConfig, .imagenette, "data/imagenette"⟩),
