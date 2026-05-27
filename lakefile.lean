@@ -110,6 +110,10 @@ lean_exe «mnist-mlp-train» where
   root := `MainMnistMlpTrain
   moreLinkArgs := ireeLink
 
+lean_exe «mnist-linear-train» where
+  root := `MainMnistLinearTrain
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar-cnn-train» where
   root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink
