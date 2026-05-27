@@ -3044,6 +3044,75 @@ so the bare row should be read as a ``what does the modern recipe
 buy us total'' baseline rather than a strict additive component of
 the leave-one-out chain.
 
+\section*{What 90-epoch ImageNet would look like}
+
+The Imagenette runs above all trained on $\sim$9.5K images for 80
+epochs. The headline ResNet result --- 21.8M parameters reaching
+74.4\% top-1 on full 1000-class ImageNet --- comes from a different
+recipe: 1.28M training images, 90 epochs, paper-recipe SGD with
+momentum. The architecture is unchanged; only the dataset, the
+output head width, and the training schedule differ. Here's what
+the loop would look like:
+
+\begin{verbatim}
+-- 1. Same backbone, 1000 classes instead of 10.
+def resnet34Imagenet : NetSpec where
+  name   := "ResNet-34 (ImageNet)"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 64 7 2 .same,
+    .maxPool 3 2,
+    .residualBlock  64  64 3 1,
+    .residualBlock  64 128 4 2,
+    .residualBlock 128 256 6 2,
+    .residualBlock 256 512 3 2,
+    .globalAvgPool,
+    .dense 512 1000 .identity      -- 1000-class head
+  ]
+
+-- 2. Paper recipe (SGD + momentum) plus modern polish.
+def resnet34ImagenetConfig : TrainConfig where
+  learningRate := 0.1
+  batchSize    := 256
+  epochs       := 90
+  useAdam      := false             -- paper: SGD + momentum
+  momentum     := 0.9
+  weightDecay  := 1e-4
+  cosineDecay  := true              -- replaces paper's step decay at ep 30/60
+  warmupEpochs := 5                 -- modern addition
+  augment      := true              -- random crop + horizontal flip
+  labelSmoothing := 0.1             -- modern addition
+
+-- 3. Same .train entry point as every other chapter.
+def main (args : List String) : IO Unit :=
+  resnet34Imagenet.train resnet34ImagenetConfig
+    (args.head?.getD "data/imagenet") .imagenet
+\end{verbatim}
+
+The code is illustrative: our \texttt{DatasetKind} ships
+\texttt{.mnist}, \texttt{.cifar10}, \texttt{.imagenette},
+\texttt{.pets} but not yet \texttt{.imagenet}. Running it for real
+would add one constructor plus a streaming ImageNet loader (the
+1.28M-image training set doesn't fit in memory the way Imagenette's
+9.5K does). What's worth noting is that everything else --- the
+architecture, the \texttt{.train} invocation, the recipe knobs ---
+is already in place and would carry over unchanged. The framework
+isn't doing anything fundamentally different at ImageNet scale;
+it's just the data that's bigger.
+
+\textbf{Compute budget, for honest comparison.} The original paper
+trained on 8 GPUs for $\sim$5 days. On the single 7900 XTX
+(gfx1100) used for the Imagenette runs above, a straight port runs
+into the memory ceiling at batch 256 --- ResNet-34's forward
+activations plus gradients plus Adam moments exceed 24~GB --- so
+you'd drop to batch 64 and 4$\times$ more steps per epoch. Call it
+a week of wall-clock, and that's before allowing for the eval pass
+on the 50K-image val set every epoch. The practical move for
+anyone wanting ImageNet-scale numbers from this codebase is to
+rent cluster time; reproducing the paper on a single GPU is
+possible but not how the result was originally produced.
+
 \chapter{MobileNetV2}
 \label{chap:depthwise}
 
