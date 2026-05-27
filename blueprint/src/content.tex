@@ -488,14 +488,17 @@ previous page.
 
 \paragraph{Training program and run command.}
 \begin{verbatim}
-def main : IO Unit := mnistLinear.train (s4tfBaseline 12) "data" .mnist
+def main (args : List String) : IO Unit :=
+  mnistLinear.train mnistLinearConfig (args.head?.getD "data") .mnist
 \end{verbatim}
 
-In our repo this is \texttt{linear-sgd} in
-\texttt{MainAblation.lean}; build and run it with
+In our repo this is the standalone trainer
+\texttt{mnist-linear-train} (\texttt{MainMnistLinearTrain.lean}),
+matching the per-chapter trainer pattern every later chapter uses.
+Build and run it with
 \begin{verbatim}
-lake build ablation
-./.lake/build/bin/ablation linear-sgd
+lake build mnist-linear-train
+./.lake/build/bin/mnist-linear-train
 \end{verbatim}
 
 \paragraph{The gradient, in math.}
@@ -518,12 +521,8 @@ Captured verbatim from \texttt{runs/2026-05-05-linear-sgd/linear-sgd.log}
 on an AMD 7900 XTX (ROCm, gfx1100):
 
 \begin{verbatim}
-$ ./.lake/build/bin/ablation linear-sgd
-Ablation: linear-sgd
-  spec: MNIST-Linear, optimizer: SGD
-  lr: 0.100000, cosine: false, wd: 0.000000
-  aug: false, label_smooth: 0.000000
-MNIST-Linear-linear-sgd: 7850 params
+$ ./.lake/build/bin/mnist-linear-train
+MNIST-Linear: 7850 params
 training: 468 batches/epoch, batch=128, SGD, lr=0.100000
   step 0/468: loss=2.301343 (11ms)
 Epoch  1/12: loss=0.381019 lr=0.100000 (932ms)
