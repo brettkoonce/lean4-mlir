@@ -267,6 +267,12 @@ private def datasetIO : DatasetKind → DatasetIO
   | .mnist      => mnistIO
   | .cifar10    => cifar10IO
   | .pets       => petsIO
+  | .imagenet   =>
+    -- Phase 3 doesn't yet support full 1000-class ImageNet — the 1.28M
+    -- training set needs a C-side streaming reader, not the current
+    -- read-everything-into-a-ByteArray pattern. Phase 2 (jax/) wires it
+    -- through tfds. Until phase 3 streams, this kind is JAX-only.
+    panic! "DatasetKind.imagenet not supported by phase 3; use phase 2 (jax/) for now"
 
 /-- Adam + cosine-LR + running-BN-stats training loop, generic over
     `DatasetKind`. The dataset specifies how to load the train/val
@@ -333,6 +339,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           | .cifar10    => "cifar10"
           | .imagenette => "imagenette"
           | .pets       => "pets"
+          | .imagenet   => "imagenet"
         let hdr :=
           "{\"kind\":\"header\",\"phase\":\"phase3\"" ++
           s!",\"netspec_name\":\"{spec.name}\"" ++

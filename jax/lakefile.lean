@@ -54,6 +54,11 @@ lean_exe «vgg16bn» where
 lean_exe «vit-tiny» where
   root := `MainVit
 
+-- ImageNet (full 1000-class) — tfds streaming. See blueprint Ch 6
+-- §"What 90-epoch ImageNet would look like".
+lean_exe «resnet34-imagenet» where
+  root := `MainResnetImagenet
+
 -- VJP oracle — one binary per axiom under test. Trainers live in
 -- tests/vjp_oracle/phase2/ so jax/ isn't crowded with test-only files.
 -- See tests/vjp_oracle/README.md at the repo root.

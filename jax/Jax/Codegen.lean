@@ -73,6 +73,82 @@ private def emitDataLoading (ds : DatasetKind) : String :=
     "    std = np.array([0.229, 0.224, 0.225]).reshape(1, 3, 1, 1)\n" ++
     "    images = ((images - mean) / std).reshape(count, -1)\n" ++
     "    return images, labels\n\n"
+  | .pets =>
+    -- The UNet/Pets segmentation demo is phase-3-only. The JAX codegen
+    -- doesn't currently emit a segmentation loss/train loop, so this
+    -- branch is unreachable at runtime; keep it stubbed for exhaustivity.
+    "# Pets segmentation is phase-3-only; phase 2 emits nothing for .pets.\n\n"
+  | .imagenet =>
+    -- ImageNet (full 1000-class, 1.28M training, 50K val) — streaming
+    -- pipeline via TFDS + tf.data. Requires `tensorflow` and
+    -- `tensorflow_datasets` in the venv and TFDS_DATA_DIR pointing at the
+    -- prepared tfds tree (default: ~/tensorflow_datasets).
+    --
+    -- The pipeline pre-normalizes (ImageNet mean/std) and flattens to
+    -- (B, 3*224*224) inside tf.data so the existing `forward()` reshape
+    -- contract is unchanged. The only difference from the in-RAM datasets
+    -- is the training loop in emitMain branches to consume an iterator
+    -- instead of indexing into a numpy array.
+    "# ═══════════════════════════════════════════════════════════════════════\n" ++
+    "#  ImageNet streaming pipeline (tfds + tf.data)\n" ++
+    "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
+    "import tensorflow as tf\n" ++
+    "tf.config.set_visible_devices([], 'GPU')  # keep TF off the GPUs\n" ++
+    "import tensorflow_datasets as tfds\n\n" ++
+    "_IMG_SIZE = 224\n" ++
+    "_CROP_PADDING = 32\n" ++
+    "_MEAN_RGB = tf.constant([0.485 * 255, 0.456 * 255, 0.406 * 255], dtype=tf.float32)\n" ++
+    "_STD_RGB  = tf.constant([0.229 * 255, 0.224 * 255, 0.225 * 255], dtype=tf.float32)\n\n" ++
+    "def _imagenet_decode_random_crop_flip(image_bytes):\n" ++
+    "    shape = tf.io.extract_jpeg_shape(image_bytes)\n" ++
+    "    bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])\n" ++
+    "    bbox_begin, bbox_size, _ = tf.image.sample_distorted_bounding_box(\n" ++
+    "        shape, bounding_boxes=bbox,\n" ++
+    "        min_object_covered=0.1, aspect_ratio_range=(3./4, 4./3.),\n" ++
+    "        area_range=(0.08, 1.0), max_attempts=10,\n" ++
+    "        use_image_if_no_bounding_boxes=True)\n" ++
+    "    oy, ox, _ = tf.unstack(bbox_begin)\n" ++
+    "    th, tw, _ = tf.unstack(bbox_size)\n" ++
+    "    window = tf.stack([oy, ox, th, tw])\n" ++
+    "    img = tf.io.decode_and_crop_jpeg(image_bytes, window, channels=3)\n" ++
+    "    img = tf.image.resize([img], [_IMG_SIZE, _IMG_SIZE],\n" ++
+    "                          method=tf.image.ResizeMethod.BICUBIC)[0]\n" ++
+    "    img = tf.image.random_flip_left_right(img)\n" ++
+    "    return img\n\n" ++
+    "def _imagenet_decode_center_crop(image_bytes):\n" ++
+    "    shape = tf.io.extract_jpeg_shape(image_bytes)\n" ++
+    "    h, w = shape[0], shape[1]\n" ++
+    "    padded = tf.cast(\n" ++
+    "        ((_IMG_SIZE / (_IMG_SIZE + _CROP_PADDING)) *\n" ++
+    "         tf.cast(tf.minimum(h, w), tf.float32)), tf.int32)\n" ++
+    "    oy = (h - padded) // 2\n" ++
+    "    ox = (w - padded) // 2\n" ++
+    "    window = tf.stack([oy, ox, padded, padded])\n" ++
+    "    img = tf.io.decode_and_crop_jpeg(image_bytes, window, channels=3)\n" ++
+    "    img = tf.image.resize([img], [_IMG_SIZE, _IMG_SIZE],\n" ++
+    "                          method=tf.image.ResizeMethod.BICUBIC)[0]\n" ++
+    "    return img\n\n" ++
+    "def build_imagenet_iter(split, batch_size, training, augment):\n" ++
+    "    ds = tfds.load('imagenet2012', split=split,\n" ++
+    "                   decoders={'image': tfds.decode.SkipDecoding()},\n" ++
+    "                   data_dir=os.environ.get('TFDS_DATA_DIR'))\n" ++
+    "    def _pp(ex):\n" ++
+    "        b = ex['image']\n" ++
+    "        img = (_imagenet_decode_random_crop_flip(b)\n" ++
+    "               if (training and augment)\n" ++
+    "               else _imagenet_decode_center_crop(b))\n" ++
+    "        img = tf.cast(img, tf.float32)              # 0..255 HWC\n" ++
+    "        img = (img - _MEAN_RGB) / _STD_RGB          # normalize, still HWC\n" ++
+    "        img = tf.transpose(img, [2, 0, 1])          # HWC -> CHW\n" ++
+    "        img = tf.reshape(img, [3 * _IMG_SIZE * _IMG_SIZE])  # flat to match forward()\n" ++
+    "        return img, ex['label']\n" ++
+    "    if training:\n" ++
+    "        ds = ds.shuffle(8192, seed=42, reshuffle_each_iteration=True)\n" ++
+    "        ds = ds.repeat()\n" ++
+    "    ds = ds.map(_pp, num_parallel_calls=tf.data.AUTOTUNE)\n" ++
+    "    ds = ds.batch(batch_size, drop_remainder=True)\n" ++
+    "    ds = ds.prefetch(tf.data.AUTOTUNE)\n" ++
+    "    return tfds.as_numpy(ds)\n\n"
 
 private def emitHelpers (spec : NetSpec) : String := Id.run do
   let mut code := ""
@@ -1002,12 +1078,13 @@ private def emitForward (spec : NetSpec) : String := Id.run do
         code := code ++ "    x = invres_block(params, x, " ++ toString pidx ++ ", 1, " ++
           toString expand ++ ", True)\n"
         pidx := pidx + nParamsPerBlock hasExpand
-    | .mbConvV3 ic _ expandCh kSize stride useSE useHSwish =>
+    | .mbConvV3 ic _ expandCh kSize stride useSE act =>
       let nP := (if expandCh != ic then 1 else 0) + 1 + (if useSE then 2 else 0) + 1
+      let isHSwish : Bool := match act with | .hSwish => true | _ => false
       code := code ++ "    x = mbconv_v3_block(params, x, " ++ toString pidx ++ ", " ++
         toString stride ++ ", " ++ toString expandCh ++ ", " ++ toString kSize ++ ", " ++
         (if useSE then "True" else "False") ++ ", " ++
-        (if useHSwish then "True" else "False") ++ ")\n"
+        (if isHSwish then "True" else "False") ++ ")\n"
       pidx := pidx + nP
     | .uib _ic _oc _expand stride preDWk postDWk =>
       let nP := (if preDWk > 0 then 1 else 0) + 1 + (if postDWk > 0 then 1 else 0) + 1
@@ -1176,8 +1253,173 @@ private def emitDataLoadCalls (ds : DatasetKind) (dataDir : String) (spec : NetS
     "    train_images, train_labels = load_imagenette(os.path.join(data_dir, \"train.bin\"))\n" ++
     "    test_images, test_labels = load_imagenette(os.path.join(data_dir, \"val.bin\"))\n" ++
     "    print(\"  \" + str(len(train_images)) + \" train, \" + str(len(test_images)) + \" val, " ++ imgDesc ++ "x3\")\n\n"
+  | .pets =>
+    -- Phase-3-only kind. Stub for exhaustivity.
+    "    raise RuntimeError(\"phase 2 doesn't emit a pets/segmentation trainer\")\n\n"
+  | .imagenet =>
+    -- Streaming: no upfront load. Just record the canonical example counts
+    -- (tfds knows them too, but we don't need to round-trip through it for
+    -- the steps_per_epoch math).
+    "    print(\"ImageNet (1000-class) — tfds streaming pipeline\")\n" ++
+    "    train_examples = 1281167\n" ++
+    "    val_examples   = 50000\n\n"
+
+/-- Streaming-tfds main for `.imagenet`. Parallel to `emitMain`'s in-RAM
+    path but iterates `build_imagenet_iter` instead of indexing into a
+    pre-loaded numpy array. Shares the trace-emission format, init-load
+    contract, and optimizer plumbing — only the data-source is different. -/
+private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : String) : String :=
+  let bs := toString cfg.batchSize
+  let ep := toString cfg.epochs
+  let lr := toString cfg.learningRate
+  let nParams := toString spec.totalParams
+  let seed := toString cfg.seed
+  let hasMomentum := cfg.momentum > 0.0
+  let warmup := toString cfg.warmupEpochs
+  let hasCosine := cfg.cosineDecay
+  let useAdam := cfg.useAdam
+  "# ═══════════════════════════════════════════════════════════════════════\n" ++
+  "#  Main (ImageNet streaming variant)\n" ++
+  "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
+  "if __name__ == \"__main__\":\n" ++
+  "    print(\"" ++ spec.name ++ " · Lean 4 → JAX\")\n" ++
+  "    print(\"  \" + \"" ++ spec.archStr ++ "\")\n" ++
+  "    print()\n\n" ++
+  "    data_dir = \"" ++ dataDir ++ "\"   # not used for tfds (TFDS_DATA_DIR env var is)\n" ++
+  "    print(\"ImageNet (1000-class) — tfds streaming pipeline\")\n" ++
+  "    train_examples = 1281167\n" ++
+  "    val_examples   = 50000\n\n" ++
+  "    BATCH_SIZE = (" ++ bs ++ " // n_devices) * n_devices or n_devices\n" ++
+  "    EPOCHS = " ++ ep ++ "\n" ++
+  "    LR = " ++ lr ++ "\n" ++
+  "    steps_per_epoch = train_examples // BATCH_SIZE\n" ++
+  "    total_steps = steps_per_epoch * EPOCHS\n" ++
+  "    print(\"lr=" ++ lr ++ "  batch_size=\" + str(BATCH_SIZE) +\n" ++
+  "          \" (\" + str(n_devices) + \" devices x \" + str(BATCH_SIZE // n_devices) + \")\" +\n" ++
+  "          \"  epochs=\" + str(EPOCHS) + \"  params=" ++ nParams ++ "\")\n" ++
+  "    print(\"steps_per_epoch=\" + str(steps_per_epoch) + \"  total_steps=\" + str(total_steps))\n" ++
+  "    print(\"backend=\" + str(jax.default_backend()) + \"  devices=\" + str(jax.devices()))\n" ++
+  "    print(\"Starting training...\")\n\n" ++
+  "    _init_load = os.environ.get('LEAN_MLIR_INIT_LOAD')\n" ++
+  "    if _init_load:\n" ++
+  "        print(f'Loading phase-3 init from {_init_load}')\n" ++
+  "        params = init_params_from_file(_init_load)\n" ++
+  "    else:\n" ++
+  "        params = init_params(random.PRNGKey(" ++ seed ++ "))\n" ++
+  "    params = jax.device_put(params, replicated_sharding)\n" ++
+  (if useAdam then
+    "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
+    "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
+    "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
+   else if hasMomentum then "    velocity = jax.tree.map(jnp.zeros_like, params)\n"
+   else "") ++
+  "\n" ++
+  "    # Trace emission (opt-in; matches phase-3 format).\n" ++
+  "    _trace_path = os.environ.get('LEAN_MLIR_TRACE_OUT')\n" ++
+  "    _trace_f = open(_trace_path, 'w') if _trace_path else None\n" ++
+  "    if _trace_f:\n" ++
+  "        _hdr = {\n" ++
+  "            'kind': 'header', 'phase': 'phase2',\n" ++
+  "            'netspec_name': \"" ++ spec.name ++ "\",\n" ++
+  "            'config': {\n" ++
+  "                'lr': " ++ lr ++ ", 'batch_size': " ++ bs ++ ", 'epochs': " ++ ep ++ ",\n" ++
+  "                'use_adam': " ++ (if useAdam then "True" else "False") ++ ",\n" ++
+  "                'weight_decay': " ++ toString cfg.weightDecay ++ ",\n" ++
+  "                'cosine': " ++ (if hasCosine then "True" else "False") ++ ",\n" ++
+  "                'warmup_epochs': " ++ toString cfg.warmupEpochs ++ ",\n" ++
+  "                'augment': " ++ (if cfg.augment then "True" else "False") ++ ",\n" ++
+  "                'label_smoothing': " ++ toString cfg.labelSmoothing ++ ",\n" ++
+  "                'seed': " ++ seed ++ ",\n" ++
+  "            },\n" ++
+  "            'total_params': " ++ nParams ++ ",\n" ++
+  "            'dataset': 'imagenet',\n" ++
+  "            'emitter_version': '1',\n" ++
+  "        }\n" ++
+  "        _trace_f.write(json.dumps(_hdr) + '\\n')\n\n" ++
+  "    train_iter = iter(build_imagenet_iter('train', BATCH_SIZE,\n" ++
+  "                                          training=True,\n" ++
+  "                                          augment=" ++ (if cfg.augment then "True" else "False") ++ "))\n" ++
+  "    _global_step = 0\n" ++
+  "    t0 = time.time()\n" ++
+  "    for epoch in range(EPOCHS):\n" ++
+  (if hasCosine then
+    "        # Per-step cosine LR (computed inside the inner loop below)\n" ++
+    "        pass\n"
+   else
+    "        lr = jnp.float32(LR)\n") ++
+  "        ep_t0 = time.time()\n" ++
+  "        epoch_loss = 0.0\n" ++
+  "        n_batches = 0\n" ++
+  "        for _ in range(steps_per_epoch):\n" ++
+  "            x, y = next(train_iter)\n" ++
+  (if hasCosine then
+    "            # Per-step LR (warmup → cosine)\n" ++
+    (if cfg.warmupEpochs > 0 then
+      "            warmup_steps = steps_per_epoch * " ++ warmup ++ "\n" ++
+      "            if _global_step < warmup_steps:\n" ++
+      "                lr = jnp.float32(LR * (_global_step + 1) / warmup_steps)\n" ++
+      "            else:\n" ++
+      "                prog = (_global_step - warmup_steps) / max(total_steps - warmup_steps, 1)\n" ++
+      "                lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n"
+     else
+      "            prog = _global_step / max(total_steps, 1)\n" ++
+      "            lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n")
+   else "") ++
+  "            x = jax.device_put(x, data_sharding)\n" ++
+  "            y = jax.device_put(y, data_sharding)\n" ++
+  (if useAdam then
+    "            params, opt_state, loss = train_step(params, opt_state, x, y, lr)\n"
+   else if hasMomentum then
+    "            params, velocity, loss = train_step(params, velocity, x, y, lr)\n"
+   else
+    "            params, loss = train_step(params, x, y, lr)\n") ++
+  "            epoch_loss += float(loss)\n" ++
+  "            n_batches += 1\n" ++
+  "            _global_step += 1\n" ++
+  "            if _trace_f:\n" ++
+  "                _trace_f.write(json.dumps({\n" ++
+  "                    'kind': 'step', 'step': _global_step, 'epoch': epoch,\n" ++
+  "                    'loss': float(loss), 'lr': float(lr),\n" ++
+  "                }) + '\\n')\n" ++
+  "            if _global_step % 100 == 0:\n" ++
+  "                print(\"  step \" + str(_global_step) + \"/\" + str(total_steps) +\n" ++
+  "                      \"  loss=\" + str(round(float(loss), 4)) +\n" ++
+  "                      \"  lr=\" + str(round(float(lr), 5)) +\n" ++
+  "                      \"  (\" + str(round((time.time()-t0)/_global_step*1000, 0)) + \"ms/step avg)\")\n" ++
+  "\n" ++
+  "        # Validation pass: rebuild iterator each epoch (non-repeating).\n" ++
+  "        print(\"  Running validation ...\")\n" ++
+  "        ev_t0 = time.time()\n" ++
+  "        v_iter = build_imagenet_iter('validation', BATCH_SIZE, training=False, augment=False)\n" ++
+  "        correct = 0\n" ++
+  "        total = 0\n" ++
+  "        total_eval_loss = 0.0\n" ++
+  "        v_batches = 0\n" ++
+  "        for x, y in v_iter:\n" ++
+  "            x = jax.device_put(x, data_sharding)\n" ++
+  "            y = jax.device_put(y, data_sharding)\n" ++
+  "            c, l = eval_batch(params, x, y)\n" ++
+  "            correct += int(c)\n" ++
+  "            total   += y.shape[0]\n" ++
+  "            total_eval_loss += float(l)\n" ++
+  "            v_batches += 1\n" ++
+  "        accuracy = correct / max(total, 1)\n" ++
+  "        elapsed_ep = time.time() - ep_t0\n" ++
+  "        print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
+  "              \" loss(train_avg)=\" + str(round(epoch_loss / max(n_batches,1), 4)) +\n" ++
+  "              \" val_top1=\" + str(correct) + \"/\" + str(total) +\n" ++
+  "              \" (\" + str(round(accuracy, 4)) + \")\" +\n" ++
+  "              \" val_loss=\" + str(round(total_eval_loss/max(v_batches,1), 4)) +\n" ++
+  "              \"  [\" + str(round(elapsed_ep, 1)) + \"s train, \" +\n" ++
+  "              str(round(time.time()-ev_t0 - elapsed_ep, 1)) + \"s val]\")\n\n" ++
+  "    print(\"\")\n" ++
+  "    print(\"Done. Total time: \" + str(round(time.time() - t0, 1)) + \"s\")\n" ++
+  "    if _trace_f: _trace_f.close()\n"
 
 private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : String) : String :=
+  match ds with
+  | .imagenet => emitMainImagenet spec cfg dataDir
+  | _ =>
   let bs := toString cfg.batchSize
   let ep := toString cfg.epochs
   let lr := toString cfg.learningRate
@@ -1250,7 +1492,9 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "            'dataset': " ++ (match ds with
                                 | .mnist => "'mnist'"
                                 | .cifar10 => "'cifar10'"
-                                | .imagenette => "'imagenette'") ++ ",\n" ++
+                                | .imagenette => "'imagenette'"
+                                | .pets => "'pets'"
+                                | .imagenet => "'imagenet'") ++ ",\n" ++
   "            'emitter_version': '1',\n" ++
   "        }\n" ++
   "        _trace_f.write(json.dumps(_hdr) + '\\n')\n" ++
