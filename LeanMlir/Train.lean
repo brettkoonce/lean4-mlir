@@ -173,6 +173,7 @@ private structure DatasetIO where
       a future dataset stores val data at a different size from the
       input. -/
   valPreprocessBatch : (raw : ByteArray) → (batch : USize) → IO ByteArray := fun raw _ => return raw
+  deriving Inhabited
 
 /-- Imagenette: 256×256 train, 224×224 val, random-crop-to-224 + hflip.
     When augment=false, falls back to deterministic center-crop 256→224
