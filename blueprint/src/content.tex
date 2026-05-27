@@ -3090,16 +3090,19 @@ def main (args : List String) : IO Unit :=
     (args.head?.getD "data/imagenet") .imagenet
 \end{verbatim}
 
-The code is illustrative: our \texttt{DatasetKind} ships
-\texttt{.mnist}, \texttt{.cifar10}, \texttt{.imagenette},
-\texttt{.pets} but not yet \texttt{.imagenet}. Running it for real
-would add one constructor plus a streaming ImageNet loader (the
-1.28M-image training set doesn't fit in memory the way Imagenette's
-9.5K does). What's worth noting is that everything else --- the
-architecture, the \texttt{.train} invocation, the recipe knobs ---
-is already in place and would carry over unchanged. The framework
-isn't doing anything fundamentally different at ImageNet scale;
-it's just the data that's bigger.
+Today, the phase-2 JAX path (\texttt{jax/MainResnetImagenet.lean},
+runs via \texttt{lake build resnet34-imagenet}) wires
+\texttt{.imagenet} through tfds streaming. The phase-3 IREE path
+shown in the snippet above still needs a C-side streaming reader
+for the 1.28M-image training set (Imagenette's 9.5K fits in a
+single \texttt{ByteArray}; ImageNet doesn't) --- until that lands,
+the phase-3 dispatcher panics with a ``use phase 2'' note when
+handed \texttt{.imagenet}. What's worth noting is that everything
+else --- the architecture, the \texttt{.train} invocation, the
+recipe knobs --- is identical across both paths; only the
+data-loading layer differs. The framework isn't doing anything
+fundamentally different at ImageNet scale; it's just the data
+that's bigger.
 
 \textbf{Compute budget.} [TODO: cuda + jax demo with measured
 wall-clock and val acc on actual hardware.]
