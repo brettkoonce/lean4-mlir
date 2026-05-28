@@ -3701,6 +3701,9 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
     (useFocal : Bool := false) (focalGamma : Float := 2.0)
     (useSeg : Bool := false)
     (useDdpm : Bool := false)
+    (useYolov1 : Bool := false)
+    (yoloGridH : Nat := 7) (yoloGridW : Nat := 7)
+    (yoloNumBoxes : Nat := 2) (yoloNumClasses : Nat := 20)
     : String := Id.run do
   let B := batchSize
   let nClasses := spec.numClasses
@@ -4842,7 +4845,188 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   -- also tells the dispatcher to use a 4-D gradShape (vs [B, NC]).
   let mut gradSSA : String := "%d_logits"
   let mut gradShape : List Nat := [B, NC]
-  if useDdpm then
+  if useYolov1 then
+    -- ═══════════════ YOLOv1: 5-term masked MSE ═══════════════
+    -- See planning/yolo_demo_v2.md Phase 1 decisions D1-D11. Predictions
+    -- arrive as flat [B, totalCh]; we reshape to [B, perCell, gH, gW]
+    -- (NCHW), slice per-term, compute masked MSE for each, then concat
+    -- gradient slabs back to [B, perCell, gH, gW] and reshape flat for
+    -- the dense backward to consume.
+    --
+    -- Channel layout (perCell = numBoxes*5 + numClasses):
+    --   [0..2)              box 0 (x, y)
+    --   [2..4)              box 0 (w, h)     -- √ applied with ε floor
+    --   [4..5)              box 0 confidence
+    --   [5..9)              box 1 (x, y, w, h)  — never optimized (Option A)
+    --   [9..10)             box 1 confidence — always penalized as no-object
+    --   [10..perCell)       per-cell class one-hot (numClasses long)
+    --
+    -- Forward terms (each summed over its non-zero cells, then summed
+    -- together and divided by B for per-image-mean gradient scaling):
+    --   T1: λ_coord · Σ mask_obj · (pred_xy - tgt_xy)²
+    --   T2: λ_coord · Σ mask_obj · (√pred_wh_ε - √tgt_wh_ε)²
+    --   T3: Σ mask_obj · (pred_c0 - 1)²
+    --   T4: λ_noobj · Σ (1 - mask_obj) · (pred_c0)²
+    --   T5: λ_noobj · Σ (pred_c1)²
+    --   T6: Σ mask_obj · Σ_c (pred_cls_c - tgt_cls_c)²
+    --
+    -- Backward: hand-derived per-term, concatenated along channel dim.
+    -- The √ derivative `1 / (2·√pred)` is paired with the 2 from d(x²)/dx,
+    -- so the prefactor is just `1 / √pred_clamp` (no 2). Where the input
+    -- was clamped (pred < ε), gradient is zeroed via stablehlo.select.
+    match curShape with
+    | [_, totalCh] =>
+      let perCell := yoloNumBoxes * 5 + yoloNumClasses
+      let gH := yoloGridH
+      let gW := yoloGridW
+      let numC := yoloNumClasses
+      let expected := gH * gW * perCell
+      if totalCh != expected then
+        code := code ++ s!"    // useYolov1=true but flat dim {totalCh} ≠ gH*gW*perCell = {expected}\n"
+      else
+        let shape4 := [B, perCell, gH, gW]
+        let shape4Ty := tensorTy shape4
+        let maskTy := tensorTy [B, gH, gW]
+        let shapeXY := [B, 2, gH, gW]
+        let shapeXYTy := tensorTy shapeXY
+        let shapeWH := shapeXY  -- same shape, different channels
+        let shapeC1 := [B, 1, gH, gW]
+        let shapeC1Ty := tensorTy shapeC1
+        let shapeClass := [B, numC, gH, gW]
+        let shapeClassTy := tensorTy shapeClass
+        let shapeBox1XYWH := [B, 4, gH, gW]
+        let shapeBox1XYWHTy := tensorTy shapeBox1XYWH
+        let i1WHTy := s!"tensor<{B}x2x{gH}x{gW}xi1>"
+        let lambdaCoord := "5.0"
+        let lambdaNoobj := "0.5"
+        let eps := "1.0e-06"
+        let curTy := tensorTy curShape
+        code := code ++ "\n    // ================ YOLOv1: 5-term masked MSE ================\n"
+        -- Reshape predictions [B, totalCh] → [B, perCell, gH, gW]
+        code := code ++ s!"    %y1_pred = stablehlo.reshape {logitsSSA} : ({curTy}) -> {shape4Ty}\n"
+        -- Slice predictions + targets
+        code := code ++ s!"    %y1_pred_xy = \"stablehlo.slice\"(%y1_pred) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0, 0>, limit_indices = array<i64: {B}, 2, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {shapeXYTy}\n"
+        code := code ++ s!"    %y1_tgt_xy = \"stablehlo.slice\"(%y_yolo) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0, 0>, limit_indices = array<i64: {B}, 2, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {shapeXYTy}\n"
+        code := code ++ s!"    %y1_pred_wh = \"stablehlo.slice\"(%y1_pred) " ++ "{" ++ s!" start_indices = array<i64: 0, 2, 0, 0>, limit_indices = array<i64: {B}, 4, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_tgt_wh = \"stablehlo.slice\"(%y_yolo) " ++ "{" ++ s!" start_indices = array<i64: 0, 2, 0, 0>, limit_indices = array<i64: {B}, 4, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_pred_c0 = \"stablehlo.slice\"(%y1_pred) " ++ "{" ++ s!" start_indices = array<i64: 0, 4, 0, 0>, limit_indices = array<i64: {B}, 5, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_pred_c1 = \"stablehlo.slice\"(%y1_pred) " ++ "{" ++ s!" start_indices = array<i64: 0, 9, 0, 0>, limit_indices = array<i64: {B}, 10, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_pred_cls = \"stablehlo.slice\"(%y1_pred) " ++ "{" ++ s!" start_indices = array<i64: 0, 10, 0, 0>, limit_indices = array<i64: {B}, {perCell}, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {shapeClassTy}\n"
+        code := code ++ s!"    %y1_tgt_cls = \"stablehlo.slice\"(%y_yolo) " ++ "{" ++ s!" start_indices = array<i64: 0, 10, 0, 0>, limit_indices = array<i64: {B}, {perCell}, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {shapeClassTy}\n"
+        -- Broadcast mask to per-term shapes
+        code := code ++ s!"    %y1_mask_xy = stablehlo.broadcast_in_dim %m_yolo, dims = [0, 2, 3] : ({maskTy}) -> {shapeXYTy}\n"
+        code := code ++ s!"    %y1_mask_c1 = stablehlo.broadcast_in_dim %m_yolo, dims = [0, 2, 3] : ({maskTy}) -> {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_mask_cls = stablehlo.broadcast_in_dim %m_yolo, dims = [0, 2, 3] : ({maskTy}) -> {shapeClassTy}\n"
+        -- Constants
+        code := code ++ s!"    %y1_oneC1 = stablehlo.constant dense<1.0> : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_lcoord = stablehlo.constant dense<{lambdaCoord}> : tensor<f32>\n"
+        code := code ++ s!"    %y1_lnoobj = stablehlo.constant dense<{lambdaNoobj}> : tensor<f32>\n"
+        code := code ++ s!"    %y1_eps_wh = stablehlo.constant dense<{eps}> : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_Bf = stablehlo.constant dense<{B}.0> : tensor<f32>\n"
+        -- T1: coord (x,y) box 0
+        code := code ++ s!"    %y1_diff_xy = stablehlo.subtract %y1_pred_xy, %y1_tgt_xy : {shapeXYTy}\n"
+        code := code ++ s!"    %y1_sq_xy = stablehlo.multiply %y1_diff_xy, %y1_diff_xy : {shapeXYTy}\n"
+        code := code ++ s!"    %y1_msq_xy = stablehlo.multiply %y1_sq_xy, %y1_mask_xy : {shapeXYTy}\n"
+        code := code ++ s!"    %y1_sum_xy = stablehlo.reduce(%y1_msq_xy init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+        code := code ++ s!"           : ({shapeXYTy}, tensor<f32>) -> tensor<f32>\n"
+        code := code ++ s!"    %y1_t1 = stablehlo.multiply %y1_sum_xy, %y1_lcoord : tensor<f32>\n"
+        -- T2: sqrt-coord (w,h) box 0 with ε floor
+        code := code ++ s!"    %y1_pred_wh_clamp = stablehlo.maximum %y1_pred_wh, %y1_eps_wh : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_sqrt_pred_wh = stablehlo.sqrt %y1_pred_wh_clamp : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_tgt_wh_clamp = stablehlo.maximum %y1_tgt_wh, %y1_eps_wh : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_sqrt_tgt_wh = stablehlo.sqrt %y1_tgt_wh_clamp : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_diff_wh = stablehlo.subtract %y1_sqrt_pred_wh, %y1_sqrt_tgt_wh : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_sq_wh = stablehlo.multiply %y1_diff_wh, %y1_diff_wh : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_msq_wh = stablehlo.multiply %y1_sq_wh, %y1_mask_xy : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_sum_wh = stablehlo.reduce(%y1_msq_wh init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+        code := code ++ s!"           : ({tensorTy shapeWH}, tensor<f32>) -> tensor<f32>\n"
+        code := code ++ s!"    %y1_t2 = stablehlo.multiply %y1_sum_wh, %y1_lcoord : tensor<f32>\n"
+        -- T3: conf positive box 0
+        code := code ++ s!"    %y1_diff_c0pos = stablehlo.subtract %y1_pred_c0, %y1_oneC1 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_sq_c0pos = stablehlo.multiply %y1_diff_c0pos, %y1_diff_c0pos : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_msq_c0pos = stablehlo.multiply %y1_sq_c0pos, %y1_mask_c1 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_t3 = stablehlo.reduce(%y1_msq_c0pos init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+        code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
+        -- T4: conf negative box 0
+        code := code ++ s!"    %y1_inv_mask_c1 = stablehlo.subtract %y1_oneC1, %y1_mask_c1 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_sq_c0neg = stablehlo.multiply %y1_pred_c0, %y1_pred_c0 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_msq_c0neg = stablehlo.multiply %y1_sq_c0neg, %y1_inv_mask_c1 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_sum_c0neg = stablehlo.reduce(%y1_msq_c0neg init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+        code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
+        code := code ++ s!"    %y1_t4 = stablehlo.multiply %y1_sum_c0neg, %y1_lnoobj : tensor<f32>\n"
+        -- T5: conf negative box 1 (always)
+        code := code ++ s!"    %y1_sq_c1neg = stablehlo.multiply %y1_pred_c1, %y1_pred_c1 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_sum_c1neg = stablehlo.reduce(%y1_sq_c1neg init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+        code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
+        code := code ++ s!"    %y1_t5 = stablehlo.multiply %y1_sum_c1neg, %y1_lnoobj : tensor<f32>\n"
+        -- T6: class
+        code := code ++ s!"    %y1_diff_cls = stablehlo.subtract %y1_pred_cls, %y1_tgt_cls : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_sq_cls = stablehlo.multiply %y1_diff_cls, %y1_diff_cls : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_msq_cls = stablehlo.multiply %y1_sq_cls, %y1_mask_cls : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_t6 = stablehlo.reduce(%y1_msq_cls init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+        code := code ++ s!"           : ({shapeClassTy}, tensor<f32>) -> tensor<f32>\n"
+        -- Aggregate
+        code := code ++ s!"    %y1_s12 = stablehlo.add %y1_t1, %y1_t2 : tensor<f32>\n"
+        code := code ++ s!"    %y1_s34 = stablehlo.add %y1_t3, %y1_t4 : tensor<f32>\n"
+        code := code ++ s!"    %y1_s56 = stablehlo.add %y1_t5, %y1_t6 : tensor<f32>\n"
+        code := code ++ s!"    %y1_s1234 = stablehlo.add %y1_s12, %y1_s34 : tensor<f32>\n"
+        code := code ++ s!"    %y1_total = stablehlo.add %y1_s1234, %y1_s56 : tensor<f32>\n"
+        code := code ++ s!"    %loss = stablehlo.divide %y1_total, %y1_Bf : tensor<f32>\n"
+        -- ─── BACKWARD ───
+        code := code ++ s!"    // ─── YOLOv1 backward (5+1 term, planning/yolo_demo_v2.md D4) ───\n"
+        code := code ++ s!"    %y1_lcoord_xy = stablehlo.constant dense<{lambdaCoord}> : {shapeXYTy}\n"
+        code := code ++ s!"    %y1_lnoobj_c1 = stablehlo.constant dense<{lambdaNoobj}> : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_two_xy = stablehlo.constant dense<2.0> : {shapeXYTy}\n"
+        code := code ++ s!"    %y1_two_c1 = stablehlo.constant dense<2.0> : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_two_cls = stablehlo.constant dense<2.0> : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_Bf_xy = stablehlo.broadcast_in_dim %y1_Bf, dims = [] : (tensor<f32>) -> {shapeXYTy}\n"
+        code := code ++ s!"    %y1_Bf_c1 = stablehlo.broadcast_in_dim %y1_Bf, dims = [] : (tensor<f32>) -> {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_Bf_cls = stablehlo.broadcast_in_dim %y1_Bf, dims = [] : (tensor<f32>) -> {shapeClassTy}\n"
+        -- d/dpred_xy = 2 · λ_coord · mask · (pred - tgt) / B
+        code := code ++ s!"    %y1_g_xy_a = stablehlo.multiply %y1_two_xy, %y1_lcoord_xy : {shapeXYTy}\n"
+        code := code ++ s!"    %y1_g_xy_b = stablehlo.multiply %y1_g_xy_a, %y1_mask_xy : {shapeXYTy}\n"
+        code := code ++ s!"    %y1_g_xy_c = stablehlo.multiply %y1_g_xy_b, %y1_diff_xy : {shapeXYTy}\n"
+        code := code ++ s!"    %y1_g_xy = stablehlo.divide %y1_g_xy_c, %y1_Bf_xy : {shapeXYTy}\n"
+        -- d/dpred_wh = mask · λ_coord · (√pred_clamp - √tgt) / √pred_clamp / B,
+        -- zeroed where pred was clamped (pred < ε).
+        code := code ++ s!"    %y1_g_wh_a = stablehlo.divide %y1_diff_wh, %y1_sqrt_pred_wh : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_g_wh_b = stablehlo.multiply %y1_g_wh_a, %y1_lcoord_xy : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_g_wh_c = stablehlo.multiply %y1_g_wh_b, %y1_mask_xy : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_active_wh = stablehlo.compare GT, %y1_pred_wh, %y1_eps_wh : ({tensorTy shapeWH}, {tensorTy shapeWH}) -> {i1WHTy}\n"
+        code := code ++ s!"    %y1_zero_wh = stablehlo.constant dense<0.0> : {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_g_wh_m = \"stablehlo.select\"(%y1_active_wh, %y1_g_wh_c, %y1_zero_wh) : ({i1WHTy}, {tensorTy shapeWH}, {tensorTy shapeWH}) -> {tensorTy shapeWH}\n"
+        code := code ++ s!"    %y1_g_wh = stablehlo.divide %y1_g_wh_m, %y1_Bf_xy : {tensorTy shapeWH}\n"
+        -- d/dpred_c0 = (2·mask·(pred-1) + 2·λ_noobj·(1-mask)·pred) / B
+        code := code ++ s!"    %y1_g_c0pos_a = stablehlo.multiply %y1_two_c1, %y1_mask_c1 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_g_c0pos_b = stablehlo.multiply %y1_g_c0pos_a, %y1_diff_c0pos : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_g_c0neg_a = stablehlo.multiply %y1_two_c1, %y1_lnoobj_c1 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_g_c0neg_b = stablehlo.multiply %y1_g_c0neg_a, %y1_inv_mask_c1 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_g_c0neg_c = stablehlo.multiply %y1_g_c0neg_b, %y1_pred_c0 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_g_c0_sum = stablehlo.add %y1_g_c0pos_b, %y1_g_c0neg_c : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_g_c0 = stablehlo.divide %y1_g_c0_sum, %y1_Bf_c1 : {shapeC1Ty}\n"
+        -- d/dpred_c1 = 2 · λ_noobj · pred / B
+        code := code ++ s!"    %y1_g_c1_a = stablehlo.multiply %y1_two_c1, %y1_lnoobj_c1 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_g_c1_b = stablehlo.multiply %y1_g_c1_a, %y1_pred_c1 : {shapeC1Ty}\n"
+        code := code ++ s!"    %y1_g_c1 = stablehlo.divide %y1_g_c1_b, %y1_Bf_c1 : {shapeC1Ty}\n"
+        -- d/dpred_cls = 2 · mask · (pred - tgt) / B
+        code := code ++ s!"    %y1_g_cls_a = stablehlo.multiply %y1_two_cls, %y1_mask_cls : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_g_cls_b = stablehlo.multiply %y1_g_cls_a, %y1_diff_cls : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_g_cls = stablehlo.divide %y1_g_cls_b, %y1_Bf_cls : {shapeClassTy}\n"
+        -- Box 1 xywh: zero (never optimized under Option A)
+        code := code ++ s!"    %y1_g_box1 = stablehlo.constant dense<0.0> : {shapeBox1XYWHTy}\n"
+        -- Concat slabs along channel dim 1: xy(2) + wh(2) + c0(1) + box1(4) + c1(1) + cls(numC)
+        code := code ++ s!"    %y1_cc1 = stablehlo.concatenate %y1_g_xy, %y1_g_wh, dim = 1 : ({shapeXYTy}, {tensorTy shapeWH}) -> {tensorTy [B, 4, gH, gW]}\n"
+        code := code ++ s!"    %y1_cc2 = stablehlo.concatenate %y1_cc1, %y1_g_c0, dim = 1 : ({tensorTy [B, 4, gH, gW]}, {shapeC1Ty}) -> {tensorTy [B, 5, gH, gW]}\n"
+        code := code ++ s!"    %y1_cc3 = stablehlo.concatenate %y1_cc2, %y1_g_box1, dim = 1 : ({tensorTy [B, 5, gH, gW]}, {shapeBox1XYWHTy}) -> {tensorTy [B, 9, gH, gW]}\n"
+        code := code ++ s!"    %y1_cc4 = stablehlo.concatenate %y1_cc3, %y1_g_c1, dim = 1 : ({tensorTy [B, 9, gH, gW]}, {shapeC1Ty}) -> {tensorTy [B, 10, gH, gW]}\n"
+        code := code ++ s!"    %y1_grad_4d = stablehlo.concatenate %y1_cc4, %y1_g_cls, dim = 1 : ({tensorTy [B, 10, gH, gW]}, {shapeClassTy}) -> {shape4Ty}\n"
+        -- Reshape back to [B, totalCh] for the dense backward to consume
+        code := code ++ s!"    %y1_grad_flat = stablehlo.reshape %y1_grad_4d : ({shape4Ty}) -> {curTy}\n"
+        gradSSA := "%y1_grad_flat"
+        gradShape := curShape
+    | _ =>
+      code := code ++ s!"    // useYolov1=true but curShape is not [B, N] flat: {curShape}\n"
+  else if useDdpm then
     -- ═══════════════ DDPM: per-pixel MSE between noise prediction and target ε ═══════════════
     -- Forward:   loss = mean_{B,C,H,W} (logits - y_ddpm)^2
     -- Backward:  d_logits = 2 (logits - y_ddpm) / N    where N = B·C·H·W
@@ -6329,7 +6513,10 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
 /-- Emit the train_step function signature. -/
 private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     (useSoftLabels : Bool := false) (useSeg : Bool := false)
-    (useDdpm : Bool := false) (ddpmOutShape : List Nat := []) : String := Id.run do
+    (useDdpm : Bool := false) (ddpmOutShape : List Nat := [])
+    (useYolov1 : Bool := false)
+    (yoloGridH : Nat := 7) (yoloGridW : Nat := 7) (yoloPerCell : Nat := 30)
+    : String := Id.run do
   let B := batchSize
   let NC := spec.numClasses
   let inDim := inputFlatDim spec
@@ -7201,6 +7388,19 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     -- explicitly because we don't track the post-network shape here.
     let yTy := tensorTy ddpmOutShape
     params := params ++ s!"      %x_flat: {tensorTy [B, inDim]}, %y_ddpm: {yTy},\n"
+  else if useYolov1 then
+    -- YOLOv1: float target [B, perCell, gridH, gridW] + per-cell float mask
+    -- [B, gridH, gridW]. See planning/yolo_demo_v2.md "Phase 1 decisions" D3
+    -- (separate ByteArray arg for mask). Channel layout within perCell:
+    --   [0..2)   box 0 (x, y)
+    --   [2..4)   box 0 (w, h)
+    --   [4..5)   box 0 confidence
+    --   [5..9)   box 1 (x, y, w, h) — zeroed by "always predictor 0" rule
+    --   [9..10)  box 1 confidence — always penalized as no-object
+    --   [10..)   per-cell class one-hot (yoloNumClasses long)
+    let tgtTy := tensorTy [B, yoloPerCell, yoloGridH, yoloGridW]
+    let maskTy := tensorTy [B, yoloGridH, yoloGridW]
+    params := params ++ s!"      %x_flat: {tensorTy [B, inDim]}, %y_yolo: {tgtTy}, %m_yolo: {maskTy},\n"
   else if useSeg then
     -- Segmentation: per-pixel int labels (B, H, W) i32. Uses spec.imageH/imageW
     -- assuming the network preserves spatial dims (encoder-decoder).
@@ -7228,13 +7428,20 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
     (useFocal : Bool := false) (focalGamma : Float := 2.0)
     (useSeg : Bool := false)
     (useDdpm : Bool := false) (ddpmOutShape : List Nat := [])
+    (useYolov1 : Bool := false)
+    (yoloGridH : Nat := 7) (yoloGridW : Nat := 7)
+    (yoloNumBoxes : Nat := 2) (yoloNumClasses : Nat := 20)
     : String :=
   s!"// {spec.name} train_step — Generated by Lean 4 → MLIR (StableHLO + VJPs)\n" ++
   s!"// Batch size: {batchSize}, optimizer: {if useAdam then "Adam" else "SGD+momentum"}\n" ++
-  s!"// label_smoothing: {labelSmoothing}, weight_decay: {weightDecay}, soft_labels: {useSoftLabels}, focal: {useFocal} (γ={focalGamma}), seg: {useSeg}, ddpm: {useDdpm}\n\n" ++
+  s!"// label_smoothing: {labelSmoothing}, weight_decay: {weightDecay}, soft_labels: {useSoftLabels}, focal: {useFocal} (γ={focalGamma}), seg: {useSeg}, ddpm: {useDdpm}, yolov1: {useYolov1}" ++
+  (if useYolov1 then s!" (grid={yoloGridH}x{yoloGridW}, B={yoloNumBoxes}, C={yoloNumClasses})" else "") ++
+  "\n\n" ++
   s!"module @{moduleName} " ++ "{\n" ++
-  emitTrainStepSig spec batchSize useSoftLabels useSeg useDdpm ddpmOutShape ++ " {\n" ++
-  emitTrainStepBody spec batchSize moduleName labelSmoothing weightDecay useAdam useSoftLabels useFocal focalGamma useSeg useDdpm ++
+  emitTrainStepSig spec batchSize useSoftLabels useSeg useDdpm ddpmOutShape
+    useYolov1 yoloGridH yoloGridW (yoloNumBoxes * 5 + yoloNumClasses) ++ " {\n" ++
+  emitTrainStepBody spec batchSize moduleName labelSmoothing weightDecay useAdam useSoftLabels useFocal focalGamma useSeg useDdpm
+    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses ++
   "  }\n" ++
   "}\n"
 

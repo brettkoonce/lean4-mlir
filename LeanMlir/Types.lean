@@ -323,6 +323,13 @@ structure TrainConfig where
       cost, M× eval cost. -/
   useTTA         : Bool  := false
   ttaSamples     : Nat   := 5
+  /-- YOLOv1 5-term masked-MSE loss. Phase 1 ships the codegen + smoke
+      tests only; the unified `compileVmfbs` trainer is NOT wired up
+      yet (it throws if `useYolov1` is set). See
+      `planning/yolo_demo_v2.md` Phase 1 + `planning/yolo_demo_v3.md`
+      for the v3 trainer integration. The mutex check in
+      `compileVmfbs` exists to catch forbidden combos when v3 lands. -/
+  useYolov1      : Bool  := false
 deriving Repr
 
 inductive DatasetKind where

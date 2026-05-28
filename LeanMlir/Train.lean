@@ -107,6 +107,21 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     throw <| IO.userError "segmentation + focal not yet supported (Phase 0: plain per-pixel CE only)"
   if useSeg && cfg.labelSmoothing != 0.0 then
     throw <| IO.userError "segmentation + label smoothing not yet supported (Phase 0: plain per-pixel CE only)"
+  -- YOLOv1 mutex checks (planning/yolo_demo_v2.md Phase 1 decision D8).
+  -- Each forbidden combo throws its own error first; the catch-all at the
+  -- end documents that Phase 1 ships smoke-tests only via generateTrainStep
+  -- directly. v3 (planning/yolo_demo_v3.md Refactor R1) replaces this with
+  -- a single match on a LossKind enum.
+  if cfg.useYolov1 && useSoftLabels then
+    throw <| IO.userError "useYolov1 is incompatible with useMixup/useCutmix/useKnnMixup (YOLOv1 targets are per-cell float tensors, not class-mixable)"
+  if cfg.useYolov1 && cfg.useFocal then
+    throw <| IO.userError "useYolov1 is incompatible with useFocal (focal applies to softmax-CE, not masked-MSE)"
+  if cfg.useYolov1 && useSeg then
+    throw <| IO.userError "useYolov1 is incompatible with segmentation (different target shape: [B,30,7,7] float vs [B,H,W] int32)"
+  if cfg.useYolov1 && cfg.labelSmoothing != 0.0 then
+    throw <| IO.userError "useYolov1 is incompatible with labelSmoothing (smoothing applies to one-hot CE, not box-regression MSE)"
+  if cfg.useYolov1 then
+    throw <| IO.userError "useYolov1 is Phase-1 smoke-test-only; the unified compileVmfbs trainer is not wired up. Call MlirCodegen.generateTrainStep + iree-compile + trainStepAdamF32Yolov1 directly. See planning/yolo_demo_v2.md Phase 1 and planning/yolo_demo_v3.md for v3 integration."
   let trainMlir := MlirCodegen.generateTrainStep spec cfg.batchSize ("jit_" ++ spec.sanitizedName ++ "_train_step")
     (labelSmoothing := cfg.labelSmoothing)
     (weightDecay := cfg.weightDecay)

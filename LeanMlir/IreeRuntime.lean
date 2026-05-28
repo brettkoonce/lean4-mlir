@@ -113,6 +113,26 @@ opaque trainStepAdamF32Ddpm
   (bnShapes : @& ByteArray)
   (batch : USize) (outC : USize) (outH : USize) (outW : USize) : IO ByteArray
 
+/-- YOLOv1 variant. `yYolo` is a `[batch, perCell, gridH, gridW]` f32
+    target tensor (NCHW); `mYolo` is a `[batch, gridH, gridW]` f32
+    per-cell objectness mask (1.0 where a GT box's center falls in
+    the cell, 0.0 otherwise). Routes to the codegen produced with
+    `useYolov1 := true`. Loss is the 5-term masked MSE described in
+    `planning/yolo_demo_v2.md` Phase 1.
+
+    `perCell = numBoxes * 5 + numClasses`. For VOC this is
+    `2*5 + 20 = 30`; `gridH = gridW = 7`. -/
+@[extern "lean_iree_train_step_adam_f32_yolov1"]
+opaque trainStepAdamF32Yolov1
+  (sess : @& IreeSession) (fnName : @& String)
+  (params : @& ByteArray) (shapes : @& ByteArray)
+  (x : @& ByteArray) (xShape : @& ByteArray)
+  (yYolo : @& ByteArray)
+  (mYolo : @& ByteArray)
+  (lr : Float) (t : Float)
+  (bnShapes : @& ByteArray)
+  (batch : USize) (gridH : USize) (gridW : USize) (perCell : USize) : IO ByteArray
+
 /-- Zero-copy f32 forward pass. Pushes x then param tensors, returns logits.
     For inference/eval — no y, lr, or velocity inputs. -/
 @[extern "lean_iree_forward_f32"]

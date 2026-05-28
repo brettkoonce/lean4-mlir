@@ -286,6 +286,19 @@ lean_exe «test-focal-emit» where
   root := `tests.TestFocalEmit
   moreLinkArgs := ireeLink
 
+-- YOLOv1 Phase 1 tests (planning/yolo_demo_v2.md decisions D10-D11).
+lean_exe «test-yolov1-emit» where
+  root := `tests.TestYolov1Emit
+  moreLinkArgs := ireeLink
+
+lean_exe «test-yolov1-mutex» where
+  root := `tests.TestYolov1Mutex
+  moreLinkArgs := ireeLink
+
+lean_exe «test-yolov1-train-step» where
+  root := `tests.TestYolov1TrainStep
+  moreLinkArgs := ireeLink
+
 lean_exe «test-randaugment» where
   root := `tests.TestRandAugment
   moreLinkArgs := ireeLink

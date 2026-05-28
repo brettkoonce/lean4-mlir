@@ -643,6 +643,109 @@ extern int iree_ffi_train_step_adam_seg(
     float* packed_params_out, float* loss_out,
     int n_bn_layers, const int64_t* bn_sizes, float* bn_stats_out);
 
+extern int iree_ffi_train_step_adam_yolov1(
+    iree_ffi_session_t* sess, const char* fn_name, int batch,
+    int gridH, int gridW, int perCell,
+    int n_params,
+    const int32_t* param_ranks,
+    const int64_t* param_dims_flat,
+    const int64_t* param_sizes,
+    const float* packed_params,
+    int x_rank, const int64_t* x_dims, const float* x,
+    const float* y_yolo, const float* m_yolo, float lr, float t,
+    float* packed_params_out, float* loss_out,
+    int n_bn_layers, const int64_t* bn_sizes, float* bn_stats_out);
+
+// YOLOv1 variant. y_yolo is f32 [batch, perCell, gridH, gridW] (target);
+// m_yolo is f32 [batch, gridH, gridW] (per-cell objectness mask). Routes
+// to the codegen produced with `useYolov1 := true`. See
+// planning/yolo_demo_v2.md Phase 1 decisions D3 + D6.
+LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_yolov1(
+    b_lean_obj_arg sess_obj,
+    b_lean_obj_arg fn_name_obj,
+    b_lean_obj_arg params_ba,
+    b_lean_obj_arg shapes_ba,
+    b_lean_obj_arg x_ba,
+    b_lean_obj_arg x_shape_ba,
+    b_lean_obj_arg y_yolo_ba,
+    b_lean_obj_arg m_yolo_ba,
+    double lr, double t,
+    b_lean_obj_arg bn_shapes_ba,
+    size_t batch, size_t gridH, size_t gridW, size_t perCell,
+    lean_obj_arg world) {
+  (void)world;
+  iree_ffi_session_t* sess =
+      (iree_ffi_session_t*)lean_get_external_data(sess_obj);
+  const char* fn_name = lean_string_cstr(fn_name_obj);
+
+  const int32_t* sp = (const int32_t*)lean_sarray_cptr(shapes_ba);
+  int n_params = sp[0];
+  int32_t* param_ranks = (int32_t*)malloc(n_params * sizeof(int32_t));
+  size_t max_dims = lean_sarray_size(shapes_ba) / 4;
+  int64_t* param_dims_flat = (int64_t*)malloc(max_dims * sizeof(int64_t));
+  int64_t* param_sizes = (int64_t*)malloc(n_params * sizeof(int64_t));
+  int sp_idx = 1, dims_idx = 0;
+  int64_t total_params = 0;
+  for (int i = 0; i < n_params; i++) {
+    int rank = sp[sp_idx++];
+    param_ranks[i] = rank;
+    int64_t sz = 1;
+    for (int d = 0; d < rank; d++) {
+      param_dims_flat[dims_idx] = (int64_t)sp[sp_idx++];
+      sz *= param_dims_flat[dims_idx];
+      dims_idx++;
+    }
+    param_sizes[i] = sz;
+    total_params += sz;
+  }
+
+  const int32_t* bnsp = (const int32_t*)lean_sarray_cptr(bn_shapes_ba);
+  int n_bn_layers = bnsp[0];
+  int64_t total_bn_stats = 0;
+  int64_t* bn_sizes = NULL;
+  if (n_bn_layers > 0) {
+    bn_sizes = (int64_t*)malloc(n_bn_layers * 2 * sizeof(int64_t));
+    for (int i = 0; i < n_bn_layers; i++) {
+      int64_t oc = (int64_t)bnsp[1 + i];
+      bn_sizes[i * 2] = oc;
+      bn_sizes[i * 2 + 1] = oc;
+      total_bn_stats += oc * 2;
+    }
+  }
+
+  const float* p_f = (const float*)lean_sarray_cptr(params_ba);
+  const int32_t* xsp = (const int32_t*)lean_sarray_cptr(x_shape_ba);
+  int x_rank = xsp[0];
+  int64_t x_dims[8];
+  for (int i = 0; i < x_rank; i++) x_dims[i] = (int64_t)xsp[1+i];
+  const float* x_f = (const float*)lean_sarray_cptr(x_ba);
+  const float* y_ptr = (const float*)lean_sarray_cptr(y_yolo_ba);
+  const float* m_ptr = (const float*)lean_sarray_cptr(m_yolo_ba);
+
+  size_t n_out_bytes = (total_params + 1 + total_bn_stats) * 4;
+  lean_object* result = lean_alloc_sarray(1, n_out_bytes, n_out_bytes);
+  float* rp = (float*)lean_sarray_cptr(result);
+  float loss_f = 0.0f;
+  float* bn_out = (total_bn_stats > 0) ? rp + total_params + 1 : NULL;
+
+  int rc = iree_ffi_train_step_adam_yolov1(
+      sess, fn_name, (int)batch, (int)gridH, (int)gridW, (int)perCell,
+      n_params, param_ranks, param_dims_flat, param_sizes,
+      p_f, x_rank, x_dims, x_f, y_ptr, m_ptr, (float)lr, (float)t,
+      rp, &loss_f,
+      n_bn_layers, bn_sizes, bn_out);
+
+  free(param_ranks); free(param_dims_flat); free(param_sizes);
+  if (bn_sizes) free(bn_sizes);
+  if (rc != 0) {
+    lean_dec_ref(result);
+    return lean_io_result_mk_error(
+        lean_mk_io_user_error(lean_mk_string("adam f32 yolov1 train_step failed")));
+  }
+  rp[total_params] = loss_f;
+  return lean_io_result_mk_ok(result);
+}
+
 LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_seg(
     b_lean_obj_arg sess_obj,
     b_lean_obj_arg fn_name_obj,

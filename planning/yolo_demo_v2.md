@@ -5,6 +5,17 @@ dataset choice; this revision tightens the scope to **smallest
 viable**, makes the codegen-extension work explicit, and pins
 decisions that v1 left open.
 
+## Status (2026-05-28, post `/plan-eng-review`)
+
+**Scope reduced to Phase 1 only.** Phase 2-6 (real VOC pipeline,
+training, mAP) moved to `planning/yolo_demo_v3.md`. This
+document still describes the full v2 design as context, but the
+committable scope is the **Phase 1 codegen extension + smoke
+test** (Section "Phase 1: codegen extension" below).
+
+11 architectural decisions captured during review — see "Phase 1
+decisions (pinned)" section after Phase 1.
+
 ## What's different from v1
 
 | | v1 | v2 |
@@ -130,27 +141,143 @@ selection. The mAP cost (-2-4%) is the price of simplicity for v2.
 Upgrade path to Option B or C is one design iteration on top of v2,
 not a rewrite.
 
-## Phase 1: codegen extension (load-bearing)
+## Phase 1: codegen extension (load-bearing) — THIS IS THE COMMITTABLE SCOPE
 
 `MlirCodegen.lean` today supports int32 `(B,)` class labels with
 softmax-CE loss. YOLOv1 needs:
 
 1. **Float-tensor target plumbing**: dispatcher/loader accepts
-   `(B, 7, 7, 30)` float target instead of `(B,)` int32.
-2. **Float-tensor mask plumbing**: `(B, 7, 7)` float mask alongside
-   target.
-3. **`.yolov1Loss` (or `.maskedMse`) variant** in the loss enum:
+   `(B, 7, 7, 30)` float target instead of `(B,)` int32. The
+   closest existing analogue is **`useDdpm`** (not `useSeg`):
+   `trainStepAdamF32Ddpm` (IreeRuntime.lean:107) already plumbs a
+   float `[B, C, H, W]` target through with per-pixel MSE. Phase
+   1 reuses that pattern.
+2. **Float-tensor mask plumbing**: separate `(B, 7, 7)` float
+   mask ByteArray, alongside target (see D3 decision below).
+3. **`useYolov1 : Bool` flag** in `MlirCodegen.generateTrainStep`:
    emit masked-MSE MLIR with the 5-term breakdown above. λ_coord
-   and λ_noobj as compile-time scalars.
-4. **Backward derivation**: masked MSE's backward is `2 * mask *
-   (pred - target)` — hand-derivable, no need to invoke autodiff
-   machinery. Emit directly.
+   and λ_noobj as compile-time scalars. (Loss enum refactor is
+   v3 work — see D2 + R1 in `yolo_demo_v3.md`.)
+4. **Backward derivation**: hand-derived per-term. For (x, y),
+   confidence, and class terms, the derivative is the standard
+   `2 * mask * (pred - target)`. For **(√w, √h) terms**, the
+   derivative includes a `1/√ŵ` factor that has a singularity at
+   ŵ = 0. The codegen applies the √ via `stablehlo.sqrt(max(ŵ,
+   ε))` with `ε = 1e-6` to keep gradients finite (see D4).
+5. **In-MLIR reshape**: model output is `[B, 1470]` flat; the
+   loss block does `stablehlo.reshape` to `[B, 30, 7, 7]` (NCHW)
+   before the elementwise masked MSE. Free at runtime; matches
+   the existing `lmHead` reshape pattern at MlirCodegen.lean:4704.
 
-Estimate: **~1 week** of focused codegen work + a smoke test.
+Estimate: **~3-5 days** of focused codegen work + the smoke
+tests (down from ~1 week in the pre-review estimate, given the
+DDPM-template insight).
 
-Smoke test: synthesize a random `(B, 7, 7, 30)` target + matching
-mask, compile train-step MLIR, run one optimizer step, verify loss
-decreases. No VOC data needed yet.
+### Tests (Phase 1 deliverables)
+
+All six tests are in scope (D10 decision). Spec: full ResNet-34
+backbone + YOLO head, batch=1 (D11 decision — realistic spec
+prioritized over fast CI).
+
+| ID | File | What | Pattern |
+|---|---|---|---|
+| T1 | `tests/TestYolov1Emit.lean` | Compile-only: emit train-step MLIR with `useYolov1 := true`, run iree-compile, assert exit 0 | matches `tests/TestDdpmTrainEmit.lean` |
+| T2 | `tests/TestYolov1TrainStep.lean` | Loss-decreases: synthesize random `[B, 7, 7, 30]` target + `[B, 7, 7]` mask, run 10 optimizer steps, assert `loss[9] < 0.5 * loss[0]` | new — first runtime test of its kind |
+| T3 | (same file as T2) | Mask correctness: target with `mask = 0` everywhere ⇒ loss matches closed-form noobj-conf-only expectation | new |
+| T4 | (same file as T2) | Per-term decomposition: 5 sub-tests, each setting target with only one of (coord, sqrt-coord, obj-conf, noobj-conf, class) active, verify only that term contributes non-zero loss | new — load-bearing for correctness |
+| T5 | (same file as T2) | √ ε-floor stability: target with predicted ŵ → ε, verify no NaN gradient | new |
+| T7 | `tests/TestYolov1Mutex.lean` | Mutex rejection: `useYolov1 + useSeg`, `useYolov1 + useFocal`, etc. each throw at `compileVmfbs` | mirrors existing useFocal mutex tests |
+
+### Smoke-test responsibility-assignment
+
+Always predictor 0 (Option A from "Loss + responsibility" section
+above). For the smoke test this means `mask_resp[i, j, 0] = 1,
+mask_resp[i, j, 1] = 0` precomputed once per batch and passed in
+the mask ByteArray (combined: `mask_obj * mask_resp` since
+they're always multiplied together in the loss).
+
+## Phase 1 decisions (pinned by `/plan-eng-review` on 2026-05-28)
+
+| ID | Decision | Choice | Rationale |
+|---|---|---|---|
+| D1 | Scope | **Phase 1 only** | Smallest viable cut; Phases 2-6 → `yolo_demo_v3.md` |
+| D2 | Loss-path routing | **`useYolov1` bool, enum refactor as v3 R1** | Smallest diff; matches existing pattern (useFocal/Seg/Ddpm) |
+| D3 | Mask plumbing | **Separate `ByteArray` arg** | Generalizes to other masked losses; cleaner FFI |
+| D4 | √ stability | **ε floor on √(ŵ, ĥ)**, `ε = 1e-6` | Paper-faithful math without `1/√ŵ` NaN |
+| D5 | Reshape site | **In-MLIR, inside loss block** | Free at runtime; matches `lmHead` pattern |
+| D6 | ABI name | **`trainStepAdamF32Yolov1`** | Matches existing naming (Ddpm/Seg/Soft); defers abstraction debate |
+| D7 | DRY for 5 MSE terms | **Inline 5 terms in Phase 1; factor in v3 (R2) when 3rd use site exists** | Rule of three; avoid premature abstraction |
+| D8 | Mutex checks | **Inline ~5 throws in `compileVmfbs`; refactor in v3 (R3) bundled with R1** | Smallest diff |
+| D9 | TODO sink | **`planning/yolo_demo_v3.md` stub** | Mirrors v1/v2 evolution; doubles as v3 design doc |
+| D10 | Test scope | **T1 + T2 + T3 + T4 + T5 + T7 all in scope** | "Loss decreases" alone is too weak — per-term decomp catches real bugs |
+| D11 | Smoke-test spec | **Full R34 + YOLO head, batch=1** | Realistic spec over fast CI; catches scale-related issues |
+| D12 | Outside voice | **Skipped** | Phase-1-only scope is small enough; subagent dispatch deferred |
+
+## What already exists (reuse map for Phase 1)
+
+| Reuse target | Source | Phase 1 usage |
+|---|---|---|
+| Float `[B, ...]` target plumbing | `trainStepAdamF32Ddpm` (IreeRuntime.lean:107) | Template for new `trainStepAdamF32Yolov1` |
+| Per-pixel MSE emit | MlirCodegen.lean:4847-4869 (DDPM block) | Template for masked-MSE emit |
+| Flat → spatial reshape pattern | `lmHead` `[B, T*V] → [B, V, T, 1]` (MlirCodegen.lean:4704) | Template for `[B, 1470] → [B, 30, 7, 7]` |
+| Compile-only smoke test pattern | `tests/TestDdpmTrainEmit.lean` | Template for T1 |
+| Mutex check pattern | `Train.lean:100-109` | Template for T7 + the new throws |
+| ResNet-34 spec | `MainResnetTrain.lean`, `MainResnet34Imagenet.lean` | Backbone of the smoke-test spec |
+| BN-free head ordering | Existing dense layers | YOLO head is dense-only, no BN |
+
+## NOT in scope (Phase 1 — all deferred to v3)
+
+| Deferred | Reason | Lands in |
+|---|---|---|
+| Pascal VOC data pipeline (Phase 2) | Codegen-first cut | v3 Phase 2 |
+| Bbox-aware augmentation (Phase 3) | No data yet | v3 Phase 3 |
+| First real training run (Phase 4) | No data, no aug | v3 Phase 4 |
+| NMS + mAP eval + viz (Phase 5) | No inference target | v3 Phase 5 |
+| Bestiary entry (Phase 6) | Nothing to show yet | v3 Phase 6 |
+| `DatasetKind.pascalVoc` addition | No loader yet | v3 Phase 2 |
+| `Loss` enum refactor (R1) | Defer for v3 | v3 pre-Phase 2 |
+| `emitMaskedMseTerm` helper (R2) | Rule of three not yet triggered | v3 if/when DETR lands |
+| `validateLossSelection` helper (R3) | Bundles with R1 | v3 pre-Phase 2 |
+| IREE fusion check on 5-term backward | Smoke test doesn't expose this | v3 perf observation |
+
+## Failure modes (Phase 1)
+
+| Codepath | Realistic failure | Caught by? |
+|---|---|---|
+| 5-term masked-MSE forward | wrong slice indices, off-by-one on (x, y, w, h, conf, class) channel layout | T4 (per-term decomposition) |
+| √ ε floor | ε too small ⇒ NaN; ε too large ⇒ gradient bias | T5 (ε-floor stability) |
+| Mask broadcast `[B,7,7]` × `[B,30,7,7]` | wrong axis broadcast, silent wrong-loss | T3 (mask = 0 closed-form) |
+| Backward 5-term sum | one term's gradient missing, model still trains on the others | T4 catches partial failures |
+| Mutex check at compileVmfbs | new flag combo not rejected ⇒ codegen runs both paths | T7 (mutex rejection) |
+| `useYolov1` flag forgotten in `generateTrainStep` recursion | silent fallback to classCE | T1 catches (different MLIR output length) |
+| `trainStepAdamF32Yolov1` C-side glue | wrong number of bound args ⇒ IREE runtime error | T2 (loss-decreases requires real execution) |
+
+**Critical gaps?** None. Every failure mode has a test, error
+handling exists (mutex throws + IREE runtime errors are visible),
+and the user-facing surface in Phase 1 is "iree-compile fails" or
+"loss-doesn't-decrease test fails" — both loud.
+
+## Worktree parallelization
+
+Phase 1 work is largely sequential — codegen → opaque FFI → C
+glue → tests all depend on the prior step. Two lanes possible:
+
+- Lane A: codegen + FFI + C glue + T1 + T2 (sequential, all
+  touch `LeanMlir/` + `ffi/`)
+- Lane B: T7 mutex-rejection test (independent file, just needs
+  the `useYolov1` flag to exist in the codegen call signature)
+
+Lane B can launch as soon as Lane A's codegen-signature change
+is in. Not a strong parallelization win for Phase 1; mostly
+sequential.
+
+---
+
+## Phase 2-6 reference (MOVED to yolo_demo_v3.md)
+
+The sections below describe the full v2 design and remain useful
+as context — but the committable scope is Phase 1 only (above).
+v3 inherits these phases verbatim.
 
 ## Phase 2: VOC 2007 data pipeline
 
@@ -238,22 +365,33 @@ NetSpec listing + final mAP + sample inference grid. ~1 day.
 (~1 week of iteration including debug). Six commits, each at a
 clean stopping point.
 
-## Open decisions for the user
+## Open decisions for the user (RESOLVED for Phase 1, deferred for v3)
 
-- **Backbone freezing**: freeze first 2 stages of ResNet-34 for
-  first run? (Conservative: yes. Aggressive: full-finetune.)
-  My recommendation: **freeze first 2 stages for first 50 epochs,
-  then unfreeze for last 50**. Costs ~30% per-step throughput when
-  unfrozen.
-- **Where mAP eval lives**: Python script in `scripts/voc_map.py`
-  with `traces/voc_map_results.json` output? Or inline in the
-  trainer's eval pass via FFI? My recommendation: **Python
-  script, called post-checkpoint**.
-- **Pretrained-from-where**: our existing `resnet34` Imagenette
-  checkpoint, or pull torchvision's ImageNet checkpoint?
-  My recommendation: **torchvision's ImageNet** — Imagenette
-  pretraining is on 10 classes, torchvision's 1000-class model
-  has richer features. Need a one-time weight-conversion script.
+Phase 1 has no remaining open decisions — see "Phase 1 decisions
+(pinned)" section above for the 11 decisions captured during
+review.
 
-If the recommendations are fine, decisions are made. Override
-where needed.
+Phase 2-6 open decisions (deferred to v3, see `yolo_demo_v3.md`):
+
+- **Backbone freezing schedule** (v3 Phase 4): recommendation
+  remains **freeze first 2 stages for first 50 epochs, then
+  unfreeze for last 50**.
+- **mAP eval location** (v3 Phase 5): recommendation remains
+  **Python script `scripts/voc_map.py`, called post-checkpoint**.
+- **Pretrained source** (v3 Phase 4): v3 starts with existing
+  local Imagenette weights (zero-effort), escalates to
+  torchvision ImageNet if mAP plateaus too low.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | 10 issues, 0 critical gaps, scope reduced Phase 1-only |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **UNRESOLVED:** 0
+- **VERDICT:** ENG CLEARED — ready to implement Phase 1
+
