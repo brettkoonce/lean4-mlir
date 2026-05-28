@@ -57,18 +57,30 @@ private def emitDataLoading (ds : DatasetKind) : String :=
     "    return np.concatenate(train_imgs), np.concatenate(train_lbls), test_imgs, test_lbls\n\n"
   | .imagenette =>
     "# ═══════════════════════════════════════════════════════════════════════\n" ++
-    "#  Imagenette data loading (binary format: 224×224×3, CHW)\n" ++
+    "#  Imagenette data loading. The phase-3 preprocessor stores TRAIN at\n" ++
+    "#  256×256 (so the Lean trainer's random-crop aug can pull a 224×224\n" ++
+    "#  window per step) but stores VAL at 224×224 already (no aug at\n" ++
+    "#  eval). The loader auto-detects by checking the per-record byte\n" ++
+    "#  count from the file size + count header. Both paths center-crop\n" ++
+    "#  to 224×224 + ImageNet-normalize.\n" ++
     "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
     "def load_imagenette(path):\n" ++
+    "    DST = 224\n" ++
     "    with open(path, \"rb\") as f:\n" ++
     "        count = struct.unpack(\"<I\", f.read(4))[0]\n" ++
     "        data = np.frombuffer(f.read(), dtype=np.uint8)\n" ++
-    "    record_size = 1 + 224 * 224 * 3\n" ++
+    "    record_size = len(data) // count\n" ++
+    "    # Each record is 1-byte label + 3*SRC*SRC image bytes.\n" ++
+    "    src_pixels = (record_size - 1) // 3\n" ++
+    "    SRC = int(np.sqrt(src_pixels))\n" ++
+    "    assert SRC * SRC * 3 + 1 == record_size, (record_size, SRC, path)\n" ++
+    "    off = (SRC - DST) // 2\n" ++
     "    data = data.reshape(count, record_size)\n" ++
     "    labels = data[:, 0].astype(np.int32)\n" ++
     "    images = data[:, 1:].astype(np.float32) / 255.0\n" ++
-    "    # Normalize with ImageNet statistics (data is CHW)\n" ++
-    "    images = images.reshape(count, 3, 224, 224)\n" ++
+    "    images = images.reshape(count, 3, SRC, SRC)\n" ++
+    "    if SRC != DST:\n" ++
+    "        images = images[:, :, off:off+DST, off:off+DST]\n" ++
     "    mean = np.array([0.485, 0.456, 0.406]).reshape(1, 3, 1, 1)\n" ++
     "    std = np.array([0.229, 0.224, 0.225]).reshape(1, 3, 1, 1)\n" ++
     "    images = ((images - mean) / std).reshape(count, -1)\n" ++
@@ -78,6 +90,10 @@ private def emitDataLoading (ds : DatasetKind) : String :=
     -- doesn't currently emit a segmentation loss/train loop, so this
     -- branch is unreachable at runtime; keep it stubbed for exhaustivity.
     "# Pets segmentation is phase-3-only; phase 2 emits nothing for .pets.\n\n"
+  | .pascalVoc =>
+    -- YOLOv1/Pascal VOC detection is phase-3-only (see planning/yolo_demo_v3.md).
+    -- JAX codegen has no detection emit; stub for exhaustivity.
+    "# Pascal VOC detection is phase-3-only; phase 2 emits nothing for .pascalVoc.\n\n"
   | .imagenet =>
     -- ImageNet (full 1000-class, 1.28M training, 50K val) — streaming
     -- pipeline via TFDS + tf.data. Requires `tensorflow` and
@@ -544,6 +560,33 @@ private def emitLNFromBuf (comment : String) (dim : Nat) : String :=
   s!"    beta = jnp.array(buf[idx:idx+{dim}]); idx += {dim}\n" ++
   "    params.append((gamma, beta))\n"
 
+-- ── params_to_file (save-side mirrors of the FromBuf helpers above) ──
+-- The on-disk format matches LeanMlir.SpecHelpers.paramShapes exactly,
+-- so a file written by `params_to_file` is byte-identical to one written
+-- by the phase-3 Lean trainer + drops straight into the Lean YOLOv1
+-- `bootstrapBackbone := some (path, prefixFloats)` path. The pair is
+-- symmetric: every .reshape(...) on load becomes .flatten() on save,
+-- and every .T on load becomes .T on save.
+
+private def emitConvBnToBuf (comment : String) : String :=
+  s!"    # {comment} (W, γ, β)\n" ++
+  s!"    W, gamma, beta = params[idx]; idx += 1\n" ++
+  s!"    f.write(np.asarray(W).astype(np.float32).flatten().tobytes())\n" ++
+  s!"    f.write(np.asarray(gamma).astype(np.float32).flatten().tobytes())\n" ++
+  s!"    f.write(np.asarray(beta).astype(np.float32).flatten().tobytes())\n"
+
+private def emitTransDenseToBuf (comment : String) : String :=
+  s!"    # {comment} (W, b) — file expects (fi, fo) row-major; JAX W is (fo, fi)\n" ++
+  s!"    W, b = params[idx]; idx += 1\n" ++
+  s!"    f.write(np.asarray(W).T.astype(np.float32).flatten().tobytes())\n" ++
+  s!"    f.write(np.asarray(b).astype(np.float32).flatten().tobytes())\n"
+
+private def emitLNToBuf (comment : String) : String :=
+  s!"    # {comment} (γ, β)\n" ++
+  s!"    gamma, beta = params[idx]; idx += 1\n" ++
+  s!"    f.write(np.asarray(gamma).astype(np.float32).flatten().tobytes())\n" ++
+  s!"    f.write(np.asarray(beta).astype(np.float32).flatten().tobytes())\n"
+
 -- Helper: emit init code for dense layer (weight, bias) with Xavier uniform
 private def emitDenseInit (comment : String) (fanIn fanOut : Nat) : String :=
   "    # " ++ comment ++ "\n" ++
@@ -978,6 +1021,86 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
   code := code ++ "    return params\n\n"
   code
 
+-- emitParamsToFile: generates the symmetric save side of init_params_from_file.
+-- Walks `spec.layers` in the same order, unpacks each tuple from the runtime
+-- `params` list, and writes the constituent tensors as float32 bytes. The
+-- on-disk byte order matches LeanMlir.SpecHelpers.paramShapes exactly, so a
+-- file written here drops into the phase-3 Lean trainer's `bootstrapBackbone`
+-- prefix-loader without conversion. See planning/yolo_demo_v3.md Phase 4.
+private def emitParamsToFile (spec : NetSpec) : String := Id.run do
+  let mut code := "def params_to_file(params, path):\n"
+  code := code ++ "    \"\"\"Mirror of init_params_from_file. Walks the JAX `params`\n"
+  code := code ++ "    list in spec order and serializes each tensor as float32 bytes\n"
+  code := code ++ "    in the same on-disk byte layout the phase-3 Lean trainer uses.\n"
+  code := code ++ "    Drop the resulting .bin into TrainConfig.bootstrapBackbone.\n"
+  code := code ++ "    \"\"\"\n"
+  code := code ++ "    idx = 0\n"
+  code := code ++ "    f = open(path, 'wb')\n"
+  for l in spec.layers do
+    match l with
+    | .dense fi fo _ =>
+      code := code ++ s!"    # dense {fi} → {fo}\n"
+      code := code ++ "    W, b = params[idx]; idx += 1\n"
+      code := code ++ "    f.write(np.asarray(W).T.astype(np.float32).flatten().tobytes())\n"
+      code := code ++ "    f.write(np.asarray(b).astype(np.float32).flatten().tobytes())\n"
+    | .conv2d ic oc k _ _ =>
+      code := code ++ s!"    # conv2d {ic}→{oc}, {k}×{k}\n"
+      code := code ++ "    W, b = params[idx]; idx += 1\n"
+      code := code ++ "    f.write(np.asarray(W).astype(np.float32).flatten().tobytes())\n"
+      code := code ++ "    f.write(np.asarray(b).astype(np.float32).flatten().tobytes())\n"
+    | .convBn ic oc k _ _ =>
+      code := code ++ emitConvBnToBuf s!"convBn {ic}→{oc}, {k}×{k}"
+    | .residualBlock ic oc nBlocks firstStride =>
+      let needsProj := !(ic == oc && firstStride == 1)
+      for bi in [:nBlocks] do
+        let blockIc := if bi == 0 then ic else oc
+        code := code ++ emitConvBnToBuf s!"resBlock[{bi}] conv1 {blockIc}→{oc}"
+        code := code ++ emitConvBnToBuf s!"resBlock[{bi}] conv2 {oc}→{oc}"
+        if bi == 0 && needsProj then
+          code := code ++ emitConvBnToBuf s!"resBlock[{bi}] proj {ic}→{oc}"
+    | .invertedResidual ic oc expand _stride n =>
+      for bi in [:n] do
+        let blockIc := if bi == 0 then ic else oc
+        let mid := blockIc * expand
+        if expand != 1 then
+          code := code ++ emitConvBnToBuf s!"invRes[{bi}] expand {blockIc}→{mid}"
+        code := code ++ emitConvBnToBuf s!"invRes[{bi}] depthwise {mid}"
+        code := code ++ emitConvBnToBuf s!"invRes[{bi}] project {mid}→{oc}"
+    | .mbConv ic oc expand kSize _stride n useSE =>
+      for bi in [:n] do
+        let blockIc := if bi == 0 then ic else oc
+        let mid := blockIc * expand
+        if expand != 1 then
+          code := code ++ emitConvBnToBuf s!"mbConv[{bi}] expand {blockIc}→{mid}"
+        code := code ++ emitConvBnToBuf s!"mbConv[{bi}] depthwise {mid} k={kSize}"
+        if useSE then
+          code := code ++ s!"    # mbConv[{bi}] SE squeeze (W, b)\n"
+          code := code ++ "    W, b = params[idx]; idx += 1\n"
+          code := code ++ "    f.write(np.asarray(W).astype(np.float32).flatten().tobytes())\n"
+          code := code ++ "    f.write(np.asarray(b).astype(np.float32).flatten().tobytes())\n"
+          code := code ++ s!"    # mbConv[{bi}] SE excite (W, b)\n"
+          code := code ++ "    W, b = params[idx]; idx += 1\n"
+          code := code ++ "    f.write(np.asarray(W).astype(np.float32).flatten().tobytes())\n"
+          code := code ++ "    f.write(np.asarray(b).astype(np.float32).flatten().tobytes())\n"
+        code := code ++ emitConvBnToBuf s!"mbConv[{bi}] project {mid}→{oc}"
+    | .bottleneckBlock ic oc nBlocks firstStride =>
+      let mid := oc / 4
+      let needsProj := !(ic == oc && firstStride == 1)
+      for bi in [:nBlocks] do
+        let blockIc := if bi == 0 then ic else oc
+        code := code ++ emitConvBnToBuf s!"bneck[{bi}] 1x1 reduce {blockIc}→{mid}"
+        code := code ++ emitConvBnToBuf s!"bneck[{bi}] 3x3 mid {mid}→{mid}"
+        code := code ++ emitConvBnToBuf s!"bneck[{bi}] 1x1 expand {mid}→{oc}"
+        if bi == 0 && needsProj then
+          code := code ++ emitConvBnToBuf s!"bneck[{bi}] proj {ic}→{oc}"
+    | .maxPool _ _ | .globalAvgPool | .flatten =>
+      pure ()
+    | _ =>
+      code := code ++ "    raise NotImplementedError('params_to_file: unsupported layer')\n"
+  code := code ++ "    f.close()\n"
+  code := code ++ "    print(f'saved {idx} param-groups to {path} ({os.path.getsize(path)} bytes)')\n\n"
+  code
+
 private def emitForward (spec : NetSpec) : String := Id.run do
   let mut code := "def forward(params, x):\n"
   -- Reshape flat images to NCHW if first layer is conv
@@ -1256,6 +1379,9 @@ private def emitDataLoadCalls (ds : DatasetKind) (dataDir : String) (spec : NetS
   | .pets =>
     -- Phase-3-only kind. Stub for exhaustivity.
     "    raise RuntimeError(\"phase 2 doesn't emit a pets/segmentation trainer\")\n\n"
+  | .pascalVoc =>
+    -- Phase-3-only kind. Stub for exhaustivity.
+    "    raise RuntimeError(\"phase 2 doesn't emit a pascalVoc/detection trainer\")\n\n"
   | .imagenet =>
     -- Streaming: no upfront load. Just record the canonical example counts
     -- (tfds knows them too, but we don't need to round-trip through it for
@@ -1411,7 +1537,22 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "              \" (\" + str(round(accuracy, 4)) + \")\" +\n" ++
   "              \" val_loss=\" + str(round(total_eval_loss/max(v_batches,1), 4)) +\n" ++
   "              \"  [\" + str(round(elapsed_ep, 1)) + \"s train, \" +\n" ++
-  "              str(round(time.time()-ev_t0 - elapsed_ep, 1)) + \"s val]\")\n\n" ++
+  "              str(round(time.time()-ev_t0 - elapsed_ep, 1)) + \"s val]\")\n" ++
+  "\n" ++
+  "        # Per-N-epoch checkpoint. LEAN_MLIR_PARAMS_OUT sets the base path;\n" ++
+  "        # writes <base>_e{N}.bin every LEAN_MLIR_CKPT_EVERY epochs (default 10)\n" ++
+  "        # plus a final <base>.bin. Matches the phase-3 trainer's per-epoch\n" ++
+  "        # save behavior so downstream bootstrap (YOLOv1) can pick up an\n" ++
+  "        # intermediate checkpoint without waiting for full training.\n" ++
+  "        _ckpt_base = os.environ.get('LEAN_MLIR_PARAMS_OUT')\n" ++
+  "        _ckpt_every = int(os.environ.get('LEAN_MLIR_CKPT_EVERY', '10'))\n" ++
+  "        if _ckpt_base and _ckpt_every > 0 and (epoch + 1) % _ckpt_every == 0:\n" ++
+  "            _ckpt_path = f'{_ckpt_base}_e{epoch+1}.bin'\n" ++
+  "            params_to_file(params, _ckpt_path)\n\n" ++
+  "    # Final save (always, if LEAN_MLIR_PARAMS_OUT was set).\n" ++
+  "    _ckpt_base = os.environ.get('LEAN_MLIR_PARAMS_OUT')\n" ++
+  "    if _ckpt_base:\n" ++
+  "        params_to_file(params, f'{_ckpt_base}.bin')\n\n" ++
   "    print(\"\")\n" ++
   "    print(\"Done. Total time: \" + str(round(time.time() - t0, 1)) + \"s\")\n" ++
   "    if _trace_f: _trace_f.close()\n"
@@ -1494,6 +1635,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
                                 | .cifar10 => "'cifar10'"
                                 | .imagenette => "'imagenette'"
                                 | .pets => "'pets'"
+                                | .pascalVoc => "'pascal_voc'"
                                 | .imagenet => "'imagenet'") ++ ",\n" ++
   "            'emitter_version': '1',\n" ++
   "        }\n" ++
@@ -1583,6 +1725,7 @@ def generate (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : 
   emitHelpers spec ++
   emitShardingSetup ++
   emitInitParams spec ++
+  emitParamsToFile spec ++
   emitForward spec ++
   emitLossAndTraining spec cfg ++
   emitMain spec cfg ds dataDir

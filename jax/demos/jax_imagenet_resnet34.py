@@ -17,7 +17,7 @@ codegen-emitted trainers:
 
 Usage:
   TFDS_DATA_DIR=/home/skoonce/tensorflow_datasets \\
-  python3 demos/jax_imagenet_resnet34.py --epochs 3 --batch 192
+  python3 jax/demos/jax_imagenet_resnet34.py --epochs 3 --batch 192
 """
 
 import argparse

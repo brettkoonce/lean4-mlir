@@ -377,6 +377,13 @@ structure TrainConfig where
       Phase 4 of `planning/yolo_demo_v3.md`. Example for YOLOv1+R34:
       `bootstrapBackbone := some (".lake/build/resnet_34_params.bin", 21284672)`. -/
   bootstrapBackbone : Option (String × Nat) := none
+  /-- Save intermediate `{pfx}_params_e{N}.bin` and
+      `{pfx}_bn_stats_e{N}.bin` snapshots every `checkpointEveryNEpochs`
+      epochs. 0 disables. Default 10 = align with the eval cadence so
+      training can be killed mid-run and resumed from the most recent
+      checkpoint (or borrowed for downstream tasks like YOLOv1
+      bootstrap — see `bootstrapBackbone`). -/
+  checkpointEveryNEpochs : Nat := 10
 deriving Repr
 
 inductive DatasetKind where

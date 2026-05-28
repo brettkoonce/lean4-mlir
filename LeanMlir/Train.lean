@@ -624,6 +624,16 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         swagDeviations := swagDeviations.push dev
       swaCount := swaCount + 1
 
+    -- Per-N-epoch checkpoint (planning/yolo_demo_v3.md Phase 4
+    -- infrastructure). Writes params + BN stats with the epoch number
+    -- in the filename so a killed training run can pick up from the
+    -- last save, OR downstream tasks (e.g. YOLOv1 bootstrap) can borrow
+    -- a mid-training checkpoint without waiting for the full schedule.
+    if cfg.checkpointEveryNEpochs > 0 && (epoch + 1) % cfg.checkpointEveryNEpochs == 0 then
+      IO.FS.writeBinFile s!"{pfx}_params_e{epoch + 1}.bin" p
+      IO.FS.writeBinFile s!"{pfx}_bn_stats_e{epoch + 1}.bin" runningBnStats
+      IO.eprintln s!"  checkpoint: wrote {pfx}_params_e{epoch + 1}.bin + bn_stats_e{epoch + 1}.bin"
+
     if (epoch + 1) % 10 == 0 || epoch + 1 == epochs then
      if useSeg then
        -- TODO: per-pixel accuracy / mIoU eval for seg. Phase 0 of the
