@@ -296,6 +296,14 @@ jobs:
           mkdir -p public/docs
           cp -r .lake/build/doc/* public/docs/ 2>/dev/null || \
             echo "::warning::No doc-gen4 output at .lake/build/doc/; docs/ will 404."
+          # Instrument doc-gen4 output with the same Umami site as the
+          # blueprint (cf. blueprint/src/umami_analytics.js). doc-gen4's
+          # template is vendored (.lake/packages/doc-gen4/...) so we
+          # patch the rendered HTML post-hoc instead of forking the
+          # template. Idempotent — see scripts/inject_umami.sh.
+          if [ -x scripts/inject_umami.sh ] && [ -d public/docs ]; then
+            scripts/inject_umami.sh public/docs
+          fi
           # Blueprint PDF — try multiple known paths, log what we find.
           if [ -f blueprint/print/print.pdf ]; then
             cp blueprint/print/print.pdf public/blueprint.pdf
