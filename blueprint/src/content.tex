@@ -4203,8 +4203,10 @@ bare config, on the same Imagenette data and 80-epoch budget.
 Cell                                          & Val acc & $\Delta$ vs bare \\
 \hline
 \texttt{convnext-tiny-gelu-cutmix}            & 87.81\% & $+2.9$ \\
+\texttt{convnext-tiny-gelu-erase}             & 85.63\% & $+0.7$ \\
 \texttt{convnext-tiny-gelu-randaug} (M=9)     & 85.48\% & $+0.5$ \\
 \texttt{convnext-tiny-gelu} (bare)            & 84.94\% & ---     \\
+\texttt{convnext-tiny-gelu-mixup}             & 83.45\% & $-1.5$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -4214,14 +4216,26 @@ Cell                                          & Val acc & $\Delta$ vs bare \\
     bare, a single config change. The ViT-Tiny ablation in
     Ch~\ref{chap:attention} reaches the same conclusion at a
     different architecture: CutMix alone is the biggest single lift.
-  \item \textbf{RandAugment at M=9 barely lifts.} $+0.5\%$ is at
-    the edge of seed noise. Same pattern as ViT-Tiny: M=9 is too
-    aggressive for our 9.5K-image scale (the paper trained on
-    1.2M images).
+  \item \textbf{Random Erasing and RandAugment at M=9 are in the
+    same tier.} $+0.7\%$ and $+0.5\%$ respectively; both at the
+    edge of seed noise. M=9 is too aggressive for our 9.5K-image
+    scale (the paper trained on 1.2M images), and erasing 25\% of
+    pixels is in the same noise band.
+  \item \textbf{Mixup actively hurts at this scale.} $-1.5\%$
+    below bare. The blended-label gradient signal is too aggressive
+    at $\sim$475 images per class; the model can't extract a clean
+    target from a Beta(0.8, 0.8) mix of two images when each class
+    has so few exemplars. A Mixup ablation on full ImageNet
+    (1.28M images, $\sim$1280 per class) typically lifts $+0.5$ to
+    $+1.0$; here we're 100$\times$ below that data scale.
 \end{itemize}
 
-One seed per cell. The $+0.5\%$ delta on RandAugment is below
-noise; the $+2.9\%$ delta from CutMix is well above.
+One seed per cell. The $+0.5\%$ and $+0.7\%$ deltas on RandAugment
+and Random Erasing are within noise; the $+2.9\%$ delta from CutMix
+and the $-1.5\%$ delta from Mixup are well above. The cross-
+architecture confirmation with Ch 10's ViT-Tiny ablation (CutMix
+$\gg$ RandAug at the same data scale) suggests the ranking is
+data-regime-driven, not architecture-driven.
 
 \chapter{Vision Transformer}
 \label{chap:attention}
