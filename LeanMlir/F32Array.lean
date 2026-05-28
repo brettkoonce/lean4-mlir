@@ -90,6 +90,24 @@ opaque loadImagenetteSized (path : @& String) (imgSize : USize) : IO (ByteArray 
 @[extern "lean_f32_load_pets"]
 opaque loadPets (path : @& String) : IO (ByteArray × ByteArray × Nat)
 
+/-- Pascal VOC 2007 + YOLOv1 loader. Returns `(images_f32_normalized,
+    yLabels_concat, count)` where `yLabels_concat` carries 6076 bytes
+    per image: 30×7×7 float32 target (5880 bytes), then 7×7 float32
+    mask (196 bytes). The Lean dispatcher (`runTraining`) splits this
+    into target + mask before calling `trainStepAdamF32Yolov1`. See
+    `preprocess_voc.py` for the on-disk format. -/
+@[extern "lean_f32_load_voc"]
+opaque loadVoc (path : @& String) : IO (ByteArray × ByteArray × Nat)
+
+/-- Split an interleaved YOLOv1 batch slice (per-record `[target||mask]`,
+    6076 bytes/record) into separately-contiguous target + mask tensors
+    suitable for the `trainStepAdamF32Yolov1` FFI. Returns
+    `(target_concat, mask_concat)` with sizes `batch * 5880` and
+    `batch * 196` bytes respectively. -/
+@[extern "lean_voc_split_batch"]
+opaque vocSplitBatch (interleaved : @& ByteArray) (batch : USize)
+    : IO (ByteArray × ByteArray)
+
 /-- Convert a uint8 mask ByteArray (one byte per pixel) into a little-endian
     int32 ByteArray of 4× the size. Pets `loadPets` returns masks as packed
     uint8; `trainStepAdamF32Seg` expects int32 per-pixel class labels. -/

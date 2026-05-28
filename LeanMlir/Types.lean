@@ -250,6 +250,38 @@ structure NetSpec where
   imageW : Nat := 28
 deriving Repr
 
+/-- The "kind" of supervised loss the train step computes. Picks the
+    label-tensor shape + the forward/backward formula. Modifiers like
+    `useFocal`, `labelSmoothing`, and the aug flags (`useMixup` etc.)
+    layer on top — `LossKind` only captures the primary loss shape.
+
+    Used by `compileVmfbs` for a single-match mutex check and to drive
+    the codegen flag set. Defaults to `.classCE` for back-compat with
+    every existing trainer; if left at the default, `compileVmfbs`
+    derives the effective kind from the older booleans
+    (`useYolov1`, `useSeg`, `useMixup`/`useCutmix`/`useKnnMixup`) so
+    callers don't have to update.
+
+    See `planning/yolo_demo_v3.md` Refactor R1 for the motivation. -/
+inductive LossKind where
+  /-- Default: int32 `[B]` class label, softmax cross-entropy. Compatible
+      with `useFocal` (focal modifier) and `labelSmoothing`. -/
+  | classCE
+  /-- Float `[B, NC]` soft labels (mixup/cutmix/knn-mixup output).
+      Compatible with `labelSmoothing` (already baked in by the caller). -/
+  | softLabelCE
+  /-- Int32 `[B, H, W]` per-pixel label tensor (segmentation). Phase 0
+      of the UNet demo — see `planning/unet_demo.md`. -/
+  | perPixelCE
+  /-- Float `[B, C, H, W]` target tensor with per-pixel MSE (DDPM,
+      autoencoder regression). Caller passes `ddpmOutShape`. -/
+  | floatTargetMse
+  /-- YOLOv1: float `[B, perCell, gridH, gridW]` target + float
+      `[B, gridH, gridW]` per-cell mask. 5-term masked MSE with √ ε-floor
+      on the box-dim terms (see `planning/yolo_demo_v2.md` Phase 1). -/
+  | yolov1Masked
+deriving Repr, BEq
+
 structure TrainConfig where
   learningRate : Float
   batchSize    : Nat
@@ -323,13 +355,17 @@ structure TrainConfig where
       cost, M× eval cost. -/
   useTTA         : Bool  := false
   ttaSamples     : Nat   := 5
-  /-- YOLOv1 5-term masked-MSE loss. Phase 1 ships the codegen + smoke
-      tests only; the unified `compileVmfbs` trainer is NOT wired up
-      yet (it throws if `useYolov1` is set). See
-      `planning/yolo_demo_v2.md` Phase 1 + `planning/yolo_demo_v3.md`
-      for the v3 trainer integration. The mutex check in
-      `compileVmfbs` exists to catch forbidden combos when v3 lands. -/
+  /-- YOLOv1 5-term masked-MSE loss. See `planning/yolo_demo_v2.md`
+      Phase 1 + `planning/yolo_demo_v3.md` for integration scope.
+      Equivalent to `lossKind := .yolov1Masked`; the bool form predates
+      LossKind and is retained for back-compat. -/
   useYolov1      : Bool  := false
+  /-- Explicit loss-kind selector. If left at the default `.classCE`,
+      `compileVmfbs` derives the effective kind from the older booleans
+      (`useYolov1`, `useSeg`, soft-label augs). Set explicitly to skip
+      the derivation path or to disambiguate borderline cases.
+      See `LossKind`. -/
+  lossKind       : LossKind := LossKind.classCE
 deriving Repr
 
 inductive DatasetKind where
@@ -338,6 +374,14 @@ inductive DatasetKind where
   | imagenette
   | pets
   | imagenet
+  /-- Pascal VOC 2007 for YOLOv1 detection (trainval: 5011 images, test:
+      4952). Images are 224×224×3 (resized at preprocess time, ImageNet-
+      normalized on Lean read). Labels carry the YOLOv1 target tensor +
+      per-cell mask concatenated as 6076 bytes/image. See
+      `planning/yolo_demo_v2.md` Phase 1 + `planning/yolo_demo_v3.md`
+      Phase 2 for the on-disk format. Only valid with
+      `lossKind := .yolov1Masked` (or `useYolov1 := true`). -/
+  | pascalVoc
 deriving Repr, BEq
 
 /-- IREE compile flags from environment. Defaults to CUDA (sm_86).

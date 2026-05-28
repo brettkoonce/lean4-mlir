@@ -25,17 +25,22 @@ def baseConfig : TrainConfig := {
   useYolov1    := true
 }
 
-/-- Run `act`, expect it to throw `IO.userError`. Returns `none` on success
-    (i.e. it threw), `some msg` on failure (it didn't throw or threw a
-    non-userError). -/
+/-- Substring check (Lean 4 core lacks String.containsSubstr). -/
+private def hasSubstr (s sub : String) : Bool :=
+  (s.splitOn sub).length > 1
+
+/-- Run `act`, expect it to throw `IO.userError` mentioning yolov1.
+    Returns `none` on success (it threw the right error), `some msg` on
+    failure. Accepts either `useYolov1` (back-compat) or `yolov1Masked`
+    (post-R1) as evidence the throw is from the YOLOv1 mutex path. -/
 private def expectThrow (label : String) (act : IO Unit) : IO (Option String) := do
   try
     act
     return some s!"FAIL [{label}]: expected throw, none happened"
   catch e =>
     let msg := toString e
-    if !msg.contains "useYolov1" then
-      return some s!"FAIL [{label}]: threw, but message didn't mention 'useYolov1': {msg}"
+    if !(hasSubstr msg "useYolov1" || hasSubstr msg "yolov1Masked") then
+      return some s!"FAIL [{label}]: threw, but message didn't mention 'useYolov1'/'yolov1Masked': {msg}"
     return none
 
 def main : IO Unit := do
@@ -71,14 +76,24 @@ def main : IO Unit := do
   | some f => failures := failures.push f
   | none => IO.println "OK [C5]: useYolov1 + labelSmoothing → throws"
 
-  -- C6: useYolov1 alone (no other forbidden combo) — still throws because
-  -- Phase 1 doesn't wire YOLOv1 through compileVmfbs (smoke-test-only).
-  match (← expectThrow "useYolov1 alone" (do let _ ← tinyYoloSpec.compileVmfbs baseConfig; pure ())) with
-  | some f => failures := failures.push f
-  | none => IO.println "OK [C6]: useYolov1 alone (Phase 1 not-yet-integrated catch-all) → throws"
+  -- C6: useYolov1 alone (no other forbidden combo) — after R1
+  -- (planning/yolo_demo_v3.md), compileVmfbs DOES integrate YOLOv1 and
+  -- should return a vmfb path without throwing. Pre-R1 this was a
+  -- catch-all throw (the "smoke-test-only" sentinel); post-R1 the
+  -- catch-all is gone and the train step compiles cleanly.
+  let c6_ok ← try
+    let _ ← tinyYoloSpec.compileVmfbs baseConfig
+    pure true
+  catch e =>
+    IO.eprintln s!"FAIL [C6]: useYolov1 alone should compile after R1, but threw: {e}"
+    pure false
+  if c6_ok then
+    IO.println "OK [C6]: useYolov1 alone (post-R1) → compileVmfbs succeeds"
+  else
+    failures := failures.push "C6 failed"
 
   if failures.isEmpty then
-    IO.println "T7 PASS: all 6 mutex checks throw as expected"
+    IO.println "T7 PASS: 5 mutex throws + 1 R1-integration success"
   else
     for f in failures do IO.eprintln f
     IO.eprintln s!"T7 FAIL: {failures.size}/6 checks failed"

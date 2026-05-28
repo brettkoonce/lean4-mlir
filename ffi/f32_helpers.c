@@ -262,6 +262,99 @@ LEAN_EXPORT lean_obj_res lean_f32_load_pets(b_lean_obj_arg path_obj, lean_obj_ar
     return lean_io_result_mk_ok(outer);
 }
 
+// ---- VOC 2007 YOLOv1 binary loader ----
+// Binary format (written by preprocess_voc.py):
+//   Header: 4-byte LE uint32 count
+//   Per record (156,604 bytes total):
+//     image  : 3 * 224 * 224     bytes uint8   (channel-first RGB)
+//     target : 30 * 7 * 7 * 4    bytes float32 (NCHW: [perCell, gridH, gridW])
+//     mask   :      7 * 7 * 4    bytes float32 (per-cell objectness)
+//
+// Returns (image_f32_normalized, ylabels_concat, count) where ylabels_concat
+// is a single ByteArray laying out target ++ mask per record (6076 bytes per
+// record). The Lean dispatcher (runTraining) splits it into target/mask at
+// call time. Image is ImageNet-normalized as in load_imagenette/load_pets.
+//
+// See planning/yolo_demo_v2.md Phase 1 + planning/yolo_demo_v3.md Phase 2.
+LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj, lean_obj_arg w) {
+    (void)w;
+    const char* path = lean_string_cstr(path_obj);
+    FILE* f = fopen(path, "rb");
+    if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open voc file")));
+    uint32_t file_count;
+    if (fread(&file_count, 4, 1, f) != 1) { fclose(f);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("bad voc header"))); }
+    uint32_t count = file_count;
+    const size_t img_size = 224;
+    const size_t pix = 3 * img_size * img_size;          // 150,528
+    const size_t target_bytes_per = 30 * 7 * 7 * 4;      // 5,880
+    const size_t mask_bytes_per   = 7 * 7 * 4;           // 196
+    const size_t aux_bytes_per    = target_bytes_per + mask_bytes_per; // 6,076
+    size_t img_bytes  = (size_t)count * pix * 4;         // f32 image buffer
+    size_t aux_bytes  = (size_t)count * aux_bytes_per;   // target ++ mask concat
+    lean_object* img_ba = lean_alloc_sarray(1, img_bytes, img_bytes);
+    lean_object* aux_ba = lean_alloc_sarray(1, aux_bytes, aux_bytes);
+    float*   img = (float*)lean_sarray_cptr(img_ba);
+    uint8_t* aux = lean_sarray_cptr(aux_ba);
+    const float mean[3] = {0.485f, 0.456f, 0.406f};
+    const float istd[3] = {1.0f/0.229f, 1.0f/0.224f, 1.0f/0.225f};
+    uint8_t* buf = (uint8_t*)malloc(pix + aux_bytes_per);
+    if (!buf) { fclose(f);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("voc loader: malloc failed"))); }
+    for (uint32_t i = 0; i < count; i++) {
+        if (fread(buf, 1, pix + aux_bytes_per, f) != pix + aux_bytes_per) {
+            free(buf); fclose(f);
+            return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("voc loader: short read")));
+        }
+        // Normalize image into f32 buffer.
+        float* dst = img + (size_t)i * pix;
+        size_t hw = img_size * img_size;
+        for (int ch = 0; ch < 3; ch++) {
+            float m = mean[ch], s = istd[ch];
+            for (size_t j = 0; j < hw; j++)
+                dst[ch*hw+j] = (buf[ch*hw+j]/255.0f - m) * s;
+        }
+        // Copy target+mask f32 bytes verbatim (concatenated in the file already).
+        memcpy(aux + (size_t)i * aux_bytes_per, buf + pix, aux_bytes_per);
+    }
+    free(buf); fclose(f);
+
+    lean_object* inner = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(inner, 0, aux_ba);
+    lean_ctor_set(inner, 1, lean_usize_to_nat((size_t)count));
+    lean_object* outer = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(outer, 0, img_ba);
+    lean_ctor_set(outer, 1, inner);
+    return lean_io_result_mk_ok(outer);
+}
+
+// Split an interleaved YOLOv1 batch slice into separately-contiguous target
+// and mask tensors. Input layout: [t0(5880), m0(196), t1(5880), m1(196), ...]
+// for `batch` records. Output: target_concat (batch*5880 bytes), mask_concat
+// (batch*196 bytes). Returns a `ByteArray × ByteArray` Lean pair.
+LEAN_EXPORT lean_obj_res lean_voc_split_batch(
+    b_lean_obj_arg interleaved_ba, size_t batch, lean_obj_arg w) {
+    (void)w;
+    const size_t target_bytes = 30 * 7 * 7 * 4;  // 5880
+    const size_t mask_bytes   = 7 * 7 * 4;       // 196
+    const size_t rec_bytes    = target_bytes + mask_bytes;
+    size_t total_t = batch * target_bytes;
+    size_t total_m = batch * mask_bytes;
+    lean_object* target_ba = lean_alloc_sarray(1, total_t, total_t);
+    lean_object* mask_ba   = lean_alloc_sarray(1, total_m, total_m);
+    const uint8_t* src = (const uint8_t*)lean_sarray_cptr(interleaved_ba);
+    uint8_t* tdst = lean_sarray_cptr(target_ba);
+    uint8_t* mdst = lean_sarray_cptr(mask_ba);
+    for (size_t i = 0; i < batch; i++) {
+        memcpy(tdst + i * target_bytes, src + i * rec_bytes, target_bytes);
+        memcpy(mdst + i * mask_bytes,   src + i * rec_bytes + target_bytes, mask_bytes);
+    }
+    lean_object* pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, target_ba);
+    lean_ctor_set(pair, 1, mask_ba);
+    return lean_io_result_mk_ok(pair);
+}
+
 // ============================================================
 // DDPM noise plumbing
 // ============================================================

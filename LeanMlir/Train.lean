@@ -97,31 +97,49 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
   IO.eprintln "Generating train step MLIR..."
   -- Mixup / CutMix / KNN-Mixup produce fractional labels; switch to the soft-label codegen.
   let useSoftLabels := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
-  if cfg.useFocal && useSoftLabels then
-    throw <| IO.userError "useFocal is restricted to int-label loss; disable mixup/cutmix/knnMixup"
-  if cfg.useFocal && cfg.labelSmoothing != 0.0 then
-    throw <| IO.userError "useFocal requires labelSmoothing = 0 (focal mixes poorly with smoothing)"
-  if useSeg && useSoftLabels then
-    throw <| IO.userError "segmentation datasets are incompatible with mixup/cutmix/knnMixup (per-pixel labels can't be mixed batch-wise)"
-  if useSeg && cfg.useFocal then
-    throw <| IO.userError "segmentation + focal not yet supported (Phase 0: plain per-pixel CE only)"
-  if useSeg && cfg.labelSmoothing != 0.0 then
-    throw <| IO.userError "segmentation + label smoothing not yet supported (Phase 0: plain per-pixel CE only)"
-  -- YOLOv1 mutex checks (planning/yolo_demo_v2.md Phase 1 decision D8).
-  -- Each forbidden combo throws its own error first; the catch-all at the
-  -- end documents that Phase 1 ships smoke-tests only via generateTrainStep
-  -- directly. v3 (planning/yolo_demo_v3.md Refactor R1) replaces this with
-  -- a single match on a LossKind enum.
-  if cfg.useYolov1 && useSoftLabels then
-    throw <| IO.userError "useYolov1 is incompatible with useMixup/useCutmix/useKnnMixup (YOLOv1 targets are per-cell float tensors, not class-mixable)"
-  if cfg.useYolov1 && cfg.useFocal then
-    throw <| IO.userError "useYolov1 is incompatible with useFocal (focal applies to softmax-CE, not masked-MSE)"
-  if cfg.useYolov1 && useSeg then
-    throw <| IO.userError "useYolov1 is incompatible with segmentation (different target shape: [B,30,7,7] float vs [B,H,W] int32)"
-  if cfg.useYolov1 && cfg.labelSmoothing != 0.0 then
-    throw <| IO.userError "useYolov1 is incompatible with labelSmoothing (smoothing applies to one-hot CE, not box-regression MSE)"
-  if cfg.useYolov1 then
-    throw <| IO.userError "useYolov1 is Phase-1 smoke-test-only; the unified compileVmfbs trainer is not wired up. Call MlirCodegen.generateTrainStep + iree-compile + trainStepAdamF32Yolov1 directly. See planning/yolo_demo_v2.md Phase 1 and planning/yolo_demo_v3.md for v3 integration."
+  -- ── Resolve effective LossKind (planning/yolo_demo_v3.md R1) ──
+  -- If `cfg.lossKind` is at its default `.classCE`, derive from the
+  -- legacy booleans for back-compat with every existing trainer.
+  let lossKind : LossKind :=
+    if cfg.lossKind != .classCE then cfg.lossKind
+    else if cfg.useYolov1 then .yolov1Masked
+    else if useSeg then .perPixelCE
+    else if useSoftLabels then .softLabelCE
+    else .classCE
+  -- ── Single-match mutex validation (replaces the prior chain of throws) ──
+  -- Modifiers (useFocal, labelSmoothing, useMixup/Cutmix/KnnMixup) only
+  -- apply to specific kinds. Reject the rest at compile time so misuse
+  -- shows up here, not as a wrong-loss-value 100 steps in.
+  match lossKind with
+  | .classCE =>
+    -- useFocal + labelSmoothing forbidden together; useFocal forbids
+    -- soft labels (mixup et al.) which would have routed us to softLabelCE.
+    if cfg.useFocal && cfg.labelSmoothing != 0.0 then
+      throw <| IO.userError "useFocal requires labelSmoothing = 0 (focal mixes poorly with smoothing)"
+  | .softLabelCE =>
+    if cfg.useFocal then
+      throw <| IO.userError "softLabelCE (mixup/cutmix/knnMixup) is incompatible with useFocal — focal applies to int-label CE only"
+  | .perPixelCE =>
+    if useSoftLabels then
+      throw <| IO.userError "perPixelCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
+    if cfg.useFocal then
+      throw <| IO.userError "perPixelCE + focal not yet supported (Phase 0: plain per-pixel CE only)"
+    if cfg.labelSmoothing != 0.0 then
+      throw <| IO.userError "perPixelCE + label smoothing not yet supported (Phase 0: plain per-pixel CE only)"
+  | .floatTargetMse =>
+    -- DDPM bypasses compileVmfbs entirely (see demos/MainCifarDdpm*Train.lean);
+    -- reaching this branch via compileVmfbs is currently unused but reserved.
+    pure ()
+  | .yolov1Masked =>
+    if useSoftLabels then
+      throw <| IO.userError "yolov1Masked is incompatible with useMixup/useCutmix/useKnnMixup — YOLOv1 targets are per-cell float tensors, not class-mixable"
+    if cfg.useFocal then
+      throw <| IO.userError "yolov1Masked is incompatible with useFocal — focal applies to softmax-CE, not masked-MSE"
+    if useSeg then
+      throw <| IO.userError "yolov1Masked is incompatible with segmentation — different target shape ([B,30,7,7] float vs [B,H,W] int32)"
+    if cfg.labelSmoothing != 0.0 then
+      throw <| IO.userError "yolov1Masked is incompatible with labelSmoothing — smoothing applies to one-hot CE, not box-regression MSE"
+  let useYolov1Codegen := lossKind == .yolov1Masked
   let trainMlir := MlirCodegen.generateTrainStep spec cfg.batchSize ("jit_" ++ spec.sanitizedName ++ "_train_step")
     (labelSmoothing := cfg.labelSmoothing)
     (weightDecay := cfg.weightDecay)
@@ -130,6 +148,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     (useFocal := cfg.useFocal)
     (focalGamma := cfg.focalGamma)
     (useSeg := useSeg)
+    (useYolov1 := useYolov1Codegen)
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"
 
@@ -278,11 +297,29 @@ private def petsIO : DatasetIO where
   loadVal   := fun dir => F32.loadPets (dir ++ "/val.bin")
   augmentBatch := fun raw _ _ => return raw
 
+/-- Pascal VOC 2007 for YOLOv1. 224×224 RGB images; "labels" buffer
+    carries the 30×7×7 float32 target tensor concatenated with the
+    7×7 float32 per-cell objectness mask (6076 bytes per record). The
+    `runTraining` dispatch splits this into target + mask before
+    calling `trainStepAdamF32Yolov1`. See `preprocess_voc.py` for the
+    on-disk format and `planning/yolo_demo_v3.md` Phase 2 for the
+    integration plan. Phase 2 ships without bbox-aware augmentation
+    (Phase 3 work). -/
+private def pascalVocIO : DatasetIO where
+  trainPixels := 3 * 224 * 224
+  valPixels   := 3 * 224 * 224
+  channels    := 3
+  labelBytesPerRecord := 30 * 7 * 7 * 4 + 7 * 7 * 4  -- target (5880) + mask (196) = 6076
+  loadTrain := fun dir => F32.loadVoc (dir ++ "/train.bin")
+  loadVal   := fun dir => F32.loadVoc (dir ++ "/val.bin")
+  augmentBatch := fun raw _ _ => return raw
+
 private def datasetIO : DatasetKind → DatasetIO
   | .imagenette => imagenetteIO
   | .mnist      => mnistIO
   | .cifar10    => cifar10IO
   | .pets       => petsIO
+  | .pascalVoc  => pascalVocIO
   | .imagenet   =>
     -- Phase 3 doesn't yet support full 1000-class ImageNet — the 1.28M
     -- training set needs a C-side streaming reader, not the current
@@ -303,10 +340,22 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let batchN : Nat := cfg.batchSize
   let batch  : USize := cfg.batchSize.toUSize
   let dio := datasetIO ds
-  -- Segmentation datasets carry per-pixel masks (H*W bytes per record)
-  -- instead of int32 class indices. Switches the train-step ABI to
-  -- `trainStepAdamF32Seg` and disables the classification eval block.
-  let useSeg := dio.labelBytesPerRecord != 4
+  -- Derive effective LossKind (planning/yolo_demo_v3.md R1). Existing
+  -- callers leave cfg.lossKind at the default .classCE and we infer from
+  -- the older booleans + the dataset kind:
+  --   * pascalVoc + useYolov1   → yolov1Masked (target+mask f32 batch dispatch)
+  --   * label record != 4 bytes → perPixelCE  (segmentation; pets path)
+  --   * mixup/cutmix/knnMixup   → softLabelCE
+  --   * else                    → classCE (with optional useFocal modifier)
+  let useSoftLabelsTop := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
+  let lossKind : LossKind :=
+    if cfg.lossKind != .classCE then cfg.lossKind
+    else if cfg.useYolov1 || ds matches .pascalVoc then .yolov1Masked
+    else if dio.labelBytesPerRecord != 4 then .perPixelCE
+    else if useSoftLabelsTop then .softLabelCE
+    else .classCE
+  let useSeg := lossKind == .perPixelCE
+  let useYolov1Run := lossKind == .yolov1Masked
 
   let (trainImg, trainLbl, nTrain) ← dio.loadTrain dataDir
   IO.eprintln s!"  train: {nTrain} images ({dio.trainPixels} floats/image)"
@@ -356,6 +405,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           | .imagenette => "imagenette"
           | .pets       => "pets"
           | .imagenet   => "imagenet"
+          | .pascalVoc  => "pascal_voc"
         let hdr :=
           "{\"kind\":\"header\",\"phase\":\"phase3\"" ++
           s!",\"netspec_name\":\"{spec.name}\"" ++
@@ -465,7 +515,17 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         yArg ← F32.cutmixSoftLabels yb batch nClassesNat.toUSize augH.toUSize augW.toUSize cfg.cutmixAlpha cfg.labelSmoothing mixSeed
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
-      let out ← if useSeg then do
+      let out ← if useYolov1Run then do
+                  -- yArg is the interleaved per-record [target||mask] slice
+                  -- (6076 bytes/record). Split into the separate target and
+                  -- mask tensors the YOLOv1 FFI expects. Phase 2 uses
+                  -- hard-coded 7×7×30 grid / 20-class VOC layout — see
+                  -- planning/yolo_demo_v2.md Phase 1 decisions D2/D6.
+                  let (yTgt, yMsk) ← F32.vocSplitBatch yArg batch
+                  IreeSession.trainStepAdamF32Yolov1 sess spec.trainFnName
+                    packed allShapes xba xSh yTgt yMsk lr globalStep.toFloat bnShapes batch
+                    (7 : USize) (7 : USize) (30 : USize)
+                else if useSeg then do
                   -- Pets `loadPets` returns uint8 masks; the seg train step
                   -- expects int32 LE [B, H, W]. yArg here is the raw uint8
                   -- batch slice (sliceLabels with bytesPerRecord = H*W).
@@ -531,6 +591,12 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
        -- (argmax + int32 label compare) is invalid for seg and would
        -- read past the mask buffer.
        IO.eprintln s!"  (seg eval skipped — Phase 0; train loss above is the signal)"
+     else if useYolov1Run then
+       -- mAP@0.5 eval for YOLOv1 is Phase 5 work (planning/yolo_demo_v3.md).
+       -- Phase 2 verifies the train step runs + loss drops on real VOC; the
+       -- classification eval block below would interpret the 1470-flat
+       -- output as class logits, which is nonsensical for detection.
+       IO.eprintln s!"  (yolov1 eval skipped — Phase 2; train loss above is the signal)"
      else
       let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
       if ← System.FilePath.pathExists evalVmfb then
@@ -706,7 +772,18 @@ def evalOnly (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
 def train (spec : NetSpec) (cfg : TrainConfig) (dataDir : String)
     (ds : DatasetKind := .imagenette) : IO Unit := do
   IO.eprintln s!"{spec.name}: {spec.totalParams} params"
-  let useSeg := (datasetIO ds).labelBytesPerRecord != 4
+  -- Match runTraining's lossKind derivation so the codegen flag aligns
+  -- with the dispatch path. Only `.perPixelCE` (segmentation: pets) sets
+  -- `useSeg`. YOLOv1 has a non-4-byte label record too but routes
+  -- through the yolov1 codegen path, not the seg one.
+  let useSoftLabelsTop := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
+  let lossKind : LossKind :=
+    if cfg.lossKind != .classCE then cfg.lossKind
+    else if cfg.useYolov1 || ds matches .pascalVoc then .yolov1Masked
+    else if (datasetIO ds).labelBytesPerRecord != 4 then .perPixelCE
+    else if useSoftLabelsTop then .softLabelCE
+    else .classCE
+  let useSeg := lossKind == .perPixelCE
   match (← IO.getEnv "LEAN_MLIR_EVAL_ONLY") with
   | some _ =>
     -- compileVmfbs is cheap when cached and produces the eval vmfb we need.

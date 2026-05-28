@@ -174,6 +174,12 @@ lean_exe «cifar-ddpm-sincos-sample» where
   root := `demos.MainCifarDdpmSincosSample
   moreLinkArgs := ireeLink
 
+-- YOLOv1 Phase 2: Pascal VOC 2007 smoke trainer.
+-- See planning/yolo_demo_v3.md Phase 2.
+lean_exe «yolov1-voc-train» where
+  root := `demos.MainYolov1VocTrain
+  moreLinkArgs := ireeLink
+
 -- ═══════════════════════════════════════════════════════════════════
 -- VJP oracle — one binary per axiom under test.
 -- Trainers live in tests/vjp_oracle/phase3/ so the root isn't crowded
