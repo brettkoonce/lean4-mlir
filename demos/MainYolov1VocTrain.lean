@@ -45,6 +45,7 @@ def r34Yolov1Config : TrainConfig where
   epochs       := 5
   useAdam      := true
   weightDecay  := 0.0
+  augment      := true        -- Phase 3a: bbox-aware horizontal flip
   -- Explicitly set lossKind for clarity (could also leave default and
   -- rely on DatasetKind.pascalVoc derivation in compileVmfbs).
   lossKind     := LossKind.yolov1Masked

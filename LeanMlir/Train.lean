@@ -309,7 +309,9 @@ private def pascalVocIO : DatasetIO where
   trainPixels := 3 * 224 * 224
   valPixels   := 3 * 224 * 224
   channels    := 3
-  labelBytesPerRecord := 30 * 7 * 7 * 4 + 7 * 7 * 4  -- target (5880) + mask (196) = 6076
+  -- Phase 3b layout: target (5880) + mask (196) + numBoxes (4) +
+  -- raw_boxes (56 × 20 = 1120) = 7200 bytes/record.
+  labelBytesPerRecord := 30 * 7 * 7 * 4 + 7 * 7 * 4 + 4 + 56 * 20
   loadTrain := fun dir => F32.loadVoc (dir ++ "/train.bin")
   loadVal   := fun dir => F32.loadVoc (dir ++ "/val.bin")
   augmentBatch := fun raw _ _ => return raw
@@ -516,14 +518,24 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
       let out ← if useYolov1Run then do
-                  -- yArg is the interleaved per-record [target||mask] slice
-                  -- (6076 bytes/record). Split into the separate target and
-                  -- mask tensors the YOLOv1 FFI expects. Phase 2 uses
-                  -- hard-coded 7×7×30 grid / 20-class VOC layout — see
-                  -- planning/yolo_demo_v2.md Phase 1 decisions D2/D6.
-                  let (yTgt, yMsk) ← F32.vocSplitBatch yArg batch
+                  -- yArg per record is target (5880) + mask (196) + numBoxes (4) +
+                  -- raw_boxes (56×20 = 1120) = 7200 bytes (Phase 3b format).
+                  --   * cfg.augment := false  → split into target+mask, no transform.
+                  --   * cfg.augment := true   → call yoloAugment which applies bbox-aware
+                  --     hflip (p=0.5) + random crop (p=0.5, scale [0.8, 1.0]) and
+                  --     re-encodes target+mask from the surviving bboxes.
+                  -- Hard-coded 7×7 grid, 30-channel, 20-class VOC layout. See
+                  -- planning/yolo_demo_v3.md Phase 3.
+                  let (xAug, yTgtAug, yMskAug) ← if cfg.augment then
+                        F32.yoloAugment xba yArg batch augC.toUSize
+                          augH.toUSize augW.toUSize
+                          (7 : USize) (7 : USize) (30 : USize) (20 : USize)
+                          0.5 0.5 0.8 (stepSeed ^^^ (11 : USize))
+                      else do
+                        let (yTgt, yMsk) ← F32.vocSplitBatch yArg batch
+                        pure (xba, yTgt, yMsk)
                   IreeSession.trainStepAdamF32Yolov1 sess spec.trainFnName
-                    packed allShapes xba xSh yTgt yMsk lr globalStep.toFloat bnShapes batch
+                    packed allShapes xAug xSh yTgtAug yMskAug lr globalStep.toFloat bnShapes batch
                     (7 : USize) (7 : USize) (30 : USize)
                 else if useSeg then do
                   -- Pets `loadPets` returns uint8 masks; the seg train step

@@ -11,10 +11,17 @@ Usage: python3 preprocess_voc.py <voc_root> <output_dir> [--max-images N] [--spl
 
 Writes train.bin (5011 images, trainval) and val.bin (4952 images, test):
   Header: count (4 bytes, little-endian uint32)
-  Per record (total 156,604 bytes):
-    image  : 3*224*224     bytes uint8   (channel-first RGB, ImageNet-normalized on Lean read)
-    target : 30*7*7 * 4    bytes float32 (NCHW: [perCell=30, gridH=7, gridW=7])
-    mask   :    7*7 * 4    bytes float32 (per-cell objectness: 1.0 if a GT box's center falls here)
+  Per record (total 157,728 bytes — bumped from 156,604 in Phase 3b for
+  the raw-bboxes block needed by bbox-aware random crop):
+    image      : 3*224*224     bytes uint8   (channel-first RGB, ImageNet-normalized on Lean read)
+    target     : 30*7*7 * 4    bytes float32 (NCHW: [perCell=30, gridH=7, gridW=7])
+    mask       :    7*7 * 4    bytes float32 (per-cell objectness: 1.0 if a GT box's center falls here)
+    numBoxes   :          4    bytes int32 LE
+    raw_boxes  : 56 * 20       bytes (first numBoxes valid, rest zero)
+                  per box (20 bytes):
+                    class_id : 4 bytes int32 LE
+                    xmin, ymin, xmax, ymax : 4 × 4 bytes float32 (normalized to [0,1] of original image)
+  Total per record: 150,528 + 5,880 + 196 + 4 + 1,120 = 157,728 bytes.
 
 Target channel layout (perCell = numBoxes*5 + numClasses = 2*5 + 20 = 30):
   [0..2)   box 0 (x, y)     cell-relative center in [0, 1]
@@ -54,6 +61,7 @@ GRID_W       = 7
 NUM_BOXES    = 2
 NUM_CLASSES  = 20
 PER_CELL     = NUM_BOXES * 5 + NUM_CLASSES  # 30
+MAX_BBOXES   = 56  # VOC trainval max is ~39; pad to 56 for safety.
 
 VOC_CLASSES = [
     "aeroplane", "bicycle", "bird", "boat", "bottle",
@@ -124,6 +132,33 @@ def encode_targets(img_w, img_h, boxes):
     return target, mask
 
 
+def pack_raw_boxes(img_w, img_h, boxes):
+    """Pack up to MAX_BBOXES bboxes into the fixed-size raw_boxes block
+    consumed by the bbox-aware aug C kernels at training time. Boxes
+    beyond MAX_BBOXES are dropped (extremely rare for VOC); the unused
+    slots are filled with zeros."""
+    block = np.zeros(MAX_BBOXES * 5, dtype=np.float32)
+    n = min(len(boxes), MAX_BBOXES)
+    for i in range(n):
+        cid, xmin, ymin, xmax, ymax = boxes[i]
+        block[i * 5 + 0] = float(cid)  # class id stored as float; reinterpreted as i32 at write time below
+        block[i * 5 + 1] = xmin / img_w
+        block[i * 5 + 2] = ymin / img_h
+        block[i * 5 + 3] = xmax / img_w
+        block[i * 5 + 4] = ymax / img_h
+    # Build the on-disk byte block: per box, 4-byte i32 class_id then 16 bytes (4 floats).
+    out = bytearray(MAX_BBOXES * 20)
+    for i in range(n):
+        cid = int(block[i * 5 + 0])
+        struct.pack_into("<i", out, i * 20, cid)
+        struct.pack_into("<ffff", out, i * 20 + 4,
+                         float(block[i * 5 + 1]),
+                         float(block[i * 5 + 2]),
+                         float(block[i * 5 + 3]),
+                         float(block[i * 5 + 4]))
+    return n, bytes(out)
+
+
 def process_split(voc_root, split_name, out_path, max_images=None):
     images_dir = voc_root / "JPEGImages"
     annot_dir = voc_root / "Annotations"
@@ -139,13 +174,19 @@ def process_split(voc_root, split_name, out_path, max_images=None):
     print(f"  {split_name}: {len(names)} images")
 
     skipped = 0
-    record_size = 3 * IMG_SIZE * IMG_SIZE + PER_CELL * GRID_H * GRID_W * 4 + GRID_H * GRID_W * 4
+    record_size = (3 * IMG_SIZE * IMG_SIZE
+                   + PER_CELL * GRID_H * GRID_W * 4
+                   + GRID_H * GRID_W * 4
+                   + 4
+                   + MAX_BBOXES * 20)
+    assert record_size == 157728, record_size
 
     with open(out_path, "wb") as f:
         # Header — count placeholder, rewrite at end.
         f.write(struct.pack("<I", 0))
 
         written = 0
+        max_boxes_seen = 0
         for name in names:
             img_path = images_dir / f"{name}.jpg"
             xml_path = annot_dir / f"{name}.xml"
@@ -154,12 +195,9 @@ def process_split(voc_root, split_name, out_path, max_images=None):
                 continue
             try:
                 img_w, img_h, boxes = parse_annotation(xml_path)
-                if not boxes:
-                    # Empty GT → mask all-zero, still write the record (model
-                    # should predict no objects). Don't skip; the noobj-conf
-                    # term still trains.
-                    pass
                 target, mask = encode_targets(img_w, img_h, boxes)
+                n_boxes, boxes_block = pack_raw_boxes(img_w, img_h, boxes)
+                max_boxes_seen = max(max_boxes_seen, n_boxes)
 
                 img = Image.open(img_path).convert("RGB").resize((IMG_SIZE, IMG_SIZE), Image.BILINEAR)
                 img_arr = np.asarray(img, dtype=np.uint8)        # (H, W, 3)
@@ -168,14 +206,19 @@ def process_split(voc_root, split_name, out_path, max_images=None):
                 img_bytes = img_chw.tobytes()
                 target_bytes = target.tobytes()
                 mask_bytes = mask.tobytes()
+                n_bytes = struct.pack("<i", n_boxes)
                 assert len(img_bytes) == 3 * IMG_SIZE * IMG_SIZE
                 assert len(target_bytes) == PER_CELL * GRID_H * GRID_W * 4
                 assert len(mask_bytes) == GRID_H * GRID_W * 4
-                assert len(img_bytes) + len(target_bytes) + len(mask_bytes) == record_size
+                assert len(boxes_block) == MAX_BBOXES * 20
+                total = len(img_bytes) + len(target_bytes) + len(mask_bytes) + len(n_bytes) + len(boxes_block)
+                assert total == record_size, (total, record_size)
 
                 f.write(img_bytes)
                 f.write(target_bytes)
                 f.write(mask_bytes)
+                f.write(n_bytes)
+                f.write(boxes_block)
                 written += 1
             except Exception as e:
                 print(f"  skipping {name}: {e}", file=sys.stderr)
@@ -187,7 +230,7 @@ def process_split(voc_root, split_name, out_path, max_images=None):
         f.write(struct.pack("<I", written))
 
     size_mb = os.path.getsize(out_path) / (1024 * 1024)
-    print(f"  wrote {out_path}: {written} records, {size_mb:.1f} MB (skipped {skipped})")
+    print(f"  wrote {out_path}: {written} records, {size_mb:.1f} MB (skipped {skipped}, max boxes seen: {max_boxes_seen})")
     return True
 
 

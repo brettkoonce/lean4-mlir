@@ -108,6 +108,45 @@ opaque loadVoc (path : @& String) : IO (ByteArray × ByteArray × Nat)
 opaque vocSplitBatch (interleaved : @& ByteArray) (batch : USize)
     : IO (ByteArray × ByteArray)
 
+/-- Bbox-aware horizontal flip for a YOLOv1 batch. Per-image p=0.5
+    coin (xorshift64 seeded by `seed`); when flipped, reverses image
+    along W, target along gridW, mask along gridW, and replaces the
+    x_cell channel with `1 - x_cell` on cells where mask=1 (since the
+    cell itself mirrors). Returns the augmented (images, target, mask)
+    triple as fresh ByteArrays; inputs are not modified.
+    See `planning/yolo_demo_v3.md` Phase 3. LEGACY — superseded by
+    `yoloAugment` (Phase 3b) which operates on raw bboxes. -/
+@[extern "lean_f32_yolo_hflip"]
+opaque yoloHflip (images : @& ByteArray) (target : @& ByteArray) (mask : @& ByteArray)
+    (batch : USize) (channels : USize) (imgH : USize) (imgW : USize)
+    (gridH : USize) (gridW : USize) (perCell : USize) (seed : USize)
+    : IO (ByteArray × ByteArray × ByteArray)
+
+/-- Unified bbox-aware augmentation for YOLOv1: per-image hflip + random
+    crop, with target+mask re-encoded from the transformed raw bboxes
+    so the geometric correspondence is exact. Replaces `yoloHflip` for
+    Phase 3b once preprocessor stores raw bboxes alongside the
+    pre-encoded target.
+
+    * `images`: f32 image batch `[B, C, H, W]`
+    * `boxes`: per-record YOLOv1 label block (target 5880 + mask 196 +
+      numBoxes 4 + raw_boxes 1120 = 7200 bytes/record). Only the
+      numBoxes + raw_boxes tail is read.
+    * `hflipProb`, `cropProb`: per-image Bernoulli probabilities.
+    * `cropMinScale`: crop side ∈ `[cropMinScale, 1.0] × imgW`
+      (paper's ±20% jitter → 0.8).
+    * `seed`: xorshift seed.
+
+    Returns `(new_image, new_target, new_mask)` as fresh ByteArrays.
+    See `planning/yolo_demo_v3.md` Phase 3. -/
+@[extern "lean_f32_yolo_augment"]
+opaque yoloAugment (images : @& ByteArray) (boxes : @& ByteArray)
+    (batch : USize) (channels : USize) (imgH : USize) (imgW : USize)
+    (gridH : USize) (gridW : USize) (perCell : USize) (numClasses : USize)
+    (hflipProb : Float) (cropProb : Float) (cropMinScale : Float)
+    (seed : USize)
+    : IO (ByteArray × ByteArray × ByteArray)
+
 /-- Convert a uint8 mask ByteArray (one byte per pixel) into a little-endian
     int32 ByteArray of 4× the size. Pets `loadPets` returns masks as packed
     uint8; `trainStepAdamF32Seg` expects int32 per-pixel class labels. -/

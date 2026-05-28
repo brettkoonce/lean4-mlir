@@ -263,19 +263,24 @@ LEAN_EXPORT lean_obj_res lean_f32_load_pets(b_lean_obj_arg path_obj, lean_obj_ar
 }
 
 // ---- VOC 2007 YOLOv1 binary loader ----
-// Binary format (written by preprocess_voc.py):
+// Binary format (written by preprocess_voc.py — Phase 3b layout, 157,728
+// bytes/record):
 //   Header: 4-byte LE uint32 count
-//   Per record (156,604 bytes total):
-//     image  : 3 * 224 * 224     bytes uint8   (channel-first RGB)
-//     target : 30 * 7 * 7 * 4    bytes float32 (NCHW: [perCell, gridH, gridW])
-//     mask   :      7 * 7 * 4    bytes float32 (per-cell objectness)
+//   Per record (157,728 bytes total):
+//     image      : 3 * 224 * 224     bytes uint8   (channel-first RGB)
+//     target     : 30 * 7 * 7 * 4    bytes float32 (NCHW)
+//     mask       :      7 * 7 * 4    bytes float32 (per-cell objectness)
+//     numBoxes   :              4    bytes int32 LE
+//     raw_boxes  : 56 * 20           bytes (each: 4-byte i32 class +
+//                                    4 × 4 byte f32 xmin/ymin/xmax/ymax
+//                                    normalized [0,1])
 //
-// Returns (image_f32_normalized, ylabels_concat, count) where ylabels_concat
-// is a single ByteArray laying out target ++ mask per record (6076 bytes per
-// record). The Lean dispatcher (runTraining) splits it into target/mask at
-// call time. Image is ImageNet-normalized as in load_imagenette/load_pets.
-//
-// See planning/yolo_demo_v2.md Phase 1 + planning/yolo_demo_v3.md Phase 2.
+// Returns (image_f32_normalized, ylabels_concat, count) where
+// ylabels_concat lays out target ++ mask ++ numBoxes ++ raw_boxes per
+// record (7,200 bytes/record). The Lean dispatcher splits this at
+// training time. Image is ImageNet-normalized as in load_imagenette/
+// load_pets. See planning/yolo_demo_v2.md Phase 1 + planning/yolo_demo_v3.md
+// Phase 2-3.
 LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj, lean_obj_arg w) {
     (void)w;
     const char* path = lean_string_cstr(path_obj);
@@ -289,9 +294,12 @@ LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj, lean_obj_arg
     const size_t pix = 3 * img_size * img_size;          // 150,528
     const size_t target_bytes_per = 30 * 7 * 7 * 4;      // 5,880
     const size_t mask_bytes_per   = 7 * 7 * 4;           // 196
-    const size_t aux_bytes_per    = target_bytes_per + mask_bytes_per; // 6,076
+    const size_t nbox_bytes_per   = 4;
+    const size_t boxes_bytes_per  = 56 * 20;             // 1,120
+    const size_t aux_bytes_per    = target_bytes_per + mask_bytes_per
+                                    + nbox_bytes_per + boxes_bytes_per; // 7,200
     size_t img_bytes  = (size_t)count * pix * 4;         // f32 image buffer
-    size_t aux_bytes  = (size_t)count * aux_bytes_per;   // target ++ mask concat
+    size_t aux_bytes  = (size_t)count * aux_bytes_per;
     lean_object* img_ba = lean_alloc_sarray(1, img_bytes, img_bytes);
     lean_object* aux_ba = lean_alloc_sarray(1, aux_bytes, aux_bytes);
     float*   img = (float*)lean_sarray_cptr(img_ba);
@@ -314,7 +322,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj, lean_obj_arg
             for (size_t j = 0; j < hw; j++)
                 dst[ch*hw+j] = (buf[ch*hw+j]/255.0f - m) * s;
         }
-        // Copy target+mask f32 bytes verbatim (concatenated in the file already).
+        // Copy target ++ mask ++ numBoxes ++ raw_boxes verbatim.
         memcpy(aux + (size_t)i * aux_bytes_per, buf + pix, aux_bytes_per);
     }
     free(buf); fclose(f);
@@ -328,16 +336,389 @@ LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj, lean_obj_arg
     return lean_io_result_mk_ok(outer);
 }
 
-// Split an interleaved YOLOv1 batch slice into separately-contiguous target
-// and mask tensors. Input layout: [t0(5880), m0(196), t1(5880), m1(196), ...]
-// for `batch` records. Output: target_concat (batch*5880 bytes), mask_concat
-// (batch*196 bytes). Returns a `ByteArray × ByteArray` Lean pair.
+// Re-encode YOLOv1 target+mask tensors from a list of bboxes. Matches
+// the encode_targets() in preprocess_voc.py — used by lean_f32_yolo_augment
+// after geometric transforms (hflip, random crop) shift the boxes around.
+// Boxes layout: per box (cid, xmin, ymin, xmax, ymax) as 5 contiguous floats
+// (cid is stored as float and cast to int on use, matching the format the
+// transform_box helper produces). xmin/ymin/xmax/ymax are normalized [0,1].
+static void yolo_encode_target_mask(
+    const float* boxes, int n_boxes,
+    float* target, float* mask,
+    int perCell, int gridH, int gridW, int numClasses) {
+    memset(target, 0, (size_t)perCell * gridH * gridW * sizeof(float));
+    memset(mask,   0, (size_t)gridH * gridW * sizeof(float));
+    for (int i = 0; i < n_boxes; i++) {
+        int cid = (int)boxes[i * 5 + 0];
+        float xmin = boxes[i * 5 + 1];
+        float ymin = boxes[i * 5 + 2];
+        float xmax = boxes[i * 5 + 3];
+        float ymax = boxes[i * 5 + 4];
+        float cx = 0.5f * (xmin + xmax);
+        float cy = 0.5f * (ymin + ymax);
+        float w_rel = xmax - xmin;
+        float h_rel = ymax - ymin;
+        int cell_j = (int)(cx * (float)gridW);
+        int cell_i = (int)(cy * (float)gridH);
+        if (cell_j >= gridW) cell_j = gridW - 1;
+        if (cell_i >= gridH) cell_i = gridH - 1;
+        if (cell_j < 0) cell_j = 0;
+        if (cell_i < 0) cell_i = 0;
+        float cx_cell = cx * (float)gridW - (float)cell_j;
+        float cy_cell = cy * (float)gridH - (float)cell_i;
+        size_t cell_off = (size_t)cell_i * (size_t)gridW + (size_t)cell_j;
+        size_t plane   = (size_t)gridH * (size_t)gridW;
+        // Clear any class one-hot at this cell from a prior (overwritten) box.
+        for (int c = 0; c < numClasses; c++) {
+            target[(size_t)(10 + c) * plane + cell_off] = 0.0f;
+        }
+        target[(size_t)0 * plane + cell_off] = cx_cell;
+        target[(size_t)1 * plane + cell_off] = cy_cell;
+        target[(size_t)2 * plane + cell_off] = w_rel;
+        target[(size_t)3 * plane + cell_off] = h_rel;
+        target[(size_t)4 * plane + cell_off] = 1.0f;  // box 0 conf
+        if (cid >= 0 && cid < numClasses) {
+            target[(size_t)(10 + cid) * plane + cell_off] = 1.0f;
+        }
+        mask[cell_off] = 1.0f;
+    }
+}
+
+// Bilinear resize from a sub-region of the source image to the full
+// destination. `src_off_y/x` + `crop_h/w` define the sub-region (in source
+// pixel coords); `hflip` reverses the output W axis (sampled by mirroring
+// the output x before the source-coord computation).
+static void yolo_bilinear_resize_chw(
+    const float* src, int src_h, int src_w, int channels,
+    float* dst, int dst_h, int dst_w,
+    int src_off_y, int src_off_x, int crop_h, int crop_w,
+    int hflip) {
+    if (crop_h < 1) crop_h = 1;
+    if (crop_w < 1) crop_w = 1;
+    size_t src_plane = (size_t)src_h * (size_t)src_w;
+    size_t dst_plane = (size_t)dst_h * (size_t)dst_w;
+    for (int oy = 0; oy < dst_h; oy++) {
+        float fy = ((float)oy + 0.5f) * (float)crop_h / (float)dst_h - 0.5f;
+        if (fy < 0.0f) fy = 0.0f;
+        if (fy > (float)(crop_h - 1)) fy = (float)(crop_h - 1);
+        int iy0 = (int)fy;
+        int iy1 = iy0 + 1; if (iy1 >= crop_h) iy1 = crop_h - 1;
+        float wy = fy - (float)iy0;
+        int sy0 = src_off_y + iy0;
+        int sy1 = src_off_y + iy1;
+        for (int ox = 0; ox < dst_w; ox++) {
+            int ox_src = hflip ? (dst_w - 1 - ox) : ox;
+            float fx = ((float)ox_src + 0.5f) * (float)crop_w / (float)dst_w - 0.5f;
+            if (fx < 0.0f) fx = 0.0f;
+            if (fx > (float)(crop_w - 1)) fx = (float)(crop_w - 1);
+            int ix0 = (int)fx;
+            int ix1 = ix0 + 1; if (ix1 >= crop_w) ix1 = crop_w - 1;
+            float wx = fx - (float)ix0;
+            int sx0 = src_off_x + ix0;
+            int sx1 = src_off_x + ix1;
+            for (int ch = 0; ch < channels; ch++) {
+                float p00 = src[(size_t)ch * src_plane + (size_t)sy0 * src_w + sx0];
+                float p01 = src[(size_t)ch * src_plane + (size_t)sy0 * src_w + sx1];
+                float p10 = src[(size_t)ch * src_plane + (size_t)sy1 * src_w + sx0];
+                float p11 = src[(size_t)ch * src_plane + (size_t)sy1 * src_w + sx1];
+                float interp = (1.0f - wy) * ((1.0f - wx) * p00 + wx * p01)
+                             + wy        * ((1.0f - wx) * p10 + wx * p11);
+                dst[(size_t)ch * dst_plane + (size_t)oy * dst_w + ox] = interp;
+            }
+        }
+    }
+}
+
+// Transform a single bbox through (random crop, then hflip). Inputs are in
+// [0, 1] of the original image; outputs are in [0, 1] of the cropped+resized
+// image. Returns 1 if the box survives (≥50% of original area inside crop
+// AND non-empty), 0 if dropped.
+static int yolo_transform_box(
+    const float* src_box, float* dst_box, int hflip,
+    float crop_off_x_rel, float crop_off_y_rel,
+    float crop_w_rel, float crop_h_rel) {
+    int cid    = (int)src_box[0];
+    float xmin = src_box[1];
+    float ymin = src_box[2];
+    float xmax = src_box[3];
+    float ymax = src_box[4];
+    float new_xmin = (xmin - crop_off_x_rel) / crop_w_rel;
+    float new_xmax = (xmax - crop_off_x_rel) / crop_w_rel;
+    float new_ymin = (ymin - crop_off_y_rel) / crop_h_rel;
+    float new_ymax = (ymax - crop_off_y_rel) / crop_h_rel;
+    if (new_xmin < 0.0f) new_xmin = 0.0f;
+    if (new_xmax > 1.0f) new_xmax = 1.0f;
+    if (new_ymin < 0.0f) new_ymin = 0.0f;
+    if (new_ymax > 1.0f) new_ymax = 1.0f;
+    if (new_xmax <= new_xmin || new_ymax <= new_ymin) return 0;
+    float old_w = xmax - xmin, old_h = ymax - ymin;
+    float new_w = new_xmax - new_xmin, new_h = new_ymax - new_ymin;
+    if (old_w * old_h > 0.0f && (new_w * new_h) / (old_w * old_h) < 0.5f) return 0;
+    if (hflip) {
+        float tmp = new_xmin;
+        new_xmin = 1.0f - new_xmax;
+        new_xmax = 1.0f - tmp;
+    }
+    dst_box[0] = (float)cid;
+    dst_box[1] = new_xmin;
+    dst_box[2] = new_ymin;
+    dst_box[3] = new_xmax;
+    dst_box[4] = new_ymax;
+    return 1;
+}
+
+// Unified bbox-aware augmentation for YOLOv1: per-image hflip + random crop,
+// with the target+mask re-encoded from the transformed bboxes (so the
+// geometric correspondence is exact). Replaces the simpler lean_f32_yolo_hflip
+// from Phase 3a now that the data file carries raw bboxes (Phase 3b).
+//
+//   `img_ba`   : f32 image batch [B, C, H, W]
+//   `box_ba`   : YOLOv1 label block per record (target 5880 + mask 196 +
+//                numBoxes (i32, 4) + raw_boxes (56 × 20)) = 7200 bytes/record.
+//                Only the numBoxes + raw_boxes tail is read by this kernel;
+//                the leading target+mask block is recomputed.
+//   `batch`    : B
+//   Geometry args: channels, imgH, imgW, gridH, gridW, perCell, numClasses
+//   Probabilities: hflip_prob (0-1), crop_prob (0-1) — applied per image.
+//   Crop intensity: crop_min_scale (e.g. 0.8) — crop_size ∈ [min_scale, 1] × img.
+//   `seed`     : xorshift seed
+//
+// Returns (new_image, new_target, new_mask) triple of fresh ByteArrays.
+// See planning/yolo_demo_v3.md Phase 3.
+LEAN_EXPORT lean_obj_res lean_f32_yolo_augment(
+    b_lean_obj_arg img_ba, b_lean_obj_arg box_ba,
+    size_t batch, size_t channels, size_t imgH, size_t imgW,
+    size_t gridH, size_t gridW, size_t perCell, size_t numClasses,
+    double hflip_prob, double crop_prob, double crop_min_scale,
+    size_t seed, lean_obj_arg w) {
+    (void)w;
+    const size_t img_floats_per   = channels * imgH * imgW;
+    const size_t tgt_floats_per   = perCell * gridH * gridW;
+    const size_t msk_floats_per   = gridH * gridW;
+    const size_t img_bytes_per    = img_floats_per * 4;
+    const size_t tgt_bytes_per    = tgt_floats_per * 4;
+    const size_t msk_bytes_per    = msk_floats_per * 4;
+    const size_t box_rec_bytes    = tgt_bytes_per + msk_bytes_per + 4 + 56 * 20;  // 7200
+    const size_t box_tail_off     = tgt_bytes_per + msk_bytes_per;  // skip to numBoxes
+    lean_object* out_img_ba = lean_alloc_sarray(1, batch * img_bytes_per, batch * img_bytes_per);
+    lean_object* out_tgt_ba = lean_alloc_sarray(1, batch * tgt_bytes_per, batch * tgt_bytes_per);
+    lean_object* out_msk_ba = lean_alloc_sarray(1, batch * msk_bytes_per, batch * msk_bytes_per);
+    const float*   src_img = (const float*)lean_sarray_cptr(img_ba);
+    const uint8_t* src_box = (const uint8_t*)lean_sarray_cptr(box_ba);
+    float* dst_img = (float*)lean_sarray_cptr(out_img_ba);
+    float* dst_tgt = (float*)lean_sarray_cptr(out_tgt_ba);
+    float* dst_msk = (float*)lean_sarray_cptr(out_msk_ba);
+
+    uint64_t rng = seed ? (uint64_t)seed : 0x9E3779B97F4A7C15ULL;
+    float transformed[56 * 5];  // scratch for transformed bboxes per image
+    for (size_t b = 0; b < batch; b++) {
+        // Per-image RNG draws.
+        rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+        double r_hflip = (double)((rng >> 32) & 0xFFFFFF) / (double)0xFFFFFF;
+        rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+        double r_crop  = (double)((rng >> 32) & 0xFFFFFF) / (double)0xFFFFFF;
+        int hflip = (r_hflip < hflip_prob) ? 1 : 0;
+        int crop  = (r_crop  < crop_prob)  ? 1 : 0;
+
+        int crop_w = (int)imgW, crop_h = (int)imgH;
+        int off_x = 0, off_y = 0;
+        if (crop) {
+            rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+            double rs = (double)((rng >> 32) & 0xFFFFFF) / (double)0xFFFFFF;
+            double scale = crop_min_scale + (1.0 - crop_min_scale) * rs;
+            crop_w = (int)(scale * (double)imgW);
+            crop_h = crop_w;
+            if (crop_w > (int)imgW) crop_w = (int)imgW;
+            if (crop_h > (int)imgH) crop_h = (int)imgH;
+            if (crop_w < 1) crop_w = 1;
+            if (crop_h < 1) crop_h = 1;
+            int max_off_x = (int)imgW - crop_w;
+            int max_off_y = (int)imgH - crop_h;
+            if (max_off_x > 0) {
+                rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+                off_x = (int)(((rng >> 32) & 0xFFFFFF) % (uint64_t)(max_off_x + 1));
+            }
+            if (max_off_y > 0) {
+                rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+                off_y = (int)(((rng >> 32) & 0xFFFFFF) % (uint64_t)(max_off_y + 1));
+            }
+        }
+
+        // Image: bilinear resize the crop region back to full size, with optional hflip.
+        yolo_bilinear_resize_chw(
+            src_img + b * img_floats_per,
+            (int)imgH, (int)imgW, (int)channels,
+            dst_img + b * img_floats_per,
+            (int)imgH, (int)imgW,
+            off_y, off_x, crop_h, crop_w, hflip);
+
+        // Bboxes: read numBoxes + raw_boxes from the per-record label block.
+        const uint8_t* rec = src_box + b * box_rec_bytes;
+        int32_t n_boxes;
+        memcpy(&n_boxes, rec + box_tail_off, 4);
+        if (n_boxes > 56) n_boxes = 56;
+        const uint8_t* boxes_arr = rec + box_tail_off + 4;
+        float crop_off_x_rel = (float)off_x / (float)imgW;
+        float crop_off_y_rel = (float)off_y / (float)imgH;
+        float crop_w_rel = (float)crop_w / (float)imgW;
+        float crop_h_rel = (float)crop_h / (float)imgH;
+        int n_kept = 0;
+        for (int i = 0; i < n_boxes; i++) {
+            const uint8_t* bp = boxes_arr + i * 20;
+            int32_t cid;
+            memcpy(&cid, bp, 4);
+            float coords[4];
+            memcpy(coords, bp + 4, 16);
+            float src_box_arr[5] = {(float)cid, coords[0], coords[1], coords[2], coords[3]};
+            if (yolo_transform_box(src_box_arr, transformed + n_kept * 5, hflip,
+                                   crop_off_x_rel, crop_off_y_rel,
+                                   crop_w_rel, crop_h_rel)) {
+                n_kept++;
+            }
+        }
+
+        // Re-encode target+mask from surviving bboxes.
+        yolo_encode_target_mask(
+            transformed, n_kept,
+            dst_tgt + b * tgt_floats_per,
+            dst_msk + b * msk_floats_per,
+            (int)perCell, (int)gridH, (int)gridW, (int)numClasses);
+    }
+
+    lean_object* inner_pair = lean_alloc_ctor(0, 2, 0);  // (target, mask)
+    lean_ctor_set(inner_pair, 0, out_tgt_ba);
+    lean_ctor_set(inner_pair, 1, out_msk_ba);
+    lean_object* outer = lean_alloc_ctor(0, 2, 0);       // (image, (target, mask))
+    lean_ctor_set(outer, 0, out_img_ba);
+    lean_ctor_set(outer, 1, inner_pair);
+    return lean_io_result_mk_ok(outer);
+}
+
+// Bbox-aware horizontal flip for YOLOv1 batches. Per-image coin flip
+// (xorshift64 from `seed`); when flipped:
+//   * image  [B, C, H, W]: reverse the W axis for every (c, h) row
+//   * target [B, perCell, gH, gW]: reverse the gW axis for every
+//     (perCell, gH) row, then on cells where mask=1 replace the x_cell
+//     channel (channel 0 — box 0's x) with 1 - x_cell because the cell
+//     itself is mirrored. Other channels (y, w, h, conf, class one-hot,
+//     box-1 slots) are hflip-symmetric and stay put.
+//   * mask   [B, gH, gW]: reverse the gW axis for every gH row
+//
+// Returns (images, target, mask) as a 3-tuple of fresh ByteArrays.
+// Inputs are not modified. See planning/yolo_demo_v3.md Phase 3.
+//
+// LEGACY: superseded by lean_f32_yolo_augment (Phase 3b) which operates
+// on raw bboxes and re-encodes target+mask from scratch. Kept for the
+// hflip-only smoke path; once the v3 trainer commits fully to the
+// augment kernel this can be removed.
+LEAN_EXPORT lean_obj_res lean_f32_yolo_hflip(
+    b_lean_obj_arg img_ba, b_lean_obj_arg tgt_ba, b_lean_obj_arg msk_ba,
+    size_t batch, size_t channels, size_t imgH, size_t imgW,
+    size_t gridH, size_t gridW, size_t perCell, size_t seed,
+    lean_obj_arg w) {
+    (void)w;
+    const size_t img_floats_per   = channels * imgH * imgW;
+    const size_t tgt_floats_per   = perCell * gridH * gridW;
+    const size_t msk_floats_per   = gridH * gridW;
+    const size_t img_bytes_per    = img_floats_per * 4;
+    const size_t tgt_bytes_per    = tgt_floats_per * 4;
+    const size_t msk_bytes_per    = msk_floats_per * 4;
+    const size_t total_img_bytes  = batch * img_bytes_per;
+    const size_t total_tgt_bytes  = batch * tgt_bytes_per;
+    const size_t total_msk_bytes  = batch * msk_bytes_per;
+
+    lean_object* out_img_ba = lean_alloc_sarray(1, total_img_bytes, total_img_bytes);
+    lean_object* out_tgt_ba = lean_alloc_sarray(1, total_tgt_bytes, total_tgt_bytes);
+    lean_object* out_msk_ba = lean_alloc_sarray(1, total_msk_bytes, total_msk_bytes);
+    const float* src_img = (const float*)lean_sarray_cptr(img_ba);
+    const float* src_tgt = (const float*)lean_sarray_cptr(tgt_ba);
+    const float* src_msk = (const float*)lean_sarray_cptr(msk_ba);
+    float* dst_img = (float*)lean_sarray_cptr(out_img_ba);
+    float* dst_tgt = (float*)lean_sarray_cptr(out_tgt_ba);
+    float* dst_msk = (float*)lean_sarray_cptr(out_msk_ba);
+
+    uint64_t rng = seed ? (uint64_t)seed : 0x9E3779B97F4A7C15ULL;
+    for (size_t b = 0; b < batch; b++) {
+        // xorshift64 next bit.
+        rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+        int flip = (int)(rng & 1);
+
+        const float* sI = src_img + b * img_floats_per;
+        const float* sT = src_tgt + b * tgt_floats_per;
+        const float* sM = src_msk + b * msk_floats_per;
+        float* dI = dst_img + b * img_floats_per;
+        float* dT = dst_tgt + b * tgt_floats_per;
+        float* dM = dst_msk + b * msk_floats_per;
+
+        if (!flip) {
+            memcpy(dI, sI, img_bytes_per);
+            memcpy(dT, sT, tgt_bytes_per);
+            memcpy(dM, sM, msk_bytes_per);
+            continue;
+        }
+
+        // Image: reverse W per (c, h) row.
+        for (size_t c = 0; c < channels; c++) {
+            for (size_t h = 0; h < imgH; h++) {
+                const float* sr = sI + (c * imgH + h) * imgW;
+                float*       dr = dI + (c * imgH + h) * imgW;
+                for (size_t x = 0; x < imgW; x++) {
+                    dr[x] = sr[imgW - 1 - x];
+                }
+            }
+        }
+        // Target: reverse gW per (perCell, gH) row.
+        for (size_t pc = 0; pc < perCell; pc++) {
+            for (size_t gh = 0; gh < gridH; gh++) {
+                const float* sr = sT + (pc * gridH + gh) * gridW;
+                float*       dr = dT + (pc * gridH + gh) * gridW;
+                for (size_t gx = 0; gx < gridW; gx++) {
+                    dr[gx] = sr[gridW - 1 - gx];
+                }
+            }
+        }
+        // Mask: reverse gW per gH row.
+        for (size_t gh = 0; gh < gridH; gh++) {
+            const float* sr = sM + gh * gridW;
+            float*       dr = dM + gh * gridW;
+            for (size_t gx = 0; gx < gridW; gx++) {
+                dr[gx] = sr[gridW - 1 - gx];
+            }
+        }
+        // x_cell (channel 0) correction: where mask=1, replace x with 1-x.
+        // Channel 0 sits at offset pc=0 in the target NCHW layout.
+        for (size_t gh = 0; gh < gridH; gh++) {
+            for (size_t gx = 0; gx < gridW; gx++) {
+                size_t cell_off = gh * gridW + gx;
+                if (dM[cell_off] > 0.5f) {
+                    dT[cell_off] = 1.0f - dT[cell_off];
+                }
+            }
+        }
+    }
+
+    lean_object* inner_pair = lean_alloc_ctor(0, 2, 0);  // (target, mask)
+    lean_ctor_set(inner_pair, 0, out_tgt_ba);
+    lean_ctor_set(inner_pair, 1, out_msk_ba);
+    lean_object* outer = lean_alloc_ctor(0, 2, 0);       // (image, (target, mask))
+    lean_ctor_set(outer, 0, out_img_ba);
+    lean_ctor_set(outer, 1, inner_pair);
+    return lean_io_result_mk_ok(outer);
+}
+
+// Split a YOLOv1 batch slice into separately-contiguous target and mask
+// tensors. Per-record layout (7200 bytes, Phase 3b format): target (5880)
+// then mask (196) then numBoxes (4) then raw_boxes (1120). This helper
+// only extracts target + mask (the first 6076 bytes of each record) and
+// discards the bbox tail. Use yoloAugment when you need the bbox tail.
+//
+// Output: target_concat (batch*5880 bytes), mask_concat (batch*196 bytes).
 LEAN_EXPORT lean_obj_res lean_voc_split_batch(
     b_lean_obj_arg interleaved_ba, size_t batch, lean_obj_arg w) {
     (void)w;
-    const size_t target_bytes = 30 * 7 * 7 * 4;  // 5880
-    const size_t mask_bytes   = 7 * 7 * 4;       // 196
-    const size_t rec_bytes    = target_bytes + mask_bytes;
+    const size_t target_bytes = 30 * 7 * 7 * 4;          // 5880
+    const size_t mask_bytes   = 7 * 7 * 4;               // 196
+    const size_t rec_bytes    = target_bytes + mask_bytes + 4 + 56 * 20;  // 7200
     size_t total_t = batch * target_bytes;
     size_t total_m = batch * mask_bytes;
     lean_object* target_ba = lean_alloc_sarray(1, total_t, total_t);
