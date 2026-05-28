@@ -362,7 +362,16 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let (trainImg, trainLbl, nTrain) ← dio.loadTrain dataDir
   IO.eprintln s!"  train: {nTrain} images ({dio.trainPixels} floats/image)"
 
-  let params ← spec.heInitParams
+  -- Phase 4: optional pretrained-backbone bootstrap. Replaces the prefix
+  -- of the He-init with bytes read from a saved checkpoint (e.g. R34
+  -- Imagenette weights loaded into a YOLOv1 init). Auto-loads BN stats
+  -- from the companion file if the path is `*_params.bin`.
+  let params ← match cfg.bootstrapBackbone with
+    | none => spec.heInitParams
+    | some (path, prefixFloats) => do
+        IO.eprintln s!"  bootstrap: loading first {prefixFloats} floats from {path}"
+        let init ← spec.heInitParams
+        NetSpec.patchInitWithPretrainedPrefix init path (prefixFloats * 4)
   -- If LEAN_MLIR_INIT_DUMP is set, save the raw init-params buffer to disk.
   -- Used by phase 2 (jax/) to load bit-identical initial parameters for
   -- step-level cross-compiler diffing. See traces/TRACE_FORMAT.md.
@@ -433,7 +442,27 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let mut p := params
   let mut m := adamM
   let mut v := adamV
-  let mut runningBnStats ← F32.const nBnStats.toUSize 0.0
+  -- Phase 4: bootstrap BN stats from the companion `_bn_stats.bin` if
+  -- the pretrained backbone has BN layers matching the spec's. Size
+  -- must match exactly (any mismatch == architecture drift between R34
+  -- backbone and YOLOv1 backbone, which would be a bug).
+  let bnInit : ByteArray ← match cfg.bootstrapBackbone with
+    | none => F32.const nBnStats.toUSize 0.0
+    | some (path, _) => do
+        let bnPath := path.replace "_params.bin" "_bn_stats.bin"
+        if ← System.FilePath.pathExists bnPath then
+          let bn ← IO.FS.readBinFile bnPath
+          let expectedBytes := nBnStats * 4
+          if bn.size == expectedBytes then
+            IO.eprintln s!"  bootstrap: loaded {bn.size}-byte BN stats from {bnPath}"
+            pure bn
+          else
+            IO.eprintln s!"  WARN: bootstrap BN stats size {bn.size} ≠ expected {expectedBytes}; using zeros"
+            F32.const nBnStats.toUSize 0.0
+        else
+          IO.eprintln s!"  bootstrap: no BN stats file at {bnPath}; using zeros"
+          F32.const nBnStats.toUSize 0.0
+  let mut runningBnStats : ByteArray := bnInit
   let mut curImg := trainImg
   let mut curLbl := trainLbl
   let mut globalStep : Nat := 0

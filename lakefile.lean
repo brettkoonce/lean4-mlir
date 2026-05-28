@@ -180,6 +180,16 @@ lean_exe «yolov1-voc-train» where
   root := `demos.MainYolov1VocTrain
   moreLinkArgs := ireeLink
 
+-- YOLOv1 Phase 4: bootstrap from R34-Imagenette pretrained backbone.
+lean_exe «yolov1-voc-train-bootstrap» where
+  root := `demos.MainYolov1VocTrainBootstrap
+  moreLinkArgs := ireeLink
+
+-- YOLOv1 Phase 5: inference dump (logits + images + IDs) for Python viz.
+lean_exe «yolov1-voc-infer» where
+  root := `demos.MainYolov1VocInfer
+  moreLinkArgs := ireeLink
+
 -- ═══════════════════════════════════════════════════════════════════
 -- VJP oracle — one binary per axiom under test.
 -- Trainers live in tests/vjp_oracle/phase3/ so the root isn't crowded

@@ -366,6 +366,17 @@ structure TrainConfig where
       the derivation path or to disambiguate borderline cases.
       See `LossKind`. -/
   lossKind       : LossKind := LossKind.classCE
+  /-- Bootstrap from a pretrained backbone checkpoint. When set to
+      `some (paramsPath, prefixFloats)`, `runTraining` overwrites the
+      first `prefixFloats * 4` bytes of the He-init with bytes read
+      from `paramsPath`. The companion `<basename>_bn_stats.bin` is
+      auto-loaded too if present (the backbone's BN running stats must
+      match the spec's BN layer count + sizes — true for YOLOv1 loading
+      R34 weights since both have identical backbone layers).
+
+      Phase 4 of `planning/yolo_demo_v3.md`. Example for YOLOv1+R34:
+      `bootstrapBackbone := some (".lake/build/resnet_34_params.bin", 21284672)`. -/
+  bootstrapBackbone : Option (String × Nat) := none
 deriving Repr
 
 inductive DatasetKind where

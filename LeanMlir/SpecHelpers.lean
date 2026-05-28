@@ -480,4 +480,25 @@ def heInitParams (spec : NetSpec) : IO ByteArray := do
     seed := s'
   return F32.concat paramParts
 
+/-- Patch the first `prefixBytes` of `initParams` with bytes read from
+    `pretrainedPath`. Used to bootstrap a fresh init from a pretrained
+    backbone — e.g. load R34-Imagenette weights into a YOLOv1 init,
+    keeping the YOLOv1 head's He-init untouched.
+
+    `prefixBytes` is computed by the caller (usually
+    `4 * (spec.totalParams - <last layer fanOut + fanIn*fanOut>)` for a
+    spec whose final dense layer differs from the pretrained source).
+
+    Returns a NEW ByteArray; `initParams` is not modified. -/
+def patchInitWithPretrainedPrefix (initParams : ByteArray) (pretrainedPath : String)
+    (prefixBytes : Nat) : IO ByteArray := do
+  let pre ← IO.FS.readBinFile pretrainedPath
+  if pre.size < prefixBytes then
+    throw <| IO.userError s!"pretrained checkpoint {pretrainedPath} has {pre.size} bytes; need at least {prefixBytes}"
+  if initParams.size < prefixBytes then
+    throw <| IO.userError s!"init params has {initParams.size} bytes; can't patch {prefixBytes}"
+  let head := pre.extract 0 prefixBytes
+  let tail := initParams.extract prefixBytes initParams.size
+  return head ++ tail
+
 end NetSpec
