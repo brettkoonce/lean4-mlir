@@ -583,6 +583,86 @@ noncomputable abbrev depthwiseConv2d_input_grad {c h w kH kW : Nat}
     (x : Tensor3 c h w) (dy : Tensor3 c h w) : Tensor3 c h w :=
   (depthwise_has_vjp3 W b).backward x dy
 
+-- ════════════════════════════════════════════════════════════════
+-- § Differentiability + flattened-Vec witnesses (shared prereq for
+--   MobileNetV2 / EfficientNet / ConvNeXt). Mirrors `conv2d_differentiable`
+--   and `flatConv`/`flatConv_differentiable` in CNN.lean, with one fewer
+--   sum level (no `Σ c`) since depthwise has no cross-channel mixing.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **`depthwiseConv2d` is differentiable everywhere.** Mirror of
+    `conv2d_differentiable`: `depthwiseConv2d W b x ch hi wi` is the affine
+    map `b ch + ∑_{kh,kw} W ch kh kw · (pad-eval x)` — a constant bias plus a
+    finite ℝ-linear combination of input coordinates (the dependent `if`-pad-
+    eval being a projection or the constant `0`). `differentiable_pi` reduces
+    to per-coordinate differentiability; `DifferentiableAt.fun_sum` lifts the
+    double sum (no `Σ c` — depthwise reads only its own channel). -/
+theorem depthwise_differentiable {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    Differentiable ℝ (depthwiseConv2d W b : Tensor3 c h w → Tensor3 c h w) := by
+  apply differentiable_pi.mpr; intro ch
+  apply differentiable_pi.mpr; intro hi
+  apply differentiable_pi.mpr; intro wi
+  show Differentiable ℝ (fun x : Tensor3 c h w =>
+    b ch + ∑ kh : Fin kH, ∑ kw : Fin kW,
+      W ch kh kw *
+        (let pH := (kH - 1) / 2
+         let pW := (kW - 1) / 2
+         let hh := kh.val + hi.val
+         let ww := kw.val + wi.val
+         if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
+           x ch ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
+         else 0))
+  apply Differentiable.const_add
+  intro x
+  apply DifferentiableAt.fun_sum; intro kh _
+  apply DifferentiableAt.fun_sum; intro kw _
+  apply DifferentiableAt.const_mul
+  set pH := (kH - 1) / 2
+  set pW := (kW - 1) / 2
+  set hh := kh.val + hi.val
+  set ww := kw.val + wi.val
+  by_cases hP : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w
+  · rw [show (fun x : Tensor3 c h w =>
+          if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
+            x ch ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
+        (fun x : Tensor3 c h w => x ch ⟨hh - pH, hP.2.1⟩ ⟨ww - pW, hP.2.2.2⟩) from by
+      funext x; rw [dif_pos hP]]
+    fun_prop
+  · rw [show (fun x : Tensor3 c h w =>
+          if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
+            x ch ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
+        (fun _ : Tensor3 c h w => (0 : ℝ)) from by funext x; rw [dif_neg hP]]
+    exact differentiableAt_const _
+
+/-- **Flat depthwise conv** — `depthwiseConv2d` bridged into flattened
+    `Vec → Vec` space: `flatten ∘ depthwiseConv2d W b ∘ unflatten`. Channels
+    and spatial dims are preserved (`c h w → c h w`), so this is
+    `Vec (c*h*w) → Vec (c*h*w)`. Mirror of `flatConv`; the form the
+    MobileNet/EfficientNet/ConvNeXt VJP composition uses (flat Vec space). -/
+noncomputable def depthwiseFlat {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    Vec (c * h * w) → Vec (c * h * w) :=
+  fun v => Tensor3.flatten (depthwiseConv2d W b (Tensor3.unflatten v))
+
+/-- **`depthwiseFlat` is differentiable everywhere.** Composition of the
+    three differentiable maps `unflatten`, `depthwiseConv2d`, `flatten`.
+    Mirror of `flatConv_differentiable`. -/
+theorem depthwiseFlat_differentiable {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    Differentiable ℝ (depthwiseFlat W b : Vec (c * h * w) → Vec (c * h * w)) :=
+  Tensor3.flatten_differentiable.comp
+    ((depthwise_differentiable W b).comp Tensor3.unflatten_differentiable)
+
+/-- **Flat depthwise conv input-VJP.** `depthwiseFlat W b` is defeq to the
+    generic bridge's `fun v => flatten (depthwiseConv2d W b (unflatten v))`,
+    so `hasVJP3_to_hasVJP` applied to `depthwise_has_vjp3` lands the witness
+    directly. Mirror of the regular-conv flat VJP. -/
+noncomputable def depthwiseFlat_has_vjp {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    HasVJP (depthwiseFlat W b : Vec (c * h * w) → Vec (c * h * w)) :=
+  hasVJP3_to_hasVJP (depthwise_has_vjp3 W b)
+
 /-! ### Depthwise weight gradient (Phase 7 — proved from foundation rules)
 
 Per-channel transpose trick:
