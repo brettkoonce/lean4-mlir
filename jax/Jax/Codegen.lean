@@ -1335,22 +1335,28 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    preds = jnp.argmax(logits, axis=-1)\n" ++
   "    log_probs = jax.nn.log_softmax(logits, axis=-1)\n" ++
   "    loss = -jnp.mean(jnp.sum(log_probs * jax.nn.one_hot(y, " ++ toString nClasses ++ "), axis=-1))\n" ++
-  "    correct = jnp.sum(preds == y)\n" ++
-  "    return correct, loss\n\n" ++
+  "    correct1 = jnp.sum(preds == y)\n" ++
+  "    # top-5: lax.top_k gives (values, indices) on the last axis; if any\n" ++
+  "    # of the top-5 indices equals the label, count as correct.\n" ++
+  "    _, top5 = jax.lax.top_k(logits, 5)\n" ++
+  "    correct5 = jnp.sum(jnp.any(top5 == y[:, None], axis=-1))\n" ++
+  "    return correct1, correct5, loss\n\n" ++
   "def evaluate(params, images, labels, batch_size=512):\n" ++
   "    batch_size = (batch_size // n_devices) * n_devices or n_devices\n" ++
-  "    correct = 0\n" ++
+  "    correct1 = 0\n" ++
+  "    correct5 = 0\n" ++
   "    total_loss = 0.0\n" ++
   "    n_batches = 0\n" ++
   "    for i in range(0, len(images) - batch_size + 1, batch_size):\n" ++
-  "        c, l = eval_batch(params,\n" ++
+  "        c1, c5, l = eval_batch(params,\n" ++
   "            jax.device_put(images[i:i+batch_size], data_sharding),\n" ++
   "            jax.device_put(labels[i:i+batch_size], data_sharding))\n" ++
-  "        correct += int(c)\n" ++
+  "        correct1 += int(c1)\n" ++
+  "        correct5 += int(c5)\n" ++
   "        total_loss += float(l)\n" ++
   "        n_batches += 1\n" ++
   "    evaluated = n_batches * batch_size\n" ++
-  "    return correct, evaluated, total_loss / max(n_batches, 1)\n\n"
+  "    return correct1, correct5, evaluated, total_loss / max(n_batches, 1)\n\n"
 
 private def emitDataLoadCalls (ds : DatasetKind) (dataDir : String) (spec : NetSpec) : String :=
   let imgDesc := toString spec.imageH ++ "x" ++ toString spec.imageW
@@ -1526,24 +1532,28 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        print(\"  Running validation ...\")\n" ++
   "        ev_t0 = time.time()\n" ++
   "        v_iter = build_imagenet_iter('validation', BATCH_SIZE, training=False, augment=False)\n" ++
-  "        correct = 0\n" ++
+  "        correct1 = 0\n" ++
+  "        correct5 = 0\n" ++
   "        total = 0\n" ++
   "        total_eval_loss = 0.0\n" ++
   "        v_batches = 0\n" ++
   "        for x, y in v_iter:\n" ++
   "            x = jax.device_put(x, data_sharding)\n" ++
   "            y = jax.device_put(y, data_sharding)\n" ++
-  "            c, l = eval_batch(params, x, y)\n" ++
-  "            correct += int(c)\n" ++
+  "            c1, c5, l = eval_batch(params, x, y)\n" ++
+  "            correct1 += int(c1)\n" ++
+  "            correct5 += int(c5)\n" ++
   "            total   += y.shape[0]\n" ++
   "            total_eval_loss += float(l)\n" ++
   "            v_batches += 1\n" ++
-  "        accuracy = correct / max(total, 1)\n" ++
+  "        acc1 = correct1 / max(total, 1)\n" ++
+  "        acc5 = correct5 / max(total, 1)\n" ++
   "        elapsed_ep = time.time() - ep_t0\n" ++
   "        print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
   "              \" loss(train_avg)=\" + str(round(epoch_loss / max(n_batches,1), 4)) +\n" ++
-  "              \" val_top1=\" + str(correct) + \"/\" + str(total) +\n" ++
-  "              \" (\" + str(round(accuracy, 4)) + \")\" +\n" ++
+  "              \" val_top1=\" + str(correct1) + \"/\" + str(total) +\n" ++
+  "              \" (\" + str(round(acc1, 4)) + \")\" +\n" ++
+  "              \" val_top5=\" + str(round(acc5, 4)) +\n" ++
   "              \" val_loss=\" + str(round(total_eval_loss/max(v_batches,1), 4)) +\n" ++
   "              \"  [\" + str(round(elapsed_ep, 1)) + \"s train, \" +\n" ++
   "              str(round(time.time()-ev_t0 - elapsed_ep, 1)) + \"s val]\")\n" ++
@@ -1705,12 +1715,15 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "                    'kind': 'step', 'step': _global_step, 'epoch': epoch,\n" ++
   "                    'loss': float(loss), 'lr': float(lr),\n" ++
   "                }) + '\\n')\n\n" ++
-  "        correct, total, test_loss = evaluate(params, test_images, test_labels)\n" ++
-  "        accuracy = correct / total\n" ++
+  "        correct1, correct5, total, test_loss = evaluate(params, test_images, test_labels)\n" ++
+  "        acc1 = correct1 / total\n" ++
+  "        acc5 = correct5 / total\n" ++
   "        elapsed = time.time() - t0\n" ++
   "        print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
-  "              \" Accuracy: \" + str(correct) + \"/\" + str(total) +\n" ++
-  "              \" (\" + str(round(accuracy, 4)) + \") Loss: \" + str(round(test_loss, 4)) +\n" ++
+  "              \" top1: \" + str(correct1) + \"/\" + str(total) +\n" ++
+  "              \" (\" + str(round(acc1, 4)) + \")\" +\n" ++
+  "              \" top5: \" + str(round(acc5, 4)) +\n" ++
+  "              \" Loss: \" + str(round(test_loss, 4)) +\n" ++
   "              \"  [\" + str(round(elapsed, 1)) + \"s]\")\n\n" ++
   "    print(\"\")\n" ++
   "    print(\"Done. Total time: \" + str(round(time.time() - t0, 1)) + \"s\")\n" ++
