@@ -44,7 +44,10 @@
         "chk_relu_has_vjp_at_correct",
         "chk_mlp_has_vjp_at_correct",
         "chk_maxPool2_has_vjp_at3_correct",
-        "chk_cnn_has_vjp_at_correct"
+        "chk_cnn_has_vjp_at_correct",
+        "chk_mobilenetv2_has_vjp_at_correct",
+        "chk_convnext_has_vjp_at_correct",
+        "chk_efficientnet_has_vjp_at_correct"
     ],
     "permitted_axioms": ["propext", "Quot.sound", "Classical.choice"],
     "enable_nanoda": false
