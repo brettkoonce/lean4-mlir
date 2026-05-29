@@ -322,6 +322,55 @@ theorem chk_vit_full_has_vjp_correct
     W_conv b_conv cls_token pos_embed ε γ1 β1 hε
     Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls x dy i
 
+/-- **`cnn_has_vjp_at` contract**: the pointwise (smooth-input) variant
+for the full ResNet-style CNN — backward equals the `pdiv`-contracted
+Jacobian. CNN analogue of `vit_full_has_vjp_correct`; the underlying
+`.correct` chains `vjp_comp_at` through stem → maxpool → residual
+blocks → global-avg-pool → dense under the smoothness hypotheses. -/
+theorem chk_cnn_has_vjp_at_correct
+    {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ) (hεs : 0 < εs)
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
+    (e₁ g₁ bb₁ e₂ g₂ bb₂ : ℝ) (he₁ : 0 < e₁) (he₂ : 0 < e₂)
+    (W₁' : Kernel4 oc c kH₁' kW₁') (b₁' : Vec oc) (W₂' : Kernel4 oc oc kH₂' kW₂') (b₂' : Vec oc)
+    (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
+    (f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip : ℝ) (hf₁ : 0 < f₁) (hf₂ : 0 < f₂) (hfp : 0 < fp)
+    (Wd : Mat oc nClasses) (bd : Vec nClasses)
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (x : Vec (ic * (2*h) * (2*w)))
+    (h_stem : ∀ k, bnForward (c * (2*h) * (2*w)) εs γs βs (flatConv Ws bs x) k ≠ 0)
+    (h_mp : MaxPool2Smooth (Tensor3.unflatten
+              (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x) : Tensor3 c (2*h) (2*w)))
+    (h_rb1 : ∀ k, bnForward (c * h * w) f₁ hh₁ i₁
+        (flatConv W₁ b₁
+          (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) k ≠ 0)
+    (h_rb1o : ∀ k,
+        ((bnForward (c * h * w) f₂ hh₂ i₂ ∘ flatConv W₂ b₂) ∘
+          (relu (c * h * w) ∘ bnForward (c * h * w) f₁ hh₁ i₁ ∘ flatConv W₁ b₁))
+            (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x)) k
+          + (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x)) k ≠ 0)
+    (h_rb2 : ∀ k, bnForward (oc * h * w) e₁ g₁ bb₁
+        (flatConv (h := h) (w := w) W₁' b₁'
+          ((rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂
+            (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) : Vec (c*h*w))) k ≠ 0)
+    (h_rb2o : ∀ k,
+        ((bnForward (oc * h * w) fp hhp ip ∘ flatConv (h := h) (w := w) Wp bp)
+          (rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂
+            (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) k)
+        + ((bnForward (oc * h * w) e₂ g₂ bb₂ ∘ flatConv (h := h) (w := w) W₂' b₂') ∘
+            (relu (oc * h * w) ∘ bnForward (oc * h * w) e₁ g₁ bb₁ ∘ flatConv (h := h) (w := w) W₁' b₁'))
+            (rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂
+              (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) k ≠ 0)
+    (dy : Vec nClasses) (i : Fin (ic * (2*h) * (2*w))) :
+    (cnn_has_vjp_at Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂
+        W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd
+        hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).backward dy i =
+      ∑ j : Fin nClasses,
+        pdiv (cnnForward Ws bs εs γs βs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂
+                W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip Wd bd)
+             x i j * dy j :=
+  cnn_has_vjp_at_correct Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂ W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o dy i
+
 -- Pointwise (`_at`) variants ────────────────────────────────────────
 
 theorem chk_relu_has_vjp_at_correct (n : Nat) (x : Vec n)
