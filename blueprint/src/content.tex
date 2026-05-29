@@ -1002,13 +1002,13 @@ chapter \emph{proves about gradients}: its VJP correctness theorems
 --- the \(\texttt{*\_has\_vjp*\_correct}\) results, each asserting
 \(\texttt{backward}\,x\,dy\,i = \sum_j \pdiv f\,x\,i\,j \cdot dy_j\)
 (a layer's backward equals the \(\pdiv\)-Jacobian contracted against
-the cotangent). Across Chapters 2--10 there are \textbf{33 VJP
+the cotangent). Across Chapters 2--10 there are \textbf{34 VJP
 correctness theorems}, one citable contract per layer, operator, and
 whole-network architecture. The foundation calculus rules,
 differentiability lemmas, and concrete forward/witness definitions
-that support them are additional machinery, not counted here ---
-Chapter~2 is entirely that kit, which is why it contributes zero
-contracts: it builds the tools the other chapters' VJPs are made of.
+that support them are additional machinery, not counted here. Even
+Chapter~2 cashes its toolkit straight into a proven model --- the
+MNIST linear classifier --- so no chapter is pure scaffolding.
 
 \textbf{Chapter 2 (You Are Here)} does the structural heavy lifting:
 11 theorems that compose Mathlib's \(\fderiv\) into the VJP
@@ -1017,14 +1017,21 @@ additive and multiplicative fan-in, identity, reindexing, finite-sum.
 Plus \(\pdiv\) itself as a definition over \(\fderiv\). The
 matrix-level extensions (matmul, transpose, scalar-scale, row-wise
 lifting, 3D chain rule) live at the start of Chapter~\ref{chap:attention},
-where attention first uses them.
+where attention first uses them. The chapter then cashes the kit into
+its first proven model: the \textbf{4 VJP contracts} of the MNIST
+linear classifier --- \(\texttt{mnistLinear\_has\_vjp\_correct}\) (the
+whole model, a single dense layer), the dense weight- and
+bias-gradient theorems, and the softmax cross-entropy gradient. It is
+the degenerate-simplest whole-model VJP, and the ops it needs are
+introduced right here, where the demo lives.
 
-\textbf{Chapter 3 (MNIST: 1D)} adds 7 theorems plus 2 definitions.
-The guarded ReLU Jacobian \(\pdiv\_\texttt{relu}\) is now proved
-via local-diagonal-CLM transport; \(\texttt{relu\_has\_vjp}\)
-and \(\texttt{mlp\_has\_vjp}\) are \texttt{noncomputable def}s
-over the canonical pdiv-derived witness, with
-\texttt{HasVJP.correct} holding by \texttt{rfl}.
+\textbf{Chapter 3 (MNIST: 1D)} adds depth and nonlinearity on top of
+Chapter~2's dense layer --- \textbf{4 VJP contracts}. The guarded ReLU
+Jacobian \(\pdiv\_\texttt{relu}\) is proved via local-diagonal-CLM
+transport; \(\texttt{relu\_has\_vjp}\) and \(\texttt{mlp\_has\_vjp}\)
+are \texttt{noncomputable def}s over the canonical pdiv-derived witness
+(\texttt{HasVJP.correct} by \texttt{rfl}), with the smooth-point
+\(\texttt{\_at}\) variants carrying the real chain-rule proof.
 
 \textbf{Chapter 4 (MNIST: 2D)} adds 3 theorems and 3 definitions.
 \(\texttt{conv2d}\) and \(\texttt{maxPool2}\) are concrete
@@ -1054,26 +1061,28 @@ level --- no cross-channel mixing) and the whole-network
 which introduces the two-sided-kink \texttt{relu6} as a new
 smooth-point activation.
 
-\textbf{Chapter 8 (EfficientNet)} contributes 3 VJP contracts: the
-squeeze-and-excitation block (\(\texttt{seBlock\_has\_vjp}\) ---
-global-avg-pool plus two 1\(\times\)1 convs plus the elementwise
-product, every piece already proved elsewhere), the smooth
-\texttt{sigmoid} gate activation, and the whole-network
-\(\texttt{efficientnet\_has\_vjp\_at}\) over MBConv blocks with a
-full-spatial SE gate.
+\textbf{Chapter 8 (EfficientNet)} contributes 4 VJP contracts:
+\texttt{swish}/SiLU (the MBConv activation), the squeeze-and-excitation
+block (\(\texttt{seBlock\_has\_vjp}\) --- global-avg-pool plus two
+1\(\times\)1 convs plus the elementwise product, every piece already
+proved elsewhere), the smooth \texttt{sigmoid} gate activation, and the
+whole-network \(\texttt{efficientnet\_has\_vjp\_at}\) over MBConv blocks
+with a full-spatial SE gate.
 
-\textbf{Chapter 9 (ConvNeXt)} contributes 5 VJP contracts: GELU
+\textbf{Chapter 9 (ConvNeXt)} contributes 4 VJP contracts: GELU
 (Jacobian via \(\fderiv\) and \texttt{Real.differentiable\_tanh}),
-LayerNorm (reusing the BN proof template), Swish, the elementwise
+LayerNorm (reusing the BN proof template), the elementwise
 layer-scale, and the whole-network
 \(\texttt{convnext\_has\_vjp\_at}\) --- the all-smooth architecture,
 discharged with no kink hypotheses, only \(\varepsilon > 0\)
-positivity.
+positivity. (Swish/SiLU lives in Chapter~8, where EfficientNet uses
+it; ConvNeXt's activation is GELU.)
 
-\textbf{Chapter 10 (ViT)} contributes 7 VJP contracts (softmax-CE,
-the three SDPA cotangents, MHSA, the transformer block, and ---
-new in this revision --- the whole-network
-\(\texttt{vit\_full\_has\_vjp\_correct}\) wrapper), resting on the
+\textbf{Chapter 10 (ViT)} contributes 6 VJP contracts (the three SDPA
+cotangents, MHSA, the transformer block, and --- new in this revision
+--- the whole-network \(\texttt{vit\_full\_has\_vjp\_correct}\) wrapper;
+the softmax cross-entropy gradient now lives in Chapter~2 with the
+linear classifier), resting on the
 largest \emph{supporting}-theorem budget in the book and the only
 chapter that needs the matrix-level extensions of Chapter~2's
 foundation rules. The chapter opens with
@@ -1095,17 +1104,17 @@ machinery this chapter just assembled.
 \hline
 Chapter & VJP contracts & Cumulative & New primitive / result \\
 \hline
-2 (Foundation)         & 0 & 0  & the \(\pdiv\) chain / fan-in / product kit (scaffolding) \\
-3 (MNIST: 1D)          & 6 & 6  & Dense (weight/bias), ReLU, MLP ($+$ smooth-point \texttt{\_at}) \\
-4 (MNIST: 2D)          & 3 & 9  & Conv, MaxPool ($+$ \texttt{\_at}) \\
-5 (CIFAR: BN)          & 1 & 10 & BatchNorm input-gradient \\
-6 (ResNet-34)          & 6 & 16 & Residual ($+$proj, $+$\texttt{\_at}), global-avg-pool, whole-net \texttt{cnn} \\
-7 (MobileNetV2)        & 2 & 18 & Depthwise, whole-net \texttt{mobilenetv2} \\
-8 (EfficientNet)       & 3 & 21 & SE (mult. fan-in), sigmoid, whole-net \texttt{efficientnet} \\
-9 (ConvNeXt)           & 5 & 26 & LayerNorm, GELU, Swish, layer-scale, whole-net \texttt{convnext} \\
-10 (ViT)               & 7 & 33 & matrix kit, Attention (SDPA/MHSA/block), whole-net \texttt{vit\_full} \\
+2 (Foundation)         & 4 & 4  & \texttt{mnistLinear} (linear classifier), dense weight/bias-grad, softmax-CE \\
+3 (MNIST: 1D)          & 4 & 8  & ReLU, MLP ($+$ smooth-point \texttt{\_at}) \\
+4 (MNIST: 2D)          & 3 & 11 & Conv, MaxPool ($+$ \texttt{\_at}) \\
+5 (CIFAR: BN)          & 1 & 12 & BatchNorm input-gradient \\
+6 (ResNet-34)          & 6 & 18 & Residual ($+$proj, $+$\texttt{\_at}), global-avg-pool, whole-net \texttt{cnn} \\
+7 (MobileNetV2)        & 2 & 20 & Depthwise, whole-net \texttt{mobilenetv2} \\
+8 (EfficientNet)       & 4 & 24 & swish, SE (mult. fan-in), sigmoid, whole-net \texttt{efficientnet} \\
+9 (ConvNeXt)           & 4 & 28 & GELU, LayerNorm, layer-scale, whole-net \texttt{convnext} \\
+10 (ViT)               & 6 & 34 & matrix kit, Attention (SDPA/MHSA/block), whole-net \texttt{vit\_full} \\
 \hline
-                       & \textbf{33} & & \\
+                       & \textbf{34} & & \\
 \hline
 \end{tabular}
 \end{center}
@@ -7400,7 +7409,7 @@ the defense. This appendix walks through all four.
 
 \section{Trust kernel}
 
-The Verified VJP Proofs suite proves \textbf{33 VJP correctness
+The Verified VJP Proofs suite proves \textbf{34 VJP correctness
 theorems} --- one per layer, operator, and whole-network architecture,
 each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\) --- on
 top of the foundation \(\pdiv\) calculus and the
@@ -7539,7 +7548,7 @@ flips, wrong contraction axis, swapped indices).
 \texttt{tests/comparator/} wires the project up to
 \href{https://github.com/leanprover/comparator}{leanprover/comparator},
 the Lean community's trustworthy-judge tool for projects that claim
-zero project axioms. It runs 48 theorems --- the foundation rules,
+zero project axioms. It runs 49 theorems --- the foundation rules,
 every chapter's headline Jacobian, the public
 \texttt{*\_has\_vjp\_correct} wrappers, and three smooth-point
 pointwise variants (\texttt{relu\_has\_vjp\_at\_correct},
@@ -7555,7 +7564,7 @@ the run.
 This is what closes the gap between ``the elaborator accepted my
 proofs'' (which \texttt{lake build} confirms) and ``the kernel
 agrees, audited from a separate process'' (which comparator confirms).
-The 48-theorem coverage is illustrative rather than exhaustive ---
+The 49-theorem coverage is illustrative rather than exhaustive ---
 the same recipe scales to any subset of the proof suite, and the
 same allowlist applies because every theorem in the project closes
 the same way.

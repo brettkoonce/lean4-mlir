@@ -2,7 +2,7 @@
 
 **Interactive proof blueprint: [brettkoonce.github.io/lean4-mlir/blueprint/](https://brettkoonce.github.io/lean4-mlir/blueprint/)**
 (or [PDF](https://brettkoonce.github.io/lean4-mlir/blueprint.pdf))
-— clickable dependency DAG for the full VJP proof suite (33 VJP correctness theorems, no `sorry`s),
+— clickable dependency DAG for the full VJP proof suite (34 VJP correctness theorems, no `sorry`s),
 from `pdiv` primitives up to the whole-network VJPs (ViT, ResNet, MobileNetV2, ConvNeXt, EfficientNet).
 
 Lean 4 as a specification language for neural networks. Declare architecture
