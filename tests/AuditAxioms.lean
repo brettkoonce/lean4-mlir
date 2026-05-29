@@ -7,6 +7,9 @@ import LeanMlir.Proofs.Depthwise
 import LeanMlir.Proofs.SE
 import LeanMlir.Proofs.LayerNorm
 import LeanMlir.Proofs.Attention
+import LeanMlir.Proofs.MobileNetV2
+import LeanMlir.Proofs.ConvNeXt
+import LeanMlir.Proofs.EfficientNet
 
 open Proofs
 
@@ -95,3 +98,14 @@ open Proofs
 #print axioms globalAvgPoolFlat_has_vjp
 #print axioms cnn_has_vjp_at
 #print axioms cnn_has_vjp_at_correct
+
+-- Whole-network VJPs for the depthwise/SE/LN-based architectures
+-- (each a representative concrete net; see per-file docstrings for the
+-- fixed structural choices). New activations: relu6 (MNv2, two-sided kink),
+-- sigmoid (EfficientNet SE gate), layerScale (ConvNeXt).
+#print axioms relu6_has_vjp_at
+#print axioms mobilenetv2_has_vjp_at_correct
+#print axioms layerScale_has_vjp_correct
+#print axioms convnext_has_vjp_at_correct
+#print axioms sigmoid_has_vjp
+#print axioms efficientnet_has_vjp_at_correct

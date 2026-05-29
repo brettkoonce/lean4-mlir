@@ -12,3 +12,8 @@ import LeanMlir.Cam
 import LeanMlir.Proofs.Attention
 import LeanMlir.Proofs.CNN
 import LeanMlir.Proofs.Depthwise
+-- End-to-end whole-network VJP compositions (each builds on the CNN/Depthwise
+-- machinery; their own file imports pull in everything transitively).
+import LeanMlir.Proofs.MobileNetV2
+import LeanMlir.Proofs.ConvNeXt
+import LeanMlir.Proofs.EfficientNet
