@@ -1033,17 +1033,18 @@ are \texttt{noncomputable def}s over the canonical pdiv-derived witness
 (\texttt{HasVJP.correct} by \texttt{rfl}), with the smooth-point
 \(\texttt{\_at}\) variants carrying the real chain-rule proof.
 
-\textbf{Chapter 4 (MNIST: 2D)} adds 3 theorems and 3 definitions.
-\(\texttt{conv2d}\) and \(\texttt{maxPool2}\) are concrete
-forward defs; the weight, bias, and (Phase 1) input-side conv
-VJPs are proved from foundation.
-\(\texttt{maxPool2\_has\_vjp3}\) is a \texttt{def} over the
-canonical pdiv-derived witness.
+\textbf{Chapter 4 (MNIST: 2D)} contributes 3 VJP contracts.
+\(\texttt{conv2d}\) and \(\texttt{maxPool2}\) are concrete forward
+defs; the conv2d input-side VJP and maxPool2's VJP --- plus its
+smooth-point \(\texttt{\_at}\) variant, whose \texttt{correct} field is
+a real proof rather than \texttt{rfl} --- are proved from foundation,
+with the conv weight- and bias-gradient theorems alongside.
 
-\textbf{Chapter 5 (CIFAR: BN)} adds 7 theorems. The inverse-stddev
-broadcast Jacobian and its smoothness lemma under
-\(\varepsilon > 0\) are proved from foundation, as are the
-BN affine and centering Jacobians.
+\textbf{Chapter 5 (CIFAR: BN)} contributes 1 VJP contract
+(\(\texttt{bn\_input\_grad}\)), assembled from a chain of supporting
+Jacobians: the inverse-stddev broadcast Jacobian and its smoothness
+lemma under \(\varepsilon > 0\), plus the BN affine and centering
+Jacobians, all proved from foundation.
 
 \textbf{Chapter 6 (ResNet-34)} contributes 6 VJP contracts and
 no new calculus: the residual additive-fan-in VJP (plus its
@@ -1100,21 +1101,21 @@ row-wise softmax smoothness, and seven transformer-level chains
 machinery this chapter just assembled.
 
 \begin{center}
-\begin{tabular}{l c c l}
+\begin{tabular}{l c l}
 \hline
-Chapter & VJP contracts & Cumulative & New primitive / result \\
+Chapter & VJP contracts & New primitive / result \\
 \hline
-2 (Foundation)         & 4 & 4  & \texttt{mnistLinear} (linear classifier), dense weight/bias-grad, softmax-CE \\
-3 (MNIST: 1D)          & 4 & 8  & ReLU, MLP ($+$ smooth-point \texttt{\_at}) \\
-4 (MNIST: 2D)          & 3 & 11 & Conv, MaxPool ($+$ \texttt{\_at}) \\
-5 (CIFAR: BN)          & 1 & 12 & BatchNorm input-gradient \\
-6 (ResNet-34)          & 6 & 18 & Residual ($+$proj, $+$\texttt{\_at}), global-avg-pool, whole-net \texttt{cnn} \\
-7 (MobileNetV2)        & 2 & 20 & Depthwise, whole-net \texttt{mobilenetv2} \\
-8 (EfficientNet)       & 4 & 24 & swish, SE (mult. fan-in), sigmoid, whole-net \texttt{efficientnet} \\
-9 (ConvNeXt)           & 4 & 28 & GELU, LayerNorm, layer-scale, whole-net \texttt{convnext} \\
-10 (ViT)               & 6 & 34 & matrix kit, Attention (SDPA/MHSA/block), whole-net \texttt{vit\_full} \\
+2 (Foundation)         & 4 & \texttt{mnistLinear} (linear classifier), dense weight/bias-grad, softmax-CE \\
+3 (MNIST: 1D)          & 4 & ReLU, MLP ($+$ smooth-point \texttt{\_at}) \\
+4 (MNIST: 2D)          & 3 & Conv, MaxPool ($+$ \texttt{\_at}) \\
+5 (CIFAR: BN)          & 1 & BatchNorm input-gradient \\
+6 (ResNet-34)          & 6 & Residual ($+$proj, $+$\texttt{\_at}), global-avg-pool, whole-net \texttt{cnn} \\
+7 (MobileNetV2)        & 2 & Depthwise, whole-net \texttt{mobilenetv2} \\
+8 (EfficientNet)       & 4 & swish, SE (mult. fan-in), sigmoid, whole-net \texttt{efficientnet} \\
+9 (ConvNeXt)           & 4 & GELU, LayerNorm, layer-scale, whole-net \texttt{convnext} \\
+10 (ViT)               & 6 & matrix kit, Attention (SDPA/MHSA/block), whole-net \texttt{vit\_full} \\
 \hline
-                       & \textbf{34} & & \\
+                       & \textbf{34} & \\
 \hline
 \end{tabular}
 \end{center}
