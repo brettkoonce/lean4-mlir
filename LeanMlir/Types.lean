@@ -414,4 +414,14 @@ def ireeCompileArgs (mlirPath outPath : String) : IO (Array String) := do
     let defaultChip := if backend == "rocm" then "gfx1100" else "sm_86"
     let chip ← (IO.getEnv "IREE_CHIP").map (·.getD defaultChip)
     pure #[s!"--iree-{backend}-target={chip}"]
-  return baseArgs ++ chipArgs ++ #["-o", outPath]
+  -- gfx1100 workaround: IREE's reduction vector-distribution pipeline
+  -- fails to distribute full N-D→scalar reductions (the YOLOv1 masked
+  -- loss at batch 16 emits `matvec_like_16x2x49` reductions that abort
+  -- with "'func.func' op failed to distribute"). Disabling just the
+  -- reduction pipeline routes those to the legacy lowering and compiles
+  -- cleanly; conv/matmul keep vector distribution, so backbone perf is
+  -- unaffected. Verified no regression on the ResNet-34 train step.
+  let extraArgs := if backend == "rocm" then
+    #["--iree-codegen-llvmgpu-use-reduction-vector-distribution=false"]
+  else #[]
+  return baseArgs ++ chipArgs ++ extraArgs ++ #["-o", outPath]
