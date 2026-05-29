@@ -1465,9 +1465,18 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "    train_iter = iter(build_imagenet_iter('train', BATCH_SIZE,\n" ++
   "                                          training=True,\n" ++
   "                                          augment=" ++ (if cfg.augment then "True" else "False") ++ "))\n" ++
-  "    _global_step = 0\n" ++
+  "    # LEAN_MLIR_START_STEP lets a resumed run continue the cosine LR schedule\n" ++
+  "    # from where it left off (instead of restarting from warmup which would\n" ++
+  "    # destabilize a partly-trained model). Set to the global_step the prior\n" ++
+  "    # checkpoint corresponds to — e.g. 50040 for resume-from-epoch-10 with\n" ++
+  "    # steps_per_epoch=5004. The matching epoch counter is derived so the\n" ++
+  "    # per-epoch log line keeps reporting the absolute epoch number.\n" ++
+  "    _global_step = int(os.environ.get('LEAN_MLIR_START_STEP', '0'))\n" ++
+  "    _start_epoch = _global_step // steps_per_epoch\n" ++
+  "    if _global_step > 0:\n" ++
+  "        print(f'Resuming at global_step={_global_step} (= epoch {_start_epoch + 1}/{EPOCHS}); LR schedule continues from there')\n" ++
   "    t0 = time.time()\n" ++
-  "    for epoch in range(EPOCHS):\n" ++
+  "    for epoch in range(_start_epoch, EPOCHS):\n" ++
   (if hasCosine then
     "        # Per-step cosine LR (computed inside the inner loop below)\n" ++
     "        pass\n"
