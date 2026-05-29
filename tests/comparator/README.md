@@ -1,6 +1,6 @@
 # Comparator-based independent kernel re-check
 
-This directory holds an end-to-end verification of 41 theorems from the
+This directory holds an end-to-end verification of 46 theorems from the
 proof suite using
 [leanprover/comparator](https://github.com/leanprover/comparator) — the
 trustworthy-judge tool the Lean Zulip community recommended for projects
@@ -16,8 +16,9 @@ opinion.
 
 ## What gets verified
 
-The 41 theorems span foundation rules, every chapter's headline
-Jacobian, and the public `*_has_vjp_correct` wrappers:
+The 46 theorems span foundation rules, every chapter's headline
+Jacobian, the public `*_has_vjp_correct` wrappers, and the five
+whole-network VJPs:
 
 | Bucket | Theorems |
 |---|---|
@@ -31,6 +32,7 @@ Jacobian, and the public `*_has_vjp_correct` wrappers:
 | Ch 8 SE | `seBlock_has_vjp_correct` |
 | Ch 9 LN+GELU | `pdiv_gelu`, `gelu_has_vjp_correct`, `layerNorm_has_vjp_correct` |
 | Ch 10 Attention | `pdiv_softmax`, `softmaxCE_grad`, `sdpa_back_Q/K/V_correct`, `mhsa_has_vjp_mat_correct`, `transformerBlock_has_vjp_mat_correct` |
+| Whole-network VJPs | `vit_full_has_vjp_correct`, `cnn_has_vjp_at_correct`, `mobilenetv2_has_vjp_at_correct`, `convnext_has_vjp_at_correct`, `efficientnet_has_vjp_at_correct` |
 
 For each, comparator confirms:
 
@@ -122,13 +124,16 @@ keeps the audit reproducible until they land.
 
 - **The remaining theorems in the proof suite** (downstream compositions,
   `_diff` smoothness lemmas, `_eq_compose` rewrites). They share the
-  same foundation as the 38 above, so methodologically there's nothing
+  same foundation as the theorems above, so methodologically there's nothing
   new to discover — just a lot of mechanical signature-extraction.
-- **`noncomputable def` artifacts** like `vit_full_has_vjp`,
-  `mhsa_layer_has_vjp_mat`, etc. comparator's `theorem_names` matches
-  `Lean.ConstantInfo.thm`, not `defn`. `#print axioms vit_full_has_vjp`
-  in `lake env lean -- ` confirms the same allowlist closure for the
-  composition shortcuts.
+- **`noncomputable def` *witnesses*** themselves like `vit_full_has_vjp`,
+  `cnn_has_vjp_at`, `mhsa_layer_has_vjp_mat`, etc. comparator's
+  `theorem_names` matches `Lean.ConstantInfo.thm`, not `defn`, so the
+  witness *defs* aren't run directly — but their public `_correct`
+  theorem wrappers (`vit_full_has_vjp_correct`, `cnn_has_vjp_at_correct`,
+  and the per-architecture `*_has_vjp_at_correct`) **are** in the suite
+  above. `#print axioms` on the underlying defs confirms the same
+  allowlist closure for the composition shortcuts.
 - **nanoda second-kernel re-check.** Set `enable_nanoda: true` in
   `config.json` and add nanoda to PATH (Rust build, ~5 min) for that
   upgrade.

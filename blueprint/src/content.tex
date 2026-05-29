@@ -7505,7 +7505,7 @@ flips, wrong contraction axis, swapped indices).
 \texttt{tests/comparator/} wires the project up to
 \href{https://github.com/leanprover/comparator}{leanprover/comparator},
 the Lean community's trustworthy-judge tool for projects that claim
-zero project axioms. It runs 41 theorems --- the foundation rules,
+zero project axioms. It runs 46 theorems --- the foundation rules,
 every chapter's headline Jacobian, the public
 \texttt{*\_has\_vjp\_correct} wrappers, and three smooth-point
 pointwise variants (\texttt{relu\_has\_vjp\_at\_correct},
@@ -7521,7 +7521,7 @@ the run.
 This is what closes the gap between ``the elaborator accepted my
 proofs'' (which \texttt{lake build} confirms) and ``the kernel
 agrees, audited from a separate process'' (which comparator confirms).
-The 41-theorem coverage is illustrative rather than exhaustive ---
+The 46-theorem coverage is illustrative rather than exhaustive ---
 the same recipe scales to any subset of the proof suite, and the
 same allowlist applies because every theorem in the project closes
 the same way.
