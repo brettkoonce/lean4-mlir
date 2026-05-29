@@ -374,6 +374,21 @@ theorem chk_cnn_has_vjp_at_correct
              x i j * dy j :=
   cnn_has_vjp_at_correct Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂ W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o dy i
 
+theorem chk_conv2d_has_vjp3_correct {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (x : Tensor3 ic h w) (dy : Tensor3 oc h w)
+    (ci : Fin ic) (hi : Fin h) (wi : Fin w) :
+    (conv2d_has_vjp3 W b).backward x dy ci hi wi =
+      ∑ co : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,
+        pdiv3 (conv2d W b) x ci hi wi co ho wo * dy co ho wo :=
+  conv2d_has_vjp3_correct W b x dy ci hi wi
+
+theorem chk_globalAvgPoolFlat_has_vjp_correct (c h w : Nat)
+    (x : Vec (c*h*w)) (dy : Vec c) (i : Fin (c*h*w)) :
+    (globalAvgPoolFlat_has_vjp c h w).backward x dy i =
+      ∑ j : Fin c, pdiv (globalAvgPoolFlat c h w) x i j * dy j :=
+  globalAvgPoolFlat_has_vjp_correct c h w x dy i
+
 theorem chk_mobilenetv2_has_vjp_at_correct
     {ic c mid₁ oc mid₂ h w kHs kWs
      kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁

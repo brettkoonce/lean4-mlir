@@ -515,6 +515,19 @@ theorem chk_cnn_has_vjp_at_correct
                 W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip Wd bd)
              x i j * dy j := by sorry
 
+theorem chk_conv2d_has_vjp3_correct {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (x : Tensor3 ic h w) (dy : Tensor3 oc h w)
+    (ci : Fin ic) (hi : Fin h) (wi : Fin w) :
+    (conv2d_has_vjp3 W b).backward x dy ci hi wi =
+      ∑ co : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,
+        pdiv3 (conv2d W b) x ci hi wi co ho wo * dy co ho wo := by sorry
+
+theorem chk_globalAvgPoolFlat_has_vjp_correct (c h w : Nat)
+    (x : Vec (c*h*w)) (dy : Vec c) (i : Fin (c*h*w)) :
+    (globalAvgPoolFlat_has_vjp c h w).backward x dy i =
+      ∑ j : Fin c, pdiv (globalAvgPoolFlat c h w) x i j * dy j := by sorry
+
 /-- **`mobilenetv2_has_vjp_at` contract**: the pointwise (smooth-input)
 variant for the full MobileNetV2 — backward equals the `pdiv`-contracted
 Jacobian. Chains `vjp_comp_at` through stem → two inverted-residual

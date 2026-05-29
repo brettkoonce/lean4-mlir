@@ -47,7 +47,9 @@
         "chk_cnn_has_vjp_at_correct",
         "chk_mobilenetv2_has_vjp_at_correct",
         "chk_convnext_has_vjp_at_correct",
-        "chk_efficientnet_has_vjp_at_correct"
+        "chk_efficientnet_has_vjp_at_correct",
+        "chk_conv2d_has_vjp3_correct",
+        "chk_globalAvgPoolFlat_has_vjp_correct"
     ],
     "permitted_axioms": ["propext", "Quot.sound", "Classical.choice"],
     "enable_nanoda": false

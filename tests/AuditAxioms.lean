@@ -42,6 +42,7 @@ open Proofs
 -- CNN
 #print axioms maxPool2_has_vjp3_correct
 #print axioms conv2d_has_vjp3
+#print axioms conv2d_has_vjp3_correct
 
 -- Depthwise
 #print axioms depthwise_has_vjp3_correct
@@ -96,6 +97,7 @@ open Proofs
 -- Capstone: end-to-end ResNet-style CNN whole-network VJP (CNN analogue
 -- of vit_full_has_vjp) + global-average-pool VJP it depends on.
 #print axioms globalAvgPoolFlat_has_vjp
+#print axioms globalAvgPoolFlat_has_vjp_correct
 #print axioms cnn_has_vjp_at
 #print axioms cnn_has_vjp_at_correct
 

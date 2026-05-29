@@ -813,6 +813,18 @@ noncomputable abbrev conv2d_input_grad {ic oc h w kH kW : Nat}
     (x : Tensor3 ic h w) (dy : Tensor3 oc h w) : Tensor3 ic h w :=
   (conv2d_has_vjp3 W b).backward x dy
 
+/-- **Uniform VJP-correctness wrapper** for `conv2d` — a citable `_correct`
+    matching the convention of every other layer (just unfolds the
+    `HasVJP3.correct` field of `conv2d_has_vjp3`). -/
+theorem conv2d_has_vjp3_correct {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (x : Tensor3 ic h w) (dy : Tensor3 oc h w)
+    (ci : Fin ic) (hi : Fin h) (wi : Fin w) :
+    (conv2d_has_vjp3 W b).backward x dy ci hi wi =
+      ∑ co : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,
+        pdiv3 (conv2d W b) x ci hi wi co ho wo * dy co ho wo :=
+  (conv2d_has_vjp3 W b).correct x dy ci hi wi
+
 -- ════════════════════════════════════════════════════════════════
 -- § Flattened conv and the conv → bn → relu block VJP
 -- ════════════════════════════════════════════════════════════════
@@ -2664,6 +2676,15 @@ noncomputable def globalAvgPoolFlat_has_vjp (c h w : Nat) :
     · intro b _ hne
       rw [if_neg (fun heq => hne heq.symm)]; ring
     · intro hp; exact absurd (Finset.mem_univ _) hp
+
+/-- **Uniform VJP-correctness wrapper** for `globalAvgPoolFlat` — a citable
+    `_correct` matching the convention of every other layer (just unfolds the
+    `HasVJP.correct` field of `globalAvgPoolFlat_has_vjp`). -/
+theorem globalAvgPoolFlat_has_vjp_correct (c h w : Nat)
+    (x : Vec (c*h*w)) (dy : Vec c) (i : Fin (c*h*w)) :
+    (globalAvgPoolFlat_has_vjp c h w).backward x dy i =
+      ∑ j : Fin c, pdiv (globalAvgPoolFlat c h w) x i j * dy j :=
+  (globalAvgPoolFlat_has_vjp c h w).correct x dy i
 
 -- maxpool flat helper
 noncomputable def maxPoolFlat (c h w : Nat) :
