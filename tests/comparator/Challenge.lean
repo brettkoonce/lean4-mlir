@@ -682,3 +682,11 @@ theorem chk_maxPool2_has_vjp_at3_correct {c h w : Nat}
     ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
       pdiv3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)
             x ci hi wi co ho wo * dy co ho wo := by sorry
+
+/-- **`mnistLinear_has_vjp_correct` contract**: whole-model VJP for the
+Chapter-2 linear classifier — the degenerate simplest case of the
+per-architecture capstones (a linear classifier is one dense layer). -/
+theorem chk_mnistLinear_has_vjp_correct {m n : Nat} (W : Mat m n) (b : Vec n)
+    (x : Vec m) (dy : Vec n) (i : Fin m) :
+    (dense_has_vjp W b).backward x dy i =
+      ∑ j : Fin n, pdiv (mnistLinear W b) x i j * dy j := by sorry

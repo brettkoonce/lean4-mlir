@@ -92,6 +92,7 @@ open Proofs
 -- at the three kinked operators (relu, mlp, maxPool2) at smooth points.
 #print axioms relu_has_vjp_at
 #print axioms mlp_has_vjp_at
+#print axioms mnistLinear_has_vjp_correct
 #print axioms maxPool2_has_vjp_at3
 
 -- Capstone: end-to-end ResNet-style CNN whole-network VJP (CNN analogue
