@@ -260,6 +260,16 @@ product), and three VJP record types (\(\HasVJP\),
 \(\HasVJPMat\), \(\HasVJPthree\), one per tensor rank) that bundle a
 backward function with its correctness claim.
 
+This is the technically hardest chapter in the book, by design. Going
+from nothing to a complete trained model --- the \(\pdiv\) calculus,
+the VJP framework, a forward pass, a loss, a backward pass, an SGD
+step, all the way down to the GPU --- is the entire machinery, built in a single
+chapter. We do it on a trivial network (one matrix multiply: the
+MNIST linear classifier), because the network is not the point ---
+building the whole machinery is. Once that machinery exists, every later
+chapter is just adding a layer: one new primitive dropped into the
+same forward / loss / backward / optimize loop.
+
 The next twelve theorems all reduce to a single definition
 (\(\pdiv\)) plus chain rule, sum rule, and product rule. Before
 we drop you into the deep end, here's the shape of what's coming:
@@ -282,7 +292,7 @@ we drop you into the deep end, here's the shape of what's coming:
 
 \node[group] (vjp) at (0, 0.5) {\textbf{VJP transpose} \\ \texttt{vjp\_comp} $\cdot$ biPath \\ elemwiseProduct $\cdot$ identity};
 
-\node[payoff] (payoff) at (0, -2) {Used in Chapters 3--9: every per-architecture \\ VJP unfolds through these structural rules.};
+\node[payoff] (payoff) at (0, -2) {Used by the MNIST linear classifier here \\ (proven + trained); then reused by every \\ architecture in Chapters 3--10.};
 
 \draw[arrow] (pdiv) -- (foundation);
 \draw[arrow] (foundation) -- (vjp);
@@ -451,7 +461,7 @@ Mechanical; see \leandocref{Proofs.elemwiseProduct\_has\_vjp}.
 Mechanical; see \leandocref{Proofs.identity\_has\_vjp}.
 \end{proof}
 
-\section*{The chapter in one trainable example: linear classifier on MNIST}
+\section{Example: MNIST linear classifier}
 
 The smallest network that learns: a single dense layer mapping
 784-dim images to 10-dim logits, trained with softmax cross-entropy
@@ -828,11 +838,15 @@ ladder to ViT.
 
 \begin{itemize}
   \item \textbf{Chapter 2: You Are Here} --- Chain rule, sum rule, product
-    rule for partial derivatives. Every backward function in the book is
-    a VJP (vector-Jacobian product) built by composing these.
-  \item \textbf{Chapter 3: MNIST: 1D MLP} --- Dense layers, ReLU, softmax CE,
-    the chain rule. The most important chapter: everything after is
-    adding more layers.
+    rule for partial derivatives; every backward in the book is a VJP
+    (vector-Jacobian product) composed from these. The book's hardest
+    chapter --- it builds the whole pipeline (foundation calculus
+    \(\to\) VJP framework \(\to\) forward/loss/backward/SGD \(\to\) GPU),
+    used by the MNIST linear classifier, proven and trained.
+    Everything after is just adding a layer.
+  \item \textbf{Chapter 3: MNIST: 1D MLP} --- ReLU and hidden layers on
+    top of Chapter 2's dense layer: the first \emph{multi-layer}
+    backward pass.
   \item \textbf{Chapter 4: MNIST: 2D CNN} --- Convolution, max pooling. The
     backward pass of conv is another conv with a reversed kernel.
   \item \textbf{Chapter 5: CIFAR with BatchNorm} --- The first dense Jacobian
@@ -1007,7 +1021,7 @@ correctness theorems}, one citable contract per layer, operator, and
 whole-network architecture. The foundation calculus rules,
 differentiability lemmas, and concrete forward/witness definitions
 that support them are additional machinery, not counted here. Even
-Chapter~2 cashes its toolkit straight into a proven model --- the
+Chapter~2's toolkit is used straight away by a proven model --- the
 MNIST linear classifier --- so no chapter is pure scaffolding.
 
 \textbf{Chapter 2 (You Are Here)} does the structural heavy lifting:
@@ -1017,8 +1031,8 @@ additive and multiplicative fan-in, identity, reindexing, finite-sum.
 Plus \(\pdiv\) itself as a definition over \(\fderiv\). The
 matrix-level extensions (matmul, transpose, scalar-scale, row-wise
 lifting, 3D chain rule) live at the start of Chapter~\ref{chap:attention},
-where attention first uses them. The chapter then cashes the kit into
-its first proven model: the \textbf{4 VJP contracts} of the MNIST
+where attention first uses them. The chapter then puts the kit to work
+in its first proven model: the \textbf{4 VJP contracts} of the MNIST
 linear classifier --- \(\texttt{mnistLinear\_has\_vjp\_correct}\) (the
 whole model, a single dense layer), the dense weight- and
 bias-gradient theorems, and the softmax cross-entropy gradient. It is
