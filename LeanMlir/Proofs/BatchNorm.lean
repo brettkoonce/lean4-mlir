@@ -748,6 +748,34 @@ noncomputable def bn_has_vjp (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     h_normalize_diff h_affine_diff
     (bnNormalize_has_vjp n ε hε) (bnAffine_has_vjp n γ β)
 
+/-- **`bnForward` is differentiable everywhere (for `ε > 0`).**
+
+    Reuses the exact differentiability argument inside `bn_has_vjp`:
+    `bnForward = bnAffine ∘ bnNormalize`, where `bnNormalize` is the
+    product of `bnCentered` (affine, hence smooth) and `bnIstdBroadcast`
+    (smooth because `bnVar + ε > 0` keeps the `Real.sqrt` away from its
+    kink — see `bnIstdBroadcast_diff`), and `bnAffine` is affine. The
+    `ε > 0` hypothesis is what licenses the inverse-sqrt smoothness. This
+    is the differentiability witness `vjp_comp_at` needs to chain `bn`
+    into the conv→bn→relu block. -/
+theorem bnForward_differentiable (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
+    Differentiable ℝ (bnForward n ε γ β) := by
+  rw [bnForward_eq_compose]
+  have h_normalize_diff : Differentiable ℝ (bnNormalize n ε) := by
+    rw [show bnNormalize n ε =
+          (fun y : Vec n => fun k : Fin n =>
+            bnCentered n y k * bnIstdBroadcast n ε y k) from by
+      funext y; exact bnXhat_eq_product n ε y]
+    have h_centered : Differentiable ℝ (bnCentered n) := by
+      have h_eq : (bnCentered n : Vec n → Vec n) =
+                  fun x => fun j => x j - (∑ i, x i) * ((n : ℝ))⁻¹ := by
+        funext x j; unfold bnCentered bnMean; ring
+      rw [h_eq]; fun_prop
+    exact h_centered.mul (bnIstdBroadcast_diff n ε hε)
+  have h_affine_diff : Differentiable ℝ (bnAffine n γ β) := by
+    unfold bnAffine; fun_prop
+  exact h_affine_diff.comp h_normalize_diff
+
 /-- The standalone end-to-end theorem: `bn_grad_input` is the correct VJP
     of `bnForward`. Follows from `bn_has_vjp` by definitional unfolding. -/
 theorem bn_input_grad_correct (n : Nat) (ε γ β : ℝ) (hε : 0 < ε)

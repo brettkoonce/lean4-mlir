@@ -144,4 +144,68 @@ theorem residualProj_has_vjp_correct {m n : Nat}
     ∑ j : Fin n, pdiv (residualProj proj f) x i j * dy j :=
   (residualProj_has_vjp proj f hproj_diff hf_diff hproj hf).correct x dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Smooth-point variants (for the CNN/ResNet composition)
+-- ════════════════════════════════════════════════════════════════
+
+/-! ResNet residual bodies contain ReLU, which is only `DifferentiableAt`
+at smooth points (see `MLP.lean`), not `Differentiable` globally. So the
+end-to-end CNN VJP (`cnn_has_vjp_at`, future) must chain through the
+pointwise `HasVJPAt` framework — `vjp_comp_at` + the witnesses below —
+exactly as `mlp_has_vjp_at` does for the MLP. These mirror the everywhere
+versions above, at a fixed `x`; `pdiv_add` is already stated at-point so
+the proof is the everywhere one with `intro x` dropped. -/
+
+/-- **Additive fan-in at a point** — smooth-point analog of `biPath_has_vjp`. -/
+noncomputable def biPath_has_vjp_at {m n : Nat}
+    (f g : Vec m → Vec n) (x : Vec m)
+    (hf_diff : DifferentiableAt ℝ f x) (hg_diff : DifferentiableAt ℝ g x)
+    (hf : HasVJPAt f x) (hg : HasVJPAt g x) :
+    HasVJPAt (biPath f g) x where
+  backward dy i := hf.backward dy i + hg.backward dy i
+  correct := by
+    intro dy i
+    rw [hf.correct, hg.correct, ← Finset.sum_add_distrib]
+    congr 1; ext j; rw [pdiv_add _ _ _ hf_diff hg_diff]; ring
+
+/-- **Residual VJP at a point**: `dx = f.back(dy) + dy`. The skip
+    (identity) is differentiable everywhere, so only `f` needs the
+    smooth-point hypothesis. -/
+noncomputable def residual_has_vjp_at {n : Nat}
+    (f : Vec n → Vec n) (x : Vec n)
+    (hf_diff : DifferentiableAt ℝ f x) (hf : HasVJPAt f x) :
+    HasVJPAt (residual f) x :=
+  biPath_has_vjp_at f (fun x => x) x
+    hf_diff differentiable_id.differentiableAt
+    hf ((identity_has_vjp n).toHasVJPAt x)
+
+/-- **Projected residual VJP at a point**: both paths carry smooth-point
+    hypotheses (the 1×1 stride-2 projection is linear, but stated at-point
+    for uniformity with the composition). -/
+noncomputable def residualProj_has_vjp_at {m n : Nat}
+    (proj f : Vec m → Vec n) (x : Vec m)
+    (hproj_diff : DifferentiableAt ℝ proj x) (hf_diff : DifferentiableAt ℝ f x)
+    (hproj : HasVJPAt proj x) (hf : HasVJPAt f x) :
+    HasVJPAt (residualProj proj f) x :=
+  biPath_has_vjp_at proj f x hproj_diff hf_diff hproj hf
+
+/-- **Public correctness theorem for `residual_has_vjp_at`**. -/
+theorem residual_has_vjp_at_correct {n : Nat}
+    (f : Vec n → Vec n) (x : Vec n)
+    (hf_diff : DifferentiableAt ℝ f x) (hf : HasVJPAt f x)
+    (dy : Vec n) (i : Fin n) :
+    (residual_has_vjp_at f x hf_diff hf).backward dy i =
+    ∑ j : Fin n, pdiv (residual f) x i j * dy j :=
+  (residual_has_vjp_at f x hf_diff hf).correct dy i
+
+/-- **Public correctness theorem for `residualProj_has_vjp_at`**. -/
+theorem residualProj_has_vjp_at_correct {m n : Nat}
+    (proj f : Vec m → Vec n) (x : Vec m)
+    (hproj_diff : DifferentiableAt ℝ proj x) (hf_diff : DifferentiableAt ℝ f x)
+    (hproj : HasVJPAt proj x) (hf : HasVJPAt f x)
+    (dy : Vec n) (i : Fin m) :
+    (residualProj_has_vjp_at proj f x hproj_diff hf_diff hproj hf).backward dy i =
+    ∑ j : Fin n, pdiv (residualProj proj f) x i j * dy j :=
+  (residualProj_has_vjp_at proj f x hproj_diff hf_diff hproj hf).correct dy i
+
 end Proofs

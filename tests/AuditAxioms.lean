@@ -89,3 +89,9 @@ open Proofs
 #print axioms relu_has_vjp_at
 #print axioms mlp_has_vjp_at
 #print axioms maxPool2_has_vjp_at3
+
+-- Capstone: end-to-end ResNet-style CNN whole-network VJP (CNN analogue
+-- of vit_full_has_vjp) + global-average-pool VJP it depends on.
+#print axioms globalAvgPoolFlat_has_vjp
+#print axioms cnn_has_vjp_at
+#print axioms cnn_has_vjp_at_correct

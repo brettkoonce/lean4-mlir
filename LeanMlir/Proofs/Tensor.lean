@@ -1522,6 +1522,36 @@ theorem flatten_unflatten {c h w : Nat} (v : Vec (c * h * w)) :
         from rfl]
   rw [Equiv.apply_symm_apply]
 
+/-- **`Tensor3.flatten` is differentiable.** It is a coordinate
+    reindexing: each output coordinate `flatten x k` is the single input
+    coordinate `x (decode k)`, hence a projection. `differentiable_pi`
+    reduces to per-coordinate differentiability, which `fun_prop`
+    discharges via the eval/projection rule. -/
+@[fun_prop]
+theorem flatten_differentiable {c h w : Nat} :
+    Differentiable ℝ (Tensor3.flatten : Tensor3 c h w → Vec (c * h * w)) := by
+  rw [differentiable_pi]; intro k
+  show Differentiable ℝ (fun x : Tensor3 c h w =>
+    let ch_w := finProdFinEquiv.symm k
+    let c_h := finProdFinEquiv.symm ch_w.1
+    x c_h.1 c_h.2 ch_w.2)
+  fun_prop
+
+/-- **`Tensor3.unflatten` is differentiable.** The inverse reindexing:
+    each output coordinate `unflatten v ci hi wi` is the single input
+    coordinate `v (encode (ci,hi,wi))`. Three nested `differentiable_pi`
+    peel the `Fin c → Fin h → Fin w → ℝ` pi structure; `fun_prop`
+    discharges the innermost projection. -/
+@[fun_prop]
+theorem unflatten_differentiable {c h w : Nat} :
+    Differentiable ℝ (Tensor3.unflatten : Vec (c * h * w) → Tensor3 c h w) := by
+  rw [show (Tensor3.unflatten : Vec (c * h * w) → Tensor3 c h w) =
+        fun v ci hi wi => v (finProdFinEquiv (finProdFinEquiv (ci, hi), wi)) from rfl]
+  apply differentiable_pi.mpr; intro ci
+  apply differentiable_pi.mpr; intro hi
+  apply differentiable_pi.mpr; intro wi
+  fun_prop
+
 end Tensor3
 
 /-- **3D partial derivative** — now a definition via the triple-nested
@@ -1716,6 +1746,129 @@ noncomputable def vjp3_comp_at {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : N
                dy kk.1 kk.2.1 kk.2.2) := by simp_rw [Finset.sum_product]
          _ = _ := Finset.sum_comm
          _ = _ := by simp_rw [Finset.sum_product]
+
+/-- **Bridge: `HasVJP3` → `HasVJP` via the `Tensor3.flatten` bijection.**
+
+    Rank-3 analogue of `hasVJPMat_to_hasVJP`. Given a Tensor3-level VJP
+    for `f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂`, produce a vector-level
+    VJP for the flattened `fun v => Tensor3.flatten (f (Tensor3.unflatten v))`.
+    The backward decodes the flat index in two `finProdFinEquiv.symm`
+    levels (matching `pdiv3`'s row-major encode), applies the Tensor3
+    backward, and the closing collapse folds the triple `co/ho/wo` sum
+    back to the single flat sum via two `Fintype.sum_prod_type` +
+    `Fintype.sum_equiv finProdFinEquiv` reindexes. -/
+noncomputable def hasVJP3_to_hasVJP {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂}
+    (hf : HasVJP3 f) :
+    HasVJP (fun v : Vec (c₁ * h₁ * w₁) =>
+              Tensor3.flatten (f (Tensor3.unflatten v))) where
+  backward := fun v dy => fun idx =>
+    let p := finProdFinEquiv.symm idx
+    let q := finProdFinEquiv.symm p.1
+    hf.backward (Tensor3.unflatten v) (Tensor3.unflatten dy) q.1 q.2 p.2
+  correct := by
+    intro v dy idx
+    set p := finProdFinEquiv.symm idx with hp
+    set q := finProdFinEquiv.symm p.1 with hq
+    show hf.backward (Tensor3.unflatten v) (Tensor3.unflatten dy) q.1 q.2 p.2 = _
+    rw [hf.correct]
+    simp only [pdiv3, Tensor3.flatten_unflatten]
+    have hidx : finProdFinEquiv (finProdFinEquiv (q.1, q.2), p.2) = idx := by
+      have h1 : (q.1, q.2) = q := rfl
+      rw [h1, hq, Equiv.apply_symm_apply]
+      have h2 : (p.1, p.2) = p := rfl
+      rw [h2, hp, Equiv.apply_symm_apply]
+    simp_rw [hidx]
+    set F : Vec (c₁ * h₁ * w₁) → Vec (c₂ * h₂ * w₂) :=
+      fun w => Tensor3.flatten (f (Tensor3.unflatten w)) with hF
+    -- Goal: ∑ co ∑ ho ∑ wo, pdiv F v idx (enc co ho wo) * Tensor3.unflatten dy co ho wo
+    --        = ∑ j', pdiv F v idx j' * dy j'
+    -- `Tensor3.unflatten dy co ho wo` is defeq `dy (enc co ho wo)`, so this is a
+    -- pure triple→flat reindexing of `G j := pdiv F v idx j * dy j`.
+    have key : ∀ (G : Fin (c₂ * h₂ * w₂) → ℝ),
+        (∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
+          G (finProdFinEquiv (finProdFinEquiv (co, ho), wo))) =
+        ∑ j' : Fin (c₂ * h₂ * w₂), G j' := by
+      intro G
+      calc (∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
+              G (finProdFinEquiv (finProdFinEquiv (co, ho), wo)))
+          = ∑ ch : Fin c₂ × Fin h₂, ∑ wo : Fin w₂,
+              G (finProdFinEquiv (finProdFinEquiv ch, wo)) := by
+            rw [Fintype.sum_prod_type]
+        _ = ∑ p2 : Fin (c₂ * h₂), ∑ wo : Fin w₂,
+              G (finProdFinEquiv (p2, wo)) := by
+            exact (Fintype.sum_equiv finProdFinEquiv
+              (fun ch : Fin c₂ × Fin h₂ =>
+                ∑ wo : Fin w₂, G (finProdFinEquiv (finProdFinEquiv ch, wo)))
+              (fun p2 : Fin (c₂ * h₂) =>
+                ∑ wo : Fin w₂, G (finProdFinEquiv (p2, wo)))
+              (fun _ => rfl))
+        _ = ∑ pw : Fin (c₂ * h₂) × Fin w₂, G (finProdFinEquiv pw) := by
+            rw [Fintype.sum_prod_type]
+        _ = ∑ j' : Fin (c₂ * h₂ * w₂), G j' := by
+            exact Fintype.sum_equiv finProdFinEquiv
+              (fun pw : Fin (c₂ * h₂) × Fin w₂ => G (finProdFinEquiv pw))
+              (fun j' => G j')
+              (fun _ => rfl)
+    exact key (fun j => pdiv F v idx j * dy j)
+
+/-- **Bridge: `HasVJPAt3` → `HasVJPAt` via the `Tensor3.flatten` bijection.**
+
+    Smooth-point analogue of `hasVJP3_to_hasVJP`, with `x` fixed. Needed
+    for kinked operators (e.g. `maxPool2`) that only carry `HasVJPAt3`.
+    Same two-level index decode and triple→flat reindex collapse. -/
+noncomputable def hasVJPAt3_to_hasVJPAt {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂}
+    {x : Tensor3 c₁ h₁ w₁}
+    (hf : HasVJPAt3 f x) :
+    HasVJPAt (fun v : Vec (c₁ * h₁ * w₁) =>
+              Tensor3.flatten (f (Tensor3.unflatten v)))
+             (Tensor3.flatten x) where
+  backward := fun dy => fun idx =>
+    let p := finProdFinEquiv.symm idx
+    let q := finProdFinEquiv.symm p.1
+    hf.backward (Tensor3.unflatten dy) q.1 q.2 p.2
+  correct := by
+    intro dy idx
+    set p := finProdFinEquiv.symm idx with hp
+    set q := finProdFinEquiv.symm p.1 with hq
+    show hf.backward (Tensor3.unflatten dy) q.1 q.2 p.2 = _
+    rw [hf.correct]
+    simp only [pdiv3]
+    have hidx : finProdFinEquiv (finProdFinEquiv (q.1, q.2), p.2) = idx := by
+      have h1 : (q.1, q.2) = q := rfl
+      rw [h1, hq, Equiv.apply_symm_apply]
+      have h2 : (p.1, p.2) = p := rfl
+      rw [h2, hp, Equiv.apply_symm_apply]
+    simp_rw [hidx]
+    set F : Vec (c₁ * h₁ * w₁) → Vec (c₂ * h₂ * w₂) :=
+      fun w => Tensor3.flatten (f (Tensor3.unflatten w)) with hF
+    have key : ∀ (G : Fin (c₂ * h₂ * w₂) → ℝ),
+        (∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
+          G (finProdFinEquiv (finProdFinEquiv (co, ho), wo))) =
+        ∑ j' : Fin (c₂ * h₂ * w₂), G j' := by
+      intro G
+      calc (∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
+              G (finProdFinEquiv (finProdFinEquiv (co, ho), wo)))
+          = ∑ ch : Fin c₂ × Fin h₂, ∑ wo : Fin w₂,
+              G (finProdFinEquiv (finProdFinEquiv ch, wo)) := by
+            rw [Fintype.sum_prod_type]
+        _ = ∑ p2 : Fin (c₂ * h₂), ∑ wo : Fin w₂,
+              G (finProdFinEquiv (p2, wo)) := by
+            exact (Fintype.sum_equiv finProdFinEquiv
+              (fun ch : Fin c₂ × Fin h₂ =>
+                ∑ wo : Fin w₂, G (finProdFinEquiv (finProdFinEquiv ch, wo)))
+              (fun p2 : Fin (c₂ * h₂) =>
+                ∑ wo : Fin w₂, G (finProdFinEquiv (p2, wo)))
+              (fun _ => rfl))
+        _ = ∑ pw : Fin (c₂ * h₂) × Fin w₂, G (finProdFinEquiv pw) := by
+            rw [Fintype.sum_prod_type]
+        _ = ∑ j' : Fin (c₂ * h₂ * w₂), G j' := by
+            exact Fintype.sum_equiv finProdFinEquiv
+              (fun pw : Fin (c₂ * h₂) × Fin w₂ => G (finProdFinEquiv pw))
+              (fun j' => G j')
+              (fun _ => rfl)
+    exact key (fun j => pdiv F (Tensor3.flatten x) idx j * dy j)
 
 /-- **Identity Jacobian for Tensor3** — theorem, via `pdiv_id` and
     injectivity of the nested `finProdFinEquiv`. -/

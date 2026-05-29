@@ -1,5 +1,7 @@
 import LeanMlir.Proofs.Tensor
 import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.BatchNorm
+import LeanMlir.Proofs.Residual
 
 /-!
 # CNN VJP Proofs
@@ -138,6 +140,53 @@ noncomputable def conv2d {ic oc h w kH kW : Nat}
          if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
            x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
          else 0)
+
+/-- **Conv2d is differentiable everywhere.** Each output coordinate
+    `conv2d W b x o hi wi` is the affine map
+    `b o + ∑_{c,kh,kw} W o c kh kw · (pad-eval x)`: a constant bias plus a
+    finite ℝ-linear combination of input coordinates (the dependent
+    `if`-pad-eval being either a projection or the constant `0`).
+    `differentiable_pi` reduces to per-coordinate differentiability;
+    `DifferentiableAt.fun_sum` lifts the triple sum, and each pad-eval
+    summand is a projection (pad true) or constant (pad false). -/
+theorem conv2d_differentiable {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Differentiable ℝ (conv2d W b : Tensor3 ic h w → Tensor3 oc h w) := by
+  apply differentiable_pi.mpr; intro o
+  apply differentiable_pi.mpr; intro hi
+  apply differentiable_pi.mpr; intro wi
+  show Differentiable ℝ (fun x : Tensor3 ic h w =>
+    b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
+      W o c kh kw *
+        (let pH := (kH - 1) / 2
+         let pW := (kW - 1) / 2
+         let hh := kh.val + hi.val
+         let ww := kw.val + wi.val
+         if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
+           x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
+         else 0))
+  apply Differentiable.const_add
+  intro x
+  apply DifferentiableAt.fun_sum; intro c _
+  apply DifferentiableAt.fun_sum; intro kh _
+  apply DifferentiableAt.fun_sum; intro kw _
+  apply DifferentiableAt.const_mul
+  set pH := (kH - 1) / 2
+  set pW := (kW - 1) / 2
+  set hh := kh.val + hi.val
+  set ww := kw.val + wi.val
+  by_cases hP : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w
+  · rw [show (fun x : Tensor3 ic h w =>
+          if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
+            x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
+        (fun x : Tensor3 ic h w => x c ⟨hh - pH, hP.2.1⟩ ⟨ww - pW, hP.2.2.2⟩) from by
+      funext x; rw [dif_pos hP]]
+    fun_prop
+  · rw [show (fun x : Tensor3 ic h w =>
+          if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
+            x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩ else 0) =
+        (fun _ : Tensor3 ic h w => (0 : ℝ)) from by funext x; rw [dif_neg hP]]
+    exact differentiableAt_const _
 
 /-- **Differentiability of an `if hpad : P then v(σ hpad) else 0` term.**
     The dependent-`if` would otherwise stymie `fun_prop`. By proof
@@ -763,6 +812,255 @@ noncomputable abbrev conv2d_input_grad {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (x : Tensor3 ic h w) (dy : Tensor3 oc h w) : Tensor3 ic h w :=
   (conv2d_has_vjp3 W b).backward x dy
+
+-- ════════════════════════════════════════════════════════════════
+-- § Flattened conv and the conv → bn → relu block VJP
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Flat conv** — `conv2d` bridged into flattened `Vec → Vec` space:
+    `flatConv W b = flatten ∘ conv2d W b ∘ unflatten`. Spatial dims are
+    preserved (`ic h w → oc h w`), so this is `Vec (ic*h*w) → Vec (oc*h*w)`.
+    This is the form the ResNet/CNN VJP composition actually uses
+    (everything lives in flat Vec space). -/
+noncomputable def flatConv {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Vec (ic * h * w) → Vec (oc * h * w) :=
+  fun v => Tensor3.flatten (conv2d W b (Tensor3.unflatten v))
+
+/-- **`flatConv` is differentiable everywhere.** Composition of the three
+    differentiable maps `unflatten`, `conv2d`, `flatten`. This is the
+    differentiability witness `vjp_comp_at` needs to chain conv into the
+    block. -/
+theorem flatConv_differentiable {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Differentiable ℝ (flatConv W b : Vec (ic * h * w) → Vec (oc * h * w)) :=
+  Tensor3.flatten_differentiable.comp
+    ((conv2d_differentiable W b).comp Tensor3.unflatten_differentiable)
+
+/-- **conv → bn → relu block VJP at a smooth point.**
+
+    The workhorse for composing a ResNet VJP. In flattened `Vec` space,
+    the block is `relu ∘ bnForward ∘ flatConv : Vec (ic*h*w) → Vec (oc*h*w)`
+    (BatchNorm runs over the `oc*h*w` flattened activations with scalar
+    `ε, γ, β`). We build `HasVJPAt` at a point `v` via two `vjp_comp_at`:
+
+    * inner = `bnForward ∘ flatConv` — both differentiable everywhere
+      (`flatConv_differentiable`, `bnForward_differentiable`), so their
+      bundled VJPs lift through `.toHasVJPAt`. The conv witness is the
+      `HasVJP3`-bridged `hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)`.
+    * outer = `relu` — needs the smoothness hypothesis `h_smooth` (no
+      post-BN activation hits the ReLU kink) for both
+      `relu_differentiableAt_of_smooth` and `relu_has_vjp_at`.
+
+    Mirrors `mlp_has_vjp_at` (dense→relu→dense), with flatConv/bn in
+    place of the dense layers. -/
+noncomputable def convBnRelu_has_vjp_at {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε γ β : ℝ) (hε : 0 < ε)
+    (v : Vec (ic * h * w))
+    (h_smooth : ∀ k, bnForward (oc * h * w) ε γ β (flatConv W b v) k ≠ 0) :
+    HasVJPAt (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConv W b) v := by
+  -- inner step: bnForward ∘ flatConv (both differentiable everywhere)
+  have hconv_diff : Differentiable ℝ (flatConv W b : Vec (ic * h * w) → Vec (oc * h * w)) :=
+    flatConv_differentiable W b
+  have hbn_diff : Differentiable ℝ (bnForward (oc * h * w) ε γ β) :=
+    bnForward_differentiable (oc * h * w) ε γ β hε
+  have step1 : HasVJPAt (bnForward (oc * h * w) ε γ β ∘ flatConv W b) v :=
+    vjp_comp_at (flatConv W b) (bnForward (oc * h * w) ε γ β) v
+      (hconv_diff v)
+      (hbn_diff _)
+      ((hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).toHasVJPAt v)
+      ((bn_has_vjp (oc * h * w) ε γ β hε).toHasVJPAt _)
+  have step1_diff : DifferentiableAt ℝ
+      (bnForward (oc * h * w) ε γ β ∘ flatConv W b) v :=
+    DifferentiableAt.comp v (hbn_diff (flatConv W b v)) (hconv_diff v)
+  -- outer step: relu (needs smoothness)
+  exact vjp_comp_at (bnForward (oc * h * w) ε γ β ∘ flatConv W b)
+    (relu (oc * h * w)) v
+    step1_diff
+    (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
+    step1
+    (relu_has_vjp_at (oc * h * w) _ h_smooth)
+
+-- ════════════════════════════════════════════════════════════════
+-- § ResNet basic residual block VJP (flattened Vec space)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **conv → bn block VJP (no ReLU), everywhere.** Just `flatConv` then
+    `bnForward`, both differentiable everywhere, so this is a global
+    `HasVJP` (no smoothness needed). This is the building block for the
+    second conv→bn of a residual body and for the 1×1 projection skip. -/
+noncomputable def convBn_has_vjp {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε γ β : ℝ) (hε : 0 < ε) :
+    HasVJP (bnForward (oc * h * w) ε γ β ∘ flatConv W b
+      : Vec (ic * h * w) → Vec (oc * h * w)) :=
+  vjp_comp (flatConv W b) (bnForward (oc * h * w) ε γ β)
+    (flatConv_differentiable W b)
+    (bnForward_differentiable (oc * h * w) ε γ β hε)
+    (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b))
+    (bn_has_vjp (oc * h * w) ε γ β hε)
+
+/-- **`convBn` is differentiable everywhere.** -/
+theorem convBn_differentiable {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε γ β : ℝ) (hε : 0 < ε) :
+    Differentiable ℝ (bnForward (oc * h * w) ε γ β ∘ flatConv W b
+      : Vec (ic * h * w) → Vec (oc * h * w)) :=
+  (bnForward_differentiable (oc * h * w) ε γ β hε).comp (flatConv_differentiable W b)
+
+/-- **Basic-block body VJP at a smooth point.**
+
+    `F := convBn₂ ∘ convBnRelu₁ = bn₂ ∘ conv₂ ∘ relu ∘ bn₁ ∘ conv₁`,
+    the body of a post-activation ResNet basic block (the outer ReLU and
+    skip-add are applied later). Channels go `ic → mid → oc` (generic;
+    set `ic = mid = oc = c` for the identity-skip block, `ic ≠ oc` for the
+    downsample/projection block). Spatial dims `h w` preserved.
+
+    Inner `convBnRelu₁` needs the smoothness hyp `h_smooth₁` (no post-bn₁
+    activation hits the ReLU kink); outer `convBn₂` is everywhere
+    differentiable, lifted via `.toHasVJPAt`. Two `vjp_comp_at` chain. -/
+noncomputable def resblock_body_has_vjp_at {ic mid oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 mid ic kH₁ kW₁) (b₁ : Vec mid)
+    (W₂ : Kernel4 oc mid kH₂ kW₂) (b₂ : Vec oc)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ : ℝ) (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂)
+    (v : Vec (ic * h * w))
+    (h_smooth₁ : ∀ k, bnForward (mid * h * w) ε₁ γ₁ β₁ (flatConv W₁ b₁ v) k ≠ 0) :
+    HasVJPAt
+      ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+        (relu (mid * h * w) ∘ bnForward (mid * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) v := by
+  -- inner = convBnRelu₁
+  have step1 : HasVJPAt
+      (relu (mid * h * w) ∘ bnForward (mid * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁) v :=
+    convBnRelu_has_vjp_at W₁ b₁ ε₁ γ₁ β₁ hε₁ v h_smooth₁
+  have step1_diff : DifferentiableAt ℝ
+      (relu (mid * h * w) ∘ bnForward (mid * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁) v := by
+    apply DifferentiableAt.comp
+    · exact relu_differentiableAt_of_smooth (mid * h * w) _ h_smooth₁
+    · exact ((bnForward_differentiable (mid * h * w) ε₁ γ₁ β₁ hε₁).comp
+        (flatConv_differentiable W₁ b₁)) v
+  -- outer = convBn₂ (everywhere)
+  exact vjp_comp_at
+    (relu (mid * h * w) ∘ bnForward (mid * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)
+    (bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) v
+    step1_diff
+    ((convBn_differentiable W₂ b₂ ε₂ γ₂ β₂ hε₂) _)
+    step1
+    ((convBn_has_vjp W₂ b₂ ε₂ γ₂ β₂ hε₂).toHasVJPAt _)
+
+/-- **Basic-block body is `DifferentiableAt` at a smooth point.** Needed as
+    the diff witness when feeding the body into the residual/projection
+    fan-in and the post-add ReLU. -/
+theorem resblock_body_differentiableAt {ic mid oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 mid ic kH₁ kW₁) (b₁ : Vec mid)
+    (W₂ : Kernel4 oc mid kH₂ kW₂) (b₂ : Vec oc)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ : ℝ) (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂)
+    (v : Vec (ic * h * w))
+    (h_smooth₁ : ∀ k, bnForward (mid * h * w) ε₁ γ₁ β₁ (flatConv W₁ b₁ v) k ≠ 0) :
+    DifferentiableAt ℝ
+      ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+        (relu (mid * h * w) ∘ bnForward (mid * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) v := by
+  apply DifferentiableAt.comp
+  · exact (convBn_differentiable W₂ b₂ ε₂ γ₂ β₂ hε₂) _
+  · apply DifferentiableAt.comp
+    · exact relu_differentiableAt_of_smooth (mid * h * w) _ h_smooth₁
+    · exact ((bnForward_differentiable (mid * h * w) ε₁ γ₁ β₁ hε₁).comp
+        (flatConv_differentiable W₁ b₁)) v
+
+/-- **Full basic residual block VJP (identity skip).**
+
+    `relu(x + F(x))` with `F` the conv→bn→relu→conv→bn body and an
+    identity skip (so `ic = mid = oc = c`, spatial preserved). Two
+    smoothness hyps: `h_smooth₁` for the inner block ReLU, and
+    `h_smooth_out` for the post-add outer ReLU (`F v + v` avoids the
+    kink). Built as `relu ∘ residual F` via `residual_has_vjp_at` then a
+    final `vjp_comp_at` with `relu`. -/
+noncomputable def resblock_has_vjp_at {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c)
+    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ : ℝ) (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂)
+    (v : Vec (c * h * w))
+    (h_smooth₁ : ∀ k, bnForward (c * h * w) ε₁ γ₁ β₁ (flatConv W₁ b₁ v) k ≠ 0)
+    (h_smooth_out : ∀ k,
+      ((bnForward (c * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+        (relu (c * h * w) ∘ bnForward (c * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) v k
+        + v k ≠ 0) :
+    HasVJPAt
+      (relu (c * h * w) ∘
+        residual
+          ((bnForward (c * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+            (relu (c * h * w) ∘ bnForward (c * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁))) v := by
+  set F :=
+    ((bnForward (c * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+      (relu (c * h * w) ∘ bnForward (c * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) with hF
+  have hF_diff : DifferentiableAt ℝ F v :=
+    resblock_body_differentiableAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
+  have hF : HasVJPAt F v :=
+    resblock_body_has_vjp_at W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
+  have hres : HasVJPAt (residual F) v :=
+    residual_has_vjp_at F v hF_diff hF
+  have hres_diff : DifferentiableAt ℝ (residual F) v := by
+    show DifferentiableAt ℝ (biPath F (fun x => x)) v
+    exact DifferentiableAt.add hF_diff differentiable_id.differentiableAt
+  have h_smooth_res : ∀ k, residual F v k ≠ 0 := h_smooth_out
+  exact vjp_comp_at (residual F) (relu (c * h * w)) v
+    hres_diff
+    (relu_differentiableAt_of_smooth (c * h * w) _ h_smooth_res)
+    hres
+    (relu_has_vjp_at (c * h * w) _ h_smooth_res)
+
+/-- **Downsample/projection basic residual block VJP.**
+
+    `relu(proj(x) + F(x))` where the channel/stride change is folded into
+    the conv dims: body `F` maps `ic → oc` (first conv `ic → oc`, second
+    `oc → oc`), and the skip is a 1×1 `convBn` projection `proj : ic → oc`
+    (everywhere differentiable — no ReLU, so its diffAt is immediate).
+    Built with `residualProj_has_vjp_at`, then `vjp_comp_at` with the
+    post-add `relu` under `h_smooth_out`. -/
+noncomputable def resblockProj_has_vjp_at
+    {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc)
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ εp γp βp : ℝ)
+    (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (hεp : 0 < εp)
+    (v : Vec (ic * h * w))
+    (h_smooth₁ : ∀ k, bnForward (oc * h * w) ε₁ γ₁ β₁ (flatConv W₁ b₁ v) k ≠ 0)
+    (h_smooth_out : ∀ k,
+      ((bnForward (oc * h * w) εp γp βp ∘ flatConv Wp bp) v k)
+      + ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+          (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) v k
+        ≠ 0) :
+    HasVJPAt
+      (relu (oc * h * w) ∘
+        residualProj
+          (bnForward (oc * h * w) εp γp βp ∘ flatConv Wp bp)
+          ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+            (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁))) v := by
+  let proj : Vec (ic * h * w) → Vec (oc * h * w) :=
+    bnForward (oc * h * w) εp γp βp ∘ flatConv Wp bp
+  let F : Vec (ic * h * w) → Vec (oc * h * w) :=
+    (bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+      (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)
+  show HasVJPAt (relu (oc * h * w) ∘ residualProj proj F) v
+  have hproj_diff : DifferentiableAt ℝ proj v :=
+    (convBn_differentiable Wp bp εp γp βp hεp) v
+  have hproj_vjp : HasVJPAt proj v :=
+    (convBn_has_vjp Wp bp εp γp βp hεp).toHasVJPAt v
+  have hF_diff : DifferentiableAt ℝ F v :=
+    resblock_body_differentiableAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
+  have hF : HasVJPAt F v :=
+    resblock_body_has_vjp_at W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
+  have hres : HasVJPAt (residualProj proj F) v :=
+    residualProj_has_vjp_at proj F v hproj_diff hF_diff hproj_vjp hF
+  have hres_diff : DifferentiableAt ℝ (residualProj proj F) v :=
+    DifferentiableAt.add hproj_diff hF_diff
+  have h_smooth_res : ∀ k, residualProj proj F v k ≠ 0 := h_smooth_out
+  exact vjp_comp_at (residualProj proj F) (relu (oc * h * w)) v
+    hres_diff
+    (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth_res)
+    hres
+    (relu_has_vjp_at (oc * h * w) _ h_smooth_res)
 
 /-! ### Weight gradient (now proved from foundation via `unfold + fun_prop`)
 
@@ -2169,5 +2467,475 @@ theorem maxPool2_has_vjp_at3_correct {c h w : Nat}
       pdiv3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)
             x ci hi wi co ho wo * dy co ho wo :=
   (maxPool2_has_vjp_at3 x h_smooth).correct dy ci hi wi
+
+-- ════════════════════════════════════════════════════════════════
+-- § Global average pool + end-to-end ResNet-style CNN VJP (capstone)
+-- ════════════════════════════════════════════════════════════════
+
+/-! ## The capstone: a whole-network ResNet-style CNN VJP
+
+`cnn_has_vjp_at` is the CNN analogue of `vit_full_has_vjp` — a single
+`HasVJPAt` for an end-to-end forward pass, chained entirely in flattened
+`Vec` space via `vjp_comp_at`. It first needs **global average pooling**,
+which was previously only referenced in codegen, so we define it here:
+`globalAvgPool x ci = (∑ hi ∑ wi x ci hi wi) / (h*w)` (mean over spatial
+per channel), bridge it to flat `Vec` space (`globalAvgPoolFlat`), and
+prove its linear VJP (`globalAvgPoolFlat_has_vjp`, backward broadcasts
+`dy ci / (h*w)` to every spatial cell of channel `ci`) and
+differentiability.
+
+**Fixed structural choices** (a concrete-but-representative pipeline, in
+the spirit of `hand_cnn_train_step.mlir`; prioritising a complete
+axiom-clean end-to-end witness over maximal generality):
+
+    input  : Vec (ic * (2h) * (2w))
+    stem   : convBnRelu  ic → c   (spatial 2h×2w preserved)
+    pool   : maxPool2    c, 2h×2w → c, h×w
+    block1 : resblock_has_vjp_at        (identity skip,  c → c,  h×w)
+    block2 : resblockProj_has_vjp_at    (projection skip, c → oc, h×w)
+    gap    : globalAvgPool   oc, h×w → Vec oc
+    head   : dense           oc → nClasses
+
+So: 1 stem conv, 1 max-pool, exactly two residual blocks (one of EACH
+skip type — identity and 1×1 projection — to exercise both code paths),
+global-average pool, one dense classifier. Channel/spatial dims stay
+implicit `Nat` params; the block/stage counts are fixed. The bundled
+smoothness hypotheses (`h_stem`, `h_mp`, `h_rb1`/`h_rb1o`, `h_rb2`/
+`h_rb2o`) are the family of every ReLU + max-pool site's smooth-point
+condition, exactly like `mlp_has_vjp_at`'s multiple `h_smooth_*`.
+
+The differentiability obstacle (max-pool is non-smooth globally, so
+`vjp_comp_at` cannot get `DifferentiableAt` of a max-pool-containing
+prefix from a global lemma) is discharged at the smooth point by
+`maxPool2_flat_hasFDerivAt` (the local linearization already proved for
+the max-pool Jacobian) via `.differentiableAt`. -/
+
+/-- Global average pool: mean over spatial dims per channel. -/
+noncomputable def globalAvgPool {c h w : Nat} (x : Tensor3 c h w) : Vec c :=
+  fun ci => (∑ hi : Fin h, ∑ wi : Fin w, x ci hi wi) / (h * w)
+
+/-- Flat GAP: `Vec (c*h*w) → Vec c`. -/
+noncomputable def globalAvgPoolFlat (c h w : Nat) : Vec (c * h * w) → Vec c :=
+  fun v => globalAvgPool (Tensor3.unflatten v : Tensor3 c h w)
+
+theorem globalAvgPoolFlat_differentiable (c h w : Nat) :
+    Differentiable ℝ (globalAvgPoolFlat c h w) := by
+  unfold globalAvgPoolFlat globalAvgPool Tensor3.unflatten
+  fun_prop
+
+/-- The channel of a flat index `idx : Fin (c*h*w)`. -/
+noncomputable def flatChannel (c h w : Nat) (idx : Fin (c * h * w)) : Fin c :=
+  (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1
+
+-- Rewrite GAP as a single Finset sum over (hi, wi) ∈ univ of scaled reindex maps.
+theorem globalAvgPoolFlat_as_sum (c h w : Nat) :
+    (globalAvgPoolFlat c h w) =
+    (fun (u : Vec (c * h * w)) (k : Fin c) =>
+      ∑ p : Fin h × Fin w,
+        (1 / (h * w : ℝ)) *
+        u (finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))) := by
+  funext u k
+  show globalAvgPool (Tensor3.unflatten u) k = _
+  unfold globalAvgPool Tensor3.unflatten
+  rw [← Finset.sum_product']
+  rw [div_eq_mul_inv, Finset.sum_mul]
+  apply Finset.sum_congr rfl
+  intro p _
+  rw [one_div, mul_comm]
+
+theorem pdiv_globalAvgPoolFlat (c h w : Nat) (v : Vec (c * h * w))
+    (idx : Fin (c * h * w)) (ci : Fin c) :
+    pdiv (globalAvgPoolFlat c h w) v idx ci =
+      (if flatChannel c h w idx = ci then 1 else 0) / (h * w) := by
+  rw [globalAvgPoolFlat_as_sum]
+  -- summands differentiable
+  have h_summand_diff : ∀ p ∈ (Finset.univ : Finset (Fin h × Fin w)),
+      DifferentiableAt ℝ
+        (fun (u : Vec (c * h * w)) (k : Fin c) =>
+          (1 / (h * w : ℝ)) *
+          u (finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))) v := by
+    intro p _
+    have h_const : DifferentiableAt ℝ
+        (fun (_ : Vec (c * h * w)) (_ : Fin c) => (1 / (h * w : ℝ))) v :=
+      differentiableAt_const _
+    have h_reindex : DifferentiableAt ℝ
+        (fun (u : Vec (c * h * w)) (k : Fin c) =>
+          u (finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))) v :=
+      (reindexCLM (fun k : Fin c =>
+        finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))).differentiableAt
+    exact h_const.mul h_reindex
+  rw [pdiv_finset_sum _ _ _ h_summand_diff]
+  -- each summand pdiv
+  have hterm : ∀ p : Fin h × Fin w,
+      pdiv (fun (u : Vec (c * h * w)) (k : Fin c) =>
+              (1 / (h * w : ℝ)) *
+              u (finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))) v idx ci =
+      (1 / (h * w : ℝ)) *
+        (if idx = finProdFinEquiv (finProdFinEquiv (ci, p.1), p.2) then 1 else 0) := by
+    intro p
+    have h_prod :
+        (fun (u : Vec (c * h * w)) (k : Fin c) =>
+          (1 / (h * w : ℝ)) *
+          u (finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))) =
+        (fun u k =>
+          (fun (_ : Vec (c * h * w)) (_ : Fin c) => (1 / (h * w : ℝ))) u k *
+          (fun (u' : Vec (c * h * w)) (k' : Fin c) =>
+            u' (finProdFinEquiv (finProdFinEquiv (k', p.1), p.2))) u k) := rfl
+    have h_const_diff : DifferentiableAt ℝ
+        (fun (_ : Vec (c * h * w)) (_ : Fin c) => (1 / (h * w : ℝ))) v :=
+      differentiableAt_const _
+    have h_reindex_diff : DifferentiableAt ℝ
+        (fun (u' : Vec (c * h * w)) (k' : Fin c) =>
+          u' (finProdFinEquiv (finProdFinEquiv (k', p.1), p.2))) v :=
+      (reindexCLM (fun k' : Fin c =>
+        finProdFinEquiv (finProdFinEquiv (k', p.1), p.2))).differentiableAt
+    rw [h_prod, pdiv_mul _ _ _ h_const_diff h_reindex_diff]
+    rw [pdiv_const, pdiv_reindex (fun k' : Fin c =>
+          finProdFinEquiv (finProdFinEquiv (k', p.1), p.2))]
+    ring
+  simp_rw [hterm]
+  rw [← Finset.mul_sum]
+  -- ∑ p, (if idx = enc(ci,p.1,p.2) then 1 else 0) = if channel idx = ci then 1 else 0
+  by_cases hch : flatChannel c h w idx = ci
+  · rw [if_pos hch]
+    -- the unique p matching is the spatial coords of idx
+    set p0 : Fin h × Fin w :=
+      ((finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2,
+       (finProdFinEquiv.symm idx).2) with hp0
+    rw [Finset.sum_eq_single p0]
+    · rw [if_pos]
+      · ring
+      · -- idx = enc(ci, p0.1, p0.2)
+        rw [hp0]
+        show idx = finProdFinEquiv
+          (finProdFinEquiv (ci, (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
+            (finProdFinEquiv.symm idx).2)
+        rw [← hch]
+        show idx = finProdFinEquiv
+          (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1,
+            (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
+            (finProdFinEquiv.symm idx).2)
+        rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
+    · intro p _ hne
+      rw [if_neg]
+      intro heq
+      apply hne
+      -- idx = enc(ci,p.1,p.2) and idx = enc(ci,p0.1,p0.2) ⟹ p = p0
+      have hidx0 : idx = finProdFinEquiv
+          (finProdFinEquiv (ci, p0.1), p0.2) := by
+        rw [hp0]
+        show idx = finProdFinEquiv
+          (finProdFinEquiv (ci, (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
+            (finProdFinEquiv.symm idx).2)
+        rw [← hch]
+        show idx = finProdFinEquiv
+          (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1,
+            (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
+            (finProdFinEquiv.symm idx).2)
+        rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
+      rw [hidx0] at heq
+      have h1 := finProdFinEquiv.injective heq
+      have h2 : finProdFinEquiv (ci, p.1) = finProdFinEquiv (ci, p0.1) := (Prod.mk.inj h1).1.symm
+      have hwe : p.2 = p0.2 := (Prod.mk.inj h1).2.symm
+      have hhe : p.1 = p0.1 := (Prod.mk.inj (finProdFinEquiv.injective h2)).2
+      exact Prod.ext hhe hwe
+    · intro hp; exact absurd (Finset.mem_univ _) hp
+  · rw [if_neg hch, zero_div]
+    rw [Finset.sum_eq_zero, mul_zero]
+    intro p _
+    rw [if_neg]
+    intro heq
+    apply hch
+    -- idx = enc(ci,p.1,p.2) ⟹ channel idx = ci
+    unfold flatChannel
+    rw [heq, Equiv.symm_apply_apply, Equiv.symm_apply_apply]
+
+/-- **Global average pool VJP (flattened).** Linear map; backward
+    broadcasts `dy ci / (h*w)` to every spatial cell of channel `ci`. -/
+noncomputable def globalAvgPoolFlat_has_vjp (c h w : Nat) :
+    HasVJP (globalAvgPoolFlat c h w) where
+  backward := fun _v dy => fun idx => dy (flatChannel c h w idx) / (h * w)
+  correct := by
+    intro v dy idx
+    simp_rw [pdiv_globalAvgPoolFlat]
+    -- ∑ ci, (if flatChannel idx = ci then 1 else 0)/(hw) * dy ci
+    rw [Finset.sum_eq_single (flatChannel c h w idx)]
+    · rw [if_pos rfl]; ring
+    · intro b _ hne
+      rw [if_neg (fun heq => hne heq.symm)]; ring
+    · intro hp; exact absurd (Finset.mem_univ _) hp
+
+-- maxpool flat helper
+noncomputable def maxPoolFlat (c h w : Nat) :
+    Vec (c * (2*h) * (2*w)) → Vec (c * h * w) :=
+  fun v => Tensor3.flatten (maxPool2 (Tensor3.unflatten v))
+
+theorem maxPoolFlat_differentiableAt {c h w : Nat}
+    (x : Tensor3 c (2*h) (2*w)) (h_smooth : MaxPool2Smooth x)
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
+    DifferentiableAt ℝ (maxPoolFlat c h w) (Tensor3.flatten x) :=
+  (maxPool2_flat_hasFDerivAt x h_smooth hc hh hw).differentiableAt
+
+noncomputable def maxPoolFlat_has_vjp_at {c h w : Nat}
+    (x : Tensor3 c (2*h) (2*w)) (h_smooth : MaxPool2Smooth x) :
+    HasVJPAt (maxPoolFlat c h w) (Tensor3.flatten x) :=
+  hasVJPAt3_to_hasVJPAt (maxPool2_has_vjp_at3 x h_smooth)
+
+-- resblock (identity) output diffAt: relu ∘ residual F
+theorem resblock_differentiableAt {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c)
+    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ : ℝ) (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂)
+    (v : Vec (c * h * w))
+    (h_smooth₁ : ∀ k, bnForward (c * h * w) ε₁ γ₁ β₁ (flatConv W₁ b₁ v) k ≠ 0)
+    (h_smooth_out : ∀ k,
+      ((bnForward (c * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+        (relu (c * h * w) ∘ bnForward (c * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) v k
+        + v k ≠ 0) :
+    DifferentiableAt ℝ
+      (relu (c * h * w) ∘
+        residual
+          ((bnForward (c * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+            (relu (c * h * w) ∘ bnForward (c * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁))) v := by
+  set F :=
+    ((bnForward (c * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+      (relu (c * h * w) ∘ bnForward (c * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) with hF
+  have hF_diff : DifferentiableAt ℝ F v :=
+    resblock_body_differentiableAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
+  have hres_diff : DifferentiableAt ℝ (residual F) v := by
+    show DifferentiableAt ℝ (biPath F (fun x => x)) v
+    exact DifferentiableAt.add hF_diff differentiable_id.differentiableAt
+  have h_smooth_res : ∀ k, residual F v k ≠ 0 := h_smooth_out
+  exact (relu_differentiableAt_of_smooth (c * h * w) _ h_smooth_res).comp v hres_diff
+
+-- resblockProj output diffAt: relu ∘ residualProj proj F
+theorem resblockProj_differentiableAt
+    {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc)
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ εp γp βp : ℝ)
+    (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (hεp : 0 < εp)
+    (v : Vec (ic * h * w))
+    (h_smooth₁ : ∀ k, bnForward (oc * h * w) ε₁ γ₁ β₁ (flatConv W₁ b₁ v) k ≠ 0)
+    (h_smooth_out : ∀ k,
+      ((bnForward (oc * h * w) εp γp βp ∘ flatConv Wp bp) v k)
+      + ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+          (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) v k
+        ≠ 0) :
+    DifferentiableAt ℝ
+      (relu (oc * h * w) ∘
+        residualProj
+          (bnForward (oc * h * w) εp γp βp ∘ flatConv Wp bp)
+          ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+            (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁))) v := by
+  set proj := (bnForward (oc * h * w) εp γp βp ∘ flatConv Wp bp) with hproj
+  set F :=
+    ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+      (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)) with hF
+  have hproj_diff : DifferentiableAt ℝ proj v :=
+    (convBn_differentiable Wp bp εp γp βp hεp) v
+  have hF_diff : DifferentiableAt ℝ F v :=
+    resblock_body_differentiableAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
+  have hres_diff : DifferentiableAt ℝ (residualProj proj F) v := by
+    show DifferentiableAt ℝ (biPath proj F) v
+    exact DifferentiableAt.add hproj_diff hF_diff
+  have h_smooth_res : ∀ k, residualProj proj F v k ≠ 0 := h_smooth_out
+  exact (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth_res).comp v hres_diff
+
+-- convBnRelu diffAt
+theorem convBnRelu_differentiableAt {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε)
+    (v : Vec (ic * h * w))
+    (h_smooth : ∀ k, bnForward (oc * h * w) ε γ β (flatConv W b v) k ≠ 0) :
+    DifferentiableAt ℝ (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConv W b) v := by
+  have hinner : DifferentiableAt ℝ (bnForward (oc * h * w) ε γ β ∘ flatConv W b) v :=
+    ((bnForward_differentiable (oc * h * w) ε γ β hε).comp (flatConv_differentiable W b)) v
+  exact (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
+
+-- abbreviations for layer functions
+noncomputable abbrev cbr {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) :
+    Vec (ic * h * w) → Vec (oc * h * w) :=
+  relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConv W b
+
+noncomputable abbrev rblk {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ : ℝ) : Vec (c * h * w) → Vec (c * h * w) :=
+  relu (c * h * w) ∘ residual
+    ((bnForward (c * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+      (relu (c * h * w) ∘ bnForward (c * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁))
+
+noncomputable abbrev rblkP {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ εp γp βp : ℝ) : Vec (ic * h * w) → Vec (oc * h * w) :=
+  relu (oc * h * w) ∘ residualProj
+    (bnForward (oc * h * w) εp γp βp ∘ flatConv Wp bp)
+    ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+      (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁))
+
+/-- The forward CNN: stem(convBnRelu) → maxpool → resblock(id) → resblockProj → gap → dense. -/
+noncomputable def cnnForward
+    {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ)
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
+    (e₁ g₁ bb₁ e₂ g₂ bb₂ : ℝ)
+    (W₁' : Kernel4 oc c kH₁' kW₁') (b₁' : Vec oc) (W₂' : Kernel4 oc oc kH₂' kW₂') (b₂' : Vec oc)
+    (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
+    (f₁ h₁ i₁ f₂ h₂ i₂ fp hp ip : ℝ)
+    (Wd : Mat oc nClasses) (bd : Vec nClasses) :
+    Vec (ic * (2*h) * (2*w)) → Vec nClasses :=
+  (dense Wd bd) ∘
+  (globalAvgPoolFlat oc h w) ∘
+  (rblkP (h := h) (w := w) W₁' b₁' W₂' b₂' Wp bp e₁ g₁ bb₁ e₂ g₂ bb₂ fp hp ip) ∘
+  (rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ h₁ i₁ f₂ h₂ i₂) ∘
+  (maxPoolFlat c h w) ∘
+  (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs)
+
+noncomputable def cnn_has_vjp_at
+    {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ) (hεs : 0 < εs)
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
+    (e₁ g₁ bb₁ e₂ g₂ bb₂ : ℝ) (he₁ : 0 < e₁) (he₂ : 0 < e₂)
+    (W₁' : Kernel4 oc c kH₁' kW₁') (b₁' : Vec oc) (W₂' : Kernel4 oc oc kH₂' kW₂') (b₂' : Vec oc)
+    (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
+    (f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip : ℝ) (hf₁ : 0 < f₁) (hf₂ : 0 < f₂) (hfp : 0 < fp)
+    (Wd : Mat oc nClasses) (bd : Vec nClasses)
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (x : Vec (ic * (2*h) * (2*w)))
+    -- stem smoothness
+    (h_stem : ∀ k, bnForward (c * (2*h) * (2*w)) εs γs βs (flatConv Ws bs x) k ≠ 0)
+    -- maxpool smoothness, on the stem output unflattened
+    (h_mp : MaxPool2Smooth (Tensor3.unflatten
+              (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x) : Tensor3 c (2*h) (2*w)))
+    -- identity resblock smoothness (at the maxpool output)
+    (h_rb1 : ∀ k, bnForward (c * h * w) f₁ hh₁ i₁
+        (flatConv W₁ b₁
+          (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) k ≠ 0)
+    (h_rb1o : ∀ k,
+        ((bnForward (c * h * w) f₂ hh₂ i₂ ∘ flatConv W₂ b₂) ∘
+          (relu (c * h * w) ∘ bnForward (c * h * w) f₁ hh₁ i₁ ∘ flatConv W₁ b₁))
+            (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x)) k
+          + (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x)) k ≠ 0)
+    -- proj resblock smoothness (at the identity resblock output)
+    (h_rb2 : ∀ k, bnForward (oc * h * w) e₁ g₁ bb₁
+        (flatConv (h := h) (w := w) W₁' b₁'
+          ((rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂
+            (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) : Vec (c*h*w))) k ≠ 0)
+    (h_rb2o : ∀ k,
+        ((bnForward (oc * h * w) fp hhp ip ∘ flatConv (h := h) (w := w) Wp bp)
+          (rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂
+            (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) k)
+        + ((bnForward (oc * h * w) e₂ g₂ bb₂ ∘ flatConv (h := h) (w := w) W₂' b₂') ∘
+            (relu (oc * h * w) ∘ bnForward (oc * h * w) e₁ g₁ bb₁ ∘ flatConv (h := h) (w := w) W₁' b₁'))
+            (rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂
+              (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) k ≠ 0) :
+    HasVJPAt (cnnForward Ws bs εs γs βs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂
+                W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip Wd bd) x := by
+  unfold cnnForward
+  -- s0: stem cbr at x
+  set S0 := cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs with hS0def
+  have s0_vjp : HasVJPAt S0 x :=
+    convBnRelu_has_vjp_at Ws bs εs γs βs hεs x h_stem
+  have s0_diff : DifferentiableAt ℝ S0 x :=
+    convBnRelu_differentiableAt Ws bs εs γs βs hεs x h_stem
+  -- s1: maxPoolFlat ∘ S0 at x; align maxpool point
+  have hpt : Tensor3.flatten (Tensor3.unflatten (S0 x) : Tensor3 c (2*h) (2*w)) = S0 x :=
+    Tensor3.flatten_unflatten (S0 x)
+  have mp_vjp : HasVJPAt (maxPoolFlat c h w) (S0 x) := by
+    rw [← hpt]; exact maxPoolFlat_has_vjp_at _ h_mp
+  have mp_diff : DifferentiableAt ℝ (maxPoolFlat c h w) (S0 x) := by
+    rw [← hpt]; exact maxPoolFlat_differentiableAt _ h_mp hc hh hw
+  have s1_vjp : HasVJPAt (maxPoolFlat c h w ∘ S0) x :=
+    vjp_comp_at S0 (maxPoolFlat c h w) x s0_diff mp_diff s0_vjp mp_vjp
+  have s1_diff : DifferentiableAt ℝ (maxPoolFlat c h w ∘ S0) x :=
+    mp_diff.comp x s0_diff
+  -- s2: rblk ∘ (maxPoolFlat ∘ S0) at x
+  set R1 := rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂ with hR1def
+  have rb1_vjp : HasVJPAt R1 (maxPoolFlat c h w (S0 x)) :=
+    resblock_has_vjp_at W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂ hf₁ hf₂ _ h_rb1 h_rb1o
+  have rb1_diff : DifferentiableAt ℝ R1 (maxPoolFlat c h w (S0 x)) :=
+    resblock_differentiableAt W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂ hf₁ hf₂ _ h_rb1 h_rb1o
+  have s2_vjp : HasVJPAt (R1 ∘ (maxPoolFlat c h w ∘ S0)) x :=
+    vjp_comp_at (maxPoolFlat c h w ∘ S0) R1 x s1_diff rb1_diff s1_vjp rb1_vjp
+  have s2_diff : DifferentiableAt ℝ (R1 ∘ (maxPoolFlat c h w ∘ S0)) x :=
+    rb1_diff.comp x s1_diff
+  -- s3: rblkP ∘ (above) at x
+  set R2 := rblkP (h := h) (w := w) W₁' b₁' W₂' b₂' Wp bp e₁ g₁ bb₁ e₂ g₂ bb₂ fp hhp ip with hR2def
+  have rb2_vjp : HasVJPAt R2 (R1 (maxPoolFlat c h w (S0 x))) :=
+    resblockProj_has_vjp_at W₁' b₁' W₂' b₂' Wp bp e₁ g₁ bb₁ e₂ g₂ bb₂ fp hhp ip
+      he₁ he₂ hfp _ h_rb2 h_rb2o
+  have rb2_diff : DifferentiableAt ℝ R2 (R1 (maxPoolFlat c h w (S0 x))) :=
+    resblockProj_differentiableAt W₁' b₁' W₂' b₂' Wp bp e₁ g₁ bb₁ e₂ g₂ bb₂ fp hhp ip
+      he₁ he₂ hfp _ h_rb2 h_rb2o
+  have s3_vjp : HasVJPAt (R2 ∘ (R1 ∘ (maxPoolFlat c h w ∘ S0))) x :=
+    vjp_comp_at (R1 ∘ (maxPoolFlat c h w ∘ S0)) R2 x s2_diff rb2_diff s2_vjp rb2_vjp
+  have s3_diff : DifferentiableAt ℝ (R2 ∘ (R1 ∘ (maxPoolFlat c h w ∘ S0))) x :=
+    rb2_diff.comp x s2_diff
+  -- s4: gap ∘ (above) at x (global lift)
+  set P3 := R2 ∘ (R1 ∘ (maxPoolFlat c h w ∘ S0)) with hP3def
+  have gap_diff : DifferentiableAt ℝ (globalAvgPoolFlat oc h w) (P3 x) :=
+    (globalAvgPoolFlat_differentiable oc h w) (P3 x)
+  have s4_vjp : HasVJPAt (globalAvgPoolFlat oc h w ∘ P3) x :=
+    vjp_comp_at P3 (globalAvgPoolFlat oc h w) x s3_diff gap_diff s3_vjp
+      ((globalAvgPoolFlat_has_vjp oc h w).toHasVJPAt (P3 x))
+  have s4_diff : DifferentiableAt ℝ (globalAvgPoolFlat oc h w ∘ P3) x :=
+    gap_diff.comp x s3_diff
+  -- s5: dense ∘ (above) at x (global lift)
+  exact vjp_comp_at (globalAvgPoolFlat oc h w ∘ P3) (dense Wd bd) x s4_diff
+    ((dense_differentiable Wd bd) _) s4_vjp
+    ((dense_has_vjp Wd bd).toHasVJPAt _)
+
+/-- **Public correctness theorem for `cnn_has_vjp_at`** — exposes the
+    witness's `.correct` field as a top-level proposition: the full
+    ResNet-style CNN's backward equals the `pdiv`-contracted Jacobian
+    (Jacobian-transpose applied to the cotangent). CNN analogue of
+    `vit_full_has_vjp_correct`. -/
+theorem cnn_has_vjp_at_correct
+    {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ) (hεs : 0 < εs)
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
+    (e₁ g₁ bb₁ e₂ g₂ bb₂ : ℝ) (he₁ : 0 < e₁) (he₂ : 0 < e₂)
+    (W₁' : Kernel4 oc c kH₁' kW₁') (b₁' : Vec oc) (W₂' : Kernel4 oc oc kH₂' kW₂') (b₂' : Vec oc)
+    (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
+    (f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip : ℝ) (hf₁ : 0 < f₁) (hf₂ : 0 < f₂) (hfp : 0 < fp)
+    (Wd : Mat oc nClasses) (bd : Vec nClasses)
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (x : Vec (ic * (2*h) * (2*w)))
+    (h_stem : ∀ k, bnForward (c * (2*h) * (2*w)) εs γs βs (flatConv Ws bs x) k ≠ 0)
+    (h_mp : MaxPool2Smooth (Tensor3.unflatten
+              (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x) : Tensor3 c (2*h) (2*w)))
+    (h_rb1 : ∀ k, bnForward (c * h * w) f₁ hh₁ i₁
+        (flatConv W₁ b₁
+          (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) k ≠ 0)
+    (h_rb1o : ∀ k,
+        ((bnForward (c * h * w) f₂ hh₂ i₂ ∘ flatConv W₂ b₂) ∘
+          (relu (c * h * w) ∘ bnForward (c * h * w) f₁ hh₁ i₁ ∘ flatConv W₁ b₁))
+            (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x)) k
+          + (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x)) k ≠ 0)
+    (h_rb2 : ∀ k, bnForward (oc * h * w) e₁ g₁ bb₁
+        (flatConv (h := h) (w := w) W₁' b₁'
+          ((rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂
+            (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) : Vec (c*h*w))) k ≠ 0)
+    (h_rb2o : ∀ k,
+        ((bnForward (oc * h * w) fp hhp ip ∘ flatConv (h := h) (w := w) Wp bp)
+          (rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂
+            (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) k)
+        + ((bnForward (oc * h * w) e₂ g₂ bb₂ ∘ flatConv (h := h) (w := w) W₂' b₂') ∘
+            (relu (oc * h * w) ∘ bnForward (oc * h * w) e₁ g₁ bb₁ ∘ flatConv (h := h) (w := w) W₁' b₁'))
+            (rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂
+              (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) k ≠ 0)
+    (dy : Vec nClasses) (i : Fin (ic * (2*h) * (2*w))) :
+    (cnn_has_vjp_at Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂
+        W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd
+        hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).backward dy i =
+      ∑ j : Fin nClasses,
+        pdiv (cnnForward Ws bs εs γs βs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂
+                W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip Wd bd)
+             x i j * dy j :=
+  (cnn_has_vjp_at Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂
+      W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd
+      hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).correct dy i
 
 end Proofs
