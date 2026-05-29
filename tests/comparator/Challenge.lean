@@ -435,6 +435,35 @@ theorem chk_transformerBlock_has_vjp_mat_correct
                  Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
               X i j k l * dY k l := by sorry
 
+/-- **`vit_full_has_vjp` contract**: the apex of the proof chain. The full
+ViT's backward (patchEmbed → vit_body → classifier_flat composition) equals
+the `pdiv`-contracted Jacobian. Just lifts the wrapper
+`vit_full_has_vjp_correct` introduced in
+`LeanMlir/Proofs/Attention.lean`. -/
+theorem chk_vit_full_has_vjp_correct
+    (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
+    (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head))
+    (pos_embed : Mat (N + 1) (heads * d_head))
+    (ε γ1 β1 : ℝ) (hε : 0 < ε)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
+    (γF βF : ℝ)
+    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
+    (x : Vec (ic * H * W)) (dy : Vec nClasses) (i : Fin (ic * H * W)) :
+    (vit_full_has_vjp ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+        W_conv b_conv cls_token pos_embed ε γ1 β1 hε
+        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls).backward x dy i =
+    ∑ j : Fin nClasses,
+      pdiv (vit_full ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+              W_conv b_conv cls_token pos_embed ε γ1 β1
+              Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls)
+           x i j * dy j := by sorry
+
 -- Pointwise (`_at`) variants — closures of the smooth-point bridge ──
 
 /-- **`relu_has_vjp_at` contract**: the pointwise (smooth-input)
