@@ -74,6 +74,7 @@ open Proofs
 #print axioms transformerTower_has_vjp_mat
 #print axioms vit_body_has_vjp_mat
 #print axioms vit_full_has_vjp
+#print axioms vit_full_has_vjp_correct
 
 -- Codegen smooth-point bridge theorems (MLP.lean)
 #print axioms relu_codegen_matches_canonical

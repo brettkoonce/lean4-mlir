@@ -3756,9 +3756,37 @@ theorem transformerBlock_has_vjp_mat_correct
   (transformerBlock_has_vjp_mat N heads d_head mlpDim ε γ1 β1 hε
      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).correct X dY i j
 
-/- Note: `vit_full_has_vjp_correct` is omitted because `vit_full_has_vjp`
-   takes 30+ explicit arguments (full ViT hyperparameter set), making
-   the wrapper unwieldy. The contract is still accessible directly via
-   `(vit_full_has_vjp ic H W ... bcls hε).correct`. -/
+/-- **Public correctness theorem for `vit_full_has_vjp`**: the full ViT's
+    backward equals the `pdiv`-contracted Jacobian (Jacobian-transpose applied to
+    the cotangent). Exposes the witness's `.correct` field as a top-level
+    proposition so consumers (and `#print axioms` audits) can cite the apex
+    contract directly instead of reaching into the record. The long signature is
+    just the full ViT hyperparameter set; the proof is the witness field. -/
+theorem vit_full_has_vjp_correct
+    (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
+    (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head))
+    (pos_embed : Mat (N + 1) (heads * d_head))
+    (ε γ1 β1 : ℝ) (hε : 0 < ε)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
+    (γF βF : ℝ)
+    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
+    (x : Vec (ic * H * W)) (dy : Vec nClasses) (i : Fin (ic * H * W)) :
+    (vit_full_has_vjp ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+        W_conv b_conv cls_token pos_embed ε γ1 β1 hε
+        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls).backward x dy i =
+      ∑ j : Fin nClasses,
+        pdiv (vit_full ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+                W_conv b_conv cls_token pos_embed ε γ1 β1
+                Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls)
+             x i j * dy j :=
+  (vit_full_has_vjp ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+      W_conv b_conv cls_token pos_embed ε γ1 β1 hε
+      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls).correct x dy i
 
 end Proofs
