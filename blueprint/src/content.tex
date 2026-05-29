@@ -3145,8 +3145,33 @@ data-loading layer differs. The framework isn't doing anything
 fundamentally different at ImageNet scale; it's just the data
 that's bigger.
 
-\textbf{Compute budget.} [TODO: cuda + jax demo with measured
-wall-clock and val acc on actual hardware.]
+\textbf{Compute budget.} The phase-2 (Lean$\to$JAX) path trains
+\texttt{resnet34Imagenet} on two AMD Radeon RX 7900 XTX GPUs
+(consumer hardware: gfx1100, ROCm 7.2, JAX 0.10.0, multi-GPU
+sharding via \texttt{Mesh + NamedSharding(P('batch'))} with RCCL
+preloaded). At batch 256 (128 per device), one epoch over the
+1.28M-image training set runs in about 24 minutes of compute plus
+a 10-second val pass; a 30-epoch run finishes in roughly 15
+wall-clock hours including first-epoch JIT compile. Final result
+on the standard 50K-image validation split is $\mathbf{69.26\%}$
+top-1 (val\_loss $1.232$). The parameter checkpoint
+(\texttt{jax\_r34\_imagenet.bin}, 87\,MB, 37 param groups) is
+written via the same \texttt{params\_to\_file} emit that phase-3
+IREE consumes --- so the JAX-trained weights drop into a phase-3
+\texttt{TrainConfig.bootstrapBackbone} field byte-for-byte without
+a separate conversion step.
+
+The recipe trims the paper's 90 epochs to 30 (SGD with momentum
+$0.9$, batch 256, cosine LR with a 5-epoch warmup from peak $0.1$,
+label smoothing $0.1$, random-crop $+$ horizontal flip,
+$\ell_2$ weight decay $10^{-4}$) --- a deliberate trade. The full
+90-epoch recipe of He et al.\ 2015
+(\href{https://arxiv.org/abs/1512.03385}{arXiv:1512.03385}) reaches
+about $73.3\%$ top-1; at 30 epochs we land roughly $95\%$ of that
+headline at $\sim$1/3 the compute, which is plenty of feature
+quality for the YOLOv1 detection bootstrap of
+Ch~\ref{chap:bestiary} and any other downstream consumer of this
+checkpoint. [TODO: bf16] [TODO: 90 epoch]
 
 \section*{A reasonable stopping point}
 
