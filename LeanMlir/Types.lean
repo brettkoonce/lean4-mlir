@@ -391,6 +391,14 @@ structure TrainConfig where
       conv-bound nets (bf16 conv is slower on MIOpen, so convs stay fp32).
       See reference_bf16_gfx1100_conv_vs_gemm. -/
   bf16 : Bool := false
+  /-- bf16 conv compute: additionally cast the standard conv path
+      (`conv2d` / `conv_bn`, hence the full ResNet/VGG/CIFAR-CNN conv stack)
+      to bfloat16, returning fp32. Independent of `bf16` so the AMD/MIOpen
+      path can keep convs in fp32 (default `false`) while CUDA/cuDNN — where
+      bf16 conv is ~1.6× FASTER via tensor cores — can opt in. Only meaningful
+      when `bf16 := true`. Depthwise/separable convs (MobileNet/EfficientNet)
+      still stay fp32. -/
+  bf16Conv : Bool := false
 deriving Repr
 
 inductive DatasetKind where

@@ -174,8 +174,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "#  Conv / Pool helpers\n" ++
       "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
       "def conv2d(x, w, b, padding='SAME', stride=(1,1)):\n" ++
-      "    x = jax.lax.conv_general_dilated(x, w, stride, padding,\n" ++
-      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
       "    return x + b.reshape(1, -1, 1, 1)\n\n"
   if spec.hasPool then
     code := code ++
@@ -185,8 +185,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
   if spec.hasBn then
     code := code ++
       "def conv_bn(x, w, gamma, beta, stride=(1,1), padding='SAME'):\n" ++
-      "    x = jax.lax.conv_general_dilated(x, w, stride, padding,\n" ++
-      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
       "    # Batch normalization: mean/var over (N, H, W) per channel,\n" ++
       "    # matching LeanMlir.MlirCodegen.emitConvBn's 2-step reduction\n" ++
       "    # across dims [2,3] then [0] (divisor b*oH*oW).\n" ++
@@ -1751,13 +1751,19 @@ private def emitShardingSetup : String :=
     `mm` is a no-op cast (identical numerics to a plain `@`). -/
 private def emitDtype (cfg : TrainConfig) : String :=
   let dt := if cfg.bf16 then "jnp.bfloat16" else "jnp.float32"
+  let convDt := if cfg.bf16 && cfg.bf16Conv then "jnp.bfloat16" else "jnp.float32"
   "# Matmul compute dtype (mixed precision). bf16 casts matmul operands and\n" ++
-  "# returns fp32; master weights / LayerNorm / softmax / conv stay fp32.\n" ++
-  "# Helps matmul-bound nets (ViT/transformers ~2.7-3.6x on gfx1100); convs\n" ++
-  "# stay fp32 since bf16 conv is slower on MIOpen.\n" ++
+  "# returns fp32; master weights / LayerNorm / softmax stay fp32.\n" ++
+  "# Helps matmul-bound nets (ViT/transformers ~2.7-3.6x on gfx1100).\n" ++
   "DT = " ++ dt ++ "\n" ++
   "def mm(a, b):\n" ++
-  "    return (a.astype(DT) @ b.astype(DT)).astype(jnp.float32)\n\n"
+  "    return (a.astype(DT) @ b.astype(DT)).astype(jnp.float32)\n\n" ++
+  "# Conv compute dtype. Independent of DT: convs stay fp32 on MIOpen/gfx1100\n" ++
+  "# (bf16 conv is slower there), but opt into bf16 on cuDNN/CUDA where tensor\n" ++
+  "# cores make bf16 conv ~1.6x faster. CONV_DT=float32 -> casts are no-ops.\n" ++
+  "CONV_DT = " ++ convDt ++ "\n" ++
+  "def convdt(x):\n" ++
+  "    return x.astype(CONV_DT)\n\n"
 
 /-- Generate a complete, self-contained JAX training script from a Lean spec. -/
 def generate (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : String) : String :=
