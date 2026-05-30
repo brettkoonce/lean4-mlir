@@ -19,7 +19,7 @@ private def emitImports : String :=
   "import numpy as np\n" ++
   "import struct, os, time, json\n\n"
 
-private def emitDataLoading (ds : DatasetKind) : String :=
+private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
   match ds with
   | .mnist =>
     "# ═══════════════════════════════════════════════════════════════════════\n" ++
@@ -130,6 +130,17 @@ private def emitDataLoading (ds : DatasetKind) : String :=
     "    img = tf.image.resize([img], [_IMG_SIZE, _IMG_SIZE],\n" ++
     "                          method=tf.image.ResizeMethod.BICUBIC)[0]\n" ++
     "    img = tf.image.random_flip_left_right(img)\n" ++
+    (if cfg.useRandAugment then
+      "    # RandAugment-lite: color subset (no geometric — tfa unavailable on tf2.21).\n" ++
+      "    # Magnitude M scales the jitter strength.\n" ++
+      "    img = tf.cast(img, tf.float32)\n" ++
+      "    _M = " ++ toString cfg.randAugmentM ++ " / 10.0\n" ++
+      "    img = tf.image.random_brightness(img, 0.3 * 255.0 * _M)\n" ++
+      "    img = tf.image.random_contrast(img, 1.0 - 0.4 * _M, 1.0 + 0.4 * _M)\n" ++
+      "    img = tf.image.random_saturation(img, 1.0 - 0.4 * _M, 1.0 + 0.4 * _M)\n" ++
+      "    img = tf.image.random_hue(img, 0.1 * _M)\n" ++
+      "    img = tf.clip_by_value(img, 0.0, 255.0)\n"
+     else "") ++
     "    return img\n\n" ++
     "def _imagenet_decode_center_crop(image_bytes):\n" ++
     "    shape = tf.io.extract_jpeg_shape(image_bytes)\n" ++
@@ -144,6 +155,23 @@ private def emitDataLoading (ds : DatasetKind) : String :=
     "    img = tf.image.resize([img], [_IMG_SIZE, _IMG_SIZE],\n" ++
     "                          method=tf.image.ResizeMethod.BICUBIC)[0]\n" ++
     "    return img\n\n" ++
+    (if cfg.randomErasing then
+      "def _random_erase(img):\n" ++
+      "    # Zero a random box (≈mean post-normalize) with prob p. tf-graph-friendly.\n" ++
+      "    def erase():\n" ++
+      "        area = float(_IMG_SIZE * _IMG_SIZE)\n" ++
+      "        er = tf.random.uniform([], 0.02, 0.33) * area\n" ++
+      "        ar = tf.random.uniform([], 0.3, 3.3)\n" ++
+      "        eh = tf.minimum(tf.cast(tf.sqrt(er * ar), tf.int32), _IMG_SIZE)\n" ++
+      "        ew = tf.minimum(tf.cast(tf.sqrt(er / ar), tf.int32), _IMG_SIZE)\n" ++
+      "        top = tf.random.uniform([], 0, _IMG_SIZE - eh + 1, dtype=tf.int32)\n" ++
+      "        left = tf.random.uniform([], 0, _IMG_SIZE - ew + 1, dtype=tf.int32)\n" ++
+      "        my = (tf.range(_IMG_SIZE) >= top) & (tf.range(_IMG_SIZE) < top + eh)\n" ++
+      "        mx = (tf.range(_IMG_SIZE) >= left) & (tf.range(_IMG_SIZE) < left + ew)\n" ++
+      "        mask = tf.cast(my[:, None] & mx[None, :], img.dtype)[:, :, None]\n" ++
+      "        return img * (1.0 - mask)\n" ++
+      "    return tf.cond(tf.random.uniform([]) < " ++ toString cfg.randomErasingProb ++ ", erase, lambda: img)\n\n"
+     else "") ++
     "def build_imagenet_iter(split, batch_size, training, augment):\n" ++
     "    ds = tfds.load('imagenet2012', split=split,\n" ++
     "                   decoders={'image': tfds.decode.SkipDecoding()},\n" ++
@@ -155,6 +183,10 @@ private def emitDataLoading (ds : DatasetKind) : String :=
     "               else _imagenet_decode_center_crop(b))\n" ++
     "        img = tf.cast(img, tf.float32)              # 0..255 HWC\n" ++
     "        img = (img - _MEAN_RGB) / _STD_RGB          # normalize, still HWC\n" ++
+    (if cfg.randomErasing then
+      "        if training and augment:\n" ++
+      "            img = _random_erase(img)\n"
+     else "") ++
     "        img = tf.transpose(img, [2, 0, 1])          # HWC -> CHW\n" ++
     "        img = tf.reshape(img, [3 * _IMG_SIZE * _IMG_SIZE])  # flat to match forward()\n" ++
     "        return img, ex['label']\n" ++
@@ -1277,8 +1309,17 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   "def loss_fn(params, x, y):\n" ++
   "    logits = forward(params, x)\n" ++
   "    log_probs = jax.nn.log_softmax(logits, axis=-1)\n" ++
-  "    one_hot = jax.nn.one_hot(y, " ++ toString nClasses ++ ")\n" ++
-  "    return -jnp.mean(jnp.sum(log_probs * one_hot, axis=-1))\n\n" ++
+  "    # y is int32 [B] (hard labels) or float [B,NC] (soft labels, mixup/cutmix).\n" ++
+  "    # y.ndim is static at trace time, so this branch is jit-safe.\n" ++
+  "    if y.ndim == 1:\n" ++
+  "        tgt = jax.nn.one_hot(y, " ++ toString nClasses ++ ")\n" ++
+  (if cfg.labelSmoothing > 0.0 then
+    "        tgt = tgt * (1.0 - " ++ toString cfg.labelSmoothing ++ ") + " ++
+      toString cfg.labelSmoothing ++ " / " ++ toString nClasses ++ "\n"
+   else "") ++
+  "    else:\n" ++
+  "        tgt = y\n" ++
+  "    return -jnp.mean(jnp.sum(log_probs * tgt, axis=-1))\n\n" ++
   let ic := match spec.layers.head? with
     | some (.conv2d ic ..) => ic | some (.convBn ic ..) => ic
     | some (.patchEmbed ic ..) => ic | _ => 3
@@ -1304,6 +1345,11 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
   let hasWD := cfg.weightDecay > 0.0
   let wd := toString cfg.weightDecay
+  -- Gradient clipping by global L2 norm (after value_and_grad, before WD + optimizer).
+  let clipLine := if cfg.gradClipNorm > 0.0 then
+    "    gn = jnp.sqrt(sum(jnp.sum(g * g) for g in jax.tree.leaves(grads)))\n" ++
+    "    grads = jax.tree.map(lambda g: g * jnp.minimum(1.0, " ++ toString cfg.gradClipNorm ++ " / (gn + 1e-6)), grads)\n"
+  else ""
   "LR = " ++ lr ++ "\n" ++
   (if hasMomentum && !useAdam then "MOMENTUM = " ++ toString cfg.momentum ++ "\n" else "") ++
   (if hasWD then "WD = " ++ wd ++ "\n" else "") ++
@@ -1311,7 +1357,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   (if useAdam then
     "@jit\n" ++
     "def train_step(params, opt_state, x, y, lr):\n" ++
-    "    loss, grads = value_and_grad(loss_fn)(params, x, y)\n" ++
+    "    loss, grads = value_and_grad(loss_fn)(params, x, y)\n" ++ clipLine ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    m, v, t = opt_state\n" ++
     "    t = t + 1\n" ++
@@ -1324,7 +1370,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   else if hasMomentum then
     "@jit\n" ++
     "def train_step(params, velocity, x, y, lr):\n" ++
-    "    loss, grads = value_and_grad(loss_fn)(params, x, y)\n" ++
+    "    loss, grads = value_and_grad(loss_fn)(params, x, y)\n" ++ clipLine ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    velocity = jax.tree.map(lambda v, g: MOMENTUM * v + g, velocity, grads)\n" ++
     "    params = jax.tree.map(lambda p, v: p - lr * v, params, velocity)\n" ++
@@ -1332,10 +1378,45 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   else
     "@jit\n" ++
     "def train_step(params, x, y, lr):\n" ++
-    "    loss, grads = value_and_grad(loss_fn)(params, x, y)\n" ++
+    "    loss, grads = value_and_grad(loss_fn)(params, x, y)\n" ++ clipLine ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    params = jax.tree.map(lambda p, g: p - lr * g, params, grads)\n" ++
     "    return params, loss\n\n") ++
+  -- Mixup (on-device, soft labels). Partner = batch-reverse (jnp.flip) to avoid
+  -- a cross-shard gather under multi-GPU sharding. λ ~ Beta(α,α) per step.
+  (if cfg.useMixup then
+    "@jit\n" ++
+    "def _mixup(x, y, key):\n" ++
+    "    lam = jax.random.beta(key, " ++ toString cfg.mixupAlpha ++ ", " ++ toString cfg.mixupAlpha ++ ")\n" ++
+    "    y1 = jax.nn.one_hot(y, " ++ toString nClasses ++ ")\n" ++
+    "    xm = lam * x + (1.0 - lam) * jnp.flip(x, 0)\n" ++
+    "    ym = lam * y1 + (1.0 - lam) * jnp.flip(y1, 0)\n" ++
+    "    return xm, ym\n\n"
+   else "") ++
+  -- CutMix (on-device, jit-friendly box via a comparison mask — no dynamic slice).
+  -- Partner = batch-reverse (flip). λ reweighted by actual pasted area.
+  (if cfg.useCutmix then
+    let H := toString spec.imageH; let W := toString spec.imageW
+    "@jit\n" ++
+    "def _cutmix(x, y, key):\n" ++
+    "    B = x.shape[0]\n" ++
+    "    k1, k2, k3 = jax.random.split(key, 3)\n" ++
+    "    lam = jax.random.beta(k1, " ++ toString cfg.cutmixAlpha ++ ", " ++ toString cfg.cutmixAlpha ++ ")\n" ++
+    "    x4 = x.reshape(B, 3, " ++ H ++ ", " ++ W ++ ")\n" ++
+    "    cut = jnp.sqrt(1.0 - lam)\n" ++
+    "    cw = (cut * " ++ W ++ ").astype(jnp.int32); ch = (cut * " ++ H ++ ").astype(jnp.int32)\n" ++
+    "    cx = jax.random.randint(k2, (), 0, " ++ W ++ "); cy = jax.random.randint(k3, (), 0, " ++ H ++ ")\n" ++
+    "    x1 = jnp.clip(cx - cw // 2, 0, " ++ W ++ "); x2 = jnp.clip(cx + cw // 2, 0, " ++ W ++ ")\n" ++
+    "    y1c = jnp.clip(cy - ch // 2, 0, " ++ H ++ "); y2c = jnp.clip(cy + ch // 2, 0, " ++ H ++ ")\n" ++
+    "    mx = (jnp.arange(" ++ W ++ ") >= x1) & (jnp.arange(" ++ W ++ ") < x2)\n" ++
+    "    my = (jnp.arange(" ++ H ++ ") >= y1c) & (jnp.arange(" ++ H ++ ") < y2c)\n" ++
+    "    mask = (my[:, None] & mx[None, :]).astype(x.dtype)\n" ++
+    "    x4m = x4 * (1.0 - mask) + jnp.flip(x4, 0) * mask\n" ++
+    "    lam_adj = 1.0 - jnp.sum(mask) / (" ++ H ++ " * " ++ W ++ ")\n" ++
+    "    y1h = jax.nn.one_hot(y, " ++ toString nClasses ++ ")\n" ++
+    "    ym = lam_adj * y1h + (1.0 - lam_adj) * jnp.flip(y1h, 0)\n" ++
+    "    return x4m.reshape(B, -1), ym\n\n"
+   else "") ++
   "@jit\n" ++
   "def eval_batch(params, x, y):\n" ++
   "    logits = forward(params, x)\n" ++
@@ -1515,6 +1596,17 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    else "") ++
   "            x = jax.device_put(x, data_sharding)\n" ++
   "            y = jax.device_put(y, data_sharding)\n" ++
+  (let mk := "jax.random.fold_in(jax.random.PRNGKey(" ++ toString cfg.seed ++ "), _global_step)"
+   if cfg.useMixup && cfg.useCutmix then
+     "            if _global_step % 2 == 0:\n" ++
+     "                x, y = _mixup(x, y, " ++ mk ++ ")\n" ++
+     "            else:\n" ++
+     "                x, y = _cutmix(x, y, " ++ mk ++ ")\n"
+   else if cfg.useMixup then
+     "            x, y = _mixup(x, y, " ++ mk ++ ")\n"
+   else if cfg.useCutmix then
+     "            x, y = _cutmix(x, y, " ++ mk ++ ")\n"
+   else "") ++
   (if useAdam then
     "            params, opt_state, loss = train_step(params, opt_state, x, y, lr)\n"
    else if hasMomentum then
@@ -1769,7 +1861,7 @@ private def emitDtype (cfg : TrainConfig) : String :=
 def generate (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : String) : String :=
   emitHeader spec ++
   emitImports ++
-  emitDataLoading ds ++
+  emitDataLoading ds cfg ++
   emitDtype cfg ++
   emitHelpers spec ++
   emitShardingSetup ++

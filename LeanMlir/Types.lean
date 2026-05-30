@@ -399,6 +399,11 @@ structure TrainConfig where
       when `bf16 := true`. Depthwise/separable convs (MobileNet/EfficientNet)
       still stay fp32. -/
   bf16Conv : Bool := false
+  /-- Clip gradients by global L2 norm before the optimizer step. 0 = off.
+      DeiT default 1.0 — essential for stable ViT-from-scratch training: it
+      lets you use the proper ~1e-3 LR without the collapse-to-chance seen at
+      higher LR with no clipping. See planning/vit_imagenet.md. -/
+  gradClipNorm : Float := 0.0
 deriving Repr
 
 inductive DatasetKind where

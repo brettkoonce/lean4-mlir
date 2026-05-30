@@ -25,12 +25,11 @@ def vitTinyImagenet : NetSpec where
     decay 0.05, label smoothing 0.1, augmentation on. bf16 matmuls.
     Peak LR 1e-4 (provisional): 5e-4 and 2e-4 both collapsed to chance the
     moment warmup ramped LR past ~1.6e-4 (train loss pinned at ln(1000)) —
-    the classic no-grad-clip ViT instability, worsened by bf16 on the
-    1000-class softmax. Peak 1e-4 keeps the whole schedule under that
-    threshold and trains stably (loss ↓, val ↑) but slowly. Proper fix is
-    gradient clipping in the codegen, which would allow a higher LR. -/
+    the classic no-grad-clip ViT instability. Now FIXED via gradClipNorm:
+    grad clipping lets us run the proper DeiT LR (5e-4 at batch 512) — the
+    very LR that collapsed to chance without clipping. -/
 def vitTinyImagenetConfig : TrainConfig where
-  learningRate   := 0.0001
+  learningRate   := 0.0005          -- proper DeiT batch-512 LR (was crippled at 1e-4)
   batchSize      := 512
   epochs         := 80
   useAdam        := true
@@ -38,7 +37,16 @@ def vitTinyImagenetConfig : TrainConfig where
   cosineDecay    := true
   warmupEpochs   := 5
   augment        := true
-  labelSmoothing := 0.1
+  labelSmoothing := 0.1             -- now actually applied (was ignored by the JAX loss)
+  gradClipNorm   := 1.0             -- DeiT default; the unlock for the 5e-4 LR
+  useMixup       := true            -- DeiT aug suite (mixup + cutmix alternate per step)
+  mixupAlpha     := 0.8
+  useCutmix      := true
+  cutmixAlpha    := 1.0
+  useRandAugment := true            -- color subset only (no geometric — tfa N/A on tf2.21)
+  randAugmentM   := 9.0
+  randomErasing  := true
+  randomErasingProb := 0.25
   bf16           := true
 
 #eval vitTinyImagenet.validate!
