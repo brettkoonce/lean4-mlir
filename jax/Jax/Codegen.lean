@@ -491,13 +491,13 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "def mhsa(x, wq, bq, wk, bk, wv, bv, wo, bo, n_heads):\n" ++
       "    B, N, D = x.shape\n" ++
       "    head_dim = D // n_heads\n" ++
-      "    q = (x @ wq.T + bq).reshape(B, N, n_heads, head_dim).transpose(0, 2, 1, 3)\n" ++
-      "    k = (x @ wk.T + bk).reshape(B, N, n_heads, head_dim).transpose(0, 2, 1, 3)\n" ++
-      "    v = (x @ wv.T + bv).reshape(B, N, n_heads, head_dim).transpose(0, 2, 1, 3)\n" ++
+      "    q = (mm(x, wq.T) + bq).reshape(B, N, n_heads, head_dim).transpose(0, 2, 1, 3)\n" ++
+      "    k = (mm(x, wk.T) + bk).reshape(B, N, n_heads, head_dim).transpose(0, 2, 1, 3)\n" ++
+      "    v = (mm(x, wv.T) + bv).reshape(B, N, n_heads, head_dim).transpose(0, 2, 1, 3)\n" ++
       "    scale = jnp.sqrt(jnp.float32(head_dim))\n" ++
-      "    attn = jax.nn.softmax(q @ k.transpose(0, 1, 3, 2) / scale, axis=-1)\n" ++
-      "    out = (attn @ v).transpose(0, 2, 1, 3).reshape(B, N, D)\n" ++
-      "    return out @ wo.T + bo\n\n" ++
+      "    attn = jax.nn.softmax(mm(q, k.transpose(0, 1, 3, 2)) / scale, axis=-1)\n" ++
+      "    out = mm(attn, v).transpose(0, 2, 1, 3).reshape(B, N, D)\n" ++
+      "    return mm(out, wo.T) + bo\n\n" ++
       "def transformer_block(params, x, idx, n_heads):\n" ++
       "    g1, b1 = params[idx]\n" ++
       "    x2 = layer_norm(x, g1, b1)\n" ++
@@ -510,8 +510,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    x2 = layer_norm(x, g2, b2)\n" ++
       "    w1, b1m = params[idx+6]\n" ++
       "    w2, b2m = params[idx+7]\n" ++
-      "    h = jax.nn.gelu(x2 @ w1.T + b1m)\n" ++
-      "    x = x + (h @ w2.T + b2m)\n" ++
+      "    h = jax.nn.gelu(mm(x2, w1.T) + b1m)\n" ++
+      "    x = x + (mm(h, w2.T) + b2m)\n" ++
       "    return x\n\n"
   code
 
@@ -1140,7 +1140,7 @@ private def emitForward (spec : NetSpec) : String := Id.run do
     | .flatten =>
       code := code ++ "    x = x.reshape(x.shape[0], -1)\n"
     | .dense _ _ act =>
-      code := code ++ "    x = x @ params[" ++ toString pidx ++ "][0].T + params[" ++
+      code := code ++ "    x = mm(x, params[" ++ toString pidx ++ "][0].T) + params[" ++
         toString pidx ++ "][1]\n"
       if act == .relu then code := code ++ "    x = jax.nn.relu(x)\n"
       if act == .relu6 then code := code ++ "    x = jnp.minimum(jax.nn.relu(x), 6.0)\n"
@@ -1229,15 +1229,22 @@ private def emitForward (spec : NetSpec) : String := Id.run do
     | .fireModule _ _ _ _ =>
       code := code ++ "    x = fire_module(params, x, " ++ toString pidx ++ ")\n"
       pidx := pidx + 3
-    | .patchEmbed _ic dim p _nP =>
-      -- Conv patch embedding
-      code := code ++ "    x = jax.lax.conv_general_dilated(x, params[" ++ toString pidx ++ "][0], (" ++
-        toString p ++ "," ++ toString p ++ "), 'VALID',\n" ++
-        "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n"
-      code := code ++ "    x = x + params[" ++ toString pidx ++ "][1].reshape(1, -1, 1, 1)\n"
+    | .patchEmbed ic dim p nP =>
+      -- Patch embedding as reshape-into-patches + matmul (equivalent to a
+      -- stride-p VALID conv for non-overlapping patches). Avoids MIOpen's
+      -- broken im2col conv kernel on gfx1100 and routes through mm() so the
+      -- patch projection gets the same bf16 treatment as the other matmuls.
+      -- Weight is stored conv-shaped (dim, ic, p, p); reshape to (dim, ic*p*p)
+      -- then transpose for the matmul — checkpoints/paramShapes unchanged.
+      let nhH := spec.imageH / p
+      let nhW := spec.imageW / p
+      code := code ++ "    x = x.reshape(x.shape[0], " ++ toString ic ++ ", " ++ toString nhH ++ ", " ++
+        toString p ++ ", " ++ toString nhW ++ ", " ++ toString p ++
+        ").transpose(0, 2, 4, 1, 3, 5).reshape(x.shape[0], " ++ toString nP ++ ", " ++
+        toString (ic * p * p) ++ ")\n"
+      code := code ++ "    x = mm(x, params[" ++ toString pidx ++ "][0].reshape(" ++ toString dim ++
+        ", -1).T) + params[" ++ toString pidx ++ "][1]\n"
       pidx := pidx + 1
-      -- Reshape from (B, dim, H', W') to (B, nPatches, dim)
-      code := code ++ "    x = x.reshape(x.shape[0], " ++ toString dim ++ ", -1).transpose(0, 2, 1)\n"
       -- Prepend CLS token
       code := code ++ "    cls = jnp.broadcast_to(params[" ++ toString pidx ++ "][0], (x.shape[0], 1, " ++ toString dim ++ "))\n"
       pidx := pidx + 1
@@ -1739,11 +1746,25 @@ private def emitShardingSetup : String :=
   "data_sharding = NamedSharding(mesh, P('batch'))\n" ++
   "replicated_sharding = NamedSharding(mesh, P())\n\n"
 
+/-- Compute-dtype helper. `DT` is the matmul compute dtype and `mm(a,b)`
+    casts operands to it, returning fp32. With bf16 off, `DT=float32` and
+    `mm` is a no-op cast (identical numerics to a plain `@`). -/
+private def emitDtype (cfg : TrainConfig) : String :=
+  let dt := if cfg.bf16 then "jnp.bfloat16" else "jnp.float32"
+  "# Matmul compute dtype (mixed precision). bf16 casts matmul operands and\n" ++
+  "# returns fp32; master weights / LayerNorm / softmax / conv stay fp32.\n" ++
+  "# Helps matmul-bound nets (ViT/transformers ~2.7-3.6x on gfx1100); convs\n" ++
+  "# stay fp32 since bf16 conv is slower on MIOpen.\n" ++
+  "DT = " ++ dt ++ "\n" ++
+  "def mm(a, b):\n" ++
+  "    return (a.astype(DT) @ b.astype(DT)).astype(jnp.float32)\n\n"
+
 /-- Generate a complete, self-contained JAX training script from a Lean spec. -/
 def generate (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : String) : String :=
   emitHeader spec ++
   emitImports ++
   emitDataLoading ds ++
+  emitDtype cfg ++
   emitHelpers spec ++
   emitShardingSetup ++
   emitInitParams spec ++

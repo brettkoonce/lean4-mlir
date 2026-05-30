@@ -384,6 +384,13 @@ structure TrainConfig where
       checkpoint (or borrowed for downstream tasks like YOLOv1
       bootstrap — see `bootstrapBackbone`). -/
   checkpointEveryNEpochs : Nat := 10
+  /-- bf16 mixed precision: cast matmul operands (dense, attention QKV /
+      scores / output, MLP, patch embed) to bfloat16, keeping master
+      weights, LayerNorm, softmax, and conv in fp32. Measured ~2.7-3.6×
+      on matmul-bound nets (ViT/transformers) on gfx1100; ~no effect on
+      conv-bound nets (bf16 conv is slower on MIOpen, so convs stay fp32).
+      See reference_bf16_gfx1100_conv_vs_gemm. -/
+  bf16 : Bool := false
 deriving Repr
 
 inductive DatasetKind where
