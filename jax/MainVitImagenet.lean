@@ -21,11 +21,16 @@ def vitTinyImagenet : NetSpec where
     .dense 192 1000 .identity             -- 1000-class head
   ]
 
-/-- DeiT-flavored 80-epoch recipe: AdamW, lr 5e-4 at batch 512 (256/device
-    on 2 GPUs), 5-epoch warmup + cosine, weight decay 0.05, label smoothing
-    0.1, augmentation on. bf16 matmuls. -/
+/-- DeiT-flavored 80-epoch recipe: AdamW, 5-epoch warmup + cosine, weight
+    decay 0.05, label smoothing 0.1, augmentation on. bf16 matmuls.
+    Peak LR 1e-4 (provisional): 5e-4 and 2e-4 both collapsed to chance the
+    moment warmup ramped LR past ~1.6e-4 (train loss pinned at ln(1000)) —
+    the classic no-grad-clip ViT instability, worsened by bf16 on the
+    1000-class softmax. Peak 1e-4 keeps the whole schedule under that
+    threshold and trains stably (loss ↓, val ↑) but slowly. Proper fix is
+    gradient clipping in the codegen, which would allow a higher LR. -/
 def vitTinyImagenetConfig : TrainConfig where
-  learningRate   := 0.0005
+  learningRate   := 0.0001
   batchSize      := 512
   epochs         := 80
   useAdam        := true
