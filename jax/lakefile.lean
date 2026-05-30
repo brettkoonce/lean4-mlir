@@ -59,6 +59,10 @@ lean_exe «vit-tiny» where
 lean_exe «resnet34-imagenet» where
   root := `MainResnetImagenet
 
+-- ViT-Tiny on 1000-class ImageNet, bf16 mixed precision, 2-GPU.
+lean_exe «vit-tiny-imagenet» where
+  root := `MainVitImagenet
+
 -- VJP oracle — one binary per axiom under test. Trainers live in
 -- tests/vjp_oracle/phase2/ so jax/ isn't crowded with test-only files.
 -- See tests/vjp_oracle/README.md at the repo root.
