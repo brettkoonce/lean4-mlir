@@ -4894,6 +4894,8 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         let shapeC1Ty := tensorTy shapeC1
         let shapeClass := [B, numC, gH, gW]
         let shapeClassTy := tensorTy shapeClass
+        let shapeClsRed := [B, gH, gW]            -- class dim reduced (for softmax CE)
+        let shapeClsRedTy := tensorTy shapeClsRed
         let shapeBox1XYWH := [B, 4, gH, gW]
         let shapeBox1XYWHTy := tensorTy shapeBox1XYWH
         let i1WHTy := s!"tensor<{B}x2x{gH}x{gW}xi1>"
@@ -4959,12 +4961,26 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         code := code ++ s!"    %y1_sum_c1neg = stablehlo.reduce(%y1_sq_c1neg init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
         code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
         code := code ++ s!"    %y1_t5 = stablehlo.multiply %y1_sum_c1neg, %y1_lnoobj : tensor<f32>\n"
-        -- T6: class
-        code := code ++ s!"    %y1_diff_cls = stablehlo.subtract %y1_pred_cls, %y1_tgt_cls : {shapeClassTy}\n"
-        code := code ++ s!"    %y1_sq_cls = stablehlo.multiply %y1_diff_cls, %y1_diff_cls : {shapeClassTy}\n"
-        code := code ++ s!"    %y1_msq_cls = stablehlo.multiply %y1_sq_cls, %y1_mask_cls : {shapeClassTy}\n"
-        code := code ++ s!"    %y1_t6 = stablehlo.reduce(%y1_msq_cls init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+        -- T6: class — softmax cross-entropy over the numC class channels (dim 1),
+        -- masked to object cells. (Replaces the original SSE class term, which was
+        -- too weak to sharpen the 20-way class logits — see planning/yolo notes.)
+        -- Numerically-stable: shift by per-cell max, then log-softmax.
+        code := code ++ s!"    %y1_cls_ninf = stablehlo.constant dense<-3.0e38> : tensor<f32>\n"
+        code := code ++ s!"    %y1_cls_max = stablehlo.reduce(%y1_pred_cls init: %y1_cls_ninf) applies stablehlo.maximum across dimensions = [1]\n"
+        code := code ++ s!"           : ({shapeClassTy}, tensor<f32>) -> {shapeClsRedTy}\n"
+        code := code ++ s!"    %y1_cls_maxb = stablehlo.broadcast_in_dim %y1_cls_max, dims = [0, 2, 3] : ({shapeClsRedTy}) -> {shapeClassTy}\n"
+        code := code ++ s!"    %y1_cls_shift = stablehlo.subtract %y1_pred_cls, %y1_cls_maxb : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_cls_exp = stablehlo.exponential %y1_cls_shift : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_cls_sumexp = stablehlo.reduce(%y1_cls_exp init: %zf) applies stablehlo.add across dimensions = [1]\n"
+        code := code ++ s!"           : ({shapeClassTy}, tensor<f32>) -> {shapeClsRedTy}\n"
+        code := code ++ s!"    %y1_cls_logsum = stablehlo.log %y1_cls_sumexp : {shapeClsRedTy}\n"
+        code := code ++ s!"    %y1_cls_logsumb = stablehlo.broadcast_in_dim %y1_cls_logsum, dims = [0, 2, 3] : ({shapeClsRedTy}) -> {shapeClassTy}\n"
+        code := code ++ s!"    %y1_cls_logsm = stablehlo.subtract %y1_cls_shift, %y1_cls_logsumb : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_cls_nll = stablehlo.multiply %y1_tgt_cls, %y1_cls_logsm : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_cls_nll_m = stablehlo.multiply %y1_cls_nll, %y1_mask_cls : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_cls_ce_sum = stablehlo.reduce(%y1_cls_nll_m init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
         code := code ++ s!"           : ({shapeClassTy}, tensor<f32>) -> tensor<f32>\n"
+        code := code ++ s!"    %y1_t6 = stablehlo.negate %y1_cls_ce_sum : tensor<f32>\n"
         -- Aggregate
         code := code ++ s!"    %y1_s12 = stablehlo.add %y1_t1, %y1_t2 : tensor<f32>\n"
         code := code ++ s!"    %y1_s34 = stablehlo.add %y1_t3, %y1_t4 : tensor<f32>\n"
@@ -5008,10 +5024,13 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         code := code ++ s!"    %y1_g_c1_a = stablehlo.multiply %y1_two_c1, %y1_lnoobj_c1 : {shapeC1Ty}\n"
         code := code ++ s!"    %y1_g_c1_b = stablehlo.multiply %y1_g_c1_a, %y1_pred_c1 : {shapeC1Ty}\n"
         code := code ++ s!"    %y1_g_c1 = stablehlo.divide %y1_g_c1_b, %y1_Bf_c1 : {shapeC1Ty}\n"
-        -- d/dpred_cls = 2 · mask · (pred - tgt) / B
-        code := code ++ s!"    %y1_g_cls_a = stablehlo.multiply %y1_two_cls, %y1_mask_cls : {shapeClassTy}\n"
-        code := code ++ s!"    %y1_g_cls_b = stablehlo.multiply %y1_g_cls_a, %y1_diff_cls : {shapeClassTy}\n"
-        code := code ++ s!"    %y1_g_cls = stablehlo.divide %y1_g_cls_b, %y1_Bf_cls : {shapeClassTy}\n"
+        -- d/dpred_cls = mask · (softmax(pred) - tgt) / B   [softmax-CE gradient,
+        -- reusing exp/sumexp from the forward; no factor of 2 unlike the SSE term]
+        code := code ++ s!"    %y1_cls_sumexpb = stablehlo.broadcast_in_dim %y1_cls_sumexp, dims = [0, 2, 3] : ({shapeClsRedTy}) -> {shapeClassTy}\n"
+        code := code ++ s!"    %y1_cls_sm = stablehlo.divide %y1_cls_exp, %y1_cls_sumexpb : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_g_cls_d = stablehlo.subtract %y1_cls_sm, %y1_tgt_cls : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_g_cls_m = stablehlo.multiply %y1_g_cls_d, %y1_mask_cls : {shapeClassTy}\n"
+        code := code ++ s!"    %y1_g_cls = stablehlo.divide %y1_g_cls_m, %y1_Bf_cls : {shapeClassTy}\n"
         -- Box 1 xywh: zero (never optimized under Option A)
         code := code ++ s!"    %y1_g_box1 = stablehlo.constant dense<0.0> : {shapeBox1XYWHTy}\n"
         -- Concat slabs along channel dim 1: xy(2) + wh(2) + c0(1) + box1(4) + c1(1) + cls(numC)
