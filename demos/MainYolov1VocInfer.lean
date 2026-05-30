@@ -77,7 +77,10 @@ def main (args : List String) : IO Unit := do
   IO.println s!"  loaded {nVal} val records; using first {n}"
   let _ := valLbl
 
-  let batch : Nat := 1
+  -- The eval vmfb is compiled at the training batch size (16), so we must
+  -- feed exactly that many images in one forward pass (batch=1 → shape error).
+  let batch : Nat := 16
+  let n := batch
   let xShape := spec.xShape batch
   let pixelsPerImage := 3 * 224 * 224
   let evalShapesBA := spec.evalShapesBA
@@ -92,21 +95,17 @@ def main (args : List String) : IO Unit := do
   let testList ← IO.FS.readFile testListPath
   let testIds := (testList.trim.splitOn "\n").map String.trim |>.filter (· != "")
 
-  let mut logitsOut : ByteArray := .empty
-  let mut imagesOut : ByteArray := .empty
+  -- Single batched forward over the first `n` (=batch) val images.
+  let imagesOut := F32.sliceImages valImg 0 n pixelsPerImage
+  let logitsOut ← IreeSession.forwardF32 sess spec.evalFnName
+                    evalParams evalShapesBA imagesOut xShape batch.toUSize nClasses
+  IO.println s!"  inferred batch of {n}"
   let mut idsOut : String := ""
   for i in [:n] do
-    let xRaw := F32.sliceImages valImg i 1 pixelsPerImage
-    let logits ← IreeSession.forwardF32 sess spec.evalFnName
-                    evalParams evalShapesBA xRaw xShape batch.toUSize nClasses
-    logitsOut := logitsOut.append logits
-    imagesOut := imagesOut.append xRaw
     if h : i < testIds.length then
       idsOut := idsOut ++ testIds[i] ++ "\n"
     else
       idsOut := idsOut ++ s!"unknown_{i}\n"
-    if i < 3 || i % 5 == 0 then
-      IO.println s!"  inferred {i+1}/{n}"
 
   IO.FS.writeBinFile logitsPath logitsOut
   IO.FS.writeBinFile imagesPath imagesOut
