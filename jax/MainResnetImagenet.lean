@@ -30,7 +30,7 @@ def resnet34Imagenet : NetSpec where
 def resnet34ImagenetConfig : TrainConfig where
   learningRate   := 0.1
   batchSize      := 256
-  epochs         := 30      -- abbreviated from paper's 90 — ~95% of feature quality at half wall-clock; backbone bootstrap doesn't need the final 1-2% top-1
+  epochs         := 90      -- full paper recipe (4-GPU bf16 run, ~18 hr clean)
 
   useAdam        := false
   momentum       := 0.9
@@ -39,6 +39,12 @@ def resnet34ImagenetConfig : TrainConfig where
   warmupEpochs   := 5
   augment        := true
   labelSmoothing := 0.1
+  -- bf16 mixed precision (incl. bf16 conv): a CUDA/cuDNN recipe — 1.60x faster
+  -- than fp32 on the 4060 Ti box, reaching 72.0% top-1 / 90.6% top-5 over the
+  -- full 50k val (see jax/runs/r34_imagenet_bf16_90ep/RESULTS.md). On AMD/MIOpen
+  -- set bf16Conv := false (bf16 conv is slower there); see reference_ares_pcie_aer.
+  bf16           := true
+  bf16Conv       := true
 
 #eval resnet34Imagenet.validate!
 

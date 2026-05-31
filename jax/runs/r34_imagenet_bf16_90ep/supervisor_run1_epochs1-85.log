@@ -1,0 +1,184 @@
+[sup] 2026-05-30 18:47:51 START 90-epoch bf16 on GPUs 0,2,3,4
+[sup] 18:47:51 attempt 1: fresh start (no checkpoint)
+[sup] 18:47:51 launched PID=10849
+[sup] 09:24:21 !!! AER detected — killing PID=10849
+[sup]   last: [Epoch 85] lr=0.000851 loss(train_avg)=1.1365 val_top1=35742/49920 (0.716) val_top5=0.9034 val_loss=1.1352  [617.3s train, -607.3s val]
+[sup] 09:24:23 attempt 1 ended (aer); cooling 15s then resuming
+[sup] 09:24:38 attempt 2: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:24:38 launched PID=68376
+[sup] 09:24:38 attempt 2 ended (crash); cooling 15s then resuming
+[sup] 09:24:53 attempt 3: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:24:53 launched PID=68650
+[sup] 09:24:53 attempt 3 ended (crash); cooling 15s then resuming
+[sup] 09:25:09 attempt 4: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:25:09 launched PID=68926
+[sup] 09:25:09 attempt 4 ended (crash); cooling 15s then resuming
+[sup] 09:25:24 attempt 5: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:25:24 launched PID=69199
+[sup] 09:25:24 attempt 5 ended (crash); cooling 15s then resuming
+[sup] 09:25:39 attempt 6: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:25:39 launched PID=69472
+[sup] 09:25:39 attempt 6 ended (crash); cooling 15s then resuming
+[sup] 09:25:54 attempt 7: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:25:54 launched PID=69745
+[sup] 09:25:54 attempt 7 ended (crash); cooling 15s then resuming
+[sup] 09:26:09 attempt 8: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:26:09 launched PID=70018
+[sup] 09:26:09 attempt 8 ended (crash); cooling 15s then resuming
+[sup] 09:26:25 attempt 9: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:26:25 launched PID=70291
+[sup] 09:26:25 attempt 9 ended (crash); cooling 15s then resuming
+[sup] 09:26:40 attempt 10: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:26:40 launched PID=70564
+[sup] 09:26:40 attempt 10 ended (crash); cooling 15s then resuming
+[sup] 09:26:55 attempt 11: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:26:55 launched PID=70837
+[sup] 09:26:55 attempt 11 ended (crash); cooling 15s then resuming
+[sup] 09:27:10 attempt 12: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:27:10 launched PID=71110
+[sup] 09:27:10 attempt 12 ended (crash); cooling 15s then resuming
+[sup] 09:27:25 attempt 13: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:27:25 launched PID=71384
+[sup] 09:27:25 attempt 13 ended (crash); cooling 15s then resuming
+[sup] 09:27:41 attempt 14: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:27:41 launched PID=71657
+[sup] 09:27:41 attempt 14 ended (crash); cooling 15s then resuming
+[sup] 09:27:56 attempt 15: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:27:56 launched PID=71930
+[sup] 09:27:56 attempt 15 ended (crash); cooling 15s then resuming
+[sup] 09:28:11 attempt 16: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:28:11 launched PID=72203
+[sup] 09:28:11 attempt 16 ended (crash); cooling 15s then resuming
+[sup] 09:28:26 attempt 17: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:28:26 launched PID=72476
+[sup] 09:28:26 attempt 17 ended (crash); cooling 15s then resuming
+[sup] 09:28:41 attempt 18: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:28:41 launched PID=72749
+[sup] 09:28:41 attempt 18 ended (crash); cooling 15s then resuming
+[sup] 09:28:57 attempt 19: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:28:57 launched PID=73022
+[sup] 09:28:57 attempt 19 ended (crash); cooling 15s then resuming
+[sup] 09:29:12 attempt 20: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:29:12 launched PID=73295
+[sup] 09:29:12 attempt 20 ended (crash); cooling 15s then resuming
+[sup] 09:29:27 attempt 21: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:29:27 launched PID=73569
+[sup] 09:29:27 attempt 21 ended (crash); cooling 15s then resuming
+[sup] 09:29:42 attempt 22: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:29:42 launched PID=73842
+[sup] 09:29:42 attempt 22 ended (crash); cooling 15s then resuming
+[sup] 09:29:57 attempt 23: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:29:57 launched PID=74115
+[sup] 09:29:57 attempt 23 ended (crash); cooling 15s then resuming
+[sup] 09:30:13 attempt 24: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:30:13 launched PID=74389
+[sup] 09:30:13 attempt 24 ended (crash); cooling 15s then resuming
+[sup] 09:30:28 attempt 25: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:30:28 launched PID=74662
+[sup] 09:30:28 attempt 25 ended (crash); cooling 15s then resuming
+[sup] 09:30:43 attempt 26: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:30:43 launched PID=74935
+[sup] 09:30:43 attempt 26 ended (crash); cooling 15s then resuming
+[sup] 09:30:58 attempt 27: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:30:58 launched PID=75208
+[sup] 09:30:58 attempt 27 ended (crash); cooling 15s then resuming
+[sup] 09:31:13 attempt 28: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:31:13 launched PID=75481
+[sup] 09:31:13 attempt 28 ended (crash); cooling 15s then resuming
+[sup] 09:31:29 attempt 29: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:31:29 launched PID=75754
+[sup] 09:31:29 attempt 29 ended (crash); cooling 15s then resuming
+[sup] 09:31:44 attempt 30: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:31:44 launched PID=76027
+[sup] 09:31:44 attempt 30 ended (crash); cooling 15s then resuming
+[sup] 09:31:59 attempt 31: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:31:59 launched PID=76300
+[sup] 09:31:59 attempt 31 ended (crash); cooling 15s then resuming
+[sup] 09:32:14 attempt 32: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:32:14 launched PID=76573
+[sup] 09:32:14 attempt 32 ended (crash); cooling 15s then resuming
+[sup] 09:32:29 attempt 33: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:32:29 launched PID=76846
+[sup] 09:32:29 attempt 33 ended (crash); cooling 15s then resuming
+[sup] 09:32:45 attempt 34: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:32:45 launched PID=77119
+[sup] 09:32:45 attempt 34 ended (crash); cooling 15s then resuming
+[sup] 09:33:00 attempt 35: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:33:00 launched PID=77392
+[sup] 09:33:00 attempt 35 ended (crash); cooling 15s then resuming
+[sup] 09:33:15 attempt 36: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:33:15 launched PID=77665
+[sup] 09:33:15 attempt 36 ended (crash); cooling 15s then resuming
+[sup] 09:33:30 attempt 37: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:33:30 launched PID=77938
+[sup] 09:33:30 attempt 37 ended (crash); cooling 15s then resuming
+[sup] 09:33:45 attempt 38: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:33:45 launched PID=78212
+[sup] 09:33:45 attempt 38 ended (crash); cooling 15s then resuming
+[sup] 09:34:01 attempt 39: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:34:01 launched PID=78486
+[sup] 09:34:01 attempt 39 ended (crash); cooling 15s then resuming
+[sup] 09:34:16 attempt 40: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:34:16 launched PID=78759
+[sup] 09:34:16 attempt 40 ended (crash); cooling 15s then resuming
+[sup] 09:34:31 attempt 41: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:34:31 launched PID=79032
+[sup] 09:34:31 attempt 41 ended (crash); cooling 15s then resuming
+[sup] 09:34:46 attempt 42: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:34:46 launched PID=79305
+[sup] 09:34:46 attempt 42 ended (crash); cooling 15s then resuming
+[sup] 09:35:01 attempt 43: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:35:01 launched PID=79581
+[sup] 09:35:01 attempt 43 ended (crash); cooling 15s then resuming
+[sup] 09:35:17 attempt 44: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:35:17 launched PID=79854
+[sup] 09:35:17 attempt 44 ended (crash); cooling 15s then resuming
+[sup] 09:35:32 attempt 45: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:35:32 launched PID=80128
+[sup] 09:35:32 attempt 45 ended (crash); cooling 15s then resuming
+[sup] 09:35:47 attempt 46: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:35:47 launched PID=80401
+[sup] 09:35:47 attempt 46 ended (crash); cooling 15s then resuming
+[sup] 09:36:02 attempt 47: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:36:02 launched PID=80674
+[sup] 09:36:02 attempt 47 ended (crash); cooling 15s then resuming
+[sup] 09:36:17 attempt 48: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:36:17 launched PID=80947
+[sup] 09:36:17 attempt 48 ended (crash); cooling 15s then resuming
+[sup] 09:36:33 attempt 49: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:36:33 launched PID=81220
+[sup] 09:36:33 attempt 49 ended (crash); cooling 15s then resuming
+[sup] 09:36:48 attempt 50: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:36:48 launched PID=81493
+[sup] 09:36:48 attempt 50 ended (crash); cooling 15s then resuming
+[sup] 09:37:03 attempt 51: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:37:03 launched PID=81766
+[sup] 09:37:03 attempt 51 ended (crash); cooling 15s then resuming
+[sup] 09:37:18 attempt 52: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:37:18 launched PID=82039
+[sup] 09:37:18 attempt 52 ended (crash); cooling 15s then resuming
+[sup] 09:37:34 attempt 53: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:37:34 launched PID=82312
+[sup] 09:37:34 attempt 53 ended (crash); cooling 15s then resuming
+[sup] 09:37:49 attempt 54: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:37:49 launched PID=82585
+[sup] 09:37:49 attempt 54 ended (crash); cooling 15s then resuming
+[sup] 09:38:04 attempt 55: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:38:04 launched PID=82858
+[sup] 09:38:04 attempt 55 ended (crash); cooling 15s then resuming
+[sup] 09:38:19 attempt 56: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:38:19 launched PID=83132
+[sup] 09:38:19 attempt 56 ended (crash); cooling 15s then resuming
+[sup] 09:38:34 attempt 57: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:38:34 launched PID=83405
+[sup] 09:38:34 attempt 57 ended (crash); cooling 15s then resuming
+[sup] 09:38:50 attempt 58: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:38:50 launched PID=83678
+[sup] 09:38:50 attempt 58 ended (crash); cooling 15s then resuming
+[sup] 09:39:05 attempt 59: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:39:05 launched PID=83951
+[sup] 09:39:05 attempt 59 ended (crash); cooling 15s then resuming
+[sup] 09:39:20 attempt 60: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 09:39:20 launched PID=84224
+[sup] 09:39:20 attempt 60 ended (crash); cooling 15s then resuming
+[sup] 09:39:35 ⛔ hit MAX_ATTEMPTS=60 — giving up

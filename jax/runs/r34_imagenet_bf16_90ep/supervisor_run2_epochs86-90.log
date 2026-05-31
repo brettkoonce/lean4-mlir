@@ -1,0 +1,5 @@
+[sup] 2026-05-31 13:12:43 START 90-epoch bf16 on GPUs 0,2,3,4
+[sup] 13:12:44 attempt 1: RESUME from epoch 85 (/home/skoonce/r34_imagenet_bf16_e85.bin), start_step=425340
+[sup] 13:12:44 launched PID=84891
+[sup]   last: [Epoch 90] lr=0.0 loss(train_avg)=1.0827 val_top1=35982/49920 (0.7208) val_top5=0.9063 val_loss=1.1148  [619.5s train, -609.8s val]
+[sup] 14:04:39 ✅ TRAINING COMPLETE (90 epochs). final=/home/skoonce/r34_imagenet_bf16.bin
