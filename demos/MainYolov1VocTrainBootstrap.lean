@@ -47,15 +47,21 @@ def r34Yolov1 : NetSpec where
   ]
 
 def r34Yolov1BootstrapConfig : TrainConfig where
-  -- Lower LR since we're fine-tuning a pretrained backbone; full-finetune
-  -- the whole network (no freeze schedule for v3 simplicity).
-  learningRate := 1.0e-4
+  -- Fresh bootstrap (R34 backbone prefix + He-init head), full-finetune. The
+  -- He-init head needs a hotter LR than a plain pretrained fine-tune, which
+  -- diverges without gradient clipping (raw LR 7e-4 spiked the loss to ~66 and
+  -- 1.5e-3 plateaued worse). gradClipNorm tames the early large-gradient
+  -- batches → 7e-4 trains stably (val: 271→~10 over 3 epochs, no spike at peak
+  -- LR). See the grad-clip codegen in LeanMlir/MlirCodegen.lean.
+  learningRate := 7.0e-4
   batchSize    := 16
   epochs       := 80
   useAdam      := true
   weightDecay  := 5.0e-4
   cosineDecay  := true
   warmupEpochs := 3
+  gradClipNorm := 4.0          -- global-L2-norm gradient clip (essential at this LR)
+  checkpointEveryNEpochs := 2  -- frequent ckpts: mars segfaults ~ep4-11; auto-resume needs recent state
   augment      := true        -- Phase 3: bbox-aware hflip + random crop
   lossKind     := LossKind.yolov1Masked
   bootstrapBackbone := some (".lake/build/jax_r34_imagenet.bin", 21284672)

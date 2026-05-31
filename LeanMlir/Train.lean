@@ -149,6 +149,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     (focalGamma := cfg.focalGamma)
     (useSeg := useSeg)
     (useYolov1 := useYolov1Codegen)
+    (gradClipNorm := cfg.gradClipNorm)
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"
 

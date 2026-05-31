@@ -3544,20 +3544,31 @@ private def emitDepthwiseConvBnBackward (r : FwdRec) (gradSSA : String) : String
     w_new = w - lr * m_hat / (sqrt(v_hat) + ε)
     + optional decoupled weight decay: w_new = w_new - wd*lr*w -/
 private def emitAdamUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : List Nat) (tag : String)
-    (applyWeightDecay : Bool := false) : String × String × String × String := Id.run do
+    (applyWeightDecay : Bool := false) (clipScale : Option String := none)
+    : String × String × String × String := Id.run do
   let ty := tensorTy shape
   let mut s := ""
+  -- Optional global-norm gradient clipping: pre-scale the gradient by the
+  -- precomputed clip factor. When clipScale = none the emitted IR is identical
+  -- to the unclipped path (no behavior change for existing nets).
+  let mut g := gradSSA
+  match clipScale with
+  | some sc =>
+    s := s ++ s!"    %gclbc_{tag} = stablehlo.broadcast_in_dim {sc}, dims = [] : (tensor<f32>) -> {ty}\n"
+    s := s ++ s!"    %gcl_{tag} = stablehlo.multiply {gradSSA}, %gclbc_{tag} : {ty}\n"
+    g := s!"%gcl_{tag}"
+  | none => pure ()
   -- m_new = β1*m + (1-β1)*grad
   s := s ++ s!"    %b1_{tag} = stablehlo.broadcast_in_dim %beta1, dims = [] : (tensor<f32>) -> {ty}\n"
   s := s ++ s!"    %ob1_{tag} = stablehlo.broadcast_in_dim %one_minus_b1, dims = [] : (tensor<f32>) -> {ty}\n"
   s := s ++ s!"    %ms_{tag} = stablehlo.multiply %b1_{tag}, {mSSA} : {ty}\n"
-  s := s ++ s!"    %mg_{tag} = stablehlo.multiply %ob1_{tag}, {gradSSA} : {ty}\n"
+  s := s ++ s!"    %mg_{tag} = stablehlo.multiply %ob1_{tag}, {g} : {ty}\n"
   s := s ++ s!"    %mn_{tag} = stablehlo.add %ms_{tag}, %mg_{tag} : {ty}\n"
   -- v_new = β2*v + (1-β2)*grad²
   s := s ++ s!"    %b2_{tag} = stablehlo.broadcast_in_dim %beta2, dims = [] : (tensor<f32>) -> {ty}\n"
   s := s ++ s!"    %ob2_{tag} = stablehlo.broadcast_in_dim %one_minus_b2, dims = [] : (tensor<f32>) -> {ty}\n"
   s := s ++ s!"    %vsc_{tag} = stablehlo.multiply %b2_{tag}, {vSSA} : {ty}\n"
-  s := s ++ s!"    %g2_{tag} = stablehlo.multiply {gradSSA}, {gradSSA} : {ty}\n"
+  s := s ++ s!"    %g2_{tag} = stablehlo.multiply {g}, {g} : {ty}\n"
   s := s ++ s!"    %vg_{tag} = stablehlo.multiply %ob2_{tag}, %g2_{tag} : {ty}\n"
   s := s ++ s!"    %vn_{tag} = stablehlo.add %vsc_{tag}, %vg_{tag} : {ty}\n"
   -- Bias correction: m_hat = m_new / bc1, v_hat = v_new / bc2
@@ -3586,13 +3597,22 @@ private def emitAdamUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : List N
     w_new = w - lr * v_new
     + optional decoupled weight decay: w_new = w_new - wd*lr*w -/
 private def emitMomentumUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : List Nat) (tag : String)
-    (applyWeightDecay : Bool := false) : String × String × String × String := Id.run do
+    (applyWeightDecay : Bool := false) (clipScale : Option String := none)
+    : String × String × String × String := Id.run do
   let ty := tensorTy shape
   let mut s := ""
+  -- Optional global-norm gradient clipping (see emitAdamUpdate). none ⇒ identical IR.
+  let mut g := gradSSA
+  match clipScale with
+  | some sc =>
+    s := s ++ s!"    %gclbc_{tag} = stablehlo.broadcast_in_dim {sc}, dims = [] : (tensor<f32>) -> {ty}\n"
+    s := s ++ s!"    %gcl_{tag} = stablehlo.multiply {gradSSA}, %gclbc_{tag} : {ty}\n"
+    g := s!"%gcl_{tag}"
+  | none => pure ()
   -- v_new = mu * velocity + grad
   s := s ++ s!"    %mu_{tag} = stablehlo.broadcast_in_dim %mu, dims = [] : (tensor<f32>) -> {ty}\n"
   s := s ++ s!"    %vs_{tag} = stablehlo.multiply %mu_{tag}, {mSSA} : {ty}\n"
-  s := s ++ s!"    %vn_{tag} = stablehlo.add %vs_{tag}, {gradSSA} : {ty}\n"
+  s := s ++ s!"    %vn_{tag} = stablehlo.add %vs_{tag}, {g} : {ty}\n"
   -- w_new = w - lr * v_new
   s := s ++ s!"    %lr_{tag} = stablehlo.broadcast_in_dim %lr, dims = [] : (tensor<f32>) -> {ty}\n"
   s := s ++ s!"    %up_{tag} = stablehlo.multiply %lr_{tag}, %vn_{tag} : {ty}\n"
@@ -3607,15 +3627,16 @@ private def emitMomentumUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : Li
   return (s, if applyWeightDecay then s!"%new_{tag}" else s!"%sub_{tag}", s!"%vn_{tag}", vSSA)
 
 /-- Emit Adam update for a convBn layer (W, gamma, beta). -/
-private def emitConvBnAdam (p ic oc kSize : Nat) (applyWeightDecay : Bool := true) : String × Array String × Array String := Id.run do
+private def emitConvBnAdam (p ic oc kSize : Nat) (applyWeightDecay : Bool := true)
+    (clipScale : Option String := none) : String × Array String × Array String := Id.run do
   let wShape := [oc, ic, kSize, kSize]
   let bShape := [oc]
   let mut s := ""
-  let (s1, wNew, mwNew, vwNew) := emitAdamUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"W{p}" (applyWeightDecay := applyWeightDecay)
+  let (s1, wNew, mwNew, vwNew) := emitAdamUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"W{p}" (applyWeightDecay := applyWeightDecay) (clipScale := clipScale)
   s := s ++ s1
-  let (s2, gNew, mgNew, vgNew) := emitAdamUpdate s!"%g{p}" s!"%d_g{p}" s!"%m_g{p}" s!"%v_g{p}" bShape s!"g{p}"
+  let (s2, gNew, mgNew, vgNew) := emitAdamUpdate s!"%g{p}" s!"%d_g{p}" s!"%m_g{p}" s!"%v_g{p}" bShape s!"g{p}" (clipScale := clipScale)
   s := s ++ s2
-  let (s3, btNew, mbtNew, vbtNew) := emitAdamUpdate s!"%bt{p}" s!"%d_bt{p}" s!"%m_bt{p}" s!"%v_bt{p}" bShape s!"bt{p}"
+  let (s3, btNew, mbtNew, vbtNew) := emitAdamUpdate s!"%bt{p}" s!"%d_bt{p}" s!"%m_bt{p}" s!"%v_bt{p}" bShape s!"bt{p}" (clipScale := clipScale)
   s := s ++ s3
   let retNames := #[wNew, gNew, btNew, mwNew, mgNew, mbtNew, vwNew, vgNew, vbtNew]
   let retTypes := #[tensorTy wShape, tensorTy bShape, tensorTy bShape,
@@ -3624,15 +3645,16 @@ private def emitConvBnAdam (p ic oc kSize : Nat) (applyWeightDecay : Bool := tru
   return (s, retNames, retTypes)
 
 /-- Emit SGD+momentum update for a convBn layer (W, gamma, beta). -/
-private def emitConvBnMomentum (p ic oc kSize : Nat) (applyWeightDecay : Bool := false) : String × Array String × Array String := Id.run do
+private def emitConvBnMomentum (p ic oc kSize : Nat) (applyWeightDecay : Bool := false)
+    (clipScale : Option String := none) : String × Array String × Array String := Id.run do
   let wShape := [oc, ic, kSize, kSize]
   let bShape := [oc]
   let mut s := ""
-  let (s1, wNew, mwNew, vwNew) := emitMomentumUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"W{p}" (applyWeightDecay := applyWeightDecay)
+  let (s1, wNew, mwNew, vwNew) := emitMomentumUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"W{p}" (applyWeightDecay := applyWeightDecay) (clipScale := clipScale)
   s := s ++ s1
-  let (s2, gNew, mgNew, vgNew) := emitMomentumUpdate s!"%g{p}" s!"%d_g{p}" s!"%m_g{p}" s!"%v_g{p}" bShape s!"g{p}"
+  let (s2, gNew, mgNew, vgNew) := emitMomentumUpdate s!"%g{p}" s!"%d_g{p}" s!"%m_g{p}" s!"%v_g{p}" bShape s!"g{p}" (clipScale := clipScale)
   s := s ++ s2
-  let (s3, btNew, mbtNew, vbtNew) := emitMomentumUpdate s!"%bt{p}" s!"%d_bt{p}" s!"%m_bt{p}" s!"%v_bt{p}" bShape s!"bt{p}"
+  let (s3, btNew, mbtNew, vbtNew) := emitMomentumUpdate s!"%bt{p}" s!"%d_bt{p}" s!"%m_bt{p}" s!"%v_bt{p}" bShape s!"bt{p}" (clipScale := clipScale)
   s := s ++ s3
   let retNames := #[wNew, gNew, btNew, mwNew, mgNew, mbtNew, vwNew, vgNew, vbtNew]
   let retTypes := #[tensorTy wShape, tensorTy bShape, tensorTy bShape,
@@ -3704,6 +3726,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
     (useYolov1 : Bool := false)
     (yoloGridH : Nat := 7) (yoloGridW : Nat := 7)
     (yoloNumBoxes : Nat := 2) (yoloNumClasses : Nat := 20)
+    (gradClipNorm : Float := 0.0)
     : String := Id.run do
   let B := batchSize
   let nClasses := spec.numClasses
@@ -6241,6 +6264,54 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   code := code ++ (if useAdam then "\n    // ================ ADAM UPDATES ================\n"
                    else "\n    // ================ SGD+MOMENTUM UPDATES ================\n")
   let wdActive := weightDecay > 0.0
+  -- ─── Optional global-norm gradient clipping ───
+  -- Compute scale = min(1, clipNorm / (‖g‖₂ + ε)) over ALL gradients, then each
+  -- optimizer update pre-scales its gradient by it. ‖g‖₂ = sqrt(Σ_params Σ g²).
+  -- Covers the standard param layers (conv2d/dense/convBn) — i.e. the CNN family
+  -- that trains on the IREE path (ResNet/ConvNeXt + heads). gradClipNorm = 0 ⇒
+  -- this whole block is skipped and clipScale stays none (no IR change).
+  let mut clipScale : Option String := none
+  if gradClipNorm > 0.0 then
+    let mut gradList : Array (String × List Nat) := #[]
+    for r in records do
+      match r.pidx with
+      | some p =>
+        match r.layer with
+        | .conv2d ic oc kSize _ _ =>
+          gradList := gradList.push (s!"%d_W{p}", [oc, ic, kSize, kSize]) |>.push (s!"%d_b{p}", [oc])
+        | .dense fanIn fanOut _ =>
+          gradList := gradList.push (s!"%d_W{p}", [fanIn, fanOut]) |>.push (s!"%d_b{p}", [fanOut])
+        | .convBn ic oc kSize _ _ =>
+          let effIc := if r.isDepthwise then 1 else ic
+          gradList := gradList.push (s!"%d_W{p}", [oc, effIc, kSize, kSize])
+                              |>.push (s!"%d_g{p}", [oc]) |>.push (s!"%d_bt{p}", [oc])
+        | _ => pure ()
+      | none => pure ()
+    if gradList.size > 0 then
+      code := code ++ "\n    // ================ GRADIENT CLIP (global L2 norm) ================\n"
+      let mut ssNames : Array String := #[]
+      let mut i := 0
+      for (gName, shape) in gradList do
+        let ty := tensorTy shape
+        let dims := String.intercalate ", " ((List.range shape.length).map toString)
+        code := code ++ s!"    %gcsq_{i} = stablehlo.multiply {gName}, {gName} : {ty}\n"
+        code := code ++ s!"    %gcss_{i} = stablehlo.reduce(%gcsq_{i} init: %zf) applies stablehlo.add across dimensions = [{dims}]\n"
+        code := code ++ s!"           : ({ty}, tensor<f32>) -> tensor<f32>\n"
+        ssNames := ssNames.push s!"%gcss_{i}"
+        i := i + 1
+      -- Tree-sum the per-gradient squared sums → total squared norm.
+      let mut acc := ssNames[0]!
+      for j in [1:ssNames.size] do
+        code := code ++ s!"    %gcacc_{j} = stablehlo.add {acc}, {ssNames[j]!} : tensor<f32>\n"
+        acc := s!"%gcacc_{j}"
+      code := code ++ s!"    %gcnorm = stablehlo.sqrt {acc} : tensor<f32>\n"
+      code := code ++ s!"    %gceps = stablehlo.constant dense<1.0e-06> : tensor<f32>\n"
+      code := code ++ s!"    %gcnorme = stablehlo.add %gcnorm, %gceps : tensor<f32>\n"
+      code := code ++ s!"    %gcthresh = stablehlo.constant dense<{gradClipNorm}> : tensor<f32>\n"
+      code := code ++ s!"    %gcraw = stablehlo.divide %gcthresh, %gcnorme : tensor<f32>\n"
+      code := code ++ s!"    %gcone = stablehlo.constant dense<1.0> : tensor<f32>\n"
+      code := code ++ s!"    %gcscale = stablehlo.minimum %gcone, %gcraw : tensor<f32>\n"
+      clipScale := some "%gcscale"
   let mut paramRetNames : Array String := #[]
   let mut paramRetTypes : Array String := #[]
   let mut mRetNames : Array String := #[]
@@ -6250,8 +6321,8 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   let mut processedPidx : Array Nat := #[]
   -- Helper: choose Adam or momentum update for a single parameter
   let emitUpdate := fun (paramSSA gradSSA mSSA vSSA : String) (shape : List Nat) (tag : String) (applyWd : Bool) =>
-    if useAdam then emitAdamUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd)
-    else emitMomentumUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd)
+    if useAdam then emitAdamUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd) (clipScale := clipScale)
+    else emitMomentumUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd) (clipScale := clipScale)
   for r in records do
     match r.pidx with
     | some p =>
@@ -6286,8 +6357,8 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           -- For depthwise convBn, weight shape is [channels, 1, kSize, kSize]
           let effIc := if r.isDepthwise then 1 else ic
           let (optCode, optNames, optTypes) :=
-            if useAdam then emitConvBnAdam p effIc oc kSize (applyWeightDecay := wdActive)
-            else emitConvBnMomentum p effIc oc kSize (applyWeightDecay := wdActive)
+            if useAdam then emitConvBnAdam p effIc oc kSize (applyWeightDecay := wdActive) (clipScale := clipScale)
+            else emitConvBnMomentum p effIc oc kSize (applyWeightDecay := wdActive) (clipScale := clipScale)
           code := code ++ optCode
           -- returns [wNew, gNew, btNew, mwNew, mgNew, mbtNew, vwNew, vgNew, vbtNew]
           paramRetNames := paramRetNames ++ optNames[:3]
@@ -7450,6 +7521,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
     (useYolov1 : Bool := false)
     (yoloGridH : Nat := 7) (yoloGridW : Nat := 7)
     (yoloNumBoxes : Nat := 2) (yoloNumClasses : Nat := 20)
+    (gradClipNorm : Float := 0.0)
     : String :=
   s!"// {spec.name} train_step — Generated by Lean 4 → MLIR (StableHLO + VJPs)\n" ++
   s!"// Batch size: {batchSize}, optimizer: {if useAdam then "Adam" else "SGD+momentum"}\n" ++
@@ -7460,7 +7532,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
   emitTrainStepSig spec batchSize useSoftLabels useSeg useDdpm ddpmOutShape
     useYolov1 yoloGridH yoloGridW (yoloNumBoxes * 5 + yoloNumClasses) ++ " {\n" ++
   emitTrainStepBody spec batchSize moduleName labelSmoothing weightDecay useAdam useSoftLabels useFocal focalGamma useSeg useDdpm
-    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses ++
+    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm ++
   "  }\n" ++
   "}\n"
 
