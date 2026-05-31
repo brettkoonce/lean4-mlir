@@ -1125,6 +1125,30 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
         code := code ++ emitConvBnToBuf s!"bneck[{bi}] 1x1 expand {mid}→{oc}"
         if bi == 0 && needsProj then
           code := code ++ emitConvBnToBuf s!"bneck[{bi}] proj {ic}→{oc}"
+    | .patchEmbed _ _ _ _ =>
+      -- Mirror of the loader: conv W,b (flatten, no .T) + cls token + pos embed.
+      code := code ++ "    # patchEmbed conv W, b\n"
+      code := code ++ "    W, b = params[idx]; idx += 1\n"
+      code := code ++ "    f.write(np.asarray(W).astype(np.float32).flatten().tobytes())\n"
+      code := code ++ "    f.write(np.asarray(b).astype(np.float32).flatten().tobytes())\n"
+      code := code ++ "    # patchEmbed cls token\n"
+      code := code ++ "    (cls,) = params[idx]; idx += 1\n"
+      code := code ++ "    f.write(np.asarray(cls).astype(np.float32).flatten().tobytes())\n"
+      code := code ++ "    # patchEmbed positional embedding\n"
+      code := code ++ "    (pos,) = params[idx]; idx += 1\n"
+      code := code ++ "    f.write(np.asarray(pos).astype(np.float32).flatten().tobytes())\n"
+    | .transformerEncoder _ _ _ nBlocks =>
+      -- Mirror of the loader: per block LN1, Q, K, V, Output, LN2, fc1, fc2; then final LN.
+      for bi in [:nBlocks] do
+        code := code ++ emitLNToBuf s!"trans[{bi}] LN1"
+        code := code ++ emitTransDenseToBuf s!"trans[{bi}] Q"
+        code := code ++ emitTransDenseToBuf s!"trans[{bi}] K"
+        code := code ++ emitTransDenseToBuf s!"trans[{bi}] V"
+        code := code ++ emitTransDenseToBuf s!"trans[{bi}] Output"
+        code := code ++ emitLNToBuf s!"trans[{bi}] LN2"
+        code := code ++ emitTransDenseToBuf s!"trans[{bi}] fc1"
+        code := code ++ emitTransDenseToBuf s!"trans[{bi}] fc2"
+      code := code ++ emitLNToBuf "trans final LN"
     | .maxPool _ _ | .globalAvgPool | .flatten =>
       pure ()
     | _ =>
