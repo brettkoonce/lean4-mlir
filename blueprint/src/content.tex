@@ -3136,7 +3136,7 @@ def resnet34ImagenetConfig : TrainConfig where
   weightDecay  := 1e-4
   cosineDecay  := true              -- replaces paper's step decay at ep 30/60
   warmupEpochs := 5                 -- modern addition
-  augment      := true              -- random crop + horizontal flip
+  augment      := true              -- random-resized-crop + horizontal flip
   labelSmoothing := 0.1             -- modern addition
 
 -- 3. Same .train entry point as every other chapter.
@@ -3191,15 +3191,12 @@ run stays fp32.)
 
 The recipe trims the paper's 90 epochs to 30 (SGD with momentum
 $0.9$, batch 256, cosine LR with a 5-epoch warmup from peak $0.1$,
-label smoothing $0.1$, random-crop $+$ horizontal flip,
-$\ell_2$ weight decay $10^{-4}$) --- a deliberate trade. The full
-90-epoch recipe of He et al.\ 2015
-(\href{https://arxiv.org/abs/1512.03385}{arXiv:1512.03385}) reaches
-about $73.3\%$ top-1; at 30 epochs we land roughly $95\%$ of that
-headline at $\sim$1/3 the compute, which is plenty of feature
-quality for the YOLOv1 detection bootstrap of
-Ch~\ref{chap:bestiary} and any other downstream consumer of this
-checkpoint.
+label smoothing $0.1$, Inception-style random-resized-crop
+(sampling $8$--$100\%$ of the image area at a $\frac{3}{4}$--$\frac{4}{3}$
+aspect ratio, then resizing to $224\times224$) plus a horizontal
+flip, $\ell_2$ weight decay $10^{-4}$) --- a deliberate trade for
+roughly $95\%$ of the paper's $\sim$73\% headline at $\sim$1/3 the
+compute.
 
 \textbf{bf16 and the full 90-epoch run.} Running the whole schedule
 is a question of patience, not capability --- and bf16 mixed
