@@ -33,7 +33,7 @@ def vitTinyImagenetConfig : TrainConfig where
   batchSize      := 512
   epochs         := 80
   useAdam        := true
-  weightDecay    := 0.05
+  weightDecay    := 0.05            -- now applied as AdamW decoupled decay (was toxic coupled-L2)
   cosineDecay    := true
   warmupEpochs   := 5
   augment        := true
@@ -47,7 +47,7 @@ def vitTinyImagenetConfig : TrainConfig where
   randAugmentM   := 9.0
   randomErasing  := true
   randomErasingProb := 0.25
-  bf16           := true
+  bf16           := true            -- bf16 exonerated (fp32 collapsed identically); back on for speed
 
 #eval vitTinyImagenet.validate!
 

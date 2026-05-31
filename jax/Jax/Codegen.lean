@@ -1358,14 +1358,20 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "@jit\n" ++
     "def train_step(params, opt_state, x, y, lr):\n" ++
     "    loss, grads = value_and_grad(loss_fn)(params, x, y)\n" ++ clipLine ++
-    (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
+    -- AdamW: DECOUPLED weight decay — applied to params directly, not folded into
+    -- the gradient. Adam+coupled-L2 ≠ AdamW; coupled L2 at the AdamW-tuned wd=0.05
+    -- collapses ViT at high LR (Loshchilov & Hutter 2017). SGD/momentum paths below
+    -- keep coupled L2, which is the correct/standard form for them.
     "    m, v, t = opt_state\n" ++
     "    t = t + 1\n" ++
     "    m = jax.tree.map(lambda mi, g: 0.9 * mi + 0.1 * g, m, grads)\n" ++
     "    v = jax.tree.map(lambda vi, g: 0.999 * vi + 0.001 * g * g, v, grads)\n" ++
     "    mc = jax.tree.map(lambda mi: mi / (1 - 0.9 ** t), m)\n" ++
     "    vc = jax.tree.map(lambda vi: vi / (1 - 0.999 ** t), v)\n" ++
-    "    params = jax.tree.map(lambda p, mi, vi: p - lr * mi / (jnp.sqrt(vi) + 1e-8), params, mc, vc)\n" ++
+    (if hasWD then
+      "    params = jax.tree.map(lambda p, mi, vi: p - lr * (mi / (jnp.sqrt(vi) + 1e-8) + WD * p), params, mc, vc)\n"
+     else
+      "    params = jax.tree.map(lambda p, mi, vi: p - lr * mi / (jnp.sqrt(vi) + 1e-8), params, mc, vc)\n") ++
     "    return params, (m, v, t), loss\n\n"
   else if hasMomentum then
     "@jit\n" ++
