@@ -1854,8 +1854,29 @@ Docker image in Appendix~\ref{app:getting_started} takes about 5
 minutes and lands at the same accuracy.
 
 \begin{center}
-\includegraphics[width=\textwidth]{curves/mnist_mlp_training}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Training loss},
+    ymode=log,
+    xmin=0, xmax=13, ymin=0.0007, ymax=0.4,
+    xtick={0,2,4,6,8,10,12},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=1pt},
+]
+\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+(1,0.218235) (2,0.082146) (3,0.050954) (4,0.035614) (5,0.025503) (6,0.017866) (7,0.011806) (8,0.009618) (9,0.005895) (10,0.003566) (11,0.002229) (12,0.000999)
+};
+\end{axis}
+\end{tikzpicture}
 \end{center}
+
+\noindent MNIST MLP ($784{\to}512{\to}512{\to}10$), SGD~0.1, 12 epochs,
+log-scale loss (\texttt{logs/ablation\_mlp-sgd.log}). Per-epoch training
+loss falls $\sim$200$\times$ from the first epoch to below $10^{-3}$; final
+test accuracy 98.57\%.
 
 Notice that the emitted MLIR is only 10\,375 characters --- about
 half of what the Adam variant would emit. Plain SGD's per-step
@@ -2251,8 +2272,36 @@ consistent and free: the convolution just finds spatial features the
 MLP couldn't see.
 
 \begin{center}
-\includegraphics[width=\textwidth]{curves/mnist_mlp_vs_cnn}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Training loss},
+    ymode=log,
+    xmin=0, xmax=13, ymin=0.0007, ymax=0.4,
+    xtick={0,2,4,6,8,10,12},
+    legend pos=north east,
+    legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=1pt},
+]
+\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+(1,0.218235) (2,0.082146) (3,0.050954) (4,0.035614) (5,0.025503) (6,0.017866) (7,0.011806) (8,0.009618) (9,0.005895) (10,0.003566) (11,0.002229) (12,0.000999)
+};
+\addlegendentry{MLP}
+\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
+(1,0.196587) (2,0.043851) (3,0.025374) (4,0.014667) (5,0.009847) (6,0.008109) (7,0.008859) (8,0.005455) (9,0.008056) (10,0.005157) (11,0.004191) (12,0.001768)
+};
+\addlegendentry{CNN}
+\end{axis}
+\end{tikzpicture}
 \end{center}
+
+\noindent MNIST, same SGD~0.1 / 12-epoch recipe, log-scale training loss
+(\texttt{logs/ablation\_\{mlp,cnn-nobn\}-sgd.log}). The CNN converges
+faster early (half the MLP's loss by epoch~2); both bottom out near $10^{-3}$
+train loss, but the CNN generalizes better --- 98.98\% vs 98.57\% test.
 
 \subsection*{Why this network is still 99\% dense-head}
 
@@ -2657,8 +2706,35 @@ computationally a random classifier from step zero to the end of
 training.
 
 \begin{center}
-\includegraphics[width=\textwidth]{curves/cifar_bn_vs_nobn}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Training loss},
+    xmin=0, xmax=31, ymin=0, ymax=2.5,
+    xtick={0,5,10,15,20,25,30},
+    ytick={0,0.5,1.0,1.5,2.0},
+    legend pos=north east,
+    legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=1pt},
+]
+\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+(1,2.36075) (2,1.61836) (3,1.48553) (4,1.39128) (5,1.29548) (6,1.19131) (7,1.11065) (8,1.05191) (9,0.983761) (10,0.921144) (11,0.870569) (12,0.845268) (13,0.799192) (14,0.764295) (15,0.713148) (16,0.688528) (17,0.663081) (18,0.640917) (19,0.608307) (20,0.584896) (21,0.556536) (22,0.524438) (23,0.524305) (24,0.507538) (25,0.505498) (26,0.478927) (27,0.445653) (28,0.424414) (29,0.419859) (30,0.419897)
+};
+\addlegendentry{with BN}
+\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
+(1,2.31808) (2,2.30509) (3,2.30132) (4,2.30487) (5,2.30438) (6,2.30441) (7,2.30416) (8,2.3045) (9,2.30428) (10,2.30442) (11,2.30435) (12,2.30482) (13,2.30471) (14,2.30438) (15,2.30456) (16,2.30438) (17,2.30441) (18,2.30465) (19,2.30469) (20,2.30442) (21,2.30446) (22,2.30441) (23,2.30477) (24,2.30441) (25,2.30465) (26,2.30468) (27,2.30432) (28,2.30422) (29,2.30457) (30,2.30434)
+};
+\addlegendentry{no BN}
+\end{axis}
+\end{tikzpicture}
 \end{center}
+
+\noindent CIFAR-10, 4-conv arch, SGD~0.1, 30 epochs (BN vs no-BN;
+\texttt{logs/ablation\_cifar-\{bn,nobn\}-sgd.log}). The no-BN run sits at
+$\log 10 \approx 2.30$ --- random-guess loss --- for the entire run.
 
 The BN run's loss halves by epoch 2 and keeps dropping. Same
 optimizer, same learning rate, same dataset, same architecture plus
