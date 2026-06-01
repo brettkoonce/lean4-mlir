@@ -3544,7 +3544,7 @@ private def emitDepthwiseConvBnBackward (r : FwdRec) (gradSSA : String) : String
     w_new = w - lr * m_hat / (sqrt(v_hat) + ε)
     + optional decoupled weight decay: w_new = w_new - wd*lr*w -/
 private def emitAdamUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : List Nat) (tag : String)
-    (applyWeightDecay : Bool := false) (clipScale : Option String := none)
+    (applyWeightDecay : Bool := false) (clipScale : Option String := none) (lrSSA : String := "%lr")
     : String × String × String × String := Id.run do
   let ty := tensorTy shape
   let mut s := ""
@@ -3577,7 +3577,7 @@ private def emitAdamUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : List N
   s := s ++ s!"    %mh_{tag} = stablehlo.divide %mn_{tag}, %bc1_{tag} : {ty}\n"
   s := s ++ s!"    %vh_{tag} = stablehlo.divide %vn_{tag}, %bc2_{tag} : {ty}\n"
   -- w_new = w - lr * m_hat / (sqrt(v_hat) + ε)
-  s := s ++ s!"    %lr_{tag} = stablehlo.broadcast_in_dim %lr, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %lr_{tag} = stablehlo.broadcast_in_dim {lrSSA}, dims = [] : (tensor<f32>) -> {ty}\n"
   s := s ++ s!"    %eps_{tag} = stablehlo.broadcast_in_dim %adam_eps, dims = [] : (tensor<f32>) -> {ty}\n"
   s := s ++ s!"    %sqv_{tag} = stablehlo.sqrt %vh_{tag} : {ty}\n"
   s := s ++ s!"    %den_{tag} = stablehlo.add %sqv_{tag}, %eps_{tag} : {ty}\n"
@@ -3597,7 +3597,7 @@ private def emitAdamUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : List N
     w_new = w - lr * v_new
     + optional decoupled weight decay: w_new = w_new - wd*lr*w -/
 private def emitMomentumUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : List Nat) (tag : String)
-    (applyWeightDecay : Bool := false) (clipScale : Option String := none)
+    (applyWeightDecay : Bool := false) (clipScale : Option String := none) (lrSSA : String := "%lr")
     : String × String × String × String := Id.run do
   let ty := tensorTy shape
   let mut s := ""
@@ -3614,7 +3614,7 @@ private def emitMomentumUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : Li
   s := s ++ s!"    %vs_{tag} = stablehlo.multiply %mu_{tag}, {mSSA} : {ty}\n"
   s := s ++ s!"    %vn_{tag} = stablehlo.add %vs_{tag}, {g} : {ty}\n"
   -- w_new = w - lr * v_new
-  s := s ++ s!"    %lr_{tag} = stablehlo.broadcast_in_dim %lr, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %lr_{tag} = stablehlo.broadcast_in_dim {lrSSA}, dims = [] : (tensor<f32>) -> {ty}\n"
   s := s ++ s!"    %up_{tag} = stablehlo.multiply %lr_{tag}, %vn_{tag} : {ty}\n"
   s := s ++ s!"    %sub_{tag} = stablehlo.subtract {paramSSA}, %up_{tag} : {ty}\n"
   if applyWeightDecay then
@@ -3726,7 +3726,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
     (useYolov1 : Bool := false)
     (yoloGridH : Nat := 7) (yoloGridW : Nat := 7)
     (yoloNumBoxes : Nat := 2) (yoloNumClasses : Nat := 20)
-    (gradClipNorm : Float := 0.0)
+    (gradClipNorm : Float := 0.0) (headLrMult : Float := 1.0)
     : String := Id.run do
   let B := batchSize
   let nClasses := spec.numClasses
@@ -6312,6 +6312,14 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       code := code ++ s!"    %gcone = stablehlo.constant dense<1.0> : tensor<f32>\n"
       code := code ++ s!"    %gcscale = stablehlo.minimum %gcone, %gcraw : tensor<f32>\n"
       clipScale := some "%gcscale"
+  -- ─── Per-group LR for the from-scratch dense head ───
+  -- The head trains at headLrMult × base LR (backbone keeps the base LR). Only
+  -- the .dense case below uses headLrSSA; everything else stays on %lr, so
+  -- headLrMult = 1.0 emits identical IR. See TrainConfig.headLrMult.
+  let headLrSSA : String := if headLrMult != 1.0 then "%lr_head" else "%lr"
+  if headLrMult != 1.0 then
+    code := code ++ s!"    %lr_headmult = stablehlo.constant dense<{headLrMult}> : tensor<f32>\n"
+    code := code ++ s!"    %lr_head = stablehlo.multiply %lr, %lr_headmult : tensor<f32>\n"
   let mut paramRetNames : Array String := #[]
   let mut paramRetTypes : Array String := #[]
   let mut mRetNames : Array String := #[]
@@ -6344,8 +6352,12 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
         | .dense fanIn fanOut _ =>
           let wShape := [fanIn, fanOut]; let bShape := [fanOut]
-          let (s1, wN, mwN, vwN) := emitUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"dW{p}" wdActive
-          let (s2, bN, mbN, vbN) := emitUpdate s!"%b{p}" s!"%d_b{p}" s!"%m_b{p}" s!"%v_b{p}" bShape s!"db{p}" false
+          -- Head dense layer: use the per-group head LR (headLrSSA).
+          let headUpd := fun (pS gS mS vS : String) (sh : List Nat) (tg : String) (wd : Bool) =>
+            if useAdam then emitAdamUpdate pS gS mS vS sh tg (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := headLrSSA)
+            else emitMomentumUpdate pS gS mS vS sh tg (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := headLrSSA)
+          let (s1, wN, mwN, vwN) := headUpd s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"dW{p}" wdActive
+          let (s2, bN, mbN, vbN) := headUpd s!"%b{p}" s!"%d_b{p}" s!"%m_b{p}" s!"%v_b{p}" bShape s!"db{p}" false
           code := code ++ s1 ++ s2
           paramRetNames := paramRetNames.push wN |>.push bN
           paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
@@ -7521,7 +7533,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
     (useYolov1 : Bool := false)
     (yoloGridH : Nat := 7) (yoloGridW : Nat := 7)
     (yoloNumBoxes : Nat := 2) (yoloNumClasses : Nat := 20)
-    (gradClipNorm : Float := 0.0)
+    (gradClipNorm : Float := 0.0) (headLrMult : Float := 1.0)
     : String :=
   s!"// {spec.name} train_step — Generated by Lean 4 → MLIR (StableHLO + VJPs)\n" ++
   s!"// Batch size: {batchSize}, optimizer: {if useAdam then "Adam" else "SGD+momentum"}\n" ++
@@ -7532,7 +7544,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
   emitTrainStepSig spec batchSize useSoftLabels useSeg useDdpm ddpmOutShape
     useYolov1 yoloGridH yoloGridW (yoloNumBoxes * 5 + yoloNumClasses) ++ " {\n" ++
   emitTrainStepBody spec batchSize moduleName labelSmoothing weightDecay useAdam useSoftLabels useFocal focalGamma useSeg useDdpm
-    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm ++
+    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult ++
   "  }\n" ++
   "}\n"
 

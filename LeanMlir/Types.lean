@@ -404,6 +404,13 @@ structure TrainConfig where
       lets you use the proper ~1e-3 LR without the collapse-to-chance seen at
       higher LR with no clipping. See planning/vit_imagenet.md. -/
   gradClipNorm : Float := 0.0
+  /-- Per-group LR multiplier for the (from-scratch) dense head, relative to
+      the base LR used by the pretrained conv backbone. 1.0 = uniform LR. Used
+      for bootstrap fine-tuning where the He-init head must learn input-
+      dependence far faster than the backbone should drift — a single LR can't
+      do both (head under-trains → collapse-to-marginal; raise it globally and
+      the backbone destabilizes). e.g. YOLOv1-VOC uses ~10. -/
+  headLrMult : Float := 1.0
 deriving Repr
 
 inductive DatasetKind where

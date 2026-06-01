@@ -150,6 +150,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     (useSeg := useSeg)
     (useYolov1 := useYolov1Codegen)
     (gradClipNorm := cfg.gradClipNorm)
+    (headLrMult := cfg.headLrMult)
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"
 
@@ -373,6 +374,20 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         IO.eprintln s!"  bootstrap: loading first {prefixFloats} floats from {path}"
         let init ← spec.heInitParams
         NetSpec.patchInitWithPretrainedPrefix init path (prefixFloats * 4)
+  -- LEAN_MLIR_INIT_LOAD: resume from a full checkpoint (overrides any bootstrap
+  -- init above). Pairs with LEAN_MLIR_START_STEP below for crash auto-resume on
+  -- the IREE/Lean path (e.g. the YOLO segfault wrapper). Adam moments are not
+  -- checkpointed, so they restart at zero (re-warm within ~1/(1-β) steps).
+  let params ← match (← IO.getEnv "LEAN_MLIR_INIT_LOAD") with
+    | none => pure params
+    | some ckpt => do
+        let loaded ← IO.FS.readBinFile ckpt
+        if loaded.size == params.size then
+          IO.eprintln s!"  resume: loaded full checkpoint {ckpt} ({loaded.size} bytes)"
+          pure loaded
+        else
+          IO.eprintln s!"  WARN: resume checkpoint {ckpt} size {loaded.size} ≠ expected {params.size}; keeping init"
+          pure params
   -- If LEAN_MLIR_INIT_DUMP is set, save the raw init-params buffer to disk.
   -- Used by phase 2 (jax/) to load bit-identical initial parameters for
   -- step-level cross-compiler diffing. See traces/TRACE_FORMAT.md.
@@ -463,10 +478,34 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         else
           IO.eprintln s!"  bootstrap: no BN stats file at {bnPath}; using zeros"
           F32.const nBnStats.toUSize 0.0
+  -- On resume (LEAN_MLIR_INIT_LOAD), prefer the checkpoint's own BN-stats
+  -- companion (`..._params_eN.bin` → `..._bn_stats_eN.bin`) over the bootstrap.
+  let bnInit ← match (← IO.getEnv "LEAN_MLIR_INIT_LOAD") with
+    | none => pure bnInit
+    | some ckpt => do
+        let bnPath := ckpt.replace "_params_e" "_bn_stats_e"
+        if ← System.FilePath.pathExists bnPath then
+          let bn ← IO.FS.readBinFile bnPath
+          if bn.size == nBnStats * 4 then
+            IO.eprintln s!"  resume: loaded BN stats from {bnPath}"
+            pure bn
+          else
+            IO.eprintln s!"  WARN: resume BN stats size {bn.size} ≠ {nBnStats * 4}; keeping init"
+            pure bnInit
+        else
+          IO.eprintln s!"  resume: no BN stats companion at {bnPath}; keeping init"
+          pure bnInit
   let mut runningBnStats : ByteArray := bnInit
   let mut curImg := trainImg
   let mut curLbl := trainLbl
-  let mut globalStep : Nat := 0
+  -- LEAN_MLIR_START_STEP: resume the epoch loop + LR schedule at this global
+  -- step (epoch = startStep / batches-per-epoch). Aligns the cosine/warmup LR
+  -- and skips already-trained epochs; pairs with LEAN_MLIR_INIT_LOAD.
+  let startStep : Nat := ((← IO.getEnv "LEAN_MLIR_START_STEP").bind (·.toNat?)).getD 0
+  let startEpoch : Nat := if bpE > 0 then startStep / bpE else 0
+  if startEpoch > 0 then
+    IO.eprintln s!"  resume: starting at epoch {startEpoch} (step {startEpoch * bpE})"
+  let mut globalStep : Nat := startEpoch * bpE
   -- EMA / SWA running averages of θ, used for the final eval checkpoint
   -- when their respective TrainConfig knobs are enabled. Both initialize
   -- to a copy of `params` (so the EMA hasn't moved yet at step 0).
@@ -484,18 +523,18 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   -- batches in the same order.
   let skipShuffle := (← IO.getEnv "LEAN_MLIR_NO_SHUFFLE").isSome
 
-  for epoch in [:epochs] do
+  for epoch in [startEpoch:epochs] do
     if !skipShuffle then
       let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPixels.toUSize (epoch + 42).toUSize
       curImg := sImg; curLbl := sLbl
 
-    let lr : Float := if cfg.cosineDecay then
-      if epoch < warmup then
-        baseLR * (epoch.toFloat + 1.0) / warmup.toFloat
-      else
-        baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (epoch.toFloat - warmup.toFloat) / (epochs.toFloat - warmup.toFloat)))
-    else
-      baseLR  -- constant LR
+    -- LR is computed PER STEP (see inside the bi loop) so warmup ramps smoothly
+    -- from ~0 over warmup*bpE steps rather than jumping to a fraction of peak at
+    -- each epoch boundary. The per-epoch jump made Adam's early steps (small v →
+    -- ~LR-sized param moves) blow up a hot head LR (headLrMult); per-step warmup
+    -- keeps those first steps tiny. `lr` here is just the running value (also
+    -- used for the epoch-end log line).
+    let mut lr : Float := baseLR
 
     let mut epochLoss : Float := 0.0
     let t0 ← IO.monoMsNow
@@ -512,6 +551,16 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     let augC := dio.channels
     for bi in [:bpE] do
       globalStep := globalStep + 1
+      -- Per-step warmup + cosine schedule (keyed off globalStep, resume-safe).
+      lr := if cfg.cosineDecay then
+              let ws := warmup * bpE
+              if ws > 0 && globalStep ≤ ws then
+                baseLR * globalStep.toFloat / ws.toFloat
+              else
+                let denom := (epochs * bpE - ws).toFloat
+                let prog := if denom > 0.0 then (globalStep - ws).toFloat / denom else 1.0
+                baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * prog))
+            else baseLR
       let xbaRaw := F32.sliceImages curImg (bi * batchN) batchN trainPixels
       let xbaInit ← if cfg.augment then dio.augmentBatch xbaRaw batch (epoch * 10000 + bi)
                                    else dio.preprocessBatch xbaRaw batch
