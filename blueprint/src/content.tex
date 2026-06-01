@@ -6353,6 +6353,69 @@ Localize and classify. Detection heads are where the linear
 graph, not a list. The bestiary entries show the single-scale view and
 defer the multi-head refactor to the limitations discussion.
 
+\paragraph{YOLO on VOC persons, in passing.}
+\textbf{[TODO: actually get this working --- the objectness loss still
+needs the focal rebalance described in the third bullet below before the
+rendered boxes are clean. The trajectory and numbers in this paragraph are
+the \emph{target}, not a measured result yet; see
+\texttt{planning/yolo\_v5.md} for the current state.]}
+The \texttt{demos/MainYolov1VocTrainBootstrap.lean} trainer is a
+single-class \emph{person} detector: a ResNet-34 backbone (bootstrapped
+from the repo's ImageNet ResNet-34 checkpoint, \texttt{jax\_r34\_imagenet.bin},
+$\sim$21M backbone params) with a \emph{convolutional} detection head,
+trained on Pascal VOC~2007 filtered to the \texttt{person} class
+($224 \times 224$ RGB $\to$ a $7 \times 7$ prediction grid). After training,
+it draws boxes that track people on held-out validation images (see
+\texttt{demos/README.md} for the rendered grid). Three things change
+relative to the image \emph{classifiers} of Part~2 and the segmentation
+nets above:
+
+\begin{itemize}
+  \item \textbf{The label is a variable-length set of boxes, baked onto a
+    grid.} A classifier compares one logit vector to one class; a
+    segmentation net compares per-pixel logits to a per-pixel mask.
+    Detection has a \emph{variable} number of objects per image, each a
+    (class, box). YOLO fixes the shape by tiling the image into a
+    $7 \times 7$ grid and making the cell containing an object's
+    \emph{center} responsible for it: the target tensor carries, per cell,
+    the box center/size, an objectness $=1$, and a class slot --- zero
+    everywhere else. The loss is multi-part (coordinate regression +
+    objectness + class), \emph{masked} to the object cells, riding the
+    \texttt{lossKind := .yolov1Masked} path in \texttt{TrainConfig} ---
+    no new VJP machinery, just the Part~2 squared-error and cross-entropy
+    backwards fired on slices of the grid.
+  \item \textbf{The head is convolutional, and that is load-bearing.} The
+    paper flattens the final feature map into two fully-connected layers
+    (shown in the catalog entry below). This demo uses a $1 \times 1$
+    convolution as the head instead ($512 \to$ per-cell channels over the
+    $7 \times 7$ map). The reason is both pedagogical and practical: an FC
+    head must \emph{learn} the spatial correspondence ``these features
+    $\to$ a box \emph{there}'' through a dense layer, and on a small
+    dataset it collapses to predicting the average box in the image
+    center; the conv head predicts each cell from its \emph{own} feature
+    column with shared weights, so localization is structural rather than
+    learned. (This is precisely the v1$\to$v2 change.)
+  \item \textbf{Class \emph{and} foreground/background imbalance shape the
+    loss.} Two imbalances bite. The first is why this demo is single-class:
+    on full 20-class VOC the network collapses to predicting the dominant
+    ``person'' label everywhere, so we narrow to person-only and let the
+    box head carry the demo. The second is intrinsic --- most of the $49$
+    cells are empty, so a naive objectness term drives every prediction to
+    ``no object''; a \emph{focal}-weighted objectness loss down-weights the
+    easy background cells so the few foreground cells survive. Inference
+    then adds a post-processing step the classifiers never needed:
+    \emph{decode} each cell's box (cell-relative $\to$ absolute), score it
+    (objectness $\times$ class), threshold, and run \emph{non-max
+    suppression} to collapse overlapping boxes (\texttt{scripts/yolo\_render.py}).
+\end{itemize}
+
+The catalog entry below keeps the paper-exact YOLOv1 \emph{shape} ($448$
+input, FC head, all 20 classes) for the historical record; the working
+demo deliberately narrows to the simplest thing that detects --- one class,
+one scale, conv head --- and defers anchors and the multi-scale FPN heads
+(which don't fit the linear \texttt{NetSpec}) to the limitations
+discussion.
+
 \subsubsection*{YOLO v1/v3/v5/v8/v11 (\texttt{Bestiary/YOLO.lean})}
 v1 (Redmon et al.\ 2016,
 \href{https://arxiv.org/abs/1506.02640}{arXiv:1506.02640}) uses
