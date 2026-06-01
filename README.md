@@ -16,7 +16,20 @@ Companion code for the upcoming book *Verified Deep Learning with Lean4*
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg)](https://doi.org/10.5281/zenodo.20402133)
 
-**Current version: `v0.5.7`** — Two parallel-agent audits closed.
+**Current version: `v0.6.0`** — Object detection joins the framework. A
+YOLOv1 person detector on Pascal VOC, bootstrapped from Chapter 6's
+ResNet-34 backbone with a 1×1 convolutional detection head — the FC head
+can't learn localization on a small dataset (diagnosed end to end in
+`planning/yolo_v5.md`); the focal-loss objectness term is the remaining
+piece, flagged in the bestiary's new detection intro. The IREE/Lean
+training path gains global-norm gradient clipping, env-var checkpoint
+resume (`LEAN_MLIR_INIT_LOAD` / `LEAN_MLIR_START_STEP`), and per-step LR
+warmup. Blueprint adds demo-anchored intros for object detection (§11.2.2)
+and diffusion (§11.2.7), redraws the MNIST/CIFAR training curves as native
+pgfplots (vector, regenerable from `logs/`), and adds a BatchNorm "why
+normalizing helps" intuition.
+
+The `v0.5.7` headline still holds: two parallel-agent audits closed.
 The "canonical `correct := rfl`" pattern at non-smooth operators
 (ReLU, the composed MLP, MaxPool2) now has machine-checked
 smooth-point bridges: `relu_codegen_matches_canonical` and
@@ -426,7 +439,7 @@ ROCm 7.2.0 / gfx1100.
   title   = {Verified Deep Learning with Lean4: Formal Backpropagation from MLP to Attention, via MLIR},
   url     = {https://github.com/brettkoonce/lean4-mlir},
   doi     = {10.5281/zenodo.20402133},
-  version = {0.5.7},
+  version = {0.6.0},
   year    = {2026},
 }
 ```
