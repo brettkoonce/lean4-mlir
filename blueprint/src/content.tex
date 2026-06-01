@@ -803,29 +803,9 @@ the same hundred lines each time. That's the framework pitch in
 concrete form: once the loop is written (and proved correct one
 layer at a time), every architecture in the book and every
 architecture in the bestiary runs through it with no further
-infrastructure code.
-
-\subsection*{How to read this book}
-
-Every chapter after this one follows the same pattern:
-
-\begin{enumerate}
-  \item A new architecture (the ``what'')
-  \item A new structural primitive (the ``why'')
-  \item Derivation of the backward pass (by hand, with indices)
-  \item Lean proof (the formal statement)
-  \item MLIR snippet (the GPU code)
-  \item Training results (proof it works)
-\end{enumerate}
-
-You can read straight through, or you can skip to any chapter whose
-architecture interests you --- each one is mostly self-contained, with
-back-references to earlier chapters for the primitives it builds on.
-
-The Lean code and MLIR snippets are available in the lean4-mlir
-repository on GitHub. Every architecture in the book can be trained
-on your hardware. Appendix A walks you through the toolchain setup;
-if you're impatient, there's a Docker image that gets you from zero
+infrastructure code. And it all runs on your hardware:
+Appendix~\ref{app:getting_started} walks you through the toolchain setup,
+and if you're impatient, there's a Docker image that gets you from zero
 to training MNIST in one command.
 
 \section{How this book is organized}
