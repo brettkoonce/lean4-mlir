@@ -7246,6 +7246,53 @@ architecture is a UNet --- often with cross-attention bolted in for
 text conditioning. The novelty lives in the noise schedule and the
 sampling loop, not in layer design.
 
+\paragraph{DDPM on MNIST, in passing.} The
+\texttt{demos/MainMnistDdpmTrain.lean} trainer (with CIFAR-10,
+sinusoidal-time-embedding, and attention variants alongside it) is a
+working denoising diffusion model: a timestep-conditioned UNet trained to
+predict the Gaussian noise added to an image. The \texttt{mnist-ddpm-sample}
+executable then runs the reverse loop --- a 50-step DDIM schedule
+subsampled from the $T = 1000$ training schedule --- starting from pure
+noise and producing MNIST digits (see \texttt{demos/README.md} for the
+rendered samples). The backbone is \emph{literally} the segmentation UNet
+(\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}) of the subsection above;
+three things change relative to the classifiers, segmentation nets, and
+detectors so far:
+
+\begin{itemize}
+  \item \textbf{The target is the noise, and it is self-supervised --- there
+    are no labels.} Every model so far compares against a human-provided
+    label: a class, a per-pixel mask, a set of boxes. Diffusion manufactures
+    its own target: sample a random timestep $t$, sample Gaussian noise
+    $\varepsilon$, add it to a clean image per the noise schedule, and train
+    the network to predict $\varepsilon$. The loss is a plain per-pixel MSE
+    between predicted and actual noise (\texttt{lossKind :=
+    .floatTargetMse}) --- the same squared-error backward from Part~2, but
+    against a target generated on the fly rather than read from disk.
+  \item \textbf{The backbone is the segmentation UNet, conditioned on the
+    timestep.} One network has to denoise at \emph{every} level
+    $t \in [0, T)$, so $t$ is fed in: the tiny MNIST demo concatenates it as
+    an extra input channel (hence the leading \texttt{.unetDown 2 16} --- one
+    image channel plus one time channel), and the CIFAR sinusoidal variant
+    embeds it (sinusoidal $\to$ dense $\to$ dense, reusing the
+    \S~\ref{layer:positionalEncoding} primitive NeRF introduced). The
+    encoder-decoder-with-skips shape is exactly the segmentation kit ---
+    diffusion adds \emph{only} the conditioning, not new layers.
+  \item \textbf{Inference is an iterative sampling loop, not one forward
+    pass.} Classifiers, segmentation, and detection each produce their output
+    in a single network call. Diffusion starts from pure Gaussian noise and
+    iterates the reverse process --- predict the noise, step toward a cleaner
+    image, repeat --- here 50 DDIM steps. The \texttt{*-ddpm-sample}
+    executables run that loop on the same vmfb the trainer produced and write
+    a PPM; the novelty is entirely in the schedule and the loop, not in any
+    layer.
+\end{itemize}
+
+The shape carries all the way up: the bestiary DDPM entry below is the same
+UNet at CIFAR scale, and Stable Diffusion is the same UNet run on VAE latents
+with text cross-attention spliced in. Encoder-decoder-with-skips plus a
+sampling loop is the whole generative pipeline.
+
 \subsubsection*{DDPM (\texttt{Bestiary/Diffusion.lean})}
 \emph{Three} new primitives (\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}, \S~\ref{layer:positionalEncoding}). The denoiser in Ho et al.'s DDPM (2020,
 \href{https://arxiv.org/abs/2006.11239}{arXiv:2006.11239}) is a UNet
