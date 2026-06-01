@@ -3312,6 +3312,7 @@ keep reading through Ch~\ref{chap:attention} (ViT) for the full
 image-classification arc and then run the trainers in
 \texttt{demos/}:
 \begin{verbatim}
+lake exe yolov1-voc-train-bootstrap  # detection (YOLO on Pascal VOC)
 lake exe unet-pets-train         # segmentation (UNet on Pets)
 lake exe cifar-ddpm-train        # diffusion generative models
 lake exe gradcam                 # explainability
@@ -3320,9 +3321,9 @@ lake exe tinygpt-shakespeare train   # NLP (char-level transformer)
 The arc from ViT to TinyGPT in particular reuses the attention
 proofs from Ch~\ref{chap:attention} verbatim --- image-token
 attention and character-token attention are the same operator,
-just at different token alphabets. Image classification + segmentation
-+ diffusion + NLP, all on the same Lean$\to$MLIR$\to$IREE pipeline,
-covers most of what people mean by ``modern deep learning.''
+just at different token alphabets. Image classification + detection
++ segmentation + diffusion + NLP, all on the same Lean$\to$MLIR$\to$IREE
+pipeline, covers most of what people mean by ``modern deep learning.''
 
 \chapter{MobileNetV2}
 \label{chap:depthwise}
