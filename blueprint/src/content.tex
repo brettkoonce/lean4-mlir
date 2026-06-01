@@ -2748,6 +2748,24 @@ conditioned, SGD steps are meaningful, training proceeds.
 
 \subsection*{Where the BN lift actually lives}
 
+Why does normalizing help at all? Each layer is tuned for the
+distribution of its inputs --- but those inputs are the outputs of every
+layer below, which are themselves changing every step. So each layer
+chases a moving target, and at a high learning rate the target moves
+fast: activations drift to scales where the nonlinearity saturates or
+gradients blow up, and the step that helped one layer wrecks the next.
+BN removes the moving part --- by pinning every layer's input to
+mean-zero, unit-variance before the learnable \(\gamma, \beta\) get a
+say, each layer always sees a well-conditioned input no matter what the
+layers below just did. Ioffe \& Szegedy framed this as reducing
+``internal covariate shift''; later analysis (Santurkar et al., 2018)
+argued the sharper reason is that normalization smooths the loss
+landscape --- gradients stay predictable from one step to the next ---
+which is exactly what lets you take the bigger steps the rest of this
+section measures. Either way: BN decouples a layer's job from the chaos
+below it, and that decoupling is worth an order of magnitude of learning
+rate.
+
 If you rerun the no-BN CIFAR config at a smaller learning rate ---
 SGD at 0.02 instead of 0.1, for example --- it trains fine and hits
 72.5\% (\texttt{logs/ablation\_cifar-nobn-sgd002.log}). At the same
