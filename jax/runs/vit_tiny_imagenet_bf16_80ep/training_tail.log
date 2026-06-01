@@ -1,0 +1,57 @@
+ViT-Tiny (ImageNet, bf16) · Lean 4 → JAX
+  Patch(3→192,16x16) → Trans(12x[3h,192]) → 192→1000
+
+ImageNet (1000-class) — tfds streaming pipeline
+lr=0.000500  batch_size=512 (4 devices x 128)  epochs=80  params=5717416
+steps_per_epoch=2502  total_steps=200160
+backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+Starting training...
+Loading phase-3 init from /home/skoonce/vit_tiny_imagenet_bf16_e79.bin
+Resuming at global_step=197658 (= epoch 80/80); LR schedule continues from there
+E0601 01:31:01.725400  140066 xtile_compiler.cc:399] Fusion: gemm_fusion_dot.634 = f32[16,576,192]{2,1,0} fusion(bitcast.2, bitcast.244, bitcast.243, bitcast.242), kind=kCustom, calls=gemm_fusion_dot.634_computation.clone, backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"fusion_backend_config":{"kind":"__triton_nested_gemm_fusion","block_level_fusion_config":{"num_warps":"4","output_tiles":[{"sizes":["1","64","64"]}],"num_ctas":1,"num_stages":3,"is_tma_allowed":false,"is_warp_specialization_allowed":false}},"force_earliest_schedule":false,"reification_cost":[],"device_type":"DEVICE_TYPE_INVALID"}
+E0601 01:31:01.725559  140066 xtile_compiler.cc:401] Computation: gemm_fusion_dot.634_computation.clone {
+  parameter_1.196 = bf16[25216,192]{1,0} parameter(1)
+  parameter_2.12 = bf16[25216,192]{1,0} parameter(2)
+  parameter_3.12 = bf16[25216,192]{1,0} parameter(3)
+  concatenate.100 = bf16[25216,576]{1,0} concatenate(parameter_1.196, parameter_2.12, parameter_3.12), dimensions={1}
+  bitcast = bf16[16,1576,576]{2,1,0} bitcast(concatenate.100)
+  parameter_0.196 = bf16[192,16,1576]{2,1,0} parameter(0)
+  ROOT dot = f32[16,576,192]{2,1,0} dot(bitcast, parameter_0.196), lhs_batch_dims={0}, lhs_contracting_dims={1}, rhs_batch_dims={1}, rhs_contracting_dims={2}, backend_config={"sizes":["128"]}
+}
+E0601 01:31:03.188113  140062 cuda_timer.cc:87] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0601 01:31:03.276472  140088 cuda_timer.cc:87] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0601 01:31:03.399169  140077 cuda_timer.cc:87] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0601 01:31:03.504342  140074 cuda_timer.cc:87] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0601 01:31:03.649490  140066 cuda_timer.cc:87] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0601 01:31:03.820824  140070 cuda_timer.cc:87] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+  step 197700/200160  loss=3.1063  lr=0.0  (0.0ms/step avg)
+  step 197800/200160  loss=3.6964  lr=0.0  (0.0ms/step avg)
+  step 197900/200160  loss=3.0566  lr=0.0  (0.0ms/step avg)
+  step 198000/200160  loss=3.5247  lr=0.0  (1.0ms/step avg)
+  step 198100/200160  loss=3.3199  lr=0.0  (1.0ms/step avg)
+  step 198200/200160  loss=3.6518  lr=0.0  (1.0ms/step avg)
+  step 198300/200160  loss=3.355  lr=0.0  (1.0ms/step avg)
+  step 198400/200160  loss=3.2346  lr=0.0  (1.0ms/step avg)
+  step 198500/200160  loss=3.2773  lr=0.0  (1.0ms/step avg)
+  step 198600/200160  loss=3.511  lr=0.0  (1.0ms/step avg)
+  step 198700/200160  loss=3.2039  lr=0.0  (1.0ms/step avg)
+  step 198800/200160  loss=3.3819  lr=0.0  (1.0ms/step avg)
+  step 198900/200160  loss=3.5618  lr=0.0  (1.0ms/step avg)
+  step 199000/200160  loss=3.1347  lr=0.0  (1.0ms/step avg)
+  step 199100/200160  loss=1.767  lr=0.0  (2.0ms/step avg)
+  step 199200/200160  loss=3.5299  lr=0.0  (2.0ms/step avg)
+  step 199300/200160  loss=3.0855  lr=0.0  (2.0ms/step avg)
+  step 199400/200160  loss=3.6646  lr=0.0  (2.0ms/step avg)
+  step 199500/200160  loss=2.4765  lr=0.0  (2.0ms/step avg)
+  step 199600/200160  loss=3.3096  lr=0.0  (2.0ms/step avg)
+  step 199700/200160  loss=3.4764  lr=0.0  (2.0ms/step avg)
+  step 199800/200160  loss=2.2905  lr=0.0  (2.0ms/step avg)
+  step 199900/200160  loss=2.8191  lr=0.0  (2.0ms/step avg)
+  step 200000/200160  loss=2.0276  lr=0.0  (2.0ms/step avg)
+  step 200100/200160  loss=3.2771  lr=0.0  (2.0ms/step avg)
+  Running validation ...
+[Epoch 80] lr=0.0 loss(train_avg)=3.1188 val_top1=32617/49664 (0.6568) val_top5=0.8708 val_loss=1.4208  [517.6s train, -496.9s val]
+saved 101 param-groups to /home/skoonce/vit_tiny_imagenet_bf16_e80.bin (22869664 bytes)
+saved 101 param-groups to /home/skoonce/vit_tiny_imagenet_bf16.bin (22869664 bytes)
+
+Done. Total time: 517.7s

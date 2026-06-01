@@ -1,0 +1,30 @@
+[sup] 2026-05-31 14:51:53 START 80-epoch bf16 on GPUs 0,2,3,4
+[sup] 14:51:53 attempt 1: fresh start (no checkpoint)
+[sup] 14:51:53 launched PID=91772
+[sup] 16:25:05 !!! AER detected — killing PID=91772
+[sup]   last: [Epoch 12] lr=0.000489 loss(train_avg)=4.7069 val_top1=19389/49664 (0.3904) val_top5=0.6488 val_loss=2.8661  [459.6s train, -450.8s val]
+[sup] 16:25:07 attempt 1 ended (aer); cooling 15s then resuming
+[sup] 16:25:22 attempt 2: RESUME from epoch 12 (/home/skoonce/vit_tiny_imagenet_bf16_e12.bin), start_step=30024
+[sup] 16:25:22 launched PID=99213
+[sup] 18:35:30 !!! AER detected — killing PID=99213
+[sup]   last: [Epoch 28] lr=0.000393 loss(train_avg)=3.9698 val_top1=26083/49664 (0.5252) val_top5=0.7758 val_loss=2.0927  [461.9s train, -453.2s val]
+[sup] 18:35:32 attempt 2 ended (aer); cooling 15s then resuming
+[sup] 18:35:47 attempt 3: RESUME from epoch 28 (/home/skoonce/vit_tiny_imagenet_bf16_e28.bin), start_step=70056
+[sup] 18:35:47 launched PID=109510
+[sup] 18:49:00 !!! AER detected — killing PID=109510
+[sup]   last: [Epoch 29] lr=0.000384 loss(train_avg)=3.9394 val_top1=26548/49664 (0.5346) val_top5=0.7802 val_loss=2.0522  [518.8s train, -497.8s val]
+[sup] 18:49:02 attempt 3 ended (aer); cooling 15s then resuming
+[sup] 18:49:17 attempt 4: RESUME from epoch 29 (/home/skoonce/vit_tiny_imagenet_bf16_e29.bin), start_step=72558
+[sup] 18:49:17 launched PID=111462
+[sup] 01:10:16 !!! AER detected — killing PID=111462
+[sup]   last: [Epoch 77] lr=2e-06 loss(train_avg)=3.1238 val_top1=32595/49664 (0.6563) val_top5=0.8708 val_loss=1.4207  [471.4s train, -462.2s val]
+[sup] 01:10:18 attempt 4 ended (aer); cooling 15s then resuming
+[sup] 01:10:33 attempt 5: RESUME from epoch 77 (/home/skoonce/vit_tiny_imagenet_bf16_e77.bin), start_step=192654
+[sup] 01:10:33 launched PID=137188
+[sup] 01:30:33 !!! AER detected — killing PID=137188
+[sup]   last: [Epoch 79] lr=0.0 loss(train_avg)=3.1331 val_top1=32613/49664 (0.6567) val_top5=0.8708 val_loss=1.4207  [465.5s train, -456.6s val]
+[sup] 01:30:35 attempt 5 ended (aer); cooling 15s then resuming
+[sup] 01:30:50 attempt 6: RESUME from epoch 79 (/home/skoonce/vit_tiny_imagenet_bf16_e79.bin), start_step=197658
+[sup] 01:30:50 launched PID=139840
+[sup]   last: [Epoch 80] lr=0.0 loss(train_avg)=3.1188 val_top1=32617/49664 (0.6568) val_top5=0.8708 val_loss=1.4208  [517.6s train, -496.9s val]
+[sup] 01:39:33 ✅ TRAINING COMPLETE (90 epochs). final=/home/skoonce/vit_tiny_imagenet_bf16.bin
