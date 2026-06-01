@@ -71,6 +71,13 @@ VOC_CLASSES = [
 ]
 CLASS_TO_ID = {c: i for i, c in enumerate(VOC_CLASSES)}
 
+# Optional box filter (set from --only-classes). When non-None, boxes whose
+# class name isn't in this set are dropped — used to build a single-class
+# detector (e.g. person-only) WITHOUT changing the on-disk perCell=30 / 20-class
+# layout, so the FFI loader + codegen stay unchanged. The kept classes keep
+# their original VOC ids (person stays id 14).
+ONLY_CLASSES = None  # type: set[str] | None
+
 
 def parse_annotation(xml_path):
     """Return (img_w, img_h, [(class_id, xmin, ymin, xmax, ymax), ...]) in pixel coords.
@@ -89,6 +96,8 @@ def parse_annotation(xml_path):
         name = obj.find("name").text
         if name not in CLASS_TO_ID:
             continue  # silently skip unknown classes (shouldn't happen for VOC 2007)
+        if ONLY_CLASSES is not None and name not in ONLY_CLASSES:
+            continue  # single-class build: drop all but the requested class(es)
         cid = CLASS_TO_ID[name]
         bb = obj.find("bndbox")
         xmin = float(bb.find("xmin").text)
@@ -240,7 +249,15 @@ def main():
     ap.add_argument("out_dir", help="output directory (will be created if missing)")
     ap.add_argument("--max-images", type=int, default=None, help="cap per split (for dev)")
     ap.add_argument("--split", choices=["trainval", "test", "both"], default="both")
+    ap.add_argument("--only-classes", default=None,
+                    help="comma-separated class names to keep (e.g. 'person'); drops all others. "
+                         "Keeps the 20-class on-disk layout — just a box filter.")
     args = ap.parse_args()
+
+    if args.only_classes:
+        global ONLY_CLASSES
+        ONLY_CLASSES = set(c.strip() for c in args.only_classes.split(","))
+        print(f"only-classes filter: {sorted(ONLY_CLASSES)}")
 
     voc_root = Path(args.voc_root)
     out_dir = Path(args.out_dir)

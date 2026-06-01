@@ -32,7 +32,14 @@ import LeanMlir
     = 21,284,672.) -/
 
 def r34Yolov1 : NetSpec where
-  name := "ResNet-34 + YOLOv1 head (VOC bootstrap)"
+  -- Conv detection head (v1.5): the backbone's [B,512,7,7] map goes straight
+  -- through a 1×1 conv → [B,30,7,7] → flatten → [B,1470], instead of the old
+  -- flatten→dense(25088→1470) FC head. The conv head predicts each cell from
+  -- its OWN 512-feature column with shared weights, so spatial localization is
+  -- structural (not learned through a giant dense layer) — fixes the box/
+  -- objectness collapse-to-center the FC head couldn't escape. Distinct name →
+  -- own checkpoint files. Backbone prefix (21,284,672) is unchanged.
+  name := "ResNet-34 + YOLOv1 conv-head (person VOC)"
   imageH := 224
   imageW := 224
   layers := [
@@ -42,8 +49,8 @@ def r34Yolov1 : NetSpec where
     .residualBlock  64 128 4 2,
     .residualBlock 128 256 6 2,
     .residualBlock 256 512 3 2,
-    .flatten,
-    .dense 25088 1470 .identity
+    .conv2d 512 30 1 .same .identity,   -- 1×1 conv detection head → [B,30,7,7]
+    .flatten                            -- → [B,1470] for the YOLOv1 masked loss
   ]
 
 def r34Yolov1BootstrapConfig : TrainConfig where
@@ -61,6 +68,10 @@ def r34Yolov1BootstrapConfig : TrainConfig where
   cosineDecay  := true
   warmupEpochs := 3
   gradClipNorm := 4.0          -- global-L2-norm gradient clip (essential at this LR)
+  headLrMult   := 1.0          -- uniform LR: the conv head is small (~15k params) and conv
+                               -- structure localizes naturally, so no dense-head boost needed.
+                               -- (headLrMult only applies to .dense layers anyway.) Run on the
+                               -- person-only data dir (data/voc2007_person).
   checkpointEveryNEpochs := 2  -- frequent ckpts: mars segfaults ~ep4-11; auto-resume needs recent state
   augment      := true        -- Phase 3: bbox-aware hflip + random crop
   lossKind     := LossKind.yolov1Masked

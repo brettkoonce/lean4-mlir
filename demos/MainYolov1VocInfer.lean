@@ -20,7 +20,8 @@ import LeanMlir
     matches and the eval vmfb + params + bn_stats files line up. -/
 
 def r34Yolov1 : NetSpec where
-  name := "ResNet-34 + YOLOv1 head (VOC bootstrap)"
+  -- Must match the trainer spec (name → checkpoint prefix; layers → eval graph).
+  name := "ResNet-34 + YOLOv1 conv-head (person VOC)"
   imageH := 224
   imageW := 224
   layers := [
@@ -30,8 +31,8 @@ def r34Yolov1 : NetSpec where
     .residualBlock  64 128 4 2,
     .residualBlock 128 256 6 2,
     .residualBlock 256 512 3 2,
-    .flatten,
-    .dense 25088 1470 .identity
+    .conv2d 512 30 1 .same .identity,
+    .flatten
   ]
 
 def main (args : List String) : IO Unit := do
