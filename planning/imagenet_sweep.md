@@ -133,6 +133,35 @@ AER-watchdog auto-resume). Canonical eval: `scripts/eval_*_full50k.py`.
   Swapping those two cables is the pending hardware fix; until then stay on
   `0,2,3,4` under the watchdog. (BIOS PCIe Gen3 is the fallback fix.)
 
+## Path to paper numbers: what's wired vs. net-new (2026-06-02 scoping)
+
+MNv2 needs nothing more — SGD + base aug is its standard recipe (~71% target).
+EfficientNet-B0 and ConvNeXt-T need more to approach paper. The four levers:
+
+| Lever | Status | Complexity | Leverage | Notes |
+|-------|--------|-----------|----------|-------|
+| Aug pipeline (Mixup/CutMix/RandAug/Erasing) | **wired** (config flags; ViT uses it) | S — flip flags | high | RandAug is **color-only** (no `tfa` on tf2.21), no AutoAugment; geometric ops = a separate M. |
+| RMSProp | not wired (have SGD+mom, Adam/AdamW) | M | low | EfficientNet-only; optimizer is emitted at ~3–4 parallel sites. SGD/AdamW reproductions hit ~75–76%, so optional. |
+| EMA (weight averaging) | not wired | M–L | high (~+0.5–1% ENet) | Shadow param tree; eval + checkpoint must use EMA, not live params. Sharding-OK via `tree.map`. |
+| Stochastic depth (drop-path) | not wired | M–L | medium | Per-block survival prob, linear-by-depth; drop the branch in training, scale at inference. **Forces an RNG into `forward`** (see below). |
+
+**Shared critical path = EMA + stochastic depth** (both M–L). RMSProp is the
+only EfficientNet-only item; ConvNeXt uses AdamW and doesn't need it.
+
+**Common prerequisite — RNG threading in `forward`.** Today `forward(params, x)`
+takes no RNG. Stochastic depth needs per-block drop masks, so the signature has
+to become `forward(params, x, rng, training)`, threaded through every
+residual-block helper and through `value_and_grad`/jit. This is the single
+change that most affects the codegen's shape — scope it first, since SD depends
+on it. (EMA does **not** need the rng — it's an optimizer-side shadow copy — so
+EMA and the rng-threading can land independently.)
+
+**ConvNeXt coverage.** ConvNeXt already has AdamW (✓) and LayerScale (✓, in the
+ported arch). So once EMA + stochastic depth land and the aug flags are flipped,
+ConvNeXt is **fully equipped** for a faithful 300ep run — RMSProp is irrelevant
+to it. The only remaining ConvNeXt gap is cosmetic (convBn-stem-with-ReLU vs
+conv+LN), not an accuracy lever.
+
 ## TODO
 
 - [ ] **Actual accuracy results** for MobileNetV2 (90ep), EfficientNet-B0
@@ -148,5 +177,7 @@ AER-watchdog auto-resume). Canonical eval: `scripts/eval_*_full50k.py`.
       record the working peak LR per net.
 - [ ] fp32 ms/step for MNv2/ENet/ConvNeXt if a full bf16-vs-fp32 speedup
       table across all five is wanted.
-- [ ] 300-epoch + stochastic-depth/EMA push for ENet/ConvNeXt to approach
-      paper numbers (current configs are the 80ep validation tier).
+- [ ] 300-epoch push for ENet/ConvNeXt to approach paper numbers — gated on
+      EMA + stochastic depth (+ flipping the aug flags); see "Path to paper
+      numbers" above for the per-lever scope and the RNG-in-`forward`
+      prerequisite. Current configs are the 80ep validation tier.
