@@ -1,0 +1,119 @@
+# imagenet_sweep.md — bf16 ImageNet sweep on the 4060 Ti box (Lean→JAX)
+
+Per-architecture ImageNet-1k training on the CUDA box (**ares**, 4× RTX
+4060 Ti, `CUDA_VISIBLE_DEVICES=0,2,3,4` — idx1/idx5 excluded, see
+`reference_ares_pcie_aer`). All phase-2 Lean→JAX, bf16 mixed precision
+(matmul + the heavy convs via `bf16Conv`; norm/softmax/GELU/SE-gate stay
+fp32). Batch 256 (4×64) everywhere. Written 2026-06-02.
+
+## TL;DR
+
+- Five architectures characterized on the same 4-GPU bf16 setup. Two run
+  to completion (R34, ViT-Tiny); three validated + throughput-measured but
+  NOT yet trained to completion (MNv2, ENet-B0, ConvNeXt-T).
+- Per-epoch cost measured from steady-state ms/step (incremental, JIT
+  amortized out) over ~400 steps each — thermally safe sample, then stop
+  (the box has no case fan; long unattended runs need the AER-watchdog
+  supervisor + cooling care).
+- bf16-vs-fp32 measured for R34 (1.60×) and ViT (1.48×); the conv vs
+  matmul split is why they differ. See `reference_bf16_depthwise_4060ti`
+  for the per-op microbench (the 3×3 depthwise is a bf16 wash; 1×1s and
+  7×7 depthwise win; whole MBConv block ~2×).
+
+## The sweep (measured throughput, batch 256, 4× 4060 Ti, bf16)
+
+| Net            | Params | ms/step | min/epoch | 80ep   | 90ep   | Status |
+|----------------|--------|---------|-----------|--------|--------|--------|
+| ViT-Tiny       | 5.7M   | 176     | ~7.6      | ~11 hr | —      | **DONE** |
+| EfficientNet-B0| 5.3M   | 102     | ~8.9      | ~12 hr | —      | validated |
+| MobileNetV2    | 3.5M   | 106     | ~9.1      | —      | ~14 hr | validated |
+| ResNet-34      | 21.8M  | 139     | ~11.9     | —      | ~18 hr | **DONE** |
+| ConvNeXt-T     | 28.6M  | 185     | ~15.9     | ~21 hr | —      | validated |
+
+(ms/step is per-step wall-clock at steady state; min/epoch = 5004 steps ×
+ms/step + ~0.3–0.5 min val. ViT is 2502 steps/epoch at batch 512 — its
+176 ms/step is already normalized into the 7.6 min/epoch figure.)
+
+Wait — ViT note: the ViT run used **batch 512** (2502 steps/epoch), the
+rest use **batch 256** (5004 steps/epoch). The min/epoch column is the
+apples-to-apples number to chart; ms/step is not directly comparable
+across the ViT row because of the batch difference.
+
+## Completed runs (real accuracy)
+
+| Net       | Epochs | Precision | Val top-1 | Val top-5 | Weights |
+|-----------|--------|-----------|-----------|-----------|---------|
+| ResNet-34 | 90     | bf16      | **72.02%**| **90.62%**| `/home/skoonce/r34_imagenet_bf16.bin` |
+| ViT-Tiny  | 80     | bf16      | **65.64%**| **87.06%**| `/home/skoonce/vit_tiny_imagenet_bf16.bin` |
+
+(Both full-50k canonical eval. Per-epoch curves + RESULTS.md in
+`jax/runs/{r34,vit_tiny}_imagenet_bf16_*/`; blueprint §6.4 and §10.5.)
+
+## bf16 vs fp32 (measured, matched 4-GPU / same batch)
+
+| Net       | fp32 ms/step | bf16 ms/step | speedup |
+|-----------|--------------|--------------|---------|
+| ResNet-34 | 223          | 139          | 1.60×   |
+| ViT-Tiny  | 260          | 176          | 1.48×   |
+
+ViT's smaller multiple: narrow matmuls (embed 192) + proportionally more
+time in fp32 LayerNorm/softmax that bf16 leaves alone. (fp32 ms/step for
+MNv2/ENet/ConvNeXt not separately measured — only the bf16 configs were
+benchmarked for those three.)
+
+## Per-net recipe notes
+
+- **ResNet-34 / MobileNetV2 / EfficientNet-B0**: SGD+momentum 0.9, peak LR
+  0.1, cosine + 5ep warmup, label smoothing 0.1, RRC+flip. wd: 1e-4 (R34),
+  4e-5 (MNv2), 1e-5 (ENet — small, protects depthwise/SE). No mixup/cutmix.
+- **ViT-Tiny / ConvNeXt-T**: AdamW + **grad-clip 1.0** (mandatory — the
+  DeiT LR collapses to chance without it; same insurance on ConvNeXt). LR
+  5e-4 (ViT, batch 512) / 4e-4 (ConvNeXt, batch 256, = 4e-3@4096 scaled),
+  wd 0.05. ViT runs the full mixup/cutmix/RandAug/erasing suite; ConvNeXt
+  validation tier leaves them off.
+
+## Trainers / build targets
+
+| Net | Lean file | exe | supervisor |
+|-----|-----------|-----|------------|
+| R34 | `MainResnetImagenet.lean` | `resnet34-imagenet` | `supervise_r34_90ep.sh` |
+| ViT | `MainVitImagenet.lean` | `vit-tiny-imagenet` | `supervise_vit_80ep.sh` |
+| MNv2| `MainMobilenetV2Imagenet.lean` | `mobilenet-v2-imagenet` | `supervise_mnv2_30ep.sh` |
+| ENet| `MainEfficientNetImagenet.lean` | `efficientnet-b0-imagenet` | `supervise_enet_b0_80ep.sh` |
+| CNeXt| `MainConvNeXtImagenet.lean` | `convnext-tiny-imagenet` | `supervise_convnext_t_80ep.sh` |
+
+Run pattern: `lake build <exe>` → emit the `.py` (run exe briefly, it
+writes `.lake/build/generated_*.py` before spawning python, then dies on
+the wrong python — harmless) → launch the supervisor (checkpoint/epoch +
+AER-watchdog auto-resume). Canonical eval: `scripts/eval_*_full50k.py`.
+
+## ⚠️ Open caveats
+
+- **LR-warmup stability unverified** for MNv2 / ENet / ConvNeXt — the
+  ~400-step samples were all still in early warmup (LR < 2e-3), loss flat
+  near ln(1000)≈6.9. Whether each takes off cleanly (esp. SGD LR 0.1 on
+  the BN-depthwise nets, and ConvNeXt AdamW) needs a real run. The configs
+  note a fallback (drop peak LR to ~0.05) if early collapse shows.
+- **Thermal**: no case fan — only run the full sweep with the supervisor
+  (auto-resume) and an eye on temps; don't stack concurrent runs.
+- **PCIe AER**: idx5 (bus 62) is the worst link, idx3 (bus 42) second.
+  Swapping those two cables is the pending hardware fix; until then stay on
+  `0,2,3,4` under the watchdog. (BIOS PCIe Gen3 is the fallback fix.)
+
+## TODO
+
+- [ ] **Actual accuracy results** for MobileNetV2 (90ep), EfficientNet-B0
+      (80ep), ConvNeXt-T (80ep) — fill the completed-runs table with real
+      val top-1/top-5 once each is trained to completion (full-50k eval).
+- [ ] Per-epoch validation curves for the three pending nets (RESULTS.md +
+      pgfplots, paralleling the R34/ViT `jax/runs/*/` treatment).
+- [ ] **Sweep chart**: once the three pending results land, build a
+      combined chart from this doc's numbers — e.g. params-vs-top1 scatter
+      and/or min-per-epoch bar, native pgfplots (see the R34 §6.4 / ViT
+      §10.5 curves for the style; `figures/log_to_pgfplots.py` may help).
+- [ ] Verify MNv2/ENet/ConvNeXt LR stability past warmup (above caveat);
+      record the working peak LR per net.
+- [ ] fp32 ms/step for MNv2/ENet/ConvNeXt if a full bf16-vs-fp32 speedup
+      table across all five is wanted.
+- [ ] 300-epoch + stochastic-depth/EMA push for ENet/ConvNeXt to approach
+      paper numbers (current configs are the 80ep validation tier).
