@@ -3724,6 +3724,93 @@ A few observations worth calling out:
   training} vs ResNet-34's 9.5 hours. The speedup comes entirely
   from the smaller per-step time; the epoch count is the same.
 
+\section{ImageNet recipe}
+
+The Imagenette run above trained on $\sim$9.5K images. The same
+backbone scales to full 1000-class ImageNet exactly the way
+ResNet-34 did in Chapter~\ref{chap:residual}: the inverted-residual
+stack is unchanged, only the head widens to 1000 and the dataset and
+schedule grow. The spec mirrors
+\texttt{jax/MainMobilenetV2Imagenet.lean}:
+
+\begin{verbatim}
+-- Same inverted-residual backbone, 1000 classes instead of 10.
+def mobilenetV2Imagenet : NetSpec where
+  name   := "MobileNetV2 (ImageNet, bf16)"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 32 3 2 .same,
+    .invertedResidual  32  16 1 1 1,
+    .invertedResidual  16  24 6 2 2,
+    .invertedResidual  24  32 6 2 3,
+    .invertedResidual  32  64 6 2 4,
+    .invertedResidual  64  96 6 1 3,
+    .invertedResidual  96 160 6 2 3,
+    .invertedResidual 160 320 6 1 1,
+    .convBn 320 1280 1 1 .same,
+    .globalAvgPool,
+    .dense 1280 1000 .identity      -- 1000-class head
+  ]
+
+-- SGD recipe, MobileNet-tuned: smaller weight decay, bf16 conv on.
+def mobilenetV2ImagenetConfig : TrainConfig where
+  learningRate := 0.1
+  batchSize    := 256
+  epochs       := 90               -- the real run; validate at 30 first
+  useAdam      := false             -- paper: SGD + momentum
+  momentum     := 0.9
+  weightDecay  := 4e-5              -- smaller than R34's 1e-4
+  cosineDecay    := true
+  warmupEpochs   := 5
+  augment        := true            -- random-resized-crop + flip
+  labelSmoothing := 0.1
+  bf16           := true
+  bf16Conv       := true            -- reaches the inverted-residual blocks
+\end{verbatim}
+
+The one knob specific to MobileNet is \texttt{bf16Conv}. ResNet's
+convolutions cast to bfloat16 the instant the flag is on, but
+MobileNet's compute lives inside inverted-residual blocks --- a
+$1\times1$ expansion, a depthwise $3\times3$, a $1\times1$
+projection --- whose convolutions originally ran in fp32 regardless.
+Routing them through the same \texttt{convdt} cast as the plain
+convolutions is what lets bf16 reach the bulk of the network: the
+payoff is the whole inverted-residual block running $\sim2\times$
+faster on cuDNN, where the $1\times1$s (which are really matmuls)
+love bfloat16 and the depthwise $3\times3$ is a wash. The weight
+decay also drops to $4\times10^{-5}$ --- MobileNet's depthwise
+filters are tiny ($9$ weights per channel), and the $10^{-4}$ that
+suits ResNet over-regularizes them.
+
+\textbf{Compute budget.} On the four RTX 4060 Ti (CUDA, bf16, batch
+256 across the four GPUs), steady-state throughput is
+$\sim$106\,ms per step, about $9.1$ minutes per epoch --- so the
+30-epoch validation tier is a $\sim$4.5-hour run and the full
+90-epoch schedule projects to roughly 14 wall-clock hours.
+Curiously, that is \emph{slower} per epoch than the
+$9.5\times$-larger ResNet-34 at $\sim$10.5\,min: depthwise
+convolution is memory-bound and low-arithmetic-intensity, so
+MobileNet's order-of-magnitude FLOP saving does not translate into
+a proportional wall-clock win on this hardware.
+
+\begin{center}
+\begin{tabular}{l l r r r r}
+\hline
+GPU & Precision & Per epoch & 90 epochs & Val top-1 & Val top-5 \\
+\hline
+4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$9.1 min & $\sim$14 hr & TODO & TODO \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent (Throughput is measured from steady-state ms/step; the run
+is not yet trained to completion, so accuracy is pending. The open
+question is whether the SGD peak LR of $0.1$ takes off cleanly on a
+batch-normalized depthwise net --- the validation tier answers it,
+and the config carries a fallback to $\sim$0.05 if the early epochs
+stall.)
+
 The general pattern ---  deeper + narrower + per-channel conv +
 surrounding $1 \times 1$ expansion --- carries forward to MobileNet
 V3 and the EfficientNet family. All of those add their own small
