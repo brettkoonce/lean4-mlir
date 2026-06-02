@@ -321,7 +321,7 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    return jnp.minimum(jax.nn.relu(x + 3.0), 6.0) / 6.0\n\n"
   if spec.hasMbConv then
     code := code ++
-      "def mbconv_block(params, x, idx, stride, expand, ksize, use_se):\n" ++
+      "def mbconv_block(params, x, idx, stride, expand, ksize, use_se, drop_key=None, keep_prob=1.0):\n" ++
       "    \"\"\"MBConv: expand → depthwise → SE → project, with Swish.\"\"\"\n" ++
       "    residual = x\n" ++
       "    i = idx\n" ++
@@ -367,6 +367,10 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "    if residual.shape == x.shape and stride == 1:\n" ++
+      "        # Stochastic depth (inverted) — only on blocks that actually skip.\n" ++
+      "        if drop_key is not None and keep_prob < 1.0:\n" ++
+      "            keep = jax.random.bernoulli(drop_key, keep_prob).astype(x.dtype)\n" ++
+      "            x = x * keep / keep_prob\n" ++
       "        x = x + residual\n" ++
       "    return x\n\n" ++
       "def fused_mbconv_block(params, x, idx, stride, expand, ksize, use_se):\n" ++
@@ -1278,9 +1282,14 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
   code
 
 private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run do
-  -- Stochastic depth: count residual (ConvNeXt) blocks for the linear keep schedule.
-  let totalCnx := (spec.layers.filterMap (fun l => match l with
-    | .convNextStage _ n _ _ => some n | _ => none)).foldl (· + ·) 0
+  -- Stochastic depth: count residual-bearing blocks for the linear keep
+  -- schedule. ConvNeXt: every block. MBConv: index over all blocks (paper
+  -- convention); the drop only actually fires where a skip exists (guarded
+  -- inside mbconv_block), so no-skip blocks just carry a unit keep.
+  let totalDrop := (spec.layers.filterMap (fun l => match l with
+    | .convNextStage _ n _ _ => some n
+    | .mbConv _ _ _ _ _ n _  => some n
+    | _ => none)).foldl (· + ·) 0
   let mut code := "def forward(params, x, drop_key=None):\n"
   -- Reshape flat images to NCHW if first layer is conv
   match spec.layers.head? with
@@ -1294,9 +1303,9 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
       toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
   | _ => pure ()
-  if cfg.dropPath > 0 && totalCnx > 0 then
-    code := code ++ "    dpkeys = (jax.random.split(drop_key, " ++ toString totalCnx ++
-      ") if drop_key is not None else [None] * " ++ toString totalCnx ++ ")\n"
+  if cfg.dropPath > 0 && totalDrop > 0 then
+    code := code ++ "    dpkeys = (jax.random.split(drop_key, " ++ toString totalDrop ++
+      ") if drop_key is not None else [None] * " ++ toString totalDrop ++ ")\n"
   let mut dbi : Nat := 0
   let mut pidx : Nat := 0
   for l in spec.layers do
@@ -1319,7 +1328,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     | .convNextStage _c nBlocks _ _ =>
       for _ in List.range nBlocks do
         if cfg.dropPath > 0 then
-          let denom := Float.ofNat (Nat.max 1 (totalCnx - 1))
+          let denom := Float.ofNat (Nat.max 1 (totalDrop - 1))
           let keep := 1.0 - cfg.dropPath * Float.ofNat dbi / denom
           code := code ++ "    x = convnext_block(params, x, " ++ toString pidx ++
             ", dpkeys[" ++ toString dbi ++ "], " ++ toString keep ++ ")\n"
@@ -1374,16 +1383,31 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     | .mbConv ic oc expand kSize stride n useSE =>
       let nPerBlock (blockExpand : Nat) (se : Bool) :=
         (if blockExpand != 1 then 1 else 0) + 1 + (if se then 2 else 0) + 1
-      let useSkipFirst := if ic == oc && stride == 1 then "True" else "False"
-      let _ := useSkipFirst  -- used in string below
-      code := code ++ "    x = mbconv_block(params, x, " ++ toString pidx ++ ", " ++
-        toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++
-        (if useSE then "True" else "False") ++ ")\n"
+      let seArg := if useSE then "True" else "False"
+      let denom := Float.ofNat (Nat.max 1 (totalDrop - 1))
+      -- First block (may carry stride / channel change).
+      if cfg.dropPath > 0 then
+        let keep := 1.0 - cfg.dropPath * Float.ofNat dbi / denom
+        code := code ++ "    x = mbconv_block(params, x, " ++ toString pidx ++ ", " ++
+          toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++
+          seArg ++ ", dpkeys[" ++ toString dbi ++ "], " ++ toString keep ++ ")\n"
+        dbi := dbi + 1
+      else
+        code := code ++ "    x = mbconv_block(params, x, " ++ toString pidx ++ ", " ++
+          toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++
+          seArg ++ ")\n"
       pidx := pidx + nPerBlock expand useSE
       for _ in List.range (n - 1) do
-        code := code ++ "    x = mbconv_block(params, x, " ++ toString pidx ++ ", 1, " ++
-          toString expand ++ ", " ++ toString kSize ++ ", " ++
-          (if useSE then "True" else "False") ++ ")\n"
+        if cfg.dropPath > 0 then
+          let keep := 1.0 - cfg.dropPath * Float.ofNat dbi / denom
+          code := code ++ "    x = mbconv_block(params, x, " ++ toString pidx ++ ", 1, " ++
+            toString expand ++ ", " ++ toString kSize ++ ", " ++
+            seArg ++ ", dpkeys[" ++ toString dbi ++ "], " ++ toString keep ++ ")\n"
+          dbi := dbi + 1
+        else
+          code := code ++ "    x = mbconv_block(params, x, " ++ toString pidx ++ ", 1, " ++
+            toString expand ++ ", " ++ toString kSize ++ ", " ++
+            seArg ++ ")\n"
         pidx := pidx + nPerBlock expand useSE
     | .invertedResidual ic oc expand stride n =>
       let nParamsPerBlock (hasExpand : Bool) := (if hasExpand then 1 else 0) + 1 + 1  -- expand? + dw + proj

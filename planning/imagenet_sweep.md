@@ -140,15 +140,16 @@ EfficientNet-B0 and ConvNeXt-T need more to approach paper. The four levers:
 
 | Lever | Status | Complexity | Leverage | Notes |
 |-------|--------|-----------|----------|-------|
-| Aug pipeline (Mixup/CutMix/RandAug/Erasing) | **wired** (config flags; ViT uses it) | S — flip flags | high | RandAug is **color-only** (no `tfa` on tf2.21), no AutoAugment; geometric ops = a separate M. |
+| Aug pipeline — color (Mixup/CutMix/RandAug-color/Erasing) | **wired** (config flags; ViT uses it) | S — flip flags | high | RandAug is **color-only** (brightness/contrast/etc.). |
+| Aug pipeline — geometric RandAug (rotate/shear/translate) | not wired | M | low–med | `tfa` gone on tf2.21; reimplement via `tf.raw_ops.ImageProjectiveTransformV3` (the op tfa wrapped) — feed an 8-elem projective vector per op + magnitude map, add to the RandAug op pool, set fill_mode. The transform-matrix math is the only real work; sampling framework already exists. Runs in the tfds map. Last slice of the aug stack; color RandAug + Mixup/CutMix capture most of the gain. |
 | RMSProp | not wired (have SGD+mom, Adam/AdamW) | M | low | EfficientNet-only; optimizer is emitted at ~3–4 parallel sites. SGD/AdamW reproductions hit ~75–76%, so optional. |
 | EMA (weight averaging) | **wired** (ImageNet path, gated by `useEMA`) | done | high (~+0.5–1% ENet) | Jitted `ema_update`, decoupled from the 3 optimizers; eval + checkpoints use the EMA tree. v1 limits: ImageNet path only (in-RAM/Imagenette no-ops if set); resume resets live params to EMA (negligible late). |
-| Stochastic depth (drop-path) | **wired** (ConvNeXt blocks, gated by `dropPath`) | done | medium | Additive RNG in `forward` (default None → drop-free); per-block inverted drop, linear keep schedule. ConvNeXt only so far — ENet's `mbconv_block` needs the same logic added. |
+| Stochastic depth (drop-path) | **wired** (ConvNeXt + ENet MBConv, gated by `dropPath`) | done | medium | Additive RNG in `forward` (default None → drop-free); per-block inverted drop, linear keep schedule over all blocks. ConvNeXt: every block. MBConv: drop guarded to skip-blocks (`ic==oc && stride==1`) inside `mbconv_block`. |
 
-**Critical path done: EMA + stochastic depth both wired.** ConvNeXt-T is fully
-equipped (AdamW + LayerScale + EMA + SD; flip aug flags for the full recipe).
-Remaining: extend SD to `mbconv_block` for EfficientNet, and RMSProp (ENet-only,
-optional). ConvNeXt uses AdamW and needs neither.
+**Critical path done: EMA + stochastic depth both wired, for ConvNeXt *and*
+ENet.** Both trainers are set up for 80ep with EMA + SD on (ConvNeXt dropPath
+0.1, ENet 0.2). Remaining, both optional: geometric RandAug (low–med) and
+RMSProp (ENet-only). ConvNeXt uses AdamW and needs neither.
 
 **Common prerequisite — RNG threading in `forward`.** Today `forward(params, x)`
 takes no RNG. Stochastic depth needs per-block drop masks, so the signature has

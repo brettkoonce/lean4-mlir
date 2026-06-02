@@ -37,12 +37,12 @@ def efficientNetB0Imagenet : NetSpec where
     params), label smoothing 0.1, random-crop + flip, bf16 + bf16Conv.
 
     EfficientNet's original recipe is RMSProp + AutoAugment + stochastic
-    depth + EMA (none of which we have); plain SGD+cosine at 80ep will land
-    a few points under the 77% paper number. That's expected for the
-    validation tier — the point here is "does it train cleanly and what's
-    the real per-epoch cost." If SE/swish make lr 0.1 unstable early, drop
-    the peak to ~0.05 (the validation run tells us). Mixup/cutmix left off,
-    as for MNv2. -/
+    depth + EMA. We now have EMA + stochastic depth (both on below); RMSProp
+    and geometric AutoAugment aren't wired, so SGD+cosine at 80ep still lands
+    a few points under the 77% paper number — fine for the validation tier,
+    whose point is "does it train cleanly + the real per-epoch cost." If
+    SE/swish make lr 0.1 unstable early, drop the peak to ~0.05. Mixup/cutmix
+    left off as for MNv2 (flip the aug flags for the full recipe). -/
 def efficientNetB0ImagenetConfig : TrainConfig where
   learningRate   := 0.1
   batchSize      := 256
@@ -56,6 +56,8 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true    -- now reaches the MBConv expand/depthwise/project
+  useEMA         := true     -- weight averaging (decay 0.9999) — eval + ckpt use it
+  dropPath       := 0.2      -- stochastic depth, EfficientNet-B0 drop-connect rate
 
 #eval efficientNetB0Imagenet.validate!
 
