@@ -1534,6 +1534,16 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    params = jax.tree.map(lambda p, g: p - lr * g, params, grads)\n" ++
     "    return params, loss\n\n") ++
+  -- EMA (exponential moving average of weights): a shadow param tree updated
+  -- each step; eval + checkpoints use it (see the imagenet main loop). Kept
+  -- decoupled from the optimizer so the three train_step variants above stay
+  -- untouched.
+  (if cfg.useEMA then
+    "EMA_DECAY = " ++ toString cfg.emaDecay ++ "\n" ++
+    "@jit\n" ++
+    "def ema_update(ema, params):\n" ++
+    "    return jax.tree.map(lambda e, p: EMA_DECAY * e + (1.0 - EMA_DECAY) * p, ema, params)\n\n"
+   else "") ++
   -- Mixup (on-device, soft labels). Partner = batch-reverse (jnp.flip) to avoid
   -- a cross-shard gather under multi-GPU sharding. λ ~ Beta(α,α) per step.
   (if cfg.useMixup then
@@ -1722,6 +1732,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "    if _global_step > 0:\n" ++
   "        print(f'Resuming at global_step={_global_step} (= epoch {_start_epoch + 1}/{EPOCHS}); LR schedule continues from there')\n" ++
   "    t0 = time.time()\n" ++
+  (if cfg.useEMA then "    ema_params = params  # EMA shadow starts at the (fresh or resumed) weights\n" else "") ++
   "    for epoch in range(_start_epoch, EPOCHS):\n" ++
   (if hasCosine then
     "        # Per-step cosine LR (computed inside the inner loop below)\n" ++
@@ -1767,6 +1778,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "            params, loss = train_step(params, x, y, lr)\n") ++
   "            epoch_loss += float(loss)\n" ++
   "            n_batches += 1\n" ++
+  (if cfg.useEMA then "            ema_params = ema_update(ema_params, params)\n" else "") ++
   "            _global_step += 1\n" ++
   "            if _trace_f:\n" ++
   "                _trace_f.write(json.dumps({\n" ++
@@ -1791,7 +1803,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        for x, y in v_iter:\n" ++
   "            x = jax.device_put(x, data_sharding)\n" ++
   "            y = jax.device_put(y, data_sharding)\n" ++
-  "            c1, c5, l = eval_batch(params, x, y)\n" ++
+  "            c1, c5, l = eval_batch(" ++ (if cfg.useEMA then "ema_params" else "params") ++ ", x, y)\n" ++
   "            correct1 += int(c1)\n" ++
   "            correct5 += int(c5)\n" ++
   "            total   += y.shape[0]\n" ++
@@ -1818,11 +1830,11 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        _ckpt_every = int(os.environ.get('LEAN_MLIR_CKPT_EVERY', '10'))\n" ++
   "        if _ckpt_base and _ckpt_every > 0 and (epoch + 1) % _ckpt_every == 0:\n" ++
   "            _ckpt_path = f'{_ckpt_base}_e{epoch+1}.bin'\n" ++
-  "            params_to_file(params, _ckpt_path)\n\n" ++
+  "            params_to_file(" ++ (if cfg.useEMA then "ema_params" else "params") ++ ", _ckpt_path)\n\n" ++
   "    # Final save (always, if LEAN_MLIR_PARAMS_OUT was set).\n" ++
   "    _ckpt_base = os.environ.get('LEAN_MLIR_PARAMS_OUT')\n" ++
   "    if _ckpt_base:\n" ++
-  "        params_to_file(params, f'{_ckpt_base}.bin')\n\n" ++
+  "        params_to_file(" ++ (if cfg.useEMA then "ema_params" else "params") ++ ", f'{_ckpt_base}.bin')\n\n" ++
   "    print(\"\")\n" ++
   "    print(\"Done. Total time: \" + str(round(time.time() - t0, 1)) + \"s\")\n" ++
   "    if _trace_f: _trace_f.close()\n"
