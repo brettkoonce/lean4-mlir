@@ -545,6 +545,44 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    h = jax.nn.gelu(mm(x2, w1.T) + b1m)\n" ++
       "    x = x + (mm(h, w2.T) + b2m)\n" ++
       "    return x\n\n"
+  let hasConvNext := spec.layers.any (fun l => match l with
+    | .convNextStage .. => true | .convNextDownsample .. => true | _ => false)
+  if hasConvNext then
+    code := code ++
+      "# ── ConvNeXt: channels-first LayerNorm (over C, per spatial loc), block, downsample ──\n" ++
+      "def channel_layer_norm(x, gamma, beta):\n" ++
+      "    mean = jnp.mean(x, axis=1, keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=1, keepdims=True)\n" ++
+      "    x = (x - mean) / jnp.sqrt(var + 1e-6)\n" ++
+      "    return x * gamma.reshape(1, -1, 1, 1) + beta.reshape(1, -1, 1, 1)\n\n" ++
+      "def _conv1x1b(x, w, b):\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), (1,1), 'SAME',\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
+      "    return x + b.reshape(1, -1, 1, 1)\n\n" ++
+      "def convnext_block(params, x, idx):\n" ++
+      "    \"\"\"DW 7x7 → channel-LN → 1x1 expand(4x) → GELU → 1x1 project → LayerScale → +residual.\"\"\"\n" ++
+      "    residual = x\n" ++
+      "    w_dw, b_dw = params[idx]\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w_dw), (1,1), 'SAME',\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'),\n" ++
+      "          feature_group_count=x.shape[1]).astype(jnp.float32) + b_dw.reshape(1, -1, 1, 1)\n" ++
+      "    g, b = params[idx+1]\n" ++
+      "    x = channel_layer_norm(x, g, b)\n" ++
+      "    w1, b1 = params[idx+2]\n" ++
+      "    x = jax.nn.gelu(_conv1x1b(x, w1, b1))\n" ++
+      "    w2, b2 = params[idx+3]\n" ++
+      "    x = _conv1x1b(x, w2, b2)\n" ++
+      "    (ls,) = params[idx+4]\n" ++
+      "    x = x * ls.reshape(1, -1, 1, 1)\n" ++
+      "    return residual + x\n\n" ++
+      "def convnext_downsample(params, x, idx):\n" ++
+      "    \"\"\"channel-LN → 2x2 stride-2 conv (no pad).\"\"\"\n" ++
+      "    g, b = params[idx]\n" ++
+      "    x = channel_layer_norm(x, g, b)\n" ++
+      "    w, bc = params[idx+1]\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), (2,2), 'VALID',\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
+      "    return x + bc.reshape(1, -1, 1, 1)\n\n"
   code
 
 -- Helper: emit init code for one conv+BN param group (w, gamma, beta)
@@ -627,6 +665,48 @@ private def emitDenseInit (comment : String) (fanIn fanOut : Nat) : String :=
   "    params.append((random.uniform(k_, (" ++ toString fanOut ++ ", " ++ toString fanIn ++
     "), minval=-scale, maxval=scale), jnp.zeros(" ++ toString fanOut ++ ")))\n"
 
+-- ── ConvNeXt param groups: conv-with-bias (no BN) + LayerScale ──
+-- ConvNeXt convs carry a bias and are normalized by channel LayerNorm (not
+-- BN), so they're (W, b) 2-tuples — unlike convBn's (W, γ, β). The three
+-- ConvNeXt sites (init / load / save) all use these so the param order
+-- agrees; forward reads the same order via convnext_block.
+
+private def emitConvBiasInit (comment : String) (oc ic kh kw : Nat) : String :=
+  let fan := ic * kh * kw + oc
+  "    # " ++ comment ++ "\n" ++
+  "    key, k_ = random.split(key)\n" ++
+  "    scale = jnp.sqrt(6.0 / " ++ toString fan ++ ")\n" ++
+  "    params.append((random.uniform(k_, (" ++ toString oc ++ ", " ++ toString ic ++ ", " ++
+    toString kh ++ ", " ++ toString kw ++ "), minval=-scale, maxval=scale), jnp.zeros(" ++ toString oc ++ ")))\n"
+
+private def emitConvBiasFromBuf (comment : String) (oc ic kh kw : Nat) : String :=
+  let nW := oc * ic * kh * kw
+  s!"    # {comment} (W, b)\n" ++
+  s!"    W = jnp.array(buf[idx:idx+{nW}].reshape({oc}, {ic}, {kh}, {kw})); idx += {nW}\n" ++
+  s!"    b = jnp.array(buf[idx:idx+{oc}]); idx += {oc}\n" ++
+  "    params.append((W, b))\n"
+
+private def emitConvBiasToBuf (comment : String) : String :=
+  s!"    # {comment} (W, b)\n" ++
+  "    W, b = params[idx]; idx += 1\n" ++
+  "    f.write(np.asarray(W).astype(np.float32).flatten().tobytes())\n" ++
+  "    f.write(np.asarray(b).astype(np.float32).flatten().tobytes())\n"
+
+-- LayerScale: a single learned per-channel γ (1-tuple), init 1e-6 (ConvNeXt default).
+private def emitLayerScaleInit (comment : String) (c : Nat) : String :=
+  "    # " ++ comment ++ "\n" ++
+  "    params.append((jnp.full((" ++ toString c ++ ",), 1e-6),))\n"
+
+private def emitLayerScaleFromBuf (comment : String) (c : Nat) : String :=
+  s!"    # {comment} (γ,)\n" ++
+  s!"    g = jnp.array(buf[idx:idx+{c}]); idx += {c}\n" ++
+  "    params.append((g,))\n"
+
+private def emitLayerScaleToBuf (comment : String) : String :=
+  s!"    # {comment} (γ,)\n" ++
+  "    (g,) = params[idx]; idx += 1\n" ++
+  "    f.write(np.asarray(g).astype(np.float32).flatten().tobytes())\n"
+
 private def emitInitParams (spec : NetSpec) : String := Id.run do
   let mut code :=
     "# ═══════════════════════════════════════════════════════════════════════\n" ++
@@ -648,6 +728,16 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
           toString k ++ ", " ++ toString k ++ "), minval=-scale, maxval=scale), jnp.zeros(" ++ toString oc ++ ")))\n"
     | .convBn ic oc k _ _ =>
       code := code ++ emitConvBnInit s!"ConvBN {ic}→{oc}, {k}x{k}" ic oc k
+    | .convNextStage c nBlocks _ _ =>
+      for bi in [:nBlocks] do
+        code := code ++ emitConvBiasInit s!"ConvNeXt[{bi}] DW 7x7 {c}ch" c 1 7 7
+        code := code ++ emitLNInit s!"ConvNeXt[{bi}] LN {c}" c
+        code := code ++ emitConvBiasInit s!"ConvNeXt[{bi}] PW expand {c}→{4*c}" (4*c) c 1 1
+        code := code ++ emitConvBiasInit s!"ConvNeXt[{bi}] PW project {4*c}→{c}" c (4*c) 1 1
+        code := code ++ emitLayerScaleInit s!"ConvNeXt[{bi}] LayerScale {c}" c
+    | .convNextDownsample ic oc _ =>
+      code := code ++ emitLNInit s!"CNXDown LN {ic}" ic
+      code := code ++ emitConvBiasInit s!"CNXDown conv 2x2 {ic}→{oc}" oc ic 2 2
     | .dense fi fo _ =>
       code := code ++
         "    # Dense " ++ toString fi ++ "→" ++ toString fo ++ "\n" ++
@@ -908,6 +998,16 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
         "    params.append((W, b))\n"
     | .convBn ic oc k _ _ =>
       code := code ++ emitConvBnFromBuf s!"convBn {ic}→{oc}, {k}×{k}" ic oc k
+    | .convNextStage c nBlocks _ _ =>
+      for bi in [:nBlocks] do
+        code := code ++ emitConvBiasFromBuf s!"ConvNeXt[{bi}] DW 7x7 {c}ch" c 1 7 7
+        code := code ++ emitLNFromBuf s!"ConvNeXt[{bi}] LN {c}" c
+        code := code ++ emitConvBiasFromBuf s!"ConvNeXt[{bi}] PW expand {c}→{4*c}" (4*c) c 1 1
+        code := code ++ emitConvBiasFromBuf s!"ConvNeXt[{bi}] PW project {4*c}→{c}" c (4*c) 1 1
+        code := code ++ emitLayerScaleFromBuf s!"ConvNeXt[{bi}] LayerScale {c}" c
+    | .convNextDownsample ic oc _ =>
+      code := code ++ emitLNFromBuf s!"CNXDown LN {ic}" ic
+      code := code ++ emitConvBiasFromBuf s!"CNXDown conv 2x2 {ic}→{oc}" oc ic 2 2
     | .residualBlock ic oc nBlocks firstStride =>
       -- Order matches LeanMlir.SpecHelpers.paramShapes: for each sub-block,
       -- (conv1 W,γ,β) + (conv2 W,γ,β), plus projection (W,γ,β) on sub-block 0
@@ -1087,6 +1187,16 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
       code := code ++ "    f.write(np.asarray(b).astype(np.float32).flatten().tobytes())\n"
     | .convBn ic oc k _ _ =>
       code := code ++ emitConvBnToBuf s!"convBn {ic}→{oc}, {k}×{k}"
+    | .convNextStage c nBlocks _ _ =>
+      for bi in [:nBlocks] do
+        code := code ++ emitConvBiasToBuf s!"ConvNeXt[{bi}] DW 7x7"
+        code := code ++ emitLNToBuf s!"ConvNeXt[{bi}] LN"
+        code := code ++ emitConvBiasToBuf s!"ConvNeXt[{bi}] PW expand"
+        code := code ++ emitConvBiasToBuf s!"ConvNeXt[{bi}] PW project"
+        code := code ++ emitLayerScaleToBuf s!"ConvNeXt[{bi}] LayerScale"
+    | .convNextDownsample _ic _oc _ =>
+      code := code ++ emitLNToBuf s!"CNXDown LN"
+      code := code ++ emitConvBiasToBuf s!"CNXDown conv 2x2"
     | .residualBlock ic oc nBlocks firstStride =>
       let needsProj := !(ic == oc && firstStride == 1)
       for bi in [:nBlocks] do
@@ -1194,6 +1304,13 @@ private def emitForward (spec : NetSpec) : String := Id.run do
         strideStr ++ ", padding='" ++ padStr ++ "')\n"
       code := code ++ "    x = jax.nn.relu(x)\n"
       pidx := pidx + 1
+    | .convNextStage _c nBlocks _ _ =>
+      for _ in List.range nBlocks do
+        code := code ++ "    x = convnext_block(params, x, " ++ toString pidx ++ ")\n"
+        pidx := pidx + 5
+    | .convNextDownsample _ic _oc _ =>
+      code := code ++ "    x = convnext_downsample(params, x, " ++ toString pidx ++ ")\n"
+      pidx := pidx + 2
     | .maxPool size stride =>
       code := code ++ "    x = max_pool2d(x, " ++ toString size ++ ", " ++ toString stride ++ ")\n"
     | .globalAvgPool =>

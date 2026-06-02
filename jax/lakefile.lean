@@ -73,6 +73,11 @@ lean_exe «mobilenet-v2-imagenet» where
 lean_exe «efficientnet-b0-imagenet» where
   root := `MainEfficientNetImagenet
 
+-- ConvNeXt-Tiny on 1000-class ImageNet, bf16 incl. bf16 conv. First JAX-path
+-- port of ConvNeXt (depthwise-7×7 + channel-LN + LayerScale blocks).
+lean_exe «convnext-tiny-imagenet» where
+  root := `MainConvNeXtImagenet
+
 -- VJP oracle — one binary per axiom under test. Trainers live in
 -- tests/vjp_oracle/phase2/ so jax/ isn't crowded with test-only files.
 -- See tests/vjp_oracle/README.md at the repo root.
