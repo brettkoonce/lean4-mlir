@@ -259,9 +259,9 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
   if spec.hasSeparable then
     code := code ++
       "def depthwise_conv(x, w, stride=(1,1), padding='SAME'):\n" ++
-      "    return jax.lax.conv_general_dilated(x, w, stride, padding,\n" ++
+      "    return jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'),\n" ++
-      "          feature_group_count=x.shape[1])\n\n" ++
+      "          feature_group_count=x.shape[1]).astype(jnp.float32)\n\n" ++
       "def sep_conv(x, dw, dw_g, dw_b, pw, pw_g, pw_b, stride=(1,1)):\n" ++
       "    \"\"\"Depthwise 3x3 + BN + ReLU6, then pointwise 1x1 + BN + ReLU6.\"\"\"\n" ++
       "    x = depthwise_conv(x, dw, stride=stride)\n" ++
@@ -285,8 +285,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    i = idx\n" ++
       "    if expand > 1:\n" ++
       "        # Expand\n" ++
-      "        x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
-      "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
+      "        x = jax.lax.conv_general_dilated(convdt(x), convdt(params[i][0]), (1,1), 'SAME',\n" ++
+      "              dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
       "        mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
@@ -302,8 +302,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    x = jnp.minimum(jax.nn.relu(x), 6.0)\n" ++
       "    i += 1\n" ++
       "    # Project (linear, no activation)\n" ++
-      "    x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
-      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(params[i][0]), (1,1), 'SAME',\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
       "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++

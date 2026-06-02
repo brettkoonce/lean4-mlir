@@ -63,6 +63,11 @@ lean_exe «resnet34-imagenet» where
 lean_exe «vit-tiny-imagenet» where
   root := `MainVitImagenet
 
+-- MobileNetV2 on 1000-class ImageNet, bf16 incl. bf16 conv (the
+-- inverted-residual blocks now route through convdt — see Codegen.lean).
+lean_exe «mobilenet-v2-imagenet» where
+  root := `MainMobilenetV2Imagenet
+
 -- VJP oracle — one binary per axiom under test. Trainers live in
 -- tests/vjp_oracle/phase2/ so jax/ isn't crowded with test-only files.
 -- See tests/vjp_oracle/README.md at the repo root.
