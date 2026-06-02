@@ -143,10 +143,12 @@ EfficientNet-B0 and ConvNeXt-T need more to approach paper. The four levers:
 | Aug pipeline (Mixup/CutMix/RandAug/Erasing) | **wired** (config flags; ViT uses it) | S — flip flags | high | RandAug is **color-only** (no `tfa` on tf2.21), no AutoAugment; geometric ops = a separate M. |
 | RMSProp | not wired (have SGD+mom, Adam/AdamW) | M | low | EfficientNet-only; optimizer is emitted at ~3–4 parallel sites. SGD/AdamW reproductions hit ~75–76%, so optional. |
 | EMA (weight averaging) | **wired** (ImageNet path, gated by `useEMA`) | done | high (~+0.5–1% ENet) | Jitted `ema_update`, decoupled from the 3 optimizers; eval + checkpoints use the EMA tree. v1 limits: ImageNet path only (in-RAM/Imagenette no-ops if set); resume resets live params to EMA (negligible late). |
-| Stochastic depth (drop-path) | not wired | M–L | medium | Per-block survival prob, linear-by-depth; drop the branch in training, scale at inference. **Forces an RNG into `forward`** (see below). |
+| Stochastic depth (drop-path) | **wired** (ConvNeXt blocks, gated by `dropPath`) | done | medium | Additive RNG in `forward` (default None → drop-free); per-block inverted drop, linear keep schedule. ConvNeXt only so far — ENet's `mbconv_block` needs the same logic added. |
 
-**Remaining critical path = stochastic depth** (M–L). EMA is done. RMSProp is the
-only EfficientNet-only item; ConvNeXt uses AdamW and doesn't need it.
+**Critical path done: EMA + stochastic depth both wired.** ConvNeXt-T is fully
+equipped (AdamW + LayerScale + EMA + SD; flip aug flags for the full recipe).
+Remaining: extend SD to `mbconv_block` for EfficientNet, and RMSProp (ENet-only,
+optional). ConvNeXt uses AdamW and needs neither.
 
 **Common prerequisite — RNG threading in `forward`.** Today `forward(params, x)`
 takes no RNG. Stochastic depth needs per-block drop masks, so the signature has

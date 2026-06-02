@@ -15,10 +15,8 @@ import Jax
     validated layer types):
       * stem is `convBn` (BN + a ReLU) rather than conv+LN — param-equivalent,
         mirrors the IREE spec; the extra stem ReLU is a minor variant.
-      * no stochastic-depth, no EMA (not wired on the JAX path yet). Both are
-        part of ConvNeXt's 300-epoch recipe — without them an 80ep run lands
-        well under the 82% paper number. That's expected for the validation
-        tier; add them before the 300ep push. -/
+      * stem is convBn (above) — the only remaining gap; EMA + stochastic
+        depth are now wired (useEMA + dropPath below). -/
 
 def convNeXtTinyImagenet : NetSpec where
   name := "ConvNeXt-T (ImageNet, bf16)"
@@ -37,13 +35,15 @@ def convNeXtTinyImagenet : NetSpec where
     .dense 768 1000 .identity                  -- 1000-class head
   ]
 
-/-- ConvNeXt-T 80-epoch recipe — validation tier of the 80→300 ladder (bump
-    EPOCHS to 300 + re-emit for the real run). ConvNeXt needs AdamW, not SGD:
-    decoupled weight decay 0.05, peak LR 4e-4 at batch 256 (≈ the 4e-3@4096
-    official LR linearly scaled), 5-epoch warmup + cosine, label smoothing
-    0.1, grad-clip 1.0 (cheap insurance — unlocked the ViT run). bf16 + bf16
-    conv. Mixup/cutmix left off for the validation tier as with MNv2/ENet;
-    the 300ep run wants them (and stochastic depth + EMA) to approach paper. -/
+/-- ConvNeXt-T 80-epoch recipe — first pass with the full faithful regularizer
+    stack on (EMA + stochastic depth), still at the 80ep tier to validate those
+    features train cleanly before the ~80-hour 300ep run (bump EPOCHS to 300 +
+    re-emit for the real run). ConvNeXt needs AdamW, not SGD: decoupled weight
+    decay 0.05, peak LR 4e-4 at batch 256 (≈ the 4e-3@4096 official LR linearly
+    scaled), 5-epoch warmup + cosine, label smoothing 0.1, grad-clip 1.0 (cheap
+    insurance — unlocked the ViT run). bf16 + bf16 conv. EMA (decay 0.9999) +
+    stochastic depth (dropPath 0.1, the ConvNeXt-T paper value) now on; mixup/
+    cutmix still off (flip the aug flags when chasing the full paper recipe). -/
 def convNeXtTinyImagenetConfig : TrainConfig where
   learningRate   := 4e-4
   batchSize      := 256
@@ -57,6 +57,8 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   gradClipNorm   := 1.0
   bf16           := true
   bf16Conv       := true
+  useEMA         := true     -- weight averaging (decay 0.9999) — eval + ckpt use it
+  dropPath       := 0.1      -- stochastic depth, ConvNeXt-T paper value
 
 #eval convNeXtTinyImagenet.validate!
 

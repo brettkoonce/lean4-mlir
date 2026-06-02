@@ -559,7 +559,7 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), (1,1), 'SAME',\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
       "    return x + b.reshape(1, -1, 1, 1)\n\n" ++
-      "def convnext_block(params, x, idx):\n" ++
+      "def convnext_block(params, x, idx, drop_key=None, keep_prob=1.0):\n" ++
       "    \"\"\"DW 7x7 → channel-LN → 1x1 expand(4x) → GELU → 1x1 project → LayerScale → +residual.\"\"\"\n" ++
       "    residual = x\n" ++
       "    w_dw, b_dw = params[idx]\n" ++
@@ -573,8 +573,13 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    w2, b2 = params[idx+3]\n" ++
       "    x = _conv1x1b(x, w2, b2)\n" ++
       "    (ls,) = params[idx+4]\n" ++
-      "    x = x * ls.reshape(1, -1, 1, 1)\n" ++
-      "    return residual + x\n\n" ++
+      "    branch = x * ls.reshape(1, -1, 1, 1)\n" ++
+      "    # Stochastic depth (inverted): drop the whole branch w.p. 1-keep_prob,\n" ++
+      "    # scale survivors by 1/keep_prob so inference (drop_key=None) is drop-free.\n" ++
+      "    if drop_key is not None and keep_prob < 1.0:\n" ++
+      "        keep = jax.random.bernoulli(drop_key, keep_prob).astype(branch.dtype)\n" ++
+      "        branch = branch * keep / keep_prob\n" ++
+      "    return residual + branch\n\n" ++
       "def convnext_downsample(params, x, idx):\n" ++
       "    \"\"\"channel-LN → 2x2 stride-2 conv (no pad).\"\"\"\n" ++
       "    g, b = params[idx]\n" ++
@@ -1272,8 +1277,11 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
   code := code ++ "    print(f'saved {idx} param-groups to {path} ({os.path.getsize(path)} bytes)')\n\n"
   code
 
-private def emitForward (spec : NetSpec) : String := Id.run do
-  let mut code := "def forward(params, x):\n"
+private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run do
+  -- Stochastic depth: count residual (ConvNeXt) blocks for the linear keep schedule.
+  let totalCnx := (spec.layers.filterMap (fun l => match l with
+    | .convNextStage _ n _ _ => some n | _ => none)).foldl (· + ·) 0
+  let mut code := "def forward(params, x, drop_key=None):\n"
   -- Reshape flat images to NCHW if first layer is conv
   match spec.layers.head? with
   | some (.conv2d ic _ _ _ _) =>
@@ -1286,6 +1294,10 @@ private def emitForward (spec : NetSpec) : String := Id.run do
     code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
       toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
   | _ => pure ()
+  if cfg.dropPath > 0 && totalCnx > 0 then
+    code := code ++ "    dpkeys = (jax.random.split(drop_key, " ++ toString totalCnx ++
+      ") if drop_key is not None else [None] * " ++ toString totalCnx ++ ")\n"
+  let mut dbi : Nat := 0
   let mut pidx : Nat := 0
   for l in spec.layers do
     match l with
@@ -1306,7 +1318,14 @@ private def emitForward (spec : NetSpec) : String := Id.run do
       pidx := pidx + 1
     | .convNextStage _c nBlocks _ _ =>
       for _ in List.range nBlocks do
-        code := code ++ "    x = convnext_block(params, x, " ++ toString pidx ++ ")\n"
+        if cfg.dropPath > 0 then
+          let denom := Float.ofNat (Nat.max 1 (totalCnx - 1))
+          let keep := 1.0 - cfg.dropPath * Float.ofNat dbi / denom
+          code := code ++ "    x = convnext_block(params, x, " ++ toString pidx ++
+            ", dpkeys[" ++ toString dbi ++ "], " ++ toString keep ++ ")\n"
+          dbi := dbi + 1
+        else
+          code := code ++ "    x = convnext_block(params, x, " ++ toString pidx ++ ")\n"
         pidx := pidx + 5
     | .convNextDownsample _ic _oc _ =>
       code := code ++ "    x = convnext_downsample(params, x, " ++ toString pidx ++ ")\n"
@@ -1452,8 +1471,8 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   let lr := toString cfg.learningRate
   let hasMomentum := cfg.momentum > 0.0
   let hasCosine := cfg.cosineDecay
-  "def loss_fn(params, x, y):\n" ++
-  "    logits = forward(params, x)\n" ++
+  "def loss_fn(params, x, y, drop_key=None):\n" ++
+  "    logits = forward(params, x, drop_key)\n" ++
   "    log_probs = jax.nn.log_softmax(logits, axis=-1)\n" ++
   "    # y is int32 [B] (hard labels) or float [B,NC] (soft labels, mixup/cutmix).\n" ++
   "    # y.ndim is static at trace time, so this branch is jit-safe.\n" ++
@@ -1502,8 +1521,8 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   "\n" ++
   (if useAdam then
     "@jit\n" ++
-    "def train_step(params, opt_state, x, y, lr):\n" ++
-    "    loss, grads = value_and_grad(loss_fn)(params, x, y)\n" ++ clipLine ++
+    "def train_step(params, opt_state, x, y, lr, drop_key=None):\n" ++
+    "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
     -- AdamW: DECOUPLED weight decay — applied to params directly, not folded into
     -- the gradient. Adam+coupled-L2 ≠ AdamW; coupled L2 at the AdamW-tuned wd=0.05
     -- collapses ViT at high LR (Loshchilov & Hutter 2017). SGD/momentum paths below
@@ -1521,16 +1540,16 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    return params, (m, v, t), loss\n\n"
   else if hasMomentum then
     "@jit\n" ++
-    "def train_step(params, velocity, x, y, lr):\n" ++
-    "    loss, grads = value_and_grad(loss_fn)(params, x, y)\n" ++ clipLine ++
+    "def train_step(params, velocity, x, y, lr, drop_key=None):\n" ++
+    "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    velocity = jax.tree.map(lambda v, g: MOMENTUM * v + g, velocity, grads)\n" ++
     "    params = jax.tree.map(lambda p, v: p - lr * v, params, velocity)\n" ++
     "    return params, velocity, loss\n\n"
   else
     "@jit\n" ++
-    "def train_step(params, x, y, lr):\n" ++
-    "    loss, grads = value_and_grad(loss_fn)(params, x, y)\n" ++ clipLine ++
+    "def train_step(params, x, y, lr, drop_key=None):\n" ++
+    "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    params = jax.tree.map(lambda p, g: p - lr * g, params, grads)\n" ++
     "    return params, loss\n\n") ++
@@ -1733,6 +1752,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        print(f'Resuming at global_step={_global_step} (= epoch {_start_epoch + 1}/{EPOCHS}); LR schedule continues from there')\n" ++
   "    t0 = time.time()\n" ++
   (if cfg.useEMA then "    ema_params = params  # EMA shadow starts at the (fresh or resumed) weights\n" else "") ++
+  (if cfg.dropPath > 0.0 then "    _drop_base = random.PRNGKey(" ++ seed ++ " + 1)  # stochastic-depth RNG stream\n" else "") ++
   "    for epoch in range(_start_epoch, EPOCHS):\n" ++
   (if hasCosine then
     "        # Per-step cosine LR (computed inside the inner loop below)\n" ++
@@ -1771,11 +1791,11 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
      "            x, y = _cutmix(x, y, " ++ mk ++ ")\n"
    else "") ++
   (if useAdam then
-    "            params, opt_state, loss = train_step(params, opt_state, x, y, lr)\n"
+    "            params, opt_state, loss = train_step(params, opt_state, x, y, lr" ++ (if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else "") ++ ")\n"
    else if hasMomentum then
-    "            params, velocity, loss = train_step(params, velocity, x, y, lr)\n"
+    "            params, velocity, loss = train_step(params, velocity, x, y, lr" ++ (if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else "") ++ ")\n"
    else
-    "            params, loss = train_step(params, x, y, lr)\n") ++
+    "            params, loss = train_step(params, x, y, lr" ++ (if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else "") ++ ")\n") ++
   "            epoch_loss += float(loss)\n" ++
   "            n_batches += 1\n" ++
   (if cfg.useEMA then "            ema_params = ema_update(ema_params, params)\n" else "") ++
@@ -1924,6 +1944,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "        _trace_f.write(json.dumps(_hdr) + '\\n')\n" ++
   "    _global_step = 0\n" ++
   "    t0 = time.time()\n" ++
+  (if cfg.dropPath > 0.0 then "    _drop_base = random.PRNGKey(" ++ seed ++ " + 1)  # stochastic-depth RNG stream\n" else "") ++
   "    for epoch in range(EPOCHS):\n" ++
   (if hasCosine then
   "        # Cosine LR schedule" ++ (if cfg.warmupEpochs > 0 then " with warmup" else "") ++ "\n" ++
@@ -2031,7 +2052,7 @@ def generate (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : 
   emitShardingSetup ++
   emitInitParams spec ++
   emitParamsToFile spec ++
-  emitForward spec ++
+  emitForward spec cfg ++
   emitLossAndTraining spec cfg ++
   emitMain spec cfg ds dataDir
 

@@ -328,6 +328,13 @@ structure TrainConfig where
   useRandAugment : Bool  := false
   randAugmentN   : Nat   := 2
   randAugmentM   : Float := 9.0
+  /-- Stochastic depth (Huang et al. 2016): drop each residual block's
+      branch with a probability that ramps linearly from 0 to `dropPath`
+      across the network's residual blocks; surviving branches are scaled
+      by 1/keep (inverted, so inference is drop-free). 0 disables. On the
+      JAX path this threads a per-step RNG through `forward`; currently
+      wired for ConvNeXt blocks. -/
+  dropPath       : Float := 0.0
   /-- DeiT-style training-loop knobs that average weights for the eval
       checkpoint. Both can be on simultaneously; eval picks EMA when
       both are enabled. Storage cost: one extra `nParams`-sized buffer
