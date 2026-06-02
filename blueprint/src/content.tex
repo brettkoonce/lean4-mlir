@@ -5,6 +5,16 @@
 % Lean declaration via \lean{...}, marks proved claims with \leanok, and
 % lists upstream dependencies via \uses{...}.
 
+% Standard lead-in before every ImageNet recipe section: ImageNet runs on
+% the phase-2 (Lean->JAX) trainer to validate the framework's logic; whether
+% phase-3 verified-IREE codegen can reach this scale is an open question.
+\newcommand{\imagenetphasenote}{\emph{Why the phase-2 trainer?} The
+ImageNet runs in this book use the phase-2 (Lean$\to$JAX) trainer: at this
+scale its job is to validate the framework's logic end to end. Whether the
+phase-3 verified-IREE codegen can reach ImageNet under its own codegen rules
+is an open question --- phase-2 is how we establish these baselines in the
+meantime.}
+
 \chapter{Introduction}
 \label{chap:introduction}
 
@@ -3175,6 +3185,8 @@ the leave-one-out chain.
 
 \section{ImageNet recipe}
 
+\imagenetphasenote
+
 The Imagenette runs above all trained on $\sim$9.5K images for 80
 epochs. The headline ResNet result --- 21.8M parameters reaching
 74.4\% top-1 on full 1000-class ImageNet --- comes from a different
@@ -3726,6 +3738,8 @@ A few observations worth calling out:
 
 \section{ImageNet recipe}
 
+\imagenetphasenote
+
 The Imagenette run above trained on $\sim$9.5K images. The same
 backbone scales to full 1000-class ImageNet exactly the way
 ResNet-34 did in Chapter~\ref{chap:residual}: the inverted-residual
@@ -3896,7 +3910,7 @@ the same product-rule structure as elementwise. Theorem
 \ref{thm:seBlock_has_vjp} is one line of composition; it
 introduces no new analytic dependencies.
 
-\section*{This is attention, in disguise, before transformers}
+\section*{Attention in Disguise}
 
 The mechanism is worth naming clearly: SE \emph{looks at the entire
 feature map}, produces \emph{a content-dependent re-weighting}, and
@@ -4117,6 +4131,8 @@ $\mathrm{swish}(x) = x \cdot \sigma(x)$ --- is orthogonal to SE.
 
 \section{ImageNet recipe}
 
+\imagenetphasenote
+
 As with ResNet-34 (Chapter~\ref{chap:residual}) and MobileNet-V2,
 the B0 backbone scales to full 1000-class ImageNet unchanged --- the
 MBConv stack stays put, the head widens to 1000, the schedule grows.
@@ -4173,6 +4189,14 @@ $6\times$-larger expanded width. An earlier version of the codegen
 sized it off the expanded width and inflated B0 from its canonical
 $5.3$M parameters to $8.4$M; sizing the squeeze correctly restores
 the faithful $\mathbf{5.29}$M-parameter B0.
+
+\textbf{Augmentation.} Like MobileNet-V2, the run uses base aug only:
+Inception-style random-resized-crop (sampling 8--100\% of the image
+area at a 3/4--4/3 aspect ratio, resized to $224\times224$) plus a
+random horizontal flip, with label smoothing $0.1$ in the loss;
+validation center-crops. The heavier pack EfficientNet's headline
+recipe leans on --- Mixup, CutMix, RandAugment, Random Erasing --- is
+wired in the codegen but left off at this validation tier.
 
 \textbf{Compute budget.} On the four RTX 4060 Ti (CUDA, bf16, batch
 256 across the four GPUs), steady-state throughput is
@@ -4645,6 +4669,97 @@ and the $-1.5\%$ delta from Mixup are well above. The cross-
 architecture confirmation with Ch 10's ViT-Tiny ablation (CutMix
 $\gg$ RandAug at the same data scale) suggests the ranking is
 data-regime-driven, not architecture-driven.
+
+\section{ImageNet recipe}
+
+\imagenetphasenote
+
+ConvNeXt's architecture first reached this book through the phase-3
+IREE backend --- the Imagenette example earlier in this chapter. The
+phase-2 port wires the two ConvNeXt-specific layers
+(\texttt{.convNextStage},
+\texttt{.convNextDownsample}) into the JAX codegen; because that path
+differentiates with \texttt{jax.value\_and\_grad}, only the forward
+had to be written --- the backward comes for free. The spec mirrors
+\texttt{jax/MainConvNeXtImagenet.lean}:
+
+\begin{verbatim}
+-- Same stage/downsample backbone, 1000 classes.
+def convNeXtTinyImagenet : NetSpec where
+  name   := "ConvNeXt-T (ImageNet, bf16)"
+  imageH := 224
+  imageW := 224
+  layers := [
+    .convBn 3 96 4 4 .same,            -- patchify stem -> 56x56
+    .convNextStage 96 3 .ln .gelu,     -- stage 1: 3 blocks @ 96
+    .convNextDownsample 96 192,
+    .convNextStage 192 3 .ln .gelu,    -- stage 2: 3 blocks @ 192
+    .convNextDownsample 192 384,
+    .convNextStage 384 9 .ln .gelu,    -- stage 3: 9 blocks @ 384
+    .convNextDownsample 384 768,
+    .convNextStage 768 3 .ln .gelu,    -- stage 4: 3 blocks @ 768
+    .globalAvgPool,
+    .dense 768 1000 .identity          -- 1000-class head
+  ]
+
+-- ConvNeXt needs AdamW, not SGD.
+def convNeXtTinyImagenetConfig : TrainConfig where
+  learningRate   := 4e-4            -- 4e-3 @ batch 4096, scaled to 256
+  batchSize      := 256
+  epochs         := 80             -- validation tier of an 80->300 ladder
+  useAdam        := true            -- AdamW (decoupled weight decay)
+  weightDecay    := 0.05
+  cosineDecay    := true
+  warmupEpochs   := 5
+  gradClipNorm   := 1.0             -- cheap insurance (unlocked the ViT run)
+  augment        := true
+  labelSmoothing := 0.1
+  bf16           := true
+  bf16Conv       := true            -- dw-7x7 + 1x1s; LN/GELU stay fp32
+\end{verbatim}
+
+Unlike MobileNet and EfficientNet, ConvNeXt trains with AdamW and a
+small decoupled weight decay, not SGD --- the modernized-convnet
+recipe is the architecture's whole thesis. \texttt{bf16Conv} pays off
+especially here: the $7\times7$ depthwise is $\sim2.3\times$ faster
+in bfloat16 (a large kernel has enough arithmetic for the tensor
+cores to bite, unlike the $3\times3$ depthwise, which is a wash), and
+the inverted-bottleneck $1\times1$s are matmuls that love it; the
+channel LayerNorm and GELU stay in fp32.
+
+Two deviations from canonical ConvNeXt, both deliberate so the port
+reuses the validated layer types: the patchify stem is
+\texttt{.convBn} (BN $+$ a ReLU) rather than conv $+$ LayerNorm
+--- param-equivalent, the ReLU a minor variant --- and stochastic
+depth and EMA are not yet wired on the JAX path. Those last two are
+core to ConvNeXt's 300-epoch recipe; without them, and without the
+augmentation pack above, an 80-epoch run lands well under the paper's
+$82.1\%$. The 80 here is the validation tier of an 80$\to$300 ladder.
+
+\textbf{Compute budget.} ConvNeXt-T is the heaviest of the three
+($28.6$M parameters --- the canonical count, verified by an
+init/forward/backward/save/reload round-trip). On the four RTX 4060
+Ti (CUDA, bf16, batch 256 across the four GPUs), steady-state
+throughput is $\sim$185\,ms per step, about $15.9$ minutes per epoch
+--- the most expensive per-epoch of any net in this book, driven by
+the $7\times7$ depthwise and the channel LayerNorms. The 80-epoch
+validation tier projects to roughly 21 wall-clock hours and the full
+300-epoch recipe to about 80 hours (a bit over three days).
+
+\begin{center}
+\begin{tabular}{l l r r r r r}
+\hline
+GPU & Precision & Per epoch & 80 epochs & 300 epochs & Val top-1 & Val top-5 \\
+\hline
+4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$15.9 min & $\sim$21 hr & $\sim$80 hr & TODO & TODO \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent (Throughput is measured from steady-state ms/step; the run
+is not yet trained to completion, so accuracy is pending --- and a
+faithful run waits on stochastic depth $+$ EMA plus the augmentation
+pack above.)
 
 \chapter{Vision Transformer}
 \label{chap:attention}
@@ -5452,6 +5567,8 @@ CutMix+WD is below noise; the 5.4\% delta from CutMix is
 well above.
 
 \section{ImageNet recipe}
+
+\imagenetphasenote
 
 The Imagenette ViT-Tiny above trained on $\sim$9.5K images. The
 full 1000-class run is the same architecture --- patch16, embed

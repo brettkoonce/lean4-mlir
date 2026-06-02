@@ -72,6 +72,39 @@ benchmarked for those three.)
   wd 0.05. ViT runs the full mixup/cutmix/RandAug/erasing suite; ConvNeXt
   validation tier leaves them off.
 
+## Augmentation (what we use, and how it differs from the Imagenette examples)
+
+What `augment := true` expands to depends on the data path:
+
+- **ImageNet (`.imagenet`, tfds):** Inception-style **random-resized-crop**
+  (`sample_distorted_bounding_box`: 8–100% of image area at a 3/4–4/3 aspect
+  ratio, resized to 224×224) **+ random horizontal flip**, applied in the tfds
+  map. Validation: resize + **center-crop** to 224 (no flip).
+- **Imagenette (`.imagenette`, in-RAM `.bin`):** `load_imagenette` statically
+  **center-crops** 256→224; then per training batch `augment_batch` does a
+  **pad-14 random crop** (pad 224→252, crop back — i.e. ±14px translation
+  jitter) **+ random horizontal flip**. No scale or aspect distortion.
+
+So the convnet **augmentation delta, Imagenette → ImageNet, is crop style
+only**: translation jitter (Imagenette) vs scale+aspect RRC (ImageNet, the
+standard ImageNet aug, since object scale varies hugely there). Both flip;
+both center-crop at val. (The bigger recipe deltas are elsewhere — optimizer,
+LR, schedule, 1000-class head — not the augmentation.)
+
+**Label smoothing 0.1** is in the loss for all five ImageNet recipes.
+
+**Heavy-aug pack — deliberately off for the convnets.** Mixup, CutMix,
+RandAugment, and Random Erasing are wired (config flags + a soft-label
+train-step for the label-mixing ones) but used **only by ViT-Tiny on
+ImageNet**: Mixup α0.8 + CutMix α1.0 (alternating per step), RandAugment M9
+(color subset), Random Erasing p0.25 — the DeiT suite. MNv2 / ENet-B0 /
+ConvNeXt-T run **base aug only** at the validation tier. ConvNeXt additionally
+lacks **stochastic depth + EMA** (not yet wired on the JAX path).
+
+These omissions are the main reason the convnet validation runs will land
+under their paper numbers; the 300-epoch + heavy-aug (+ stochastic-depth/EMA
+for ConvNeXt) push is the TODO that closes the gap.
+
 ## Trainers / build targets
 
 | Net | Lean file | exe | supervisor |
