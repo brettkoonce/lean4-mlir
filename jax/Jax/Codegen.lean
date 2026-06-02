@@ -326,8 +326,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    residual = x\n" ++
       "    i = idx\n" ++
       "    if expand > 1:\n" ++
-      "        x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
-      "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
+      "        x = jax.lax.conv_general_dilated(convdt(x), convdt(params[i][0]), (1,1), 'SAME',\n" ++
+      "              dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
       "        mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
@@ -336,9 +336,9 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "        i += 1\n" ++
       "    # Depthwise conv\n" ++
       "    pad = ((ksize - 1) // 2, (ksize - 1) // 2)\n" ++
-      "    x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(params[i][0]), (stride,stride), (pad,pad),\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'),\n" ++
-      "          feature_group_count=x.shape[1])\n" ++
+      "          feature_group_count=x.shape[1]).astype(jnp.float32)\n" ++
       "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
@@ -360,8 +360,8 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "        x = x * se\n" ++
       "        i += 1\n" ++
       "    # Project (linear)\n" ++
-      "    x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
-      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(params[i][0]), (1,1), 'SAME',\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
       "    mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
@@ -739,7 +739,10 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
           "                   jnp.ones(" ++ toString mid ++ "), jnp.zeros(" ++ toString mid ++ ")))\n"
         -- SE
         if useSE then
-          let seMid := Nat.max 1 (mid / 4)
+          -- Canonical EfficientNet SE: squeeze relative to the block INPUT
+          -- channels (blockIc//4), not the 6×-larger expanded mid. mid/4
+          -- inflated B0 to 8.4M params; blockIc/4 gives the faithful ~5.3M.
+          let seMid := Nat.max 1 (blockIc / 4)
           code := code ++
             "    # SE down " ++ toString mid ++ "→" ++ toString seMid ++ "\n" ++
             "    key, k_ = random.split(key)\n" ++
@@ -936,7 +939,9 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
       for bi in [:n] do
         let blockIc := if bi == 0 then ic else oc
         let mid := blockIc * expand
-        let seMid := Nat.max 1 (mid / 4)
+        -- SE sized off block input channels (blockIc//4) — must match the
+        -- init in emitParamInit; see the canonical-SE note there.
+        let seMid := Nat.max 1 (blockIc / 4)
         if expand != 1 then
           code := code ++ emitConvBnFromBuf s!"mbConv[{bi}] expand {blockIc}→{mid}" blockIc mid 1
         code := code ++ emitConvBnFromBuf s!"mbConv[{bi}] depthwise {mid} k={kSize}" 1 mid kSize
