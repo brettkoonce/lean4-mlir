@@ -4172,6 +4172,8 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true            -- reaches the MBConv expand/dw/project
+  useEMA         := true            -- weight averaging, decay 0.9999
+  dropPath       := 0.2             -- stochastic depth (B0 drop-connect rate)
 \end{verbatim}
 
 Two details are specific to EfficientNet. First, \texttt{bf16Conv}
@@ -4218,10 +4220,12 @@ GPU & Precision & Per epoch & 80 epochs & 300 epochs & Val top-1 & Val top-5 \\
 \noindent (Throughput is measured from steady-state ms/step; the run
 is not yet trained to completion, so accuracy is pending.
 EfficientNet's headline ${\sim}77\%$ comes from a far longer schedule
-with RMSProp, AutoAugment, stochastic depth, and EMA --- this SGD
-validation tier, the 80 of an 80$\to$300 ladder, is a
-soundness-and-throughput check and will sit well under the paper
-number until those land.)
+with RMSProp, AutoAugment, stochastic depth, and EMA. Of those, EMA
+(decay 0.9999) and stochastic depth (drop-connect 0.2) are now on, and
+cost ${<}5\%$ per epoch; RMSProp and the geometric half of RandAugment
+remain off. So this 80-epoch tier validates the regularizers train
+cleanly before the 300-epoch run; it will still sit under the paper
+number until the schedule lengthens and the aug pack comes on.)
 
 \section{Side quests}
 \label{sec:enet_side_quests}
@@ -4716,6 +4720,8 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true            -- dw-7x7 + 1x1s; LN/GELU stay fp32
+  useEMA         := true            -- weight averaging, decay 0.9999
+  dropPath       := 0.1             -- stochastic depth (ConvNeXt-T paper value)
 \end{verbatim}
 
 Unlike MobileNet and EfficientNet, ConvNeXt trains with AdamW and a
@@ -4727,14 +4733,16 @@ cores to bite, unlike the $3\times3$ depthwise, which is a wash), and
 the inverted-bottleneck $1\times1$s are matmuls that love it; the
 channel LayerNorm and GELU stay in fp32.
 
-Two deviations from canonical ConvNeXt, both deliberate so the port
-reuses the validated layer types: the patchify stem is
-\texttt{.convBn} (BN $+$ a ReLU) rather than conv $+$ LayerNorm
---- param-equivalent, the ReLU a minor variant --- and stochastic
-depth and EMA are not yet wired on the JAX path. Those last two are
-core to ConvNeXt's 300-epoch recipe; without them, and without the
-augmentation pack above, an 80-epoch run lands well under the paper's
-$82.1\%$. The 80 here is the validation tier of an 80$\to$300 ladder.
+The two regularizers core to ConvNeXt's 300-epoch recipe ---
+\textbf{stochastic depth} (drop-path 0.1, the paper value) and
+\textbf{EMA} (weight averaging, decay 0.9999) --- are now wired and on
+(\texttt{dropPath} and \texttt{useEMA} above), and cost ${<}5\%$ per
+epoch. One canonical deviation remains, deliberate so the port reuses
+the validated layer types: the patchify stem is \texttt{.convBn}
+(BN $+$ a ReLU) rather than conv $+$ LayerNorm --- param-equivalent,
+the ReLU a minor variant. With the augmentation pack above still off,
+an 80-epoch run lands under the paper's $82.1\%$; the 80 here is the
+validation tier of an 80$\to$300 ladder.
 
 \textbf{Compute budget.} ConvNeXt-T is the heaviest of the three
 ($28.6$M parameters --- the canonical count, verified by an
@@ -4757,9 +4765,9 @@ GPU & Precision & Per epoch & 80 epochs & 300 epochs & Val top-1 & Val top-5 \\
 \end{center}
 
 \noindent (Throughput is measured from steady-state ms/step; the run
-is not yet trained to completion, so accuracy is pending --- and a
-faithful run waits on stochastic depth $+$ EMA plus the augmentation
-pack above.)
+is not yet trained to completion, so accuracy is pending. With EMA $+$
+stochastic depth now on, the remaining gap to the paper recipe is the
+300-epoch schedule and the augmentation pack above.)
 
 \chapter{Vision Transformer}
 \label{chap:attention}
