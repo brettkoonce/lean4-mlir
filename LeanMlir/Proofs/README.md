@@ -250,11 +250,10 @@ axiom in the closure would fail the run. See
 ## Verify
 
 ```bash
-lake build LeanMlir.Proofs.Tensor LeanMlir.Proofs.MLP \
-  LeanMlir.Proofs.CNN LeanMlir.Proofs.BatchNorm \
-  LeanMlir.Proofs.Residual LeanMlir.Proofs.Depthwise \
-  LeanMlir.Proofs.SE LeanMlir.Proofs.LayerNorm \
-  LeanMlir.Proofs.Attention
+lake build LeanMlir          # the library root imports every proof module
 ```
+
+The `LeanMlir` root imports the whole proof suite (transitively), so this
+one build type-checks all of it — no module list to keep in sync.
 
 If it builds, it's correct. That's the point.

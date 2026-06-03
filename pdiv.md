@@ -178,8 +178,7 @@ backward via the `def` instead of the axiom.
 ### Verify
 
 ```bash
-lake build LeanMlir.Proofs.MLP LeanMlir.Proofs.CNN \
-           LeanMlir.Proofs.Attention
+lake build LeanMlir
 ```
 
 Expected: clean build. No downstream `rw`/`simp` site depends on the
@@ -269,7 +268,7 @@ sanity check (single-coord ReLU on `Vec 1`), then generalize.
 ### Verify
 
 ```bash
-lake build LeanMlir.Proofs.MLP
+lake build LeanMlir
 ```
 
 `#print axioms pdiv_relu` should show only Lean core.
