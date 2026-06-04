@@ -130,6 +130,21 @@ jobs:
           ln -sf ~/comparator/.lake/build/bin/comparator  "$HOME/.local/bin/comparator"
           command -v landrun lean4export comparator
 
+      - name: Debug — how landrun resolves and whether the shim translates
+        run: |
+          echo "PATH=$PATH"
+          echo "--- which -a landrun (every landrun on PATH, in order) ---"
+          which -a landrun || true
+          echo "--- ls -la ~/.local/bin ---"
+          ls -la "$HOME/.local/bin"
+          echo "--- file that 'landrun' resolves to ---"
+          file "$(command -v landrun)" || true
+          echo "--- shim contents ---"
+          cat "$HOME/.local/bin/landrun" || true
+          echo "--- translation test: 'landrun -ldd /tmp -- /bin/true' ---"
+          echo "    (a '-ldd' error here = shim NOT translating; anything else = shim works)"
+          landrun -ldd /tmp -- /bin/true 2>&1 | head -8 || true
+
       - name: Run comparator (49 theorems, kernel + axiom-closure re-check)
         run: |
           cd tests/comparator
