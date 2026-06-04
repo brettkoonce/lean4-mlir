@@ -46,7 +46,7 @@ def mobilenetV2Imagenet : NetSpec where
 def mobilenetV2ImagenetConfig : TrainConfig where
   learningRate   := 0.1
   batchSize      := 256
-  epochs         := 30      -- validation tier; 90 = the real near-paper run
+  epochs         := 90      -- near-paper run (validation tier was 30)
   useAdam        := false
   momentum       := 0.9
   weightDecay    := 4e-5

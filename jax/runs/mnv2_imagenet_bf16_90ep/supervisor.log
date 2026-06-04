@@ -1,0 +1,5 @@
+[sup] 2026-06-04 15:29:08 START 90-epoch MNv2 bf16 on GPUs 0,2,3,4
+[sup] 15:29:08 attempt 1: RESUME from epoch 84 (/home/skoonce/mnv2_imagenet_bf16_e84.bin), start_step=420336
+[sup] 15:29:08 launched PID=4393
+[sup]   last: [Epoch 90] lr=0.0 loss(train_avg)=2.3214 val_top1=34138/49920 (0.6839) val_top5=0.8815 val_loss=1.3857  [556.8s train, -546.8s val]
+[sup] 16:27:06 ✅ TRAINING COMPLETE (90 epochs). final=/home/skoonce/mnv2_imagenet_bf16.bin

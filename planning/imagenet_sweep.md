@@ -1,5 +1,34 @@
 # imagenet_sweep.md — bf16 ImageNet sweep on the 4060 Ti box (Lean→JAX)
 
+## Purpose
+
+This is a **decision tool for practitioners running these experiments**: a
+quantified map of *what each training knob buys you* — in accuracy and in
+wall-clock — on fixed, consumer-grade hardware. The goal is not "we trained
+five nets"; it's "here is what turning knob X costs and returns, measured on
+the same box, so you can choose where to spend compute instead of guessing."
+
+The knobs quantified (or being quantified) here:
+
+- **Precision** — bf16 vs fp32: speedup *and* the per-op reason (conv vs
+  matmul; the depthwise wash). Does mixed precision pay off on consumer NVIDIA?
+- **Epochs** — 80 vs 300 (and the 30→90 anchor): what does 1/4 the compute
+  cost you in final accuracy? The short-tier runs are baselines, not throwaways.
+- **Architecture at fixed budget** — R34 / MNv2 / ENet-B0 / ConvNeXt-T / ViT-Tiny
+  on *identical* hardware + recipe: the clean params-vs-accuracy-vs-time
+  comparison you rarely get because real-world runs differ in setup.
+- **Recipe levers** — EMA, stochastic depth, heavy aug, grad-clip: each with
+  measured complexity / leverage (see "Path to paper numbers"). Which knob is
+  worth turning? (We even measured the EMA per-step tax: ~4–5%.)
+- **Scaling out** — 4→6 consumer GPUs over PCIe: the failure mode (Gen4 AER)
+  and the fix (Gen3), so multi-GPU-on-a-budget is documented, not folklore.
+
+The per-run `RESULTS.md` files are the raw data; the synthesis layer (the
+combined sweep chart in the TODO) is the "knob → cost/benefit" payoff. Frame
+additions as *comparisons*, not just more run logs.
+
+---
+
 Per-architecture ImageNet-1k training on the CUDA box (**ares**, 4× RTX
 4060 Ti, `CUDA_VISIBLE_DEVICES=0,2,3,4` — idx1/idx5 excluded, see
 `reference_ares_pcie_aer`). All phase-2 Lean→JAX, bf16 mixed precision
@@ -26,7 +55,7 @@ fp32). Batch 256 (4×64) everywhere. Written 2026-06-02.
 |----------------|--------|---------|-----------|--------|--------|--------|
 | ViT-Tiny       | 5.7M   | 176     | ~7.6      | ~11 hr | —      | **DONE** |
 | EfficientNet-B0| 5.3M   | 102     | ~8.9      | ~12 hr | —      | validated |
-| MobileNetV2    | 3.5M   | 106     | ~9.1      | —      | ~14 hr | validated |
+| MobileNetV2    | 3.5M   | 106     | ~9.1      | —      | ~14 hr | **DONE** |
 | ResNet-34      | 21.8M  | 139     | ~11.9     | —      | ~18 hr | **DONE** |
 | ConvNeXt-T     | 28.6M  | 185     | ~15.9     | ~21 hr | —      | validated |
 
@@ -43,11 +72,19 @@ across the ViT row because of the batch difference.
 
 | Net       | Epochs | Precision | Val top-1 | Val top-5 | Weights |
 |-----------|--------|-----------|-----------|-----------|---------|
-| ResNet-34 | 90     | bf16      | **72.02%**| **90.62%**| `/home/skoonce/r34_imagenet_bf16.bin` |
-| ViT-Tiny  | 80     | bf16      | **65.64%**| **87.06%**| `/home/skoonce/vit_tiny_imagenet_bf16.bin` |
+| ResNet-34   | 90     | bf16      | **72.02%**| **90.62%**| `/home/skoonce/r34_imagenet_bf16.bin` |
+| ViT-Tiny    | 80     | bf16      | **65.64%**| **87.06%**| `/home/skoonce/vit_tiny_imagenet_bf16.bin` |
+| MobileNetV2 | 90     | bf16      | **68.33%**| **88.17%**| `/home/skoonce/mnv2_imagenet_bf16.bin` |
 
-(Both full-50k canonical eval. Per-epoch curves + RESULTS.md in
-`jax/runs/{r34,vit_tiny}_imagenet_bf16_*/`; blueprint §6.4 and §10.5.)
+(All full-50k canonical eval. Per-epoch curves + RESULTS.md in
+`jax/runs/{r34,vit_tiny,mnv2}_imagenet_bf16_*/`; R34/ViT also blueprint §6.4/§10.5.)
+
+**PCIe Gen3 fix validated (2026-06-04).** The MNv2 run spanned the BIOS
+Gen4→Gen3 change: the Gen4 portion (ep 1–84) threw ~5 AER `BadTLP`
+auto-resumes; the Gen3 portion (ep 85–90, ~1 hr sustained load) threw **0**.
+Throughput cost ~108→~111 ms/step (**+~3%**, negligible — compute-bound, not
+interconnect-bound). ⇒ Gen3 trades ~3%/step for stability and unlocks 6-GPU
+(the ~1.5× win swamps it). Full confirmation pending a clean 6-GPU run.
 
 ## bf16 vs fp32 (measured, matched 4-GPU / same batch)
 
@@ -184,3 +221,28 @@ conv+LN), not an accuracy lever.
       EMA + stochastic depth (+ flipping the aug flags); see "Path to paper
       numbers" above for the per-lever scope and the RNG-in-`forward`
       prerequisite. Current configs are the 80ep validation tier.
+
+## Run queue (decided 2026-06-04)
+
+Agreed sequence. **Gen3 BIOS fix goes right after MNv2-90 finishes**, before
+everything else — every later run wants the stability (no resume babysitting)
+and the ~1.35× from 6 GPUs, and the 300-epoch runs (1–2.5 days each, unattended)
+must not be exposed to host-reset risk. The two 80-epoch convnet runs stay in
+as the **anchor baseline** (short-tier apples-to-apples datapoint) AND the
+6-GPU+Gen3 stability shakedown before committing to the multi-day 300s.
+
+1. [ ] **MNv2-90** — in progress (4-GPU, ~68% top-1 expected). DONE when full-50k eval logged.
+2. [ ] **BIOS → PCIe Gen3** (post-MNv2; see reference_ares_pcie_aer for the WRX80E-SAGE menu path). Reboot.
+   - [ ] Calibrate: 6-GPU MNv2 ~400-step throughput bench → pin the real 4→6 multiplier (assumed 1.35×, ideal 1.5×). Also re-bench 4-GPU MNv2 vs 106 ms/step to confirm Gen3 ≈ no slowdown.
+   - [ ] Confirm a clean 6-GPU run holds (AER should vanish at Gen3).
+3. [ ] **ENet-B0 80ep** @ 6-GPU — anchor + shakedown (~9 hr est).
+4. [ ] **ConvNeXt-T 80ep** @ 6-GPU — anchor + shakedown (~15 hr est).
+5. [ ] **ViT-Tiny 300ep** @ 6-GPU (~28 hr est) — fastest of the 300s + riskiest recipe (LR-collapse history), so front-loaded.
+6. [ ] **ENet-B0 300ep** @ 6-GPU (~34 hr est) — full recipe (heavy aug on).
+7. [ ] **ConvNeXt-T 300ep** @ 6-GPU (~61 hr / ~2.5 days est) — heaviest; Gen3 stability is a prerequisite.
+
+**6-GPU 300ep estimates (likely 1.35× from 4-GPU rates; soft until the calibration bench):**
+ViT ~28 hr, ENet ~34 hr, ConvNeXt ~61 hr. Optimistic (1.45×): 26 / 32 / 57 hr.
+Risk to watch on the 300s: data pipeline may become the bottleneck at 6-GPU for
+the lighter nets (ViT/ENet ~6 min/epoch are near input-bound), and heavy aug is
+CPU-side — could erode the 6-GPU speedup. Measure, don't assume.
