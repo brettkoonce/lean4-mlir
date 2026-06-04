@@ -8114,14 +8114,19 @@ skip IREE entirely. The proofs don't depend on the runtime.
 git clone https://github.com/brettkoonce/lean4-mlir.git
 cd lean4-mlir
 lake exe cache get             # pull ~5 GB of precompiled Mathlib
-lake build LeanMlir            # builds the library — all proof modules included
+lake build Proofs              # type-checks the entire VJP proof suite
 \end{verbatim}
 
-The library root now imports the entire proof suite (every chapter's
-VJP module, transitively), so this single build type-checks all of it
-against Lean's kernel --- that is the entire verification, no module
-list to keep current. Every VJP formula is proved against Mathlib's
-\(\fderiv\) (see Appendix~\ref{app:verification}).
+The \texttt{Proofs} target's roots are the apex VJP modules; their
+transitive imports cover every chapter's proof file, so this single
+build type-checks all of it against Lean's kernel --- that is the
+entire verification, no module list to keep current. Because the proof
+suite imports only Mathlib --- never the codegen --- \texttt{Proofs}
+skips the IREE/StableHLO layer entirely; it is also the default target,
+so a bare \texttt{lake build} runs the same check. (\texttt{lake build
+LeanMlir} builds the whole repo instead --- codegen, trainers, and
+proofs.) Every VJP formula is proved against Mathlib's \(\fderiv\) (see
+Appendix~\ref{app:verification}).
 
 To also run the numerical gradient checks:
 

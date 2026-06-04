@@ -1,0 +1,111 @@
+name: Comparator (independent kernel re-check)
+
+# Independent kernel re-verification of the proof suite via
+# leanprover/comparator: re-runs Lean's kernel typechecker (separately
+# from the elaborator) and statically checks the transitive axiom closure
+# of every theorem against [propext, Quot.sound, Classical.choice].
+#
+# This is the deep, slow backstop for the zero-project-axioms claim.
+# The fast per-push gate stays `proofs.yml` (which runs
+# tests/AuditAxioms.lean). Keep this check NON-REQUIRED until it has gone
+# green a few times on the runner — see "Known risk" below.
+#
+# Known risk: comparator sandboxes via Landlock ABI v5, which needs
+# Linux kernel >= 6.10. GitHub's `ubuntu-24.04` image currently ships a
+# new-enough kernel; `ubuntu-22.04` does NOT. The `uname -r` step below
+# makes the kernel legible if the sandbox ever fails.
+#
+# Tool pinning: lean4export reads the project's `.olean`s, so its build
+# must stay olean-compatible with the project's Lean (v4.30.0). The refs
+# below are upstream HEAD at authoring time; if a future bump breaks the
+# build, pin LEAN4EXPORT_REF/COMPARATOR_REF to the first commit that went
+# green here (or to a commit whose lean-toolchain matches v4.30.0).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'LeanMlir/Proofs/**'
+      - 'tests/comparator/**'
+      - '.github/workflows/comparator.yml'
+  workflow_dispatch:
+
+jobs:
+  comparator:
+    runs-on: ubuntu-24.04        # Landlock ABI v5 -> kernel >= 6.10
+    timeout-minutes: 45
+    env:
+      LEAN4EXPORT_REF: cd502a76e05515e7d3e09eaefee1dfd8349ca592
+      COMPARATOR_REF:  3afea238d63125383110f8b59acaf11d7788c3e1
+      LANDRUN_VERSION: v0.1.13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show kernel (Landlock v5 needs >= 6.10)
+        run: uname -r
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Cache .lake (parent — Mathlib + proof oleans)
+        uses: actions/cache@v4
+        with:
+          path: .lake
+          key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}
+          restore-keys: lake-
+
+      - name: Build proof suite (warms Mathlib + Proofs oleans for comparator)
+        run: |
+          lake exe cache get
+          lake build Proofs
+
+      - name: Install landrun (Landlock sandbox runner)
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/landrun" \
+            "https://github.com/Zouuup/landrun/releases/download/${LANDRUN_VERSION}/landrun-linux-amd64"
+          chmod +x "$HOME/.local/bin/landrun"
+          landrun --version
+
+      - name: Cache lean4export build
+        id: cache-lean4export
+        uses: actions/cache@v4
+        with:
+          path: ~/lean4export
+          key: lean4export-${{ env.LEAN4EXPORT_REF }}
+
+      - name: Build lean4export (.olean -> text exporter)
+        if: steps.cache-lean4export.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/leanprover/lean4export ~/lean4export
+          git -C ~/lean4export checkout "$LEAN4EXPORT_REF"
+          (cd ~/lean4export && lake build)
+
+      - name: Cache comparator build
+        id: cache-comparator
+        uses: actions/cache@v4
+        with:
+          path: ~/comparator
+          key: comparator-${{ env.COMPARATOR_REF }}
+
+      - name: Build comparator
+        if: steps.cache-comparator.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/leanprover/comparator ~/comparator
+          git -C ~/comparator checkout "$COMPARATOR_REF"
+          (cd ~/comparator && lake build)
+
+      - name: Link tools onto PATH
+        run: |
+          ln -sf ~/lean4export/.lake/build/bin/lean4export "$HOME/.local/bin/lean4export"
+          ln -sf ~/comparator/.lake/build/bin/comparator  "$HOME/.local/bin/comparator"
+          command -v landrun lean4export comparator
+
+      - name: Run comparator (49 theorems, kernel + axiom-closure re-check)
+        run: |
+          cd tests/comparator
+          ./run.sh

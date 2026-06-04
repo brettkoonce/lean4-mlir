@@ -22,8 +22,35 @@ require «doc-gen4» from git
 require mathlib from git
   "https://github.com/leanprover-community/mathlib4"
 
+-- The everything-root: codegen + IREE FFI + trainers' shared modules +
+-- the proof suite, all pulled in transitively via `LeanMlir.lean`.
+-- `lake build LeanMlir` type-checks the whole repo.
 lean_lib «LeanMlir» where
   roots := #[`LeanMlir]
+
+-- Scoped targets, so CI and contributors can build one slice without the
+-- rest. `LeanMlir` above is all-or-nothing; these split it along the same
+-- seam the codebase already has (the proof suite imports only Mathlib —
+-- never the codegen — so `Proofs` skips Types/Spec/MlirCodegen/Train).
+
+/-- **`lake build Proofs`** — the VJP proof suite only. Roots are the apex
+    modules (same set `LeanMlir.lean` aggregates); their transitive imports
+    cover every proof file. Default target: a bare `lake build` now
+    type-checks the formalization instead of doing nothing. -/
+@[default_target]
+lean_lib «Proofs» where
+  srcDir := "."
+  roots := #[`LeanMlir.Proofs.Attention, `LeanMlir.Proofs.CNN,
+             `LeanMlir.Proofs.Depthwise, `LeanMlir.Proofs.MobileNetV2,
+             `LeanMlir.Proofs.ConvNeXt, `LeanMlir.Proofs.EfficientNet]
+
+/-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
+    The half that actually emits StableHLO and runs on device. -/
+lean_lib «Codegen» where
+  srcDir := "."
+  roots := #[`LeanMlir.MlirCodegen, `LeanMlir.Train, `LeanMlir.Spec,
+             `LeanMlir.SpecHelpers, `LeanMlir.Types, `LeanMlir.IreeRuntime,
+             `LeanMlir.Ddpm, `LeanMlir.Cam, `LeanMlir.F32Array]
 
 -- IREE FFI shim: Lean ↔ C bridge for libiree_ffi.so (see ffi/).
 target ireeLeanFfiO pkg : System.FilePath := do
