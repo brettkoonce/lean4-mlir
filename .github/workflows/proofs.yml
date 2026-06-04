@@ -30,18 +30,11 @@ jobs:
 
       - name: Build proofs
         run: |
-          lake build LeanMlir.Proofs.Tensor \
-                     LeanMlir.Proofs.MLP \
-                     LeanMlir.Proofs.CNN \
-                     LeanMlir.Proofs.BatchNorm \
-                     LeanMlir.Proofs.Residual \
-                     LeanMlir.Proofs.Depthwise \
-                     LeanMlir.Proofs.SE \
-                     LeanMlir.Proofs.LayerNorm \
-                     LeanMlir.Proofs.Attention \
-                     LeanMlir.Proofs.MobileNetV2 \
-                     LeanMlir.Proofs.ConvNeXt \
-                     LeanMlir.Proofs.EfficientNet
+          # Build the whole `Proofs` lib (all roots + transitive imports) so the
+          # axiom-closure check below can `lake env lean tests/AuditAxioms.lean`
+          # against every proof module — including opt-in roots like MnistCNN
+          # and MatBridge that AuditAxioms imports. Future roots are covered too.
+          lake build Proofs
 
       - name: Three-axiom closure check
         run: |
