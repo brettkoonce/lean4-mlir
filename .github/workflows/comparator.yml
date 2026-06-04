@@ -147,5 +147,12 @@ jobs:
 
       - name: Run comparator (49 theorems, kernel + axiom-closure re-check)
         run: |
+          # comparator spawns landrun with a custom child env (Main.lean
+          # `IO.Process.output … env := envOverride`), which bypasses the
+          # PATH-prepended wrapper run.sh sets up — so point comparator at our
+          # flag-translating shim directly via its own COMPARATOR_LANDRUN
+          # override (Main.lean:287). The shim handles `-ldd`/`-add-exec` ->
+          # `--ldd`/`--add-exec` and widens `--rox /usr`.
+          export COMPARATOR_LANDRUN="$HOME/.local/bin/landrun"
           cd tests/comparator
           ./run.sh
