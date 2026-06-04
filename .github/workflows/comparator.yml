@@ -44,6 +44,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free up disk space
+        # Mathlib is built/cached twice here (parent `lake build Proofs`, then
+        # again when tests/comparator resolves its own Mathlib), which overflows
+        # the runner's ~14 GB free. Reclaim the ~20+ GB of preinstalled SDKs we
+        # don't use (Android, .NET, GHC, CodeQL) up front.
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h /
+
       - name: Show kernel (Landlock v5 needs >= 6.10)
         run: uname -r
 
