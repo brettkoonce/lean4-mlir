@@ -120,3 +120,8 @@ open Proofs
 -- never instantiated).
 #print axioms mnistCnnNoBn_has_vjp_at_correct
 #print axioms Micro.mnistMicroCnn_has_vjp_correct
+-- Tier-1 discharged instance: multi-channel (2→2 mixing conv), four pool
+-- windows per channel, 10-class head — every smoothness hypothesis
+-- discharged via the reusable structural lemmas (no `native_decide`).
+#print axioms maxPool2Smooth_of_injective
+#print axioms Mini.miniCnn_has_vjp_correct
