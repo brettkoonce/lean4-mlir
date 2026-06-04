@@ -79,6 +79,10 @@ jobs:
           # `--rox /usr` is idempotent if run.sh's wrapper also added it.
           cat > "$HOME/.local/bin/landrun" <<'SHIM'
           #!/usr/bin/env bash
+          # run.sh's own wrapper invokes this through a temp-dir symlink, so
+          # $0 may be that symlink, not the install path. readlink -f follows
+          # it to the real shim location, where landrun.bin sits beside it.
+          here="$(dirname "$(readlink -f "$0")")"
           args=(--rox /usr)
           for a in "$@"; do
             case "$a" in
@@ -87,7 +91,7 @@ jobs:
               *)         args+=("$a") ;;
             esac
           done
-          exec "$(dirname "$0")/landrun.bin" "${args[@]}"
+          exec "$here/landrun.bin" "${args[@]}"
           SHIM
           chmod +x "$HOME/.local/bin/landrun"
           "$HOME/.local/bin/landrun.bin" --version
