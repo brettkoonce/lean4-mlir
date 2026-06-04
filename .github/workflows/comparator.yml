@@ -63,13 +63,34 @@ jobs:
           lake exe cache get
           lake build Proofs
 
-      - name: Install landrun (Landlock sandbox runner)
+      - name: Install landrun (+ flag shim at the canonical binary path)
         run: |
           mkdir -p "$HOME/.local/bin"
-          curl -fsSL -o "$HOME/.local/bin/landrun" \
+          curl -fsSL -o "$HOME/.local/bin/landrun.bin" \
             "https://github.com/Zouuup/landrun/releases/download/${LANDRUN_VERSION}/landrun-linux-amd64"
+          chmod +x "$HOME/.local/bin/landrun.bin"
+          # comparator emits single-dash `-ldd` / `-add-exec` (landrun's
+          # urfave/cli parser wants `--ldd` / `--add-exec`) and a too-narrow
+          # `--rox /usr/bin/git` (lake needs exec across all of /usr).
+          # tests/comparator/run.sh fixes both via a temp-dir wrapper prepended
+          # to PATH — but comparator can resolve landrun's real path and bypass
+          # that wrapper (observed in CI). Shimming at the canonical binary
+          # location instead makes the translation robust either way; the extra
+          # `--rox /usr` is idempotent if run.sh's wrapper also added it.
+          cat > "$HOME/.local/bin/landrun" <<'SHIM'
+          #!/usr/bin/env bash
+          args=(--rox /usr)
+          for a in "$@"; do
+            case "$a" in
+              -ldd)      args+=(--ldd) ;;
+              -add-exec) args+=(--add-exec) ;;
+              *)         args+=("$a") ;;
+            esac
+          done
+          exec "$(dirname "$0")/landrun.bin" "${args[@]}"
+          SHIM
           chmod +x "$HOME/.local/bin/landrun"
-          landrun --version
+          "$HOME/.local/bin/landrun.bin" --version
 
       - name: Cache lean4export build
         id: cache-lean4export
