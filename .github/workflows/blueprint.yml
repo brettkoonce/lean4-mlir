@@ -92,15 +92,13 @@ jobs:
 
       - name: Build Lean library
         run: |
-          # `checkdecls` imports the umbrella `LeanMlir` module, which pulls in
-          # MlirCodegen + Types + IreeRuntime etc. via LeanMlir.lean. Also build
-          # the Proofs submodules explicitly to make sure they're all present.
-          lake build LeanMlir \
-                     LeanMlir.Proofs.Tensor LeanMlir.Proofs.MLP \
-                     LeanMlir.Proofs.CNN LeanMlir.Proofs.BatchNorm \
-                     LeanMlir.Proofs.Residual LeanMlir.Proofs.Depthwise \
-                     LeanMlir.Proofs.SE LeanMlir.Proofs.LayerNorm \
-                     LeanMlir.Proofs.Attention
+          # `checkdecls` imports every module across the lake libraries, so all
+          # their oleans must exist. Build the `LeanMlir` umbrella (codegen +
+          # Types/IreeRuntime/... via LeanMlir.lean) plus the whole `Proofs`
+          # lib, whose roots cover every proof module — including opt-in roots
+          # the umbrella does not import (MatBridge, MnistCNN). Using the lib
+          # target keeps this future-proof: new Proofs roots are built here too.
+          lake build LeanMlir Proofs
 
       - name: Install graphviz (system-wide so output-format plugins register)
         # cache-apt-pkgs-action caches the graphviz binaries but skips the
