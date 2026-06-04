@@ -107,15 +107,30 @@ phase 2 — autodiff is done at codegen time in Lean (`LeanMlir/MlirCodegen.lean
 ~5000 lines), not at runtime by a framework. See [`RESULTS.md`](RESULTS.md)
 for the per-architecture numbers.
 
-The proofs that the generated MLIR is mathematically correct live in
-[`LeanMlir/Proofs/`](LeanMlir/Proofs/) — chapter-by-chapter VJP correctness
-proofs for tensor ops, MLP, CNN, residual, batch norm, depthwise, SE,
-LayerNorm, and attention. The codegen and the proofs were written
-independently and arrived at the same decomposition: every backward pass
-factors through the standalone gradient of one new primitive per
-architecture (softmax for attention, the spatial reductions for BN, the
-rank-1 collapse for SE), and everything else is composition via the chain
-rule on tools from earlier chapters.
+The VJP correctness proofs live in [`LeanMlir/Proofs/`](LeanMlir/Proofs/) —
+chapter-by-chapter, for tensor ops, MLP, CNN, residual, batch norm,
+depthwise, SE, LayerNorm, and attention, up to whole-network backward passes
+(ViT, ResNet, MobileNetV2, ConvNeXt, EfficientNet). What they establish: each
+reference forward function, written in exact real arithmetic (`ℝ`), has a
+backward pass equal to its Mathlib `fderiv` Jacobian-transpose — with zero
+project axioms (`#print axioms` closes under the Lean-core triple alone).
+
+These proofs are about the reference `ℝ` definitions in `Proofs/`, **not** the
+`Float32` StableHLO the codegen emits — the two are written separately and no
+Lean theorem currently links them. The connection is instead twofold. (1)
+*Structural*: codegen and proofs were developed independently and arrived at
+the same decomposition — every backward pass factors through the standalone
+gradient of one new primitive per architecture (softmax for attention, the
+spatial reductions for BN, the rank-1 collapse for SE), and everything else is
+composition via the chain rule on tools from earlier chapters — and the
+codegen cites the matching proof inline in the MLIR it generates. (2)
+*Numerical*: finite-difference checks ([`LeanMlir/Proofs/check_jacobians.py`](LeanMlir/Proofs/check_jacobians.py))
+and JAX `value_and_grad` oracles ([`tests/vjp_oracle/`](tests/vjp_oracle/))
+exercise the emitted formulas — including at the ReLU/MaxPool kinks, where the
+codegen substitutes the standard subgradient convention. See the "Codegen
+trust boundary" section of [`LeanMlir/Proofs/README.md`](LeanMlir/Proofs/README.md)
+for the precise gap. Closing it formally — a forward-extraction lemma tying a
+proven `*Forward` to the codegen's emitted graph — is open future work.
 
 ## Pipeline
 

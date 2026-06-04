@@ -996,7 +996,7 @@ noncomputable def mhsa_layer (N heads d_head : Nat)
 
 /-! ## Phase 3: Column-stacked SDPA — the bridge from `HasVJPMat3` to multi-head.
 
-    The two `mhsa_*` axioms below were the project floor for two reasons:
+    The two `mhsa_*` former axioms below were the project floor for two reasons:
     (1) joint differentiability of `(Q, K, V) ↦ sdpa Q K V`, which doesn't
     follow from the existing per-input `_flat_diff` lemmas; (2) the per-head
     "vmap" structure, which `colSlabwise_has_vjp_mat` (Phase 1) handles for
