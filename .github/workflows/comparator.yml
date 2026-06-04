@@ -38,7 +38,9 @@ jobs:
     env:
       LEAN4EXPORT_REF: cd502a76e05515e7d3e09eaefee1dfd8349ca592
       COMPARATOR_REF:  3afea238d63125383110f8b59acaf11d7788c3e1
-      LANDRUN_VERSION: v0.1.13
+      # v0.1.14 is the first release whose CLI accepts comparator's
+      # single-dash `-ldd` / `-add-exec` (v0.1.13's urfave/cli rejects them).
+      LANDRUN_VERSION: v0.1.14
     steps:
       - uses: actions/checkout@v4
 
@@ -63,38 +65,19 @@ jobs:
           lake exe cache get
           lake build Proofs
 
-      - name: Install landrun (+ flag shim at the canonical binary path)
+      - name: Install landrun
         run: |
           mkdir -p "$HOME/.local/bin"
-          curl -fsSL -o "$HOME/.local/bin/landrun.bin" \
+          curl -fsSL -o "$HOME/.local/bin/landrun" \
             "https://github.com/Zouuup/landrun/releases/download/${LANDRUN_VERSION}/landrun-linux-amd64"
-          chmod +x "$HOME/.local/bin/landrun.bin"
-          # comparator emits single-dash `-ldd` / `-add-exec` (landrun's
-          # urfave/cli parser wants `--ldd` / `--add-exec`) and a too-narrow
-          # `--rox /usr/bin/git` (lake needs exec across all of /usr).
-          # tests/comparator/run.sh fixes both via a temp-dir wrapper prepended
-          # to PATH — but comparator can resolve landrun's real path and bypass
-          # that wrapper (observed in CI). Shimming at the canonical binary
-          # location instead makes the translation robust either way; the extra
-          # `--rox /usr` is idempotent if run.sh's wrapper also added it.
-          cat > "$HOME/.local/bin/landrun" <<'SHIM'
-          #!/usr/bin/env bash
-          # run.sh's own wrapper invokes this through a temp-dir symlink, so
-          # $0 may be that symlink, not the install path. readlink -f follows
-          # it to the real shim location, where landrun.bin sits beside it.
-          here="$(dirname "$(readlink -f "$0")")"
-          args=(--rox /usr)
-          for a in "$@"; do
-            case "$a" in
-              -ldd)      args+=(--ldd) ;;
-              -add-exec) args+=(--add-exec) ;;
-              *)         args+=("$a") ;;
-            esac
-          done
-          exec "$here/landrun.bin" "${args[@]}"
-          SHIM
           chmod +x "$HOME/.local/bin/landrun"
-          "$HOME/.local/bin/landrun.bin" --version
+          landrun --version
+          # Guard: comparator passes single-dash `-ldd`; fail loudly (rather
+          # than 40 lines into the run) if a version bump regresses that.
+          if landrun -ldd 2>&1 | grep -q 'not defined'; then
+            echo "::error::landrun ${LANDRUN_VERSION} rejects the single-dash -ldd flag comparator emits"
+            exit 1
+          fi
 
       - name: Cache lean4export build
         id: cache-lean4export
@@ -130,29 +113,7 @@ jobs:
           ln -sf ~/comparator/.lake/build/bin/comparator  "$HOME/.local/bin/comparator"
           command -v landrun lean4export comparator
 
-      - name: Debug — how landrun resolves and whether the shim translates
-        run: |
-          echo "PATH=$PATH"
-          echo "--- which -a landrun (every landrun on PATH, in order) ---"
-          which -a landrun || true
-          echo "--- ls -la ~/.local/bin ---"
-          ls -la "$HOME/.local/bin"
-          echo "--- file that 'landrun' resolves to ---"
-          file "$(command -v landrun)" || true
-          echo "--- shim contents ---"
-          cat "$HOME/.local/bin/landrun" || true
-          echo "--- translation test: 'landrun -ldd /tmp -- /bin/true' ---"
-          echo "    (a '-ldd' error here = shim NOT translating; anything else = shim works)"
-          landrun -ldd /tmp -- /bin/true 2>&1 | head -8 || true
-
       - name: Run comparator (49 theorems, kernel + axiom-closure re-check)
         run: |
-          # comparator spawns landrun with a custom child env (Main.lean
-          # `IO.Process.output … env := envOverride`), which bypasses the
-          # PATH-prepended wrapper run.sh sets up — so point comparator at our
-          # flag-translating shim directly via its own COMPARATOR_LANDRUN
-          # override (Main.lean:287). The shim handles `-ldd`/`-add-exec` ->
-          # `--ldd`/`--add-exec` and widens `--rox /usr`.
-          export COMPARATOR_LANDRUN="$HOME/.local/bin/landrun"
           cd tests/comparator
           ./run.sh
