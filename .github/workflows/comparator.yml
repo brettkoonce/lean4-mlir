@@ -81,16 +81,23 @@ jobs:
 
       - name: Cache lean4export build
         id: cache-lean4export
+        # Key includes the project toolchain: lean4export's olean reader is
+        # version-locked, so it must be rebuilt when the project's Lean
+        # changes — and this busts caches from a mismatched build.
         uses: actions/cache@v4
         with:
           path: ~/lean4export
-          key: lean4export-${{ env.LEAN4EXPORT_REF }}
+          key: lean4export-${{ env.LEAN4EXPORT_REF }}-${{ hashFiles('lean-toolchain') }}
 
       - name: Build lean4export (.olean -> text exporter)
         if: steps.cache-lean4export.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/leanprover/lean4export ~/lean4export
           git -C ~/lean4export checkout "$LEAN4EXPORT_REF"
+          # lean4export reads the project's .oleans, so it must be built with
+          # the project's exact Lean — its HEAD pins a newer toolchain whose
+          # olean reader rejects our v4.30.0 headers ("incompatible header").
+          cp lean-toolchain ~/lean4export/lean-toolchain
           (cd ~/lean4export && lake build)
 
       - name: Cache comparator build
