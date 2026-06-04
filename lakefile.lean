@@ -43,6 +43,9 @@ lean_lib «Proofs» where
   roots := #[`LeanMlir.Proofs.Attention, `LeanMlir.Proofs.CNN,
              `LeanMlir.Proofs.Depthwise, `LeanMlir.Proofs.MobileNetV2,
              `LeanMlir.Proofs.ConvNeXt, `LeanMlir.Proofs.EfficientNet,
+             -- Chapter-4 MNIST 2D CNN (no BN): conditional whole-net VJP
+             -- + a concrete instance with every smoothness hyp discharged.
+             `LeanMlir.Proofs.MnistCNN,
              -- opt-in Mathlib.Matrix interop; not imported by the suite,
              -- listed here so CI keeps it green.
              `LeanMlir.Proofs.MatBridge]

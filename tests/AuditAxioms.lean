@@ -10,6 +10,7 @@ import LeanMlir.Proofs.Attention
 import LeanMlir.Proofs.MobileNetV2
 import LeanMlir.Proofs.ConvNeXt
 import LeanMlir.Proofs.EfficientNet
+import LeanMlir.Proofs.MnistCNN
 
 open Proofs
 
@@ -112,3 +113,10 @@ open Proofs
 #print axioms convnext_has_vjp_at_correct
 #print axioms sigmoid_has_vjp
 #print axioms efficientnet_has_vjp_at_correct
+
+-- Chapter-4 MNIST 2D CNN (no BN): the conditional whole-network capstone,
+-- and the concrete tiny instance with every smoothness hypothesis
+-- discharged (unconditional — closes the gap that the *_at apexes are
+-- never instantiated).
+#print axioms mnistCnnNoBn_has_vjp_at_correct
+#print axioms Micro.mnistMicroCnn_has_vjp_correct
