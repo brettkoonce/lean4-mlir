@@ -42,7 +42,10 @@ lean_lib «Proofs» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.Attention, `LeanMlir.Proofs.CNN,
              `LeanMlir.Proofs.Depthwise, `LeanMlir.Proofs.MobileNetV2,
-             `LeanMlir.Proofs.ConvNeXt, `LeanMlir.Proofs.EfficientNet]
+             `LeanMlir.Proofs.ConvNeXt, `LeanMlir.Proofs.EfficientNet,
+             -- opt-in Mathlib.Matrix interop; not imported by the suite,
+             -- listed here so CI keeps it green.
+             `LeanMlir.Proofs.MatBridge]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
