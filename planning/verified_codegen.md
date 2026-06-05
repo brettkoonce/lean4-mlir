@@ -14,12 +14,12 @@ where the emitted text *is* `print (emitBack net)` by construction (so R3
 is closed for that net, no string-diffing), validated on IREE. **MLP first,
 land it, then expand.**
 
-Status: **MLP fully landed (Phases 0–2 + the param-grad/SGD and loss-cotangent
-slices of Phase 4).** The whole MLP train-step module — forward → loss
-cotangent → backward → parameter gradients — is the rendering of proof-backed
-IR; the ONLY trusted numerics is the SGD arithmetic `θ' = θ − lr·dθ` (plus the
-irreducible printer/IREE/float). Remaining: CNN (Phase 3), and optionally
-SGD-IR / migrating `generateTrainStep`.
+Status: **MLP fully landed (Phases 0–2 + Phase-4 param-grad/SGD and loss
+slices); CNN landed through the whole backward chain (Phase 3).** The MLP
+train step (forward → loss → backward → grads) and the CNN input-gradient
+backward (conv → relu → maxpool → flatten → dense) are both renderings of
+proof-backed IR, GPU-validated on rocm/gfx1100. Remaining: CNN weight-gradient
++ a full CNN train step; optionally SGD-IR / migrating `generateTrainStep`.
 
 ## Done (MLP)
 
@@ -52,6 +52,18 @@ SGD-IR / migrating `generateTrainStep`.
   `%dy` to `%onehot`). So the cotangent is proof-backed too — the train step is
   `forward → loss → backward → grads`, every mathematical op proof-backed; only
   the SGD arithmetic stays trusted. Train step: 1.19e-7 on CPU and GPU.
+- **Phase 3 (CNN)** — the proof-backed pattern generalized past dense/relu to
+  real spatial ops. The repo's `conv2d` is SAME-pad stride-1 cross-correlation
+  = `stablehlo.convolution`; `maxPool2` = `reduce_window`(max). The proven
+  backwards render as: conv input-VJP = `transpose`+`reverse`+`convolution`
+  (`conv_back_bridge_1to2`, the reversed-kernel identity); maxpool VJP =
+  `select_and_scatter` (`maxpool_back_bridge`, route dy to argmax, GE tie-break
+  = the no-tie smooth-point hypothesis). `cnnModule` then composes the lot —
+  `conv → relu → maxpool → flatten → dense` forward + the full input-gradient
+  backward (`dense_back → reshape → maxpool_back → relu_back → conv_back`), the
+  reshape proof-faithful because `Tensor3.flatten` is C-order = `stablehlo
+  .reshape`. Validated vs an independent numpy CNN VJP: conv 1.91e-6, maxpool
+  exact, the whole `cnn_back` chain 9.54e-7 — on CPU and GPU.
 
 ## The pipeline
 
@@ -130,7 +142,8 @@ not just the backward.
 | **4 (param-grad + SGD slice)** | `dWℓ`/`dbℓ` emitters + bridges + a full SGD `mlpTrainStepModule`; run a train step where the weights move correctly. | Lean + GPU. | ✅ CPU 0.0 / GPU 1.19e-7 |
 | **2** | Forward IR + `⟦fwdIR⟧ = mlpForward` bridge → the *whole* MLP module is proof-backed (forward + backward), not just backward. | Lean + IREE. | ✅ `Fwd`/`HloF`, mlp_fwd 2.38e-7 |
 | **4 (loss-cotangent slice)** | Loss IR (softmax-CE cotangent) instead of the supplied `%dy` — `emitLossCot`/`lossCot_bridge` + `renderLossCot`; train step computes dy in-module. | Lean + GPU. | ✅ loss_cot 5.96e-8 |
-| **3** | `Back3.toStablehlo` (conv `convolution`, maxpool tile-compare-select) + Tensor3↔Vec wiring → render a small **CNN** end-to-end. | Lean + IREE. | next |
+| **3** | conv `convolution` + maxpool `reduce_window`/`select_and_scatter` + flatten reshape → a small **CNN** backward chain end-to-end. | Lean + GPU. | ✅ cnn_back 9.54e-7 |
+| **3 (rest)** | CNN weight-gradient (conv dW = a convolution) + a full CNN train step (param grads + SGD). | Lean + GPU. | next |
 | **4 (rest)** | SGD-IR (make the optimizer step proof-backed too); then decide whether to migrate `generateTrainStep` or keep the parallel path as the verified reference. | Optional. | — |
 
 ## R3 closure & residual trust, per phase
