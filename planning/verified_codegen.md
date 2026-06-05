@@ -14,12 +14,16 @@ where the emitted text *is* `print (emitBack net)` by construction (so R3
 is closed for that net, no string-diffing), validated on IREE. **MLP first,
 land it, then expand.**
 
-Status: **MLP fully landed (Phases 0–2 + Phase-4 param-grad/SGD and loss
-slices); CNN landed through the whole backward chain (Phase 3).** The MLP
-train step (forward → loss → backward → grads) and the CNN input-gradient
-backward (conv → relu → maxpool → flatten → dense) are both renderings of
-proof-backed IR, GPU-validated on rocm/gfx1100. Remaining: CNN weight-gradient
-+ a full CNN train step; optionally SGD-IR / migrating `generateTrainStep`.
+Status: **MLP and CNN both fully landed as complete proof-backed SGD train
+steps, GPU-validated on rocm/gfx1100.** The MLP (`forward → loss → backward →
+6 param grads → SGD`) and the CNN (`conv → relu → maxpool → flatten → dense →
+loss → backward → 4 param grads → SGD`, conv dW via the transpose trick) are
+both renderings of proof-backed IR. Goal (per the author): extend this
+**across the book** to make "the codegen is verified" a concrete, book-wide
+claim — a verified-alongside artifact, **not** a production swap of
+`generateTrainStep` (that's a later, separate decision). Next: a generalized
+`NetSpec`-driven harness, then the chapter sweep (BatchNorm → Residual/ResNet
+→ Attention/ViT → MobileNet/ConvNeXt/EfficientNet).
 
 ## Done (MLP)
 
@@ -143,7 +147,7 @@ not just the backward.
 | **2** | Forward IR + `⟦fwdIR⟧ = mlpForward` bridge → the *whole* MLP module is proof-backed (forward + backward), not just backward. | Lean + IREE. | ✅ `Fwd`/`HloF`, mlp_fwd 2.38e-7 |
 | **4 (loss-cotangent slice)** | Loss IR (softmax-CE cotangent) instead of the supplied `%dy` — `emitLossCot`/`lossCot_bridge` + `renderLossCot`; train step computes dy in-module. | Lean + GPU. | ✅ loss_cot 5.96e-8 |
 | **3** | conv `convolution` + maxpool `reduce_window`/`select_and_scatter` + flatten reshape → a small **CNN** backward chain end-to-end. | Lean + GPU. | ✅ cnn_back 9.54e-7 |
-| **3 (rest)** | CNN weight-gradient (conv dW = a convolution) + a full CNN train step (param grads + SGD). | Lean + GPU. | next |
+| **3 (rest)** | CNN weight-gradient (conv dW = the transpose trick) + a full CNN train step (param grads + SGD). | Lean + GPU. | ✅ cnn_train_step 1.19e-7 |
 | **4 (rest)** | SGD-IR (make the optimizer step proof-backed too); then decide whether to migrate `generateTrainStep` or keep the parallel path as the verified reference. | Optional. | — |
 
 ## R3 closure & residual trust, per phase
