@@ -281,6 +281,53 @@ def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
   s!"{tt [d₀,d₁]}, {tt [d₁]}, {tt [d₁,d₂]}, {tt [d₂]}, {tt [d₂,d₃]}, {tt [d₃]}\n" ++
   "  }\n}\n"
 
+-- ════════════════════════════════════════════════════════════════
+-- § CNN — conv forward + proof-backed conv backward (Phase 3, start)
+--
+-- The repo's `conv2d` is SAME-padding, stride-1 cross-correlation, which is
+-- exactly `stablehlo.convolution` (XLA conv is cross-correlation, no flip).
+-- The proven conv input-gradient is `IR.convBackDenote W = conv2d(reverseSwap
+-- W, 0)` (`IR.conv3_node_bridge_1to2`, via the reversed-kernel identity
+-- `conv_back_bridge_1to2`): swap in/out channels + flip both spatial axes,
+-- then convolve. So the backward is `transpose [1,0,2,3]` + `reverse [2,3]` +
+-- `convolution`. Layout: NCHW input/output `[B,C,H,W]`, OIHW kernel
+-- `[oc,ic,kH,kW]` (= `Kernel4 oc ic kH kW`).
+-- ════════════════════════════════════════════════════════════════
+
+/-- A `stablehlo.convolution` op, SAME padding (`pH,pW`) + stride 1: NCHW
+    in/out, OIHW kernel. (Explicit unit dilations — IREE's lowering wants
+    them.) -/
+def convOp (o lhs rhs tyL tyR tyO : String) (pH pW : Nat) : String :=
+  s!"    {o} = stablehlo.convolution({lhs}, {rhs})\n" ++
+  "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+  "      window = " ++ "{" ++
+    s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++
+    "}\n" ++
+  "      " ++ "{batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+    s!" : ({tyL}, {tyR}) -> {tyO}\n"
+
+/-- Conv forward `conv2d W b` as a `func.func @conv_fwd` (convolution + bias). -/
+def convFwdModule (B ic oc H Wd kH kW : Nat) : String :=
+  let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+  "module @m {\n" ++
+  s!"  func.func @conv_fwd(%x: {tt [B,ic,H,Wd]}, %W: {tt [oc,ic,kH,kW]}, %b: {tt [oc]}) -> {tt [B,oc,H,Wd]} " ++ "{\n" ++
+  convOp "%c" "%x" "%W" (tt [B,ic,H,Wd]) (tt [oc,ic,kH,kW]) (tt [B,oc,H,Wd]) pH pW ++
+  s!"    %bb = stablehlo.broadcast_in_dim %b, dims = [1] : ({tt [oc]}) -> {tt [B,oc,H,Wd]}\n" ++
+  s!"    %o = stablehlo.add %c, %bb : {tt [B,oc,H,Wd]}\n" ++
+  s!"    return %o : {tt [B,oc,H,Wd]}\n" ++ "  }\n}\n"
+
+/-- Conv input-gradient backward `IR.convBackDenote W` as `@conv_back`:
+    `transpose` (swap channels) + `reverse` (flip spatial) + `convolution`.
+    Denotes the proven conv input-VJP (`conv_back_bridge_1to2`). -/
+def convBackModule (B ic oc H Wd kH kW : Nat) : String :=
+  let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+  "module @m {\n" ++
+  s!"  func.func @conv_back(%dy: {tt [B,oc,H,Wd]}, %W: {tt [oc,ic,kH,kW]}) -> {tt [B,ic,H,Wd]} " ++ "{\n" ++
+  s!"    %Wt = stablehlo.transpose %W, dims = [1, 0, 2, 3] : ({tt [oc,ic,kH,kW]}) -> {tt [ic,oc,kH,kW]}\n" ++
+  s!"    %Wr = stablehlo.reverse %Wt, dims = [2, 3] : {tt [ic,oc,kH,kW]}\n" ++
+  convOp "%dx" "%dy" "%Wr" (tt [B,oc,H,Wd]) (tt [ic,oc,kH,kW]) (tt [B,ic,H,Wd]) pH pW ++
+  s!"    return %dx : {tt [B,ic,H,Wd]}\n" ++ "  }\n}\n"
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -290,5 +337,8 @@ def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
 #eval IO.FS.writeFile "/tmp/mlp_fwd.mlir" (mlpFwdModule 2 4 3 3 2)
 #eval IO.FS.writeFile "/tmp/loss_cot.mlir" (lossCotModule 2 2)
 #eval IO.FS.writeFile "/tmp/mlp_train_step.mlir" (mlpTrainStepModule 2 4 3 3 2 "0.1")
+-- CNN (Phase 3): conv forward + proof-backed conv backward, 1→2 ch, 4×4, 3×3.
+#eval IO.FS.writeFile "/tmp/conv_fwd.mlir" (convFwdModule 1 1 2 4 4 3 3)
+#eval IO.FS.writeFile "/tmp/conv_back.mlir" (convBackModule 1 1 2 4 4 3 3)
 
 end Proofs.IRPrint

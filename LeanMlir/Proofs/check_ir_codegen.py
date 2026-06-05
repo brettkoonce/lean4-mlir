@@ -15,6 +15,9 @@ with IREE, runs it, and checks it against an independent numpy reference:
   • mlp_train_step           — a full SGD step: proof-backed forward → loss
                                cotangent → backward (dx + dW/db) → trusted SGD;
                                checks the six updated parameters against numpy.
+  • conv_fwd / conv_back     — CNN (Phase 3): conv2d as stablehlo.convolution,
+                               and the proven conv input-VJP (transpose+reverse
+                               +conv = ⟦convBackDenote⟧).
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -70,6 +73,38 @@ def mlp_fwd_ref(x, W0, b0, W1, b1, W2, b2):
 def loss_cot_ref(logits, onehot):
     """softmax-CE gradient ∂L/∂logits = softmax(logits) − onehot."""
     return softmax_np(logits) - onehot
+
+def conv2d_ref(x, W, b):
+    """SAME-pad, stride-1 cross-correlation (the repo's conv2d). NCHW / OIHW."""
+    B, IC, H, Wd = x.shape; OC, _, kH, kW = W.shape; pH, pW = (kH-1)//2, (kW-1)//2
+    y = np.zeros((B, OC, H, Wd), np.float32)
+    for o in range(OC):
+        y[:, o] += b[o]
+        for c in range(IC):
+            for kh in range(kH):
+                for kw in range(kW):
+                    hs, ws = kh - pH, kw - pW         # shift of this tap
+                    for hi in range(H):
+                        for wi in range(Wd):
+                            r, s = hi + hs, wi + ws
+                            if 0 <= r < H and 0 <= s < Wd:
+                                y[:, o, hi, wi] += W[o, c, kh, kw] * x[:, c, r, s]
+    return y
+
+def conv_input_vjp_ref(W, dy, IC, H, Wd):
+    """Adjoint of conv2d wrt the input (independent of the transpose/reverse trick)."""
+    OC, _, kH, kW = W.shape; pH, pW = (kH-1)//2, (kW-1)//2; B = dy.shape[0]
+    dx = np.zeros((B, IC, H, Wd), np.float32)
+    for o in range(OC):
+        for c in range(IC):
+            for kh in range(kH):
+                for kw in range(kW):
+                    for hi in range(H):
+                        for wi in range(Wd):
+                            r, s = hi + kh - pH, wi + kw - pW
+                            if 0 <= r < H and 0 <= s < Wd:
+                                dx[:, c, r, s] += W[o, c, kh, kw] * dy[:, o, hi, wi]
+    return dx
 
 def mlp_back_ref(dy, W0, W1, W2, p0, p1):
     """Input-gradient (VJP) chain dx."""
@@ -135,6 +170,19 @@ e = max_err(outs, ts_ref); ok &= e < TOL
 print(f"mlp_train_step  ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  "
       f"(6 updated params vs numpy, loss cotangent computed in-module)")
 
+# ── CNN conv (Phase 3): SAME 3×3, 1→2 channels, 4×4 — forward + backward ──
+cic, coc, cH, cW, ckH, ckW = 1, 2, 4, 4, 3, 3
+cx = rng.standard_normal((1, cic, cH, cW)).astype(np.float32)
+cW_ = rng.standard_normal((coc, cic, ckH, ckW)).astype(np.float32)
+cb = rng.standard_normal((coc,)).astype(np.float32)
+outs, nb = compile_run("/tmp/conv_fwd.mlir", "conv_fwd", [cx, cW_, cb])
+e = max_err(outs, [conv2d_ref(cx, cW_, cb)]); ok &= e < TOL
+print(f"conv_fwd        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (stablehlo.convolution = conv2d)")
+cdy = rng.standard_normal((1, coc, cH, cW)).astype(np.float32)
+outs, nb = compile_run("/tmp/conv_back.mlir", "conv_back", [cdy, cW_])
+e = max_err(outs, [conv_input_vjp_ref(cW_, cdy, cic, cH, cW)]); ok &= e < TOL
+print(f"conv_back       ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (transpose+reverse+conv = proven conv VJP)")
+
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
 # ════════════════════════════════════════════════════════════════
@@ -164,6 +212,10 @@ try:
                               backend="rocm", config="hip", extra=extra)
         eg = max_err(outs, ts_ref); ok &= eg < TOL
         print(f"mlp_train_step  (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
+        outs, _ = compile_run("/tmp/conv_back.mlir", "conv_back", [cdy, cW_],
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, [conv_input_vjp_ref(cW_, cdy, cic, cH, cW)]); ok &= eg < TOL
+        print(f"conv_back       (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:
