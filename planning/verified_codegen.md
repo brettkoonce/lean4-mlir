@@ -14,11 +14,12 @@ where the emitted text *is* `print (emitBack net)` by construction (so R3
 is closed for that net, no string-diffing), validated on IREE. **MLP first,
 land it, then expand.**
 
-Status: **Phases 0–2 landed for the MLP, plus the param-grad + SGD slice of
-Phase 4** (see "Done" below). The whole MLP train-step module — forward +
-backward + parameter gradients — is now the rendering of proof-backed IR;
-only the SGD arithmetic (and printer/IREE/float) stay trusted. Remaining:
-CNN (Phase 3) and the rest of Phase 4 (loss-cotangent IR).
+Status: **MLP fully landed (Phases 0–2 + the param-grad/SGD and loss-cotangent
+slices of Phase 4).** The whole MLP train-step module — forward → loss
+cotangent → backward → parameter gradients — is the rendering of proof-backed
+IR; the ONLY trusted numerics is the SGD arithmetic `θ' = θ − lr·dθ` (plus the
+irreducible printer/IREE/float). Remaining: CNN (Phase 3), and optionally
+SGD-IR / migrating `generateTrainStep`.
 
 ## Done (MLP)
 
@@ -41,8 +42,16 @@ CNN (Phase 3) and the rest of Phase 4 (loss-cotangent IR).
   `HloF` (forward AST, peer of `Hlo`) renders the forward; the standalone
   `@mlp_fwd` module and the train step's forward are now `render(mlpFwd…)`,
   matching numpy forward to 2.38e-7. The forward is no longer trusted: it is
-  the rendering of an IR proven `= mlpForward`. Only SGD arithmetic +
-  printer/IREE/float remain trusted.
+  the rendering of an IR proven `= mlpForward`.
+- **Loss cotangent (rest of Phase 4)** — `IR.emitLossCot` + `lossCot_bridge`
+  (`⟦emitLossCot⟧ = ∂(crossEntropy)/∂logits = softmax(logits) − onehot`, via
+  the repo's `softmaxCE_grad`). Printer: `renderLossCot` emits the softmax head
+  (`exp`+`reduce`+`broadcast`+`divide`) + `subtract` target; the standalone
+  `@loss_cot` module (5.96e-8 vs numpy) and the train step now COMPUTE the
+  cotangent in-module from the logits + target distribution (input changed from
+  `%dy` to `%onehot`). So the cotangent is proof-backed too — the train step is
+  `forward → loss → backward → grads`, every mathematical op proof-backed; only
+  the SGD arithmetic stays trusted. Train step: 1.19e-7 on CPU and GPU.
 
 ## The pipeline
 
@@ -120,8 +129,9 @@ not just the backward.
 | **1** | **Land it.** Compile on IREE, run the MLP backward, confirm it matches the numpy VJP. R3 closed for the MLP backward, validated on GPU. | GPU. | ✅ CPU + rocm/gfx1100 |
 | **4 (param-grad + SGD slice)** | `dWℓ`/`dbℓ` emitters + bridges + a full SGD `mlpTrainStepModule`; run a train step where the weights move correctly. | Lean + GPU. | ✅ CPU 0.0 / GPU 1.19e-7 |
 | **2** | Forward IR + `⟦fwdIR⟧ = mlpForward` bridge → the *whole* MLP module is proof-backed (forward + backward), not just backward. | Lean + IREE. | ✅ `Fwd`/`HloF`, mlp_fwd 2.38e-7 |
+| **4 (loss-cotangent slice)** | Loss IR (softmax-CE cotangent) instead of the supplied `%dy` — `emitLossCot`/`lossCot_bridge` + `renderLossCot`; train step computes dy in-module. | Lean + GPU. | ✅ loss_cot 5.96e-8 |
 | **3** | `Back3.toStablehlo` (conv `convolution`, maxpool tile-compare-select) + Tensor3↔Vec wiring → render a small **CNN** end-to-end. | Lean + IREE. | next |
-| **4 (rest)** | Loss IR (softmax-CE cotangent) instead of the supplied `%dy`; then decide whether to migrate `generateTrainStep` or keep the parallel path as the verified reference. | Big; optional. | — |
+| **4 (rest)** | SGD-IR (make the optimizer step proof-backed too); then decide whether to migrate `generateTrainStep` or keep the parallel path as the verified reference. | Optional. | — |
 
 ## R3 closure & residual trust, per phase
 
