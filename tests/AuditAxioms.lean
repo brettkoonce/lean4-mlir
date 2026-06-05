@@ -125,3 +125,7 @@ open Proofs
 -- discharged via the reusable structural lemmas (no `native_decide`).
 #print axioms maxPool2Smooth_of_injective
 #print axioms Mini.miniCnn_has_vjp_correct
+-- Tier-2: same CNN with genuine 3×3 SAME-padding convolutions
+-- (center-structured, via conv2d_center3x3), every hypothesis discharged.
+#print axioms conv2d_center3x3
+#print axioms Spatial.spatialCnn_has_vjp_correct

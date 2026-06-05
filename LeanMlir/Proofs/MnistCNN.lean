@@ -406,6 +406,38 @@ theorem conv2d_1x1 {ic oc h w : Nat} (W : Kernel4 oc ic 1 1) (b : Vec oc)
       have := hi.isLt; have := wi.isLt
       refine ⟨?_, ?_, ?_, ?_⟩ <;> simp only [Fin.val_zero] <;> omega) hcond
 
+/-- **3×3 conv with a center-only kernel collapses to a per-pixel channel
+    mix.** If `W` vanishes off the center tap `(1,1)`, the full 3×3
+    SAME-padding sum — all nine taps and their padding branches — reduces
+    to `b o + ∑ c, W o c 1 1 · t c hi wi`. The 3×3 analogue of
+    `conv2d_1x1`: a center-structured instance exercises genuine spatial
+    convolution (the padding `if`s are evaluated) while keeping a closed
+    forward form. -/
+theorem conv2d_center3x3 {ic oc h w : Nat}
+    (W : Kernel4 oc ic 3 3) (b : Vec oc)
+    (hW : ∀ (o : Fin oc) (c : Fin ic) (kh kw : Fin 3),
+            ¬ (kh = 1 ∧ kw = 1) → W o c kh kw = 0)
+    (t : Tensor3 ic h w) (o : Fin oc) (hi : Fin h) (wi : Fin w) :
+    conv2d W b t o hi wi = b o + ∑ c : Fin ic, W o c 1 1 * t c hi wi := by
+  unfold conv2d
+  congr 1
+  refine Finset.sum_congr rfl (fun c _ => ?_)
+  -- Expand the 3×3 tap sum; the eight off-center taps vanish (`W = 0`).
+  simp only [Fin.sum_univ_three]
+  rw [hW o c 0 0 (by decide), hW o c 0 1 (by decide), hW o c 0 2 (by decide),
+      hW o c 1 0 (by decide), hW o c 1 2 (by decide),
+      hW o c 2 0 (by decide), hW o c 2 1 (by decide), hW o c 2 2 (by decide)]
+  simp only [zero_mul, add_zero, zero_add]
+  -- Center tap (1,1): SAME-padding keeps it in range, value is `t c hi wi`.
+  congr 1
+  dsimp only
+  split
+  · refine congrArg₂ (t c) ?_ ?_ <;> (apply Fin.ext; simp only [Fin.val_one]; omega)
+  · rename_i hcond
+    exact absurd (by
+      have := hi.isLt; have := wi.isLt
+      refine ⟨?_, ?_, ?_, ?_⟩ <;> simp only [Fin.val_one] <;> omega) hcond
+
 -- ════════════════════════════════════════════════════════════════
 -- § Tier-1 instance — a genuinely multi-channel, multi-window,
 --   10-class `mnistCnnNoBn` with every smoothness hypothesis DISCHARGED
@@ -580,5 +612,159 @@ theorem miniCnn_has_vjp_correct (dy : Vec 10) (i : Fin (1 * (2*2) * (2*2))) :
   miniCnn_has_vjp_at.correct dy i
 
 end Mini
+
+-- ════════════════════════════════════════════════════════════════
+-- § Tier-2 instance — same multi-channel/multi-window/10-class CNN, now
+--   with genuine 3×3 SAME-padding convolutions
+--
+-- Identical in spirit to `Mini`, but the two conv layers use 3×3 kernels
+-- (center-structured, via `conv2d_center3x3`), so the forward exercises
+-- real spatial convolution — the nine-tap sum and the SAME-padding
+-- branches — not just a per-pixel 1×1 channel mix. The smoothness
+-- discharge is unchanged: `maxPool2Smooth_of_injective` for the no-tie
+-- condition, positivity propagation for the ReLU conditions, all inside
+-- the three-axiom closure.
+-- ════════════════════════════════════════════════════════════════
+
+namespace Spatial
+
+/-- Input tensor, 16 distinct strictly-positive values (positionally
+    injective). -/
+noncomputable def T0 : Tensor3 1 (2*2) (2*2) :=
+  fun _ hi wi => ((4 * hi.val + wi.val + 1 : ℕ) : ℝ)
+noncomputable def X : Vec (1 * (2*2) * (2*2)) := Tensor3.flatten T0
+/-- conv1: 1→2 channels, 3×3, center tap `1`, zero elsewhere. -/
+noncomputable def W1 : Kernel4 2 1 3 3 := fun _ _ kh kw => if kh = 1 ∧ kw = 1 then 1 else 0
+noncomputable def b1 : Vec 2 := fun o => if o = 0 then 1 else 2
+/-- conv2: 2→2 channels, 3×3, center tap depends on the output channel
+    (`1` for channel 0, `2` for channel 1), zero elsewhere. -/
+noncomputable def W2 : Kernel4 2 2 3 3 :=
+  fun o _ kh kw => if kh = 1 ∧ kw = 1 then (if o = 0 then 1 else 2) else 0
+noncomputable def b2 : Vec 2 := fun _ => 1
+noncomputable def W3 : Mat (2*2*2) 3 := fun _ _ => 1
+noncomputable def b3 : Vec 3 := fun _ => 1
+noncomputable def W4 : Mat 3 3 := fun _ _ => 1
+noncomputable def b4 : Vec 3 := fun _ => 1
+noncomputable def W5 : Mat 3 10 := fun _ _ => 1
+noncomputable def b5 : Vec 10 := fun _ => 0
+
+/-- conv1 vanishes off the center tap (the `conv2d_center3x3` hypothesis). -/
+theorem hW1 (o : Fin 2) (c : Fin 1) (kh kw : Fin 3) (hne : ¬(kh = 1 ∧ kw = 1)) :
+    W1 o c kh kw = 0 := by simp only [W1]; exact if_neg hne
+theorem hW2 (o c : Fin 2) (kh kw : Fin 3) (hne : ¬(kh = 1 ∧ kw = 1)) :
+    W2 o c kh kw = 0 := by simp only [W2]; exact if_neg hne
+/-- conv1 center tap is `1`. -/
+theorem W1_center (o : Fin 2) (c : Fin 1) : W1 o c 1 1 = 1 := by simp [W1]
+
+/-- conv1 in closed form. -/
+theorem conv1_eq (o : Fin 2) (hi wi : Fin (2*2)) :
+    conv2d W1 b1 T0 o hi wi = b1 o + T0 0 hi wi := by
+  rw [conv2d_center3x3 W1 b1 hW1, Fin.sum_univ_one, W1_center, one_mul]
+
+theorem conv1_pos (o : Fin 2) (hi wi : Fin (2*2)) : 0 < conv2d W1 b1 T0 o hi wi := by
+  rw [conv1_eq]
+  have hb : (0:ℝ) < b1 o := by simp only [b1]; split <;> norm_num
+  have ht : (0:ℝ) ≤ T0 0 hi wi := by simp only [T0]; positivity
+  linarith
+
+/-- conv2 ∘ conv1 in closed form. -/
+theorem conv2_eq (o : Fin 2) (hi wi : Fin (2*2)) :
+    conv2d W2 b2 (conv2d W1 b1 T0) o hi wi
+      = b2 o + (W2 o 0 1 1 * (b1 0 + T0 0 hi wi) + W2 o 1 1 1 * (b1 1 + T0 0 hi wi)) := by
+  rw [conv2d_center3x3 W2 b2 hW2, Fin.sum_univ_two, conv1_eq, conv1_eq]
+
+theorem conv2_pos (o : Fin 2) (hi wi : Fin (2*2)) :
+    0 < conv2d W2 b2 (conv2d W1 b1 T0) o hi wi := by
+  rw [conv2d_center3x3 W2 b2 hW2]
+  have hb : (0:ℝ) < b2 o := by simp only [b2]; norm_num
+  have hs : (0:ℝ) ≤ ∑ i : Fin 2, W2 o i 1 1 * conv2d W1 b1 T0 i hi wi := by
+    apply Finset.sum_nonneg
+    intro i _
+    apply mul_nonneg
+    · rw [show W2 o i 1 1 = (if o = 0 then (1:ℝ) else 2) from by simp [W2]]
+      split <;> norm_num
+    · exact le_of_lt (conv1_pos i hi wi)
+  linarith
+
+/-- The max-pool input is positionally injective on each channel. -/
+theorem poolTensor_inj (ci : Fin 2) (r r' s s' : Fin (2*2))
+    (heq : conv2d W2 b2 (conv2d W1 b1 T0) ci r s
+         = conv2d W2 b2 (conv2d W1 b1 T0) ci r' s') :
+    r = r' ∧ s = s' := by
+  rw [conv2_eq, conv2_eq] at heq
+  have key : T0 0 r s = T0 0 r' s' := by
+    fin_cases ci <;> (simp [W2, b1, b2] at heq; linarith)
+  simp only [T0] at key
+  rw [Nat.cast_inj] at key
+  have hr := r.isLt; have hs := s.isLt; have hr' := r'.isLt; have hs' := s'.isLt
+  exact ⟨Fin.ext (by omega), Fin.ext (by omega)⟩
+
+theorem flatConv1_eq : flatConv W1 b1 X = Tensor3.flatten (conv2d W1 b1 T0) := by
+  simp only [flatConv, X, Tensor3.unflatten_flatten]
+
+theorem convZ_eq :
+    flatConv W2 b2 (Tensor3.flatten (conv2d W1 b1 T0))
+      = Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)) := by
+  simp only [flatConv, Tensor3.unflatten_flatten]
+
+theorem block1_eq :
+    (relu (2 * (2*2) * (2*2)) ∘ flatConv W1 b1) X
+      = Tensor3.flatten (conv2d W1 b1 T0) := by
+  simp only [Function.comp_apply, flatConv1_eq]
+  exact relu_id_of_pos (fun k => flatten_pos_of_pos (fun o hi wi => conv1_pos o hi wi) k)
+
+theorem blockZ_eq :
+    ((relu (2 * (2*2) * (2*2)) ∘ flatConv W2 b2) ∘
+      (relu (2 * (2*2) * (2*2)) ∘ flatConv W1 b1)) X
+      = Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)) := by
+  rw [Function.comp_apply, block1_eq, Function.comp_apply, convZ_eq]
+  exact relu_id_of_pos (fun k => flatten_pos_of_pos (fun o hi wi => conv2_pos o hi wi) k)
+
+theorem pooled_eq :
+    maxPoolFlat 2 2 2 (Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)))
+      = Tensor3.flatten (maxPool2 (conv2d W2 b2 (conv2d W1 b1 T0))) := by
+  simp only [maxPoolFlat, Tensor3.unflatten_flatten]
+
+theorem pooled_pos (i : Fin (2*2*2)) :
+    0 < maxPoolFlat 2 2 2 (Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0))) i := by
+  rw [pooled_eq]
+  exact flatten_pos_of_pos
+    (fun ci hi wi => maxPool2_pos (fun o r s => conv2_pos o r s) ci hi wi) i
+
+theorem dense3_pos (j : Fin 3) :
+    0 < dense W3 b3
+      (maxPoolFlat 2 2 2 (Tensor3.flatten (conv2d W2 b2 (conv2d W1 b1 T0)))) j :=
+  dense_pos_of_nonneg (fun _ _ => by simp [W3]) (fun _ => by simp [b3])
+    (fun i => le_of_lt (pooled_pos i)) j
+
+/-- **Unconditional whole-network VJP for a 3×3-convolution CNN.** Same
+    shape as `Mini.miniCnn` (2 channels, eight pool windows, 10 classes)
+    but with genuine 3×3 SAME-padding convolutions, every smoothness
+    hypothesis discharged, inside the three-axiom closure. -/
+noncomputable def spatialCnn_has_vjp_at :
+    HasVJPAt (mnistCnnNoBnForward W1 b1 W2 b2 W3 b3 W4 b4 W5 b5) X :=
+  mnistCnnNoBn_has_vjp_at W1 b1 W2 b2 W3 b3 W4 b4 W5 b5
+    (by norm_num) (by norm_num) (by norm_num) X
+    (by intro k; rw [flatConv1_eq]
+        exact ne_of_gt (flatten_pos_of_pos (fun o hi wi => conv1_pos o hi wi) k))
+    (by intro k; rw [block1_eq, convZ_eq]
+        exact ne_of_gt (flatten_pos_of_pos (fun o hi wi => conv2_pos o hi wi) k))
+    (by rw [blockZ_eq, Tensor3.unflatten_flatten]
+        exact maxPool2Smooth_of_injective _
+          (fun ci r r' s s' h => poolTensor_inj ci r r' s s' h))
+    (by intro k; rw [blockZ_eq]; exact ne_of_gt (dense3_pos k))
+    (by intro k
+        rw [blockZ_eq, Function.comp_apply, relu_id_of_pos (fun i => dense3_pos i)]
+        exact ne_of_gt (dense_pos_of_nonneg (fun _ _ => by simp [W4]) (fun _ => by simp [b4])
+          (fun i => le_of_lt (dense3_pos i)) k))
+
+/-- **Public unconditional correctness theorem** — the 3×3-conv CNN's
+    backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
+theorem spatialCnn_has_vjp_correct (dy : Vec 10) (i : Fin (1 * (2*2) * (2*2))) :
+    spatialCnn_has_vjp_at.backward dy i =
+      ∑ j : Fin 10, pdiv (mnistCnnNoBnForward W1 b1 W2 b2 W3 b3 W4 b4 W5 b5) X i j * dy j :=
+  spatialCnn_has_vjp_at.correct dy i
+
+end Spatial
 
 end Proofs
