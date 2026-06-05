@@ -4929,28 +4929,65 @@ validation tier of an 80$\to$300 ladder.
 
 \textbf{Compute budget.} ConvNeXt-T is the heaviest of the three
 ($28.6$M parameters --- the canonical count, verified by an
-init/forward/backward/save/reload round-trip). On the four RTX 4060
-Ti (CUDA, bf16, batch 256 across the four GPUs), steady-state
-throughput is $\sim$185\,ms per step, about $15.9$ minutes per epoch
+init/forward/backward/save/reload round-trip). Run on all \emph{six}
+RTX 4060 Ti (CUDA, bf16, batch 252 = 6$\times$42), steady-state
+throughput is $\sim$143\,ms per step, about $12.6$ minutes per epoch
 --- the most expensive per-epoch of any net in this book, driven by
-the $7\times7$ depthwise and the channel LayerNorms. The 80-epoch
-validation tier projects to roughly 21 wall-clock hours and the full
-300-epoch recipe to about 80 hours (a bit over three days).
+the $7\times7$ depthwise and the channel LayerNorms. Unlike the
+lighter EfficientNet, ConvNeXt gets a healthy $\sim$1.27$\times$ from
+four to six GPUs (it ran $\sim$185\,ms/step on four): being
+compute-bound, it keeps the cards near $100\%$ utilization rather than
+starving on the host data pipeline, so more of the added GPUs
+actually turns.
 
 \begin{center}
-\begin{tabular}{l l r r r r r}
+\begin{tabular}{l l r r r r}
 \hline
-GPU & Precision & Per epoch & 80 epochs & 300 epochs & Val top-1 & Val top-5 \\
+GPU & Epochs & Per epoch & Wall-clock & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$15.9 min & $\sim$21 hr & $\sim$80 hr & TODO & TODO \\
+6$\times$ 4060 Ti & 80 & $\sim$12.6 min & $\sim$15.5 hr & $\mathbf{75.93\%}$ & $\mathbf{92.27\%}$ \\
+6$\times$ 4060 Ti & 300 & $\sim$12.6 min & $\sim$63 hr & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent (Throughput is measured from steady-state ms/step; the run
-is not yet trained to completion, so accuracy is pending. With EMA $+$
-stochastic depth now on, the remaining gap to the paper recipe is the
-300-epoch schedule and the augmentation pack above.)
+\noindent (CUDA, bf16. The 300-epoch row is the projected wall-clock;
+accuracy pending.) The 80-epoch run reached $\mathbf{75.93\%}$ top-1 /
+$\mathbf{92.27\%}$ top-5 on the full 50{,}000-image validation split
+--- the strongest result in this book's sweep, ahead of EfficientNet-B0
+($72.3\%$) and ResNet-34 ($72.0\%$). The modern recipe earns it:
+AdamW, LayerScale, stochastic depth, and EMA are all in; the remaining
+gap to ConvNeXt-T's $\sim$82\% headline is geometric AutoAugment and
+the 300-epoch schedule. The validation curve --- note the slow start,
+an artifact of the EMA shadow (decay $0.9999$) lagging the live
+weights for the first few epochs, then catching up:
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
+    xmin=0, xmax=81, ymin=0, ymax=95,
+    xtick={0,10,20,30,40,50,60,70,80}, ytick={20,40,60,80},
+    legend pos=south east, legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small}, label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=1pt},
+]
+\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+(2,1.43) (3,2.85) (4,4.05) (5,11.20) (7,33.64) (8,41.50) (9,48.69) (10,55.26) (11,60.44) (12,63.92) (13,66.44) (14,68.02) (16,70.20) (17,70.97) (18,71.58) (19,72.11) (21,72.94) (22,73.23) (23,73.53) (24,73.75) (26,74.31) (27,74.41) (28,74.65) (29,74.80) (31,75.05) (32,75.15) (33,75.22) (34,75.47) (36,75.63) (37,75.63) (38,75.73) (39,75.86) (41,76.02) (42,76.03) (43,76.06) (44,76.02) (46,76.11) (47,76.15) (48,76.28) (49,76.23) (51,76.27) (52,76.22) (53,76.23) (54,76.20) (56,76.23) (57,76.18) (58,76.14) (59,76.12) (60,76.13) (61,76.07) (62,76.03) (63,75.99) (66,75.98) (67,75.92) (68,76.02) (69,75.99) (70,76.03) (71,76.00) (79,75.94) (80,75.93)
+};
+\addlegendentry{top-1}
+\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
+(2,5.18) (3,8.68) (4,11.37) (5,26.99) (7,58.74) (8,67.14) (9,73.59) (10,78.95) (11,82.81) (12,85.21) (13,86.82) (14,87.94) (16,89.25) (17,89.65) (18,90.11) (19,90.44) (21,91.01) (22,91.27) (23,91.42) (24,91.57) (26,91.86) (27,91.94) (28,91.98) (29,92.08) (31,92.26) (32,92.32) (33,92.38) (34,92.34) (36,92.43) (37,92.51) (38,92.54) (39,92.58) (41,92.64) (42,92.61) (43,92.66) (44,92.67) (46,92.61) (47,92.62) (48,92.68) (49,92.62) (51,92.62) (52,92.64) (53,92.67) (54,92.66) (56,92.58) (57,92.59) (58,92.54) (59,92.57) (60,92.56) (61,92.52) (62,92.47) (63,92.43) (66,92.44) (67,92.43) (68,92.43) (69,92.36) (70,92.38) (71,92.35) (79,92.24) (80,92.24)
+};
+\addlegendentry{top-5}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent ConvNeXt-T / ImageNet-1k validation accuracy per epoch
+(bf16, 6$\times$ 4060 Ti).
 
 \chapter{Vision Transformer}
 \label{chap:attention}

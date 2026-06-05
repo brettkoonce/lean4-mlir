@@ -1,0 +1,5 @@
+[sup] 2026-06-05 03:56:47 START 80-epoch ConvNeXt-T bf16 on GPUs 0,1,2,3,4,5 (6-GPU, post-Gen3)
+[sup] 03:56:47 attempt 1: fresh start (no checkpoint)
+[sup] 03:56:47 launched PID=64795
+[sup]   last: [Epoch 80] lr=0.0 loss(train_avg)=1.5805 val_top1=37885/49896 (0.7593) val_top5=0.9224 val_loss=1.1132  [752.7s train, -742.5s val]
+[sup] 20:37:11 ✅ TRAINING COMPLETE (80 epochs). final=/home/skoonce/convnext_tiny_imagenet_bf16.bin

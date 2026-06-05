@@ -18,7 +18,7 @@ The knobs quantified (or being quantified) here:
   on *identical* hardware + recipe: the clean params-vs-accuracy-vs-time
   comparison you rarely get because real-world runs differ in setup.
 - **Recipe levers** — EMA, stochastic depth, heavy aug, grad-clip: each with
-  measured complexity / leverage (see "Path to paper numbers"). Which knob is
+  measured complexity / leverage (see "Per-net gap to paper"). Which knob is
   worth turning? (We even measured the EMA per-step tax: ~4–5%.)
 - **Scaling out** — 4→6 consumer GPUs over PCIe: the failure mode (Gen4 AER)
   and the fix (Gen3), so multi-GPU-on-a-budget is documented, not folklore.
@@ -57,7 +57,7 @@ fp32). Batch 256 (4×64) everywhere. Written 2026-06-02.
 | EfficientNet-B0| 5.3M   | 102     | ~8.9      | ~12 hr | —      | **DONE** |
 | MobileNetV2    | 3.5M   | 106     | ~9.1      | —      | ~14 hr | **DONE** |
 | ResNet-34      | 21.8M  | 139     | ~11.9     | —      | ~18 hr | **DONE** |
-| ConvNeXt-T     | 28.6M  | 185     | ~15.9     | ~21 hr | —      | validated |
+| ConvNeXt-T     | 28.6M  | 185     | ~15.9     | ~21 hr | —      | **DONE** |
 
 (ms/step is per-step wall-clock at steady state; min/epoch = 5004 steps ×
 ms/step + ~0.3–0.5 min val. ViT is 2502 steps/epoch at batch 512 — its
@@ -76,14 +76,19 @@ across the ViT row because of the batch difference.
 | ViT-Tiny    | 80     | bf16      | **65.64%**| **87.06%**| `/home/skoonce/vit_tiny_imagenet_bf16.bin` |
 | MobileNetV2 | 90     | bf16      | **68.33%**| **88.17%**| `/home/skoonce/mnv2_imagenet_bf16.bin` |
 | EfficientNet-B0 | 80 | bf16      | **72.31%**| **90.31%**| `/home/skoonce/enet_b0_imagenet_bf16.bin` |
+| ConvNeXt-T  | 80     | bf16      | **75.93%**| **92.27%**| `/home/skoonce/convnext_tiny_imagenet_bf16.bin` |
 
-(All full-50k canonical eval. Per-epoch curves + RESULTS.md in
-`jax/runs/{r34,vit_tiny,mnv2,enet_b0}_imagenet_bf16_*/`; R34/ViT/MNv2 also blueprint §6.4/§10.5/§7.2.)
+**SWEEP COMPLETE — 5/5 trained to completion.** (All full-50k canonical eval.
+Per-epoch curves + RESULTS.md in `jax/runs/{r34,vit_tiny,mnv2,enet_b0,convnext_tiny}_imagenet_bf16_*/`;
+all five also in blueprint §6.4/§7.2/§8.2/§9.3/§10.5.)
 
-**ENet-B0 is the sweep accuracy leader** — 72.31%, edging R34 (72.02%) at ~¼ the
-params (5.3M vs 21.8M). First full 6-GPU run (post-Gen3): 2 AER auto-resumes over
-~10.5 hr (epochs 25, 74) — Gen3 makes 6-GPU AER much rarer (vs Gen4's death in
-30 s) but NOT zero. Measured 4→6 GPU speedup ~1.17× (data-pipeline-bound).
+**ConvNeXt-T is the sweep accuracy leader — 75.93%**, well clear of ENet (72.31%)
+and R34 (72.02%); the modern recipe (AdamW + LayerScale + stochastic depth + EMA)
+earns it, at 28.6M params. **6-GPU scaling: ConvNeXt 1.27× > ENet 1.17×** (4→6),
+as predicted — heavier/compute-bound nets recover more of the added GPUs (95–100%
+util vs ENet's input-starved ~65%). **Gen3 reliability: ConvNeXt ran 0 AER over
+15.5 hr; ENet 2 over 10.5 hr — Gen3 makes 6-GPU AER rare-not-zero** (vs Gen4's
+death in ~30 s). Final ranking: ConvNeXt 75.9 > ENet 72.3 ≈ R34 72.0 > MNv2 68.3 > ViT 65.6.
 
 **PCIe Gen3 fix validated (2026-06-04).** The MNv2 run spanned the BIOS
 Gen4→Gen3 change: the Gen4 portion (ep 1–84) threw ~5 AER `BadTLP`
@@ -191,37 +196,58 @@ AER-watchdog auto-resume). Canonical eval: `scripts/eval_*_full50k.py`.
   Swapping those two cables is the pending hardware fix; until then stay on
   `0,2,3,4` under the watchdog. (BIOS PCIe Gen3 is the fallback fix.)
 
-## Path to paper numbers: what's wired vs. net-new (2026-06-02 scoping)
+## Per-net gap to paper (2026-06-05 inventory, post 4/5-runs)
 
-MNv2 needs nothing more — SGD + base aug is its standard recipe (~71% target).
-EfficientNet-B0 and ConvNeXt-T need more to approach paper. The four levers:
+What each net is *still missing* vs its published recipe. Nothing here is
+broken or unfaithful in a way that matters — these are the last-few-points
+features. Achieved = our completed run (full-50k); paper ≈ the canonical number.
 
-| Lever | Status | Complexity | Leverage | Notes |
-|-------|--------|-----------|----------|-------|
-| Aug pipeline — color (Mixup/CutMix/RandAug-color/Erasing) | **wired** (config flags; ViT uses it) | S — flip flags | high | RandAug is **color-only** (brightness/contrast/etc.). |
-| Aug pipeline — geometric RandAug (rotate/shear/translate) | not wired | M | low–med | `tfa` gone on tf2.21; reimplement via `tf.raw_ops.ImageProjectiveTransformV3` (the op tfa wrapped) — feed an 8-elem projective vector per op + magnitude map, add to the RandAug op pool, set fill_mode. The transform-matrix math is the only real work; sampling framework already exists. Runs in the tfds map. Last slice of the aug stack; color RandAug + Mixup/CutMix capture most of the gain. |
-| RMSProp | not wired (have SGD+mom, Adam/AdamW) | M | low | EfficientNet-only; optimizer is emitted at ~3–4 parallel sites. SGD/AdamW reproductions hit ~75–76%, so optional. |
-| EMA (weight averaging) | **wired** (ImageNet path, gated by `useEMA`) | done | high (~+0.5–1% ENet) | Jitted `ema_update`, decoupled from the 3 optimizers; eval + checkpoints use the EMA tree. v1 limits: ImageNet path only (in-RAM/Imagenette no-ops if set); resume resets live params to EMA (negligible late). |
-| Stochastic depth (drop-path) | **wired** (ConvNeXt + ENet MBConv, gated by `dropPath`) | done | medium | Additive RNG in `forward` (default None → drop-free); per-block inverted drop, linear keep schedule over all blocks. ConvNeXt: every block. MBConv: drop guarded to skip-blocks (`ic==oc && stride==1`) inside `mbconv_block`. |
+| Net | Achieved | Paper | Missing vs paper | Notes |
+|-----|----------|-------|------------------|-------|
+| **MobileNetV2** | 68.3% (90ep) | ~72% | essentially nothing | Paper used RMSProp; SGD is a fine substitute. Gap is mostly schedule/length, not a missing feature. Closest-to-done. |
+| **EfficientNet-B0** | 72.3% (80ep) | ~77% | **RMSProp**, **geometric AA**, 80→300ep | B0 was *designed* for RMSProp (ρ0.9, ε1e-3, decay0.9+warmup) — not wired, we used SGD. EMA ✓ + stoch-depth ✓ already on. |
+| **ConvNeXt-T** | ~76% (80ep, running) | ~82% | **geometric AA**, mixup/cutmix (off), 80→300ep; LN-stem (cosmetic) | AdamW ✓ LayerScale ✓ stoch-depth ✓ EMA ✓ grad-clip ✓. Modern stack is the most complete; gap is aug + length. |
+| **ViT-Tiny / DeiT-Ti** | 65.6% (80ep) | ~72% (300ep, non-distill) | **distillation token**, **repeated aug**, geometric AA, 80→300ep | Has the full mixup+cutmix+RandAug(color)+erasing pack, AdamW, grad-clip. DeiT's headline uses a distill token from a teacher (RegNet) — we have no teacher. |
 
-**Critical path done: EMA + stochastic depth both wired, for ConvNeXt *and*
-ENet.** Both trainers are set up for 80ep with EMA + SD on (ConvNeXt dropPath
-0.1, ENet 0.2). Remaining, both optional: geometric RandAug (low–med) and
-RMSProp (ENet-only). ConvNeXt uses AdamW and needs neither.
+**Two features lift multiple nets at once (the broad levers):**
 
-**Common prerequisite — RNG threading in `forward`.** Today `forward(params, x)`
-takes no RNG. Stochastic depth needs per-block drop masks, so the signature has
-to become `forward(params, x, rng, training)`, threaded through every
-residual-block helper and through `value_and_grad`/jit. This is the single
-change that most affects the codegen's shape — scope it first, since SD depends
-on it. (EMA does **not** need the rng — it's an optimizer-side shadow copy — so
-EMA and the rng-threading can land independently.)
+| Feature | Lifts | Effort | Est. gain | Status |
+|---------|-------|--------|-----------|--------|
+| **Geometric AutoAugment** (shear/rotate/translate via `tf.raw_ops.ImageProjectiveTransformV3`) | ENet, ConvNeXt, ViT | high (CPU pipeline; tf2.21 workaround) | +1–3% each | only color RandAug wired |
+| **RMSProp** | ENet (designed for it), MNv2 | low (codegen branch, like AdamW) | +1–2% | not wired |
+| **80→300 epochs** | all | $$ (serial wall-clock: ViT ~32h, ENet ~37h, ConvNeXt ~63h @ 6-GPU) | +1–3% | queued |
+| **Distillation token** | ViT/DeiT only | high (needs a teacher net) | +1–2% | not wired |
 
-**ConvNeXt coverage.** ConvNeXt already has AdamW (✓) and LayerScale (✓, in the
-ported arch). So once EMA + stochastic depth land and the aug flags are flipped,
-ConvNeXt is **fully equipped** for a faithful 300ep run — RMSProp is irrelevant
-to it. The only remaining ConvNeXt gap is cosmetic (convBn-stem-with-ReLU vs
-conv+LN), not an accuracy lever.
+Already in (not gaps): EMA, stochastic depth, LayerScale, grad-clip,
+mixup/cutmix, color RandAug, random erasing, label smoothing, cosine, warmup.
+
+**Caveat tying back to throughput:** geometric AA is *more* CPU-side aug, which
+worsens the 6-GPU data-pipeline starvation (the 1.17–1.27× ceiling). Landing it
+may need the data-prep fix (more workers / GPU-decode / cache) in tandem, else
+6-GPU util drops further. RMSProp has no such interaction — pure compute.
+
+**Suggested order (recipe axis):** RMSProp first (afternoon; clean ENet-80 A/B
+vs the 72.3% SGD baseline), then geometric AA (week; validate it doesn't tank
+throughput before any 300ep run). Doing these *before* the 300ep runs means
+those run the actual paper recipe, not "paper minus the two things that matter."
+
+### Implementation notes for the two undone levers
+
+- **Geometric AutoAugment** — `tfa` is gone on tf2.21, so reimplement via
+  `tf.raw_ops.ImageProjectiveTransformV3` (the op tfa wrapped): per op, build an
+  8-element projective transform vector from the magnitude, set `fill_mode`, add
+  rotate/shear-x/shear-y/translate-x/translate-y to the RandAugment op pool
+  (currently color-only). The transform-matrix math is the only real work — the
+  RandAug N-of-pool sampling framework already exists, runs in the tfds map.
+- **RMSProp** — emit alongside the SGD/AdamW branches in the train-step codegen
+  (~3–4 parallel sites). EfficientNet's exact knobs matter: ρ=0.9, ε=1e-3, plus
+  its non-standard accumulator decay 0.9 + warmup — match those, not textbook
+  RMSProp. Pure optimizer-side; no `forward`/RNG changes.
+- **Already-landed plumbing** (so neither lever is blocked on infra): `forward`
+  now threads `(params, x, rng, training)` through every block helper +
+  value_and_grad/jit (the stochastic-depth prerequisite, done); `ema_update` is
+  a jitted optimizer-side shadow, decoupled from all 3 optimizers, eval + ckpt
+  use the EMA tree. EMA is ImageNet-path-only (Imagenette no-ops if set).
 
 ## TODO
 
@@ -238,10 +264,10 @@ conv+LN), not an accuracy lever.
       record the working peak LR per net.
 - [ ] fp32 ms/step for MNv2/ENet/ConvNeXt if a full bf16-vs-fp32 speedup
       table across all five is wanted.
-- [ ] 300-epoch push for ENet/ConvNeXt to approach paper numbers — gated on
-      EMA + stochastic depth (+ flipping the aug flags); see "Path to paper
-      numbers" above for the per-lever scope and the RNG-in-`forward`
-      prerequisite. Current configs are the 80ep validation tier.
+- [ ] 300-epoch push for ENet/ConvNeXt/ViT to approach paper — EMA + stochastic
+      depth are done (and ran in the 80ep tier); remaining recipe gaps are
+      geometric AA + RMSProp (ENet) + ViT distillation. See "Per-net gap to
+      paper" above for the per-net breakdown and implementation notes.
 
 ## Run queue (decided 2026-06-04)
 
