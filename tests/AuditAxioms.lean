@@ -11,6 +11,7 @@ import LeanMlir.Proofs.MobileNetV2
 import LeanMlir.Proofs.ConvNeXt
 import LeanMlir.Proofs.EfficientNet
 import LeanMlir.Proofs.MnistCNN
+import LeanMlir.Proofs.IR
 
 open Proofs
 
@@ -129,3 +130,8 @@ open Proofs
 -- (center-structured, via conv2d_center3x3), every hypothesis discharged.
 #print axioms conv2d_center3x3
 #print axioms Spatial.spatialCnn_has_vjp_correct
+
+-- Denoted StableHLO-subset IR (Phase 0a/0b spike, planning/typed_ir.md):
+-- the emitted backward graph denotes the proven HasVJP.backward.
+#print axioms IR.dense_back_bridge
+#print axioms IR.relu_back_bridge

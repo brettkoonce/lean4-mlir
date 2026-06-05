@@ -48,7 +48,10 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.MnistCNN,
              -- opt-in Mathlib.Matrix interop; not imported by the suite,
              -- listed here so CI keeps it green.
-             `LeanMlir.Proofs.MatBridge]
+             `LeanMlir.Proofs.MatBridge,
+             -- denoted StableHLO-subset IR (Phase 0a/0b spike); bridges the
+             -- emitted backward graph to the proven HasVJP.backward.
+             `LeanMlir.Proofs.IR]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
