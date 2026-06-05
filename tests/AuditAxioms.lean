@@ -174,3 +174,9 @@ open Proofs
 -- Final assembly: the emitted whole-MLP backward graph denotes the proven
 -- whole-network VJP (mlp_has_vjp_at), per-op _at bridges chained via denote_subst.
 #print axioms IR.mlp_whole_bridge
+-- Parameter gradients (train-step pieces): the emitted weight/bias backward
+-- (outer-product `dot_general` / batch `reduce`) computes the certified
+-- cotangent-contracted Jacobians wrt W and b at the actual chain cotangent.
+#print axioms IR.weight_grad_bridge
+#print axioms IR.bias_grad_bridge
+#print axioms IR.mlp_layer1_weight_grad_bridge

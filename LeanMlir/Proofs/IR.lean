@@ -633,5 +633,84 @@ theorem mlp_whole_bridge {d₀ d₁ d₂ d₃ : Nat}
              id_eq, Function.comp_apply]
   rfl
 
+-- ════════════════════════════════════════════════════════════════
+-- § Parameter gradients — weight/bias backward (the train-step pieces)
+--
+-- The input-gradient bridges above carry the cotangent *through* the net
+-- (`dx`). A train step also needs the *parameter* gradients at each dense
+-- layer: given the cotangent `dyℓ` arriving at that layer's output (computed
+-- by a backward subgraph `e`) and the layer's saved forward input `x`,
+--   dW = outer(x, dyℓ)   — a `dot_general` contracting the batch axis,
+--   db = dyℓ             — a `reduce`-add over the batch axis.
+-- These are the proven `dense_weight_grad`/`dense_bias_grad`, which
+-- `dense_weight_grad_correct`/`dense_bias_grad_correct` certify *are* the
+-- cotangent-contracted Jacobians of the dense layer wrt `W` and `b`.
+-- Emitting them off the (already-bridged) backward chain promotes the
+-- input-gradient bridge to a full **train-step** bridge: every gradient the
+-- optimizer consumes is the rendering of a proof-backed quantity.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Weight-gradient emitter: the outer product of the dense layer's saved
+    forward input `x` with the cotangent at the layer's output (the
+    denotation of the backward subgraph `e`). Mirrors the `dot_general`
+    that contracts the batch axis (`dW = xᵀ · dy`). -/
+noncomputable def emitWeightGrad {inp m n : Nat} (x : Vec m) (e : Back inp n)
+    (dy : Vec inp) : Mat m n :=
+  Mat.outer x (e.denote dy)
+
+/-- Bias-gradient emitter: the cotangent at the layer's output. Mirrors the
+    `reduce`-add over the batch axis (`db = Σ_batch dy`). -/
+noncomputable def emitBiasGrad {inp n : Nat} (e : Back inp n) (dy : Vec inp) : Vec n :=
+  e.denote dy
+
+/-- **Weight-gradient bridge.** The emitted outer-product graph, fed the
+    cotangent the backward subgraph `e` delivers, computes coordinate-wise
+    the cotangent-contracted Jacobian of the dense layer wrt `W` — the
+    proven `dense_weight_grad`. Certified by `dense_weight_grad_correct` at
+    the *actual* chain cotangent `e.denote dy`, so it composes with any of
+    the input-gradient bridges above. -/
+theorem weight_grad_bridge {inp m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
+    (e : Back inp n) (dy : Vec inp) (i : Fin m) (j : Fin n) :
+    emitWeightGrad x e dy i j
+      = ∑ k : Fin n,
+          pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
+               (Mat.flatten W) (finProdFinEquiv (i, j)) k * (e.denote dy) k :=
+  dense_weight_grad_correct W b x (e.denote dy) i j
+
+/-- **Bias-gradient bridge.** The emitted graph (the cotangent itself,
+    reduce-summed over the batch) computes the cotangent-contracted Jacobian
+    of the dense layer wrt `b` — the proven `dense_bias_grad`. Certified by
+    `dense_bias_grad_correct`. -/
+theorem bias_grad_bridge {inp m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
+    (e : Back inp n) (dy : Vec inp) (i : Fin n) :
+    emitBiasGrad e dy i
+      = ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' x) b i j * (e.denote dy) j :=
+  dense_bias_grad_correct W b x (e.denote dy) i
+
+/-- The backward subgraph delivering the cotangent at the MLP's **layer-1**
+    dense output: `relu'(p₁) ⊙ (W₂ · dy)` — ReLU-back composed with the
+    layer-2 dense input-gradient. (Layer 2's output cotangent is the top
+    `cotangent`; layer 0's prepends another `relu'(p₀) ⊙ (W₁ · ·)`.) -/
+def mlpCotOut1 {d₂ d₃ : Nat} (W₂ : Mat d₂ d₃) (p₁ : Vec d₂) : Back d₃ d₂ :=
+  (emitReluBack p₁).subst (emitDenseBack W₂)
+
+/-- **MLP hidden-layer parameter-gradient bridge (representative).** At the
+    interesting layer — layer 1, whose output cotangent is a genuine
+    backward subgraph `mlpCotOut1`, not just the top cotangent — the emitted
+    weight and bias gradients equal the certified Jacobians of that dense
+    layer wrt `W₁`/`b₁`, contracted with the cotangent the backward chain
+    actually delivers there. Instantiates the generic bridges at the MLP's
+    layer-1 subgraph; the other two layers are the same bridges at
+    `Back.cotangent` (layer 2) and `mlpCotOut0` (layer 0). -/
+theorem mlp_layer1_weight_grad_bridge {d₁ d₂ d₃ : Nat}
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (x₁ : Vec d₁) (p₁ : Vec d₂)
+    (dy : Vec d₃) (i : Fin d₁) (j : Fin d₂) :
+    emitWeightGrad x₁ (mlpCotOut1 W₂ p₁) dy i j
+      = ∑ k : Fin d₂,
+          pdiv (fun v : Vec (d₁ * d₂) => dense (Mat.unflatten v) b₁ x₁)
+               (Mat.flatten W₁) (finProdFinEquiv (i, j)) k
+            * ((mlpCotOut1 W₂ p₁).denote dy) k :=
+  weight_grad_bridge W₁ b₁ x₁ (mlpCotOut1 W₂ p₁) dy i j
+
 end IR
 end Proofs
