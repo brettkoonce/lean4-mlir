@@ -14,7 +14,26 @@ where the emitted text *is* `print (emitBack net)` by construction (so R3
 is closed for that net, no string-diffing), validated on IREE. **MLP first,
 land it, then expand.**
 
-Status: planning.
+Status: **Phases 0–1 landed for the MLP, plus the param-grad + SGD slice of
+Phase 4** (see "Done" below). Remaining: forward bridge (Phase 2), CNN
+(Phase 3), and the rest of Phase 4.
+
+## Done (MLP)
+
+- **Phase 0** — `IRPrint.lean` renders the backward graph to StableHLO
+  (`Hlo` mirror of `Back`); `mlpModule`/`linearModule` emit full `func.func`s.
+- **Phase 1** — `check_ir_codegen.py` compiles them on IREE and runs them on
+  CPU (`llvm-cpu`) **and the real GPU** (`rocm/gfx1100`, Radeon RX 7900 XTX),
+  matching an independent numpy VJP to ~1e-7. R3 closed for the MLP backward,
+  GPU-validated.
+- **Param grads + SGD (slice of Phase 4)** — `mlpTrainStepModule` renders a
+  full SGD step: trusted forward → proof-backed backward (the dx chain
+  `⟦emitMlpBack⟧ = mlp_has_vjp_at.backward`, plus `dWℓ`/`dbℓ` =
+  `IR.emitWeightGrad`/`emitBiasGrad`, bridged to the certified Jacobians by
+  `weight_grad_bridge`/`bias_grad_bridge`) → trusted elementwise SGD. The six
+  updated parameters match numpy SGD to 0.0 on CPU and 1.19e-7 on the GPU —
+  the proof-backed gradients drive a correct weight update on real hardware.
+  Still trusted: the forward (Phase 2 closes it) and the SGD arithmetic.
 
 ## The pipeline
 
@@ -86,13 +105,14 @@ not just the backward.
 
 ## Phases
 
-| Phase | Scope | Who |
-|---|---|---|
-| **0** | `Back.toStablehlo` printer (Vec ops: dot_general/multiply/reduce/broadcast/sub/add/select) + render the MLP backward (`emitMlpBack`) + splice into a hand/existing forward+loss+optimizer → one `.mlir`. | Lean-only — **I can do this.** |
-| **1** | **Land it.** Compile the module on the IREE/FFI path, train an MLP step, confirm gradients match the `vjp_oracle` / finite-diff (and the existing `mnist-mlp-train`). R3 closed for the MLP backward, validated on GPU. | Needs your GPU/FFI. |
-| **2** | Forward IR + `⟦fwdIR⟧ = mlpForward` bridge → the *whole* MLP module is proof-backed (forward + backward), not just backward. | Lean + IREE. |
-| **3** | `Back3.toStablehlo` (conv `convolution`, maxpool tile-compare-select) + Tensor3↔Vec wiring → render a small **CNN** end-to-end. | Lean + IREE. |
-| **4** | Loss + optimizer IR (or keep reusing) → fully-rendered train step; then decide whether to migrate `generateTrainStep` or keep the parallel path as the verified reference. | Big; optional. |
+| Phase | Scope | Who | Status |
+|---|---|---|---|
+| **0** | `Back.toStablehlo` printer (Vec ops: dot_general/multiply/reduce/broadcast/sub/add/select) + render the MLP backward (`emitMlpBack`) → one `.mlir`. | Lean-only. | ✅ `IRPrint.lean` |
+| **1** | **Land it.** Compile on IREE, run the MLP backward, confirm it matches the numpy VJP. R3 closed for the MLP backward, validated on GPU. | GPU. | ✅ CPU + rocm/gfx1100 |
+| **4 (param-grad + SGD slice)** | `dWℓ`/`dbℓ` emitters + bridges + a full SGD `mlpTrainStepModule`; run a train step where the weights move correctly. | Lean + GPU. | ✅ CPU 0.0 / GPU 1.19e-7 |
+| **2** | Forward IR + `⟦fwdIR⟧ = mlpForward` bridge → the *whole* MLP module is proof-backed (forward + backward), not just backward. | Lean + IREE. | next |
+| **3** | `Back3.toStablehlo` (conv `convolution`, maxpool tile-compare-select) + Tensor3↔Vec wiring → render a small **CNN** end-to-end. | Lean + IREE. | — |
+| **4 (rest)** | Loss IR (softmax-CE cotangent) instead of the supplied `%dy`; then decide whether to migrate `generateTrainStep` or keep the parallel path as the verified reference. | Big; optional. | — |
 
 ## R3 closure & residual trust, per phase
 
