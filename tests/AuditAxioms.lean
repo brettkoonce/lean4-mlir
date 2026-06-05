@@ -143,3 +143,8 @@ open Proofs
 -- Phase 2: the emitted tile-compare-select graph denotes the canonical
 -- maxpool backward at smooth points (no argmax ties).
 #print axioms IR.maxpool_back_bridge
+-- Phase 1 smooth activations: emitted `dy ⊙ act'(x)` graph denotes the
+-- proven diagonal-Jacobian backward.
+#print axioms IR.gelu_back_bridge
+#print axioms IR.swish_back_bridge
+#print axioms IR.sigmoid_back_bridge

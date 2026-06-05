@@ -1,5 +1,7 @@
 import LeanMlir.Proofs.MLP
 import LeanMlir.Proofs.CNN
+import LeanMlir.Proofs.LayerNorm
+import LeanMlir.Proofs.EfficientNet
 
 /-! # A denoted StableHLO-subset IR — Phase 0a/0b spike
 
@@ -51,6 +53,7 @@ inductive Back (inp : Nat) : Nat → Type where
   | cotangent : Back inp inp
   | dotGeneral {m n : Nat} (A : Mat m n) : Back inp n → Back inp m
   | selectPos {n : Nat} (x : Vec n) : Back inp n → Back inp n
+  | scale {n : Nat} (s : Vec n) : Back inp n → Back inp n
 
 /-- **Denotational semantics** of a backward graph, into the proofs' own
     `Vec` type — so a bridge theorem can equate it with a proven
@@ -60,6 +63,7 @@ noncomputable def Back.denote {inp out : Nat} (e : Back inp out) (dy : Vec inp) 
   | .cotangent       => dy
   | .dotGeneral A e' => Mat.mulVec A (e'.denote dy)
   | .selectPos x e'  => fun i => if x i > 0 then e'.denote dy i else 0
+  | .scale s e'      => fun i => e'.denote dy i * s i
 
 /-- **Composition lemma** (the Phase-3 mechanism in miniature): a
     `dotGeneral` node denotes post-composition with `Mat.mulVec`.
@@ -192,6 +196,43 @@ theorem maxpool_back_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
   show (if MaxPool2IsArgmax x ci hi_in wi_in
         then dy ci (winRow hi_in) (winCol wi_in) else 0) = _
   exact (maxPool2_codegen_matches_canonical x h_smooth dy ci hi_in wi_in).symm
+
+-- ════════════════════════════════════════════════════════════════
+-- § Phase 1 — smooth elementwise activations (diagonal Jacobian)
+--
+-- GELU, Swish/SiLU and sigmoid all have a diagonal Jacobian, so their
+-- proven `HasVJP.backward` is the closed form `dy ⊙ act'(x)` — a single
+-- `stablehlo.multiply` of the cotangent against the saved
+-- activation-derivative vector. The IR `scale` node models exactly that
+-- multiply, so each bridge is definitional — the smooth-activation
+-- analogue of `dense_back_bridge`.
+--
+-- (BN/LayerNorm's 3-term rank-1 backward and softmax's rank-1 backward
+-- are closed forms too, but their emitted graphs are multi-op
+-- reduce+elementwise — they need a `reduce`/`broadcast` IR extension, and
+-- SE is compositional; those are the remaining smooth layers.)
+-- ════════════════════════════════════════════════════════════════
+
+/-- The emitted elementwise-activation backward graph: `stablehlo.multiply`
+    of the cotangent with the saved activation-derivative `s = act'(x)`. -/
+def emitActBack {n : Nat} (s : Vec n) : Back n n := .scale s .cotangent
+
+/-- **GELU backward bridge.** The emitted `dy ⊙ gelu'(x)` graph denotes the
+    proven GELU backward. Definitional — GELU's diagonal Jacobian makes its
+    `HasVJP.backward` exactly this elementwise scaling. -/
+theorem gelu_back_bridge (n : Nat) (x dy : Vec n) :
+    (emitActBack (fun i => geluScalarDeriv (x i))).denote dy
+      = (gelu_has_vjp n).backward x dy := rfl
+
+/-- **Swish / SiLU backward bridge.** Same diagonal pattern. -/
+theorem swish_back_bridge (n : Nat) (x dy : Vec n) :
+    (emitActBack (fun i => swishScalarDeriv (x i))).denote dy
+      = (swish_has_vjp n).backward x dy := rfl
+
+/-- **Sigmoid backward bridge.** Same diagonal pattern. -/
+theorem sigmoid_back_bridge (n : Nat) (x dy : Vec n) :
+    (emitActBack (fun i => sigmoidScalarDeriv (x i))).denote dy
+      = (sigmoid_has_vjp n).backward x dy := rfl
 
 end IR
 end Proofs
