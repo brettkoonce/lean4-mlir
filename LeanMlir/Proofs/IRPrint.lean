@@ -1541,6 +1541,107 @@ def mbconvBackModule (c cmid H W kHd kWd r : Nat) (eps : String) : String :=
      s!"    %dx = stablehlo.add %dOut, %dxb : {tt [1,c,H,W]}\n" ++
      s!"    return %dx : {tt [1,c,H,W]}\n")
 
+-- ════════════════════════════════════════════════════════════════
+-- § MobileNetV2 inverted residual — the linear-bottleneck block (Phase 3 sweep)
+--
+--   expand(1×1 conv)→BN→relu6 → depthwise(k×k)→BN→relu6 → project(1×1 conv)→BN
+--     + x        (stride-1, cin=cout: identity skip; linear bottleneck — no
+--                 activation after project)
+-- The MBConv skeleton minus the squeeze-excite branch, relu6 in place of swish
+-- (`invresBody = ivProject ∘ ivDepthwise ∘ ivExpand`). relu6 has a kink, so its
+-- bridge holds at a smooth point (no pre-activation exactly 0 or 6) — the
+-- measure-zero conditionality of the proven `relu6_has_vjp_at`. Reuses the
+-- nf/eps-parameterized flat BN and the conv/depthwise machinery from MBConv.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Elementwise relu6 forward `y = min(max(x,0),6)` into `{out}` (type `ty`). -/
+def relu6F (out x ty : String) : String :=
+  s!"    {out}_z = stablehlo.constant dense<0.0> : {ty}\n" ++
+  s!"    {out}_six = stablehlo.constant dense<6.0> : {ty}\n" ++
+  s!"    {out}_m1 = stablehlo.maximum {x}, {out}_z : {ty}\n" ++
+  s!"    {out} = stablehlo.minimum {out}_m1, {out}_six : {ty}\n"
+
+/-- Elementwise relu6 backward `{out} = dy ⊙ 1[0<x<6]` (`x` = pre-activation). -/
+def relu6B (out x dy ty tyI1 : String) : String :=
+  s!"    {out}_z = stablehlo.constant dense<0.0> : {ty}\n" ++
+  s!"    {out}_six = stablehlo.constant dense<6.0> : {ty}\n" ++
+  s!"    {out}_gt = stablehlo.compare GT, {x}, {out}_z : ({ty}, {ty}) -> {tyI1}\n" ++
+  s!"    {out}_lt = stablehlo.compare LT, {x}, {out}_six : ({ty}, {ty}) -> {tyI1}\n" ++
+  s!"    {out}_mask = stablehlo.and {out}_gt, {out}_lt : {tyI1}\n" ++
+  s!"    {out} = stablehlo.select {out}_mask, {dy}, {out}_z : {tyI1}, {ty}\n"
+
+/-- Inverted-residual parameter signature (expand 1×1, depthwise k×k, project
+    1×1; conv biases folded into BN). `cin = cout = c` for the identity skip. -/
+def invresSig (c cmid H W kHd kWd : Nat) : String :=
+  s!"%x: {tt [1,c,H,W]}, %We: {tt [cmid,c,1,1]}, %ge: tensor<f32>, %be: tensor<f32>, " ++
+  s!"%Wd: {tt [cmid,kHd,kWd]}, %gd: tensor<f32>, %bd: tensor<f32>, " ++
+  s!"%Wp: {tt [c,cmid,1,1]}, %gp: tensor<f32>, %bp: tensor<f32>"
+
+/-- Inverted-residual forward chain producing `%out`, leaving `%e_n`,`%d_n`,
+    `%e_c`,`%d_c`,`%p_n…` for the backward. -/
+def invresFwdBody (c cmid H W kHd kWd : Nat) : String :=
+  let pHd := (kHd-1)/2; let pWd := (kWd-1)/2; let Me := cmid*H*W; let Mp := c*H*W
+  -- expand 1×1 conv → flat BN → relu6
+  convOp "%e_c" "%x" "%We" (tt [1,c,H,W]) (tt [cmid,c,1,1]) (tt [1,cmid,H,W]) 0 0 ++
+  s!"    %e_cf = stablehlo.reshape %e_c : ({tt [1,cmid,H,W]}) -> {tt [1,Me]}\n" ++
+  mbLNF "%e_n" "%e_cf" "%ge" "%be" "%nfe" "%epse" 1 Me ++
+  relu6F "%e_r" "%e_n" (tt [1,Me]) ++
+  s!"    %e_r4 = stablehlo.reshape %e_r : ({tt [1,Me]}) -> {tt [1,cmid,H,W]}\n" ++
+  -- depthwise (no bias) → flat BN → relu6
+  s!"    %dwe = stablehlo.reshape %Wd : ({tt [cmid,kHd,kWd]}) -> {tt [cmid,1,kHd,kWd]}\n" ++
+  convOpG "%d_c" "%e_r4" "%dwe" (tt [1,cmid,H,W]) (tt [cmid,1,kHd,kWd]) (tt [1,cmid,H,W]) pHd pWd (toString cmid) ++
+  s!"    %d_cf = stablehlo.reshape %d_c : ({tt [1,cmid,H,W]}) -> {tt [1,Me]}\n" ++
+  mbLNF "%d_n" "%d_cf" "%gd" "%bd" "%nfe" "%epse" 1 Me ++
+  relu6F "%d_r" "%d_n" (tt [1,Me]) ++
+  s!"    %d_r4 = stablehlo.reshape %d_r : ({tt [1,Me]}) -> {tt [1,cmid,H,W]}\n" ++
+  -- project 1×1 conv → flat BN (linear bottleneck — no activation)
+  convOp "%p_c" "%d_r4" "%Wp" (tt [1,cmid,H,W]) (tt [c,cmid,1,1]) (tt [1,c,H,W]) 0 0 ++
+  s!"    %p_cf = stablehlo.reshape %p_c : ({tt [1,c,H,W]}) -> {tt [1,Mp]}\n" ++
+  mbLNF "%p_n" "%p_cf" "%gp" "%bp" "%nfp" "%epsp" 1 Mp ++
+  s!"    %p_n4 = stablehlo.reshape %p_n : ({tt [1,Mp]}) -> {tt [1,c,H,W]}\n" ++
+  -- identity residual skip
+  s!"    %out = stablehlo.add %x, %p_n4 : {tt [1,c,H,W]}\n"
+
+/-- Residual inverted-residual forward as `@invres_fwd`. -/
+def invresFwdModule (c cmid H W kHd kWd : Nat) (eps : String) : String :=
+  actMod "invres_fwd" (invresSig c cmid H W kHd kWd) (tt [1,c,H,W])
+    (mbconvConsts c cmid H W eps ++ invresFwdBody c cmid H W kHd kWd ++
+     s!"    return %out : {tt [1,c,H,W]}\n")
+
+/-- Residual inverted-residual input-gradient backward `dx = dOut + body.back(dOut)`
+    as `@invres_back`: project-back → relu6/dw → relu6/expand, then the skip. -/
+def invresBackModule (c cmid H W kHd kWd : Nat) (eps : String) : String :=
+  let pHd := (kHd-1)/2; let pWd := (kWd-1)/2; let Me := cmid*H*W; let Mp := c*H*W
+  actMod "invres_back" (invresSig c cmid H W kHd kWd ++ s!", %dOut: {tt [1,c,H,W]}") (tt [1,c,H,W])
+    (mbconvConsts c cmid H W eps ++ invresFwdBody c cmid H W kHd kWd ++
+     "    // ── backward: input gradient dx = dOut + body.back(dOut) ──\n" ++
+     -- project back: BN-back then 1×1 conv input-VJP
+     s!"    %dOnf = stablehlo.reshape %dOut : ({tt [1,c,H,W]}) -> {tt [1,Mp]}\n" ++
+     mbLNB "%dpcf" "%p_n" "%gp" "%dOnf" "%nfp" 1 Mp ++
+     s!"    %dpc = stablehlo.reshape %dpcf : ({tt [1,Mp]}) -> {tt [1,c,H,W]}\n" ++
+     s!"    %Wpt = stablehlo.transpose %Wp, dims = [1, 0, 2, 3] : ({tt [c,cmid,1,1]}) -> {tt [cmid,c,1,1]}\n" ++
+     s!"    %Wpr = stablehlo.reverse %Wpt, dims = [2, 3] : {tt [cmid,c,1,1]}\n" ++
+     convOp "%ddr" "%dpc" "%Wpr" (tt [1,c,H,W]) (tt [cmid,c,1,1]) (tt [1,cmid,H,W]) 0 0 ++
+     -- depthwise-bn-relu6 back
+     s!"    %ddrf = stablehlo.reshape %ddr : ({tt [1,cmid,H,W]}) -> {tt [1,Me]}\n" ++
+     relu6B "%ddn" "%d_n" "%ddrf" (tt [1,Me]) (ti1 [1,Me]) ++
+     mbLNB "%ddc" "%d_n" "%gd" "%ddn" "%nfe" 1 Me ++
+     s!"    %ddc4 = stablehlo.reshape %ddc : ({tt [1,Me]}) -> {tt [1,cmid,H,W]}\n" ++
+     s!"    %dwe2 = stablehlo.reshape %Wd : ({tt [cmid,kHd,kWd]}) -> {tt [cmid,1,kHd,kWd]}\n" ++
+     s!"    %dwr = stablehlo.reverse %dwe2, dims = [2, 3] : {tt [cmid,1,kHd,kWd]}\n" ++
+     convOpG "%des" "%ddc4" "%dwr" (tt [1,cmid,H,W]) (tt [cmid,1,kHd,kWd]) (tt [1,cmid,H,W]) pHd pWd (toString cmid) ++
+     s!"    %desf = stablehlo.reshape %des : ({tt [1,cmid,H,W]}) -> {tt [1,Me]}\n" ++
+     -- expand-bn-relu6 back
+     relu6B "%den" "%e_n" "%desf" (tt [1,Me]) (ti1 [1,Me]) ++
+     mbLNB "%dec" "%e_n" "%ge" "%den" "%nfe" 1 Me ++
+     s!"    %dec4 = stablehlo.reshape %dec : ({tt [1,Me]}) -> {tt [1,cmid,H,W]}\n" ++
+     s!"    %Wet = stablehlo.transpose %We, dims = [1, 0, 2, 3] : ({tt [cmid,c,1,1]}) -> {tt [c,cmid,1,1]}\n" ++
+     s!"    %Wer = stablehlo.reverse %Wet, dims = [2, 3] : {tt [c,cmid,1,1]}\n" ++
+     convOp "%dxb" "%dec4" "%Wer" (tt [1,cmid,H,W]) (tt [c,cmid,1,1]) (tt [1,c,H,W]) 0 0 ++
+     -- residual fan-in
+     s!"    %dx = stablehlo.add %dOut, %dxb : {tt [1,c,H,W]}\n" ++
+     s!"    return %dx : {tt [1,c,H,W]}\n")
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -1603,5 +1704,8 @@ def mbconvBackModule (c cmid H W kHd kWd r : Nat) (eps : String) : String :=
 
 #eval IO.FS.writeFile "/tmp/mbconv_fwd.mlir" (mbconvFwdModule 2 4 4 4 3 3 2 "0.00001")
 #eval IO.FS.writeFile "/tmp/mbconv_back.mlir" (mbconvBackModule 2 4 4 4 3 3 2 "0.00001")
+
+#eval IO.FS.writeFile "/tmp/invres_fwd.mlir" (invresFwdModule 2 4 4 4 3 3 "0.00001")
+#eval IO.FS.writeFile "/tmp/invres_back.mlir" (invresBackModule 2 4 4 4 3 3 "0.00001")
 
 end Proofs.IRPrint
