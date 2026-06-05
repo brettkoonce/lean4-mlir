@@ -2,18 +2,25 @@
 """Execution-side check for the denoted-IR bridge (planning/verified_codegen.md, Loop A).
 
 Lean side (proven): ⟦emitMlpBack⟧ = mlp_has_vjp_at.backward  (IR.mlp_whole_bridge),
-and the per-op bridges (dense_at_bridge, relu_at_bridge, …).
+the per-op bridges (dense_at_bridge, relu_at_bridge, …), and the parameter
+gradients weight_grad_bridge / bias_grad_bridge (dW = outer(x, dy), db = Σ dy).
 
 This script closes the loop on the *execution* side: it (re)generates the
 StableHLO that `IRPrint.lean` renders from those same IR graphs, compiles it
-with IREE, runs it, and checks it computes the VJP against an independent
-numpy reference. Compiles on IREE's CPU backend (`llvm-cpu`) — correctness
-needs no GPU; ROCm/CUDA only change the backend, not the numerics.
+with IREE, runs it, and checks it against an independent numpy reference:
+
+  • linear_back / mlp_back   — the input-gradient (VJP) chain (dx);
+  • mlp_train_step           — a full SGD step: forward (trusted) → proof-backed
+                               backward (dx chain + dW/db) → SGD update; checks
+                               the six updated parameters against numpy.
+
+Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
+ROCm/HIP leg only changes the backend, not the numerics.
 
 Run:  .venv/bin/python LeanMlir/Proofs/check_ir_codegen.py
 Deps: iree-base-compiler, iree-base-runtime, numpy (pip); lake (to regenerate).
 """
-import os, subprocess, sys
+import os, subprocess, sys, glob, re
 import numpy as np
 import iree.compiler as ic
 import iree.runtime as rt
@@ -22,29 +29,57 @@ import iree.runtime as rt
 subprocess.run(["lake", "env", "lean", "LeanMlir/Proofs/IRPrint.lean"],
                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def run_fn(mlir_path: str, fname: str, args):
-    mlir = open(mlir_path).read()
-    vmfb = ic.compile_str(mlir, target_backends=["llvm-cpu"], input_type="stablehlo")
-    ctx = rt.SystemContext(config=rt.Config("local-task"))
+def _np(r):  # IREE result → numpy (single result or one element of a tuple)
+    return np.asarray(r.to_host() if hasattr(r, "to_host") else r)
+
+def compile_run(mlir_path, fname, args, backend="llvm-cpu", config="local-task", extra=None):
+    """Compile `mlir_path` for `backend`, run `fname(*args)`, return (outputs, nbytes).
+    `outputs` is a list of numpy arrays (one per result)."""
+    vmfb = ic.compile_str(open(mlir_path).read(), target_backends=[backend],
+                          input_type="stablehlo", extra_args=extra or [])
+    ctx = rt.SystemContext(config=rt.Config(config))
     ctx.add_vm_module(rt.VmModule.copy_buffer(ctx.instance, vmfb))
-    return np.asarray(ctx.modules.m[fname](*args).to_host()), len(vmfb)
+    res = ctx.modules.m[fname](*args)
+    outs = [_np(r) for r in res] if isinstance(res, (list, tuple)) else [_np(res)]
+    return outs, len(vmfb)
 
 def relu_mask(p):  # 1[p > 0]
     return np.where(p > 0, 1.0, 0.0).astype(np.float32)
+
+def max_err(outs, refs):
+    return max(float(np.abs(o - r).max()) for o, r in zip(outs, refs))
 
 ok = True
 TOL = 1e-4
 rng = np.random.default_rng(0)
 
+# ════════════════════════════════════════════════════════════════
+# Reference computations (independent numpy)
+# ════════════════════════════════════════════════════════════════
+def mlp_back_ref(dy, W0, W1, W2, p0, p1):
+    """Input-gradient (VJP) chain dx."""
+    return (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
+
+def mlp_sgd_ref(x, W0, b0, W1, b1, W2, b2, dy, lr):
+    """Forward → backward (dx chain + param grads) → SGD; returns 6 updated params."""
+    h0 = x @ W0 + b0; a0 = np.maximum(h0, 0.0)
+    h1 = a0 @ W1 + b1; a1 = np.maximum(h1, 0.0)
+    dW2 = a1.T @ dy;            db2 = dy.sum(0);  dx2 = dy @ W2.T
+    dy1 = (h1 > 0) * dx2;       dW1 = a0.T @ dy1; db1 = dy1.sum(0); dx1 = dy1 @ W1.T
+    dy0 = (h0 > 0) * dx1;       dW0 = x.T @ dy0;  db0 = dy0.sum(0)
+    return [W0 - lr*dW0, b0 - lr*db0, W1 - lr*dW1, b1 - lr*db1, W2 - lr*dW2, b2 - lr*db2]
+
+# ════════════════════════════════════════════════════════════════
+# § CPU checks (the correctness gate — backend-independent numerics)
+# ════════════════════════════════════════════════════════════════
 # ── linear: dx = dy · W0ᵀ ──
 dy = rng.standard_normal((2, 3)).astype(np.float32)
 W0 = rng.standard_normal((4, 3)).astype(np.float32)
-out, nb = run_fn("/tmp/linear_back.mlir", "linear_back", [dy, W0])
-ref = dy @ W0.T
-e = float(np.abs(out - ref).max()); ok &= e < TOL
-print(f"linear_back  ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}")
+outs, nb = compile_run("/tmp/linear_back.mlir", "linear_back", [dy, W0])
+e = max_err(outs, [dy @ W0.T]); ok &= e < TOL
+print(f"linear_back     ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}")
 
-# ── mlp 4→3→3→2: dx = ((((dy·W2ᵀ)⊙1[p1>0])·W1ᵀ)⊙1[p0>0])·W0ᵀ ──
+# ── mlp 4→3→3→2 input-gradient ──
 B, d0, d1, d2, d3 = 2, 4, 3, 3, 2
 dy = rng.standard_normal((B, d3)).astype(np.float32)
 W0 = rng.standard_normal((d0, d1)).astype(np.float32)
@@ -52,18 +87,33 @@ W1 = rng.standard_normal((d1, d2)).astype(np.float32)
 W2 = rng.standard_normal((d2, d3)).astype(np.float32)
 p0 = rng.standard_normal((B, d1)).astype(np.float32)
 p1 = rng.standard_normal((B, d2)).astype(np.float32)
-out, nb = run_fn("/tmp/mlp_back.mlir", "mlp_back", [dy, W0, W1, W2, p0, p1])
-ref = (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
-e = float(np.abs(out - ref).max()); ok &= e < TOL
-print(f"mlp_back     ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}")
+mlp_back_args = [dy, W0, W1, W2, p0, p1]
+outs, nb = compile_run("/tmp/mlp_back.mlir", "mlp_back", mlp_back_args)
+e = max_err(outs, [mlp_back_ref(dy, W0, W1, W2, p0, p1)]); ok &= e < TOL
+print(f"mlp_back        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}")
+
+# ── mlp full SGD train step: 6 updated params (forward+backward+SGD) ──
+LR = 0.1
+x  = rng.standard_normal((B, d0)).astype(np.float32)
+b0 = rng.standard_normal((d1,)).astype(np.float32)
+b1 = rng.standard_normal((d2,)).astype(np.float32)
+b2 = rng.standard_normal((d3,)).astype(np.float32)
+dyt = rng.standard_normal((B, d3)).astype(np.float32)
+ts_args = [x, W0, b0, W1, b1, W2, b2, dyt]
+ts_ref = mlp_sgd_ref(x, W0, b0, W1, b1, W2, b2, dyt, LR)
+outs, nb = compile_run("/tmp/mlp_train_step.mlir", "mlp_train_step", ts_args)
+e = max_err(outs, ts_ref); ok &= e < TOL
+print(f"mlp_train_step  ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  "
+      f"(6 updated params vs numpy SGD)")
 
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
-# ── best-effort GPU check: same module, ROCm/HIP backend, real device ──
+# ════════════════════════════════════════════════════════════════
+# § Best-effort GPU check: same modules, ROCm/HIP backend, real device
 # CPU above is the gate (correctness is backend-independent); this just
-# confirms it also runs on the GPU if one is present.
+# confirms the proof-backed backward + train step also run on the GPU.
+# ════════════════════════════════════════════════════════════════
 def gpu_arch():
-    import glob, re
     for rocminfo in ["rocminfo", *glob.glob("/opt/rocm*/bin/rocminfo")]:
         try:
             out = subprocess.run([rocminfo], capture_output=True, text=True).stdout
@@ -76,14 +126,15 @@ def gpu_arch():
 
 try:
     if "hip" in rt.query_available_drivers() and (arch := gpu_arch()):
-        vmfb = ic.compile_str(open("/tmp/mlp_back.mlir").read(), target_backends=["rocm"],
-                              input_type="stablehlo", extra_args=[f"--iree-hip-target={arch}"])
-        ctx = rt.SystemContext(config=rt.Config("hip"))
-        ctx.add_vm_module(rt.VmModule.copy_buffer(ctx.instance, vmfb))
-        outg = np.asarray(ctx.modules.m["mlp_back"](dy, W0, W1, W2, p0, p1).to_host())
-        eg = float(np.abs(outg - ref).max())
-        print(f"mlp_back     (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
-        ok &= eg < TOL
+        extra = [f"--iree-hip-target={arch}"]
+        outs, _ = compile_run("/tmp/mlp_back.mlir", "mlp_back", mlp_back_args,
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, [mlp_back_ref(dy, W0, W1, W2, p0, p1)]); ok &= eg < TOL
+        print(f"mlp_back        (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
+        outs, _ = compile_run("/tmp/mlp_train_step.mlir", "mlp_train_step", ts_args,
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, ts_ref); ok &= eg < TOL
+        print(f"mlp_train_step  (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:
