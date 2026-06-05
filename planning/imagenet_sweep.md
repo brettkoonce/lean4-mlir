@@ -54,7 +54,7 @@ fp32). Batch 256 (4×64) everywhere. Written 2026-06-02.
 | Net            | Params | ms/step | min/epoch | 80ep   | 90ep   | Status |
 |----------------|--------|---------|-----------|--------|--------|--------|
 | ViT-Tiny       | 5.7M   | 176     | ~7.6      | ~11 hr | —      | **DONE** |
-| EfficientNet-B0| 5.3M   | 102     | ~8.9      | ~12 hr | —      | validated |
+| EfficientNet-B0| 5.3M   | 102     | ~8.9      | ~12 hr | —      | **DONE** |
 | MobileNetV2    | 3.5M   | 106     | ~9.1      | —      | ~14 hr | **DONE** |
 | ResNet-34      | 21.8M  | 139     | ~11.9     | —      | ~18 hr | **DONE** |
 | ConvNeXt-T     | 28.6M  | 185     | ~15.9     | ~21 hr | —      | validated |
@@ -75,16 +75,37 @@ across the ViT row because of the batch difference.
 | ResNet-34   | 90     | bf16      | **72.02%**| **90.62%**| `/home/skoonce/r34_imagenet_bf16.bin` |
 | ViT-Tiny    | 80     | bf16      | **65.64%**| **87.06%**| `/home/skoonce/vit_tiny_imagenet_bf16.bin` |
 | MobileNetV2 | 90     | bf16      | **68.33%**| **88.17%**| `/home/skoonce/mnv2_imagenet_bf16.bin` |
+| EfficientNet-B0 | 80 | bf16      | **72.31%**| **90.31%**| `/home/skoonce/enet_b0_imagenet_bf16.bin` |
 
 (All full-50k canonical eval. Per-epoch curves + RESULTS.md in
-`jax/runs/{r34,vit_tiny,mnv2}_imagenet_bf16_*/`; R34/ViT also blueprint §6.4/§10.5.)
+`jax/runs/{r34,vit_tiny,mnv2,enet_b0}_imagenet_bf16_*/`; R34/ViT/MNv2 also blueprint §6.4/§10.5/§7.2.)
+
+**ENet-B0 is the sweep accuracy leader** — 72.31%, edging R34 (72.02%) at ~¼ the
+params (5.3M vs 21.8M). First full 6-GPU run (post-Gen3): 2 AER auto-resumes over
+~10.5 hr (epochs 25, 74) — Gen3 makes 6-GPU AER much rarer (vs Gen4's death in
+30 s) but NOT zero. Measured 4→6 GPU speedup ~1.17× (data-pipeline-bound).
 
 **PCIe Gen3 fix validated (2026-06-04).** The MNv2 run spanned the BIOS
 Gen4→Gen3 change: the Gen4 portion (ep 1–84) threw ~5 AER `BadTLP`
 auto-resumes; the Gen3 portion (ep 85–90, ~1 hr sustained load) threw **0**.
 Throughput cost ~108→~111 ms/step (**+~3%**, negligible — compute-bound, not
-interconnect-bound). ⇒ Gen3 trades ~3%/step for stability and unlocks 6-GPU
-(the ~1.5× win swamps it). Full confirmation pending a clean 6-GPU run.
+interconnect-bound). ⇒ Gen3 trades ~3%/step for stability and unlocks 6-GPU.
+
+**6-GPU confirmed clean post-Gen3 (2026-06-04, ENet-B0 run).** First all-6-GPU
+run since the fix: 0 AER past the threshold that killed every Gen4 6-GPU
+attempt in ~20–30 s. Gen3 fixes the 6-GPU case, not just 4.
+
+**…but the 4→6 GPU speedup is only ~1.17×, not the assumed 1.35×.** Measured
+on ENet-B0: 4-GPU 107 ms/step (2393 img/s) → 6-GPU 90 ms/step (2800 img/s).
+**Cause is NOT bandwidth** (gradient all-reduce is ~2 ms of a ~90 ms step, even
+on Gen3) — it's **input starvation**: GPUs sit at ~65% util, waiting on the
+tfds CPU-side decode+augment pipeline, which can't feed 6 cards. The light nets
+hit this wall first (ENet ~90 ms/step is very data-hungry); smaller per-GPU
+batch (64→42 at fixed 256) is a secondary factor. Prediction: **heavier nets
+(ConvNeXt) should scale better to 6-GPU** (more compute/step → less starved).
+Mitigations if wanted: more data-loader parallelism, caching, or larger
+per-GPU batch. Revise 300-epoch 6-GPU estimates to ~1.17–1.25× (net-dependent),
+not 1.35×.
 
 ## bf16 vs fp32 (measured, matched 4-GPU / same batch)
 
@@ -231,18 +252,21 @@ must not be exposed to host-reset risk. The two 80-epoch convnet runs stay in
 as the **anchor baseline** (short-tier apples-to-apples datapoint) AND the
 6-GPU+Gen3 stability shakedown before committing to the multi-day 300s.
 
-1. [ ] **MNv2-90** — in progress (4-GPU, ~68% top-1 expected). DONE when full-50k eval logged.
-2. [ ] **BIOS → PCIe Gen3** (post-MNv2; see reference_ares_pcie_aer for the WRX80E-SAGE menu path). Reboot.
-   - [ ] Calibrate: 6-GPU MNv2 ~400-step throughput bench → pin the real 4→6 multiplier (assumed 1.35×, ideal 1.5×). Also re-bench 4-GPU MNv2 vs 106 ms/step to confirm Gen3 ≈ no slowdown.
-   - [ ] Confirm a clean 6-GPU run holds (AER should vanish at Gen3).
-3. [ ] **ENet-B0 80ep** @ 6-GPU — anchor + shakedown (~9 hr est).
-4. [ ] **ConvNeXt-T 80ep** @ 6-GPU — anchor + shakedown (~15 hr est).
-5. [ ] **ViT-Tiny 300ep** @ 6-GPU (~28 hr est) — fastest of the 300s + riskiest recipe (LR-collapse history), so front-loaded.
-6. [ ] **ENet-B0 300ep** @ 6-GPU (~34 hr est) — full recipe (heavy aug on).
-7. [ ] **ConvNeXt-T 300ep** @ 6-GPU (~61 hr / ~2.5 days est) — heaviest; Gen3 stability is a prerequisite.
+1. [x] **MNv2-90** — DONE (4-GPU): 68.33% top-1 / 88.17% top-5 full-50k.
+2. [x] **BIOS → PCIe Gen3** — DONE. AER eliminated; ~3% step-time cost. 6-GPU confirmed clean.
+   - [x] 6-GPU multiplier measured (ENet): **~1.17×**, not 1.35× — input-pipeline-bound (see above).
+   - [x] Clean 6-GPU run holds (0 AER past the Gen4 failure threshold).
+3. [x] **ENet-B0 80ep** @ 6-GPU — DONE: 72.31% top-1 / 90.31% top-5. ~8min/epoch, 1.17x vs 4-GPU, 2 AER resumes.
+4. [ ] **ConvNeXt-T 80ep** @ 6-GPU — anchor + shakedown. Heavier → should scale better to 6-GPU than ENet did.
+5. [ ] **ViT-Tiny 300ep** @ 6-GPU — fastest of the 300s + riskiest recipe (LR-collapse history), front-loaded.
+6. [ ] **ENet-B0 300ep** @ 6-GPU — full recipe (heavy aug on).
+7. [ ] **ConvNeXt-T 300ep** @ 6-GPU — heaviest; Gen3 stability is a prerequisite.
 
-**6-GPU 300ep estimates (likely 1.35× from 4-GPU rates; soft until the calibration bench):**
-ViT ~28 hr, ENet ~34 hr, ConvNeXt ~61 hr. Optimistic (1.45×): 26 / 32 / 57 hr.
-Risk to watch on the 300s: data pipeline may become the bottleneck at 6-GPU for
-the lighter nets (ViT/ENet ~6 min/epoch are near input-bound), and heavy aug is
-CPU-side — could erode the 6-GPU speedup. Measure, don't assume.
+**6-GPU 300ep estimates — REVISED to measured ~1.17× (light nets) / up to ~1.25× (heavy):**
+soft until each net's own 6-GPU rate is measured. ViT ~31 hr, ENet ~37 hr (now
+~10.7 hr/80ep × 300/80), ConvNeXt ~50–55 hr (expected to scale better, less
+input-bound). **Confirmed risk:** at 6-GPU the tfds CPU data pipeline is the
+bottleneck for light nets — ENet sat at ~65% GPU util (input-starved), giving
+only 1.17× from +50% GPUs. Heavy aug (300ep recipes turn it on) is also CPU-side
+and will compound this. Mitigation before the 300s if speed matters: more
+data-loader workers / caching / larger per-GPU batch.

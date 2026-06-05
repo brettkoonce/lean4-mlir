@@ -1,0 +1,15 @@
+[sup] 2026-06-04 16:45:18 START 80-epoch ENet-B0 bf16 on GPUs 0,1,2,3,4,5 (6-GPU, post-Gen3)
+[sup] 16:45:18 attempt 1: fresh start (no checkpoint)
+[sup] 16:45:18 launched PID=11173
+[sup] 20:10:32 !!! AER detected — killing PID=11173
+[sup]   last: [Epoch 25] lr=0.083457 loss(train_avg)=2.554 val_top1=34079/49896 (0.683) val_top5=0.8816 val_loss=1.34  [484.8s train, -475.2s val]
+[sup] 20:10:34 attempt 1 ended (aer); cooling 15s then resuming
+[sup] 20:10:50 attempt 2: RESUME from epoch 25 (/home/skoonce/enet_b0_imagenet_bf16_e25.bin), start_step=127075
+[sup] 20:10:50 launched PID=28207
+[sup] 02:49:13 !!! AER detected — killing PID=28207
+[sup]   last: [Epoch 74] lr=0.001571 loss(train_avg)=2.0372 val_top1=36130/49896 (0.7241) val_top5=0.9034 val_loss=1.1877  [481.4s train, -472.1s val]
+[sup] 02:49:15 attempt 2 ended (aer); cooling 15s then resuming
+[sup] 02:49:31 attempt 3: RESUME from epoch 74 (/home/skoonce/enet_b0_imagenet_bf16_e74.bin), start_step=376142
+[sup] 02:49:31 launched PID=56635
+[sup]   last: [Epoch 80] lr=0.0 loss(train_avg)=2.0224 val_top1=36140/49896 (0.7243) val_top5=0.9033 val_loss=1.1898  [479.9s train, -470.5s val]
+[sup] 03:39:16 ✅ TRAINING COMPLETE (80 epochs). final=/home/skoonce/enet_b0_imagenet_bf16.bin
