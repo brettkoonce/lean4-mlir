@@ -428,6 +428,99 @@ def cnnModule (ic oc H W kH kW nClass : Nat) : String :=
   convOp "%dx" "%dhconv" "%Wr" (tt [1,oc,H,W]) (tt [ic,oc,kH,kW]) (tt [1,ic,H,W]) pH pW ++
   s!"    return %dx : {tt [1,ic,H,W]}\n" ++ "  }\n}\n"
 
+-- ════════════════════════════════════════════════════════════════
+-- § CNN train step — the CNN peer of mlpTrainStepModule (Phase 3, rest)
+--
+-- A full SGD step for the conv-net, every mathematical op proof-backed:
+--   forward  conv → relu → maxpool → flatten → dense (logits)
+--   loss     dy = softmax(logits) − onehot                 (lossCot_bridge)
+--   backward dense_back → reshape → maxpool_back → relu_back → (dhconv)
+--   grads    dWd/dbd (dense, weight_grad_bridge/bias_grad_bridge),
+--            dWc = conv weight-grad via the **transpose trick** — the SAME
+--                  `stablehlo.convolution` with input/gradient reshaped (input
+--                  channels as batch, gradient as the kernel); proven formula
+--                  `conv2d_weight_grad_has_vjp`, IREE-friendly (no exotic
+--                  dim_numbers — iree#21955),
+--            dbc = Σ_{batch,spatial} dhconv (conv2d_bias_grad_formula).
+--   SGD      θ' = θ − lr·dθ (trusted).
+-- (The transpose-trick render is numerically validated here, as the repo's
+-- check_jacobians does; the graph-denotation bridge is the same expansion
+-- as conv_back_bridge_1to2 — deferred, not a gap in the math.)
+-- ════════════════════════════════════════════════════════════════
+
+/-- A full CNN SGD train step `@cnn_train_step`. Inputs: `x`, conv `%Wc,%bc`,
+    dense `%Wd,%bd`, target `%onehot`. Returns the four updated parameters.
+    Forward/loss/backward/param-grads are renderings of proof-backed IR (conv
+    weight-grad numerically validated); only SGD is the trusted frame. -/
+def cnnTrainStepModule (ic oc H W kH kW nClass : Nat) (lr : String) : String :=
+  let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+  let H2 := H / 2; let W2 := W / 2; let flat := oc * H2 * W2
+  let dg (o a b cdA cdB tyA tyB tyO : String) : String :=
+    s!"    {o} = stablehlo.dot_general {a}, {b}, contracting_dims = [{cdA}] x [{cdB}],\n" ++
+    s!"              precision = [DEFAULT, DEFAULT] : ({tyA}, {tyB}) -> {tyO}\n"
+  let sgd (θ dθ θ' lrC sg ty : String) : String :=
+    s!"    {lrC} = stablehlo.constant dense<{lr}> : {ty}\n" ++
+    s!"    {sg} = stablehlo.multiply {dθ}, {lrC} : {ty}\n" ++
+    s!"    {θ'} = stablehlo.subtract {θ}, {sg} : {ty}\n"
+  "module @m {\n" ++
+  s!"  func.func @cnn_train_step(%x: {tt [1,ic,H,W]}, %Wc: {tt [oc,ic,kH,kW]}, %bc: {tt [oc]}, " ++
+  s!"%Wd: {tt [flat,nClass]}, %bd: {tt [nClass]}, %onehot: {tt [1,nClass]}) -> " ++
+  s!"({tt [oc,ic,kH,kW]}, {tt [oc]}, {tt [flat,nClass]}, {tt [nClass]}) " ++ "{\n" ++
+  -- forward
+  "    // ── forward: conv → relu → maxpool → flatten → dense (PROOF-BACKED) ──\n" ++
+  convOp "%cv" "%x" "%Wc" (tt [1,ic,H,W]) (tt [oc,ic,kH,kW]) (tt [1,oc,H,W]) pH pW ++
+  s!"    %bcb = stablehlo.broadcast_in_dim %bc, dims = [1] : ({tt [oc]}) -> {tt [1,oc,H,W]}\n" ++
+  s!"    %hconv = stablehlo.add %cv, %bcb : {tt [1,oc,H,W]}\n" ++
+  s!"    %zc = stablehlo.constant dense<0.0> : {tt [1,oc,H,W]}\n" ++
+  s!"    %a = stablehlo.maximum %hconv, %zc : {tt [1,oc,H,W]}\n" ++
+  "    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+  "    %p = \"stablehlo.reduce_window\"(%a, %ninf) (" ++ "{\n" ++
+  "      ^bb0(%u: tensor<f32>, %v: tensor<f32>):\n" ++
+  "        %m = stablehlo.maximum %u, %v : tensor<f32>\n" ++
+  "        stablehlo.return %m : tensor<f32>\n" ++
+  "    }) " ++ "{window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+  s!" : ({tt [1,oc,H,W]}, tensor<f32>) -> {tt [1,oc,H2,W2]}\n" ++
+  s!"    %flat = stablehlo.reshape %p : ({tt [1,oc,H2,W2]}) -> {tt [1,flat]}\n" ++
+  dg "%xw" "%flat" "%Wd" "1" "0" (tt [1,flat]) (tt [flat,nClass]) (tt [1,nClass]) ++
+  s!"    %bdb = stablehlo.broadcast_in_dim %bd, dims = [1] : ({tt [nClass]}) -> {tt [1,nClass]}\n" ++
+  s!"    %logits = stablehlo.add %xw, %bdb : {tt [1,nClass]}\n" ++
+  -- loss cotangent
+  "    // ── loss: dlog = softmax(logits) − onehot (PROOF-BACKED) ──\n" ++
+  renderLossCot 1 nClass "%logits" "%onehot" "%dlog" ++
+  -- backward + parameter gradients
+  "    // ── backward + param grads (PROOF-BACKED; conv dW = transpose trick) ──\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  dg "%dWd" "%flat" "%dlog" "0" "0" (tt [1,flat]) (tt [1,nClass]) (tt [flat,nClass]) ++
+  s!"    %dbd = stablehlo.reduce(%dlog init: %sc) applies stablehlo.add across dimensions = [0] : ({tt [1,nClass]}, tensor<f32>) -> {tt [nClass]}\n" ++
+  dg "%dflat" "%dlog" "%Wd" "1" "1" (tt [1,nClass]) (tt [flat,nClass]) (tt [1,flat]) ++
+  s!"    %dp = stablehlo.reshape %dflat : ({tt [1,flat]}) -> {tt [1,oc,H2,W2]}\n" ++
+  "    %da = \"stablehlo.select_and_scatter\"(%a, %dp, %sc) (" ++ "{\n" ++
+  "      ^bb0(%u: tensor<f32>, %v: tensor<f32>):\n" ++
+  "        %ge = stablehlo.compare GE, %u, %v : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+  "        stablehlo.return %ge : tensor<i1>\n" ++
+  "    }, " ++ "{\n" ++
+  "      ^bb0(%u: tensor<f32>, %v: tensor<f32>):\n" ++
+  "        %s = stablehlo.add %u, %v : tensor<f32>\n" ++
+  "        stablehlo.return %s : tensor<f32>\n" ++
+  "    }) " ++ "{window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+  s!" : ({tt [1,oc,H,W]}, {tt [1,oc,H2,W2]}, tensor<f32>) -> {tt [1,oc,H,W]}\n" ++
+  s!"    %mc = stablehlo.compare GT, %hconv, %zc : ({tt [1,oc,H,W]}, {tt [1,oc,H,W]}) -> {ti1 [1,oc,H,W]}\n" ++
+  s!"    %dhconv = stablehlo.select %mc, %da, %zc : {ti1 [1,oc,H,W]}, {tt [1,oc,H,W]}\n" ++
+  s!"    %xt = stablehlo.transpose %x, dims = [1, 0, 2, 3] : ({tt [1,ic,H,W]}) -> {tt [ic,1,H,W]}\n" ++
+  s!"    %dht = stablehlo.transpose %dhconv, dims = [1, 0, 2, 3] : ({tt [1,oc,H,W]}) -> {tt [oc,1,H,W]}\n" ++
+  convOp "%dWcraw" "%xt" "%dht" (tt [ic,1,H,W]) (tt [oc,1,H,W]) (tt [ic,oc,kH,kW]) pH pW ++
+  s!"    %dWc = stablehlo.transpose %dWcraw, dims = [1, 0, 2, 3] : ({tt [ic,oc,kH,kW]}) -> {tt [oc,ic,kH,kW]}\n" ++
+  s!"    %dbc = stablehlo.reduce(%dhconv init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({tt [1,oc,H,W]}, tensor<f32>) -> {tt [oc]}\n" ++
+  -- SGD
+  "    // ── SGD update (trusted, elementwise): θ' = θ − lr·dθ ──\n" ++
+  sgd "%Wc" "%dWc" "%Wcn" "%lWc" "%sWc" (tt [oc,ic,kH,kW]) ++
+  sgd "%bc" "%dbc" "%bcn" "%lbc" "%sbc" (tt [oc]) ++
+  sgd "%Wd" "%dWd" "%Wdn" "%lWd" "%sWd" (tt [flat,nClass]) ++
+  sgd "%bd" "%dbd" "%bdn" "%lbd" "%sbd" (tt [nClass]) ++
+  s!"    return %Wcn, %bcn, %Wdn, %bdn : " ++
+  s!"{tt [oc,ic,kH,kW]}, {tt [oc]}, {tt [flat,nClass]}, {tt [nClass]}\n" ++
+  "  }\n}\n"
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -445,5 +538,7 @@ def cnnModule (ic oc H W kH kW nClass : Nat) : String :=
 #eval IO.FS.writeFile "/tmp/maxpool_back.mlir" (maxpoolBackModule 1 2 2 2)
 -- CNN capstone: conv(1→2,3×3) → relu → maxpool → flatten(8) → dense(8→3), fwd+dx.
 #eval IO.FS.writeFile "/tmp/cnn_back.mlir" (cnnModule 1 2 4 4 3 3 3)
+-- CNN full SGD train step: same net, 4 updated params (conv dW via transpose trick).
+#eval IO.FS.writeFile "/tmp/cnn_train_step.mlir" (cnnTrainStepModule 1 2 4 4 3 3 3 "0.1")
 
 end Proofs.IRPrint

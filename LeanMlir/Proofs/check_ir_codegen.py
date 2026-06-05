@@ -24,6 +24,8 @@ with IREE, runs it, and checks it against an independent numpy reference:
   • cnn_back                  — CNN capstone: conv→relu→maxpool→flatten→dense
                                forward + the full input-gradient backward chain,
                                every op a rendered proof-backed bridge.
+  • cnn_train_step            — full CNN SGD step: 4 updated params; conv weight
+                               gradient via the transpose trick (same conv op).
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -128,6 +130,34 @@ def maxpool_back_ref(x, dy):
                     di, dj = np.unravel_index(int(np.argmax(win)), (2, 2))
                     dx[b, c, 2*i+di, 2*j+dj] = dy[b, c, i, j]
     return dx
+
+def conv_weight_grad_ref(x, dy, wshape):
+    """Conv weight VJP dW[o,c,kh,kw] = Σ_{h,w} x[c,h+kh-p,w+kw-p]·dy[o,h,w] (the
+    transpose-trick formula, computed directly — independent of the rendered op)."""
+    OC, IC, kH, kW = wshape; pH, pW = (kH-1)//2, (kW-1)//2; H, W = x.shape[2], x.shape[3]
+    dW = np.zeros(wshape, np.float32)
+    for o in range(OC):
+        for c in range(IC):
+            for kh in range(kH):
+                for kw in range(kW):
+                    for h in range(H):
+                        for w in range(W):
+                            r, s = h + kh - pH, w + kw - pW
+                            if 0 <= r < H and 0 <= s < W:
+                                dW[o, c, kh, kw] += x[0, c, r, s] * dy[0, o, h, w]
+    return dW
+
+def cnn_sgd_ref(x, Wc, bc, Wd, bd, onehot, lr, ic, H, W):
+    """Full CNN SGD step: forward → loss → backward → 4 param grads → SGD."""
+    hconv = conv2d_ref(x, Wc, bc); a = np.maximum(hconv, 0.0)
+    p = maxpool_fwd_ref(a); oc = Wc.shape[0]
+    flat = p.reshape(1, -1)
+    dlog = softmax_np(flat @ Wd + bd) - onehot
+    dWd = flat.T @ dlog; dbd = dlog.sum(0)
+    dp = (dlog @ Wd.T).reshape(p.shape)
+    da = maxpool_back_ref(a, dp); dhconv = (hconv > 0) * da
+    dWc = conv_weight_grad_ref(x, dhconv, Wc.shape); dbc = dhconv.sum(axis=(0, 2, 3))
+    return [Wc - lr*dWc, bc - lr*dbc, Wd - lr*dWd, bd - lr*dbd]
 
 def cnn_back_ref(x, Wc, bc, Wd, dy, ic, H, W):
     """CNN input-gradient: conv → relu → maxpool → flatten → dense, then the
@@ -244,6 +274,17 @@ e = max_err(outs, [cnn_ref]); ok &= e < TOL
 print(f"cnn_back        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  "
       f"(conv→relu→maxpool→flatten→dense backward, every op proof-backed)")
 
+# ── CNN full SGD train step: 4 updated params (conv dW via transpose trick) ──
+nbd = rng.standard_normal((ncls,)).astype(np.float32)
+nlabels = rng.integers(0, ncls, size=1)
+nonehot = np.eye(ncls, dtype=np.float32)[nlabels]
+cts_args = [nx, nWc, nbc, nWd, nbd, nonehot]
+cts_ref = cnn_sgd_ref(nx, nWc, nbc, nWd, nbd, nonehot, LR, nic, nH, nW)
+outs, nb = compile_run("/tmp/cnn_train_step.mlir", "cnn_train_step", cts_args)
+e = max_err(outs, cts_ref); ok &= e < TOL
+print(f"cnn_train_step  ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  "
+      f"(4 updated params vs numpy; conv dW = transpose trick)")
+
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
 # ════════════════════════════════════════════════════════════════
@@ -285,6 +326,10 @@ try:
                               backend="rocm", config="hip", extra=extra)
         eg = max_err(outs, [cnn_ref]); ok &= eg < TOL
         print(f"cnn_back        (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
+        outs, _ = compile_run("/tmp/cnn_train_step.mlir", "cnn_train_step", cts_args,
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, cts_ref); ok &= eg < TOL
+        print(f"cnn_train_step  (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:
