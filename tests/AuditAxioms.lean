@@ -164,3 +164,6 @@ open Proofs
 #print axioms IR.maxpool3_node_bridge
 #print axioms IR.conv3_node_bridge_1to2
 #print axioms IR.conv_compose3
+-- Flatten bridge: flattened Back3 graph denotes the proven flattened-layer Vec backward.
+#print axioms IR.maxpool_flatten_bridge
+#print axioms IR.conv_flatten_bridge_1to2

@@ -253,11 +253,12 @@ remaining steps to `⟦emit mnistCnnNoBn⟧ = mnistCnnNoBn_has_vjp_at.backward`:
    (the Tensor3 chain rule). The conv/maxpool nodes are bridged to the
    proven backwards (`conv3_node_bridge_1to2`, `maxpool3_node_bridge`), and
    `conv_compose3` composes two convs via the chain rule.
-2. **flatten bridge — `Back3` ↔ `Back`.** `mnistCnnNoBn` runs in flattened
-   Vec space (`flatConv`, `maxPoolFlat`), so the last connective step is a
-   node/lemma sending a `Back3` graph to its `Back` form across the
-   `Tensor3.flatten` bijection (cf. `hasVJP3_to_hasVJP`) — so the Tensor3
-   conv/maxpool and the Vec dense/relu compose in one graph.
+2. ✅ **flatten bridge — landed.** `Back3.flatDenote` views a `Back3` graph
+   in flattened Vec space (`flatten ∘ denote ∘ unflatten`), and
+   `maxpool_flatten_bridge` / `conv_flatten_bridge_1to2` show it denotes the
+   proven *flattened* layer backward (`maxPoolFlat_has_vjp_at`,
+   `hasVJP3_to_hasVJP (conv2d_has_vjp3 …)`) — the exact Vec backwards
+   `mnistCnnNoBn` composes. So the Tensor3 conv/maxpool now speak Vec.
 3. **`HasVJPAt` smooth-point variants.** Per-op bridges target the global
    `HasVJP`; `mnistCnnNoBn_has_vjp_at` composes via `vjp_comp_at`, so the
    chained bridge needs `_at` versions (the kink bridges are already

@@ -513,5 +513,45 @@ theorem conv_compose3 {ic mc oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
       = convBackDenote W₁ (convBackDenote W₂ dz) := by
   rw [denote_subst3]; simp only [Back3.denote]
 
+-- ════════════════════════════════════════════════════════════════
+-- § Flatten bridge — `Back3` (Tensor3) into flattened Vec space
+--
+-- `mnistCnnNoBn` runs in flattened Vec space (`flatConv`, `maxPoolFlat`),
+-- so the connective step is to view a `Back3` graph through the
+-- `Tensor3.flatten` bijection and show it denotes the proven *flattened*
+-- layer backward (`hasVJP3_to_hasVJP` / `maxPoolFlat_has_vjp_at`). With
+-- this, the Tensor3 conv/maxpool and the Vec dense/relu speak the same
+-- (Vec) language and can be chained.
+-- ════════════════════════════════════════════════════════════════
+
+/-- View a `Back3` graph in flattened Vec space: `flatten ∘ denote ∘ unflatten`. -/
+noncomputable def Back3.flatDenote {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    (e : Back3 c₁ h₁ w₁ c₂ h₂ w₂) (dy : Vec (c₁ * h₁ * w₁)) : Vec (c₂ * h₂ * w₂) :=
+  Tensor3.flatten (e.denote (Tensor3.unflatten dy))
+
+/-- **Flatten bridge, max-pool.** The flattened `Back3` maxpool graph
+    denotes the proven flattened maxpool layer backward
+    `maxPoolFlat_has_vjp_at` (the form `mnistCnnNoBn` composes). -/
+theorem maxpool_flatten_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
+    (h_smooth : MaxPool2Smooth x) (dy : Vec (c * h * w)) :
+    (Back3.maxpool x Back3.cot).flatDenote dy
+      = (maxPoolFlat_has_vjp_at x h_smooth).backward dy := by
+  funext idx
+  simp only [Back3.flatDenote, Back3.denote, maxPoolFlat_has_vjp_at,
+             hasVJPAt3_to_hasVJPAt, maxPoolBackDenote, maxPool2_has_vjp_at3,
+             Tensor3.flatten]
+
+/-- **Flatten bridge, conv (Spatial `1→2` shape).** The flattened `Back3`
+    conv graph denotes the proven flattened conv layer backward
+    `hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)` — chains `conv_back_bridge_1to2`
+    (the reversed-kernel identity) with the `Tensor3.flatten` decode. -/
+theorem conv_flatten_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
+    (v : Vec (1 * (2*2) * (2*2))) (dy : Vec (2 * (2*2) * (2*2))) :
+    (Back3.conv W Back3.cot).flatDenote dy
+      = (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward v dy := by
+  funext idx
+  simp only [Back3.flatDenote, Back3.denote, hasVJP3_to_hasVJP, Tensor3.flatten]
+  rw [conv_back_bridge_1to2 W b (Tensor3.unflatten v) (Tensor3.unflatten dy)]
+
 end IR
 end Proofs
