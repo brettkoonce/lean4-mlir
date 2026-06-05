@@ -159,3 +159,8 @@ open Proofs
 #print axioms IR.denote_subst
 #print axioms IR.twoDense_back_bridge
 #print axioms IR.se_back_bridge
+-- Tensor3 IR: conv/maxpool lifted into a composable backward graph + chain rule.
+#print axioms IR.denote_subst3
+#print axioms IR.maxpool3_node_bridge
+#print axioms IR.conv3_node_bridge_1to2
+#print axioms IR.conv_compose3

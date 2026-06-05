@@ -437,5 +437,81 @@ theorem se_back_bridge {n : Nat} (gate : Vec n → Vec n)
         funext (fun j => mul_comm _ _)]
   ring
 
+-- ════════════════════════════════════════════════════════════════
+-- § Tensor3 IR — lifting conv/maxpool into a composable backward graph
+--
+-- conv2d and maxPool2 are Tensor3 → Tensor3, so they don't fit the Vec
+-- `Back`. `Back3` is the Tensor3 analogue: a backward graph rooted at the
+-- (Tensor3) cotangent, with `conv` (transposed-conv backward) and
+-- `maxpool` (route-to-argmax) nodes whose denotations are the already-proven
+-- `convBackDenote`/`maxPoolBackDenote`. `denote_subst3` is the Tensor3
+-- chain rule, so conv/maxpool now compose — the Tensor3 half of what
+-- `Back`/`denote_subst` give the Vec layers.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Tensor3-level backward graph: indexed by the top cotangent shape
+    `(c₁ h₁ w₁)` and the current shape `(c₂ h₂ w₂)` (walking toward the
+    input gradient). -/
+inductive Back3 (c₁ h₁ w₁ : Nat) : Nat → Nat → Nat → Type where
+  | cot : Back3 c₁ h₁ w₁ c₁ h₁ w₁
+  | conv {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) :
+      Back3 c₁ h₁ w₁ oc h w → Back3 c₁ h₁ w₁ ic h w
+  | maxpool {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
+      Back3 c₁ h₁ w₁ c h w → Back3 c₁ h₁ w₁ c (2*h) (2*w)
+
+/-- Denote a `Back3` graph as a `Tensor3 → Tensor3` function, via the
+    per-op Tensor3 backward denotations. -/
+noncomputable def Back3.denote {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    (e : Back3 c₁ h₁ w₁ c₂ h₂ w₂) (dy : Tensor3 c₁ h₁ w₁) : Tensor3 c₂ h₂ w₂ :=
+  match e with
+  | .cot          => dy
+  | .conv W e'    => convBackDenote W (e'.denote dy)
+  | .maxpool x e' => maxPoolBackDenote x (e'.denote dy)
+
+/-- Plug `g` into the cotangent leaf of `e` (Tensor3 composition). -/
+def Back3.subst {c₁ h₁ w₁ c₀ h₀ w₀ c₂ h₂ w₂ : Nat}
+    (e : Back3 c₁ h₁ w₁ c₂ h₂ w₂) (g : Back3 c₀ h₀ w₀ c₁ h₁ w₁) :
+    Back3 c₀ h₀ w₀ c₂ h₂ w₂ :=
+  match e with
+  | .cot          => g
+  | .conv W e'    => .conv W (e'.subst g)
+  | .maxpool x e' => .maxpool x (e'.subst g)
+
+/-- **Tensor3 chain rule** — the `Back3` analogue of `denote_subst`. -/
+theorem denote_subst3 {c₁ h₁ w₁ c₀ h₀ w₀ c₂ h₂ w₂ : Nat}
+    (e : Back3 c₁ h₁ w₁ c₂ h₂ w₂) (g : Back3 c₀ h₀ w₀ c₁ h₁ w₁)
+    (dz : Tensor3 c₀ h₀ w₀) : (e.subst g).denote dz = e.denote (g.denote dz) := by
+  induction e with
+  | cot => rfl
+  | conv W e' ih => simp only [Back3.subst, Back3.denote, ih]
+  | maxpool x e' ih => simp only [Back3.subst, Back3.denote, ih]
+
+/-- The `Back3` maxpool node denotes the proven pointwise maxpool backward
+    `maxPool2_has_vjp_at3` — `maxPoolBackDenote` *is* that backward. -/
+theorem maxpool3_node_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
+    (h_smooth : MaxPool2Smooth x) (dy : Tensor3 c h w) :
+    (Back3.maxpool x Back3.cot).denote dy = (maxPool2_has_vjp_at3 x h_smooth).backward dy := by
+  funext ci hi wi
+  simp only [Back3.denote, maxPoolBackDenote, maxPool2_has_vjp_at3]
+
+/-- The `Back3` conv node denotes the proven conv backward, at the Spatial
+    instance's `1→2` conv shape (via `conv_back_bridge_1to2`). -/
+theorem conv3_node_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
+    (x : Tensor3 1 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
+    (Back3.conv W Back3.cot).denote dy = (conv2d_has_vjp3 W b).backward x dy := by
+  simp only [Back3.denote]
+  exact conv_back_bridge_1to2 W b x dy
+
+/-- **Tensor3 composition demonstrator.** The `Back3` `subst` of two conv
+    layers' backward graphs denotes the composition of their Tensor3
+    backwards, via the Tensor3 chain rule `denote_subst3` — the conv/maxpool
+    analogue of `twoDense_back_bridge`. -/
+theorem conv_compose3 {ic mc oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 mc ic kH₁ kW₁) (W₂ : Kernel4 oc mc kH₂ kW₂) (dz : Tensor3 oc h w) :
+    ((Back3.conv (h := h) (w := w) W₁ Back3.cot).subst
+        (Back3.conv (h := h) (w := w) W₂ Back3.cot)).denote dz
+      = convBackDenote W₁ (convBackDenote W₂ dz) := by
+  rw [denote_subst3]; simp only [Back3.denote]
+
 end IR
 end Proofs

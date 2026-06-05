@@ -245,18 +245,24 @@ All per-op backward bridges + the composition are done and audited in
 
 ## Remaining gap to the full `mnistCnnNoBn` whole-network bridge
 
-The per-op + composition machinery is complete; three well-scoped
-extensions stand between here and `⟦emit mnistCnnNoBn⟧ = mnistCnnNoBn_has_vjp_at.backward`:
+The per-op + composition machinery is complete (Vec **and** Tensor3); the
+remaining steps to `⟦emit mnistCnnNoBn⟧ = mnistCnnNoBn_has_vjp_at.backward`:
 
-1. **Tensor3 IR.** conv/maxpool bridges are Tensor3-level (`convBackDenote`,
-   `maxPoolBackDenote`), separate from the Vec `Back`; composing the whole
-   CNN into one graph needs `Back`/`subst`/`denote_subst` lifted to Tensor3
-   (or everything flattened to Vec).
-2. **`HasVJPAt` smooth-point variants.** Per-op bridges target the global
+1. ✅ **Tensor3 IR — landed.** `Back3` is the Tensor3 analogue of `Back`
+   (`cot`/`conv`/`maxpool`), with `denote3`, `subst3`, and `denote_subst3`
+   (the Tensor3 chain rule). The conv/maxpool nodes are bridged to the
+   proven backwards (`conv3_node_bridge_1to2`, `maxpool3_node_bridge`), and
+   `conv_compose3` composes two convs via the chain rule.
+2. **flatten bridge — `Back3` ↔ `Back`.** `mnistCnnNoBn` runs in flattened
+   Vec space (`flatConv`, `maxPoolFlat`), so the last connective step is a
+   node/lemma sending a `Back3` graph to its `Back` form across the
+   `Tensor3.flatten` bijection (cf. `hasVJP3_to_hasVJP`) — so the Tensor3
+   conv/maxpool and the Vec dense/relu compose in one graph.
+3. **`HasVJPAt` smooth-point variants.** Per-op bridges target the global
    `HasVJP`; `mnistCnnNoBn_has_vjp_at` composes via `vjp_comp_at`, so the
    chained bridge needs `_at` versions (the kink bridges are already
    smooth-point-conditional, so this is mostly mechanical).
-3. **General-shape conv identity.** The remaining ~100–150-line
+4. **General-shape conv identity.** The remaining ~100–150-line
    partial-bijection sum-reindex (all dims, odd kernels) — the one genuine
    hard lemma; concrete shapes are done.
 
