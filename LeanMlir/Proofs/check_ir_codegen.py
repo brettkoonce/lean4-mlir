@@ -297,6 +297,31 @@ def vit_block_back_ref(x, Wq, Wk, Wv, Wo, bq, bk, bv, bo, g1, b1, g2, b2, Wfc1, 
     da = dQ @ Wq.T + dK @ Wk.T + dV @ Wv.T
     return dx1 + bn_back_ref(x, g1, da, eps)                        # attn residual fan-in
 
+def _convsame(x, W):  # SAME stride-1 conv, no bias (BN absorbs it)
+    return conv2d_ref(x, W, np.zeros(W.shape[0], np.float32))
+
+def res_block_fwd_ref(x, W1, W2, g1, b1, g2, b2, eps):
+    """ResNet basic block: relu(BN2(conv2(relu(BN1(conv1(x))))) + x). BN = flat LN."""
+    C, H, W = x.shape[1:]; M = C*H*W
+    c1 = _convsame(x, W1); n1 = bn_fwd_ref(c1.reshape(1, M), g1, b1, eps).reshape(1, C, H, W)
+    r1 = np.maximum(n1, 0.0)
+    c2 = _convsame(r1, W2); n2 = bn_fwd_ref(c2.reshape(1, M), g2, b2, eps).reshape(1, C, H, W)
+    return np.maximum(n2 + x, 0.0)
+
+def res_block_back_ref(x, W1, W2, g1, b1, g2, b2, eps, dOut):
+    """dx = F.back(dadd) + dadd, dadd = dOut ⊙ relu'(F(x)+x)."""
+    C, H, W = x.shape[1:]; M = C*H*W
+    c1 = _convsame(x, W1); n1 = bn_fwd_ref(c1.reshape(1, M), g1, b1, eps).reshape(1, C, H, W)
+    r1 = np.maximum(n1, 0.0)
+    c2 = _convsame(r1, W2); n2 = bn_fwd_ref(c2.reshape(1, M), g2, b2, eps).reshape(1, C, H, W)
+    dadd = dOut * (n2 + x > 0)
+    dc2 = bn_back_ref(c2.reshape(1, M), g2, dadd.reshape(1, M), eps).reshape(1, C, H, W)
+    dr1 = conv_input_vjp_ref(W2, dc2, C, H, W)
+    dn1 = dr1 * (n1 > 0)
+    dc1 = bn_back_ref(c1.reshape(1, M), g1, dn1.reshape(1, M), eps).reshape(1, C, H, W)
+    dF = conv_input_vjp_ref(W1, dc1, C, H, W)
+    return dF + dadd
+
 def residual_fwd_ref(x, W, b): return x + (x @ W + b)
 def residual_back_ref(dy, W): return dy + dy @ W.T            # add fan-in: I + dense
 def se_fwd_ref(x): return x * _sig(x)
@@ -516,6 +541,22 @@ print(f"vit_fwd         ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'
 outs, nb = compile_run("/tmp/vit_back.mlir", "vit_back", blkargs + [vdO])
 e = max_err(outs, [vit_block_back_ref(*blkrefargs, vdO)]); ok &= e < TOL
 print(f"vit_back        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (full block dx: gelu MLP-back + attn-back)")
+
+# ── ResNet basic residual block (conv-BN-relu-conv-BN + skip + relu): fwd + dx ──
+rC, rH, rW = 2, 4, 4
+rx = rng.standard_normal((1, rC, rH, rW)).astype(np.float32)
+rW1 = rng.standard_normal((rC, rC, 3, 3)).astype(np.float32)
+rW2 = rng.standard_normal((rC, rC, 3, 3)).astype(np.float32)
+rg1 = np.array(rng.standard_normal(), np.float32); rrb1 = np.array(rng.standard_normal(), np.float32)
+rg2 = np.array(rng.standard_normal(), np.float32); rrb2 = np.array(rng.standard_normal(), np.float32)
+rdO = rng.standard_normal((1, rC, rH, rW)).astype(np.float32)
+rbargs = [rx, rW1, rW2, rg1, rrb1, rg2, rrb2]
+outs, nb = compile_run("/tmp/res_fwd.mlir", "res_fwd", rbargs)
+e = max_err(outs, [res_block_fwd_ref(rx, rW1, rW2, rg1, rrb1, rg2, rrb2, EPS)]); ok &= e < TOL
+print(f"res_fwd         ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (relu(BN-conv-relu-BN-conv + skip))")
+outs, nb = compile_run("/tmp/res_back.mlir", "res_back", rbargs + [rdO])
+e = max_err(outs, [res_block_back_ref(rx, rW1, rW2, rg1, rrb1, rg2, rrb2, EPS, rdO)]); ok &= e < TOL
+print(f"res_back        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (dx = F.back(dadd) + dadd, residual fan-in)")
 
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 

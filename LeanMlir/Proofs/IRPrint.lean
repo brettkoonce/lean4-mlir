@@ -1068,6 +1068,87 @@ def vitBlockBackModule (N D F : Nat) (eps scale : String) : String :=
      renderLNBack "%dxa" "%a" "%g1" "%da" N D ++
      s!"    %dx = stablehlo.add %dx1, %dxa : {tt [N,D]}\n    return %dx : {tt [N,D]}\n")
 
+-- ════════════════════════════════════════════════════════════════
+-- § ResNet — the whole-network test case (Phase 3, deep assembly)
+--
+-- The repo's proven ResNet-style net (\texttt{cnn\_has\_vjp\_at}) is
+--   dense ∘ globalAvgPool ∘ rblkP ∘ rblk ∘ maxPool ∘ cbr(stem),
+-- where its "BN" is `bnForward` over the *flattened* feature vector --- i.e.
+-- the per-token LN renderer (renderLN), reused at n = C·H·W. The basic block
+-- is  out = relu( BN₂(conv₂(relu(BN₁(conv₁(x))))) + skip(x) )  (residual_has_vjp).
+-- Convs have no bias (BN absorbs it — standard ResNet). We keep tensors NCHW
+-- and reshape to [1,C·H·W] only across each BN. (Input gradient dx; the
+-- generator below stacks these blocks into a full ResNet tower.)
+-- ════════════════════════════════════════════════════════════════
+
+/-- One conv→BN→relu→conv→BN forward residual function `F`, into `{p}out`
+    (plus `{p}c1/{p}n1f/{p}c2/{p}n2` saved for the backward). NCHW;
+    `%sc,%nf,%eps,%zc` in scope; reshapes across BN to `[1,M]`, `M=C·H·W`. -/
+def renderResF (p x W1 W2 g1 b1 g2 b2 : String) (C H W kH kW : Nat) : String :=
+  let pH := (kH-1)/2; let pW := (kW-1)/2; let M := C*H*W
+  convOp s!"{p}c1" x W1 (tt [1,C,H,W]) (tt [C,C,kH,kW]) (tt [1,C,H,W]) pH pW ++
+  s!"    {p}c1f = stablehlo.reshape {p}c1 : ({tt [1,C,H,W]}) -> {tt [1,M]}\n" ++
+  renderLN s!"{p}n1f" s!"{p}c1f" g1 b1 1 M ++
+  s!"    {p}n1 = stablehlo.reshape {p}n1f : ({tt [1,M]}) -> {tt [1,C,H,W]}\n" ++
+  s!"    {p}r1 = stablehlo.maximum {p}n1, %zc : {tt [1,C,H,W]}\n" ++
+  convOp s!"{p}c2" s!"{p}r1" W2 (tt [1,C,H,W]) (tt [C,C,kH,kW]) (tt [1,C,H,W]) pH pW ++
+  s!"    {p}c2f = stablehlo.reshape {p}c2 : ({tt [1,C,H,W]}) -> {tt [1,M]}\n" ++
+  renderLN s!"{p}n2f" s!"{p}c2f" g2 b2 1 M ++
+  s!"    {p}out = stablehlo.reshape {p}n2f : ({tt [1,M]}) -> {tt [1,C,H,W]}\n"
+
+/-- Backward of `renderResF` from cotangent `{p}dn2` ([1,C,H,W]) to `{p}dF`
+    (the dx contribution of `F`), reusing the saved forward `{p}…`. -/
+def renderResFBack (p W1 W2 g1 g2 dn2 : String) (C H W kH kW : Nat) : String :=
+  let pH := (kH-1)/2; let pW := (kW-1)/2; let M := C*H*W
+  s!"    {p}dn2f = stablehlo.reshape {dn2} : ({tt [1,C,H,W]}) -> {tt [1,M]}\n" ++
+  renderLNBack s!"{p}dc2f" s!"{p}n2f" g2 s!"{p}dn2f" 1 M ++
+  s!"    {p}dc2 = stablehlo.reshape {p}dc2f : ({tt [1,M]}) -> {tt [1,C,H,W]}\n" ++
+  s!"    {p}W2t = stablehlo.transpose {W2}, dims = [1, 0, 2, 3] : ({tt [C,C,kH,kW]}) -> {tt [C,C,kH,kW]}\n" ++
+  s!"    {p}W2r = stablehlo.reverse {p}W2t, dims = [2, 3] : {tt [C,C,kH,kW]}\n" ++
+  convOp s!"{p}dr1" s!"{p}dc2" s!"{p}W2r" (tt [1,C,H,W]) (tt [C,C,kH,kW]) (tt [1,C,H,W]) pH pW ++
+  s!"    {p}mn1 = stablehlo.compare GT, {p}n1, %zc : ({tt [1,C,H,W]}, {tt [1,C,H,W]}) -> {ti1 [1,C,H,W]}\n" ++
+  s!"    {p}dn1 = stablehlo.select {p}mn1, {p}dr1, %zc : {ti1 [1,C,H,W]}, {tt [1,C,H,W]}\n" ++
+  s!"    {p}dn1f = stablehlo.reshape {p}dn1 : ({tt [1,C,H,W]}) -> {tt [1,M]}\n" ++
+  renderLNBack s!"{p}dc1f" s!"{p}n1f" g1 s!"{p}dn1f" 1 M ++
+  s!"    {p}dc1 = stablehlo.reshape {p}dc1f : ({tt [1,M]}) -> {tt [1,C,H,W]}\n" ++
+  s!"    {p}W1t = stablehlo.transpose {W1}, dims = [1, 0, 2, 3] : ({tt [C,C,kH,kW]}) -> {tt [C,C,kH,kW]}\n" ++
+  s!"    {p}W1r = stablehlo.reverse {p}W1t, dims = [2, 3] : {tt [C,C,kH,kW]}\n" ++
+  convOp s!"{p}dF" s!"{p}dc1" s!"{p}W1r" (tt [1,C,H,W]) (tt [C,C,kH,kW]) (tt [1,C,H,W]) pH pW
+
+/-- Identity residual block forward `relu(F(x) + x)` as `@res_fwd`. -/
+def resBlockFwdModule (C H W kH kW : Nat) (eps : String) : String :=
+  let M := C*H*W
+  actMod "res_fwd"
+    (s!"%x: {tt [1,C,H,W]}, %W1: {tt [C,C,kH,kW]}, %W2: {tt [C,C,kH,kW]}, " ++
+     s!"%g1: tensor<f32>, %b1: tensor<f32>, %g2: tensor<f32>, %b2: tensor<f32>")
+    (tt [1,C,H,W])
+    ("    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+     s!"    %nf = stablehlo.constant dense<{M}.0> : {tt [1,M]}\n" ++
+     s!"    %eps = stablehlo.constant dense<{eps}> : {tt [1,M]}\n" ++
+     s!"    %zc = stablehlo.constant dense<0.0> : {tt [1,C,H,W]}\n" ++
+     renderResF "%" "%x" "%W1" "%W2" "%g1" "%b1" "%g2" "%b2" C H W kH kW ++
+     s!"    %add = stablehlo.add %out, %x : {tt [1,C,H,W]}\n" ++
+     s!"    %y = stablehlo.maximum %add, %zc : {tt [1,C,H,W]}\n    return %y : {tt [1,C,H,W]}\n")
+
+/-- Identity residual block input-gradient backward `dx = F.back(dadd) + dadd`
+    (the add fan-in), `dadd = dOut ⊙ relu'(F(x)+x)`. As `@res_back`. -/
+def resBlockBackModule (C H W kH kW : Nat) (eps : String) : String :=
+  let M := C*H*W
+  actMod "res_back"
+    (s!"%x: {tt [1,C,H,W]}, %W1: {tt [C,C,kH,kW]}, %W2: {tt [C,C,kH,kW]}, " ++
+     s!"%g1: tensor<f32>, %b1: tensor<f32>, %g2: tensor<f32>, %b2: tensor<f32>, %dOut: {tt [1,C,H,W]}")
+    (tt [1,C,H,W])
+    ("    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+     s!"    %nf = stablehlo.constant dense<{M}.0> : {tt [1,M]}\n" ++
+     s!"    %eps = stablehlo.constant dense<{eps}> : {tt [1,M]}\n" ++
+     s!"    %zc = stablehlo.constant dense<0.0> : {tt [1,C,H,W]}\n" ++
+     renderResF "%" "%x" "%W1" "%W2" "%g1" "%b1" "%g2" "%b2" C H W kH kW ++
+     s!"    %add = stablehlo.add %out, %x : {tt [1,C,H,W]}\n" ++
+     s!"    %madd = stablehlo.compare GT, %add, %zc : ({tt [1,C,H,W]}, {tt [1,C,H,W]}) -> {ti1 [1,C,H,W]}\n" ++
+     s!"    %dadd = stablehlo.select %madd, %dOut, %zc : {ti1 [1,C,H,W]}, {tt [1,C,H,W]}\n" ++
+     renderResFBack "%" "%W1" "%W2" "%g1" "%g2" "%dadd" C H W kH kW ++
+     s!"    %dx = stablehlo.add %dF, %dadd : {tt [1,C,H,W]}\n    return %dx : {tt [1,C,H,W]}\n")
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -1119,5 +1200,8 @@ def vitBlockBackModule (N D F : Nat) (eps scale : String) : String :=
 -- Full ViT transformer block (attn + MLP sublayers), N=2, D=4, F=8.
 #eval IO.FS.writeFile "/tmp/vit_fwd.mlir" (vitBlockFwdModule 2 4 8 "0.00001" "0.5")
 #eval IO.FS.writeFile "/tmp/vit_back.mlir" (vitBlockBackModule 2 4 8 "0.00001" "0.5")
+-- ResNet basic residual block (conv-BN-relu-conv-BN + skip + relu), C=2, 4×4, 3×3.
+#eval IO.FS.writeFile "/tmp/res_fwd.mlir" (resBlockFwdModule 2 4 4 3 3 "0.00001")
+#eval IO.FS.writeFile "/tmp/res_back.mlir" (resBlockBackModule 2 4 4 3 3 "0.00001")
 
 end Proofs.IRPrint
