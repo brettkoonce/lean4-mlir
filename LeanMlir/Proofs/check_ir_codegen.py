@@ -26,6 +26,8 @@ with IREE, runs it, and checks it against an independent numpy reference:
                                every op a rendered proof-backed bridge.
   • cnn_train_step            — full CNN SGD step: 4 updated params; conv weight
                                gradient via the transpose trick (same conv op).
+  • bn_fwd / bn_back          — BatchNorm/LayerNorm: reduce/broadcast/rsqrt
+                               forward + the proven 3-term rank-1 backward.
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -172,6 +174,19 @@ def cnn_back_ref(x, Wc, bc, Wd, dy, ic, H, W):
     dhconv = (hconv > 0) * da                       # relu backward
     return conv_input_vjp_ref(Wc, dhconv, ic, H, W) # [1, ic, H, W]
 
+def bn_fwd_ref(x, g, b, eps):
+    """bnForward over the feature axis: y = γ·(x−μ)/√(σ²+ε) + β (population var)."""
+    mu = x.mean(1, keepdims=True); var = ((x - mu) ** 2).mean(1, keepdims=True)
+    return g * (x - mu) / np.sqrt(var + eps) + b
+
+def bn_back_ref(x, g, dy, eps):
+    """Proven 3-term BN backward: dx = (istd/N)·(N·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂)), dx̂=γ·dy."""
+    n = x.shape[1]; mu = x.mean(1, keepdims=True); var = ((x - mu) ** 2).mean(1, keepdims=True)
+    istd = 1.0 / np.sqrt(var + eps); xhat = (x - mu) * istd
+    dxhat = g * dy
+    sdx = dxhat.sum(1, keepdims=True); sxdx = (xhat * dxhat).sum(1, keepdims=True)
+    return (istd / n) * (n * dxhat - sdx - xhat * sxdx)
+
 def mlp_back_ref(dy, W0, W1, W2, p0, p1):
     """Input-gradient (VJP) chain dx."""
     return (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
@@ -285,6 +300,20 @@ e = max_err(outs, cts_ref); ok &= e < TOL
 print(f"cnn_train_step  ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  "
       f"(4 updated params vs numpy; conv dW = transpose trick)")
 
+# ── BatchNorm/LayerNorm (Phase 3 sweep): forward + proven 3-term backward ──
+EPS = 1e-5
+bnB, bnN = 2, 4
+bx = rng.standard_normal((bnB, bnN)).astype(np.float32)
+bg = np.float32(rng.standard_normal()); bb = np.float32(rng.standard_normal())
+bdy = rng.standard_normal((bnB, bnN)).astype(np.float32)
+gsc = np.array(bg, np.float32); bsc = np.array(bb, np.float32)
+outs, nb = compile_run("/tmp/bn_fwd.mlir", "bn_fwd", [bx, gsc, bsc])
+e = max_err(outs, [bn_fwd_ref(bx, bg, bb, EPS)]); ok &= e < TOL
+print(f"bn_fwd          ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (reduce/broadcast/rsqrt = bnForward)")
+outs, nb = compile_run("/tmp/bn_back.mlir", "bn_back", [bx, gsc, bdy])
+e = max_err(outs, [bn_back_ref(bx, bg, bdy, EPS)]); ok &= e < TOL
+print(f"bn_back         ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (proven 3-term rank-1 backward)")
+
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
 # ════════════════════════════════════════════════════════════════
@@ -330,6 +359,10 @@ try:
                               backend="rocm", config="hip", extra=extra)
         eg = max_err(outs, cts_ref); ok &= eg < TOL
         print(f"cnn_train_step  (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
+        outs, _ = compile_run("/tmp/bn_back.mlir", "bn_back", [bx, gsc, bdy],
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, [bn_back_ref(bx, bg, bdy, EPS)]); ok &= eg < TOL
+        print(f"bn_back         (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:

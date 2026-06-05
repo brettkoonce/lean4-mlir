@@ -521,6 +521,77 @@ def cnnTrainStepModule (ic oc H W kH kW nClass : Nat) (lr : String) : String :=
   s!"{tt [oc,ic,kH,kW]}, {tt [oc]}, {tt [flat,nClass]}, {tt [nClass]}\n" ++
   "  }\n}\n"
 
+-- ════════════════════════════════════════════════════════════════
+-- § BatchNorm / LayerNorm — the reduce/broadcast chapter (Phase 3 sweep)
+--
+-- The repo's `bnForward` (Vec n → Vec n) normalizes over the feature axis:
+--   μ = Σx/N, σ² = Σ(x−μ)²/N, x̂ = (x−μ)·istd, istd = 1/√(σ²+ε), y = γx̂+β.
+-- Its proven backward (`bn_back_bridge`, the consolidated 3-term rank-1 form):
+--   dx = (istd/N)·( N·dx̂ − Σⱼdx̂ⱼ − x̂·Σⱼ x̂ⱼdx̂ⱼ ),  dx̂ = γ·dy.
+-- Rendered with `reduce`(add over the feature axis) + `broadcast_in_dim` +
+-- `rsqrt`/`multiply`/`subtract` — the same renderers softmax, LayerNorm
+-- (definitionally BN) and attention reuse. (γ,β scalar, per the Vec proof.)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Reduce-sum over the feature axis [1] of `[B,n]`, broadcast back to `[B,n]`.
+    `init %sc` (a `tensor<f32>` 0) must already be in scope. -/
+def reduceSumBcast (o src : String) (B n : Nat) : String :=
+  s!"    {o}_r = stablehlo.reduce({src} init: %sc) applies stablehlo.add across dimensions = [1] : ({tt [B,n]}, tensor<f32>) -> {tt [B]}\n" ++
+  s!"    {o} = stablehlo.broadcast_in_dim {o}_r, dims = [0] : ({tt [B]}) -> {tt [B,n]}\n"
+
+/-- BatchNorm/LayerNorm forward `bnForward` as `@bn_fwd` (γ,β scalar inputs). -/
+def bnFwdModule (B n : Nat) (eps : String) : String :=
+  "module @m {\n" ++
+  s!"  func.func @bn_fwd(%x: {tt [B,n]}, %g: tensor<f32>, %b: tensor<f32>) -> {tt [B,n]} " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %nf = stablehlo.constant dense<{n}.0> : {tt [B,n]}\n" ++
+  s!"    %eps = stablehlo.constant dense<{eps}> : {tt [B,n]}\n" ++
+  reduceSumBcast "%sum" "%x" B n ++
+  s!"    %mu = stablehlo.divide %sum, %nf : {tt [B,n]}\n" ++
+  s!"    %xc = stablehlo.subtract %x, %mu : {tt [B,n]}\n" ++
+  s!"    %sq = stablehlo.multiply %xc, %xc : {tt [B,n]}\n" ++
+  reduceSumBcast "%vs" "%sq" B n ++
+  s!"    %var = stablehlo.divide %vs, %nf : {tt [B,n]}\n" ++
+  s!"    %vare = stablehlo.add %var, %eps : {tt [B,n]}\n" ++
+  s!"    %istd = stablehlo.rsqrt %vare : {tt [B,n]}\n" ++
+  s!"    %xhat = stablehlo.multiply %xc, %istd : {tt [B,n]}\n" ++
+  s!"    %gb = stablehlo.broadcast_in_dim %g, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
+  s!"    %bb = stablehlo.broadcast_in_dim %b, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
+  s!"    %gx = stablehlo.multiply %xhat, %gb : {tt [B,n]}\n" ++
+  s!"    %y = stablehlo.add %gx, %bb : {tt [B,n]}\n" ++
+  s!"    return %y : {tt [B,n]}\n" ++ "  }\n}\n"
+
+/-- BatchNorm/LayerNorm backward `bn_has_vjp.backward` (the proven 3-term
+    rank-1 form, `bn_back_bridge`) as `@bn_back`: recompute x̂,istd, then
+    `dx = (istd/N)·(N·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))`, `dx̂ = γ·dy`. -/
+def bnBackModule (B n : Nat) (eps : String) : String :=
+  "module @m {\n" ++
+  s!"  func.func @bn_back(%x: {tt [B,n]}, %g: tensor<f32>, %dy: {tt [B,n]}) -> {tt [B,n]} " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %nf = stablehlo.constant dense<{n}.0> : {tt [B,n]}\n" ++
+  s!"    %eps = stablehlo.constant dense<{eps}> : {tt [B,n]}\n" ++
+  reduceSumBcast "%sum" "%x" B n ++
+  s!"    %mu = stablehlo.divide %sum, %nf : {tt [B,n]}\n" ++
+  s!"    %xc = stablehlo.subtract %x, %mu : {tt [B,n]}\n" ++
+  s!"    %sq = stablehlo.multiply %xc, %xc : {tt [B,n]}\n" ++
+  reduceSumBcast "%vs" "%sq" B n ++
+  s!"    %var = stablehlo.divide %vs, %nf : {tt [B,n]}\n" ++
+  s!"    %vare = stablehlo.add %var, %eps : {tt [B,n]}\n" ++
+  s!"    %istd = stablehlo.rsqrt %vare : {tt [B,n]}\n" ++
+  s!"    %xhat = stablehlo.multiply %xc, %istd : {tt [B,n]}\n" ++
+  s!"    %gb = stablehlo.broadcast_in_dim %g, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
+  s!"    %dxhat = stablehlo.multiply %gb, %dy : {tt [B,n]}\n" ++
+  reduceSumBcast "%sdx" "%dxhat" B n ++
+  s!"    %xd = stablehlo.multiply %xhat, %dxhat : {tt [B,n]}\n" ++
+  reduceSumBcast "%sxdx" "%xd" B n ++
+  s!"    %t1 = stablehlo.multiply %dxhat, %nf : {tt [B,n]}\n" ++
+  s!"    %i1 = stablehlo.subtract %t1, %sdx : {tt [B,n]}\n" ++
+  s!"    %xs = stablehlo.multiply %xhat, %sxdx : {tt [B,n]}\n" ++
+  s!"    %i2 = stablehlo.subtract %i1, %xs : {tt [B,n]}\n" ++
+  s!"    %s = stablehlo.divide %istd, %nf : {tt [B,n]}\n" ++
+  s!"    %dx = stablehlo.multiply %s, %i2 : {tt [B,n]}\n" ++
+  s!"    return %dx : {tt [B,n]}\n" ++ "  }\n}\n"
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -540,5 +611,8 @@ def cnnTrainStepModule (ic oc H W kH kW nClass : Nat) (lr : String) : String :=
 #eval IO.FS.writeFile "/tmp/cnn_back.mlir" (cnnModule 1 2 4 4 3 3 3)
 -- CNN full SGD train step: same net, 4 updated params (conv dW via transpose trick).
 #eval IO.FS.writeFile "/tmp/cnn_train_step.mlir" (cnnTrainStepModule 1 2 4 4 3 3 3 "0.1")
+-- BatchNorm/LayerNorm forward + proof-backed 3-term backward, B=2, n=4, ε=1e-5.
+#eval IO.FS.writeFile "/tmp/bn_fwd.mlir" (bnFwdModule 2 4 "0.00001")
+#eval IO.FS.writeFile "/tmp/bn_back.mlir" (bnBackModule 2 4 "0.00001")
 
 end Proofs.IRPrint
