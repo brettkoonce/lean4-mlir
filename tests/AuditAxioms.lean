@@ -140,3 +140,6 @@ open Proofs
 -- Spatial instance's conv shapes).
 #print axioms IR.conv_back_bridge_1to2
 #print axioms IR.conv_back_bridge_2to2
+-- Phase 2: the emitted tile-compare-select graph denotes the canonical
+-- maxpool backward at smooth points (no argmax ties).
+#print axioms IR.maxpool_back_bridge

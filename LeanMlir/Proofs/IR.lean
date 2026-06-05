@@ -33,6 +33,12 @@ in `tests/AuditAxioms.lean`); no `native_decide`.
 namespace Proofs
 namespace IR
 
+-- `MaxPool2IsArgmax` is a `∀`-quantified order Prop over `ℝ`; its `if`
+-- needs the classical decidability instance `CNN.lean` uses (it `open`s
+-- `Classical`). Low priority, so it doesn't disturb the `Nat`/`ℝ`-order
+-- decidability the dense/relu/conv bridges already rely on.
+open Classical
+
 /-- A backward subgraph, rooted at the cotangent `dy : Vec inp`, producing
     a `Vec out`. Saved forward data (weights `A`, the ReLU pre-activation
     `x`) is baked into the constructors. Each constructor models the
@@ -150,6 +156,42 @@ theorem conv_back_bridge_2to2 (W : Kernel4 2 2 3 3) (b : Vec 2)
   funext ci hi wi
   fin_cases ci <;> fin_cases hi <;> fin_cases wi <;>
     simp [conv2d, conv2d_input_grad_formula, reverseSwap, kRev, Fin.sum_univ_succ]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Phase 2 — max-pool (the other kinked op)
+--
+-- The pooling analogue of the ReLU bridge: the codegen emits
+-- tile-compare-select (broadcast `dy` and the pooled output, `compare EQ`
+-- to find the argmax cells, `select` `dy` through the mask). At a smooth
+-- point (every 2×2 window has a unique strict argmax) that graph routes
+-- `dy` to the argmax cell — the canonical pdiv-derived maxpool backward.
+-- Conditional on `MaxPool2Smooth`, reusing `maxPool2_codegen_matches_canonical`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Denotation of the emitted maxpool input-gradient graph** (StableHLO
+    tile-compare-select): at a smooth point, route `dy` to each window's
+    argmax input cell, zero elsewhere. -/
+noncomputable def maxPoolBackDenote {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
+    Tensor3 c h w → Tensor3 c (2*h) (2*w) :=
+  fun dy ci hi_in wi_in =>
+    if MaxPool2IsArgmax x ci hi_in wi_in then dy ci (winRow hi_in) (winCol wi_in) else 0
+
+/-- **MaxPool backward bridge (smooth point).** The emitted
+    tile-compare-select graph denotes the canonical pdiv-derived maxpool
+    backward, *conditional on no argmax ties* (`MaxPool2Smooth`). The
+    spatial-pooling analogue of `relu_back_bridge`; reuses
+    `maxPool2_codegen_matches_canonical`. The Lean-vs-codegen gap at
+    argmax-tie boundaries is exactly the codegen trust boundary. -/
+theorem maxpool_back_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
+    (h_smooth : MaxPool2Smooth x) (dy : Tensor3 c h w)
+    (ci : Fin c) (hi_in : Fin (2*h)) (wi_in : Fin (2*w)) :
+    maxPoolBackDenote x dy ci hi_in wi_in
+      = (maxPool2_has_vjp3 :
+          HasVJP3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)).backward
+          x dy ci hi_in wi_in := by
+  show (if MaxPool2IsArgmax x ci hi_in wi_in
+        then dy ci (winRow hi_in) (winCol wi_in) else 0) = _
+  exact (maxPool2_codegen_matches_canonical x h_smooth dy ci hi_in wi_in).symm
 
 end IR
 end Proofs
