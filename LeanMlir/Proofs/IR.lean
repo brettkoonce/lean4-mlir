@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.CNN
 
 /-! # A denoted StableHLO-subset IR — Phase 0a/0b spike
 
@@ -94,6 +95,61 @@ theorem relu_back_bridge {n : Nat} (x : Vec n) (h_smooth : ∀ k, x k ≠ 0)
     (emitReluBack x).denote dy i = (relu_has_vjp n).backward x dy i := by
   show (if x i > 0 then dy i else 0) = (relu_has_vjp n).backward x dy i
   exact (relu_codegen_matches_canonical n x h_smooth dy i).symm
+
+-- ════════════════════════════════════════════════════════════════
+-- § Phase 2 — convolution (the real spatial op)
+--
+-- The conv input-gradient is the StableHLO `convolution(dy, reverse(Wᵀ))`
+-- — transpose channels, flip the kernel spatially, convolve. Under
+-- `⟦conv⟧ := conv2d` (D3) that graph denotes a forward `conv2d` of the
+-- reversed-swapped kernel, so the backward bridge reduces to the
+-- "reversed-kernel identity" `dx = conv(dy, reverse(Wᵀ))` that `CNN.lean`
+-- only *asserts* in prose (CNN.lean:288–290, "Equivalent under the partial
+-- bijection …") and never proves — the repo deliberately uses the
+-- (co, ho, wo) form of `conv2d_input_grad_formula` to avoid this bijection.
+-- Here it is discharged by expansion at the concrete shapes the Spatial
+-- instance uses (the partial-bijection-free route the repo wanted). The
+-- general-shape proof is the remaining Phase-2 item.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Spatial reversal of a kernel index: `k − 1 − i`. -/
+def kRev {k : Nat} (i : Fin k) : Fin k := ⟨k - 1 - i.val, by omega⟩
+
+/-- Transpose-and-flip a kernel — swap in/out channels and reverse both
+    spatial axes. This is the kernel the codegen feeds to the backward
+    `stablehlo.convolution` (`transpose dims [1,0,2,3]` + `reverse [2,3]`). -/
+noncomputable def reverseSwap {ic oc kH kW : Nat} (W : Kernel4 oc ic kH kW) :
+    Kernel4 ic oc kH kW := fun ci co kh kw => W co ci (kRev kh) (kRev kw)
+
+/-- **Denotation of the emitted conv input-gradient graph.** The codegen
+    emits `convolution(dy, reverse(transpose(W)))`; under `⟦conv⟧ := conv2d`
+    (D3) that denotes a forward `conv2d` of the reversed-swapped kernel. -/
+noncomputable def convBackDenote {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) : Tensor3 oc h w → Tensor3 ic h w :=
+  conv2d (reverseSwap W) (fun _ => 0)
+
+/-- **Conv backward bridge, 1→2 channels (the Spatial instance's first
+    conv: `Kernel4 2 1 3 3` at 4×4).** The emitted transposed-convolution
+    graph denotes the proven conv input-VJP `(conv2d_has_vjp3 W b).backward`.
+    This discharges the reversed-kernel identity `CNN.lean` only asserts,
+    by expansion at the concrete shape. -/
+theorem conv_back_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
+    (x : Tensor3 1 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
+    convBackDenote W dy = (conv2d_has_vjp3 W b).backward x dy := by
+  show conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy
+  funext ci hi wi
+  fin_cases ci <;> fin_cases hi <;> fin_cases wi <;>
+    simp [conv2d, conv2d_input_grad_formula, reverseSwap, kRev, Fin.sum_univ_succ]
+
+/-- **Conv backward bridge, 2→2 channels (the Spatial instance's second
+    conv: `Kernel4 2 2 3 3` at 4×4).** Same identity at the 2→2 shape. -/
+theorem conv_back_bridge_2to2 (W : Kernel4 2 2 3 3) (b : Vec 2)
+    (x : Tensor3 2 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
+    convBackDenote W dy = (conv2d_has_vjp3 W b).backward x dy := by
+  show conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy
+  funext ci hi wi
+  fin_cases ci <;> fin_cases hi <;> fin_cases wi <;>
+    simp [conv2d, conv2d_input_grad_formula, reverseSwap, kRev, Fin.sum_univ_succ]
 
 end IR
 end Proofs

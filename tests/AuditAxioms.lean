@@ -135,3 +135,8 @@ open Proofs
 -- the emitted backward graph denotes the proven HasVJP.backward.
 #print axioms IR.dense_back_bridge
 #print axioms IR.relu_back_bridge
+-- Phase 2: the emitted transposed-convolution graph denotes the proven
+-- conv input-VJP (the reversed-kernel identity, by expansion at the
+-- Spatial instance's conv shapes).
+#print axioms IR.conv_back_bridge_1to2
+#print axioms IR.conv_back_bridge_2to2

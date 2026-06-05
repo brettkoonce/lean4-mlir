@@ -215,3 +215,31 @@ Run **Phase 0a + 0b** as the real spike (a few hours): minimal `Expr`,
 (reusing `relu_codegen_matches_canonical`). That tells us the true per-op
 cost and whether the `⟦conv⟧ := conv2d` shortcut holds up — before
 committing to Phases 1–3.
+
+## Spike results (landed in `LeanMlir/Proofs/IR.lean`)
+
+Phases 0a, 0b, **and a chunk of Phase 2** are done and audited (3-axiom
+closure, no `native_decide`):
+
+- **0a `dense_back_bridge`** — `⟦dot_general⟧` denotes `Mat.mulVec W dy`.
+  Definitional, as predicted; pins the `Back`/`denote` plumbing.
+- **0b `relu_back_bridge`** — the `compare`+`select` graph denotes the
+  canonical ReLU backward at smooth points, via
+  `relu_codegen_matches_canonical`. The smooth-point pattern slots in
+  exactly as planned.
+- **Phase 2 `conv_back_bridge_{1to2,2to2}`** — the emitted transposed-conv
+  graph (`convBackDenote = conv2d (reverseSwap W)`) denotes the proven
+  `(conv2d_has_vjp3 W b).backward`. **This discharges the "reversed-kernel
+  identity" `dx = conv(dy, reverse(Wᵀ))` that `CNN.lean:288` only asserts
+  in prose and never proves.**
+
+**Key Phase-2 finding (revises the risk table):** the conv backward bridge
+is *cheap at concrete shapes* — `fin_cases` over the spatial positions +
+`simp` closes it in ~7s/shape, no partial bijection needed (the route the
+repo wanted but never took). It is proven for the two shapes the `Spatial`
+instance uses (`Kernel4 2 1 3 3` and `2 2 3 3` at 4×4). The **general-shape**
+reversed-kernel identity (all `ic, oc, h, w` with odd `kH, kW`) still needs
+the partial-bijection sum-reindex through the dependent padding difs — that
+is the one genuine ~100–150-line Phase-2 item that remains. So "conv is
+weeks" downgrades to "concrete conv is hours (done); general conv is the
+one hard lemma."
