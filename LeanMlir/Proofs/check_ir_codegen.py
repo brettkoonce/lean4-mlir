@@ -34,6 +34,8 @@ with IREE, runs it, and checks it against an independent numpy reference:
                                + the proven dQ/dK/dV (the ViT apex).
   • {sigmoid,swish,relu6,gelu} — pointwise activations: forward + the proven
                                diagonal backward dy⊙act'(x).
+  • residual / se             — the fan-in chapters: residual add (I + dense),
+                               squeeze-excite gate-multiply (se_back_bridge).
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -228,6 +230,12 @@ ACT_REF = {
                       * (1 + 3 * 0.044715 * x**2))),
 }
 
+def residual_fwd_ref(x, W, b): return x + (x @ W + b)
+def residual_back_ref(dy, W): return dy + dy @ W.T            # add fan-in: I + dense
+def se_fwd_ref(x): return x * _sig(x)
+def se_back_ref(x, dy):
+    s = _sig(x); return s * dy + (x * dy) * (s * (1 - s))     # gate⊙dy + gate_back(x⊙dy)
+
 def mlp_back_ref(dy, W0, W1, W2, p0, p1):
     """Input-gradient (VJP) chain dx."""
     return (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
@@ -388,6 +396,20 @@ for nm, (fref, bref) in ACT_REF.items():
     e2 = max_err(outs2, [bref(ax, ady).astype(np.float32)]); ok &= e2 < TOL
     print(f"{nm+'_fwd/back':15s} ({nb}/{nb2}B): fwd={e:.2e} back={e2:.2e}  "
           f"{'PASS' if max(e, e2) < TOL else 'FAIL'}  (dy⊙{nm}'(x))")
+
+# ── Residual + SE (Phase 3 sweep): the fan-in chapters ──
+rW = rng.standard_normal((4, 4)).astype(np.float32); rb = rng.standard_normal((4,)).astype(np.float32)
+rx = rng.standard_normal((2, 4)).astype(np.float32); rdy = rng.standard_normal((2, 4)).astype(np.float32)
+outs, nb = compile_run("/tmp/residual_fwd.mlir", "residual_fwd", [rx, rW, rb])
+e = max_err(outs, [residual_fwd_ref(rx, rW, rb)]); ok &= e < TOL
+outs2, nb2 = compile_run("/tmp/residual_back.mlir", "residual_back", [rdy, rW])
+e2 = max_err(outs2, [residual_back_ref(rdy, rW)]); ok &= e2 < TOL
+print(f"residual_fwd/back ({nb}/{nb2}B): fwd={e:.2e} back={e2:.2e}  {'PASS' if max(e,e2)<TOL else 'FAIL'}  (add fan-in)")
+outs, nb = compile_run("/tmp/se_fwd.mlir", "se_fwd", [ax])
+e = max_err(outs, [se_fwd_ref(ax)]); ok &= e < TOL
+outs2, nb2 = compile_run("/tmp/se_back.mlir", "se_back", [ax, ady])
+e2 = max_err(outs2, [se_back_ref(ax, ady)]); ok &= e2 < TOL
+print(f"se_fwd/back     ({nb}/{nb2}B): fwd={e:.2e} back={e2:.2e}  {'PASS' if max(e,e2)<TOL else 'FAIL'}  (gate-multiply fan-in)")
 
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 

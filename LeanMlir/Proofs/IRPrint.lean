@@ -781,6 +781,46 @@ def geluBackM (m : Nat) : String :=
      s!"    %gp = stablehlo.add %ta, %tb : {tt [m]}\n" ++
      s!"    %dx = stablehlo.multiply %dy, %gp : {tt [m]}\n    return %dx : {tt [m]}\n")
 
+-- ════════════════════════════════════════════════════════════════
+-- § Residual + Squeeze-Excite (Phase 3 sweep) — the fan-in chapters
+--
+-- Residual `out = x + f(x)`: backward `dx = dy + f_back(dy)` — an `add`
+-- fan-in (here f = dense n→n, so dx = dy + dy·Wᵀ). SE `out = x ⊙ gate(x)`:
+-- backward (se_back_bridge) `dx = gate(x)⊙dy + gate_back(x⊙dy)` — `add`
+-- fan-in of the gate output and the gate's own backward (here gate = σ, so
+-- gate_back(v) = v⊙σ(1−σ)). Both show the chain rule composing through a
+-- non-composition combinator (the fan-in `add`).
+-- ════════════════════════════════════════════════════════════════
+
+/-- Residual dense block forward `x + dense W b x`. -/
+def residualFwdM (B n : Nat) : String :=
+  actMod "residual_fwd" s!"%x: {tt [B,n]}, %W: {tt [n,n]}, %b: {tt [n]}" (tt [B,n])
+    (matdg "%xw" "%x" "%W" "1" "0" (tt [B,n]) (tt [n,n]) (tt [B,n]) ++
+     s!"    %bb = stablehlo.broadcast_in_dim %b, dims = [1] : ({tt [n]}) -> {tt [B,n]}\n" ++
+     s!"    %h = stablehlo.add %xw, %bb : {tt [B,n]}\n" ++
+     s!"    %out = stablehlo.add %x, %h : {tt [B,n]}\n    return %out : {tt [B,n]}\n")
+/-- Residual backward `dx = dy + dy·Wᵀ` (the add fan-in: identity + dense). -/
+def residualBackM (B n : Nat) : String :=
+  actMod "residual_back" s!"%dy: {tt [B,n]}, %W: {tt [n,n]}" (tt [B,n])
+    (matdg "%wd" "%dy" "%W" "1" "1" (tt [B,n]) (tt [n,n]) (tt [B,n]) ++
+     s!"    %dx = stablehlo.add %dy, %wd : {tt [B,n]}\n    return %dx : {tt [B,n]}\n")
+
+/-- SE block forward `x ⊙ σ(x)` (gate = sigmoid). -/
+def seFwdM (m : Nat) : String :=
+  actMod "se_fwd" s!"%x: {tt [m]}" (tt [m])
+    (s!"    %g = stablehlo.logistic %x : {tt [m]}\n    %out = stablehlo.multiply %x, %g : {tt [m]}\n    return %out : {tt [m]}\n")
+/-- SE backward (se_back_bridge): `dx = σ(x)⊙dy + (x⊙dy)⊙σ(x)(1−σ(x))`. -/
+def seBackM (m : Nat) : String :=
+  actMod "se_back" s!"%x: {tt [m]}, %dy: {tt [m]}" (tt [m])
+    (s!"    %g = stablehlo.logistic %x : {tt [m]}\n" ++
+     s!"    %one = stablehlo.constant dense<1.0> : {tt [m]}\n" ++
+     s!"    %t1 = stablehlo.multiply %g, %dy : {tt [m]}\n" ++
+     s!"    %xdy = stablehlo.multiply %x, %dy : {tt [m]}\n" ++
+     s!"    %om = stablehlo.subtract %one, %g : {tt [m]}\n" ++
+     s!"    %sp = stablehlo.multiply %g, %om : {tt [m]}\n" ++
+     s!"    %t2 = stablehlo.multiply %xdy, %sp : {tt [m]}\n" ++
+     s!"    %dx = stablehlo.add %t1, %t2 : {tt [m]}\n    return %dx : {tt [m]}\n")
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -818,5 +858,10 @@ def geluBackM (m : Nat) : String :=
 #eval IO.FS.writeFile "/tmp/relu6_back.mlir" (relu6BackM 8)
 #eval IO.FS.writeFile "/tmp/gelu_fwd.mlir" (geluFwdM 8)
 #eval IO.FS.writeFile "/tmp/gelu_back.mlir" (geluBackM 8)
+-- Residual (add fan-in) + Squeeze-Excite (gate-multiply fan-in).
+#eval IO.FS.writeFile "/tmp/residual_fwd.mlir" (residualFwdM 2 4)
+#eval IO.FS.writeFile "/tmp/residual_back.mlir" (residualBackM 2 4)
+#eval IO.FS.writeFile "/tmp/se_fwd.mlir" (seFwdM 8)
+#eval IO.FS.writeFile "/tmp/se_back.mlir" (seBackM 8)
 
 end Proofs.IRPrint
