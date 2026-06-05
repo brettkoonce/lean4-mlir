@@ -1345,6 +1345,202 @@ def resnetTrainStepModule (C H W kH kW nCls : Nat) (eps lr : String) : String :=
      s!"{tt [C,C,kH,kW]}, {f32}, {f32}, {ty4}, {ty4}, {f32}, {f32}, {f32}, {f32}, " ++
      s!"{ty4}, {ty4}, {f32}, {f32}, {f32}, {f32}, {tt [C,nCls]}, {tt [nCls]}\n")
 
+-- ════════════════════════════════════════════════════════════════
+-- § EfficientNet MBConv — the squeeze-excite inverted residual (Phase 3 sweep)
+--
+-- The headline EfficientNet block, rendered end-to-end:
+--   expand(1×1 conv)→BN→swish → depthwise(k×k)→BN→swish
+--     → SE(GAP→dense→swish→dense→sigmoid→broadcast→⊙)
+--     → project(1×1 conv)→BN → + x        (stride-1, cin=cout: identity skip)
+-- Every stage is an already-validated op; the genuine squeeze-excite gate is a
+-- fan-out sub-network multiplied back into the main path, so its backward is a
+-- product-rule fan-in (the proven `seBlockFull` / `se_back_bridge` shape):
+--   d(in) = broadcast(gate)⊙d(se) + GAPback(gate.back(Σ_spatial(in⊙d(se)))).
+-- BN here is the flat `bnForward` (LayerNorm over the flattened example, scalar
+-- γ/β); conv biases fold into BN (the be=bd=bp=0 instance), as in `renderResF`.
+-- Expand widens channels (cin→cmid) so the expand/dw BN run over cmid·h·w while
+-- the project BN runs over cout·h·w — hence the nf/eps-parameterized flat BN.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Flat-BN forward (= `renderLN`/`bnForward`) but with explicit `nf`,`eps` SSA
+    names so one block can carry several BN widths (cmid·h·w vs cout·h·w). -/
+def mbLNF (out x g b nf eps : String) (B n : Nat) : String :=
+  reduceSumBcast s!"{out}_sm" x B n ++
+  s!"    {out}_mu = stablehlo.divide {out}_sm, {nf} : {tt [B,n]}\n" ++
+  s!"    {out}_xc = stablehlo.subtract {x}, {out}_mu : {tt [B,n]}\n" ++
+  s!"    {out}_sq = stablehlo.multiply {out}_xc, {out}_xc : {tt [B,n]}\n" ++
+  reduceSumBcast s!"{out}_vs" s!"{out}_sq" B n ++
+  s!"    {out}_var = stablehlo.divide {out}_vs, {nf} : {tt [B,n]}\n" ++
+  s!"    {out}_ve = stablehlo.add {out}_var, {eps} : {tt [B,n]}\n" ++
+  s!"    {out}_istd = stablehlo.rsqrt {out}_ve : {tt [B,n]}\n" ++
+  s!"    {out}_xhat = stablehlo.multiply {out}_xc, {out}_istd : {tt [B,n]}\n" ++
+  s!"    {out}_gb = stablehlo.broadcast_in_dim {g}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
+  s!"    {out}_bb = stablehlo.broadcast_in_dim {b}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
+  s!"    {out}_gx = stablehlo.multiply {out}_xhat, {out}_gb : {tt [B,n]}\n" ++
+  s!"    {out} = stablehlo.add {out}_gx, {out}_bb : {tt [B,n]}\n"
+
+/-- Flat-BN backward (= `renderLNBack`) with explicit `nf` name; reuses
+    `{ln}_xhat`/`{ln}_istd` + scalar γ `g`. -/
+def mbLNB (out ln g dy nf : String) (B n : Nat) : String :=
+  s!"    {out}_gb = stablehlo.broadcast_in_dim {g}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
+  s!"    {out}_dxh = stablehlo.multiply {out}_gb, {dy} : {tt [B,n]}\n" ++
+  reduceSumBcast s!"{out}_sdx" s!"{out}_dxh" B n ++
+  s!"    {out}_xd = stablehlo.multiply {ln}_xhat, {out}_dxh : {tt [B,n]}\n" ++
+  reduceSumBcast s!"{out}_sxd" s!"{out}_xd" B n ++
+  s!"    {out}_t1 = stablehlo.multiply {out}_dxh, {nf} : {tt [B,n]}\n" ++
+  s!"    {out}_i1 = stablehlo.subtract {out}_t1, {out}_sdx : {tt [B,n]}\n" ++
+  s!"    {out}_xs = stablehlo.multiply {ln}_xhat, {out}_sxd : {tt [B,n]}\n" ++
+  s!"    {out}_i2 = stablehlo.subtract {out}_i1, {out}_xs : {tt [B,n]}\n" ++
+  s!"    {out}_s = stablehlo.divide {ln}_istd, {nf} : {tt [B,n]}\n" ++
+  s!"    {out} = stablehlo.multiply {out}_s, {out}_i2 : {tt [B,n]}\n"
+
+/-- Elementwise swish forward `y = x·σ(x)` into `{out}` (StableHLO type `ty`). -/
+def swishF (out x ty : String) : String :=
+  s!"    {out}_s = stablehlo.logistic {x} : {ty}\n" ++
+  s!"    {out} = stablehlo.multiply {x}, {out}_s : {ty}\n"
+
+/-- Elementwise swish backward `{out} = dy ⊙ σ(1 + x(1−σ))` (`x` = pre-activation). -/
+def swishB (out x dy ty : String) : String :=
+  s!"    {out}_s = stablehlo.logistic {x} : {ty}\n" ++
+  s!"    {out}_one = stablehlo.constant dense<1.0> : {ty}\n" ++
+  s!"    {out}_om = stablehlo.subtract {out}_one, {out}_s : {ty}\n" ++
+  s!"    {out}_xom = stablehlo.multiply {x}, {out}_om : {ty}\n" ++
+  s!"    {out}_in = stablehlo.add {out}_one, {out}_xom : {ty}\n" ++
+  s!"    {out}_sp = stablehlo.multiply {out}_s, {out}_in : {ty}\n" ++
+  s!"    {out} = stablehlo.multiply {dy}, {out}_sp : {ty}\n"
+
+/-- Squeeze-excite gate forward: `se = x ⊙ broadcast(σ(W₂·swish(W₁·GAP(x))+b₂))`.
+    `x` is `[1,C,H,W]`; produces `{p}se` `[1,C,H,W]`, leaving `{p}gate` `[1,C]`
+    and `{p}ex` (pre-mid-swish `[1,r]`) for the backward. `%sc` (f32 0) in scope. -/
+def renderSEGate (p x Ws1 bs1 Ws2 bs2 : String) (C H W r : Nat) : String :=
+  -- squeeze: global average pool over the spatial axes
+  s!"    {p}sq_s = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({tt [1,C,H,W]}, tensor<f32>) -> {tt [1,C]}\n" ++
+  s!"    {p}sq_hw = stablehlo.constant dense<{H*W}.0> : {tt [1,C]}\n" ++
+  s!"    {p}sq = stablehlo.divide {p}sq_s, {p}sq_hw : {tt [1,C]}\n" ++
+  -- excite: dense C→r, swish, dense r→C, sigmoid
+  renderDense s!"{p}ex" s!"{p}sq" Ws1 bs1 1 C r ++
+  swishF s!"{p}a1" s!"{p}ex" (tt [1,r]) ++
+  renderDense s!"{p}h2" s!"{p}a1" Ws2 bs2 1 r C ++
+  s!"    {p}gate = stablehlo.logistic {p}h2 : {tt [1,C]}\n" ++
+  -- broadcast the per-channel gate back to spatial and multiply
+  s!"    {p}gb = stablehlo.broadcast_in_dim {p}gate, dims = [0, 1] : ({tt [1,C]}) -> {tt [1,C,H,W]}\n" ++
+  s!"    {p}se = stablehlo.multiply {x}, {p}gb : {tt [1,C,H,W]}\n"
+
+/-- Squeeze-excite backward: input-cotangent of `se = x ⊙ broadcast(gate(x))`,
+    the product-rule fan-in. `dse` cotangent `[1,C,H,W]`; reuses `{p}gate`,`{p}ex`
+    + the SE input `x`. Produces `{p}dds` `[1,C,H,W]`. `%sc` in scope. -/
+def renderSEGateBack (p x dse Ws1 Ws2 : String) (C H W r : Nat) : String :=
+  -- left factor: broadcast(gate) ⊙ dse
+  s!"    {p}gb2 = stablehlo.broadcast_in_dim {p}gate, dims = [0, 1] : ({tt [1,C]}) -> {tt [1,C,H,W]}\n" ++
+  s!"    {p}dleft = stablehlo.multiply {p}gb2, {dse} : {tt [1,C,H,W]}\n" ++
+  -- gate path: dgate = Σ_spatial(x ⊙ dse) (adjoint of broadcast)
+  s!"    {p}xdse = stablehlo.multiply {x}, {dse} : {tt [1,C,H,W]}\n" ++
+  s!"    {p}dgate = stablehlo.reduce({p}xdse init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({tt [1,C,H,W]}, tensor<f32>) -> {tt [1,C]}\n" ++
+  -- through sigmoid': gate(1−gate)
+  s!"    {p}one = stablehlo.constant dense<1.0> : {tt [1,C]}\n" ++
+  s!"    {p}omg = stablehlo.subtract {p}one, {p}gate : {tt [1,C]}\n" ++
+  s!"    {p}sg = stablehlo.multiply {p}gate, {p}omg : {tt [1,C]}\n" ++
+  s!"    {p}dh2 = stablehlo.multiply {p}dgate, {p}sg : {tt [1,C]}\n" ++
+  -- dense₂ back: da1 = dh2 · Ws₂ᵀ
+  matdg s!"{p}da1" s!"{p}dh2" Ws2 "1" "1" (tt [1,C]) (tt [r,C]) (tt [1,r]) ++
+  -- swish back through the excite mid
+  swishB s!"{p}dex" s!"{p}ex" s!"{p}da1" (tt [1,r]) ++
+  -- dense₁ back: dsq = dex · Ws₁ᵀ
+  matdg s!"{p}dsq" s!"{p}dex" Ws1 "1" "1" (tt [1,r]) (tt [C,r]) (tt [1,C]) ++
+  -- GAP back: broadcast(dsq / (H·W)) over spatial
+  s!"    {p}dsq_hw = stablehlo.constant dense<{H*W}.0> : {tt [1,C]}\n" ++
+  s!"    {p}dsq_d = stablehlo.divide {p}dsq, {p}dsq_hw : {tt [1,C]}\n" ++
+  s!"    {p}dgate_sp = stablehlo.broadcast_in_dim {p}dsq_d, dims = [0, 1] : ({tt [1,C]}) -> {tt [1,C,H,W]}\n" ++
+  -- sum the two fan-in contributions
+  s!"    {p}dds = stablehlo.add {p}dleft, {p}dgate_sp : {tt [1,C,H,W]}\n"
+
+/-- Per-MBConv parameter signature (expand 1×1, depthwise k×k, SE squeeze C→r→C,
+    project 1×1; conv biases folded into BN). `cin = cout = c` for the skip. -/
+def mbconvSig (c cmid H W kHd kWd r : Nat) : String :=
+  s!"%x: {tt [1,c,H,W]}, %We: {tt [cmid,c,1,1]}, %ge: tensor<f32>, %be: tensor<f32>, " ++
+  s!"%Wd: {tt [cmid,kHd,kWd]}, %gd: tensor<f32>, %bd: tensor<f32>, " ++
+  s!"%Ws1: {tt [cmid,r]}, %bs1: {tt [r]}, %Ws2: {tt [r,cmid]}, %bs2: {tt [cmid]}, " ++
+  s!"%Wp: {tt [c,cmid,1,1]}, %gp: tensor<f32>, %bp: tensor<f32>"
+
+/-- Shared constants: f32 zero + the two BN widths' nf/eps. -/
+def mbconvConsts (c cmid H W : Nat) (eps : String) : String :=
+  let Me := cmid*H*W; let Mp := c*H*W
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %nfe = stablehlo.constant dense<{Me}.0> : {tt [1,Me]}\n" ++
+  s!"    %epse = stablehlo.constant dense<{eps}> : {tt [1,Me]}\n" ++
+  s!"    %nfp = stablehlo.constant dense<{Mp}.0> : {tt [1,Mp]}\n" ++
+  s!"    %epsp = stablehlo.constant dense<{eps}> : {tt [1,Mp]}\n"
+
+/-- MBConv forward chain producing `%out`, leaving every saved activation
+    (`%e_n`,`%d_n`,`%e_c`,`%d_c`,`%d_s4`, the SE `%g…`, `%p_n…`) for the backward. -/
+def mbconvFwdBody (c cmid H W kHd kWd r : Nat) : String :=
+  let pHd := (kHd-1)/2; let pWd := (kWd-1)/2; let Me := cmid*H*W; let Mp := c*H*W
+  -- expand 1×1 conv → flat BN → swish
+  convOp "%e_c" "%x" "%We" (tt [1,c,H,W]) (tt [cmid,c,1,1]) (tt [1,cmid,H,W]) 0 0 ++
+  s!"    %e_cf = stablehlo.reshape %e_c : ({tt [1,cmid,H,W]}) -> {tt [1,Me]}\n" ++
+  mbLNF "%e_n" "%e_cf" "%ge" "%be" "%nfe" "%epse" 1 Me ++
+  swishF "%e_s" "%e_n" (tt [1,Me]) ++
+  s!"    %e_s4 = stablehlo.reshape %e_s : ({tt [1,Me]}) -> {tt [1,cmid,H,W]}\n" ++
+  -- depthwise (no bias) → flat BN → swish
+  s!"    %dwe = stablehlo.reshape %Wd : ({tt [cmid,kHd,kWd]}) -> {tt [cmid,1,kHd,kWd]}\n" ++
+  convOpG "%d_c" "%e_s4" "%dwe" (tt [1,cmid,H,W]) (tt [cmid,1,kHd,kWd]) (tt [1,cmid,H,W]) pHd pWd (toString cmid) ++
+  s!"    %d_cf = stablehlo.reshape %d_c : ({tt [1,cmid,H,W]}) -> {tt [1,Me]}\n" ++
+  mbLNF "%d_n" "%d_cf" "%gd" "%bd" "%nfe" "%epse" 1 Me ++
+  swishF "%d_s" "%d_n" (tt [1,Me]) ++
+  s!"    %d_s4 = stablehlo.reshape %d_s : ({tt [1,Me]}) -> {tt [1,cmid,H,W]}\n" ++
+  -- squeeze-excite (genuine gate sub-network)
+  renderSEGate "%g" "%d_s4" "%Ws1" "%bs1" "%Ws2" "%bs2" cmid H W r ++
+  -- project 1×1 conv → flat BN
+  convOp "%p_c" "%gse" "%Wp" (tt [1,cmid,H,W]) (tt [c,cmid,1,1]) (tt [1,c,H,W]) 0 0 ++
+  s!"    %p_cf = stablehlo.reshape %p_c : ({tt [1,c,H,W]}) -> {tt [1,Mp]}\n" ++
+  mbLNF "%p_n" "%p_cf" "%gp" "%bp" "%nfp" "%epsp" 1 Mp ++
+  s!"    %p_n4 = stablehlo.reshape %p_n : ({tt [1,Mp]}) -> {tt [1,c,H,W]}\n" ++
+  -- identity residual skip
+  s!"    %out = stablehlo.add %x, %p_n4 : {tt [1,c,H,W]}\n"
+
+/-- Residual MBConv forward as `@mbconv_fwd`. -/
+def mbconvFwdModule (c cmid H W kHd kWd r : Nat) (eps : String) : String :=
+  actMod "mbconv_fwd" (mbconvSig c cmid H W kHd kWd r) (tt [1,c,H,W])
+    (mbconvConsts c cmid H W eps ++ mbconvFwdBody c cmid H W kHd kWd r ++
+     s!"    return %out : {tt [1,c,H,W]}\n")
+
+/-- Residual MBConv input-gradient backward `dx = dOut + body.back(dOut)` as
+    `@mbconv_back`: project-back → SE fan-in → dw-bn-swish back → expand-bn-swish
+    back, then the residual add. Recomputes the forward to save activations. -/
+def mbconvBackModule (c cmid H W kHd kWd r : Nat) (eps : String) : String :=
+  let pHd := (kHd-1)/2; let pWd := (kWd-1)/2; let Me := cmid*H*W; let Mp := c*H*W
+  actMod "mbconv_back" (mbconvSig c cmid H W kHd kWd r ++ s!", %dOut: {tt [1,c,H,W]}") (tt [1,c,H,W])
+    (mbconvConsts c cmid H W eps ++ mbconvFwdBody c cmid H W kHd kWd r ++
+     "    // ── backward: input gradient dx = dOut + body.back(dOut) ──\n" ++
+     -- project back: BN-back then 1×1 conv input-VJP
+     s!"    %dOnf = stablehlo.reshape %dOut : ({tt [1,c,H,W]}) -> {tt [1,Mp]}\n" ++
+     mbLNB "%dpcf" "%p_n" "%gp" "%dOnf" "%nfp" 1 Mp ++
+     s!"    %dpc = stablehlo.reshape %dpcf : ({tt [1,Mp]}) -> {tt [1,c,H,W]}\n" ++
+     s!"    %Wpt = stablehlo.transpose %Wp, dims = [1, 0, 2, 3] : ({tt [c,cmid,1,1]}) -> {tt [cmid,c,1,1]}\n" ++
+     s!"    %Wpr = stablehlo.reverse %Wpt, dims = [2, 3] : {tt [cmid,c,1,1]}\n" ++
+     convOp "%dse" "%dpc" "%Wpr" (tt [1,c,H,W]) (tt [cmid,c,1,1]) (tt [1,cmid,H,W]) 0 0 ++
+     -- squeeze-excite back (fan-in)
+     renderSEGateBack "%g" "%d_s4" "%dse" "%Ws1" "%Ws2" cmid H W r ++
+     -- depthwise-bn-swish back
+     s!"    %gddsf = stablehlo.reshape %gdds : ({tt [1,cmid,H,W]}) -> {tt [1,Me]}\n" ++
+     swishB "%ddn" "%d_n" "%gddsf" (tt [1,Me]) ++
+     mbLNB "%ddc" "%d_n" "%gd" "%ddn" "%nfe" 1 Me ++
+     s!"    %ddc4 = stablehlo.reshape %ddc : ({tt [1,Me]}) -> {tt [1,cmid,H,W]}\n" ++
+     s!"    %dwe2 = stablehlo.reshape %Wd : ({tt [cmid,kHd,kWd]}) -> {tt [cmid,1,kHd,kWd]}\n" ++
+     s!"    %dwr = stablehlo.reverse %dwe2, dims = [2, 3] : {tt [cmid,1,kHd,kWd]}\n" ++
+     convOpG "%des" "%ddc4" "%dwr" (tt [1,cmid,H,W]) (tt [cmid,1,kHd,kWd]) (tt [1,cmid,H,W]) pHd pWd (toString cmid) ++
+     s!"    %desf = stablehlo.reshape %des : ({tt [1,cmid,H,W]}) -> {tt [1,Me]}\n" ++
+     -- expand-bn-swish back
+     swishB "%den" "%e_n" "%desf" (tt [1,Me]) ++
+     mbLNB "%dec" "%e_n" "%ge" "%den" "%nfe" 1 Me ++
+     s!"    %dec4 = stablehlo.reshape %dec : ({tt [1,Me]}) -> {tt [1,cmid,H,W]}\n" ++
+     s!"    %Wet = stablehlo.transpose %We, dims = [1, 0, 2, 3] : ({tt [cmid,c,1,1]}) -> {tt [c,cmid,1,1]}\n" ++
+     s!"    %Wer = stablehlo.reverse %Wet, dims = [2, 3] : {tt [c,cmid,1,1]}\n" ++
+     convOp "%dxb" "%dec4" "%Wer" (tt [1,cmid,H,W]) (tt [c,cmid,1,1]) (tt [1,c,H,W]) 0 0 ++
+     -- residual fan-in
+     s!"    %dx = stablehlo.add %dOut, %dxb : {tt [1,c,H,W]}\n" ++
+     s!"    return %dx : {tt [1,c,H,W]}\n")
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -1404,5 +1600,8 @@ def resnetTrainStepModule (C H W kH kW nCls : Nat) (eps lr : String) : String :=
 #eval IO.FS.writeFile "/tmp/res_tower_back.mlir" (resTowerBackModule 16 2 4 4 3 3 "0.00001")
 -- Full ResNet SGD train step: stem + 2 blocks + GAP + FC + softmax-CE, 17 params.
 #eval IO.FS.writeFile "/tmp/resnet_train_step.mlir" (resnetTrainStepModule 2 4 4 3 3 3 "0.00001" "0.1")
+
+#eval IO.FS.writeFile "/tmp/mbconv_fwd.mlir" (mbconvFwdModule 2 4 4 4 3 3 2 "0.00001")
+#eval IO.FS.writeFile "/tmp/mbconv_back.mlir" (mbconvBackModule 2 4 4 4 3 3 2 "0.00001")
 
 end Proofs.IRPrint
