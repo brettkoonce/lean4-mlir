@@ -48,8 +48,16 @@ GPU-validated (rocm/gfx1100), vs independent numpy references (24 CPU checks,
 - **ViT transformer block** — `MlpSublayer ∘ AttnSublayer`, both residual
   sublayers (LN → QKV → SDPA → Wo → residual; LN → Wfc1 → gelu → Wfc2 →
   residual), forward + input-gradient backward (vit_fwd 2.80e-6 / vit_back
-  9.41e-6 CPU, 6.15e-7 GPU). The hardest composition in the book, wired and
-  validated — the three-way QKV fan-in + gelu MLP back.
+  9.41e-6 CPU, 6.15e-7 GPU). The hardest composition in the book — the
+  three-way QKV fan-in + gelu MLP back.
+- **ResNet** — (a) a **full SGD train step**: stem(conv-BN-relu) → 2 residual
+  blocks → global-avg-pool → FC → softmax-CE, backward with **every parameter
+  gradient** (conv weight grads via the transpose trick, BN γ/β grads, FC W/b),
+  then SGD — 17 updated params, 8.94e-8 CPU / 1.19e-7 GPU; and (b) a
+  **generated 16-block dx tower** (ResNet-34's residual depth, stacked by a
+  Lean fold) — res_tower_back 2.48e-5 GPU, showing depth is a loop bound. The
+  block is `relu(BN2(conv2(relu(BN1(conv1(x))))) + skip)`; the repo's "BN" is
+  `bnForward` over the flattened map = the LN renderer at n=C·H·W.
 
 Every primitive the book's architectures are built from is covered; the
 composite conv nets (MobileNetV2 / ConvNeXt / EfficientNet) are pure wirings of
