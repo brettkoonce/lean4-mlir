@@ -42,11 +42,20 @@ GPU-validated (rocm/gfx1100), vs independent numpy references (24 CPU checks,
 | residual | ✅ | ✅ add fan-in | 6e-8 |
 | squeeze-excite | ✅ | ✅ gate-multiply fan-in | 0.0 |
 
-Plus two full SGD train steps end-to-end: **MLP** (1.19e-7) and **CNN**
-(1.19e-7). Every primitive the book's architectures are built from is covered;
-the composite nets (MobileNetV2 / ConvNeXt / EfficientNet) are pure wirings of
-these ops — no new primitives. The "the codegen is verified" claim is concrete
-across the book at the op level + two representative whole-net train steps.
+**Whole networks assembled end-to-end + GPU-validated:**
+- **MLP** — full SGD train step (1.19e-7).
+- **CNN** — full SGD train step (1.19e-7).
+- **ViT transformer block** — `MlpSublayer ∘ AttnSublayer`, both residual
+  sublayers (LN → QKV → SDPA → Wo → residual; LN → Wfc1 → gelu → Wfc2 →
+  residual), forward + input-gradient backward (vit_fwd 2.80e-6 / vit_back
+  9.41e-6 CPU, 6.15e-7 GPU). The hardest composition in the book, wired and
+  validated — the three-way QKV fan-in + gelu MLP back.
+
+Every primitive the book's architectures are built from is covered; the
+composite conv nets (MobileNetV2 / ConvNeXt / EfficientNet) are pure wirings of
+these ops — no new primitives. So "the codegen is verified" is concrete across
+the book: every op + three representative whole networks (MLP, CNN, ViT block),
+all proof-backed and validated on real GPU hardware.
 
 ## Done (MLP)
 
