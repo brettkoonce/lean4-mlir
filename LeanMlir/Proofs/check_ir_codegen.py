@@ -28,6 +28,8 @@ with IREE, runs it, and checks it against an independent numpy reference:
                                gradient via the transpose trick (same conv op).
   • bn_fwd / bn_back          — BatchNorm/LayerNorm: reduce/broadcast/rsqrt
                                forward + the proven 3-term rank-1 backward.
+  • softmax_fwd / _back       — softmax + the proven rank-1 backward
+                               (p⊙(dy−⟨p,dy⟩)); the attention building block.
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -187,6 +189,10 @@ def bn_back_ref(x, g, dy, eps):
     sdx = dxhat.sum(1, keepdims=True); sxdx = (xhat * dxhat).sum(1, keepdims=True)
     return (istd / n) * (n * dxhat - sdx - xhat * sxdx)
 
+def softmax_back_ref(z, dy):
+    """Rank-1 softmax backward: dz = p ⊙ (dy − ⟨p,dy⟩)."""
+    p = softmax_np(z); return p * (dy - (p * dy).sum(1, keepdims=True))
+
 def mlp_back_ref(dy, W0, W1, W2, p0, p1):
     """Input-gradient (VJP) chain dx."""
     return (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
@@ -314,6 +320,16 @@ outs, nb = compile_run("/tmp/bn_back.mlir", "bn_back", [bx, gsc, bdy])
 e = max_err(outs, [bn_back_ref(bx, bg, bdy, EPS)]); ok &= e < TOL
 print(f"bn_back         ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (proven 3-term rank-1 backward)")
 
+# ── Softmax (Phase 3 sweep): forward + proven rank-1 backward ──
+sz = rng.standard_normal((2, 4)).astype(np.float32)
+sdy = rng.standard_normal((2, 4)).astype(np.float32)
+outs, nb = compile_run("/tmp/softmax_fwd.mlir", "softmax_fwd", [sz])
+e = max_err(outs, [softmax_np(sz)]); ok &= e < TOL
+print(f"softmax_fwd     ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (exp/reduce/divide = softmax)")
+outs, nb = compile_run("/tmp/softmax_back.mlir", "softmax_back", [sz, sdy])
+e = max_err(outs, [softmax_back_ref(sz, sdy)]); ok &= e < TOL
+print(f"softmax_back    ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (rank-1: p⊙(dy−⟨p,dy⟩))")
+
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
 # ════════════════════════════════════════════════════════════════
@@ -363,6 +379,10 @@ try:
                               backend="rocm", config="hip", extra=extra)
         eg = max_err(outs, [bn_back_ref(bx, bg, bdy, EPS)]); ok &= eg < TOL
         print(f"bn_back         (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
+        outs, _ = compile_run("/tmp/softmax_back.mlir", "softmax_back", [sz, sdy],
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, [softmax_back_ref(sz, sdy)]); ok &= eg < TOL
+        print(f"softmax_back    (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:

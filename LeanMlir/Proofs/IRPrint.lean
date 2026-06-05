@@ -592,6 +592,44 @@ def bnBackModule (B n : Nat) (eps : String) : String :=
   s!"    %dx = stablehlo.multiply %s, %i2 : {tt [B,n]}\n" ++
   s!"    return %dx : {tt [B,n]}\n" ++ "  }\n}\n"
 
+-- ════════════════════════════════════════════════════════════════
+-- § Softmax — the rank-1 chapter (Phase 3 sweep; the attention building block)
+--
+-- `softmax c z = exp(z)/Σexp(z)` (over the feature axis). Proven backward
+-- (`softmax_back_bridge`, rank-1): `dz = p ⊙ (dy − ⟨p, dy⟩)`, one reduction
+-- `⟨p,dy⟩` + broadcast-subtract + scale by `p` — same shape as BN. Reuses the
+-- `reduceSumBcast` renderer; this is the core nonlinearity of attention.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Softmax over the feature axis into `o`: `exp` + `reduce`(add) + `broadcast`
+    + `divide`. `%sc` (a `tensor<f32>` 0) must be in scope. -/
+def renderSoftmax (o z : String) (B c : Nat) : String :=
+  s!"    %se = stablehlo.exponential {z} : {tt [B,c]}\n" ++
+  s!"    %ssum_r = stablehlo.reduce(%se init: %sc) applies stablehlo.add across dimensions = [1] : ({tt [B,c]}, tensor<f32>) -> {tt [B]}\n" ++
+  s!"    %ssumb = stablehlo.broadcast_in_dim %ssum_r, dims = [0] : ({tt [B]}) -> {tt [B,c]}\n" ++
+  s!"    {o} = stablehlo.divide %se, %ssumb : {tt [B,c]}\n"
+
+/-- Softmax forward `softmax c` as `@softmax_fwd`. -/
+def softmaxFwdModule (B c : Nat) : String :=
+  "module @m {\n" ++
+  s!"  func.func @softmax_fwd(%z: {tt [B,c]}) -> {tt [B,c]} " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  renderSoftmax "%p" "%z" B c ++
+  s!"    return %p : {tt [B,c]}\n" ++ "  }\n}\n"
+
+/-- Softmax backward `softmax_has_vjp.backward` (rank-1, `softmax_back_bridge`)
+    as `@softmax_back`: `dz = p ⊙ (dy − Σⱼ pⱼ·dyⱼ)`. -/
+def softmaxBackModule (B c : Nat) : String :=
+  "module @m {\n" ++
+  s!"  func.func @softmax_back(%z: {tt [B,c]}, %dy: {tt [B,c]}) -> {tt [B,c]} " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  renderSoftmax "%p" "%z" B c ++
+  s!"    %pdy = stablehlo.multiply %p, %dy : {tt [B,c]}\n" ++
+  reduceSumBcast "%s" "%pdy" B c ++
+  s!"    %d = stablehlo.subtract %dy, %s : {tt [B,c]}\n" ++
+  s!"    %dz = stablehlo.multiply %p, %d : {tt [B,c]}\n" ++
+  s!"    return %dz : {tt [B,c]}\n" ++ "  }\n}\n"
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -614,5 +652,8 @@ def bnBackModule (B n : Nat) (eps : String) : String :=
 -- BatchNorm/LayerNorm forward + proof-backed 3-term backward, B=2, n=4, ε=1e-5.
 #eval IO.FS.writeFile "/tmp/bn_fwd.mlir" (bnFwdModule 2 4 "0.00001")
 #eval IO.FS.writeFile "/tmp/bn_back.mlir" (bnBackModule 2 4 "0.00001")
+-- Softmax forward + proven rank-1 backward, B=2, c=4.
+#eval IO.FS.writeFile "/tmp/softmax_fwd.mlir" (softmaxFwdModule 2 4)
+#eval IO.FS.writeFile "/tmp/softmax_back.mlir" (softmaxBackModule 2 4)
 
 end Proofs.IRPrint
