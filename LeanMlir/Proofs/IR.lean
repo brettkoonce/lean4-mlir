@@ -591,5 +591,47 @@ theorem denseRelu_at_bridge {m n : Nat} (W : Mat m n) (b : Vec n) (v : Vec m)
   simp only [vjp_comp_at, emitDenseBack, emitReluBack, Back.denote,
              HasVJP.toHasVJPAt, dense_has_vjp, relu_has_vjp_at]
 
+-- ════════════════════════════════════════════════════════════════
+-- § Final assembly — a whole-network bridge
+--
+-- `mlpForward = dense W₂ ∘ relu ∘ dense W₁ ∘ relu ∘ dense W₀` is a genuine
+-- whole network (all in Vec), and `mlp_has_vjp_at` is its proven VJP at a
+-- smooth point (built by chaining `vjp_comp_at`). The emitted whole
+-- backward is a single Vec `subst` chain of the per-op graphs; the bridge
+-- shows it denotes `mlp_has_vjp_at.backward` — every per-op `_at` bridge
+-- assembled through `denote_subst` into one machine-checked statement that
+-- the emitted StableHLO backward graph computes the proven whole-network VJP.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The emitted backward graph for the whole MLP: the `subst` chain
+    `dense₀ ∘ relu(p₀) ∘ dense₁ ∘ relu(p₁) ∘ dense₂` (backward order), where
+    `p₀ = dense W₀ b₀ x`, `p₁ = dense W₁ b₁ (relu (dense W₀ b₀ x))` are the
+    ReLU pre-activations. -/
+noncomputable def emitMlpBack {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (W₁ : Mat d₁ d₂) (W₂ : Mat d₂ d₃)
+    (p₀ : Vec d₁) (p₁ : Vec d₂) : Back d₃ d₀ :=
+  (emitDenseBack W₀).subst
+    ((emitReluBack p₀).subst
+      ((emitDenseBack W₁).subst
+        ((emitReluBack p₁).subst (emitDenseBack W₂))))
+
+/-- **Whole-network bridge.** The emitted MLP backward graph denotes the
+    proven `mlp_has_vjp_at.backward` — the full assembly: per-op `_at`
+    bridges chained through `denote_subst`, matching the nested `vjp_comp_at`.
+    A machine-checked statement that the emitted backward graph computes the
+    proven whole-network VJP at a smooth point. -/
+theorem mlp_whole_bridge {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀)
+    (h_smooth_0 : ∀ k, dense W₀ b₀ x k ≠ 0)
+    (h_smooth_1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0) (dy : Vec d₃) :
+    (emitMlpBack W₀ W₁ W₂ (dense W₀ b₀ x)
+        (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote dy
+      = (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).backward dy := by
+  simp only [emitMlpBack, denote_subst, mlp_has_vjp_at, vjp_comp_at, Back.denote,
+             emitDenseBack, emitReluBack, HasVJP.toHasVJPAt, dense_has_vjp, relu_has_vjp_at,
+             id_eq, Function.comp_apply]
+  rfl
+
 end IR
 end Proofs

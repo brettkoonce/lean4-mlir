@@ -171,3 +171,6 @@ open Proofs
 #print axioms IR.relu_at_bridge
 #print axioms IR.dense_at_bridge
 #print axioms IR.denseRelu_at_bridge
+-- Final assembly: the emitted whole-MLP backward graph denotes the proven
+-- whole-network VJP (mlp_has_vjp_at), per-op _at bridges chained via denote_subst.
+#print axioms IR.mlp_whole_bridge

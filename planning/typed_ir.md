@@ -265,15 +265,25 @@ remaining steps to `⟦emit mnistCnnNoBn⟧ = mnistCnnNoBn_has_vjp_at.backward`:
    wraps the global), and `denseRelu_at_bridge` shows the IR `subst` of the
    dense+relu graphs denotes the `vjp_comp_at` block backward — a real
    `mnistCnnNoBn` building block.
-4. **Final assembly + general conv.** What's left is bookkeeping: chain all
-   the per-layer/block bridges (Vec `subst` for dense/relu blocks, function
-   composition for the conv/maxpool `flatDenote` parts) to match the full
-   nested `vjp_comp_at` in `mnistCnnNoBn_has_vjp_at.backward`; and the
-   one genuine hard lemma — the **general-shape conv identity**
-   (~100–150-line partial-bijection sum-reindex; concrete shapes done).
+4. ✅ **Final assembly — landed (whole-network bridge).** `mlp_whole_bridge`:
+   the emitted backward graph for the *whole* MLP (`mlpForward`, an all-Vec
+   network — 3 dense + 2 relu) denotes the proven whole-network VJP
+   `mlp_has_vjp_at.backward`. `emitMlpBack` is one Vec `subst` chain; the
+   proof is the per-op `_at` bridges assembled through `denote_subst`,
+   matching the nested `vjp_comp_at` (closes under the three axioms). This is
+   the end-to-end statement: *the emitted StableHLO backward graph computes
+   the proven whole-network VJP at a smooth point.*
 
-Every structural piece is in place: per-op bridges (Vec + Tensor3), both
-chain rules, the flatten bridge, the `_at` block composition. The capstone
-is now assembly + the one conv lemma.
+**The pattern is complete.** Per-op bridges (Vec + Tensor3), both chain
+rules, the flatten bridge, `_at` variants, and a whole-network assembly are
+all in place and axiom-clean. Two items remain to reach the *CNN-specific*
+capstone `⟦emit mnistCnnNoBn⟧ = mnistCnnNoBn_has_vjp_at.backward`:
+
+- **Weave conv/maxpool into the assembly.** `mlp_whole_bridge` is all-Vec
+  (`subst` chain). The CNN additionally threads the conv/maxpool `flatDenote`
+  graphs (function composition at the `vjp_comp_at` seams, via the flatten
+  bridges) — same mechanism, more layers, plus `conv_flatten_bridge_2to2`.
+- **General-shape conv identity** — the one genuine hard lemma (~100–150-line
+  partial-bijection sum-reindex; concrete shapes done).
 
 None is new research; each is bounded plumbing on top of what's landed.
