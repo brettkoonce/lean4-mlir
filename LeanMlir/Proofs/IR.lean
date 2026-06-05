@@ -2,6 +2,7 @@ import LeanMlir.Proofs.MLP
 import LeanMlir.Proofs.CNN
 import LeanMlir.Proofs.LayerNorm
 import LeanMlir.Proofs.EfficientNet
+import LeanMlir.Proofs.Attention
 
 /-! # A denoted StableHLO-subset IR — Phase 0a/0b spike
 
@@ -312,6 +313,30 @@ theorem layernorm_back_bridge {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : 
         (Back.scaleConst γ Back.cotangent)).denote dy
       = (layerNorm_has_vjp n ε γ β hε).backward x dy :=
   bn_back_bridge ε γ β hε x dy
+
+-- ════════════════════════════════════════════════════════════════
+-- § Phase 1 — softmax (rank-1, like BN)
+--
+-- softmax's backward is the rank-1 `dzᵢ = pᵢ·(dyᵢ − ⟨p, dy⟩)` (one
+-- reduction `⟨p, dy⟩` + a broadcast-subtract + a scale by `p`), the same
+-- optimization shape as BN. With the reduce/broadcast IR in place it is
+-- `scale p (sub cotangent (sumBroadcast (scale p cotangent)))`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The emitted softmax input-gradient graph: scale by `p`, subtract the
+    broadcast inner product `⟨p, dy⟩`, scale by `p`. -/
+noncomputable def emitSoftmaxBack {c : Nat} (p : Vec c) : Back c c :=
+  .scale p (.sub .cotangent (.sumBroadcast (.scale p .cotangent)))
+
+/-- **Softmax backward bridge.** The emitted reduce+broadcast+scale graph
+    denotes the proven rank-1 softmax backward `pᵢ·(dyᵢ − ⟨p, dy⟩)`. -/
+theorem softmax_back_bridge (c : Nat) (z dy : Vec c) :
+    (emitSoftmaxBack (softmax c z)).denote dy = (softmax_has_vjp c).backward z dy := by
+  funext i
+  simp only [emitSoftmaxBack, Back.denote, softmax_has_vjp]
+  rw [show (∑ j, dy j * softmax c z j) = ∑ j, softmax c z j * dy j from
+        Finset.sum_congr rfl (fun j _ => mul_comm _ _)]
+  ring
 
 end IR
 end Proofs

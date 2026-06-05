@@ -154,3 +154,4 @@ open Proofs
 #print axioms IR.bn_normalize_back_bridge
 #print axioms IR.bn_back_bridge
 #print axioms IR.layernorm_back_bridge
+#print axioms IR.softmax_back_bridge
