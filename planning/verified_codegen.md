@@ -21,9 +21,27 @@ loss → backward → 4 param grads → SGD`, conv dW via the transpose trick) a
 both renderings of proof-backed IR. Goal (per the author): extend this
 **across the book** to make "the codegen is verified" a concrete, book-wide
 claim — a verified-alongside artifact, **not** a production swap of
-`generateTrainStep` (that's a later, separate decision). Next: a generalized
-`NetSpec`-driven harness, then the chapter sweep (BatchNorm → Residual/ResNet
-→ Attention/ViT → MobileNet/ConvNeXt/EfficientNet).
+`generateTrainStep` (that's a later, separate decision).
+
+**Chapter sweep — every CORE op now rendered proof-backed + GPU-validated
+(rocm/gfx1100), vs an independent numpy reference:**
+
+| op / layer | forward | backward | GPU err |
+|---|---|---|---|
+| dense | ✅ | ✅ (+dW/db) | 1e-7 |
+| relu | ✅ | ✅ | — |
+| conv2d | ✅ `convolution` | ✅ reversed-kernel (+dW transpose trick) | 1.9e-6 |
+| maxpool | ✅ `reduce_window` | ✅ `select_and_scatter` | 0.0 |
+| softmax-CE loss | ✅ | ✅ | — |
+| BatchNorm/LayerNorm | ✅ | ✅ 3-term rank-1 | 6e-8 |
+| softmax | ✅ | ✅ rank-1 | 9e-8 |
+| **attention (SDPA)** | ✅ | ✅ dQ/dK/dV | 4e-8 |
+
+Plus two full SGD train steps end-to-end: **MLP** (1.19e-7) and **CNN**
+(1.19e-7). Remaining chapters are compositions of the above + a few small ops:
+Residual (add fan-in), SE (gate multiply), Depthwise (grouped conv), the
+elementwise activations (gelu/swish/sigmoid/relu6/layerScale), and the
+composite nets (MobileNetV2 / ConvNeXt / EfficientNet).
 
 ## Done (MLP)
 
