@@ -306,6 +306,41 @@ def convOp (o lhs rhs tyL tyR tyO : String) (pH pW : Nat) : String :=
   "      " ++ "{batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
     s!" : ({tyL}, {tyR}) -> {tyO}\n"
 
+/-- Wrap a single-function module. -/
+def actMod (name argSig retTy body : String) : String :=
+  "module @m {\n" ++ s!"  func.func @{name}({argSig}) -> {retTy} " ++ "{\n" ++ body ++ "  }\n}\n"
+
+/-- `convOp` with an explicit `feature_group_count` (grouped/depthwise conv). -/
+def convOpG (o lhs rhs tyL tyR tyO : String) (pH pW : Nat) (fgc : String) : String :=
+  s!"    {o} = stablehlo.convolution({lhs}, {rhs})\n" ++
+  "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+  "      window = " ++ "{" ++
+    s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++
+    "}\n" ++
+  "      " ++ "{" ++ s!"batch_group_count = 1 : i64, feature_group_count = {fgc} : i64" ++ "}" ++
+    s!" : ({tyL}, {tyR}) -> {tyO}\n"
+
+/-- Depthwise (per-channel) conv forward `depthwiseConv2d` as `@dw_fwd`:
+    grouped convolution, `feature_group_count = c`, kernel `[c,1,kH,kW]`. -/
+def depthwiseFwdM (c H W kH kW : Nat) : String :=
+  let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+  actMod "dw_fwd" s!"%x: {tt [1,c,H,W]}, %W: {tt [c,kH,kW]}, %b: {tt [c]}" (tt [1,c,H,W])
+    (s!"    %We = stablehlo.reshape %W : ({tt [c,kH,kW]}) -> {tt [c,1,kH,kW]}\n" ++
+     convOpG "%cv" "%x" "%We" (tt [1,c,H,W]) (tt [c,1,kH,kW]) (tt [1,c,H,W]) pH pW (toString c) ++
+     s!"    %bb = stablehlo.broadcast_in_dim %b, dims = [1] : ({tt [c]}) -> {tt [1,c,H,W]}\n" ++
+     s!"    %o = stablehlo.add %cv, %bb : {tt [1,c,H,W]}\n    return %o : {tt [1,c,H,W]}\n")
+
+/-- Depthwise conv input-gradient `depthwiseConv2d_input_grad_formula` as
+    `@dw_back`: per-channel reversed-kernel grouped conv (no channel
+    transpose — depthwise channels don't mix). -/
+def depthwiseBackM (c H W kH kW : Nat) : String :=
+  let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+  actMod "dw_back" s!"%dy: {tt [1,c,H,W]}, %W: {tt [c,kH,kW]}" (tt [1,c,H,W])
+    (s!"    %We = stablehlo.reshape %W : ({tt [c,kH,kW]}) -> {tt [c,1,kH,kW]}\n" ++
+     s!"    %Wr = stablehlo.reverse %We, dims = [2, 3] : {tt [c,1,kH,kW]}\n" ++
+     convOpG "%dx" "%dy" "%Wr" (tt [1,c,H,W]) (tt [c,1,kH,kW]) (tt [1,c,H,W]) pH pW (toString c) ++
+     s!"    return %dx : {tt [1,c,H,W]}\n")
+
 /-- Conv forward `conv2d W b` as a `func.func @conv_fwd` (convolution + bias). -/
 def convFwdModule (B ic oc H Wd kH kW : Nat) : String :=
   let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
@@ -692,10 +727,6 @@ def sdpaBackModule (n d : Nat) (scale : String) : String :=
 -- two-sided clamp with mask `1[0<x<6]` (relu6_has_vjp_at). Length `m`. -/
 -- ════════════════════════════════════════════════════════════════
 
-/-- Wrap a single-function module. -/
-def actMod (name argSig retTy body : String) : String :=
-  "module @m {\n" ++ s!"  func.func @{name}({argSig}) -> {retTy} " ++ "{\n" ++ body ++ "  }\n}\n"
-
 /-- sigmoid: σ = logistic; σ' = σ(1−σ). -/
 def sigmoidFwdM (m : Nat) : String :=
   actMod "sigmoid_fwd" s!"%x: {tt [m]}" (tt [m])
@@ -863,5 +894,8 @@ def seBackM (m : Nat) : String :=
 #eval IO.FS.writeFile "/tmp/residual_back.mlir" (residualBackM 2 4)
 #eval IO.FS.writeFile "/tmp/se_fwd.mlir" (seFwdM 8)
 #eval IO.FS.writeFile "/tmp/se_back.mlir" (seBackM 8)
+-- Depthwise (per-channel grouped) conv forward + proof-backed backward, c=2, 4×4, 3×3.
+#eval IO.FS.writeFile "/tmp/dw_fwd.mlir" (depthwiseFwdM 2 4 4 3 3)
+#eval IO.FS.writeFile "/tmp/dw_back.mlir" (depthwiseBackM 2 4 4 3 3)
 
 end Proofs.IRPrint

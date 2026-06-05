@@ -36,6 +36,8 @@ with IREE, runs it, and checks it against an independent numpy reference:
                                diagonal backward dy⊙act'(x).
   • residual / se             — the fan-in chapters: residual add (I + dense),
                                squeeze-excite gate-multiply (se_back_bridge).
+  • depthwise_fwd / _back     — per-channel grouped conv (feature_group_count=c)
+                               + the proven per-channel input gradient.
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -230,6 +232,33 @@ ACT_REF = {
                       * (1 + 3 * 0.044715 * x**2))),
 }
 
+def dw_fwd_ref(x, W, b):
+    """Depthwise conv2d: per-channel SAME cross-correlation. x[1,c,H,W], W[c,kH,kW]."""
+    _, C, H, Wd = x.shape; kH, kW = W.shape[1], W.shape[2]; pH, pW = (kH-1)//2, (kW-1)//2
+    y = np.zeros_like(x)
+    for c in range(C):
+        y[0, c] += b[c]
+        for kh in range(kH):
+            for kw in range(kW):
+                for hi in range(H):
+                    for wi in range(Wd):
+                        r, s = hi+kh-pH, wi+kw-pW
+                        if 0 <= r < H and 0 <= s < Wd: y[0, c, hi, wi] += W[c, kh, kw] * x[0, c, r, s]
+    return y
+
+def dw_back_ref(dy, W):
+    """Depthwise input-grad (per-channel adjoint, independent of the reverse trick)."""
+    _, C, H, Wd = dy.shape; kH, kW = W.shape[1], W.shape[2]; pH, pW = (kH-1)//2, (kW-1)//2
+    dx = np.zeros_like(dy)
+    for c in range(C):
+        for kh in range(kH):
+            for kw in range(kW):
+                for hi in range(H):
+                    for wi in range(Wd):
+                        r, s = hi+kh-pH, wi+kw-pW
+                        if 0 <= r < H and 0 <= s < Wd: dx[0, c, r, s] += W[c, kh, kw] * dy[0, c, hi, wi]
+    return dx
+
 def residual_fwd_ref(x, W, b): return x + (x @ W + b)
 def residual_back_ref(dy, W): return dy + dy @ W.T            # add fan-in: I + dense
 def se_fwd_ref(x): return x * _sig(x)
@@ -410,6 +439,16 @@ e = max_err(outs, [se_fwd_ref(ax)]); ok &= e < TOL
 outs2, nb2 = compile_run("/tmp/se_back.mlir", "se_back", [ax, ady])
 e2 = max_err(outs2, [se_back_ref(ax, ady)]); ok &= e2 < TOL
 print(f"se_fwd/back     ({nb}/{nb2}B): fwd={e:.2e} back={e2:.2e}  {'PASS' if max(e,e2)<TOL else 'FAIL'}  (gate-multiply fan-in)")
+
+# ── Depthwise (per-channel grouped) conv: forward + proof-backed input grad ──
+dwx = rng.standard_normal((1, 2, 4, 4)).astype(np.float32)
+dwW = rng.standard_normal((2, 3, 3)).astype(np.float32); dwb = rng.standard_normal((2,)).astype(np.float32)
+dwdy = rng.standard_normal((1, 2, 4, 4)).astype(np.float32)
+outs, nb = compile_run("/tmp/dw_fwd.mlir", "dw_fwd", [dwx, dwW, dwb])
+e = max_err(outs, [dw_fwd_ref(dwx, dwW, dwb)]); ok &= e < TOL
+outs2, nb2 = compile_run("/tmp/dw_back.mlir", "dw_back", [dwdy, dwW])
+e2 = max_err(outs2, [dw_back_ref(dwdy, dwW)]); ok &= e2 < TOL
+print(f"depthwise_fwd/back ({nb}/{nb2}B): fwd={e:.2e} back={e2:.2e}  {'PASS' if max(e,e2)<TOL else 'FAIL'}  (grouped conv, fgc=c)")
 
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
