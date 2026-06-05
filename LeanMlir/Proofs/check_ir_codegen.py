@@ -32,6 +32,8 @@ with IREE, runs it, and checks it against an independent numpy reference:
                                (p⊙(dy−⟨p,dy⟩)); the attention building block.
   • sdpa_fwd / sdpa_back      — scaled dot-product attention softmax(QKᵀ/√d)·V
                                + the proven dQ/dK/dV (the ViT apex).
+  • {sigmoid,swish,relu6,gelu} — pointwise activations: forward + the proven
+                               diagonal backward dy⊙act'(x).
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -209,6 +211,23 @@ def sdpa_back_ref(Q, K, V, dOut, d):
     dScores = dScaled * scale
     return [dScores @ K, dScores.T @ Q, dV]               # dQ, dK, dV
 
+def _sig(x): return 1.0 / (1.0 + np.exp(-x))
+def _gelu_parts(x):
+    c = np.sqrt(2.0 / np.pi); t = np.tanh(c * (x + 0.044715 * x**3)); return c, t
+# (forward, backward dy⊙act'(x)) per activation — derivatives match *ScalarDeriv.
+ACT_REF = {
+    "sigmoid": (lambda x: _sig(x),
+                lambda x, dy: dy * _sig(x) * (1 - _sig(x))),
+    "swish":   (lambda x: x * _sig(x),
+                lambda x, dy: dy * (_sig(x) * (1 + x * (1 - _sig(x))))),
+    "relu6":   (lambda x: np.minimum(np.maximum(x, 0.0), 6.0),
+                lambda x, dy: dy * ((x > 0) & (x < 6)).astype(np.float32)),
+    "gelu":    (lambda x: 0.5 * x * (1 + _gelu_parts(x)[1]),
+                lambda x, dy: dy * (0.5 * (1 + _gelu_parts(x)[1])
+                    + 0.5 * x * (1 - _gelu_parts(x)[1]**2) * _gelu_parts(x)[0]
+                      * (1 + 3 * 0.044715 * x**2))),
+}
+
 def mlp_back_ref(dy, W0, W1, W2, p0, p1):
     """Input-gradient (VJP) chain dx."""
     return (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
@@ -358,6 +377,17 @@ print(f"sdpa_fwd        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'
 outs, nb = compile_run("/tmp/sdpa_back.mlir", "sdpa_back", [aQ, aK, aV, aD])
 e = max_err(outs, sdpa_back_ref(aQ, aK, aV, aD, ad)); ok &= e < TOL
 print(f"sdpa_back       ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (dQ,dK,dV vs proven sdpa_back_Q/K/V)")
+
+# ── Pointwise activations (Phase 3 sweep): fwd + proven dy⊙act'(x) backward ──
+ax = rng.standard_normal((8,)).astype(np.float32)
+ady = rng.standard_normal((8,)).astype(np.float32)
+for nm, (fref, bref) in ACT_REF.items():
+    outs, nb = compile_run(f"/tmp/{nm}_fwd.mlir", f"{nm}_fwd", [ax])
+    e = max_err(outs, [fref(ax).astype(np.float32)]); ok &= e < TOL
+    outs2, nb2 = compile_run(f"/tmp/{nm}_back.mlir", f"{nm}_back", [ax, ady])
+    e2 = max_err(outs2, [bref(ax, ady).astype(np.float32)]); ok &= e2 < TOL
+    print(f"{nm+'_fwd/back':15s} ({nb}/{nb2}B): fwd={e:.2e} back={e2:.2e}  "
+          f"{'PASS' if max(e, e2) < TOL else 'FAIL'}  (dy⊙{nm}'(x))")
 
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 

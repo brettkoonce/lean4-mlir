@@ -682,6 +682,105 @@ def sdpaBackModule (n d : Nat) (scale : String) : String :=
   matdg "%dK" "%dScores" "%Q" "0" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
   s!"    return %dQ, %dK, %dV : {tt [n,d]}, {tt [n,d]}, {tt [n,d]}\n" ++ "  }\n}\n"
 
+-- ════════════════════════════════════════════════════════════════
+-- § Pointwise activations (Phase 3 sweep) — gelu, swish, sigmoid, relu6
+--
+-- Each has a diagonal Jacobian, so its proven backward is `dy ⊙ act'(x)`
+-- (gelu/swish/sigmoid_back_bridge — a single multiply). Forward renders the
+-- transcendental directly (`logistic`/`tanh`); the derivative is the
+-- closed form matching the repo's `*ScalarDeriv = deriv …`. relu6 is the
+-- two-sided clamp with mask `1[0<x<6]` (relu6_has_vjp_at). Length `m`. -/
+-- ════════════════════════════════════════════════════════════════
+
+/-- Wrap a single-function module. -/
+def actMod (name argSig retTy body : String) : String :=
+  "module @m {\n" ++ s!"  func.func @{name}({argSig}) -> {retTy} " ++ "{\n" ++ body ++ "  }\n}\n"
+
+/-- sigmoid: σ = logistic; σ' = σ(1−σ). -/
+def sigmoidFwdM (m : Nat) : String :=
+  actMod "sigmoid_fwd" s!"%x: {tt [m]}" (tt [m])
+    (s!"    %s = stablehlo.logistic %x : {tt [m]}\n    return %s : {tt [m]}\n")
+def sigmoidBackM (m : Nat) : String :=
+  actMod "sigmoid_back" s!"%x: {tt [m]}, %dy: {tt [m]}" (tt [m])
+    (s!"    %s = stablehlo.logistic %x : {tt [m]}\n" ++
+     s!"    %one = stablehlo.constant dense<1.0> : {tt [m]}\n" ++
+     s!"    %om = stablehlo.subtract %one, %s : {tt [m]}\n" ++
+     s!"    %sp = stablehlo.multiply %s, %om : {tt [m]}\n" ++
+     s!"    %dx = stablehlo.multiply %dy, %sp : {tt [m]}\n    return %dx : {tt [m]}\n")
+
+/-- swish: y = x·σ(x); swish' = σ·(1 + x·(1−σ)). -/
+def swishFwdM (m : Nat) : String :=
+  actMod "swish_fwd" s!"%x: {tt [m]}" (tt [m])
+    (s!"    %s = stablehlo.logistic %x : {tt [m]}\n    %y = stablehlo.multiply %x, %s : {tt [m]}\n    return %y : {tt [m]}\n")
+def swishBackM (m : Nat) : String :=
+  actMod "swish_back" s!"%x: {tt [m]}, %dy: {tt [m]}" (tt [m])
+    (s!"    %s = stablehlo.logistic %x : {tt [m]}\n" ++
+     s!"    %one = stablehlo.constant dense<1.0> : {tt [m]}\n" ++
+     s!"    %om = stablehlo.subtract %one, %s : {tt [m]}\n" ++
+     s!"    %xom = stablehlo.multiply %x, %om : {tt [m]}\n" ++
+     s!"    %inner = stablehlo.add %one, %xom : {tt [m]}\n" ++
+     s!"    %sp = stablehlo.multiply %s, %inner : {tt [m]}\n" ++
+     s!"    %dx = stablehlo.multiply %dy, %sp : {tt [m]}\n    return %dx : {tt [m]}\n")
+
+/-- relu6: clamp(x,0,6); deriv = 1[0<x<6]. -/
+def relu6FwdM (m : Nat) : String :=
+  actMod "relu6_fwd" s!"%x: {tt [m]}" (tt [m])
+    (s!"    %z = stablehlo.constant dense<0.0> : {tt [m]}\n" ++
+     s!"    %six = stablehlo.constant dense<6.0> : {tt [m]}\n" ++
+     s!"    %m1 = stablehlo.maximum %x, %z : {tt [m]}\n" ++
+     s!"    %y = stablehlo.minimum %m1, %six : {tt [m]}\n    return %y : {tt [m]}\n")
+def relu6BackM (m : Nat) : String :=
+  actMod "relu6_back" s!"%x: {tt [m]}, %dy: {tt [m]}" (tt [m])
+    (s!"    %z = stablehlo.constant dense<0.0> : {tt [m]}\n" ++
+     s!"    %six = stablehlo.constant dense<6.0> : {tt [m]}\n" ++
+     s!"    %gt = stablehlo.compare GT, %x, %z : ({tt [m]}, {tt [m]}) -> {ti1 [m]}\n" ++
+     s!"    %lt = stablehlo.compare LT, %x, %six : ({tt [m]}, {tt [m]}) -> {ti1 [m]}\n" ++
+     s!"    %mask = stablehlo.and %gt, %lt : {ti1 [m]}\n" ++
+     s!"    %dx = stablehlo.select %mask, %dy, %z : {ti1 [m]}, {tt [m]}\n    return %dx : {tt [m]}\n")
+
+/-- gelu (tanh approx, c=√(2/π), a=0.044715): y = 0.5x(1+t), t=tanh(c(x+ax³));
+    gelu' = 0.5(1+t) + 0.5x(1−t²)·c(1+3a·x²). -/
+def geluFwdM (m : Nat) : String :=
+  actMod "gelu_fwd" s!"%x: {tt [m]}" (tt [m])
+    (s!"    %a = stablehlo.constant dense<0.044715> : {tt [m]}\n" ++
+     s!"    %c = stablehlo.constant dense<0.7978845608> : {tt [m]}\n" ++
+     s!"    %half = stablehlo.constant dense<0.5> : {tt [m]}\n" ++
+     s!"    %one = stablehlo.constant dense<1.0> : {tt [m]}\n" ++
+     s!"    %x2 = stablehlo.multiply %x, %x : {tt [m]}\n" ++
+     s!"    %x3 = stablehlo.multiply %x2, %x : {tt [m]}\n" ++
+     s!"    %ax3 = stablehlo.multiply %a, %x3 : {tt [m]}\n" ++
+     s!"    %inn = stablehlo.add %x, %ax3 : {tt [m]}\n" ++
+     s!"    %u = stablehlo.multiply %c, %inn : {tt [m]}\n" ++
+     s!"    %t = stablehlo.tanh %u : {tt [m]}\n" ++
+     s!"    %ot = stablehlo.add %one, %t : {tt [m]}\n" ++
+     s!"    %hx = stablehlo.multiply %half, %x : {tt [m]}\n" ++
+     s!"    %y = stablehlo.multiply %hx, %ot : {tt [m]}\n    return %y : {tt [m]}\n")
+def geluBackM (m : Nat) : String :=
+  actMod "gelu_back" s!"%x: {tt [m]}, %dy: {tt [m]}" (tt [m])
+    (s!"    %a = stablehlo.constant dense<0.044715> : {tt [m]}\n" ++
+     s!"    %a3 = stablehlo.constant dense<0.134145> : {tt [m]}\n" ++
+     s!"    %c = stablehlo.constant dense<0.7978845608> : {tt [m]}\n" ++
+     s!"    %half = stablehlo.constant dense<0.5> : {tt [m]}\n" ++
+     s!"    %one = stablehlo.constant dense<1.0> : {tt [m]}\n" ++
+     s!"    %x2 = stablehlo.multiply %x, %x : {tt [m]}\n" ++
+     s!"    %x3 = stablehlo.multiply %x2, %x : {tt [m]}\n" ++
+     s!"    %ax3 = stablehlo.multiply %a, %x3 : {tt [m]}\n" ++
+     s!"    %inn = stablehlo.add %x, %ax3 : {tt [m]}\n" ++
+     s!"    %u = stablehlo.multiply %c, %inn : {tt [m]}\n" ++
+     s!"    %t = stablehlo.tanh %u : {tt [m]}\n" ++
+     s!"    %ot = stablehlo.add %one, %t : {tt [m]}\n" ++
+     s!"    %ta = stablehlo.multiply %half, %ot : {tt [m]}\n" ++
+     s!"    %t2 = stablehlo.multiply %t, %t : {tt [m]}\n" ++
+     s!"    %omt2 = stablehlo.subtract %one, %t2 : {tt [m]}\n" ++
+     s!"    %hx = stablehlo.multiply %half, %x : {tt [m]}\n" ++
+     s!"    %hxo = stablehlo.multiply %hx, %omt2 : {tt [m]}\n" ++
+     s!"    %a3x2 = stablehlo.multiply %a3, %x2 : {tt [m]}\n" ++
+     s!"    %in2 = stablehlo.add %one, %a3x2 : {tt [m]}\n" ++
+     s!"    %cin2 = stablehlo.multiply %c, %in2 : {tt [m]}\n" ++
+     s!"    %tb = stablehlo.multiply %hxo, %cin2 : {tt [m]}\n" ++
+     s!"    %gp = stablehlo.add %ta, %tb : {tt [m]}\n" ++
+     s!"    %dx = stablehlo.multiply %dy, %gp : {tt [m]}\n    return %dx : {tt [m]}\n")
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -710,5 +809,14 @@ def sdpaBackModule (n d : Nat) (scale : String) : String :=
 -- Scaled dot-product attention forward + proven backward (dQ,dK,dV), n=3, d=4, 1/√4=0.5.
 #eval IO.FS.writeFile "/tmp/sdpa_fwd.mlir" (sdpaFwdModule 3 4 "0.5")
 #eval IO.FS.writeFile "/tmp/sdpa_back.mlir" (sdpaBackModule 3 4 "0.5")
+-- Pointwise activations (m=8): fwd + proven dy⊙act'(x) backward.
+#eval IO.FS.writeFile "/tmp/sigmoid_fwd.mlir" (sigmoidFwdM 8)
+#eval IO.FS.writeFile "/tmp/sigmoid_back.mlir" (sigmoidBackM 8)
+#eval IO.FS.writeFile "/tmp/swish_fwd.mlir" (swishFwdM 8)
+#eval IO.FS.writeFile "/tmp/swish_back.mlir" (swishBackM 8)
+#eval IO.FS.writeFile "/tmp/relu6_fwd.mlir" (relu6FwdM 8)
+#eval IO.FS.writeFile "/tmp/relu6_back.mlir" (relu6BackM 8)
+#eval IO.FS.writeFile "/tmp/gelu_fwd.mlir" (geluFwdM 8)
+#eval IO.FS.writeFile "/tmp/gelu_back.mlir" (geluBackM 8)
 
 end Proofs.IRPrint
