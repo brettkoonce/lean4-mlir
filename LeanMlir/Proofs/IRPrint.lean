@@ -1642,6 +1642,104 @@ def invresBackModule (c cmid H W kHd kWd : Nat) (eps : String) : String :=
      s!"    %dx = stablehlo.add %dOut, %dxb : {tt [1,c,H,W]}\n" ++
      s!"    return %dx : {tt [1,c,H,W]}\n")
 
+-- ════════════════════════════════════════════════════════════════
+-- § ConvNeXt block — depthwise + LN + inverted MLP + layer scale (Phase 3 sweep)
+--
+--   depthwise(7×7)→LN → expand(1×1, c→cExp)+b→gelu → project(1×1, cExp→c)+b
+--     → layerScale(γ ⊙) → + x      (identity skip; no post-add activation)
+-- The proven `convNextBlock = residual(layerScale ∘ project ∘ gelu ∘ expand ∘
+-- LN ∘ depthwise)`. Everything is smooth (gelu smooth, LN smooth for ε>0,
+-- conv/layerScale linear) — no kink hypotheses. `layerScale γ` is the trivial
+-- per-element `γ⊙x`; its backward is `γ⊙dy`. The LN is the proof's *flat*
+-- `layerNormForward` (= flat BN, normalizing over the whole c·h·w vector); true
+-- ConvNeXt channel-LN-over-NCHW is the same representation caveat the proof
+-- flags. The 1×1 conv biases feed gelu/layerScale (not a norm) so they are kept;
+-- the depthwise bias folds into LN. Reuses the gelu renderers + flat BN.
+-- ════════════════════════════════════════════════════════════════
+
+/-- ConvNeXt parameter signature: depthwise k×k (no bias), flat-LN scalars,
+    expand/project 1×1 (with bias), and the per-element layer-scale `γ`. -/
+def convnextSig (c cExp H W kH kW : Nat) : String :=
+  s!"%x: {tt [1,c,H,W]}, %Wdw: {tt [c,kH,kW]}, %gln: tensor<f32>, %bln: tensor<f32>, " ++
+  s!"%Wex: {tt [cExp,c,1,1]}, %bex: {tt [cExp]}, %Wpr: {tt [c,cExp,1,1]}, %bpr: {tt [c]}, " ++
+  s!"%gls: {tt [1,c,H,W]}"
+
+/-- Shared constants: f32 zero, the flat-LN width nf/eps, and the gelu splats
+    (sized to the expanded activation `cExp·H·W`). -/
+def convnextConsts (c cExp H W : Nat) (eps : String) : String :=
+  let M := c*H*W; let Mex := cExp*H*W
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %nfM = stablehlo.constant dense<{M}.0> : {tt [1,M]}\n" ++
+  s!"    %epsM = stablehlo.constant dense<{eps}> : {tt [1,M]}\n" ++
+  geluConsts 1 Mex
+
+/-- ConvNeXt forward chain producing `%out`, leaving `%ln…` (LN xhat/istd),
+    `%ge…` (gelu saved), and the SE-free activations for the backward. -/
+def convnextFwdBody (c cExp H W kH kW : Nat) : String :=
+  let pH := (kH-1)/2; let pW := (kW-1)/2; let M := c*H*W; let Mex := cExp*H*W
+  -- depthwise k×k (no bias)
+  s!"    %dwe = stablehlo.reshape %Wdw : ({tt [c,kH,kW]}) -> {tt [c,1,kH,kW]}\n" ++
+  convOpG "%d_c" "%x" "%dwe" (tt [1,c,H,W]) (tt [c,1,kH,kW]) (tt [1,c,H,W]) pH pW (toString c) ++
+  s!"    %d_cf = stablehlo.reshape %d_c : ({tt [1,c,H,W]}) -> {tt [1,M]}\n" ++
+  -- flat LayerNorm
+  mbLNF "%ln" "%d_cf" "%gln" "%bln" "%nfM" "%epsM" 1 M ++
+  s!"    %ln4 = stablehlo.reshape %ln : ({tt [1,M]}) -> {tt [1,c,H,W]}\n" ++
+  -- expand 1×1 (c→cExp) + per-channel bias
+  convOp "%ex_c" "%ln4" "%Wex" (tt [1,c,H,W]) (tt [cExp,c,1,1]) (tt [1,cExp,H,W]) 0 0 ++
+  s!"    %ex_bb = stablehlo.broadcast_in_dim %bex, dims = [1] : ({tt [cExp]}) -> {tt [1,cExp,H,W]}\n" ++
+  s!"    %ex = stablehlo.add %ex_c, %ex_bb : {tt [1,cExp,H,W]}\n" ++
+  s!"    %ex_f = stablehlo.reshape %ex : ({tt [1,cExp,H,W]}) -> {tt [1,Mex]}\n" ++
+  -- gelu on the expanded activation
+  renderGeluF "%ge" "%ex_f" 1 Mex ++
+  s!"    %ge4 = stablehlo.reshape %ge : ({tt [1,Mex]}) -> {tt [1,cExp,H,W]}\n" ++
+  -- project 1×1 (cExp→c) + per-channel bias
+  convOp "%pr_c" "%ge4" "%Wpr" (tt [1,cExp,H,W]) (tt [c,cExp,1,1]) (tt [1,c,H,W]) 0 0 ++
+  s!"    %pr_bb = stablehlo.broadcast_in_dim %bpr, dims = [1] : ({tt [c]}) -> {tt [1,c,H,W]}\n" ++
+  s!"    %pr = stablehlo.add %pr_c, %pr_bb : {tt [1,c,H,W]}\n" ++
+  -- layer scale (elementwise γ) + identity skip
+  s!"    %ls = stablehlo.multiply %gls, %pr : {tt [1,c,H,W]}\n" ++
+  s!"    %out = stablehlo.add %x, %ls : {tt [1,c,H,W]}\n"
+
+/-- ConvNeXt block forward as `@convnext_fwd`. -/
+def convnextFwdModule (c cExp H W kH kW : Nat) (eps : String) : String :=
+  actMod "convnext_fwd" (convnextSig c cExp H W kH kW) (tt [1,c,H,W])
+    (convnextConsts c cExp H W eps ++ convnextFwdBody c cExp H W kH kW ++
+     s!"    return %out : {tt [1,c,H,W]}\n")
+
+/-- ConvNeXt block input-gradient backward `dx = dOut + body.back(dOut)` as
+    `@convnext_back`: layerScale-back → project input-VJP → gelu-back → expand
+    input-VJP → LN-back → depthwise input-VJP, then the identity skip. -/
+def convnextBackModule (c cExp H W kH kW : Nat) (eps : String) : String :=
+  let pH := (kH-1)/2; let pW := (kW-1)/2; let M := c*H*W; let Mex := cExp*H*W
+  actMod "convnext_back" (convnextSig c cExp H W kH kW ++ s!", %dOut: {tt [1,c,H,W]}") (tt [1,c,H,W])
+    (convnextConsts c cExp H W eps ++ convnextFwdBody c cExp H W kH kW ++
+     "    // ── backward: input gradient dx = dOut + body.back(dOut) ──\n" ++
+     -- layer scale back: d(project) = γ ⊙ dOut
+     s!"    %dpr = stablehlo.multiply %gls, %dOut : {tt [1,c,H,W]}\n" ++
+     -- project 1×1 conv input-VJP (bias irrelevant to dx)
+     s!"    %Wprt = stablehlo.transpose %Wpr, dims = [1, 0, 2, 3] : ({tt [c,cExp,1,1]}) -> {tt [cExp,c,1,1]}\n" ++
+     s!"    %Wprr = stablehlo.reverse %Wprt, dims = [2, 3] : {tt [cExp,c,1,1]}\n" ++
+     convOp "%dge4" "%dpr" "%Wprr" (tt [1,c,H,W]) (tt [cExp,c,1,1]) (tt [1,cExp,H,W]) 0 0 ++
+     -- gelu back (reuses the saved %ge_* forward)
+     s!"    %dge4f = stablehlo.reshape %dge4 : ({tt [1,cExp,H,W]}) -> {tt [1,Mex]}\n" ++
+     renderGeluB "%dex" "%ge" "%dge4f" 1 Mex ++
+     s!"    %dex4 = stablehlo.reshape %dex : ({tt [1,Mex]}) -> {tt [1,cExp,H,W]}\n" ++
+     -- expand 1×1 conv input-VJP
+     s!"    %Wext = stablehlo.transpose %Wex, dims = [1, 0, 2, 3] : ({tt [cExp,c,1,1]}) -> {tt [c,cExp,1,1]}\n" ++
+     s!"    %Wexr = stablehlo.reverse %Wext, dims = [2, 3] : {tt [c,cExp,1,1]}\n" ++
+     convOp "%dln4" "%dex4" "%Wexr" (tt [1,cExp,H,W]) (tt [c,cExp,1,1]) (tt [1,c,H,W]) 0 0 ++
+     -- flat LayerNorm back
+     s!"    %dln4f = stablehlo.reshape %dln4 : ({tt [1,c,H,W]}) -> {tt [1,M]}\n" ++
+     mbLNB "%ddc" "%ln" "%gln" "%dln4f" "%nfM" 1 M ++
+     s!"    %ddc4 = stablehlo.reshape %ddc : ({tt [1,M]}) -> {tt [1,c,H,W]}\n" ++
+     -- depthwise input-VJP
+     s!"    %dwe2 = stablehlo.reshape %Wdw : ({tt [c,kH,kW]}) -> {tt [c,1,kH,kW]}\n" ++
+     s!"    %dwr = stablehlo.reverse %dwe2, dims = [2, 3] : {tt [c,1,kH,kW]}\n" ++
+     convOpG "%dxb" "%ddc4" "%dwr" (tt [1,c,H,W]) (tt [c,1,kH,kW]) (tt [1,c,H,W]) pH pW (toString c) ++
+     -- identity residual fan-in
+     s!"    %dx = stablehlo.add %dOut, %dxb : {tt [1,c,H,W]}\n" ++
+     s!"    return %dx : {tt [1,c,H,W]}\n")
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -1707,5 +1805,8 @@ def invresBackModule (c cmid H W kHd kWd : Nat) (eps : String) : String :=
 
 #eval IO.FS.writeFile "/tmp/invres_fwd.mlir" (invresFwdModule 2 4 4 4 3 3 "0.00001")
 #eval IO.FS.writeFile "/tmp/invres_back.mlir" (invresBackModule 2 4 4 4 3 3 "0.00001")
+
+#eval IO.FS.writeFile "/tmp/convnext_fwd.mlir" (convnextFwdModule 2 8 4 4 7 7 "0.00001")
+#eval IO.FS.writeFile "/tmp/convnext_back.mlir" (convnextBackModule 2 8 4 4 7 7 "0.00001")
 
 end Proofs.IRPrint
