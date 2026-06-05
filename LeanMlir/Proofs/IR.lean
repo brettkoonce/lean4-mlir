@@ -3,6 +3,7 @@ import LeanMlir.Proofs.CNN
 import LeanMlir.Proofs.LayerNorm
 import LeanMlir.Proofs.EfficientNet
 import LeanMlir.Proofs.Attention
+import LeanMlir.Proofs.SE
 
 /-! # A denoted StableHLO-subset IR — Phase 0a/0b spike
 
@@ -58,6 +59,7 @@ inductive Back (inp : Nat) : Nat → Type where
   | sumBroadcast {n : Nat} : Back inp n → Back inp n
   | sub {n : Nat} : Back inp n → Back inp n → Back inp n
   | scaleConst {n : Nat} (c : ℝ) : Back inp n → Back inp n
+  | add {n : Nat} : Back inp n → Back inp n → Back inp n
 
 /-- **Denotational semantics** of a backward graph, into the proofs' own
     `Vec` type — so a bridge theorem can equate it with a proven
@@ -71,6 +73,7 @@ noncomputable def Back.denote {inp out : Nat} (e : Back inp out) (dy : Vec inp) 
   | .sumBroadcast e' => fun _ => ∑ j, e'.denote dy j
   | .sub e1 e2       => fun i => e1.denote dy i - e2.denote dy i
   | .scaleConst c e' => fun i => c * e'.denote dy i
+  | .add e1 e2       => fun i => e1.denote dy i + e2.denote dy i
 
 /-- **Composition lemma** (the Phase-3 mechanism in miniature): a
     `dotGeneral` node denotes post-composition with `Mat.mulVec`.
@@ -101,6 +104,7 @@ def Back.subst {inp inp' out : Nat} (e : Back inp out) (g : Back inp' inp) : Bac
   | .sumBroadcast e' => .sumBroadcast (e'.subst g)
   | .sub e1 e2       => .sub (e1.subst g) (e2.subst g)
   | .scaleConst c e' => .scaleConst c (e'.subst g)
+  | .add e1 e2       => .add (e1.subst g) (e2.subst g)
 
 /-- **IR-level chain rule.** `subst` denotes the composition of
     denotations: `⟦e[g/cotangent]⟧ dz = ⟦e⟧ (⟦g⟧ dz)`. The analogue of
@@ -115,6 +119,7 @@ theorem denote_subst {inp inp' out : Nat} (e : Back inp out) (g : Back inp' inp)
   | sumBroadcast e' ih => simp only [Back.subst, Back.denote, ih]
   | sub e1 e2 ih1 ih2 => simp only [Back.subst, Back.denote, ih1, ih2]
   | scaleConst c e' ih => simp only [Back.subst, Back.denote, ih]
+  | add e1 e2 ih1 ih2 => simp only [Back.subst, Back.denote, ih1, ih2]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Phase 0a — dense
@@ -399,6 +404,38 @@ theorem twoDense_back_bridge {d₀ d₁ d₂ : Nat}
           (dense_has_vjp W₁ b₁) (dense_has_vjp W₂ b₂)).backward x dz := by
   rw [denote_subst]
   simp only [vjp_comp, emitDenseBack, Back.denote, dense_has_vjp]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Squeeze-and-Excitation (the fan-in case)
+--
+-- `seBlock gate = elemwiseProduct id gate`, so its backward is a fan-in:
+--   dxᵢ = gate(x)ᵢ·dyᵢ + gate_backward(x ⊙ dy)ᵢ
+-- — `stablehlo.add` of (a) `scale` by the gate output and (b) the gate's
+-- own backward graph fed `x ⊙ dy`. This is where the IR chain rule
+-- (`denote_subst`, to plug the gate's backward graph `bg` in) and the new
+-- `add` fan-in node both earn their keep. Generic in the gate: given the
+-- gate's per-op bridge `hbg`, SE's bridge follows. -/
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Squeeze-and-Excitation backward bridge.** Given the gate's backward
+    graph `bg` bridged to its proven backward at `x` (`hbg`), the emitted SE
+    backward graph — `add (scale (gate x) dy) (bg[x ⊙ dy])` — denotes the
+    proven `seBlock_has_vjp.backward`. The fan-in + `denote_subst` (to plug
+    the gate graph in) assemble the per-op bridges through a non-composition
+    combinator. -/
+theorem se_back_bridge {n : Nat} (gate : Vec n → Vec n)
+    (hg_diff : Differentiable ℝ gate) (hg : HasVJP gate)
+    (bg : Back n n) (x dy : Vec n) (hbg : ∀ z, bg.denote z = hg.backward x z) :
+    (Back.add (Back.scale (gate x) Back.cotangent)
+        (bg.subst (Back.scale x Back.cotangent))).denote dy
+      = (seBlock_has_vjp gate hg_diff hg).backward x dy := by
+  funext i
+  simp only [Back.denote, seBlock_has_vjp, elemwiseProduct_has_vjp, identity_has_vjp]
+  rw [denote_subst]
+  simp only [Back.denote]
+  rw [hbg, show (fun j => dy j * x j) = (fun j => x j * dy j) from
+        funext (fun j => mul_comm _ _)]
+  ring
 
 end IR
 end Proofs

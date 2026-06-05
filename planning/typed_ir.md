@@ -8,9 +8,10 @@ connected to those proofs only by comments + the numerical oracle
 (`check_jacobians.py`, `tests/vjp_oracle/`). This doc scopes turning
 that comment into a theorem.
 
-Status: **planning / spike.** No code committed yet. The point of the
-doc is to decide the IR shape and measure the per-op proof cost on one
-slice before committing to the full ladder.
+Status: **Phases 0–3 landed** in `LeanMlir/Proofs/IR.lean` — every per-op
+backward bridge plus the composition (IR chain rule), audited under the
+three-axiom closure. See **Results** at the end. The design rationale below
+(written as the original spike) is kept as-is; it called the shape right.
 
 ## Framing: tests vs. the language gap
 
@@ -208,38 +209,55 @@ Below the `⟦·⟧` boundary stays trusted, same as the float discussion:
 - The README "codegen trust boundary" section shrinks from "numerical
   oracle only" to "denotational bridge for ops X…Z; oracle for the rest."
 
-## Immediate next step
+## Results (landed in `LeanMlir/Proofs/IR.lean`)
 
-Run **Phase 0a + 0b** as the real spike (a few hours): minimal `Expr`,
-`denote`, the dense bridge (scaffolding) and the relu smooth-point bridge
-(reusing `relu_codegen_matches_canonical`). That tells us the true per-op
-cost and whether the `⟦conv⟧ := conv2d` shortcut holds up — before
-committing to Phases 1–3.
+All per-op backward bridges + the composition are done and audited in
+`tests/AuditAxioms.lean` (three-axiom closure, no `native_decide`, no
+`sorry`). The IR `Back` carries `cotangent`, `dotGeneral`, `selectPos`,
+`scale`, `sumBroadcast`, `sub`, `scaleConst`, `add`, plus `subst`.
 
-## Spike results (landed in `LeanMlir/Proofs/IR.lean`)
+| op | bridge | how |
+|---|---|---|
+| dense | `dense_back_bridge` | definitional (`dot_general` = `Mat.mulVec`) |
+| conv | `conv_back_bridge_{1to2,2to2}` | reversed-kernel identity, by expansion at the `Spatial` shapes |
+| relu | `relu_back_bridge` | smooth-point, via `relu_codegen_matches_canonical` |
+| maxpool | `maxpool_back_bridge` | smooth-point, via `maxPool2_codegen_matches_canonical` |
+| gelu / swish / sigmoid | `*_back_bridge` | definitional (diagonal `scale`) |
+| BN / LayerNorm | `bn_normalize_back_bridge`, `bn_back_bridge`, `layernorm_back_bridge` | 3-term rank-1 via `sumBroadcast`+`sub`+`scaleConst` |
+| softmax | `softmax_back_bridge` | rank-1, same reduce/broadcast shape |
+| SE | `se_back_bridge` | fan-in `add` + `denote_subst` (gate plugged in) |
+| **composition** | `denote_subst` + `twoDense_back_bridge` | the IR chain rule + an end-to-end composite |
 
-Phases 0a, 0b, **and a chunk of Phase 2** are done and audited (3-axiom
-closure, no `native_decide`):
+**Findings vs. the original risk table:**
 
-- **0a `dense_back_bridge`** — `⟦dot_general⟧` denotes `Mat.mulVec W dy`.
-  Definitional, as predicted; pins the `Back`/`denote` plumbing.
-- **0b `relu_back_bridge`** — the `compare`+`select` graph denotes the
-  canonical ReLU backward at smooth points, via
-  `relu_codegen_matches_canonical`. The smooth-point pattern slots in
-  exactly as planned.
-- **Phase 2 `conv_back_bridge_{1to2,2to2}`** — the emitted transposed-conv
-  graph (`convBackDenote = conv2d (reverseSwap W)`) denotes the proven
-  `(conv2d_has_vjp3 W b).backward`. **This discharges the "reversed-kernel
-  identity" `dx = conv(dy, reverse(Wᵀ))` that `CNN.lean:288` only asserts
-  in prose and never proves.**
+- **`⟦conv⟧ := conv2d` (D3) held up.** The conv backward bridge is *cheap at
+  concrete shapes* — `fin_cases` over the spatial positions + `simp`
+  (~7s/shape), no partial bijection. It discharges the reversed-kernel
+  identity `dx = conv(dy, reverse(Wᵀ))` that `CNN.lean:288` only asserts in
+  prose. So "conv is weeks" → "concrete conv is hours (done)."
+- **The kink pattern reused the existing bridge theorems** verbatim (relu,
+  maxpool), conditional on the same smoothness hyps as the codegen boundary.
+- **BN's 3-term rank-1 formula bridged cleanly** once `sumBroadcast`/`sub`/
+  `scaleConst` were added; the `bnForward = bnAffine ∘ bnNormalize` cast
+  collapsed by `rfl`, and LayerNorm came free (definitionally BN).
+- **`denote_subst` (the chain rule) is the keystone** — SE (fan-in) and the
+  composite demonstrator both go through it.
 
-**Key Phase-2 finding (revises the risk table):** the conv backward bridge
-is *cheap at concrete shapes* — `fin_cases` over the spatial positions +
-`simp` closes it in ~7s/shape, no partial bijection needed (the route the
-repo wanted but never took). It is proven for the two shapes the `Spatial`
-instance uses (`Kernel4 2 1 3 3` and `2 2 3 3` at 4×4). The **general-shape**
-reversed-kernel identity (all `ic, oc, h, w` with odd `kH, kW`) still needs
-the partial-bijection sum-reindex through the dependent padding difs — that
-is the one genuine ~100–150-line Phase-2 item that remains. So "conv is
-weeks" downgrades to "concrete conv is hours (done); general conv is the
-one hard lemma."
+## Remaining gap to the full `mnistCnnNoBn` whole-network bridge
+
+The per-op + composition machinery is complete; three well-scoped
+extensions stand between here and `⟦emit mnistCnnNoBn⟧ = mnistCnnNoBn_has_vjp_at.backward`:
+
+1. **Tensor3 IR.** conv/maxpool bridges are Tensor3-level (`convBackDenote`,
+   `maxPoolBackDenote`), separate from the Vec `Back`; composing the whole
+   CNN into one graph needs `Back`/`subst`/`denote_subst` lifted to Tensor3
+   (or everything flattened to Vec).
+2. **`HasVJPAt` smooth-point variants.** Per-op bridges target the global
+   `HasVJP`; `mnistCnnNoBn_has_vjp_at` composes via `vjp_comp_at`, so the
+   chained bridge needs `_at` versions (the kink bridges are already
+   smooth-point-conditional, so this is mostly mechanical).
+3. **General-shape conv identity.** The remaining ~100–150-line
+   partial-bijection sum-reindex (all dims, odd kernels) — the one genuine
+   hard lemma; concrete shapes are done.
+
+None is new research; each is bounded plumbing on top of what's landed.
