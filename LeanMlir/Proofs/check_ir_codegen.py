@@ -38,6 +38,8 @@ with IREE, runs it, and checks it against an independent numpy reference:
                                squeeze-excite gate-multiply (se_back_bridge).
   • depthwise_fwd / _back     — per-channel grouped conv (feature_group_count=c)
                                + the proven per-channel input gradient.
+  • attn_fwd / attn_back      — ViT attention sublayer assembled end to end
+                               (LN→QKV→SDPA→Wo→residual) + its input gradient.
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -259,6 +261,21 @@ def dw_back_ref(dy, W):
                         if 0 <= r < H and 0 <= s < Wd: dx[0, c, r, s] += W[c, kh, kw] * dy[0, c, hi, wi]
     return dx
 
+def attn_fwd_ref(x, Wq, Wk, Wv, Wo, bq, bk, bv, bo, g1, b1, eps, d):
+    """ViT attention sublayer: x + Wo·SDPA(LN(x)·{Wq,Wk,Wv}) (single head, +biases)."""
+    a = bn_fwd_ref(x, g1, b1, eps)                      # per-token LN
+    Q = a @ Wq + bq; K = a @ Wk + bk; V = a @ Wv + bv
+    return x + (sdpa_fwd_ref(Q, K, V, d) @ Wo + bo)
+
+def attn_back_ref(x, Wq, Wk, Wv, Wo, bq, bk, bv, bo, g1, b1, eps, d, dOut):
+    """dx for the attention sublayer: residual + LN-back ∘ 3-way QKV fan-in ∘ SDPA-back."""
+    a = bn_fwd_ref(x, g1, b1, eps)
+    Q = a @ Wq + bq; K = a @ Wk + bk; V = a @ Wv + bv
+    dattn = dOut @ Wo.T
+    dQ, dK, dV = sdpa_back_ref(Q, K, V, dattn, d)
+    da = dQ @ Wq.T + dK @ Wk.T + dV @ Wv.T              # three-way fan-in
+    return dOut + bn_back_ref(x, g1, da, eps)           # LN-back + residual
+
 def residual_fwd_ref(x, W, b): return x + (x @ W + b)
 def residual_back_ref(dy, W): return dy + dy @ W.T            # add fan-in: I + dense
 def se_fwd_ref(x): return x * _sig(x)
@@ -450,6 +467,21 @@ outs2, nb2 = compile_run("/tmp/dw_back.mlir", "dw_back", [dwdy, dwW])
 e2 = max_err(outs2, [dw_back_ref(dwdy, dwW)]); ok &= e2 < TOL
 print(f"depthwise_fwd/back ({nb}/{nb2}B): fwd={e:.2e} back={e2:.2e}  {'PASS' if max(e,e2)<TOL else 'FAIL'}  (grouped conv, fgc=c)")
 
+# ── ViT attention sublayer (Phase 3 apex assembly): LN→QKV→SDPA→Wo→residual ──
+vN, vD = 2, 4
+vx = rng.standard_normal((vN, vD)).astype(np.float32)
+vWq, vWk, vWv, vWo = (rng.standard_normal((vD, vD)).astype(np.float32) for _ in range(4))
+vbq, vbk, vbv, vbo = (rng.standard_normal((vD,)).astype(np.float32) for _ in range(4))
+vg1 = np.array(rng.standard_normal(), np.float32); vb1 = np.array(rng.standard_normal(), np.float32)
+vdO = rng.standard_normal((vN, vD)).astype(np.float32)
+vargs = [vx, vWq, vWk, vWv, vWo, vbq, vbk, vbv, vbo, vg1, vb1]
+outs, nb = compile_run("/tmp/attn_fwd.mlir", "attn_fwd", vargs)
+e = max_err(outs, [attn_fwd_ref(vx, vWq, vWk, vWv, vWo, vbq, vbk, vbv, vbo, vg1, vb1, EPS, vD)]); ok &= e < TOL
+print(f"attn_fwd        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (x + Wo·SDPA(LN(x)·QKV))")
+outs, nb = compile_run("/tmp/attn_back.mlir", "attn_back", vargs + [vdO])
+e = max_err(outs, [attn_back_ref(vx, vWq, vWk, vWv, vWo, vbq, vbk, vbv, vbo, vg1, vb1, EPS, vD, vdO)]); ok &= e < TOL
+print(f"attn_back       ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (dx: residual+LN-back+3-way QKV fan-in+SDPA-back)")
+
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
 # ════════════════════════════════════════════════════════════════
@@ -507,6 +539,10 @@ try:
                               backend="rocm", config="hip", extra=extra)
         eg = max_err(outs, sdpa_back_ref(aQ, aK, aV, aD, ad)); ok &= eg < TOL
         print(f"sdpa_back       (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
+        outs, _ = compile_run("/tmp/attn_back.mlir", "attn_back", vargs + [vdO],
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, [attn_back_ref(vx, vWq, vWk, vWv, vWo, vbq, vbk, vbv, vbo, vg1, vb1, EPS, vD, vdO)]); ok &= eg < TOL
+        print(f"attn_back       (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}  (ViT sublayer)")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:

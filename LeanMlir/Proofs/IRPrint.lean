@@ -852,6 +852,122 @@ def seBackM (m : Nat) : String :=
      s!"    %t2 = stablehlo.multiply %xdy, %sp : {tt [m]}\n" ++
      s!"    %dx = stablehlo.add %t1, %t2 : {tt [m]}\n    return %dx : {tt [m]}\n")
 
+-- ════════════════════════════════════════════════════════════════
+-- § ViT transformer block — the apex assembly (Phase 3, whole-net)
+--
+-- `transformerBlock = MlpSublayer ∘ AttnSublayer`, each a residual:
+--   AttnSublayer x = x + Wo·SDPA(LN₁(x)·{Wq,Wk,Wv})   (+biases)
+--   MlpSublayer  y = y + Wfc2·gelu(Wfc1·LN₂(y))        (+biases)
+-- The full block composes EVERY rendered op: per-token LayerNorm, dense
+-- projections, scaled dot-product attention (with the proven dQ/dK/dV and
+-- the three-way Q/K/V fan-in at the input), gelu, residual add. The backward
+-- (input gradient `dx`) chains them via the proven bridges — the codegen
+-- analogue of `transformerBlock_has_vjp_mat`. Single head (heads=1,
+-- d_head=D); `N` tokens, model dim `D`, MLP hidden `F`, scale `1/√D`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Per-token LayerNorm forward into `out` (γ,β scalar SSA names); leaves
+    `{out}_xhat` and `{out}_istd` in scope for the backward. `%sc` (f32 0),
+    `%nf` (= n splat) and `%eps` must be in scope. -/
+def renderLN (out x g b : String) (B n : Nat) : String :=
+  reduceSumBcast s!"{out}_sm" x B n ++
+  s!"    {out}_mu = stablehlo.divide {out}_sm, %nf : {tt [B,n]}\n" ++
+  s!"    {out}_xc = stablehlo.subtract {x}, {out}_mu : {tt [B,n]}\n" ++
+  s!"    {out}_sq = stablehlo.multiply {out}_xc, {out}_xc : {tt [B,n]}\n" ++
+  reduceSumBcast s!"{out}_vs" s!"{out}_sq" B n ++
+  s!"    {out}_var = stablehlo.divide {out}_vs, %nf : {tt [B,n]}\n" ++
+  s!"    {out}_ve = stablehlo.add {out}_var, %eps : {tt [B,n]}\n" ++
+  s!"    {out}_istd = stablehlo.rsqrt {out}_ve : {tt [B,n]}\n" ++
+  s!"    {out}_xhat = stablehlo.multiply {out}_xc, {out}_istd : {tt [B,n]}\n" ++
+  s!"    {out}_gb = stablehlo.broadcast_in_dim {g}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
+  s!"    {out}_bb = stablehlo.broadcast_in_dim {b}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
+  s!"    {out}_gx = stablehlo.multiply {out}_xhat, {out}_gb : {tt [B,n]}\n" ++
+  s!"    {out} = stablehlo.add {out}_gx, {out}_bb : {tt [B,n]}\n"
+
+/-- LayerNorm backward `dx` from cotangent `dy`, reusing `{ln}_xhat`/`{ln}_istd`
+    + scalar γ `g`. (The proven 3-term form.) `%nf` in scope. -/
+def renderLNBack (out ln g dy : String) (B n : Nat) : String :=
+  s!"    {out}_gb = stablehlo.broadcast_in_dim {g}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
+  s!"    {out}_dxh = stablehlo.multiply {out}_gb, {dy} : {tt [B,n]}\n" ++
+  reduceSumBcast s!"{out}_sdx" s!"{out}_dxh" B n ++
+  s!"    {out}_xd = stablehlo.multiply {ln}_xhat, {out}_dxh : {tt [B,n]}\n" ++
+  reduceSumBcast s!"{out}_sxd" s!"{out}_xd" B n ++
+  s!"    {out}_t1 = stablehlo.multiply {out}_dxh, %nf : {tt [B,n]}\n" ++
+  s!"    {out}_i1 = stablehlo.subtract {out}_t1, {out}_sdx : {tt [B,n]}\n" ++
+  s!"    {out}_xs = stablehlo.multiply {ln}_xhat, {out}_sxd : {tt [B,n]}\n" ++
+  s!"    {out}_i2 = stablehlo.subtract {out}_i1, {out}_xs : {tt [B,n]}\n" ++
+  s!"    {out}_s = stablehlo.divide {ln}_istd, %nf : {tt [B,n]}\n" ++
+  s!"    {out} = stablehlo.multiply {out}_s, {out}_i2 : {tt [B,n]}\n"
+
+/-- Dense `out = in·W + b` ([B,m]·[m,n]+[n]) into `{out}`. -/
+def renderDense (out inp W b : String) (B m n : Nat) : String :=
+  matdg s!"{out}_w" inp W "1" "0" (tt [B,m]) (tt [m,n]) (tt [B,n]) ++
+  s!"    {out}_bb = stablehlo.broadcast_in_dim {b}, dims = [1] : ({tt [n]}) -> {tt [B,n]}\n" ++
+  s!"    {out} = stablehlo.add {out}_w, {out}_bb : {tt [B,n]}\n"
+
+/-- ViT **attention sublayer** forward `x + Wo·SDPA(LN(x)·{Wq,Wk,Wv})`
+    (single head, +biases). `@attn_fwd`. -/
+def attnSublayerFwdModule (N D : Nat) (eps scale : String) : String :=
+  actMod "attn_fwd"
+    (s!"%x: {tt [N,D]}, %Wq: {tt [D,D]}, %Wk: {tt [D,D]}, %Wv: {tt [D,D]}, %Wo: {tt [D,D]}, " ++
+     s!"%bq: {tt [D]}, %bk: {tt [D]}, %bv: {tt [D]}, %bo: {tt [D]}, %g1: tensor<f32>, %b1: tensor<f32>")
+    (tt [N,D])
+    ("    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+     s!"    %nf = stablehlo.constant dense<{D}.0> : {tt [N,D]}\n" ++
+     s!"    %eps = stablehlo.constant dense<{eps}> : {tt [N,D]}\n" ++
+     s!"    %scl = stablehlo.constant dense<{scale}> : {tt [N,N]}\n" ++
+     renderLN "%a" "%x" "%g1" "%b1" N D ++
+     renderDense "%Q" "%a" "%Wq" "%bq" N D D ++
+     renderDense "%K" "%a" "%Wk" "%bk" N D D ++
+     renderDense "%V" "%a" "%Wv" "%bv" N D D ++
+     matdg "%scores" "%Q" "%K" "1" "1" (tt [N,D]) (tt [N,D]) (tt [N,N]) ++
+     s!"    %scaled = stablehlo.multiply %scores, %scl : {tt [N,N]}\n" ++
+     renderSoftmax "%w" "%scaled" N N ++
+     matdg "%attn" "%w" "%V" "1" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
+     renderDense "%o" "%attn" "%Wo" "%bo" N D D ++
+     s!"    %out = stablehlo.add %x, %o : {tt [N,D]}\n    return %out : {tt [N,D]}\n")
+
+/-- ViT attention sublayer **input-gradient backward** `dx` (chains LN-back,
+    the three-way Q/K/V fan-in, SDPA dQ/dK/dV, residual). `@attn_back`. -/
+def attnSublayerBackModule (N D : Nat) (eps scale : String) : String :=
+  actMod "attn_back"
+    (s!"%x: {tt [N,D]}, %Wq: {tt [D,D]}, %Wk: {tt [D,D]}, %Wv: {tt [D,D]}, %Wo: {tt [D,D]}, " ++
+     s!"%bq: {tt [D]}, %bk: {tt [D]}, %bv: {tt [D]}, %bo: {tt [D]}, %g1: tensor<f32>, %b1: tensor<f32>, %dOut: {tt [N,D]}")
+    (tt [N,D])
+    ("    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+     s!"    %nf = stablehlo.constant dense<{D}.0> : {tt [N,D]}\n" ++
+     s!"    %eps = stablehlo.constant dense<{eps}> : {tt [N,D]}\n" ++
+     s!"    %scl = stablehlo.constant dense<{scale}> : {tt [N,N]}\n" ++
+     -- recompute forward intermediates: a, Q, K, V, weights
+     renderLN "%a" "%x" "%g1" "%b1" N D ++
+     renderDense "%Q" "%a" "%Wq" "%bq" N D D ++
+     renderDense "%K" "%a" "%Wk" "%bk" N D D ++
+     renderDense "%V" "%a" "%Wv" "%bv" N D D ++
+     matdg "%scores" "%Q" "%K" "1" "1" (tt [N,D]) (tt [N,D]) (tt [N,N]) ++
+     s!"    %scaled = stablehlo.multiply %scores, %scl : {tt [N,N]}\n" ++
+     renderSoftmax "%w" "%scaled" N N ++
+     -- backward: o = attn·Wo ⇒ dattn = dOut·Woᵀ
+     matdg "%dattn" "%dOut" "%Wo" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+     -- SDPA backward (dQ,dK,dV)
+     matdg "%dWeights" "%dattn" "%V" "1" "1" (tt [N,D]) (tt [N,D]) (tt [N,N]) ++
+     matdg "%dV" "%w" "%dattn" "0" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
+     s!"    %pdw = stablehlo.multiply %w, %dWeights : {tt [N,N]}\n" ++
+     reduceSumBcast "%srow" "%pdw" N N ++
+     s!"    %diff = stablehlo.subtract %dWeights, %srow : {tt [N,N]}\n" ++
+     s!"    %dScaled = stablehlo.multiply %w, %diff : {tt [N,N]}\n" ++
+     s!"    %dScores = stablehlo.multiply %dScaled, %scl : {tt [N,N]}\n" ++
+     matdg "%dQ" "%dScores" "%K" "1" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
+     matdg "%dK" "%dScores" "%Q" "0" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
+     -- projections back ⇒ three-way fan-in da = dQ·Wqᵀ + dK·Wkᵀ + dV·Wvᵀ
+     matdg "%daQ" "%dQ" "%Wq" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+     matdg "%daK" "%dK" "%Wk" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+     matdg "%daV" "%dV" "%Wv" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+     s!"    %daQK = stablehlo.add %daQ, %daK : {tt [N,D]}\n" ++
+     s!"    %da = stablehlo.add %daQK, %daV : {tt [N,D]}\n" ++
+     -- LN backward + residual fan-in
+     renderLNBack "%dxa" "%a" "%g1" "%da" N D ++
+     s!"    %dx = stablehlo.add %dOut, %dxa : {tt [N,D]}\n    return %dx : {tt [N,D]}\n")
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -897,5 +1013,8 @@ def seBackM (m : Nat) : String :=
 -- Depthwise (per-channel grouped) conv forward + proof-backed backward, c=2, 4×4, 3×3.
 #eval IO.FS.writeFile "/tmp/dw_fwd.mlir" (depthwiseFwdM 2 4 4 3 3)
 #eval IO.FS.writeFile "/tmp/dw_back.mlir" (depthwiseBackM 2 4 4 3 3)
+-- ViT attention sublayer (LN→QKV→SDPA→Wo→residual), N=2 tokens, D=4, ε=1e-5, 1/√4=0.5.
+#eval IO.FS.writeFile "/tmp/attn_fwd.mlir" (attnSublayerFwdModule 2 4 "0.00001" "0.5")
+#eval IO.FS.writeFile "/tmp/attn_back.mlir" (attnSublayerBackModule 2 4 "0.00001" "0.5")
 
 end Proofs.IRPrint
