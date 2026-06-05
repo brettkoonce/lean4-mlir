@@ -40,6 +40,8 @@ with IREE, runs it, and checks it against an independent numpy reference:
                                + the proven per-channel input gradient.
   • attn_fwd / attn_back      — ViT attention sublayer assembled end to end
                                (LN→QKV→SDPA→Wo→residual) + its input gradient.
+  • vit_fwd / vit_back        — the full ViT transformer block (attn + MLP/gelu
+                               sublayers) assembled end to end + its dx.
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -276,6 +278,25 @@ def attn_back_ref(x, Wq, Wk, Wv, Wo, bq, bk, bv, bo, g1, b1, eps, d, dOut):
     da = dQ @ Wq.T + dK @ Wk.T + dV @ Wv.T              # three-way fan-in
     return dOut + bn_back_ref(x, g1, da, eps)           # LN-back + residual
 
+def vit_block_fwd_ref(x, Wq, Wk, Wv, Wo, bq, bk, bv, bo, g1, b1, g2, b2, Wfc1, bfc1, Wfc2, bfc2, eps, d):
+    """Full transformer block: MlpSublayer ∘ AttnSublayer (each residual)."""
+    x1 = attn_fwd_ref(x, Wq, Wk, Wv, Wo, bq, bk, bv, bo, g1, b1, eps, d)
+    c = bn_fwd_ref(x1, g2, b2, eps)
+    hg = ACT_REF["gelu"][0](c @ Wfc1 + bfc1)
+    return x1 + (hg @ Wfc2 + bfc2)
+
+def vit_block_back_ref(x, Wq, Wk, Wv, Wo, bq, bk, bv, bo, g1, b1, g2, b2, Wfc1, bfc1, Wfc2, bfc2, eps, d, dOut):
+    """dx: MLP-sublayer back (gelu) + attention-sublayer back (3-way QKV fan-in)."""
+    x1 = attn_fwd_ref(x, Wq, Wk, Wv, Wo, bq, bk, bv, bo, g1, b1, eps, d)
+    c = bn_fwd_ref(x1, g2, b2, eps); h1 = c @ Wfc1 + bfc1
+    dh1 = ACT_REF["gelu"][1](h1, dOut @ Wfc2.T)
+    dx1 = dOut + bn_back_ref(x1, g2, dh1 @ Wfc1.T, eps)              # MLP residual fan-in
+    a = bn_fwd_ref(x, g1, b1, eps)
+    Q = a @ Wq + bq; K = a @ Wk + bk; V = a @ Wv + bv
+    dQ, dK, dV = sdpa_back_ref(Q, K, V, dx1 @ Wo.T, d)
+    da = dQ @ Wq.T + dK @ Wk.T + dV @ Wv.T
+    return dx1 + bn_back_ref(x, g1, da, eps)                        # attn residual fan-in
+
 def residual_fwd_ref(x, W, b): return x + (x @ W + b)
 def residual_back_ref(dy, W): return dy + dy @ W.T            # add fan-in: I + dense
 def se_fwd_ref(x): return x * _sig(x)
@@ -482,6 +503,20 @@ outs, nb = compile_run("/tmp/attn_back.mlir", "attn_back", vargs + [vdO])
 e = max_err(outs, [attn_back_ref(vx, vWq, vWk, vWv, vWo, vbq, vbk, vbv, vbo, vg1, vb1, EPS, vD, vdO)]); ok &= e < TOL
 print(f"attn_back       ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (dx: residual+LN-back+3-way QKV fan-in+SDPA-back)")
 
+# ── Full ViT transformer block (apex whole-net): both sublayers, fwd + dx ──
+vF = 8
+vWfc1 = rng.standard_normal((vD, vF)).astype(np.float32); vbfc1 = rng.standard_normal((vF,)).astype(np.float32)
+vWfc2 = rng.standard_normal((vF, vD)).astype(np.float32); vbfc2 = rng.standard_normal((vD,)).astype(np.float32)
+vg2 = np.array(rng.standard_normal(), np.float32); vb2 = np.array(rng.standard_normal(), np.float32)
+blkargs = [vx, vWq, vWk, vWv, vWo, vbq, vbk, vbv, vbo, vg1, vb1, vg2, vb2, vWfc1, vbfc1, vWfc2, vbfc2]
+blkrefargs = blkargs + [EPS, vD]
+outs, nb = compile_run("/tmp/vit_fwd.mlir", "vit_fwd", blkargs)
+e = max_err(outs, [vit_block_fwd_ref(*blkrefargs)]); ok &= e < TOL
+print(f"vit_fwd         ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (transformer block: attn + MLP sublayers)")
+outs, nb = compile_run("/tmp/vit_back.mlir", "vit_back", blkargs + [vdO])
+e = max_err(outs, [vit_block_back_ref(*blkrefargs, vdO)]); ok &= e < TOL
+print(f"vit_back        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (full block dx: gelu MLP-back + attn-back)")
+
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
 # ════════════════════════════════════════════════════════════════
@@ -543,6 +578,10 @@ try:
                               backend="rocm", config="hip", extra=extra)
         eg = max_err(outs, [attn_back_ref(vx, vWq, vWk, vWv, vWo, vbq, vbk, vbv, vbo, vg1, vb1, EPS, vD, vdO)]); ok &= eg < TOL
         print(f"attn_back       (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}  (ViT sublayer)")
+        outs, _ = compile_run("/tmp/vit_back.mlir", "vit_back", blkargs + [vdO],
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, [vit_block_back_ref(*blkrefargs, vdO)]); ok &= eg < TOL
+        print(f"vit_back        (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}  (full transformer block)")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:

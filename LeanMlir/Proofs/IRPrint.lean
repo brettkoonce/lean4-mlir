@@ -905,6 +905,40 @@ def renderDense (out inp W b : String) (B m n : Nat) : String :=
   s!"    {out}_bb = stablehlo.broadcast_in_dim {b}, dims = [1] : ({tt [n]}) -> {tt [B,n]}\n" ++
   s!"    {out} = stablehlo.add {out}_w, {out}_bb : {tt [B,n]}\n"
 
+/-- GELU (tanh approx) forward into `{out}`; leaves `{out}_t/_ot/_x2/_hx` for
+    the backward. gelu constants `%ga,%gc,%ghalf,%gone,%ga3` ([B,n]) in scope. -/
+def renderGeluF (out x : String) (B n : Nat) : String :=
+  s!"    {out}_x2 = stablehlo.multiply {x}, {x} : {tt [B,n]}\n" ++
+  s!"    {out}_x3 = stablehlo.multiply {out}_x2, {x} : {tt [B,n]}\n" ++
+  s!"    {out}_ax3 = stablehlo.multiply %ga, {out}_x3 : {tt [B,n]}\n" ++
+  s!"    {out}_inn = stablehlo.add {x}, {out}_ax3 : {tt [B,n]}\n" ++
+  s!"    {out}_u = stablehlo.multiply %gc, {out}_inn : {tt [B,n]}\n" ++
+  s!"    {out}_t = stablehlo.tanh {out}_u : {tt [B,n]}\n" ++
+  s!"    {out}_ot = stablehlo.add %gone, {out}_t : {tt [B,n]}\n" ++
+  s!"    {out}_hx = stablehlo.multiply %ghalf, {x} : {tt [B,n]}\n" ++
+  s!"    {out} = stablehlo.multiply {out}_hx, {out}_ot : {tt [B,n]}\n"
+
+/-- GELU backward `{out} = dy ⊙ gelu'(x)`, reusing the forward `{g}_*`. -/
+def renderGeluB (out g dy : String) (B n : Nat) : String :=
+  s!"    {out}_ta = stablehlo.multiply %ghalf, {g}_ot : {tt [B,n]}\n" ++
+  s!"    {out}_t2 = stablehlo.multiply {g}_t, {g}_t : {tt [B,n]}\n" ++
+  s!"    {out}_omt2 = stablehlo.subtract %gone, {out}_t2 : {tt [B,n]}\n" ++
+  s!"    {out}_hxo = stablehlo.multiply {g}_hx, {out}_omt2 : {tt [B,n]}\n" ++
+  s!"    {out}_a3x2 = stablehlo.multiply %ga3, {g}_x2 : {tt [B,n]}\n" ++
+  s!"    {out}_in2 = stablehlo.add %gone, {out}_a3x2 : {tt [B,n]}\n" ++
+  s!"    {out}_cin2 = stablehlo.multiply %gc, {out}_in2 : {tt [B,n]}\n" ++
+  s!"    {out}_tb = stablehlo.multiply {out}_hxo, {out}_cin2 : {tt [B,n]}\n" ++
+  s!"    {out}_gp = stablehlo.add {out}_ta, {out}_tb : {tt [B,n]}\n" ++
+  s!"    {out} = stablehlo.multiply {dy}, {out}_gp : {tt [B,n]}\n"
+
+/-- The gelu tanh-approx constants as `[B,n]` splats. -/
+def geluConsts (B n : Nat) : String :=
+  s!"    %ga = stablehlo.constant dense<0.044715> : {tt [B,n]}\n" ++
+  s!"    %ga3 = stablehlo.constant dense<0.134145> : {tt [B,n]}\n" ++
+  s!"    %gc = stablehlo.constant dense<0.7978845608> : {tt [B,n]}\n" ++
+  s!"    %ghalf = stablehlo.constant dense<0.5> : {tt [B,n]}\n" ++
+  s!"    %gone = stablehlo.constant dense<1.0> : {tt [B,n]}\n"
+
 /-- ViT **attention sublayer** forward `x + Wo·SDPA(LN(x)·{Wq,Wk,Wv})`
     (single head, +biases). `@attn_fwd`. -/
 def attnSublayerFwdModule (N D : Nat) (eps scale : String) : String :=
@@ -968,6 +1002,72 @@ def attnSublayerBackModule (N D : Nat) (eps scale : String) : String :=
      renderLNBack "%dxa" "%a" "%g1" "%da" N D ++
      s!"    %dx = stablehlo.add %dOut, %dxa : {tt [N,D]}\n    return %dx : {tt [N,D]}\n")
 
+/-- The full transformer-block parameter signature (shared by fwd/back). -/
+def vitBlockSig (N D F : Nat) : String :=
+  s!"%x: {tt [N,D]}, %Wq: {tt [D,D]}, %Wk: {tt [D,D]}, %Wv: {tt [D,D]}, %Wo: {tt [D,D]}, " ++
+  s!"%bq: {tt [D]}, %bk: {tt [D]}, %bv: {tt [D]}, %bo: {tt [D]}, %g1: tensor<f32>, %b1: tensor<f32>, " ++
+  s!"%g2: tensor<f32>, %b2: tensor<f32>, %Wfc1: {tt [D,F]}, %bfc1: {tt [F]}, %Wfc2: {tt [F,D]}, %bfc2: {tt [D]}"
+
+/-- Shared block constants + the attention sublayer forward through `%x1`,
+    and (for back) `%c,%h1,%hg` of the MLP sublayer. -/
+def vitBlockFwdBody (N D F : Nat) (eps scale : String) : String :=
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %nf = stablehlo.constant dense<{D}.0> : {tt [N,D]}\n" ++
+  s!"    %eps = stablehlo.constant dense<{eps}> : {tt [N,D]}\n" ++
+  s!"    %scl = stablehlo.constant dense<{scale}> : {tt [N,N]}\n" ++
+  geluConsts N F ++
+  renderLN "%a" "%x" "%g1" "%b1" N D ++
+  renderDense "%Q" "%a" "%Wq" "%bq" N D D ++
+  renderDense "%K" "%a" "%Wk" "%bk" N D D ++
+  renderDense "%V" "%a" "%Wv" "%bv" N D D ++
+  matdg "%scores" "%Q" "%K" "1" "1" (tt [N,D]) (tt [N,D]) (tt [N,N]) ++
+  s!"    %scaled = stablehlo.multiply %scores, %scl : {tt [N,N]}\n" ++
+  renderSoftmax "%w" "%scaled" N N ++
+  matdg "%attn" "%w" "%V" "1" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
+  renderDense "%o" "%attn" "%Wo" "%bo" N D D ++
+  s!"    %x1 = stablehlo.add %x, %o : {tt [N,D]}\n" ++
+  renderLN "%c" "%x1" "%g2" "%b2" N D ++
+  renderDense "%h1" "%c" "%Wfc1" "%bfc1" N D F ++
+  renderGeluF "%hg" "%h1" N F
+
+/-- Full ViT **transformer block** forward `MlpSublayer ∘ AttnSublayer`. -/
+def vitBlockFwdModule (N D F : Nat) (eps scale : String) : String :=
+  actMod "vit_fwd" (vitBlockSig N D F) (tt [N,D])
+    (vitBlockFwdBody N D F eps scale ++
+     renderDense "%m" "%hg" "%Wfc2" "%bfc2" N F D ++
+     s!"    %out = stablehlo.add %x1, %m : {tt [N,D]}\n    return %out : {tt [N,D]}\n")
+
+/-- Full ViT transformer block **input-gradient backward** `dx`: MLP-sublayer
+    back (gelu) then attention-sublayer back (3-way QKV fan-in), each a residual
+    fan-in. The codegen analogue of `transformerBlock_has_vjp_mat`. -/
+def vitBlockBackModule (N D F : Nat) (eps scale : String) : String :=
+  actMod "vit_back" (vitBlockSig N D F ++ s!", %dOut: {tt [N,D]}") (tt [N,D])
+    (vitBlockFwdBody N D F eps scale ++
+     -- MLP sublayer backward
+     matdg "%dhg" "%dOut" "%Wfc2" "1" "1" (tt [N,D]) (tt [F,D]) (tt [N,F]) ++
+     renderGeluB "%dh1" "%hg" "%dhg" N F ++
+     matdg "%dc" "%dh1" "%Wfc1" "1" "1" (tt [N,F]) (tt [D,F]) (tt [N,D]) ++
+     renderLNBack "%dx1m" "%c" "%g2" "%dc" N D ++
+     s!"    %dx1 = stablehlo.add %dOut, %dx1m : {tt [N,D]}\n" ++
+     -- attention sublayer backward (cotangent %dx1)
+     matdg "%dattn" "%dx1" "%Wo" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+     matdg "%dWeights" "%dattn" "%V" "1" "1" (tt [N,D]) (tt [N,D]) (tt [N,N]) ++
+     matdg "%dV" "%w" "%dattn" "0" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
+     s!"    %pdw = stablehlo.multiply %w, %dWeights : {tt [N,N]}\n" ++
+     reduceSumBcast "%srow" "%pdw" N N ++
+     s!"    %diff = stablehlo.subtract %dWeights, %srow : {tt [N,N]}\n" ++
+     s!"    %dScaled = stablehlo.multiply %w, %diff : {tt [N,N]}\n" ++
+     s!"    %dScores = stablehlo.multiply %dScaled, %scl : {tt [N,N]}\n" ++
+     matdg "%dQ" "%dScores" "%K" "1" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
+     matdg "%dK" "%dScores" "%Q" "0" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
+     matdg "%daQ" "%dQ" "%Wq" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+     matdg "%daK" "%dK" "%Wk" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+     matdg "%daV" "%dV" "%Wv" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+     s!"    %daQK = stablehlo.add %daQ, %daK : {tt [N,D]}\n" ++
+     s!"    %da = stablehlo.add %daQK, %daV : {tt [N,D]}\n" ++
+     renderLNBack "%dxa" "%a" "%g1" "%da" N D ++
+     s!"    %dx = stablehlo.add %dx1, %dxa : {tt [N,D]}\n    return %dx : {tt [N,D]}\n")
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -1016,5 +1116,8 @@ def attnSublayerBackModule (N D : Nat) (eps scale : String) : String :=
 -- ViT attention sublayer (LN→QKV→SDPA→Wo→residual), N=2 tokens, D=4, ε=1e-5, 1/√4=0.5.
 #eval IO.FS.writeFile "/tmp/attn_fwd.mlir" (attnSublayerFwdModule 2 4 "0.00001" "0.5")
 #eval IO.FS.writeFile "/tmp/attn_back.mlir" (attnSublayerBackModule 2 4 "0.00001" "0.5")
+-- Full ViT transformer block (attn + MLP sublayers), N=2, D=4, F=8.
+#eval IO.FS.writeFile "/tmp/vit_fwd.mlir" (vitBlockFwdModule 2 4 8 "0.00001" "0.5")
+#eval IO.FS.writeFile "/tmp/vit_back.mlir" (vitBlockBackModule 2 4 8 "0.00001" "0.5")
 
 end Proofs.IRPrint
