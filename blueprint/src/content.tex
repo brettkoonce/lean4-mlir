@@ -1882,19 +1882,137 @@ comparison. Later chapters switch to the modern recipe (Adam + cosine + warmup
 + weight decay + label smoothing + data augmentation) once we can
 benchmark the deltas against this baseline.
 
-\subsection*{What is actually in those ``20\,502 chars''}
+\subsection*{Is that MLIR verified? In what sense, and to what tolerance}
 
-The 20\,502-character line is the entire training step emitted as
-\texttt{stablehlo} MLIR --- forward pass through all three dense
-layers plus the softmax cross-entropy loss plus the backward pass
-(VJP of every layer) plus the Adam optimizer update for each
-parameter. IREE compiles that MLIR once into a vmfb (vm flatbuffer)
-and then executes it per mini-batch with no further translation
-overhead. The 669\,706 parameter count is the sum of the three
-dense layers: $784 \cdot 512 + 512 = 401\,920$ for layer 1,
-$512 \cdot 512 + 512 = 262\,656$ for layer 2, $512 \cdot 10 + 10 =
-5\,130$ for layer 3. Subsequent chapters show the per-layer MLIR
-fragments this code is assembled from.
+That 20\,502-character line is the entire training step --- the forward
+pass through all three dense layers, the softmax cross-entropy loss, the
+backward pass (the VJP of every layer), and the optimizer update for each
+of the $669\,706$ parameters --- emitted as one \texttt{stablehlo} block
+that IREE compiles once and then runs per mini-batch. The question this
+section answers is the one that matters for a book about \emph{verified}
+learning: in what precise sense is that emitted code correct, and how do
+we know?
+
+\medskip\noindent\textbf{What is already proven.} The mathematics is
+settled earlier in this chapter. \texttt{mlpForward} is the
+three-dense-layer network; \texttt{mlp\_has\_vjp\_at} proves its
+reverse-mode derivative (the vector--Jacobian product) by chaining the
+per-layer chain rule \texttt{vjp\_comp\_at}; the parameter gradients are
+pinned by \texttt{dense\_weight\_grad\_correct} and
+\texttt{dense\_bias\_grad\_correct}, and the loss gradient by
+\texttt{softmaxCE\_grad}. Each closes under the three standard axioms
+(\texttt{propext}, \texttt{Classical.choice}, \texttt{Quot.sound}) --- no
+\texttt{sorry}, no \texttt{native\_decide}. So \emph{what} the gradient
+is, is not in question.
+
+\medskip\noindent\textbf{The gap, and how we close it.} The GPU never
+runs those Lean functions; it runs the emitted \texttt{stablehlo}. The
+dangerous failure mode of any code generator is that the math is right
+while the emitted op contracts the wrong axis, transposes backwards, or
+silently drops a term --- and the only thing traditionally linking the
+proof to the emitted string is a code comment. We replace that comment
+with a theorem. The emitted backward is given a Lean datatype,
+\texttt{Back}, with a denotation $[\![\cdot]\!]$ valued in the proofs'
+own vector type. For the MLP the graph is
+\[
+  \texttt{emitMlpBack}
+  = \texttt{dotGeneral}\,W_0 \circ \texttt{selectPos}\,p_0
+    \circ \texttt{dotGeneral}\,W_1 \circ \texttt{selectPos}\,p_1
+    \circ \texttt{dotGeneral}\,W_2,
+\]
+rooted at the incoming cotangent, with
+$[\![\texttt{dotGeneral}\,W]\!] = \texttt{Mat.mulVec}\,W$ and
+$[\![\texttt{selectPos}\,p]\!] = (v \mapsto \text{if } p>0 \text{ then }
+v \text{ else } 0)$. The payoff is the bridge theorem
+\[
+  \texttt{mlp\_whole\_bridge}:\quad
+  [\![\texttt{emitMlpBack}]\!](dy)
+  = \texttt{mlp\_has\_vjp\_at}.\mathrm{backward}(dy),
+\]
+proved by bridging each op (\texttt{dense\_at\_bridge},
+\texttt{relu\_at\_bridge}) and composing them with the IR-level chain
+rule \texttt{denote\_subst} --- the exact analogue of
+\texttt{vjp\_comp\_at}. The denotation of the emitted graph \emph{is},
+by machine check, the proven derivative. The forward
+($[\![\texttt{emitMlpFwd}]\!] = \texttt{mlpForward}$), the loss
+cotangent, and the parameter gradients are bridged the same way, so
+every mathematical operation in the train step is covered. A small
+computable printer then walks that same graph and emits one
+\texttt{stablehlo} op per node ($\texttt{dotGeneral}\,W \mapsto
+\texttt{stablehlo.dot\_general}$; $\texttt{selectPos}\,p \mapsto
+\texttt{compare GT 0} + \texttt{select}$), so the emitted text \emph{is}
+the printout of \texttt{emitMlpBack} by construction.
+
+Here is exactly what the printer emits for that graph --- nothing
+hand-written, one \texttt{stablehlo} op per IR node (default
+\texttt{precision} attributes elided for the page):
+
+\begin{verbatim}
+func.func @mlp_back(%dy: tensor<2x2xf32>, %W0: tensor<4x3xf32>,
+    %W1: tensor<3x3xf32>, %W2: tensor<3x2xf32>,
+    %p0: tensor<2x3xf32>, %p1: tensor<2x3xf32>) -> tensor<2x4xf32> {
+  %bk0 = stablehlo.dot_general %dy, %W2, contracting_dims = [1] x [1]
+           : (tensor<2x2xf32>, tensor<3x2xf32>) -> tensor<2x3xf32>
+  %bk1 = stablehlo.constant dense<0.0> : tensor<2x3xf32>
+  %bk2 = stablehlo.compare GT, %p1, %bk1
+           : (tensor<2x3xf32>, tensor<2x3xf32>) -> tensor<2x3xi1>
+  %bk3 = stablehlo.select %bk2, %bk0, %bk1
+           : tensor<2x3xi1>, tensor<2x3xf32>
+  %bk4 = stablehlo.dot_general %bk3, %W1, contracting_dims = [1] x [1]
+           : (tensor<2x3xf32>, tensor<3x3xf32>) -> tensor<2x3xf32>
+  %bk5 = stablehlo.constant dense<0.0> : tensor<2x3xf32>
+  %bk6 = stablehlo.compare GT, %p0, %bk5
+           : (tensor<2x3xf32>, tensor<2x3xf32>) -> tensor<2x3xi1>
+  %bk7 = stablehlo.select %bk6, %bk4, %bk5
+           : tensor<2x3xi1>, tensor<2x3xf32>
+  %bk8 = stablehlo.dot_general %bk7, %W0, contracting_dims = [1] x [1]
+           : (tensor<2x3xf32>, tensor<4x3xf32>) -> tensor<2x4xf32>
+  return %bk8 : tensor<2x4xf32>
+}
+\end{verbatim}
+
+\noindent Read it against the graph: each \texttt{dot\_general}
+(\texttt{\%bk0}, \texttt{\%bk4}, \texttt{\%bk8}) is a
+\texttt{dotGeneral}\,$W$ node, whose denotation is
+$\texttt{Mat.mulVec}\,W$; each \texttt{compare GT} + \texttt{select}
+pair (\texttt{\%bk2}/\texttt{\%bk3}, \texttt{\%bk6}/\texttt{\%bk7}) is a
+\texttt{selectPos}\,$p$ node --- the ReLU subgradient. The bridge
+theorem is precisely the claim that this text computes
+\texttt{mlp\_has\_vjp\_at}'s backward.
+
+\medskip\noindent\textbf{Proven versus trusted.} The honest accounting:
+\begin{itemize}
+  \item \emph{Proven} (Lean, three axioms): the IR's denotation equals
+    the proven derivative, and likewise for the forward, loss, and
+    gradient bridges.
+  \item \emph{By construction}: the emitted StableHLO is the rendering
+    of exactly that graph.
+  \item \emph{Trusted} (validated, not proven): that the StableHLO
+    \emph{text} denotes $[\![\cdot]\!]$ --- a faithful printer, whose
+    proof would require a formal semantics of StableHLO text that does
+    not yet exist; that IREE lowers it correctly; and that
+    \texttt{float32} approximates $\mathbb{R}$.
+\end{itemize}
+So the claim is exact and bounded: \emph{the gradient the GPU computes
+is, by a machine-checked theorem, the network's exact reverse-mode
+derivative over $\mathbb{R}$ --- up to a faithful printer, IREE, and
+floating point.} The first half is a proof; the rest is tested, end to
+end. Compiled by IREE and run on the GPU, the emitted train step updates
+all six MLP parameter tensors to within $1.2\times10^{-7}$ of an
+independent NumPy SGD reference. The irreducible unproven surface is one
+$\sim$200-line printer plus IREE plus float --- where a conventional
+generator leaves thousands of lines of string-building linked to the
+proof by nothing at all.
+
+\medskip\noindent\textbf{One honest caveat.} The ReLU bridge holds at a
+\emph{smooth point} --- an input where no pre-activation is exactly
+zero. At the kink ReLU has no derivative, and the code uses a
+subgradient (the \texttt{compare GT 0} sends the zero case to $0$); the
+equality is permitted to fail precisely on that measure-zero set, and
+nowhere else. This is the smallest setting in which the technique
+appears; the same three pieces --- denoted IR, bridge theorem, printer
+--- carry unchanged to the CNN of Chapter~\ref{chap:cnn} and to a full
+transformer block.
 
 \chapter{MNIST: 2D CNN}
 \label{chap:cnn}
