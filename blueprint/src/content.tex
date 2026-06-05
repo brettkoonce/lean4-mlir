@@ -2540,29 +2540,6 @@ tile-compare-select by \texttt{maxpool\_back\_bridge}, the dense
 \texttt{dot\_general}s exactly as in Chapter~\ref{chap:mlp} --- so the
 whole CNN backward is covered, op by op.
 
-\medskip\noindent\textbf{Proven versus trusted.} The same honest
-accounting as the MLP:
-\begin{itemize}
-  \item \emph{Proven} (Lean, three axioms): the emitted conv-backward
-    graph's denotation equals \texttt{conv2d\_has\_vjp3}'s backward, and
-    likewise for the forward, max-pool, dense, and loss bridges.
-  \item \emph{By construction}: the emitted StableHLO is the rendering of
-    exactly those graphs.
-  \item \emph{Trusted} (validated, not proven): that the StableHLO
-    \emph{text} denotes $[\![\cdot]\!]$ --- the $\sim$200-line printer,
-    whose faithfulness would need a formal semantics of StableHLO text
-    that does not yet exist; that IREE lowers it correctly; and that
-    \texttt{float32} approximates $\mathbb{R}$.
-\end{itemize}
-Compiled by IREE and run on the GPU, the emitted conv backward matches an
-independent NumPy convolution input-VJP to $1.9\times10^{-6}$, and the
-full CNN train step updates all four parameter tensors --- the
-convolution's weight and bias and the dense head's weight and bias --- to
-within $1.2\times10^{-7}$ of an independent NumPy SGD reference. So the
-gradient the GPU computes through the convolution is, by a machine-checked
-theorem, the network's exact reverse-mode derivative over $\mathbb{R}$ ---
-up to that one printer, IREE, and floating point.
-
 \medskip\noindent\textbf{One honest caveat.} The CNN has two kinked ops,
 not one. The convolution itself is linear, so its bridge is
 \emph{unconditional} --- it holds at every input. But the relu bridges
