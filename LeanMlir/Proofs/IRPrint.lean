@@ -78,6 +78,48 @@ def renderBlock (name : String) (B : Nat) (h : Hlo) : String :=
   code ++ s!"  //   dx = {res}\n"
 
 -- ════════════════════════════════════════════════════════════════
+-- § Forward codegen AST — the renderable mirror of `IR.Fwd`
+--
+-- `Hlo` mirrors the backward IR `Back`; `HloF` mirrors the *forward* IR
+-- `IR.Fwd` (whose denotation is proven `= mlpForward`, `IR.mlp_fwd_bridge`).
+-- So the emitted forward StableHLO is `print (mlpFwdHlo)` by construction —
+-- the forward enjoys the same render-from-proof-backed-IR status as the
+-- backward, not a hand-written string. `dense` → `dot_general +
+-- broadcast_in_dim + add`, `relu` → `maximum 0`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Forward graph in codegen form: SSA names + shapes, mirroring `IR.Fwd`. -/
+inductive HloF where
+  | input (ssa : String) : HloF
+  | dense (wSSA bSSA : String) (m n : Nat) : HloF → HloF
+  | relu (n : Nat) : HloF → HloF
+
+/-- Render a forward graph to StableHLO. Threads `(dense#, relu#)`: dense
+    outputs are named `%h{k}` (the saved pre-activations the backward reads
+    for its ReLU masks), relu outputs `%a{k}` (the activations `dWℓ` reads).
+    Returns `(code, resultSSA)`. -/
+def HloF.render (B : Nat) : HloF → StateM (Nat × Nat) (String × String)
+  | .input ssa => pure ("", ssa)
+  | .dense wSSA bSSA m n e => do
+      let (c, r) ← e.render B
+      let (hk, ak) ← get; set (hk + 1, ak)
+      let bb := s!"%hb{hk}"; let dd := s!"%hd{hk}"; let o := s!"%h{hk}"
+      pure (c ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {bSSA}, dims = [1] : ({tt [n]}) -> {tt [B, n]}\n" ++
+        s!"    {dd} = stablehlo.dot_general {r}, {wSSA}, contracting_dims = [1] x [0],\n" ++
+        s!"              precision = [DEFAULT, DEFAULT] : ({tt [B, m]}, {tt [m, n]}) -> {tt [B, n]}\n" ++
+        s!"    {o} = stablehlo.add {dd}, {bb} : {tt [B, n]}\n",
+        o)
+  | .relu n e => do
+      let (c, r) ← e.render B
+      let (hk, ak) ← get; set (hk, ak + 1)
+      let z := s!"%az{ak}"; let o := s!"%a{ak}"
+      pure (c ++
+        s!"    {z} = stablehlo.constant dense<0.0> : {tt [B, n]}\n" ++
+        s!"    {o} = stablehlo.maximum {r}, {z} : {tt [B, n]}\n",
+        o)
+
+-- ════════════════════════════════════════════════════════════════
 -- § Examples
 -- ════════════════════════════════════════════════════════════════
 
@@ -109,6 +151,28 @@ def mlpModule (B d₀ d₁ d₂ d₃ : Nat) : String :=
   s!"%W2: {tt [d₂, d₃]}, %p0: {tt [B, d₁]}, %p1: {tt [B, d₂]}) -> {tt [B, d₀]} " ++ "{\n" ++
   body ++ s!"    return {res} : {tt [B, d₀]}\n" ++ "  }\n}\n"
 
+/-- **Forward activations prefix** `relu ∘ dense W₁ ∘ relu ∘ dense W₀`: the
+    part of the forward whose outputs the backward consumes (`%h0,%h1`
+    pre-activations; `%a0,%a1` activations; result `%a1`). Mirror of
+    `IR.emitMlpFwd` minus the top dense; its denotation is the layer-1
+    activation, with `%h0,%h1` proven `= IR.mlp_fwd_preact0/1`. -/
+def mlpFwdActs (d₀ d₁ d₂ : Nat) : HloF :=
+  .relu d₂ (.dense "%W1" "%b1" d₁ d₂ (.relu d₁ (.dense "%W0" "%b0" d₀ d₁ (.input "%x"))))
+
+/-- **Whole MLP forward** `dense W₂ ∘ (mlpFwdActs)`. Mirror of `IR.emitMlpFwd`
+    (`⟦emitMlpFwd⟧ = mlpForward`, `IR.mlp_fwd_bridge`). -/
+def mlpFwdHlo (d₀ d₁ d₂ d₃ : Nat) : HloF :=
+  .dense "%W2" "%b2" d₂ d₃ (mlpFwdActs d₀ d₁ d₂)
+
+/-- Standalone forward `func.func @mlp_fwd`: `x` + weights in, logits out.
+    The render-from-IR forward artifact, peer to `mlpModule` (the backward). -/
+def mlpFwdModule (B d₀ d₁ d₂ d₃ : Nat) : String :=
+  let (body, res) := ((mlpFwdHlo d₀ d₁ d₂ d₃).render B).run' (0, 0)
+  "module @m {\n" ++
+  s!"  func.func @mlp_fwd(%x: {tt [B,d₀]}, %W0: {tt [d₀,d₁]}, %b0: {tt [d₁]}, " ++
+  s!"%W1: {tt [d₁,d₂]}, %b1: {tt [d₂]}, %W2: {tt [d₂,d₃]}, %b2: {tt [d₃]}) -> {tt [B,d₃]} " ++ "{\n" ++
+  body ++ s!"    return {res} : {tt [B,d₃]}\n" ++ "  }\n}\n"
+
 -- ════════════════════════════════════════════════════════════════
 -- § Full train step — forward + proof-backed backward + SGD
 --
@@ -116,9 +180,11 @@ def mlpModule (B d₀ d₁ d₂ d₃ : Nat) : String :=
 -- train step also needs the *parameter* gradients and an optimizer update.
 -- This module renders one full SGD step for the MLP:
 --
---   forward  (TRUSTED): recompute the saved activations h0,a0,h1,a1 from x
---                       and the weights (Phase-2 forward-IR bridge would make
---                       this proof-backed too; here it is hand-rendered).
+--   forward  (PROOF-BACKED): rendered from `mlpFwdActs` (the prefix of
+--                       `mlpFwdHlo`/`IR.emitMlpFwd`), whose denotation is the
+--                       proven `mlpForward` activation; `%h0,%h1` are the
+--                       pre-activations (= IR.mlp_fwd_preact0/1) the backward
+--                       reads, `%a0,%a1` the activations.
 --   backward (PROOF-BACKED): the dx chain is ⟦emitMlpBack⟧ = mlp_has_vjp_at
 --                       .backward; each dWℓ = aₗ₋₁ᵀ·dyℓ (batch-contracting
 --                       dot_general) and dbℓ = Σ_batch dyℓ (reduce-add) is
@@ -127,17 +193,19 @@ def mlpModule (B d₀ d₁ d₂ d₃ : Nat) : String :=
 --                       bias_grad_bridge.
 --   SGD      (TRUSTED): θ' = θ − lr·dθ, elementwise.
 --
--- So the gradient core the optimizer consumes is the rendering of
--- proof-backed IR; forward and the SGD arithmetic are the trusted frame.
+-- So forward, backward, and the parameter gradients the optimizer consumes
+-- are ALL renderings of proof-backed IR; only the SGD arithmetic (and the
+-- printer / IREE / float) remain trusted.
 -- ════════════════════════════════════════════════════════════════
 
 /-- A full MLP SGD train step (`dense → relu → dense → relu → dense`),
     `dims d₀→d₁→d₂→d₃`, batch `B`, learning rate `lr` (a decimal literal).
     Inputs: `x`, the six parameters, and the output cotangent `%dy`
     (`∂L/∂logits`, supplied — keeps the loss out of scope). Returns the six
-    updated parameters. Op-for-op the rendering of the proof-backed backward
-    (`IR.emitMlpBack` + `IR.emitWeightGrad`/`emitBiasGrad`) inside a trusted
-    forward + SGD frame. -/
+    updated parameters. The forward is `render mlpFwdActs` and the backward
+    is the rendering of the proof-backed `IR.emitMlpBack` +
+    `IR.emitWeightGrad`/`emitBiasGrad`; only the SGD arithmetic is the
+    trusted frame. -/
 def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
   let sgd (θ dθ θ' lrC sg ty : String) : String :=
     s!"    {lrC} = stablehlo.constant dense<{lr}> : {ty}\n" ++
@@ -146,26 +214,22 @@ def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
   let dg (o a b cdA cdB tyA tyB tyO : String) : String :=
     s!"    {o} = stablehlo.dot_general {a}, {b}, contracting_dims = [{cdA}] x [{cdB}],\n" ++
     s!"              precision = [DEFAULT, DEFAULT] : ({tyA}, {tyB}) -> {tyO}\n"
+  -- forward rendered from the forward IR mirror (names %h0,%a0,%h1,%a1)
+  let fwd := (((mlpFwdActs d₀ d₁ d₂).render B).run' (0, 0)).1
   "module @m {\n" ++
   s!"  func.func @mlp_train_step(%x: {tt [B,d₀]}, %W0: {tt [d₀,d₁]}, %b0: {tt [d₁]}, " ++
   s!"%W1: {tt [d₁,d₂]}, %b1: {tt [d₂]}, %W2: {tt [d₂,d₃]}, %b2: {tt [d₃]}, %dy: {tt [B,d₃]}) -> " ++
   s!"({tt [d₀,d₁]}, {tt [d₁]}, {tt [d₁,d₂]}, {tt [d₂]}, {tt [d₂,d₃]}, {tt [d₃]}) " ++ "{\n" ++
-  -- ── forward (trusted) ──
-  "    // ── forward (trusted): recompute saved activations from x, weights ──\n" ++
-  dg "%xw0" "%x" "%W0" "1" "0" (tt [B,d₀]) (tt [d₀,d₁]) (tt [B,d₁]) ++
-  s!"    %b0b = stablehlo.broadcast_in_dim %b0, dims = [1] : ({tt [d₁]}) -> {tt [B,d₁]}\n" ++
-  s!"    %h0 = stablehlo.add %xw0, %b0b : {tt [B,d₁]}\n" ++
-  s!"    %za = stablehlo.constant dense<0.0> : {tt [B,d₁]}\n" ++
-  s!"    %a0 = stablehlo.maximum %h0, %za : {tt [B,d₁]}\n" ++
-  dg "%aw1" "%a0" "%W1" "1" "0" (tt [B,d₁]) (tt [d₁,d₂]) (tt [B,d₂]) ++
-  s!"    %b1b = stablehlo.broadcast_in_dim %b1, dims = [1] : ({tt [d₂]}) -> {tt [B,d₂]}\n" ++
-  s!"    %h1 = stablehlo.add %aw1, %b1b : {tt [B,d₂]}\n" ++
-  s!"    %zb = stablehlo.constant dense<0.0> : {tt [B,d₂]}\n" ++
-  s!"    %a1 = stablehlo.maximum %h1, %zb : {tt [B,d₂]}\n" ++
+  -- ── forward (proof-backed: rendered from mlpFwdActs ⊂ emitMlpFwd) ──
+  "    // ── forward (PROOF-BACKED: render mlpFwdActs; ⟦emitMlpFwd⟧ = mlpForward,\n" ++
+  "    //    %h0,%h1 = pre-activations IR.mlp_fwd_preact0/1, %a0,%a1 = activations) ──\n" ++
+  fwd ++
   -- ── backward (proof-backed) ──
   "    // ── backward (PROOF-BACKED: dx chain = ⟦emitMlpBack⟧ = mlp_has_vjp_at.backward;\n" ++
   "    //    dWℓ/dbℓ = emitWeightGrad/emitBiasGrad, bridged to the certified Jacobians) ──\n" ++
   "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %za = stablehlo.constant dense<0.0> : {tt [B,d₁]}\n" ++
+  s!"    %zb = stablehlo.constant dense<0.0> : {tt [B,d₂]}\n" ++
   dg "%dW2" "%a1" "%dy" "0" "0" (tt [B,d₂]) (tt [B,d₃]) (tt [d₂,d₃]) ++
   s!"    %db2 = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({tt [B,d₃]}, tensor<f32>) -> {tt [d₃]}\n" ++
   dg "%dx2" "%dy" "%W2" "1" "1" (tt [B,d₃]) (tt [d₂,d₃]) (tt [B,d₂]) ++
@@ -196,6 +260,7 @@ def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
 #eval IO.println (renderBlock "mlp 4→3→3→2 (B=2)" 2 (mlpHlo 4 3 3 2))
 #eval IO.FS.writeFile "/tmp/linear_back.mlir" (linearModule 2 4 3)
 #eval IO.FS.writeFile "/tmp/mlp_back.mlir" (mlpModule 2 4 3 3 2)
+#eval IO.FS.writeFile "/tmp/mlp_fwd.mlir" (mlpFwdModule 2 4 3 3 2)
 #eval IO.FS.writeFile "/tmp/mlp_train_step.mlir" (mlpTrainStepModule 2 4 3 3 2 "0.1")
 
 end Proofs.IRPrint

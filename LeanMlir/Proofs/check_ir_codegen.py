@@ -10,8 +10,9 @@ StableHLO that `IRPrint.lean` renders from those same IR graphs, compiles it
 with IREE, runs it, and checks it against an independent numpy reference:
 
   • linear_back / mlp_back   — the input-gradient (VJP) chain (dx);
-  • mlp_train_step           — a full SGD step: forward (trusted) → proof-backed
-                               backward (dx chain + dW/db) → SGD update; checks
+  • mlp_fwd                   — the forward map (⟦emitMlpFwd⟧ = mlpForward);
+  • mlp_train_step           — a full SGD step: proof-backed forward + backward
+                               (dx chain + dW/db) → trusted SGD update; checks
                                the six updated parameters against numpy.
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
@@ -56,6 +57,12 @@ rng = np.random.default_rng(0)
 # ════════════════════════════════════════════════════════════════
 # Reference computations (independent numpy)
 # ════════════════════════════════════════════════════════════════
+def mlp_fwd_ref(x, W0, b0, W1, b1, W2, b2):
+    """Forward map mlpForward: relu(relu(x·W0+b0)·W1+b1)·W2+b2."""
+    a0 = np.maximum(x @ W0 + b0, 0.0)
+    a1 = np.maximum(a0 @ W1 + b1, 0.0)
+    return a1 @ W2 + b2
+
 def mlp_back_ref(dy, W0, W1, W2, p0, p1):
     """Input-gradient (VJP) chain dx."""
     return (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
@@ -92,12 +99,18 @@ outs, nb = compile_run("/tmp/mlp_back.mlir", "mlp_back", mlp_back_args)
 e = max_err(outs, [mlp_back_ref(dy, W0, W1, W2, p0, p1)]); ok &= e < TOL
 print(f"mlp_back        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}")
 
-# ── mlp full SGD train step: 6 updated params (forward+backward+SGD) ──
+# ── mlp forward (proof-backed: ⟦emitMlpFwd⟧ = mlpForward) ──
 LR = 0.1
 x  = rng.standard_normal((B, d0)).astype(np.float32)
 b0 = rng.standard_normal((d1,)).astype(np.float32)
 b1 = rng.standard_normal((d2,)).astype(np.float32)
 b2 = rng.standard_normal((d3,)).astype(np.float32)
+fwd_args = [x, W0, b0, W1, b1, W2, b2]
+outs, nb = compile_run("/tmp/mlp_fwd.mlir", "mlp_fwd", fwd_args)
+e = max_err(outs, [mlp_fwd_ref(x, W0, b0, W1, b1, W2, b2)]); ok &= e < TOL
+print(f"mlp_fwd         ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}")
+
+# ── mlp full SGD train step: 6 updated params (forward+backward+SGD) ──
 dyt = rng.standard_normal((B, d3)).astype(np.float32)
 ts_args = [x, W0, b0, W1, b1, W2, b2, dyt]
 ts_ref = mlp_sgd_ref(x, W0, b0, W1, b1, W2, b2, dyt, LR)

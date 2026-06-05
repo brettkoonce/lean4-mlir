@@ -712,5 +712,86 @@ theorem mlp_layer1_weight_grad_bridge {d₁ d₂ d₃ : Nat}
             * ((mlpCotOut1 W₂ p₁).denote dy) k :=
   weight_grad_bridge W₁ b₁ x₁ (mlpCotOut1 W₂ p₁) dy i j
 
+-- ════════════════════════════════════════════════════════════════
+-- § Forward IR — the other half of the train step (Phase 2)
+--
+-- `Back` denotes the backward (cotangent → gradients); `Fwd` is its mirror
+-- for the *forward* pass (input → output). With it, the forward StableHLO
+-- the train step recomputes is no longer just trusted: it is the rendering
+-- of `emitMlpFwd`, whose denotation is *proven* equal to the proven forward
+-- map `mlpForward` (`mlp_fwd_bridge`). The whole MLP module — forward AND
+-- backward AND parameter gradients — is then the rendering of proof-backed
+-- IR (only the SGD arithmetic and the printer/IREE/float stay trusted).
+-- `Fwd.subst` / `denote_subst_fwd` give the forward chain rule, mirroring
+-- `Back.subst` / `denote_subst`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- A forward graph: input `x : Vec inp`, producing a `Vec out`. Each
+    constructor is a forward op (the affine `dense`, the `relu`
+    nonlinearity); the StableHLO mirror renders `dense` as
+    `dot_general + broadcast_in_dim + add` and `relu` as `maximum 0`. -/
+inductive Fwd (inp : Nat) : Nat → Type where
+  | input : Fwd inp inp
+  | dense {m n : Nat} (W : Mat m n) (b : Vec n) : Fwd inp m → Fwd inp n
+  | relu {n : Nat} : Fwd inp n → Fwd inp n
+
+/-- **Denotational semantics** of a forward graph, into the proofs' `Vec`
+    type — so a bridge can equate it with the proven forward map. -/
+noncomputable def Fwd.denote {inp out : Nat} (e : Fwd inp out) (x : Vec inp) : Vec out :=
+  -- (`_root_.Proofs.dense`/`relu` — the bare names resolve to the `Fwd`
+  -- constructors inside this namespace.)
+  match e with
+  | .input        => x
+  | .dense W b e' => _root_.Proofs.dense W b (e'.denote x)
+  | .relu e'      => _root_.Proofs.relu _ (e'.denote x)
+
+/-- Plug `g` into the input leaf of `e` (forward composition). The forward
+    analogue of `Back.subst`. -/
+def Fwd.subst {inp mid out : Nat} (e : Fwd mid out) (g : Fwd inp mid) : Fwd inp out :=
+  match e with
+  | .input        => g
+  | .dense W b e' => .dense W b (e'.subst g)
+  | .relu e'      => .relu (e'.subst g)
+
+/-- **Forward IR chain rule** — `subst` denotes composition. Mirror of
+    `denote_subst`; lets forward graphs compose to arbitrary depth. -/
+theorem denote_subst_fwd {inp mid out : Nat} (e : Fwd mid out) (g : Fwd inp mid)
+    (x : Vec inp) : (e.subst g).denote x = e.denote (g.denote x) := by
+  induction e with
+  | input => rfl
+  | dense W b e' ih => simp only [Fwd.subst, Fwd.denote, ih]
+  | relu e' ih => simp only [Fwd.subst, Fwd.denote, ih]
+
+/-- The emitted forward graph for the whole MLP:
+    `dense W₂ ∘ relu ∘ dense W₁ ∘ relu ∘ dense W₀` as a `Fwd` tree. -/
+def emitMlpFwd {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) : Fwd d₀ d₃ :=
+  .dense W₂ b₂ (.relu (.dense W₁ b₁ (.relu (.dense W₀ b₀ .input))))
+
+/-- **Forward bridge.** The emitted forward graph denotes the proven forward
+    map `mlpForward`. Promotes the train step's forward from trusted to
+    proof-backed (up to the printer): the emitted forward StableHLO is the
+    rendering of an IR proven to compute `mlpForward`. -/
+theorem mlp_fwd_bridge {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) :
+    (emitMlpFwd W₀ b₀ W₁ b₁ W₂ b₂).denote x = mlpForward W₀ b₀ W₁ b₁ W₂ b₂ x :=
+  rfl
+
+/-- **Splice contract, layer-0 pre-activation.** The forward IR's sub-graph
+    up to the first ReLU input denotes exactly the pre-activation
+    `dense W₀ b₀ x` that the backward graph reads as `p₀` (its first
+    `compare`/`select` mask). Forward output ↦ backward input, proven. -/
+theorem mlp_fwd_preact0 {d₀ d₁ : Nat} (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (x : Vec d₀) :
+    (Fwd.dense W₀ b₀ Fwd.input).denote x = dense W₀ b₀ x := rfl
+
+/-- **Splice contract, layer-1 pre-activation.** Likewise the sub-graph up to
+    the second ReLU input denotes the `p₁` the backward reads. -/
+theorem mlp_fwd_preact1 {d₀ d₁ d₂ : Nat} (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (x : Vec d₀) :
+    (Fwd.dense W₁ b₁ (Fwd.relu (Fwd.dense W₀ b₀ Fwd.input))).denote x
+      = dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) := rfl
+
 end IR
 end Proofs

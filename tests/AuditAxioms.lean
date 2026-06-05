@@ -180,3 +180,10 @@ open Proofs
 #print axioms IR.weight_grad_bridge
 #print axioms IR.bias_grad_bridge
 #print axioms IR.mlp_layer1_weight_grad_bridge
+-- Forward IR (Phase 2): the emitted forward graph denotes the proven forward
+-- map mlpForward, and its sub-graphs denote the pre-activations the backward
+-- reads — so the whole train-step module (fwd + back + grads) is proof-backed.
+#print axioms IR.denote_subst_fwd
+#print axioms IR.mlp_fwd_bridge
+#print axioms IR.mlp_fwd_preact0
+#print axioms IR.mlp_fwd_preact1
