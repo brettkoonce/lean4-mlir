@@ -630,6 +630,58 @@ def softmaxBackModule (B c : Nat) : String :=
   s!"    %dz = stablehlo.multiply %p, %d : {tt [B,c]}\n" ++
   s!"    return %dz : {tt [B,c]}\n" ++ "  }\n}\n"
 
+-- ════════════════════════════════════════════════════════════════
+-- § Scaled dot-product attention — the apex (Phase 3 sweep, ViT core)
+--
+-- `sdpa Q K V = softmax(QKᵀ/√d)·V`. Proven backward (sdpa_back_Q/K/V_correct),
+-- step by step:  dV = wᵀ·dOut,  dWeights = dOut·Vᵀ,  dScaled =
+-- rowsoftmax-VJP(w, dWeights) = w⊙(dW − ⟨w,dW⟩),  dScores = dScaled/√d,
+-- dQ = dScores·K,  dK = dScoresᵀ·Q. All `dot_general` + the softmax above +
+-- a scalar scale — "no novel structural move" (Attention.lean): three dense
+-- backwards, two matmuls, one row-softmax, one scale. (Q,K,V : Mat n d,
+-- single head — the W_q/W_k/W_v/W_o projections are dense layers already done.)
+-- ════════════════════════════════════════════════════════════════
+
+/-- A `dot_general` matmul (no batch dims): contract `cdA`×`cdB`. -/
+def matdg (o a b cdA cdB tyA tyB tyO : String) : String :=
+  s!"    {o} = stablehlo.dot_general {a}, {b}, contracting_dims = [{cdA}] x [{cdB}],\n" ++
+  s!"              precision = [DEFAULT, DEFAULT] : ({tyA}, {tyB}) -> {tyO}\n"
+
+/-- SDPA forward `sdpa n d` as `@sdpa_fwd`: scores = QKᵀ, scale, rowsoftmax, ·V. -/
+def sdpaFwdModule (n d : Nat) (scale : String) : String :=
+  "module @m {\n" ++
+  s!"  func.func @sdpa_fwd(%Q: {tt [n,d]}, %K: {tt [n,d]}, %V: {tt [n,d]}) -> {tt [n,d]} " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %scl = stablehlo.constant dense<{scale}> : {tt [n,n]}\n" ++
+  matdg "%scores" "%Q" "%K" "1" "1" (tt [n,d]) (tt [n,d]) (tt [n,n]) ++
+  s!"    %scaled = stablehlo.multiply %scores, %scl : {tt [n,n]}\n" ++
+  renderSoftmax "%weights" "%scaled" n n ++
+  matdg "%out" "%weights" "%V" "1" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
+  s!"    return %out : {tt [n,d]}\n" ++ "  }\n}\n"
+
+/-- SDPA backward (the three proven input grads `sdpa_back_Q/K/V`) as
+    `@sdpa_back`: recompute the softmax weights, then the matmul/softmax-VJP
+    chain. Returns `(dQ, dK, dV)`. -/
+def sdpaBackModule (n d : Nat) (scale : String) : String :=
+  "module @m {\n" ++
+  s!"  func.func @sdpa_back(%Q: {tt [n,d]}, %K: {tt [n,d]}, %V: {tt [n,d]}, %dOut: {tt [n,d]}) -> " ++
+  s!"({tt [n,d]}, {tt [n,d]}, {tt [n,d]}) " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %scl = stablehlo.constant dense<{scale}> : {tt [n,n]}\n" ++
+  matdg "%scores" "%Q" "%K" "1" "1" (tt [n,d]) (tt [n,d]) (tt [n,n]) ++
+  s!"    %scaled = stablehlo.multiply %scores, %scl : {tt [n,n]}\n" ++
+  renderSoftmax "%weights" "%scaled" n n ++
+  matdg "%dWeights" "%dOut" "%V" "1" "1" (tt [n,d]) (tt [n,d]) (tt [n,n]) ++
+  matdg "%dV" "%weights" "%dOut" "0" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
+  s!"    %pdw = stablehlo.multiply %weights, %dWeights : {tt [n,n]}\n" ++
+  reduceSumBcast "%srow" "%pdw" n n ++
+  s!"    %diff = stablehlo.subtract %dWeights, %srow : {tt [n,n]}\n" ++
+  s!"    %dScaled = stablehlo.multiply %weights, %diff : {tt [n,n]}\n" ++
+  s!"    %dScores = stablehlo.multiply %dScaled, %scl : {tt [n,n]}\n" ++
+  matdg "%dQ" "%dScores" "%K" "1" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
+  matdg "%dK" "%dScores" "%Q" "0" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
+  s!"    return %dQ, %dK, %dV : {tt [n,d]}, {tt [n,d]}, {tt [n,d]}\n" ++ "  }\n}\n"
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -655,5 +707,8 @@ def softmaxBackModule (B c : Nat) : String :=
 -- Softmax forward + proven rank-1 backward, B=2, c=4.
 #eval IO.FS.writeFile "/tmp/softmax_fwd.mlir" (softmaxFwdModule 2 4)
 #eval IO.FS.writeFile "/tmp/softmax_back.mlir" (softmaxBackModule 2 4)
+-- Scaled dot-product attention forward + proven backward (dQ,dK,dV), n=3, d=4, 1/√4=0.5.
+#eval IO.FS.writeFile "/tmp/sdpa_fwd.mlir" (sdpaFwdModule 3 4 "0.5")
+#eval IO.FS.writeFile "/tmp/sdpa_back.mlir" (sdpaBackModule 3 4 "0.5")
 
 end Proofs.IRPrint

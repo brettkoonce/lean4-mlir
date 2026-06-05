@@ -30,6 +30,8 @@ with IREE, runs it, and checks it against an independent numpy reference:
                                forward + the proven 3-term rank-1 backward.
   • softmax_fwd / _back       — softmax + the proven rank-1 backward
                                (p⊙(dy−⟨p,dy⟩)); the attention building block.
+  • sdpa_fwd / sdpa_back      — scaled dot-product attention softmax(QKᵀ/√d)·V
+                               + the proven dQ/dK/dV (the ViT apex).
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -193,6 +195,20 @@ def softmax_back_ref(z, dy):
     """Rank-1 softmax backward: dz = p ⊙ (dy − ⟨p,dy⟩)."""
     p = softmax_np(z); return p * (dy - (p * dy).sum(1, keepdims=True))
 
+def sdpa_fwd_ref(Q, K, V, d):
+    """sdpa = softmax(QKᵀ/√d)·V (row softmax)."""
+    return softmax_np(Q @ K.T / np.sqrt(d)) @ V
+
+def sdpa_back_ref(Q, K, V, dOut, d):
+    """Proven SDPA input grads (sdpa_back_Q/K/V)."""
+    scale = 1.0 / np.sqrt(d)
+    w = softmax_np(Q @ K.T * scale)
+    dW = dOut @ V.T
+    dV = w.T @ dOut
+    dScaled = w * (dW - (w * dW).sum(1, keepdims=True))   # row-softmax VJP
+    dScores = dScaled * scale
+    return [dScores @ K, dScores.T @ Q, dV]               # dQ, dK, dV
+
 def mlp_back_ref(dy, W0, W1, W2, p0, p1):
     """Input-gradient (VJP) chain dx."""
     return (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
@@ -330,6 +346,19 @@ outs, nb = compile_run("/tmp/softmax_back.mlir", "softmax_back", [sz, sdy])
 e = max_err(outs, [softmax_back_ref(sz, sdy)]); ok &= e < TOL
 print(f"softmax_back    ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (rank-1: p⊙(dy−⟨p,dy⟩))")
 
+# ── Scaled dot-product attention (Phase 3 apex): forward + proven dQ/dK/dV ──
+an, ad = 3, 4
+aQ = rng.standard_normal((an, ad)).astype(np.float32)
+aK = rng.standard_normal((an, ad)).astype(np.float32)
+aV = rng.standard_normal((an, ad)).astype(np.float32)
+aD = rng.standard_normal((an, ad)).astype(np.float32)
+outs, nb = compile_run("/tmp/sdpa_fwd.mlir", "sdpa_fwd", [aQ, aK, aV])
+e = max_err(outs, [sdpa_fwd_ref(aQ, aK, aV, ad)]); ok &= e < TOL
+print(f"sdpa_fwd        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (softmax(QKᵀ/√d)·V)")
+outs, nb = compile_run("/tmp/sdpa_back.mlir", "sdpa_back", [aQ, aK, aV, aD])
+e = max_err(outs, sdpa_back_ref(aQ, aK, aV, aD, ad)); ok &= e < TOL
+print(f"sdpa_back       ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (dQ,dK,dV vs proven sdpa_back_Q/K/V)")
+
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
 # ════════════════════════════════════════════════════════════════
@@ -383,6 +412,10 @@ try:
                               backend="rocm", config="hip", extra=extra)
         eg = max_err(outs, [softmax_back_ref(sz, sdy)]); ok &= eg < TOL
         print(f"softmax_back    (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
+        outs, _ = compile_run("/tmp/sdpa_back.mlir", "sdpa_back", [aQ, aK, aV, aD],
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, sdpa_back_ref(aQ, aK, aV, aD, ad)); ok &= eg < TOL
+        print(f"sdpa_back       (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:
