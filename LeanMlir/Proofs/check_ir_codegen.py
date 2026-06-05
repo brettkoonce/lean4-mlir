@@ -13,7 +13,7 @@ needs no GPU; ROCm/CUDA only change the backend, not the numerics.
 Run:  .venv/bin/python LeanMlir/Proofs/check_ir_codegen.py
 Deps: iree-base-compiler, iree-base-runtime, numpy (pip); lake (to regenerate).
 """
-import subprocess, sys
+import os, subprocess, sys
 import numpy as np
 import iree.compiler as ic
 import iree.runtime as rt
@@ -57,5 +57,40 @@ ref = (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
 e = float(np.abs(out - ref).max()); ok &= e < TOL
 print(f"mlp_back     ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}")
 
-print("ALL PASS" if ok else "FAILURES")
-sys.exit(0 if ok else 1)
+print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
+
+# ── best-effort GPU check: same module, ROCm/HIP backend, real device ──
+# CPU above is the gate (correctness is backend-independent); this just
+# confirms it also runs on the GPU if one is present.
+def gpu_arch():
+    import glob, re
+    for rocminfo in ["rocminfo", *glob.glob("/opt/rocm*/bin/rocminfo")]:
+        try:
+            out = subprocess.run([rocminfo], capture_output=True, text=True).stdout
+            m = re.search(r"gfx[0-9a-f]+", out)
+            if m:
+                return m.group(0)
+        except Exception:
+            pass
+    return None
+
+try:
+    if "hip" in rt.query_available_drivers() and (arch := gpu_arch()):
+        vmfb = ic.compile_str(open("/tmp/mlp_back.mlir").read(), target_backends=["rocm"],
+                              input_type="stablehlo", extra_args=[f"--iree-hip-target={arch}"])
+        ctx = rt.SystemContext(config=rt.Config("hip"))
+        ctx.add_vm_module(rt.VmModule.copy_buffer(ctx.instance, vmfb))
+        outg = np.asarray(ctx.modules.m["mlp_back"](dy, W0, W1, W2, p0, p1).to_host())
+        eg = float(np.abs(outg - ref).max())
+        print(f"mlp_back     (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
+        ok &= eg < TOL
+    else:
+        print("gpu: no hip device — skipped (cpu check is the gate)")
+except Exception as e:
+    print(f"gpu: skipped ({type(e).__name__}: {e})")
+
+# Hard-exit past IREE's nanobind teardown, whose at-exit "leaked instances"
+# report is harmless noise that would otherwise bury the PASS lines.
+sys.stdout.flush()
+sys.stderr.flush()
+os._exit(0 if ok else 1)
