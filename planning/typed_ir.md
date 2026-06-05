@@ -259,12 +259,21 @@ remaining steps to `⟦emit mnistCnnNoBn⟧ = mnistCnnNoBn_has_vjp_at.backward`:
    proven *flattened* layer backward (`maxPoolFlat_has_vjp_at`,
    `hasVJP3_to_hasVJP (conv2d_has_vjp3 …)`) — the exact Vec backwards
    `mnistCnnNoBn` composes. So the Tensor3 conv/maxpool now speak Vec.
-3. **`HasVJPAt` smooth-point variants.** Per-op bridges target the global
-   `HasVJP`; `mnistCnnNoBn_has_vjp_at` composes via `vjp_comp_at`, so the
-   chained bridge needs `_at` versions (the kink bridges are already
-   smooth-point-conditional, so this is mostly mechanical).
-4. **General-shape conv identity.** The remaining ~100–150-line
-   partial-bijection sum-reindex (all dims, odd kernels) — the one genuine
-   hard lemma; concrete shapes are done.
+3. ✅ **`HasVJPAt` variants — landed.** `relu_at_bridge` / `dense_at_bridge`
+   bridge the leaves to the `HasVJPAt` instances (rfl: `relu_has_vjp_at`'s
+   backward *is* the compare/select formula; `(dense_has_vjp).toHasVJPAt`
+   wraps the global), and `denseRelu_at_bridge` shows the IR `subst` of the
+   dense+relu graphs denotes the `vjp_comp_at` block backward — a real
+   `mnistCnnNoBn` building block.
+4. **Final assembly + general conv.** What's left is bookkeeping: chain all
+   the per-layer/block bridges (Vec `subst` for dense/relu blocks, function
+   composition for the conv/maxpool `flatDenote` parts) to match the full
+   nested `vjp_comp_at` in `mnistCnnNoBn_has_vjp_at.backward`; and the
+   one genuine hard lemma — the **general-shape conv identity**
+   (~100–150-line partial-bijection sum-reindex; concrete shapes done).
+
+Every structural piece is in place: per-op bridges (Vec + Tensor3), both
+chain rules, the flatten bridge, the `_at` block composition. The capstone
+is now assembly + the one conv lemma.
 
 None is new research; each is bounded plumbing on top of what's landed.

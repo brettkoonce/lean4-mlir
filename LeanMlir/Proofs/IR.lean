@@ -553,5 +553,43 @@ theorem conv_flatten_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
   simp only [Back3.flatDenote, Back3.denote, hasVJP3_to_hasVJP, Tensor3.flatten]
   rw [conv_back_bridge_1to2 W b (Tensor3.unflatten v) (Tensor3.unflatten dy)]
 
+-- ════════════════════════════════════════════════════════════════
+-- § `HasVJPAt` (smooth-point) variants — the form whole-network VJPs use
+--
+-- `mnistCnnNoBn_has_vjp_at` composes layers via `vjp_comp_at` over their
+-- `HasVJPAt` instances. The leaves bridge trivially: `relu_has_vjp_at`'s
+-- backward IS the `compare`/`select` formula (rfl), and
+-- `(dense_has_vjp).toHasVJPAt` just wraps the global. The payoff is the
+-- block: the IR `subst` of the dense + relu backward graphs denotes the
+-- `vjp_comp_at` block backward — the actual `mnistCnnNoBn` building block.
+-- (conv/maxpool `_at` forms are the flatten bridges above.)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **ReLU `_at` bridge.** The `compare`/`select` graph denotes the pointwise
+    `relu_has_vjp_at` backward directly — definitional (no canonical sum). -/
+theorem relu_at_bridge (n : Nat) (x : Vec n) (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) :
+    (emitReluBack x).denote dy = (relu_has_vjp_at n x h_smooth).backward dy := rfl
+
+/-- **Dense `_at` bridge.** `(dense_has_vjp).toHasVJPAt` wraps the global
+    instance, so the dense graph still denotes it (rfl). -/
+theorem dense_at_bridge {m n : Nat} (W : Mat m n) (b : Vec n) (v : Vec m) (dy : Vec n) :
+    (emitDenseBack W).denote dy = ((dense_has_vjp W b).toHasVJPAt v).backward dy := rfl
+
+/-- **Dense→ReLU block `_at` bridge.** The IR `subst` of the dense and relu
+    backward graphs denotes the proven `vjp_comp_at` block backward — a real
+    `mnistCnnNoBn` building block, assembled from the per-op `_at` bridges via
+    `denote_subst`. -/
+theorem denseRelu_at_bridge {m n : Nat} (W : Mat m n) (b : Vec n) (v : Vec m)
+    (h_smooth : ∀ k, dense W b v k ≠ 0) (dy : Vec n) :
+    ((emitDenseBack W).subst (emitReluBack (dense W b v))).denote dy
+      = (vjp_comp_at (dense W b) (relu n) v
+          ((dense_differentiable W b) v)
+          (relu_differentiableAt_of_smooth n _ h_smooth)
+          ((dense_has_vjp W b).toHasVJPAt v)
+          (relu_has_vjp_at n _ h_smooth)).backward dy := by
+  rw [denote_subst]
+  simp only [vjp_comp_at, emitDenseBack, emitReluBack, Back.denote,
+             HasVJP.toHasVJPAt, dense_has_vjp, relu_has_vjp_at]
+
 end IR
 end Proofs

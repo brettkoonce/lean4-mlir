@@ -167,3 +167,7 @@ open Proofs
 -- Flatten bridge: flattened Back3 graph denotes the proven flattened-layer Vec backward.
 #print axioms IR.maxpool_flatten_bridge
 #print axioms IR.conv_flatten_bridge_1to2
+-- HasVJPAt smooth-point variants + a real dense→relu block via vjp_comp_at.
+#print axioms IR.relu_at_bridge
+#print axioms IR.dense_at_bridge
+#print axioms IR.denseRelu_at_bridge
