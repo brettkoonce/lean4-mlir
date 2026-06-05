@@ -18,6 +18,9 @@ with IREE, runs it, and checks it against an independent numpy reference:
   • conv_fwd / conv_back     — CNN (Phase 3): conv2d as stablehlo.convolution,
                                and the proven conv input-VJP (transpose+reverse
                                +conv = ⟦convBackDenote⟧).
+  • maxpool_fwd / _back       — CNN (Phase 3): maxPool2 as reduce_window(max),
+                               and the proven maxpool VJP (select_and_scatter
+                               = ⟦maxPoolBackDenote⟧, route dy to argmax).
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -106,6 +109,23 @@ def conv_input_vjp_ref(W, dy, IC, H, Wd):
                                 dx[:, c, r, s] += W[o, c, kh, kw] * dy[:, o, hi, wi]
     return dx
 
+def maxpool_fwd_ref(x):
+    """2×2 stride-2 max pool (the repo's maxPool2), NCHW."""
+    B, C, H, W = x.shape
+    return x.reshape(B, C, H // 2, 2, W // 2, 2).max(axis=(3, 5))
+
+def maxpool_back_ref(x, dy):
+    """Route dy to each 2×2 window's argmax cell (the proven maxPoolBackDenote)."""
+    B, C, H, W = x.shape; dx = np.zeros_like(x)
+    for b in range(B):
+        for c in range(C):
+            for i in range(H // 2):
+                for j in range(W // 2):
+                    win = x[b, c, 2*i:2*i+2, 2*j:2*j+2]
+                    di, dj = np.unravel_index(int(np.argmax(win)), (2, 2))
+                    dx[b, c, 2*i+di, 2*j+dj] = dy[b, c, i, j]
+    return dx
+
 def mlp_back_ref(dy, W0, W1, W2, p0, p1):
     """Input-gradient (VJP) chain dx."""
     return (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
@@ -183,6 +203,16 @@ outs, nb = compile_run("/tmp/conv_back.mlir", "conv_back", [cdy, cW_])
 e = max_err(outs, [conv_input_vjp_ref(cW_, cdy, cic, cH, cW)]); ok &= e < TOL
 print(f"conv_back       ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (transpose+reverse+conv = proven conv VJP)")
 
+# ── CNN maxpool (Phase 3): 2×2 stride-2, 2 ch, 4×4 → 2×2 — forward + backward ──
+mpx = rng.standard_normal((1, 2, 4, 4)).astype(np.float32)
+mpdy = rng.standard_normal((1, 2, 2, 2)).astype(np.float32)
+outs, nb = compile_run("/tmp/maxpool_fwd.mlir", "maxpool_fwd", [mpx])
+e = max_err(outs, [maxpool_fwd_ref(mpx)]); ok &= e < TOL
+print(f"maxpool_fwd     ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (reduce_window max)")
+outs, nb = compile_run("/tmp/maxpool_back.mlir", "maxpool_back", [mpx, mpdy])
+e = max_err(outs, [maxpool_back_ref(mpx, mpdy)]); ok &= e < TOL
+print(f"maxpool_back    ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (select_and_scatter = route dy to argmax)")
+
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
 # ════════════════════════════════════════════════════════════════
@@ -216,6 +246,10 @@ try:
                               backend="rocm", config="hip", extra=extra)
         eg = max_err(outs, [conv_input_vjp_ref(cW_, cdy, cic, cH, cW)]); ok &= eg < TOL
         print(f"conv_back       (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
+        outs, _ = compile_run("/tmp/maxpool_back.mlir", "maxpool_back", [mpx, mpdy],
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, [maxpool_back_ref(mpx, mpdy)]); ok &= eg < TOL
+        print(f"maxpool_back    (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:

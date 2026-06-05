@@ -328,6 +328,44 @@ def convBackModule (B ic oc H Wd kH kW : Nat) : String :=
   convOp "%dx" "%dy" "%Wr" (tt [B,oc,H,Wd]) (tt [ic,oc,kH,kW]) (tt [B,ic,H,Wd]) pH pW ++
   s!"    return %dx : {tt [B,ic,H,Wd]}\n" ++ "  }\n}\n"
 
+-- 2×2 stride-2 max pool: forward = `reduce_window`(max); backward =
+-- `select_and_scatter` (route dy to each window's argmax), which is exactly
+-- `IR.maxPoolBackDenote` and matches the proven maxpool VJP at smooth points
+-- (unique argmax — `maxpool_back_bridge`/`maxpool3_node_bridge`; GE tie-break).
+
+/-- Max-pool forward `IR.maxPool2` as `@maxpool_fwd`: `reduce_window` max,
+    window/stride `[1,1,2,2]` over NCHW. -/
+def maxpoolFwdModule (B c h w : Nat) : String :=
+  "module @m {\n" ++
+  s!"  func.func @maxpool_fwd(%x: {tt [B,c,2*h,2*w]}) -> {tt [B,c,h,w]} " ++ "{\n" ++
+  "    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+  "    %p = \"stablehlo.reduce_window\"(%x, %ninf) (" ++ "{\n" ++
+  "      ^bb0(%a: tensor<f32>, %b: tensor<f32>):\n" ++
+  "        %m = stablehlo.maximum %a, %b : tensor<f32>\n" ++
+  "        stablehlo.return %m : tensor<f32>\n" ++
+  "    }) " ++ "{window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+  s!" : ({tt [B,c,2*h,2*w]}, tensor<f32>) -> {tt [B,c,h,w]}\n" ++
+  s!"    return %p : {tt [B,c,h,w]}\n" ++ "  }\n}\n"
+
+/-- Max-pool backward `IR.maxPoolBackDenote` as `@maxpool_back`:
+    `select_and_scatter` (select = GE, scatter = add) routes `dy` to each
+    window's argmax cell — the proven maxpool VJP at smooth points. -/
+def maxpoolBackModule (B c h w : Nat) : String :=
+  "module @m {\n" ++
+  s!"  func.func @maxpool_back(%x: {tt [B,c,2*h,2*w]}, %dy: {tt [B,c,h,w]}) -> {tt [B,c,2*h,2*w]} " ++ "{\n" ++
+  "    %z = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  "    %dx = \"stablehlo.select_and_scatter\"(%x, %dy, %z) (" ++ "{\n" ++
+  "      ^bb0(%a: tensor<f32>, %b: tensor<f32>):\n" ++
+  "        %ge = stablehlo.compare GE, %a, %b : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+  "        stablehlo.return %ge : tensor<i1>\n" ++
+  "    }, " ++ "{\n" ++
+  "      ^bb0(%a: tensor<f32>, %b: tensor<f32>):\n" ++
+  "        %s = stablehlo.add %a, %b : tensor<f32>\n" ++
+  "        stablehlo.return %s : tensor<f32>\n" ++
+  "    }) " ++ "{window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+  s!" : ({tt [B,c,2*h,2*w]}, {tt [B,c,h,w]}, tensor<f32>) -> {tt [B,c,2*h,2*w]}\n" ++
+  s!"    return %dx : {tt [B,c,2*h,2*w]}\n" ++ "  }\n}\n"
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -340,5 +378,8 @@ def convBackModule (B ic oc H Wd kH kW : Nat) : String :=
 -- CNN (Phase 3): conv forward + proof-backed conv backward, 1→2 ch, 4×4, 3×3.
 #eval IO.FS.writeFile "/tmp/conv_fwd.mlir" (convFwdModule 1 1 2 4 4 3 3)
 #eval IO.FS.writeFile "/tmp/conv_back.mlir" (convBackModule 1 1 2 4 4 3 3)
+-- 2×2 max pool forward + proof-backed backward, 2 ch, 4×4 → 2×2.
+#eval IO.FS.writeFile "/tmp/maxpool_fwd.mlir" (maxpoolFwdModule 1 2 2 2)
+#eval IO.FS.writeFile "/tmp/maxpool_back.mlir" (maxpoolBackModule 1 2 2 2)
 
 end Proofs.IRPrint
