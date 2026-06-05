@@ -322,6 +322,54 @@ def res_block_back_ref(x, W1, W2, g1, b1, g2, b2, eps, dOut):
     dF = conv_input_vjp_ref(W1, dc1, C, H, W)
     return dF + dadd
 
+def resnet_train_step_ref(x, Ws, gs, bs, W10, W20, g10, b10, g20, b20,
+                          W11, W21, g11, b11, g21, b21, Wd, bd, onehot, eps, lr):
+    """Full ResNet SGD step: stem→2 blocks→GAP→FC→softmax-CE, all param grads."""
+    C, H, W = x.shape[1:]; M = C*H*W
+
+    def bn_back_full(cf, g, dyf):                 # cf=pre-BN flat, dyf=output cotangent
+        mu = cf.mean(1, keepdims=True); var = ((cf-mu)**2).mean(1, keepdims=True)
+        xhat = (cf-mu)/np.sqrt(var+eps)
+        return bn_back_ref(cf, g, dyf, eps), float((xhat*dyf).sum()), float(dyf.sum())
+
+    def blk_fwd(xin, W1, W2, g1, b1, g2, b2):
+        c1 = _convsame(xin, W1); n1 = bn_fwd_ref(c1.reshape(1, M), g1, b1, eps).reshape(1, C, H, W)
+        r1 = np.maximum(n1, 0.0)
+        c2 = _convsame(r1, W2); n2 = bn_fwd_ref(c2.reshape(1, M), g2, b2, eps).reshape(1, C, H, W)
+        add = n2 + xin
+        return np.maximum(add, 0.0), dict(xin=xin, c1=c1, n1=n1, r1=r1, c2=c2, add=add)
+
+    def blk_back(b, W1, W2, g1, g2, dyout):
+        dadd = dyout * (b['add'] > 0)
+        dc2f, dg2, db2 = bn_back_full(b['c2'].reshape(1, M), g2, dadd.reshape(1, M))
+        dc2 = dc2f.reshape(1, C, H, W); dr1 = conv_input_vjp_ref(W2, dc2, C, H, W)
+        dn1 = dr1 * (b['n1'] > 0)
+        dc1f, dg1, db1 = bn_back_full(b['c1'].reshape(1, M), g1, dn1.reshape(1, M))
+        dc1 = dc1f.reshape(1, C, H, W); dF = conv_input_vjp_ref(W1, dc1, C, H, W)
+        return (dF + dadd, conv_weight_grad_ref(b['xin'], dc1, W1.shape),
+                conv_weight_grad_ref(b['r1'], dc2, W2.shape), dg1, db1, dg2, db2)
+
+    # forward
+    sc1 = _convsame(x, Ws); sn = bn_fwd_ref(sc1.reshape(1, M), gs, bs, eps).reshape(1, C, H, W)
+    sa = np.maximum(sn, 0.0)
+    B0y, B0 = blk_fwd(sa, W10, W20, g10, b10, g20, b20)
+    B1y, B1 = blk_fwd(B0y, W11, W21, g11, b11, g21, b21)
+    gap = B1y.mean(axis=(2, 3)); logits = gap @ Wd + bd
+    dy = softmax_np(logits) - onehot
+    # backward
+    dWd = gap.T @ dy; dbd = dy.sum(0)
+    dB1y = np.broadcast_to((dy @ Wd.T)[:, :, None, None] / (H*W), (1, C, H, W)).copy()
+    B1dx, dW11, dW21, dg11, db11, dg21, db21 = blk_back(B1, W11, W21, g11, g21, dB1y)
+    B0dx, dW10, dW20, dg10, db10, dg20, db20 = blk_back(B0, W10, W20, g10, g20, B1dx)
+    dsn = B0dx * (sn > 0)
+    dsc1f, dgs, dbs = bn_back_full(sc1.reshape(1, M), gs, dsn.reshape(1, M))
+    dWs = conv_weight_grad_ref(x, dsc1f.reshape(1, C, H, W), Ws.shape)
+    u = lambda p, d: p - lr * d
+    return [u(Ws, dWs), u(gs, dgs), u(bs, dbs),
+            u(W10, dW10), u(W20, dW20), u(g10, dg10), u(b10, db10), u(g20, dg20), u(b20, db20),
+            u(W11, dW11), u(W21, dW21), u(g11, dg11), u(b11, db11), u(g21, dg21), u(b21, db21),
+            u(Wd, dWd), u(bd, dbd)]
+
 def residual_fwd_ref(x, W, b): return x + (x @ W + b)
 def residual_back_ref(dy, W): return dy + dy @ W.T            # add fan-in: I + dense
 def se_fwd_ref(x): return x * _sig(x)
@@ -588,6 +636,24 @@ outs, nb = compile_run("/tmp/res_tower_back.mlir", "res_tower_back", targs + [td
 e = max_err(outs, [res_tower_back_ref(tx, tblocks, EPS, tdO)]); ok &= e < TOL
 print(f"res_tower_back  ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (dx through {KBLK} residual blocks)")
 
+# ── Full ResNet SGD train step: stem + 2 blocks + GAP + FC + softmax-CE, 17 params ──
+nC, nH, nW, nCl = 2, 4, 4, 3
+def _k(): return rng.standard_normal((nC, nC, 3, 3)).astype(np.float32)
+def _s(): return np.array(rng.standard_normal(), np.float32)
+rnx = rng.standard_normal((1, nC, nH, nW)).astype(np.float32)
+rnWs = _k(); rngs = _s(); rnbs = _s()
+rnW10, rnW20 = _k(), _k(); rng10, rnb10, rng20, rnb20 = _s(), _s(), _s(), _s()
+rnW11, rnW21 = _k(), _k(); rng11, rnb11, rng21, rnb21 = _s(), _s(), _s(), _s()
+rnWd = rng.standard_normal((nC, nCl)).astype(np.float32); rnbd = rng.standard_normal((nCl,)).astype(np.float32)
+rnoh = np.eye(nCl, dtype=np.float32)[rng.integers(0, nCl, size=1)]
+rn_args = [rnx, rnWs, rngs, rnbs, rnW10, rnW20, rng10, rnb10, rng20, rnb20,
+           rnW11, rnW21, rng11, rnb11, rng21, rnb21, rnWd, rnbd, rnoh]
+rn_ref = resnet_train_step_ref(rnx, rnWs, rngs, rnbs, rnW10, rnW20, rng10, rnb10, rng20, rnb20,
+                               rnW11, rnW21, rng11, rnb11, rng21, rnb21, rnWd, rnbd, rnoh, EPS, 0.1)
+outs, nb = compile_run("/tmp/resnet_train_step.mlir", "resnet_train_step", rn_args)
+e = max_err(outs, rn_ref); ok &= e < TOL
+print(f"resnet_train_step ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (17 updated params: stem+2 blocks+FC)")
+
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
 # ════════════════════════════════════════════════════════════════
@@ -657,6 +723,10 @@ try:
                               backend="rocm", config="hip", extra=extra)
         eg = max_err(outs, [res_tower_back_ref(tx, tblocks, EPS, tdO)]); ok &= eg < TOL
         print(f"res_tower_back  (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}  ({KBLK}-block ResNet tower)")
+        outs, _ = compile_run("/tmp/resnet_train_step.mlir", "resnet_train_step", rn_args,
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, rn_ref); ok &= eg < TOL
+        print(f"resnet_train_step (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}  (full ResNet train step)")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:

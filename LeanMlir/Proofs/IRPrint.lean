@@ -1210,6 +1210,141 @@ def resTowerBackModule (k C H W kH kW : Nat) (eps : String) : String :=
   actMod "res_tower_back" (resTowerSig k C H W kH kW ++ s!", %dOut: {tt [1,C,H,W]}") (tt [1,C,H,W])
     (resTowerConsts C H W eps ++ fwd ++ bwd ++ s!"    return {dx} : {tt [1,C,H,W]}\n")
 
+-- ════════════════════════════════════════════════════════════════
+-- § ResNet train step — the full verified ResNet (Phase 3, capstone)
+--
+-- stem(cbr) → k residual blocks → global-avg-pool → FC → softmax-CE, with the
+-- full backward computing dx AND every parameter gradient (conv weight grads
+-- via the transpose trick, BN γ/β grads, FC W/b grads), then SGD. Every
+-- gradient is a rendering of proof-backed IR; SGD arithmetic is the trusted
+-- frame --- the same standard as the MLP and CNN train steps, now for a
+-- residual net. (Constant width, no downsample, to keep dims uniform; the
+-- dx-tower generator above shows depth scales to 16.)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Global average pool `[1,C,H,W] → [1,C]`. `%sc` in scope. -/
+def renderGAP (out x : String) (C H W : Nat) : String :=
+  s!"    {out}_s = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({tt [1,C,H,W]}, tensor<f32>) -> {tt [1,C]}\n" ++
+  s!"    {out}_hw = stablehlo.constant dense<{H*W}.0> : {tt [1,C]}\n" ++
+  s!"    {out} = stablehlo.divide {out}_s, {out}_hw : {tt [1,C]}\n"
+
+/-- GAP backward: `dx[c,i,j] = dy[c]/(H·W)` broadcast over the spatial axes. -/
+def renderGAPBack (out dy : String) (C H W : Nat) : String :=
+  s!"    {out}_hw = stablehlo.constant dense<{H*W}.0> : {tt [1,C]}\n" ++
+  s!"    {out}_d = stablehlo.divide {dy}, {out}_hw : {tt [1,C]}\n" ++
+  s!"    {out} = stablehlo.broadcast_in_dim {out}_d, dims = [0, 1] : ({tt [1,C]}) -> {tt [1,C,H,W]}\n"
+
+/-- Conv weight gradient via the transpose trick: input + output-cotangent → dW. -/
+def renderConvWGrad (out inp grad : String) (ic oc H W kH kW : Nat) : String :=
+  let pH := (kH-1)/2; let pW := (kW-1)/2
+  s!"    {out}_xt = stablehlo.transpose {inp}, dims = [1, 0, 2, 3] : ({tt [1,ic,H,W]}) -> {tt [ic,1,H,W]}\n" ++
+  s!"    {out}_dt = stablehlo.transpose {grad}, dims = [1, 0, 2, 3] : ({tt [1,oc,H,W]}) -> {tt [oc,1,H,W]}\n" ++
+  convOp s!"{out}_raw" s!"{out}_xt" s!"{out}_dt" (tt [ic,1,H,W]) (tt [oc,1,H,W]) (tt [ic,oc,kH,kW]) pH pW ++
+  s!"    {out} = stablehlo.transpose {out}_raw, dims = [1, 0, 2, 3] : ({tt [ic,oc,kH,kW]}) -> {tt [oc,ic,kH,kW]}\n"
+
+/-- BN scalar γ,β grads: dγ = Σ(x̂⊙dy), dβ = Σ(dy) over the flattened map. -/
+def renderBNParamGrad (dg db xhat dyf : String) (M : Nat) : String :=
+  s!"    {dg}_p = stablehlo.multiply {xhat}, {dyf} : {tt [1,M]}\n" ++
+  s!"    {dg} = stablehlo.reduce({dg}_p init: %sc) applies stablehlo.add across dimensions = [0, 1] : ({tt [1,M]}, tensor<f32>) -> tensor<f32>\n" ++
+  s!"    {db} = stablehlo.reduce({dyf} init: %sc) applies stablehlo.add across dimensions = [0, 1] : ({tt [1,M]}, tensor<f32>) -> tensor<f32>\n"
+
+/-- A full 2-block ResNet SGD train step (`@resnet_train_step`): stem(cbr) →
+    2 residual blocks → GAP → FC → softmax-CE, backward with every parameter
+    gradient, then SGD. Returns the 17 updated parameters. -/
+def resnetTrainStepModule (C H W kH kW nCls : Nat) (eps lr : String) : String :=
+  let M := C*H*W
+  let sgd (θ dθ θ' lrC sg ty : String) : String :=
+    s!"    {lrC} = stablehlo.constant dense<{lr}> : {ty}\n" ++
+    s!"    {sg} = stablehlo.multiply {dθ}, {lrC} : {ty}\n" ++
+    s!"    {θ'} = stablehlo.subtract {θ}, {sg} : {ty}\n"
+  let ty4 := tt [C,C,kH,kW]; let f32 := "tensor<f32>"
+  actMod "resnet_train_step"
+    (s!"%x: {tt [1,C,H,W]}, %Ws: {tt [C,C,kH,kW]}, %gs: {f32}, %bs: {f32}, " ++
+     s!"%W10: {ty4}, %W20: {ty4}, %g10: {f32}, %bb10: {f32}, %g20: {f32}, %bb20: {f32}, " ++
+     s!"%W11: {ty4}, %W21: {ty4}, %g11: {f32}, %bb11: {f32}, %g21: {f32}, %bb21: {f32}, " ++
+     s!"%Wd: {tt [C,nCls]}, %bd: {tt [nCls]}, %onehot: {tt [1,nCls]}")
+    (s!"({tt [C,C,kH,kW]}, {f32}, {f32}, {ty4}, {ty4}, {f32}, {f32}, {f32}, {f32}, " ++
+     s!"{ty4}, {ty4}, {f32}, {f32}, {f32}, {f32}, {tt [C,nCls]}, {tt [nCls]})")
+    (-- consts
+     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+     s!"    %nf = stablehlo.constant dense<{M}.0> : {tt [1,M]}\n" ++
+     s!"    %eps = stablehlo.constant dense<{eps}> : {tt [1,M]}\n" ++
+     s!"    %zc = stablehlo.constant dense<0.0> : {tt [1,C,H,W]}\n" ++
+     "    // ── forward: stem(cbr) → block0 → block1 → GAP → FC → logits ──\n" ++
+     convOp "%sc1" "%x" "%Ws" (tt [1,C,H,W]) (tt [C,C,kH,kW]) (tt [1,C,H,W]) ((kH-1)/2) ((kW-1)/2) ++
+     s!"    %sc1f = stablehlo.reshape %sc1 : ({tt [1,C,H,W]}) -> {tt [1,M]}\n" ++
+     renderLN "%snf" "%sc1f" "%gs" "%bs" 1 M ++
+     s!"    %sn = stablehlo.reshape %snf : ({tt [1,M]}) -> {tt [1,C,H,W]}\n" ++
+     s!"    %sa = stablehlo.maximum %sn, %zc : {tt [1,C,H,W]}\n" ++
+     renderResF "%B0" "%sa" "%W10" "%W20" "%g10" "%bb10" "%g20" "%bb20" C H W kH kW ++
+     s!"    %B0add = stablehlo.add %B0out, %sa : {tt [1,C,H,W]}\n" ++
+     s!"    %B0y = stablehlo.maximum %B0add, %zc : {tt [1,C,H,W]}\n" ++
+     renderResF "%B1" "%B0y" "%W11" "%W21" "%g11" "%bb11" "%g21" "%bb21" C H W kH kW ++
+     s!"    %B1add = stablehlo.add %B1out, %B0y : {tt [1,C,H,W]}\n" ++
+     s!"    %B1y = stablehlo.maximum %B1add, %zc : {tt [1,C,H,W]}\n" ++
+     renderGAP "%gap" "%B1y" C H W ++
+     s!"    %xw = stablehlo.dot_general %gap, %Wd, contracting_dims = [1] x [0],\n" ++
+     s!"              precision = [DEFAULT, DEFAULT] : ({tt [1,C]}, {tt [C,nCls]}) -> {tt [1,nCls]}\n" ++
+     s!"    %bdb = stablehlo.broadcast_in_dim %bd, dims = [1] : ({tt [nCls]}) -> {tt [1,nCls]}\n" ++
+     s!"    %logits = stablehlo.add %xw, %bdb : {tt [1,nCls]}\n" ++
+     "    // ── loss + backward (PROOF-BACKED: dx + every param grad) ──\n" ++
+     renderLossCot 1 nCls "%logits" "%onehot" "%dy" ++
+     -- FC backward
+     s!"    %dWd = stablehlo.dot_general %gap, %dy, contracting_dims = [0] x [0],\n" ++
+     s!"              precision = [DEFAULT, DEFAULT] : ({tt [1,C]}, {tt [1,nCls]}) -> {tt [C,nCls]}\n" ++
+     s!"    %dbd = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({tt [1,nCls]}, tensor<f32>) -> {tt [nCls]}\n" ++
+     s!"    %dgap = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1],\n" ++
+     s!"              precision = [DEFAULT, DEFAULT] : ({tt [1,nCls]}, {tt [C,nCls]}) -> {tt [1,C]}\n" ++
+     renderGAPBack "%dB1y" "%dgap" C H W ++
+     -- block1 backward + param grads
+     s!"    %B1madd = stablehlo.compare GT, %B1add, %zc : ({tt [1,C,H,W]}, {tt [1,C,H,W]}) -> {ti1 [1,C,H,W]}\n" ++
+     s!"    %B1dadd = stablehlo.select %B1madd, %dB1y, %zc : {ti1 [1,C,H,W]}, {tt [1,C,H,W]}\n" ++
+     renderResFBack "%B1" "%W11" "%W21" "%g11" "%g21" "%B1dadd" C H W kH kW ++
+     s!"    %B1dx = stablehlo.add %B1dF, %B1dadd : {tt [1,C,H,W]}\n" ++
+     renderConvWGrad "%dW11" "%B0y" "%B1dc1" C C H W kH kW ++
+     renderConvWGrad "%dW21" "%B1r1" "%B1dc2" C C H W kH kW ++
+     renderBNParamGrad "%dg11" "%dbb11" "%B1n1f_xhat" "%B1dn1f" M ++
+     renderBNParamGrad "%dg21" "%dbb21" "%B1n2f_xhat" "%B1dn2f" M ++
+     -- block0 backward + param grads
+     s!"    %B0madd = stablehlo.compare GT, %B0add, %zc : ({tt [1,C,H,W]}, {tt [1,C,H,W]}) -> {ti1 [1,C,H,W]}\n" ++
+     s!"    %B0dadd = stablehlo.select %B0madd, %B1dx, %zc : {ti1 [1,C,H,W]}, {tt [1,C,H,W]}\n" ++
+     renderResFBack "%B0" "%W10" "%W20" "%g10" "%g20" "%B0dadd" C H W kH kW ++
+     s!"    %B0dx = stablehlo.add %B0dF, %B0dadd : {tt [1,C,H,W]}\n" ++
+     renderConvWGrad "%dW10" "%sa" "%B0dc1" C C H W kH kW ++
+     renderConvWGrad "%dW20" "%B0r1" "%B0dc2" C C H W kH kW ++
+     renderBNParamGrad "%dg10" "%dbb10" "%B0n1f_xhat" "%B0dn1f" M ++
+     renderBNParamGrad "%dg20" "%dbb20" "%B0n2f_xhat" "%B0dn2f" M ++
+     -- stem backward + param grads
+     s!"    %smask = stablehlo.compare GT, %sn, %zc : ({tt [1,C,H,W]}, {tt [1,C,H,W]}) -> {ti1 [1,C,H,W]}\n" ++
+     s!"    %dsn = stablehlo.select %smask, %B0dx, %zc : {ti1 [1,C,H,W]}, {tt [1,C,H,W]}\n" ++
+     s!"    %dsnf = stablehlo.reshape %dsn : ({tt [1,C,H,W]}) -> {tt [1,M]}\n" ++
+     renderLNBack "%dsc1f" "%snf" "%gs" "%dsnf" 1 M ++
+     s!"    %dsc1 = stablehlo.reshape %dsc1f : ({tt [1,M]}) -> {tt [1,C,H,W]}\n" ++
+     renderConvWGrad "%dWs" "%x" "%dsc1" C C H W kH kW ++
+     renderBNParamGrad "%dgs" "%dbs" "%snf_xhat" "%dsnf" M ++
+     "    // ── SGD update (trusted): θ' = θ − lr·dθ ──\n" ++
+     sgd "%Ws" "%dWs" "%Wsn" "%lWs" "%sWs" (tt [C,C,kH,kW]) ++
+     sgd "%gs" "%dgs" "%gsn" "%lgs" "%sgs" f32 ++
+     sgd "%bs" "%dbs" "%bsn" "%lbs" "%sbs" f32 ++
+     sgd "%W10" "%dW10" "%W10n" "%lW10" "%sW10" ty4 ++
+     sgd "%W20" "%dW20" "%W20n" "%lW20" "%sW20" ty4 ++
+     sgd "%g10" "%dg10" "%g10n" "%lg10" "%sg10" f32 ++
+     sgd "%bb10" "%dbb10" "%bb10n" "%lbb10" "%sbb10" f32 ++
+     sgd "%g20" "%dg20" "%g20n" "%lg20" "%sg20" f32 ++
+     sgd "%bb20" "%dbb20" "%bb20n" "%lbb20" "%sbb20" f32 ++
+     sgd "%W11" "%dW11" "%W11n" "%lW11" "%sW11" ty4 ++
+     sgd "%W21" "%dW21" "%W21n" "%lW21" "%sW21" ty4 ++
+     sgd "%g11" "%dg11" "%g11n" "%lg11" "%sg11" f32 ++
+     sgd "%bb11" "%dbb11" "%bb11n" "%lbb11" "%sbb11" f32 ++
+     sgd "%g21" "%dg21" "%g21n" "%lg21" "%sg21" f32 ++
+     sgd "%bb21" "%dbb21" "%bb21n" "%lbb21" "%sbb21" f32 ++
+     sgd "%Wd" "%dWd" "%Wdn" "%lWd" "%sWd" (tt [C,nCls]) ++
+     sgd "%bd" "%dbd" "%bdn" "%lbd" "%sbd" (tt [nCls]) ++
+     s!"    return %Wsn, %gsn, %bsn, %W10n, %W20n, %g10n, %bb10n, %g20n, %bb20n, " ++
+     s!"%W11n, %W21n, %g11n, %bb11n, %g21n, %bb21n, %Wdn, %bdn : " ++
+     s!"{tt [C,C,kH,kW]}, {f32}, {f32}, {ty4}, {ty4}, {f32}, {f32}, {f32}, {f32}, " ++
+     s!"{ty4}, {ty4}, {f32}, {f32}, {f32}, {f32}, {tt [C,nCls]}, {tt [nCls]}\n")
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -1267,5 +1402,7 @@ def resTowerBackModule (k C H W kH kW : Nat) (eps : String) : String :=
 -- ResNet-34-depth residual tower (16 blocks = 3+4+6+3), generated by a loop.
 #eval IO.FS.writeFile "/tmp/res_tower_fwd.mlir" (resTowerFwdModule 16 2 4 4 3 3 "0.00001")
 #eval IO.FS.writeFile "/tmp/res_tower_back.mlir" (resTowerBackModule 16 2 4 4 3 3 "0.00001")
+-- Full ResNet SGD train step: stem + 2 blocks + GAP + FC + softmax-CE, 17 params.
+#eval IO.FS.writeFile "/tmp/resnet_train_step.mlir" (resnetTrainStepModule 2 4 4 3 3 3 "0.00001" "0.1")
 
 end Proofs.IRPrint
