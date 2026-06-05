@@ -93,8 +93,27 @@ def mlpHlo (d₀ d₁ d₂ d₃ : Nat) : Hlo :=
     (.dot "%W1" d₁ d₂ (.reluBack "%p1" d₂
       (.dot "%W2" d₂ d₃ (.input "%dy")))))
 
--- Dump the rendered StableHLO (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
+/-- Wrap the linear backward as a standalone `func.func` module. -/
+def linearModule (B d₀ d₁ : Nat) : String :=
+  let (body, res) := ((linearHlo d₀ d₁).render B).run' 0
+  "module @m {\n" ++
+  s!"  func.func @linear_back(%dy: {tt [B, d₁]}, %W0: {tt [d₀, d₁]}) -> {tt [B, d₀]} " ++ "{\n" ++
+  body ++ s!"    return {res} : {tt [B, d₀]}\n" ++ "  }\n}\n"
+
+/-- Wrap the MLP backward as a `func.func`: cotangent + weights + saved
+    ReLU pre-activations in, `dx` out. (Input-gradient / VJP chain.) -/
+def mlpModule (B d₀ d₁ d₂ d₃ : Nat) : String :=
+  let (body, res) := ((mlpHlo d₀ d₁ d₂ d₃).render B).run' 0
+  "module @m {\n" ++
+  s!"  func.func @mlp_back(%dy: {tt [B, d₃]}, %W0: {tt [d₀, d₁]}, %W1: {tt [d₁, d₂]}, " ++
+  s!"%W2: {tt [d₂, d₃]}, %p0: {tt [B, d₁]}, %p1: {tt [B, d₂]}) -> {tt [B, d₀]} " ++ "{\n" ++
+  body ++ s!"    return {res} : {tt [B, d₀]}\n" ++ "  }\n}\n"
+
+-- Dump (human view) + write compilable modules for the IREE loop
+-- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
 #eval IO.println (renderBlock "mlp 4→3→3→2 (B=2)" 2 (mlpHlo 4 3 3 2))
+#eval IO.FS.writeFile "/tmp/linear_back.mlir" (linearModule 2 4 3)
+#eval IO.FS.writeFile "/tmp/mlp_back.mlir" (mlpModule 2 4 3 3 2)
 
 end Proofs.IRPrint
