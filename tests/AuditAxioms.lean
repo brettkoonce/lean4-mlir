@@ -148,3 +148,9 @@ open Proofs
 #print axioms IR.gelu_back_bridge
 #print axioms IR.swish_back_bridge
 #print axioms IR.sigmoid_back_bridge
+-- BatchNorm: the emitted reduce+broadcast+elementwise graph denotes the
+-- proven consolidated 3-term rank-1 backward (+ the affine γ·dy half).
+#print axioms IR.bn_affine_back_bridge
+#print axioms IR.bn_normalize_back_bridge
+#print axioms IR.bn_back_bridge
+#print axioms IR.layernorm_back_bridge

@@ -54,6 +54,9 @@ inductive Back (inp : Nat) : Nat → Type where
   | dotGeneral {m n : Nat} (A : Mat m n) : Back inp n → Back inp m
   | selectPos {n : Nat} (x : Vec n) : Back inp n → Back inp n
   | scale {n : Nat} (s : Vec n) : Back inp n → Back inp n
+  | sumBroadcast {n : Nat} : Back inp n → Back inp n
+  | sub {n : Nat} : Back inp n → Back inp n → Back inp n
+  | scaleConst {n : Nat} (c : ℝ) : Back inp n → Back inp n
 
 /-- **Denotational semantics** of a backward graph, into the proofs' own
     `Vec` type — so a bridge theorem can equate it with a proven
@@ -64,6 +67,9 @@ noncomputable def Back.denote {inp out : Nat} (e : Back inp out) (dy : Vec inp) 
   | .dotGeneral A e' => Mat.mulVec A (e'.denote dy)
   | .selectPos x e'  => fun i => if x i > 0 then e'.denote dy i else 0
   | .scale s e'      => fun i => e'.denote dy i * s i
+  | .sumBroadcast e' => fun _ => ∑ j, e'.denote dy j
+  | .sub e1 e2       => fun i => e1.denote dy i - e2.denote dy i
+  | .scaleConst c e' => fun i => c * e'.denote dy i
 
 /-- **Composition lemma** (the Phase-3 mechanism in miniature): a
     `dotGeneral` node denotes post-composition with `Mat.mulVec`.
@@ -233,6 +239,79 @@ theorem swish_back_bridge (n : Nat) (x dy : Vec n) :
 theorem sigmoid_back_bridge (n : Nat) (x dy : Vec n) :
     (emitActBack (fun i => sigmoidScalarDeriv (x i))).denote dy
       = (sigmoid_has_vjp n).backward x dy := rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § Phase 1 — BatchNorm / LayerNorm (the rank-1 "wringer")
+--
+-- BN's normalize backward is the consolidated 3-term rank-1 formula
+--   dxᵢ = invN·s·( N·dx̂ᵢ − Σⱼ dx̂ⱼ − x̂ᵢ·Σⱼ x̂ⱼ·dx̂ⱼ )
+-- which the codegen emits as two `stablehlo.reduce` sums + broadcast +
+-- elementwise subtract/scale. The IR now carries `sumBroadcast`
+-- (reduce+broadcast), `sub`, and `scaleConst`; the bridge shows that graph
+-- denotes the proven `bnNormalize_has_vjp.backward`. The affine half
+-- (`γ·dy`) is one `scaleConst`. `bn_has_vjp = vjp_comp normalize affine`,
+-- so the full BN backward is the normalize graph fed `γ ⊙ dy`. LayerNorm
+-- is definitionally BN, so it inherits all of this.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The emitted BN-normalize input-gradient graph, as a function of an
+    input subgraph (the cotangent for normalize alone; `γ ⊙ dy` for full
+    BN). Two `sumBroadcast` reductions + `sub` + `scaleConst` — exactly the
+    consolidated three-term formula. -/
+noncomputable def bnNormalizeBackOf {n : Nat} (xh : Vec n) (s invN : ℝ)
+    (input : Back n n) : Back n n :=
+  .scaleConst (invN * s)
+    (.sub
+      (.sub (.scaleConst (n : ℝ) input) (.sumBroadcast input))
+      (.scale xh (.sumBroadcast (.scale xh input))))
+
+/-- **BN affine backward bridge** — the `γ·dy` half is one `scaleConst`. -/
+theorem bn_affine_back_bridge {n : Nat} (γ β : ℝ) (v dy : Vec n) :
+    (Back.scaleConst γ Back.cotangent).denote dy
+      = (bnAffine_has_vjp n γ β).backward v dy := rfl
+
+/-- **BN normalize backward bridge — the 3-term rank-1 wringer.** The
+    emitted reduce+broadcast+elementwise graph denotes the proven
+    consolidated BN-normalize backward `bnNormalize_has_vjp.backward`
+    (the cross-coordinate `Σ dx̂` and `Σ x̂·dx̂` reductions and the
+    rank-1 `x̂ᵢ·Σx̂·dx̂` correction, matched termwise). -/
+theorem bn_normalize_back_bridge {n : Nat} (ε : ℝ) (hε : 0 < ε) (x dxhat : Vec n) :
+    (bnNormalizeBackOf (bnXhat n ε x) (bnIstd n x ε) (1 / (n : ℝ))
+        Back.cotangent).denote dxhat
+      = (bnNormalize_has_vjp n ε hε).backward x dxhat := by
+  funext i
+  simp only [bnNormalizeBackOf, Back.denote, bnNormalize_has_vjp]
+  rw [show (∑ j, dxhat j * bnXhat n ε x j) = ∑ j, bnXhat n ε x j * dxhat j from
+        Finset.sum_congr rfl (fun j _ => mul_comm _ _)]
+  ring
+
+/-- **Full BatchNorm backward bridge.** `bn_has_vjp = vjp_comp normalize
+    affine`, so the emitted graph is the 3-term normalize graph fed
+    `γ ⊙ dy` (the affine backward). Denotes `(bn_has_vjp …).backward`.
+    The `bnForward = bnAffine ∘ bnNormalize` cast collapses by `rfl`. -/
+theorem bn_back_bridge {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : Vec n) :
+    (bnNormalizeBackOf (bnXhat n ε x) (bnIstd n x ε) (1 / (n : ℝ))
+        (Back.scaleConst γ Back.cotangent)).denote dy
+      = (bn_has_vjp n ε γ β hε).backward x dy := by
+  have h : (bn_has_vjp n ε γ β hε).backward x dy
+         = (bnNormalize_has_vjp n ε hε).backward x
+             ((bnAffine_has_vjp n γ β).backward (bnNormalize n ε x) dy) := by
+    simp only [bn_has_vjp, vjp_comp, eq_mpr_eq_cast]; rfl
+  rw [h]
+  funext i
+  simp only [bnNormalizeBackOf, Back.denote, bnNormalize_has_vjp, bnAffine_has_vjp]
+  rw [show (∑ j, γ * dy j * bnXhat n ε x j) = ∑ j, bnXhat n ε x j * (γ * dy j) from
+        Finset.sum_congr rfl (fun j _ => mul_comm _ _)]
+  ring
+
+/-- **LayerNorm backward bridge — free.** `layerNorm_has_vjp` is
+    definitionally `bn_has_vjp` (LayerNorm is BN on a different axis), so
+    the same emitted graph denotes its backward. -/
+theorem layernorm_back_bridge {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : Vec n) :
+    (bnNormalizeBackOf (bnXhat n ε x) (bnIstd n x ε) (1 / (n : ℝ))
+        (Back.scaleConst γ Back.cotangent)).denote dy
+      = (layerNorm_has_vjp n ε γ β hε).backward x dy :=
+  bn_back_bridge ε γ β hε x dy
 
 end IR
 end Proofs
