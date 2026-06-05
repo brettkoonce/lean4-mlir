@@ -21,6 +21,9 @@ with IREE, runs it, and checks it against an independent numpy reference:
   • maxpool_fwd / _back       — CNN (Phase 3): maxPool2 as reduce_window(max),
                                and the proven maxpool VJP (select_and_scatter
                                = ⟦maxPoolBackDenote⟧, route dy to argmax).
+  • cnn_back                  — CNN capstone: conv→relu→maxpool→flatten→dense
+                               forward + the full input-gradient backward chain,
+                               every op a rendered proof-backed bridge.
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -126,6 +129,19 @@ def maxpool_back_ref(x, dy):
                     dx[b, c, 2*i+di, 2*j+dj] = dy[b, c, i, j]
     return dx
 
+def cnn_back_ref(x, Wc, bc, Wd, dy, ic, H, W):
+    """CNN input-gradient: conv → relu → maxpool → flatten → dense, then the
+    adjoint chain (dense → reshape → maxpool → relu → conv). Independent of the
+    rendered ops (uses the loop refs above), so it checks the whole composition."""
+    hconv = conv2d_ref(x, Wc, bc)                  # [1, oc, H, W]
+    a = np.maximum(hconv, 0.0)                      # relu
+    oc = Wc.shape[0]; H2, W2 = H // 2, W // 2
+    dflat = dy @ Wd.T                               # [1, oc*H2*W2]
+    dp = dflat.reshape(1, oc, H2, W2)               # C-order (= Tensor3.flatten)
+    da = maxpool_back_ref(a, dp)                    # [1, oc, H, W]  (operand = a)
+    dhconv = (hconv > 0) * da                       # relu backward
+    return conv_input_vjp_ref(Wc, dhconv, ic, H, W) # [1, ic, H, W]
+
 def mlp_back_ref(dy, W0, W1, W2, p0, p1):
     """Input-gradient (VJP) chain dx."""
     return (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
@@ -213,6 +229,21 @@ outs, nb = compile_run("/tmp/maxpool_back.mlir", "maxpool_back", [mpx, mpdy])
 e = max_err(outs, [maxpool_back_ref(mpx, mpdy)]); ok &= e < TOL
 print(f"maxpool_back    ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (select_and_scatter = route dy to argmax)")
 
+# ── CNN capstone (Phase 3): conv→relu→maxpool→flatten→dense, fwd + full dx chain ──
+nic, noc, nH, nW, nkH, nkW, ncls = 1, 2, 4, 4, 3, 3, 3
+nflat = noc * (nH // 2) * (nW // 2)
+nx  = rng.standard_normal((1, nic, nH, nW)).astype(np.float32)
+nWc = rng.standard_normal((noc, nic, nkH, nkW)).astype(np.float32)
+nbc = rng.standard_normal((noc,)).astype(np.float32)
+nWd = rng.standard_normal((nflat, ncls)).astype(np.float32)
+ndy = rng.standard_normal((1, ncls)).astype(np.float32)
+cnn_args = [nx, nWc, nbc, nWd, ndy]
+cnn_ref = cnn_back_ref(nx, nWc, nbc, nWd, ndy, nic, nH, nW)
+outs, nb = compile_run("/tmp/cnn_back.mlir", "cnn_back", cnn_args)
+e = max_err(outs, [cnn_ref]); ok &= e < TOL
+print(f"cnn_back        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  "
+      f"(conv→relu→maxpool→flatten→dense backward, every op proof-backed)")
+
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 
 # ════════════════════════════════════════════════════════════════
@@ -250,6 +281,10 @@ try:
                               backend="rocm", config="hip", extra=extra)
         eg = max_err(outs, [maxpool_back_ref(mpx, mpdy)]); ok &= eg < TOL
         print(f"maxpool_back    (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
+        outs, _ = compile_run("/tmp/cnn_back.mlir", "cnn_back", cnn_args,
+                              backend="rocm", config="hip", extra=extra)
+        eg = max_err(outs, [cnn_ref]); ok &= eg < TOL
+        print(f"cnn_back        (hip/{arch}): max_err={eg:.2e}  {'PASS' if eg < TOL else 'FAIL'}")
     else:
         print("gpu: no hip device — skipped (cpu check is the gate)")
 except Exception as e:

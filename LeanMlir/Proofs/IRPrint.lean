@@ -366,6 +366,68 @@ def maxpoolBackModule (B c h w : Nat) : String :=
   s!" : ({tt [B,c,2*h,2*w]}, {tt [B,c,h,w]}, tensor<f32>) -> {tt [B,c,2*h,2*w]}\n" ++
   s!"    return %dx : {tt [B,c,2*h,2*w]}\n" ++ "  }\n}\n"
 
+-- ════════════════════════════════════════════════════════════════
+-- § CNN capstone — conv → relu → maxpool → flatten → dense, fwd + dx
+--
+-- The CNN analogue of `mlpModule` (the whole backward chain): one
+-- `func.func @cnn_back` that runs the forward far enough to save the
+-- activations the backward reads (the conv pre-activation `%hconv` for the
+-- ReLU mask, the ReLU output `%a` = maxpool's operand), then the full
+-- input-gradient backward, composing EVERY proof-backed primitive:
+--
+--   dense_back  (dot_general)         dense_at_bridge
+--   reshape     (flatten bijection)   conv_flatten_bridge / maxpool_flatten_bridge
+--   maxpool_back(select_and_scatter)  maxpool_back_bridge   (route dy to argmax)
+--   relu_back   (compare GT + select) relu_at_bridge
+--   conv_back   (transpose+reverse+conv) conv_back_bridge_1to2
+--
+-- composed via the proven chain rules `denote_subst` / `denote_subst3`. The
+-- Tensor3 flatten is C-order row-major (`Tensor3.flatten` = `stablehlo.reshape`),
+-- so the reshape is proof-faithful. Layout NCHW / OIHW, batch 1. (dx only;
+-- the conv weight-gradient + a full CNN train step is the next step.)
+-- ════════════════════════════════════════════════════════════════
+
+/-- A small CNN forward + input-gradient backward, `@cnn_back`:
+    `conv (ic→oc, kH×kW SAME) → relu → maxpool 2×2 → flatten → dense
+    (flat→nClass)`, dims from `(ic,oc,H,W,kH,kW,nClass)`, batch 1. Inputs:
+    `x`, conv weights `%Wc,%bc`, dense weight `%Wd`, cotangent `%dy`; output
+    `dx`. Every op is a rendered proof-backed bridge (see the section note). -/
+def cnnModule (ic oc H W kH kW nClass : Nat) : String :=
+  let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+  let H2 := H / 2; let W2 := W / 2; let flat := oc * H2 * W2
+  "module @m {\n" ++
+  s!"  func.func @cnn_back(%x: {tt [1,ic,H,W]}, %Wc: {tt [oc,ic,kH,kW]}, %bc: {tt [oc]}, " ++
+  s!"%Wd: {tt [flat,nClass]}, %dy: {tt [1,nClass]}) -> {tt [1,ic,H,W]} " ++ "{\n" ++
+  -- forward (to the saved activations the backward reads)
+  "    // ── forward: conv → relu (saves %hconv pre-act, %a = maxpool operand) ──\n" ++
+  convOp "%cv" "%x" "%Wc" (tt [1,ic,H,W]) (tt [oc,ic,kH,kW]) (tt [1,oc,H,W]) pH pW ++
+  s!"    %bcb = stablehlo.broadcast_in_dim %bc, dims = [1] : ({tt [oc]}) -> {tt [1,oc,H,W]}\n" ++
+  s!"    %hconv = stablehlo.add %cv, %bcb : {tt [1,oc,H,W]}\n" ++
+  s!"    %zc = stablehlo.constant dense<0.0> : {tt [1,oc,H,W]}\n" ++
+  s!"    %a = stablehlo.maximum %hconv, %zc : {tt [1,oc,H,W]}\n" ++
+  -- backward (the full dx chain)
+  "    // ── backward (dx): dense → reshape → maxpool → relu → conv, all proof-backed ──\n" ++
+  s!"    %dflat = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1],\n" ++
+  s!"              precision = [DEFAULT, DEFAULT] : ({tt [1,nClass]}, {tt [flat,nClass]}) -> {tt [1,flat]}\n" ++
+  s!"    %dp = stablehlo.reshape %dflat : ({tt [1,flat]}) -> {tt [1,oc,H2,W2]}\n" ++
+  "    %zs = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  "    %da = \"stablehlo.select_and_scatter\"(%a, %dp, %zs) (" ++ "{\n" ++
+  "      ^bb0(%u: tensor<f32>, %v: tensor<f32>):\n" ++
+  "        %ge = stablehlo.compare GE, %u, %v : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+  "        stablehlo.return %ge : tensor<i1>\n" ++
+  "    }, " ++ "{\n" ++
+  "      ^bb0(%u: tensor<f32>, %v: tensor<f32>):\n" ++
+  "        %s = stablehlo.add %u, %v : tensor<f32>\n" ++
+  "        stablehlo.return %s : tensor<f32>\n" ++
+  "    }) " ++ "{window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+  s!" : ({tt [1,oc,H,W]}, {tt [1,oc,H2,W2]}, tensor<f32>) -> {tt [1,oc,H,W]}\n" ++
+  s!"    %mc = stablehlo.compare GT, %hconv, %zc : ({tt [1,oc,H,W]}, {tt [1,oc,H,W]}) -> {ti1 [1,oc,H,W]}\n" ++
+  s!"    %dhconv = stablehlo.select %mc, %da, %zc : {ti1 [1,oc,H,W]}, {tt [1,oc,H,W]}\n" ++
+  s!"    %Wt = stablehlo.transpose %Wc, dims = [1, 0, 2, 3] : ({tt [oc,ic,kH,kW]}) -> {tt [ic,oc,kH,kW]}\n" ++
+  s!"    %Wr = stablehlo.reverse %Wt, dims = [2, 3] : {tt [ic,oc,kH,kW]}\n" ++
+  convOp "%dx" "%dhconv" "%Wr" (tt [1,oc,H,W]) (tt [ic,oc,kH,kW]) (tt [1,ic,H,W]) pH pW ++
+  s!"    return %dx : {tt [1,ic,H,W]}\n" ++ "  }\n}\n"
+
 -- Dump (human view) + write compilable modules for the IREE loop
 -- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
@@ -381,5 +443,7 @@ def maxpoolBackModule (B c h w : Nat) : String :=
 -- 2×2 max pool forward + proof-backed backward, 2 ch, 4×4 → 2×2.
 #eval IO.FS.writeFile "/tmp/maxpool_fwd.mlir" (maxpoolFwdModule 1 2 2 2)
 #eval IO.FS.writeFile "/tmp/maxpool_back.mlir" (maxpoolBackModule 1 2 2 2)
+-- CNN capstone: conv(1→2,3×3) → relu → maxpool → flatten(8) → dense(8→3), fwd+dx.
+#eval IO.FS.writeFile "/tmp/cnn_back.mlir" (cnnModule 1 2 4 4 3 3 3)
 
 end Proofs.IRPrint
