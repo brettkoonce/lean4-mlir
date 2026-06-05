@@ -80,6 +80,43 @@ theorem denote_dotGeneral {inp m n : Nat} (A : Mat m n) (e : Back inp n) (dy : V
     (Back.dotGeneral A e).denote dy = Mat.mulVec A (e.denote dy) := rfl
 
 -- ════════════════════════════════════════════════════════════════
+-- § Phase 3 — composition (the IR-level chain rule)
+--
+-- A backward graph is rooted at the cotangent leaf; composing two layers'
+-- backwards means plugging one graph into the other's cotangent. `subst`
+-- does that, and `denote_subst` proves it denotes the composition of the
+-- denotations — the IR analogue of `vjp_comp`/`vjp_comp_at`. This is the
+-- mechanism that assembles per-op bridges into a whole-network bridge.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Plug the backward graph `g` into the cotangent leaf of `e`. For a
+    composite `g_layer ∘ f_layer`, `e` is `f_layer`'s backward and `g` is
+    `g_layer`'s, giving the composite's backward. -/
+def Back.subst {inp inp' out : Nat} (e : Back inp out) (g : Back inp' inp) : Back inp' out :=
+  match e with
+  | .cotangent       => g
+  | .dotGeneral A e' => .dotGeneral A (e'.subst g)
+  | .selectPos x e'  => .selectPos x (e'.subst g)
+  | .scale s e'      => .scale s (e'.subst g)
+  | .sumBroadcast e' => .sumBroadcast (e'.subst g)
+  | .sub e1 e2       => .sub (e1.subst g) (e2.subst g)
+  | .scaleConst c e' => .scaleConst c (e'.subst g)
+
+/-- **IR-level chain rule.** `subst` denotes the composition of
+    denotations: `⟦e[g/cotangent]⟧ dz = ⟦e⟧ (⟦g⟧ dz)`. The analogue of
+    `vjp_comp` — chains per-op bridges into a whole-network bridge. -/
+theorem denote_subst {inp inp' out : Nat} (e : Back inp out) (g : Back inp' inp)
+    (dz : Vec inp') : (e.subst g).denote dz = e.denote (g.denote dz) := by
+  induction e with
+  | cotangent => rfl
+  | dotGeneral A e' ih => simp only [Back.subst, Back.denote, ih]
+  | selectPos x e' ih => simp only [Back.subst, Back.denote, ih]
+  | scale s e' ih => simp only [Back.subst, Back.denote, ih]
+  | sumBroadcast e' ih => simp only [Back.subst, Back.denote, ih]
+  | sub e1 e2 ih1 ih2 => simp only [Back.subst, Back.denote, ih1, ih2]
+  | scaleConst c e' ih => simp only [Back.subst, Back.denote, ih]
+
+-- ════════════════════════════════════════════════════════════════
 -- § Phase 0a — dense
 -- ════════════════════════════════════════════════════════════════
 
@@ -337,6 +374,31 @@ theorem softmax_back_bridge (c : Nat) (z dy : Vec c) :
   rw [show (∑ j, dy j * softmax c z j) = ∑ j, softmax c z j * dy j from
         Finset.sum_congr rfl (fun j _ => mul_comm _ _)]
   ring
+
+-- ════════════════════════════════════════════════════════════════
+-- § Phase 3 — whole-network bridge (demonstrator)
+--
+-- Assemble per-op bridges into a composite via `denote_subst`. Two dense
+-- layers `dense W₂ ∘ dense W₁`: the IR `subst` of their per-layer backward
+-- graphs denotes the proven composite backward `(vjp_comp …).backward`.
+-- This is the assembly pattern a full whole-network bridge uses;
+-- `denote_subst` chains it to arbitrary depth. (Reaching the full
+-- `mnistCnnNoBn` additionally needs a Tensor3 IR for conv/maxpool and the
+-- `HasVJPAt` smooth-point variants; SE needs an `add` fan-in node.)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **End-to-end composition bridge.** The IR `subst` of two dense layers'
+    backward graphs denotes the proven composite VJP `(vjp_comp …).backward`
+    — `denote_subst` (IR chain rule) ∘ the per-op `dense` bridge. -/
+theorem twoDense_back_bridge {d₀ d₁ d₂ : Nat}
+    (W₁ : Mat d₀ d₁) (b₁ : Vec d₁) (W₂ : Mat d₁ d₂) (b₂ : Vec d₂)
+    (x : Vec d₀) (dz : Vec d₂) :
+    ((emitDenseBack W₁).subst (emitDenseBack W₂)).denote dz
+      = (vjp_comp (dense W₁ b₁) (dense W₂ b₂)
+          (dense_differentiable W₁ b₁) (dense_differentiable W₂ b₂)
+          (dense_has_vjp W₁ b₁) (dense_has_vjp W₂ b₂)).backward x dz := by
+  rw [denote_subst]
+  simp only [vjp_comp, emitDenseBack, Back.denote, dense_has_vjp]
 
 end IR
 end Proofs

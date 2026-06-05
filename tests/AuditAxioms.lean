@@ -155,3 +155,6 @@ open Proofs
 #print axioms IR.bn_back_bridge
 #print axioms IR.layernorm_back_bridge
 #print axioms IR.softmax_back_bridge
+-- Phase 3: IR-level chain rule + an end-to-end composite bridge.
+#print axioms IR.denote_subst
+#print axioms IR.twoDense_back_bridge
