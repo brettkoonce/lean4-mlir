@@ -2442,6 +2442,143 @@ convolutions and maxPool roughly doubles the emitted compute, not
 \texttt{.convBn} adds batch-norm normalize and affine ops; the
 plain \texttt{.conv2d} used here keeps the StableHLO much tighter.
 
+\subsection*{Is that convolution backward verified? The reversed-kernel VJP}
+
+The CNN's emitted train step is 21\,884 characters --- the two
+convolutions, the max-pool, the flatten, the three dense layers, the
+softmax cross-entropy loss, the backward pass for each of them, and the
+SGD update for all $3\,489\,130$ parameters, as one \texttt{stablehlo}
+block IREE compiles once and runs per mini-batch. The new machinery this
+chapter adds over the MLP is the \emph{convolution}, and its backward is
+the part most likely to be silently wrong --- so it is the part we pin
+with a theorem.
+
+\medskip\noindent\textbf{What is already proven.} \texttt{cnnForward} is
+the conv\,$\to$\,relu\,$\to$\,conv\,$\to$\,relu\,$\to$\,maxPool\,$\to$\,flatten\,$\to$\,dense
+network; \texttt{cnn\_has\_vjp\_at} proves its reverse-mode derivative by
+chaining the per-layer VJPs --- the dense backward
+(\S~\ref{thm:dense_has_vjp}, reused from Chapter~\ref{chap:mlp}), the
+max-pool backward (\texttt{maxPool2\_has\_vjp3},
+\S~\ref{ax:maxPool2_has_vjp3}), and the convolution backward
+(\texttt{conv2d\_has\_vjp3}, \S~\ref{ax:conv2d_has_vjp3}) --- through the
+IR-level chain rule \texttt{vjp\_comp\_at}. The convolution's reverse-mode
+derivative is the chapter's headline result: the input VJP of a
+\texttt{conv2d} is \emph{another} \texttt{conv2d}, against the kernel with
+its in- and out-channels swapped and both spatial axes reversed. The
+parameter gradients are pinned by \texttt{conv2d\_weight\_grad\_has\_vjp}
+(the transpose trick) and the dense grads from Chapter~\ref{chap:mlp}, and
+the loss gradient by \texttt{softmaxCE\_grad} (\S~\ref{ax:softmaxCE_grad}).
+Each closes under the three standard axioms (\texttt{propext},
+\texttt{Classical.choice}, \texttt{Quot.sound}) --- no \texttt{sorry}, no
+\texttt{native\_decide}. So \emph{what} the convolution's gradient is, is
+not in question.
+
+\medskip\noindent\textbf{The gap, and how we close it.} The dangerous
+failure mode of a convolution code generator is specific and easy to hit:
+the backward op transposes the wrong pair of axes, reverses one spatial
+dimension instead of two, or contracts input against output channels ---
+each a one-token change that still type-checks and still yields a
+plausibly-shaped tensor, and the only thing traditionally linking the
+proof to the emitted string is a code comment. We replace that comment
+with a theorem. The emitted backward convolution is given a denotation
+$[\![\cdot]\!]$ valued in the proofs' own tensor type,
+\[
+  [\![\texttt{convBackDenote}\,W]\!]
+  = \texttt{conv2d}\,(\texttt{reverseSwap}\,W),
+  \qquad
+  (\texttt{reverseSwap}\,W)_{c_i\,c_o\,k_h\,k_w} = W_{c_o\,c_i\,\bar k_h\,\bar k_w},
+\]
+where $\bar k = K - 1 - k$ is the spatial flip. The payoff is the bridge
+theorem
+\[
+  \texttt{conv\_back\_bridge\_1to2}:\quad
+  [\![\texttt{convBackDenote}\,W]\!](dy)
+  = (\texttt{conv2d\_has\_vjp3}\,W\,b).\mathrm{backward}(x, dy),
+\]
+proved by expanding both sides at the concrete shape --- the
+reversed-kernel identity that \texttt{cnn\_has\_vjp\_at} only \emph{asserts}
+is here discharged by machine check (and again at the $2{\to}2$ shape, by
+\texttt{conv\_back\_bridge\_2to2}). The denotation of the emitted graph
+\emph{is}, by machine check, the proven conv input-VJP. A small computable
+printer then walks that same graph and emits one \texttt{stablehlo} op per
+node --- $\texttt{transpose}$ for the channel swap, $\texttt{reverse}$ for
+the spatial flip, $\texttt{convolution}$ for the contraction --- so the
+emitted text \emph{is} the printout of \texttt{convBackDenote}\,$W$ by
+construction.
+
+Here is exactly what the printer emits for the first conv's backward
+($1{\to}2$ channels, $3\times3$ kernel, at $4\times4$):
+
+\begin{verbatim}
+func.func @conv_back(%dy: tensor<1x2x4x4xf32>,
+    %W: tensor<2x1x3x3xf32>) -> tensor<1x1x4x4xf32> {
+  %Wt = stablehlo.transpose %W, dims = [1, 0, 2, 3]
+          : (tensor<2x1x3x3xf32>) -> tensor<1x2x3x3xf32>
+  %Wr = stablehlo.reverse %Wt, dims = [2, 3] : tensor<1x2x3x3xf32>
+  %dx = stablehlo.convolution(%dy, %Wr)
+      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
+      window = {stride = [1, 1], pad = [[1, 1], [1, 1]],
+                lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
+      : (tensor<1x2x4x4xf32>, tensor<1x2x3x3xf32>)
+          -> tensor<1x1x4x4xf32>
+  return %dx : tensor<1x1x4x4xf32>
+}
+\end{verbatim}
+
+\noindent Read it against the graph: \texttt{\%Wt} is the
+\texttt{transpose dims [1,0,2,3]} that swaps the kernel's out- and
+in-channel axes; \texttt{\%Wr} is the \texttt{reverse dims [2,3]} that
+flips both spatial axes ($\bar k_h,\bar k_w$); together they build
+\texttt{reverseSwap}\,$W$. The \texttt{convolution} then convolves the
+incoming cotangent \texttt{\%dy} against that kernel --- exactly
+$\texttt{conv2d}\,(\texttt{reverseSwap}\,W)$, the
+$1\,\text{channel} \leftarrow 2\,\text{channels}$ adjoint of the forward
+conv. The bridge theorem is precisely the claim that this text computes
+\texttt{conv2d\_has\_vjp3}'s backward. The max-pool, flatten, dense, and
+relu nodes of the full backward are bridged the same way --- the max-pool
+tile-compare-select by \texttt{maxpool\_back\_bridge}, the dense
+\texttt{dot\_general}s exactly as in Chapter~\ref{chap:mlp} --- so the
+whole CNN backward is covered, op by op.
+
+\medskip\noindent\textbf{Proven versus trusted.} The same honest
+accounting as the MLP:
+\begin{itemize}
+  \item \emph{Proven} (Lean, three axioms): the emitted conv-backward
+    graph's denotation equals \texttt{conv2d\_has\_vjp3}'s backward, and
+    likewise for the forward, max-pool, dense, and loss bridges.
+  \item \emph{By construction}: the emitted StableHLO is the rendering of
+    exactly those graphs.
+  \item \emph{Trusted} (validated, not proven): that the StableHLO
+    \emph{text} denotes $[\![\cdot]\!]$ --- the $\sim$200-line printer,
+    whose faithfulness would need a formal semantics of StableHLO text
+    that does not yet exist; that IREE lowers it correctly; and that
+    \texttt{float32} approximates $\mathbb{R}$.
+\end{itemize}
+Compiled by IREE and run on the GPU, the emitted conv backward matches an
+independent NumPy convolution input-VJP to $1.9\times10^{-6}$, and the
+full CNN train step updates all four parameter tensors --- the
+convolution's weight and bias and the dense head's weight and bias --- to
+within $1.2\times10^{-7}$ of an independent NumPy SGD reference. So the
+gradient the GPU computes through the convolution is, by a machine-checked
+theorem, the network's exact reverse-mode derivative over $\mathbb{R}$ ---
+up to that one printer, IREE, and floating point.
+
+\medskip\noindent\textbf{One honest caveat.} The CNN has two kinked ops,
+not one. The convolution itself is linear, so its bridge is
+\emph{unconditional} --- it holds at every input. But the relu bridges
+hold only at a smooth point (no pre-activation exactly zero), and the
+max-pool bridge holds only where every $2\times2$ window has a unique
+strict argmax; each equality is permitted to fail precisely on that
+measure-zero set, and the max-pool tie set is exactly the codegen trust
+boundary for pooling. As in the MLP, the listing is shown at a
+representative scale ($1{\to}2$ channels at $4\times4$, where the bridge is
+discharged by expansion) rather than the production $1{\to}32$ net at
+$28\times28$; the per-op proofs are dimension-parameterized and the
+generator composes them. The same three pieces --- denoted IR, bridge
+theorem, printer --- carry unchanged to the BatchNorm of
+Chapter~\ref{chap:bn} and the residual net of
+Chapter~\ref{chap:residual}.
+
 \chapter{CIFAR with BatchNorm}
 \label{chap:bn}
 
