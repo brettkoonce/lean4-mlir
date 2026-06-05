@@ -11,9 +11,10 @@ with IREE, runs it, and checks it against an independent numpy reference:
 
   • linear_back / mlp_back   — the input-gradient (VJP) chain (dx);
   • mlp_fwd                   — the forward map (⟦emitMlpFwd⟧ = mlpForward);
-  • mlp_train_step           — a full SGD step: proof-backed forward + backward
-                               (dx chain + dW/db) → trusted SGD update; checks
-                               the six updated parameters against numpy.
+  • loss_cot                  — softmax-CE gradient (⟦emitLossCot⟧ = ∂L/∂logits);
+  • mlp_train_step           — a full SGD step: proof-backed forward → loss
+                               cotangent → backward (dx + dW/db) → trusted SGD;
+                               checks the six updated parameters against numpy.
 
 Compiles on IREE's CPU backend (`llvm-cpu`) — correctness needs no GPU; the
 ROCm/HIP leg only changes the backend, not the numerics.
@@ -57,20 +58,28 @@ rng = np.random.default_rng(0)
 # ════════════════════════════════════════════════════════════════
 # Reference computations (independent numpy)
 # ════════════════════════════════════════════════════════════════
+def softmax_np(z):
+    e = np.exp(z); return e / e.sum(1, keepdims=True)
+
 def mlp_fwd_ref(x, W0, b0, W1, b1, W2, b2):
     """Forward map mlpForward: relu(relu(x·W0+b0)·W1+b1)·W2+b2."""
     a0 = np.maximum(x @ W0 + b0, 0.0)
     a1 = np.maximum(a0 @ W1 + b1, 0.0)
     return a1 @ W2 + b2
 
+def loss_cot_ref(logits, onehot):
+    """softmax-CE gradient ∂L/∂logits = softmax(logits) − onehot."""
+    return softmax_np(logits) - onehot
+
 def mlp_back_ref(dy, W0, W1, W2, p0, p1):
     """Input-gradient (VJP) chain dx."""
     return (((dy @ W2.T) * relu_mask(p1)) @ W1.T * relu_mask(p0)) @ W0.T
 
-def mlp_sgd_ref(x, W0, b0, W1, b1, W2, b2, dy, lr):
-    """Forward → backward (dx chain + param grads) → SGD; returns 6 updated params."""
+def mlp_sgd_ref(x, W0, b0, W1, b1, W2, b2, onehot, lr):
+    """Forward → loss cotangent → backward (dx + param grads) → SGD; 6 updated params."""
     h0 = x @ W0 + b0; a0 = np.maximum(h0, 0.0)
     h1 = a0 @ W1 + b1; a1 = np.maximum(h1, 0.0)
+    dy = softmax_np(a1 @ W2 + b2) - onehot         # loss cotangent (computed)
     dW2 = a1.T @ dy;            db2 = dy.sum(0);  dx2 = dy @ W2.T
     dy1 = (h1 > 0) * dx2;       dW1 = a0.T @ dy1; db1 = dy1.sum(0); dx1 = dy1 @ W1.T
     dy0 = (h0 > 0) * dx1;       dW0 = x.T @ dy0;  db0 = dy0.sum(0)
@@ -106,18 +115,25 @@ b0 = rng.standard_normal((d1,)).astype(np.float32)
 b1 = rng.standard_normal((d2,)).astype(np.float32)
 b2 = rng.standard_normal((d3,)).astype(np.float32)
 fwd_args = [x, W0, b0, W1, b1, W2, b2]
+logits = mlp_fwd_ref(x, W0, b0, W1, b1, W2, b2)
 outs, nb = compile_run("/tmp/mlp_fwd.mlir", "mlp_fwd", fwd_args)
-e = max_err(outs, [mlp_fwd_ref(x, W0, b0, W1, b1, W2, b2)]); ok &= e < TOL
+e = max_err(outs, [logits]); ok &= e < TOL
 print(f"mlp_fwd         ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}")
 
-# ── mlp full SGD train step: 6 updated params (forward+backward+SGD) ──
-dyt = rng.standard_normal((B, d3)).astype(np.float32)
-ts_args = [x, W0, b0, W1, b1, W2, b2, dyt]
-ts_ref = mlp_sgd_ref(x, W0, b0, W1, b1, W2, b2, dyt, LR)
+# ── softmax-CE loss cotangent dy = softmax(logits) − onehot (proof-backed) ──
+labels = rng.integers(0, d3, size=B)
+onehot = np.eye(d3, dtype=np.float32)[labels]
+outs, nb = compile_run("/tmp/loss_cot.mlir", "loss_cot", [logits, onehot])
+e = max_err(outs, [loss_cot_ref(logits, onehot)]); ok &= e < TOL
+print(f"loss_cot        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}")
+
+# ── mlp full SGD train step: forward → loss → backward → SGD; 6 updated params ──
+ts_args = [x, W0, b0, W1, b1, W2, b2, onehot]
+ts_ref = mlp_sgd_ref(x, W0, b0, W1, b1, W2, b2, onehot, LR)
 outs, nb = compile_run("/tmp/mlp_train_step.mlir", "mlp_train_step", ts_args)
 e = max_err(outs, ts_ref); ok &= e < TOL
 print(f"mlp_train_step  ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  "
-      f"(6 updated params vs numpy SGD)")
+      f"(6 updated params vs numpy, loss cotangent computed in-module)")
 
 print("ALL PASS (cpu)" if ok else "FAILURES (cpu)")
 

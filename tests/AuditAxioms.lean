@@ -187,3 +187,7 @@ open Proofs
 #print axioms IR.mlp_fwd_bridge
 #print axioms IR.mlp_fwd_preact0
 #print axioms IR.mlp_fwd_preact1
+-- Loss cotangent (rest of Phase 4): the emitted softmax−onehot loss head
+-- denotes the proven softmax-CE gradient ∂L/∂logits, so the cotangent fed to
+-- the backward is proof-backed too (not supplied) — full train step closed.
+#print axioms IR.lossCot_bridge

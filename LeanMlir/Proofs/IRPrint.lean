@@ -173,6 +173,26 @@ def mlpFwdModule (B d₀ d₁ d₂ d₃ : Nat) : String :=
   s!"%W1: {tt [d₁,d₂]}, %b1: {tt [d₂]}, %W2: {tt [d₂,d₃]}, %b2: {tt [d₃]}) -> {tt [B,d₃]} " ++ "{\n" ++
   body ++ s!"    return {res} : {tt [B,d₃]}\n" ++ "  }\n}\n"
 
+/-- Render the softmax-CE loss head `dy = softmax(logits) − onehot`:
+    `exp` + `reduce`(add over classes) + `broadcast` + `divide` (= softmax),
+    then `subtract` the target. Mirror of `IR.emitLossCot`, whose denotation
+    is the proven `∂(crossEntropy)/∂logits` (`IR.lossCot_bridge`). -/
+def renderLossCot (B c : Nat) (logits onehot dy : String) : String :=
+  s!"    %le = stablehlo.exponential {logits} : {tt [B,c]}\n" ++
+  s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %lsum = stablehlo.reduce(%le init: %lz) applies stablehlo.add across dimensions = [1] : ({tt [B,c]}, tensor<f32>) -> {tt [B]}\n" ++
+  s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({tt [B]}) -> {tt [B,c]}\n" ++
+  s!"    %lsm = stablehlo.divide %le, %lsb : {tt [B,c]}\n" ++
+  s!"    {dy} = stablehlo.subtract %lsm, {onehot} : {tt [B,c]}\n"
+
+/-- Standalone softmax-CE loss-cotangent module: `logits` + target `onehot`
+    in, `dy = ∂L/∂logits` out. The render-from-IR loss-head artifact. -/
+def lossCotModule (B c : Nat) : String :=
+  "module @m {\n" ++
+  s!"  func.func @loss_cot(%logits: {tt [B,c]}, %onehot: {tt [B,c]}) -> {tt [B,c]} " ++ "{\n" ++
+  renderLossCot B c "%logits" "%onehot" "%dy" ++
+  s!"    return %dy : {tt [B,c]}\n" ++ "  }\n}\n"
+
 -- ════════════════════════════════════════════════════════════════
 -- § Full train step — forward + proof-backed backward + SGD
 --
@@ -180,11 +200,15 @@ def mlpFwdModule (B d₀ d₁ d₂ d₃ : Nat) : String :=
 -- train step also needs the *parameter* gradients and an optimizer update.
 -- This module renders one full SGD step for the MLP:
 --
---   forward  (PROOF-BACKED): rendered from `mlpFwdActs` (the prefix of
---                       `mlpFwdHlo`/`IR.emitMlpFwd`), whose denotation is the
---                       proven `mlpForward` activation; `%h0,%h1` are the
---                       pre-activations (= IR.mlp_fwd_preact0/1) the backward
---                       reads, `%a0,%a1` the activations.
+--   forward  (PROOF-BACKED): rendered from `mlpFwdHlo`/`IR.emitMlpFwd`, whose
+--                       denotation is the proven `mlpForward` (logits `%h2`);
+--                       `%h0,%h1` are the pre-activations (IR.mlp_fwd_preact0/1)
+--                       the backward reads, `%a0,%a1` the activations.
+--   loss     (PROOF-BACKED): dy = softmax(%h2) − %onehot, rendered from
+--                       `renderLossCot`/`IR.emitLossCot`, whose denotation is
+--                       the proven softmax-CE gradient ∂L/∂logits
+--                       (IR.lossCot_bridge). The cotangent is computed, not
+--                       supplied.
 --   backward (PROOF-BACKED): the dx chain is ⟦emitMlpBack⟧ = mlp_has_vjp_at
 --                       .backward; each dWℓ = aₗ₋₁ᵀ·dyℓ (batch-contracting
 --                       dot_general) and dbℓ = Σ_batch dyℓ (reduce-add) is
@@ -193,18 +217,18 @@ def mlpFwdModule (B d₀ d₁ d₂ d₃ : Nat) : String :=
 --                       bias_grad_bridge.
 --   SGD      (TRUSTED): θ' = θ − lr·dθ, elementwise.
 --
--- So forward, backward, and the parameter gradients the optimizer consumes
--- are ALL renderings of proof-backed IR; only the SGD arithmetic (and the
--- printer / IREE / float) remain trusted.
+-- So forward, loss cotangent, backward, AND the parameter gradients are ALL
+-- renderings of proof-backed IR; only the SGD arithmetic (and the printer /
+-- IREE / float) remain trusted.
 -- ════════════════════════════════════════════════════════════════
 
-/-- A full MLP SGD train step (`dense → relu → dense → relu → dense`),
-    `dims d₀→d₁→d₂→d₃`, batch `B`, learning rate `lr` (a decimal literal).
-    Inputs: `x`, the six parameters, and the output cotangent `%dy`
-    (`∂L/∂logits`, supplied — keeps the loss out of scope). Returns the six
-    updated parameters. The forward is `render mlpFwdActs` and the backward
-    is the rendering of the proof-backed `IR.emitMlpBack` +
-    `IR.emitWeightGrad`/`emitBiasGrad`; only the SGD arithmetic is the
+/-- A full MLP SGD train step (`dense → relu → dense → relu → dense` + softmax
+    cross-entropy), `dims d₀→d₁→d₂→d₃`, batch `B`, learning rate `lr` (a
+    decimal literal). Inputs: `x`, the six parameters, and the target
+    distribution `%onehot` (the labels). The loss cotangent
+    `dy = softmax(logits) − onehot` is *computed* in-module, not supplied.
+    Returns the six updated parameters. Forward / loss / backward / param-grads
+    are all renderings of proof-backed IR; only the SGD arithmetic is the
     trusted frame. -/
 def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
   let sgd (θ dθ θ' lrC sg ty : String) : String :=
@@ -214,16 +238,19 @@ def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
   let dg (o a b cdA cdB tyA tyB tyO : String) : String :=
     s!"    {o} = stablehlo.dot_general {a}, {b}, contracting_dims = [{cdA}] x [{cdB}],\n" ++
     s!"              precision = [DEFAULT, DEFAULT] : ({tyA}, {tyB}) -> {tyO}\n"
-  -- forward rendered from the forward IR mirror (names %h0,%a0,%h1,%a1)
-  let fwd := (((mlpFwdActs d₀ d₁ d₂).render B).run' (0, 0)).1
+  -- full forward rendered from the forward IR mirror; logits = result handle
+  let (fwd, logits) := ((mlpFwdHlo d₀ d₁ d₂ d₃).render B).run' (0, 0)
   "module @m {\n" ++
   s!"  func.func @mlp_train_step(%x: {tt [B,d₀]}, %W0: {tt [d₀,d₁]}, %b0: {tt [d₁]}, " ++
-  s!"%W1: {tt [d₁,d₂]}, %b1: {tt [d₂]}, %W2: {tt [d₂,d₃]}, %b2: {tt [d₃]}, %dy: {tt [B,d₃]}) -> " ++
+  s!"%W1: {tt [d₁,d₂]}, %b1: {tt [d₂]}, %W2: {tt [d₂,d₃]}, %b2: {tt [d₃]}, %onehot: {tt [B,d₃]}) -> " ++
   s!"({tt [d₀,d₁]}, {tt [d₁]}, {tt [d₁,d₂]}, {tt [d₂]}, {tt [d₂,d₃]}, {tt [d₃]}) " ++ "{\n" ++
-  -- ── forward (proof-backed: rendered from mlpFwdActs ⊂ emitMlpFwd) ──
-  "    // ── forward (PROOF-BACKED: render mlpFwdActs; ⟦emitMlpFwd⟧ = mlpForward,\n" ++
-  "    //    %h0,%h1 = pre-activations IR.mlp_fwd_preact0/1, %a0,%a1 = activations) ──\n" ++
+  -- ── forward (proof-backed: rendered from mlpFwdHlo = emitMlpFwd) ──
+  "    // ── forward (PROOF-BACKED: render mlpFwdHlo; ⟦emitMlpFwd⟧ = mlpForward,\n" ++
+  "    //    %h0,%h1 = pre-activations IR.mlp_fwd_preact0/1, %a0,%a1 = activations, logits = result) ──\n" ++
   fwd ++
+  -- ── loss cotangent (proof-backed: dy = softmax(logits) − onehot) ──
+  "    // ── loss (PROOF-BACKED: dy = softmax(logits) − onehot = ⟦emitLossCot⟧ = ∂L/∂logits) ──\n" ++
+  renderLossCot B d₃ logits "%onehot" "%dy" ++
   -- ── backward (proof-backed) ──
   "    // ── backward (PROOF-BACKED: dx chain = ⟦emitMlpBack⟧ = mlp_has_vjp_at.backward;\n" ++
   "    //    dWℓ/dbℓ = emitWeightGrad/emitBiasGrad, bridged to the certified Jacobians) ──\n" ++
@@ -261,6 +288,7 @@ def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
 #eval IO.FS.writeFile "/tmp/linear_back.mlir" (linearModule 2 4 3)
 #eval IO.FS.writeFile "/tmp/mlp_back.mlir" (mlpModule 2 4 3 3 2)
 #eval IO.FS.writeFile "/tmp/mlp_fwd.mlir" (mlpFwdModule 2 4 3 3 2)
+#eval IO.FS.writeFile "/tmp/loss_cot.mlir" (lossCotModule 2 2)
 #eval IO.FS.writeFile "/tmp/mlp_train_step.mlir" (mlpTrainStepModule 2 4 3 3 2 "0.1")
 
 end Proofs.IRPrint

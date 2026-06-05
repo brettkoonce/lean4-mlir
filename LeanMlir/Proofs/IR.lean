@@ -793,5 +793,33 @@ theorem mlp_fwd_preact1 {d₀ d₁ d₂ : Nat} (W₀ : Mat d₀ d₁) (b₀ : Ve
     (Fwd.dense W₁ b₁ (Fwd.relu (Fwd.dense W₀ b₀ Fwd.input))).denote x
       = dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) := rfl
 
+-- ════════════════════════════════════════════════════════════════
+-- § Loss cotangent — closing the last supplied input (rest of Phase 4)
+--
+-- The train step fed the backward a *supplied* cotangent dy = ∂L/∂logits.
+-- For softmax-cross-entropy the repo PROVES that gradient is
+-- `softmax(logits) − onehot(label)` (`softmaxCE_grad`). Emitting that as a
+-- loss-head graph (`exp`+`reduce`+`broadcast`+`divide`, then `subtract` the
+-- target) makes dy itself proof-backed: the train step then takes the target
+-- distribution as input and the only trusted numerics left is SGD.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The emitted loss-cotangent (softmax-CE head): `softmax(logits) −
+    onehot(label)`. Rendered as `exp` + `reduce`(add) + `broadcast` + `divide`
+    (softmax) then `subtract` the target. Feeds the backward's cotangent leaf. -/
+noncomputable def emitLossCot (c : Nat) (logits : Vec c) (label : Fin c) : Vec c :=
+  fun j => softmax c logits j - oneHot c label j
+
+/-- **Loss-cotangent bridge.** The emitted softmax−onehot graph denotes the
+    proven cross-entropy gradient `∂(crossEntropy)/∂logits` (`softmaxCE_grad`).
+    So the cotangent fed to the backward is itself proof-backed, not supplied:
+    the whole train step `forward → loss → backward → grads` is proof-backed
+    end to end, and only the SGD arithmetic (and printer/IREE/float) stays
+    trusted. -/
+theorem lossCot_bridge (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
+    emitLossCot c logits label j
+      = pdiv (fun (z : Vec c) (_ : Fin 1) => crossEntropy c z label) logits j 0 :=
+  (softmaxCE_grad c logits label j).symm
+
 end IR
 end Proofs
