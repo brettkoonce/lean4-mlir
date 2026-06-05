@@ -14,9 +14,11 @@ where the emitted text *is* `print (emitBack net)` by construction (so R3
 is closed for that net, no string-diffing), validated on IREE. **MLP first,
 land it, then expand.**
 
-Status: **Phases 0–1 landed for the MLP, plus the param-grad + SGD slice of
-Phase 4** (see "Done" below). Remaining: forward bridge (Phase 2), CNN
-(Phase 3), and the rest of Phase 4.
+Status: **Phases 0–2 landed for the MLP, plus the param-grad + SGD slice of
+Phase 4** (see "Done" below). The whole MLP train-step module — forward +
+backward + parameter gradients — is now the rendering of proof-backed IR;
+only the SGD arithmetic (and printer/IREE/float) stay trusted. Remaining:
+CNN (Phase 3) and the rest of Phase 4 (loss-cotangent IR).
 
 ## Done (MLP)
 
@@ -27,13 +29,20 @@ Phase 4** (see "Done" below). Remaining: forward bridge (Phase 2), CNN
   matching an independent numpy VJP to ~1e-7. R3 closed for the MLP backward,
   GPU-validated.
 - **Param grads + SGD (slice of Phase 4)** — `mlpTrainStepModule` renders a
-  full SGD step: trusted forward → proof-backed backward (the dx chain
+  full SGD step: proof-backed backward (the dx chain
   `⟦emitMlpBack⟧ = mlp_has_vjp_at.backward`, plus `dWℓ`/`dbℓ` =
   `IR.emitWeightGrad`/`emitBiasGrad`, bridged to the certified Jacobians by
   `weight_grad_bridge`/`bias_grad_bridge`) → trusted elementwise SGD. The six
   updated parameters match numpy SGD to 0.0 on CPU and 1.19e-7 on the GPU —
   the proof-backed gradients drive a correct weight update on real hardware.
-  Still trusted: the forward (Phase 2 closes it) and the SGD arithmetic.
+- **Phase 2** — forward IR `Fwd` + `mlp_fwd_bridge` (`⟦emitMlpFwd⟧ =
+  mlpForward`) + `mlp_fwd_preact0/1` (the forward sub-graphs denote exactly the
+  pre-activations the backward reads — the splice contract, proven). Printer:
+  `HloF` (forward AST, peer of `Hlo`) renders the forward; the standalone
+  `@mlp_fwd` module and the train step's forward are now `render(mlpFwd…)`,
+  matching numpy forward to 2.38e-7. The forward is no longer trusted: it is
+  the rendering of an IR proven `= mlpForward`. Only SGD arithmetic +
+  printer/IREE/float remain trusted.
 
 ## The pipeline
 
@@ -110,8 +119,8 @@ not just the backward.
 | **0** | `Back.toStablehlo` printer (Vec ops: dot_general/multiply/reduce/broadcast/sub/add/select) + render the MLP backward (`emitMlpBack`) → one `.mlir`. | Lean-only. | ✅ `IRPrint.lean` |
 | **1** | **Land it.** Compile on IREE, run the MLP backward, confirm it matches the numpy VJP. R3 closed for the MLP backward, validated on GPU. | GPU. | ✅ CPU + rocm/gfx1100 |
 | **4 (param-grad + SGD slice)** | `dWℓ`/`dbℓ` emitters + bridges + a full SGD `mlpTrainStepModule`; run a train step where the weights move correctly. | Lean + GPU. | ✅ CPU 0.0 / GPU 1.19e-7 |
-| **2** | Forward IR + `⟦fwdIR⟧ = mlpForward` bridge → the *whole* MLP module is proof-backed (forward + backward), not just backward. | Lean + IREE. | next |
-| **3** | `Back3.toStablehlo` (conv `convolution`, maxpool tile-compare-select) + Tensor3↔Vec wiring → render a small **CNN** end-to-end. | Lean + IREE. | — |
+| **2** | Forward IR + `⟦fwdIR⟧ = mlpForward` bridge → the *whole* MLP module is proof-backed (forward + backward), not just backward. | Lean + IREE. | ✅ `Fwd`/`HloF`, mlp_fwd 2.38e-7 |
+| **3** | `Back3.toStablehlo` (conv `convolution`, maxpool tile-compare-select) + Tensor3↔Vec wiring → render a small **CNN** end-to-end. | Lean + IREE. | next |
 | **4 (rest)** | Loss IR (softmax-CE cotangent) instead of the supplied `%dy`; then decide whether to migrate `generateTrainStep` or keep the parallel path as the verified reference. | Big; optional. | — |
 
 ## R3 closure & residual trust, per phase
