@@ -53,6 +53,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .flatConvF w b ic oc h w' kH kW :: ts, e :: st =>
       parseStack ts (.flatConvF w b ic oc h w' kH kW e :: st)
   | .maxPoolF c h w :: ts, e :: st => parseStack ts (.maxPoolF c h w e :: st)
+  | .convBack w ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.convBack w ic oc h w' kH kW e :: st)
   | _ :: _, _                    => none  -- stack underflow / malformed
 
 /-- Parse a full token stream back to a single graph. -/
@@ -82,6 +84,7 @@ theorem parseStack_toToks (r : Raw) :
   | selectPos x n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | flatConvF w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | maxPoolF c h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | convBack w ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
 
 /-- **Serialization round-trip.** `parse` recovers any skeleton from its
     postorder token stream. -/

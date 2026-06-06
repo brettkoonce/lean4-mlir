@@ -242,6 +242,7 @@ open Proofs
 #print axioms StableHLO.flatConvF_faithful
 #print axioms StableHLO.maxPoolF_faithful
 #print axioms StableHLO.cnnFwdGraph_faithful
+#print axioms StableHLO.convBack_faithful
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
