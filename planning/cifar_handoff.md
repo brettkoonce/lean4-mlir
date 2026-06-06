@@ -14,6 +14,43 @@ Written 2026-06-06 by the session that finished ch4.
 
 ---
 
+## ⭐ UPDATE 2026-06-06 (b) — Milestone B (BatchNorm) is DONE
+
+**The BN demon is slain: verified BN forward + its consolidated O(N) three-term
+input-VJP, GPU-trained.** What landed (committed to `main`):
+- **Typed SHlo BN ops** `bnF` (forward, denotes `bnForward`) + `bnBack` (denotes
+  `bn_grad_input`), full lockstep through inductive/den/skel/Raw/Tok/toToks/emitTok
+  + parser round-trip. Faithfulness: `bnF_faithful` (rfl), `bnBack_faithful`
+  (= pdiv-Jacobian via `bn_input_grad_correct`, under 0<ε). emitTok copies
+  `IRPrint.renderLN`/`renderLNBack`.
+- **Semantics** (CifarCNN.lean): `cifarCnnBnForward` (conv→BN→relu ×4) + conditional
+  `cifarCnnBn_has_vjp_at(_correct)` via `convBnRelu_has_vjp_at`.
+- **Renderer**: `cifarBnFwdGraph(_faithful)`, `cifarBnFwdModuleV`, `cifarBnTrainStepText`
+  (BN fwd=renderLN, back=renderLNBack 3-term, scalar dγ/dβ). `#eval` →
+  `verified_mlir/cifar_bn_{fwd,train_step}.mlir`. Both iree-compile on rocm.
+- **`CifarBnLayout`** (22 params, γ/β are rank-0 `#[]` scalars — the FFI shim's
+  empty-product gives size 1; verified to flow end-to-end). `MainCifarBnVerified.lean`
+  + `cifar-bn-verified` exe. Audit **140/140** 3-axiom-clean (+3 BN ℝ-headlines).
+
+**⚠️ KEY MODELING CHOICE + result.** The proven `bnForward` is a **per-example
+GLOBAL normalization** (reduce μ/var over the whole oc·H·W feature vec, **scalar**
+γ/β), NOT per-channel batch-BN. This is what keeps the per-example "D1 shortcut"
+intact and is faithfully verifiable (it's literally `IRPrint.renderLN` = LayerNorm-
+shaped). Result: **57.1% @ epoch 10 (climbing, healthy)** — *below* no-BN's 66%.
+That's faithful, not a bug: global normalization + scalar affine is very aggressive
+(discards per-channel scale, can't restore it), so it slows early learning. The hard
+chapter content (BN's tricky O(N) backward, verified + on GPU) is the win; a true
+accuracy "lift" would need **per-channel** BN (apply `bnForward` per channel-slice
+with per-channel γ/β — a real extension: a per-channel forward + chained VJP, more
+proof work) and/or the init/lr-robustness framing from update (a) below.
+
+**Next ideas if continuing:** (1) per-channel BN for a real lift; (2) the discharged
+`Tiny` BN instance (non-vacuity witness — deferred; needs two exact-istd BN stages
+with injectivity through both pools, harder than the no-BN `Tiny`); (3) variant C
+(verified Adam) for the 72% number. §§2–7 below are the original (pre-A) plan.
+
+---
+
 ## ⭐ UPDATE 2026-06-06 — Milestone A is DONE (and a surprise)
 
 **Milestone A (no-BN SGD CIFAR) is complete and committed.** What landed:

@@ -72,6 +72,14 @@ inductive SHlo : Nat → Type where
   -- Max-pool backward (`select_and_scatter`, route dy to the window argmax);
   -- `x` is the saved pre-pool input. Conditional (no-ties) like the ReLU kink.
   | maxPoolBack {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
+  -- Chapter 5 (BatchNorm): per-example normalization over the whole feature
+  -- vec (reduce mean/var over axis [1], scalar γ/β). `gName,bName` are the γ,β
+  -- scalar SSA inputs, `epsStr` the rendered ε literal; ε,γ,β carry the den.
+  | bnF        {n : Nat} (gName bName epsStr : String) (ε γ β : ℝ)   : SHlo n → SHlo n
+  -- BN input-VJP — the consolidated O(N) three-term gradient (`bn_grad_input`),
+  -- recomputing x̂/istd from the saved BN input `x` (`xName`). Total in `x`;
+  -- faithful (= pdiv-Jacobian) under `0 < ε` (`bn_input_grad_correct`).
+  | bnBack     {n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec n) : SHlo n → SHlo n
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -102,6 +110,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .maxPoolF (c := c) (h := h) (w := w) e => maxPoolFlat c h w (den e)
   | _, .convBack _ W b v e => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward v (den e)
   | _, .maxPoolBack (c := c) (h := h) (w := w) _ x e => maxPoolBackFlat c h w x (den e)
+  | _, .bnF (n := n) _ _ _ ε γ β e => bnForward n ε γ β (den e)
+  | _, .bnBack (n := n) _ _ _ ε γ x e => bn_grad_input n ε γ x (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -348,6 +358,23 @@ theorem maxPoolBack_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2*w)
   simp only [den, maxPoolBackFlat, maxPoolFlat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
              maxPool2_has_vjp_at3]
 
+/-- **BN forward faithfulness.** The per-example reduce/normalize/affine graph
+    (γ·(x−μ)·istd + β, μ/var over the feature axis) denotes the proven
+    `bnForward` (BatchNorm.lean). -/
+@[simp] theorem bnF_faithful {n : Nat} (gN bN es : String) (ε γ β : ℝ) (e : SHlo n) :
+    den (.bnF gN bN es ε γ β e) = bnForward n ε γ β (den e) := rfl
+
+/-- **BN backward faithfulness.** The consolidated three-term graph denotes the
+    proven BN input-VJP — equal to the `pdiv`-contracted Jacobian of `bnForward`
+    (`bn_input_grad_correct`), under `0 < ε`. β-independent (a constant shift
+    does not enter the Jacobian). -/
+theorem bnBack_faithful {n : Nat} (gN xN es : String) (ε γ β : ℝ) (hε : 0 < ε)
+    (x : Vec n) (e : SHlo n) (i : Fin n) :
+    den (.bnBack gN xN es ε γ x e) i
+      = ∑ j : Fin n, pdiv (bnForward n ε γ β) x i j * den e j := by
+  show bn_grad_input n ε γ x (den e) i = _
+  exact bn_input_grad_correct n ε γ β hε x (den e) i
+
 /-- Whole MNIST-CNN **forward** graph:
     `dense ∘ relu ∘ dense ∘ relu ∘ dense ∘ maxPool ∘ relu ∘ conv ∘ relu ∘ conv`. -/
 def cnnFwdGraph {ic c h w d1 nClasses kH kW : Nat}
@@ -406,6 +433,50 @@ theorem cifarFwdGraph_faithful {ic c1 c2 h w d1 nClasses kH kW : Nat}
       = cifarCnnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x := by
   simp only [cifarFwdGraph, cifarCnnForward, Function.comp_apply,
              denseF_faithful, reluF_faithful, flatConvF_faithful, maxPoolF_faithful, den_operand]
+
+/-- Whole **BN-CIFAR forward** graph (Chapter 5, BatchNorm variant): each conv is
+    followed by a per-example `bnF` before its ReLU. `epsStr` is the shared ε
+    literal; the four BN layers carry scalar γ/β inputs `%g{i}`/`%bt{i}`. -/
+def cifarBnFwdGraph {ic c1 c2 h w d1 nClasses kH kW : Nat} (epsStr : String)
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ γ₁ β₁ : ℝ)
+    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ γ₂ β₂ : ℝ)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (ε₃ γ₃ β₃ : ℝ)
+    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2) (ε₄ γ₄ β₄ : ℝ)
+    (W₅ : Mat (c2*h*w) d1) (b₅ : Vec d1) (W₆ : Mat d1 d1) (b₆ : Vec d1)
+    (W₇ : Mat d1 nClasses) (b₇ : Vec nClasses)
+    (x : Vec (ic*(2*(2*h))*(2*(2*w)))) : SHlo nClasses :=
+  denseF "%W7" "%b7" W₇ b₇
+    (.reluF (denseF "%W6" "%b6" W₆ b₆
+      (.reluF (denseF "%W5" "%b5" W₅ b₅
+        (.maxPoolF (c := c2) (h := h) (w := w)
+          (.reluF (.bnF "%g4" "%bt4" epsStr ε₄ γ₄ β₄
+            (.flatConvF (h := 2*h) (w := 2*w) "%W4" "%b4" W₄ b₄
+            (.reluF (.bnF "%g3" "%bt3" epsStr ε₃ γ₃ β₃
+              (.flatConvF (h := 2*h) (w := 2*w) "%W3" "%b3" W₃ b₃
+              (.maxPoolF (c := c1) (h := 2*h) (w := 2*w)
+                (.reluF (.bnF "%g2" "%bt2" epsStr ε₂ γ₂ β₂
+                  (.flatConvF (h := 2*(2*h)) (w := 2*(2*w)) "%W2" "%b2" W₂ b₂
+                  (.reluF (.bnF "%g1" "%bt1" epsStr ε₁ γ₁ β₁
+                    (.flatConvF (h := 2*(2*h)) (w := 2*(2*w)) "%W1" "%b1" W₁ b₁
+                    (.operand "%x" x)))))))))))))))))))
+
+/-- **BN-CIFAR forward faithfulness.** The forward graph denotes the proven
+    `cifarCnnBnForward`. -/
+theorem cifarBnFwdGraph_faithful {ic c1 c2 h w d1 nClasses kH kW : Nat} (epsStr : String)
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ γ₁ β₁ : ℝ)
+    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ γ₂ β₂ : ℝ)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (ε₃ γ₃ β₃ : ℝ)
+    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2) (ε₄ γ₄ β₄ : ℝ)
+    (W₅ : Mat (c2*h*w) d1) (b₅ : Vec d1) (W₆ : Mat d1 d1) (b₆ : Vec d1)
+    (W₇ : Mat d1 nClasses) (b₇ : Vec nClasses)
+    (x : Vec (ic*(2*(2*h))*(2*(2*w)))) :
+    den (cifarBnFwdGraph epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
+          W₅ b₅ W₆ b₆ W₇ b₇ x)
+      = cifarCnnBnForward W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
+          W₅ b₅ W₆ b₆ W₇ b₇ x := by
+  simp only [cifarBnFwdGraph, cifarCnnBnForward, Function.comp_apply,
+             denseF_faithful, reluF_faithful, flatConvF_faithful, maxPoolF_faithful,
+             bnF_faithful, den_operand]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Chapter 4 — CNN: whole-chain backward (A2c, the MLP-analog of
@@ -546,6 +617,8 @@ inductive Raw where
   | maxPoolF   (c h w : Nat)               : Raw → Raw
   | convBack   (w : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | maxPoolBack (x : String) (c h w : Nat) : Raw → Raw
+  | bnF        (g b eps : String) (n : Nat) : Raw → Raw
+  | bnBack     (g x eps : String) (n : Nat) : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -566,6 +639,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .convBack (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
       .convBack wN ic oc h w kH kW (skel e)
   | _, .maxPoolBack (c := c) (h := h) (w := w) xN _ e => .maxPoolBack xN c h w (skel e)
+  | k, .bnF gN bN es _ _ _ e => .bnF gN bN es k (skel e)
+  | k, .bnBack gN xN es _ _ _ e => .bnBack gN xN es k (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -582,6 +657,8 @@ inductive Tok where
   | maxPoolF   (c h w : Nat)               : Tok
   | convBack   (w : String) (ic oc h w' kH kW : Nat) : Tok
   | maxPoolBack (x : String) (c h w : Nat) : Tok
+  | bnF        (g b eps : String) (n : Nat) : Tok
+  | bnBack     (g x eps : String) (n : Nat) : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -599,6 +676,8 @@ def toToks : Raw → List Tok
   | .maxPoolF c h w e => toToks e ++ [.maxPoolF c h w]
   | .convBack w ic oc h w' kH kW e => toToks e ++ [.convBack w ic oc h w' kH kW]
   | .maxPoolBack x c h w e => toToks e ++ [.maxPoolBack x c h w]
+  | .bnF g b eps n e => toToks e ++ [.bnF g b eps n]
+  | .bnBack g x eps n e => toToks e ++ [.bnBack g x eps n]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -694,6 +773,68 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
         s!" : ({ty [B,c,2*h,2*w]}, {ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,2*h,2*w]}\n" ++
         s!"    {o} = stablehlo.reshape {scn} : ({ty [B,c,2*h,2*w]}) -> {ty [B, c*(2*h)*(2*w)]}\n", o :: st)
+  | .bnF gN bN epsStr n, r :: st => do
+      -- per-example BatchNorm forward `γ·(x−μ)·istd + β` (reduce μ/var over [1])
+      let z ← fresh; let nf ← fresh; let ep ← fresh
+      let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+      let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+      let xhat ← fresh; let gb ← fresh; let bb ← fresh; let gx ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,n]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,n]}\n" ++
+        s!"    {smr} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,n]}\n" ++
+        s!"    {xc} = stablehlo.subtract {r}, {mu} : {ty [B,n]}\n" ++
+        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,n]}\n" ++
+        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,n]}\n" ++
+        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,n]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,n]}\n" ++
+        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,n]}\n" ++
+        s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,n]}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [] : (tensor<f32>) -> {ty [B,n]}\n" ++
+        s!"    {gx} = stablehlo.multiply {xhat}, {gb} : {ty [B,n]}\n" ++
+        s!"    {o} = stablehlo.add {gx}, {bb} : {ty [B,n]}\n", o :: st)
+  | .bnBack gN xN epsStr n, r :: st => do
+      -- BN input-VJP: recompute x̂/istd from saved input {xN}, then the
+      -- consolidated three-term `(istd/N)·(N·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))`, dx̂ = γ·dy.
+      let z ← fresh; let nf ← fresh; let ep ← fresh
+      let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+      let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+      let xhat ← fresh; let gb ← fresh; let dxh ← fresh; let sdxr ← fresh; let sdx ← fresh
+      let xd ← fresh; let sxdr ← fresh; let sxd ← fresh; let t1 ← fresh; let i1 ← fresh
+      let xs ← fresh; let i2 ← fresh; let sN ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,n]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,n]}\n" ++
+        s!"    {smr} = stablehlo.reduce({xN} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,n]}\n" ++
+        s!"    {xc} = stablehlo.subtract {xN}, {mu} : {ty [B,n]}\n" ++
+        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,n]}\n" ++
+        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,n]}\n" ++
+        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,n]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,n]}\n" ++
+        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,n]}\n" ++
+        s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,n]}\n" ++
+        s!"    {dxh} = stablehlo.multiply {gb}, {r} : {ty [B,n]}\n" ++
+        s!"    {sdxr} = stablehlo.reduce({dxh} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+        s!"    {sdx} = stablehlo.broadcast_in_dim {sdxr}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+        s!"    {xd} = stablehlo.multiply {xhat}, {dxh} : {ty [B,n]}\n" ++
+        s!"    {sxdr} = stablehlo.reduce({xd} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+        s!"    {sxd} = stablehlo.broadcast_in_dim {sxdr}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+        s!"    {t1} = stablehlo.multiply {dxh}, {nf} : {ty [B,n]}\n" ++
+        s!"    {i1} = stablehlo.subtract {t1}, {sdx} : {ty [B,n]}\n" ++
+        s!"    {xs} = stablehlo.multiply {xhat}, {sxd} : {ty [B,n]}\n" ++
+        s!"    {i2} = stablehlo.subtract {i1}, {xs} : {ty [B,n]}\n" ++
+        s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,n]}\n" ++
+        s!"    {o} = stablehlo.multiply {sN}, {i2} : {ty [B,n]}\n", o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
@@ -1146,6 +1287,211 @@ def cifarTrainStepText (B ic c1 c2 H W kH kW d1 nClasses : Nat) (lr : String) : 
   s!"    return %W1n, %b1n, %W2n, %b2n, %W3n, %b3n, %W4n, %b4n, %W5n, %b5n, %W6n, %b6n, %W7n, %b7n : {ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
   "  }\n}\n"
 
+/-- `@cifar_bn_fwd` rendered from the verified BN-CIFAR forward AST. γ/β are
+    scalar `tensor<f32>` inputs (`%g{i}`/`%bt{i}`); `epsStr` the ε literal. -/
+def cifarBnFwdModuleV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr : String)
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ γ₁ β₁ : ℝ)
+    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ γ₂ β₂ : ℝ)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (ε₃ γ₃ β₃ : ℝ)
+    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2) (ε₄ γ₄ β₄ : ℝ)
+    (W₅ : Mat (c2*h*w) d1) (b₅ : Vec d1) (W₆ : Mat d1 d1) (b₆ : Vec d1)
+    (W₇ : Mat d1 nClasses) (b₇ : Vec nClasses) (x : Vec (ic*(2*(2*h))*(2*(2*w)))) : String :=
+  renderModule "cifar_bn_fwd"
+    s!"%x: {ty [B,ic*(2*(2*h))*(2*(2*w))]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %g1: tensor<f32>, %bt1: tensor<f32>, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %g2: tensor<f32>, %bt2: tensor<f32>, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %g3: tensor<f32>, %bt3: tensor<f32>, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %g4: tensor<f32>, %bt4: tensor<f32>, %W5: {ty [c2*h*w,d1]}, %b5: {ty [d1]}, %W6: {ty [d1,d1]}, %b6: {ty [d1]}, %W7: {ty [d1,nClasses]}, %b7: {ty [nClasses]}"
+    B nClasses (cifarBnFwdGraph epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
+      W₅ b₅ W₆ b₆ W₇ b₇ x)
+
+/-- Full **BN-CIFAR** SGD train step (`@cifar_bn_train_step`). The Chapter-5
+    BatchNorm peer of `cifarTrainStepText`: each conv→relu block becomes
+    conv→BN→relu. The per-example BN forward (`bnFwd` = `renderLN`: reduce μ/var
+    over the feature axis, normalize, scalar-affine — denotes `bnForward`), its
+    consolidated three-term input-VJP (`bnBack` = `renderLNBack` — the proven
+    `bn_grad_input`, `bnBack_faithful`), and the scalar param grads
+    `dγ = Σ dy·x̂`, `dβ = Σ dy` are inserted. BN runs on the flattened
+    `[B, oc·H·W]` per-example feature vec (reshape around the 4-D conv). 22
+    params (4×{W,b,γ,β} + 3×{W,b}). The whole-net backward is
+    `cifarCnnBn_has_vjp_at`. `lr = 0.1/B`. -/
+def cifarBnTrainStepText (B ic c1 c2 H W kH kW d1 nClasses : Nat) (epsStr lr : String) : String :=
+  let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+  let H2 := H / 2; let W2 := W / 2
+  let Hp := H2 / 2; let Wp := W2 / 2
+  let flat := c2 * Hp * Wp
+  let M1 := c1 * H * W            -- stage-1 BN feature size
+  let M2 := c2 * H2 * W2          -- stage-2 BN feature size
+  let dg (o a w cA cB tA tB tO : String) : String :=
+    s!"    {o} = stablehlo.dot_general {a}, {w}, contracting_dims = [{cA}] x [{cB}], precision = [DEFAULT, DEFAULT] : ({tA}, {tB}) -> {tO}\n"
+  let dense (oh a w bnm : String) (mm nn : Nat) : String :=
+    dg s!"{oh}d" a w "1" "0" (ty [B,mm]) (ty [mm,nn]) (ty [B,nn]) ++
+    s!"    {oh}b = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [nn]}) -> {ty [B,nn]}\n" ++
+    s!"    {oh} = stablehlo.add {oh}d, {oh}b : {ty [B,nn]}\n"
+  let relu2 (o h : String) (nn : Nat) : String :=
+    s!"    {o}z = stablehlo.constant dense<0.0> : {ty [B,nn]}\n" ++
+    s!"    {o} = stablehlo.maximum {h}, {o}z : {ty [B,nn]}\n"
+  let reduce0 (o dyk : String) (nn : Nat) : String :=
+    s!"    {o} = stablehlo.reduce({dyk} init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [B,nn]}, tensor<f32>) -> {ty [nn]}\n"
+  let selMask2 (o pre dgrad : String) (nn : Nat) : String :=
+    s!"    {o}z = stablehlo.constant dense<0.0> : {ty [B,nn]}\n" ++
+    s!"    {o}m = stablehlo.compare GT, {pre}, {o}z : ({ty [B,nn]}, {ty [B,nn]}) -> {tyI1 [B,nn]}\n" ++
+    s!"    {o} = stablehlo.select {o}m, {dgrad}, {o}z : {tyI1 [B,nn]}, {ty [B,nn]}\n"
+  let convFwd (o lhs w bnm : String) (oc icc Hh Ww : Nat) : String :=
+    s!"    {o}c = stablehlo.convolution({lhs}, {w})\n" ++
+    "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+    "      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+    "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+    s!" : ({ty [B,icc,Hh,Ww]}, {ty [oc,icc,kH,kW]}) -> {ty [B,oc,Hh,Ww]}\n" ++
+    s!"    {o}b = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,Hh,Ww]}\n" ++
+    s!"    {o} = stablehlo.add {o}c, {o}b : {ty [B,oc,Hh,Ww]}\n"
+  let convBack (o dh w : String) (icc oc Hh Ww : Nat) : String :=
+    s!"    {o}t = stablehlo.transpose {w}, dims = [1, 0, 2, 3] : ({ty [oc,icc,kH,kW]}) -> {ty [icc,oc,kH,kW]}\n" ++
+    s!"    {o}r = stablehlo.reverse {o}t, dims = [2, 3] : {ty [icc,oc,kH,kW]}\n" ++
+    s!"    {o} = stablehlo.convolution({dh}, {o}r)\n" ++
+    "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+    "      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+    "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+    s!" : ({ty [B,oc,Hh,Ww]}, {ty [icc,oc,kH,kW]}) -> {ty [B,icc,Hh,Ww]}\n"
+  let convWGrad (o inp grad : String) (icc oc Hh Ww : Nat) : String :=
+    s!"    {o}xt = stablehlo.transpose {inp}, dims = [1, 0, 2, 3] : ({ty [B,icc,Hh,Ww]}) -> {ty [icc,B,Hh,Ww]}\n" ++
+    s!"    {o}dt = stablehlo.transpose {grad}, dims = [1, 0, 2, 3] : ({ty [B,oc,Hh,Ww]}) -> {ty [oc,B,Hh,Ww]}\n" ++
+    s!"    {o}raw = stablehlo.convolution({o}xt, {o}dt)\n" ++
+    "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+    "      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+    "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+    s!" : ({ty [icc,B,Hh,Ww]}, {ty [oc,B,Hh,Ww]}) -> {ty [icc,oc,kH,kW]}\n" ++
+    s!"    {o} = stablehlo.transpose {o}raw, dims = [1, 0, 2, 3] : ({ty [icc,oc,kH,kW]}) -> {ty [oc,icc,kH,kW]}\n"
+  let convBiasGrad (o dh : String) (oc Hh Ww : Nat) : String :=
+    s!"    {o} = stablehlo.reduce({dh} init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n"
+  let maxpoolFwd (o a : String) (C Hh Ww : Nat) : String :=
+    s!"    {o}ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+    s!"    {o} = \"stablehlo.reduce_window\"({a}, {o}ninf) (" ++ "{\n" ++
+    "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
+    "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
+    "        stablehlo.return %pm : tensor<f32>\n" ++
+    "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+    s!" : ({ty [B,C,Hh,Ww]}, tensor<f32>) -> {ty [B,C,Hh/2,Ww/2]}\n"
+  let scatter (o src dgrad : String) (C Hh Ww : Nat) : String :=
+    s!"    {o} = \"stablehlo.select_and_scatter\"({src}, {dgrad}, %sc) (" ++ "{\n" ++
+    "      ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):\n" ++
+    "        %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+    "        stablehlo.return %sge : tensor<i1>\n" ++
+    "    }, " ++ "{\n" ++
+    "      ^bb0(%su: tensor<f32>, %sv: tensor<f32>):\n" ++
+    "        %ss = stablehlo.add %su, %sv : tensor<f32>\n" ++
+    "        stablehlo.return %ss : tensor<f32>\n" ++
+    "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+    s!" : ({ty [B,C,Hh,Ww]}, {ty [B,C,Hh/2,Ww/2]}, tensor<f32>) -> {ty [B,C,Hh,Ww]}\n"
+  -- BN forward (per-example, reduce over feature axis [1]); saves {o}_xhat,_istd,_nf.
+  let bnFwd (o x g bt : String) (Mn : Nat) : String :=
+    s!"    {o}_nf = stablehlo.constant dense<{Mn}.0> : {ty [B,Mn]}\n" ++
+    s!"    {o}_ep = stablehlo.constant dense<{epsStr}> : {ty [B,Mn]}\n" ++
+    s!"    {o}_smr = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [B,Mn]}, tensor<f32>) -> {ty [B]}\n" ++
+    s!"    {o}_sm = stablehlo.broadcast_in_dim {o}_smr, dims = [0] : ({ty [B]}) -> {ty [B,Mn]}\n" ++
+    s!"    {o}_mu = stablehlo.divide {o}_sm, {o}_nf : {ty [B,Mn]}\n" ++
+    s!"    {o}_xc = stablehlo.subtract {x}, {o}_mu : {ty [B,Mn]}\n" ++
+    s!"    {o}_sq = stablehlo.multiply {o}_xc, {o}_xc : {ty [B,Mn]}\n" ++
+    s!"    {o}_vsr = stablehlo.reduce({o}_sq init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [B,Mn]}, tensor<f32>) -> {ty [B]}\n" ++
+    s!"    {o}_vs = stablehlo.broadcast_in_dim {o}_vsr, dims = [0] : ({ty [B]}) -> {ty [B,Mn]}\n" ++
+    s!"    {o}_var = stablehlo.divide {o}_vs, {o}_nf : {ty [B,Mn]}\n" ++
+    s!"    {o}_ve = stablehlo.add {o}_var, {o}_ep : {ty [B,Mn]}\n" ++
+    s!"    {o}_istd = stablehlo.rsqrt {o}_ve : {ty [B,Mn]}\n" ++
+    s!"    {o}_xhat = stablehlo.multiply {o}_xc, {o}_istd : {ty [B,Mn]}\n" ++
+    s!"    {o}_gb = stablehlo.broadcast_in_dim {g}, dims = [] : (tensor<f32>) -> {ty [B,Mn]}\n" ++
+    s!"    {o}_bb = stablehlo.broadcast_in_dim {bt}, dims = [] : (tensor<f32>) -> {ty [B,Mn]}\n" ++
+    s!"    {o}_gx = stablehlo.multiply {o}_xhat, {o}_gb : {ty [B,Mn]}\n" ++
+    s!"    {o} = stablehlo.add {o}_gx, {o}_bb : {ty [B,Mn]}\n"
+  -- BN input-VJP (the consolidated three-term form); reuses {bn}_xhat/_istd/_nf.
+  let bnBack (o bn g dyf : String) (Mn : Nat) : String :=
+    s!"    {o}_gb = stablehlo.broadcast_in_dim {g}, dims = [] : (tensor<f32>) -> {ty [B,Mn]}\n" ++
+    s!"    {o}_dxh = stablehlo.multiply {o}_gb, {dyf} : {ty [B,Mn]}\n" ++
+    s!"    {o}_sdxr = stablehlo.reduce({o}_dxh init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [B,Mn]}, tensor<f32>) -> {ty [B]}\n" ++
+    s!"    {o}_sdx = stablehlo.broadcast_in_dim {o}_sdxr, dims = [0] : ({ty [B]}) -> {ty [B,Mn]}\n" ++
+    s!"    {o}_xd = stablehlo.multiply {bn}_xhat, {o}_dxh : {ty [B,Mn]}\n" ++
+    s!"    {o}_sxdr = stablehlo.reduce({o}_xd init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [B,Mn]}, tensor<f32>) -> {ty [B]}\n" ++
+    s!"    {o}_sxd = stablehlo.broadcast_in_dim {o}_sxdr, dims = [0] : ({ty [B]}) -> {ty [B,Mn]}\n" ++
+    s!"    {o}_t1 = stablehlo.multiply {o}_dxh, {bn}_nf : {ty [B,Mn]}\n" ++
+    s!"    {o}_i1 = stablehlo.subtract {o}_t1, {o}_sdx : {ty [B,Mn]}\n" ++
+    s!"    {o}_xs = stablehlo.multiply {bn}_xhat, {o}_sxd : {ty [B,Mn]}\n" ++
+    s!"    {o}_i2 = stablehlo.subtract {o}_i1, {o}_xs : {ty [B,Mn]}\n" ++
+    s!"    {o}_s = stablehlo.divide {bn}_istd, {bn}_nf : {ty [B,Mn]}\n" ++
+    s!"    {o} = stablehlo.multiply {o}_s, {o}_i2 : {ty [B,Mn]}\n"
+  -- BN scalar param grads dγ = Σ dy·x̂, dβ = Σ dy (over batch+feature → scalar).
+  let bnParamGrad (dgr dbe bn dyf : String) (Mn : Nat) : String :=
+    s!"    {dgr}_p = stablehlo.multiply {dyf}, {bn}_xhat : {ty [B,Mn]}\n" ++
+    s!"    {dgr} = stablehlo.reduce({dgr}_p init: %sc) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,Mn]}, tensor<f32>) -> tensor<f32>\n" ++
+    s!"    {dbe} = stablehlo.reduce({dyf} init: %sc) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,Mn]}, tensor<f32>) -> tensor<f32>\n"
+  let rs (o src : String) (dimsFrom dimsTo : List Nat) : String :=
+    s!"    {o} = stablehlo.reshape {src} : ({ty dimsFrom}) -> {ty dimsTo}\n"
+  let sgd (θ dθ ty' : String) : String :=
+    s!"    {θ}l = stablehlo.constant dense<{lr}> : {ty'}\n" ++
+    s!"    {θ}s = stablehlo.multiply {dθ}, {θ}l : {ty'}\n" ++
+    s!"    {θ}n = stablehlo.subtract {θ}, {θ}s : {ty'}\n"
+  "module @m {\n" ++
+  s!"  func.func @cifar_bn_train_step(%x: {ty [B,ic*H*W]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %g1: tensor<f32>, %bt1: tensor<f32>, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %g2: tensor<f32>, %bt2: tensor<f32>, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %g3: tensor<f32>, %bt3: tensor<f32>, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %g4: tensor<f32>, %bt4: tensor<f32>, %W5: {ty [flat,d1]}, %b5: {ty [d1]}, %W6: {ty [d1,d1]}, %b6: {ty [d1]}, %W7: {ty [d1,nClasses]}, %b7: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c1,ic,kH,kW]}, {ty [c1]}, tensor<f32>, tensor<f32>, {ty [c1,c1,kH,kW]}, {ty [c1]}, tensor<f32>, tensor<f32>, {ty [c2,c1,kH,kW]}, {ty [c2]}, tensor<f32>, tensor<f32>, {ty [c2,c2,kH,kW]}, {ty [c2]}, tensor<f32>, tensor<f32>, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  "    // ── forward: (conv→BN→relu)×2→pool →(conv→BN→relu)×2→pool →flatten→(dense→relu)×2→dense ──\n" ++
+  rs "%xr" "%x" [B,ic*H*W] [B,ic,H,W] ++
+  convFwd "%hc1" "%xr" "%W1" "%b1" c1 ic H W ++ rs "%hc1f" "%hc1" [B,c1,H,W] [B,M1] ++
+  bnFwd "%bn1" "%hc1f" "%g1" "%bt1" M1 ++ relu2 "%ac1f" "%bn1" M1 ++ rs "%ac1" "%ac1f" [B,M1] [B,c1,H,W] ++
+  convFwd "%hc2" "%ac1" "%W2" "%b2" c1 c1 H W ++ rs "%hc2f" "%hc2" [B,c1,H,W] [B,M1] ++
+  bnFwd "%bn2" "%hc2f" "%g2" "%bt2" M1 ++ relu2 "%ac2f" "%bn2" M1 ++ rs "%ac2" "%ac2f" [B,M1] [B,c1,H,W] ++
+  maxpoolFwd "%pool1" "%ac2" c1 H W ++
+  convFwd "%hc3" "%pool1" "%W3" "%b3" c2 c1 H2 W2 ++ rs "%hc3f" "%hc3" [B,c2,H2,W2] [B,M2] ++
+  bnFwd "%bn3" "%hc3f" "%g3" "%bt3" M2 ++ relu2 "%ac3f" "%bn3" M2 ++ rs "%ac3" "%ac3f" [B,M2] [B,c2,H2,W2] ++
+  convFwd "%hc4" "%ac3" "%W4" "%b4" c2 c2 H2 W2 ++ rs "%hc4f" "%hc4" [B,c2,H2,W2] [B,M2] ++
+  bnFwd "%bn4" "%hc4f" "%g4" "%bt4" M2 ++ relu2 "%ac4f" "%bn4" M2 ++ rs "%ac4" "%ac4f" [B,M2] [B,c2,H2,W2] ++
+  maxpoolFwd "%pool2" "%ac4" c2 H2 W2 ++
+  rs "%flat" "%pool2" [B,c2,Hp,Wp] [B,flat] ++
+  dense "%h5" "%flat" "%W5" "%b5" flat d1 ++ relu2 "%a5" "%h5" d1 ++
+  dense "%h6" "%a5" "%W6" "%b6" d1 d1 ++ relu2 "%a6" "%h6" d1 ++
+  dense "%logits" "%a6" "%W7" "%b7" d1 nClasses ++
+  "    // ── loss cotangent dy = softmax(logits) − onehot ──\n" ++
+  s!"    %le = stablehlo.exponential %logits : {ty [B,nClasses]}\n" ++
+  s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [B,nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+  s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [B]}) -> {ty [B,nClasses]}\n" ++
+  s!"    %lsm = stablehlo.divide %le, %lsb : {ty [B,nClasses]}\n" ++
+  s!"    %dy = stablehlo.subtract %lsm, %onehot : {ty [B,nClasses]}\n" ++
+  "    // ── backward: dense (dotOut)+relu → scatter → (relu→BN-back→convBack)×stage, twice ──\n" ++
+  dg "%dx7" "%dy" "%W7" "1" "1" (ty [B,nClasses]) (ty [d1,nClasses]) (ty [B,d1]) ++
+  selMask2 "%dy6" "%h6" "%dx7" d1 ++
+  dg "%dx6" "%dy6" "%W6" "1" "1" (ty [B,d1]) (ty [d1,d1]) (ty [B,d1]) ++
+  selMask2 "%dy5" "%h5" "%dx6" d1 ++
+  dg "%dx5" "%dy5" "%W5" "1" "1" (ty [B,d1]) (ty [flat,d1]) (ty [B,flat]) ++
+  rs "%dpool2" "%dx5" [B,flat] [B,c2,Hp,Wp] ++
+  scatter "%dac4" "%ac4" "%dpool2" c2 H2 W2 ++ rs "%dac4f" "%dac4" [B,c2,H2,W2] [B,M2] ++
+  selMask2 "%dbn4" "%bn4" "%dac4f" M2 ++
+  bnBack "%dhc4f" "%bn4" "%g4" "%dbn4" M2 ++ bnParamGrad "%dg4" "%dbt4" "%bn4" "%dbn4" M2 ++
+  rs "%dhc4" "%dhc4f" [B,M2] [B,c2,H2,W2] ++
+  convBack "%dac3" "%dhc4" "%W4" c2 c2 H2 W2 ++ rs "%dac3f" "%dac3" [B,c2,H2,W2] [B,M2] ++
+  selMask2 "%dbn3" "%bn3" "%dac3f" M2 ++
+  bnBack "%dhc3f" "%bn3" "%g3" "%dbn3" M2 ++ bnParamGrad "%dg3" "%dbt3" "%bn3" "%dbn3" M2 ++
+  rs "%dhc3" "%dhc3f" [B,M2] [B,c2,H2,W2] ++
+  convBack "%dpool1" "%dhc3" "%W3" c1 c2 H2 W2 ++
+  scatter "%dac2" "%ac2" "%dpool1" c1 H W ++ rs "%dac2f" "%dac2" [B,c1,H,W] [B,M1] ++
+  selMask2 "%dbn2" "%bn2" "%dac2f" M1 ++
+  bnBack "%dhc2f" "%bn2" "%g2" "%dbn2" M1 ++ bnParamGrad "%dg2" "%dbt2" "%bn2" "%dbn2" M1 ++
+  rs "%dhc2" "%dhc2f" [B,M1] [B,c1,H,W] ++
+  convBack "%dac1" "%dhc2" "%W2" c1 c1 H W ++ rs "%dac1f" "%dac1" [B,c1,H,W] [B,M1] ++
+  selMask2 "%dbn1" "%bn1" "%dac1f" M1 ++
+  bnBack "%dhc1f" "%bn1" "%g1" "%dbn1" M1 ++ bnParamGrad "%dg1" "%dbt1" "%bn1" "%dbn1" M1 ++
+  rs "%dhc1" "%dhc1f" [B,M1] [B,c1,H,W] ++
+  "    // ── param grads: dense W/b; conv dW (transpose trick), db (reduce) ──\n" ++
+  dg "%dW7" "%a6" "%dy" "0" "0" (ty [B,d1]) (ty [B,nClasses]) (ty [d1,nClasses]) ++ reduce0 "%db7" "%dy" nClasses ++
+  dg "%dW6" "%a5" "%dy6" "0" "0" (ty [B,d1]) (ty [B,d1]) (ty [d1,d1]) ++ reduce0 "%db6" "%dy6" d1 ++
+  dg "%dW5" "%flat" "%dy5" "0" "0" (ty [B,flat]) (ty [B,d1]) (ty [flat,d1]) ++ reduce0 "%db5" "%dy5" d1 ++
+  convWGrad "%dW4" "%ac3" "%dhc4" c2 c2 H2 W2 ++ convBiasGrad "%db4" "%dhc4" c2 H2 W2 ++
+  convWGrad "%dW3" "%pool1" "%dhc3" c1 c2 H2 W2 ++ convBiasGrad "%db3" "%dhc3" c2 H2 W2 ++
+  convWGrad "%dW2" "%ac1" "%dhc2" c1 c1 H W ++ convBiasGrad "%db2" "%dhc2" c1 H W ++
+  convWGrad "%dW1" "%xr" "%dhc1" ic c1 H W ++ convBiasGrad "%db1" "%dhc1" c1 H W ++
+  "    // ── SGD θ' = θ − lr·∇ (all 22 params, incl. scalar γ/β) ──\n" ++
+  sgd "%W1" "%dW1" (ty [c1,ic,kH,kW]) ++ sgd "%b1" "%db1" (ty [c1]) ++ sgd "%g1" "%dg1" "tensor<f32>" ++ sgd "%bt1" "%dbt1" "tensor<f32>" ++
+  sgd "%W2" "%dW2" (ty [c1,c1,kH,kW]) ++ sgd "%b2" "%db2" (ty [c1]) ++ sgd "%g2" "%dg2" "tensor<f32>" ++ sgd "%bt2" "%dbt2" "tensor<f32>" ++
+  sgd "%W3" "%dW3" (ty [c2,c1,kH,kW]) ++ sgd "%b3" "%db3" (ty [c2]) ++ sgd "%g3" "%dg3" "tensor<f32>" ++ sgd "%bt3" "%dbt3" "tensor<f32>" ++
+  sgd "%W4" "%dW4" (ty [c2,c2,kH,kW]) ++ sgd "%b4" "%db4" (ty [c2]) ++ sgd "%g4" "%dg4" "tensor<f32>" ++ sgd "%bt4" "%dbt4" "tensor<f32>" ++
+  sgd "%W5" "%dW5" (ty [flat,d1]) ++ sgd "%b5" "%db5" (ty [d1]) ++
+  sgd "%W6" "%dW6" (ty [d1,d1]) ++ sgd "%b6" "%db6" (ty [d1]) ++
+  sgd "%W7" "%dW7" (ty [d1,nClasses]) ++ sgd "%b7" "%db7" (ty [nClasses]) ++
+  s!"    return %W1n, %b1n, %g1n, %bt1n, %W2n, %b2n, %g2n, %bt2n, %W3n, %b3n, %g3n, %bt3n, %W4n, %b4n, %g4n, %bt4n, %W5n, %b5n, %W6n, %b6n, %W7n, %b7n : {ty [c1,ic,kH,kW]}, {ty [c1]}, tensor<f32>, tensor<f32>, {ty [c1,c1,kH,kW]}, {ty [c1]}, tensor<f32>, tensor<f32>, {ty [c2,c1,kH,kW]}, {ty [c2]}, tensor<f32>, tensor<f32>, {ty [c2,c2,kH,kW]}, {ty [c2]}, tensor<f32>, tensor<f32>, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
+  "  }\n}\n"
+
 end StableHLO
 end Proofs
 
@@ -1196,4 +1542,14 @@ end Proofs
        (fun _ => 0))
   -- Chapter 5 CIFAR full SGD train step (32×32 stage-1 spatial; lr = 0.1/128).
   IO.FS.writeFile "verified_mlir/cifar_train_step.mlir"
-    (Proofs.StableHLO.cifarTrainStepText 128 3 32 64 32 32 3 3 512 10 "0.00078125") : IO Unit)
+    (Proofs.StableHLO.cifarTrainStepText 128 3 32 64 32 32 3 3 512 10 "0.00078125")
+  -- Chapter 5 CIFAR **BatchNorm** forward (per-example BN after each conv; ε=1e-5).
+  IO.FS.writeFile "verified_mlir/cifar_bn_fwd.mlir"
+    (Proofs.StableHLO.cifarBnFwdModuleV 128 3 32 64 8 8 512 10 3 3 "1.0e-05"
+       (fun _ _ _ _ => 0) (fun _ => 0) 1 0 0 (fun _ _ _ _ => 0) (fun _ => 0) 1 0 0
+       (fun _ _ _ _ => 0) (fun _ => 0) 1 0 0 (fun _ _ _ _ => 0) (fun _ => 0) 1 0 0
+       (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+       (fun _ => 0))
+  -- Chapter 5 CIFAR **BatchNorm** full SGD train step (ε=1e-5; lr = 0.1/128).
+  IO.FS.writeFile "verified_mlir/cifar_bn_train_step.mlir"
+    (Proofs.StableHLO.cifarBnTrainStepText 128 3 32 64 32 32 3 3 512 10 "1.0e-05" "0.00078125") : IO Unit)

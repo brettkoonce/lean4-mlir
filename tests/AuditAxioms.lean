@@ -262,6 +262,15 @@ open Proofs
 -- condition (first-pool output positionally injective: the four 2×2 window
 -- maxima 6,8,14,16 are distinct, via Nat.cast_max + omega). Non-vacuity witness.
 #print axioms Tiny.cifarTinyCnn_has_vjp_correct
+
+-- Chapter-5 CIFAR **BatchNorm** variant: per-example BN (bnForward, reduce over
+-- the feature vec, scalar γ/β) inserted after each conv. The whole-network VJP
+-- (conv→BN→relu blocks via convBnRelu_has_vjp_at), the verified BN forward-graph
+-- faithfulness, and the typed BN input-VJP op (the consolidated O(N) three-term
+-- gradient = pdiv-Jacobian, bn_input_grad_correct). GPU-trained by `cifar-bn-verified`.
+#print axioms cifarCnnBn_has_vjp_at_correct
+#print axioms StableHLO.cifarBnFwdGraph_faithful
+#print axioms StableHLO.bnBack_faithful
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate

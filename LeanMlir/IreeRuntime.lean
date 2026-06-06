@@ -233,6 +233,28 @@ def shapesBA : ByteArray := packShapes paramShapes
 def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
 end CifarLayout
 
+namespace CifarBnLayout
+/-- BN-CIFAR params: each conv layer carries scalar γ/β (rank-0 `#[]`) after its
+    bias, interleaved as `W|b|γ|β`. 22 params (4×{W,b,γ,β} + 3×{W,b}). Order MUST
+    match `@cifar_bn_train_step`'s signature. -/
+def paramShapes : Array (Array Nat) := #[
+  #[32, 3, 3, 3], #[32], #[], #[],     -- conv0: 3→32  + γ1,β1
+  #[32, 32, 3, 3], #[32], #[], #[],    -- conv1: 32→32 + γ2,β2
+  #[64, 32, 3, 3], #[64], #[], #[],    -- conv2: 32→64 + γ3,β3
+  #[64, 64, 3, 3], #[64], #[], #[],    -- conv3: 64→64 + γ4,β4
+  #[4096, 512], #[512],                -- dense0
+  #[512, 512], #[512],                 -- dense1
+  #[512, 10], #[10]                    -- dense2
+]
+def nParams : Nat :=
+  (32*3*3*3 + 32 + 1 + 1) + (32*32*3*3 + 32 + 1 + 1) +
+  (64*32*3*3 + 64 + 1 + 1) + (64*64*3*3 + 64 + 1 + 1) +
+  4096*512 + 512 + 512*512 + 512 + 512*10 + 10
+def lossIdx : Nat := nParams
+def shapesBA : ByteArray := packShapes paramShapes
+def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
+end CifarBnLayout
+
 def MlpLayout.paramShapes : Array (Array Nat) := #[
   #[784, 512], #[512], #[512, 512], #[512], #[512, 10], #[10]
 ]

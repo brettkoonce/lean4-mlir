@@ -181,6 +181,12 @@ lean_exe «cifar-verified» where
   root := `MainCifarVerified
   moreLinkArgs := ireeLink
 
+-- Chapter 5 (BatchNorm): trains the CIFAR-10 CNN + per-example BN on the
+-- VERIFIED-rendered StableHLO (Proofs.StableHLO.cifarBnTrainStepText).
+lean_exe «cifar-bn-verified» where
+  root := `MainCifarBnVerified
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar-cnn-train» where
   root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink
