@@ -119,6 +119,11 @@ open Proofs
 #print axioms convnext_has_vjp_correct
 #print axioms sigmoid_has_vjp
 #print axioms efficientnet_has_vjp_at_correct
+-- EfficientNet promoted to an UNCONDITIONAL global VJP (all-smooth: swish +
+-- sigmoid SE gate + conv/bn, no kinks) — joins vit_full and convnext.
+-- Only the `0 < ε` batch-norm conditions.
+#print axioms efficientnet_has_vjp
+#print axioms efficientnet_has_vjp_correct
 
 -- Chapter-4 MNIST 2D CNN (no BN): the conditional whole-network capstone,
 -- and the concrete tiny instance with every smoothness hypothesis

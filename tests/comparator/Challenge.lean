@@ -669,6 +669,35 @@ theorem chk_efficientnet_has_vjp_at_correct
                 Wh bh)
              x i j * dy j := by sorry
 
+/-- **`efficientnet_has_vjp_correct` contract (global)**: EfficientNet is
+all-smooth (swish + sigmoid SE gate + conv/bn, no kinks), so its
+whole-network VJP holds at *every* input — the unconditional analogue of
+`vit_full_has_vjp_correct`. -/
+theorem chk_efficientnet_has_vjp_correct
+    {ic c cmid₁ cout cmid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁
+      kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ r₁ r₂ nClasses : Nat}
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ) (hεs : 0 < εs)
+    (We₁ : Kernel4 cmid₁ c kHe₁ kWe₁) (be₁ : Vec cmid₁) (εe₁ γe₁ βe₁ : ℝ) (hεe₁ : 0 < εe₁)
+    (Wd₁ : DepthwiseKernel cmid₁ kHd₁ kWd₁) (bd₁ : Vec cmid₁) (εd₁ γd₁ βd₁ : ℝ) (hεd₁ : 0 < εd₁)
+    (Ws₁₁ : Mat cmid₁ r₁) (bs₁₁ : Vec r₁) (Ws₁₂ : Mat r₁ cmid₁) (bs₁₂ : Vec cmid₁)
+    (Wp₁ : Kernel4 c cmid₁ kHp₁ kWp₁) (bp₁ : Vec c) (εp₁ γp₁ βp₁ : ℝ) (hεp₁ : 0 < εp₁)
+    (We₂ : Kernel4 cmid₂ c kHe₂ kWe₂) (be₂ : Vec cmid₂) (εe₂ γe₂ βe₂ : ℝ) (hεe₂ : 0 < εe₂)
+    (Wd₂ : DepthwiseKernel cmid₂ kHd₂ kWd₂) (bd₂ : Vec cmid₂) (εd₂ γd₂ βd₂ : ℝ) (hεd₂ : 0 < εd₂)
+    (Ws₂₁ : Mat cmid₂ r₂) (bs₂₁ : Vec r₂) (Ws₂₂ : Mat r₂ cmid₂) (bs₂₂ : Vec cmid₂)
+    (Wp₂ : Kernel4 cout cmid₂ kHp₂ kWp₂) (bp₂ : Vec cout) (εp₂ γp₂ βp₂ : ℝ) (hεp₂ : 0 < εp₂)
+    (Wh : Mat cout nClasses) (bh : Vec nClasses)
+    (x : Vec (ic * h * w)) (dy : Vec nClasses) (i : Fin (ic * h * w)) :
+    (efficientnet_has_vjp (h := h) (w := w) Ws bs εs γs βs hεs
+        We₁ be₁ εe₁ γe₁ βe₁ hεe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ hεd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ hεp₁
+        We₂ be₂ εe₂ γe₂ βe₂ hεe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ hεd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ hεp₂
+        Wh bh).backward x dy i =
+      ∑ j : Fin nClasses,
+        pdiv (efficientnetForward Ws bs εs γs βs
+                We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁
+                We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂
+                Wh bh)
+             x i j * dy j := by sorry
+
 -- Pointwise (`_at`) variants — closures of the smooth-point bridge ──
 
 /-- **`relu_has_vjp_at` contract**: the pointwise (smooth-input)

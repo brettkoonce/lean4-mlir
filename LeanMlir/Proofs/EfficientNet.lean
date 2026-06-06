@@ -359,12 +359,23 @@ theorem mbconvBody_differentiable {cin cmid cout h w kHe kWe kHd kWd kHp kWp r :
 -- § Residual MBConv (stride-1, cin = cout = c): identity skip
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Residual MBConv VJP at a point.** When stride is 1 and
-    `cin = cout = c`, the MBConv body's input and output shapes match, so
-    the identity skip connection applies: `residual (mbconvBody …)`.
-    Since the body is differentiable everywhere (global `HasVJP`), the
-    pointwise residual VJP follows from `residual_has_vjp_at` with the
-    body lifted via `.toHasVJPAt`. -/
+/-- **Residual MBConv VJP (global).** When stride is 1 and `cin = cout = c`,
+    the MBConv body's input and output shapes match, so the identity skip
+    applies: `residual (mbconvBody …)`. The body is differentiable
+    everywhere (global `HasVJP`), so the residual VJP is global too. -/
+noncomputable def mbconvResidual_has_vjp {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
+    (We : Kernel4 cmid c kHe kWe) (be : Vec cmid) (εe γe βe : ℝ) (hεe : 0 < εe)
+    (Wd : DepthwiseKernel cmid kHd kWd) (bd : Vec cmid) (εd γd βd : ℝ) (hεd : 0 < εd)
+    (Ws₁ : Mat cmid r) (bs₁ : Vec r) (Ws₂ : Mat r cmid) (bs₂ : Vec cmid)
+    (Wp : Kernel4 c cmid kHp kWp) (bp : Vec c) (εp γp βp : ℝ) (hεp : 0 < εp) :
+    HasVJP (residual (mbconvBody (h := h) (w := w)
+        We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp)) :=
+  residual_has_vjp _
+    (mbconvBody_differentiable We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp)
+    (mbconvBody_has_vjp We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp)
+
+/-- **Residual MBConv VJP at a point** — the global witness restricted to a
+    point. Kept for downstream `_at` consumers. -/
 noncomputable def mbconvResidual_has_vjp_at {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
     (We : Kernel4 cmid c kHe kWe) (be : Vec cmid) (εe γe βe : ℝ) (hεe : 0 < εe)
     (Wd : DepthwiseKernel cmid kHd kWd) (bd : Vec cmid) (εd γd βd : ℝ) (hεd : 0 < εd)
@@ -373,9 +384,8 @@ noncomputable def mbconvResidual_has_vjp_at {c cmid h w kHe kWe kHd kWd kHp kWp 
     (x : Vec (c * h * w)) :
     HasVJPAt (residual (mbconvBody (h := h) (w := w)
         We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp)) x :=
-  residual_has_vjp_at _ x
-    ((mbconvBody_differentiable We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp) x)
-    ((mbconvBody_has_vjp We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp).toHasVJPAt x)
+  (mbconvResidual_has_vjp We be εe γe βe hεe Wd bd εd γd βd hεd
+    Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp).toHasVJPAt x
 
 theorem mbconvResidual_differentiable {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
     (We : Kernel4 cmid c kHe kWe) (be : Vec cmid) (εe γe βe : ℝ) (hεe : 0 < εe)
@@ -437,6 +447,65 @@ noncomputable def efficientnetForward
     We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁) ∘
   (swish (c * h * w) ∘ bnForward (c * h * w) εs γs βs ∘ flatConv Ws bs)
 
+/-- **End-to-end EfficientNet VJP (global).** Every block is smooth
+    everywhere (swish + sigmoid SE gate + convs + BN, no ReLU/maxpool), so
+    the only hypotheses are the `0 < ε` batch-norm conditions and the VJP
+    holds at *every* input — putting EfficientNet alongside
+    `vit_full_has_vjp` and `convnext_has_vjp` as an unconditional
+    whole-network VJP. Chained through the global `vjp_comp`. -/
+noncomputable def efficientnet_has_vjp
+    {ic c cmid₁ cout cmid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁
+      kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ r₁ r₂ nClasses : Nat}
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ) (hεs : 0 < εs)
+    (We₁ : Kernel4 cmid₁ c kHe₁ kWe₁) (be₁ : Vec cmid₁) (εe₁ γe₁ βe₁ : ℝ) (hεe₁ : 0 < εe₁)
+    (Wd₁ : DepthwiseKernel cmid₁ kHd₁ kWd₁) (bd₁ : Vec cmid₁) (εd₁ γd₁ βd₁ : ℝ) (hεd₁ : 0 < εd₁)
+    (Ws₁₁ : Mat cmid₁ r₁) (bs₁₁ : Vec r₁) (Ws₁₂ : Mat r₁ cmid₁) (bs₁₂ : Vec cmid₁)
+    (Wp₁ : Kernel4 c cmid₁ kHp₁ kWp₁) (bp₁ : Vec c) (εp₁ γp₁ βp₁ : ℝ) (hεp₁ : 0 < εp₁)
+    (We₂ : Kernel4 cmid₂ c kHe₂ kWe₂) (be₂ : Vec cmid₂) (εe₂ γe₂ βe₂ : ℝ) (hεe₂ : 0 < εe₂)
+    (Wd₂ : DepthwiseKernel cmid₂ kHd₂ kWd₂) (bd₂ : Vec cmid₂) (εd₂ γd₂ βd₂ : ℝ) (hεd₂ : 0 < εd₂)
+    (Ws₂₁ : Mat cmid₂ r₂) (bs₂₁ : Vec r₂) (Ws₂₂ : Mat r₂ cmid₂) (bs₂₂ : Vec cmid₂)
+    (Wp₂ : Kernel4 cout cmid₂ kHp₂ kWp₂) (bp₂ : Vec cout) (εp₂ γp₂ βp₂ : ℝ) (hεp₂ : 0 < εp₂)
+    (Wh : Mat cout nClasses) (bh : Vec nClasses) :
+    HasVJP (efficientnetForward (h := h) (w := w) Ws bs εs γs βs
+        We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁
+        We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂
+        Wh bh) := by
+  unfold efficientnetForward
+  set STEM := swish (c * h * w) ∘ bnForward (c * h * w) εs γs βs ∘ flatConv Ws bs with hSTEM
+  have stem_diff : Differentiable ℝ STEM := convBnSwish_differentiable Ws bs εs γs βs hεs
+  have stem_vjp : HasVJP STEM := convBnSwish_has_vjp Ws bs εs γs βs hεs
+  set MB1 := residual (mbconvBody (h := h) (w := w)
+    We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁) with hMB1
+  have mb1_diff : Differentiable ℝ MB1 :=
+    mbconvResidual_differentiable We₁ be₁ εe₁ γe₁ βe₁ hεe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ hεd₁
+      Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ hεp₁
+  have mb1_vjp : HasVJP MB1 :=
+    mbconvResidual_has_vjp We₁ be₁ εe₁ γe₁ βe₁ hεe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ hεd₁
+      Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ hεp₁
+  set MB2 := mbconvBody (h := h) (w := w)
+    We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ with hMB2
+  have mb2_diff : Differentiable ℝ MB2 :=
+    mbconvBody_differentiable We₂ be₂ εe₂ γe₂ βe₂ hεe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ hεd₂
+      Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ hεp₂
+  have mb2_vjp : HasVJP MB2 :=
+    mbconvBody_has_vjp We₂ be₂ εe₂ γe₂ βe₂ hεe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ hεd₂
+      Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ hεp₂
+  have s1_vjp : HasVJP (MB1 ∘ STEM) := vjp_comp STEM MB1 stem_diff mb1_diff stem_vjp mb1_vjp
+  have s1_diff : Differentiable ℝ (MB1 ∘ STEM) := mb1_diff.comp stem_diff
+  have s2_vjp : HasVJP (MB2 ∘ (MB1 ∘ STEM)) := vjp_comp (MB1 ∘ STEM) MB2 s1_diff mb2_diff s1_vjp mb2_vjp
+  have s2_diff : Differentiable ℝ (MB2 ∘ (MB1 ∘ STEM)) := mb2_diff.comp s1_diff
+  set P2 := MB2 ∘ (MB1 ∘ STEM) with hP2
+  have gap_diff : Differentiable ℝ (globalAvgPoolFlat cout h w) := globalAvgPoolFlat_differentiable cout h w
+  have gap_vjp : HasVJP (globalAvgPoolFlat cout h w) := globalAvgPoolFlat_has_vjp cout h w
+  have s3_vjp : HasVJP (globalAvgPoolFlat cout h w ∘ P2) :=
+    vjp_comp P2 (globalAvgPoolFlat cout h w) s2_diff gap_diff s2_vjp gap_vjp
+  have s3_diff : Differentiable ℝ (globalAvgPoolFlat cout h w ∘ P2) := gap_diff.comp s2_diff
+  exact vjp_comp (globalAvgPoolFlat cout h w ∘ P2) (dense Wh bh) s3_diff
+    (dense_differentiable Wh bh) s3_vjp (dense_has_vjp Wh bh)
+
+/-- **End-to-end EfficientNet VJP at a point** — the global witness
+    restricted to a point. Kept for downstream `_at` consumers and the
+    comparator. -/
 noncomputable def efficientnet_has_vjp_at
     {ic c cmid₁ cout cmid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁
       kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ r₁ r₂ nClasses : Nat}
@@ -454,51 +523,44 @@ noncomputable def efficientnet_has_vjp_at
     HasVJPAt (efficientnetForward Ws bs εs γs βs
         We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁
         We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂
-        Wh bh) x := by
-  unfold efficientnetForward
-  -- stem (conv-bn-swish), global
-  set STEM := swish (c * h * w) ∘ bnForward (c * h * w) εs γs βs ∘ flatConv Ws bs with hSTEM
-  have stem_diff : Differentiable ℝ STEM := convBnSwish_differentiable Ws bs εs γs βs hεs
-  have stem_vjp : HasVJPAt STEM x := (convBnSwish_has_vjp Ws bs εs γs βs hεs).toHasVJPAt x
-  -- MBConv₁ residual
-  set MB1 := residual (mbconvBody (h := h) (w := w)
-    We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁) with hMB1
-  have mb1_diff : Differentiable ℝ MB1 :=
-    mbconvResidual_differentiable We₁ be₁ εe₁ γe₁ βe₁ hεe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ hεd₁
-      Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ hεp₁
-  have mb1_vjp : HasVJPAt MB1 (STEM x) :=
-    mbconvResidual_has_vjp_at We₁ be₁ εe₁ γe₁ βe₁ hεe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ hεd₁
-      Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ hεp₁ (STEM x)
-  -- MBConv₂ no skip, global
-  set MB2 := mbconvBody (h := h) (w := w)
-    We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ with hMB2
-  have mb2_diff : Differentiable ℝ MB2 :=
-    mbconvBody_differentiable We₂ be₂ εe₂ γe₂ βe₂ hεe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ hεd₂
-      Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ hεp₂
-  have mb2_vjp : HasVJPAt MB2 (MB1 (STEM x)) :=
-    (mbconvBody_has_vjp We₂ be₂ εe₂ γe₂ βe₂ hεe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ hεd₂
-      Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ hεp₂).toHasVJPAt (MB1 (STEM x))
-  -- compose s1 = MB1 ∘ STEM
-  have s1_vjp : HasVJPAt (MB1 ∘ STEM) x :=
-    vjp_comp_at STEM MB1 x (stem_diff x) (mb1_diff _) stem_vjp mb1_vjp
-  have s1_diff : DifferentiableAt ℝ (MB1 ∘ STEM) x := (mb1_diff _).comp x (stem_diff x)
-  -- compose s2 = MB2 ∘ (MB1 ∘ STEM)
-  have s2_vjp : HasVJPAt (MB2 ∘ (MB1 ∘ STEM)) x :=
-    vjp_comp_at (MB1 ∘ STEM) MB2 x s1_diff (mb2_diff _) s1_vjp mb2_vjp
-  have s2_diff : DifferentiableAt ℝ (MB2 ∘ (MB1 ∘ STEM)) x := (mb2_diff _).comp x s1_diff
-  -- compose s3 = GAP ∘ (above), global lift
-  set P2 := MB2 ∘ (MB1 ∘ STEM) with hP2
-  have gap_diff : DifferentiableAt ℝ (globalAvgPoolFlat cout h w) (P2 x) :=
-    (globalAvgPoolFlat_differentiable cout h w) (P2 x)
-  have s3_vjp : HasVJPAt (globalAvgPoolFlat cout h w ∘ P2) x :=
-    vjp_comp_at P2 (globalAvgPoolFlat cout h w) x s2_diff gap_diff s2_vjp
-      ((globalAvgPoolFlat_has_vjp cout h w).toHasVJPAt (P2 x))
-  have s3_diff : DifferentiableAt ℝ (globalAvgPoolFlat cout h w ∘ P2) x :=
-    gap_diff.comp x s2_diff
-  -- compose s4 = dense head ∘ (above), global lift
-  exact vjp_comp_at (globalAvgPoolFlat cout h w ∘ P2) (dense Wh bh) x s3_diff
-    ((dense_differentiable Wh bh) _) s3_vjp
-    ((dense_has_vjp Wh bh).toHasVJPAt _)
+        Wh bh) x :=
+  (efficientnet_has_vjp (h := h) (w := w) Ws bs εs γs βs hεs
+      We₁ be₁ εe₁ γe₁ βe₁ hεe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ hεd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ hεp₁
+      We₂ be₂ εe₂ γe₂ βe₂ hεe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ hεd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ hεp₂
+      Wh bh).toHasVJPAt x
+
+/-- **Public correctness theorem for `efficientnet_has_vjp` (global)** — the
+    full EfficientNet's backward equals the `pdiv`-contracted Jacobian
+    (Jacobian-transpose on the cotangent), at *every* input `x`. The
+    unconditional EfficientNet analogue of `vit_full_has_vjp_correct`. -/
+theorem efficientnet_has_vjp_correct
+    {ic c cmid₁ cout cmid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁
+      kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ r₁ r₂ nClasses : Nat}
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ) (hεs : 0 < εs)
+    (We₁ : Kernel4 cmid₁ c kHe₁ kWe₁) (be₁ : Vec cmid₁) (εe₁ γe₁ βe₁ : ℝ) (hεe₁ : 0 < εe₁)
+    (Wd₁ : DepthwiseKernel cmid₁ kHd₁ kWd₁) (bd₁ : Vec cmid₁) (εd₁ γd₁ βd₁ : ℝ) (hεd₁ : 0 < εd₁)
+    (Ws₁₁ : Mat cmid₁ r₁) (bs₁₁ : Vec r₁) (Ws₁₂ : Mat r₁ cmid₁) (bs₁₂ : Vec cmid₁)
+    (Wp₁ : Kernel4 c cmid₁ kHp₁ kWp₁) (bp₁ : Vec c) (εp₁ γp₁ βp₁ : ℝ) (hεp₁ : 0 < εp₁)
+    (We₂ : Kernel4 cmid₂ c kHe₂ kWe₂) (be₂ : Vec cmid₂) (εe₂ γe₂ βe₂ : ℝ) (hεe₂ : 0 < εe₂)
+    (Wd₂ : DepthwiseKernel cmid₂ kHd₂ kWd₂) (bd₂ : Vec cmid₂) (εd₂ γd₂ βd₂ : ℝ) (hεd₂ : 0 < εd₂)
+    (Ws₂₁ : Mat cmid₂ r₂) (bs₂₁ : Vec r₂) (Ws₂₂ : Mat r₂ cmid₂) (bs₂₂ : Vec cmid₂)
+    (Wp₂ : Kernel4 cout cmid₂ kHp₂ kWp₂) (bp₂ : Vec cout) (εp₂ γp₂ βp₂ : ℝ) (hεp₂ : 0 < εp₂)
+    (Wh : Mat cout nClasses) (bh : Vec nClasses)
+    (x : Vec (ic * h * w)) (dy : Vec nClasses) (i : Fin (ic * h * w)) :
+    (efficientnet_has_vjp (h := h) (w := w) Ws bs εs γs βs hεs
+        We₁ be₁ εe₁ γe₁ βe₁ hεe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ hεd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ hεp₁
+        We₂ be₂ εe₂ γe₂ βe₂ hεe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ hεd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ hεp₂
+        Wh bh).backward x dy i =
+      ∑ j : Fin nClasses,
+        pdiv (efficientnetForward Ws bs εs γs βs
+                We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁
+                We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂
+                Wh bh)
+             x i j * dy j :=
+  (efficientnet_has_vjp (h := h) (w := w) Ws bs εs γs βs hεs
+      We₁ be₁ εe₁ γe₁ βe₁ hεe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ hεd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ hεp₁
+      We₂ be₂ εe₂ γe₂ βe₂ hεe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ hεd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ hεp₂
+      Wh bh).correct x dy i
 
 /-- **Public correctness theorem for `efficientnet_has_vjp_at`** — exposes
     the witness's `.correct` field: the full EfficientNet's backward equals
