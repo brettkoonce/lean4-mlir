@@ -11,7 +11,7 @@ in one fused function), compile to GPU via IREE, train end-to-end. No Python
 runtime, no autograd library — the gradients are computed at codegen time
 in Lean.
 
-Companion code for the upcoming book *Verified Deep Learning with Lean4*
+Companion code for the upcoming book *Verified Deep Learning with Lean 4*
 (follow-up to [Convolutional Neural Networks with Swift for TensorFlow](https://doi.org/10.1007/978-1-4842-6168-2), Apress).
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg)](https://doi.org/10.5281/zenodo.20402133)
@@ -451,7 +451,7 @@ ROCm 7.2.0 / gfx1100.
 ```bibtex
 @software{koonce2026leanmlir,
   author  = {Brett Koonce},
-  title   = {Verified Deep Learning with Lean4: Formal Backpropagation from MLP to Attention, via MLIR},
+  title   = {Verified Deep Learning with Lean 4: Formal Backpropagation from MLP to Attention, via MLIR},
   url     = {https://github.com/brettkoonce/lean4-mlir},
   doi     = {10.5281/zenodo.20402133},
   version = {0.6.0},
