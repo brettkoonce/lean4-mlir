@@ -614,6 +614,31 @@ theorem chk_convnext_has_vjp_at_correct
           Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
           εhd γhd βhd Wd bd) x i j * dy j := by sorry
 
+/-- **`convnext_has_vjp_correct` contract (global)**: ConvNeXt is all-smooth
+(LayerNorm + GELU, no kinks), so its whole-network VJP holds at *every*
+input — the unconditional analogue of `vit_full_has_vjp_correct`. -/
+theorem chk_convnext_has_vjp_correct
+    {ic c cExp h w kH kW nClasses : Nat}
+    (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ) (hεst : 0 < εst)
+    (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ) (hεn₁ : 0 < εn₁)
+    (Wex₁ : Kernel4 cExp c 1 1) (bex₁ : Vec cExp)
+    (Wpr₁ : Kernel4 c cExp 1 1) (bpr₁ : Vec c) (γls₁ : Vec (c * h * w))
+    (Wdw₂ : DepthwiseKernel c kH kW) (bdw₂ : Vec c) (εn₂ γn₂ βn₂ : ℝ) (hεn₂ : 0 < εn₂)
+    (Wex₂ : Kernel4 cExp c 1 1) (bex₂ : Vec cExp)
+    (Wpr₂ : Kernel4 c cExp 1 1) (bpr₂ : Vec c) (γls₂ : Vec (c * h * w))
+    (εhd γhd βhd : ℝ) (hεhd : 0 < εhd)
+    (Wd : Mat c nClasses) (bd : Vec nClasses)
+    (x : Vec (ic * h * w)) (dy : Vec nClasses) (i : Fin (ic * h * w)) :
+    (convnext_has_vjp Wst bst εst γst βst hεst
+      Wdw₁ bdw₁ εn₁ γn₁ βn₁ hεn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
+      Wdw₂ bdw₂ εn₂ γn₂ βn₂ hεn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
+      εhd γhd βhd hεhd Wd bd).backward x dy i =
+      ∑ j : Fin nClasses,
+        pdiv (convNextForward Wst bst εst γst βst
+          Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
+          Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
+          εhd γhd βhd Wd bd) x i j * dy j := by sorry
+
 /-- **`efficientnet_has_vjp_at` contract**: the pointwise (smooth-input)
 variant for the full EfficientNet — backward equals the `pdiv`-contracted
 Jacobian. Chains `vjp_comp_at` through stem → two MBConv blocks (expand →

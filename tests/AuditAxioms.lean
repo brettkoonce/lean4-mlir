@@ -112,6 +112,11 @@ open Proofs
 #print axioms mobilenetv2_has_vjp_at_correct
 #print axioms layerScale_has_vjp_correct
 #print axioms convnext_has_vjp_at_correct
+-- ConvNeXt promoted to an UNCONDITIONAL global VJP (all-smooth: LN+GELU, no
+-- kinks) — joins vit_full as a whole-net VJP holding at every input, not a
+-- fixed point. Only the four `0 < ε` LayerNorm conditions.
+#print axioms convnext_has_vjp
+#print axioms convnext_has_vjp_correct
 #print axioms sigmoid_has_vjp
 #print axioms efficientnet_has_vjp_at_correct
 
