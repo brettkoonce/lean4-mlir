@@ -147,6 +147,11 @@ open Proofs
 -- Chapter-3 MLP: concrete whole-network instance, every ReLU smoothness
 -- hypothesis discharged (unconditional) — the simplest kinked capstone.
 #print axioms MlpConcrete.mlpConcrete_has_vjp_correct
+-- ResNet-style CNN *with* BN: concrete whole-network instance, every
+-- smoothness hypothesis discharged (injective stem for maxpool no-ties +
+-- exact-istd BN positivity; resblocks via γ=0). The last conditional
+-- capstone instantiated.
+#print axioms CnnConcrete.cnnConcrete_has_vjp_correct
 
 -- Denoted StableHLO-subset IR (Phase 0a/0b spike, planning/typed_ir.md):
 -- the emitted backward graph denotes the proven HasVJP.backward.

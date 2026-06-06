@@ -817,4 +817,150 @@ theorem mlpConcrete_has_vjp_correct (dy : Vec 2) (i : Fin 2) :
 
 end MlpConcrete
 
+-- ════════════════════════════════════════════════════════════════
+-- ResNet-style CNN *with* BatchNorm: a concrete whole-network instance
+-- with every smoothness hypothesis discharged — the `cnn_has_vjp_at`
+-- analogue of the BN-free Micro/Mini/Spatial instances, and the last
+-- conditional capstone to be instantiated. The maxpool `MaxPool2Smooth`
+-- forbids the constant trick (constant ties every window), so the stem
+-- must be genuinely injective: a 1×1 identity conv on an injective input,
+-- with ε chosen so BN's istd is exact (var+ε a perfect square), giving
+-- distinct positive BN outputs. Resblocks (post-maxpool, here Vec 1) use
+-- BN γ=0 → constant. Inside the three-axiom closure.
+-- ════════════════════════════════════════════════════════════════
+
+open Finset BigOperators
+
+/-- BN with γ = 0 collapses to the constant shift β (no input constraint) —
+    discharges the resblock smoothness conditions, whose BN inputs need not
+    be constant. -/
+theorem bnForward_gamma_zero {n : Nat} (ε β : ℝ) (v : Vec n) :
+    bnForward n ε 0 β v = (fun _ => β) := by
+  funext k; simp [bnForward, bnXhat]
+
+namespace CnnConcrete
+
+-- ic=c=oc=1, h=w=1 (stem spatial 2×2), nClasses=2. Stem: 1×1 identity conv,
+-- BN (ε=11/4, γ=1, β=10) ⇒ bn(X) = [9.25,9.75,10.25,10.75] (distinct,
+-- positive). Resblocks: all BN γ=0 → constant.
+noncomputable def Ws  : Kernel4 1 1 1 1 := fun _ _ _ _ => 1
+noncomputable def bs  : Vec 1 := fun _ => 0
+noncomputable def X   : Vec (1 * (2*1) * (2*1)) := fun i => (i.val : ℝ)
+noncomputable def W₁  : Kernel4 1 1 1 1 := fun _ _ _ _ => 0
+noncomputable def b₁  : Vec 1 := fun _ => 0
+noncomputable def W₂  : Kernel4 1 1 1 1 := fun _ _ _ _ => 0
+noncomputable def b₂  : Vec 1 := fun _ => 0
+noncomputable def W₁' : Kernel4 1 1 1 1 := fun _ _ _ _ => 0
+noncomputable def b₁' : Vec 1 := fun _ => 0
+noncomputable def W₂' : Kernel4 1 1 1 1 := fun _ _ _ _ => 0
+noncomputable def b₂' : Vec 1 := fun _ => 0
+noncomputable def Wp  : Kernel4 1 1 1 1 := fun _ _ _ _ => 0
+noncomputable def bp  : Vec 1 := fun _ => 0
+noncomputable def Wd  : Mat 1 2 := fun _ _ => 0
+noncomputable def bd  : Vec 2 := fun _ => 0
+
+/-- The 1×1 identity stem conv is the identity on the (flattened) input. -/
+theorem flatConvWs : flatConv (h := 2*1) (w := 2*1) Ws bs X = X := by
+  have hc : conv2d Ws bs (Tensor3.unflatten X) = Tensor3.unflatten X := by
+    funext o hi wi
+    rw [conv2d_1x1]
+    simp only [bs, Ws, Fin.sum_univ_one, one_mul, zero_add]
+    congr 1
+    exact (Fin.fin_one_eq_zero o).symm ▸ rfl
+  simp only [flatConv, hc, Tensor3.flatten_unflatten]
+
+theorem bnMeanX : bnMean (1 * (2*1) * (2*1)) X = 3/2 := by
+  unfold bnMean
+  change (∑ i : Fin 4, X i) / ((4:ℕ):ℝ) = 3/2
+  rw [Fin.sum_univ_four]; norm_num [X]
+
+theorem bnVarX : bnVar (1 * (2*1) * (2*1)) X = 5/4 := by
+  unfold bnVar
+  rw [bnMeanX]
+  change (∑ i : Fin 4, (X i - 3/2) * (X i - 3/2)) / ((4:ℕ):ℝ) = 5/4
+  rw [Fin.sum_univ_four]; norm_num [X]
+
+theorem bnIstdX : bnIstd (1 * (2*1) * (2*1)) X (11/4) = 1/2 := by
+  unfold bnIstd
+  rw [bnVarX, show (5/4 + 11/4 : ℝ) = 2^2 by norm_num, Real.sqrt_sq (by norm_num)]
+
+theorem bnX_eq (k : Fin (1 * (2*1) * (2*1))) :
+    bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X k = (X k - 3/2) * (1/2) + 10 := by
+  unfold bnForward bnXhat
+  rw [bnMeanX, bnIstdX]; ring
+
+theorem bnX_pos (k : Fin (1 * (2*1) * (2*1))) :
+    0 < bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X k := by
+  rw [bnX_eq]
+  have hx : 0 ≤ X k := by simp only [X]; positivity
+  nlinarith [hx]
+
+theorem bnX_inj : Function.Injective (bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X) := by
+  intro a b hab
+  rw [bnX_eq, bnX_eq] at hab
+  have hXab : X a = X b := by linarith
+  have : (a.val : ℝ) = (b.val : ℝ) := by simpa [X] using hXab
+  exact Fin.ext (by exact_mod_cast this)
+
+/-- `cbr X` collapses to `bn X` (identity conv, then relu of a positive). -/
+theorem cbrX : cbr (h := 2*1) (w := 2*1) Ws bs (11/4) 1 10 X
+    = bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X := by
+  show relu _ (bnForward _ (11/4) 1 10 (flatConv Ws bs X)) = _
+  rw [flatConvWs]
+  exact relu_id_of_pos (fun k => bnX_pos k)
+
+/-- **Whole-network VJP for a concrete ResNet-style CNN with BatchNorm** —
+    every smoothness hypothesis discharged: the stem produces distinct
+    positive BN outputs (so maxpool has no ties and `bn ≠ 0`), and the
+    resblock BNs use γ=0 (constant). -/
+noncomputable def cnnConcrete_has_vjp_at :
+    HasVJPAt (cnnForward Ws bs (11/4) 1 10 W₁ b₁ W₂ b₂ 1 0 1 1 0 1
+      W₁' b₁' W₂' b₂' Wp bp 1 0 1 1 0 1 1 0 1 Wd bd) X :=
+  cnn_has_vjp_at Ws bs (11/4) 1 10 (by norm_num)
+    W₁ b₁ W₂ b₂ 1 0 1 1 0 1 (by norm_num) (by norm_num)
+    W₁' b₁' W₂' b₂' Wp bp
+    1 0 1 1 0 1 1 0 1 (by norm_num) (by norm_num) (by norm_num)
+    Wd bd (by norm_num) (by norm_num) (by norm_num) X
+    -- h_stem
+    (fun k => ne_of_gt (by rw [flatConvWs]; exact bnX_pos k))
+    -- h_mp (maxpool no ties): the stem output is positionally injective
+    (by
+      rw [cbrX]
+      apply maxPool2Smooth_of_injective
+      intro ci r r' s s' heq
+      simp only [Tensor3.unflatten] at heq
+      have h1 := bnX_inj heq
+      have h2 := finProdFinEquiv.injective h1
+      have h3 : (finProdFinEquiv (ci, r)) = (finProdFinEquiv (ci, r')) := congrArg Prod.fst h2
+      have h4 : s = s' := congrArg Prod.snd h2
+      have h5 := finProdFinEquiv.injective h3
+      exact ⟨congrArg Prod.snd h5, h4⟩)
+    -- h_rb1
+    (fun k => by rw [bnForward_gamma_zero]; norm_num)
+    -- h_rb1o
+    (fun k => by
+      have hmp : 0 < maxPoolFlat 1 1 1 (bnForward (1*(2*1)*(2*1)) (11/4) 1 10 X) k :=
+        flatten_pos_of_pos (fun ci hi wi =>
+          maxPool2_pos (fun _ _ _ => bnX_pos _) ci hi wi) k
+      simp only [Function.comp_apply]
+      rw [bnForward_gamma_zero, flatConvWs, relu_id_of_pos (fun k => bnX_pos k)]
+      show (1:ℝ) + maxPoolFlat 1 1 1 (bnForward (1*(2*1)*(2*1)) (11/4) 1 10 X) k ≠ 0
+      exact ne_of_gt (by linarith))
+    -- h_rb2
+    (fun k => by rw [bnForward_gamma_zero]; norm_num)
+    -- h_rb2o
+    (fun k => by
+      simp only [Function.comp_apply]
+      rw [bnForward_gamma_zero, bnForward_gamma_zero]; norm_num)
+
+/-- **Public unconditional correctness theorem** — the concrete CNN's
+    backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
+theorem cnnConcrete_has_vjp_correct (dy : Vec 2) (i : Fin (1 * (2*1) * (2*1))) :
+    cnnConcrete_has_vjp_at.backward dy i =
+      ∑ j : Fin 2, pdiv (cnnForward Ws bs (11/4) 1 10 W₁ b₁ W₂ b₂ 1 0 1 1 0 1
+        W₁' b₁' W₂' b₂' Wp bp 1 0 1 1 0 1 1 0 1 Wd bd) X i j * dy j :=
+  cnnConcrete_has_vjp_at.correct dy i
+
+end CnnConcrete
+
 end Proofs
