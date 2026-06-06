@@ -305,3 +305,45 @@ All four typecheck under the current build. The author can land the
 bridge theorem into `MLP.lean` as a one-line move, integrate
 `AuditAxioms.lean` into CI alongside the comparator, and treat the
 doc-drift fixes as a single small PR.
+
+---
+
+## Status update — 2026-06-06
+
+The audit above is preserved as a dated snapshot; this section supersedes it
+where they differ.
+
+**Counts.** Headline `#print axioms` checks: 47 → **114**
+(`tests/AuditAxioms.lean`), all still closing under exactly
+`[propext, Classical.choice, Quot.sound]`. Independent comparator re-check:
+38 → **51** theorems (`tests/comparator/config.json`).
+
+**Findings resolved.**
+
+- **B.1 / E.1, E.2 (vacuous-witness bridge).** Landed and axiom-audited:
+  `relu_codegen_matches_canonical` (`MLP.lean:446`) and
+  `maxPool2_codegen_matches_canonical` (`CNN.lean:2291`).
+- **B.3 / E.5 (pointwise framework).** `HasVJPAt` + `vjp_comp_at`
+  (`Tensor.lean:322,342`) and `mlp_has_vjp_at` (`MLP.lean:549`) are landed and
+  now load-bearing — the CNN-family whole-network VJPs compose through them.
+- **B.2 (Mathlib `Matrix` bridge).** Addressed by
+  `LeanMlir/Proofs/MatBridge.lean` (`Proofs.Mat` ↔ Mathlib `Matrix` via
+  `Matrix.of`).
+- **C / E.3 (doc drift).** The CNN "Summary of axioms" header now reads
+  "Summary of derivations" (`CNN.lean:2423`).
+- **E.4 (CI guardrail).** `tests/AuditAxioms.lean` runs in
+  `.github/workflows/proofs.yml` as a three-axiom-closure gate.
+
+**New since this audit — whole-network VJPs.** Every architecture capstone is
+now either unconditional or concretely instantiated:
+
+- *Unconditional* global `HasVJP` (correct at every input, only `0 < ε`):
+  `vit_full_has_vjp`, `convnext_has_vjp`, `efficientnet_has_vjp`.
+- *Conditional `_at` + a discharged concrete instance*: MLP (`MlpConcrete`),
+  MNIST-CNN (`Spatial`/`Mini`/`Micro`), ResNet (`CnnConcrete`), MobileNetV2
+  (`MobileNetV2Concrete`) — each proving its per-site smoothness bundle
+  jointly satisfiable on the real forward, not vacuous.
+
+**Still open.** The codegen↔proof link remains unproven (reference `ℝ` vs the
+emitted `Float32` StableHLO); `MobileNetV2Concrete` is a degenerate
+(constant-output) witness; the concrete nets are tiny by construction.

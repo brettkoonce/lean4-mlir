@@ -344,3 +344,49 @@ Missed (this audit's contribution):
 - The `_at` framework is not consumed anywhere downstream — its
   audience is `#print axioms` and a future `cnn_has_vjp_at3` that
   doesn't exist yet.
+
+---
+
+## Status update — 2026-06-06
+
+The audit above is preserved as a dated (2026-05-18) snapshot; this section
+supersedes it where they differ.
+
+**Counts.** 54 → **114** three-axiom `#print axioms` checks
+(`tests/AuditAxioms.lean`); comparator re-check now covers **51** theorems
+(`tests/comparator/config.json`).
+
+**B.2 — RETRACTED (resolved).** The report claims "`HasVJPAt3` has no chain
+rule — `maxPool2_has_vjp_at3` is an orphan." No longer true: `vjp3_comp_at`
+exists at `Tensor.lean:1718`, and `maxPool2_has_vjp_at3` is consumed via
+`hasVJPAt3_to_hasVJPAt` into `cnn_has_vjp_at` (`CNN.lean:2703`) and into
+`IR.lean`. (The probe comment at `tests/AuditProbes.lean:24` still asserts the
+old claim and is now stale — worth deleting.) Residual nit: a Tensor3-native
+`cnn_has_vjp_at3` consuming `vjp3_comp_at` *directly* still doesn't exist (the
+CNN apex composes at the flattened `Vec` level), so `vjp3_comp_at` itself has
+no in-tree consumer yet — a cleanliness item, not the capability gap the
+report described.
+
+**B.3 — resolved.** The `HasVJPAt` instances are now load-bearing: the
+conditional whole-network VJPs (`cnn` / `mobilenetv2` / `convnext_has_vjp_at`)
+chain through `vjp_comp_at`, and the concrete instances (`MlpConcrete`,
+`CnnConcrete`, `MobileNetV2Concrete`) consume them to discharge smoothness.
+
+**B.4 — resolved.** The Mathlib `Matrix` bridge landed
+(`LeanMlir/Proofs/MatBridge.lean`).
+
+**C.2 — resolved.** `CNN.lean` now reads "Summary of derivations".
+
+**B.1 — resolved.** The `select_and_scatter` doc drift is fixed. The two
+remaining mentions (`CNN.lean:1803`, `Proofs/README.md`) now correctly state
+that the codegen emits **tile-compare-select** and *avoids*
+`select_and_scatter` (IREE doesn't support it), with the EQ-mask tie
+semantics (gradient to every tied cell) spelled out.
+
+**New since this audit — whole-network VJPs.** ViT, ConvNeXt and EfficientNet
+are unconditional global `HasVJP` (correct at every input, only `0 < ε`);
+MLP, MNIST-CNN, ResNet and MobileNetV2 carry concrete instances discharging
+every smoothness hypothesis. See the "Whole-network VJPs" section of
+`LeanMlir/Proofs/README.md`. Honest caveats: the codegen↔proof link is still
+unproven, `MobileNetV2Concrete` is a degenerate (constant-output) witness, and
+the concrete nets are tiny.

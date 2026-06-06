@@ -21,9 +21,11 @@ Probes:
       (codegen-shape, no rfl-escape).
   P6. `mlp_has_vjp.correct := rfl` works because backward is literally
       the canonical sum.
-  P7. `HasVJPAt3` exists but has no `vjp_comp_at3` chain rule defined.
-      The probe shows the type signature compiles but can't find an
-      instance for a composition.
+  P7. `HasVJPAt3` + `vjp3_comp_at` (Tensor.lean) — the Tensor3 pointwise
+      chain rule now exists. The CNN apex composes at the flattened `Vec`
+      level via `vjp_comp_at`, so `vjp3_comp_at` has no in-tree consumer yet
+      (a cleanliness nit, not a capability gap). Header note only — no probe
+      body.
   P8. `Vec 0` edge case: pdiv_id, pdiv_relu apply vacuously.
   P9. `pdiv (dense W b) x 1 2 = W 1 2` by `pdiv_dense`.
   P10. `pdivMat_transpose` on a concrete 2×3 transpose returns 1
