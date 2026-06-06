@@ -244,6 +244,10 @@ open Proofs
 #print axioms StableHLO.cnnFwdGraph_faithful
 #print axioms StableHLO.convBack_faithful
 #print axioms StableHLO.maxPoolBack_faithful
+-- A2c: the whole-chain CNN backward graph denotes the proven conditional
+-- whole-network VJP mnistCnnNoBn_has_vjp_at.backward (MLP-analog of
+-- mlpBackGraph_faithful).
+#print axioms StableHLO.cnnBackGraph_faithful
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate

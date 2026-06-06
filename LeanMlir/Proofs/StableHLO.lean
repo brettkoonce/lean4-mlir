@@ -375,6 +375,109 @@ theorem cnnFwdGraph_faithful {ic c h w d1 nClasses kH kW : Nat}
              denseF_faithful, reluF_faithful, flatConvF_faithful, maxPoolF_faithful, den_operand]
 
 -- ════════════════════════════════════════════════════════════════
+-- § Chapter 4 — CNN: whole-chain backward (A2c, the MLP-analog of
+--   `mlpBackGraph_faithful`). The full backward graph denotes the proven
+--   conditional whole-network VJP `mnistCnnNoBn_has_vjp_at.backward`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Pointwise-VJP backwards are unique: `.correct` pins `backward` to the
+    `pdiv`-contracted Jacobian, so any two `HasVJPAt f x` agree on `backward`.
+    Lets us swap the maxpool's `flatten∘unflatten` transport (built into
+    `mnistCnnNoBn_has_vjp_at`) for the cast-free witness below. -/
+theorem hasVJPAt_backward_det {m n : Nat} {f : Vec m → Vec n} {x : Vec m}
+    (v v' : HasVJPAt f x) (dy : Vec n) : v.backward dy = v'.backward dy := by
+  funext i; rw [v.correct, v'.correct]
+
+/-- Max-pool VJP at a *raw* flattened point (no `flatten ∘ unflatten` index), so
+    it composes without a transport cast; `backward` is `maxPoolBackFlat`. The
+    `correct` field reuses `maxPoolFlat_has_vjp_at.correct`, aligning the point
+    via `Tensor3.flatten_unflatten`. -/
+noncomputable def maxPoolFlat_has_vjp_at' {c h w : Nat} (v : Vec (c*(2*h)*(2*w)))
+    (hs : MaxPool2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :
+    HasVJPAt (maxPoolFlat c h w) v where
+  backward := maxPoolBackFlat c h w v
+  correct := fun dy i => by
+    have hbk : maxPoolBackFlat c h w v dy i
+                = (maxPoolFlat_has_vjp_at (Tensor3.unflatten v) hs).backward dy i := by
+      simp only [maxPoolFlat_has_vjp_at, hasVJPAt3_to_hasVJPAt, maxPool2_has_vjp_at3, maxPoolBackFlat]
+    rw [hbk, (maxPoolFlat_has_vjp_at (Tensor3.unflatten v) hs).correct dy i,
+        Tensor3.flatten_unflatten]
+
+@[simp] theorem maxPoolFlat_has_vjp_at'_backward {c h w : Nat} (v : Vec (c*(2*h)*(2*w)))
+    (hs : MaxPool2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :
+    (maxPoolFlat_has_vjp_at' v hs).backward = maxPoolBackFlat c h w v := rfl
+
+/-- Whole MNIST-CNN **backward** (input-VJP) graph, reversing `cnnFwdGraph`:
+    `convBack W₁ ∘ select(a₁) ∘ convBack W₂ ∘ select(a₂) ∘ maxPoolBack ∘
+     dotOut W₃ ∘ select(a₃) ∘ dotOut W₄ ∘ select(a₄) ∘ dotOut W₅`, with `aᵢ` the
+    ReLU pre-activations and the conv/maxpool saved inputs threaded as in §4. -/
+noncomputable def cnnBackGraph
+    {ic c h w d1 nClasses kH kW : Nat}
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
+    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c * h * w) d1) (b₃ : Vec d1)
+    (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses)
+    (x : Vec (ic * (2*h) * (2*w))) (dy : Vec nClasses) :
+    SHlo (ic * (2*h) * (2*w)) :=
+  let z1 := (relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁) x
+  let zmp := (relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂) z1
+  let zd3 := maxPoolFlat c h w zmp
+  let zd4 := (relu d1 ∘ dense W₃ b₃) zd3
+  .convBack "%W1" W₁ b₁ x
+    (.selectPos "%a1" (flatConv (h := 2*h) (w := 2*w) W₁ b₁ x)
+      (.convBack "%W2" W₂ b₂ z1
+        (.selectPos "%a2" (flatConv (h := 2*h) (w := 2*w) W₂ b₂ z1)
+          (.maxPoolBack "%z2" zmp
+            (.dotOut "%W3" W₃
+              (.selectPos "%a3" (dense W₃ b₃ zd3)
+                (.dotOut "%W4" W₄
+                  (.selectPos "%a4" (dense W₄ b₄ zd4)
+                    (.dotOut "%W5" W₅ (.operand "%dy" dy))))))))))
+
+-- **CNN backward faithfulness (smooth point) — A2c.** The whole-chain backward
+-- graph denotes the proven conditional whole-network VJP
+-- `mnistCnnNoBn_has_vjp_at.backward` (the Chapter-4 peer of
+-- `mlpBackGraph_faithful`). The per-op `convBack`/`selectPos`/`dotOut` ops
+-- assemble through `vjp_comp_at`; the one `maxPoolBack` matches via VJP
+-- uniqueness (`hasVJPAt_backward_det`) — sidestepping the `flatten∘unflatten`
+-- transport in `mnistCnnNoBn_has_vjp_at`'s maxpool step.
+set_option maxHeartbeats 2000000 in
+theorem cnnBackGraph_faithful
+    {ic c h w d1 nClasses kH kW : Nat}
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
+    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c * h * w) d1) (b₃ : Vec d1)
+    (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses)
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (x : Vec (ic * (2*h) * (2*w)))
+    (h1 : ∀ k, flatConv (h := 2*h) (w := 2*w) W₁ b₁ x k ≠ 0)
+    (h2 : ∀ k, flatConv (h := 2*h) (w := 2*w) W₂ b₂
+            ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁) x) k ≠ 0)
+    (h_mp : MaxPool2Smooth (Tensor3.unflatten
+            (((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
+              ∘ (relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁)) x)
+            : Tensor3 c (2*h) (2*w)))
+    (h3 : ∀ k, dense W₃ b₃ (maxPoolFlat c h w
+            (((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
+              ∘ (relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁)) x)) k ≠ 0)
+    (h4 : ∀ k, dense W₄ b₄ ((relu d1 ∘ dense W₃ b₃) (maxPoolFlat c h w
+            (((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
+              ∘ (relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁)) x))) k ≠ 0)
+    (dy : Vec nClasses) :
+    den (cnnBackGraph W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ x dy)
+      = (mnistCnnNoBn_has_vjp_at W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
+          hc hh hw x h1 h2 h_mp h3 h4).backward dy := by
+  simp only [cnnBackGraph, den, mnistCnnNoBn_has_vjp_at, convRelu_has_vjp_at,
+    denseRelu_has_vjp_at, vjp_comp_at, dense_has_vjp, relu_has_vjp_at,
+    hasVJP3_to_hasVJP, HasVJP.toHasVJPAt, Mat.mulVec, id_eq, Function.comp_apply]
+  rw [hasVJPAt_backward_det _ (maxPoolFlat_has_vjp_at'
+        ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
+          ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁) x)) h_mp)]
+  rfl
+
+-- ════════════════════════════════════════════════════════════════
 -- § Syntactic half: `pretty` renders the AST to real StableHLO text
 -- ════════════════════════════════════════════════════════════════
 
