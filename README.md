@@ -95,7 +95,7 @@ performance was poor — every operation crossed the FFI boundary, no fusion,
 no autodiff, no JIT.
 
 **Phase 2 — Lean → JAX.** [`jax/`](jax/): Lean as a metaprogramming layer
-that emits idiomatic JAX Python (`jax/Jax/Codegen.lean`, ~1100 lines). The
+that emits idiomatic JAX Python (`jax/Jax/Codegen.lean`, ~2100 lines). The
 generated script gets `value_and_grad` autodiff and XLA JIT for free, runs
 on any JAX-supported device. Trades the pure-Lean story for a working stack
 and real GPU performance. See [`jax/README.md`](jax/README.md) for details.
@@ -104,7 +104,7 @@ and real GPU performance. See [`jax/README.md`](jax/README.md) for details.
 runtime at all. Lean directly emits StableHLO MLIR, IREE compiles it to a
 GPU flatbuffer, a thin C FFI loads and runs it. The pure-math version of
 phase 2 — autodiff is done at codegen time in Lean (`LeanMlir/MlirCodegen.lean`,
-~5000 lines), not at runtime by a framework. See [`RESULTS.md`](RESULTS.md)
+~7500 lines), not at runtime by a framework. See [`RESULTS.md`](RESULTS.md)
 for the per-architecture numbers.
 
 The VJP correctness proofs live in [`LeanMlir/Proofs/`](LeanMlir/Proofs/) —
@@ -371,13 +371,13 @@ lean4-mlir/
 │
 ├── LeanMlir.lean           -- umbrella module
 ├── LeanMlir/
-│   ├── MlirCodegen.lean    -- ~5000 lines, NetSpec → StableHLO MLIR
+│   ├── MlirCodegen.lean    -- ~7500 lines, NetSpec → StableHLO MLIR
 │   ├── IreeRuntime.lean    -- Lean ↔ libiree_ffi.so bindings
 │   ├── F32Array.lean       -- ByteArray-backed float32 helpers
 │   ├── Spec.lean           -- NetSpec / Layer / param-counting
 │   ├── Types.lean          -- core types (Layer, Activation, Padding, ...)
 │   ├── MnistData.lean      -- IDX file loader (older training paths)
-│   └── Proofs/             -- VJP correctness proofs (~2100 lines)
+│   └── Proofs/             -- VJP correctness proofs (~17,600 lines)
 │       ├── Tensor.lean
 │       ├── MLP.lean
 │       ├── CNN.lean
@@ -467,7 +467,7 @@ VJPs and (for BN) running statistics for eval.
 
 ## Lean version
 
-Tested with Lean 4.29.0 / Lake 5.0.0, IREE built from source against
+Tested with Lean 4.30.0 / Lake 5.0.0, IREE built from source against
 ROCm 7.2.0 / gfx1100.
 
 ## Citing this work
