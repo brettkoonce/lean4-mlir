@@ -237,6 +237,11 @@ open Proofs
 #print axioms StableHLO.selectPos_faithful
 #print axioms StableHLO.mlpFwdGraph_faithful
 #print axioms StableHLO.mlpBackGraph_faithful
+-- R4 Stage A, Chapter 4 (CNN): conv + maxpool forward ops; the whole MNIST-CNN
+-- forward graph denotes the proven mnistCnnNoBnForward.
+#print axioms StableHLO.flatConvF_faithful
+#print axioms StableHLO.maxPoolF_faithful
+#print axioms StableHLO.cnnFwdGraph_faithful
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate

@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.IR
+import LeanMlir.Proofs.MnistCNN
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 2: the linear classifier)
 
@@ -58,6 +59,12 @@ inductive SHlo : Nat → Type where
   -- (`select(x>0,·,0)`); `xName`/`x` is the saved pre-activation.
   | reluF      {n : Nat}                                        : SHlo n → SHlo n
   | selectPos  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
+  -- Chapter 4 (CNN): flattened conv forward (`stablehlo.convolution`) and
+  -- 2×2 max-pool forward (`reduce_window`). Vec-indexed via the proofs'
+  -- flattened forms `flatConv`/`maxPoolFlat`.
+  | flatConvF  {ic oc h w kH kW : Nat} (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (b : Vec oc)                    : SHlo (ic*h*w) → SHlo (oc*h*w)
+  | maxPoolF   {c h w : Nat}                                    : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
 
 /-- **AST denotation `⟦·⟧ₐ`** — our reading of each StableHLO op's spec, over
     `ℝ`, per-example, in primitive terms — independent of `dense`/`Mat.mulVec`.
@@ -72,6 +79,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .sub a b        => fun j => den a j - den b j
   | _, .reluF e        => fun i => max (den e i) 0
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
+  | _, .flatConvF _ _ W b e => flatConv W b (den e)
+  | _, .maxPoolF (c := c) (h := h) (w := w) e => maxPoolFlat c h w (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -277,6 +286,53 @@ theorem mlpBackGraph_faithful (W₀ : Mat e₀ e₁) (b₀ : Vec e₁) (W₁ : M
   rfl
 
 -- ════════════════════════════════════════════════════════════════
+-- § Chapter 4 — CNN: conv + maxpool (forward, semantic)
+--
+-- The conv/maxpool *forward* ops, denoted by the proofs' flattened forms
+-- `flatConv`/`maxPoolFlat`. The whole MNIST-CNN forward graph denotes the
+-- proven `mnistCnnNoBnForward`. (The backward VJP — conv input-grad via the
+-- reversed kernel + maxpool select_and_scatter, = `mnistCnnNoBn_has_vjp_at` —
+-- is the next phase.)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Conv forward faithfulness.** The (flattened) `stablehlo.convolution` op
+    denotes the proven `flatConv`. -/
+theorem flatConvF_faithful {ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic*h*w)) :
+    den (.flatConvF wN bN W b e) = flatConv W b (den e) := rfl
+
+/-- **Max-pool forward faithfulness.** The (flattened) `reduce_window(max)` op
+    denotes the proven `maxPoolFlat`. -/
+theorem maxPoolF_faithful {c h w : Nat} (e : SHlo (c*(2*h)*(2*w))) :
+    den (.maxPoolF e) = maxPoolFlat c h w (den e) := rfl
+
+/-- Whole MNIST-CNN **forward** graph:
+    `dense ∘ relu ∘ dense ∘ relu ∘ dense ∘ maxPool ∘ relu ∘ conv ∘ relu ∘ conv`. -/
+def cnnFwdGraph {ic c h w d1 nClasses kH kW : Nat}
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses)
+    (x : Vec (ic*(2*h)*(2*w))) : SHlo nClasses :=
+  denseF "%W5" "%b5" W₅ b₅
+    (.reluF (denseF "%W4" "%b4" W₄ b₄
+      (.reluF (denseF "%W3" "%b3" W₃ b₃
+        (.maxPoolF (c := c) (h := h) (w := w)
+          (.reluF (.flatConvF (h := 2*h) (w := 2*w) "%W2" "%b2" W₂ b₂
+            (.reluF (.flatConvF (h := 2*h) (w := 2*w) "%W1" "%b1" W₁ b₁
+              (.operand "%x" x))))))))))
+
+/-- **CNN forward faithfulness.** The forward graph denotes the proven
+    `mnistCnnNoBnForward`. -/
+theorem cnnFwdGraph_faithful {ic c h w d1 nClasses kH kW : Nat}
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) (x : Vec (ic*(2*h)*(2*w))) :
+    den (cnnFwdGraph W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x)
+      = mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x := by
+  simp only [cnnFwdGraph, mnistCnnNoBnForward, Function.comp_apply,
+             denseF_faithful, reluF_faithful, flatConvF_faithful, maxPoolF_faithful, den_operand]
+
+-- ════════════════════════════════════════════════════════════════
 -- § Syntactic half: `pretty` renders the AST to real StableHLO text
 -- ════════════════════════════════════════════════════════════════
 
@@ -308,6 +364,8 @@ inductive Raw where
   | sub        (n : Nat)                   : Raw → Raw → Raw
   | reluF      (n : Nat)                   : Raw → Raw
   | selectPos  (x : String) (n : Nat)      : Raw → Raw
+  | flatConvF  (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
+  | maxPoolF   (c h w : Nat)               : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -322,6 +380,9 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .sub a b               => .sub k (skel a) (skel b)
   | k, .reluF e               => .reluF k (skel e)
   | k, .selectPos x _ e       => .selectPos x k (skel e)
+  | _, .flatConvF (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
+      .flatConvF wN bN ic oc h w kH kW (skel e)
+  | _, .maxPoolF (c := c) (h := h) (w := w) e => .maxPoolF c h w (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -334,6 +395,8 @@ inductive Tok where
   | sub        (n : Nat)                   : Tok
   | reluF      (n : Nat)                   : Tok
   | selectPos  (x : String) (n : Nat)      : Tok
+  | flatConvF  (w b : String) (ic oc h w' kH kW : Nat) : Tok
+  | maxPoolF   (c h w : Nat)               : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -347,6 +410,8 @@ def toToks : Raw → List Tok
   | .sub n a b       => toToks a ++ toToks b ++ [.sub n]
   | .reluF n e       => toToks e ++ [.reluF n]
   | .selectPos x n e => toToks e ++ [.selectPos x n]
+  | .flatConvF w b ic oc h w' kH kW e => toToks e ++ [.flatConvF w b ic oc h w' kH kW]
+  | .maxPoolF c h w e => toToks e ++ [.maxPoolF c h w]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -387,6 +452,31 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
         s!"    {msk} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
         s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
+  | .flatConvF w b ic oc h w' kH kW, r :: st => do
+      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      let xn ← fresh; let cv ← fresh; let bb ← fresh; let ob ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, ic*h*w']}) -> {ty [B,ic,h,w']}\n" ++
+        s!"    {cv} = stablehlo.convolution({xn}, {w})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+        s!" : ({ty [B,ic,h,w']}, {ty [oc,ic,kH,kW]}) -> {ty [B,oc,h,w']}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w']}\n" ++
+        s!"    {ob} = stablehlo.add {cv}, {bb} : {ty [B,oc,h,w']}\n" ++
+        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
+  | .maxPoolF c h w, r :: st => do
+      let xn ← fresh; let ninf ← fresh; let p ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
+        s!"    {ninf} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+        s!"    {p} = \"stablehlo.reduce_window\"({xn}, {ninf}) (" ++ "{\n" ++
+        "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
+        "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
+        "        stablehlo.return %pm : tensor<f32>\n" ++
+        "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+        s!" : ({ty [B,c,2*h,2*w]}, tensor<f32>) -> {ty [B,c,h,w]}\n" ++
+        s!"    {o} = stablehlo.reshape {p} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
