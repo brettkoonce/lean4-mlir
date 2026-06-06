@@ -169,6 +169,12 @@ lean_exe «mnist-mlp-verified» where
   root := `MainMnistMlpVerified
   moreLinkArgs := ireeLink
 
+-- Chapter 4: trains the MNIST CNN on the VERIFIED-rendered StableHLO
+-- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepText).
+lean_exe «mnist-cnn-verified» where
+  root := `MainMnistCnnVerified
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar-cnn-train» where
   root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink

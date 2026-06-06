@@ -697,6 +697,154 @@ def mlpTrainStepText (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
   s!"    return %W0n, %b0n, %W1n, %b1n, %W2n, %b2n : {ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}\n" ++
   "  }\n}\n"
 
+/-- Full **CNN** SGD train step (`@cnn_train_step`), the ch4 peer of
+    `mlpTrainStepText`. Architecture (= `mnistCnnNoBnForward`):
+    `conv W₁ → relu → conv W₂ → relu → maxpool → flatten → dense W₃ → relu →
+     dense W₄ → relu → dense W₅`. Each mathematical op is a rendering of a
+    proof-backed piece:
+    * forward conv/maxpool/dense/relu — `flatConvF_faithful`, `maxPoolF_faithful`,
+      `denseF_faithful`, `reluF_faithful` (and `cnnFwdGraph_faithful` for the whole);
+    * loss cotangent `%dy = softmax(logits) − onehot` — `lossCotGraph_isCEgrad`;
+    * backward dense (`dot_general`, contract output axis) + relu masks
+      (`compare GT`+`select`) — `mlpBackGraph_faithful`/`selectPos_faithful`;
+    * maxpool backward (`select_and_scatter`, GE/add, route dy to the window
+      argmax) — `maxPoolBack_faithful`; conv input-VJP (transpose+reverse+conv)
+      — `convBack_faithful`;
+    * dense W/b grads (`dot_general` over batch / `reduce`) — `wGrad/bGrad`;
+    * conv weight grad — the **transpose trick** (`conv2d_weight_grad_has_vjp`):
+      the SAME `stablehlo.convolution` with the batch axis as the contraction
+      feature; rendered here, validated by the GPU run (a `convWGrad_faithful`
+      theorem is optional polish, see §B2 of the handoff);
+    * SGD `θ' = θ − lr·∇` — `sgd*_descends_certified_grad`.
+    The op text mirrors the GPU-validated emitter (`emitTok`) byte-for-byte for
+    conv/maxpool/convBack/select_and_scatter; assembly + SSA naming is the
+    renderer. `lr = 0.1/B` (grads sum over the batch). -/
+def cnnTrainStepText (B ic c H W kH kW d1 nClasses : Nat) (lr : String) : String :=
+  let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+  let H2 := H / 2; let W2 := W / 2; let flat := c * H2 * W2
+  -- dense dot_general (explicit contraction dims), as in mlpTrainStepText
+  let dg (o a w cA cB tA tB tO : String) : String :=
+    s!"    {o} = stablehlo.dot_general {a}, {w}, contracting_dims = [{cA}] x [{cB}], precision = [DEFAULT, DEFAULT] : ({tA}, {tB}) -> {tO}\n"
+  let dense (oh a w bnm : String) (mm nn : Nat) : String :=
+    dg s!"{oh}d" a w "1" "0" (ty [B,mm]) (ty [mm,nn]) (ty [B,nn]) ++
+    s!"    {oh}b = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [nn]}) -> {ty [B,nn]}\n" ++
+    s!"    {oh} = stablehlo.add {oh}d, {oh}b : {ty [B,nn]}\n"
+  let relu (o h : String) (nn : Nat) : String :=
+    s!"    {o}z = stablehlo.constant dense<0.0> : {ty [B,nn]}\n" ++
+    s!"    {o} = stablehlo.maximum {h}, {o}z : {ty [B,nn]}\n"
+  let relu4 (o h : String) : String :=
+    s!"    {o}z = stablehlo.constant dense<0.0> : {ty [B,c,H,W]}\n" ++
+    s!"    {o} = stablehlo.maximum {h}, {o}z : {ty [B,c,H,W]}\n"
+  let reduce0 (o dyk : String) (nn : Nat) : String :=
+    s!"    {o} = stablehlo.reduce({dyk} init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [B,nn]}, tensor<f32>) -> {ty [nn]}\n"
+  -- relu-backward masks (`select(pre>0, dy, 0)`), 2-D and 4-D forms
+  let selMask2 (o pre dgrad : String) (nn : Nat) : String :=
+    s!"    {o}z = stablehlo.constant dense<0.0> : {ty [B,nn]}\n" ++
+    s!"    {o}m = stablehlo.compare GT, {pre}, {o}z : ({ty [B,nn]}, {ty [B,nn]}) -> {tyI1 [B,nn]}\n" ++
+    s!"    {o} = stablehlo.select {o}m, {dgrad}, {o}z : {tyI1 [B,nn]}, {ty [B,nn]}\n"
+  let selMask4 (o pre dgrad : String) : String :=
+    s!"    {o}z = stablehlo.constant dense<0.0> : {ty [B,c,H,W]}\n" ++
+    s!"    {o}m = stablehlo.compare GT, {pre}, {o}z : ({ty [B,c,H,W]}, {ty [B,c,H,W]}) -> {tyI1 [B,c,H,W]}\n" ++
+    s!"    {o} = stablehlo.select {o}m, {dgrad}, {o}z : {tyI1 [B,c,H,W]}, {ty [B,c,H,W]}\n"
+  -- conv forward (SAME pad, stride 1) + bias bcast over channel dim 1
+  let convFwd (o lhs w bnm : String) (oc icc : Nat) : String :=
+    s!"    {o}c = stablehlo.convolution({lhs}, {w})\n" ++
+    "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+    "      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+    "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+    s!" : ({ty [B,icc,H,W]}, {ty [oc,icc,kH,kW]}) -> {ty [B,oc,H,W]}\n" ++
+    s!"    {o}b = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,H,W]}\n" ++
+    s!"    {o} = stablehlo.add {o}c, {o}b : {ty [B,oc,H,W]}\n"
+  -- conv input-VJP: transpose[1,0,2,3] + reverse[2,3] + convolution (= emitTok convBack)
+  let convBack (o dh w : String) (icc oc : Nat) : String :=
+    s!"    {o}t = stablehlo.transpose {w}, dims = [1, 0, 2, 3] : ({ty [oc,icc,kH,kW]}) -> {ty [icc,oc,kH,kW]}\n" ++
+    s!"    {o}r = stablehlo.reverse {o}t, dims = [2, 3] : {ty [icc,oc,kH,kW]}\n" ++
+    s!"    {o} = stablehlo.convolution({dh}, {o}r)\n" ++
+    "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+    "      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+    "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+    s!" : ({ty [B,oc,H,W]}, {ty [icc,oc,kH,kW]}) -> {ty [B,icc,H,W]}\n"
+  -- conv weight grad (transpose trick): dW[o,i,·] = Σ_{b,y,x} x[b,i,·]·dh[b,o,·];
+  -- realized as a convolution with the batch axis as the contraction feature.
+  let convWGrad (o inp grad : String) (icc oc : Nat) : String :=
+    s!"    {o}xt = stablehlo.transpose {inp}, dims = [1, 0, 2, 3] : ({ty [B,icc,H,W]}) -> {ty [icc,B,H,W]}\n" ++
+    s!"    {o}dt = stablehlo.transpose {grad}, dims = [1, 0, 2, 3] : ({ty [B,oc,H,W]}) -> {ty [oc,B,H,W]}\n" ++
+    s!"    {o}raw = stablehlo.convolution({o}xt, {o}dt)\n" ++
+    "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+    "      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+    "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+    s!" : ({ty [icc,B,H,W]}, {ty [oc,B,H,W]}) -> {ty [icc,oc,kH,kW]}\n" ++
+    s!"    {o} = stablehlo.transpose {o}raw, dims = [1, 0, 2, 3] : ({ty [icc,oc,kH,kW]}) -> {ty [oc,icc,kH,kW]}\n"
+  let convBiasGrad (o dh : String) (oc : Nat) : String :=
+    s!"    {o} = stablehlo.reduce({dh} init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,H,W]}, tensor<f32>) -> {ty [oc]}\n"
+  -- maxpool forward (`reduce_window` max) and backward (`select_and_scatter`)
+  let maxpoolFwd (o a : String) : String :=
+    s!"    {o}ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+    s!"    {o} = \"stablehlo.reduce_window\"({a}, {o}ninf) (" ++ "{\n" ++
+    "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
+    "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
+    "        stablehlo.return %pm : tensor<f32>\n" ++
+    "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+    s!" : ({ty [B,c,H,W]}, tensor<f32>) -> {ty [B,c,H2,W2]}\n"
+  let scatter (o src dgrad : String) : String :=
+    s!"    {o} = \"stablehlo.select_and_scatter\"({src}, {dgrad}, %sc) (" ++ "{\n" ++
+    "      ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):\n" ++
+    "        %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+    "        stablehlo.return %sge : tensor<i1>\n" ++
+    "    }, " ++ "{\n" ++
+    "      ^bb0(%su: tensor<f32>, %sv: tensor<f32>):\n" ++
+    "        %ss = stablehlo.add %su, %sv : tensor<f32>\n" ++
+    "        stablehlo.return %ss : tensor<f32>\n" ++
+    "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+    s!" : ({ty [B,c,H,W]}, {ty [B,c,H2,W2]}, tensor<f32>) -> {ty [B,c,H,W]}\n"
+  let sgd (θ dθ ty' : String) : String :=
+    s!"    {θ}l = stablehlo.constant dense<{lr}> : {ty'}\n" ++
+    s!"    {θ}s = stablehlo.multiply {dθ}, {θ}l : {ty'}\n" ++
+    s!"    {θ}n = stablehlo.subtract {θ}, {θ}s : {ty'}\n"
+  "module @m {\n" ++
+  s!"  func.func @cnn_train_step(%x: {ty [B,ic*H*W]}, %W1: {ty [c,ic,kH,kW]}, %b1: {ty [c]}, %W2: {ty [c,c,kH,kW]}, %b2: {ty [c]}, %W3: {ty [flat,d1]}, %b3: {ty [d1]}, %W4: {ty [d1,d1]}, %b4: {ty [d1]}, %W5: {ty [d1,nClasses]}, %b5: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  "    // ── forward: conv→relu→conv→relu→maxpool→flatten→dense→relu→dense→relu→dense ──\n" ++
+  s!"    %xr = stablehlo.reshape %x : ({ty [B,ic*H*W]}) -> {ty [B,ic,H,W]}\n" ++
+  convFwd "%hc1" "%xr" "%W1" "%b1" c ic ++ relu4 "%ac1" "%hc1" ++
+  convFwd "%hc2" "%ac1" "%W2" "%b2" c c ++ relu4 "%ac2" "%hc2" ++
+  maxpoolFwd "%pool" "%ac2" ++
+  s!"    %flat = stablehlo.reshape %pool : ({ty [B,c,H2,W2]}) -> {ty [B,flat]}\n" ++
+  dense "%h3" "%flat" "%W3" "%b3" flat d1 ++ relu "%a3" "%h3" d1 ++
+  dense "%h4" "%a3" "%W4" "%b4" d1 d1 ++ relu "%a4" "%h4" d1 ++
+  dense "%logits" "%a4" "%W5" "%b5" d1 nClasses ++
+  "    // ── loss cotangent dy = softmax(logits) − onehot (lossCotGraph_isCEgrad) ──\n" ++
+  s!"    %le = stablehlo.exponential %logits : {ty [B,nClasses]}\n" ++
+  s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [B,nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+  s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [B]}) -> {ty [B,nClasses]}\n" ++
+  s!"    %lsm = stablehlo.divide %le, %lsb : {ty [B,nClasses]}\n" ++
+  s!"    %dy = stablehlo.subtract %lsm, %onehot : {ty [B,nClasses]}\n" ++
+  "    // ── backward: dense (dotOut) + relu masks → reshape → select_and_scatter → convBack ──\n" ++
+  dg "%dx5" "%dy" "%W5" "1" "1" (ty [B,nClasses]) (ty [d1,nClasses]) (ty [B,d1]) ++
+  selMask2 "%dy4" "%h4" "%dx5" d1 ++
+  dg "%dx4" "%dy4" "%W4" "1" "1" (ty [B,d1]) (ty [d1,d1]) (ty [B,d1]) ++
+  selMask2 "%dy3" "%h3" "%dx4" d1 ++
+  dg "%dx3" "%dy3" "%W3" "1" "1" (ty [B,d1]) (ty [flat,d1]) (ty [B,flat]) ++
+  s!"    %dpool = stablehlo.reshape %dx3 : ({ty [B,flat]}) -> {ty [B,c,H2,W2]}\n" ++
+  scatter "%dac2" "%ac2" "%dpool" ++
+  selMask4 "%dhc2" "%hc2" "%dac2" ++
+  convBack "%dac1" "%dhc2" "%W2" c c ++
+  selMask4 "%dhc1" "%hc1" "%dac1" ++
+  "    // ── param grads: dense W/b (dot_general/reduce); conv dW (transpose trick), db (reduce) ──\n" ++
+  dg "%dW5" "%a4" "%dy" "0" "0" (ty [B,d1]) (ty [B,nClasses]) (ty [d1,nClasses]) ++ reduce0 "%db5" "%dy" nClasses ++
+  dg "%dW4" "%a3" "%dy4" "0" "0" (ty [B,d1]) (ty [B,d1]) (ty [d1,d1]) ++ reduce0 "%db4" "%dy4" d1 ++
+  dg "%dW3" "%flat" "%dy3" "0" "0" (ty [B,flat]) (ty [B,d1]) (ty [flat,d1]) ++ reduce0 "%db3" "%dy3" d1 ++
+  convWGrad "%dW2" "%ac1" "%dhc2" c c ++ convBiasGrad "%db2" "%dhc2" c ++
+  convWGrad "%dW1" "%xr" "%dhc1" ic c ++ convBiasGrad "%db1" "%dhc1" c ++
+  "    // ── SGD θ' = θ − lr·∇ (all 10 params) ──\n" ++
+  sgd "%W1" "%dW1" (ty [c,ic,kH,kW]) ++ sgd "%b1" "%db1" (ty [c]) ++
+  sgd "%W2" "%dW2" (ty [c,c,kH,kW]) ++ sgd "%b2" "%db2" (ty [c]) ++
+  sgd "%W3" "%dW3" (ty [flat,d1]) ++ sgd "%b3" "%db3" (ty [d1]) ++
+  sgd "%W4" "%dW4" (ty [d1,d1]) ++ sgd "%b4" "%db4" (ty [d1]) ++
+  sgd "%W5" "%dW5" (ty [d1,nClasses]) ++ sgd "%b5" "%db5" (ty [nClasses]) ++
+  s!"    return %W1n, %b1n, %W2n, %b2n, %W3n, %b3n, %W4n, %b4n, %W5n, %b5n : {ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
+  "  }\n}\n"
+
 end StableHLO
 end Proofs
 
@@ -733,4 +881,7 @@ end Proofs
     (Proofs.StableHLO.cnnFwdModuleV 128 1 32 14 14 512 10 3 3
        (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
        (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-       (fun _ => 0)) : IO Unit)
+       (fun _ => 0))
+  -- Chapter 4 CNN full SGD train step (same dims; lr = 0.1/128 = mean-loss equiv).
+  IO.FS.writeFile "verified_mlir/cnn_train_step.mlir"
+    (Proofs.StableHLO.cnnTrainStepText 128 1 32 28 28 3 3 512 10 "0.00078125") : IO Unit)
