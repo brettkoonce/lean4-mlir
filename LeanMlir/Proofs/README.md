@@ -67,6 +67,32 @@ Tensor.lean                    ← pdiv (def via fderiv) + VJP framework
                                + ViT body chains (proved) + patchEmbed (proved)
 ```
 
+## Whole-network VJPs
+
+Two forms, set by the architecture's activations:
+
+- **Unconditional** (ViT, ConvNeXt, EfficientNet) — only smooth ops
+  (GELU/Swish/sigmoid, softmax, LayerNorm, convolution; no ReLU, no
+  max-pool), so `vit_full_has_vjp` / `convnext_has_vjp` /
+  `efficientnet_has_vjp` are global `HasVJP`: correct at *every* input, with
+  the `0 < ε` LayerNorm/BatchNorm positivity as the only side condition.
+
+- **Conditional + concretely instantiated** (MLP, MNIST-CNN, ResNet,
+  MobileNetV2) — ReLU/ReLU6/max-pool have genuine kinks, so the generic
+  whole-network VJP is pointwise (`*_has_vjp_at`, under per-site
+  off-the-kink hypotheses). Each is instantiated on a concrete small net
+  with every hypothesis discharged (`MlpConcrete`, `Spatial`/`Mini`,
+  `CnnConcrete`, `MobileNetV2Concrete`), proving the bundle is jointly
+  satisfiable — not vacuous.
+
+Conditionality is intrinsic to the math, not a formalization gap: it enters
+exactly at the non-smooth operators and is *recovered* by the
+smooth-activation nets. Two honesty notes on the concrete witnesses:
+`MobileNetV2Concrete` is degenerate (constant output — ReLU6's two-sided
+kink admits no cheap live witness, since pinning every input into `(0,6)`
+forces constant activations), whereas `CnnConcrete` has a genuinely
+injective stem; and all concrete nets are deliberately tiny.
+
 ## Axioms (0 project)
 
 Pure-Mathlib closure on every theorem. `#print axioms vit_full_has_vjp`

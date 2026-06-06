@@ -2,7 +2,7 @@
 
 **Interactive proof blueprint: [brettkoonce.github.io/lean4-mlir/blueprint/](https://brettkoonce.github.io/lean4-mlir/blueprint/)**
 (or [PDF](https://brettkoonce.github.io/lean4-mlir/blueprint.pdf))
-— clickable dependency DAG for the full VJP proof suite (34 VJP correctness theorems, no `sorry`s),
+— clickable dependency DAG for the full VJP proof suite (no `sorry`s, zero project axioms),
 from `pdiv` primitives up to the whole-network VJPs (ViT, ResNet, MobileNetV2, ConvNeXt, EfficientNet).
 
 Lean 4 as a specification language for neural networks. Declare architecture
@@ -114,6 +114,30 @@ depthwise, SE, LayerNorm, and attention, up to whole-network backward passes
 reference forward function, written in exact real arithmetic (`ℝ`), has a
 backward pass equal to its Mathlib `fderiv` Jacobian-transpose — with zero
 project axioms (`#print axioms` closes under the Lean-core triple alone).
+
+The whole-network results come in two forms, set by the architecture's
+activations:
+
+- **Unconditional** — ViT, ConvNeXt, EfficientNet. These use only smooth ops
+  (GELU / Swish / sigmoid, softmax, LayerNorm, convolution — no ReLU, no
+  max-pool), so the VJP holds at *every* input, with the LayerNorm/BatchNorm
+  `0 < ε` positivity as the only side conditions (`vit_full_has_vjp`,
+  `convnext_has_vjp`, `efficientnet_has_vjp : HasVJP …`).
+
+- **Conditional + concretely instantiated** — MLP, MNIST-CNN, ResNet,
+  MobileNetV2. ReLU, ReLU6 and max-pool are genuinely non-differentiable at
+  their kinks, so the *generic* whole-network VJP is stated at a smooth point
+  (`*_has_vjp_at`, under per-site "off the kink" hypotheses). Each is then
+  **instantiated on a concrete (small, representative) network** with every
+  smoothness hypothesis discharged, giving a hypothesis-free correctness
+  theorem (`MlpConcrete`, `Spatial`/`Mini`, `CnnConcrete`,
+  `MobileNetV2Concrete`) — proof that the kink-avoidance conditions are
+  jointly satisfiable on the real forward, not vacuous.
+
+Axiom closure on every one of these is a CI invariant
+([`tests/AuditAxioms.lean`](tests/AuditAxioms.lean)); the generic headline
+theorems are additionally re-checked by the independent
+[`tests/comparator/`](tests/comparator/) kernel pass.
 
 These proofs are about the reference `ℝ` definitions in `Proofs/`, **not** the
 `Float32` StableHLO the codegen emits — the two are written separately and no
