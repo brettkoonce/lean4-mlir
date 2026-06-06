@@ -54,7 +54,10 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.IR,
              -- R4 printer-faithfulness Stage A (ch 2): StableHLO-subset AST +
              -- denotation `den` proven to match the linear train-step math.
-             `LeanMlir.Proofs.StableHLO]
+             `LeanMlir.Proofs.StableHLO,
+             -- R4 syntactic core: op-graph serialization round-trip
+             -- (parse (toToks (skel a)) = a).
+             `LeanMlir.Proofs.StableHLOParse]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

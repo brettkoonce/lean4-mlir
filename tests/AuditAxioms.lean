@@ -13,6 +13,7 @@ import LeanMlir.Proofs.EfficientNet
 import LeanMlir.Proofs.MnistCNN
 import LeanMlir.Proofs.IR
 import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.StableHLOParse
 
 open Proofs
 
@@ -236,3 +237,8 @@ open Proofs
 #print axioms StableHLO.selectPos_faithful
 #print axioms StableHLO.mlpFwdGraph_faithful
 #print axioms StableHLO.mlpBackGraph_faithful
+-- R4 syntactic core: the emitted op-graph is a faithful serialization
+-- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
+-- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
+-- wants all three, so the ℝ-carrying headline `roundtrip` is the audited one.)
+#print axioms StableHLO.roundtrip
