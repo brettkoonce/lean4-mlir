@@ -28,7 +28,7 @@ seven transformer-level composition chains.
 
 The progression: **30 → 0 project axioms.** See `planning/VJP.md` (foundation
 flip and per-chapter migration) and `planning/pdiv.md` (final 4-axiom retirement)
-at the repo root for the full elimination history.
+for the full elimination history.
 
 ## Dependency graph
 

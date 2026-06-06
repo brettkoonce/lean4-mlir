@@ -17,3 +17,7 @@ import LeanMlir.Proofs.Depthwise
 import LeanMlir.Proofs.MobileNetV2
 import LeanMlir.Proofs.ConvNeXt
 import LeanMlir.Proofs.EfficientNet
+-- Verified-codegen bridges (denoted IR + per-op bridge theorems) so doc-gen4
+-- documents them. IRPrint.lean is deliberately left out: its file-writing
+-- #evals run at elaboration time (use `lake env lean …/IRPrint.lean`).
+import LeanMlir.Proofs.IR
