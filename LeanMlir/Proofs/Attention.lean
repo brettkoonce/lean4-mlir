@@ -467,7 +467,7 @@ noncomputable def rowSoftmax {m n : Nat} (A : Mat m n) : Mat m n :=
   fun i => softmax n (A i)
 
 /-- **Smoothness of `rowSoftmax`** — proved from Mathlib calculus
-    (VJP.md follow-up B).
+    (planning/VJP.md follow-up B).
 
     `rowSoftmax M r c = exp(M r c) / Σⱼ exp(M r j)`. The denominator is
     everywhere positive (sum of `Real.exp_pos` terms over a nonempty
@@ -1060,7 +1060,7 @@ theorem mhsa_weights_flat_diff (n d : Nat) :
 
 /-- **Joint flat-diff of column-stacked SDPA.**
 
-    The blocker for Phase 3 (per `mhsa.md`): joint diff in `(Q, K, V)`
+    The blocker for Phase 3 (per `planning/mhsa.md`): joint diff in `(Q, K, V)`
     doesn't follow from the existing per-input `_flat_diff` lemmas. Here
     we prove it by treating the qkv-slab as the variable, factoring SDPA
     as `Mat.mul ∘ rowSoftmax ∘ scaled-matmul`, and chaining: pre-softmax

@@ -398,7 +398,7 @@ theorem pdiv_bnCentered (n : Nat) (x : Vec n) (i j : Fin n) :
   ring
 
 /-- **Smoothness of `bnIstdBroadcast`** — proved from Mathlib calculus
-    (VJP.md follow-up C).
+    (planning/VJP.md follow-up C).
 
     `bnIstdBroadcast n ε x = 1/√(σ²(x) + ε)`. Since `σ²(x) ≥ 0` (sum
     of squares ÷ n ≥ 0) and `ε > 0`, the argument `bnVar + ε` is

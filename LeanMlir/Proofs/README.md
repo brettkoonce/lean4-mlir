@@ -26,8 +26,8 @@ deferred" Jacobian: `pdivMat_rowIndep`, `pdiv_softmax`,
 inverse-stddev smoothness, the row-wise softmax smoothness, and all
 seven transformer-level composition chains.
 
-The progression: **30 → 0 project axioms.** See `VJP.md` (foundation
-flip and per-chapter migration) and `pdiv.md` (final 4-axiom retirement)
+The progression: **30 → 0 project axioms.** See `planning/VJP.md` (foundation
+flip and per-chapter migration) and `planning/pdiv.md` (final 4-axiom retirement)
 at the repo root for the full elimination history.
 
 ## Dependency graph

@@ -873,7 +873,7 @@ theorem pdivMat_matmul_right_const {m p q : Nat} (A : Mat m p) (D : Mat p q)
       fun s => ⟨fun h => hik h.2, False.elim⟩]
     simp
 
-/-- **Row-wise Jacobian decomposition** — proved (VJP.md follow-up D).
+/-- **Row-wise Jacobian decomposition** — proved (planning/VJP.md follow-up D).
 
     For a row-independent function `M ↦ (r ↦ g (M r))`, the (i,j,k,l)
     Jacobian entry is `pdiv g (A i) j l` when `i = k` and `0` otherwise.

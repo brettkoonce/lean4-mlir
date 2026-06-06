@@ -163,7 +163,7 @@ lemma geluScalar_diff : Differentiable ℝ geluScalar := by
 lemma gelu_diff (D : Nat) : Differentiable ℝ (gelu D) := by
   unfold gelu; fun_prop
 
-/-- **Partial derivative of GELU** — proved (VJP.md follow-up E).
+/-- **Partial derivative of GELU** — proved (planning/VJP.md follow-up E).
 
     `gelu n` has diagonal Jacobian: each output coord depends only on
     the corresponding input coord via `geluScalar`. So
