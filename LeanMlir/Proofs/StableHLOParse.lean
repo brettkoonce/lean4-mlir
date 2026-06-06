@@ -33,61 +33,9 @@ namespace Proofs
 namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § Renderable skeleton + its postorder token serialization
+-- § Parser for the postorder token serialization (`Raw`/`Tok`/`toToks`/`skel`
+--   live in StableHLO.lean — the emitter shares them).
 -- ════════════════════════════════════════════════════════════════
-
-/-- The renderable skeleton of an `SHlo` graph: op structure + shapes + leaf
-    SSA names, with `ℝ` values and the shape index erased. This is exactly the
-    information that reaches the emitted text. -/
-inductive Raw where
-  | operand    (name : String) (n : Nat)            : Raw
-  | dotIn      (w : String) (m n : Nat)             : Raw → Raw
-  | dotOut     (w : String) (m n : Nat)             : Raw → Raw
-  | addBcast   (b : String) (n : Nat)               : Raw → Raw
-  | expe       (n : Nat)                            : Raw → Raw
-  | softmaxDiv (n : Nat)                            : Raw → Raw
-  | sub        (n : Nat)                            : Raw → Raw → Raw
-  | reluF      (n : Nat)                            : Raw → Raw
-  | selectPos  (x : String) (n : Nat)               : Raw → Raw
-deriving DecidableEq, Repr, Inhabited
-
-/-- Erase an `SHlo` graph to its renderable skeleton. -/
-def skel : {k : Nat} → SHlo k → Raw
-  | k, .operand name _      => .operand name k
-  | k, .dotIn (m := m) w _ e  => .dotIn w m k (skel e)
-  | k, .dotOut (n := n) w _ e => .dotOut w k n (skel e)
-  | k, .addBcast b _ e      => .addBcast b k (skel e)
-  | k, .expe e              => .expe k (skel e)
-  | k, .softmaxDiv e        => .softmaxDiv k (skel e)
-  | k, .sub a b             => .sub k (skel a) (skel b)
-  | k, .reluF e             => .reluF k (skel e)
-  | k, .selectPos x _ e     => .selectPos x k (skel e)
-
-/-- One serialized token: an opcode with its shapes/names but no operands
-    (operands are recovered positionally from a postorder stream). -/
-inductive Tok where
-  | operand    (name : String) (n : Nat)  : Tok
-  | dotIn      (w : String) (m n : Nat)    : Tok
-  | dotOut     (w : String) (m n : Nat)    : Tok
-  | addBcast   (b : String) (n : Nat)      : Tok
-  | expe       (n : Nat)                   : Tok
-  | softmaxDiv (n : Nat)                   : Tok
-  | sub        (n : Nat)                   : Tok
-  | reluF      (n : Nat)                   : Tok
-  | selectPos  (x : String) (n : Nat)      : Tok
-deriving DecidableEq, Repr
-
-/-- Postorder serialization: children, then the node's opcode token. -/
-def toToks : Raw → List Tok
-  | .operand nm n    => [.operand nm n]
-  | .dotIn w m n e   => toToks e ++ [.dotIn w m n]
-  | .dotOut w m n e  => toToks e ++ [.dotOut w m n]
-  | .addBcast b n e  => toToks e ++ [.addBcast b n]
-  | .expe n e        => toToks e ++ [.expe n]
-  | .softmaxDiv n e  => toToks e ++ [.softmaxDiv n]
-  | .sub n a b       => toToks a ++ toToks b ++ [.sub n]
-  | .reluF n e       => toToks e ++ [.reluF n]
-  | .selectPos x n e => toToks e ++ [.selectPos x n]
 
 /-- Stack reconstructor: fold the token stream, pushing operands and applying
     each opcode to the top of the stack (popping its arity). -/

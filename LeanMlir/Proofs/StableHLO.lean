@@ -292,45 +292,120 @@ def tyI1 (dims : List Nat) : String :=
 def fresh : StateM Nat String := do
   let k ← get; set (k + 1); pure s!"%v{k}"
 
-/-- **`pretty`** — render an `SHlo` graph to a StableHLO op sequence, batch dim
-    `B`. Returns `(emitted code, result SSA)`. Op forms mirror `IRPrint.lean`. -/
-def pretty (B : Nat) : {k : Nat} → SHlo k → StateM Nat (String × String)
-  | _, .operand name _ => pure ("", name)
-  | _, .dotIn (m := m) (n := n) wName _ e => do
-      let (c, r) ← pretty B e; let o ← fresh
-      pure (c ++ s!"    {o} = stablehlo.dot_general {r}, {wName}, contracting_dims = [1] x [0], " ++
-            s!"precision = [DEFAULT, DEFAULT] : ({ty [B,m]}, {ty [m,n]}) -> {ty [B,n]}\n", o)
-  | _, .dotOut (m := m) (n := n) wName _ e => do
-      let (c, r) ← pretty B e; let o ← fresh
-      pure (c ++ s!"    {o} = stablehlo.dot_general {r}, {wName}, contracting_dims = [1] x [1], " ++
-            s!"precision = [DEFAULT, DEFAULT] : ({ty [B,n]}, {ty [m,n]}) -> {ty [B,m]}\n", o)
-  | k, .addBcast bName _ e => do
-      let (c, r) ← pretty B e; let bb ← fresh; let o ← fresh
-      pure (c ++ s!"    {bb} = stablehlo.broadcast_in_dim {bName}, dims = [1] : ({ty [k]}) -> {ty [B,k]}\n" ++
-            s!"    {o} = stablehlo.add {r}, {bb} : {ty [B,k]}\n", o)
-  | k, .expe e => do
-      let (c, r) ← pretty B e; let o ← fresh
-      pure (c ++ s!"    {o} = stablehlo.exponential {r} : {ty [B,k]}\n", o)
-  | k, .softmaxDiv e => do
-      let (c, r) ← pretty B e; let z ← fresh; let s ← fresh; let sb ← fresh; let o ← fresh
-      pure (c ++
-        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-        s!"    {s} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,k]}, tensor<f32>) -> {ty [B]}\n" ++
-        s!"    {sb} = stablehlo.broadcast_in_dim {s}, dims = [0] : ({ty [B]}) -> {ty [B,k]}\n" ++
-        s!"    {o} = stablehlo.divide {r}, {sb} : {ty [B,k]}\n", o)
-  | k, .sub a b => do
-      let (ca, ra) ← pretty B a; let (cb, rb) ← pretty B b; let o ← fresh
-      pure (ca ++ cb ++ s!"    {o} = stablehlo.subtract {ra}, {rb} : {ty [B,k]}\n", o)
-  | k, .reluF e => do
-      let (c, r) ← pretty B e; let z ← fresh; let o ← fresh
-      pure (c ++ s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,k]}\n" ++
-            s!"    {o} = stablehlo.maximum {r}, {z} : {ty [B,k]}\n", o)
-  | k, .selectPos xName _ e => do
-      let (c, r) ← pretty B e; let z ← fresh; let msk ← fresh; let o ← fresh
-      pure (c ++
-        s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,k]}\n" ++
-        s!"    {msk} = stablehlo.compare GT, {xName}, {z} : ({ty [B,k]}, {ty [B,k]}) -> {tyI1 [B,k]}\n" ++
-        s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,k]}, {ty [B,k]}\n", o)
+-- ── Renderable skeleton + postorder tokenization (one form, shared with the
+--    parser in StableHLOParse.lean) ──
+
+/-- The renderable skeleton of an `SHlo` graph: opcodes + shapes + leaf SSA
+    names, with `ℝ` operand values and the shape index erased — exactly what
+    reaches the emitted text. -/
+inductive Raw where
+  | operand    (name : String) (n : Nat)  : Raw
+  | dotIn      (w : String) (m n : Nat)    : Raw → Raw
+  | dotOut     (w : String) (m n : Nat)    : Raw → Raw
+  | addBcast   (b : String) (n : Nat)      : Raw → Raw
+  | expe       (n : Nat)                   : Raw → Raw
+  | softmaxDiv (n : Nat)                   : Raw → Raw
+  | sub        (n : Nat)                   : Raw → Raw → Raw
+  | reluF      (n : Nat)                   : Raw → Raw
+  | selectPos  (x : String) (n : Nat)      : Raw → Raw
+deriving DecidableEq, Repr, Inhabited
+
+/-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
+    index; keeps op structure, shapes, leaf names). -/
+def skel : {k : Nat} → SHlo k → Raw
+  | k, .operand name _        => .operand name k
+  | k, .dotIn (m := m) w _ e  => .dotIn w m k (skel e)
+  | k, .dotOut (n := n) w _ e => .dotOut w k n (skel e)
+  | k, .addBcast b _ e        => .addBcast b k (skel e)
+  | k, .expe e                => .expe k (skel e)
+  | k, .softmaxDiv e          => .softmaxDiv k (skel e)
+  | k, .sub a b               => .sub k (skel a) (skel b)
+  | k, .reluF e               => .reluF k (skel e)
+  | k, .selectPos x _ e       => .selectPos x k (skel e)
+
+/-- One serialized token: an opcode with shapes/names; operands are positional. -/
+inductive Tok where
+  | operand    (name : String) (n : Nat)  : Tok
+  | dotIn      (w : String) (m n : Nat)    : Tok
+  | dotOut     (w : String) (m n : Nat)    : Tok
+  | addBcast   (b : String) (n : Nat)      : Tok
+  | expe       (n : Nat)                   : Tok
+  | softmaxDiv (n : Nat)                   : Tok
+  | sub        (n : Nat)                   : Tok
+  | reluF      (n : Nat)                   : Tok
+  | selectPos  (x : String) (n : Nat)      : Tok
+deriving DecidableEq, Repr
+
+/-- Postorder serialization: children, then the node's opcode token. -/
+def toToks : Raw → List Tok
+  | .operand nm n    => [.operand nm n]
+  | .dotIn w m n e   => toToks e ++ [.dotIn w m n]
+  | .dotOut w m n e  => toToks e ++ [.dotOut w m n]
+  | .addBcast b n e  => toToks e ++ [.addBcast b n]
+  | .expe n e        => toToks e ++ [.expe n]
+  | .softmaxDiv n e  => toToks e ++ [.softmaxDiv n]
+  | .sub n a b       => toToks a ++ toToks b ++ [.sub n]
+  | .reluF n e       => toToks e ++ [.reluF n]
+  | .selectPos x n e => toToks e ++ [.selectPos x n]
+
+/-- Render one token: pop its operands' result-names off the stack, emit its
+    StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
+    here is the audited lexical boundary (validated by `iree-compile` + GPU run);
+    the *structure* it consumes is the proven-faithful token stream. -/
+def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List String)
+  | .operand nm _, st => pure ("", nm :: st)
+  | .dotIn w m n, r :: st => do
+      let o ← fresh
+      pure (s!"    {o} = stablehlo.dot_general {r}, {w}, contracting_dims = [1] x [0], " ++
+            s!"precision = [DEFAULT, DEFAULT] : ({ty [B,m]}, {ty [m,n]}) -> {ty [B,n]}\n", o :: st)
+  | .dotOut w m n, r :: st => do
+      let o ← fresh
+      pure (s!"    {o} = stablehlo.dot_general {r}, {w}, contracting_dims = [1] x [1], " ++
+            s!"precision = [DEFAULT, DEFAULT] : ({ty [B,n]}, {ty [m,n]}) -> {ty [B,m]}\n", o :: st)
+  | .addBcast b n, r :: st => do
+      let bb ← fresh; let o ← fresh
+      pure (s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [n]}) -> {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.add {r}, {bb} : {ty [B,n]}\n", o :: st)
+  | .expe n, r :: st => do
+      let o ← fresh
+      pure (s!"    {o} = stablehlo.exponential {r} : {ty [B,n]}\n", o :: st)
+  | .softmaxDiv n, r :: st => do
+      let z ← fresh; let s ← fresh; let sb ← fresh; let o ← fresh
+      pure (s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {s} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+        s!"    {sb} = stablehlo.broadcast_in_dim {s}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+        s!"    {o} = stablehlo.divide {r}, {sb} : {ty [B,n]}\n", o :: st)
+  | .sub n, b :: a :: st => do
+      let o ← fresh
+      pure (s!"    {o} = stablehlo.subtract {a}, {b} : {ty [B,n]}\n", o :: st)
+  | .reluF n, r :: st => do
+      let z ← fresh; let o ← fresh
+      pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n", o :: st)
+  | .selectPos x n, r :: st => do
+      let z ← fresh; let msk ← fresh; let o ← fresh
+      pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
+        s!"    {msk} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
+        s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
+  | _, st => pure ("    // MALFORMED token stream\n", st)
+
+/-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
+def serializeToks (B : Nat) : List Tok → (String × List String) → StateM Nat (String × List String)
+  | [], acc           => pure acc
+  | t :: ts, (code, st) => do
+      let (c, st') ← emitTok B t st
+      serializeToks B ts (code ++ c, st')
+
+/-- **`pretty`** — render an `SHlo` graph to StableHLO, now defined as
+    `serialize ∘ toToks ∘ skel`: tokenize the graph (postorder), then print the
+    tokens. The emitter shares ONE structured form with the parser, so the
+    round-trip `parse (toToks (skel a)) = skel a` (StableHLOParse.lean) is about
+    the very tokens this prints — the printer can't structurally drift. -/
+def pretty (B : Nat) {k : Nat} (g : SHlo k) : StateM Nat (String × String) := do
+  let (code, st) ← serializeToks B (toToks (skel g)) ("", [])
+  match st with
+  | [r] => pure (code, r)
+  | _   => pure (code, "%MALFORMED")
 
 /-- Wrap a rendered single-result graph as a `func.func` module. -/
 def renderModule (name argSig : String) (B retLen : Nat) (g : SHlo retLen) : String :=
