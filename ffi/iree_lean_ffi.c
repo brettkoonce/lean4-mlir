@@ -965,3 +965,78 @@ LEAN_EXPORT lean_obj_res lean_iree_linear_train_step(
   }
   return lean_io_result_mk_ok(result);
 }
+
+// ---- Verified-renderer MLP train step (StableHLO.mlpTrainStepText) ----
+// Module signature (x, W0,b0,W1,b1,W2,b2, onehot) -> (W0n,b0n,W1n,b1n,W2n,b2n).
+// Inputs: x[batch,d0], the params (packed f32, sliced per `shapes`), onehot
+// (built here from int32 labels y[batch], d3 classes). Returns the updated
+// params packed in the same layout as `params`.
+LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v(
+    b_lean_obj_arg sess_obj,
+    b_lean_obj_arg fn_name_obj,
+    b_lean_obj_arg x_ba,
+    b_lean_obj_arg params_ba,
+    b_lean_obj_arg shapes_ba,
+    b_lean_obj_arg y_ba,
+    size_t batch, size_t d0, size_t d3, lean_obj_arg world) {
+  (void)world;
+  iree_ffi_session_t* sess =
+      (iree_ffi_session_t*)lean_get_external_data(sess_obj);
+  const char* fn_name = lean_string_cstr(fn_name_obj);
+
+  const int32_t* sp = (const int32_t*)lean_sarray_cptr(shapes_ba);
+  int n_params = sp[0];
+  int n_inputs = 1 + n_params + 1;  // x, params..., onehot
+  int32_t* input_ranks = (int32_t*)malloc(n_inputs * sizeof(int32_t));
+  int64_t* dims = (int64_t*)malloc((lean_sarray_size(shapes_ba) / 4 + 16) * sizeof(int64_t));
+  const float** in_data = (const float**)malloc(n_inputs * sizeof(float*));
+  int di = 0, sp_idx = 1;
+
+  // input 0: x [batch, d0]
+  input_ranks[0] = 2; dims[di++] = (int64_t)batch; dims[di++] = (int64_t)d0;
+  in_data[0] = (const float*)lean_sarray_cptr(x_ba);
+
+  // inputs 1..n_params: param tensors sliced from packed `params`
+  const float* pf = (const float*)lean_sarray_cptr(params_ba);
+  int64_t off = 0;
+  for (int i = 0; i < n_params; i++) {
+    int rank = sp[sp_idx++]; input_ranks[1 + i] = rank; int64_t sz = 1;
+    for (int d = 0; d < rank; d++) { dims[di] = (int64_t)sp[sp_idx++]; sz *= dims[di]; di++; }
+    in_data[1 + i] = pf + off; off += sz;
+  }
+  int64_t n_total = off;
+
+  // last input: onehot [batch, d3] from int32 labels
+  const int32_t* y = (const int32_t*)lean_sarray_cptr(y_ba);
+  float* onehot = (float*)calloc(batch * d3, sizeof(float));
+  for (size_t i = 0; i < batch; i++) {
+    int32_t l = y[i]; if (l >= 0 && (size_t)l < d3) onehot[i * d3 + (size_t)l] = 1.0f;
+  }
+  input_ranks[1 + n_params] = 2; dims[di++] = (int64_t)batch; dims[di++] = (int64_t)d3;
+  in_data[1 + n_params] = onehot;
+
+  // outputs: n_params updated tensors, same sizes, packed into one result
+  lean_object* result = lean_alloc_sarray(1, (size_t)n_total * 4, (size_t)n_total * 4);
+  float* out = (float*)lean_sarray_cptr(result);
+  int64_t* out_totals = (int64_t*)malloc(n_params * sizeof(int64_t));
+  float** outputs = (float**)malloc(n_params * sizeof(float*));
+  sp_idx = 1; off = 0;
+  for (int i = 0; i < n_params; i++) {
+    int rank = sp[sp_idx++]; int64_t sz = 1;
+    for (int d = 0; d < rank; d++) sz *= sp[sp_idx++];
+    out_totals[i] = sz; outputs[i] = out + off; off += sz;
+  }
+
+  int rc = iree_ffi_invoke_f32(sess, fn_name,
+      n_inputs, input_ranks, dims, in_data,
+      n_params, out_totals, outputs);
+
+  free(input_ranks); free(dims); free(in_data); free(onehot);
+  free(out_totals); free(outputs);
+  if (rc != 0) {
+    lean_dec_ref(result);
+    return lean_io_result_mk_error(
+        lean_mk_io_user_error(lean_mk_string("mlp train step failed")));
+  }
+  return lean_io_result_mk_ok(result);
+}

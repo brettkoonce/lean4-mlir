@@ -153,6 +153,17 @@ opaque linearTrainStepV
   (x : @& ByteArray) (W0 : @& ByteArray) (b0 : @& ByteArray) (y : @& ByteArray)
   (batch : USize) (d0 : USize) (d1 : USize) : IO ByteArray
 
+/-- Drive the **verified-renderer** `@mlp_train_step`
+    (`StableHLO.mlpTrainStepText`) through the generic IREE invoke. `params` is
+    the packed f32 weights (sliced per `shapes`, same layout as `forwardF32`);
+    `x` is `batch×d₀`; `y` is int32 `[batch]` (one-hot built in the C shim with
+    `d₃` classes). Returns the updated params, packed in the same layout. -/
+@[extern "lean_iree_mlp_train_step_v"]
+opaque mlpTrainStepV
+  (sess : @& IreeSession) (fnName : @& String)
+  (x : @& ByteArray) (params : @& ByteArray) (shapes : @& ByteArray) (y : @& ByteArray)
+  (batch : USize) (d0 : USize) (d3 : USize) : IO ByteArray
+
 end IreeSession
 
 /- Sizes for the packed-params layout. -/

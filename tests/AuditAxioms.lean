@@ -229,3 +229,10 @@ open Proofs
 -- SGD update proven (not trusted) for plain SGD on the linear net.
 #print axioms StableHLO.sgdW_descends_certified_grad
 #print axioms StableHLO.sgdB_descends_certified_grad
+-- R4 Stage A, Chapter 3 (MLP): ReLU forward (maximum) + backward (select),
+-- whole-MLP forward (= mlpForward) and backward chain (= mlp_has_vjp_at, the
+-- conditional whole-network VJP at a smooth point).
+#print axioms StableHLO.reluF_faithful
+#print axioms StableHLO.selectPos_faithful
+#print axioms StableHLO.mlpFwdGraph_faithful
+#print axioms StableHLO.mlpBackGraph_faithful

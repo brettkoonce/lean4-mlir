@@ -160,6 +160,12 @@ lean_exe «mnist-linear-verified» where
   root := `MainMnistLinearVerified
   moreLinkArgs := ireeLink
 
+-- Chapter 3: trains the MNIST MLP on the VERIFIED-rendered StableHLO
+-- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepText).
+lean_exe «mnist-mlp-verified» where
+  root := `MainMnistMlpVerified
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar-cnn-train» where
   root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink
