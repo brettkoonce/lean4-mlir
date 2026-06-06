@@ -635,5 +635,103 @@ theorem mobilenetv2_has_vjp_at_correct
       We₂ be₂ e₂ ge₂ be2 he₂ Wd₂ bd₂ d₂ gd₂ bd2 hd₂ Wp₂ bp₂ p₂ gp₂ bp2 hp₂ Wh bh
       x h_stem h_b1e h_b1d h_b2e h_b2d).correct dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- Concrete whole-network instance: every ReLU6 smoothness hypothesis
+-- discharged (the `mobilenetv2_has_vjp_at` analogue of the MnistCNN
+-- concrete instances). Closes the gap that the relu6 smoothness bundle is
+-- never shown jointly satisfiable on the real `mobilenetv2Forward`.
+--
+-- NOTE: this is a *degenerate* witness. The discharge uses `bnForward_const`
+-- (BN of a constant = its shift β), which requires every BN input to be
+-- constant — forcing constant pre-GAP activations and hence a constant
+-- network (zero Jacobian). That is intrinsic to ReLU6's two-sided kink: the
+-- only cheap way to land every relu6 input strictly inside (0,6) is to pin
+-- it to a single β. A *live* MobileNetV2 witness (non-trivial Jacobian)
+-- needs genuine per-coordinate (0,6) bounds and is left as follow-up.
+-- ════════════════════════════════════════════════════════════════
+
+/-- BN of a constant vector is the (constant) shift `β` — centering zeroes
+    the normalized term, killing the `√`. Keystone for discharging ReLU6
+    smoothness on a constant-activation net. -/
+theorem bnForward_const {n : Nat} (hn : 0 < n) (ε γ β c : ℝ) :
+    bnForward n ε γ β (fun _ => c) = (fun _ => β) := by
+  have hmean : bnMean n (fun _ : Fin n => c) = c := by
+    unfold bnMean
+    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
+        mul_comm, mul_div_assoc, div_self (Nat.cast_ne_zero.mpr hn.ne'), mul_one]
+  funext i
+  simp only [bnForward, bnXhat]
+  rw [hmean]; ring
+
+/-- A conv with everywhere-zero kernel and bias maps anything to `0`. -/
+theorem flatConv_eq_zero {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (hW : ∀ o c kh kw, W o c kh kw = 0) (hb : ∀ o, b o = 0) (v : Vec (ic * h * w)) :
+    flatConv (h := h) (w := w) W b v = (fun _ => (0:ℝ)) := by
+  funext k; simp [flatConv, conv2d, Tensor3.flatten, hW, hb]
+
+/-- A depthwise conv with everywhere-zero kernel and bias maps anything to `0`. -/
+theorem depthwiseFlat_eq_zero {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (hW : ∀ ch kh kw, W ch kh kw = 0) (hb : ∀ ch, b ch = 0) (v : Vec (c * h * w)) :
+    depthwiseFlat (h := h) (w := w) W b v = (fun _ => (0:ℝ)) := by
+  funext k; simp [depthwiseFlat, depthwiseConv2d, Tensor3.flatten, hW, hb]
+
+namespace MobileNetV2Concrete
+
+-- ic=1, c=mid₁=oc=mid₂=2, h=w=2, nClasses=2, 1×1 kernels, zero weights,
+-- all BN (ε,γ,β) = (1,1,1) so every relu6 input lands at β = 1 ∈ (0,6).
+noncomputable def Ws  : Kernel4 2 1 1 1 := fun _ _ _ _ => 0
+noncomputable def bs  : Vec 2 := fun _ => 0
+noncomputable def We₁ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
+noncomputable def bE₁ : Vec 2 := fun _ => 0
+noncomputable def Wd₁ : DepthwiseKernel 2 1 1 := fun _ _ _ => 0
+noncomputable def bD₁ : Vec 2 := fun _ => 0
+noncomputable def Wp₁ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
+noncomputable def bP₁ : Vec 2 := fun _ => 0
+noncomputable def We₂ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
+noncomputable def bE₂ : Vec 2 := fun _ => 0
+noncomputable def Wd₂ : DepthwiseKernel 2 1 1 := fun _ _ _ => 0
+noncomputable def bD₂ : Vec 2 := fun _ => 0
+noncomputable def Wp₂ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
+noncomputable def bP₂ : Vec 2 := fun _ => 0
+noncomputable def Wh  : Mat 2 2 := fun _ _ => 0
+noncomputable def bh  : Vec 2 := fun _ => 0
+noncomputable def X   : Vec (1 * 2 * 2) := fun _ => 0
+
+/-- **Whole-network VJP for a concrete MobileNetV2** — every ReLU6
+    smoothness hypothesis (`bn ≠ 0 ∧ bn ≠ 6` at the five relu6 sites)
+    discharged: every BN input is the zero vector (zero kernels), so each
+    BN output is its shift `β = 1 ∈ (0,6)` via `bnForward_const`. -/
+noncomputable def mnv2Concrete_has_vjp_at :
+    HasVJPAt (mobilenetv2Forward Ws bs 1 1 1 We₁ bE₁ 1 1 1 Wd₁ bD₁ 1 1 1 Wp₁ bP₁ 1 1 1
+      We₂ bE₂ 1 1 1 Wd₂ bD₂ 1 1 1 Wp₂ bP₂ 1 1 1 Wh bh) X :=
+  mobilenetv2_has_vjp_at Ws bs 1 1 1 (by norm_num)
+    We₁ bE₁ 1 1 1 (by norm_num) Wd₁ bD₁ 1 1 1 (by norm_num) Wp₁ bP₁ 1 1 1 (by norm_num)
+    We₂ bE₂ 1 1 1 (by norm_num) Wd₂ bD₂ 1 1 1 (by norm_num) Wp₂ bP₂ 1 1 1 (by norm_num)
+    Wh bh X
+    (by intro k
+        rw [flatConv_eq_zero Ws bs (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const (by norm_num)]
+        exact ⟨by norm_num, by norm_num⟩)
+    (by intro k
+        rw [flatConv_eq_zero We₁ bE₁ (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const (by norm_num)]
+        exact ⟨by norm_num, by norm_num⟩)
+    (by intro k
+        rw [depthwiseFlat_eq_zero Wd₁ bD₁ (fun _ _ _ => rfl) (fun _ => rfl), bnForward_const (by norm_num)]
+        exact ⟨by norm_num, by norm_num⟩)
+    (by intro k
+        rw [flatConv_eq_zero We₂ bE₂ (fun _ _ _ _ => rfl) (fun _ => rfl), bnForward_const (by norm_num)]
+        exact ⟨by norm_num, by norm_num⟩)
+    (by intro k
+        rw [depthwiseFlat_eq_zero Wd₂ bD₂ (fun _ _ _ => rfl) (fun _ => rfl), bnForward_const (by norm_num)]
+        exact ⟨by norm_num, by norm_num⟩)
+
+/-- **Public unconditional correctness theorem** — the concrete MobileNetV2's
+    backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
+theorem mnv2Concrete_has_vjp_correct (dy : Vec 2) (i : Fin (1 * 2 * 2)) :
+    mnv2Concrete_has_vjp_at.backward dy i =
+      ∑ j : Fin 2, pdiv (mobilenetv2Forward Ws bs 1 1 1 We₁ bE₁ 1 1 1 Wd₁ bD₁ 1 1 1 Wp₁ bP₁ 1 1 1
+        We₂ bE₂ 1 1 1 Wd₂ bD₂ 1 1 1 Wp₂ bP₂ 1 1 1 Wh bh) X i j * dy j :=
+  mnv2Concrete_has_vjp_at.correct dy i
+
+end MobileNetV2Concrete
 
 end Proofs
