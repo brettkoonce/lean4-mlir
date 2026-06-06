@@ -592,6 +592,37 @@ operator-specific theorems and compose them through the chain rule
 we just proved. The training loop that runs all of them is the
 same hundred lines of Lean, walked through next.
 
+\section{MLIR: Linear}
+
+The backward pass of the linear classifier is one operation: with the loss
+cotangent $dy = \mathrm{softmax}(\mathrm{logits}) - \text{onehot}$, the input
+gradient is $dx = dy\,W^{\!\top}$, a single matrix multiply. Here is exactly
+what the code generator emits for it (at a small representative size; nothing
+hand-written, one \texttt{stablehlo} op):
+
+\begin{verbatim}
+func.func @linear_back(%dy: tensor<2x3xf32>, %W0: tensor<4x3xf32>)
+    -> tensor<2x4xf32> {
+  %bk0 = stablehlo.dot_general %dy, %W0, contracting_dims = [1] x [1]
+           : (tensor<2x3xf32>, tensor<4x3xf32>) -> tensor<2x4xf32>
+  return %bk0 : tensor<2x4xf32>
+}
+\end{verbatim}
+
+\noindent That \texttt{dot\_general}, contracting the output axis of $dy$
+against the output axis of $W$, \emph{is} multiplication by $W^{\!\top}$ ---
+which is, by a machine-checked theorem, the linear layer's exact reverse-mode
+derivative. Everything else in this book scales that one move up. Each
+architecture chapter closes with an ``MLIR: \emph{operator}'' section that
+takes the chapter's new operator --- convolution, BatchNorm, the residual
+fan-in, depthwise convolution, squeeze-excitation, layer scale, attention ---
+and shows that \emph{its} emitted backward is likewise the rendering of a
+proven derivative. The shared machinery underneath them --- the denoted
+intermediate representation, the bridge theorems that tie it to the proofs,
+the printer that turns it into the text above, and the execution oracle that
+checks the result on the GPU --- is the subject of
+Appendix~\ref{app:verification}.
+
 \section{What's inside \texttt{.train}?}
 \label{sec:mlp_inside_train}
 
@@ -1882,38 +1913,20 @@ comparison. Later chapters switch to the modern recipe (Adam + cosine + warmup
 + weight decay + label smoothing + data augmentation) once we can
 benchmark the deltas against this baseline.
 
-\subsection*{Is that MLIR verified? In what sense, and to what tolerance}
+\section{MLIR: Dense}
 
-That 20\,502-character line is the entire training step --- the forward
-pass through all three dense layers, the softmax cross-entropy loss, the
-backward pass (the VJP of every layer), and the optimizer update for each
-of the $669\,706$ parameters --- emitted as one \texttt{stablehlo} block
-that IREE compiles once and then runs per mini-batch. The question this
-section answers is the one that matters for a book about \emph{verified}
-learning: in what precise sense is that emitted code correct, and how do
-we know?
-
-\medskip\noindent\textbf{What is already proven.} The mathematics is
-settled earlier in this chapter. \texttt{mlpForward} is the
+\noindent\textbf{What is already proven.} \texttt{mlpForward} is the
 three-dense-layer network; \texttt{mlp\_has\_vjp\_at} proves its
 reverse-mode derivative (the vector--Jacobian product) by chaining the
 per-layer chain rule \texttt{vjp\_comp\_at}; the parameter gradients are
 pinned by \texttt{dense\_weight\_grad\_correct} and
 \texttt{dense\_bias\_grad\_correct}, and the loss gradient by
-\texttt{softmaxCE\_grad}. Each closes under the three standard axioms
-(\texttt{propext}, \texttt{Classical.choice}, \texttt{Quot.sound}) --- no
-\texttt{sorry}, no \texttt{native\_decide}. So \emph{what} the gradient
-is, is not in question.
+\texttt{softmaxCE\_grad}. So \emph{what} the gradient is, is not in
+question.
 
-\medskip\noindent\textbf{The gap, and how we close it.} The GPU never
-runs those Lean functions; it runs the emitted \texttt{stablehlo}. The
-dangerous failure mode of any code generator is that the math is right
-while the emitted op contracts the wrong axis, transposes backwards, or
-silently drops a term --- and the only thing traditionally linking the
-proof to the emitted string is a code comment. We replace that comment
-with a theorem. The emitted backward is given a Lean datatype,
-\texttt{Back}, with a denotation $[\![\cdot]\!]$ valued in the proofs'
-own vector type. For the MLP the graph is
+\medskip\noindent\textbf{The gap, and how we close it.} The emitted
+backward is a value of a Lean datatype, \texttt{Back}, with a denotation
+$[\![\cdot]\!]$ into the proofs' own vector type. For the MLP the graph is
 \[
   \texttt{emitMlpBack}
   = \texttt{dotGeneral}\,W_0 \circ \texttt{selectPos}\,p_0
@@ -1923,25 +1936,15 @@ own vector type. For the MLP the graph is
 rooted at the incoming cotangent, with
 $[\![\texttt{dotGeneral}\,W]\!] = \texttt{Mat.mulVec}\,W$ and
 $[\![\texttt{selectPos}\,p]\!] = (v \mapsto \text{if } p>0 \text{ then }
-v \text{ else } 0)$. The payoff is the bridge theorem
+v \text{ else } 0)$, and the bridge theorem
 \[
   \texttt{mlp\_whole\_bridge}:\quad
   [\![\texttt{emitMlpBack}]\!](dy)
-  = \texttt{mlp\_has\_vjp\_at}.\mathrm{backward}(dy),
+  = \texttt{mlp\_has\_vjp\_at}.\mathrm{backward}(dy)
 \]
-proved by bridging each op (\texttt{dense\_at\_bridge},
-\texttt{relu\_at\_bridge}) and composing them with the IR-level chain
-rule \texttt{denote\_subst} --- the exact analogue of
-\texttt{vjp\_comp\_at}. The denotation of the emitted graph \emph{is},
-by machine check, the proven derivative. The forward
-($[\![\texttt{emitMlpFwd}]\!] = \texttt{mlpForward}$), the loss
-cotangent, and the parameter gradients are bridged the same way, so
-every mathematical operation in the train step is covered. A small
-computable printer then walks that same graph and emits one
-\texttt{stablehlo} op per node ($\texttt{dotGeneral}\,W \mapsto
-\texttt{stablehlo.dot\_general}$; $\texttt{selectPos}\,p \mapsto
-\texttt{compare GT 0} + \texttt{select}$), so the emitted text \emph{is}
-the printout of \texttt{emitMlpBack} by construction.
+says the denotation of that graph is the proven derivative; the forward,
+the loss cotangent, and the parameter gradients are covered the same way.
+The printer walks the graph and emits one \texttt{stablehlo} op per node:
 
 Here is exactly what the printer emits for that graph --- nothing
 hand-written, one \texttt{stablehlo} op per IR node (default
@@ -1980,39 +1983,20 @@ pair (\texttt{\%bk2}/\texttt{\%bk3}, \texttt{\%bk6}/\texttt{\%bk7}) is a
 theorem is precisely the claim that this text computes
 \texttt{mlp\_has\_vjp\_at}'s backward.
 
-\medskip\noindent\textbf{Proven versus trusted.} The honest accounting:
+\medskip\noindent\textbf{Caveats.}
 \begin{itemize}
-  \item \emph{Proven} (Lean, three axioms): the IR's denotation equals
-    the proven derivative, and likewise for the forward, loss, and
-    gradient bridges.
-  \item \emph{By construction}: the emitted StableHLO is the rendering
-    of exactly that graph.
-  \item \emph{Trusted} (validated, not proven): that the StableHLO
-    \emph{text} denotes $[\![\cdot]\!]$ --- a faithful printer, whose
-    proof would require a formal semantics of StableHLO text that does
-    not yet exist; that IREE lowers it correctly; and that
-    \texttt{float32} approximates $\mathbb{R}$.
+  \item \textbf{ReLU is a smooth-point bridge.} Where a pre-activation is
+    exactly zero ReLU has no derivative; the emitted \texttt{compare GT 0}
+    sends that case to $0$, and the bridge is permitted to fail on that
+    measure-zero set.
+  \item \textbf{Representative scale.} The listing is shown at a small
+    size; the trained network is $784{\to}512{\to}512{\to}10$. The proof
+    is dimension-parameterized and the printer emits the same graph at
+    every width.
+  \item \textbf{Trusted surface.} The printer's faithfulness, IREE's
+    lowering, and \texttt{float32} $\approx \mathbb{R}$ are tested, not
+    proved; the full accounting is in Appendix~\ref{sec:verified_codegen}.
 \end{itemize}
-So the claim is exact and bounded: \emph{the gradient the GPU computes
-is, by a machine-checked theorem, the network's exact reverse-mode
-derivative over $\mathbb{R}$ --- up to a faithful printer, IREE, and
-floating point.} The first half is a proof; the rest is tested, end to
-end. Compiled by IREE and run on the GPU, the emitted train step updates
-all six MLP parameter tensors to within $1.2\times10^{-7}$ of an
-independent NumPy SGD reference. The irreducible unproven surface is one
-$\sim$200-line printer plus IREE plus float --- where a conventional
-generator leaves thousands of lines of string-building linked to the
-proof by nothing at all.
-
-\medskip\noindent\textbf{One honest caveat.} The ReLU bridge holds at a
-\emph{smooth point} --- an input where no pre-activation is exactly
-zero. At the kink ReLU has no derivative, and the code uses a
-subgradient (the \texttt{compare GT 0} sends the zero case to $0$); the
-equality is permitted to fail precisely on that measure-zero set, and
-nowhere else. This is the smallest setting in which the technique
-appears; the same three pieces --- denoted IR, bridge theorem, printer
---- carry unchanged to the CNN of Chapter~\ref{chap:cnn} and to a full
-transformer block.
 
 \chapter{MNIST: 2D CNN}
 \label{chap:cnn}
@@ -2442,18 +2426,9 @@ convolutions and maxPool roughly doubles the emitted compute, not
 \texttt{.convBn} adds batch-norm normalize and affine ops; the
 plain \texttt{.conv2d} used here keeps the StableHLO much tighter.
 
-\subsection*{Is that convolution backward verified? The reversed-kernel VJP}
+\section{MLIR: Convolution}
 
-The CNN's emitted train step is 21\,884 characters --- the two
-convolutions, the max-pool, the flatten, the three dense layers, the
-softmax cross-entropy loss, the backward pass for each of them, and the
-SGD update for all $3\,489\,130$ parameters, as one \texttt{stablehlo}
-block IREE compiles once and runs per mini-batch. The new machinery this
-chapter adds over the MLP is the \emph{convolution}, and its backward is
-the part most likely to be silently wrong --- so it is the part we pin
-with a theorem.
-
-\medskip\noindent\textbf{What is already proven.} \texttt{cnnForward} is
+\noindent\textbf{What is already proven.} \texttt{cnnForward} is
 the conv\,$\to$\,relu\,$\to$\,conv\,$\to$\,relu\,$\to$\,maxPool\,$\to$\,flatten\,$\to$\,dense
 network; \texttt{cnn\_has\_vjp\_at} proves its reverse-mode derivative by
 chaining the per-layer VJPs --- the dense backward
@@ -2468,43 +2443,30 @@ its in- and out-channels swapped and both spatial axes reversed. The
 parameter gradients are pinned by \texttt{conv2d\_weight\_grad\_has\_vjp}
 (the transpose trick) and the dense grads from Chapter~\ref{chap:mlp}, and
 the loss gradient by \texttt{softmaxCE\_grad} (\S~\ref{ax:softmaxCE_grad}).
-Each closes under the three standard axioms (\texttt{propext},
-\texttt{Classical.choice}, \texttt{Quot.sound}) --- no \texttt{sorry}, no
-\texttt{native\_decide}. So \emph{what} the convolution's gradient is, is
-not in question.
+So \emph{what} the convolution's gradient is, is not in question.
 
-\medskip\noindent\textbf{The gap, and how we close it.} The dangerous
-failure mode of a convolution code generator is specific and easy to hit:
-the backward op transposes the wrong pair of axes, reverses one spatial
-dimension instead of two, or contracts input against output channels ---
-each a one-token change that still type-checks and still yields a
-plausibly-shaped tensor, and the only thing traditionally linking the
-proof to the emitted string is a code comment. We replace that comment
-with a theorem. The emitted backward convolution is given a denotation
-$[\![\cdot]\!]$ valued in the proofs' own tensor type,
+\medskip\noindent\textbf{The gap, and how we close it.} The emitted
+backward convolution is given a denotation $[\![\cdot]\!]$ valued in the
+proofs' own tensor type,
 \[
   [\![\texttt{convBackDenote}\,W]\!]
   = \texttt{conv2d}\,(\texttt{reverseSwap}\,W),
   \qquad
   (\texttt{reverseSwap}\,W)_{c_i\,c_o\,k_h\,k_w} = W_{c_o\,c_i\,\bar k_h\,\bar k_w},
 \]
-where $\bar k = K - 1 - k$ is the spatial flip. The payoff is the bridge
-theorem
+where $\bar k = K - 1 - k$ is the spatial flip, and the bridge theorem
 \[
   \texttt{conv\_back\_bridge\_1to2}:\quad
   [\![\texttt{convBackDenote}\,W]\!](dy)
-  = (\texttt{conv2d\_has\_vjp3}\,W\,b).\mathrm{backward}(x, dy),
+  = (\texttt{conv2d\_has\_vjp3}\,W\,b).\mathrm{backward}(x, dy)
 \]
-proved by expanding both sides at the concrete shape --- the
-reversed-kernel identity that \texttt{cnn\_has\_vjp\_at} only \emph{asserts}
-is here discharged by machine check (and again at the $2{\to}2$ shape, by
-\texttt{conv\_back\_bridge\_2to2}). The denotation of the emitted graph
-\emph{is}, by machine check, the proven conv input-VJP. A small computable
-printer then walks that same graph and emits one \texttt{stablehlo} op per
-node --- $\texttt{transpose}$ for the channel swap, $\texttt{reverse}$ for
-the spatial flip, $\texttt{convolution}$ for the contraction --- so the
-emitted text \emph{is} the printout of \texttt{convBackDenote}\,$W$ by
-construction.
+says the denotation of that graph is the proven conv input-VJP --- the
+reversed-kernel identity \texttt{cnn\_has\_vjp\_at} only \emph{asserts},
+discharged here by expansion at the concrete shape (and again at the
+$2{\to}2$ shape, by \texttt{conv\_back\_bridge\_2to2}). The printer walks the
+graph and emits one \texttt{stablehlo} op per node --- \texttt{transpose}
+for the channel swap, \texttt{reverse} for the spatial flip,
+\texttt{convolution} for the contraction:
 
 Here is exactly what the printer emits for the first conv's backward
 ($1{\to}2$ channels, $3\times3$ kernel, at $4\times4$):
@@ -2540,21 +2502,19 @@ tile-compare-select by \texttt{maxpool\_back\_bridge}, the dense
 \texttt{dot\_general}s exactly as in Chapter~\ref{chap:mlp} --- so the
 whole CNN backward is covered, op by op.
 
-\medskip\noindent\textbf{One honest caveat.} The CNN has two kinked ops,
-not one. The convolution itself is linear, so its bridge is
-\emph{unconditional} --- it holds at every input. But the relu bridges
-hold only at a smooth point (no pre-activation exactly zero), and the
-max-pool bridge holds only where every $2\times2$ window has a unique
-strict argmax; each equality is permitted to fail precisely on that
-measure-zero set, and the max-pool tie set is exactly the codegen trust
-boundary for pooling. As in the MLP, the listing is shown at a
-representative scale ($1{\to}2$ channels at $4\times4$, where the bridge is
-discharged by expansion) rather than the production $1{\to}32$ net at
-$28\times28$; the per-op proofs are dimension-parameterized and the
-generator composes them. The same three pieces --- denoted IR, bridge
-theorem, printer --- carry unchanged to the BatchNorm of
-Chapter~\ref{chap:bn} and the residual net of
-Chapter~\ref{chap:residual}.
+\medskip\noindent\textbf{Caveats.}
+\begin{itemize}
+  \item \textbf{The convolution bridge is unconditional} --- a convolution
+    is linear, so it holds at every input.
+  \item \textbf{ReLU is a smooth-point bridge} (no pre-activation exactly
+    zero), failing only on that measure-zero set.
+  \item \textbf{Max-pool needs a unique argmax} --- the bridge holds only
+    where every $2\times2$ window has a strict argmax; the tie set is the
+    codegen trust boundary for pooling.
+  \item \textbf{Representative scale} --- $1{\to}2$ channels at $4\times4$
+    rather than the production $1{\to}32$ net at $28\times28$; the per-op
+    proofs are dimension-parameterized.
+\end{itemize}
 
 \chapter{CIFAR with BatchNorm}
 \label{chap:bn}
@@ -3012,6 +2972,87 @@ at every step --- so the empirical result (``BN lets you train with
 a 5$\times$ bigger learning rate'') rests on a machine-checked
 mathematical claim, not on folklore.
 
+\section{MLIR: BatchNorm}
+
+\noindent\textbf{What is already proven.} BatchNorm factors as
+$\mathrm{bnForward} = \mathrm{bnAffine} \circ \mathrm{bnNormalize}$, and its
+reverse-mode derivative is the three-term formula of
+\S~\ref{thm:bnNormalize_has_vjp}: with $\hat{x} = (x-\mu)\,\mathrm{istd}$,
+\[
+  dx = \frac{\mathrm{istd}\,\gamma}{n}\Bigl(n\,dy
+       \;-\; \textstyle\sum_k dy_k
+       \;-\; \hat{x}\,\textstyle\sum_k \hat{x}_k\,dy_k\Bigr).
+\]
+\texttt{bn\_has\_vjp} proves it, composing \texttt{bnNormalize\_has\_vjp}
+(the rank-1 wringer) with \texttt{bnAffine\_has\_vjp} (the $\gamma\,dy$
+half). The one subtlety, isolated in \S~\ref{ax:bnIstdBroadcast_diff}, is
+that the inverse-stddev term carries an $\mathrm{istd}^3$ that needs
+$\varepsilon > 0$ to stay differentiable --- the single place in the book
+where the math reaches past chain-sum-product into real analysis.
+
+\medskip\noindent\textbf{The gap, and how we close it.} The three-term
+backward is not elementwise --- the two $\sum_k$ reductions couple every
+coordinate to every other. The emitted backward graph is given a denotation
+in the proofs' own vector type, and
+\texttt{bn\_back\_bridge} proves that denotation equal to
+\texttt{bn\_has\_vjp}'s backward --- the emitted reduce/broadcast/elementwise
+graph \emph{is}, by machine check, the three-term formula. Here is what the
+printer emits (the forward-statistic recompute --- mean, variance,
+\texttt{rsqrt}, normalize --- elided to its one comment line; $n=4$):
+
+\begin{verbatim}
+// forward stats recomputed: %mu, %istd, %xhat = (x-mu)*istd
+%dxhat = stablehlo.multiply %gb, %dy : tensor<2x4xf32>   // dxhat = g*dy
+%sdx_r = stablehlo.reduce(%dxhat init: %sc)
+           applies stablehlo.add across dimensions = [1]
+           : (tensor<2x4xf32>, tensor<f32>) -> tensor<2xf32>
+%sdx = stablehlo.broadcast_in_dim %sdx_r, dims = [0]
+           : (tensor<2xf32>) -> tensor<2x4xf32>          // sum dxhat
+%xd = stablehlo.multiply %xhat, %dxhat : tensor<2x4xf32>
+%sxdx_r = stablehlo.reduce(%xd init: %sc)
+           applies stablehlo.add across dimensions = [1]
+           : (tensor<2x4xf32>, tensor<f32>) -> tensor<2xf32>
+%sxdx = stablehlo.broadcast_in_dim %sxdx_r, dims = [0]
+           : (tensor<2xf32>) -> tensor<2x4xf32>          // sum xhat*dxhat
+%t1 = stablehlo.multiply %dxhat, %nf : tensor<2x4xf32>   // N*dxhat
+%i1 = stablehlo.subtract %t1, %sdx : tensor<2x4xf32>     //   - sum dxhat
+%xs = stablehlo.multiply %xhat, %sxdx : tensor<2x4xf32>
+%i2 = stablehlo.subtract %i1, %xs : tensor<2x4xf32>      //   - xhat*(sum)
+%s = stablehlo.divide %istd, %nf : tensor<2x4xf32>       // istd/N
+%dx = stablehlo.multiply %s, %i2 : tensor<2x4xf32>
+return %dx : tensor<2x4xf32>
+\end{verbatim}
+
+\noindent Read it against the formula: \texttt{\%dxhat} is the affine
+backward $\gamma\,dy$; each \texttt{reduce} along \texttt{dimensions = [1]}
+followed by a \texttt{broadcast\_in\_dim} is one of the cross-coordinate
+sums ($\sum_k dy_k$ as \texttt{\%sdx}, $\sum_k\hat{x}_k\,dy_k$ as
+\texttt{\%sxdx}); \texttt{\%i1} assembles $n\,dy - \sum dy$ (the direct term
+minus the centering correction), \texttt{\%i2} subtracts the rank-1
+normalization correction $\hat{x}\sum\hat{x}\,dy$, and \texttt{\%dx} scales
+the whole bracket by $\mathrm{istd}/n$. The graph folds $\gamma$ into
+\texttt{\%dxhat} up front, which is why that leading scale is
+$\mathrm{istd}/n$ and not $\mathrm{istd}\,\gamma/n$ --- the same formula,
+$\gamma$ pulled inside the parenthesis. The bridge theorem is precisely the
+claim that this text computes \texttt{bn\_has\_vjp}'s backward.
+
+\medskip\noindent Because LayerNorm is BatchNorm along a different axis, the
+very same emitted graph denotes the LayerNorm backward
+(\texttt{layernorm\_back\_bridge} is literally \texttt{bn\_back\_bridge}) ---
+the normalization sitting inside the residual, depthwise, and ConvNeXt blocks
+built on this foundation.
+
+\medskip\noindent\textbf{Caveats.}
+\begin{itemize}
+  \item \textbf{Needs $\varepsilon > 0$.} The inverse-stddev term carries an
+    $\mathrm{istd}^3$; given $\varepsilon > 0$ the bridge is unconditional
+    (smooth everywhere, with no smooth-point exclusion, unlike ReLU and
+    max-pool).
+  \item \textbf{Representative scale} ($n = 4$); the proof is
+    dimension-parameterized and the printer emits the same graph at every
+    width.
+\end{itemize}
+
 The next chapter (\S~\ref{chap:residual}) adds residual connections
 and the same mechanical approach: prove that the VJP of a skip
 connection is additive fan-in, compose with BN and conv, and the
@@ -3287,6 +3328,71 @@ Some numbers worth noticing:
   for 36 total. Each one proves its own VJP via
   \S~\ref{thm:bn_has_vjp} and composes with the rest of the network
   via \S~\ref{thm:vjp_comp}.
+
+\section{MLIR: Residual}
+
+\noindent\textbf{What is already proven.} A residual block is
+$\mathrm{residual}(x) = f(x) + x$ --- an additive fan-in, where $f$ is the
+conv\,$\to$\,BN\,$\to$\,relu\,$\to$\,conv\,$\to$\,BN inner block. As
+Theorem~\ref{thm:residual_has_vjp} states, its reverse-mode derivative is
+the additive-fan-in rule with the identity in one slot: \emph{send the
+upstream gradient through both branches and add}.
+\texttt{residual\_has\_vjp\_at} proves exactly this at the evaluation point
+(a one-line proof: the fan-in lemma with the identity's VJP plugged into
+one slot), and the inner $f$'s VJP is the convolution and BatchNorm
+backward already proven in Chapters~\ref{chap:cnn} and~\ref{chap:bn}. The
+whole block --- and a tower of sixteen of them --- composes by the chain
+rule \texttt{vjp\_comp\_at} (\S~\ref{thm:vjp_comp}).
+
+\medskip\noindent\textbf{The gap, and how we close it.} The residual
+fan-in is the structural heart of a deep ResNet. The emitted backward is
+given a denotation valued in the proofs' own tensor type, shown equal to
+\texttt{residual\_has\_vjp\_at}'s backward, and the structural move is
+visible in the emitted text. The forward
+saves $\texttt{add} = f(x) + x$ and the block output
+$\texttt{relu}(\texttt{add})$; the backward first pushes the incoming
+cotangent back through that relu (a \texttt{compare}/\texttt{select} at the
+post-add, giving \texttt{\%dadd}), and then --- this is the fan-in --- sends
+\texttt{\%dadd} through \emph{both} branches and adds (the inner block's
+forward and $f$-backward elided, as they are the conv/BN nodes of
+Chapters~\ref{chap:cnn}--\ref{chap:bn}):
+
+\begin{verbatim}
+// forward (saved): %out = f(%x)  [conv-BN-relu-conv-BN, Ch. 4-5]
+//                  %add = %out + %x
+%madd = stablehlo.compare GT, %add, %zc
+          : (tensor<1x2x4x4xf32>, tensor<1x2x4x4xf32>)
+            -> tensor<1x2x4x4xi1>
+%dadd = stablehlo.select %madd, %dOut, %zc
+          : tensor<1x2x4x4xi1>, tensor<1x2x4x4xf32>
+// %dF = f.backward(%dadd)  [conv/BN/relu input-VJP chain, Ch. 4-5]
+%dx = stablehlo.add %dF, %dadd : tensor<1x2x4x4xf32>
+return %dx : tensor<1x2x4x4xf32>
+\end{verbatim}
+
+\noindent Read it against the theorem: \texttt{\%dadd} is the cotangent at
+the fan-in, and it appears \emph{twice} in the last two lines --- once as
+the input to $f$'s backward (\texttt{\%dF}, the gradient through the
+residual function) and once added directly (\texttt{\%dx = \%dF + \%dadd},
+the gradient straight down the identity skip). That single
+\texttt{stablehlo.add} \emph{is} ``send the gradient through both branches
+and add'': the skip term is the same \texttt{\%dadd} the block term started
+from, which is why the gradient survives all sixteen blocks instead of
+attenuating away. The inner $f$ backward that computes \texttt{\%dF} --- the
+convolution and BatchNorm input-VJPs --- is bridged op by op exactly as in
+Chapters~\ref{chap:cnn} and~\ref{chap:bn}; only the fan-in is new here.
+
+\medskip\noindent\textbf{Caveats.}
+\begin{itemize}
+  \item \textbf{The fan-in \texttt{add} is unconditional} --- addition is
+    linear, so that bridge holds at every input.
+  \item \textbf{The post-add ReLU is a smooth-point bridge} (no
+    pre-activation exactly zero), and the two BatchNorms inside $f$ carry
+    their own $\epsilon > 0$ conditions from Chapter~\ref{chap:bn}.
+  \item \textbf{Representative scale} --- a constant-width two-channel block
+    at $4\times4$ rather than the production stem-to-512 net; the same
+    \texttt{\%dadd} fan-in is repeated for each of the sixteen blocks.
+\end{itemize}
 
 \section{What's in the production recipe?}
 
@@ -3968,6 +4074,62 @@ A few observations worth calling out:
   training} vs ResNet-34's 9.5 hours. The speedup comes entirely
   from the smaller per-step time; the epoch count is the same.
 
+\section{MLIR: Depthwise Convolution}
+
+\noindent\textbf{What is already proven.} A depthwise convolution
+applies one $k\times k$ kernel per channel with no cross-channel sum, so its
+reverse-mode derivative (\S~\ref{ax:depthwise_has_vjp3},
+\texttt{depthwise\_has\_vjp3}) is a reversed-kernel convolution \emph{minus}
+the channel transpose the full-conv VJP of Chapter~\ref{chap:cnn} needs:
+with no $\sum_{c_\text{in}}$ to take the adjoint of, there is no in/out
+channel axis to swap. The inverted-residual block composes this with the
+pointwise convs, BatchNorm, and relu6; \texttt{mobilenetv2\_has\_vjp\_at}
+chains the whole network through \texttt{vjp\_comp\_at}.
+
+\medskip\noindent\textbf{The gap, and how we close it.} The emitted graph
+is denoted and shown equal to \texttt{depthwise\_has\_vjp3}'s backward. Here
+is what the printer emits for the depthwise input gradient (two channels,
+$3\times3$):
+
+\begin{verbatim}
+func.func @dw_back(%dy: tensor<1x2x4x4xf32>, %W: tensor<2x3x3xf32>)
+    -> tensor<1x2x4x4xf32> {
+  %We = stablehlo.reshape %W
+          : (tensor<2x3x3xf32>) -> tensor<2x1x3x3xf32>
+  %Wr = stablehlo.reverse %We, dims = [2, 3] : tensor<2x1x3x3xf32>
+  %dx = stablehlo.convolution(%dy, %Wr)
+      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
+      window = {stride = [1, 1], pad = [[1, 1], [1, 1]],
+                lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
+      {batch_group_count = 1 : i64, feature_group_count = 2 : i64}
+      : (tensor<1x2x4x4xf32>, tensor<2x1x3x3xf32>)
+        -> tensor<1x2x4x4xf32>
+  return %dx : tensor<1x2x4x4xf32>
+}
+\end{verbatim}
+
+\noindent Read it against Chapter~\ref{chap:cnn}'s \texttt{conv\_back}: that
+one began with a \texttt{transpose \%W, dims = [1, 0, 2, 3]} to swap the in-
+and out-channel axes before reversing; this one has \emph{no transpose}. The
+\texttt{reshape} only adds the singleton input-channel axis the grouped form
+expects ($[c,k,k] \to [c,1,k,k]$), the \texttt{reverse} flips the two
+spatial axes, and \texttt{feature\_group\_count = 2} --- equal to the channel
+count --- tells the convolution to run each channel through its own filter,
+no mixing. That single attribute \emph{is} the depthwise structure; the
+bridge theorem is the claim that this graph computes
+\texttt{depthwise\_has\_vjp3}'s backward.
+
+\medskip\noindent\textbf{Caveats.}
+\begin{itemize}
+  \item \textbf{The depthwise convolution bridge is unconditional} --- it is
+    linear.
+  \item \textbf{relu6 is a smooth-point bridge} --- MobileNetV2's clamp to
+    $[0,6]$ has no derivative where a pre-activation sits exactly at $0$ or
+    $6$, and the bridge may fail only on that measure-zero set.
+  \item \textbf{Representative scale} (two channels at $4\times4$); the proof
+    is dimension-parameterized.
+\end{itemize}
+
 \section{ImageNet recipe}
 
 \imagenetphasenote
@@ -4390,6 +4552,62 @@ accuracy-per-parameter cost is low when you compound it with other
 scaling tricks. The other architectural contribution
 EfficientNet shipped --- the \emph{Swish} activation
 $\mathrm{swish}(x) = x \cdot \sigma(x)$ --- is orthogonal to SE.
+
+\section{MLIR: Squeeze-and-Excitation}
+
+\noindent\textbf{What is already proven.} Squeeze-excitation is an
+elementwise product $\mathrm{se}(x) = x \odot g(x)$, where the per-channel
+gate $g(x)$ is itself a small sub-network of the same input $x$ ---
+global-average-pool, dense, swish, dense, sigmoid, broadcast. Because the
+gate depends on $x$, the VJP is a \emph{product rule}, not a plain scaling:
+\texttt{seBlock\_has\_vjp} proves
+\[
+  dx = g(x)\odot dy \;+\; g.\mathrm{back}\bigl(x \odot dy\bigr),
+\]
+the gate-weighted cotangent \emph{plus} the gate's own backward applied to
+the co-input $x\odot dy$. \texttt{seBlockFull\_has\_vjp} supplies the
+concrete gate (the GAP--dense--swish--dense--sigmoid chain) and
+\texttt{mbconvBody\_has\_vjp} composes the whole MBConv.
+
+\medskip\noindent\textbf{The gap, and how we close it.} The emitted graph
+realizes \texttt{seBlock\_has\_vjp}'s product-rule backward in full --- both
+terms --- each piece of the gate carrying the swish, sigmoid, and dense
+bridges of the previous chapters. Here is the fan-in, with the excite
+sub-network's internal VJP elided to its one comment line (the SE block runs
+on the MBConv's four mid-channels):
+
+\begin{verbatim}
+// se = x * broadcast(gate(x)); gate = squeeze-excite sub-network
+// %dse = cotangent into the SE block;  %ggb2 = broadcast(gate)
+%gdleft = stablehlo.multiply %ggb2, %dse : tensor<1x4x4x4xf32>
+%gxdse = stablehlo.multiply %d_s4, %dse : tensor<1x4x4x4xf32>
+%gdgate = stablehlo.reduce(%gxdse init: %sc)
+            applies stablehlo.add across dimensions = [2, 3]
+            : (tensor<1x4x4x4xf32>, tensor<f32>) -> tensor<1x4xf32>
+// ... gate VJP through the excite MLP (sigmoid/dense/swish/dense) ...
+%gdgate_sp = stablehlo.broadcast_in_dim %gdsq_d, dims = [0, 1]
+            : (tensor<1x4xf32>) -> tensor<1x4x4x4xf32>
+%gdds = stablehlo.add %gdleft, %gdgate_sp : tensor<1x4x4x4xf32>
+\end{verbatim}
+
+\noindent Read it against the product rule: \texttt{\%gdleft} is
+$g(x)\odot dy$, the term a naive generator would stop at; \texttt{\%gdgate}
+reduces $x \odot dy$ over the spatial axes --- the adjoint of the gate's
+broadcast, i.e.\ the cotangent on the per-channel gate values --- which then
+flows back through the excite MLP and the global-average-pool to
+\texttt{\%gdgate\_sp}; and \texttt{\%gdds = \%gdleft + \%gdgate\_sp} adds the
+two. That final \texttt{add} \emph{is} the product rule: the gradient that
+passes straight through the channel, plus the gradient that re-tunes the
+gate, summed.
+
+\medskip\noindent\textbf{Caveats.}
+\begin{itemize}
+  \item \textbf{The SE fan-in carries no kink condition} --- swish and
+    sigmoid are smooth everywhere; the only smooth-point caveats in an
+    MBConv come from its BatchNorms ($\epsilon > 0$).
+  \item \textbf{Representative scale} (four mid-channels, reduced to two in
+    the squeeze); the proof is dimension-parameterized.
+\end{itemize}
 
 \section{ImageNet recipe}
 
@@ -4909,6 +5127,48 @@ ConvNeXt-T       & 27.83M  & 790 KB   & 2030 ms   & 13.3 h   & 84.94\% \\
     The 84.94\% number we land here vs the paper's 82.1\% top-1
     on ImageNet-1K is the same model getting different scores on
     different datasets, not a code-correctness issue.
+\end{itemize}
+
+\section{MLIR: Layer Scale}
+
+\noindent\textbf{What is already proven.} Layer scale is a
+per-channel learnable diagonal, $\mathrm{layerScale}(\gamma, x) = \gamma
+\odot x$. Its Jacobian is diagonal, so it is its own adjoint:
+\texttt{layerScale\_has\_vjp} proves $\mathrm{back}(x, dy) = \gamma \odot
+dy$ --- the backward multiplies by the \emph{same} $\gamma$ the forward did.
+The full block is $\mathrm{residual}(\mathrm{layerScale} \circ
+\mathrm{project} \circ \mathrm{gelu} \circ \mathrm{expand} \circ
+\mathrm{LN} \circ \mathrm{depthwise})$, and
+\texttt{convNextBlock\_has\_vjp} composes the six stages through
+\texttt{vjp\_comp\_at}.
+
+\medskip\noindent\textbf{The gap, and how we close it.} The emitted graph
+denotes \texttt{layerScale\_has\_vjp}'s backward exactly. Here is the block's
+tail --- the layer scale, the identity skip, and the start of the backward:
+
+\begin{verbatim}
+// ConvNeXt block tail:  out = x + layerScale(gamma, project(...))
+%ls = stablehlo.multiply %gls, %pr : tensor<1x2x4x4xf32> // gamma (*) pr
+%out = stablehlo.add %x, %ls : tensor<1x2x4x4xf32> // + identity skip
+// backward, cotangent %dOut:  d(pr) = gamma (*) d(out)
+%dpr = stablehlo.multiply %gls, %dOut : tensor<1x2x4x4xf32>
+\end{verbatim}
+
+\noindent Read it against the Jacobian: the forward \texttt{multiply \%gls,
+\%pr} and the backward \texttt{multiply \%gls, \%dOut} are the \emph{same}
+operation against the \emph{same} $\gamma$ tensor \texttt{\%gls} --- a
+diagonal map is its own transpose, so its VJP is itself. The rest of the
+block backward (the GELU, LayerNorm, pointwise, and depthwise input-VJPs)
+chains through the bridges of the previous chapters.
+
+\medskip\noindent\textbf{Caveats.}
+\begin{itemize}
+  \item \textbf{No kink anywhere.} This is the first block in the book whose
+    every bridge is unconditional --- GELU and LayerNorm are smooth (the
+    latter given $\epsilon > 0$), and layer scale and the convolutions are
+    linear; the only hypothesis anywhere is the LayerNorm's $\epsilon > 0$.
+  \item \textbf{Representative scale} (two channels at $4\times4$); the proof
+    is dimension-parameterized.
 \end{itemize}
 
 \section{Data Augmentation}
@@ -5846,6 +6106,65 @@ only when trained on ImageNet-21K (14M images) or JFT-300M (300M
 images); at Imagenette scale the ConvNets' inductive bias (locality,
 translation equivariance) actively helps, and the ViT has to learn
 those properties from data it doesn't have.
+
+\section{MLIR: Attention}
+
+\noindent\textbf{What is already proven.} Scaled dot-product
+attention is $\mathrm{sdpa}(Q,K,V) = \mathrm{softmax}(QK^{\!\top}/\sqrt{d})\,V$.
+Its reverse-mode derivative produces three gradients --- $dQ$, $dK$, $dV$ ---
+each proven separately (\S\S~\ref{thm:sdpa_back_Q_correct}--%
+\ref{thm:sdpa_back_V_correct}, \texttt{sdpa\_back\_Q/K/V}), all built on the
+softmax backward, which couples every position to every other
+(\S~\ref{thm:softmax_has_vjp}). Because $Q$, $K$, and $V$ are three linear
+projections of the \emph{same} input $a$, the input gradient is a three-way
+fan-in, $da = dQ\,W_q^{\!\top} + dK\,W_k^{\!\top} + dV\,W_v^{\!\top}$;
+\texttt{sdpa\_has\_vjp\_mat3} bundles the three, and
+\texttt{transformerAttnSublayer\_has\_vjp\_mat} composes the whole sublayer
+(LayerNorm, the QKV projections, attention, the output projection, the
+residual) through \texttt{vjp\_comp\_at}.
+
+\medskip\noindent\textbf{The gap, and how we close it.} The softmax backward
+is non-elementwise and the three projections are coupled. The emitted graph
+denotes \texttt{transformerAttnSublayer\_has\_vjp\_mat}'s backward. Here is
+the three-way fan-in at the input (two tokens, model dimension four, single
+head; the SDPA backward that produces $dQ,dK,dV$ elided to its comment):
+
+\begin{verbatim}
+// dQ,dK,dV = SDPA.back(dOut . Wo^T)  (softmax-weighted attention grads)
+%daQ = stablehlo.dot_general %dQ, %Wq, contracting_dims = [1] x [1]
+         : (tensor<2x4xf32>, tensor<4x4xf32>) -> tensor<2x4xf32>
+%daK = stablehlo.dot_general %dK, %Wk, contracting_dims = [1] x [1]
+         : (tensor<2x4xf32>, tensor<4x4xf32>) -> tensor<2x4xf32>
+%daV = stablehlo.dot_general %dV, %Wv, contracting_dims = [1] x [1]
+         : (tensor<2x4xf32>, tensor<4x4xf32>) -> tensor<2x4xf32>
+%daQK = stablehlo.add %daQ, %daK : tensor<2x4xf32>
+%da = stablehlo.add %daQK, %daV : tensor<2x4xf32>
+// %dxa = LN.back(%da);  %dx = %dOut + %dxa  (residual skip)
+\end{verbatim}
+
+\noindent Read it against the fan-in: each \texttt{dot\_general} carries one
+of the attention gradients back through its projection ($dQ$ through $W_q$,
+and so on, contracting the model axis); the two \texttt{add}s sum the three.
+This is the residual fan-in of Chapter~\ref{chap:residual} with three
+branches instead of one --- attention reads the input thrice, so the gradient
+returns thrice and adds. The softmax-weighted $dQ,dK,dV$ that feed the
+\texttt{dot\_general}s come from the proven \texttt{sdpa\_back\_Q/K/V}, and
+the surrounding LayerNorm and output projection chain through their bridges.
+
+\medskip\noindent With attention pinned, the verified-codegen thread covers
+every operator in the modern vision stack --- dense, convolution, BatchNorm,
+residual, depthwise, squeeze-excite, layer scale, and attention --- each
+emitted as the rendering of a machine-checked derivative, from the same three
+pieces: denoted IR, bridge theorem, printer.
+
+\medskip\noindent\textbf{Caveats.}
+\begin{itemize}
+  \item \textbf{The attention bridge is unconditional} --- softmax and the
+    linear projections are smooth everywhere, with no smooth-point clause.
+  \item \textbf{Representative scale} (two tokens, $d = 4$, one head); the
+    proof is dimension-parameterized and the printer emits the same graph at
+    every sequence length and head count.
+\end{itemize}
 
 \section{Data Augmentation}
 \label{sec:vit_aug_ablation}
@@ -8644,9 +8963,190 @@ the same recipe scales to any subset of the proof suite, and the
 same allowlist applies because every theorem in the project closes
 the same way.
 
-\section{The four layers, summarized}
+\section{Verified code generation}
+\label{sec:verified_codegen}
 
-Together, the four layers catch four different kinds of bugs:
+The four layers above answer whether the \emph{mathematics} is right --- the
+hand-derived VJPs, their proofs, and the elaborator that accepted them. They
+say nothing about a different gap. The GPU never runs the Lean functions; it
+runs a block of emitted \texttt{stablehlo} that IREE compiles once per
+training program. A code generator can be handed a correct proof and still
+emit an operation that contracts the wrong axis, transposes backwards, or
+silently drops a term --- and the only thing traditionally linking the proof
+to the emitted string is a code comment. The ``MLIR: \emph{operator}''
+section in each chapter closes that gap for one operator; this section
+describes the machinery they share.
+
+\medskip\noindent\textbf{Three pieces.} The link from a proof to the GPU is
+built from three components:
+
+\begin{itemize}
+  \item \textbf{Denoted IR and a bridge theorem.} The emitted backward (and
+    forward) is not a string but a Lean datatype --- a small abstract syntax
+    tree (\texttt{Back}, \texttt{Fwd}, \texttt{Back3}) --- carrying a
+    denotation $[\![\cdot]\!]$ valued in the proofs' own \texttt{Vec} and
+    \texttt{Tensor3} types. A \emph{bridge theorem} then proves that this
+    denotation equals the proven derivative: $[\![\,\text{emitted
+    graph}\,]\!] = (\text{proven VJP}).\mathrm{backward}$. Examples are
+    \texttt{conv\_back\_bridge}, \texttt{bn\_back\_bridge}, and
+    \texttt{relu\_back\_bridge}; each closes under the same three axioms as
+    the rest of the project.
+  \item \textbf{A computable printer.} A small printer walks that same IR and
+    emits one \texttt{stablehlo} operation per node ---
+    \texttt{dotGeneral}\,$W$ becomes \texttt{stablehlo.dot\_general}, a
+    \texttt{selectPos} node becomes \texttt{compare GT 0} plus
+    \texttt{select}, and so on. The emitted text \emph{is} the printout of
+    the IR, by construction.
+  \item \textbf{An execution oracle.} A Python harness regenerates the
+    \texttt{.mlir} from the printer, compiles it with IREE for both the
+    \texttt{llvm-cpu} and \texttt{rocm} backends, runs it, and diffs the
+    result against an independent NumPy reference. The CPU run is the
+    correctness gate; the GPU run (ROCm on a Radeon RX 7900 XTX, gfx1100)
+    confirms the proof-backed graph also executes on real hardware, matching
+    the reference to roughly $10^{-6}$.
+\end{itemize}
+
+\medskip\noindent\textbf{Proven versus trusted.} The resulting claim is exact
+and bounded:
+\begin{itemize}
+  \item \emph{Proven} (Lean, three axioms): the IR's denotation equals the
+    proven derivative.
+  \item \emph{By construction}: the emitted StableHLO is the rendering of
+    exactly that IR.
+  \item \emph{Trusted} (validated numerically, not proven): that the
+    StableHLO \emph{text} faithfully denotes $[\![\cdot]\!]$ --- a property
+    that would need a formal semantics of StableHLO text, which does not yet
+    exist; that IREE lowers the text correctly; and that \texttt{float32}
+    approximates $\mathbb{R}$.
+\end{itemize}
+So the gradient the GPU computes is, by a machine-checked theorem, the
+network's exact reverse-mode derivative over $\mathbb{R}$ --- up to one
+printer, IREE, and floating point. Where a conventional generator leaves
+thousands of lines of string-building linked to the proof by nothing at all,
+the unproven surface here is a single printer, tested end to end.
+
+\medskip\noindent\textbf{Why it is tractable.} The reason a deep ResNet or a
+transformer block comes under this scheme as a focused engineering build,
+rather than a research project, is the order things were proved in. The VJP
+library is \emph{per-operator and generic} --- proved once, over abstract
+dimensions, before any code generation existed --- and the whole-network VJPs
+compose those per-operator lemmas through the chain rule. Code generation
+therefore carries \emph{no new proof obligation}: every architecture's
+operators were proven once, and the emitter reuses them, adding only the
+printer and the numerical check. Build the mathematical foundation
+per-operator and generic, and the code generation becomes mechanical.
+
+\medskip\noindent\textbf{The one conditional.} For the smooth operators ---
+BatchNorm and LayerNorm (given $\varepsilon > 0$), GELU, swish, sigmoid,
+softmax, and attention --- the bridge is unconditional, holding at every
+input. For the kinked operators --- ReLU, ReLU6, and max-pool --- it holds
+only at a \emph{smooth point}, where no pre-activation sits exactly on the
+kink (zero for ReLU, $0$ or $6$ for ReLU6, an argmax tie for max-pool); the
+equality is permitted to fail precisely on that measure-zero set, and nowhere
+else. That set is the one irreducible boundary the smooth-point caveats in
+the chapter sections refer to.
+
+\section{Inside a bridge theorem}
+\label{sec:inside_bridge}
+
+The ``denoted IR and a bridge theorem'' above is worth seeing concretely,
+because it is the step that does the real work --- the place where a string of
+emitted code becomes a proposition Lean can check. Take the backward pass. It
+is represented not as text but as a value of an inductive type, a small
+abstract syntax tree whose constructors are exactly the StableHLO operations a
+backward uses:
+
+\begin{verbatim}
+inductive Back (inp : Nat) : Nat -> Type where
+  | cotangent  : Back inp inp            -- the input dy
+  | dotGeneral (A : Mat m n) : Back inp n -> Back inp m   -- matmul
+  | selectPos  (x : Vec n)   : Back inp n -> Back inp n   -- ReLU mask
+  -- plus scale, sub, add, sumBroadcast, scaleConst (BN, residuals)
+\end{verbatim}
+
+\noindent A \texttt{Back} value is a closed description of one backward graph.
+The dense backward, for instance, is just \texttt{dotGeneral W cotangent} ---
+feed the incoming cotangent into a single matrix multiply. Two functions are
+defined on this type, and \emph{everything} rests on the gap between them
+being closed by a theorem.
+
+\medskip\noindent\textbf{The denotation.} The first function,
+\texttt{Back.denote}, interprets a graph into the proofs' own \texttt{Vec}
+type --- it says what the graph \emph{means} mathematically:
+\[
+  [\![\texttt{cotangent}]\!]\,dy = dy, \qquad
+  [\![\texttt{dotGeneral}\,A\,e]\!]\,dy
+    = \texttt{Mat.mulVec}\,A\,([\![e]\!]\,dy),
+\]
+\[
+  [\![\texttt{selectPos}\,x\,e]\!]\,dy
+    = \bigl(i \mapsto \text{if } x_i > 0
+      \text{ then } [\![e]\!]\,dy\,i \text{ else } 0\bigr),
+\]
+and likewise for the remaining constructors --- \texttt{scale}, \texttt{sub},
+\texttt{sumBroadcast}, \texttt{scaleConst}, \texttt{add} --- which are the
+pieces that assemble BatchNorm's three-term backward and the residual fan-in.
+So a \texttt{Back} value denotes a concrete $\texttt{Vec} \to \texttt{Vec}$
+function, living in the same world as the VJP theorems.
+
+\medskip\noindent\textbf{The bridge, as an equation.} A bridge theorem states
+that this denotation equals the proven derivative. For the dense layer:
+\[
+  \texttt{dense\_back\_bridge}:\quad
+  [\![\texttt{emitDenseBack}\,W]\!]\,dy
+  = (\texttt{dense\_has\_vjp}\,W\,b).\mathrm{backward}\,x\,dy.
+\]
+Its proof is one word, \texttt{rfl}: both sides reduce to the \emph{same}
+term, \texttt{Mat.mulVec}\,$W\,dy$, so the denotation of the emitted graph and
+the proven backward are definitionally identical. That base case pins the
+plumbing. The ReLU bridge is the first with real content:
+\[
+  \texttt{relu\_back\_bridge}\ \ (h_{\text{smooth}} : \forall k,\ x_k \ne 0):
+  \quad
+  [\![\texttt{emitReluBack}\,x]\!]\,dy\,i
+  = (\texttt{relu\_has\_vjp}\,n).\mathrm{backward}\,x\,dy\,i.
+\]
+The proof unfolds the denotation to $\text{if } x_i > 0 \text{ then } dy_i
+\text{ else } 0$ and shows it equals the canonical ReLU subgradient --- but
+\emph{only} under the hypothesis $h_{\text{smooth}}$ that no coordinate sits
+on the kink. That hypothesis is not a technicality. It names exactly the
+measure-zero set where the emitted \texttt{compare GT 0} disagrees with the
+true derivative, and the theorem is written to permit failure precisely there
+and nowhere else. The convolution bridge of Chapter~\ref{chap:cnn} is the same
+shape with a harder proof: \texttt{convBackDenote} unfolds to a forward
+\texttt{conv2d} of the reversed-and-transposed kernel, discharged by expansion
+at the concrete tensor shape.
+
+\medskip\noindent\textbf{Composing the per-operator bridges.} Whole-network
+backwards are assembled by substitution. \texttt{Back.subst} plugs one graph
+into another's \texttt{cotangent} leaf, and a chain-rule lemma proves the
+denotation composes:
+\[
+  \texttt{denote\_subst}:\quad
+  [\![\,e[g/\texttt{cotangent}]\,]\!]\,dz
+  = [\![e]\!]\,([\![g]\!]\,dz),
+\]
+proved by induction over the graph --- the IR-level analogue of the
+\texttt{vjp\_comp} that builds whole-network VJPs from per-layer ones. So the
+per-operator bridges compose into a whole-network bridge the same way the VJP
+theorems compose into a whole-network VJP: the MLP's
+\texttt{mlp\_whole\_bridge} is this one substitution, chaining its five
+per-operator bridges.
+
+\medskip\noindent\textbf{Why the datatype is the point.} The \texttt{Back}
+value is the pivot between two arrows. The printer walks it and emits one
+\texttt{stablehlo} operation per constructor (\texttt{dotGeneral} $\mapsto$
+\texttt{stablehlo.dot\_general}; \texttt{selectPos} $\mapsto$ \texttt{compare
+GT 0} plus \texttt{select}) --- that arrow is the trusted one, producing the
+text in each chapter's listing. The denotation interprets the same value into
+the proofs' \texttt{Vec} type, and the bridge proves \emph{that} equals the
+derivative --- that arrow is machine-checked. Because both arrows start from
+one concrete datatype rather than from a string, ``the emitted code computes
+the proven gradient'' is a theorem about a value, not a hope about a comment.
+
+\section{The five layers, summarized}
+
+Together, the five layers catch five different kinds of bugs:
 
 \begin{itemize}
   \item \textbf{Formal proofs} fail if the math is wrong. Every
@@ -8669,6 +9169,13 @@ Together, the four layers catch four different kinds of bugs:
     a proof's transitive closure --- the places \(\#\)\texttt{print
     axioms} and \(\texttt{lake build}\) share an elaborator with
     and therefore can't independently audit.
+  \item \textbf{Verified code generation} (\S~\ref{sec:verified_codegen})
+    fails if the StableHLO the GPU actually runs denotes something other
+    than the proven derivative: the bridge theorems pin each emitted
+    operator to its proof, and the IREE-versus-NumPy oracle confirms the
+    graph executes correctly on hardware. This is the one layer about the
+    \emph{emitted code} rather than the mathematics behind it --- the gap
+    the other four sit upstream of.
 \end{itemize}
 
 Each layer fails differently. Overlaying them is the guarantee.
