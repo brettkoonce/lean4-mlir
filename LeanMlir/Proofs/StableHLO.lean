@@ -80,6 +80,12 @@ inductive SHlo : Nat → Type where
   -- recomputing x̂/istd from the saved BN input `x` (`xName`). Total in `x`;
   -- faithful (= pdiv-Jacobian) under `0 < ε` (`bn_input_grad_correct`).
   | bnBack     {n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec n) : SHlo n → SHlo n
+  -- Chapter 6 (ResNet): residual add (`stablehlo.add`) and global-average-pool.
+  -- `addV` is binary (mirrors `.sub`); the residual skip reuses the block-input
+  -- subtree in BOTH operands, so the graph stays a tree. `gapF` reduces the
+  -- spatial axes (`reduce add over [2,3]`, ÷h·w), `Vec (c*h*w) → Vec c`.
+  | addV       {n : Nat}                                        : SHlo n → SHlo n → SHlo n
+  | gapF       {c h w : Nat}                                    : SHlo (c*h*w) → SHlo c
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -112,6 +118,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .maxPoolBack (c := c) (h := h) (w := w) _ x e => maxPoolBackFlat c h w x (den e)
   | _, .bnF (n := n) _ _ _ ε γ β e => bnForward n ε γ β (den e)
   | _, .bnBack (n := n) _ _ _ ε γ x e => bn_grad_input n ε γ x (den e)
+  | _, .addV a b       => fun j => den a j + den b j
+  | _, .gapF (c := c) (h := h) (w := w) e => globalAvgPoolFlat c h w (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -127,6 +135,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
     den (.softmaxDiv e) = fun j => den e j / ∑ k, den e k := rfl
 @[simp] theorem den_sub {n : Nat} (a b : SHlo n) :
     den (.sub a b) = fun j => den a j - den b j := rfl
+@[simp] theorem den_addV {n : Nat} (a b : SHlo n) :
+    den (.addV a b) = fun j => den a j + den b j := rfl
 @[simp] theorem den_reluF {n : Nat} (e : SHlo n) :
     den (.reluF e) = fun i => max (den e i) 0 := rfl
 @[simp] theorem den_selectPos {n : Nat} (s : String) (x : Vec n) (e : SHlo n) :
@@ -364,6 +374,17 @@ theorem maxPoolBack_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2*w)
 @[simp] theorem bnF_faithful {n : Nat} (gN bN es : String) (ε γ β : ℝ) (e : SHlo n) :
     den (.bnF gN bN es ε γ β e) = bnForward n ε γ β (den e) := rfl
 
+/-- **Residual-add faithfulness** (= `den_addV`). The binary `stablehlo.add`
+    denotes pointwise vector addition — the fan-in of a residual/skip
+    connection. (`rfl`, so kept out of the axiom audit.) -/
+theorem addV_faithful {n : Nat} (a b : SHlo n) :
+    den (.addV a b) = fun j => den a j + den b j := rfl
+
+/-- **Global-average-pool faithfulness.** The reduce-over-spatial / ÷h·w graph
+    denotes the proven `globalAvgPoolFlat` (CNN.lean). -/
+@[simp] theorem gapF_faithful {c h w : Nat} (e : SHlo (c*h*w)) :
+    den (.gapF e) = globalAvgPoolFlat c h w (den e) := rfl
+
 /-- **BN backward faithfulness.** The consolidated three-term graph denotes the
     proven BN input-VJP — equal to the `pdiv`-contracted Jacobian of `bnForward`
     (`bn_input_grad_correct`), under `0 < ε`. β-independent (a constant shift
@@ -477,6 +498,80 @@ theorem cifarBnFwdGraph_faithful {ic c1 c2 h w d1 nClasses kH kW : Nat} (epsStr 
   simp only [cifarBnFwdGraph, cifarCnnBnForward, Function.comp_apply,
              denseF_faithful, reluF_faithful, flatConvF_faithful, maxPoolF_faithful,
              bnF_faithful, den_operand]
+
+/-- Whole **ResNet-style forward** graph (Chapter 6): the structure the proven
+    whole-net VJP `cnn_has_vjp_at` already covers —
+    `dense ∘ GAP ∘ rblkP ∘ rblk ∘ maxPool ∘ cbr(stem)`. The stem is `convBnRelu`
+    (SAME conv on the `2h×2w` input), one maxpool to `h×w`, an identity basic
+    block (`rblk`: `relu(F(y)+y)`), a projection basic block (`rblkP`:
+    `relu(proj(y)+F(y))`, `c→oc`), global-average-pool, then dense. Each block's
+    skip reuses the block-input **subtree** in BOTH `addV` operands, so the graph
+    stays a tree (the §7 "tree-safe via operand leaves" trick, generalized to a
+    computed input). `epsStr` is the shared ε literal; each BN carries scalar γ/β
+    SSA inputs (`%g*`/`%bt*`). The Chapter-6 peer of `cifarBnFwdGraph`. -/
+noncomputable def resnetFwdGraph
+    {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
+    (epsStr : String)
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ)
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
+    (e₁ g₁ bb₁ e₂ g₂ bb₂ : ℝ)
+    (W₁' : Kernel4 oc c kH₁' kW₁') (b₁' : Vec oc) (W₂' : Kernel4 oc oc kH₂' kW₂') (b₂' : Vec oc)
+    (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
+    (f₁ h₁ i₁ f₂ h₂ i₂ fp hp ip : ℝ)
+    (Wd : Mat oc nClasses) (bd : Vec nClasses)
+    (x : Vec (ic*(2*h)*(2*w))) : SHlo nClasses :=
+  -- stem (convBnRelu on the 2h×2w input) → maxpool to h×w
+  let pooled : SHlo (c*h*w) :=
+    .maxPoolF (c := c) (h := h) (w := w)
+      (.reluF (.bnF "%gs" "%bts" epsStr εs γs βs
+        (.flatConvF (h := 2*h) (w := 2*w) "%Ws" "%bs" Ws bs (.operand "%x" x))))
+  -- identity basic block: relu(F(pooled) + pooled),  F = bn∘conv ∘ relu∘bn∘conv
+  let rblkOut : SHlo (c*h*w) :=
+    .reluF (.addV
+      (.bnF "%g2" "%bt2" epsStr f₂ h₂ i₂
+        (.flatConvF (h := h) (w := w) "%W2" "%b2" W₂ b₂
+          (.reluF (.bnF "%g1" "%bt1" epsStr f₁ h₁ i₁
+            (.flatConvF (h := h) (w := w) "%W1" "%b1" W₁ b₁ pooled)))))
+      pooled)
+  -- projection basic block: relu(proj(rblkOut) + F'(rblkOut)),  c→oc
+  let rblkPOut : SHlo (oc*h*w) :=
+    .reluF (.addV
+      (.bnF "%gp" "%btp" epsStr fp hp ip
+        (.flatConvF (h := h) (w := w) "%Wp" "%bp" Wp bp rblkOut))
+      (.bnF "%g2p" "%bt2p" epsStr e₂ g₂ bb₂
+        (.flatConvF (h := h) (w := w) "%W2p" "%b2p" W₂' b₂'
+          (.reluF (.bnF "%g1p" "%bt1p" epsStr e₁ g₁ bb₁
+            (.flatConvF (h := h) (w := w) "%W1p" "%b1p" W₁' b₁' rblkOut))))))
+  denseF "%Wd" "%bd" Wd bd (.gapF (c := oc) (h := h) (w := w) rblkPOut)
+
+/-- **ResNet-style forward faithfulness.** The forward graph denotes the proven
+    `cnnForward` — the net whose whole-network VJP is `cnn_has_vjp_at` (discharged
+    unconditionally by `CnnConcrete.cnnConcrete_has_vjp_correct`). The residual
+    `addV`s denote the `+` of `residual`/`residualProj` (`biPath`); each skip's
+    duplicated subtree denotes the same block-input value, so `den` reads it
+    twice and the fan-in is exact. -/
+theorem resnetFwdGraph_faithful
+    {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
+    (epsStr : String)
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ)
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
+    (e₁ g₁ bb₁ e₂ g₂ bb₂ : ℝ)
+    (W₁' : Kernel4 oc c kH₁' kW₁') (b₁' : Vec oc) (W₂' : Kernel4 oc oc kH₂' kW₂') (b₂' : Vec oc)
+    (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
+    (f₁ h₁ i₁ f₂ h₂ i₂ fp hp ip : ℝ)
+    (Wd : Mat oc nClasses) (bd : Vec nClasses)
+    (x : Vec (ic*(2*h)*(2*w))) :
+    den (resnetFwdGraph epsStr Ws bs εs γs βs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂
+          W₁' b₁' W₂' b₂' Wp bp f₁ h₁ i₁ f₂ h₂ i₂ fp hp ip Wd bd x)
+      = cnnForward Ws bs εs γs βs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂
+          W₁' b₁' W₂' b₂' Wp bp f₁ h₁ i₁ f₂ h₂ i₂ fp hp ip Wd bd x := by
+  -- LHS: collapse the graph denotation to its explicit nested form.
+  simp only [resnetFwdGraph, denseF_faithful, gapF_faithful, reluF_faithful,
+             bnF_faithful, flatConvF_faithful, maxPoolF_faithful, den_addV, den_operand]
+  -- RHS: unfold the abbreviations (incl. `biPath`, which `simp` can't unfold below
+  -- its arity), then peel the `∘`s. Both sides land on the same `+`-nested form.
+  unfold cnnForward cbr rblk rblkP residual residualProj biPath
+  simp only [Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Chapter 4 — CNN: whole-chain backward (A2c, the MLP-analog of
@@ -619,6 +714,8 @@ inductive Raw where
   | maxPoolBack (x : String) (c h w : Nat) : Raw → Raw
   | bnF        (g b eps : String) (n : Nat) : Raw → Raw
   | bnBack     (g x eps : String) (n : Nat) : Raw → Raw
+  | addV       (n : Nat)                   : Raw → Raw → Raw
+  | gapF       (c h w : Nat)               : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -641,6 +738,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .maxPoolBack (c := c) (h := h) (w := w) xN _ e => .maxPoolBack xN c h w (skel e)
   | k, .bnF gN bN es _ _ _ e => .bnF gN bN es k (skel e)
   | k, .bnBack gN xN es _ _ _ e => .bnBack gN xN es k (skel e)
+  | k, .addV a b              => .addV k (skel a) (skel b)
+  | _, .gapF (c := c) (h := h) (w := w) e => .gapF c h w (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -659,6 +758,8 @@ inductive Tok where
   | maxPoolBack (x : String) (c h w : Nat) : Tok
   | bnF        (g b eps : String) (n : Nat) : Tok
   | bnBack     (g x eps : String) (n : Nat) : Tok
+  | addV       (n : Nat)                   : Tok
+  | gapF       (c h w : Nat)               : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -678,6 +779,8 @@ def toToks : Raw → List Tok
   | .maxPoolBack x c h w e => toToks e ++ [.maxPoolBack x c h w]
   | .bnF g b eps n e => toToks e ++ [.bnF g b eps n]
   | .bnBack g x eps n e => toToks e ++ [.bnBack g x eps n]
+  | .addV n a b      => toToks a ++ toToks b ++ [.addV n]
+  | .gapF c h w e    => toToks e ++ [.gapF c h w]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -835,6 +938,20 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {i2} = stablehlo.subtract {i1}, {xs} : {ty [B,n]}\n" ++
         s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,n]}\n" ++
         s!"    {o} = stablehlo.multiply {sN}, {i2} : {ty [B,n]}\n", o :: st)
+  | .addV n, b :: a :: st => do
+      -- residual fan-in: dy of the two operands summed (`F(x) + skip`)
+      let o ← fresh
+      pure (s!"    {o} = stablehlo.add {a}, {b} : {ty [B,n]}\n", o :: st)
+  | .gapF c h w, r :: st => do
+      -- global average pool: reshape to [B,c,h,w], reduce-add over the spatial
+      -- axes [2,3], divide by h·w. Denotes `globalAvgPoolFlat` (mean over H×W).
+      let xn ← fresh; let z ← fresh; let sm ← fresh; let nf ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {sm} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n" ++
+        s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
+        s!"    {o} = stablehlo.divide {sm}, {nf} : {ty [B,c]}\n", o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/

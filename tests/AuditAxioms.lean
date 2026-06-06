@@ -271,6 +271,15 @@ open Proofs
 #print axioms cifarCnnBn_has_vjp_at_correct
 #print axioms StableHLO.cifarBnFwdGraph_faithful
 #print axioms StableHLO.bnBack_faithful
+
+-- Chapter-6 ResNet-style net: the verified forward-graph faithfulness for the
+-- structure the proven whole-network VJP `cnn_has_vjp_at` already covers
+-- (stem → maxpool → identity block → projection block → GAP → dense). The
+-- residual skips render as `addV` fan-ins (the block-input subtree reused in both
+-- operands, tree-safe); the head is global-average-pool (`gapF`). Its whole-net
+-- VJP `cnn_has_vjp_at_correct` (+ the unconditional CnnConcrete instance) is
+-- audited above; this is the rendered-forward peer (cf. cifarBnFwdGraph_faithful).
+#print axioms StableHLO.resnetFwdGraph_faithful
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
