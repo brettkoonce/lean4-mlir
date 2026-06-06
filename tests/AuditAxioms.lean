@@ -12,6 +12,7 @@ import LeanMlir.Proofs.ConvNeXt
 import LeanMlir.Proofs.EfficientNet
 import LeanMlir.Proofs.MnistCNN
 import LeanMlir.Proofs.IR
+import LeanMlir.Proofs.StableHLO
 
 open Proofs
 
@@ -213,3 +214,18 @@ open Proofs
 -- denotes the proven softmax-CE gradient ∂L/∂logits, so the cotangent fed to
 -- the backward is proof-backed too (not supplied) — full train step closed.
 #print axioms IR.lossCot_bridge
+
+-- R4 printer-faithfulness, Stage A (Chapter 2): the StableHLO-subset AST's
+-- denotation `den` matches the proven math for every piece of the linear
+-- train step — forward logits, dense input-VJP, softmax-CE cotangent (to the
+-- proven ∂CE/∂logits), and the weight/bias parameter Jacobians.
+#print axioms StableHLO.fwdGraph_faithful
+#print axioms StableHLO.backGraph_faithful
+#print axioms StableHLO.softmaxDiv_expe_faithful
+#print axioms StableHLO.lossCotGraph_faithful
+#print axioms StableHLO.lossCotGraph_isCEgrad
+#print axioms StableHLO.wGrad_isWeightJacobian
+#print axioms StableHLO.bGrad_isBiasJacobian
+-- SGD update proven (not trusted) for plain SGD on the linear net.
+#print axioms StableHLO.sgdW_descends_certified_grad
+#print axioms StableHLO.sgdB_descends_certified_grad

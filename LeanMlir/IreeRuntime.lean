@@ -142,6 +142,17 @@ opaque forwardF32
   (x : @& ByteArray) (xShape : @& ByteArray)
   (batch : USize) (nClasses : USize) : IO ByteArray
 
+/-- Drive the **verified-renderer** `@linear_train_step`
+    (`StableHLO.linearTrainStepModuleV`) through the generic IREE invoke.
+    Inputs are raw f32 ByteArrays: `x` is `batch×d₀`, `W0` is `d₀×d₁`, `b0`
+    is `d₁`; `y` is int32 `[batch]` (the one-hot is built in the C shim).
+    Returns `W0n (d₀·d₁ f32) ++ b0n (d₁ f32)`. -/
+@[extern "lean_iree_linear_train_step"]
+opaque linearTrainStepV
+  (sess : @& IreeSession) (fnName : @& String)
+  (x : @& ByteArray) (W0 : @& ByteArray) (b0 : @& ByteArray) (y : @& ByteArray)
+  (batch : USize) (d0 : USize) (d1 : USize) : IO ByteArray
+
 end IreeSession
 
 /- Sizes for the packed-params layout. -/

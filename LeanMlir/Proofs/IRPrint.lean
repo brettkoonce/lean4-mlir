@@ -282,6 +282,70 @@ def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
   "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
+-- § Chapter 2 — linear classifier: forward + full SGD train step
+--
+-- The single-dense-layer specialisation of the MLP pieces above (no ReLU,
+-- so no `compare`/`select` masks and no hidden pre-activations). It is the
+-- smallest closed `printer → codegen → run` artifact in the book:
+--
+--   forward    (PROOF-BACKED): one `dense` rendered from `HloF.dense`; its
+--                       denotation is the proven `mnistLinear` logits
+--                       (⟦emit dense⟧ = dense forward; cf. IR.mlp_fwd_bridge).
+--   loss       (PROOF-BACKED): dy = softmax(logits) − onehot, rendered from
+--                       `renderLossCot`; ⟦emitLossCot⟧ = ∂L/∂logits
+--                       (IR.lossCot_bridge). Computed in-module, not supplied.
+--   param-grad (PROOF-BACKED): dW0 = xᵀ·dy (batch-contracting dot_general),
+--                       db0 = Σ_batch dy (reduce-add) — IR.weight_grad_bridge
+--                       / IR.bias_grad_bridge, the certified Jacobians.
+--   SGD        (TRUSTED): θ' = θ − lr·dθ, elementwise.
+--
+-- So forward, loss cotangent, and parameter gradients are ALL renderings of
+-- proof-backed IR; only the SGD arithmetic (and the printer / IREE / float)
+-- stay trusted. This is the Chapter-2 ("You Are Here") peer of
+-- `mlpTrainStepModule`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Forward-only linear classifier `@linear_fwd`: `x` + params in, logits
+    out. One `dense` (⟦·⟧ = `mnistLinear`). The inference/eval peer of
+    `linearTrainStepModule`. -/
+def linearFwdModule (B d₀ d₁ : Nat) : String :=
+  let (body, res) := ((HloF.dense "%W0" "%b0" d₀ d₁ (.input "%x")).render B).run' (0, 0)
+  "module @m {\n" ++
+  s!"  func.func @linear_fwd(%x: {tt [B,d₀]}, %W0: {tt [d₀,d₁]}, %b0: {tt [d₁]}) -> {tt [B,d₁]} " ++ "{\n" ++
+  body ++ s!"    return {res} : {tt [B,d₁]}\n" ++ "  }\n}\n"
+
+/-- A full **linear** SGD train step (`dense d₀→d₁` + softmax cross-entropy),
+    batch `B`, learning rate `lr` (a decimal literal). Inputs: `x`, the two
+    parameters `%W0,%b0`, and the target distribution `%onehot`. The loss
+    cotangent `dy = softmax(logits) − onehot` is *computed* in-module, not
+    supplied. Returns the two updated parameters. Forward / loss / param-grads
+    are renderings of proof-backed IR; only the SGD arithmetic is the trusted
+    frame. The Chapter-2 peer of `mlpTrainStepModule`. -/
+def linearTrainStepModule (B d₀ d₁ : Nat) (lr : String) : String :=
+  let (fwd, logits) := ((HloF.dense "%W0" "%b0" d₀ d₁ (.input "%x")).render B).run' (0, 0)
+  "module @m {\n" ++
+  s!"  func.func @linear_train_step(%x: {tt [B,d₀]}, %W0: {tt [d₀,d₁]}, %b0: {tt [d₁]}, " ++
+  s!"%onehot: {tt [B,d₁]}) -> ({tt [d₀,d₁]}, {tt [d₁]}) " ++ "{\n" ++
+  "    // ── forward (PROOF-BACKED: render HloF.dense; ⟦·⟧ = mnistLinear logits) ──\n" ++
+  fwd ++
+  "    // ── loss (PROOF-BACKED: dy = softmax(logits) − onehot = ⟦emitLossCot⟧ = ∂L/∂logits) ──\n" ++
+  renderLossCot B d₁ logits "%onehot" "%dy" ++
+  "    // ── param grads (PROOF-BACKED: dW0 = xᵀ·dy, db0 = Σ_batch dy = weight/bias_grad_bridge) ──\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %dW0 = stablehlo.dot_general %x, %dy, contracting_dims = [0] x [0],\n" ++
+  s!"              precision = [DEFAULT, DEFAULT] : ({tt [B,d₀]}, {tt [B,d₁]}) -> {tt [d₀,d₁]}\n" ++
+  s!"    %db0 = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({tt [B,d₁]}, tensor<f32>) -> {tt [d₁]}\n" ++
+  "    // ── SGD update (trusted, elementwise): θ' = θ − lr·dθ ──\n" ++
+  s!"    %lW0 = stablehlo.constant dense<{lr}> : {tt [d₀,d₁]}\n" ++
+  s!"    %sW0 = stablehlo.multiply %dW0, %lW0 : {tt [d₀,d₁]}\n" ++
+  s!"    %W0n = stablehlo.subtract %W0, %sW0 : {tt [d₀,d₁]}\n" ++
+  s!"    %lb0 = stablehlo.constant dense<{lr}> : {tt [d₁]}\n" ++
+  s!"    %sb0 = stablehlo.multiply %db0, %lb0 : {tt [d₁]}\n" ++
+  s!"    %b0n = stablehlo.subtract %b0, %sb0 : {tt [d₁]}\n" ++
+  s!"    return %W0n, %b0n : {tt [d₀,d₁]}, {tt [d₁]}\n" ++
+  "  }\n}\n"
+
+-- ════════════════════════════════════════════════════════════════
 -- § CNN — conv forward + proof-backed conv backward (Phase 3, start)
 --
 -- The repo's `conv2d` is SAME-padding, stride-1 cross-correlation, which is
@@ -1745,6 +1809,13 @@ def convnextBackModule (c cExp H W kH kW : Nat) (eps : String) : String :=
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
 #eval IO.println (renderBlock "mlp 4→3→3→2 (B=2)" 2 (mlpHlo 4 3 3 2))
 #eval IO.FS.writeFile "/tmp/linear_back.mlir" (linearModule 2 4 3)
+-- Chapter 2: the actual MNIST linear classifier (784→10), forward + full
+-- SGD train step at the book's batch=128 — the printer→codegen→run artifact.
+#eval IO.FS.writeFile "/tmp/linear_fwd.mlir" (linearFwdModule 128 784 10)
+-- lr literal = 0.1/128: the proof-bridged loss cotangent is the *summed*
+-- batch gradient (dW0 = Σ_batch x⊗dy, no 1/B), so descending the *mean* loss
+-- at the book's nominal lr=0.1 means the trusted SGD frame uses lr = 0.1/B.
+#eval IO.FS.writeFile "/tmp/linear_train_step.mlir" (linearTrainStepModule 128 784 10 "0.00078125")
 #eval IO.FS.writeFile "/tmp/mlp_back.mlir" (mlpModule 2 4 3 3 2)
 #eval IO.FS.writeFile "/tmp/mlp_fwd.mlir" (mlpFwdModule 2 4 3 3 2)
 #eval IO.FS.writeFile "/tmp/loss_cot.mlir" (lossCotModule 2 2)

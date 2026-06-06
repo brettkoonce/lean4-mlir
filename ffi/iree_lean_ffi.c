@@ -905,3 +905,63 @@ LEAN_EXPORT lean_obj_res lean_iree_forward_f32(
   }
   return lean_io_result_mk_ok(result);
 }
+
+// ---- Verified-renderer linear train step (StableHLO.linearTrainStepModuleV) ----
+// Drives the proof-rendered @linear_train_step (signature
+//   (x:[B,d0], W0:[d0,d1], b0:[d1], onehot:[B,d1]) -> (W0n:[d0,d1], b0n:[d1]))
+// through the generic IREE invoke. The one-hot is built here from int32 labels
+// `y` (so the Lean caller passes the same labels the production path uses).
+// Returns a ByteArray of W0n (d0*d1 f32) ++ b0n (d1 f32).
+LEAN_EXPORT lean_obj_res lean_iree_linear_train_step(
+    b_lean_obj_arg sess_obj,
+    b_lean_obj_arg fn_name_obj,
+    b_lean_obj_arg x_ba,
+    b_lean_obj_arg w0_ba,
+    b_lean_obj_arg b0_ba,
+    b_lean_obj_arg y_ba,
+    size_t batch, size_t d0, size_t d1, lean_obj_arg world) {
+  (void)world;
+  iree_ffi_session_t* sess =
+      (iree_ffi_session_t*)lean_get_external_data(sess_obj);
+  const char* fn_name = lean_string_cstr(fn_name_obj);
+
+  // Build one-hot [batch, d1] f32 from int32 labels [batch].
+  const int32_t* y = (const int32_t*)lean_sarray_cptr(y_ba);
+  float* onehot = (float*)calloc(batch * d1, sizeof(float));
+  for (size_t i = 0; i < batch; i++) {
+    int32_t lbl = y[i];
+    if (lbl >= 0 && (size_t)lbl < d1) onehot[i * d1 + (size_t)lbl] = 1.0f;
+  }
+
+  // 4 inputs: x[B,d0], W0[d0,d1], b0[d1], onehot[B,d1].
+  int32_t input_ranks[4]   = {2, 2, 1, 2};
+  int64_t input_dims_flat[7] = {(int64_t)batch, (int64_t)d0,
+                                (int64_t)d0,    (int64_t)d1,
+                                (int64_t)d1,
+                                (int64_t)batch, (int64_t)d1};
+  const float* input_data[4] = {
+      (const float*)lean_sarray_cptr(x_ba),
+      (const float*)lean_sarray_cptr(w0_ba),
+      (const float*)lean_sarray_cptr(b0_ba),
+      (const float*)onehot};
+
+  // 2 outputs packed into one result: W0n (d0*d1) ++ b0n (d1).
+  int64_t n_w = (int64_t)(d0 * d1), n_b = (int64_t)d1;
+  size_t out_bytes = (size_t)(n_w + n_b) * 4;
+  lean_object* result = lean_alloc_sarray(1, out_bytes, out_bytes);
+  float* out = (float*)lean_sarray_cptr(result);
+  int64_t out_totals[2] = {n_w, n_b};
+  float* outputs[2] = {out, out + n_w};
+
+  int rc = iree_ffi_invoke_f32(sess, fn_name,
+      4, input_ranks, input_dims_flat, input_data,
+      2, out_totals, outputs);
+
+  free(onehot);
+  if (rc != 0) {
+    lean_dec_ref(result);
+    return lean_io_result_mk_error(
+        lean_mk_io_user_error(lean_mk_string("linear train step failed")));
+  }
+  return lean_io_result_mk_ok(result);
+}
