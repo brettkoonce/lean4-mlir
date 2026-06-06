@@ -175,6 +175,12 @@ lean_exe «mnist-cnn-verified» where
   root := `MainMnistCnnVerified
   moreLinkArgs := ireeLink
 
+-- Chapter 5: trains the CIFAR-10 CNN (no BN) on the VERIFIED-rendered StableHLO
+-- (verified_mlir/cifar_train_step.mlir = Proofs.StableHLO.cifarTrainStepText).
+lean_exe «cifar-verified» where
+  root := `MainCifarVerified
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar-cnn-train» where
   root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink

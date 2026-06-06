@@ -11,6 +11,7 @@ import LeanMlir.Proofs.MobileNetV2
 import LeanMlir.Proofs.ConvNeXt
 import LeanMlir.Proofs.EfficientNet
 import LeanMlir.Proofs.MnistCNN
+import LeanMlir.Proofs.CifarCNN
 import LeanMlir.Proofs.IR
 import LeanMlir.Proofs.StableHLO
 import LeanMlir.Proofs.StableHLOParse
@@ -248,6 +249,19 @@ open Proofs
 -- whole-network VJP mnistCnnNoBn_has_vjp_at.backward (MLP-analog of
 -- mlpBackGraph_faithful).
 #print axioms StableHLO.cnnBackGraph_faithful
+
+-- Chapter-5 CIFAR-10 2D CNN (no BN): the conditional whole-network VJP capstone
+-- (two conv→conv→pool stages, channel changes, two maxpools) and the verified
+-- forward-graph faithfulness it is rendered through. The Chapter-5 peers of
+-- mnistCnnNoBn_has_vjp_at_correct and StableHLO.cnnFwdGraph_faithful. Trained on
+-- GPU through the proof-rendered StableHLO by the `cifar-verified` exe.
+#print axioms cifarCnn_has_vjp_at_correct
+#print axioms StableHLO.cifarFwdGraph_faithful
+-- Concrete tiny CIFAR instance: every smoothness hypothesis discharged
+-- (unconditional) — including the Chapter-5-specific SECOND-pool no-tie
+-- condition (first-pool output positionally injective: the four 2×2 window
+-- maxima 6,8,14,16 are distinct, via Nat.cast_max + omega). Non-vacuity witness.
+#print axioms Tiny.cifarTinyCnn_has_vjp_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
