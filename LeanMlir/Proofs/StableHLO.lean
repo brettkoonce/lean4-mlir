@@ -630,6 +630,15 @@ def mlpFwdModuleV (B d₀ d₁ d₂ d₃ : Nat)
     s!"%x: {ty [B,d₀]}, %W0: {ty [d₀,d₁]}, %b0: {ty [d₁]}, %W1: {ty [d₁,d₂]}, %b1: {ty [d₂]}, %W2: {ty [d₂,d₃]}, %b2: {ty [d₃]}"
     B d₃ (mlpFwdGraph W₀ b₀ W₁ b₁ W₂ b₂ x)
 
+/-- `@cnn_fwd` rendered from the verified CNN forward AST `cnnFwdGraph`. -/
+def cnnFwdModuleV (B ic c h w d1 nClasses kH kW : Nat)
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) (x : Vec (ic*(2*h)*(2*w))) : String :=
+  renderModule "cnn_fwd"
+    s!"%x: {ty [B,ic*(2*h)*(2*w)]}, %W1: {ty [c,ic,kH,kW]}, %b1: {ty [c]}, %W2: {ty [c,c,kH,kW]}, %b2: {ty [c]}, %W3: {ty [c*h*w,d1]}, %b3: {ty [d1]}, %W4: {ty [d1,d1]}, %b4: {ty [d1]}, %W5: {ty [d1,nClasses]}, %b5: {ty [nClasses]}"
+    B nClasses (cnnFwdGraph W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x)
+
 /-- Full **MLP** SGD train step. The forward layers emit exactly `mlpFwdGraph`'s
     ops (`dot_general`+`add`, `maximum`), saving the pre-activations `%h0,%h1`;
     the backward emits `mlpBackGraph`'s ops (`dot_general`, `compare GT`+`select`
@@ -718,4 +727,10 @@ end Proofs
        (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
        (fun _ => 0))
   IO.FS.writeFile "verified_mlir/mlp_train_step.mlir"
-    (Proofs.StableHLO.mlpTrainStepText 128 784 512 512 10 "0.00078125") : IO Unit)
+    (Proofs.StableHLO.mlpTrainStepText 128 784 512 512 10 "0.00078125")
+  -- Chapter 4 CNN forward (1→32→32 conv, 28×28→14×14 maxpool, 6272→512→512→10).
+  IO.FS.writeFile "verified_mlir/cnn_fwd.mlir"
+    (Proofs.StableHLO.cnnFwdModuleV 128 1 32 14 14 512 10 3 3
+       (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+       (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+       (fun _ => 0)) : IO Unit)
