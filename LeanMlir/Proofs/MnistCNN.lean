@@ -767,4 +767,54 @@ theorem spatialCnn_has_vjp_correct (dy : Vec 10) (i : Fin (1 * (2*2) * (2*2))) :
 
 end Spatial
 
+-- ════════════════════════════════════════════════════════════════
+-- Chapter-3 MLP: a concrete whole-network instance with every ReLU
+-- smoothness hypothesis discharged (the simplest kinked capstone — one
+-- non-smooth op, `relu`, two sites). Closes the gap that `mlp_has_vjp_at`
+-- is never instantiated. Inside the three-axiom closure.
+-- ════════════════════════════════════════════════════════════════
+
+namespace MlpConcrete
+
+/-- A concrete 3-layer MLP (`dense → relu → dense → relu → dense`) with
+    all-ones weights/biases and a positive input. Every ReLU pre-activation
+    is then strictly positive (hence `≠ 0`), so both smoothness hypotheses
+    of `mlp_has_vjp_at` discharge. The net is non-constant, so this is a
+    *live* witness (non-trivial Jacobian), not a degenerate one. The
+    Chapter-3 analogue of the `Micro`/`Mini`/`Spatial` CNN instances. -/
+noncomputable def W₀ : Mat 2 2 := fun _ _ => 1
+noncomputable def b₀ : Vec 2 := fun _ => 1
+noncomputable def W₁ : Mat 2 2 := fun _ _ => 1
+noncomputable def b₁ : Vec 2 := fun _ => 1
+noncomputable def W₂ : Mat 2 2 := fun _ _ => 1
+noncomputable def b₂ : Vec 2 := fun _ => 1
+noncomputable def x  : Vec 2 := fun _ => 1
+
+/-- First-layer pre-activation is strictly positive at every coordinate. -/
+theorem preact0_pos (k : Fin 2) : 0 < dense W₀ b₀ x k :=
+  dense_pos_of_nonneg (fun _ _ => by simp [W₀]) (fun _ => by simp [b₀]) (fun _ => by simp [x]) k
+
+/-- **Unconditional whole-network VJP for a concrete 3-layer MLP.** Both
+    ReLU `≠ 0` hypotheses are discharged via `dense_pos_of_nonneg`
+    (positive bias + nonnegative weights/input propagate strict
+    positivity), with `relu_id_of_pos` collapsing the inner ReLU. -/
+noncomputable def mlpConcrete_has_vjp_at :
+    HasVJPAt (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x :=
+  mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x
+    (fun k => ne_of_gt (preact0_pos k))
+    (by
+      intro k
+      rw [relu_id_of_pos (fun i => preact0_pos i)]
+      exact ne_of_gt (dense_pos_of_nonneg (fun _ _ => by simp [W₁]) (fun _ => by simp [b₁])
+        (fun i => le_of_lt (preact0_pos i)) k))
+
+/-- **Public unconditional correctness theorem** — the concrete MLP's
+    backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
+theorem mlpConcrete_has_vjp_correct (dy : Vec 2) (i : Fin 2) :
+    mlpConcrete_has_vjp_at.backward dy i =
+      ∑ j : Fin 2, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
+  mlpConcrete_has_vjp_at.correct dy i
+
+end MlpConcrete
+
 end Proofs
