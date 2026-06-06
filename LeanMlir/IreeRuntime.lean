@@ -255,6 +255,29 @@ def shapesBA : ByteArray := packShapes paramShapes
 def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
 end CifarBnLayout
 
+namespace ResnetLayout
+/-- Chapter-6 ResNet-style params (ic=3, c=32, oc=64, 3×3 convs): stem {W,b,γ,β},
+    identity block 2×{W,b,γ,β}, projection block 2×{W,b,γ,β} + proj {W,b,γ,β},
+    dense {W,b}. 26 params; γ/β are rank-0 `#[]` scalars. Order MUST match
+    `@resnet_train_step`'s signature (and `@resnet_fwd`'s). -/
+def paramShapes : Array (Array Nat) := #[
+  #[32, 3, 3, 3], #[32], #[], #[],     -- stem conv 3→32   + γs,βs
+  #[32, 32, 3, 3], #[32], #[], #[],    -- rblk  conv1 32→32 + γ1,β1
+  #[32, 32, 3, 3], #[32], #[], #[],    -- rblk  conv2 32→32 + γ2,β2
+  #[64, 32, 3, 3], #[64], #[], #[],    -- rblkP conv1 32→64 + γ1p,β1p
+  #[64, 64, 3, 3], #[64], #[], #[],    -- rblkP conv2 64→64 + γ2p,β2p
+  #[64, 32, 3, 3], #[64], #[], #[],    -- rblkP proj  32→64 + γp,βp
+  #[64, 10], #[10]                     -- dense 64→10
+]
+def nParams : Nat :=
+  (32*3*3*3 + 32 + 1 + 1) + (32*32*3*3 + 32 + 1 + 1) + (32*32*3*3 + 32 + 1 + 1) +
+  (64*32*3*3 + 64 + 1 + 1) + (64*64*3*3 + 64 + 1 + 1) + (64*32*3*3 + 64 + 1 + 1) +
+  64*10 + 10
+def lossIdx : Nat := nParams
+def shapesBA : ByteArray := packShapes paramShapes
+def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
+end ResnetLayout
+
 def MlpLayout.paramShapes : Array (Array Nat) := #[
   #[784, 512], #[512], #[512, 512], #[512], #[512, 10], #[10]
 ]
