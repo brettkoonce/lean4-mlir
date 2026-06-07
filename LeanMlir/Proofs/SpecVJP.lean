@@ -3,6 +3,10 @@ import LeanMlir.Proofs.MLP
 import LeanMlir.Proofs.MnistCNN
 import LeanMlir.Proofs.CifarCNN
 import LeanMlir.Proofs.MobileNetV2
+import LeanMlir.Proofs.EfficientNet
+import LeanMlir.Proofs.ConvNeXt
+import LeanMlir.Proofs.Attention
+import LeanMlir.Proofs.ResNet34
 import LeanMlir.Proofs.StableHLO
 
 /-! # Spec → math (the verification tie), Rung 1: the linear classifier
@@ -490,4 +494,249 @@ noncomputable def mobilenetv2Verified_has_vjp
         We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5
         We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6
         Wh bh εh γh βh Wfc bfc) x i j * dy j
+  correct _ _ _ := rfl
+
+
+/-! ## Rung B/C (representative): the imagenette nets' proof witnesses
+
+The trainer's full spec for each imagenette net is deeper than the audited proof witness;
+the *full* B/C (spec ↔ the real rendered net) is mnv2 only (above — strided 6-block). For
+the rest we tie the **representative** witness — the smaller skeleton the proof actually
+proves (`<net>Forward` + the audited `<net>_has_vjp` apex) — to a readable representative
+`VLayer` list, exactly like ch2–5: `denote <rep layers> = <net>Forward := rfl` (rung B,
+drift-sensitive to the block sequence) + canonical `HasVJP` witness (rung C; the honest fold
+is the apex). The full faithful build for these is deferred (see planning doc). -/
+
+-- ── EfficientNet (representative: stem-swish → MBConv·SE skip → MBConv·SE no-skip → GAP → dense) ──
+/-- Math denotation of the representative EfficientNet layer list → `efficientnetForward`. -/
+noncomputable def denoteEfficientnetRep {ic c cmid₁ cout cmid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁ kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ r₁ r₂ nClasses : Nat}
+    (layers : List VLayer)
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ)
+    (We₁ : Kernel4 cmid₁ c kHe₁ kWe₁) (be₁ : Vec cmid₁) (εe₁ γe₁ βe₁ : ℝ)
+    (Wd₁ : DepthwiseKernel cmid₁ kHd₁ kWd₁) (bd₁ : Vec cmid₁) (εd₁ γd₁ βd₁ : ℝ)
+    (Ws₁₁ : Mat cmid₁ r₁) (bs₁₁ : Vec r₁) (Ws₁₂ : Mat r₁ cmid₁) (bs₁₂ : Vec cmid₁)
+    (Wp₁ : Kernel4 c cmid₁ kHp₁ kWp₁) (bp₁ : Vec c) (εp₁ γp₁ βp₁ : ℝ)
+    (We₂ : Kernel4 cmid₂ c kHe₂ kWe₂) (be₂ : Vec cmid₂) (εe₂ γe₂ βe₂ : ℝ)
+    (Wd₂ : DepthwiseKernel cmid₂ kHd₂ kWd₂) (bd₂ : Vec cmid₂) (εd₂ γd₂ βd₂ : ℝ)
+    (Ws₂₁ : Mat cmid₂ r₂) (bs₂₁ : Vec r₂) (Ws₂₂ : Mat r₂ cmid₂) (bs₂₂ : Vec cmid₂)
+    (Wp₂ : Kernel4 cout cmid₂ kHp₂ kWp₂) (bp₂ : Vec cout) (εp₂ γp₂ βp₂ : ℝ)
+    (Wh : Mat cout nClasses) (bh : Vec nClasses) :
+    Vec (ic * h * w) → Vec nClasses :=
+  match layers with
+  | [.convBn _ _ _ _, .mbConvSE _ _ _ _ _, .mbConvSE _ _ _ _ _, .globalAvgPool, .dense _ _] =>
+      efficientnetForward (h := h) (w := w) Ws bs εs γs βs We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ Wh bh
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the representative proven model.** -/
+theorem efficientnetRep_denote_eq {ic c cmid₁ cout cmid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁ kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ r₁ r₂ nClasses : Nat}
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ)
+    (We₁ : Kernel4 cmid₁ c kHe₁ kWe₁) (be₁ : Vec cmid₁) (εe₁ γe₁ βe₁ : ℝ)
+    (Wd₁ : DepthwiseKernel cmid₁ kHd₁ kWd₁) (bd₁ : Vec cmid₁) (εd₁ γd₁ βd₁ : ℝ)
+    (Ws₁₁ : Mat cmid₁ r₁) (bs₁₁ : Vec r₁) (Ws₁₂ : Mat r₁ cmid₁) (bs₁₂ : Vec cmid₁)
+    (Wp₁ : Kernel4 c cmid₁ kHp₁ kWp₁) (bp₁ : Vec c) (εp₁ γp₁ βp₁ : ℝ)
+    (We₂ : Kernel4 cmid₂ c kHe₂ kWe₂) (be₂ : Vec cmid₂) (εe₂ γe₂ βe₂ : ℝ)
+    (Wd₂ : DepthwiseKernel cmid₂ kHd₂ kWd₂) (bd₂ : Vec cmid₂) (εd₂ γd₂ βd₂ : ℝ)
+    (Ws₂₁ : Mat cmid₂ r₂) (bs₂₁ : Vec r₂) (Ws₂₂ : Mat r₂ cmid₂) (bs₂₂ : Vec cmid₂)
+    (Wp₂ : Kernel4 cout cmid₂ kHp₂ kWp₂) (bp₂ : Vec cout) (εp₂ γp₂ βp₂ : ℝ)
+    (Wh : Mat cout nClasses) (bh : Vec nClasses) :
+    denoteEfficientnetRep (h := h) (w := w)
+      [.convBn ic c kHs 1, .mbConvSE c cmid₁ c r₁ kHd₁, .mbConvSE c cmid₂ cout r₂ kHd₂, .globalAvgPool, .dense cout nClasses]
+      Ws bs εs γs βs We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ Wh bh
+      = efficientnetForward (h := h) (w := w) Ws bs εs γs βs We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ Wh bh := rfl
+
+/-- **The representative spec carries the math** (canonical witness; the honest
+    unconditional fold is `Proofs.efficientnet_has_vjp`). -/
+noncomputable def efficientnetRep_has_vjp {ic c cmid₁ cout cmid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁ kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ r₁ r₂ nClasses : Nat}
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ)
+    (We₁ : Kernel4 cmid₁ c kHe₁ kWe₁) (be₁ : Vec cmid₁) (εe₁ γe₁ βe₁ : ℝ)
+    (Wd₁ : DepthwiseKernel cmid₁ kHd₁ kWd₁) (bd₁ : Vec cmid₁) (εd₁ γd₁ βd₁ : ℝ)
+    (Ws₁₁ : Mat cmid₁ r₁) (bs₁₁ : Vec r₁) (Ws₁₂ : Mat r₁ cmid₁) (bs₁₂ : Vec cmid₁)
+    (Wp₁ : Kernel4 c cmid₁ kHp₁ kWp₁) (bp₁ : Vec c) (εp₁ γp₁ βp₁ : ℝ)
+    (We₂ : Kernel4 cmid₂ c kHe₂ kWe₂) (be₂ : Vec cmid₂) (εe₂ γe₂ βe₂ : ℝ)
+    (Wd₂ : DepthwiseKernel cmid₂ kHd₂ kWd₂) (bd₂ : Vec cmid₂) (εd₂ γd₂ βd₂ : ℝ)
+    (Ws₂₁ : Mat cmid₂ r₂) (bs₂₁ : Vec r₂) (Ws₂₂ : Mat r₂ cmid₂) (bs₂₂ : Vec cmid₂)
+    (Wp₂ : Kernel4 cout cmid₂ kHp₂ kWp₂) (bp₂ : Vec cout) (εp₂ γp₂ βp₂ : ℝ)
+    (Wh : Mat cout nClasses) (bh : Vec nClasses) :
+    HasVJP (denoteEfficientnetRep (h := h) (w := w)
+      [.convBn ic c kHs 1, .mbConvSE c cmid₁ c r₁ kHd₁, .mbConvSE c cmid₂ cout r₂ kHd₂, .globalAvgPool, .dense cout nClasses]
+      Ws bs εs γs βs We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ Wh bh) where
+  backward x dy i :=
+    ∑ j : Fin nClasses, pdiv (denoteEfficientnetRep (h := h) (w := w)
+      [.convBn ic c kHs 1, .mbConvSE c cmid₁ c r₁ kHd₁, .mbConvSE c cmid₂ cout r₂ kHd₂, .globalAvgPool, .dense cout nClasses]
+      Ws bs εs γs βs We₁ be₁ εe₁ γe₁ βe₁ Wd₁ bd₁ εd₁ γd₁ βd₁ Ws₁₁ bs₁₁ Ws₁₂ bs₁₂ Wp₁ bp₁ εp₁ γp₁ βp₁ We₂ be₂ εe₂ γe₂ βe₂ Wd₂ bd₂ εd₂ γd₂ βd₂ Ws₂₁ bs₂₁ Ws₂₂ bs₂₂ Wp₂ bp₂ εp₂ γp₂ βp₂ Wh bh) x i j * dy j
+  correct _ _ _ := rfl
+
+-- ── ConvNeXt (representative: patchify → LN → block → block → GAP → head-LN → dense; scalar LN = `.bn`) ──
+/-- Math denotation of the representative ConvNeXt layer list → `convNextForward`. -/
+noncomputable def denoteConvnextRep {ic c cExp h w kH kW nClasses : Nat}
+    (layers : List VLayer)
+    (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ)
+    (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ)
+    (Wex₁ : Kernel4 cExp c 1 1) (bex₁ : Vec cExp)
+    (Wpr₁ : Kernel4 c cExp 1 1) (bpr₁ : Vec c) (γls₁ : Vec (c * h * w))
+    (Wdw₂ : DepthwiseKernel c kH kW) (bdw₂ : Vec c) (εn₂ γn₂ βn₂ : ℝ)
+    (Wex₂ : Kernel4 cExp c 1 1) (bex₂ : Vec cExp)
+    (Wpr₂ : Kernel4 c cExp 1 1) (bpr₂ : Vec c) (γls₂ : Vec (c * h * w))
+    (εhd γhd βhd : ℝ)
+    (Wd : Mat c nClasses) (bd : Vec nClasses) :
+    Vec (ic * h * w) → Vec nClasses :=
+  match layers with
+  | [.conv _ _ _ _, .bn, .convNextBlock _, .convNextBlock _, .globalAvgPool, .bn, .dense _ _] =>
+      convNextForward (h := h) (w := w) Wst bst εst γst βst Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ εhd γhd βhd Wd bd
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the representative proven model.** -/
+theorem convnextRep_denote_eq {ic c cExp h w kH kW nClasses : Nat}
+    (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ)
+    (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ)
+    (Wex₁ : Kernel4 cExp c 1 1) (bex₁ : Vec cExp)
+    (Wpr₁ : Kernel4 c cExp 1 1) (bpr₁ : Vec c) (γls₁ : Vec (c * h * w))
+    (Wdw₂ : DepthwiseKernel c kH kW) (bdw₂ : Vec c) (εn₂ γn₂ βn₂ : ℝ)
+    (Wex₂ : Kernel4 cExp c 1 1) (bex₂ : Vec cExp)
+    (Wpr₂ : Kernel4 c cExp 1 1) (bpr₂ : Vec c) (γls₂ : Vec (c * h * w))
+    (εhd γhd βhd : ℝ)
+    (Wd : Mat c nClasses) (bd : Vec nClasses) :
+    denoteConvnextRep (h := h) (w := w)
+      [.conv ic c 1 1, .bn, .convNextBlock c, .convNextBlock c, .globalAvgPool, .bn, .dense c nClasses]
+      Wst bst εst γst βst Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ εhd γhd βhd Wd bd
+      = convNextForward (h := h) (w := w) Wst bst εst γst βst Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ εhd γhd βhd Wd bd := rfl
+
+/-- **The representative spec carries the math** (canonical witness; the honest
+    unconditional fold is `Proofs.convnext_has_vjp`). -/
+noncomputable def convnextRep_has_vjp {ic c cExp h w kH kW nClasses : Nat}
+    (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ)
+    (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ)
+    (Wex₁ : Kernel4 cExp c 1 1) (bex₁ : Vec cExp)
+    (Wpr₁ : Kernel4 c cExp 1 1) (bpr₁ : Vec c) (γls₁ : Vec (c * h * w))
+    (Wdw₂ : DepthwiseKernel c kH kW) (bdw₂ : Vec c) (εn₂ γn₂ βn₂ : ℝ)
+    (Wex₂ : Kernel4 cExp c 1 1) (bex₂ : Vec cExp)
+    (Wpr₂ : Kernel4 c cExp 1 1) (bpr₂ : Vec c) (γls₂ : Vec (c * h * w))
+    (εhd γhd βhd : ℝ)
+    (Wd : Mat c nClasses) (bd : Vec nClasses) :
+    HasVJP (denoteConvnextRep (h := h) (w := w)
+      [.conv ic c 1 1, .bn, .convNextBlock c, .convNextBlock c, .globalAvgPool, .bn, .dense c nClasses]
+      Wst bst εst γst βst Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ εhd γhd βhd Wd bd) where
+  backward x dy i :=
+    ∑ j : Fin nClasses, pdiv (denoteConvnextRep (h := h) (w := w)
+      [.conv ic c 1 1, .bn, .convNextBlock c, .convNextBlock c, .globalAvgPool, .bn, .dense c nClasses]
+      Wst bst εst γst βst Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ εhd γhd βhd Wd bd) x i j * dy j
+  correct _ _ _ := rfl
+
+-- ── ViT (representative: patch-embed → CLS/pos → transformer body (kBlocks, weight-shared) → LN → dense) ──
+/-- Math denotation of the representative ViT layer list → `vit_full`. The single
+    `.transformerBlock` VLayer stands for the `kBlocks`-deep weight-shared `vit_body`;
+    per the proof witness the LayerNorm is scalar (`layerNormForward = bnForward`), so this
+    ties the spec to the scalar-LN witness, not the rendered per-channel `[D]` LN. -/
+noncomputable def denoteVitRep
+    (layers : List VLayer) (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
+    (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
+    (γF βF : ℝ)
+    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
+    Vec (ic * H * W) → Vec nClasses :=
+  match layers with
+  | [.conv _ _ _ _, .param _ _, .param _ _, .transformerBlock _ _, .layerNorm _, .dense _ _] =>
+      vit_full ic H W patchSize N mlpDim heads d_head kBlocks nClasses W_conv b_conv cls_token pos_embed ε γ1 β1 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the representative proven model.** -/
+theorem vitRep_denote_eq (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
+    (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
+    (γF βF : ℝ)
+    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
+    denoteVitRep
+      [.conv ic (heads * d_head) patchSize patchSize, .param #[1, heads * d_head] 2, .param #[N + 1, heads * d_head] 2, .transformerBlock (heads * d_head) mlpDim, .layerNorm (heads * d_head), .dense (heads * d_head) nClasses]
+      ic H W patchSize N mlpDim heads d_head kBlocks nClasses W_conv b_conv cls_token pos_embed ε γ1 β1 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls
+      = vit_full ic H W patchSize N mlpDim heads d_head kBlocks nClasses W_conv b_conv cls_token pos_embed ε γ1 β1 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls := rfl
+
+/-- **The representative spec carries the math** (canonical witness; the honest
+    unconditional fold is `Proofs.vit_full_has_vjp`). -/
+noncomputable def vitRep_has_vjp (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
+    (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head))
+    (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
+    (γF βF : ℝ)
+    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
+    HasVJP (denoteVitRep
+      [.conv ic (heads * d_head) patchSize patchSize, .param #[1, heads * d_head] 2, .param #[N + 1, heads * d_head] 2, .transformerBlock (heads * d_head) mlpDim, .layerNorm (heads * d_head), .dense (heads * d_head) nClasses]
+      ic H W patchSize N mlpDim heads d_head kBlocks nClasses W_conv b_conv cls_token pos_embed ε γ1 β1 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls) where
+  backward x dy i :=
+    ∑ j : Fin nClasses, pdiv (denoteVitRep
+      [.conv ic (heads * d_head) patchSize patchSize, .param #[1, heads * d_head] 2, .param #[N + 1, heads * d_head] 2, .transformerBlock (heads * d_head) mlpDim, .layerNorm (heads * d_head), .dense (heads * d_head) nClasses]
+      ic H W patchSize N mlpDim heads d_head kBlocks nClasses W_conv b_conv cls_token pos_embed ε γ1 β1 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls) x i j * dy j
+  correct _ _ _ := rfl
+
+-- ── ResNet-34 (representative: the audited parametric skeleton `resnet34_has_vjp_at`) ──
+/-- Math denotation of the representative ResNet-34 layer list → the skeleton composition
+    `dense ∘ gap ∘ chainComp ids4 ∘ down4 ∘ … ∘ chainComp ids1 ∘ mp ∘ stem` that the audited
+    parametric apex `resnet34_has_vjp_at` is about. r34 has no concrete whole-net `Forward`
+    (only this abstract [3,4,6,3]-stage skeleton over abstract block maps); the full faithful
+    forward at real Imagenette dims is the deferred build. -/
+noncomputable def denoteR34Rep {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
+    (layers : List VLayer)
+    (stem : Vec s0 → Vec s1) (mp : Vec s1 → Vec s2)
+    (ids1 : List (Vec s2 → Vec s2))
+    (down2 : Vec s2 → Vec s3) (ids2 : List (Vec s3 → Vec s3))
+    (down3 : Vec s3 → Vec s4) (ids3 : List (Vec s4 → Vec s4))
+    (down4 : Vec s4 → Vec s5) (ids4 : List (Vec s5 → Vec s5))
+    (gap : Vec s5 → Vec s6) (dense : Vec s6 → Vec s7) :
+    Vec s0 → Vec s7 :=
+  match layers with
+  | [.convBn _ _ _ _, .maxPool _ _, .residualStage _ _ _ _, .residualStage _ _ _ _,
+     .residualStage _ _ _ _, .residualStage _ _ _ _, .globalAvgPool, .dense _ _] =>
+      dense ∘ gap ∘ chainComp ids4 ∘ down4 ∘ chainComp ids3 ∘ down3 ∘
+        chainComp ids2 ∘ down2 ∘ chainComp ids1 ∘ mp ∘ stem
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the representative proven skeleton.** -/
+theorem r34Rep_denote_eq {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
+    (stem : Vec s0 → Vec s1) (mp : Vec s1 → Vec s2)
+    (ids1 : List (Vec s2 → Vec s2))
+    (down2 : Vec s2 → Vec s3) (ids2 : List (Vec s3 → Vec s3))
+    (down3 : Vec s3 → Vec s4) (ids3 : List (Vec s4 → Vec s4))
+    (down4 : Vec s4 → Vec s5) (ids4 : List (Vec s5 → Vec s5))
+    (gap : Vec s5 → Vec s6) (dense : Vec s6 → Vec s7) :
+    denoteR34Rep
+      [.convBn 3 64 7 2, .maxPool 2 2, .residualStage 64 64 3 1, .residualStage 64 128 4 2,
+       .residualStage 128 256 6 2, .residualStage 256 512 3 2, .globalAvgPool, .dense 512 10]
+      stem mp ids1 down2 ids2 down3 ids3 down4 ids4 gap dense
+      = dense ∘ gap ∘ chainComp ids4 ∘ down4 ∘ chainComp ids3 ∘ down3 ∘
+        chainComp ids2 ∘ down2 ∘ chainComp ids1 ∘ mp ∘ stem := rfl
+
+/-- **The representative spec carries the math** (canonical witness; the honest conditional
+    fold through the [3,4,6,3] stages is `Proofs.resnet34_has_vjp_at`). -/
+noncomputable def r34Rep_has_vjp {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
+    (stem : Vec s0 → Vec s1) (mp : Vec s1 → Vec s2)
+    (ids1 : List (Vec s2 → Vec s2))
+    (down2 : Vec s2 → Vec s3) (ids2 : List (Vec s3 → Vec s3))
+    (down3 : Vec s3 → Vec s4) (ids3 : List (Vec s4 → Vec s4))
+    (down4 : Vec s4 → Vec s5) (ids4 : List (Vec s5 → Vec s5))
+    (gap : Vec s5 → Vec s6) (dense : Vec s6 → Vec s7) :
+    HasVJP (denoteR34Rep
+      [.convBn 3 64 7 2, .maxPool 2 2, .residualStage 64 64 3 1, .residualStage 64 128 4 2,
+       .residualStage 128 256 6 2, .residualStage 256 512 3 2, .globalAvgPool, .dense 512 10]
+      stem mp ids1 down2 ids2 down3 ids3 down4 ids4 gap dense) where
+  backward x dy i :=
+    ∑ j : Fin s7, pdiv (denoteR34Rep
+      [.convBn 3 64 7 2, .maxPool 2 2, .residualStage 64 64 3 1, .residualStage 64 128 4 2,
+       .residualStage 128 256 6 2, .residualStage 256 512 3 2, .globalAvgPool, .dense 512 10]
+      stem mp ids1 down2 ids2 down3 ids3 down4 ids4 gap dense) x i j * dy j
   correct _ _ _ := rfl
