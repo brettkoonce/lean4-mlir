@@ -1,5 +1,5 @@
 module @m {
-  func.func @mobilenetv2_fwd(%x: tensor<128x3072xf32>, %sW: tensor<32x3x3x3xf32>, %sb: tensor<32xf32>, %sg: tensor<32xf32>, %sbt: tensor<32xf32>, %iraeW: tensor<64x32x1x1xf32>, %iraeb: tensor<64xf32>, %iraeg: tensor<64xf32>, %iraebt: tensor<64xf32>, %iradW: tensor<64x1x3x3xf32>, %iradb: tensor<64xf32>, %iradg: tensor<64xf32>, %iradbt: tensor<64xf32>, %irapW: tensor<32x64x1x1xf32>, %irapb: tensor<32xf32>, %irapg: tensor<32xf32>, %irapbt: tensor<32xf32>, %irbeW: tensor<64x32x1x1xf32>, %irbeb: tensor<64xf32>, %irbeg: tensor<64xf32>, %irbebt: tensor<64xf32>, %irbdW: tensor<64x1x3x3xf32>, %irbdb: tensor<64xf32>, %irbdg: tensor<64xf32>, %irbdbt: tensor<64xf32>, %irbpW: tensor<64x64x1x1xf32>, %irbpb: tensor<64xf32>, %irbpg: tensor<64xf32>, %irbpbt: tensor<64xf32>, %Wd: tensor<64x10xf32>, %bd: tensor<10xf32>) -> tensor<128x10xf32> {
+  func.func @mobilenetv2_fwd(%x: tensor<128x3072xf32>, %sW: tensor<32x3x3x3xf32>, %sb: tensor<32xf32>, %sg: tensor<32xf32>, %sbt: tensor<32xf32>, %iraeW: tensor<64x32x1x1xf32>, %iraeb: tensor<64xf32>, %iraeg: tensor<64xf32>, %iraebt: tensor<64xf32>, %iradW: tensor<64x1x3x3xf32>, %iradb: tensor<64xf32>, %iradg: tensor<64xf32>, %iradbt: tensor<64xf32>, %irapW: tensor<32x64x1x1xf32>, %irapb: tensor<32xf32>, %irapg: tensor<32xf32>, %irapbt: tensor<32xf32>, %irbeW: tensor<64x32x1x1xf32>, %irbeb: tensor<64xf32>, %irbeg: tensor<64xf32>, %irbebt: tensor<64xf32>, %irbdW: tensor<64x1x3x3xf32>, %irbdb: tensor<64xf32>, %irbdg: tensor<64xf32>, %irbdbt: tensor<64xf32>, %irbpW: tensor<64x64x1x1xf32>, %irbpb: tensor<64xf32>, %irbpg: tensor<64xf32>, %irbpbt: tensor<64xf32>, %hW: tensor<128x64x1x1xf32>, %hb: tensor<128xf32>, %hg: tensor<128xf32>, %hbt: tensor<128xf32>, %Wd: tensor<128x10xf32>, %bd: tensor<10xf32>) -> tensor<128x10xf32> {
     %sc = stablehlo.constant dense<0.0> : tensor<f32>
     %xr = stablehlo.reshape %x : (tensor<128x3072xf32>) -> tensor<128x3x32x32xf32>
     %stcc = stablehlo.convolution(%xr, %sW)
@@ -190,10 +190,37 @@ module @m {
     %irbpnbtb = stablehlo.broadcast_in_dim %irbpbt, dims = [1] : (tensor<64xf32>) -> tensor<128x64x8x8xf32>
     %irbpngx = stablehlo.multiply %irbpnxh, %irbpngb : tensor<128x64x8x8xf32>
     %irbpn = stablehlo.add %irbpngx, %irbpnbtb : tensor<128x64x8x8xf32>
-    %outgs = stablehlo.reduce(%irbpn init: %sc) applies stablehlo.add across dimensions = [2, 3] : (tensor<128x64x8x8xf32>, tensor<f32>) -> tensor<128x64xf32>
-    %outgnf = stablehlo.constant dense<64.0> : tensor<128x64xf32>
-    %outg = stablehlo.divide %outgs, %outgnf : tensor<128x64xf32>
-    %outdd = stablehlo.dot_general %outg, %Wd, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<64x10xf32>) -> tensor<128x10xf32>
+    %hc = stablehlo.convolution(%irbpn, %hW)
+      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
+      window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
+      {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x64x8x8xf32>, tensor<128x64x1x1xf32>) -> tensor<128x128x8x8xf32>
+    %hbb = stablehlo.broadcast_in_dim %hb, dims = [1] : (tensor<128xf32>) -> tensor<128x128x8x8xf32>
+    %h = stablehlo.add %hc, %hbb : tensor<128x128x8x8xf32>
+    %hnnf = stablehlo.constant dense<64.0> : tensor<128x128x8x8xf32>
+    %hnep = stablehlo.constant dense<1.0e-5> : tensor<128x128x8x8xf32>
+    %hnsmr = stablehlo.reduce(%h init: %sc) applies stablehlo.add across dimensions = [2, 3] : (tensor<128x128x8x8xf32>, tensor<f32>) -> tensor<128x128xf32>
+    %hnsm = stablehlo.broadcast_in_dim %hnsmr, dims = [0, 1] : (tensor<128x128xf32>) -> tensor<128x128x8x8xf32>
+    %hnmu = stablehlo.divide %hnsm, %hnnf : tensor<128x128x8x8xf32>
+    %hnxc = stablehlo.subtract %h, %hnmu : tensor<128x128x8x8xf32>
+    %hnsq = stablehlo.multiply %hnxc, %hnxc : tensor<128x128x8x8xf32>
+    %hnvsr = stablehlo.reduce(%hnsq init: %sc) applies stablehlo.add across dimensions = [2, 3] : (tensor<128x128x8x8xf32>, tensor<f32>) -> tensor<128x128xf32>
+    %hnvs = stablehlo.broadcast_in_dim %hnvsr, dims = [0, 1] : (tensor<128x128xf32>) -> tensor<128x128x8x8xf32>
+    %hnvr = stablehlo.divide %hnvs, %hnnf : tensor<128x128x8x8xf32>
+    %hnve = stablehlo.add %hnvr, %hnep : tensor<128x128x8x8xf32>
+    %hnistd = stablehlo.rsqrt %hnve : tensor<128x128x8x8xf32>
+    %hnxh = stablehlo.multiply %hnxc, %hnistd : tensor<128x128x8x8xf32>
+    %hngb = stablehlo.broadcast_in_dim %hg, dims = [1] : (tensor<128xf32>) -> tensor<128x128x8x8xf32>
+    %hnbtb = stablehlo.broadcast_in_dim %hbt, dims = [1] : (tensor<128xf32>) -> tensor<128x128x8x8xf32>
+    %hngx = stablehlo.multiply %hnxh, %hngb : tensor<128x128x8x8xf32>
+    %hn = stablehlo.add %hngx, %hnbtb : tensor<128x128x8x8xf32>
+    %hrz = stablehlo.constant dense<0.0> : tensor<128x128x8x8xf32>
+    %hrsix = stablehlo.constant dense<6.0> : tensor<128x128x8x8xf32>
+    %hrmx = stablehlo.maximum %hn, %hrz : tensor<128x128x8x8xf32>
+    %hr = stablehlo.minimum %hrmx, %hrsix : tensor<128x128x8x8xf32>
+    %outgs = stablehlo.reduce(%hr init: %sc) applies stablehlo.add across dimensions = [2, 3] : (tensor<128x128x8x8xf32>, tensor<f32>) -> tensor<128x128xf32>
+    %outgnf = stablehlo.constant dense<64.0> : tensor<128x128xf32>
+    %outg = stablehlo.divide %outgs, %outgnf : tensor<128x128xf32>
+    %outdd = stablehlo.dot_general %outg, %Wd, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x128xf32>, tensor<128x10xf32>) -> tensor<128x10xf32>
     %outdb = stablehlo.broadcast_in_dim %bd, dims = [1] : (tensor<10xf32>) -> tensor<128x10xf32>
     %out = stablehlo.add %outdd, %outdb : tensor<128x10xf32>
     return %out : tensor<128x10xf32>

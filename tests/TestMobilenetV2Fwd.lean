@@ -9,7 +9,12 @@ matching the proven apex structure `dense ∘ GAP ∘ invresBody ∘ residual(in
   stem  : 3×3 stride-2 conv (3→32, 32→16) + BN + relu6, then 2×2 maxpool (16→8)
   IR-A  : inverted-residual WITH skip   (ic=oc=32, mid=t·ic=64, stride 1 @8×8)
   IR-B  : inverted-residual WITHOUT skip (ic=32→oc=64, mid=64, stride 1 @8×8)
-  tail  : global-average-pool → dense(64→10)
+  head  : 1×1 conv (64→128) + BN + relu6  (the MNv2 "features" layer @8×8)
+  tail  : global-average-pool → dense(128→10)
+
+The head's relu6 before GAP is ESSENTIAL: per-example instance-norm forces each
+channel's spatial mean to 0, so GAP of a raw (linear-bottleneck) BN output is the
+constant β — input-independent. The relu6 gives the pooled tensor a per-input mean.
 
 Every fragment is the same StableHLO the VERIFIED per-op emitters produce: the
 stem uses a regular stride-2 conv (ch6 `flatConvStridedF`), the inverted-residual
@@ -153,16 +158,24 @@ private def mobilenetv2Fwd : String := Id.run do
     maxpool "stp" "%str" 32 16 16
   let (a, oa) := irBlockFwd "ira" "%stp" 32 64 32 8 8 true   -- skip block (ic=oc=32)
   let (b, ob) := irBlockFwd "irb" oa 32 64 64 8 8 false      -- no-skip block (32→64)
-  let tail := gapDense "out" ob 64 10 8 8
+  -- head: 1×1 conv (64→128) → BN → relu6 — the standard MNv2 "features" layer.
+  -- ESSENTIAL: GAP of a per-example instance-normed BN is just β (constant across
+  -- inputs); the relu6 here gives the pooled tensor an input-varying mean.
+  let head :=
+    conv1 "h" ob "%hW" "%hb" 128 64 8 8 ++
+    bnPC "hn" "%h" "%hg" "%hbt" 128 8 8 (8*8) ++
+    relu6 "hr" "%hn" 128 8 8
+  let tail := gapDense "out" "%hr" 128 10 8 8
   let body :=
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    stemCode ++ a ++ b ++ tail
+    stemCode ++ a ++ b ++ head ++ tail
   let sig : List String :=
     ["%x: " ++ ty [BS,3072]]
     ++ [s!"%sW: {ty [32,3,3,3]}", s!"%sb: {ty [32]}"] ++ bnSig "s" 32
     ++ irBlockSig "ira" 32 64 32
     ++ irBlockSig "irb" 32 64 64
-    ++ [s!"%Wd: {ty [64,10]}", s!"%bd: {ty [10]}"]
+    ++ [s!"%hW: {ty [128,64,1,1]}", s!"%hb: {ty [128]}"] ++ bnSig "h" 128
+    ++ [s!"%Wd: {ty [128,10]}", s!"%bd: {ty [10]}"]
   let argSig := String.intercalate ", " sig
   return "module @m {\n" ++ s!"  func.func @mobilenetv2_fwd({argSig}) -> {ty [BS,10]} " ++ "{\n" ++
     body ++ s!"    return %out : {ty [BS,10]}\n" ++ "  }\n}\n"

@@ -306,6 +306,35 @@ def shapesBA : ByteArray := packShapes paramShapes
 def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
 end ResNet34Layout
 
+namespace MobileNetV2Layout
+/-- Chapter-7 small **MobileNetV2** params (CIFAR 3×32×32): stem {W,b,γ,β} (3×3
+    stride-2 conv 3→32), then two inverted-residual blocks — each expand 1×1
+    {W,b,γ,β}, depthwise 3×3 {W,b,γ,β} (a `[mid,1,3,3]` kernel, feature_group_count
+    = mid), project 1×1 {W,b,γ,β} — then the head 1×1 conv {W,b,γ,β} (64→128, the
+    MNv2 "features" layer: conv→BN→relu6 before GAP, so the pooled tensor isn't the
+    constant β of an instance-normed BN) and dense {W,b}. Per-channel BN ⇒ γ/β are
+    **rank-1 `[c]`**. 34 params. The `(dims, initKind)` order MUST match
+    `@mobilenetv2_train_step`'s signature (and `@mobilenetv2_fwd`'s) — both rendered
+    from the same `allParams` (tests/TestMobilenetV2*.lean). `initKind`: 0 =
+    He(fan-in) (depthwise fan-in = 1·3·3 = 9), 1 = ones (γ), 2 = zeros (β / bias). -/
+private def irBlk (ic mid oc : Nat) : Array (Array Nat × Nat) :=
+  #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2),    -- expand 1×1
+    (#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),     -- depthwise 3×3
+    (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]       -- project 1×1
+/-- `(dims, initKind)` for every param, in func-arg order. -/
+def specs : Array (Array Nat × Nat) := Id.run do
+  let mut a : Array (Array Nat × Nat) := #[(#[32,3,3,3],0),(#[32],2),(#[32],1),(#[32],2)]  -- stem
+  a := a ++ irBlk 32 64 32                                                                 -- IR-A (skip)
+  a := a ++ irBlk 32 64 64                                                                 -- IR-B (no-skip)
+  a := a ++ #[(#[128,64,1,1],0),(#[128],2),(#[128],1),(#[128],2)]                          -- head 1×1 conv→BN→relu6
+  a := a ++ #[(#[128,10],0),(#[10],2)]                                                     -- dense
+  return a
+def paramShapes : Array (Array Nat) := specs.map (·.1)
+def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
+def shapesBA : ByteArray := packShapes paramShapes
+def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
+end MobileNetV2Layout
+
 def MlpLayout.paramShapes : Array (Array Nat) := #[
   #[784, 512], #[512], #[512, 512], #[512], #[512, 10], #[10]
 ]

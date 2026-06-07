@@ -209,6 +209,13 @@ lean_exe «resnet34-verified» where
   root := `MainResnet34Verified
   moreLinkArgs := ireeLink
 
+-- ch7 C4: small MobileNetV2 (inverted-residual blocks: depthwise conv + relu6 +
+-- per-channel BN) trained on VERIFIED-rendered StableHLO
+-- (tests/TestMobilenetV2{Train,Fwd}.lean); 30 params.
+lean_exe «mobilenetv2-verified» where
+  root := `MainMobilenetV2Verified
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar-cnn-train» where
   root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink

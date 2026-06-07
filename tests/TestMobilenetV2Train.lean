@@ -6,7 +6,12 @@ import LeanMlir.Types
 The full single-batch SGD train step for the small MobileNetV2 of C4a (ch6 B9b
 analog). Exercises every op type's forward + backward + SGD:
   stem 3×3 stride-2 conv + BN + relu6 → maxpool → IR-A (skip) → IR-B (no-skip)
-  → GAP → dense, softmax-CE mean-loss cotangent, full reverse pass, SGD updates.
+  → head 1×1 conv (64→128) + BN + relu6 → GAP → dense, softmax-CE mean-loss
+  cotangent, full reverse pass, SGD updates.
+
+The head's relu6 before GAP is ESSENTIAL (the MNv2 "features" layer): per-example
+instance-norm zeroes each channel's spatial mean, so GAP of a raw linear-bottleneck
+BN is the constant β; the relu6 restores a per-input pooled mean so the net learns.
 
 The genuinely-new backward fragments vs ch6:
   * depthwise input-grad  = reverse the [c,1,3,3] filters over [2,3] + depthwise
@@ -271,7 +276,9 @@ private def allParams : List (String × String × String) :=
    ("sg", "%dstndg", ty [32]), ("sbt", "%dstndb", ty [32])]
   ++ irBlkParams "ira" 32 64 32
   ++ irBlkParams "irb" 32 64 64
-  ++ [("Wd", "%dWd", ty [64,10]), ("bd", "%dbd", ty [10])]
+  ++ [("hW", "%dhW", ty [128,64,1,1]), ("hb", "%dhb", ty [128]),
+      ("hg", "%dhndg", ty [128]), ("hbt", "%dhndb", ty [128])]
+  ++ [("Wd", "%dWd", ty [128,10]), ("bd", "%dbd", ty [10])]
 
 private def trainStep : String := Id.run do
   -- ── forward: stem → maxpool → IR-A → IR-B → GAP(8×8) → dense(64→10) ──
@@ -283,11 +290,17 @@ private def trainStep : String := Id.run do
     ++ maxpool "stp" "%str" 32 16 16
   let (a, _) := irBlockFwd "ira" "%stp" 32 64 32 8 8 true
   let (b, ob) := irBlockFwd "irb" "%irao" 32 64 64 8 8 false
+  -- head: 1×1 conv (64→128) → BN → relu6 (the standard MNv2 "features" layer).
+  -- ESSENTIAL: GAP of a per-example instance-normed BN is just β (constant across
+  -- inputs); the relu6 gives the pooled tensor an input-varying mean so the net learns.
   fwd := fwd ++ a ++ b
-    ++ s!"    %gaps = stablehlo.reduce({ob} init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,64,8,8]}, tensor<f32>) -> {ty [BS,64]}\n"
-    ++ s!"    %gapnf = stablehlo.constant dense<64.0> : {ty [BS,64]}\n"
-    ++ s!"    %gap = stablehlo.divide %gaps, %gapnf : {ty [BS,64]}\n"
-    ++ s!"    %ld = stablehlo.dot_general %gap, %Wd, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,64]}, {ty [64,10]}) -> {ty [BS,10]}\n"
+    ++ conv1 "h" ob "%hW" "%hb" 128 64 8 8
+    ++ bnPC "hn" "%h" "%hg" "%hbt" 128 8 8 (8*8)
+    ++ relu6 "hr" "%hn" 128 8 8
+    ++ s!"    %gaps = stablehlo.reduce(%hr init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,128,8,8]}, tensor<f32>) -> {ty [BS,128]}\n"
+    ++ s!"    %gapnf = stablehlo.constant dense<64.0> : {ty [BS,128]}\n"
+    ++ s!"    %gap = stablehlo.divide %gaps, %gapnf : {ty [BS,128]}\n"
+    ++ s!"    %ld = stablehlo.dot_general %gap, %Wd, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,128]}, {ty [128,10]}) -> {ty [BS,10]}\n"
     ++ s!"    %ldb = stablehlo.broadcast_in_dim %bd, dims = [1] : ({ty [10]}) -> {ty [BS,10]}\n"
     ++ s!"    %logits = stablehlo.add %ld, %ldb : {ty [BS,10]}\n"
   -- ── loss cotangent dy = (softmax(logits) − onehot) / B (mean loss) ──
@@ -301,14 +314,20 @@ private def trainStep : String := Id.run do
     ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"
   -- ── backward: dense + GAP → IR-B → IR-A → maxpool → stem ──
   let mut bwd :=
-    s!"    %dgap = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [BS,10]}, {ty [64,10]}) -> {ty [BS,64]}\n"
-    ++ s!"    %dWd = stablehlo.dot_general %gap, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,64]}, {ty [BS,10]}) -> {ty [64,10]}\n"
+    s!"    %dgap = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [BS,10]}, {ty [128,10]}) -> {ty [BS,128]}\n"
+    ++ s!"    %dWd = stablehlo.dot_general %gap, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,128]}, {ty [BS,10]}) -> {ty [128,10]}\n"
     ++ s!"    %dbd = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n"
-    ++ s!"    %dgnf = stablehlo.constant dense<64.0> : {ty [BS,64]}\n"
-    ++ s!"    %dgs = stablehlo.divide %dgap, %dgnf : {ty [BS,64]}\n"
-    ++ s!"    %dgapin = stablehlo.broadcast_in_dim %dgs, dims = [0, 1] : ({ty [BS,64]}) -> {ty [BS,64,8,8]}\n"
+    ++ s!"    %dgnf = stablehlo.constant dense<64.0> : {ty [BS,128]}\n"
+    ++ s!"    %dgs = stablehlo.divide %dgap, %dgnf : {ty [BS,128]}\n"
+    ++ s!"    %dgapin = stablehlo.broadcast_in_dim %dgs, dims = [0, 1] : ({ty [BS,128]}) -> {ty [BS,128,8,8]}\n"
+  -- head backward: relu6 back (mask on %hn) → BN back → 1×1 conv back (→ dy for IR-B)
   bwd := bwd
-    ++ (irBlockBack "irb" "%dgapin" "%irao" 32 64 64 8 8 false).1
+    ++ relu6Back "dhr" "%hn" "%dgapin" 128 8 8
+    ++ bnBackPC "dhn" "hn" "%dhr" 128 8 8
+    ++ conv1Back "dh" "%dhn" "%hW" 64 128 8 8
+    ++ conv1WGrad "dhW" "%irbpn" "%dhn" 64 128 8 8
+    ++ convBiasGrad "dhb" "%dhn" 128 8 8
+    ++ (irBlockBack "irb" "%dh" "%irao" 32 64 64 8 8 false).1
     ++ (irBlockBack "ira" "%irbde" "%stp" 32 64 32 8 8 true).1
     ++ maxpoolBack "dmp" "%str" "%iradx" 32 8 8
     ++ relu6Back "dstr" "%stn" "%dmp" 32 16 16
