@@ -1,5 +1,23 @@
 # Verified ResNet-34 (Chapter 6) — handoff
 
+> **⭐ 2026-06-07 UPDATE — moved to IMAGENETTE 224² (uncommitted, on `main`).** The
+> `resnet34-verified` trainer no longer targets CIFAR 32²; it is now the paper-native
+> **ImageNet-resolution ResNet-34 on Imagenette 224²** (like ch8's B0). New **faithful
+> 7×7 stride-2 stem** (224→112; `convStem` fwd + `convWGradStem` back in
+> tests/TestResnet34Train.lean — upsample 112→224 then 7×7/pad-3 weight-grad, reusing the
+> proven `flatConvStride2 = decimate2 ∘ stride-1` pattern, kernel-general) + 2×2 maxpool
+> (112→56); spatial **56→28→14→7**, GAP÷49. Stem W is now `[64,3,7,7]`; still 146 params /
+> 22.67M floats. BS=32. Edits: tests/TestResnet34{Fwd,Train}.lean, `ResNet34Layout`@IreeRuntime,
+> MainResnet34Verified (now loads `<DATA>/imagenette/{train.bin@256 centerCrop→224, val.bin@224}`).
+> Both MLIRs render + iree-compile rocm (fwd 89KB, train 254KB); exe builds; ran one epoch =
+> **9.45% (= chance, climb pending a later "run all trainers" pass)** — confirms the 224² train
+> epoch + 34-layer backward execute with no OOM/crash. Also: the **entire ch6-A ResNet-*style*
+> trainer was DELETED** — `MainResnetVerified.lean` + lakefile `resnet-verified` entry +
+> `ResnetLayout`@IreeRuntime + `resnetFwdModuleV`/`resnetTrainStepText`@StableHLO +
+> `verified_mlir/resnet_*.mlir`. The audited `resnetFwdGraph` + `resnetFwdGraph_faithful` are KEPT
+> (audit unchanged). §§ below describe the original CIFAR build; the *architecture/proof* content is
+> unchanged — only resolution/stem/data moved (and the dead ch6-A trainer plumbing is gone).
+
 Continuation doc for the ResNet chapter of the verified-codegen ladder. Picks up
 after **Milestone A (verified ResNet-*style* net), B1–B6c (the whole verified
 ResNet-34 architecture), B7 (the unconditional concrete instance), and B8a/B8a'

@@ -1,5 +1,19 @@
 # Verified MobileNetV2 (Chapter 7) — handoff
 
+> **⭐ 2026-06-07 UPDATE — moved to IMAGENETTE 224² (uncommitted, on `main`).** The
+> `mobilenetv2-verified` trainer no longer targets CIFAR 32²; it is now the paper-native
+> **ImageNet-resolution MobileNetV2 on Imagenette 224²** (like ch8's B0). The stem was
+> already 3×3 **stride-2** (faithful), so the only change to reach the real MobileNetV2
+> **/32 flow** was making **b5 and b6 ALSO stride-2** (now b1/b3/b5/b6 = 4 strided
+> depthwise): **224→112(stem)→56→28→14→7**, head/GAP @7×7 (÷49). NO new fragment types
+> (b1/b3 already exercised the strided depthwise fwd+back), NO param-shape change (still
+> 82 params; b6 simply loses its skip since s≠1). BS=32. Edits: tests/TestMobilenetV2{Fwd,Train}.lean,
+> `MobileNetV2Layout`@IreeRuntime, MainMobilenetV2Verified (now loads
+> `<DATA>/imagenette/{train.bin@256 centerCrop→224, val.bin@224}`). Both MLIRs render +
+> iree-compile rocm (fwd 49KB, train 137KB) + exe builds; **GPU-train deferred to a later
+> "run all trainers" pass**. §§ below describe the original CIFAR build; only resolution/
+> stride-depth/data moved (proofs untouched).
+
 Continuation doc for the **MobileNetV2** chapter of the verified-codegen ladder. ch7
 brings MNv2 into the same "render via the proof-carrying StableHLO emitter + GPU-train
 on the rendered text" line that ch6 just closed for ResNet-34 (`resnet34-verified`).

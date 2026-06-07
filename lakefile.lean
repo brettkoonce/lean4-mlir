@@ -196,13 +196,6 @@ lean_exe «cifar-bn-verified» where
   root := `MainCifarBnVerified
   moreLinkArgs := ireeLink
 
--- Chapter 6 (ResNet): trains the residual + global-average-pool net on the
--- VERIFIED-rendered StableHLO (Proofs.StableHLO.resnetTrainStepText); whole-net
--- VJP = the audited Proofs.cnn_has_vjp_at.
-lean_exe «resnet-verified» where
-  root := `MainResnetVerified
-  moreLinkArgs := ireeLink
-
 -- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
 -- VERIFIED-rendered StableHLO (tests/TestResnet34{Train,Fwd}.lean); 146 params.
 lean_exe «resnet34-verified» where

@@ -3,13 +3,15 @@ import LeanMlir.Types
 
 /-! # B9a — full ResNet-34 forward renderer + `iree-compile` validation
 
-Programmatic StableHLO for a real ResNet-34 forward (CIFAR 3×32×32 input):
-strided 3×3 stem (3→64, 32→16) → 2×2 maxpool (16→8) → 4 stages of basic blocks
-`[3,4,6,3]` at channels `64/128/256/512` (stages 2–4 open with a strided downsample
-block, 8→4→2→1) → global-average-pool → dense(512→10). Every fragment is the same
-StableHLO the VERIFIED per-op emitters produce (conv, stride-2 conv, per-channel BN
-= bnPerChannelF/Back, relu, maxpool, GAP, dense); this de-risks the whole 34-layer
-forward on `iree-compile` before wiring the train step.
+Programmatic StableHLO for a real ResNet-34 forward (IMAGENETTE 3×224×224 input —
+the paper's native ImageNet resolution): 7×7 stride-2 stem (3→64, 224→112) → 2×2
+maxpool (112→56) → 4 stages of basic blocks `[3,4,6,3]` at channels `64/128/256/512`
+(stages 2–4 open with a strided downsample block, 56→28→14→7) → global-average-pool →
+dense(512→10). Every fragment is the same StableHLO the VERIFIED per-op emitters
+produce (conv, stride-2 conv — incl. the 7×7 stem, per-channel BN = bnPerChannelF/Back,
+relu, maxpool, GAP, dense); this de-risks the whole 34-layer forward on `iree-compile`
+before wiring the train step. (The 7×7 stride-2 stem reuses the proven strided-conv
+identity `flatConvStride2 = decimate2 ∘ (stride-1 SAME conv)`, kernel-general.)
 
 Naming: helper `o` is a bare prefix; the helper's result SSA is `%{o}`, its
 intermediates `%{o}…`. All value inputs carry a leading `%`.
@@ -21,7 +23,7 @@ Run (rocm):
 
 open Proofs Proofs.StableHLO
 
-private def BS : Nat := 128
+private def BS : Nat := 32
 private def EPS : String := "1.0e-5"
 
 -- ── 4-D fragment helpers ([B,C,H,W] throughout; structured names, no global counter) ──
@@ -33,6 +35,17 @@ private def conv (o x w bnm : String) (oc ic Hin Win Hout Wout s : Nat) : String
   "      window = {" ++ s!"stride = [{s}, {s}], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
   "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
   s!" : ({ty [BS,ic,Hin,Win]}, {ty [oc,ic,3,3]}) -> {ty [BS,oc,Hout,Wout]}\n" ++
+  s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hout,Wout]}\n" ++
+  s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,oc,Hout,Wout]}\n"
+
+/-- 7×7 SAME conv, stride 2, pad 3 (the ImageNet ResNet stem: 224→112). Same proven
+    stride-2 pattern as the 3×3 `conv s=2`, just kernel-7. Result SSA = `%{o}`. -/
+private def convStem (o x w bnm : String) (oc ic Hin Win Hout Wout : Nat) : String :=
+  s!"    %{o}c = stablehlo.convolution({x}, {w})\n" ++
+  "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+  "      window = {stride = [2, 2], pad = [[3, 3], [3, 3]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+  "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+  s!" : ({ty [BS,ic,Hin,Win]}, {ty [oc,ic,7,7]}) -> {ty [BS,oc,Hout,Wout]}\n" ++
   s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hout,Wout]}\n" ++
   s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,oc,Hout,Wout]}\n"
 
@@ -139,27 +152,27 @@ private def gapDense (o x : String) (c nC Hh Ww : Nat) : String :=
 -- ── whole net ──
 
 private def resnet34Fwd : String := Id.run do
-  -- stride-1 3×3 stem (3→64 @32×32) + 2×2 maxpool (32→16); downsamples 16→8→4→2
+  -- 7×7 stride-2 stem (3→64, 224→112) + 2×2 maxpool (112→56); downsamples 56→28→14→7
   let stemCode :=
-    s!"    %xr = stablehlo.reshape %x : ({ty [BS,3072]}) -> {ty [BS,3,32,32]}\n" ++
-    conv "stc" "%xr" "%sW" "%sb" 64 3 32 32 32 32 1 ++
-    bnPC "stn" "%stc" "%sg" "%sbt" 64 32 32 (32*32) ++
-    relu "str" "%stn" 64 32 32 ++
-    maxpool "stp" "%str" 64 32 32
-  let (s1, o1) := idChain "s1" "%stp" 3 64 16 16
-  let (d2, o2) := downBlock "d2" o1 64 128 8 8
-  let (s2, o2b) := idChain "s2" o2 3 128 8 8
-  let (d3, o3) := downBlock "d3" o2b 128 256 4 4
-  let (s3, o3b) := idChain "s3" o3 5 256 4 4
-  let (d4, o4) := downBlock "d4" o3b 256 512 2 2
-  let (s4, o4b) := idChain "s4" o4 2 512 2 2
-  let tail := gapDense "out" o4b 512 10 2 2
+    s!"    %xr = stablehlo.reshape %x : ({ty [BS,150528]}) -> {ty [BS,3,224,224]}\n" ++
+    convStem "stc" "%xr" "%sW" "%sb" 64 3 224 224 112 112 ++
+    bnPC "stn" "%stc" "%sg" "%sbt" 64 112 112 (112*112) ++
+    relu "str" "%stn" 64 112 112 ++
+    maxpool "stp" "%str" 64 112 112
+  let (s1, o1) := idChain "s1" "%stp" 3 64 56 56
+  let (d2, o2) := downBlock "d2" o1 64 128 28 28
+  let (s2, o2b) := idChain "s2" o2 3 128 28 28
+  let (d3, o3) := downBlock "d3" o2b 128 256 14 14
+  let (s3, o3b) := idChain "s3" o3 5 256 14 14
+  let (d4, o4) := downBlock "d4" o3b 256 512 7 7
+  let (s4, o4b) := idChain "s4" o4 2 512 7 7
+  let tail := gapDense "out" o4b 512 10 7 7
   let body :=
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     stemCode ++ s1 ++ d2 ++ s2 ++ d3 ++ s3 ++ d4 ++ s4 ++ tail
   let sig : List String :=
-    ["%x: " ++ ty [BS,3072]]
-    ++ [s!"%sW: {ty [64,3,3,3]}", s!"%sb: {ty [64]}"] ++ bnSig "s" 64
+    ["%x: " ++ ty [BS,150528]]
+    ++ [s!"%sW: {ty [64,3,7,7]}", s!"%sb: {ty [64]}"] ++ bnSig "s" 64
     ++ idChainSig "s1" 3 64
     ++ downBlockSig "d2" 64 128 ++ idChainSig "s2" 3 128
     ++ downBlockSig "d3" 128 256 ++ idChainSig "s3" 5 256

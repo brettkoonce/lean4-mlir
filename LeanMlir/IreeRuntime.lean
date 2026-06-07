@@ -255,37 +255,16 @@ def shapesBA : ByteArray := packShapes paramShapes
 def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
 end CifarBnLayout
 
-namespace ResnetLayout
-/-- Chapter-6 ResNet-style params (ic=3, c=32, oc=64, 3×3 convs): stem {W,b,γ,β},
-    identity block 2×{W,b,γ,β}, projection block 2×{W,b,γ,β} + proj {W,b,γ,β},
-    dense {W,b}. 26 params; γ/β are rank-0 `#[]` scalars. Order MUST match
-    `@resnet_train_step`'s signature (and `@resnet_fwd`'s). -/
-def paramShapes : Array (Array Nat) := #[
-  #[32, 3, 3, 3], #[32], #[], #[],     -- stem conv 3→32   + γs,βs
-  #[32, 32, 3, 3], #[32], #[], #[],    -- rblk  conv1 32→32 + γ1,β1
-  #[32, 32, 3, 3], #[32], #[], #[],    -- rblk  conv2 32→32 + γ2,β2
-  #[64, 32, 3, 3], #[64], #[], #[],    -- rblkP conv1 32→64 + γ1p,β1p
-  #[64, 64, 3, 3], #[64], #[], #[],    -- rblkP conv2 64→64 + γ2p,β2p
-  #[64, 32, 3, 3], #[64], #[], #[],    -- rblkP proj  32→64 + γp,βp
-  #[64, 10], #[10]                     -- dense 64→10
-]
-def nParams : Nat :=
-  (32*3*3*3 + 32 + 1 + 1) + (32*32*3*3 + 32 + 1 + 1) + (32*32*3*3 + 32 + 1 + 1) +
-  (64*32*3*3 + 64 + 1 + 1) + (64*64*3*3 + 64 + 1 + 1) + (64*32*3*3 + 64 + 1 + 1) +
-  64*10 + 10
-def lossIdx : Nat := nParams
-def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
-end ResnetLayout
-
 namespace ResNet34Layout
-/-- Chapter-6 **real ResNet-34** params (CIFAR 3×32×32): stem {W,b,γ,β}, then the
+/-- Chapter-6 **real ResNet-34** params (IMAGENETTE 3×224×224 — paper-native ImageNet
+    resolution): **7×7 stride-2 stem** {W=`[64,3,7,7]`,b,γ,β} (224→112), then the
     16 basic blocks (3 strided downsample {W,b,γ,β}×2 + proj{W,b,γ,β}; 13 identity
-    {W,b,γ,β}×2) at channels 64/128/256/512, then dense {W,b}. Per-channel BN ⇒ γ/β
-    are **rank-1 `[c]`** (not rank-0 scalars). 146 params. The `(dims, initKind)`
-    order MUST match `@resnet34_train_step`'s signature (and `@resnet34_fwd`'s) —
-    both rendered from the same `Blk` list (tests/TestResnet34*.lean `allParams`).
-    `initKind`: 0 = He(fan-in), 1 = ones (γ), 2 = zeros (β / bias). -/
+    {W,b,γ,β}×2) at channels 64/128/256/512 (spatial 56/28/14/7), then dense {W,b}.
+    Per-channel BN ⇒ γ/β are **rank-1 `[c]`** (not rank-0 scalars). 146 params. The
+    `(dims, initKind)` order MUST match `@resnet34_train_step`'s signature (and
+    `@resnet34_fwd`'s) — both rendered from the same `Blk` list (tests/TestResnet34*.lean
+    `allParams`). `initKind`: 0 = He(fan-in) (stem fan-in = 3·7·7 = 147), 1 = ones (γ),
+    2 = zeros (β / bias). -/
 private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2)]
 private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
@@ -293,7 +272,7 @@ private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
     (#[c,cin,3,3],0),(#[c],2),(#[c],1),(#[c],2)]
 /-- `(dims, initKind)` for every param, in func-arg order. -/
 def specs : Array (Array Nat × Nat) := Id.run do
-  let mut a : Array (Array Nat × Nat) := #[(#[64,3,3,3],0),(#[64],2),(#[64],1),(#[64],2)]  -- stem
+  let mut a : Array (Array Nat × Nat) := #[(#[64,3,7,7],0),(#[64],2),(#[64],1),(#[64],2)]  -- 7×7-s2 stem
   for _ in [0:3] do a := a ++ idBlk 64                                                     -- stage1
   a := a ++ downBlk 64 128;  for _ in [0:3] do a := a ++ idBlk 128                         -- stage2
   a := a ++ downBlk 128 256; for _ in [0:5] do a := a ++ idBlk 256                         -- stage3
@@ -303,21 +282,24 @@ def specs : Array (Array Nat × Nat) := Id.run do
 def paramShapes : Array (Array Nat) := specs.map (·.1)
 def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
 def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
+def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- Imagenette 224²
 end ResNet34Layout
 
 namespace MobileNetV2Layout
-/-- Chapter-7 **MobileNetV2** params (CIFAR 3×32×32, real downsampling `[t,c,n,s]`):
-    stem {W,b,γ,β} (3×3 stride-2 conv 3→16), then 6 inverted-residual blocks — each
-    expand 1×1 {W,b,γ,β}, depthwise 3×3 {W,b,γ,β} (a `[mid,1,3,3]` kernel,
-    feature_group_count = mid; stride-2 for the 2 downsampling blocks), project 1×1
-    {W,b,γ,β} — then the head 1×1 conv {W,b,γ,β} (64→128, the MNv2 "features" layer:
-    conv→BN→relu6 before GAP, so the pooled tensor isn't the constant β of an
-    instance-normed BN) and dense {W,b}. Per-channel BN ⇒ γ/β are **rank-1 `[c]`**.
-    82 params. Spatial 32→16(stem)→8(b1,s2)→4(b3,s2)→4. The `(dims, initKind)` order
-    MUST match `@mobilenetv2_train_step`'s signature (and `@mobilenetv2_fwd`'s) — both
-    rendered from the same `blocks`/`allParams` (tests/TestMobilenetV2*.lean).
-    `initKind`: 0 = He(fan-in) (depthwise fan-in = 1·3·3 = 9), 1 = ones (γ), 2 = zeros. -/
+/-- Chapter-7 **MobileNetV2** params (IMAGENETTE 3×224×224 — paper-native ImageNet
+    resolution, real downsampling `[t,c,n,s]`): stem {W,b,γ,β} (3×3 stride-2 conv
+    3→16), then 6 inverted-residual blocks — each expand 1×1 {W,b,γ,β}, depthwise 3×3
+    {W,b,γ,β} (a `[mid,1,3,3]` kernel, feature_group_count = mid; stride-2 for the 4
+    downsampling blocks b1/b3/b5/b6), project 1×1 {W,b,γ,β} — then the head 1×1 conv
+    {W,b,γ,β} (64→128, the MNv2 "features" layer: conv→BN→relu6 before GAP, so the
+    pooled tensor isn't the constant β of an instance-normed BN) and dense {W,b}.
+    Per-channel BN ⇒ γ/β are **rank-1 `[c]`**. 82 params. Spatial
+    224→112(stem)→56(b1,s2)→28(b3,s2)→14(b5,s2)→7(b6,s2) — the real MobileNetV2 /32
+    flow. The `(dims, initKind)` order MUST match `@mobilenetv2_train_step`'s signature
+    (and `@mobilenetv2_fwd`'s) — both rendered from the same `blocks`/`allParams`
+    (tests/TestMobilenetV2*.lean). Strides live only in the renderers (no param-shape
+    effect). `initKind`: 0 = He(fan-in) (depthwise fan-in = 1·3·3 = 9), 1 = ones (γ),
+    2 = zeros. -/
 private def irBlk (ic mid oc : Nat) : Array (Array Nat × Nat) :=
   #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2),    -- expand 1×1
     (#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),     -- depthwise 3×3 (stride 1 or 2)
@@ -335,7 +317,7 @@ def specs : Array (Array Nat × Nat) := Id.run do
 def paramShapes : Array (Array Nat) := specs.map (·.1)
 def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
 def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
+def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- Imagenette 224²
 end MobileNetV2Layout
 
 namespace EfficientNetLayout

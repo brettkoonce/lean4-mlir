@@ -4,11 +4,13 @@ import LeanMlir.Types
 /-! # C4b/D3 — MobileNetV2 train-step renderer (real downsampling [t,c,n,s]) + iree
 
 Full single-batch SGD train step for the downsampling MobileNetV2 of the forward
-renderer. Data-driven over one block list `(p, ic, mid, oc, s)`, threading spatial
-dims through forward AND the reverse pass. Exercises every op's fwd+back+SGD:
-  stem 3×3 stride-2 conv + BN + relu6 → 6 inverted-residual blocks (2 of them
-  stride-2 downsampling via depthwise) → head 1×1 conv (64→128) + BN + relu6 →
-  GAP → dense, softmax-CE mean-loss cotangent, full reverse pass, SGD updates.
+renderer (IMAGENETTE 3×224×224, the real MobileNetV2 /32 spatial flow). Data-driven
+over one block list `(p, ic, mid, oc, s)`, threading spatial dims through forward AND
+the reverse pass. Exercises every op's fwd+back+SGD:
+  stem 3×3 stride-2 conv + BN + relu6 → 6 inverted-residual blocks (4 of them
+  stride-2 downsampling via depthwise: 224→112→56→28→14→7) → head 1×1 conv (64→128)
+  + BN + relu6 → GAP → dense, softmax-CE mean-loss cotangent, full reverse pass,
+  SGD updates.
 
 New strided backward fragments vs the stride-1 net:
   * depthwise stride-2 input-grad  (`dwconvStridedBack`) — zero-upsample the
@@ -23,7 +25,7 @@ Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestMobilenetV2Train.l
 
 open Proofs Proofs.StableHLO
 
-private def BS : Nat := 128
+private def BS : Nat := 32
 private def EPS : String := "1.0e-5"
 private def LR : String := "0.3"
 
@@ -258,12 +260,12 @@ private def sgd (θ dθ ty' : String) : String :=
 
 /-- (p, ic, mid, oc, s); spatial threaded from the stem (16×16). -/
 private def blocks : List (String × Nat × Nat × Nat × Nat) :=
-  [("b1", 16, 64,  24, 2),   -- 16→8
-   ("b2", 24, 96,  24, 1),   -- skip
-   ("b3", 24, 96,  32, 2),   -- 8→4
-   ("b4", 32, 128, 32, 1),   -- skip
-   ("b5", 32, 128, 64, 1),   -- 32→64 (no skip)
-   ("b6", 64, 256, 64, 1)]   -- skip
+  [("b1", 16, 64,  24, 2),   -- 112→56
+   ("b2", 24, 96,  24, 1),   -- skip @56
+   ("b3", 24, 96,  32, 2),   -- 56→28
+   ("b4", 32, 128, 32, 1),   -- skip @28
+   ("b5", 32, 128, 64, 2),   -- 28→14 (no skip)
+   ("b6", 64, 256, 64, 2)]   -- 14→7 (no skip)
 
 /-- IR block param triples (name, gradSSA, type) in func-arg order. -/
 private def irBlkParams (p : String) (ic mid oc : Nat) : List (String × String × String) :=
@@ -284,14 +286,14 @@ private def allParams : List (String × String × String) :=
   ++ [("Wd", "%dWd", ty [128,10]), ("bd", "%dbd", ty [10])]
 
 private def trainStep : String := Id.run do
-  -- ── forward: stem → blocks → head → GAP(4×4) → dense(128→10) ──
+  -- ── forward: stem → blocks → head → GAP(7×7) → dense(128→10) ──
   let mut fwd := "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n"
-    ++ s!"    %xr = stablehlo.reshape %x : ({ty [BS,3072]}) -> {ty [BS,3,32,32]}\n"
-    ++ conv3 "stc" "%xr" "%sW" "%sb" 16 3 32 32 16 16 2
-    ++ bnPC "stn" "%stc" "%sg" "%sbt" 16 16 16 (16*16)
-    ++ relu6 "str" "%stn" 16 16 16
+    ++ s!"    %xr = stablehlo.reshape %x : ({ty [BS,150528]}) -> {ty [BS,3,224,224]}\n"
+    ++ conv3 "stc" "%xr" "%sW" "%sb" 16 3 224 224 112 112 2
+    ++ bnPC "stn" "%stc" "%sg" "%sbt" 16 112 112 (112*112)
+    ++ relu6 "str" "%stn" 16 112 112
   let mut cur := "%str"
-  let mut curH := 16
+  let mut curH := 112
   let mut io : List ((String × Nat × Nat × Nat × Nat) × String × Nat) := []  -- (blk, xin, Hin)
   for blk in blocks do
     let (p, ic, mid, oc, s) := blk
@@ -342,14 +344,14 @@ private def trainStep : String := Id.run do
     d := out
   -- stem backward: relu6 (mask stn) → BN → strided 3×3 weight-grad
   bwd := bwd
-    ++ relu6Back "dstr" "%stn" d 16 16 16
-    ++ bnBackPC "dstn" "stn" "%dstr" 16 16 16
-    ++ convBiasGrad "dsb" "%dstn" 16 16 16
-    ++ conv3WGradStrided "dsW" "%xr" "%dstn" 3 16 16 16
+    ++ relu6Back "dstr" "%stn" d 16 112 112
+    ++ bnBackPC "dstn" "stn" "%dstr" 16 112 112
+    ++ convBiasGrad "dsb" "%dstn" 16 112 112
+    ++ conv3WGradStrided "dsW" "%xr" "%dstn" 3 16 112 112
   -- ── SGD + signature/return, all from the single param list ──
   let upd := String.join (allParams.map (fun (nm, gr, t) => sgd nm gr t))
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [BS,3072]) :: allParams.map (fun (nm, _, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])
+    (("%x: " ++ ty [BS,150528]) :: allParams.map (fun (nm, _, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])
   let retTyL := String.intercalate ", " (allParams.map (fun (_, _, t) => t))
   let retVals := String.intercalate ", " (allParams.map (fun (nm, _, _) => s!"%{nm}n"))
   return "module @m {\n" ++ s!"  func.func @mobilenetv2_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++

@@ -3,21 +3,23 @@ import LeanMlir.Types
 
 /-! # C4a/D3 — MobileNetV2 forward renderer (real downsampling [t,c,n,s]) + iree
 
-Programmatic StableHLO for a real, DOWNSAMPLING MobileNetV2 forward (CIFAR 3×32×32),
-matching the reference architecture (inverted-residual `[t,c,n,s]` stages that shrink
-spatial via STRIDE-2 DEPTHWISE — the C3 `depthwiseStridedF` op):
+Programmatic StableHLO for a real, DOWNSAMPLING MobileNetV2 forward (IMAGENETTE
+3×224×224 — the paper-native ImageNet resolution), matching the reference architecture
+(inverted-residual `[t,c,n,s]` stages that shrink spatial via STRIDE-2 DEPTHWISE — the
+C3 `depthwiseStridedF` op), at the real MobileNetV2 /32 spatial flow:
 
-  stem  : 3×3 stride-2 conv (3→16, 32→16) + BN + relu6
-  b1    : IR  16→24, t≈4 (mid 64),  stride 2  (16→8)   [no skip]
-  b2    : IR  24→24, mid 96,        stride 1  (8×8)     [skip]
-  b3    : IR  24→32, mid 96,        stride 2  (8→4)     [no skip]
-  b4    : IR  32→32, mid 128,       stride 1  (4×4)     [skip]
-  b5    : IR  32→64, mid 128,       stride 1  (4×4)     [no skip]
-  b6    : IR  64→64, mid 256,       stride 1  (4×4)     [skip]
-  head  : 1×1 conv (64→128) + BN + relu6  (MNv2 "features" layer @4×4)
+  stem  : 3×3 stride-2 conv (3→16, 224→112) + BN + relu6
+  b1    : IR  16→24, t≈4 (mid 64),  stride 2  (112→56)  [no skip]
+  b2    : IR  24→24, mid 96,        stride 1  (56×56)   [skip]
+  b3    : IR  24→32, mid 96,        stride 2  (56→28)   [no skip]
+  b4    : IR  32→32, mid 128,       stride 1  (28×28)   [skip]
+  b5    : IR  32→64, mid 128,       stride 2  (28→14)   [no skip]
+  b6    : IR  64→64, mid 256,       stride 2  (14→7)    [no skip]
+  head  : 1×1 conv (64→128) + BN + relu6  (MNv2 "features" layer @7×7)
   tail  : global-average-pool → dense(128→10)
 
-Spatial: 32→16(stem)→8(b1)→4(b3)→4 — two strided-depthwise downsamples. Every
+Spatial: 224→112(stem)→56(b1)→28(b3)→14(b5)→7(b6) — four strided-depthwise
+downsamples (+ the strided stem) = the real MobileNetV2 /32 flow. Every
 fragment is the StableHLO a VERIFIED per-op emitter produces: depthwise stride-1
 (`depthwiseF`) / stride-2 (`depthwiseStridedF`), relu6 (`relu6F`), per-channel BN
 (`bnPerChannelF`), 1×1/3×3 convs, residual `addV`, GAP, dense. A block downsamples
@@ -32,7 +34,7 @@ Run (rocm):
 
 open Proofs Proofs.StableHLO
 
-private def BS : Nat := 128
+private def BS : Nat := 32
 private def EPS : String := "1.0e-5"
 
 -- ── 4-D fragment helpers ([B,C,H,W]; structured names, result `%{o}`) ──
@@ -130,12 +132,12 @@ private def irBlockFwd (p x : String) (ic mid oc Hin s : Nat) : String × String
 -- ── block config (p, ic, mid, oc, s); spatial threaded from the stem (16×16) ──
 
 private def blocks : List (String × Nat × Nat × Nat × Nat) :=
-  [("b1", 16, 64,  24, 2),   -- 16→8
-   ("b2", 24, 96,  24, 1),   -- skip
-   ("b3", 24, 96,  32, 2),   -- 8→4
-   ("b4", 32, 128, 32, 1),   -- skip
-   ("b5", 32, 128, 64, 1),   -- 32→64 (no skip)
-   ("b6", 64, 256, 64, 1)]   -- skip
+  [("b1", 16, 64,  24, 2),   -- 112→56
+   ("b2", 24, 96,  24, 1),   -- skip @56
+   ("b3", 24, 96,  32, 2),   -- 56→28
+   ("b4", 32, 128, 32, 1),   -- skip @28
+   ("b5", 32, 128, 64, 2),   -- 28→14 (no skip)
+   ("b6", 64, 256, 64, 2)]   -- 14→7 (no skip)
 
 private def bnSig (p : String) (oc : Nat) : List String :=
   [s!"%{p}g: {ty [oc]}", s!"%{p}bt: {ty [oc]}"]
@@ -155,19 +157,19 @@ private def gapDense (o x : String) (c nC Hh Ww : Nat) : String :=
 -- ── whole net ──
 
 private def mobilenetv2Fwd : String := Id.run do
-  -- stem: 3×3 stride-2 conv (3→16, 32→16) + BN + relu6
+  -- stem: 3×3 stride-2 conv (3→16, 224→112) + BN + relu6
   let stemCode :=
-    s!"    %xr = stablehlo.reshape %x : ({ty [BS,3072]}) -> {ty [BS,3,32,32]}\n" ++
-    conv3 "stc" "%xr" "%sW" "%sb" 16 3 32 32 16 16 2 ++
-    bnPC "stn" "%stc" "%sg" "%sbt" 16 16 16 (16*16) ++
-    relu6 "str" "%stn" 16 16 16
+    s!"    %xr = stablehlo.reshape %x : ({ty [BS,150528]}) -> {ty [BS,3,224,224]}\n" ++
+    conv3 "stc" "%xr" "%sW" "%sb" 16 3 224 224 112 112 2 ++
+    bnPC "stn" "%stc" "%sg" "%sbt" 16 112 112 (112*112) ++
+    relu6 "str" "%stn" 16 112 112
   let mut blkCode := ""
   let mut cur := "%str"
-  let mut curH := 16
+  let mut curH := 112
   for (p, ic, mid, oc, s) in blocks do
     let (c, out) := irBlockFwd p cur ic mid oc curH s
     blkCode := blkCode ++ c; cur := out; curH := curH / s
-  -- head: 1×1 conv (64→128) + BN + relu6 @ curH×curH (=4×4)
+  -- head: 1×1 conv (64→128) + BN + relu6 @ curH×curH (=7×7)
   let head :=
     conv1 "h" cur "%hW" "%hb" 128 64 curH curH ++
     bnPC "hn" "%h" "%hg" "%hbt" 128 curH curH (curH*curH) ++
@@ -177,7 +179,7 @@ private def mobilenetv2Fwd : String := Id.run do
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     stemCode ++ blkCode ++ head ++ tail
   let sig : List String :=
-    ["%x: " ++ ty [BS,3072]]
+    ["%x: " ++ ty [BS,150528]]
     ++ [s!"%sW: {ty [16,3,3,3]}", s!"%sb: {ty [16]}"] ++ bnSig "s" 16
     ++ (blocks.map (fun (p, ic, mid, oc, _) => irBlockSig p ic mid oc)).flatten
     ++ [s!"%hW: {ty [128,64,1,1]}", s!"%hb: {ty [128]}"] ++ bnSig "h" 128
