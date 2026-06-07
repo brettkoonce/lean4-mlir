@@ -338,6 +338,39 @@ def shapesBA : ByteArray := packShapes paramShapes
 def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
 end MobileNetV2Layout
 
+namespace EfficientNetLayout
+/-- Chapter-8 **EfficientNet** params (CIFAR 3×32×32, real downsampling): stem
+    {W,b,γ,β} (3×3 stride-2 conv 3→16), then 6 MBConv blocks — each expand 1×1
+    {W,b,γ,β}, depthwise 3×3 {W,b,γ,β} (`[mid,1,3,3]`, feature_group_count = mid;
+    stride-2 for the 2 downsampling blocks), **squeeze-excite** {Ws₁`[mid,r]`,bs₁`[r]`,
+    Ws₂`[r,mid]`,bs₂`[mid]`}, project 1×1 {W,b,γ,β} — then head 1×1 conv {W,b,γ,β}
+    (64→128, conv→BN→swish before GAP) and dense {W,b}. Per-channel BN ⇒ γ/β rank-1
+    `[c]`. 106 params. Spatial 32→16(stem)→8(b1,s2)→4(b3,s2)→4. The `(dims, initKind)`
+    order MUST match `@efficientnet_train_step`'s signature (and `@efficientnet_fwd`'s)
+    — both rendered from the same `blocks`/`allParams` (tests/TestEfficientNet*.lean).
+    `initKind`: 0 = He(fan-in) (depthwise fan-in = 1·3·3 = 9, SE dense = mid/r), 1 = ones
+    (γ), 2 = zeros (β / bias). -/
+private def mbBlk (ic mid oc r : Nat) : Array (Array Nat × Nat) :=
+  #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2),    -- expand 1×1
+    (#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),     -- depthwise 3×3 (stride 1 or 2)
+    (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),         -- squeeze-excite dense₁/dense₂
+    (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]       -- project 1×1
+/-- (ic, mid, oc, r) per block — MUST match tests/TestEfficientNet*.lean `blocks`. -/
+private def blocks : Array (Nat × Nat × Nat × Nat) :=
+  #[(16,64,24,4),(24,96,24,6),(24,96,32,6),(32,128,32,8),(32,128,64,8),(64,256,64,16)]
+/-- `(dims, initKind)` for every param, in func-arg order. -/
+def specs : Array (Array Nat × Nat) := Id.run do
+  let mut a : Array (Array Nat × Nat) := #[(#[16,3,3,3],0),(#[16],2),(#[16],1),(#[16],2)]  -- stem
+  for (ic, mid, oc, r) in blocks do a := a ++ mbBlk ic mid oc r                            -- 6 MBConv blocks
+  a := a ++ #[(#[128,64,1,1],0),(#[128],2),(#[128],1),(#[128],2)]                          -- head 1×1 conv→BN→swish
+  a := a ++ #[(#[128,10],0),(#[10],2)]                                                     -- dense
+  return a
+def paramShapes : Array (Array Nat) := specs.map (·.1)
+def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
+def shapesBA : ByteArray := packShapes paramShapes
+def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
+end EfficientNetLayout
+
 def MlpLayout.paramShapes : Array (Array Nat) := #[
   #[784, 512], #[512], #[512, 512], #[512], #[512, 10], #[10]
 ]
