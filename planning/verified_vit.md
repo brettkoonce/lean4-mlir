@@ -1,5 +1,31 @@
 # Verified ViT (Chapter 10) — handoff / plan for a fresh session
 
+> ## ✅ DONE (2026-06-07) — codegen complete + gradcheck-validated + GPU-training
+> ch10 ViT verified codegen is **fully built and numerically validated**. Commits on `main`
+> (NOT pushed): `76297ed` V1 row-softmax op, `c28f83e` V2 SDPA, `df27f95` V3 MHSA,
+> `821ec47` V4 block, `f6ebc14` V5+V6a (patch/CLS/pos + whole-net + tiny gradcheck),
+> `dc0525c` V6b production render + `ViTLayout` + `MainViTVerified` + `vit-verified` exe.
+> - **Every fragment gradcheck-validated in Lean4** (no numpy; adjoint/finite-diff via
+>   iree-run-module): `tests/TestSDPA` (3-path SDPA, rel err 2.6e-4), `tests/TestMHSA`
+>   (full MHSA over 9 inputs, 2.2e-3), `tests/TestViTBlock` (block over 17 inputs, 5.3e-4),
+>   `tests/TestViTTiny` (WHOLE net over all params, 6.5e-5). All PASS.
+> - V1 row-softmax op (`softmaxRowF`/`softmaxRowBack`, `StableHLO.lean`) is rfl-faithful to
+>   `rowSoftmax`/`rowSoftmax_has_vjp_mat` (tie proven in TestSoftmaxRow) — **audit stays 157/157**.
+> - Shared lib: `LeanMlir/ViTRender.lean` (all fragments + `vitFwd/vitBack` + module builders)
+>   + `LeanMlir/GradcheckHelpers.lean` (the Lean gradcheck harness). `ViTLayout` in IreeRuntime.
+> - **LayerNorm γ/β are per-channel `[192]`** (the user's choice — beyond the scalar proof
+>   witness `vit_full`, faithful per-op: normalize ∘ per-channel affine). See [[ch10-vit-ln-perchannel-decision]].
+> - Production depth-12 ViT-Tiny @ Imagenette 224² (200 params, 5.5M floats):
+>   `verified_mlir/vit_{train_step,fwd}.mlir` both iree-compile to ROCm; `vit-verified` exe
+>   GPU-trains end-to-end (no crash/NaN, 92% GPU util). **Accuracy: see below — long run;
+>   ViT-from-scratch on small data is hard (plain SGD, no AdamW/aug), a low number is expected.**
+> - Gotcha fixed: block-prefix needs a separator (`{p}b{i}_`) or block 1's LN1 sub-prefix
+>   collides with block 11 (SSA redefinition at depth ≥ 11).
+>
+> The plan below (§§0–9) is the ORIGINAL pre-work spec, kept for reference.
+
+---
+
 Plan doc for the **Vision Transformer** chapter of the verified-codegen ladder. ch10 brings
 ViT (Dosovitskiy et al. 2021, "An Image is Worth 16×16 Words") into the same "render via the
 proof-carrying StableHLO emitter + GPU-train on the rendered text **on Imagenette 224²**"
