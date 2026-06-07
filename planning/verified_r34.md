@@ -1,18 +1,20 @@
 # Verified ResNet-34 (Chapter 6) — handoff
 
 Continuation doc for the ResNet chapter of the verified-codegen ladder. Picks up
-after **Milestone A (verified ResNet-*style* net) and Milestone B1–B6c (the whole
-verified ResNet-34 architecture) are DONE and committed locally** (not pushed).
+after **Milestone A (verified ResNet-*style* net), Milestone B1–B6c (the whole
+verified ResNet-34 architecture), and Milestone B7 (the unconditional concrete
+instance) are DONE and committed locally** (not pushed).
 
-> **Status in one line:** the whole-network conditional VJP of a real 34-layer
-> ResNet — **`Proofs.resnet34_has_vjp_at`** — is PROVEN and **audit-clean
-> (149/149, 3-axiom)**, alongside every primitive it needs (strided conv +
-> in/weight VJP + render, deep-block chain, all four block types). What remains
-> is the *trained model*: a concrete-instance discharge (non-vacuity), per-channel
-> BN, and the full GPU render+train. Read §§0–3 first; the rest is reference.
+> **Status in one line:** the whole-network VJP of a real 34-layer ResNet —
+> **`Proofs.resnet34_has_vjp_at`** — is PROVEN, and now **UNCONDITIONAL**: B7's
+> concrete instance **`ResNet34Concrete.resnet34Concrete_has_vjp_correct`**
+> discharges every smoothness/no-tie hypothesis at 1ch/32×32, so the architecture
+> is non-vacuous. **Audit 150/150, 3-axiom.** What remains is the *trained model*:
+> per-channel BN and the full GPU render+train. Read §§0–3 first; the rest is
+> reference.
 
-Written 2026-06-07 by the session that did ch6-A + ch6-B1…B6c. `origin/main` is
-behind by **10 local commits** (`5f09e93`…`5df5743`); commit-to-main is fine,
+Written 2026-06-07 by the session that did ch6-A + ch6-B1…B7. `origin/main` is
+behind by **14 local commits** (`34cdc52`…`785caa3`); commit-to-main is fine,
 **never push without explicit per-push permission**.
 
 ---
@@ -63,6 +65,7 @@ All in **`LeanMlir/Proofs/StridedConv.lean`** (B1–B2) and
 | B6a | `3d71730` | **strided residual-proj block**: `resblock_bodyStrided_has_vjp_at`, `rblkPStrided_has_vjp_at(_correct)`. |
 | B6b | `d9f5b82` | **stage combinators (_at)**: `ChainData`/`chain_vjp_diff_at`/`vjp_chain_at`, `resStage_has_vjp_at`. |
 | B6c | `5df5743` | **WHOLE NET**: `resnet34_has_vjp_at` (+`vjp_comp_diff_at`). |
+| B7 | `785caa3` | **UNCONDITIONAL concrete instance**: `resnet34Concrete_has_vjp_correct` (non-vacuity). |
 
 **THE KEY IDENTITY (B1):** stride-2 SAME conv = `decimate2 ∘ (stride-1 SAME conv)`
 (both read `x_pad[2·hi+kh−pH, …]`). So the strided VJPs **reuse** the existing
@@ -82,21 +85,24 @@ activations; folded from `vjp_comp_at` + `vjp_chain_at`.
 
 In suggested order:
 
-### B7 — concrete-instance discharge (non-vacuity)  [proof; "high" but mechanical]
-`resnet34_has_vjp_at` is *conditional* (smoothness/no-tie hypotheses, parametric
-over abstract `stem`/`down`/`ids`). Build an **unconditional witness** at concrete
-CIFAR dims, exactly as **`CnnConcrete.cnnConcrete_has_vjp_correct`** does for the
-2-block net (CNN.lean):
-- Instantiate `stem := convBnReluStrided` closure, `downᵢ := rblkPStrided`
-  closures, `idsᵢ := [rblk, …]` lists (the identity-block closures), `gap :=
-  globalAvgPoolFlat`, `dense := dense`, `mp := maxPoolFlat`.
-- Provide each `(HasVJPAt, DifferentiableAt)` pair from B5/B6a/CNN
-  (`convBnReluStrided_has_vjp_at`, `rblkPStrided_has_vjp_at`, `resblock_has_vjp_at`
-  for `rblk`) and each `ChainData` (a nested `PProd` of the per-block witnesses).
-- Discharge every smoothness/no-tie hyp with a concrete weight choice (γ=0
-  resblocks + exact-istd BN + injective-stem maxpool no-ties — copy the
-  `CnnConcrete` tricks: `Nat.cast_max` + `omega` for the maxpool distinct-maxima).
-- Headline: `resnet34Concrete_has_vjp_correct`, add to AuditAxioms (→150).
+### ~~B7 — concrete-instance discharge (non-vacuity)~~  ✅ DONE (`785caa3`)
+`ResNet34Concrete.resnet34Concrete_has_vjp_correct` (in `ResNet34.lean`). A real
+34-layer concrete net at 1ch/32×32: strided identity-conv stem → maxpool →
+(3+4+6+3) identity blocks → 3 strided downsamplers → GAP → dense, every
+smoothness/no-tie hyp discharged. **Two dimension-robust tricks** (so the
+256/1024-element BN discharge needs no `norm_num` over thousand-element sums):
+- **`bnForward_lb`** (`bn ≥ β − |γ|·√n`, from `(vₖ−μ)² ≤ Σ(vⱼ−μ)² = n·σ²`): the
+  stem's `β = 20 > √256` forces `bn > 0`, so ReLU = id and the stem output stays
+  injective → maxpool no-ties (`bnForward_injective` + `decimateIdx_injective`).
+- **zero-weight blocks**: every non-stem conv has a zero kernel ⇒ BN input is the
+  constant `0` ⇒ `bnForward_const_eq` collapses each residual body to `1`; the
+  post-add ReLU input is `1 + activation > 0` (identity blocks, `activation ≥ 0`
+  threaded by `idChainData`) or `2` (downsamplers, fully unconditional).
+New reusable lemmas live in `ResNet34.lean`'s B7 section (BN bounds, strided-index
+injectivity, generic `idBlk`/`downBlk` machinery). Note: ResNet34 now imports
+MnistCNN (for `conv2d_1x1`/`maxPool2Smooth_of_injective`/`relu_id_of_pos`/positivity);
+`bnForward_const_eq`/`flatConv_zero` are local copies of MobileNetV2's (could be
+hoisted to CNN/BatchNorm later to dedupe).
 
 ### B8 — per-channel BatchNorm  [proof + render; genuinely new]
 Current BN is per-example GLOBAL scalar γ/β (the `bnForward` ch5 used). Real
@@ -119,13 +125,14 @@ sum of per-channel VJPs). Then a `bnPerChannelF`/`bnPerChannelBack` SHlo op pair
 ---
 
 ## 3. Suggested first steps for the clean session
-1. `git log --oneline -12` (confirm the 10 ch6 commits); skim
-   `LeanMlir/Proofs/ResNet34.lean` end-to-end (`resnet34_has_vjp_at` is the apex)
-   and `CnnConcrete` in `CNN.lean` (the discharge template for B7).
-2. Build + audit green first (see §4): **149/149**.
-3. **Do B7** (concrete instance) — the highest-value next proof, makes the
-   verified ResNet-34 *unconditional*. Mirror `CnnConcrete` block-by-block.
-4. Then B8 (per-channel BN) and B9 (render+train) as separate chapters.
+1. `git log --oneline -14` (confirm the ch6 commits through B7 `785caa3`); skim
+   `LeanMlir/Proofs/ResNet34.lean` end-to-end (`resnet34_has_vjp_at` is the apex,
+   `ResNet34Concrete.resnet34Concrete_has_vjp_correct` the B7 unconditional headline).
+2. Build + audit green first (see §4): **150/150**.
+3. **Do B8** (per-channel BN) and **B9** (render+train) as separate chapters — the
+   remaining work toward a *trained* ResNet-34. (B7 is done; the architecture is
+   now unconditional.) `CnnConcrete` in `MnistCNN.lean` remains the discharge
+   template if you need to build further concrete instances.
 
 ---
 
@@ -135,7 +142,7 @@ sum of per-channel VJPs). Then a `bnPerChannelF`/`bnPerChannelBack` SHlo op pair
 cd /home/skoonce/lean/proof_verify_demo/lean4-mlir
 lake build Proofs                       # type-checks the suite incl. StridedConv + ResNet34
 lake env lean tests/AuditAxioms.lean 2>&1 | grep -c 'depends on axioms: \[propext, Classical.choice, Quot.sound\]$'
-#   must equal total 'depends on axioms:' lines (149 now; B7 → 150)
+#   must equal total 'depends on axioms:' lines (150 now, incl. B7)
 
 export PATH="$PWD/.venv/bin:$PATH"
 export LD_LIBRARY_PATH="$PWD/ffi:/opt/rocm/lib:$LD_LIBRARY_PATH"
@@ -202,9 +209,13 @@ DATA=/home/skoonce/lean/claude_max/lean4-jax/data           # mnist + cifar-10/ 
 
 - **ch6-A is a verified ResNet-*STYLE* net** (stem+maxpool+1 id-block+1 proj-block
   +GAP+dense), GPU-trained 60.8%. **ch6-B (`resnet34_has_vjp_at`) is the verified
-  34-layer *architecture*** — the whole-net VJP is proven + audit-clean — but it is
-  (a) *conditional* until B7 discharges a concrete instance, and (b) *not yet
-  trained/rendered* (B9). Don't claim "trained ResNet-34" until B7+B9 land.
+  34-layer *architecture*** — the whole-net VJP is proven + audit-clean — and as of
+  **B7 it is UNCONDITIONAL** (`resnet34Concrete_has_vjp_correct` exhibits a concrete
+  34-layer instance with every hypothesis discharged, so the theorem is non-vacuous).
+  It is still *not yet trained/rendered* (B9), and the concrete instance is a
+  *degenerate* witness (zero-weight blocks ⇒ constant bodies ⇒ the block Jacobians
+  are trivial; only the stem + maxpool carry a non-trivial Jacobian) — its job is
+  non-vacuity, not a live model. Don't claim "trained ResNet-34" until B9 lands.
 - **BN is per-example GLOBAL scalar γ/β**, not per-channel batch-BN. On CIFAR it
   *underperforms* no-BN (ch5: 57% vs 66%); ch6-A's 60.8% with this BN is fine. A
   real accuracy story needs per-channel BN (B8). The chapter win is a
@@ -218,14 +229,17 @@ DATA=/home/skoonce/lean/claude_max/lean4-jax/data           # mnist + cifar-10/ 
 ## 7. File map (ch6)
 
 - `LeanMlir/Proofs/StridedConv.lean` — B1/B2 (strided conv VJPs). imports CNN.
-- `LeanMlir/Proofs/ResNet34.lean` — B4/B5/B6a/B6b/B6c. imports CNN + StridedConv.
-  Apex: `resnet34_has_vjp_at`. (B7 concrete instance goes here.)
+- `LeanMlir/Proofs/ResNet34.lean` — B4/B5/B6a/B6b/B6c + **B7**. imports CNN + **MnistCNN**
+  + StridedConv. Apex: `resnet34_has_vjp_at`; B7 headline `ResNet34Concrete.resnet34Concrete_has_vjp_correct`
+  (+ reusable B7 lemmas: `bnForward_lb`/`bnForward_injective`/`decimateIdx_injective`,
+  generic `idBlk`/`downBlk`).
 - `LeanMlir/Proofs/StableHLO.lean` — A ops (`addV`/`gapF`) + `resnetFwdGraph(_faithful)`
   + `resnetFwdModuleV` + `resnetTrainStepText` + B3 strided ops; `import …StridedConv`.
 - `LeanMlir/Proofs/StableHLOParse.lean` — parser cases for all ch6 ops.
 - `LeanMlir/IreeRuntime.lean` — `ResnetLayout` (26 params). (B9: `ResNet34Layout`.)
 - `MainResnetVerified.lean` + lakefile `resnet-verified` — ch6-A trainer.
-- `tests/AuditAxioms.lean` — 149 headlines (imports StridedConv + ResNet34).
+- `tests/AuditAxioms.lean` — 150 headlines (imports StridedConv + ResNet34).
 - `verified_mlir/resnet_{fwd,train_step}.mlir` — ch6-A rendered (byte-stable).
-- Reuse templates: `cnn_has_vjp_at`@CNN.lean:2817 + `CnnConcrete` (B7 template);
-  `cifarBnTrainStepText`/`MainCifarBnVerified.lean` (render+trainer template).
+- Reuse templates: `cnn_has_vjp_at`@CNN.lean:2817 + `CnnConcrete`@MnistCNN.lean:841
+  (concrete-instance template); `cifarBnTrainStepText`/`MainCifarBnVerified.lean`
+  (render+trainer template).
