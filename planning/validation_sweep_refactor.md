@@ -75,18 +75,41 @@ DONE — full ladder A+B+C+E, GPU-validated:
 - ch2 linear (92%, fwd+cotangent E) · ch3 MLP (97.78%, fwd+**back** E) · ch4 CNN (98.99%,
   fwd E) · ch5 cifar (~67%, fwd E) · ch5 cifar-bn (~57% slow, fwd E). Commits 649ef6a … 25847f2.
 
-DONE — rung A + trainer + GPU-validated (B/C/E pending):
-- ch6 r34: spec in `VerifiedNets` + `#guard == ResNet34Layout.specs`, one-line main; GPU
-  epoch 1 = 369/3904 = **9.45% = exact match to the known r34-imagenette number** (≈chance
-  from scratch — codegen-identical to prior r34). Commit 74818d1.
+DONE — rung A + trainer migrated + GPU codegen-validated (B/C/E pending) — **ALL imagenette**:
+- ch6 r34 (146 params, 74818d1) · ch7 mnv2 (82, 39ee53d) · ch8 efficientnet (262, 7750b1c) ·
+  ch9 convnext (180, 15c38af) · ch10 vit (200, ae8b1d2). Each: spec in `VerifiedNets`,
+  `#guard toSpecs == XLayout.specs`, one-line `main`, GPU compiles rendered MLIR + loads
+  imagenette + trains. **Numbers ≈chance** (r34/mnv2 = 9.45% flat — degenerate from scratch);
+  that's the deferred v3-parity issue, NOT a codegen problem.
 
-All on `main`, **NOT pushed** (~73 ahead).
+**A-route sweep COMPLETE — all ch2–10 trainers are on the declarative VerifiedNetSpec/driver.**
+All on `main`, **NOT pushed** (~78 ahead).
+
+Remaining (the deferred passes): full B/C (build the real forwards — representative witnesses
+won't do), E (whole-net SHlo assembly + re-route committed render), v3-parity (Adam/aug/
+schedule so numbers stop sucking). See the readiness sections + loose ends.
 
 ## THE PLAN (agreed)
 
-**Sweep target = A + B/C for all five imagenette nets** (r34→mnv2→enet→convnext→vit).
-**E is a SEPARATE later pass**, opportunistic, starting where E-ops are ready (r34/mnv2).
-Do not attempt E during the B/C sweep.
+**End goal = FULL builds (option b) for every net** — the most tedious/rigorous tie (the
+spec's *full rendered* net = its math + VJP + generated MLIR), to preempt any "what does
+verification mean" argument. The **representative tie (a) is NOT the destination.**
+
+**First pass (now) = the A-route only** across all five imagenette nets
+(r34✅→mnv2✅→enet→convnext→vit): add the block `VLayer`s, `#guard toSpecs == XLayout.specs`,
+one-line `main`, GPU-smoke (compiles/loads/trains; ≈chance from scratch is fine). Then come
+back for full B/C + E.
+
+**Why B/C/E are a second pass, not the sweep:** the imagenette proof `Forward`/apex defs are
+**representative witnesses** (smaller depth, scalar BN/LN), not the full rendered nets — so
+full-net B/C needs *building* the real forward per net (the r34-awkward path, often with a
+scalar-vs-per-channel BN gap). E needs whole-net `SHlo` assembly + re-routing the committed
+`.mlir`. Both deferred.
+
+**Also deferred — v3 parity (numbers):** the verified trainers run plain mean-loss SGD and
+score ≈chance on imagenette; the v3 unverified `Main*Train.lean` use Adam + augmentation +
+cosine + label-smoothing. Goal: get the verified trainers training to comparable numbers /
+codegen-identical to v3. Separate workstream (see loose ends).
 
 ## Imagenette nets — per-net pointers (do in this order)
 
