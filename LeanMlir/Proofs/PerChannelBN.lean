@@ -340,6 +340,37 @@ noncomputable def reassocBack_has_vjp (oc h w : Nat) :
             fun k : Fin (oc * h * w) => y (reassocBackIdx oc h w k)) from rfl,
         pdiv_reindex]
 
+/-- The bridge is a permutation, so each reindex's VJP backward is just the *inverse*
+    reindex (the single matching delta survives the scatter). These two collapse the
+    `vjp_comp` backwards into a clean closed form for `bnPerChannelTensor3`. -/
+theorem reassocBack_has_vjp_backward_eq (oc h w : Nat) (v : Vec (oc * (h * w)))
+    (dy : Vec (oc * h * w)) :
+    (reassocBack_has_vjp oc h w).backward v dy = reassocFwd oc h w dy := by
+  funext idx
+  show (∑ k : Fin (oc * h * w), (if idx = reassocBackIdx oc h w k then (1 : ℝ) else 0) * dy k)
+      = dy (reassocFwdIdx oc h w idx)
+  rw [Finset.sum_eq_single (reassocFwdIdx oc h w idx)]
+  · rw [if_pos (reassocBackIdx_reassocFwdIdx oc h w idx).symm, one_mul]
+  · intro k _ hk
+    rw [if_neg, zero_mul]
+    intro hcond
+    exact hk (by rw [hcond, reassocFwdIdx_reassocBackIdx])
+  · intro h; exact absurd (Finset.mem_univ _) h
+
+theorem reassocFwd_has_vjp_backward_eq (oc h w : Nat) (v : Vec (oc * h * w))
+    (dy : Vec (oc * (h * w))) :
+    (reassocFwd_has_vjp oc h w).backward v dy = reassocBack oc h w dy := by
+  funext idx
+  show (∑ k : Fin (oc * (h * w)), (if idx = reassocFwdIdx oc h w k then (1 : ℝ) else 0) * dy k)
+      = dy (reassocBackIdx oc h w idx)
+  rw [Finset.sum_eq_single (reassocBackIdx oc h w idx)]
+  · rw [if_pos (reassocFwdIdx_reassocBackIdx oc h w idx).symm, one_mul]
+  · intro k _ hk
+    rw [if_neg, zero_mul]
+    intro hcond
+    exact hk (by rw [hcond, reassocBackIdx_reassocFwdIdx])
+  · intro h; exact absurd (Finset.mem_univ _) h
+
 -- ════════════════════════════════════════════════════════════════
 -- § Per-channel BN on the network's Tensor3 layout (the plug-in op)
 -- ════════════════════════════════════════════════════════════════
@@ -383,5 +414,50 @@ theorem bnPerChannelTensor3_has_vjp_correct (oc h w : Nat) (ε : ℝ) (hε : 0 <
     (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).backward x dy i =
       ∑ j : Fin (oc * h * w), pdiv (bnPerChannelTensor3 oc h w ε γ β) x i j * dy j :=
   (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).correct x dy i
+
+/-- The composed `vjp_comp` backward collapses (the bridge reindexes are permutations):
+    per-channel BN's Tensor3 backward is the Mat-split block-diagonal backward,
+    conjugated by the layout bridge. -/
+theorem bnPerChannelTensor3_has_vjp_backward_eq (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x dy : Vec (oc * h * w)) :
+    (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).backward x dy =
+      reassocBack oc h w
+        ((bnPerChannelFlat_has_vjp oc (h * w) ε hε γ β).backward
+          (reassocFwd oc h w x) (reassocFwd oc h w dy)) := by
+  show (reassocFwd_has_vjp oc h w).backward x
+        ((bnPerChannelFlat_has_vjp oc (h * w) ε hε γ β).backward (reassocFwd oc h w x)
+          ((reassocBack_has_vjp oc h w).backward
+            ((bnPerChannelFlat oc (h * w) ε γ β ∘ reassocFwd oc h w) x) dy)) = _
+  rw [reassocBack_has_vjp_backward_eq, reassocFwd_has_vjp_backward_eq]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Renderable closed-form backward in the Tensor3 layout (B8b's `den` target)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Renderable per-channel BN backward on the Tensor3 `(oc*h)*w` layout** — relabel
+    to Mat-split, run the per-channel consolidated three-term `bnPerChannel_grad_input`,
+    relabel back. This is exactly what the `bnPerChannelBack` SHlo op emits (per-channel
+    `renderLNBack`, reducing over the spatial axis); its faithfulness spec is below. -/
+noncomputable def bnPerChannelTensor3_grad_input (oc h w : Nat) (ε : ℝ) (γ : Vec oc)
+    (x dy : Vec (oc * h * w)) : Vec (oc * h * w) :=
+  reassocBack oc h w
+    (bnPerChannel_grad_input oc (h * w) ε γ (reassocFwd oc h w x) (reassocFwd oc h w dy))
+
+/-- **Renderable Tensor3 backward is faithful** (ℝ-headline): equals the
+    `pdiv`-contracted (block-diagonal) Jacobian of per-channel BN on the network's
+    activation layout, under `0 < ε`. The licence to render per-channel BN's backward
+    in ResNet-34. -/
+theorem bnPerChannelTensor3_grad_input_correct (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x dy : Vec (oc * h * w)) (i : Fin (oc * h * w)) :
+    bnPerChannelTensor3_grad_input oc h w ε γ x dy i =
+      ∑ j : Fin (oc * h * w), pdiv (bnPerChannelTensor3 oc h w ε γ β) x i j * dy j := by
+  rw [← bnPerChannelTensor3_has_vjp_correct oc h w ε hε γ β,
+      bnPerChannelTensor3_has_vjp_backward_eq oc h w ε hε γ β]
+  show bnPerChannel_grad_input oc (h * w) ε γ (reassocFwd oc h w x) (reassocFwd oc h w dy)
+        (reassocBackIdx oc h w i)
+      = (bnPerChannelFlat_has_vjp oc (h * w) ε hε γ β).backward
+          (reassocFwd oc h w x) (reassocFwd oc h w dy) (reassocBackIdx oc h w i)
+  rw [bnPerChannel_grad_input_correct oc (h * w) ε hε γ β,
+      bnPerChannelFlat_has_vjp_correct oc (h * w) ε hε γ β]
 
 end Proofs

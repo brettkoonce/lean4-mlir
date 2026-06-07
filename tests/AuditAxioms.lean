@@ -336,6 +336,11 @@ open Proofs
 -- reassocFwd/reassocBack (a pure product re-association, VJP via pdiv_reindex like
 -- decimateFlat). The plug-in op that wires per-channel BN into ResNet-34.
 #print axioms bnPerChannelTensor3_has_vjp_correct
+-- B9 entry (cont.): the RENDERABLE per-channel BN backward in the Tensor3 layout —
+-- the bridge reindexes are permutations, so the vjp_comp backward collapses to
+-- reassocBack ∘ bnPerChannel_grad_input ∘ reassocFwd. The closed form bnPerChannelBack
+-- emits (per-channel renderLNBack over the spatial axis); faithful = pdiv-Jacobian.
+#print axioms bnPerChannelTensor3_grad_input_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
