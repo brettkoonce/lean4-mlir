@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.IR
 import LeanMlir.Proofs.CifarCNN
 import LeanMlir.Proofs.StridedConv
+import LeanMlir.Proofs.PerChannelBN
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 2: the linear classifier)
 
@@ -95,6 +96,15 @@ inductive SHlo : Nat → Type where
       (W : Kernel4 oc ic kH kW) (b : Vec oc)              : SHlo (ic*(2*h)*(2*w)) → SHlo (oc*h*w)
   | convStridedBack  {ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*(2*h)*(2*w))) : SHlo (oc*h*w) → SHlo (ic*(2*h)*(2*w))
+  -- Chapter 6 Milestone B8 (real-ResNet PER-CHANNEL BatchNorm): normalize each
+  -- channel-slice over its h·w spatial cells with its OWN `(γ_c, β_c)`, γ/β : `Vec oc`
+  -- (rank-1, `broadcast dims=[1]` — vs `bnF`'s rank-0 scalars). `den` via the proven
+  -- `bnPerChannelTensor3` (the Mat-split block-diagonal BN bridged into the `(oc*h)*w`
+  -- activation layout) / its renderable backward `bnPerChannelTensor3_grad_input`.
+  | bnPerChannelF    {oc h w : Nat} (gName bName epsStr : String) (ε : ℝ) (γ β : Vec oc)
+                                                           : SHlo (oc*h*w) → SHlo (oc*h*w)
+  | bnPerChannelBack {oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
+      (x : Vec (oc*h*w))                                   : SHlo (oc*h*w) → SHlo (oc*h*w)
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -131,6 +141,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .gapF (c := c) (h := h) (w := w) e => globalAvgPoolFlat c h w (den e)
   | _, .flatConvStridedF _ _ W b e => flatConvStride2 W b (den e)
   | _, .convStridedBack _ W b v e => (flatConvStride2_has_vjp W b).backward v (den e)
+  | _, .bnPerChannelF (oc := oc) (h := h) (w := w) _ _ _ ε γ β e =>
+      bnPerChannelTensor3 oc h w ε γ β (den e)
+  | _, .bnPerChannelBack (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
+      bnPerChannelTensor3_grad_input oc h w ε γ x (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -419,6 +433,25 @@ theorem bnBack_faithful {n : Nat} (gN xN es : String) (ε γ β : ℝ) (hε : 0 
       = ∑ j : Fin n, pdiv (bnForward n ε γ β) x i j * den e j := by
   show bn_grad_input n ε γ x (den e) i = _
   exact bn_input_grad_correct n ε γ β hε x (den e) i
+
+/-- **Per-channel BN forward faithfulness.** The 4-D reshape + per-channel
+    reduce/normalize (μ/var over the spatial axes `[2,3]`, rank-1 γ/β `dims=[1]`)
+    denotes the proven `bnPerChannelTensor3` (PerChannelBN.lean). (`rfl`, so kept
+    out of the axiom audit — `roundtrip` covers it structurally.) -/
+@[simp] theorem bnPerChannelF_faithful {oc h w : Nat} (gN bN es : String) (ε : ℝ)
+    (γ β : Vec oc) (e : SHlo (oc*h*w)) :
+    den (.bnPerChannelF gN bN es ε γ β e) = bnPerChannelTensor3 oc h w ε γ β (den e) := rfl
+
+/-- **Per-channel BN backward faithfulness.** The block-diagonal three-term graph
+    (per-channel, reducing over the spatial axes) denotes the proven per-channel BN
+    input-VJP — equal to the `pdiv`-contracted (block-diagonal) Jacobian of
+    `bnPerChannelTensor3` (`bnPerChannelTensor3_grad_input_correct`), under `0 < ε`. -/
+theorem bnPerChannelBack_faithful {oc h w : Nat} (gN xN es : String) (ε : ℝ) (hε : 0 < ε)
+    (γ β : Vec oc) (x : Vec (oc*h*w)) (e : SHlo (oc*h*w)) (i : Fin (oc*h*w)) :
+    den (.bnPerChannelBack gN xN es ε γ x e) i
+      = ∑ j : Fin (oc*h*w), pdiv (bnPerChannelTensor3 oc h w ε γ β) x i j * den e j := by
+  show bnPerChannelTensor3_grad_input oc h w ε γ x (den e) i = _
+  exact bnPerChannelTensor3_grad_input_correct oc h w ε hε γ β x (den e) i
 
 /-- Whole MNIST-CNN **forward** graph:
     `dense ∘ relu ∘ dense ∘ relu ∘ dense ∘ maxPool ∘ relu ∘ conv ∘ relu ∘ conv`. -/
@@ -742,6 +775,8 @@ inductive Raw where
   | gapF       (c h w : Nat)               : Raw → Raw
   | flatConvStridedF (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | convStridedBack  (w : String) (ic oc h w' kH kW : Nat) : Raw → Raw
+  | bnPerChannelF    (g b eps : String) (oc h w : Nat) : Raw → Raw
+  | bnPerChannelBack (g x eps : String) (oc h w : Nat) : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -770,6 +805,10 @@ def skel : {k : Nat} → SHlo k → Raw
       .flatConvStridedF wN bN ic oc h w kH kW (skel e)
   | _, .convStridedBack (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
       .convStridedBack wN ic oc h w kH kW (skel e)
+  | _, .bnPerChannelF (oc := oc) (h := h) (w := w) gN bN es _ _ _ e =>
+      .bnPerChannelF gN bN es oc h w (skel e)
+  | _, .bnPerChannelBack (oc := oc) (h := h) (w := w) gN xN es _ _ _ e =>
+      .bnPerChannelBack gN xN es oc h w (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -792,6 +831,8 @@ inductive Tok where
   | gapF       (c h w : Nat)               : Tok
   | flatConvStridedF (w b : String) (ic oc h w' kH kW : Nat) : Tok
   | convStridedBack  (w : String) (ic oc h w' kH kW : Nat) : Tok
+  | bnPerChannelF    (g b eps : String) (oc h w : Nat) : Tok
+  | bnPerChannelBack (g x eps : String) (oc h w : Nat) : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -815,6 +856,8 @@ def toToks : Raw → List Tok
   | .gapF c h w e    => toToks e ++ [.gapF c h w]
   | .flatConvStridedF w b ic oc h w' kH kW e => toToks e ++ [.flatConvStridedF w b ic oc h w' kH kW]
   | .convStridedBack w ic oc h w' kH kW e => toToks e ++ [.convStridedBack w ic oc h w' kH kW]
+  | .bnPerChannelF g b eps oc h w e => toToks e ++ [.bnPerChannelF g b eps oc h w]
+  | .bnPerChannelBack g x eps oc h w e => toToks e ++ [.bnPerChannelBack g x eps oc h w]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -1017,6 +1060,76 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
         s!" : ({ty [B,oc,2*h,2*w']}, {ty [ic,oc,kH,kW]}) -> {ty [B,ic,2*h,2*w']}\n" ++
         s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,2*h,2*w']}) -> {ty [B, ic*(2*h)*(2*w')]}\n", o :: st)
+  | .bnPerChannelF gN bN epsStr oc h w, r :: st => do
+      -- PER-CHANNEL BatchNorm forward: reshape to [B,oc,h,w], reduce μ/var over the
+      -- spatial axes [2,3] (per channel), normalize, then γ·x̂+β with rank-1 γ/β
+      -- (broadcast dims=[1]). Mirrors `bnF` but 4-D + per-channel.
+      let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
+      let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+      let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+      let xhat ← fresh; let gb ← fresh; let bb ← fresh; let gx ← fresh; let ob ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,oc,h,w]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,oc,h,w]}\n" ++
+        s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc]}\n" ++
+        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,oc,h,w]}\n" ++
+        s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,oc,h,w]}\n" ++
+        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,oc,h,w]}\n" ++
+        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc]}\n" ++
+        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,oc,h,w]}\n" ++
+        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+        s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {gx} = stablehlo.multiply {xhat}, {gb} : {ty [B,oc,h,w]}\n" ++
+        s!"    {ob} = stablehlo.add {gx}, {bb} : {ty [B,oc,h,w]}\n" ++
+        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
+  | .bnPerChannelBack gN xN epsStr oc h w, r :: st => do
+      -- PER-CHANNEL BN input-VJP: recompute x̂/istd per channel from saved input {xN},
+      -- then the block-diagonal three-term `(istd/m)·(m·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))`,
+      -- dx̂ = γ·dy, with all Σ reductions over the spatial axes [2,3] (m = h·w).
+      let dn ← fresh; let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
+      let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+      let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+      let xhat ← fresh; let gb ← fresh; let dxh ← fresh; let sdxr ← fresh; let sdx ← fresh
+      let xd ← fresh; let sxdr ← fresh; let sxd ← fresh; let t1 ← fresh; let i1 ← fresh
+      let xs ← fresh; let i2 ← fresh; let sN ← fresh; let o0 ← fresh; let o ← fresh
+      pure (
+        s!"    {dn} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {xn} = stablehlo.reshape {xN} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,oc,h,w]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,oc,h,w]}\n" ++
+        s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc]}\n" ++
+        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,oc,h,w]}\n" ++
+        s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,oc,h,w]}\n" ++
+        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,oc,h,w]}\n" ++
+        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc]}\n" ++
+        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,oc,h,w]}\n" ++
+        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+        s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {dxh} = stablehlo.multiply {gb}, {dn} : {ty [B,oc,h,w]}\n" ++
+        s!"    {sdxr} = stablehlo.reduce({dxh} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc]}\n" ++
+        s!"    {sdx} = stablehlo.broadcast_in_dim {sdxr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {xd} = stablehlo.multiply {xhat}, {dxh} : {ty [B,oc,h,w]}\n" ++
+        s!"    {sxdr} = stablehlo.reduce({xd} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc]}\n" ++
+        s!"    {sxd} = stablehlo.broadcast_in_dim {sxdr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {t1} = stablehlo.multiply {dxh}, {nf} : {ty [B,oc,h,w]}\n" ++
+        s!"    {i1} = stablehlo.subtract {t1}, {sdx} : {ty [B,oc,h,w]}\n" ++
+        s!"    {xs} = stablehlo.multiply {xhat}, {sxd} : {ty [B,oc,h,w]}\n" ++
+        s!"    {i2} = stablehlo.subtract {i1}, {xs} : {ty [B,oc,h,w]}\n" ++
+        s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,oc,h,w]}\n" ++
+        s!"    {o0} = stablehlo.multiply {sN}, {i2} : {ty [B,oc,h,w]}\n" ++
+        s!"    {o} = stablehlo.reshape {o0} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/

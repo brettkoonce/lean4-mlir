@@ -341,6 +341,12 @@ open Proofs
 -- reassocBack ∘ bnPerChannel_grad_input ∘ reassocFwd. The closed form bnPerChannelBack
 -- emits (per-channel renderLNBack over the spatial axis); faithful = pdiv-Jacobian.
 #print axioms bnPerChannelTensor3_grad_input_correct
+-- B8b: the per-channel BN SHlo op pair backward-faithfulness — the rendered
+-- bnPerChannelBack op (4-D reshape, per-channel reduce over [2,3], rank-1 γ dims=[1])
+-- denotes the proven block-diagonal BN input-VJP (= pdiv-Jacobian of bnPerChannelTensor3,
+-- under 0<ε). The per-channel peer of bnBack_faithful. (bnPerChannelF_faithful is rfl
+-- ⇒ covered structurally by roundtrip, not separately audited.)
+#print axioms StableHLO.bnPerChannelBack_faithful
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
