@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.IR
 import LeanMlir.Proofs.CifarCNN
+import LeanMlir.Proofs.StridedConv
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 2: the linear classifier)
 
@@ -86,6 +87,14 @@ inductive SHlo : Nat → Type where
   -- spatial axes (`reduce add over [2,3]`, ÷h·w), `Vec (c*h*w) → Vec c`.
   | addV       {n : Nat}                                        : SHlo n → SHlo n → SHlo n
   | gapF       {c h w : Nat}                                    : SHlo (c*h*w) → SHlo c
+  -- Chapter 6 Milestone B (ResNet-34 downsampling): stride-2 SAME conv forward
+  -- (`stablehlo.convolution` with `window_strides=[2,2]`) and its input-VJP
+  -- (zero-upsample the cotangent — `lhs_dilation` — then the reversed-kernel
+  -- conv). `den` via the proven `flatConvStride2` / `flatConvStride2_has_vjp`.
+  | flatConvStridedF {ic oc h w kH kW : Nat} (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (b : Vec oc)              : SHlo (ic*(2*h)*(2*w)) → SHlo (oc*h*w)
+  | convStridedBack  {ic oc h w kH kW : Nat} (wName : String)
+      (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*(2*h)*(2*w))) : SHlo (oc*h*w) → SHlo (ic*(2*h)*(2*w))
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -120,6 +129,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .bnBack (n := n) _ _ _ ε γ x e => bn_grad_input n ε γ x (den e)
   | _, .addV a b       => fun j => den a j + den b j
   | _, .gapF (c := c) (h := h) (w := w) e => globalAvgPoolFlat c h w (den e)
+  | _, .flatConvStridedF _ _ W b e => flatConvStride2 W b (den e)
+  | _, .convStridedBack _ W b v e => (flatConvStride2_has_vjp W b).backward v (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -384,6 +395,19 @@ theorem addV_faithful {n : Nat} (a b : SHlo n) :
     denotes the proven `globalAvgPoolFlat` (CNN.lean). -/
 @[simp] theorem gapF_faithful {c h w : Nat} (e : SHlo (c*h*w)) :
     den (.gapF e) = globalAvgPoolFlat c h w (den e) := rfl
+
+/-- **Strided-conv forward faithfulness.** The `window_strides=[2,2]`
+    `stablehlo.convolution` denotes the proven `flatConvStride2`
+    (= decimate ∘ stride-1 conv, StridedConv.lean). -/
+@[simp] theorem flatConvStridedF_faithful {ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic*(2*h)*(2*w))) :
+    den (.flatConvStridedF wN bN W b e) = flatConvStride2 W b (den e) := rfl
+
+/-- **Strided-conv input-VJP faithfulness.** The zero-upsample (`lhs_dilation`)
+    + reversed-kernel conv denotes the proven `flatConvStride2_has_vjp` backward. -/
+theorem convStridedBack_faithful {ic oc h w kH kW : Nat} (wN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*(2*h)*(2*w))) (e : SHlo (oc*h*w)) :
+    den (.convStridedBack wN W b v e) = (flatConvStride2_has_vjp W b).backward v (den e) := rfl
 
 /-- **BN backward faithfulness.** The consolidated three-term graph denotes the
     proven BN input-VJP — equal to the `pdiv`-contracted Jacobian of `bnForward`
@@ -716,6 +740,8 @@ inductive Raw where
   | bnBack     (g x eps : String) (n : Nat) : Raw → Raw
   | addV       (n : Nat)                   : Raw → Raw → Raw
   | gapF       (c h w : Nat)               : Raw → Raw
+  | flatConvStridedF (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
+  | convStridedBack  (w : String) (ic oc h w' kH kW : Nat) : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -740,6 +766,10 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .bnBack gN xN es _ _ _ e => .bnBack gN xN es k (skel e)
   | k, .addV a b              => .addV k (skel a) (skel b)
   | _, .gapF (c := c) (h := h) (w := w) e => .gapF c h w (skel e)
+  | _, .flatConvStridedF (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
+      .flatConvStridedF wN bN ic oc h w kH kW (skel e)
+  | _, .convStridedBack (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
+      .convStridedBack wN ic oc h w kH kW (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -760,6 +790,8 @@ inductive Tok where
   | bnBack     (g x eps : String) (n : Nat) : Tok
   | addV       (n : Nat)                   : Tok
   | gapF       (c h w : Nat)               : Tok
+  | flatConvStridedF (w b : String) (ic oc h w' kH kW : Nat) : Tok
+  | convStridedBack  (w : String) (ic oc h w' kH kW : Nat) : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -781,6 +813,8 @@ def toToks : Raw → List Tok
   | .bnBack g x eps n e => toToks e ++ [.bnBack g x eps n]
   | .addV n a b      => toToks a ++ toToks b ++ [.addV n]
   | .gapF c h w e    => toToks e ++ [.gapF c h w]
+  | .flatConvStridedF w b ic oc h w' kH kW e => toToks e ++ [.flatConvStridedF w b ic oc h w' kH kW]
+  | .convStridedBack w ic oc h w' kH kW e => toToks e ++ [.convStridedBack w ic oc h w' kH kW]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -952,6 +986,37 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {sm} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n" ++
         s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
         s!"    {o} = stablehlo.divide {sm}, {nf} : {ty [B,c]}\n", o :: st)
+  | .flatConvStridedF w b ic oc h w' kH kW, r :: st => do
+      -- stride-2 SAME conv: reshape, convolution with window_strides=[2,2], +bias
+      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      let xn ← fresh; let cv ← fresh; let bb ← fresh; let ob ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, ic*(2*h)*(2*w')]}) -> {ty [B,ic,2*h,2*w']}\n" ++
+        s!"    {cv} = stablehlo.convolution({xn}, {w})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [2, 2], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+        s!" : ({ty [B,ic,2*h,2*w']}, {ty [oc,ic,kH,kW]}) -> {ty [B,oc,h,w']}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w']}\n" ++
+        s!"    {ob} = stablehlo.add {cv}, {bb} : {ty [B,oc,h,w']}\n" ++
+        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
+  | .convStridedBack w ic oc h w' kH kW, r :: st => do
+      -- stride-2 conv input-VJP: zero-upsample dy (pad with interior=1, high=1) to
+      -- the 2h×2w grid, then the reversed-kernel stride-1 conv (= decimate.back ▸ conv.back)
+      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      let dn ← fresh; let z ← fresh; let up ← fresh; let wt ← fresh; let wr ← fresh; let dx ← fresh; let o ← fresh
+      pure (
+        s!"    {dn} = stablehlo.reshape {r} : ({ty [B, oc*h*w']}) -> {ty [B,oc,h,w']}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {up} = stablehlo.pad {dn}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w']}, tensor<f32>) -> {ty [B,oc,2*h,2*w']}\n" ++
+        s!"    {wt} = stablehlo.transpose {w}, dims = [1, 0, 2, 3] : ({ty [oc,ic,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+        s!"    {wr} = stablehlo.reverse {wt}, dims = [2, 3] : {ty [ic,oc,kH,kW]}\n" ++
+        s!"    {dx} = stablehlo.convolution({up}, {wr})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+        s!" : ({ty [B,oc,2*h,2*w']}, {ty [ic,oc,kH,kW]}) -> {ty [B,ic,2*h,2*w']}\n" ++
+        s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,2*h,2*w']}) -> {ty [B, ic*(2*h)*(2*w')]}\n", o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/

@@ -60,6 +60,10 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .bnBack g x eps n :: ts, e :: st => parseStack ts (.bnBack g x eps n e :: st)
   | .addV n :: ts, b :: a :: st  => parseStack ts (.addV n a b :: st)
   | .gapF c h w :: ts, e :: st   => parseStack ts (.gapF c h w e :: st)
+  | .flatConvStridedF w b ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.flatConvStridedF w b ic oc h w' kH kW e :: st)
+  | .convStridedBack w ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.convStridedBack w ic oc h w' kH kW e :: st)
   | _ :: _, _                    => none  -- stack underflow / malformed
 
 /-- Parse a full token stream back to a single graph. -/
@@ -95,6 +99,8 @@ theorem parseStack_toToks (r : Raw) :
   | bnBack g x eps n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | addV n a b iha ihb => intro ts st; simp only [toToks, List.append_assoc, iha, ihb]; rfl
   | gapF c h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | flatConvStridedF w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | convStridedBack w ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
 
 /-- **Serialization round-trip.** `parse` recovers any skeleton from its
     postorder token stream. -/
