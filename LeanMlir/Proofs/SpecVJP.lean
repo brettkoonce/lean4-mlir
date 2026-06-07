@@ -176,3 +176,33 @@ theorem linearVerified_lossCot_isCEgrad (W : Mat 784 10) (b : Vec 10) (x : Vec 7
       = pdiv (fun (z : Vec 10) (_ : Fin 1) => crossEntropy 10 z label)
              (denoteLinear linearVerified.layers W b x) j 0 := by
   exact lossCotGraph_isCEgrad W b x label j
+
+/-! ## Rung E (MLP): the spec ↔ the generated MLIR — both forward *and* backward
+
+The MLP has faithfulness for the whole forward graph (`mlpFwdGraph_faithful`) AND the whole
+backward input-VJP graph (`mlpBackGraph_faithful`). Composed with `denoteMLP = mlpForward`
+and `mlpVerified_has_vjp_at = mlp_has_vjp_at`, both halves of the generated train step are
+tied to the spec: the rendered forward computes the spec's forward, and the rendered
+backward computes the spec's VJP backward (at a smooth input). -/
+
+open Proofs.StableHLO in
+/-- **Generated MLP forward MLIR ↔ spec.** The forward graph (→ `mlp_fwd.mlir`) denotes
+    the spec's forward function. -/
+theorem mlpVerified_fwd_faithful (W₀ : Mat 784 512) (b₀ : Vec 512)
+    (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) (x : Vec 784) :
+    den (mlpFwdGraph W₀ b₀ W₁ b₁ W₂ b₂ x)
+      = denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂ x := by
+  exact mlpFwdGraph_faithful W₀ b₀ W₁ b₁ W₂ b₂ x
+
+open Proofs.StableHLO in
+/-- **Generated MLP backward MLIR ↔ spec.** The backward input-VJP graph (in
+    `mlp_train_step.mlir`) denotes the spec's VJP backward (`mlpVerified_has_vjp_at`), at a
+    smooth input (the two ReLU pre-activations avoid zero). -/
+theorem mlpVerified_back_faithful (W₀ : Mat 784 512) (b₀ : Vec 512)
+    (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) (x : Vec 784)
+    (h0 : ∀ k, dense W₀ b₀ x k ≠ 0)
+    (h1 : ∀ k, dense W₁ b₁ (relu 512 (dense W₀ b₀ x)) k ≠ 0) (dy : Vec 10) :
+    den (mlpBackGraph W₀ W₁ W₂ (dense W₀ b₀ x)
+          (dense W₁ b₁ (relu 512 (dense W₀ b₀ x))) dy)
+      = (mlpVerified_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1).backward dy := by
+  exact mlpBackGraph_faithful W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1 dy
