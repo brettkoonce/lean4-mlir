@@ -65,3 +65,48 @@ def cnnVerified : VerifiedNetSpec where
 #guard cnnVerified.toSpecs ==
   #[(#[32, 1, 3, 3], 0), (#[32], 2), (#[32, 32, 3, 3], 0), (#[32], 2),
     (#[6272, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
+
+/-- The Chapter-5 CIFAR-10 CNN (no BN): conv 3→32 → relu → conv 32→32 → relu → maxpool
+    → conv 32→64 → relu → conv 64→64 → relu → maxpool → flatten(4096) → dense 4096→512
+    → relu → dense 512→512 → relu → dense 512→10. VJP: `cifarCnn_has_vjp` (Proofs/SpecVJP). -/
+def cifarVerified : VerifiedNetSpec where
+  name     := "CIFAR-CNN"
+  slug     := "cifar"
+  inC      := 3
+  imageH   := 32
+  imageW   := 32
+  nClasses := 10
+  data     := .cifar
+  layers   := [.conv 3 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
+               .conv 32 64 3 1, .relu, .conv 64 64 3 1, .relu, .maxPool 2 2, .flatten,
+               .dense 4096 512, .relu, .dense 512 512, .relu, .dense 512 10]
+  blurb    := "CIFAR-10 CNN via the VERIFIED renderer (3→32→32→pool→32→64→64→pool→512→512→10) → IREE FFI → GPU"
+
+#guard cifarVerified.toSpecs ==
+  #[(#[32, 3, 3, 3], 0), (#[32], 2), (#[32, 32, 3, 3], 0), (#[32], 2),
+    (#[64, 32, 3, 3], 0), (#[64], 2), (#[64, 64, 3, 3], 0), (#[64], 2),
+    (#[4096, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
+
+/-- The Chapter-5 CIFAR-10 CNN **with scalar BatchNorm** (`bnForward`, one γ/β over the
+    whole c·h·w map) after each conv. Same backbone as `cifarVerified` + 4 `.bn` layers.
+    VJP: `cifarBnVerified_has_vjp` (the conditional fold is `cifarCnnBn_has_vjp_at`). -/
+def cifarBnVerified : VerifiedNetSpec where
+  name     := "CIFAR-CNN-BN"
+  slug     := "cifar_bn"
+  inC      := 3
+  imageH   := 32
+  imageW   := 32
+  nClasses := 10
+  data     := .cifar
+  layers   := [.conv 3 32 3 1, .bn, .relu, .conv 32 32 3 1, .bn, .relu, .maxPool 2 2,
+               .conv 32 64 3 1, .bn, .relu, .conv 64 64 3 1, .bn, .relu, .maxPool 2 2, .flatten,
+               .dense 4096 512, .relu, .dense 512 512, .relu, .dense 512 10]
+  blurb    := "CIFAR-10 CNN + scalar BatchNorm via the VERIFIED renderer (conv→BN→relu ×4, 2 pools, 512→512→10) → IREE FFI → GPU"
+
+-- conv{W,b} then scalar BN{γ:[],β:[]} ×4, then 3 dense{W,b}.
+#guard cifarBnVerified.toSpecs ==
+  #[(#[32, 3, 3, 3], 0), (#[32], 2), (#[], 1), (#[], 2),
+    (#[32, 32, 3, 3], 0), (#[32], 2), (#[], 1), (#[], 2),
+    (#[64, 32, 3, 3], 0), (#[64], 2), (#[], 1), (#[], 2),
+    (#[64, 64, 3, 3], 0), (#[64], 2), (#[], 1), (#[], 2),
+    (#[4096, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]

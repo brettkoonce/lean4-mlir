@@ -42,6 +42,9 @@ inductive VLayer where
   | conv (ic oc k stride : Nat)
   /-- flatten `[C,H,W]` → vector. No params (a reshape). -/
   | flatten
+  /-- scalar-global BatchNorm (the proven `bnForward`): normalize over the whole
+      `c·h·w` feature map per example, **scalar** γ/β. Params `{γ, β}` (rank-0). -/
+  | bn
 deriving Repr
 
 namespace VLayer
@@ -73,6 +76,7 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
   | relu                    => #[]
   | conv ic oc k _          => #[(#[oc,ic,k,k],0),(#[oc],2)]
   | flatten                 => #[]
+  | bn                      => #[(#[],1),(#[],2)]   -- scalar γ (ones), β (zeros)
 
 end VLayer
 
