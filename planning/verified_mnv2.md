@@ -4,15 +4,19 @@ Continuation doc for the **MobileNetV2** chapter of the verified-codegen ladder.
 brings MNv2 into the same "render via the proof-carrying StableHLO emitter + GPU-train
 on the rendered text" line that ch6 just closed for ResNet-34 (`resnet34-verified`).
 
-> **Status in one line — ch7 is DONE (C1+C2+C4; C3 optional):** the whole-network VJP
+> **Status in one line — ch7 is FULLY DONE (C1+C2+C3+C4):** the whole-network VJP
 > of MobileNetV2 — **`Proofs.mobilenetv2_has_vjp_at`** (`_correct`), UNCONDITIONAL via
 > `MobileNetV2Concrete.mnv2Concrete_has_vjp_correct` — was already PROVEN + audit-clean,
-> and now the **verified codegen GPU-TRAINS**: `mobilenetv2-verified` climbs CIFAR-10
-> **12.3%→34.8% over 10 epochs** (monotonic, no NaN). Done this session: **C1** depthwise
-> SHlo op pair (`depthwiseF`/`depthwiseBack`), **C2** relu6 op pair (`relu6F`/`selectMid`),
-> **C4** inverted-residual renderer + `MobileNetV2Layout` + `MainMobilenetV2Verified` +
-> `mobilenetv2-verified` exe. **C3** (strided depthwise) still **optional** — this config
-> downsamples via a regular stride-2 stem + maxpool, stride-1 IR blocks = proven apex.
+> and now the **verified codegen GPU-TRAINS the real downsampling architecture**:
+> `mobilenetv2-verified` climbs CIFAR-10 **10%→57.1% over 20 epochs** (monotonic, no NaN).
+> Done this session: **C1** depthwise op pair (`depthwiseF`/`Back`), **C2** relu6 op pair
+> (`relu6F`/`selectMid`), **C3** STRIDED depthwise (`depthwiseStridedF`/`Back`, proof
+> `depthwiseStride2Flat_has_vjp_correct` = decimate ∘ depthwise), **C4/D** the deeper
+> `[t,c,n,s]` inverted-residual renderer + `MobileNetV2Layout` + `MainMobilenetV2Verified`
+> + `mobilenetv2-verified` exe. Final net: stem-s2 → 6 IR blocks (2 stride-2 depthwise
+> downsamples, 32→16→8→4) → head conv-BN-relu6 → GAP → dense, 82 params, lr=0.3.
+> (An earlier shallow stride-1 cut — 2 blocks, 34 params — trained 12.3→34.8% @ lr=0.1;
+> the deep downsampling net supersedes it.)
 
 > **⚠ The one gotcha that cost a debug cycle (don't repeat):** ending the net on a
 > linear-bottleneck projection BN → GAP is **degenerate** — per-example instance-norm
@@ -90,17 +94,18 @@ ch6-A → ch6-B (resnet34).
 
 ## 2. ⭐ WHAT REMAINS — the verified codegen (ch7 = render + train)
 
-> **DONE (this session).** C1, C2, C4 all landed; only C3 (strided depthwise) is left,
-> and it's optional. The final shipped config: **stem** 3×3 stride-2 conv (3→32, reuses
-> ch6's regular strided conv, NOT depthwise) → BN → relu6 → maxpool (16→8) → **IR-A**
-> inverted-residual w/ skip (ic=oc=32, mid=64, stride-1 @8×8) → **IR-B** inverted-residual
-> no-skip (32→64, mid=64, @8×8) → **head** 1×1 conv (64→128) → BN → relu6 → GAP → dense
-> 128→10. 34 params, lr=0.1, GPU-trains 12.3%→34.8%. The depthwise **weight-grad** turned
-> out to need `batch_group_count = c` (the XLA depthwise-filter-grad trick: transpose
-> inp/dy → `[c,B,H,W]`, conv → `[1,c,3,3]`, reshape `[c,1,3,3]`) — de-risk it standalone
-> on iree first. Files: `tests/TestDepthwise.lean` (C1), `tests/TestRelu6.lean` (C2),
-> `tests/TestMobilenetV2{Fwd,Train}.lean` (C4), `MobileNetV2Layout` (IreeRuntime.lean),
-> `MainMobilenetV2Verified.lean`, exe `mobilenetv2-verified`.
+> **DONE (this session) — C1+C2+C3+C4, all four.** Final shipped config is the REAL
+> downsampling MNv2: **stem** 3×3 stride-2 conv (3→16, reuses ch6's regular strided conv)
+> → BN → relu6 → **6 inverted-residual blocks** `(ic,mid,oc,s)` = (16,64,24,2)(24,96,24,1)
+> (24,96,32,2)(32,128,32,1)(32,128,64,1)(64,256,64,1) — blocks 1&3 downsample via
+> **STRIDE-2 DEPTHWISE** (C3), skip iff s=1∧ic=oc — → **head** 1×1 conv (64→128) → BN →
+> relu6 → GAP → dense 128→10. 82 params, lr=0.3, 20 epochs, GPU-trains 10%→**57.1%**.
+> Two emitter gotchas: depthwise **weight-grad** needs `batch_group_count = c` (XLA
+> filter-grad trick: transpose inp/dy → `[c,B,H,W]`, conv → `[1,c,3,3]`, reshape); strided
+> depthwise weight-grad = upsample dy then that same stride-1 weight-grad. Files:
+> `tests/TestDepthwise.lean` (C1), `tests/TestRelu6.lean` (C2), `tests/TestDepthwiseStrided.lean`
+> (C3/D2), `tests/TestMobilenetV2{Fwd,Train}.lean` (deep renderer), `MobileNetV2Layout`
+> (IreeRuntime.lean), `MainMobilenetV2Verified.lean`, exe `mobilenetv2-verified`.
 
 The proof half is done; everything below is **render/GPU** (no new Mathlib). Suggested
 order, mirroring ch6's de-risk-on-iree-compile-first discipline:
@@ -125,7 +130,15 @@ strided-conv pair (`flatConvStridedF`/`convStridedBack`, `StableHLO.lean`):
 `select(0 < x ∧ x < 6, dy, 0)` (two `compare` + `and` + `select`, or two chained selects).
 `den = relu6 n` / its VJP. A two-sided `reluF`/`selectPos`. rfl-faithful forward.
 
-### C3 — strided depthwise (downsampling)  ⏭ OPTIONAL / NOT DONE  [skipped — stride-1 IR blocks + regular strided stem reach a trainable net]
+### C3 — strided depthwise (downsampling)  ✅ DONE  [D1 proof + D2 op pair + D3/D4 deep net]
+**Built (commits ff7db60 D1, cc90233 D2, c5532d2 D3+D4).** D1: `depthwiseStride2Flat
+= decimateFlat ∘ depthwiseFlat` + `_has_vjp(_correct)` via `vjp_comp` (Depthwise.lean,
+now imports StridedConv); audit 156/156. D2: `depthwiseStridedF`/`depthwiseStridedBack`
+SHlo op pair (9-site lockstep), fwd `window_strides=[2,2]`, back zero-upsample
+(`stablehlo.pad` interior=1) + reversed-kernel stride-1 depthwise; iree OK
+(tests/TestDepthwiseStrided.lean). D3/D4: the deeper `[t,c,n,s]` renderer downsamples
+via strided depthwise → GPU-trains 10→57.1%. The original prose below is the design it
+followed.
 MNv2 halves spatial via **stride-2 depthwise**. Reuse the B1 identity:
 `dwconv_stride2 = decimateFlat ∘ depthwiseFlat` (+ VJP via `vjp_comp` + `decimateFlat_has_vjp`),
 then a `depthwiseStridedF`/`depthwiseStridedBack` op pair (forward `window_strides=[2,2]`;
