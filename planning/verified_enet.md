@@ -1,184 +1,102 @@
-# Verified EfficientNet (Chapter 8) — handoff
+# Verified EfficientNet (Chapter 8) — handoff / completion report
 
 Continuation doc for the **EfficientNet** chapter of the verified-codegen ladder. ch8
-brings EfficientNet (MBConv = inverted-residual + **squeeze-excite** + **swish**) into
-the same "render via the proof-carrying StableHLO emitter + GPU-train on the rendered
-text" line that ch6 (ResNet-34) and ch7 (MobileNetV2) closed.
+brings EfficientNet (MBConv = inverted-residual + **squeeze-excite** + **swish** +
+**batch-norm**) into the same "render via the proof-carrying StableHLO emitter + GPU-train
+on the rendered text" line as ch6 (ResNet-34) and ch7 (MobileNetV2).
 
-> **Status in one line:** the whole-network VJP of EfficientNet —
-> **`Proofs.efficientnet_has_vjp`** (`_correct`) — is **PROVEN, audit-clean, and
-> UNCONDITIONAL** (all-smooth: swish + sigmoid SE gate + conv/BN, NO kinks, holds at
-> *every* input under only `0 < ε`; even cleaner than MNv2, which had relu6 kinks).
-> Also `efficientnet_has_vjp_at(_correct)` (smooth-point form). The SE/swish/sigmoid/
-> MBConv VJPs are all done: `seBlock_has_vjp_correct`, `swish_has_vjp_correct`,
-> `sigmoid_has_vjp`, `seGate_has_vjp`, `broadcastFlat_has_vjp`, `mbconvBody_has_vjp`,
-> `mbconvResidual_has_vjp(_at)`. **The MATH is entirely in hand.** What remains for a
-> *trained* model is the **verified codegen** — the `mobilenetv2-verified` treatment:
-> a swish op + a sigmoid op + the **squeeze-excite module renderer** + the MBConv
-> renderer/layout/Main + GPU train. **ch7 leaves ~85% reusable** (depthwise stride-1/
-> stride-2, per-channel BN, 1×1 convs, GAP, dense, residual, the data-driven `[t,c,n,s]`
-> strided-block harness); the only genuinely-new emitter work is swish, sigmoid, and the
-> SE gate (the one hard combinator: a fan-out sub-network multiplied back into the main
-> path). Read §§0–3 first; rest is reference.
+> **Status in one line:** ch8 is **DONE through E6** — a **faithful EfficientNet-B0**
+> (real `[t,c,n,s,k]` config, all-swish, batch-norm, SE) is rendered per-op from the
+> proven-faithful emitter, iree-compiles on ROCm, and GPU-trains on **Imagenette 224²**
+> (B0's native resolution). The whole-network VJP `Proofs.efficientnet_has_vjp(_correct)`
+> was already proven/unconditional; E1–E6 added the **verified codegen**. Audit **157/157**
+> 3-axiom-clean (E5a added `bnBatchTensor4_grad_input_correct`). All commits LOCAL, **never
+> push without explicit per-push permission.**
 
-Written 2026-06-07 by the session that finished ch7 (MobileNetV2, `mobilenetv2-verified`
-GPU-trains the real downsampling net 10%→57.1%). `origin/main` is behind by ch6 + ch7 +
-this doc; commit-to-main is fine, **never push without explicit per-push permission**.
+Updated 2026-06-07 by the session that built E1–E6. `origin/main` is behind by ch6 + ch7 +
+ch8. Read §§0–2 first; rest is reference + honest framing + future work.
 
 ---
 
 ## 0. The pattern (unchanged from every chapter)
 
-Typed, proof-carrying StableHLO emitter. Per op-graph:
-`SHlo a ─skel→ Raw ─toToks→ [Tok] ─emitTok→ StableHLO text`, two halves:
-- **Semantic R4:** `den (graph) = <proven Mathlib fderiv quantity>` (faithfulness).
-- **Syntactic R4:** `parse (toToks (skel a)) = skel a` (round-trip, `roundtrip`).
+Typed, proof-carrying StableHLO. Two faithfulness halves per op:
+- **Semantic R4:** `den (graph) = <proven Mathlib fderiv quantity>`.
+- **Syntactic R4:** `parse (toToks (skel a)) = skel a` (round-trip, for the typed AST ops).
 
-Deliverables per chapter: whole-net forward graph + faithfulness, full SGD train-step
-renderer, a `*-verified` exe that GPU-trains on the rendered text, audit ℝ-headline(s)
-3-axiom-clean.
-
-Ladder: ch2 92.10%, ch3 97.86%, ch4 98.89%, ch5-A 66%, ch5-B 57%, ch6-A 60.8%,
-**ch6-B (real ResNet-34) 62%+**, **ch7 (MobileNetV2, real downsampling) 57.1%** (verified
-architecture AND GPU-trained). **ch8 = EfficientNet** (architecture verified + unconditional;
-codegen + train = this doc).
+The **trainer** is hand-rendered batched StableHLO string fragments (ch7/ch8 style), each
+fragment faithful PER-OP to a proven function — NOT a single `den(trainStep)` theorem.
+Validated by training (loss/accuracy moving), like ch6/ch7's `*-verified` exes.
 
 ---
 
-## 1. ⭐ WHAT IS DONE — the EfficientNet proofs (audit-clean) + ch7 reuse
+## 1. ⭐ WHAT WAS BUILT — E1–E6 (all committed, local)
 
-### The EfficientNet VJP stack (committed; in the audited headlines)
-In **`LeanMlir/Proofs/EfficientNet.lean`** (imports `Depthwise`, `SE`, `LayerNorm`),
-**`LeanMlir/Proofs/SE.lean`**, and **`LeanMlir/Proofs/LayerNorm.lean`** (swish lives here).
-
-| Piece | Theorem / def | Notes |
+| Step | Commit | What |
 |---|---|---|
-| swish | `swish` (= `x·σ(x)`), `swish_has_vjp(_correct)`, `swishScalarDeriv` | **SMOOTH everywhere** (no kink). backward `dy·swish'(x)`, closed form `σ(x)·(1 + x·(1−σ(x)))`. |
-| sigmoid | `sigmoid` (= `σ`), `sigmoid_has_vjp(_correct)`, `pdiv_sigmoid` | the SE gate's output nonlinearity. backward `dy·σ(x)(1−σ(x))`. |
-| broadcast (channel→spatial) | `broadcastFlat`, `broadcastFlat_has_vjp` | `Vec c → Vec (c·h·w)`; backward = **sum each channel's spatial cotangents** (adjoint of broadcast). |
-| SE gate | `seGate` (= `broadcast ∘ sigmoid ∘ dense₂ ∘ swish ∘ dense₁ ∘ GAP`), `seGate_has_vjp` | the squeeze-excite sub-network (`c·h·w → c·h·w`), chained via `vjp_comp`. |
-| SE block (main × gate) | `seBlock gate x = x ⊙ gate(x)` (`SE.lean`), `seBlock_has_vjp(_correct)` = `elemwiseProduct_has_vjp (id) gate` | the fan-out: `back = gate(x)⊙dy + gate.back(x, x⊙dy)`. |
-| MBConv body | `mbconvBody` (= `project(1×1 conv-bn) ∘ SE ∘ depthwise(bn-swish) ∘ expand(1×1 conv-bn-swish)`), `mbconvBody_has_vjp` | the EfficientNet block. |
-| MBConv residual | `mbconvResidual_has_vjp(_at)` | stride-1, `cin=cout` block in an identity residual. |
-| **WHOLE NET** | `efficientnetForward`, **`efficientnet_has_vjp(_correct)`** (UNCONDITIONAL) + `efficientnet_has_vjp_at(_correct)` | `dense ∘ GAP ∘ MBConv₂ ∘ residual(MBConv₁) ∘ (swish∘BN∘conv stem)`. |
+| E1 | `de4f3a7` | **swish** SHlo op pair `swishF`/`swishBack` (StableHLO.lean, full lockstep). All-smooth, GLOBAL `swish_has_vjp`. |
+| E2 | `bd43cc2` | **sigmoid** op pair `sigmoidF`/`sigmoidBack` (the SE gate nonlinearity). imports EfficientNet (sigmoid lives there). |
+| E3 | `fae03cd` | **squeeze-excite** module renderer `seFwd`/`seBack` (tests/TestSE.lean) — fan-out gate, 2-path backward + dense W/b grads. iree + **finite-difference GRADCHECK** all pass. |
+| E4 | `b277439` | **MBConv renderer** + layout + Main + `efficientnet-verified` exe (reduced CIFAR config). [head was a relu6 STOPGAP — see E5] |
+| E5a | `872ba25` | **batch-norm VJP** `bnBatchTensor4(_grad_input)(_correct)` (PerChannelBN.lean). Audit 156→**157**. |
+| E5b | `bd6b5a4` | batch-norm codegen → **genuinely ALL-SWISH** (relu6 head removed). CIFAR 48.7%→**65.5%**. |
+| E6 | `3be94b0` | **faithful EfficientNet-B0** `[t,c,n,s,k]` on **Imagenette 224²** (variable kernel 3×3/5×5, MBConv1 no-expand, stem stride-2, 224→7, 262 params). |
 
-Audited headlines: `swish_has_vjp_correct`, `sigmoid_has_vjp`, `seBlock_has_vjp_correct`,
-`efficientnet_has_vjp_at_correct`, `efficientnet_has_vjp`, `efficientnet_has_vjp_correct`
-(see `tests/AuditAxioms.lean`; audit currently **156/156** 3-axiom-clean). The old IRPrint
-codegen also has audited backward bridges `IR.swish_back_bridge` / `IR.sigmoid_back_bridge`
-— **a reference for the exact swish/sigmoid backward StableHLO**.
-
-**NB — the proven apex is a SMALL EfficientNet** (stem + 1 residual-MBConv + 1 plain
-MBConv, each with a full SE gate), the analogue of ch7's small apex / ch6-A's 2-block
-net. Going deeper / downsampling is the codegen-side scaling job (see §2), exactly as
-ch7 went small-apex → deep `[t,c,n,s]` net.
-
-### ⭐ What ch7 (MNv2) leaves REUSABLE (this is why ch8 is cheap)
-- **Depthwise conv op pairs** — `depthwiseF`/`depthwiseBack` (C1, stride-1) AND
-  `depthwiseStridedF`/`depthwiseStridedBack` (C3, stride-2 downsample). MBConv's depthwise
-  is identical. **5×5 depthwise needs NO new op** — the op is `kH/kW`-parameterized with
-  pad `(k−1)/2`, so EfficientNet's 5×5 stages just pass `kH=kW=5`.
-- **Per-channel BatchNorm op pair** — `bnPerChannelF`/`bnPerChannelBack`. Reuse verbatim.
-- **1×1 convs, GAP `gapF`, dense, residual `addV`** — all present.
-- **The depthwise weight-grad trick** — `batch_group_count = c` (stride-1) and upsample-then-
-  that (stride-2). Reuse the ch7 train fragments `dwconvWGrad`/`dwconvWGradStrided`.
-- **The whole `mobilenetv2-verified` codegen harness** — `tests/TestMobilenetV2{Fwd,Train}.lean`
-  (data-driven `(p,ic,mid,oc,s)` block-list renderer threading spatial dims fwd+reverse,
-  with strided depthwise), `MobileNetV2Layout` (IreeRuntime.lean), `MainMobilenetV2Verified.lean`,
-  the `mlpTrainStepV` FFI loop. ch8's renderer/layout/Main are a near-clone: **swish in place
-  of relu6, the SE module inserted before project, MBConv = inverted-residual + SE.**
+### The proofs (were already done before E1; in the audited 157)
+`efficientnet_has_vjp(_correct)` (UNCONDITIONAL, all-smooth), `swish_has_vjp_correct`,
+`sigmoid_has_vjp`, `seBlock_has_vjp_correct`, `seGate_has_vjp`, `broadcastFlat_has_vjp`,
+`mbconvBody_has_vjp`. **E5a added** `bnBatchTensor4_grad_input_correct` — the only new proof
+of the chapter, and it was mostly REUSE (see §2).
 
 ---
 
-## 2. ⭐ WHAT REMAINS — the verified codegen (ch8 = render + train)
+## 2. ⭐ KEY FINDINGS (read before touching anything)
 
-The proof half is done; everything below is **render/GPU** (no new Mathlib). Suggested
-order, mirroring ch7's de-risk-on-iree-compile-first discipline:
+### Batch-norm is what makes EfficientNet all-swish work (E5 — the crux)
+The proven BN (carried since ch5) is **per-example INSTANCE-norm**. Instance-norm
+standardizes every example identically, so `GAP(act(BN)) ≈ a per-image-INVARIANT constant`
+for any *smooth* `act`. A **swish head froze the net at EXACTLY chance** (10.0±0.05% at BOTH
+lr=0.3 AND lr=0.1 — a degenerate FORWARD, not an lr washout). E4's stopgap was a **relu6
+head** (hard clamp breaks the degeneracy). **E5 fixed it properly with BATCH-norm** —
+batch-norm keeps inter-image variance in the pooled features, so swish works at the final
+GAP. The net is now **genuinely all-swish; relu6 is gone**. (DON'T reintroduce a relu6 head.)
 
-### E1 — swish SHlo op pair  [small, all-smooth — easier than relu6]
-A `swishF`/`swishBack` op pair, 9-site lockstep mirroring the relu6 pair (`relu6F`/`selectMid`,
-`StableHLO.lean`) but SIMPLER (swish is differentiable everywhere — no `select` mask, no
-smoothness hyp, no two-sided kink):
-- **`swishF`** forward: `x · sigmoid(x)`. StableHLO: `σ = logistic(x)` (`stablehlo.logistic`),
-  `o = multiply(x, σ)`. `den = swish n` (rfl).
-- **`swishBack`** backward: `dy · swish'(x)`, closed form `σ(x)·(1 + x·(1−σ(x)))`. Saves the
-  pre-activation `x` (`xName`). `den = (swish_has_vjp n).backward x (den e)`, faithful via
-  `swish_has_vjp_correct`. **Reference the existing `IR.swish_back_bridge` StableHLO**
-  (IRPrint.lean) for the exact op sequence (logistic + a few multiplies/subtracts).
-- 9 sites + standalone `tests/TestSwish.lean` iree-compile (mirror `tests/TestRelu6.lean`).
-  swishF/swishBack are rfl-faithful → out of the audit; `roundtrip` covers them.
+### The batch-norm proof was mostly REUSE
+Batch-norm per channel = normalizing each channel over its `N·H·W` (batch+spatial) cells =
+**exactly `bnPerChannelFlat` with `m = N·h·w`** (the existing per-channel instance-norm VJP,
+group enlarged from one example's spatial cells to the whole batch). The only NEW content
+was a layout bridge `[N,C,H,W]↔[C,N·H·W]` (`bnchwFwd/Back` — a TRANSPOSE-reindex, vs the
+instance-norm bridge's pure re-association), mirroring `reassocFwd/Back` + `bnPerChannelTensor3`
+line-for-line. `bnBatch`/`bnBatchBack` fragments = the instance-norm fragments with the
+Σ-reductions over `[0,2,3]` instead of `[2,3]`.
 
-### E2 — sigmoid SHlo op pair  [small]
-`sigmoidF` forward `stablehlo.logistic(x)` = `σ(x)`; `sigmoidBack` backward `dy·σ(x)(1−σ(x))`
-(saves `x`; `σ = logistic(x)`, `mul(dy, mul(σ, sub(1, σ)))`). `den = sigmoid n` / its VJP via
-`sigmoid_has_vjp_correct`. Reference `IR.sigmoid_back_bridge`. rfl-faithful forward.
-
-### E3 — the SQUEEZE-EXCITE module  [the one genuinely-new combinator]
-SE is `seBlock gate x = x ⊙ broadcast(gate(squeeze(x)))`. Render it as a sub-graph and its
-two-path backward (NO single new SHlo op needed if you compose existing ops — GAP, dense/1×1,
-swish, sigmoid, a channel-broadcast, and an elementwise multiply — but you DO need a renderer
-fragment + its backward, like ch7's per-block fragments). **⭐ GOLDMINE REFERENCE:** the OLD
-IRPrint codegen already emits the FULL MBConv-with-SE — `IRPrint.lean` ~**1413–1614** has the
-squeeze-excite gate forward ("squeeze-excite (genuine gate sub-network)") AND its backward
-fan-in ("squeeze-excite back (fan-in)"), plus `swishF`/`swishB` (~1462) and `swishFwdM`/
-`swishBackM` (~807). Mirror that StableHLO directly. Forward (on `[B,c,h,w]`):
-1. **squeeze** = GAP over spatial → `[B,c]`.
-2. **reduce** = `dot_general` (`[B,c]·[c,r]`) + bias → `[B,r]`  (the SE bottleneck, r = c/4 typ).
-3. **swish** (E1) → `[B,r]`.
-4. **expand** = `dot_general` (`[B,r]·[r,c]`) + bias → `[B,c]`.
-5. **sigmoid** (E2) → `[B,c]`  (= the per-channel gate, save it).
-6. **broadcast** gate `[B,c]` → `[B,c,h,w]` (`broadcast_in_dim dims=[0,1]`) and **multiply**
-   with the main path `x` → SE output.
-
-Backward (the elemwise-product VJP `back = gate⊙dy + gate.back(x, x⊙dy)`):
-- **main path:** `gate ⊙ dy` (saved gate × incoming cotangent) — one `multiply`.
-- **gate path:** cotangent `x ⊙ dy` →
-  GAP-back into `[B,c]` (reduce-sum over spatial — the adjoint of the step-6 broadcast is
-  sum-over-spatial; `broadcastFlat_has_vjp`) →
-  sigmoid-back (⊙ σ(1−σ), E2) →
-  expand `dot_general` back (`[B,c]·[r,c]ᵀ → [B,r]`) + its weight/bias grads →
-  swish-back (⊙ swish′, E1) →
-  reduce `dot_general` back (`[B,r]·[c,r]ᵀ → [B,c]`) + its weight/bias grads →
-  GAP-back to spatial (`broadcast dy/(h·w)`, the squeeze adjoint) → `[B,c,h,w]`.
-- **dx = main + gate-path**, summed (`stablehlo.add`). The two SE dense weight grads
-  (`dWs₁`, `dWs₂`) + biases are extra params.
-- De-risk a standalone `tests/TestSE.lean` (one SE module fwd+back) on `iree-compile` BEFORE
-  wiring into MBConv. **Watch:** the saved gate value is reused in BOTH the main-path scale
-  and (implicitly) the sigmoid-back; save it once.
-
-### E4 — the MBConv renderer + layout + Main + GPU train  [clone mobilenetv2-verified]
-- **MBConv block fwd/back fragment** (mirror ch7's `irBlockFwd`/`irBlockBack`): expand
-  `1×1 conv→BN→swish` (`ic→mid=t·ic`) → depthwise `dw→BN→swish` (stride 1 or 2; 3×3 or 5×5) →
-  **SE module** (E3) → project `1×1 conv→BN` (no swish); add the residual skip iff stride-1 ∧
-  `ic=oc`. Backward = the reverse, with the SE two-path inserted between project-back and
-  depthwise-back. Swap ch7's `relu6`/`relu6Back` → `swish`/`swishBack` (E1).
-- **block list** — the EfficientNet-B0-style `[t, c, n, s]` config as a `blocks`-style list
-  (data-driven, exactly like ch7's `blocks`); a reduced-downsample CIFAR config (see §5).
-- **`EfficientNetLayout`** (IreeRuntime.lean) — clone `MobileNetV2Layout`; add the 2 SE dense
-  weights+biases per block (`Ws₁ [c,r]`, `bs₁ [r]`, `Ws₂ [r,c]`, `bs₂ [c]`), depthwise kernels
-  `[mid,1,kH,kW]`. Data-driven from the same `blocks`.
-- **`MainEfficientNetVerified.lean`** + lakefile `efficientnet-verified` exe — clone
-  `MainMobilenetV2Verified.lean` (flat `[BS,3072]` `%x` reshaped internally; mean-loss cotangent
-  ÷B; `mlpTrainStepV` FFI loop; programmatic He/γ=1/β=0 init). GPU-train CIFAR-10.
-- **De-risk each fragment on `iree-compile` before the full chain** (swish → sigmoid → SE →
-  one MBConv fwd → small-net train step → full depth, the ch7 de-risk rhythm).
-
-**NB — naming clash:** `efficientnet-train` (lakefile) is the **OLD unverified** `NetSpec`/
-`MlirCodegen` path. The verified one is a NEW file `MainEfficientNetVerified.lean` + exe
-`efficientnet-verified` (do not overwrite the old one). Likewise an `efficientnet-v2-train`
-exists — leave it.
+### B0-on-Imagenette is the right target (not CIFAR)
+B0 was designed for 224×224 ImageNet (stem stride-2, 5 downsamples 224→7). Forced onto 32²
+CIFAR it over-downsamples (5×5 convs on 4×4 maps — awkward). **Imagenette** (10-class
+ImageNet subset, `<DATA>/imagenette/{train.bin@256, val.bin@224}`) is B0's native scale.
+E6 trains on it at 224² with the real B0 spatial flow.
 
 ---
 
-## 3. Suggested first steps for the clean session
-1. `git log --oneline -10`; build + audit green (`lake build Proofs`; audit 156/156 — see §4).
-   Skim `EfficientNet.lean` (`efficientnet_has_vjp`, `mbconvBody`, `seGate`, `seBlock_has_vjp`),
-   `SE.lean` (`seBlock`, `elemwiseProduct_has_vjp`), `LayerNorm.lean` (`swish`, `swish_has_vjp`).
-2. Re-read ch7's `tests/TestMobilenetV2{Fwd,Train}.lean` + `MainMobilenetV2Verified.lean` +
-   `MobileNetV2Layout` + the C1/C3 depthwise op pairs — ch8's renderer/layout/Main are near-clones.
-3. **Do E1 (swish) then E2 (sigmoid)** first — small, iree-validate standalone (mirror
-   `tests/TestRelu6.lean`). Then **E3 (SE module)** — the hard part; de-risk a standalone
-   `tests/TestSE.lean` fwd+back on iree. Then E4 (the MBConv trainer).
+## 3. The EfficientNet-B0 architecture (E6, what's rendered)
+
+Stem 3×3 **stride-2** conv (3→32) → BN → swish (224→112). Then 7 stages `[t,c,n,s,k]`:
+
+| stage | expand t | ch c | repeats n | stride s | kernel k | spatial |
+|---|---|---|---|---|---|---|
+| s1 | 1 (MBConv1, **no expand conv**) | 16 | 1 | 1 | 3 | @112 |
+| s2 | 6 | 24 | 2 | 2 | 3 | 112→56 |
+| s3 | 6 | 40 | 2 | 2 | 5 | 56→28 |
+| s4 | 6 | 80 | 3 | 2 | 3 | 28→14 |
+| s5 | 6 | 112 | 3 | 1 | 5 | @14 |
+| s6 | 6 | 192 | 4 | 2 | 5 | 14→7 |
+| s7 | 6 | 320 | 1 | 1 | 3 | @7 |
+
+16 MBConv layers; SE ratio 0.25 of block-input ch (r = ic/4) in every block. Head 1×1 conv
+(320→1280) → BN → swish → GAP → dense(1280→10). 262 params / 4.04M floats (B0 range).
+
+MBConv = expand 1×1→BN→swish (SKIPPED if t=1) → depthwise k×k (stride 1/2)→BN→swish → SE
+(squeeze C→r→C, sigmoid, ×main) → project 1×1→BN; + residual iff s=1 ∧ ic=oc.
 
 ---
 
@@ -188,111 +106,78 @@ exists — leave it.
 cd /home/skoonce/lean/proof_verify_demo/lean4-mlir
 lake build Proofs
 lake env lean tests/AuditAxioms.lean 2>&1 | grep -c 'depends on axioms: \[propext, Classical.choice, Quot.sound\]$'
-#   must equal total 'depends on axioms:' lines (156 now — ENet headlines already in it)
+#   must equal total 'depends on axioms:' lines (157)
 
 export PATH="$PWD/.venv/bin:$PATH"
 export LD_LIBRARY_PATH="$PWD/ffi:/opt/rocm/lib:$LD_LIBRARY_PATH"
 export IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0
-DATA=/home/skoonce/lean/claude_max/lean4-jax/data            # cifar-10/ lives here
-# ch7 reference trainer (works; the template to clone):
-.lake/build/bin/mobilenetv2-verified "$DATA"                 # MobileNetV2, 10%→57.1%
-# render+compile an op pair standalone (the E1/E2 de-risk pattern):
-lake env lean tests/TestRelu6.lean                           # → @relu6_{fwd,back} iree-compile OK
-lake env lean tests/TestDepthwiseStrided.lean                # → @dwstrided_{fwd,back} iree-compile OK
-# ch8 target (once built): .lake/build/bin/efficientnet-verified "$DATA"
+DATA=/home/skoonce/lean/claude_max/lean4-jax/data        # imagenette/ + cifar-10/ live here
+
+# render + iree-compile the B0 renderers (writes verified_mlir/efficientnet_{fwd,train_step}.mlir):
+lake env lean tests/TestEfficientNetFwd.lean             # @efficientnet_fwd  iree OK (138KB)
+lake env lean tests/TestEfficientNetTrain.lean           # @efficientnet_train_step iree OK (410KB, 262 params)
+lake env lean tests/TestSE.lean                          # SE module fwd+back iree OK (gradcheck: /tmp/se_gradcheck.py)
+
+# GPU-train the verified B0 on Imagenette 224²:
+lake build efficientnet-verified
+.lake/build/bin/efficientnet-verified "$DATA"            # loads imagenette, BS=32, lr=0.1
 ```
-- **Running a trainer in this harness:** Bash tool `run_in_background: true`; do NOT
-  `nohup … &` (detached child gets killed) and do NOT `pkill -f <exe>` from a shell whose
-  own cmdline contains that string. The exe flushes per epoch (`(← IO.getStdout).flush`).
-- **Rendering MLIRs:** the `tests/TestMobilenetV2*.lean` write `verified_mlir/*.mlir` via
-  `#eval main` under `lake env lean …` (needs `IO.FS.createDirAll "verified_mlir"`).
+- **Running a trainer:** Bash `run_in_background: true`; do NOT `nohup … &`. Flushes per epoch.
+- **Imagenette is slow:** 224² B0 ≈ 49× CIFAR compute; ~5–8 min/epoch at BS=32. iree-compile of the
+  410KB train step takes a couple minutes.
+- The **reduced-CIFAR all-swish net** (E5, commit `bd6b5a4`) is the fast iteration target (65.5%, ~30s/epoch).
 
 ---
 
-## 5. Gotchas (carried from ch7 — read before editing)
+## 5. RESULTS + honest framing (don't oversell)
 
-- **swish/sigmoid are SMOOTH** — no kink, no mask, no smoothness hypothesis. `stablehlo.logistic`
-  is `σ`; swish fwd = `multiply(x, logistic(x))`. This makes E1/E2 *easier* than relu6; the whole
-  net is UNCONDITIONAL. (`select`/`compare` only appear in ch7's relu6 — none here.)
-- **SE is a FAN-OUT multiplied back** — the SE backward has TWO paths into `dx` (main scale +
-  gate gradient); both must be emitted and summed. The gate value is reused; save it once. The
-  squeeze GAP-back (`broadcast dy/(h·w)`) and the broadcast-back (`reduce-sum over spatial`) are
-  ADJOINTS of each other's forward steps — get the `÷h·w` only on the squeeze side.
-- **5×5 depthwise = no new op** — pass `kH=kW=5` to the existing `depthwiseF`/`depthwiseStridedF`;
-  the emit pads `(k−1)/2 = 2`. EfficientNet-B0 uses 3×3 and 5×5 stages.
-- **Strided depthwise = the C3 op** (`depthwiseStridedF`/`depthwiseStridedBack`) — MBConv
-  downsamples via stride-2 depthwise, already built + iree-validated in ch7. Backward = zero-
-  upsample (`stablehlo.pad` interior=1) + reversed-kernel stride-1 depthwise; weight-grad =
-  upsample dy then `batch_group_count=c` stride-1 weight-grad.
-- **Per-example instance-norm washout in deep nets** — ch7's deep net needed **lr=0.3** (not 0.1)
-  after a ~2-epoch warmup; at lr=0.1 it crept ~0.2%/epoch (NOT a bug — monotonic = correct
-  gradients; the proven BN is per-example instance-norm, not batch-norm, so many norm layers erase
-  signal). Instance-norm masks divergence (renormalizes activations) ⇒ too-high-lr shows as flat-
-  chance, not NaN. Start EfficientNet at lr≈0.2–0.3, tune.
-- **Dims must keep feature maps non-degenerate** — for CIFAR 32×32 use a reduced-downsample
-  config (ch7 used stem-s2 + 2 strided-depthwise blocks: 32→16→8→4; no map below the kernel).
-  A 5×5 depthwise needs the map ≥ 5 (so don't 5×5 below 8×8 unless padded — SAME pad handles it,
-  but keep ≥ the stride·2 tiling rule).
-- **`%x` is the flat `[BS,3072]` FFI buffer** — reshape to `[BS,3,32,32]` inside the func; the
-  stem conv + its weight-grad read the reshaped `%xr`. **Mean-loss cotangent** (`dy = (softmax−
-  onehot)/B`) so `lr` is well-scaled.
-- **Param order is the single source of truth** — generate argSig / forward / backward / SGD /
-  return / layout `specs` / init all from one `blocks` list (ch7's `blocks`/`allParams`), else the
-  FFI silently binds the wrong buffer. The SE adds 2 dense W+b per block — thread them through.
-- **GAP-of-instance-norm degeneracy** — ch7's net was frozen at 9.99% until a final
-  `1×1 conv→BN→swish` HEAD was added before GAP (GAP of a raw instance-norm BN is the constant β,
-  input-independent). EfficientNet's standard head (`1×1 conv→BN→swish`, `cout→1280`-ish) plays
-  this role — KEEP IT (use swish, not relu6). Without an activation between the last linear BN and
-  GAP, the net won't learn.
-- **Adding an SHlo op = 9-site lockstep** (SHlo ctor / den / faithful / Raw / skel / Tok / toToks /
-  parseStack / parseStack_toToks). `relu6F`/`selectMid` (ch7 C2) and `depthwiseStridedF`/`Back`
-  (ch7 C3) are the worked op-pair examples. rfl-faithful forwards do NOT go in AuditAxioms.
-- **emitter byte-stability:** after editing, `git diff --stat verified_mlir/` must be empty for
-  unrelated `.mlir` files (resnet34, mobilenetv2).
+- **CONFIRMED:** fwd (138KB) + train (410KB, 262 params) iree-compile ROCm gfx1100; Imagenette
+  loads (9469 train / 3925 val); `efficientnet-verified` GPU-trains without OOM. Audit 157/157;
+  resnet34/mobilenetv2 `.mlir` byte-stable. The per-op faithfulness + E3 SE gradcheck + E5a
+  batch-norm proof + the E5 CIFAR all-swish result (65.5%) establish the gradients are correct.
+- **Training number on Imagenette:** B0 trained FROM SCRATCH on only 9469 images with **plain SGD,
+  no augmentation/schedule/dropout/EMA** is a hard optimization (B0 was designed for ImageNet-1.3M
+  + the full recipe). Epoch 1 ≈ chance (9.45%); see the live run for the climb. The chapter win is
+  a **verified, paper-faithful B0 architecture GPU-training on native-resolution data**, NOT a SOTA
+  Imagenette number.
+- **The win is correctness/codegen**, faithful PER-OP (swish/sigmoid/SE/batch-norm/depthwise/conv/
+  residual/GAP/dense), validated by training — not a single `den(trainStep)` theorem.
+
+### Explicitly OUT OF SCOPE (user: "not ema/etc")
+Paper training recipe — RMSProp, LR warmup+exp-decay, weight decay, dropout/stochastic-depth,
+weight EMA; **population-stats eval** (we use batch stats at eval, BS=32); ImageNet-1000 (we use
+Imagenette-10). None of these need new proofs (the optimizer/eval-stats aren't part of the VJP);
+they're "normal deep-learning engineering."
 
 ---
 
-## 6. The honest framing (don't oversell)
+## 6. File map (ch8)
 
-- The verified trainer is a **codegen artifact** — hand-rendered StableHLO, faithful **PER-OP**
-  (each fragment is the StableHLO a proven-faithful emitter produces: swish = `swish_has_vjp_correct`,
-  sigmoid = `sigmoid_has_vjp`, SE = `seBlock_has_vjp_correct` / `broadcastFlat_has_vjp`, depthwise/
-  strided-depthwise/per-channel-BN/residual/GAP/dense as in ch6/ch7). It is **not** a single
-  `den(trainStep)=…` theorem; the whole-net correctness theorem is `efficientnet_has_vjp` (UNCONDITIONAL,
-  audit-clean), and the trainer mirrors its structure — validated by training (loss/accuracy decreasing),
-  exactly like ch6/ch7's `*-verified` exes.
-- The proven apex is a **small EfficientNet**; a deeper / downsampling B0-style config for a real
-  accuracy number is the codegen scaling job (E4 + the block list), not new math.
-- Per-channel BN here is per-example **instance-norm** (matches the proven `bnForward` per channel-
-  slice), not batch-BN. The chapter win is a **correctness/codegen** result (MBConv + squeeze-excite +
-  swish verified end-to-end and GPU-trained), not a SOTA number.
+- `LeanMlir/Proofs/LayerNorm.lean` — `swish(_has_vjp(_correct))`. **PROOF (pre-existing).**
+- `LeanMlir/Proofs/SE.lean` — `seBlock`, `elemwiseProduct(_has_vjp)`, `seBlock_has_vjp(_correct)`. **PROOF.**
+- `LeanMlir/Proofs/EfficientNet.lean` — `sigmoid(_has_vjp)`, `broadcastFlat`, `seGate`, `mbconvBody`,
+  apex `efficientnet_has_vjp(_correct)` (UNCONDITIONAL). **PROOF.**
+- `LeanMlir/Proofs/PerChannelBN.lean` — **E5a:** `bnchwFwd/Back` bridge + `bnBatchTensor4(_has_vjp)
+  (_correct)` + `bnBatchTensor4_grad_input(_correct)` (the audited batch-norm headline).
+- `LeanMlir/Proofs/StableHLO.lean` — **E1/E2:** `swishF`/`swishBack`, `sigmoidF`/`sigmoidBack` op pairs.
+- `LeanMlir/Proofs/StableHLOParse.lean` — parser cases for the 4 new ops.
+- `tests/TestSwish.lean` / `tests/TestSigmoid.lean` / `tests/TestSE.lean` — E1/E2/E3 standalone iree.
+- `tests/TestEfficientNet{Fwd,Train}.lean` — **E6:** the B0 renderer (variable kernel, MBConv1
+  no-expand, B0 stage→block generator, 224² stem-stride-2). `bnBatch`/`bnBatchBack` fragments (E5b).
+- `LeanMlir/IreeRuntime.lean` — `EfficientNetLayout` (B0 specs, 262 params, xShape 224²).
+- `MainEfficientNetVerified.lean` + lakefile `efficientnet-verified` — loads Imagenette (train@256
+  centerCrop→224, val@224), BS=32, SGD lr=0.1. (Old unverified `efficientnet-train` left alone.)
+- `verified_mlir/efficientnet_{fwd,train_step}.mlir` — E6 rendered (224²).
 
 ---
 
-## 7. File map (ch8)
+## 7. Future work (if continuing — all codegen/infra, NO new proofs except where noted)
 
-- `LeanMlir/Proofs/LayerNorm.lean` — `swish(_has_vjp(_correct))`, `swishScalarDeriv`. **PROOFS DONE.**
-- `LeanMlir/Proofs/SE.lean` — `seBlock`, `elemwiseProduct(_has_vjp)`, `seBlock_has_vjp(_correct)`,
-  `pdiv_mul`. **PROOFS DONE.**
-- `LeanMlir/Proofs/EfficientNet.lean` — `sigmoid(_has_vjp)`, `broadcastFlat(_has_vjp)`, `seGate(_has_vjp)`,
-  `mbconvBody(_has_vjp)`, `mbconvResidual_has_vjp(_at)`, apex `efficientnet_has_vjp(_at)(_correct)`
-  (UNCONDITIONAL). imports Depthwise/SE/LayerNorm. **PROOFS DONE.**
-- `LeanMlir/Proofs/StableHLO.lean` — **E1/E2 add here:** `swishF`/`swishBack` + `sigmoidF`/`sigmoidBack`
-  SHlo op pairs (9-site lockstep). Reuses `depthwiseF/Back`, `depthwiseStridedF/Back`, `bnPerChannelF/Back`,
-  `addV`, `gapF`, `denseF`, `flatConvF`.
-- `LeanMlir/Proofs/StableHLOParse.lean` — parser cases for the new ops.
-- `LeanMlir/Proofs/IRPrint.lean` — **⭐ reference:** `IR.swish_back_bridge` / `IR.sigmoid_back_bridge`
-  (audited swish/sigmoid backward StableHLO), `swishF`/`swishB`/`swishFwdM`/`swishBackM`, and the
-  **full MBConv-with-squeeze-excite forward+backward emit (~1413–1614)** — mirror it directly for E3/E4.
-- `tests/TestSwish.lean` / `tests/TestSigmoid.lean` (NEW, E1/E2) / `tests/TestSE.lean` (NEW, E3) /
-  `tests/TestEfficientNet{Fwd,Train}.lean` (NEW, E4) — standalone render + iree-compile, mirror
-  `tests/TestRelu6.lean` and `tests/TestMobilenetV2{Fwd,Train}.lean`.
-- `LeanMlir/IreeRuntime.lean` — add **`EfficientNetLayout`** (clone `MobileNetV2Layout`; +2 SE dense
-  W/b per block; depthwise kernels `[mid,1,kH,kW]`).
-- `MainEfficientNetVerified.lean` (NEW) + lakefile `efficientnet-verified` — clone
-  `MainMobilenetV2Verified.lean`. (Do NOT touch the old unverified `efficientnet-train`/`-v2-train`.)
-- `verified_mlir/efficientnet_{fwd,train_step}.mlir` — E4 rendered.
-- **Reuse templates (ch7):** `tests/TestMobilenetV2Train.lean` (data-driven `[t,c,n,s]` renderer +
-  strided depthwise fwd/back helpers), `MobileNetV2Layout` (layout generator), `MainMobilenetV2Verified.lean`
-  (trainer), `tests/TestRelu6.lean` + `tests/TestDepthwiseStrided.lean` (standalone op-pair iree checks),
-  `relu6F`/`selectMid` + `depthwiseStridedF`/`depthwiseStridedBack` (op-pair lockstep worked examples).
+1. **Get a real Imagenette number** — add the paper training recipe (the things scoped out): a LR
+   schedule (pass lr as a train-step input), weight decay (`+λθ` in the grad), RMSProp/momentum
+   (per-param state), dropout (in-graph RNG), weight EMA + **population-stats eval** (running mean/var
+   as EMA "params" — the genuinely-fiddly bit). None need proofs. Likely the biggest accuracy lever
+   alongside more data.
+2. **Push** ch6 + ch7 + ch8 to origin (only with explicit per-push permission).
+3. **ImageNet-1000** — bigger data pipeline + compute; FC 1280→1000.
+4. The reduced-CIFAR all-swish net (E5) remains available for fast iteration.
