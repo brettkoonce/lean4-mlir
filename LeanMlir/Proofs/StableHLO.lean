@@ -121,6 +121,16 @@ inductive SHlo : Nat → Type where
       (W : DepthwiseKernel c kH kW) (b : Vec c)            : SHlo (c*h*w) → SHlo (c*h*w)
   | depthwiseBack {c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*h*w)) : SHlo (c*h*w) → SHlo (c*h*w)
+  -- Chapter 7 C3: STRIDE-2 depthwise conv forward (`window_strides=[2,2]`,
+  -- `feature_group_count = c`, `[c,1,kH,kW]` kernel — halves spatial, the MNv2
+  -- downsampling op) and its input-VJP (zero-upsample the cotangent via
+  -- `stablehlo.pad` interior=1 then the reversed-kernel stride-1 depthwise — the
+  -- `convStridedBack` shape, per-channel). `den` via the proven `depthwiseStride2Flat`
+  -- / `depthwiseStride2Flat_has_vjp` (= decimate ∘ depthwise).
+  | depthwiseStridedF    {c h w kH kW : Nat} (wName bName : String)
+      (W : DepthwiseKernel c kH kW) (b : Vec c)            : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
+  | depthwiseStridedBack {c h w kH kW : Nat} (wName : String)
+      (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -165,6 +175,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       bnPerChannelTensor3_grad_input oc h w ε γ x (den e)
   | _, .depthwiseF _ _ W b e => depthwiseFlat W b (den e)
   | _, .depthwiseBack _ W b v e => (depthwiseFlat_has_vjp W b).backward v (den e)
+  | _, .depthwiseStridedF _ _ W b e => depthwiseStride2Flat W b (den e)
+  | _, .depthwiseStridedBack _ W b v e => (depthwiseStride2Flat_has_vjp W b).backward v (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -507,6 +519,20 @@ theorem depthwiseBack_faithful {c h w kH kW : Nat} (wN : String)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*h*w)) (e : SHlo (c*h*w)) :
     den (.depthwiseBack wN W b v e) = (depthwiseFlat_has_vjp W b).backward v (den e) := rfl
 
+/-- **Strided-depthwise forward faithfulness.** The `window_strides=[2,2]`,
+    `feature_group_count = c` `stablehlo.convolution` denotes the proven
+    `depthwiseStride2Flat` (= decimate ∘ stride-1 depthwise, Depthwise.lean). -/
+@[simp] theorem depthwiseStridedF_faithful {c h w kH kW : Nat} (wN bN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (e : SHlo (c*(2*h)*(2*w))) :
+    den (.depthwiseStridedF wN bN W b e) = depthwiseStride2Flat W b (den e) := rfl
+
+/-- **Strided-depthwise input-VJP faithfulness.** The zero-upsample (`stablehlo.pad`
+    interior=1) + reversed-kernel stride-1 depthwise denotes the proven
+    `depthwiseStride2Flat_has_vjp` backward. -/
+theorem depthwiseStridedBack_faithful {c h w kH kW : Nat} (wN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) (e : SHlo (c*h*w)) :
+    den (.depthwiseStridedBack wN W b v e) = (depthwiseStride2Flat_has_vjp W b).backward v (den e) := rfl
+
 /-- Whole MNIST-CNN **forward** graph:
     `dense ∘ relu ∘ dense ∘ relu ∘ dense ∘ maxPool ∘ relu ∘ conv ∘ relu ∘ conv`. -/
 def cnnFwdGraph {ic c h w d1 nClasses kH kW : Nat}
@@ -835,6 +861,8 @@ inductive Raw where
   | bnPerChannelBack (g x eps : String) (oc h w : Nat) : Raw → Raw
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Raw → Raw
+  | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
+  | depthwiseStridedBack (w : String) (c h w' kH kW : Nat) : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -873,6 +901,10 @@ def skel : {k : Nat} → SHlo k → Raw
       .depthwiseF wN bN c h w kH kW (skel e)
   | _, .depthwiseBack (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
       .depthwiseBack wN c h w kH kW (skel e)
+  | _, .depthwiseStridedF (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
+      .depthwiseStridedF wN bN c h w kH kW (skel e)
+  | _, .depthwiseStridedBack (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
+      .depthwiseStridedBack wN c h w kH kW (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -901,6 +933,8 @@ inductive Tok where
   | bnPerChannelBack (g x eps : String) (oc h w : Nat) : Tok
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Tok
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Tok
+  | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Tok
+  | depthwiseStridedBack (w : String) (c h w' kH kW : Nat) : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -930,6 +964,8 @@ def toToks : Raw → List Tok
   | .bnPerChannelBack g x eps oc h w e => toToks e ++ [.bnPerChannelBack g x eps oc h w]
   | .depthwiseF w b c h w' kH kW e => toToks e ++ [.depthwiseF w b c h w' kH kW]
   | .depthwiseBack w c h w' kH kW e => toToks e ++ [.depthwiseBack w c h w' kH kW]
+  | .depthwiseStridedF w b c h w' kH kW e => toToks e ++ [.depthwiseStridedF w b c h w' kH kW]
+  | .depthwiseStridedBack w c h w' kH kW e => toToks e ++ [.depthwiseStridedBack w c h w' kH kW]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -1249,6 +1285,38 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         "      {batch_group_count = 1 : i64, feature_group_count = " ++ toString c ++ " : i64}" ++
         s!" : ({ty [B,c,h,w']}, {ty [c,1,kH,kW]}) -> {ty [B,c,h,w']}\n" ++
         s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,h,w']}) -> {ty [B, c*h*w']}\n", o :: st)
+  | .depthwiseStridedF w b c h w' kH kW, r :: st => do
+      -- stride-2 depthwise conv: reshape, grouped convolution with window_strides=[2,2]
+      -- (feature_group_count = c, [c,1,kH,kW] kernel), SAME pad, + bias. Halves spatial.
+      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      let xn ← fresh; let cv ← fresh; let bb ← fresh; let ob ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*(2*h)*(2*w')]}) -> {ty [B,c,2*h,2*w']}\n" ++
+        s!"    {cv} = stablehlo.convolution({xn}, {w})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [2, 2], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = " ++ toString c ++ " : i64}" ++
+        s!" : ({ty [B,c,2*h,2*w']}, {ty [c,1,kH,kW]}) -> {ty [B,c,h,w']}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [c]}) -> {ty [B,c,h,w']}\n" ++
+        s!"    {ob} = stablehlo.add {cv}, {bb} : {ty [B,c,h,w']}\n" ++
+        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,c,h,w']}) -> {ty [B, c*h*w']}\n", o :: st)
+  | .depthwiseStridedBack w c h w' kH kW, r :: st => do
+      -- stride-2 depthwise input-VJP: zero-upsample dy (pad interior/high=1) back to
+      -- 2h×2w', reverse the per-channel filters over [2,3] (no transpose, 1×1 groups),
+      -- then the reversed-kernel stride-1 depthwise conv (feature_group_count = c).
+      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      let dn ← fresh; let z ← fresh; let up ← fresh; let wr ← fresh; let dx ← fresh; let o ← fresh
+      pure (
+        s!"    {dn} = stablehlo.reshape {r} : ({ty [B, c*h*w']}) -> {ty [B,c,h,w']}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {up} = stablehlo.pad {dn}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,c,h,w']}, tensor<f32>) -> {ty [B,c,2*h,2*w']}\n" ++
+        s!"    {wr} = stablehlo.reverse {w}, dims = [2, 3] : {ty [c,1,kH,kW]}\n" ++
+        s!"    {dx} = stablehlo.convolution({up}, {wr})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = " ++ toString c ++ " : i64}" ++
+        s!" : ({ty [B,c,2*h,2*w']}, {ty [c,1,kH,kW]}) -> {ty [B,c,2*h,2*w']}\n" ++
+        s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,2*h,2*w']}) -> {ty [B, c*(2*h)*(2*w')]}\n", o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
