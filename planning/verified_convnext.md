@@ -5,9 +5,45 @@ ConvNeXt-T (Liu et al. 2022, "A ConvNet for the 2020s") into the same "render vi
 proof-carrying StableHLO emitter + GPU-train on the rendered text **on Imagenette 224²**"
 line as ch6 (ResNet-34), ch7 (MobileNetV2), and ch8 (EfficientNet-B0).
 
-> **Status in one line:** the **whole-network VJP is ALREADY PROVEN + AUDITED** —
-> `Proofs.convnext_has_vjp` / `convnext_has_vjp_correct` (UNCONDITIONAL except the four
-> `0 < ε` LayerNorm conditions; all-smooth, no ReLU/maxpool kinks), plus the entire
+> **✅ CODEGEN DONE (2026-06-07); ⚠️ ACCURACY NOT YET VALIDATED.** Codegen built, renders +
+> iree-compiles (ROCm), GPU-trains end-to-end (no crash/NaN, gradients flow through the FFI).
+> The proofs were already there (`Proofs.convnext_has_vjp` / `_correct`, UNCONDITIONAL except
+> the four `0 < ε` LayerNorm conditions, audit 157/157). The ch9 deliverable — the **VERIFIED
+> STABLEHLO CODEGEN** — is complete: `geluF`/`geluBack` SHlo op pair (+ `geluScalarDeriv_eq`
+> closed-form lemma, all 3-axiom clean, audit stays 157/157); the ConvNeXt-T renderer
+> (`tests/TestConvNeXt{Fwd,Train}.lean`, [3,3,9,3] @ [96,192,384,768], 180 params / 27.8M floats
+> ≈ ConvNeXt-T's 28M); `ConvNeXtLayout`; `MainConvNeXtVerified.lean` + lakefile `convnext-verified`;
+> `verified_mlir/convnext_{fwd,train_step}.mlir`. Both MLIRs iree-compile. Commits de2d223 (N1) ·
+> 8fb7880 (N2+N4 block) · eae89af (N3 strided) · 937f69b (N5 full net), local-not-pushed.
+>
+> **⚠️ Training result so far (stopped after epoch 1 — full 20-epoch run is ~13 h):** `convnext-verified`
+> on imagenette 224² (BS=32, lr=0.1) → **epoch 1 = 387/3904 = 9.91% = CHANCE**. This is the §7-flagged
+> "epoch-1 at chance" signal. Most likely **deep global-scalar-LN washout at lr=0.1** (the ch7 MNv2
+> lesson: a deep per-example-norm net crept ~0.2 %/epoch at lr=0.1, needed lr=0.3 — and ConvNeXt's
+> LN is global over the WHOLE c·h·w, even more aggressive than ch7's per-channel instance-norm, with
+> 18 + head LNs); a `layerScale` γ init of 1.0 (vs the paper's 1e-6) makes the blocks fully perturb
+> the residual stream early. **OR** a degenerate forward / backward bug. **FOLLOW-UP needed** (not yet
+> done): (a) re-render with lr=0.3 and/or train more epochs; (b) per §7, run `convnext_fwd` on two
+> different batches and check the logits VARY (if identical → degenerate forward, debug the head /
+> global LN); (c) if still dead, add a finite-difference/adjoint gradcheck on the block backward
+> (the hand-wired reverse threading or the even-kernel strided backward are the suspects). The
+> **codegen pipeline is validated** (render→compile→GPU-train, gradients flow, no NaN); the **trained
+> accuracy is NOT** — don't claim a ConvNeXt accuracy number until this is resolved.
+>
+> Implementation notes vs. the original plan below: the whole net is **hand-rendered 4-D
+> StableHLO fragments** (ch7/ch8 style), with `geluF`/`geluBack` as the proof-carrying SHlo
+> *witness* (TestGelu compiles the per-op text). LN = the flat global-scalar `bnF`/`bnBack`
+> form (reshape [B,c,h,w]↔[B,c·h·w]). Patchify (4×4/s4) + downsample (2×2/s2) needed
+> **hand-derived even-kernel** transposed-conv backwards (the proven `flatConvStride2` is
+> odd-kernel only: pad (k-1)/2, kernel 2 ⇒ pad 0 ⇒ shape mismatch) — input-grad = dilate dy
+> (interior s-1, high s-1), reverse(Wᵀ), conv pad [[s-1,0]]; weight-grad = dilate-no-high +
+> valid conv (verified on concrete h=1,2 examples). LN is **per-example**, so eval uses the
+> same stats as train (no batch-stat/EMA mismatch — nicer than EfficientNet's batch-norm).
+> The original §§1–9 below are the as-planned design; read them for the rationale.
+
+> **(historical, as-planned) Status in one line:** the **whole-network VJP is ALREADY PROVEN
+> + AUDITED** — `Proofs.convnext_has_vjp` / `convnext_has_vjp_correct` (UNCONDITIONAL except
+> the four `0 < ε` LayerNorm conditions; all-smooth, no ReLU/maxpool kinks), plus the entire
 > component stack (`gelu_has_vjp_correct`, `layerNorm_has_vjp_correct`,
 > `layerScale_has_vjp(_correct)`, `convNextBlock(Body)_has_vjp`). **What's missing is the
 > VERIFIED STABLEHLO CODEGEN** — there is **no `geluF`/`geluBack` op, no ConvNeXt renderer,
