@@ -1,29 +1,29 @@
 import LeanMlir.Proofs.StableHLO
 import LeanMlir.Types
 
-/-! # C4a — MobileNetV2 forward renderer + `iree-compile` validation
+/-! # C4a/D3 — MobileNetV2 forward renderer (real downsampling [t,c,n,s]) + iree
 
-Programmatic StableHLO for a small but real MobileNetV2 forward (CIFAR 3×32×32),
-matching the proven apex structure `dense ∘ GAP ∘ invresBody ∘ residual(invresBody)
-∘ stem`:
-  stem  : 3×3 stride-2 conv (3→32, 32→16) + BN + relu6, then 2×2 maxpool (16→8)
-  IR-A  : inverted-residual WITH skip   (ic=oc=32, mid=t·ic=64, stride 1 @8×8)
-  IR-B  : inverted-residual WITHOUT skip (ic=32→oc=64, mid=64, stride 1 @8×8)
-  head  : 1×1 conv (64→128) + BN + relu6  (the MNv2 "features" layer @8×8)
+Programmatic StableHLO for a real, DOWNSAMPLING MobileNetV2 forward (CIFAR 3×32×32),
+matching the reference architecture (inverted-residual `[t,c,n,s]` stages that shrink
+spatial via STRIDE-2 DEPTHWISE — the C3 `depthwiseStridedF` op):
+
+  stem  : 3×3 stride-2 conv (3→16, 32→16) + BN + relu6
+  b1    : IR  16→24, t≈4 (mid 64),  stride 2  (16→8)   [no skip]
+  b2    : IR  24→24, mid 96,        stride 1  (8×8)     [skip]
+  b3    : IR  24→32, mid 96,        stride 2  (8→4)     [no skip]
+  b4    : IR  32→32, mid 128,       stride 1  (4×4)     [skip]
+  b5    : IR  32→64, mid 128,       stride 1  (4×4)     [no skip]
+  b6    : IR  64→64, mid 256,       stride 1  (4×4)     [skip]
+  head  : 1×1 conv (64→128) + BN + relu6  (MNv2 "features" layer @4×4)
   tail  : global-average-pool → dense(128→10)
 
-The head's relu6 before GAP is ESSENTIAL: per-example instance-norm forces each
-channel's spatial mean to 0, so GAP of a raw (linear-bottleneck) BN output is the
-constant β — input-independent. The relu6 gives the pooled tensor a per-input mean.
-
-Every fragment is the same StableHLO the VERIFIED per-op emitters produce: the
-stem uses a regular stride-2 conv (ch6 `flatConvStridedF`), the inverted-residual
-blocks use the C1 depthwise op (`depthwiseF`, feature_group_count=c, [c,1,3,3]
-kernel), C2 relu6 (`relu6F`), per-channel BN (`bnPerChannelF`), 1×1 convs, GAP and
-dense. Stride-1 IR blocks = the proven apex (no C3 strided depthwise needed). This
-de-risks the whole MNv2 forward on `iree-compile` before wiring the train step.
-
-Naming: helper `o` is a bare prefix; result SSA = `%{o}`, intermediates `%{o}…`.
+Spatial: 32→16(stem)→8(b1)→4(b3)→4 — two strided-depthwise downsamples. Every
+fragment is the StableHLO a VERIFIED per-op emitter produces: depthwise stride-1
+(`depthwiseF`) / stride-2 (`depthwiseStridedF`), relu6 (`relu6F`), per-channel BN
+(`bnPerChannelF`), 1×1/3×3 convs, residual `addV`, GAP, dense. A block downsamples
+(stride 2, no skip) or keeps shape (stride 1, skip iff ic=oc). The head's relu6
+before GAP is essential (per-example instance-norm zeroes the spatial mean, so GAP
+of a raw linear-bottleneck BN is the constant β).
 
 Run (rocm):
   export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
@@ -35,9 +35,9 @@ open Proofs Proofs.StableHLO
 private def BS : Nat := 128
 private def EPS : String := "1.0e-5"
 
--- ── 4-D fragment helpers ([B,C,H,W] throughout; structured names) ──
+-- ── 4-D fragment helpers ([B,C,H,W]; structured names, result `%{o}`) ──
 
-/-- 3×3 SAME conv (stride `s`, pad 1) + bias broadcast — for the stem. Result `%{o}`. -/
+/-- 3×3 SAME conv (stride `s`, pad 1) + bias — the stem. -/
 private def conv3 (o x w bnm : String) (oc ic Hin Win Hout Wout s : Nat) : String :=
   s!"    %{o}c = stablehlo.convolution({x}, {w})\n" ++
   "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
@@ -47,7 +47,7 @@ private def conv3 (o x w bnm : String) (oc ic Hin Win Hout Wout s : Nat) : Strin
   s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hout,Wout]}\n" ++
   s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,oc,Hout,Wout]}\n"
 
-/-- 1×1 conv (pad 0, stride 1) + bias — the expand/project convs. Result `%{o}`. -/
+/-- 1×1 conv (pad 0, stride 1) + bias — expand/project/head. -/
 private def conv1 (o x w bnm : String) (oc ic Hh Ww : Nat) : String :=
   s!"    %{o}c = stablehlo.convolution({x}, {w})\n" ++
   "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
@@ -57,8 +57,7 @@ private def conv1 (o x w bnm : String) (oc ic Hh Ww : Nat) : String :=
   s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,oc,Hh,Ww]}\n"
 
-/-- Depthwise 3×3 SAME conv (stride 1, pad 1, feature_group_count=c, [c,1,3,3]
-    kernel) + bias — the C1 `depthwiseF` op. Result `%{o}`. -/
+/-- Depthwise 3×3 SAME conv, STRIDE 1 (feature_group_count=c, [c,1,3,3]). -/
 private def dwconv (o x w bnm : String) (c Hh Ww : Nat) : String :=
   s!"    %{o}c = stablehlo.convolution({x}, {w})\n" ++
   "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
@@ -68,8 +67,18 @@ private def dwconv (o x w bnm : String) (c Hh Ww : Nat) : String :=
   s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [c]}) -> {ty [BS,c,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,c,Hh,Ww]}\n"
 
-/-- Per-channel BatchNorm forward (4-D), reduce μ/var over spatial `[2,3]`, rank-1
-    γ/β `dims=[1]`. The bnPerChannelF op pattern, kept 4-D. Result `%{o}`. -/
+/-- Depthwise 3×3 SAME conv, STRIDE 2 (the C3 `depthwiseStridedF`): input
+    `[B,c,2Hout,2Wout]` → output `[B,c,Hout,Wout]` (halves spatial). -/
+private def dwconvStrided (o x w bnm : String) (c Hout Wout : Nat) : String :=
+  s!"    %{o}c = stablehlo.convolution({x}, {w})\n" ++
+  "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+  "      window = {stride = [2, 2], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+  "      {batch_group_count = 1 : i64, feature_group_count = " ++ toString c ++ " : i64}" ++
+  s!" : ({ty [BS,c,2*Hout,2*Wout]}, {ty [c,1,3,3]}) -> {ty [BS,c,Hout,Wout]}\n" ++
+  s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [c]}) -> {ty [BS,c,Hout,Wout]}\n" ++
+  s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,c,Hout,Wout]}\n"
+
+/-- Per-channel BN forward (reduce μ/var over spatial [2,3], rank-1 γ/β dims=[1]). -/
 private def bnPC (o x g bt : String) (oc Hh Ww m : Nat) : String :=
   s!"    %{o}nf = stablehlo.constant dense<{m}.0> : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}ep = stablehlo.constant dense<{EPS}> : {ty [BS,oc,Hh,Ww]}\n" ++
@@ -89,50 +98,47 @@ private def bnPC (o x g bt : String) (oc Hh Ww m : Nat) : String :=
   s!"    %{o}gx = stablehlo.multiply %{o}xh, %{o}gb : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.add %{o}gx, %{o}btb : {ty [BS,oc,Hh,Ww]}\n"
 
-/-- ReLU6 forward: clamp to [0,6] as `min(max(x,0),6)` (the C2 `relu6F` op). -/
 private def relu6 (o x : String) (c Hh Ww : Nat) : String :=
   s!"    %{o}z = stablehlo.constant dense<0.0> : {ty [BS,c,Hh,Ww]}\n" ++
   s!"    %{o}six = stablehlo.constant dense<6.0> : {ty [BS,c,Hh,Ww]}\n" ++
   s!"    %{o}mx = stablehlo.maximum {x}, %{o}z : {ty [BS,c,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.minimum %{o}mx, %{o}six : {ty [BS,c,Hh,Ww]}\n"
 
-private def maxpool (o x : String) (c Hh Ww : Nat) : String :=
-  s!"    %{o}ni = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
-  s!"    %{o} = \"stablehlo.reduce_window\"({x}, %{o}ni) (" ++ "{\n" ++
-  "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
-  "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
-  "        stablehlo.return %pm : tensor<f32>\n" ++
-  "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
-  s!" : ({ty [BS,c,Hh,Ww]}, tensor<f32>) -> {ty [BS,c,Hh/2,Ww/2]}\n"
-
 private def addOp (o a b : String) (oc Hh Ww : Nat) : String :=
   s!"    %{o} = stablehlo.add {a}, {b} : {ty [BS,oc,Hh,Ww]}\n"
 
--- ── inverted-residual block: expand 1×1 → bn → relu6 → dw → bn → relu6 →
---    project 1×1 → bn (no relu6); + residual skip iff ic=oc (stride 1). ──
+-- ── inverted-residual block (stride `s`): expand 1×1 → BN → relu6 → depthwise
+--    (stride `s`) → BN → relu6 → project 1×1 → BN; + residual iff s=1 ∧ ic=oc ──
 
-private def irBlockFwd (p x : String) (ic mid oc Hh Ww : Nat) (skip : Bool) : String × String :=
-  let m := Hh*Ww
+private def irBlockFwd (p x : String) (ic mid oc Hin s : Nat) : String × String :=
+  let Hout := Hin / s
   let body :=
-    conv1 s!"{p}e" x s!"%{p}eW" s!"%{p}eb" mid ic Hh Ww ++
-    bnPC s!"{p}en" s!"%{p}e" s!"%{p}eg" s!"%{p}ebt" mid Hh Ww m ++
-    relu6 s!"{p}er" s!"%{p}en" mid Hh Ww ++
-    dwconv s!"{p}d" s!"%{p}er" s!"%{p}dW" s!"%{p}db" mid Hh Ww ++
-    bnPC s!"{p}dn" s!"%{p}d" s!"%{p}dg" s!"%{p}dbt" mid Hh Ww m ++
-    relu6 s!"{p}dr" s!"%{p}dn" mid Hh Ww ++
-    conv1 s!"{p}p" s!"%{p}dr" s!"%{p}pW" s!"%{p}pb" oc mid Hh Ww ++
-    bnPC s!"{p}pn" s!"%{p}p" s!"%{p}pg" s!"%{p}pbt" oc Hh Ww m
-  if skip then
-    (body ++ addOp s!"{p}o" s!"%{p}pn" x oc Hh Ww, s!"%{p}o")
+    conv1 s!"{p}e" x s!"%{p}eW" s!"%{p}eb" mid ic Hin Hin ++
+    bnPC s!"{p}en" s!"%{p}e" s!"%{p}eg" s!"%{p}ebt" mid Hin Hin (Hin*Hin) ++
+    relu6 s!"{p}er" s!"%{p}en" mid Hin Hin ++
+    (if s == 2 then dwconvStrided s!"{p}d" s!"%{p}er" s!"%{p}dW" s!"%{p}db" mid Hout Hout
+     else dwconv s!"{p}d" s!"%{p}er" s!"%{p}dW" s!"%{p}db" mid Hin Hin) ++
+    bnPC s!"{p}dn" s!"%{p}d" s!"%{p}dg" s!"%{p}dbt" mid Hout Hout (Hout*Hout) ++
+    relu6 s!"{p}dr" s!"%{p}dn" mid Hout Hout ++
+    conv1 s!"{p}p" s!"%{p}dr" s!"%{p}pW" s!"%{p}pb" oc mid Hout Hout ++
+    bnPC s!"{p}pn" s!"%{p}p" s!"%{p}pg" s!"%{p}pbt" oc Hout Hout (Hout*Hout)
+  if s == 1 && ic == oc then
+    (body ++ addOp s!"{p}o" s!"%{p}pn" x oc Hout Hout, s!"%{p}o")
   else
     (body, s!"%{p}pn")
 
--- ── parameter-signature generators (mirror the body's names + types) ──
+-- ── block config (p, ic, mid, oc, s); spatial threaded from the stem (16×16) ──
+
+private def blocks : List (String × Nat × Nat × Nat × Nat) :=
+  [("b1", 16, 64,  24, 2),   -- 16→8
+   ("b2", 24, 96,  24, 1),   -- skip
+   ("b3", 24, 96,  32, 2),   -- 8→4
+   ("b4", 32, 128, 32, 1),   -- skip
+   ("b5", 32, 128, 64, 1),   -- 32→64 (no skip)
+   ("b6", 64, 256, 64, 1)]   -- skip
 
 private def bnSig (p : String) (oc : Nat) : List String :=
   [s!"%{p}g: {ty [oc]}", s!"%{p}bt: {ty [oc]}"]
-
-/-- IR block params in func-arg order: expand(1×1) / depthwise(3×3) / project(1×1). -/
 private def irBlockSig (p : String) (ic mid oc : Nat) : List String :=
   [s!"%{p}eW: {ty [mid,ic,1,1]}", s!"%{p}eb: {ty [mid]}", s!"%{p}eg: {ty [mid]}", s!"%{p}ebt: {ty [mid]}",
    s!"%{p}dW: {ty [mid,1,3,3]}", s!"%{p}db: {ty [mid]}", s!"%{p}dg: {ty [mid]}", s!"%{p}dbt: {ty [mid]}",
@@ -149,31 +155,31 @@ private def gapDense (o x : String) (c nC Hh Ww : Nat) : String :=
 -- ── whole net ──
 
 private def mobilenetv2Fwd : String := Id.run do
-  -- stem: 3×3 stride-2 conv (3→32, 32→16) + BN + relu6, then 2×2 maxpool (16→8)
+  -- stem: 3×3 stride-2 conv (3→16, 32→16) + BN + relu6
   let stemCode :=
     s!"    %xr = stablehlo.reshape %x : ({ty [BS,3072]}) -> {ty [BS,3,32,32]}\n" ++
-    conv3 "stc" "%xr" "%sW" "%sb" 32 3 32 32 16 16 2 ++
-    bnPC "stn" "%stc" "%sg" "%sbt" 32 16 16 (16*16) ++
-    relu6 "str" "%stn" 32 16 16 ++
-    maxpool "stp" "%str" 32 16 16
-  let (a, oa) := irBlockFwd "ira" "%stp" 32 64 32 8 8 true   -- skip block (ic=oc=32)
-  let (b, ob) := irBlockFwd "irb" oa 32 64 64 8 8 false      -- no-skip block (32→64)
-  -- head: 1×1 conv (64→128) → BN → relu6 — the standard MNv2 "features" layer.
-  -- ESSENTIAL: GAP of a per-example instance-normed BN is just β (constant across
-  -- inputs); the relu6 here gives the pooled tensor an input-varying mean.
+    conv3 "stc" "%xr" "%sW" "%sb" 16 3 32 32 16 16 2 ++
+    bnPC "stn" "%stc" "%sg" "%sbt" 16 16 16 (16*16) ++
+    relu6 "str" "%stn" 16 16 16
+  let mut blkCode := ""
+  let mut cur := "%str"
+  let mut curH := 16
+  for (p, ic, mid, oc, s) in blocks do
+    let (c, out) := irBlockFwd p cur ic mid oc curH s
+    blkCode := blkCode ++ c; cur := out; curH := curH / s
+  -- head: 1×1 conv (64→128) + BN + relu6 @ curH×curH (=4×4)
   let head :=
-    conv1 "h" ob "%hW" "%hb" 128 64 8 8 ++
-    bnPC "hn" "%h" "%hg" "%hbt" 128 8 8 (8*8) ++
-    relu6 "hr" "%hn" 128 8 8
-  let tail := gapDense "out" "%hr" 128 10 8 8
+    conv1 "h" cur "%hW" "%hb" 128 64 curH curH ++
+    bnPC "hn" "%h" "%hg" "%hbt" 128 curH curH (curH*curH) ++
+    relu6 "hr" "%hn" 128 curH curH
+  let tail := gapDense "out" "%hr" 128 10 curH curH
   let body :=
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    stemCode ++ a ++ b ++ head ++ tail
+    stemCode ++ blkCode ++ head ++ tail
   let sig : List String :=
     ["%x: " ++ ty [BS,3072]]
-    ++ [s!"%sW: {ty [32,3,3,3]}", s!"%sb: {ty [32]}"] ++ bnSig "s" 32
-    ++ irBlockSig "ira" 32 64 32
-    ++ irBlockSig "irb" 32 64 64
+    ++ [s!"%sW: {ty [16,3,3,3]}", s!"%sb: {ty [16]}"] ++ bnSig "s" 16
+    ++ (blocks.map (fun (p, ic, mid, oc, _) => irBlockSig p ic mid oc)).flatten
     ++ [s!"%hW: {ty [128,64,1,1]}", s!"%hb: {ty [128]}"] ++ bnSig "h" 128
     ++ [s!"%Wd: {ty [128,10]}", s!"%bd: {ty [10]}"]
   let argSig := String.intercalate ", " sig
@@ -182,7 +188,7 @@ private def mobilenetv2Fwd : String := Id.run do
 
 def main : IO Unit := do
   let mlir := mobilenetv2Fwd
-  IO.println s!"rendered @mobilenetv2_fwd (BS={BS}): {mlir.length} chars"
+  IO.println s!"rendered @mobilenetv2_fwd (BS={BS}, {blocks.length} IR blocks): {mlir.length} chars"
   IO.FS.createDirAll "verified_mlir"
   IO.FS.writeFile "verified_mlir/mobilenetv2_fwd.mlir" mlir
   IO.FS.createDirAll ".lake/build"
