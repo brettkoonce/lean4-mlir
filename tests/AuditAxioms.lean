@@ -342,6 +342,14 @@ open Proofs
 -- reassocBack ∘ bnPerChannel_grad_input ∘ reassocFwd. The closed form bnPerChannelBack
 -- emits (per-channel renderLNBack over the spatial axis); faithful = pdiv-Jacobian.
 #print axioms bnPerChannelTensor3_grad_input_correct
+-- ch8 E5 (EfficientNet BATCH-norm): batch-norm per channel on the [N,C,H,W] layout —
+-- bnPerChannelFlat with m = N·h·w (the per-channel group enlarged from one example's
+-- spatial cells to the WHOLE BATCH), conjugated by the [N,C,H,W]↔[C,N·H·W] TRANSPOSE
+-- bridge (bnchwFwd/bnchwBack, a permutation reindex like reassoc). The renderable
+-- batch-norm backward = bnchwBack ∘ bnPerChannel_grad_input(m=N·h·w) ∘ bnchwFwd; faithful
+-- = pdiv-Jacobian of bnBatchTensor4 (batch-coupled, block-diagonal across channels, 0<ε).
+-- This is what makes EfficientNet genuinely all-swish (instance-norm degenerated the GAP).
+#print axioms bnBatchTensor4_grad_input_correct
 -- B8b: the per-channel BN SHlo op pair backward-faithfulness — the rendered
 -- bnPerChannelBack op (4-D reshape, per-channel reduce over [2,3], rank-1 γ dims=[1])
 -- denotes the proven block-diagonal BN input-VJP (= pdiv-Jacobian of bnPerChannelTensor3,

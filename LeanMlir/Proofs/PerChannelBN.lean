@@ -460,4 +460,191 @@ theorem bnPerChannelTensor3_grad_input_correct (oc h w : Nat) (ε : ℝ) (hε : 
   rw [bnPerChannel_grad_input_correct oc (h * w) ε hε γ β,
       bnPerChannelFlat_has_vjp_correct oc (h * w) ε hε γ β]
 
+-- ════════════════════════════════════════════════════════════════
+-- § Chapter 8 (EfficientNet) — BATCH norm per channel on the [N,C,H,W] layout
+--
+-- EfficientNet uses batch-norm, not the per-example instance-norm above. The KEY
+-- observation: batch-norm normalizes each channel over its `N·H·W` (batch+spatial)
+-- elements — which is EXACTLY `bnPerChannelFlat oc m` with `m = N·(h·w)`, the SAME
+-- proven block-diagonal VJP, just with the per-channel group enlarged from the
+-- spatial cells of one example to the whole batch. So no new BN math is needed; the
+-- only new content is the layout bridge `[N,C,H,W] ↔ [C, N·H·W]` (move the channel
+-- axis to the front — a TRANSPOSE-reindex, vs the instance-norm bridge's pure
+-- re-association). Mirrors `reassocFwd/Back` + `bnPerChannelTensor3` exactly.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Transpose-reindex `Fin (oc*(N*(h*w))) → Fin (N*(oc*(h*w)))`: a per-channel Mat
+    index `(c, (n, s))` maps to the network `[N,C,H,W]` flat index `(n, (c, s))` —
+    swap the batch and channel axes (`s ↔ (hi,wi)` carried along). A permutation. -/
+noncomputable def bnchwFwdIdx (N oc h w : Nat) (mIdx : Fin (oc * (N * (h * w)))) :
+    Fin (N * (oc * (h * w))) :=
+  let cs := finProdFinEquiv.symm mIdx        -- (Fin oc, Fin (N*(h*w)))
+  let ns := finProdFinEquiv.symm cs.2        -- (Fin N, Fin (h*w))
+  finProdFinEquiv (ns.1, finProdFinEquiv (cs.1, ns.2))
+
+/-- Transpose-reindex `Fin (N*(oc*(h*w))) → Fin (oc*(N*(h*w)))`: the inverse,
+    network `(n, (c, s))` ↦ per-channel Mat `(c, (n, s))`. -/
+noncomputable def bnchwBackIdx (N oc h w : Nat) (t : Fin (N * (oc * (h * w)))) :
+    Fin (oc * (N * (h * w))) :=
+  let nr := finProdFinEquiv.symm t           -- (Fin N, Fin (oc*(h*w)))
+  let cs := finProdFinEquiv.symm nr.2        -- (Fin oc, Fin (h*w))
+  finProdFinEquiv (cs.1, finProdFinEquiv (nr.1, cs.2))
+
+theorem bnchwFwdIdx_bnchwBackIdx (N oc h w : Nat) (t : Fin (N * (oc * (h * w)))) :
+    bnchwFwdIdx N oc h w (bnchwBackIdx N oc h w t) = t := by
+  unfold bnchwFwdIdx bnchwBackIdx
+  simp only [Equiv.symm_apply_apply]
+  rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
+
+theorem bnchwBackIdx_bnchwFwdIdx (N oc h w : Nat) (mIdx : Fin (oc * (N * (h * w)))) :
+    bnchwBackIdx N oc h w (bnchwFwdIdx N oc h w mIdx) = mIdx := by
+  unfold bnchwFwdIdx bnchwBackIdx
+  simp only [Equiv.symm_apply_apply]
+  rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
+
+/-- **[N,C,H,W] → [C,N·H·W]** reindex (gather the network cell at the Mat position). -/
+noncomputable def bnchwFwd (N oc h w : Nat) :
+    Vec (N * (oc * (h * w))) → Vec (oc * (N * (h * w))) :=
+  fun y k => y (bnchwFwdIdx N oc h w k)
+
+/-- **[C,N·H·W] → [N,C,H,W]** reindex (the inverse relabeling). -/
+noncomputable def bnchwBack (N oc h w : Nat) :
+    Vec (oc * (N * (h * w))) → Vec (N * (oc * (h * w))) :=
+  fun y k => y (bnchwBackIdx N oc h w k)
+
+theorem bnchwFwd_differentiable (N oc h w : Nat) :
+    Differentiable ℝ (bnchwFwd N oc h w) :=
+  (reindexCLM (bnchwFwdIdx N oc h w)).differentiable
+
+theorem bnchwBack_differentiable (N oc h w : Nat) :
+    Differentiable ℝ (bnchwBack N oc h w) :=
+  (reindexCLM (bnchwBackIdx N oc h w)).differentiable
+
+noncomputable def bnchwFwd_has_vjp (N oc h w : Nat) :
+    HasVJP (bnchwFwd N oc h w) where
+  backward := fun _v dy => fun idx =>
+    ∑ k : Fin (oc * (N * (h * w))), (if idx = bnchwFwdIdx N oc h w k then (1 : ℝ) else 0) * dy k
+  correct := by
+    intro v dy idx
+    apply Finset.sum_congr rfl
+    intro j _
+    rw [show bnchwFwd N oc h w = (fun y : Vec (N * (oc * (h * w))) =>
+            fun k : Fin (oc * (N * (h * w))) => y (bnchwFwdIdx N oc h w k)) from rfl,
+        pdiv_reindex]
+
+noncomputable def bnchwBack_has_vjp (N oc h w : Nat) :
+    HasVJP (bnchwBack N oc h w) where
+  backward := fun _v dy => fun idx =>
+    ∑ k : Fin (N * (oc * (h * w))), (if idx = bnchwBackIdx N oc h w k then (1 : ℝ) else 0) * dy k
+  correct := by
+    intro v dy idx
+    apply Finset.sum_congr rfl
+    intro j _
+    rw [show bnchwBack N oc h w = (fun y : Vec (oc * (N * (h * w))) =>
+            fun k : Fin (N * (oc * (h * w))) => y (bnchwBackIdx N oc h w k)) from rfl,
+        pdiv_reindex]
+
+theorem bnchwBack_has_vjp_backward_eq (N oc h w : Nat) (v : Vec (oc * (N * (h * w))))
+    (dy : Vec (N * (oc * (h * w)))) :
+    (bnchwBack_has_vjp N oc h w).backward v dy = bnchwFwd N oc h w dy := by
+  funext idx
+  show (∑ k : Fin (N * (oc * (h * w))), (if idx = bnchwBackIdx N oc h w k then (1 : ℝ) else 0) * dy k)
+      = dy (bnchwFwdIdx N oc h w idx)
+  rw [Finset.sum_eq_single (bnchwFwdIdx N oc h w idx)]
+  · rw [if_pos (bnchwBackIdx_bnchwFwdIdx N oc h w idx).symm, one_mul]
+  · intro k _ hk
+    rw [if_neg, zero_mul]
+    intro hcond
+    exact hk (by rw [hcond, bnchwFwdIdx_bnchwBackIdx])
+  · intro h; exact absurd (Finset.mem_univ _) h
+
+theorem bnchwFwd_has_vjp_backward_eq (N oc h w : Nat) (v : Vec (N * (oc * (h * w))))
+    (dy : Vec (oc * (N * (h * w)))) :
+    (bnchwFwd_has_vjp N oc h w).backward v dy = bnchwBack N oc h w dy := by
+  funext idx
+  show (∑ k : Fin (oc * (N * (h * w))), (if idx = bnchwFwdIdx N oc h w k then (1 : ℝ) else 0) * dy k)
+      = dy (bnchwBackIdx N oc h w idx)
+  rw [Finset.sum_eq_single (bnchwBackIdx N oc h w idx)]
+  · rw [if_pos (bnchwFwdIdx_bnchwBackIdx N oc h w idx).symm, one_mul]
+  · intro k _ hk
+    rw [if_neg, zero_mul]
+    intro hcond
+    exact hk (by rw [hcond, bnchwBackIdx_bnchwFwdIdx])
+  · intro h; exact absurd (Finset.mem_univ _) h
+
+/-- **Batch-norm per channel on the network's `[N,C,H,W]` layout.** Conjugate the
+    Mat-split `bnPerChannelFlat` (with `m = N·h·w`, the whole batch's cells per channel)
+    by the transpose bridge: relabel `[N,C,H,W] → [C, N·H·W]`, normalize each channel
+    over ALL its batch+spatial cells, relabel back. The EfficientNet normalization. -/
+noncomputable def bnBatchTensor4 (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
+    Vec (N * (oc * (h * w))) → Vec (N * (oc * (h * w))) :=
+  bnchwBack N oc h w ∘ (bnPerChannelFlat oc (N * (h * w)) ε γ β) ∘ bnchwFwd N oc h w
+
+theorem bnBatchTensor4_differentiable (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    Differentiable ℝ (bnBatchTensor4 N oc h w ε γ β) := by
+  unfold bnBatchTensor4
+  exact (bnchwBack_differentiable N oc h w).comp
+    ((bnPerChannelFlat_differentiable oc (N * (h * w)) ε hε γ β).comp
+      (bnchwFwd_differentiable N oc h w))
+
+/-- **Batch-norm (network layout) VJP** — block-diagonal across channels (now coupling
+    the whole batch within each channel), lifted through the transpose bridge. -/
+noncomputable def bnBatchTensor4_has_vjp (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    HasVJP (bnBatchTensor4 N oc h w ε γ β) :=
+  let inner : Vec (N * (oc * (h * w))) → Vec (oc * (N * (h * w))) :=
+    bnPerChannelFlat oc (N * (h * w)) ε γ β ∘ bnchwFwd N oc h w
+  let inner_diff : Differentiable ℝ inner :=
+    (bnPerChannelFlat_differentiable oc (N * (h * w)) ε hε γ β).comp (bnchwFwd_differentiable N oc h w)
+  let inner_vjp : HasVJP inner :=
+    vjp_comp (bnchwFwd N oc h w) (bnPerChannelFlat oc (N * (h * w)) ε γ β)
+      (bnchwFwd_differentiable N oc h w) (bnPerChannelFlat_differentiable oc (N * (h * w)) ε hε γ β)
+      (bnchwFwd_has_vjp N oc h w) (bnPerChannelFlat_has_vjp oc (N * (h * w)) ε hε γ β)
+  show HasVJP (bnchwBack N oc h w ∘ inner) from
+  vjp_comp inner (bnchwBack N oc h w) inner_diff (bnchwBack_differentiable N oc h w)
+    inner_vjp (bnchwBack_has_vjp N oc h w)
+
+theorem bnBatchTensor4_has_vjp_correct (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x dy : Vec (N * (oc * (h * w)))) (i : Fin (N * (oc * (h * w)))) :
+    (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward x dy i =
+      ∑ j : Fin (N * (oc * (h * w))), pdiv (bnBatchTensor4 N oc h w ε γ β) x i j * dy j :=
+  (bnBatchTensor4_has_vjp N oc h w ε hε γ β).correct x dy i
+
+theorem bnBatchTensor4_has_vjp_backward_eq (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x dy : Vec (N * (oc * (h * w)))) :
+    (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward x dy =
+      bnchwBack N oc h w
+        ((bnPerChannelFlat_has_vjp oc (N * (h * w)) ε hε γ β).backward
+          (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy)) := by
+  show (bnchwFwd_has_vjp N oc h w).backward x
+        ((bnPerChannelFlat_has_vjp oc (N * (h * w)) ε hε γ β).backward (bnchwFwd N oc h w x)
+          ((bnchwBack_has_vjp N oc h w).backward
+            ((bnPerChannelFlat oc (N * (h * w)) ε γ β ∘ bnchwFwd N oc h w) x) dy)) = _
+  rw [bnchwBack_has_vjp_backward_eq, bnchwFwd_has_vjp_backward_eq]
+
+/-- **Renderable batch-norm backward on the `[N,C,H,W]` layout** — relabel to the
+    per-channel Mat, run the consolidated three-term `bnPerChannel_grad_input` over the
+    whole batch (`m = N·h·w`), relabel back. Exactly what the batched `bnBatch` StableHLO
+    fragment emits (reduce over `[0,2,3]` per channel). -/
+noncomputable def bnBatchTensor4_grad_input (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
+    (x dy : Vec (N * (oc * (h * w)))) : Vec (N * (oc * (h * w))) :=
+  bnchwBack N oc h w
+    (bnPerChannel_grad_input oc (N * (h * w)) ε γ (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy))
+
+/-- **Renderable batch-norm backward is faithful** (ℝ-headline): equals the
+    `pdiv`-contracted (block-diagonal-across-channels, batch-coupled) Jacobian of
+    batch-norm on the network's `[N,C,H,W]` layout, under `0 < ε`. The licence to render
+    EfficientNet's batch-norm backward as the per-channel three-term formula over the batch. -/
+theorem bnBatchTensor4_grad_input_correct (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x dy : Vec (N * (oc * (h * w)))) (i : Fin (N * (oc * (h * w)))) :
+    bnBatchTensor4_grad_input N oc h w ε γ x dy i =
+      ∑ j : Fin (N * (oc * (h * w))), pdiv (bnBatchTensor4 N oc h w ε γ β) x i j * dy j := by
+  rw [← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β,
+      bnBatchTensor4_has_vjp_backward_eq N oc h w ε hε γ β]
+  show bnPerChannel_grad_input oc (N * (h * w)) ε γ (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy)
+        (bnchwBackIdx N oc h w i)
+      = (bnPerChannelFlat_has_vjp oc (N * (h * w)) ε hε γ β).backward
+          (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy) (bnchwBackIdx N oc h w i)
+  rw [bnPerChannel_grad_input_correct oc (N * (h * w)) ε hε γ β,
+      bnPerChannelFlat_has_vjp_correct oc (N * (h * w)) ε hε γ β]
+
 end Proofs
