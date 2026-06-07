@@ -250,4 +250,138 @@ theorem bnPerChannel_grad_input_correct (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (
   rw [(bn_has_vjp m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε).correct,
       ← bn_input_grad_correct m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε]
 
+-- ════════════════════════════════════════════════════════════════
+-- § Layout bridge: Tensor3 `(oc*h)*w`  ↔  Mat-split `oc*(h*w)`  (B9 entry)
+-- ════════════════════════════════════════════════════════════════
+
+/-! The network carries its activations in the **Tensor3** flat layout `(oc*h)*w`
+(`flatConv` etc.), but `bnPerChannelFlat` is defined on the **Mat-split** layout
+`oc*(h*w)` (row `c` = the `h·w` spatial cells of channel `c`). The two `Vec`s have
+the same size; they differ only in how `finProdFinEquiv` associates the product. So
+the bridge is a pure **re-association reindex** (a permutation of coordinates) — a
+`reindexCLM` whose VJP is the scatter `pdiv_reindex` gives, exactly like
+`decimateFlat`. Conjugating `bnPerChannelFlat` by this bridge yields per-channel BN
+acting on the network's Tensor3 activations, with its VJP for free via `vjp_comp`. -/
+
+/-- Re-association index `Fin (oc*(h*w)) → Fin (oc*h*w)`: a Mat-split flat index
+    `(c, s)` with `s ↔ (hi, wi)` maps to the Tensor3 flat index `((c, hi), wi)`. A
+    pure product re-association — no arithmetic. -/
+noncomputable def reassocFwdIdx (oc h w : Nat) (mIdx : Fin (oc * (h * w))) :
+    Fin (oc * h * w) :=
+  let cs := finProdFinEquiv.symm mIdx        -- (Fin oc, Fin (h*w))
+  let hw := finProdFinEquiv.symm cs.2        -- (Fin h, Fin w)
+  finProdFinEquiv (finProdFinEquiv (cs.1, hw.1), hw.2)
+
+/-- Re-association index `Fin (oc*h*w) → Fin (oc*(h*w))`: the inverse direction,
+    Tensor3 `((c, hi), wi)` ↦ Mat-split `(c, (hi, wi))`. -/
+noncomputable def reassocBackIdx (oc h w : Nat) (t : Fin (oc * h * w)) :
+    Fin (oc * (h * w)) :=
+  let chw := finProdFinEquiv.symm t          -- (Fin (oc*h), Fin w)
+  let ch := finProdFinEquiv.symm chw.1       -- (Fin oc, Fin h)
+  finProdFinEquiv (ch.1, finProdFinEquiv (ch.2, chw.2))
+
+/-- The two re-association indices are mutual inverses — the bridge is a genuine
+    relabeling (so conjugating by it really *is* per-channel BN, just in Tensor3
+    coordinates). Pure `finProdFinEquiv` round-trip. -/
+theorem reassocFwdIdx_reassocBackIdx (oc h w : Nat) (t : Fin (oc * h * w)) :
+    reassocFwdIdx oc h w (reassocBackIdx oc h w t) = t := by
+  unfold reassocFwdIdx reassocBackIdx
+  simp only [Equiv.symm_apply_apply]
+  rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
+
+theorem reassocBackIdx_reassocFwdIdx (oc h w : Nat) (mIdx : Fin (oc * (h * w))) :
+    reassocBackIdx oc h w (reassocFwdIdx oc h w mIdx) = mIdx := by
+  unfold reassocFwdIdx reassocBackIdx
+  simp only [Equiv.symm_apply_apply]
+  rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
+
+/-- **Tensor3 → Mat-split** reindex: read the `((c,hi),wi)` cell at Mat position
+    `(c, (hi,wi))`. A `reindexCLM`, hence continuous-linear / differentiable. -/
+noncomputable def reassocFwd (oc h w : Nat) :
+    Vec (oc * h * w) → Vec (oc * (h * w)) :=
+  fun y k => y (reassocFwdIdx oc h w k)
+
+/-- **Mat-split → Tensor3** reindex (the inverse relabeling). -/
+noncomputable def reassocBack (oc h w : Nat) :
+    Vec (oc * (h * w)) → Vec (oc * h * w) :=
+  fun y k => y (reassocBackIdx oc h w k)
+
+theorem reassocFwd_differentiable (oc h w : Nat) :
+    Differentiable ℝ (reassocFwd oc h w) :=
+  (reindexCLM (reassocFwdIdx oc h w)).differentiable
+
+theorem reassocBack_differentiable (oc h w : Nat) :
+    Differentiable ℝ (reassocBack oc h w) :=
+  (reindexCLM (reassocBackIdx oc h w)).differentiable
+
+/-- VJP of the forward reindex — the scatter `pdiv_reindex` gives. Mirrors
+    `decimateFlat_has_vjp`. -/
+noncomputable def reassocFwd_has_vjp (oc h w : Nat) :
+    HasVJP (reassocFwd oc h w) where
+  backward := fun _v dy => fun idx =>
+    ∑ k : Fin (oc * (h * w)), (if idx = reassocFwdIdx oc h w k then (1 : ℝ) else 0) * dy k
+  correct := by
+    intro v dy idx
+    apply Finset.sum_congr rfl
+    intro j _
+    rw [show reassocFwd oc h w = (fun y : Vec (oc * h * w) =>
+            fun k : Fin (oc * (h * w)) => y (reassocFwdIdx oc h w k)) from rfl,
+        pdiv_reindex]
+
+noncomputable def reassocBack_has_vjp (oc h w : Nat) :
+    HasVJP (reassocBack oc h w) where
+  backward := fun _v dy => fun idx =>
+    ∑ k : Fin (oc * h * w), (if idx = reassocBackIdx oc h w k then (1 : ℝ) else 0) * dy k
+  correct := by
+    intro v dy idx
+    apply Finset.sum_congr rfl
+    intro j _
+    rw [show reassocBack oc h w = (fun y : Vec (oc * (h * w)) =>
+            fun k : Fin (oc * h * w) => y (reassocBackIdx oc h w k)) from rfl,
+        pdiv_reindex]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Per-channel BN on the network's Tensor3 layout (the plug-in op)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Per-channel BatchNorm on the Tensor3 `(oc*h)*w` activation layout.** Conjugate
+    the Mat-split `bnPerChannelFlat` by the layout bridge: relabel to Mat-split,
+    normalize each channel over its `h·w` spatial cells, relabel back. This is the
+    op B9 wires into the ResNet-34 trainer (its `den` target). -/
+noncomputable def bnPerChannelTensor3 (oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
+    Vec (oc * h * w) → Vec (oc * h * w) :=
+  reassocBack oc h w ∘ (bnPerChannelFlat oc (h * w) ε γ β) ∘ reassocFwd oc h w
+
+theorem bnPerChannelTensor3_differentiable (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    Differentiable ℝ (bnPerChannelTensor3 oc h w ε γ β) := by
+  unfold bnPerChannelTensor3
+  exact (reassocBack_differentiable oc h w).comp
+    ((bnPerChannelFlat_differentiable oc (h * w) ε hε γ β).comp
+      (reassocFwd_differentiable oc h w))
+
+/-- **Per-channel BN (Tensor3 layout) VJP** — block-diagonal across channels, lifted
+    through the layout bridge by `vjp_comp` (twice). -/
+noncomputable def bnPerChannelTensor3_has_vjp (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    HasVJP (bnPerChannelTensor3 oc h w ε γ β) :=
+  let inner : Vec (oc * h * w) → Vec (oc * (h * w)) :=
+    bnPerChannelFlat oc (h * w) ε γ β ∘ reassocFwd oc h w
+  let inner_diff : Differentiable ℝ inner :=
+    (bnPerChannelFlat_differentiable oc (h * w) ε hε γ β).comp (reassocFwd_differentiable oc h w)
+  let inner_vjp : HasVJP inner :=
+    vjp_comp (reassocFwd oc h w) (bnPerChannelFlat oc (h * w) ε γ β)
+      (reassocFwd_differentiable oc h w) (bnPerChannelFlat_differentiable oc (h * w) ε hε γ β)
+      (reassocFwd_has_vjp oc h w) (bnPerChannelFlat_has_vjp oc (h * w) ε hε γ β)
+  show HasVJP (reassocBack oc h w ∘ inner) from
+  vjp_comp inner (reassocBack oc h w) inner_diff (reassocBack_differentiable oc h w)
+    inner_vjp (reassocBack_has_vjp oc h w)
+
+/-- **Per-channel BN (Tensor3 layout) VJP correctness** (ℝ-headline): the backward
+    equals the `pdiv`-contracted (block-diagonal) Jacobian of per-channel BN on the
+    network's activation layout. The licence to wire per-channel BN into ResNet-34. -/
+theorem bnPerChannelTensor3_has_vjp_correct (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x dy : Vec (oc * h * w)) (i : Fin (oc * h * w)) :
+    (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).backward x dy i =
+      ∑ j : Fin (oc * h * w), pdiv (bnPerChannelTensor3 oc h w ε γ β) x i j * dy j :=
+  (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).correct x dy i
+
 end Proofs

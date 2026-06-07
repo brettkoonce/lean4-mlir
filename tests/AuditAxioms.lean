@@ -331,6 +331,11 @@ open Proofs
 -- bn_grad_input run on each channel-slice, proven faithful (= pdiv-Jacobian) under
 -- 0<ε. The closed form a per-channel bnBack op / renderLNBack-per-channel emits.
 #print axioms bnPerChannel_grad_input_correct
+-- B9 entry: per-channel BN on the network's Tensor3 (oc*h)*w activation layout —
+-- bnPerChannelFlat (Mat-split oc*(h*w)) conjugated by the layout-bridge reindex
+-- reassocFwd/reassocBack (a pure product re-association, VJP via pdiv_reindex like
+-- decimateFlat). The plug-in op that wires per-channel BN into ResNet-34.
+#print axioms bnPerChannelTensor3_has_vjp_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
