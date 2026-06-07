@@ -4,11 +4,11 @@ import LeanMlir.IreeRuntime
 
 /-! # `efficientnet-verified` — train a small EfficientNet on the VERIFIED-rendered codegen
 
-Chapter 8 (E1–E4): a real, DOWNSAMPLING EfficientNet whose whole-network VJP is the
+Chapter 8 (E1–E5): a real, DOWNSAMPLING EfficientNet whose whole-network VJP is the
 audited, UNCONDITIONAL `Proofs.efficientnet_has_vjp(_correct)` (the swish/sigmoid/SE/
-MBConv VJP stack — all smooth, no kinks), now rendered + GPU-trained. CIFAR 3×32×32, the
-MBConv (inverted-residual + squeeze-excite + swish) shape with STRIDE-2 DEPTHWISE
-downsampling:
+MBConv VJP stack — all smooth, no kinks), now rendered + GPU-trained. ALL-SWISH with
+BATCH norm (E5 — the paper-faithful normalization). CIFAR 3×32×32, the MBConv
+(inverted-residual + squeeze-excite + swish) shape with STRIDE-2 DEPTHWISE downsampling:
 
   stem  3×3 stride-2 conv (3→16, 32→16) → BN → swish →
   b1    MBConv 16→24, mid 64,  r 4,  stride 2 (16→8)  [no skip] →
@@ -21,9 +21,9 @@ downsampling:
   global-average-pool → dense 128→10 + softmax-CE
 
 MBConv: expand 1×1 conv→BN→swish → depthwise 3×3 (stride 1/2)→BN→swish → SE gate
-(squeeze C→r→C, sigmoid, ×main) → project 1×1 conv→BN; + residual iff s=1 ∧ ic=oc. The
-head's swish before GAP is essential (per-example instance-norm zeroes each channel's
-spatial mean, so GAP of a raw linear-bottleneck BN is the constant β).
+(squeeze C→r→C, sigmoid, ×main) → project 1×1 conv→BN; + residual iff s=1 ∧ ic=oc.
+BATCH norm (not the ch7 per-example instance-norm) keeps inter-image variance in the
+pooled features, so swish works at the final GAP — genuinely all-swish, no relu6 head.
 
 Trains on `verified_mlir/efficientnet_train_step.mlir` (106 params), evals via
 `verified_mlir/efficientnet_fwd.mlir` — both rendered by tests/TestEfficientNet{Train,Fwd}.lean
@@ -31,8 +31,9 @@ from the same `blocks`/`allParams`, every op fragment the StableHLO of a proven-
 emitter: swish (`swish_has_vjp_correct`, E1 `swishF/swishBack`), sigmoid (`sigmoid_has_vjp`,
 E2 `sigmoidF`), the SE gate (`seBlock_has_vjp_correct`/`broadcastFlat_has_vjp`, E3 — gradcheck-
 validated standalone), depthwise stride-1/2 (`depthwiseFlat`/`depthwiseStride2Flat_has_vjp`),
-per-channel BN (`bnPerChannelTensor3_grad_input_correct`), residual `addV`, 1×1/3×3 convs,
-GAP, dense. Both MLIRs iree-compile to ROCm gfx1100.
+BATCH norm (`bnBatchTensor4_grad_input_correct`, E5 — reduce over batch+spatial [0,2,3]),
+residual `addV`, 1×1/3×3 convs, GAP, dense. Both MLIRs iree-compile to ROCm gfx1100.
+NB eval uses batch stats (BS=128); paper-faithful population-stats EMA is future work.
 
 106 params packed per `EfficientNetLayout` (per-channel γ/β rank-1 `[c]`; depthwise kernels
 `[mid,1,3,3]`; SE dense Ws₁`[mid,r]`/Ws₂`[r,mid]`). Reuses the params-general `mlpTrainStepV`

@@ -1,11 +1,12 @@
 import LeanMlir.Proofs.StableHLO
 import LeanMlir.Types
 
-/-! # E4a — EfficientNet forward renderer (MBConv = inverted-residual + SE + swish) + iree
+/-! # E4a/E5 — EfficientNet forward renderer (MBConv = inverted-residual + SE + swish) + iree
 
-Programmatic StableHLO for a real, DOWNSAMPLING EfficientNet-style forward (CIFAR
-3×32×32). The MBConv block = ch7's inverted residual with relu6 → **swish** and a
-**squeeze-excite** gate inserted before the project (the E3 `seFwd` fragment):
+Programmatic StableHLO for a real, DOWNSAMPLING EfficientNet forward (CIFAR 3×32×32),
+ALL-SWISH with BATCH norm (E5 — the paper-faithful normalization; ch7's inverted residual
+with relu6 → **swish** and a **squeeze-excite** gate inserted before the project, the E3
+`seFwd` fragment):
 
   stem  : 3×3 stride-2 conv (3→16, 32→16) + BN + swish
   b1    : MBConv 16→24, mid 64,  r 4,  stride 2  (16→8)   [no skip]
@@ -21,10 +22,11 @@ MBConv: expand 1×1 conv→BN→swish → depthwise 3×3 (stride 1/2)→BN→swi
 (squeeze C→r→C, sigmoid, ×main) → project 1×1 conv→BN; + residual iff s=1 ∧ ic=oc.
 Every fragment is the StableHLO a VERIFIED per-op emitter produces: depthwise stride-1
 (`depthwiseF`) / stride-2 (`depthwiseStridedF`), swish (`swishF`), sigmoid (`sigmoidF`),
-per-channel BN (`bnPerChannelF`), 1×1/3×3 convs, residual `addV`, GAP, dense; the SE
-gate mirrors the proven `seGate`/`seBlock`/`broadcastFlat` VJP stack. The head's swish
-before GAP is essential (per-example instance-norm zeroes the spatial mean, so GAP of a
-raw linear-bottleneck BN is the constant β).
+BATCH norm (`bnBatchTensor4`, E5: reduce μ/var over batch+spatial [0,2,3] per channel),
+1×1/3×3 convs, residual `addV`, GAP, dense; the SE gate mirrors the proven
+`seGate`/`seBlock`/`broadcastFlat` VJP stack. Batch-norm (vs the ch7 instance-norm) keeps
+inter-image variance in the pooled features, so swish works at the final GAP — the net is
+genuinely all-swish (no relu6 head workaround needed).
 
 Run (rocm):
   export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
@@ -79,17 +81,22 @@ private def dwconvStrided (o x w bnm : String) (c Hout Wout : Nat) : String :=
   s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [c]}) -> {ty [BS,c,Hout,Wout]}\n" ++
   s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,c,Hout,Wout]}\n"
 
-/-- Per-channel BN forward (reduce μ/var over spatial [2,3], rank-1 γ/β dims=[1]). -/
-private def bnPC (o x g bt : String) (oc Hh Ww m : Nat) : String :=
-  s!"    %{o}nf = stablehlo.constant dense<{m}.0> : {ty [BS,oc,Hh,Ww]}\n" ++
+/-- **Batch-norm per channel** (the EfficientNet normalization): reduce μ/var over
+    BATCH+spatial `[0,2,3]` per channel (count `N·H·W`), rank-1 γ/β dims=[1]. This is
+    the proven `bnBatchTensor4` (= `bnPerChannelFlat` with `m = N·h·w` via the
+    `[N,C,H,W]↔[C,N·H·W]` bridge, E5a). Unlike instance-norm it does NOT zero each
+    example's spatial mean, so GAP-of-swish is non-degenerate → all-swish trains. -/
+private def bnBatch (o x g bt : String) (oc Hh Ww _m : Nat) : String :=
+  let nf := BS * Hh * Ww
+  s!"    %{o}nf = stablehlo.constant dense<{nf}.0> : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}ep = stablehlo.constant dense<{EPS}> : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}smr = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [BS,oc]}\n" ++
-  s!"    %{o}sm = stablehlo.broadcast_in_dim %{o}smr, dims = [0, 1] : ({ty [BS,oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}smr = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
+  s!"    %{o}sm = stablehlo.broadcast_in_dim %{o}smr, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}mu = stablehlo.divide %{o}sm, %{o}nf : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}xc = stablehlo.subtract {x}, %{o}mu : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}sq = stablehlo.multiply %{o}xc, %{o}xc : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}vsr = stablehlo.reduce(%{o}sq init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [BS,oc]}\n" ++
-  s!"    %{o}vs = stablehlo.broadcast_in_dim %{o}vsr, dims = [0, 1] : ({ty [BS,oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}vsr = stablehlo.reduce(%{o}sq init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
+  s!"    %{o}vs = stablehlo.broadcast_in_dim %{o}vsr, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}vr = stablehlo.divide %{o}vs, %{o}nf : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}ve = stablehlo.add %{o}vr, %{o}ep : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}istd = stablehlo.rsqrt %{o}ve : {ty [BS,oc,Hh,Ww]}\n" ++
@@ -103,16 +110,6 @@ private def bnPC (o x g bt : String) (oc Hh Ww m : Nat) : String :=
 private def swishAct (o x : String) (c Hh Ww : Nat) : String :=
   s!"    %{o}s = stablehlo.logistic {x} : {ty [BS,c,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.multiply {x}, %{o}s : {ty [BS,c,Hh,Ww]}\n"
-
-/-- ReLU6 forward `clamp(x,0,6)` (= emitTok relu6F). Used in the HEAD only: GAP of an
-    instance-normed BN is the constant β (input-independent), and swish (≈0.5x near 0)
-    is too smooth to break that degeneracy at the final pool — relu6's hard rectification
-    gives the pooled tensor a per-input mean (the ch7 fix; blocks stay swish). -/
-private def relu6 (o x : String) (c Hh Ww : Nat) : String :=
-  s!"    %{o}z = stablehlo.constant dense<0.0> : {ty [BS,c,Hh,Ww]}\n" ++
-  s!"    %{o}six = stablehlo.constant dense<6.0> : {ty [BS,c,Hh,Ww]}\n" ++
-  s!"    %{o}mx = stablehlo.maximum {x}, %{o}z : {ty [BS,c,Hh,Ww]}\n" ++
-  s!"    %{o} = stablehlo.minimum %{o}mx, %{o}six : {ty [BS,c,Hh,Ww]}\n"
 
 private def addOp (o a b : String) (oc Hh Ww : Nat) : String :=
   s!"    %{o} = stablehlo.add {a}, {b} : {ty [BS,oc,Hh,Ww]}\n"
@@ -143,15 +140,15 @@ private def mbconvFwd (p x : String) (ic mid oc Hin s r : Nat) : String × Strin
   let Hout := Hin / s
   let body :=
     conv1 s!"{p}e" x s!"%{p}eW" s!"%{p}eb" mid ic Hin Hin ++
-    bnPC s!"{p}en" s!"%{p}e" s!"%{p}eg" s!"%{p}ebt" mid Hin Hin (Hin*Hin) ++
+    bnBatch s!"{p}en" s!"%{p}e" s!"%{p}eg" s!"%{p}ebt" mid Hin Hin (Hin*Hin) ++
     swishAct s!"{p}es" s!"%{p}en" mid Hin Hin ++
     (if s == 2 then dwconvStrided s!"{p}d" s!"%{p}es" s!"%{p}dW" s!"%{p}db" mid Hout Hout
      else dwconv s!"{p}d" s!"%{p}es" s!"%{p}dW" s!"%{p}db" mid Hin Hin) ++
-    bnPC s!"{p}dn" s!"%{p}d" s!"%{p}dg" s!"%{p}dbt" mid Hout Hout (Hout*Hout) ++
+    bnBatch s!"{p}dn" s!"%{p}d" s!"%{p}dg" s!"%{p}dbt" mid Hout Hout (Hout*Hout) ++
     swishAct s!"{p}ds" s!"%{p}dn" mid Hout Hout ++
     seFwd s!"{p}z" s!"%{p}ds" s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2" mid Hout Hout r ++
     conv1 s!"{p}p" s!"%{p}zse" s!"%{p}pW" s!"%{p}pb" oc mid Hout Hout ++
-    bnPC s!"{p}pn" s!"%{p}p" s!"%{p}pg" s!"%{p}pbt" oc Hout Hout (Hout*Hout)
+    bnBatch s!"{p}pn" s!"%{p}p" s!"%{p}pg" s!"%{p}pbt" oc Hout Hout (Hout*Hout)
   if s == 1 && ic == oc then
     (body ++ addOp s!"{p}o" s!"%{p}pn" x oc Hout Hout, s!"%{p}o")
   else
@@ -189,7 +186,7 @@ private def efficientnetFwd : String := Id.run do
   let stemCode :=
     s!"    %xr = stablehlo.reshape %x : ({ty [BS,3072]}) -> {ty [BS,3,32,32]}\n" ++
     conv3 "stc" "%xr" "%sW" "%sb" 16 3 32 32 16 16 2 ++
-    bnPC "stn" "%stc" "%sg" "%sbt" 16 16 16 (16*16) ++
+    bnBatch "stn" "%stc" "%sg" "%sbt" 16 16 16 (16*16) ++
     swishAct "str" "%stn" 16 16 16
   let mut blkCode := ""
   let mut cur := "%str"
@@ -199,8 +196,8 @@ private def efficientnetFwd : String := Id.run do
     blkCode := blkCode ++ c; cur := out; curH := curH / s
   let head :=
     conv1 "h" cur "%hW" "%hb" 128 64 curH curH ++
-    bnPC "hn" "%h" "%hg" "%hbt" 128 curH curH (curH*curH) ++
-    relu6 "hr" "%hn" 128 curH curH
+    bnBatch "hn" "%h" "%hg" "%hbt" 128 curH curH (curH*curH) ++
+    swishAct "hr" "%hn" 128 curH curH
   let tail := gapDense "out" "%hr" 128 10 curH curH
   let body :=
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++

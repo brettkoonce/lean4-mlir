@@ -216,8 +216,8 @@ lean_exe «mobilenetv2-verified» where
   root := `MainMobilenetV2Verified
   moreLinkArgs := ireeLink
 
--- ch8 E4: small EfficientNet (MBConv = inverted-residual + squeeze-excite + swish +
--- per-channel BN) trained on VERIFIED-rendered StableHLO
+-- ch8 E4/E5: small EfficientNet (MBConv = inverted-residual + squeeze-excite + swish +
+-- BATCH norm — genuinely all-swish) trained on VERIFIED-rendered StableHLO
 -- (tests/TestEfficientNet{Train,Fwd}.lean); 106 params.
 lean_exe «efficientnet-verified» where
   root := `MainEfficientNetVerified
