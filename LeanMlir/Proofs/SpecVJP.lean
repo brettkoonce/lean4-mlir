@@ -1,6 +1,7 @@
 import LeanMlir.VerifiedNets
 import LeanMlir.Proofs.MLP
 import LeanMlir.Proofs.MnistCNN
+import LeanMlir.Proofs.StableHLO
 
 /-! # Spec → math (the verification tie), Rung 1: the linear classifier
 
@@ -144,3 +145,34 @@ noncomputable def cnnVerified_has_vjp (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
   backward x dy i :=
     ∑ j : Fin 10, pdiv (denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅) x i j * dy j
   correct _ _ _ := rfl
+
+/-! ## Rung E (linear): the spec ↔ the *generated MLIR*
+
+The ties above connect the spec to the **math** (`denote` = the proven forward, which has
+the proven VJP). This connects the spec to the **StableHLO the trainer actually compiles
+and runs**: the generated forward graph `fwdGraph` (→ `verified_mlir/linear_fwd.mlir`, the
+eval path) and the train-step loss-cotangent graph `lossCotGraph` (→ `linear_train_step.mlir`)
+*denote* the spec's forward and its softmax-CE gradient — via the audited faithfulness
+theorems (`fwdGraph_faithful`, `lossCotGraph_isCEgrad`) composed with `denoteLinear =
+mnistLinear` (`rfl`). So the generated code provably computes the spec's function.
+
+What stays trusted (the codegen boundary, per `Proofs/README.md`): the text render
+`linearFwdModuleV = pretty (emit fwdGraph)` and that the committed `.mlir` equals that
+text — the pretty-printer + regeneration, NOT the semantics, which are proven here. -/
+
+open Proofs.StableHLO in
+/-- **Generated forward MLIR ↔ spec.** The forward graph (rendered to `linear_fwd.mlir`,
+    the eval path) denotes the spec's forward function. -/
+theorem linearVerified_fwd_faithful (W : Mat 784 10) (b : Vec 10) (x : Vec 784) :
+    den (fwdGraph W b x) = denoteLinear linearVerified.layers W b x := by
+  exact fwdGraph_faithful W b x
+
+open Proofs.StableHLO in
+/-- **Generated train-step cotangent ↔ spec.** The loss-cotangent graph (in
+    `linear_train_step.mlir`) denotes `∂(softmax-CE)/∂logits` at the spec's logits. -/
+theorem linearVerified_lossCot_isCEgrad (W : Mat 784 10) (b : Vec 10) (x : Vec 784)
+    (label : Fin 10) (j : Fin 10) :
+    den (lossCotGraph W b x (oneHot 10 label)) j
+      = pdiv (fun (z : Vec 10) (_ : Fin 1) => crossEntropy 10 z label)
+             (denoteLinear linearVerified.layers W b x) j 0 := by
+  exact lossCotGraph_isCEgrad W b x label j
