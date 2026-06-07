@@ -49,6 +49,9 @@ lean_lib «Proofs» where
              -- Chapter-6 ResNet Milestone B: stride-2 SAME convolution (the hard
              -- new downsampling op) = decimate ∘ stride-1 conv, with its input-VJP.
              `LeanMlir.Proofs.StridedConv,
+             -- Chapter-6 ResNet Milestone B: the deep-block chain (a list of
+             -- same-type residual blocks composes to one VJP) — 16-block depth.
+             `LeanMlir.Proofs.ResNet34,
              -- opt-in Mathlib.Matrix interop; not imported by the suite,
              -- listed here so CI keeps it green.
              `LeanMlir.Proofs.MatBridge,

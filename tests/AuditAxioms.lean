@@ -16,6 +16,7 @@ import LeanMlir.Proofs.IR
 import LeanMlir.Proofs.StableHLO
 import LeanMlir.Proofs.StableHLOParse
 import LeanMlir.Proofs.StridedConv
+import LeanMlir.Proofs.ResNet34
 
 open Proofs
 
@@ -291,6 +292,10 @@ open Proofs
 -- ...and its weight-VJP (the kernel grad for training a strided block), likewise
 -- by vjp_comp reusing the proven conv2d_weight_grad_has_vjp.
 #print axioms flatConvStride2_weight_grad_has_vjp_correct
+-- Deep-block chain: a list of same-type residual blocks composes to a single
+-- VJP (the 16-block depth of ResNet-34, as a List.length rather than per-block
+-- boilerplate). Generic enabler, proven by induction chaining vjp_comp.
+#print axioms vjp_chain_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
