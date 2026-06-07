@@ -315,6 +315,12 @@ open Proofs
 -- .correct field is the ℝ-carrying pdiv-Jacobian), folded from the verified
 -- vjp_comp_at / vjp_chain_at — the 34-layer structural analogue of cnn_has_vjp_at.
 #print axioms resnet34_has_vjp_at
+-- B7: the UNCONDITIONAL concrete instance — `resnet34_has_vjp_at` instantiated at
+-- 1ch/32×32 with the verified components (strided identity stem, 3 strided
+-- downsamplers, 16 zero-weight identity blocks, GAP, dense), every smoothness/no-tie
+-- hypothesis discharged. Makes the verified ResNet-34 non-vacuous; the ResNet-34
+-- peer of CnnConcrete.cnnConcrete_has_vjp_correct.
+#print axioms ResNet34Concrete.resnet34Concrete_has_vjp_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
