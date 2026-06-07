@@ -296,6 +296,10 @@ open Proofs
 -- VJP (the 16-block depth of ResNet-34, as a List.length rather than per-block
 -- boilerplate). Generic enabler, proven by induction chaining vjp_comp.
 #print axioms vjp_chain_correct
+-- Strided downsampling block (conv stride-2 → BN → relu), the workhorse opening
+-- each ResNet-34 stage: its conditional VJP, by vjp_comp_at reusing
+-- flatConvStride2_has_vjp + the proven BN/ReLU VJPs.
+#print axioms convBnReluStrided_has_vjp_at_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate

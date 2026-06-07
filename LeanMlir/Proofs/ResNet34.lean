@@ -73,4 +73,68 @@ theorem vjp_chain_correct {n : Nat} (fs : List (Vec n → Vec n))
       = ∑ j : Fin n, pdiv (chainComp fs) x i j * dy j :=
   (vjp_chain fs hdiff hvjp).correct x dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Strided downsampling block — conv(stride 2) → BN → relu
+-- ════════════════════════════════════════════════════════════════
+
+/-- **conv(stride-2) → bn block VJP (no ReLU), everywhere.** The strided peer of
+    `convBn_has_vjp`: `flatConvStride2` then `bnForward`, both differentiable
+    everywhere, so a global `HasVJP`. The downsampling body of a stage-start
+    block and its strided 1×1 projection skip. -/
+noncomputable def convBnStrided_has_vjp {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε) :
+    HasVJP (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b
+      : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
+  vjp_comp (flatConvStride2 W b) (bnForward (oc * h * w) ε γ β)
+    (flatConvStride2_differentiable W b)
+    (bnForward_differentiable (oc * h * w) ε γ β hε)
+    (flatConvStride2_has_vjp W b)
+    (bn_has_vjp (oc * h * w) ε γ β hε)
+
+/-- **conv(stride-2) → bn is differentiable everywhere.** -/
+theorem convBnStrided_differentiable {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε) :
+    Differentiable ℝ (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b
+      : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
+  (bnForward_differentiable (oc * h * w) ε γ β hε).comp (flatConvStride2_differentiable W b)
+
+/-- **conv(stride-2) → bn → relu block VJP at a smooth point.** The strided peer
+    of `convBnRelu_has_vjp_at` (the workhorse opening each downsampling stage):
+    two `vjp_comp_at`, with `flatConvStride2_has_vjp` for the conv and the ReLU
+    smoothness hypothesis `h_smooth` (no post-BN activation hits the kink). -/
+noncomputable def convBnReluStrided_has_vjp_at {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth : ∀ k, bnForward (oc * h * w) ε γ β (flatConvStride2 W b v) k ≠ 0) :
+    HasVJPAt (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v := by
+  have hconv_diff : Differentiable ℝ
+      (flatConvStride2 W b : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
+    flatConvStride2_differentiable W b
+  have hbn_diff : Differentiable ℝ (bnForward (oc * h * w) ε γ β) :=
+    bnForward_differentiable (oc * h * w) ε γ β hε
+  have step1 : HasVJPAt (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v :=
+    vjp_comp_at (flatConvStride2 W b) (bnForward (oc * h * w) ε γ β) v
+      (hconv_diff v) (hbn_diff _)
+      ((flatConvStride2_has_vjp W b).toHasVJPAt v)
+      ((bn_has_vjp (oc * h * w) ε γ β hε).toHasVJPAt _)
+  have step1_diff : DifferentiableAt ℝ
+      (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v :=
+    DifferentiableAt.comp v (hbn_diff _) (hconv_diff v)
+  exact vjp_comp_at (bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b)
+    (relu (oc * h * w)) v step1_diff
+    (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth) step1
+    (relu_has_vjp_at (oc * h * w) _ h_smooth)
+
+/-- **Strided block VJP correctness** (ℝ-headline): the strided downsampling
+    block's backward equals the `pdiv`-Jacobian of `relu ∘ bn ∘ conv_stride2`. -/
+theorem convBnReluStrided_has_vjp_at_correct {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth : ∀ k, bnForward (oc * h * w) ε γ β (flatConvStride2 W b v) k ≠ 0)
+    (dy : Vec (oc * h * w)) (i : Fin (ic * (2 * h) * (2 * w))) :
+    (convBnReluStrided_has_vjp_at W b ε γ β hε v h_smooth).backward dy i
+      = ∑ j : Fin (oc * h * w),
+          pdiv (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v i j * dy j :=
+  (convBnReluStrided_has_vjp_at W b ε γ β hε v h_smooth).correct dy i
+
 end Proofs
