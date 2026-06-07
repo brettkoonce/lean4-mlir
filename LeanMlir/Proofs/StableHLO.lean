@@ -5,6 +5,7 @@ import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.Depthwise
 import LeanMlir.Proofs.MobileNetV2
 import LeanMlir.Proofs.LayerNorm
+import LeanMlir.Proofs.EfficientNet
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 2: the linear classifier)
 
@@ -139,6 +140,13 @@ inductive SHlo : Nat → Type where
   -- saved pre-activation. `den` via the proven `swish` / `swish_has_vjp` (LayerNorm.lean).
   | swishF     {n : Nat}                                        : SHlo n → SHlo n
   | swishBack  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
+  -- Chapter 8 (EfficientNet): sigmoid forward (`σ(x) = stablehlo.logistic`, the SE
+  -- gate's output nonlinearity) and its input-VJP (`dy · σ(x)·(1−σ(x))`). Like swish,
+  -- SMOOTH everywhere (no kink, NO smoothness hyp — GLOBAL `sigmoid_has_vjp`, not `_at`).
+  -- `sigmoidBack`'s `xName`/`x` is the saved pre-activation. `den` via the proven
+  -- `sigmoid` / `sigmoid_has_vjp` (EfficientNet.lean).
+  | sigmoidF     {n : Nat}                                      : SHlo n → SHlo n
+  | sigmoidBack  {n : Nat} (xName : String) (x : Vec n)         : SHlo n → SHlo n
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -187,6 +195,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .depthwiseStridedBack _ W b v e => (depthwiseStride2Flat_has_vjp W b).backward v (den e)
   | _, .swishF (n := n) e => swish n (den e)
   | _, .swishBack (n := n) _ x e => (swish_has_vjp n).backward x (den e)
+  | _, .sigmoidF (n := n) e => sigmoid n (den e)
+  | _, .sigmoidBack (n := n) _ x e => (sigmoid_has_vjp n).backward x (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -557,6 +567,19 @@ theorem depthwiseStridedBack_faithful {c h w kH kW : Nat} (wN : String)
 theorem swishBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
     den (.swishBack xN x e) = (swish_has_vjp n).backward x (den e) := rfl
 
+/-- **Sigmoid forward faithfulness.** The `stablehlo.logistic(x)` graph denotes the
+    proven `sigmoid` (= σ(x), EfficientNet.lean) — the SE gate's output nonlinearity.
+    Smooth everywhere. (`rfl`, so kept out of the axiom audit — `roundtrip` covers it.) -/
+@[simp] theorem sigmoidF_faithful {n : Nat} (e : SHlo n) :
+    den (.sigmoidF e) = sigmoid n (den e) := rfl
+
+/-- **Sigmoid input-VJP faithfulness.** The closed-form `dy ⊙ σ(x)·(1−σ(x))` graph
+    (recomputing σ from the saved pre-activation `x`) denotes the proven GLOBAL
+    `sigmoid_has_vjp` backward (`dy ⊙ sigmoidScalarDeriv x`; sigmoid is smooth
+    everywhere, so this is a global VJP — no smoothness hypothesis). -/
+theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
+    den (.sigmoidBack xN x e) = (sigmoid_has_vjp n).backward x (den e) := rfl
+
 /-- Whole MNIST-CNN **forward** graph:
     `dense ∘ relu ∘ dense ∘ relu ∘ dense ∘ maxPool ∘ relu ∘ conv ∘ relu ∘ conv`. -/
 def cnnFwdGraph {ic c h w d1 nClasses kH kW : Nat}
@@ -889,6 +912,8 @@ inductive Raw where
   | depthwiseStridedBack (w : String) (c h w' kH kW : Nat) : Raw → Raw
   | swishF     (n : Nat)                   : Raw → Raw
   | swishBack  (x : String) (n : Nat)      : Raw → Raw
+  | sigmoidF   (n : Nat)                   : Raw → Raw
+  | sigmoidBack (x : String) (n : Nat)     : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -933,6 +958,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .depthwiseStridedBack wN c h w kH kW (skel e)
   | k, .swishF e             => .swishF k (skel e)
   | k, .swishBack x _ e      => .swishBack x k (skel e)
+  | k, .sigmoidF e           => .sigmoidF k (skel e)
+  | k, .sigmoidBack x _ e    => .sigmoidBack x k (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -965,6 +992,8 @@ inductive Tok where
   | depthwiseStridedBack (w : String) (c h w' kH kW : Nat) : Tok
   | swishF     (n : Nat)                   : Tok
   | swishBack  (x : String) (n : Nat)      : Tok
+  | sigmoidF   (n : Nat)                   : Tok
+  | sigmoidBack (x : String) (n : Nat)     : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -998,6 +1027,8 @@ def toToks : Raw → List Tok
   | .depthwiseStridedBack w c h w' kH kW e => toToks e ++ [.depthwiseStridedBack w c h w' kH kW]
   | .swishF n e      => toToks e ++ [.swishF n]
   | .swishBack x n e => toToks e ++ [.swishBack x n]
+  | .sigmoidF n e    => toToks e ++ [.sigmoidF n]
+  | .sigmoidBack x n e => toToks e ++ [.sigmoidBack x n]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -1365,6 +1396,19 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {xom} = stablehlo.multiply {x}, {om} : {ty [B,n]}\n" ++
             s!"    {inr} = stablehlo.add {one}, {xom} : {ty [B,n]}\n" ++
             s!"    {sp} = stablehlo.multiply {s}, {inr} : {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
+  | .sigmoidF n, r :: st => do
+      -- sigmoid forward: σ(x) = logistic(x) (smooth, the SE gate's output nonlinearity).
+      let o ← fresh
+      pure (s!"    {o} = stablehlo.logistic {r} : {ty [B,n]}\n", o :: st)
+  | .sigmoidBack x n, r :: st => do
+      -- sigmoid input-VJP: dy ⊙ σ(x)·(1−σ(x)), recomputing σ from the saved
+      -- pre-activation {x} (matches `sigmoidScalarDeriv`'s closed form, IRPrint `sigmoidBackM`).
+      let s ← fresh; let one ← fresh; let om ← fresh; let sp ← fresh; let o ← fresh
+      pure (s!"    {s} = stablehlo.logistic {x} : {ty [B,n]}\n" ++
+            s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
+            s!"    {om} = stablehlo.subtract {one}, {s} : {ty [B,n]}\n" ++
+            s!"    {sp} = stablehlo.multiply {s}, {om} : {ty [B,n]}\n" ++
             s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
