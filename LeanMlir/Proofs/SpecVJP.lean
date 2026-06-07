@@ -2,6 +2,7 @@ import LeanMlir.VerifiedNets
 import LeanMlir.Proofs.MLP
 import LeanMlir.Proofs.MnistCNN
 import LeanMlir.Proofs.CifarCNN
+import LeanMlir.Proofs.MobileNetV2
 import LeanMlir.Proofs.StableHLO
 
 /-! # Spec → math (the verification tie), Rung 1: the linear classifier
@@ -339,3 +340,154 @@ theorem cifarBnVerified_fwd_faithful (epsStr : String)
           W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇ x := by
   exact cifarBnFwdGraph_faithful (h := 8) (w := 8) epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
           W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇ x
+
+/-! ## Rung B/C (ch7 MobileNetV2): the spec ↔ the **full** strided render
+
+The first imagenette net to get the *full faithful* B/C (not the representative tie):
+`denoteMobilenet` maps `mobilenetv2Verified.layers` — the real 10-entry layer list the
+trainer runs (stem-s2 → 6 inverted-residual blocks `[16→64→24, 24→96→24, 24→96→32,
+32→128→32, 32→128→64, 64→256→64]` with 4 stride-2 depthwise downsamples 224→7 and 2
+stride-1 skips → 1×1 conv-bn-relu6 head → GAP → dense) — to `mobilenetv2Forward_full`, the
+faithful 6-block composition built in `Proofs/MobileNetV2.lean` from the strided
+inverted-residual VJP infrastructure (`invresBodyStrided`, `flatConvStride2`,
+`depthwiseStride2Flat`). The `rfl` tie is drift-sensitive: change any block's `[t,c,n,s]`
+and the match stops reducing.
+
+The honest chain-rule fold is carried by the new strided inverted-residual block witness
+`Proofs.invresBodyStrided_has_vjp_at` (expand-SAME → stride-2 depthwise → project-SAME,
+the downsampling block the render uses) composed with the representative inverted-residual
+fold `Proofs.mobilenetv2_has_vjp_at`; here the rung-C headline is the unconditional
+canonical witness, matching the ch4/ch5 conv nets (`cnnVerified_has_vjp` /
+`cifarVerified_has_vjp`).
+
+**Stated gap** (intrinsic, shared with ch5-BN / every BN net here): the proof's `bnForward`
+is SCALAR-global (one γ/β over the whole `c·h·w` map per example); the render uses
+per-channel `[c]` BN. Topology, channel flow, stride schedule, relu6 sites and residual
+placement are all faithful — only BN granularity differs. -/
+
+/-- Math denotation of the MobileNetV2 spec: the real 10-entry layer list denotes to
+    `mobilenetv2Forward_full` (the full strided 6-block render). Any other list is not the
+    net (`0`), making the tie below drift-sensitive. -/
+noncomputable def denoteMobilenet (layers : List VLayer)
+    (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
+    (We1 : Kernel4 64 16 1 1) (be1 : Vec 64) (εe1 γe1 βe1 : ℝ)
+    (Wd1 : DepthwiseKernel 64 3 3) (bd1 : Vec 64) (εd1 γd1 βd1 : ℝ)
+    (Wp1 : Kernel4 24 64 1 1) (bp1 : Vec 24) (εp1 γp1 βp1 : ℝ)
+    (We2 : Kernel4 96 24 1 1) (be2 : Vec 96) (εe2 γe2 βe2 : ℝ)
+    (Wd2 : DepthwiseKernel 96 3 3) (bd2 : Vec 96) (εd2 γd2 βd2 : ℝ)
+    (Wp2 : Kernel4 24 96 1 1) (bp2 : Vec 24) (εp2 γp2 βp2 : ℝ)
+    (We3 : Kernel4 96 24 1 1) (be3 : Vec 96) (εe3 γe3 βe3 : ℝ)
+    (Wd3 : DepthwiseKernel 96 3 3) (bd3 : Vec 96) (εd3 γd3 βd3 : ℝ)
+    (Wp3 : Kernel4 32 96 1 1) (bp3 : Vec 32) (εp3 γp3 βp3 : ℝ)
+    (We4 : Kernel4 128 32 1 1) (be4 : Vec 128) (εe4 γe4 βe4 : ℝ)
+    (Wd4 : DepthwiseKernel 128 3 3) (bd4 : Vec 128) (εd4 γd4 βd4 : ℝ)
+    (Wp4 : Kernel4 32 128 1 1) (bp4 : Vec 32) (εp4 γp4 βp4 : ℝ)
+    (We5 : Kernel4 128 32 1 1) (be5 : Vec 128) (εe5 γe5 βe5 : ℝ)
+    (Wd5 : DepthwiseKernel 128 3 3) (bd5 : Vec 128) (εd5 γd5 βd5 : ℝ)
+    (Wp5 : Kernel4 64 128 1 1) (bp5 : Vec 64) (εp5 γp5 βp5 : ℝ)
+    (We6 : Kernel4 256 64 1 1) (be6 : Vec 256) (εe6 γe6 βe6 : ℝ)
+    (Wd6 : DepthwiseKernel 256 3 3) (bd6 : Vec 256) (εd6 γd6 βd6 : ℝ)
+    (Wp6 : Kernel4 64 256 1 1) (bp6 : Vec 64) (εp6 γp6 βp6 : ℝ)
+    (Wh : Kernel4 128 64 1 1) (bh : Vec 128) (εh γh βh : ℝ)
+    (Wfc : Mat 128 10) (bfc : Vec 10) :
+    Vec (3 * 224 * 224) → Vec 10 :=
+  match layers with
+  | [.convBn 3 16 3 2,
+     .invertedResidual 16 64 24 2, .invertedResidual 24 96 24 1,
+     .invertedResidual 24 96 32 2, .invertedResidual 32 128 32 1,
+     .invertedResidual 32 128 64 2, .invertedResidual 64 256 64 2,
+     .convBn 64 128 1 1, .globalAvgPool, .dense 128 10] =>
+      mobilenetv2Forward_full Ws bs εs γs βs
+        We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1
+        We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2
+        We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3
+        We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4
+        We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5
+        We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6
+        Wh bh εh γh βh Wfc bfc
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the full proven render.** `mobilenetv2Verified`'s denotation is exactly
+    `mobilenetv2Forward_full` (the strided 6-block net) — by `rfl`, drift-sensitive. -/
+theorem mobilenetv2Verified_denote_eq
+    (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
+    (We1 : Kernel4 64 16 1 1) (be1 : Vec 64) (εe1 γe1 βe1 : ℝ)
+    (Wd1 : DepthwiseKernel 64 3 3) (bd1 : Vec 64) (εd1 γd1 βd1 : ℝ)
+    (Wp1 : Kernel4 24 64 1 1) (bp1 : Vec 24) (εp1 γp1 βp1 : ℝ)
+    (We2 : Kernel4 96 24 1 1) (be2 : Vec 96) (εe2 γe2 βe2 : ℝ)
+    (Wd2 : DepthwiseKernel 96 3 3) (bd2 : Vec 96) (εd2 γd2 βd2 : ℝ)
+    (Wp2 : Kernel4 24 96 1 1) (bp2 : Vec 24) (εp2 γp2 βp2 : ℝ)
+    (We3 : Kernel4 96 24 1 1) (be3 : Vec 96) (εe3 γe3 βe3 : ℝ)
+    (Wd3 : DepthwiseKernel 96 3 3) (bd3 : Vec 96) (εd3 γd3 βd3 : ℝ)
+    (Wp3 : Kernel4 32 96 1 1) (bp3 : Vec 32) (εp3 γp3 βp3 : ℝ)
+    (We4 : Kernel4 128 32 1 1) (be4 : Vec 128) (εe4 γe4 βe4 : ℝ)
+    (Wd4 : DepthwiseKernel 128 3 3) (bd4 : Vec 128) (εd4 γd4 βd4 : ℝ)
+    (Wp4 : Kernel4 32 128 1 1) (bp4 : Vec 32) (εp4 γp4 βp4 : ℝ)
+    (We5 : Kernel4 128 32 1 1) (be5 : Vec 128) (εe5 γe5 βe5 : ℝ)
+    (Wd5 : DepthwiseKernel 128 3 3) (bd5 : Vec 128) (εd5 γd5 βd5 : ℝ)
+    (Wp5 : Kernel4 64 128 1 1) (bp5 : Vec 64) (εp5 γp5 βp5 : ℝ)
+    (We6 : Kernel4 256 64 1 1) (be6 : Vec 256) (εe6 γe6 βe6 : ℝ)
+    (Wd6 : DepthwiseKernel 256 3 3) (bd6 : Vec 256) (εd6 γd6 βd6 : ℝ)
+    (Wp6 : Kernel4 64 256 1 1) (bp6 : Vec 64) (εp6 γp6 βp6 : ℝ)
+    (Wh : Kernel4 128 64 1 1) (bh : Vec 128) (εh γh βh : ℝ)
+    (Wfc : Mat 128 10) (bfc : Vec 10) :
+    denoteMobilenet mobilenetv2Verified.layers Ws bs εs γs βs
+        We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1
+        We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2
+        We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3
+        We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4
+        We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5
+        We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6
+        Wh bh εh γh βh Wfc bfc
+      = mobilenetv2Forward_full Ws bs εs γs βs
+        We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1
+        We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2
+        We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3
+        We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4
+        We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5
+        We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6
+        Wh bh εh γh βh Wfc bfc := rfl
+
+/-- **The spec carries the math.** The full MobileNetV2 spec's denotation has a VJP — the
+    canonical `pdiv`-derived witness (the honest strided chain-rule fold is
+    `Proofs.mobilenetv2_full_has_vjp_at`). -/
+noncomputable def mobilenetv2Verified_has_vjp
+    (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
+    (We1 : Kernel4 64 16 1 1) (be1 : Vec 64) (εe1 γe1 βe1 : ℝ)
+    (Wd1 : DepthwiseKernel 64 3 3) (bd1 : Vec 64) (εd1 γd1 βd1 : ℝ)
+    (Wp1 : Kernel4 24 64 1 1) (bp1 : Vec 24) (εp1 γp1 βp1 : ℝ)
+    (We2 : Kernel4 96 24 1 1) (be2 : Vec 96) (εe2 γe2 βe2 : ℝ)
+    (Wd2 : DepthwiseKernel 96 3 3) (bd2 : Vec 96) (εd2 γd2 βd2 : ℝ)
+    (Wp2 : Kernel4 24 96 1 1) (bp2 : Vec 24) (εp2 γp2 βp2 : ℝ)
+    (We3 : Kernel4 96 24 1 1) (be3 : Vec 96) (εe3 γe3 βe3 : ℝ)
+    (Wd3 : DepthwiseKernel 96 3 3) (bd3 : Vec 96) (εd3 γd3 βd3 : ℝ)
+    (Wp3 : Kernel4 32 96 1 1) (bp3 : Vec 32) (εp3 γp3 βp3 : ℝ)
+    (We4 : Kernel4 128 32 1 1) (be4 : Vec 128) (εe4 γe4 βe4 : ℝ)
+    (Wd4 : DepthwiseKernel 128 3 3) (bd4 : Vec 128) (εd4 γd4 βd4 : ℝ)
+    (Wp4 : Kernel4 32 128 1 1) (bp4 : Vec 32) (εp4 γp4 βp4 : ℝ)
+    (We5 : Kernel4 128 32 1 1) (be5 : Vec 128) (εe5 γe5 βe5 : ℝ)
+    (Wd5 : DepthwiseKernel 128 3 3) (bd5 : Vec 128) (εd5 γd5 βd5 : ℝ)
+    (Wp5 : Kernel4 64 128 1 1) (bp5 : Vec 64) (εp5 γp5 βp5 : ℝ)
+    (We6 : Kernel4 256 64 1 1) (be6 : Vec 256) (εe6 γe6 βe6 : ℝ)
+    (Wd6 : DepthwiseKernel 256 3 3) (bd6 : Vec 256) (εd6 γd6 βd6 : ℝ)
+    (Wp6 : Kernel4 64 256 1 1) (bp6 : Vec 64) (εp6 γp6 βp6 : ℝ)
+    (Wh : Kernel4 128 64 1 1) (bh : Vec 128) (εh γh βh : ℝ)
+    (Wfc : Mat 128 10) (bfc : Vec 10) :
+    HasVJP (denoteMobilenet mobilenetv2Verified.layers Ws bs εs γs βs
+        We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1
+        We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2
+        We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3
+        We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4
+        We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5
+        We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6
+        Wh bh εh γh βh Wfc bfc) where
+  backward x dy i :=
+    ∑ j : Fin 10, pdiv (denoteMobilenet mobilenetv2Verified.layers Ws bs εs γs βs
+        We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1
+        We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2
+        We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3
+        We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4
+        We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5
+        We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6
+        Wh bh εh γh βh Wfc bfc) x i j * dy j
+  correct _ _ _ := rfl
