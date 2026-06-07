@@ -154,6 +154,55 @@ theorem Real.differentiable_tanh : Differentiable ℝ Real.tanh := by
           Real.differentiable_cosh.differentiableAt
           (Real.cosh_pos x).ne'
 
+/-- **Derivative of `Real.tanh`** — `tanh'(y) = 1 − tanh²(y)`, built from
+    `tanh = sinh/cosh` via the quotient rule and `cosh² − sinh² = 1`.
+    (Mathlib has `Real.differentiable_tanh` but no `HasDerivAt` form, so we
+    derive it here for the GELU closed-form derivative `geluScalarDeriv_eq`.) -/
+theorem Real.hasDerivAt_tanh (y : ℝ) : HasDerivAt Real.tanh (1 - Real.tanh y ^ 2) y := by
+  have h : Real.tanh = fun z => Real.sinh z / Real.cosh z := funext Real.tanh_eq_sinh_div_cosh
+  rw [h]
+  have hd := (Real.hasDerivAt_sinh y).div (Real.hasDerivAt_cosh y) (Real.cosh_pos y).ne'
+  convert hd using 1
+  simp only []
+  rw [div_pow]
+  field_simp
+
+/-- **Closed form of `geluScalarDeriv`** — the analytic derivative of the
+    tanh-approximation GELU. With `u = √(2/π)·(x + 0.044715·x³)` and `t = tanh u`,
+
+    `gelu'(x) = 0.5·(1 + t) + 0.5·x·(1 − t²)·√(2/π)·(1 + 3·0.044715·x²)`.
+
+    This is exactly the closed form the verified `geluBack` StableHLO emitter
+    renders — so the emitted backward text is certified equal to `deriv geluScalar`
+    (not merely the empirically-validated formula that swish/sigmoid rely on).
+    Proof: assemble `HasDerivAt` for the polynomial inner, `tanh` via
+    `Real.hasDerivAt_tanh`, and the outer product, then `HasDerivAt.deriv`. -/
+theorem geluScalarDeriv_eq (x : ℝ) :
+    geluScalarDeriv x =
+      0.5 * (1 + Real.tanh (Real.sqrt (2 / Real.pi) * (x + 0.044715 * x^3)))
+      + 0.5 * x * ((1 - Real.tanh (Real.sqrt (2 / Real.pi) * (x + 0.044715 * x^3))^2)
+          * (Real.sqrt (2 / Real.pi) * (1 + 0.044715 * (3 * x^2)))) := by
+  unfold geluScalarDeriv geluScalar
+  have hpoly : HasDerivAt (fun z : ℝ => z + 0.044715 * z^3) (1 + 0.044715 * (3 * x^2)) x := by
+    have h1 : HasDerivAt (fun z : ℝ => z) 1 x := hasDerivAt_id x
+    have h2 : HasDerivAt (fun z : ℝ => 0.044715 * z^3) (0.044715 * (3 * x^2)) x :=
+      (hasDerivAt_pow 3 x).const_mul 0.044715
+    simpa using h1.add h2
+  have hu : HasDerivAt (fun z : ℝ => Real.sqrt (2 / Real.pi) * (z + 0.044715 * z^3))
+              (Real.sqrt (2 / Real.pi) * (1 + 0.044715 * (3 * x^2))) x :=
+    hpoly.const_mul _
+  have ht := (Real.hasDerivAt_tanh (Real.sqrt (2 / Real.pi) * (x + 0.044715 * x^3))).comp x hu
+  have h1pt := ht.const_add 1
+  have hhalfx : HasDerivAt (fun z : ℝ => 0.5 * z) 0.5 x := by
+    simpa using (hasDerivAt_id x).const_mul (0.5 : ℝ)
+  have hg : HasDerivAt
+      (fun z : ℝ => 0.5 * z * (1 + Real.tanh (Real.sqrt (2 / Real.pi) * (z + 0.044715 * z^3))))
+      (0.5 * (1 + Real.tanh (Real.sqrt (2 / Real.pi) * (x + 0.044715 * x^3)))
+        + 0.5 * x * ((1 - Real.tanh (Real.sqrt (2 / Real.pi) * (x + 0.044715 * x^3))^2)
+            * (Real.sqrt (2 / Real.pi) * (1 + 0.044715 * (3 * x^2))))) x :=
+    hhalfx.mul h1pt
+  rw [hg.deriv]
+
 /-- Differentiability of `geluScalar` as a scalar function. -/
 @[fun_prop]
 lemma geluScalar_diff : Differentiable ℝ geluScalar := by

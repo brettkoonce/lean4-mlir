@@ -147,6 +147,14 @@ inductive SHlo : Nat → Type where
   -- `sigmoid` / `sigmoid_has_vjp` (EfficientNet.lean).
   | sigmoidF     {n : Nat}                                      : SHlo n → SHlo n
   | sigmoidBack  {n : Nat} (xName : String) (x : Vec n)         : SHlo n → SHlo n
+  -- Chapter 9 (ConvNeXt): GELU forward (tanh approximation,
+  -- `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))`, via `stablehlo.tanh`) and its
+  -- input-VJP (`dy · gelu'(x)`, closed form from the tanh-approx derivative).
+  -- Like swish/sigmoid, SMOOTH everywhere (no kink, NO smoothness hyp — the VJP is
+  -- the GLOBAL `gelu_has_vjp`, not `_at`). `geluBack`'s `xName`/`x` is the saved
+  -- pre-activation. `den` via the proven `gelu` / `gelu_has_vjp` (LayerNorm.lean).
+  | geluF      {n : Nat}                                        : SHlo n → SHlo n
+  | geluBack   {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -197,6 +205,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .swishBack (n := n) _ x e => (swish_has_vjp n).backward x (den e)
   | _, .sigmoidF (n := n) e => sigmoid n (den e)
   | _, .sigmoidBack (n := n) _ x e => (sigmoid_has_vjp n).backward x (den e)
+  | _, .geluF (n := n) e => gelu n (den e)
+  | _, .geluBack (n := n) _ x e => (gelu_has_vjp n).backward x (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -580,6 +590,20 @@ theorem swishBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
     den (.sigmoidBack xN x e) = (sigmoid_has_vjp n).backward x (den e) := rfl
 
+/-- **GELU forward faithfulness.** The tanh-approximation graph
+    `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))` denotes the proven `gelu`
+    (LayerNorm.lean). Smooth everywhere; no kink, no smoothness hypothesis.
+    (`rfl`, so kept out of the axiom audit — `roundtrip` covers it structurally.) -/
+@[simp] theorem geluF_faithful {n : Nat} (e : SHlo n) :
+    den (.geluF e) = gelu n (den e) := rfl
+
+/-- **GELU input-VJP faithfulness.** The closed-form `dy ⊙ gelu'(x)` graph
+    (recomputing `tanh(u(x))` from the saved pre-activation `x`) denotes the proven
+    GLOBAL `gelu_has_vjp` backward (`dy ⊙ geluScalarDeriv x`; GELU is smooth
+    everywhere, so this is a global VJP — no smoothness hypothesis). -/
+theorem geluBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
+    den (.geluBack xN x e) = (gelu_has_vjp n).backward x (den e) := rfl
+
 /-- Whole MNIST-CNN **forward** graph:
     `dense ∘ relu ∘ dense ∘ relu ∘ dense ∘ maxPool ∘ relu ∘ conv ∘ relu ∘ conv`. -/
 def cnnFwdGraph {ic c h w d1 nClasses kH kW : Nat}
@@ -914,6 +938,8 @@ inductive Raw where
   | swishBack  (x : String) (n : Nat)      : Raw → Raw
   | sigmoidF   (n : Nat)                   : Raw → Raw
   | sigmoidBack (x : String) (n : Nat)     : Raw → Raw
+  | geluF      (n : Nat)                   : Raw → Raw
+  | geluBack   (x : String) (n : Nat)      : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -960,6 +986,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .swishBack x _ e      => .swishBack x k (skel e)
   | k, .sigmoidF e           => .sigmoidF k (skel e)
   | k, .sigmoidBack x _ e    => .sigmoidBack x k (skel e)
+  | k, .geluF e              => .geluF k (skel e)
+  | k, .geluBack x _ e       => .geluBack x k (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -994,6 +1022,8 @@ inductive Tok where
   | swishBack  (x : String) (n : Nat)      : Tok
   | sigmoidF   (n : Nat)                   : Tok
   | sigmoidBack (x : String) (n : Nat)     : Tok
+  | geluF      (n : Nat)                   : Tok
+  | geluBack   (x : String) (n : Nat)      : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -1029,6 +1059,8 @@ def toToks : Raw → List Tok
   | .swishBack x n e => toToks e ++ [.swishBack x n]
   | .sigmoidF n e    => toToks e ++ [.sigmoidF n]
   | .sigmoidBack x n e => toToks e ++ [.sigmoidBack x n]
+  | .geluF n e       => toToks e ++ [.geluF n]
+  | .geluBack x n e  => toToks e ++ [.geluBack x n]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -1410,6 +1442,57 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {om} = stablehlo.subtract {one}, {s} : {ty [B,n]}\n" ++
             s!"    {sp} = stablehlo.multiply {s}, {om} : {ty [B,n]}\n" ++
             s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
+  | .geluF n, r :: st => do
+      -- gelu forward (tanh approximation): y = 0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³))).
+      -- Smooth everywhere (no kink/mask); `stablehlo.tanh` is the only non-arith op.
+      let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
+      let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
+      let chalf ← fresh; let hx ← fresh; let o ← fresh
+      pure (s!"    {x2} = stablehlo.multiply {r}, {r} : {ty [B,n]}\n" ++
+            s!"    {x3} = stablehlo.multiply {x2}, {r} : {ty [B,n]}\n" ++
+            s!"    {ck} = stablehlo.constant dense<0.044715> : {ty [B,n]}\n" ++
+            s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty [B,n]}\n" ++
+            s!"    {inn} = stablehlo.add {r}, {kx3} : {ty [B,n]}\n" ++
+            s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty [B,n]}\n" ++
+            s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty [B,n]}\n" ++
+            s!"    {t} = stablehlo.tanh {u} : {ty [B,n]}\n" ++
+            s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
+            s!"    {opt} = stablehlo.add {one}, {t} : {ty [B,n]}\n" ++
+            s!"    {chalf} = stablehlo.constant dense<0.5> : {ty [B,n]}\n" ++
+            s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.multiply {hx}, {opt} : {ty [B,n]}\n", o :: st)
+  | .geluBack x n, r :: st => do
+      -- gelu input-VJP: dy ⊙ gelu'(x), recomputing tanh(u(x)) from the saved
+      -- pre-activation {x}. gelu'(x) = 0.5·(1+t) + 0.5·x·(1−t²)·√(2/π)·(1+3·0.044715·x²),
+      -- t = tanh(√(2/π)·(x+0.044715·x³)). (Matches IRPrint `renderGeluB`.)
+      let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
+      let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
+      let chalf ← fresh; let term1 ← fresh; let t2 ← fresh; let omt2 ← fresh
+      let hx ← fresh; let hxo ← fresh; let c3b ← fresh; let a3x2 ← fresh
+      let in2 ← fresh; let up ← fresh; let term2 ← fresh; let gp ← fresh; let o ← fresh
+      pure (s!"    {x2} = stablehlo.multiply {x}, {x} : {ty [B,n]}\n" ++
+            s!"    {x3} = stablehlo.multiply {x2}, {x} : {ty [B,n]}\n" ++
+            s!"    {ck} = stablehlo.constant dense<0.044715> : {ty [B,n]}\n" ++
+            s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty [B,n]}\n" ++
+            s!"    {inn} = stablehlo.add {x}, {kx3} : {ty [B,n]}\n" ++
+            s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty [B,n]}\n" ++
+            s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty [B,n]}\n" ++
+            s!"    {t} = stablehlo.tanh {u} : {ty [B,n]}\n" ++
+            s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
+            s!"    {opt} = stablehlo.add {one}, {t} : {ty [B,n]}\n" ++
+            s!"    {chalf} = stablehlo.constant dense<0.5> : {ty [B,n]}\n" ++
+            s!"    {term1} = stablehlo.multiply {chalf}, {opt} : {ty [B,n]}\n" ++
+            s!"    {t2} = stablehlo.multiply {t}, {t} : {ty [B,n]}\n" ++
+            s!"    {omt2} = stablehlo.subtract {one}, {t2} : {ty [B,n]}\n" ++
+            s!"    {hx} = stablehlo.multiply {chalf}, {x} : {ty [B,n]}\n" ++
+            s!"    {hxo} = stablehlo.multiply {hx}, {omt2} : {ty [B,n]}\n" ++
+            s!"    {c3b} = stablehlo.constant dense<0.134145> : {ty [B,n]}\n" ++
+            s!"    {a3x2} = stablehlo.multiply {c3b}, {x2} : {ty [B,n]}\n" ++
+            s!"    {in2} = stablehlo.add {one}, {a3x2} : {ty [B,n]}\n" ++
+            s!"    {up} = stablehlo.multiply {csqrt}, {in2} : {ty [B,n]}\n" ++
+            s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty [B,n]}\n" ++
+            s!"    {gp} = stablehlo.add {term1}, {term2} : {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.multiply {r}, {gp} : {ty [B,n]}\n", o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
