@@ -327,6 +327,10 @@ open Proofs
 -- bn_has_vjp, cross-channel blocks vanish (pdivMat_rowIndep_perRow, a per-row
 -- generalization of rowwise_has_vjp_mat). The genuinely-new "parallel/blockwise VJP".
 #print axioms bnPerChannelFlat_has_vjp_correct
+-- B8a': the RENDERABLE per-channel BN backward — the per-example three-term
+-- bn_grad_input run on each channel-slice, proven faithful (= pdiv-Jacobian) under
+-- 0<ε. The closed form a per-channel bnBack op / renderLNBack-per-channel emits.
+#print axioms bnPerChannel_grad_input_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate

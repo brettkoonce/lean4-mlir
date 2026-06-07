@@ -215,4 +215,39 @@ theorem bnPerChannelFlat_has_vjp_correct (oc m : Nat) (ε : ℝ) (hε : 0 < ε) 
       ∑ j : Fin (oc * m), pdiv (bnPerChannelFlat oc m ε γ β) v i j * dy j :=
   (bnPerChannelFlat_has_vjp oc m ε hε γ β).correct v dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Renderable closed-form backward (the per-channel consolidated gradient)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Per-channel consolidated BN input-gradient** — the renderable closed form: run
+    the per-example three-term `bn_grad_input` on each channel-slice (`m = h·w` spatial
+    cells), reusing that channel's `γ_c`. This is exactly what a `bnPerChannelBack` SHlo
+    op / `renderLNBack`-per-channel emits; the abstract `bnPerChannelFlat_has_vjp.backward`
+    is the spec it must match. -/
+noncomputable def bnPerChannel_grad_input (oc m : Nat) (ε : ℝ) (γ : Vec oc)
+    (x dy : Vec (oc * m)) : Vec (oc * m) :=
+  fun idx =>
+    bn_grad_input m ε (γ (finProdFinEquiv.symm idx).1)
+      (Mat.unflatten x (finProdFinEquiv.symm idx).1)
+      (Mat.unflatten dy (finProdFinEquiv.symm idx).1)
+      (finProdFinEquiv.symm idx).2
+
+/-- **Renderable backward is faithful** (ℝ-headline): the per-channel consolidated
+    gradient equals the `pdiv`-contracted Jacobian of per-channel BN, under `0 < ε`.
+    Each channel reduces to the per-example `bn_input_grad_correct`. The licence to
+    render per-channel BN's backward as the three-term formula per channel. -/
+theorem bnPerChannel_grad_input_correct (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x dy : Vec (oc * m)) (i : Fin (oc * m)) :
+    bnPerChannel_grad_input oc m ε γ x dy i =
+      ∑ j : Fin (oc * m), pdiv (bnPerChannelFlat oc m ε γ β) x i j * dy j := by
+  rw [← bnPerChannelFlat_has_vjp_correct oc m ε hε γ β]
+  show bn_grad_input m ε (γ (finProdFinEquiv.symm i).1)
+        (Mat.unflatten x (finProdFinEquiv.symm i).1) (Mat.unflatten dy (finProdFinEquiv.symm i).1)
+        (finProdFinEquiv.symm i).2
+      = (bn_has_vjp m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε).backward
+          (Mat.unflatten x (finProdFinEquiv.symm i).1) (Mat.unflatten dy (finProdFinEquiv.symm i).1)
+          (finProdFinEquiv.symm i).2
+  rw [(bn_has_vjp m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε).correct,
+      ← bn_input_grad_correct m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε]
+
 end Proofs
