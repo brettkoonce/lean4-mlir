@@ -388,11 +388,13 @@ def vitFwd (p x wConv bConv cls pos gF bF Wc bc : String)
     (blocks : List BlockParams) (cfg : ViTConfig) : String :=
   let n0 := cfg.ph * cfg.pw
   let n := n0 + 1
+  -- block prefix `{p}b{i}_` (trailing `_` separates the index from sub-prefixes so
+  -- block 1's LN1 `…b1_1` ≠ block 11 `…b11_`).
   let (blkCode, lastZ) := (blocks.zipIdx).foldl (fun (st : String × String) (bi : BlockParams × Nat) =>
       let (acc, prev) := st
       let (bpi, i) := bi
-      (acc ++ blockFwd s!"{p}b{i}" prev bpi cfg.b n cfg.d cfg.m cfg.h cfg.dh cfg.eps cfg.scale,
-       s!"%{p}b{i}out")) ("", s!"%{p}cpz")
+      (acc ++ blockFwd s!"{p}b{i}_" prev bpi cfg.b n cfg.d cfg.m cfg.h cfg.dh cfg.eps cfg.scale,
+       s!"%{p}b{i}_out")) ("", s!"%{p}cpz")
   patchEmbedFwd s!"{p}pe" x wConv bConv cfg.b cfg.ic cfg.d cfg.ph cfg.pw cfg.s ++
   clsPosFwd s!"{p}cp" s!"%{p}petok" cls pos cfg.b n0 cfg.d ++
   blkCode ++
@@ -409,8 +411,8 @@ def vitBack (p dlog x wConv Wc gF : String)
   let (blkCode, firstDz) := (blocks.zipIdx.reverse).foldl (fun (st : String × String) (bi : BlockParams × Nat) =>
       let (acc, dnext) := st
       let (bpi, i) := bi
-      (acc ++ blockBack s!"{p}b{i}" dnext bpi cfg.b n cfg.d cfg.m cfg.h cfg.dh cfg.scale,
-       s!"%{p}b{i}dx")) ("", s!"%{p}flndx")
+      (acc ++ blockBack s!"{p}b{i}_" dnext bpi cfg.b n cfg.d cfg.m cfg.h cfg.dh cfg.scale,
+       s!"%{p}b{i}_dx")) ("", s!"%{p}flndx")
   headBack s!"{p}hd" Wc dlog cfg.b n cfg.d cfg.nc ++
   lnBack s!"{p}fln" gF s!"%{p}hddz" cfg.b n cfg.d ++
   blkCode ++
@@ -429,7 +431,7 @@ def vitParamNames (blocks : List BlockParams) : List String :=
 /-- Param grad SSA names produced by `vitBack p`, SAME order as `vitParamNames`. -/
 def vitGradNames (p : String) (blocks : List BlockParams) : List String :=
   [s!"%{p}pedw", s!"%{p}pedb", s!"%{p}cpdcls2", s!"%{p}cpdpos"] ++
-  ((List.range blocks.length).flatMap (fun i => blockGradNames s!"{p}b{i}")) ++
+  ((List.range blocks.length).flatMap (fun i => blockGradNames s!"{p}b{i}_")) ++
   [s!"%{p}flndg", s!"%{p}flndb", s!"%{p}hddWc", s!"%{p}hddbc"]
 
 /-- Param dims in canonical order (matches `vitParamNames`). -/
@@ -442,5 +444,71 @@ def vitParamDims (blocks : List BlockParams) (cfg : ViTConfig) : List (List Nat)
      [cfg.d], [cfg.d],
      [cfg.d, cfg.m], [cfg.m], [cfg.m, cfg.d], [cfg.d]])) ++
   [[cfg.d], [cfg.d], [cfg.d, cfg.nc], [cfg.nc]]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Whole-net module builders (the production train-step + fwd renderers)
+-- ════════════════════════════════════════════════════════════════
+
+/-- The param func signature `%nm: tensor<…>` (canonical order). -/
+def vitParamSig (blocks : List BlockParams) (cfg : ViTConfig) : String :=
+  String.intercalate ", "
+    (((vitParamNames blocks).zip (vitParamDims blocks cfg)).map (fun (nm, ds) => s!"{nm}: {ty ds}"))
+
+/-- `@vit_fwd(%x flat, params…) → logits [b,nc]` — image→logits (for eval). The flat
+    `%x` `[b, ic·H·W]` is reshaped to `[b,ic,H,W]` then run through `vitFwd`. -/
+def vitFwdModule (cfg : ViTConfig) (blocks : List BlockParams) : String :=
+  let h := cfg.s * cfg.ph; let w := cfg.s * cfg.pw; let d0 := cfg.ic * h * w
+  "module @m {\n" ++
+  s!"  func.func @vit_fwd(%x: {ty [cfg.b, d0]}, {vitParamSig blocks cfg}) -> {ty [cfg.b, cfg.nc]} " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %xr = stablehlo.reshape %x : ({ty [cfg.b, d0]}) -> {ty [cfg.b, cfg.ic, h, w]}\n" ++
+  vitFwd "vit" "%xr" "%wConv" "%bConv" "%cls" "%pos" "%gF" "%bF" "%Wc" "%bc" blocks cfg ++
+  s!"    return %vithdlogits : {ty [cfg.b, cfg.nc]}\n" ++ "  }\n}\n"
+
+/-- `@vit_train_step(%x flat, params…, %onehot) → updated params` — one mean-loss-SGD
+    step. Forward → softmax-CE cotangent `dy=(softmax(logits)−onehot)/b` → `vitBack` →
+    per-param SGD `θ ← θ − lr·dθ` (baked in), returns the updated param list. -/
+def vitTrainStepModule (cfg : ViTConfig) (blocks : List BlockParams) (lr : String) : String :=
+  let h := cfg.s * cfg.ph; let w := cfg.s * cfg.pw; let d0 := cfg.ic * h * w
+  let pnames := vitParamNames blocks
+  let pdims := vitParamDims blocks cfg
+  let grads := vitGradNames "vit" blocks
+  let cot :=
+    s!"    %le = stablehlo.exponential %vithdlogits : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [cfg.b, cfg.nc]}, tensor<f32>) -> {ty [cfg.b]}\n" ++
+    s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [cfg.b]}) -> {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsm = stablehlo.divide %le, %lsb : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %bnc = stablehlo.constant dense<{cfg.b}.0> : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [cfg.b, cfg.nc]}\n"
+  let upd := String.join (((pnames.zip grads).zip pdims).map (fun ((nm, gr), ds) =>
+    s!"    {nm}_lr = stablehlo.constant dense<{lr}> : {ty ds}\n" ++
+    s!"    {nm}_st = stablehlo.multiply {gr}, {nm}_lr : {ty ds}\n" ++
+    s!"    {nm}n = stablehlo.subtract {nm}, {nm}_st : {ty ds}\n"))
+  let retTy := String.intercalate ", " (pdims.map (fun ds => ty ds))
+  let retVals := String.intercalate ", " (pnames.map (fun nm => s!"{nm}n"))
+  "module @m {\n" ++
+  s!"  func.func @vit_train_step(%x: {ty [cfg.b, d0]}, {vitParamSig blocks cfg}, %onehot: {ty [cfg.b, cfg.nc]}) -> ({retTy}) " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %xr = stablehlo.reshape %x : ({ty [cfg.b, d0]}) -> {ty [cfg.b, cfg.ic, h, w]}\n" ++
+  vitFwd "vit" "%xr" "%wConv" "%bConv" "%cls" "%pos" "%gF" "%bF" "%Wc" "%bc" blocks cfg ++
+  cot ++
+  vitBack "vit" "%dy" "%xr" "%wConv" "%Wc" "%gF" blocks cfg ++
+  upd ++
+  s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+
+/-- Production ViT-Tiny config @ Imagenette 224² (matches `ViTLayout`): depth-`k`
+    blocks with distinct per-block param names `%<field>_<i>`. -/
+def vitTinyBlocks (depth : Nat) : List BlockParams :=
+  (List.range depth).map (fun i =>
+    { g1 := s!"%g1_{i}", b1 := s!"%b1_{i}",
+      Wq := s!"%Wq_{i}", bq := s!"%bq_{i}", Wk := s!"%Wk_{i}", bk := s!"%bk_{i}",
+      Wv := s!"%Wv_{i}", bv := s!"%bv_{i}", Wo := s!"%Wo_{i}", bo := s!"%bo_{i}",
+      g2 := s!"%g2_{i}", b2 := s!"%b2_{i}",
+      Wfc1 := s!"%Wfc1_{i}", bfc1 := s!"%bfc1_{i}", Wfc2 := s!"%Wfc2_{i}", bfc2 := s!"%bfc2_{i}" })
+
+def vitTinyConfig (b depth : Nat) : ViTConfig :=
+  { b := b, ic := 3, d := 192, ph := 14, pw := 14, s := 16, m := 768, h := 3, dh := 64,
+    nc := 10, eps := "1.0e-5", scale := "0.125" }   -- 1/√64 = 0.125
 
 end ViTRender

@@ -223,6 +223,10 @@ lean_exe «convnext-verified» where
   root := `MainConvNeXtVerified
   moreLinkArgs := ireeLink
 
+lean_exe «vit-verified» where
+  root := `MainViTVerified
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar-cnn-train» where
   root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink
