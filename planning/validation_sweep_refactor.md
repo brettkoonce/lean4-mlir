@@ -105,7 +105,19 @@ compiling but still >10min). Reverted the fold; kept the forward + rfl + canonic
 strided block VJP. Representative tie is the pragmatic current state; revisit the full fold with
 a non-`isDefEq` assembly (e.g. `@[irreducible]` blocks, or a fold combinator) if pursued.
 
-Remaining (other deferred passes): E (whole-net SHlo assembly + re-route committed render),
+**E (forward) STARTED — mnv2 representative DONE (cd11958):** `mobilenetv2FwdGraph` +
+`mobilenetv2FwdGraph_faithful : den(graph)=mobilenetv2Forward` in `StableHLO.lean`, the ch7 peer
+of `resnetFwdGraph_faithful` (whole-net SHlo graph: stem conv-bn-relu6 → skip/no-skip
+inverted-residual via `addV` → GAP → dense; one `simp only` over the op-faithfulness lemmas +
+`unfold`). Axiom-clean. SAME-spatial 2-block representative (matches the representative forward,
+not the full strided render). **E IS `simp`-based ⇒ it likely does NOT hit the VJP fold's
+concrete-dim `isDefEq` wall** — so the full strided E (assemble `depthwiseStridedF`/
+`flatConvStridedF` whole-net graph at concrete dims + prove faithfulness) is plausibly tractable,
+unlike full B/C. Still missing for full E: (1) strided whole-net graph assembly, (2) re-route the
+committed `tests/Test*` string `.mlir` to `pretty(emit graph)`. r34/enet/convnext/vit forward-E
+= same representative-graph recipe (r34 already has `resnetFwdGraph`); their graphs not built yet.
+
+Remaining (other deferred passes): full/strided E + re-route committed renders;
 v3-parity (Adam/aug/schedule so numbers stop sucking). See the readiness sections + loose ends.
 
 ## THE PLAN (agreed)
