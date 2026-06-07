@@ -110,3 +110,29 @@ def cifarBnVerified : VerifiedNetSpec where
     (#[64, 32, 3, 3], 0), (#[64], 2), (#[], 1), (#[], 2),
     (#[64, 64, 3, 3], 0), (#[64], 2), (#[], 1), (#[], 2),
     (#[4096, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
+
+/-- ch6 **ResNet-34** on Imagenette 224²: 7×7-s2 stem → BN → relu → maxpool →
+    [3,4,6,3] basic-block stages (per-channel BN, strided downsample at the first block of
+    stages 2–4) → GAP → dense. 146 params. VJP: the audited parametric skeleton
+    `Proofs.resnet34_has_vjp_at`. -/
+def resnet34Verified : VerifiedNetSpec where
+  name     := "ResNet-34"
+  slug     := "resnet34"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 10
+  data     := .imagenette
+  layers   := [
+    .convBn 3 64 7 2,            -- 7×7-s2 stem → BN → relu       224→112
+    .maxPool 2 2,                --                                112→56
+    .residualStage  64  64 3 1,  -- stage1: 3 identity            @56
+    .residualStage  64 128 4 2,  -- stage2: downsample + 3        56→28
+    .residualStage 128 256 6 2,  -- stage3: downsample + 5        28→14
+    .residualStage 256 512 3 2,  -- stage4: downsample + 2        14→7
+    .globalAvgPool,
+    .dense 512 10 ]
+  blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→pool→[3,4,6,3] blocks w/ per-channel BN + strided downsamples, 56→28→14→7→GAP→dense) via the VERIFIED renderer → IREE FFI → GPU"
+
+-- Derived layout (146 params) == the audited hand-list ResNet34Layout.specs.
+#guard resnet34Verified.toSpecs == ResNet34Layout.specs
