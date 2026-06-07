@@ -15,14 +15,16 @@ ResNet-34 architecture), B7 (the unconditional concrete instance), and B8a/B8a'
 > **+ the renderable backward in the network's Tensor3 layout**
 > (`bnPerChannelTensor3_grad_input_correct`); and **B8b** lands the per-channel BN
 > **SHlo op pair** `bnPerChannelF`/`bnPerChannelBack` (`bnPerChannelBack_faithful`),
-> rendered + **iree-compiled to ROCm**. **Audit 155/155, 3-axiom.** The per-channel
-> BN math AND its MLIR op pair are now done. What remains for a *trained* model: the
-> full ResNet-34 GPU render+train (B9) — wiring the strided convs + this BN op pair
-> into a whole-net train step. Read §§0–3 first; rest is reference.
+> rendered + **iree-compiled to ROCm**. **Audit 155/155, 3-axiom.** And **B9 is DONE**:
+> a real **ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) is GPU-TRAINING**
+> on the verified-rendered StableHLO — `resnet34-verified`, **38.6% CIFAR-10 test acc
+> @ epoch 1** (climbing), confirming the hand-wired 34-layer backward is correct. Ch6
+> is now a *trained* model, not just a verified architecture. Read §§0–3 first; rest is
+> reference.
 
-Written 2026-06-07 by the session that did ch6-A + ch6-B1…B8a' + B9-entry + B8b.
-`origin/main` is behind by **~26 local commits** (`34cdc52`…HEAD; latest *code* commit
-`813065c` = B8b, the rest are handoff-doc updates); commit-to-main is fine, **never push
+Written 2026-06-07 by the session that did ch6-A + ch6-B1…B8a' + B9-entry + B8b + B9.
+`origin/main` is behind by **~33 local commits** (`34cdc52`…HEAD; latest *code* commit
+`bee1943` = B9c, the rest are handoff-doc updates); commit-to-main is fine, **never push
 without explicit per-push permission**.
 
 ---
@@ -39,8 +41,8 @@ train-step renderer, a `*-verified` exe that GPU-trains on the rendered text,
 audit ℝ-headline(s) 3-axiom-clean.
 
 Ladder: ch2 92.10%, ch3 97.86%, ch4 98.89%, ch5-A 66%, ch5-B 57%,
-**ch6-A (ResNet-style) 60.8%**. ch6-B = real ResNet-34 (architecture verified; not
-yet trained).
+**ch6-A (ResNet-style) 60.8%**, **ch6-B (real ResNet-34, [3,4,6,3], per-channel BN)
+38.6%@ep1 (climbing)** — architecture verified (`resnet34_has_vjp_at`) AND GPU-trained.
 
 ---
 
@@ -93,8 +95,9 @@ activations; folded from `vjp_comp_at` + `vjp_chain_at`.
 
 ## 2. ⭐ WHAT REMAINS (for a TRAINED ResNet-34)
 
-**Genuinely remaining = B9 (the full render/GPU trainer).** B7, B8a/B8a', B9-entry,
-and B8b below are ✅ DONE — kept here with their design notes for reference. In order:
+**Nothing critical remaining — B9 is DONE (ResNet-34 GPU-trains, 38.6%@ep1).** B7,
+B8a/B8a', B9-entry, B8b, and B9 below are all ✅ DONE — kept here with their design
+notes for reference. Only optional polish remains (more epochs, library refactor):
 
 ### ~~B7 — concrete-instance discharge (non-vacuity)~~  ✅ DONE (`785caa3`)
 `ResNet34Concrete.resnet34Concrete_has_vjp_correct` (in `ResNet34.lean`). A real
@@ -154,7 +157,36 @@ vs ch5-B's rank-0 scalars), full 9-site lockstep mirroring `bnF`/`bnBack`:
 ROCm gfx1100 (`lake env lean tests/TestPerChannelBn.lean` with `IREE_BACKEND=rocm`). What
 remains is wiring it into the B9 trainer. See §6 honesty note.
 
-### B9 — full ResNet-34 render + trainer + GPU train  [render; ~1000+ lines]
+### ~~B9 — full ResNet-34 render + trainer + GPU train~~  ✅ DONE — TRAINS 38.6%@ep1
+The real ResNet-34 now GPU-trains on the verified-rendered StableHLO. Done in three
+de-risked sub-steps (the doc's "de-risk each op fragment on iree-compile" advice):
+- **B9a** (`cafb5ee`): `tests/TestResnet34Fwd.lean` — full forward renderer (stride-1
+  3×3 stem 3→64 + maxpool 32→16 → [3,4,6,3] blocks @64/128/256/512, spatial 16/8/4/2,
+  strided downsamples → GAP → dense), depth-parametric block/stage builders. 87KB →
+  iree-compile OK ROCm. (Dims keep maps non-degenerate — no 2→1 strided conv.)
+- **B9b** (`ba73b37` de-risk small net, `fe317a8` full depth): `tests/TestResnet34Train.lean`
+  — train-step renderer, data-driven from one `Blk` list (`allParams`, 146 tensors).
+  Backward helpers each mirror a proven VJP: reluBack, **bnBackPC** (per-channel BN
+  three-term + dγ/dβ), convBack/convWGrad/convBiasGrad, **convBackStrided/convWGradStrided**
+  (zero-upsample then stride-1 = the decimate-backward), maxpoolBack (select_and_scatter),
+  dense/GAP back; block backward idBlockBack/downBlockBack (residual fan-in). 249KB →
+  iree-compile OK ROCm.
+- **B9c** (`bee1943`): `ResNet34Layout` (IreeRuntime.lean — 146-param `(dims,initKind)`
+  specs in func-arg order, He/γ=1/β=0 init) + `MainResnet34Verified.lean` + lakefile
+  `resnet34-verified`. Mean-loss cotangent (÷B), lr=0.1, `%x` is the flat `[BS,3072]`
+  FFI buffer reshaped to `[BS,3,32,32]`. Reuses `mlpTrainStepV`. **GPU-trains CIFAR-10:
+  epoch 1 = 38.6%** (gradients correct ⇒ the hand-wired 34-layer backward works).
+- **NB (honest framing):** the trainer is a *codegen* artifact (hand-rendered StableHLO),
+  faithful PER-OP (each fragment is the StableHLO a proven-faithful emitter produces);
+  it is NOT a single `den(trainStep)=…` theorem. The whole-net VJP theorem is
+  `resnet34_has_vjp_at` (parametric, audit-clean); the trainer mirrors its structure and
+  is validated by training (loss/acc). Per-channel BN here is per-example instance-norm
+  (matches the proven `bnPerChannelFlat`), not batch-BN.
+- Remaining polish (optional): run more epochs for a final number; byte-stable commit of
+  `verified_mlir/resnet34_*.mlir`; optionally hoist the renderers from `tests/` into a
+  library module shared with the Main (currently the Main reads the committed MLIRs).
+
+#### Original B9 plan (for reference)
 - `resnet34TrainStepText` — scale `resnetTrainStepText` (StableHLO.lean): strided
   stem (`flatConvStridedF`/`convStridedBack`), 16 blocks, residual fan-ins,
   strided downsample at stage starts, GAP, dense. Watch SSA-name management.
@@ -307,8 +339,16 @@ DATA=/home/skoonce/lean/claude_max/lean4-jax/data           # mnist + cifar-10/ 
 - `LeanMlir/Proofs/StableHLOParse.lean` — parser cases for all ch6 ops (incl. B8b).
 - `tests/TestPerChannelBn.lean` — **B8b** standalone render + iree-compile check
   (`@perchannel_bn_fwd`/`@perchannel_bn_back`, both compile to ROCm gfx1100).
-- `LeanMlir/IreeRuntime.lean` — `ResnetLayout` (26 params). (B9: `ResNet34Layout`.)
+- `tests/TestResnet34Fwd.lean` — **B9a** full ResNet-34 forward renderer (run via
+  `lake env lean …`, writes `verified_mlir/resnet34_fwd.mlir`, iree-compiles).
+- `tests/TestResnet34Train.lean` — **B9b** full train-step renderer (data-driven `Blk`
+  list + `allParams`; fwd/back fragment helpers; writes `verified_mlir/resnet34_train_step.mlir`).
+- `LeanMlir/IreeRuntime.lean` — `ResnetLayout` (26 params, ch6-A) + **`ResNet34Layout`**
+  (146 params, B9c — generated `(dims,initKind)` specs in func-arg order).
 - `MainResnetVerified.lean` + lakefile `resnet-verified` — ch6-A trainer.
+- `MainResnet34Verified.lean` + lakefile **`resnet34-verified`** — **B9c** ResNet-34
+  trainer (programmatic 146-param init, GPU-trains CIFAR-10).
+- `verified_mlir/resnet34_{fwd,train_step}.mlir` — B9 rendered (BS=128, 89KB/254KB).
 - `tests/AuditAxioms.lean` — 155 headlines (imports StridedConv + ResNet34 + PerChannelBN).
 - `verified_mlir/resnet_{fwd,train_step}.mlir` — ch6-A rendered (byte-stable).
 - Reuse templates: `cnn_has_vjp_at`@CNN.lean:2817 + `CnnConcrete`@MnistCNN.lean:841
