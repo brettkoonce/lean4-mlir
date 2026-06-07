@@ -165,3 +165,42 @@ def mobilenetv2Verified : VerifiedNetSpec where
 
 -- Derived layout (82 params) == the audited hand-list MobileNetV2Layout.specs.
 #guard mobilenetv2Verified.toSpecs == MobileNetV2Layout.specs
+
+/-- ch8 **EfficientNet-B0** on Imagenette 224²: 3×3-s2 stem → 16 MBConv blocks (`[t,c,n,s,k]`
+    B0 config; expand 1×1 [skip when t=1] → depthwise k×k → squeeze-excite → project 1×1, all
+    BN + swish) → 1×1 head (320→1280) → GAP → dense. 262 params. The 16 `mbConvSE ic mid oc r k`
+    args are the B0 generator unrolled (mid=t·ic, r=ic/4, ic threads stage→stage). VJP witness
+    `Proofs.efficientnet_has_vjp` (representative — full B/C deferred). -/
+def efficientnetVerified : VerifiedNetSpec where
+  name     := "EfficientNet-B0"
+  slug     := "efficientnet"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 10
+  data     := .imagenette
+  layers   := [
+    .convBn 3 32 3 2,            -- stem 3×3-s2
+    .mbConvSE   32   32  16  8 3,  -- s1 t1 (no expand)
+    .mbConvSE   16   96  24  4 3,  -- s2
+    .mbConvSE   24  144  24  6 3,
+    .mbConvSE   24  144  40  6 5,  -- s3
+    .mbConvSE   40  240  40 10 5,
+    .mbConvSE   40  240  80 10 3,  -- s4
+    .mbConvSE   80  480  80 20 3,
+    .mbConvSE   80  480  80 20 3,
+    .mbConvSE   80  480 112 20 5,  -- s5
+    .mbConvSE  112  672 112 28 5,
+    .mbConvSE  112  672 112 28 5,
+    .mbConvSE  112  672 192 28 5,  -- s6
+    .mbConvSE  192 1152 192 48 5,
+    .mbConvSE  192 1152 192 48 5,
+    .mbConvSE  192 1152 192 48 5,
+    .mbConvSE  192 1152 320 48 3,  -- s7
+    .convBn 320 1280 1 1,         -- head 1×1 (320→1280)
+    .globalAvgPool,
+    .dense 1280 10 ]
+  blurb := "EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"
+
+-- Derived layout (262 params) == the audited hand-list EfficientNetLayout.specs.
+#guard efficientnetVerified.toSpecs == EfficientNetLayout.specs

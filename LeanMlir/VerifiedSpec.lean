@@ -49,6 +49,11 @@ inductive VLayer where
       conv→per-channel BN→relu6, depthwise 3×3→BN→relu6, project 1×1→BN (linear bottleneck),
       + residual when `stride=1 ∧ ic=oc`. Params `{W,b,γ,β}` ×3 (expand/depthwise/project). -/
   | invertedResidual (ic mid oc stride : Nat)
+  /-- EfficientNet MBConv block (`ic→mid=t·ic→oc`, depthwise `k×k`, SE ratio `r`): expand 1×1
+      (skipped when `mid=ic`, i.e. t=1) → BN → swish, depthwise k×k → BN → swish, squeeze-excite
+      (`Ws₁[mid,r]`,`bs₁[r]`,`Ws₂[r,mid]`,`bs₂[mid]`, sigmoid gate), project 1×1 → BN. Params:
+      (expand{W,b,γ,β} if t≠1) ++ depthwise{W,b,γ,β} ++ SE{Ws₁,bs₁,Ws₂,bs₂} ++ project{W,b,γ,β}. -/
+  | mbConvSE (ic mid oc r k : Nat)
 deriving Repr
 
 namespace VLayer
@@ -84,6 +89,11 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
   | invertedResidual ic mid oc _ =>                 -- expand 1×1 | depthwise 3×3 | project 1×1, each +BN
     #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2),
       (#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),
+      (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]
+  | mbConvSE ic mid oc r k =>                        -- (expand if t≠1) | depthwise k×k | SE | project, +BN
+    (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2)] else #[]) ++
+    #[(#[mid,1,k,k],0),(#[mid],2),(#[mid],1),(#[mid],2),
+      (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),
       (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]
 
 end VLayer
