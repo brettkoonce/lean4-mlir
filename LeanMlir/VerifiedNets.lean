@@ -204,3 +204,32 @@ def efficientnetVerified : VerifiedNetSpec where
 
 -- Derived layout (262 params) == the audited hand-list EfficientNetLayout.specs.
 #guard efficientnetVerified.toSpecs == EfficientNetLayout.specs
+
+/-- ch9 **ConvNeXt-T** on Imagenette 224²: 4×4-s4 patchify → [3,3,9,3] ConvNeXt blocks @
+    [96,192,384,768] (depthwise 7×7 → scalar-LN → 1×1 expand → GELU → 1×1 project → layerScale)
+    with 3 between-stage (LN + 2×2-s2) downsamples (56→28→14→7) → GAP → LN → dense. 180 params.
+    VJP witness `Proofs.convnext_has_vjp` (representative ~2-block; full B/C deferred). -/
+def convnextVerified : VerifiedNetSpec where
+  name     := "ConvNeXt-T"
+  slug     := "convnext"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 10
+  data     := .imagenette
+  layers   := [
+    .conv 3 96 4 4,                                              -- patchify 4×4/s4   224→56
+    .convNextBlock 96, .convNextBlock 96, .convNextBlock 96,     -- stage 1 (3) @56
+    .bn, .conv 96 192 2 2,                                       -- downsample 96→192  56→28
+    .convNextBlock 192, .convNextBlock 192, .convNextBlock 192,  -- stage 2 (3) @28
+    .bn, .conv 192 384 2 2,                                      -- downsample 192→384 28→14
+    .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,  -- stage 3 (9) @14
+    .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,
+    .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,
+    .bn, .conv 384 768 2 2,                                      -- downsample 384→768 14→7
+    .convNextBlock 768, .convNextBlock 768, .convNextBlock 768,  -- stage 4 (3) @7
+    .globalAvgPool, .bn, .dense 768 10 ]                         -- head: GAP → LN → dense
+  blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + LN + GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense) via the VERIFIED renderer → IREE FFI → GPU"
+
+-- Derived layout (180 params) == the audited hand-list ConvNeXtLayout.specs.
+#guard convnextVerified.toSpecs == ConvNeXtLayout.specs
