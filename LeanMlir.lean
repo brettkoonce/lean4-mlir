@@ -7,6 +7,9 @@ import LeanMlir.GradcheckHelpers
 import LeanMlir.ViTRender
 import LeanMlir.SpecHelpers
 import LeanMlir.Train
+import LeanMlir.VerifiedTrain
+import LeanMlir.VerifiedSpec
+import LeanMlir.VerifiedNets
 import LeanMlir.Ddpm
 import LeanMlir.Cam
 -- VJP proofs (Attention pulls in Tensor/MLP/Residual/SE/LayerNorm/BatchNorm
