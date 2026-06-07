@@ -15,6 +15,7 @@ import LeanMlir.Proofs.CifarCNN
 import LeanMlir.Proofs.IR
 import LeanMlir.Proofs.StableHLO
 import LeanMlir.Proofs.StableHLOParse
+import LeanMlir.Proofs.StridedConv
 
 open Proofs
 
@@ -280,6 +281,13 @@ open Proofs
 -- VJP `cnn_has_vjp_at_correct` (+ the unconditional CnnConcrete instance) is
 -- audited above; this is the rendered-forward peer (cf. cifarBnFwdGraph_faithful).
 #print axioms StableHLO.resnetFwdGraph_faithful
+
+-- Chapter-6 ResNet **Milestone B** (toward real ResNet-34): stride-2 SAME
+-- convolution — the downsampling op that gates the jump from the ch6-A ResNet-
+-- style net to 34 layers. Key identity: conv_stride2 = decimate2 ∘ (stride-1
+-- conv), so the input-VJP reuses the proven conv2d_has_vjp3 (via vjp_comp + the
+-- decimation reindex-VJP) rather than re-deriving it with stride arithmetic.
+#print axioms flatConvStride2_has_vjp_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
