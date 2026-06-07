@@ -83,11 +83,30 @@ DONE — rung A + trainer migrated + GPU codegen-validated (B/C/E pending) — *
   that's the deferred v3-parity issue, NOT a codegen problem.
 
 **A-route sweep COMPLETE — all ch2–10 trainers are on the declarative VerifiedNetSpec/driver.**
-All on `main`, **NOT pushed** (~78 ahead).
+All on `main`, **NOT pushed** (~80 ahead).
 
-Remaining (the deferred passes): full B/C (build the real forwards — representative witnesses
-won't do), E (whole-net SHlo assembly + re-route committed render), v3-parity (Adam/aug/
-schedule so numbers stop sucking). See the readiness sections + loose ends.
+**B/C DONE for all imagenette nets (2026-06-07, commits 9ce5674 + 3129a48, in `SpecVJP.lean`):**
+- **mnv2 = FULL faithful** (9ce5674): spec rfl-denotes the *real* 6-block strided render
+  (`mobilenetv2Forward_full`) + canonical `HasVJP` witness + NEW strided inverted-residual
+  block VJP (`invresBodyStrided_has_vjp_at`/`_differentiableAt`, `convBnRelu6Strided*`,
+  `dwBnRelu6Strided*`, `depthwiseStride2Flat` reuse) in `MobileNetV2.lean`.
+- **r34/efficientnet/convnext/vit = REPRESENTATIVE** (3129a48): `denoteXRep <rep VLayer list>
+  = <net>Forward/skeleton := rfl` (rung B) + canonical `HasVJP` (rung C), referencing the
+  audited apex (`efficientnet_has_vjp`/`convnext_has_vjp`/`vit_full_has_vjp`/`resnet34_has_vjp_at`).
+  All cheap to compile (symbolic dims). vit = scalar-LN witness (per-channel `[D]` gap); r34 ties
+  to the parametric [3,4,6,3] skeleton (no concrete whole-net Forward).
+
+**Full faithful build for r34/enet/convnext/vit is DEFERRED — known Lean wall.** The mnv2 full
+whole-net conditional fold (`mobilenetv2_full_has_vjp_at`, ~14-stage `vjp_comp_at`) WAS built and
+is mathematically correct, but compiles pathologically slowly (>10 min: `isDefEq` churns ~170k
+heartbeats/stage over deeply-nested `@[reducible]` blocks at CONCRETE dims — symbolic reps don't
+hit this). Tried: subst-inline, opaque named-block defs + explicit `(h:=)(w:=)` dims (got it
+compiling but still >10min). Reverted the fold; kept the forward + rfl + canonical witness +
+strided block VJP. Representative tie is the pragmatic current state; revisit the full fold with
+a non-`isDefEq` assembly (e.g. `@[irreducible]` blocks, or a fold combinator) if pursued.
+
+Remaining (other deferred passes): E (whole-net SHlo assembly + re-route committed render),
+v3-parity (Adam/aug/schedule so numbers stop sucking). See the readiness sections + loose ends.
 
 ## THE PLAN (agreed)
 
