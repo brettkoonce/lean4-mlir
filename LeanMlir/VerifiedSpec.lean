@@ -58,6 +58,16 @@ inductive VLayer where
       c→4c → GELU → 1×1 project 4c→c → layerScale (per-channel γ). Params: depthwise{W,b};
       LN{γ,β scalar}; expand{W,b}; project{W,b}; layerScale{γ:[c]}. -/
   | convNextBlock (c : Nat)
+  /-- Per-channel LayerNorm over `d` features (normalize ∘ `[d]` affine). Params `{γ:[d], β:[d]}`
+      — the non-scalar form (cf. `bn`, which is scalar-global). -/
+  | layerNorm (d : Nat)
+  /-- Pre-norm transformer block (dim `d`, MLP hidden `m`): LN1 → MHSA (Wq/Wk/Wv/Wo `[d,d]`) →
+      +x → LN2 → MLP (`d→m→d`) → +x. Params: LN1{γ,β}; {Wq,bq,Wk,bk,Wv,bv,Wo,bo};
+      LN2{γ,β}; {Wfc1[d,m],bfc1, Wfc2[m,d],bfc2} (per-channel `[d]` LN). -/
+  | transformerBlock (d m : Nat)
+  /-- A bare learned parameter tensor `(dims, initKind)` — e.g. ViT's CLS token / positional
+      embedding (not produced by any standard layer). -/
+  | param (dims : Array Nat) (kind : Nat)
 deriving Repr
 
 namespace VLayer
@@ -102,6 +112,13 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
   | convNextBlock c =>                               -- depthwise 7×7 | LN(scalar) | expand | project | layerScale
     #[(#[c,1,7,7],0),(#[c],2),(#[],1),(#[],2),
       (#[4*c,c,1,1],0),(#[4*c],2),(#[c,4*c,1,1],0),(#[c],2),(#[c],1)]
+  | layerNorm d             => #[(#[d],1),(#[d],2)]   -- per-channel γ,β
+  | transformerBlock d m =>                          -- LN1 | Wq/Wk/Wv/Wo | LN2 | MLP(d→m→d)
+    #[(#[d],1),(#[d],2),
+      (#[d,d],0),(#[d],2),(#[d,d],0),(#[d],2),(#[d,d],0),(#[d],2),(#[d,d],0),(#[d],2),
+      (#[d],1),(#[d],2),
+      (#[d,m],0),(#[m],2),(#[m,d],0),(#[d],2)]
+  | param dims kind         => #[(dims, kind)]
 
 end VLayer
 

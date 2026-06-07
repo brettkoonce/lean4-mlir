@@ -233,3 +233,39 @@ def convnextVerified : VerifiedNetSpec where
 
 -- Derived layout (180 params) == the audited hand-list ConvNeXtLayout.specs.
 #guard convnextVerified.toSpecs == ConvNeXtLayout.specs
+
+/-- ch10 **ViT-Tiny** on Imagenette 224² (patch-16): 16×16-s16 conv patch embed (3→192,
+    →196 patches), learned CLS token + positional embed (→197 tokens), 12 pre-norm transformer
+    blocks (dim 192, 3 heads, MLP 768), final per-channel LayerNorm, CLS-slice dense head 192→10.
+    200 params. VJP witness `Proofs.vit_full_has_vjp_correct` (scalar-LN witness vs this
+    per-channel `[192]` render — granularity gap; full B/C deferred). -/
+def vitVerified : VerifiedNetSpec where
+  name     := "ViT-Tiny"
+  slug     := "vit"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 10
+  data     := .imagenette
+  layers   := [
+    .conv 3 192 16 16,            -- patch embed 16×16/s16 (3→192)   224→14×14=196
+    .param #[1, 192] 2,           -- CLS token  [1,192]
+    .param #[197, 192] 2,         -- positional embedding  [197,192]
+    .transformerBlock 192 768,    -- 12 pre-norm blocks @ dim 192, MLP 768
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .layerNorm 192,               -- final LayerNorm (per-channel [192])
+    .dense 192 10 ]               -- CLS-head 192→10
+  blurb := "ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → IREE FFI → GPU"
+
+-- Derived layout (200 params) == the audited hand-list ViTLayout.specs.
+#guard vitVerified.toSpecs == ViTLayout.specs
