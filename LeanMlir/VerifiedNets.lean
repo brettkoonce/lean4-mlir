@@ -136,3 +136,32 @@ def resnet34Verified : VerifiedNetSpec where
 
 -- Derived layout (146 params) == the audited hand-list ResNet34Layout.specs.
 #guard resnet34Verified.toSpecs == ResNet34Layout.specs
+
+/-- ch7 **MobileNetV2** on Imagenette 224²: 3×3-s2 stem → BN → relu6 → 6 inverted-residual
+    blocks `[t,c,n,s]` (4 strided depthwise downsamples, per-channel BN, relu6, linear
+    bottleneck) → 1×1 head conv → BN → relu6 → GAP → dense. 82 params. (The proof witness
+    `Proofs.mobilenetv2_has_vjp_at` is a representative stem+2-block scalar-BN net, not this
+    full render — B/C tie is therefore representative, see planning doc.) -/
+def mobilenetv2Verified : VerifiedNetSpec where
+  name     := "MobileNetV2"
+  slug     := "mobilenetv2"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 10
+  data     := .imagenette
+  layers   := [
+    .convBn 3 16 3 2,               -- stem 3×3-s2 → BN → relu6     224→112
+    .invertedResidual 16  64 24 2,  -- b1  s2                       112→56
+    .invertedResidual 24  96 24 1,  -- b2  s1                       @56
+    .invertedResidual 24  96 32 2,  -- b3  s2                       56→28
+    .invertedResidual 32 128 32 1,  -- b4  s1                       @28
+    .invertedResidual 32 128 64 2,  -- b5  s2                       28→14
+    .invertedResidual 64 256 64 2,  -- b6  s2                       14→7
+    .convBn 64 128 1 1,             -- head 1×1 → BN → relu6
+    .globalAvgPool,
+    .dense 128 10 ]
+  blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 6 inverted-residual blocks, 4 stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"
+
+-- Derived layout (82 params) == the audited hand-list MobileNetV2Layout.specs.
+#guard mobilenetv2Verified.toSpecs == MobileNetV2Layout.specs

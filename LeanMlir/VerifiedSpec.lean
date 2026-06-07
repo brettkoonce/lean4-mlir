@@ -45,6 +45,10 @@ inductive VLayer where
   /-- scalar-global BatchNorm (the proven `bnForward`): normalize over the whole
       `c·h·w` feature map per example, **scalar** γ/β. Params `{γ, β}` (rank-0). -/
   | bn
+  /-- MobileNetV2 inverted-residual block (`ic→mid→oc`, depthwise `stride`): expand 1×1
+      conv→per-channel BN→relu6, depthwise 3×3→BN→relu6, project 1×1→BN (linear bottleneck),
+      + residual when `stride=1 ∧ ic=oc`. Params `{W,b,γ,β}` ×3 (expand/depthwise/project). -/
+  | invertedResidual (ic mid oc stride : Nat)
 deriving Repr
 
 namespace VLayer
@@ -77,6 +81,10 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
   | conv ic oc k _          => #[(#[oc,ic,k,k],0),(#[oc],2)]
   | flatten                 => #[]
   | bn                      => #[(#[],1),(#[],2)]   -- scalar γ (ones), β (zeros)
+  | invertedResidual ic mid oc _ =>                 -- expand 1×1 | depthwise 3×3 | project 1×1, each +BN
+    #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2),
+      (#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),
+      (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]
 
 end VLayer
 
