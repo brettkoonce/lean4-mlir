@@ -1,5 +1,6 @@
 import LeanMlir.VerifiedNets
 import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.MnistCNN
 
 /-! # Spec → math (the verification tie), Rung 1: the linear classifier
 
@@ -103,3 +104,43 @@ theorem mlpVerified_has_vjp_correct (W₀ : Mat 784 512) (b₀ : Vec 512)
     (mlpVerified_has_vjp W₀ b₀ W₁ b₁ W₂ b₂).backward x dy i
       = ∑ j : Fin 10, pdiv (denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
   (mlpVerified_has_vjp W₀ b₀ W₁ b₁ W₂ b₂).correct x dy i
+
+/-! ## Rung 3: the CNN — the fold now runs through conv + maxpool
+
+The CNN's denotation is `mnistCnnNoBnForward` — a flat `Vec 784 → Vec 10` chain
+`flatConv → relu → flatConv → relu → maxPoolFlat → dense → relu → dense → relu → dense`.
+The honest chain-rule fold (via `vjp_comp_at` through conv/maxpool/dense) is the audited
+`mnistCnnNoBn_has_vjp_at`, conditional on the four ReLU kinks + the maxpool being smooth at
+the input. Here we headline the unconditional canonical witness (`mlp_has_vjp` style); the
+spec is exactly the subject of that conditional fold via `cnnVerified_denote_eq`. -/
+
+/-- Math denotation of the CNN spec: the 11-layer list denotes to `mnistCnnNoBnForward`
+    (`c=32`, `h=w=14`, the Chapter-4 MNIST CNN). -/
+noncomputable def denoteCNN (layers : List VLayer)
+    (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32) (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32)
+    (W₃ : Mat 6272 512) (b₃ : Vec 512) (W₄ : Mat 512 512) (b₄ : Vec 512)
+    (W₅ : Mat 512 10) (b₅ : Vec 10) : Vec 784 → Vec 10 :=
+  match layers with
+  | [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
+     .dense 6272 512, .relu, .dense 512 512, .relu, .dense 512 10] =>
+      mnistCnnNoBnForward (h := 14) (w := 14) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the proven model.** `cnnVerified`'s denotation is exactly `mnistCnnNoBnForward`
+    — the function the Chapter-4 fold `mnistCnnNoBn_has_vjp_at` is about — by `rfl`. -/
+theorem cnnVerified_denote_eq (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
+    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (W₃ : Mat 6272 512) (b₃ : Vec 512)
+    (W₄ : Mat 512 512) (b₄ : Vec 512) (W₅ : Mat 512 10) (b₅ : Vec 10) :
+    denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
+      = mnistCnnNoBnForward (h := 14) (w := 14) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ := rfl
+
+/-- **The spec carries the math.** The CNN spec's denotation (conv→relu→conv→relu→maxpool
+    →dense→…) has a VJP — the canonical `pdiv`-derived witness. The conditional chain-rule
+    fold through conv/maxpool is the audited `mnistCnnNoBn_has_vjp_at`. -/
+noncomputable def cnnVerified_has_vjp (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
+    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (W₃ : Mat 6272 512) (b₃ : Vec 512)
+    (W₄ : Mat 512 512) (b₄ : Vec 512) (W₅ : Mat 512 10) (b₅ : Vec 10) :
+    HasVJP (denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅) where
+  backward x dy i :=
+    ∑ j : Fin 10, pdiv (denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅) x i j * dy j
+  correct _ _ _ := rfl

@@ -38,6 +38,10 @@ inductive VLayer where
   | dense (ic oc : Nat)
   /-- ReLU activation (pointwise). No params. -/
   | relu
+  /-- plain conv (`oc←ic`, `k×k`, `stride`) + bias, NO batch-norm. Params `{W,b}`. -/
+  | conv (ic oc k stride : Nat)
+  /-- flatten `[C,H,W]` → vector. No params (a reshape). -/
+  | flatten
 deriving Repr
 
 namespace VLayer
@@ -67,6 +71,8 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
   | globalAvgPool           => #[]
   | dense ic oc             => #[(#[ic,oc],0),(#[oc],2)]
   | relu                    => #[]
+  | conv ic oc k _          => #[(#[oc,ic,k,k],0),(#[oc],2)]
+  | flatten                 => #[]
 
 end VLayer
 
