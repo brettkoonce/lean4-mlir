@@ -4,20 +4,31 @@ Continuation doc for the **MobileNetV2** chapter of the verified-codegen ladder.
 brings MNv2 into the same "render via the proof-carrying StableHLO emitter + GPU-train
 on the rendered text" line that ch6 just closed for ResNet-34 (`resnet34-verified`).
 
-> **Status in one line:** the whole-network VJP of MobileNetV2 —
-> **`Proofs.mobilenetv2_has_vjp_at`** (`_correct`) — is **PROVEN and audit-clean**, and
-> **UNCONDITIONAL** via `MobileNetV2Concrete.mnv2Concrete_has_vjp_correct`; the depthwise
-> conv VJP (`depthwise_has_vjp3_correct`), relu6 VJP (`relu6_has_vjp_at`), and the
-> inverted-residual block VJPs (`invresBody_has_vjp_at`/`invresSkip_has_vjp_at`) are all
-> done. **The MATH (proof half) is entirely in hand.** What remains for a *trained* model
-> is the **verified codegen** — the `resnet34-verified` treatment: a depthwise-conv SHlo
-> op pair + a relu6 op + the inverted-residual renderer/layout/Main + GPU train. ch6
-> leaves ~90% of the scaffolding reusable; the only genuinely-new emitter op is depthwise
-> conv. Read §§0–3 first; rest is reference.
+> **Status in one line — ch7 is DONE (C1+C2+C4; C3 optional):** the whole-network VJP
+> of MobileNetV2 — **`Proofs.mobilenetv2_has_vjp_at`** (`_correct`), UNCONDITIONAL via
+> `MobileNetV2Concrete.mnv2Concrete_has_vjp_correct` — was already PROVEN + audit-clean,
+> and now the **verified codegen GPU-TRAINS**: `mobilenetv2-verified` climbs CIFAR-10
+> **12.3%→34.8% over 10 epochs** (monotonic, no NaN). Done this session: **C1** depthwise
+> SHlo op pair (`depthwiseF`/`depthwiseBack`), **C2** relu6 op pair (`relu6F`/`selectMid`),
+> **C4** inverted-residual renderer + `MobileNetV2Layout` + `MainMobilenetV2Verified` +
+> `mobilenetv2-verified` exe. **C3** (strided depthwise) still **optional** — this config
+> downsamples via a regular stride-2 stem + maxpool, stride-1 IR blocks = proven apex.
 
-Written 2026-06-07 by the session that finished ch6 (ResNet-34, `resnet34-verified`
-GPU-trains 38.6%→62%+). `origin/main` is behind by all of ch6 + this doc; commit-to-main
+> **⚠ The one gotcha that cost a debug cycle (don't repeat):** ending the net on a
+> linear-bottleneck projection BN → GAP is **degenerate** — per-example instance-norm
+> zeroes each channel's spatial mean, so `GAP(γ·x̂+β) = β`, **constant across inputs** →
+> every image gets the same logits → frozen at exactly 9.99%. **Fix = the standard MNv2
+> "features" head** (`1×1 conv 64→128 → BN → relu6`) before GAP; the relu6 restores a
+> per-input pooled mean. (ResNet-34 dodged it via its final `relu(BN+skip)`.) Any GAP that
+> follows a raw instance-norm BN needs a nonlinearity in between.
+
+Updated 2026-06-07 by the session that finished ch7 codegen (`mobilenetv2-verified`
+GPU-trains 12.3%→34.8%). Commits `1096623`(C1) `f8f340b`(C2) `4724d49`(C4a) `ab1a376`(C4b)
+`7f48229`(C4c), all local-not-pushed. `origin/main` is behind by ch6 + ch7; commit-to-main
 is fine, **never push without explicit per-push permission**.
+
+Original handoff (pre-codegen) written 2026-06-07 by the ch6 session; §§1–7 below are the
+reference it left — still accurate, with C1/C2/C4 now marked done inline.
 
 ---
 
@@ -79,10 +90,22 @@ ch6-A → ch6-B (resnet34).
 
 ## 2. ⭐ WHAT REMAINS — the verified codegen (ch7 = render + train)
 
+> **DONE (this session).** C1, C2, C4 all landed; only C3 (strided depthwise) is left,
+> and it's optional. The final shipped config: **stem** 3×3 stride-2 conv (3→32, reuses
+> ch6's regular strided conv, NOT depthwise) → BN → relu6 → maxpool (16→8) → **IR-A**
+> inverted-residual w/ skip (ic=oc=32, mid=64, stride-1 @8×8) → **IR-B** inverted-residual
+> no-skip (32→64, mid=64, @8×8) → **head** 1×1 conv (64→128) → BN → relu6 → GAP → dense
+> 128→10. 34 params, lr=0.1, GPU-trains 12.3%→34.8%. The depthwise **weight-grad** turned
+> out to need `batch_group_count = c` (the XLA depthwise-filter-grad trick: transpose
+> inp/dy → `[c,B,H,W]`, conv → `[1,c,3,3]`, reshape `[c,1,3,3]`) — de-risk it standalone
+> on iree first. Files: `tests/TestDepthwise.lean` (C1), `tests/TestRelu6.lean` (C2),
+> `tests/TestMobilenetV2{Fwd,Train}.lean` (C4), `MobileNetV2Layout` (IreeRuntime.lean),
+> `MainMobilenetV2Verified.lean`, exe `mobilenetv2-verified`.
+
 The proof half is done; everything below is **render/GPU** (no new Mathlib). Suggested
 order, mirroring ch6's de-risk-on-iree-compile-first discipline:
 
-### C1 — depthwise conv SHlo op pair  [the one genuinely-new emitter op]
+### C1 — depthwise conv SHlo op pair  ✅ DONE  [the one genuinely-new emitter op]
 A `depthwiseF` / `depthwiseBack` (+ weight-grad) op pair, 9-site lockstep mirroring B3's
 strided-conv pair (`flatConvStridedF`/`convStridedBack`, `StableHLO.lean`):
 - **`depthwiseF`** forward: `stablehlo.convolution` with **`feature_group_count = c`** and
@@ -97,12 +120,12 @@ strided-conv pair (`flatConvStridedF`/`convStridedBack`, `StableHLO.lean`):
   rocm (mirror `tests/TestPerChannelBn.lean`). **Watch:** `feature_group_count` + the
   `[c,1,kH,kW]` kernel shape are the only deltas from a normal conv.
 
-### C2 — relu6 SHlo op  [small]
+### C2 — relu6 SHlo op  ✅ DONE  [small]
 `relu6F` forward `clamp(x,0,6) = maximum(minimum(x, 6), 0)`; backward mask
 `select(0 < x ∧ x < 6, dy, 0)` (two `compare` + `and` + `select`, or two chained selects).
 `den = relu6 n` / its VJP. A two-sided `reluF`/`selectPos`. rfl-faithful forward.
 
-### C3 — strided depthwise (downsampling)  [optional for a first stride-1 MNv2]
+### C3 — strided depthwise (downsampling)  ⏭ OPTIONAL / NOT DONE  [skipped — stride-1 IR blocks + regular strided stem reach a trainable net]
 MNv2 halves spatial via **stride-2 depthwise**. Reuse the B1 identity:
 `dwconv_stride2 = decimateFlat ∘ depthwiseFlat` (+ VJP via `vjp_comp` + `decimateFlat_has_vjp`),
 then a `depthwiseStridedF`/`depthwiseStridedBack` op pair (forward `window_strides=[2,2]`;
@@ -110,7 +133,7 @@ backward zero-upsample via `stablehlo.pad` interior=1 then reversed-kernel depth
 exactly the `convStridedBack` shape). *Skippable for a first stride-1 verified MNv2* (the
 proven apex is stride-1); needed for a downsampling config with a real accuracy story.
 
-### C4 — the inverted-residual renderer + layout + Main + GPU train  [clone resnet34-verified]
+### C4 — the inverted-residual renderer + layout + Main + GPU train  ✅ DONE  [clone resnet34-verified]
 - **IR block fwd/back fragment** (mirror `idBlock`/`downBlock` in `TestResnet34Train.lean`):
   expand `1×1 conv→BN→relu6` (`ic→mid=t·ic`) → depthwise `dw→BN→relu6` → project
   `1×1 conv→BN` (no relu6, `mid→oc`); add the residual skip iff stride-1 ∧ `ic=oc`.
