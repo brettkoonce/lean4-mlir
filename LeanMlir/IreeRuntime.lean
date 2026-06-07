@@ -278,6 +278,34 @@ def shapesBA : ByteArray := packShapes paramShapes
 def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
 end ResnetLayout
 
+namespace ResNet34Layout
+/-- Chapter-6 **real ResNet-34** params (CIFAR 3×32×32): stem {W,b,γ,β}, then the
+    16 basic blocks (3 strided downsample {W,b,γ,β}×2 + proj{W,b,γ,β}; 13 identity
+    {W,b,γ,β}×2) at channels 64/128/256/512, then dense {W,b}. Per-channel BN ⇒ γ/β
+    are **rank-1 `[c]`** (not rank-0 scalars). 146 params. The `(dims, initKind)`
+    order MUST match `@resnet34_train_step`'s signature (and `@resnet34_fwd`'s) —
+    both rendered from the same `Blk` list (tests/TestResnet34*.lean `allParams`).
+    `initKind`: 0 = He(fan-in), 1 = ones (γ), 2 = zeros (β / bias). -/
+private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
+  #[(#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2)]
+private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
+  #[(#[c,cin,3,3],0),(#[c],2),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2),
+    (#[c,cin,3,3],0),(#[c],2),(#[c],1),(#[c],2)]
+/-- `(dims, initKind)` for every param, in func-arg order. -/
+def specs : Array (Array Nat × Nat) := Id.run do
+  let mut a : Array (Array Nat × Nat) := #[(#[64,3,3,3],0),(#[64],2),(#[64],1),(#[64],2)]  -- stem
+  for _ in [0:3] do a := a ++ idBlk 64                                                     -- stage1
+  a := a ++ downBlk 64 128;  for _ in [0:3] do a := a ++ idBlk 128                         -- stage2
+  a := a ++ downBlk 128 256; for _ in [0:5] do a := a ++ idBlk 256                         -- stage3
+  a := a ++ downBlk 256 512; for _ in [0:2] do a := a ++ idBlk 512                         -- stage4
+  a := a ++ #[(#[512,10],0),(#[10],2)]                                                     -- dense
+  return a
+def paramShapes : Array (Array Nat) := specs.map (·.1)
+def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
+def shapesBA : ByteArray := packShapes paramShapes
+def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
+end ResNet34Layout
+
 def MlpLayout.paramShapes : Array (Array Nat) := #[
   #[784, 512], #[512], #[512, 512], #[512], #[512, 10], #[10]
 ]

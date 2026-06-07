@@ -16,9 +16,9 @@ Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestResnet34Train.lean
 
 open Proofs Proofs.StableHLO
 
-private def BS : Nat := 2
+private def BS : Nat := 128
 private def EPS : String := "1.0e-5"
-private def LR : String := "0.05"
+private def LR : String := "0.1"
 
 -- ════════════ forward fragments ([B,C,H,W]; `o` bare prefix → result `%{o}`) ════════════
 
@@ -265,7 +265,8 @@ private def allParams : List (String × String × String) :=
 private def trainStep : String := Id.run do
   -- ── forward: stem → maxpool → blocks → GAP(2×2) → dense(512→10) ──
   let mut fwd := "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n"
-    ++ conv "stc" "%x" "%sW" "%sb" 64 3 32 32 32 32 1
+    ++ s!"    %xr = stablehlo.reshape %x : ({ty [BS,3072]}) -> {ty [BS,3,32,32]}\n"
+    ++ conv "stc" "%xr" "%sW" "%sb" 64 3 32 32 32 32 1
     ++ bnPC "stn" "%stc" "%sg" "%sbt" 64 32 32 (32*32)
     ++ relu "str" "%stn" 64 32 32
     ++ maxpool "stp" "%str" 64 32 32
@@ -289,7 +290,9 @@ private def trainStep : String := Id.run do
     ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
     ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
     ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
-    ++ s!"    %dy = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
+    ++ s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
+    ++ s!"    %bnc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n"
+    ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"   -- mean-loss cotangent
   -- ── backward: dense + GAP, blocks reversed, maxpool, stem ──
   let mut bwd :=
     s!"    %dgap = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [BS,10]}, {ty [512,10]}) -> {ty [BS,512]}\n"
@@ -308,11 +311,11 @@ private def trainStep : String := Id.run do
     ++ reluBack "dstr" "%stn" "%dmp" 64 32 32
     ++ bnBackPC "dstn" "stn" "%dstr" 64 32 32
     ++ convBiasGrad "dsb" "%dstn" 64 32 32
-    ++ convWGrad "dsW" "%x" "%dstn" 3 64 32 32
+    ++ convWGrad "dsW" "%xr" "%dstn" 3 64 32 32
   -- ── SGD + signature/return, all from the single param list ──
   let upd := String.join (allParams.map (fun (nm, gr, t) => sgd nm gr t))
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [BS,3,32,32]) :: allParams.map (fun (nm, _, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])
+    (("%x: " ++ ty [BS,3072]) :: allParams.map (fun (nm, _, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])
   let retTyL := String.intercalate ", " (allParams.map (fun (_, _, t) => t))
   let retVals := String.intercalate ", " (allParams.map (fun (nm, _, _) => s!"%{nm}n"))
   return "module @m {\n" ++ s!"  func.func @resnet34_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
@@ -320,15 +323,15 @@ private def trainStep : String := Id.run do
 
 def main : IO Unit := do
   let mlir := trainStep
-  IO.println s!"rendered full ResNet-34 train step: {mlir.length} chars, {allParams.length} params"
+  IO.println s!"rendered full ResNet-34 train step (BS={BS}): {mlir.length} chars, {allParams.length} params"
+  IO.FS.createDirAll "verified_mlir"
+  IO.FS.writeFile "verified_mlir/resnet34_train_step.mlir" mlir
   IO.FS.createDirAll ".lake/build"
-  let path := ".lake/build/resnet34_train_step_v.mlir"
-  IO.FS.writeFile path mlir
-  let cargs ← ireeCompileArgs path ".lake/build/resnet34_train_step_v.vmfb"
+  let cargs ← ireeCompileArgs "verified_mlir/resnet34_train_step.mlir" ".lake/build/resnet34_train_step_v.vmfb"
   let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
   if r.exitCode != 0 then
     IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 3000}"
   else
-    IO.println "resnet34 FULL train step iree-compile OK → .lake/build/resnet34_train_step_v.vmfb"
+    IO.println "resnet34 FULL train step iree-compile OK → verified_mlir/resnet34_train_step.mlir"
 
 #eval main

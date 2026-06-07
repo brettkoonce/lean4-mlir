@@ -203,6 +203,12 @@ lean_exe «resnet-verified» where
   root := `MainResnetVerified
   moreLinkArgs := ireeLink
 
+-- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
+-- VERIFIED-rendered StableHLO (tests/TestResnet34{Train,Fwd}.lean); 146 params.
+lean_exe «resnet34-verified» where
+  root := `MainResnet34Verified
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar-cnn-train» where
   root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink

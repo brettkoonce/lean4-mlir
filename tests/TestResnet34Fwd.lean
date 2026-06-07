@@ -21,7 +21,7 @@ Run (rocm):
 
 open Proofs Proofs.StableHLO
 
-private def BS : Nat := 2
+private def BS : Nat := 128
 private def EPS : String := "1.0e-5"
 
 -- ── 4-D fragment helpers ([B,C,H,W] throughout; structured names, no global counter) ──
@@ -141,7 +141,8 @@ private def gapDense (o x : String) (c nC Hh Ww : Nat) : String :=
 private def resnet34Fwd : String := Id.run do
   -- stride-1 3×3 stem (3→64 @32×32) + 2×2 maxpool (32→16); downsamples 16→8→4→2
   let stemCode :=
-    conv "stc" "%x" "%sW" "%sb" 64 3 32 32 32 32 1 ++
+    s!"    %xr = stablehlo.reshape %x : ({ty [BS,3072]}) -> {ty [BS,3,32,32]}\n" ++
+    conv "stc" "%xr" "%sW" "%sb" 64 3 32 32 32 32 1 ++
     bnPC "stn" "%stc" "%sg" "%sbt" 64 32 32 (32*32) ++
     relu "str" "%stn" 64 32 32 ++
     maxpool "stp" "%str" 64 32 32
@@ -157,7 +158,7 @@ private def resnet34Fwd : String := Id.run do
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     stemCode ++ s1 ++ d2 ++ s2 ++ d3 ++ s3 ++ d4 ++ s4 ++ tail
   let sig : List String :=
-    ["%x: " ++ ty [BS,3,32,32]]
+    ["%x: " ++ ty [BS,3072]]
     ++ [s!"%sW: {ty [64,3,3,3]}", s!"%sb: {ty [64]}"] ++ bnSig "s" 64
     ++ idChainSig "s1" 3 64
     ++ downBlockSig "d2" 64 128 ++ idChainSig "s2" 3 128
@@ -170,10 +171,11 @@ private def resnet34Fwd : String := Id.run do
 
 def main : IO Unit := do
   let mlir := resnet34Fwd
-  IO.println s!"rendered @resnet34_fwd: {mlir.length} chars"
+  IO.println s!"rendered @resnet34_fwd (BS={BS}): {mlir.length} chars"
+  IO.FS.createDirAll "verified_mlir"
+  IO.FS.writeFile "verified_mlir/resnet34_fwd.mlir" mlir
   IO.FS.createDirAll ".lake/build"
-  let path := ".lake/build/resnet34_fwd_v.mlir"
-  IO.FS.writeFile path mlir
+  let path := "verified_mlir/resnet34_fwd.mlir"
   let cargs ← ireeCompileArgs path ".lake/build/resnet34_fwd_v.vmfb"
   let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
   if r.exitCode != 0 then
