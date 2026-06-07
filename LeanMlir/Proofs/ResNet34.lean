@@ -137,4 +137,141 @@ theorem convBnReluStrided_has_vjp_at_correct {ic oc h w kH kW : Nat}
           pdiv (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConvStride2 W b) v i j * dy j :=
   (convBnReluStrided_has_vjp_at W b ε γ β hε v h_smooth).correct dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Strided residual-projection block (the stage-start downsampling block)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Strided basic-block body VJP** `F = convBn₂(stride 1) ∘ convBnRelu₁(stride 2)`
+    (channels `ic → oc`, spatial `2h×2w → h×w`). The strided peer of
+    `resblock_body_has_vjp_at`: inner downsampling conv→bn→relu (needs `h_smooth₁`),
+    outer stride-1 conv→bn (everywhere); two `vjp_comp_at`. -/
+noncomputable def resblock_bodyStrided_has_vjp_at {ic oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc)
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ : ℝ) (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth₁ : ∀ k, bnForward (oc * h * w) ε₁ γ₁ β₁ (flatConvStride2 W₁ b₁ v) k ≠ 0) :
+    HasVJPAt
+      ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+        (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)) v := by
+  have hconv1_diff : Differentiable ℝ
+      (flatConvStride2 W₁ b₁ : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
+    flatConvStride2_differentiable W₁ b₁
+  have step1 : HasVJPAt
+      (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v :=
+    convBnReluStrided_has_vjp_at W₁ b₁ ε₁ γ₁ β₁ hε₁ v h_smooth₁
+  have step1_diff : DifferentiableAt ℝ
+      (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v := by
+    apply DifferentiableAt.comp
+    · exact relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth₁
+    · exact ((bnForward_differentiable (oc * h * w) ε₁ γ₁ β₁ hε₁).comp hconv1_diff) v
+  exact vjp_comp_at
+    (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)
+    (bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) v
+    step1_diff
+    ((convBn_differentiable W₂ b₂ ε₂ γ₂ β₂ hε₂) _)
+    step1
+    ((convBn_has_vjp W₂ b₂ ε₂ γ₂ β₂ hε₂).toHasVJPAt _)
+
+/-- **Strided basic-block body is `DifferentiableAt`** at a smooth point. -/
+theorem resblock_bodyStrided_differentiableAt {ic oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc)
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ : ℝ) (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth₁ : ∀ k, bnForward (oc * h * w) ε₁ γ₁ β₁ (flatConvStride2 W₁ b₁ v) k ≠ 0) :
+    DifferentiableAt ℝ
+      ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+        (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)) v := by
+  have hconv1_diff : Differentiable ℝ
+      (flatConvStride2 W₁ b₁ : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
+    flatConvStride2_differentiable W₁ b₁
+  apply DifferentiableAt.comp
+  · exact (convBn_differentiable W₂ b₂ ε₂ γ₂ β₂ hε₂) _
+  · apply DifferentiableAt.comp
+    · exact relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth₁
+    · exact ((bnForward_differentiable (oc * h * w) ε₁ γ₁ β₁ hε₁).comp hconv1_diff) v
+
+/-- **Full strided residual-projection block VJP** — the block that opens each
+    ResNet-34 downsampling stage: `relu( proj(x) + F(x) )` where both the body's
+    first conv `W₁` and the 1×1 projection skip `Wp` are stride-2 (so `ic→oc`,
+    `2h×2w → h×w`), and the body's second conv `W₂` is stride-1. Built via
+    `residualProj_has_vjp_at` (fan-in of the strided proj `convBnStrided` and the
+    strided body) then a final `vjp_comp_at` with the post-add ReLU. The strided
+    peer of `resblockProj_has_vjp_at`. -/
+noncomputable def rblkPStrided_has_vjp_at
+    {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc)
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ εp γp βp : ℝ)
+    (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (hεp : 0 < εp)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth₁ : ∀ k, bnForward (oc * h * w) ε₁ γ₁ β₁ (flatConvStride2 W₁ b₁ v) k ≠ 0)
+    (h_smooth_out : ∀ k,
+      ((bnForward (oc * h * w) εp γp βp ∘ flatConvStride2 Wp bp) v k)
+      + ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+          (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)) v k
+        ≠ 0) :
+    HasVJPAt
+      (relu (oc * h * w) ∘
+        residualProj
+          (bnForward (oc * h * w) εp γp βp ∘ flatConvStride2 Wp bp)
+          ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+            (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁))) v := by
+  let proj : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
+    bnForward (oc * h * w) εp γp βp ∘ flatConvStride2 Wp bp
+  let F : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
+    (bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+      (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)
+  show HasVJPAt (relu (oc * h * w) ∘ residualProj proj F) v
+  have hproj_diff : DifferentiableAt ℝ proj v :=
+    (convBnStrided_differentiable Wp bp εp γp βp hεp) v
+  have hproj_vjp : HasVJPAt proj v :=
+    (convBnStrided_has_vjp Wp bp εp γp βp hεp).toHasVJPAt v
+  have hF_diff : DifferentiableAt ℝ F v :=
+    resblock_bodyStrided_differentiableAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
+  have hF : HasVJPAt F v :=
+    resblock_bodyStrided_has_vjp_at W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
+  have hres : HasVJPAt (residualProj proj F) v :=
+    residualProj_has_vjp_at proj F v hproj_diff hF_diff hproj_vjp hF
+  have hres_diff : DifferentiableAt ℝ (residualProj proj F) v :=
+    DifferentiableAt.add hproj_diff hF_diff
+  have h_smooth_res : ∀ k, residualProj proj F v k ≠ 0 := h_smooth_out
+  exact vjp_comp_at (residualProj proj F) (relu (oc * h * w)) v
+    hres_diff
+    (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth_res)
+    hres
+    (relu_has_vjp_at (oc * h * w) _ h_smooth_res)
+
+/-- **Strided residual-projection block VJP correctness** (ℝ-headline): the
+    downsampling block's backward equals the `pdiv`-Jacobian of
+    `relu ∘ residualProj (strided proj) (strided body)`. -/
+theorem rblkPStrided_has_vjp_at_correct
+    {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc)
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc)
+    (ε₁ γ₁ β₁ ε₂ γ₂ β₂ εp γp βp : ℝ)
+    (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (hεp : 0 < εp)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth₁ : ∀ k, bnForward (oc * h * w) ε₁ γ₁ β₁ (flatConvStride2 W₁ b₁ v) k ≠ 0)
+    (h_smooth_out : ∀ k,
+      ((bnForward (oc * h * w) εp γp βp ∘ flatConvStride2 Wp bp) v k)
+      + ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+          (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)) v k
+        ≠ 0)
+    (dy : Vec (oc * h * w)) (i : Fin (ic * (2 * h) * (2 * w))) :
+    (rblkPStrided_has_vjp_at W₁ b₁ W₂ b₂ Wp bp ε₁ γ₁ β₁ ε₂ γ₂ β₂ εp γp βp
+        hε₁ hε₂ hεp v h_smooth₁ h_smooth_out).backward dy i
+      = ∑ j : Fin (oc * h * w),
+          pdiv (relu (oc * h * w) ∘
+            residualProj
+              (bnForward (oc * h * w) εp γp βp ∘ flatConvStride2 Wp bp)
+              ((bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+                (relu (oc * h * w) ∘ bnForward (oc * h * w) ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)))
+            v i j * dy j :=
+  (rblkPStrided_has_vjp_at W₁ b₁ W₂ b₂ Wp bp ε₁ γ₁ β₁ ε₂ γ₂ β₂ εp γp βp
+      hε₁ hε₂ hεp v h_smooth₁ h_smooth_out).correct dy i
+
 end Proofs

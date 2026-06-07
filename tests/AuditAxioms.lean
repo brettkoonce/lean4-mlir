@@ -300,6 +300,10 @@ open Proofs
 -- each ResNet-34 stage: its conditional VJP, by vjp_comp_at reusing
 -- flatConvStride2_has_vjp + the proven BN/ReLU VJPs.
 #print axioms convBnReluStrided_has_vjp_at_correct
+-- Strided residual-PROJECTION block (relu(proj(x)+F(x)), both first-conv and 1×1
+-- skip stride-2) — the downsampling residual block at each ResNet-34 stage start.
+-- Via residualProj_has_vjp_at over the strided proj + strided body.
+#print axioms rblkPStrided_has_vjp_at_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
