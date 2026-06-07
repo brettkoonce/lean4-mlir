@@ -120,4 +120,39 @@ def adjointGradcheck (label fwdVmfb fwdFn backVmfb backFn : String)
   else
     IO.eprintln s!"[{label}] ❌ FAIL — backward does NOT match finite differences"; return false
 
+/-- Like `adjointGradcheck` but with `fixed` inputs (concrete `(shape,values)`)
+    that are passed to BOTH fwd and back, never perturbed, and have no expected
+    gradient — e.g. a ViT input image (first layer ⇒ no image grad). The forward
+    arg order is `fixed ++ params`; the backward is `fixed ++ params ++ dOut` and
+    returns one grad per PARAM (in order). -/
+def adjointGradcheckFixed (label fwdVmfb fwdFn backVmfb backFn : String)
+    (fixed : List (String × Array Float))
+    (inShapes : List String) (inLens : List Nat)
+    (outShape : String) (outLen : Nat)
+    (seedBase : Nat := 0) (eps : Float := 1.0e-3) (tol : Float := 1.0e-2) : IO Bool := do
+  let params := (inLens.zipIdx).map (fun (l, i) => randVec (seedBase + 100 + i) l)
+  let dirs   := (inLens.zipIdx).map (fun (l, i) => randVec (seedBase + 200 + i) l)
+  let dO := randVec (seedBase + 42) outLen
+  let ins := inShapes.zip params
+  let back ← runFn backVmfb backFn (fixed ++ ins ++ [(outShape, dO)])
+  if back.size != inShapes.length then
+    IO.eprintln s!"[{label}] expected {inShapes.length} back results, got {back.size}"; return false
+  let lhs := ((back.toList.zip dirs).map (fun (g, v) => dot g v)).foldl (· + ·) 0.0
+  let phi (s : Float) : IO Float := do
+    let pert := (params.zip dirs).map (fun (pv, vv) => axpy s vv pv)
+    let f ← runFn fwdVmfb fwdFn (fixed ++ inShapes.zip pert)
+    if f.size != 1 then IO.eprintln s!"[{label}] fwd result missing"; return 0.0
+    return dot f[0]! dO
+  let phiP ← phi eps
+  let phiM ← phi (-eps)
+  let rhs := (phiP - phiM) / (2.0 * eps)
+  let absErr := Float.abs (lhs - rhs)
+  let relErr := absErr / (Float.abs rhs + 1.0e-9)
+  IO.println s!"[{label}] adjoint lhs = {lhs}   finite-diff rhs = {rhs}"
+  IO.println s!"[{label}] abs err = {absErr}   rel err = {relErr}"
+  if relErr < tol then
+    IO.println s!"[{label}] ✅ PASS"; return true
+  else
+    IO.eprintln s!"[{label}] ❌ FAIL — backward does NOT match finite differences"; return false
+
 end ViTGradcheck

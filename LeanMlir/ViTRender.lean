@@ -278,4 +278,169 @@ def blockGradNames (p : String) : List String :=
    s!"%{p}2dg", s!"%{p}2db",
    s!"%{p}pdWfc1", s!"%{p}pdbfc1", s!"%{p}pdWfc2", s!"%{p}pdbfc2"]
 
+-- ════════════════════════════════════════════════════════════════
+-- § Patch embed (k=s strided conv) + flatten + CLS token + positional embed
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Patch-embed conv forward**, prefix `p`: non-overlapping `s×s`/stride-`s` conv
+    `[b,ic,s·ph,s·pw]·[d,ic,s,s] + bias → [b,d,ph,pw]`, then flatten to tokens
+    `[b, ph·pw, d]` (transpose `[0,2,3,1]` + reshape). Result `%{p}tok`. -/
+def patchEmbedFwd (p x w bias : String) (b ic d ph pw s : Nat) : String :=
+  s!"    %{p}c = stablehlo.convolution({x}, {w})\n" ++
+  "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+  "      window = {" ++ s!"stride = [{s}, {s}], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+  "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+  s!" : ({ty [b,ic,s*ph,s*pw]}, {ty [d,ic,s,s]}) -> {ty [b,d,ph,pw]}\n" ++
+  s!"    %{p}cbb = stablehlo.broadcast_in_dim {bias}, dims = [1] : ({ty [d]}) -> {ty [b,d,ph,pw]}\n" ++
+  s!"    %{p}pe = stablehlo.add %{p}c, %{p}cbb : {ty [b,d,ph,pw]}\n" ++
+  s!"    %{p}pt = stablehlo.transpose %{p}pe, dims = [0, 2, 3, 1] : ({ty [b,d,ph,pw]}) -> {ty [b,ph,pw,d]}\n" ++
+  s!"    %{p}tok = stablehlo.reshape %{p}pt : ({ty [b,ph,pw,d]}) -> {ty [b,ph*pw,d]}\n"
+
+/-- **Patch-embed backward** (weight + bias grads; NO input grad — first layer),
+    prefix `p`. `dtok` `[b,ph·pw,d]` is the token-grad. Reshapes/transposes back to
+    `[b,d,ph,pw]`, then: bias grad `reduce[0,2,3]→[d]`; weight grad = dilate `dy`
+    interior `s-1` (no high → `s·ph-(s-1)`), valid conv `→ [d,ic,s,s]`. Produces
+    `%{p}dw` `[d,ic,s,s]`, `%{p}db` `[d]`. -/
+def patchEmbedBack (p x dtok : String) (b ic d ph pw s : Nat) : String :=
+  let dilH := s*ph - (s-1)
+  let dilW := s*pw - (s-1)
+  -- token-grad → [b,d,ph,pw]
+  s!"    %{p}dtr = stablehlo.reshape {dtok} : ({ty [b,ph*pw,d]}) -> {ty [b,ph,pw,d]}\n" ++
+  s!"    %{p}dy = stablehlo.transpose %{p}dtr, dims = [0, 3, 1, 2] : ({ty [b,ph,pw,d]}) -> {ty [b,d,ph,pw]}\n" ++
+  -- bias grad
+  s!"    %{p}db = stablehlo.reduce(%{p}dy init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [b,d,ph,pw]}, tensor<f32>) -> {ty [d]}\n" ++
+  -- weight grad (dilate-no-high + valid conv, ch9 patchifyWGrad with stride s)
+  s!"    %{p}u = stablehlo.pad %{p}dy, %sc, low = [0, 0, 0, 0], high = [0, 0, 0, 0], interior = [0, 0, {s-1}, {s-1}] : ({ty [b,d,ph,pw]}, tensor<f32>) -> {ty [b,d,dilH,dilW]}\n" ++
+  s!"    %{p}xt = stablehlo.transpose {x}, dims = [1, 0, 2, 3] : ({ty [b,ic,s*ph,s*pw]}) -> {ty [ic,b,s*ph,s*pw]}\n" ++
+  s!"    %{p}dt = stablehlo.transpose %{p}u, dims = [1, 0, 2, 3] : ({ty [b,d,dilH,dilW]}) -> {ty [d,b,dilH,dilW]}\n" ++
+  s!"    %{p}raw = stablehlo.convolution(%{p}xt, %{p}dt)\n" ++
+  "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+  "      window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+  "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+  s!" : ({ty [ic,b,s*ph,s*pw]}, {ty [d,b,dilH,dilW]}) -> {ty [ic,d,s,s]}\n" ++
+  s!"    %{p}dw = stablehlo.transpose %{p}raw, dims = [1, 0, 2, 3] : ({ty [ic,d,s,s]}) -> {ty [d,ic,s,s]}\n"
+
+/-- **CLS-token + positional-embed forward**, prefix `p`: prepend a learned `[1,d]`
+    CLS at row 0 of the `n0` patch tokens → `[b,n0+1,d]`, then add a learned `[n0+1,d]`
+    positional embedding (broadcast over batch). Result `%{p}z` `[b,n0+1,d]`. -/
+def clsPosFwd (p tok cls pos : String) (b n0 d : Nat) : String :=
+  s!"    %{p}clsb = stablehlo.broadcast_in_dim {cls}, dims = [1, 2] : ({ty [1,d]}) -> {ty [b,1,d]}\n" ++
+  s!"    %{p}cat = stablehlo.concatenate %{p}clsb, {tok}, dim = 1 : ({ty [b,1,d]}, {ty [b,n0,d]}) -> {ty [b,n0+1,d]}\n" ++
+  s!"    %{p}posb = stablehlo.broadcast_in_dim {pos}, dims = [1, 2] : ({ty [n0+1,d]}) -> {ty [b,n0+1,d]}\n" ++
+  s!"    %{p}z = stablehlo.add %{p}cat, %{p}posb : {ty [b,n0+1,d]}\n"
+
+/-- **CLS + pos backward**, prefix `p`. `dz` `[b,n0+1,d]`. Produces `%{p}dtok`
+    `[b,n0,d]` (patch-token grad), `%{p}dcls` `[1,d]` (Σ over batch of row 0),
+    `%{p}dpos` `[n0+1,d]` (Σ over batch). -/
+def clsPosBack (p dz : String) (b n0 d : Nat) : String :=
+  -- pos: sum over batch
+  s!"    %{p}dpos = stablehlo.reduce({dz} init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [b,n0+1,d]}, tensor<f32>) -> {ty [n0+1,d]}\n" ++
+  -- CLS: row 0 slice, sum over batch
+  s!"    %{p}cslc = stablehlo.slice {dz} [0:{b}, 0:1, 0:{d}] : ({ty [b,n0+1,d]}) -> {ty [b,1,d]}\n" ++
+  s!"    %{p}cr = stablehlo.reshape %{p}cslc : ({ty [b,1,d]}) -> {ty [b,d]}\n" ++
+  s!"    %{p}dcls = stablehlo.reduce(%{p}cr init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [b,d]}, tensor<f32>) -> {ty [d]}\n" ++
+  s!"    %{p}dcls2 = stablehlo.reshape %{p}dcls : ({ty [d]}) -> {ty [1,d]}\n" ++
+  -- patch tokens: rows 1..n0
+  s!"    %{p}dtok = stablehlo.slice {dz} [0:{b}, 1:{n0+1}, 0:{d}] : ({ty [b,n0+1,d]}) -> {ty [b,n0,d]}\n"
+
+/-- **Classifier head forward**, prefix `p`: take the CLS token (row 0 of `[b,n,d]`)
+    → `[b,d]`, dense `[d,nc] + bias → [b,nc]` logits. Result `%{p}logits`. -/
+def headFwd (p z Wc bc : String) (b n d nc : Nat) : String :=
+  s!"    %{p}cls = stablehlo.slice {z} [0:{b}, 0:1, 0:{d}] : ({ty [b,n,d]}) -> {ty [b,1,d]}\n" ++
+  s!"    %{p}clsv = stablehlo.reshape %{p}cls : ({ty [b,1,d]}) -> {ty [b,d]}\n" ++
+  s!"    %{p}hd = stablehlo.dot_general %{p}clsv, {Wc}, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [b,d]}, {ty [d,nc]}) -> {ty [b,nc]}\n" ++
+  s!"    %{p}hbb = stablehlo.broadcast_in_dim {bc}, dims = [1] : ({ty [nc]}) -> {ty [b,nc]}\n" ++
+  s!"    %{p}logits = stablehlo.add %{p}hd, %{p}hbb : {ty [b,nc]}\n"
+
+/-- **Classifier head backward**, prefix `p`. Reuses `%{p}clsv` from `headFwd`.
+    `dlog` `[b,nc]`. Produces `%{p}dz` `[b,n,d]` (cotangent scattered into row 0,
+    zero elsewhere), `%{p}dWc` `[d,nc]`, `%{p}dbc` `[nc]`. -/
+def headBack (p Wc dlog : String) (b n d nc : Nat) : String :=
+  s!"    %{p}dWc = stablehlo.dot_general %{p}clsv, {dlog}, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [b,d]}, {ty [b,nc]}) -> {ty [d,nc]}\n" ++
+  s!"    %{p}dbc = stablehlo.reduce({dlog} init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [b,nc]}, tensor<f32>) -> {ty [nc]}\n" ++
+  s!"    %{p}dclsv = stablehlo.dot_general {dlog}, {Wc}, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [b,nc]}, {ty [d,nc]}) -> {ty [b,d]}\n" ++
+  s!"    %{p}dclsr = stablehlo.reshape %{p}dclsv : ({ty [b,d]}) -> {ty [b,1,d]}\n" ++
+  -- scatter into row 0: pad the [b,1,d] grad with zeros to [b,n,d] (high pad on dim 1)
+  s!"    %{p}dz = stablehlo.pad %{p}dclsr, %sc, low = [0, 0, 0], high = [0, {n-1}, 0], interior = [0, 0, 0] : ({ty [b,1,d]}, tensor<f32>) -> {ty [b,n,d]}\n"
+
+-- ════════════════════════════════════════════════════════════════
+-- § Whole ViT:  patch-embed → CLS+pos → k blocks → final LN → head
+-- ════════════════════════════════════════════════════════════════
+
+/-- ViT hyperparameters (one config). `n0 = ph·pw` patches, `n = n0+1` tokens. -/
+structure ViTConfig where
+  b : Nat        -- batch
+  ic : Nat       -- input channels (3)
+  d : Nat        -- model dim
+  ph : Nat       -- patch grid height (= H/s)
+  pw : Nat       -- patch grid width
+  s : Nat        -- patch size (= stride)
+  m : Nat        -- MLP hidden
+  h : Nat        -- heads
+  dh : Nat       -- head dim (= d/h)
+  nc : Nat       -- classes
+  eps : String
+  scale : String
+
+/-- **Whole-ViT forward**, prefix `p`: `x` `[b,ic,s·ph,s·pw]` → logits `[b,nc]`.
+    Result `%{p}hdlogits`. Keeps every sub-fragment save for the backward. -/
+def vitFwd (p x wConv bConv cls pos gF bF Wc bc : String)
+    (blocks : List BlockParams) (cfg : ViTConfig) : String :=
+  let n0 := cfg.ph * cfg.pw
+  let n := n0 + 1
+  let (blkCode, lastZ) := (blocks.zipIdx).foldl (fun (st : String × String) (bi : BlockParams × Nat) =>
+      let (acc, prev) := st
+      let (bpi, i) := bi
+      (acc ++ blockFwd s!"{p}b{i}" prev bpi cfg.b n cfg.d cfg.m cfg.h cfg.dh cfg.eps cfg.scale,
+       s!"%{p}b{i}out")) ("", s!"%{p}cpz")
+  patchEmbedFwd s!"{p}pe" x wConv bConv cfg.b cfg.ic cfg.d cfg.ph cfg.pw cfg.s ++
+  clsPosFwd s!"{p}cp" s!"%{p}petok" cls pos cfg.b n0 cfg.d ++
+  blkCode ++
+  lnFwd s!"{p}fln" lastZ gF bF cfg.b n cfg.d cfg.eps ++
+  headFwd s!"{p}hd" s!"%{p}flny" Wc bc cfg.b n cfg.d cfg.nc
+
+/-- **Whole-ViT backward**, prefix `p`. Reuses `vitFwd p` saves. `dlog` `[b,nc]` is
+    the logits cotangent. `x` is the (fixed) input image (for the patch weight-grad).
+    Produces all param grads (see `vitGradNames`); NO image grad (first layer). -/
+def vitBack (p dlog x wConv Wc gF : String)
+    (blocks : List BlockParams) (cfg : ViTConfig) : String :=
+  let n0 := cfg.ph * cfg.pw
+  let n := n0 + 1
+  let (blkCode, firstDz) := (blocks.zipIdx.reverse).foldl (fun (st : String × String) (bi : BlockParams × Nat) =>
+      let (acc, dnext) := st
+      let (bpi, i) := bi
+      (acc ++ blockBack s!"{p}b{i}" dnext bpi cfg.b n cfg.d cfg.m cfg.h cfg.dh cfg.scale,
+       s!"%{p}b{i}dx")) ("", s!"%{p}flndx")
+  headBack s!"{p}hd" Wc dlog cfg.b n cfg.d cfg.nc ++
+  lnBack s!"{p}fln" gF s!"%{p}hddz" cfg.b n cfg.d ++
+  blkCode ++
+  clsPosBack s!"{p}cp" firstDz cfg.b n0 cfg.d ++
+  patchEmbedBack s!"{p}pe" x s!"%{p}cpdtok" cfg.b cfg.ic cfg.d cfg.ph cfg.pw cfg.s
+
+/-- Param SSA names in canonical (layout) order: wConv, bConv, cls, pos, then each
+    block's 16 (via `BlockParams` fields), then gF, bF, Wc, bc. -/
+def vitParamNames (blocks : List BlockParams) : List String :=
+  ["%wConv", "%bConv", "%cls", "%pos"] ++
+  (blocks.flatMap (fun bp =>
+    [bp.g1, bp.b1, bp.Wq, bp.bq, bp.Wk, bp.bk, bp.Wv, bp.bv, bp.Wo, bp.bo,
+     bp.g2, bp.b2, bp.Wfc1, bp.bfc1, bp.Wfc2, bp.bfc2])) ++
+  ["%gF", "%bF", "%Wc", "%bc"]
+
+/-- Param grad SSA names produced by `vitBack p`, SAME order as `vitParamNames`. -/
+def vitGradNames (p : String) (blocks : List BlockParams) : List String :=
+  [s!"%{p}pedw", s!"%{p}pedb", s!"%{p}cpdcls2", s!"%{p}cpdpos"] ++
+  ((List.range blocks.length).flatMap (fun i => blockGradNames s!"{p}b{i}")) ++
+  [s!"%{p}flndg", s!"%{p}flndb", s!"%{p}hddWc", s!"%{p}hddbc"]
+
+/-- Param dims in canonical order (matches `vitParamNames`). -/
+def vitParamDims (blocks : List BlockParams) (cfg : ViTConfig) : List (List Nat) :=
+  let n := cfg.ph * cfg.pw + 1
+  [[cfg.d, cfg.ic, cfg.s, cfg.s], [cfg.d], [1, cfg.d], [n, cfg.d]] ++
+  (blocks.flatMap (fun _ =>
+    [[cfg.d], [cfg.d],
+     [cfg.d, cfg.d], [cfg.d], [cfg.d, cfg.d], [cfg.d], [cfg.d, cfg.d], [cfg.d], [cfg.d, cfg.d], [cfg.d],
+     [cfg.d], [cfg.d],
+     [cfg.d, cfg.m], [cfg.m], [cfg.m, cfg.d], [cfg.d]])) ++
+  [[cfg.d], [cfg.d], [cfg.d, cfg.nc], [cfg.nc]]
+
 end ViTRender
