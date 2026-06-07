@@ -155,6 +155,17 @@ inductive SHlo : Nat → Type where
   -- pre-activation. `den` via the proven `gelu` / `gelu_has_vjp` (LayerNorm.lean).
   | geluF      {n : Nat}                                        : SHlo n → SHlo n
   | geluBack   {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
+  -- Chapter 10 (ViT): ROW-softmax forward — each of the `m` rows of an `[m,n]`
+  -- matrix (flattened to `Vec (m*n)`, row-major) gets the 1-D `softmax` over its
+  -- `n` columns (`reduce add` over the LAST axis, broadcast, divide — NO max-shift,
+  -- matching the proven plain exp/sum `softmax`). `den` via `rowSoftmaxFlat` (=
+  -- `Mat.flatten ∘ rowSoftmax ∘ Mat.unflatten`, the proven `rowSoftmax`).
+  | softmaxRowF    {m n : Nat}                                  : SHlo (m*n) → SHlo (m*n)
+  -- ROW-softmax input-VJP — per row the proven closed form `pᵢ⊙(dyᵢ − ⟨pᵢ,dyᵢ⟩)`
+  -- with `p = softmax(preActᵢ)` recomputed from the saved pre-softmax scores
+  -- (`xName`/`preAct`). SMOOTH everywhere (softmax has no kink). `den` via
+  -- `rowSoftmaxBackFlat` (= `Mat.flatten ∘ rowSoftmax_has_vjp_mat.backward ∘ Mat.unflatten`).
+  | softmaxRowBack {m n : Nat} (xName : String) (preAct : Vec (m*n)) : SHlo (m*n) → SHlo (m*n)
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -167,6 +178,26 @@ noncomputable def maxPoolBackFlat (c h w : Nat)
     let q := finProdFinEquiv.symm p.1
     if MaxPool2IsArgmax (Tensor3.unflatten xv : Tensor3 c (2*h) (2*w)) q.1 q.2 p.2
     then (Tensor3.unflatten dyv : Tensor3 c h w) q.1 (winRow q.2) (winCol p.2) else 0
+
+/-- **Row-softmax (flattened)** — apply the 1-D `softmax` (MLP.lean) to each of
+    the `m` rows of the row-major `Vec (m*n)`. Definitionally equal to
+    `Mat.flatten ∘ rowSoftmax ∘ Mat.unflatten` (Attention.lean's `rowSoftmax`);
+    spelled with MLP's `softmax` so `StableHLO` needn't import `Attention`
+    (the tie to `rowSoftmax` is an `rfl` faithfulness lemma in `TestSoftmaxRow`). -/
+noncomputable def rowSoftmaxFlat (m n : Nat) (v : Vec (m*n)) : Vec (m*n) :=
+  Mat.flatten (fun i => softmax n ((Mat.unflatten v) i))
+
+/-- **Row-softmax backward (flattened)** — per row, the proven closed form
+    `pᵢ⊙(dyᵢ − ⟨pᵢ,dyᵢ⟩)` with `pᵢ = softmax(preActᵢ)`. Definitionally equal to
+    `Mat.flatten ∘ rowSoftmax_has_vjp_mat.backward (Mat.unflatten preAct) ∘ Mat.unflatten`
+    (since `softmax_has_vjp.backward z dy i = let p := softmax z; p i·(dy i − ⟨p,dy⟩)`);
+    spelled with MLP's `softmax` to keep `Attention` out of `StableHLO`'s imports. -/
+noncomputable def rowSoftmaxBackFlat (m n : Nat) (preAct dy : Vec (m*n)) : Vec (m*n) :=
+  Mat.flatten (fun i =>
+    let p := softmax n ((Mat.unflatten preAct) i)
+    let dyi := (Mat.unflatten dy) i
+    let s := ∑ j, p j * dyi j
+    fun c => p c * (dyi c - s))
 
 /-- **AST denotation `⟦·⟧ₐ`** — our reading of each StableHLO op's spec, over
     `ℝ`, per-example, in primitive terms — independent of `dense`/`Mat.mulVec`.
@@ -207,6 +238,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .sigmoidBack (n := n) _ x e => (sigmoid_has_vjp n).backward x (den e)
   | _, .geluF (n := n) e => gelu n (den e)
   | _, .geluBack (n := n) _ x e => (gelu_has_vjp n).backward x (den e)
+  | _, .softmaxRowF (m := m) (n := n) e => rowSoftmaxFlat m n (den e)
+  | _, .softmaxRowBack (m := m) (n := n) _ preAct e => rowSoftmaxBackFlat m n preAct (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -604,6 +637,20 @@ theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 theorem geluBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
     den (.geluBack xN x e) = (gelu_has_vjp n).backward x (den e) := rfl
 
+/-- **Row-softmax forward faithfulness.** The per-row `exp / reduce[last] / divide`
+    graph denotes `rowSoftmaxFlat` (= flattened `rowSoftmax`, Attention.lean). Plain
+    exp/sum, no max-shift (matches the proven `softmax`). Smooth everywhere.
+    (`rfl`, so kept out of the axiom audit — `roundtrip` covers it structurally.) -/
+@[simp] theorem softmaxRowF_faithful {m n : Nat} (e : SHlo (m*n)) :
+    den (.softmaxRowF e) = rowSoftmaxFlat m n (den e) := rfl
+
+/-- **Row-softmax input-VJP faithfulness.** The per-row closed-form
+    `p ⊙ (dy − ⟨p,dy⟩)` graph (recomputing `p` from the saved pre-softmax scores)
+    denotes `rowSoftmaxBackFlat` (= flattened `rowSoftmax_has_vjp_mat.backward`).
+    Softmax is smooth, so this is a global VJP — no smoothness hypothesis. -/
+theorem softmaxRowBack_faithful {m n : Nat} (xN : String) (preAct : Vec (m*n)) (e : SHlo (m*n)) :
+    den (.softmaxRowBack xN preAct e) = rowSoftmaxBackFlat m n preAct (den e) := rfl
+
 /-- Whole MNIST-CNN **forward** graph:
     `dense ∘ relu ∘ dense ∘ relu ∘ dense ∘ maxPool ∘ relu ∘ conv ∘ relu ∘ conv`. -/
 def cnnFwdGraph {ic c h w d1 nClasses kH kW : Nat}
@@ -940,6 +987,8 @@ inductive Raw where
   | sigmoidBack (x : String) (n : Nat)     : Raw → Raw
   | geluF      (n : Nat)                   : Raw → Raw
   | geluBack   (x : String) (n : Nat)      : Raw → Raw
+  | softmaxRowF    (m n : Nat)             : Raw → Raw
+  | softmaxRowBack (x : String) (m n : Nat) : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -988,6 +1037,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .sigmoidBack x _ e    => .sigmoidBack x k (skel e)
   | k, .geluF e              => .geluF k (skel e)
   | k, .geluBack x _ e       => .geluBack x k (skel e)
+  | _, .softmaxRowF (m := m) (n := n) e => .softmaxRowF m n (skel e)
+  | _, .softmaxRowBack (m := m) (n := n) x _ e => .softmaxRowBack x m n (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -1024,6 +1075,8 @@ inductive Tok where
   | sigmoidBack (x : String) (n : Nat)     : Tok
   | geluF      (n : Nat)                   : Tok
   | geluBack   (x : String) (n : Nat)      : Tok
+  | softmaxRowF    (m n : Nat)             : Tok
+  | softmaxRowBack (x : String) (m n : Nat) : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -1061,6 +1114,8 @@ def toToks : Raw → List Tok
   | .sigmoidBack x n e => toToks e ++ [.sigmoidBack x n]
   | .geluF n e       => toToks e ++ [.geluF n]
   | .geluBack x n e  => toToks e ++ [.geluBack x n]
+  | .softmaxRowF m n e    => toToks e ++ [.softmaxRowF m n]
+  | .softmaxRowBack x m n e => toToks e ++ [.softmaxRowBack x m n]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -1493,6 +1548,41 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty [B,n]}\n" ++
             s!"    {gp} = stablehlo.add {term1}, {term2} : {ty [B,n]}\n" ++
             s!"    {o} = stablehlo.multiply {r}, {gp} : {ty [B,n]}\n", o :: st)
+  | .softmaxRowF m n, r :: st => do
+      -- ROW-softmax: reshape flat `[B,m*n]` → `[B,m,n]`, exp, reduce add over the
+      -- LAST axis [2] (per row), broadcast back over dims [0,1], divide, reshape to
+      -- flat. Plain exp/sum (no max-shift), matching the proven `softmax` (3-D
+      -- analogue of `.softmaxDiv`).
+      let xn ← fresh; let z ← fresh; let e ← fresh; let s ← fresh; let sb ← fresh
+      let dv ← fresh; let o ← fresh
+      pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {e} = stablehlo.exponential {xn} : {ty [B,m,n]}\n" ++
+        s!"    {s} = stablehlo.reduce({e} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+        s!"    {sb} = stablehlo.broadcast_in_dim {s}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+        s!"    {dv} = stablehlo.divide {e}, {sb} : {ty [B,m,n]}\n" ++
+        s!"    {o} = stablehlo.reshape {dv} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+  | .softmaxRowBack x m n, r :: st => do
+      -- ROW-softmax input-VJP `p ⊙ (dy − ⟨p,dy⟩)` per row: reshape flat→`[B,m,n]`,
+      -- recompute `p` from the saved pre-softmax scores {x} (exp/reduce[2]/broadcast/
+      -- divide), then the rank-1 correction (`pdy`, reduce[2], subtract, multiply),
+      -- reshape to flat. {r} is dy.
+      let xn ← fresh; let dn ← fresh; let z ← fresh; let e ← fresh; let s ← fresh
+      let sb ← fresh; let p ← fresh; let pdy ← fresh; let sr ← fresh; let srb ← fresh
+      let d ← fresh; let dz ← fresh; let o ← fresh
+      pure (s!"    {xn} = stablehlo.reshape {x} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {dn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {e} = stablehlo.exponential {xn} : {ty [B,m,n]}\n" ++
+        s!"    {s} = stablehlo.reduce({e} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+        s!"    {sb} = stablehlo.broadcast_in_dim {s}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+        s!"    {p} = stablehlo.divide {e}, {sb} : {ty [B,m,n]}\n" ++
+        s!"    {pdy} = stablehlo.multiply {p}, {dn} : {ty [B,m,n]}\n" ++
+        s!"    {sr} = stablehlo.reduce({pdy} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+        s!"    {srb} = stablehlo.broadcast_in_dim {sr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+        s!"    {d} = stablehlo.subtract {dn}, {srb} : {ty [B,m,n]}\n" ++
+        s!"    {dz} = stablehlo.multiply {p}, {d} : {ty [B,m,n]}\n" ++
+        s!"    {o} = stablehlo.reshape {dz} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
