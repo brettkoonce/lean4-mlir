@@ -52,6 +52,9 @@ lean_lib «Proofs» where
              -- Chapter-6 ResNet Milestone B: the deep-block chain (a list of
              -- same-type residual blocks composes to one VJP) — 16-block depth.
              `LeanMlir.Proofs.ResNet34,
+             -- Chapter-6 ResNet Milestone B8: per-channel BatchNorm (block-diagonal
+             -- VJP via a per-row generalization of `rowwise_has_vjp_mat`).
+             `LeanMlir.Proofs.PerChannelBN,
              -- opt-in Mathlib.Matrix interop; not imported by the suite,
              -- listed here so CI keeps it green.
              `LeanMlir.Proofs.MatBridge,

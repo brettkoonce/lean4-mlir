@@ -17,6 +17,7 @@ import LeanMlir.Proofs.StableHLO
 import LeanMlir.Proofs.StableHLOParse
 import LeanMlir.Proofs.StridedConv
 import LeanMlir.Proofs.ResNet34
+import LeanMlir.Proofs.PerChannelBN
 
 open Proofs
 
@@ -321,6 +322,11 @@ open Proofs
 -- hypothesis discharged. Makes the verified ResNet-34 non-vacuous; the ResNet-34
 -- peer of CnnConcrete.cnnConcrete_has_vjp_correct.
 #print axioms ResNet34Concrete.resnet34Concrete_has_vjp_correct
+-- B8: per-channel BatchNorm — the real-ResNet BN (each channel-slice normalized with
+-- its own γ_c/β_c, γ/β : Vec oc). Block-diagonal VJP: each channel runs its own
+-- bn_has_vjp, cross-channel blocks vanish (pdivMat_rowIndep_perRow, a per-row
+-- generalization of rowwise_has_vjp_mat). The genuinely-new "parallel/blockwise VJP".
+#print axioms bnPerChannelFlat_has_vjp_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
