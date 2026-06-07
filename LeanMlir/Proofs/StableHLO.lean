@@ -4,6 +4,7 @@ import LeanMlir.Proofs.StridedConv
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.Depthwise
 import LeanMlir.Proofs.MobileNetV2
+import LeanMlir.Proofs.LayerNorm
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 2: the linear classifier)
 
@@ -131,6 +132,13 @@ inductive SHlo : Nat → Type where
       (W : DepthwiseKernel c kH kW) (b : Vec c)            : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
   | depthwiseStridedBack {c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
+  -- Chapter 8 (EfficientNet): swish forward (`x · σ(x)`, σ = `stablehlo.logistic`)
+  -- and its input-VJP (`dy · swish'(x)`, closed form `σ(x)·(1 + x·(1−σ(x)))`).
+  -- Swish is SMOOTH everywhere (no kink, NO smoothness hyp — unlike relu6); the
+  -- VJP is the GLOBAL `swish_has_vjp` (no `_at`). `swishBack`'s `xName`/`x` is the
+  -- saved pre-activation. `den` via the proven `swish` / `swish_has_vjp` (LayerNorm.lean).
+  | swishF     {n : Nat}                                        : SHlo n → SHlo n
+  | swishBack  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -177,6 +185,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .depthwiseBack _ W b v e => (depthwiseFlat_has_vjp W b).backward v (den e)
   | _, .depthwiseStridedF _ _ W b e => depthwiseStride2Flat W b (den e)
   | _, .depthwiseStridedBack _ W b v e => (depthwiseStride2Flat_has_vjp W b).backward v (den e)
+  | _, .swishF (n := n) e => swish n (den e)
+  | _, .swishBack (n := n) _ x e => (swish_has_vjp n).backward x (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -533,6 +543,20 @@ theorem depthwiseStridedBack_faithful {c h w kH kW : Nat} (wN : String)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) (e : SHlo (c*h*w)) :
     den (.depthwiseStridedBack wN W b v e) = (depthwiseStride2Flat_has_vjp W b).backward v (den e) := rfl
 
+/-- **Swish forward faithfulness.** The `multiply(x, logistic(x))` graph denotes
+    the proven `swish` (= `x · σ(x)`, LayerNorm.lean). Smooth everywhere; no kink,
+    no smoothness hypothesis. (`rfl`, so kept out of the axiom audit — `roundtrip`
+    covers it structurally.) -/
+@[simp] theorem swishF_faithful {n : Nat} (e : SHlo n) :
+    den (.swishF e) = swish n (den e) := rfl
+
+/-- **Swish input-VJP faithfulness.** The closed-form `dy ⊙ σ(x)·(1 + x·(1−σ(x)))`
+    graph (recomputing σ from the saved pre-activation `x`) denotes the proven GLOBAL
+    `swish_has_vjp` backward (`dy ⊙ swishScalarDeriv x`; swish is smooth everywhere, so
+    this is a global VJP — no smoothness hypothesis). -/
+theorem swishBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
+    den (.swishBack xN x e) = (swish_has_vjp n).backward x (den e) := rfl
+
 /-- Whole MNIST-CNN **forward** graph:
     `dense ∘ relu ∘ dense ∘ relu ∘ dense ∘ maxPool ∘ relu ∘ conv ∘ relu ∘ conv`. -/
 def cnnFwdGraph {ic c h w d1 nClasses kH kW : Nat}
@@ -863,6 +887,8 @@ inductive Raw where
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseStridedBack (w : String) (c h w' kH kW : Nat) : Raw → Raw
+  | swishF     (n : Nat)                   : Raw → Raw
+  | swishBack  (x : String) (n : Nat)      : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -905,6 +931,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .depthwiseStridedF wN bN c h w kH kW (skel e)
   | _, .depthwiseStridedBack (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
       .depthwiseStridedBack wN c h w kH kW (skel e)
+  | k, .swishF e             => .swishF k (skel e)
+  | k, .swishBack x _ e      => .swishBack x k (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -935,6 +963,8 @@ inductive Tok where
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Tok
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Tok
   | depthwiseStridedBack (w : String) (c h w' kH kW : Nat) : Tok
+  | swishF     (n : Nat)                   : Tok
+  | swishBack  (x : String) (n : Nat)      : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -966,6 +996,8 @@ def toToks : Raw → List Tok
   | .depthwiseBack w c h w' kH kW e => toToks e ++ [.depthwiseBack w c h w' kH kW]
   | .depthwiseStridedF w b c h w' kH kW e => toToks e ++ [.depthwiseStridedF w b c h w' kH kW]
   | .depthwiseStridedBack w c h w' kH kW e => toToks e ++ [.depthwiseStridedBack w c h w' kH kW]
+  | .swishF n e      => toToks e ++ [.swishF n]
+  | .swishBack x n e => toToks e ++ [.swishBack x n]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -1317,6 +1349,23 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         "      {batch_group_count = 1 : i64, feature_group_count = " ++ toString c ++ " : i64}" ++
         s!" : ({ty [B,c,2*h,2*w']}, {ty [c,1,kH,kW]}) -> {ty [B,c,2*h,2*w']}\n" ++
         s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,2*h,2*w']}) -> {ty [B, c*(2*h)*(2*w')]}\n", o :: st)
+  | .swishF n, r :: st => do
+      -- swish forward: y = x · σ(x), σ = logistic (smooth everywhere, no kink/mask).
+      let s ← fresh; let o ← fresh
+      pure (s!"    {s} = stablehlo.logistic {r} : {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.multiply {r}, {s} : {ty [B,n]}\n", o :: st)
+  | .swishBack x n, r :: st => do
+      -- swish input-VJP: dy ⊙ σ(x)·(1 + x·(1−σ(x))), recomputing σ from the saved
+      -- pre-activation {x} (matches `swishScalarDeriv`'s closed form, IRPrint `swishB`).
+      let s ← fresh; let one ← fresh; let om ← fresh; let xom ← fresh
+      let inr ← fresh; let sp ← fresh; let o ← fresh
+      pure (s!"    {s} = stablehlo.logistic {x} : {ty [B,n]}\n" ++
+            s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
+            s!"    {om} = stablehlo.subtract {one}, {s} : {ty [B,n]}\n" ++
+            s!"    {xom} = stablehlo.multiply {x}, {om} : {ty [B,n]}\n" ++
+            s!"    {inr} = stablehlo.add {one}, {xom} : {ty [B,n]}\n" ++
+            s!"    {sp} = stablehlo.multiply {s}, {inr} : {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/

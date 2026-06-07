@@ -78,6 +78,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.depthwiseStridedF w b c h w' kH kW e :: st)
   | .depthwiseStridedBack w c h w' kH kW :: ts, e :: st =>
       parseStack ts (.depthwiseStridedBack w c h w' kH kW e :: st)
+  | .swishF n :: ts, e :: st     => parseStack ts (.swishF n e :: st)
+  | .swishBack x n :: ts, e :: st => parseStack ts (.swishBack x n e :: st)
   | _ :: _, _                    => none  -- stack underflow / malformed
 
 /-- Parse a full token stream back to a single graph. -/
@@ -123,6 +125,8 @@ theorem parseStack_toToks (r : Raw) :
   | depthwiseBack w c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseStridedF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseStridedBack w c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | swishF n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | swishBack x n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
 
 /-- **Serialization round-trip.** `parse` recovers any skeleton from its
     postorder token stream. -/
