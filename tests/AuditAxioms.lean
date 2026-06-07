@@ -304,6 +304,11 @@ open Proofs
 -- skip stride-2) — the downsampling residual block at each ResNet-34 stage start.
 -- Via residualProj_has_vjp_at over the strided proj + strided body.
 #print axioms rblkPStrided_has_vjp_at_correct
+-- Stage assembly: the conditional (_at) deep-block chain (vjp_chain_at, the
+-- identity-block run of a stage) and a full ResNet stage = downsample block then
+-- that chain (resStage). The composition machinery for the 4-stage whole net.
+#print axioms vjp_chain_at_correct
+#print axioms resStage_has_vjp_at_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate

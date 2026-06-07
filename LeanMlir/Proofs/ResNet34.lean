@@ -74,6 +74,73 @@ theorem vjp_chain_correct {n : Nat} (fs : List (Vec n → Vec n))
   (vjp_chain fs hdiff hvjp).correct x dy i
 
 -- ════════════════════════════════════════════════════════════════
+-- § Deep-block chain at a smooth point (the conditional `_at` chain)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Recursive hypothesis bundle for a chain of `HasVJPAt` blocks: each block is
+    `DifferentiableAt` and `HasVJPAt` **at its running activation** — the point
+    `chainComp rest x` feeding it (the deeper blocks run first). Residual identity
+    blocks are only `HasVJPAt` at smooth points, so the chain must thread the
+    point, not assume global differentiability. -/
+def ChainData {n : Nat} (x : Vec n) : List (Vec n → Vec n) → Type
+  | [] => PUnit
+  | f :: rest =>
+      -- `PProd` (not `×`): the first field `DifferentiableAt` is a `Prop`.
+      PProd (DifferentiableAt ℝ f (chainComp rest x))
+        (PProd (HasVJPAt f (chainComp rest x)) (ChainData x rest))
+
+/-- The chain at a point both **has a VJP and is differentiable** there, from the
+    per-block `ChainData`. The companion `DifferentiableAt` is carried alongside
+    so the recursion can feed the inner-composition differentiability into each
+    `vjp_comp_at` / `DifferentiableAt.comp`. -/
+noncomputable def chain_vjp_diff_at {n : Nat} (x : Vec n) :
+    (fs : List (Vec n → Vec n)) → ChainData x fs →
+      PProd (HasVJPAt (chainComp fs) x) (DifferentiableAt ℝ (chainComp fs) x)
+  | [], _ => ⟨(identity_has_vjp n).toHasVJPAt x, differentiable_id.differentiableAt⟩
+  | f :: rest, d =>
+      let ih := chain_vjp_diff_at x rest d.snd.snd
+      ⟨vjp_comp_at (chainComp rest) f x ih.snd d.fst ih.fst d.snd.fst, d.fst.comp x ih.snd⟩
+
+/-- **Deep-block chain VJP at a smooth point.** A composition of conditional
+    (`HasVJPAt`) blocks — e.g. the k identity residual blocks of a ResNet stage —
+    has a VJP at `x`, given each block is differentiable + has a VJP at its
+    running activation (`ChainData`). The `_at` peer of `vjp_chain`. -/
+noncomputable def vjp_chain_at {n : Nat} (x : Vec n) (fs : List (Vec n → Vec n))
+    (hdata : ChainData x fs) : HasVJPAt (chainComp fs) x :=
+  (chain_vjp_diff_at x fs hdata).fst
+
+/-- **Deep-chain-at VJP correctness** (ℝ-headline): the chained backward at `x`
+    equals the `pdiv`-Jacobian of the composition at `x`. -/
+theorem vjp_chain_at_correct {n : Nat} (x : Vec n) (fs : List (Vec n → Vec n))
+    (hdata : ChainData x fs) (dy : Vec n) (i : Fin n) :
+    (vjp_chain_at x fs hdata).backward dy i = ∑ j : Fin n, pdiv (chainComp fs) x i j * dy j :=
+  (vjp_chain_at x fs hdata).correct dy i
+
+/-- **A full ResNet stage has a VJP at a point.** A stage is a downsample block
+    `down : Vec m → Vec n` (channel/spatial change — `rblkPStrided`, or for the
+    first stage the identity / stem-fed input) followed by a chain of `k` identity
+    residual blocks `chainComp ids : Vec n → Vec n`. VJPAt by one `vjp_comp_at`
+    gluing the downsample to the (deep-chained) identity blocks. The reusable
+    composition pattern for assembling ResNet-34's four stages. -/
+noncomputable def resStage_has_vjp_at {m n : Nat}
+    (down : Vec m → Vec n) (ids : List (Vec n → Vec n)) (x : Vec m)
+    (hdown_diff : DifferentiableAt ℝ down x) (hdown : HasVJPAt down x)
+    (hids : ChainData (down x) ids) :
+    HasVJPAt (chainComp ids ∘ down) x :=
+  vjp_comp_at down (chainComp ids) x hdown_diff
+    (chain_vjp_diff_at (down x) ids hids).snd hdown (vjp_chain_at (down x) ids hids)
+
+/-- **ResNet-stage VJP correctness** (ℝ-headline): the stage's backward equals the
+    `pdiv`-Jacobian of `(identity-block chain) ∘ downsample` at `x`. -/
+theorem resStage_has_vjp_at_correct {m n : Nat}
+    (down : Vec m → Vec n) (ids : List (Vec n → Vec n)) (x : Vec m)
+    (hdown_diff : DifferentiableAt ℝ down x) (hdown : HasVJPAt down x)
+    (hids : ChainData (down x) ids) (dy : Vec n) (i : Fin m) :
+    (resStage_has_vjp_at down ids x hdown_diff hdown hids).backward dy i
+      = ∑ j : Fin n, pdiv (chainComp ids ∘ down) x i j * dy j :=
+  (resStage_has_vjp_at down ids x hdown_diff hdown hids).correct dy i
+
+-- ════════════════════════════════════════════════════════════════
 -- § Strided downsampling block — conv(stride 2) → BN → relu
 -- ════════════════════════════════════════════════════════════════
 
