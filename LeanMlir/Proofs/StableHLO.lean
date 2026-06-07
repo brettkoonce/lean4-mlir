@@ -828,6 +828,81 @@ theorem resnetFwdGraph_faithful
   unfold cnnForward cbr rblk rblkP residual residualProj biPath
   simp only [Function.comp_apply]
 
+/-- Whole **MobileNetV2 forward** graph (representative, ch7 peer of `resnetFwdGraph`):
+    stem (conv→bn→relu6) → skip inverted-residual `addV(invresBody, stem)` → no-skip
+    inverted-residual → global-average-pool → dense. Each inverted-residual body is
+    `bn∘conv(project) ∘ relu6∘bn∘depthwise ∘ relu6∘bn∘conv(expand)`; the skip's `addV`
+    reuses the block-input subtree (linear bottleneck — no relu6 after the add). Uses the
+    MobileNetV2 ops `relu6F`/`depthwiseF` (SAME-spatial representative; the stride-2
+    `depthwiseStridedF`/`flatConvStridedF` of the full render are exercised at the op level,
+    not assembled here — full strided graph deferred, see planning doc). `epsStr` = shared ε
+    literal; each scalar BN carries γ/β SSA inputs `%g*`/`%bt*`. -/
+def mobilenetv2FwdGraph
+    {ic c mid₁ oc mid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁
+     kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ nClasses : Nat}
+    (epsStr : String)
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ)
+    (We₁ : Kernel4 mid₁ c kHe₁ kWe₁) (be₁ : Vec mid₁) (e₁ ge₁ be1 : ℝ)
+    (Wd₁ : DepthwiseKernel mid₁ kHd₁ kWd₁) (bd₁ : Vec mid₁) (d₁ gd₁ bd1 : ℝ)
+    (Wp₁ : Kernel4 c mid₁ kHp₁ kWp₁) (bp₁ : Vec c) (p₁ gp₁ bp1 : ℝ)
+    (We₂ : Kernel4 mid₂ c kHe₂ kWe₂) (be₂ : Vec mid₂) (e₂ ge₂ be2 : ℝ)
+    (Wd₂ : DepthwiseKernel mid₂ kHd₂ kWd₂) (bd₂ : Vec mid₂) (d₂ gd₂ bd2 : ℝ)
+    (Wp₂ : Kernel4 oc mid₂ kHp₂ kWp₂) (bp₂ : Vec oc) (p₂ gp₂ bp2 : ℝ)
+    (Wh : Mat oc nClasses) (bh : Vec nClasses)
+    (x : Vec (ic*h*w)) : SHlo nClasses :=
+  -- stem: relu6(bn(conv x))
+  let stemOut : SHlo (c*h*w) :=
+    .relu6F (.bnF "%gs" "%bts" epsStr εs γs βs
+      (.flatConvF (h := h) (w := w) "%Ws" "%bs" Ws bs (.operand "%x" x)))
+  -- block1 body (inverted residual, c→mid₁→c): project ∘ depthwise ∘ expand
+  let b1Body : SHlo (c*h*w) :=
+    .bnF "%gp1" "%btp1" epsStr p₁ gp₁ bp1
+      (.flatConvF (h := h) (w := w) "%Wp1" "%bp1" Wp₁ bp₁
+        (.relu6F (.bnF "%gd1" "%btd1" epsStr d₁ gd₁ bd1
+          (.depthwiseF (h := h) (w := w) "%Wd1" "%bd1" Wd₁ bd₁
+            (.relu6F (.bnF "%ge1" "%bte1" epsStr e₁ ge₁ be1
+              (.flatConvF (h := h) (w := w) "%We1" "%be1" We₁ be₁ stemOut)))))))
+  -- block1 (skip): linear-bottleneck residual, no relu6 after the add
+  let b1Out : SHlo (c*h*w) := .addV b1Body stemOut
+  -- block2 body (inverted residual, c→mid₂→oc, no skip)
+  let b2Out : SHlo (oc*h*w) :=
+    .bnF "%gp2" "%btp2" epsStr p₂ gp₂ bp2
+      (.flatConvF (h := h) (w := w) "%Wp2" "%bp2" Wp₂ bp₂
+        (.relu6F (.bnF "%gd2" "%btd2" epsStr d₂ gd₂ bd2
+          (.depthwiseF (h := h) (w := w) "%Wd2" "%bd2" Wd₂ bd₂
+            (.relu6F (.bnF "%ge2" "%bte2" epsStr e₂ ge₂ be2
+              (.flatConvF (h := h) (w := w) "%We2" "%be2" We₂ be₂ b1Out)))))))
+  denseF "%Wh" "%bh" Wh bh (.gapF (c := oc) (h := h) (w := w) b2Out)
+
+/-- **MobileNetV2 forward faithfulness.** The representative forward graph denotes the
+    proven `mobilenetv2Forward` (whose end-to-end VJP at a smooth point is
+    `mobilenetv2_has_vjp_at`). The skip `addV` denotes the `+` of `residual`/`biPath`;
+    the inverted-residual body's `bn/conv/depthwise/relu6` ops denote
+    `invresBody = ivProject ∘ ivDepthwise ∘ ivExpand`. ch7 peer of `resnetFwdGraph_faithful`. -/
+theorem mobilenetv2FwdGraph_faithful
+    {ic c mid₁ oc mid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁
+     kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ nClasses : Nat}
+    (epsStr : String)
+    (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ)
+    (We₁ : Kernel4 mid₁ c kHe₁ kWe₁) (be₁ : Vec mid₁) (e₁ ge₁ be1 : ℝ)
+    (Wd₁ : DepthwiseKernel mid₁ kHd₁ kWd₁) (bd₁ : Vec mid₁) (d₁ gd₁ bd1 : ℝ)
+    (Wp₁ : Kernel4 c mid₁ kHp₁ kWp₁) (bp₁ : Vec c) (p₁ gp₁ bp1 : ℝ)
+    (We₂ : Kernel4 mid₂ c kHe₂ kWe₂) (be₂ : Vec mid₂) (e₂ ge₂ be2 : ℝ)
+    (Wd₂ : DepthwiseKernel mid₂ kHd₂ kWd₂) (bd₂ : Vec mid₂) (d₂ gd₂ bd2 : ℝ)
+    (Wp₂ : Kernel4 oc mid₂ kHp₂ kWp₂) (bp₂ : Vec oc) (p₂ gp₂ bp2 : ℝ)
+    (Wh : Mat oc nClasses) (bh : Vec nClasses)
+    (x : Vec (ic*h*w)) :
+    den (mobilenetv2FwdGraph epsStr Ws bs εs γs βs
+          We₁ be₁ e₁ ge₁ be1 Wd₁ bd₁ d₁ gd₁ bd1 Wp₁ bp₁ p₁ gp₁ bp1
+          We₂ be₂ e₂ ge₂ be2 Wd₂ bd₂ d₂ gd₂ bd2 Wp₂ bp₂ p₂ gp₂ bp2 Wh bh x)
+      = mobilenetv2Forward Ws bs εs γs βs
+          We₁ be₁ e₁ ge₁ be1 Wd₁ bd₁ d₁ gd₁ bd1 Wp₁ bp₁ p₁ gp₁ bp1
+          We₂ be₂ e₂ ge₂ be2 Wd₂ bd₂ d₂ gd₂ bd2 Wp₂ bp₂ p₂ gp₂ bp2 Wh bh x := by
+  simp only [mobilenetv2FwdGraph, denseF_faithful, gapF_faithful, relu6F_faithful,
+             bnF_faithful, flatConvF_faithful, depthwiseF_faithful, den_addV, den_operand]
+  unfold mobilenetv2Forward invresBody ivExpand ivDepthwise ivProject residual biPath
+  simp only [Function.comp_apply]
+
 -- ════════════════════════════════════════════════════════════════
 -- § Chapter 4 — CNN: whole-chain backward (A2c, the MLP-analog of
 --   `mlpBackGraph_faithful`). The full backward graph denotes the proven
