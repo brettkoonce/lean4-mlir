@@ -71,32 +71,74 @@ IREE_BACKEND=rocm IREE_CHIP=gfx1100 IREE_DEVICE=hip \
 
 ## Status
 
-DONE (full ladder A+B+C+E, GPU-validated):
+DONE — full ladder A+B+C+E, GPU-validated:
 - ch2 linear (92%, fwd+cotangent E) · ch3 MLP (97.78%, fwd+**back** E) · ch4 CNN (98.99%,
-  fwd E) · ch5 cifar (~67%, fwd E) · ch5 cifar-bn (~57% slow, fwd E).
-- Commits 649ef6a … 25847f2 on `main`, **NOT pushed** (~72 ahead).
+  fwd E) · ch5 cifar (~67%, fwd E) · ch5 cifar-bn (~57% slow, fwd E). Commits 649ef6a … 25847f2.
+
+DONE — rung A + trainer + GPU-validated (B/C/E pending):
+- ch6 r34: spec in `VerifiedNets` + `#guard == ResNet34Layout.specs`, one-line main; GPU
+  epoch 1 = 369/3904 = **9.45% = exact match to the known r34-imagenette number** (≈chance
+  from scratch — codegen-identical to prior r34). Commit 74818d1.
+
+All on `main`, **NOT pushed** (~73 ahead).
+
+## THE PLAN (agreed)
+
+**Sweep target = A + B/C for all five imagenette nets** (r34→mnv2→enet→convnext→vit).
+**E is a SEPARATE later pass**, opportunistic, starting where E-ops are ready (r34/mnv2).
+Do not attempt E during the B/C sweep.
 
 ## Imagenette nets — per-net pointers (do in this order)
 
 All Layouts (`ResNet34/MobileNetV2/EfficientNet/ConvNeXt/ViTLayout`) are in
 `IreeRuntime.lean` and already expose `.specs` → rung A is trivial. The trainers already
 use `mlpTrainStepV` + `.imagenette` data → they fit `VerifiedNet.train` (one-line `main`).
-**Key caveat for rung E**: `den(graph)=math` faithfulness in `StableHLO.lean` exists for
-ch2–5 **and a `resnetFwdGraph_faithful` (line ~808)** — but **NOT** for mnv2/efficientnet/
-convnext/vit (those MLIRs are hand-rendered by `tests/TestX{Train,Fwd}.lean` and
-gradcheck-validated, not denotation-proven). So expect A+B+C for those; **E is r34-only
-(maybe) until/unless that infra is extended**. Flag E as out-of-scope per net if so.
 
-- **r34** (`Proofs/ResNet34.lean`): apex `resnet34_has_vjp_at` (:174, **parametric skeleton**
-  over stem/mp/4×(down,ids)/gap/dense — depth is a `List.length`). VLayers all exist
-  (`convBn`/`maxPool`/`residualStage`/`globalAvgPool`/`dense` — built in the r34 spike).
-  `toBlocks` (the spec→renderer-block fold) was prototyped + proven `== blocks` in a reverted
-  edit — re-derivable. E: `resnetFwdGraph_faithful` exists (StableHLO ~808) — check it matches
-  the full `ResNet34Layout` render or is representative.
-- **mnv2** (`Proofs/MobileNetV2.lean`): apex `mobilenetv2_has_vjp_at`. Inverted-residual /
-  MBConv blocks (expand 1×1 → depthwise k×k strided → project 1×1, per-channel BN, **relu6**,
-  residual when s=1∧ic=oc). New VLayers needed: depthwise, relu6, invertedResidual (+ per-channel BN
-  — distinct from scalar `.bn`). No fwd-graph faithfulness → E likely out of scope.
+### B/C readiness — r34 is the AWKWARD one; the rest are clean
+B/C = `denote spec.layers = <proof Forward fn> := rfl` + canonical-witness `has_vjp`.
+- **r34 has NO whole-net `Forward` def** — only the parametric skeleton `resnet34_has_vjp_at`
+  + block-level VJP lemmas + tiny 1-channel toy blocks (`idBlk`/`downBlk`). So B/C must
+  *build* `resnet34Forward` (the full [3,4,6,3] op-composition at real dims), and its proof
+  BN is scalar `bnForward` vs the render's per-channel `[c]` BN (granularity gap). Hardest B/C.
+- **mnv2 / efficientnet / convnext / vit all HAVE a `Forward` def** → clean B/C like ch2–5
+  (modulo representative-depth/scalar-witness gaps): `mobilenetv2Forward` (MobileNetV2.lean:461),
+  `efficientnetForward` (EfficientNet.lean:424), `convNextForward` (ConvNeXt.lean:267, ~2-block
+  representative), `vit_full` (Attention.lean:3629, scalar-LN witness).
+- **Suggested B/C order: mnv2 first** (clean Forward), then enet/convnext/vit, **r34 last**
+  (build its forward as a dedicated task).
+
+### E readiness — gets HARDER later (mirror image of B/C). Don't sweep E.
+E = `den(graph)=spec` + committed `.mlir` = `pretty(emit graph)`. The per-**op** verified IR
+is *largely built*: `StableHLO.SHlo` has `depthwiseF`/`depthwiseStridedF`, `swishF`, `relu6F`,
+`softmaxRowF`, `geluF` — each with `den` + faithfulness. **The real gap**: the imagenette
+committed MLIRs are **hand-written string concatenation** (`tests/TestX{Train,Fwd}.lean`, ~200
+concat lines each), gradcheck-validated — they do NOT go through `emit(SHlo)`. So E per net =
+(1) assemble the whole-net graph in `SHlo`, (2) prove whole-net `den(graph)=math` (deep
+faithfulness fold), (3) **re-route the committed render** from strings to `pretty(emit graph)`
+so E ties to the real artifact (today even `resnetFwdGraph_faithful` is a *representative*
+SHlo graph, NOT what's committed), (4) fill missing ops. It is plumbing, not new math, but a
+sizable per-net assembly+re-render. Tractability:
+| net | E-readiness | missing for E |
+|---|---|---|
+| r34 | easiest | ops all in SHlo; whole-net SHlo assembly + re-route + per-channel BN |
+| mnv2 | easy | `depthwiseF`/`depthwiseStridedF`/`relu6F` exist; assembly + re-route |
+| efficientnet | medium | SE sub-graph + per-channel BN (swish exists) |
+| convnext | harder | layerScale + **even-kernel transposed conv** (gelu/depthwise exist) |
+| vit | hardest | **batched multi-head SDPA** (softmaxRowF exists; the dot_general attention + 3-path backward is the wall) |
+→ **E pass (later, opportunistic): start r34/mnv2; treat enet/convnext/vit E — esp. attention — as a deliberate separate project.**
+
+Below = net-specific architecture + new `VLayer`s each B/C needs (B/C/E readiness is in the
+two sections above).
+
+- **r34** (`Proofs/ResNet34.lean`): ✅ **A + trainer + GPU done** (commit 74818d1). Apex
+  `resnet34_has_vjp_at` (:174, **parametric skeleton**, no Forward def). VLayers all exist
+  (`convBn`/`maxPool`/`residualStage`/`globalAvgPool`/`dense`). B/C = build `resnet34Forward`
+  (real-dim [3,4,6,3] op-composition) — the awkward one; do last. `toBlocks` (spec→renderer
+  blocks) was prototyped + proven `== blocks` in a reverted edit — re-derivable.
+- **mnv2** (`Proofs/MobileNetV2.lean`): apex `mobilenetv2_has_vjp_at`; **`mobilenetv2Forward`
+  (:461)** → clean B/C. Inverted-residual/MBConv (expand 1×1 → depthwise k×k strided → project
+  1×1, per-channel BN, **relu6**, residual when s=1∧ic=oc). New VLayers: depthwise, relu6,
+  invertedResidual, per-channel BN (distinct from scalar `.bn`). **B/C-first imagenette target.**
 - **efficientnet** (`Proofs/EfficientNet.lean`): apex `efficientnet_has_vjp(_correct)` (:456/536,
   unconditional), `efficientnetForward` (:424). MBConv + **squeeze-excite** + **swish** +
   **batch-norm** (per-channel). New VLayers: swish, sigmoid, SE, MBConv-w-SE, per-channel BN.
@@ -126,8 +168,9 @@ gradcheck-validated, not denotation-proven). So expect A+B+C for those; **E is r
   that text (regeneration). `Proofs/StableHLOParse.lean` could close the text→IR round-trip.
 - **CIFAR-BN GPU perf** — ~2 min/epoch (scalar-BN global reductions over c·h·w are slow on the
   rocm reduction path); fine, just slow. Not a correctness issue.
-- **Push** — ~72 local commits on `main`, unpushed (needs explicit per-push OK per
+- **Push** — ~73 local commits on `main`, unpushed (needs explicit per-push OK per
   `memory/git-workflow-commit-to-main.md`).
-- **Imagenette E infra** — if we want rung E for mnv2/enet/convnext/vit, the `den(emit g)=math`
-  faithfulness for their op-graphs would need building (currently those nets are gradcheck-validated
-  string renders, not denotation-proven). Big; likely a separate effort.
+- **Imagenette E pass** — the separate later project (see "E readiness" above): assemble each
+  net's whole-net `SHlo` graph, prove `den(graph)=math`, and re-route the committed `.mlir` from
+  the `tests/TestX*` string emitters to `pretty(emit graph)`. Per-op IR mostly exists; start
+  r34/mnv2; attention (vit) is the wall. Do AFTER B/C is unified across all five.
