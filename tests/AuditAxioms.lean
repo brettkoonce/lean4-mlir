@@ -309,6 +309,12 @@ open Proofs
 -- that chain (resStage). The composition machinery for the 4-stage whole net.
 #print axioms vjp_chain_at_correct
 #print axioms resStage_has_vjp_at_correct
+-- THE WHOLE-NETWORK ResNet-34 VJP: dense ∘ GAP ∘ stage₄ ∘ stage₃ ∘ stage₂ ∘
+-- stage₁ ∘ maxpool ∘ stem, each stage = (identity-block chain) ∘ downsample, the
+-- 16 basic blocks as the idsᵢ lists. The conditional whole-net VJP (its HasVJPAt
+-- .correct field is the ℝ-carrying pdiv-Jacobian), folded from the verified
+-- vjp_comp_at / vjp_chain_at — the 34-layer structural analogue of cnn_has_vjp_at.
+#print axioms resnet34_has_vjp_at
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate

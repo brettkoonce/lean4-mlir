@@ -141,6 +141,82 @@ theorem resStage_has_vjp_at_correct {m n : Nat}
   (resStage_has_vjp_at down ids x hdown_diff hdown hids).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
+-- § The whole ResNet-34 network VJP
+-- ════════════════════════════════════════════════════════════════
+
+/-- Compose two `HasVJPAt`-with-`DifferentiableAt` pairs (carried as `PProd` so the
+    `DifferentiableAt` `Prop` is allowed). The fold step for the whole net. -/
+noncomputable def vjp_comp_diff_at {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
+    (x : Vec m)
+    (hf : PProd (HasVJPAt f x) (DifferentiableAt ℝ f x))
+    (hg : PProd (HasVJPAt g (f x)) (DifferentiableAt ℝ g (f x))) :
+    PProd (HasVJPAt (g ∘ f) x) (DifferentiableAt ℝ (g ∘ f) x) :=
+  ⟨vjp_comp_at f g x hf.snd hg.snd hf.fst hg.fst, hg.snd.comp x hf.snd⟩
+
+/-- **Whole-network ResNet-34 VJP.** The conditional VJP of a real ResNet-34-shaped
+    network at an input `x`:
+
+      `dense ∘ GAP ∘ stage₄ ∘ stage₃ ∘ stage₂ ∘ stage₁ ∘ maxpool ∘ stem`
+
+    with `stageᵢ = (identity-block chain) ∘ downsampleᵢ` for the three downsampling
+    stages (the 3+4+6+3 = 16 basic blocks live in the `idsᵢ` lists + the three
+    `downᵢ` blocks; instantiate `down`/`ids`/`stem`/`gap`/`dense` with the verified
+    `convBnReluStrided`/`rblkPStrided`/`rblk`/`globalAvgPoolFlat`/`dense` and
+    `maxPoolFlat`). Parametric over the component functions and their per-component
+    VJP+differentiability witnesses at the running activations — so depth is a
+    `List.length`, not 100 explicit weight arguments. Folded from the verified
+    `vjp_comp_at` / `vjp_chain_at` (`ChainData` threads each block's smooth point).
+
+    This is the structural analogue of `cnn_has_vjp_at` scaled to 34 layers; the
+    discharge of the smoothness/no-tie hypotheses for a concrete instance (à la
+    `CnnConcrete`) plus per-channel BN and the GPU render remain. -/
+noncomputable def resnet34_has_vjp_at
+    {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
+    (stem : Vec s0 → Vec s1) (mp : Vec s1 → Vec s2)
+    (ids1 : List (Vec s2 → Vec s2))
+    (down2 : Vec s2 → Vec s3) (ids2 : List (Vec s3 → Vec s3))
+    (down3 : Vec s3 → Vec s4) (ids3 : List (Vec s4 → Vec s4))
+    (down4 : Vec s4 → Vec s5) (ids4 : List (Vec s5 → Vec s5))
+    (gap : Vec s5 → Vec s6) (dense : Vec s6 → Vec s7)
+    (x : Vec s0)
+    (hstem : PProd (HasVJPAt stem x) (DifferentiableAt ℝ stem x))
+    (hmp : PProd (HasVJPAt mp (stem x)) (DifferentiableAt ℝ mp (stem x)))
+    (hids1 : ChainData (mp (stem x)) ids1)
+    (hdown2 : PProd (HasVJPAt down2 (chainComp ids1 (mp (stem x))))
+                    (DifferentiableAt ℝ down2 (chainComp ids1 (mp (stem x)))))
+    (hids2 : ChainData (down2 (chainComp ids1 (mp (stem x)))) ids2)
+    (hdown3 : PProd (HasVJPAt down3 (chainComp ids2 (down2 (chainComp ids1 (mp (stem x))))))
+                    (DifferentiableAt ℝ down3 (chainComp ids2 (down2 (chainComp ids1 (mp (stem x)))))))
+    (hids3 : ChainData (down3 (chainComp ids2 (down2 (chainComp ids1 (mp (stem x)))))) ids3)
+    (hdown4 : PProd (HasVJPAt down4 (chainComp ids3 (down3 (chainComp ids2 (down2 (chainComp ids1 (mp (stem x))))))))
+                    (DifferentiableAt ℝ down4 (chainComp ids3 (down3 (chainComp ids2 (down2 (chainComp ids1 (mp (stem x)))))))))
+    (hids4 : ChainData (down4 (chainComp ids3 (down3 (chainComp ids2 (down2 (chainComp ids1 (mp (stem x)))))))) ids4)
+    (hgap : PProd (HasVJPAt gap (chainComp ids4 (down4 (chainComp ids3 (down3 (chainComp ids2 (down2 (chainComp ids1 (mp (stem x))))))))))
+                  (DifferentiableAt ℝ gap (chainComp ids4 (down4 (chainComp ids3 (down3 (chainComp ids2 (down2 (chainComp ids1 (mp (stem x)))))))))))
+    (hdense : PProd (HasVJPAt dense (gap (chainComp ids4 (down4 (chainComp ids3 (down3 (chainComp ids2 (down2 (chainComp ids1 (mp (stem x)))))))))))
+                    (DifferentiableAt ℝ dense (gap (chainComp ids4 (down4 (chainComp ids3 (down3 (chainComp ids2 (down2 (chainComp ids1 (mp (stem x))))))))))))
+    : HasVJPAt
+        (dense ∘ gap ∘ chainComp ids4 ∘ down4 ∘ chainComp ids3 ∘ down3 ∘
+          chainComp ids2 ∘ down2 ∘ chainComp ids1 ∘ mp ∘ stem) x :=
+  let p1 := vjp_comp_diff_at stem mp x hstem hmp
+  let p2 := vjp_comp_diff_at (mp ∘ stem) (chainComp ids1) x p1 (chain_vjp_diff_at _ ids1 hids1)
+  let p3 := vjp_comp_diff_at (chainComp ids1 ∘ mp ∘ stem) down2 x p2 hdown2
+  let p4 := vjp_comp_diff_at (down2 ∘ chainComp ids1 ∘ mp ∘ stem) (chainComp ids2) x p3
+              (chain_vjp_diff_at _ ids2 hids2)
+  let p5 := vjp_comp_diff_at (chainComp ids2 ∘ down2 ∘ chainComp ids1 ∘ mp ∘ stem) down3 x p4 hdown3
+  let p6 := vjp_comp_diff_at (down3 ∘ chainComp ids2 ∘ down2 ∘ chainComp ids1 ∘ mp ∘ stem)
+              (chainComp ids3) x p5 (chain_vjp_diff_at _ ids3 hids3)
+  let p7 := vjp_comp_diff_at (chainComp ids3 ∘ down3 ∘ chainComp ids2 ∘ down2 ∘ chainComp ids1 ∘ mp ∘ stem)
+              down4 x p6 hdown4
+  let p8 := vjp_comp_diff_at (down4 ∘ chainComp ids3 ∘ down3 ∘ chainComp ids2 ∘ down2 ∘ chainComp ids1 ∘ mp ∘ stem)
+              (chainComp ids4) x p7 (chain_vjp_diff_at _ ids4 hids4)
+  let p9 := vjp_comp_diff_at (chainComp ids4 ∘ down4 ∘ chainComp ids3 ∘ down3 ∘ chainComp ids2 ∘ down2 ∘ chainComp ids1 ∘ mp ∘ stem)
+              gap x p8 hgap
+  let p10 := vjp_comp_diff_at (gap ∘ chainComp ids4 ∘ down4 ∘ chainComp ids3 ∘ down3 ∘ chainComp ids2 ∘ down2 ∘ chainComp ids1 ∘ mp ∘ stem)
+              dense x p9 hdense
+  p10.fst
+
+-- ════════════════════════════════════════════════════════════════
 -- § Strided downsampling block — conv(stride 2) → BN → relu
 -- ════════════════════════════════════════════════════════════════
 
