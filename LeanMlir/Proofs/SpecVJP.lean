@@ -206,3 +206,22 @@ theorem mlpVerified_back_faithful (W₀ : Mat 784 512) (b₀ : Vec 512)
           (dense W₁ b₁ (relu 512 (dense W₀ b₀ x))) dy)
       = (mlpVerified_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1).backward dy := by
   exact mlpBackGraph_faithful W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1 dy
+
+/-! ## Rung E (CNN): the spec ↔ the generated MLIR (forward)
+
+The generated CNN forward graph (`flatConv→relu→flatConv→relu→maxPoolFlat→dense→relu→
+dense→relu→dense`) denotes the spec's forward. The backward graph faithfulness exists too
+(`cnnBackGraph_faithful` denotes `mnistCnnNoBn_has_vjp_at.backward` — the VJP of exactly
+this spec's forward), but it carries the same five ReLU/maxpool smoothness hypotheses as
+the conditional fold, so we headline the unconditional forward tie (matching
+`cnnVerified_has_vjp`, the canonical witness). -/
+
+open Proofs.StableHLO in
+/-- **Generated CNN forward MLIR ↔ spec.** The forward graph (→ `cnn_fwd.mlir`) denotes
+    the spec's forward (`mnistCnnNoBnForward`, c=32 / h=w=14). -/
+theorem cnnVerified_fwd_faithful (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
+    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (W₃ : Mat 6272 512) (b₃ : Vec 512)
+    (W₄ : Mat 512 512) (b₄ : Vec 512) (W₅ : Mat 512 10) (b₅ : Vec 10) (x : Vec 784) :
+    den (cnnFwdGraph (h := 14) (w := 14) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x)
+      = denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x := by
+  exact cnnFwdGraph_faithful (h := 14) (w := 14) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x
