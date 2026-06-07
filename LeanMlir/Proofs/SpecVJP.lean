@@ -54,3 +54,52 @@ theorem linearVerified_has_vjp_correct (W : Mat 784 10) (b : Vec 10)
     (linearVerified_has_vjp W b).backward x dy i
       = ∑ j : Fin 10, pdiv (denoteLinear linearVerified.layers W b) x i j * dy j :=
   (linearVerified_has_vjp W b).correct x dy i
+
+/-! ## Rung 2: the MLP — the first genuine `vjp_comp` fold
+
+The linear model was the degenerate case (one layer, no fold). The MLP's denotation is a
+*chain* — `dense ∘ relu ∘ dense ∘ relu ∘ dense` (`mlpForward`) — and its VJP is built by
+folding `vjp_comp_at` down that chain (`mlp_has_vjp_at`). So this is where the spec→math
+tie first exercises the chain rule, not just a single op. -/
+
+/-- Math denotation of the MLP spec: the 5-layer list denotes to `mlpForward`. -/
+noncomputable def denoteMLP (layers : List VLayer)
+    (W₀ : Mat 784 512) (b₀ : Vec 512) (W₁ : Mat 512 512) (b₁ : Vec 512)
+    (W₂ : Mat 512 10) (b₂ : Vec 10) : Vec 784 → Vec 10 :=
+  match layers with
+  | [.dense 784 512, .relu, .dense 512 512, .relu, .dense 512 10] =>
+      mlpForward W₀ b₀ W₁ b₁ W₂ b₂
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the proven model.** `mlpVerified`'s denotation is exactly `mlpForward`
+    (`dense ∘ relu ∘ dense ∘ relu ∘ dense`) — by `rfl`, drift-sensitive. -/
+theorem mlpVerified_denote_eq (W₀ : Mat 784 512) (b₀ : Vec 512)
+    (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) :
+    denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂ = mlpForward W₀ b₀ W₁ b₁ W₂ b₂ := rfl
+
+/-- **The spec carries the math (canonical witness).** The MLP spec's denotation has a
+    VJP — the global `pdiv`-derived witness (`mlp_has_vjp`; relu uses the framework
+    subgradient convention at the kinks, per `Proofs/README.md`). -/
+noncomputable def mlpVerified_has_vjp (W₀ : Mat 784 512) (b₀ : Vec 512)
+    (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) :
+    HasVJP (denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂) :=
+  mlp_has_vjp W₀ b₀ W₁ b₁ W₂ b₂
+
+/-- **The spec carries the math (the real fold).** At a smooth input — the two ReLU
+    pre-activations avoid zero — the MLP spec's denotation has a VJP built by *folding*
+    `vjp_comp_at` through `dense → relu → dense → relu → dense` (no `rfl` escape at the
+    kinks). This is the chain rule applied to the spec, the step linear couldn't show. -/
+noncomputable def mlpVerified_has_vjp_at (W₀ : Mat 784 512) (b₀ : Vec 512)
+    (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) (x : Vec 784)
+    (h0 : ∀ k, dense W₀ b₀ x k ≠ 0)
+    (h1 : ∀ k, dense W₁ b₁ (relu 512 (dense W₀ b₀ x)) k ≠ 0) :
+    HasVJPAt (denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂) x :=
+  mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1
+
+/-- …correctness headline for the canonical witness carries over to the spec. -/
+theorem mlpVerified_has_vjp_correct (W₀ : Mat 784 512) (b₀ : Vec 512)
+    (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10)
+    (x : Vec 784) (dy : Vec 10) (i : Fin 784) :
+    (mlpVerified_has_vjp W₀ b₀ W₁ b₁ W₂ b₂).backward x dy i
+      = ∑ j : Fin 10, pdiv (denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
+  (mlpVerified_has_vjp W₀ b₀ W₁ b₁ W₂ b₂).correct x dy i

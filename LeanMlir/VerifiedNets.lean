@@ -26,3 +26,21 @@ def linearVerified : VerifiedNetSpec where
 
 -- Shape tie: the derived param layout is W:[784,10] (He) + b:[10] (zeros).
 #guard linearVerified.toSpecs == #[(#[784, 10], 0), (#[10], 2)]
+
+/-- The Chapter-3 MLP: dense 784→512 → relu → dense 512→512 → relu → dense 512→10.
+    Trained by `MainMnistMlpVerified`; its math VJP is proven in `Proofs/SpecVJP.lean`
+    (`mlpVerified_has_vjp` / `_at`) — both over *this* object. -/
+def mlpVerified : VerifiedNetSpec where
+  name     := "MNIST-MLP"
+  slug     := "mlp"
+  inC      := 1
+  imageH   := 28
+  imageW   := 28
+  nClasses := 10
+  data     := .mnist
+  layers   := [.dense 784 512, .relu, .dense 512 512, .relu, .dense 512 10]
+  blurb    := "MNIST-MLP via the VERIFIED renderer (784→512→512→10) → IREE FFI → GPU"
+
+-- Shape tie: W₀:[784,512] b₀:[512] | W₁:[512,512] b₁:[512] | W₂:[512,10] b₂:[10].
+#guard mlpVerified.toSpecs ==
+  #[(#[784, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]

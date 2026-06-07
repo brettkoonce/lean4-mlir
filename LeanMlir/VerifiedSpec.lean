@@ -36,6 +36,8 @@ inductive VLayer where
   | globalAvgPool
   /-- dense `ic→oc`. Params `{W,b}`. -/
   | dense (ic oc : Nat)
+  /-- ReLU activation (pointwise). No params. -/
+  | relu
 deriving Repr
 
 namespace VLayer
@@ -64,6 +66,7 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
   | residualStage ic oc n s => stageSpec ic oc n s
   | globalAvgPool           => #[]
   | dense ic oc             => #[(#[ic,oc],0),(#[oc],2)]
+  | relu                    => #[]
 
 end VLayer
 
