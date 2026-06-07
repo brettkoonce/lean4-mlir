@@ -16,8 +16,9 @@ ResNet-34 architecture), B7 (the unconditional concrete instance), and B8a/B8a'
 > (B9). Read §§0–3 first; rest is reference.
 
 Written 2026-06-07 by the session that did ch6-A + ch6-B1…B8a'. `origin/main` is
-behind by **18 local commits** (`34cdc52`…`d7f6a2c`); commit-to-main is fine,
-**never push without explicit per-push permission**.
+behind by **~20 local commits** (`34cdc52`…HEAD; latest *code* commit `d7f6a2c` =
+B8a', the rest are handoff-doc updates); commit-to-main is fine, **never push
+without explicit per-push permission**.
 
 ---
 
@@ -85,9 +86,10 @@ activations; folded from `vjp_comp_at` + `vjp_chain_at`.
 
 ---
 
-## 2. ⭐ WHAT REMAINS (for a TRAINED ResNet-34 — all large, not started)
+## 2. ⭐ WHAT REMAINS (for a TRAINED ResNet-34)
 
-In suggested order:
+**Genuinely remaining = B8b + B9 (both render/GPU, large).** B7 and B8a/B8a' below
+are ✅ DONE — kept here with their design notes for reference. In suggested order:
 
 ### ~~B7 — concrete-instance discharge (non-vacuity)~~  ✅ DONE (`785caa3`)
 `ResNet34Concrete.resnet34Concrete_has_vjp_correct` (in `ResNet34.lean`). A real
@@ -148,6 +150,14 @@ story.* See §6 honesty note.
   `resnet34-verified` exe (mirror `MainResnetVerified.lean`). GPU-train CIFAR-10
   (or downscaled ImageNet/imagenette).
 - De-risk each new op fragment on `iree-compile` before the full chain.
+- **Suggested entry point** (smallest first verified step): the layout bridge
+  `oc*(h·w) ↔ (oc*h)*w` — a `reindexCLM`/`pdiv_reindex` reassociation with its VJP
+  (exactly like `decimateFlat`), so `bnPerChannelFlat` (Mat-split) plugs into the
+  Tensor3-layout (`(oc*h)*w`) activations. Small, proof-only, audit-clean — does the
+  B8a "NB layout" bridge before any MLIR. Then B8b's op pair, then scale the trainer.
+- **Closest render+trainer template:** `cifarBnTrainStepText` + `MainCifarBnVerified.lean`
+  (ch5-B: the only existing BN trainer) — and ch6-A's `resnetTrainStepText`/
+  `MainResnetVerified.lean` for the residual/GAP/strided structure.
 
 ---
 
@@ -155,7 +165,8 @@ story.* See §6 honesty note.
 1. `git log --oneline -18` (confirm the ch6 commits through B8a' `d7f6a2c`); skim
    `LeanMlir/Proofs/ResNet34.lean` (`resnet34_has_vjp_at` apex,
    `ResNet34Concrete.resnet34Concrete_has_vjp_correct` B7 headline) and
-   `LeanMlir/Proofs/PerChannelBN.lean` (B8a: `bnPerChannelFlat_has_vjp_correct`).
+   `LeanMlir/Proofs/PerChannelBN.lean` (B8a/B8a': `bnPerChannelFlat_has_vjp_correct`
+   + the renderable `bnPerChannel_grad_input_correct`).
 2. Build + audit green first (see §4): **152/152**.
 3. **Do B8b + B9** — the remaining work toward a *trained* ResNet-34. B8b (the
    per-channel BN SHlo op pair) is best done WITH B9's trainer (it only pays off
@@ -258,8 +269,9 @@ DATA=/home/skoonce/lean/claude_max/lean4-jax/data           # mnist + cifar-10/ 
 
 ## 7. File map (ch6)
 
-- `LeanMlir/Proofs/PerChannelBN.lean` — **B8a** (per-channel BN block-diagonal VJP).
-  imports BatchNorm. `bnPerChannelFlat(_has_vjp(_correct))` + the reusable per-row
+- `LeanMlir/Proofs/PerChannelBN.lean` — **B8a/B8a'** (per-channel BN block-diagonal VJP +
+  renderable backward). imports BatchNorm. `bnPerChannelFlat(_has_vjp(_correct))`,
+  `bnPerChannel_grad_input(_correct)`, + the reusable per-row
   `pdivMat_rowIndep_perRow`/`rowwisePerRow_has_vjp_mat`. In the `Proofs` lib roots.
 - `LeanMlir/Proofs/StridedConv.lean` — B1/B2 (strided conv VJPs). imports CNN.
 - `LeanMlir/Proofs/ResNet34.lean` — B4/B5/B6a/B6b/B6c + **B7**. imports CNN + **MnistCNN**
