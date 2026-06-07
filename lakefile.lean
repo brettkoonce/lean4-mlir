@@ -216,6 +216,13 @@ lean_exe «efficientnet-verified» where
   root := `MainEfficientNetVerified
   moreLinkArgs := ireeLink
 
+-- Chapter 9: ConvNeXt-T (Liu et al. 2022 — patchify stem + [3,3,9,3] depthwise-7×7
+-- blocks with LN + GELU + layerScale + 3 between-stage downsamples) trained on
+-- VERIFIED-rendered StableHLO (tests/TestConvNeXt{Train,Fwd}.lean); 180 params.
+lean_exe «convnext-verified» where
+  root := `MainConvNeXtVerified
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar-cnn-train» where
   root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink

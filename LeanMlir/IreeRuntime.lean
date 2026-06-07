@@ -359,6 +359,43 @@ def shapesBA : ByteArray := packShapes paramShapes
 def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- Imagenette 224²
 end EfficientNetLayout
 
+namespace ConvNeXtLayout
+/-- Chapter-9 **ConvNeXt-T** params (IMAGENETTE 3×224×224 — paper-native resolution):
+    4×4/s4 patchify stem {W=`[96,3,4,4]`,b} (224→56), then [3,3,9,3] blocks @ [96,192,
+    384,768] (spatial 56/28/14/7) with 3 between-stage LN+2×2/s2 downsamples, then head
+    GAP → LN(768) → dense {W,b}. ConvNeXt block (9 params): depthwise 7×7 {W=`[c,1,7,7]`,b}
+    → **LN** (global per-example scalar γ/β, rank-0 `#[]`) → 1×1 expand {W=`[4c,c,1,1]`,b}
+    → GELU → 1×1 project {W=`[c,4c,1,1]`,b} → **layerScale** (per-channel γ=`[c]`). Each
+    downsample (4 params): LN scalar {γ,β} + 2×2 conv {W=`[2c,c,2,2]`,b}. 180 params. The
+    `(dims, initKind)` order MUST match `@convnext_train_step`'s signature — both from the
+    same [3,3,9,3] generator (tests/TestConvNeXt*.lean). `initKind`: 0 = He(fan-in)
+    (depthwise 49, expand c, project 4c, patchify 48, downsample 4c, dense 768), 1 = ones
+    (LN γ / layerScale γ), 2 = zeros (LN β / bias). -/
+private def depths : Array Nat := #[3, 3, 9, 3]
+private def dims   : Array Nat := #[96, 192, 384, 768]
+private def blockSpec (c e : Nat) : Array (Array Nat × Nat) :=
+  #[(#[c,1,7,7],0),(#[c],2),(#[],1),(#[],2),     -- depthwise W,b ; LN γ,β (scalar)
+    (#[e,c,1,1],0),(#[e],2),                      -- expand W,b
+    (#[c,e,1,1],0),(#[c],2),                      -- project W,b
+    (#[c],1)]                                     -- layerScale γ (per-channel)
+private def downSpec (ci co : Nat) : Array (Array Nat × Nat) :=
+  #[(#[],1),(#[],2),(#[co,ci,2,2],0),(#[co],2)]   -- LN γ,β (scalar) ; 2×2/s2 conv W,b
+/-- `(dims, initKind)` for every param, in func-arg order. -/
+def specs : Array (Array Nat × Nat) := Id.run do
+  let mut a : Array (Array Nat × Nat) := #[(#[96,3,4,4],0),(#[96],2)]   -- patchify stem
+  for si in [0:4] do
+    let c := dims[si]!
+    let e := 4 * c
+    for _ in [0:depths[si]!] do a := a ++ blockSpec c e
+    if si < 3 then a := a ++ downSpec c dims[si+1]!
+  a := a ++ #[(#[],1),(#[],2),(#[768,10],0),(#[10],2)]   -- head LN γ,β ; dense W,b
+  return a
+def paramShapes : Array (Array Nat) := specs.map (·.1)
+def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
+def shapesBA : ByteArray := packShapes paramShapes
+def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- Imagenette 224²
+end ConvNeXtLayout
+
 def MlpLayout.paramShapes : Array (Array Nat) := #[
   #[784, 512], #[512], #[512, 512], #[512], #[512, 10], #[10]
 ]
