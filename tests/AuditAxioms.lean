@@ -288,6 +288,9 @@ open Proofs
 -- conv), so the input-VJP reuses the proven conv2d_has_vjp3 (via vjp_comp + the
 -- decimation reindex-VJP) rather than re-deriving it with stride arithmetic.
 #print axioms flatConvStride2_has_vjp_correct
+-- ...and its weight-VJP (the kernel grad for training a strided block), likewise
+-- by vjp_comp reusing the proven conv2d_weight_grad_has_vjp.
+#print axioms flatConvStride2_weight_grad_has_vjp_correct
 -- R4 syntactic core: the emitted op-graph is a faithful serialization
 -- (parse (toToks (skel a)) = some (skel a)). (The underlying `parse_toToks`
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate

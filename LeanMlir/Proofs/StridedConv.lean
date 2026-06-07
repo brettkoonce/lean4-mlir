@@ -120,4 +120,46 @@ theorem flatConvStride2_has_vjp_correct {ic oc h w kH kW : Nat}
       = ∑ j : Fin (oc * h * w), pdiv (flatConvStride2 W b) x i j * dy j :=
   (flatConvStride2_has_vjp W b).correct x dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Stride-2 conv weight-VJP (reuses the stride-1 weight-grad)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Conv2d (as a function of its flattened kernel) is differentiable** — it is
+    affine in the weights (`b o + ∑ v(idx)·pad-eval x`, the pad-eval being a
+    weight-independent constant). Needed as the `vjp_comp` hypothesis for the
+    strided weight-grad. -/
+theorem conv2d_weight_differentiable {ic oc h w kH kW : Nat} (b : Vec oc) (x : Tensor3 ic h w) :
+    Differentiable ℝ (fun v : Vec (oc * ic * kH * kW) =>
+      Tensor3.flatten (conv2d (Kernel4.unflatten v) b x)) := by
+  unfold conv2d Tensor3.flatten Kernel4.unflatten
+  fun_prop
+
+/-- **Stride-2 conv weight-VJP.** The same composition `decimate ∘ conv` viewed
+    as a function of the *kernel* (input `x` fixed): the weight-grad is
+    `conv_weight_grad` run on the zero-upsampled cotangent. By `vjp_comp`,
+    reusing the proven stride-1 `conv2d_weight_grad_has_vjp` + `decimateFlat_has_vjp`. -/
+noncomputable def flatConvStride2_weight_grad_has_vjp {ic oc h w kH kW : Nat}
+    (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) :
+    HasVJP (fun v : Vec (oc * ic * kH * kW) =>
+      flatConvStride2 (Kernel4.unflatten v) b x) :=
+  let f : Vec (oc * ic * kH * kW) → Vec (oc * (2 * h) * (2 * w)) :=
+    fun v => Tensor3.flatten (conv2d (Kernel4.unflatten v) b (Tensor3.unflatten x))
+  let hf_diff : Differentiable ℝ f :=
+    conv2d_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten x)
+  let hf_vjp : HasVJP f :=
+    conv2d_weight_grad_has_vjp (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten x)
+  show HasVJP (decimateFlat oc h w ∘ f) from
+  vjp_comp f (decimateFlat oc h w) hf_diff (decimateFlat_differentiable oc h w)
+    hf_vjp (decimateFlat_has_vjp oc h w)
+
+/-- **Stride-2 conv weight-VJP correctness** (ℝ-headline): backward = the
+    `pdiv`-Jacobian of the strided conv in its kernel. -/
+theorem flatConvStride2_weight_grad_has_vjp_correct {ic oc h w kH kW : Nat}
+    (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w)))
+    (v : Vec (oc * ic * kH * kW)) (dy : Vec (oc * h * w)) (i : Fin (oc * ic * kH * kW)) :
+    (flatConvStride2_weight_grad_has_vjp b x).backward v dy i
+      = ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) => flatConvStride2 (Kernel4.unflatten v') b x) v i j * dy j :=
+  (flatConvStride2_weight_grad_has_vjp b x).correct v dy i
+
 end Proofs
