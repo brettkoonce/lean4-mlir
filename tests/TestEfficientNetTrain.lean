@@ -1,39 +1,31 @@
 import LeanMlir.Proofs.StableHLO
 import LeanMlir.Types
 
-/-! # E4b/E5 — EfficientNet train-step renderer (MBConv = inverted-residual + SE + swish) + iree
+/-! # E6 — EfficientNet-B0 train-step renderer (faithful [t,c,n,s,k] config) + iree
 
-Full single-batch SGD train step for the downsampling EfficientNet of the forward
-renderer — ALL-SWISH with BATCH norm (E5, the paper-faithful normalization). Data-driven
-over one block list `(p, ic, mid, oc, s, r)`, threading spatial dims through forward AND
-the reverse pass. The MBConv block = ch7's inverted residual with relu6 → **swish** and a
-**squeeze-excite** gate before the project:
+Full single-batch SGD train step for the EfficientNet-B0 forward of TestEfficientNetFwd.lean
+— all-swish, batch norm (E5), the real B0 stage spec (16 MBConv layers, channels
+[16,24,40,80,112,192,320], kernels [3,3,5,3,5,5,3], expand [1,6,6,6,6,6,6] with the MBConv1
+no-expand first stage), on Imagenette 224² (native B0 resolution, stem stride 2, 224→7).
+Data-driven over the generated per-block `(p, ic, mid, oc, s, r, k)` list, threading spatial
+dims fwd AND reverse.
 
-  stem 3×3 stride-2 conv + BN + swish → 6 MBConv blocks (2 stride-2 downsampling via
-  depthwise; each with an SE gate) → head 1×1 conv (64→128) + BN + swish → GAP →
-  dense, softmax-CE mean-loss cotangent, full reverse pass, SGD updates.
-
-vs ch7's MobileNetV2 trainer: swish/swishBack in place of relu6/relu6Back, BATCH norm
-(`bnBatch`/`bnBatchBack`, reduce μ/var over batch+spatial [0,2,3] per channel — the proven
-`bnBatchTensor4(_grad_input)`, E5) in place of instance-norm, and the SE module (seFwd
-forward + seBack 2-path backward) inserted between depthwise-swish and the project. SE
-backward: the project's conv-input grad is the SE-output cotangent `dse`; seBack returns
-the SE-input cotangent (→ depthwise swish-back) plus the two SE dense weight+bias grads.
-Every fragment is the StableHLO of a proven-faithful per-op emitter (swishF/swishBack,
-sigmoidF, batch-norm 3-term backward, depthwise stride-1/2, convs, residual, GAP, dense);
-the SE mirrors `seGate`/`seBlock`/`broadcastFlat`, gradcheck-validated standalone
-(tests/TestSE.lean). Batch-norm keeps inter-image variance in the pooled features, so swish
-works at the final GAP — genuinely all-swish, no relu6 head needed (E4's instance-norm hack).
-NB eval uses batch stats (BS=128); paper-faithful population-stats EMA is future work.
+vs E5's reduced 6-block net: depthwise fragments parameterized by kernel `k` (5×5 as well as
+3×3); the MBConv1 (t=1, mid=ic) blocks skip the expand conv/BN/swish — both forward and the
+expand-back (their dx is the depthwise input-grad directly); the B0 [t,c,n,s,k] stage spec
+with repeats. Every fragment is the StableHLO of a proven-faithful per-op emitter (swish,
+sigmoid, batch-norm 3-term backward, depthwise k×k stride-1/2 — the op is kernel-general,
+convs, residual, GAP, dense); SE mirrors `seGate`/`seBlock`/`broadcastFlat` (gradcheck-validated).
 
 Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestEfficientNetTrain.lean
 -/
 
 open Proofs Proofs.StableHLO
 
-private def BS : Nat := 128
+private def BS : Nat := 32      -- 224² B0 is memory-heavy; small batch
+private def IMG : Nat := 224    -- Imagenette resolution (B0 native, stem stride 2 → 112)
 private def EPS : String := "1.0e-5"
-private def LR : String := "0.3"
+private def LR : String := "0.1"
 
 -- ════════════ forward fragments ════════════
 
@@ -55,27 +47,28 @@ private def conv1 (o x w bnm : String) (oc ic Hh Ww : Nat) : String :=
   s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,oc,Hh,Ww]}\n"
 
-private def dwconv (o x w bnm : String) (c Hh Ww : Nat) : String :=
+/-- Depthwise k×k SAME conv, STRIDE 1 (feature_group_count=c, [c,1,k,k], pad (k-1)/2). -/
+private def dwconv (o x w bnm : String) (c Hh Ww k : Nat) : String :=
+  let p := (k-1)/2
   s!"    %{o}c = stablehlo.convolution({x}, {w})\n" ++
   "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-  "      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+  "      window = {" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
   "      {batch_group_count = 1 : i64, feature_group_count = " ++ toString c ++ " : i64}" ++
-  s!" : ({ty [BS,c,Hh,Ww]}, {ty [c,1,3,3]}) -> {ty [BS,c,Hh,Ww]}\n" ++
+  s!" : ({ty [BS,c,Hh,Ww]}, {ty [c,1,k,k]}) -> {ty [BS,c,Hh,Ww]}\n" ++
   s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [c]}) -> {ty [BS,c,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,c,Hh,Ww]}\n"
 
-private def dwconvStrided (o x w bnm : String) (c Hout Wout : Nat) : String :=
+private def dwconvStrided (o x w bnm : String) (c Hout Wout k : Nat) : String :=
+  let p := (k-1)/2
   s!"    %{o}c = stablehlo.convolution({x}, {w})\n" ++
   "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-  "      window = {stride = [2, 2], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+  "      window = {" ++ s!"stride = [2, 2], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
   "      {batch_group_count = 1 : i64, feature_group_count = " ++ toString c ++ " : i64}" ++
-  s!" : ({ty [BS,c,2*Hout,2*Wout]}, {ty [c,1,3,3]}) -> {ty [BS,c,Hout,Wout]}\n" ++
+  s!" : ({ty [BS,c,2*Hout,2*Wout]}, {ty [c,1,k,k]}) -> {ty [BS,c,Hout,Wout]}\n" ++
   s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [c]}) -> {ty [BS,c,Hout,Wout]}\n" ++
   s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,c,Hout,Wout]}\n"
 
-/-- **Batch-norm per channel** (the EfficientNet normalization): reduce μ/var over
-    BATCH+spatial `[0,2,3]` per channel (count `N·H·W`), rank-1 γ/β dims=[1]. The proven
-    `bnBatchTensor4` (`bnPerChannelFlat` m=N·h·w via the `[N,C,H,W]↔[C,N·H·W]` bridge, E5a).
+/-- Batch-norm per channel (E5): reduce μ/var over batch+spatial [0,2,3], rank-1 γ/β dims=[1].
     Saves `%{o}gb`,`%{o}xh`,`%{o}nf`,`%{o}istd` for the backward. -/
 private def bnBatch (o x g bt : String) (oc Hh Ww _m : Nat) : String :=
   let nf := BS * Hh * Ww
@@ -97,7 +90,6 @@ private def bnBatch (o x g bt : String) (oc Hh Ww _m : Nat) : String :=
   s!"    %{o}gx = stablehlo.multiply %{o}xh, %{o}gb : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.add %{o}gx, %{o}btb : {ty [BS,oc,Hh,Ww]}\n"
 
-/-- Swish forward `y = x · σ(x)` (= emitTok swishF). -/
 private def swishAct (o x : String) (c Hh Ww : Nat) : String :=
   s!"    %{o}s = stablehlo.logistic {x} : {ty [BS,c,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.multiply {x}, %{o}s : {ty [BS,c,Hh,Ww]}\n"
@@ -105,8 +97,6 @@ private def swishAct (o x : String) (c Hh Ww : Nat) : String :=
 private def addOp (o a b : String) (oc Hh Ww : Nat) : String :=
   s!"    %{o} = stablehlo.add {a}, {b} : {ty [BS,oc,Hh,Ww]}\n"
 
-/-- SE forward (squeeze→dense₁→swish→dense₂→sigmoid→bcast×x). Produces `%{p}se`,
-    saves `%{p}sq`,`%{p}ex`,`%{p}a1`,`%{p}gate`. -/
 private def seFwd (p x Ws1 bs1 Ws2 bs2 : String) (c h w r : Nat) : String :=
   s!"    %{p}sqs = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,c,h,w]}, tensor<f32>) -> {ty [BS,c]}\n" ++
   s!"    %{p}sqnf = stablehlo.constant dense<{h*w}.0> : {ty [BS,c]}\n" ++
@@ -125,7 +115,6 @@ private def seFwd (p x Ws1 bs1 Ws2 bs2 : String) (c h w r : Nat) : String :=
 
 -- ════════════ backward fragments ════════════
 
-/-- Swish backward `dx = dy ⊙ σ(pre)·(1 + pre·(1−σ(pre)))` (= emitTok swishBack). -/
 private def swishBack (o pre dy : String) (c Hh Ww : Nat) : String :=
   s!"    %{o}s = stablehlo.logistic {pre} : {ty [BS,c,Hh,Ww]}\n" ++
   s!"    %{o}one = stablehlo.constant dense<1.0> : {ty [BS,c,Hh,Ww]}\n" ++
@@ -135,11 +124,8 @@ private def swishBack (o pre dy : String) (c Hh Ww : Nat) : String :=
   s!"    %{o}sp = stablehlo.multiply %{o}s, %{o}in : {ty [BS,c,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.multiply {dy}, %{o}sp : {ty [BS,c,Hh,Ww]}\n"
 
-/-- **Batch-norm per-channel backward** — the batch-coupled consolidated 3-term input
-    grad `(istd/m)·(m·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))` with the reductions over BATCH+spatial
-    `[0,2,3]` (m=N·H·W), + γ/β grads. The render of the proven `bnBatchTensor4_grad_input`
-    (E5a). Differs from instance-norm backward ONLY in the Σ-reduction axes ([0,2,3] vs
-    [2,3]) — batch-norm couples the whole batch within each channel. -/
+/-- Batch-norm per-channel backward: batch-coupled 3-term (Σ over [0,2,3]) + γ/β grads.
+    The render of the proven `bnBatchTensor4_grad_input` (E5). -/
 private def bnBatchBack (o bn dy : String) (oc Hh Ww : Nat) : String :=
   s!"    %{o}dxh = stablehlo.multiply %{bn}gb, {dy} : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}sdxr = stablehlo.reduce(%{o}dxh init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
@@ -175,23 +161,27 @@ private def conv1WGrad (o inp dy : String) (ic oc Hh Ww : Nat) : String :=
   s!" : ({ty [ic,BS,Hh,Ww]}, {ty [oc,BS,Hh,Ww]}) -> {ty [ic,oc,1,1]}\n" ++
   s!"    %{o} = stablehlo.transpose %{o}raw, dims = [1, 0, 2, 3] : ({ty [ic,oc,1,1]}) -> {ty [oc,ic,1,1]}\n"
 
-private def dwconvBack (o dy w : String) (c Hh Ww : Nat) : String :=
-  s!"    %{o}rev = stablehlo.reverse {w}, dims = [2, 3] : {ty [c,1,3,3]}\n" ++
+/-- Depthwise k×k input-grad (reverse [2,3] + depthwise conv, pad (k-1)/2). -/
+private def dwconvBack (o dy w : String) (c Hh Ww k : Nat) : String :=
+  let p := (k-1)/2
+  s!"    %{o}rev = stablehlo.reverse {w}, dims = [2, 3] : {ty [c,1,k,k]}\n" ++
   s!"    %{o} = stablehlo.convolution({dy}, %{o}rev)\n" ++
   "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-  "      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+  "      window = {" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
   "      {batch_group_count = 1 : i64, feature_group_count = " ++ toString c ++ " : i64}" ++
-  s!" : ({ty [BS,c,Hh,Ww]}, {ty [c,1,3,3]}) -> {ty [BS,c,Hh,Ww]}\n"
+  s!" : ({ty [BS,c,Hh,Ww]}, {ty [c,1,k,k]}) -> {ty [BS,c,Hh,Ww]}\n"
 
-private def dwconvWGrad (o inp dy : String) (c Hh Ww : Nat) : String :=
+/-- Depthwise k×k weight-grad (batch_group_count=c, output [1,c,k,k] → [c,1,k,k], pad (k-1)/2). -/
+private def dwconvWGrad (o inp dy : String) (c Hh Ww k : Nat) : String :=
+  let p := (k-1)/2
   s!"    %{o}xt = stablehlo.transpose {inp}, dims = [1, 0, 2, 3] : ({ty [BS,c,Hh,Ww]}) -> {ty [c,BS,Hh,Ww]}\n" ++
   s!"    %{o}dt = stablehlo.transpose {dy}, dims = [1, 0, 2, 3] : ({ty [BS,c,Hh,Ww]}) -> {ty [c,BS,Hh,Ww]}\n" ++
   s!"    %{o}raw = stablehlo.convolution(%{o}xt, %{o}dt)\n" ++
   "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-  "      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+  "      window = {" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
   "      {batch_group_count = " ++ toString c ++ " : i64, feature_group_count = 1 : i64}" ++
-  s!" : ({ty [c,BS,Hh,Ww]}, {ty [c,BS,Hh,Ww]}) -> {ty [1,c,3,3]}\n" ++
-  s!"    %{o} = stablehlo.reshape %{o}raw : ({ty [1,c,3,3]}) -> {ty [c,1,3,3]}\n"
+  s!" : ({ty [c,BS,Hh,Ww]}, {ty [c,BS,Hh,Ww]}) -> {ty [1,c,k,k]}\n" ++
+  s!"    %{o} = stablehlo.reshape %{o}raw : ({ty [1,c,k,k]}) -> {ty [c,1,k,k]}\n"
 
 private def convBiasGrad (o dy : String) (oc Hh Ww : Nat) : String :=
   s!"    %{o} = stablehlo.reduce({dy} init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n"
@@ -199,18 +189,22 @@ private def convBiasGrad (o dy : String) (oc Hh Ww : Nat) : String :=
 private def upsample (o dy : String) (c Hh Ww : Nat) : String :=
   s!"    %{o} = stablehlo.pad {dy}, %sc, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [BS,c,Hh,Ww]}, tensor<f32>) -> {ty [BS,c,2*Hh,2*Ww]}\n"
 
-private def dwconvStridedBack (o dy w : String) (c Hout Wout : Nat) : String :=
+/-- Depthwise STRIDE-2 input-grad (k×k): zero-upsample dy, reverse [2,3], stride-1 depthwise. -/
+private def dwconvStridedBack (o dy w : String) (c Hout Wout k : Nat) : String :=
+  let p := (k-1)/2
   upsample s!"{o}u" dy c Hout Wout ++
-  s!"    %{o}rev = stablehlo.reverse {w}, dims = [2, 3] : {ty [c,1,3,3]}\n" ++
+  s!"    %{o}rev = stablehlo.reverse {w}, dims = [2, 3] : {ty [c,1,k,k]}\n" ++
   s!"    %{o} = stablehlo.convolution(%{o}u, %{o}rev)\n" ++
   "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-  "      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+  "      window = {" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
   "      {batch_group_count = 1 : i64, feature_group_count = " ++ toString c ++ " : i64}" ++
-  s!" : ({ty [BS,c,2*Hout,2*Wout]}, {ty [c,1,3,3]}) -> {ty [BS,c,2*Hout,2*Wout]}\n"
+  s!" : ({ty [BS,c,2*Hout,2*Wout]}, {ty [c,1,k,k]}) -> {ty [BS,c,2*Hout,2*Wout]}\n"
 
-private def dwconvWGradStrided (o inp dy : String) (c Hout Wout : Nat) : String :=
-  upsample s!"{o}u" dy c Hout Wout ++ dwconvWGrad o inp s!"%{o}u" c (2*Hout) (2*Wout)
+/-- Depthwise STRIDE-2 weight-grad (k×k): upsample dy then the stride-1 depthwise weight-grad. -/
+private def dwconvWGradStrided (o inp dy : String) (c Hout Wout k : Nat) : String :=
+  upsample s!"{o}u" dy c Hout Wout ++ dwconvWGrad o inp s!"%{o}u" c (2*Hout) (2*Wout) k
 
+/-- 3×3 conv weight-grad (stride 1, pad 1). -/
 private def conv3WGrad (o inp dy : String) (ic oc Hh Ww : Nat) : String :=
   s!"    %{o}xt = stablehlo.transpose {inp}, dims = [1, 0, 2, 3] : ({ty [BS,ic,Hh,Ww]}) -> {ty [ic,BS,Hh,Ww]}\n" ++
   s!"    %{o}dt = stablehlo.transpose {dy}, dims = [1, 0, 2, 3] : ({ty [BS,oc,Hh,Ww]}) -> {ty [oc,BS,Hh,Ww]}\n" ++
@@ -221,11 +215,11 @@ private def conv3WGrad (o inp dy : String) (ic oc Hh Ww : Nat) : String :=
   s!" : ({ty [ic,BS,Hh,Ww]}, {ty [oc,BS,Hh,Ww]}) -> {ty [ic,oc,3,3]}\n" ++
   s!"    %{o} = stablehlo.transpose %{o}raw, dims = [1, 0, 2, 3] : ({ty [ic,oc,3,3]}) -> {ty [oc,ic,3,3]}\n"
 
+/-- Strided 3×3 conv weight-grad (the B0 stem, stride 2): upsample dy then stride-1 wgrad. -/
 private def conv3WGradStrided (o inp dy : String) (ic oc Hh Ww : Nat) : String :=
   upsample s!"{o}u" dy oc Hh Ww ++ conv3WGrad o inp s!"%{o}u" ic oc (2*Hh) (2*Ww)
 
-/-- SE backward — input cotangent `%{p}dds` + dense grads `%{p}dWs1`,`%{p}dbs1`,
-    `%{p}dWs2`,`%{p}dbs2`. Reuses `%{p}sq`,`%{p}ex`,`%{p}a1`,`%{p}gate`. -/
+/-- SE backward — input cotangent `%{p}dds` + dense grads. Reuses `%{p}sq`,`%{p}ex`,`%{p}a1`,`%{p}gate`. -/
 private def seBack (p x dse Ws1 Ws2 : String) (c h w r : Nat) : String :=
   s!"    %{p}gb2 = stablehlo.broadcast_in_dim %{p}gate, dims = [0, 1] : ({ty [BS,c]}) -> {ty [BS,c,h,w]}\n" ++
   s!"    %{p}dleft = stablehlo.multiply %{p}gb2, {dse} : {ty [BS,c,h,w]}\n" ++
@@ -253,16 +247,21 @@ private def seBack (p x dse Ws1 Ws2 : String) (c h w r : Nat) : String :=
   s!"    %{p}dgsp = stablehlo.broadcast_in_dim %{p}dsqd, dims = [0, 1] : ({ty [BS,c]}) -> {ty [BS,c,h,w]}\n" ++
   s!"    %{p}dds = stablehlo.add %{p}dleft, %{p}dgsp : {ty [BS,c,h,w]}\n"
 
--- ════════════ MBConv block forward / backward (stride `s`, SE bottleneck `r`) ════════════
+-- ════════════ MBConv block forward / backward (stride `s`, SE `r`, kernel `k`) ════════════
 
-private def mbconvFwd (p x : String) (ic mid oc Hin s r : Nat) : String × String :=
+private def mbconvFwd (p x : String) (ic mid oc Hin s r k : Nat) : String × String :=
   let Hout := Hin / s
+  let hasExpand := mid != ic
+  let (exC, dwIn) :=
+    if hasExpand then
+      (conv1 s!"{p}e" x s!"%{p}eW" s!"%{p}eb" mid ic Hin Hin ++
+       bnBatch s!"{p}en" s!"%{p}e" s!"%{p}eg" s!"%{p}ebt" mid Hin Hin (Hin*Hin) ++
+       swishAct s!"{p}es" s!"%{p}en" mid Hin Hin, s!"%{p}es")
+    else ("", x)
   let body :=
-    conv1 s!"{p}e" x s!"%{p}eW" s!"%{p}eb" mid ic Hin Hin ++
-    bnBatch s!"{p}en" s!"%{p}e" s!"%{p}eg" s!"%{p}ebt" mid Hin Hin (Hin*Hin) ++
-    swishAct s!"{p}es" s!"%{p}en" mid Hin Hin ++
-    (if s == 2 then dwconvStrided s!"{p}d" s!"%{p}es" s!"%{p}dW" s!"%{p}db" mid Hout Hout
-     else dwconv s!"{p}d" s!"%{p}es" s!"%{p}dW" s!"%{p}db" mid Hin Hin) ++
+    exC ++
+    (if s == 2 then dwconvStrided s!"{p}d" dwIn s!"%{p}dW" s!"%{p}db" mid Hout Hout k
+     else dwconv s!"{p}d" dwIn s!"%{p}dW" s!"%{p}db" mid Hin Hin k) ++
     bnBatch s!"{p}dn" s!"%{p}d" s!"%{p}dg" s!"%{p}dbt" mid Hout Hout (Hout*Hout) ++
     swishAct s!"{p}ds" s!"%{p}dn" mid Hout Hout ++
     seFwd s!"{p}z" s!"%{p}ds" s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2" mid Hout Hout r ++
@@ -273,103 +272,112 @@ private def mbconvFwd (p x : String) (ic mid oc Hin s r : Nat) : String × Strin
   else
     (body, s!"%{p}pn")
 
-/-- MBConv block backward (stride `s`). `dy` = cotangent of block output (at Hout);
-    `xin` = block input (at Hin). Result dx `%{p}dx` (at Hin). -/
-private def mbconvBack (p dy xin : String) (ic mid oc Hin s r : Nat) : String × String :=
+private def mbconvBack (p dy xin : String) (ic mid oc Hin s r k : Nat) : String × String :=
   let Hout := Hin / s
-  let body :=
-    -- project back: BN back → 1×1 conv back (= SE-output cotangent `%{p}dp`)
+  let hasExpand := mid != ic
+  let dwInName := if hasExpand then s!"%{p}es" else xin   -- depthwise input (= block input if no expand)
+  let proj :=
     bnBatchBack s!"{p}dpn" s!"{p}pn" dy oc Hout Hout ++
     conv1Back s!"{p}dp" s!"%{p}dpn" s!"%{p}pW" mid oc Hout Hout ++
     conv1WGrad s!"{p}dpW" s!"%{p}zse" s!"%{p}dpn" mid oc Hout Hout ++
-    convBiasGrad s!"{p}dpb" s!"%{p}dpn" oc Hout Hout ++
-    -- SE back (2-path fan-in): x = depthwise-swish `%{p}ds`, dse = `%{p}dp`
-    --   → SE-input cotangent `%{p}zdds` + dense grads %{p}zdWs1/dbs1/dWs2/dbs2
-    seBack s!"{p}z" s!"%{p}ds" s!"%{p}dp" s!"%{p}zW1" s!"%{p}zW2" mid Hout Hout r ++
-    -- depthwise: swish back (pre = dn @Hout, dy = SE-input cotangent) → BN back → depthwise back
+    convBiasGrad s!"{p}dpb" s!"%{p}dpn" oc Hout Hout
+  let se := seBack s!"{p}z" s!"%{p}ds" s!"%{p}dp" s!"%{p}zW1" s!"%{p}zW2" mid Hout Hout r
+  let dw :=
     swishBack s!"{p}ddr" s!"%{p}dn" s!"%{p}zdds" mid Hout Hout ++
     bnBatchBack s!"{p}ddn" s!"{p}dn" s!"%{p}ddr" mid Hout Hout ++
     (if s == 2 then
-       dwconvStridedBack s!"{p}dd" s!"%{p}ddn" s!"%{p}dW" mid Hout Hout ++
-       dwconvWGradStrided s!"{p}ddW" s!"%{p}es" s!"%{p}ddn" mid Hout Hout
+       dwconvStridedBack s!"{p}dd" s!"%{p}ddn" s!"%{p}dW" mid Hout Hout k ++
+       dwconvWGradStrided s!"{p}ddW" dwInName s!"%{p}ddn" mid Hout Hout k
      else
-       dwconvBack s!"{p}dd" s!"%{p}ddn" s!"%{p}dW" mid Hin Hin ++
-       dwconvWGrad s!"{p}ddW" s!"%{p}es" s!"%{p}ddn" mid Hin Hin) ++
-    convBiasGrad s!"{p}ddb" s!"%{p}ddn" mid Hout Hout ++
-    -- expand: swish back (pre = en @Hin, dy = depthwise-input cotangent) → BN back → 1×1 conv back
-    swishBack s!"{p}der" s!"%{p}en" s!"%{p}dd" mid Hin Hin ++
-    bnBatchBack s!"{p}den" s!"{p}en" s!"%{p}der" mid Hin Hin ++
-    conv1Back s!"{p}de" s!"%{p}den" s!"%{p}eW" ic mid Hin Hin ++
-    conv1WGrad s!"{p}deW" xin s!"%{p}den" ic mid Hin Hin ++
-    convBiasGrad s!"{p}deb" s!"%{p}den" mid Hin Hin
+       dwconvBack s!"{p}dd" s!"%{p}ddn" s!"%{p}dW" mid Hin Hin k ++
+       dwconvWGrad s!"{p}ddW" dwInName s!"%{p}ddn" mid Hin Hin k) ++
+    convBiasGrad s!"{p}ddb" s!"%{p}ddn" mid Hout Hout
+  let (exB, dxMain) :=
+    if hasExpand then
+      (swishBack s!"{p}der" s!"%{p}en" s!"%{p}dd" mid Hin Hin ++
+       bnBatchBack s!"{p}den" s!"{p}en" s!"%{p}der" mid Hin Hin ++
+       conv1Back s!"{p}de" s!"%{p}den" s!"%{p}eW" ic mid Hin Hin ++
+       conv1WGrad s!"{p}deW" xin s!"%{p}den" ic mid Hin Hin ++
+       convBiasGrad s!"{p}deb" s!"%{p}den" mid Hin Hin, s!"%{p}de")
+    else ("", s!"%{p}dd")    -- no expand: dx = depthwise input-grad directly (= block-input cotangent)
+  let body := proj ++ se ++ dw ++ exB
   if s == 1 && ic == oc then
-    (body ++ addOp s!"{p}dx" s!"%{p}de" dy ic Hin Hin, s!"%{p}dx")
+    (body ++ addOp s!"{p}dx" dxMain dy ic Hin Hin, s!"%{p}dx")
   else
-    (body, s!"%{p}de")
+    (body, dxMain)
 
--- ════════════ block config + data-driven params ════════════
+-- ════════════ EfficientNet-B0 config + data-driven params ════════════
 
 private def sgd (θ dθ ty' : String) : String :=
   s!"    %{θ}l = stablehlo.constant dense<{LR}> : {ty'}\n" ++
   s!"    %{θ}s = stablehlo.multiply {dθ}, %{θ}l : {ty'}\n" ++
   s!"    %{θ}n = stablehlo.subtract %{θ}, %{θ}s : {ty'}\n"
 
-/-- (p, ic, mid, oc, s, r); spatial threaded from the stem (16×16). -/
-private def blocks : List (String × Nat × Nat × Nat × Nat × Nat) :=
-  [("b1", 16, 64,  24, 2, 4),    -- 16→8
-   ("b2", 24, 96,  24, 1, 6),    -- skip
-   ("b3", 24, 96,  32, 2, 6),    -- 8→4
-   ("b4", 32, 128, 32, 1, 8),    -- skip
-   ("b5", 32, 128, 64, 1, 8),    -- 32→64 (no skip)
-   ("b6", 64, 256, 64, 1, 16)]   -- skip
+private def stages : List (Nat × Nat × Nat × Nat × Nat) :=
+  [(1, 16,  1, 1, 3), (6, 24,  2, 2, 3), (6, 40,  2, 2, 5), (6, 80,  3, 2, 3),
+   (6, 112, 3, 1, 5), (6, 192, 4, 2, 5), (6, 320, 1, 1, 3)]
 
-/-- MBConv param triples (name, gradSSA, type) in func-arg order — expand, depthwise,
-    SE (2 dense W+b), project — MUST match mbconvFwd/mbconvBack + the layout. -/
-private def mbconvParams (p : String) (ic mid oc r : Nat) : List (String × String × String) :=
-  [(s!"{p}eW", s!"%{p}deW", ty [mid,ic,1,1]), (s!"{p}eb", s!"%{p}deb", ty [mid]),
-   (s!"{p}eg", s!"%{p}dendg", ty [mid]), (s!"{p}ebt", s!"%{p}dendb", ty [mid]),
-   (s!"{p}dW", s!"%{p}ddW", ty [mid,1,3,3]), (s!"{p}db", s!"%{p}ddb", ty [mid]),
+private def blocks : List (String × Nat × Nat × Nat × Nat × Nat × Nat) := Id.run do
+  let mut bs : List (String × Nat × Nat × Nat × Nat × Nat × Nat) := []
+  let mut prev := 32
+  let mut idx := 1
+  for (t, c, n, s, k) in stages do
+    for j in [0:n] do
+      let ic := if j == 0 then prev else c
+      let stride := if j == 0 then s else 1
+      bs := bs ++ [(s!"b{idx}", ic, t * ic, c, stride, max 1 (ic / 4), k)]
+      idx := idx + 1
+    prev := c
+  return bs
+
+/-- MBConv param triples (name, gradSSA, type), conditional on expand (MBConv1 has none),
+    kernel-`k` depthwise. MUST match mbconvFwd/mbconvBack + the layout. -/
+private def mbconvParams (p : String) (ic mid oc r k : Nat) : List (String × String × String) :=
+  (if mid != ic then
+    [(s!"{p}eW", s!"%{p}deW", ty [mid,ic,1,1]), (s!"{p}eb", s!"%{p}deb", ty [mid]),
+     (s!"{p}eg", s!"%{p}dendg", ty [mid]), (s!"{p}ebt", s!"%{p}dendb", ty [mid])]
+   else []) ++
+  [(s!"{p}dW", s!"%{p}ddW", ty [mid,1,k,k]), (s!"{p}db", s!"%{p}ddb", ty [mid]),
    (s!"{p}dg", s!"%{p}ddndg", ty [mid]), (s!"{p}dbt", s!"%{p}ddndb", ty [mid]),
    (s!"{p}zW1", s!"%{p}zdWs1", ty [mid,r]), (s!"{p}zb1", s!"%{p}zdbs1", ty [r]),
    (s!"{p}zW2", s!"%{p}zdWs2", ty [r,mid]), (s!"{p}zb2", s!"%{p}zdbs2", ty [mid]),
    (s!"{p}pW", s!"%{p}dpW", ty [oc,mid,1,1]), (s!"{p}pb", s!"%{p}dpb", ty [oc]),
    (s!"{p}pg", s!"%{p}dpndg", ty [oc]), (s!"{p}pbt", s!"%{p}dpndb", ty [oc])]
 
-/-- Whole net's param triples: stem, blocks, head, dense. -/
 private def allParams : List (String × String × String) :=
-  [("sW", "%dsW", ty [16,3,3,3]), ("sb", "%dsb", ty [16]),
-   ("sg", "%dstndg", ty [16]), ("sbt", "%dstndb", ty [16])]
-  ++ (blocks.map (fun (p, ic, mid, oc, _, r) => mbconvParams p ic mid oc r)).flatten
-  ++ [("hW", "%dhW", ty [128,64,1,1]), ("hb", "%dhb", ty [128]),
-      ("hg", "%dhndg", ty [128]), ("hbt", "%dhndb", ty [128])]
-  ++ [("Wd", "%dWd", ty [128,10]), ("bd", "%dbd", ty [10])]
+  [("sW", "%dsW", ty [32,3,3,3]), ("sb", "%dsb", ty [32]),
+   ("sg", "%dstndg", ty [32]), ("sbt", "%dstndb", ty [32])]
+  ++ (blocks.map (fun (p, ic, mid, oc, _, r, k) => mbconvParams p ic mid oc r k)).flatten
+  ++ [("hW", "%dhW", ty [1280,320,1,1]), ("hb", "%dhb", ty [1280]),
+      ("hg", "%dhndg", ty [1280]), ("hbt", "%dhndb", ty [1280])]
+  ++ [("Wd", "%dWd", ty [1280,10]), ("bd", "%dbd", ty [10])]
 
 private def trainStep : String := Id.run do
-  -- ── forward: stem → blocks → head → GAP(4×4) → dense(128→10) ──
+  -- ── forward: stem (3→32, stride 1) → B0 blocks → head (320→1280) → GAP → dense ──
   let mut fwd := "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n"
-    ++ s!"    %xr = stablehlo.reshape %x : ({ty [BS,3072]}) -> {ty [BS,3,32,32]}\n"
-    ++ conv3 "stc" "%xr" "%sW" "%sb" 16 3 32 32 16 16 2
-    ++ bnBatch "stn" "%stc" "%sg" "%sbt" 16 16 16 (16*16)
-    ++ swishAct "str" "%stn" 16 16 16
+    ++ s!"    %xr = stablehlo.reshape %x : ({ty [BS,3*IMG*IMG]}) -> {ty [BS,3,IMG,IMG]}\n"
+    ++ conv3 "stc" "%xr" "%sW" "%sb" 32 3 IMG IMG (IMG/2) (IMG/2) 2
+    ++ bnBatch "stn" "%stc" "%sg" "%sbt" 32 (IMG/2) (IMG/2) ((IMG/2)*(IMG/2))
+    ++ swishAct "str" "%stn" 32 (IMG/2) (IMG/2)
   let mut cur := "%str"
-  let mut curH := 16
-  let mut io : List ((String × Nat × Nat × Nat × Nat × Nat) × String × Nat) := []  -- (blk, xin, Hin)
+  let mut curH := IMG/2
+  let mut io : List ((String × Nat × Nat × Nat × Nat × Nat × Nat) × String × Nat) := []
   for blk in blocks do
-    let (p, ic, mid, oc, s, r) := blk
+    let (p, ic, mid, oc, s, r, k) := blk
     io := io ++ [(blk, cur, curH)]
-    fwd := fwd ++ (mbconvFwd p cur ic mid oc curH s r).1
+    fwd := fwd ++ (mbconvFwd p cur ic mid oc curH s r k).1
     cur := if s == 1 && ic == oc then s!"%{p}o" else s!"%{p}pn"
     curH := curH / s
-  -- head: 1×1 conv (64→128) + BN + swish @ curH
+  -- head: 1×1 conv (320→1280) + BN + swish @ curH
   let hd := curH
   fwd := fwd
-    ++ conv1 "h" cur "%hW" "%hb" 128 64 hd hd
-    ++ bnBatch "hn" "%h" "%hg" "%hbt" 128 hd hd (hd*hd)
-    ++ swishAct "hr" "%hn" 128 hd hd
-    ++ s!"    %gaps = stablehlo.reduce(%hr init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,128,hd,hd]}, tensor<f32>) -> {ty [BS,128]}\n"
-    ++ s!"    %gapnf = stablehlo.constant dense<{hd*hd}.0> : {ty [BS,128]}\n"
-    ++ s!"    %gap = stablehlo.divide %gaps, %gapnf : {ty [BS,128]}\n"
-    ++ s!"    %ld = stablehlo.dot_general %gap, %Wd, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,128]}, {ty [128,10]}) -> {ty [BS,10]}\n"
+    ++ conv1 "h" cur "%hW" "%hb" 1280 320 hd hd
+    ++ bnBatch "hn" "%h" "%hg" "%hbt" 1280 hd hd (hd*hd)
+    ++ swishAct "hr" "%hn" 1280 hd hd
+    ++ s!"    %gaps = stablehlo.reduce(%hr init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,1280,hd,hd]}, tensor<f32>) -> {ty [BS,1280]}\n"
+    ++ s!"    %gapnf = stablehlo.constant dense<{hd*hd}.0> : {ty [BS,1280]}\n"
+    ++ s!"    %gap = stablehlo.divide %gaps, %gapnf : {ty [BS,1280]}\n"
+    ++ s!"    %ld = stablehlo.dot_general %gap, %Wd, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,1280]}, {ty [1280,10]}) -> {ty [BS,10]}\n"
     ++ s!"    %ldb = stablehlo.broadcast_in_dim %bd, dims = [1] : ({ty [10]}) -> {ty [BS,10]}\n"
     ++ s!"    %logits = stablehlo.add %ld, %ldb : {ty [BS,10]}\n"
   -- ── loss cotangent dy = (softmax(logits) − onehot) / B ──
@@ -383,34 +391,34 @@ private def trainStep : String := Id.run do
     ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"
   -- ── backward: dense + GAP → head → blocks reversed → stem ──
   let mut bwd :=
-    s!"    %dgap = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [BS,10]}, {ty [128,10]}) -> {ty [BS,128]}\n"
-    ++ s!"    %dWd = stablehlo.dot_general %gap, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,128]}, {ty [BS,10]}) -> {ty [128,10]}\n"
+    s!"    %dgap = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [BS,10]}, {ty [1280,10]}) -> {ty [BS,1280]}\n"
+    ++ s!"    %dWd = stablehlo.dot_general %gap, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,1280]}, {ty [BS,10]}) -> {ty [1280,10]}\n"
     ++ s!"    %dbd = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n"
-    ++ s!"    %dgnf = stablehlo.constant dense<{hd*hd}.0> : {ty [BS,128]}\n"
-    ++ s!"    %dgs = stablehlo.divide %dgap, %dgnf : {ty [BS,128]}\n"
-    ++ s!"    %dgapin = stablehlo.broadcast_in_dim %dgs, dims = [0, 1] : ({ty [BS,128]}) -> {ty [BS,128,hd,hd]}\n"
-    -- head backward: swish (pre hn) → BN → 1×1 conv back (→ dy for last block)
-    ++ swishBack "dhr" "%hn" "%dgapin" 128 hd hd
-    ++ bnBatchBack "dhn" "hn" "%dhr" 128 hd hd
-    ++ conv1Back "dh" "%dhn" "%hW" 64 128 hd hd
-    ++ conv1WGrad "dhW" cur "%dhn" 64 128 hd hd
-    ++ convBiasGrad "dhb" "%dhn" 128 hd hd
+    ++ s!"    %dgnf = stablehlo.constant dense<{hd*hd}.0> : {ty [BS,1280]}\n"
+    ++ s!"    %dgs = stablehlo.divide %dgap, %dgnf : {ty [BS,1280]}\n"
+    ++ s!"    %dgapin = stablehlo.broadcast_in_dim %dgs, dims = [0, 1] : ({ty [BS,1280]}) -> {ty [BS,1280,hd,hd]}\n"
+    ++ swishBack "dhr" "%hn" "%dgapin" 1280 hd hd
+    ++ bnBatchBack "dhn" "hn" "%dhr" 1280 hd hd
+    ++ conv1Back "dh" "%dhn" "%hW" 320 1280 hd hd
+    ++ conv1WGrad "dhW" cur "%dhn" 320 1280 hd hd
+    ++ convBiasGrad "dhb" "%dhn" 1280 hd hd
   let mut d := "%dh"
   for (blk, xin, hin) in io.reverse do
-    let (p, ic, mid, oc, s, r) := blk
-    let (code, out) := mbconvBack p d xin ic mid oc hin s r
+    let (p, ic, mid, oc, s, r, k) := blk
+    let (code, out) := mbconvBack p d xin ic mid oc hin s r k
     bwd := bwd ++ code
     d := out
-  -- stem backward: swish (pre stn) → BN → strided 3×3 weight-grad
+  -- stem backward: swish (pre stn) → BN → 3×3 weight-grad (stride 2)
+  let sH := IMG/2
   bwd := bwd
-    ++ swishBack "dstr" "%stn" d 16 16 16
-    ++ bnBatchBack "dstn" "stn" "%dstr" 16 16 16
-    ++ convBiasGrad "dsb" "%dstn" 16 16 16
-    ++ conv3WGradStrided "dsW" "%xr" "%dstn" 3 16 16 16
+    ++ swishBack "dstr" "%stn" d 32 sH sH
+    ++ bnBatchBack "dstn" "stn" "%dstr" 32 sH sH
+    ++ convBiasGrad "dsb" "%dstn" 32 sH sH
+    ++ conv3WGradStrided "dsW" "%xr" "%dstn" 3 32 sH sH
   -- ── SGD + signature/return, all from the single param list ──
   let upd := String.join (allParams.map (fun (nm, gr, t) => sgd nm gr t))
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [BS,3072]) :: allParams.map (fun (nm, _, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])
+    (("%x: " ++ ty [BS,3*IMG*IMG]) :: allParams.map (fun (nm, _, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])
   let retTyL := String.intercalate ", " (allParams.map (fun (_, _, t) => t))
   let retVals := String.intercalate ", " (allParams.map (fun (nm, _, _) => s!"%{nm}n"))
   return "module @m {\n" ++ s!"  func.func @efficientnet_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
@@ -418,7 +426,7 @@ private def trainStep : String := Id.run do
 
 def main : IO Unit := do
   let mlir := trainStep
-  IO.println s!"rendered EfficientNet train step (BS={BS}, {blocks.length} MBConv blocks): {mlir.length} chars, {allParams.length} params"
+  IO.println s!"rendered EfficientNet-B0 train step (BS={BS}, {blocks.length} MBConv layers): {mlir.length} chars, {allParams.length} params"
   IO.FS.createDirAll "verified_mlir"
   IO.FS.writeFile "verified_mlir/efficientnet_train_step.mlir" mlir
   IO.FS.createDirAll ".lake/build"
@@ -427,6 +435,6 @@ def main : IO Unit := do
   if r.exitCode != 0 then
     IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 3000}"
   else
-    IO.println "efficientnet FULL train step iree-compile OK → verified_mlir/efficientnet_train_step.mlir"
+    IO.println "efficientnet-B0 FULL train step iree-compile OK → verified_mlir/efficientnet_train_step.mlir"
 
 #eval main
