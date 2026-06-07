@@ -3,6 +3,7 @@ import LeanMlir.Proofs.CifarCNN
 import LeanMlir.Proofs.StridedConv
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.Depthwise
+import LeanMlir.Proofs.MobileNetV2
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 2: the linear classifier)
 
@@ -62,6 +63,11 @@ inductive SHlo : Nat → Type where
   -- (`select(x>0,·,0)`); `xName`/`x` is the saved pre-activation.
   | reluF      {n : Nat}                                        : SHlo n → SHlo n
   | selectPos  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
+  -- Chapter 7 (MobileNetV2): ReLU6 forward (`clamp(·,0,6) = min(max(·,0),6)`) and
+  -- its backward mask (`select(0<x<6,·,0)` — the TWO-SIDED kink, smooth iff
+  -- `x≠0 ∧ x≠6`). `selectMid`'s `xName`/`x` is the saved pre-activation.
+  | relu6F     {n : Nat}                                        : SHlo n → SHlo n
+  | selectMid  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
   -- Chapter 4 (CNN): flattened conv forward (`stablehlo.convolution`) and
   -- 2×2 max-pool forward (`reduce_window`). Vec-indexed via the proofs'
   -- flattened forms `flatConv`/`maxPoolFlat`.
@@ -141,6 +147,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .sub a b        => fun j => den a j - den b j
   | _, .reluF e        => fun i => max (den e i) 0
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
+  | _, .relu6F e       => fun i => min (max (den e i) 0) 6
+  | _, .selectMid _ x e => fun i => if 0 < x i ∧ x i < 6 then den e i else 0
   | _, .flatConvF _ _ W b e => flatConv W b (den e)
   | _, .maxPoolF (c := c) (h := h) (w := w) e => maxPoolFlat c h w (den e)
   | _, .convBack _ W b v e => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward v (den e)
@@ -178,6 +186,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
     den (.reluF e) = fun i => max (den e i) 0 := rfl
 @[simp] theorem den_selectPos {n : Nat} (s : String) (x : Vec n) (e : SHlo n) :
     den (.selectPos s x e) = fun i => if x i > 0 then den e i else 0 := rfl
+@[simp] theorem den_relu6F {n : Nat} (e : SHlo n) :
+    den (.relu6F e) = fun i => min (max (den e i) 0) 6 := rfl
+@[simp] theorem den_selectMid {n : Nat} (s : String) (x : Vec n) (e : SHlo n) :
+    den (.selectMid s x e) = fun i => if 0 < x i ∧ x i < 6 then den e i else 0 := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § `emit`: the linear (Chapter-2) train-step graphs
@@ -318,6 +330,18 @@ theorem reluF_faithful {k : Nat} (e : SHlo k) : den (.reluF e) = relu k (den e) 
 theorem selectPos_faithful {k : Nat} (s : String) (x : Vec k) (hx : ∀ i, x i ≠ 0)
     (e : SHlo k) :
     den (.selectPos s x e) = (relu_has_vjp_at k x hx).backward (den e) := rfl
+
+/-- **ReLU6 forward faithfulness.** `min(max(·,0),6)` denotes the proven `relu6`
+    (MobileNetV2.lean). (`rfl` — `relu6` is defined as exactly this clamp.) -/
+@[simp] theorem relu6F_faithful {k : Nat} (e : SHlo k) :
+    den (.relu6F e) = relu6 k (den e) := rfl
+
+/-- **ReLU6 backward faithfulness (smooth point).** `select(0<x<6,·,0)` denotes the
+    proven `relu6_has_vjp_at` backward — the two-sided kink's mask, smooth iff
+    `x≠0 ∧ x≠6` (both bounds, unlike ReLU's one-sided `x≠0`). -/
+theorem selectMid_faithful {k : Nat} (s : String) (x : Vec k)
+    (h_smooth : ∀ i, x i ≠ 0 ∧ x i ≠ 6) (e : SHlo k) :
+    den (.selectMid s x e) = (relu6_has_vjp_at k x h_smooth).backward (den e) := rfl
 
 /-- A dense forward layer graph: `broadcast(bias) + dot_general(·, W)`. -/
 def denseF {a c : Nat} (wN bN : String) (W : Mat a c) (bias : Vec c) (e : SHlo a) : SHlo c :=
@@ -795,6 +819,8 @@ inductive Raw where
   | sub        (n : Nat)                   : Raw → Raw → Raw
   | reluF      (n : Nat)                   : Raw → Raw
   | selectPos  (x : String) (n : Nat)      : Raw → Raw
+  | relu6F     (n : Nat)                   : Raw → Raw
+  | selectMid  (x : String) (n : Nat)      : Raw → Raw
   | flatConvF  (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | maxPoolF   (c h w : Nat)               : Raw → Raw
   | convBack   (w : String) (ic oc h w' kH kW : Nat) : Raw → Raw
@@ -823,6 +849,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .sub a b               => .sub k (skel a) (skel b)
   | k, .reluF e               => .reluF k (skel e)
   | k, .selectPos x _ e       => .selectPos x k (skel e)
+  | k, .relu6F e              => .relu6F k (skel e)
+  | k, .selectMid x _ e       => .selectMid x k (skel e)
   | _, .flatConvF (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
       .flatConvF wN bN ic oc h w kH kW (skel e)
   | _, .maxPoolF (c := c) (h := h) (w := w) e => .maxPoolF c h w (skel e)
@@ -857,6 +885,8 @@ inductive Tok where
   | sub        (n : Nat)                   : Tok
   | reluF      (n : Nat)                   : Tok
   | selectPos  (x : String) (n : Nat)      : Tok
+  | relu6F     (n : Nat)                   : Tok
+  | selectMid  (x : String) (n : Nat)      : Tok
   | flatConvF  (w b : String) (ic oc h w' kH kW : Nat) : Tok
   | maxPoolF   (c h w : Nat)               : Tok
   | convBack   (w : String) (ic oc h w' kH kW : Nat) : Tok
@@ -884,6 +914,8 @@ def toToks : Raw → List Tok
   | .sub n a b       => toToks a ++ toToks b ++ [.sub n]
   | .reluF n e       => toToks e ++ [.reluF n]
   | .selectPos x n e => toToks e ++ [.selectPos x n]
+  | .relu6F n e      => toToks e ++ [.relu6F n]
+  | .selectMid x n e => toToks e ++ [.selectMid x n]
   | .flatConvF w b ic oc h w' kH kW e => toToks e ++ [.flatConvF w b ic oc h w' kH kW]
   | .maxPoolF c h w e => toToks e ++ [.maxPoolF c h w]
   | .convBack w ic oc h w' kH kW e => toToks e ++ [.convBack w ic oc h w' kH kW]
@@ -937,6 +969,22 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       let z ← fresh; let msk ← fresh; let o ← fresh
       pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
         s!"    {msk} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
+        s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
+  | .relu6F n, r :: st => do
+      -- ReLU6 forward: clamp to [0,6] as `min(max(x,0),6)` (matches `relu6`'s def).
+      let z ← fresh; let six ← fresh; let mx ← fresh; let o ← fresh
+      pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
+            s!"    {six} = stablehlo.constant dense<6.0> : {ty [B,n]}\n" ++
+            s!"    {mx} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.minimum {mx}, {six} : {ty [B,n]}\n", o :: st)
+  | .selectMid x n, r :: st => do
+      -- ReLU6 backward mask: route dy where `0 < x < 6`, else 0 (the two-sided kink).
+      let z ← fresh; let six ← fresh; let g0 ← fresh; let l6 ← fresh; let msk ← fresh; let o ← fresh
+      pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
+        s!"    {six} = stablehlo.constant dense<6.0> : {ty [B,n]}\n" ++
+        s!"    {g0} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
+        s!"    {l6} = stablehlo.compare LT, {x}, {six} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
+        s!"    {msk} = stablehlo.and {g0}, {l6} : {tyI1 [B,n]}\n" ++
         s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
   | .flatConvF w b ic oc h w' kH kW, r :: st => do
       let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
