@@ -218,114 +218,117 @@ private def sgd (θ dθ ty' : String) : String :=
   s!"    %{θ}s = stablehlo.multiply {dθ}, %{θ}l : {ty'}\n" ++
   s!"    %{θ}n = stablehlo.subtract %{θ}, %{θ}s : {ty'}\n"
 
--- ════════════ small representative net: stem → mp → id(s1b0) → down(d2) → id(s2b0) → GAP → dense ════════════
+-- ════════════ data-driven full ResNet-34 [3,4,6,3] ════════════
+
+/-- A residual block in forward order. `idB p c hh` = identity block (c ch @ hh×hh);
+    `downB p cin c hh` = strided downsample (cin→c, 2hh×2hh → hh×hh). -/
+inductive Blk where
+  | idB   (p : String) (c hh : Nat)
+  | downB (p : String) (cin c hh : Nat)
+
+/-- The 16 basic blocks: stage depths [3,4,6,3], channels 64/128/256/512,
+    spatial 16/8/4/2 (stages 2–4 open with a strided downsample). -/
+private def blocks : List Blk :=
+  [.idB "s1b0" 64 16, .idB "s1b1" 64 16, .idB "s1b2" 64 16,
+   .downB "d2" 64 128 8, .idB "s2b0" 128 8, .idB "s2b1" 128 8, .idB "s2b2" 128 8,
+   .downB "d3" 128 256 4, .idB "s3b0" 256 4, .idB "s3b1" 256 4, .idB "s3b2" 256 4,
+     .idB "s3b3" 256 4, .idB "s3b4" 256 4,
+   .downB "d4" 256 512 2, .idB "s4b0" 512 2, .idB "s4b1" 512 2]
+
+private def blkOut : Blk → String
+  | .idB p _ _ => s!"%{p}o" | .downB p _ _ _ => s!"%{p}o"
+private def blkDx : Blk → String
+  | .idB p _ _ => s!"%{p}dx" | .downB p _ _ _ => s!"%{p}dx"
+
+/-- Per-block parameter list as `(name, gradSSA, type)` triples, in func-arg order. -/
+private def blkParams : Blk → List (String × String × String)
+  | .idB p c _ =>
+    [(s!"{p}W1", s!"%{p}dW1", ty [c,c,3,3]), (s!"{p}b1", s!"%{p}db1", ty [c]),
+     (s!"{p}g1", s!"%{p}dn1dg", ty [c]), (s!"{p}bt1", s!"%{p}dn1db", ty [c]),
+     (s!"{p}W2", s!"%{p}dW2", ty [c,c,3,3]), (s!"{p}b2", s!"%{p}db2", ty [c]),
+     (s!"{p}g2", s!"%{p}dn2dg", ty [c]), (s!"{p}bt2", s!"%{p}dn2db", ty [c])]
+  | .downB p cin c _ =>
+    [(s!"{p}W1", s!"%{p}dW1", ty [c,cin,3,3]), (s!"{p}b1", s!"%{p}db1", ty [c]),
+     (s!"{p}g1", s!"%{p}dn1dg", ty [c]), (s!"{p}bt1", s!"%{p}dn1db", ty [c]),
+     (s!"{p}W2", s!"%{p}dW2", ty [c,c,3,3]), (s!"{p}b2", s!"%{p}db2", ty [c]),
+     (s!"{p}g2", s!"%{p}dn2dg", ty [c]), (s!"{p}bt2", s!"%{p}dn2db", ty [c]),
+     (s!"{p}Wp", s!"%{p}dWp", ty [c,cin,3,3]), (s!"{p}bp", s!"%{p}dbp", ty [c]),
+     (s!"{p}gp", s!"%{p}dnpdg", ty [c]), (s!"{p}btp", s!"%{p}dnpdb", ty [c])]
+
+/-- Whole net's parameter triples in func-arg order: stem, blocks, dense. -/
+private def allParams : List (String × String × String) :=
+  [("sW", "%dsW", ty [64,3,3,3]), ("sb", "%dsb", ty [64]),
+   ("sg", "%dstndg", ty [64]), ("sbt", "%dstndb", ty [64])]
+  ++ (blocks.map blkParams).flatten
+  ++ [("Wd", "%dWd", ty [512,10]), ("bd", "%dbd", ty [10])]
 
 private def trainStep : String := Id.run do
-  -- forward
-  let fwd :=
-    "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    conv "stc" "%x" "%sW" "%sb" 64 3 32 32 32 32 1 ++
-    bnPC "stn" "%stc" "%sg" "%sbt" 64 32 32 (32*32) ++
-    relu "str" "%stn" 64 32 32 ++
-    maxpool "stp" "%str" 64 32 32 ++
-    (idBlockFwd "s1b0" "%stp" 64 16 16).1 ++
-    (downBlockFwd "d2" "%s1b0o" 64 128 8 8).1 ++
-    (idBlockFwd "s2b0" "%d2o" 128 8 8).1 ++
-    -- GAP (8×8) → dense 128→10
-    s!"    %gaps = stablehlo.reduce(%s2b0o init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,128,8,8]}, tensor<f32>) -> {ty [BS,128]}\n" ++
-    s!"    %gapnf = stablehlo.constant dense<64.0> : {ty [BS,128]}\n" ++
-    s!"    %gap = stablehlo.divide %gaps, %gapnf : {ty [BS,128]}\n" ++
-    s!"    %ld = stablehlo.dot_general %gap, %Wd, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,128]}, {ty [128,10]}) -> {ty [BS,10]}\n" ++
-    s!"    %ldb = stablehlo.broadcast_in_dim %bd, dims = [1] : ({ty [10]}) -> {ty [BS,10]}\n" ++
-    s!"    %logits = stablehlo.add %ld, %ldb : {ty [BS,10]}\n"
-  -- loss cotangent dy = softmax(logits) − onehot
+  -- ── forward: stem → maxpool → blocks → GAP(2×2) → dense(512→10) ──
+  let mut fwd := "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n"
+    ++ conv "stc" "%x" "%sW" "%sb" 64 3 32 32 32 32 1
+    ++ bnPC "stn" "%stc" "%sg" "%sbt" 64 32 32 (32*32)
+    ++ relu "str" "%stn" 64 32 32
+    ++ maxpool "stp" "%str" 64 32 32
+  let mut cur := "%stp"
+  let mut io : List (Blk × String) := []      -- (block, its input SSA name)
+  for blk in blocks do
+    io := io ++ [(blk, cur)]
+    match blk with
+    | .idB p c hh => fwd := fwd ++ (idBlockFwd p cur c hh hh).1; cur := s!"%{p}o"
+    | .downB p cin c hh => fwd := fwd ++ (downBlockFwd p cur cin c hh hh).1; cur := s!"%{p}o"
+  fwd := fwd
+    ++ s!"    %gaps = stablehlo.reduce({cur} init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,512,2,2]}, tensor<f32>) -> {ty [BS,512]}\n"
+    ++ s!"    %gapnf = stablehlo.constant dense<4.0> : {ty [BS,512]}\n"
+    ++ s!"    %gap = stablehlo.divide %gaps, %gapnf : {ty [BS,512]}\n"
+    ++ s!"    %ld = stablehlo.dot_general %gap, %Wd, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,512]}, {ty [512,10]}) -> {ty [BS,10]}\n"
+    ++ s!"    %ldb = stablehlo.broadcast_in_dim %bd, dims = [1] : ({ty [10]}) -> {ty [BS,10]}\n"
+    ++ s!"    %logits = stablehlo.add %ld, %ldb : {ty [BS,10]}\n"
+  -- ── loss cotangent dy = softmax(logits) − onehot ──
   let cot :=
-    s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n" ++
-    s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n" ++
-    s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n" ++
-    s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n" ++
-    s!"    %dy = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
-  -- backward: dense+GAP → s2b0 → d2 → s1b0 → maxpool → stem
-  let bwd :=
-    -- dense back
-    s!"    %dgap = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [BS,10]}, {ty [128,10]}) -> {ty [BS,128]}\n" ++
-    s!"    %dWd = stablehlo.dot_general %gap, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,128]}, {ty [BS,10]}) -> {ty [128,10]}\n" ++
-    s!"    %dbd = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n" ++
-    -- GAP back: broadcast dgap/64 over 8×8
-    s!"    %dgnf = stablehlo.constant dense<64.0> : {ty [BS,128]}\n" ++
-    s!"    %dgs = stablehlo.divide %dgap, %dgnf : {ty [BS,128]}\n" ++
-    s!"    %dgapin = stablehlo.broadcast_in_dim %dgs, dims = [0, 1] : ({ty [BS,128]}) -> {ty [BS,128,8,8]}\n" ++
-    (idBlockBack "s2b0" "%dgapin" "%d2o" 128 8 8).1 ++
-    (downBlockBack "d2" "%s2b0dx" "%s1b0o" 64 128 8 8).1 ++
-    (idBlockBack "s1b0" "%d2dx" "%stp" 64 16 16).1 ++
-    -- maxpool back (16×16 ← 8×8 over %str), then stem
-    maxpoolBack "dmp" "%str" "%s1b0dx" 64 16 16 ++
-    reluBack "dstr" "%stn" "%dmp" 64 32 32 ++
-    bnBackPC "dstn" "stn" "%dstr" 64 32 32 ++
-    convBiasGrad "dsb" "%dstn" 64 32 32 ++
-    convWGrad "dsW" "%x" "%dstn" 3 64 32 32
-  -- SGD updates (every param) + return
-  let upd :=
-    sgd "sW" "%dsW" (ty [64,3,3,3]) ++ sgd "sb" "%dsb" (ty [64]) ++
-    sgd "sg" "%dstndg" (ty [64]) ++ sgd "sbt" "%dstndb" (ty [64]) ++
-    -- s1b0
-    sgd "s1b0W1" "%s1b0dW1" (ty [64,64,3,3]) ++ sgd "s1b0b1" "%s1b0db1" (ty [64]) ++
-    sgd "s1b0g1" "%s1b0dn1dg" (ty [64]) ++ sgd "s1b0bt1" "%s1b0dn1db" (ty [64]) ++
-    sgd "s1b0W2" "%s1b0dW2" (ty [64,64,3,3]) ++ sgd "s1b0b2" "%s1b0db2" (ty [64]) ++
-    sgd "s1b0g2" "%s1b0dn2dg" (ty [64]) ++ sgd "s1b0bt2" "%s1b0dn2db" (ty [64]) ++
-    -- d2
-    sgd "d2W1" "%d2dW1" (ty [128,64,3,3]) ++ sgd "d2b1" "%d2db1" (ty [128]) ++
-    sgd "d2g1" "%d2dn1dg" (ty [128]) ++ sgd "d2bt1" "%d2dn1db" (ty [128]) ++
-    sgd "d2W2" "%d2dW2" (ty [128,128,3,3]) ++ sgd "d2b2" "%d2db2" (ty [128]) ++
-    sgd "d2g2" "%d2dn2dg" (ty [128]) ++ sgd "d2bt2" "%d2dn2db" (ty [128]) ++
-    sgd "d2Wp" "%d2dWp" (ty [128,64,3,3]) ++ sgd "d2bp" "%d2dbp" (ty [128]) ++
-    sgd "d2gp" "%d2dnpdg" (ty [128]) ++ sgd "d2btp" "%d2dnpdb" (ty [128]) ++
-    -- s2b0
-    sgd "s2b0W1" "%s2b0dW1" (ty [128,128,3,3]) ++ sgd "s2b0b1" "%s2b0db1" (ty [128]) ++
-    sgd "s2b0g1" "%s2b0dn1dg" (ty [128]) ++ sgd "s2b0bt1" "%s2b0dn1db" (ty [128]) ++
-    sgd "s2b0W2" "%s2b0dW2" (ty [128,128,3,3]) ++ sgd "s2b0b2" "%s2b0db2" (ty [128]) ++
-    sgd "s2b0g2" "%s2b0dn2dg" (ty [128]) ++ sgd "s2b0bt2" "%s2b0dn2db" (ty [128]) ++
-    sgd "Wd" "%dWd" (ty [128,10]) ++ sgd "bd" "%dbd" (ty [10])
-  let args := "%x: " ++ ty [BS,3,32,32] ++ ", %sW: " ++ ty [64,3,3,3] ++ ", %sb: " ++ ty [64] ++ ", %sg: " ++ ty [64] ++ ", %sbt: " ++ ty [64]
-    ++ ", %s1b0W1: " ++ ty [64,64,3,3] ++ ", %s1b0b1: " ++ ty [64] ++ ", %s1b0g1: " ++ ty [64] ++ ", %s1b0bt1: " ++ ty [64]
-    ++ ", %s1b0W2: " ++ ty [64,64,3,3] ++ ", %s1b0b2: " ++ ty [64] ++ ", %s1b0g2: " ++ ty [64] ++ ", %s1b0bt2: " ++ ty [64]
-    ++ ", %d2W1: " ++ ty [128,64,3,3] ++ ", %d2b1: " ++ ty [128] ++ ", %d2g1: " ++ ty [128] ++ ", %d2bt1: " ++ ty [128]
-    ++ ", %d2W2: " ++ ty [128,128,3,3] ++ ", %d2b2: " ++ ty [128] ++ ", %d2g2: " ++ ty [128] ++ ", %d2bt2: " ++ ty [128]
-    ++ ", %d2Wp: " ++ ty [128,64,3,3] ++ ", %d2bp: " ++ ty [128] ++ ", %d2gp: " ++ ty [128] ++ ", %d2btp: " ++ ty [128]
-    ++ ", %s2b0W1: " ++ ty [128,128,3,3] ++ ", %s2b0b1: " ++ ty [128] ++ ", %s2b0g1: " ++ ty [128] ++ ", %s2b0bt1: " ++ ty [128]
-    ++ ", %s2b0W2: " ++ ty [128,128,3,3] ++ ", %s2b0b2: " ++ ty [128] ++ ", %s2b0g2: " ++ ty [128] ++ ", %s2b0bt2: " ++ ty [128]
-    ++ ", %Wd: " ++ ty [128,10] ++ ", %bd: " ++ ty [10] ++ ", %onehot: " ++ ty [BS,10]
-  let retTy := "(" ++ String.intercalate ", " [
-    ty [64,3,3,3], ty [64], ty [64], ty [64],
-    ty [64,64,3,3], ty [64], ty [64], ty [64], ty [64,64,3,3], ty [64], ty [64], ty [64],
-    ty [128,64,3,3], ty [128], ty [128], ty [128], ty [128,128,3,3], ty [128], ty [128], ty [128], ty [128,64,3,3], ty [128], ty [128], ty [128],
-    ty [128,128,3,3], ty [128], ty [128], ty [128], ty [128,128,3,3], ty [128], ty [128], ty [128],
-    ty [128,10], ty [10]] ++ ")"
-  let retVals := String.intercalate ", " [
-    "%sWn", "%sbn", "%sgn", "%sbtn",
-    "%s1b0W1n", "%s1b0b1n", "%s1b0g1n", "%s1b0bt1n", "%s1b0W2n", "%s1b0b2n", "%s1b0g2n", "%s1b0bt2n",
-    "%d2W1n", "%d2b1n", "%d2g1n", "%d2bt1n", "%d2W2n", "%d2b2n", "%d2g2n", "%d2bt2n", "%d2Wpn", "%d2bpn", "%d2gpn", "%d2btpn",
-    "%s2b0W1n", "%s2b0b1n", "%s2b0g1n", "%s2b0bt1n", "%s2b0W2n", "%s2b0b2n", "%s2b0g2n", "%s2b0bt2n",
-    "%Wdn", "%bdn"]
-  return "module @m {\n" ++ s!"  func.func @resnet34_train_step({args}) -> {retTy} " ++ "{\n" ++
-    fwd ++ cot ++ bwd ++ upd ++ s!"    return {retVals} : {String.intercalate ", " [
-      ty [64,3,3,3], ty [64], ty [64], ty [64],
-      ty [64,64,3,3], ty [64], ty [64], ty [64], ty [64,64,3,3], ty [64], ty [64], ty [64],
-      ty [128,64,3,3], ty [128], ty [128], ty [128], ty [128,128,3,3], ty [128], ty [128], ty [128], ty [128,64,3,3], ty [128], ty [128], ty [128],
-      ty [128,128,3,3], ty [128], ty [128], ty [128], ty [128,128,3,3], ty [128], ty [128], ty [128],
-      ty [128,10], ty [10]]}\n" ++ "  }\n}\n"
+    s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n"
+    ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
+    ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
+    ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
+    ++ s!"    %dy = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
+  -- ── backward: dense + GAP, blocks reversed, maxpool, stem ──
+  let mut bwd :=
+    s!"    %dgap = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [BS,10]}, {ty [512,10]}) -> {ty [BS,512]}\n"
+    ++ s!"    %dWd = stablehlo.dot_general %gap, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,512]}, {ty [BS,10]}) -> {ty [512,10]}\n"
+    ++ s!"    %dbd = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n"
+    ++ s!"    %dgnf = stablehlo.constant dense<4.0> : {ty [BS,512]}\n"
+    ++ s!"    %dgs = stablehlo.divide %dgap, %dgnf : {ty [BS,512]}\n"
+    ++ s!"    %dgapin = stablehlo.broadcast_in_dim %dgs, dims = [0, 1] : ({ty [BS,512]}) -> {ty [BS,512,2,2]}\n"
+  let mut d := "%dgapin"
+  for (blk, xin) in io.reverse do
+    match blk with
+    | .idB p c hh => bwd := bwd ++ (idBlockBack p d xin c hh hh).1; d := s!"%{p}dx"
+    | .downB p cin c hh => bwd := bwd ++ (downBlockBack p d xin cin c hh hh).1; d := s!"%{p}dx"
+  bwd := bwd
+    ++ maxpoolBack "dmp" "%str" d 64 16 16
+    ++ reluBack "dstr" "%stn" "%dmp" 64 32 32
+    ++ bnBackPC "dstn" "stn" "%dstr" 64 32 32
+    ++ convBiasGrad "dsb" "%dstn" 64 32 32
+    ++ convWGrad "dsW" "%x" "%dstn" 3 64 32 32
+  -- ── SGD + signature/return, all from the single param list ──
+  let upd := String.join (allParams.map (fun (nm, gr, t) => sgd nm gr t))
+  let argSig := String.intercalate ", "
+    (("%x: " ++ ty [BS,3,32,32]) :: allParams.map (fun (nm, _, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])
+  let retTyL := String.intercalate ", " (allParams.map (fun (_, _, t) => t))
+  let retVals := String.intercalate ", " (allParams.map (fun (nm, _, _) => s!"%{nm}n"))
+  return "module @m {\n" ++ s!"  func.func @resnet34_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
+    fwd ++ cot ++ bwd ++ upd ++ s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
 
 def main : IO Unit := do
   let mlir := trainStep
-  IO.println s!"rendered train step: {mlir.length} chars"
+  IO.println s!"rendered full ResNet-34 train step: {mlir.length} chars, {allParams.length} params"
   IO.FS.createDirAll ".lake/build"
-  let path := ".lake/build/resnet34_train_small.mlir"
+  let path := ".lake/build/resnet34_train_step_v.mlir"
   IO.FS.writeFile path mlir
-  let cargs ← ireeCompileArgs path ".lake/build/resnet34_train_small.vmfb"
+  let cargs ← ireeCompileArgs path ".lake/build/resnet34_train_step_v.vmfb"
   let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
   if r.exitCode != 0 then
     IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 3000}"
   else
-    IO.println "resnet34 small train step iree-compile OK"
+    IO.println "resnet34 FULL train step iree-compile OK → .lake/build/resnet34_train_step_v.vmfb"
 
 #eval main
