@@ -54,6 +54,7 @@ open Proofs
 
 -- Depthwise
 #print axioms depthwise_has_vjp3_correct
+#print axioms depthwiseStride2Flat_has_vjp_correct
 
 -- BatchNorm
 #print axioms pdiv_bnAffine

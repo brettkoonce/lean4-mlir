@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Tensor
 import LeanMlir.Proofs.CNN
+import LeanMlir.Proofs.StridedConv
 
 /-!
 # Depthwise Convolution
@@ -662,6 +663,58 @@ noncomputable def depthwiseFlat_has_vjp {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) :
     HasVJP (depthwiseFlat W b : Vec (c * h * w) → Vec (c * h * w)) :=
   hasVJP3_to_hasVJP (depthwise_has_vjp3 W b)
+
+-- ════════════════════════════════════════════════════════════════
+-- § Strided (stride-2) depthwise conv — `decimate ∘ depthwise` (ch7 C3)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Stride-2 SAME depthwise conv**, flattened: `Vec (c·2h·2w) → Vec (c·h·w)`.
+    Defined as `decimateFlat ∘ depthwiseFlat` (the stride-1 SAME depthwise on the
+    `2h×2w` grid, then keep even positions) — exactly the strided-conv recipe
+    (`flatConvStride2`, StridedConv.lean) with the depthwise kernel. This is how
+    MobileNetV2 downsamples (stride-2 depthwise inside an inverted-residual block);
+    channels are unchanged (`c → c`), spatial halves. -/
+noncomputable def depthwiseStride2Flat {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w) :=
+  decimateFlat c h w ∘ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b)
+
+theorem depthwiseStride2Flat_differentiable {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    Differentiable ℝ (depthwiseStride2Flat W b
+      : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) := by
+  unfold depthwiseStride2Flat
+  have hf : Differentiable ℝ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b) :=
+    depthwiseFlat_differentiable W b
+  have hg : Differentiable ℝ (decimateFlat c h w) := decimateFlat_differentiable c h w
+  exact hg.comp hf
+
+/-- **Stride-2 depthwise input-VJP** — by the chain rule (`vjp_comp`) on
+    `decimateFlat ∘ depthwiseFlat`, reusing the proven stride-1 depthwise input-VJP
+    (`depthwiseFlat_has_vjp`) and the decimation VJP. The backward is
+    `depthwise.back (decimate.back dy)` — i.e. zero-upsample the cotangent then run
+    the reversed-kernel stride-1 depthwise (StableHLO: `stablehlo.pad` interior=1
+    then `feature_group_count = c` reversed-kernel conv), exactly the `convStridedBack`
+    shape with the per-channel grouping. -/
+noncomputable def depthwiseStride2Flat_has_vjp {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    HasVJP (depthwiseStride2Flat W b
+      : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) :=
+  let hf_diff : Differentiable ℝ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b) :=
+    depthwiseFlat_differentiable W b
+  let hf_vjp : HasVJP (depthwiseFlat (h := 2 * h) (w := 2 * w) W b) :=
+    depthwiseFlat_has_vjp W b
+  show HasVJP (decimateFlat c h w ∘ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b)) from
+  vjp_comp _ _ hf_diff (decimateFlat_differentiable c h w) hf_vjp (decimateFlat_has_vjp c h w)
+
+/-- **Stride-2 depthwise input-VJP correctness** (the ℝ-carrying audit headline):
+    the backward equals the `pdiv`-contracted Jacobian of `depthwiseStride2Flat`. -/
+theorem depthwiseStride2Flat_has_vjp_correct {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (x : Vec (c * (2 * h) * (2 * w))) (dy : Vec (c * h * w)) (i : Fin (c * (2 * h) * (2 * w))) :
+    (depthwiseStride2Flat_has_vjp W b).backward x dy i
+      = ∑ j : Fin (c * h * w), pdiv (depthwiseStride2Flat W b) x i j * dy j :=
+  (depthwiseStride2Flat_has_vjp W b).correct x dy i
 
 /-! ### Depthwise weight gradient (Phase 7 — proved from foundation rules)
 
