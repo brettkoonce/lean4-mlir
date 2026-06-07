@@ -13,15 +13,16 @@ ResNet-34 architecture), B7 (the unconditional concrete instance), and B8a/B8a'
 > closed-form backward** (`bnPerChannel_grad_input_correct`); and **B9-entry** adds
 > the **layout bridge** `(oc*h)*w ↔ oc*(h*w)` (`bnPerChannelTensor3_has_vjp_correct`)
 > **+ the renderable backward in the network's Tensor3 layout**
-> (`bnPerChannelTensor3_grad_input_correct`). **Audit 154/154, 3-axiom.** The
-> per-channel BN MATH **including the network's activation layout** is now done —
-> BOTH `den` targets B8b needs are proven faithful. What remains for a *trained*
-> model: the per-channel BN MLIR emission (B8b) + the full ResNet-34 GPU render+train
-> (B9). Read §§0–3 first; rest is reference.
+> (`bnPerChannelTensor3_grad_input_correct`); and **B8b** lands the per-channel BN
+> **SHlo op pair** `bnPerChannelF`/`bnPerChannelBack` (`bnPerChannelBack_faithful`),
+> rendered + **iree-compiled to ROCm**. **Audit 155/155, 3-axiom.** The per-channel
+> BN math AND its MLIR op pair are now done. What remains for a *trained* model: the
+> full ResNet-34 GPU render+train (B9) — wiring the strided convs + this BN op pair
+> into a whole-net train step. Read §§0–3 first; rest is reference.
 
-Written 2026-06-07 by the session that did ch6-A + ch6-B1…B8a' + B9-entry. `origin/main`
-is behind by **~22 local commits** (`34cdc52`…HEAD; latest *code* commit `3d4525e` =
-B9-entry pt2, the rest are handoff-doc updates); commit-to-main is fine, **never push
+Written 2026-06-07 by the session that did ch6-A + ch6-B1…B8a' + B9-entry + B8b.
+`origin/main` is behind by **~26 local commits** (`34cdc52`…HEAD; latest *code* commit
+`813065c` = B8b, the rest are handoff-doc updates); commit-to-main is fine, **never push
 without explicit per-push permission**.
 
 ---
@@ -92,8 +93,8 @@ activations; folded from `vjp_comp_at` + `vjp_chain_at`.
 
 ## 2. ⭐ WHAT REMAINS (for a TRAINED ResNet-34)
 
-**Genuinely remaining = B8b + B9 (both render/GPU, large).** B7 and B8a/B8a' below
-are ✅ DONE — kept here with their design notes for reference. In suggested order:
+**Genuinely remaining = B9 (the full render/GPU trainer).** B7, B8a/B8a', B9-entry,
+and B8b below are ✅ DONE — kept here with their design notes for reference. In order:
 
 ### ~~B7 — concrete-instance discharge (non-vacuity)~~  ✅ DONE (`785caa3`)
 `ResNet34Concrete.resnet34Concrete_has_vjp_correct` (in `ResNet34.lean`). A real
@@ -119,7 +120,7 @@ hoisted to CNN/BatchNorm later to dedupe).
 + `bnPerChannelFlat_differentiable`; **and (B8a') the renderable closed-form backward**
 `bnPerChannel_grad_input` + `bnPerChannel_grad_input_correct` (the per-example three-term
 `bn_grad_input` per channel-slice, proven = the pdiv-Jacobian — the formula a per-channel
-`bnBack` emits). Audit **154/154** 3-axiom-clean. Real ResNet BN
+`bnBack` emits). Audit **155/155** 3-axiom-clean. Real ResNet BN
 applies `bnForward (h·w) ε (γ c) (β c)` to each channel-slice (γ/β `Vec oc`), so the
 whole Jacobian is **block-diagonal** across channels. Got it cheaply by GENERALIZING
 the existing `rowwise_has_vjp_mat` (Tensor.lean, multi-head attn) from a single per-row
@@ -133,18 +134,25 @@ with the *Mat* row-major split `oc*(h·w)`; the network's Tensor3 activations ar
 `(oc*h)*w` — B9 must bridge the re-association `oc*(h·w) ↔ (oc*h)*w` when wiring this in.
 Tensor.lean untouched (per-row lemmas live in the new file).
 
-### B8b — per-channel BN render (the SHlo op pair)  [render; do with B9]
-A `bnPerChannelF`/`bnPerChannelBack` SHlo op pair (γ/β render as rank-1 `Vec oc`,
-`dims=[1]`, vs the current rank-0 scalars). The 9-site lockstep mirrors ch5-B's
-`bnF`/`bnBack` (StableHLO.lean:79/83/128/…). **The den equations are now ready:**
-`den (bnPerChannelF) = bnPerChannelFlat …` (rfl) and `den (bnPerChannelBack) =
-bnPerChannel_grad_input …`, faithful via `bnPerChannel_grad_input_correct` (the per-example
-`renderLNBack`/IRPrint.lean:953 applied per channel-slice). So B8b is now *pure render*:
-the MLIR text (reduce μ/var over the spatial axis per channel; γ/β `broadcast_in_dim
-dims=[1]`) + the 9-site lockstep + round-trip + `iree-compile` validation (IREE works here:
-`iree-compile … rocm gfx1100` on `verified_mlir/*.mlir` succeeds). Folded into B9 because
-it only pays off wired into a trainer. *Optional for correctness; needed for an accuracy
-story.* See §6 honesty note.
+### ~~B8b — per-channel BN render (the SHlo op pair)~~  ✅ DONE (`813065c`)
+The `bnPerChannelF`/`bnPerChannelBack` SHlo op pair (γ/β rank-1 `Vec oc`, `dims=[1]`,
+vs ch5-B's rank-0 scalars), full 9-site lockstep mirroring `bnF`/`bnBack`:
+- **SHlo** `bnPerChannelF {oc h w} (γ β : Vec oc)` / `bnPerChannelBack {oc h w}
+  (γ : Vec oc) (x saved)`, both `SHlo (oc*h*w) → SHlo (oc*h*w)`.
+- **den** = `bnPerChannelTensor3` (fwd) / `bnPerChannelTensor3_grad_input` (back).
+- **faithfulness**: `bnPerChannelF_faithful` (rfl, roundtrip-covered, not audited) +
+  `bnPerChannelBack_faithful` (= pdiv block-diagonal Jacobian under `0<ε`, via
+  `bnPerChannelTensor3_grad_input_correct`) — the per-channel peer of `bnBack_faithful`.
+- **Raw/skel/Tok/toToks/parseStack/parseStack_toToks**: 2 cases each (round-trip closes).
+- **emitTok**: reshape `[B,oc*h*w]→[B,oc,h,w]`, per-channel μ/var reduce over the spatial
+  axes `[2,3]`, normalize, rank-1 γ/β `broadcast_in_dim dims=[1]`; backward = the
+  block-diagonal three-term `(istd/m)·(m·dx̂ − Σdx̂ − x̂·Σ(x̂dx̂))` per channel.
+
+`StableHLO.lean` now `import …PerChannelBN` (no cycle). Audit **155/155** 3-axiom-clean
+(+`bnPerChannelBack_faithful`). **iree-validated:** `tests/TestPerChannelBn.lean` renders
+`@perchannel_bn_fwd`/`@perchannel_bn_back` from the verified AST; both `iree-compile` to
+ROCm gfx1100 (`lake env lean tests/TestPerChannelBn.lean` with `IREE_BACKEND=rocm`). What
+remains is wiring it into the B9 trainer. See §6 honesty note.
 
 ### B9 — full ResNet-34 render + trainer + GPU train  [render; ~1000+ lines]
 - `resnet34TrainStepText` — scale `resnetTrainStepText` (StableHLO.lean): strided
@@ -177,7 +185,7 @@ story.* See §6 honesty note.
    `ResNet34Concrete.resnet34Concrete_has_vjp_correct` B7 headline) and
    `LeanMlir/Proofs/PerChannelBN.lean` (B8a/B8a': `bnPerChannelFlat_has_vjp_correct`
    + the renderable `bnPerChannel_grad_input_correct`).
-2. Build + audit green first (see §4): **154/154**.
+2. Build + audit green first (see §4): **155/155**.
 3. **Do B8b + B9** — the remaining work toward a *trained* ResNet-34. B8b (the
    per-channel BN SHlo op pair) is best done WITH B9's trainer (it only pays off
    wired in + GPU-validated). Watch the `oc*(h·w) ↔ (oc*h)*w` re-association when
@@ -191,7 +199,7 @@ story.* See §6 honesty note.
 cd /home/skoonce/lean/proof_verify_demo/lean4-mlir
 lake build Proofs                       # type-checks the suite incl. StridedConv + ResNet34
 lake env lean tests/AuditAxioms.lean 2>&1 | grep -c 'depends on axioms: \[propext, Classical.choice, Quot.sound\]$'
-#   must equal total 'depends on axioms:' lines (154 now, incl. B7 + B8a/B8a' + B9-entry)
+#   must equal total 'depends on axioms:' lines (155 now, incl. B7 + B8a/B8a' + B9-entry + B8b)
 
 export PATH="$PWD/.venv/bin:$PATH"
 export LD_LIBRARY_PATH="$PWD/ffi:/opt/rocm/lib:$LD_LIBRARY_PATH"
@@ -293,11 +301,15 @@ DATA=/home/skoonce/lean/claude_max/lean4-jax/data           # mnist + cifar-10/ 
   (+ reusable B7 lemmas: `bnForward_lb`/`bnForward_injective`/`decimateIdx_injective`,
   generic `idBlk`/`downBlk`).
 - `LeanMlir/Proofs/StableHLO.lean` — A ops (`addV`/`gapF`) + `resnetFwdGraph(_faithful)`
-  + `resnetFwdModuleV` + `resnetTrainStepText` + B3 strided ops; `import …StridedConv`.
-- `LeanMlir/Proofs/StableHLOParse.lean` — parser cases for all ch6 ops.
+  + `resnetFwdModuleV` + `resnetTrainStepText` + B3 strided ops + **B8b per-channel BN
+  op pair** (`bnPerChannelF`/`bnPerChannelBack`, `bnPerChannel{F,Back}_faithful`);
+  `import …StridedConv` + **`…PerChannelBN`**.
+- `LeanMlir/Proofs/StableHLOParse.lean` — parser cases for all ch6 ops (incl. B8b).
+- `tests/TestPerChannelBn.lean` — **B8b** standalone render + iree-compile check
+  (`@perchannel_bn_fwd`/`@perchannel_bn_back`, both compile to ROCm gfx1100).
 - `LeanMlir/IreeRuntime.lean` — `ResnetLayout` (26 params). (B9: `ResNet34Layout`.)
 - `MainResnetVerified.lean` + lakefile `resnet-verified` — ch6-A trainer.
-- `tests/AuditAxioms.lean` — 154 headlines (imports StridedConv + ResNet34 + PerChannelBN).
+- `tests/AuditAxioms.lean` — 155 headlines (imports StridedConv + ResNet34 + PerChannelBN).
 - `verified_mlir/resnet_{fwd,train_step}.mlir` — ch6-A rendered (byte-stable).
 - Reuse templates: `cnn_has_vjp_at`@CNN.lean:2817 + `CnnConcrete`@MnistCNN.lean:841
   (concrete-instance template); `cifarBnTrainStepText`/`MainCifarBnVerified.lean`
