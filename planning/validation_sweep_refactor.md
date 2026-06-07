@@ -105,20 +105,25 @@ compiling but still >10min). Reverted the fold; kept the forward + rfl + canonic
 strided block VJP. Representative tie is the pragmatic current state; revisit the full fold with
 a non-`isDefEq` assembly (e.g. `@[irreducible]` blocks, or a fold combinator) if pursued.
 
-**E (forward) STARTED — mnv2 representative DONE (cd11958):** `mobilenetv2FwdGraph` +
-`mobilenetv2FwdGraph_faithful : den(graph)=mobilenetv2Forward` in `StableHLO.lean`, the ch7 peer
-of `resnetFwdGraph_faithful` (whole-net SHlo graph: stem conv-bn-relu6 → skip/no-skip
-inverted-residual via `addV` → GAP → dense; one `simp only` over the op-faithfulness lemmas +
-`unfold`). Axiom-clean. SAME-spatial 2-block representative (matches the representative forward,
-not the full strided render). **E IS `simp`-based ⇒ it likely does NOT hit the VJP fold's
-concrete-dim `isDefEq` wall** — so the full strided E (assemble `depthwiseStridedF`/
-`flatConvStridedF` whole-net graph at concrete dims + prove faithfulness) is plausibly tractable,
-unlike full B/C. Still missing for full E: (1) strided whole-net graph assembly, (2) re-route the
-committed `tests/Test*` string `.mlir` to `pretty(emit graph)`. r34/enet/convnext/vit forward-E
-= same representative-graph recipe (r34 already has `resnetFwdGraph`); their graphs not built yet.
+**E (forward) DONE for mnv2 — BOTH representative AND full strided (cd11958 + 384416e):**
+- representative (`cd11958`): `mobilenetv2FwdGraph` + `_faithful : den=mobilenetv2Forward` (SAME 2-block).
+- **FULL strided (`384416e`): `mobilenetv2FwdGraphFull` + `_faithful : den=mobilenetv2Forward_full`**
+  — whole-net SHlo graph at REAL ch7 dims (3×224²→7×7×64; strided stem `flatConvStridedF` +
+  `depthwiseStridedF` downsamples + `addV` skips), proven by ONE `simp only` + `unfold`. Axiom-clean,
+  compiles in normal ~35s. SpecVJP `mobilenetv2Verified_fwd_faithful : den(graph)=denoteMobilenet
+  spec.layers` (= faithfulness ∘ denote_eq) ⇒ **mnv2 has the full A+B+C+E(fwd) ladder tied to the
+  real render** — the only imagenette net at that bar.
+- **KEY LESSON: E is `simp`-rewriting (op lemmas are `@[simp] rfl`), NOT the `vjp_comp_at`/`isDefEq`
+  fold — so it does NOT hit the concrete-dim wall that forced full B/C to be reverted.** Full E is
+  TRACTABLE where full B/C was not. So: forward-E for the other nets (r34/enet/convnext/vit) at full
+  OR representative is the same simp recipe (r34 already has `resnetFwdGraph`; others not built) and
+  should be cheap.
 
-Remaining (other deferred passes): full/strided E + re-route committed renders;
-v3-parity (Adam/aug/schedule so numbers stop sucking). See the readiness sections + loose ends.
+Remaining E: backward graph (the VJP graph denotes the backward — carries the relu6 smoothness hyps)
++ re-route the committed `tests/Test*` string `.mlir` to `pretty(emit graph)` (plumbing). Other deferred:
+v3-parity (Adam/aug/schedule). Formalization (B/C/E) is architecture-math, INDEPENDENT of v3-parity
+(optimizer/data) — don't gate the cheap reps on it; reserve the expensive full passes for after the
+architecture (esp. scalar-vs-per-channel BN) is final. See the readiness sections + loose ends.
 
 ## THE PLAN (agreed)
 
