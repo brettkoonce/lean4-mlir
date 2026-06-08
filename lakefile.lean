@@ -73,7 +73,10 @@ lean_lib «Proofs» where
              -- M2: the MLP per-layer parameter-gradient assembly (Crux A).
              `LeanMlir.Proofs.MlpTrainStep,
              -- M3: the CNN convolution parameter-gradient bridges.
-             `LeanMlir.Proofs.CnnTrainStep]
+             `LeanMlir.Proofs.CnnTrainStep,
+             -- MLP render half: the train-step text as a name-threaded render of the
+             -- proven forward graphs (multi-intermediate generalization).
+             `LeanMlir.Proofs.MlpRender]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
