@@ -2848,6 +2848,33 @@ identical.
 
 \subsection*{Training: one learns, one doesn't}
 
+\textbf{[TODO: these results are tied to the init parameters and need to be redone.]}
+%
+% WHY THIS NEEDS UPDATING (investigation 2026-06-08, GPU-validated):
+% The "one learns, one doesn't" framing overstates the no-BN result. The no-BN
+% freeze at SGD lr=0.1 is NOT a law of the architecture --- it is an
+% init-conditioning artifact sitting on a knife-edge stability boundary:
+%   * This cifar-nobn-sgd ablation cell freezes at log(10)=2.302 (10% = chance).
+%   * But the *proof-verified* no-BN net (same architecture, same He init scale,
+%     same effective lr=0.1) TRAINS to ~67% --- and does so across all 5 random
+%     seeds tested (LEAN_MLIR_SEED). It only collapses above its ~0.25 LR ceiling.
+%   * The two differ ONLY in the He-init draw: the ablation uses consecutive
+%     seeds (base 42) whose xorshift streams are correlated -> worse-conditioned
+%     init -> ceiling drops below 0.1; the verified net uses stride-2 seeds ->
+%     ceiling ~0.25. The frozen cell also TRAINS fine at lr=0.05 (~67%), i.e. it
+%     is LR-limited, not broken.
+% So the honest statement is "no-BN is fragile right at lr=0.1 --- whether a given
+% init lands above or below the dead-ReLU collapse edge is luck, and BN removes
+% that fragility," NOT "no-BN cannot learn." The verified math was never wrong.
+%
+% BN SIDE: the 61.57% here is per-channel BN. The verified BN net is now also
+% per-channel (commit a8b91ed) and reaches ~71% at lr=0.1; the earlier
+% scalar-global verified BN actually UNDERPERFORMED no-BN (~58% < ~67%).
+%
+% CAVEAT to not overclaim: per-example per-channel (instance-norm) BN gives the
+% accuracy lift but NOT extra LR headroom --- it collapses at lr>=0.2, same as
+% no-BN. "BN lets you crank the LR" needs batch-statistic BN (train != eval).
+%
 Both runs use \texttt{s4tfBaseline} (SGD 0.1, 30 epochs). Output
 captured from \texttt{logs/ablation\_cifar-nobn-sgd.log} and
 \texttt{logs/ablation\_cifar-bn-sgd.log}:
