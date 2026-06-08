@@ -156,6 +156,63 @@ trust boundary" section of [`LeanMlir/Proofs/README.md`](LeanMlir/Proofs/README.
 for the precise gap. Closing it formally — a forward-extraction lemma tying a
 proven `*Forward` to the codegen's emitted graph — is open future work.
 
+## What is and isn't verified
+
+All proofs are over exact reals (`ℝ`). The emitted MLIR and GPU execution are
+`Float32`; `iree-compile`, the IREE runtime, and the FFI are trusted. Within
+that boundary, the verification is tiered by dataset / backend:
+
+**Tier 1 — MNIST (linear, mlp, cnn): forward + backward bridged.** The reference
+forward and backward are proven faithful to the Mathlib `fderiv` math as rendered
+StableHLO graphs (`mlpFwdGraph_faithful`, `mlpBackGraph_faithful`,
+`cnnFwdGraph_faithful`, `cnnBackGraph_faithful`; for linear also the param-grad
+Jacobians `wGrad/bGrad_is*Jacobian` and `sgdW/sgdB_descends_certified_grad`).
+All audited to the 3-axiom closure. Caveat: the train-step `.mlir` is currently
+assembled from these proven op-graphs with a hand-written grad/SGD tail (see
+`linearTrainStepModuleV`); folding that tail into the rendered AST so the whole
+train-step module is `render(provenGraph)` is in progress.
+
+**Tier 2 — CIFAR (cifar, cifar-bn): forward bridged, backward WIP.**
+`cifarFwdGraph_faithful` / `cifarBnFwdGraph_faithful` (plus op-level
+`bnBack_faithful`) hold; the whole-net backward graph and the train step are
+not yet rendered from a proof.
+
+**Tier 3 — Imagenette (ResNet-34, MobileNetV2, ConvNeXt, EfficientNet, ViT):
+ℝ whole-net VJP proven; codegen bridge WIP.** The whole-network VJP is proven
+over `ℝ` (`resnet34_has_vjp_at`, `vit_full_has_vjp`, `convnext_has_vjp`,
+`efficientnet_has_vjp`, `mobilenetv2_has_vjp_at`). The rendered-MLIR bridge is
+forward-graph-only (resnet/mnv2/convnext) or op-level-only (efficientnet/vit),
+and the GPU trainers behind the Imagenette numbers below run the **unverified**
+`MlirCodegen.lean` path. No theorem links those proofs to that codegen yet.
+
+**Tier 4 — ImageNet-1k (phase-2 Lean→JAX bridge): scale baseline, gradients
+not Lean-verified.** Full 1000-class ImageNet runs use the phase-2 path
+(`jax/Jax/Codegen.lean`, ~1100 lines: `NetSpec` → idiomatic JAX Python), where
+**JAX's `value_and_grad` computes the gradients and XLA does the compilation** —
+the Lean VJP proofs are not in the loop. The only proof-adjacent Lean artifact is
+the shared `NetSpec` ADT (the same architecture spec whose phase-3 backward is
+proven over `ℝ`); the emitter itself is unverified. This tier exists to (a)
+establish scale baselines the verified-IREE codegen can't yet reach — ConvNeXt-T
+75.93% / EfficientNet-B0 72.31% / ResNet-34 72.02% / MobileNetV2 68.33% / ViT-Tiny
+65.64% top-1, full 50k val ([`jax/runs/*/RESULTS.md`](jax/runs/)) — and (b) serve
+as the differential-test **oracle**: [`tests/vjp_oracle/`](tests/vjp_oracle/) uses
+JAX `value_and_grad` as ground truth to cross-check the Tier 1–3 Lean-derived VJPs
+to 1–2 ULP. So Tier 4 is the least-verified tier by gradient provenance but the
+one that empirically anchors the others. Whether phase-3 verified codegen can reach
+ImageNet scale is open.
+
+**Not yet verified anywhere:** the `ℝ`→`Float32` gap (no forward-extraction lemma);
+the ~7500-line `MlirCodegen.lean` (zero theorems); and, outside Tier 1, the
+train-step text that `iree-compile` actually consumes.
+
+**Concrete-instance honesty.** The conditional capstones (MLP, MNIST-CNN, CIFAR,
+MobileNetV2, ResNet-34) are instantiated to discharge their off-the-kink
+hypotheses. `MlpConcrete`, `Micro`/`Mini`/`Spatial` (MNIST) and `Tiny` (CIFAR) are
+live witnesses (non-constant forward, nonzero Jacobian). `MobileNetV2Concrete`,
+`CnnConcrete`, and `ResNet34Concrete` are degenerate constant-output nets (zero
+Jacobian) — they prove the hypothesis bundle is satisfiable but say nothing about a
+realistic gradient; live witnesses for the deep/BN/ReLU6 nets are follow-up.
+
 ## Pipeline
 
 ```

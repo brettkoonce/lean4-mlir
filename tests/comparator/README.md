@@ -1,6 +1,6 @@
 # Comparator-based independent kernel re-check
 
-This directory holds an end-to-end verification of 49 theorems from the
+This directory holds an end-to-end verification of 51 theorems from the
 proof suite using
 [leanprover/comparator](https://github.com/leanprover/comparator) — the
 trustworthy-judge tool the Lean Zulip community recommended for projects
@@ -16,7 +16,7 @@ opinion.
 
 ## What gets verified
 
-The 49 theorems span foundation rules, every chapter's headline
+The 51 theorems span foundation rules, every chapter's headline
 Jacobian, the public `*_has_vjp_correct` wrappers, and the five
 whole-network VJPs:
 

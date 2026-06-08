@@ -24,7 +24,7 @@ appear in each Solution-side proof's transitive axiom closure, and
 (c) the Solution typechecks against Lean's kernel independently of the
 elaborator. See `README.md` for the full prereq + run instructions.
 
-The 38 theorems below span the foundation rules, every chapter's headline
+The 51 theorems below span the foundation rules, every chapter's headline
 Jacobian, and the public `*_has_vjp_correct` wrappers — enough to verify
 "zero project axioms" reaches everywhere. The
 docstrings give each theorem's mathematical content in regular LaTeX (so
