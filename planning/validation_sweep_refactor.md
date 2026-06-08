@@ -115,9 +115,15 @@ a non-`isDefEq` assembly (e.g. `@[irreducible]` blocks, or a fold combinator) if
   real render** — the only imagenette net at that bar.
 - **KEY LESSON: E is `simp`-rewriting (op lemmas are `@[simp] rfl`), NOT the `vjp_comp_at`/`isDefEq`
   fold — so it does NOT hit the concrete-dim wall that forced full B/C to be reverted.** Full E is
-  TRACTABLE where full B/C was not. So: forward-E for the other nets (r34/enet/convnext/vit) at full
-  OR representative is the same simp recipe (r34 already has `resnetFwdGraph`; others not built) and
-  should be cheap.
+  TRACTABLE where full B/C was not.
+- **forward-E per net = `simp` graph, BUT first needs every op as an SHlo F-op.** mnv2/r34 were lucky
+  (all ops existed). Adding an op = ~9 edits across the pipeline (SHlo/Raw/Tok ctors + den + skel +
+  toToks + emitTok + StableHLOParse parseStack + parseStack_toToks round-trip) + a faithfulness rfl.
+  Status: **r34 rep E done** (`resnetFwdGraph`, pre-existing) · **mnv2 done** (full+rep) · **convnext
+  rep E DONE (8fdeacb)** — needed a NEW `layerScaleF` op (γ⊙x), `convNextFwdGraph_faithful` +
+  SpecVJP `convnextRep_fwd_faithful`, axiom-clean · **efficientnet** needs an SE-gate/broadcast-mul op
+  (swish/sigmoid/conv/bn/depthwise exist) — medium · **vit** needs the attention ops (only `softmaxRowF`
+  exists; QKV dot_generals + SDPA + MHSA missing) — the wall.
 
 Remaining E: backward graph (the VJP graph denotes the backward — carries the relu6 smoothness hyps)
 + re-route the committed `tests/Test*` string `.mlir` to `pretty(emit graph)` (plumbing). Other deferred:
