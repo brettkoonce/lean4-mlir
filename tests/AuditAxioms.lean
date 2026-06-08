@@ -261,6 +261,9 @@ open Proofs
 -- M3: the CNN convolution parameter-gradient bridges (kernel grad = correlation).
 #print axioms conv_weight_grad_bridge
 #print axioms conv_bias_grad_bridge
+-- CNN render close: the rendered conv weight/bias SGD outputs denote θ − lr·certified.
+#print axioms cnn_render_convW_certified
+#print axioms cnn_render_convb_certified
 -- Chain: the composed cotangent subgraphs reduce to the explicit relu'⊙Wᵀ·… backprop
 -- formulas (denote_subst). Fold: the output-layer total-loss gradient (unconditional).
 #print axioms IR.mlpCotOut1_denote

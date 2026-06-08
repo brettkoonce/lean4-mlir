@@ -51,4 +51,40 @@ theorem conv_bias_grad_bridge {ic oc h w kH kW : Nat}
           pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o j * c j :=
   (conv2d_bias_grad_has_vjp W x).correct b c o
 
+-- ════════════════════════════════════════════════════════════════
+-- § Closing the CNN render — the conv param outputs denote the certified gradients
+--
+-- The CNN train step (`cnnTrainStepText` — conv→relu→conv→relu→maxpool→dense→relu→
+-- dense→relu→dense) renders, per conv layer, `%dWᵢ = convWGrad` (the transpose-trick
+-- kernel gradient) and `%Wᵢn = Wᵢ − lr·%dWᵢ`. These theorems are the denotation side:
+-- each rendered conv SGD output equals `θ − lr·(certified conv Jacobian · the cotangent
+-- the backward chain delivers)`, via the conv bridges. The conv analogue of the MLP
+-- `mlp_render_W*_certified`; generic in the cotangent `c`, so one theorem covers both
+-- conv layers (W₁, W₂). The three DENSE layers (W₃,W₄,W₅) reuse the M2 dense bridges
+-- (`weight_grad_bridge`/`bias_grad_bridge`) exactly as the MLP render close does.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Conv weight output, certified.** `Wⁿ = W − lr·(transpose-trick kernel grad)` denotes,
+    at the flattened kernel, `W − lr·(certified ∂conv/∂kernel · cotangent)`. -/
+theorem cnn_render_convW_certified {ic oc h w kH kW : Nat}
+    (b : Vec oc) (x : Tensor3 ic h w)
+    (v : Vec (oc * ic * kH * kW)) (c : Vec (oc * h * w)) (lr : ℝ)
+    (idx : Fin (oc * ic * kH * kW)) :
+    v idx - lr * (conv2d_weight_grad_has_vjp b x).backward v c idx
+      = v idx - lr * ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+                  Tensor3.flatten (conv2d (Kernel4.unflatten v') b x))
+               v idx j * c j := by
+  rw [conv_weight_grad_bridge b x v c idx]
+
+/-- **Conv bias output, certified.** Likewise `bⁿ = b − lr·(batch/spatial reduce)` denotes
+    `b − lr·(certified ∂conv/∂bias · cotangent)`. -/
+theorem cnn_render_convb_certified {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w)
+    (b : Vec oc) (c : Vec (oc * h * w)) (lr : ℝ) (o : Fin oc) :
+    b o - lr * (conv2d_bias_grad_has_vjp W x).backward b c o
+      = b o - lr * ∑ j : Fin (oc * h * w),
+          pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o j * c j := by
+  rw [conv_bias_grad_bridge W x b c o]
+
 end Proofs
