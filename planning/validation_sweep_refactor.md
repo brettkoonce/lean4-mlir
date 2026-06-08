@@ -78,7 +78,7 @@ Ladder per net (A=shape `#guard` · B/C=spec→math+VJP · E=spec→generated-ML
 | 2 | linear | ✅ | ✅ full | ✅ (+cotangent) | 92% |
 | 3 | mlp | ✅ | ✅ full | ✅ fwd+**back** | 97.78% |
 | 4 | cnn | ✅ | ✅ full | ✅ fwd | 98.99% |
-| 5 | cifar / cifar-bn | ✅ | ✅ full | ✅ fwd | ~67% / ~57% — **cifar-bn is SCALAR BN** |
+| 5 | cifar / cifar-bn | ✅ | ✅ full | ✅ fwd | ~67% / **~71%** — **cifar-bn is now PER-CHANNEL BN (reconciled `a8b91ed`)** |
 | 6 | r34 | ✅ | rep (skeleton `resnet34_has_vjp_at`) | ✅ rep (`resnetFwdGraph`, pre-existing) | render uses per-channel BN |
 | 7 | **mnv2** | ✅ | ✅ **FULL** (real strided render) | ✅ **FULL strided** + rep | **the exemplar — full A+B+C+E(fwd) on the real render** |
 | 8 | efficientnet | ✅ | rep | ⏳ needs an **SE/broadcast-mul op** | swish/sigmoid/conv/bn/dw F-ops exist |
@@ -109,11 +109,29 @@ All B/C + E ties live in `Proofs/SpecVJP.lean` (NOT in the build aggregator — 
    label-smoothing = optimizer/data loop). Don't gate the cheap reps on numerics; reserve the expensive
    full passes (full B/C; per-channel BN re-spec) for after the architecture is final.
 
-**NEXT (user is taking this on CIFAR — smaller dataset, easy to iterate): BN reconciliation ↓**
+**CIFAR-BN reconciliation DONE (2026-06-08, commit `a8b91ed`, not pushed) ↓ — generalize to the imagenette nets next.**
 
-## BN reconciliation — the flagged next pass (handoff)
+## BN reconciliation — ✅ DONE for CIFAR; imagenette nets remain
 
-**THE GAP (uniform, not net-by-net):** every VERIFIED PROOF forward uses **scalar-global** `bnForward`
+**✅ CIFAR-BN CLOSED (commit `a8b91ed`).** The verified cifar-bn net is now **per-example per-channel**
+BN (`bnPerChannelTensor3`, `m=h·w`, γ/β `[c]`) end-to-end: render (`cifarBnTrainStepText` +
+`cifarBnFwdTextPC`) + proofs (B `cifarBnVerified_denote_eq`, C `cifarCnnBn_has_vjp_at` via a new
+`convBnReluPC_has_vjp_at` block, E `cifarBnFwdGraph_faithful` via `.bnPerChannelF`), all 3-axiom-clean,
+byte-tied to the GPU-trained MLIR. **GPU-validated: per-channel BN 71% > no-BN 67% > old scalar 58%**
+(BN now *helps*, inverting the prior "BN hurts"). New surface: `.bnPerChannel oc` VLayer
+(`VerifiedSpec`), `CifarBnLayout` γ/β `#[c]`. **The exact same scalar→per-channel swap recipe now
+generalizes to mnv2 / efficientnet / convnext** (which still use scalar BN/LN in their verified
+forwards): build a per-channel `convBnReluPC`-style block on `bnPerChannelTensor3_has_vjp`, swap the
+forward def's `bnForward (c*H*W)` → `bnPerChannelTensor3 c H W`, refold the VJP, swap the graph's
+`.bnF` → `.bnPerChannelF`. **GOTCHA: `lake env lean <file>` reads STALE import `.olean`s — must
+`lake build <Module>` to refresh after editing an imported proof file.**
+
+**⚠️ Honest scope note:** per-*example* per-channel (instance-norm) gives the *accuracy* lift but
+NOT LR headroom — cifar-bn collapses at lr≥0.2 like no-BN (its ceiling is *below* no-BN's). "BN
+enables higher LR" needs *batch*-statistic BN (`m=N·h·w`, the enet-E5 `[N,C,H,W]↔[C,N·H·W]` bridge)
+with running-stats / train≠eval handling — a bigger, separate build if ever wanted.
+
+**THE GAP (now imagenette-only):** every imagenette VERIFIED PROOF forward still uses **scalar-global** `bnForward`
 (one γ/β normalizing over the *whole* `c·h·w` map per example); every RENDER + every UNVERIFIED trainer
 uses **per-channel** BN/LN. These are *different functions*, so today's proofs are about a slightly
 different net than what actually trains. (ViT isn't special — its proof is scalar-LN like the rest, its
@@ -134,19 +152,24 @@ either: per-example per-channel (`m = h·w`, instance-norm — simplest, keeps t
 (`m = N·h·w`, the efficientnet-E5 `[N,C,H,W]↔[C,N·H·W]` bridge — needs running-stats handling for eval).
 **Pick per-example per-channel** unless you want to model running stats in the proof.
 
-**CIFAR-BN files to touch:** VERIFIED = `cifarBnVerified` (`VerifiedNets.lean`) → `cifarCnnBnForward`
-(`CifarCNN.lean`, SCALAR — the 4 conv-bn use scalar `bnForward`) + `cifarBnVerified_has_vjp` +
-`cifarBnFwdGraph_faithful` (E, scalar) (`SpecVJP.lean` / `StableHLO.lean`). UNVERIFIED ref =
-`MainCifarCnnBnTrain.lean` (per-channel + EMA). RECONCILE = pick the BN, rebuild `cifarCnnBnForward` +
-its VJP + its `cifarBnFwdGraph` on `bnPerChannelFlat`/`bnPerChannelF`. CIFAR-10 is small ⇒ fast numeric
-iteration. Once CIFAR-BN is settled, the same swap generalizes to mnv2/efficientnet/convnext (which all
-use scalar BN in their verified forwards today).
+**WORKED EXAMPLE — CIFAR-BN, DONE (`a8b91ed`), the template to copy for the imagenette nets:**
+chose **per-example per-channel** (`m=h·w`, train=eval). Touched: `cifarCnnBnForward` +
+`cifarCnnBn_has_vjp_at` (`CifarCNN.lean`) — `bnForward (c*H*W)` → `bnPerChannelTensor3 c H W`, γ/β
+`ℝ`→`Vec c`, refold via the new `convBnReluPC_has_vjp_at`/`_differentiableAt` (mirror of the scalar
+`convBnRelu_has_vjp_at` on `bnPerChannelTensor3_has_vjp`); `cifarBnFwdGraph` `.bnF`→`.bnPerChannelF`
+(explicit `(oc h w)`) + `cifarBnFwdGraph_faithful` via `bnPerChannelF_faithful`
+(`StableHLO.lean`); `denoteCifarBn`/`cifarBnVerified_has_vjp`/`_fwd_faithful` (`SpecVJP.lean`);
+`.bnPerChannel oc` VLayer + `CifarBnLayout` γ/β `#[c]`. Both apex theorems 3-axiom-clean; render is
+hand-string `cifarBnTrainStepText`/`cifarBnFwdTextPC` (`[B,c·H·W]`→`[B,c,H·W]`, reduce spatial [2]).
+**To generalize: repeat this swap on mnv2/efficientnet/convnext** (their verified forwards still use
+scalar `bnForward`). GOTCHA: `lake build <Module>` (not `lake env lean`) to refresh stale import oleans.
 
 ## Status
 
 DONE — full ladder A+B+C+E, GPU-validated:
 - ch2 linear (92%, fwd+cotangent E) · ch3 MLP (97.78%, fwd+**back** E) · ch4 CNN (98.99%,
-  fwd E) · ch5 cifar (~67%, fwd E) · ch5 cifar-bn (~57% slow, fwd E). Commits 649ef6a … 25847f2.
+  fwd E) · ch5 cifar (~67%, fwd E) · ch5 cifar-bn (**~71%, PER-CHANNEL BN**, fwd E — reconciled
+  `a8b91ed`). Commits 649ef6a … 25847f2 (+ `a8b91ed`/`04e2087`).
 
 DONE — rung A + trainer migrated + GPU codegen-validated (B/C/E pending) — **ALL imagenette**:
 - ch6 r34 (146 params, 74818d1) · ch7 mnv2 (82, 39ee53d) · ch8 efficientnet (262, 7750b1c) ·
