@@ -164,6 +164,52 @@ hand-string `cifarBnTrainStepText`/`cifarBnFwdTextPC` (`[B,c·H·W]`→`[B,c,H·
 **To generalize: repeat this swap on mnv2/efficientnet/convnext** (their verified forwards still use
 scalar `bnForward`). GOTCHA: `lake build <Module>` (not `lake env lean`) to refresh stale import oleans.
 
+### THREE BN regimes (the thing to keep straight — not one "per-channel")
+
+There are *three* normalizations in play; "per-channel" is ambiguous between two of them:
+1. **scalar-global** — `bnForward (n) ε γ β`, γ/β `ℝ`: one mean/var over the *whole* `c·h·w` map per
+   example. Reduce axis (render) = flat `[1]`. Per-example ⇒ train=eval. *(what every imagenette PROOF
+   forward still uses; what CIFAR used pre-`a8b91ed`.)*
+2. **per-example per-channel** (instance-norm) — `bnPerChannelTensor3 oc h w` = `bnPerChannelFlat oc (h·w)`,
+   γ/β `[c]`: each channel over its own `h·w`, per example. Render reduce = `[2,3]` on `[N,C,H,W]` (or
+   CIFAR's `[2]` on the `[B,c,h·w]` reshape). Per-example ⇒ train=eval. *(what CIFAR is NOW; what the
+   r34/mnv2 RENDERS already emit.)*
+3. **batch per-channel** (textbook BN) — `bnchwFwd N oc h w` / `bnPerChannelFlat oc (N·h·w)` via the
+   `[N,C,H,W]↔[C,N·H·W]` bridge, γ/β `[c]`: each channel over batch+spatial. Render reduce = `[0,2,3]`.
+   **train ≠ eval** ⇒ needs running-stats/EMA the proofs don't model. *(what the efficientnet RENDER emits.)*
+
+### PER-NET STATUS — proof BN vs render BN (verified from code + committed verified_mlir, 2026-06-08)
+
+| net | PROOF forward BN | RENDER BN (committed `_train_step.mlir` reduce axis) | gap |
+|---|---|---|---|
+| **cifar-bn** | per-example per-channel `bnPerChannelTensor3` | per-example per-channel (reshape→`[2]`) | ✅ **matched (`a8b91ed`)** |
+| r34 | scalar — parametric *skeleton* `resnet34_has_vjp_at`, NO whole-net forward | per-example per-channel (`[2,3]` ×145) | ⚠️ gap |
+| **mnv2** | **scalar** `bnForward` + relu6 (`convBnRelu6_has_vjp_at`, `mobilenetv2Forward_full`) | per-example per-channel (`[2,3]` ×81) | ⚠️ gap — *identical to CIFAR's* |
+| **enet** | **scalar** `bnForward` + swish (`convBnSwish_has_vjp`, `mbconvBody`) | **batch** per-channel (`[0,2,3]` ×343) | ⚠️ gap — *render is BATCH not instance* |
+| **convnext** | **scalar** `layerNormForward` (≡ `bnForward`, `convNextBlockBody`) | scalar-global LN (reshape→`[1]` ×133) | ✅ **already consistent** |
+
+KEY: three of four imagenette PROOFS are in exactly CIFAR's pre-`a8b91ed` scalar state. convnext is NOT —
+its proof AND render are both scalar-global LN (consistent by design; the proof even has an explicit
+"LN representation caveat"). convnext's real gap is the LN **axis** (LayerNorm over *channels* per spatial
+position — the TRANSPOSE of `bnPerChannelTensor3`), a different/deferred op, and per-example either way.
+
+### PORTING NOTES (how each differs from the CIFAR recipe)
+
+- **mnv2 — closest fit, do FIRST.** Render already uses the exact normalization CIFAR now proves, so the
+  swap applies directly. But instead of one `convBnReluPC` block, build per-channel versions of:
+  `convBnRelu6` (relu6 not relu), `dwBnRelu6` (`depthwiseFlat` not `flatConv`), the **strided**
+  `convBnRelu6Strided`/`dwBnRelu6Strided`, and the project `convBn`-no-activation block — then refold the
+  inverted-residual body VJP (`invresBodyStrided_has_vjp_at`). Has the full concrete `mobilenetv2Forward_full`
+  (no skeleton to build). relu6/swish smoothness hyps carry as-is (BN moves to post-BN pre-activations).
+- **enet — different target op (BATCH).** To MATCH its render, reconcile to `bnchwFwd`/`bnPerChannelFlat
+  m=N·h·w` (regime 3), NOT `bnPerChannelTensor3`. Blocks: `convBnSwish` + `dwBnSwish` + project (SE is
+  BN-free, untouched). Plus decide the eval-stats story (running stats / batch-stat eval) — the per-example
+  path sidesteps this; the batch path doesn't. Bigger than mnv2.
+- **convnext — NOT this swap.** No scalar-vs-per-channel proof/render gap. If "real" ConvNeXt LN is ever
+  wanted, it's a channel-axis LayerNorm op (new), independent of this pass.
+- **r34 — build the forward first.** B/C is the representative skeleton; needs a concrete `resnet34Forward`
+  (the awkward path) before the CIFAR recipe applies. Render is per-example per-channel like mnv2.
+
 ## Status
 
 DONE — full ladder A+B+C+E, GPU-validated:
