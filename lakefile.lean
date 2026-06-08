@@ -76,7 +76,10 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.CnnTrainStep,
              -- MLP render half: the train-step text as a name-threaded render of the
              -- proven forward graphs (multi-intermediate generalization).
-             `LeanMlir.Proofs.MlpRender]
+             `LeanMlir.Proofs.MlpRender,
+             -- CNN render half: the CNN train-step text rendered from `cnnFwdGraph`,
+             -- with flat→NCHW reshape glue bridging the conv param-grad tail.
+             `LeanMlir.Proofs.CnnRender]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
