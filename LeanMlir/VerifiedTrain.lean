@@ -168,9 +168,11 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
-  -- init params in func-arg order from the layout specs (one seed per slot)
+  -- init params in func-arg order from the layout specs (one seed per slot).
+  -- Seed base is overridable via LEAN_MLIR_SEED (default 1) to probe how
+  -- sensitive convergence is to the specific He-init draw.
   let mut parts : Array ByteArray := #[]
-  let mut seed := 1
+  let mut seed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
   for spec in net.specs do
     parts := parts.push (← mkParam seed spec.1 spec.2)
     seed := seed + 1

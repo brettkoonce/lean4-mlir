@@ -831,6 +831,10 @@ def ablations : List (String × AblationRun) := [
   -- Chapter 3: CIFAR (no BN — should struggle). Direct s4tf baseline
   -- match: SGD 0.1, no augmentation, no recipe tricks.
   ("cifar-nobn-sgd",   ⟨cifarCnnNoBn, s4tfBaseline 30, .cifar10, "data"⟩),
+  -- Diagnostic: same no-BN spec at lower SGD LRs (probe the stability ceiling
+  -- vs the verified renderer, which trains at 0.1 and collapses only at ≥0.3).
+  ("cifar-nobn-sgd05", ⟨cifarCnnNoBn, { s4tfBaseline 15 with learningRate := 0.05 }, .cifar10, "data"⟩),
+  ("cifar-nobn-sgd02", ⟨cifarCnnNoBn, { s4tfBaseline 15 with learningRate := 0.02 }, .cifar10, "data"⟩),
 
   -- Chapter 5: CIFAR-CNN-BN leave-one-out recipe ablation. Same flag
   -- exposure as the R34 chapter; cifar-bn-full has all knobs on, each
