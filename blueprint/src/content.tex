@@ -8934,14 +8934,21 @@ normalization, residual connections, depthwise convolution,
 squeeze-and-excitation, layer normalization, and self-attention ---
 is machine-checked by Lean's type system. If it builds, it's correct.
 
-But ``it builds'' is only one of four independent checks we rely on.
-Composition proofs catch math errors, finite-difference checks confirm
-each closed-form Jacobian formula in the proof matches the function it
-claims to differentiate, a parallel JAX pipeline catches codegen and
-implementation errors, and an independent kernel re-check (comparator)
-audits the transitive axiom closure of every theorem outside Lean's
-elaborator. Each layer fails in a different way, so overlaying them is
-the defense. This appendix walks through all four.
+But ``it builds'' is only the first of \emph{three kinds of certainty}
+this appendix relies on, and they are not the same kind. \textbf{Proven}
+(deductive): in Lean, against three axioms, each operator's gradient is its
+exact reverse-mode derivative --- and an independent re-checker confirms no
+project axiom slipped into a proof, so ``proven'' means proven-clean.
+\textbf{By construction} (structural): the StableHLO the GPU runs is not
+written but \emph{printed} from the same datatype the proofs reason about,
+with a bridge theorem pinning it to the proven formula, so the code cannot
+drift from the math. \textbf{Cross-checked} (empirical): because IREE and
+\texttt{float32} cannot themselves be proven, three independent oracles ---
+a finite-difference probe, a parallel JAX pipeline, and a CPU/GPU/NumPy
+comparator --- must agree on the gradient before the hardware is believed.
+Each kind catches what the others structurally cannot; the five mechanisms
+this appendix walks through are these three kinds of certainty, with the
+empirical one split among its witnesses.
 
 \section{Trust kernel}
 
@@ -9286,41 +9293,55 @@ derivative --- that arrow is machine-checked. Because both arrows start from
 one concrete datatype rather than from a string, ``the emitted code computes
 the proven gradient'' is a theorem about a value, not a hope about a comment.
 
-\section{The five layers, summarized}
+\section{The five layers, as three kinds of certainty}
 
-Together, the five layers catch five different kinds of bugs:
+The five mechanisms are three kinds of certainty about a single claim ---
+that the GPU computed the network's exact gradient --- with the empirical
+kind split among its witnesses. Each kind catches what the others
+structurally cannot.
 
+\paragraph{Proven (deductive): the math is right.}
 \begin{itemize}
-  \item \textbf{Formal proofs} fail if the math is wrong. Every
-    theorem reduces to Mathlib's \(\fderiv\) and Lean core; the
-    trust kernel is exactly
-    \texttt{propext}, \texttt{Classical.choice},
-    \texttt{Quot.sound}, plus what Mathlib proves about
-    \(\fderiv\). Type-checking can't catch the prose narrating
-    a different formula than the theorem states, though.
-  \item \textbf{FD gradient checks} catch that prose-vs-theorem
-    drift, plus any algebraic typo in a closed-form Jacobian.
-    FD can't spot compiler bugs or non-smooth-point tiebreak
-    disagreements.
-  \item \textbf{The JAX-parallel pipeline} fails if either
-    compiler has a codegen bug, if the runtime drifts, or if
-    the hand-derived VJP disagrees with JAX autodiff --- the
-    places formal proofs and FD can't see.
-  \item \textbf{Comparator} fails if the elaborator accepted a
-    term the kernel wouldn't, or if any project axiom snuck into
-    a proof's transitive closure --- the places \(\#\)\texttt{print
-    axioms} and \(\texttt{lake build}\) share an elaborator with
-    and therefore can't independently audit.
-  \item \textbf{Verified code generation} (\S~\ref{sec:verified_codegen})
-    fails if the StableHLO the GPU actually runs denotes something other
-    than the proven derivative: the bridge theorems pin each emitted
-    operator to its proof, and the IREE-versus-NumPy oracle confirms the
-    graph executes correctly on hardware. This is the one layer about the
-    \emph{emitted code} rather than the mathematics behind it --- the gap
-    the other four sit upstream of.
+  \item \textbf{Formal proofs} fail if the math is wrong. Every theorem
+    reduces to Mathlib's \(\fderiv\) and Lean core; the trust kernel is
+    exactly \texttt{propext}, \texttt{Classical.choice}, \texttt{Quot.sound},
+    plus what Mathlib proves about \(\fderiv\). Type-checking can't catch the
+    prose narrating a different formula than the theorem states, though.
+  \item \textbf{The comparator} fails if the elaborator accepted a term the
+    kernel wouldn't, or if any project axiom snuck into a proof's transitive
+    closure --- the independent re-check that makes ``proven'' mean
+    proven-clean, since \(\#\)\texttt{print axioms} and \(\texttt{lake
+    build}\) share an elaborator and cannot audit themselves.
 \end{itemize}
 
-Each layer fails differently. Overlaying them is the guarantee.
+\paragraph{By construction (structural): the code is the math.}
+\begin{itemize}
+  \item \textbf{The bridge theorems} (\S~\ref{sec:verified_codegen}) fail if
+    the emitted StableHLO denotes anything other than the proven derivative.
+    The graph is printed from the same datatype the bridge reasons about, so
+    it cannot drift: ``the code computes the proven gradient'' is a theorem
+    about a value, not a hope about a comment.
+\end{itemize}
+
+\paragraph{Cross-checked (empirical): the hardware agrees.}
+\begin{itemize}
+  \item \textbf{FD gradient checks} catch prose-vs-theorem drift and any
+    algebraic typo in a closed-form Jacobian. FD can't spot compiler bugs or
+    non-smooth-point tiebreak disagreements.
+  \item \textbf{The JAX-parallel pipeline} fails if either compiler has a
+    codegen bug, if the runtime drifts, or if a hand-derived VJP disagrees
+    with JAX autodiff.
+  \item \textbf{The IREE-versus-NumPy oracle} fails if the compiled graph
+    computes the wrong thing on real hardware --- the one check that reaches
+    past the proofs to IREE's lowering and \texttt{float32}, neither of which
+    can be proven.
+\end{itemize}
+
+Each kind fails differently --- a deductive proof is blind to a miscompile,
+an empirical diff is blind to a measure-zero kink, a faithful bridge is blind
+to a wrong formula it renders perfectly --- and overlaying them is the
+guarantee. Verified code generation straddles two of these: its bridge is
+structural, its oracle empirical.
 
 \chapter*{Acknowledgments}
 \addcontentsline{toc}{chapter}{Acknowledgments}
