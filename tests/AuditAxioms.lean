@@ -261,6 +261,11 @@ open Proofs
 -- M3: the CNN convolution parameter-gradient bridges (kernel grad = correlation).
 #print axioms conv_weight_grad_bridge
 #print axioms conv_bias_grad_bridge
+-- Chain: the composed cotangent subgraphs reduce to the explicit relu'⊙Wᵀ·… backprop
+-- formulas (denote_subst). Fold: the output-layer total-loss gradient (unconditional).
+#print axioms IR.mlpCotOut1_denote
+#print axioms IR.mlpCotOut0_denote
+#print axioms IR.mlp_output_total_loss_grad
 -- R4 Stage A, Chapter 3 (MLP): ReLU forward (maximum) + backward (select),
 -- whole-MLP forward (= mlpForward) and backward chain (= mlp_has_vjp_at, the
 -- conditional whole-network VJP at a smooth point).

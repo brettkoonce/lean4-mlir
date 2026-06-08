@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.IR
+import LeanMlir.Proofs.LinearTrainStep
 
 /-! # M2 — the MLP train step: per-layer parameter-gradient assembly
 
@@ -83,5 +84,58 @@ theorem mlp_layer2_weight_grad_bridge {d₂ d₃ : Nat}
           pdiv (fun v : Vec (d₂ * d₃) => dense (Mat.unflatten v) b₂ x₂)
                (Mat.flatten W₂) (finProdFinEquiv (i, j)) k * dy k := by
   rw [weight_grad_bridge W₂ b₂ x₂ Back.cotangent dy i j]; rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § The chain: the composed cotangent subgraphs ARE the explicit backprop formulas
+--
+-- `mlpCotOut1`/`mlpCotOut0` are `Back.subst` compositions; `denote_subst` (the IR
+-- chain rule) reduces their denotations to the closed `relu' ⊙ Wᵀ·…` forms. So "the
+-- cotangent the backward chain delivers" is not an opaque graph but the genuine
+-- multiplied-through gradient.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Layer-1 cotangent, explicit.** `mlpCotOut1.denote g = relu'(p₁) ⊙ (W₂ · g)`. -/
+theorem mlpCotOut1_denote {d₂ d₃ : Nat} (W₂ : Mat d₂ d₃) (p₁ : Vec d₂) (g : Vec d₃) :
+    (mlpCotOut1 W₂ p₁).denote g = fun i => if p₁ i > 0 then Mat.mulVec W₂ g i else 0 := by
+  unfold mlpCotOut1 emitReluBack emitDenseBack
+  rw [denote_subst]
+  rfl
+
+/-- **Layer-0 cotangent, explicit** — the deepest chain
+    `relu'(p₀) ⊙ (W₁ · (relu'(p₁) ⊙ (W₂ · g)))`. -/
+theorem mlpCotOut0_denote {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂) (W₂ : Mat d₂ d₃)
+    (p₀ : Vec d₁) (p₁ : Vec d₂) (g : Vec d₃) :
+    (mlpCotOut0 W₁ W₂ p₀ p₁).denote g
+      = fun i => if p₀ i > 0
+          then Mat.mulVec W₁ (fun k => if p₁ k > 0 then Mat.mulVec W₂ g k else 0) i else 0 := by
+  unfold mlpCotOut0 emitReluBack emitDenseBack
+  rw [denote_subst, denote_subst]
+  simp only [Back.denote, mlpCotOut1_denote W₂ p₁ g]
+
+-- ════════════════════════════════════════════════════════════════
+-- § The fold (output layer): the loss gradient wrt the TOP weights is `θ − lr·∂L/∂θ`
+--
+-- The output dense `W₂` classifies the layer-2 activation `a₁` and sits directly below
+-- the softmax-CE loss — no ReLU between it and the loss — so its total-loss gradient
+-- folds UNCONDITIONALLY: it is a direct instance of the linear fold at input `a₁`. The
+-- hidden layers (`W₁`,`W₀`) fold only at smooth points (the chain runs back through the
+-- ReLU kinks); that conditional fold is the remaining new proof.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Output-layer total-loss gradient.** For the top dense layer on activation `a₁`
+    (in the MLP, `a₁ = relu(dense W₁ b₁ (relu(dense W₀ b₀ x)))`), the single gradient of
+    the whole softmax-CE loss wrt `W₂` equals the certified `∂logits/∂W₂` contracted with
+    the softmax-CE residual `softmax − onehot`. Unconditional — a direct instance of the
+    linear fold `lossWeightGrad_eq_sum`. -/
+theorem mlp_output_total_loss_grad {d₂ d₃ : Nat}
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (a₁ : Vec d₂) (label : Fin d₃) (i : Fin d₂) (j : Fin d₃) :
+    pdiv (fun v : Vec (d₂ * d₃) => fun _ : Fin 1 =>
+            crossEntropy d₃ (dense (Mat.unflatten v) b₂ a₁) label)
+         (Mat.flatten W₂) (finProdFinEquiv (i, j)) 0
+      = ∑ k : Fin d₃,
+          pdiv (fun v : Vec (d₂ * d₃) => dense (Mat.unflatten v) b₂ a₁)
+               (Mat.flatten W₂) (finProdFinEquiv (i, j)) k
+            * (softmax d₃ (mnistLinear W₂ b₂ a₁) k - oneHot d₃ label k) :=
+  StableHLO.lossWeightGrad_eq_sum W₂ b₂ a₁ label i j
 
 end Proofs.IR
