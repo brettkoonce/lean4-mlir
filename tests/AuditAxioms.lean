@@ -241,6 +241,11 @@ open Proofs
 #print axioms StableHLO.lossCot_eq_softmax_sub_onehot
 #print axioms StableHLO.sgdW_descends_softmaxCE_grad
 #print axioms StableHLO.sgdB_descends_softmaxCE_grad
+-- M1 chain-rule fold: the SGD step is literally θ − lr·∂Loss/∂θ.
+#print axioms StableHLO.crossEntropy_differentiable
+#print axioms StableHLO.denseWeightMap_differentiable
+#print axioms StableHLO.lossWeightGrad_eq_sum
+#print axioms StableHLO.sgdW_descends_loss_gradient
 -- R4 Stage A, Chapter 3 (MLP): ReLU forward (maximum) + backward (select),
 -- whole-MLP forward (= mlpForward) and backward chain (= mlp_has_vjp_at, the
 -- conditional whole-network VJP at a smooth point).
