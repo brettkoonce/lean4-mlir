@@ -270,6 +270,8 @@ open Proofs
 -- back through one / two ReLU kinks — discharged at a smooth point).
 #print axioms IR.mlp_hidden_total_loss_grad
 #print axioms IR.mlp_input_total_loss_grad
+-- Whole-net capstone: every weight layer's total-loss gradient at once (one statement).
+#print axioms IR.mlp_whole_net_weight_grads
 -- R4 Stage A, Chapter 3 (MLP): ReLU forward (maximum) + backward (select),
 -- whole-MLP forward (= mlpForward) and backward chain (= mlp_has_vjp_at, the
 -- conditional whole-network VJP at a smooth point).

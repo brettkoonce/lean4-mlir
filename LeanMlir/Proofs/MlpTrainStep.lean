@@ -238,4 +238,62 @@ theorem mlp_input_total_loss_grad {d₀ d₁ d₂ d₃ : Nat}
            from by rw [Mat.unflatten_flatten]; exact hG_diff)]
   simp only [Mat.unflatten_flatten]
 
+-- ════════════════════════════════════════════════════════════════
+-- § Whole-net capstone — every weight layer's total-loss gradient at once
+--
+-- One statement for the whole MLP's training: at a smooth point (both hidden
+-- pre-activations off the ReLU kinks — the same pair `mlp_has_vjp_at` uses), the
+-- gradient of the WHOLE softmax-CE loss `crossEntropy ∘ mlpForward` with respect to
+-- every weight layer is the certified assembled gradient. Output layer unconditionally,
+-- the two hidden layers conditionally — folded from the per-layer results, with the
+-- forward activations threaded through (`a₀ = relu(dense W₀ b₀ x)`, etc.).
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Whole-network MLP weight-gradient capstone.** The three weight layers' total-loss
+    gradients, jointly, under the two smoothness hypotheses. -/
+theorem mlp_whole_net_weight_grads {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃)
+    (h_smooth_0 : ∀ k, dense W₀ b₀ x k ≠ 0)
+    (h_smooth_1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0) :
+    -- input layer W₀ (chain back through both ReLUs)
+    (∀ (i : Fin d₀) (j : Fin d₁),
+      pdiv (fun v : Vec (d₀ * d₁) => fun _ : Fin 1 =>
+              crossEntropy d₃
+                (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x))))) label)
+           (Mat.flatten W₀) (finProdFinEquiv (i, j)) 0
+        = ∑ k : Fin d₁,
+            pdiv (fun v : Vec (d₀ * d₁) => dense (Mat.unflatten v) b₀ x)
+                 (Mat.flatten W₀) (finProdFinEquiv (i, j)) k
+              * pdiv (fun z : Vec d₁ => fun _ : Fin 1 =>
+                       crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
+                     (dense W₀ b₀ x) k 0) ∧
+    -- hidden layer W₁ (chain back through one ReLU)
+    (∀ (i : Fin d₁) (j : Fin d₂),
+      pdiv (fun v : Vec (d₁ * d₂) => fun _ : Fin 1 =>
+              crossEntropy d₃
+                (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+           (Mat.flatten W₁) (finProdFinEquiv (i, j)) 0
+        = ∑ k : Fin d₂,
+            pdiv (fun v : Vec (d₁ * d₂) => dense (Mat.unflatten v) b₁ (relu d₁ (dense W₀ b₀ x)))
+                 (Mat.flatten W₁) (finProdFinEquiv (i, j)) k
+              * pdiv (fun z : Vec d₂ => fun _ : Fin 1 =>
+                       crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
+                     (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))) k 0) ∧
+    -- output layer W₂ (directly below the loss — unconditional)
+    (∀ (i : Fin d₂) (j : Fin d₃),
+      pdiv (fun v : Vec (d₂ * d₃) => fun _ : Fin 1 =>
+              crossEntropy d₃
+                (dense (Mat.unflatten v) b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+           (Mat.flatten W₂) (finProdFinEquiv (i, j)) 0
+        = ∑ k : Fin d₃,
+            pdiv (fun v : Vec (d₂ * d₃) =>
+                    dense (Mat.unflatten v) b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))))
+                 (Mat.flatten W₂) (finProdFinEquiv (i, j)) k
+              * (softmax d₃ (mnistLinear W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k
+                  - oneHot d₃ label k)) :=
+  ⟨fun i j => mlp_input_total_loss_grad W₀ b₀ W₁ b₁ W₂ b₂ x label h_smooth_0 h_smooth_1 i j,
+   fun i j => mlp_hidden_total_loss_grad W₁ b₁ W₂ b₂ (relu d₁ (dense W₀ b₀ x)) label h_smooth_1 i j,
+   fun i j => mlp_output_total_loss_grad W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label i j⟩
+
 end Proofs.IR
