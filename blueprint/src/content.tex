@@ -617,7 +617,11 @@ architecture chapter closes with an ``MLIR: \emph{operator}'' section that
 takes the chapter's new operator --- convolution, BatchNorm, the residual
 fan-in, depthwise convolution, squeeze-excitation, layer scale, attention ---
 and shows that \emph{its} emitted backward is likewise the rendering of a
-proven derivative. The shared machinery underneath them --- the denoted
+proven derivative. Each of those listings is shown at a small representative
+size --- a few channels, tokens, or units of width. The per-operator proof
+beneath is dimension-parameterized and the printer emits the identical graph
+at production scale, so each section just states its toy shape and moves on.
+The shared machinery underneath them --- the denoted
 intermediate representation, the bridge theorems that tie it to the proofs,
 the printer that turns it into the text above, and the execution oracle that
 checks the result on the GPU --- is the subject of
@@ -1578,7 +1582,7 @@ that the rest of the book leans on.
   \label{ax:pdiv_dense}
   \lean{Proofs.pdiv_dense}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, ax:pdiv_finset_sum, ax:pdiv_reindex}
+  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
   \(\partial (Wx + b)_j / \partial x_i = W_{ij}\). Derived from foundation rules.
 \end{theorem}
 
@@ -1591,7 +1595,7 @@ Mechanical; see \leandocref{Proofs.pdiv\_dense}.
   \label{ax:pdiv_dense_W}
   \lean{Proofs.pdiv_dense_W}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, ax:pdiv_finset_sum, ax:pdiv_reindex}
+  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
   \(\partial (Wx + b)_j / \partial W_{i'j'} = x_{i'} \delta_{jj'}\). Phase 7;
   derived from foundation rules over the flatten bijection.
 \end{theorem}
@@ -1989,10 +1993,8 @@ theorem is precisely the claim that this text computes
     exactly zero ReLU has no derivative; the emitted \texttt{compare GT 0}
     sends that case to $0$, and the bridge is permitted to fail on that
     measure-zero set.
-  \item \textbf{Representative scale.} The listing is shown at a small
-    size; the trained network is $784{\to}512{\to}512{\to}10$. The proof
-    is dimension-parameterized and the printer emits the same graph at
-    every width.
+  \item \textbf{Representative scale.} Shown small; the trained net is
+    $784{\to}512{\to}512{\to}10$.
   \item \textbf{Trusted surface.} The printer's faithfulness, IREE's
     lowering, and \texttt{float32} $\approx \mathbb{R}$ are tested, not
     proved; the full accounting is in Appendix~\ref{sec:verified_codegen}.
@@ -2182,7 +2184,7 @@ Mechanical; see \leandocref{Proofs.conv2d\_has\_vjp3}.
   \label{ax:conv2d_weight_grad_has_vjp}
   \lean{Proofs.conv2d_weight_grad_has_vjp}
   \leanok
-  \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_finset_sum, ax:pdiv_reindex}
+  \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex}
   Phase 7: the transpose-trick formula via \texttt{Kernel4.flatten}.
   Derived from foundation rules.
 \end{theorem}
@@ -2512,8 +2514,7 @@ whole CNN backward is covered, op by op.
     where every $2\times2$ window has a strict argmax; the tie set is the
     codegen trust boundary for pooling.
   \item \textbf{Representative scale} --- $1{\to}2$ channels at $4\times4$
-    rather than the production $1{\to}32$ net at $28\times28$; the per-op
-    proofs are dimension-parameterized.
+    (production: $1{\to}32$ at $28\times28$).
 \end{itemize}
 
 \chapter{CIFAR with BatchNorm}
@@ -2701,7 +2702,7 @@ Mechanical; see \leandocref{Proofs.pdiv\_bnAffine}.
   \label{ax:pdiv_bnCentered}
   \lean{Proofs.pdiv_bnCentered}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, ax:pdiv_id, ax:pdiv_finset_sum, ax:pdiv_reindex}
+  \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, ax:pdiv_id, thm:pdiv_finset_sum, ax:pdiv_reindex}
   \(\partial (x_j - \mu) / \partial x_i = \delta_{ij} - 1/n\).
   Derived from foundation rules.
 \end{theorem}
@@ -3075,9 +3076,7 @@ built on this foundation.
     $\mathrm{istd}^3$; given $\varepsilon > 0$ the bridge is unconditional
     (smooth everywhere, with no smooth-point exclusion, unlike ReLU and
     max-pool).
-  \item \textbf{Representative scale} ($n = 4$); the proof is
-    dimension-parameterized and the printer emits the same graph at every
-    width.
+  \item \textbf{Representative scale} ($n = 4$).
 \end{itemize}
 
 The next chapter (\S~\ref{chap:residual}) adds residual connections
@@ -3416,9 +3415,8 @@ Chapters~\ref{chap:cnn} and~\ref{chap:bn}; only the fan-in is new here.
   \item \textbf{The post-add ReLU is a smooth-point bridge} (no
     pre-activation exactly zero), and the two BatchNorms inside $f$ carry
     their own $\epsilon > 0$ conditions from Chapter~\ref{chap:bn}.
-  \item \textbf{Representative scale} --- a constant-width two-channel block
-    at $4\times4$ rather than the production stem-to-512 net; the same
-    \texttt{\%dadd} fan-in is repeated for each of the sixteen blocks.
+  \item \textbf{Representative scale} --- a two-channel block at $4\times4$;
+    the same \texttt{\%dadd} fan-in repeats for all sixteen blocks.
 \end{itemize}
 
 \section{What's in the production recipe?}
@@ -3942,7 +3940,7 @@ Mechanical; see \leandocref{Proofs.depthwise\_has\_vjp3}.
   \label{ax:depthwise_weight_grad_has_vjp3}
   \lean{Proofs.depthwise_weight_grad_has_vjp3}
   \leanok
-  \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_finset_sum, ax:pdiv_reindex}
+  \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex}
   Phase 7: reuses \(\HasVJPthree\) directly since \texttt{DepthwiseKernel}
   is definitionally \(\mathsf{Tensor3}\). Derived from foundation rules.
 \end{theorem}
@@ -4153,8 +4151,7 @@ bridge theorem is the claim that this graph computes
   \item \textbf{relu6 is a smooth-point bridge} --- MobileNetV2's clamp to
     $[0,6]$ has no derivative where a pre-activation sits exactly at $0$ or
     $6$, and the bridge may fail only on that measure-zero set.
-  \item \textbf{Representative scale} (two channels at $4\times4$); the proof
-    is dimension-parameterized.
+  \item \textbf{Representative scale} (two channels at $4\times4$).
 \end{itemize}
 
 \section{ImageNet recipe}
@@ -4627,13 +4624,18 @@ two. That final \texttt{add} \emph{is} the product rule: the gradient that
 passes straight through the channel, plus the gradient that re-tunes the
 gate, summed.
 
+\medskip\noindent As with attention, the listing shows the new structural
+move --- the product-rule fan-in --- and elides the work behind it: the
+\texttt{// gate VJP} comment stands for the excite MLP's own backward
+(sigmoid, dense, swish, dense), each carried by this chapter's bridges and
+composed in \texttt{seBlockFull\_has\_vjp}.
+
 \medskip\noindent\textbf{Caveats.}
 \begin{itemize}
   \item \textbf{The SE fan-in carries no kink condition} --- swish and
     sigmoid are smooth everywhere; the only smooth-point caveats in an
     MBConv come from its BatchNorms ($\epsilon > 0$).
-  \item \textbf{Representative scale} (four mid-channels, reduced to two in
-    the squeeze); the proof is dimension-parameterized.
+  \item \textbf{Representative scale} (four mid-channels, two in the squeeze).
 \end{itemize}
 
 \section{ImageNet recipe}
@@ -5158,45 +5160,32 @@ ConvNeXt-T       & 27.83M  & 790 KB   & 2030 ms   & 13.3 h   & 84.94\% \\
 
 \section{MLIR: Layer Scale}
 
-\noindent\textbf{What is already proven.} Layer scale is a
-per-channel learnable diagonal, $\mathrm{layerScale}(\gamma, x) = \gamma
-\odot x$. Its Jacobian is diagonal, so it is its own adjoint:
-\texttt{layerScale\_has\_vjp} proves $\mathrm{back}(x, dy) = \gamma \odot
-dy$ --- the backward multiplies by the \emph{same} $\gamma$ the forward did.
-The full block is $\mathrm{residual}(\mathrm{layerScale} \circ
-\mathrm{project} \circ \mathrm{gelu} \circ \mathrm{expand} \circ
-\mathrm{LN} \circ \mathrm{depthwise})$, and
-\texttt{convNextBlock\_has\_vjp} composes the six stages through
-\texttt{vjp\_comp\_at}.
-
-\medskip\noindent\textbf{The gap, and how we close it.} The emitted graph
-denotes \texttt{layerScale\_has\_vjp}'s backward exactly. Here is the block's
-tail --- the layer scale, the identity skip, and the start of the backward:
+Layer scale is a per-channel learnable diagonal,
+$\mathrm{layerScale}(\gamma, x) = \gamma \odot x$ --- the simplest operator in
+this series. Its Jacobian is diagonal, so it is its own adjoint:
+\texttt{layerScale\_has\_vjp} proves $\mathrm{back}(x, dy) = \gamma \odot dy$,
+the backward multiplying by the \emph{same} $\gamma$ the forward did. There is
+nothing to bridge past that identity --- the emitted graph is two
+\texttt{multiply}s against one tensor:
 
 \begin{verbatim}
 // ConvNeXt block tail:  out = x + layerScale(gamma, project(...))
-%ls = stablehlo.multiply %gls, %pr : tensor<1x2x4x4xf32> // gamma (*) pr
-%out = stablehlo.add %x, %ls : tensor<1x2x4x4xf32> // + identity skip
+%ls  = stablehlo.multiply %gls, %pr   : tensor<1x2x4x4xf32> // gamma (*) pr
+%out = stablehlo.add %x, %ls          : tensor<1x2x4x4xf32> // + identity skip
 // backward, cotangent %dOut:  d(pr) = gamma (*) d(out)
 %dpr = stablehlo.multiply %gls, %dOut : tensor<1x2x4x4xf32>
 \end{verbatim}
 
-\noindent Read it against the Jacobian: the forward \texttt{multiply \%gls,
-\%pr} and the backward \texttt{multiply \%gls, \%dOut} are the \emph{same}
-operation against the \emph{same} $\gamma$ tensor \texttt{\%gls} --- a
-diagonal map is its own transpose, so its VJP is itself. The rest of the
-block backward (the GELU, LayerNorm, pointwise, and depthwise input-VJPs)
-chains through the bridges of the previous chapters.
-
-\medskip\noindent\textbf{Caveats.}
-\begin{itemize}
-  \item \textbf{No kink anywhere.} This is the first block in the book whose
-    every bridge is unconditional --- GELU and LayerNorm are smooth (the
-    latter given $\epsilon > 0$), and layer scale and the convolutions are
-    linear; the only hypothesis anywhere is the LayerNorm's $\epsilon > 0$.
-  \item \textbf{Representative scale} (two channels at $4\times4$); the proof
-    is dimension-parameterized.
-\end{itemize}
+\noindent The forward \texttt{multiply \%gls, \%pr} and the backward
+\texttt{multiply \%gls, \%dOut} are the same op against the same $\gamma$
+tensor: a diagonal map is its own transpose, so its VJP is itself. The
+identity skip is the residual fan-in of Chapter~\ref{chap:residual}; the
+surrounding GELU, LayerNorm, and convolution backwards reuse their bridges ---
+and, uniquely in this book, every one is unconditional (the only hypothesis
+anywhere is LayerNorm's $\epsilon > 0$). The full block is
+$\mathrm{residual}(\mathrm{layerScale} \circ \mathrm{project} \circ
+\mathrm{gelu} \circ \mathrm{expand} \circ \mathrm{LN} \circ
+\mathrm{depthwise})$, composed by \texttt{convNextBlock\_has\_vjp}.
 
 \section{Data Augmentation}
 
@@ -6178,6 +6167,14 @@ returns thrice and adds. The softmax-weighted $dQ,dK,dV$ that feed the
 \texttt{dot\_general}s come from the proven \texttt{sdpa\_back\_Q/K/V}, and
 the surrounding LayerNorm and output projection chain through their bridges.
 
+\medskip\noindent One honesty note: the hard part of attention is in that
+first comment. This listing is the \emph{projection} fan-in --- three linear
+adjoints and two adds --- while the softmax backward that couples every token
+to every other (\texttt{softmax\_has\_vjp}, \S~\ref{sec:attention_proofs}) is
+what \texttt{// SDPA.back} stands in for. We show the fan-in because it is the
+new \emph{structural} move; the coupled core is carried by the proofs of
+\S~\ref{sec:attention_proofs}.
+
 \medskip\noindent With attention pinned, the verified-codegen thread covers
 every operator in the modern vision stack --- dense, convolution, BatchNorm,
 residual, depthwise, squeeze-excite, layer scale, and attention --- each
@@ -6188,9 +6185,7 @@ pieces: denoted IR, bridge theorem, printer.
 \begin{itemize}
   \item \textbf{The attention bridge is unconditional} --- softmax and the
     linear projections are smooth everywhere, with no smooth-point clause.
-  \item \textbf{Representative scale} (two tokens, $d = 4$, one head); the
-    proof is dimension-parameterized and the printer emits the same graph at
-    every sequence length and head count.
+  \item \textbf{Representative scale} (two tokens, $d = 4$, one head).
 \end{itemize}
 
 \section{Data Augmentation}
