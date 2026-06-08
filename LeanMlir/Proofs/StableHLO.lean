@@ -6,6 +6,7 @@ import LeanMlir.Proofs.Depthwise
 import LeanMlir.Proofs.MobileNetV2
 import LeanMlir.Proofs.LayerNorm
 import LeanMlir.Proofs.EfficientNet
+import LeanMlir.Proofs.ConvNeXt
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 2: the linear classifier)
 
@@ -155,6 +156,9 @@ inductive SHlo : Nat → Type where
   -- pre-activation. `den` via the proven `gelu` / `gelu_has_vjp` (LayerNorm.lean).
   | geluF      {n : Nat}                                        : SHlo n → SHlo n
   | geluBack   {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
+  -- Chapter 9 (ConvNeXt): per-element layer-scale `γ ⊙ x` (diagonal linear, `γ : Vec n`
+  -- over the flattened `c·h·w` map). `den` via the proven `layerScale` (ConvNeXt.lean).
+  | layerScaleF {n : Nat} (γName : String) (γ : Vec n)          : SHlo n → SHlo n
   -- Chapter 10 (ViT): ROW-softmax forward — each of the `m` rows of an `[m,n]`
   -- matrix (flattened to `Vec (m*n)`, row-major) gets the 1-D `softmax` over its
   -- `n` columns (`reduce add` over the LAST axis, broadcast, divide — NO max-shift,
@@ -238,6 +242,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .sigmoidBack (n := n) _ x e => (sigmoid_has_vjp n).backward x (den e)
   | _, .geluF (n := n) e => gelu n (den e)
   | _, .geluBack (n := n) _ x e => (gelu_has_vjp n).backward x (den e)
+  | _, .layerScaleF (n := n) _ γ e => layerScale γ (den e)
   | _, .softmaxRowF (m := m) (n := n) e => rowSoftmaxFlat m n (den e)
   | _, .softmaxRowBack (m := m) (n := n) _ preAct e => rowSoftmaxBackFlat m n preAct (den e)
 
@@ -630,6 +635,11 @@ theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 @[simp] theorem geluF_faithful {n : Nat} (e : SHlo n) :
     den (.geluF e) = gelu n (den e) := rfl
 
+/-- **Layer-scale faithfulness.** The per-element multiply `γ ⊙ x` denotes the proven
+    `layerScale` (ConvNeXt.lean). (`rfl`.) -/
+@[simp] theorem layerScaleF_faithful {n : Nat} (γN : String) (γ : Vec n) (e : SHlo n) :
+    den (.layerScaleF γN γ e) = layerScale γ (den e) := rfl
+
 /-- **GELU input-VJP faithfulness.** The closed-form `dy ⊙ gelu'(x)` graph
     (recomputing `tanh(u(x))` from the saved pre-activation `x`) denotes the proven
     GLOBAL `gelu_has_vjp` backward (`dy ⊙ geluScalarDeriv x`; GELU is smooth
@@ -1018,6 +1028,66 @@ theorem mobilenetv2FwdGraphFull_faithful
          ivDepthwise ivProject residual biPath
   simp only [Function.comp_apply]
 
+
+/-- Whole **ConvNeXt forward** graph (representative, ch9 peer of `resnetFwdGraph`): 1×1
+    patchify conv → stem-LN → 2 residual ConvNeXt blocks (depthwise → LN → 1×1 expand →
+    GELU → 1×1 project → layerScale, then `addV` skip) → GAP → head-LN → dense. Scalar LN
+    (`= bnForward`, via `bnF`); uses `geluF` + the new `layerScaleF`. Denotes the proven
+    `convNextForward`. -/
+def convNextFwdGraph {ic c cExp h w kH kW nClasses : Nat}
+    (epsStr : String)
+    (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ)
+    (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ)
+    (Wex₁ : Kernel4 cExp c 1 1) (bex₁ : Vec cExp)
+    (Wpr₁ : Kernel4 c cExp 1 1) (bpr₁ : Vec c) (γls₁ : Vec (c * h * w))
+    (Wdw₂ : DepthwiseKernel c kH kW) (bdw₂ : Vec c) (εn₂ γn₂ βn₂ : ℝ)
+    (Wex₂ : Kernel4 cExp c 1 1) (bex₂ : Vec cExp)
+    (Wpr₂ : Kernel4 c cExp 1 1) (bpr₂ : Vec c) (γls₂ : Vec (c * h * w))
+    (εhd γhd βhd : ℝ)
+    (Wd : Mat c nClasses) (bd : Vec nClasses)
+    (x : Vec (ic * h * w)) : SHlo nClasses :=
+  let patchOut : SHlo (c * h * w) :=
+    .flatConvF (h := h) (w := w) "%Wst" "%bst" Wst bst (.operand "%x" x)
+  let stemLn : SHlo (c * h * w) :=
+    .bnF "%gst" "%btst" epsStr εst γst βst patchOut
+  let b1Body : SHlo (c * h * w) :=
+    .layerScaleF "%gls1" γls₁
+      (.flatConvF (h := h) (w := w) "%Wpr1" "%bpr1" Wpr₁ bpr₁
+        (.geluF (.flatConvF (h := h) (w := w) "%Wex1" "%bex1" Wex₁ bex₁
+          (.bnF "%gn1" "%btn1" epsStr εn₁ γn₁ βn₁
+            (.depthwiseF (h := h) (w := w) "%Wdw1" "%bdw1" Wdw₁ bdw₁ stemLn)))))
+  let b1Out : SHlo (c * h * w) := .addV b1Body stemLn
+  let b2Body : SHlo (c * h * w) :=
+    .layerScaleF "%gls2" γls₂
+      (.flatConvF (h := h) (w := w) "%Wpr2" "%bpr2" Wpr₂ bpr₂
+        (.geluF (.flatConvF (h := h) (w := w) "%Wex2" "%bex2" Wex₂ bex₂
+          (.bnF "%gn2" "%btn2" epsStr εn₂ γn₂ βn₂
+            (.depthwiseF (h := h) (w := w) "%Wdw2" "%bdw2" Wdw₂ bdw₂ b1Out)))))
+  let b2Out : SHlo (c * h * w) := .addV b2Body b1Out
+  let headLn : SHlo c :=
+    .bnF "%ghd" "%bthd" epsStr εhd γhd βhd (.gapF (c := c) (h := h) (w := w) b2Out)
+  denseF "%Wd" "%bd" Wd bd headLn
+
+/-- **ConvNeXt forward faithfulness.** The representative forward graph denotes the proven
+    `convNextForward`. Scalar LN (`layerNormForward = bnForward`); `simp`-based. -/
+theorem convNextFwdGraph_faithful {ic c cExp h w kH kW nClasses : Nat}
+    (epsStr : String)
+    (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ)
+    (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ)
+    (Wex₁ : Kernel4 cExp c 1 1) (bex₁ : Vec cExp)
+    (Wpr₁ : Kernel4 c cExp 1 1) (bpr₁ : Vec c) (γls₁ : Vec (c * h * w))
+    (Wdw₂ : DepthwiseKernel c kH kW) (bdw₂ : Vec c) (εn₂ γn₂ βn₂ : ℝ)
+    (Wex₂ : Kernel4 cExp c 1 1) (bex₂ : Vec cExp)
+    (Wpr₂ : Kernel4 c cExp 1 1) (bpr₂ : Vec c) (γls₂ : Vec (c * h * w))
+    (εhd γhd βhd : ℝ)
+    (Wd : Mat c nClasses) (bd : Vec nClasses)
+    (x : Vec (ic * h * w)) :
+    den (convNextFwdGraph epsStr Wst bst εst γst βst Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ εhd γhd βhd Wd bd x) = convNextForward Wst bst εst γst βst Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ εhd γhd βhd Wd bd x := by
+  simp only [convNextFwdGraph, denseF_faithful, gapF_faithful, geluF_faithful, bnF_faithful,
+             flatConvF_faithful, depthwiseF_faithful, layerScaleF_faithful, den_addV, den_operand]
+  unfold convNextForward convNextBlock convNextBlockBody residual biPath layerNormForward
+  simp only [Function.comp_apply]
+
 -- ════════════════════════════════════════════════════════════════
 -- § Chapter 4 — CNN: whole-chain backward (A2c, the MLP-analog of
 --   `mlpBackGraph_faithful`). The full backward graph denotes the proven
@@ -1177,6 +1247,7 @@ inductive Raw where
   | sigmoidBack (x : String) (n : Nat)     : Raw → Raw
   | geluF      (n : Nat)                   : Raw → Raw
   | geluBack   (x : String) (n : Nat)      : Raw → Raw
+  | layerScaleF (γ : String) (n : Nat)     : Raw → Raw
   | softmaxRowF    (m n : Nat)             : Raw → Raw
   | softmaxRowBack (x : String) (m n : Nat) : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
@@ -1227,6 +1298,7 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .sigmoidBack x _ e    => .sigmoidBack x k (skel e)
   | k, .geluF e              => .geluF k (skel e)
   | k, .geluBack x _ e       => .geluBack x k (skel e)
+  | k, .layerScaleF γN _ e   => .layerScaleF γN k (skel e)
   | _, .softmaxRowF (m := m) (n := n) e => .softmaxRowF m n (skel e)
   | _, .softmaxRowBack (m := m) (n := n) x _ e => .softmaxRowBack x m n (skel e)
 
@@ -1265,6 +1337,7 @@ inductive Tok where
   | sigmoidBack (x : String) (n : Nat)     : Tok
   | geluF      (n : Nat)                   : Tok
   | geluBack   (x : String) (n : Nat)      : Tok
+  | layerScaleF (γ : String) (n : Nat)     : Tok
   | softmaxRowF    (m n : Nat)             : Tok
   | softmaxRowBack (x : String) (m n : Nat) : Tok
 deriving DecidableEq, Repr
@@ -1304,6 +1377,7 @@ def toToks : Raw → List Tok
   | .sigmoidBack x n e => toToks e ++ [.sigmoidBack x n]
   | .geluF n e       => toToks e ++ [.geluF n]
   | .geluBack x n e  => toToks e ++ [.geluBack x n]
+  | .layerScaleF γN n e => toToks e ++ [.layerScaleF γN n]
   | .softmaxRowF m n e    => toToks e ++ [.softmaxRowF m n]
   | .softmaxRowBack x m n e => toToks e ++ [.softmaxRowBack x m n]
 
@@ -1687,6 +1761,11 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {om} = stablehlo.subtract {one}, {s} : {ty [B,n]}\n" ++
             s!"    {sp} = stablehlo.multiply {s}, {om} : {ty [B,n]}\n" ++
             s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
+  | .layerScaleF gN n, r :: st => do
+      -- per-element layer-scale `γ ⊙ x`: broadcast γ:[n] over the batch, then multiply.
+      let gb ← fresh; let o ← fresh
+      pure (s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [n]}) -> {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.multiply {r}, {gb} : {ty [B,n]}\n", o :: st)
   | .geluF n, r :: st => do
       -- gelu forward (tanh approximation): y = 0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³))).
       -- Smooth everywhere (no kink/mask); `stablehlo.tanh` is the only non-arith op.
