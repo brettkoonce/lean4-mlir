@@ -2682,7 +2682,7 @@ and the VJPs that fall out of them. Theorem
 \ref{thm:bn_has_vjp} closes the loop by composing them. The
 forward is three steps, so the chain rule from
 Chapter~\ref{chap:tensor} gives us three Jacobians to multiply,
-and the famous ``BN three-term backward'' is exactly that
+and the ``BN three-term backward'' is exactly that
 product written out.
 
 \section*{The centering term has an indirect path}
@@ -2735,7 +2735,7 @@ the book} where the math actually requires real-analysis machinery
 beyond chain-sum-product; everything else in the framework reduces
 to those three rules.
 
-\section*{The famous three-term backward}
+\section*{The three-term backward}
 
 Compose the three forward steps and apply the product rule on
 \(\hat{x} = (x - \mu) \cdot \mathrm{istd}\). The cross-terms collapse
@@ -2790,7 +2790,7 @@ Chapter~\ref{chap:tensor}. The 3-term backward is the
 centerpiece; affine is a corollary; composition is a one-line
 proof. The structural story of the chapter is: one new
 Mathlib-level analytic dependency (sqrt and recip
-differentiability), one famous formula, and the rest is the same
+differentiability), one formula, and the rest is the same
 chain rule we already had.
 
 \section*{The theorems}
@@ -3109,7 +3109,7 @@ itself out. The proof suite we built in this chapter is what
 mechanically guarantees the BN pass is computing the correct VJP
 at every step --- so the empirical result (``BN lets you train with
 a 5$\times$ bigger learning rate'') rests on a machine-checked
-mathematical claim, not on folklore.
+mathematical claim.
 
 \section{MLIR: BatchNorm}
 
