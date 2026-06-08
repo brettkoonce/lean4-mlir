@@ -98,17 +98,17 @@ def cifarBnVerified : VerifiedNetSpec where
   imageW   := 32
   nClasses := 10
   data     := .cifar
-  layers   := [.conv 3 32 3 1, .bn, .relu, .conv 32 32 3 1, .bn, .relu, .maxPool 2 2,
-               .conv 32 64 3 1, .bn, .relu, .conv 64 64 3 1, .bn, .relu, .maxPool 2 2, .flatten,
+  layers   := [.conv 3 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
+               .conv 32 64 3 1, .bnPerChannel 64, .relu, .conv 64 64 3 1, .bnPerChannel 64, .relu, .maxPool 2 2, .flatten,
                .dense 4096 512, .relu, .dense 512 512, .relu, .dense 512 10]
-  blurb    := "CIFAR-10 CNN + scalar BatchNorm via the VERIFIED renderer (conv→BN→relu ×4, 2 pools, 512→512→10) → IREE FFI → GPU"
+  blurb    := "CIFAR-10 CNN + per-channel BatchNorm via the VERIFIED renderer (conv→BN→relu ×4, 2 pools, 512→512→10) → IREE FFI → GPU"
 
--- conv{W,b} then scalar BN{γ:[],β:[]} ×4, then 3 dense{W,b}.
+-- conv{W,b} then per-channel BN{γ:[c],β:[c]} ×4, then 3 dense{W,b}.
 #guard cifarBnVerified.toSpecs ==
-  #[(#[32, 3, 3, 3], 0), (#[32], 2), (#[], 1), (#[], 2),
-    (#[32, 32, 3, 3], 0), (#[32], 2), (#[], 1), (#[], 2),
-    (#[64, 32, 3, 3], 0), (#[64], 2), (#[], 1), (#[], 2),
-    (#[64, 64, 3, 3], 0), (#[64], 2), (#[], 1), (#[], 2),
+  #[(#[32, 3, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
+    (#[32, 32, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
+    (#[64, 32, 3, 3], 0), (#[64], 2), (#[64], 1), (#[64], 2),
+    (#[64, 64, 3, 3], 0), (#[64], 2), (#[64], 1), (#[64], 2),
     (#[4096, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
 
 /-- ch6 **ResNet-34** on Imagenette 224²: 7×7-s2 stem → BN → relu → maxpool →

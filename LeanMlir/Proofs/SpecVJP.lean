@@ -287,25 +287,25 @@ theorem cifarVerified_fwd_faithful
 
 -- ── CIFAR + scalar BatchNorm ──
 noncomputable def denoteCifarBn (layers : List VLayer)
-    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ γ₁ β₁ : ℝ)
-    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ γ₂ β₂ : ℝ)
-    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ γ₃ β₃ : ℝ)
-    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ γ₄ β₄ : ℝ)
+    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ : ℝ) (γ₁ β₁ : Vec 32)
+    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ : ℝ) (γ₂ β₂ : Vec 32)
+    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ : ℝ) (γ₃ β₃ : Vec 64)
+    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ : ℝ) (γ₄ β₄ : Vec 64)
     (W₅ : Mat 4096 512) (b₅ : Vec 512) (W₆ : Mat 512 512) (b₆ : Vec 512)
     (W₇ : Mat 512 10) (b₇ : Vec 10) : Vec 3072 → Vec 10 :=
   match layers with
-  | [.conv 3 32 3 1, .bn, .relu, .conv 32 32 3 1, .bn, .relu, .maxPool 2 2,
-     .conv 32 64 3 1, .bn, .relu, .conv 64 64 3 1, .bn, .relu, .maxPool 2 2, .flatten,
+  | [.conv 3 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
+     .conv 32 64 3 1, .bnPerChannel 64, .relu, .conv 64 64 3 1, .bnPerChannel 64, .relu, .maxPool 2 2, .flatten,
      .dense 4096 512, .relu, .dense 512 512, .relu, .dense 512 10] =>
       cifarCnnBnForward (h := 8) (w := 8) W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
         W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇
   | _ => fun _ => 0
 
 theorem cifarBnVerified_denote_eq
-    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ γ₁ β₁ : ℝ)
-    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ γ₂ β₂ : ℝ)
-    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ γ₃ β₃ : ℝ)
-    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ γ₄ β₄ : ℝ)
+    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ : ℝ) (γ₁ β₁ : Vec 32)
+    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ : ℝ) (γ₂ β₂ : Vec 32)
+    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ : ℝ) (γ₃ β₃ : Vec 64)
+    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ : ℝ) (γ₄ β₄ : Vec 64)
     (W₅ : Mat 4096 512) (b₅ : Vec 512) (W₆ : Mat 512 512) (b₆ : Vec 512)
     (W₇ : Mat 512 10) (b₇ : Vec 10) :
     denoteCifarBn cifarBnVerified.layers W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
@@ -313,12 +313,12 @@ theorem cifarBnVerified_denote_eq
       = cifarCnnBnForward (h := 8) (w := 8) W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
           W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇ := rfl
 
-/-- **The (scalar-BN) CIFAR spec carries the math.** -/
+/-- **The (per-channel-BN) CIFAR spec carries the math.** -/
 noncomputable def cifarBnVerified_has_vjp
-    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ γ₁ β₁ : ℝ)
-    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ γ₂ β₂ : ℝ)
-    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ γ₃ β₃ : ℝ)
-    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ γ₄ β₄ : ℝ)
+    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ : ℝ) (γ₁ β₁ : Vec 32)
+    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ : ℝ) (γ₂ β₂ : Vec 32)
+    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ : ℝ) (γ₃ β₃ : Vec 64)
+    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ : ℝ) (γ₄ β₄ : Vec 64)
     (W₅ : Mat 4096 512) (b₅ : Vec 512) (W₆ : Mat 512 512) (b₆ : Vec 512)
     (W₇ : Mat 512 10) (b₇ : Vec 10) :
     HasVJP (denoteCifarBn cifarBnVerified.layers W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
@@ -329,13 +329,13 @@ noncomputable def cifarBnVerified_has_vjp
   correct _ _ _ := rfl
 
 open Proofs.StableHLO in
-/-- **Generated (scalar-BN) CIFAR forward MLIR ↔ spec.** (`epsStr` = the rendered ε text;
+/-- **Generated (per-channel-BN) CIFAR forward MLIR ↔ spec.** (`epsStr` = the rendered ε text;
     the denotation uses the real `εᵢ`, so it holds for any string.) -/
 theorem cifarBnVerified_fwd_faithful (epsStr : String)
-    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ γ₁ β₁ : ℝ)
-    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ γ₂ β₂ : ℝ)
-    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ γ₃ β₃ : ℝ)
-    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ γ₄ β₄ : ℝ)
+    (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (ε₁ : ℝ) (γ₁ β₁ : Vec 32)
+    (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (ε₂ : ℝ) (γ₂ β₂ : Vec 32)
+    (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (ε₃ : ℝ) (γ₃ β₃ : Vec 64)
+    (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64) (ε₄ : ℝ) (γ₄ β₄ : Vec 64)
     (W₅ : Mat 4096 512) (b₅ : Vec 512) (W₆ : Mat 512 512) (b₆ : Vec 512)
     (W₇ : Mat 512 10) (b₇ : Vec 10) (x : Vec 3072) :
     den (cifarBnFwdGraph (h := 8) (w := 8) epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
