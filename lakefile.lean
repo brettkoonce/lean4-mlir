@@ -69,7 +69,9 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.StableHLOParse,
              -- M1 (planning/verified_train_step.md): the linear train step bundled
              -- into one SGD-on-certified-softmax-CE-gradient theorem.
-             `LeanMlir.Proofs.LinearTrainStep]
+             `LeanMlir.Proofs.LinearTrainStep,
+             -- M2: the MLP per-layer parameter-gradient assembly (Crux A).
+             `LeanMlir.Proofs.MlpTrainStep]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

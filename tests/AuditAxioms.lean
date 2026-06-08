@@ -19,6 +19,7 @@ import LeanMlir.Proofs.StridedConv
 import LeanMlir.Proofs.ResNet34
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
+import LeanMlir.Proofs.MlpTrainStep
 
 open Proofs
 
@@ -250,6 +251,12 @@ open Proofs
 -- each rendered parameter output denotes the certified SGD step.
 #print axioms StableHLO.linWeightDen_is_loss_descent
 #print axioms StableHLO.linBiasDen_is_certified
+-- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
+-- weight/bias bridges completing all three layers; Crux A).
+#print axioms IR.mlp_layer0_weight_grad_bridge
+#print axioms IR.mlp_layer0_bias_grad_bridge
+#print axioms IR.mlp_layer1_bias_grad_bridge
+#print axioms IR.mlp_layer2_weight_grad_bridge
 -- R4 Stage A, Chapter 3 (MLP): ReLU forward (maximum) + backward (select),
 -- whole-MLP forward (= mlpForward) and backward chain (= mlp_has_vjp_at, the
 -- conditional whole-network VJP at a smooth point).
