@@ -20,6 +20,7 @@ import LeanMlir.Proofs.ResNet34
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
 import LeanMlir.Proofs.MlpTrainStep
+import LeanMlir.Proofs.CnnTrainStep
 
 open Proofs
 
@@ -257,6 +258,9 @@ open Proofs
 #print axioms IR.mlp_layer0_bias_grad_bridge
 #print axioms IR.mlp_layer1_bias_grad_bridge
 #print axioms IR.mlp_layer2_weight_grad_bridge
+-- M3: the CNN convolution parameter-gradient bridges (kernel grad = correlation).
+#print axioms conv_weight_grad_bridge
+#print axioms conv_bias_grad_bridge
 -- R4 Stage A, Chapter 3 (MLP): ReLU forward (maximum) + backward (select),
 -- whole-MLP forward (= mlpForward) and backward chain (= mlp_has_vjp_at, the
 -- conditional whole-network VJP at a smooth point).
