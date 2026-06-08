@@ -12,6 +12,10 @@ blueprint/src/*.paux
 blueprint/src/*.out
 blueprint/src/*.toc
 blueprint/src/*.pdf
+blueprint/src/*.fls
+blueprint/src/*.fdb_latexmk
+blueprint/src/*.xdv
+blueprint/src/*.synctex.gz
 
 # Training logs — ignore at root, curated ones live under logs/ or runs/
 *.log
