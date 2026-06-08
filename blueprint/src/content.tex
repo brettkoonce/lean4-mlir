@@ -853,6 +853,117 @@ Appendix~\ref{app:getting_started} walks you through the toolchain setup,
 and if you're impatient, there's a Docker image that gets you from zero
 to training MNIST in one command.
 
+\section{MLIR: Training Step}
+\label{sec:mlir_training_step}
+
+Section~\ref{sec:mlp_inside_train} made a strong claim about the inner call:
+\emph{one} dispatched \texttt{stablehlo} vmfb does the forward pass, the loss,
+the backward pass, \emph{and} the optimizer update --- no tape, no per-step
+graph construction. This is where we cash it. The ``MLIR: Linear'' section
+above rendered a single operator's backward in isolation; here is the
+\emph{whole} thing the linear classifier compiles to. It is short enough to
+show essentially in full --- only the default \texttt{precision} attributes are
+dropped and the long type signatures wrapped for the page:
+
+\begin{verbatim}
+func.func @linear_train_step(
+    %x: tensor<128x784xf32>,  %W0: tensor<784x10xf32>,
+    %b0: tensor<10xf32>,      %onehot: tensor<128x10xf32>)
+    -> (tensor<784x10xf32>, tensor<10xf32>) {
+  // -- forward + softmax-CE cotangent (rendered from lossCotGraph) --
+  %v0 = stablehlo.dot_general %x, %W0, contracting_dims = [1] x [0]
+          : (tensor<128x784xf32>, tensor<784x10xf32>) -> tensor<128x10xf32>
+  %v1 = stablehlo.broadcast_in_dim %b0, dims = [1]
+          : (tensor<10xf32>) -> tensor<128x10xf32>
+  %v2 = stablehlo.add %v0, %v1 : tensor<128x10xf32>          // logits
+  %v3 = stablehlo.exponential %v2 : tensor<128x10xf32>
+  %v4 = stablehlo.constant dense<0.0> : tensor<f32>
+  %v5 = stablehlo.reduce(%v3 init: %v4)
+          applies stablehlo.add across dimensions = [1]
+          : (tensor<128x10xf32>, tensor<f32>) -> tensor<128xf32>
+  %v6 = stablehlo.broadcast_in_dim %v5, dims = [0]
+          : (tensor<128xf32>) -> tensor<128x10xf32>
+  %v7 = stablehlo.divide %v3, %v6 : tensor<128x10xf32>       // softmax
+  %v8 = stablehlo.subtract %v7, %onehot : tensor<128x10xf32> // dy
+  // -- param grads:  dW0 = x^T . dy,  db0 = sum_batch dy --
+  %sc  = stablehlo.constant dense<0.0> : tensor<f32>
+  %dW0 = stablehlo.dot_general %x, %v8, contracting_dims = [0] x [0]
+           : (tensor<128x784xf32>, tensor<128x10xf32>) -> tensor<784x10xf32>
+  %db0 = stablehlo.reduce(%v8 init: %sc)
+           applies stablehlo.add across dimensions = [0]
+           : (tensor<128x10xf32>, tensor<f32>) -> tensor<10xf32>
+  // -- SGD update:  theta' = theta - lr*grad  (0.00078125 = 0.1 / 128) --
+  %lW0 = stablehlo.constant dense<0.00078125> : tensor<784x10xf32>
+  %sW0 = stablehlo.multiply %dW0, %lW0 : tensor<784x10xf32>
+  %W0n = stablehlo.subtract %W0, %sW0 : tensor<784x10xf32>
+  %lb0 = stablehlo.constant dense<0.00078125> : tensor<10xf32>
+  %sb0 = stablehlo.multiply %db0, %lb0 : tensor<10xf32>
+  %b0n = stablehlo.subtract %b0, %sb0 : tensor<10xf32>
+  return %W0n, %b0n : tensor<784x10xf32>, tensor<10xf32>
+}
+\end{verbatim}
+
+\noindent One function, one straight line of dataflow, no control flow: the
+signature takes the parameters and a batch of data and returns the
+\emph{updated} parameters, $(\theta,\,\text{data}) \mapsto \theta'$. Read it in
+four bands. The first (\texttt{\%v0}--\texttt{\%v8}) fuses the forward pass and
+the loss cotangent --- \texttt{dot\_general} for the logits, the
+\texttt{exp}/\texttt{reduce}/\texttt{divide} softmax, and the \texttt{subtract
+\%onehot} that yields $dy = \partial\mathrm{CE}/\partial\text{logits}$; that
+whole band is the rendering of a single verified graph, \texttt{lossCotGraph},
+certified equal to the softmax--cross-entropy gradient by
+\texttt{lossCotGraph\_isCEgrad}. The second band is the backward pass --- the
+\texttt{dot\_general \%x, \%v8} is exactly the move from the ``MLIR: Linear''
+section, $x^{\!\top} dy$, now serving as the weight gradient, and the
+\texttt{reduce} sums $dy$ over the batch for the bias gradient. The third band
+is the optimizer: scale each gradient by the learning rate and subtract. There
+is no fourth band --- no copy-back, no separate update kernel. Forward, loss,
+backward, and step are one compiled function, which is exactly why
+\S~\ref{sec:mlp_inside_train}'s loop can treat a training step as a single
+dispatch.
+
+\medskip\noindent Two honest notes. \textbf{This is SGD, not Adam.} The
+\texttt{mnistLinear} example runs the \texttt{s4tfBaseline} configuration ---
+plain $\theta' = \theta - \alpha\nabla$ at a constant learning rate --- so the
+update band is three ops per tensor. Turning on \texttt{cfg.useAdam} grows that
+band (the first- and second-moment buffers enter and leave the signature and an
+\texttt{rsqrt} appears) but changes nothing above it; the deeper chapters'
+steps carry that Adam tail, the early ones do not. \textbf{The learning rate is
+folded in.} The weight-gradient \texttt{dot\_general} contracts the batch axis,
+so $dW_0$ is a batch \emph{sum}, not a mean; the constant \texttt{0.00078125}
+is $\alpha/N = 0.1/128$, the per-sample rate that turns that sum back into the
+mean update. Everything else in the listing is, line for line, the rendering of
+a theorem proved earlier in this chapter.
+
+\medskip\noindent That one function is the only heavy thing in the loop that
+drives it. Stripped of logging, the shuffle, and the schedule, the whole of
+\S~\ref{sec:mlp_inside_train}'s \texttt{runTraining} is six lines:
+
+\begin{verbatim}
+p := heInit(spec)                      // params (+ zeroed Adam buffers)
+for epoch in 0..E:
+  for batch in shuffle(data):
+    p := train_step_vmfb(p, batch, lr) // <- the function above
+  if epoch % 10 == 0: eval(p)          // forward-only vmfb
+save(p)
+\end{verbatim}
+
+\noindent Six lines of host control flow around one compiled dispatch. The
+loop shuffles, schedules the learning rate, and counts epochs --- it never
+computes a gradient or touches a tensor. The lone \texttt{train\_step\_vmfb}
+call is the function above, and it is the only place arithmetic happens.
+
+\medskip\noindent\textbf{Where this stands.} As of this writing, the linear
+classifier above is the one model carried all the way through this scheme ---
+its loss, backward, and SGD update each tied to a machine-checked theorem,
+fused into the single step shown and running on GPU. The deeper architectures
+of Part~I and the bestiary are proved operator by operator and code-generated;
+bringing each one's whole training step under the same end-to-end check is in
+progress, one model at a time. Until that work is finished the claims here
+stay scoped to what is done --- but when it is, the book earns its stronger
+sentence, \emph{every architecture in this book trained end-to-end under one
+machine-checked scheme}, and this note retires.
+
 \section{How this book is organized}
 
 \textbf{Part 1: The framework (Chapters 2--10).} One new primitive per
