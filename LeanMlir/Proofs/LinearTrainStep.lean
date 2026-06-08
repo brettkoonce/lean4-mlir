@@ -140,4 +140,110 @@ theorem sgdW_descends_loss_gradient (lr : ℝ) (label : Fin n) (i : Fin m) (j : 
                (Mat.flatten W) (finProdFinEquiv (i, j)) 0 := by
   rw [sgdW_descends_softmaxCE_grad W b x lr label i j, lossWeightGrad_eq_sum W b x label i j]
 
+-- ════════════════════════════════════════════════════════════════
+-- § The rendering half: `renderModuleN` / `denN` — a denotable, renderable
+--   MULTI-OUTPUT train-step module. The forward/loss cotangent is an `SHlo`
+--   rendered ONCE (shared `%dy`, exactly as real MLIR SSA); the updated-parameter
+--   outputs carry both an MLIR render template and an ℝ denotation. Faithfulness
+--   ties `denN` to the certified SGD step (M1). The single-dense `linear` instance
+--   below is the template; deeper nets reuse the same structures with a larger
+--   cotangent subgraph and one (weightOut, biasOut) pair per layer — mechanical.
+-- ════════════════════════════════════════════════════════════════
+
+/-- One updated-parameter output of a multi-result module: its MLIR result type,
+    the SSA name it binds, and the lines computing it from the rendered cotangent
+    `%dy`. Renderable (computable); the `ℝ`-valued denotation lives separately. -/
+structure TrainOut where
+  tyStr  : String
+  result : String
+  emit   : String → String
+
+/-- A multi-output train-step module: the forward+loss cotangent subgraph (an
+    `SHlo`, rendered ONCE → shared `%dy`) plus the updated-parameter outputs. The
+    multi-result generalization of `renderModule`. -/
+structure TrainStepModule (B : Nat) where
+  fname  : String
+  argSig : String
+  cotLen : Nat
+  cot    : SHlo cotLen
+  outs   : List TrainOut
+
+/-- **`renderModuleN`** — render a multi-output module: cotangent once (shared
+    `%dy`), each output's lines, then a tuple `return`. -/
+def renderModuleN {B : Nat} (M : TrainStepModule B) : String :=
+  let (cotBody, dy) := (pretty B M.cot).run' 0
+  let retSig := String.intercalate ", " (M.outs.map (·.tyStr))
+  let tail   := String.join (M.outs.map (fun o => o.emit dy))
+  let rets   := String.intercalate ", " (M.outs.map (·.result))
+  "module @m {\n" ++ s!"  func.func @{M.fname}({M.argSig}) -> ({retSig}) " ++ "{\n" ++
+    cotBody ++ tail ++ s!"    return {rets} : {retSig}\n" ++ "  }\n}\n"
+
+section LinearModule
+variable (B : Nat) (lr : ℝ) (lrStr : String) (label : Fin n)
+
+/-- Weight output `W0' = W0 − lr·dot_general(x, dy)` (batch-contracting outer
+    product), rendered. -/
+def linWeightOut : TrainOut where
+  tyStr  := ty [m, n]
+  result := "%W0n"
+  emit   := fun dy =>
+    s!"    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    s!"    %dW0 = stablehlo.dot_general %x, {dy}, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,m]}, {ty [B,n]}) -> {ty [m,n]}\n" ++
+    s!"    %lW0 = stablehlo.constant dense<{lrStr}> : {ty [m,n]}\n" ++
+    s!"    %sW0 = stablehlo.multiply %dW0, %lW0 : {ty [m,n]}\n" ++
+    s!"    %W0n = stablehlo.subtract %W0, %sW0 : {ty [m,n]}\n"
+
+/-- Bias output `b0' = b0 − lr·reduce(dy)` (batch-sum), rendered. -/
+def linBiasOut : TrainOut where
+  tyStr  := ty [n]
+  result := "%b0n"
+  emit   := fun dy =>
+    s!"    %db0 = stablehlo.reduce({dy} init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [B,n]}, tensor<f32>) -> {ty [n]}\n" ++
+    s!"    %lb0 = stablehlo.constant dense<{lrStr}> : {ty [n]}\n" ++
+    s!"    %sb0 = stablehlo.multiply %db0, %lb0 : {ty [n]}\n" ++
+    s!"    %b0n = stablehlo.subtract %b0, %sb0 : {ty [n]}\n"
+
+/-- The linear train-step module (renderable; the `%onehot` value is a runtime
+    input that `pretty` ignores, so the placeholder cotangent renders identically
+    to the live one). Structural peer of `linearTrainStepModuleV`. -/
+def linTrainStepModule : TrainStepModule B where
+  fname  := "linear_train_step"
+  argSig := s!"%x: {ty [B,m]}, %W0: {ty [m,n]}, %b0: {ty [n]}, %onehot: {ty [B,n]}"
+  cotLen := n
+  cot    := lossCotGraph W b x (fun _ => 0)
+  outs   := [linWeightOut (m := m) (n := n) B lrStr, linBiasOut (n := n) B lrStr]
+
+/-- The two outputs' `ℝ` denotations: the flattened certified weight update and
+    the certified bias update. -/
+noncomputable def linWeightDen : Vec (m * n) := Mat.flatten (sgdW W b x lr label)
+noncomputable def linBiasDen   : Vec n       := sgdB W b x lr label
+
+/-- `denN` — the tuple of per-example output denotations the module computes. -/
+noncomputable def linTrainStepDenN : List (Σ k, Vec k) :=
+  [⟨m * n, linWeightDen W b x lr label⟩, ⟨n, linBiasDen W b x lr label⟩]
+
+/-- **Faithfulness, output 0 (weights).** The rendered weight output denotes
+    *literally* `W − lr·∂(softmax-CE loss)/∂W` (M1 `sgdW_descends_loss_gradient`). -/
+theorem linWeightDen_is_loss_descent (i : Fin m) (j : Fin n) :
+    linWeightDen W b x lr label (finProdFinEquiv (i, j))
+      = W i j - lr *
+          pdiv (fun v : Vec (m * n) => fun _ : Fin 1 =>
+                  crossEntropy n (dense (Mat.unflatten v) b x) label)
+               (Mat.flatten W) (finProdFinEquiv (i, j)) 0 := by
+  rw [linWeightDen, show Mat.flatten (sgdW W b x lr label) (finProdFinEquiv (i, j))
+        = sgdW W b x lr label i j from by simp [Mat.flatten, Equiv.symm_apply_apply]]
+  exact sgdW_descends_loss_gradient W b x lr label i j
+
+/-- **Faithfulness, output 1 (bias).** The rendered bias output denotes the
+    certified `b − lr·(∂logits/∂b · (softmax − onehot))` (M1). -/
+theorem linBiasDen_is_certified (j : Fin n) :
+    linBiasDen W b x lr label j
+      = b j - lr * ∑ i : Fin n,
+          pdiv (fun b' : Vec n => dense W b' x) b j i
+            * (softmax n (mnistLinear W b x) i - oneHot n label i) := by
+  rw [linBiasDen]
+  exact sgdB_descends_softmaxCE_grad W b x lr label j
+
+end LinearModule
+
 end Proofs.StableHLO

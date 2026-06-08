@@ -246,6 +246,10 @@ open Proofs
 #print axioms StableHLO.denseWeightMap_differentiable
 #print axioms StableHLO.lossWeightGrad_eq_sum
 #print axioms StableHLO.sgdW_descends_loss_gradient
+-- M1 rendering half: the multi-output `renderModuleN`/`denN` train-step module —
+-- each rendered parameter output denotes the certified SGD step.
+#print axioms StableHLO.linWeightDen_is_loss_descent
+#print axioms StableHLO.linBiasDen_is_certified
 -- R4 Stage A, Chapter 3 (MLP): ReLU forward (maximum) + backward (select),
 -- whole-MLP forward (= mlpForward) and backward chain (= mlp_has_vjp_at, the
 -- conditional whole-network VJP at a smooth point).
