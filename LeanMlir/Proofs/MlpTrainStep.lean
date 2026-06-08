@@ -296,4 +296,79 @@ theorem mlp_whole_net_weight_grads {d₀ d₁ d₂ d₃ : Nat}
    fun i j => mlp_hidden_total_loss_grad W₁ b₁ W₂ b₂ (relu d₁ (dense W₀ b₀ x)) label h_smooth_1 i j,
    fun i j => mlp_output_total_loss_grad W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label i j⟩
 
+-- ════════════════════════════════════════════════════════════════
+-- § Closing the render — the rendered train step's six param outputs are certified
+--
+-- `mlpTrainStepStructured` (MlpRender.lean) renders `%dWᵢ`/`%dbᵢ` as exactly
+-- `emitWeightGrad`/`emitBiasGrad` at the MLP's activations and the cotangents the
+-- backward chain delivers (`%dy = g`, `%dy1 = mlpCotOut1.denote g`,
+-- `%dy0 = mlpCotOut0.denote g`), then `%θn = θ − lr·∇`. These theorems are the
+-- denotation side: each rendered SGD output equals `θ − lr·(certified per-layer
+-- gradient)`, via the layer bridges. The MLP analogue of `linWeightDen_is_loss_descent`.
+-- Unconditional (the bridges hold for any cotangent `g`).
+-- ════════════════════════════════════════════════════════════════
+
+variable {d₀ d₁ d₂ d₃ : Nat}
+  (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+  (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (g : Vec d₃) (lr : ℝ)
+
+/-- Rendered `%W2n` output = `W₂ − lr·(certified ∂logits/∂W₂ · g)`. -/
+theorem mlp_render_W2_certified (i : Fin d₂) (j : Fin d₃) :
+    W₂ i j - lr * emitWeightGrad (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) Back.cotangent g i j
+      = W₂ i j - lr * ∑ k : Fin d₃,
+          pdiv (fun v : Vec (d₂ * d₃) =>
+                  dense (Mat.unflatten v) b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))))
+               (Mat.flatten W₂) (finProdFinEquiv (i, j)) k * g k := by
+  rw [mlp_layer2_weight_grad_bridge W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) g i j]
+
+/-- Rendered `%W1n` output = `W₁ − lr·(certified ∂p₁/∂W₁ · the chain cotangent)`. -/
+theorem mlp_render_W1_certified (i : Fin d₁) (j : Fin d₂) :
+    W₁ i j - lr *
+        emitWeightGrad (relu d₁ (dense W₀ b₀ x))
+          (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) g i j
+      = W₁ i j - lr * ∑ k : Fin d₂,
+          pdiv (fun v : Vec (d₁ * d₂) => dense (Mat.unflatten v) b₁ (relu d₁ (dense W₀ b₀ x)))
+               (Mat.flatten W₁) (finProdFinEquiv (i, j)) k
+            * (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g k := by
+  rw [mlp_layer1_weight_grad_bridge W₁ b₁ W₂ (relu d₁ (dense W₀ b₀ x))
+        (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))) g i j]
+
+/-- Rendered `%W0n` output = `W₀ − lr·(certified ∂p₀/∂W₀ · the deepest chain cotangent)`. -/
+theorem mlp_render_W0_certified (i : Fin d₀) (j : Fin d₁) :
+    W₀ i j - lr *
+        emitWeightGrad x
+          (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) g i j
+      = W₀ i j - lr * ∑ k : Fin d₁,
+          pdiv (fun v : Vec (d₀ * d₁) => dense (Mat.unflatten v) b₀ x)
+               (Mat.flatten W₀) (finProdFinEquiv (i, j)) k
+            * (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g k := by
+  rw [mlp_layer0_weight_grad_bridge W₀ b₀ W₁ W₂ x (dense W₀ b₀ x)
+        (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))) g i j]
+
+/-- Rendered `%b2n` output = `b₂ − lr·(certified ∂logits/∂b₂ · g)`. -/
+theorem mlp_render_b2_certified (i : Fin d₃) :
+    b₂ i - lr * emitBiasGrad Back.cotangent g i
+      = b₂ i - lr * ∑ j : Fin d₃,
+          pdiv (fun b' : Vec d₃ => dense W₂ b' (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) b₂ i j
+            * g j := by
+  rw [bias_grad_bridge W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) Back.cotangent g i]; rfl
+
+/-- Rendered `%b1n` output = `b₁ − lr·(certified ∂p₁/∂b₁ · the chain cotangent)`. -/
+theorem mlp_render_b1_certified (i : Fin d₂) :
+    b₁ i - lr * emitBiasGrad (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) g i
+      = b₁ i - lr * ∑ j : Fin d₂,
+          pdiv (fun b' : Vec d₂ => dense W₁ b' (relu d₁ (dense W₀ b₀ x))) b₁ i j
+            * (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g j := by
+  rw [mlp_layer1_bias_grad_bridge W₁ b₁ W₂ (relu d₁ (dense W₀ b₀ x))
+        (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))) g i]
+
+/-- Rendered `%b0n` output = `b₀ − lr·(certified ∂p₀/∂b₀ · the deepest chain cotangent)`. -/
+theorem mlp_render_b0_certified (i : Fin d₁) :
+    b₀ i - lr * emitBiasGrad (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) g i
+      = b₀ i - lr * ∑ j : Fin d₁,
+          pdiv (fun b' : Vec d₁ => dense W₀ b' x) b₀ i j
+            * (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g j := by
+  rw [mlp_layer0_bias_grad_bridge W₀ b₀ W₁ W₂ x (dense W₀ b₀ x)
+        (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))) g i]
+
 end Proofs.IR

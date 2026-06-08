@@ -272,6 +272,14 @@ open Proofs
 #print axioms IR.mlp_input_total_loss_grad
 -- Whole-net capstone: every weight layer's total-loss gradient at once (one statement).
 #print axioms IR.mlp_whole_net_weight_grads
+-- Render close: the rendered MLP train step's six param outputs (W₂',W₁',W₀',b₂',b₁',b₀')
+-- denote θ − lr·(certified per-layer gradient). The denotation side of MlpRender.
+#print axioms IR.mlp_render_W2_certified
+#print axioms IR.mlp_render_W1_certified
+#print axioms IR.mlp_render_W0_certified
+#print axioms IR.mlp_render_b2_certified
+#print axioms IR.mlp_render_b1_certified
+#print axioms IR.mlp_render_b0_certified
 -- R4 Stage A, Chapter 3 (MLP): ReLU forward (maximum) + backward (select),
 -- whole-MLP forward (= mlpForward) and backward chain (= mlp_has_vjp_at, the
 -- conditional whole-network VJP at a smooth point).
