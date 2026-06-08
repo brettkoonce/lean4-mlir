@@ -69,6 +69,79 @@ IREE_BACKEND=rocm IREE_CHIP=gfx1100 IREE_DEVICE=hip \
 - MNIST idx: `/home/skoonce/lean/mnist-lean4/data`.  CIFAR-10 bin: `/home/skoonce/lean/claude_max/lean4-jax/data` (has `cifar-10/`).  Imagenette: needs `<dir>/imagenette/{train.bin@256,val.bin@224}` — locate before running.
 - `ffi/libiree_ffi.so` is a HIP+local-task build; `.venv/bin/iree-compile` supports rocm gfx1100. CPU fallback = `IREE_BACKEND=llvm-cpu IREE_DEVICE=local-task` (slow for wide nets). Single-GPU only. See `memory/lean4-mlir-env-assets.md`.
 
+## ⭐ SESSION HANDOFF — 2026-06-08 (RESUME POINT — read this first)
+
+Ladder per net (A=shape `#guard` · B/C=spec→math+VJP · E=spec→generated-MLIR, forward):
+
+| ch | net | A | B/C | E(fwd) | notes |
+|----|-----|---|-----|--------|-------|
+| 2 | linear | ✅ | ✅ full | ✅ (+cotangent) | 92% |
+| 3 | mlp | ✅ | ✅ full | ✅ fwd+**back** | 97.78% |
+| 4 | cnn | ✅ | ✅ full | ✅ fwd | 98.99% |
+| 5 | cifar / cifar-bn | ✅ | ✅ full | ✅ fwd | ~67% / ~57% — **cifar-bn is SCALAR BN** |
+| 6 | r34 | ✅ | rep (skeleton `resnet34_has_vjp_at`) | ✅ rep (`resnetFwdGraph`, pre-existing) | render uses per-channel BN |
+| 7 | **mnv2** | ✅ | ✅ **FULL** (real strided render) | ✅ **FULL strided** + rep | **the exemplar — full A+B+C+E(fwd) on the real render** |
+| 8 | efficientnet | ✅ | rep | ⏳ needs an **SE/broadcast-mul op** | swish/sigmoid/conv/bn/dw F-ops exist |
+| 9 | convnext | ✅ | rep | ✅ rep (built `layerScaleF` op) | scalar LN |
+| 10 | vit | ✅ | rep (scalar-LN) | 🧱 needs **attention ops** | the wall (only `softmaxRowF` exists) |
+
+All B/C + E ties live in `Proofs/SpecVJP.lean` (NOT in the build aggregator — check with
+`lake env lean LeanMlir/Proofs/SpecVJP.lean`); the forward graphs + faithfulness live in
+`Proofs/StableHLO.lean`. Commits `8e9ae0b … 60d5ed6` on `main`, **NOT pushed** (~86 ahead).
+
+**Key lessons (the expensive map-making this session bought):**
+1. **Full whole-net B/C VJP fold HIT A LEAN WALL** at concrete dims — `vjp_comp_at`+`set` do repeated
+   `isDefEq`/`kabstract` over deeply-nested `@[reducible]` blocks ⇒ >10 min compile (even with opaque
+   named-block defs + explicit `(h:=)(w:=)`). Reverted. **Only mnv2 has full B/C** (built
+   `mobilenetv2Forward_full` + the strided block VJP `invresBodyStrided_has_vjp_at`/`_differentiableAt`,
+   `convBnRelu6Strided*`, `dwBnRelu6Strided*`/`ivDepthwiseStrided`). **Revisit full B/C with
+   `@[irreducible]` blocks or a fold combinator.** The other 4 nets' B/C is REPRESENTATIVE (denote a
+   rep `VLayer` list → the proof's existing `<net>Forward`/skeleton by `rfl` + canonical `HasVJP`).
+2. **E does NOT hit that wall** — it is `simp`-rewriting (op faithfulness lemmas are `@[simp] rfl`), so
+   even the FULL concrete strided mnv2 graph faithfulness compiles in the normal ~35 s. **Full E is
+   tractable where full B/C was not.**
+3. **But forward-E per net first needs every op as an SHlo F-op.** Adding one = ~9 edits across the
+   pipeline (`SHlo`/`Raw`/`Tok` ctors + `den`/`skel`/`toToks`/`emitTok` + `StableHLOParse.parseStack`
+   + the `parseStack_toToks` round-trip) + a `rfl` faithfulness lemma. mnv2/r34 were lucky (all ops
+   existed); convnext needed `layerScaleF` (done). efficientnet needs an SE/broadcast-mul op; vit needs
+   attention. `layerScaleF` (8fdeacb) is the worked example to copy for the next op.
+4. **Formalization (A/B/C/E) is architecture-MATH ⇒ INDEPENDENT of v3-parity** (Adam/aug/cosine/
+   label-smoothing = optimizer/data loop). Don't gate the cheap reps on numerics; reserve the expensive
+   full passes (full B/C; per-channel BN re-spec) for after the architecture is final.
+
+**NEXT (user is taking this on CIFAR — smaller dataset, easy to iterate): BN reconciliation ↓**
+
+## BN reconciliation — the flagged next pass (handoff)
+
+**THE GAP (uniform, not net-by-net):** every VERIFIED PROOF forward uses **scalar-global** `bnForward`
+(one γ/β normalizing over the *whole* `c·h·w` map per example); every RENDER + every UNVERIFIED trainer
+uses **per-channel** BN/LN. These are *different functions*, so today's proofs are about a slightly
+different net than what actually trains. (ViT isn't special — its proof is scalar-LN like the rest, its
+render is per-channel-`[D]` like the rest.)
+
+**Closing it is a BUILD, not new theory** — the per-channel infra already exists and is fully wired:
+- math: `bnPerChannelFlat (oc m ε γ β) : Vec (oc*m) → Vec (oc*m)` + `bnPerChannelFlat_has_vjp` (`Proofs/PerChannelBN.lean`).
+- SHlo op: `bnPerChannelF` + `bnPerChannelF_faithful` (`den = bnPerChannelTensor3`), threaded through den/skel/toToks/emit/parse.
+- the RENDERS already emit `bnPerChannelF` (e.g. r34 committed MLIR — `tests/TestResnet34Fwd.lean`). So
+  only the *proof* side is the scalar holdout. To close: swap scalar `bnForward`/`bnF` →
+  `bnPerChannelFlat`/`bnPerChannelF` in the verified forward + its VJP + its graph faithfulness.
+
+**EVAL-STATS subtlety (decide this first):** the unverified `MainCifarCnnBnTrain` uses EMA running stats
+(true batch-norm, momentum 0.1 per `RESULTS.md`) ⇒ train ≠ eval. The verified scalar `bnForward` is
+PER-EXAMPLE (instance-norm-like) ⇒ train = eval, no EMA mismatch — **that is *why* the verified nets went
+scalar** (it sidesteps the running-stats machinery the proofs don't model). `bnPerChannelFlat` can be
+either: per-example per-channel (`m = h·w`, instance-norm — simplest, keeps train=eval) OR batch
+(`m = N·h·w`, the efficientnet-E5 `[N,C,H,W]↔[C,N·H·W]` bridge — needs running-stats handling for eval).
+**Pick per-example per-channel** unless you want to model running stats in the proof.
+
+**CIFAR-BN files to touch:** VERIFIED = `cifarBnVerified` (`VerifiedNets.lean`) → `cifarCnnBnForward`
+(`CifarCNN.lean`, SCALAR — the 4 conv-bn use scalar `bnForward`) + `cifarBnVerified_has_vjp` +
+`cifarBnFwdGraph_faithful` (E, scalar) (`SpecVJP.lean` / `StableHLO.lean`). UNVERIFIED ref =
+`MainCifarCnnBnTrain.lean` (per-channel + EMA). RECONCILE = pick the BN, rebuild `cifarCnnBnForward` +
+its VJP + its `cifarBnFwdGraph` on `bnPerChannelFlat`/`bnPerChannelF`. CIFAR-10 is small ⇒ fast numeric
+iteration. Once CIFAR-BN is settled, the same swap generalizes to mnv2/efficientnet/convnext (which all
+use scalar BN in their verified forwards today).
+
 ## Status
 
 DONE — full ladder A+B+C+E, GPU-validated:
