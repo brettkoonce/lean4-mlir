@@ -138,4 +138,104 @@ theorem mlp_output_total_loss_grad {d₂ d₃ : Nat}
             * (softmax d₃ (mnistLinear W₂ b₂ a₁) k - oneHot d₃ label k) :=
   StableHLO.lossWeightGrad_eq_sum W₂ b₂ a₁ label i j
 
+/-- **Hidden-layer total-loss fold (conditional).** At a smooth point — the hidden
+    pre-activation `p₁ = dense W₁ b₁ a₀` off the ReLU kinks — the single gradient of the
+    whole softmax-CE loss wrt the hidden weights `W₁` folds, by the chain rule
+    (`pdiv_comp`), into the certified `∂p₁/∂W₁` contracted with the loss gradient at the
+    hidden pre-activation, `∂L/∂p₁`. That inner factor is exactly the cotangent the
+    backward chain delivers at layer 1 (`relu'(p₁) ⊙ (W₂ · (softmax−onehot))`, cf.
+    `mlpCotOut1_denote`). Conditionality is intrinsic: the chain runs back through the
+    ReLU kink, so — unlike the linear / output-layer fold — this needs the smoothness
+    hypothesis. The hidden-layer analogue of `lossWeightGrad_eq_sum`. -/
+theorem mlp_hidden_total_loss_grad {d₁ d₂ d₃ : Nat}
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
+    (a₀ : Vec d₁) (label : Fin d₃) (h_smooth : ∀ k, dense W₁ b₁ a₀ k ≠ 0)
+    (i : Fin d₁) (j : Fin d₂) :
+    pdiv (fun v : Vec (d₁ * d₂) => fun _ : Fin 1 =>
+            crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) label)
+         (Mat.flatten W₁) (finProdFinEquiv (i, j)) 0
+      = ∑ k : Fin d₂,
+          pdiv (fun v : Vec (d₁ * d₂) => dense (Mat.unflatten v) b₁ a₀)
+               (Mat.flatten W₁) (finProdFinEquiv (i, j)) k
+            * pdiv (fun z : Vec d₂ => fun _ : Fin 1 =>
+                     crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
+                   (dense W₁ b₁ a₀) k 0 := by
+  -- `G = loss ∘ dense W₂ ∘ relu` is differentiable at `p₁` (ReLU smooth there).
+  have hG_diff : DifferentiableAt ℝ
+      (fun z : Vec d₂ => fun _ : Fin 1 => crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
+      (dense W₁ b₁ a₀) := by
+    rw [differentiableAt_pi]
+    intro _
+    exact (StableHLO.crossEntropy_differentiable d₃ label).differentiableAt.comp _
+      ((dense_differentiable W₂ b₂).differentiableAt.comp _
+        (relu_differentiableAt_of_smooth d₂ _ h_smooth))
+  -- The loss-of-W₁ map is `G ∘ (W₁-weight-map)`; apply the chain rule.
+  rw [show (fun v : Vec (d₁ * d₂) => fun _ : Fin 1 =>
+              crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) label)
+        = (fun z : Vec d₂ => fun _ : Fin 1 => crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
+            ∘ (fun v : Vec (d₁ * d₂) => dense (Mat.unflatten v) b₁ a₀) from rfl,
+      pdiv_comp _ _ _ ((StableHLO.denseWeightMap_differentiable b₁ a₀) _)
+        (show DifferentiableAt ℝ
+                (fun z : Vec d₂ => fun _ : Fin 1 => crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
+                (dense (Mat.unflatten (Mat.flatten W₁)) b₁ a₀)
+           from by rw [Mat.unflatten_flatten]; exact hG_diff)]
+  -- The inner point `F(flatten W₁) = dense (unflatten (flatten W₁)) b₁ a₀ = dense W₁ b₁ a₀`.
+  simp only [Mat.unflatten_flatten]
+
+/-- **Input-layer total-loss fold (conditional, deepest).** The same fold for the
+    first layer `W₀`, whose chain runs back through *both* ReLUs — so it carries both
+    smoothness hypotheses (the same pair as `mlp_has_vjp_at`). The total loss gradient
+    wrt `W₀` = certified `∂p₀/∂W₀` contracted with the loss gradient at `p₀` (the
+    deepest cotangent the backward chain delivers, cf. `mlpCotOut0_denote`). -/
+theorem mlp_input_total_loss_grad {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃)
+    (h_smooth_0 : ∀ k, dense W₀ b₀ x k ≠ 0)
+    (h_smooth_1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0)
+    (i : Fin d₀) (j : Fin d₁) :
+    pdiv (fun v : Vec (d₀ * d₁) => fun _ : Fin 1 =>
+            crossEntropy d₃
+              (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x))))) label)
+         (Mat.flatten W₀) (finProdFinEquiv (i, j)) 0
+      = ∑ k : Fin d₁,
+          pdiv (fun v : Vec (d₀ * d₁) => dense (Mat.unflatten v) b₀ x)
+               (Mat.flatten W₀) (finProdFinEquiv (i, j)) k
+            * pdiv (fun z : Vec d₁ => fun _ : Fin 1 =>
+                     crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
+                   (dense W₀ b₀ x) k 0 := by
+  have hG_diff : DifferentiableAt ℝ
+      (fun z : Vec d₁ => fun _ : Fin 1 =>
+        crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
+      (dense W₀ b₀ x) := by
+    rw [differentiableAt_pi]
+    intro _
+    have hr1 : DifferentiableAt ℝ (relu d₁) (dense W₀ b₀ x) :=
+      relu_differentiableAt_of_smooth d₁ _ h_smooth_0
+    have hr2 : DifferentiableAt ℝ (relu d₂) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))) :=
+      relu_differentiableAt_of_smooth d₂ _ h_smooth_1
+    have h1 : DifferentiableAt ℝ (fun z : Vec d₁ => dense W₁ b₁ (relu d₁ z)) (dense W₀ b₀ x) :=
+      (dense_differentiable W₁ b₁).differentiableAt.comp (f := relu d₁) _ hr1
+    have h2 : DifferentiableAt ℝ (fun z : Vec d₁ => relu d₂ (dense W₁ b₁ (relu d₁ z)))
+        (dense W₀ b₀ x) :=
+      hr2.comp (f := fun z : Vec d₁ => dense W₁ b₁ (relu d₁ z)) _ h1
+    have h3 : DifferentiableAt ℝ
+        (fun z : Vec d₁ => dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) (dense W₀ b₀ x) :=
+      (dense_differentiable W₂ b₂).differentiableAt.comp
+        (f := fun z : Vec d₁ => relu d₂ (dense W₁ b₁ (relu d₁ z))) _ h2
+    exact (StableHLO.crossEntropy_differentiable d₃ label).differentiableAt.comp
+      (f := fun z : Vec d₁ => dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) _ h3
+  rw [show (fun v : Vec (d₀ * d₁) => fun _ : Fin 1 =>
+              crossEntropy d₃
+                (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x))))) label)
+        = (fun z : Vec d₁ => fun _ : Fin 1 =>
+              crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
+            ∘ (fun v : Vec (d₀ * d₁) => dense (Mat.unflatten v) b₀ x) from rfl,
+      pdiv_comp _ _ _ ((StableHLO.denseWeightMap_differentiable b₀ x) _)
+        (show DifferentiableAt ℝ
+                (fun z : Vec d₁ => fun _ : Fin 1 =>
+                  crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
+                (dense (Mat.unflatten (Mat.flatten W₀)) b₀ x)
+           from by rw [Mat.unflatten_flatten]; exact hG_diff)]
+  simp only [Mat.unflatten_flatten]
+
 end Proofs.IR

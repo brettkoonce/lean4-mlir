@@ -266,6 +266,10 @@ open Proofs
 #print axioms IR.mlpCotOut1_denote
 #print axioms IR.mlpCotOut0_denote
 #print axioms IR.mlp_output_total_loss_grad
+-- The conditional hidden-layer folds: total loss gradient wrt W₁ / W₀ (the chain runs
+-- back through one / two ReLU kinks — discharged at a smooth point).
+#print axioms IR.mlp_hidden_total_loss_grad
+#print axioms IR.mlp_input_total_loss_grad
 -- R4 Stage A, Chapter 3 (MLP): ReLU forward (maximum) + backward (select),
 -- whole-MLP forward (= mlpForward) and backward chain (= mlp_has_vjp_at, the
 -- conditional whole-network VJP at a smooth point).
