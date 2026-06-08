@@ -18,6 +18,7 @@ import LeanMlir.Proofs.StableHLOParse
 import LeanMlir.Proofs.StridedConv
 import LeanMlir.Proofs.ResNet34
 import LeanMlir.Proofs.PerChannelBN
+import LeanMlir.Proofs.LinearTrainStep
 
 open Proofs
 
@@ -235,6 +236,11 @@ open Proofs
 -- SGD update proven (not trusted) for plain SGD on the linear net.
 #print axioms StableHLO.sgdW_descends_certified_grad
 #print axioms StableHLO.sgdB_descends_certified_grad
+-- M1: the linear SGD step bundled to the certified closed-form softmax-CE
+-- gradient (softmax − onehot) contracted with the certified ∂logits/∂θ Jacobian.
+#print axioms StableHLO.lossCot_eq_softmax_sub_onehot
+#print axioms StableHLO.sgdW_descends_softmaxCE_grad
+#print axioms StableHLO.sgdB_descends_softmaxCE_grad
 -- R4 Stage A, Chapter 3 (MLP): ReLU forward (maximum) + backward (select),
 -- whole-MLP forward (= mlpForward) and backward chain (= mlp_has_vjp_at, the
 -- conditional whole-network VJP at a smooth point).

@@ -66,7 +66,10 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.StableHLO,
              -- R4 syntactic core: op-graph serialization round-trip
              -- (parse (toToks (skel a)) = a).
-             `LeanMlir.Proofs.StableHLOParse]
+             `LeanMlir.Proofs.StableHLOParse,
+             -- M1 (planning/verified_train_step.md): the linear train step bundled
+             -- into one SGD-on-certified-softmax-CE-gradient theorem.
+             `LeanMlir.Proofs.LinearTrainStep]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
