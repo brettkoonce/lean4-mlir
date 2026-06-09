@@ -599,3 +599,12 @@ open Proofs
 #print axioms StableHLO.mbExpGraphB_faithful
 #print axioms StableHLO.efficientnetFwdGraphB_full_faithful
 #print axioms efficientnetForwardB_full_has_vjp
+-- ConvNeXt RENDER (planning/convnext_close.md Item A) — the representative 2-block forward graph.
+-- The DELIBERATE CONTRAST to EfficientNet: ConvNeXt's normalization is LayerNorm, which is per-example
+-- separable, so the graph lives at a plain batch-1 index (no batched token layer, no `batchMap`/`bnBatchF`).
+-- The representative `convNextFwdGraph` (stem 1×1 patchify → scalar-LN → block×2 → GAP → head-LN → dense;
+-- tokens flatConvF×5, depthwiseF×2 [7×7], bnF×4 [scalar LN = bnForward over c·h·w], geluF×2, layerScaleF×2,
+-- gapF, denseF, addV×2 residual) denotes the proven `convNextForward` (`convnext_has_vjp`, audited above).
+-- Scalar LN matches the operational render reducing dim `[1]` per example — faithful at batch-1, as for
+-- MNV2/r34. The "text = render of a proven forward graph" forward half (Item A) for ConvNeXt.
+#print axioms StableHLO.convNextFwdGraph_faithful

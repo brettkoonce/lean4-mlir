@@ -56,13 +56,13 @@ Audited (`tests/AuditAxioms.lean`): `convnext_has_vjp[_correct]`, `convnext_has_
 
 ## 2. The four rungs
 
-### Item A — forward graph — ✅ **DONE** (representative; only audit-wiring missing)
-`convNextFwdGraph` + `convNextFwdGraph_faithful` (`StableHLO.lean`) already denote the proven
+### Item A — forward graph — ✅ **DONE** (representative; audit-wired)
+`convNextFwdGraph` + `convNextFwdGraph_faithful` (`StableHLO.lean`) denote the proven
 `convNextForward` at the representative dims, **batch-1** (scalar LN, reduce `[1]` per example — no
-batched index). **TODO:** add `#print axioms StableHLO.convNextFwdGraph_faithful` to `AuditAxioms.lean`
-(it's proven `rfl`-simp; this just records it 3-axiom clean, matching the other nets' forward graphs).
-No new tokens. (Contrast: EfficientNet needed a whole batched-token layer because its BN couples the
-batch; ConvNeXt does not.)
+batched index). **Audit-wired** (`tests/AuditAxioms.lean`, ConvNeXt RENDER section): `#print axioms
+StableHLO.convNextFwdGraph_faithful` ⇒ `[propext, Classical.choice, Quot.sound]`, 3-axiom clean,
+matching the other nets' forward graphs. No new tokens. (Contrast: EfficientNet needed a whole
+batched-token layer because its BN couples the batch; ConvNeXt does not.)
 
 ### Item C — the param close — [NEXT; mostly reuse, two small new families]
 `ConvNeXtClose.lean` — certify each param output `θ − lr·(certified ∂forward/∂θ · cotangent)`:
@@ -101,8 +101,8 @@ is the per-block head start. **Pure-Lean, batch-1** — no batched-VJP machinery
 ---
 
 ## 3. Order & status
-1. **Item A** ✅ DONE — `convNextFwdGraph` + `_faithful` (representative, scalar LN, batch-1). Just wire
-   into `AuditAxioms.lean`.
+1. **Item A** ✅ DONE — `convNextFwdGraph` + `_faithful` (representative, scalar LN, batch-1), now
+   audit-wired into `AuditAxioms.lean` (3-axiom clean).
 2. **Item C** — param close (`ConvNeXtClose.lean`): reuse conv/depthwise/dense bridges; add the two small
    new families (layer-scale `γ`, scalar-LN `γ/β`); pin 7×7 depthwise.
 3. **Item B** — structured render (`tests/TestConvNeXtTrainPC.lean`) + `iree-run-module` parity. All
