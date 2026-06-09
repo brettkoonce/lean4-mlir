@@ -45,12 +45,19 @@ bridges to r34's kernels — the audit-meaningful step (confirms the 7×7 stem a
 the shapes no prior net exercised through these bridges, really are covered). BN/dense are verbatim
 reuse (no kernel to pin). This was *cheaper* than MobileNetV2's Item C.
 
-### Item A — per-channel forward graph — [NEXT, real assembly, mechanical given the MobileNetV2 template]
-`ResNet34RenderPC.lean`: `resnet34FwdGraphFullPC` (per-channel, full 16 blocks + maxpool + 7×7 stem)
-+ `resnet34Forward_full_pc` + `_faithful`. **No new tokens** — `flatConvStridedF`/`flatConvF`/
-`bnPerChannelF`/`reluF`/`maxPoolF`/`addV`/`gapF`/`denseF` all exist; the representative `resnetFwdGraph`
-already shows the residual-block tree shape (`rblk`/`rblkP`, subtree-reuse in `addV`). Extend to
-per-channel + full depth; same `simp`+`unfold` faithfulness recipe as `mobilenetv2FwdGraphFullPC_faithful`.
+### Item A — per-channel forward graph — ✅ **DONE** (2026-06-09)
+`LeanMlir/Proofs/ResNet34RenderPC.lean` (3-axiom clean, audited). Per-channel building blocks
+`cbrStridedPC` (7×7 strided stem conv-bn-relu), `rblkPC` (identity block `relu(F(x)+x)`),
+`rblkPStridedPC` (downsample block `relu(F_s(x)+proj_s(x))`, 3×3 strided projection) — per-channel
+`bnPerChannelTensor3` mirrors of `cbr`/`rblk`/`rblkP`. **No new tokens.** Structured as:
+- **per-block typed graphs + faithfulness** `idBlockGraphPC_faithful` / `downBlockGraphPC_faithful`
+  (each block's token tree denotes its per-channel forward; the residual `addV` reuses the block-input
+  subtree, tree-safe) — the general, reusable core, ~12 params each.
+- **whole-net** `resnet34FwdGraphFullPC` + `resnet34Forward_full_pc` + `resnet34FwdGraphFullPC_faithful`
+  at the render dims (3×224² → 7×7×512, 146 params, shared ε): 7×7 strided stem → maxpool → `[3,4,6,3]`
+  blocks → GAP → dense. The whole-net faithfulness is a single `simp only` chaining the per-block
+  lemmas + stem/maxpool/GAP/dense `_faithful` (compiled in ~2 s). Same recipe as
+  `mobilenetv2FwdGraphFullPC_faithful`, but the per-block-lemma factoring keeps the 16-block proof one line.
 
 ### Item B — structured render — [MECHANICAL given A; *more* token-covered than MobileNetV2]
 `tests/TestResnet34TrainPC.lean`: forward + backward cotangent chain via `pretty`. r34's backward is
@@ -74,8 +81,8 @@ bridges' generic cotangent to it is less from-scratch than MobileNetV2's would b
 
 ## 3. Order & status
 1. **Item C** ✅ DONE — free close, `ResNet34Close.lean`.
-2. **Item A** — per-channel forward graph (next).
-3. **Item B** — structured render + `iree-run-module` parity.
+2. **Item A** ✅ DONE — per-channel forward graph, `ResNet34RenderPC.lean` (per-block + whole-net faithful).
+3. **Item B** — structured render + `iree-run-module` parity (harness ✅ ready: `scripts/render_parity.py`).
 4. **Item D** — optional cotangent-chain polish.
 
 After Item B, r34 is closed both ways (the CIFAR-BN bar). The new work is concentrated in A/B assembly,

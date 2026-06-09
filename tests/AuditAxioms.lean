@@ -26,6 +26,7 @@ import LeanMlir.Proofs.CnnChainClose
 import LeanMlir.Proofs.MobileNetV2Close
 import LeanMlir.Proofs.MobileNetV2RenderPC
 import LeanMlir.Proofs.ResNet34Close
+import LeanMlir.Proofs.ResNet34RenderPC
 
 open Proofs
 
@@ -480,3 +481,13 @@ open Proofs
 #print axioms r34_render_blockConvb_certified
 #print axioms r34_render_downConvW_certified
 #print axioms r34_render_downConvb_certified
+-- ResNet-34 RENDER (Item A) — the PER-CHANNEL-BN typed SHlo forward graph matching the render
+-- (StableHLO's resnetFwdGraph is scalar-bnF + representative; this is per-channel + full depth).
+-- Per-block faithfulness (idBlockGraphPC_faithful / downBlockGraphPC_faithful: each basic block's
+-- token tree denotes its per-channel rblkPC / rblkPStridedPC forward; the residual addV reuses the
+-- block-input subtree) chains into the whole-net resnet34FwdGraphFullPC_faithful (7×7 stem → maxpool
+-- → [3,4,6,3] blocks → GAP → dense, 146 params). The "text = render of a proven graph" forward half
+-- at the render's per-channel BN; prerequisite for the r34 structured render (Item B).
+#print axioms StableHLO.idBlockGraphPC_faithful
+#print axioms StableHLO.downBlockGraphPC_faithful
+#print axioms StableHLO.resnet34FwdGraphFullPC_faithful

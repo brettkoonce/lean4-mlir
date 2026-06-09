@@ -97,7 +97,10 @@ lean_lib «Proofs» where
              -- ResNet-34 close (Item C): a FREE close — every r34 param family certified
              -- by an existing bridge (the 7×7 stem + 3×3 strided projection pinned to the
              -- generic strided conv W/b bridges; no new VJP).
-             `LeanMlir.Proofs.ResNet34Close]
+             `LeanMlir.Proofs.ResNet34Close,
+             -- ResNet-34 render (Item A): the PER-CHANNEL-BN typed SHlo forward graph (full
+             -- 16-block [3,4,6,3] net, 7×7 stem, maxpool) + per-block + whole-net faithfulness.
+             `LeanMlir.Proofs.ResNet34RenderPC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
