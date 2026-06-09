@@ -37,6 +37,7 @@ import LeanMlir.Proofs.ResNet34ChainClose
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
+import LeanMlir.Proofs.ViTClose
 
 open Proofs
 
@@ -666,3 +667,28 @@ open Proofs
 #print axioms vitForward2_has_vjp_correct
 #print axioms mhsa_layer_one_head
 #print axioms StableHLO.vitFwdGraph_faithful
+-- ViT CLOSE (planning/vit_close.md Item C) — the param close, two genuinely-new bridge families.
+-- Per-token dense W/b (the M2 outer-product bridge row-lifted): every row of [N,a] through the same
+-- W:[a,c], so dW = Σ_tokens xᵣ⊗dyᵣ (one dot_general contracting the token axis) and db = Σ_tokens dyᵣ
+-- are the certified Jacobian contractions — covers Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases at every block.
+-- Row-lifted scalar-LN γ/β (the ConvNeXtClose Vec-1 embedding over N token rows; affine in the params
+-- ⇒ no 0<ε): dγ = Σ_r Σ_k dY·x̂ᵣ, dβ = Σ Σ dY — covers all five LN sites. pos_embed: the Jacobian of
+-- patchEmbed_flat in pos is the IDENTITY (broadcast-add) ⇒ dPos = dy. cls_token: a row-0 masked
+-- gather ⇒ dCls = the row-0 slice of the embed cotangent (clsSliceF's shape). The classifier head is
+-- verbatim M2 weight/bias_grad_bridge reuse (audited above). Remaining: the patch-projection conv
+-- Wp/bp over patchEmbed_flat (the M3 pad-eval recipe + CLS/pos plumbing) — the § E follow-up.
+#print axioms pdiv_rowDense_W
+#print axioms vit_rowDenseW_grad_bridge
+#print axioms vit_rowDenseb_grad_bridge
+#print axioms vit_render_rowdenseW_certified
+#print axioms vit_render_rowdenseb_certified
+#print axioms pdiv_rowLN_gamma
+#print axioms pdiv_rowLN_beta
+#print axioms vit_rowlnGamma_grad_bridge
+#print axioms vit_rowlnBeta_grad_bridge
+#print axioms vit_render_rowlngamma_certified
+#print axioms vit_render_rowlnbeta_certified
+#print axioms pdiv_patchEmbed_pos
+#print axioms vit_render_pos_certified
+#print axioms pdiv_patchEmbed_cls
+#print axioms vit_render_cls_certified

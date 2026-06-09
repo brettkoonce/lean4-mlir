@@ -122,7 +122,12 @@ lean_lib «Proofs» where
              -- ViT close (Item A): the distinct-param 2-block ViT forward (vitForward2 +
              -- whole-net VJP) and the heads=1 token forward graph + faithfulness
              -- (den vitFwdGraph = vitForward2 via mhsa_layer_one_head).
-             `LeanMlir.Proofs.ViTFwdGraph]
+             `LeanMlir.Proofs.ViTFwdGraph,
+             -- ViT close (Item C): the per-token dense W/b family (row-lifted M2
+             -- outer product), row-lifted scalar-LN γ/β, pos-embed identity, CLS
+             -- masked-gather — every representative-ViT param family except the
+             -- patch conv certified.
+             `LeanMlir.Proofs.ViTClose]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

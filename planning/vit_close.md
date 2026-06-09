@@ -156,10 +156,15 @@ explicit dims on stage lemmas.
    (`den vitFwdGraph = vitForward2` at heads := 1). The per-head plumbing collapses via
    `mhsa_layer_one_head` (the `Fin 1 × Fin d ≃ Fin (1·d)` sum reindex); the den side reduces
    through flat↔Mat commutation bridges (`*_flat` lemmas) + `vitBlockSpelled`. Audit 286/286.
-2. **Item C** — param close (`ViTClose.lean`): the per-token dense W/b family + row-lifted scalar-LN
-   γ/β + pos/cls (the two free ones) + M2 reuse for the head. *Independent of Item A* — can go first
-   for a quick win (it certifies the committed ViT-Tiny render's param-grad shapes, the MNV2
-   value-first precedent), but A is the schedule risk and unblocks B.
+2. **Item C — ✅ CLOSED (2026-06-09) except the patch conv.** `LeanMlir/Proofs/ViTClose.lean`:
+   per-token dense W/b (`vit_render_rowdense{W,b}_certified` — the row-lifted M2 family, covers
+   Wq/Wk/Wv/Wo + Wfc1/Wfc2 + biases), row-lifted scalar-LN γ/β
+   (`vit_render_rowln{gamma,beta}_certified`, all 5 sites, no `0<ε`), pos-embed identity
+   (`vit_render_pos_certified`), CLS masked gather (`vit_render_cls_certified`); classifier =
+   verbatim M2 reuse. Audit 301/301. **Remaining (§ E follow-up): patch-projection conv `Wp`/`bp`
+   over `patchEmbed_flat`** — the M3 pad-eval recipe (`pdiv_const_mul_pi_pad_eval`,
+   `Kernel4.unflatten`) + the row-0/CLS masking; the `vit_render_cls_certified` masked-gather
+   trick (pull the conv sum out with a `[n≠0]` mask, constants-in-v throughout) is the template.
 3. **Item B** — structured render `tests/TestViTTrainPC.lean` + iree + ref-only smoke.
 4. **Item D** — optional attention-block cotangent chain (`ViTChainClose.lean`).
 
