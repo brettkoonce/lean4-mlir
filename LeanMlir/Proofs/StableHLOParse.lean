@@ -87,6 +87,17 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .layerScaleF γ n :: ts, e :: st => parseStack ts (.layerScaleF γ n e :: st)
   | .softmaxRowF m n :: ts, e :: st => parseStack ts (.softmaxRowF m n e :: st)
   | .softmaxRowBack x m n :: ts, e :: st => parseStack ts (.softmaxRowBack x m n e :: st)
+  | .matmulF m k n :: ts, b :: a :: st => parseStack ts (.matmulF m k n a b :: st)
+  | .transposeF m n :: ts, e :: st => parseStack ts (.transposeF m n e :: st)
+  | .scaleF s n :: ts, e :: st => parseStack ts (.scaleF s n e :: st)
+  | .lnRowF g b eps m n :: ts, e :: st => parseStack ts (.lnRowF g b eps m n e :: st)
+  | .lnRowBack g x eps m n :: ts, e :: st => parseStack ts (.lnRowBack g x eps m n e :: st)
+  | .denseRowF w b N a c :: ts, e :: st => parseStack ts (.denseRowF w b N a c e :: st)
+  | .denseRowBack w N a c :: ts, e :: st => parseStack ts (.denseRowBack w N a c e :: st)
+  | .patchEmbedF w b cls pos ic H W P N D :: ts, e :: st =>
+      parseStack ts (.patchEmbedF w b cls pos ic H W P N D e :: st)
+  | .clsSliceF N D :: ts, e :: st => parseStack ts (.clsSliceF N D e :: st)
+  | .clsPadF N D :: ts, e :: st => parseStack ts (.clsPadF N D e :: st)
   | .batched tag info :: ts, e :: st => parseStack ts (.batched tag info e :: st)
   | _ :: _, _                    => none  -- stack underflow / malformed
 
@@ -142,6 +153,16 @@ theorem parseStack_toToks (r : Raw) :
   | layerScaleF γ n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | softmaxRowF m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | softmaxRowBack x m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | matmulF m k n a b iha ihb => intro ts st; simp only [toToks, List.append_assoc, iha, ihb]; rfl
+  | transposeF m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | scaleF s n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | lnRowF g b eps m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | lnRowBack g x eps m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | denseRowF w b N a c e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | denseRowBack w N a c e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | patchEmbedF w b cls pos ic H W P N D e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | clsSliceF N D e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | clsPadF N D e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | batched tag info e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
 
 /-- **Serialization round-trip.** `parse` recovers any skeleton from its

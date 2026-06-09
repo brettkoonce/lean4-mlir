@@ -206,6 +206,53 @@ inductive SHlo : Nat → Type where
   -- (`xName`/`preAct`). SMOOTH everywhere (softmax has no kink). `den` via
   -- `rowSoftmaxBackFlat` (= `Mat.flatten ∘ rowSoftmax_has_vjp_mat.backward ∘ Mat.unflatten`).
   | softmaxRowBack {m n : Nat} (xName : String) (preAct : Vec (m*n)) : SHlo (m*n) → SHlo (m*n)
+  -- Chapter 10 (ViT): matrix multiply `C = A·B` on row-major flattened operands
+  -- (reshape both to rank-3, `stablehlo.dot_general` batching dim 0, contract A's
+  -- last axis with B's middle, reshape back). Binary like `.sub`/`.addV`. `den` via
+  -- `matMulFlat` (= flatten ∘ `Mat.mul` ∘ unflatten). The attention BACKWARDS reuse
+  -- this same token — matmul's VJP IS matmul (`dA = dC·Bᵀ`, `dB = Aᵀ·dC`).
+  | matmulF    {m k n : Nat}                                    : SHlo (m*k) → SHlo (k*n) → SHlo (m*n)
+  -- Matrix transpose on the row-major flat layout (`stablehlo.transpose
+  -- dims=[0,2,1]` at rank 3). `den` via `transposeFlat` (= flatten ∘ `Mat.transpose`
+  -- ∘ unflatten). Pairs with `matmulF` to spell the attention backward matmuls.
+  | transposeF {m n : Nat}                                      : SHlo (m*n) → SHlo (n*m)
+  -- Scalar multiply `s · x` (`stablehlo.multiply` against a splat constant) — the
+  -- `1/√d` of SDPA. `sStr` is the rendered literal (denotation-irrelevant); `s`
+  -- carries the den. Linear, so it is its own VJP.
+  | scaleF     {n : Nat} (sStr : String) (s : ℝ)                : SHlo n → SHlo n
+  -- ROW-wise LayerNorm forward over an `[m,n]` row-major flat: each token row gets
+  -- `bnF`'s normalize/affine graph with μ/var reduced over the LAST axis (scalar
+  -- γ/β — LayerNorm IS per-example BN, `layerNormForward := bnForward` defeq).
+  -- `den` via `rowLNFlat` (rowwise `bnForward`).
+  | lnRowF     {m n : Nat} (gName bName epsStr : String) (ε γ β : ℝ) : SHlo (m*n) → SHlo (m*n)
+  -- ROW-wise LayerNorm input-VJP — per row `bnBack`'s consolidated three-term
+  -- gradient, recomputing x̂/istd from the saved flat pre-LN input `x` (`xName`).
+  -- Total in `x`; faithful (= pdiv-Jacobian per row) under `0 < ε`.
+  | lnRowBack  {m n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec (m*n)) : SHlo (m*n) → SHlo (m*n)
+  -- PER-TOKEN dense forward: every row of the `[N,a]` flat through the same
+  -- `W:[a,c]` + bias (`dot_general` contracting the feature axis `[2] x [0]`,
+  -- bias broadcast `dims=[2]`). `den` via `rowDenseFlat` (rowwise `dense`).
+  | denseRowF  {N a c : Nat} (wName bName : String) (W : Mat a c) (b : Vec c) : SHlo (N*a) → SHlo (N*c)
+  -- PER-TOKEN dense input-VJP `dX = dY·Wᵀ` (`dot_general` contracting dy's feature
+  -- axis with W's OUTPUT axis `[2] x [1]`). `den` via `rowDenseBackFlat` (rowwise
+  -- `Mat.mulVec W` = the proven `dense_has_vjp` backward). Linear — global VJP.
+  | denseRowBack {N a c : Nat} (wName : String) (W : Mat a c)   : SHlo (N*c) → SHlo (N*a)
+  -- ViT patch embedding (one coarse token, like `seBlock`): stride-P VALID conv
+  -- (kernel `[D,ic,P,P]`, the non-overlapping patch projection) + bias, channels-
+  -- last transpose + flatten to `[N,D]` tokens, prepend the CLS token, add the
+  -- position embedding. `den` via `patchEmbedFlat` (a local re-spelling of the
+  -- proven `patchEmbed_flat`, Attention.lean — the tie is `rfl` in ViTFwdGraph).
+  | patchEmbedF {ic H W P N D : Nat} (wName bName clsName posName : String)
+      (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N+1) D) :
+      SHlo (ic*H*W) → SHlo ((N+1)*D)
+  -- CLS-token gather: row 0 of the `[N+1,D]` flat (`stablehlo.slice` after
+  -- reshape) — the classifier head's input. `den` via `clsSliceFlat` (= the
+  -- proven `cls_slice_flat`, Attention.lean).
+  | clsSliceF  {N D : Nat}                                      : SHlo ((N+1)*D) → SHlo D
+  -- CLS-slice VJP: scatter `dy` to row 0, zeros elsewhere (`stablehlo.pad` with
+  -- `high = [0, N, 0]`). `den` via `clsPadFlat` (= the proven
+  -- `cls_slice_flat_has_vjp.backward`). Linear — global VJP.
+  | clsPadF    {N D : Nat}                                      : SHlo D → SHlo ((N+1)*D)
   -- Chapter 8 (EfficientNet, BATCHED): a batch-separable op (conv/depthwise/dense/
   -- GAP/SE) lifted to `N` examples by `batchMap`; `den` is `batchMap N (denOp op)`.
   -- The whole EfficientNet forward graph lives at the batched index `N·(c·h·w)`;
@@ -249,6 +296,85 @@ noncomputable def rowSoftmaxBackFlat (m n : Nat) (preAct dy : Vec (m*n)) : Vec (
     let dyi := (Mat.unflatten dy) i
     let s := ∑ j, p j * dyi j
     fun c => p c * (dyi c - s))
+
+-- ── Chapter 10 (ViT) den helpers — flattened matrix/row-wise forms, spelled
+--    with `Mat`/`bnForward`/`dense` so `StableHLO` needn't import `Attention`
+--    (the rfl ties to `rowSoftmax`-style Attention forms live in ViTFwdGraph). ──
+
+/-- **Flattened matrix multiply** `C = A·B` on row-major flat operands.
+    Definitionally `Mat.flatten ∘ Mat.mul ∘ Mat.unflatten²`. -/
+noncomputable def matMulFlat (m k n : Nat) (a : Vec (m*k)) (b : Vec (k*n)) : Vec (m*n) :=
+  Mat.flatten (Mat.mul (Mat.unflatten a) (Mat.unflatten b))
+
+/-- **Flattened transpose** — `Mat.transpose` conjugated by row-major flattening. -/
+noncomputable def transposeFlat (m n : Nat) (v : Vec (m*n)) : Vec (n*m) :=
+  Mat.flatten (Mat.transpose (Mat.unflatten v))
+
+/-- **Row-wise LayerNorm (flattened)** — each of the `m` token rows gets the 1-D
+    `bnForward` over its `n` features (LayerNorm IS per-example BN:
+    `layerNormForward := bnForward` definitionally, LayerNorm.lean). -/
+noncomputable def rowLNFlat (m n : Nat) (ε γ β : ℝ) (v : Vec (m*n)) : Vec (m*n) :=
+  Mat.flatten (fun i => bnForward n ε γ β ((Mat.unflatten v) i))
+
+/-- **Row-wise LayerNorm input-VJP (flattened)** — per row the consolidated
+    three-term `bn_grad_input`, recomputing x̂/istd from the saved pre-LN input. -/
+noncomputable def rowLNBackFlat (m n : Nat) (ε γ : ℝ) (x dy : Vec (m*n)) : Vec (m*n) :=
+  Mat.flatten (fun i => bn_grad_input n ε γ ((Mat.unflatten x) i) ((Mat.unflatten dy) i))
+
+/-- **Per-token dense (flattened)** — every row of the `[N,a]` flat through the
+    same `dense W b`. -/
+noncomputable def rowDenseFlat (N a c : Nat) (W : Mat a c) (b : Vec c) (v : Vec (N*a)) :
+    Vec (N*c) :=
+  Mat.flatten (fun i => dense W b ((Mat.unflatten v) i))
+
+/-- **Per-token dense input-VJP (flattened)** — per row `dX = W·dy` (=
+    `(dense_has_vjp W b).backward`'s `Mat.mulVec W`, MLP.lean). -/
+noncomputable def rowDenseBackFlat (N a c : Nat) (W : Mat a c) (dy : Vec (N*c)) :
+    Vec (N*a) :=
+  Mat.flatten (fun i => Mat.mulVec W ((Mat.unflatten dy) i))
+
+/-- **ViT patch embedding (flattened)** — a LOCAL re-spelling of the proven
+    `patchEmbed_flat` (Attention.lean), kept here so `StableHLO` needn't import
+    `Attention` (the tie is an `rfl` lemma in ViTFwdGraph). Output row `n`:
+    CLS token at `n = 0`, else conv-projection of patch `n−1` + bias; plus the
+    position embedding everywhere. -/
+noncomputable def patchEmbedFlat
+    (ic H W patchSize N D : Nat)
+    (W_conv : Kernel4 D ic patchSize patchSize) (b_conv : Vec D)
+    (cls_token : Vec D) (pos_embed : Mat (N + 1) D) :
+    Vec (ic * H * W) → Vec ((N + 1) * D) :=
+  fun img =>
+    fun idx_out =>
+      let n := (finProdFinEquiv.symm idx_out).1
+      let d := (finProdFinEquiv.symm idx_out).2
+      pos_embed n d +
+        (if n.val = 0 then
+          cls_token d
+         else
+          b_conv d +
+          ∑ c : Fin ic, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
+            W_conv d c kh kw *
+              (let W' := W / patchSize
+               let p := n.val - 1
+               let h' := p / W'
+               let w' := p % W'
+               let hh := h' * patchSize + kh.val
+               let ww := w' * patchSize + kw.val
+               if hpad : hh < H ∧ ww < W then
+                 img (finProdFinEquiv (finProdFinEquiv (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
+               else 0))
+
+/-- **CLS slice (flattened)** — gather row 0 of the `[N+1,D]` flat (= the proven
+    `cls_slice_flat`, Attention.lean; tie is `rfl` in ViTFwdGraph). -/
+noncomputable def clsSliceFlat (N D : Nat) (v : Vec ((N+1)*D)) : Vec D :=
+  fun k => v (finProdFinEquiv ((0 : Fin (N + 1)), k))
+
+/-- **CLS pad (flattened)** — scatter `dy` to row 0, zeros elsewhere (= the proven
+    `cls_slice_flat_has_vjp.backward`; tie is `rfl` in ViTFwdGraph). -/
+noncomputable def clsPadFlat (N D : Nat) (dy : Vec D) : Vec ((N+1)*D) :=
+  fun idx =>
+    let p := finProdFinEquiv.symm idx
+    if p.1 = (0 : Fin (N + 1)) then dy p.2 else 0
 
 /-- **The proven per-example forward of a `BatchableOp`** — exactly the existing
     batch-1 op (`flatConv`/`depthwiseFlat`/`dense`/`globalAvgPoolFlat`/`seBlockFull`/…).
@@ -315,6 +441,17 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .layerScaleF (n := n) _ γ e => layerScale γ (den e)
   | _, .softmaxRowF (m := m) (n := n) e => rowSoftmaxFlat m n (den e)
   | _, .softmaxRowBack (m := m) (n := n) _ preAct e => rowSoftmaxBackFlat m n preAct (den e)
+  | _, .matmulF (m := m) (k := k) (n := n) a b => matMulFlat m k n (den a) (den b)
+  | _, .transposeF (m := m) (n := n) e => transposeFlat m n (den e)
+  | _, .scaleF _ s e => fun i => s * den e i
+  | _, .lnRowF (m := m) (n := n) _ _ _ ε γ β e => rowLNFlat m n ε γ β (den e)
+  | _, .lnRowBack (m := m) (n := n) _ _ _ ε γ x e => rowLNBackFlat m n ε γ x (den e)
+  | _, .denseRowF (N := N) (a := a) (c := c) _ _ W b e => rowDenseFlat N a c W b (den e)
+  | _, .denseRowBack (N := N) (a := a) (c := c) _ W e => rowDenseBackFlat N a c W (den e)
+  | _, .patchEmbedF (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ _ _ _ Wc bc cls pos e =>
+      patchEmbedFlat ic H W P N D Wc bc cls pos (den e)
+  | _, .clsSliceF (N := N) (D := D) e => clsSliceFlat N D (den e)
+  | _, .clsPadF (N := N) (D := D) e => clsPadFlat N D (den e)
   | _, .batchOp (N := N) op e => batchMap N (denOp op) (den e)
   | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ β e =>
       bnBatchLA N oc h w ε γ β (den e)
@@ -767,6 +904,70 @@ theorem geluBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
     Softmax is smooth, so this is a global VJP — no smoothness hypothesis. -/
 theorem softmaxRowBack_faithful {m n : Nat} (xN : String) (preAct : Vec (m*n)) (e : SHlo (m*n)) :
     den (.softmaxRowBack xN preAct e) = rowSoftmaxBackFlat m n preAct (den e) := rfl
+
+/-- **Matrix-multiply faithfulness.** The reshape + batching-dim-0 `dot_general`
+    (contracting `[2] x [1]`) + reshape graph denotes `matMulFlat` (= the flattened
+    `Mat.mul`). Bilinear; the attention backwards reuse this token (`dA = dC·Bᵀ`,
+    `dB = Aᵀ·dC`). (`rfl`, so kept out of the axiom audit — `roundtrip` covers it
+    structurally.) -/
+@[simp] theorem matmulF_faithful {m k n : Nat} (a : SHlo (m*k)) (b : SHlo (k*n)) :
+    den (.matmulF a b) = matMulFlat m k n (den a) (den b) := rfl
+
+/-- **Transpose faithfulness.** `stablehlo.transpose dims=[0,2,1]` (after reshape
+    to rank 3) denotes `transposeFlat` (= the flattened `Mat.transpose`). (`rfl`.) -/
+@[simp] theorem transposeF_faithful {m n : Nat} (e : SHlo (m*n)) :
+    den (.transposeF e) = transposeFlat m n (den e) := rfl
+
+/-- **Scalar-scale faithfulness.** The splat-constant `stablehlo.multiply` denotes
+    pointwise `s · x` — SDPA's `1/√d`. (`rfl`; the `sStr ↔ s` literal agreement is
+    the audited lexical boundary, like `bnF`'s `epsStr`.) -/
+@[simp] theorem scaleF_faithful {n : Nat} (sN : String) (s : ℝ) (e : SHlo n) :
+    den (.scaleF sN s e) = fun i => s * den e i := rfl
+
+/-- **Row-LayerNorm forward faithfulness.** The rank-3 reduce[2]/normalize/affine
+    graph (per token row, scalar γ/β) denotes `rowLNFlat` (rowwise `bnForward` =
+    rowwise `layerNormForward`, definitionally). (`rfl`.) -/
+@[simp] theorem lnRowF_faithful {m n : Nat} (gN bN es : String) (ε γ β : ℝ) (e : SHlo (m*n)) :
+    den (.lnRowF gN bN es ε γ β e) = rowLNFlat m n ε γ β (den e) := rfl
+
+/-- **Row-LayerNorm input-VJP faithfulness.** The per-row consolidated three-term
+    graph (recomputing x̂/istd from the saved pre-LN input, reductions over the row
+    axis) denotes `rowLNBackFlat` (rowwise `bn_grad_input` — faithful to the
+    pdiv-Jacobian per row under `0 < ε`, `bn_input_grad_correct`). -/
+theorem lnRowBack_faithful {m n : Nat} (gN xN es : String) (ε γ : ℝ) (x : Vec (m*n))
+    (e : SHlo (m*n)) :
+    den (.lnRowBack gN xN es ε γ x e) = rowLNBackFlat m n ε γ x (den e) := rfl
+
+/-- **Per-token dense forward faithfulness.** The `dot_general [2] x [0]` + bias
+    broadcast `dims=[2]` graph denotes `rowDenseFlat` (rowwise `dense W b`). (`rfl`.) -/
+@[simp] theorem denseRowF_faithful {N a c : Nat} (wN bN : String) (W : Mat a c) (b : Vec c)
+    (e : SHlo (N*a)) :
+    den (.denseRowF wN bN W b e) = rowDenseFlat N a c W b (den e) := rfl
+
+/-- **Per-token dense input-VJP faithfulness.** The `dot_general [2] x [1]` graph
+    (dy against W's output axis) denotes `rowDenseBackFlat` (rowwise `Mat.mulVec W`
+    = the proven `dense_has_vjp` backward; dense is affine — global VJP). -/
+theorem denseRowBack_faithful {N a c : Nat} (wN : String) (W : Mat a c) (e : SHlo (N*c)) :
+    den (.denseRowBack wN W e) = rowDenseBackFlat N a c W (den e) := rfl
+
+/-- **Patch-embedding faithfulness.** The stride-P VALID conv + channels-last
+    flatten + CLS concatenate + position-embed add graph denotes `patchEmbedFlat`
+    (the local re-spelling of the proven `patchEmbed_flat`; the tie is `rfl` in
+    ViTFwdGraph). (`rfl`, coarse-token like `seBlock`.) -/
+@[simp] theorem patchEmbedF_faithful {ic H W P N D : Nat} (wN bN cN pN : String)
+    (Wc : Kernel4 D ic P P) (bc cls : Vec D) (pos : Mat (N+1) D) (e : SHlo (ic*H*W)) :
+    den (.patchEmbedF wN bN cN pN Wc bc cls pos e)
+      = patchEmbedFlat ic H W P N D Wc bc cls pos (den e) := rfl
+
+/-- **CLS-slice faithfulness.** The row-0 `stablehlo.slice` denotes `clsSliceFlat`
+    (= the proven `cls_slice_flat`). (`rfl`.) -/
+@[simp] theorem clsSliceF_faithful {N D : Nat} (e : SHlo ((N+1)*D)) :
+    den (.clsSliceF e) = clsSliceFlat N D (den e) := rfl
+
+/-- **CLS-pad faithfulness.** The zero-pad scatter-to-row-0 denotes `clsPadFlat`
+    (= the proven `cls_slice_flat_has_vjp.backward`; linear — global VJP). (`rfl`.) -/
+@[simp] theorem clsPadF_faithful {N D : Nat} (e : SHlo D) :
+    den (.clsPadF (N := N) e) = clsPadFlat N D (den e) := rfl
 
 /-- Whole MNIST-CNN **forward** graph:
     `dense ∘ relu ∘ dense ∘ relu ∘ dense ∘ maxPool ∘ relu ∘ conv ∘ relu ∘ conv`. -/
@@ -1357,6 +1558,16 @@ inductive Raw where
   | layerScaleF (γ : String) (n : Nat)     : Raw → Raw
   | softmaxRowF    (m n : Nat)             : Raw → Raw
   | softmaxRowBack (x : String) (m n : Nat) : Raw → Raw
+  | matmulF    (m k n : Nat)               : Raw → Raw → Raw
+  | transposeF (m n : Nat)                 : Raw → Raw
+  | scaleF     (s : String) (n : Nat)      : Raw → Raw
+  | lnRowF     (g b eps : String) (m n : Nat) : Raw → Raw
+  | lnRowBack  (g x eps : String) (m n : Nat) : Raw → Raw
+  | denseRowF  (w b : String) (N a c : Nat) : Raw → Raw
+  | denseRowBack (w : String) (N a c : Nat) : Raw → Raw
+  | patchEmbedF (w b cls pos : String) (ic H W P N D : Nat) : Raw → Raw
+  | clsSliceF  (N D : Nat)                 : Raw → Raw
+  | clsPadF    (N D : Nat)                 : Raw → Raw
   -- EfficientNet batched ops (`batchOp`/`bnBatchF`): the renderable skeleton keeps
   -- only a tag + shape info; the concrete batched StableHLO emission is Item B.
   | batched    (tag : String) (info : List Nat) : Raw → Raw
@@ -1411,6 +1622,17 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .layerScaleF γN _ e   => .layerScaleF γN k (skel e)
   | _, .softmaxRowF (m := m) (n := n) e => .softmaxRowF m n (skel e)
   | _, .softmaxRowBack (m := m) (n := n) x _ e => .softmaxRowBack x m n (skel e)
+  | _, .matmulF (m := m) (k := k) (n := n) a b => .matmulF m k n (skel a) (skel b)
+  | _, .transposeF (m := m) (n := n) e => .transposeF m n (skel e)
+  | k, .scaleF sStr _ e => .scaleF sStr k (skel e)
+  | _, .lnRowF (m := m) (n := n) gN bN es _ _ _ e => .lnRowF gN bN es m n (skel e)
+  | _, .lnRowBack (m := m) (n := n) gN xN es _ _ _ e => .lnRowBack gN xN es m n (skel e)
+  | _, .denseRowF (N := N) (a := a) (c := c) wN bN _ _ e => .denseRowF wN bN N a c (skel e)
+  | _, .denseRowBack (N := N) (a := a) (c := c) wN _ e => .denseRowBack wN N a c (skel e)
+  | _, .patchEmbedF (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) wN bN cN pN _ _ _ _ e =>
+      .patchEmbedF wN bN cN pN ic H W P N D (skel e)
+  | _, .clsSliceF (N := N) (D := D) e => .clsSliceF N D (skel e)
+  | _, .clsPadF (N := N) (D := D) e => .clsPadF N D (skel e)
   | _, .batchOp (N := N) (a := a) (b := b) _ e => .batched "batchOp" [N, a, b] (skel e)
   | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
       .batched "bnBatch" [N, oc, h, w] (skel e)
@@ -1453,6 +1675,16 @@ inductive Tok where
   | layerScaleF (γ : String) (n : Nat)     : Tok
   | softmaxRowF    (m n : Nat)             : Tok
   | softmaxRowBack (x : String) (m n : Nat) : Tok
+  | matmulF    (m k n : Nat)               : Tok
+  | transposeF (m n : Nat)                 : Tok
+  | scaleF     (s : String) (n : Nat)      : Tok
+  | lnRowF     (g b eps : String) (m n : Nat) : Tok
+  | lnRowBack  (g x eps : String) (m n : Nat) : Tok
+  | denseRowF  (w b : String) (N a c : Nat) : Tok
+  | denseRowBack (w : String) (N a c : Nat) : Tok
+  | patchEmbedF (w b cls pos : String) (ic H W P N D : Nat) : Tok
+  | clsSliceF  (N D : Nat)                 : Tok
+  | clsPadF    (N D : Nat)                 : Tok
   | batched    (tag : String) (info : List Nat) : Tok
 deriving DecidableEq, Repr
 
@@ -1494,6 +1726,16 @@ def toToks : Raw → List Tok
   | .layerScaleF γN n e => toToks e ++ [.layerScaleF γN n]
   | .softmaxRowF m n e    => toToks e ++ [.softmaxRowF m n]
   | .softmaxRowBack x m n e => toToks e ++ [.softmaxRowBack x m n]
+  | .matmulF m k n a b    => toToks a ++ toToks b ++ [.matmulF m k n]
+  | .transposeF m n e     => toToks e ++ [.transposeF m n]
+  | .scaleF s n e         => toToks e ++ [.scaleF s n]
+  | .lnRowF g b eps m n e => toToks e ++ [.lnRowF g b eps m n]
+  | .lnRowBack g x eps m n e => toToks e ++ [.lnRowBack g x eps m n]
+  | .denseRowF w b N a c e => toToks e ++ [.denseRowF w b N a c]
+  | .denseRowBack w N a c e => toToks e ++ [.denseRowBack w N a c]
+  | .patchEmbedF w b cls pos ic H W P N D e => toToks e ++ [.patchEmbedF w b cls pos ic H W P N D]
+  | .clsSliceF N D e      => toToks e ++ [.clsSliceF N D]
+  | .clsPadF N D e        => toToks e ++ [.clsPadF N D]
   | .batched tag info e   => toToks e ++ [.batched tag info]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
@@ -1967,6 +2209,158 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {d} = stablehlo.subtract {dn}, {srb} : {ty [B,m,n]}\n" ++
         s!"    {dz} = stablehlo.multiply {p}, {d} : {ty [B,m,n]}\n" ++
         s!"    {o} = stablehlo.reshape {dz} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+  | .matmulF m k n, b :: a :: st => do
+      -- flattened matrix multiply C = A·B: reshape both operands to rank 3,
+      -- dot_general with batching dim 0 (contract A's last axis with B's middle),
+      -- reshape back to flat. (Postorder pushes a then b, so b is on top.)
+      let an ← fresh; let bn ← fresh; let mm ← fresh; let o ← fresh
+      pure (s!"    {an} = stablehlo.reshape {a} : ({ty [B, m*k]}) -> {ty [B,m,k]}\n" ++
+        s!"    {bn} = stablehlo.reshape {b} : ({ty [B, k*n]}) -> {ty [B,k,n]}\n" ++
+        s!"    {mm} = stablehlo.dot_general {an}, {bn}, batching_dims = [0] x [0], contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({ty [B,m,k]}, {ty [B,k,n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {o} = stablehlo.reshape {mm} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+  | .transposeF m n, r :: st => do
+      -- flattened matrix transpose: reshape to rank 3, swap the matrix axes
+      -- (dims = [0, 2, 1], batch axis fixed), reshape back.
+      let xn ← fresh; let t ← fresh; let o ← fresh
+      pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {t} = stablehlo.transpose {xn}, dims = [0, 2, 1] : ({ty [B,m,n]}) -> {ty [B,n,m]}\n" ++
+        s!"    {o} = stablehlo.reshape {t} : ({ty [B,n,m]}) -> {ty [B, n*m]}\n", o :: st)
+  | .scaleF sStr n, r :: st => do
+      -- scalar multiply s·x against a splat constant (SDPA's 1/√d).
+      let c ← fresh; let o ← fresh
+      pure (s!"    {c} = stablehlo.constant dense<{sStr}> : {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.multiply {r}, {c} : {ty [B,n]}\n", o :: st)
+  | .lnRowF gN bN epsStr m n, r :: st => do
+      -- ROW-wise LayerNorm forward: reshape flat [B,m*n] → [B,m,n], then `bnF`'s
+      -- normalize/affine graph at rank 3 — μ/var reduced over the LAST axis [2]
+      -- (per token row), broadcast back over dims [0,1], scalar γ/β (dims = []),
+      -- reshape to flat. LayerNorm IS per-example BN per row.
+      let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
+      let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+      let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+      let xhat ← fresh; let gb ← fresh; let bb ← fresh; let gx ← fresh; let ob ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,m,n]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,m,n]}\n" ++
+        s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,m,n]}\n" ++
+        s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,m,n]}\n" ++
+        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,m,n]}\n" ++
+        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,m,n]}\n" ++
+        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,m,n]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,m,n]}\n" ++
+        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,m,n]}\n" ++
+        s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
+        s!"    {gx} = stablehlo.multiply {xhat}, {gb} : {ty [B,m,n]}\n" ++
+        s!"    {ob} = stablehlo.add {gx}, {bb} : {ty [B,m,n]}\n" ++
+        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+  | .lnRowBack gN xN epsStr m n, r :: st => do
+      -- ROW-wise LN input-VJP: recompute x̂/istd per row from the saved flat
+      -- pre-LN input {xN}, then `bnBack`'s consolidated three-term
+      -- `(istd/n)·(n·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))` (dx̂ = γ·dy) at rank 3, all Σ
+      -- reductions over the row axis [2], reshape to flat. {r} is dy.
+      let dn ← fresh; let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
+      let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+      let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+      let xhat ← fresh; let gb ← fresh; let dxh ← fresh; let sdxr ← fresh; let sdx ← fresh
+      let xd ← fresh; let sxdr ← fresh; let sxd ← fresh; let t1 ← fresh; let i1 ← fresh
+      let xs ← fresh; let i2 ← fresh; let sN ← fresh; let o0 ← fresh; let o ← fresh
+      pure (
+        s!"    {dn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {xn} = stablehlo.reshape {xN} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,m,n]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,m,n]}\n" ++
+        s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,m,n]}\n" ++
+        s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,m,n]}\n" ++
+        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,m,n]}\n" ++
+        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,m,n]}\n" ++
+        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,m,n]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,m,n]}\n" ++
+        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,m,n]}\n" ++
+        s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
+        s!"    {dxh} = stablehlo.multiply {gb}, {dn} : {ty [B,m,n]}\n" ++
+        s!"    {sdxr} = stablehlo.reduce({dxh} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+        s!"    {sdx} = stablehlo.broadcast_in_dim {sdxr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+        s!"    {xd} = stablehlo.multiply {xhat}, {dxh} : {ty [B,m,n]}\n" ++
+        s!"    {sxdr} = stablehlo.reduce({xd} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+        s!"    {sxd} = stablehlo.broadcast_in_dim {sxdr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+        s!"    {t1} = stablehlo.multiply {dxh}, {nf} : {ty [B,m,n]}\n" ++
+        s!"    {i1} = stablehlo.subtract {t1}, {sdx} : {ty [B,m,n]}\n" ++
+        s!"    {xs} = stablehlo.multiply {xhat}, {sxd} : {ty [B,m,n]}\n" ++
+        s!"    {i2} = stablehlo.subtract {i1}, {xs} : {ty [B,m,n]}\n" ++
+        s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,m,n]}\n" ++
+        s!"    {o0} = stablehlo.multiply {sN}, {i2} : {ty [B,m,n]}\n" ++
+        s!"    {o} = stablehlo.reshape {o0} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+  | .denseRowF wN bN N a c, r :: st => do
+      -- per-token dense: reshape [B,N*a] → [B,N,a], dot_general contracting the
+      -- feature axis with W:[a,c] ([2] x [0] — every token row through the same W),
+      -- bias broadcast dims = [2], reshape back. (ViTRender `mlpRowFwd` form.)
+      let xn ← fresh; let dg ← fresh; let bb ← fresh; let ob ← fresh; let o ← fresh
+      pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, N*a]}) -> {ty [B,N,a]}\n" ++
+        s!"    {dg} = stablehlo.dot_general {xn}, {wN}, contracting_dims = [2] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,N,a]}, {ty [a,c]}) -> {ty [B,N,c]}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [2] : ({ty [c]}) -> {ty [B,N,c]}\n" ++
+        s!"    {ob} = stablehlo.add {dg}, {bb} : {ty [B,N,c]}\n" ++
+        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,N,c]}) -> {ty [B, N*c]}\n", o :: st)
+  | .denseRowBack wN N a c, r :: st => do
+      -- per-token dense input-VJP dX = dY·Wᵀ: contract dy's feature axis with W's
+      -- OUTPUT axis ([2] x [1] — the GPU-validated ViTRender backward form).
+      let dn ← fresh; let dg ← fresh; let o ← fresh
+      pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B, N*c]}) -> {ty [B,N,c]}\n" ++
+        s!"    {dg} = stablehlo.dot_general {dn}, {wN}, contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({ty [B,N,c]}, {ty [a,c]}) -> {ty [B,N,a]}\n" ++
+        s!"    {o} = stablehlo.reshape {dg} : ({ty [B,N,a]}) -> {ty [B, N*a]}\n", o :: st)
+  | .patchEmbedF wN bN clsN posN ic H W P N D, r :: st => do
+      -- ViT patch embedding: reshape image to [B,ic,H,W], stride-P VALID conv
+      -- (kernel [D,ic,P,P] — the non-overlapping patch projection) + bias, move
+      -- channels last (transpose [0,2,3,1]) and flatten the patch grid to [B,N,D],
+      -- prepend the broadcast CLS token (concatenate at dim 1), add the position
+      -- embedding (broadcast dims = [1,2]), reshape to flat [B,(N+1)*D].
+      let hp := H / P; let wp := W / P
+      let xn ← fresh; let cv ← fresh; let bb ← fresh; let cb ← fresh
+      let tr ← fresh; let tk ← fresh; let clsb ← fresh; let cat ← fresh
+      let pb ← fresh; let ob ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, ic*H*W]}) -> {ty [B,ic,H,W]}\n" ++
+        s!"    {cv} = stablehlo.convolution({xn}, {wN})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [{P}, {P}], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+        s!" : ({ty [B,ic,H,W]}, {ty [D,ic,P,P]}) -> {ty [B,D,hp,wp]}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [D]}) -> {ty [B,D,hp,wp]}\n" ++
+        s!"    {cb} = stablehlo.add {cv}, {bb} : {ty [B,D,hp,wp]}\n" ++
+        s!"    {tr} = stablehlo.transpose {cb}, dims = [0, 2, 3, 1] : ({ty [B,D,hp,wp]}) -> {ty [B,hp,wp,D]}\n" ++
+        s!"    {tk} = stablehlo.reshape {tr} : ({ty [B,hp,wp,D]}) -> {ty [B,N,D]}\n" ++
+        s!"    {clsb} = stablehlo.broadcast_in_dim {clsN}, dims = [2] : ({ty [D]}) -> {ty [B,1,D]}\n" ++
+        s!"    {cat} = stablehlo.concatenate {clsb}, {tk}, dim = 1 : ({ty [B,1,D]}, {ty [B,N,D]}) -> {ty [B,N+1,D]}\n" ++
+        s!"    {pb} = stablehlo.broadcast_in_dim {posN}, dims = [1, 2] : ({ty [N+1,D]}) -> {ty [B,N+1,D]}\n" ++
+        s!"    {ob} = stablehlo.add {cat}, {pb} : {ty [B,N+1,D]}\n" ++
+        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,N+1,D]}) -> {ty [B, (N+1)*D]}\n", o :: st)
+  | .clsSliceF N D, r :: st => do
+      -- CLS-token gather (row 0): reshape [B,(N+1)*D] → [B,N+1,D], slice the
+      -- first token row, reshape to [B,D]. (ViTRender `headFwd` slice form.)
+      let xn ← fresh; let sl ← fresh; let o ← fresh
+      pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, (N+1)*D]}) -> {ty [B,N+1,D]}\n" ++
+        s!"    {sl} = stablehlo.slice {xn} [0:{B}, 0:1, 0:{D}] : ({ty [B,N+1,D]}) -> {ty [B,1,D]}\n" ++
+        s!"    {o} = stablehlo.reshape {sl} : ({ty [B,1,D]}) -> {ty [B,D]}\n", o :: st)
+  | .clsPadF N D, r :: st => do
+      -- CLS-slice VJP (scatter dy to row 0): reshape [B,D] → [B,1,D], zero-pad
+      -- N token rows below (high = [0, N, 0]), reshape to flat [B,(N+1)*D].
+      -- (ViTRender `headBack` pad form.)
+      let dn ← fresh; let z ← fresh; let pd ← fresh; let o ← fresh
+      pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B,D]}) -> {ty [B,1,D]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {pd} = stablehlo.pad {dn}, {z}, low = [0, 0, 0], high = [0, {N}, 0], interior = [0, 0, 0] : ({ty [B,1,D]}, tensor<f32>) -> {ty [B,N+1,D]}\n" ++
+        s!"    {o} = stablehlo.reshape {pd} : ({ty [B,N+1,D]}) -> {ty [B, (N+1)*D]}\n", o :: st)
   | .batched tag info, r :: st =>
       -- EfficientNet batched op: the concrete batched StableHLO emission (the
       -- `[N,C,H,W]` conv/depthwise/SE fragments + the reduce-[0,2,3] batch-norm)
