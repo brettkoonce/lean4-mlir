@@ -4,10 +4,12 @@ import LeanMlir.Types
 /-! # ViT Item B — structured representative train-step render (proof-rendered)
 
 The ViT peer of `tests/TestConvNeXtTrainPC.lean`, at the **representative** config —
-now **MULTI-HEAD** (the proven graph `vitFwdGraphMHV`, `ViTMultiHead.lean`): patchSize-1
-patch embed (per-pixel dense + CLS + pos) → 2 distinct-param pre-norm transformer blocks
-(**heads = 2, d_head = 16**) → final per-token LN → CLS slice → dense head. CIFAR-shaped:
-3×8² in → 64 patches + CLS = 65 tokens, D = 32, mlpDim = 128, 10 classes, BS = 32.
+now **MULTI-HEAD and DEPTH-12** (the proven graph `vitFwdGraphKMHV`, `ViTDepthK.lean` /
+`ViTMultiHead.lean`): patchSize-1 patch embed (per-pixel dense + CLS + pos) →
+**12 distinct-param pre-norm transformer blocks** (data-driven loop, the `Fin k`
+param-function regime; **heads = 2, d_head = 16**) → final per-token LN → CLS slice →
+dense head. CIFAR-shaped: 3×8² in → 64 patches + CLS = 65 tokens, D = 32, mlpDim = 128,
+10 classes, BS = 32, 4 + 16·12 + 4 = 200 params (the ViT-Tiny param count).
 **Vector-[D] LN γ/β** (the production `ViTRender` form, proven in `ViTVecLN.lean`): each
 LN site is the three-token decomposition `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β`;
 the LN backward reuses `rowScaleF` on the cotangent (diagonal — its own input-VJP) then
@@ -36,7 +38,7 @@ Only the no-SHlo-constructor pieces are hand-emitted, each certified in
 
 No committed same-signature renderer exists (the committed `TestViTTrain.lean` is the
 full ViT-Tiny: 224², depth-12, 3 heads, vector-LN), so validation is the
-`scripts/render_parity.py` ref-only smoke: compile + run on the GPU, all 40 updated
+`scripts/render_parity.py` ref-only smoke: compile + run on the GPU, all 200 updated
 params finite:
   `scripts/render_parity.py --fn vit_rep_train_step --ref /tmp/vitpc/train_step.mlir`
 
@@ -50,6 +52,7 @@ private def IC : Nat := 3     -- input channels
 private def HH : Nat := 8     -- spatial
 private def NP : Nat := 64    -- patches (8×8 at patchSize 1)
 private def NT : Nat := 65    -- tokens (patches + CLS)
+private def DEPTH : Nat := 12 -- transformer blocks (the ViT-Tiny depth)
 private def HD : Nat := 2     -- heads
 private def DH : Nat := 16    -- d_head
 private def DD : Nat := 32    -- embed dim (= heads · d_head)
@@ -298,14 +301,20 @@ private def blkParams (i : Nat) : List (String × String) :=
 
 private def trainStep : String := Id.run do
   let go : StateM Nat String := do
-    -- ═══ forward (proof-rendered; the vitFwdGraph tokens in graph order) ═══
+    -- ═══ forward (proof-rendered; the vitFwdGraphKMHV tokens in graph order) ═══
     let (cE, embed) ← pretty BS (.patchEmbedF (ic := IC) (H := HH) (W := HH) (P := 1)
       (N := NP) (D := DD) "%Wp" "%bp" "%cls" "%pos"
       (zK : Kernel4 DD IC 1 1) zV zV (zM : Mat (NP+1) DD) (.operand "%x" zV))
-    let (cB1, b1) ← fwdBlock 1 embed
-    let (cB2, b2) ← fwdBlock 2 b1.bout
+    let mut fwd := cE
+    let mut blocks : List FNames := []
+    let mut xcur := embed
+    for i in List.range DEPTH do
+      let (c, b) ← fwdBlock (i + 1) xcur
+      fwd := fwd ++ c
+      blocks := blocks ++ [b]
+      xcur := b.bout
     let (cFa, xhF) ← pretty BS (.lnRowF "%one" "%sc" EPS 0 1 0
-      (.operand b2.bout (zV : Vec (NT*DD))))
+      (.operand xcur (zV : Vec (NT*DD))))
     let (cFb, scF) ← pretty BS (.rowScaleF "%gF" (zV : Vec DD)
       (.operand xhF (zV : Vec (NT*DD))))
     let (cF, fl) ← pretty BS (.rowBiasF "%btF" (zV : Vec DD)
@@ -317,25 +326,28 @@ private def trainStep : String := Id.run do
     -- loss cotangent: (softmax(logits) − onehot)/BS
     let (cSub, dyr) ← pretty BS (.sub (.softmaxDiv (.expe (.operand logits (zV : Vec 10))))
       (.operand "%onehot" zV))
-    let fwd := cE ++ cB1 ++ cB2 ++ cFa ++ cFb ++ cF ++ cCs ++ cLog ++ cSub
+    fwd := fwd ++ cFa ++ cFb ++ cF ++ cCs ++ cLog ++ cSub
     -- ═══ backward cotangent chain (proof-rendered) ═══
     let (cDd, cot_cls) ← pretty BS (.dotOut "%Wcls" (zM : Mat DD 10) (.operand "%dy" zV))
     let (cPad, cot_fl) ← pretty BS (.clsPadF (N := NP) (D := DD)
       (.operand cot_cls (zV : Vec DD)))
     let (cFsc, cot_xhF) ← pretty BS (.rowScaleF "%gF" (zV : Vec DD)
       (.operand cot_fl (zV : Vec (NT*DD))))
-    let (cFbk, cot_b2out) ← pretty BS (.lnRowBack "%one" b2.bout EPS 0 1
+    let (cFbk, cot_bLout) ← pretty BS (.lnRowBack "%one" xcur EPS 0 1
       (zV : Vec (NT*DD)) (.operand cot_xhF zV))
-    let (cB2b, cot_b1out, dQ2, dK2, dV2, ch2, cln2_2, cm1_2, cg2, cln1_2) ←
-      bwdBlock 2 cot_b2out b2
-    let (cB1b, cot_embed, dQ1, dK1, dV1, ch1, cln2_1, cm1_1, cg1, cln1_1) ←
-      bwdBlock 1 cot_b1out b1
-    let bwd := s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [BS, 10]}\n" ++
-      cDd ++ cPad ++ cFsc ++ cFbk ++ cB2b ++ cB1b
-    -- ═══ param grads (hand-emitted; Item C certified forms) ═══
-    let paramG :=
-      blockParamGrads 2 b2 dQ2 dK2 dV2 ch2 cln2_2 cm1_2 cg2 cln1_2 cot_b2out ++
-      blockParamGrads 1 b1 dQ1 dK1 dV1 ch1 cln2_1 cm1_1 cg1 cln1_1 cot_b1out ++
+    let mut bwd := s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [BS, 10]}\n" ++
+      cDd ++ cPad ++ cFsc ++ cFbk
+    -- blocks in reverse, threading the cotangent; per-block param grads as we go
+    let mut paramG := ""
+    let mut cot := cot_bLout
+    for (i, b) in (((List.range DEPTH).map (· + 1)).zip blocks).reverse do
+      let (c, cot_in, dQ, dK, dV, ch, cln2, cm1, cg, cln1) ← bwdBlock i cot b
+      bwd := bwd ++ c
+      paramG := paramG ++ blockParamGrads i b dQ dK dV ch cln2 cm1 cg cln1 cot
+      cot := cot_in
+    let cot_embed := cot
+    -- ═══ remaining param grads (hand-emitted; Item C certified forms) ═══
+    paramG := paramG ++
       -- final vector-LN γ/β: per-channel reduces off the saved normalize output
       vecLNParamGrad "%dgF" "%dbtF" xhF cot_fl NT DD ++
       -- pos-embed: dPos = Σ_batch dy at the embed output
@@ -359,10 +371,10 @@ private def trainStep : String := Id.run do
       s!"    %dbcls = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n"
     pure (fwd ++ bwd ++ paramG)
   let body : String := go.run' 0
-  -- ═══ SGD over all 40 params (forward order) + signature ═══
+  -- ═══ SGD over all 4 + 16·DEPTH + 4 params (forward order) + signature ═══
   let allParams : List (String × String) :=
     [("Wp", ty [DD,IC,1,1]), ("bp", ty [DD]), ("cls", ty [DD]), ("pos", ty [NT,DD])]
-    ++ blkParams 1 ++ blkParams 2
+    ++ (List.range DEPTH).flatMap (fun i => blkParams (i + 1))
     ++ [("gF", ty [DD]), ("btF", ty [DD]),
         ("Wcls", ty [DD,10]), ("bcls", ty [10])]
   let upd := String.join (allParams.map (fun (nm, t) => sgd s!"%{nm}" s!"%d{nm}" t))

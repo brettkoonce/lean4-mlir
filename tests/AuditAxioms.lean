@@ -41,6 +41,7 @@ import LeanMlir.Proofs.ViTClose
 import LeanMlir.Proofs.ViTChainClose
 import LeanMlir.Proofs.ViTVecLN
 import LeanMlir.Proofs.ViTMultiHead
+import LeanMlir.Proofs.ViTDepthK
 
 open Proofs
 
@@ -792,3 +793,21 @@ open Proofs
 #print axioms StableHLO.den_headsSumG
 #print axioms StableHLO.vitFwdGraphMH_faithful
 #print axioms StableHLO.vitFwdGraphMHV_faithful
+
+-- ============ ViT scaling pass: depth-k (ViTDepthK.lean) ============
+-- General-depth distinct-param tower at the production form (vector-LN + multi-head). The proven
+-- transformerTower shares ONE param tuple; vitForwardKV takes ps : Fin k -> BlockParamsV (the
+-- 16-field per-block structure) and folds blocks head-first. The whole-net VJP holds at EVERY
+-- depth with only 0 < eps (vjp_comp gluing the bridged transformerBlockV_has_vjp_mat inductively
+-- — the tower induction at distinct params). At k = 2 it IS vitForward2V definitionally
+-- (vitForwardKV_two_eq, rfl). The token-level fold vitBodyGraphKMHV (per-block SSA prefixes
+-- b{i}_) denotes the Mat fold by induction chaining vitBlockGraphMHV_den_aux per block;
+-- vitFwdGraphKMHV_faithful is the depth-general apex. Render: TestViTTrainPC now data-drives
+-- DEPTH = 12 blocks (200 params, the ViT-Tiny count) — iree-compile OK + gfx1100 smoke 200/200.
+#print axioms vitBodyKVFlat_eq_flatten
+#print axioms vitBodyKVFlat_has_vjp
+#print axioms vitForwardKV_two_eq
+#print axioms vitForwardKV_has_vjp
+#print axioms vitForwardKV_has_vjp_correct
+#print axioms StableHLO.vitBodyGraphKMHV_den
+#print axioms StableHLO.vitFwdGraphKMHV_faithful

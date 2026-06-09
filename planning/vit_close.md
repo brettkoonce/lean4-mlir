@@ -220,14 +220,27 @@ ConvNeXt / transformer) at the full MNV2/r34/ConvNeXt bar.**
   slice/pad on cotangents, `dQ/dK/dV = Σ_h pad_h(·)`); iree-compile OK + gfx1100
   ref-only smoke 40/40 finite & non-zero. Audit 354/354. Item C was free as predicted
   (the dense family is shape-generic; grads contract the full `[N,D]` axis).
-- **fused QKV / depth-12** — open. Detailed handoff below.
+- **depth-k — ✅ closed (2026-06-09).** `LeanMlir/Proofs/ViTDepthK.lean`, at the
+  production form (vector-LN + multi-head): `BlockParamsV` (the 16-field per-block
+  structure), `vitBodyKV(Flat)` head-first block folds, `vitBodyKVFlat_has_vjp` by
+  induction (the tower induction at DISTINCT per-block params — `vjp_comp` gluing the
+  bridged `transformerBlockV_has_vjp_mat` per step), `vitForwardKV(_has_vjp[_correct])`
+  unconditional except `0<ε` at EVERY depth, `vitForwardKV_two_eq` (at k=2 it IS
+  `vitForward2V`, `rfl`). Graph: `vitBodyGraphKMHV` token fold (per-block `b{i}_` SSA
+  prefixes), `vitFwdGraphKMHV_faithful` — the depth-general apex, by induction chaining
+  `vitBlockGraphMHV_den_aux` (de-privatized, as designed) + `vitBlockSpelledMHV_eq` per
+  block. **Render:** `TestViTTrainPC.lean` now data-drives `DEPTH := 12` blocks
+  (200 params — the ViT-Tiny count; heads=2, D=32 representative dims) — 553KB MLIR,
+  iree-compile OK + gfx1100 smoke 200/200 finite & non-zero. Audit 361/361.
+- **fused QKV** — open (only worth doing with the production render). Detailed handoff below.
 
 ---
 
 ## Next-session handoff — the remaining scaling items
 
-Goal state: the **production ViT-Tiny config proof-rendered** — depth-12, 3 heads (multi-head
-machinery done; 3 heads is a config change), 16×16/s16, 224², vector-[D] LN (done), converging
+Goal state: the **production ViT-Tiny config proof-rendered** — depth-12 (done — the render
+already runs 12 blocks/200 params), 3 heads (multi-head machinery done; 3 heads is a config
+change), 16×16/s16 (statements already general in P), 224², vector-[D] LN (done), converging
 the close with the committed GPU-trained
 `ViTRender.lean`/`TestViTTrain.lean` (which would then be retired or re-derived as the
 proof-rendered text). Work items in dependency order:
@@ -263,7 +276,7 @@ The MATH is already general: `mhsa_has_vjp_mat`/`transformerBlock(V)_has_vjp_mat
 - Item C is FREE for multi-head (the per-token dense family is shape-generic; softmax/scale
   have no params). Item D: the SDPA ties go per-head (state at the sliced Mat's).
 
-### 2. Depth-k (mechanical, do after or independently of multi-head)
+### 2. Depth-k — ✅ CLOSED 2026-06-09 (see scaling-pass status above; plan kept for reference)
 - `vitForwardK (k) (params : Fin k → BlockParams) := classifier ∘ LNF ∘ (fold of blocks) ∘
   patchEmbed` — define `BlockParams` as a structure (the 16-tuple) to keep signatures sane.
 - VJP by induction on k: the chain step is exactly `vitForward2(V)_has_vjp`'s `vjp_comp` +
@@ -287,7 +300,7 @@ vector-LN, BS=32 — every ingredient then exists; compare against the committed
 byte-identical text (recompute-vs-save layouts, like CIFAR-BN), validate by swap-training
 imagenette or the `render_parity.py` two-sided parity if signatures align.
 
-### Assets from this effort (all 3-axiom clean, audit 354/354)
+### Assets from this effort (all 3-axiom clean, audit 361/361)
 `ViTFwdGraph.lean` (vitForward2(+V is in ViTVecLN), graph, faithfulness, the flat↔Mat
 bridges, `mhsa_layer_one_head`); `ViTClose.lean` (per-token dense W/b, rowwise scalar-LN,
 pos/cls, patch conv — all param families, general P); `ViTChainClose.lean` (chain cots +
@@ -295,8 +308,9 @@ the `sdpa_back_{Q,K,V}` ties); `ViTVecLN.lean` (vector-LN: blockV/vitForward2V, 
 rowBiasF tokens, graphV faithfulness, per-channel γ/β bridges + chain pins);
 `ViTMultiHead.lean` (multi-head: `headSliceF`/`headPadF` tokens + `headsSumG`,
 `mhsa_layer_spelled` at general heads, `vitBlockSpelledMH(V)`, `vitFwdGraphMH(V)_faithful`);
-`tests/TestViTTrainPC.lean` (heads=2 vector-LN proof-rendered train step, iree + 40/40 GPU
-smoke).
+`ViTDepthK.lean` (depth-k: `BlockParamsV`, `vitForwardKV(_has_vjp)` at every depth,
+`vitFwdGraphKMHV_faithful`); `tests/TestViTTrainPC.lean` (depth-12 × heads=2 vector-LN
+proof-rendered train step, 200 params, iree + 200/200 GPU smoke).
 Gotchas that carried: per-block lemmas then chain; nested-application not `∘`; explicit dims
 on stage lemmas; beta-expanded-vs-factored `rw` failures → explicitly-typed `have`s;
 `lake env lean` does NOT refresh oleans (run `lake build` before depending on edits).

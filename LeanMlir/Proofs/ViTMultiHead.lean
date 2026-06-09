@@ -330,8 +330,9 @@ def vitBlockGraphMHV {Np1 hm1 d mlpDim : Nat}
     (SHlo.geluF (SHlo.denseRowF s!"%{pfx}Wfc1" s!"%{pfx}bfc1" Wfc1 bfc1 ln2))
   SHlo.addV hres m2
 
-/-- Multi-head vector-LN block-graph denotation. -/
-private lemma vitBlockGraphMHV_den_aux {Np1 hm1 d mlpDim : Nat}
+/-- Multi-head vector-LN block-graph denotation. Public — the depth-k
+    faithfulness induction (`ViTDepthK.lean`) chains it per block. -/
+lemma vitBlockGraphMHV_den_aux {Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr oneStr zeroStr : String) (ε : ℝ)
     (γ1 β1 : Vec ((hm1 + 1) * d))
     (Wq Wk Wv Wo : Mat ((hm1 + 1) * d) ((hm1 + 1) * d))
