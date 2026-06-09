@@ -857,3 +857,137 @@ theorem vit_render_veclnbeta_certified {N D : Nat} (ε : ℝ) (γv : Vec D)
   rw [vit_veclnBeta_grad_bridge ε γv β X dy i]
 
 end Proofs
+
+namespace Proofs
+
+-- ════════════════════════════════════════════════════════════════
+-- § 7. Vector-LN chain pins (the Item D analogue)
+--
+-- The vector-LN block backward decomposes each LN input-VJP as the render emits
+-- it: `rowScaleF γ` on the cotangent (diagonal — the forward token), then
+-- `lnRowBack`(γ=1) at the saved pre-LN input. The MLP/attention dense segments
+-- and the SDPA ties are LN-form-agnostic (`vitCot{G,M1,Ln2,DP,DS,DQ,DK,DV,Ln1}`
+-- from `ViTChainClose` hold verbatim); only the residual fan-ins change.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Cot at the attention-sublayer output `h`, vector-LN form: `dyOut` + the
+    decomposed LN₂ input-VJP (`rowScaleFlat γ2` then `rowLNBackFlat` at γ=1). -/
+noncomputable def vitCotHV {Np1 D mlpDim : Nat} (ε : ℝ) (γ2 : Vec D)
+    (Wfc1 : Mat D mlpDim) (Wfc2 : Mat mlpDim D) (h : Vec (Np1 * D))
+    (m1 : Vec (Np1 * mlpDim)) (dyOut : Vec (Np1 * D)) : Vec (Np1 * D) :=
+  fun i => dyOut i + StableHLO.rowLNBackFlat Np1 D ε 1 h
+    (StableHLO.rowScaleFlat Np1 D γ2 (vitCotLn2 Wfc1 Wfc2 m1 dyOut)) i
+
+/-- Cot at the SDPA output, vector-LN form. -/
+noncomputable def vitCotAttV {Np1 D mlpDim : Nat} (ε : ℝ) (γ2 : Vec D)
+    (Wo : Mat D D) (Wfc1 : Mat D mlpDim) (Wfc2 : Mat mlpDim D)
+    (h : Vec (Np1 * D)) (m1 : Vec (Np1 * mlpDim)) (dyOut : Vec (Np1 * D)) :
+    Vec (Np1 * D) :=
+  StableHLO.rowDenseBackFlat Np1 D D Wo (vitCotHV ε γ2 Wfc1 Wfc2 h m1 dyOut)
+
+/-- Cot at the block input, vector-LN form: `cotH` + the decomposed LN₁
+    input-VJP of the three-way Q/K/V fan-in. -/
+noncomputable def vitCotXinV {Np1 D : Nat} (ε : ℝ) (γ1 : Vec D)
+    (Wq Wk Wv : Mat D D) (xin : Vec (Np1 * D)) (dQ dK dV cotH : Vec (Np1 * D)) :
+    Vec (Np1 * D) :=
+  fun i => cotH i + StableHLO.rowLNBackFlat Np1 D ε 1 xin
+    (StableHLO.rowScaleFlat Np1 D γ1 (vitCotLn1 Wq Wk Wv dQ dK dV)) i
+
+/-- Cot at block 2's output, vector-LN form: the decomposed final-LN input-VJP
+    of the classifier-back row-0 scatter. -/
+noncomputable def vitCotB2outV (N D nClasses : Nat) (ε : ℝ) (γF : Vec D)
+    (Wcls : Mat D nClasses) (b2out : Vec ((N + 1) * D)) (dy : Vec nClasses) :
+    Vec ((N + 1) * D) :=
+  StableHLO.rowLNBackFlat (N + 1) D ε 1 b2out
+    (StableHLO.rowScaleFlat (N + 1) D γF (vitCotFl N D nClasses Wcls dy))
+
+/-- **Vector LN₂ γ, chain-certified** at `vitCotLn2` (the fc2-back → GELU mask →
+    fc1-back cotangent), with the saved attn-sublayer output `h` as the LN input. -/
+theorem vit_render_vecln2gamma_chain_certified {Np1 D mlpDim : Nat}
+    (ε : ℝ) (βv γ : Vec D) (h : Vec (Np1 * D)) (Wfc1 : Mat D mlpDim)
+    (Wfc2 : Mat mlpDim D) (m1 : Vec (Np1 * mlpDim)) (dyOut : Vec (Np1 * D))
+    (lr : ℝ) (i : Fin D) :
+    γ i - lr * vecLN_grad_gamma Np1 D ε (Mat.unflatten h)
+        (Mat.unflatten (vitCotLn2 Wfc1 Wfc2 m1 dyOut)) i
+      = γ i - lr * ∑ o : Fin (Np1 * D),
+          pdiv (fun gv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε gv βv
+                    ((Mat.unflatten h) r))) γ i o
+            * vitCotLn2 Wfc1 Wfc2 m1 dyOut o :=
+  vit_render_veclngamma_certified ε βv γ (Mat.unflatten h)
+    (vitCotLn2 Wfc1 Wfc2 m1 dyOut) lr i
+
+/-- **Vector LN₂ β, chain-certified.** -/
+theorem vit_render_vecln2beta_chain_certified {Np1 D mlpDim : Nat}
+    (ε : ℝ) (γv β : Vec D) (h : Vec (Np1 * D)) (Wfc1 : Mat D mlpDim)
+    (Wfc2 : Mat mlpDim D) (m1 : Vec (Np1 * mlpDim)) (dyOut : Vec (Np1 * D))
+    (lr : ℝ) (i : Fin D) :
+    β i - lr * vecLN_grad_beta Np1 D
+        (Mat.unflatten (vitCotLn2 Wfc1 Wfc2 m1 dyOut)) i
+      = β i - lr * ∑ o : Fin (Np1 * D),
+          pdiv (fun bv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε γv bv
+                    ((Mat.unflatten h) r))) β i o
+            * vitCotLn2 Wfc1 Wfc2 m1 dyOut o :=
+  vit_render_veclnbeta_certified ε γv β (Mat.unflatten h)
+    (vitCotLn2 Wfc1 Wfc2 m1 dyOut) lr i
+
+/-- **Vector LN₁ γ, chain-certified** at the three-way Q/K/V fan-in `vitCotLn1`,
+    with the saved block input `xin` as the LN input. -/
+theorem vit_render_vecln1gamma_chain_certified {Np1 D : Nat}
+    (ε : ℝ) (βv γ : Vec D) (xin : Vec (Np1 * D)) (Wq Wk Wv : Mat D D)
+    (dQ dK dV : Vec (Np1 * D)) (lr : ℝ) (i : Fin D) :
+    γ i - lr * vecLN_grad_gamma Np1 D ε (Mat.unflatten xin)
+        (Mat.unflatten (vitCotLn1 Wq Wk Wv dQ dK dV)) i
+      = γ i - lr * ∑ o : Fin (Np1 * D),
+          pdiv (fun gv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε gv βv
+                    ((Mat.unflatten xin) r))) γ i o
+            * vitCotLn1 Wq Wk Wv dQ dK dV o :=
+  vit_render_veclngamma_certified ε βv γ (Mat.unflatten xin)
+    (vitCotLn1 Wq Wk Wv dQ dK dV) lr i
+
+/-- **Vector LN₁ β, chain-certified.** -/
+theorem vit_render_vecln1beta_chain_certified {Np1 D : Nat}
+    (ε : ℝ) (γv β : Vec D) (xin : Vec (Np1 * D)) (Wq Wk Wv : Mat D D)
+    (dQ dK dV : Vec (Np1 * D)) (lr : ℝ) (i : Fin D) :
+    β i - lr * vecLN_grad_beta Np1 D
+        (Mat.unflatten (vitCotLn1 Wq Wk Wv dQ dK dV)) i
+      = β i - lr * ∑ o : Fin (Np1 * D),
+          pdiv (fun bv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε γv bv
+                    ((Mat.unflatten xin) r))) β i o
+            * vitCotLn1 Wq Wk Wv dQ dK dV o :=
+  vit_render_veclnbeta_certified ε γv β (Mat.unflatten xin)
+    (vitCotLn1 Wq Wk Wv dQ dK dV) lr i
+
+/-- **Final vector-LN γ, chain-certified** at `vitCotFl` (classifier-back
+    scattered to row 0), with the saved block-2 output as the LN input. -/
+theorem vit_render_veclnFgamma_chain_certified {N D nClasses : Nat}
+    (ε : ℝ) (βv γ : Vec D) (b2out : Vec ((N + 1) * D)) (Wcls : Mat D nClasses)
+    (dy : Vec nClasses) (lr : ℝ) (i : Fin D) :
+    γ i - lr * vecLN_grad_gamma (N + 1) D ε (Mat.unflatten b2out)
+        (Mat.unflatten (vitCotFl N D nClasses Wcls dy)) i
+      = γ i - lr * ∑ o : Fin ((N + 1) * D),
+          pdiv (fun gv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε gv βv
+                    ((Mat.unflatten b2out) r))) γ i o
+            * vitCotFl N D nClasses Wcls dy o :=
+  vit_render_veclngamma_certified ε βv γ (Mat.unflatten b2out)
+    (vitCotFl N D nClasses Wcls dy) lr i
+
+/-- **Final vector-LN β, chain-certified.** -/
+theorem vit_render_veclnFbeta_chain_certified {N D nClasses : Nat}
+    (ε : ℝ) (γv β : Vec D) (b2out : Vec ((N + 1) * D)) (Wcls : Mat D nClasses)
+    (dy : Vec nClasses) (lr : ℝ) (i : Fin D) :
+    β i - lr * vecLN_grad_beta (N + 1) D
+        (Mat.unflatten (vitCotFl N D nClasses Wcls dy)) i
+      = β i - lr * ∑ o : Fin ((N + 1) * D),
+          pdiv (fun bv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε γv bv
+                    ((Mat.unflatten b2out) r))) β i o
+            * vitCotFl N D nClasses Wcls dy o :=
+  vit_render_veclnbeta_certified ε γv β (Mat.unflatten b2out)
+    (vitCotFl N D nClasses Wcls dy) lr i
+
+end Proofs

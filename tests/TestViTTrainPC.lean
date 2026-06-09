@@ -7,7 +7,12 @@ The ViT peer of `tests/TestConvNeXtTrainPC.lean`, at the **representative** `vit
 config (the proven graph `vitFwdGraph`, Item A): patchSize-1 patch embed (per-pixel dense
 + CLS + pos) → 2 distinct-param pre-norm transformer blocks (heads = 1) → final per-token
 LN → CLS slice → dense head. CIFAR-shaped: 3×8² in → 64 patches + CLS = 65 tokens,
-D = 32, mlpDim = 128, 10 classes, BS = 32.
+D = 32, mlpDim = 128, 10 classes, BS = 32. **Vector-[D] LN γ/β** (the production
+`ViTRender` form, proven in `ViTVecLN.lean`): each LN site is the three-token
+decomposition `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β` (`vitFwdGraphV`'s spelling);
+the LN backward reuses `rowScaleF` on the cotangent (diagonal — its own input-VJP) then
+`lnRowBack`(γ=1) at the saved pre-LN input; the per-channel param grads keep the channel
+axis (`dγ_k = Σ_{b,tokens} dy·x̂`, certified `vit_render_vecln{gamma,beta}_certified`).
 
 Forward AND the whole backward cotangent chain are proof-rendered through `pretty` over
 the very tokens of `vitFwdGraph` — forward (`patchEmbedF`/`lnRowF`/`denseRowF`/`matmulF`/
@@ -70,28 +75,16 @@ private def rowDenseBGrad (o dyFlat : String) (c : Nat) : String :=
   rs3 s!"{o}i" dyFlat NT c ++
   s!"    {o} = stablehlo.reduce({o}i init: %sc) applies stablehlo.add across dimensions = [0, 1] : ({ty [BS,NT,c]}, tensor<f32>) -> {ty [c]}\n"
 
-/-- rowwise scalar-LN dγ = Σ_(b,tok,D) dy·x̂, dβ = Σ dy; recompute x̂ per token row from
-    the saved LN input (stats over the row axis [2] — `lnRowF`'s own emission text).
-    The rendered `rowLN_grad_gamma/beta` (`vit_render_rowln{gamma,beta}_certified`). -/
-private def lnRowParamGrad (dgr dbe inFlat dyFlat : String) (t f : Nat) : String :=
+/-- vector-LN dγ_k = Σ_(b,tok) dy·x̂ (KEEPS the channel axis), dβ_k = Σ_(b,tok) dy —
+    `ViTRender`'s per-channel LN param reduces, off the SAVED normalize output x̂ (the
+    `lnRowF`(1,0) SSA value — no recompute needed at the decomposed form). The rendered
+    `vecLN_grad_gamma/beta` (`vit_render_vecln{gamma,beta}_certified`). -/
+private def vecLNParamGrad (dgr dbe xhFlat dyFlat : String) (t f : Nat) : String :=
   let tn := ty [BS, t, f]
-  rs3 s!"{dgr}xi" inFlat t f ++ rs3 s!"{dgr}dyi" dyFlat t f ++
-  s!"    {dgr}nf = stablehlo.constant dense<{f}.0> : {tn}\n" ++
-  s!"    {dgr}ep = stablehlo.constant dense<{EPS}> : {tn}\n" ++
-  s!"    {dgr}smr = stablehlo.reduce({dgr}xi init: %sc) applies stablehlo.add across dimensions = [2] : ({tn}, tensor<f32>) -> {ty [BS, t]}\n" ++
-  s!"    {dgr}sm = stablehlo.broadcast_in_dim {dgr}smr, dims = [0, 1] : ({ty [BS, t]}) -> {tn}\n" ++
-  s!"    {dgr}mu = stablehlo.divide {dgr}sm, {dgr}nf : {tn}\n" ++
-  s!"    {dgr}xc = stablehlo.subtract {dgr}xi, {dgr}mu : {tn}\n" ++
-  s!"    {dgr}sq = stablehlo.multiply {dgr}xc, {dgr}xc : {tn}\n" ++
-  s!"    {dgr}vsr = stablehlo.reduce({dgr}sq init: %sc) applies stablehlo.add across dimensions = [2] : ({tn}, tensor<f32>) -> {ty [BS, t]}\n" ++
-  s!"    {dgr}vs = stablehlo.broadcast_in_dim {dgr}vsr, dims = [0, 1] : ({ty [BS, t]}) -> {tn}\n" ++
-  s!"    {dgr}vr = stablehlo.divide {dgr}vs, {dgr}nf : {tn}\n" ++
-  s!"    {dgr}ve = stablehlo.add {dgr}vr, {dgr}ep : {tn}\n" ++
-  s!"    {dgr}istd = stablehlo.rsqrt {dgr}ve : {tn}\n" ++
-  s!"    {dgr}xh = stablehlo.multiply {dgr}xc, {dgr}istd : {tn}\n" ++
+  rs3 s!"{dgr}xh" xhFlat t f ++ rs3 s!"{dgr}dyi" dyFlat t f ++
   s!"    {dgr}p = stablehlo.multiply {dgr}dyi, {dgr}xh : {tn}\n" ++
-  s!"    {dgr} = stablehlo.reduce({dgr}p init: %sc) applies stablehlo.add across dimensions = [0, 1, 2] : ({tn}, tensor<f32>) -> tensor<f32>\n" ++
-  s!"    {dbe} = stablehlo.reduce({dgr}dyi init: %sc) applies stablehlo.add across dimensions = [0, 1, 2] : ({tn}, tensor<f32>) -> tensor<f32>\n"
+  s!"    {dgr} = stablehlo.reduce({dgr}p init: %sc) applies stablehlo.add across dimensions = [0, 1] : ({tn}, tensor<f32>) -> {ty [f]}\n" ++
+  s!"    {dbe} = stablehlo.reduce({dgr}dyi init: %sc) applies stablehlo.add across dimensions = [0, 1] : ({tn}, tensor<f32>) -> {ty [f]}\n"
 
 private def sgd (θ dθ ty' : String) : String :=
   s!"    {θ}l = stablehlo.constant dense<{LR}> : {ty'}\n" ++
@@ -101,6 +94,7 @@ private def sgd (θ dθ ty' : String) : String :=
 -- ════════════ captured forward names per ViT block ════════════
 private structure FNames where  -- flat SSA names from `pretty`
   xin : String   -- block input (= the attn residual skip; saved pre-LN1 input)
+  xh1 : String   -- LN1 normalize out (x̂ — the dγ1 partner)
   ln1 : String   -- LN1 out (= Q/K/V dense input)
   q : String
   k : String
@@ -109,6 +103,7 @@ private structure FNames where  -- flat SSA names from `pretty`
   p : String     -- post-softmax weights
   att : String   -- P·V (out-proj input)
   h : String     -- attn-sublayer out (= the MLP residual skip; saved pre-LN2 input)
+  xh2 : String   -- LN2 normalize out (x̂ — the dγ2 partner)
   ln2 : String   -- LN2 out (= fc1 input)
   m1 : String    -- fc1 out (pre-GELU)
   g : String     -- GELU out (fc2 input)
@@ -116,8 +111,12 @@ private structure FNames where  -- flat SSA names from `pretty`
 
 /-- One ViT block forward via `pretty` — exactly the `vitBlockGraph` tokens. -/
 private def fwdBlock (i : Nat) (xin : String) : StateM Nat (String × FNames) := do
-  let (k1, ln1) ← pretty BS (.lnRowF s!"%g1_{i}" s!"%bt1_{i}" EPS 0 0 0
+  let (k1a, xh1) ← pretty BS (.lnRowF "%one" "%sc" EPS 0 1 0
     (.operand xin (zV : Vec (NT*DD))))
+  let (k1b, sc1) ← pretty BS (.rowScaleF s!"%g1_{i}" (zV : Vec DD)
+    (.operand xh1 (zV : Vec (NT*DD))))
+  let (k1, ln1) ← pretty BS (.rowBiasF s!"%bt1_{i}" (zV : Vec DD)
+    (.operand sc1 (zV : Vec (NT*DD))))
   let (k2, q) ← pretty BS (.denseRowF s!"%Wq{i}" s!"%bq{i}" (zM : Mat DD DD) zV
     (.operand ln1 (zV : Vec (NT*DD))))
   let (k3, kk) ← pretty BS (.denseRowF s!"%Wk{i}" s!"%bk{i}" (zM : Mat DD DD) zV
@@ -134,17 +133,21 @@ private def fwdBlock (i : Nat) (xin : String) : StateM Nat (String × FNames) :=
   let (k10, o) ← pretty BS (.denseRowF s!"%Wo{i}" s!"%bo{i}" (zM : Mat DD DD) zV
     (.operand att (zV : Vec (NT*DD))))
   let (k11, h) ← pretty BS (.addV (.operand xin (zV : Vec (NT*DD))) (.operand o zV))
-  let (k12, ln2) ← pretty BS (.lnRowF s!"%g2_{i}" s!"%bt2_{i}" EPS 0 0 0
+  let (k12a, xh2) ← pretty BS (.lnRowF "%one" "%sc" EPS 0 1 0
     (.operand h (zV : Vec (NT*DD))))
+  let (k12b, sc2) ← pretty BS (.rowScaleF s!"%g2_{i}" (zV : Vec DD)
+    (.operand xh2 (zV : Vec (NT*DD))))
+  let (k12, ln2) ← pretty BS (.rowBiasF s!"%bt2_{i}" (zV : Vec DD)
+    (.operand sc2 (zV : Vec (NT*DD))))
   let (k13, m1) ← pretty BS (.denseRowF s!"%Wfc1{i}" s!"%bfc1{i}" (zM : Mat DD MD) zV
     (.operand ln2 (zV : Vec (NT*DD))))
   let (k14, g) ← pretty BS (.geluF (.operand m1 (zV : Vec (NT*MD))))
   let (k15, m2) ← pretty BS (.denseRowF s!"%Wfc2{i}" s!"%bfc2{i}" (zM : Mat MD DD) zV
     (.operand g (zV : Vec (NT*MD))))
   let (k16, bout) ← pretty BS (.addV (.operand h (zV : Vec (NT*DD))) (.operand m2 zV))
-  pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7 ++ k8 ++ k9 ++ k10 ++ k11 ++ k12 ++
-        k13 ++ k14 ++ k15 ++ k16,
-        ⟨xin, ln1, q, kk, v, ss, p, att, h, ln2, m1, g, bout⟩)
+  pure (k1a ++ k1b ++ k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7 ++ k8 ++ k9 ++ k10 ++
+        k11 ++ k12a ++ k12b ++ k12 ++ k13 ++ k14 ++ k15 ++ k16,
+        ⟨xin, xh1, ln1, q, kk, v, ss, p, att, h, xh2, ln2, m1, g, bout⟩)
 
 /-- One ViT block backward via `pretty`. `dy` = flat cotangent at block output.
     The SDPA backward is the forward `matmulF`/`transposeF` on cotangents.
@@ -159,8 +162,10 @@ private def bwdBlock (i : Nat) (dy : String) (b : FNames) :
     (.operand cot_g zV))
   let (k3, cot_ln2) ← pretty BS (.denseRowBack s!"%Wfc1{i}" (zM : Mat DD MD)
     (.operand cot_m1 (zV : Vec (NT*MD))))
-  let (k4, cot_h_mlp) ← pretty BS (.lnRowBack s!"%g2_{i}" b.h EPS 0 0
-    (zV : Vec (NT*DD)) (.operand cot_ln2 zV))
+  let (k4a, cot_xh2) ← pretty BS (.rowScaleF s!"%g2_{i}" (zV : Vec DD)
+    (.operand cot_ln2 (zV : Vec (NT*DD))))
+  let (k4, cot_h_mlp) ← pretty BS (.lnRowBack "%one" b.h EPS 0 1
+    (zV : Vec (NT*DD)) (.operand cot_xh2 zV))
   let (k5, cot_h) ← pretty BS (.addV (.operand dy (zV : Vec (NT*DD)))
     (.operand cot_h_mlp zV))
   -- attn sublayer back: h = xin + Wo·SDPA(q,k,v)
@@ -191,12 +196,14 @@ private def bwdBlock (i : Nat) (dy : String) (b : FNames) :
     (.operand dV (zV : Vec (NT*DD))))
   let (k19, s1) ← pretty BS (.addV (.operand cq (zV : Vec (NT*DD))) (.operand ck zV))
   let (k20, cot_ln1) ← pretty BS (.addV (.operand s1 (zV : Vec (NT*DD))) (.operand cv zV))
-  let (k21, cot_xin_attn) ← pretty BS (.lnRowBack s!"%g1_{i}" b.xin EPS 0 0
-    (zV : Vec (NT*DD)) (.operand cot_ln1 zV))
+  let (k21a, cot_xh1) ← pretty BS (.rowScaleF s!"%g1_{i}" (zV : Vec DD)
+    (.operand cot_ln1 (zV : Vec (NT*DD))))
+  let (k21, cot_xin_attn) ← pretty BS (.lnRowBack "%one" b.xin EPS 0 1
+    (zV : Vec (NT*DD)) (.operand cot_xh1 zV))
   let (k22, cot_xin) ← pretty BS (.addV (.operand cot_h (zV : Vec (NT*DD)))
     (.operand cot_xin_attn zV))
-  pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7 ++ k8 ++ k9 ++ k10 ++ k11 ++ k12 ++
-        k13 ++ k14 ++ k15 ++ k16 ++ k17 ++ k18 ++ k19 ++ k20 ++ k21 ++ k22,
+  pure (k1 ++ k2 ++ k3 ++ k4a ++ k4 ++ k5 ++ k6 ++ k7 ++ k8 ++ k9 ++ k10 ++ k11 ++
+        k12 ++ k13 ++ k14 ++ k15 ++ k16 ++ k17 ++ k18 ++ k19 ++ k20 ++ k21a ++ k21 ++ k22,
         cot_xin, dQ, dK, dV, cot_h, cot_ln2, cot_m1, cot_g, cot_ln1)
 
 /-- Block param grads (hand-emitted, Item C certified forms). -/
@@ -210,18 +217,18 @@ private def blockParamGrads (i : Nat) (b : FNames)
   -- MLP fc1/fc2: X = LN2-out / GELU-out; dy at fc2-out = block-out cotangent
   rowDenseWGrad s!"%dWfc1{i}" b.ln2 cot_m1 DD MD ++ rowDenseBGrad s!"%dbfc1{i}" cot_m1 MD ++
   rowDenseWGrad s!"%dWfc2{i}" b.g dy MD DD ++ rowDenseBGrad s!"%dbfc2{i}" dy DD ++
-  -- scalar LN1/LN2 γ/β from the saved pre-LN inputs
-  lnRowParamGrad s!"%dg1_{i}" s!"%dbt1_{i}" b.xin cot_ln1 NT DD ++
-  lnRowParamGrad s!"%dg2_{i}" s!"%dbt2_{i}" b.h cot_ln2 NT DD
+  -- vector LN1/LN2 γ/β: per-channel reduces off the SAVED normalize outputs
+  vecLNParamGrad s!"%dg1_{i}" s!"%dbt1_{i}" b.xh1 cot_ln1 NT DD ++
+  vecLNParamGrad s!"%dg2_{i}" s!"%dbt2_{i}" b.xh2 cot_ln2 NT DD
 
 /-- per-block param (name, type) list, forward order (matches `vitFwdGraph` arg order). -/
 private def blkParams (i : Nat) : List (String × String) :=
-  [(s!"g1_{i}", "tensor<f32>"), (s!"bt1_{i}", "tensor<f32>"),
+  [(s!"g1_{i}", ty [DD]), (s!"bt1_{i}", ty [DD]),
    (s!"Wq{i}", ty [DD,DD]), (s!"bq{i}", ty [DD]),
    (s!"Wk{i}", ty [DD,DD]), (s!"bk{i}", ty [DD]),
    (s!"Wv{i}", ty [DD,DD]), (s!"bv{i}", ty [DD]),
    (s!"Wo{i}", ty [DD,DD]), (s!"bo{i}", ty [DD]),
-   (s!"g2_{i}", "tensor<f32>"), (s!"bt2_{i}", "tensor<f32>"),
+   (s!"g2_{i}", ty [DD]), (s!"bt2_{i}", ty [DD]),
    (s!"Wfc1{i}", ty [DD,MD]), (s!"bfc1{i}", ty [MD]),
    (s!"Wfc2{i}", ty [MD,DD]), (s!"bfc2{i}", ty [DD])]
 
@@ -233,8 +240,12 @@ private def trainStep : String := Id.run do
       (zK : Kernel4 DD IC 1 1) zV zV (zM : Mat (NP+1) DD) (.operand "%x" zV))
     let (cB1, b1) ← fwdBlock 1 embed
     let (cB2, b2) ← fwdBlock 2 b1.bout
-    let (cF, fl) ← pretty BS (.lnRowF "%gF" "%btF" EPS 0 0 0
+    let (cFa, xhF) ← pretty BS (.lnRowF "%one" "%sc" EPS 0 1 0
       (.operand b2.bout (zV : Vec (NT*DD))))
+    let (cFb, scF) ← pretty BS (.rowScaleF "%gF" (zV : Vec DD)
+      (.operand xhF (zV : Vec (NT*DD))))
+    let (cF, fl) ← pretty BS (.rowBiasF "%btF" (zV : Vec DD)
+      (.operand scF (zV : Vec (NT*DD))))
     let (cCs, clsv) ← pretty BS (.clsSliceF (N := NP) (D := DD)
       (.operand fl (zV : Vec ((NP+1)*DD))))
     let (cLog, logits) ← pretty BS (denseF "%Wcls" "%bcls" (zM : Mat DD 10) zV
@@ -242,25 +253,27 @@ private def trainStep : String := Id.run do
     -- loss cotangent: (softmax(logits) − onehot)/BS
     let (cSub, dyr) ← pretty BS (.sub (.softmaxDiv (.expe (.operand logits (zV : Vec 10))))
       (.operand "%onehot" zV))
-    let fwd := cE ++ cB1 ++ cB2 ++ cF ++ cCs ++ cLog ++ cSub
+    let fwd := cE ++ cB1 ++ cB2 ++ cFa ++ cFb ++ cF ++ cCs ++ cLog ++ cSub
     -- ═══ backward cotangent chain (proof-rendered) ═══
     let (cDd, cot_cls) ← pretty BS (.dotOut "%Wcls" (zM : Mat DD 10) (.operand "%dy" zV))
     let (cPad, cot_fl) ← pretty BS (.clsPadF (N := NP) (D := DD)
       (.operand cot_cls (zV : Vec DD)))
-    let (cFb, cot_b2out) ← pretty BS (.lnRowBack "%gF" b2.bout EPS 0 0
-      (zV : Vec (NT*DD)) (.operand cot_fl (zV : Vec ((NP+1)*DD))))
+    let (cFsc, cot_xhF) ← pretty BS (.rowScaleF "%gF" (zV : Vec DD)
+      (.operand cot_fl (zV : Vec (NT*DD))))
+    let (cFbk, cot_b2out) ← pretty BS (.lnRowBack "%one" b2.bout EPS 0 1
+      (zV : Vec (NT*DD)) (.operand cot_xhF zV))
     let (cB2b, cot_b1out, dQ2, dK2, dV2, ch2, cln2_2, cm1_2, cg2, cln1_2) ←
       bwdBlock 2 cot_b2out b2
     let (cB1b, cot_embed, dQ1, dK1, dV1, ch1, cln2_1, cm1_1, cg1, cln1_1) ←
       bwdBlock 1 cot_b1out b1
     let bwd := s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [BS, 10]}\n" ++
-      cDd ++ cPad ++ cFb ++ cB2b ++ cB1b
+      cDd ++ cPad ++ cFsc ++ cFbk ++ cB2b ++ cB1b
     -- ═══ param grads (hand-emitted; Item C certified forms) ═══
     let paramG :=
       blockParamGrads 2 b2 dQ2 dK2 dV2 ch2 cln2_2 cm1_2 cg2 cln1_2 cot_b2out ++
       blockParamGrads 1 b1 dQ1 dK1 dV1 ch1 cln2_1 cm1_1 cg1 cln1_1 cot_b1out ++
-      -- final LN γ/β (saved block-2 out)
-      lnRowParamGrad "%dgF" "%dbtF" b2.bout cot_fl NT DD ++
+      -- final vector-LN γ/β: per-channel reduces off the saved normalize output
+      vecLNParamGrad "%dgF" "%dbtF" xhF cot_fl NT DD ++
       -- pos-embed: dPos = Σ_batch dy at the embed output
       rs3 "%dposi" cot_embed NT DD ++
       s!"    %dpos = stablehlo.reduce(%dposi init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,NT,DD]}, tensor<f32>) -> {ty [NT,DD]}\n" ++
@@ -286,7 +299,7 @@ private def trainStep : String := Id.run do
   let allParams : List (String × String) :=
     [("Wp", ty [DD,IC,1,1]), ("bp", ty [DD]), ("cls", ty [DD]), ("pos", ty [NT,DD])]
     ++ blkParams 1 ++ blkParams 2
-    ++ [("gF", "tensor<f32>"), ("btF", "tensor<f32>"),
+    ++ [("gF", ty [DD]), ("btF", ty [DD]),
         ("Wcls", ty [DD,10]), ("bcls", ty [10])]
   let upd := String.join (allParams.map (fun (nm, t) => sgd s!"%{nm}" s!"%d{nm}" t))
   let argSig := String.intercalate ", "
@@ -296,6 +309,7 @@ private def trainStep : String := Id.run do
   let retVals := String.intercalate ", " (allParams.map (fun (nm, _) => s!"%{nm}n"))
   return "module @m {\n" ++ s!"  func.func @vit_rep_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n" ++
     body ++ upd ++
     s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"

@@ -760,3 +760,16 @@ open Proofs
 #print axioms vit_veclnBeta_grad_bridge
 #print axioms vit_render_veclngamma_certified
 #print axioms vit_render_veclnbeta_certified
+-- Vector-LN render upgrade + chain pins: TestViTTrainPC.lean now renders the production ViTRender
+-- LN form (each site lnRowF(1,0) -> rowScaleF -> rowBiasF; backward = rowScaleF on the cotangent
+-- then lnRowBack at gamma=1; per-channel dgamma/dbeta reduces off the SAVED normalize output) —
+-- iree-compile OK + gfx1100 ref-only smoke 40/40. The vector-LN chain cots decompose each LN
+-- input-VJP the same way (vitCot{H,Att,Xin,B2out}V); the dense/SDPA chain segments and ties are
+-- LN-form-agnostic and hold verbatim. The per-channel gamma/beta pins at the actual chain
+-- cotangents (the three-way fan-in at LN1, the MLP chain at LN2, the row-0 scatter at the final LN):
+#print axioms vit_render_vecln1gamma_chain_certified
+#print axioms vit_render_vecln1beta_chain_certified
+#print axioms vit_render_vecln2gamma_chain_certified
+#print axioms vit_render_vecln2beta_chain_certified
+#print axioms vit_render_veclnFgamma_chain_certified
+#print axioms vit_render_veclnFbeta_chain_certified

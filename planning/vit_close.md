@@ -194,8 +194,12 @@ ConvNeXt / transformer) at the full MNV2/r34/ConvNeXt bar.**
   input-VJP); `vitFwdGraphV_faithful` (each LN site = lnRowF(1,0) → rowScaleF → rowBiasF, the
   exact ViTRender decomposition); per-channel param bridges
   `vit_render_vecln{gamma,beta}_certified` (dγ_k = Σ_tokens dy·x̂ keeping the channel axis).
-  Audit 341/341. Remaining for this item: the render upgrade (Item-B analogue, swap the
-  TrainPC LN sites to the 3-token decomposition + [D] param grads) + chain pins (D analogue).
+  **Render upgraded (B analogue):** `TestViTTrainPC.lean` now renders the production LN form
+  (3-token decomposition; backward = rowScaleF-on-cotangent + lnRowBack(γ=1); per-channel
+  dγ/dβ off the SAVED normalize output) — iree-compile OK + gfx1100 smoke 40/40.
+  **Chain pins (D analogue):** `vitCot{H,Att,Xin,B2out}V` decompose the LN input-VJPs the
+  same way; the dense/SDPA segments + ties are LN-form-agnostic and hold verbatim; six
+  per-channel γ/β pins at the actual chain cotangents. Audit 347/347. **This item is DONE.**
 - **16×16/s16 patchify — ✅ already general.** `patchEmbedF`, its faithfulness, the §E patch
   close, and the chain pins are all stated at general `patchSize` — nothing scalar-specific
   to lift. (The Item B render exercised P=1; a P=16 render is a config change.)
