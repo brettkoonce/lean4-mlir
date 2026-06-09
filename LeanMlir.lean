@@ -35,6 +35,7 @@ import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
+import LeanMlir.Proofs.ViTFwdGraph
 -- Verified-codegen bridges (denoted IR + per-op bridge theorems) so doc-gen4
 -- documents them. IRPrint.lean is deliberately left out: its file-writing
 -- #evals run at elaboration time (use `lake env lean …/IRPrint.lean`).

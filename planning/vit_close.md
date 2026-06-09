@@ -149,10 +149,13 @@ explicit dims on stage lemmas.
 ---
 
 ## 3. Order & status
-1. **Item A** — tokens (`matmulF`, `transposeF`, `scaleF`, `lnRowF/Back`, `denseRowF/Back`,
-   `clsConcatF/clsSliceF/clsPadF`) + `vitForward2` (distinct-param 2-block VJP) + `vitFwdGraph` +
-   `_faithful`, audit-wired. **The long pole** — budget it as multiple sessions; land tokens in
-   reviewable chunks (matmul/transpose first — they unlock SDPA — then LN/dense rows, then CLS).
+1. **Item A — ✅ CLOSED (2026-06-09).** Tokens landed (`bf6ebde`: ten ops, `patchEmbedF` as one
+   coarse token instead of `clsConcatF`); `LeanMlir/Proofs/ViTFwdGraph.lean` adds `vitForward2`
+   (distinct-param 2-block, generic heads) + `vitForward2_has_vjp[_correct]` (UNCONDITIONAL,
+   only `0 < ε`), `vitBlockGraph`/`vitFwdGraph` (heads = 1) + **`vitFwdGraph_faithful`**
+   (`den vitFwdGraph = vitForward2` at heads := 1). The per-head plumbing collapses via
+   `mhsa_layer_one_head` (the `Fin 1 × Fin d ≃ Fin (1·d)` sum reindex); the den side reduces
+   through flat↔Mat commutation bridges (`*_flat` lemmas) + `vitBlockSpelled`. Audit 286/286.
 2. **Item C** — param close (`ViTClose.lean`): the per-token dense W/b family + row-lifted scalar-LN
    γ/β + pos/cls (the two free ones) + M2 reuse for the head. *Independent of Item A* — can go first
    for a quick win (it certifies the committed ViT-Tiny render's param-grad shapes, the MNV2

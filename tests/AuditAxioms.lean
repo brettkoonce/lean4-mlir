@@ -36,6 +36,7 @@ import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
+import LeanMlir.Proofs.ViTFwdGraph
 
 open Proofs
 
@@ -650,3 +651,18 @@ open Proofs
 #print axioms cnx_render_dw7b_chain_certified
 #print axioms cnx_stem_render_convW_chain_certified
 #print axioms cnx_stem_render_convb_chain_certified
+-- ViT RENDER (planning/vit_close.md Item A) — the representative distinct-param 2-block ViT.
+-- The proven transformerTower/vit_full share ONE param tuple across blocks; the close needs distinct
+-- per-block params, so `vitForward2` (patchEmbed → block₁ → block₂ → final per-token LN → CLS slice →
+-- dense head) composes `transformerBlock_has_vjp_mat` twice with the patch-embed/final-LN/classifier
+-- witnesses — an UNCONDITIONAL whole-net VJP (only 0 < ε; softmax/GELU/LN are kink-free), joining
+-- vit_full/convnext. The forward graph `vitFwdGraph` spells the block at heads = 1 over the ch10 token
+-- vocabulary (patchEmbedF, lnRowF, denseRowF ×6, matmulF ×2 [Q·Kᵀ, P·V], transposeF, scaleF [1/√d],
+-- softmaxRowF, geluF, addV ×2 residual, clsSliceF, denseF head); `vitFwdGraph_faithful` proves
+-- den vitFwdGraph = vitForward2 at heads = 1 — the per-head slice/concat plumbing collapses via
+-- `mhsa_layer_one_head` (SDPA = three matmuls + a row-softmax). The attention analogue of
+-- `convNextFwdGraph_faithful`: "text = render of a proven forward graph", Item A for ch10.
+#print axioms vitForward2_has_vjp
+#print axioms vitForward2_has_vjp_correct
+#print axioms mhsa_layer_one_head
+#print axioms StableHLO.vitFwdGraph_faithful

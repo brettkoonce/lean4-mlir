@@ -118,7 +118,11 @@ lean_lib «Proofs» where
              -- ConvNeXt close (Item C): mostly reuse (7×7 depthwise pinned to the generic
              -- bridges) + the two genuinely-new families — layer-scale γ (dγ = x⊙dy) and
              -- scalar-LN γ/β (the Vec-1 embedding bridging bn_grad_gamma/beta).
-             `LeanMlir.Proofs.ConvNeXtClose]
+             `LeanMlir.Proofs.ConvNeXtClose,
+             -- ViT close (Item A): the distinct-param 2-block ViT forward (vitForward2 +
+             -- whole-net VJP) and the heads=1 token forward graph + faithfulness
+             -- (den vitFwdGraph = vitForward2 via mhsa_layer_one_head).
+             `LeanMlir.Proofs.ViTFwdGraph]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
