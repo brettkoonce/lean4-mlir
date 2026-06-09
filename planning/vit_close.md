@@ -165,11 +165,20 @@ explicit dims on stage lemmas.
    `vit_render_patch{W,b}_certified`): `patchEmbed_flat` is LINEAR in the kernel with CONSTANT
    pad-guarded read coefficients — no pad-eval calculus needed; `dWp = Σ_p read·dy_(p+1,·)`,
    `dbp = Σ_p dy_(p+1,·)` (CLS row masked). Audit 307/307.
-3. **Item B** — structured render `tests/TestViTTrainPC.lean` + iree + ref-only smoke.
+3. **Item B — ✅ CLOSED (2026-06-09).** `tests/TestViTTrainPC.lean`: forward + the whole backward
+   cotangent chain proof-rendered via `pretty` over the `vitFwdGraph` tokens (fn
+   `@vit_rep_train_step`, 3×8²/P=1/65 tokens/D=32/mlp=128, 40 params). The SDPA backward is the
+   forward `matmulF`/`transposeF` on cotangents (dP=dO·Vᵀ, dV=Pᵀ·dO, softmaxRowBack, undo-scale,
+   dQ=dS·K, dK=dSᵀ·Q); residual + Q/K/V fan-ins are `addV`. Hand-emitted only the Item-C-certified
+   param grads (per-token dense dW/db, rowwise-LN dγ/dβ, dPos, dCls slice, patch-dense dWp/dbp,
+   M2 head). Validation: iree-compile OK + gfx1100 ref-only smoke 40/40 outputs finite & non-zero
+   (`scripts/render_parity.py --fn vit_rep_train_step`).
 4. **Item D** — optional attention-block cotangent chain (`ViTChainClose.lean`).
 
-After A+C+B, the representative ViT is closed both ways — and the ladder covers all four flagship
-families (CNN / inverted-residual / ConvNeXt / transformer).
+**A+C+B all closed (2026-06-09): the representative ViT is closed both ways — the ladder now
+covers all four flagship families (CNN / inverted-residual / ConvNeXt / transformer).** Item D
+(the cotangent-chain pinning) is the remaining optional rung; the scaling pass (vector-[D] LN,
+multi-head, 16×16 patchify, depth-12) per the handoff notes.
 
 ## Handoff notes
 - **Templates:** `softmaxRowF`/`softmaxRowBack` (StableHLO.lean ~198–250 + its `emitTok` case) is THE
