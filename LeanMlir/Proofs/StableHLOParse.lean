@@ -98,6 +98,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.patchEmbedF w b cls pos ic H W P N D e :: st)
   | .clsSliceF N D :: ts, e :: st => parseStack ts (.clsSliceF N D e :: st)
   | .clsPadF N D :: ts, e :: st => parseStack ts (.clsPadF N D e :: st)
+  | .rowScaleF g m n :: ts, e :: st => parseStack ts (.rowScaleF g m n e :: st)
+  | .rowBiasF b m n :: ts, e :: st => parseStack ts (.rowBiasF b m n e :: st)
   | .batched tag info :: ts, e :: st => parseStack ts (.batched tag info e :: st)
   | _ :: _, _                    => none  -- stack underflow / malformed
 
@@ -163,6 +165,8 @@ theorem parseStack_toToks (r : Raw) :
   | patchEmbedF w b cls pos ic H W P N D e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | clsSliceF N D e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | clsPadF N D e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | rowScaleF g m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | rowBiasF b m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | batched tag info e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
 
 /-- **Serialization round-trip.** `parse` recovers any skeleton from its

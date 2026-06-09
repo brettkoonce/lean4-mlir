@@ -183,8 +183,24 @@ explicit dims on stage lemmas.
 
 **ALL FOUR RUNGS CLOSED (2026-06-09): the representative ViT is closed both ways with the
 cotangent chain pinned — the ladder covers all four flagship families (CNN / inverted-residual /
-ConvNeXt / transformer) at the full MNV2/r34/ConvNeXt bar.** Remaining: only the optional scaling
-pass (vector-[D] LN, multi-head, 16×16 patchify, depth-12) per the handoff notes.
+ConvNeXt / transformer) at the full MNV2/r34/ConvNeXt bar.**
+
+## Scaling pass status
+- **vector-[D] LN — ✅ core closed (2026-06-09).** `LeanMlir/Proofs/ViTVecLN.lean`: `layerNormVec`
+  (= ViTRender's scalar-LN(1,0) ∘ per-channel scale + bias) with VJP composed from
+  `layerNorm_has_vjp`(1,0) + `layerScale_has_vjp` + bias translation; vector-LN sublayers/block
+  (`transformerBlockV_has_vjp_mat`); `vitForward2V(_has_vjp[_correct])` (unconditional, only
+  `0<ε`); two new broadcast tokens `rowScaleF`/`rowBiasF` (9-site lockstep; rowScaleF is its own
+  input-VJP); `vitFwdGraphV_faithful` (each LN site = lnRowF(1,0) → rowScaleF → rowBiasF, the
+  exact ViTRender decomposition); per-channel param bridges
+  `vit_render_vecln{gamma,beta}_certified` (dγ_k = Σ_tokens dy·x̂ keeping the channel axis).
+  Audit 341/341. Remaining for this item: the render upgrade (Item-B analogue, swap the
+  TrainPC LN sites to the 3-token decomposition + [D] param grads) + chain pins (D analogue).
+- **16×16/s16 patchify — ✅ already general.** `patchEmbedF`, its faithfulness, the §E patch
+  close, and the chain pins are all stated at general `patchSize` — nothing scalar-specific
+  to lift. (The Item B render exercised P=1; a P=16 render is a config change.)
+- **multi-head / fused QKV / depth-12** — open (per-head slice/concat tokens; the proofs are
+  already general in `heads`; depth-k = the per-block generic lemmas chained k times).
 
 ## Handoff notes
 - **Templates:** `softmaxRowF`/`softmaxRowBack` (StableHLO.lean ~198–250 + its `emitTok` case) is THE

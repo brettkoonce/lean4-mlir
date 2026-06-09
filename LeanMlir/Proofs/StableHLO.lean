@@ -253,6 +253,15 @@ inductive SHlo : Nat → Type where
   -- `high = [0, N, 0]`). `den` via `clsPadFlat` (= the proven
   -- `cls_slice_flat_has_vjp.backward`). Linear — global VJP.
   | clsPadF    {N D : Nat}                                      : SHlo D → SHlo ((N+1)*D)
+  -- ViT vector-LN affine (the ch10 scaling pass): per-token broadcast scale — every
+  -- row of an `[m,n]` flat elementwise-scaled by the SHARED `γ : [n]` (broadcast over
+  -- the row axis; contrast `layerScaleF`, which has a distinct γ per position).
+  -- Diagonal-linear, so it is its own input-VJP (the layer-scale trick, row-lifted).
+  -- `den` via `rowScaleFlat`.
+  | rowScaleF  {m n : Nat} (gName : String) (γ : Vec n)         : SHlo (m*n) → SHlo (m*n)
+  -- Per-token broadcast bias `+ β` (`β : [n]` shared across rows). Translation —
+  -- the input-VJP is the identity (cotangent passthrough). `den` via `rowBiasFlat`.
+  | rowBiasF   {m n : Nat} (bName : String) (β : Vec n)         : SHlo (m*n) → SHlo (m*n)
   -- Chapter 8 (EfficientNet, BATCHED): a batch-separable op (conv/depthwise/dense/
   -- GAP/SE) lifted to `N` examples by `batchMap`; `den` is `batchMap N (denOp op)`.
   -- The whole EfficientNet forward graph lives at the batched index `N·(c·h·w)`;
@@ -376,6 +385,15 @@ noncomputable def clsPadFlat (N D : Nat) (dy : Vec D) : Vec ((N+1)*D) :=
     let p := finProdFinEquiv.symm idx
     if p.1 = (0 : Fin (N + 1)) then dy p.2 else 0
 
+/-- **Row-broadcast scale (flattened)** — every token row elementwise-scaled by the
+    shared `γ : Vec n` (= rowwise `layerScale γ`). -/
+noncomputable def rowScaleFlat (m n : Nat) (γ : Vec n) (v : Vec (m*n)) : Vec (m*n) :=
+  Mat.flatten (fun r => layerScale γ ((Mat.unflatten v) r))
+
+/-- **Row-broadcast bias (flattened)** — `+ β` on every token row. -/
+noncomputable def rowBiasFlat (m n : Nat) (β : Vec n) (v : Vec (m*n)) : Vec (m*n) :=
+  Mat.flatten (fun r k => (Mat.unflatten v) r k + β k)
+
 /-- **The proven per-example forward of a `BatchableOp`** — exactly the existing
     batch-1 op (`flatConv`/`depthwiseFlat`/`dense`/`globalAvgPoolFlat`/`seBlockFull`/…).
     `SHlo.batchOp`'s `den` is `batchMap N (denOp op)`. -/
@@ -452,6 +470,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       patchEmbedFlat ic H W P N D Wc bc cls pos (den e)
   | _, .clsSliceF (N := N) (D := D) e => clsSliceFlat N D (den e)
   | _, .clsPadF (N := N) (D := D) e => clsPadFlat N D (den e)
+  | _, .rowScaleF (m := m) (n := n) _ γ e => rowScaleFlat m n γ (den e)
+  | _, .rowBiasF (m := m) (n := n) _ β e => rowBiasFlat m n β (den e)
   | _, .batchOp (N := N) op e => batchMap N (denOp op) (den e)
   | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ β e =>
       bnBatchLA N oc h w ε γ β (den e)
@@ -968,6 +988,17 @@ theorem denseRowBack_faithful {N a c : Nat} (wN : String) (W : Mat a c) (e : SHl
     (= the proven `cls_slice_flat_has_vjp.backward`; linear — global VJP). (`rfl`.) -/
 @[simp] theorem clsPadF_faithful {N D : Nat} (e : SHlo D) :
     den (.clsPadF (N := N) e) = clsPadFlat N D (den e) := rfl
+
+/-- **Row-broadcast scale faithfulness.** The reshape + broadcast-γ-over-rows +
+    multiply graph denotes `rowScaleFlat` (rowwise `layerScale γ`). Diagonal-linear —
+    its own input-VJP, so the backward reuses this token on the cotangent. (`rfl`.) -/
+@[simp] theorem rowScaleF_faithful {m n : Nat} (gN : String) (γ : Vec n) (e : SHlo (m*n)) :
+    den (.rowScaleF gN γ e) = rowScaleFlat m n γ (den e) := rfl
+
+/-- **Row-broadcast bias faithfulness.** The broadcast-β-over-rows + add graph denotes
+    `rowBiasFlat`. Translation — identity input-VJP. (`rfl`.) -/
+@[simp] theorem rowBiasF_faithful {m n : Nat} (bN : String) (β : Vec n) (e : SHlo (m*n)) :
+    den (.rowBiasF bN β e) = rowBiasFlat m n β (den e) := rfl
 
 /-- Whole MNIST-CNN **forward** graph:
     `dense ∘ relu ∘ dense ∘ relu ∘ dense ∘ maxPool ∘ relu ∘ conv ∘ relu ∘ conv`. -/
@@ -1568,6 +1599,8 @@ inductive Raw where
   | patchEmbedF (w b cls pos : String) (ic H W P N D : Nat) : Raw → Raw
   | clsSliceF  (N D : Nat)                 : Raw → Raw
   | clsPadF    (N D : Nat)                 : Raw → Raw
+  | rowScaleF  (g : String) (m n : Nat)    : Raw → Raw
+  | rowBiasF   (b : String) (m n : Nat)    : Raw → Raw
   -- EfficientNet batched ops (`batchOp`/`bnBatchF`): the renderable skeleton keeps
   -- only a tag + shape info; the concrete batched StableHLO emission is Item B.
   | batched    (tag : String) (info : List Nat) : Raw → Raw
@@ -1633,6 +1666,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .patchEmbedF wN bN cN pN ic H W P N D (skel e)
   | _, .clsSliceF (N := N) (D := D) e => .clsSliceF N D (skel e)
   | _, .clsPadF (N := N) (D := D) e => .clsPadF N D (skel e)
+  | _, .rowScaleF (m := m) (n := n) gN _ e => .rowScaleF gN m n (skel e)
+  | _, .rowBiasF (m := m) (n := n) bN _ e => .rowBiasF bN m n (skel e)
   | _, .batchOp (N := N) (a := a) (b := b) _ e => .batched "batchOp" [N, a, b] (skel e)
   | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
       .batched "bnBatch" [N, oc, h, w] (skel e)
@@ -1685,6 +1720,8 @@ inductive Tok where
   | patchEmbedF (w b cls pos : String) (ic H W P N D : Nat) : Tok
   | clsSliceF  (N D : Nat)                 : Tok
   | clsPadF    (N D : Nat)                 : Tok
+  | rowScaleF  (g : String) (m n : Nat)    : Tok
+  | rowBiasF   (b : String) (m n : Nat)    : Tok
   | batched    (tag : String) (info : List Nat) : Tok
 deriving DecidableEq, Repr
 
@@ -1736,6 +1773,8 @@ def toToks : Raw → List Tok
   | .patchEmbedF w b cls pos ic H W P N D e => toToks e ++ [.patchEmbedF w b cls pos ic H W P N D]
   | .clsSliceF N D e      => toToks e ++ [.clsSliceF N D]
   | .clsPadF N D e        => toToks e ++ [.clsPadF N D]
+  | .rowScaleF g m n e    => toToks e ++ [.rowScaleF g m n]
+  | .rowBiasF b m n e     => toToks e ++ [.rowBiasF b m n]
   | .batched tag info e   => toToks e ++ [.batched tag info]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
@@ -2361,6 +2400,21 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
         s!"    {pd} = stablehlo.pad {dn}, {z}, low = [0, 0, 0], high = [0, {N}, 0], interior = [0, 0, 0] : ({ty [B,1,D]}, tensor<f32>) -> {ty [B,N+1,D]}\n" ++
         s!"    {o} = stablehlo.reshape {pd} : ({ty [B,N+1,D]}) -> {ty [B, (N+1)*D]}\n", o :: st)
+  | .rowScaleF gN m n, r :: st => do
+      -- per-token broadcast scale: reshape [B,m*n] -> [B,m,n], broadcast the shared
+      -- gamma:[n] over batch+rows (dims = [2]), multiply, reshape back.
+      let xn <- fresh; let gb <- fresh; let mu <- fresh; let o <- fresh
+      pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [2] : ({ty [n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {mu} = stablehlo.multiply {xn}, {gb} : {ty [B,m,n]}\n" ++
+        s!"    {o} = stablehlo.reshape {mu} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+  | .rowBiasF bN m n, r :: st => do
+      -- per-token broadcast bias: same bracket, broadcast beta:[n] dims = [2], add.
+      let xn <- fresh; let bb <- fresh; let ad <- fresh; let o <- fresh
+      pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [2] : ({ty [n]}) -> {ty [B,m,n]}\n" ++
+        s!"    {ad} = stablehlo.add {xn}, {bb} : {ty [B,m,n]}\n" ++
+        s!"    {o} = stablehlo.reshape {ad} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
   | .batched tag info, r :: st =>
       -- EfficientNet batched op: the concrete batched StableHLO emission (the
       -- `[N,C,H,W]` conv/depthwise/SE fragments + the reduce-[0,2,3] batch-norm)

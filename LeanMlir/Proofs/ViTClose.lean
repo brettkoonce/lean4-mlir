@@ -43,7 +43,7 @@ namespace Proofs
 open scoped BigOperators
 
 /-- Sum over a flat product index = double sum over the factors (row-major). -/
-private lemma sum_fin_prod {M : Type*} [AddCommMonoid M] (m n : Nat)
+lemma sum_fin_prod {M : Type*} [AddCommMonoid M] (m n : Nat)
     (f : Fin (m * n) → M) :
     (∑ idx : Fin (m * n), f idx)
       = ∑ r : Fin m, ∑ k : Fin n, f (finProdFinEquiv (r, k)) := by
@@ -450,7 +450,7 @@ theorem vit_render_rowlnbeta_certified (N D : Nat) (ε γ : ℝ) (β : Vec 1)
 -- ════════════════════════════════════════════════════════════════
 
 /-- Identity-plus-constant Jacobian: `∂(p_k + C_k)/∂p_i = δ_(i,k)`. -/
-private theorem pdiv_id_add_const {m : Nat} (C : Vec m) (x : Vec m) (i j : Fin m) :
+theorem pdiv_id_add_const {m : Nat} (C : Vec m) (x : Vec m) (i j : Fin m) :
     pdiv (fun p : Vec m => fun k => p k + C k) x i j = if i = j then 1 else 0 := by
   have h_id : DifferentiableAt ℝ (fun p : Vec m => p) x := differentiableAt_id
   have h_const : DifferentiableAt ℝ (fun _ : Vec m => C) x := differentiableAt_const _
@@ -460,7 +460,7 @@ private theorem pdiv_id_add_const {m : Nat} (C : Vec m) (x : Vec m) (i j : Fin m
 
 /-- Masked-gather-plus-constant Jacobian:
     `∂(mask_k·cl_(σ k) + C_k)/∂cl_i = mask_k·δ_(i,σ k)`. -/
-private theorem pdiv_maskGather_add_const {m D : Nat} (mask : Vec m) (σ : Fin m → Fin D)
+theorem pdiv_maskGather_add_const {m D : Nat} (mask : Vec m) (σ : Fin m → Fin D)
     (C : Vec m) (x : Vec D) (i : Fin D) (j : Fin m) :
     pdiv (fun cl : Vec D => fun k => mask k * cl (σ k) + C k) x i j
       = mask j * (if i = σ j then 1 else 0) := by

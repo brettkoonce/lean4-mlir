@@ -39,6 +39,7 @@ import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
 import LeanMlir.Proofs.ViTClose
 import LeanMlir.Proofs.ViTChainClose
+import LeanMlir.Proofs.ViTVecLN
 
 open Proofs
 
@@ -737,3 +738,25 @@ open Proofs
 #print axioms vit_render_cls_chain_certified
 #print axioms vit_render_patchW_chain_certified
 #print axioms vit_render_patchb_chain_certified
+-- ViT SCALING PASS: vector-[D] LayerNorm (planning/vit_close.md scaling item 1) — the close lifted
+-- from the proof's scalar LN gamma/beta to the committed production render's per-channel vector
+-- form (ViTRender: scalar-LN(1,0) followed by per-channel scale + bias). layerNormVec's VJP
+-- composes layerNorm_has_vjp(1,0) + layerScale_has_vjp + the bias translation; the vector-LN
+-- sublayers/block re-run the biPathMat/vjpMat_comp recipe (transformerBlockV_has_vjp_mat);
+-- vitForward2V is the distinct-param 2-block net at vector LN with an UNCONDITIONAL whole-net VJP
+-- (only 0 < eps). The graph spells each LN site lnRowF(1,0) -> rowScaleF gamma -> rowBiasF beta
+-- (two new broadcast tokens, 9-site lockstep; rowScaleF is its own input-VJP, rowBiasF passes the
+-- cotangent through) and vitFwdGraphV_faithful proves den = vitForward2V at heads = 1. The
+-- per-channel param grads d-gamma_k = Sum_tokens dy*xhat (KEEPING the channel axis — ViTRender's
+-- reduce) and d-beta_k = Sum_tokens dy are certified via the masked-gather Jacobian recipe.
+#print axioms layerNormVec_has_vjp
+#print axioms transformerBlockV_has_vjp_mat
+#print axioms vitForward2V_has_vjp
+#print axioms vitForward2V_has_vjp_correct
+#print axioms StableHLO.vitFwdGraphV_faithful
+#print axioms pdiv_vecLN_gamma
+#print axioms pdiv_vecLN_beta
+#print axioms vit_veclnGamma_grad_bridge
+#print axioms vit_veclnBeta_grad_bridge
+#print axioms vit_render_veclngamma_certified
+#print axioms vit_render_veclnbeta_certified
