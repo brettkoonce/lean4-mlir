@@ -34,6 +34,7 @@ import LeanMlir.Proofs.EfficientNetFullB0
 import LeanMlir.Proofs.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
+import LeanMlir.Proofs.ConvNeXtClose
 
 open Proofs
 
@@ -608,3 +609,21 @@ open Proofs
 -- Scalar LN matches the operational render reducing dim `[1]` per example — faithful at batch-1, as for
 -- MNV2/r34. The "text = render of a proven forward graph" forward half (Item A) for ConvNeXt.
 #print axioms StableHLO.convNextFwdGraph_faithful
+-- ConvNeXt CLOSE (planning/convnext_close.md Item C) — mostly reuse, two genuinely-new param families.
+-- The 1×1 convs (stem/expand/project) and dense head reuse M3/M2 verbatim; the 7×7 depthwise (the kernel
+-- size no prior net used; stride-1 — ConvNeXt blocks keep resolution) pins the generic depthwise bridges.
+-- New: layer-scale γ — layerScale is symmetric in (γ,x), so the param Jacobian is the diagonal x_iδ_ij
+-- (pdiv_layerScale_gamma, the mirror of pdiv_layerScale), giving the rendered dγ = x⊙dy. And scalar-LN
+-- γ/β — layerNormForward has SCALAR γ,β (BatchNorm.lean left bn_grad_gamma/beta as definitions-only:
+-- "scalar params don't fit the pdiv framework"); the Vec-1 embedding brings them inside (LN affine in
+-- the params, the CifarBnClose recipe with the constant channel map Fin n → Fin 1), certifying the
+-- rendered whole-n reduces dγ = Σ dy·x̂, dβ = Σ dy. Affine ⇒ no 0<ε. 3-axiom clean.
+#print axioms cnx_render_dw7W_certified
+#print axioms cnx_render_dw7b_certified
+#print axioms pdiv_layerScale_gamma
+#print axioms layerScale_gamma_grad_bridge
+#print axioms cnx_render_lsgamma_certified
+#print axioms cnx_lnGamma_grad_bridge
+#print axioms cnx_lnBeta_grad_bridge
+#print axioms cnx_render_lngamma_certified
+#print axioms cnx_render_lnbeta_certified

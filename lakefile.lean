@@ -114,7 +114,11 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.ResNet34RenderPC,
              -- ResNet-34 cotangent-chain close (Item D): the Item C conv bridges pinned to the
              -- cotangent the backward chain delivers (id/downsample block + maxpool-back stem).
-             `LeanMlir.Proofs.ResNet34ChainClose]
+             `LeanMlir.Proofs.ResNet34ChainClose,
+             -- ConvNeXt close (Item C): mostly reuse (7×7 depthwise pinned to the generic
+             -- bridges) + the two genuinely-new families — layer-scale γ (dγ = x⊙dy) and
+             -- scalar-LN γ/β (the Vec-1 embedding bridging bn_grad_gamma/beta).
+             `LeanMlir.Proofs.ConvNeXtClose]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

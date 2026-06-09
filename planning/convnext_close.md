@@ -64,23 +64,29 @@ StableHLO.convNextFwdGraph_faithful` ⇒ `[propext, Classical.choice, Quot.sound
 matching the other nets' forward graphs. No new tokens. (Contrast: EfficientNet needed a whole
 batched-token layer because its BN couples the batch; ConvNeXt does not.)
 
-### Item C — the param close — [NEXT; mostly reuse, two small new families]
-`ConvNeXtClose.lean` — certify each param output `θ − lr·(certified ∂forward/∂θ · cotangent)`:
+### Item C — the param close — ✅ **DONE** (`ConvNeXtClose.lean`, audit-wired)
+Every param output certified `θ − lr·(certified ∂forward/∂θ · cotangent)`, 3-axiom clean:
 
 | family (render SSA)                       | forward fn            | certified by                                   |
 |-------------------------------------------|-----------------------|------------------------------------------------|
 | stem 1×1 conv `W/b`                       | `flatConv`/`conv2d`   | `conv_weight/bias_grad_bridge` (M3, **reuse**) |
-| depthwise **7×7** `W/b`                   | `depthwiseConv2d`     | `mnv2_depthwise_weight/bias_grad_bridge` (kernel-general — **pin 7×7**) |
+| depthwise **7×7** `W/b`                   | `depthwiseConv2d`     | `cnx_render_dw7{W,b}_certified` (kernel-general bridges **pinned at 7×7**) |
 | expand/project 1×1 conv `W/b`             | `flatConv`/`conv2d`   | `conv_weight/bias_grad_bridge` (M3, **reuse**) |
 | dense head `Wd/bd`                        | matmul / +bias        | M2 `weight/bias_grad_bridge` (**reuse**)       |
-| **layer-scale `γ`** (`layerScaleF`)       | `γ ⊙ x`               | **new tiny bridge**: `∂(γⱼxⱼ)/∂γᵢ = xᵢδᵢⱼ` ⇒ `dγ = x ⊙ dy` |
-| **scalar-LN `γ/β`** (the `bnF` sites)     | `layerNormForward`    | scalar special-case of the bn γ/β grad (cf. `cifar_bn_render_{gamma,beta}` at the whole-`n`, scalar shape) |
+| **layer-scale `γ`** (`layerScaleF`)       | `γ ⊙ x`               | `cnx_render_lsgamma_certified` (**new**): `pdiv_layerScale_gamma` (`∂(γⱼxⱼ)/∂γᵢ = xᵢδᵢⱼ`) ⇒ `dγ = x ⊙ dy` |
+| **scalar-LN `γ/β`** (the `bnF` sites)     | `layerNormForward`    | `cnx_render_ln{gamma,beta}_certified` (**new**, see below) |
 | gelu                                      | —                     | no parameters                                  |
 
-The only genuinely-new param bridges are **layer-scale `γ`** (multiplicative-bias analogue; `pdiv_layerScale`
-already gives the diagonal Jacobian) and the **scalar-LN `γ/β`** grads (single scalars over the whole `n`).
-Everything else is verbatim reuse at the ConvNeXt shapes. The 7×7 depthwise is the only kernel size to pin
-(prior nets used 3×3/5×5).
+**A planning correction discovered during the build:** the scalar-LN `γ/β` grads were NOT the free
+"scalar special-case of `cifar_bn_render_{gamma,beta}`" the plan claimed — `BatchNorm.lean` had
+deliberately left `bn_grad_gamma`/`bn_grad_beta` as *definitions only* ("scalar params don't fit the
+`pdiv`/`HasVJP` framework cleanly"). `ConvNeXtClose.lean` closes that gap with the **`Vec 1` embedding**:
+as a function of `γ' : Vec 1`, LN is affine (`fun y k => x̂ₖ·y 0 + β`), so the CifarBnClose Jacobian
+recipe applies with the constant channel map `Fin n → Fin 1` — certifying the rendered whole-`n` reduces
+`dγ = Σ dy·x̂`, `dβ = Σ dy` against the certified Jacobian. Affine in the params ⇒ no `0<ε`. The
+layer-scale `γ` bridge is the symmetry mirror of `pdiv_layerScale` (roles of γ/x swapped). The 7×7
+depthwise pins are verbatim instantiations of the kernel-general `mnv2_render_depthwise{W,b}_certified`
+(stride-1 only — ConvNeXt blocks keep resolution). All audited in `tests/AuditAxioms.lean`.
 
 ### Item B — structured render — [given C; the backward tokens already exist]
 `tests/TestConvNeXtTrainPC.lean`: forward + backward via `pretty` over the `convNextFwdGraph` tokens.
@@ -103,8 +109,9 @@ is the per-block head start. **Pure-Lean, batch-1** — no batched-VJP machinery
 ## 3. Order & status
 1. **Item A** ✅ DONE — `convNextFwdGraph` + `_faithful` (representative, scalar LN, batch-1), now
    audit-wired into `AuditAxioms.lean` (3-axiom clean).
-2. **Item C** — param close (`ConvNeXtClose.lean`): reuse conv/depthwise/dense bridges; add the two small
-   new families (layer-scale `γ`, scalar-LN `γ/β`); pin 7×7 depthwise.
+2. **Item C** ✅ DONE — param close (`ConvNeXtClose.lean`): 7×7 depthwise pinned; layer-scale `γ`
+   (`pdiv_layerScale_gamma` ⇒ `dγ = x⊙dy`) and scalar-LN `γ/β` (the `Vec 1` embedding — NOT free
+   reuse; `bn_grad_gamma/beta` were definitions-only) bridged + certified. Audit-wired, 3-axiom clean.
 3. **Item B** — structured render (`tests/TestConvNeXtTrainPC.lean`) + `iree-run-module` parity. All
    backward tokens exist (layer-scale back = `layerScaleF` on the cotangent).
 4. **Item D** — optional block cotangent chain (`ConvNeXtChainClose.lean`), batch-1.
