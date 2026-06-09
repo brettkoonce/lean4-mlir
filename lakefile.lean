@@ -101,6 +101,10 @@ lean_lib «Proofs» where
              -- Jacobian contracted with ∂loss/∂(layer output) IS the total loss gradient (pdiv_comp
              -- at a smooth point). The conv analogue of mlp_hidden_total_loss_grad; program-wide.
              `LeanMlir.Proofs.ConvLossFold,
+             -- EfficientNet-B0 close (Item C): a FREE close — every param family reuses an
+             -- existing bridge (5×5 depthwise pinned; batch-norm γ/β = per-channel BN at m=N·h·w;
+             -- SE squeeze/excite are dense → M2). No new VJP.
+             `LeanMlir.Proofs.EfficientNetClose,
              -- ResNet-34 close (Item C): a FREE close — every r34 param family certified
              -- by an existing bridge (the 7×7 stem + 3×3 strided projection pinned to the
              -- generic strided conv W/b bridges; no new VJP).

@@ -27,6 +27,7 @@ import LeanMlir.Proofs.MobileNetV2Close
 import LeanMlir.Proofs.MobileNetV2RenderPC
 import LeanMlir.Proofs.MobileNetV2ChainClose
 import LeanMlir.Proofs.ConvLossFold
+import LeanMlir.Proofs.EfficientNetClose
 import LeanMlir.Proofs.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
@@ -501,6 +502,17 @@ open Proofs
 #print axioms conv_bias_total_loss_grad_fold
 #print axioms depthwise_total_loss_grad_fold
 #print axioms depthwise_bias_total_loss_grad_fold
+-- EfficientNet-B0 CLOSE (Item C) — another FREE close: every param family reuses an existing bridge.
+-- The two new structures introduce no new PARAM-gradient bridge: batch-norm γ/β = per-channel BN γ/β
+-- over the merged batch+spatial axis (bnBatchTensor4 = bnchwBack∘bnPerChannelFlat oc (N·h·w)∘bnchwFwd,
+-- γ/β affine), and squeeze-excite's squeeze/excite are dense (→ M2 bridges). These pin the 5×5 depthwise
+-- (the kernel no prior net used) and record the batch-norm-as-per-channel-at-N·h·w reuse. 3-axiom clean.
+#print axioms enet_render_dw5W_certified
+#print axioms enet_render_dw5b_certified
+#print axioms enet_render_dw5W_strided_certified
+#print axioms enet_render_dw5b_strided_certified
+#print axioms enet_render_bngamma_certified
+#print axioms enet_render_bnbeta_certified
 -- ResNet-34 CLOSE (Item C) — a FREE close: every r34 param family certified by an existing bridge.
 -- r34 uses only regular convs (3×3 + the 7×7 stem), per-channel BN, relu, maxpool, residual, dense —
 -- no depthwise/relu6, and maxpool/relu/add/GAP carry no params. So NO new VJP; these six theorems pin
