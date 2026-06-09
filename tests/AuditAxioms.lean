@@ -24,6 +24,7 @@ import LeanMlir.Proofs.CnnTrainStep
 import LeanMlir.Proofs.CifarBnClose
 import LeanMlir.Proofs.CnnChainClose
 import LeanMlir.Proofs.MobileNetV2Close
+import LeanMlir.Proofs.MobileNetV2RenderPC
 
 open Proofs
 
@@ -456,3 +457,12 @@ open Proofs
 #print axioms mnv2_render_stem_convb_certified
 #print axioms mnv2_render_depthwiseW_strided_certified
 #print axioms mnv2_render_depthwiseb_strided_certified
+-- MobileNetV2 RENDER (planning/mobilenetv2_close.md Item A) — the PER-CHANNEL-BN typed SHlo
+-- forward graph at the full ch7 render dims (3×224² → 7×7×64): strided stem → 6 inverted-residual
+-- blocks (4 stride-2 downsampling via depthwiseStridedF, 2 stride-1 with an addV skip) → conv-bn-
+-- relu6 head → GAP → dense. Per-channel BN (bnPerChannelF, γ/β : Vec c) at every BN site, so it
+-- matches the operational render's BN flavor (StableHLO's prior mobilenetv2FwdGraphFull used SCALAR
+-- bnF, tied to the scalar mobilenetv2Forward_full — a different function than the render). The
+-- faithfulness `den (graph) = mobilenetv2Forward_full_pc` is the "text = render of a proven graph"
+-- forward half at the render's per-channel BN; prerequisite for the structured render (Item B).
+#print axioms StableHLO.mobilenetv2FwdGraphFullPC_faithful

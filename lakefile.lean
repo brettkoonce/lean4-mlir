@@ -89,7 +89,11 @@ lean_lib «Proofs» where
              -- MobileNetV2 close (Item C): the depthwise (stride-1/2) + strided-conv
              -- parameter-gradient bridges — every MobileNetV2 train-step param output
              -- certified θ − lr·(certified Jacobian · cotangent).
-             `LeanMlir.Proofs.MobileNetV2Close]
+             `LeanMlir.Proofs.MobileNetV2Close,
+             -- MobileNetV2 render (Item A): the PER-CHANNEL-BN typed SHlo forward graph
+             -- (matches the operational render's BN flavor) + faithfulness to the
+             -- per-channel ℝ-forward. Prerequisite for the structured render (Item B).
+             `LeanMlir.Proofs.MobileNetV2RenderPC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

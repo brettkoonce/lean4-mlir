@@ -68,14 +68,29 @@ critical path*, but worth noting when claiming "verified."
 
 ## 2. The genuinely-new work (what closing actually requires)
 
-### Item A — typed forward graph `mobilenetv2FwdGraph : SHlo nClasses`  [NEW, real assembly]
+### Item A — typed forward graph `mobilenetv2FwdGraph : SHlo nClasses`  ✅ **DONE** (2026-06-09)
 Assemble the whole inverted-residual net from the faithful tokens (per-channel BN, to match the
 render), with a `_faithful` theorem to the per-channel ℝ-forward — the analogue of
 `cifarBnFwdGraph`/`cifarBnFwdGraph_faithful` but with depthwise, residual `addV`, stride-2, and the
-block structure. **This is the prerequisite for a structured render.** Sub-tasks: reconcile the
-ℝ-forward to per-channel BN; thread the residual skip (the `addV` reuses the block-input subtree in
-both operands, so the graph stays a tree, cf. the `addV` doc comment); carry the stride-2 shape
-changes (`flatConvStridedF`/`depthwiseStridedF` halve spatial).
+block structure. **This is the prerequisite for a structured render.**
+
+**Shipped** (`LeanMlir/Proofs/MobileNetV2RenderPC.lean`, 3-axiom clean, audited):
+- Found that `StableHLO.lean` *already* had the full strided graph `mobilenetv2FwdGraphFull` +
+  `mobilenetv2FwdGraphFull_faithful` — but using **scalar** `bnF`, tied to the scalar
+  `mobilenetv2Forward_full`. That's a *different function* than the render (which emits per-channel
+  BN), so it was not a faithful "render of a proven graph". The gap was purely the BN flavor.
+- Built the **per-channel** twin: stage abbreviations `ivExpandPC`/`ivDepthwisePC`/
+  `ivDepthwiseStridedPC`/`ivProjectPC` (per-channel `bnPerChannelTensor3`, `γ/β : Vec c`) →
+  `mobilenetv2Forward_full_pc` (full ℝ-forward, same topology/stride/relu6 schedule) →
+  `mobilenetv2FwdGraphFullPC` (typed `SHlo`, `bnPerChannelF` tokens, strided stem +
+  `depthwiseStridedF` on the 4 downsampling blocks + `addV` skip on b2/b4 + conv-bn-relu6 head) →
+  **`mobilenetv2FwdGraphFullPC_faithful`**: `den (graph) = mobilenetv2Forward_full_pc`, via
+  `bnPerChannelF_faithful`, same `simp`-then-`unfold` recipe as the scalar peer (compiled first try).
+- The "reconcile scalar↔per-channel BN" sub-task was handled by building per-channel *throughout*
+  (no scalar ℝ-VJP in the loop), so there is no mismatch to reconcile away.
+
+Net: MobileNetV2 now has a **proven per-channel forward graph** whose `pretty` will match the
+render's forward text — the input Item B needs.
 
 ### Item B — structured render `mobilenetv2TrainStepStructured`  [NEW, mechanical given A]
 Pretty the forward graph (Item A) capturing names; the backward/grad/SGD **tail already exists**
@@ -137,8 +152,9 @@ net). *Optional* — pins the cotangent; the further "= ∂loss/∂θ" fold rema
    blocks' **strided** depthwise W/b + the stem strided **bias** each needed a new `decimate ∘
    stride-1` VJP (bounded analogues of the existing ch6 strided conv weight-grad, not just
    instantiation). See Item C above.
-2. **Item A (typed forward graph)** + its `_faithful`. The prerequisite for the structured render;
-   also reconciles the scalar↔per-channel BN.
+2. **Item A (typed forward graph)** + its `_faithful`. ✅ **DONE** — `MobileNetV2RenderPC.lean`
+   (`mobilenetv2FwdGraphFullPC` + `_faithful`, per-channel BN matching the render). The scalar full
+   graph already existed in `StableHLO.lean`; the new work was the per-channel twin.
 3. **Item B (structured render)** from A. Swap-train validate. Now MobileNetV2 has the "text =
    render of proven graph" half too.
 4. **Item D (cotangent chain)** — optional polish; the branchy inverted-residual analogue of
