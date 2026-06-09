@@ -59,12 +59,21 @@ reuse (no kernel to pin). This was *cheaper* than MobileNetV2's Item C.
   lemmas + stem/maxpool/GAP/dense `_faithful` (compiled in ~2 s). Same recipe as
   `mobilenetv2FwdGraphFullPC_faithful`, but the per-block-lemma factoring keeps the 16-block proof one line.
 
-### Item B — structured render — [MECHANICAL given A; *more* token-covered than MobileNetV2]
-`tests/TestResnet34TrainPC.lean`: forward + backward cotangent chain via `pretty`. r34's backward is
-better covered by tokens than MobileNetV2's: relu back = **`selectPos`** (single-sided, simpler than
-relu6's `selectMid`); maxpool back = **`maxPoolBack`**; plus `convBack`/`convStridedBack`/
-`bnPerChannelBack`/`dotOut`/`addV`. Hand-emit only: GAP back, conv/strided-conv weight+bias grads, the
-7×7 stem weight-grad, BN dγ/dβ.
+### Item B — structured render — ✅ **DONE** (2026-06-09)
+`tests/TestResnet34TrainPC.lean`: forward + backward cotangent chain proof-rendered via `pretty` —
+forward (`flatConvStridedF`/`flatConvF`/`bnPerChannelF`/`reluF`/`maxPoolF`/`addV`/`gapF`/`denseF`),
+backward (`dotOut`, `bnPerChannelBack`, **`selectPos`** (single-sided relu mask), `convBack`/
+`convStridedBack`, `addV` residual fan-in). Hand-emit only: GAP back, conv/strided-conv weight+bias
+grads, the 7×7 stem weight-grad, BN dγ/dβ — **and the maxpool backward** (the `maxPoolBack` token's
+`emitTok` hardcodes region args `%sa/%sb/%sc/%sd`, which collide with the stem-bias param `%sb` and
+the `%sc` init constant; hand-emitted with `%q`-prefixed names, as the committed renderer does).
+**r34-specific wrinkle vs MobileNetV2:** the residual add is *inside* the block-output relu
+(`relu(add(main, skip))`), so the skip cotangent is the post-relu-back value (`cot_a`), not `dy` —
+matching the committed `addOp {p}dx %{p}dc1 %{p}da`.
+
+iree-compiles OK (388 KB MLIR, gfx1100); same 146-param signature as the committed render (`diff`-
+identical). **Validated bit-identical** via `scripts/render_parity.py`: 146/146 outputs `np.array_equal`,
+worst rel-diff 0.0 (each a real SGD step — outputs differ from inputs). r34 is now **closed both ways**.
 
 **Validation harness: ✅ SET UP & de-risked** (the hard part last time). `scripts/render_parity.py`
 (reusable) parses the func sig, gens fixed-random `.npy` inputs, iree-compiles + GPU-runs both the
@@ -82,8 +91,12 @@ bridges' generic cotangent to it is less from-scratch than MobileNetV2's would b
 ## 3. Order & status
 1. **Item C** ✅ DONE — free close, `ResNet34Close.lean`.
 2. **Item A** ✅ DONE — per-channel forward graph, `ResNet34RenderPC.lean` (per-block + whole-net faithful).
-3. **Item B** — structured render + `iree-run-module` parity (harness ✅ ready: `scripts/render_parity.py`).
-4. **Item D** — optional cotangent-chain polish.
+3. **Item B** ✅ DONE — structured render `TestResnet34TrainPC.lean`, bit-identical to committed (146/146).
+4. **Item D** — optional cotangent-chain polish (not started; `resnet34_has_vjp_at` gives a head start).
+
+**r34 is closed both ways (CIFAR-BN bar): every param certified (C) + per-channel forward graph
+proven faithful (A) + structured render = proven graph, GPU-validated bit-identical (B).** Only the
+optional Item D (cotangent-chain pinning) remains.
 
 After Item B, r34 is closed both ways (the CIFAR-BN bar). The new work is concentrated in A/B assembly,
 mechanical given the MobileNetV2 templates (`MobileNetV2RenderPC.lean`, `tests/TestMobilenetV2TrainPC.lean`).
