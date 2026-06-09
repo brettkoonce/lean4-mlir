@@ -203,8 +203,77 @@ ConvNeXt / transformer) at the full MNV2/r34/ConvNeXt bar.**
 - **16×16/s16 patchify — ✅ already general.** `patchEmbedF`, its faithfulness, the §E patch
   close, and the chain pins are all stated at general `patchSize` — nothing scalar-specific
   to lift. (The Item B render exercised P=1; a P=16 render is a config change.)
-- **multi-head / fused QKV / depth-12** — open (per-head slice/concat tokens; the proofs are
-  already general in `heads`; depth-k = the per-block generic lemmas chained k times).
+- **multi-head / fused QKV / depth-12** — open. Detailed handoff below.
+
+---
+
+## Next-session handoff — the remaining scaling items
+
+Goal state: the **production ViT-Tiny config proof-rendered** — depth-12, 3 heads, 16×16/s16,
+224², vector-[D] LN (done), converging the close with the committed GPU-trained
+`ViTRender.lean`/`TestViTTrain.lean` (which would then be retired or re-derived as the
+proof-rendered text). Work items in dependency order:
+
+### 1. Multi-head (the substantive one)
+The MATH is already general: `mhsa_has_vjp_mat`/`transformerBlock(V)_has_vjp_mat` hold for any
+`heads`. What's missing is RENDERING + faithfulness at heads > 1:
+- **New tokens** (9-site lockstep each; templates: `softmaxRowF` bracket + `clsSliceF` slice):
+  a per-head column-slice `headSliceF {N heads d} (h : Fin heads) : SHlo (N·(heads·d)) →
+  SHlo (N·d)` (slice columns `[h·d, (h+1)·d)` after reshape `[B,N,H·d]`; den = the
+  `finProdFinEquiv (h, ·)` column gather `mhsa_layer` uses) and the concat
+  `headConcatF : (list/fold of) SHlo (N·d) → SHlo (N·(heads·d))`. Concat-of-many needs either
+  a binary `concat2F` folded `heads−1` times (cheap: `(N·a)+(N·b)` index casts — beware
+  `Nat` non-defeq, the `(N+1)·D` lesson) or one k-ary token carrying `heads` operands
+  (harder in the `Raw`/`Tok` postorder — the binary fold is recommended).
+- **Faithfulness target**: `mhsa_layer N heads d` directly (NOT a 1-head specialization).
+  The key lemma generalizes `mhsa_layer_one_head`: per head `h`, the sliced Q/K/V feed a
+  `matmulF`-spelled SDPA (the `sum_fin_one_mul` reindex becomes the per-head fibre sum —
+  `Fintype.sum_prod_type` over `Fin heads × Fin d`); the concat reassembles
+  `mhsa_layer`'s `finProdFinEquiv.symm` indexing. Budget the Fin-index work: it is the
+  `fpf_one_head` family at general `h`, plus concat-boundary casts.
+- **Alternative emission** (matches `ViTRender`/`emitMHSAForward` better): reshape
+  `[B,N,H·d] → [B,N,H,d] → transpose [B,H,N,d]` + batched `dot_general` batching `[0,1]`.
+  That needs a rank-4 bracket (new emitTok shapes) but ONE token pair
+  (`headsMatmulF`/`headsTransposeF`) instead of per-head slices. den = `batchMap`-style
+  over heads. Choose ONE route before starting; the slice route reuses more machinery,
+  the batched route matches the production text.
+- Item C is FREE for multi-head (the per-token dense family is shape-generic; softmax/scale
+  have no params). Item D: the SDPA ties go per-head (state at the sliced Mat's).
+
+### 2. Depth-k (mechanical, do after or independently of multi-head)
+- `vitForwardK (k) (params : Fin k → BlockParams) := classifier ∘ LNF ∘ (fold of blocks) ∘
+  patchEmbed` — define `BlockParams` as a structure (the 16-tuple) to keep signatures sane.
+- VJP by induction on k: the chain step is exactly `vitForward2(V)_has_vjp`'s `vjp_comp` +
+  `hasVJPMat_to_hasVJP (transformerBlock(V)_has_vjp_mat …)` step; the tower proof
+  (`transformerTower_has_vjp_mat`) is the shared-params version of this induction — mirror
+  its structure with the `Fin k` param function.
+- Graph: `vitFwdGraphK` by `List.foldl` over `Fin k` prefixes (`b{i}_`); faithfulness by
+  induction using `vitBlockGraph(V)_den_aux` (already per-block generic — this was designed
+  for exactly this). The `pretty`-based render (`TestViTTrainPC`) already data-drives per
+  block; lifting to 12 is a loop + the param-list change.
+
+### 3. Fused QKV slab (optional)
+The proof-side `mhsa_qkv_W` column-stacking machinery exists (Attention.lean Phase 3). Render:
+one `denseRowF` at `[D, 3·D]` + three column slices (the `headSliceF` token at `Fin 3` fibres
+covers it). Only worth doing with multi-head (the production render fuses).
+
+### 4. Production-config render (the capstone)
+`TestViTTrainPC` at ic=3, H=W=224, P=16 (N=196), D=192, heads=3, mlpDim=768, depth-12,
+vector-LN, BS=32 — every ingredient then exists; compare against the committed
+`verified_mlir/vit_train_step.mlir` trainer (`vit-verified` exe) — expect equivalent-not-
+byte-identical text (recompute-vs-save layouts, like CIFAR-BN), validate by swap-training
+imagenette or the `render_parity.py` two-sided parity if signatures align.
+
+### Assets from this effort (all 3-axiom clean, audit 347/347)
+`ViTFwdGraph.lean` (vitForward2(+V is in ViTVecLN), graph, faithfulness, the flat↔Mat
+bridges, `mhsa_layer_one_head`); `ViTClose.lean` (per-token dense W/b, rowwise scalar-LN,
+pos/cls, patch conv — all param families, general P); `ViTChainClose.lean` (chain cots +
+the `sdpa_back_{Q,K,V}` ties); `ViTVecLN.lean` (vector-LN: blockV/vitForward2V, rowScaleF/
+rowBiasF tokens, graphV faithfulness, per-channel γ/β bridges + chain pins);
+`tests/TestViTTrainPC.lean` (vector-LN proof-rendered train step, iree + 40/40 GPU smoke).
+Gotchas that carried: per-block lemmas then chain; nested-application not `∘`; explicit dims
+on stage lemmas; beta-expanded-vs-factored `rw` failures → explicitly-typed `have`s;
+`lake env lean` does NOT refresh oleans (run `lake build` before depending on edits).
 
 ## Handoff notes
 - **Templates:** `softmaxRowF`/`softmaxRowBack` (StableHLO.lean ~198–250 + its `emitTok` case) is THE
