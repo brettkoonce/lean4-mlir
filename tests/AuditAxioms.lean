@@ -42,6 +42,7 @@ import LeanMlir.Proofs.ViTChainClose
 import LeanMlir.Proofs.ViTVecLN
 import LeanMlir.Proofs.ViTMultiHead
 import LeanMlir.Proofs.ViTDepthK
+import LeanMlir.Proofs.MobileNetV2FullPaper
 
 open Proofs
 
@@ -811,3 +812,17 @@ open Proofs
 #print axioms vitForwardKV_has_vjp_correct
 #print axioms StableHLO.vitBodyGraphKMHV_den
 #print axioms StableHLO.vitFwdGraphKMHV_faithful
+
+-- ============ Paper-spec full MobileNetV2 (MobileNetV2FullPaper.lean) ============
+-- The reduced ch7 close certified the repo's 6-block trainer; this scales the per-channel stage
+-- machinery over the REAL [t,c,n,s] table — 17 bottlenecks at 224^2 (4 stride-2 downsamples,
+-- 10 identity skips, 2 stage-first s=1 widenings, and the t=1 NO-EXPAND first block, the one
+-- genuinely-new shape) + stem 3->32 + head 320->1280. The EfficientNetFullB0 enumeration recipe;
+-- forward + graph + faithfulness (relu6 is kinked, so the whole-net input-VJP stays
+-- pointwise-only — the repo standard for relu-family nets, same as full ResNet-34). The
+-- MobileNetV2Close/ChainClose param bridges are dim-polymorphic and cover the paper shapes.
+#print axioms StableHLO.ivNoExpGraphW_faithful
+#print axioms StableHLO.ivExpOnlyGraphW_faithful
+#print axioms StableHLO.ivResidGraphW_faithful
+#print axioms StableHLO.ivStridedGraphW_faithful
+#print axioms StableHLO.mobilenetv2FwdGraphPaper_faithful

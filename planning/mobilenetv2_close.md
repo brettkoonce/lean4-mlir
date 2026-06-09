@@ -217,11 +217,20 @@ missed. The genuine head start: every per-op VJP and stride-1 param-grad bridge 
 **Honest caveat on "full": `mobilenetv2Forward_full(_pc)` is full relative to the repo's ch7
 trainer — a REDUCED MobileNetV2 (strided stem + 6 inverted-residual blocks + 1×1 head), not
 the paper's 17-block `[t,c,n,s]` spec.** The close (Items A–D, all ✅ above) certifies exactly
-the committed GPU-trained net, which is the right target repo-internally — but nothing should
-claim the paper MNV2 architecture is closed. If a paper-spec close is ever wanted, it is
-mechanical: the same per-block machinery (`invresBody(Strided)`, the per-channel-BN bridges,
-the stride-2 depthwise VJPs) enumerated over the real `[t,c,n,s]` table — exactly how
-`EfficientNetFullB0.lean` scaled the representative EfficientNet to all 16 MBConv blocks
-(pure enumeration + per-block chaining, no new math). The ViT depth-k handoff
-(`planning/vit_close.md`) gives the `Fin k → BlockParams` induction recipe if a generic-depth
-statement is preferred over enumeration.
+the committed GPU-trained net, which is the right target repo-internally.
+
+**PAPER-SPEC CLOSE — ✅ DONE (2026-06-09).** `LeanMlir/Proofs/MobileNetV2FullPaper.lean`
+enumerates the per-channel stage machinery over the REAL `[t,c,n,s]` table, the
+`EfficientNetFullB0` recipe: `IVW`/`IVWNoExp` weight bundles + `MNV2PaperWeights` (stem
+3→32, the 17 bottlenecks, head 320→1280, dense 1280→10), block-kind wrappers
+(`ivNoExpW`/`ivExpOnlyW`/`ivResidW`/`ivStridedW`), `mobilenetv2ForwardPaper` (full ℝ-forward,
+nested-application form), per-kind typed graphs + `_faithful`, and the apex
+**`mobilenetv2FwdGraphPaper_faithful`** (3×224² → 10, 4 stride-2 downsamples, 10 identity
+skips, 2 stage-first s=1 widenings). The one genuinely-new block shape was the **t=1
+no-expand first bottleneck** (depthwise→BN→relu6→project→BN, the torchvision/official
+layout) — composed from the existing `ivDepthwisePC`/`ivProjectPC` stages. Audit 366/366,
+3-axiom clean; compiled essentially first-try (one paren-balance fix). Scope note: like
+full ResNet-34, the deliverable is forward + graph + faithfulness — relu6 is kinked, so the
+whole-net input-VJP stays pointwise-only (the repo standard for relu-family nets); the
+param-grad close needs nothing new (the `MobileNetV2Close`/`ChainClose` bridges are
+dim-polymorphic and apply at the paper shapes verbatim).
