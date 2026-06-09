@@ -209,3 +209,19 @@ strided depthwise W/b and the stem strided bias each needed a new `decimate ∘ 
 lemmas). These are bounded analogues of the proven ch6 strided conv weight-grad, so they went in
 quickly (~190 LOC total, all 3-axiom clean), but they *are* new proofs the original Item C list
 missed. The genuine head start: every per-op VJP and stride-1 param-grad bridge was already proven.
+
+---
+
+## Full-architecture status (ladder audit, 2026-06-09)
+
+**Honest caveat on "full": `mobilenetv2Forward_full(_pc)` is full relative to the repo's ch7
+trainer — a REDUCED MobileNetV2 (strided stem + 6 inverted-residual blocks + 1×1 head), not
+the paper's 17-block `[t,c,n,s]` spec.** The close (Items A–D, all ✅ above) certifies exactly
+the committed GPU-trained net, which is the right target repo-internally — but nothing should
+claim the paper MNV2 architecture is closed. If a paper-spec close is ever wanted, it is
+mechanical: the same per-block machinery (`invresBody(Strided)`, the per-channel-BN bridges,
+the stride-2 depthwise VJPs) enumerated over the real `[t,c,n,s]` table — exactly how
+`EfficientNetFullB0.lean` scaled the representative EfficientNet to all 16 MBConv blocks
+(pure enumeration + per-block chaining, no new math). The ViT depth-k handoff
+(`planning/vit_close.md`) gives the `Fin k → BlockParams` induction recipe if a generic-depth
+statement is preferred over enumeration.

@@ -158,3 +158,38 @@ optional upgrades below (faithful channel-LN, 4×4 stride-4 stem, full `[3,3,9,3
 - **Optional upgrades (all batch-separable — none force a batched index):** faithful channel-LN-over-NCHW
   (reduce over C per `(n,h,w)` — a new `layerNormChannel` token + VJP, the real ConvNeXt LN); 4×4 stride-4
   patchify stem; full `[3,3,9,3]` depth.
+
+---
+
+## Full-architecture status (ladder audit, 2026-06-09)
+
+**ConvNeXt is one of two nets NOT closed at full architecture** (the other: ViT — see
+`planning/vit_close.md`'s handoff). What exists: the representative 2-block close (all four
+rungs, above) and the committed full ConvNeXt-T `[3,3,9,3]` production render
+(`tests/TestConvNeXtTrain.lean` — hand fragments, GPU-trained, NOT graph-closed). Contrast:
+ResNet-34 is closed at the full 16-block `[3,4,6,3]` net (`ResNet34RenderPC`) and
+EfficientNet-B0 at all 16 MBConv blocks (`EfficientNetFullB0`).
+
+### Scaling handoff — full ConvNeXt-T `[3,3,9,3]`
+Mirror the ViT depth-k recipe (`planning/vit_close.md` next-session handoff §2), which was
+designed off this exact gap:
+1. **Depth-k within a stage**: `convNextForwardK (k) (params : Fin k → CnxBlockParams)` —
+   bundle the 9-param block tuple in a structure; VJP by induction with the existing
+   `convNextBlock_has_vjp` as the step (the blocks are same-shape within a stage — easier
+   than ViT, no index changes). Graph by fold; faithfulness by induction off a per-block
+   den lemma (extract one from `convNextFwdGraph_faithful`'s block segment, the analogue of
+   `vitBlockGraph_den_aux`).
+2. **Downsample stages**: between stages, ConvNeXt-T has LN + 2×2/s2 conv downsamples and
+   channel widening (96→192→384→768). The strided-conv tokens + VJPs exist (ch6
+   `flatConvStridedF`, `StridedConv.lean`); what's new is only the stage-boundary chaining
+   (same `vjp_comp` shape as the stem).
+3. **4×4/s4 patchify stem**: the even-kernel non-overlapping strided conv — `patchEmbedF`'s
+   conv core at P=4 without the CLS/pos plumbing, or ch9's existing patchify recipe; the
+   ViT §E patch-close showed the kernel-Jacobian is the cheap const×reindex case.
+4. **Faithful channel-LN** (optional, beyond the scalar/vector-over-flat forms): real
+   ConvNeXt LN normalizes over C per (n,h,w) — a `layerNormChannel` token + rowwise-style
+   VJP over the channel fibre. The ViT vector-LN file (`ViTVecLN.lean`) is the template for
+   adding an LN variant end-to-end (forward+VJP+tokens+faithfulness+param bridges+chain pins).
+5. Item C/D are then free-to-cheap: every param family is already bridged
+   (`ConvNeXtClose`/`ConvNeXtChainClose` are dim-generic); only the stage-boundary
+   downsample conv W/b needs the strided bridges (proven for MNV2/r34).
