@@ -28,6 +28,9 @@ import LeanMlir.Proofs.MobileNetV2RenderPC
 import LeanMlir.Proofs.MobileNetV2ChainClose
 import LeanMlir.Proofs.ConvLossFold
 import LeanMlir.Proofs.EfficientNetClose
+import LeanMlir.Proofs.EfficientNetRenderPC
+import LeanMlir.Proofs.EfficientNetChainClose
+import LeanMlir.Proofs.EfficientNetFullB0
 import LeanMlir.Proofs.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
@@ -555,3 +558,44 @@ open Proofs
 #print axioms downBlock_render_convbp_chain_certified
 #print axioms stem_render_convW_chain_certified
 #print axioms stem_render_convb_chain_certified
+-- EfficientNet-B0 RENDER (Item A) — the BATCHED typed SHlo forward graph matching the render.
+-- EfficientNet's render emits TRUE batch-norm (reduce [0,2,3], batch-coupled), so unlike MNV2/r34
+-- the graph lives at the batched index N·(c·h·w): every batch-separable op is `batchMap N` of the
+-- proven per-example op (`SHlo.batchOp`/`BatchableOp`), the pointwise ops reuse their existing tokens,
+-- and true batch-norm is `SHlo.bnBatchF` (= the proven `bnBatchTensor4`). Per-block faithfulness
+-- (each block's token tree denotes its batched ℝ-forward; SE = `batchMap N seBlockFull`, residual =
+-- `addV`) chains into the whole-net `efficientnetFwdGraphB_faithful`. The "text = render of a proven
+-- forward graph" half for EfficientNet at the render's genuine (batch-coupled) BN flavor.
+#print axioms StableHLO.stemGraphB_faithful
+#print axioms StableHLO.mbNoExpGraphB_faithful
+#print axioms StableHLO.mbStridedGraphB_faithful
+#print axioms StableHLO.mbResidGraphB_faithful
+#print axioms StableHLO.headGraphB_faithful
+#print axioms StableHLO.efficientnetFwdGraphB_faithful
+-- EfficientNet-B0 cotangent-chain CLOSE (Item D), batched backward primitives. The backward math at
+-- the batched index: `batchMap_has_vjp` is the block-diagonal VJP lift — a batch-separable op's
+-- gradient is the proven per-example VJP applied per example (reuses `rowwise_has_vjp_mat` +
+-- `hasVJPMat_to_hasVJP`); this is `seBlockFull_has_vjp` / the conv-depthwise-dense VJPs lifted to the
+-- batch. `bnBatchLA_has_vjp` is the one batch-coupled op — the proven `bnBatchTensor4` VJP reindex-
+-- conjugated to the network's flat index. (`reindex_has_vjp` is a reusable generic reindex VJP.)
+#print axioms batchMap_has_vjp
+#print axioms batchMap_differentiable
+#print axioms reindex_has_vjp
+#print axioms bnBatchLA_has_vjp
+#print axioms bnBatchLA_differentiable
+-- Per-block batched gradients (the per-block VJP, the user-requested deliverable): each MBConv block
+-- type + head, composing the batched stage VJPs via `vjp_comp` (SE = `batchMap N seBlockFull`, true-BN
+-- = `bnBatchLA`, swish pointwise, residual via `residual_has_vjp`). Then the whole-subnet capstone —
+-- the batched, true-batch-norm + SE analogue of `efficientnet_has_vjp`. Both forward (Item A) and
+-- backward now proven for the block decomposition we scale.
+#print axioms mbNoExpFwdB_has_vjp
+#print axioms mbStridedFwdB_has_vjp
+#print axioms mbResidFwdB_has_vjp
+#print axioms headFwdB_has_vjp
+#print axioms efficientnetForwardB_has_vjp
+-- FULL EfficientNet-B0 (all 16 MBConv blocks, real [t,c,n,s,k] spec): the batched forward
+-- graph at full depth denotes the full ℝ-forward. Scales the representative via the generic
+-- per-block graph/faithful machinery (+ the 4th block shape mbExp: expand+stride1+no-residual).
+#print axioms StableHLO.mbExpGraphB_faithful
+#print axioms StableHLO.efficientnetFwdGraphB_full_faithful
+#print axioms efficientnetForwardB_full_has_vjp

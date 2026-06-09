@@ -87,6 +87,7 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .layerScaleF γ n :: ts, e :: st => parseStack ts (.layerScaleF γ n e :: st)
   | .softmaxRowF m n :: ts, e :: st => parseStack ts (.softmaxRowF m n e :: st)
   | .softmaxRowBack x m n :: ts, e :: st => parseStack ts (.softmaxRowBack x m n e :: st)
+  | .batched tag info :: ts, e :: st => parseStack ts (.batched tag info e :: st)
   | _ :: _, _                    => none  -- stack underflow / malformed
 
 /-- Parse a full token stream back to a single graph. -/
@@ -141,6 +142,7 @@ theorem parseStack_toToks (r : Raw) :
   | layerScaleF γ n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | softmaxRowF m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | softmaxRowBack x m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | batched tag info e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
 
 /-- **Serialization round-trip.** `parse` recovers any skeleton from its
     postorder token stream. -/

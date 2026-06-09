@@ -48,6 +48,42 @@ namespace Proofs
 namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
+-- § Batched lift (EfficientNet) — per-example block-apply over N examples,
+--   plus the one genuinely batch-coupled op (true batch-norm).
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Per-example block-apply.** Lift a per-example map `f : Vec a → Vec b` to a
+    batch of `N` examples laid out row-major `[N, a] ↦ [N, b]` (the network's
+    `[N,C,H,W]`-style flattening): example `n` occupies the `finProdFinEquiv`
+    block `{(n, ·)}`. Every spatial/channel op in EfficientNet is batch-separable
+    and lifts this way; only true batch-norm (`bnBatchTensor4`) couples the batch. -/
+noncomputable def batchMap (N : Nat) {a b : Nat} (f : Vec a → Vec b) :
+    Vec (N * a) → Vec (N * b) :=
+  fun x idx =>
+    let p := finProdFinEquiv.symm idx
+    f (fun i : Fin a => x (finProdFinEquiv (p.1, i))) p.2
+
+/-- **A batch-separable EfficientNet op**, shape-indexed by per-example in/out
+    length. The descriptor carried by `SHlo.batchOp`; its `denOp` is the proven
+    per-example forward, lifted by `batchMap`. (swish/sigmoid/relu/addV are
+    pointwise, so they need no descriptor — the existing tokens already denote
+    them block-diagonally at the batched index `N·(c·h·w)`.) -/
+inductive BatchableOp : Nat → Nat → Type where
+  | conv {ic oc h w kH kW : Nat} (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*h*w) (oc*h*w)
+  | convStrided {ic oc h w kH kW : Nat} (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
+  | depthwise {c h w kH kW : Nat} (wName bName : String)
+      (W : DepthwiseKernel c kH kW) (bias : Vec c)         : BatchableOp (c*h*w) (c*h*w)
+  | depthwiseStrided {c h w kH kW : Nat} (wName bName : String)
+      (W : DepthwiseKernel c kH kW) (bias : Vec c)         : BatchableOp (c*(2*h)*(2*w)) (c*h*w)
+  | dense {a c : Nat} (wName bName : String)
+      (W : Mat a c) (bias : Vec c)                         : BatchableOp a c
+  | gap {c h w : Nat}                                      : BatchableOp (c*h*w) c
+  | seBlock {c h w r : Nat} (w1Name b1Name w2Name b2Name : String)
+      (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) : BatchableOp (c*h*w) (c*h*w)
+
+-- ════════════════════════════════════════════════════════════════
 -- § StableHLO-subset AST — denotable AND renderable
 -- ════════════════════════════════════════════════════════════════
 
@@ -170,6 +206,17 @@ inductive SHlo : Nat → Type where
   -- (`xName`/`preAct`). SMOOTH everywhere (softmax has no kink). `den` via
   -- `rowSoftmaxBackFlat` (= `Mat.flatten ∘ rowSoftmax_has_vjp_mat.backward ∘ Mat.unflatten`).
   | softmaxRowBack {m n : Nat} (xName : String) (preAct : Vec (m*n)) : SHlo (m*n) → SHlo (m*n)
+  -- Chapter 8 (EfficientNet, BATCHED): a batch-separable op (conv/depthwise/dense/
+  -- GAP/SE) lifted to `N` examples by `batchMap`; `den` is `batchMap N (denOp op)`.
+  -- The whole EfficientNet forward graph lives at the batched index `N·(c·h·w)`;
+  -- pointwise swish/sigmoid/relu/addV reuse their existing tokens at that index.
+  | batchOp {N a b : Nat} (op : BatchableOp a b)               : SHlo (N * a) → SHlo (N * b)
+  -- Chapter 8 (EfficientNet, BATCHED): TRUE batch-norm — reduce μ/var over the
+  -- batch+spatial axes [0,2,3] per channel (NOT per-example). The one op that
+  -- couples the batch; `den` is `bnBatchLA` (= the proven `bnBatchTensor4`,
+  -- conjugated to the network's left-assoc `N·(oc·h·w)` flat index).
+  | bnBatchF {N oc h w : Nat} (gName bName epsStr : String) (ε : ℝ) (γ β : Vec oc) :
+      SHlo (N * (oc * h * w)) → SHlo (N * (oc * h * w))
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -202,6 +249,29 @@ noncomputable def rowSoftmaxBackFlat (m n : Nat) (preAct dy : Vec (m*n)) : Vec (
     let dyi := (Mat.unflatten dy) i
     let s := ∑ j, p j * dyi j
     fun c => p c * (dyi c - s))
+
+/-- **The proven per-example forward of a `BatchableOp`** — exactly the existing
+    batch-1 op (`flatConv`/`depthwiseFlat`/`dense`/`globalAvgPoolFlat`/`seBlockFull`/…).
+    `SHlo.batchOp`'s `den` is `batchMap N (denOp op)`. -/
+noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
+  | _, _, .conv _ _ W bias => flatConv W bias
+  | _, _, .convStrided _ _ W bias => flatConvStride2 W bias
+  | _, _, .depthwise _ _ W bias => depthwiseFlat W bias
+  | _, _, .depthwiseStrided _ _ W bias => depthwiseStride2Flat W bias
+  | _, _, .dense _ _ W bias => dense W bias
+  | _, _, .gap (c := c) (h := h) (w := w) => globalAvgPoolFlat c h w
+  | _, _, .seBlock (h := h) (w := w) _ _ _ _ W₁ b₁ W₂ b₂ => seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂
+
+/-- **True batch-norm at the network's left-assoc `[N,C,H,W]` flat index.** The
+    proven `bnBatchTensor4` (typed at `N·(oc·(h·w))`) conjugated by the `mul_assoc`
+    reindex so it slots into the `N·(oc·h·w)` batched composition (where conv/etc.
+    produce `oc·h·w = (oc·h)·w`). Reindex only — the function IS `bnBatchTensor4`. -/
+noncomputable def bnBatchLA (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
+    Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)) :=
+  fun v =>
+    (fun y => y ∘ Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))
+      (bnBatchTensor4 N oc h w ε γ β
+        (v ∘ Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm))
 
 /-- **AST denotation `⟦·⟧ₐ`** — our reading of each StableHLO op's spec, over
     `ℝ`, per-example, in primitive terms — independent of `dense`/`Mat.mulVec`.
@@ -245,6 +315,9 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .layerScaleF (n := n) _ γ e => layerScale γ (den e)
   | _, .softmaxRowF (m := m) (n := n) e => rowSoftmaxFlat m n (den e)
   | _, .softmaxRowBack (m := m) (n := n) _ preAct e => rowSoftmaxBackFlat m n preAct (den e)
+  | _, .batchOp (N := N) op e => batchMap N (denOp op) (den e)
+  | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ β e =>
+      bnBatchLA N oc h w ε γ β (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -270,6 +343,40 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
     den (.relu6F e) = fun i => min (max (den e i) 0) 6 := rfl
 @[simp] theorem den_selectMid {n : Nat} (s : String) (x : Vec n) (e : SHlo n) :
     den (.selectMid s x e) = fun i => if 0 < x i ∧ x i < 6 then den e i else 0 := rfl
+
+-- Batched-lift faithfulness: `den` of each batched token = `batchMap N` of the
+-- proven per-example op (rfl, since `denOp` returns that op directly), and the
+-- true-batch-norm token denotes `bnBatchLA` (= the proven `bnBatchTensor4`).
+@[simp] theorem den_batchOp_conv {N ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (bias : Vec oc) (e : SHlo (N * (ic*h*w))) :
+    den (.batchOp (N := N) (.conv (h := h) (w := w) wN bN W bias) e)
+      = batchMap N (flatConv W bias) (den e) := rfl
+@[simp] theorem den_batchOp_convStrided {N ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (bias : Vec oc) (e : SHlo (N * (ic*(2*h)*(2*w)))) :
+    den (.batchOp (N := N) (.convStrided (h := h) (w := w) wN bN W bias) e)
+      = batchMap N (flatConvStride2 W bias) (den e) := rfl
+@[simp] theorem den_batchOp_depthwise {N c h w kH kW : Nat} (wN bN : String)
+    (W : DepthwiseKernel c kH kW) (bias : Vec c) (e : SHlo (N * (c*h*w))) :
+    den (.batchOp (N := N) (.depthwise (h := h) (w := w) wN bN W bias) e)
+      = batchMap N (depthwiseFlat W bias) (den e) := rfl
+@[simp] theorem den_batchOp_depthwiseStrided {N c h w kH kW : Nat} (wN bN : String)
+    (W : DepthwiseKernel c kH kW) (bias : Vec c) (e : SHlo (N * (c*(2*h)*(2*w)))) :
+    den (.batchOp (N := N) (.depthwiseStrided (h := h) (w := w) wN bN W bias) e)
+      = batchMap N (depthwiseStride2Flat W bias) (den e) := rfl
+@[simp] theorem den_batchOp_dense {N a c : Nat} (wN bN : String)
+    (W : Mat a c) (bias : Vec c) (e : SHlo (N * a)) :
+    den (.batchOp (N := N) (.dense wN bN W bias) e)
+      = batchMap N (dense W bias) (den e) := rfl
+@[simp] theorem den_batchOp_gap {N c h w : Nat} (e : SHlo (N * (c*h*w))) :
+    den (.batchOp (N := N) (.gap (c := c) (h := h) (w := w)) e)
+      = batchMap N (globalAvgPoolFlat c h w) (den e) := rfl
+@[simp] theorem den_batchOp_seBlock {N c h w r : Nat} (w1 b1 w2 b2 : String)
+    (W₁ : Mat c r) (β₁ : Vec r) (W₂ : Mat r c) (β₂ : Vec c) (e : SHlo (N * (c*h*w))) :
+    den (.batchOp (N := N) (.seBlock (h := h) (w := w) w1 b1 w2 b2 W₁ β₁ W₂ β₂) e)
+      = batchMap N (seBlockFull (h := h) (w := w) W₁ β₁ W₂ β₂) (den e) := rfl
+@[simp] theorem den_bnBatchF {N oc h w : Nat} (gN bN es : String) (ε : ℝ) (γ β : Vec oc)
+    (e : SHlo (N * (oc*h*w))) :
+    den (.bnBatchF gN bN es ε γ β e) = bnBatchLA N oc h w ε γ β (den e) := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § `emit`: the linear (Chapter-2) train-step graphs
@@ -1250,6 +1357,9 @@ inductive Raw where
   | layerScaleF (γ : String) (n : Nat)     : Raw → Raw
   | softmaxRowF    (m n : Nat)             : Raw → Raw
   | softmaxRowBack (x : String) (m n : Nat) : Raw → Raw
+  -- EfficientNet batched ops (`batchOp`/`bnBatchF`): the renderable skeleton keeps
+  -- only a tag + shape info; the concrete batched StableHLO emission is Item B.
+  | batched    (tag : String) (info : List Nat) : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
@@ -1301,6 +1411,9 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .layerScaleF γN _ e   => .layerScaleF γN k (skel e)
   | _, .softmaxRowF (m := m) (n := n) e => .softmaxRowF m n (skel e)
   | _, .softmaxRowBack (m := m) (n := n) x _ e => .softmaxRowBack x m n (skel e)
+  | _, .batchOp (N := N) (a := a) (b := b) _ e => .batched "batchOp" [N, a, b] (skel e)
+  | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
+      .batched "bnBatch" [N, oc, h, w] (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -1340,6 +1453,7 @@ inductive Tok where
   | layerScaleF (γ : String) (n : Nat)     : Tok
   | softmaxRowF    (m n : Nat)             : Tok
   | softmaxRowBack (x : String) (m n : Nat) : Tok
+  | batched    (tag : String) (info : List Nat) : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -1380,6 +1494,7 @@ def toToks : Raw → List Tok
   | .layerScaleF γN n e => toToks e ++ [.layerScaleF γN n]
   | .softmaxRowF m n e    => toToks e ++ [.softmaxRowF m n]
   | .softmaxRowBack x m n e => toToks e ++ [.softmaxRowBack x m n]
+  | .batched tag info e   => toToks e ++ [.batched tag info]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -1852,6 +1967,12 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {d} = stablehlo.subtract {dn}, {srb} : {ty [B,m,n]}\n" ++
         s!"    {dz} = stablehlo.multiply {p}, {d} : {ty [B,m,n]}\n" ++
         s!"    {o} = stablehlo.reshape {dz} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+  | .batched tag info, r :: st =>
+      -- EfficientNet batched op: the concrete batched StableHLO emission (the
+      -- `[N,C,H,W]` conv/depthwise/SE fragments + the reduce-[0,2,3] batch-norm)
+      -- is Item B. Item A is forward-graph faithfulness (`den`), which never calls
+      -- `emit`; here we record the op and pass the result through.
+      pure (s!"    // [EfficientNet Item B] batched {tag} {info} — render TODO\n", r :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
