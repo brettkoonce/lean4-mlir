@@ -57,9 +57,14 @@ per-channel + full depth; same `simp`+`unfold` faithfulness recipe as `mobilenet
 better covered by tokens than MobileNetV2's: relu back = **`selectPos`** (single-sided, simpler than
 relu6's `selectMid`); maxpool back = **`maxPoolBack`**; plus `convBack`/`convStridedBack`/
 `bnPerChannelBack`/`dotOut`/`addV`. Hand-emit only: GAP back, conv/strided-conv weight+bias grads, the
-7×7 stem weight-grad, BN dγ/dβ. Validate with the **`iree-run-module` same-inputs output diff** vs the
-committed `resnet34_train_step.mlir` (the imagenette swap-train loader is broken in this env — see
-memory `running-verified-trainers-locally`; the run-module diff is stronger and bypasses it).
+7×7 stem weight-grad, BN dγ/dβ.
+
+**Validation harness: ✅ SET UP & de-risked** (the hard part last time). `scripts/render_parity.py`
+(reusable) parses the func sig, gens fixed-random `.npy` inputs, iree-compiles + GPU-runs both the
+committed and structured `.mlir` via `iree-run-module`, and `np.array_equal`s all outputs. Proven on
+the committed r34 baseline (`--fn resnet34_train_step --ref verified_mlir/resnet34_train_step.mlir`:
+148 inputs/146 outputs, all finite; committed-vs-itself = 146/146 bit-identical) and on MobileNetV2
+(82/82). So Item B validation is now one command — bypasses the broken imagenette swap-train loader.
 
 ### Item D — cotangent chain — [optional; head start]
 r34 already has `resnet34_has_vjp_at` (the chain assembled parametrically), so pinning the Item C
