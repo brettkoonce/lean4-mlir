@@ -82,9 +82,25 @@ the committed r34 baseline (`--fn resnet34_train_step --ref verified_mlir/resnet
 148 inputs/146 outputs, all finite; committed-vs-itself = 146/146 bit-identical) and on MobileNetV2
 (82/82). So Item B validation is now one command — bypasses the broken imagenette swap-train loader.
 
-### Item D — cotangent chain — [optional; head start]
-r34 already has `resnet34_has_vjp_at` (the chain assembled parametrically), so pinning the Item C
-bridges' generic cotangent to it is less from-scratch than MobileNetV2's would be.
+### Item D — cotangent chain — ✅ **DONE** (2026-06-09)
+`LeanMlir/Proofs/ResNet34ChainClose.lean` (10 theorems, 3-axiom clean, audited) — the `CnnChainClose`
+analogue: the Item C conv bridges pinned to the cotangent the **actual backward chain delivers**. The
+chain through a basic block composes the *rendered* backward denotations — the block-output relu mask
+(`selectPos`, `if a>0`), the per-channel BN input-VJP (`bnPerChannelTensor3_grad_input`, =
+`bnPerChannelBack`'s denotation), and the conv input-VJP (`conv2d_has_vjp3` via the flatten bridge, =
+`convBack`'s denotation) — into `idBlockCotC2`/`idBlockCotC1`:
+- **identity block**: `idBlock_render_conv{W,b}{1,2}_chain_certified` at `idBlockCotC1`/`idBlockCotC2`.
+- **downsample block**: conv₂/b₂ (stride-1) reuse the identity theorems; the strided main `W₁`/`b₁`
+  and projection `Wp`/`bp` use `downBlock_render_conv{W1,Wp,...}_chain_certified` (the projection
+  cotangent is `idBlockCotC2` with `(γp, cp)`; the main `conv₁` cotangent is `idBlockCotC1`, since
+  conv₂ is stride-1).
+- **stem**: `stemCot` crosses the maxpool `select_and_scatter` (`maxPoolBackFlat`) + the stem relu/BN;
+  `stem_render_conv{W,b}_chain_certified` (7×7 strided).
+
+Each conv θ output denotes `θ − lr·(certified ∂conv/∂θ · the-actual-chain-cotangent)`. Pins the
+cotangent; the further `= ∂loss/∂θ` fold (composing the per-block cotangents through all 16 blocks +
+maxpool + stem to the loss) stays separate, exactly as for the CNN. r34's `resnet34_has_vjp_at` gave the
+conceptual head start; the pin itself is the per-block cotangent composition above.
 
 ---
 
@@ -92,11 +108,12 @@ bridges' generic cotangent to it is less from-scratch than MobileNetV2's would b
 1. **Item C** ✅ DONE — free close, `ResNet34Close.lean`.
 2. **Item A** ✅ DONE — per-channel forward graph, `ResNet34RenderPC.lean` (per-block + whole-net faithful).
 3. **Item B** ✅ DONE — structured render `TestResnet34TrainPC.lean`, bit-identical to committed (146/146).
-4. **Item D** — optional cotangent-chain polish (not started; `resnet34_has_vjp_at` gives a head start).
+4. **Item D** ✅ DONE — cotangent-chain pin `ResNet34ChainClose.lean` (id/down block + maxpool-back stem).
 
-**r34 is closed both ways (CIFAR-BN bar): every param certified (C) + per-channel forward graph
-proven faithful (A) + structured render = proven graph, GPU-validated bit-identical (B).** Only the
-optional Item D (cotangent-chain pinning) remains.
+**r34 is FULLY closed (C+A+B+D):** every param certified (C) + per-channel forward graph proven
+faithful (A) + structured render = proven graph, GPU-validated bit-identical (B) + cotangent chain
+pinned to the actual backward (D). This goes one rung *past* the MobileNetV2 close (which stopped at
+C+A+B) — matching the conv-close upgrade (`CnnChainClose`) for the branchy multi-scale ResNet.
 
 After Item B, r34 is closed both ways (the CIFAR-BN bar). The new work is concentrated in A/B assembly,
 mechanical given the MobileNetV2 templates (`MobileNetV2RenderPC.lean`, `tests/TestMobilenetV2TrainPC.lean`).

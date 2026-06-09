@@ -100,7 +100,10 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.ResNet34Close,
              -- ResNet-34 render (Item A): the PER-CHANNEL-BN typed SHlo forward graph (full
              -- 16-block [3,4,6,3] net, 7×7 stem, maxpool) + per-block + whole-net faithfulness.
-             `LeanMlir.Proofs.ResNet34RenderPC]
+             `LeanMlir.Proofs.ResNet34RenderPC,
+             -- ResNet-34 cotangent-chain close (Item D): the Item C conv bridges pinned to the
+             -- cotangent the backward chain delivers (id/downsample block + maxpool-back stem).
+             `LeanMlir.Proofs.ResNet34ChainClose]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

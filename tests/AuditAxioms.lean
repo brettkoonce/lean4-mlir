@@ -27,6 +27,7 @@ import LeanMlir.Proofs.MobileNetV2Close
 import LeanMlir.Proofs.MobileNetV2RenderPC
 import LeanMlir.Proofs.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
+import LeanMlir.Proofs.ResNet34ChainClose
 
 open Proofs
 
@@ -491,3 +492,22 @@ open Proofs
 #print axioms StableHLO.idBlockGraphPC_faithful
 #print axioms StableHLO.downBlockGraphPC_faithful
 #print axioms StableHLO.resnet34FwdGraphFullPC_faithful
+-- ResNet-34 cotangent-chain CLOSE (Item D) — the CnnChainClose analogue: the Item C conv bridges
+-- pinned to the cotangent the actual backward chain delivers. The chain through a basic block composes
+-- the rendered backward denotations — the block-output relu mask (selectPos, if a>0), the per-channel
+-- BN input-VJP (bnPerChannelTensor3_grad_input, = bnPerChannelBack's denotation), and the conv input-VJP
+-- (conv2d_has_vjp3 via the flatten bridge, = convBack's denotation) — into idBlockCotC2/idBlockCotC1;
+-- the downsample block adds the strided main/projection convs (idBlockCotC1 / idBlockCotC2 with γp), the
+-- stem crosses the maxpool select_and_scatter (maxPoolBackFlat). Each conv θ output then denotes
+-- θ − lr·(certified ∂conv/∂θ · the-actual-chain-cotangent). Pins the cotangent; the further = ∂loss/∂θ
+-- fold (composing through all 16 blocks) stays separate, as for the CNN. 3-axiom clean.
+#print axioms idBlock_render_convW2_chain_certified
+#print axioms idBlock_render_convb2_chain_certified
+#print axioms idBlock_render_convW1_chain_certified
+#print axioms idBlock_render_convb1_chain_certified
+#print axioms downBlock_render_convW1_chain_certified
+#print axioms downBlock_render_convb1_chain_certified
+#print axioms downBlock_render_convWp_chain_certified
+#print axioms downBlock_render_convbp_chain_certified
+#print axioms stem_render_convW_chain_certified
+#print axioms stem_render_convb_chain_certified
