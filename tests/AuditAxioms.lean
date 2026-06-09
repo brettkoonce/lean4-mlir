@@ -23,6 +23,7 @@ import LeanMlir.Proofs.MlpTrainStep
 import LeanMlir.Proofs.CnnTrainStep
 import LeanMlir.Proofs.CifarBnClose
 import LeanMlir.Proofs.CnnChainClose
+import LeanMlir.Proofs.MobileNetV2Close
 
 open Proofs
 
@@ -436,3 +437,22 @@ open Proofs
 #print axioms cnn_render_convb2_chain_certified
 #print axioms cnn_render_convW1_chain_certified
 #print axioms cnn_render_convb1_chain_certified
+-- MobileNetV2 CLOSE (planning/mobilenetv2_close.md Item C) — the "free close" generic in the
+-- cotangent: every MobileNetV2 train-step parameter output denotes θ − lr·(certified Jacobian ·
+-- cotangent). Three genuinely-new bridge families (the 1×1 conv W/b, BN γ/β, and dense W/b
+-- families reuse the M3/CIFAR-BN/M2 bridges verbatim at the MobileNetV2 shapes, so are covered by
+-- cnn_render_conv{W,b}_certified / cifar_bn_render_{gamma,beta}_certified / weight_grad_bridge):
+--   • depthwise (stride-1) W/b — .correct of the proven depthwise_weight_grad_has_vjp3 /
+--     depthwise_bias_grad_has_vjp (per-channel transpose trick / spatial reduce), SGD-wrapped.
+--   • stem strided 3×3 conv W/b — flatConvStride2_weight_grad_has_vjp (ch6) + a new strided-conv
+--     bias VJP (decimate ∘ conv2d-in-b).
+--   • strided depthwise W/b (4 of 6 blocks downsample) — new depthwiseStride2 weight/bias VJPs,
+--     the decimate ∘ stride-1 recipe (vjp_comp of a proven stride-1 depthwise VJP + decimateFlat).
+#print axioms mnv2_depthwise_weight_grad_bridge
+#print axioms mnv2_depthwise_bias_grad_bridge
+#print axioms mnv2_render_depthwiseW_certified
+#print axioms mnv2_render_depthwiseb_certified
+#print axioms mnv2_render_stem_convW_certified
+#print axioms mnv2_render_stem_convb_certified
+#print axioms mnv2_render_depthwiseW_strided_certified
+#print axioms mnv2_render_depthwiseb_strided_certified

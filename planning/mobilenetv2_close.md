@@ -86,7 +86,7 @@ tail to captured names. Validate by swap-train `mobilenetv2-verified` (expect pa
 committed renderer; per-channel BN back via `bnPerChannelBack` token is *equivalent, not
 bit-identical* if it recomputes like CIFAR-BN did).
 
-### Item C — the close `MobileNetV2Close.lean`  [NEW wrappers, mostly cheap — DO THIS FIRST]
+### Item C — the close `MobileNetV2Close.lean`  ✅ **DONE** (2026-06-09)
 Instantiate the reusable bridges at each param, generic in the cotangent (the CIFAR-non-BN-style
 "free close" — needs no chain). Per block: expand/project/head 1×1 → `cnn_render_conv{W,b}_certified`;
 **depthwise → new `mnv2_render_depthwise{W,b}_certified`** wrapping `depthwise_weight_grad_has_vjp3
@@ -95,6 +95,27 @@ instantiation, the VJP is proven); BN γ/β → `cifar_bn_render_{gamma,beta}_ce
 conv → the ch6 strided conv weight-grad. relu6 has no params. `#print axioms` each in AuditAxioms.
 **This is the highest-value/effort piece and doesn't depend on A/B** — the operational render
 already GPU-trains, so the close certifies *that* computation.
+
+**Shipped** (`LeanMlir/Proofs/MobileNetV2Close.lean`, 8 certified theorems, all 3-axiom clean
+`[propext, Classical.choice, Quot.sound]`, audited in `tests/AuditAxioms.lean`):
+- `mnv2_render_depthwise{W,b}_certified` — stride-1 depthwise (blocks b2,b4), the plan's headline
+  family. Thin `.correct` wrappers of `depthwise_weight_grad_has_vjp3` / `depthwise_bias_grad_has_vjp`.
+- `mnv2_render_stem_conv{W,b}_certified` — stem 3×3 stride-2. W reuses `flatConvStride2_weight_grad_has_vjp`;
+  b needed a **new** `flatConvStride2_bias_grad_has_vjp` (the plan only listed the stem *weight*).
+- `mnv2_render_depthwise{W,b}_strided_certified` — **the gap the plan missed**: 4 of 6 blocks
+  (b1,b3,b5,b6) downsample with a *strided* depthwise, so their dW/db feed `depthwiseStride2Flat`,
+  not `depthwiseConv2d`. Built new `depthwiseStride2_{weight,bias}_grad_has_vjp` = `vjp_comp` of a
+  proven stride-1 depthwise VJP with `decimateFlat_has_vjp` (the same `decimate ∘ stride-1` recipe
+  as the ch6 strided conv weight-grad; backward = upsample-then-stride-1, matching the render's
+  `dwconvWGradStrided`). +3 helper differentiability lemmas (`depthwise_weight/bias_differentiable`,
+  `conv2d_bias_differentiable`).
+- **Reuse (no new theorem):** 1×1 conv W/b → `cnn_render_conv{W,b}_certified`; BN γ/β →
+  `cifar_bn_render_{gamma,beta}_certified`; dense Wd/bd → M2 `weight/bias_grad_bridge`. These are
+  fully dim-polymorphic, so they apply at the MobileNetV2 shapes verbatim (documented in the file's
+  coverage table + the AuditAxioms note, as CIFAR-BN did).
+
+Net: **every** MobileNetV2 train-step parameter family is now certified `θ − lr·(certified
+Jacobian · the layer cotangent)`. MobileNetV2 is at the CIFAR-non-BN "close-DONE" bar.
 
 ### Item D — the inverted-residual cotangent chain  [NEW, the hard/optional polish]
 The analogue of `CnnChainClose.lean`, but harder: pin the generic `c` to the actual chain through
@@ -109,11 +130,13 @@ net). *Optional* — pins the cotangent; the further "= ∂loss/∂θ" fold rema
 
 ## 3. Suggested order (value-first, like the original handoff)
 
-1. **Item C (the close), generic-cotangent.** Cheapest, highest value, no prerequisites. Gives
-   "every MobileNetV2 conv/depthwise/BN param output denotes `θ − lr·(certified Jacobian · the
-   layer cotangent)`." The depthwise W/b wrappers are the only new bridge family (instantiation).
-   Land + audit. This alone is a real result: the operational GPU-trained render is now
-   param-certified.
+1. **Item C (the close), generic-cotangent.** ✅ **DONE** — `MobileNetV2Close.lean`, 8 theorems,
+   3-axiom clean, audited. "Every MobileNetV2 conv/depthwise/BN param output denotes `θ − lr·(certified
+   Jacobian · the layer cotangent)`." The operational GPU-trained render is now param-certified.
+   Scope note: the depthwise W/b wrappers were *not* the only new content — the 4 downsampling
+   blocks' **strided** depthwise W/b + the stem strided **bias** each needed a new `decimate ∘
+   stride-1` VJP (bounded analogues of the existing ch6 strided conv weight-grad, not just
+   instantiation). See Item C above.
 2. **Item A (typed forward graph)** + its `_faithful`. The prerequisite for the structured render;
    also reconciles the scalar↔per-channel BN.
 3. **Item B (structured render)** from A. Swap-train validate. Now MobileNetV2 has the "text =
@@ -129,5 +152,10 @@ to `planning/render_close_handoff.md` §"Validation recipe".
 The Explore-style "no new proofs, ~200 LOC" estimate is too rosy: it ignores that there is **no
 typed forward graph and no structured render** (Items A+B are real assembly), and that the
 **cotangent chain (Item D) is branchier than anything done so far** (residual fan-in + multi-scale
-stride-2). What *is* cheap is Item C (the param closes), because every per-op VJP and param-grad
-bridge is already proven and 3-axiom-clean — that's the genuine head start.
+stride-2). Item C (the param closes) was the cheap head start — but *not* "no new proofs":
+the stride-1 depthwise + reuse families were instantiation, but the **4 downsampling blocks'
+strided depthwise W/b and the stem strided bias each needed a new `decimate ∘ stride-1` VJP**
+(`depthwiseStride2_{weight,bias}_grad_has_vjp`, `flatConvStride2_bias_grad_has_vjp` + 3 diff
+lemmas). These are bounded analogues of the proven ch6 strided conv weight-grad, so they went in
+quickly (~190 LOC total, all 3-axiom clean), but they *are* new proofs the original Item C list
+missed. The genuine head start: every per-op VJP and stride-1 param-grad bridge was already proven.

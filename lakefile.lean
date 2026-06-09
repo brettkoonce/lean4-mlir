@@ -85,7 +85,11 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.CifarBnClose,
              -- CNN conv-close upgrade: the conv param closes pinned to the actual
              -- backward-chain cotangent (Back3 maxpool/conv via flatDenote + relu masks).
-             `LeanMlir.Proofs.CnnChainClose]
+             `LeanMlir.Proofs.CnnChainClose,
+             -- MobileNetV2 close (Item C): the depthwise (stride-1/2) + strided-conv
+             -- parameter-gradient bridges — every MobileNetV2 train-step param output
+             -- certified θ − lr·(certified Jacobian · cotangent).
+             `LeanMlir.Proofs.MobileNetV2Close]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
