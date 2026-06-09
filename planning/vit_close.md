@@ -232,7 +232,27 @@ ConvNeXt / transformer) at the full MNV2/r34/ConvNeXt bar.**
   block. **Render:** `TestViTTrainPC.lean` now data-drives `DEPTH := 12` blocks
   (200 params — the ViT-Tiny count; heads=2, D=32 representative dims) — 553KB MLIR,
   iree-compile OK + gfx1100 smoke 200/200 finite & non-zero. Audit 361/361.
-- **fused QKV** — open (only worth doing with the production render). Detailed handoff below.
+- **production ViT-Tiny capstone — ✅ CLOSED (2026-06-09).** `TestViTTrainPC.lean` now
+  renders the FULL production config: 3×224², 16×16/s16 (196+1 tokens), D=192, heads=3,
+  d_head=64, mlpDim=768, depth-12, vector-LN, BS=32, 200 params — with the SIGNATURE
+  matched to the committed `verified_mlir/vit_train_step.mlir` exactly (same
+  `@vit_train_step` name, same param order/shapes incl. cls `[1,D]` via reshape glue,
+  eps 1e-5, scale 1/√64, lr 0.1, identical tanh-GELU constants). New emission: the §E
+  patch W-grad at general P as an im2col contraction (non-overlapping patches = pure
+  reshape/transpose + ONE dot_general — vs the committed dilate+conv; equivalent).
+  **VALIDATED TWO-SIDED: `render_parity.py` PARITY ✓ — all 200 updated params match the
+  committed GPU-trained trainer, worst rel-diff 7.1e-8 (38 bit-identical)** — float-
+  rounding-level agreement despite genuinely different texts (per-head slice/pad-sum vs
+  rank-4 batched attention, 3-token vs fused LN affine, recompute-vs-save layouts).
+  This is the convergence the capstone wanted: the committed trainer's text is now
+  cross-validated against a proof-rendered module of the same signature.
+- **fused QKV — MOOT.** The committed render carries SEPARATE Wq/Wk/Wv `[d,d]` params
+  (the fused-slab note in §0 was stale) — signature convergence needed no fusing. The
+  proof-side `mhsa_qkv_W` machinery remains available if a fused render is ever wanted.
+
+**THE LADDER IS COMPLETE: representative close (4 rungs) + vector-LN + multi-head +
+depth-k + the production ViT-Tiny capstone, all 3-axiom clean (audit 361/361), the
+production render parity-validated against the committed GPU trainer at 7e-8.**
 
 ---
 
@@ -288,12 +308,16 @@ The MATH is already general: `mhsa_has_vjp_mat`/`transformerBlock(V)_has_vjp_mat
   for exactly this). The `pretty`-based render (`TestViTTrainPC`) already data-drives per
   block; lifting to 12 is a loop + the param-list change.
 
-### 3. Fused QKV slab (optional)
+### 3. Fused QKV slab (optional) — MOOT (the committed render is unfused; see status above)
 The proof-side `mhsa_qkv_W` column-stacking machinery exists (Attention.lean Phase 3). Render:
 one `denseRowF` at `[D, 3·D]` + three column slices (the `headSliceF` token at `Fin 3` fibres
 covers it). Only worth doing with multi-head (the production render fuses).
 
-### 4. Production-config render (the capstone)
+### 4. Production-config render (the capstone) — ✅ CLOSED 2026-06-09
+Done, and stronger than the plan hoped: signatures were made to align exactly (the
+committed render turned out to use separate Wq/Wk/Wv; only cls `[1,D]` needed reshape
+glue), so the validation is the full two-sided `render_parity.py` — PARITY ✓, 200/200
+outputs, worst rel-diff 7.1e-8. See the scaling-pass status above. Original plan:
 `TestViTTrainPC` at ic=3, H=W=224, P=16 (N=196), D=192, heads=3, mlpDim=768, depth-12,
 vector-LN, BS=32 — every ingredient then exists; compare against the committed
 `verified_mlir/vit_train_step.mlir` trainer (`vit-verified` exe) — expect equivalent-not-
@@ -309,8 +333,9 @@ rowBiasF tokens, graphV faithfulness, per-channel γ/β bridges + chain pins);
 `ViTMultiHead.lean` (multi-head: `headSliceF`/`headPadF` tokens + `headsSumG`,
 `mhsa_layer_spelled` at general heads, `vitBlockSpelledMH(V)`, `vitFwdGraphMH(V)_faithful`);
 `ViTDepthK.lean` (depth-k: `BlockParamsV`, `vitForwardKV(_has_vjp)` at every depth,
-`vitFwdGraphKMHV_faithful`); `tests/TestViTTrainPC.lean` (depth-12 × heads=2 vector-LN
-proof-rendered train step, 200 params, iree + 200/200 GPU smoke).
+`vitFwdGraphKMHV_faithful`); `tests/TestViTTrainPC.lean` (the PRODUCTION ViT-Tiny
+proof-rendered train step: 224²/P=16/D=192/heads=3/depth-12, 200 params, committed-
+signature-matched, two-sided parity PARITY ✓ at 7.1e-8).
 Gotchas that carried: per-block lemmas then chain; nested-application not `∘`; explicit dims
 on stage lemmas; beta-expanded-vs-factored `rw` failures → explicitly-typed `have`s;
 `lake env lean` does NOT refresh oleans (run `lake build` before depending on edits).

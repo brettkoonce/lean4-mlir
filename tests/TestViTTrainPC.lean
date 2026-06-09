@@ -3,13 +3,16 @@ import LeanMlir.Types
 
 /-! # ViT Item B — structured representative train-step render (proof-rendered)
 
-The ViT peer of `tests/TestConvNeXtTrainPC.lean`, at the **representative** config —
-now **MULTI-HEAD and DEPTH-12** (the proven graph `vitFwdGraphKMHV`, `ViTDepthK.lean` /
-`ViTMultiHead.lean`): patchSize-1 patch embed (per-pixel dense + CLS + pos) →
-**12 distinct-param pre-norm transformer blocks** (data-driven loop, the `Fin k`
-param-function regime; **heads = 2, d_head = 16**) → final per-token LN → CLS slice →
-dense head. CIFAR-shaped: 3×8² in → 64 patches + CLS = 65 tokens, D = 32, mlpDim = 128,
-10 classes, BS = 32, 4 + 16·12 + 4 = 200 params (the ViT-Tiny param count).
+The ViT peer of `tests/TestConvNeXtTrainPC.lean`, at the **PRODUCTION ViT-Tiny config**
+(the capstone; the proven graph `vitFwdGraphKMHV`, `ViTDepthK.lean` / `ViTMultiHead.lean`):
+16×16/stride-16 patch embed (+ CLS + pos) → **12 distinct-param pre-norm transformer
+blocks** (data-driven loop, the `Fin k` param-function regime; **heads = 3, d_head = 64**)
+→ final per-token LN → CLS slice → dense head. ImageNet-shaped: 3×224² in → 196 patches
++ CLS = 197 tokens, D = 192, mlpDim = 768, 10 classes (imagenette), BS = 32,
+4 + 16·12 + 4 = 200 params. The signature MATCHES the committed
+`verified_mlir/vit_train_step.mlir` exactly (same `@vit_train_step` name, same param
+order/shapes — incl. cls as `[1,D]` via denotation-trivial reshape glue, eps 1e-5,
+scale 1/√64, lr 0.1), enabling the TWO-SIDED `render_parity.py` check.
 **Vector-[D] LN γ/β** (the production `ViTRender` form, proven in `ViTVecLN.lean`): each
 LN site is the three-token decomposition `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β`;
 the LN backward reuses `rowScaleF` on the cotangent (diagonal — its own input-VJP) then
@@ -36,11 +39,12 @@ Only the no-SHlo-constructor pieces are hand-emitted, each certified in
 `dWp`/`dbp` over the patch rows (`vit_render_patch{W,b}_certified`), and the head
 `dWcls = clsᵀ·dy` / `dbcls = Σ dy` (M2).
 
-No committed same-signature renderer exists (the committed `TestViTTrain.lean` is the
-full ViT-Tiny: 224², depth-12, 3 heads, vector-LN), so validation is the
-`scripts/render_parity.py` ref-only smoke: compile + run on the GPU, all 200 updated
-params finite:
-  `scripts/render_parity.py --fn vit_rep_train_step --ref /tmp/vitpc/train_step.mlir`
+Validation is the `scripts/render_parity.py` TWO-SIDED parity against the committed
+GPU-trained renderer (same signature; expect equivalent-not-byte-identical — the
+recompute-vs-save layouts differ, e.g. per-head slice/pad-sum vs rank-4 batched
+attention, im2col vs dilate+conv patch W-grad, 3-token vs fused LN affine):
+  `scripts/render_parity.py --fn vit_train_step --ref verified_mlir/vit_train_step.mlir \
+     --cand /tmp/vitpc/train_step.mlir`
 
 Run: `IREE_BACKEND=rocm lake env lean tests/TestViTTrainPC.lean`
 -/
@@ -49,17 +53,20 @@ open Proofs Proofs.StableHLO
 
 private def BS : Nat := 32
 private def IC : Nat := 3     -- input channels
-private def HH : Nat := 8     -- spatial
-private def NP : Nat := 64    -- patches (8×8 at patchSize 1)
-private def NT : Nat := 65    -- tokens (patches + CLS)
+private def HH : Nat := 224   -- spatial (ImageNet)
+private def PP : Nat := 16    -- patch size (= stride)
+private def PH : Nat := 14    -- patch grid (224/16)
+private def NP : Nat := 196   -- patches (14×14)
+private def NT : Nat := 197   -- tokens (patches + CLS)
 private def DEPTH : Nat := 12 -- transformer blocks (the ViT-Tiny depth)
-private def HD : Nat := 2     -- heads
-private def DH : Nat := 16    -- d_head
-private def DD : Nat := 32    -- embed dim (= heads · d_head)
-private def MD : Nat := 128   -- MLP dim (4×)
-private def EPS : String := "1.0e-6"
+private def HD : Nat := 3     -- heads
+private def DH : Nat := 64    -- d_head
+private def DD : Nat := 192   -- embed dim (= heads · d_head)
+private def MD : Nat := 768   -- MLP dim (4×)
+private def NC : Nat := 10    -- classes (imagenette)
+private def EPS : String := "1.0e-5"  -- the committed ViTRender eps
 private def LR : String := "0.1"
-private def SCALE : String := "0.25"   -- 1/√16 = 1/√d_head
+private def SCALE : String := "0.125"  -- 1/√64 = 1/√d_head
 
 -- placeholder values (pretty/emitTok render names only; values are irrelevant)
 private def zK {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
@@ -302,9 +309,13 @@ private def blkParams (i : Nat) : List (String × String) :=
 private def trainStep : String := Id.run do
   let go : StateM Nat String := do
     -- ═══ forward (proof-rendered; the vitFwdGraphKMHV tokens in graph order) ═══
-    let (cE, embed) ← pretty BS (.patchEmbedF (ic := IC) (H := HH) (W := HH) (P := 1)
-      (N := NP) (D := DD) "%Wp" "%bp" "%cls" "%pos"
-      (zK : Kernel4 DD IC 1 1) zV zV (zM : Mat (NP+1) DD) (.operand "%x" zV))
+    -- the committed signature carries cls as [1,D]; the patchEmbedF broadcast
+    -- reads a [D] vector — denotation-trivial reshape glue
+    let cClsR := s!"    %clsr = stablehlo.reshape %cls : ({ty [1,DD]}) -> {ty [DD]}\n"
+    let (cE, embed) ← pretty BS (.patchEmbedF (ic := IC) (H := HH) (W := HH) (P := PP)
+      (N := NP) (D := DD) "%Wp" "%bp" "%clsr" "%pos"
+      (zK : Kernel4 DD IC PP PP) zV zV (zM : Mat (NP+1) DD) (.operand "%x" zV))
+    let cE := cClsR ++ cE
     let mut fwd := cE
     let mut blocks : List FNames := []
     let mut xcur := embed
@@ -321,21 +332,21 @@ private def trainStep : String := Id.run do
       (.operand scF (zV : Vec (NT*DD))))
     let (cCs, clsv) ← pretty BS (.clsSliceF (N := NP) (D := DD)
       (.operand fl (zV : Vec ((NP+1)*DD))))
-    let (cLog, logits) ← pretty BS (denseF "%Wcls" "%bcls" (zM : Mat DD 10) zV
+    let (cLog, logits) ← pretty BS (denseF "%Wcls" "%bcls" (zM : Mat DD NC) zV
       (.operand clsv (zV : Vec DD)))
     -- loss cotangent: (softmax(logits) − onehot)/BS
-    let (cSub, dyr) ← pretty BS (.sub (.softmaxDiv (.expe (.operand logits (zV : Vec 10))))
+    let (cSub, dyr) ← pretty BS (.sub (.softmaxDiv (.expe (.operand logits (zV : Vec NC))))
       (.operand "%onehot" zV))
     fwd := fwd ++ cFa ++ cFb ++ cF ++ cCs ++ cLog ++ cSub
     -- ═══ backward cotangent chain (proof-rendered) ═══
-    let (cDd, cot_cls) ← pretty BS (.dotOut "%Wcls" (zM : Mat DD 10) (.operand "%dy" zV))
+    let (cDd, cot_cls) ← pretty BS (.dotOut "%Wcls" (zM : Mat DD NC) (.operand "%dy" zV))
     let (cPad, cot_fl) ← pretty BS (.clsPadF (N := NP) (D := DD)
       (.operand cot_cls (zV : Vec DD)))
     let (cFsc, cot_xhF) ← pretty BS (.rowScaleF "%gF" (zV : Vec DD)
       (.operand cot_fl (zV : Vec (NT*DD))))
     let (cFbk, cot_bLout) ← pretty BS (.lnRowBack "%one" xcur EPS 0 1
       (zV : Vec (NT*DD)) (.operand cot_xhF zV))
-    let mut bwd := s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [BS, 10]}\n" ++
+    let mut bwd := s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [BS, NC]}\n" ++
       cDd ++ cPad ++ cFsc ++ cFbk
     -- blocks in reverse, threading the cotangent; per-block param grads as we go
     let mut paramG := ""
@@ -354,39 +365,44 @@ private def trainStep : String := Id.run do
       rs3 "%dposi" cot_embed NT DD ++
       s!"    %dpos = stablehlo.reduce(%dposi init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,NT,DD]}, tensor<f32>) -> {ty [NT,DD]}\n" ++
       -- CLS token: dCls = row-0 slice of the embed cotangent, batch-summed
+      -- (final reshape to [1,D] — the committed signature's cls shape)
       s!"    %dclss = stablehlo.slice %dposi [0:{BS}, 0:1, 0:{DD}] : ({ty [BS,NT,DD]}) -> {ty [BS,1,DD]}\n" ++
       s!"    %dclsf = stablehlo.reshape %dclss : ({ty [BS,1,DD]}) -> {ty [BS,DD]}\n" ++
-      s!"    %dcls = stablehlo.reduce(%dclsf init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,DD]}, tensor<f32>) -> {ty [DD]}\n" ++
-      -- patch projection (patchSize 1 = per-pixel dense over the 64 patch rows):
-      -- X = image pixels token-major [BS,64,IC]; dY = embed-cot rows 1..65
-      s!"    %dWpx4 = stablehlo.reshape %x : ({ty [BS, IC*HH*HH]}) -> {ty [BS,IC,NP]}\n" ++
-      s!"    %dWpxt = stablehlo.transpose %dWpx4, dims = [0, 2, 1] : ({ty [BS,IC,NP]}) -> {ty [BS,NP,IC]}\n" ++
+      s!"    %dclsr = stablehlo.reduce(%dclsf init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,DD]}, tensor<f32>) -> {ty [DD]}\n" ++
+      s!"    %dcls = stablehlo.reshape %dclsr : ({ty [DD]}) -> {ty [1,DD]}\n" ++
+      -- patch projection (stride-P non-overlapping conv = per-patch dense): im2col
+      -- the image into patch-major rows [BS,NP,IC·P·P] (pure reshape/transpose —
+      -- patches don't overlap), then ONE dot_general against the patch-token rows
+      -- of the embed cotangent — the §E certified `dWp = Σ_p read·dy_(p+1,·)` form
+      s!"    %dWpx6 = stablehlo.reshape %x : ({ty [BS, IC*HH*HH]}) -> {ty [BS,IC,PH,PP,PH,PP]}\n" ++
+      s!"    %dWpxt = stablehlo.transpose %dWpx6, dims = [0, 2, 4, 1, 3, 5] : ({ty [BS,IC,PH,PP,PH,PP]}) -> {ty [BS,PH,PH,IC,PP,PP]}\n" ++
+      s!"    %dWpxm = stablehlo.reshape %dWpxt : ({ty [BS,PH,PH,IC,PP,PP]}) -> {ty [BS, NP, IC*PP*PP]}\n" ++
       s!"    %dWpdy = stablehlo.slice %dposi [0:{BS}, 1:{NT}, 0:{DD}] : ({ty [BS,NT,DD]}) -> {ty [BS,NP,DD]}\n" ++
-      s!"    %dWpr = stablehlo.dot_general %dWpxt, %dWpdy, contracting_dims = [0, 1] x [0, 1], precision = [DEFAULT, DEFAULT] : ({ty [BS,NP,IC]}, {ty [BS,NP,DD]}) -> {ty [IC,DD]}\n" ++
-      s!"    %dWpt = stablehlo.transpose %dWpr, dims = [1, 0] : ({ty [IC,DD]}) -> {ty [DD,IC]}\n" ++
-      s!"    %dWp = stablehlo.reshape %dWpt : ({ty [DD,IC]}) -> {ty [DD,IC,1,1]}\n" ++
+      s!"    %dWpr = stablehlo.dot_general %dWpxm, %dWpdy, contracting_dims = [0, 1] x [0, 1], precision = [DEFAULT, DEFAULT] : ({ty [BS,NP,IC*PP*PP]}, {ty [BS,NP,DD]}) -> {ty [IC*PP*PP,DD]}\n" ++
+      s!"    %dWpt = stablehlo.transpose %dWpr, dims = [1, 0] : ({ty [IC*PP*PP,DD]}) -> {ty [DD,IC*PP*PP]}\n" ++
+      s!"    %dWp = stablehlo.reshape %dWpt : ({ty [DD,IC*PP*PP]}) -> {ty [DD,IC,PP,PP]}\n" ++
       s!"    %dbp = stablehlo.reduce(%dWpdy init: %sc) applies stablehlo.add across dimensions = [0, 1] : ({ty [BS,NP,DD]}, tensor<f32>) -> {ty [DD]}\n" ++
       -- head: dWcls = clsᵀ·dy (M2 outer product, batch-contracted), dbcls = Σ dy
-      s!"    %dWcls = stablehlo.dot_general {clsv}, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,DD]}, {ty [BS,10]}) -> {ty [DD,10]}\n" ++
-      s!"    %dbcls = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n"
+      s!"    %dWcls = stablehlo.dot_general {clsv}, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,DD]}, {ty [BS,NC]}) -> {ty [DD,NC]}\n" ++
+      s!"    %dbcls = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,NC]}, tensor<f32>) -> {ty [NC]}\n"
     pure (fwd ++ bwd ++ paramG)
   let body : String := go.run' 0
   -- ═══ SGD over all 4 + 16·DEPTH + 4 params (forward order) + signature ═══
   let allParams : List (String × String) :=
-    [("Wp", ty [DD,IC,1,1]), ("bp", ty [DD]), ("cls", ty [DD]), ("pos", ty [NT,DD])]
+    [("Wp", ty [DD,IC,PP,PP]), ("bp", ty [DD]), ("cls", ty [1,DD]), ("pos", ty [NT,DD])]
     ++ (List.range DEPTH).flatMap (fun i => blkParams (i + 1))
     ++ [("gF", ty [DD]), ("btF", ty [DD]),
-        ("Wcls", ty [DD,10]), ("bcls", ty [10])]
+        ("Wcls", ty [DD,NC]), ("bcls", ty [NC])]
   let upd := String.join (allParams.map (fun (nm, t) => sgd s!"%{nm}" s!"%d{nm}" t))
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [BS, IC*HH*HH]) :: allParams.map (fun (nm, t) => s!"%{nm}: {t}")
-      ++ ["%onehot: " ++ ty [BS,10]])
+      ++ ["%onehot: " ++ ty [BS,NC]])
   let retTyL := String.intercalate ", " (allParams.map (fun (_, t) => t))
   let retVals := String.intercalate ", " (allParams.map (fun (nm, _) => s!"%{nm}n"))
-  return "module @m {\n" ++ s!"  func.func @vit_rep_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
+  return "module @m {\n" ++ s!"  func.func @vit_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
-    s!"    %bsc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n" ++
+    s!"    %bsc = stablehlo.constant dense<{BS}.0> : {ty [BS,NC]}\n" ++
     body ++ upd ++
     s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
 
