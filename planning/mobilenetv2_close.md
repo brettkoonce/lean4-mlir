@@ -92,14 +92,28 @@ block structure. **This is the prerequisite for a structured render.**
 Net: MobileNetV2 now has a **proven per-channel forward graph** whose `pretty` will match the
 render's forward text — the input Item B needs.
 
-### Item B — structured render `mobilenetv2TrainStepStructured`  [NEW, mechanical given A]
+### Item B — structured render `mobilenetv2TrainStepStructured`  ✅ **DONE** (2026-06-09)
 Pretty the forward graph (Item A) capturing names; the backward/grad/SGD **tail already exists**
-as the hand-written `TestMobilenetV2Train.lean` text (depthwise-back regular+strided, relu6Back
-two-sided kink, per-channel BN back + dγ/dβ, residual fan-in, conv W/b grads). Same **(a′) recipe**
-as CIFAR-BN: flat forward + flat→NCHW `reshape` glue for the 4-D conv/depthwise consumers; wire the
-tail to captured names. Validate by swap-train `mobilenetv2-verified` (expect parity with the
-committed renderer; per-channel BN back via `bnPerChannelBack` token is *equivalent, not
-bit-identical* if it recomputes like CIFAR-BN did).
+as the hand-written `TestMobilenetV2Train.lean` text. Same **(a′) recipe** as CIFAR-BN.
+
+**Shipped** (`tests/TestMobilenetV2TrainPC.lean`, `#eval`-rendered, iree-compiles, GPU-validated):
+- Realized the recipe is *stronger* than planned: not just the forward, but the **entire backward
+  cotangent chain** is proof-rendered through `pretty` — `dotOut` (dense), `bnPerChannelBack`,
+  `selectMid` (relu6 two-sided kink), `convBack`, `depthwiseBack`/`depthwiseStridedBack`, and `addV`
+  (residual fan-in) are all flat-in/flat-out SHlo tokens. Only the pieces with **no SHlo constructor**
+  are hand-emitted: GAP backward, conv/depthwise weight+bias grads (transpose trick / reduce), and the
+  per-channel BN dγ/dβ (recompute x̂). Reshape glue (flat→NCHW) only at the hand weight/bias/BN-param
+  grads. So the structured render is *more* proof-rendered than the hand-written one.
+- Same 82-param func signature/order as the committed renderer (verified `diff`-identical) → drop-in.
+- iree-compiles OK (213 KB MLIR, gfx1100).
+- **Validation: bit-identical, not just epoch-parity.** The swap-train harness (`mobilenetv2-verified`)
+  is blocked here by a *pre-existing* imagenette data-loader bug ("short read") that hits the committed
+  renderer equally — so instead ran **both** the committed and structured vmfbs through `iree-run-module`
+  with identical fixed-random inputs and compared all 82 output param-updates: **worst rel-diff 0.0,
+  `np.array_equal` True on every param** (and every output differs from its input — a real SGD step,
+  gradients flowed end-to-end). The per-channel-BN recompute turned out bit-identical, not merely
+  equivalent. This is a stronger parity check than the planned swap-train epoch check and bypasses the
+  data bug entirely.
 
 ### Item C — the close `MobileNetV2Close.lean`  ✅ **DONE** (2026-06-09)
 Instantiate the reusable bridges at each param, generic in the cotangent (the CIFAR-non-BN-style
@@ -155,14 +169,17 @@ net). *Optional* — pins the cotangent; the further "= ∂loss/∂θ" fold rema
 2. **Item A (typed forward graph)** + its `_faithful`. ✅ **DONE** — `MobileNetV2RenderPC.lean`
    (`mobilenetv2FwdGraphFullPC` + `_faithful`, per-channel BN matching the render). The scalar full
    graph already existed in `StableHLO.lean`; the new work was the per-channel twin.
-3. **Item B (structured render)** from A. Swap-train validate. Now MobileNetV2 has the "text =
-   render of proven graph" half too.
+3. **Item B (structured render)** from A. ✅ **DONE** — `tests/TestMobilenetV2TrainPC.lean`,
+   forward + full backward cotangent chain proof-rendered, iree-compiles, **bit-identical** GPU
+   outputs vs the committed renderer (82/82 params, `np.array_equal`). MobileNetV2 now has the
+   "text = render of proven graph" half.
 4. **Item D (cotangent chain)** — optional polish; the branchy inverted-residual analogue of
-   `CnnChainClose`.
+   `CnnChainClose`. *Not started.*
 
-After step 1, MobileNetV2 is close-DONE (the CIFAR-non-BN bar). After step 3, it's closed both ways
-(the CIFAR-BN bar). Step 4 matches the conv-close upgrade. Validation recipe + audit gate: identical
-to `planning/render_close_handoff.md` §"Validation recipe".
+After step 1, MobileNetV2 is close-DONE (the CIFAR-non-BN bar). **After step 3 (now), it's closed
+both ways (the CIFAR-BN bar).** Step 4 matches the conv-close upgrade. Validation recipe + audit gate:
+identical to `planning/render_close_handoff.md` §"Validation recipe" (here the swap-train was replaced
+by an `iree-run-module` same-inputs output diff, since the imagenette loader is broken in this env).
 
 ## 4. Honest scope note
 The Explore-style "no new proofs, ~200 LOC" estimate is too rosy: it ignores that there is **no
