@@ -253,6 +253,18 @@ inductive SHlo : Nat → Type where
   -- `high = [0, N, 0]`). `den` via `clsPadFlat` (= the proven
   -- `cls_slice_flat_has_vjp.backward`). Linear — global VJP.
   | clsPadF    {N D : Nat}                                      : SHlo D → SHlo ((N+1)*D)
+  -- Multi-head (ch10 scaling pass): per-head column slice — head `h`'s `[N,d]`
+  -- block of the `[N,heads·d]` flat (columns `[h·d,(h+1)·d)` are contiguous in the
+  -- row-major layout: `stablehlo.slice` on the feature axis after reshape).
+  -- `den` via `headSliceFlat` (= `mhsa_layer`'s `finProdFinEquiv (h, ·)` column
+  -- gather). Linear reindex.
+  | headSliceF {N heads d : Nat} (h : Fin heads)                : SHlo (N*(heads*d)) → SHlo (N*d)
+  -- Multi-head: per-head column scatter — pad an `[N,d]` head block into head `h`'s
+  -- columns of a zero `[N,heads·d]` (`stablehlo.pad` on the feature axis). Both the
+  -- slice's VJP AND the forward concat (`concat = Σ_h headPadF h ∘ head h` — every
+  -- column hits exactly one head, and the sum stays at the ONE index `N·(heads·d)`,
+  -- dodging the `(N·a)+(N·b)` Nat-cast trap a binary concat token would hit). Linear.
+  | headPadF   {N heads d : Nat} (h : Fin heads)                : SHlo (N*d) → SHlo (N*(heads*d))
   -- ViT vector-LN affine (the ch10 scaling pass): per-token broadcast scale — every
   -- row of an `[m,n]` flat elementwise-scaled by the SHARED `γ : [n]` (broadcast over
   -- the row axis; contrast `layerScaleF`, which has a distinct γ per position).
@@ -385,6 +397,23 @@ noncomputable def clsPadFlat (N D : Nat) (dy : Vec D) : Vec ((N+1)*D) :=
     let p := finProdFinEquiv.symm idx
     if p.1 = (0 : Fin (N + 1)) then dy p.2 else 0
 
+/-- **Per-head column slice (flattened)** — head `h`'s `[N,d]` block of the
+    `[N,heads·d]` flat: the `finProdFinEquiv (h, ·)` column gather `mhsa_layer`
+    uses to feed each head's SDPA. -/
+noncomputable def headSliceFlat (N heads d : Nat) (h : Fin heads)
+    (v : Vec (N*(heads*d))) : Vec (N*d) :=
+  Mat.flatten (fun (r : Fin N) (j : Fin d) =>
+    (Mat.unflatten v) r (finProdFinEquiv (h, j)))
+
+/-- **Per-head column pad (flattened)** — scatter an `[N,d]` head block into head
+    `h`'s columns of a zero `[N,heads·d]`. `mhsa_layer`'s concat is the sum of
+    these over heads; it is also `headSliceFlat`'s VJP. -/
+noncomputable def headPadFlat (N heads d : Nat) (h : Fin heads)
+    (v : Vec (N*d)) : Vec (N*(heads*d)) :=
+  Mat.flatten (fun (r : Fin N) (hj : Fin (heads*d)) =>
+    let p := finProdFinEquiv.symm hj
+    if p.1 = h then (Mat.unflatten v) r p.2 else 0)
+
 /-- **Row-broadcast scale (flattened)** — every token row elementwise-scaled by the
     shared `γ : Vec n` (= rowwise `layerScale γ`). -/
 noncomputable def rowScaleFlat (m n : Nat) (γ : Vec n) (v : Vec (m*n)) : Vec (m*n) :=
@@ -470,6 +499,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       patchEmbedFlat ic H W P N D Wc bc cls pos (den e)
   | _, .clsSliceF (N := N) (D := D) e => clsSliceFlat N D (den e)
   | _, .clsPadF (N := N) (D := D) e => clsPadFlat N D (den e)
+  | _, .headSliceF (N := N) (heads := heads) (d := d) h e => headSliceFlat N heads d h (den e)
+  | _, .headPadF (N := N) (heads := heads) (d := d) h e => headPadFlat N heads d h (den e)
   | _, .rowScaleF (m := m) (n := n) _ γ e => rowScaleFlat m n γ (den e)
   | _, .rowBiasF (m := m) (n := n) _ β e => rowBiasFlat m n β (den e)
   | _, .batchOp (N := N) op e => batchMap N (denOp op) (den e)
@@ -988,6 +1019,19 @@ theorem denseRowBack_faithful {N a c : Nat} (wN : String) (W : Mat a c) (e : SHl
     (= the proven `cls_slice_flat_has_vjp.backward`; linear — global VJP). (`rfl`.) -/
 @[simp] theorem clsPadF_faithful {N D : Nat} (e : SHlo D) :
     den (.clsPadF (N := N) e) = clsPadFlat N D (den e) := rfl
+
+/-- **Per-head slice faithfulness.** The feature-axis `stablehlo.slice` of head `h`'s
+    contiguous column block denotes `headSliceFlat` (= `mhsa_layer`'s per-head column
+    gather). Linear reindex. (`rfl`.) -/
+@[simp] theorem headSliceF_faithful {N heads d : Nat} (h : Fin heads)
+    (e : SHlo (N*(heads*d))) :
+    den (.headSliceF h e) = headSliceFlat N heads d h (den e) := rfl
+
+/-- **Per-head pad faithfulness.** The feature-axis zero-pad into head `h`'s column
+    block denotes `headPadFlat` (the slice's VJP; summed over heads it is
+    `mhsa_layer`'s concat). Linear. (`rfl`.) -/
+@[simp] theorem headPadF_faithful {N heads d : Nat} (h : Fin heads) (e : SHlo (N*d)) :
+    den (.headPadF h e) = headPadFlat N heads d h (den e) := rfl
 
 /-- **Row-broadcast scale faithfulness.** The reshape + broadcast-γ-over-rows +
     multiply graph denotes `rowScaleFlat` (rowwise `layerScale γ`). Diagonal-linear —
@@ -1599,6 +1643,8 @@ inductive Raw where
   | patchEmbedF (w b cls pos : String) (ic H W P N D : Nat) : Raw → Raw
   | clsSliceF  (N D : Nat)                 : Raw → Raw
   | clsPadF    (N D : Nat)                 : Raw → Raw
+  | headSliceF (N heads d hIdx : Nat)      : Raw → Raw
+  | headPadF   (N heads d hIdx : Nat)      : Raw → Raw
   | rowScaleF  (g : String) (m n : Nat)    : Raw → Raw
   | rowBiasF   (b : String) (m n : Nat)    : Raw → Raw
   -- EfficientNet batched ops (`batchOp`/`bnBatchF`): the renderable skeleton keeps
@@ -1666,6 +1712,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .patchEmbedF wN bN cN pN ic H W P N D (skel e)
   | _, .clsSliceF (N := N) (D := D) e => .clsSliceF N D (skel e)
   | _, .clsPadF (N := N) (D := D) e => .clsPadF N D (skel e)
+  | _, .headSliceF (N := N) (heads := heads) (d := d) h e => .headSliceF N heads d h.val (skel e)
+  | _, .headPadF (N := N) (heads := heads) (d := d) h e => .headPadF N heads d h.val (skel e)
   | _, .rowScaleF (m := m) (n := n) gN _ e => .rowScaleF gN m n (skel e)
   | _, .rowBiasF (m := m) (n := n) bN _ e => .rowBiasF bN m n (skel e)
   | _, .batchOp (N := N) (a := a) (b := b) _ e => .batched "batchOp" [N, a, b] (skel e)
@@ -1720,6 +1768,8 @@ inductive Tok where
   | patchEmbedF (w b cls pos : String) (ic H W P N D : Nat) : Tok
   | clsSliceF  (N D : Nat)                 : Tok
   | clsPadF    (N D : Nat)                 : Tok
+  | headSliceF (N heads d hIdx : Nat)      : Tok
+  | headPadF   (N heads d hIdx : Nat)      : Tok
   | rowScaleF  (g : String) (m n : Nat)    : Tok
   | rowBiasF   (b : String) (m n : Nat)    : Tok
   | batched    (tag : String) (info : List Nat) : Tok
@@ -1773,6 +1823,8 @@ def toToks : Raw → List Tok
   | .patchEmbedF w b cls pos ic H W P N D e => toToks e ++ [.patchEmbedF w b cls pos ic H W P N D]
   | .clsSliceF N D e      => toToks e ++ [.clsSliceF N D]
   | .clsPadF N D e        => toToks e ++ [.clsPadF N D]
+  | .headSliceF N heads d hIdx e => toToks e ++ [.headSliceF N heads d hIdx]
+  | .headPadF N heads d hIdx e   => toToks e ++ [.headPadF N heads d hIdx]
   | .rowScaleF g m n e    => toToks e ++ [.rowScaleF g m n]
   | .rowBiasF b m n e     => toToks e ++ [.rowBiasF b m n]
   | .batched tag info e   => toToks e ++ [.batched tag info]
@@ -2400,6 +2452,21 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
         s!"    {pd} = stablehlo.pad {dn}, {z}, low = [0, 0, 0], high = [0, {N}, 0], interior = [0, 0, 0] : ({ty [B,1,D]}, tensor<f32>) -> {ty [B,N+1,D]}\n" ++
         s!"    {o} = stablehlo.reshape {pd} : ({ty [B,N+1,D]}) -> {ty [B, (N+1)*D]}\n", o :: st)
+  | .headSliceF N heads d hIdx, r :: st => do
+      -- per-head column slice: reshape [B,N*(H*d)] → [B,N,H*d], slice head h's
+      -- contiguous feature block [h*d:(h+1)*d] (row-major layout), reshape to flat.
+      let xn ← fresh; let sl ← fresh; let o ← fresh
+      pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, N*(heads*d)]}) -> {ty [B,N,heads*d]}\n" ++
+        s!"    {sl} = stablehlo.slice {xn} [0:{B}, 0:{N}, {hIdx*d}:{(hIdx+1)*d}] : ({ty [B,N,heads*d]}) -> {ty [B,N,d]}\n" ++
+        s!"    {o} = stablehlo.reshape {sl} : ({ty [B,N,d]}) -> {ty [B, N*d]}\n", o :: st)
+  | .headPadF N heads d hIdx, r :: st => do
+      -- per-head column scatter: reshape [B,N*d] → [B,N,d], zero-pad the feature
+      -- axis into head h's block (low = h*d, high = (heads-1-h)*d), reshape to flat.
+      let dn ← fresh; let z ← fresh; let pd ← fresh; let o ← fresh
+      pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B, N*d]}) -> {ty [B,N,d]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {pd} = stablehlo.pad {dn}, {z}, low = [0, 0, {hIdx*d}], high = [0, 0, {(heads-1-hIdx)*d}], interior = [0, 0, 0] : ({ty [B,N,d]}, tensor<f32>) -> {ty [B,N,heads*d]}\n" ++
+        s!"    {o} = stablehlo.reshape {pd} : ({ty [B,N,heads*d]}) -> {ty [B, N*(heads*d)]}\n", o :: st)
   | .rowScaleF gN m n, r :: st => do
       -- per-token broadcast scale: reshape [B,m*n] -> [B,m,n], broadcast the shared
       -- gamma:[n] over batch+rows (dims = [2]), multiply, reshape back.

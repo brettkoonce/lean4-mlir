@@ -40,6 +40,7 @@ import LeanMlir.Proofs.ViTFwdGraph
 import LeanMlir.Proofs.ViTClose
 import LeanMlir.Proofs.ViTChainClose
 import LeanMlir.Proofs.ViTVecLN
+import LeanMlir.Proofs.ViTMultiHead
 
 open Proofs
 
@@ -773,3 +774,21 @@ open Proofs
 #print axioms vit_render_vecln2beta_chain_certified
 #print axioms vit_render_veclnFgamma_chain_certified
 #print axioms vit_render_veclnFbeta_chain_certified
+
+-- ============ ViT scaling pass: multi-head (ViTMultiHead.lean) ============
+-- The MHSA math was always general in heads; this closes RENDERING + faithfulness at heads > 1.
+-- Two new tokens headSliceF/headPadF (per-head column slice + pad-scatter; row-major layout makes
+-- head h's columns the contiguous block [h*d,(h+1)*d) — slice/pad on the feature axis, the
+-- clsSliceF/clsPadF templates). The concat is the PAD-SUM: Sum_h pad_h(SDPA_h) stays at the one
+-- index N*(heads*d), dodging the (N*a)+(N*b) Nat-cast trap of a binary concat token; the pad is
+-- simultaneously the slice's VJP, so the backward reuses the same pair on cotangents.
+-- mhsa_layer_spelled ties mhsa_layer N heads d DIRECTLY (not a 1-head specialization) to the
+-- per-head slice -> matmul-spelled SDPA -> pad form; vitFwdGraphMH(V)_faithful prove the heads =
+-- hm1+1 forward graphs (scalar AND production vector-LN form) denote vitForward2(V).
+#print axioms sum_headPadMat_apply
+#print axioms mhsa_layer_spelled
+#print axioms vitBlockSpelledMH_eq
+#print axioms vitBlockSpelledMHV_eq
+#print axioms StableHLO.den_headsSumG
+#print axioms StableHLO.vitFwdGraphMH_faithful
+#print axioms StableHLO.vitFwdGraphMHV_faithful

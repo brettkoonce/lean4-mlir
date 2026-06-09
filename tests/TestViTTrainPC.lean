@@ -3,25 +3,28 @@ import LeanMlir.Types
 
 /-! # ViT Item B — structured representative train-step render (proof-rendered)
 
-The ViT peer of `tests/TestConvNeXtTrainPC.lean`, at the **representative** `vitForward2`
-config (the proven graph `vitFwdGraph`, Item A): patchSize-1 patch embed (per-pixel dense
-+ CLS + pos) → 2 distinct-param pre-norm transformer blocks (heads = 1) → final per-token
-LN → CLS slice → dense head. CIFAR-shaped: 3×8² in → 64 patches + CLS = 65 tokens,
-D = 32, mlpDim = 128, 10 classes, BS = 32. **Vector-[D] LN γ/β** (the production
-`ViTRender` form, proven in `ViTVecLN.lean`): each LN site is the three-token
-decomposition `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β` (`vitFwdGraphV`'s spelling);
+The ViT peer of `tests/TestConvNeXtTrainPC.lean`, at the **representative** config —
+now **MULTI-HEAD** (the proven graph `vitFwdGraphMHV`, `ViTMultiHead.lean`): patchSize-1
+patch embed (per-pixel dense + CLS + pos) → 2 distinct-param pre-norm transformer blocks
+(**heads = 2, d_head = 16**) → final per-token LN → CLS slice → dense head. CIFAR-shaped:
+3×8² in → 64 patches + CLS = 65 tokens, D = 32, mlpDim = 128, 10 classes, BS = 32.
+**Vector-[D] LN γ/β** (the production `ViTRender` form, proven in `ViTVecLN.lean`): each
+LN site is the three-token decomposition `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β`;
 the LN backward reuses `rowScaleF` on the cotangent (diagonal — its own input-VJP) then
 `lnRowBack`(γ=1) at the saved pre-LN input; the per-channel param grads keep the channel
 axis (`dγ_k = Σ_{b,tokens} dy·x̂`, certified `vit_render_vecln{gamma,beta}_certified`).
 
 Forward AND the whole backward cotangent chain are proof-rendered through `pretty` over
-the very tokens of `vitFwdGraph` — forward (`patchEmbedF`/`lnRowF`/`denseRowF`/`matmulF`/
-`transposeF`/`scaleF`/`softmaxRowF`/`geluF`/`addV`/`clsSliceF`/`denseF`) and backward
-(`dotOut`, `clsPadF`, `lnRowBack`, `denseRowBack`, `geluBack`, `softmaxRowBack`, and the
-**SDPA 3-path backward spelled with the forward `matmulF`/`transposeF` on cotangents** —
-matmul's VJP IS matmul: `dP = dO·Vᵀ`, `dV = Pᵀ·dO`, `dQ = s·dS·K`, `dK = s·dSᵀ·Q` — the
-proven `sdpa_back_{Q,K,V}` shapes; no backward-only matmul token). Residual fan-ins are
-`addV`; the Q/K/V three-way fan-in at LN₁'s output is two `addV`s.
+the very tokens of `vitFwdGraphMHV` — forward (`patchEmbedF`/`lnRowF`/`denseRowF`/
+**per head: `headSliceF` → `matmulF`/`transposeF`/`scaleF`/`softmaxRowF` → `headPadF`**,
+the pad-sum concat as `addV`/`clsSliceF`/`denseF`) and backward (`dotOut`, `clsPadF`,
+`lnRowBack`, `denseRowBack`, `geluBack`, `softmaxRowBack`, and the **per-head SDPA 3-path
+backward spelled with the forward `matmulF`/`transposeF`/`headSliceF`/`headPadF` on
+cotangents** — matmul's VJP IS matmul and the slice/pad pair are each other's VJPs:
+`dO_h = slice_h dO`, `dP_h = dO_h·V_hᵀ`, `dV_h = P_hᵀ·dO_h`, `dQ_h = s·dS_h·K_h`,
+`dK_h = s·dS_hᵀ·Q_h`, then `dQ = Σ_h pad_h dQ_h` etc. — the proven `sdpa_back_{Q,K,V}`
+shapes per head). Residual fan-ins are `addV`; the Q/K/V three-way fan-in at LN₁'s
+output is two `addV`s.
 
 Only the no-SHlo-constructor pieces are hand-emitted, each certified in
 `ViTClose.lean` (Item C): per-token dense `dW = Σ_{b,tokens} x⊗dy` / `db = Σ dy`
@@ -47,11 +50,13 @@ private def IC : Nat := 3     -- input channels
 private def HH : Nat := 8     -- spatial
 private def NP : Nat := 64    -- patches (8×8 at patchSize 1)
 private def NT : Nat := 65    -- tokens (patches + CLS)
-private def DD : Nat := 32    -- embed dim (heads = 1)
+private def HD : Nat := 2     -- heads
+private def DH : Nat := 16    -- d_head
+private def DD : Nat := 32    -- embed dim (= heads · d_head)
 private def MD : Nat := 128   -- MLP dim (4×)
 private def EPS : String := "1.0e-6"
 private def LR : String := "0.1"
-private def SCALE : String := "0.17677669529663687"   -- 1/√32 = 1/√d_head
+private def SCALE : String := "0.25"   -- 1/√16 = 1/√d_head
 
 -- placeholder values (pretty/emitTok render names only; values are irrelevant)
 private def zK {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
@@ -92,16 +97,20 @@ private def sgd (θ dθ ty' : String) : String :=
   s!"    {θ}n = stablehlo.subtract {θ}, {θ}s : {ty'}\n"
 
 -- ════════════ captured forward names per ViT block ════════════
+private structure HNames where  -- per-head saved SSA names
+  qh : String    -- sliced Q (the dK matmul partner)
+  kh : String    -- sliced K (the dQ matmul partner)
+  vh : String    -- sliced V (the dP transpose partner)
+  ss : String    -- scaled scores (pre-softmax; softmaxRowBack's saved input)
+  p  : String    -- post-softmax weights (the dV transpose partner)
+deriving Inhabited
+
 private structure FNames where  -- flat SSA names from `pretty`
   xin : String   -- block input (= the attn residual skip; saved pre-LN1 input)
   xh1 : String   -- LN1 normalize out (x̂ — the dγ1 partner)
   ln1 : String   -- LN1 out (= Q/K/V dense input)
-  q : String
-  k : String
-  v : String
-  ss : String    -- scaled scores (pre-softmax; softmaxRowBack's saved input)
-  p : String     -- post-softmax weights
-  att : String   -- P·V (out-proj input)
+  hs : List HNames  -- per-head saved names (HD entries)
+  att : String   -- Σ_h pad_h(P_h·V_h) — the head concat (out-proj input)
   h : String     -- attn-sublayer out (= the MLP residual skip; saved pre-LN2 input)
   xh2 : String   -- LN2 normalize out (x̂ — the dγ2 partner)
   ln2 : String   -- LN2 out (= fc1 input)
@@ -109,7 +118,81 @@ private structure FNames where  -- flat SSA names from `pretty`
   g : String     -- GELU out (fc2 input)
   bout : String  -- block out
 
-/-- One ViT block forward via `pretty` — exactly the `vitBlockGraph` tokens. -/
+/-- Left-fold `addV` of the per-head pad-scatters (= `headsSumG`'s emission). -/
+private def sumPads (ns : List String) : StateM Nat (String × String) := do
+  let mut code := ""
+  let mut acc := ns.head!
+  for pn in ns.tail! do
+    let (ca, s) ← pretty BS (.addV (.operand acc (zV : Vec (NT*(HD*DH)))) (.operand pn zV))
+    code := code ++ ca
+    acc := s
+  pure (code, acc)
+
+/-- Per-head SDPA forward: slice Q/K/V, `Q_h·K_hᵀ` → `·1/√d_head` → row-softmax →
+    `P_h·V_h`, pad-scatter back; the head concat is the `addV` fold of the pads
+    (exactly `vitBlockGraphMHV`'s attention tokens). -/
+private def fwdHeads (q k v : String) : StateM Nat (String × List HNames × String) := do
+  let mut code := ""
+  let mut hs : List HNames := []
+  let mut pads : List String := []
+  for h in List.finRange HD do
+    let (c1, qh) ← pretty BS (.headSliceF h (.operand q (zV : Vec (NT*(HD*DH)))))
+    let (c2, kh) ← pretty BS (.headSliceF h (.operand k (zV : Vec (NT*(HD*DH)))))
+    let (c3, vh) ← pretty BS (.headSliceF h (.operand v (zV : Vec (NT*(HD*DH)))))
+    let (c4, kT) ← pretty BS (.transposeF (.operand kh (zV : Vec (NT*DH))))
+    let (c5, scs) ← pretty BS (.matmulF (.operand qh (zV : Vec (NT*DH)))
+      (.operand kT (zV : Vec (DH*NT))))
+    let (c6, ss) ← pretty BS (.scaleF SCALE 0 (.operand scs (zV : Vec (NT*NT))))
+    let (c7, p) ← pretty BS (.softmaxRowF (.operand ss (zV : Vec (NT*NT))))
+    let (c8, attH) ← pretty BS (.matmulF (.operand p (zV : Vec (NT*NT)))
+      (.operand vh (zV : Vec (NT*DH))))
+    let (c9, pad) ← pretty BS (.headPadF h (.operand attH (zV : Vec (NT*DH))))
+    code := code ++ c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++ c9
+    hs := hs ++ [⟨qh, kh, vh, ss, p⟩]
+    pads := pads ++ [pad]
+  let (cs, att) ← sumPads pads
+  pure (code ++ cs, hs, att)
+
+/-- Per-head SDPA backward — the forward `matmulF`/`transposeF`/`headSliceF`/`headPadF`
+    on cotangents (slice and pad are each other's VJPs): per head `dO_h = slice_h dO`,
+    `dP_h = dO_h·V_hᵀ`, `dV_h = P_hᵀ·dO_h`, `dS_h = softmaxRowBack`, undo-scale,
+    `dQ_h = dS_h·K_h`, `dK_h = dS_hᵀ·Q_h`, then `dQ/dK/dV = Σ_h pad_h(·)` — the proven
+    `sdpa_back_{Q,K,V}` shapes per head. Returns (code, dQ, dK, dV) at `[NT,D]` flat. -/
+private def bwdHeads (cot_att : String) (hs : List HNames) :
+    StateM Nat (String × String × String × String) := do
+  let mut code := ""
+  let mut dQpads : List String := []
+  let mut dKpads : List String := []
+  let mut dVpads : List String := []
+  for (h, b) in (List.finRange HD).zip hs do
+    let (c0, dOh) ← pretty BS (.headSliceF h (.operand cot_att (zV : Vec (NT*(HD*DH)))))
+    let (c1, vT) ← pretty BS (.transposeF (.operand b.vh (zV : Vec (NT*DH))))
+    let (c2, dP) ← pretty BS (.matmulF (.operand dOh (zV : Vec (NT*DH)))
+      (.operand vT (zV : Vec (DH*NT))))
+    let (c3, pT) ← pretty BS (.transposeF (.operand b.p (zV : Vec (NT*NT))))
+    let (c4, dVh) ← pretty BS (.matmulF (.operand pT (zV : Vec (NT*NT)))
+      (.operand dOh (zV : Vec (NT*DH))))
+    let (c5, dS) ← pretty BS (.softmaxRowBack b.ss (zV : Vec (NT*NT)) (.operand dP zV))
+    let (c6, dSs) ← pretty BS (.scaleF SCALE 0 (.operand dS (zV : Vec (NT*NT))))
+    let (c7, dQh) ← pretty BS (.matmulF (.operand dSs (zV : Vec (NT*NT)))
+      (.operand b.kh (zV : Vec (NT*DH))))
+    let (c8, dSsT) ← pretty BS (.transposeF (.operand dSs (zV : Vec (NT*NT))))
+    let (c9, dKh) ← pretty BS (.matmulF (.operand dSsT (zV : Vec (NT*NT)))
+      (.operand b.qh (zV : Vec (NT*DH))))
+    let (cq, dQp) ← pretty BS (.headPadF h (.operand dQh (zV : Vec (NT*DH))))
+    let (ck, dKp) ← pretty BS (.headPadF h (.operand dKh (zV : Vec (NT*DH))))
+    let (cv, dVp) ← pretty BS (.headPadF h (.operand dVh (zV : Vec (NT*DH))))
+    code := code ++ c0 ++ c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++ c9 ++
+            cq ++ ck ++ cv
+    dQpads := dQpads ++ [dQp]
+    dKpads := dKpads ++ [dKp]
+    dVpads := dVpads ++ [dVp]
+  let (csq, dQ) ← sumPads dQpads
+  let (csk, dK) ← sumPads dKpads
+  let (csv, dV) ← sumPads dVpads
+  pure (code ++ csq ++ csk ++ csv, dQ, dK, dV)
+
+/-- One ViT block forward via `pretty` — exactly the `vitBlockGraphMHV` tokens. -/
 private def fwdBlock (i : Nat) (xin : String) : StateM Nat (String × FNames) := do
   let (k1a, xh1) ← pretty BS (.lnRowF "%one" "%sc" EPS 0 1 0
     (.operand xin (zV : Vec (NT*DD))))
@@ -123,13 +206,7 @@ private def fwdBlock (i : Nat) (xin : String) : StateM Nat (String × FNames) :=
     (.operand ln1 (zV : Vec (NT*DD))))
   let (k4, v) ← pretty BS (.denseRowF s!"%Wv{i}" s!"%bv{i}" (zM : Mat DD DD) zV
     (.operand ln1 (zV : Vec (NT*DD))))
-  let (k5, kT) ← pretty BS (.transposeF (.operand kk (zV : Vec (NT*DD))))
-  let (k6, sc) ← pretty BS (.matmulF (.operand q (zV : Vec (NT*DD)))
-    (.operand kT (zV : Vec (DD*NT))))
-  let (k7, ss) ← pretty BS (.scaleF SCALE 0 (.operand sc (zV : Vec (NT*NT))))
-  let (k8, p) ← pretty BS (.softmaxRowF (.operand ss (zV : Vec (NT*NT))))
-  let (k9, att) ← pretty BS (.matmulF (.operand p (zV : Vec (NT*NT)))
-    (.operand v (zV : Vec (NT*DD))))
+  let (k5, hs, att) ← fwdHeads q kk v
   let (k10, o) ← pretty BS (.denseRowF s!"%Wo{i}" s!"%bo{i}" (zM : Mat DD DD) zV
     (.operand att (zV : Vec (NT*DD))))
   let (k11, h) ← pretty BS (.addV (.operand xin (zV : Vec (NT*DD))) (.operand o zV))
@@ -145,9 +222,9 @@ private def fwdBlock (i : Nat) (xin : String) : StateM Nat (String × FNames) :=
   let (k15, m2) ← pretty BS (.denseRowF s!"%Wfc2{i}" s!"%bfc2{i}" (zM : Mat MD DD) zV
     (.operand g (zV : Vec (NT*MD))))
   let (k16, bout) ← pretty BS (.addV (.operand h (zV : Vec (NT*DD))) (.operand m2 zV))
-  pure (k1a ++ k1b ++ k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7 ++ k8 ++ k9 ++ k10 ++
+  pure (k1a ++ k1b ++ k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k10 ++
         k11 ++ k12a ++ k12b ++ k12 ++ k13 ++ k14 ++ k15 ++ k16,
-        ⟨xin, xh1, ln1, q, kk, v, ss, p, att, h, xh2, ln2, m1, g, bout⟩)
+        ⟨xin, xh1, ln1, hs, att, h, xh2, ln2, m1, g, bout⟩)
 
 /-- One ViT block backward via `pretty`. `dy` = flat cotangent at block output.
     The SDPA backward is the forward `matmulF`/`transposeF` on cotangents.
@@ -168,25 +245,12 @@ private def bwdBlock (i : Nat) (dy : String) (b : FNames) :
     (zV : Vec (NT*DD)) (.operand cot_xh2 zV))
   let (k5, cot_h) ← pretty BS (.addV (.operand dy (zV : Vec (NT*DD)))
     (.operand cot_h_mlp zV))
-  -- attn sublayer back: h = xin + Wo·SDPA(q,k,v)
+  -- attn sublayer back: h = xin + Wo·MHSA(q,k,v)
   let (k6, cot_att) ← pretty BS (.denseRowBack s!"%Wo{i}" (zM : Mat DD DD)
     (.operand cot_h (zV : Vec (NT*DD))))
-  -- SDPA 3-path: dP = dO·Vᵀ, dV = Pᵀ·dO, dS = softmaxRowBack, undo scale,
-  -- dQ = dS·K, dK = dSᵀ·Q  (the proven sdpa_back_{Q,K,V} shapes)
-  let (k7, vT) ← pretty BS (.transposeF (.operand b.v (zV : Vec (NT*DD))))
-  let (k8, dP) ← pretty BS (.matmulF (.operand cot_att (zV : Vec (NT*DD)))
-    (.operand vT (zV : Vec (DD*NT))))
-  let (k9, pT) ← pretty BS (.transposeF (.operand b.p (zV : Vec (NT*NT))))
-  let (k10, dV) ← pretty BS (.matmulF (.operand pT (zV : Vec (NT*NT)))
-    (.operand cot_att (zV : Vec (NT*DD))))
-  let (k11, dS) ← pretty BS (.softmaxRowBack b.ss (zV : Vec (NT*NT))
-    (.operand dP zV))
-  let (k12, dSs) ← pretty BS (.scaleF SCALE 0 (.operand dS (zV : Vec (NT*NT))))
-  let (k13, dQ) ← pretty BS (.matmulF (.operand dSs (zV : Vec (NT*NT)))
-    (.operand b.k (zV : Vec (NT*DD))))
-  let (k14, dSsT) ← pretty BS (.transposeF (.operand dSs (zV : Vec (NT*NT))))
-  let (k15, dK) ← pretty BS (.matmulF (.operand dSsT (zV : Vec (NT*NT)))
-    (.operand b.q (zV : Vec (NT*DD))))
+  -- per-head SDPA 3-path backward + pad-sum (the proven sdpa_back_{Q,K,V}
+  -- shapes per head; slice/pad are each other's VJPs)
+  let (k7, dQ, dK, dV) ← bwdHeads cot_att b.hs
   -- Q/K/V dense backs fan IN at LN1's output (three cotangents sum)
   let (k16, cq) ← pretty BS (.denseRowBack s!"%Wq{i}" (zM : Mat DD DD)
     (.operand dQ (zV : Vec (NT*DD))))
@@ -202,8 +266,8 @@ private def bwdBlock (i : Nat) (dy : String) (b : FNames) :
     (zV : Vec (NT*DD)) (.operand cot_xh1 zV))
   let (k22, cot_xin) ← pretty BS (.addV (.operand cot_h (zV : Vec (NT*DD)))
     (.operand cot_xin_attn zV))
-  pure (k1 ++ k2 ++ k3 ++ k4a ++ k4 ++ k5 ++ k6 ++ k7 ++ k8 ++ k9 ++ k10 ++ k11 ++
-        k12 ++ k13 ++ k14 ++ k15 ++ k16 ++ k17 ++ k18 ++ k19 ++ k20 ++ k21a ++ k21 ++ k22,
+  pure (k1 ++ k2 ++ k3 ++ k4a ++ k4 ++ k5 ++ k6 ++ k7 ++
+        k16 ++ k17 ++ k18 ++ k19 ++ k20 ++ k21a ++ k21 ++ k22,
         cot_xin, dQ, dK, dV, cot_h, cot_ln2, cot_m1, cot_g, cot_ln1)
 
 /-- Block param grads (hand-emitted, Item C certified forms). -/

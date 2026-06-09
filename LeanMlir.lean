@@ -39,6 +39,7 @@ import LeanMlir.Proofs.ViTFwdGraph
 import LeanMlir.Proofs.ViTClose
 import LeanMlir.Proofs.ViTChainClose
 import LeanMlir.Proofs.ViTVecLN
+import LeanMlir.Proofs.ViTMultiHead
 -- Verified-codegen bridges (denoted IR + per-op bridge theorems) so doc-gen4
 -- documents them. IRPrint.lean is deliberately left out: its file-writing
 -- #evals run at elaboration time (use `lake env lean …/IRPrint.lean`).

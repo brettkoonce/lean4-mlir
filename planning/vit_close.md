@@ -203,18 +203,41 @@ ConvNeXt / transformer) at the full MNV2/r34/ConvNeXt bar.**
 - **16×16/s16 patchify — ✅ already general.** `patchEmbedF`, its faithfulness, the §E patch
   close, and the chain pins are all stated at general `patchSize` — nothing scalar-specific
   to lift. (The Item B render exercised P=1; a P=16 render is a config change.)
-- **multi-head / fused QKV / depth-12** — open. Detailed handoff below.
+- **multi-head — ✅ closed (2026-06-09).** Two new tokens `headSliceF`/`headPadF`
+  (per-head column slice + pad-scatter; row-major layout makes head h's columns the
+  contiguous block `[h·d,(h+1)·d)` — feature-axis `stablehlo.slice`/`pad`, the
+  `clsSliceF`/`clsPadF` templates verbatim). **Route deviation from the handoff plan:**
+  instead of a binary `concat2F` fold (the `(N·a)+(N·b)` Nat-cast trap), the concat is
+  the **pad-sum** — `Σ_h headPadF h (SDPA_h)` stays at the single index `N·(heads·d)`
+  (`headsSumG`, a left-assoc `addV` fold), and the pad is simultaneously the slice's
+  VJP, so forward concat AND both backward directions come from the one token pair.
+  `LeanMlir/Proofs/ViTMultiHead.lean`: `mhsa_layer_spelled` ties `mhsa_layer N heads d`
+  DIRECTLY (general heads, per-head fibre via `sum_headPadMat_apply`);
+  `vitBlockSpelledMH(V)_eq`; `vitFwdGraphMH(V)_faithful` at `heads := hm1+1` against
+  `vitForward2`/`vitForward2V` (both LN forms; VJPs were already heads-general).
+  **Render upgraded:** `TestViTTrainPC.lean` now heads=2/d_head=16 (D=32 unchanged,
+  same 40 params) — per-head SDPA fwd+bwd all by token (`fwdHeads`/`bwdHeads`,
+  slice/pad on cotangents, `dQ/dK/dV = Σ_h pad_h(·)`); iree-compile OK + gfx1100
+  ref-only smoke 40/40 finite & non-zero. Audit 354/354. Item C was free as predicted
+  (the dense family is shape-generic; grads contract the full `[N,D]` axis).
+- **fused QKV / depth-12** — open. Detailed handoff below.
 
 ---
 
 ## Next-session handoff — the remaining scaling items
 
-Goal state: the **production ViT-Tiny config proof-rendered** — depth-12, 3 heads, 16×16/s16,
-224², vector-[D] LN (done), converging the close with the committed GPU-trained
+Goal state: the **production ViT-Tiny config proof-rendered** — depth-12, 3 heads (multi-head
+machinery done; 3 heads is a config change), 16×16/s16, 224², vector-[D] LN (done), converging
+the close with the committed GPU-trained
 `ViTRender.lean`/`TestViTTrain.lean` (which would then be retired or re-derived as the
 proof-rendered text). Work items in dependency order:
 
-### 1. Multi-head (the substantive one)
+### 1. Multi-head (the substantive one) — ✅ CLOSED 2026-06-09 (see scaling-pass status above)
+Closed via the slice route, with one design change: the concat is the pad-sum (no
+`concat2F`, no Nat casts) — `headPadF` is both the concat building block and the slice's
+VJP. Item D's per-head SDPA chain ties (state at the sliced Mats) remain optional.
+Original plan kept for reference:
+
 The MATH is already general: `mhsa_has_vjp_mat`/`transformerBlock(V)_has_vjp_mat` hold for any
 `heads`. What's missing is RENDERING + faithfulness at heads > 1:
 - **New tokens** (9-site lockstep each; templates: `softmaxRowF` bracket + `clsSliceF` slice):
@@ -264,13 +287,16 @@ vector-LN, BS=32 — every ingredient then exists; compare against the committed
 byte-identical text (recompute-vs-save layouts, like CIFAR-BN), validate by swap-training
 imagenette or the `render_parity.py` two-sided parity if signatures align.
 
-### Assets from this effort (all 3-axiom clean, audit 347/347)
+### Assets from this effort (all 3-axiom clean, audit 354/354)
 `ViTFwdGraph.lean` (vitForward2(+V is in ViTVecLN), graph, faithfulness, the flat↔Mat
 bridges, `mhsa_layer_one_head`); `ViTClose.lean` (per-token dense W/b, rowwise scalar-LN,
 pos/cls, patch conv — all param families, general P); `ViTChainClose.lean` (chain cots +
 the `sdpa_back_{Q,K,V}` ties); `ViTVecLN.lean` (vector-LN: blockV/vitForward2V, rowScaleF/
 rowBiasF tokens, graphV faithfulness, per-channel γ/β bridges + chain pins);
-`tests/TestViTTrainPC.lean` (vector-LN proof-rendered train step, iree + 40/40 GPU smoke).
+`ViTMultiHead.lean` (multi-head: `headSliceF`/`headPadF` tokens + `headsSumG`,
+`mhsa_layer_spelled` at general heads, `vitBlockSpelledMH(V)`, `vitFwdGraphMH(V)_faithful`);
+`tests/TestViTTrainPC.lean` (heads=2 vector-LN proof-rendered train step, iree + 40/40 GPU
+smoke).
 Gotchas that carried: per-block lemmas then chain; nested-application not `∘`; explicit dims
 on stage lemmas; beta-expanded-vs-factored `rw` failures → explicitly-typed `have`s;
 `lake env lean` does NOT refresh oleans (run `lake build` before depending on edits).
