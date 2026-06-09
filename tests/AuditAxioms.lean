@@ -35,6 +35,7 @@ import LeanMlir.Proofs.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
 import LeanMlir.Proofs.ConvNeXtClose
+import LeanMlir.Proofs.ConvNeXtChainClose
 
 open Proofs
 
@@ -627,3 +628,25 @@ open Proofs
 #print axioms cnx_lnBeta_grad_bridge
 #print axioms cnx_render_lngamma_certified
 #print axioms cnx_render_lnbeta_certified
+-- ConvNeXt cotangent-chain CLOSE (planning/convnext_close.md Item D) — the MobileNetV2ChainClose/
+-- ResNet34ChainClose analogue: the Item C bridges pinned to the cotangent the ACTUAL backward chain
+-- delivers through a ConvNeXt block. The chain composes the rendered backward denotations —
+-- layer-scale back (= layerScale γls on the cotangent, the symmetric-diagonal trick the Item B render
+-- uses), project/expand 1×1 conv-back (conv2d_has_vjp3), the GELU mask (geluScalarDeriv at the saved
+-- pre-GELU activation), the scalar-LN input-VJP (bn_grad_input = bnBack's denotation), the 7×7
+-- depthwise-back — with the residual addV passing dyOut straight through (no post-add activation,
+-- no stride split: one set of cotangents covers every block). Unlike MNV2/r34, the ConvNeXt-signature
+-- param families are pinned too: layer-scale γ (cotangent = dyOut, the exact passthrough) and the
+-- block scalar-LN γ/β at cnxCotN (through ls-back → proj-back → GELU mask → exp-back). Batch-1,
+-- pure-Lean — no batched-VJP machinery (the EfficientNet contrast). 3-axiom clean.
+#print axioms cnx_render_lsgamma_chain_certified
+#print axioms cnx_render_projW_chain_certified
+#print axioms cnx_render_projb_chain_certified
+#print axioms cnx_render_expW_chain_certified
+#print axioms cnx_render_expb_chain_certified
+#print axioms cnx_render_lngamma_chain_certified
+#print axioms cnx_render_lnbeta_chain_certified
+#print axioms cnx_render_dw7W_chain_certified
+#print axioms cnx_render_dw7b_chain_certified
+#print axioms cnx_stem_render_convW_chain_certified
+#print axioms cnx_stem_render_convb_chain_certified

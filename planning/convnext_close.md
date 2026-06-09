@@ -104,13 +104,20 @@ smoke** (iree-compile + gfx1100 run: 26/26 outputs all-finite, 26/26 non-zero). 
 extended to parse 0-d scalar `tensor<f32>` params (the scalar-LN `γ/β`) — a fix that also newly enables
 the harness on the committed full ConvNeXt-T (verified 182/180 parse, plus mnv2 84/82, r34 148/146).
 
-### Item D — cotangent chain — [optional; the block chain, batch-1]
-`ConvNeXtChainClose.lean` — the analogue of `MobileNetV2ChainClose`. Pin each conv/dw param to the
-cotangent the **actual backward chain delivers**, composing the rendered backward denotations through the
-block: layer-scale back (`γ⊙·`) → project conv-back → gelu back (`dy⊙gelu'`) → expand conv-back → scalar-LN
-input-VJP (`bn_grad_input`) → depthwise back; the residual adds the skip cotangent. `convNextBlock_has_vjp`
-is the per-block head start. **Pure-Lean, batch-1** — no batched-VJP machinery (the EfficientNet
-`batchMap_has_vjp` lift is NOT needed; ConvNeXt stays per-example).
+### Item D — cotangent chain — ✅ **DONE** (`ConvNeXtChainClose.lean`, audit-wired)
+The analogue of `MobileNetV2ChainClose`: each param pinned to the cotangent the **actual backward
+chain delivers**, composing the rendered backward denotations through the block — layer-scale back
+(= `layerScale γls` on the cotangent, `cnxCotP`) → project conv-back → gelu mask (`dy⊙geluScalarDeriv`,
+`cnxCotE`) → expand conv-back (`cnxCotN`) → scalar-LN input-VJP (`bn_grad_input`, `cnxCotD`) →
+depthwise back + the skip's `dyOut` (`cnxCotXin`); stem = `bn_grad_input` at the saved patch
+(`cnxStemCot`). No stride split (blocks keep resolution — one cotangent set covers every block) and
+no post-add activation (the `addV` passes `dyOut` straight through, so the layer-scale pin is the
+exact passthrough). **Goes beyond the MNV2/r34 precedent:** the ConvNeXt-signature param families
+are chain-pinned too — layer-scale `γ` at `dyOut` and the block scalar-LN `γ/β` at `cnxCotN` — so
+every block param (not just conv/dw) is certified at its actual chain cotangent. Blocks compose by
+instantiation (block 1's `dyOut` := block 2's `cnxCotXin`; `dyStem` := block 1's `cnxCotXin`).
+**Pure-Lean, batch-1** — no batched-VJP machinery (the EfficientNet `batchMap_has_vjp` lift is NOT
+needed; ConvNeXt stays per-example). 11 theorems audit-wired, 3-axiom clean (audit now 282/282).
 
 ---
 
@@ -125,10 +132,12 @@ is the per-block head start. **Pure-Lean, batch-1** — no batched-VJP machinery
    cotangent); validated iree-compile + ref-only GPU smoke (26/26 finite/non-zero — no
    same-signature committed ref; the committed renderer is full ConvNeXt-T). `render_parity.py`
    extended for 0-d scalar `tensor<f32>` params.
-4. **Item D** — optional block cotangent chain (`ConvNeXtChainClose.lean`), batch-1.
+4. **Item D** ✅ DONE — block cotangent chain (`ConvNeXtChainClose.lean`, batch-1): every block
+   param (incl. layer-scale `γ`, scalar-LN `γ/β` — beyond the MNV2/r34 conv/dw-only precedent)
+   + the stem pinned to the actual chain cotangent. Audit-wired, 3-axiom clean.
 
-**The small ConvNeXt is now closed both ways** (Items A+C+B). Item D remains the optional
-cotangent-chain strengthening.
+**The small ConvNeXt is closed both ways, all four rungs done** (A+C+B+D). Remaining: only the
+optional upgrades below (faithful channel-LN, 4×4 stride-4 stem, full `[3,3,9,3]` depth).
 
 ## Handoff notes
 - **"Small version" = the representative `convNextForward`** (2 blocks, 1×1 stem, scalar LN) — already
