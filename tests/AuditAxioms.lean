@@ -675,8 +675,11 @@ open Proofs
 -- ⇒ no 0<ε): dγ = Σ_r Σ_k dY·x̂ᵣ, dβ = Σ Σ dY — covers all five LN sites. pos_embed: the Jacobian of
 -- patchEmbed_flat in pos is the IDENTITY (broadcast-add) ⇒ dPos = dy. cls_token: a row-0 masked
 -- gather ⇒ dCls = the row-0 slice of the embed cotangent (clsSliceF's shape). The classifier head is
--- verbatim M2 weight/bias_grad_bridge reuse (audited above). Remaining: the patch-projection conv
--- Wp/bp over patchEmbed_flat (the M3 pad-eval recipe + CLS/pos plumbing) — the § E follow-up.
+-- verbatim M2 weight/bias_grad_bridge reuse (audited above). Patch conv Wp/bp: patchEmbed_flat is
+-- LINEAR in the kernel with CONSTANT pad-guarded image-read coefficients (the mirror of the
+-- input-grad case — no pad-eval calculus), so dWp = Σ_patches read·dy_(p+1,·) (the dilate-dy/valid-
+-- conv form, CLS row excluded) and dbp = Σ_patches dy_(p+1,·) are the certified contractions.
+-- EVERY representative-ViT train-step param family is now certified.
 #print axioms pdiv_rowDense_W
 #print axioms vit_rowDenseW_grad_bridge
 #print axioms vit_rowDenseb_grad_bridge
@@ -692,3 +695,9 @@ open Proofs
 #print axioms vit_render_pos_certified
 #print axioms pdiv_patchEmbed_cls
 #print axioms vit_render_cls_certified
+#print axioms pdiv_patchEmbed_W
+#print axioms vit_patchW_grad_bridge
+#print axioms vit_render_patchW_certified
+#print axioms pdiv_patchEmbed_b
+#print axioms vit_patchb_grad_bridge
+#print axioms vit_render_patchb_certified

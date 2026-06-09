@@ -15,6 +15,7 @@ everything in a ViT is per-example separable (the EfficientNet contrast).
 | LN γ/β ×5 sites (scalar, per-token)  | rowwise `layerNormForward` | `vit_render_rowln{gamma,beta}_certified` (**new**): the ConvNeXtClose `Vec 1` embedding row-lifted — `dγ = Σ_{tokens} Σ_D dy·x̂`, `dβ = Σ Σ dy` (affine in the params ⇒ no `0 < ε`) |
 | `pos_embed`                          | additive (`patchEmbed_flat`) | `vit_render_pos_certified`: the pos-Jacobian is the identity ⇒ `dPos = dy` |
 | `cls_token`                          | row-0 scatter (`patchEmbed_flat`) | `vit_render_cls_certified`: masked-gather Jacobian ⇒ `dCls = dy` row-0 slice |
+| patch conv `Wp`/`bp`                 | stride-P conv (`patchEmbed_flat`) | `vit_render_patch{W,b}_certified`: kernel-linear w/ constant guarded reads ⇒ `dWp = Σ_p read·dy_(p+1)`, `dbp = Σ_p dy_(p+1)` (CLS row excluded) |
 | attention internals (softmax, scale) | —                          | no parameters |
 
 Two genuinely-new bridge families (everything else is reuse or a reindex):
@@ -31,8 +32,10 @@ Two genuinely-new bridge families (everything else is reuse or a reindex):
   is certified. Likewise `dβ = Σ_r Σ_k dY_(r,k)`.
 
 The classifier head (`dense` on the CLS vector) is VERBATIM M2 `weight/bias_grad_bridge`
-reuse at `[D, nClasses]`. The patch-embed conv `Wp`/`bp` close over `patchEmbed_flat`
-is in § E. 3-axiom clean by construction.
+reuse at `[D, nClasses]`. The patch-embed conv `Wp`/`bp` (§ E) closes over
+`patchEmbed_flat` directly — the kernel is the VARIABLE and the pad-guarded image reads
+are CONSTANT coefficients (the mirror of the input-grad case), so the same const×reindex
+recipe applies with the CLS row masked out. 3-axiom clean by construction.
 -/
 
 namespace Proofs
@@ -572,13 +575,371 @@ theorem vit_render_cls_certified {ic H W P N D : Nat}
   dsimp only
   simp
 
+-- ════════════════════════════════════════════════════════════════
+-- § E. Patch-projection conv Wp/bp — the embed kernel close
+--
+-- The KEY structural fact: as a function of the (flattened) kernel, `patchEmbed_flat`
+-- is linear with CONSTANT coefficients — the pad-guarded image reads sit in the
+-- coefficient, not the variable (the mirror of the input-grad case, where the
+-- pad-eval calculus was needed). So the §A const×reindex recipe applies verbatim,
+-- with §C's mask trick zeroing the CLS row.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The pad-guarded patch read of `patchEmbed_flat`, named: input pixel
+    `(c, h'·P + kh, w'·P + kw)` of patch `p` (row-major patch grid of width
+    `W/P`), zero out of range. Constant in the kernel. -/
+noncomputable def patchRead (ic H W P : Nat) (img : Vec (ic * H * W))
+    (c : Fin ic) (kh kw : Fin P) (p : Nat) : ℝ :=
+  let W' := W / P
+  let h' := p / W'
+  let w' := p % W'
+  let hh := h' * P + kh.val
+  let ww := w' * P + kw.val
+  if hpad : hh < H ∧ ww < W then
+    img (finProdFinEquiv (finProdFinEquiv (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
+  else 0
+
+/-- **Jacobian of `patchEmbed_flat` w.r.t. the (flattened) patch kernel** —
+    `∂y_(n,dd)/∂W_(d,c,kh,kw) = [n ≠ 0]·δ_(dd,d)·read(c,kh,kw, patch n−1)`. -/
+theorem pdiv_patchEmbed_W {ic H W P N D : Nat}
+    (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
+    (img : Vec (ic * H * W))
+    (d : Fin D) (c : Fin ic) (kh kw : Fin P) (idx : Fin ((N + 1) * D)) :
+    pdiv (fun v : Vec (D * ic * P * P) =>
+            patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
+      (Kernel4.flatten Wc)
+      (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) idx
+      = if (finProdFinEquiv.symm idx).2 = d then
+          (if (finProdFinEquiv.symm idx).1.val = 0 then 0
+           else patchRead ic H W P img c kh kw ((finProdFinEquiv.symm idx).1.val - 1))
+        else 0 := by
+  -- Normal form: a single product-indexed sum of (reindex)×(constant masked read),
+  -- plus the kernel-free constant part.
+  rw [show (fun v : Vec (D * ic * P * P) =>
+              patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img) =
+        (fun v : Vec (D * ic * P * P) => fun o : Fin ((N + 1) * D) =>
+          (∑ t : Fin ic × Fin P × Fin P,
+            v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                  ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
+              (if (finProdFinEquiv.symm o).1.val = 0 then 0
+               else patchRead ic H W P img t.1 t.2.1 t.2.2
+                      ((finProdFinEquiv.symm o).1.val - 1))) +
+          patchEmbed_flat ic H W P N D (fun _ _ _ _ => 0) bc cls pos img o) from by
+      funext v o
+      unfold patchEmbed_flat patchRead Kernel4.unflatten
+      simp only [Fintype.sum_prod_type]
+      by_cases h : (finProdFinEquiv.symm o).1.val = 0
+      · simp only [h, if_true, mul_zero, Finset.sum_const_zero, zero_add]
+      · simp only [h, if_false, zero_mul, Finset.sum_const_zero, add_zero]
+        rw [show (∑ c' : Fin ic, ∑ kh' : Fin P, ∑ kw' : Fin P,
+              v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                    ((finProdFinEquiv.symm o).2, c'), kh'), kw')) *
+                (let W' := W / P
+                 let p := (finProdFinEquiv.symm o).1.val - 1
+                 let h' := p / W'
+                 let w' := p % W'
+                 let hh := h' * P + kh'.val
+                 let ww := w' * P + kw'.val
+                 if hpad : hh < H ∧ ww < W then
+                   img (finProdFinEquiv (finProdFinEquiv (c', ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
+                 else 0)) =
+            (∑ c' : Fin ic, ∑ kh' : Fin P, ∑ kw' : Fin P,
+              (let W' := W / P
+               let p := (finProdFinEquiv.symm o).1.val - 1
+               let h' := p / W'
+               let w' := p % W'
+               let hh := h' * P + kh'.val
+               let ww := w' * P + kw'.val
+               if hpad : hh < H ∧ ww < W then
+                 img (finProdFinEquiv (finProdFinEquiv (c', ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
+               else 0) *
+              v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                    ((finProdFinEquiv.symm o).2, c'), kh'), kw'))) from by
+          apply Finset.sum_congr rfl; intro c' _
+          apply Finset.sum_congr rfl; intro kh' _
+          apply Finset.sum_congr rfl; intro kw' _
+          ring]
+        ring]
+  -- pdiv through (sum + const), then per-summand (reindex × const).
+  have h_summand_diff : ∀ t ∈ (Finset.univ : Finset (Fin ic × Fin P × Fin P)),
+      DifferentiableAt ℝ
+        (fun (v : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
+          v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
+            (if (finProdFinEquiv.symm o).1.val = 0 then 0
+             else patchRead ic H W P img t.1 t.2.1 t.2.2
+                    ((finProdFinEquiv.symm o).1.val - 1))) (Kernel4.flatten Wc) := by
+    intro t _
+    exact ((reindexCLM (fun o : Fin ((N + 1) * D) =>
+        finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+          ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2))).differentiableAt).mul
+      (differentiableAt_const _)
+  have h_sum_diff : DifferentiableAt ℝ
+      (fun (v : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
+        ∑ t : Fin ic × Fin P × Fin P,
+          v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
+            (if (finProdFinEquiv.symm o).1.val = 0 then 0
+             else patchRead ic H W P img t.1 t.2.1 t.2.2
+                    ((finProdFinEquiv.symm o).1.val - 1))) (Kernel4.flatten Wc) := by
+    have h_eq : (fun (v : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
+          ∑ t : Fin ic × Fin P × Fin P,
+            v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                  ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
+              (if (finProdFinEquiv.symm o).1.val = 0 then 0
+               else patchRead ic H W P img t.1 t.2.1 t.2.2
+                      ((finProdFinEquiv.symm o).1.val - 1))) =
+        (fun v : Vec (D * ic * P * P) => ∑ t : Fin ic × Fin P × Fin P,
+          fun o : Fin ((N + 1) * D) =>
+            v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                  ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
+              (if (finProdFinEquiv.symm o).1.val = 0 then 0
+               else patchRead ic H W P img t.1 t.2.1 t.2.2
+                      ((finProdFinEquiv.symm o).1.val - 1))) := by
+      funext v o; rw [Finset.sum_apply]
+    rw [h_eq]
+    exact DifferentiableAt.fun_sum (fun t _ => h_summand_diff t (Finset.mem_univ t))
+  have h_const_diff : DifferentiableAt ℝ
+      (fun _ : Vec (D * ic * P * P) =>
+        patchEmbed_flat ic H W P N D (fun _ _ _ _ => 0) bc cls pos img)
+      (Kernel4.flatten Wc) := differentiableAt_const _
+  rw [pdiv_add _ _ _ h_sum_diff h_const_diff, pdiv_const, add_zero]
+  rw [pdiv_finset_sum (Finset.univ : Finset (Fin ic × Fin P × Fin P))
+      (fun t v o =>
+        v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+              ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
+          (if (finProdFinEquiv.symm o).1.val = 0 then 0
+           else patchRead ic H W P img t.1 t.2.1 t.2.2
+                  ((finProdFinEquiv.symm o).1.val - 1)))
+      (Kernel4.flatten Wc) h_summand_diff
+      (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) idx]
+  have hterm : ∀ t : Fin ic × Fin P × Fin P,
+      pdiv (fun (v : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
+              v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                    ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
+                (if (finProdFinEquiv.symm o).1.val = 0 then 0
+                 else patchRead ic H W P img t.1 t.2.1 t.2.2
+                        ((finProdFinEquiv.symm o).1.val - 1)))
+           (Kernel4.flatten Wc)
+           (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) idx =
+      (if finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw) =
+            finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+              ((finProdFinEquiv.symm idx).2, t.1), t.2.1), t.2.2)
+        then 1 else 0) *
+        (if (finProdFinEquiv.symm idx).1.val = 0 then 0
+         else patchRead ic H W P img t.1 t.2.1 t.2.2
+                ((finProdFinEquiv.symm idx).1.val - 1)) := by
+    intro t
+    have h_gather : DifferentiableAt ℝ
+        (fun (w : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
+          w (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2))) (Kernel4.flatten Wc) :=
+      (reindexCLM (fun o : Fin ((N + 1) * D) =>
+        finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+          ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2))).differentiableAt
+    have h_maskread : DifferentiableAt ℝ
+        (fun (_ : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
+          (if (finProdFinEquiv.symm o).1.val = 0 then (0 : ℝ)
+           else patchRead ic H W P img t.1 t.2.1 t.2.2
+                  ((finProdFinEquiv.symm o).1.val - 1))) (Kernel4.flatten Wc) :=
+      differentiableAt_const _
+    rw [show (fun (v : Vec (D * ic * P * P)) (o : Fin ((N + 1) * D)) =>
+                v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                      ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2)) *
+                  (if (finProdFinEquiv.symm o).1.val = 0 then 0
+                   else patchRead ic H W P img t.1 t.2.1 t.2.2
+                          ((finProdFinEquiv.symm o).1.val - 1))) =
+          (fun v o =>
+            (fun (w : Vec (D * ic * P * P)) (o' : Fin ((N + 1) * D)) =>
+              w (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+                    ((finProdFinEquiv.symm o').2, t.1), t.2.1), t.2.2))) v o *
+            (fun (_ : Vec (D * ic * P * P)) (o' : Fin ((N + 1) * D)) =>
+              (if (finProdFinEquiv.symm o').1.val = 0 then (0 : ℝ)
+               else patchRead ic H W P img t.1 t.2.1 t.2.2
+                      ((finProdFinEquiv.symm o').1.val - 1))) v o) from rfl,
+        pdiv_mul _ _ _ h_gather h_maskread,
+        pdiv_const,
+        pdiv_reindex (fun o : Fin ((N + 1) * D) =>
+          finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+            ((finProdFinEquiv.symm o).2, t.1), t.2.1), t.2.2))
+          (Kernel4.flatten Wc)
+          (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) idx]
+    ring
+  simp_rw [hterm]
+  -- Collapse the product sum at t = (c, kh, kw); the kernel index matches iff
+  -- additionally (symm idx).2 = d (nested fPF injectivity).
+  rw [Finset.sum_eq_single ((c, kh, kw) : Fin ic × Fin P × Fin P)
+      (fun t _ hne => by
+        rw [if_neg, zero_mul]
+        intro heq
+        apply hne
+        have h1 := finProdFinEquiv.injective heq
+        have hkw : kw = t.2.2 := congrArg Prod.snd h1
+        have h2 := finProdFinEquiv.injective (congrArg Prod.fst h1)
+        have hkh : kh = t.2.1 := congrArg Prod.snd h2
+        have h3 := finProdFinEquiv.injective (congrArg Prod.fst h2)
+        have hc : c = t.1 := congrArg Prod.snd h3
+        exact Prod.ext hc.symm (Prod.ext hkh.symm hkw.symm))
+      (fun h => absurd (Finset.mem_univ _) h)]
+  by_cases hd : (finProdFinEquiv.symm idx).2 = d
+  · rw [if_pos hd]
+    rw [show finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw) =
+          finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
+            ((finProdFinEquiv.symm idx).2, (c, kh, kw).1), (c, kh, kw).2.1),
+            (c, kh, kw).2.2) from by rw [hd]]
+    rw [if_pos rfl, one_mul]
+  · rw [if_neg hd, if_neg, zero_mul]
+    intro heq
+    apply hd
+    have h1 := finProdFinEquiv.injective heq
+    have h2 := finProdFinEquiv.injective (congrArg Prod.fst h1)
+    have h3 := finProdFinEquiv.injective (congrArg Prod.fst h2)
+    exact (congrArg Prod.fst h3).symm
+
+/-- The rendered **patch-kernel gradient**: for each tap `(d,c,kh,kw)`, the
+    patch-grid reduce `Σ_p read(c,kh,kw,p)·dy_(p+1,d)` — the "dilate dy /
+    valid conv" weight grad, with the CLS row (token 0) excluded. -/
+noncomputable def patchEmbed_weight_grad (ic H W P N D : Nat)
+    (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) : Kernel4 D ic P P :=
+  fun d c kh kw =>
+    ∑ n : Fin N, patchRead ic H W P img c kh kw n.val *
+      dy (finProdFinEquiv (n.succ, d))
+
+/-- The rendered **patch bias gradient**: `db_d = Σ_p dy_(p+1,d)` (the CLS row
+    excluded — token 0 carries no conv bias). -/
+noncomputable def patchEmbed_bias_grad (N D : Nat) (dy : Vec ((N + 1) * D)) : Vec D :=
+  fun d => ∑ n : Fin N, dy (finProdFinEquiv (n.succ, d))
+
+/-- **Patch-kernel gradient bridge.** The rendered patch-grid reduce equals the
+    certified ∂(patchEmbed)/∂W contraction. -/
+theorem vit_patchW_grad_bridge {ic H W P N D : Nat}
+    (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
+    (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D))
+    (d : Fin D) (c : Fin ic) (kh kw : Fin P) :
+    patchEmbed_weight_grad ic H W P N D img dy d c kh kw
+      = ∑ o : Fin ((N + 1) * D),
+          pdiv (fun v : Vec (D * ic * P * P) =>
+                  patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
+            (Kernel4.flatten Wc)
+            (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o
+            * dy o := by
+  simp_rw [pdiv_patchEmbed_W]
+  rw [sum_fin_prod (N + 1) D]
+  -- collapse the channel axis at dd = d
+  have hrow : ∀ n : Fin (N + 1),
+      (∑ k : Fin D,
+        (if (finProdFinEquiv.symm (finProdFinEquiv (n, k))).2 = d then
+          (if (finProdFinEquiv.symm (finProdFinEquiv (n, k))).1.val = 0 then 0
+           else patchRead ic H W P img c kh kw
+                  ((finProdFinEquiv.symm (finProdFinEquiv (n, k))).1.val - 1))
+         else 0) * dy (finProdFinEquiv (n, k)))
+      = (if n.val = 0 then 0
+         else patchRead ic H W P img c kh kw (n.val - 1)) *
+          dy (finProdFinEquiv (n, d)) := by
+    intro n
+    rw [Finset.sum_eq_single d
+        (fun k _ hne => by
+          rw [Equiv.symm_apply_apply]
+          dsimp only
+          rw [if_neg hne, zero_mul])
+        (fun h => absurd (Finset.mem_univ d) h)]
+    rw [Equiv.symm_apply_apply]
+    dsimp only
+    rw [if_pos rfl]
+  simp_rw [hrow]
+  rw [Fin.sum_univ_succ]
+  unfold patchEmbed_weight_grad
+  simp only [Fin.val_zero, reduceIte, zero_mul, zero_add, Fin.val_succ,
+             Nat.succ_ne_zero, if_false, Nat.add_sub_cancel]
+
+/-- **Patch-kernel output, certified.** `Wpⁿ = Wp − lr·(patch-grid reduce)`
+    denotes the certified ∂(patchEmbed)/∂Wp contraction. -/
+theorem vit_render_patchW_certified {ic H W P N D : Nat}
+    (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
+    (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (lr : ℝ)
+    (d : Fin D) (c : Fin ic) (kh kw : Fin P) :
+    Wc d c kh kw - lr * patchEmbed_weight_grad ic H W P N D img dy d c kh kw
+      = Wc d c kh kw - lr * ∑ o : Fin ((N + 1) * D),
+          pdiv (fun v : Vec (D * ic * P * P) =>
+                  patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
+            (Kernel4.flatten Wc)
+            (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o
+            * dy o := by
+  rw [vit_patchW_grad_bridge Wc bc cls pos img dy d c kh kw]
+
+/-- **Jacobian of `patchEmbed_flat` w.r.t. the patch bias** — the row-masked
+    gather `∂y_(n,k)/∂bc_i = [n ≠ 0]·δ_(i,k)` (token 0 is the CLS row). -/
+theorem pdiv_patchEmbed_b {ic H W P N D : Nat}
+    (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
+    (img : Vec (ic * H * W)) (i : Fin D) (j : Fin ((N + 1) * D)) :
+    pdiv (fun b' : Vec D =>
+            patchEmbed_flat ic H W P N D Wc b' cls pos img) bc i j
+      = (if (finProdFinEquiv.symm j).1.val = 0 then (0 : ℝ) else 1) *
+          (if i = (finProdFinEquiv.symm j).2 then 1 else 0) := by
+  rw [show (fun b' : Vec D => patchEmbed_flat ic H W P N D Wc b' cls pos img)
+        = (fun b' : Vec D => fun o : Fin ((N + 1) * D) =>
+            (fun o' : Fin ((N + 1) * D) =>
+              if (finProdFinEquiv.symm o').1.val = 0 then (0 : ℝ) else 1) o *
+              b' ((fun o' : Fin ((N + 1) * D) => (finProdFinEquiv.symm o').2) o) +
+            patchEmbed_flat ic H W P N D Wc (fun _ => (0 : ℝ)) cls pos img o) from by
+      funext b' o
+      unfold patchEmbed_flat
+      by_cases h : (finProdFinEquiv.symm o).1.val = 0
+      · simp only [h, if_true]
+        ring
+      · simp only [h, if_false]
+        ring]
+  exact pdiv_maskGather_add_const _ _ _ bc i j
+
+/-- **Patch bias gradient bridge.** The rendered CLS-row-excluded reduce equals
+    the certified ∂(patchEmbed)/∂bc contraction. -/
+theorem vit_patchb_grad_bridge {ic H W P N D : Nat}
+    (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
+    (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (i : Fin D) :
+    patchEmbed_bias_grad N D dy i
+      = ∑ o : Fin ((N + 1) * D),
+          pdiv (fun b' : Vec D =>
+                  patchEmbed_flat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
+  simp_rw [pdiv_patchEmbed_b]
+  rw [sum_fin_prod (N + 1) D]
+  have hrow : ∀ n : Fin (N + 1),
+      (∑ k : Fin D,
+        (if (finProdFinEquiv.symm (finProdFinEquiv (n, k))).1.val = 0 then (0 : ℝ) else 1) *
+          (if i = (finProdFinEquiv.symm (finProdFinEquiv (n, k))).2 then 1 else 0) *
+          dy (finProdFinEquiv (n, k)))
+      = (if n.val = 0 then (0 : ℝ) else 1) * dy (finProdFinEquiv (n, i)) := by
+    intro n
+    rw [Finset.sum_eq_single i
+        (fun k _ hne => by
+          rw [Equiv.symm_apply_apply]
+          dsimp only
+          rw [if_neg (Ne.symm hne), mul_zero, zero_mul])
+        (fun h => absurd (Finset.mem_univ i) h)]
+    rw [Equiv.symm_apply_apply]
+    dsimp only
+    rw [if_pos rfl, mul_one]
+  simp_rw [hrow]
+  rw [Fin.sum_univ_succ]
+  unfold patchEmbed_bias_grad
+  simp only [Fin.val_zero, reduceIte, zero_mul, zero_add, Fin.val_succ,
+             Nat.succ_ne_zero, if_false, one_mul]
+
+/-- **Patch bias output, certified.** -/
+theorem vit_render_patchb_certified {ic H W P N D : Nat}
+    (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
+    (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (lr : ℝ) (i : Fin D) :
+    bc i - lr * patchEmbed_bias_grad N D dy i
+      = bc i - lr * ∑ o : Fin ((N + 1) * D),
+          pdiv (fun b' : Vec D =>
+                  patchEmbed_flat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
+  rw [vit_patchb_grad_bridge Wc bc cls pos img dy i]
+
 -- The classifier head (`dense Wcls bcls` on the CLS vector) is covered VERBATIM by the
 -- existing M2 `weight_grad_bridge`/`bias_grad_bridge` (`dense_weight_grad_correct`/
 -- `dense_bias_grad_correct`) at the `[D, nClasses]` shape — single-vector dense, nothing
 -- to row-lift. Softmax and the 1/√d scale carry no parameters. With the per-token dense
--- W/b family (§ A: Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases), the row-lifted scalar-LN γ/β (§ B:
--- all five sites), and pos/cls (§ C), every parameter family of the representative ViT
--- train step except the patch-projection conv `Wp`/`bp` (§ E, follow-up) is certified
--- `θ − lr·(certified Jacobian · cotangent)`.
+-- W/b family (§ A), the row-lifted scalar-LN γ/β (§ B), pos/cls (§ C), and the patch
+-- conv Wp/bp (§ E), EVERY parameter family of the representative ViT train step is
+-- certified `θ − lr·(certified Jacobian · cotangent)`.
 
 end Proofs
