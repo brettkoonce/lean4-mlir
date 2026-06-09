@@ -25,6 +25,7 @@ import LeanMlir.Proofs.CifarBnClose
 import LeanMlir.Proofs.CnnChainClose
 import LeanMlir.Proofs.MobileNetV2Close
 import LeanMlir.Proofs.MobileNetV2RenderPC
+import LeanMlir.Proofs.ResNet34Close
 
 open Proofs
 
@@ -466,3 +467,16 @@ open Proofs
 -- faithfulness `den (graph) = mobilenetv2Forward_full_pc` is the "text = render of a proven graph"
 -- forward half at the render's per-channel BN; prerequisite for the structured render (Item B).
 #print axioms StableHLO.mobilenetv2FwdGraphFullPC_faithful
+-- ResNet-34 CLOSE (Item C) — a FREE close: every r34 param family certified by an existing bridge.
+-- r34 uses only regular convs (3×3 + the 7×7 stem), per-channel BN, relu, maxpool, residual, dense —
+-- no depthwise/relu6, and maxpool/relu/add/GAP carry no params. So NO new VJP; these six theorems pin
+-- the generic strided/regular conv W/b bridges to r34's exact kernels, confirming the 7×7 stem and the
+-- 3×3 strided projection (the shapes no prior net exercised) are covered. The per-channel BN γ/β
+-- (cifar_bn_render_*) and dense (M2 weight/bias_grad_bridge) families are verbatim reuse, already
+-- audited. 3-axiom clean by inheritance from the MobileNetV2/CNN/CIFAR-BN bridges.
+#print axioms r34_render_stem_convW_certified
+#print axioms r34_render_stem_convb_certified
+#print axioms r34_render_blockConvW_certified
+#print axioms r34_render_blockConvb_certified
+#print axioms r34_render_downConvW_certified
+#print axioms r34_render_downConvb_certified
