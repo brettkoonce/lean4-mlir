@@ -26,6 +26,7 @@ import LeanMlir.Proofs.CnnChainClose
 import LeanMlir.Proofs.MobileNetV2Close
 import LeanMlir.Proofs.MobileNetV2RenderPC
 import LeanMlir.Proofs.MobileNetV2ChainClose
+import LeanMlir.Proofs.ConvLossFold
 import LeanMlir.Proofs.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
@@ -488,6 +489,18 @@ open Proofs
 #print axioms invres_render_expW_s1_chain_certified
 #print axioms invres_render_expW_s2_chain_certified
 #print axioms mnv2_stem_render_convW_chain_certified
+-- THE COTANGENT PASS / = ∂loss/∂θ FOLD — what ties the certified per-layer Jacobian (Item C/D) to
+-- genuine gradient descent on the LOSS. The single gradient of the whole loss wrt a conv/depthwise
+-- param equals that certified Jacobian contracted with ∂loss/∂(layer output) — pdiv_comp (chain rule)
+-- on G ∘ (the θ-weight-map), at a smooth point (the downstream loss G differentiable at the layer
+-- output, the relu6/BN smoothness bundle). The conv/depthwise analogue of mlp_hidden_total_loss_grad;
+-- generic in G, so one theorem covers every conv (CNN/CIFAR/MobileNetV2/r34) and one every depthwise.
+-- The inner factor pdiv G (layer output) IS the cotangent Item D renders — composing closes the loop
+-- θⁿ = θ − lr·∂loss/∂θ. 3-axiom clean.
+#print axioms conv_total_loss_grad_fold
+#print axioms conv_bias_total_loss_grad_fold
+#print axioms depthwise_total_loss_grad_fold
+#print axioms depthwise_bias_total_loss_grad_fold
 -- ResNet-34 CLOSE (Item C) — a FREE close: every r34 param family certified by an existing bridge.
 -- r34 uses only regular convs (3×3 + the 7×7 stem), per-channel BN, relu, maxpool, residual, dense —
 -- no depthwise/relu6, and maxpool/relu/add/GAP carry no params. So NO new VJP; these six theorems pin

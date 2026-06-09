@@ -97,6 +97,10 @@ lean_lib «Proofs» where
              -- MobileNetV2 cotangent-chain close (Item D): the Item C conv/depthwise bridges
              -- pinned to the inverted-residual backward chain (relu6 kink + depthwise + stride-2).
              `LeanMlir.Proofs.MobileNetV2ChainClose,
+             -- The cotangent pass / = ∂loss/∂θ fold: the certified per-layer conv/depthwise
+             -- Jacobian contracted with ∂loss/∂(layer output) IS the total loss gradient (pdiv_comp
+             -- at a smooth point). The conv analogue of mlp_hidden_total_loss_grad; program-wide.
+             `LeanMlir.Proofs.ConvLossFold,
              -- ResNet-34 close (Item C): a FREE close — every r34 param family certified
              -- by an existing bridge (the 7×7 stem + 3×3 strided projection pinned to the
              -- generic strided conv W/b bridges; no new VJP).

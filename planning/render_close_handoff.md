@@ -53,8 +53,16 @@ parity, restore the committed file byte-identical — it must NEVER change). Eac
 
 ## What's still open (program-wide, all pre-existing)
 
-- **MobileNetV2** (ch7) — the live frontier. See `planning/mobilenetv2_close.md`.
-- The render-close → **total-loss-gradient** fold (`pdiv G = Back.denote`, the `mlp_*_total_loss_grad`
-  analogue) for CNN/CIFAR — the conv chain is pinned (`CnnChainClose`) but not yet folded to `∂loss/∂θ`.
+- ~~**MobileNetV2** (ch7) — the live frontier.~~ ✅ **FULLY closed (C+A+B+D)**, see
+  `planning/mobilenetv2_close.md`. **ResNet-34 too** (`planning/resnet34_close.md`).
+- ~~The render-close → **total-loss-gradient** fold (`pdiv G = Back.denote`, the `mlp_*_total_loss_grad`
+  analogue) — the conv chain is pinned (`CnnChainClose`) but not yet folded to `∂loss/∂θ`.~~ ✅ **DONE**
+  (2026-06-09): `LeanMlir/Proofs/ConvLossFold.lean` — the general conv/depthwise `= ∂loss/∂θ` fold
+  (`conv_total_loss_grad_fold` / `depthwise_total_loss_grad_fold` + biases), via `pdiv_comp` at a smooth
+  point, generic in the downstream loss `G`. Covers every conv (CNN/CIFAR/MobileNetV2/r34) and every
+  depthwise. The inner factor `pdiv G (layer output)` is the cotangent the chain-close (`*ChainClose`)
+  pins; composing them closes the loop `θⁿ = θ − lr·∂loss/∂θ`. The only residue is *instantiating* `G`
+  to each net's concrete downstream + discharging its differentiability (the smoothness bundle, as
+  `mobilenetv2_has_vjp_at` carries it) — mechanical, not a new mechanism.
 - The CIFAR non-BN epoch-10 plain-SGD divergence (demo-config; BN sidesteps it).
 - The unchanged trusted base: `ℝ→Float32`, `iree-compile`, the op templates.
