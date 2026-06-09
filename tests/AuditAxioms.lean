@@ -21,6 +21,7 @@ import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
 import LeanMlir.Proofs.MlpTrainStep
 import LeanMlir.Proofs.CnnTrainStep
+import LeanMlir.Proofs.CifarBnClose
 
 open Proofs
 
@@ -409,3 +410,15 @@ open Proofs
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
 -- wants all three, so the ℝ-carrying headline `roundtrip` is the audited one.)
 #print axioms StableHLO.roundtrip
+-- CIFAR-BN render CLOSE — the per-channel BN scale/shift parameter-gradient bridges
+-- (the last params of the CIFAR-BN train step). γ/β enter BN affinely (y = γ·x̂ + β,
+-- x̂ independent of both), so the rendered per-channel reduces dγ_c = Σ_s dy·x̂ and
+-- dβ_c = Σ_s dy equal the certified pdiv-Jacobian of per-channel BN (as a function of
+-- γ resp. β) contracted with the cotangent — via pdiv_reindex/pdiv_mul/pdiv_const over a
+-- channel-gather. The affine BN analogue of bias_grad_bridge; no 0<ε (ε only enters the
+-- constant x̂). Together with bnPerChannelTensor3_grad_input_correct (BN input grad) and
+-- the conv/dense bridges, every CIFAR-BN train-step parameter output is now certified.
+#print axioms bnPerChannel_grad_gamma_correct
+#print axioms bnPerChannel_grad_beta_correct
+#print axioms cifar_bn_render_gamma_certified
+#print axioms cifar_bn_render_beta_certified

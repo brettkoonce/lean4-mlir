@@ -79,7 +79,10 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.MlpRender,
              -- CNN render half: the CNN train-step text rendered from `cnnFwdGraph`,
              -- with flat→NCHW reshape glue bridging the conv param-grad tail.
-             `LeanMlir.Proofs.CnnRender]
+             `LeanMlir.Proofs.CnnRender,
+             -- CIFAR-BN close: the per-channel BN scale/shift (dγ, dβ) param-grad
+             -- bridges — the affine BN analogue of `bias_grad_bridge`.
+             `LeanMlir.Proofs.CifarBnClose]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
