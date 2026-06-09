@@ -88,13 +88,21 @@ layer-scale `γ` bridge is the symmetry mirror of `pdiv_layerScale` (roles of γ
 depthwise pins are verbatim instantiations of the kernel-general `mnv2_render_depthwise{W,b}_certified`
 (stride-1 only — ConvNeXt blocks keep resolution). All audited in `tests/AuditAxioms.lean`.
 
-### Item B — structured render — [given C; the backward tokens already exist]
-`tests/TestConvNeXtTrainPC.lean`: forward + backward via `pretty` over the `convNextFwdGraph` tokens.
-Backward pieces all have tokens: `geluBack` (smooth, no kink), `bnBack` (scalar-LN input-VJP), `convBack`/
-`depthwiseBack`, `dotOut` (dense). **Layer-scale backward reuses `layerScaleF` itself** — `layerScale`'s
-input-VJP is `γ ⊙ dy` (diagonal/symmetric: applying the forward token to the cotangent IS the backward),
-so no new backward token. Hand-emit only the param grads (conv/dw/dense W/b, layer-scale `dγ = x⊙dy`,
-scalar-LN `dγ/dβ`). Validate with `scripts/render_parity.py` (cf. the MNV2/r34 `TrainPC` peers).
+### Item B — structured render — ✅ **DONE** (`tests/TestConvNeXtTrainPC.lean`)
+Forward + the whole backward cotangent chain proof-rendered via `pretty` over the `convNextFwdGraph`
+tokens (fn `@convnext_rep_train_step`, representative dims 3×32² / c=32 / cExp=128 / dw 7×7 / 10
+classes, BS=32; 26 params + x + onehot). Backward all by token: `geluBack`, `bnBack` (scalar-LN
+input-VJP), `convBack`/`depthwiseBack`, `dotOut` (dense). **Layer-scale backward reuses `layerScaleF`
+itself** — `layerScale`'s input-VJP is `γ ⊙ dy` (diagonal/symmetric: applying the forward token to the
+cotangent IS the backward), so no new backward token, exactly as planned. Hand-emitted only the param
+grads (conv/dw/dense W/b, layer-scale `dγ = x⊙dy` via multiply+reduce[0], scalar-LN `dγ/dβ` via
+recompute-x̂ + reduce `[0,1]` → `tensor<f32>`) and the GAP backward (reshape/broadcast/divide).
+**Validation:** the committed renderer (`TestConvNeXtTrain.lean` → `verified_mlir/convnext_train_step.mlir`)
+is FULL ConvNeXt-T ([3,3,9,3], 180 params, 4×4-stride-4 stem) — signatures don't match the
+representative, so no swap-parity is possible; validated instead with the `render_parity.py` **ref-only
+smoke** (iree-compile + gfx1100 run: 26/26 outputs all-finite, 26/26 non-zero). `render_parity.py` was
+extended to parse 0-d scalar `tensor<f32>` params (the scalar-LN `γ/β`) — a fix that also newly enables
+the harness on the committed full ConvNeXt-T (verified 182/180 parse, plus mnv2 84/82, r34 148/146).
 
 ### Item D — cotangent chain — [optional; the block chain, batch-1]
 `ConvNeXtChainClose.lean` — the analogue of `MobileNetV2ChainClose`. Pin each conv/dw param to the
@@ -112,11 +120,15 @@ is the per-block head start. **Pure-Lean, batch-1** — no batched-VJP machinery
 2. **Item C** ✅ DONE — param close (`ConvNeXtClose.lean`): 7×7 depthwise pinned; layer-scale `γ`
    (`pdiv_layerScale_gamma` ⇒ `dγ = x⊙dy`) and scalar-LN `γ/β` (the `Vec 1` embedding — NOT free
    reuse; `bn_grad_gamma/beta` were definitions-only) bridged + certified. Audit-wired, 3-axiom clean.
-3. **Item B** — structured render (`tests/TestConvNeXtTrainPC.lean`) + `iree-run-module` parity. All
-   backward tokens exist (layer-scale back = `layerScaleF` on the cotangent).
+3. **Item B** ✅ DONE — structured render (`tests/TestConvNeXtTrainPC.lean`, fn
+   `convnext_rep_train_step`): all backward by token (layer-scale back = `layerScaleF` on the
+   cotangent); validated iree-compile + ref-only GPU smoke (26/26 finite/non-zero — no
+   same-signature committed ref; the committed renderer is full ConvNeXt-T). `render_parity.py`
+   extended for 0-d scalar `tensor<f32>` params.
 4. **Item D** — optional block cotangent chain (`ConvNeXtChainClose.lean`), batch-1.
 
-After Item B, the small ConvNeXt is closed both ways.
+**The small ConvNeXt is now closed both ways** (Items A+C+B). Item D remains the optional
+cotangent-chain strengthening.
 
 ## Handoff notes
 - **"Small version" = the representative `convNextForward`** (2 blocks, 1×1 stem, scalar LN) — already

@@ -29,7 +29,8 @@ def parse_input_shapes(mlir_path, fn):
     if not m:
         sys.exit(f"could not find func @{fn} in {mlir_path}")
     inputs_part = m.group(1)
-    return re.findall(r'tensor<([0-9x]+)xf32>', inputs_part)
+    # capture dims-with-trailing-x ('' for a scalar tensor<f32>, e.g. ConvNeXt's scalar-LN γ/β)
+    return re.findall(r'tensor<([0-9x]*)f32>', inputs_part)
 
 
 def count_outputs(mlir_path, fn):
@@ -79,8 +80,8 @@ def main():
     rng = np.random.default_rng(args.seed)
     in_flags = []
     for i, s in enumerate(shapes):
-        dims = [int(d) for d in s.split('x')]
-        a = (rng.standard_normal(dims).astype(np.float32) * args.scale)
+        dims = [int(d) for d in s.split('x') if d]  # [] = 0-d scalar (tensor<f32>)
+        a = (np.asarray(rng.standard_normal(dims)).astype(np.float32) * args.scale)
         p = f"{work}/in/i{i}.npy"; np.save(p, a); in_flags.append(f"--input=@{p}")
 
     compile(args.ref, f"{work}/ref.vmfb")
