@@ -82,7 +82,10 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.CnnRender,
              -- CIFAR-BN close: the per-channel BN scale/shift (dγ, dβ) param-grad
              -- bridges — the affine BN analogue of `bias_grad_bridge`.
-             `LeanMlir.Proofs.CifarBnClose]
+             `LeanMlir.Proofs.CifarBnClose,
+             -- CNN conv-close upgrade: the conv param closes pinned to the actual
+             -- backward-chain cotangent (Back3 maxpool/conv via flatDenote + relu masks).
+             `LeanMlir.Proofs.CnnChainClose]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

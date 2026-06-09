@@ -22,6 +22,7 @@ import LeanMlir.Proofs.LinearTrainStep
 import LeanMlir.Proofs.MlpTrainStep
 import LeanMlir.Proofs.CnnTrainStep
 import LeanMlir.Proofs.CifarBnClose
+import LeanMlir.Proofs.CnnChainClose
 
 open Proofs
 
@@ -422,3 +423,16 @@ open Proofs
 #print axioms bnPerChannel_grad_beta_correct
 #print axioms cifar_bn_render_gamma_certified
 #print axioms cifar_bn_render_beta_certified
+-- CNN conv-close UPGRADE — the conv param closes pinned to the ACTUAL backward-chain
+-- cotangent (not a generic c). The chain from dy: dense-head flat Back chain
+-- (cnnDenseHeadCot, the mlpCotOut mechanism) → maxpool-back (Back3 node via flatDenote,
+-- crossing the flatten boundary) → relu mask → conv2-back (Back3 node via flatDenote) →
+-- relu mask. Instantiates cnn_render_conv{W,b}_certified at cnnChainCotW2/W1 — so each
+-- conv θ output denotes θ − lr·(certified ∂conv/∂θ · the cotangent the chain delivers).
+-- The conv analogue of mlpCotOut0/1; pins the cotangent (the further "= ∂loss/∂θ" fold is
+-- the separate pdiv G = Back.denote step).
+#print axioms cnnDenseHeadCot_denote
+#print axioms cnn_render_convW2_chain_certified
+#print axioms cnn_render_convb2_chain_certified
+#print axioms cnn_render_convW1_chain_certified
+#print axioms cnn_render_convb1_chain_certified
