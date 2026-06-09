@@ -146,14 +146,28 @@ already GPU-trains, so the close certifies *that* computation.
 Net: **every** MobileNetV2 train-step parameter family is now certified `θ − lr·(certified
 Jacobian · the layer cotangent)`. MobileNetV2 is at the CIFAR-non-BN "close-DONE" bar.
 
-### Item D — the inverted-residual cotangent chain  [NEW, the hard/optional polish]
-The analogue of `CnnChainClose.lean`, but harder: pin the generic `c` to the actual chain through
-6 blocks, crossing **(i)** residual fan-in (`addV` backward: the cotangent at a block output flows
-to BOTH the skip and the body, summed at the block input), **(ii)** stride-2 downsample boundaries
-(the strided backward zero-upsamples; cotangent spatial size changes), **(iii)** the relu6
-two-sided kink (`selectMid`), **(iv)** per-channel BN back, **(v)** depthwise + pointwise convs.
-This is the genuinely-new, fiddliest piece (a `Back`/`Back3`-style chain over a branchy, multi-scale
-net). *Optional* — pins the cotangent; the further "= ∂loss/∂θ" fold remains separate (as for CNN).
+### Item D — the inverted-residual cotangent chain  ✅ **DONE** (2026-06-09)
+`LeanMlir/Proofs/MobileNetV2ChainClose.lean` (9 theorems, 3-axiom clean, audited) — the analogue of
+`CnnChainClose`/`ResNet34ChainClose`, pinning the Item C bridges' generic `c` to the cotangent the
+inverted-residual backward chain delivers. The chain through a block composes the *rendered* backward
+denotations — relu6 two-sided-kink mask (`selectMid`, `if 0<x<6`), per-channel BN input-VJP
+(`bnPerChannelTensor3_grad_input`), 1×1 conv input-VJP (`conv2d_has_vjp3` via the flatten bridge),
+depthwise input-VJP (`depthwiseFlat_has_vjp` / `depthwiseStride2Flat_has_vjp`) — `project→depthwise→
+expand` into `invresCotPc` / `invresCotDc` / `invresCotEcS1` / `invresCotEcS2`:
+- **project** (1×1): `invres_render_proj{W,b}_chain_certified` at `invresCotPc`. The **linear bottleneck**
+  (no relu6 after the residual `addV`) makes the project-BN output cotangent `dyOut` *directly* — skip
+  and no-skip alike, unlike r34's `relu(add(…))`. ((i) the residual fan-in is therefore trivial here.)
+- **depthwise**: `invres_render_dw{W,b}_{s1,s2}_chain_certified` at `invresCotDc` — stride-1 (skip
+  blocks, `mnv2_render_depthwise*`) and stride-2 (downsampling, the strided depthwise bridges). ((ii)+(v))
+- **expand** (1×1): `invres_render_expW_{s1,s2}_chain_certified` at `invresCotEcS1`/`S2`. The stride-2
+  blocks carry the expand-side cotangent at 2h×2w (the `_s2` split — (ii) the spatial size changes). ((iii)+(iv))
+- **stem** (3×3 strided): `mnv2_stem_render_convW_chain_certified` at `mnv2StemCot` (relu6 mask + BN-back;
+  no maxpool, simpler than r34's stem).
+
+Each conv/depthwise θ output denotes `θ − lr·(certified ∂/∂θ · the-actual-chain-cotangent)`. Pins the
+cotangent; the `= ∂loss/∂θ` fold stays separate (as for the CNN). The flatten/unflatten + stride-split +
+relu6-kink juggling — the "fiddliest piece" — all compiled first try, reusing the `ResNet34ChainClose`
+template.
 
 ---
 
@@ -173,13 +187,16 @@ net). *Optional* — pins the cotangent; the further "= ∂loss/∂θ" fold rema
    forward + full backward cotangent chain proof-rendered, iree-compiles, **bit-identical** GPU
    outputs vs the committed renderer (82/82 params, `np.array_equal`). MobileNetV2 now has the
    "text = render of proven graph" half.
-4. **Item D (cotangent chain)** — optional polish; the branchy inverted-residual analogue of
-   `CnnChainClose`. *Not started.*
+4. **Item D (cotangent chain)** ✅ **DONE** — `MobileNetV2ChainClose.lean` (9 theorems, 3-axiom clean).
+   The branchy inverted-residual analogue of `CnnChainClose`/`ResNet34ChainClose`.
 
-After step 1, MobileNetV2 is close-DONE (the CIFAR-non-BN bar). **After step 3 (now), it's closed
-both ways (the CIFAR-BN bar).** Step 4 matches the conv-close upgrade. Validation recipe + audit gate:
-identical to `planning/render_close_handoff.md` §"Validation recipe" (here the swap-train was replaced
-by an `iree-run-module` same-inputs output diff, since the imagenette loader is broken in this env).
+After step 1, MobileNetV2 is close-DONE (the CIFAR-non-BN bar). After step 3, closed both ways (the
+CIFAR-BN bar). **After step 4 (now), MobileNetV2 is FULLY closed (C+A+B+D)** — matching ResNet-34.
+Step 4 matches the conv-close upgrade. Validation recipe + audit gate: identical to
+`planning/render_close_handoff.md` §"Validation recipe" (here the swap-train was replaced by an
+`iree-run-module` same-inputs output diff via `scripts/render_parity.py`, since the imagenette loader
+is broken in this env). The `= ∂loss/∂θ` fold (composing the per-block cotangents through all blocks to
+the loss) is the one remaining program-wide open item, shared with the CNN — not MobileNetV2-specific.
 
 ## 4. Honest scope note
 The Explore-style "no new proofs, ~200 LOC" estimate is too rosy: it ignores that there is **no

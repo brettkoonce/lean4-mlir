@@ -25,6 +25,7 @@ import LeanMlir.Proofs.CifarBnClose
 import LeanMlir.Proofs.CnnChainClose
 import LeanMlir.Proofs.MobileNetV2Close
 import LeanMlir.Proofs.MobileNetV2RenderPC
+import LeanMlir.Proofs.MobileNetV2ChainClose
 import LeanMlir.Proofs.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
@@ -469,6 +470,24 @@ open Proofs
 -- faithfulness `den (graph) = mobilenetv2Forward_full_pc` is the "text = render of a proven graph"
 -- forward half at the render's per-channel BN; prerequisite for the structured render (Item B).
 #print axioms StableHLO.mobilenetv2FwdGraphFullPC_faithful
+-- MobileNetV2 cotangent-chain CLOSE (Item D) — the inverted-residual analogue of CnnChainClose/
+-- ResNet34ChainClose. The Item C conv/depthwise bridges pinned to the cotangent the backward chain
+-- delivers: project→depthwise→expand composes the rendered backward denotations — relu6 two-sided-kink
+-- mask (selectMid, if 0<x<6), per-channel BN input-VJP (bnPerChannelTensor3_grad_input), 1×1 conv
+-- input-VJP (conv2d_has_vjp3 via flatten), depthwise input-VJP (depthwiseFlat / depthwiseStride2Flat
+-- _has_vjp) — into invresCotPc/Dc/EcS1/EcS2. The linear bottleneck (no relu6 after the addV) makes the
+-- project-BN output cotangent dyOut directly; the stride-2 blocks carry the expand-side cotangent at
+-- 2h×2w (the _s2 split). Each conv/depthwise θ output denotes θ − lr·(certified ∂/∂θ · the-actual-chain-
+-- cotangent). Pins the cotangent; the = ∂loss/∂θ fold stays separate, as for the CNN. 3-axiom clean.
+#print axioms invres_render_projW_chain_certified
+#print axioms invres_render_projb_chain_certified
+#print axioms invres_render_dwW_s1_chain_certified
+#print axioms invres_render_dwb_s1_chain_certified
+#print axioms invres_render_dwW_s2_chain_certified
+#print axioms invres_render_dwb_s2_chain_certified
+#print axioms invres_render_expW_s1_chain_certified
+#print axioms invres_render_expW_s2_chain_certified
+#print axioms mnv2_stem_render_convW_chain_certified
 -- ResNet-34 CLOSE (Item C) — a FREE close: every r34 param family certified by an existing bridge.
 -- r34 uses only regular convs (3×3 + the 7×7 stem), per-channel BN, relu, maxpool, residual, dense —
 -- no depthwise/relu6, and maxpool/relu/add/GAP carry no params. So NO new VJP; these six theorems pin

@@ -94,6 +94,9 @@ lean_lib «Proofs» where
              -- (matches the operational render's BN flavor) + faithfulness to the
              -- per-channel ℝ-forward. Prerequisite for the structured render (Item B).
              `LeanMlir.Proofs.MobileNetV2RenderPC,
+             -- MobileNetV2 cotangent-chain close (Item D): the Item C conv/depthwise bridges
+             -- pinned to the inverted-residual backward chain (relu6 kink + depthwise + stride-2).
+             `LeanMlir.Proofs.MobileNetV2ChainClose,
              -- ResNet-34 close (Item C): a FREE close — every r34 param family certified
              -- by an existing bridge (the 7×7 stem + 3×3 strided projection pinned to the
              -- generic strided conv W/b bridges; no new VJP).
