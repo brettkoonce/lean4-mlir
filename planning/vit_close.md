@@ -173,12 +173,18 @@ explicit dims on stage lemmas.
    param grads (per-token dense dW/db, rowwise-LN dγ/dβ, dPos, dCls slice, patch-dense dWp/dbp,
    M2 head). Validation: iree-compile OK + gfx1100 ref-only smoke 40/40 outputs finite & non-zero
    (`scripts/render_parity.py --fn vit_rep_train_step`).
-4. **Item D** — optional attention-block cotangent chain (`ViTChainClose.lean`).
+4. **Item D — ✅ CLOSED (2026-06-09).** `LeanMlir/Proofs/ViTChainClose.lean`: the Item C bridges
+   pinned to the actual attention-block backward chain. Chain cots compose the rendered backward
+   denotations (`vitCot{G,M1,Ln2,H,Att,DP,DS,DQ,DK,DV,Ln1,Xin,Fl,B2out}`); the substantive ties
+   `vitCotD{Q,K,V}_eq_sdpa_back_{Q,K,V}` prove the matmul-spelled SDPA segments ARE the proven
+   closed forms at the pinned saved activations. The Q/K/V three-way fan-in (`vitCotLn1`) is the
+   new structural wrinkle. 18 chain-pinned param theorems (all block families + final-LN +
+   pos/cls/patch). Audit 330/330.
 
-**A+C+B all closed (2026-06-09): the representative ViT is closed both ways — the ladder now
-covers all four flagship families (CNN / inverted-residual / ConvNeXt / transformer).** Item D
-(the cotangent-chain pinning) is the remaining optional rung; the scaling pass (vector-[D] LN,
-multi-head, 16×16 patchify, depth-12) per the handoff notes.
+**ALL FOUR RUNGS CLOSED (2026-06-09): the representative ViT is closed both ways with the
+cotangent chain pinned — the ladder covers all four flagship families (CNN / inverted-residual /
+ConvNeXt / transformer) at the full MNV2/r34/ConvNeXt bar.** Remaining: only the optional scaling
+pass (vector-[D] LN, multi-head, 16×16 patchify, depth-12) per the handoff notes.
 
 ## Handoff notes
 - **Templates:** `softmaxRowF`/`softmaxRowBack` (StableHLO.lean ~198–250 + its `emitTok` case) is THE

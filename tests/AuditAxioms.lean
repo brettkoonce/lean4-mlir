@@ -38,6 +38,7 @@ import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
 import LeanMlir.Proofs.ViTClose
+import LeanMlir.Proofs.ViTChainClose
 
 open Proofs
 
@@ -701,3 +702,38 @@ open Proofs
 #print axioms pdiv_patchEmbed_b
 #print axioms vit_patchb_grad_bridge
 #print axioms vit_render_patchb_certified
+-- ViT cotangent-chain CLOSE (planning/vit_close.md Item D) — the ConvNeXtChainClose analogue: the
+-- Item C bridges pinned to the cotangent the ACTUAL backward chain delivers through the attention
+-- block. The chain composes the rendered backward denotations — per-token dense input-VJPs
+-- (rowDenseBackFlat), the GELU mask, the rowwise scalar-LN input-VJP (rowLNBackFlat = rowwise
+-- bn_grad_input), the row-softmax backward at the saved pre-softmax scores, and the SDPA matmuls
+-- spelled with the forward matMulFlat/transposeFlat on cotangents. THE SUBSTANTIVE TIES
+-- (vitCotD{Q,K,V}_eq_sdpa_back_{Q,K,V}): at the pinned saved activations the matmul-spelled chain
+-- segments ARE the proven closed forms sdpa_back_{Q,K,V} — the rendered attention backward is
+-- pinned to the audited SDPA suite. New structural wrinkle vs all prior nets: the THREE-WAY fan-in
+-- at LN1's output (the Q/K/V dense-backs sum, vitCotLn1). Residual fan-ins at both sublayers
+-- (vitCotH, vitCotXin); classifier-back scattered to row 0 (vitCotFl); the embed params (pos, cls,
+-- patch W/b) pinned at the block-1 input cotangent. Batch-1, pure-Lean. 3-axiom clean.
+#print axioms vitCotDP_eq_sdpa_dWeights
+#print axioms vitCotDS_eq_sdpa_dScaled
+#print axioms vitCotDQ_eq_sdpa_back_Q
+#print axioms vitCotDK_eq_sdpa_back_K
+#print axioms vitCotDV_eq_sdpa_back_V
+#print axioms vit_render_Wfc2_chain_certified
+#print axioms vit_render_bfc2_chain_certified
+#print axioms vit_render_Wfc1_chain_certified
+#print axioms vit_render_bfc1_chain_certified
+#print axioms vit_render_ln2gamma_chain_certified
+#print axioms vit_render_ln2beta_chain_certified
+#print axioms vit_render_Wo_chain_certified
+#print axioms vit_render_bo_chain_certified
+#print axioms vit_render_Wq_chain_certified
+#print axioms vit_render_Wk_chain_certified
+#print axioms vit_render_Wv_chain_certified
+#print axioms vit_render_ln1gamma_chain_certified
+#print axioms vit_render_ln1beta_chain_certified
+#print axioms vit_render_lnFgamma_chain_certified
+#print axioms vit_render_pos_chain_certified
+#print axioms vit_render_cls_chain_certified
+#print axioms vit_render_patchW_chain_certified
+#print axioms vit_render_patchb_chain_certified

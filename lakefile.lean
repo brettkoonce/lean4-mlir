@@ -127,7 +127,11 @@ lean_lib «Proofs» where
              -- outer product), row-lifted scalar-LN γ/β, pos-embed identity, CLS
              -- masked-gather — every representative-ViT param family except the
              -- patch conv certified.
-             `LeanMlir.Proofs.ViTClose]
+             `LeanMlir.Proofs.ViTClose,
+             -- ViT cotangent-chain close (Item D): the Item C bridges pinned to the
+             -- attention-block backward chain (SDPA matmul chain = the proven
+             -- sdpa_back_{Q,K,V} closed forms; the Q/K/V three-way fan-in at LN1).
+             `LeanMlir.Proofs.ViTChainClose]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
