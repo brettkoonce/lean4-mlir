@@ -1155,9 +1155,10 @@ chapter \emph{proves about gradients}: its VJP correctness theorems
 --- the \(\texttt{*\_has\_vjp*\_correct}\) results, each asserting
 \(\texttt{backward}\,x\,dy\,i = \sum_j \pdiv f\,x\,i\,j \cdot dy_j\)
 (a layer's backward equals the \(\pdiv\)-Jacobian contracted against
-the cotangent). Across Chapters 2--10 there are \textbf{34 VJP
+the cotangent). Across Chapters 2--10 there are \textbf{48 VJP
 correctness theorems}, one citable contract per layer, operator, and
-whole-network architecture. The foundation calculus rules,
+whole-network architecture --- through the full-architecture closes of
+all five Part~I networks. The foundation calculus rules,
 differentiability lemmas, and concrete forward/witness definitions
 that support them are additional machinery, not counted here. Even
 Chapter~2's toolkit is used straight away by a proven model --- the
@@ -8945,7 +8946,9 @@ project axiom slipped into a proof, so ``proven'' means proven-clean.
 \textbf{By construction} (structural): the StableHLO the GPU runs is not
 written but \emph{printed} from the same datatype the proofs reason about,
 with a bridge theorem pinning it to the proven formula, so the code cannot
-drift from the math. \textbf{Cross-checked} (empirical): because IREE and
+drift from the math --- and this now covers whole training steps (forward,
+backward, update), for ViT-Tiny and ConvNeXt-T at the production trainers'
+exact signatures. \textbf{Cross-checked} (empirical): because IREE and
 \texttt{float32} cannot themselves be proven, three independent oracles ---
 a finite-difference probe, a parallel JAX pipeline, and a CPU/GPU/NumPy
 comparator --- must agree on the gradient before the hardware is believed.
@@ -8955,13 +8958,18 @@ empirical one split among its witnesses.
 
 \section{Trust kernel}
 
-The Verified VJP Proofs suite proves \textbf{34 VJP correctness
+The Verified VJP Proofs suite proves \textbf{48 VJP correctness
 theorems} --- one per layer, operator, and whole-network architecture,
-each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\) --- on
+each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\), now
+including the full-architecture closes of all five Part~I networks --- on
 top of the foundation \(\pdiv\) calculus and the
 differentiability/forward/witness machinery they rest on, plus 22
-architecture definitions in the bestiary, across 12 Lean proof files,
-with zero project axioms. Earlier drafts shipped 30
+architecture definitions in the bestiary, across 51 Lean proof files,
+with zero project axioms. The axiom audit
+(\texttt{tests/AuditAxioms.lean}) re-checks \textbf{383 theorems} in all
+--- the VJP contracts plus the forward-graph faithfulness, render, and
+cotangent-chain results --- every one closing under the same three core
+axioms. Earlier drafts shipped 30
 project axioms; the progression: 30 (early) \(\to\) 10 (post
 diff-threading) \(\to\) \textbf{0} (post column-slab + Phase 7
 cleanup, Apr 2026).
