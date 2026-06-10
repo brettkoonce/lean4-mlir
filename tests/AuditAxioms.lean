@@ -44,6 +44,7 @@ import LeanMlir.Proofs.ViTMultiHead
 import LeanMlir.Proofs.ViTDepthK
 import LeanMlir.Proofs.MobileNetV2FullPaper
 import LeanMlir.Proofs.ConvNeXtFullT
+import LeanMlir.Proofs.FloatBridge
 
 open Proofs
 
@@ -868,3 +869,18 @@ open Proofs
 #print axioms convNextForwardTC_eq_chain
 #print axioms convNextForwardTC_has_vjp_correct
 #print axioms StableHLO.convNextFwdGraphTC_faithful
+
+-- ℝ→Float32 bridge, Tier 1 (FloatBridge.lean): standard-model rounding
+-- (hypothesis-style `FloatModel`, NO project axioms — binary32 satisfies the
+-- interface with u = 2⁻²⁴ on the normal range). Forward error bounds for the
+-- toy nets: compounded dot/dense budgets (association-independent, so IREE
+-- reduction reassociation is covered), ReLU exact-in-float 1-Lipschitz
+-- pass-through, and the linear/MLP forward-extraction capstones.
+#print axioms FloatModel.dot_close
+#print axioms FloatModel.dot_close_linear
+#print axioms FloatModel.dense_close
+#print axioms FloatModel.dense_close_fresh
+#print axioms FloatModel.relu_close
+#print axioms FloatModel.pow_one_add_sub_one_le
+#print axioms FloatModel.linear_float_close
+#print axioms FloatModel.mlp_float_close

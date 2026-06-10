@@ -43,6 +43,8 @@ import LeanMlir.Proofs.ViTMultiHead
 import LeanMlir.Proofs.ViTDepthK
 import LeanMlir.Proofs.MobileNetV2FullPaper
 import LeanMlir.Proofs.ConvNeXtFullT
+-- ℝ→Float32 bridge, Tier 1: standard-model rounding bounds for the toy nets.
+import LeanMlir.Proofs.FloatBridge
 -- Verified-codegen bridges (denoted IR + per-op bridge theorems) so doc-gen4
 -- documents them. IRPrint.lean is deliberately left out: its file-writing
 -- #evals run at elaboration time (use `lake env lean …/IRPrint.lean`).

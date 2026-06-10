@@ -201,9 +201,11 @@ to 1–2 ULP. So Tier 4 is the least-verified tier by gradient provenance but th
 one that empirically anchors the others. Whether phase-3 verified codegen can reach
 ImageNet scale is open.
 
-**Not yet verified anywhere:** the `ℝ`→`Float32` gap (no forward-extraction lemma);
-the ~7500-line `MlirCodegen.lean` (zero theorems); and, outside Tier 1, the
-train-step text that `iree-compile` actually consumes.
+**Not yet verified anywhere:** the `ℝ`→`Float32` gap beyond the Tier-1 forward
+bounds (`LeanMlir/Proofs/FloatBridge.lean` proves standard-rounding-model forward
+error budgets for the linear/MLP nets — relative-error model only, no underflow
+term, gradient half open); the ~7500-line `MlirCodegen.lean` (zero theorems);
+and, outside Tier 1, the train-step text that `iree-compile` actually consumes.
 
 **Concrete-instance honesty.** The conditional capstones (MLP, MNIST-CNN, CIFAR,
 MobileNetV2, ResNet-34) are instantiated to discharge their off-the-kink

@@ -149,7 +149,11 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.ConvNeXtFullT,
              -- Paper-spec full MobileNetV2 (all 17 [t,c,n,s] bottlenecks): forward
              -- graph + faithfulness.
-             `LeanMlir.Proofs.MobileNetV2FullPaper]
+             `LeanMlir.Proofs.MobileNetV2FullPaper,
+             -- ℝ→Float32 bridge, Tier 1: standard-model rounding (hypothesis-style,
+             -- no axioms) + forward error bounds for the linear/MLP nets
+             -- (dot/dense budgets, ReLU exact-in-float Lipschitz pass-through).
+             `LeanMlir.Proofs.FloatBridge]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
