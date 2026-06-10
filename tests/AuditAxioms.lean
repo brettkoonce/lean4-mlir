@@ -609,6 +609,12 @@ open Proofs
 #print axioms StableHLO.mbExpGraphB_faithful
 #print axioms StableHLO.efficientnetFwdGraphB_full_faithful
 #print axioms efficientnetForwardB_full_has_vjp
+-- The nested↔∘-chain bridge + correctness on the nested forward itself — the form-gap
+-- this file shipped with, closed by the ConvNeXt-T rw-shaped-proof recipe
+-- (equation-lemma rw + comp_apply peeling, syntactic close; simp/rfl would make the
+-- kernel reduce the block bodies and time out).
+#print axioms efficientnetForwardB_full_eq_chain
+#print axioms efficientnetForwardB_full_has_vjp_correct
 -- ConvNeXt RENDER (planning/convnext_close.md Item A) — the representative 2-block forward graph.
 -- The DELIBERATE CONTRAST to EfficientNet: ConvNeXt's normalization is LayerNorm, which is per-example
 -- separable, so the graph lives at a plain batch-1 index (no batched token layer, no `batchMap`/`bnBatchF`).

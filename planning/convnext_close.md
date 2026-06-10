@@ -194,8 +194,9 @@ following the handoff recipe below almost verbatim:
   recursive `convNextStageK` folds at literal depth (the kernel ignores reducibility
   and has no defeq cache; minimal failing case: `stage y = (stage ∘ id) y` by `simp`).
   The working proof is `rw [defEqLemma]; rw [comp_apply × 11]` — every step
-  propositional, the close syntactic, 2 s total. EfficientNet-B0's same form-gap is
-  now closable by the identical recipe (follow-up).
+  propositional, the close syntactic, 2 s total. EfficientNet-B0's same form-gap was
+  then closed by the identical recipe (`efficientnetForwardB_full_eq_chain` +
+  `_has_vjp_correct` on the nested forward) — no full-net form-gap remains anywhere.
 - **Graph + faithfulness**: `cnxBlockGraphW_faithful` + `cnxStageGraphK_den` (induction)
   + `cnxDownGraphW_faithful` → the apex **`convNextFwdGraphT_faithful`** (3×224² → 10,
   blocks `b1_`…`b18_`). **No heartbeat bump**: the forward is written in

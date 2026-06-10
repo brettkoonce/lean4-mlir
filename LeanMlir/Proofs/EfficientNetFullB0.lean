@@ -459,4 +459,73 @@ noncomputable def efficientnetForwardB_full_has_vjp (N : Nat) (w : B0Weights)
   have e16 := vjp_comp _ _ f15 d16 e15 v16;       have f16 := d16.comp f15
   exact vjp_comp _ _ f16 dH e16 vH
 
+/-- **`efficientnetForwardB_full` = the `∘`-chain of the VJP's statement** — the
+    kernel-checked bridge between the nested-application and composition forms,
+    closing the form-gap this file shipped with. PROOF-SHAPE MATTERS (the ConvNeXt-T
+    `convNextForwardT_eq_chain` lesson): equation-lemma `rw` + 17 `comp_apply`
+    rewrites close syntactically; a `simp`/`rfl` proof of the same statement makes
+    the kernel reduce the block bodies (no reducibility, no defeq cache) and
+    deterministically time out. -/
+theorem efficientnetForwardB_full_eq_chain (N : Nat) (w : B0Weights)
+    (x : Vec (N * (3 * 224 * 224))) :
+    efficientnetForwardB_full N w x =
+      (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘
+        mbExpW N 7 7 w.b16 ∘ mbResidW N 7 7 w.b15 ∘ mbResidW N 7 7 w.b14 ∘ mbResidW N 7 7 w.b13 ∘
+        mbStridedW N 7 7 w.b12 ∘ mbResidW N 14 14 w.b11 ∘ mbResidW N 14 14 w.b10 ∘
+        mbExpW N 14 14 w.b9 ∘ mbResidW N 14 14 w.b8 ∘ mbResidW N 14 14 w.b7 ∘
+        mbStridedW N 14 14 w.b6 ∘ mbResidW N 28 28 w.b5 ∘ mbStridedW N 28 28 w.b4 ∘
+        mbResidW N 56 56 w.b3 ∘ mbStridedW N 56 56 w.b2 ∘ mbNoExpW N 112 112 w.b1 ∘
+        stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) x := by
+  rw [efficientnetForwardB_full]
+  rw [Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
+      Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
+      Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
+      Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
+      Function.comp_apply]
+
+/-- **Public correctness theorem for `efficientnetForwardB_full_has_vjp`** — the full
+    B0's backward equals the `pdiv`-contracted Jacobian of `efficientnetForwardB_full`
+    itself at every input, tying the chain-stated VJP back to the nested forward via
+    `efficientnetForwardB_full_eq_chain`. -/
+theorem efficientnetForwardB_full_has_vjp_correct (N : Nat) (w : B0Weights)
+    (hsε : 0 < w.sε)
+    (hb1d : 0 < w.b1.dε) (hb1p : 0 < w.b1.pε)
+    (hb2e : 0 < w.b2.eε) (hb2d : 0 < w.b2.dε) (hb2p : 0 < w.b2.pε)
+    (hb3e : 0 < w.b3.eε) (hb3d : 0 < w.b3.dε) (hb3p : 0 < w.b3.pε)
+    (hb4e : 0 < w.b4.eε) (hb4d : 0 < w.b4.dε) (hb4p : 0 < w.b4.pε)
+    (hb5e : 0 < w.b5.eε) (hb5d : 0 < w.b5.dε) (hb5p : 0 < w.b5.pε)
+    (hb6e : 0 < w.b6.eε) (hb6d : 0 < w.b6.dε) (hb6p : 0 < w.b6.pε)
+    (hb7e : 0 < w.b7.eε) (hb7d : 0 < w.b7.dε) (hb7p : 0 < w.b7.pε)
+    (hb8e : 0 < w.b8.eε) (hb8d : 0 < w.b8.dε) (hb8p : 0 < w.b8.pε)
+    (hb9e : 0 < w.b9.eε) (hb9d : 0 < w.b9.dε) (hb9p : 0 < w.b9.pε)
+    (hb10e : 0 < w.b10.eε) (hb10d : 0 < w.b10.dε) (hb10p : 0 < w.b10.pε)
+    (hb11e : 0 < w.b11.eε) (hb11d : 0 < w.b11.dε) (hb11p : 0 < w.b11.pε)
+    (hb12e : 0 < w.b12.eε) (hb12d : 0 < w.b12.dε) (hb12p : 0 < w.b12.pε)
+    (hb13e : 0 < w.b13.eε) (hb13d : 0 < w.b13.dε) (hb13p : 0 < w.b13.pε)
+    (hb14e : 0 < w.b14.eε) (hb14d : 0 < w.b14.dε) (hb14p : 0 < w.b14.pε)
+    (hb15e : 0 < w.b15.eε) (hb15d : 0 < w.b15.dε) (hb15p : 0 < w.b15.pε)
+    (hb16e : 0 < w.b16.eε) (hb16d : 0 < w.b16.dε) (hb16p : 0 < w.b16.pε)
+    (hhε : 0 < w.hε)
+    (x : Vec (N * (3 * 224 * 224))) (dy : Vec (N * 10)) (i : Fin (N * (3 * 224 * 224))) :
+    (efficientnetForwardB_full_has_vjp N w hsε hb1d hb1p hb2e hb2d hb2p hb3e hb3d hb3p
+        hb4e hb4d hb4p hb5e hb5d hb5p hb6e hb6d hb6p hb7e hb7d hb7p hb8e hb8d hb8p
+        hb9e hb9d hb9p hb10e hb10d hb10p hb11e hb11d hb11p hb12e hb12d hb12p
+        hb13e hb13d hb13p hb14e hb14d hb14p hb15e hb15d hb15p hb16e hb16d hb16p
+        hhε).backward x dy i =
+      ∑ j : Fin (N * 10), pdiv (efficientnetForwardB_full N w) x i j * dy j := by
+  have h := (efficientnetForwardB_full_has_vjp N w hsε hb1d hb1p hb2e hb2d hb2p hb3e hb3d hb3p
+        hb4e hb4d hb4p hb5e hb5d hb5p hb6e hb6d hb6p hb7e hb7d hb7p hb8e hb8d hb8p
+        hb9e hb9d hb9p hb10e hb10d hb10p hb11e hb11d hb11p hb12e hb12d hb12p
+        hb13e hb13d hb13p hb14e hb14d hb14p hb15e hb15d hb15p hb16e hb16d hb16p
+        hhε).correct x dy i
+  rwa [show efficientnetForwardB_full N w =
+        (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘
+          mbExpW N 7 7 w.b16 ∘ mbResidW N 7 7 w.b15 ∘ mbResidW N 7 7 w.b14 ∘ mbResidW N 7 7 w.b13 ∘
+          mbStridedW N 7 7 w.b12 ∘ mbResidW N 14 14 w.b11 ∘ mbResidW N 14 14 w.b10 ∘
+          mbExpW N 14 14 w.b9 ∘ mbResidW N 14 14 w.b8 ∘ mbResidW N 14 14 w.b7 ∘
+          mbStridedW N 14 14 w.b6 ∘ mbResidW N 28 28 w.b5 ∘ mbStridedW N 28 28 w.b4 ∘
+          mbResidW N 56 56 w.b3 ∘ mbStridedW N 56 56 w.b2 ∘ mbNoExpW N 112 112 w.b1 ∘
+          stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ)
+      from funext (efficientnetForwardB_full_eq_chain N w)]
+
 end Proofs
