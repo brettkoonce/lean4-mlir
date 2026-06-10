@@ -169,7 +169,11 @@ lean_lib «Proofs» where
              -- mask sign) the loss-of-one-layer maps get explicit
              -- segment-Lipschitz constants, and one inexact SGD step on each
              -- weight layer provably decreases the cross-entropy loss.
-             `LeanMlir.Proofs.SgdDescentMlp]
+             `LeanMlir.Proofs.SgdDescentMlp,
+             -- The descent program reaches the Chapter-4 CNN: quantitative
+             -- max-pool selection margins (the argmax freezes along the step
+             -- segment), pool 1-Lipschitz/ℓ1-contraction, conv kernel drift.
+             `LeanMlir.Proofs.SgdDescentCnn]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

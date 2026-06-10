@@ -257,10 +257,14 @@ margin hypotheses describe real training, not a technicality.
 theorems); outside Tier 1, the train-step text that `iree-compile` actually
 consumes; and, within the float bridge, subnormals (the model is
 relative-error-only), the joint all-layers descent step and bias columns
-(the per-weight-layer constants are proven for linear + MLP; the CNN's are
-open, and so is every-parameter-at-once, where the logits are no longer
-affine in the moving parameters), and any link from the
-Lean-side `FloatModel` to IREE's actual kernels beyond the empirical probe.
+(the per-weight-layer constants are proven for linear + MLP; for the CNN
+the new ingredients are proven — quantitative max-pool selection margins
+that freeze the argmax routing, pool `ℓ1`-contraction, conv-kernel drift
+with the weight-sharing factor — but the conv-layer capstone assembly is
+open, `planning/sgd_descent_cnn.md`; so is every-parameter-at-once, where
+the logits are no longer affine in the moving parameters), and any link
+from the Lean-side `FloatModel` to IREE's actual kernels beyond the
+empirical probe.
 
 **Concrete-instance honesty.** The conditional capstones (MLP, MNIST-CNN, CIFAR,
 MobileNetV2, ResNet-34) are instantiated to discharge their off-the-kink
@@ -504,7 +508,8 @@ lean4-mlir/
 │       ├── FloatBridge.lean      -- ℝ→Float32: rounding budgets (Tier 1)
 │       ├── SgdDescent.lean       -- inexact-gradient descent over ℝ
 │       ├── SgdDescentLinear.lean -- Lipschitz constants, linear loss
-│       └── SgdDescentMlp.lean    -- ...through the MLP's ReLU kinks (margins)
+│       ├── SgdDescentMlp.lean    -- ...through the MLP's ReLU kinks (margins)
+│       └── SgdDescentCnn.lean    -- ...toward the CNN: pool selection margins
 │
 ├── Main*Train.lean         -- phase 3 trainers (one per architecture)
 │   ├── MainResnetTrain.lean

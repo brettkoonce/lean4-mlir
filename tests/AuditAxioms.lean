@@ -47,6 +47,7 @@ import LeanMlir.Proofs.ConvNeXtFullT
 import LeanMlir.Proofs.FloatBridge
 import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
+import LeanMlir.Proofs.SgdDescentCnn
 import LeanMlir.Proofs.SgdDescentMlp
 
 open Proofs
@@ -1013,3 +1014,43 @@ open Proofs
 #print axioms mlp_input_logit_drift
 #print axioms mlp_input_loss_grad_lipschitz
 #print axioms mlp_input_sgd_descends
+-- The descent program reaches the Chapter-4 CNN (SgdDescentCnn.lean):
+-- the three genuinely-new ingredient families beyond the MLP. (1) The
+-- POOL SELECTION MARGIN: MaxPool2MarginQ δ (pairwise window gaps > 2δ)
+-- is the quantitative form of MaxPool2Smooth — a δ-perturbation can
+-- neither tie nor reorder a window, so the argmax (isArgmax_iff), the
+-- smoothness (smooth_of_close), and the pool's entire pdiv3 routing
+-- pattern (pdiv3_eq) FREEZE, exactly as the ReLU margins freeze the
+-- masks. (2) The pool passes drift through unamplified: 1-Lipschitz per
+-- entry (max4_sub_abs_le) and ℓ1-contractive across entries — the 2×2
+-- stride-2 windows partition the input (sum_window_cells). (3) Conv is a
+-- dense layer with weight sharing: affine in the kernel
+-- (conv2d_kernel_sub), per-entry drift ≤ a·(slab ℓ1) ≤ a·‖e‖₁, and the
+-- ℓ1 drift picks up the spatial multiplicity (h·w)·a·‖e‖₁
+-- (conv2d_kernel_drift_sum). The dense head below the pool is already
+-- covered by the MLP descent theorems at the pooled activation; the
+-- conv-layer capstone assembly is the remaining work
+-- (planning/sgd_descent_cnn.md).
+#print axioms max4_sub_abs_le
+#print axioms max4_sub_abs_le_sum
+#print axioms flatten_t3Idx
+#print axioms sum_t3
+#print axioms sum_window_cells
+#print axioms maxPoolFlat_apply
+#print axioms maxPoolFlat_entry_lipschitz
+#print axioms maxPoolFlat_l1_contract
+#print axioms ne_of_gap_of_close
+#print axioms lt_of_lt_gap_of_close
+#print axioms MaxPool2MarginQ.smooth_of_close
+#print axioms MaxPool2MarginQ.smooth
+#print axioms MaxPool2MarginQ.isArgmax_iff
+#print axioms MaxPool2MarginQ.pdiv3_eq
+#print axioms conv2d_eq_convPad
+#print axioms abs_convPad_le
+#print axioms k4Idx_inj
+#print axioms sum_abs_kernel_slab_le
+#print axioms sum_abs_k4
+#print axioms conv2d_kernel_sub
+#print axioms conv2d_kernel_drift
+#print axioms conv2d_kernel_drift_total
+#print axioms conv2d_kernel_drift_sum
