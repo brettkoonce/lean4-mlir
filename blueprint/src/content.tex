@@ -953,16 +953,19 @@ loop shuffles, schedules the learning rate, and counts epochs --- it never
 computes a gradient or touches a tensor. The lone \texttt{train\_step\_vmfb}
 call is the function above, and it is the only place arithmetic happens.
 
-\medskip\noindent\textbf{Where this stands.} As of this writing, the linear
-classifier above is the one model carried all the way through this scheme ---
-its loss, backward, and SGD update each tied to a machine-checked theorem,
-fused into the single step shown and running on GPU. The deeper architectures
-of Part~I and the bestiary are proved operator by operator and code-generated;
-bringing each one's whole training step under the same end-to-end check is in
-progress, one model at a time. Until that work is finished the claims here
-stay scoped to what is done --- but when it is, the book earns its stronger
-sentence, \emph{every architecture in this book trained end-to-end under one
-machine-checked scheme}, and this note retires.
+\medskip\noindent\textbf{Where this stands.} The scheme above now covers more
+than the linear classifier: the shallow chapters' train steps (MLP, CNN,
+CIFAR$\pm$BN) are closed both ways, and all five Part~I architectures ---
+ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT --- are proved at
+full architecture: machine-checked forward graph plus whole-network backward,
+three classical axioms. For ViT-Tiny and ConvNeXt-T the proven graphs were
+re-rendered at the committed trainers' signatures and agree on GPU to float
+rounding (ConvNeXt: 179/180 tensors bit-identical). The one open gap: the
+theorems are over $\mathbb{R}$, the GPU runs \texttt{float32}. Part~II's
+bestiary is deliberately lighter --- decomposed into the same proved
+primitives, not carried to whole-step closes. The book's official claim is
+exactly this, no more and no less: \emph{every architecture in Part~I
+trained end-to-end under one machine-checked scheme}.
 
 \section{How this book is organized}
 
