@@ -594,58 +594,63 @@ private theorem gamma_num (hMu : M.u ≤ u32) {k : ℕ} {q : ℝ}
   exact ((pow_gamma_bound M.u hu k (lt_of_le_of_lt hkM hk)).trans
     (div_one_sub_mono hkM hk)).trans hq
 
-/-- Layer-0 budget at the committed MNIST dims: `E₀ ≤ 0.0012`. -/
+/-- Layer-0 budget at the committed MNIST dims and *trained* magnitudes
+    (`|W| ≤ 3/5`, covering the measured `max|W| = 0.52`): `E₀ ≤ 0.023`. -/
 private theorem mnist_E0_le (hMu : M.u ≤ u32) :
-    layerBudget M.u 784 (1/32) 1 1 0 ≤ 6/5000 := by
+    layerBudget M.u 784 (3/5) 1 1 0 ≤ 23/1000 := by
   refine (layerBudget_le_of M.u_nonneg (by norm_num) (by norm_num)
     (by norm_num) (M.gamma_num (q := 47/1000000) hMu (by norm_num [u32])
       (by norm_num [u32])) le_rfl le_rfl).trans ?_
   norm_num
 
-private theorem mnist_E0_nonneg : (0:ℝ) ≤ layerBudget M.u 784 (1/32) 1 1 0 :=
+private theorem mnist_E0_nonneg : (0:ℝ) ≤ layerBudget M.u 784 (3/5) 1 1 0 :=
   layerBudget_nonneg M.u_nonneg (by norm_num) (by norm_num) (by norm_num)
     le_rfl
 
-/-- Layer-1 budget at the committed MNIST dims: `E₁ ≤ 0.032`. -/
+/-- Layer-1 budget at the committed MNIST dims and trained magnitudes:
+    `E₁ ≤ 12`. -/
 private theorem mnist_E1_le (hMu : M.u ≤ u32) :
-    layerBudget M.u 512 (1/32) 1 (51/2)
-      (layerBudget M.u 784 (1/32) 1 1 0) ≤ 4/125 := by
+    layerBudget M.u 512 (3/5) 1 (2357/5)
+      (layerBudget M.u 784 (3/5) 1 1 0) ≤ 12 := by
   refine (layerBudget_le_of M.u_nonneg (by norm_num) (by norm_num)
     (by norm_num) (M.gamma_num (q := 31/1000000) hMu (by norm_num [u32])
       (by norm_num [u32])) M.mnist_E0_nonneg (M.mnist_E0_le hMu)).trans ?_
   norm_num
 
-private theorem mnist_E1_nonneg : (0:ℝ) ≤ layerBudget M.u 512 (1/32) 1 (51/2)
-    (layerBudget M.u 784 (1/32) 1 1 0) :=
+private theorem mnist_E1_nonneg : (0:ℝ) ≤ layerBudget M.u 512 (3/5) 1 (2357/5)
+    (layerBudget M.u 784 (3/5) 1 1 0) :=
   layerBudget_nonneg M.u_nonneg (by norm_num) (by norm_num) (by norm_num)
     M.mnist_E0_nonneg
 
-/-- **Numeric capstone at the committed MNIST-MLP dims** (the
-    `MainMnistMlpTrain.lean` net: 784→512→512→10). For any rounding model at
-    binary32 accuracy (`u ≤ 2⁻²⁴`), weights bounded by `1/32` and biases and
-    pixels by `1`, every rounded logit is within **3/4** of the exact-real
-    logit — while the logits themselves can reach ≈6.5·10³, i.e. ≈10⁻⁴
-    relative. All three layer budgets discharge by `norm_num` through the
-    γ-form (`pow_gamma_bound`); no big-power evaluation.
+/-- **Numeric capstone at the committed MNIST-MLP dims and TRAINED
+    magnitudes** (the `MainMnistMlpVerified.lean` net: 784→512→512→10;
+    `|W| ≤ 3/5` covers the measured `max|W| = 0.52` of a real 12-epoch
+    97.8% run — He init already exceeds the prettier `1/32` in its tails).
+    For any rounding model at binary32 accuracy (`u ≤ 2⁻²⁴`), every rounded
+    logit is within **5100** of the exact-real logit — the worst-case logit
+    magnitude at these bounds is ≈4.5·10⁷, so ≈10⁻⁴ *relative*, the same
+    relative scale as at small weights. All three layer budgets discharge by
+    `norm_num` through the γ-form; no big-power evaluation.
 
-    The dominant term is the Lipschitz amplification of the layer-0 budget
-    (`16·e` per layer), not fresh rounding — the worst-case-composition
-    blow-up that makes a-posteriori/probabilistic analysis the right tool
-    past toy depth. -/
+    Measured on the live run (`scripts/margin_probe.py`): actual logit
+    drift ≤ 1.6·10⁻⁵ — the ≈3·10⁸ gap between the worst-case bound and
+    reality is the worst-case-composition blow-up (`307·e` Lipschitz
+    amplification per layer at these magnitudes), the quantitative case for
+    a-posteriori certificates past toy depth. -/
 theorem mnist_mlp_float_budget (hMu : M.u ≤ u32)
     (W₀ : Mat 784 512) (b₀ : Vec 512) (W₁ : Mat 512 512) (b₁ : Vec 512)
     (W₂ : Mat 512 10) (b₂ : Vec 10) (x : Vec 784)
-    (hW₀ : ∀ i j, |W₀ i j| ≤ 1/32) (hb₀ : ∀ j, |b₀ j| ≤ 1)
-    (hW₁ : ∀ i j, |W₁ i j| ≤ 1/32) (hb₁ : ∀ j, |b₁ j| ≤ 1)
-    (hW₂ : ∀ i j, |W₂ i j| ≤ 1/32) (hb₂ : ∀ j, |b₂ j| ≤ 1)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ 3/5) (hb₀ : ∀ j, |b₀ j| ≤ 1)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ 3/5) (hb₁ : ∀ j, |b₁ j| ≤ 1)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ 3/5) (hb₂ : ∀ j, |b₂ j| ≤ 1)
     (hx : ∀ i, |x i| ≤ 1) (k : Fin 10) :
     |M.mlpF W₀ b₀ W₁ b₁ W₂ b₂ x k -
         Proofs.dense W₂ b₂ (relu 512 (Proofs.dense W₁ b₁
-          (relu 512 (Proofs.dense W₀ b₀ x)))) k| ≤ 3/4 := by
+          (relu 512 (Proofs.dense W₀ b₀ x)))) k| ≤ 5100 := by
   have hu := M.u_nonneg
-  have hB₂ : layerBudget M.u 512 (1/32) 1 409
-      (layerBudget M.u 512 (1/32) 1 (51/2)
-        (layerBudget M.u 784 (1/32) 1 1 0)) ≤ 3/4 := by
+  have hB₂ : layerBudget M.u 512 (3/5) 1 (3620377/25)
+      (layerBudget M.u 512 (3/5) 1 (2357/5)
+        (layerBudget M.u 784 (3/5) 1 1 0)) ≤ 5100 := by
     refine (layerBudget_le_of hu (by norm_num) (by norm_num) (by norm_num)
       (M.gamma_num (q := 31/1000000) hMu (by norm_num [u32])
         (by norm_num [u32])) M.mnist_E1_nonneg (M.mnist_E1_le hMu)).trans ?_
@@ -655,8 +660,9 @@ theorem mnist_mlp_float_budget (hMu : M.u ≤ u32)
     (by norm_num) (by norm_num) (by norm_num) (by norm_num)
     (by norm_num) (by norm_num)
     hW₀ hb₀ hW₁ hb₁ hW₂ hb₂ hx k
-  rw [show layerAct 784 (1/32) 1 1 = (51/2 : ℝ) by norm_num [layerAct],
-      show layerAct 512 (1/32) 1 (51/2) = (409 : ℝ) by norm_num [layerAct]]
+  rw [show layerAct 784 (3/5) 1 1 = (2357/5 : ℝ) by norm_num [layerAct],
+      show layerAct 512 (3/5) 1 (2357/5) = (3620377/25 : ℝ) by
+        norm_num [layerAct]]
     at hmain
   exact hmain.trans hB₂
 
@@ -1243,43 +1249,49 @@ theorem mlp_b0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
         hc₁mag j)
   exact M.sgd_step_close (b₀ j) (hcot0 j) hc₀mag hlr
 
-/-- **Numeric gradient capstone at the committed dims** (784→512→512→10,
-    `MainMnistMlpTrain.lean`): binary32 accuracy (`u ≤ 2⁻²⁴`), `lr = 1/10`,
-    `|W| ≤ 1/32`, `|b|, |x| ≤ 1`, `|g| ≤ 1` (a softmax−onehot cotangent is
-    always in `[−1,1]`), cotangent taken exact — then every rounded W₂ SGD
-    entry is within **1/300** of the certified real step.
+/-- **Numeric gradient capstone at the committed dims and TRAINED
+    magnitudes** (784→512→512→10, `|W| ≤ 3/5` covering the measured
+    `max|W| = 0.52`): binary32 accuracy (`u ≤ 2⁻²⁴`), `lr = 1/10`,
+    `|b|, |x| ≤ 1`, `|g| ≤ 1` (a softmax−onehot cotangent is always in
+    `[−1,1]`), cotangent taken exact — then every rounded W₂ SGD entry is
+    within **5/4** of the certified real step.
 
-    The budget decomposes honestly: ~0.0032 of it is `lr·E₁·|g|` — the
+    The budget decomposes honestly: ~1.2 of it is `lr·E₁·|g|` — the
     *forward* budget riding through the gradient at learning-rate scale —
-    while fresh backward rounding contributes only ~5·10⁻⁶. The gradient
-    step is as accurate as the forward pass, no worse. -/
+    while fresh backward rounding contributes only ~2·10⁻³. The gradient
+    step is as accurate as the forward pass, no worse. Measured on the
+    live run (`scripts/margin_probe.py`): actual W₂ step deviation
+    ≤ 7.5·10⁻⁹ — the worst-case-vs-measured gap is the a-posteriori case
+    in numbers. -/
 theorem mnist_w2_step_float_budget (hMu : M.u ≤ u32)
     (W₀ : Mat 784 512) (b₀ : Vec 512) (W₁ : Mat 512 512) (b₁ : Vec 512)
     (W₂ : Mat 512 10) (x : Vec 784) (g : Vec 10)
-    (hW₀ : ∀ i j, |W₀ i j| ≤ 1/32) (hb₀ : ∀ j, |b₀ j| ≤ 1)
-    (hW₁ : ∀ i j, |W₁ i j| ≤ 1/32) (hb₁ : ∀ j, |b₁ j| ≤ 1)
-    (hW₂ : ∀ i j, |W₂ i j| ≤ 1/32)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ 3/5) (hb₀ : ∀ j, |b₀ j| ≤ 1)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ 3/5) (hb₁ : ∀ j, |b₁ j| ≤ 1)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ 3/5)
     (hx : ∀ i, |x i| ≤ 1) (hG : ∀ j, |g j| ≤ 1)
     (i : Fin 512) (j : Fin 10) :
     |M.sub (W₂ i j) (M.mul (1/10) (M.mul
         (relu 512 (M.dense W₁ b₁ (relu 512 (M.dense W₀ b₀ x))) i) (g j))) -
       (W₂ i j - (1/10) * (relu 512 (Proofs.dense W₁ b₁
-        (relu 512 (Proofs.dense W₀ b₀ x))) i * g j))| ≤ 1/300 := by
+        (relu 512 (Proofs.dense W₀ b₀ x))) i * g j))| ≤ 5/4 := by
   have hu := M.u_nonneg
   have hmain := M.mlp_w2_step_float_close (gt := g) (eg := 0) (lr := 1/10) W₂
     (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num)
     (by norm_num) hW₀ hb₀ hW₁ hb₁ hx hG (fun j' => by simp) i j
-  rw [show layerAct 784 (1/32) 1 1 = (51/2 : ℝ) by norm_num [layerAct],
-      show layerAct 512 (1/32) 1 (51/2) = (409 : ℝ) by norm_num [layerAct]]
+  rw [show layerAct 784 (3/5) 1 1 = (2357/5 : ℝ) by norm_num [layerAct],
+      show layerAct 512 (3/5) 1 (2357/5) = (3620377/25 : ℝ) by
+        norm_num [layerAct]]
     at hmain
   refine hmain.trans ?_
-  have hm1 : mulErr M.u 409 1 (layerBudget M.u 512 (1/32) 1 (51/2)
-      (layerBudget M.u 784 (1/32) 1 1 0)) 0 ≤ 321/10000 := by
+  have hm1 : mulErr M.u (3620377/25) 1 (layerBudget M.u 512 (3/5) 1 (2357/5)
+      (layerBudget M.u 784 (3/5) 1 1 0)) 0 ≤ 121/10 := by
     refine (mulErr_mono hu hMu (by norm_num) (by norm_num)
       M.mnist_E1_nonneg (M.mnist_E1_le hMu) le_rfl).trans ?_
     norm_num [FloatModel.mulErr, u32]
-  have hm0 : (0:ℝ) ≤ mulErr M.u 409 1 (layerBudget M.u 512 (1/32) 1 (51/2)
-      (layerBudget M.u 784 (1/32) 1 1 0)) 0 :=
+  have hm0 : (0:ℝ) ≤ mulErr M.u (3620377/25) 1
+      (layerBudget M.u 512 (3/5) 1 (2357/5)
+        (layerBudget M.u 784 (3/5) 1 1 0)) 0 :=
     mulErr_nonneg hu (by norm_num) (by norm_num) M.mnist_E1_nonneg le_rfl
   refine (sgdErr_mono hu hMu (by norm_num) (abs_nonneg _) (hW₂ i j)
     (by norm_num) hm0 hm1).trans ?_
@@ -1673,10 +1685,11 @@ theorem exp_sub_one_le {x : ℝ} (hx1 : x < 1) :
     term; the head's own rounding contributes < 4·10⁻⁶.
 
     `δ = 1/100` is an a-posteriori-style hypothesis: the *worst-case*
-    forward logit budget (3/4 at these dims) makes `e^(2δ) − 1` vacuous
-    (> 1, weaker than the trivial bound 2), so a useful head budget needs
-    the measured logit error — exactly the hand-off point from worst-case
-    to a-posteriori analysis. -/
+    forward logit budget (≈5100 at trained magnitudes) makes `e^(2δ) − 1`
+    vacuous, so a useful head budget needs the measured logit error —
+    exactly the hand-off point from worst-case to a-posteriori analysis.
+    Empirically validated (`scripts/margin_probe.py`): measured drift on a
+    real 12-epoch run is ≤ 1.6·10⁻⁵, 600× inside the `1/100` hypothesis. -/
 theorem mnist_cot_budget (hMu : M.u ≤ u32) (fexp : ℝ → ℝ) {eexp : ℝ}
     (heexp0 : 0 ≤ eexp) (heexp : eexp ≤ 1/1000000)
     (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)

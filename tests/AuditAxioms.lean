@@ -890,8 +890,10 @@ open Proofs
 -- plain rational arithmetic at concrete u, no big-power evaluation), the
 -- uniform-magnitude closed-form budgets, and the capstone at the committed
 -- MainMnistMlpTrain dims (784→512→512→10): any binary32-accuracy model
--- (u ≤ 2⁻²⁴), |W| ≤ 1/32, |b|,|x| ≤ 1 ⇒ every rounded logit within 3/4 of
--- the exact-ℝ logit (≈1e-4 relative; all three layer budgets by norm_num).
+-- (u ≤ 2⁻²⁴), |W| ≤ 3/5 (TRAINED magnitudes — measured max|W| = 0.52 on a
+-- real 97.8% run; He init already exceeds 1/32 in its tails), |b|,|x| ≤ 1 ⇒
+-- every rounded logit within 5100 of the exact-ℝ logit (worst-case logits
+-- ≈4.5e7 ⇒ ≈1e-4 relative; measured drift 1.6e-5 — scripts/margin_probe.py).
 #print axioms FloatModel.pow_gamma_bound
 #print axioms FloatModel.dense_abs_le
 #print axioms FloatModel.denseErr_le_uniform
@@ -920,9 +922,10 @@ open Proofs
 -- train-step param entries now budgeted against their certified real steps,
 -- the float mirror of mlp_render_{W2,W1,W0,b2,b1,b0}_certified. Plus the
 -- numeric gradient capstone at the committed dims: u ≤ 2⁻²⁴, lr = 1/10,
--- |W| ≤ 1/32, |b|,|x| ≤ 1, |g| ≤ 1, exact cotangent ⇒ every rounded W₂
--- SGD entry within 1/300 of the certified step (≈0.0032 = lr·E₁·|g|, the
--- forward budget at learning-rate scale; fresh backward rounding ≈ 5e-6).
+-- |W| ≤ 3/5 (trained magnitudes), |b|,|x| ≤ 1, |g| ≤ 1, exact cotangent ⇒
+-- every rounded W₂ SGD entry within 5/4 of the certified step (≈1.2 =
+-- lr·E₁·|g|, the forward budget at lr scale; fresh backward rounding ≈2e-3;
+-- measured deviation 7.5e-9 — the a-posteriori case in numbers).
 #print axioms FloatModel.mlp_b1_step_float_close
 #print axioms FloatModel.mlp_w0_step_float_close
 #print axioms FloatModel.mlp_b0_step_float_close
@@ -938,7 +941,7 @@ open Proofs
 -- rounded cotangent is within 21/1000 of certified — nearly all of it the
 -- e^(2δ)−1 ≈ 2δ math-perturbation term; head rounding < 4e-6. The δ
 -- hypothesis is a-posteriori-style: the worst-case forward logit budget
--- (3/4) makes e^(2δ)−1 vacuous — the formal hand-off point from worst-case
+-- (≈5100) makes e^(2δ)−1 vacuous — the formal hand-off point from worst-case
 -- to measured-error analysis.
 #print axioms FloatModel.sum_close
 #print axioms FloatModel.softmax_perturb
