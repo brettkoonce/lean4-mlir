@@ -142,6 +142,11 @@ inductive SHlo : Nat → Type where
       (W : Kernel4 oc ic kH kW) (b : Vec oc)              : SHlo (ic*(2*h)*(2*w)) → SHlo (oc*h*w)
   | convStridedBack  {ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*(2*h)*(2*w))) : SHlo (oc*h*w) → SHlo (ic*(2*h)*(2*w))
+  -- Chapter 9 scaling pass (full ConvNeXt-T): stride-4 SAME conv forward — the
+  -- 4×4/s4 patchify stem (`stablehlo.convolution` with `window_strides=[4,4]`).
+  -- `den` via the proven `flatConvStride4` (= decimate ∘ decimate ∘ stride-1 conv).
+  | flatConvStride4F {ic oc h w kH kW : Nat} (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (b : Vec oc) : SHlo (ic*(2*(2*h))*(2*(2*w))) → SHlo (oc*h*w)
   -- Chapter 6 Milestone B8 (real-ResNet PER-CHANNEL BatchNorm): normalize each
   -- channel-slice over its h·w spatial cells with its OWN `(γ_c, β_c)`, γ/β : `Vec oc`
   -- (rank-1, `broadcast dims=[1]` — vs `bnF`'s rank-0 scalars). `den` via the proven
@@ -470,6 +475,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .addV a b       => fun j => den a j + den b j
   | _, .gapF (c := c) (h := h) (w := w) e => globalAvgPoolFlat c h w (den e)
   | _, .flatConvStridedF _ _ W b e => flatConvStride2 W b (den e)
+  | _, .flatConvStride4F _ _ W b e => flatConvStride4 W b (den e)
   | _, .convStridedBack _ W b v e => (flatConvStride2_has_vjp W b).backward v (den e)
   | _, .bnPerChannelF (oc := oc) (h := h) (w := w) _ _ _ ε γ β e =>
       bnPerChannelTensor3 oc h w ε γ β (den e)
@@ -833,6 +839,13 @@ theorem addV_faithful {n : Nat} (a b : SHlo n) :
 theorem convStridedBack_faithful {ic oc h w kH kW : Nat} (wN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*(2*h)*(2*w))) (e : SHlo (oc*h*w)) :
     den (.convStridedBack wN W b v e) = (flatConvStride2_has_vjp W b).backward v (den e) := rfl
+
+/-- **Stride-4 conv forward faithfulness.** The `window_strides=[4,4]`
+    `stablehlo.convolution` (the ConvNeXt 4×4/s4 patchify stem) denotes the proven
+    `flatConvStride4` (= decimate ∘ decimate ∘ stride-1 conv, StridedConv.lean). -/
+@[simp] theorem flatConvStride4F_faithful {ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic*(2*(2*h))*(2*(2*w)))) :
+    den (.flatConvStride4F wN bN W b e) = flatConvStride4 W b (den e) := rfl
 
 /-- **BN backward faithfulness.** The consolidated three-term graph denotes the
     proven BN input-VJP — equal to the `pdiv`-contracted Jacobian of `bnForward`
@@ -1618,6 +1631,7 @@ inductive Raw where
   | gapF       (c h w : Nat)               : Raw → Raw
   | flatConvStridedF (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | convStridedBack  (w : String) (ic oc h w' kH kW : Nat) : Raw → Raw
+  | flatConvStride4F (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | bnPerChannelF    (g b eps : String) (oc h w : Nat) : Raw → Raw
   | bnPerChannelBack (g x eps : String) (oc h w : Nat) : Raw → Raw
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
@@ -1680,6 +1694,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .flatConvStridedF wN bN ic oc h w kH kW (skel e)
   | _, .convStridedBack (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
       .convStridedBack wN ic oc h w kH kW (skel e)
+  | _, .flatConvStride4F (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
+      .flatConvStride4F wN bN ic oc h w kH kW (skel e)
   | _, .bnPerChannelF (oc := oc) (h := h) (w := w) gN bN es _ _ _ e =>
       .bnPerChannelF gN bN es oc h w (skel e)
   | _, .bnPerChannelBack (oc := oc) (h := h) (w := w) gN xN es _ _ _ e =>
@@ -1743,6 +1759,7 @@ inductive Tok where
   | gapF       (c h w : Nat)               : Tok
   | flatConvStridedF (w b : String) (ic oc h w' kH kW : Nat) : Tok
   | convStridedBack  (w : String) (ic oc h w' kH kW : Nat) : Tok
+  | flatConvStride4F (w b : String) (ic oc h w' kH kW : Nat) : Tok
   | bnPerChannelF    (g b eps : String) (oc h w : Nat) : Tok
   | bnPerChannelBack (g x eps : String) (oc h w : Nat) : Tok
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Tok
@@ -1798,6 +1815,7 @@ def toToks : Raw → List Tok
   | .gapF c h w e    => toToks e ++ [.gapF c h w]
   | .flatConvStridedF w b ic oc h w' kH kW e => toToks e ++ [.flatConvStridedF w b ic oc h w' kH kW]
   | .convStridedBack w ic oc h w' kH kW e => toToks e ++ [.convStridedBack w ic oc h w' kH kW]
+  | .flatConvStride4F w b ic oc h w' kH kW e => toToks e ++ [.flatConvStride4F w b ic oc h w' kH kW]
   | .bnPerChannelF g b eps oc h w e => toToks e ++ [.bnPerChannelF g b eps oc h w]
   | .bnPerChannelBack g x eps oc h w e => toToks e ++ [.bnPerChannelBack g x eps oc h w]
   | .depthwiseF w b c h w' kH kW e => toToks e ++ [.depthwiseF w b c h w' kH kW]
@@ -2015,6 +2033,21 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {sm} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n" ++
         s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
         s!"    {o} = stablehlo.divide {sm}, {nf} : {ty [B,c]}\n", o :: st)
+  | .flatConvStride4F w b ic oc h w' kH kW, r :: st => do
+      -- stride-4 SAME conv (the ConvNeXt 4×4/s4 patchify stem): reshape,
+      -- convolution with window_strides=[4,4], +bias
+      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      let xn ← fresh; let cv ← fresh; let bb ← fresh; let ob ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, ic*(2*(2*h))*(2*(2*w'))]}) -> {ty [B,ic,2*(2*h),2*(2*w')]}\n" ++
+        s!"    {cv} = stablehlo.convolution({xn}, {w})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [4, 4], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+        s!" : ({ty [B,ic,2*(2*h),2*(2*w')]}, {ty [oc,ic,kH,kW]}) -> {ty [B,oc,h,w']}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w']}\n" ++
+        s!"    {ob} = stablehlo.add {cv}, {bb} : {ty [B,oc,h,w']}\n" ++
+        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
   | .flatConvStridedF w b ic oc h w' kH kW, r :: st => do
       -- stride-2 SAME conv: reshape, convolution with window_strides=[2,2], +bias
       let pH := (kH - 1) / 2; let pW := (kW - 1) / 2

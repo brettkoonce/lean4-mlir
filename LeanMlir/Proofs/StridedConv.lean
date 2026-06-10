@@ -162,4 +162,50 @@ theorem flatConvStride2_weight_grad_has_vjp_correct {ic oc h w kH kW : Nat}
           pdiv (fun v' : Vec (oc * ic * kH * kW) => flatConvStride2 (Kernel4.unflatten v') b x) v i j * dy j :=
   (flatConvStride2_weight_grad_has_vjp b x).correct v dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Stride-4 SAME convolution = decimate ∘ decimate ∘ (stride-1 SAME conv)
+--   (the ConvNeXt 4×4/s4 patchify stem, ch9 scaling pass)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Stride-4 SAME convolution**, flattened: `Vec (ic·4h·4w) → Vec (oc·h·w)`.
+    Double decimation of the stride-1 SAME conv — keep every 4th position
+    (even-of-even), the ch6 SAME-strided convention extended to stride 4. -/
+noncomputable def flatConvStride4 {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Vec (ic * (2 * (2 * h)) * (2 * (2 * w))) → Vec (oc * h * w) :=
+  decimateFlat oc h w ∘ decimateFlat oc (2 * h) (2 * w) ∘
+    flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b
+
+theorem flatConvStride4_differentiable {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Differentiable ℝ (flatConvStride4 W b
+      : Vec (ic * (2 * (2 * h)) * (2 * (2 * w))) → Vec (oc * h * w)) := by
+  unfold flatConvStride4
+  have hf : Differentiable ℝ (flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
+    flatConv_differentiable W b
+  exact (decimateFlat_differentiable oc h w).comp
+    ((decimateFlat_differentiable oc (2 * h) (2 * w)).comp hf)
+
+/-- **Stride-4 conv input-VJP** — two `vjp_comp` steps over the proven stride-1
+    conv input-VJP and the two decimation VJPs (backward = zero-upsample twice,
+    then the reversed-kernel conv). -/
+noncomputable def flatConvStride4_has_vjp {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    HasVJP (flatConvStride4 W b
+      : Vec (ic * (2 * (2 * h)) * (2 * (2 * w))) → Vec (oc * h * w)) := by
+  unfold flatConvStride4
+  have hf_diff : Differentiable ℝ (flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
+    flatConv_differentiable W b
+  have hf_vjp : HasVJP (flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
+    hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)
+  have s1_vjp : HasVJP (decimateFlat oc (2 * h) (2 * w) ∘
+      flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
+    vjp_comp _ _ hf_diff (decimateFlat_differentiable oc (2 * h) (2 * w))
+      hf_vjp (decimateFlat_has_vjp oc (2 * h) (2 * w))
+  have s1_diff : Differentiable ℝ (decimateFlat oc (2 * h) (2 * w) ∘
+      flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
+    (decimateFlat_differentiable oc (2 * h) (2 * w)).comp hf_diff
+  exact vjp_comp _ _ s1_diff (decimateFlat_differentiable oc h w)
+    s1_vjp (decimateFlat_has_vjp oc h w)
+
 end Proofs

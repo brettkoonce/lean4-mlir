@@ -43,6 +43,7 @@ import LeanMlir.Proofs.ViTVecLN
 import LeanMlir.Proofs.ViTMultiHead
 import LeanMlir.Proofs.ViTDepthK
 import LeanMlir.Proofs.MobileNetV2FullPaper
+import LeanMlir.Proofs.ConvNeXtFullT
 
 open Proofs
 
@@ -826,3 +827,22 @@ open Proofs
 #print axioms StableHLO.ivResidGraphW_faithful
 #print axioms StableHLO.ivStridedGraphW_faithful
 #print axioms StableHLO.mobilenetv2FwdGraphPaper_faithful
+
+-- ============ Full ConvNeXt-T [3,3,9,3] (ConvNeXtFullT.lean) ============
+-- The last flagship without a full-architecture close. Stage depth-k (CnxBlockParams +
+-- Fin k induction, convNextBlock_has_vjp as the chain step), LN + 2x2/s2 downsample
+-- boundaries (existing stride-2 VJPs), and the NEW 4x4/s4 patchify stem
+-- (flatConvStride4 = decimate . decimate . stride-1 SAME conv + the flatConvStride4F
+-- token — the ch6 SAME-strided convention extended). GELU/LN/conv smooth => the
+-- whole-net VJP is GLOBAL at every depth (only the 10 LN positivities) — ConvNeXt-T
+-- joins efficientnetForwardB_full/vitForwardKV. Same scalar-LN representation caveat
+-- as the representative; faithful channel-LN stays the optional follow-up.
+#print axioms flatConvStride4_has_vjp
+#print axioms convNextStageK_has_vjp
+#print axioms cnxDownW_has_vjp
+#print axioms convNextForwardT_has_vjp
+#print axioms convNextForwardT_has_vjp_correct
+#print axioms StableHLO.cnxBlockGraphW_faithful
+#print axioms StableHLO.cnxStageGraphK_den
+#print axioms StableHLO.cnxDownGraphW_faithful
+#print axioms StableHLO.convNextFwdGraphT_faithful

@@ -161,16 +161,45 @@ optional upgrades below (faithful channel-LN, 4×4 stride-4 stem, full `[3,3,9,3
 
 ---
 
-## Full-architecture status (ladder audit, 2026-06-09)
+## Full-architecture status (ladder audit, 2026-06-09; CLOSED 2026-06-10)
 
-**ConvNeXt is one of two nets NOT closed at full architecture** (the other: ViT — see
-`planning/vit_close.md`'s handoff). What exists: the representative 2-block close (all four
-rungs, above) and the committed full ConvNeXt-T `[3,3,9,3]` production render
-(`tests/TestConvNeXtTrain.lean` — hand fragments, GPU-trained, NOT graph-closed). Contrast:
-ResNet-34 is closed at the full 16-block `[3,4,6,3]` net (`ResNet34RenderPC`) and
-EfficientNet-B0 at all 16 MBConv blocks (`EfficientNetFullB0`).
+**FULL ConvNeXt-T `[3,3,9,3]` — ✅ CLOSED.** `LeanMlir/Proofs/ConvNeXtFullT.lean`,
+following the handoff recipe below almost verbatim:
+- **Stage depth-k** (handoff §1): `CnxBlockParams` (the 10-field block bundle),
+  `convNextStageK (k) (ps : Fin k → …)` head-first fold, VJP by `Fin k` induction with
+  `convNextBlock_has_vjp` as the chain step — the ViT depth-k recipe, simpler here
+  (same-shape blocks within a stage).
+- **Downsample boundaries** (§2): `CnxDownParams`/`cnxDownW` = `flatConvStride2(2×2) ∘ LN`;
+  both VJPs existed, only the chaining was new.
+- **4×4/s4 patchify stem** (§3): NEW `flatConvStride4` (= decimate ∘ decimate ∘ stride-1
+  SAME conv, `StridedConv.lean` — the ch6 convention extended) + the `flatConvStride4F`
+  token (full lockstep, `window_strides=[4,4]` emission).
+- **Whole-net global VJP**: `convNextForwardT_has_vjp(_correct)` — GELU/LN/conv smooth,
+  so unconditional except the 10 LN positivities; ConvNeXt-T joins
+  `efficientnetForwardB_full_has_vjp`/`vitForwardKV_has_vjp` at full depth. **Stated on
+  the `∘`-chain of the stages** (the `efficientnetForwardB_full_has_vjp` shape), while
+  the faithfulness below is stated on the nested-application `convNextForwardT`. The two
+  are the same composition by construction (identical component list), but a
+  kernel-checked bridge between the forms is **not** provable in practice — the defeq
+  (even routed propositionally through `comp_apply`) makes the kernel δ-unfold the whole
+  net, duplicating the prefix chain at every LN mean/var site (deterministic timeout).
+  Same documented gap as EfficientNet-B0.
+- **Graph + faithfulness**: `cnxBlockGraphW_faithful` + `cnxStageGraphK_den` (induction)
+  + `cnxDownGraphW_faithful` → the apex **`convNextFwdGraphT_faithful`** (3×224² → 10,
+  blocks `b1_`…`b18_`). **No heartbeat bump**: the forward is written in
+  nested-application form (per the handoff note below) so the apex is a flat `rw` chain
+  of the per-segment lemmas + a structural `rfl` — the `efficientnetFwdGraphB_full`
+  recipe. (A first draft wrote the forward as a `∘`-chain and proved the apex by
+  simp+unfold; that needed 6.4M heartbeats and still died in the kernel. Nested form
+  fixed it outright.)
+- §4 (faithful channel-LN) remains the optional follow-up — the scalar-LN representation
+  caveat carries over from the representative, as documented. §5 confirmed: the param
+  bridges are dim-generic; nothing new needed.
+All 3-axiom clean (audit 375/375). With this, ALL FIVE flagship families are closed at
+full architecture: ResNet-34, EfficientNet-B0, ViT-Tiny (+production parity), paper-spec
+MobileNetV2, ConvNeXt-T.
 
-### Scaling handoff — full ConvNeXt-T `[3,3,9,3]`
+### Scaling handoff — full ConvNeXt-T `[3,3,9,3]` (original plan, kept for reference)
 Mirror the ViT depth-k recipe (`planning/vit_close.md` next-session handoff §2), which was
 designed off this exact gap:
 1. **Depth-k within a stage**: `convNextForwardK (k) (params : Fin k → CnxBlockParams)` —
