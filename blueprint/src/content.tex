@@ -1157,11 +1157,14 @@ chapter \emph{proves about gradients}: its VJP correctness theorems
 --- the \(\texttt{*\_has\_vjp*\_correct}\) results, each asserting
 \(\texttt{backward}\,x\,dy\,i = \sum_j \pdiv f\,x\,i\,j \cdot dy_j\)
 (a layer's backward equals the \(\pdiv\)-Jacobian contracted against
-the cotangent). Across Chapters 2--10 there are \textbf{48 VJP
-correctness theorems}, one citable contract per layer, operator, and
-whole-network architecture --- through the full-architecture closes of
-all five Part~I networks. The foundation calculus rules,
-differentiability lemmas, and concrete forward/witness definitions
+the cotangent). Across Chapters 2--10 there are \textbf{40 contracts}
+--- one citable per layer, operator, and whole-network architecture,
+through the full-architecture closes of all five Part~I networks ---
+plus \textbf{8 witnesses}: concrete end-to-end instances (a specific
+net at specific weights), \(\texttt{\_correct}\) theorems too but
+sanity checks rather than citable contracts, so the table below keeps
+them in their own column. The foundation calculus rules,
+differentiability lemmas, and concrete forward definitions
 that support them are additional machinery, not counted here. Even
 Chapter~2's toolkit is used straight away by a proven model --- the
 MNIST linear classifier --- so no chapter is pure scaffolding.
@@ -1200,7 +1203,7 @@ a real proof rather than \texttt{rfl} --- and the whole-net MNIST-CNN
 contract are proved from foundation, with the conv weight- and
 bias-gradient theorems alongside.
 
-\textbf{Chapter 5 (CIFAR: BN)} contributes 4 VJP contracts: the
+\textbf{Chapter 5 (CIFAR: BN)} contributes 4 VJP contracts (plus a concrete witness): the
 per-channel BatchNorm VJP in both layouts (flat and NCHW tensor) and
 the CIFAR whole-nets with and without BN --- all assembled from the
 \(\texttt{bn\_input\_grad}\) chain of supporting Jacobians (the
@@ -1208,7 +1211,7 @@ inverse-stddev broadcast Jacobian and its smoothness lemma under
 \(\varepsilon > 0\), plus the BN affine and centering Jacobians, all
 proved from foundation).
 
-\textbf{Chapter 6 (ResNet-34)} contributes 9 VJP contracts and
+\textbf{Chapter 6 (ResNet-34)} contributes 9 VJP contracts (plus a concrete witness) and
 no new calculus: the residual additive-fan-in VJP (plus its
 projected variant), the global-average-pool VJP, the stride-2
 convolution's input- and weight-VJPs (= decimation \(\circ\) the
@@ -1218,7 +1221,7 @@ composing stem, residual blocks, pool, and dense head end to end.
 The scaling claim in miniature: an entire architecture's backward,
 built from Chapter~2's kit.
 
-\textbf{Chapter 7 (MobileNetV2)} contributes 3 VJP contracts: the
+\textbf{Chapter 7 (MobileNetV2)} contributes 3 VJP contracts (plus a concrete witness): the
 depthwise input VJP at stride 1 (same recipe as Ch~4 with one fewer
 summation level --- no cross-channel mixing) and stride 2, and the
 whole-network \(\texttt{mobilenetv2\_has\_vjp\_at}\) over
@@ -1290,11 +1293,7 @@ Chapter & Contracts & Witnesses & New primitive / result \\
 \end{tabular}
 \end{center}
 
-The witness column counts each chapter's concrete end-to-end instances
-(a specific net at specific weights carried through the whole pipeline);
-they are \(\texttt{\_correct}\) theorems too, but of a different kind ---
-sanity instances, not citable operator contracts --- so the table keeps
-them apart. The shift from earlier drafts: every architecture ends in a
+The shift from earlier drafts: every architecture ends in a
 \emph{whole-network} VJP contract, and for the smooth half the contract
 now holds at \emph{full architecture} ---
 \(\texttt{efficientnetForwardB\_full\_has\_vjp\_correct}\) (all 16 MBConv
