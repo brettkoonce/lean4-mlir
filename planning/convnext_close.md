@@ -186,12 +186,16 @@ following the handoff recipe below almost verbatim:
   so unconditional except the 10 LN positivities; ConvNeXt-T joins
   `efficientnetForwardB_full_has_vjp`/`vitForwardKV_has_vjp` at full depth. **Stated on
   the `∘`-chain of the stages** (the `efficientnetForwardB_full_has_vjp` shape), while
-  the faithfulness below is stated on the nested-application `convNextForwardT`. The two
-  are the same composition by construction (identical component list), but a
-  kernel-checked bridge between the forms is **not** provable in practice — the defeq
-  (even routed propositionally through `comp_apply`) makes the kernel δ-unfold the whole
-  net, duplicating the prefix chain at every LN mean/var site (deterministic timeout).
-  Same documented gap as EfficientNet-B0.
+  the faithfulness below is stated on the nested-application `convNextForwardT`.
+  **The two forms ARE kernel-checked equal**: `convNextForwardT_eq_chain` (and `TC`)
+  bridges them, and `_has_vjp_correct` is stated on `convNextForwardT` itself through
+  the bridge. PROOF-SHAPE LESSON (found by bisection): the bridge dies in the kernel
+  if proved by `rfl`/`simp` — their closing defeq makes the kernel iota-unroll the
+  recursive `convNextStageK` folds at literal depth (the kernel ignores reducibility
+  and has no defeq cache; minimal failing case: `stage y = (stage ∘ id) y` by `simp`).
+  The working proof is `rw [defEqLemma]; rw [comp_apply × 11]` — every step
+  propositional, the close syntactic, 2 s total. EfficientNet-B0's same form-gap is
+  now closable by the identical recipe (follow-up).
 - **Graph + faithfulness**: `cnxBlockGraphW_faithful` + `cnxStageGraphK_den` (induction)
   + `cnxDownGraphW_faithful` → the apex **`convNextFwdGraphT_faithful`** (3×224² → 10,
   blocks `b1_`…`b18_`). **No heartbeat bump**: the forward is written in

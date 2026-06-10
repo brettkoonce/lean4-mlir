@@ -844,6 +844,11 @@ open Proofs
 #print axioms convNextStageK_has_vjp
 #print axioms cnxDownW_has_vjp
 #print axioms convNextForwardT_has_vjp
+-- The nested↔∘-chain bridge: provable ONLY with the rw-shaped proof (equation-lemma
+-- rw + comp_apply peeling, syntactic close) — a simp/rfl close makes the kernel
+-- iota-unroll the recursive stage folds (no defeq cache) and deterministically
+-- time out. Closes the form-gap EfficientNet-B0 still carries.
+#print axioms convNextForwardT_eq_chain
 #print axioms convNextForwardT_has_vjp_correct
 #print axioms StableHLO.cnxBlockGraphW_faithful
 #print axioms StableHLO.cnxStageGraphK_den
@@ -854,4 +859,6 @@ open Proofs
 -- proof-renders at the committed signature. CAPSTONE: two-sided GPU parity vs the
 -- committed trainer — 180/180 outputs, 179 bit-identical, worst rel-diff 1.05e-5.
 #print axioms convNextForwardTC_has_vjp
+#print axioms convNextForwardTC_eq_chain
+#print axioms convNextForwardTC_has_vjp_correct
 #print axioms StableHLO.convNextFwdGraphTC_faithful

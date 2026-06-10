@@ -229,11 +229,36 @@ noncomputable def convNextForwardT_has_vjp (w : CnxTWeights)
   have f10 := lnh_diff.comp f9
   exact vjp_comp _ _ f10 (dense_differentiable w.Wd w.bd) e10 (dense_has_vjp w.Wd w.bd)
 
+/-- **`convNextForwardT` = the `∘`-chain of `convNextForwardT_has_vjp`'s statement** —
+    the kernel-checked bridge between the nested-application and composition forms.
+    PROOF-SHAPE MATTERS: the equation-lemma `rw` + 11 `Function.comp_apply` rewrites
+    close SYNTACTICALLY, so the kernel never reduces anything. (A `simp`-closed or
+    `rfl` proof of the same statement dies in the kernel: its closing defeq
+    iota-unrolls the recursive `convNextStageK` folds at literal depth — the kernel
+    ignores reducibility and has no defeq cache.) -/
+theorem convNextForwardT_eq_chain (w : CnxTWeights) (x : Vec (3 * 224 * 224)) :
+    convNextForwardT w x =
+      (dense w.Wd w.bd ∘
+        layerNormForward 768 w.hε w.hγ w.hβ ∘
+        globalAvgPoolFlat 768 7 7 ∘
+        convNextStageK 3 w.s4 ∘
+        cnxDownW 7 7 w.d3 ∘
+        convNextStageK 9 w.s3 ∘
+        cnxDownW 14 14 w.d2 ∘
+        convNextStageK 3 w.s2 ∘
+        cnxDownW 28 28 w.d1 ∘
+        convNextStageK 3 w.s1 ∘
+        layerNormForward (96 * 56 * 56) w.sε w.sγ w.sβ ∘
+        flatConvStride4 (h := 56) (w := 56) w.sW w.sb) x := by
+  rw [convNextForwardT]
+  rw [Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
+      Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
+      Function.comp_apply, Function.comp_apply, Function.comp_apply]
+
 /-- **Public correctness theorem for `convNextForwardT_has_vjp`** — the full
-    ConvNeXt-T's backward equals the `pdiv`-contracted Jacobian at every input,
-    stated on the same `∘`-chain as the VJP (= `convNextForwardT` by construction;
-    a kernel-checked bridge between the two forms is out of reach — the defeq
-    unfolds the whole net — matching the `efficientnetForwardB_full` precedent). -/
+    ConvNeXt-T's backward equals the `pdiv`-contracted Jacobian of
+    `convNextForwardT` itself at every input, tying the chain-stated VJP back to
+    the nested forward via `convNextForwardT_eq_chain`. -/
 theorem convNextForwardT_has_vjp_correct (w : CnxTWeights)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
@@ -243,22 +268,22 @@ theorem convNextForwardT_has_vjp_correct (w : CnxTWeights)
     (hhε : 0 < w.hε)
     (x : Vec (3 * 224 * 224)) (dy : Vec 10) (i : Fin (3 * 224 * 224)) :
     (convNextForwardT_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x dy i =
-      ∑ j : Fin 10,
-        pdiv
-          (dense w.Wd w.bd ∘
-            layerNormForward 768 w.hε w.hγ w.hβ ∘
-            globalAvgPoolFlat 768 7 7 ∘
-            convNextStageK 3 w.s4 ∘
-            cnxDownW 7 7 w.d3 ∘
-            convNextStageK 9 w.s3 ∘
-            cnxDownW 14 14 w.d2 ∘
-            convNextStageK 3 w.s2 ∘
-            cnxDownW 28 28 w.d1 ∘
-            convNextStageK 3 w.s1 ∘
-            layerNormForward (96 * 56 * 56) w.sε w.sγ w.sβ ∘
-            flatConvStride4 (h := 56) (w := 56) w.sW w.sb)
-          x i j * dy j :=
-  (convNextForwardT_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).correct x dy i
+      ∑ j : Fin 10, pdiv (convNextForwardT w) x i j * dy j := by
+  have h := (convNextForwardT_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).correct x dy i
+  rwa [show convNextForwardT w =
+        (dense w.Wd w.bd ∘
+          layerNormForward 768 w.hε w.hγ w.hβ ∘
+          globalAvgPoolFlat 768 7 7 ∘
+          convNextStageK 3 w.s4 ∘
+          cnxDownW 7 7 w.d3 ∘
+          convNextStageK 9 w.s3 ∘
+          cnxDownW 14 14 w.d2 ∘
+          convNextStageK 3 w.s2 ∘
+          cnxDownW 28 28 w.d1 ∘
+          convNextStageK 3 w.s1 ∘
+          layerNormForward (96 * 56 * 56) w.sε w.sγ w.sβ ∘
+          flatConvStride4 (h := 56) (w := 56) w.sW w.sb)
+      from funext (convNextForwardT_eq_chain w)]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Committed-render config (no stem-LN) — for the render capstone
@@ -332,6 +357,51 @@ noncomputable def convNextForwardTC_has_vjp (w : CnxTWeights)
   have e10 := vjp_comp _ _ f9 lnh_diff e9 (layerNorm_has_vjp 768 w.hε w.hγ w.hβ hhε)
   have f10 := lnh_diff.comp f9
   exact vjp_comp _ _ f10 (dense_differentiable w.Wd w.bd) e10 (dense_has_vjp w.Wd w.bd)
+
+/-- The committed-config nested↔chain bridge (see `convNextForwardT_eq_chain` for
+    why the proof shape matters). -/
+theorem convNextForwardTC_eq_chain (w : CnxTWeights) (x : Vec (3 * 224 * 224)) :
+    convNextForwardTC w x =
+      (dense w.Wd w.bd ∘
+        layerNormForward 768 w.hε w.hγ w.hβ ∘
+        globalAvgPoolFlat 768 7 7 ∘
+        convNextStageK 3 w.s4 ∘
+        cnxDownW 7 7 w.d3 ∘
+        convNextStageK 9 w.s3 ∘
+        cnxDownW 14 14 w.d2 ∘
+        convNextStageK 3 w.s2 ∘
+        cnxDownW 28 28 w.d1 ∘
+        convNextStageK 3 w.s1 ∘
+        flatConvStride4 (h := 56) (w := 56) w.sW w.sb) x := by
+  rw [convNextForwardTC]
+  rw [Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
+      Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
+      Function.comp_apply, Function.comp_apply]
+
+/-- Committed-config correctness on `convNextForwardTC` itself (via the bridge). -/
+theorem convNextForwardTC_has_vjp_correct (w : CnxTWeights)
+    (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
+    (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
+    (h3 : ∀ i, 0 < (w.s3 i).εn) (hd3 : 0 < w.d3.ε)
+    (h4 : ∀ i, 0 < (w.s4 i).εn)
+    (hhε : 0 < w.hε)
+    (x : Vec (3 * 224 * 224)) (dy : Vec 10) (i : Fin (3 * 224 * 224)) :
+    (convNextForwardTC_has_vjp w h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x dy i =
+      ∑ j : Fin 10, pdiv (convNextForwardTC w) x i j * dy j := by
+  have h := (convNextForwardTC_has_vjp w h1 hd1 h2 hd2 h3 hd3 h4 hhε).correct x dy i
+  rwa [show convNextForwardTC w =
+        (dense w.Wd w.bd ∘
+          layerNormForward 768 w.hε w.hγ w.hβ ∘
+          globalAvgPoolFlat 768 7 7 ∘
+          convNextStageK 3 w.s4 ∘
+          cnxDownW 7 7 w.d3 ∘
+          convNextStageK 9 w.s3 ∘
+          cnxDownW 14 14 w.d2 ∘
+          convNextStageK 3 w.s2 ∘
+          cnxDownW 28 28 w.d1 ∘
+          convNextStageK 3 w.s1 ∘
+          flatConvStride4 (h := 56) (w := 56) w.sW w.sb)
+      from funext (convNextForwardTC_eq_chain w)]
 
 end Proofs
 
