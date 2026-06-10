@@ -170,7 +170,10 @@ Jacobians `wGrad/bGrad_is*Jacobian` and `sgdW/sgdB_descends_certified_grad`).
 All audited to the 3-axiom closure. Caveat: the train-step `.mlir` is currently
 assembled from these proven op-graphs with a hand-written grad/SGD tail (see
 `linearTrainStepModuleV`); folding that tail into the rendered AST so the whole
-train-step module is `render(provenGraph)` is in progress.
+train-step module is `render(provenGraph)` is in progress. Tier 1 also now
+carries the `ℝ`→`Float32` bridge (below): forward, gradient, and SGD-step
+rounding budgets for the linear/MLP nets, and for linear a proven descent
+guarantee.
 
 **Tier 2 — CIFAR (cifar, cifar-bn): forward bridged, backward WIP.**
 `cifarFwdGraph_faithful` / `cifarBnFwdGraph_faithful` (plus op-level
@@ -201,11 +204,55 @@ to 1–2 ULP. So Tier 4 is the least-verified tier by gradient provenance but th
 one that empirically anchors the others. Whether phase-3 verified codegen can reach
 ImageNet scale is open.
 
-**Not yet verified anywhere:** the `ℝ`→`Float32` gap beyond the Tier-1 forward
-bounds (`LeanMlir/Proofs/FloatBridge.lean` proves standard-rounding-model forward
-error budgets for the linear/MLP nets — relative-error model only, no underflow
-term, gradient half open); the ~7500-line `MlirCodegen.lean` (zero theorems);
-and, outside Tier 1, the train-step text that `iree-compile` actually consumes.
+### The ℝ→Float32 bridge (Tier 1)
+
+All tier proofs are over exact reals; `LeanMlir/Proofs/FloatBridge.lean` +
+`SgdDescent.lean`/`SgdDescentLinear.lean` close the rounding gap for the
+Tier-1 nets, hypothesis-style (zero project axioms — a `FloatModel` is any
+rounding operator with relative error `u`; binary32 instantiates it with
+`u = 2⁻²⁴` on the normal range, subnormals open). The chain, every link in
+the 3-axiom audit:
+
+- **Forward** (`mlp_float_close_uniform`): dot/dense budgets in the
+  classical compounded form, valid for *every* summation association (IREE
+  may reassociate reductions freely). ReLU is exact in float — the op that
+  forces the off-the-kink hypotheses over `ℝ` is the free op here.
+- **Backward** (`mlp_{w2,w1,w0,b2,b1,b0}_step_float_close`): every rounded
+  SGD parameter entry within an explicit budget of `θ − lr·(aᵢ·cⱼ)` — the
+  same `emitWeightGrad`/`emitBiasGrad` entries `mlp_render_*_certified`
+  prove equal to the `pdiv`-Jacobian contractions. The ReLU masks need
+  *quantitative* margins (`ez < |zᵢ|`: rounding must not flip a sign).
+- **Loss head** (`softmax_ce_cot_close`): the rounded softmax−onehot
+  cotangent vs the certified gradient, given an `exp` accuracy hypothesis
+  (`|fexp t − exp t| ≤ eexp·exp t` — GPU `exp` has no IEEE spec; `eexp` is
+  the constant `tests/vjp_oracle/` validates at 1–2 ULP).
+- **Descent** (`sgd_descends`, `linear_sgd_descends`): an η-accurate
+  gradient step still *decreases the loss* — and for the linear net the
+  smoothness hypothesis is proven with the explicit constant
+  `2a²/(1−2aD)`, no Hessian (the same softmax ratio sandwich as the float
+  budgets).
+
+**Measured vs proven** (`scripts/margin_probe.py`, an f32/f64 twin of the
+97.8% GPU run; numeric capstones instantiated at the *trained* magnitudes
+`|W| ≤ 3/5`):
+
+| quantity | worst-case theorem | measured |
+|---|---|---|
+| logit drift | ≤ 5100 (`mnist_mlp_float_budget`) | 1.6·10⁻⁵ |
+| cotangent | ≤ 21/1000 at δ=1/100 (`mnist_cot_budget`) | 2.2·10⁻⁶ |
+| W₂ SGD step | ≤ 5/4 (`mnist_w2_step_float_budget`) | 7.5·10⁻⁹ |
+| ReLU mask flips | 0 under margins | **0 / 29.5M** |
+
+The worst-case-vs-measured gap (up to ~10⁸) is the quantitative case for
+a-posteriori certificates past toy depth; the zero flip count says the
+margin hypotheses describe real training, not a technicality.
+
+**Not yet verified anywhere:** the ~7500-line `MlirCodegen.lean` (zero
+theorems); outside Tier 1, the train-step text that `iree-compile` actually
+consumes; and, within the float bridge, subnormals (the model is
+relative-error-only), the MLP/CNN descent Lipschitz constants (linear only;
+ReLU makes the deep losses piecewise-smooth), and any link from the
+Lean-side `FloatModel` to IREE's actual kernels beyond the empirical probe.
 
 **Concrete-instance honesty.** The conditional capstones (MLP, MNIST-CNN, CIFAR,
 MobileNetV2, ResNet-34) are instantiated to discharge their off-the-kink
@@ -436,7 +483,7 @@ lean4-mlir/
 │   ├── Spec.lean           -- NetSpec / Layer / param-counting
 │   ├── Types.lean          -- core types (Layer, Activation, Padding, ...)
 │   ├── MnistData.lean      -- IDX file loader (older training paths)
-│   └── Proofs/             -- VJP correctness proofs (~17,600 lines)
+│   └── Proofs/             -- VJP correctness proofs (~36,700 lines)
 │       ├── Tensor.lean
 │       ├── MLP.lean
 │       ├── CNN.lean
@@ -445,7 +492,10 @@ lean4-mlir/
 │       ├── Depthwise.lean
 │       ├── SE.lean
 │       ├── LayerNorm.lean
-│       └── Attention.lean
+│       ├── Attention.lean
+│       ├── FloatBridge.lean      -- ℝ→Float32: rounding budgets (Tier 1)
+│       ├── SgdDescent.lean       -- inexact-gradient descent over ℝ
+│       └── SgdDescentLinear.lean -- Lipschitz constants, linear loss
 │
 ├── Main*Train.lean         -- phase 3 trainers (one per architecture)
 │   ├── MainResnetTrain.lean
