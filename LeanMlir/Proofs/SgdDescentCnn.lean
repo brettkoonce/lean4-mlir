@@ -43,7 +43,7 @@ biases are the same argument and are left open. -/
 
 namespace Proofs
 
-open StableHLO
+open StableHLO Classical
 
 -- ════════════════════════════════════════════════════════════════
 -- § Max is Lipschitz: the 2×2 window max moves no more than its cells
@@ -597,5 +597,1548 @@ theorem MaxPool2MarginQ.pdiv3_eq {c h w : Nat} {δ : ℝ} (hδ0 : 0 ≤ δ)
     simp [hA, hAy]
   · have hAy : ¬ MaxPool2IsArgmax y ci hi wi := fun h => hA (hiff.mp h)
     simp [hA, hAy]
+
+-- ════════════════════════════════════════════════════════════════
+-- § The 3-dense head above the pool: input-gradient closed form
+-- ════════════════════════════════════════════════════════════════
+
+/-- Folds the raw `finProdFinEquiv` encoding back into `t3Idx`. -/
+theorem t3Idx_def {c h w : Nat} (ci : Fin c) (hi : Fin h) (wi : Fin w) :
+    finProdFinEquiv (finProdFinEquiv (ci, hi), wi) = t3Idx ci hi wi := rfl
+
+/-- `t3Idx` is injective componentwise — the spatial peer of `k4Idx_inj`. -/
+theorem t3Idx_inj {c h w : Nat} {ci ci' : Fin c} {hi hi' : Fin h}
+    {wi wi' : Fin w} (hEq : t3Idx ci hi wi = t3Idx ci' hi' wi') :
+    ci = ci' ∧ hi = hi' ∧ wi = wi' := by
+  unfold t3Idx at hEq
+  have h1 := finProdFinEquiv.injective hEq
+  have hwi : wi = wi' := (Prod.ext_iff.mp h1).2
+  have h2 := finProdFinEquiv.injective (Prod.ext_iff.mp h1).1
+  exact ⟨(Prod.ext_iff.mp h2).1, (Prod.ext_iff.mp h2).2, hwi⟩
+
+/-- The 3-dense head `CE ∘ d₅ ∘ relu ∘ d₄ ∘ relu ∘ d₃` is differentiable
+    at any point whose two ReLU pre-activations are off the kinks. -/
+theorem ce_head3_differentiableAt {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
+    (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC)
+    (b₅ : Vec nC) (label : Fin nC) (u : Vec p)
+    (hz3 : ∀ l, dense W₃ b₃ u l ≠ 0)
+    (hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ u)) q ≠ 0) :
+    DifferentiableAt ℝ
+      (fun y : Vec p => fun _ : Fin 1 => crossEntropy nC
+        (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y)))))
+        label) u := by
+  rw [differentiableAt_pi]
+  intro _
+  have h1 : DifferentiableAt ℝ
+      (fun y : Vec p => relu d₃ (dense W₃ b₃ y)) u :=
+    (relu_differentiableAt_of_smooth d₃ _ hz3).comp
+      (f := fun y : Vec p => dense W₃ b₃ y) u ((dense_differentiable W₃ b₃) u)
+  have h2 : DifferentiableAt ℝ
+      (fun y : Vec p => dense W₄ b₄ (relu d₃ (dense W₃ b₃ y))) u :=
+    ((dense_differentiable W₄ b₄) _).comp
+      (f := fun y : Vec p => relu d₃ (dense W₃ b₃ y)) u h1
+  have h3 : DifferentiableAt ℝ
+      (fun y : Vec p => relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y)))) u :=
+    (relu_differentiableAt_of_smooth d₄ _ hz4).comp
+      (f := fun y : Vec p => dense W₄ b₄ (relu d₃ (dense W₃ b₃ y))) u h2
+  have h4 : DifferentiableAt ℝ
+      (fun y : Vec p =>
+        dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y))))) u :=
+    ((dense_differentiable W₅ b₅) _).comp
+      (f := fun y : Vec p => relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y))))
+      u h3
+  exact (crossEntropy_differentiable nC label).differentiableAt.comp
+    (f := fun y : Vec p =>
+      dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y))))) u h4
+
+/-- **Loss input-gradient of the 3-dense head** `CE∘d₅∘relu∘d₄∘relu∘d₃`
+    at the pooled vector — one `pdiv_comp` hop (peel `dense W₃`) on top of
+    `ce_head2_input_grad`, exactly as `ce_head2` was one hop on
+    `ce_head_relu`. Note there is NO leading mask: the pool output feeds
+    `dense W₃` directly. -/
+theorem ce_head3_input_grad {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
+    (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC)
+    (b₅ : Vec nC) (label : Fin nC) (u : Vec p)
+    (hz3 : ∀ l, dense W₃ b₃ u l ≠ 0)
+    (hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ u)) q ≠ 0) (j : Fin p) :
+    pdiv (fun y : Vec p => fun _ : Fin 1 => crossEntropy nC
+        (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y)))))
+        label) u j 0
+      = ∑ l, W₃ j l *
+          ((if dense W₃ b₃ u l > 0 then (1:ℝ) else 0) *
+            ∑ q, W₄ l q *
+              ((if dense W₄ b₄ (relu d₃ (dense W₃ b₃ u)) q > 0
+                  then (1:ℝ) else 0) *
+                ∑ k, W₅ q k *
+                  (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄
+                      (relu d₃ (dense W₃ b₃ u))))) k -
+                    oneHot nC label k))) := by
+  have hH : DifferentiableAt ℝ
+      (fun z : Vec d₃ => fun _ : Fin 1 => crossEntropy nC
+        (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ z)))) label)
+      (dense W₃ b₃ u) := by
+    rw [differentiableAt_pi]
+    intro _
+    have h1 : DifferentiableAt ℝ
+        (fun z : Vec d₃ => relu d₄ (dense W₄ b₄ (relu d₃ z)))
+        (dense W₃ b₃ u) :=
+      (relu_differentiableAt_of_smooth d₄ _ hz4).comp
+        (f := fun z : Vec d₃ => dense W₄ b₄ (relu d₃ z)) _
+        (((dense_differentiable W₄ b₄) _).comp (f := relu d₃) _
+          (relu_differentiableAt_of_smooth d₃ _ hz3))
+    have h2 : DifferentiableAt ℝ
+        (fun z : Vec d₃ => dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ z))))
+        (dense W₃ b₃ u) :=
+      ((dense_differentiable W₅ b₅) _).comp
+        (f := fun z : Vec d₃ => relu d₄ (dense W₄ b₄ (relu d₃ z))) _ h1
+    exact (crossEntropy_differentiable nC label).differentiableAt.comp
+      (f := fun z : Vec d₃ =>
+        dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ z)))) _ h2
+  rw [show (fun y : Vec p => fun _ : Fin 1 => crossEntropy nC
+          (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ y)))))
+          label)
+        = (fun z : Vec d₃ => fun _ : Fin 1 => crossEntropy nC
+            (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ z)))) label)
+          ∘ (dense W₃ b₃) from rfl,
+      pdiv_comp _ _ _ ((dense_differentiable W₃ b₃) u) hH]
+  refine Finset.sum_congr rfl fun l _ => ?_
+  rw [pdiv_dense, ce_head2_input_grad W₄ b₄ W₅ b₅ label _ hz3 hz4 l]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Through the pool: the loss gradient at the conv output
+-- ════════════════════════════════════════════════════════════════
+
+/-- The whole head above the conv output — `CE∘head3∘maxPoolFlat∘relu` —
+    is differentiable at any point with the relu₂ pre-activation off the
+    kinks, no pool ties (POST-relu), and the two head masks off the
+    kinks. -/
+theorem pool_head_differentiableAt {c h w d₃ d₄ nC : Nat}
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (z₂ : Vec (c * (2*h) * (2*w))) (hz2 : ∀ k, z₂ k ≠ 0)
+    (hmp : MaxPool2Smooth (Tensor3.unflatten
+      (relu (c * (2*h) * (2*w)) z₂) : Tensor3 c (2*h) (2*w)))
+    (hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) z₂)) l ≠ 0)
+    (hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) z₂)))) q ≠ 0) :
+    DifferentiableAt ℝ
+      (fun y : Vec (c * (2*h) * (2*w)) => fun _ : Fin 1 => crossEntropy nC
+        (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
+          (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y))))))) label)
+      z₂ := by
+  have hHd := ce_head3_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label
+    (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) z₂)) hz3 hz4
+  have hpt : Tensor3.flatten (Tensor3.unflatten
+      (relu (c * (2*h) * (2*w)) z₂) : Tensor3 c (2*h) (2*w)) =
+      relu (c * (2*h) * (2*w)) z₂ := Tensor3.flatten_unflatten _
+  have hmp_d : DifferentiableAt ℝ (maxPoolFlat c h w)
+      (relu (c * (2*h) * (2*w)) z₂) := by
+    rw [← hpt]
+    exact maxPoolFlat_differentiableAt _ hmp hc hh hw
+  have h1 : DifferentiableAt ℝ
+      (fun y : Vec (c * (2*h) * (2*w)) =>
+        maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y)) z₂ :=
+    hmp_d.comp (f := relu (c * (2*h) * (2*w))) z₂
+      (relu_differentiableAt_of_smooth _ _ hz2)
+  exact hHd.comp
+    (f := fun y : Vec (c * (2*h) * (2*w)) =>
+      maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y)) z₂ h1
+
+/-- **Loss input-gradient at the conv output** — the key glue of the conv
+    rung. The chain `pdiv`s through the relu (mask) and the pool (frozen
+    selector): at a smooth point the sum over pooled coordinates collapses
+    to the single argmax term, so
+
+    `∂(CE∘head3∘pool∘relu)/∂z₂[ci,hi,wi] = relu'(z₂[ci,hi,wi]) ·
+       𝟙[(ci,hi,wi) is its window's argmax] · head3grad(window(ci,hi,wi))`.
+
+    NB the pool acts on the POST-relu activation, so the smoothness and
+    argmax conditions are stated on `relu z₂`, not `z₂`. -/
+theorem pool_relu_input_grad {c h w d₃ d₄ nC : Nat}
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
+    (z₂ : Vec (c * (2*h) * (2*w))) (hz2 : ∀ k, z₂ k ≠ 0)
+    (hmp : MaxPool2Smooth (Tensor3.unflatten
+      (relu (c * (2*h) * (2*w)) z₂) : Tensor3 c (2*h) (2*w)))
+    (hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) z₂)) l ≠ 0)
+    (hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) z₂)))) q ≠ 0)
+    (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)) :
+    pdiv (fun y : Vec (c * (2*h) * (2*w)) => fun _ : Fin 1 => crossEntropy nC
+        (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
+          (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y))))))) label)
+        z₂ (t3Idx ci hi wi) 0
+      = (if z₂ (t3Idx ci hi wi) > 0 then (1:ℝ) else 0) *
+          (if MaxPool2IsArgmax
+              (Tensor3.unflatten (relu (c * (2*h) * (2*w)) z₂)) ci hi wi
+            then ∑ l, W₃ (t3Idx ci (winRow hi) (winCol wi)) l *
+              ((if dense W₃ b₃ (maxPoolFlat c h w
+                    (relu (c * (2*h) * (2*w)) z₂)) l > 0
+                  then (1:ℝ) else 0) *
+                ∑ q, W₄ l q *
+                  ((if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+                        (relu (c * (2*h) * (2*w)) z₂)))) q > 0
+                      then (1:ℝ) else 0) *
+                    ∑ k, W₅ q k *
+                      (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄
+                          (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+                            (relu (c * (2*h) * (2*w)) z₂))))))) k -
+                        oneHot nC label k)))
+            else 0) := by
+  have hc : 0 < c := Fin.pos ci
+  have hh : 0 < h := by have := Fin.pos hi; omega
+  have hw : 0 < w := by have := Fin.pos wi; omega
+  have hHd := ce_head3_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label
+    (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) z₂)) hz3 hz4
+  have hpt : Tensor3.flatten (Tensor3.unflatten
+      (relu (c * (2*h) * (2*w)) z₂) : Tensor3 c (2*h) (2*w)) =
+      relu (c * (2*h) * (2*w)) z₂ := Tensor3.flatten_unflatten _
+  have hmp_d : DifferentiableAt ℝ (maxPoolFlat c h w)
+      (relu (c * (2*h) * (2*w)) z₂) := by
+    rw [← hpt]
+    exact maxPoolFlat_differentiableAt _ hmp hc hh hw
+  have hG : DifferentiableAt ℝ
+      ((fun u : Vec (c * h * w) => fun _ : Fin 1 => crossEntropy nC
+          (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ u)))))
+          label) ∘ (maxPoolFlat c h w))
+      (relu (c * (2*h) * (2*w)) z₂) :=
+    hHd.comp _ hmp_d
+  -- hop 1: peel the relu; the chain picks up the mask
+  rw [show (fun y : Vec (c * (2*h) * (2*w)) => fun _ : Fin 1 =>
+          crossEntropy nC
+          (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
+            (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y))))))) label)
+        = ((fun u : Vec (c * h * w) => fun _ : Fin 1 => crossEntropy nC
+            (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ u)))))
+            label) ∘ (maxPoolFlat c h w)) ∘ (relu (c * (2*h) * (2*w)))
+        from rfl,
+      pdiv_comp _ _ _
+        (relu_differentiableAt_of_smooth (c * (2*h) * (2*w)) z₂ hz2) hG]
+  simp_rw [pdiv_relu (c * (2*h) * (2*w)) z₂ hz2 (t3Idx ci hi wi), ite_mul,
+    zero_mul]
+  rw [Finset.sum_ite_eq]
+  simp only [Finset.mem_univ, if_true]
+  congr 1
+  -- hop 2: through the pool; the routing collapses to the argmax cell
+  rw [pdiv_comp (maxPoolFlat c h w) _ _ hmp_d hHd (t3Idx ci hi wi) 0,
+    sum_t3 (fun q : Fin (c * h * w) =>
+      pdiv (maxPoolFlat c h w) (relu (c * (2*h) * (2*w)) z₂)
+        (t3Idx ci hi wi) q *
+      pdiv (fun u : Vec (c * h * w) => fun _ : Fin 1 => crossEntropy nC
+          (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ u)))))
+          label) (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) z₂)) q 0)]
+  -- the pool pdiv IS pdiv3 of maxPool2, which the margin collapses
+  have hglue : ∀ (co : Fin c) (ho : Fin h) (wo : Fin w),
+      pdiv (maxPoolFlat c h w) (relu (c * (2*h) * (2*w)) z₂)
+        (t3Idx ci hi wi) (t3Idx co ho wo) =
+      (if co = ci ∧ ho = winRow hi ∧ wo = winCol wi ∧
+          MaxPool2IsArgmax (Tensor3.unflatten
+            (relu (c * (2*h) * (2*w)) z₂)) ci hi wi
+        then (1:ℝ) else 0) := by
+    intro co ho wo
+    have h1 : pdiv (maxPoolFlat c h w) (relu (c * (2*h) * (2*w)) z₂)
+        (t3Idx ci hi wi) (t3Idx co ho wo) =
+        pdiv3 maxPool2 (Tensor3.unflatten (relu (c * (2*h) * (2*w)) z₂))
+          ci hi wi co ho wo := by
+      unfold pdiv3
+      rw [hpt]
+      rfl
+    rw [h1, pdiv3_maxPool2_smooth _ hmp ci hi wi co ho wo]
+  simp_rw [hglue]
+  rw [Finset.sum_eq_single ci
+      (fun co _ hne_co => by
+        rw [Finset.sum_eq_zero]
+        intro ho _
+        rw [Finset.sum_eq_zero]
+        intro wo _
+        rw [if_neg (fun hcon => hne_co hcon.1)]
+        ring)
+      (fun habs => absurd (Finset.mem_univ ci) habs)]
+  rw [Finset.sum_eq_single (winRow hi)
+      (fun ho _ hne_ho => by
+        rw [Finset.sum_eq_zero]
+        intro wo _
+        rw [if_neg (fun hcon => hne_ho hcon.2.1)]
+        ring)
+      (fun habs => absurd (Finset.mem_univ _) habs)]
+  rw [Finset.sum_eq_single (winCol wi)
+      (fun wo _ hne_wo => by
+        rw [if_neg (fun hcon => hne_wo hcon.2.2.1)]
+        ring)
+      (fun habs => absurd (Finset.mem_univ _) habs)]
+  by_cases hA : MaxPool2IsArgmax
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w)) z₂)) ci hi wi
+  · rw [if_pos ⟨rfl, rfl, rfl, hA⟩, if_pos hA,
+      ce_head3_input_grad W₃ b₃ W₄ b₄ W₅ b₅ label _ hz3 hz4]
+    simp only [ite_mul, one_mul, zero_mul]
+  · rw [if_neg (fun hcon => hA hcon.2.2.2), if_neg hA, zero_mul]
+
+-- ════════════════════════════════════════════════════════════════
+-- § The conv weight-map Jacobian: closed form, point-free, ℓ1 row mass
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Closed form of the conv weight-map `pdiv`** — extracted from the
+    certified VJP (`conv2d_weight_grad_has_vjp`) by contracting its
+    `.correct` field against a basis vector. Kernel entry `(o,cc,kh,kw)`
+    touches output `(co,hi,wi)` iff `co = o`, with coefficient the padded
+    input read `convPad`. NB the right-hand side does not mention `v`:
+    the weight map is affine, so its Jacobian is point-free — this is
+    what lets the gradient difference along a step segment collapse to
+    the head drift alone. -/
+theorem conv2d_weight_pdiv {ic oc h w kH kW : Nat} (b : Vec oc)
+    (x : Tensor3 ic h w) (v : Vec (oc * ic * kH * kW))
+    (o : Fin oc) (cc : Fin ic) (kh : Fin kH) (kw : Fin kW)
+    (co : Fin oc) (hi : Fin h) (wi : Fin w) :
+    pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+        Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) v
+      (k4Idx o cc kh kw) (t3Idx co hi wi)
+      = if co = o then convPad kH kW x cc kh kw hi wi else 0 := by
+  have hb := conv_weight_grad_bridge b x v (basisVec (t3Idx co hi wi))
+    (k4Idx o cc kh kw)
+  have hsum : ∑ j : Fin (oc * h * w),
+      pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+          Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) v
+        (k4Idx o cc kh kw) j * basisVec (t3Idx co hi wi) j
+      = pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+          Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) v
+        (k4Idx o cc kh kw) (t3Idx co hi wi) := by
+    rw [Finset.sum_eq_single (t3Idx co hi wi)
+      (fun j _ hne => by rw [basisVec_apply, if_neg hne, mul_zero])
+      (fun habs => absurd (Finset.mem_univ _) habs)]
+    rw [basisVec_apply, if_pos rfl, mul_one]
+  rw [← hsum, ← hb]
+  -- evaluate the transpose-trick backward at the basis vector
+  simp only [conv2d_weight_grad_has_vjp, k4Idx, Equiv.symm_apply_apply,
+    basisVec_apply, convPad]
+  simp only [t3Idx_def]
+  rcases eq_or_ne co o with hco | hco
+  · subst hco
+    rw [if_pos rfl,
+      Finset.sum_eq_single hi
+        (fun hi' _ hne_hi => by
+          rw [Finset.sum_eq_zero]
+          intro wi' _
+          rw [if_neg (fun heq => hne_hi
+            (t3Idx_inj (show t3Idx co hi' wi' = t3Idx co hi wi
+              from heq)).2.1), mul_zero])
+        (fun habs => absurd (Finset.mem_univ _) habs),
+      Finset.sum_eq_single wi
+        (fun wi' _ hne_wi => by
+          rw [if_neg (fun heq => hne_wi
+            (t3Idx_inj (show t3Idx co hi wi' = t3Idx co hi wi
+              from heq)).2.2), mul_zero])
+        (fun habs => absurd (Finset.mem_univ _) habs),
+      if_pos rfl, mul_one]
+  · rw [if_neg hco, Finset.sum_eq_zero]
+    intro hi' _
+    rw [Finset.sum_eq_zero]
+    intro wi' _
+    rw [if_neg (fun heq => hco
+      ((t3Idx_inj (show t3Idx o hi' wi' = t3Idx co hi wi from heq)).1).symm),
+      mul_zero]
+
+/-- The `ℓ1` mass of one Jacobian row of the conv weight map: kernel
+    entry `(o,cc,kh,kw)` touches the `(h·w)` outputs of its slab, each
+    with a padded read bounded by `a` — the quantitative form of "weight
+    sharing costs a spatial multiplicity". -/
+theorem conv2d_weight_pdiv_row_l1 {ic oc h w kH kW : Nat} (b : Vec oc)
+    (x : Tensor3 ic h w) {a : ℝ} (ha : 0 ≤ a)
+    (hx : ∀ c i j, |x c i j| ≤ a) (v : Vec (oc * ic * kH * kW))
+    (o : Fin oc) (cc : Fin ic) (kh : Fin kH) (kw : Fin kW) :
+    ∑ k : Fin (oc * h * w),
+        |pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+            Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) v
+          (k4Idx o cc kh kw) k| ≤ ((h * w : ℕ) : ℝ) * a := by
+  rw [sum_t3 (fun k : Fin (oc * h * w) =>
+    |pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+        Tensor3.flatten (conv2d (Kernel4.unflatten v') b x)) v
+      (k4Idx o cc kh kw) k|)]
+  simp_rw [conv2d_weight_pdiv b x v o cc kh kw]
+  rw [Finset.sum_eq_single o
+    (fun co _ hne_co => by
+      rw [Finset.sum_eq_zero]
+      intro hi _
+      rw [Finset.sum_eq_zero]
+      intro wi _
+      rw [if_neg hne_co, abs_zero])
+    (fun habs => absurd (Finset.mem_univ _) habs)]
+  calc ∑ hi : Fin h, ∑ wi : Fin w,
+        |if o = o then convPad kH kW x cc kh kw hi wi else 0|
+      ≤ ∑ _hi : Fin h, ∑ _wi : Fin w, a := by
+        refine Finset.sum_le_sum fun hi _ => Finset.sum_le_sum fun wi _ => ?_
+        rw [if_pos rfl]
+        exact abs_convPad_le x ha hx cc kh kw hi wi
+    _ = ((h * w : ℕ) : ℝ) * a := by
+        rw [Finset.sum_const, Finset.sum_const, Finset.card_univ,
+          Finset.card_univ, Fintype.card_fin, Fintype.card_fin, smul_smul,
+          nsmul_eq_mul]
+
+-- ════════════════════════════════════════════════════════════════
+-- § The conv2 loss-of-kernel map: differentiability and gradient
+-- ════════════════════════════════════════════════════════════════
+
+/-- The loss-of-conv2-kernel map is differentiable wherever the relu₂
+    pre-activation is off the kinks, no pool window ties (POST-relu),
+    and the two head pre-activations are off the kinks. -/
+theorem cnn_conv2_loss_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
+    (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (v : Vec (c * c * kH * kW))
+    (hz2 : ∀ k, Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k ≠ 0)
+    (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))) :
+      Tensor3 c (2*h) (2*w)))
+    (hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))) l ≠ 0)
+    (hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q ≠ 0) :
+    DifferentiableAt ℝ
+      (fun v' : Vec (c * c * kH * kW) =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+          label) v := by
+  have hG := pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw
+    (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)) hz2 hmp hz3 hz4
+  have h0 : DifferentiableAt ℝ
+      (fun v' : Vec (c * c * kH * kW) =>
+        Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) v :=
+    (conv2d_weight_differentiable b₂ x₁) v
+  exact ((differentiableAt_pi.mp hG) 0).comp
+    (f := fun v' : Vec (c * c * kH * kW) =>
+      Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) v h0
+
+/-- **Closed form of the conv2 loss gradient** at any four-margin point —
+    the EXISTING fold `conv_total_loss_grad_fold` (generic in the
+    downstream `G`) contracted with the pool-collapsed head gradient
+    (`pool_relu_input_grad`) and the point-free conv weight Jacobian
+    (`conv2d_weight_pdiv`). The conv-layer peer of
+    `mlp_input_loss_gradAt`; the spatial triple sum (vs the MLP's
+    Kronecker collapse) is weight sharing. -/
+theorem cnn_conv2_loss_gradAt {c h w d₃ d₄ nC kH kW : Nat}
+    (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
+    (hh : 0 < h) (hw : 0 < w)
+    (v : Vec (c * c * kH * kW))
+    (hz2 : ∀ k, Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k ≠ 0)
+    (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))) :
+      Tensor3 c (2*h) (2*w)))
+    (hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))) l ≠ 0)
+    (hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q ≠ 0)
+    (o cc : Fin c) (kh : Fin kH) (kw : Fin kW) :
+    gradAt (fun v' : Vec (c * c * kH * kW) =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+          label)
+        v (k4Idx o cc kh kw)
+      = ∑ ci : Fin c, ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
+          (if ci = o then convPad kH kW x₁ cc kh kw hi wi else 0) *
+            ((if Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)
+                  (t3Idx ci hi wi) > 0 then (1:ℝ) else 0) *
+              (if MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+                    (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))))
+                  ci hi wi
+                then ∑ l, W₃ (t3Idx ci (winRow hi) (winCol wi)) l *
+                  ((if dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))))
+                        l > 0 then (1:ℝ) else 0) *
+                    ∑ q, W₄ l q *
+                      ((if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+                            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                              (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q > 0
+                          then (1:ℝ) else 0) *
+                        ∑ k, W₅ q k *
+                          (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄
+                              (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+                                (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                                  (conv2d (Kernel4.unflatten v) b₂ x₁))))))))) k -
+                            oneHot nC label k)))
+                else 0)) := by
+  have hc : 0 < c := Fin.pos o
+  have hdiff := cnn_conv2_loss_differentiableAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅
+    label hc hh hw v hz2 hmp hz3 hz4
+  have hG := pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw
+    (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)) hz2 hmp hz3 hz4
+  calc gradAt (fun v' : Vec (c * c * kH * kW) =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+          label)
+        v (k4Idx o cc kh kw)
+      = pdiv (fun v' : Vec (c * c * kH * kW) => fun _ : Fin 1 =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+            label)
+          v (k4Idx o cc kh kw) 0 := gradAt_eq_pdiv _ _ hdiff _
+    _ = pdiv (fun v' : Vec (c * c * kH * kW) => fun _ : Fin 1 =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+            label)
+          (Kernel4.flatten (Kernel4.unflatten v)) (k4Idx o cc kh kw) 0 := by
+        rw [Kernel4.flatten_unflatten]
+    _ = ∑ k : Fin (c * (2*h) * (2*w)),
+          pdiv (fun v' : Vec (c * c * kH * kW) =>
+              Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁))
+            (Kernel4.flatten (Kernel4.unflatten v)) (k4Idx o cc kh kw) k *
+          pdiv (fun y : Vec (c * (2*h) * (2*w)) => fun _ : Fin 1 =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w
+                  (relu (c * (2*h) * (2*w)) y))))))) label)
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)) k 0 :=
+        conv_total_loss_grad_fold b₂ x₁ (Kernel4.unflatten v)
+          (fun y : Vec (c * (2*h) * (2*w)) => fun _ : Fin 1 =>
+            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+              (dense W₃ b₃ (maxPoolFlat c h w
+                (relu (c * (2*h) * (2*w)) y))))))) label)
+          hG (k4Idx o cc kh kw)
+    _ = ∑ ci : Fin c, ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
+          pdiv (fun v' : Vec (c * c * kH * kW) =>
+              Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁))
+            (Kernel4.flatten (Kernel4.unflatten v)) (k4Idx o cc kh kw)
+            (t3Idx ci hi wi) *
+          pdiv (fun y : Vec (c * (2*h) * (2*w)) => fun _ : Fin 1 =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w
+                  (relu (c * (2*h) * (2*w)) y))))))) label)
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))
+            (t3Idx ci hi wi) 0 :=
+        sum_t3 (fun k : Fin (c * (2*h) * (2*w)) =>
+          pdiv (fun v' : Vec (c * c * kH * kW) =>
+              Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁))
+            (Kernel4.flatten (Kernel4.unflatten v)) (k4Idx o cc kh kw) k *
+          pdiv (fun y : Vec (c * (2*h) * (2*w)) => fun _ : Fin 1 =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w
+                  (relu (c * (2*h) * (2*w)) y))))))) label)
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)) k 0)
+    _ = ∑ ci : Fin c, ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
+          (if ci = o then convPad kH kW x₁ cc kh kw hi wi else 0) *
+            ((if Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)
+                  (t3Idx ci hi wi) > 0 then (1:ℝ) else 0) *
+              (if MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+                    (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))))
+                  ci hi wi
+                then ∑ l, W₃ (t3Idx ci (winRow hi) (winCol wi)) l *
+                  ((if dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))))
+                        l > 0 then (1:ℝ) else 0) *
+                    ∑ q, W₄ l q *
+                      ((if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+                            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                              (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q > 0
+                          then (1:ℝ) else 0) *
+                        ∑ k, W₅ q k *
+                          (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄
+                              (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+                                (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                                  (conv2d (Kernel4.unflatten v) b₂ x₁))))))))) k -
+                            oneHot nC label k)))
+                else 0)) := by
+        refine Finset.sum_congr rfl fun ci _ => Finset.sum_congr rfl
+          fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
+        rw [conv2d_weight_pdiv b₂ x₁ _ o cc kh kw ci hi wi,
+          pool_relu_input_grad W₃ b₃ W₄ b₄ W₅ b₅ label _ hz2 hmp hz3 hz4
+            ci hi wi]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Drift transport: conv → relu → pool → dense → relu → dense → logits
+-- ════════════════════════════════════════════════════════════════
+
+/-- The `ℓ1` mass of a scaled step. -/
+theorem smul_l1_mass {n : Nat} (e : Vec n) {t : ℝ} (ht0 : 0 ≤ t) :
+    (∑ idx, |(t • e) idx|) = t * ∑ idx, |e idx| := by
+  rw [Finset.mul_sum]
+  exact Finset.sum_congr rfl fun idx _ => by
+    simp [abs_mul, abs_of_nonneg ht0]
+
+/-- A `t`-scaled step stays inside the step radius for `t ∈ [0,1]`. -/
+theorem smul_l1_mass_le {n : Nat} (e : Vec n) {t D : ℝ} (ht0 : 0 ≤ t)
+    (ht1 : t ≤ 1) (he : (∑ idx, |e idx|) ≤ D) :
+    (∑ idx, |(t • e) idx|) ≤ D := by
+  rw [smul_l1_mass e ht0]
+  calc t * ∑ idx, |e idx|
+      ≤ 1 * D := mul_le_mul ht1 he
+        (Finset.sum_nonneg fun _ _ => abs_nonneg _) zero_le_one
+    _ = D := one_mul D
+
+/-- A dense layer's output moves by at most `w·‖Δinput‖₁` per entry — the
+    `ℓ1→ℓ∞` operator bound used at every dense crossing of the chain. -/
+theorem dense_input_drift {m n : Nat} (W : Mat m n) (b : Vec n)
+    {wb : ℝ} (hW : ∀ i j, |W i j| ≤ wb)
+    (u u' : Vec m) (j : Fin n) :
+    |dense W b u' j - dense W b u j| ≤ wb * ∑ i, |u' i - u i| := by
+  have hdiff : dense W b u' j - dense W b u j =
+      ∑ i, (u' i - u i) * W i j := by
+    have h2 : (∑ i, u' i * W i j) - (∑ i, u i * W i j) =
+        ∑ i, (u' i - u i) * W i j := by
+      rw [← Finset.sum_sub_distrib]
+      exact Finset.sum_congr rfl fun i _ => by ring
+    show ((∑ i, u' i * W i j) + b j) - ((∑ i, u i * W i j) + b j) = _
+    linarith [h2]
+  rw [hdiff]
+  calc |∑ i, (u' i - u i) * W i j|
+      ≤ ∑ i, |(u' i - u i) * W i j| := Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ i, |u' i - u i| * wb :=
+        Finset.sum_le_sum fun i _ => by
+          rw [abs_mul]
+          exact mul_le_mul_of_nonneg_left (hW i j) (abs_nonneg _)
+    _ = wb * ∑ i, |u' i - u i| := by
+        rw [← Finset.sum_mul]
+        ring
+
+/-- Per-entry conv drift, flat-index form of `conv2d_kernel_drift_total`. -/
+theorem conv2d_flat_kernel_drift_total {ic oc h w kH kW : Nat} (b : Vec oc)
+    (x : Tensor3 ic h w) {a : ℝ} (ha : 0 ≤ a)
+    (hx : ∀ c i j, |x c i j| ≤ a) (v e : Vec (oc * ic * kH * kW))
+    (k : Fin (oc * h * w)) :
+    |Tensor3.flatten (conv2d (Kernel4.unflatten (v + e)) b x) k -
+      Tensor3.flatten (conv2d (Kernel4.unflatten v) b x) k| ≤
+      a * ∑ idx, |e idx| := by
+  obtain ⟨p, rfl⟩ := finProdFinEquiv.surjective k
+  obtain ⟨pp, wi⟩ := p
+  obtain ⟨q, rfl⟩ := finProdFinEquiv.surjective pp
+  obtain ⟨o, hi⟩ := q
+  rw [show finProdFinEquiv (finProdFinEquiv (o, hi), wi) =
+        t3Idx o hi wi from rfl,
+    flatten_t3Idx, flatten_t3Idx]
+  exact conv2d_kernel_drift_total b x ha hx v e o hi wi
+
+/-- `ℓ1` conv drift, flat-index form of `conv2d_kernel_drift_sum`. -/
+theorem conv2d_flat_kernel_drift_sum {ic oc h w kH kW : Nat} (b : Vec oc)
+    (x : Tensor3 ic h w) {a : ℝ} (ha : 0 ≤ a)
+    (hx : ∀ c i j, |x c i j| ≤ a) (v e : Vec (oc * ic * kH * kW)) :
+    ∑ k, |Tensor3.flatten (conv2d (Kernel4.unflatten (v + e)) b x) k -
+        Tensor3.flatten (conv2d (Kernel4.unflatten v) b x) k| ≤
+      ((h * w : ℕ) : ℝ) * (a * ∑ idx, |e idx|) := by
+  rw [sum_t3 (fun k : Fin (oc * h * w) =>
+    |Tensor3.flatten (conv2d (Kernel4.unflatten (v + e)) b x) k -
+      Tensor3.flatten (conv2d (Kernel4.unflatten v) b x) k|)]
+  calc ∑ o : Fin oc, ∑ hi : Fin h, ∑ wi : Fin w,
+        |Tensor3.flatten (conv2d (Kernel4.unflatten (v + e)) b x)
+            (t3Idx o hi wi) -
+          Tensor3.flatten (conv2d (Kernel4.unflatten v) b x)
+            (t3Idx o hi wi)|
+      = ∑ o : Fin oc, ∑ hi : Fin h, ∑ wi : Fin w,
+          |conv2d (Kernel4.unflatten (v + e)) b x o hi wi -
+            conv2d (Kernel4.unflatten v) b x o hi wi| := by
+        refine Finset.sum_congr rfl fun o _ => Finset.sum_congr rfl
+          fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
+        rw [flatten_t3Idx, flatten_t3Idx]
+    _ ≤ ((h * w : ℕ) : ℝ) * (a * ∑ idx, |e idx|) :=
+        conv2d_kernel_drift_sum b x ha hx v e
+
+/-- **Pooled `ℓ1` drift**: kernel perturbation → conv (`ℓ1`, spatial
+    multiplicity) → relu (contraction) → pool (contraction). -/
+theorem cnn_pool_l1_drift {c h w kH kW : Nat} (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w)) {a : ℝ} (ha : 0 ≤ a)
+    (hx : ∀ cc i j, |x₁ cc i j| ≤ a) (v e : Vec (c * c * kH * kW)) :
+    ∑ q, |maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten (v + e)) b₂ x₁))) q -
+        maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))) q| ≤
+      ((2*h * (2*w) : ℕ) : ℝ) * (a * ∑ idx, |e idx|) :=
+  le_trans (maxPoolFlat_l1_contract _ _)
+    (le_trans (Finset.sum_le_sum fun k _ => relu_entry_lipschitz _ _ _ k)
+      (conv2d_flat_kernel_drift_sum b₂ x₁ ha hx v e))
+
+/-- Per-entry POST-relu tensor drift — the form the pool margin
+    (`MaxPool2MarginQ`) consumes. -/
+theorem cnn_postrelu_close {c h w kH kW : Nat} (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w)) {a : ℝ} (ha : 0 ≤ a)
+    (hx : ∀ cc i j, |x₁ cc i j| ≤ a) (v e : Vec (c * c * kH * kW))
+    (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)) :
+    |(Tensor3.unflatten (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten (v + e)) b₂ x₁))) :
+          Tensor3 c (2*h) (2*w)) ci hi wi -
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))) :
+          Tensor3 c (2*h) (2*w)) ci hi wi| ≤
+      a * ∑ idx, |e idx| := by
+  rw [unflatten_t3Idx, unflatten_t3Idx]
+  exact le_trans (relu_entry_lipschitz _ _ _ _)
+    (conv2d_flat_kernel_drift_total b₂ x₁ ha hx v e _)
+
+/-- Per-entry drift of the relu₃ pre-activation. -/
+theorem cnn_z3_drift {c h w d₃ kH kW : Nat} (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w)) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
+    {a w₃ : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
+    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
+    (v e : Vec (c * c * kH * kW)) (l : Fin d₃) :
+    |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten (v + e)) b₂ x₁)))) l -
+      dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))) l| ≤
+      w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * ∑ idx, |e idx|)) :=
+  le_trans (dense_input_drift W₃ b₃ hW₃ _ _ l)
+    (mul_le_mul_of_nonneg_left (cnn_pool_l1_drift b₂ x₁ ha hx v e) hw₃)
+
+/-- Per-entry drift of the relu₄ pre-activation. -/
+theorem cnn_z4_drift {c h w d₃ d₄ kH kW : Nat} (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w)) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
+    (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    {a w₃ w₄ : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
+    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
+    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
+    (v e : Vec (c * c * kH * kW)) (q : Fin d₄) :
+    |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten (v + e)) b₂ x₁)))))) q -
+      dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q| ≤
+      w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+        (a * ∑ idx, |e idx|)))) := by
+  refine le_trans (dense_input_drift W₄ b₄ hW₄ _ _ q)
+    (mul_le_mul_of_nonneg_left ?_ hw₄)
+  calc ∑ l, |relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+            (conv2d (Kernel4.unflatten (v + e)) b₂ x₁))))) l -
+        relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+            (conv2d (Kernel4.unflatten v) b₂ x₁))))) l|
+      ≤ ∑ l, |dense W₃ b₃ (maxPoolFlat c h w
+            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+              (conv2d (Kernel4.unflatten (v + e)) b₂ x₁)))) l -
+          dense W₃ b₃ (maxPoolFlat c h w
+            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+              (conv2d (Kernel4.unflatten v) b₂ x₁)))) l| :=
+        Finset.sum_le_sum fun l _ => relu_entry_lipschitz _ _ _ l
+    _ ≤ ∑ _l : Fin d₃, w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+          (a * ∑ idx, |e idx|)) :=
+        Finset.sum_le_sum fun l _ =>
+          cnn_z3_drift b₂ x₁ W₃ b₃ ha hx hw₃ hW₃ v e l
+    _ = (d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+          (a * ∑ idx, |e idx|))) := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
+          nsmul_eq_mul]
+
+/-- **Logit drift through the whole conv2 chain**: kernel perturbation →
+    conv → relu → pool → d₃ → relu → d₄ → relu → d₅. Each dense crossing
+    contributes its `ℓ1→ℓ1` operator factor `dᵢ·wᵢ`; the conv contributes
+    the weight-sharing multiplicity `(2h)·(2w)`. -/
+theorem cnn_conv2_logit_drift {c h w d₃ d₄ nC kH kW : Nat} (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w)) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
+    (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
+    {a w₃ w₄ w₅ : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
+    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
+    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
+    (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
+    (v e : Vec (c * c * kH * kW)) (k : Fin nC) :
+    |dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
+        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten (v + e)) b₂ x₁)))))))) k -
+      dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
+        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten v) b₂ x₁)))))))) k| ≤
+      w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+        (((2*h * (2*w) : ℕ) : ℝ) * (a * ∑ idx, |e idx|)))))) := by
+  refine le_trans (dense_input_drift W₅ b₅ hW₅ _ _ k)
+    (mul_le_mul_of_nonneg_left ?_ hw₅)
+  calc ∑ q, |relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+            (conv2d (Kernel4.unflatten (v + e)) b₂ x₁))))))) q -
+        relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+            (conv2d (Kernel4.unflatten v) b₂ x₁))))))) q|
+      ≤ ∑ q, |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+              (conv2d (Kernel4.unflatten (v + e)) b₂ x₁)))))) q -
+          dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+              (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q| :=
+        Finset.sum_le_sum fun q _ => relu_entry_lipschitz _ _ _ q
+    _ ≤ ∑ _q : Fin d₄, w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+          (a * ∑ idx, |e idx|)))) :=
+        Finset.sum_le_sum fun q _ =>
+          cnn_z4_drift b₂ x₁ W₃ b₃ W₄ b₄ ha hx hw₃ hW₃ hw₄ hW₄ v e q
+    _ = (d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+          (a * ∑ idx, |e idx|))))) := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
+          nsmul_eq_mul]
+
+-- ════════════════════════════════════════════════════════════════
+-- § The margins freeze every routing decision along the segment
+-- ════════════════════════════════════════════════════════════════
+
+/-- The relu₂ margin keeps the conv pre-activation off the kink, same
+    sign, along the whole step segment. -/
+theorem cnn_margin2_keeps_offkink {c h w kH kW : Nat} (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w)) {a D : ℝ} (ha : 0 ≤ a)
+    (hx : ∀ cc i j, |x₁ cc i j| ≤ a) (v e : Vec (c * c * kH * kW))
+    (he : (∑ idx, |e idx|) ≤ D)
+    (hm : ∀ k, a * D <
+      |Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k|)
+    (t : ℝ) (ht0 : 0 ≤ t) (ht1 : t ≤ 1) (k : Fin (c * (2*h) * (2*w))) :
+    Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • e)) b₂ x₁) k ≠ 0 ∧
+      (0 < Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • e)) b₂ x₁) k
+        ↔ 0 < Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k) := by
+  refine sign_stable_of_close ?_ (hm k)
+  have h1 := conv2d_flat_kernel_drift_total b₂ x₁ ha hx v (t • e) k
+  have h2 : a * (∑ idx, |(t • e) idx|) ≤ a * D :=
+    mul_le_mul_of_nonneg_left (smul_l1_mass_le e ht0 ht1 he) ha
+  linarith
+
+/-- The POST-relu tensor stays within the pool margin radius `a·D` along
+    the whole step segment — what `MaxPool2MarginQ.{smooth_of_close,
+    isArgmax_iff, pdiv3_eq}` consume. -/
+theorem cnn_postrelu_close_seg {c h w kH kW : Nat} (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w)) {a D : ℝ} (ha : 0 ≤ a)
+    (hx : ∀ cc i j, |x₁ cc i j| ≤ a) (v e : Vec (c * c * kH * kW))
+    (he : (∑ idx, |e idx|) ≤ D)
+    (t : ℝ) (ht0 : 0 ≤ t) (ht1 : t ≤ 1)
+    (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)) :
+    |(Tensor3.unflatten (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • e)) b₂ x₁))) :
+          Tensor3 c (2*h) (2*w)) ci hi wi -
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))) :
+          Tensor3 c (2*h) (2*w)) ci hi wi| ≤ a * D :=
+  le_trans (cnn_postrelu_close b₂ x₁ ha hx v (t • e) ci hi wi)
+    (mul_le_mul_of_nonneg_left (smul_l1_mass_le e ht0 ht1 he) ha)
+
+/-- The relu₃ margin keeps the first head pre-activation off the kink,
+    same sign, along the whole step segment. -/
+theorem cnn_margin3_keeps_offkink {c h w d₃ kH kW : Nat} (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w)) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
+    {a w₃ D : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
+    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
+    (v e : Vec (c * c * kH * kW)) (he : (∑ idx, |e idx|) ≤ D)
+    (hm : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * D)) <
+      |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))) l|)
+    (t : ℝ) (ht0 : 0 ≤ t) (ht1 : t ≤ 1) (l : Fin d₃) :
+    dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • e)) b₂ x₁))))
+        l ≠ 0 ∧
+      (0 < dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • e)) b₂ x₁))))
+          l ↔
+        0 < dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))) l) := by
+  refine sign_stable_of_close ?_ (hm l)
+  have h1 := cnn_z3_drift b₂ x₁ W₃ b₃ ha hx hw₃ hW₃ v (t • e) l
+  have h2 : w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * ∑ idx, |(t • e) idx|)) ≤
+      w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * D)) :=
+    mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
+      (mul_le_mul_of_nonneg_left (smul_l1_mass_le e ht0 ht1 he) ha)
+      (Nat.cast_nonneg _)) hw₃
+  linarith
+
+/-- The relu₄ margin keeps the second head pre-activation off the kink,
+    same sign, along the whole step segment. -/
+theorem cnn_margin4_keeps_offkink {c h w d₃ d₄ kH kW : Nat} (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w)) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
+    (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    {a w₃ w₄ D : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
+    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
+    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
+    (v e : Vec (c * c * kH * kW)) (he : (∑ idx, |e idx|) ≤ D)
+    (hm : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+        (a * D)))) <
+      |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q|)
+    (t : ℝ) (ht0 : 0 ≤ t) (ht1 : t ≤ 1) (q : Fin d₄) :
+    dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten (v + t • e)) b₂ x₁)))))) q ≠ 0 ∧
+      (0 < dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+            (conv2d (Kernel4.unflatten (v + t • e)) b₂ x₁)))))) q ↔
+        0 < dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+            (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q) := by
+  refine sign_stable_of_close ?_ (hm q)
+  have h1 := cnn_z4_drift b₂ x₁ W₃ b₃ W₄ b₄ ha hx hw₃ hW₃ hw₄ hW₄
+    v (t • e) q
+  have h2 : w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+      (a * ∑ idx, |(t • e) idx|)))) ≤
+      w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))) :=
+    mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
+      (mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
+        (mul_le_mul_of_nonneg_left (smul_l1_mass_le e ht0 ht1 he) ha)
+        (Nat.cast_nonneg _)) hw₃) (Nat.cast_nonneg _)) hw₄
+  linarith
+
+-- ════════════════════════════════════════════════════════════════
+-- § The head-gradient drift under frozen masks
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Frozen-mask head-gradient drift**: with the two head masks frozen
+    (0/1-valued, shared between the two points) and the softmax drifting
+    by at most `Δ`, the head3 gradient closed form drifts by at most
+    `d₃·w₃·d₄·w₄·nC·w₅·Δ` — the oneHot cancels in the difference. -/
+theorem head3_sum_drift {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
+    (W₄ : Mat d₃ d₄) (W₅ : Mat d₄ nC) {w₃ w₄ w₅ Δ : ℝ}
+    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
+    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
+    (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
+    (m₃ : Fin d₃ → ℝ) (hm₃ : ∀ l, |m₃ l| ≤ 1)
+    (m₄ : Fin d₄ → ℝ) (hm₄ : ∀ r, |m₄ r| ≤ 1)
+    (s s' oh : Vec nC) (hs : ∀ k, |s' k - s k| ≤ Δ) (q : Fin p) :
+    |(∑ l, W₃ q l * (m₃ l * ∑ r, W₄ l r *
+        (m₄ r * ∑ k, W₅ r k * (s' k - oh k)))) -
+      ∑ l, W₃ q l * (m₃ l * ∑ r, W₄ l r *
+        (m₄ r * ∑ k, W₅ r k * (s k - oh k)))| ≤
+      (d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) * (w₅ * Δ))))) := by
+  have hcoll : (∑ l, W₃ q l * (m₃ l * ∑ r, W₄ l r *
+        (m₄ r * ∑ k, W₅ r k * (s' k - oh k)))) -
+      (∑ l, W₃ q l * (m₃ l * ∑ r, W₄ l r *
+        (m₄ r * ∑ k, W₅ r k * (s k - oh k)))) =
+      ∑ l, W₃ q l * (m₃ l * ∑ r, W₄ l r *
+        (m₄ r * ∑ k, W₅ r k * (s' k - s k))) := by
+    rw [← Finset.sum_sub_distrib]
+    refine Finset.sum_congr rfl fun l _ => ?_
+    rw [← mul_sub, ← mul_sub, ← Finset.sum_sub_distrib]
+    congr 2
+    refine Finset.sum_congr rfl fun r _ => ?_
+    rw [← mul_sub, ← mul_sub, ← Finset.sum_sub_distrib]
+    congr 2
+    exact Finset.sum_congr rfl fun k _ => by ring
+  rw [hcoll]
+  have hinner : ∀ r, |∑ k, W₅ r k * (s' k - s k)| ≤
+      (nC : ℝ) * (w₅ * Δ) := by
+    intro r
+    calc |∑ k, W₅ r k * (s' k - s k)|
+        ≤ ∑ k, |W₅ r k * (s' k - s k)| := Finset.abs_sum_le_sum_abs _ _
+      _ ≤ ∑ _k : Fin nC, w₅ * Δ :=
+          Finset.sum_le_sum fun k _ => by
+            rw [abs_mul]
+            exact mul_le_mul (hW₅ r k) (hs k) (abs_nonneg _) hw₅
+      _ = (nC : ℝ) * (w₅ * Δ) := by
+          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
+            nsmul_eq_mul]
+  have hmid : ∀ l, |∑ r, W₄ l r *
+      (m₄ r * ∑ k, W₅ r k * (s' k - s k))| ≤
+      (d₄ : ℝ) * (w₄ * ((nC : ℝ) * (w₅ * Δ))) := by
+    intro l
+    calc |∑ r, W₄ l r * (m₄ r * ∑ k, W₅ r k * (s' k - s k))|
+        ≤ ∑ r, |W₄ l r * (m₄ r * ∑ k, W₅ r k * (s' k - s k))| :=
+          Finset.abs_sum_le_sum_abs _ _
+      _ ≤ ∑ _r : Fin d₄, w₄ * ((nC : ℝ) * (w₅ * Δ)) := by
+          refine Finset.sum_le_sum fun r _ => ?_
+          rw [abs_mul]
+          refine mul_le_mul (hW₄ l r) ?_ (abs_nonneg _) hw₄
+          rw [abs_mul]
+          exact le_trans (mul_le_of_le_one_left (abs_nonneg _) (hm₄ r))
+            (hinner r)
+      _ = (d₄ : ℝ) * (w₄ * ((nC : ℝ) * (w₅ * Δ))) := by
+          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
+            nsmul_eq_mul]
+  calc |∑ l, W₃ q l * (m₃ l * ∑ r, W₄ l r *
+        (m₄ r * ∑ k, W₅ r k * (s' k - s k)))|
+      ≤ ∑ l, |W₃ q l * (m₃ l * ∑ r, W₄ l r *
+          (m₄ r * ∑ k, W₅ r k * (s' k - s k)))| :=
+        Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ _l : Fin d₃, w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) * (w₅ * Δ)))) := by
+        refine Finset.sum_le_sum fun l _ => ?_
+        rw [abs_mul]
+        refine mul_le_mul (hW₃ q l) ?_ (abs_nonneg _) hw₃
+        rw [abs_mul]
+        exact le_trans (mul_le_of_le_one_left (abs_nonneg _) (hm₃ l))
+          (hmid l)
+    _ = (d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) * (w₅ * Δ))))) := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
+          nsmul_eq_mul]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Segment-Lipschitz gradient for the conv2 loss, explicit constant
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Segment-Lipschitz gradient for the conv2-kernel loss, explicit
+    constant.** Under the four margins at step radius `D` — relu₂
+    (`a·D`), pool selection (`MaxPool2MarginQ (a·D)` of the POST-relu
+    tensor), relu₃ (`w₃·4hw·a·D`), relu₄ (`w₄·d₃·w₃·4hw·a·D`) — every
+    routing decision (masks AND pool argmaxes) freezes along `[v, v+d]`,
+    the point-free conv Jacobian factors out, and the difference
+    collapses to the softmax drift exactly as in
+    `mlp_input_loss_grad_lipschitz`. The conv-layer peer of that
+    theorem; the constant picks up the weight-sharing multiplicity
+    `((2h)·(2w))²`. -/
+theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
+    (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
+    (hh : 0 < h) (hw : 0 < w)
+    {a w₃ w₄ w₅ D : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
+    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
+    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
+    (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
+    (v d : Vec (c * c * kH * kW)) (hd : (∑ idx, |d idx|) ≤ D)
+    (hm2 : ∀ k, a * D <
+      |Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k|)
+    (hmq : MaxPool2MarginQ (a * D) (Tensor3.unflatten
+      (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))))
+    (hm3 : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * D)) <
+      |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))) l|)
+    (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+        (a * D)))) <
+      |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q|)
+    (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))) < 1)
+    (t : ℝ) (ht : t ∈ Set.Icc (0:ℝ) 1)
+    (idx : Fin (c * c * kH * kW)) :
+    |gradAt (fun v' : Vec (c * c * kH * kW) =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+          label)
+        (v + t • d) idx -
+      gradAt (fun v' : Vec (c * c * kH * kW) =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+          label)
+        v idx| ≤
+      (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
+        (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 /
+        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))))) * (t * D) := by
+  obtain ⟨ht0, ht1⟩ := ht
+  have hD0 : 0 ≤ D :=
+    le_trans (Finset.sum_nonneg fun _ _ => abs_nonneg _) hd
+  have haD0 : 0 ≤ a * D := mul_nonneg ha hD0
+  have hδ0 : (0:ℝ) ≤ w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))) :=
+    mul_nonneg hw₅ (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₄
+      (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₃
+        (mul_nonneg (Nat.cast_nonneg _) haD0)))))
+  have hden : (0:ℝ) < 1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))) := by linarith
+  obtain ⟨p1, rfl⟩ := finProdFinEquiv.surjective idx
+  obtain ⟨p2, kw⟩ := p1
+  obtain ⟨p3, rfl⟩ := finProdFinEquiv.surjective p2
+  obtain ⟨p4, kh⟩ := p3
+  obtain ⟨p5, rfl⟩ := finProdFinEquiv.surjective p4
+  obtain ⟨o, cc⟩ := p5
+  rw [show finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (o, cc), kh),
+        kw) = k4Idx o cc kh kw from rfl]
+  -- base-point conditions from the margins
+  have hz2_v : ∀ k,
+      Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k ≠ 0 :=
+    fun k h0 => by
+      have hk := hm2 k
+      rw [h0, abs_zero] at hk
+      exact absurd hk (not_lt.mpr haD0)
+  have hmp_v : MaxPool2Smooth (Tensor3.unflatten
+      (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))) :
+      Tensor3 c (2*h) (2*w)) := hmq.smooth haD0
+  have hz3_v : ∀ l, dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))) l ≠ 0 :=
+    fun l h0 => by
+      have hk := hm3 l
+      rw [h0, abs_zero] at hk
+      exact absurd hk (not_lt.mpr (mul_nonneg hw₃
+        (mul_nonneg (Nat.cast_nonneg _) haD0)))
+  have hz4_v : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+        (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q ≠ 0 :=
+    fun q h0 => by
+      have hk := hm4 q
+      rw [h0, abs_zero] at hk
+      exact absurd hk (not_lt.mpr (mul_nonneg hw₄
+        (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₃
+          (mul_nonneg (Nat.cast_nonneg _) haD0)))))
+  -- segment-point conditions: everything frozen
+  have hstab2 := fun k =>
+    cnn_margin2_keeps_offkink b₂ x₁ ha hx v d hd hm2 t ht0 ht1 k
+  have hz2_t : ∀ k, Tensor3.flatten
+      (conv2d (Kernel4.unflatten (v + t • d)) b₂ x₁) k ≠ 0 :=
+    fun k => (hstab2 k).1
+  have hclose := fun ci hi wi =>
+    cnn_postrelu_close_seg b₂ x₁ ha hx v d hd t ht0 ht1 ci hi wi
+  have hmp_t : MaxPool2Smooth (Tensor3.unflatten
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+        (conv2d (Kernel4.unflatten (v + t • d)) b₂ x₁))) :
+      Tensor3 c (2*h) (2*w)) := hmq.smooth_of_close hclose
+  have hstab3 := fun l =>
+    cnn_margin3_keeps_offkink b₂ x₁ W₃ b₃ ha hx hw₃ hW₃ v d hd hm3
+      t ht0 ht1 l
+  have hz3_t : ∀ l, dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+        (conv2d (Kernel4.unflatten (v + t • d)) b₂ x₁)))) l ≠ 0 :=
+    fun l => (hstab3 l).1
+  have hstab4 := fun q =>
+    cnn_margin4_keeps_offkink b₂ x₁ W₃ b₃ W₄ b₄ ha hx hw₃ hW₃ hw₄ hW₄
+      v d hd hm4 t ht0 ht1 q
+  have hz4_t : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+        (conv2d (Kernel4.unflatten (v + t • d)) b₂ x₁)))))) q ≠ 0 :=
+    fun q => (hstab4 q).1
+  -- both gradients in closed form
+  rw [cnn_conv2_loss_gradAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw
+      (v + t • d) hz2_t hmp_t hz3_t hz4_t o cc kh kw,
+    cnn_conv2_loss_gradAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw
+      v hz2_v hmp_v hz3_v hz4_v o cc kh kw]
+  -- the frozen masks and the frozen routing
+  have hmask2 : ∀ (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)),
+      (if Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • d)) b₂ x₁)
+          (t3Idx ci hi wi) > 0 then (1:ℝ) else 0) =
+      (if Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)
+          (t3Idx ci hi wi) > 0 then (1:ℝ) else 0) := by
+    intro ci hi wi
+    by_cases hp : Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)
+        (t3Idx ci hi wi) > 0
+    · rw [if_pos ((hstab2 _).2.mpr hp), if_pos hp]
+    · rw [if_neg (fun hgt => hp ((hstab2 _).2.mp hgt)), if_neg hp]
+  have hmask3 : ∀ l : Fin d₃,
+      (if dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • d)) b₂ x₁))))
+          l > 0 then (1:ℝ) else 0) =
+      (if dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))))
+          l > 0 then (1:ℝ) else 0) := by
+    intro l
+    by_cases hp : dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))) l > 0
+    · rw [if_pos ((hstab3 l).2.mpr hp), if_pos hp]
+    · rw [if_neg (fun hgt => hp ((hstab3 l).2.mp hgt)), if_neg hp]
+  have hmask4 : ∀ q : Fin d₄,
+      (if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+            (conv2d (Kernel4.unflatten (v + t • d)) b₂ x₁)))))) q > 0
+        then (1:ℝ) else 0) =
+      (if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+            (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q > 0
+        then (1:ℝ) else 0) := by
+    intro q
+    by_cases hp : dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q > 0
+    · rw [if_pos ((hstab4 q).2.mpr hp), if_pos hp]
+    · rw [if_neg (fun hgt => hp ((hstab4 q).2.mp hgt)), if_neg hp]
+  have hargiff : ∀ (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)),
+      MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • d)) b₂ x₁))))
+        ci hi wi ↔
+      MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))))
+        ci hi wi :=
+    fun ci hi wi => hmq.isArgmax_iff hclose ci hi wi
+  -- the softmax drift along the segment
+  have hzdrift : ∀ k, |dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+      (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • d))
+          b₂ x₁)))))))) k -
+      dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
+        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten v) b₂ x₁)))))))) k| ≤
+      t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+        (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))) := by
+    intro k
+    have h1 := cnn_conv2_logit_drift b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ ha hx
+      hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ v (t • d) k
+    rw [smul_l1_mass d ht0] at h1
+    have h2 : w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+        (((2*h * (2*w) : ℕ) : ℝ) * (a * (t * ∑ idx, |d idx|))))))) =
+        t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * ∑ idx, |d idx|))))))) := by
+      ring
+    rw [h2] at h1
+    have h3 : w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+        (((2*h * (2*w) : ℕ) : ℝ) * (a * ∑ idx, |d idx|)))))) ≤
+        w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))) :=
+      mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
+        (mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
+          (mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
+            (mul_le_mul_of_nonneg_left hd ha) (Nat.cast_nonneg _)) hw₃)
+          (Nat.cast_nonneg _)) hw₄) (Nat.cast_nonneg _)) hw₅
+    have h4 := mul_le_mul_of_nonneg_left h3 ht0
+    linarith
+  have hδlt : 2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) < 1 := by
+    nlinarith [mul_le_mul_of_nonneg_right ht1 hδ0]
+  have hexp := FloatModel.exp_sub_one_le hδlt
+  have hmono : 2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+        (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) /
+        (1 - 2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))))) ≤
+      2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+        (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) /
+        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) := by
+    refine div_le_div_of_nonneg_left
+      (by nlinarith [mul_nonneg ht0 hδ0]) hden ?_
+    nlinarith [mul_le_mul_of_nonneg_right ht1 hδ0]
+  have hS : ∀ k, |softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+      (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • d))
+          b₂ x₁))))))))) k -
+      softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
+        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten v) b₂ x₁))))))))) k| ≤
+      2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+        (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) /
+        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) :=
+    fun k => le_trans (FloatModel.softmax_perturb _ _ hzdrift k)
+      (le_trans hexp hmono)
+  have hΔ0 : (0:ℝ) ≤ 2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) /
+      (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+        (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) :=
+    div_nonneg (mul_nonneg (by norm_num) (mul_nonneg ht0 hδ0)) hden.le
+  have hM0 : (0:ℝ) ≤ (d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) *
+      (w₅ * (2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+        (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) /
+        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))))))))) :=
+    mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₃
+      (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₄
+        (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₅ hΔ0)))))
+  -- the conv Jacobian row mass
+  have hcp : ∑ ci : Fin c, ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
+      |if ci = o then convPad kH kW x₁ cc kh kw hi wi else 0| ≤
+      ((2*h * (2*w) : ℕ) : ℝ) * a := by
+    rw [Finset.sum_eq_single o
+      (fun ci _ hne => by
+        rw [Finset.sum_eq_zero]
+        intro hi _
+        rw [Finset.sum_eq_zero]
+        intro wi _
+        rw [if_neg hne, abs_zero])
+      (fun habs => absurd (Finset.mem_univ _) habs)]
+    calc ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
+          |if o = o then convPad kH kW x₁ cc kh kw hi wi else 0|
+        ≤ ∑ _hi : Fin (2*h), ∑ _wi : Fin (2*w), a := by
+          refine Finset.sum_le_sum fun hi _ =>
+            Finset.sum_le_sum fun wi _ => ?_
+          rw [if_pos rfl]
+          exact abs_convPad_le x₁ ha hx cc kh kw hi wi
+      _ = ((2*h * (2*w) : ℕ) : ℝ) * a := by
+          rw [Finset.sum_const, Finset.sum_const, Finset.card_univ,
+            Finset.card_univ, Fintype.card_fin, Fintype.card_fin,
+            smul_smul, nsmul_eq_mul]
+  -- the endgame: combine, freeze, collapse to the softmax drift
+  have hfinal : ∑ ci : Fin c, ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
+      (|if ci = o then convPad kH kW x₁ cc kh kw hi wi else 0| *
+        ((d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) *
+          (w₅ * (2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+            (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) /
+            (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+              (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))))))))))) ≤
+      (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
+        (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 /
+        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))))) * (t * D) := by
+    calc ∑ ci : Fin c, ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
+        (|if ci = o then convPad kH kW x₁ cc kh kw hi wi else 0| *
+          ((d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) *
+            (w₅ * (2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+              (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) /
+              (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+                (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))))))))))))
+        = (∑ ci : Fin c, ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
+            |if ci = o then convPad kH kW x₁ cc kh kw hi wi else 0|) *
+            ((d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) *
+              (w₅ * (2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+                (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) /
+                (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+                  (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))))))))))) := by
+          simp only [← Finset.sum_mul]
+      _ ≤ (((2*h * (2*w) : ℕ) : ℝ) * a) *
+            ((d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) *
+              (w₅ * (2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+                (((2*h * (2*w) : ℕ) : ℝ) * (a * D)))))))) /
+                (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+                  (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))))))))))) :=
+          mul_le_mul_of_nonneg_right hcp hM0
+      _ = (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
+            (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 /
+            (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+              (((2*h * (2*w) : ℕ) : ℝ) * (a * D))))))))) * (t * D) := by
+          ring
+  refine le_trans (le_trans (by
+    rw [← Finset.sum_sub_distrib]
+    refine le_trans (le_of_eq (congrArg abs (Finset.sum_congr rfl
+      fun ci _ => by rw [← Finset.sum_sub_distrib]))) ?_
+    refine le_trans (le_of_eq (congrArg abs (Finset.sum_congr rfl
+      fun ci _ => Finset.sum_congr rfl fun hi _ => by
+        rw [← Finset.sum_sub_distrib]))) ?_
+    refine le_trans (Finset.abs_sum_le_sum_abs _ _) ?_
+    exact Finset.sum_le_sum fun ci _ => le_trans
+      (Finset.abs_sum_le_sum_abs _ _)
+      (Finset.sum_le_sum fun hi _ => Finset.abs_sum_le_sum_abs _ _))
+    (Finset.sum_le_sum fun ci _ => Finset.sum_le_sum fun hi _ =>
+      Finset.sum_le_sum fun wi _ => ?_)) hfinal
+  -- per-term: freeze the masks and the route, collapse to the drift
+  rw [hmask2 ci hi wi]
+  simp only [hmask3, hmask4]
+  by_cases hA : MaxPool2IsArgmax (Tensor3.unflatten
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+        (conv2d (Kernel4.unflatten v) b₂ x₁)))) ci hi wi
+  · rw [if_pos ((hargiff ci hi wi).mpr hA), if_pos hA, ← mul_sub,
+      abs_mul, ← mul_sub, abs_mul]
+    refine mul_le_mul_of_nonneg_left ?_ (abs_nonneg _)
+    refine le_trans (mul_le_of_le_one_left (abs_nonneg _) ?_) ?_
+    · split_ifs <;> simp
+    · exact head3_sum_drift W₃ W₄ W₅ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅
+        (fun l => if dense W₃ b₃ (maxPoolFlat c h w
+          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+            (conv2d (Kernel4.unflatten v) b₂ x₁)))) l > 0
+          then (1:ℝ) else 0)
+        (fun l => by dsimp only; split_ifs <;> simp)
+        (fun q => if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+            (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q > 0
+          then (1:ℝ) else 0)
+        (fun q => by dsimp only; split_ifs <;> simp)
+        (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))))))))))
+        (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d (Kernel4.unflatten (v + t • d))
+              b₂ x₁))))))))))
+        (oneHot nC label) hS (t3Idx ci (winRow hi) (winCol wi))
+  · rw [if_neg (fun hA' => hA ((hargiff ci hi wi).mp hA')), if_neg hA]
+    simp only [mul_zero, sub_self, abs_zero]
+    exact mul_nonneg (abs_nonneg _) hM0
+
+-- ════════════════════════════════════════════════════════════════
+-- § The conv2 capstone: one inexact SGD step provably descends
+-- ════════════════════════════════════════════════════════════════
+
+/-- **One inexact SGD step on the CNN's second conv kernel provably
+    decreases the cross-entropy loss.** All of `sgd_descends`'
+    hypotheses discharged for the loss-of-conv2-kernel map:
+    differentiability along the segment and the segment-Lipschitz
+    constant both come from the FOUR margin hypotheses at the step
+    radius `D = lr·(‖∇L‖₁ + |kernel|·η)` — relu₂, the pool-selection
+    margin (POST-relu), relu₃, relu₄ — which freeze every mask and the
+    pool's entire routing pattern along the step. Remaining hypotheses
+    are checkable arithmetic: the oracle accuracy `η`, the margins, the
+    small-step condition, and the two dominance conditions. Conclusion:
+    the loss drops by ≥ `lr·‖∇L‖₂²/2`. The conv-layer peer of
+    `mlp_input_sgd_descends`; the descent program now reaches through
+    weight sharing and max-pooling. -/
+theorem cnn_conv2_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
+    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
+    (gh : Vec (c * c * kH * kW))
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    {lr η a w₃ w₄ w₅ : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
+    (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
+    (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
+    (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
+    (hlr : 0 ≤ lr) (hη : 0 ≤ η)
+    (hgh : ∀ idx, |gh idx -
+      gradAt (fun v' : Vec (c * c * kH * kW) =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+          label) (Kernel4.flatten W₂) idx| ≤ η)
+    (hm2 : ∀ k, a * (lr * ((∑ idx, |gradAt
+        (fun v' : Vec (c * c * kH * kW) =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+            label) (Kernel4.flatten W₂) idx|) +
+        ((c * c * kH * kW : ℕ) : ℝ) * η)) <
+      |Tensor3.flatten (conv2d W₂ b₂ x₁) k|)
+    (hmq : MaxPool2MarginQ (a * (lr * ((∑ idx, |gradAt
+        (fun v' : Vec (c * c * kH * kW) =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+            label) (Kernel4.flatten W₂) idx|) +
+        ((c * c * kH * kW : ℕ) : ℝ) * η)))
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ x₁)))))
+    (hm3 : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
+        |gradAt (fun v' : Vec (c * c * kH * kW) =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+            label) (Kernel4.flatten W₂) idx|) +
+        ((c * c * kH * kW : ℕ) : ℝ) * η)))) <
+      |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ x₁)))) l|)
+    (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+        (a * (lr * ((∑ idx, |gradAt
+          (fun v' : Vec (c * c * kH * kW) =>
+            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                (Tensor3.flatten
+                  (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
+            (Kernel4.flatten W₂) idx|) +
+          ((c * c * kH * kW : ℕ) : ℝ) * η)))))) <
+      |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q|)
+    (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt
+        (fun v' : Vec (c * c * kH * kW) =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+            label) (Kernel4.flatten W₂) idx|) +
+        ((c * c * kH * kW : ℕ) : ℝ) * η))))))))) < 1)
+    (h1 : lr * η * (∑ idx, |gradAt
+        (fun v' : Vec (c * c * kH * kW) =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+            label) (Kernel4.flatten W₂) idx|) ≤
+      lr * (∑ idx, gradAt
+        (fun v' : Vec (c * c * kH * kW) =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+            label) (Kernel4.flatten W₂) idx ^ 2) / 4)
+    (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
+        (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 /
+        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt
+            (fun v' : Vec (c * c * kH * kW) =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten
+                    (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
+              (Kernel4.flatten W₂) idx|) +
+            ((c * c * kH * kW : ℕ) : ℝ) * η))))))))))) *
+        (lr * ((∑ idx, |gradAt
+          (fun v' : Vec (c * c * kH * kW) =>
+            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                (Tensor3.flatten
+                  (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
+            (Kernel4.flatten W₂) idx|) +
+          ((c * c * kH * kW : ℕ) : ℝ) * η)) ^ 2 ≤
+      lr * (∑ idx, gradAt
+        (fun v' : Vec (c * c * kH * kW) =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+            label) (Kernel4.flatten W₂) idx ^ 2) / 4) :
+    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d
+            (Kernel4.unflatten (Kernel4.flatten W₂ - lr • gh))
+            b₂ x₁))))))))) label ≤
+      crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d
+            (Kernel4.unflatten (Kernel4.flatten W₂)) b₂ x₁)))))))))
+          label -
+        lr * (∑ idx, gradAt
+          (fun v' : Vec (c * c * kH * kW) =>
+            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                (Tensor3.flatten
+                  (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
+          (Kernel4.flatten W₂) idx ^ 2) / 2 := by
+  set f : Vec (c * c * kH * kW) → ℝ :=
+    fun v' : Vec (c * c * kH * kW) =>
+      crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+        label with hf
+  have hden : (0:ℝ) < 1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
+        |gradAt f (Kernel4.flatten W₂) idx|) +
+        ((c * c * kH * kW : ℕ) : ℝ) * η))))))))) := by
+    linarith
+  have hC0 : (0:ℝ) ≤ 2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 *
+      (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 /
+      (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+        (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
+          |gradAt f (Kernel4.flatten W₂) idx|) +
+          ((c * c * kH * kW : ℕ) : ℝ) * η)))))))))) :=
+    div_nonneg (by positivity) hden.le
+  -- the margins, restated at the `unflatten ∘ flatten` parameter point
+  have hm2' : ∀ k, a * (lr * ((∑ idx,
+      |gradAt f (Kernel4.flatten W₂) idx|) +
+      ((c * c * kH * kW : ℕ) : ℝ) * η)) <
+      |Tensor3.flatten (conv2d (Kernel4.unflatten (Kernel4.flatten W₂))
+        b₂ x₁) k| := fun k => by
+    rw [Kernel4.unflatten_flatten]
+    exact hm2 k
+  have hmq' : MaxPool2MarginQ (a * (lr * ((∑ idx,
+      |gradAt f (Kernel4.flatten W₂) idx|) +
+      ((c * c * kH * kW : ℕ) : ℝ) * η)))
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten (Kernel4.flatten W₂))
+          b₂ x₁)))) := by
+    rw [Kernel4.unflatten_flatten]
+    exact hmq
+  have hm3' : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
+      |gradAt f (Kernel4.flatten W₂) idx|) +
+      ((c * c * kH * kW : ℕ) : ℝ) * η)))) <
+      |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten (Kernel4.flatten W₂))
+          b₂ x₁)))) l| := fun l => by
+    rw [Kernel4.unflatten_flatten]
+    exact hm3 l
+  have hm4' : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+      (a * (lr * ((∑ idx, |gradAt f (Kernel4.flatten W₂) idx|) +
+        ((c * c * kH * kW : ℕ) : ℝ) * η)))))) <
+      |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d (Kernel4.unflatten (Kernel4.flatten W₂)) b₂ x₁))))))
+        q| := fun q => by
+    rw [Kernel4.unflatten_flatten]
+    exact hm4 q
+  -- ℓ1 radius of the step
+  have hD : (∑ idx, |(-(lr • gh)) idx|) ≤
+      lr * ((∑ idx, |gradAt f (Kernel4.flatten W₂) idx|) +
+        ((c * c * kH * kW : ℕ) : ℝ) * η) := by
+    calc (∑ idx, |(-(lr • gh)) idx|) = ∑ idx, lr * |gh idx| := by
+          refine Finset.sum_congr rfl fun idx _ => ?_
+          simp [abs_mul, abs_of_nonneg hlr]
+      _ ≤ ∑ idx, lr * (|gradAt f (Kernel4.flatten W₂) idx| + η) := by
+          refine Finset.sum_le_sum fun idx _ => ?_
+          refine mul_le_mul_of_nonneg_left ?_ hlr
+          have h3 : |gh idx| ≤
+              |gh idx - gradAt f (Kernel4.flatten W₂) idx| +
+              |gradAt f (Kernel4.flatten W₂) idx| := by
+            simpa using abs_sub_le (gh idx)
+              (gradAt f (Kernel4.flatten W₂) idx) 0
+          linarith [hgh idx]
+      _ = lr * ((∑ idx, |gradAt f (Kernel4.flatten W₂) idx|) +
+            ((c * c * kH * kW : ℕ) : ℝ) * η) := by
+          rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
+            Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  have hmain := sgd_descends f (Kernel4.flatten W₂) gh hlr hη hC0 hgh
+    (fun t ht => cnn_conv2_loss_differentiableAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅
+      label hc hh hw _
+      (fun k => (cnn_margin2_keeps_offkink b₂ x₁ ha hx
+        (Kernel4.flatten W₂) (-(lr • gh)) hD hm2' t ht.1 ht.2 k).1)
+      (hmq'.smooth_of_close (fun ci hi wi => cnn_postrelu_close_seg b₂ x₁
+        ha hx (Kernel4.flatten W₂) (-(lr • gh)) hD t ht.1 ht.2 ci hi wi))
+      (fun l => (cnn_margin3_keeps_offkink b₂ x₁ W₃ b₃ ha hx hw₃ hW₃
+        (Kernel4.flatten W₂) (-(lr • gh)) hD hm3' t ht.1 ht.2 l).1)
+      (fun q => (cnn_margin4_keeps_offkink b₂ x₁ W₃ b₃ W₄ b₄ ha hx hw₃ hW₃
+        hw₄ hW₄ (Kernel4.flatten W₂) (-(lr • gh)) hD hm4' t ht.1 ht.2 q).1))
+    (fun t ht idx => by
+      have h := cnn_conv2_loss_grad_lipschitz b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅
+        label hh hw ha hx hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ (Kernel4.flatten W₂)
+        (-(lr • gh)) hD hm2' hmq' hm3' hm4' hsmall t ht idx
+      simpa [hf] using h)
+    h1 h2
+  simpa [hf] using hmain
 
 end Proofs

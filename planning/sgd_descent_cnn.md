@@ -1,10 +1,10 @@
 # SGD descent through the CNN — remaining assembly
 
-Status (this commit): the three genuinely-new ingredient families are
-proven and audited in `LeanMlir/Proofs/SgdDescentCnn.lean`; the conv-layer
-capstone assembly (mirroring `SgdDescentMlp.lean`'s shape) is the remaining
-work. Everything below is mechanical given what's now in place — no new
-mathematics is required.
+Status (this commit): the conv2-layer rung is DONE — `cnn_conv2_sgd_descends`
+(LeanMlir/Proofs/SgdDescentCnn.lean) proves one inexact SGD step on the
+second conv kernel decreases the CE loss, under the four margins at the
+step radius. 3-axiom clean (tests/AuditAxioms.lean). Remaining: conv1 and
+the biases.
 
 ## What's done
 
@@ -30,57 +30,51 @@ mathematics is required.
    instances of `linear_sgd_descends` / `mlp_hidden_sgd_descends` /
    `mlp_input_sgd_descends` at `x := maxPoolFlat (…)` — the MLP theorems
    are generic in the fixed activation vector. Thin wrappers optional.
+5. **The conv2-layer rung (NEW this commit)** — exactly the 5-step plan:
+   - `ce_head3_input_grad`: one `pdiv_comp` hop (peel `dense W₃`) on
+     `ce_head2_input_grad`; NO leading mask (the pool feeds `d₃` direct).
+   - `pool_relu_input_grad`: the key glue. `pdiv` through relu (mask)
+     then `maxPoolFlat`; the pool `pdiv` IS `pdiv3 maxPool2` after
+     `unfold pdiv3; rw [Tensor3.flatten_unflatten]; rfl`, and
+     `pdiv3_maxPool2_smooth` + a `Finset.sum_eq_single` chain collapse
+     the pooled sum to the single argmax term.
+   - `conv2d_weight_pdiv`: the conv weight-map Jacobian closed form
+     (`if co = o then convPad … else 0`), extracted from the CERTIFIED
+     VJP by contracting `conv_weight_grad_bridge` against `basisVec` —
+     no re-derivation of the 200-line foundation proof. Point-free
+     (conv is affine in the kernel), so along a segment only the head
+     gradient moves. Row mass: `conv2d_weight_pdiv_row_l1 ≤ (h·w)·a`.
+   - `cnn_conv2_loss_gradAt`: the EXISTING fold
+     (`conv_total_loss_grad_fold`, generic in `G`) + `sum_t3` + the two
+     pieces above.
+   - `cnn_conv2_loss_grad_lipschitz`: margins freeze relu₂
+     (`cnn_margin2_keeps_offkink`), the pool routing
+     (`cnn_postrelu_close_seg` + `isArgmax_iff` — the margin/closeness
+     stated on the POST-relu tensor), relu₃/relu₄
+     (`cnn_margin{3,4}_keeps_offkink` via the drift chain
+     `cnn_pool_l1_drift → cnn_z3_drift → cnn_z4_drift →
+     cnn_conv2_logit_drift`); the difference collapses to the softmax
+     drift (`head3_sum_drift`, masks generic 0/1-valued); constant
+     `C₂ = 2·nC·(4hw)²·d₃²·d₄²·w₃²·w₄²·w₅²·a²/(1−2δ̄)` with
+     `δ̄ = w₅·d₄·w₄·d₃·w₃·(4hw)·a·D`, assembled by `ring`.
+   - `cnn_conv2_sgd_descends`: assembled via `sgd_descends` exactly as
+     `mlp_input_sgd_descends` (margins at the step radius
+     `D = lr·(‖∇f₂‖₁ + |kernel|·η)`).
 
-## Remaining: the conv2-layer rung (then conv1)
+## Remaining: conv1, biases
 
-Target net: `mnistCnnNoBnForward` (MnistCNN.lean:79). Loss-of-conv2-kernel:
-`f₂(v) = CE(d₅∘r∘d₄∘r∘d₃ (maxPoolFlat (relu (flatConv (unflatten v) b₂ a₁))))`
-with `a₁ = relu (flatConv W₁ b₁ x)` fixed.
-
-1. **`ce_head3_input_grad`** — input-gradient of the 3-dense head
-   `CE∘d₅∘relu∘d₄∘relu∘d₃` at the pooled vector: one `pdiv_comp` hop
-   (peel `dense W₃`) on top of `ce_head2_input_grad` (SgdDescentMlp.lean),
-   exactly as `ce_head2` was one hop on `ce_head_relu`. Hypotheses: relu₃,
-   relu₄ pre-acts off-kink.
-2. **`pool_relu_input_grad`** — input-gradient of `G₂ := CE∘head3∘
-   maxPoolFlat∘relu` at the conv output `z₂`: `pdiv_comp` through `relu`
-   (mask, `pdiv_relu`) then `maxPoolFlat`. Key glue, free by definitional
-   unfolding: `pdiv (maxPoolFlat c h w) (flatten x) (t3Idx ci hi wi)
-   (t3Idx co ho wo) = pdiv3 maxPool2 x ci hi wi co ho wo` is `rfl`
-   (`maxPoolFlat` IS `flatten ∘ maxPool2 ∘ unflatten`, and `pdiv3` is
-   defined as the flat `pdiv` of that composite — Tensor.lean:1563). Then
-   `pdiv3_maxPool2_smooth` collapses the sum over pooled coordinates to
-   the single argmax term: `pdiv G₂ z₂ j 0 = relu'(z₂ⱼ) ·
-   (if IsArgmax then head3grad(window j) else 0)`. Hypotheses: relu₂
-   margin + `MaxPool2Smooth` of the post-relu tensor (NB the pool acts on
-   the POST-relu activation; state the margin there).
-3. **`cnn_conv2_loss_gradAt`** — closed form via the EXISTING fold
-   `conv_total_loss_grad_fold` (ConvLossFold.lean:34, generic in `G` —
-   no new fold needed) + step 2. Note the conv-weight `pdiv` factor is
-   NOT a Kronecker delta (weight sharing): keep it as the certified
-   Jacobian (`conv2d_weight_grad_has_vjp.backward` form via
-   `conv_weight_grad_bridge`) contracted with the step-2 closed form.
-4. **`cnn_conv2_loss_grad_lipschitz`** — frozen everything (relu₂ mask:
-   margin `a·D < |z₂|` via `conv2d_kernel_drift_total`; pool routing:
-   `MaxPool2MarginQ (a·D)` of post-relu via `pdiv3_eq` +
-   `maxPoolFlat_entry_lipschitz`; relu₃/relu₄ masks: margins at
-   `w₃·(4hw·a·D)` resp. `w₄·d₁·w₃·(4hw·a·D)` via `maxPoolFlat_l1_contract`
-   + `conv2d_kernel_drift_sum`), the difference collapses to the softmax
-   drift exactly as in `mlp_input_loss_grad_lipschitz`. Logit drift
-   `δ̄ = w₅·d₁·w₄·d₁·w₃·(4hw)·a·D` (conv2 runs at spatial `(2h)·(2w)`);
-   constant `C₂ = 2·nC·(4hw)²·d₁²·w₃²·w₄²·w₅²·a²/(1−2δ̄)`-shaped, assembled
-   by `ring` like the MLP file — do not precompute, let the calc produce it.
-   The Jacobian factor: `∑_k |J(idx,k)| ≤ (4hw)·a` (each kernel entry
-   touches `(2h)(2w)` outputs of its slab; `convPad` bounded by `a`).
-5. **`cnn_conv2_sgd_descends`** — assemble via `sgd_descends` exactly as
-   `mlp_input_sgd_descends` (margins at the step radius
-   `D = lr·(‖∇f₂‖₁ + |kernel|·η)`; differentiability along the segment
-   from the frozen margins + `maxPoolFlat_differentiableAt`).
-6. **conv1** — one more conv+relu crossing; the input-side conv drift
+1. **conv1** — one more conv+relu crossing; the input-side conv drift
    needs the conv-as-function-of-INPUT `ℓ1→ℓ1` bound (factor
    `ic·kH·kW·w₂ᶜ`-shaped, entrywise kernel bound `w₂ᶜ`) — a sibling of
    `conv2d_kernel_drift` with the roles of kernel and input swapped.
-   Margins: relu₁ + everything in the conv2 list.
+   Margins: relu₁ + everything in the conv2 list. The gradAt closed form
+   needs the conv2-as-INPUT `pdiv` (certified `conv2d_has_vjp3` /
+   `conv2d_input_grad_formula`) in place of the frozen-activation step.
+2. **Biases** — `conv_bias_total_loss_grad_fold` already exists
+   (ConvLossFold.lean); the bias-map is affine with Jacobian a Kronecker
+   indicator over the slab, drift `≤ ‖e‖₁` per entry (no `a` factor,
+   no spatial multiplicity on the per-entry side). Same argument,
+   strictly easier than the kernel.
 
 ## Gotchas encountered (don't rediscover)
 
@@ -93,3 +87,16 @@ with `a₁ = relu (flatConv W₁ b₁ x)` fixed.
   (see `MaxPool2MarginQ.pdiv3_eq`).
 - The pool margin/`MaxPool2Smooth` must be stated on the POST-relu tensor
   (the net pools `relu (flatConv …)`).
+- `simp_rw [pdiv_relu, ite_mul, zero_mul]` (the mask-collapse idiom)
+  distributes ite-masks EVERYWHERE in the goal, including the statement's
+  own RHS — re-normalize at the end with
+  `simp only [ite_mul, one_mul, zero_mul]` (see `pool_relu_input_grad`).
+- Unfolding the certified conv backward: `simp only
+  [conv2d_weight_grad_has_vjp, k4Idx, Equiv.symm_apply_apply,
+  basisVec_apply, convPad]` leaves RAW `finProdFinEquiv` encodings in the
+  ite conditions; fold them back with `t3Idx_def` in a SECOND simp pass
+  (folding in the same pass can race the kernel-side `symm_apply_apply`).
+- Mask-`≤ 1` side goals on lambda-applied ites need `dsimp only` (beta)
+  before `split_ifs`.
+- `open Classical` at file level (CNN.lean convention) for `if`s over
+  `MaxPool2IsArgmax`-style Props.

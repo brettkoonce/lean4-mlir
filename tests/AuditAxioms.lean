@@ -1028,9 +1028,7 @@ open Proofs
 -- (conv2d_kernel_sub), per-entry drift ≤ a·(slab ℓ1) ≤ a·‖e‖₁, and the
 -- ℓ1 drift picks up the spatial multiplicity (h·w)·a·‖e‖₁
 -- (conv2d_kernel_drift_sum). The dense head below the pool is already
--- covered by the MLP descent theorems at the pooled activation; the
--- conv-layer capstone assembly is the remaining work
--- (planning/sgd_descent_cnn.md).
+-- covered by the MLP descent theorems at the pooled activation.
 #print axioms max4_sub_abs_le
 #print axioms max4_sub_abs_le_sum
 #print axioms flatten_t3Idx
@@ -1054,3 +1052,38 @@ open Proofs
 #print axioms conv2d_kernel_drift
 #print axioms conv2d_kernel_drift_total
 #print axioms conv2d_kernel_drift_sum
+-- The conv2-layer rung, assembled (SgdDescentCnn.lean). The gradient
+-- closed form chains the EXISTING fold (conv_total_loss_grad_fold,
+-- generic in G) with the pool-collapsed head gradient: pdiv through the
+-- relu picks up the mask (pool_relu_input_grad), the pool's pdiv3
+-- collapses to the single argmax term at a smooth point, and the
+-- 3-dense head above the pool is one pdiv_comp hop on ce_head2
+-- (ce_head3_input_grad). The conv weight Jacobian is extracted from the
+-- certified VJP by contracting .correct against a basis vector
+-- (conv2d_weight_pdiv) — its closed form is POINT-FREE (conv is affine
+-- in the kernel), so along a step segment only the head gradient moves.
+-- Under the four margins at the step radius — relu₂ (a·D), pool
+-- selection (MaxPool2MarginQ (a·D), POST-relu), relu₃, relu₄ — every
+-- mask and the pool's routing pattern freeze
+-- (cnn_margin{2,3,4}_keeps_offkink, cnn_postrelu_close_seg), the
+-- difference collapses to the softmax drift
+-- (cnn_conv2_loss_grad_lipschitz, constant explicit with the
+-- weight-sharing multiplicity ((2h)·(2w))² — vs the MLP's width
+-- factors), and one inexact SGD step on the second conv kernel provably
+-- decreases the cross-entropy loss by ≥ lr·‖∇L‖₂²/2
+-- (cnn_conv2_sgd_descends). conv1 and the biases remain
+-- (planning/sgd_descent_cnn.md).
+#print axioms ce_head3_input_grad
+#print axioms pool_relu_input_grad
+#print axioms conv2d_weight_pdiv
+#print axioms conv2d_weight_pdiv_row_l1
+#print axioms cnn_conv2_loss_differentiableAt
+#print axioms cnn_conv2_loss_gradAt
+#print axioms cnn_pool_l1_drift
+#print axioms cnn_conv2_logit_drift
+#print axioms cnn_margin2_keeps_offkink
+#print axioms cnn_margin3_keeps_offkink
+#print axioms cnn_margin4_keeps_offkink
+#print axioms head3_sum_drift
+#print axioms cnn_conv2_loss_grad_lipschitz
+#print axioms cnn_conv2_sgd_descends
