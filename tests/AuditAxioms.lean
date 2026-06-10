@@ -884,3 +884,14 @@ open Proofs
 #print axioms FloatModel.pow_one_add_sub_one_le
 #print axioms FloatModel.linear_float_close
 #print axioms FloatModel.mlp_float_close
+-- The numeric rung: the γ-form (classical γₖ = k·u/(1−k·u) division bound —
+-- plain rational arithmetic at concrete u, no big-power evaluation), the
+-- uniform-magnitude closed-form budgets, and the capstone at the committed
+-- MainMnistMlpTrain dims (784→512→512→10): any binary32-accuracy model
+-- (u ≤ 2⁻²⁴), |W| ≤ 1/32, |b|,|x| ≤ 1 ⇒ every rounded logit within 3/4 of
+-- the exact-ℝ logit (≈1e-4 relative; all three layer budgets by norm_num).
+#print axioms FloatModel.pow_gamma_bound
+#print axioms FloatModel.dense_abs_le
+#print axioms FloatModel.denseErr_le_uniform
+#print axioms FloatModel.mlp_float_close_uniform
+#print axioms FloatModel.mnist_mlp_float_budget

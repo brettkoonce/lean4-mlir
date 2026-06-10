@@ -385,6 +385,273 @@ theorem mlp_float_close {d₀ d₁ d₂ d₃ : Nat}
   exact M.dense_close W₂ b₂ _ _ e₁ he₁ r1 k
 
 -- ════════════════════════════════════════════════════════════════
+-- § The γ-form: rational budgets for numeric instantiation
+-- ════════════════════════════════════════════════════════════════
+
+/-- `(1 − k·u)·(1+u)^k ≤ 1`, unconditionally (for `k·u ≥ 1` the left side
+    is `≤ 0`). The division-free product form of the classical `γₖ` bound,
+    so the induction needs no `k·u < 1` bookkeeping. -/
+private theorem one_sub_mul_pow_le (u : ℝ) (hu : 0 ≤ u) (k : ℕ) :
+    (1 - (k : ℝ) * u) * (1 + u) ^ k ≤ 1 := by
+  induction k with
+  | zero => simp
+  | succ k ih =>
+    have hp : (0 : ℝ) ≤ (1 + u) ^ k := pow_nonneg (by linarith) k
+    have hs : (1 + u) ^ (k + 1) = (1 + u) ^ k * (1 + u) := pow_succ _ _
+    have key : (1 - ((k : ℝ) + 1) * u) * (1 + u) ≤ 1 - (k : ℝ) * u := by
+      nlinarith [mul_nonneg (mul_nonneg
+        (add_nonneg (Nat.cast_nonneg (α := ℝ) k) zero_le_one) hu) hu]
+    push_cast
+    calc (1 - ((k : ℝ) + 1) * u) * (1 + u) ^ (k + 1)
+        = ((1 - ((k : ℝ) + 1) * u) * (1 + u)) * (1 + u) ^ k := by rw [hs]; ring
+      _ ≤ (1 - (k : ℝ) * u) * (1 + u) ^ k := mul_le_mul_of_nonneg_right key hp
+      _ ≤ 1 := ih
+
+/-- **The classical `γₖ` bound**: for `k·u < 1`,
+    `(1+u)^k − 1 ≤ k·u/(1 − k·u)`. Turns the compounded budgets into plain
+    rational arithmetic at a concrete `u` (e.g. `u32`) — `norm_num` country,
+    no big-power evaluation. -/
+theorem pow_gamma_bound (u : ℝ) (hu : 0 ≤ u) (k : ℕ)
+    (hk : (k : ℝ) * u < 1) :
+    (1 + u) ^ k - 1 ≤ (k : ℝ) * u / (1 - (k : ℝ) * u) := by
+  have hpos : 0 < 1 - (k : ℝ) * u := by linarith
+  have h0 := one_sub_mul_pow_le u hu k
+  have h1 : (1 + u) ^ k ≤ 1 / (1 - (k : ℝ) * u) := by
+    rw [le_div_iff₀ hpos]
+    linarith [mul_comm ((1 + u) ^ k) (1 - (k : ℝ) * u)]
+  have h2 : 1 / (1 - (k : ℝ) * u) - 1 = (k : ℝ) * u / (1 - (k : ℝ) * u) := by
+    field_simp
+    ring
+  linarith
+
+/-- `x ↦ x/(1−x)` is monotone on `[0, 1)` — lets a `u ≤ u32` hypothesis ride
+    through the γ-form. -/
+private theorem div_one_sub_mono {x y : ℝ} (hxy : x ≤ y)
+    (hy : y < 1) : x / (1 - x) ≤ y / (1 - y) := by
+  have h1 : 0 < 1 - x := by linarith
+  have h2 : 0 < 1 - y := by linarith
+  rw [div_le_div_iff₀ h1 h2]
+  nlinarith
+
+-- ════════════════════════════════════════════════════════════════
+-- § Uniform-magnitude budgets (closed forms in dims and norms)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Worst-case output magnitude of one real layer under uniform magnitude
+    bounds: `|denseⱼ| ≤ m·w·A + β` (and `relu` only shrinks). -/
+noncomputable def layerAct (m : ℕ) (w β A : ℝ) : ℝ := (m : ℝ) * w * A + β
+
+/-- The uniform-magnitude form of `denseErr`: every `|Wᵢⱼ| ≤ w`, `|bⱼ| ≤ β`,
+    real activation magnitude `≤ A`, inherited error `≤ E`. -/
+noncomputable def layerBudget (u : ℝ) (m : ℕ) (w β A E : ℝ) : ℝ :=
+  ((1 + u) ^ (m + 2) - 1) * ((m : ℝ) * w * (A + E) + β) + (m : ℝ) * w * E
+
+theorem layerAct_nonneg {m : ℕ} {w β A : ℝ} (hw : 0 ≤ w) (hβ : 0 ≤ β)
+    (hA : 0 ≤ A) : 0 ≤ layerAct m w β A :=
+  add_nonneg (mul_nonneg (mul_nonneg (Nat.cast_nonneg m) hw) hA) hβ
+
+theorem layerBudget_nonneg {u : ℝ} {m : ℕ} {w β A E : ℝ} (hu : 0 ≤ u)
+    (hw : 0 ≤ w) (hβ : 0 ≤ β) (hA : 0 ≤ A) (hE : 0 ≤ E) :
+    0 ≤ layerBudget u m w β A E := by
+  have hG : (0 : ℝ) ≤ (1 + u) ^ (m + 2) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith))
+  have hmw : (0 : ℝ) ≤ (m : ℝ) * w := mul_nonneg (Nat.cast_nonneg m) hw
+  exact add_nonneg
+    (mul_nonneg hG (add_nonneg (mul_nonneg hmw (add_nonneg hA hE)) hβ))
+    (mul_nonneg hmw hE)
+
+/-- Replacing the power term and the inherited error in `layerBudget` by
+    upper bounds gives an upper bound — the monotonicity step the numeric
+    instantiations chain through. -/
+private theorem layerBudget_le_of {u : ℝ} {m : ℕ} {w β A E g Ē : ℝ}
+    (hu : 0 ≤ u) (hw : 0 ≤ w) (hβ : 0 ≤ β) (hA : 0 ≤ A)
+    (hG : (1 + u) ^ (m + 2) - 1 ≤ g) (hE0 : 0 ≤ E) (hE : E ≤ Ē) :
+    layerBudget u m w β A E ≤ g * ((m : ℝ) * w * (A + Ē) + β) + (m : ℝ) * w * Ē := by
+  have hG0 : (0 : ℝ) ≤ (1 + u) ^ (m + 2) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith))
+  have hmw : (0 : ℝ) ≤ (m : ℝ) * w := mul_nonneg (Nat.cast_nonneg m) hw
+  have hAE : (m : ℝ) * w * (A + E) ≤ (m : ℝ) * w * (A + Ē) :=
+    mul_le_mul_of_nonneg_left (by linarith) hmw
+  have hX0 : (0 : ℝ) ≤ (m : ℝ) * w * (A + E) + β :=
+    add_nonneg (mul_nonneg hmw (add_nonneg hA hE0)) hβ
+  have h1 : ((1 + u) ^ (m + 2) - 1) * ((m : ℝ) * w * (A + E) + β)
+      ≤ g * ((m : ℝ) * w * (A + Ē) + β) :=
+    mul_le_mul hG (by linarith) hX0 (hG0.trans hG)
+  have h2 : (m : ℝ) * w * E ≤ (m : ℝ) * w * Ē :=
+    mul_le_mul_of_nonneg_left hE hmw
+  exact add_le_add h1 h2
+
+/-- ReLU never grows magnitudes. -/
+theorem relu_abs_le {n : ℕ} (z : Vec n) (i : Fin n) :
+    |relu n z i| ≤ |z i| := by
+  simp only [relu]
+  by_cases h : z i > 0
+  · simp [h]
+  · simp [h]
+
+/-- Real dense-layer magnitude bound: `|denseⱼ| ≤ layerAct m w β a`. -/
+theorem dense_abs_le {m n : ℕ} {W : Mat m n} {b : Vec n} {x : Vec m}
+    {w β a : ℝ} (ha : 0 ≤ a)
+    (hW : ∀ i j, |W i j| ≤ w) (hb : ∀ j, |b j| ≤ β) (hx : ∀ i, |x i| ≤ a)
+    (j : Fin n) : |Proofs.dense W b x j| ≤ layerAct m w β a := by
+  have h1 : |∑ i, x i * W i j| ≤ (m : ℝ) * w * a := by
+    calc |∑ i, x i * W i j| ≤ ∑ i, |x i * W i j| :=
+          Finset.abs_sum_le_sum_abs _ _
+      _ ≤ ∑ _i : Fin m, a * w := by
+          refine Finset.sum_le_sum fun i _ => ?_
+          rw [abs_mul]
+          exact mul_le_mul (hx i) (hW i j) (abs_nonneg _) ha
+      _ = (m : ℝ) * (a * w) := by rw [Finset.sum_const]; simp [nsmul_eq_mul]
+      _ = (m : ℝ) * w * a := by ring
+  calc |Proofs.dense W b x j| = |(∑ i, x i * W i j) + b j| := rfl
+    _ ≤ |∑ i, x i * W i j| + |b j| := abs_add_le _ _
+    _ ≤ (m : ℝ) * w * a + β := add_le_add h1 (hb j)
+    _ = layerAct m w β a := rfl
+
+/-- `denseErr` under uniform magnitude bounds is at most the closed-form
+    `layerBudget`. -/
+theorem denseErr_le_uniform {m n : ℕ} {W : Mat m n} {b : Vec n} {xa : Vec m}
+    {w β a e : ℝ} (hw : 0 ≤ w) (he : 0 ≤ e)
+    (hW : ∀ i j, |W i j| ≤ w) (hb : ∀ j, |b j| ≤ β) (hxa : ∀ i, |xa i| ≤ a)
+    (j : Fin n) :
+    M.denseErr W b xa e j ≤ layerBudget M.u m w β a e := by
+  have hG : (0 : ℝ) ≤ (1 + M.u) ^ (m + 2) - 1 :=
+    sub_nonneg.mpr (M.one_le_pow_one_add_u (m + 2))
+  have hsum1 : (∑ i, |W i j| * (|xa i| + e)) ≤ (m : ℝ) * w * (a + e) := by
+    calc (∑ i, |W i j| * (|xa i| + e)) ≤ ∑ _i : Fin m, w * (a + e) := by
+          refine Finset.sum_le_sum fun i _ => ?_
+          exact mul_le_mul (hW i j) (by linarith [hxa i])
+            (add_nonneg (abs_nonneg _) he) hw
+      _ = (m : ℝ) * (w * (a + e)) := by rw [Finset.sum_const]; simp [nsmul_eq_mul]
+      _ = (m : ℝ) * w * (a + e) := by ring
+  have hsum2 : (∑ i, |W i j|) ≤ (m : ℝ) * w := by
+    calc (∑ i, |W i j|) ≤ ∑ _i : Fin m, w :=
+          Finset.sum_le_sum fun i _ => hW i j
+      _ = (m : ℝ) * w := by rw [Finset.sum_const]; simp [nsmul_eq_mul]
+  have hmono1 : ((1 + M.u) ^ (m + 2) - 1) * ((∑ i, |W i j| * (|xa i| + e)) + |b j|)
+      ≤ ((1 + M.u) ^ (m + 2) - 1) * ((m : ℝ) * w * (a + e) + β) :=
+    mul_le_mul_of_nonneg_left (add_le_add hsum1 (hb j)) hG
+  have hmono2 : (∑ i, |W i j|) * e ≤ (m : ℝ) * w * e :=
+    mul_le_mul_of_nonneg_right hsum2 he
+  show ((1 + M.u) ^ (m + 2) - 1) * ((∑ i, |W i j| * (|xa i| + e)) + |b j|)
+      + (∑ i, |W i j|) * e
+    ≤ ((1 + M.u) ^ (m + 2) - 1) * ((m : ℝ) * w * (a + e) + β) + (m : ℝ) * w * e
+  linarith
+
+/-- **MLP forward extraction, uniform-magnitude budgets.** `mlp_float_close`
+    with the `e₀`/`e₁` uniformization discharged once and for all from
+    coordinatewise magnitude bounds `|Wᵢ| ≤ wᵢ`, `|bᵢ| ≤ βᵢ`, `|x| ≤ a`.
+    The budget is a closed form in the dims and magnitudes — evaluable by
+    `norm_num` at a concrete net. -/
+theorem mlp_float_close_uniform {d₀ d₁ d₂ d₃ : Nat}
+    {W₀ : Mat d₀ d₁} {b₀ : Vec d₁} {W₁ : Mat d₁ d₂} {b₁ : Vec d₂}
+    {W₂ : Mat d₂ d₃} {b₂ : Vec d₃} {x : Vec d₀}
+    {w₀ β₀ w₁ β₁ w₂ β₂ a : ℝ}
+    (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁)
+    (hw₂ : 0 ≤ w₂) (ha : 0 ≤ a)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w₂) (hb₂ : ∀ j, |b₂ j| ≤ β₂)
+    (hx : ∀ i, |x i| ≤ a) (k : Fin d₃) :
+    |M.mlpF W₀ b₀ W₁ b₁ W₂ b₂ x k -
+        Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁
+          (relu d₁ (Proofs.dense W₀ b₀ x)))) k| ≤
+      layerBudget M.u d₂ w₂ β₂ (layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a))
+        (layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+          (layerBudget M.u d₀ w₀ β₀ a 0)) := by
+  have hA₁0 : 0 ≤ layerAct d₀ w₀ β₀ a := layerAct_nonneg hw₀ hβ₀ ha
+  have hA₂0 : 0 ≤ layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) :=
+    layerAct_nonneg hw₁ hβ₁ hA₁0
+  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
+  have hE₁0 : 0 ≤ layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+      (layerBudget M.u d₀ w₀ β₀ a 0) :=
+    layerBudget_nonneg M.u_nonneg hw₁ hβ₁ hA₁0 hE₀0
+  -- real activation magnitude bounds, layer by layer
+  have ha₁ : ∀ i, |relu d₁ (Proofs.dense W₀ b₀ x) i| ≤ layerAct d₀ w₀ β₀ a :=
+    fun i => (relu_abs_le _ i).trans (dense_abs_le ha hW₀ hb₀ hx i)
+  have ha₂ : ∀ i, |relu d₂ (Proofs.dense W₁ b₁
+      (relu d₁ (Proofs.dense W₀ b₀ x))) i| ≤
+      layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) :=
+    fun i => (relu_abs_le _ i).trans (dense_abs_le hA₁0 hW₁ hb₁ ha₁ i)
+  refine (M.mlp_float_close W₀ b₀ W₁ b₁ W₂ b₂ x _ _ hE₀0 hE₁0
+    (fun j => M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j)
+    (fun j => M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j) k).trans ?_
+  exact M.denseErr_le_uniform hw₂ hE₁0 hW₂ hb₂ ha₂ k
+
+-- ════════════════════════════════════════════════════════════════
+-- § The committed-net numeric instance (784→512→512→10, binary32)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Numeric capstone at the committed MNIST-MLP dims** (the
+    `MainMnistMlpTrain.lean` net: 784→512→512→10). For any rounding model at
+    binary32 accuracy (`u ≤ 2⁻²⁴`), weights bounded by `1/32` and biases and
+    pixels by `1`, every rounded logit is within **3/4** of the exact-real
+    logit — while the logits themselves can reach ≈6.5·10³, i.e. ≈10⁻⁴
+    relative. All three layer budgets discharge by `norm_num` through the
+    γ-form (`pow_gamma_bound`); no big-power evaluation.
+
+    The dominant term is the Lipschitz amplification of the layer-0 budget
+    (`16·e` per layer), not fresh rounding — the worst-case-composition
+    blow-up that makes a-posteriori/probabilistic analysis the right tool
+    past toy depth. -/
+theorem mnist_mlp_float_budget (hMu : M.u ≤ u32)
+    (W₀ : Mat 784 512) (b₀ : Vec 512) (W₁ : Mat 512 512) (b₁ : Vec 512)
+    (W₂ : Mat 512 10) (b₂ : Vec 10) (x : Vec 784)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ 1/32) (hb₀ : ∀ j, |b₀ j| ≤ 1)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ 1/32) (hb₁ : ∀ j, |b₁ j| ≤ 1)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ 1/32) (hb₂ : ∀ j, |b₂ j| ≤ 1)
+    (hx : ∀ i, |x i| ≤ 1) (k : Fin 10) :
+    |M.mlpF W₀ b₀ W₁ b₁ W₂ b₂ x k -
+        Proofs.dense W₂ b₂ (relu 512 (Proofs.dense W₁ b₁
+          (relu 512 (Proofs.dense W₀ b₀ x)))) k| ≤ 3/4 := by
+  have hu := M.u_nonneg
+  -- γ-form bounds at the two layer exponents, monotone through u ≤ u32
+  have hgam : ∀ k : ℕ, (k : ℝ) * u32 < 1 →
+      (1 + M.u) ^ k - 1 ≤ (k : ℝ) * u32 / (1 - (k : ℝ) * u32) := by
+    intro k hk
+    have hkM : (k : ℝ) * M.u ≤ (k : ℝ) * u32 :=
+      mul_le_mul_of_nonneg_left hMu (Nat.cast_nonneg k)
+    exact (pow_gamma_bound M.u hu k (lt_of_le_of_lt hkM hk)).trans
+      (div_one_sub_mono hkM hk)
+  have hg786 : (1 + M.u) ^ 786 - 1 ≤ 47 / 1000000 := by
+    refine (hgam 786 (by norm_num [u32])).trans ?_
+    norm_num [u32]
+  have hg514 : (1 + M.u) ^ 514 - 1 ≤ 31 / 1000000 := by
+    refine (hgam 514 (by norm_num [u32])).trans ?_
+    norm_num [u32]
+  -- the closed-form budgets, bounded layer by layer
+  have hB₀ : layerBudget M.u 784 (1/32) 1 1 0 ≤ 6/5000 := by
+    refine (layerBudget_le_of hu (by norm_num) (by norm_num) (by norm_num)
+      hg786 le_rfl le_rfl).trans ?_
+    norm_num
+  have hB₀0 : (0:ℝ) ≤ layerBudget M.u 784 (1/32) 1 1 0 :=
+    layerBudget_nonneg hu (by norm_num) (by norm_num) (by norm_num) le_rfl
+  have hB₁ : layerBudget M.u 512 (1/32) 1 (51/2)
+      (layerBudget M.u 784 (1/32) 1 1 0) ≤ 4/125 := by
+    refine (layerBudget_le_of hu (by norm_num) (by norm_num) (by norm_num)
+      hg514 hB₀0 hB₀).trans ?_
+    norm_num
+  have hB₁0 : (0:ℝ) ≤ layerBudget M.u 512 (1/32) 1 (51/2)
+      (layerBudget M.u 784 (1/32) 1 1 0) :=
+    layerBudget_nonneg hu (by norm_num) (by norm_num) (by norm_num) hB₀0
+  have hB₂ : layerBudget M.u 512 (1/32) 1 409
+      (layerBudget M.u 512 (1/32) 1 (51/2)
+        (layerBudget M.u 784 (1/32) 1 1 0)) ≤ 3/4 := by
+    refine (layerBudget_le_of hu (by norm_num) (by norm_num) (by norm_num)
+      hg514 hB₁0 hB₁).trans ?_
+    norm_num
+  -- assemble: the uniform capstone, activation constants evaluated
+  have hmain := M.mlp_float_close_uniform
+    (by norm_num) (by norm_num) (by norm_num) (by norm_num)
+    (by norm_num) (by norm_num)
+    hW₀ hb₀ hW₁ hb₁ hW₂ hb₂ hx k
+  rw [show layerAct 784 (1/32) 1 1 = (51/2 : ℝ) by norm_num [layerAct],
+      show layerAct 512 (1/32) 1 (51/2) = (409 : ℝ) by norm_num [layerAct]]
+    at hmain
+  exact hmain.trans hB₂
+
+-- ════════════════════════════════════════════════════════════════
 -- § Sanity: the exact model inhabits the interface, budgets collapse
 -- ════════════════════════════════════════════════════════════════
 
