@@ -957,7 +957,9 @@ call is the function above, and it is the only place arithmetic happens.
 than the linear classifier: the shallow chapters' train steps (MLP, CNN,
 CIFAR$\pm$BN) are closed both ways, and all five Part~I architectures ---
 ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT --- are proved at
-full architecture: machine-checked forward graph plus whole-network backward,
+full architecture: machine-checked forward graphs throughout; whole-network
+backward at full depth for the smooth three, at representative depth for the
+two ReLU nets (their parameter gradients certified through the chain closes);
 three classical axioms. For ViT-Tiny and ConvNeXt-T the proven graphs were
 re-rendered at the committed trainers' signatures and agree on GPU to float
 rounding (ConvNeXt: 179/180 tensors bit-identical). The one open gap: the
@@ -1172,70 +1174,83 @@ Plus \(\pdiv\) itself as a definition over \(\fderiv\). The
 matrix-level extensions (matmul, transpose, scalar-scale, row-wise
 lifting, 3D chain rule) live at the start of Chapter~\ref{chap:attention},
 where attention first uses them. The chapter then puts the kit to work
-in its first proven model: the \textbf{4 VJP contracts} of the MNIST
-linear classifier --- \(\texttt{mnistLinear\_has\_vjp\_correct}\) (the
-whole model, a single dense layer), the dense weight- and
-bias-gradient theorems, and the softmax cross-entropy gradient. It is
-the degenerate-simplest whole-model VJP, and the ops it needs are
+in its first proven model: \textbf{1 VJP contract},
+\(\texttt{mnistLinear\_has\_vjp\_correct}\) --- the whole model, a
+single dense layer --- with the dense weight- and bias-gradient
+theorems and the softmax cross-entropy gradient certified alongside
+(parameter-gradient contracts, counted with the supporting machinery).
+It is the degenerate-simplest whole-model VJP, and the ops it needs are
 introduced right here, where the demo lives.
 
 \textbf{Chapter 3 (MNIST: 1D)} adds depth and nonlinearity on top of
-Chapter~2's dense layer --- \textbf{4 VJP contracts}. The guarded ReLU
+Chapter~2's dense layer --- \textbf{2 VJP contracts} plus the chapter's
+concrete end-to-end witness. The guarded ReLU
 Jacobian \(\pdiv\_\texttt{relu}\) is proved via local-diagonal-CLM
 transport; \(\texttt{relu\_has\_vjp}\) and \(\texttt{mlp\_has\_vjp}\)
 are \texttt{noncomputable def}s over the canonical pdiv-derived witness
 (\texttt{HasVJP.correct} by \texttt{rfl}), with the smooth-point
 \(\texttt{\_at}\) variants carrying the real chain-rule proof.
 
-\textbf{Chapter 4 (MNIST: 2D)} contributes 3 VJP contracts.
+\textbf{Chapter 4 (MNIST: 2D)} contributes 3 VJP contracts (plus four
+concrete witnesses at increasing structure).
 \(\texttt{conv2d}\) and \(\texttt{maxPool2}\) are concrete forward
-defs; the conv2d input-side VJP and maxPool2's VJP --- plus its
+defs; the conv2d input-side VJP, maxPool2's VJP --- plus its
 smooth-point \(\texttt{\_at}\) variant, whose \texttt{correct} field is
-a real proof rather than \texttt{rfl} --- are proved from foundation,
-with the conv weight- and bias-gradient theorems alongside.
+a real proof rather than \texttt{rfl} --- and the whole-net MNIST-CNN
+contract are proved from foundation, with the conv weight- and
+bias-gradient theorems alongside.
 
-\textbf{Chapter 5 (CIFAR: BN)} contributes 1 VJP contract
-(\(\texttt{bn\_input\_grad}\)), assembled from a chain of supporting
-Jacobians: the inverse-stddev broadcast Jacobian and its smoothness
-lemma under \(\varepsilon > 0\), plus the BN affine and centering
-Jacobians, all proved from foundation.
+\textbf{Chapter 5 (CIFAR: BN)} contributes 4 VJP contracts: the
+per-channel BatchNorm VJP in both layouts (flat and NCHW tensor) and
+the CIFAR whole-nets with and without BN --- all assembled from the
+\(\texttt{bn\_input\_grad}\) chain of supporting Jacobians (the
+inverse-stddev broadcast Jacobian and its smoothness lemma under
+\(\varepsilon > 0\), plus the BN affine and centering Jacobians, all
+proved from foundation).
 
-\textbf{Chapter 6 (ResNet-34)} contributes 6 VJP contracts and
+\textbf{Chapter 6 (ResNet-34)} contributes 9 VJP contracts and
 no new calculus: the residual additive-fan-in VJP (plus its
-projected and smooth-point \texttt{\_at} variants), the
-global-average-pool VJP, and --- new in this revision ---
-\(\texttt{cnn\_has\_vjp\_at}\), the \emph{whole-network} fold
+projected variant), the global-average-pool VJP, the stride-2
+convolution's input- and weight-VJPs (= decimation \(\circ\) the
+stride-1 conv, the downsample op), the strided block and stage folds,
+and \(\texttt{cnn\_has\_vjp\_at}\), the \emph{whole-network} fold
 composing stem, residual blocks, pool, and dense head end to end.
 The scaling claim in miniature: an entire architecture's backward,
 built from Chapter~2's kit.
 
-\textbf{Chapter 7 (MobileNetV2)} contributes 2 VJP contracts: the
-depthwise input VJP (same recipe as Ch~4 with one fewer summation
-level --- no cross-channel mixing) and the whole-network
-\(\texttt{mobilenetv2\_has\_vjp\_at}\) over inverted-residual blocks,
-which introduces the two-sided-kink \texttt{relu6} as a new
-smooth-point activation.
+\textbf{Chapter 7 (MobileNetV2)} contributes 3 VJP contracts: the
+depthwise input VJP at stride 1 (same recipe as Ch~4 with one fewer
+summation level --- no cross-channel mixing) and stride 2, and the
+whole-network \(\texttt{mobilenetv2\_has\_vjp\_at}\) over
+inverted-residual blocks, which introduces the two-sided-kink
+\texttt{relu6} as a new smooth-point activation.
 
-\textbf{Chapter 8 (EfficientNet)} contributes 4 VJP contracts:
+\textbf{Chapter 8 (EfficientNet)} contributes 5 VJP contracts:
 \texttt{swish}/SiLU (the MBConv activation), the squeeze-and-excitation
 block (\(\texttt{seBlock\_has\_vjp}\) --- global-avg-pool plus two
 1\(\times\)1 convs plus the elementwise product, every piece already
-proved elsewhere), the smooth \texttt{sigmoid} gate activation, and the
-whole-network \(\texttt{efficientnet\_has\_vjp\_at}\) over MBConv blocks
-with a full-spatial SE gate.
+proved elsewhere), the whole-network
+\(\texttt{efficientnet\_has\_vjp\_at}\) over MBConv blocks with a
+full-spatial SE gate plus its unconditional global sibling, and ---
+at full architecture --- \(\texttt{efficientnetForwardB\_full}\): all
+16 MBConv blocks, batched, under true batch-norm.
 
-\textbf{Chapter 9 (ConvNeXt)} contributes 4 VJP contracts: GELU
+\textbf{Chapter 9 (ConvNeXt)} contributes 7 VJP contracts: GELU
 (Jacobian via \(\fderiv\) and \texttt{Real.differentiable\_tanh}),
 LayerNorm (reusing the BN proof template), the elementwise
-layer-scale, and the whole-network
-\(\texttt{convnext\_has\_vjp\_at}\) --- the all-smooth architecture,
+layer-scale, the whole-network \(\texttt{convnext\_has\_vjp\_at}\)
+plus its unconditional global sibling --- the all-smooth architecture,
 discharged with no kink hypotheses, only \(\varepsilon > 0\)
-positivity. (Swish/SiLU lives in Chapter~8, where EfficientNet uses
-it; ConvNeXt's activation is GELU.)
+positivity --- and, at full architecture,
+\(\texttt{convNextForwardT}\) (all 18 blocks, 4\(\times\)4/s4 patchify
+stem) with its committed-config variant. (Swish/SiLU lives in
+Chapter~8, where EfficientNet uses it; ConvNeXt's activation is GELU.)
 
-\textbf{Chapter 10 (ViT)} contributes 6 VJP contracts (the three SDPA
-cotangents, MHSA, the transformer block, and --- new in this revision
---- the whole-network \(\texttt{vit\_full\_has\_vjp\_correct}\) wrapper;
+\textbf{Chapter 10 (ViT)} contributes 6 VJP contracts (MHSA, the
+transformer block, the depth-2 whole-network in scalar- and vector-LN
+forms, the general-depth \(\texttt{vitForwardKV}\) --- every depth
+\(k\) at once --- and the
+whole-network \(\texttt{vit\_full\_has\_vjp\_correct}\) wrapper;
 the softmax cross-entropy gradient now lives in Chapter~2 with the
 linear classifier), resting on the
 largest \emph{supporting}-theorem budget in the book and the only
@@ -1255,35 +1270,48 @@ row-wise softmax smoothness, and seven transformer-level chains
 machinery this chapter just assembled.
 
 \begin{center}
-\begin{tabular}{l c l}
+\small
+\begin{tabular}{l c c l}
 \hline
-Chapter & VJP contracts & New primitive / result \\
+Chapter & Contracts & Witnesses & New primitive / result \\
 \hline
-2 (Foundation)         & 4 & \texttt{mnistLinear} (linear classifier), dense weight/bias-grad, softmax-CE \\
-3 (MNIST: 1D)          & 4 & ReLU, MLP ($+$ smooth-point \texttt{\_at}) \\
-4 (MNIST: 2D)          & 3 & Conv, MaxPool ($+$ \texttt{\_at}) \\
-5 (CIFAR: BN)          & 1 & BatchNorm input-gradient \\
-6 (ResNet-34)          & 6 & Residual ($+$proj, $+$\texttt{\_at}), global-avg-pool, whole-net \texttt{cnn} \\
-7 (MobileNetV2)        & 2 & Depthwise, whole-net \texttt{mobilenetv2} \\
-8 (EfficientNet)       & 4 & swish, SE (mult. fan-in), sigmoid, whole-net \texttt{efficientnet} \\
-9 (ConvNeXt)           & 4 & GELU, LayerNorm, layer-scale, whole-net \texttt{convnext} \\
-10 (ViT)               & 6 & matrix kit, Attention (SDPA/MHSA/block), whole-net \texttt{vit\_full} \\
+2 (Foundation)   & 1 & --- & \texttt{mnistLinear}: the whole classifier \\
+3 (MNIST: 1D)    & 2 & 1   & ReLU, MLP \\
+4 (MNIST: 2D)    & 3 & 4   & conv2d, maxPool2, whole-net MNIST CNN \\
+5 (CIFAR: BN)    & 4 & 1   & per-channel BN (flat $+$ NCHW), CIFAR whole-nets $\pm$BN \\
+6 (ResNet-34)    & 9 & 1   & residual ($+$proj), GAP, stride-2 conv, block/stage, whole-net \texttt{cnn} \\
+7 (MobileNetV2)  & 3 & 1   & depthwise (stride 1$+$2), whole-net \texttt{mobilenetv2} \\
+8 (EfficientNet) & 5 & --- & swish, SE, whole-net $\times$2, \textbf{full B0} (16 MBConv blocks) \\
+9 (ConvNeXt)     & 7 & --- & GELU, LayerNorm, layer-scale, whole-net $\times$2, \textbf{full ConvNeXt-T} \\
+10 (ViT)         & 6 & --- & MHSA, block, depth-2 ($\times$2 LN forms), \textbf{every depth $k$}, \texttt{vit\_full} \\
 \hline
-                       & \textbf{34} & \\
+                 & \textbf{40} & \textbf{8} & total \textbf{48} \\
 \hline
 \end{tabular}
 \end{center}
 
-The shift from earlier drafts: every architecture now ends in a single
-\emph{whole-network} VJP contract --- \(\texttt{cnn\_has\_vjp\_at\_correct}\),
-\(\texttt{mobilenetv2\_has\_vjp\_at\_correct}\),
-\(\texttt{convnext\_has\_vjp\_at\_correct}\),
-\(\texttt{efficientnet\_has\_vjp\_at\_correct}\),
-\(\texttt{vit\_full\_has\_vjp\_correct}\) --- the entire forward pass's
-backward, machine-checked end to end, not just the per-layer pieces. (The
-underlying forward and witness \texttt{def}s, the foundation \(\pdiv\)
-rules, and the differentiability lemmas are the supporting machinery these
-33 contracts rest on; they are not counted in the table.)
+The witness column counts each chapter's concrete end-to-end instances
+(a specific net at specific weights carried through the whole pipeline);
+they are \(\texttt{\_correct}\) theorems too, but of a different kind ---
+sanity instances, not citable operator contracts --- so the table keeps
+them apart. The shift from earlier drafts: every architecture ends in a
+\emph{whole-network} VJP contract, and for the smooth half the contract
+now holds at \emph{full architecture} ---
+\(\texttt{efficientnetForwardB\_full\_has\_vjp\_correct}\) (all 16 MBConv
+blocks, true batch-norm),
+\(\texttt{convNextForwardT\_has\_vjp\_correct}\) (all 18 blocks; plus the
+committed-config variant), and
+\(\texttt{vitForwardKV\_has\_vjp\_correct}\) (every depth \(k\)). The
+kinked nets keep their whole-network contracts at representative depth
+--- \(\texttt{cnn\_has\_vjp\_at\_correct}\),
+\(\texttt{mobilenetv2\_has\_vjp\_at\_correct}\); the ReLU/ReLU6 kinks
+force at-a-point statements --- while their \emph{full} architectures are
+closed on the forward side (graph faithfulness at all 34 layers, all 17
+bottlenecks) with parameter gradients certified family-by-family through
+the chain closes. (The underlying forward and witness \texttt{def}s, the
+foundation \(\pdiv\) rules, and the differentiability lemmas are the
+supporting machinery these 48 contracts rest on; they are not counted in
+the table.)
 
 One observation worth pulling out: \textbf{every chapter is pure
 composition.} Every primitive in every chapter either inherits
