@@ -16,9 +16,9 @@ Per the handoff recipe (`planning/convnext_close.md` §"Scaling handoff"):
    VJP by induction (`vjp_comp` + the existing `convNextBlock_has_vjp` as the step) —
    the ViT depth-k recipe, simpler here (same-shape blocks within a stage).
 2. **Downsample boundaries** — `cnxDownW` = `flatConvStride2(2×2) ∘ LN`; both VJPs existed.
-3. **4×4/s4 patchify stem** — NEW `flatConvStride4` (= decimate ∘ decimate ∘ stride-1
-   SAME conv, `StridedConv.lean`) + the `flatConvStride4F` token; the ch6 SAME-strided
-   convention extended to stride 4.
+3. **4×4/s4 patchify stem** — NEW `flatConvStride4` (= decimate ∘ decimateOdd ∘ stride-1
+   SAME conv, `StridedConv.lean`: the left-aligned window `x[4i..4i+3]` of the paper's
+   pad-0 `Conv2d(4, s=4)`) + the `flatConvStride4F` token.
 
 GELU/LN/conv are smooth, so the whole-net VJP is GLOBAL (unconditional except the 10 LN
 positivities) — ConvNeXt-T joins `efficientnetForwardB_full_has_vjp` and `vitForwardKV`.
@@ -37,7 +37,8 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 
 /-- One ConvNeXt block's 10 parameters (depthwise `kH×kW`, LN (scalar), expand `c→cExp`,
-    project `cExp→c`, layer-scale over the flat `c·h·w`). -/
+    project `cExp→c`, **per-channel** layer-scale `γls : Vec c` — the paper's form;
+    it enters `convNextBlock` channel-expanded via `StableHLO.chanIdx`). -/
 structure CnxBlockParams (c cExp h w kH kW : Nat) where
   Wdw : DepthwiseKernel c kH kW
   bdw : Vec c
@@ -48,12 +49,18 @@ structure CnxBlockParams (c cExp h w kH kW : Nat) where
   bex : Vec cExp
   Wpr : Kernel4 c cExp 1 1
   bpr : Vec c
-  γls : Vec (c * h * w)
+  γls : Vec c
+
+/-- The per-channel layer-scale expanded to the flat `c·h·w` map (a constant
+    reindex of the parameter — the layer-scale `convNextBlock` actually applies). -/
+noncomputable def cnxGls {c cExp h w kH kW : Nat} (p : CnxBlockParams c cExp h w kH kW) :
+    Vec (c * h * w) :=
+  fun k => p.γls (StableHLO.chanIdx c h w k)
 
 /-- `convNextBlock` at a bundled param block. -/
 noncomputable def cnxBlockW {c cExp h w kH kW : Nat} (p : CnxBlockParams c cExp h w kH kW) :
     Vec (c * h * w) → Vec (c * h * w) :=
-  convNextBlock p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr p.γls
+  convNextBlock p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr (cnxGls p)
 
 /-- **Depth-`k` stage fold** (head recursion — block `0` runs first). -/
 noncomputable def convNextStageK {c cExp h w kH kW : Nat} :
@@ -69,7 +76,7 @@ theorem convNextStageK_diff {c cExp h w kH kW : Nat} :
   | k + 1, ps, hε =>
       (convNextStageK_diff k (fun i => ps i.succ) (fun i => hε i.succ)).comp
         (convNextBlock_differentiable (ps 0).Wdw (ps 0).bdw (ps 0).εn (hε 0)
-          (ps 0).γn (ps 0).βn (ps 0).Wex (ps 0).bex (ps 0).Wpr (ps 0).bpr (ps 0).γls)
+          (ps 0).γn (ps 0).βn (ps 0).Wex (ps 0).bex (ps 0).Wpr (ps 0).bpr (cnxGls (ps 0)))
 
 /-- **Depth-`k` stage VJP** — induction with `convNextBlock_has_vjp` as the chain step. -/
 noncomputable def convNextStageK_has_vjp {c cExp h w kH kW : Nat} :
@@ -79,10 +86,10 @@ noncomputable def convNextStageK_has_vjp {c cExp h w kH kW : Nat} :
   | k + 1, ps, hε =>
       vjp_comp (cnxBlockW (ps 0)) (convNextStageK k (fun i => ps i.succ))
         (convNextBlock_differentiable (ps 0).Wdw (ps 0).bdw (ps 0).εn (hε 0)
-          (ps 0).γn (ps 0).βn (ps 0).Wex (ps 0).bex (ps 0).Wpr (ps 0).bpr (ps 0).γls)
+          (ps 0).γn (ps 0).βn (ps 0).Wex (ps 0).bex (ps 0).Wpr (ps 0).bpr (cnxGls (ps 0)))
         (convNextStageK_diff k (fun i => ps i.succ) (fun i => hε i.succ))
         (convNextBlock_has_vjp (ps 0).Wdw (ps 0).bdw (ps 0).εn (hε 0)
-          (ps 0).γn (ps 0).βn (ps 0).Wex (ps 0).bex (ps 0).Wpr (ps 0).bpr (ps 0).γls)
+          (ps 0).γn (ps 0).βn (ps 0).Wex (ps 0).bex (ps 0).Wpr (ps 0).bpr (cnxGls (ps 0)))
         (convNextStageK_has_vjp k (fun i => ps i.succ) (fun i => hε i.succ))
 
 -- ════════════════════════════════════════════════════════════════
@@ -253,6 +260,79 @@ theorem convNextForwardT_has_vjp_correct (w : CnxTWeights)
           x i j * dy j :=
   (convNextForwardT_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).correct x dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Committed-render config (no stem-LN) — for the render capstone
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Committed-render config**: the committed `convnext_train_step.mlir` omits the
+    paper's stem-LN (the patchify output feeds block `s0b0` directly — 180 params,
+    not 182). This variant matches that signature exactly for the render capstone
+    (`tests/TestConvNeXtTTrainPC.lean`); `convNextForwardT` keeps the paper form
+    (`w.sε/sγ/sβ` are simply unused here). -/
+noncomputable def convNextForwardTC (w : CnxTWeights) (x : Vec (3 * 224 * 224)) : Vec 10 :=
+  dense w.Wd w.bd
+    (layerNormForward 768 w.hε w.hγ w.hβ
+      (globalAvgPoolFlat 768 7 7
+        (convNextStageK 3 w.s4
+          (cnxDownW 7 7 w.d3
+            (convNextStageK 9 w.s3
+              (cnxDownW 14 14 w.d2
+                (convNextStageK 3 w.s2
+                  (cnxDownW 28 28 w.d1
+                    (convNextStageK 3 w.s1
+                      (flatConvStride4 (h := 56) (w := 56) w.sW w.sb x))))))))))
+
+/-- The committed-config whole-net VJP (chain-stated, as `convNextForwardT_has_vjp`;
+    one fewer LN positivity — no stem-LN). -/
+noncomputable def convNextForwardTC_has_vjp (w : CnxTWeights)
+    (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
+    (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
+    (h3 : ∀ i, 0 < (w.s3 i).εn) (hd3 : 0 < w.d3.ε)
+    (h4 : ∀ i, 0 < (w.s4 i).εn)
+    (hhε : 0 < w.hε) :
+    HasVJP
+      (dense w.Wd w.bd ∘
+        layerNormForward 768 w.hε w.hγ w.hβ ∘
+        globalAvgPoolFlat 768 7 7 ∘
+        convNextStageK 3 w.s4 ∘
+        cnxDownW 7 7 w.d3 ∘
+        convNextStageK 9 w.s3 ∘
+        cnxDownW 14 14 w.d2 ∘
+        convNextStageK 3 w.s2 ∘
+        cnxDownW 28 28 w.d1 ∘
+        convNextStageK 3 w.s1 ∘
+        flatConvStride4 (h := 56) (w := 56) w.sW w.sb) := by
+  have st_diff := flatConvStride4_differentiable (h := 56) (w := 56) w.sW w.sb
+  have st_vjp := flatConvStride4_has_vjp (h := 56) (w := 56) w.sW w.sb
+  have s1d := convNextStageK_diff 3 w.s1 h1
+  have e2 := vjp_comp _ _ st_diff s1d st_vjp (convNextStageK_has_vjp 3 w.s1 h1)
+  have f2 := s1d.comp st_diff
+  have d1d := cnxDownW_diff 28 28 w.d1 hd1
+  have e3 := vjp_comp _ _ f2 d1d e2 (cnxDownW_has_vjp 28 28 w.d1 hd1)
+  have f3 := d1d.comp f2
+  have s2d := convNextStageK_diff 3 w.s2 h2
+  have e4 := vjp_comp _ _ f3 s2d e3 (convNextStageK_has_vjp 3 w.s2 h2)
+  have f4 := s2d.comp f3
+  have d2d := cnxDownW_diff 14 14 w.d2 hd2
+  have e5 := vjp_comp _ _ f4 d2d e4 (cnxDownW_has_vjp 14 14 w.d2 hd2)
+  have f5 := d2d.comp f4
+  have s3d := convNextStageK_diff 9 w.s3 h3
+  have e6 := vjp_comp _ _ f5 s3d e5 (convNextStageK_has_vjp 9 w.s3 h3)
+  have f6 := s3d.comp f5
+  have d3d := cnxDownW_diff 7 7 w.d3 hd3
+  have e7 := vjp_comp _ _ f6 d3d e6 (cnxDownW_has_vjp 7 7 w.d3 hd3)
+  have f7 := d3d.comp f6
+  have s4d := convNextStageK_diff 3 w.s4 h4
+  have e8 := vjp_comp _ _ f7 s4d e7 (convNextStageK_has_vjp 3 w.s4 h4)
+  have f8 := s4d.comp f7
+  have gap_diff := globalAvgPoolFlat_differentiable 768 7 7
+  have e9 := vjp_comp _ _ f8 gap_diff e8 (globalAvgPoolFlat_has_vjp 768 7 7)
+  have f9 := gap_diff.comp f8
+  have lnh_diff := bnForward_differentiable 768 w.hε w.hγ w.hβ hhε
+  have e10 := vjp_comp _ _ f9 lnh_diff e9 (layerNorm_has_vjp 768 w.hε w.hγ w.hβ hhε)
+  have f10 := lnh_diff.comp f9
+  exact vjp_comp _ _ f10 (dense_differentiable w.Wd w.bd) e10 (dense_has_vjp w.Wd w.bd)
+
 end Proofs
 
 namespace Proofs.StableHLO
@@ -267,7 +347,7 @@ namespace Proofs.StableHLO
 def cnxBlockGraphW (pfx epsStr : String) {c cExp h w kH kW : Nat}
     (p : CnxBlockParams c cExp h w kH kW) (e : SHlo (c * h * w)) : SHlo (c * h * w) :=
   .addV
-    (.layerScaleF s!"%{pfx}gls" p.γls
+    (.layerScaleChF s!"%{pfx}gls" p.γls
       (.flatConvF (h := h) (w := w) s!"%{pfx}Wpr" s!"%{pfx}bpr" p.Wpr p.bpr
         (.geluF
           (.flatConvF (h := h) (w := w) s!"%{pfx}Wex" s!"%{pfx}bex" p.Wex p.bex
@@ -278,9 +358,9 @@ def cnxBlockGraphW (pfx epsStr : String) {c cExp h w kH kW : Nat}
 theorem cnxBlockGraphW_faithful (pfx epsStr : String) {c cExp h w kH kW : Nat}
     (p : CnxBlockParams c cExp h w kH kW) (e : SHlo (c * h * w)) :
     den (cnxBlockGraphW pfx epsStr p e) = cnxBlockW p (den e) := by
-  unfold cnxBlockGraphW cnxBlockW convNextBlock convNextBlockBody residual biPath
+  unfold cnxBlockGraphW cnxBlockW cnxGls convNextBlock convNextBlockBody residual biPath
          layerNormForward
-  simp only [layerScaleF_faithful, flatConvF_faithful, geluF_faithful, bnF_faithful,
+  simp only [layerScaleChF_faithful, flatConvF_faithful, geluF_faithful, bnF_faithful,
              depthwiseF_faithful, den_addV, Function.comp_apply]
 
 /-- **Depth-`k` stage graph fold** — block `base+1` first, SSA prefixes `b{base+1}_`…. -/
@@ -358,6 +438,39 @@ theorem convNextFwdGraphT_faithful (epsStr : String) (w : CnxTWeights)
       cnxStageGraphK_den, cnxDownGraphW_faithful,
       cnxStageGraphK_den, cnxDownGraphW_faithful,
       cnxStageGraphK_den, bnF_faithful, flatConvStride4F_faithful, den_operand]
+  rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § Committed-render config graph (no stem-LN) + faithfulness
+-- ════════════════════════════════════════════════════════════════
+
+/-- The committed-config forward graph: `convNextFwdGraphT` minus the stem-LN
+    (matching the committed 180-param `convnext_train_step.mlir` exactly). -/
+def convNextFwdGraphTC (epsStr : String) (w : CnxTWeights)
+    (x : Vec (3 * 224 * 224)) : SHlo 10 :=
+  denseF "%Wd" "%bd" w.Wd w.bd
+    (.bnF "%ghd" "%bthd" epsStr w.hε w.hγ w.hβ
+      (.gapF (c := 768) (h := 7) (w := 7)
+        (cnxStageGraphK epsStr 15 3 w.s4
+          (cnxDownGraphW "d3" epsStr 7 7 w.d3
+            (cnxStageGraphK epsStr 6 9 w.s3
+              (cnxDownGraphW "d2" epsStr 14 14 w.d2
+                (cnxStageGraphK epsStr 3 3 w.s2
+                  (cnxDownGraphW "d1" epsStr 28 28 w.d1
+                    (cnxStageGraphK epsStr 0 3 w.s1
+                      (.flatConvStride4F (h := 56) (w := 56) "%Wst" "%bst" w.sW w.sb
+                        (.operand "%x" x)))))))))))
+
+/-- **Committed-config forward faithfulness** — same `rw` chain as the apex, one
+    `bnF` fewer. The graph `tests/TestConvNeXtTTrainPC.lean` renders. -/
+theorem convNextFwdGraphTC_faithful (epsStr : String) (w : CnxTWeights)
+    (x : Vec (3 * 224 * 224)) :
+    den (convNextFwdGraphTC epsStr w x) = convNextForwardTC w x := by
+  rw [convNextFwdGraphTC, denseF_faithful, bnF_faithful, gapF_faithful,
+      cnxStageGraphK_den, cnxDownGraphW_faithful,
+      cnxStageGraphK_den, cnxDownGraphW_faithful,
+      cnxStageGraphK_den, cnxDownGraphW_faithful,
+      cnxStageGraphK_den, flatConvStride4F_faithful, den_operand]
   rfl
 
 end Proofs.StableHLO

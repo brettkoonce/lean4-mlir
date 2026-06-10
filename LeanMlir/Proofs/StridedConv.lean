@@ -163,17 +163,56 @@ theorem flatConvStride2_weight_grad_has_vjp_correct {ic oc h w kH kW : Nat}
   (flatConvStride2_weight_grad_has_vjp b x).correct v dy i
 
 -- ════════════════════════════════════════════════════════════════
--- § Stride-4 SAME convolution = decimate ∘ decimate ∘ (stride-1 SAME conv)
+-- § Stride-4 patchify convolution = decimate ∘ decimateOdd ∘ (stride-1 SAME conv)
 --   (the ConvNeXt 4×4/s4 patchify stem, ch9 scaling pass)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Stride-4 SAME convolution**, flattened: `Vec (ic·4h·4w) → Vec (oc·h·w)`.
-    Double decimation of the stride-1 SAME conv — keep every 4th position
-    (even-of-even), the ch6 SAME-strided convention extended to stride 4. -/
+/-- The odd decimation index map: like `decimateIdx` but keeping the **odd**
+    positions `(co, 2·ho+1, 2·wo+1)`. Composed under an even decimation it reads
+    `4·ho+1` — which for the SAME conv at `pad (k-1)/2 = 1` (k = 4) makes the
+    window exactly the **left-aligned** `x[4i .. 4i+3]`: the real (paper/render)
+    pad-0 stride-4 patchify, never touching the boundary padding. -/
+noncomputable def decimateOddIdx (oc h w : Nat) (k : Fin (oc * h * w)) :
+    Fin (oc * (2 * h) * (2 * w)) :=
+  let p := finProdFinEquiv.symm k         -- (Fin (oc*h), Fin w)
+  let q := finProdFinEquiv.symm p.1       -- (Fin oc, Fin h)
+  finProdFinEquiv
+    (finProdFinEquiv (q.1, (⟨2 * q.2.val + 1, by have := q.2.isLt; omega⟩ : Fin (2 * h))),
+     (⟨2 * p.2.val + 1, by have := p.2.isLt; omega⟩ : Fin (2 * w)))
+
+/-- **Flat odd spatial decimation** `Vec (oc·2h·2w) → Vec (oc·h·w)`: keep the odd
+    spatial positions. A coordinate reindex, exactly as `decimateFlat`. -/
+noncomputable def decimateOddFlat (oc h w : Nat) :
+    Vec (oc * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
+  fun y k => y (decimateOddIdx oc h w k)
+
+theorem decimateOddFlat_differentiable (oc h w : Nat) :
+    Differentiable ℝ (decimateOddFlat oc h w) :=
+  (reindexCLM (decimateOddIdx oc h w)).differentiable
+
+/-- **Odd-decimation VJP** — the same sparse-δ reindex Jacobian as
+    `decimateFlat_has_vjp`, at the odd positions. -/
+noncomputable def decimateOddFlat_has_vjp (oc h w : Nat) :
+    HasVJP (decimateOddFlat oc h w) where
+  backward := fun _v dy => fun idx =>
+    ∑ k : Fin (oc * h * w), (if idx = decimateOddIdx oc h w k then (1 : ℝ) else 0) * dy k
+  correct := by
+    intro v dy idx
+    apply Finset.sum_congr rfl
+    intro j _
+    rw [show decimateOddFlat oc h w = (fun y : Vec (oc * (2*h) * (2*w)) =>
+            fun k : Fin (oc * h * w) => y (decimateOddIdx oc h w k)) from rfl,
+        pdiv_reindex]
+
+/-- **Stride-4 patchify convolution**, flattened: `Vec (ic·4h·4w) → Vec (oc·h·w)`.
+    `decimateFlat ∘ decimateOddFlat ∘ (stride-1 SAME conv)` — reads the SAME conv
+    (pad `(k-1)/2`) at positions `4i+1`, which for the 4×4 stem is the
+    **left-aligned window** `x[4i .. 4i+3]`: the paper's pad-0 `Conv2d(k=4, s=4)`
+    and the committed render's patchify, in-bounds at every tap. -/
 noncomputable def flatConvStride4 {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :
     Vec (ic * (2 * (2 * h)) * (2 * (2 * w))) → Vec (oc * h * w) :=
-  decimateFlat oc h w ∘ decimateFlat oc (2 * h) (2 * w) ∘
+  decimateFlat oc h w ∘ decimateOddFlat oc (2 * h) (2 * w) ∘
     flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b
 
 theorem flatConvStride4_differentiable {ic oc h w kH kW : Nat}
@@ -184,7 +223,7 @@ theorem flatConvStride4_differentiable {ic oc h w kH kW : Nat}
   have hf : Differentiable ℝ (flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
     flatConv_differentiable W b
   exact (decimateFlat_differentiable oc h w).comp
-    ((decimateFlat_differentiable oc (2 * h) (2 * w)).comp hf)
+    ((decimateOddFlat_differentiable oc (2 * h) (2 * w)).comp hf)
 
 /-- **Stride-4 conv input-VJP** — two `vjp_comp` steps over the proven stride-1
     conv input-VJP and the two decimation VJPs (backward = zero-upsample twice,
@@ -198,13 +237,13 @@ noncomputable def flatConvStride4_has_vjp {ic oc h w kH kW : Nat}
     flatConv_differentiable W b
   have hf_vjp : HasVJP (flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
     hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)
-  have s1_vjp : HasVJP (decimateFlat oc (2 * h) (2 * w) ∘
+  have s1_vjp : HasVJP (decimateOddFlat oc (2 * h) (2 * w) ∘
       flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
-    vjp_comp _ _ hf_diff (decimateFlat_differentiable oc (2 * h) (2 * w))
-      hf_vjp (decimateFlat_has_vjp oc (2 * h) (2 * w))
-  have s1_diff : Differentiable ℝ (decimateFlat oc (2 * h) (2 * w) ∘
+    vjp_comp _ _ hf_diff (decimateOddFlat_differentiable oc (2 * h) (2 * w))
+      hf_vjp (decimateOddFlat_has_vjp oc (2 * h) (2 * w))
+  have s1_diff : Differentiable ℝ (decimateOddFlat oc (2 * h) (2 * w) ∘
       flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
-    (decimateFlat_differentiable oc (2 * h) (2 * w)).comp hf_diff
+    (decimateOddFlat_differentiable oc (2 * h) (2 * w)).comp hf_diff
   exact vjp_comp _ _ s1_diff (decimateFlat_differentiable oc h w)
     s1_vjp (decimateFlat_has_vjp oc h w)
 

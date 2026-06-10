@@ -171,9 +171,17 @@ following the handoff recipe below almost verbatim:
   (same-shape blocks within a stage).
 - **Downsample boundaries** (§2): `CnxDownParams`/`cnxDownW` = `flatConvStride2(2×2) ∘ LN`;
   both VJPs existed, only the chaining was new.
-- **4×4/s4 patchify stem** (§3): NEW `flatConvStride4` (= decimate ∘ decimate ∘ stride-1
-  SAME conv, `StridedConv.lean` — the ch6 convention extended) + the `flatConvStride4F`
-  token (full lockstep, `window_strides=[4,4]` emission).
+- **4×4/s4 patchify stem** (§3): NEW `flatConvStride4` (= decimate ∘ decimateOdd ∘
+  stride-1 SAME conv, `StridedConv.lean` — reading the SAME conv at offset-1 positions
+  `4i+1` makes the window the **left-aligned pad-0** `x[4i..4i+3]` of the paper's
+  `Conv2d(4, s=4)` and the committed render; the first draft's decimate∘decimate was
+  one pixel off) + the `flatConvStride4F` token (full lockstep, `window_strides=[4,4]`
+  pad-0 emission).
+- **Per-channel layer-scale** (paper form): `CnxBlockParams.γls : Vec c`, entering
+  `convNextBlock` channel-expanded via `StableHLO.chanIdx` (a constant reindex — free
+  for the VJPs); NEW `layerScaleChF` token (γ `tensor<c>`, broadcast `dims=[1]`,
+  matching the committed signature). The representative's per-element `layerScaleF`
+  subsumes it semantically; the bundle now carries the paper's parameterization.
 - **Whole-net global VJP**: `convNextForwardT_has_vjp(_correct)` — GELU/LN/conv smooth,
   so unconditional except the 10 LN positivities; ConvNeXt-T joins
   `efficientnetForwardB_full_has_vjp`/`vitForwardKV_has_vjp` at full depth. **Stated on
@@ -195,9 +203,31 @@ following the handoff recipe below almost verbatim:
 - §4 (faithful channel-LN) remains the optional follow-up — the scalar-LN representation
   caveat carries over from the representative, as documented. §5 confirmed: the param
   bridges are dim-generic; nothing new needed.
-All 3-axiom clean (audit 375/375). With this, ALL FIVE flagship families are closed at
+All 3-axiom clean (audit 378/378). With this, ALL FIVE flagship families are closed at
 full architecture: ResNet-34, EfficientNet-B0, ViT-Tiny (+production parity), paper-spec
 MobileNetV2, ConvNeXt-T.
+
+**RENDER CAPSTONE (2026-06-10) — production parity, the ViT-capstone analogue.**
+`tests/TestConvNeXtTTrainPC.lean` proof-renders the FULL `[3,3,9,3]` train step through
+`pretty` over the proven `convNextFwdGraphTC` tokens at the committed
+`convnext_train_step.mlir`'s EXACT signature (BS=32, 3×224²→10, 180 params, fn
+`@convnext_train_step`, eps 1.0e-6, lr 0.1): forward + the whole backward cotangent
+chain by token (`flatConvStride4F`/`depthwiseF`/`bnF`/`flatConvF`/`geluF`/
+`layerScaleChF`/`addV`/`flatConvStridedF`/`gapF`/`denseF`; back: `dotOut`/`bnBack`/
+`convBack`/`geluBack`/`depthwiseBack`/`convStridedBack`/`layerScaleChF`-on-cotangent);
+hand-emitted only the param grads, GAP backward, and the two strided W-grads (the
+committed dilate-dy formulations). **Two-sided GPU parity (gfx1100): 180/180 outputs —
+179 bit-identical, worst rel-diff 1.05e-5.** Three committed-vs-proof convention gaps
+were found and fixed on the PROOF side along the way:
+1. the stem window offset (decimate∘decimate read `x[4i−1..4i+2]`; the committed/paper
+   patchify is the left-aligned `x[4i..4i+3]` → `decimateOddFlat`);
+2. per-channel layer-scale `tensor<c>` (proof had per-element `c·h·w`);
+3. `convStridedBack`'s transpose-conv pad for EVEN kernels (low = k−1−p, high = p —
+   `[[1,0],[1,0]]` for the 2×2 downsample; odd-k text unchanged).
+And one committed-vs-paper gap is now documented: **the committed trainer omits the
+paper's stem-LN** (180 params, not 182). The capstone therefore targets the
+committed-config variant `convNextForwardTC`/`convNextFwdGraphTC` (+`_faithful`, chain
+VJP — audit-wired); `convNextForwardT` keeps the paper form (with stem-LN).
 
 ### Scaling handoff — full ConvNeXt-T `[3,3,9,3]` (original plan, kept for reference)
 Mirror the ViT depth-k recipe (`planning/vit_close.md` next-session handoff §2), which was

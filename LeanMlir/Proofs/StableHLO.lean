@@ -200,6 +200,10 @@ inductive SHlo : Nat → Type where
   -- Chapter 9 (ConvNeXt): per-element layer-scale `γ ⊙ x` (diagonal linear, `γ : Vec n`
   -- over the flattened `c·h·w` map). `den` via the proven `layerScale` (ConvNeXt.lean).
   | layerScaleF {n : Nat} (γName : String) (γ : Vec n)          : SHlo n → SHlo n
+  -- Per-CHANNEL layer-scale (the paper's form, the committed full-T render's
+  -- `tensor<c>` γ): `den` = the proven `layerScale` at the channel-expanded
+  -- vector `γ ∘ chanIdx` (a constant reindex of the parameter).
+  | layerScaleChF {c h w : Nat} (γName : String) (γ : Vec c)    : SHlo (c*h*w) → SHlo (c*h*w)
   -- Chapter 10 (ViT): ROW-softmax forward — each of the `m` rows of an `[m,n]`
   -- matrix (flattened to `Vec (m*n)`, row-major) gets the 1-D `softmax` over its
   -- `n` columns (`reduce add` over the LAST axis, broadcast, divide — NO max-shift,
@@ -451,6 +455,12 @@ noncomputable def bnBatchLA (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
       (bnBatchTensor4 N oc h w ε γ β
         (v ∘ Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm))
 
+/-- Channel index of a flat `c·h·w` position (the repo's left-assoc
+    `finProdFinEquiv` convention: `k ↔ ((chan, row), col)`). Used to expand a
+    per-channel parameter (`Vec c`) to the flat per-element map. -/
+def chanIdx (c h w : Nat) (k : Fin (c * h * w)) : Fin c :=
+  (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1
+
 /-- **AST denotation `⟦·⟧ₐ`** — our reading of each StableHLO op's spec, over
     `ℝ`, per-example, in primitive terms — independent of `dense`/`Mat.mulVec`.
     SSA names are ignored. -/
@@ -492,6 +502,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .geluF (n := n) e => gelu n (den e)
   | _, .geluBack (n := n) _ x e => (gelu_has_vjp n).backward x (den e)
   | _, .layerScaleF (n := n) _ γ e => layerScale γ (den e)
+  | _, .layerScaleChF (c := c) (h := h) (w := w) _ γ e =>
+      layerScale (fun k => γ (chanIdx c h w k)) (den e)
   | _, .softmaxRowF (m := m) (n := n) e => rowSoftmaxFlat m n (den e)
   | _, .softmaxRowBack (m := m) (n := n) _ preAct e => rowSoftmaxBackFlat m n preAct (den e)
   | _, .matmulF (m := m) (k := k) (n := n) a b => matMulFlat m k n (den a) (den b)
@@ -947,6 +959,12 @@ theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
     `layerScale` (ConvNeXt.lean). (`rfl`.) -/
 @[simp] theorem layerScaleF_faithful {n : Nat} (γN : String) (γ : Vec n) (e : SHlo n) :
     den (.layerScaleF γN γ e) = layerScale γ (den e) := rfl
+
+/-- **Per-channel layer-scale faithfulness.** The `[c]`-broadcast multiply denotes
+    the proven `layerScale` at the channel-expanded vector. (`rfl`.) -/
+@[simp] theorem layerScaleChF_faithful {c h w : Nat} (γN : String) (γ : Vec c)
+    (e : SHlo (c*h*w)) :
+    den (.layerScaleChF γN γ e) = layerScale (fun k => γ (chanIdx c h w k)) (den e) := rfl
 
 /-- **GELU input-VJP faithfulness.** The closed-form `dy ⊙ gelu'(x)` graph
     (recomputing `tanh(u(x))` from the saved pre-activation `x`) denotes the proven
@@ -1645,6 +1663,7 @@ inductive Raw where
   | geluF      (n : Nat)                   : Raw → Raw
   | geluBack   (x : String) (n : Nat)      : Raw → Raw
   | layerScaleF (γ : String) (n : Nat)     : Raw → Raw
+  | layerScaleChF (γ : String) (c h w : Nat) : Raw → Raw
   | softmaxRowF    (m n : Nat)             : Raw → Raw
   | softmaxRowBack (x : String) (m n : Nat) : Raw → Raw
   | matmulF    (m k n : Nat)               : Raw → Raw → Raw
@@ -1715,6 +1734,7 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .geluF e              => .geluF k (skel e)
   | k, .geluBack x _ e       => .geluBack x k (skel e)
   | k, .layerScaleF γN _ e   => .layerScaleF γN k (skel e)
+  | _, .layerScaleChF (c := c) (h := h) (w := w) γN _ e => .layerScaleChF γN c h w (skel e)
   | _, .softmaxRowF (m := m) (n := n) e => .softmaxRowF m n (skel e)
   | _, .softmaxRowBack (m := m) (n := n) x _ e => .softmaxRowBack x m n (skel e)
   | _, .matmulF (m := m) (k := k) (n := n) a b => .matmulF m k n (skel a) (skel b)
@@ -1773,6 +1793,7 @@ inductive Tok where
   | geluF      (n : Nat)                   : Tok
   | geluBack   (x : String) (n : Nat)      : Tok
   | layerScaleF (γ : String) (n : Nat)     : Tok
+  | layerScaleChF (γ : String) (c h w : Nat) : Tok
   | softmaxRowF    (m n : Nat)             : Tok
   | softmaxRowBack (x : String) (m n : Nat) : Tok
   | matmulF    (m k n : Nat)               : Tok
@@ -1829,6 +1850,7 @@ def toToks : Raw → List Tok
   | .geluF n e       => toToks e ++ [.geluF n]
   | .geluBack x n e  => toToks e ++ [.geluBack x n]
   | .layerScaleF γN n e => toToks e ++ [.layerScaleF γN n]
+  | .layerScaleChF γN c h w e => toToks e ++ [.layerScaleChF γN c h w]
   | .softmaxRowF m n e    => toToks e ++ [.softmaxRowF m n]
   | .softmaxRowBack x m n e => toToks e ++ [.softmaxRowBack x m n]
   | .matmulF m k n a b    => toToks a ++ toToks b ++ [.matmulF m k n]
@@ -2034,9 +2056,12 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
         s!"    {o} = stablehlo.divide {sm}, {nf} : {ty [B,c]}\n", o :: st)
   | .flatConvStride4F w b ic oc h w' kH kW, r :: st => do
-      -- stride-4 SAME conv (the ConvNeXt 4×4/s4 patchify stem): reshape,
-      -- convolution with window_strides=[4,4], +bias
-      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      -- stride-4 patchify conv (the ConvNeXt 4×4/s4 stem): reshape, convolution
+      -- with window_strides=[4,4], +bias. The denotation reads the SAME conv
+      -- (pad (k-1)/2) at the offset-1 positions 4i+1 (decimate ∘ decimateOdd),
+      -- so the emitted pad is one less: (k-1)/2 − 1 — for the 4×4 stem pad 0,
+      -- the left-aligned window x[4i..4i+3] of the paper's pad-0 Conv2d(4, s=4).
+      let pH := (kH - 1) / 2 - 1; let pW := (kW - 1) / 2 - 1
       let xn ← fresh; let cv ← fresh; let bb ← fresh; let ob ← fresh; let o ← fresh
       pure (
         s!"    {xn} = stablehlo.reshape {r} : ({ty [B, ic*(2*(2*h))*(2*(2*w'))]}) -> {ty [B,ic,2*(2*h),2*(2*w')]}\n" ++
@@ -2064,7 +2089,10 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
   | .convStridedBack w ic oc h w' kH kW, r :: st => do
       -- stride-2 conv input-VJP: zero-upsample dy (pad with interior=1, high=1) to
-      -- the 2h×2w grid, then the reversed-kernel stride-1 conv (= decimate.back ▸ conv.back)
+      -- the 2h×2w grid, then the reversed-kernel stride-1 conv (= decimate.back ▸ conv.back).
+      -- Transpose-conv pad: low = k−1−p, high = p (p = the forward pad (k−1)/2) —
+      -- symmetric (k−1)/2 for odd k (3×3 MNV2/r34, unchanged), [[1,0]] for the
+      -- even 2×2 ConvNeXt downsample (the left-aligned forward window).
       let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
       let dn ← fresh; let z ← fresh; let up ← fresh; let wt ← fresh; let wr ← fresh; let dx ← fresh; let o ← fresh
       pure (
@@ -2075,7 +2103,7 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {wr} = stablehlo.reverse {wt}, dims = [2, 3] : {ty [ic,oc,kH,kW]}\n" ++
         s!"    {dx} = stablehlo.convolution({up}, {wr})\n" ++
         "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{kH - 1 - pH}, {pH}], [{kW - 1 - pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
         "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
         s!" : ({ty [B,oc,2*h,2*w']}, {ty [ic,oc,kH,kW]}) -> {ty [B,ic,2*h,2*w']}\n" ++
         s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,2*h,2*w']}) -> {ty [B, ic*(2*h)*(2*w')]}\n", o :: st)
@@ -2247,6 +2275,14 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       let gb ← fresh; let o ← fresh
       pure (s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [n]}) -> {ty [B,n]}\n" ++
             s!"    {o} = stablehlo.multiply {r}, {gb} : {ty [B,n]}\n", o :: st)
+  | .layerScaleChF gN c h w', r :: st => do
+      -- per-channel layer-scale: reshape flat→NCHW, broadcast γ:[c] over
+      -- batch+spatial (dims=[1]), multiply, reshape back.
+      let xn ← fresh; let gb ← fresh; let m ← fresh; let o ← fresh
+      pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*h*w']}) -> {ty [B,c,h,w']}\n" ++
+            s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [c]}) -> {ty [B,c,h,w']}\n" ++
+            s!"    {m} = stablehlo.multiply {xn}, {gb} : {ty [B,c,h,w']}\n" ++
+            s!"    {o} = stablehlo.reshape {m} : ({ty [B,c,h,w']}) -> {ty [B, c*h*w']}\n", o :: st)
   | .geluF n, r :: st => do
       -- gelu forward (tanh approximation): y = 0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³))).
       -- Smooth everywhere (no kink/mask); `stablehlo.tanh` is the only non-arith op.

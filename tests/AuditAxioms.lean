@@ -832,11 +832,14 @@ open Proofs
 -- The last flagship without a full-architecture close. Stage depth-k (CnxBlockParams +
 -- Fin k induction, convNextBlock_has_vjp as the chain step), LN + 2x2/s2 downsample
 -- boundaries (existing stride-2 VJPs), and the NEW 4x4/s4 patchify stem
--- (flatConvStride4 = decimate . decimate . stride-1 SAME conv + the flatConvStride4F
--- token — the ch6 SAME-strided convention extended). GELU/LN/conv smooth => the
--- whole-net VJP is GLOBAL at every depth (only the 10 LN positivities) — ConvNeXt-T
--- joins efficientnetForwardB_full/vitForwardKV. Same scalar-LN representation caveat
+-- (flatConvStride4 = decimate . decimateOdd . stride-1 SAME conv — the LEFT-ALIGNED
+-- pad-0 window x[4i..4i+3] of the paper's Conv2d(4, s=4) and the committed render —
+-- + the flatConvStride4F token). Per-channel layer-scale (γls : Vec c, the paper's
+-- form, via layerScaleChF/chanIdx). GELU/LN/conv smooth => the whole-net VJP is
+-- GLOBAL at every depth (only the LN positivities) — ConvNeXt-T joins
+-- efficientnetForwardB_full/vitForwardKV. Same scalar-LN representation caveat
 -- as the representative; faithful channel-LN stays the optional follow-up.
+#print axioms decimateOddFlat_has_vjp
 #print axioms flatConvStride4_has_vjp
 #print axioms convNextStageK_has_vjp
 #print axioms cnxDownW_has_vjp
@@ -846,3 +849,9 @@ open Proofs
 #print axioms StableHLO.cnxStageGraphK_den
 #print axioms StableHLO.cnxDownGraphW_faithful
 #print axioms StableHLO.convNextFwdGraphT_faithful
+-- Committed-render config (no stem-LN — the committed convnext_train_step.mlir
+-- omits the paper's stem-LN, 180 params): the graph tests/TestConvNeXtTTrainPC.lean
+-- proof-renders at the committed signature. CAPSTONE: two-sided GPU parity vs the
+-- committed trainer — 180/180 outputs, 179 bit-identical, worst rel-diff 1.05e-5.
+#print axioms convNextForwardTC_has_vjp
+#print axioms StableHLO.convNextFwdGraphTC_faithful
