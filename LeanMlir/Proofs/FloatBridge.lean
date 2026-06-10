@@ -583,6 +583,43 @@ theorem mlp_float_close_uniform {d₀ d₁ d₂ d₃ : Nat}
 -- § The committed-net numeric instance (784→512→512→10, binary32)
 -- ════════════════════════════════════════════════════════════════
 
+/-- γ-form at a concrete exponent and target, monotone through `u ≤ u32`. -/
+private theorem gamma_num (hMu : M.u ≤ u32) {k : ℕ} {q : ℝ}
+    (hk : (k : ℝ) * u32 < 1)
+    (hq : (k : ℝ) * u32 / (1 - (k : ℝ) * u32) ≤ q) :
+    (1 + M.u) ^ k - 1 ≤ q := by
+  have hu := M.u_nonneg
+  have hkM : (k : ℝ) * M.u ≤ (k : ℝ) * u32 :=
+    mul_le_mul_of_nonneg_left hMu (Nat.cast_nonneg k)
+  exact ((pow_gamma_bound M.u hu k (lt_of_le_of_lt hkM hk)).trans
+    (div_one_sub_mono hkM hk)).trans hq
+
+/-- Layer-0 budget at the committed MNIST dims: `E₀ ≤ 0.0012`. -/
+private theorem mnist_E0_le (hMu : M.u ≤ u32) :
+    layerBudget M.u 784 (1/32) 1 1 0 ≤ 6/5000 := by
+  refine (layerBudget_le_of M.u_nonneg (by norm_num) (by norm_num)
+    (by norm_num) (M.gamma_num (q := 47/1000000) hMu (by norm_num [u32])
+      (by norm_num [u32])) le_rfl le_rfl).trans ?_
+  norm_num
+
+private theorem mnist_E0_nonneg : (0:ℝ) ≤ layerBudget M.u 784 (1/32) 1 1 0 :=
+  layerBudget_nonneg M.u_nonneg (by norm_num) (by norm_num) (by norm_num)
+    le_rfl
+
+/-- Layer-1 budget at the committed MNIST dims: `E₁ ≤ 0.032`. -/
+private theorem mnist_E1_le (hMu : M.u ≤ u32) :
+    layerBudget M.u 512 (1/32) 1 (51/2)
+      (layerBudget M.u 784 (1/32) 1 1 0) ≤ 4/125 := by
+  refine (layerBudget_le_of M.u_nonneg (by norm_num) (by norm_num)
+    (by norm_num) (M.gamma_num (q := 31/1000000) hMu (by norm_num [u32])
+      (by norm_num [u32])) M.mnist_E0_nonneg (M.mnist_E0_le hMu)).trans ?_
+  norm_num
+
+private theorem mnist_E1_nonneg : (0:ℝ) ≤ layerBudget M.u 512 (1/32) 1 (51/2)
+    (layerBudget M.u 784 (1/32) 1 1 0) :=
+  layerBudget_nonneg M.u_nonneg (by norm_num) (by norm_num) (by norm_num)
+    M.mnist_E0_nonneg
+
 /-- **Numeric capstone at the committed MNIST-MLP dims** (the
     `MainMnistMlpTrain.lean` net: 784→512→512→10). For any rounding model at
     binary32 accuracy (`u ≤ 2⁻²⁴`), weights bounded by `1/32` and biases and
@@ -606,40 +643,12 @@ theorem mnist_mlp_float_budget (hMu : M.u ≤ u32)
         Proofs.dense W₂ b₂ (relu 512 (Proofs.dense W₁ b₁
           (relu 512 (Proofs.dense W₀ b₀ x)))) k| ≤ 3/4 := by
   have hu := M.u_nonneg
-  -- γ-form bounds at the two layer exponents, monotone through u ≤ u32
-  have hgam : ∀ k : ℕ, (k : ℝ) * u32 < 1 →
-      (1 + M.u) ^ k - 1 ≤ (k : ℝ) * u32 / (1 - (k : ℝ) * u32) := by
-    intro k hk
-    have hkM : (k : ℝ) * M.u ≤ (k : ℝ) * u32 :=
-      mul_le_mul_of_nonneg_left hMu (Nat.cast_nonneg k)
-    exact (pow_gamma_bound M.u hu k (lt_of_le_of_lt hkM hk)).trans
-      (div_one_sub_mono hkM hk)
-  have hg786 : (1 + M.u) ^ 786 - 1 ≤ 47 / 1000000 := by
-    refine (hgam 786 (by norm_num [u32])).trans ?_
-    norm_num [u32]
-  have hg514 : (1 + M.u) ^ 514 - 1 ≤ 31 / 1000000 := by
-    refine (hgam 514 (by norm_num [u32])).trans ?_
-    norm_num [u32]
-  -- the closed-form budgets, bounded layer by layer
-  have hB₀ : layerBudget M.u 784 (1/32) 1 1 0 ≤ 6/5000 := by
-    refine (layerBudget_le_of hu (by norm_num) (by norm_num) (by norm_num)
-      hg786 le_rfl le_rfl).trans ?_
-    norm_num
-  have hB₀0 : (0:ℝ) ≤ layerBudget M.u 784 (1/32) 1 1 0 :=
-    layerBudget_nonneg hu (by norm_num) (by norm_num) (by norm_num) le_rfl
-  have hB₁ : layerBudget M.u 512 (1/32) 1 (51/2)
-      (layerBudget M.u 784 (1/32) 1 1 0) ≤ 4/125 := by
-    refine (layerBudget_le_of hu (by norm_num) (by norm_num) (by norm_num)
-      hg514 hB₀0 hB₀).trans ?_
-    norm_num
-  have hB₁0 : (0:ℝ) ≤ layerBudget M.u 512 (1/32) 1 (51/2)
-      (layerBudget M.u 784 (1/32) 1 1 0) :=
-    layerBudget_nonneg hu (by norm_num) (by norm_num) (by norm_num) hB₀0
   have hB₂ : layerBudget M.u 512 (1/32) 1 409
       (layerBudget M.u 512 (1/32) 1 (51/2)
         (layerBudget M.u 784 (1/32) 1 1 0)) ≤ 3/4 := by
     refine (layerBudget_le_of hu (by norm_num) (by norm_num) (by norm_num)
-      hg514 hB₁0 hB₁).trans ?_
+      (M.gamma_num (q := 31/1000000) hMu (by norm_num [u32])
+        (by norm_num [u32])) M.mnist_E1_nonneg (M.mnist_E1_le hMu)).trans ?_
     norm_num
   -- assemble: the uniform capstone, activation constants evaluated
   have hmain := M.mlp_float_close_uniform
@@ -754,6 +763,45 @@ theorem sgd_step_close (θ : ℝ) {gt g lr G eg : ℝ}
     M.u * (|θ| + (1 + M.u) * (lr * (G + eg)))
       + (M.u * (lr * (G + eg)) + lr * eg)
   linarith [htri2, hsub, h3, hpclose, h4]
+
+private theorem mulErr_nonneg {u A C ea ec : ℝ} (hu : 0 ≤ u) (hA : 0 ≤ A)
+    (hC : 0 ≤ C) (hea : 0 ≤ ea) (hec : 0 ≤ ec) : 0 ≤ mulErr u A C ea ec :=
+  add_nonneg
+    (mul_nonneg hu (mul_nonneg (by linarith) (by linarith)))
+    (by nlinarith)
+
+private theorem mulErr_mono {u u' A C ea ea' ec : ℝ}
+    (hu : 0 ≤ u) (huu : u ≤ u') (hA : 0 ≤ A) (hC : 0 ≤ C)
+    (hea0 : 0 ≤ ea) (hea : ea ≤ ea') (hec : 0 ≤ ec) :
+    mulErr u A C ea ec ≤ mulErr u' A C ea' ec := by
+  have h1 : (A + ea) * (C + ec) ≤ (A + ea') * (C + ec) :=
+    mul_le_mul_of_nonneg_right (by linarith) (by linarith)
+  have h10 : (0:ℝ) ≤ (A + ea) * (C + ec) :=
+    mul_nonneg (by linarith) (by linarith)
+  have t1 : u * ((A + ea) * (C + ec)) ≤ u' * ((A + ea') * (C + ec)) :=
+    mul_le_mul huu h1 h10 (by linarith)
+  have t2 : ea * C ≤ ea' * C := mul_le_mul_of_nonneg_right hea hC
+  have t3 : ea * ec ≤ ea' * ec := mul_le_mul_of_nonneg_right hea hec
+  exact add_le_add t1 (by linarith)
+
+private theorem sgdErr_mono {u u' lr Θ Θ' G eg eg' : ℝ}
+    (hu : 0 ≤ u) (huu : u ≤ u') (hlr : 0 ≤ lr) (hΘ0 : 0 ≤ Θ) (hΘ : Θ ≤ Θ')
+    (hG : 0 ≤ G) (heg0 : 0 ≤ eg) (heg : eg ≤ eg') :
+    sgdErr u lr Θ G eg ≤ sgdErr u' lr Θ' G eg' := by
+  have hin : lr * (G + eg) ≤ lr * (G + eg') :=
+    mul_le_mul_of_nonneg_left (by linarith) hlr
+  have hin0 : (0:ℝ) ≤ lr * (G + eg) := mul_nonneg hlr (by linarith)
+  have h1u : (1 + u) * (lr * (G + eg)) ≤ (1 + u') * (lr * (G + eg')) :=
+    mul_le_mul (by linarith) hin hin0 (by linarith)
+  have hX0 : (0:ℝ) ≤ Θ + (1 + u) * (lr * (G + eg)) :=
+    add_nonneg hΘ0 (mul_nonneg (by linarith) hin0)
+  have t1 : u * (Θ + (1 + u) * (lr * (G + eg))) ≤
+      u' * (Θ' + (1 + u') * (lr * (G + eg'))) :=
+    mul_le_mul huu (by linarith) hX0 (by linarith)
+  have t2 : u * (lr * (G + eg)) ≤ u' * (lr * (G + eg')) :=
+    mul_le_mul huu hin hin0 (by linarith)
+  have t3 : lr * eg ≤ lr * eg' := mul_le_mul_of_nonneg_left heg hlr
+  exact add_le_add t1 (add_le_add t2 t3)
 
 /-- ReLU backward mask — `if z > 0 then v else 0`. Compare + select: exact
     in floating point, so the float chain applies it bare (the rendered
@@ -979,6 +1027,263 @@ theorem mlp_w1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     rw [abs_mul]
     exact mul_le_mul (ha₁ i) hc₁ (abs_nonneg _) hA₁0
   exact M.sgd_step_close (W₁ i j) hmul hac hlr
+
+/-- **Rounded hidden bias update (b₁)** — the gradient is the layer-1
+    cotangent itself (`emitBiasGrad`), so this is the cotangent chain
+    followed by `sgd_step_close`. -/
+theorem mlp_b1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
+    {W₀ : Mat d₀ d₁} {b₀ : Vec d₁} {W₁ : Mat d₁ d₂} (b₁ : Vec d₂)
+    {W₂ : Mat d₂ d₃} {x : Vec d₀} {gt g : Vec d₃} {lr : ℝ}
+    {w₀ β₀ w₁ β₁ w₂ a G eg : ℝ}
+    (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁)
+    (hw₂ : 0 ≤ w₂) (ha : 0 ≤ a) (hlr : 0 ≤ lr) (hG0 : 0 ≤ G) (heg : 0 ≤ eg)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w₂)
+    (hx : ∀ i, |x i| ≤ a)
+    (hG : ∀ j, |g j| ≤ G) (hg : ∀ j, |gt j - g j| ≤ eg)
+    (hmargin : ∀ i', layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) <
+      |Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) i'|)
+    (j : Fin d₂) :
+    |M.sub (b₁ j) (M.mul lr
+        (reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+          (M.dense (fun j' i' => W₂ i' j') (fun _ => 0) gt) j)) -
+      (b₁ j - lr *
+        reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+          (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g) j)| ≤
+    sgdErr M.u lr |b₁ j| (layerAct d₃ w₂ 0 G)
+      (layerBudget M.u d₃ w₂ 0 G eg) := by
+  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
+  have l0 : ∀ j', |M.dense W₀ b₀ x j' - Proofs.dense W₀ b₀ x j'| ≤
+      layerBudget M.u d₀ w₀ β₀ a 0 := fun j' =>
+    (M.dense_close_fresh W₀ b₀ x j').trans
+      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j')
+  have r0 : ∀ j', |relu d₁ (M.dense W₀ b₀ x) j' -
+      relu d₁ (Proofs.dense W₀ b₀ x) j'| ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    fun j' => relu_close _ _ _ l0 j'
+  have ha₁ : ∀ i', |relu d₁ (Proofs.dense W₀ b₀ x) i'| ≤
+      layerAct d₀ w₀ β₀ a :=
+    fun i' => (relu_abs_le _ i').trans (dense_abs_le ha hW₀ hb₀ hx i')
+  have l1 : ∀ j', |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j' -
+      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j'| ≤
+      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) := fun j' =>
+    (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j').trans
+      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j')
+  have hcot := fun j' =>
+    M.cot_step_close W₂ _ _ gt g hw₂ hG0 heg hW₂ hG hg l1 hmargin j'
+  have hc₁ : |reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+      (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g) j| ≤
+      layerAct d₃ w₂ 0 G :=
+    (reluMask_abs_le _ _ j).trans
+      (dense_abs_le hG0 (fun j' i' => hW₂ i' j') (fun _ => by simp) hG j)
+  exact M.sgd_step_close (b₁ j) (hcot j) hc₁ hlr
+
+/-- **Rounded input-layer weight update (W₀)** — the cotangent crosses BOTH
+    masks, so both quantitative margins are required; the activation operand
+    is the raw input `x`, identical in both nets (zero inherited error). The
+    real target `W₀ᵢⱼ − lr·(xᵢ·c₀ⱼ)` is the `mlp_render_W0_certified`
+    quantity. -/
+theorem mlp_w0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) {b₀ : Vec d₁} {W₁ : Mat d₁ d₂} {b₁ : Vec d₂}
+    {W₂ : Mat d₂ d₃} {x : Vec d₀} {gt g : Vec d₃} {lr : ℝ}
+    {w₀ β₀ w₁ β₁ w₂ a G eg : ℝ}
+    (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁)
+    (hw₂ : 0 ≤ w₂) (ha : 0 ≤ a) (hlr : 0 ≤ lr) (hG0 : 0 ≤ G) (heg : 0 ≤ eg)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w₂)
+    (hx : ∀ i, |x i| ≤ a)
+    (hG : ∀ j, |g j| ≤ G) (hg : ∀ j, |gt j - g j| ≤ eg)
+    (hmargin₁ : ∀ i', layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) <
+      |Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) i'|)
+    (hmargin₀ : ∀ i', layerBudget M.u d₀ w₀ β₀ a 0 <
+      |Proofs.dense W₀ b₀ x i'|)
+    (i : Fin d₀) (j : Fin d₁) :
+    |M.sub (W₀ i j) (M.mul lr (M.mul (x i)
+        (reluMask (M.dense W₀ b₀ x)
+          (M.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+            (reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+              (M.dense (fun j' i' => W₂ i' j') (fun _ => 0) gt))) j))) -
+      (W₀ i j - lr * (x i *
+        reluMask (Proofs.dense W₀ b₀ x)
+          (Proofs.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+            (reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+              (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g))) j))| ≤
+    sgdErr M.u lr |W₀ i j|
+      (a * layerAct d₂ w₁ 0 (layerAct d₃ w₂ 0 G))
+      (mulErr M.u a (layerAct d₂ w₁ 0 (layerAct d₃ w₂ 0 G)) 0
+        (layerBudget M.u d₂ w₁ 0 (layerAct d₃ w₂ 0 G)
+          (layerBudget M.u d₃ w₂ 0 G eg))) := by
+  have hC₁0 : 0 ≤ layerAct d₃ w₂ 0 G := layerAct_nonneg hw₂ le_rfl hG0
+  have hEC₁0 : 0 ≤ layerBudget M.u d₃ w₂ 0 G eg :=
+    layerBudget_nonneg M.u_nonneg hw₂ le_rfl hG0 heg
+  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
+  have l0 : ∀ j', |M.dense W₀ b₀ x j' - Proofs.dense W₀ b₀ x j'| ≤
+      layerBudget M.u d₀ w₀ β₀ a 0 := fun j' =>
+    (M.dense_close_fresh W₀ b₀ x j').trans
+      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j')
+  have r0 : ∀ j', |relu d₁ (M.dense W₀ b₀ x) j' -
+      relu d₁ (Proofs.dense W₀ b₀ x) j'| ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    fun j' => relu_close _ _ _ l0 j'
+  have ha₁ : ∀ i', |relu d₁ (Proofs.dense W₀ b₀ x) i'| ≤
+      layerAct d₀ w₀ β₀ a :=
+    fun i' => (relu_abs_le _ i').trans (dense_abs_le ha hW₀ hb₀ hx i')
+  have l1 : ∀ j', |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j' -
+      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j'| ≤
+      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) := fun j' =>
+    (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j').trans
+      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j')
+  -- layer-1 cotangent, then the layer-0 cotangent through the second mask
+  have hcot := fun j' =>
+    M.cot_step_close W₂ _ _ gt g hw₂ hG0 heg hW₂ hG hg l1 hmargin₁ j'
+  have hc₁mag : ∀ j', |reluMask
+      (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+      (Proofs.dense (fun j'' i' => W₂ i' j'') (fun _ => 0) g) j'| ≤
+      layerAct d₃ w₂ 0 G := fun j' =>
+    (reluMask_abs_le _ _ j').trans
+      (dense_abs_le hG0 (fun j'' i' => hW₂ i' j'') (fun _ => by simp) hG j')
+  have hcot0 := fun j' =>
+    M.cot_step_close W₁ (M.dense W₀ b₀ x) (Proofs.dense W₀ b₀ x) _ _
+      hw₁ hC₁0 hEC₁0 hW₁ hc₁mag hcot l0 hmargin₀ j'
+  have hc₀mag : |reluMask (Proofs.dense W₀ b₀ x)
+      (Proofs.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+        (reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+          (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g))) j| ≤
+      layerAct d₂ w₁ 0 (layerAct d₃ w₂ 0 G) :=
+    (reluMask_abs_le _ _ j).trans
+      (dense_abs_le hC₁0 (fun j' i' => hW₁ i' j') (fun _ => by simp)
+        hc₁mag j)
+  have hmul := M.mul_close (show |x i - x i| ≤ 0 by simp) (hcot0 j)
+    (hx i) hc₀mag
+  have hac : |x i * reluMask (Proofs.dense W₀ b₀ x)
+      (Proofs.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+        (reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+          (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g))) j| ≤
+      a * layerAct d₂ w₁ 0 (layerAct d₃ w₂ 0 G) := by
+    rw [abs_mul]
+    exact mul_le_mul (hx i) hc₀mag (abs_nonneg _) ha
+  exact M.sgd_step_close (W₀ i j) hmul hac hlr
+
+/-- **Rounded input bias update (b₀)** — the layer-0 cotangent directly. -/
+theorem mlp_b0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
+    {W₀ : Mat d₀ d₁} (b₀ : Vec d₁) {W₁ : Mat d₁ d₂} {b₁ : Vec d₂}
+    {W₂ : Mat d₂ d₃} {x : Vec d₀} {gt g : Vec d₃} {lr : ℝ}
+    {w₀ β₀ w₁ β₁ w₂ a G eg : ℝ}
+    (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁)
+    (hw₂ : 0 ≤ w₂) (ha : 0 ≤ a) (hlr : 0 ≤ lr) (hG0 : 0 ≤ G) (heg : 0 ≤ eg)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w₂)
+    (hx : ∀ i, |x i| ≤ a)
+    (hG : ∀ j, |g j| ≤ G) (hg : ∀ j, |gt j - g j| ≤ eg)
+    (hmargin₁ : ∀ i', layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) <
+      |Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) i'|)
+    (hmargin₀ : ∀ i', layerBudget M.u d₀ w₀ β₀ a 0 <
+      |Proofs.dense W₀ b₀ x i'|)
+    (j : Fin d₁) :
+    |M.sub (b₀ j) (M.mul lr
+        (reluMask (M.dense W₀ b₀ x)
+          (M.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+            (reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+              (M.dense (fun j' i' => W₂ i' j') (fun _ => 0) gt))) j)) -
+      (b₀ j - lr *
+        reluMask (Proofs.dense W₀ b₀ x)
+          (Proofs.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+            (reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+              (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g))) j)| ≤
+    sgdErr M.u lr |b₀ j| (layerAct d₂ w₁ 0 (layerAct d₃ w₂ 0 G))
+      (layerBudget M.u d₂ w₁ 0 (layerAct d₃ w₂ 0 G)
+        (layerBudget M.u d₃ w₂ 0 G eg)) := by
+  have hC₁0 : 0 ≤ layerAct d₃ w₂ 0 G := layerAct_nonneg hw₂ le_rfl hG0
+  have hEC₁0 : 0 ≤ layerBudget M.u d₃ w₂ 0 G eg :=
+    layerBudget_nonneg M.u_nonneg hw₂ le_rfl hG0 heg
+  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
+  have l0 : ∀ j', |M.dense W₀ b₀ x j' - Proofs.dense W₀ b₀ x j'| ≤
+      layerBudget M.u d₀ w₀ β₀ a 0 := fun j' =>
+    (M.dense_close_fresh W₀ b₀ x j').trans
+      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j')
+  have r0 : ∀ j', |relu d₁ (M.dense W₀ b₀ x) j' -
+      relu d₁ (Proofs.dense W₀ b₀ x) j'| ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    fun j' => relu_close _ _ _ l0 j'
+  have ha₁ : ∀ i', |relu d₁ (Proofs.dense W₀ b₀ x) i'| ≤
+      layerAct d₀ w₀ β₀ a :=
+    fun i' => (relu_abs_le _ i').trans (dense_abs_le ha hW₀ hb₀ hx i')
+  have l1 : ∀ j', |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j' -
+      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j'| ≤
+      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) := fun j' =>
+    (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j').trans
+      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j')
+  have hcot := fun j' =>
+    M.cot_step_close W₂ _ _ gt g hw₂ hG0 heg hW₂ hG hg l1 hmargin₁ j'
+  have hc₁mag : ∀ j', |reluMask
+      (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+      (Proofs.dense (fun j'' i' => W₂ i' j'') (fun _ => 0) g) j'| ≤
+      layerAct d₃ w₂ 0 G := fun j' =>
+    (reluMask_abs_le _ _ j').trans
+      (dense_abs_le hG0 (fun j'' i' => hW₂ i' j'') (fun _ => by simp) hG j')
+  have hcot0 := fun j' =>
+    M.cot_step_close W₁ (M.dense W₀ b₀ x) (Proofs.dense W₀ b₀ x) _ _
+      hw₁ hC₁0 hEC₁0 hW₁ hc₁mag hcot l0 hmargin₀ j'
+  have hc₀mag : |reluMask (Proofs.dense W₀ b₀ x)
+      (Proofs.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+        (reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+          (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g))) j| ≤
+      layerAct d₂ w₁ 0 (layerAct d₃ w₂ 0 G) :=
+    (reluMask_abs_le _ _ j).trans
+      (dense_abs_le hC₁0 (fun j' i' => hW₁ i' j') (fun _ => by simp)
+        hc₁mag j)
+  exact M.sgd_step_close (b₀ j) (hcot0 j) hc₀mag hlr
+
+/-- **Numeric gradient capstone at the committed dims** (784→512→512→10,
+    `MainMnistMlpTrain.lean`): binary32 accuracy (`u ≤ 2⁻²⁴`), `lr = 1/10`,
+    `|W| ≤ 1/32`, `|b|, |x| ≤ 1`, `|g| ≤ 1` (a softmax−onehot cotangent is
+    always in `[−1,1]`), cotangent taken exact — then every rounded W₂ SGD
+    entry is within **1/300** of the certified real step.
+
+    The budget decomposes honestly: ~0.0032 of it is `lr·E₁·|g|` — the
+    *forward* budget riding through the gradient at learning-rate scale —
+    while fresh backward rounding contributes only ~5·10⁻⁶. The gradient
+    step is as accurate as the forward pass, no worse. -/
+theorem mnist_w2_step_float_budget (hMu : M.u ≤ u32)
+    (W₀ : Mat 784 512) (b₀ : Vec 512) (W₁ : Mat 512 512) (b₁ : Vec 512)
+    (W₂ : Mat 512 10) (x : Vec 784) (g : Vec 10)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ 1/32) (hb₀ : ∀ j, |b₀ j| ≤ 1)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ 1/32) (hb₁ : ∀ j, |b₁ j| ≤ 1)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ 1/32)
+    (hx : ∀ i, |x i| ≤ 1) (hG : ∀ j, |g j| ≤ 1)
+    (i : Fin 512) (j : Fin 10) :
+    |M.sub (W₂ i j) (M.mul (1/10) (M.mul
+        (relu 512 (M.dense W₁ b₁ (relu 512 (M.dense W₀ b₀ x))) i) (g j))) -
+      (W₂ i j - (1/10) * (relu 512 (Proofs.dense W₁ b₁
+        (relu 512 (Proofs.dense W₀ b₀ x))) i * g j))| ≤ 1/300 := by
+  have hu := M.u_nonneg
+  have hmain := M.mlp_w2_step_float_close (gt := g) (eg := 0) (lr := 1/10) W₂
+    (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num)
+    (by norm_num) hW₀ hb₀ hW₁ hb₁ hx hG (fun j' => by simp) i j
+  rw [show layerAct 784 (1/32) 1 1 = (51/2 : ℝ) by norm_num [layerAct],
+      show layerAct 512 (1/32) 1 (51/2) = (409 : ℝ) by norm_num [layerAct]]
+    at hmain
+  refine hmain.trans ?_
+  have hm1 : mulErr M.u 409 1 (layerBudget M.u 512 (1/32) 1 (51/2)
+      (layerBudget M.u 784 (1/32) 1 1 0)) 0 ≤ 321/10000 := by
+    refine (mulErr_mono hu hMu (by norm_num) (by norm_num)
+      M.mnist_E1_nonneg (M.mnist_E1_le hMu) le_rfl).trans ?_
+    norm_num [FloatModel.mulErr, u32]
+  have hm0 : (0:ℝ) ≤ mulErr M.u 409 1 (layerBudget M.u 512 (1/32) 1 (51/2)
+      (layerBudget M.u 784 (1/32) 1 1 0)) 0 :=
+    mulErr_nonneg hu (by norm_num) (by norm_num) M.mnist_E1_nonneg le_rfl
+  refine (sgdErr_mono hu hMu (by norm_num) (abs_nonneg _) (hW₂ i j)
+    (by norm_num) hm0 hm1).trans ?_
+  norm_num [FloatModel.sgdErr, u32]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Sanity: the exact model inhabits the interface, budgets collapse

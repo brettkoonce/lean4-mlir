@@ -913,3 +913,15 @@ open Proofs
 #print axioms FloatModel.mlp_w2_step_float_close
 #print axioms FloatModel.mlp_b2_step_float_close
 #print axioms FloatModel.mlp_w1_step_float_close
+-- Completion: the remaining param entries (b₁ = cotangent SGD; W₀/b₀ cross
+-- BOTH masks, so both quantitative margins appear) — all six rounded MLP
+-- train-step param entries now budgeted against their certified real steps,
+-- the float mirror of mlp_render_{W2,W1,W0,b2,b1,b0}_certified. Plus the
+-- numeric gradient capstone at the committed dims: u ≤ 2⁻²⁴, lr = 1/10,
+-- |W| ≤ 1/32, |b|,|x| ≤ 1, |g| ≤ 1, exact cotangent ⇒ every rounded W₂
+-- SGD entry within 1/300 of the certified step (≈0.0032 = lr·E₁·|g|, the
+-- forward budget at learning-rate scale; fresh backward rounding ≈ 5e-6).
+#print axioms FloatModel.mlp_b1_step_float_close
+#print axioms FloatModel.mlp_w0_step_float_close
+#print axioms FloatModel.mlp_b0_step_float_close
+#print axioms FloatModel.mnist_w2_step_float_budget
