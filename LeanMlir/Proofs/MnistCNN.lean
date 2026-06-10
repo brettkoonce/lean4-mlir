@@ -430,7 +430,6 @@ theorem conv2d_center3x3 {ic oc h w : Nat}
   simp only [zero_mul, add_zero, zero_add]
   -- Center tap (1,1): SAME-padding keeps it in range, value is `t c hi wi`.
   congr 1
-  dsimp only
   split
   · refine congrArg₂ (t c) ?_ ?_ <;> (apply Fin.ext; simp only [Fin.val_one]; omega)
   · rename_i hcond

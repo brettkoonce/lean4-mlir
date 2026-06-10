@@ -184,7 +184,8 @@ theorem parse_toToks (r : Raw) : parse (toToks r) = some r := by
   unfold parse
   have h : parseStack (toToks r) [] = some [r] := by
     have := parseStack_toToks r [] []
-    simpa using this
+    rw [List.append_nil] at this
+    exact this
   rw [h]
 
 /-- **R4 syntactic core.** The emitted op-graph (skeleton) of any `SHlo` is a

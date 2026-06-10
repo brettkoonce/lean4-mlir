@@ -162,10 +162,12 @@ theorem Real.hasDerivAt_tanh (y : ℝ) : HasDerivAt Real.tanh (1 - Real.tanh y ^
   have h : Real.tanh = fun z => Real.sinh z / Real.cosh z := funext Real.tanh_eq_sinh_div_cosh
   rw [h]
   have hd := (Real.hasDerivAt_sinh y).div (Real.hasDerivAt_cosh y) (Real.cosh_pos y).ne'
-  convert hd using 1
-  simp only []
-  rw [div_pow]
-  field_simp
+  -- v4.31: `convert … using 1` also spawns spurious `AddCommGroup` instance-defeq
+  -- side goals (closed by `rfl`) alongside the real derivative-equality goal.
+  convert hd using 1 <;>
+    first
+      | rfl
+      | (simp only [div_pow]; field_simp)
 
 /-- **Closed form of `geluScalarDeriv`** — the analytic derivative of the
     tanh-approximation GELU. With `u = √(2/π)·(x + 0.044715·x³)` and `t = tanh u`,
@@ -187,7 +189,7 @@ theorem geluScalarDeriv_eq (x : ℝ) :
     have h1 : HasDerivAt (fun z : ℝ => z) 1 x := hasDerivAt_id x
     have h2 : HasDerivAt (fun z : ℝ => 0.044715 * z^3) (0.044715 * (3 * x^2)) x :=
       (hasDerivAt_pow 3 x).const_mul 0.044715
-    simpa using h1.add h2
+    exact h1.add h2
   have hu : HasDerivAt (fun z : ℝ => Real.sqrt (2 / Real.pi) * (z + 0.044715 * z^3))
               (Real.sqrt (2 / Real.pi) * (1 + 0.044715 * (3 * x^2))) x :=
     hpoly.const_mul _

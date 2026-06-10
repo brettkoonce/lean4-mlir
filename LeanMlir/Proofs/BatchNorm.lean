@@ -1,5 +1,7 @@
 import LeanMlir.Proofs.Tensor
-import Mathlib.Data.Real.Sqrt
+-- `Real.sqrt` + lemmas come transitively via `Analysis.SpecialFunctions.Sqrt` below,
+-- which exists on both v4.30 (`Data.Real.Sqrt`) and v4.31 (`Analysis.Real.Sqrt`, moved
+-- by mathlib #39964; old path is a deprecation shim on 4.31) — so we don't name it.
 import Mathlib.Analysis.SpecialFunctions.Sqrt
 import Mathlib.Analysis.Calculus.FDeriv.Mul
 import Mathlib.Analysis.Calculus.Deriv.Inv
@@ -512,8 +514,9 @@ theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i 
                   ((2 * C k x) • C k) x := fun k => by
     have h := (hCk_at k).mul (hCk_at k)
     -- h : HasFDerivAt (... * ...) (C k x • C k + C k x • C k) x
-    convert h using 1
-    rw [two_mul, add_smul]
+    -- v4.31: `convert … using 1` also spawns spurious `AddCommGroup`/`Module`
+    -- instance-defeq side goals (closed by `rfl`) alongside the real derivative goal.
+    convert h using 1 <;> first | rw [two_mul, add_smul] | rfl
   have h_sumsq_at : HasFDerivAt
       (fun x' : Vec (n' + 1) => ∑ k : Fin (n' + 1), C k x' * C k x')
       (∑ k : Fin (n' + 1), (2 * C k x) • C k) x :=
