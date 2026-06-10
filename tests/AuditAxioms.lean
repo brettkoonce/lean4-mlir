@@ -46,6 +46,7 @@ import LeanMlir.Proofs.MobileNetV2FullPaper
 import LeanMlir.Proofs.ConvNeXtFullT
 import LeanMlir.Proofs.FloatBridge
 import LeanMlir.Proofs.SgdDescent
+import LeanMlir.Proofs.SgdDescentLinear
 
 open Proofs
 
@@ -957,3 +958,18 @@ open Proofs
 #print axioms descent_segment
 #print axioms sgd_descent_inexact
 #print axioms sgd_descends
+-- The smoothness hypothesis discharged for the Chapter-2 net
+-- (SgdDescentLinear.lean): linear_loss_gradAt re-derives the certified
+-- ∂L/∂W_{ij} = xᵢ·(softmaxⱼ − onehotⱼ) through gradAt;
+-- dense_unflatten_drift (logits move ≤ a·‖d‖₁); linear_loss_grad_lipschitz
+-- gives the EXPLICIT segment-Lipschitz constant 2a²/(1−2aD) under 2aD < 1 —
+-- the softmax ratio sandwich + the γ-form, no Hessian, no MVT — and
+-- linear_sgd_descends: one inexact SGD step on the MNIST-linear classifier
+-- provably decreases the cross-entropy loss by ≥ lr·‖∇L‖₂²/2. Smoothness is
+-- PROVEN here, not assumed; the remaining hypotheses are checkable
+-- arithmetic (oracle η from the float budgets, small-step, dominance).
+#print axioms gradAt_eq_pdiv
+#print axioms linear_loss_gradAt
+#print axioms dense_unflatten_drift
+#print axioms linear_loss_grad_lipschitz
+#print axioms linear_sgd_descends

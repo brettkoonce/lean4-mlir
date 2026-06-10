@@ -1654,7 +1654,7 @@ theorem softmax_ce_cot_close (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
 /-- `e^x − 1 ≤ x/(1−x)` for `0 ≤ x < 1` — the exp analogue of the γ-form,
     from `1 − x ≤ e^(−x)` alone; keeps the numeric head budget in
     `norm_num` country. -/
-private theorem exp_sub_one_le {x : ℝ} (hx1 : x < 1) :
+theorem exp_sub_one_le {x : ℝ} (hx1 : x < 1) :
     Real.exp x - 1 ≤ x / (1 - x) := by
   have hp := Real.exp_pos x
   have hprod : Real.exp x * Real.exp (-x) = 1 := by

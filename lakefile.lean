@@ -158,7 +158,12 @@ lean_lib «Proofs» where
              -- oracle + segment smoothness ⇒ the SGD step still decreases the loss,
              -- with an explicit decrease. The keystone the FloatBridge budgets
              -- plug into ("close" ⇒ "still trains").
-             `LeanMlir.Proofs.SgdDescent]
+             `LeanMlir.Proofs.SgdDescent,
+             -- The smoothness hypothesis DISCHARGED for the Chapter-2 linear
+             -- softmax-CE loss: explicit segment-Lipschitz constant 2a²/(1−2aD)
+             -- via the softmax ratio sandwich (no Hessian), and the capstone —
+             -- one inexact SGD step provably decreases the cross-entropy loss.
+             `LeanMlir.Proofs.SgdDescentLinear]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
