@@ -1071,8 +1071,7 @@ open Proofs
 -- weight-sharing multiplicity ((2h)·(2w))² — vs the MLP's width
 -- factors), and one inexact SGD step on the second conv kernel provably
 -- decreases the cross-entropy loss by ≥ lr·‖∇L‖₂²/2
--- (cnn_conv2_sgd_descends). The biases remain
--- (planning/sgd_descent_cnn.md).
+-- (cnn_conv2_sgd_descends). The bias rungs follow below.
 #print axioms ce_head3_input_grad
 #print axioms pool_relu_input_grad
 #print axioms conv2d_weight_pdiv
@@ -1110,8 +1109,7 @@ open Proofs
 -- (cnn_conv1_loss_grad_lipschitz) — and one inexact SGD step on the
 -- first conv kernel provably decreases the loss by ≥ lr·‖∇L‖₂²/2
 -- (cnn_conv1_sgd_descends). Every conv kernel of the Chapter-4 CNN now
--- has a proven descent statement; the biases remain
--- (planning/sgd_descent_cnn.md).
+-- has a proven descent statement; the bias rungs follow below.
 #print axioms sum_pinned_le
 #print axioms abs_convTap_expand
 #print axioms convTap_out_l1
@@ -1132,3 +1130,47 @@ open Proofs
 #print axioms cnn_conv1_loss_gradAt
 #print axioms cnn_conv1_loss_grad_lipschitz
 #print axioms cnn_conv1_sgd_descends
+-- The conv BIAS rungs (SgdDescentCnn.lean): conv2d is affine in its
+-- bias with the simplest possible Jacobian — a Kronecker channel
+-- indicator (conv2d_bias_pdiv, extracted from the certified bias VJP
+-- conv2d_bias_grad_has_vjp by contracting .correct against a basis
+-- vector, exactly as conv2d_weight_pdiv). The per-entry drift is
+-- exactly |e o| (conv2d_bias_sub — no input bound a, no kernel mass);
+-- the ℓ1 drift picks up the spatial multiplicity h·w
+-- (conv2d_flat_bias_drift_sum — one bias entry feeds a whole channel).
+-- Everything downstream is the kernel-rung argument verbatim with the
+-- conv stage's a·D radii replaced by the bare D: four margins for the
+-- conv2 bias (cnnb2_margin{2,3,4}_keeps_offkink + the pool), five for
+-- the conv1 bias (cnnb1_margin{1,2,3,4}_keeps_offkink + the pool), the
+-- head gradients reused verbatim (pool_relu_input_grad /
+-- cnn1_pool_head_input_grad), the segment-Lipschitz constants the
+-- kernel constants with a² ↦ 1, and one inexact SGD step on either
+-- conv bias provably decreases the loss by ≥ lr·‖∇L‖₂²/2
+-- (cnn_conv2_bias_sgd_descends / cnn_conv1_bias_sgd_descends). With
+-- these, EVERY parameter of the Chapter-4 CNN — both conv kernels,
+-- both conv biases, and the dense head — has a proven descent
+-- statement.
+#print axioms conv2d_bias_sub
+#print axioms conv2d_flat_bias_drift_total
+#print axioms conv2d_flat_bias_drift_sum
+#print axioms conv2d_bias_pdiv
+#print axioms cnnb2_pool_l1_drift
+#print axioms cnnb2_logit_drift
+#print axioms cnnb2_margin2_keeps_offkink
+#print axioms cnnb2_margin3_keeps_offkink
+#print axioms cnnb2_margin4_keeps_offkink
+#print axioms cnn_conv2_bias_loss_differentiableAt
+#print axioms cnn_conv2_bias_loss_gradAt
+#print axioms cnn_conv2_bias_loss_grad_lipschitz
+#print axioms cnn_conv2_bias_sgd_descends
+#print axioms cnnb1_z2_entry_drift
+#print axioms cnnb1_pool_l1_drift
+#print axioms cnnb1_logit_drift
+#print axioms cnnb1_margin1_keeps_offkink
+#print axioms cnnb1_margin2_keeps_offkink
+#print axioms cnnb1_margin3_keeps_offkink
+#print axioms cnnb1_margin4_keeps_offkink
+#print axioms cnn_conv1_bias_loss_differentiableAt
+#print axioms cnn_conv1_bias_loss_gradAt
+#print axioms cnn_conv1_bias_loss_grad_lipschitz
+#print axioms cnn_conv1_bias_sgd_descends

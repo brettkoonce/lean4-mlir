@@ -1,10 +1,13 @@
 # SGD descent through the CNN — remaining assembly
 
-Status (this commit): BOTH conv rungs are DONE — `cnn_conv2_sgd_descends`
-and `cnn_conv1_sgd_descends` (LeanMlir/Proofs/SgdDescentCnn.lean) prove
-one inexact SGD step on either conv kernel decreases the CE loss, under
-the four (resp. five) margins at the step radius. 3-axiom clean
-(tests/AuditAxioms.lean). Remaining: the biases.
+Status (this commit): COMPLETE. All four conv rungs are DONE —
+`cnn_conv2_sgd_descends`, `cnn_conv1_sgd_descends`,
+`cnn_conv2_bias_sgd_descends`, and `cnn_conv1_bias_sgd_descends`
+(LeanMlir/Proofs/SgdDescentCnn.lean) prove one inexact SGD step on
+either conv kernel OR either conv bias decreases the CE loss, under the
+four (resp. five) margins at the step radius. Together with the MLP
+rungs for the dense head, EVERY parameter of the Chapter-4 CNN has a
+proven descent statement. 3-axiom clean (tests/AuditAxioms.lean).
 
 ## What's done
 
@@ -89,12 +92,33 @@ A FUNCTION OF ITS INPUT — conv is linear there:
   with constant `2·nC·(4hw)²·(c·kH·kW)²·d₃²·d₄²·w₂²·w₃²·w₄²·w₅²·a²/(1−2δ̄₁)`,
   `δ̄₁ = w₅·d₄·w₄·d₃·w₃·(c·kH·kW)·w₂·(4hw)·a·D`; `cnn_conv1_sgd_descends`.
 
-## Remaining: biases
+## What's done, concluded: the bias rungs (NEW this commit)
 
-`conv_bias_total_loss_grad_fold` already exists (ConvLossFold.lean); the
-bias-map is affine with Jacobian a Kronecker indicator over the slab,
-drift `≤ ‖e‖₁` per entry (no `a` factor, no spatial multiplicity on the
-per-entry side). Same argument, strictly easier than the kernels.
+Exactly as predicted — same argument, strictly easier than the kernels:
+
+- **Bias primitives**: `conv2d_bias_sub` (the difference is EXACTLY
+  `e o` — conv is affine in the bias), `conv2d_flat_bias_drift_total`
+  (per-entry ≤ `‖e‖₁`, no `a`, no kernel mass),
+  `conv2d_flat_bias_drift_sum` (`ℓ1` ≤ `(h·w)·‖e‖₁` — one bias entry
+  feeds a whole channel), `conv2d_bias_pdiv` (the Kronecker channel
+  indicator `if co = o then 1 else 0`, extracted from the CERTIFIED
+  bias VJP `conv2d_bias_grad_has_vjp` by the same basisVec trick as
+  `conv2d_weight_pdiv`; point-free).
+- **conv2-bias rung** (`cnnb2_*`): the conv2-kernel chain verbatim with
+  the conv stage's `a·‖e‖₁` replaced by the bare `‖e‖₁`; margins at the
+  bare radius `D`; `pool_relu_input_grad` reused verbatim in
+  `cnn_conv2_bias_loss_gradAt` (the fold is
+  `conv_bias_total_loss_grad_fold`); Lipschitz constant = the kernel
+  constant with `a² ↦ 1`; `cnn_conv2_bias_sgd_descends` at
+  `D = lr·(‖∇f‖₁ + c·η)`. NO flatten/unflatten plumbing anywhere — the
+  bias IS a vector, so the descends proof is the kernel proof minus the
+  `Kernel4.unflatten_flatten` margin restatements.
+- **conv1-bias rung** (`cnnb1_*`): same one layer deeper;
+  `cnn1_pool_head_input_grad` reused verbatim; five margins at bias
+  radii (`D`, `(c·kH·kW)·w₂·D`, pool at the same, `w₃·…`, `w₄·…`);
+  constant `2·nC·(4hw)²·(c·kH·kW)²·d₃²·d₄²·w₂²·w₃²·w₄²·w₅²/(1−2δ̄₁ᵇ)`,
+  `δ̄₁ᵇ = w₅·d₄·w₄·d₃·w₃·(c·kH·kW)·w₂·(4hw)·D`;
+  `cnn_conv1_bias_sgd_descends`.
 
 ## Gotchas encountered (don't rediscover)
 
@@ -136,3 +160,12 @@ per-entry side). Same argument, strictly easier than the kernels.
 - The 12-deep conv1 forward needs THIRTEEN closing parens after `x₀`
   before `label` (count them programmatically; three separate sessions
   got it wrong by one).
+- Deriving the bias variants of the deep `(w₅ * (2·t·δ̄ / (1 − 2·δ̄)))`
+  motifs by hand-adjusting paren runs WILL re-associate the division one
+  level up (hM0's shape then mismatches hfinal's, surfacing as
+  application-type errors far from the typo). The safe recipe: generate
+  the bias text from the kernel text by BALANCED substring substitutions
+  only — `(a * D)` → `D`, ` * a ^ 2` → ``, `a * (lr * (` → `lr * ((`,
+  `(Kernel4.unflatten u') b₁` → `W₁ b'` — and machine-check the net
+  paren balance per block before building (a fourth session got it
+  wrong by one, in six places).
