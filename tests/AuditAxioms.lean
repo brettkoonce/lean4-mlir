@@ -45,6 +45,7 @@ import LeanMlir.Proofs.ViTDepthK
 import LeanMlir.Proofs.MobileNetV2FullPaper
 import LeanMlir.Proofs.ConvNeXtFullT
 import LeanMlir.Proofs.FloatBridge
+import LeanMlir.Proofs.SgdDescent
 
 open Proofs
 
@@ -943,3 +944,16 @@ open Proofs
 #print axioms FloatModel.softmaxF_close
 #print axioms FloatModel.softmax_ce_cot_close
 #print axioms FloatModel.mnist_cot_budget
+-- Inexact-gradient descent over ℝ (SgdDescent.lean): the keystone that
+-- turns the FloatBridge budgets into a TRAINING statement. descent_segment
+-- is the MVT-form descent lemma (segment-local differentiability +
+-- coordinatewise gradient drift ⇒ f(x+d) ≤ f(x) + ⟨d,∇f⟩ + C·D²);
+-- sgd_descent_inexact gives the explicit three-term bound (full descent −
+-- oracle tax − curvature tax) for x − lr·ĝ with ‖ĝ−∇f‖∞ ≤ η — the η the
+-- per-entry float budgets supply; sgd_descends: if each tax is ≤ a quarter
+-- of the descent, the inexact step decreases the loss by ≥ lr·‖∇f‖₂²/2.
+-- Discharging smoothness for the concrete nets is future work.
+#print axioms fderiv_apply_eq_sum_grad
+#print axioms descent_segment
+#print axioms sgd_descent_inexact
+#print axioms sgd_descends

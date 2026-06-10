@@ -153,7 +153,12 @@ lean_lib «Proofs» where
              -- ℝ→Float32 bridge, Tier 1: standard-model rounding (hypothesis-style,
              -- no axioms) + forward error bounds for the linear/MLP nets
              -- (dot/dense budgets, ReLU exact-in-float Lipschitz pass-through).
-             `LeanMlir.Proofs.FloatBridge]
+             `LeanMlir.Proofs.FloatBridge,
+             -- Inexact-gradient descent over ℝ (MVT form): an η-accurate gradient
+             -- oracle + segment smoothness ⇒ the SGD step still decreases the loss,
+             -- with an explicit decrease. The keystone the FloatBridge budgets
+             -- plug into ("close" ⇒ "still trains").
+             `LeanMlir.Proofs.SgdDescent]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
