@@ -895,3 +895,21 @@ open Proofs
 #print axioms FloatModel.denseErr_le_uniform
 #print axioms FloatModel.mlp_float_close_uniform
 #print axioms FloatModel.mnist_mlp_float_budget
+-- The gradient half, first rung: rounded backward ops (3-rounding param
+-- update fl(θ − fl(lr·fl(a·c))), exact-select ReLU mask) + the float-side
+-- kink condition — reluMask_close needs a QUANTITATIVE margin ez < |zᵢ|
+-- (forward rounding must not flip a ReLU), the float analogue of the
+-- suite's x k ≠ 0 hypotheses. cot_step_close reuses dense (b = 0) for the
+-- transposed matvec, so the whole backward chain rides the forward
+-- machinery. Capstones: the rounded W₂/b₂/W₁ SGD entries are within
+-- explicit sgdErr budgets of θ − lr·(aᵢ·cⱼ) — the emitWeightGrad/
+-- emitBiasGrad entries that mlp_render_{W2,W1,b2}_certified prove equal
+-- to the pdiv-Jacobian contractions. Output cotangent g̃ ≈ g is a
+-- hypothesis (softmax−onehot head awaits an exp accuracy axiom).
+#print axioms FloatModel.mul_close
+#print axioms FloatModel.sgd_step_close
+#print axioms FloatModel.reluMask_close
+#print axioms FloatModel.cot_step_close
+#print axioms FloatModel.mlp_w2_step_float_close
+#print axioms FloatModel.mlp_b2_step_float_close
+#print axioms FloatModel.mlp_w1_step_float_close

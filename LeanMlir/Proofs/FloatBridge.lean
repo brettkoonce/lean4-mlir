@@ -258,8 +258,8 @@ noncomputable def denseErr {m n : Nat} (W : Mat m n) (b : Vec n) (xa : Vec m)
     + (∑ i, |W i j|) * e
 
 /-- **Rounded dense layer forward error, with inherited input error.**
-    If `x̃` is within `e` of the real activation `xa` coordinatewise, then
-    `|M.dense W b x̃ j − dense W b xa j| ≤ denseErr W b xa e j`. -/
+    If `xt` is within `e` of the real activation `xa` coordinatewise, then
+    `|M.dense W b xt j − dense W b xa j| ≤ denseErr W b xa e j`. -/
 theorem dense_close {m n : Nat} (W : Mat m n) (b : Vec n) (xt xa : Vec m)
     (e : ℝ) (he : 0 ≤ e) (hx : ∀ i, |xt i - xa i| ≤ e) (j : Fin n) :
     |M.dense W b xt j - Proofs.dense W b xa j| ≤ M.denseErr W b xa e j := by
@@ -650,6 +650,335 @@ theorem mnist_mlp_float_budget (hMu : M.u ≤ u32)
       show layerAct 512 (1/32) 1 (51/2) = (409 : ℝ) by norm_num [layerAct]]
     at hmain
   exact hmain.trans hB₂
+
+-- ════════════════════════════════════════════════════════════════
+-- § Backward ops: rounded product, SGD update, ReLU mask
+-- ════════════════════════════════════════════════════════════════
+
+/-- Rounded subtraction: `fl(x − y)`. -/
+noncomputable def sub (x y : ℝ) : ℝ := M.rnd (x - y)
+
+/-- Budget of one rounded product of two inherited-error operands:
+    `|fl(xt·yt) − x·y|` with `|xt−x| ≤ ea`, `|yt−y| ≤ ec`, `|x| ≤ A`, `|y| ≤ C`. -/
+noncomputable def mulErr (u A C ea ec : ℝ) : ℝ :=
+  u * ((A + ea) * (C + ec)) + (A * ec + ea * C + ea * ec)
+
+/-- Budget of one rounded SGD update `fl(θ − fl(lr·gt))` against `θ − lr·g`,
+    with `|gt−g| ≤ eg`, `|g| ≤ G`. -/
+noncomputable def sgdErr (u lr Θ G eg : ℝ) : ℝ :=
+  u * (Θ + (1 + u) * (lr * (G + eg))) + (u * (lr * (G + eg)) + lr * eg)
+
+/-- **Rounded product with inherited operand errors.** -/
+theorem mul_close {xt x yt y ea ec A C : ℝ}
+    (hx : |xt - x| ≤ ea) (hy : |yt - y| ≤ ec)
+    (hA : |x| ≤ A) (hC : |y| ≤ C) :
+    |M.mul xt yt - x * y| ≤ mulErr M.u A C ea ec := by
+  have hu := M.u_nonneg
+  have hea0 : 0 ≤ ea := (abs_nonneg _).trans hx
+  have hec0 : 0 ≤ ec := (abs_nonneg _).trans hy
+  have hA0 : 0 ≤ A := (abs_nonneg _).trans hA
+  have hC0 : 0 ≤ C := (abs_nonneg _).trans hC
+  have hxt : |xt| ≤ A + ea := by
+    have h := abs_sub_le xt x 0
+    simp only [sub_zero] at h
+    linarith
+  have hyt : |yt| ≤ C + ec := by
+    have h := abs_sub_le yt y 0
+    simp only [sub_zero] at h
+    linarith
+  have hprod : |xt * yt - x * y| ≤ A * ec + ea * C + ea * ec := by
+    have h1 : xt * yt - x * y = xt * (yt - y) + y * (xt - x) := by ring
+    have h2 : |xt| * |yt - y| ≤ (A + ea) * ec :=
+      mul_le_mul hxt hy (abs_nonneg _) (by linarith)
+    have h3 : |y| * |xt - x| ≤ C * ea := mul_le_mul hC hx (abs_nonneg _) hC0
+    calc |xt * yt - x * y| = |xt * (yt - y) + y * (xt - x)| := by rw [h1]
+      _ ≤ |xt * (yt - y)| + |y * (xt - x)| := abs_add_le _ _
+      _ = |xt| * |yt - y| + |y| * |xt - x| := by rw [abs_mul, abs_mul]
+      _ ≤ A * ec + ea * C + ea * ec := by nlinarith
+  have habs : |xt * yt| ≤ (A + ea) * (C + ec) := by
+    rw [abs_mul]
+    exact mul_le_mul hxt hyt (abs_nonneg _) (by linarith)
+  have hrnd : |M.mul xt yt - xt * yt| ≤ M.u * |xt * yt| := M.err _
+  have htri : |M.mul xt yt - x * y| ≤
+      |M.mul xt yt - xt * yt| + |xt * yt - x * y| := abs_sub_le _ _ _
+  have h2 : M.u * |xt * yt| ≤ M.u * ((A + ea) * (C + ec)) :=
+    mul_le_mul_of_nonneg_left habs hu
+  show |M.mul xt yt - x * y| ≤
+    M.u * ((A + ea) * (C + ec)) + (A * ec + ea * C + ea * ec)
+  linarith
+
+/-- **Rounded SGD update**: `fl(θ − fl(lr·gt))` is within `sgdErr` of the
+    real step `θ − lr·g`. Two roundings plus the inherited gradient error. -/
+theorem sgd_step_close (θ : ℝ) {gt g lr G eg : ℝ}
+    (hg : |gt - g| ≤ eg) (hG : |g| ≤ G) (hlr : 0 ≤ lr) :
+    |M.sub θ (M.mul lr gt) - (θ - lr * g)| ≤ sgdErr M.u lr |θ| G eg := by
+  have hu := M.u_nonneg
+  have heg0 : 0 ≤ eg := (abs_nonneg _).trans hg
+  have hG0 : 0 ≤ G := (abs_nonneg _).trans hG
+  have hgt : |gt| ≤ G + eg := by
+    have h := abs_sub_le gt g 0
+    simp only [sub_zero] at h
+    linarith
+  have hlrg : |lr * gt| ≤ lr * (G + eg) := by
+    rw [abs_mul, abs_of_nonneg hlr]
+    exact mul_le_mul_of_nonneg_left hgt hlr
+  have hp1 : |M.mul lr gt - lr * gt| ≤ M.u * |lr * gt| := M.err _
+  have hp2 : |lr * gt - lr * g| ≤ lr * eg := by
+    rw [show lr * gt - lr * g = lr * (gt - g) from by ring, abs_mul,
+        abs_of_nonneg hlr]
+    exact mul_le_mul_of_nonneg_left hg hlr
+  have hmono := mul_le_mul_of_nonneg_left hlrg hu
+  have hpclose : |M.mul lr gt - lr * g| ≤ M.u * (lr * (G + eg)) + lr * eg := by
+    have htri := abs_sub_le (M.mul lr gt) (lr * gt) (lr * g)
+    linarith
+  have hpabs : |M.mul lr gt| ≤ (1 + M.u) * (lr * (G + eg)) := by
+    have htri : |M.mul lr gt| ≤ |M.mul lr gt - lr * gt| + |lr * gt| := by
+      have h := abs_sub_le (M.mul lr gt) (lr * gt) 0
+      simp only [sub_zero] at h
+      linarith
+    nlinarith
+  have hsub : |M.sub θ (M.mul lr gt) - (θ - M.mul lr gt)| ≤
+      M.u * |θ - M.mul lr gt| := M.err _
+  have hθp : |θ - M.mul lr gt| ≤ |θ| + (1 + M.u) * (lr * (G + eg)) := by
+    have h := abs_sub_le θ 0 (M.mul lr gt)
+    simp only [sub_zero, zero_sub, abs_neg] at h
+    linarith
+  have h3 : |(θ - M.mul lr gt) - (θ - lr * g)| = |M.mul lr gt - lr * g| := by
+    rw [show (θ - M.mul lr gt) - (θ - lr * g) = -(M.mul lr gt - lr * g) from
+        by ring, abs_neg]
+  have htri2 : |M.sub θ (M.mul lr gt) - (θ - lr * g)| ≤
+      |M.sub θ (M.mul lr gt) - (θ - M.mul lr gt)| +
+        |(θ - M.mul lr gt) - (θ - lr * g)| := abs_sub_le _ _ _
+  have h4 := mul_le_mul_of_nonneg_left hθp hu
+  show |M.sub θ (M.mul lr gt) - (θ - lr * g)| ≤
+    M.u * (|θ| + (1 + M.u) * (lr * (G + eg)))
+      + (M.u * (lr * (G + eg)) + lr * eg)
+  linarith [htri2, hsub, h3, hpclose, h4]
+
+/-- ReLU backward mask — `if z > 0 then v else 0`. Compare + select: exact
+    in floating point, so the float chain applies it bare (the rendered
+    trainer's relu-back compare reads the rendered pre-activation, exactly
+    the `zt` here). -/
+noncomputable def reluMask {n : ℕ} (z v : Vec n) : Vec n :=
+  fun i => if z i > 0 then v i else 0
+
+theorem reluMask_abs_le {n : ℕ} (z v : Vec n) (i : Fin n) :
+    |reluMask z v i| ≤ |v i| := by
+  simp only [reluMask]
+  by_cases h : z i > 0
+  · simp [h]
+  · simp [h]
+
+/-- **The float-side kink condition.** If the pre-activation error `ez`
+    cannot flip any sign — `ez < |zᵢ|`, a *quantitative margin*, the float
+    analogue of the suite's `x k ≠ 0` off-the-kink hypotheses — then the
+    float and real masks agree and the mask is 1-Lipschitz in the value. -/
+theorem reluMask_close {n : ℕ} {zt z vt v : Vec n} {ez ev : ℝ}
+    (hz : ∀ i, |zt i - z i| ≤ ez) (hm : ∀ i, ez < |z i|)
+    (hv : ∀ i, |vt i - v i| ≤ ev) (hev : 0 ≤ ev) (i : Fin n) :
+    |reluMask zt vt i - reluMask z v i| ≤ ev := by
+  have hzi := abs_le.mp (hz i)
+  have hmi := hm i
+  simp only [reluMask]
+  rcases lt_trichotomy (z i) 0 with hneg | hzero | hpos
+  · have h1 : ¬ z i > 0 := by linarith
+    have h2 : ¬ zt i > 0 := by
+      rw [not_lt]
+      rw [abs_of_neg hneg] at hmi
+      linarith [hzi.2]
+    rw [if_neg h1, if_neg h2]
+    simpa using hev
+  · exfalso
+    rw [hzero] at hmi
+    simp only [abs_zero] at hmi
+    linarith [(abs_nonneg (zt i - z i)).trans (hz i)]
+  · have h2 : zt i > 0 := by
+      rw [abs_of_pos hpos] at hmi
+      linarith [hzi.1]
+    rw [if_pos hpos, if_pos h2]
+    exact hv i
+
+/-- **Cotangent through one layer** — `mask(z, Wᵀ·c)`, float vs real. The
+    transposed matvec is `dense` with zero bias, so the dot machinery is
+    reused wholesale; under the quantitative margin the mask passes the
+    `layerBudget` through unchanged. -/
+theorem cot_step_close {m n : ℕ} (W : Mat m n) (zt z : Vec m) (ct c : Vec n)
+    {w C ec ez : ℝ} (hw : 0 ≤ w) (hC0 : 0 ≤ C) (hec : 0 ≤ ec)
+    (hW : ∀ i j, |W i j| ≤ w) (hC : ∀ j, |c j| ≤ C)
+    (hc : ∀ j, |ct j - c j| ≤ ec)
+    (hz : ∀ i, |zt i - z i| ≤ ez) (hm : ∀ i, ez < |z i|) (i : Fin m) :
+    |reluMask zt (M.dense (fun j i' => W i' j) (fun _ => 0) ct) i -
+      reluMask z (Proofs.dense (fun j i' => W i' j) (fun _ => 0) c) i| ≤
+      layerBudget M.u n w 0 C ec := by
+  have hpre : ∀ i', |M.dense (fun j i' => W i' j) (fun _ => 0) ct i' -
+      Proofs.dense (fun j i' => W i' j) (fun _ => 0) c i'| ≤
+      layerBudget M.u n w 0 C ec := fun i' =>
+    (M.dense_close _ _ ct c ec hec hc i').trans
+      (M.denseErr_le_uniform hw hec (fun j i'' => hW i'' j)
+        (fun _ => by simp) hC i')
+  exact reluMask_close hz hm hpre
+    (layerBudget_nonneg M.u_nonneg hw le_rfl hC0 hec) i
+
+-- ════════════════════════════════════════════════════════════════
+-- § Train-step capstones: rounded SGD entries vs the certified step
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Rounded output-layer weight update (W₂).** The float update
+    `fl(W₂ᵢⱼ − fl(lr·fl(ã₂ᵢ·gtⱼ)))` — outer-product gradient from the *stored
+    float forward activation*, as the rendered trainer computes it — is
+    within an explicit budget of the real step `W₂ᵢⱼ − lr·(a₂ᵢ·gⱼ)`. The real
+    target is `Mat.outer a₂ g i j = emitWeightGrad`'s entry, the quantity
+    `mlp_render_W2_certified` proves equal to the pdiv-Jacobian contraction —
+    so this chains the float step to the certified gradient. Takes the output
+    cotangent `gt ≈ g` as a hypothesis (the softmax−onehot head needs an `exp`
+    accuracy axiom — future rung). -/
+theorem mlp_w2_step_float_close {d₀ d₁ d₂ d₃ : Nat}
+    {W₀ : Mat d₀ d₁} {b₀ : Vec d₁} {W₁ : Mat d₁ d₂} {b₁ : Vec d₂}
+    (W₂ : Mat d₂ d₃) {x : Vec d₀} {gt g : Vec d₃} {lr : ℝ}
+    {w₀ β₀ w₁ β₁ a G eg : ℝ}
+    (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁)
+    (ha : 0 ≤ a) (hlr : 0 ≤ lr)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hx : ∀ i, |x i| ≤ a)
+    (hG : ∀ j, |g j| ≤ G) (hg : ∀ j, |gt j - g j| ≤ eg)
+    (i : Fin d₂) (j : Fin d₃) :
+    |M.sub (W₂ i j) (M.mul lr (M.mul
+        (relu d₂ (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))) i) (gt j))) -
+      (W₂ i j - lr * (relu d₂ (Proofs.dense W₁ b₁
+        (relu d₁ (Proofs.dense W₀ b₀ x))) i * g j))| ≤
+    sgdErr M.u lr |W₂ i j|
+      (layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) * G)
+      (mulErr M.u (layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)) G
+        (layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+          (layerBudget M.u d₀ w₀ β₀ a 0)) eg) := by
+  have hA₁0 : 0 ≤ layerAct d₀ w₀ β₀ a := layerAct_nonneg hw₀ hβ₀ ha
+  have hA₂0 : 0 ≤ layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) :=
+    layerAct_nonneg hw₁ hβ₁ hA₁0
+  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
+  -- float forward chain: ã₂ within E₁ of a₂
+  have l0 : ∀ j', |M.dense W₀ b₀ x j' - Proofs.dense W₀ b₀ x j'| ≤
+      layerBudget M.u d₀ w₀ β₀ a 0 := fun j' =>
+    (M.dense_close_fresh W₀ b₀ x j').trans
+      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j')
+  have r0 : ∀ j', |relu d₁ (M.dense W₀ b₀ x) j' -
+      relu d₁ (Proofs.dense W₀ b₀ x) j'| ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    fun j' => relu_close _ _ _ l0 j'
+  have ha₁ : ∀ i', |relu d₁ (Proofs.dense W₀ b₀ x) i'| ≤
+      layerAct d₀ w₀ β₀ a :=
+    fun i' => (relu_abs_le _ i').trans (dense_abs_le ha hW₀ hb₀ hx i')
+  have l1 : ∀ j', |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j' -
+      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j'| ≤
+      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) := fun j' =>
+    (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j').trans
+      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j')
+  have r1 : ∀ j', |relu d₂ (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))) j' -
+      relu d₂ (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))) j'| ≤
+      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) :=
+    fun j' => relu_close _ _ _ l1 j'
+  have ha₂ : |relu d₂ (Proofs.dense W₁ b₁
+      (relu d₁ (Proofs.dense W₀ b₀ x))) i| ≤
+      layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) :=
+    (relu_abs_le _ i).trans (dense_abs_le hA₁0 hW₁ hb₁ ha₁ i)
+  have hmul := M.mul_close (r1 i) (hg j) ha₂ (hG j)
+  have hac : |relu d₂ (Proofs.dense W₁ b₁
+      (relu d₁ (Proofs.dense W₀ b₀ x))) i * g j| ≤
+      layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) * G := by
+    rw [abs_mul]
+    exact mul_le_mul ha₂ (hG j) (abs_nonneg _) hA₂0
+  exact M.sgd_step_close (W₂ i j) hmul hac hlr
+
+/-- **Rounded output-layer bias update (b₂)** — the bias gradient *is* the
+    cotangent (`emitBiasGrad`), so this is `sgd_step_close` directly. -/
+theorem mlp_b2_step_float_close {d₃ : Nat} (b₂ : Vec d₃) {gt g : Vec d₃}
+    {lr G eg : ℝ} (hlr : 0 ≤ lr)
+    (hG : ∀ j, |g j| ≤ G) (hg : ∀ j, |gt j - g j| ≤ eg) (j : Fin d₃) :
+    |M.sub (b₂ j) (M.mul lr (gt j)) - (b₂ j - lr * g j)| ≤
+      sgdErr M.u lr |b₂ j| G eg :=
+  M.sgd_step_close (b₂ j) (hg j) (hG j) hlr
+
+/-- **Rounded hidden-layer weight update (W₁), through the backward chain.**
+    The float cotangent `ct₁ = mask(pt₁, W₂ᵀ·gt)` — computed from the rendered
+    pre-activation and the rounded transposed matvec, exactly the structure
+    of the rendered backward — is within `layerBudget` of the real
+    `c₁ = mask(p₁, W₂ᵀ·g)` (the `mlpCotOut1` closed form), **given the
+    quantitative margin** `E₁ < |p₁ᵢ|` at every layer-1 pre-activation: the
+    forward rounding error must not flip a ReLU. Then the update is within
+    `sgdErr` of the real `W₁ᵢⱼ − lr·(a₁ᵢ·c₁ⱼ)`, the quantity
+    `mlp_render_W1_certified` certifies. `W₀`/`b₁`/`b₀` are the same
+    instantiation one mask deeper. -/
+theorem mlp_w1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
+    {W₀ : Mat d₀ d₁} {b₀ : Vec d₁} (W₁ : Mat d₁ d₂) {b₁ : Vec d₂}
+    {W₂ : Mat d₂ d₃} {x : Vec d₀} {gt g : Vec d₃} {lr : ℝ}
+    {w₀ β₀ w₁ β₁ w₂ a G eg : ℝ}
+    (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁)
+    (hw₂ : 0 ≤ w₂) (ha : 0 ≤ a) (hlr : 0 ≤ lr) (hG0 : 0 ≤ G) (heg : 0 ≤ eg)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w₂)
+    (hx : ∀ i, |x i| ≤ a)
+    (hG : ∀ j, |g j| ≤ G) (hg : ∀ j, |gt j - g j| ≤ eg)
+    (hmargin : ∀ i', layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) <
+      |Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) i'|)
+    (i : Fin d₁) (j : Fin d₂) :
+    |M.sub (W₁ i j) (M.mul lr (M.mul
+        (relu d₁ (M.dense W₀ b₀ x) i)
+        (reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+          (M.dense (fun j' i' => W₂ i' j') (fun _ => 0) gt) j))) -
+      (W₁ i j - lr * (relu d₁ (Proofs.dense W₀ b₀ x) i *
+        reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+          (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g) j))| ≤
+    sgdErr M.u lr |W₁ i j|
+      (layerAct d₀ w₀ β₀ a * layerAct d₃ w₂ 0 G)
+      (mulErr M.u (layerAct d₀ w₀ β₀ a) (layerAct d₃ w₂ 0 G)
+        (layerBudget M.u d₀ w₀ β₀ a 0)
+        (layerBudget M.u d₃ w₂ 0 G eg)) := by
+  have hA₁0 : 0 ≤ layerAct d₀ w₀ β₀ a := layerAct_nonneg hw₀ hβ₀ ha
+  have hC₁0 : 0 ≤ layerAct d₃ w₂ 0 G := layerAct_nonneg hw₂ le_rfl hG0
+  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
+  -- float forward chain to the layer-1 pre-activation
+  have l0 : ∀ j', |M.dense W₀ b₀ x j' - Proofs.dense W₀ b₀ x j'| ≤
+      layerBudget M.u d₀ w₀ β₀ a 0 := fun j' =>
+    (M.dense_close_fresh W₀ b₀ x j').trans
+      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j')
+  have r0 : ∀ j', |relu d₁ (M.dense W₀ b₀ x) j' -
+      relu d₁ (Proofs.dense W₀ b₀ x) j'| ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
+    fun j' => relu_close _ _ _ l0 j'
+  have ha₁ : ∀ i', |relu d₁ (Proofs.dense W₀ b₀ x) i'| ≤
+      layerAct d₀ w₀ β₀ a :=
+    fun i' => (relu_abs_le _ i').trans (dense_abs_le ha hW₀ hb₀ hx i')
+  have l1 : ∀ j', |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) j' -
+      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) j'| ≤
+      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) := fun j' =>
+    (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 j').trans
+      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j')
+  -- the backward cotangent through the mask, under the margin
+  have hcot : ∀ j', |reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+      (M.dense (fun j'' i' => W₂ i' j'') (fun _ => 0) gt) j' -
+      reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+        (Proofs.dense (fun j'' i' => W₂ i' j'') (fun _ => 0) g) j'| ≤
+      layerBudget M.u d₃ w₂ 0 G eg := fun j' =>
+    M.cot_step_close W₂ _ _ gt g hw₂ hG0 heg hW₂ hG hg l1 hmargin j'
+  -- the real cotangent magnitude
+  have hc₁ : |reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+      (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g) j| ≤
+      layerAct d₃ w₂ 0 G :=
+    (reluMask_abs_le _ _ j).trans
+      (dense_abs_le hG0 (fun j' i' => hW₂ i' j') (fun _ => by simp) hG j)
+  have hmul := M.mul_close (r0 i) (hcot j) (ha₁ i) hc₁
+  have hac : |relu d₁ (Proofs.dense W₀ b₀ x) i *
+      reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+        (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g) j| ≤
+      layerAct d₀ w₀ β₀ a * layerAct d₃ w₂ 0 G := by
+    rw [abs_mul]
+    exact mul_le_mul (ha₁ i) hc₁ (abs_nonneg _) hA₁0
+  exact M.sgd_step_close (W₁ i j) hmul hac hlr
 
 -- ════════════════════════════════════════════════════════════════
 -- § Sanity: the exact model inhabits the interface, budgets collapse
