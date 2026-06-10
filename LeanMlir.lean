@@ -48,6 +48,7 @@ import LeanMlir.Proofs.FloatBridge
 -- Inexact-gradient descent over ℝ: the keystone the float budgets plug into.
 import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
+import LeanMlir.Proofs.SgdDescentMlp
 -- Verified-codegen bridges (denoted IR + per-op bridge theorems) so doc-gen4
 -- documents them. IRPrint.lean is deliberately left out: its file-writing
 -- #evals run at elaboration time (use `lake env lean …/IRPrint.lean`).

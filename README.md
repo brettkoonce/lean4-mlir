@@ -207,7 +207,8 @@ ImageNet scale is open.
 ### The ℝ→Float32 bridge (Tier 1)
 
 All tier proofs are over exact reals; `LeanMlir/Proofs/FloatBridge.lean` +
-`SgdDescent.lean`/`SgdDescentLinear.lean` close the rounding gap for the
+`SgdDescent.lean`/`SgdDescentLinear.lean`/`SgdDescentMlp.lean` close the
+rounding gap for the
 Tier-1 nets, hypothesis-style (zero project axioms — a `FloatModel` is any
 rounding operator with relative error `u`; binary32 instantiates it with
 `u = 2⁻²⁴` on the normal range, subnormals open). The chain, every link in
@@ -226,11 +227,16 @@ the 3-axiom audit:
   cotangent vs the certified gradient, given an `exp` accuracy hypothesis
   (`|fexp t − exp t| ≤ eexp·exp t` — GPU `exp` has no IEEE spec; `eexp` is
   the constant `tests/vjp_oracle/` validates at 1–2 ULP).
-- **Descent** (`sgd_descends`, `linear_sgd_descends`): an η-accurate
-  gradient step still *decreases the loss* — and for the linear net the
-  smoothness hypothesis is proven with the explicit constant
-  `2a²/(1−2aD)`, no Hessian (the same softmax ratio sandwich as the float
-  budgets).
+- **Descent** (`sgd_descends`, `linear_sgd_descends`,
+  `mlp_{output,hidden,input}_sgd_descends`): an η-accurate gradient step
+  still *decreases the loss* — with the smoothness hypothesis proven, not
+  assumed: explicit constant `2a²/(1−2aD)` for the linear net, and through
+  the MLP's ReLU kinks per weight layer under quantitative **margins** (the
+  step's `ℓ1` radius cannot flip a mask sign, so the sign pattern freezes
+  along the segment): `2d₃w₂²a²/(1−2w₂aD)` for the hidden layer,
+  `2d₃d₂²w₁²w₂²a²/(1−2w₂d₂w₁aD)` for the input layer; the output layer is
+  the linear theorem at the hidden activation, margin-free. No Hessian
+  anywhere (the same softmax ratio sandwich as the float budgets).
 
 **Measured vs proven** (`scripts/margin_probe.py`, an f32/f64 twin of the
 97.8% GPU run; numeric capstones instantiated at the *trained* magnitudes
@@ -250,8 +256,10 @@ margin hypotheses describe real training, not a technicality.
 **Not yet verified anywhere:** the ~7500-line `MlirCodegen.lean` (zero
 theorems); outside Tier 1, the train-step text that `iree-compile` actually
 consumes; and, within the float bridge, subnormals (the model is
-relative-error-only), the MLP/CNN descent Lipschitz constants (linear only;
-ReLU makes the deep losses piecewise-smooth), and any link from the
+relative-error-only), the joint all-layers descent step and bias columns
+(the per-weight-layer constants are proven for linear + MLP; the CNN's are
+open, and so is every-parameter-at-once, where the logits are no longer
+affine in the moving parameters), and any link from the
 Lean-side `FloatModel` to IREE's actual kernels beyond the empirical probe.
 
 **Concrete-instance honesty.** The conditional capstones (MLP, MNIST-CNN, CIFAR,
@@ -495,7 +503,8 @@ lean4-mlir/
 │       ├── Attention.lean
 │       ├── FloatBridge.lean      -- ℝ→Float32: rounding budgets (Tier 1)
 │       ├── SgdDescent.lean       -- inexact-gradient descent over ℝ
-│       └── SgdDescentLinear.lean -- Lipschitz constants, linear loss
+│       ├── SgdDescentLinear.lean -- Lipschitz constants, linear loss
+│       └── SgdDescentMlp.lean    -- ...through the MLP's ReLU kinks (margins)
 │
 ├── Main*Train.lean         -- phase 3 trainers (one per architecture)
 │   ├── MainResnetTrain.lean

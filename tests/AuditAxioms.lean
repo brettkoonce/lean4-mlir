@@ -47,6 +47,7 @@ import LeanMlir.Proofs.ConvNeXtFullT
 import LeanMlir.Proofs.FloatBridge
 import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
+import LeanMlir.Proofs.SgdDescentMlp
 
 open Proofs
 
@@ -976,3 +977,39 @@ open Proofs
 #print axioms dense_unflatten_drift
 #print axioms linear_loss_grad_lipschitz
 #print axioms linear_sgd_descends
+-- The smoothness hypothesis discharged through the Chapter-3 MLP
+-- (SgdDescentMlp.lean), layer by layer. The key is the MARGIN hypothesis
+-- (the step's ℓ1 radius keeps every ReLU pre-activation away from its
+-- kink): the masks then FREEZE along the whole segment
+-- (sign_stable_of_close / margin_keeps_offkink), and the frozen-mask loss
+-- gets the same elementary treatment as the linear net — logit drift
+-- (1-Lipschitz ReLU, column-tiled ℓ1 mass), softmax ratio sandwich, γ-form.
+-- Closed-form gradients (mlp_hidden/input_loss_gradAt) collapse the
+-- conditional folds to the explicit relu'⊙Wᵀ backprop forms; the explicit
+-- segment-Lipschitz constants are 2·d₃·w₂²·a²/(1−2w₂aD) for the hidden
+-- layer and 2·d₃·d₂²·w₁²·w₂²·a²/(1−2w₂d₂w₁aD) for the input layer; the
+-- capstones mlp_{output,hidden,input}_sgd_descends prove one inexact SGD
+-- step on EACH weight layer decreases the loss by ≥ lr·‖∇L‖₂²/2 (output
+-- layer = the linear theorem at the hidden activation, margin-free).
+#print axioms relu_entry_lipschitz
+#print axioms sign_stable_of_close
+#print axioms sum_abs_flatten_cols
+#print axioms dense_unflatten_diff
+#print axioms dense_unflatten_col_drift
+#print axioms dense_unflatten_drift_sum
+#print axioms margin_keeps_offkink
+#print axioms margin_keeps_offkink_mid
+#print axioms ce_dense_input_grad
+#print axioms ce_head_relu_input_grad
+#print axioms ce_head2_input_grad
+#print axioms mlp_hidden_loss_differentiableAt
+#print axioms mlp_hidden_loss_gradAt
+#print axioms mlp_hidden_logit_drift
+#print axioms mlp_hidden_loss_grad_lipschitz
+#print axioms mlp_hidden_sgd_descends
+#print axioms mlp_output_sgd_descends
+#print axioms mlp_input_loss_differentiableAt
+#print axioms mlp_input_loss_gradAt
+#print axioms mlp_input_logit_drift
+#print axioms mlp_input_loss_grad_lipschitz
+#print axioms mlp_input_sgd_descends

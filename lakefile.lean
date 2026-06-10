@@ -163,7 +163,13 @@ lean_lib «Proofs» where
              -- softmax-CE loss: explicit segment-Lipschitz constant 2a²/(1−2aD)
              -- via the softmax ratio sandwich (no Hessian), and the capstone —
              -- one inexact SGD step provably decreases the cross-entropy loss.
-             `LeanMlir.Proofs.SgdDescentLinear]
+             `LeanMlir.Proofs.SgdDescentLinear,
+             -- The smoothness hypothesis discharged through the Chapter-3
+             -- MLP: under quantitative ReLU margins (the step cannot flip a
+             -- mask sign) the loss-of-one-layer maps get explicit
+             -- segment-Lipschitz constants, and one inexact SGD step on each
+             -- weight layer provably decreases the cross-entropy loss.
+             `LeanMlir.Proofs.SgdDescentMlp]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
