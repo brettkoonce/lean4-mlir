@@ -1,10 +1,10 @@
 # SGD descent through the CNN — remaining assembly
 
-Status (this commit): the conv2-layer rung is DONE — `cnn_conv2_sgd_descends`
-(LeanMlir/Proofs/SgdDescentCnn.lean) proves one inexact SGD step on the
-second conv kernel decreases the CE loss, under the four margins at the
-step radius. 3-axiom clean (tests/AuditAxioms.lean). Remaining: conv1 and
-the biases.
+Status (this commit): BOTH conv rungs are DONE — `cnn_conv2_sgd_descends`
+and `cnn_conv1_sgd_descends` (LeanMlir/Proofs/SgdDescentCnn.lean) prove
+one inexact SGD step on either conv kernel decreases the CE loss, under
+the four (resp. five) margins at the step radius. 3-axiom clean
+(tests/AuditAxioms.lean). Remaining: the biases.
 
 ## What's done
 
@@ -61,20 +61,40 @@ the biases.
      `mlp_input_sgd_descends` (margins at the step radius
      `D = lr·(‖∇f₂‖₁ + |kernel|·η)`).
 
-## Remaining: conv1, biases
+## What's done, continued: the conv1 rung (NEW this commit)
 
-1. **conv1** — one more conv+relu crossing; the input-side conv drift
-   needs the conv-as-function-of-INPUT `ℓ1→ℓ1` bound (factor
-   `ic·kH·kW·w₂ᶜ`-shaped, entrywise kernel bound `w₂ᶜ`) — a sibling of
-   `conv2d_kernel_drift` with the roles of kernel and input swapped.
-   Margins: relu₁ + everything in the conv2 list. The gradAt closed form
-   needs the conv2-as-INPUT `pdiv` (certified `conv2d_has_vjp3` /
-   `conv2d_input_grad_formula`) in place of the frozen-activation step.
-2. **Biases** — `conv_bias_total_loss_grad_fold` already exists
-   (ConvLossFold.lean); the bias-map is affine with Jacobian a Kronecker
-   indicator over the slab, drift `≤ ‖e‖₁` per entry (no `a` factor,
-   no spatial multiplicity on the per-entry side). Same argument,
-   strictly easier than the kernel.
+The deepest descent statement. The genuinely new mathematics is conv AS
+A FUNCTION OF ITS INPUT — conv is linear there:
+
+- `convTap` — the input-side Jacobian entry (single kernel tap), the
+  peer of `convPad`; extracted POINT-FREE from the certified input-VJP
+  by contracting `conv2d_has_vjp3.correct` against a basis cotangent
+  (`conv2d_input_pdiv3` / `conv2d_flat_input_pdiv`) — same basisVec
+  trick as `conv2d_weight_pdiv`, no re-derivation.
+- **Locality, not spatial count**: each input entry feeds ≤ `oc·kH·kW`
+  outputs, each output reads ≤ `ic·kH·kW` inputs (`convTap_out_l1` /
+  `convTap_in_l1`). Proof device: expand `|convTap|` as a kernel-offset
+  indicator sum (`abs_convTap_expand`) and collapse pinned sums
+  (`sum_pinned_le`); same device gives the input-drift bounds
+  (`conv2d_input_entry_drift`, `conv2d_input_l1_drift` via
+  `abs_convPad_sub_expand`).
+- Drift chain `cnn1_*`: conv1 (`ℓ1`, spatial multiplicity `4hw`) → relu
+  → conv2-as-input (`ℓ1`, locality `c·kH·kW·w₂`) → relu → pool → head;
+  FIVE margins freeze everything (`cnn1_margin{1,2,3,4}_keeps_offkink`,
+  `cnn1_postrelu2_close_seg`).
+- `cnn1_pool_head_input_grad`: peel relu₁ (mask), contract the
+  point-free taps with the EXISTING pool-collapsed conv2-rung gradient
+  (`pool_relu_input_grad` reused verbatim at z₂).
+- `cnn_conv1_loss_gradAt` via the same fold; `cnn_conv1_loss_grad_lipschitz`
+  with constant `2·nC·(4hw)²·(c·kH·kW)²·d₃²·d₄²·w₂²·w₃²·w₄²·w₅²·a²/(1−2δ̄₁)`,
+  `δ̄₁ = w₅·d₄·w₄·d₃·w₃·(c·kH·kW)·w₂·(4hw)·a·D`; `cnn_conv1_sgd_descends`.
+
+## Remaining: biases
+
+`conv_bias_total_loss_grad_fold` already exists (ConvLossFold.lean); the
+bias-map is affine with Jacobian a Kronecker indicator over the slab,
+drift `≤ ‖e‖₁` per entry (no `a` factor, no spatial multiplicity on the
+per-entry side). Same argument, strictly easier than the kernels.
 
 ## Gotchas encountered (don't rediscover)
 
@@ -100,3 +120,19 @@ the biases.
   before `split_ifs`.
 - `open Classical` at file level (CNN.lean convention) for `if`s over
   `MaxPool2IsArgmax`-style Props.
+- `congrArg abs (by rw [...])` with the equation's RHS a METAVAR: the
+  first `rw`'s closing `rfl` unifies the metavar with the half-rewritten
+  form and silently closes the goal. Pin the type first (helper lemma
+  `abs_triple_sum_sub_le`, or a `have` with the statement spelled).
+- `refine le_trans (Finset.sum_le_sum fun i _ => ?_) ?_` can't
+  synthesize the middle sum — prepare the tail bound as a `have hlast`
+  FIRST and pass it as the second argument to pin `g`.
+- Term-level `calc` whose first expression starts mid-line: a trailing
+  `:= by` on the FIRST step needs its tactics indented past the calc
+  EXPRESSION's start column, not the step's.
+- `DifferentiableAt.comp _ hg hf` with `_` for the point can misresolve
+  `f`/`x` — pass the point explicitly when `hg`'s point is an applied
+  composite.
+- The 12-deep conv1 forward needs THIRTEEN closing parens after `x₀`
+  before `label` (count them programmatically; three separate sessions
+  got it wrong by one).

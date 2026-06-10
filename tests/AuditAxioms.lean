@@ -1071,7 +1071,7 @@ open Proofs
 -- weight-sharing multiplicity ((2h)·(2w))² — vs the MLP's width
 -- factors), and one inexact SGD step on the second conv kernel provably
 -- decreases the cross-entropy loss by ≥ lr·‖∇L‖₂²/2
--- (cnn_conv2_sgd_descends). conv1 and the biases remain
+-- (cnn_conv2_sgd_descends). The biases remain
 -- (planning/sgd_descent_cnn.md).
 #print axioms ce_head3_input_grad
 #print axioms pool_relu_input_grad
@@ -1087,3 +1087,48 @@ open Proofs
 #print axioms head3_sum_drift
 #print axioms cnn_conv2_loss_grad_lipschitz
 #print axioms cnn_conv2_sgd_descends
+-- The conv1 rung (SgdDescentCnn.lean): the deepest descent statement.
+-- The new mathematics is conv AS A FUNCTION OF ITS INPUT: conv is
+-- linear there, and its Jacobian entry is a single kernel tap
+-- (convTap, the input-side peer of convPad), extracted point-free from
+-- the certified input-VJP (conv2d_has_vjp3) by contracting .correct
+-- against a basis cotangent (conv2d_input_pdiv3 /
+-- conv2d_flat_input_pdiv). The ℓ1 operator factor of a conv crossing
+-- is LOCALITY, not a spatial count: each input entry feeds at most
+-- oc·kH·kW outputs and each output reads at most ic·kH·kW inputs
+-- (convTap_out_l1 / convTap_in_l1, via the kernel-offset indicator
+-- expansion abs_convTap_expand and the pinned-sum bound sum_pinned_le);
+-- the same locality bounds the drift (conv2d_input_entry_drift,
+-- conv2d_input_l1_drift via abs_convPad_sub_expand). The conv1 chain
+-- crosses relu₁, conv2-as-input, relu₂, the pool, and the 3-dense head:
+-- FIVE margins at the step radius freeze every mask and the pool
+-- routing (cnn1_margin{1,2,3,4}_keeps_offkink,
+-- cnn1_postrelu2_close_seg), the head gradient collapses through the
+-- point-free taps (cnn1_pool_head_input_grad, cnn_conv1_loss_gradAt),
+-- the segment-Lipschitz constant is explicit with BOTH multiplicities
+-- — conv1 weight sharing ((2h)·(2w))² and conv2 locality (c·kH·kW)²·w₂²
+-- (cnn_conv1_loss_grad_lipschitz) — and one inexact SGD step on the
+-- first conv kernel provably decreases the loss by ≥ lr·‖∇L‖₂²/2
+-- (cnn_conv1_sgd_descends). Every conv kernel of the Chapter-4 CNN now
+-- has a proven descent statement; the biases remain
+-- (planning/sgd_descent_cnn.md).
+#print axioms sum_pinned_le
+#print axioms abs_convTap_expand
+#print axioms convTap_out_l1
+#print axioms convTap_in_l1
+#print axioms conv2d_input_pdiv3
+#print axioms conv2d_flat_input_pdiv
+#print axioms conv2d_input_entry_drift
+#print axioms conv2d_input_l1_drift
+#print axioms cnn1_z2_entry_drift
+#print axioms cnn1_pool_l1_drift
+#print axioms cnn1_logit_drift
+#print axioms cnn1_margin1_keeps_offkink
+#print axioms cnn1_margin2_keeps_offkink
+#print axioms cnn1_margin3_keeps_offkink
+#print axioms cnn1_margin4_keeps_offkink
+#print axioms cnn1_pool_head_input_grad
+#print axioms cnn_conv1_loss_differentiableAt
+#print axioms cnn_conv1_loss_gradAt
+#print axioms cnn_conv1_loss_grad_lipschitz
+#print axioms cnn_conv1_sgd_descends
