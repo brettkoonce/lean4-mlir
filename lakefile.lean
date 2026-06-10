@@ -135,7 +135,21 @@ lean_lib «Proofs» where
              -- ViT scaling pass (vector-[D] LN): layerNormVec block + vitForward2V
              -- whole-net VJP + the rowScaleF/rowBiasF token graph + faithfulness +
              -- the per-channel gamma/beta param bridges.
-             `LeanMlir.Proofs.ViTVecLN]
+             `LeanMlir.Proofs.ViTVecLN,
+             -- ViT scaling pass (multi-head + depth-k): headSliceF/headPadF tokens,
+             -- mhsa at general heads, then the distinct-param depth-k tower
+             -- (vitForwardKV). ViTDepthK imports ViTMultiHead, covering both.
+             `LeanMlir.Proofs.ViTDepthK,
+             -- EfficientNet-B0 at full depth (16 distinct MBConv blocks, true BN+SE):
+             -- batched forward graph + whole-net VJP. Imports the EfficientNet
+             -- RenderPC + ChainClose modules, covering all three.
+             `LeanMlir.Proofs.EfficientNetFullB0,
+             -- Full ConvNeXt-T [3,3,9,3]: forward graph + faithfulness + whole-net
+             -- VJP. Imports ConvNeXtChainClose, covering both.
+             `LeanMlir.Proofs.ConvNeXtFullT,
+             -- Paper-spec full MobileNetV2 (all 17 [t,c,n,s] bottlenecks): forward
+             -- graph + faithfulness.
+             `LeanMlir.Proofs.MobileNetV2FullPaper]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
