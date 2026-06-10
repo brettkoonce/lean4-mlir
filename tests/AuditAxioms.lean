@@ -925,3 +925,21 @@ open Proofs
 #print axioms FloatModel.mlp_w0_step_float_close
 #print axioms FloatModel.mlp_b0_step_float_close
 #print axioms FloatModel.mnist_w2_step_float_budget
+-- The loss head — the LAST Tier-1 float hypothesis discharged. fexp is
+-- hypothesis-supplied (GPU exp has no IEEE spec; |fexp t − exp t| ≤
+-- eexp·exp t is the constant vjp_oracle validates). softmax_perturb is the
+-- elementary ratio sandwich (logit error δ moves softmax by ≤ e^(2δ)−1, no
+-- MVT); softmaxF_close budgets the rounded exp/sum/div head at the same
+-- logits; softmax_ce_cot_close combines both + the final rounded subtract
+-- against the CERTIFIED gradient softmax−onehot (softmaxCE_grad). Numeric
+-- mnist_cot_budget (n = 10, eexp ≤ 1e-6, logits within δ = 1/100): the
+-- rounded cotangent is within 21/1000 of certified — nearly all of it the
+-- e^(2δ)−1 ≈ 2δ math-perturbation term; head rounding < 4e-6. The δ
+-- hypothesis is a-posteriori-style: the worst-case forward logit budget
+-- (3/4) makes e^(2δ)−1 vacuous — the formal hand-off point from worst-case
+-- to measured-error analysis.
+#print axioms FloatModel.sum_close
+#print axioms FloatModel.softmax_perturb
+#print axioms FloatModel.softmaxF_close
+#print axioms FloatModel.softmax_ce_cot_close
+#print axioms FloatModel.mnist_cot_budget

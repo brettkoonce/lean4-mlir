@@ -1286,6 +1286,449 @@ theorem mnist_w2_step_float_budget (hMu : M.u ≤ u32)
   norm_num [FloatModel.sgdErr, u32]
 
 -- ════════════════════════════════════════════════════════════════
+-- § The loss head: rounded softmax−onehot cotangent
+-- ════════════════════════════════════════════════════════════════
+
+/-- Rounded division: `fl(x / y)`. -/
+noncomputable def div (x y : ℝ) : ℝ := M.rnd (x / y)
+
+/-- Rounded sum, left-fold association. Like `dot`, the bound below holds
+    for every association. -/
+noncomputable def sum : {n : Nat} → Vec n → ℝ
+  | 0, _ => 0
+  | n + 1, x => M.add (sum (fun i => x i.castSucc)) (x (Fin.last n))
+
+theorem sum_succ {n : Nat} (x : Vec (n + 1)) :
+    M.sum x = M.add (M.sum (fun i => x i.castSucc)) (x (Fin.last n)) := rfl
+
+/-- **Rounded sum forward error** — `((1+u)^(n+1) − 1)·Σ|xᵢ|`, association-
+    independent (exponent `n+1` because the seed addition with `0` rounds). -/
+theorem sum_close : ∀ {n : ℕ} (x : Vec n),
+    |M.sum x - ∑ i, x i| ≤ ((1 + M.u) ^ (n + 1) - 1) * ∑ i, |x i| := by
+  intro n
+  induction n with
+  | zero => intro x; simp [FloatModel.sum]
+  | succ n ih =>
+    intro x
+    rw [M.sum_succ x]
+    simp only [Fin.sum_univ_castSucc]
+    rw [show ((1 : ℝ) + M.u) ^ (n + 1 + 1) = (1 + M.u) ^ (n + 1) * (1 + M.u)
+        from pow_succ _ _]
+    exact step_bound M.u_nonneg
+      (Finset.abs_sum_le_sum_abs _ _)
+      (M.one_add_u_le_pow (by omega))
+      (ih (fun i => x i.castSucc))
+      (by simp only [sub_self, abs_zero]
+          exact mul_nonneg M.u_nonneg (abs_nonneg _))
+      (M.err _)
+
+/-- The float softmax: rounded `exp`, rounded sum, rounded division — the
+    structure of the rendered loss head. `fexp` is hypothesis-supplied
+    (GPU `exp` has no IEEE spec; its accuracy constant is exactly what the
+    repo's `vjp_oracle` harness validates empirically). -/
+noncomputable def softmaxF (fexp : ℝ → ℝ) {n : Nat} (z : Vec n) : Vec n :=
+  fun k => M.div (fexp (z k)) (M.sum (fun j => fexp (z j)))
+
+/-- The float softmax−onehot cotangent (one final rounded subtract; the
+    onehot operand is exact). -/
+noncomputable def softmaxCECotF (fexp : ℝ → ℝ) {n : Nat} (z : Vec n)
+    (label : Fin n) : Vec n :=
+  fun k => M.sub (M.softmaxF fexp z k) (oneHot n label k)
+
+private theorem softmax_nonneg {n : ℕ} (z : Vec n) (k : Fin n) :
+    0 ≤ softmax n z k :=
+  div_nonneg (Real.exp_pos _).le
+    (Finset.sum_nonneg fun j _ => (Real.exp_pos (z j)).le)
+
+private theorem softmax_le_one {n : ℕ} (z : Vec n) (k : Fin n) :
+    softmax n z k ≤ 1 := by
+  have hD : 0 < ∑ j, Real.exp (z j) :=
+    Finset.sum_pos (fun j _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
+  exact (div_le_one hD).mpr
+    (Finset.single_le_sum (fun j _ => (Real.exp_pos (z j)).le)
+      (Finset.mem_univ k))
+
+/-- **Softmax perturbation, elementary ratio form**: a coordinatewise logit
+    error `δ` moves every softmax output by at most `e^(2δ) − 1`. Proved by
+    sandwiching `softmax(z̃) ∈ [e^(−2δ), e^(2δ)]·softmax(z)` with bare `exp`
+    monotonicity — no mean-value theorem. -/
+theorem softmax_perturb {n : ℕ} (zt z : Vec n) {δ : ℝ}
+    (hδ : ∀ k', |zt k' - z k'| ≤ δ) (k : Fin n) :
+    |softmax n zt k - softmax n z k| ≤ Real.exp (2 * δ) - 1 := by
+  have hδ0 : 0 ≤ δ := (abs_nonneg _).trans (hδ k)
+  have hD : 0 < ∑ j, Real.exp (z j) :=
+    Finset.sum_pos (fun j _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
+  have hDt : 0 < ∑ j, Real.exp (zt j) :=
+    Finset.sum_pos (fun j _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
+  -- numerator and denominator sandwiches
+  have hnum_ub : Real.exp (zt k) ≤ Real.exp δ * Real.exp (z k) := by
+    rw [← Real.exp_add]
+    exact Real.exp_le_exp.mpr (by have := abs_le.mp (hδ k); linarith)
+  have hnum_lb : Real.exp (-δ) * Real.exp (z k) ≤ Real.exp (zt k) := by
+    rw [← Real.exp_add]
+    exact Real.exp_le_exp.mpr (by have := abs_le.mp (hδ k); linarith)
+  have hden_lb : Real.exp (-δ) * ∑ j, Real.exp (z j) ≤ ∑ j, Real.exp (zt j) := by
+    rw [Finset.mul_sum]
+    refine Finset.sum_le_sum fun j _ => ?_
+    rw [← Real.exp_add]
+    exact Real.exp_le_exp.mpr (by have := abs_le.mp (hδ j); linarith)
+  have hden_ub : (∑ j, Real.exp (zt j)) ≤ Real.exp δ * ∑ j, Real.exp (z j) := by
+    rw [Finset.mul_sum]
+    refine Finset.sum_le_sum fun j _ => ?_
+    rw [← Real.exp_add]
+    exact Real.exp_le_exp.mpr (by have := abs_le.mp (hδ j); linarith)
+  -- the two-sided ratio bound
+  have hub : softmax n zt k ≤ Real.exp (2 * δ) * softmax n z k := by
+    have h1 : Real.exp (zt k) / (∑ j, Real.exp (zt j)) ≤
+        (Real.exp δ * Real.exp (z k)) / (Real.exp (-δ) * ∑ j, Real.exp (z j)) :=
+      div_le_div₀ (mul_nonneg (Real.exp_pos δ).le (Real.exp_pos _).le)
+        hnum_ub (mul_pos (Real.exp_pos _) hD) hden_lb
+    have h2 : (Real.exp δ * Real.exp (z k)) /
+        (Real.exp (-δ) * ∑ j, Real.exp (z j)) =
+        Real.exp (2 * δ) * (Real.exp (z k) / ∑ j, Real.exp (z j)) := by
+      rw [mul_div_mul_comm, ← Real.exp_sub]
+      ring_nf
+    exact le_of_le_of_eq h1 h2
+  have hlb : Real.exp (-(2 * δ)) * softmax n z k ≤ softmax n zt k := by
+    have h1 : (Real.exp (-δ) * Real.exp (z k)) /
+        (Real.exp δ * ∑ j, Real.exp (z j)) ≤
+        Real.exp (zt k) / ∑ j, Real.exp (zt j) :=
+      div_le_div₀ (Real.exp_pos _).le hnum_lb hDt hden_ub
+    have h2 : (Real.exp (-δ) * Real.exp (z k)) /
+        (Real.exp δ * ∑ j, Real.exp (z j)) =
+        Real.exp (-(2 * δ)) * (Real.exp (z k) / ∑ j, Real.exp (z j)) := by
+      rw [mul_div_mul_comm, ← Real.exp_sub]
+      ring_nf
+    exact le_of_eq_of_le h2.symm h1
+  -- assemble
+  have hs0 := softmax_nonneg z k
+  have hs1 := softmax_le_one z k
+  have hexp1 : 1 ≤ Real.exp (2 * δ) := by
+    have := Real.add_one_le_exp (2 * δ); linarith
+  have hprod : Real.exp (2 * δ) * Real.exp (-(2 * δ)) = 1 := by
+    rw [← Real.exp_add]; simp
+  have hsum2 : 2 ≤ Real.exp (2 * δ) + Real.exp (-(2 * δ)) := by
+    nlinarith [sq_nonneg (Real.exp (2 * δ) - 1), Real.exp_pos (2 * δ)]
+  rw [abs_le]
+  constructor
+  · nlinarith [hlb, hs1, hs0]
+  · nlinarith [hub, hs1, hs0]
+
+/-- Denominator perturbation of the float softmax: rounded-sum compounding
+    on `exp`-inaccurate terms. -/
+noncomputable def smRho (u eexp : ℝ) (n : ℕ) : ℝ :=
+  ((1 + u) ^ (n + 1) - 1) * (1 + eexp) + eexp
+
+/-- Relative budget of the pre-rounding float softmax against the real
+    softmax at the same logits. -/
+noncomputable def smKappa (u eexp : ℝ) (n : ℕ) : ℝ :=
+  (eexp + smRho u eexp n) / (1 - smRho u eexp n)
+
+/-- Absolute budget of the float softmax against the real softmax at the
+    REAL logits: head rounding + the `e^(2δ) − 1` logit-perturbation term. -/
+noncomputable def smErr (u eexp δ : ℝ) (n : ℕ) : ℝ :=
+  u * (1 + smKappa u eexp n) + smKappa u eexp n + (Real.exp (2 * δ) - 1)
+
+/-- Budget of the full rounded softmax−onehot cotangent against the
+    certified real gradient. -/
+noncomputable def cotErr (u eexp δ : ℝ) (n : ℕ) : ℝ :=
+  u * (1 + smErr u eexp δ n) + smErr u eexp δ n
+
+private theorem smRho_nonneg {eexp : ℝ} {n : ℕ} (heexp : 0 ≤ eexp) :
+    0 ≤ smRho M.u eexp n :=
+  add_nonneg
+    (mul_nonneg (sub_nonneg.mpr (M.one_le_pow_one_add_u (n + 1)))
+      (by linarith))
+    heexp
+
+/-- **Float softmax vs real softmax at the same logits** (part A): the
+    rounded `exp`/`sum`/`div` head is within `u·(1+κ) + κ` absolutely, where
+    `κ = (eexp + ρ)/(1 − ρ)` compounds the `exp` accuracy and the sum
+    rounding. The sandwich is the same ratio argument as
+    `softmax_perturb` — division-perturbation never appears. -/
+theorem softmaxF_close (fexp : ℝ → ℝ) {eexp : ℝ} {n : ℕ} (z : Vec n)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : smRho M.u eexp n < 1) (k : Fin n) :
+    |M.softmaxF fexp z k - softmax n z k| ≤
+      M.u * (1 + smKappa M.u eexp n) + smKappa M.u eexp n := by
+  have hu := M.u_nonneg
+  have hρ0 : 0 ≤ smRho M.u eexp n := M.smRho_nonneg heexp0
+  have hκ0 : 0 ≤ smKappa M.u eexp n :=
+    div_nonneg (by linarith) (by linarith)
+  have hD : 0 < ∑ j, Real.exp (z j) :=
+    Finset.sum_pos (fun j _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
+  have hG0 : (0:ℝ) ≤ (1 + M.u) ^ (n + 1) - 1 :=
+    sub_nonneg.mpr (M.one_le_pow_one_add_u (n + 1))
+  -- numerator sandwich
+  have hN_ub : fexp (z k) ≤ (1 + eexp) * Real.exp (z k) := by
+    nlinarith [abs_le.mp (hfexp (z k))]
+  have hN_lb : (1 - eexp) * Real.exp (z k) ≤ fexp (z k) := by
+    nlinarith [abs_le.mp (hfexp (z k))]
+  have hN0 : 0 ≤ fexp (z k) :=
+    le_trans (mul_nonneg (by linarith) (Real.exp_pos _).le) hN_lb
+  -- denominator sandwich
+  have habs_v : ∀ j : Fin n, |fexp (z j)| ≤ (1 + eexp) * Real.exp (z j) := by
+    intro j
+    have h2 : |fexp (z j)| ≤ |fexp (z j) - Real.exp (z j)| + |Real.exp (z j)| := by
+      simpa using abs_sub_le (fexp (z j)) (Real.exp (z j)) 0
+    rw [abs_of_pos (Real.exp_pos _)] at h2
+    nlinarith [hfexp (z j)]
+  have hSv_err : |(∑ j, fexp (z j)) - ∑ j, Real.exp (z j)| ≤
+      eexp * ∑ j, Real.exp (z j) := by
+    rw [← Finset.sum_sub_distrib, Finset.mul_sum]
+    exact (Finset.abs_sum_le_sum_abs _ _).trans
+      (Finset.sum_le_sum fun j _ => hfexp (z j))
+  have hSabs : (∑ j, |fexp (z j)|) ≤ (1 + eexp) * ∑ j, Real.exp (z j) := by
+    rw [Finset.mul_sum]
+    exact Finset.sum_le_sum fun j _ => habs_v j
+  have hS_err : |M.sum (fun j => fexp (z j)) - ∑ j, Real.exp (z j)| ≤
+      smRho M.u eexp n * ∑ j, Real.exp (z j) := by
+    calc |M.sum (fun j => fexp (z j)) - ∑ j, Real.exp (z j)|
+        ≤ |M.sum (fun j => fexp (z j)) - ∑ j, fexp (z j)| +
+          |(∑ j, fexp (z j)) - ∑ j, Real.exp (z j)| := abs_sub_le _ _ _
+      _ ≤ ((1 + M.u) ^ (n + 1) - 1) * ((1 + eexp) * ∑ j, Real.exp (z j)) +
+          eexp * ∑ j, Real.exp (z j) :=
+          add_le_add ((M.sum_close _).trans
+            (mul_le_mul_of_nonneg_left hSabs hG0)) hSv_err
+      _ = smRho M.u eexp n * ∑ j, Real.exp (z j) := by
+          simp only [smRho]; ring
+  have hS_lb : (1 - smRho M.u eexp n) * (∑ j, Real.exp (z j)) ≤
+      M.sum (fun j => fexp (z j)) := by
+    have := abs_le.mp hS_err; nlinarith
+  have hS_ub : M.sum (fun j => fexp (z j)) ≤
+      (1 + smRho M.u eexp n) * ∑ j, Real.exp (z j) := by
+    have := abs_le.mp hS_err; nlinarith
+  have hSden_pos : 0 < (1 - smRho M.u eexp n) * ∑ j, Real.exp (z j) :=
+    mul_pos (by linarith) hD
+  have hS_pos : 0 < M.sum (fun j => fexp (z j)) :=
+    lt_of_lt_of_le hSden_pos hS_lb
+  -- the pre-rounding quotient sandwich
+  have hsdef : softmax n z k = Real.exp (z k) / ∑ j, Real.exp (z j) := rfl
+  have hs0 := softmax_nonneg z k
+  have hs1 := softmax_le_one z k
+  have hQub : fexp (z k) / M.sum (fun j => fexp (z j)) ≤
+      (1 + smKappa M.u eexp n) * softmax n z k := by
+    have h1 : fexp (z k) / M.sum (fun j => fexp (z j)) ≤
+        ((1 + eexp) * Real.exp (z k)) /
+          ((1 - smRho M.u eexp n) * ∑ j, Real.exp (z j)) :=
+      div_le_div₀ (mul_nonneg (by linarith) (Real.exp_pos _).le) hN_ub
+        hSden_pos hS_lb
+    have h2 : ((1 + eexp) * Real.exp (z k)) /
+        ((1 - smRho M.u eexp n) * ∑ j, Real.exp (z j)) =
+        ((1 + eexp) / (1 - smRho M.u eexp n)) * softmax n z k := by
+      rw [mul_div_mul_comm, hsdef]
+    have hne : (1:ℝ) - smRho M.u eexp n ≠ 0 := ne_of_gt (by linarith)
+    have h3 : (1 + eexp) / (1 - smRho M.u eexp n) = 1 + smKappa M.u eexp n := by
+      simp only [smKappa]
+      rw [div_eq_iff hne, add_mul, one_mul, div_mul_cancel₀ _ hne]
+      ring
+    rw [h2, h3] at h1
+    exact h1
+  have hQlb : (1 - smKappa M.u eexp n) * softmax n z k ≤
+      fexp (z k) / M.sum (fun j => fexp (z j)) := by
+    have h1 : ((1 - eexp) * Real.exp (z k)) /
+        ((1 + smRho M.u eexp n) * ∑ j, Real.exp (z j)) ≤
+        fexp (z k) / M.sum (fun j => fexp (z j)) :=
+      div_le_div₀ hN0 hN_lb hS_pos hS_ub
+    have h2 : ((1 - eexp) * Real.exp (z k)) /
+        ((1 + smRho M.u eexp n) * ∑ j, Real.exp (z j)) =
+        ((1 - eexp) / (1 + smRho M.u eexp n)) * softmax n z k := by
+      rw [mul_div_mul_comm, hsdef]
+    have h3 : 1 - smKappa M.u eexp n ≤
+        (1 - eexp) / (1 + smRho M.u eexp n) := by
+      have hne : (1:ℝ) - smRho M.u eexp n ≠ 0 := ne_of_gt (by linarith)
+      have hκdef : smKappa M.u eexp n * (1 - smRho M.u eexp n) =
+          eexp + smRho M.u eexp n := by
+        simp only [smKappa]
+        rw [div_mul_cancel₀ _ hne]
+      have hκρ : eexp + smRho M.u eexp n ≤
+          smKappa M.u eexp n * (1 + smRho M.u eexp n) := by
+        have h4 : smKappa M.u eexp n * (1 - smRho M.u eexp n) ≤
+            smKappa M.u eexp n * (1 + smRho M.u eexp n) :=
+          mul_le_mul_of_nonneg_left (by linarith) hκ0
+        linarith [hκdef]
+      rw [le_div_iff₀ (by linarith)]
+      nlinarith [hκρ]
+    calc (1 - smKappa M.u eexp n) * softmax n z k
+        ≤ ((1 - eexp) / (1 + smRho M.u eexp n)) * softmax n z k :=
+          mul_le_mul_of_nonneg_right h3 hs0
+      _ = _ := h2.symm
+      _ ≤ _ := h1
+  have hQs : |fexp (z k) / M.sum (fun j => fexp (z j)) - softmax n z k| ≤
+      smKappa M.u eexp n := by
+    rw [abs_le]
+    constructor
+    · nlinarith [hQlb, hs0, hs1, hκ0]
+    · nlinarith [hQub, hs0, hs1, hκ0]
+  have hQabs : |fexp (z k) / M.sum (fun j => fexp (z j))| ≤
+      1 + smKappa M.u eexp n := by
+    have h1 : |fexp (z k) / M.sum (fun j => fexp (z j))| ≤
+        |fexp (z k) / M.sum (fun j => fexp (z j)) - softmax n z k| +
+          |softmax n z k| := by
+      simpa using abs_sub_le (fexp (z k) / M.sum (fun j => fexp (z j)))
+        (softmax n z k) 0
+    rw [abs_of_nonneg hs0] at h1
+    linarith
+  have hrnd : |M.softmaxF fexp z k -
+      fexp (z k) / M.sum (fun j => fexp (z j))| ≤
+      M.u * |fexp (z k) / M.sum (fun j => fexp (z j))| := M.err _
+  have htri : |M.softmaxF fexp z k - softmax n z k| ≤
+      |M.softmaxF fexp z k - fexp (z k) / M.sum (fun j => fexp (z j))| +
+        |fexp (z k) / M.sum (fun j => fexp (z j)) - softmax n z k| :=
+    abs_sub_le _ _ _
+  have h4 := mul_le_mul_of_nonneg_left hQabs hu
+  linarith
+
+/-- **The rounded softmax−onehot cotangent is within `cotErr` of the
+    certified real gradient** `softmax(z) − onehot` — the `pdiv`-certified
+    `∂(crossEntropy)/∂logits` (`softmaxCE_grad`). This discharges the
+    `g̃ ≈ g` hypothesis of the `mlp_*_step_float_close` capstones:
+    `eg := cotErr u eexp δ n`, where `δ` bounds the float-vs-real logits
+    (worst case: the forward `layerBudget`; in practice: an a-posteriori
+    measured value, since `e^(2δ) − 1` is only sharp for small `δ`). -/
+theorem softmax_ce_cot_close (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
+    (zt z : Vec n) (label : Fin n)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : smRho M.u eexp n < 1)
+    (hδ : ∀ k', |zt k' - z k'| ≤ δ) (k : Fin n) :
+    |M.softmaxCECotF fexp zt label k -
+      (softmax n z k - oneHot n label k)| ≤ cotErr M.u eexp δ n := by
+  have hu := M.u_nonneg
+  have hδ0 : 0 ≤ δ := (abs_nonneg _).trans (hδ k)
+  have hκ0 : 0 ≤ smKappa M.u eexp n :=
+    div_nonneg (by linarith [M.smRho_nonneg (eexp := eexp) (n := n) heexp0])
+      (by linarith)
+  have hexp1 : 1 ≤ Real.exp (2 * δ) := by
+    have := Real.add_one_le_exp (2 * δ); linarith
+  -- part A + part B
+  have hA := M.softmaxF_close fexp zt heexp0 heexp1 hfexp hρ1 k
+  have hB := softmax_perturb zt z hδ k
+  have hsm : |M.softmaxF fexp zt k - softmax n z k| ≤
+      smErr M.u eexp δ n := by
+    have htri := abs_sub_le (M.softmaxF fexp zt k) (softmax n zt k)
+      (softmax n z k)
+    simp only [smErr]
+    linarith
+  have hsm0 : 0 ≤ smErr M.u eexp δ n := by
+    simp only [smErr]
+    nlinarith [mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smKappa M.u eexp n)]
+  -- |real softmax − onehot| ≤ 1
+  have hs0 := softmax_nonneg z k
+  have hs1 := softmax_le_one z k
+  have hy : |softmax n z k - oneHot n label k| ≤ 1 := by
+    simp only [oneHot]
+    by_cases h : k = label
+    · rw [if_pos h, abs_le]; constructor <;> linarith
+    · rw [if_neg h, abs_le]; constructor <;> linarith
+  -- the final rounded subtract
+  have hrnd : |M.softmaxCECotF fexp zt label k -
+      (M.softmaxF fexp zt k - oneHot n label k)| ≤
+      M.u * |M.softmaxF fexp zt k - oneHot n label k| := M.err _
+  have hsFy : |M.softmaxF fexp zt k - oneHot n label k| ≤
+      1 + smErr M.u eexp δ n := by
+    have h1 : |M.softmaxF fexp zt k - oneHot n label k| ≤
+        |M.softmaxF fexp zt k - softmax n z k| +
+          |softmax n z k - oneHot n label k| := abs_sub_le _ _ _
+    linarith
+  have htri : |M.softmaxCECotF fexp zt label k -
+      (softmax n z k - oneHot n label k)| ≤
+      |M.softmaxCECotF fexp zt label k -
+        (M.softmaxF fexp zt k - oneHot n label k)| +
+        |M.softmaxF fexp zt k - softmax n z k| := by
+    have h1 := abs_sub_le (M.softmaxCECotF fexp zt label k)
+      (M.softmaxF fexp zt k - oneHot n label k)
+      (softmax n z k - oneHot n label k)
+    have h2 : |(M.softmaxF fexp zt k - oneHot n label k) -
+        (softmax n z k - oneHot n label k)| =
+        |M.softmaxF fexp zt k - softmax n z k| := by
+      rw [show (M.softmaxF fexp zt k - oneHot n label k) -
+          (softmax n z k - oneHot n label k) =
+          M.softmaxF fexp zt k - softmax n z k from by ring]
+    linarith
+  have h4 := mul_le_mul_of_nonneg_left hsFy hu
+  simp only [cotErr]
+  linarith
+
+/-- `e^x − 1 ≤ x/(1−x)` for `0 ≤ x < 1` — the exp analogue of the γ-form,
+    from `1 − x ≤ e^(−x)` alone; keeps the numeric head budget in
+    `norm_num` country. -/
+private theorem exp_sub_one_le {x : ℝ} (hx1 : x < 1) :
+    Real.exp x - 1 ≤ x / (1 - x) := by
+  have hp := Real.exp_pos x
+  have hprod : Real.exp x * Real.exp (-x) = 1 := by
+    rw [← Real.exp_add]; simp
+  have h1 : (1 - x) * Real.exp x ≤ 1 := by
+    nlinarith [Real.add_one_le_exp (-x), hp]
+  rw [le_div_iff₀ (by linarith : (0:ℝ) < 1 - x)]
+  nlinarith [h1]
+
+/-- **Numeric head budget at the committed MNIST output** (`n = 10`): for
+    any model at binary32 accuracy, `exp` accurate to `eexp ≤ 10⁻⁶`
+    (GPU `exp` is ~1–2 ULP; the constant is what `vjp_oracle` validates),
+    and float logits within `δ = 1/100` of real, the rounded
+    softmax−onehot cotangent is within **21/1000** of the certified
+    gradient — almost all of it the `e^(2δ) − 1 ≈ 2δ` logit-perturbation
+    term; the head's own rounding contributes < 4·10⁻⁶.
+
+    `δ = 1/100` is an a-posteriori-style hypothesis: the *worst-case*
+    forward logit budget (3/4 at these dims) makes `e^(2δ) − 1` vacuous
+    (> 1, weaker than the trivial bound 2), so a useful head budget needs
+    the measured logit error — exactly the hand-off point from worst-case
+    to a-posteriori analysis. -/
+theorem mnist_cot_budget (hMu : M.u ≤ u32) (fexp : ℝ → ℝ) {eexp : ℝ}
+    (heexp0 : 0 ≤ eexp) (heexp : eexp ≤ 1/1000000)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (zt z : Vec 10) (label : Fin 10)
+    (hz : ∀ k', |zt k' - z k'| ≤ 1/100) (k : Fin 10) :
+    |M.softmaxCECotF fexp zt label k -
+      (softmax 10 z k - oneHot 10 label k)| ≤ 21/1000 := by
+  have hu := M.u_nonneg
+  have hu32 : M.u ≤ 1/16777216 := hMu.trans (by norm_num [u32])
+  have hg11 : (1 + M.u) ^ (10 + 1) - 1 ≤ 7/10000000 :=
+    M.gamma_num (q := 7/10000000) hMu (by norm_num [u32]) (by norm_num [u32])
+  have hG0 : (0:ℝ) ≤ (1 + M.u) ^ (10 + 1) - 1 :=
+    sub_nonneg.mpr (M.one_le_pow_one_add_u (10 + 1))
+  have hρ : smRho M.u eexp 10 ≤ 18/10000000 := by
+    simp only [smRho]
+    nlinarith [mul_le_mul hg11 (by linarith : 1 + eexp ≤ 1 + 1/1000000)
+      (by linarith : (0:ℝ) ≤ 1 + eexp) (by norm_num : (0:ℝ) ≤ 7/10000000)]
+  have hρ0 : 0 ≤ smRho M.u eexp 10 := M.smRho_nonneg heexp0
+  have hρ1 : smRho M.u eexp 10 < 1 := lt_of_le_of_lt hρ (by norm_num)
+  have hκ : smKappa M.u eexp 10 ≤ 3/1000000 := by
+    simp only [smKappa]
+    rw [div_le_iff₀ (by linarith)]
+    nlinarith
+  have hκ0 : 0 ≤ smKappa M.u eexp 10 :=
+    div_nonneg (by linarith) (by linarith)
+  have hexp : Real.exp (2 * (1/100 : ℝ)) - 1 ≤ 1/49 := by
+    rw [show (2:ℝ) * (1/100) = 1/50 from by norm_num]
+    exact (exp_sub_one_le (by norm_num)).trans (by norm_num)
+  have hsm : smErr M.u eexp (1/100) 10 ≤ 41/2000 := by
+    simp only [smErr]
+    have h1 : M.u * (1 + smKappa M.u eexp 10) ≤
+        (1/16777216) * (1 + 3/1000000) :=
+      mul_le_mul hu32 (by linarith) (by linarith) (by norm_num)
+    have h2 : (1/16777216 : ℝ) * (1 + 3/1000000) + 3/1000000 + 1/49 ≤
+        41/2000 := by norm_num
+    linarith
+  have hsm0 : 0 ≤ smErr M.u eexp (1/100) 10 := by
+    simp only [smErr]
+    have hexp1 : 1 ≤ Real.exp (2 * (1/100 : ℝ)) := by
+      have := Real.add_one_le_exp (2 * (1/100 : ℝ)); linarith
+    nlinarith [mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smKappa M.u eexp 10)]
+  refine (M.softmax_ce_cot_close fexp zt z label heexp0 (by linarith) hfexp
+    hρ1 hz k).trans ?_
+  simp only [cotErr]
+  have h1 : M.u * (1 + smErr M.u eexp (1/100) 10) ≤
+      (1/16777216) * (1 + 41/2000) :=
+    mul_le_mul hu32 (by linarith) (by linarith) (by norm_num)
+  have h2 : (1/16777216 : ℝ) * (1 + 41/2000) + 41/2000 ≤ 21/1000 := by
+    norm_num
+  linarith
+
+-- ════════════════════════════════════════════════════════════════
 -- § Sanity: the exact model inhabits the interface, budgets collapse
 -- ════════════════════════════════════════════════════════════════
 
