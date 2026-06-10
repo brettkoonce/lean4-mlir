@@ -66,6 +66,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.flatConvStridedF w b ic oc h w' kH kW e :: st)
   | .convStridedBack w ic oc h w' kH kW :: ts, e :: st =>
       parseStack ts (.convStridedBack w ic oc h w' kH kW e :: st)
+  | .flatConvStride4F w b ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.flatConvStride4F w b ic oc h w' kH kW e :: st)
   | .bnPerChannelF g b eps oc h w :: ts, e :: st =>
       parseStack ts (.bnPerChannelF g b eps oc h w e :: st)
   | .bnPerChannelBack g x eps oc h w :: ts, e :: st =>
@@ -85,6 +87,7 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .geluF n :: ts, e :: st      => parseStack ts (.geluF n e :: st)
   | .geluBack x n :: ts, e :: st => parseStack ts (.geluBack x n e :: st)
   | .layerScaleF γ n :: ts, e :: st => parseStack ts (.layerScaleF γ n e :: st)
+  | .layerScaleChF γ c h w :: ts, e :: st => parseStack ts (.layerScaleChF γ c h w e :: st)
   | .softmaxRowF m n :: ts, e :: st => parseStack ts (.softmaxRowF m n e :: st)
   | .softmaxRowBack x m n :: ts, e :: st => parseStack ts (.softmaxRowBack x m n e :: st)
   | .matmulF m k n :: ts, b :: a :: st => parseStack ts (.matmulF m k n a b :: st)
@@ -100,6 +103,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .clsPadF N D :: ts, e :: st => parseStack ts (.clsPadF N D e :: st)
   | .rowScaleF g m n :: ts, e :: st => parseStack ts (.rowScaleF g m n e :: st)
   | .rowBiasF b m n :: ts, e :: st => parseStack ts (.rowBiasF b m n e :: st)
+  | .headSliceF N heads d hIdx :: ts, e :: st => parseStack ts (.headSliceF N heads d hIdx e :: st)
+  | .headPadF N heads d hIdx :: ts, e :: st => parseStack ts (.headPadF N heads d hIdx e :: st)
   | .batched tag info :: ts, e :: st => parseStack ts (.batched tag info e :: st)
   | _ :: _, _                    => none  -- stack underflow / malformed
 
@@ -140,6 +145,7 @@ theorem parseStack_toToks (r : Raw) :
   | gapF c h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | flatConvStridedF w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | convStridedBack w ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | flatConvStride4F w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | bnPerChannelF g b eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | bnPerChannelBack g x eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
@@ -153,6 +159,7 @@ theorem parseStack_toToks (r : Raw) :
   | geluF n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | geluBack x n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | layerScaleF γ n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | layerScaleChF γ c h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | softmaxRowF m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | softmaxRowBack x m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | matmulF m k n a b iha ihb => intro ts st; simp only [toToks, List.append_assoc, iha, ihb]; rfl
@@ -167,6 +174,8 @@ theorem parseStack_toToks (r : Raw) :
   | clsPadF N D e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | rowScaleF g m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | rowBiasF b m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | headSliceF N heads d hIdx e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | headPadF N heads d hIdx e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | batched tag info e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
 
 /-- **Serialization round-trip.** `parse` recovers any skeleton from its
