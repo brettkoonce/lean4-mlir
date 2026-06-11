@@ -6454,20 +6454,28 @@ spend proportionally more time in the fp32 LayerNorm/softmax that
 bf16 leaves untouched. The run:
 
 \begin{center}
-\begin{tabular}{l l r r r r}
+\begin{tabular}{l l r r r r r}
 \hline
-GPU & Precision & Per epoch & 80 epochs & Val top-1 & Val top-5 \\
+GPU & Precision & Per epoch & Epochs & Wall-clock & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (CUDA) & fp32 & $\sim$11.1 min & $\sim$15 hr & --- & --- \\
-4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & $\sim$11 hr & $\mathbf{65.64\%}$ & $\mathbf{87.06\%}$ \\
+4$\times$ 4060 Ti (CUDA) & fp32 & $\sim$11.1 min & 80 & $\sim$15 hr & --- & --- \\
+4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 80 & $\sim$11 hr & $\mathbf{65.64\%}$ & $\mathbf{87.06\%}$ \\
+4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 300 & $\sim$41 hr & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent (The fp32 row is throughput-only --- steady-state
 ms/step measured over a few hundred steps, projected to 80 epochs;
-only the bf16 configuration was trained to completion. bf16 does
-not cost final accuracy here.)
+only the 80-epoch bf16 configuration was trained to completion. The
+300-epoch row is a linear projection of that wall-clock, not yet
+run. bf16 does not cost final accuracy here.)
+
+\noindent\textbf{[TODO: 300 epoch run]}
+
+\noindent\textbf{[TODO: geo ra (wired, needs to be hooked up),
+stochastic depth (needs to be scoped), repeated augmentation (needs
+to be scoped)]}
 
 The 80-epoch run reached $\mathbf{65.64\%}$ top-1 /
 $\mathbf{87.06\%}$ top-5 on the full 50{,}000-image validation
