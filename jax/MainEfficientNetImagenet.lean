@@ -37,18 +37,21 @@ def efficientNetB0Imagenet : NetSpec where
     bf16 + bf16Conv.
 
     EfficientNet's original recipe is RMSProp + AutoAugment + stochastic depth
-    + EMA. We now have RMSProp (here) + EMA + stochastic depth; geometric
-    AutoAugment is still the one missing piece (color-only RandAugment for now),
-    so this should close most — not all — of the gap to the 77% paper number.
+    + EMA — and as of this config we have ALL FOUR: RMSProp (below) + the full
+    AutoAugment ImageNet policy (useAutoAugment, geometric ops included via
+    ImageProjectiveTransformV3) + stochastic depth + EMA. This is the faithful
+    B0 recipe; the remaining gap to 77% is schedule/length, not missing pieces.
     RMSProp knobs: ρ=0.9, μ=0.9, ε=1e-3 (EfficientNet's value). LR schedule
     stays cosine, not the paper's 0.97-every-2.4-epochs exponential decay.
 
-    TODO(rmsprop): recipe CHANGE — the prior SGD+cosine results no longer
-    apply. Re-run 80ep + re-eval (eval_enet_full50k.py, supervise script
-    unchanged) for fresh numbers. lr 0.045 is the MobileNet-style peak; the
-    paper-faithful linear-scaled value is ~0.016 at batch 256 (0.256@4096), so
-    if SE/swish make 0.045 unstable early, drop toward ~0.016. Mixup/cutmix
-    still off (flip the aug flags for the full recipe). -/
+    TODO(recipe): this is a CHANGE on two axes (optimizer SGD→RMSProp, aug
+    color-RandAugment→full AutoAugment) — prior results no longer apply. Re-run
+    80ep + re-eval (eval_enet_full50k.py, supervise script unchanged) for fresh
+    numbers. lr 0.045 is the MobileNet-style peak; the paper-faithful
+    linear-scaled value is ~0.016 at batch 256 (0.256@4096), so if SE/swish
+    make 0.045 unstable early, drop toward ~0.016. AutoAugment is a CPU-side
+    tf.data op — watch input throughput isn't the bottleneck on the first run.
+    Mixup/cutmix still off (flip those flags for the very full recipe). -/
 def efficientNetB0ImagenetConfig : TrainConfig where
   learningRate   := 0.045   -- RMSProp peak (was 0.1 for SGD); see TODO re ~0.016 fallback
   batchSize      := 256
@@ -61,6 +64,7 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   cosineDecay    := true
   warmupEpochs   := 5
   augment        := true
+  useAutoAugment := true     -- full AutoAugment ImageNet policy (incl. geometric)
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true    -- now reaches the MBConv expand/depthwise/project

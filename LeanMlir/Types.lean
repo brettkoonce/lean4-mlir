@@ -354,6 +354,15 @@ structure TrainConfig where
   useRandAugment : Bool  := false
   randAugmentN   : Nat   := 2
   randAugmentM   : Float := 9.0
+  /-- AutoAugment, ImageNet learned policy (Cubuk et al. 2018) — the full 25
+      sub-policies, applied per-image after crop/hflip on the imagenet (tfds)
+      path. Unlike `useRandAugment` (color subset only), this includes the
+      GEOMETRIC ops (shear/rotate) via `tf.raw_ops.ImageProjectiveTransformV3`
+      (core TF — dissolves the old "tfa unavailable on tf2.21" blocker) plus
+      the full color set (posterize/solarize/equalize/autocontrast/etc).
+      Subsumes the color RandAugment, so leave `useRandAugment` off when this
+      is on. EfficientNet's original recipe; no labels touched. -/
+  useAutoAugment : Bool  := false
   /-- Stochastic depth (Huang et al. 2016): drop each residual block's
       branch with a probability that ramps linearly from 0 to `dropPath`
       across the network's residual blocks; surviving branches are scaled

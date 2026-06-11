@@ -19,6 +19,149 @@ private def emitImports : String :=
   "import numpy as np\n" ++
   "import struct, os, time, json\n\n"
 
+private def autoAugmentPy : String :=
+"# ════════════════════════════════════════════════════════════════
+#  AutoAugment (ImageNet policy, Cubuk et al. 2018) — pure TF, no tfa.
+#  Geometric ops via tf.raw_ops.ImageProjectiveTransformV3 (core TF).
+# ════════════════════════════════════════════════════════════════
+
+_AA_MAX = 10.0
+
+def _aa_blend(a, b, f):  # a,b float32 HWC; returns uint8
+    return tf.cast(tf.clip_by_value(a + f * (b - a), 0.0, 255.0), tf.uint8)
+
+def _aa_transform(img, vec):
+    # img uint8 HWC. vec: 8-param projective transform (output->input). NEAREST.
+    H = tf.shape(img)[0]; W = tf.shape(img)[1]
+    images = tf.expand_dims(tf.cast(img, tf.float32), 0)
+    transforms = tf.reshape(tf.cast(vec, tf.float32), [1, 8])
+    out = tf.raw_ops.ImageProjectiveTransformV3(
+        images=images, transforms=transforms, output_shape=tf.stack([H, W]),
+        fill_value=128.0, interpolation='NEAREST', fill_mode='CONSTANT')
+    return tf.cast(tf.clip_by_value(out[0], 0.0, 255.0), tf.uint8)
+
+def _aa_shear_x(img, lvl):    return _aa_transform(img, [1.0, lvl, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0])
+def _aa_shear_y(img, lvl):    return _aa_transform(img, [1.0, 0.0, 0.0, lvl, 1.0, 0.0, 0.0, 0.0])
+def _aa_translate_x(img, px): return _aa_transform(img, [1.0, 0.0, -px, 0.0, 1.0, 0.0, 0.0, 0.0])
+def _aa_translate_y(img, px): return _aa_transform(img, [1.0, 0.0, 0.0, 0.0, 1.0, -px, 0.0, 0.0])
+
+def _aa_rotate(img, deg):
+    H = tf.cast(tf.shape(img)[0], tf.float32); W = tf.cast(tf.shape(img)[1], tf.float32)
+    th = deg * 3.141592653589793 / 180.0
+    cs = tf.cos(th); sn = tf.sin(th)
+    xo = ((W - 1.0) - (cs * (W - 1.0) - sn * (H - 1.0))) / 2.0
+    yo = ((H - 1.0) - (sn * (W - 1.0) + cs * (H - 1.0))) / 2.0
+    return _aa_transform(img, [cs, -sn, xo, sn, cs, yo, 0.0, 0.0])
+
+def _aa_invert(img):       return 255 - img
+def _aa_solarize(img, thr):return tf.where(img < tf.cast(thr, img.dtype), img, 255 - img)
+def _aa_posterize(img, bits):
+    shift = 8 - bits
+    return tf.bitwise.left_shift(tf.bitwise.right_shift(img, shift), shift)
+
+def _aa_autocontrast(img):
+    def ch(c):
+        x = tf.cast(img[:, :, c], tf.float32)
+        lo = tf.reduce_min(x); hi = tf.reduce_max(x)
+        scaled = tf.clip_by_value((x - lo) * 255.0 / tf.maximum(hi - lo, 1.0), 0.0, 255.0)
+        return tf.cast(tf.where(hi <= lo, x, scaled), tf.uint8)
+    return tf.stack([ch(0), ch(1), ch(2)], 2)
+
+def _aa_equalize(img):
+    def ch(c):
+        im = tf.cast(img[:, :, c], tf.int32)
+        histo = tf.histogram_fixed_width(im, [0, 255], nbins=256)
+        nz = tf.reshape(tf.gather(histo, tf.where(tf.not_equal(histo, 0))), [-1])
+        step = (tf.reduce_sum(histo) - nz[-1]) // 255
+        lut = tf.clip_by_value((tf.cumsum(histo) - histo + step // 2) // step, 0, 255)
+        result = tf.cond(tf.logical_or(tf.equal(step, 0), tf.size(nz) <= 1),
+                         lambda: im, lambda: tf.gather(lut, im))
+        return tf.cast(result, tf.uint8)
+    return tf.stack([ch(0), ch(1), ch(2)], 2)
+
+def _aa_gray(img):  # float32 HWC, luminance broadcast to 3
+    g = tf.image.rgb_to_grayscale(img)
+    return tf.cast(tf.tile(g, [1, 1, 3]), tf.float32)
+
+def _aa_color(img, f):
+    return _aa_blend(_aa_gray(img), tf.cast(img, tf.float32), f)
+def _aa_contrast(img, f):
+    m = tf.reduce_mean(_aa_gray(img))
+    return _aa_blend(tf.fill(tf.shape(img), m), tf.cast(img, tf.float32), f)
+def _aa_brightness(img, f):
+    return _aa_blend(tf.zeros(tf.shape(img), tf.float32), tf.cast(img, tf.float32), f)
+def _aa_sharpness(img, f):
+    k = tf.tile(tf.reshape(tf.constant([[1.,1.,1.],[1.,5.,1.],[1.,1.,1.]]) / 13.0, [3,3,1,1]), [1,1,3,1])
+    x = tf.expand_dims(tf.cast(img, tf.float32), 0)
+    blur = tf.nn.depthwise_conv2d(x, k, [1,1,1,1], 'SAME')[0]
+    res = _aa_blend(blur, tf.cast(img, tf.float32), f)
+    H = tf.shape(img)[0]; W = tf.shape(img)[1]
+    interior = tf.tile(tf.pad(tf.ones([H-2, W-2], tf.bool), [[1,1],[1,1]])[:, :, None], [1, 1, 3])
+    return tf.where(interior, res, img)   # keep original 1px border (PIL SMOOTH)
+
+# ---- op registry: name -> (fn, magnitude->arg, signed) ----
+def _aa_enh(m): return (m/_AA_MAX)*1.8 + 0.1
+def _aa_she(m): return (m/_AA_MAX)*0.3
+def _aa_trn(m): return (m/_AA_MAX)*100.0
+def _aa_rot(m): return (m/_AA_MAX)*30.0
+def _aa_pos(m): return int((m/_AA_MAX)*4)
+def _aa_sol(m): return int((m/_AA_MAX)*256)
+
+_AA_OPS = {
+  'ShearX': (_aa_shear_x,_aa_she,True), 'ShearY': (_aa_shear_y,_aa_she,True),
+  'TranslateX': (_aa_translate_x,_aa_trn,True), 'TranslateY': (_aa_translate_y,_aa_trn,True),
+  'Rotate': (_aa_rotate,_aa_rot,True),
+  'Color': (_aa_color,_aa_enh,False), 'Contrast': (_aa_contrast,_aa_enh,False),
+  'Brightness': (_aa_brightness,_aa_enh,False), 'Sharpness': (_aa_sharpness,_aa_enh,False),
+  'Posterize': (_aa_posterize,_aa_pos,False), 'Solarize': (_aa_solarize,_aa_sol,False),
+  'AutoContrast': (_aa_autocontrast,None,False), 'Equalize': (_aa_equalize,None,False),
+  'Invert': (_aa_invert,None,False),
+}
+
+_AA_POLICY = [
+  [('Posterize',0.4,8),('Rotate',0.6,9)], [('Solarize',0.6,5),('AutoContrast',0.6,5)],
+  [('Equalize',0.8,8),('Equalize',0.6,3)], [('Posterize',0.6,7),('Posterize',0.6,6)],
+  [('Equalize',0.4,7),('Solarize',0.2,4)], [('Equalize',0.4,4),('Rotate',0.8,8)],
+  [('Solarize',0.6,3),('Equalize',0.6,7)], [('Posterize',0.8,5),('Equalize',1.0,2)],
+  [('Rotate',0.2,3),('Solarize',0.6,8)], [('Equalize',0.6,8),('Posterize',0.4,6)],
+  [('Rotate',0.8,8),('Color',0.4,0)], [('Rotate',0.4,9),('Equalize',0.6,2)],
+  [('Equalize',0.0,7),('Equalize',0.8,8)], [('Invert',0.6,4),('Equalize',1.0,8)],
+  [('Color',0.6,4),('Contrast',1.0,8)], [('Rotate',0.8,8),('Color',1.0,2)],
+  [('Color',0.8,8),('Solarize',0.8,7)], [('Sharpness',0.4,7),('Invert',0.6,8)],
+  [('ShearX',0.6,5),('Equalize',1.0,9)], [('Color',0.4,0),('Equalize',0.6,3)],
+  [('Equalize',0.4,7),('Solarize',0.2,4)], [('Solarize',0.6,5),('AutoContrast',0.6,5)],
+  [('Invert',0.6,4),('Equalize',1.0,8)], [('Color',0.6,4),('Contrast',1.0,8)],
+  [('Equalize',0.8,8),('Equalize',0.6,3)],
+]
+
+def _aa_apply_op(img, name, mag):
+    fn, argfn, signed = _AA_OPS[name]
+    if argfn is None:
+        return fn(img)
+    arg = argfn(mag)
+    if signed:
+        arg = tf.where(tf.random.uniform([]) < 0.5, arg, -arg)
+    return fn(img, arg)
+
+def _autoaugment(img):
+    # img float32 HWC 0..255 -> apply one random sub-policy -> float32 HWC
+    img = tf.cast(tf.clip_by_value(img, 0.0, 255.0), tf.uint8)
+    branches = []
+    for sp in _AA_POLICY:
+        def make(sp):
+            def f():
+                x = img
+                for (name, prob, mag) in sp:
+                    x = tf.cond(tf.random.uniform([]) < prob,
+                                lambda x=x, name=name, mag=mag: _aa_apply_op(x, name, mag),
+                                lambda x=x: x)
+                return x
+            return f
+        branches.append(make(sp))
+    idx = tf.random.uniform([], 0, len(_AA_POLICY), dtype=tf.int32)
+    out = tf.switch_case(idx, branches)
+    return tf.cast(out, tf.float32)"
+
 private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
   match ds with
   | .mnist =>
@@ -115,6 +258,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "_CROP_PADDING = 32\n" ++
     "_MEAN_RGB = tf.constant([0.485 * 255, 0.456 * 255, 0.406 * 255], dtype=tf.float32)\n" ++
     "_STD_RGB  = tf.constant([0.229 * 255, 0.224 * 255, 0.225 * 255], dtype=tf.float32)\n\n" ++
+    (if cfg.useAutoAugment then autoAugmentPy ++ "\n" else "") ++
     "def _imagenet_decode_random_crop_flip(image_bytes):\n" ++
     "    shape = tf.io.extract_jpeg_shape(image_bytes)\n" ++
     "    bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])\n" ++
@@ -130,6 +274,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    img = tf.image.resize([img], [_IMG_SIZE, _IMG_SIZE],\n" ++
     "                          method=tf.image.ResizeMethod.BICUBIC)[0]\n" ++
     "    img = tf.image.random_flip_left_right(img)\n" ++
+    (if cfg.useAutoAugment then "    img = _autoaugment(img)\n" else "") ++
     (if cfg.useRandAugment then
       "    # RandAugment-lite: color subset (no geometric — tfa unavailable on tf2.21).\n" ++
       "    # Magnitude M scales the jitter strength.\n" ++
