@@ -15,8 +15,11 @@ rung host-passes `1−βᵗ`).
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/vit-verified-adam data`
 -/
 
+-- Matches MainVitTrain.lean's `vitTinyConfig` (the reference): 80 epochs, bs 32,
+-- AdamW lr 3e-4 / wd 1e-4, cosine + 5-epoch warmup, label smoothing 0.1, augment.
+-- (vitTinyConfig sets NO EMA and gradClipNorm 0.0, so the verified path omits them too.)
 def vitAdamConfig : VerifiedConfig where
-  epochs    := 20
+  epochs    := 80
   batchSize := 32
 
 def main (argv : List String) : IO Unit := do
@@ -26,5 +29,5 @@ def main (argv : List String) : IO Unit := do
   let mlir := ViTRender.vitTrainStepModuleAdamSched cfg (ViTRender.vitTinyBlocks 12)
                 "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001" 0.1   -- label smoothing α=0.1
   IO.FS.writeFile "verified_mlir/vit_adam_train_step.mlir" mlir
-  -- baseLR 1e-3, β₁ .9, β₂ .999, 5-epoch linear warmup then cosine decay.
-  vitVerified.toNet.trainAdamSched vitAdamConfig (argv.head?.getD "data") 0.001 0.9 0.999 5
+  -- baseLR 3e-4, β₁ .9, β₂ .999, 5-epoch linear warmup then cosine decay (vitTinyConfig).
+  vitVerified.toNet.trainAdamSched vitAdamConfig (argv.head?.getD "data") 0.0003 0.9 0.999 5
