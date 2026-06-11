@@ -4382,7 +4382,7 @@ GPU & Precision & Per epoch & 90 epochs & Val top-1 & Val top-5 \\
 top-1 / $\mathbf{88.17\%}$ top-5 on the full 50{,}000-image
 validation split --- a few points under the $\sim$71\% paper number,
 the gap attributable to the missing RMSProp optimizer
-\textbf{[TODO: wire RMSProp]} and original
+\textbf{[TODO: run w/ RMSProp]} (now wired) and the original
 longer schedule, not the precision or pipeline. The SGD peak LR of
 $0.1$ took off cleanly (no collapse), so the $0.05$ fallback was
 never needed. The validation curve has the usual shape --- a fast
@@ -4851,8 +4851,9 @@ random horizontal flip, with label smoothing $0.1$ in the loss;
 validation center-crops. The heavier pack EfficientNet's headline
 recipe leans on --- Mixup, CutMix, RandAugment, Random Erasing --- is
 wired into the phase-2 Lean$\to$JAX trainer (emitted into the generated
-\texttt{tf.data} pipeline, each knob gated on a config flag, RandAugment as
-a color-only ``lite'' variant) but left off at this validation tier.
+\texttt{tf.data} pipeline, each knob gated on a config flag, RandAugment in
+a color-only or full geometric variant, plus AutoAugment) but left off at
+this validation tier.
 
 \textbf{Compute budget.} This was the first run on all \emph{six} RTX
 4060 Ti (CUDA, bf16, batch 252 = 6$\times$42), steady-state
@@ -4883,11 +4884,10 @@ $\mathbf{72.31\%}$ top-1 / $\mathbf{90.31\%}$ top-5 on the full
 book's sweep, edging ResNet-34's $72.0\%$ at roughly a quarter of the
 parameters ($5.3$M vs $21.8$M). It still sits under EfficientNet's
 headline ${\sim}77\%$, which comes from a far longer schedule with
-RMSProp, AutoAugment (the trainer substitutes RandAugment),
-stochastic depth, and EMA. Of those, EMA (decay
+RMSProp, AutoAugment, stochastic depth, and EMA. Of those, EMA (decay
 0.9999) and stochastic depth (drop-connect 0.2) are on here, costing
-${<}5\%$ per epoch; RMSProp, the geometric half of RandAugment
-\textbf{[TODO: wire RMSProp + geometric RandAugment]}, and
+${<}5\%$ per epoch; RMSProp and AutoAugment
+\textbf{[TODO: run w/ rmsprop + geo aa]} (both now wired), and
 the 300-epoch length remain the gap to the paper number. The
 validation curve:
 
@@ -5462,9 +5462,9 @@ the validated layer types: the patchify stem is \texttt{.convBn}
 (BN $+$ a ReLU) rather than conv $+$ LayerNorm --- param-equivalent,
 the ReLU a minor variant. The augmentation pack above --- Mixup, CutMix,
 RandAugment, Random Erasing --- is wired into the phase-2 Lean$\to$JAX
-trainer (each knob gated on a config flag, RandAugment as a color-only
-``lite'' variant \textbf{[TODO: wire geometric RandAugment]}) but left off
-here, so an 80-epoch run lands under the paper's $82.1\%$; the 80 here is
+trainer (each knob gated on a config flag, RandAugment now a full
+color+geometric variant \textbf{[TODO: run w/ geo ra]}) but left off for
+this 80-epoch run, which lands under the paper's $82.1\%$; the 80 here is
 the validation tier of an 80$\to$300 ladder.
 
 \textbf{Compute budget.} ConvNeXt-T is the heaviest of the three
@@ -5498,7 +5498,7 @@ $\mathbf{92.27\%}$ top-5 on the full 50{,}000-image validation split
 ($72.3\%$) and ResNet-34 ($72.0\%$). The modern recipe earns it:
 AdamW, LayerScale, stochastic depth, and EMA are all in; the remaining
 gap to ConvNeXt-T's $\sim$82\% headline is geometric RandAugment
-\textbf{[TODO: wire geometric RandAugment]} and
+\textbf{[TODO: run w/ geo ra]} (now wired) and
 the 300-epoch schedule. The validation curve --- note the slow start,
 an artifact of the EMA shadow (decay $0.9999$) lagging the live
 weights for the first few epochs, then catching up:
