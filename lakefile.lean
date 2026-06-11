@@ -340,6 +340,14 @@ lean_exe «efficientnet-verified» where
   root := `MainEfficientNetVerified
   moreLinkArgs := ireeLink
 
+-- enet peer of mnv2-verified-adam: the proof-rendered train step (all-swish + squeeze-excite +
+-- batch-norm) with the SGD update swapped for AdamW (ViTRender.emitAdamV) + packed θ|m|v + runtime
+-- lr/bc threading via trainAdamSched. Recipe matches efficientnet-train (lr 1e-3, wd 1e-4,
+-- cosine+warmup 3, label-smoothing 0.1). Render: tests/TestEfficientNetTrain.lean.
+lean_exe «efficientnet-verified-adam» where
+  root := `MainEfficientNetVerifiedAdam
+  moreLinkArgs := ireeLink
+
 -- Chapter 9: ConvNeXt-T (Liu et al. 2022 — patchify stem + [3,3,9,3] depthwise-7×7
 -- blocks with LN + GELU + layerScale + 3 between-stage downsamples) trained on
 -- VERIFIED-rendered StableHLO (tests/TestConvNeXt{Train,Fwd}.lean); 180 params.
