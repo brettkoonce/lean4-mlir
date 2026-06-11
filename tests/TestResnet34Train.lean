@@ -42,17 +42,19 @@ private def convStem (o x w bnm : String) (oc ic Hin Win Hout Wout : Nat) : Stri
   s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hout,Wout]}\n" ++
   s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,oc,Hout,Wout]}\n"
 
-/-- Per-channel BN forward; saves `%{o}xh` (x̂), `%{o}istd`, `%{o}nf`, `%{o}gb` for the backward. -/
+/-- True batch-norm forward (reduce μ/var over batch+spatial `[0,2,3]`, `nf = BS·H·W`) — matches
+    the reference's batch-norm (not per-sample), so the train curve tracks. Saves `%{o}xh` (x̂),
+    `%{o}istd`, `%{o}nf`, `%{o}gb` for the backward. Same op as enet's `bnBatch`. -/
 private def bnPC (o x g bt : String) (oc Hh Ww m : Nat) : String :=
-  s!"    %{o}nf = stablehlo.constant dense<{m}.0> : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}nf = stablehlo.constant dense<{BS*m}.0> : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}ep = stablehlo.constant dense<{EPS}> : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}smr = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [BS,oc]}\n" ++
-  s!"    %{o}sm = stablehlo.broadcast_in_dim %{o}smr, dims = [0, 1] : ({ty [BS,oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}smr = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
+  s!"    %{o}sm = stablehlo.broadcast_in_dim %{o}smr, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}mu = stablehlo.divide %{o}sm, %{o}nf : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}xc = stablehlo.subtract {x}, %{o}mu : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}sq = stablehlo.multiply %{o}xc, %{o}xc : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}vsr = stablehlo.reduce(%{o}sq init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [BS,oc]}\n" ++
-  s!"    %{o}vs = stablehlo.broadcast_in_dim %{o}vsr, dims = [0, 1] : ({ty [BS,oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}vsr = stablehlo.reduce(%{o}sq init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
+  s!"    %{o}vs = stablehlo.broadcast_in_dim %{o}vsr, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}vr = stablehlo.divide %{o}vs, %{o}nf : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}ve = stablehlo.add %{o}vr, %{o}ep : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}istd = stablehlo.rsqrt %{o}ve : {ty [BS,oc,Hh,Ww]}\n" ++
@@ -86,15 +88,15 @@ private def reluBack (o pre dy : String) (oc Hh Ww : Nat) : String :=
   s!"    %{o}m = stablehlo.compare GT, {pre}, %{o}z : ({ty [BS,oc,Hh,Ww]}, {ty [BS,oc,Hh,Ww]}) -> {tyI1 [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.select %{o}m, {dy}, %{o}z : {tyI1 [BS,oc,Hh,Ww]}, {ty [BS,oc,Hh,Ww]}\n"
 
-/-- Per-channel BN backward (reuses forward `bn` saves). Result dx `%{o}`; param
-    grads `%{o}dg` (dγ : [oc]) and `%{o}db` (dβ : [oc]). -/
+/-- Batch-norm backward (batch-coupled 3-term over `[0,2,3]`; reuses forward `bn` saves). Result
+    dx `%{o}`; param grads `%{o}dg` (dγ : [oc]) and `%{o}db` (dβ : [oc]). Same as enet's `bnBatchBack`. -/
 private def bnBackPC (o bn dy : String) (oc Hh Ww : Nat) : String :=
   s!"    %{o}dxh = stablehlo.multiply %{bn}gb, {dy} : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}sdxr = stablehlo.reduce(%{o}dxh init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [BS,oc]}\n" ++
-  s!"    %{o}sdx = stablehlo.broadcast_in_dim %{o}sdxr, dims = [0, 1] : ({ty [BS,oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}sdxr = stablehlo.reduce(%{o}dxh init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
+  s!"    %{o}sdx = stablehlo.broadcast_in_dim %{o}sdxr, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}xd = stablehlo.multiply %{bn}xh, %{o}dxh : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}sxdr = stablehlo.reduce(%{o}xd init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [BS,oc]}\n" ++
-  s!"    %{o}sxd = stablehlo.broadcast_in_dim %{o}sxdr, dims = [0, 1] : ({ty [BS,oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}sxdr = stablehlo.reduce(%{o}xd init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
+  s!"    %{o}sxd = stablehlo.broadcast_in_dim %{o}sxdr, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}t1 = stablehlo.multiply %{o}dxh, %{bn}nf : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}i1 = stablehlo.subtract %{o}t1, %{o}sdx : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}xs = stablehlo.multiply %{bn}xh, %{o}sxd : {ty [BS,oc,Hh,Ww]}\n" ++
@@ -398,11 +400,20 @@ private def adamCot : String :=
   ++ s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n"
   ++ s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
 
+/-- BN layers (prefix, channels, H·W) in forward order — the running-stats layout shared by the
+    train-step batch-stat outputs, the driver's `runningBnStats` buffer, and `@resnet34_fwd_eval`
+    inputs. The forward saves `%{prefix}smr`/`%{prefix}vsr` ([oc] batch sums over `[0,2,3]`). -/
+private def bnLayers : List (String × Nat × Nat) :=
+  ("stn", 64, 112*112) ::
+  blocks.flatMap (fun b => match b with
+    | .idB p c hh => [(s!"{p}n1", c, hh*hh), (s!"{p}n2", c, hh*hh)]
+    | .downB p _cin c hh => [(s!"{p}n1", c, hh*hh), (s!"{p}n2", c, hh*hh), (s!"{p}np", c, hh*hh)])
+
 /-- `@resnet34_adam_train_step` — the proof-rendered fwd/bwd/param-grads with the SGD update swapped
     for `ViTRender.emitAdamV` and the `[θ|m|v]` + scalar-tail packed signature the generic
-    `VerifiedNet.trainAdamSched` driver expects:
-    `(x, θ×k, m×k, v×k, lr, bc1, bc2, onehot) → (θ'×k, m'×k, v'×k, loss, bc1, bc2)` (k=146).
-    `lr`/`bc1`/`bc2` runtime (cosine+warmup + per-step bias correction); `bc1`/`bc2` pass through. -/
+    `VerifiedNet.trainAdamSched` driver expects, EXTENDED with per-BN-layer batch mean/var carried
+    out in passthrough slots (running-stats BN; the func also takes matching dummy `[oc]` inputs so
+    `#outputs = #inputs`). `lr`/`bc1`/`bc2` runtime; `bc1`/`bc2` + the stat-in slots pass through. -/
 private def trainStepAdamSched : String :=
   let body := renderBody adamCot
   let updParts := allParams.map (fun (nm, gr, ds) =>
@@ -414,14 +425,24 @@ private def trainStepAdamSched : String :=
   let psig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
   let msig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
   let vsig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
+  -- Per-BN-layer batch mean/var = smr/(BS·H·W), vsr/(BS·H·W). Carried out in passthrough slots
+  -- (the func also takes 2 dummy `[oc]` inputs per layer so #outputs = #inputs for the generic FFI).
+  let statIn := String.intercalate ", " (bnLayers.flatMap (fun (p, oc, _) =>
+    [s!"%{p}mui: {ty [oc]}", s!"%{p}vari: {ty [oc]}"]))
+  let statCode := String.join (bnLayers.map (fun (p, oc, hw) =>
+    s!"    %{p}bnnf = stablehlo.constant dense<{BS*hw}.0> : {ty [oc]}\n" ++
+    s!"    %{p}bnmu = stablehlo.divide %{p}smr, %{p}bnnf : {ty [oc]}\n" ++
+    s!"    %{p}bnvar = stablehlo.divide %{p}vsr, %{p}bnnf : {ty [oc]}\n"))
+  let statOutNames := bnLayers.flatMap (fun (p, _, _) => [s!"%{p}bnmu", s!"%{p}bnvar"])
+  let statOutTy := bnLayers.flatMap (fun (_, oc, _) => [ty [oc], ty [oc]])
   let argSig := ("%x: " ++ ty [BS,150528]) ++ ", " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: " ++ ty [BS,10]
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, " ++ statIn ++ ", %onehot: " ++ ty [BS,10]
   let dims := allParams.map (fun (_, _, ds) => ds)
   let allDims := dims ++ dims ++ dims
-  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
-  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
+  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statOutTy)
+  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"] ++ statOutNames)
   "module @m {\n" ++ s!"  func.func @resnet34_adam_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
-    body ++ adamConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+    body ++ adamConsts ++ upd ++ statCode ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
 
 /-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH (the render +
     write already happened, so the artifact exists regardless). -/

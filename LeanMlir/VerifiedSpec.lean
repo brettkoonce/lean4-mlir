@@ -140,6 +140,9 @@ structure VerifiedNetSpec where
   data     : VerifiedData
   layers   : List VLayer
   blurb    : String
+  /-- Per-BN-layer channel counts in forward order (empty = LayerNorm / no-BN). Drives running-stats
+      BN threading in `trainAdamSched` — see `VerifiedNet.bnChannels`. -/
+  bnChannels : Array Nat := #[]
 
 namespace VerifiedNetSpec
 
@@ -153,7 +156,7 @@ def d0 (s : VerifiedNetSpec) : Nat := s.inC * s.imageH * s.imageW
 /-- Lower to the runtime `VerifiedNet` the driver consumes. -/
 def toNet (s : VerifiedNetSpec) : VerifiedNet :=
   { name := s.name, slug := s.slug, specs := s.toSpecs, d0 := s.d0,
-    nClasses := s.nClasses, data := s.data, blurb := s.blurb }
+    nClasses := s.nClasses, data := s.data, blurb := s.blurb, bnChannels := s.bnChannels }
 
 /-- Train end-to-end (delegates to the shared `VerifiedNet.train` driver). -/
 def train (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=

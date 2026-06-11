@@ -132,7 +132,14 @@ def resnet34Verified : VerifiedNetSpec where
     .residualStage 256 512 3 2,  -- stage4: downsample + 2        14→7
     .globalAvgPool,
     .dense 512 10 ]
-  blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→pool→[3,4,6,3] blocks w/ per-channel BN + strided downsamples, 56→28→14→7→GAP→dense) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→pool→[3,4,6,3] blocks w/ batch-norm + strided downsamples, 56→28→14→7→GAP→dense) via the VERIFIED renderer → IREE FFI → GPU"
+  -- 36 BN layers in forward order (stem; then per basic block 2, per downsample block 3) — the
+  -- running-stats layout for trainAdamSched + @resnet34_fwd_eval. Matches TestResnet34Train.bnLayers.
+  bnChannels := #[64,
+    64,64, 64,64, 64,64,                              -- stage1: 3 id blocks
+    128,128,128, 128,128, 128,128, 128,128,           -- d2 + stage2: 3 id blocks
+    256,256,256, 256,256, 256,256, 256,256, 256,256, 256,256,  -- d3 + stage3: 5 id blocks
+    512,512,512, 512,512, 512,512]                    -- d4 + stage4: 2 id blocks
 
 -- Derived layout (146 params) == the audited hand-list ResNet34Layout.specs.
 #guard resnet34Verified.toSpecs == ResNet34Layout.specs

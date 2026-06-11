@@ -56,6 +56,11 @@ structure VerifiedNet where
   data     : VerifiedData
   /-- One-line intro printed at startup (the prose banner). -/
   blurb    : String
+  /-- Per-BN-layer channel counts, in forward order (empty for LayerNorm / no-BN nets). When
+      non-empty, `trainAdamSched` threads running BN stats: the adam train step carries per-layer
+      batch mean/var out in passthrough slots, the driver EMAs them, and eval uses
+      `<slug>_fwd_eval.mlir` (affine BN with the running stats) instead of `<slug>_fwd.mlir`. -/
+  bnChannels : Array Nat := #[]
 
 /-- Training hyperparameters — the `TrainConfig` of the verified path. Mirrors the
     reference `TrainConfig`; kept as its own object so a net is a (spec, config) pair. -/
@@ -279,21 +284,36 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let d0 := net.d0
   let nc := net.nClasses
   IO.println net.blurb
+  -- Running-stats BN: when `bnChannels` is non-empty the adam train step carries per-layer batch
+  -- mean/var out in passthrough slots (so #out=#in), the driver EMAs them into `runningBnStats`,
+  -- and eval uses `<slug>_fwd_eval.mlir` (affine BN with the running stats) — class-batch-independent
+  -- eval parity, not the degenerate batch-BN-eval. LayerNorm / no-BN nets skip all of this.
+  let hasBn := !net.bnChannels.isEmpty
+  let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
+  let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let tsVmfb  := s!".lake/build/{net.slug}_adam_ts.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
+  let fwdEvalVmfb := s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
   compileVmfb s!"verified_mlir/{net.slug}_adam_train_step.mlir" tsVmfb
   compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"             fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
+  let fwdEvalSess ← if hasBn then do
+      compileVmfb s!"verified_mlir/{net.slug}_fwd_eval.mlir" fwdEvalVmfb
+      IreeSession.create fwdEvalVmfb
+    else pure fwdSess
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     loadData net.data d0 dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   let nb  := nTrain / bs
   let nbt := nEval / bs
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} AdamW (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
+  if hasBn then IO.println s!"  running-stats BN: {net.bnChannels.size} layers, {nBnStats} stat floats → eval via @{net.slug}_fwd_eval"
   (← IO.getStdout).flush
-  let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes ++ #[#[], #[], #[]])
+  let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes ++ #[#[], #[], #[]]
+                                ++ (if hasBn then bnStatShapes else #[]))
   let fwdShapes := net.shapesBA
+  let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
   let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_adam_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
@@ -307,6 +327,10 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let mut thetamv := F32.concat #[theta, zeros, zeros]
   let mvBytes := 3 * net.nParams * 4
   let pBytes := net.nParams * 4
+  -- Running BN stats (EMA of per-layer batch mean/var; mom 1.0 on the first step to seed,
+  -- then 0.1). Reset per process — washed out well before the per-epoch eval (mom 0.1).
+  let mut runningBnStats ← F32.const nBnStats.toUSize 0.0
+  let mut bnFirst := true
   let totalSteps := (cfg.epochs * nb).toFloat
   let warmSteps := (warmupEpochs * nb).toFloat
   -- Auto checkpoint/resume: each epoch writes [θ|m|v] + the next-epoch counter;
@@ -333,7 +357,8 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
       let bc1 := 1.0 - Float.exp (gstep * Float.log β1)
       let bc2 := 1.0 - Float.exp (gstep * Float.log β2)
       let tail := F32.concat #[← F32.const (1 : USize) lrt, ← F32.const (1 : USize) bc1, ← F32.const (1 : USize) bc2]
-      let params := F32.concat #[thetamv, tail]
+      -- BN nets append the (ignored) stat-in passthrough slots; the step writes batch stats out.
+      let params := if hasBn then F32.concat #[thetamv, tail, runningBnStats] else F32.concat #[thetamv, tail]
       let augSeed := (ep * nb + bi + 1).toUSize
       let xbRaw := F32.sliceImages sImg (bi * bs) bs trainPix
       -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
@@ -357,12 +382,22 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
         IO.println s!"  step {bi}/{nb}: loss={stepLoss}"
         (← IO.getStdout).flush
       thetamv := out.extract 0 mvBytes
+      -- EMA the batch BN stats (in the passthrough slots after [θ'|m'|v'|loss|bc1|bc2]).
+      if hasBn then
+        let batchBn := out.extract ((3 * net.nParams + 3) * 4) ((3 * net.nParams + 3 + nBnStats) * 4)
+        runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.1)
+        bnFirst := false
     IO.println s!"Epoch {ep + 1}/{cfg.epochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
     let thetaCur := thetamv.extract 0 pBytes
+    -- BN nets eval through `@<slug>_fwd_eval` with the running stats appended; others use `@<slug>_fwd`.
+    let evalSess := if hasBn then fwdEvalSess else fwdSess
+    let evalFn := if hasBn then s!"m.{net.slug}_fwd_eval" else fwdFn
+    let evalParams := if hasBn then F32.concat #[thetaCur, runningBnStats] else thetaCur
+    let evalShapes := if hasBn then fwdEvalShapes else fwdShapes
     let mut correct := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImages evalImg (bi * bs) bs d0
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn thetaCur fwdShapes
+      let logits ← IreeSession.forwardF32 evalSess evalFn evalParams evalShapes
                       xb xShape bs.toUSize nc.toUSize
       for j in [0:bs] do
         let pred := (F32.argmax10 logits (j * nc).toUSize).toNat

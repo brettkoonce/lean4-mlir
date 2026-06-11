@@ -52,15 +52,15 @@ private def convStem (o x w bnm : String) (oc ic Hin Win Hout Wout : Nat) : Stri
 /-- Per-channel BatchNorm forward (4-D), reduce μ/var over spatial `[2,3]`, rank-1
     γ/β `dims=[1]`. The bnPerChannelF op pattern, kept 4-D. Result SSA = `%{o}`. -/
 private def bnPC (o x g bt : String) (oc Hh Ww m : Nat) : String :=
-  s!"    %{o}nf = stablehlo.constant dense<{m}.0> : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}nf = stablehlo.constant dense<{BS*m}.0> : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}ep = stablehlo.constant dense<{EPS}> : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}smr = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [BS,oc]}\n" ++
-  s!"    %{o}sm = stablehlo.broadcast_in_dim %{o}smr, dims = [0, 1] : ({ty [BS,oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}smr = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
+  s!"    %{o}sm = stablehlo.broadcast_in_dim %{o}smr, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}mu = stablehlo.divide %{o}sm, %{o}nf : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}xc = stablehlo.subtract {x}, %{o}mu : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}sq = stablehlo.multiply %{o}xc, %{o}xc : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}vsr = stablehlo.reduce(%{o}sq init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [BS,oc]}\n" ++
-  s!"    %{o}vs = stablehlo.broadcast_in_dim %{o}vsr, dims = [0, 1] : ({ty [BS,oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}vsr = stablehlo.reduce(%{o}sq init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
+  s!"    %{o}vs = stablehlo.broadcast_in_dim %{o}vsr, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}vr = stablehlo.divide %{o}vs, %{o}nf : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}ve = stablehlo.add %{o}vr, %{o}ep : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o}istd = stablehlo.rsqrt %{o}ve : {ty [BS,oc,Hh,Ww]}\n" ++
@@ -141,6 +141,69 @@ private def idChainSig (base : String) (n c : Nat) : List String := Id.run do
   for i in [:n] do acc := acc ++ idBlockSig s!"{base}b{i}" c
   return acc
 
+-- ════════════ inference-BN (running-stats) eval forward ════════════
+-- Affine-only BN consuming per-layer running mean/var (func inputs `%{o}mu`/`%{o}var`), instead of
+-- computing batch stats. The `<slug>_fwd_eval.mlir` the driver evals with once running-stats are
+-- threaded; exact-parity eval (class-batch-independent), unlike batch-BN eval.
+
+/-- Affine BN with running stats: `y = γ·(x − μ)·rsqrt(var + ε) + β`, μ/var from inputs `%{o}mu`/`%{o}var`. -/
+private def bnEval (o x g bt : String) (oc Hh Ww : Nat) : String :=
+  s!"    %{o}mub = stablehlo.broadcast_in_dim %{o}mu, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}xc = stablehlo.subtract {x}, %{o}mub : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}vb = stablehlo.broadcast_in_dim %{o}var, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}ep = stablehlo.constant dense<{EPS}> : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}ve = stablehlo.add %{o}vb, %{o}ep : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}istd = stablehlo.rsqrt %{o}ve : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}xh = stablehlo.multiply %{o}xc, %{o}istd : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}gb = stablehlo.broadcast_in_dim {g}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}btb = stablehlo.broadcast_in_dim {bt}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}gx = stablehlo.multiply %{o}xh, %{o}gb : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o} = stablehlo.add %{o}gx, %{o}btb : {ty [BS,oc,Hh,Ww]}\n"
+
+private def idBlockEval (p x : String) (c Hh Ww : Nat) : String × String :=
+  let code :=
+    conv s!"{p}c1" x s!"%{p}W1" s!"%{p}b1" c c Hh Ww Hh Ww 1 ++
+    bnEval s!"{p}n1" s!"%{p}c1" s!"%{p}g1" s!"%{p}bt1" c Hh Ww ++
+    relu s!"{p}r1" s!"%{p}n1" c Hh Ww ++
+    conv s!"{p}c2" s!"%{p}r1" s!"%{p}W2" s!"%{p}b2" c c Hh Ww Hh Ww 1 ++
+    bnEval s!"{p}n2" s!"%{p}c2" s!"%{p}g2" s!"%{p}bt2" c Hh Ww ++
+    addOp s!"{p}a" s!"%{p}n2" x c Hh Ww ++
+    relu s!"{p}o" s!"%{p}a" c Hh Ww
+  (code, s!"%{p}o")
+
+private def downBlockEval (p x : String) (c oc Hh Ww : Nat) : String × String :=
+  let Hin := 2*Hh; let Win := 2*Ww
+  let code :=
+    conv s!"{p}c1" x s!"%{p}W1" s!"%{p}b1" oc c Hin Win Hh Ww 2 ++
+    bnEval s!"{p}n1" s!"%{p}c1" s!"%{p}g1" s!"%{p}bt1" oc Hh Ww ++
+    relu s!"{p}r1" s!"%{p}n1" oc Hh Ww ++
+    conv s!"{p}c2" s!"%{p}r1" s!"%{p}W2" s!"%{p}b2" oc oc Hh Ww Hh Ww 1 ++
+    bnEval s!"{p}n2" s!"%{p}c2" s!"%{p}g2" s!"%{p}bt2" oc Hh Ww ++
+    conv s!"{p}cp" x s!"%{p}Wp" s!"%{p}bp" oc c Hin Win Hh Ww 2 ++
+    bnEval s!"{p}np" s!"%{p}cp" s!"%{p}gp" s!"%{p}btp" oc Hh Ww ++
+    addOp s!"{p}a" s!"%{p}n2" s!"%{p}np" oc Hh Ww ++
+    relu s!"{p}o" s!"%{p}a" oc Hh Ww
+  (code, s!"%{p}o")
+
+private def idChainEval (base x : String) (n c Hh Ww : Nat) : String × String := Id.run do
+  let mut code := ""; let mut cur := x
+  for i in [:n] do
+    let (c2, out) := idBlockEval s!"{base}b{i}" cur c Hh Ww
+    code := code ++ c2; cur := out
+  return (code, cur)
+
+/-- BN running-stats input pair `(%{p}mu, %{p}var)`, both `[oc]` — canonical (forward) order. -/
+private def bnStatSig (p : String) (oc : Nat) : List String :=
+  [s!"%{p}mu: {ty [oc]}", s!"%{p}var: {ty [oc]}"]
+private def idBlockStatSig (p : String) (c : Nat) : List String :=
+  bnStatSig s!"{p}n1" c ++ bnStatSig s!"{p}n2" c
+private def downBlockStatSig (p : String) (oc : Nat) : List String :=
+  bnStatSig s!"{p}n1" oc ++ bnStatSig s!"{p}n2" oc ++ bnStatSig s!"{p}np" oc
+private def idChainStatSig (base : String) (n c : Nat) : List String := Id.run do
+  let mut acc := []
+  for i in [:n] do acc := acc ++ idBlockStatSig s!"{base}b{i}" c
+  return acc
+
 private def gapDense (o x : String) (c nC Hh Ww : Nat) : String :=
   s!"    %{o}gs = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [2, 3] : ({ty [BS,c,Hh,Ww]}, tensor<f32>) -> {ty [BS,c]}\n" ++
   s!"    %{o}gnf = stablehlo.constant dense<{Hh*Ww}.0> : {ty [BS,c]}\n" ++
@@ -182,18 +245,64 @@ private def resnet34Fwd : String := Id.run do
   return "module @m {\n" ++ s!"  func.func @resnet34_fwd({argSig}) -> {ty [BS,10]} " ++ "{\n" ++
     body ++ s!"    return %out : {ty [BS,10]}\n" ++ "  }\n}\n"
 
+/-- `@resnet34_fwd_eval` — the eval forward with affine running-stats BN. Same params as
+    `@resnet34_fwd`, plus per-BN-layer `%{p}mu`/`%{p}var` `[oc]` inputs in BN forward order
+    (the driver passes `θ ++ runningBnStats`). Returns logits `[BS,10]`. -/
+private def resnet34FwdEval : String := Id.run do
+  let stemCode :=
+    s!"    %xr = stablehlo.reshape %x : ({ty [BS,150528]}) -> {ty [BS,3,224,224]}\n" ++
+    convStem "stc" "%xr" "%sW" "%sb" 64 3 224 224 112 112 ++
+    bnEval "stn" "%stc" "%sg" "%sbt" 64 112 112 ++
+    relu "str" "%stn" 64 112 112 ++
+    maxpool "stp" "%str" 64 112 112
+  let (s1, o1) := idChainEval "s1" "%stp" 3 64 56 56
+  let (d2, o2) := downBlockEval "d2" o1 64 128 28 28
+  let (s2, o2b) := idChainEval "s2" o2 3 128 28 28
+  let (d3, o3) := downBlockEval "d3" o2b 128 256 14 14
+  let (s3, o3b) := idChainEval "s3" o3 5 256 14 14
+  let (d4, o4) := downBlockEval "d4" o3b 256 512 7 7
+  let (s4, o4b) := idChainEval "s4" o4 2 512 7 7
+  let tail := gapDense "out" o4b 512 10 7 7
+  let body :=
+    "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    stemCode ++ s1 ++ d2 ++ s2 ++ d3 ++ s3 ++ d4 ++ s4 ++ tail
+  let paramSig : List String :=
+    ["%x: " ++ ty [BS,150528]]
+    ++ [s!"%sW: {ty [64,3,7,7]}", s!"%sb: {ty [64]}"] ++ bnSig "s" 64
+    ++ idChainSig "s1" 3 64
+    ++ downBlockSig "d2" 64 128 ++ idChainSig "s2" 3 128
+    ++ downBlockSig "d3" 128 256 ++ idChainSig "s3" 5 256
+    ++ downBlockSig "d4" 256 512 ++ idChainSig "s4" 2 512
+    ++ [s!"%Wd: {ty [512,10]}", s!"%bd: {ty [10]}"]
+  -- BN running-stats inputs, BN forward order (the driver's runningBnStats layout)
+  let statSig : List String :=
+    bnStatSig "stn" 64
+    ++ idChainStatSig "s1" 3 64
+    ++ downBlockStatSig "d2" 128 ++ idChainStatSig "s2" 3 128
+    ++ downBlockStatSig "d3" 256 ++ idChainStatSig "s3" 5 256
+    ++ downBlockStatSig "d4" 512 ++ idChainStatSig "s4" 2 512
+  let argSig := String.intercalate ", " (paramSig ++ statSig)
+  return "module @m {\n" ++ s!"  func.func @resnet34_fwd_eval({argSig}) -> {ty [BS,10]} " ++ "{\n" ++
+    body ++ s!"    return %out : {ty [BS,10]}\n" ++ "  }\n}\n"
+
+private def tryCompile (src dst label : String) : IO Unit := do
+  try
+    let cargs ← ireeCompileArgs src dst
+    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+    if r.exitCode != 0 then IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take 3000}"
+    else IO.println s!"{label} iree-compile OK → {src}"
+  catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
+
 def main : IO Unit := do
+  IO.FS.createDirAll "verified_mlir"
+  IO.FS.createDirAll ".lake/build"
   let mlir := resnet34Fwd
   IO.println s!"rendered @resnet34_fwd (BS={BS}): {mlir.length} chars"
-  IO.FS.createDirAll "verified_mlir"
   IO.FS.writeFile "verified_mlir/resnet34_fwd.mlir" mlir
-  IO.FS.createDirAll ".lake/build"
-  let path := "verified_mlir/resnet34_fwd.mlir"
-  let cargs ← ireeCompileArgs path ".lake/build/resnet34_fwd_v.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 3000}"
-  else
-    IO.println "resnet34_fwd iree-compile OK → .lake/build/resnet34_fwd_v.vmfb"
+  let evalMlir := resnet34FwdEval
+  IO.println s!"rendered @resnet34_fwd_eval (BS={BS}): {evalMlir.length} chars"
+  IO.FS.writeFile "verified_mlir/resnet34_fwd_eval.mlir" evalMlir
+  tryCompile "verified_mlir/resnet34_fwd.mlir" ".lake/build/resnet34_fwd_v.vmfb" "fwd"
+  tryCompile "verified_mlir/resnet34_fwd_eval.mlir" ".lake/build/resnet34_fwd_eval_v.vmfb" "fwd_eval"
 
 #eval main
