@@ -476,11 +476,23 @@ private def adamCot : String :=
   ++ s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n"
   ++ s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
 
-/-- `@efficientnet_adam_train_step` — the proof-rendered fwd/bwd/param-grads with the SGD update
-    swapped for `ViTRender.emitAdamV` and the `[θ|m|v]` + scalar-tail packed signature the generic
-    `VerifiedNet.trainAdamSched` driver expects:
-    `(x, θ×k, m×k, v×k, lr, bc1, bc2, onehot) → (θ'×k, m'×k, v'×k, loss, bc1, bc2)` (k=262).
-    `lr`/`bc1`/`bc2` runtime (cosine+warmup + per-step bias correction); `bc1`/`bc2` pass through. -/
+/-- BN layers (prefix, channels, H·W) in forward order — the running-stats layout shared by the
+    train-step batch-stat outputs, the driver's `runningBnStats`, and `@efficientnet_fwd_eval`.
+    Per block: expand-BN (only when t≠1) → depthwise-BN → project-BN. -/
+private def bnLayers : List (String × Nat × Nat) := Id.run do
+  let mut ls := [("stn", 32, (IMG/2)*(IMG/2))]
+  let mut curH := IMG/2
+  for (p, ic, mid, oc, s, _r, _k) in blocks do
+    let Hout := curH / s
+    if mid != ic then ls := ls ++ [(s!"{p}en", mid, curH*curH)]
+    ls := ls ++ [(s!"{p}dn", mid, Hout*Hout), (s!"{p}pn", oc, Hout*Hout)]
+    curH := Hout
+  ls := ls ++ [("hn", 1280, curH*curH)]
+  return ls
+
+/-- Channel count per BN layer in forward order — the `bnChannels` metadata for `efficientnetVerified`. -/
+def bnChannelsList : List Nat := bnLayers.map (fun (_, oc, _) => oc)
+
 private def trainStepAdamSched : String :=
   let body := renderBody adamCot
   let updParts := allParams.map (fun (nm, gr, ds) =>
@@ -492,14 +504,24 @@ private def trainStepAdamSched : String :=
   let psig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
   let msig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
   let vsig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
+  -- Per-BN-layer batch mean/var = smr/(BS·H·W), vsr/(BS·H·W) → passthrough slots (matching dummy
+  -- `[oc]` inputs keep #outputs = #inputs for the generic FFI). Running-stats BN; see r34.
+  let statIn := String.intercalate ", " (bnLayers.flatMap (fun (p, oc, _) =>
+    [s!"%{p}mui: {ty [oc]}", s!"%{p}vari: {ty [oc]}"]))
+  let statCode := String.join (bnLayers.map (fun (p, oc, hw) =>
+    s!"    %{p}bnnf = stablehlo.constant dense<{BS*hw}.0> : {ty [oc]}\n" ++
+    s!"    %{p}bnmu = stablehlo.divide %{p}smr, %{p}bnnf : {ty [oc]}\n" ++
+    s!"    %{p}bnvar = stablehlo.divide %{p}vsr, %{p}bnnf : {ty [oc]}\n"))
+  let statOutNames := bnLayers.flatMap (fun (p, _, _) => [s!"%{p}bnmu", s!"%{p}bnvar"])
+  let statOutTy := bnLayers.flatMap (fun (_, oc, _) => [ty [oc], ty [oc]])
   let argSig := ("%x: " ++ ty [BS,3*IMG*IMG]) ++ ", " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: " ++ ty [BS,10]
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, " ++ statIn ++ ", %onehot: " ++ ty [BS,10]
   let dims := allParams.map (fun (_, _, ds) => ds)
   let allDims := dims ++ dims ++ dims
-  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
-  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
+  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statOutTy)
+  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"] ++ statOutNames)
   "module @m {\n" ++ s!"  func.func @efficientnet_adam_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
-    body ++ adamConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+    body ++ adamConsts ++ upd ++ statCode ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
 
 /-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH (the render +
     write already happened, so the artifact exists regardless). -/
@@ -521,6 +543,7 @@ def main : IO Unit := do
   IO.FS.writeFile "verified_mlir/efficientnet_train_step.mlir" mlir
   let amlir := trainStepAdamSched
   IO.println s!"rendered EfficientNet-B0 AdamW-sched train step: {amlir.length} chars"
+  IO.println s!"  bnChannels ({bnChannelsList.length} layers): {bnChannelsList}"
   IO.FS.writeFile "verified_mlir/efficientnet_adam_train_step.mlir" amlir
   -- SGD smoke (the committed train step; verifies the shared `renderBody`).
   tryCompile "verified_mlir/efficientnet_train_step.mlir" ".lake/build/efficientnet_train_step_v.vmfb" "SGD"

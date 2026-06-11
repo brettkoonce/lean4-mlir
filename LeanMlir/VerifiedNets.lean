@@ -208,6 +208,12 @@ def efficientnetVerified : VerifiedNetSpec where
     .globalAvgPool,
     .dense 1280 10 ]
   blurb := "EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"
+  -- 49 BN layers in forward order (stem; per MBConv: expand-BN [t≠1 only], depthwise-BN, project-BN;
+  -- head) — running-stats layout for trainAdamSched + @efficientnet_fwd_eval. Printed by
+  -- TestEfficientNetTrain.bnChannelsList; true batch-norm makes batch-BN eval degenerate on sorted val.
+  bnChannels := #[32, 32, 16, 96, 96, 24, 144, 144, 24, 144, 144, 40, 240, 240, 40, 240, 240, 80,
+    480, 480, 80, 480, 480, 80, 480, 480, 112, 672, 672, 112, 672, 672, 112, 672, 672, 192,
+    1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 320, 1280]
 
 -- Derived layout (262 params) == the audited hand-list EfficientNetLayout.specs.
 #guard efficientnetVerified.toSpecs == EfficientNetLayout.specs

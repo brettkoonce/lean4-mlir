@@ -227,18 +227,109 @@ private def efficientnetFwd : String := Id.run do
   return "module @m {\n" ++ s!"  func.func @efficientnet_fwd({argSig}) -> {ty [BS,10]} " ++ "{\n" ++
     body ++ s!"    return %out : {ty [BS,10]}\n" ++ "  }\n}\n"
 
+-- ════════════ inference-BN (running-stats) eval forward ════════════
+-- Affine-only BN consuming per-layer running μ/var (inputs `%{o}mu`/`%{o}var`); the SE/swish/conv
+-- ops are unchanged. The `efficientnet_fwd_eval.mlir` the driver evals with once running-stats are
+-- threaded — class-batch-independent eval parity.
+
+/-- Affine BN with running stats: `y = γ·(x − μ)·rsqrt(var + ε) + β`, μ/var from `%{o}mu`/`%{o}var`. -/
+private def bnEval (o x g bt : String) (oc Hh Ww : Nat) : String :=
+  s!"    %{o}mub = stablehlo.broadcast_in_dim %{o}mu, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}xc = stablehlo.subtract {x}, %{o}mub : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}vb = stablehlo.broadcast_in_dim %{o}var, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}ep = stablehlo.constant dense<{EPS}> : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}ve = stablehlo.add %{o}vb, %{o}ep : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}istd = stablehlo.rsqrt %{o}ve : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}xh = stablehlo.multiply %{o}xc, %{o}istd : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}gb = stablehlo.broadcast_in_dim {g}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}btb = stablehlo.broadcast_in_dim {bt}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o}gx = stablehlo.multiply %{o}xh, %{o}gb : {ty [BS,oc,Hh,Ww]}\n" ++
+  s!"    %{o} = stablehlo.add %{o}gx, %{o}btb : {ty [BS,oc,Hh,Ww]}\n"
+
+/-- MBConv forward with affine running-stats BN (bnEval); SE/swish/conv identical to `mbconvFwd`. -/
+private def mbconvEval (p x : String) (ic mid oc Hin s r k : Nat) : String × String :=
+  let Hout := Hin / s
+  let hasExpand := mid != ic
+  let (exC, dwIn) :=
+    if hasExpand then
+      (conv1 s!"{p}e" x s!"%{p}eW" s!"%{p}eb" mid ic Hin Hin ++
+       bnEval s!"{p}en" s!"%{p}e" s!"%{p}eg" s!"%{p}ebt" mid Hin Hin ++
+       swishAct s!"{p}es" s!"%{p}en" mid Hin Hin, s!"%{p}es")
+    else ("", x)
+  let body :=
+    exC ++
+    (if s == 2 then dwconvStrided s!"{p}d" dwIn s!"%{p}dW" s!"%{p}db" mid Hout Hout k
+     else dwconv s!"{p}d" dwIn s!"%{p}dW" s!"%{p}db" mid Hin Hin k) ++
+    bnEval s!"{p}dn" s!"%{p}d" s!"%{p}dg" s!"%{p}dbt" mid Hout Hout ++
+    swishAct s!"{p}ds" s!"%{p}dn" mid Hout Hout ++
+    seFwd s!"{p}z" s!"%{p}ds" s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2" mid Hout Hout r ++
+    conv1 s!"{p}p" s!"%{p}zse" s!"%{p}pW" s!"%{p}pb" oc mid Hout Hout ++
+    bnEval s!"{p}pn" s!"%{p}p" s!"%{p}pg" s!"%{p}pbt" oc Hout Hout
+  if s == 1 && ic == oc then
+    (body ++ addOp s!"{p}o" s!"%{p}pn" x oc Hout Hout, s!"%{p}o")
+  else
+    (body, s!"%{p}pn")
+
+/-- Per-BN-layer running-stats input pair `(%{p}mu, %{p}var)` `[oc]` (canonical forward order). -/
+private def bnStatSig (p : String) (oc : Nat) : List String :=
+  [s!"%{p}mu: {ty [oc]}", s!"%{p}var: {ty [oc]}"]
+private def mbconvStatSig (p : String) (ic mid oc : Nat) : List String :=
+  (if mid != ic then bnStatSig s!"{p}en" mid else []) ++ bnStatSig s!"{p}dn" mid ++ bnStatSig s!"{p}pn" oc
+
+/-- `@efficientnet_fwd_eval` — eval forward with affine running-stats BN; params + per-BN-layer
+    `%{p}mu`/`%{p}var` `[oc]` inputs in BN forward order (driver passes `θ ++ runningBnStats`). -/
+private def efficientnetFwdEval : String := Id.run do
+  let stemCode :=
+    s!"    %xr = stablehlo.reshape %x : ({ty [BS,3*IMG*IMG]}) -> {ty [BS,3,IMG,IMG]}\n" ++
+    conv3 "stc" "%xr" "%sW" "%sb" 32 3 IMG IMG (IMG/2) (IMG/2) 2 ++
+    bnEval "stn" "%stc" "%sg" "%sbt" 32 (IMG/2) (IMG/2) ++
+    swishAct "str" "%stn" 32 (IMG/2) (IMG/2)
+  let mut blkCode := ""
+  let mut cur := "%str"
+  let mut curH := IMG/2
+  for (p, ic, mid, oc, s, r, k) in blocks do
+    let (c, out) := mbconvEval p cur ic mid oc curH s r k
+    blkCode := blkCode ++ c; cur := out; curH := curH / s
+  let head :=
+    conv1 "h" cur "%hW" "%hb" 1280 320 curH curH ++
+    bnEval "hn" "%h" "%hg" "%hbt" 1280 curH curH ++
+    swishAct "hr" "%hn" 1280 curH curH
+  let tail := gapDense "out" "%hr" 1280 10 curH curH
+  let body :=
+    "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    stemCode ++ blkCode ++ head ++ tail
+  let paramSig : List String :=
+    ["%x: " ++ ty [BS,3*IMG*IMG]]
+    ++ [s!"%sW: {ty [32,3,3,3]}", s!"%sb: {ty [32]}"] ++ bnSig "s" 32
+    ++ (blocks.map (fun (p, ic, mid, oc, _, r, k) => mbconvSig p ic mid oc r k)).flatten
+    ++ [s!"%hW: {ty [1280,320,1,1]}", s!"%hb: {ty [1280]}"] ++ bnSig "h" 1280
+    ++ [s!"%Wd: {ty [1280,10]}", s!"%bd: {ty [10]}"]
+  let statSig : List String :=
+    bnStatSig "stn" 32
+    ++ (blocks.map (fun (p, ic, mid, oc, _, _, _) => mbconvStatSig p ic mid oc)).flatten
+    ++ bnStatSig "hn" 1280
+  let argSig := String.intercalate ", " (paramSig ++ statSig)
+  return "module @m {\n" ++ s!"  func.func @efficientnet_fwd_eval({argSig}) -> {ty [BS,10]} " ++ "{\n" ++
+    body ++ s!"    return %out : {ty [BS,10]}\n" ++ "  }\n}\n"
+
+private def tryCompile (src dst label : String) : IO Unit := do
+  try
+    let cargs ← ireeCompileArgs src dst
+    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+    if r.exitCode != 0 then IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take 3000}"
+    else IO.println s!"{label} iree-compile OK → {src}"
+  catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
+
 def main : IO Unit := do
+  IO.FS.createDirAll "verified_mlir"
+  IO.FS.createDirAll ".lake/build"
   let mlir := efficientnetFwd
   IO.println s!"rendered @efficientnet_fwd B0 (BS={BS}, {blocks.length} MBConv layers): {mlir.length} chars"
-  IO.FS.createDirAll "verified_mlir"
   IO.FS.writeFile "verified_mlir/efficientnet_fwd.mlir" mlir
-  IO.FS.createDirAll ".lake/build"
-  let path := "verified_mlir/efficientnet_fwd.mlir"
-  let cargs ← ireeCompileArgs path ".lake/build/efficientnet_fwd_v.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 3000}"
-  else
-    IO.println "efficientnet_fwd B0 iree-compile OK → .lake/build/efficientnet_fwd_v.vmfb"
+  let evalMlir := efficientnetFwdEval
+  IO.println s!"rendered @efficientnet_fwd_eval (BS={BS}): {evalMlir.length} chars"
+  IO.FS.writeFile "verified_mlir/efficientnet_fwd_eval.mlir" evalMlir
+  tryCompile "verified_mlir/efficientnet_fwd.mlir" ".lake/build/efficientnet_fwd_v.vmfb" "fwd"
+  tryCompile "verified_mlir/efficientnet_fwd_eval.mlir" ".lake/build/efficientnet_fwd_eval_v.vmfb" "fwd_eval"
 
 #eval main
