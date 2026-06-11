@@ -363,6 +363,14 @@ lean_exe «convnext-verified» where
   root := `MainConvNeXtVerified
   moreLinkArgs := ireeLink
 
+-- convnext peer of r34-verified-adam: the proof-rendered train step (all-smooth — LayerNorm +
+-- GELU + layerScale, no BN) with the SGD update swapped for AdamW (ViTRender.emitAdamV) + packed
+-- θ|m|v + runtime lr/bc threading via trainAdamSched. Recipe matches the reference (lr 1e-3, wd
+-- 1e-4, cosine+warmup 3, label-smoothing 0.1). Render: tests/TestConvNeXtTrain.lean.
+lean_exe «convnext-verified-adam» where
+  root := `MainConvNeXtVerifiedAdam
+  moreLinkArgs := ireeLink
+
 lean_exe «vit-verified» where
   root := `MainViTVerified
   moreLinkArgs := ireeLink

@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.StableHLO
+import LeanMlir.ViTRender
 import LeanMlir.Types
 
 /-! # ch9 N5 — ConvNeXt-T train-step renderer (faithful [3,3,9,3] config) + iree
@@ -310,20 +311,20 @@ private def spats  : Array Nat := #[56, 28, 14, 7]
 
 -- ════════════ param list (forward order); single source for sig + grads + update ════════════
 
-private def blockParams (p : String) (c e : Nat) : List (String × String × String) :=
-  [(s!"{p}dW", s!"%{p}ddW", ty [c,1,7,7]), (s!"{p}db", s!"%{p}ddb", ty [c]),
-   (s!"{p}ng", s!"%{p}dndg", "tensor<f32>"), (s!"{p}nbt", s!"%{p}dndb", "tensor<f32>"),
-   (s!"{p}eW", s!"%{p}deW", ty [e,c,1,1]), (s!"{p}eb", s!"%{p}deb", ty [e]),
-   (s!"{p}pW", s!"%{p}dpW", ty [c,e,1,1]), (s!"{p}pb", s!"%{p}dpb", ty [c]),
-   (s!"{p}lg", s!"%{p}dlsdg", ty [c])]
+private def blockParams (p : String) (c e : Nat) : List (String × String × List Nat) :=
+  [(s!"{p}dW", s!"%{p}ddW", [c,1,7,7]), (s!"{p}db", s!"%{p}ddb", [c]),
+   (s!"{p}ng", s!"%{p}dndg", []), (s!"{p}nbt", s!"%{p}dndb", []),
+   (s!"{p}eW", s!"%{p}deW", [e,c,1,1]), (s!"{p}eb", s!"%{p}deb", [e]),
+   (s!"{p}pW", s!"%{p}dpW", [c,e,1,1]), (s!"{p}pb", s!"%{p}dpb", [c]),
+   (s!"{p}lg", s!"%{p}dlsdg", [c])]
 
-private def downParams (d : String) (ci co : Nat) : List (String × String × String) :=
-  [(s!"{d}ng", s!"%{d}dndg", "tensor<f32>"), (s!"{d}nbt", s!"%{d}dndb", "tensor<f32>"),
-   (s!"{d}W", s!"%{d}dW", ty [co,ci,2,2]), (s!"{d}b", s!"%{d}db", ty [co])]
+private def downParams (d : String) (ci co : Nat) : List (String × String × List Nat) :=
+  [(s!"{d}ng", s!"%{d}dndg", []), (s!"{d}nbt", s!"%{d}dndb", []),
+   (s!"{d}W", s!"%{d}dW", [co,ci,2,2]), (s!"{d}b", s!"%{d}db", [co])]
 
-private def allParams : List (String × String × String) := Id.run do
-  let mut ps : List (String × String × String) :=
-    [("psW", "%psdW", ty [96,3,4,4]), ("psb", "%psdb", ty [96])]
+private def allParams : List (String × String × List Nat) := Id.run do
+  let mut ps : List (String × String × List Nat) :=
+    [("psW", "%psdW", [96,3,4,4]), ("psb", "%psdb", [96])]
   for si in [0:4] do
     let c := dims[si]!
     let e := 4 * c
@@ -331,8 +332,8 @@ private def allParams : List (String × String × String) := Id.run do
       ps := ps ++ blockParams s!"s{si}b{j}" c e
     if si < 3 then
       ps := ps ++ downParams s!"d{si}" c dims[si+1]!
-  ps := ps ++ [("hng", "%hddg", "tensor<f32>"), ("hnbt", "%hddb", "tensor<f32>"),
-               ("Wd", "%dWd", ty [768,10]), ("bd", "%dbd", ty [10])]
+  ps := ps ++ [("hng", "%hddg", []), ("hnbt", "%hddb", []),
+               ("Wd", "%dWd", [768,10]), ("bd", "%dbd", [10])]
   return ps
 
 private def sgd (θ dθ ty' : String) : String :=
@@ -342,7 +343,10 @@ private def sgd (θ dθ ty' : String) : String :=
 
 -- ════════════ whole train step ════════════
 
-private def trainStep : String := Id.run do
+/-- The forward + backward body, SHARED by the SGD (`trainStep`) and AdamW (`trainStepAdamSched`)
+    renders. `cot` is spliced between forward and backward; it must define `%dy` (the cotangent the
+    backward reads) — and `%loss` for the Adam path. -/
+private def renderBody (cot : String) : String := Id.run do
   let mut fwd := "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n"
     ++ s!"    %xr = stablehlo.reshape %x : ({ty [BS,3*IMG*IMG]}) -> {ty [BS,3,IMG,IMG]}\n"
     ++ patchify "ps" "%xr" "%psW" "%psb" 96 3 56 56 4
@@ -372,16 +376,7 @@ private def trainStep : String := Id.run do
     ++ s!"    %ld = stablehlo.dot_general %hnf, %Wd, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,768]}, {ty [768,10]}) -> {ty [BS,10]}\n"
     ++ s!"    %ldb = stablehlo.broadcast_in_dim %bd, dims = [1] : ({ty [10]}) -> {ty [BS,10]}\n"
     ++ s!"    %logits = stablehlo.add %ld, %ldb : {ty [BS,10]}\n"
-  -- loss cotangent dy = (softmax(logits) − onehot) / B
-  let cot :=
-    s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n"
-    ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
-    ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
-    ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
-    ++ s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
-    ++ s!"    %bnc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n"
-    ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"
-  -- backward: dense + GAP → head-LN → blocks/downs reversed → patchify
+  -- backward: dense + GAP → head-LN → blocks/downs reversed → patchify (reads `%dy` from `cot`)
   let mut bwd :=
     s!"    %dhnf = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [BS,10]}, {ty [768,10]}) -> {ty [BS,768]}\n"
     ++ s!"    %dWd = stablehlo.dot_general %hnf, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,768]}, {ty [BS,10]}) -> {ty [768,10]}\n"
@@ -403,26 +398,122 @@ private def trainStep : String := Id.run do
   bwd := bwd
     ++ patchifyWGrad "psdW" "%xr" d 3 96 56 56 4
     ++ convBiasGrad "psdb" d 96 56 56
+  return fwd ++ cot ++ bwd
+
+/-- SGD loss cotangent dy = (softmax(logits) − onehot) / B. -/
+private def sgdCot : String :=
+  s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n"
+  ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
+  ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
+  ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
+  ++ s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
+  ++ s!"    %bnc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n"
+  ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"
+
+private def trainStep : String :=
+  let body := renderBody sgdCot
   -- SGD + signature/return from the single param list
-  let upd := String.join (allParams.map (fun (nm, gr, t) => sgd nm gr t))
+  let upd := String.join (allParams.map (fun (nm, gr, ds) => sgd nm gr (ty ds)))
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [BS,3*IMG*IMG]) :: allParams.map (fun (nm, _, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])
-  let retTyL := String.intercalate ", " (allParams.map (fun (_, _, t) => t))
+    (("%x: " ++ ty [BS,3*IMG*IMG]) :: allParams.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}") ++ ["%onehot: " ++ ty [BS,10]])
+  let retTyL := String.intercalate ", " (allParams.map (fun (_, _, ds) => ty ds))
   let retVals := String.intercalate ", " (allParams.map (fun (nm, _, _) => s!"%{nm}n"))
-  return "module @m {\n" ++ s!"  func.func @convnext_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
-    fwd ++ cot ++ bwd ++ upd ++ s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
+  "module @m {\n" ++ s!"  func.func @convnext_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
+    body ++ upd ++ s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
+
+-- ════════════ AdamW scheduled train step (loss-curve parity with the convnext reference) ════════════
+
+/-- β₁/β₂/ε/wd baked (the convnext reference recipe); `%lr`/`%bc1`/`%bc2` arrive as runtime args. -/
+private def adamConsts : String :=
+  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
+  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
+  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
+  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
+  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
+  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+
+/-- AdamW loss cotangent with label smoothing α=0.1 (off-class mass α/K, K=10) + the in-graph
+    smoothed-CE loss `%loss` for logging — same mechanism as the ViT/mnv2/enet/r34 sched renders.
+    Defines `%lsm` (softmax), `%dy` (smoothed cotangent), `%loss`. -/
+private def adamCot : String :=
+  let ls : Float := 0.1
+  let lsK : Float := ls / 10.0
+  s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n"
+  ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
+  ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
+  ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
+  ++ s!"    %dyr0 = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
+  ++ s!"    %lsa = stablehlo.constant dense<{ls}> : {ty [BS,10]}\n"
+  ++ s!"    %lsaoh = stablehlo.multiply %lsa, %onehot : {ty [BS,10]}\n"
+  ++ s!"    %dyr1 = stablehlo.add %dyr0, %lsaoh : {ty [BS,10]}\n"
+  ++ s!"    %lsaik = stablehlo.constant dense<{lsK}> : {ty [BS,10]}\n"
+  ++ s!"    %dyr = stablehlo.subtract %dyr1, %lsaik : {ty [BS,10]}\n"
+  ++ s!"    %bnc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n"
+  ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"
+  ++ s!"    %llog = stablehlo.log %lsm : {ty [BS,10]}\n"
+  ++ s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [BS,10]}\n"
+  ++ s!"    %t1s = stablehlo.reduce(%ohll init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
+  ++ s!"    %lls = stablehlo.reduce(%llog init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
+  ++ s!"    %omac = stablehlo.constant dense<{1.0 - ls}> : {ty [BS]}\n"
+  ++ s!"    %aKc = stablehlo.constant dense<{lsK}> : {ty [BS]}\n"
+  ++ s!"    %lt1 = stablehlo.multiply %omac, %t1s : {ty [BS]}\n"
+  ++ s!"    %lt2 = stablehlo.multiply %aKc, %lls : {ty [BS]}\n"
+  ++ s!"    %lpe = stablehlo.add %lt1, %lt2 : {ty [BS]}\n"
+  ++ s!"    %lsum2 = stablehlo.reduce(%lpe init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS]}, tensor<f32>) -> tensor<f32>\n"
+  ++ s!"    %lbfc = stablehlo.constant dense<{BS}.0> : tensor<f32>\n"
+  ++ s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n"
+  ++ s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+
+/-- `@convnext_adam_train_step` — the proof-rendered fwd/bwd/param-grads with the SGD update swapped
+    for `ViTRender.emitAdamV` and the `[θ|m|v]` + scalar-tail packed signature the generic
+    `VerifiedNet.trainAdamSched` driver expects:
+    `(x, θ×k, m×k, v×k, lr, bc1, bc2, onehot) → (θ'×k, m'×k, v'×k, loss, bc1, bc2)` (k=180).
+    `lr`/`bc1`/`bc2` runtime (cosine+warmup + per-step bias correction); `bc1`/`bc2` pass through.
+    Scalar LN params (dims `[]` → `tensor<f32>`) go through `emitAdamV` as rank-0 (identity casts). -/
+private def trainStepAdamSched : String :=
+  let body := renderBody adamCot
+  let updParts := allParams.map (fun (nm, gr, ds) =>
+    ViTRender.emitAdamV ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
+  let upd := String.join (updParts.map (·.1))
+  let thetaN := updParts.map (·.2.1)
+  let mN := updParts.map (·.2.2.1)
+  let vN := updParts.map (·.2.2.2)
+  let psig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
+  let msig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
+  let vsig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
+  let argSig := ("%x: " ++ ty [BS,3*IMG*IMG]) ++ ", " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: " ++ ty [BS,10]
+  let pdims := allParams.map (fun (_, _, ds) => ds)
+  let allDims := pdims ++ pdims ++ pdims
+  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
+  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
+  "module @m {\n" ++ s!"  func.func @convnext_adam_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
+    body ++ adamConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+
+/-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH (the render +
+    write already happened, so the artifact exists regardless). -/
+private def tryCompile (src dst label : String) : IO Unit := do
+  try
+    let cargs ← ireeCompileArgs src dst
+    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+    if r.exitCode != 0 then IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take 3000}"
+    else IO.println s!"{label} iree-compile OK → {src}"
+  catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
 
 def main : IO Unit := do
+  IO.FS.createDirAll "verified_mlir"
+  IO.FS.createDirAll ".lake/build"
+  -- Render + write BOTH artifacts first, then compile (so a missing iree-compile can't abort
+  -- before the AdamW artifact is written).
   let mlir := trainStep
   IO.println s!"rendered ConvNeXt-T train step (BS={BS}, [3,3,9,3]): {mlir.length} chars, {allParams.length} params"
-  IO.FS.createDirAll "verified_mlir"
   IO.FS.writeFile "verified_mlir/convnext_train_step.mlir" mlir
-  IO.FS.createDirAll ".lake/build"
-  let cargs ← ireeCompileArgs "verified_mlir/convnext_train_step.mlir" ".lake/build/convnext_train_step_v.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 3000}"
-  else
-    IO.println "convnext-T FULL train step iree-compile OK → verified_mlir/convnext_train_step.mlir"
+  let amlir := trainStepAdamSched
+  IO.println s!"rendered ConvNeXt-T AdamW-sched train step: {amlir.length} chars"
+  IO.FS.writeFile "verified_mlir/convnext_adam_train_step.mlir" amlir
+  -- SGD smoke (the committed train step; verifies the shared `renderBody`).
+  tryCompile "verified_mlir/convnext_train_step.mlir" ".lake/build/convnext_train_step_v.vmfb" "SGD"
+  -- AdamW scheduled train step — the artifact `convnext-verified-adam` trains on.
+  tryCompile "verified_mlir/convnext_adam_train_step.mlir" "/tmp/convnext_adam_ts.vmfb" "AdamW"
 
 #eval main
