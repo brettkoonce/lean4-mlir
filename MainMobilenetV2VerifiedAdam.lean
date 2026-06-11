@@ -11,10 +11,12 @@ bias correction) through the unchanged FFI (`n_params = 3k`).
 
 Recipe matches `mobilenet-v2-train` (`MainMobilenetV2Train.lean`'s `mobilenetV2Config`): AdamW
 lr 1e-3 / wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment, 80 epochs, bs 32
-(no EMA, no grad-clip). **Loss-curve-first parity**: both this and the reference batch-norm in
-train mode, so the train-loss curve tracks; eval here uses the eval-batch's own BN stats (the
-reference uses running stats), so val-acc is close-not-exact — running-stats BN is a later rung.
-Weight decay is applied uniformly (incl. BN/bias), matching the ViT verified path.
+(no EMA, no grad-clip). **Exact BN parity**: TRUE batch-norm (reduce `[0,2,3]`) in the train step
++ running-stats eval — `mobilenetv2Verified.bnChannels` (20 layers) is non-empty, so the generic
+`trainAdamSched` threads per-layer EMA batch stats and evals through `@mobilenetv2_fwd_eval` (affine
+BN with the running stats), class-batch-independent on the sorted val set (GPU-validated: epoch-1
+loss 2.18, running-stats val_acc 32.9%). The BN is hand-emitted (not a proof token — see
+`TestMobilenetV2TrainPC`). Weight decay is applied uniformly (incl. BN/bias), matching the ViT path.
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mobilenetv2-verified-adam data` (loader reads
 `data/imagenette`).

@@ -169,6 +169,13 @@ def mobilenetv2Verified : VerifiedNetSpec where
     .globalAvgPool,
     .dense 128 10 ]
   blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 6 inverted-residual blocks, 4 stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"
+  -- 20 BN layers in forward order (stem; per inverted-residual block expand-BN/depthwise-BN/project-BN;
+  -- head) — running-stats layout for trainAdamSched + @mobilenetv2_fwd_eval. Matches
+  -- TestMobilenetV2TrainPC.bnLayers. True batch-norm (reduce [0,2,3]) → batch-BN eval degenerate on
+  -- sorted val, so the adam trainer evals through running stats instead.
+  bnChannels := #[16,
+    64,64,24, 96,96,24, 96,96,32, 128,128,32, 128,128,64, 256,256,64,
+    128]
 
 -- Derived layout (82 params) == the audited hand-list MobileNetV2Layout.specs.
 #guard mobilenetv2Verified.toSpecs == MobileNetV2Layout.specs

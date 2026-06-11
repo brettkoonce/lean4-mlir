@@ -7,33 +7,44 @@ on identical data. mnv2 is the cheapest next target (smallest imagenette net, 82
 params) — but it carries the one thing ViT didn't: **BatchNorm**.
 
 ---
-## STATUS (2026-06-11) — DONE, with one BN caveat
-`mobilenetv2-verified-adam` is **built, GPU-validated, committed (`90e9bb6`), and pushed** — along
-with the whole verified-AdamW set (vit, mnv2, enet `19c487b`, r34 `845077b`, convnext `26e91d1`).
-The §1 AdamW packed render and §3 Main/recipe/exe below all landed as planned (the `emitAdamV` swap
-+ packed `[θ|m|v]` + scalar-tail through `trainAdamSched`).
+## STATUS (2026-06-11) — exact-parity DONE + GPU-validated (UNCOMMITTED, awaiting sign-off)
+`mobilenetv2-verified-adam` originally landed (committed `90e9bb6`, pushed) with **per-sample BN** —
+the documented caveat. Exact BN parity (true `[0,2,3]` batch-norm + running-stats eval, matching r34/
+enet) is now **implemented and GPU-validated** on the 7900 XTX (gfx1100): all 4 artifacts
+iree-compile; a fresh run trains cleanly (epoch-1 loss 2.18, descending into epoch 2 at ~1.9), and
+the running-stats eval through `@mobilenetv2_fwd_eval` is **non-degenerate: epoch-1 val_acc
+1283/3904 = 32.9%** (vs ~10% for degenerate batch-BN-eval on the class-sorted val set; right in the
+r34 37.4% / enet 40.1% family). UNCOMMITTED, awaiting Brett's sign-off. What changed:
 
-**§2 (BatchNorm) was the swing factor, exactly as predicted — and it split three ways:**
-- **mnv2 kept per-sample BN** (reduce `[2,3]`, each image self-normalized). This is a *different
-  operation* than the reference's true batch-norm (reduce `[0,2,3]`), so mnv2's train curve doesn't
-  tightly match the reference — but its **eval works fine** (self-normalizing → not degenerate on the
-  class-sorted val set). **Accepted as a documented caveat**, because mnv2's BN is rendered through
-  PROOF TOKENS (`.bnPerChannelF`) and `.bnBatchF` has no `pretty`/emit case (no batch-back token
-  either) — so giving mnv2 batch-norm means HAND-rebuilding it in the proof-token PC render, trading
-  away its proof-rendered-BN property, for the weakest net.
-- **r34 + enet got full exact BN parity** (committed `293cb1c`, `cceea14`): true `[0,2,3]` batch-norm
-  (r34 swapped; enet already was) **+ running-stats eval**. Running-stats is now SHARED INFRA in the
-  generic `trainAdamSched` driver — a new `<slug>_fwd_eval.mlir` (affine BN with per-layer running
-  μ/var), the adam step carries batch mean/var in PASSTHROUGH slots (keeps FFI `#out=#in`), the
-  driver EMAs them (`bnMom` 1.0→0.1) into `runningBnStats`, and a `bnChannels : Array Nat` field
-  drives it (empty for LN nets). Fixed degenerate sorted-val eval: r34 16%→37.4%, enet 12%→40.1%.
+- **Adam train step** (`tests/TestMobilenetV2TrainPC.lean`): the BN proof tokens `.bnPerChannelF` /
+  `.bnPerChannelBack` are replaced by **hand-emitted** flat↔NCHW true-batch-norm fragments
+  (`bnB`/`bnBackB`, reduce `[0,2,3]`, nf=BS·H·W). `bnB` saves x̂/istd/nf/γb + `[oc]` batch sums;
+  `bnBackB` reuses them and **folds dγ/dβ** (the old separate `bnParamGrad` recompute is gone → the
+  artifact shrank 383KB→335KB). Per-layer batch mean/var are carried out in passthrough slots
+  (`bnLayers`, 20 layers), so the generic `trainAdamSched` running-stats subsystem drives it.
+  **This is the proof-token-BN tradeoff the caveat warned about** — BN forward+backward stop being
+  proof-rendered; the convs, depthwise, relu6, residual, gap and dense all STAY `pretty`-rendered.
+- **Eval forward** (`tests/TestMobilenetV2Fwd.lean`): `bnPC` swapped to true batch-norm; new
+  `@mobilenetv2_fwd_eval` (affine BN consuming per-layer running μ/var, forward-order stat sig).
+- **SGD train step** (`tests/TestMobilenetV2Train.lean`): `bnPC`/`bnBackPC` swapped to true
+  batch-norm (the exact r34 diff) — keeps the `mobilenetv2-verified` SGD exe self-consistent.
+- **Spec** (`LeanMlir/VerifiedNets.lean`): `bnChannels := #[16, 64,64,24, …, 128]` (20 layers).
 
-**If mnv2 exact-parity is wanted later:** the driver + metadata are done; only the mnv2-SIDE render
-work remains — hand-emit batch-norm fwd+bwd into `TestMobilenetV2TrainPC` (replace the
-`.bnPerChannelF`/`.bnPerChannelBack` `pretty` calls with hand-emitted batch fragments, like r34/enet),
-add `bnLayers` + train-step stat passthrough, a `mobilenetv2_fwd_eval` render, and set `bnChannels`
-on `mobilenetv2Verified`. See `[[verified-adam-net-progress]]` memory + the r34 commit `293cb1c` for
-the template.
+Validation: all 4 files typecheck + render; adam params==returns (289); 40 BN grad names
+defined+consumed; zero undefined SSA refs; 246 reshapes element-consistent; stat-in dummies pure
+passthrough; 40 stat divides = 20 bnChannels × 2. **GPU (gfx1100, lean4-jax FFI + IREE 3.12, rocm):**
+all 4 artifacts iree-compile clean (the `--iree-codegen-llvmgpu-use-reduction-vector-distribution=false`
+rocm workaround is needed now that BN reduces `[0,2,3]`); fresh run epoch-1 loss 2.18 → epoch-2 ~1.9,
+running-stats val_acc 32.9%. Run recipe: clear `.lake/build/mobilenetv2_adam_ckpt.bin{,.epoch}`, then
+`PATH=…/lean4-jax/.venv/bin IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 .lake/build/bin/mobilenetv2-verified-adam
+…/mnist-lean4/data` (see `[[running-verified-trainers-locally]]`).
+
+**For r34 + enet** (committed `293cb1c`, `cceea14`): same true `[0,2,3]` batch-norm + running-stats
+eval — the SHARED INFRA in `trainAdamSched` (a `<slug>_fwd_eval.mlir`, batch mean/var in PASSTHROUGH
+slots keeping the FFI param/return symmetry, EMA `bnMom` 1.0→0.1 into `runningBnStats`, the
+`bnChannels : Array Nat` field, empty for LN nets). mnv2 now reuses this subsystem too — only the
+mnv2-side render (hand-emitted BN + fwd_eval + bnChannels) was the remaining work, now done. See
+`[[verified-adam-net-progress]]` + the r34 commit `293cb1c` for the template.
 
 ---
 ## Headline: mnv2 reuses ~80% of the ViT spine; the real new work is BatchNorm.
