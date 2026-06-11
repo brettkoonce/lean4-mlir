@@ -159,6 +159,11 @@ open Proofs
 -- not a constant collapse. (Nonzero-Jacobian seal is the documented residual.)
 #print axioms Mnv2Live.bn13_window
 #print axioms Mnv2Live.mnv2Live_has_vjp_correct
+-- ...and the live witness is non-degenerate: its forward is non-constant
+-- (`forward X ≠ forward 0`), so the Jacobian is not identically zero — the
+-- formal seal that distinguishes it from the constant-output `MobileNetV2Concrete`.
+#print axioms Mnv2Live.chSum_convX
+#print axioms Mnv2Live.mnv2Live_forward_nonconstant
 #print axioms layerScale_has_vjp_correct
 #print axioms convnext_has_vjp_at_correct
 -- ConvNeXt promoted to an UNCONDITIONAL global VJP (all-smooth: LN+GELU, no

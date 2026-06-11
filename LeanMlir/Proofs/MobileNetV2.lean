@@ -999,9 +999,10 @@ end MobileNetV2Concrete
 --   zeroing every kernel → constant output → zero Jacobian. `Mnv2Live`
 --   discharges the SAME bundle on a NONZERO, non-collapsed net, defeating
 --   BN's `√(σ²+ε)` with the `γ=1,β=3, n≤8` window (`bn13_window`) instead
---   of a constant collapse. The formal nonzero-Jacobian seal is the
---   documented residual (see the closing docstring); `bnForward_mean` /
---   `bn1_devSum_scale` / `bnIstd_pos` are its reusable, layout-free core.
+--   of a constant collapse — AND proves the net is genuinely non-degenerate
+--   (`mnv2Live_forward_nonconstant : forward X ≠ forward 0`, below), so its
+--   Jacobian is not identically zero. `bnForward_mean` / `bn1_devSum_scale` /
+--   `bnIstd_pos` are the reusable, layout-free core of that seal.
 -- ════════════════════════════════════════════════════════════════
 
 namespace Mnv2Live
@@ -1180,24 +1181,310 @@ theorem mnv2Live_has_vjp_correct (dy : Vec 2) (i : Fin (1 * 2 * 2)) :
           We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh) X i j * dy j :=
   mnv2Live_has_vjp_at.correct dy i
 
-/-! ## The remaining obligation: non-vacuity (nonzero Jacobian)
+-- ── Non-vacuity seal: the live forward is genuinely non-constant ──
+-- Everything below proves `mnv2Live_forward_nonconstant : forward X ≠ forward 0`,
+-- closing the gap that `MobileNetV2Concrete` left open (constant output). The
+-- ReLU6 sites are locally the identity at `X` (the window), block-2's identity
+-- convs leave four genuine BN layers, and the asymmetric stem plants a
+-- channel-0 deviation that BN rescales by a positive `istd` through all four —
+-- so `gap₀(X) < 3 = gap₀(0)`. Three-axiom clean.
 
-```
-theorem mnv2Live_jacobian_ne_zero :
-    ∃ (i : Fin (1 * 2 * 2)) (j : Fin 2),
-      pdiv (mobilenetv2Forward Ws bs 1 1 3 …) X i j ≠ 0
-```
 
-At `X` every ReLU6 is strictly inside `(0,6)` (`win`), so each is *locally the
-identity*, and with the identity convs of block2 the forward agrees on a
-neighborhood with `dense_id ∘ gap ∘ BN ∘ BN ∘ BN ∘ BN ∘ flatConv`. The
-asymmetric stem plants `Σ_{channel 0}(z − μ) = −3 ≠ 0`; `bnForward_mean` +
-`bn1_devSum_scale` + `bnIstd_pos` carry that deviation through all four BN
-layers scaled by a positive constant, so `gap₀ = 3 − 3·∏istd/4 < 3`, whereas
-the constant input gives `gap₀ = 3` (`bnForward_const`). Hence the forward is
-non-constant and the Jacobian is nonzero. The residual is purely the layer
-reduction + the concrete `finProdFinEquiv` evaluation of `flatConv`/`gap`.
--/
+-- 1×1 conv as a per-pixel channel mix (local copy of MnistCNN.conv2d_1x1
+-- to avoid an inter-file import).
+theorem conv2d_1x1' {ic oc h w : Nat} (W : Kernel4 oc ic 1 1) (b : Vec oc)
+    (t : Tensor3 ic h w) (o : Fin oc) (hi : Fin h) (wi : Fin w) :
+    conv2d W b t o hi wi = b o + ∑ c : Fin ic, W o c 0 0 * t c hi wi := by
+  unfold conv2d
+  congr 1
+  refine Finset.sum_congr rfl (fun c _ => ?_)
+  rw [Fin.sum_univ_one, Fin.sum_univ_one]
+  congr 1
+  dsimp only
+  split
+  · refine congrArg₂ (t c) ?_ ?_ <;> (apply Fin.ext; simp only [Fin.val_zero]; omega)
+  · rename_i hcond
+    exact absurd (by
+      have := hi.isLt; have := wi.isLt
+      refine ⟨?_, ?_, ?_, ?_⟩ <;> simp only [Fin.val_zero] <;> omega) hcond
+
+/-- ReLU6 is the identity wherever every coordinate is strictly inside `(0,6)`. -/
+theorem relu6_id_window (n : Nat) (y : Vec n) (hy : ∀ k, 0 < y k ∧ y k < 6) :
+    relu6 n y = y := by
+  funext k
+  simp only [relu6]
+  obtain ⟨h0, h6⟩ := hy k
+  rw [max_eq_left (le_of_lt h0), min_eq_left (le_of_lt h6)]
+
+/-- A 1×1 channel-identity conv (`W o i = δ_oi`, `b = 0`) is the identity. -/
+theorem flatConv_id2 (W : Kernel4 2 2 1 1) (b : Vec 2)
+    (hW : ∀ o i, W o i 0 0 = if o = i then 1 else 0) (hb : ∀ o, b o = 0)
+    (v : Vec (2 * 2 * 2)) :
+    flatConv (h := 2) (w := 2) W b v = v := by
+  have hc : conv2d W b (Tensor3.unflatten v) = Tensor3.unflatten v := by
+    funext o hi wi
+    rw [conv2d_1x1', hb]
+    simp only [hW, ite_mul, one_mul, zero_mul, zero_add]
+    rw [Finset.sum_ite_eq Finset.univ o (fun c => (Tensor3.unflatten v) c hi wi)]
+    simp [Finset.mem_univ]
+  simp only [flatConv, hc, Tensor3.flatten_unflatten]
+
+/-- The 1×1 unit depthwise conv (`W = 1`, `b = 0`) is the identity. -/
+theorem depthwiseFlat_id1 (W : DepthwiseKernel 2 1 1) (b : Vec 2)
+    (hW : ∀ ch, W ch 0 0 = 1) (hb : ∀ ch, b ch = 0)
+    (v : Vec (2 * 2 * 2)) :
+    depthwiseFlat (h := 2) (w := 2) W b v = v := by
+  have hc : depthwiseConv2d W b (Tensor3.unflatten v) = Tensor3.unflatten v := by
+    funext ch hi wi
+    simp only [depthwiseConv2d, hb, Fin.sum_univ_one, hW, one_mul, zero_add]
+    split
+    · exact congrArg₂ (Tensor3.unflatten v ch)
+        (by apply Fin.ext; simp only [Fin.val_zero]; omega)
+        (by apply Fin.ext; simp only [Fin.val_zero]; omega)
+    · rename_i hcond
+      exact absurd (by
+        have := hi.isLt; have := wi.isLt
+        refine ⟨?_, ?_, ?_, ?_⟩ <;> simp only [Fin.val_zero] <;> omega) hcond
+  simp only [depthwiseFlat, hc, Tensor3.flatten_unflatten]
+
+-- ── constant-collapse helpers ──
+
+/-- ReLU6 fixes the constant-`3` vector. -/
+theorem relu6_const3 (n : Nat) : relu6 n (fun _ => 3) = (fun _ => 3) :=
+  relu6_id_window n _ (fun _ => ⟨by norm_num, by norm_num⟩)
+
+/-- BN (γ=1,β=3) sends the constant-`c` vector to constant `3`. -/
+theorem bn8_const (c : ℝ) : bnForward (2 * 2 * 2) 1 1 3 (fun _ => c) = (fun _ => 3) :=
+  bnForward_const (by norm_num) 1 1 3 c
+
+/-- ReLU6 fixes every BN output (the window lands in `(0,6)`). -/
+theorem relu6_bn8 (z : Vec (2 * 2 * 2)) :
+    relu6 (2 * 2 * 2) (bnForward (2 * 2 * 2) 1 1 3 z) = bnForward (2 * 2 * 2) 1 1 3 z :=
+  relu6_id_window _ _ (fun k => bn13_window (2 * 2 * 2) (by norm_num) (by norm_num) 1 one_pos z k)
+
+/-- The zeroed skip-block body is constantly `3`, for *any* input. -/
+theorem invresBody₁_const (y : Vec (2 * 2 * 2)) :
+    invresBody (h := 2) (w := 2) We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3 y
+      = (fun _ => 3) := by
+  simp only [invresBody, ivProject, ivDepthwise, ivExpand, Function.comp_apply,
+    flatConv_eq_zero We₁ be₁ (fun _ _ _ _ => rfl) (fun _ => rfl),
+    flatConv_eq_zero Wp₁ bp₁ (fun _ _ _ _ => rfl) (fun _ => rfl),
+    depthwiseFlat_eq_zero Wd₁ bd₁ (fun _ _ _ => rfl) (fun _ => rfl),
+    bn8_const, relu6_const3]
+
+/-- Block-2 (identity convs) reduces to three genuine BN layers. -/
+theorem invresBody₂_eq (y : Vec (2 * 2 * 2)) :
+    invresBody (h := 2) (w := 2) We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 y
+      = bnForward (2*2*2) 1 1 3 (bnForward (2*2*2) 1 1 3 (bnForward (2*2*2) 1 1 3 y)) := by
+  simp only [invresBody, ivProject, ivDepthwise, ivExpand, Function.comp_apply,
+    flatConv_id2 We₂ be₂ (fun _ _ => rfl) (fun _ => rfl),
+    flatConv_id2 Wp₂ bp₂ (fun _ _ => rfl) (fun _ => rfl),
+    depthwiseFlat_id1 Wd₂ bd₂ (fun _ => rfl) (fun _ => rfl),
+    relu6_bn8]
+
+/-- GAP of a constant vector is that constant. -/
+theorem gap_const (c : ℝ) : globalAvgPoolFlat 2 2 2 (fun _ => c) = (fun _ => c) := by
+  funext k
+  rw [globalAvgPoolFlat_as_sum]
+  simp only [Finset.sum_const, Finset.card_univ, Fintype.card_prod, Fintype.card_fin,
+    nsmul_eq_mul]
+  ring
+
+/-- The identity dense head fixes a constant vector. -/
+theorem dense_id3 (c : ℝ) : dense Wh bh (fun _ => c) = (fun _ => c) := by
+  funext j
+  simp only [dense, bh, Wh, add_zero, mul_ite, mul_one, mul_zero]
+  rw [Finset.sum_ite_eq' Finset.univ j (fun _ => c)]
+  simp
+
+/-- The stem conv sends the zero input to zero (bias `0`). -/
+theorem flatConv_Ws_zero :
+    flatConv (h := 2) (w := 2) Ws bs (fun _ => (0:ℝ)) = (fun _ => 0) := by
+  unfold flatConv
+  have hu : (Tensor3.unflatten (fun _ => (0:ℝ)) : Tensor3 1 2 2) = (fun _ _ _ => 0) := by
+    funext c hi wi; rfl
+  rw [hu]
+  have hc : conv2d Ws bs (fun _ _ _ => (0:ℝ) : Tensor3 1 2 2) = (fun _ _ _ => 0) := by
+    funext o hi wi
+    rw [conv2d_1x1']
+    simp [bs]
+  rw [hc]
+  funext k
+  simp [Tensor3.flatten]
+
+/-- **`forward 0 = 3` (constant)** — the zero input collapses through every layer. -/
+theorem forward_zero :
+    mobilenetv2Forward Ws bs 1 1 3 We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3
+      We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh ((fun _ => 0) : Vec (1 * 2 * 2))
+      = (fun _ => 3) := by
+  have hblock1 :
+      residual (invresBody (h := 2) (w := 2) We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3)
+        (fun _ => 3) = (fun _ => (6:ℝ)) := by
+    funext k
+    simp only [residual, biPath, invresBody₁_const]
+    norm_num
+  simp only [mobilenetv2Forward, Function.comp_apply, flatConv_Ws_zero, bn8_const, relu6_const3,
+    hblock1,
+    flatConv_id2 We₂ be₂ (fun _ _ => rfl) (fun _ => rfl),
+    flatConv_id2 Wp₂ bp₂ (fun _ _ => rfl) (fun _ => rfl),
+    depthwiseFlat_id1 Wd₂ bd₂ (fun _ => rfl) (fun _ => rfl),
+    gap_const, dense_id3]
+
+-- ── channel-0 deviation functional (the liveness carrier) ──
+
+/-- Flat index of channel-0 spatial position `p` (matches `globalAvgPoolFlat_as_sum`). -/
+def ι (p : Fin 2 × Fin 2) : Fin (2 * 2 * 2) :=
+  finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), p.1), p.2)
+
+/-- Sum of channel-0 deviations from the (full-vector) mean. -/
+noncomputable def chSum (z : Vec (2 * 2 * 2)) : ℝ :=
+  ∑ p : Fin 2 × Fin 2, (z (ι p) - bnMean (2 * 2 * 2) z)
+
+/-- Per-coordinate BN identity (γ=1, β=3): `BN z k − 3 = (z k − μ)·istd`. -/
+theorem bn8_sub3 (z : Vec (2 * 2 * 2)) (k : Fin (2 * 2 * 2)) :
+    bnForward (2 * 2 * 2) 1 1 3 z k - 3 = (z k - bnMean (2 * 2 * 2) z) * bnIstd (2 * 2 * 2) z 1 := by
+  simp only [bnForward, bnXhat, one_mul]; ring
+
+/-- **BN rescales the channel-0 deviation sum by `istd`** (no sqrt value needed). -/
+theorem chSum_bn (z : Vec (2 * 2 * 2)) :
+    chSum (bnForward (2 * 2 * 2) 1 1 3 z) = bnIstd (2 * 2 * 2) z 1 * chSum z := by
+  simp only [chSum, bnForward_mean (2 * 2 * 2) (by norm_num) 1 1 3 z]
+  rw [Finset.mul_sum]
+  apply Finset.sum_congr rfl
+  intro p _
+  rw [bn8_sub3]; ring
+
+/-- Adding a constant leaves the channel-0 deviation sum unchanged. -/
+theorem chSum_const_add (c : ℝ) (z : Vec (2 * 2 * 2)) :
+    chSum (fun k => c + z k) = chSum z := by
+  have hmean : bnMean (2 * 2 * 2) (fun k => c + z k) = c + bnMean (2 * 2 * 2) z := by
+    simp only [bnMean, Finset.sum_add_distrib, Finset.sum_const, Finset.card_univ,
+      Fintype.card_fin, nsmul_eq_mul]
+    field_simp
+  simp only [chSum, hmean]
+  apply Finset.sum_congr rfl; intro p _; ring
+
+/-- GAP of channel 0 in terms of the deviation sum and the mean. -/
+theorem gap0_eq (z : Vec (2 * 2 * 2)) :
+    globalAvgPoolFlat 2 2 2 z 0 = (1 / 4) * chSum z + bnMean (2 * 2 * 2) z := by
+  rw [globalAvgPoolFlat_as_sum]
+  simp only [chSum, ι, Finset.sum_sub_distrib, Finset.sum_const, Finset.card_univ,
+    Fintype.card_prod, Fintype.card_fin, nsmul_eq_mul, ← Finset.mul_sum]
+  push_cast
+  ring
+
+-- ── the concrete stem deviation (finProdFinEquiv evaluation) ──
+
+/-- The stem conv at output channel `c`: `(if c=0 then 1 else 2)·input`. -/
+theorem convX_chan (c : Fin 2) (hi wi : Fin 2) :
+    conv2d Ws bs (Tensor3.unflatten X) c hi wi
+      = (if c = 0 then (1:ℝ) else 2) * (Tensor3.unflatten X) 0 hi wi := by
+  rw [conv2d_1x1']
+  simp only [bs, Ws, Fin.sum_univ_one, zero_add]
+
+/-- `convX` at a channel-0 index is just the (channel-0) input there. -/
+theorem convX_ι (p : Fin 2 × Fin 2) :
+    flatConv (h := 2) (w := 2) Ws bs X (ι p) = (Tensor3.unflatten X) 0 p.1 p.2 := by
+  show Tensor3.flatten (conv2d Ws bs (Tensor3.unflatten X)) (ι p) = _
+  rw [show Tensor3.flatten (conv2d Ws bs (Tensor3.unflatten X)) (ι p)
+        = conv2d Ws bs (Tensor3.unflatten X) 0 p.1 p.2 from ?_, convX_chan]
+  · simp
+  · simp only [ι, Tensor3.flatten, Equiv.symm_apply_apply]
+
+/-- `Σ` over the four channel-0 positions of the input is `6` (= 0+1+2+3). -/
+theorem sumX0 : (∑ p : Fin 2 × Fin 2, (Tensor3.unflatten X) 0 p.1 p.2) = 6 := by
+  have key : (∑ p : Fin 2 × Fin 2,
+      (finProdFinEquiv (finProdFinEquiv ((0 : Fin 1), p.1), p.2) : Fin 4).val) = 6 := by decide
+  calc (∑ p : Fin 2 × Fin 2, (Tensor3.unflatten X) 0 p.1 p.2)
+      = ∑ p : Fin 2 × Fin 2,
+          ((finProdFinEquiv (finProdFinEquiv ((0 : Fin 1), p.1), p.2) : Fin 4).val : ℝ) :=
+        Finset.sum_congr rfl (fun p _ => rfl)
+    _ = ((∑ p : Fin 2 × Fin 2,
+          (finProdFinEquiv (finProdFinEquiv ((0 : Fin 1), p.1), p.2) : Fin 4).val : ℕ) : ℝ) := by
+        rw [Nat.cast_sum]
+    _ = 6 := by rw [key]; norm_num
+
+/-- Sum over a flattened tensor equals the tensor's triple sum (index reindex). -/
+theorem sum_flatten8 (T : Tensor3 2 2 2) :
+    (∑ k, Tensor3.flatten T k) = ∑ c : Fin 2, ∑ hi : Fin 2, ∑ wi : Fin 2, T c hi wi := by
+  rw [← Equiv.sum_comp finProdFinEquiv (Tensor3.flatten T), Fintype.sum_prod_type]
+  simp only [Tensor3.flatten, Equiv.symm_apply_apply]
+  rw [← Equiv.sum_comp finProdFinEquiv
+        (fun q => ∑ w : Fin 2, T (finProdFinEquiv.symm q).1 (finProdFinEquiv.symm q).2 w),
+      Fintype.sum_prod_type]
+  simp only [Equiv.symm_apply_apply]
+
+/-- The total of `convX` over all eight cells is `18` (= 6 + 12). -/
+theorem sumConvX : (∑ k, flatConv (h := 2) (w := 2) Ws bs X k) = 18 := by
+  have hcol : (∑ hi : Fin 2, ∑ wi : Fin 2, (Tensor3.unflatten X) 0 hi wi) = 6 := by
+    rw [← Fintype.sum_prod_type']; exact sumX0
+  show (∑ k, Tensor3.flatten (conv2d Ws bs (Tensor3.unflatten X)) k) = 18
+  rw [sum_flatten8]
+  simp only [convX_chan, ← Finset.mul_sum, hcol]
+  rw [Fin.sum_univ_two]; norm_num
+
+/-- **`chSum convX = −3`** — the stem plants a nonzero channel-0 asymmetry. -/
+theorem chSum_convX : chSum (flatConv (h := 2) (w := 2) Ws bs X) = -3 := by
+  have hmean : bnMean (2 * 2 * 2) (flatConv (h := 2) (w := 2) Ws bs X) = 18 / 8 := by
+    rw [bnMean, sumConvX]; norm_num
+  simp only [chSum, convX_ι, hmean, Finset.sum_sub_distrib, Finset.sum_const, Finset.card_univ,
+    Fintype.card_prod, Fintype.card_fin, nsmul_eq_mul, sumX0]
+  norm_num
+
+-- ── the assembly: forward X is non-constant ──
+
+/-- The identity dense head reads off channel `j`. -/
+theorem dense_Wh_apply (u : Vec 2) (j : Fin 2) : dense Wh bh u j = u j := by
+  simp only [dense, bh, Wh, add_zero, mul_ite, mul_one, mul_zero]
+  rw [Finset.sum_ite_eq' Finset.univ j (fun i => u i)]
+  simp
+
+/-- The `X`-forward reduces to four BN layers on a constant-shifted stem output. -/
+theorem forward_X_eq :
+    mobilenetv2Forward Ws bs 1 1 3 We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3
+      We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh X
+      = dense Wh bh (globalAvgPoolFlat 2 2 2
+          (bnForward (2 * 2 * 2) 1 1 3 (bnForward (2 * 2 * 2) 1 1 3 (bnForward (2 * 2 * 2) 1 1 3
+            (fun k => 3 + bnForward (2 * 2 * 2) 1 1 3 (flatConv (h := 2) (w := 2) Ws bs X) k))))) := by
+  have hb1 :
+      residual (invresBody (h := 2) (w := 2) We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3)
+        (bnForward (2 * 2 * 2) 1 1 3 (flatConv (h := 2) (w := 2) Ws bs X))
+        = (fun k => 3 + bnForward (2 * 2 * 2) 1 1 3 (flatConv (h := 2) (w := 2) Ws bs X) k) := by
+    funext k; simp only [residual, biPath, invresBody₁_const]
+  simp only [mobilenetv2Forward, Function.comp_apply, relu6_bn8,
+    flatConv_id2 We₂ be₂ (fun _ _ => rfl) (fun _ => rfl),
+    flatConv_id2 Wp₂ bp₂ (fun _ _ => rfl) (fun _ => rfl),
+    depthwiseFlat_id1 Wd₂ bd₂ (fun _ => rfl) (fun _ => rfl),
+    hb1]
+
+/-- **The live witness is non-degenerate**: its forward computes a non-trivial
+    function of the input — `forward X ≠ forward 0`. So the Jacobian is not
+    identically zero, unlike `MobileNetV2Concrete`. -/
+theorem mnv2Live_forward_nonconstant :
+    mobilenetv2Forward Ws bs 1 1 3 We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3
+        We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh X
+      ≠ mobilenetv2Forward Ws bs 1 1 3 We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3
+          We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh ((fun _ => 0) : Vec (1 * 2 * 2)) := by
+  have hpos : ∀ z : Vec (2 * 2 * 2), 0 < bnIstd (2 * 2 * 2) z 1 :=
+    fun z => bnIstd_pos (2 * 2 * 2) 1 one_pos z
+  have hchSum :
+      chSum (bnForward (2 * 2 * 2) 1 1 3 (bnForward (2 * 2 * 2) 1 1 3 (bnForward (2 * 2 * 2) 1 1 3
+        (fun k => 3 + bnForward (2 * 2 * 2) 1 1 3 (flatConv (h := 2) (w := 2) Ws bs X) k)))) < 0 := by
+    rw [chSum_bn, chSum_bn, chSum_bn, chSum_const_add, chSum_bn, chSum_convX]
+    apply mul_neg_of_pos_of_neg (hpos _)
+    apply mul_neg_of_pos_of_neg (hpos _)
+    apply mul_neg_of_pos_of_neg (hpos _)
+    apply mul_neg_of_pos_of_neg (hpos _)
+    norm_num
+  have hX0 :
+      (mobilenetv2Forward Ws bs 1 1 3 We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3
+        We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh X) 0 < 3 := by
+    rw [forward_X_eq, dense_Wh_apply, gap0_eq, bnForward_mean (2 * 2 * 2) (by norm_num) 1 1 3 _]
+    linarith [hchSum]
+  intro h
+  rw [h, forward_zero] at hX0
+  simp at hX0
+
 
 end Mnv2Live
 
