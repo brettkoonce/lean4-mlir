@@ -309,7 +309,23 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let pBytes := net.nParams * 4
   let totalSteps := (cfg.epochs * nb).toFloat
   let warmSteps := (warmupEpochs * nb).toFloat
-  for ep in [0:cfg.epochs] do
+  -- Auto checkpoint/resume: each epoch writes [θ|m|v] + the next-epoch counter;
+  -- on startup, resume from the latest checkpoint if present (survives reaps).
+  -- Delete `.lake/build/<slug>_adam_ckpt.bin{,.epoch}` to start fresh.
+  let ckptPath := s!".lake/build/{net.slug}_adam_ckpt.bin"
+  let epPath := ckptPath ++ ".epoch"
+  let mut startEpoch := 0
+  if (← System.FilePath.pathExists ckptPath) && (← System.FilePath.pathExists epPath) then
+    thetamv ← IO.FS.readBinFile ckptPath
+    startEpoch := ((← IO.FS.readFile epPath).toNat?).getD 0
+    IO.println s!"  ▸ resuming from checkpoint at epoch {startEpoch}"
+    (← IO.getStdout).flush
+  for ep in [startEpoch:cfg.epochs] do
+    let mut epochLossSum := 0.0
+    let mut lastLr := 0.0
+    -- Per-epoch Fisher-Yates shuffle (the reference does this; the data is
+    -- class-sorted, so without it every batch is a single class — degenerate).
+    let (sImg, sLbl) ← F32.shuffle trainImg trainLbl nTrain.toUSize trainPix.toUSize (ep + 42).toUSize
     for bi in [0:nb] do
       let gstep := (ep * nb + bi + 1).toFloat
       let lrt := if gstep ≤ warmSteps then baseLR * gstep / warmSteps
@@ -319,7 +335,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
       let tail := F32.concat #[← F32.const (1 : USize) lrt, ← F32.const (1 : USize) bc1, ← F32.const (1 : USize) bc2]
       let params := F32.concat #[thetamv, tail]
       let augSeed := (ep * nb + bi + 1).toUSize
-      let xbRaw := F32.sliceImages trainImg (bi * bs) bs trainPix
+      let xbRaw := F32.sliceImages sImg (bi * bs) bs trainPix
       -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
       -- lives in the data pipeline, not the network): Imagenette = random crop
       -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
@@ -331,9 +347,17 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
             F32.randomHFlip c bs.toUSize 3 224 224 (augSeed + 7777)
         | .cifar => F32.randomHFlip xbRaw bs.toUSize 3 32 32 augSeed
         | _ => pure xbRaw
-      let yb := F32.sliceLabels trainLbl (bi * bs) bs
+      let yb := F32.sliceLabels sLbl (bi * bs) bs
       let out ← IreeSession.mlpTrainStepV tsSess tsFn xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
+      -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']
+      let stepLoss := F32.read out (3 * net.nParams).toUSize
+      epochLossSum := epochLossSum + stepLoss
+      lastLr := lrt
+      if bi < 3 || bi % 100 == 0 then
+        IO.println s!"  step {bi}/{nb}: loss={stepLoss}"
+        (← IO.getStdout).flush
       thetamv := out.extract 0 mvBytes
+    IO.println s!"Epoch {ep + 1}/{cfg.epochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
     let thetaCur := thetamv.extract 0 pBytes
     let mut correct := 0
     for bi in [0:nbt] do
@@ -347,6 +371,8 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}%"
     (← IO.getStdout).flush
+    IO.FS.writeBinFile ckptPath thetamv
+    IO.FS.writeFile epPath (toString (ep + 1))
   IO.println s!"done (trained {net.name} with AdamW + cosine/warmup via packed threading)."
 
 /-- Train driver for the **2-parameter linear** path (Chapter 2). The verified

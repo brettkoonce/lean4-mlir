@@ -688,12 +688,27 @@ def vitTrainStepModuleAdamSched (cfg : ViTConfig) (blocks : List BlockParams)
     s!"    %lsaik = stablehlo.constant dense<{lsK}> : {ty [cfg.b, cfg.nc]}\n" ++
     s!"    %dyr = stablehlo.subtract %dyr1, %lsaik : {ty [cfg.b, cfg.nc]}\n" ++
     s!"    %bnc = stablehlo.constant dense<{cfg.b}.0> : {ty [cfg.b, cfg.nc]}\n" ++
-    s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [cfg.b, cfg.nc]}\n"
+    s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [cfg.b, cfg.nc]}\n" ++
+    -- Smoothed-CE loss for logging: -mean_b( (1−α)·log p[true] + (α/K)·Σ_k log p_k ),
+    -- emitted to the %loss output slot (replaces the lr passthrough — lr isn't read back).
+    s!"    %llog = stablehlo.log %lsm : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %t1s = stablehlo.reduce(%ohll init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [cfg.b, cfg.nc]}, tensor<f32>) -> {ty [cfg.b]}\n" ++
+    s!"    %lls = stablehlo.reduce(%llog init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [cfg.b, cfg.nc]}, tensor<f32>) -> {ty [cfg.b]}\n" ++
+    s!"    %omac = stablehlo.constant dense<{1.0 - ls}> : {ty [cfg.b]}\n" ++
+    s!"    %aKc = stablehlo.constant dense<{lsK}> : {ty [cfg.b]}\n" ++
+    s!"    %lt1 = stablehlo.multiply %omac, %t1s : {ty [cfg.b]}\n" ++
+    s!"    %lt2 = stablehlo.multiply %aKc, %lls : {ty [cfg.b]}\n" ++
+    s!"    %lpe = stablehlo.add %lt1, %lt2 : {ty [cfg.b]}\n" ++
+    s!"    %lsum2 = stablehlo.reduce(%lpe init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [cfg.b]}, tensor<f32>) -> tensor<f32>\n" ++
+    s!"    %lbfc = stablehlo.constant dense<{cfg.b}.0> : tensor<f32>\n" ++
+    s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
+    s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
   let updParts := (((pnames.zip grads).zip pdims).zip (mnames.zip vnames)).map
     (fun (((nm, gr), ds), (mm, vv)) => emitAdamV nm gr mm vv ds (String.ofList (nm.toList.drop 1)))
   let upd := String.join (updParts.map (·.1))
   let allNames := (updParts.map (·.2.1)) ++ (updParts.map (·.2.2.1)) ++ (updParts.map (·.2.2.2))
-    ++ ["%lr", "%bc1", "%bc2"]
+    ++ ["%loss", "%bc1", "%bc2"]   -- the lr slot now carries the train loss for logging
   let allDims := pdims ++ pdims ++ pdims
   let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
   let retVals := String.intercalate ", " allNames
