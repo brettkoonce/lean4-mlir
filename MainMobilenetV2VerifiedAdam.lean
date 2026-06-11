@@ -1,0 +1,32 @@
+import LeanMlir.VerifiedNets
+
+/-! # `mobilenetv2-verified-adam` — train MobileNetV2 with the VERIFIED-rendered **AdamW** step
+
+The mnv2 peer of `vit-verified-adam`: the proof-rendered MobileNetV2 train step
+(`tests/TestMobilenetV2TrainPC.lean → verified_mlir/mobilenetv2_adam_train_step.mlir`,
+`@mobilenetv2_adam_train_step`) with the SGD update swapped for AdamW via
+`ViTRender.emitAdamV`, driven by the generic `VerifiedNet.trainAdamSched` — which threads
+`[θ|m|v]` as one packed blob + the runtime `lr`/`bc₁`/`bc₂` scalars (cosine + warmup + per-step
+bias correction) through the unchanged FFI (`n_params = 3k`).
+
+Recipe matches `mobilenet-v2-train` (`MainMobilenetV2Train.lean`'s `mobilenetV2Config`): AdamW
+lr 1e-3 / wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment, 80 epochs, bs 32
+(no EMA, no grad-clip). **Loss-curve-first parity**: both this and the reference batch-norm in
+train mode, so the train-loss curve tracks; eval here uses the eval-batch's own BN stats (the
+reference uses running stats), so val-acc is close-not-exact — running-stats BN is a later rung.
+Weight decay is applied uniformly (incl. BN/bias), matching the ViT verified path.
+
+Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mobilenetv2-verified-adam data` (loader reads
+`data/imagenette`).
+-/
+
+-- Matches MainMobilenetV2Train.lean's `mobilenetV2Config`: 80 epochs, bs 32, AdamW lr 1e-3 /
+-- wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment.
+def mobilenetv2AdamConfig : VerifiedConfig where
+  epochs    := 80
+  batchSize := 32
+
+def main (argv : List String) : IO Unit :=
+  -- baseLR 1e-3, β₁ .9, β₂ .999, 3-epoch linear warmup then cosine decay (mobilenetV2Config).
+  mobilenetv2Verified.toNet.trainAdamSched mobilenetv2AdamConfig
+    (argv.head?.getD "data") 0.001 0.9 0.999 3

@@ -325,6 +325,14 @@ lean_exe «mobilenetv2-verified» where
   root := `MainMobilenetV2Verified
   moreLinkArgs := ireeLink
 
+-- mnv2 peer of vit-verified-adam: the proof-rendered train step with the SGD update swapped for
+-- AdamW (ViTRender.emitAdamV) + packed θ|m|v + runtime lr/bc threading via trainAdamSched. Recipe
+-- matches mobilenet-v2-train (lr 1e-3, wd 1e-4, cosine+warmup 3, label-smoothing 0.1). Loss-curve
+-- parity; batch-BN eval (running-stats BN deferred). Render: tests/TestMobilenetV2TrainPC.lean.
+lean_exe «mobilenetv2-verified-adam» where
+  root := `MainMobilenetV2VerifiedAdam
+  moreLinkArgs := ireeLink
+
 -- ch8 E4/E5/E6: EfficientNet-B0 (faithful [t,c,n,s,k] config — 16 MBConv layers,
 -- inverted-residual + squeeze-excite + swish + BATCH norm, 3×3/5×5 depthwise) trained
 -- on VERIFIED-rendered StableHLO (tests/TestEfficientNet{Train,Fwd}.lean); 262 params.

@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.MobileNetV2RenderPC
+import LeanMlir.ViTRender
 import LeanMlir.Types
 
 /-! # Item B — structured MobileNetV2 train-step render (per-channel BN, proof-rendered)
@@ -190,7 +191,11 @@ private def blockSgd (p : String) (ic mid oc : Nat) : String :=
   sgd s!"%{p}pW" s!"%{p}dpW" (ty [oc,mid,1,1]) ++ sgd s!"%{p}pb" s!"%{p}dpb" (ty [oc]) ++
   sgd s!"%{p}pg" s!"%{p}dpg" (ty [oc]) ++ sgd s!"%{p}pbt" s!"%{p}dpbt" (ty [oc])
 
-private def trainStep : String := Id.run do
+/-- The proof-rendered fwd + backward-cotangent-chain + hand param grads, SHARED by the SGD
+    (`trainStep`) and AdamW (`trainStepAdamSched`) renders. The softmax `sm` `[BS,10]` is captured
+    and handed to `cot`, which emits the loss cotangent (and must define `%dy` in scope — plus
+    `%loss` for the Adam path). Everything downstream (dense param grads, dense-back) reads `%dy`. -/
+private def renderBody (cot : String → String) : String := Id.run do
   let go : StateM Nat String := do
     -- ═══ forward (proof-rendered) ═══
     let (cStemC, stc) ← pretty BS (.flatConvStridedF (h := 112) (w := 112) "%sW" "%sb" (zK : Kernel4 16 3 3 3) zV (.operand "%x" zV))
@@ -212,14 +217,14 @@ private def trainStep : String := Id.run do
     let (cHr, hr) ← pretty BS (.relu6F (.operand hn (zV : Vec (128*7*7))))
     let (cGap, gap) ← pretty BS (.gapF (c := 128) (h := 7) (w := 7) (.operand hr zV))
     let (cLog, logits) ← pretty BS (denseF "%Wd" "%bd" (zM : Mat 128 10) zV (.operand gap zV))
-    -- loss cotangent: (softmax(logits) − onehot)/BS
-    let (cSub, dyr) ← pretty BS (.sub (.softmaxDiv (.expe (.operand logits (zV : Vec 10)))) (.operand "%onehot" (zV : Vec 10)))
-    fwd := fwd ++ cHc ++ cHb ++ cHr ++ cGap ++ cLog ++ cSub
+    -- softmax(logits) [BS,10] — `cot` turns it into the loss cotangent `%dy` (+ `%loss`).
+    let (cSm, sm) ← pretty BS (.softmaxDiv (.expe (.operand logits (zV : Vec 10))))
+    fwd := fwd ++ cHc ++ cHb ++ cHr ++ cGap ++ cLog ++ cSm ++ cot sm
     -- ═══ backward cotangent chain (proof-rendered) ═══
-    -- dy = dyr / BS ; dense-back (dotOut) → gap-back (broadcast/÷49) → head relu6 → head bn → head conv
+    -- dense-back (dotOut, reads `%dy`) → gap-back (broadcast/÷49) → head relu6 → head bn → head conv
     let (cDg, cotGap) ← pretty BS (.dotOut "%Wd" (zM : Mat 128 10) (.operand "%dy" zV))
     let mut bwd :=
-      s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [BS,10]}\n" ++ cDg ++
+      cDg ++
       rs4 "%dgi" cotGap 128 1 1 ++  -- [BS,128] → [BS,128,1,1]
       s!"    %dgb = stablehlo.broadcast_in_dim %dgi, dims = [0, 1, 2, 3] : ({ty [BS,128,1,1]}) -> {ty [BS,128,7,7]}\n" ++
       s!"    %dgn = stablehlo.constant dense<49.0> : {ty [BS,128,7,7]}\n" ++
@@ -256,7 +261,15 @@ private def trainStep : String := Id.run do
       s!"    %dWd = stablehlo.dot_general {gap}, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,128]}, {ty [BS,10]}) -> {ty [128,10]}\n" ++
       s!"    %dbd = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n"
     pure (fwd ++ bwd ++ paramG ++ headG ++ stemG ++ denseG)
-  let body : String := go.run' 0
+  pure (go.run' 0)
+
+/-- SGD loss cotangent: `%dy = (softmax − onehot)/BS`. -/
+private def sgdCot (sm : String) : String :=
+  s!"    %dyr = stablehlo.subtract {sm}, %onehot : {ty [BS,10]}\n" ++
+  s!"    %dy = stablehlo.divide %dyr, %bsc : {ty [BS,10]}\n"
+
+private def trainStep : String := Id.run do
+  let body : String := renderBody sgdCot
   -- ═══ SGD over all 82 params (allParams order) + signature ═══
   let stemSgd := sgd "%sW" "%dsW" (ty [16,3,3,3]) ++ sgd "%sb" "%dsb" (ty [16]) ++ sgd "%sg" "%dsg" (ty [16]) ++ sgd "%sbt" "%dsbt" (ty [16])
   let blkSgd := String.join (blocks.map (fun (p, ic, mid, oc, _, _) => blockSgd p ic mid oc))
@@ -281,16 +294,114 @@ private def trainStep : String := Id.run do
     body ++ stemSgd ++ blkSgd ++ headSgd ++ denseSgd ++
     s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
 
+-- ════════════ AdamW scheduled train step (loss-curve parity with mobilenet-v2-train) ════════════
+
+/-- (paramName, gradName, dims) for all 82 params, in `allParams` order (= `net.specs` order).
+    Drives the per-param AdamW update and the packed `[θ|m|v]` signature. The grad names match
+    those emitted by `renderBody`'s param-grad section (`%{p}d…` per block, `%d…` for stem/head/dense). -/
+private def adamParams : List (String × String × List Nat) :=
+  [("%sW", "%dsW", [16,3,3,3]), ("%sb", "%dsb", [16]), ("%sg", "%dsg", [16]), ("%sbt", "%dsbt", [16])]
+  ++ (blocks.map (fun (p, ic, mid, oc, _, _) =>
+       [(s!"%{p}eW", s!"%{p}deW", [mid,ic,1,1]), (s!"%{p}eb", s!"%{p}deb", [mid]),
+        (s!"%{p}eg", s!"%{p}deg", [mid]), (s!"%{p}ebt", s!"%{p}debt", [mid]),
+        (s!"%{p}dW", s!"%{p}ddW", [mid,1,3,3]), (s!"%{p}db", s!"%{p}ddb", [mid]),
+        (s!"%{p}dg", s!"%{p}ddg", [mid]), (s!"%{p}dbt", s!"%{p}ddbt", [mid]),
+        (s!"%{p}pW", s!"%{p}dpW", [oc,mid,1,1]), (s!"%{p}pb", s!"%{p}dpb", [oc]),
+        (s!"%{p}pg", s!"%{p}dpg", [oc]), (s!"%{p}pbt", s!"%{p}dpbt", [oc])])).flatten
+  ++ [("%hW", "%dhW", [128,64,1,1]), ("%hb", "%dhb", [128]), ("%hg", "%dhg", [128]), ("%hbt", "%dhbt", [128]),
+      ("%Wd", "%dWd", [128,10]), ("%bd", "%dbd", [10])]
+
+/-- β₁/β₂/ε/wd baked (the mnv2 reference recipe); `%lr`/`%bc1`/`%bc2` arrive as runtime args. -/
+private def adamConsts : String :=
+  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
+  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
+  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
+  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
+  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
+  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+
+/-- AdamW loss cotangent with label smoothing α=0.1 (off-class mass α/K, K=10), plus the in-graph
+    smoothed-CE loss `%loss` for logging — same mechanism as `ViTRender.vitTrainStepModuleAdamSched`.
+    Defines `%dy` (the cotangent the backward chain reads) and `%loss`. -/
+private def adamCot (sm : String) : String :=
+  let ls : Float := 0.1
+  let lsK : Float := ls / 10.0
+  s!"    %dyr0 = stablehlo.subtract {sm}, %onehot : {ty [BS,10]}\n" ++
+  s!"    %lsa = stablehlo.constant dense<{ls}> : {ty [BS,10]}\n" ++
+  s!"    %lsaoh = stablehlo.multiply %lsa, %onehot : {ty [BS,10]}\n" ++
+  s!"    %dyr1 = stablehlo.add %dyr0, %lsaoh : {ty [BS,10]}\n" ++
+  s!"    %lsaik = stablehlo.constant dense<{lsK}> : {ty [BS,10]}\n" ++
+  s!"    %dyr = stablehlo.subtract %dyr1, %lsaik : {ty [BS,10]}\n" ++
+  s!"    %dy = stablehlo.divide %dyr, %bsc : {ty [BS,10]}\n" ++
+  s!"    %llog = stablehlo.log {sm} : {ty [BS,10]}\n" ++
+  s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [BS,10]}\n" ++
+  s!"    %t1s = stablehlo.reduce(%ohll init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n" ++
+  s!"    %lls = stablehlo.reduce(%llog init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n" ++
+  s!"    %omac = stablehlo.constant dense<{1.0 - ls}> : {ty [BS]}\n" ++
+  s!"    %aKc = stablehlo.constant dense<{lsK}> : {ty [BS]}\n" ++
+  s!"    %lt1 = stablehlo.multiply %omac, %t1s : {ty [BS]}\n" ++
+  s!"    %lt2 = stablehlo.multiply %aKc, %lls : {ty [BS]}\n" ++
+  s!"    %lpe = stablehlo.add %lt1, %lt2 : {ty [BS]}\n" ++
+  s!"    %lsum2 = stablehlo.reduce(%lpe init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS]}, tensor<f32>) -> tensor<f32>\n" ++
+  s!"    %lbfc = stablehlo.constant dense<{BS}.0> : tensor<f32>\n" ++
+  s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
+  s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+
+/-- `@mobilenetv2_adam_train_step` — the proof-rendered fwd/bwd/param-grads with the SGD update
+    swapped for `ViTRender.emitAdamV` and the `[θ|m|v]` + scalar-tail packed signature the generic
+    `VerifiedNet.trainAdamSched` driver expects:
+    `(x, θ×82, m×82, v×82, lr, bc1, bc2, onehot) → (θ'×82, m'×82, v'×82, loss, bc1, bc2)`.
+    `lr`/`bc1`/`bc2` are runtime params (cosine+warmup + per-step bias correction); `bc1`/`bc2`
+    pass through unchanged (keeps `#outputs = #inputs`). Op-graph identical to the SGD render — the
+    SSA plumbing is the whole job. -/
+private def trainStepAdamSched : String :=
+  let body  := renderBody adamCot
+  let names := adamParams.map (fun (nm, _, _) => nm)
+  let dims  := adamParams.map (fun (_, _, ds) => ds)
+  let updParts := adamParams.map (fun (nm, gr, ds) =>
+    ViTRender.emitAdamV nm gr (nm ++ "m") (nm ++ "v") ds (String.ofList (nm.toList.drop 1)))
+  let upd := String.join (updParts.map (·.1))
+  let thetaN := updParts.map (·.2.1)
+  let mN := updParts.map (·.2.2.1)
+  let vN := updParts.map (·.2.2.2)
+  let psig := String.intercalate ", " ((names.zip dims).map (fun (nm, ds) => s!"{nm}: {ty ds}"))
+  let msig := String.intercalate ", " ((names.zip dims).map (fun (nm, ds) => s!"{nm}m: {ty ds}"))
+  let vsig := String.intercalate ", " ((names.zip dims).map (fun (nm, ds) => s!"{nm}v: {ty ds}"))
+  let argSig := ("%x: " ++ ty [BS,150528]) ++ ", " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: " ++ ty [BS,10]
+  let allDims := dims ++ dims ++ dims
+  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
+  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
+  "module @m {\n" ++ s!"  func.func @mobilenetv2_adam_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
+    "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    s!"    %bsc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n" ++
+    adamConsts ++
+    body ++ upd ++
+    s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+
+/-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH (the render +
+    write already happened, so the artifact exists regardless). -/
+private def tryCompile (src dst label : String) : IO Unit := do
+  try
+    let cargs ← ireeCompileArgs src dst
+    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+    if r.exitCode != 0 then IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take 5000}"
+    else IO.println s!"{label} iree-compile OK → {src}"
+  catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
+
 def main : IO Unit := do
+  IO.FS.createDirAll "/tmp/mnv2pc"
+  -- Render + write BOTH artifacts first, then compile — so a missing iree-compile can't abort
+  -- before the AdamW artifact is written.
   let mlir := trainStep
   IO.println s!"rendered structured MobileNetV2 train step: {mlir.length} chars"
-  IO.FS.createDirAll "/tmp/mnv2pc"
   IO.FS.writeFile "/tmp/mnv2pc/train_step.mlir" mlir
-  let cargs ← ireeCompileArgs "/tmp/mnv2pc/train_step.mlir" "/tmp/mnv2pc/train_step.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 5000}"
-  else
-    IO.println "structured MobileNetV2 train step iree-compile OK → /tmp/mnv2pc/train_step.mlir"
+  let amlir := trainStepAdamSched
+  IO.println s!"rendered MobileNetV2 AdamW-sched train step: {amlir.length} chars"
+  IO.FS.writeFile "verified_mlir/mobilenetv2_adam_train_step.mlir" amlir
+  -- SGD smoke (swap-compatible with the committed train step; verifies the shared `renderBody`).
+  tryCompile "/tmp/mnv2pc/train_step.mlir" "/tmp/mnv2pc/train_step.vmfb" "SGD"
+  -- AdamW scheduled train step — the artifact `mobilenetv2-verified-adam` trains on.
+  tryCompile "verified_mlir/mobilenetv2_adam_train_step.mlir" "/tmp/mnv2pc/adam_train_step.vmfb" "AdamW"
 
 #eval main
