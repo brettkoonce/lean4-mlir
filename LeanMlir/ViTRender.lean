@@ -594,4 +594,58 @@ def vitTrainStepModuleAdam (cfg : ViTConfig) (blocks : List BlockParams) : Strin
   upd ++
   s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
 
+/-- **Packed AdamW train step** for the FFI driver. Hyperparameters are baked as
+    constants (so the func takes NO scalar args), and the parameters + both moment
+    buffers thread as a single `[θ|m|v]` blob: arg order `(x, θ×k, m×k, v×k, onehot)`
+    and return `(θ'×k, m'×k, v'×k)`. This matches `iree_ffi_train_step_generic`'s
+    `(x, params, y) → params'` contract with `n_params = 3k` (the moments ride in
+    the params blob — no `.so` change). Bias correction is omitted (`bc₁=bc₂=1`); a
+    later rung host-passes the per-step `1−βᵗ`. Optimizer = `Proofs.adamWParam`. -/
+def vitTrainStepModuleAdamPacked (cfg : ViTConfig) (blocks : List BlockParams)
+    (lr β1 ob1 β2 ob2 eps wd : String) : String :=
+  let h := cfg.s * cfg.ph; let w := cfg.s * cfg.pw; let d0 := cfg.ic * h * w
+  let pnames := vitParamNames blocks
+  let pdims := vitParamDims blocks cfg
+  let grads := vitGradNames "vit" blocks
+  let mnames := pnames.map (· ++ "m")
+  let vnames := pnames.map (· ++ "v")
+  let psig := vitParamSig blocks cfg
+  let msig := String.intercalate ", " ((mnames.zip pdims).map (fun (nm, ds) => s!"{nm}: {ty ds}"))
+  let vsig := String.intercalate ", " ((vnames.zip pdims).map (fun (nm, ds) => s!"{nm}: {ty ds}"))
+  let consts :=
+    s!"    %b1 = stablehlo.constant dense<{β1}> : tensor<f32>\n" ++
+    s!"    %ob1 = stablehlo.constant dense<{ob1}> : tensor<f32>\n" ++
+    s!"    %b2 = stablehlo.constant dense<{β2}> : tensor<f32>\n" ++
+    s!"    %ob2 = stablehlo.constant dense<{ob2}> : tensor<f32>\n" ++
+    s!"    %bc1 = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+    s!"    %bc2 = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+    s!"    %lr = stablehlo.constant dense<{lr}> : tensor<f32>\n" ++
+    s!"    %eps = stablehlo.constant dense<{eps}> : tensor<f32>\n" ++
+    s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n"
+  let cot :=
+    s!"    %le = stablehlo.exponential %vithdlogits : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [cfg.b, cfg.nc]}, tensor<f32>) -> {ty [cfg.b]}\n" ++
+    s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [cfg.b]}) -> {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsm = stablehlo.divide %le, %lsb : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %bnc = stablehlo.constant dense<{cfg.b}.0> : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [cfg.b, cfg.nc]}\n"
+  let updParts := (((pnames.zip grads).zip pdims).zip (mnames.zip vnames)).map
+    (fun (((nm, gr), ds), (mm, vv)) => emitAdamV nm gr mm vv ds (String.ofList (nm.toList.drop 1)))
+  let upd := String.join (updParts.map (·.1))
+  let allNames := (updParts.map (·.2.1)) ++ (updParts.map (·.2.2.1)) ++ (updParts.map (·.2.2.2))
+  let allDims := pdims ++ pdims ++ pdims
+  let retTy := String.intercalate ", " (allDims.map (fun ds => ty ds))
+  let retVals := String.intercalate ", " allNames
+  "module @m {\n" ++
+  s!"  func.func @vit_adam_train_step(%x: {ty [cfg.b, d0]}, {psig}, {msig}, {vsig}, %onehot: {ty [cfg.b, cfg.nc]}) -> ({retTy}) " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  consts ++
+  s!"    %xr = stablehlo.reshape %x : ({ty [cfg.b, d0]}) -> {ty [cfg.b, cfg.ic, h, w]}\n" ++
+  vitFwd "vit" "%xr" "%wConv" "%bConv" "%cls" "%pos" "%gF" "%bF" "%Wc" "%bc" blocks cfg ++
+  cot ++
+  vitBack "vit" "%dy" "%xr" "%wConv" "%Wc" "%gF" blocks cfg ++
+  upd ++
+  s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+
 end ViTRender

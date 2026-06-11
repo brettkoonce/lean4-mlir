@@ -22,6 +22,9 @@ def main : IO Unit := do
   IO.FS.writeFile "/tmp/adam/adam_step.mlir" adamTinyModule
   let cfg := vitTinyConfig 32 12
   IO.FS.writeFile "/tmp/adam/vit_train_step_adam.mlir" (vitTrainStepModuleAdam cfg (vitTinyBlocks 12))
-  IO.println "wrote /tmp/adam/adam_step.mlir + /tmp/adam/vit_train_step_adam.mlir"
+  -- Packed FFI-shaped form: (x, θ, m, v, onehot) → (θ',m',v'), hyperparams baked.
+  IO.FS.writeFile "/tmp/adam/vit_adam_packed.mlir"
+    (vitTrainStepModuleAdamPacked cfg (vitTinyBlocks 12) "0.001" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001")
+  IO.println "wrote adam_step.mlir + vit_train_step_adam.mlir + vit_adam_packed.mlir"
 
 #eval main

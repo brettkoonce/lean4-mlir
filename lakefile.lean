@@ -343,6 +343,12 @@ lean_exe «vit-verified» where
   root := `MainViTVerified
   moreLinkArgs := ireeLink
 
+-- Phase 3c: ViT-Tiny with the VERIFIED-rendered AdamW step (packed θ|m|v threading
+-- through the generic FFI; ViTRender.vitTrainStepModuleAdamPacked / trainAdamPacked).
+lean_exe «vit-verified-adam» where
+  root := `MainViTVerifiedAdam
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar-cnn-train» where
   root := `MainCifarCnnTrain
   moreLinkArgs := ireeLink
