@@ -354,6 +354,12 @@ structure TrainConfig where
   useRandAugment : Bool  := false
   randAugmentN   : Nat   := 2
   randAugmentM   : Float := 9.0
+  /-- Upgrade `useRandAugment` from the color-only "lite" path to the full
+      RandAugment(N, M) sampler over the color+GEOMETRIC op set (shear/rotate/
+      translate via `ImageProjectiveTransformV3`, shared with AutoAugment). This
+      is what ConvNeXt's recipe wants. Only meaningful when `useRandAugment` is
+      on; leaving it false keeps the back-compat color-lite path (e.g. ViT). -/
+  randAugmentGeometric : Bool := false
   /-- AutoAugment, ImageNet learned policy (Cubuk et al. 2018) — the full 25
       sub-policies, applied per-image after crop/hflip on the imagenet (tfds)
       path. Unlike `useRandAugment` (color subset only), this includes the

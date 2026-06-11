@@ -42,8 +42,17 @@ def convNeXtTinyImagenet : NetSpec where
     decay 0.05, peak LR 4e-4 at batch 256 (≈ the 4e-3@4096 official LR linearly
     scaled), 5-epoch warmup + cosine, label smoothing 0.1, grad-clip 1.0 (cheap
     insurance — unlocked the ViT run). bf16 + bf16 conv. EMA (decay 0.9999) +
-    stochastic depth (dropPath 0.1, the ConvNeXt-T paper value) now on; mixup/
-    cutmix still off (flip the aug flags when chasing the full paper recipe). -/
+    stochastic depth (dropPath 0.1, the ConvNeXt-T paper value) now on. Geometric
+    RandAugment (N=2, M=9, the ConvNeXt recipe value) is now on too — the full
+    RandAugment(N,M) sampler over the color+geometric op set (shear/rotate via
+    ImageProjectiveTransformV3), not the old color-only "lite". Mixup/cutmix
+    still off (flip those flags when chasing the very full paper recipe).
+
+    TODO(geo-ra): recipe CHANGE — adds geometric RandAugment vs the prior
+    no-RandAugment 80ep run that hit 75.93%. The blueprint named this as the
+    remaining gap to ConvNeXt-T's ~82% (with the 300ep schedule). Re-run +
+    re-eval (eval_convnext_full50k.py, supervise script unchanged) for fresh
+    numbers; RandAugment is CPU-side tf.data — watch input throughput. -/
 def convNeXtTinyImagenetConfig : TrainConfig where
   learningRate   := 4e-4
   batchSize      := 256
@@ -53,6 +62,8 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   cosineDecay    := true
   warmupEpochs   := 5
   augment        := true
+  useRandAugment       := true   -- ConvNeXt recipe RandAugment...
+  randAugmentGeometric := true   -- ...the full color+geometric sampler (N=2, M=9)
   labelSmoothing := 0.1
   gradClipNorm   := 1.0
   bf16           := true

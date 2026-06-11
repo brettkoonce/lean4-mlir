@@ -135,6 +135,8 @@ _AA_POLICY = [
 ]
 
 def _aa_apply_op(img, name, mag):
+    if name == 'Identity':
+        return img
     fn, argfn, signed = _AA_OPS[name]
     if argfn is None:
         return fn(img)
@@ -161,6 +163,28 @@ def _autoaugment(img):
     idx = tf.random.uniform([], 0, len(_AA_POLICY), dtype=tf.int32)
     out = tf.switch_case(idx, branches)
     return tf.cast(out, tf.float32)"
+
+/-- RandAugment (Cubuk et al. 2019): N ops sampled uniformly at one shared
+    magnitude M, drawn from the color+geometric op set defined in
+    `autoAugmentPy` (so emit that block too whenever this is used). Distinct
+    from `autoAugmentPy`'s learned 25-policy scheme — this is what ConvNeXt's
+    recipe uses. -/
+private def randAugmentPy : String :=
+"# ──────────────────────────────────────────────────────────────────
+#  RandAugment (Cubuk et al. 2019): n ops sampled uniformly at magnitude m.
+#  Reuses the _aa_* op set above (color + geometric); needs the AA op block.
+# ──────────────────────────────────────────────────────────────────
+_RA_OPS = ['Identity','AutoContrast','Equalize','Rotate','Solarize','Color',
+           'Posterize','Contrast','Brightness','Sharpness','ShearX','ShearY',
+           'TranslateX','TranslateY']
+
+def _randaugment(img, n, m):
+    img = tf.cast(tf.clip_by_value(img, 0.0, 255.0), tf.uint8)
+    for _ in range(n):
+        k = tf.random.uniform([], 0, len(_RA_OPS), dtype=tf.int32)
+        branches = [(lambda nm=nm, x=img: _aa_apply_op(x, nm, m)) for nm in _RA_OPS]
+        img = tf.switch_case(k, branches)
+    return tf.cast(img, tf.float32)"
 
 private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
   match ds with
@@ -258,7 +282,11 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "_CROP_PADDING = 32\n" ++
     "_MEAN_RGB = tf.constant([0.485 * 255, 0.456 * 255, 0.406 * 255], dtype=tf.float32)\n" ++
     "_STD_RGB  = tf.constant([0.229 * 255, 0.224 * 255, 0.225 * 255], dtype=tf.float32)\n\n" ++
-    (if cfg.useAutoAugment then autoAugmentPy ++ "\n" else "") ++
+    -- The _aa_* op block (color + geometric) is shared by AutoAugment and the
+    -- geometric RandAugment sampler; emit it if either is on.
+    (if cfg.useAutoAugment || (cfg.useRandAugment && cfg.randAugmentGeometric)
+       then autoAugmentPy ++ "\n" else "") ++
+    (if cfg.useRandAugment && cfg.randAugmentGeometric then randAugmentPy ++ "\n" else "") ++
     "def _imagenet_decode_random_crop_flip(image_bytes):\n" ++
     "    shape = tf.io.extract_jpeg_shape(image_bytes)\n" ++
     "    bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])\n" ++
@@ -275,8 +303,11 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "                          method=tf.image.ResizeMethod.BICUBIC)[0]\n" ++
     "    img = tf.image.random_flip_left_right(img)\n" ++
     (if cfg.useAutoAugment then "    img = _autoaugment(img)\n" else "") ++
-    (if cfg.useRandAugment then
-      "    # RandAugment-lite: color subset (no geometric — tfa unavailable on tf2.21).\n" ++
+    (if cfg.useRandAugment && cfg.randAugmentGeometric then
+      -- Geometric RandAugment: N ops at magnitude M over the full color+geometric set.
+      "    img = _randaugment(img, " ++ toString cfg.randAugmentN ++ ", " ++ toString cfg.randAugmentM ++ ")\n"
+     else if cfg.useRandAugment then
+      "    # RandAugment-lite: color subset (no geometric — set randAugmentGeometric for full RA).\n" ++
       "    # Magnitude M scales the jitter strength.\n" ++
       "    img = tf.cast(img, tf.float32)\n" ++
       "    _M = " ++ toString cfg.randAugmentM ++ " / 10.0\n" ++
