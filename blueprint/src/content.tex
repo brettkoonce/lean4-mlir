@@ -4935,14 +4935,6 @@ larger student on the combined dataset with heavy augmentation
 (RandAugment, dropout, stochastic depth) --- the ``noise'' the title
 refers to. Iterate.
 
-What's interesting from this book's perspective: the architecture
-doesn't change. Every Noisy Student model is still
-EfficientNet-B$k$ or -L$k$. The lift comes entirely from the data
-plus training recipe, not new ops. Our \texttt{enetB0SwishSpec}
-could be the teacher in a Noisy Student loop unchanged --- the
-missing pieces are the unlabeled corpus and the iteration harness,
-not the proof side.
-
 \textbf{EfficientDet}
 (\href{https://arxiv.org/abs/1911.09070}{Tan et al.\ 2020}).
 EfficientNet backbone plus \emph{BiFPN} (bidirectional feature
@@ -4951,21 +4943,6 @@ features by fusing each spatial resolution with both its coarser
 and finer neighbors via weighted-sum cross-scale connections. The
 detection head is a small per-anchor MLP predicting class plus box
 coordinates, applied at every BiFPN output level.
-
-What it would take to add: BiFPN is a few rounds of \texttt{convBn}
-plus resize-to-match-spatial-resolution plus weighted add. The
-cross-scale resize is the only new primitive ---
-nearest-neighbor or bilinear upsample / downsample. Every other
-component (conv, BN, dense head) is already proved. The
-detection-side loss (focal loss plus Smooth-L1 box regression) is
-also new but it sits at the leaves of the backward graph; it
-doesn't touch the proofs threading through the architecture.
-
-These two side quests sit on the bestiary edge: the underlying VJP
-proofs in \texttt{Proofs/} would hold without modification; what's
-missing is the surrounding scaffolding --- a data pipeline for
-Noisy Student, a multi-scale head plus detection loss for
-EfficientDet.
 
 \chapter{ConvNeXt}
 \label{chap:layernorm}
