@@ -173,7 +173,16 @@ lean_lib «Proofs» where
              -- The descent program reaches the Chapter-4 CNN: quantitative
              -- max-pool selection margins (the argmax freezes along the step
              -- segment), pool 1-Lipschitz/ℓ1-contraction, conv kernel drift.
-             `LeanMlir.Proofs.SgdDescentCnn]
+             `LeanMlir.Proofs.SgdDescentCnn,
+             -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
+             -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
+             -- Faithfulness target + denominator well-definedness; NO descent
+             -- claim (Adam isn't monotone).
+             `LeanMlir.Proofs.AdamStep,
+             -- Phase 3b: the AdamW render-close — emitted weight/bias update =
+             -- adamWScalar of the certified gradient (sgdW_descends_certified_grad
+             -- analogue, optimizer swapped for AdamW).
+             `LeanMlir.Proofs.AdamRender]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

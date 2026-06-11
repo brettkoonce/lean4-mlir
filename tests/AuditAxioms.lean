@@ -49,6 +49,8 @@ import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
 import LeanMlir.Proofs.SgdDescentCnn
 import LeanMlir.Proofs.SgdDescentMlp
+import LeanMlir.Proofs.AdamStep
+import LeanMlir.Proofs.AdamRender
 
 open Proofs
 
@@ -1174,3 +1176,16 @@ open Proofs
 #print axioms cnn_conv1_bias_loss_gradAt
 #print axioms cnn_conv1_bias_loss_grad_lipschitz
 #print axioms cnn_conv1_bias_sgd_descends
+-- Adam/AdamW optimizer step over ℝ (Phase 3a, vit_train_to_vit_verified.md): the
+-- emitted-update spec (adamWParam_apply), denominator well-definedness, and the
+-- second-moment nonneg invariant. Faithfulness/well-definedness only — no descent.
+#print axioms adamVNext_nonneg
+#print axioms adam_denom_pos
+#print axioms adamWParam_apply
+#print axioms adamWParam_wd_zero
+-- Phase 3b: AdamW render-close (den-level faithfulness) — the emitted weight/bias
+-- update = adamWScalar of the certified ∂/∂θ Jacobian · denoted softmax-CE cotangent
+-- (the sgdW_descends_certified_grad analogue, optimizer = AdamW). Faithfulness only.
+#print axioms Proofs.adamWParam_eq_scalar
+#print axioms StableHLO.adamW_certified_grad
+#print axioms StableHLO.adamB_certified_grad

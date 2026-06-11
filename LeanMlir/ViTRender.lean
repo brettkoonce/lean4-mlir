@@ -511,4 +511,87 @@ def vitTinyConfig (b depth : Nat) : ViTConfig :=
   { b := b, ic := 3, d := 192, ph := 14, pw := 14, s := 16, m := 768, h := 3, dh := 64,
     nc := 10, eps := "1.0e-5", scale := "0.125" }   -- 1/√64 = 0.125
 
+-- ════════════════════════════════════════════════════════════════
+-- § AdamW optimizer render (Phase 3b of vit_train_to_vit_verified.md)
+-- The proven-fragment-side analogue of `MlirCodegen.emitAdamUpdate`; its ℝ
+-- spec is `Proofs.adamWParam` (LeanMlir/Proofs/AdamStep.lean). Scalar
+-- hyperparameters arrive as `tensor<f32>` function args.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **AdamW update for one parameter.** Emits the `m'/v'/θ'` block at shape `ds`
+    (tag `t` keeps SSA names distinct), reading scalar args `%b1 %ob1 %b2 %ob2
+    %bc1 %bc2 %lr %eps %wd`. Returns `(ir, θ'SSA, m'SSA, v'SSA)`. Op-for-op the
+    coordinate formula `Proofs.adamWParam`:
+    `θ' = θ − lr·((β₁m+(1−β₁)g)/bc₁)/(√((β₂v+(1−β₂)g²)/bc₂)+ε) − (wd·lr)·θ`. -/
+def emitAdamV (θ g m v : String) (ds : List Nat) (t : String) : String × String × String × String :=
+  let T := ty ds
+  let s :=
+    s!"    %adb1{t} = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> {T}\n" ++
+    s!"    %adob1{t} = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> {T}\n" ++
+    s!"    %adms{t} = stablehlo.multiply %adb1{t}, {m} : {T}\n" ++
+    s!"    %admg{t} = stablehlo.multiply %adob1{t}, {g} : {T}\n" ++
+    s!"    %admn{t} = stablehlo.add %adms{t}, %admg{t} : {T}\n" ++
+    s!"    %adb2{t} = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> {T}\n" ++
+    s!"    %adob2{t} = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> {T}\n" ++
+    s!"    %advs{t} = stablehlo.multiply %adb2{t}, {v} : {T}\n" ++
+    s!"    %adg2{t} = stablehlo.multiply {g}, {g} : {T}\n" ++
+    s!"    %advg{t} = stablehlo.multiply %adob2{t}, %adg2{t} : {T}\n" ++
+    s!"    %advn{t} = stablehlo.add %advs{t}, %advg{t} : {T}\n" ++
+    s!"    %adbc1{t} = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> {T}\n" ++
+    s!"    %adbc2{t} = stablehlo.broadcast_in_dim %bc2, dims = [] : (tensor<f32>) -> {T}\n" ++
+    s!"    %admh{t} = stablehlo.divide %admn{t}, %adbc1{t} : {T}\n" ++
+    s!"    %advh{t} = stablehlo.divide %advn{t}, %adbc2{t} : {T}\n" ++
+    s!"    %adlr{t} = stablehlo.broadcast_in_dim %lr, dims = [] : (tensor<f32>) -> {T}\n" ++
+    s!"    %adeps{t} = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {T}\n" ++
+    s!"    %adsq{t} = stablehlo.sqrt %advh{t} : {T}\n" ++
+    s!"    %adden{t} = stablehlo.add %adsq{t}, %adeps{t} : {T}\n" ++
+    s!"    %adrat{t} = stablehlo.divide %admh{t}, %adden{t} : {T}\n" ++
+    s!"    %adst{t} = stablehlo.multiply %adlr{t}, %adrat{t} : {T}\n" ++
+    s!"    %adsub{t} = stablehlo.subtract {θ}, %adst{t} : {T}\n" ++
+    s!"    %adwd{t} = stablehlo.broadcast_in_dim %wd, dims = [] : (tensor<f32>) -> {T}\n" ++
+    s!"    %adwdlr{t} = stablehlo.multiply %adwd{t}, %adlr{t} : {T}\n" ++
+    s!"    %adwdp{t} = stablehlo.multiply %adwdlr{t}, {θ} : {T}\n" ++
+    s!"    %adnew{t} = stablehlo.subtract %adsub{t}, %adwdp{t} : {T}\n"
+  (s, s!"%adnew{t}", s!"%admn{t}", s!"%advn{t}")
+
+/-- `@vit_train_step_adam` — the SGD train step's optimizer swapped for AdamW.
+    Same forward/backward/softmax-CE cotangent as `vitTrainStepModule`; the per-
+    param SGD `θ−lr·dθ` is replaced by `emitAdamV` (so the func also takes the
+    per-param moments `%<nm>m`/`%<nm>v` and the scalar Adam hyperparameters).
+    Returns the updated parameters (moment outputs elided for the smoke; a full
+    step would also return `%admn`/`%advn`). -/
+def vitTrainStepModuleAdam (cfg : ViTConfig) (blocks : List BlockParams) : String :=
+  let h := cfg.s * cfg.ph; let w := cfg.s * cfg.pw; let d0 := cfg.ic * h * w
+  let pnames := vitParamNames blocks
+  let pdims := vitParamDims blocks cfg
+  let grads := vitGradNames "vit" blocks
+  let mnames := pnames.map (· ++ "m")
+  let vnames := pnames.map (· ++ "v")
+  let psig := vitParamSig blocks cfg
+  let msig := String.intercalate ", " ((mnames.zip pdims).map (fun (nm, ds) => s!"{nm}: {ty ds}"))
+  let vsig := String.intercalate ", " ((vnames.zip pdims).map (fun (nm, ds) => s!"{nm}: {ty ds}"))
+  let scalarSig := "%b1: tensor<f32>, %ob1: tensor<f32>, %b2: tensor<f32>, %ob2: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %lr: tensor<f32>, %eps: tensor<f32>, %wd: tensor<f32>"
+  let cot :=
+    s!"    %le = stablehlo.exponential %vithdlogits : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [cfg.b, cfg.nc]}, tensor<f32>) -> {ty [cfg.b]}\n" ++
+    s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [cfg.b]}) -> {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsm = stablehlo.divide %le, %lsb : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %bnc = stablehlo.constant dense<{cfg.b}.0> : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [cfg.b, cfg.nc]}\n"
+  let updParts := (((pnames.zip grads).zip pdims).zip (mnames.zip vnames)).map
+    (fun (((nm, gr), ds), (mm, vv)) => emitAdamV nm gr mm vv ds (String.ofList (nm.toList.drop 1)))
+  let upd := String.join (updParts.map (·.1))
+  let retTy := String.intercalate ", " (pdims.map (fun ds => ty ds))
+  let retVals := String.intercalate ", " (updParts.map (·.2.1))
+  "module @m {\n" ++
+  s!"  func.func @vit_train_step_adam(%x: {ty [cfg.b, d0]}, {psig}, {msig}, {vsig}, {scalarSig}, %onehot: {ty [cfg.b, cfg.nc]}) -> ({retTy}) " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %xr = stablehlo.reshape %x : ({ty [cfg.b, d0]}) -> {ty [cfg.b, cfg.ic, h, w]}\n" ++
+  vitFwd "vit" "%xr" "%wConv" "%bConv" "%cls" "%pos" "%gF" "%bF" "%Wc" "%bc" blocks cfg ++
+  cot ++
+  vitBack "vit" "%dy" "%xr" "%wConv" "%Wc" "%gF" blocks cfg ++
+  upd ++
+  s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+
 end ViTRender

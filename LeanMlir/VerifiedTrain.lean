@@ -127,9 +127,15 @@ private def loadData (data : VerifiedData) (d0 : Nat) (dataDir : String) :
   match data with
   | .imagenette =>
     let idir := dataDir ++ "/imagenette"
-    let (trI, trL, nTr) ← F32.loadImagenetteSized (idir ++ "/train.bin") 256
+    -- Some data dirs ship `train.bin` at the canonical 256² (→ 224 center-crop);
+    -- others (incl. this env) store it at 224² already (4-byte header + records of
+    -- [1 label byte + 224·224·3 uint8]) — calling the loader with the wrong size is
+    -- the "short read". Default to 224²/no-crop (matches val); override with
+    -- LEAN_MLIR_IMAGENETTE_TRAIN=256 for the 256² train split + center-crop.
+    let px := ((← IO.getEnv "LEAN_MLIR_IMAGENETTE_TRAIN").bind (·.toNat?)).getD 224
+    let (trI, trL, nTr) ← F32.loadImagenetteSized (idir ++ "/train.bin") px.toUSize
     let (evI, evL, nEv) ← F32.loadImagenette (idir ++ "/val.bin")
-    return (trI, trL, nTr, evI, evL, nEv, 3 * 256 * 256, true)
+    return (trI, trL, nTr, evI, evL, nEv, 3 * px * px, px == 256)
   | .mnist =>
     let (trI, nTr) ← F32.loadIdxImages (dataDir ++ "/train-images-idx3-ubyte")
     let (trL, _)   ← F32.loadIdxLabels (dataDir ++ "/train-labels-idx1-ubyte")
