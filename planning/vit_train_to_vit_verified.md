@@ -8,6 +8,56 @@ ViT runner (`vit-verified`, `VerifiedNet.train` over `ViTRender.lean`) up to
 Imagenette ViT-Tiny number — so the proof-rendered path can reproduce that
 accuracy, not just compile-and-run.
 
+---
+
+## STATUS (2026-06-11) — DONE through recipe parity + differential-tested
+
+The `vit-verified-adam` exe (`MainViTVerifiedAdam`, `lean_exe vit-verified-adam`) now
+trains ViT-Tiny through the verified render with **full recipe parity** to
+`vitTinyConfig`, and has been **differential-tested against `vit-train` on identical
+256² Imagenette** — it tracks the reference step-for-step.
+
+**Implemented (commits `c939ea2` → `c8c66ac`):**
+- **Phase 0** loader fix — `train.bin` 224² vs the loader's 256² assumption;
+  `VerifiedTrain.loadData` defaults to 224²/no-crop, `LEAN_MLIR_IMAGENETTE_TRAIN=256`
+  for the canonical 256²-train + random-crop split.
+- **Phase 3a** ℝ AdamW spec (`Proofs/AdamStep.lean`: `adamWParam` etc.) — audited (531/531 3-axiom).
+- **Phase 3b** AdamW render (`ViTRender.emitAdamV`) + den-level faithfulness
+  (`Proofs/AdamRender.lean`: `adamW_certified_grad`, linear-net) + GPU numeric pin (0.49).
+- **Phase 3c** packed `[θ|m|v]` threading through the generic FFI (no `.so` change).
+- **Phase 2** runtime lr + cosine + warmup + exact bias correction (lr/bc₁/bc₂ ride as
+  rank-0 scalar params in the blob tail; `vitTrainStepModuleAdamSched` / `trainAdamSched`).
+- **Phase 4 render** label smoothing in-graph (soft-target CE cotangent); proof rung pending.
+- **Phase 5** data-pipeline augmentation: random crop 256→224 + random hflip (`F32.randomCrop`/`randomHFlip`).
+- **Recipe-match** to `vitTinyConfig`: lr 3e-4, 80 ep, wd 1e-4, cosine, warmup 5, label-smooth 0.1,
+  augment; EMA + grad-clip correctly OMITTED (vitTinyConfig sets neither).
+- **Differential-test plumbing**: per-epoch `F32.shuffle` (a real bug the diff-test caught —
+  class-sorted data made single-class batches, val_acc stuck at the 9.4% random floor); in-graph
+  smoothed-CE loss surfaced to the (unread) lr output slot → per-step/epoch loss logging matching
+  vit-train; auto checkpoint/resume (`.lake/build/<slug>_adam_ckpt.bin{,.epoch}`).
+
+**Differential-test result (256² Imagenette, identical recipe):** step 100 verified `2.111` vs
+reference `2.124`; epoch 1 loss `2.10` vs `2.11`, lr identical; **val_acc 39.7%→67.4% over 25
+epochs** (healthy curve, tracking the reference) before an external reap. The proven gradient
+drives the same learning as the trusted one.
+
+**To run (clean 80-epoch):** `rm -f .lake/build/vit_adam_ckpt.bin*` first (else it resumes from the
+last checkpoint — currently epoch 1), then
+`HIP_VISIBLE_DEVICES=0 LEAN_MLIR_IMAGENETTE_TRAIN=256 .lake/build/bin/vit-verified-adam <dir-with-/imagenette>`
+(256² split is at `claude_max/lean4-jax/data`). ~6–7h (verified is ~2× slower/step). A watchdog
+loop that auto-resumes on reap is the robust way to get the full 80 epochs.
+
+**Remaining (not blocking the run):**
+1. **Finish the 80-epoch run** for the final top-1 (vs the reference's number).
+2. **~2× per-step overhead** — the `[θ|m|v]` blob rebuild (concat+extract, 2×66 MB/step). Optimize by
+   reusing the output blob + overwriting the 12-byte scalar tail in place (needs an f32-write into a
+   ByteArray). Halves the run time; benefits every verified trainer.
+3. **Verification-depth rungs** (independent of the number): the ViT-specific Adam den-close
+   (`vit_render_*_adam_certified`, the linear-net `adamW_certified_grad` lifted to ViT), the
+   soft-target CE gradient proof (`softmaxCE_grad_softTarget`), and the text↔den extraction.
+
+---
+
 ## Headline: the gap is the OPTIMIZER + the RECIPE, not the model.
 
 The verified render already emits the **real ViT-Tiny** and it is proof-faithful:
