@@ -648,4 +648,64 @@ def vitTrainStepModuleAdamPacked (cfg : ViTConfig) (blocks : List BlockParams)
   upd ++
   s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
 
+/-- **Scheduled AdamW train step** (Phase 2): like `…AdamPacked`, but `lr`/`bc₁`/`bc₂`
+    arrive as runtime rank-0 scalar *params* (smuggled in the packed blob's tail —
+    the FFI takes no scalar slot) so the host can drive cosine+warmup and the
+    per-step bias correction `1−βᵗ`. They are returned UNCHANGED (passthrough) so
+    `#outputs = #inputs = 3k+3`, preserving the generic FFI's invariant. Arg order
+    `(x, θ×k, m×k, v×k, lr, bc₁, bc₂, onehot)`; only `β₁,β₂,ε,wd` stay baked. -/
+def vitTrainStepModuleAdamSched (cfg : ViTConfig) (blocks : List BlockParams)
+    (β1 ob1 β2 ob2 eps wd : String) (ls : Float) : String :=
+  let h := cfg.s * cfg.ph; let w := cfg.s * cfg.pw; let d0 := cfg.ic * h * w
+  let lsK := ls / cfg.nc.toFloat   -- α/K, the off-class smoothing mass
+  let pnames := vitParamNames blocks
+  let pdims := vitParamDims blocks cfg
+  let grads := vitGradNames "vit" blocks
+  let mnames := pnames.map (· ++ "m")
+  let vnames := pnames.map (· ++ "v")
+  let psig := vitParamSig blocks cfg
+  let msig := String.intercalate ", " ((mnames.zip pdims).map (fun (nm, ds) => s!"{nm}: {ty ds}"))
+  let vsig := String.intercalate ", " ((vnames.zip pdims).map (fun (nm, ds) => s!"{nm}: {ty ds}"))
+  let consts :=
+    s!"    %b1 = stablehlo.constant dense<{β1}> : tensor<f32>\n" ++
+    s!"    %ob1 = stablehlo.constant dense<{ob1}> : tensor<f32>\n" ++
+    s!"    %b2 = stablehlo.constant dense<{β2}> : tensor<f32>\n" ++
+    s!"    %ob2 = stablehlo.constant dense<{ob2}> : tensor<f32>\n" ++
+    s!"    %eps = stablehlo.constant dense<{eps}> : tensor<f32>\n" ++
+    s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n"
+  -- Label smoothing (α = ls): the soft-target CE gradient softmax − ((1−α)·onehot +
+  -- α/K) = (softmax − onehot) + α·onehot − α/K, applied in-graph (the FFI still
+  -- passes a hard onehot). α = 0 recovers the hard-label cotangent.
+  let cot :=
+    s!"    %le = stablehlo.exponential %vithdlogits : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [cfg.b, cfg.nc]}, tensor<f32>) -> {ty [cfg.b]}\n" ++
+    s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [cfg.b]}) -> {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsm = stablehlo.divide %le, %lsb : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %dyr0 = stablehlo.subtract %lsm, %onehot : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsa = stablehlo.constant dense<{ls}> : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsaoh = stablehlo.multiply %lsa, %onehot : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %dyr1 = stablehlo.add %dyr0, %lsaoh : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %lsaik = stablehlo.constant dense<{lsK}> : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %dyr = stablehlo.subtract %dyr1, %lsaik : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %bnc = stablehlo.constant dense<{cfg.b}.0> : {ty [cfg.b, cfg.nc]}\n" ++
+    s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [cfg.b, cfg.nc]}\n"
+  let updParts := (((pnames.zip grads).zip pdims).zip (mnames.zip vnames)).map
+    (fun (((nm, gr), ds), (mm, vv)) => emitAdamV nm gr mm vv ds (String.ofList (nm.toList.drop 1)))
+  let upd := String.join (updParts.map (·.1))
+  let allNames := (updParts.map (·.2.1)) ++ (updParts.map (·.2.2.1)) ++ (updParts.map (·.2.2.2))
+    ++ ["%lr", "%bc1", "%bc2"]
+  let allDims := pdims ++ pdims ++ pdims
+  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
+  let retVals := String.intercalate ", " allNames
+  "module @m {\n" ++
+  s!"  func.func @vit_adam_train_step(%x: {ty [cfg.b, d0]}, {psig}, {msig}, {vsig}, %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [cfg.b, cfg.nc]}) -> ({retTy}) " ++ "{\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  consts ++
+  s!"    %xr = stablehlo.reshape %x : ({ty [cfg.b, d0]}) -> {ty [cfg.b, cfg.ic, h, w]}\n" ++
+  vitFwd "vit" "%xr" "%wConv" "%bConv" "%cls" "%pos" "%gF" "%bF" "%Wc" "%bc" blocks cfg ++
+  cot ++
+  vitBack "vit" "%dy" "%xr" "%wConv" "%Wc" "%gF" blocks cfg ++
+  upd ++
+  s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+
 end ViTRender

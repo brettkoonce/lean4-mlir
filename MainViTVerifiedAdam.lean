@@ -20,9 +20,11 @@ def vitAdamConfig : VerifiedConfig where
   batchSize := 32
 
 def main (argv : List String) : IO Unit := do
-  -- Emit the packed AdamW train step (lr 1e-3, β₁ .9, β₂ .999, ε 1e-8, wd 1e-4).
+  -- Emit the scheduled AdamW train step (β₁ .9, β₂ .999, ε 1e-8, wd 1e-4 baked;
+  -- lr/bc₁/bc₂ are runtime scalar params the driver schedules).
   let cfg := ViTRender.vitTinyConfig 32 12
-  let mlir := ViTRender.vitTrainStepModuleAdamPacked cfg (ViTRender.vitTinyBlocks 12)
-                "0.001" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+  let mlir := ViTRender.vitTrainStepModuleAdamSched cfg (ViTRender.vitTinyBlocks 12)
+                "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001" 0.1   -- label smoothing α=0.1
   IO.FS.writeFile "verified_mlir/vit_adam_train_step.mlir" mlir
-  vitVerified.toNet.trainAdamPacked vitAdamConfig (argv.head?.getD "data")
+  -- baseLR 1e-3, β₁ .9, β₂ .999, 5-epoch linear warmup then cosine decay.
+  vitVerified.toNet.trainAdamSched vitAdamConfig (argv.head?.getD "data") 0.001 0.9 0.999 5

@@ -267,6 +267,77 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} with AdamW via packed θ|m|v threading)."
 
+/-- **Scheduled AdamW driver** (Phase 2) — `trainAdamPacked` with a runtime LR and
+    bias correction. `lr`/`bc₁`/`bc₂` ride as three rank-0 scalar params in the blob
+    tail (`[θ|m|v|lr|bc₁|bc₂]`, the FFI takes no scalar slot) and are returned
+    unchanged; the host recomputes them each step: cosine decay + linear warmup for
+    `lr`, and `bc₁=1−β₁ᵗ`, `bc₂=1−β₂ᵗ` (proper bias correction). Drives
+    `ViTRender.vitTrainStepModuleAdamSched`. -/
+def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
+    (baseLR β1 β2 : Float) (warmupEpochs : Nat) : IO Unit := do
+  let bs := cfg.batchSize
+  let d0 := net.d0
+  let nc := net.nClasses
+  IO.println net.blurb
+  let tsVmfb  := s!".lake/build/{net.slug}_adam_ts.vmfb"
+  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
+  compileVmfb s!"verified_mlir/{net.slug}_adam_train_step.mlir" tsVmfb
+  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"             fwdVmfb
+  let tsSess  ← IreeSession.create tsVmfb
+  let fwdSess ← IreeSession.create fwdVmfb
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
+    loadData net.data d0 dataDir
+  let evalName := match net.data with | .imagenette => "val" | _ => "test"
+  let nb  := nTrain / bs
+  let nbt := nEval / bs
+  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} AdamW (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
+  (← IO.getStdout).flush
+  let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes ++ #[#[], #[], #[]])
+  let fwdShapes := net.shapesBA
+  let xShape := net.xShape bs
+  let tsFn  := s!"m.{net.slug}_adam_train_step"
+  let fwdFn := s!"m.{net.slug}_fwd"
+  let mut parts : Array ByteArray := #[]
+  let mut seed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
+  for spec in net.specs do
+    parts := parts.push (← mkParam seed spec.1 spec.2)
+    seed := seed + 1
+  let theta := F32.concat parts
+  let zeros ← F32.const net.nParams.toUSize 0.0
+  let mut thetamv := F32.concat #[theta, zeros, zeros]
+  let mvBytes := 3 * net.nParams * 4
+  let pBytes := net.nParams * 4
+  let totalSteps := (cfg.epochs * nb).toFloat
+  let warmSteps := (warmupEpochs * nb).toFloat
+  for ep in [0:cfg.epochs] do
+    for bi in [0:nb] do
+      let gstep := (ep * nb + bi + 1).toFloat
+      let lrt := if gstep ≤ warmSteps then baseLR * gstep / warmSteps
+                 else baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (gstep - warmSteps) / (totalSteps - warmSteps)))
+      let bc1 := 1.0 - Float.exp (gstep * Float.log β1)
+      let bc2 := 1.0 - Float.exp (gstep * Float.log β2)
+      let tail := F32.concat #[← F32.const (1 : USize) lrt, ← F32.const (1 : USize) bc1, ← F32.const (1 : USize) bc2]
+      let params := F32.concat #[thetamv, tail]
+      let xbRaw := F32.sliceImages trainImg (bi * bs) bs trainPix
+      let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
+      let yb := F32.sliceLabels trainLbl (bi * bs) bs
+      let out ← IreeSession.mlpTrainStepV tsSess tsFn xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
+      thetamv := out.extract 0 mvBytes
+    let thetaCur := thetamv.extract 0 pBytes
+    let mut correct := 0
+    for bi in [0:nbt] do
+      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn thetaCur fwdShapes
+                      xb xShape bs.toUSize nc.toUSize
+      for j in [0:bs] do
+        let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
+        let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
+        if pred == lbl then correct := correct + 1
+    let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}%"
+    (← IO.getStdout).flush
+  IO.println s!"done (trained {net.name} with AdamW + cosine/warmup via packed threading)."
+
 /-- Train driver for the **2-parameter linear** path (Chapter 2). The verified
     `@<slug>_train_step` takes `W0`/`b0` as *separate* arguments (`linearTrainStepV`),
     weights are zero-initialized, and the loss/lr are baked into the MLIR — distinct
