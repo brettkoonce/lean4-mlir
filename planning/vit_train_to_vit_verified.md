@@ -29,7 +29,7 @@ emits a pure SGD update (`θn = θ − grad·lr`) against a **hard-label**
 | LR schedule | cosine decay | constant | render (lr→arg) + host (Phase 2) |
 | warmup | 5 epochs | none | host (Phase 2) |
 | label smoothing | 0.1 | none (one-hot) | render (≈free) + proof (Phase 4) |
-| augmentation | mixup/CutMix | none | host (Phase 5) |
+| augmentation | random crop + hflip (CutMix/mixup = ch9/10) | none | host (Phase 5) |
 | EMA / grad-clip | available | none | host / render (Phase 5) |
 | epochs | 80 | 20 (cfg default) | host (Phase 6) |
 
@@ -55,7 +55,7 @@ proof boundary — same discipline as `planning/verified_train_step.md`'s TCB.
   *update map* (Adam/AdamW, weight decay): `θ' = adamStep(θ, m, v, ĝ, …)` where
   `ĝ` is the certified `vit_render_*_chain_certified` gradient. Faithfulness only.
 - **(H) Host-side, named in the TCB** — the lr *value* each step (cosine/warmup is
-  just which `f32` we feed), the data pipeline (CutMix/mixup/crop), EMA weight
+  just which `f32` we feed), the data pipeline (random crop / hflip / mixup), EMA weight
   averaging, epoch count. These are inputs to a proven function, not part of it.
 
 The TCB stays: `iree-compile`, Float32 arithmetic, the FFI. Note `FloatBridge`
@@ -167,13 +167,16 @@ for a probability vector `t` (mild). Host builds the smoothed target
 Acceptance: `softmaxCE_grad_softTarget` audits 3-axiom; render-parity holds with a
 soft-label input; a label-smoothed run trains.
 
-## Phase 5 — Augmentation (CutMix/mixup), EMA, grad-clip
+## Phase 5 — Augmentation (random crop + hflip), EMA, grad-clip
 
-Mostly **host-side**, riding on Phase 4's soft-label path:
-- **CutMix/mixup (H):** patch/blend two images and produce the mixed soft label
-  (`λ·t_a + (1−λ)·t_b`) → straight into the soft-label CE. Your own ablation flags
-  CutMix as *the* load-bearing accuracy knob at 9.5k images, so this is where the
-  number actually moves. No new theorem (the label is just an input).
+The **baseline `vit-train` Imagenette pipeline** is plain geometric augmentation,
+in the *data pipeline*, not the network: **random crop + random horizontal flip**
+(hflip only on CIFAR; nothing on MNIST). That is what parity with the original
+number needs — all host-side, no soft labels required:
+- **Random crop + hflip (H):** per-batch geometric transforms on the input bytes
+  before the forward. Random crop needs a larger source (the canonical 256² train
+  split → 224, via `LEAN_MLIR_IMAGENETTE_TRAIN=256`); hflip works on the 224² data
+  directly. No theorem — it only touches the input `x`.
 - **EMA (H):** maintain an exponential moving average of `params` on the host for
   eval; pure post-hoc averaging, outside the proof boundary.
 - **Grad-clip (decision):** global-norm clipping scales every gradient by
@@ -183,12 +186,17 @@ Mostly **host-side**, riding on Phase 4's soft-label path:
   (b) skip it for ViT-Tiny (warmup usually suffices). Recommend (b) first; (a) if
   early-epoch instability appears.
 
-Acceptance: CutMix run materially closes the gap to the target.
+**CutMix/mixup are NOT in the baseline recipe** — they are the **Chapter 9/10
+data-augmentation explorations** (the ch10 ViT ablation where CutMix is the
+load-bearing knob at 9.5k images). They ride on Phase 4's soft-label path and are
+a *beyond-parity* accuracy lever, not a parity requirement.
+
+Acceptance: random crop + hflip reaches the baseline `vit-train` accuracy band.
 
 ## Phase 6 — Scale + match the number
 
 Bump `VerifiedConfig` to 80 epochs (the `vitTinyConfig` budget), run the full
-Adam + cosine + warmup + wd + label-smoothing + CutMix recipe through the verified
+Adam + cosine + warmup + wd + label-smoothing + crop/hflip recipe through the verified
 renderer, and compare the val top-1 to the original `vit-train` number. Stretch
 goal: match it; honest floor: a *fully verified-gradient* ViT that trains to a
 respectable, reported number, with the schedule/aug named as host-side TCB.

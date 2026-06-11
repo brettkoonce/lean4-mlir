@@ -318,8 +318,19 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
       let bc2 := 1.0 - Float.exp (gstep * Float.log β2)
       let tail := F32.concat #[← F32.const (1 : USize) lrt, ← F32.const (1 : USize) bc1, ← F32.const (1 : USize) bc2]
       let params := F32.concat #[thetamv, tail]
+      let augSeed := (ep * nb + bi + 1).toUSize
       let xbRaw := F32.sliceImages trainImg (bi * bs) bs trainPix
-      let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
+      -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
+      -- lives in the data pipeline, not the network): Imagenette = random crop
+      -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
+      -- MNIST = none.
+      let xb ← match net.data with
+        | .imagenette =>
+            let c ← if crop then F32.randomCrop xbRaw bs.toUSize 3 256 256 224 224 augSeed
+                    else pure xbRaw
+            F32.randomHFlip c bs.toUSize 3 224 224 (augSeed + 7777)
+        | .cifar => F32.randomHFlip xbRaw bs.toUSize 3 32 32 augSeed
+        | _ => pure xbRaw
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
       let out ← IreeSession.mlpTrainStepV tsSess tsFn xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
       thetamv := out.extract 0 mvBytes
