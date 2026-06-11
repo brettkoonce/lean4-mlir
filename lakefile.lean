@@ -182,7 +182,13 @@ lean_lib «Proofs» where
              -- Phase 3b: the AdamW render-close — emitted weight/bias update =
              -- adamWScalar of the certified gradient (sgdW_descends_certified_grad
              -- analogue, optimizer swapped for AdamW).
-             `LeanMlir.Proofs.AdamRender]
+             `LeanMlir.Proofs.AdamRender,
+             -- WIP toward a live ResNet-34 witness (Mnv2Live peer): Stage-1
+             -- `liveDown` mechanism only — `liveFwd` is still constant-output at
+             -- 1 channel (structural: gap averages BN deviations back to β; see
+             -- the file header). Build-checked so the mechanism doesn't rot; NOT
+             -- a live witness and NOT in the AuditAxioms headline set.
+             `LeanMlir.Proofs.ResNet34Live]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
