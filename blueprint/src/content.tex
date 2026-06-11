@@ -1872,7 +1872,27 @@ spatial structure.
 \subsection*{Architecture}
 
 \begin{center}
-\includegraphics[width=0.85\textwidth]{arch/mnist_mlp}
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  >={Stealth[length=2.5mm]},
+  node distance=0.75cm,
+  every node/.style={font=\sffamily\footnotesize},
+  io/.style     = {draw=blue!55!black,   rounded corners=2pt, fill=blue!8,    align=center, inner sep=4pt, minimum height=1.25cm, minimum width=2.0cm},
+  dense/.style  = {draw=orange!65!black, rounded corners=2pt, fill=orange!12,  align=center, inner sep=4pt, minimum height=1.25cm, minimum width=2.2cm},
+  head/.style   = {draw=red!60!black,    rounded corners=2pt, fill=red!8,      align=center, inner sep=4pt, minimum height=1.25cm, minimum width=2.2cm},
+  logits/.style = {draw=green!50!black,  rounded corners=2pt, fill=green!14, very thick, align=center, inner sep=4pt, minimum height=1.25cm, minimum width=2.0cm},
+  arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
+]
+  \node[io]                    (input) {Input\\$28\times28$ flatten\\$\to 784$};
+  \node[dense, right=of input] (d1)    {Dense\\$784 \to 512$\\ReLU\\401,920 params};
+  \node[dense, right=of d1]    (d2)    {Dense\\$512 \to 512$\\ReLU\\262,656 params};
+  \node[head,  right=of d2]    (d3)    {Dense\\$512 \to 10$\\(identity)\\5,130 params};
+  \node[logits, right=of d3]   (out)   {Logits\\10 classes};
+  \draw[arr] (input) -- (d1);
+  \draw[arr] (d1) -- (d2);
+  \draw[arr] (d2) -- (d3);
+  \draw[arr] (d3) -- (out);
+\end{tikzpicture}}
 \end{center}
 
 Three dense layers stacked with ReLU non-linearities between them:
@@ -2384,7 +2404,40 @@ same dense head you already know.
 \subsection*{Architecture}
 
 \begin{center}
-\includegraphics[width=\textwidth]{arch/mnist_cnn}
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  >={Stealth[length=2.5mm]},
+  node distance=0.7cm,
+  every node/.style={font=\sffamily\footnotesize},
+  io/.style     = {draw=blue!55!black,    rounded corners=2pt, fill=blue!8,    align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.0cm},
+  conv/.style   = {draw=orange!65!black,  rounded corners=2pt, fill=orange!12,  align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.2cm},
+  pool/.style   = {draw=teal!60!black,    rounded corners=2pt, fill=teal!10,    align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.0cm},
+  flat/.style   = {draw=purple!60!black,  rounded corners=2pt, fill=purple!8,   align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.0cm},
+  dense/.style  = {draw=orange!65!black,  rounded corners=2pt, fill=orange!12,  align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.2cm},
+  head/.style   = {draw=red!60!black,     rounded corners=2pt, fill=red!8,      align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.2cm},
+  logits/.style = {draw=green!50!black,   rounded corners=2pt, fill=green!14, very thick, align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.0cm},
+  arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
+]
+  % Row 1: input -> conv -> conv -> pool -> flatten
+  \node[io]                  (input) {Input\\$28\times28\times1$};
+  \node[conv, right=of input] (c1)   {Conv2D\\$1 \to 32$ ch\\$3\times3$, ReLU\\320 p};
+  \node[conv, right=of c1]    (c2)   {Conv2D\\$32 \to 32$ ch\\$3\times3$, ReLU\\9,248 p};
+  \node[pool, right=of c2]    (p1)   {maxPool\\$2\times2$\\$28 \to 14$};
+  \node[flat, right=of p1]    (fl)   {flatten\\$14\times14\times32$\\$\to 6272$};
+  % Row 2: dense -> dense -> dense -> logits (wraps below row 1)
+  \node[dense, below=1.4cm of input] (d1) {Dense\\$6272 \to 512$\\ReLU\\3,211,776 p};
+  \node[dense, right=of d1]   (d2)   {Dense\\$512 \to 512$\\ReLU\\262,656 p};
+  \node[head,  right=of d2]   (d3)   {Dense\\$512 \to 10$\\(identity)\\5,130 p};
+  \node[logits, right=of d3]  (out)  {Logits\\10 classes};
+  \draw[arr] (input) -- (c1);
+  \draw[arr] (c1) -- (c2);
+  \draw[arr] (c2) -- (p1);
+  \draw[arr] (p1) -- (fl);
+  \draw[arr] (fl.south) -- ++(0,-0.55) -| (d1.north);   % wrap end-of-row-1 to start-of-row-2
+  \draw[arr] (d1) -- (d2);
+  \draw[arr] (d2) -- (d3);
+  \draw[arr] (d3) -- (out);
+\end{tikzpicture}}
 \end{center}
 
 Two convolutions lift the 1-channel grayscale input to 32 channels,
