@@ -31,24 +31,32 @@ def efficientNetB0Imagenet : NetSpec where
 
 /-- EfficientNet-B0 80-epoch recipe — the validation tier of the 80→300
     ladder (EPOCHS is baked from this spec; bump to 300 + re-emit for the
-    real run). Mirrors the MobileNetV2 recipe that trained cleanly: SGD +
-    momentum 0.9, base lr 0.1 at batch 256, 5-epoch warmup + cosine, weight
-    decay 1e-5 (EfficientNet's small value — protects the depthwise/SE
-    params), label smoothing 0.1, random-crop + flip, bf16 + bf16Conv.
+    real run). RMSProp + momentum 0.9, base lr 0.045 at batch 256, 5-epoch
+    warmup + cosine, weight decay 1e-5 (EfficientNet's small value — protects
+    the depthwise/SE params), label smoothing 0.1, random-crop + flip,
+    bf16 + bf16Conv.
 
-    EfficientNet's original recipe is RMSProp + AutoAugment + stochastic
-    depth + EMA. We now have EMA + stochastic depth (both on below); RMSProp
-    and geometric AutoAugment aren't wired, so SGD+cosine at 80ep still lands
-    a few points under the 77% paper number — fine for the validation tier,
-    whose point is "does it train cleanly + the real per-epoch cost." If
-    SE/swish make lr 0.1 unstable early, drop the peak to ~0.05. Mixup/cutmix
-    left off as for MNv2 (flip the aug flags for the full recipe). -/
+    EfficientNet's original recipe is RMSProp + AutoAugment + stochastic depth
+    + EMA. We now have RMSProp (here) + EMA + stochastic depth; geometric
+    AutoAugment is still the one missing piece (color-only RandAugment for now),
+    so this should close most — not all — of the gap to the 77% paper number.
+    RMSProp knobs: ρ=0.9, μ=0.9, ε=1e-3 (EfficientNet's value). LR schedule
+    stays cosine, not the paper's 0.97-every-2.4-epochs exponential decay.
+
+    TODO(rmsprop): recipe CHANGE — the prior SGD+cosine results no longer
+    apply. Re-run 80ep + re-eval (eval_enet_full50k.py, supervise script
+    unchanged) for fresh numbers. lr 0.045 is the MobileNet-style peak; the
+    paper-faithful linear-scaled value is ~0.016 at batch 256 (0.256@4096), so
+    if SE/swish make 0.045 unstable early, drop toward ~0.016. Mixup/cutmix
+    still off (flip the aug flags for the full recipe). -/
 def efficientNetB0ImagenetConfig : TrainConfig where
-  learningRate   := 0.1
+  learningRate   := 0.045   -- RMSProp peak (was 0.1 for SGD); see TODO re ~0.016 fallback
   batchSize      := 256
   epochs         := 80
-  useAdam        := false
-  momentum       := 0.9
+  optimizer      := .rmsprop  -- EfficientNet's original optimizer
+  momentum       := 0.9       -- μ for the RMSprop momentum buffer
+  rmspropDecay   := 0.9       -- ρ, the running mean-square decay
+  rmspropEps     := 1e-3      -- EfficientNet uses ε=1e-3
   weightDecay    := 1e-5
   cosineDecay    := true
   warmupEpochs   := 5

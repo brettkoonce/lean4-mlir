@@ -1490,6 +1490,14 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
   code := code ++ "    return x\n\n"
   code
 
+/-- Effective optimizer for the JAX backend: `cfg.optimizer` when set away from
+    the `.sgd` default, else derived from the legacy `useAdam` bool. Mirrors how
+    the effective `LossKind` is derived from the older loss booleans. -/
+private def effOpt (cfg : TrainConfig) : OptimizerKind :=
+  match cfg.optimizer with
+  | .sgd => if cfg.useAdam then .adam else .sgd
+  | k    => k
+
 private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   let nClasses := spec.numClasses
   let lr := toString cfg.learningRate
@@ -1526,8 +1534,11 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    x = x[:, :, top:top+" ++ toString spec.imageH ++ ", left:left+" ++ toString spec.imageW ++ "]\n" ++
     "    return x.reshape(x.shape[0], -1)\n\n"
   else "") ++
-  let useAdam := cfg.useAdam
-  let optName := if useAdam then "Adam" else "SGD" ++ (if hasMomentum then " + momentum" else "")
+  let opt := effOpt cfg
+  let optName := match opt with
+    | .adam => "Adam"
+    | .rmsprop => "RMSprop"
+    | .sgd => "SGD" ++ (if hasMomentum then " + momentum" else "")
   "# ═══════════════════════════════════════════════════════════════════════\n" ++
   "#  Training  (" ++ optName ++
     (if hasCosine then " + cosine LR" else "") ++ ")\n" ++
@@ -1540,10 +1551,17 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    grads = jax.tree.map(lambda g: g * jnp.minimum(1.0, " ++ toString cfg.gradClipNorm ++ " / (gn + 1e-6)), grads)\n"
   else ""
   "LR = " ++ lr ++ "\n" ++
-  (if hasMomentum && !useAdam then "MOMENTUM = " ++ toString cfg.momentum ++ "\n" else "") ++
+  (match opt with
+   | .rmsprop =>
+     "MOMENTUM = " ++ toString cfg.momentum ++ "\n" ++
+     "RHO = " ++ toString cfg.rmspropDecay ++ "\n" ++
+     "EPS = " ++ toString cfg.rmspropEps ++ "\n"
+   | .sgd => if hasMomentum then "MOMENTUM = " ++ toString cfg.momentum ++ "\n" else ""
+   | .adam => "") ++
   (if hasWD then "WD = " ++ wd ++ "\n" else "") ++
   "\n" ++
-  (if useAdam then
+  (match opt with
+   | .adam =>
     "@jit\n" ++
     "def train_step(params, opt_state, x, y, lr, drop_key=None):\n" ++
     "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
@@ -1562,7 +1580,22 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
      else
       "    params = jax.tree.map(lambda p, mi, vi: p - lr * mi / (jnp.sqrt(vi) + 1e-8), params, mc, vc)\n") ++
     "    return params, (m, v, t), loss\n\n"
-  else if hasMomentum then
+   | .rmsprop =>
+    -- RMSprop + momentum (MobileNet/EfficientNet native). opt_state = (sq, buf):
+    -- sq is the running mean-square of the gradient, buf the momentum buffer on
+    -- the normalized gradient. WD stays coupled into the gradient (so it flows
+    -- through the accumulator), matching those papers' L2 form — NOT decoupled.
+    "@jit\n" ++
+    "def train_step(params, opt_state, x, y, lr, drop_key=None):\n" ++
+    "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
+    (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
+    "    sq, buf = opt_state\n" ++
+    "    sq = jax.tree.map(lambda s, g: RHO * s + (1.0 - RHO) * g * g, sq, grads)\n" ++
+    "    buf = jax.tree.map(lambda b, g, s: MOMENTUM * b + g / (jnp.sqrt(s) + EPS), buf, grads, sq)\n" ++
+    "    params = jax.tree.map(lambda p, b: p - lr * b, params, buf)\n" ++
+    "    return params, (sq, buf), loss\n\n"
+   | .sgd =>
+    if hasMomentum then
     "@jit\n" ++
     "def train_step(params, velocity, x, y, lr, drop_key=None):\n" ++
     "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
@@ -1570,7 +1603,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    velocity = jax.tree.map(lambda v, g: MOMENTUM * v + g, velocity, grads)\n" ++
     "    params = jax.tree.map(lambda p, v: p - lr * v, params, velocity)\n" ++
     "    return params, velocity, loss\n\n"
-  else
+    else
     "@jit\n" ++
     "def train_step(params, x, y, lr, drop_key=None):\n" ++
     "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
@@ -1702,7 +1735,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   let hasMomentum := cfg.momentum > 0.0
   let warmup := toString cfg.warmupEpochs
   let hasCosine := cfg.cosineDecay
-  let useAdam := cfg.useAdam
+  let opt := effOpt cfg
   "# ═══════════════════════════════════════════════════════════════════════\n" ++
   "#  Main (ImageNet streaming variant)\n" ++
   "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
@@ -1732,12 +1765,16 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "    else:\n" ++
   "        params = init_params(random.PRNGKey(" ++ seed ++ "))\n" ++
   "    params = jax.device_put(params, replicated_sharding)\n" ++
-  (if useAdam then
+  (match opt with
+   | .adam =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
-   else if hasMomentum then "    velocity = jax.tree.map(jnp.zeros_like, params)\n"
-   else "") ++
+   | .rmsprop =>
+    "    opt_sq = jax.tree.map(jnp.zeros_like, params)\n" ++
+    "    opt_buf = jax.tree.map(jnp.zeros_like, params)\n" ++
+    "    opt_state = (opt_sq, opt_buf)\n"
+   | .sgd => if hasMomentum then "    velocity = jax.tree.map(jnp.zeros_like, params)\n" else "") ++
   "\n" ++
   "    # Trace emission (opt-in; matches phase-3 format).\n" ++
   "    _trace_path = os.environ.get('LEAN_MLIR_TRACE_OUT')\n" ++
@@ -1748,7 +1785,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "            'netspec_name': \"" ++ spec.name ++ "\",\n" ++
   "            'config': {\n" ++
   "                'lr': " ++ lr ++ ", 'batch_size': " ++ bs ++ ", 'epochs': " ++ ep ++ ",\n" ++
-  "                'use_adam': " ++ (if useAdam then "True" else "False") ++ ",\n" ++
+  "                'use_adam': " ++ (if opt == .adam then "True" else "False") ++ ",\n" ++
   "                'weight_decay': " ++ toString cfg.weightDecay ++ ",\n" ++
   "                'cosine': " ++ (if hasCosine then "True" else "False") ++ ",\n" ++
   "                'warmup_epochs': " ++ toString cfg.warmupEpochs ++ ",\n" ++
@@ -1814,11 +1851,13 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    else if cfg.useCutmix then
      "            x, y = _cutmix(x, y, " ++ mk ++ ")\n"
    else "") ++
-  (if useAdam then
+  (match opt with
+   | .adam | .rmsprop =>
     "            params, opt_state, loss = train_step(params, opt_state, x, y, lr" ++ (if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else "") ++ ")\n"
-   else if hasMomentum then
+   | .sgd =>
+    if hasMomentum then
     "            params, velocity, loss = train_step(params, velocity, x, y, lr" ++ (if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else "") ++ ")\n"
-   else
+    else
     "            params, loss = train_step(params, x, y, lr" ++ (if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else "") ++ ")\n") ++
   "            epoch_loss += float(loss)\n" ++
   "            n_batches += 1\n" ++
@@ -1917,13 +1956,17 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "        params = init_params(random.PRNGKey(" ++ seed ++ "))\n" ++
   "    params = jax.device_put(params, replicated_sharding)\n" ++
   "    rng = np.random.RandomState(42)\n" ++
-  let useAdam := cfg.useAdam
-  (if useAdam then
+  let opt := effOpt cfg
+  (match opt with
+   | .adam =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
-  else if hasMomentum then "    velocity = jax.tree.map(jnp.zeros_like, params)\n"
-  else "") ++
+   | .rmsprop =>
+    "    opt_sq = jax.tree.map(jnp.zeros_like, params)\n" ++
+    "    opt_buf = jax.tree.map(jnp.zeros_like, params)\n" ++
+    "    opt_state = (opt_sq, opt_buf)\n"
+   | .sgd => if hasMomentum then "    velocity = jax.tree.map(jnp.zeros_like, params)\n" else "") ++
   "\n" ++
   (if preStage then
   "    # Pre-stage all data as JAX arrays (one transfer, not per-batch)\n" ++
@@ -1947,7 +1990,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "                'lr': " ++ lr ++ ",\n" ++
   "                'batch_size': " ++ bs ++ ",\n" ++
   "                'epochs': " ++ ep ++ ",\n" ++
-  "                'use_adam': " ++ (if cfg.useAdam then "True" else "False") ++ ",\n" ++
+  "                'use_adam': " ++ (if opt == .adam then "True" else "False") ++ ",\n" ++
   "                'weight_decay': " ++ toString cfg.weightDecay ++ ",\n" ++
   "                'cosine': " ++ (if cfg.cosineDecay then "True" else "False") ++ ",\n" ++
   "                'warmup_epochs': " ++ toString cfg.warmupEpochs ++ ",\n" ++
@@ -2009,12 +2052,14 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   else
   "            x = jax.device_put(shuf_images[i:i+BATCH_SIZE], data_sharding)\n") ++
   "            y = jax.device_put(shuf_labels[i:i+BATCH_SIZE], data_sharding)\n" ++
-  (if useAdam then
-  "            params, opt_state, loss = train_step(params, opt_state, x, y, lr)\n"
-  else if hasMomentum then
-  "            params, velocity, loss = train_step(params, velocity, x, y, lr)\n"
-  else
-  "            params, loss = train_step(params, x, y, lr)\n") ++
+  (match opt with
+   | .adam | .rmsprop =>
+     "            params, opt_state, loss = train_step(params, opt_state, x, y, lr)\n"
+   | .sgd =>
+     if hasMomentum then
+       "            params, velocity, loss = train_step(params, velocity, x, y, lr)\n"
+     else
+       "            params, loss = train_step(params, x, y, lr)\n") ++
   "            epoch_loss += float(loss)\n" ++
   "            n_batches += 1\n" ++
   "            _global_step += 1\n" ++

@@ -282,6 +282,22 @@ inductive LossKind where
   | yolov1Masked
 deriving Repr, BEq
 
+/-- Optimizer selector for the training loop. Added additively over the legacy
+    `TrainConfig.useAdam` bool (à la `LossKind` over the older loss booleans):
+    the JAX backend derives the effective optimizer from `useAdam` when this is
+    left at the `.sgd` default, so no existing config needs to change. -/
+inductive OptimizerKind where
+  /-- Plain SGD, or SGD + heavy-ball momentum when `TrainConfig.momentum > 0`. -/
+  | sgd
+  /-- Adam / AdamW (decoupled weight decay when `weightDecay > 0`). -/
+  | adam
+  /-- RMSprop with momentum — the native MobileNetV2 / EfficientNet optimizer.
+      `v = ρ·v + (1-ρ)·g²;  buf = μ·buf + g/(√v+ε);  p -= lr·buf`, with ρ =
+      `rmspropDecay`, μ = `momentum`, ε = `rmspropEps`. Weight decay stays
+      coupled into the gradient (the form those papers use), unlike AdamW. -/
+  | rmsprop
+deriving Repr, BEq, DecidableEq
+
 structure TrainConfig where
   learningRate : Float
   batchSize    : Nat
@@ -289,6 +305,16 @@ structure TrainConfig where
   seed         : Nat := 314159
   momentum     : Float := 0.0
   useAdam      : Bool := false
+  /-- Optimizer selector (additive over `useAdam`). Left at the `.sgd` default,
+      the JAX backend derives the effective optimizer from `useAdam` (true →
+      Adam) for back-compat; set explicitly to `.rmsprop` (or `.adam`) to
+      override. The IREE/MLIR backend still reads `useAdam`. -/
+  optimizer    : OptimizerKind := .sgd
+  /-- RMSprop running-mean-square decay ρ (only used when `optimizer = .rmsprop`). -/
+  rmspropDecay : Float := 0.9
+  /-- RMSprop denominator ε — NOT 1e-8: MobileNetV2 uses 1.0, EfficientNet 1e-3;
+      the large value is part of those recipes. -/
+  rmspropEps   : Float := 1e-3
   weightDecay  : Float := 0.0
   cosineDecay  : Bool := false
   warmupEpochs : Nat := 0

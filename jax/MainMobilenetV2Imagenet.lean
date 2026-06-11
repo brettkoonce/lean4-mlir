@@ -34,21 +34,29 @@ def mobilenetV2Imagenet : NetSpec where
     real run — EPOCHS/LR/BATCH are baked from this spec, so it's a one-line
     edit + re-emit, no env override).
 
-    SGD + momentum 0.9, base lr 0.1 at batch 256 with a 5-epoch warmup +
-    cosine decay — the proven R34 ImageNet pipeline, not MobileNet's original
-    RMSProp. Two MobileNet-specific departures from the R34 recipe:
+    RMSProp + momentum 0.9, base lr 0.045 at batch 256 with a 5-epoch warmup +
+    cosine decay — MobileNetV2's *original* optimizer (was SGD+momentum lr 0.1,
+    the borrowed R34 pipeline). Two MobileNet-specific departures kept:
       * weight decay 4e-5 (not 1e-4): large wd hurts the tiny depthwise
         weights; 4e-5 is the standard MobileNet value.
       * no mixup/cutmix: not standard for MobileNetV2 and a net loss at
         short schedules.
-    If lr 0.1 proves unstable at 30ep (BN depthwise nets can be touchy),
-    drop the peak to ~0.05; the validation run is what tells us. -/
+    RMSProp knobs: ρ=0.9 (rmspropDecay), μ=0.9 (momentum), ε=1.0 (rmspropEps —
+    MobileNetV2's value, NOT 1e-8). LR schedule stays cosine (the repo's wired
+    schedule), not the paper's 0.98/epoch exponential decay.
+
+    TODO(rmsprop): this is a recipe CHANGE — the prior SGD results no longer
+    apply. Re-run 90ep + re-eval (the supervise script + eval_mnv2_full50k.py
+    are unchanged) to get fresh numbers. lr 0.045 is the paper value at the
+    paper's batch; if it's unstable at batch 256, drop the peak to ~0.02. -/
 def mobilenetV2ImagenetConfig : TrainConfig where
-  learningRate   := 0.1
+  learningRate   := 0.045   -- MobileNetV2-native RMSProp peak (was 0.1 for SGD)
   batchSize      := 256
   epochs         := 90      -- near-paper run (validation tier was 30)
-  useAdam        := false
-  momentum       := 0.9
+  optimizer      := .rmsprop  -- MobileNetV2's original optimizer
+  momentum       := 0.9       -- μ for the RMSprop momentum buffer
+  rmspropDecay   := 0.9       -- ρ, the running mean-square decay
+  rmspropEps     := 1.0       -- MobileNetV2 uses ε=1.0
   weightDecay    := 4e-5
   cosineDecay    := true
   warmupEpochs   := 5
