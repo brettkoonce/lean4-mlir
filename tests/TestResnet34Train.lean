@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.StableHLO
+import LeanMlir.ViTRender
 import LeanMlir.Types
 
 /-! # B9b (de-risk) — ResNet-34 train-step BACKWARD helpers, small representative net
@@ -265,29 +266,32 @@ private def blkOut : Blk → String
 private def blkDx : Blk → String
   | .idB p _ _ => s!"%{p}dx" | .downB p _ _ _ => s!"%{p}dx"
 
-/-- Per-block parameter list as `(name, gradSSA, type)` triples, in func-arg order. -/
-private def blkParams : Blk → List (String × String × String)
+/-- Per-block parameter list as `(name, gradSSA, dims)` triples, in func-arg order. -/
+private def blkParams : Blk → List (String × String × List Nat)
   | .idB p c _ =>
-    [(s!"{p}W1", s!"%{p}dW1", ty [c,c,3,3]), (s!"{p}b1", s!"%{p}db1", ty [c]),
-     (s!"{p}g1", s!"%{p}dn1dg", ty [c]), (s!"{p}bt1", s!"%{p}dn1db", ty [c]),
-     (s!"{p}W2", s!"%{p}dW2", ty [c,c,3,3]), (s!"{p}b2", s!"%{p}db2", ty [c]),
-     (s!"{p}g2", s!"%{p}dn2dg", ty [c]), (s!"{p}bt2", s!"%{p}dn2db", ty [c])]
+    [(s!"{p}W1", s!"%{p}dW1", [c,c,3,3]), (s!"{p}b1", s!"%{p}db1", [c]),
+     (s!"{p}g1", s!"%{p}dn1dg", [c]), (s!"{p}bt1", s!"%{p}dn1db", [c]),
+     (s!"{p}W2", s!"%{p}dW2", [c,c,3,3]), (s!"{p}b2", s!"%{p}db2", [c]),
+     (s!"{p}g2", s!"%{p}dn2dg", [c]), (s!"{p}bt2", s!"%{p}dn2db", [c])]
   | .downB p cin c _ =>
-    [(s!"{p}W1", s!"%{p}dW1", ty [c,cin,3,3]), (s!"{p}b1", s!"%{p}db1", ty [c]),
-     (s!"{p}g1", s!"%{p}dn1dg", ty [c]), (s!"{p}bt1", s!"%{p}dn1db", ty [c]),
-     (s!"{p}W2", s!"%{p}dW2", ty [c,c,3,3]), (s!"{p}b2", s!"%{p}db2", ty [c]),
-     (s!"{p}g2", s!"%{p}dn2dg", ty [c]), (s!"{p}bt2", s!"%{p}dn2db", ty [c]),
-     (s!"{p}Wp", s!"%{p}dWp", ty [c,cin,3,3]), (s!"{p}bp", s!"%{p}dbp", ty [c]),
-     (s!"{p}gp", s!"%{p}dnpdg", ty [c]), (s!"{p}btp", s!"%{p}dnpdb", ty [c])]
+    [(s!"{p}W1", s!"%{p}dW1", [c,cin,3,3]), (s!"{p}b1", s!"%{p}db1", [c]),
+     (s!"{p}g1", s!"%{p}dn1dg", [c]), (s!"{p}bt1", s!"%{p}dn1db", [c]),
+     (s!"{p}W2", s!"%{p}dW2", [c,c,3,3]), (s!"{p}b2", s!"%{p}db2", [c]),
+     (s!"{p}g2", s!"%{p}dn2dg", [c]), (s!"{p}bt2", s!"%{p}dn2db", [c]),
+     (s!"{p}Wp", s!"%{p}dWp", [c,cin,3,3]), (s!"{p}bp", s!"%{p}dbp", [c]),
+     (s!"{p}gp", s!"%{p}dnpdg", [c]), (s!"{p}btp", s!"%{p}dnpdb", [c])]
 
 /-- Whole net's parameter triples in func-arg order: stem, blocks, dense. -/
-private def allParams : List (String × String × String) :=
-  [("sW", "%dsW", ty [64,3,7,7]), ("sb", "%dsb", ty [64]),
-   ("sg", "%dstndg", ty [64]), ("sbt", "%dstndb", ty [64])]
+private def allParams : List (String × String × List Nat) :=
+  [("sW", "%dsW", [64,3,7,7]), ("sb", "%dsb", [64]),
+   ("sg", "%dstndg", [64]), ("sbt", "%dstndb", [64])]
   ++ (blocks.map blkParams).flatten
-  ++ [("Wd", "%dWd", ty [512,10]), ("bd", "%dbd", ty [10])]
+  ++ [("Wd", "%dWd", [512,10]), ("bd", "%dbd", [10])]
 
-private def trainStep : String := Id.run do
+/-- The forward + backward body, SHARED by the SGD (`trainStep`) and AdamW (`trainStepAdamSched`)
+    renders. `cot` is spliced between forward and backward; it must define `%dy` (the cotangent the
+    backward reads) — and `%loss` for the Adam path. -/
+private def renderBody (cot : String) : String := Id.run do
   -- ── forward: 7×7-s2 stem → maxpool → blocks → GAP(7×7) → dense(512→10) ──
   let mut fwd := "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n"
     ++ s!"    %xr = stablehlo.reshape %x : ({ty [BS,150528]}) -> {ty [BS,3,224,224]}\n"
@@ -309,16 +313,7 @@ private def trainStep : String := Id.run do
     ++ s!"    %ld = stablehlo.dot_general %gap, %Wd, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,512]}, {ty [512,10]}) -> {ty [BS,10]}\n"
     ++ s!"    %ldb = stablehlo.broadcast_in_dim %bd, dims = [1] : ({ty [10]}) -> {ty [BS,10]}\n"
     ++ s!"    %logits = stablehlo.add %ld, %ldb : {ty [BS,10]}\n"
-  -- ── loss cotangent dy = softmax(logits) − onehot ──
-  let cot :=
-    s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n"
-    ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
-    ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
-    ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
-    ++ s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
-    ++ s!"    %bnc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n"
-    ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"   -- mean-loss cotangent
-  -- ── backward: dense + GAP, blocks reversed, maxpool, stem ──
+  -- ── backward: dense + GAP, blocks reversed, maxpool, stem (reads `%dy` from `cot`) ──
   let mut bwd :=
     s!"    %dgap = stablehlo.dot_general %dy, %Wd, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [BS,10]}, {ty [512,10]}) -> {ty [BS,512]}\n"
     ++ s!"    %dWd = stablehlo.dot_general %gap, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,512]}, {ty [BS,10]}) -> {ty [512,10]}\n"
@@ -337,26 +332,121 @@ private def trainStep : String := Id.run do
     ++ bnBackPC "dstn" "stn" "%dstr" 64 112 112
     ++ convBiasGrad "dsb" "%dstn" 64 112 112
     ++ convWGradStem "dsW" "%xr" "%dstn" 3 64 112 112
+  return fwd ++ cot ++ bwd
+
+/-- SGD loss cotangent dy = (softmax(logits) − onehot) / B (mean-loss). -/
+private def sgdCot : String :=
+  s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n"
+  ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
+  ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
+  ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
+  ++ s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
+  ++ s!"    %bnc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n"
+  ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"   -- mean-loss cotangent
+
+private def trainStep : String :=
+  let body := renderBody sgdCot
   -- ── SGD + signature/return, all from the single param list ──
-  let upd := String.join (allParams.map (fun (nm, gr, t) => sgd nm gr t))
+  let upd := String.join (allParams.map (fun (nm, gr, ds) => sgd nm gr (ty ds)))
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [BS,150528]) :: allParams.map (fun (nm, _, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])
-  let retTyL := String.intercalate ", " (allParams.map (fun (_, _, t) => t))
+    (("%x: " ++ ty [BS,150528]) :: allParams.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}") ++ ["%onehot: " ++ ty [BS,10]])
+  let retTyL := String.intercalate ", " (allParams.map (fun (_, _, ds) => ty ds))
   let retVals := String.intercalate ", " (allParams.map (fun (nm, _, _) => s!"%{nm}n"))
-  return "module @m {\n" ++ s!"  func.func @resnet34_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
-    fwd ++ cot ++ bwd ++ upd ++ s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
+  "module @m {\n" ++ s!"  func.func @resnet34_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
+    body ++ upd ++ s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
+
+-- ════════════ AdamW scheduled train step (loss-curve parity with the resnet34 reference) ════════════
+
+/-- β₁/β₂/ε/wd baked (the r34 reference recipe); `%lr`/`%bc1`/`%bc2` arrive as runtime args. -/
+private def adamConsts : String :=
+  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
+  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
+  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
+  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
+  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
+  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+
+/-- AdamW loss cotangent with label smoothing α=0.1 (off-class mass α/K, K=10) + the in-graph
+    smoothed-CE loss `%loss` for logging — same mechanism as the ViT/mnv2/enet sched renders.
+    Defines `%lsm` (softmax), `%dy` (smoothed cotangent), `%loss`. -/
+private def adamCot : String :=
+  let ls : Float := 0.1
+  let lsK : Float := ls / 10.0
+  s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n"
+  ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
+  ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
+  ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
+  ++ s!"    %dyr0 = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
+  ++ s!"    %lsa = stablehlo.constant dense<{ls}> : {ty [BS,10]}\n"
+  ++ s!"    %lsaoh = stablehlo.multiply %lsa, %onehot : {ty [BS,10]}\n"
+  ++ s!"    %dyr1 = stablehlo.add %dyr0, %lsaoh : {ty [BS,10]}\n"
+  ++ s!"    %lsaik = stablehlo.constant dense<{lsK}> : {ty [BS,10]}\n"
+  ++ s!"    %dyr = stablehlo.subtract %dyr1, %lsaik : {ty [BS,10]}\n"
+  ++ s!"    %bnc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n"
+  ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"
+  ++ s!"    %llog = stablehlo.log %lsm : {ty [BS,10]}\n"
+  ++ s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [BS,10]}\n"
+  ++ s!"    %t1s = stablehlo.reduce(%ohll init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
+  ++ s!"    %lls = stablehlo.reduce(%llog init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
+  ++ s!"    %omac = stablehlo.constant dense<{1.0 - ls}> : {ty [BS]}\n"
+  ++ s!"    %aKc = stablehlo.constant dense<{lsK}> : {ty [BS]}\n"
+  ++ s!"    %lt1 = stablehlo.multiply %omac, %t1s : {ty [BS]}\n"
+  ++ s!"    %lt2 = stablehlo.multiply %aKc, %lls : {ty [BS]}\n"
+  ++ s!"    %lpe = stablehlo.add %lt1, %lt2 : {ty [BS]}\n"
+  ++ s!"    %lsum2 = stablehlo.reduce(%lpe init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS]}, tensor<f32>) -> tensor<f32>\n"
+  ++ s!"    %lbfc = stablehlo.constant dense<{BS}.0> : tensor<f32>\n"
+  ++ s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n"
+  ++ s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+
+/-- `@resnet34_adam_train_step` — the proof-rendered fwd/bwd/param-grads with the SGD update swapped
+    for `ViTRender.emitAdamV` and the `[θ|m|v]` + scalar-tail packed signature the generic
+    `VerifiedNet.trainAdamSched` driver expects:
+    `(x, θ×k, m×k, v×k, lr, bc1, bc2, onehot) → (θ'×k, m'×k, v'×k, loss, bc1, bc2)` (k=146).
+    `lr`/`bc1`/`bc2` runtime (cosine+warmup + per-step bias correction); `bc1`/`bc2` pass through. -/
+private def trainStepAdamSched : String :=
+  let body := renderBody adamCot
+  let updParts := allParams.map (fun (nm, gr, ds) =>
+    ViTRender.emitAdamV ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
+  let upd := String.join (updParts.map (·.1))
+  let thetaN := updParts.map (·.2.1)
+  let mN := updParts.map (·.2.2.1)
+  let vN := updParts.map (·.2.2.2)
+  let psig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
+  let msig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
+  let vsig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
+  let argSig := ("%x: " ++ ty [BS,150528]) ++ ", " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: " ++ ty [BS,10]
+  let dims := allParams.map (fun (_, _, ds) => ds)
+  let allDims := dims ++ dims ++ dims
+  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
+  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
+  "module @m {\n" ++ s!"  func.func @resnet34_adam_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
+    body ++ adamConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+
+/-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH (the render +
+    write already happened, so the artifact exists regardless). -/
+private def tryCompile (src dst label : String) : IO Unit := do
+  try
+    let cargs ← ireeCompileArgs src dst
+    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+    if r.exitCode != 0 then IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take 3000}"
+    else IO.println s!"{label} iree-compile OK → {src}"
+  catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
 
 def main : IO Unit := do
+  IO.FS.createDirAll "verified_mlir"
+  IO.FS.createDirAll ".lake/build"
+  -- Render + write BOTH artifacts first, then compile (so a missing iree-compile can't abort
+  -- before the AdamW artifact is written).
   let mlir := trainStep
   IO.println s!"rendered full ResNet-34 train step (BS={BS}): {mlir.length} chars, {allParams.length} params"
-  IO.FS.createDirAll "verified_mlir"
   IO.FS.writeFile "verified_mlir/resnet34_train_step.mlir" mlir
-  IO.FS.createDirAll ".lake/build"
-  let cargs ← ireeCompileArgs "verified_mlir/resnet34_train_step.mlir" ".lake/build/resnet34_train_step_v.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 3000}"
-  else
-    IO.println "resnet34 FULL train step iree-compile OK → verified_mlir/resnet34_train_step.mlir"
+  let amlir := trainStepAdamSched
+  IO.println s!"rendered ResNet-34 AdamW-sched train step: {amlir.length} chars"
+  IO.FS.writeFile "verified_mlir/resnet34_adam_train_step.mlir" amlir
+  -- SGD smoke (the committed train step; verifies the shared `renderBody`).
+  tryCompile "verified_mlir/resnet34_train_step.mlir" ".lake/build/resnet34_train_step_v.vmfb" "SGD"
+  -- AdamW scheduled train step — the artifact `resnet34-verified-adam` trains on.
+  tryCompile "verified_mlir/resnet34_adam_train_step.mlir" "/tmp/resnet34_adam_ts.vmfb" "AdamW"
 
 #eval main

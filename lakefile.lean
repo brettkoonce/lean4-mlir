@@ -318,6 +318,14 @@ lean_exe «resnet34-verified» where
   root := `MainResnet34Verified
   moreLinkArgs := ireeLink
 
+-- r34 peer of mnv2/enet-verified-adam: the proof-rendered train step (per-channel BN + strided
+-- downsamples) with the SGD update swapped for AdamW (ViTRender.emitAdamV) + packed θ|m|v + runtime
+-- lr/bc threading via trainAdamSched. Recipe matches the reference (lr 1e-3, wd 1e-4, cosine+warmup
+-- 3, label-smoothing 0.1). Render: tests/TestResnet34Train.lean.
+lean_exe «resnet34-verified-adam» where
+  root := `MainResnet34VerifiedAdam
+  moreLinkArgs := ireeLink
+
 -- ch7 C4: small MobileNetV2 (inverted-residual blocks: depthwise conv + relu6 +
 -- per-channel BN) trained on VERIFIED-rendered StableHLO
 -- (tests/TestMobilenetV2{Train,Fwd}.lean); 30 params.
