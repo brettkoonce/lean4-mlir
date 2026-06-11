@@ -992,4 +992,213 @@ theorem mnv2Concrete_has_vjp_correct (dy : Vec 2) (i : Fin (1 * 2 * 2)) :
 
 end MobileNetV2Concrete
 
+-- ════════════════════════════════════════════════════════════════
+-- § The *live* counterpart of `MobileNetV2Concrete`
+--
+--   `MobileNetV2Concrete` (above) discharges the off-the-kink bundle by
+--   zeroing every kernel → constant output → zero Jacobian. `Mnv2Live`
+--   discharges the SAME bundle on a NONZERO, non-collapsed net, defeating
+--   BN's `√(σ²+ε)` with the `γ=1,β=3, n≤8` window (`bn13_window`) instead
+--   of a constant collapse. The formal nonzero-Jacobian seal is the
+--   documented residual (see the closing docstring); `bnForward_mean` /
+--   `bn1_devSum_scale` / `bnIstd_pos` are its reusable, layout-free core.
+-- ════════════════════════════════════════════════════════════════
+
+namespace Mnv2Live
+
+open Proofs
+
+-- ════════════════════════════════════════════════════════════════
+-- § The sqrt-defeating window lemma (the reusable contribution)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **With `γ=1, β=3` and length `n ≤ 8`, every BN output is in `(0,6)`** — for
+    an *arbitrary* input `z` and *arbitrary* `ε>0`. No constant-collapse, no
+    sqrt computed: the bound reduces to `(zₖ−μ)² < 9(σ²+ε)`. -/
+theorem bn13_window (n : Nat) (hn : 0 < n) (hn8 : n ≤ 8)
+    (ε : ℝ) (hε : 0 < ε) (z : Vec n) (k : Fin n) :
+    0 < bnForward n ε 1 3 z k ∧ bnForward n ε 1 3 z k < 6 := by
+  set μ := bnMean n z with hμ
+  set v := bnVar n z with hvdef
+  have hv0 : 0 ≤ v := by
+    rw [hvdef, bnVar]
+    apply div_nonneg
+    · exact Finset.sum_nonneg (fun i _ => mul_self_nonneg _)
+    · positivity
+  set s := v + ε with hsdef
+  have hs0 : 0 < s := by rw [hsdef]; linarith
+  have hsqrt : 0 < Real.sqrt s := Real.sqrt_pos.mpr hs0
+  set d := z k - μ with hddef
+  have hnv : (n : ℝ) * v = ∑ i, (z i - μ) * (z i - μ) := by
+    rw [hvdef, bnVar]
+    rw [mul_div_cancel₀]
+    exact_mod_cast hn.ne'
+  have hsingle : d * d ≤ ∑ i, (z i - μ) * (z i - μ) := by
+    rw [hddef]
+    exact Finset.single_le_sum (f := fun i => (z i - μ) * (z i - μ))
+      (fun i _ => mul_self_nonneg _) (Finset.mem_univ k)
+  have hd_le_nv : d * d ≤ (n : ℝ) * v := by rw [hnv]; exact hsingle
+  have hn8' : (n : ℝ) ≤ 8 := by exact_mod_cast hn8
+  have hnv_le : (n : ℝ) * v ≤ 8 * v := mul_le_mul_of_nonneg_right hn8' hv0
+  have hkey : d * d < 9 * s := by rw [hsdef]; nlinarith [hd_le_nv, hnv_le, hv0, hε]
+  have hd2 : d ^ 2 < 9 * s := by rw [sq]; exact hkey
+  have habs : |d| < 3 * Real.sqrt s := by
+    have h1 : Real.sqrt (d ^ 2) < Real.sqrt (9 * s) :=
+      Real.sqrt_lt_sqrt (sq_nonneg d) hd2
+    rw [Real.sqrt_sq_eq_abs] at h1
+    rwa [Real.sqrt_mul (by norm_num) s, show Real.sqrt 9 = 3 by
+      rw [show (9 : ℝ) = 3 ^ 2 by norm_num, Real.sqrt_sq (by norm_num)]] at h1
+  have hval : bnForward n ε 1 3 z k = d / Real.sqrt s + 3 := by
+    simp only [bnForward, bnXhat, bnIstd, hddef, one_mul]
+    rw [mul_one_div]
+  have hquot : |d / Real.sqrt s| < 3 := by
+    rw [abs_div, abs_of_pos hsqrt, div_lt_iff₀ hsqrt]
+    linarith [habs]
+  rw [abs_lt] at hquot
+  rw [hval]
+  constructor <;> linarith [hquot.1, hquot.2]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Reusable, layout-free core of the liveness seal
+--   BN forces output mean β and rescales every deviation by istd > 0,
+--   so a cross-channel asymmetry planted at the stem cannot vanish.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Deviations sum to zero: `Σₖ (zₖ − μ) = 0`. -/
+theorem dev_sum_zero (n : Nat) (hn : 0 < n) (z : Vec n) :
+    ∑ k, (z k - bnMean n z) = 0 := by
+  have hn' : (n : ℝ) ≠ 0 := by exact_mod_cast hn.ne'
+  rw [Finset.sum_sub_distrib, Finset.sum_const, Finset.card_univ, Fintype.card_fin, bnMean,
+    nsmul_eq_mul]
+  have h : (n : ℝ) * ((∑ k, z k) / n) = ∑ k, z k := by field_simp
+  rw [h, sub_self]
+
+/-- **BN forces the output mean to `β`** (for `n > 0`). -/
+theorem bnForward_mean (n : Nat) (hn : 0 < n) (ε γ β : ℝ) (z : Vec n) :
+    bnMean n (bnForward n ε γ β z) = β := by
+  have hn' : (n : ℝ) ≠ 0 := by exact_mod_cast hn.ne'
+  have hxhat : ∑ k, bnXhat n ε z k = 0 := by
+    simp only [bnXhat]
+    rw [← Finset.sum_mul, dev_sum_zero n hn z, zero_mul]
+  have hsum : ∑ k, bnForward n ε γ β z k = (n : ℝ) * β := by
+    simp only [bnForward]
+    rw [Finset.sum_add_distrib, ← Finset.mul_sum, hxhat, mul_zero, zero_add,
+      Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  rw [bnMean, hsum, mul_comm (n : ℝ) β, mul_div_assoc, div_self hn', mul_one]
+
+/-- **BN rescales every deviation by `istd`** (the `γ=1` case). Over *any*
+    index set `S`, the BN-output deviation-sum is the input deviation-sum
+    scaled by the positive `bnIstd`. This is what carries a stem-planted
+    cross-channel asymmetry through the four BN layers undamped. -/
+theorem bn1_devSum_scale (n : Nat) (hn : 0 < n) (ε β : ℝ) (z : Vec n)
+    (S : Finset (Fin n)) :
+    ∑ k ∈ S, (bnForward n ε 1 β z k - bnMean n (bnForward n ε 1 β z))
+      = bnIstd n z ε * ∑ k ∈ S, (z k - bnMean n z) := by
+  rw [bnForward_mean n hn ε 1 β z, Finset.mul_sum]
+  apply Finset.sum_congr rfl
+  intro k _
+  simp only [bnForward, bnXhat, one_mul]
+  ring
+
+/-- `bnIstd` is strictly positive (so the rescaling above never kills the sign). -/
+theorem bnIstd_pos (n : Nat) (ε : ℝ) (hε : 0 < ε) (z : Vec n) :
+    0 < bnIstd n z ε := by
+  rw [bnIstd]
+  apply div_pos one_pos
+  apply Real.sqrt_pos.mpr
+  have hv0 : 0 ≤ bnVar n z := by
+    rw [bnVar]; apply div_nonneg
+    · exact Finset.sum_nonneg (fun i _ => mul_self_nonneg _)
+    · positivity
+  linarith
+
+-- ════════════════════════════════════════════════════════════════
+-- § A concrete net with NONZERO, NON-COLLAPSED weights
+--   dims: ic=1, c=mid₁=oc=mid₂=2, h=w=2, nClasses=2  (every BN vec len 8).
+--
+--   • stem: ASYMMETRIC (channel 0 ·1, channel 1 ·2) — plants the
+--     cross-channel asymmetry the seal relies on.
+--   • block1 (skip): body zeroed; `invresBody₁ ≡ const`, so block1 is a
+--     constant shift of its input (injective; preserves deviations).
+--   • block2 (no skip): IDENTITY convs ⇒ three genuine BN layers on the
+--     signal (the irreducible nonlinearity — block2 has no skip to hide in).
+--   • head: IDENTITY dense ⇒ output = per-channel GAP (reads each channel,
+--     unlike v1's all-ones head which BN-mean-collapsed to a constant).
+-- ════════════════════════════════════════════════════════════════
+
+noncomputable def Ws  : Kernel4 2 1 1 1 := fun o _ _ _ => if o = 0 then 1 else 2
+noncomputable def bs  : Vec 2 := fun _ => 0
+noncomputable def We₁ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
+noncomputable def be₁ : Vec 2 := fun _ => 0
+noncomputable def Wd₁ : DepthwiseKernel 2 1 1 := fun _ _ _ => 0
+noncomputable def bd₁ : Vec 2 := fun _ => 0
+noncomputable def Wp₁ : Kernel4 2 2 1 1 := fun _ _ _ _ => 0
+noncomputable def bp₁ : Vec 2 := fun _ => 0
+/-- block2 expand: identity channel map. -/
+noncomputable def We₂ : Kernel4 2 2 1 1 := fun o i _ _ => if o = i then 1 else 0
+noncomputable def be₂ : Vec 2 := fun _ => 0
+/-- block2 depthwise: identity (single 1×1 tap). -/
+noncomputable def Wd₂ : DepthwiseKernel 2 1 1 := fun _ _ _ => 1
+noncomputable def bd₂ : Vec 2 := fun _ => 0
+/-- block2 project: identity channel map. -/
+noncomputable def Wp₂ : Kernel4 2 2 1 1 := fun o i _ _ => if o = i then 1 else 0
+noncomputable def bp₂ : Vec 2 := fun _ => 0
+/-- identity dense head ⇒ output = per-channel GAP. -/
+noncomputable def Wh  : Mat 2 2 := fun i j => if i = j then 1 else 0
+noncomputable def bh  : Vec 2 := fun _ => 0
+/-- Non-constant input. -/
+noncomputable def X : Vec (1 * 2 * 2) := fun i => (i.val : ℝ)
+
+/-- The five ReLU6 sites all discharge through the one window lemma (length 8,
+    γ=1, β=3, ε=1), regardless of the weights feeding them. -/
+private theorem win (z : Vec (2 * 2 * 2)) (k : Fin (2 * 2 * 2)) :
+    bnForward (2 * 2 * 2) 1 1 3 z k ≠ 0 ∧ bnForward (2 * 2 * 2) 1 1 3 z k ≠ 6 := by
+  obtain ⟨h0, h6⟩ := bn13_window (2 * 2 * 2) (by norm_num) (by norm_num) 1 one_pos z k
+  exact ⟨h0.ne', h6.ne⟩
+
+/-- **Unconditional whole-network VJP on a nonzero, non-collapsed MobileNetV2.**
+    Every ReLU6 smoothness hypothesis of `mobilenetv2_has_vjp_at` is discharged
+    by `win` (the window lemma) — *not* by a constant collapse. No side
+    conditions; three-axiom closure. -/
+noncomputable def mnv2Live_has_vjp_at :
+    HasVJPAt (mobilenetv2Forward Ws bs 1 1 3
+      We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3
+      We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh) X :=
+  mobilenetv2_has_vjp_at Ws bs 1 1 3 one_pos
+    We₁ be₁ 1 1 3 one_pos Wd₁ bd₁ 1 1 3 one_pos Wp₁ bp₁ 1 1 3 one_pos
+    We₂ be₂ 1 1 3 one_pos Wd₂ bd₂ 1 1 3 one_pos Wp₂ bp₂ 1 1 3 one_pos Wh bh X
+    (fun k => win _ k) (fun k => win _ k) (fun k => win _ k)
+    (fun k => win _ k) (fun k => win _ k)
+
+/-- **Public unconditional correctness theorem** — the nonzero-weight
+    MobileNetV2's backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
+theorem mnv2Live_has_vjp_correct (dy : Vec 2) (i : Fin (1 * 2 * 2)) :
+    mnv2Live_has_vjp_at.backward dy i =
+      ∑ j : Fin 2,
+        pdiv (mobilenetv2Forward Ws bs 1 1 3
+          We₁ be₁ 1 1 3 Wd₁ bd₁ 1 1 3 Wp₁ bp₁ 1 1 3
+          We₂ be₂ 1 1 3 Wd₂ bd₂ 1 1 3 Wp₂ bp₂ 1 1 3 Wh bh) X i j * dy j :=
+  mnv2Live_has_vjp_at.correct dy i
+
+/-! ## The remaining obligation: non-vacuity (nonzero Jacobian)
+
+```
+theorem mnv2Live_jacobian_ne_zero :
+    ∃ (i : Fin (1 * 2 * 2)) (j : Fin 2),
+      pdiv (mobilenetv2Forward Ws bs 1 1 3 …) X i j ≠ 0
+```
+
+At `X` every ReLU6 is strictly inside `(0,6)` (`win`), so each is *locally the
+identity*, and with the identity convs of block2 the forward agrees on a
+neighborhood with `dense_id ∘ gap ∘ BN ∘ BN ∘ BN ∘ BN ∘ flatConv`. The
+asymmetric stem plants `Σ_{channel 0}(z − μ) = −3 ≠ 0`; `bnForward_mean` +
+`bn1_devSum_scale` + `bnIstd_pos` carry that deviation through all four BN
+layers scaled by a positive constant, so `gap₀ = 3 − 3·∏istd/4 < 3`, whereas
+the constant input gives `gap₀ = 3` (`bnForward_const`). Hence the forward is
+non-constant and the Jacobian is nonzero. The residual is purely the layer
+reduction + the concrete `finProdFinEquiv` evaluation of `flatConv`/`gap`.
+-/
+
+end Mnv2Live
+
 end Proofs

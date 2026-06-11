@@ -154,6 +154,11 @@ open Proofs
 -- hypothesis discharged (unconditional, degenerate constant-activation
 -- witness via bnForward_const).
 #print axioms MobileNetV2Concrete.mnv2Concrete_has_vjp_correct
+-- MobileNetV2: the LIVE counterpart — same ReLU6 bundle discharged on a
+-- NONZERO, non-collapsed net via the `γ=1,β=3,n≤8` window (`bn13_window`),
+-- not a constant collapse. (Nonzero-Jacobian seal is the documented residual.)
+#print axioms Mnv2Live.bn13_window
+#print axioms Mnv2Live.mnv2Live_has_vjp_correct
 #print axioms layerScale_has_vjp_correct
 #print axioms convnext_has_vjp_at_correct
 -- ConvNeXt promoted to an UNCONDITIONAL global VJP (all-smooth: LN+GELU, no
