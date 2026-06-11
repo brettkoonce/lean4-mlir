@@ -6,6 +6,36 @@ Bring MobileNetV2 to the same standard `vit-verified-adam` reached (see
 on identical data. mnv2 is the cheapest next target (smallest imagenette net, 82
 params) — but it carries the one thing ViT didn't: **BatchNorm**.
 
+---
+## STATUS (2026-06-11) — DONE, with one BN caveat
+`mobilenetv2-verified-adam` is **built, GPU-validated, committed (`90e9bb6`), and pushed** — along
+with the whole verified-AdamW set (vit, mnv2, enet `19c487b`, r34 `845077b`, convnext `26e91d1`).
+The §1 AdamW packed render and §3 Main/recipe/exe below all landed as planned (the `emitAdamV` swap
++ packed `[θ|m|v]` + scalar-tail through `trainAdamSched`).
+
+**§2 (BatchNorm) was the swing factor, exactly as predicted — and it split three ways:**
+- **mnv2 kept per-sample BN** (reduce `[2,3]`, each image self-normalized). This is a *different
+  operation* than the reference's true batch-norm (reduce `[0,2,3]`), so mnv2's train curve doesn't
+  tightly match the reference — but its **eval works fine** (self-normalizing → not degenerate on the
+  class-sorted val set). **Accepted as a documented caveat**, because mnv2's BN is rendered through
+  PROOF TOKENS (`.bnPerChannelF`) and `.bnBatchF` has no `pretty`/emit case (no batch-back token
+  either) — so giving mnv2 batch-norm means HAND-rebuilding it in the proof-token PC render, trading
+  away its proof-rendered-BN property, for the weakest net.
+- **r34 + enet got full exact BN parity** (committed `293cb1c`, `cceea14`): true `[0,2,3]` batch-norm
+  (r34 swapped; enet already was) **+ running-stats eval**. Running-stats is now SHARED INFRA in the
+  generic `trainAdamSched` driver — a new `<slug>_fwd_eval.mlir` (affine BN with per-layer running
+  μ/var), the adam step carries batch mean/var in PASSTHROUGH slots (keeps FFI `#out=#in`), the
+  driver EMAs them (`bnMom` 1.0→0.1) into `runningBnStats`, and a `bnChannels : Array Nat` field
+  drives it (empty for LN nets). Fixed degenerate sorted-val eval: r34 16%→37.4%, enet 12%→40.1%.
+
+**If mnv2 exact-parity is wanted later:** the driver + metadata are done; only the mnv2-SIDE render
+work remains — hand-emit batch-norm fwd+bwd into `TestMobilenetV2TrainPC` (replace the
+`.bnPerChannelF`/`.bnPerChannelBack` `pretty` calls with hand-emitted batch fragments, like r34/enet),
+add `bnLayers` + train-step stat passthrough, a `mobilenetv2_fwd_eval` render, and set `bnChannels`
+on `mobilenetv2Verified`. See `[[verified-adam-net-progress]]` memory + the r34 commit `293cb1c` for
+the template.
+
+---
 ## Headline: mnv2 reuses ~80% of the ViT spine; the real new work is BatchNorm.
 
 The ViT effort built a net-generic spine. mnv2 reuses almost all of it.
@@ -78,9 +108,14 @@ at eval. **The verified driver has none** (it batch-norms everywhere). Consequen
 - ~1–2 days, BN the swing. Recommended path: get the **loss-curve diff-test passing first**
   (render + batch-BN, no stats), confirm tracking, then add running-stats BN for val-acc parity.
 
-## After mnv2
-The same template applies to the rest, cheapest-first by param count: mnv2 (82) →
-cnn/cifar (no imagenette, small) → resnet34 (146) → convnext (180) → efficientnet (262).
-All AdamW-reference, all reuse the spine; r34/convnext/efficientnet also have BN (same #2),
-convnext/efficientnet are all-smooth like ViT otherwise. Each gets diff-tested the same way —
-match anything found.
+## After mnv2 — DONE (all imagenette nets)
+The template applied to the rest as planned, cheapest-first by param count: mnv2 (82) → resnet34
+(146) → convnext (180) → efficientnet (262), all AdamW-reference, all reusing the spine — all
+**committed + pushed** (see STATUS at top). convnext is all-smooth like ViT (LayerNorm → exact
+parity, no BN gap); r34 + enet got exact BN parity; mnv2 keeps per-sample BN (caveat).
+
+**Remaining (next clean session):** the small **cnn/cifar** nets (MNIST/CIFAR, not imagenette) —
+their references also use AdamW (lr 1e-3, warmup 1–2, no label-smoothing, bs 128), same `emitAdamV`
+swap recipe, but the render path differs (no per-net `allParams`/`sgd`/`cot` test — likely a shared
+`CnnRender`-style library; needs investigation first). Lower value (re-proves the swap on small
+nets, no new capability). `mnist-linear` uses a separate 2-param `trainLinear` driver — skip.
