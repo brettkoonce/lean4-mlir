@@ -1566,11 +1566,12 @@ Concretely, that means:
   tricks --- one recipe held constant across architectures for
   consistency. This book adopts the modern recipe --- Adam, cosine
   decay, linear warmup, weight decay, label smoothing, and basic
-  data augmentation --- the DAWNBench 2018 recipe, and how this book's
+  data augmentation are how this book's
   Imagenette results were achieved. That full recipe is assembled and
-  ablated in Chapter~\ref{chap:residual} (ResNet); the later chapters
-  add full ImageNet recipes, trained through a Lean 4 \(\to\) JAX
-  bridge, with modern data augmentations.
+  ablated in Chapter~\ref{chap:residual} (ResNet) and ran against each
+  architecture after as a common baseline. Later chapters add full
+  ImageNet recipes, trained through a Lean 4 \(\to\) JAX bridge, with
+  modern data augmentations.
 
 \item \textbf{The codegen is new.} The first book's Swift-for-TensorFlow
   pipeline is replaced with Lean 4 \(\to\) StableHLO MLIR \(\to\) IREE
