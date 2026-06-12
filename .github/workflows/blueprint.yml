@@ -100,6 +100,18 @@ jobs:
           # target keeps this future-proof: new Proofs roots are built here too.
           lake build LeanMlir Proofs
 
+      - name: Install graphviz (libcgraph for leanblueprint's dep-graph plugin)
+        # leanblueprint's `dep_graph` plugin imports pygraphviz, which dlopens
+        # libcgraph.so.8 (shipped by graphviz). Without it the `blueprint`
+        # plasTeX package fails to load — \lean/\leanok/\uses go unrecognized,
+        # `leanblueprint web` silently skips writing blueprint/lean_decls, and
+        # the next step dies with "Could not find declaration list". This is the
+        # dep-graph dependency only; the old .dot architecture diagrams are gone
+        # (now native TikZ), so no `dot -T...` render step is needed.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz libgraphviz-dev pkg-config
+
       - name: Cache TeX Live .deb downloads
         # Cache the downloaded .debs from /var/cache/apt/archives so
         # subsequent runs skip the ~500 MB download of texlive-fonts-

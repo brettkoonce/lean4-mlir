@@ -20,15 +20,6 @@
 \input{macros/common}
 \input{macros/web}
 
-% plasTeX compiles each TikZ/vector figure in a standalone latex run whose
-% preamble does NOT pick up the blueprint package's web-only \home/\github/
-% \dochome (they're undefined there, which crashes the figure's image compile).
-% Guard them as no-ops: \providecommand leaves the real HTML-render defs intact
-% and only kicks in for the image-compile context. See the figures in §3.1/§4.1.
-\providecommand{\home}[1]{}
-\providecommand{\github}[1]{}
-\providecommand{\dochome}[1]{}
-
 \home{https://brettkoonce.github.io/lean4-mlir}
 \github{https://github.com/brettkoonce/lean4-mlir}
 \dochome{https://brettkoonce.github.io/lean4-mlir/docs}
