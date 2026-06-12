@@ -1,0 +1,258 @@
+# formalization.yaml — see https://github.com/mathlib-initiative/formalization.yaml
+# Self-reported. The factual spine (axioms, comparator count, license, source)
+# is verifiable from the repo; the fidelity/review sections are written to state
+# the project's known gaps plainly rather than to pitch.
+version: "v0.3"
+
+project:
+  name: "Verified Deep Learning with Lean 4"
+  authors: ["Brett Koonce"]
+  license: "BSD-3-Clause"
+
+sources:
+  - title: "Convolutional Neural Networks with Swift for TensorFlow"
+    authors: ["Brett Koonce"]
+    id: "doi:10.1007/978-1-4842-6168-2"   # Apress, 2021
+    type: "textbook"
+    license: ""                            # commercial (Apress)
+    author_contacted: "n/a"               # the formalization author wrote this book
+    prior_work: ""                         # extends the book; coverage pushed through ConvNeXt + ViT
+  - title: "Mathlib"
+    authors: ["The mathlib community"]
+    id: "https://github.com/leanprover-community/mathlib4"
+    type: "library"
+    license: "Apache-2.0"
+    author_contacted: "n/a"
+    prior_work: ""                         # foundation: fderiv / Differentiable API; see literature_dependencies
+
+status:
+  scope: >-
+    Machine-checked vector-Jacobian-product (backward-pass) correctness for the
+    layer primitives of six vision architectures and their full-network
+    compositions: MLP, 2D CNN, BatchNorm-CNN, ResNet-34, MobileNetV2,
+    EfficientNet-B0, ConvNeXt-T, and ViT-Tiny. Covers dense, ReLU/ReLU6,
+    softmax cross-entropy, 2D / strided / depthwise convolution, max-pool,
+    global-average-pool, batch-norm's three-term backward, residual + projection
+    blocks, squeeze-excitation, GELU/Swish/sigmoid, layer-norm, layer-scale, and
+    a multi-theorem treatment of scaled-dot-product / multi-head self-attention
+    through the full transformer tower. Each NetSpec also emits StableHLO MLIR
+    (compiled by IREE, cross-checked against a parallel JAX pipeline) — that
+    codegen/training path is engineered and empirically validated, NOT part of
+    the proved theorems (see fidelity.divergences).
+  sorry_count: 0
+  sorry_in_definitions: 0
+  axioms: ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
+  main_results:
+    # Representative headline set. The full audit (tests/AuditAxioms.lean) runs
+    # `#print axioms` on 535 declarations; 51 are independently kernel-rechecked
+    # by the comparator (tests/comparator/config.json). All close under exactly
+    # the three core axioms above. comparator_config below points at that config
+    # for results included in the 51-theorem recheck.
+    - declaration: "Proofs.pdiv_comp"          # chain / additive / multiplicative fan-in + finset-sum
+      file: "LeanMlir/Proofs/Tensor.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: "tests/comparator/config.json"
+      literature_dependencies:
+        - statement: "fderiv chain rule, fderiv of sum, Differentiable composition"
+          source: "Mathlib.Analysis.Calculus.FDeriv"
+    - declaration: "Proofs.dense_weight_grad_correct"
+      file: "LeanMlir/Proofs/MLP.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: "tests/comparator/config.json"
+      literature_dependencies: []
+    - declaration: "Proofs.conv2d_has_vjp3_correct"
+      file: "LeanMlir/Proofs/CNN.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: "tests/comparator/config.json"
+      literature_dependencies: []
+    - declaration: "Proofs.bn_input_grad_correct"   # batch-norm three-term backward
+      file: "LeanMlir/Proofs/BatchNorm.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""    # audited; not in the 51-theorem comparator subset
+      literature_dependencies: []
+    - declaration: "Proofs.layerNorm_has_vjp_correct"
+      file: "LeanMlir/Proofs/LayerNorm.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: "tests/comparator/config.json"
+      literature_dependencies: []
+    - declaration: "Proofs.softmaxCE_grad"
+      file: "LeanMlir/Proofs/Attention.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: "tests/comparator/config.json"
+      literature_dependencies: []
+    - declaration: "Proofs.mhsa_has_vjp_mat_correct"   # multi-head self-attention
+      file: "LeanMlir/Proofs/Attention.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: "tests/comparator/config.json"
+      literature_dependencies: []
+    - declaration: "Proofs.vit_full_has_vjp_correct"   # full ViT-Tiny body composes + has a VJP
+      file: "LeanMlir/Proofs/Attention.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: "tests/comparator/config.json"
+      literature_dependencies: []
+    - declaration: "Proofs.mobilenetv2_has_vjp_at_correct"
+      file: "LeanMlir/Proofs/MobileNetV2.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: "tests/comparator/config.json"
+      literature_dependencies: []
+    - declaration: "Proofs.convnext_has_vjp_correct"
+      file: "LeanMlir/Proofs/ConvNeXt.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: "tests/comparator/config.json"
+      literature_dependencies: []
+    - declaration: "Proofs.efficientnet_has_vjp_correct"
+      file: "LeanMlir/Proofs/EfficientNet.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: "tests/comparator/config.json"
+      literature_dependencies: []
+    - declaration: "Proofs.Mnv2Live.mnv2Live_forward_nonconstant"   # non-degeneracy witness (see fidelity)
+      file: "LeanMlir/Proofs/MobileNetV2.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+
+automation:
+  methods:
+    - method: "agent"
+      models: ["Qwen3+", "Opus 4.6+"]
+      framework: "OpenCode + Claude Code"
+      tool_setup: >-
+        Lean 4 + Lake + Mathlib for the proofs; an independent kernel re-check via
+        leanprover/comparator with the nanoda kernel; IREE for StableHLO->binary
+        compilation; a parallel JAX (Lean->Python codegen) pipeline for empirical
+        cross-checking on GPU/CPU. The audit report (tests/AUDIT_REPORT*.md) and
+        mutation tests were themselves agent-assisted.
+      cost:
+        wall_time: ""        # not precisely tracked; project developed over months
+        spend_usd: ""        # not tracked
+        hardware: "two GPU workstations for training + codegen validation across both vendor stacks — 6x RTX 4060 Ti (NVIDIA/CUDA) and 2x Radeon RX 7900 XTX (AMD/ROCm, gfx1100); API for proof work"
+      prompting_notes: >-
+        Mixed interactive + agentic. Proof development, codegen, the audit, and
+        the empirical training runs were all done with AI assistance.
+  spend_usd: ""              # not tracked
+  notes: >-
+    Heavily AI-assisted throughout — proof authoring, MLIR/JAX codegen, the
+    self-audit, and training. Not an unattended autonomous run; the author
+    drove and reviewed the work.
+
+fidelity:
+  divergences: |
+    The proved theorems form tiers; not everything the prose/abstract describes
+    is a theorem. Stated plainly:
+
+    1. STRONGEST — layer VJP correctness. The per-layer backward formulas
+       (dense, conv, batch-norm, layer-norm, softmax-CE, attention/MHSA, GELU,
+       etc.) are derived from Mathlib's `fderiv` and machine-checked. These are
+       the core results and are the bulk of the 51 comparator-rechecked theorems.
+
+    2. CODEGEN TRUST BOUNDARY (disclosed gap). The canonical backward is the
+       `fderiv`/`pdiv` expression, which at NON-smooth points (a ReLU input
+       exactly 0, a pooling argmax tie) returns Mathlib's junk default of 0,
+       whereas the emitted codegen uses the standard subgradient/argmax
+       convention (`if x>0 then dy else 0`, select-and-scatter). They agree only
+       at smooth points. This is documented in LeanMlir/Proofs/README.md
+       ("Codegen trust boundary"); smooth-point bridge theorems were added
+       (`relu_codegen_matches_canonical`, `maxPool2_codegen_matches_canonical`).
+
+    3. SMOOTH-INPUT CONDITIONING. The global instances `relu_has_vjp`,
+       `mlp_has_vjp`, `maxPool2_has_vjp3` define `backward` as the pdiv-sum RHS
+       and close `correct` by `rfl` — codegen-shaped witnesses whose formal
+       content is the pdiv expression (which fully characterizes backprop only at
+       smooth points). The earlier limitation (global composition needing
+       `Differentiable R f`, which blocked ReLU-containing chains) has since been
+       addressed: a pointwise `HasVJPAt` API with `vjp_comp_at` (Tensor.lean) plus
+       `relu_has_vjp_at` / `mlp_has_vjp_at` (MLP.lean) give real chain-rule proofs
+       — no rfl escape — under an explicit smooth-input hypothesis
+       (`∀ k, preact k ≠ 0`, i.e. no ReLU kink / no pooling tie). The residual
+       honest caveat is therefore that the strongest backprop-correctness results
+       are conditioned on smooth inputs; the measure-zero non-smooth points are
+       the disclosed codegen trust boundary of (2).
+
+    4. FULL-NET RESULTS are "the network composes and has a VJP at a witness
+       point". To rule out a vacuous (e.g. all-zero-weight) witness, separate
+       non-degeneracy proofs exist: `Mnv2Live.mnv2Live_forward_nonconstant`
+       proves the live MobileNetV2 forward is non-constant. The analogous
+       ResNet-34 live witness is in progress (Stage 1), not complete.
+
+    5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
+       (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
+       `mulVec/transpose/outer/mul`. This IS bridged to Mathlib's `Matrix`
+       namespace by `LeanMlir/Proofs/MatBridge.lean` (`Mat.mulVec_eq`,
+       `Mat.transpose_eq`, `Mat.outer_eq`, `Mat.mul_eq`), so a downstream
+       consumer can apply Mathlib's matrix algebra to the suite's outputs. The
+       bridge is opt-in by design — the core suite does not import it, keeping
+       its import surface Matrix-free unless interop is wanted.
+
+    6. NOT PROVED — empirically validated only: that the nets train to good
+       ImageNet accuracy, that StableHLO/IREE compilation is faithful, that the
+       JAX pipeline agrees numerically, and that bf16 doesn't change results.
+       These are engineering claims backed by runs and cross-checks, not theorems.
+
+review:
+  status: "agent-reviewed"   # also self-assessed; NOT externally peer-reviewed
+  reviewers: []
+  notes: >-
+    Three independent checks beyond `lake build`: (1) an agent self-audit
+    (tests/AUDIT_REPORT*.md) that found no axioms/sorries and surfaced the
+    fidelity caveats above; (2) mutation testing (corrupting a backward formula
+    breaks the build at every mutation tried); (3) leanprover/comparator +
+    nanoda re-running Lean's kernel typechecker on 51 theorems with a hard-coded
+    permitted-axiom allowlist of exactly {propext, Quot.sound, Classical.choice}.
+    No external human peer review.
+
+alignment:
+  namespace: "Proofs"
+  statements:
+    - source: "Dense layer backward (weight + bias gradients)"
+      lean: "dense_weight_grad_correct / dense_bias_grad_correct"
+      module: "LeanMlir/Proofs/MLP.lean"
+      status: "proved"
+      note: ""
+    - source: "2D convolution backward"
+      lean: "conv2d_has_vjp3_correct"
+      module: "LeanMlir/Proofs/CNN.lean"
+      status: "proved"
+      note: ""
+    - source: "Batch normalization three-term backward"
+      lean: "bn_input_grad_correct"
+      module: "LeanMlir/Proofs/BatchNorm.lean"
+      status: "proved"
+      note: ""
+    - source: "Multi-head self-attention backward (Q/K/V) + full ViT body"
+      lean: "mhsa_has_vjp_mat_correct / vit_full_has_vjp_correct"
+      module: "LeanMlir/Proofs/Attention.lean"
+      status: "proved"
+      note: ""
+    - source: "ReLU / max-pool backward at non-smooth points"
+      lean: "relu_codegen_matches_canonical / maxPool2_codegen_matches_canonical"
+      module: "LeanMlir/Proofs/MLP.lean, LeanMlir/Proofs/CNN.lean"
+      status: "proved"
+      note: "smooth-point bridge only; non-smooth points are a disclosed trust boundary"
+    - source: "Live-network non-degeneracy (ResNet-34)"
+      lean: "(ResNet-34 live witness, Stage 1)"
+      module: "LeanMlir/Proofs/ResNet34Live.lean"
+      status: "in-progress"
+      note: "MobileNetV2 analogue is proved; R34 is partial"
+    - source: "StableHLO/IREE codegen faithfulness, JAX numeric agreement, training accuracy"
+      lean: "(none — empirical)"
+      module: ""
+      status: "not-formalized"
+      note: "validated by runs + cross-checks, not by theorems"
+
+acknowledgements: >-
+  Built on Mathlib (foundation: fderiv / Differentiable). Independent kernel
+  re-checking via leanprover/comparator and the nanoda kernel. StableHLO/IREE
+  for compilation; JAX for cross-checking. Architectural coverage follows
+  "Convolutional Neural Networks with Swift for TensorFlow" (Apress, 2021).
