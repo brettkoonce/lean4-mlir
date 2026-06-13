@@ -344,12 +344,21 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     startEpoch := ((← IO.FS.readFile epPath).toNat?).getD 0
     IO.println s!"  ▸ resuming from checkpoint at epoch {startEpoch}"
     (← IO.getStdout).flush
+  -- Reuse ONE shuffle buffer across epochs (mirrors the reference trainer's
+  -- curImg/curLbl). Shuffling the SAME mutable in place keeps it exclusive
+  -- (rc 1) so F32.shuffle mutates it rather than allocating a fresh full-dataset
+  -- copy each epoch. The old `F32.shuffle trainImg` kept the pristine trainImg
+  -- alive (rc≥2), forcing the copy path every epoch and leaking ~one training
+  -- set (5.3 GiB) per epoch → OOM after ~30 epochs on a 188 GB box.
+  let mut curImg := trainImg
+  let mut curLbl := trainLbl
   for ep in [startEpoch:cfg.epochs] do
     let mut epochLossSum := 0.0
     let mut lastLr := 0.0
     -- Per-epoch Fisher-Yates shuffle (the reference does this; the data is
     -- class-sorted, so without it every batch is a single class — degenerate).
-    let (sImg, sLbl) ← F32.shuffle trainImg trainLbl nTrain.toUSize trainPix.toUSize (ep + 42).toUSize
+    let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize (ep + 42).toUSize
+    curImg := sImg; curLbl := sLbl
     for bi in [0:nb] do
       let gstep := (ep * nb + bi + 1).toFloat
       let lrt := if gstep ≤ warmSteps then baseLR * gstep / warmSteps
@@ -360,7 +369,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
       -- BN nets append the (ignored) stat-in passthrough slots; the step writes batch stats out.
       let params := if hasBn then F32.concat #[thetamv, tail, runningBnStats] else F32.concat #[thetamv, tail]
       let augSeed := (ep * nb + bi + 1).toUSize
-      let xbRaw := F32.sliceImages sImg (bi * bs) bs trainPix
+      let xbRaw := F32.sliceImages curImg (bi * bs) bs trainPix
       -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
       -- lives in the data pipeline, not the network): Imagenette = random crop
       -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
@@ -372,7 +381,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
             F32.randomHFlip c bs.toUSize 3 224 224 (augSeed + 7777)
         | .cifar => F32.randomHFlip xbRaw bs.toUSize 3 32 32 augSeed
         | _ => pure xbRaw
-      let yb := F32.sliceLabels sLbl (bi * bs) bs
+      let yb := F32.sliceLabels curLbl (bi * bs) bs
       let out ← IreeSession.mlpTrainStepV tsSess tsFn xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
       -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']
       let stepLoss := F32.read out (3 * net.nParams).toUSize
