@@ -45,11 +45,9 @@ def mobilenetV2Imagenet : NetSpec where
     MobileNetV2's value, NOT 1e-8). LR schedule stays cosine (the repo's wired
     schedule), not the paper's 0.98/epoch exponential decay.
 
-    TODO(recipe): this is a CHANGE on two axes — optimizer SGD→RMSProp, and
-    aug crop/flip→full AutoAugment ImageNet policy (useAutoAugment; geometric
-    ops via ImageProjectiveTransformV3). AutoAugment is BEYOND the MobileNetV2
-    paper (which used only crop/flip) — included because the demo set wanted
-    geometric AA; drop the flag for the paper-faithful MNv2 aug. Prior SGD
+    TODO(recipe): this is a CHANGE on one axis — optimizer SGD→RMSProp (the
+    paper's optimizer). Aug stays paper-faithful: crop/flip only, NOT
+    AutoAugment (MobileNetV2 used no AA; useAutoAugment=false). Prior SGD
     results no longer apply — re-run 90ep + re-eval (supervise script +
     eval_mnv2_full50k.py unchanged). lr 0.045 is the paper value at the paper's
     batch; if unstable at batch 256, drop the peak to ~0.02. -/
@@ -64,8 +62,8 @@ def mobilenetV2ImagenetConfig : TrainConfig where
   weightDecay    := 4e-5
   cosineDecay    := true
   warmupEpochs   := 5
-  augment        := true    -- random-crop + horizontal flip
-  useAutoAugment := true    -- full AutoAugment (incl. geometric) — beyond MNv2 paper; see TODO
+  augment        := true    -- random-crop + horizontal flip (MNv2 paper aug)
+  useAutoAugment := false   -- MNv2 paper used crop/flip only; AA is beyond the paper
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true    -- now reaches the inverted-residual blocks

@@ -64,6 +64,12 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   augment        := true
   useRandAugment       := true   -- ConvNeXt recipe RandAugment...
   randAugmentGeometric := true   -- ...the full color+geometric sampler (N=2, M=9)
+  useMixup       := true     -- ConvNeXt paper aug pack: Mixup α0.8...
+  mixupAlpha     := 0.8
+  useCutmix      := true     -- ...+ CutMix α1.0 (alternates with Mixup per step)...
+  cutmixAlpha    := 1.0
+  randomErasing  := true     -- ...+ Random Erasing p0.25 — completes the DeiT-style pack
+  randomErasingProb := 0.25
   labelSmoothing := 0.1
   gradClipNorm   := 1.0
   bf16           := true
