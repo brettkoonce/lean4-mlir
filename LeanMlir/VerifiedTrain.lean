@@ -132,12 +132,13 @@ private def loadData (data : VerifiedData) (d0 : Nat) (dataDir : String) :
   match data with
   | .imagenette =>
     let idir := dataDir ++ "/imagenette"
-    -- Some data dirs ship `train.bin` at the canonical 256² (→ 224 center-crop);
-    -- others (incl. this env) store it at 224² already (4-byte header + records of
-    -- [1 label byte + 224·224·3 uint8]) — calling the loader with the wrong size is
-    -- the "short read". Default to 224²/no-crop (matches val); override with
-    -- LEAN_MLIR_IMAGENETTE_TRAIN=256 for the 256² train split + center-crop.
-    let px := ((← IO.getEnv "LEAN_MLIR_IMAGENETTE_TRAIN").bind (·.toNat?)).getD 224
+    -- Train split ships at 256² → randomCrop 256→224 + hflip (the training recipe);
+    -- val ships at 224² (center crop). DEFAULT is 256²/crop, matching the reference
+    -- trainer (Train.lean `imagenetteIO` hardcodes 256). Some dirs store the train
+    -- split at 224² already (records of [1 label byte + 224·224·3 uint8]); for those
+    -- set LEAN_MLIR_IMAGENETTE_TRAIN=224 to load 224²/no-crop (else: "short read").
+    -- px also feeds trainPix (3·px²) and crop := (px == 256).
+    let px := ((← IO.getEnv "LEAN_MLIR_IMAGENETTE_TRAIN").bind (·.toNat?)).getD 256
     let (trI, trL, nTr) ← F32.loadImagenetteSized (idir ++ "/train.bin") px.toUSize
     let (evI, evL, nEv) ← F32.loadImagenette (idir ++ "/val.bin")
     return (trI, trL, nTr, evI, evL, nEv, 3 * px * px, px == 256)
