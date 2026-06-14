@@ -548,4 +548,96 @@ theorem projBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
       bnBatchLABack_faithful (β := β) (hε := hε)]
   simp only [projB_has_vjp, bnStage_has_vjp, vjp_comp]
 
+-- ════════════════════════════════════════════════════════════════
+-- § Capstone: the whole batched MBConv residual block
+-- ════════════════════════════════════════════════════════════════
+
+/-- The batched MBConv body's VJP — `projB ∘ seB ∘ dwbsB ∘ cbsB`, reconstructed
+    as the exact `vjp_comp` chain `mbResidFwdB_has_vjp` builds inline (`vBody`). -/
+noncomputable def mbBodyB_has_vjp (N : Nat) {c mid h w kHd kWd r : Nat}
+    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c) :
+    HasVJP (projB N (h := h) (w := w) Wp bp εp γp βp ∘ seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ ∘
+            dwbsB N (h := h) (w := w) Wd bd εd γd βd ∘ cbsB N (h := h) (w := w) We be εe γe βe) :=
+  let dE := cbsB_differentiable N (h := h) (w := w) We be εe hεe γe βe
+  let dDw := dwbsB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd
+  let dSe := seB_differentiable N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂
+  vjp_comp _ _ (dSe.comp (dDw.comp dE)) (projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp)
+    (vjp_comp _ _ (dDw.comp dE) dSe
+      (vjp_comp _ _ dE dDw (cbsB_has_vjp N (h := h) (w := w) We be εe hεe γe βe)
+        (dwbsB_has_vjp N (h := h) (w := w) Wd bd εd hεd γd βd))
+      (seB_has_vjp N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂))
+    (projB_has_vjp N (h := h) (w := w) Wp bp εp hεp γp βp)
+
+/-- The batched MBConv body backward graph: the four stage graphs chained at their
+    cumulative forward activations (`cbsB⁻¹ ∘ dwbsB⁻¹ ∘ seB⁻¹ ∘ projB⁻¹`). -/
+noncomputable def mbBodyBackBatchedGraph {N c mid h w kHd kWd r : Nat}
+    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (γp βp : Vec c)
+    (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+  let xE := cbsB N (h := h) (w := w) We be εe γe βe x
+  let xD := dwbsB N (h := h) (w := w) Wd bd εd γd βd xE
+  let xS := seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ xD
+  cbsBackBatchedGraph We be εe γe βe x
+    (dwbsBackBatchedGraph Wd bd εd γd βd xE
+      (.seBackBatched (N := N) "%seW1" "%seb1" "%seW2" "%seb2" Wz₁ bz₁ Wz₂ bz₂ xD
+        (projBackBatchedGraph Wp bp εp γp βp xS e)))
+
+theorem mbBodyBackBatchedGraph_faithful {N c mid h w kHd kWd r : Nat}
+    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c)
+    (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
+    den (mbBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp x e)
+      = (mbBodyB_has_vjp N We be εe hεe γe βe Wd bd εd hεd γd βd
+          Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp).backward x (den e) := by
+  rw [mbBodyBackBatchedGraph, cbsBackBatchedGraph_faithful (hε := hεe),
+      dwbsBackBatchedGraph_faithful (hε := hεd), seBackBatched_faithful,
+      projBackBatchedGraph_faithful (hε := hεp)]
+  simp only [mbBodyB_has_vjp, vjp_comp, Function.comp_apply]
+
+/-- The whole batched MBConv residual block backward graph (body + identity skip). -/
+noncomputable def mbResidBlockBackBatchedGraph {N c mid h w kHd kWd r : Nat}
+    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (γp βp : Vec c)
+    (x dy : Vec (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+  residualBackGraph
+    (mbBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp
+      x (.operand "%dy" dy)) dy
+
+/-- **CAPSTONE — the whole batched EfficientNet MBConv residual block: backward
+    graph ↔ the proven `mbResidFwdB_has_vjp`.** The four batched stage backward
+    graphs (`cbsB`/`dwbsB`/`seB`/`projB`) chained at their forward activations +
+    the identity skip, proven equal to the repo's batched MBConv block VJP. The
+    batched analogue of the per-example `mbconvResidual_backGraph_faithful`. -/
+theorem mbResidBlockBackBatchedGraph_faithful {N c mid h w kHd kWd r : Nat}
+    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c)
+    (x dy : Vec (N * (c * h * w))) :
+    den (mbResidBlockBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp x dy)
+      = (mbResidFwdB_has_vjp N We be εe hεe γe βe Wd bd εd hεd γd βd
+          Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp).backward x dy :=
+  residualBackGraph_faithful
+    (projB N (h := h) (w := w) Wp bp εp γp βp ∘ seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ ∘
+      dwbsB N (h := h) (w := w) Wd bd εd γd βd ∘ cbsB N (h := h) (w := w) We be εe γe βe)
+    ((projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp).comp
+      ((seB_differentiable N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂).comp
+        ((dwbsB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd).comp
+          (cbsB_differentiable N (h := h) (w := w) We be εe hεe γe βe))))
+    (mbBodyB_has_vjp N We be εe hεe γe βe Wd bd εd hεd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp)
+    x dy
+    (mbBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp
+      x (.operand "%dy" dy))
+    (mbBodyBackBatchedGraph_faithful We be εe hεe γe βe Wd bd εd hεd γd βd
+      Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp x (.operand "%dy" dy))
+
 end Proofs.StableHLO

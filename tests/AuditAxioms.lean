@@ -1230,3 +1230,6 @@ open Proofs
 #print axioms StableHLO.cbsBackBatchedGraph_faithful
 #print axioms StableHLO.dwbsBackBatchedGraph_faithful
 #print axioms StableHLO.projBackBatchedGraph_faithful
+-- Capstone: the whole batched MBConv residual block backward graph.
+#print axioms StableHLO.mbBodyBackBatchedGraph_faithful
+#print axioms StableHLO.mbResidBlockBackBatchedGraph_faithful
