@@ -1337,3 +1337,19 @@ open Proofs
 #print axioms StableHLO.mlpSublayerBackGraph_faithfulMH
 #print axioms StableHLO.attnSublayerBackGraphMH_faithful
 #print axioms StableHLO.transformerBlockBackGraphMH_faithful
+
+-- ViT whole-block backward-graph faithfulness at the FULL PRODUCTION config:
+-- general MULTI-HEAD (heads = hm1 + 1) + VECTOR-[D] LayerNorm γ/β per LN site
+-- (the committed verified_mlir/vit_train_step.mlir ViT-Tiny form). The MHSA + MLP-body
+-- backwards are LN-agnostic and REUSED verbatim from the MH scalar capstone; the only
+-- new piece is the vec-LN LN-back fragment: layerNormVec = (+βv) ∘ layerScale γv ∘ LN(1,0),
+-- whose input-VJP collapses (bias backward = id) to the normalize-only (γ=1) backward of
+-- the rowwise-layerScale-γv cotangent — rendered as lnRowBack(γ=1) ∘ rowScaleF γv
+-- (rowVecLNBack_eq_backward, the crux bridge). Sublayers + whole block then mirror the
+-- scalar/MH templates, re-targeting the _has_vjp_mat to the …V… (vec-LN) versions
+-- (transformerBlockVBackGraphMH_faithful = the production-parity capstone:
+-- den graph = transformerBlockV_has_vjp_mat.backward, vector LN + general heads).
+#print axioms StableHLO.rowVecLNBack_eq_backward
+#print axioms StableHLO.mlpSublayerVBackGraph_faithfulMH
+#print axioms StableHLO.attnSublayerVBackGraphMH_faithful
+#print axioms StableHLO.transformerBlockVBackGraphMH_faithful
