@@ -188,7 +188,12 @@ lean_lib «Proofs» where
              -- 1 channel (structural: gap averages BN deviations back to β; see
              -- the file header). Build-checked so the mechanism doesn't rot; NOT
              -- a live witness and NOT in the AuditAxioms headline set.
-             `LeanMlir.Proofs.ResNet34Live]
+             `LeanMlir.Proofs.ResNet34Live,
+             -- Backward-graph faithfulness (den-level): fan-in bricks
+             -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
+             -- batched conv+depthwise), the whole per-example MBConv block, and
+             -- the batched-stage backward primitives.
+             `LeanMlir.Proofs.EfficientNetBackB0]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

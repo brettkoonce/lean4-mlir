@@ -51,6 +51,7 @@ import LeanMlir.Proofs.SgdDescentCnn
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
+import LeanMlir.Proofs.EfficientNetBackB0
 
 open Proofs
 
@@ -1199,3 +1200,26 @@ open Proofs
 #print axioms Proofs.adamWParam_eq_scalar
 #print axioms StableHLO.adamW_certified_grad
 #print axioms StableHLO.adamB_certified_grad
+
+-- EfficientNet backward-graph faithfulness (den-level): fan-in bricks, per-op
+-- backward ops, the whole per-example MBConv residual block, and the batched
+-- per-stage backward primitives (true-batch-norm + batched conv/depthwise).
+#print axioms StableHLO.residualBackGraph_faithful
+#print axioms StableHLO.residual_dense_backGraph_faithful
+#print axioms StableHLO.seBlockBackGraph_faithful
+#print axioms StableHLO.se_dense_backGraph_faithful
+#print axioms StableHLO.gapBack_faithful
+#print axioms StableHLO.broadcastBack_faithful
+#print axioms StableHLO.seGate_backGraph_faithful
+#print axioms StableHLO.seBlockFull_backGraph_faithful
+#print axioms StableHLO.bnBack_faithful_fn
+#print axioms StableHLO.convBnSwishBackGraph_faithful
+#print axioms StableHLO.dwBnSwishBackGraph_faithful
+#print axioms StableHLO.convBnBackGraph_faithful
+#print axioms StableHLO.seGateBackGraphE_faithful
+#print axioms StableHLO.seBlockFullBackGraphE_faithful
+#print axioms StableHLO.mbconvBodyBackGraph_faithful
+#print axioms StableHLO.mbconvResidual_backGraph_faithful
+#print axioms StableHLO.bnBatchBack_faithful
+#print axioms StableHLO.convBackBatched_faithful
+#print axioms StableHLO.depthwiseBackBatched_faithful

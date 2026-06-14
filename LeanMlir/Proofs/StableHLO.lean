@@ -134,6 +134,10 @@ inductive SHlo : Nat → Type where
   -- spatial axes (`reduce add over [2,3]`, ÷h·w), `Vec (c*h*w) → Vec c`.
   | addV       {n : Nat}                                        : SHlo n → SHlo n → SHlo n
   | gapF       {c h w : Nat}                                    : SHlo (c*h*w) → SHlo c
+  -- GAP backward (VJP): per-channel cotangent broadcast over H×W, /(h·w).
+  | gapBack    {c h w : Nat}                                    : SHlo c → SHlo (c*h*w)
+  -- Broadcast backward (VJP = sum-over-spatial): the adjoint of `broadcastFlat`.
+  | broadcastBack {c h w : Nat}                                 : SHlo (c*h*w) → SHlo c
   -- Chapter 6 Milestone B (ResNet-34 downsampling): stride-2 SAME conv forward
   -- (`stablehlo.convolution` with `window_strides=[2,2]`) and its input-VJP
   -- (zero-upsample the cotangent — `lhs_dilation` — then the reversed-kernel
@@ -294,6 +298,24 @@ inductive SHlo : Nat → Type where
   -- conjugated to the network's left-assoc `N·(oc·h·w)` flat index).
   | bnBatchF {N oc h w : Nat} (gName bName epsStr : String) (ε : ℝ) (γ β : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (oc * h * w))
+  -- True batch-norm BACKWARD (VJP), `[N,C,H,W]` layout: the renderable three-term
+  -- `bnBatchTensor4_grad_input` (reduce over [0,2,3] per channel). `den` is the
+  -- proven `bnBatchTensor4` VJP backward (batch-coupled). Routes through the
+  -- generic `batched` Raw/Tok tag like the forward batched ops.
+  | bnBatchBack {N oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
+      (x : Vec (N * (oc * (h * w)))) :
+      SHlo (N * (oc * (h * w))) → SHlo (N * (oc * (h * w)))
+  -- Batched conv input-VJP: `batchMap N` of the proven per-example conv
+  -- input-grad (activation-independent — conv is linear). Routes through the
+  -- generic `batched` tag like the forward batched ops.
+  | convBackBatched {N ic oc h w kH kW : Nat} (wName : String)
+      (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+      SHlo (N * (oc * h * w)) → SHlo (N * (ic * h * w))
+  -- Batched depthwise input-VJP: `batchMap N` of the proven per-example
+  -- depthwise input-grad (activation-independent — depthwise conv is linear).
+  | depthwiseBackBatched {N c h w kH kW : Nat} (wName : String)
+      (W : DepthwiseKernel c kH kW) (b : Vec c) :
+      SHlo (N * (c * h * w)) → SHlo (N * (c * h * w))
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -484,6 +506,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .bnBack (n := n) _ _ _ ε γ x e => bn_grad_input n ε γ x (den e)
   | _, .addV a b       => fun j => den a j + den b j
   | _, .gapF (c := c) (h := h) (w := w) e => globalAvgPoolFlat c h w (den e)
+  | _, .gapBack (c := c) (h := h) (w := w) e =>
+      (globalAvgPoolFlat_has_vjp c h w).backward (fun _ => 0) (den e)
+  | _, .broadcastBack (c := c) (h := h) (w := w) e =>
+      fun k => ∑ idx : Fin (c * h * w), if flatChannel c h w idx = k then den e idx else 0
   | _, .flatConvStridedF _ _ W b e => flatConvStride2 W b (den e)
   | _, .flatConvStride4F _ _ W b e => flatConvStride4 W b (den e)
   | _, .convStridedBack _ W b v e => (flatConvStride2_has_vjp W b).backward v (den e)
@@ -524,6 +550,12 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .batchOp (N := N) op e => batchMap N (denOp op) (den e)
   | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ β e =>
       bnBatchLA N oc h w ε γ β (den e)
+  | _, .bnBatchBack (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
+      bnBatchTensor4_grad_input N oc h w ε γ x (den e)
+  | _, .convBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ W b e =>
+      batchMap N (fun dy => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
+  | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
+      batchMap N (fun dy => (hasVJP3_to_hasVJP (depthwise_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -1647,6 +1679,8 @@ inductive Raw where
   | bnBack     (g x eps : String) (n : Nat) : Raw → Raw
   | addV       (n : Nat)                   : Raw → Raw → Raw
   | gapF       (c h w : Nat)               : Raw → Raw
+  | gapBack    (c h w : Nat)               : Raw → Raw
+  | broadcastBack (c h w : Nat)            : Raw → Raw
   | flatConvStridedF (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | convStridedBack  (w : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | flatConvStride4F (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
@@ -1709,6 +1743,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .bnBack gN xN es _ _ _ e => .bnBack gN xN es k (skel e)
   | k, .addV a b              => .addV k (skel a) (skel b)
   | _, .gapF (c := c) (h := h) (w := w) e => .gapF c h w (skel e)
+  | _, .gapBack (c := c) (h := h) (w := w) e => .gapBack c h w (skel e)
+  | _, .broadcastBack (c := c) (h := h) (w := w) e => .broadcastBack c h w (skel e)
   | _, .flatConvStridedF (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
       .flatConvStridedF wN bN ic oc h w kH kW (skel e)
   | _, .convStridedBack (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
@@ -1755,6 +1791,12 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .batchOp (N := N) (a := a) (b := b) _ e => .batched "batchOp" [N, a, b] (skel e)
   | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
       .batched "bnBatch" [N, oc, h, w] (skel e)
+  | _, .bnBatchBack (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
+      .batched "bnBatchBack" [N, oc, h, w] (skel e)
+  | _, .convBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ e =>
+      .batched "convBackBatched" [N, ic, oc, h, w] (skel e)
+  | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ _ _ e =>
+      .batched "depthwiseBackBatched" [N, c, h, w] (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -1777,6 +1819,8 @@ inductive Tok where
   | bnBack     (g x eps : String) (n : Nat) : Tok
   | addV       (n : Nat)                   : Tok
   | gapF       (c h w : Nat)               : Tok
+  | gapBack    (c h w : Nat)               : Tok
+  | broadcastBack (c h w : Nat)            : Tok
   | flatConvStridedF (w b : String) (ic oc h w' kH kW : Nat) : Tok
   | convStridedBack  (w : String) (ic oc h w' kH kW : Nat) : Tok
   | flatConvStride4F (w b : String) (ic oc h w' kH kW : Nat) : Tok
@@ -1834,6 +1878,8 @@ def toToks : Raw → List Tok
   | .bnBack g x eps n e => toToks e ++ [.bnBack g x eps n]
   | .addV n a b      => toToks a ++ toToks b ++ [.addV n]
   | .gapF c h w e    => toToks e ++ [.gapF c h w]
+  | .gapBack c h w e => toToks e ++ [.gapBack c h w]
+  | .broadcastBack c h w e => toToks e ++ [.broadcastBack c h w]
   | .flatConvStridedF w b ic oc h w' kH kW e => toToks e ++ [.flatConvStridedF w b ic oc h w' kH kW]
   | .convStridedBack w ic oc h w' kH kW e => toToks e ++ [.convStridedBack w ic oc h w' kH kW]
   | .flatConvStride4F w b ic oc h w' kH kW e => toToks e ++ [.flatConvStride4F w b ic oc h w' kH kW]
@@ -2055,6 +2101,26 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {sm} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n" ++
         s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
         s!"    {o} = stablehlo.divide {sm}, {nf} : {ty [B,c]}\n", o :: st)
+  | .gapBack c h w, r :: st => do
+      -- GAP backward (VJP): divide the per-channel cotangent by h·w, broadcast
+      -- it back over the H×W spatial grid, reshape to flat. Reverse of `.gapF`.
+      -- Denotes `globalAvgPoolFlat`'s VJP backward `dy[chan idx] / (h·w)`.
+      -- (Text emission best-effort/unverified-vs-IREE; the `den` is proven.)
+      let nf ← fresh; let dv ← fresh; let bb ← fresh; let o ← fresh
+      pure (
+        s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
+        s!"    {dv} = stablehlo.divide {r}, {nf} : {ty [B,c]}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {dv}, dims = [0, 1] : ({ty [B,c]}) -> {ty [B,c,h,w]}\n" ++
+        s!"    {o} = stablehlo.reshape {bb} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+  | .broadcastBack c h w, r :: st => do
+      -- broadcast backward (VJP) = sum over H×W per channel (adjoint of broadcast):
+      -- reshape to [B,c,h,w], reduce-add over spatial axes [2,3] → [B,c]. No divide.
+      -- (Text emission best-effort/unverified-vs-IREE; the `den` is proven.)
+      let xn ← fresh; let z ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {o} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n", o :: st)
   | .flatConvStride4F w b ic oc h w' kH kW, r :: st => do
       -- stride-4 patchify conv (the ConvNeXt 4×4/s4 stem): reshape, convolution
       -- with window_strides=[4,4], +bias. The denotation reads the SAME conv
