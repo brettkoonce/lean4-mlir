@@ -478,4 +478,74 @@ theorem bnBatchLABack_faithful {N oc h w : Nat} (gN xN es : String)
       = (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x (den e) :=
   bnBatchLA_back_conj ε γ β hε x (den e)
 
+/-- **`seBackBatched` (batched squeeze-excite backward) faithfulness.** The `den`
+    (rowwise application of the proven per-example `seBlockFull` VJP) equals the
+    proven batched `seB_has_vjp` backward. SE is non-linear, so — unlike the
+    linear `convBackBatched`/`depthwiseBackBatched` — the backward threads each
+    example's forward activation `v`; the rowwise `batchMap_has_vjp` structure
+    handles that. The fourth (and last) MBConv stage's batch-separable backward. -/
+theorem seBackBatched_faithful {N c h w r : Nat} (w1N b1N w2N b2N : String)
+    (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
+    (v : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
+    den (SHlo.seBackBatched (N := N) w1N b1N w2N b2N W₁ b₁ W₂ b₂ v e)
+      = (seB_has_vjp N (h := h) (w := w) W₁ b₁ W₂ b₂).backward v (den e) := by
+  funext idx
+  simp only [den, seB_has_vjp, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Batched MBConv stage backward graphs (the bn wrapper unblocks these)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Batched **conv → bn → swish** stage backward graph (MBConv expand), at the
+    network layout: `convBackBatched ∘ bnBatchLABack ∘ swishBack`, each at its
+    cumulative forward activation. -/
+noncomputable def cbsBackBatchedGraph {N ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
+    (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) : SHlo (N * (ic * h * w)) :=
+  .convBackBatched (N := N) "%cbsW" W b
+    (.bnBatchLABack "%cbsG" "%cbsX" "cbsE" ε γ (batchMap N (flatConv W b) x)
+      (.swishBack "%cbsSw" (bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x)) e))
+
+theorem cbsBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) :
+    den (cbsBackBatchedGraph W b ε γ β x e)
+      = (cbsB_has_vjp N W b ε hε γ β).backward x (den e) := by
+  rw [cbsBackBatchedGraph, convBackBatched_faithful (v := x),
+      bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
+  simp only [cbsB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
+
+/-- Batched **depthwise → bn → swish** stage backward graph (MBConv depthwise). -/
+noncomputable def dwbsBackBatchedGraph {N c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c)
+    (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+  .depthwiseBackBatched (N := N) "%dwsW" W b
+    (.bnBatchLABack "%dwsG" "%dwsX" "dwsE" ε γ (batchMap N (depthwiseFlat W b) x)
+      (.swishBack "%dwsSw" (bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x)) e))
+
+theorem dwbsBackBatchedGraph_faithful {N c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
+    (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
+    den (dwbsBackBatchedGraph W b ε γ β x e)
+      = (dwbsB_has_vjp N W b ε hε γ β).backward x (den e) := by
+  rw [dwbsBackBatchedGraph, depthwiseBackBatched_faithful (v := x),
+      bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
+  simp only [dwbsB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
+
+/-- Batched **conv → bn** stage backward graph (MBConv project, no swish). -/
+noncomputable def projBackBatchedGraph {N ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
+    (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) : SHlo (N * (ic * h * w)) :=
+  .convBackBatched (N := N) "%pbW" W b
+    (.bnBatchLABack "%pbG" "%pbX" "pbE" ε γ (batchMap N (flatConv W b) x) e)
+
+theorem projBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) :
+    den (projBackBatchedGraph W b ε γ β x e)
+      = (projB_has_vjp N W b ε hε γ β).backward x (den e) := by
+  rw [projBackBatchedGraph, convBackBatched_faithful (v := x),
+      bnBatchLABack_faithful (β := β) (hε := hε)]
+  simp only [projB_has_vjp, bnStage_has_vjp, vjp_comp]
+
 end Proofs.StableHLO

@@ -1225,3 +1225,8 @@ open Proofs
 #print axioms StableHLO.depthwiseBackBatched_faithful
 #print axioms StableHLO.bnBatchLA_back_conj
 #print axioms StableHLO.bnBatchLABack_faithful
+#print axioms StableHLO.seBackBatched_faithful
+-- Batched MBConv stage backward graphs (the bn wrapper lets these compose).
+#print axioms StableHLO.cbsBackBatchedGraph_faithful
+#print axioms StableHLO.dwbsBackBatchedGraph_faithful
+#print axioms StableHLO.projBackBatchedGraph_faithful

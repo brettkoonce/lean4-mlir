@@ -322,6 +322,14 @@ inductive SHlo : Nat → Type where
   | bnBatchLABack {N oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
       (x : Vec (N * (oc * h * w))) :
       SHlo (N * (oc * h * w)) → SHlo (N * (oc * h * w))
+  -- Batched squeeze-excite backward: rowwise application of the proven per-example
+  -- `seBlockFull` VJP. SE is non-linear, so the backward uses each example's forward
+  -- activation `v` (unlike the linear conv/depthwise). `den` references the proven
+  -- witness rowwise; renderable emission (batchMap-of-SE-subgraph) is deferred.
+  | seBackBatched {N c h w r : Nat} (w1Name b1Name w2Name b2Name : String)
+      (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
+      (v : Vec (N * (c * h * w))) :
+      SHlo (N * (c * h * w)) → SHlo (N * (c * h * w))
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -569,6 +577,12 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
           (fun i' => ∑ k', if i' = (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w))) k'
                            then den e k' else 0) k
         else 0
+  | _, .seBackBatched (h := h) (w := w) _ _ _ _ W₁ b₁ W₂ b₂ v e =>
+      fun idx =>
+        (seBlockFull_has_vjp (h := h) (w := w) W₁ b₁ W₂ b₂).backward
+          (Mat.unflatten v (finProdFinEquiv.symm idx).1)
+          (Mat.unflatten (den e) (finProdFinEquiv.symm idx).1)
+          (finProdFinEquiv.symm idx).2
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -1812,6 +1826,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "depthwiseBackBatched" [N, c, h, w] (skel e)
   | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
       .batched "bnBatchLABack" [N, oc, h, w] (skel e)
+  | _, .seBackBatched (N := N) (c := c) (h := h) (w := w) _ _ _ _ _ _ _ _ _ e =>
+      .batched "seBackBatched" [N, c, h, w] (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
