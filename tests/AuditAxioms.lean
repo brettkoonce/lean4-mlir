@@ -1321,3 +1321,19 @@ open Proofs
 #print axioms StableHLO.mlpSublayerBackGraph_faithful
 #print axioms StableHLO.attnSublayerBackGraph_faithful
 #print axioms StableHLO.transformerBlockBackGraph_faithful
+
+-- ViT whole-block backward-graph faithfulness, lifted to GENERAL MULTI-HEAD
+-- (heads = hm1 + 1, ≥1; subsumes the production heads = 3). The MHSA backward
+-- collapses to the per-head fan-in: each head slices the dense Q/K/V projections +
+-- the Wo-back cotangent to its d-columns, runs the proven sdpa_back_{Q,K,V} at
+-- d_head, pads back to D and sums over heads, with the qkv-stack dense-back fanning
+-- into denseRowBack Wq/Wk/Wv (mhsa_backward_collapseMH ↔ mhsa_has_vjp_mat by VJP
+-- determinism + the general-heads colSlab/qkv split). The render graph mirrors this
+-- per head via headSliceF/headPadF + headsSumG (mhsaBackGraphMH_faithful); the
+-- sublayer/block wrappers are head-agnostic at (hm1+1)*d (transformerBlockBackGraphMH_faithful
+-- = the multi-head capstone: den graph = transformerBlock_has_vjp_mat.backward, scalar LN).
+#print axioms StableHLO.mhsa_backward_collapseMH
+#print axioms StableHLO.mhsaBackGraphMH_faithful
+#print axioms StableHLO.mlpSublayerBackGraph_faithfulMH
+#print axioms StableHLO.attnSublayerBackGraphMH_faithful
+#print axioms StableHLO.transformerBlockBackGraphMH_faithful
