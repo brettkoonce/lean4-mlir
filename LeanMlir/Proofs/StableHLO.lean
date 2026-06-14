@@ -316,6 +316,12 @@ inductive SHlo : Nat → Type where
   | depthwiseBackBatched {N c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * h * w))
+  -- True batch-norm backward on the NETWORK layout `N·(oc·h·w)` (what
+  -- renderBody's `bnBatch` emits): the `bnBatchTensor4` backward reindex-
+  -- conjugated to the left-assoc index (`bnBatchLA_eq_comp`).
+  | bnBatchLABack {N oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
+      (x : Vec (N * (oc * h * w))) :
+      SHlo (N * (oc * h * w)) → SHlo (N * (oc * h * w))
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -556,6 +562,13 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       batchMap N (fun dy => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
       batchMap N (fun dy => (hasVJP3_to_hasVJP (depthwise_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
+  | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
+      fun i => ∑ k, if i = (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) k then
+        bnBatchTensor4_grad_input N oc h w ε γ
+          (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x)
+          (fun i' => ∑ k', if i' = (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w))) k'
+                           then den e k' else 0) k
+        else 0
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -1797,6 +1810,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "convBackBatched" [N, ic, oc, h, w] (skel e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ _ _ e =>
       .batched "depthwiseBackBatched" [N, c, h, w] (skel e)
+  | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
+      .batched "bnBatchLABack" [N, oc, h, w] (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where

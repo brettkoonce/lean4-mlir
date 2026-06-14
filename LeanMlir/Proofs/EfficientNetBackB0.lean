@@ -431,4 +431,51 @@ theorem depthwiseBackBatched_faithful {N c h w kH kW : Nat} (wN : String)
     rowwise_has_vjp_mat, hasVJP3_to_hasVJP, depthwise_has_vjp3]
   rfl
 
+-- ════════════════════════════════════════════════════════════════
+-- § bn-layout wrapper: true-batch-norm backward on the NETWORK layout
+-- ════════════════════════════════════════════════════════════════
+
+/-- **`bnBatchLA` backward = reindex-conjugated `bnBatchTensor4` backward.**
+    The network indexes at `N·(oc·h·w)` (left-assoc) but the proven true-BN
+    `bnBatchTensor4` lives at `N·(oc·(h·w))`; `bnBatchLA` bridges by conjugating
+    with the associativity-cast reindexes (`bnBatchLA_eq_comp`). Its VJP backward
+    is therefore: scatter the cotangent into `[N,C,(H·W)]`, run the renderable
+    three-term `bnBatchTensor4_grad_input` at the reindexed activation, scatter
+    back. This is what a network-layout `bnBatchLABack` op denotes. -/
+theorem bnBatchLA_back_conj {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
+    (x dy : Vec (N * (oc * h * w))) :
+    (reindex_has_vjp (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm)).backward x
+      (bnBatchTensor4_grad_input N oc h w ε γ
+        (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x)
+        ((reindex_has_vjp (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))).backward
+          (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x) dy))
+      = (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x dy := by
+  have hb : bnBatchTensor4_grad_input N oc h w ε γ
+        (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x)
+        ((reindex_has_vjp (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))).backward
+          (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x) dy)
+      = (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward
+        (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x)
+        ((reindex_has_vjp (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))).backward
+          (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x) dy) := by
+    funext i
+    rw [bnBatchTensor4_grad_input_correct N oc h w ε hε γ β,
+        ← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β]
+  rw [hb]
+  simp only [bnBatchLA_has_vjp, vjp_comp, eq_mpr_eq_cast]
+  rfl
+
+/-- **`bnBatchLABack` (network-layout true batch-norm backward) faithfulness.**
+    The `den` (inline scatter-conjugated `bnBatchTensor4_grad_input`) equals the
+    proven `bnBatchLA_has_vjp` backward — the bn backward at the network's
+    `N·(oc·h·w)` index, which is what renderBody's `bnBatch` emits. This is the
+    layout wrapper that lets `bnBatchBack` compose with `convBackBatched` /
+    `depthwiseBackBatched` (all on the left-assoc index) into batched stages. -/
+theorem bnBatchLABack_faithful {N oc h w : Nat} (gN xN es : String)
+    (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
+    (x : Vec (N * (oc * h * w))) (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.bnBatchLABack gN xN es ε γ x e)
+      = (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x (den e) :=
+  bnBatchLA_back_conj ε γ β hε x (den e)
+
 end Proofs.StableHLO

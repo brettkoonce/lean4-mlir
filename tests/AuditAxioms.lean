@@ -1223,3 +1223,5 @@ open Proofs
 #print axioms StableHLO.bnBatchBack_faithful
 #print axioms StableHLO.convBackBatched_faithful
 #print axioms StableHLO.depthwiseBackBatched_faithful
+#print axioms StableHLO.bnBatchLA_back_conj
+#print axioms StableHLO.bnBatchLABack_faithful
