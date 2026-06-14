@@ -64,6 +64,15 @@ namespace Proofs.StableHLO
     Vec (N * (c * h * w)) → Vec (N * (c * h * w)) :=
   relu6 (N * (c * h * w)) ∘ bnBatchLA N c h w ε γ β ∘ batchMap N (depthwiseFlat W b)
 
+/-- Batched **STRIDE-2 depthwise → bn → relu6** stage (MobileNetV2 downsample
+    depthwise), at the network layout. The stride-2 analogue of `dwbrB`: maps the
+    larger input spatial `c·(2h)·(2w)` to the output spatial `c·h·w`. Identical to
+    EfficientNet's `dwbsSB` but with `relu6` for `swish`. -/
+@[reducible] noncomputable def dwbrBstrided (N : Nat) {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c) :
+    Vec (N * (c * (2 * h) * (2 * w))) → Vec (N * (c * h * w)) :=
+  relu6 (N * (c * h * w)) ∘ bnBatchLA N c h w ε γ β ∘ batchMap N (depthwiseStride2Flat W b)
+
 -- ════════════════════════════════════════════════════════════════
 -- § Stage `_at`-VJP + differentiability (relu6 smoothness threaded)
 -- ════════════════════════════════════════════════════════════════
@@ -143,6 +152,27 @@ theorem dwbrB_differentiableAt (N : Nat) {c h w kH kW : Nat}
   bnRelu6Stage_differentiableAt N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
     ε hε γ β x h_smooth
 
+/-- `dwbrBstrided` (STRIDE-2 depthwise-bn-relu6) `_at` VJP at a smooth point. The
+    stride-2 analogue of `dwbrB_has_vjp_at`: lifts `depthwiseStride2Flat_has_vjp`
+    (the strided per-channel conv input-VJP) through the generic relu6-bn stage. -/
+noncomputable def dwbrBstrided_has_vjp_at (N : Nat) {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w))))
+    (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0 ∧
+                     bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 6) :
+    HasVJPAt (dwbrBstrided N (h := h) (w := w) W b ε γ β) x :=
+  bnRelu6Stage_has_vjp_at N (depthwiseStride2Flat W b) (depthwiseStride2Flat_differentiable W b)
+    (depthwiseStride2Flat_has_vjp W b) ε hε γ β x h_smooth
+
+theorem dwbrBstrided_differentiableAt (N : Nat) {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w))))
+    (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0 ∧
+                     bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 6) :
+    DifferentiableAt ℝ (dwbrBstrided N (h := h) (w := w) W b ε γ β) x :=
+  bnRelu6Stage_differentiableAt N (depthwiseStride2Flat W b) (depthwiseStride2Flat_differentiable W b)
+    ε hε γ β x h_smooth
+
 -- ════════════════════════════════════════════════════════════════
 -- § Batched relu6-stage backward graphs (selectMid for the relu6 kink)
 -- ════════════════════════════════════════════════════════════════
@@ -190,6 +220,32 @@ theorem dwbrBackBatchedGraph_faithful {N c h w kH kW : Nat}
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
   simp only [dwbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt,
+    Function.comp_apply]
+
+/-- Batched **STRIDE-2 depthwise → bn → relu6** stage backward graph (MobileNetV2
+    downsample depthwise). The stride-2 analogue of `dwbrBackBatchedGraph`: the
+    bn/relu6 run at the OUTPUT spatial `h×w`, then `depthwiseStridedBackBatched` maps
+    the bn-cotangent back to the larger input `c·(2h)·(2w)` (zero-upsample +
+    reversed-kernel per-channel depthwise). The relu6 back is `.selectMid` as before. -/
+noncomputable def dwbrBstridedBackBatchedGraph {N c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w))) :
+    SHlo (N * (c * (2 * h) * (2 * w))) :=
+  .depthwiseStridedBackBatched (N := N) "%dwsrW" W b
+    (.bnBatchLABack "%dwsrG" "%dwsrX" "dwsrE" ε γ (batchMap N (depthwiseStride2Flat W b) x)
+      (.selectMid "%dwsrR6" (bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x)) e))
+
+theorem dwbrBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w)))
+    (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0 ∧
+                     bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 6) :
+    den (dwbrBstridedBackBatchedGraph W b ε γ β x e)
+      = (dwbrBstrided_has_vjp_at N W b ε hε γ β x h_smooth).backward (den e) := by
+  rw [dwbrBstridedBackBatchedGraph, depthwiseStridedBackBatched_faithful (v := x),
+      bnBatchLABack_faithful (β := β) (hε := hε),
+      selectMid_faithful _ _ h_smooth]
+  simp only [dwbrBstrided_has_vjp_at, bnRelu6Stage_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt,
     Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
@@ -296,6 +352,128 @@ theorem mnv2BodyBackBatchedGraph_faithful {N c mid h w kHd kWd : Nat}
       dwbrBackBatchedGraph_faithful (hε := hεd) (h_smooth := h_sd),
       projBackBatchedGraph_faithful (hε := hεp)]
   simp only [mnv2BodyB_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt, Function.comp_apply]
+
+-- ════════════════════════════════════════════════════════════════
+-- § The DOWNSAMPLE body: `projB ∘ dwbrBstrided ∘ cbrB` (strided, NO residual)
+-- ════════════════════════════════════════════════════════════════
+
+/-- The batched MobileNetV2 DOWNSAMPLE inverted-residual body's VJP at a smooth
+    point — `projB ∘ dwbrBstrided ∘ cbrB`, the stride-2 analogue of
+    `mnv2BodyB_has_vjp_at` (swaps the stride-1 `dwbrB` depthwise stage for the
+    STRIDED `dwbrBstrided`). The expand `cbrB` runs at the larger `2h×2w` (1×1
+    conv keeps spatial), the strided depthwise then halves spatial to `h×w`; project
+    runs at `h×w`. NO residual (spatial/channels change), so this is the body alone.
+    Two `vjp_comp_at` chains thread the two relu6 smoothness families.
+
+    `h_se` is the expand relu6 smoothness (at the cbrB pre-relu6 activation, at
+    `2h×2w`); `h_sd` is the strided-depthwise relu6 smoothness (at the dwbrBstrided
+    pre-relu6 activation, fed the cbrB output). -/
+noncomputable def mnv2DownBodyB_has_vjp_at (N : Nat) {ic mid oc h w kHd kWd : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w))))
+    (h_se : ∀ k, bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
+                 bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 6)
+    (h_sd : ∀ k, bnBatchLA N mid h w εd γd βd
+                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 0 ∧
+                 bnBatchLA N mid h w εd γd βd
+                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 6) :
+    HasVJPAt (projB N (h := h) (w := w) Wp bp εp γp βp ∘
+              dwbrBstrided N (h := h) (w := w) Wd bd εd γd βd ∘
+              cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe) x := by
+  -- expand stage (at the larger 2h×2w spatial)
+  have he_vjp : HasVJPAt (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe) x :=
+    cbrB_has_vjp_at N We be εe hεe γe βe x h_se
+  have he_diff : DifferentiableAt ℝ (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe) x :=
+    cbrB_differentiableAt N We be εe hεe γe βe x h_se
+  -- strided depthwise stage (at the expand output)
+  have hd_vjp : HasVJPAt (dwbrBstrided N (h := h) (w := w) Wd bd εd γd βd)
+      (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x) :=
+    dwbrBstrided_has_vjp_at N Wd bd εd hεd γd βd _ h_sd
+  have hd_diff : DifferentiableAt ℝ (dwbrBstrided N (h := h) (w := w) Wd bd εd γd βd)
+      (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x) :=
+    dwbrBstrided_differentiableAt N Wd bd εd hεd γd βd _ h_sd
+  -- strided-depthwise ∘ expand
+  have hde_vjp : HasVJPAt
+      (dwbrBstrided N (h := h) (w := w) Wd bd εd γd βd ∘
+        cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe) x :=
+    vjp_comp_at _ _ x he_diff hd_diff he_vjp hd_vjp
+  have hde_diff : DifferentiableAt ℝ
+      (dwbrBstrided N (h := h) (w := w) Wd bd εd γd βd ∘
+        cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe) x :=
+    hd_diff.comp x he_diff
+  -- project (global, lifted)
+  exact vjp_comp_at _ (projB N (h := h) (w := w) Wp bp εp γp βp) x
+    hde_diff
+    ((projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp) _)
+    hde_vjp
+    ((projB_has_vjp N (h := h) (w := w) Wp bp εp hεp γp βp).toHasVJPAt _)
+
+theorem mnv2DownBodyB_differentiableAt (N : Nat) {ic mid oc h w kHd kWd : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w))))
+    (h_se : ∀ k, bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
+                 bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 6)
+    (h_sd : ∀ k, bnBatchLA N mid h w εd γd βd
+                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 0 ∧
+                 bnBatchLA N mid h w εd γd βd
+                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 6) :
+    DifferentiableAt ℝ (projB N (h := h) (w := w) Wp bp εp γp βp ∘
+              dwbrBstrided N (h := h) (w := w) Wd bd εd γd βd ∘
+              cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe) x := by
+  have he_diff : DifferentiableAt ℝ (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe) x :=
+    cbrB_differentiableAt N We be εe hεe γe βe x h_se
+  have hd_diff : DifferentiableAt ℝ (dwbrBstrided N (h := h) (w := w) Wd bd εd γd βd)
+      (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x) :=
+    dwbrBstrided_differentiableAt N Wd bd εd hεd γd βd _ h_sd
+  exact ((projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp) _).comp x
+    (hd_diff.comp x he_diff)
+
+/-- The batched MobileNetV2 downsample body backward graph: the three stage graphs
+    chained at their cumulative forward activations
+    (`cbrB⁻¹ ∘ dwbrBstrided⁻¹ ∘ projB⁻¹`). Stride-2 analogue of
+    `mnv2BodyBackBatchedGraph` (strided depthwise stage graph, no residual). -/
+noncomputable def mnv2DownBodyBackBatchedGraph {N ic mid oc h w kHd kWd : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
+    SHlo (N * (ic * (2 * h) * (2 * w))) :=
+  let xE := cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x
+  let xD := dwbrBstrided N (h := h) (w := w) Wd bd εd γd βd xE
+  cbrBackBatchedGraph We be εe γe βe x
+    (dwbrBstridedBackBatchedGraph Wd bd εd γd βd xE
+      (projBackBatchedGraph Wp bp εp γp βp xD e))
+
+/-- **CAPSTONE — the batched MobileNetV2 DOWNSAMPLE inverted-residual body: backward
+    graph ↔ the proven `mnv2DownBodyB_has_vjp_at`.** The three batched stage backward
+    graphs (`cbrB`/`dwbrBstrided`/`projB`) chained at their forward activations,
+    proven equal to the downsample-body VJP. The stride-2 analogue of
+    `mnv2BodyBackBatchedGraph_faithful` (no residual skip — the downsample block
+    changes spatial/channels, so the body alone is the block), threaded through the
+    two relu6 smoothness hypotheses (relu6's VJP is only `_at`). The MobileNetV2
+    relu6 peer of the EfficientNet `mbDownBodyBackBatchedGraph_faithful`. -/
+theorem mnv2DownBodyBackBatchedGraph_faithful {N ic mid oc h w kHd kWd : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w)))
+    (h_se : ∀ k, bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
+                 bnBatchLA N mid (2 * h) (2 * w) εe γe βe (batchMap N (flatConv We be) x) k ≠ 6)
+    (h_sd : ∀ k, bnBatchLA N mid h w εd γd βd
+                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 0 ∧
+                 bnBatchLA N mid h w εd γd βd
+                    (batchMap N (depthwiseStride2Flat Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 6) :
+    den (mnv2DownBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp x e)
+      = (mnv2DownBodyB_has_vjp_at N We be εe hεe γe βe Wd bd εd hεd γd βd
+          Wp bp εp hεp γp βp x h_se h_sd).backward (den e) := by
+  rw [mnv2DownBodyBackBatchedGraph, cbrBackBatchedGraph_faithful (hε := hεe) (h_smooth := h_se),
+      dwbrBstridedBackBatchedGraph_faithful (hε := hεd) (h_smooth := h_sd),
+      projBackBatchedGraph_faithful (hε := hεp)]
+  simp only [mnv2DownBodyB_has_vjp_at, vjp_comp_at, HasVJP.toHasVJPAt, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Capstone: the whole batched MobileNetV2 inverted-residual block

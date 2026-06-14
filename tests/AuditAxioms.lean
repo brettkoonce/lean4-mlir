@@ -1261,6 +1261,16 @@ open Proofs
 #print axioms StableHLO.mnv2BodyBackBatchedGraph_faithful
 -- Capstone: the whole batched MobileNetV2 inverted-residual block backward graph.
 #print axioms StableHLO.mnv2ResidBlockBackBatchedGraph_faithful
+-- DOWNSAMPLE (stride-2) inverted-residual peer of the block above: the depthwise is
+-- STRIDED (dwbrBstrided) and there is NO residual skip (spatial/channels change),
+-- so the "block" is the body alone: projB ∘ dwbrBstrided ∘ cbrB. Built on the
+-- stride-2 batched-depthwise VJP `depthwiseStridedBackBatched`; the relu6 back token
+-- stays `.selectMid` (_at-form, smoothness threaded). The relu6 peer of the
+-- EfficientNet `mbDownBodyBackBatchedGraph_faithful`.
+-- Batched strided depthwise → bn → relu6 stage backward graph.
+#print axioms StableHLO.dwbrBstridedBackBatchedGraph_faithful
+-- Capstone: the batched MobileNetV2 downsample inverted-residual body backward graph.
+#print axioms StableHLO.mnv2DownBodyBackBatchedGraph_faithful
 
 -- ResNet-34 backward-graph faithfulness (den-level): the relu (_at) peer of the two
 -- blocks above, with the structural twist of an OUTER post-residual relu. The body
