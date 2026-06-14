@@ -1236,6 +1236,19 @@ open Proofs
 #print axioms StableHLO.mbBodyBackBatchedGraph_faithful
 #print axioms StableHLO.mbResidBlockBackBatchedGraph_faithful
 
+-- EfficientNet DOWNSAMPLE MBConv body backward-graph faithfulness: the stride-2
+-- peer of the identity-residual MBConv above. The downsample block changes
+-- spatial/channels so it has NO residual skip — the "block" is the body alone:
+-- projB ∘ seB ∘ dwbsSB ∘ cbsB, where the depthwise stage is STRIDED (dwbsSB).
+-- Built on the NEW stride-2 batched-depthwise VJP `depthwiseStridedBackBatched`
+-- (the stride-2 / depthwise analog of `convStridedBackBatched`). EfficientNet uses
+-- swish (a global VJP), so this stays in the clean global HasVJP/vjp_comp form.
+#print axioms StableHLO.depthwiseStridedBackBatched_faithful
+-- Batched strided depthwise → bn → swish stage backward graph.
+#print axioms StableHLO.dwbsSBackBatchedGraph_faithful
+-- Capstone: the batched EfficientNet downsample MBConv body backward graph.
+#print axioms StableHLO.mbDownBodyBackBatchedGraph_faithful
+
 -- MobileNetV2 backward-graph faithfulness (den-level): the relu6 (_at) peer of the
 -- EfficientNet block above. relu6's TWO-SIDED kink gives only a pointwise VJP
 -- (relu6_has_vjp_at), so the stages/body/capstone are _at-form with the relu6

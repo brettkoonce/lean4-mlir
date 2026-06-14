@@ -436,6 +436,29 @@ theorem convStridedBackBatched_faithful {N ic oc h w kH kW : Nat} (wN : String)
   simp only [den, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
   rfl
 
+/-- **Batched STRIDE-2 depthwise input-VJP faithfulness.** The stride-2 analogue
+    of `depthwiseBackBatched_faithful` (and the depthwise analogue of
+    `convStridedBackBatched_faithful`): `depthwiseStridedBackBatched` denotes the
+    proven VJP of the batched strided depthwise `batchMap N (depthwiseStride2Flat W b)`
+    — i.e. the per-example strided-depthwise input-grad (`depthwiseStride2Flat_has_vjp`
+    = zero-upsample the cotangent then the reversed-kernel per-channel depthwise)
+    applied independently across the batch. Strided depthwise (`decimate ∘ depthwise`)
+    is linear, so its backward ignores the forward activation; the batched backward
+    is a plain `batchMap` of the per-example backward, matching `batchMap_has_vjp`.
+    The EfficientNet downsample MBConv's stride-2 depthwise backward brick. -/
+theorem depthwiseStridedBackBatched_faithful {N c h w kH kW : Nat} (wN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (v : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w))) :
+    den (SHlo.depthwiseStridedBackBatched (N := N) wN W b e)
+      = (batchMap_has_vjp (depthwiseStride2Flat W b) (depthwiseStride2Flat_has_vjp W b)
+          (depthwiseStride2Flat_differentiable W b)).backward v (den e) := by
+  funext idx
+  -- The transport in `batchMap_has_vjp` unfolds to the per-example strided-depthwise
+  -- backward on each row; both sides then differ only in the (discarded) forward
+  -- activation arg, since strided depthwise is linear (its backward ignores it).
+  simp only [den, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  rfl
+
 /-- **Batched depthwise input-VJP faithfulness.** The depthwise analogue of
     `convBackBatched_faithful`: `depthwiseBackBatched` denotes the proven VJP of
     the batched depthwise `batchMap N (depthwiseFlat W b)`. Depthwise conv is
@@ -554,6 +577,28 @@ theorem dwbsBackBatchedGraph_faithful {N c h w kH kW : Nat}
       bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
   simp only [dwbsB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
 
+/-- Batched **STRIDE-2 depthwise → bn → swish** stage backward graph (the
+    EfficientNet downsample MBConv's depthwise). The stride-2 analogue of
+    `dwbsBackBatchedGraph`: the bn/swish run at the OUTPUT spatial `h×w`, then
+    `depthwiseStridedBackBatched` maps the bn-cotangent back to the larger input
+    `c·(2h)·(2w)` (zero-upsample + reversed-kernel per-channel depthwise). -/
+noncomputable def dwbsSBackBatchedGraph {N c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w))) :
+    SHlo (N * (c * (2 * h) * (2 * w))) :=
+  .depthwiseStridedBackBatched (N := N) "%dwssW" W b
+    (.bnBatchLABack "%dwssG" "%dwssX" "dwssE" ε γ (batchMap N (depthwiseStride2Flat W b) x)
+      (.swishBack "%dwssSw" (bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x)) e))
+
+theorem dwbsSBackBatchedGraph_faithful {N c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w))) :
+    den (dwbsSBackBatchedGraph W b ε γ β x e)
+      = (dwbsSB_has_vjp N W b ε hε γ β).backward x (den e) := by
+  rw [dwbsSBackBatchedGraph, depthwiseStridedBackBatched_faithful (v := x),
+      bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
+  simp only [dwbsSB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
+
 /-- Batched **conv → bn** stage backward graph (MBConv project, no swish). -/
 noncomputable def projBackBatchedGraph {N ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
@@ -622,6 +667,74 @@ theorem mbBodyBackBatchedGraph_faithful {N c mid h w kHd kWd r : Nat}
       dwbsBackBatchedGraph_faithful (hε := hεd), seBackBatched_faithful,
       projBackBatchedGraph_faithful (hε := hεp)]
   simp only [mbBodyB_has_vjp, vjp_comp, Function.comp_apply]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Capstone: the batched DOWNSAMPLE MBConv body (strided depthwise, NO residual)
+-- ════════════════════════════════════════════════════════════════
+
+/-- The batched downsample MBConv body's VJP — `projB ∘ seB ∘ dwbsSB ∘ cbsB`, the
+    stride-2 analogue of `mbBodyB_has_vjp` (swaps the stride-1 `dwbsB` depthwise
+    stage for the STRIDED `dwbsSB`). The expand `cbsB` runs at the larger `2h×2w`,
+    the strided depthwise then halves spatial to `h×w`; the rest at `h×w`. No
+    residual (spatial/channels change), so this is the body alone — reconstructed
+    as the exact `vjp_comp` chain `mbStridedFwdB_has_vjp` builds inline. -/
+noncomputable def mbDownBodyB_has_vjp (N : Nat) {ic mid oc h w kHd kWd r : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
+    HasVJP (projB N (h := h) (w := w) Wp bp εp γp βp ∘ seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ ∘
+            dwbsSB N (h := h) (w := w) Wd bd εd γd βd ∘
+            cbsB N (h := 2 * h) (w := 2 * w) We be εe γe βe) :=
+  let dE := cbsB_differentiable N (h := 2 * h) (w := 2 * w) We be εe hεe γe βe
+  let dDw := dwbsSB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd
+  let dSe := seB_differentiable N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂
+  vjp_comp _ _ (dSe.comp (dDw.comp dE)) (projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp)
+    (vjp_comp _ _ (dDw.comp dE) dSe
+      (vjp_comp _ _ dE dDw (cbsB_has_vjp N (h := 2 * h) (w := 2 * w) We be εe hεe γe βe)
+        (dwbsSB_has_vjp N (h := h) (w := w) Wd bd εd hεd γd βd))
+      (seB_has_vjp N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂))
+    (projB_has_vjp N (h := h) (w := w) Wp bp εp hεp γp βp)
+
+/-- The batched downsample MBConv body backward graph: the four stage graphs chained
+    at their cumulative forward activations (`cbsB⁻¹ ∘ dwbsSB⁻¹ ∘ seB⁻¹ ∘ projB⁻¹`).
+    Stride-2 analogue of `mbBodyBackBatchedGraph` (strided depthwise stage graph). -/
+noncomputable def mbDownBodyBackBatchedGraph {N ic mid oc h w kHd kWd r : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
+    SHlo (N * (ic * (2 * h) * (2 * w))) :=
+  let xE := cbsB N (h := 2 * h) (w := 2 * w) We be εe γe βe x
+  let xD := dwbsSB N (h := h) (w := w) Wd bd εd γd βd xE
+  let xS := seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ xD
+  cbsBackBatchedGraph We be εe γe βe x
+    (dwbsSBackBatchedGraph Wd bd εd γd βd xE
+      (.seBackBatched (N := N) "%seW1" "%seb1" "%seW2" "%seb2" Wz₁ bz₁ Wz₂ bz₂ xD
+        (projBackBatchedGraph Wp bp εp γp βp xS e)))
+
+/-- **CAPSTONE — the batched EfficientNet DOWNSAMPLE MBConv body: backward graph ↔
+    the proven `mbDownBodyB_has_vjp`.** The four batched stage backward graphs
+    (`cbsB`/`dwbsSB`/`seB`/`projB`) chained at their forward activations, proven
+    equal to the downsample-body VJP. The stride-2 analogue of
+    `mbBodyBackBatchedGraph_faithful` (no residual skip — the downsample block
+    changes spatial/channels, so the body alone is the block). EfficientNet uses
+    swish (a global VJP), so this stays in the clean global `HasVJP`/`vjp_comp`
+    form (no `_at` recompute, unlike r34/mnv2's relu blocks). -/
+theorem mbDownBodyBackBatchedGraph_faithful {N ic mid oc h w kHd kWd r : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
+    den (mbDownBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp x e)
+      = (mbDownBodyB_has_vjp N We be εe hεe γe βe Wd bd εd hεd γd βd
+          Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp).backward x (den e) := by
+  rw [mbDownBodyBackBatchedGraph, cbsBackBatchedGraph_faithful (hε := hεe),
+      dwbsSBackBatchedGraph_faithful (hε := hεd), seBackBatched_faithful,
+      projBackBatchedGraph_faithful (hε := hεp)]
+  simp only [mbDownBodyB_has_vjp, vjp_comp, Function.comp_apply]
 
 /-- The whole batched MBConv residual block backward graph (body + identity skip). -/
 noncomputable def mbResidBlockBackBatchedGraph {N c mid h w kHd kWd r : Nat}

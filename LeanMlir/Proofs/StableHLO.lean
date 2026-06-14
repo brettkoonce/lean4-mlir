@@ -324,6 +324,15 @@ inductive SHlo : Nat → Type where
   | depthwiseBackBatched {N c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * h * w))
+  -- Batched STRIDE-2 depthwise input-VJP: `batchMap N` of the proven per-example
+  -- strided-depthwise input-grad (`depthwiseStride2Flat_has_vjp` — activation-
+  -- independent, strided depthwise = `decimate ∘ depthwise` is linear). The
+  -- EfficientNet downsample MBConv's stride-2 depthwise backward; halves spatial
+  -- vs `depthwiseBackBatched` (the depthwise analog of `convStridedBackBatched`).
+  -- Routes through the generic `batched` tag like the stride-1 batched ops.
+  | depthwiseStridedBackBatched {N c h w kH kW : Nat} (wName : String)
+      (W : DepthwiseKernel c kH kW) (b : Vec c) :
+      SHlo (N * (c * h * w)) → SHlo (N * (c * (2 * h) * (2 * w)))
   -- True batch-norm backward on the NETWORK layout `N·(oc·h·w)` (what
   -- renderBody's `bnBatch` emits): the `bnBatchTensor4` backward reindex-
   -- conjugated to the left-assoc index (`bnBatchLA_eq_comp`).
@@ -580,6 +589,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       batchMap N (fun dy => (flatConvStride2_has_vjp W b).backward (fun _ => 0) dy) (den e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
       batchMap N (fun dy => (hasVJP3_to_hasVJP (depthwise_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
+  | _, .depthwiseStridedBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
+      batchMap N (fun dy => (depthwiseStride2Flat_has_vjp W b).backward (fun _ => 0) dy) (den e)
   | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
       fun i => ∑ k, if i = (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) k then
         bnBatchTensor4_grad_input N oc h w ε γ
@@ -1836,6 +1847,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "convStridedBackBatched" [N, ic, oc, h, w] (skel e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ _ _ e =>
       .batched "depthwiseBackBatched" [N, c, h, w] (skel e)
+  | _, .depthwiseStridedBackBatched (N := N) (c := c) (h := h) (w := w) _ _ _ e =>
+      .batched "depthwiseStridedBackBatched" [N, c, h, w] (skel e)
   | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
       .batched "bnBatchLABack" [N, oc, h, w] (skel e)
   | _, .seBackBatched (N := N) (c := c) (h := h) (w := w) _ _ _ _ _ _ _ _ _ e =>
