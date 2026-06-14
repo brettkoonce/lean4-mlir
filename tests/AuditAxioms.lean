@@ -54,6 +54,7 @@ import LeanMlir.Proofs.AdamRender
 import LeanMlir.Proofs.EfficientNetBackB0
 import LeanMlir.Proofs.MobileNetV2BackB0
 import LeanMlir.Proofs.ResNet34BackB0
+import LeanMlir.Proofs.ConvNeXtBackB0
 
 open Proofs
 
@@ -1222,6 +1223,14 @@ open Proofs
 #print axioms StableHLO.seBlockFullBackGraphE_faithful
 #print axioms StableHLO.mbconvBodyBackGraph_faithful
 #print axioms StableHLO.mbconvResidual_backGraph_faithful
+-- ConvNeXt backward-graph faithfulness (den-level), per-example (batch-1): the
+-- block-body backward graph, the identity/residual block capstone, and the
+-- LN+2×2/s2 downsample capstone. LayerNorm is per-example separable (= bnForward
+-- on the feature axis), so no batched machinery; the LN backward routes through
+-- bnBack_faithful_fn (layerNorm_has_vjp ≡ bn_has_vjp).
+#print axioms StableHLO.cnxBlockBodyBackGraph_faithful
+#print axioms StableHLO.cnxResidBlockBackGraph_faithful
+#print axioms StableHLO.cnxDownBackGraph_faithful
 #print axioms StableHLO.bnBatchBack_faithful
 #print axioms StableHLO.convBackBatched_faithful
 #print axioms StableHLO.depthwiseBackBatched_faithful

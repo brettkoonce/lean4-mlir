@@ -204,7 +204,14 @@ lean_lib «Proofs» where
              -- body (conv-bn ∘ conv-bn-relu), and the identity-block capstone —
              -- relu (_at) with an OUTER post-residual relu (the extra factor
              -- vs the MBConv/inverted-residual blocks).
-             `LeanMlir.Proofs.ResNet34BackB0]
+             `LeanMlir.Proofs.ResNet34BackB0,
+             -- ConvNeXt backward-graph faithfulness (den-level): the per-example
+             -- (batch-1) peer of EfficientNetBackB0. LayerNorm is per-example
+             -- separable, so no batched machinery — the block-body backward graph
+             -- (depthwise → LN → expand → gelu → project → layerScale) + identity-skip
+             -- residual capstone, plus the LN+2×2/s2 downsample capstone. GELU is a
+             -- global VJP, so everything stays in the clean global HasVJP form.
+             `LeanMlir.Proofs.ConvNeXtBackB0]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
