@@ -311,6 +311,14 @@ inductive SHlo : Nat → Type where
   | convBackBatched {N ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (ic * h * w))
+  -- Batched STRIDE-2 conv input-VJP: `batchMap N` of the proven per-example
+  -- strided-conv input-grad (`flatConvStride2_has_vjp` — activation-independent,
+  -- strided conv = `decimate ∘ conv` is linear). The downsample basic-block's
+  -- stride-2 conv1 backward; halves spatial vs `convBackBatched`. Routes through
+  -- the generic `batched` tag like the stride-1 batched ops.
+  | convStridedBackBatched {N ic oc h w kH kW : Nat} (wName : String)
+      (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+      SHlo (N * (oc * h * w)) → SHlo (N * (ic * (2 * h) * (2 * w)))
   -- Batched depthwise input-VJP: `batchMap N` of the proven per-example
   -- depthwise input-grad (activation-independent — depthwise conv is linear).
   | depthwiseBackBatched {N c h w kH kW : Nat} (wName : String)
@@ -568,6 +576,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       bnBatchTensor4_grad_input N oc h w ε γ x (den e)
   | _, .convBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ W b e =>
       batchMap N (fun dy => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
+  | _, .convStridedBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ W b e =>
+      batchMap N (fun dy => (flatConvStride2_has_vjp W b).backward (fun _ => 0) dy) (den e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
       batchMap N (fun dy => (hasVJP3_to_hasVJP (depthwise_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
   | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
@@ -1822,6 +1832,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "bnBatchBack" [N, oc, h, w] (skel e)
   | _, .convBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ e =>
       .batched "convBackBatched" [N, ic, oc, h, w] (skel e)
+  | _, .convStridedBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ e =>
+      .batched "convStridedBackBatched" [N, ic, oc, h, w] (skel e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ _ _ e =>
       .batched "depthwiseBackBatched" [N, c, h, w] (skel e)
   | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>

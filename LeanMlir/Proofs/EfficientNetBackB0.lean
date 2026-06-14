@@ -414,6 +414,28 @@ theorem convBackBatched_faithful {N ic oc h w kH kW : Nat} (wN : String)
     rowwise_has_vjp_mat, hasVJP3_to_hasVJP, conv2d_has_vjp3]
   rfl
 
+/-- **Batched STRIDE-2 conv input-VJP faithfulness.** The stride-2 analogue of
+    `convBackBatched_faithful`: `convStridedBackBatched` denotes the proven VJP of
+    the batched strided conv `batchMap N (flatConvStride2 W b)` — i.e. the
+    per-example strided-conv input-grad (`flatConvStride2_has_vjp` = zero-upsample
+    the cotangent then the reversed-kernel conv) applied independently across the
+    batch. Strided conv (`decimate ∘ conv`) is linear, so its backward ignores the
+    forward activation; the batched backward is a plain `batchMap` of the
+    per-example backward, matching `batchMap_has_vjp`. The downsample basic-block's
+    stride-2 conv1 backward brick. -/
+theorem convStridedBackBatched_faithful {N ic oc h w kH kW : Nat} (wN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.convStridedBackBatched (N := N) wN W b e)
+      = (batchMap_has_vjp (flatConvStride2 W b) (flatConvStride2_has_vjp W b)
+          (flatConvStride2_differentiable W b)).backward v (den e) := by
+  funext idx
+  -- The transport in `batchMap_has_vjp` unfolds to the per-example strided-conv
+  -- backward on each row; both sides then differ only in the (discarded) forward
+  -- activation arg, since strided conv is linear (its backward ignores it).
+  simp only [den, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  rfl
+
 /-- **Batched depthwise input-VJP faithfulness.** The depthwise analogue of
     `convBackBatched_faithful`: `depthwiseBackBatched` denotes the proven VJP of
     the batched depthwise `batchMap N (depthwiseFlat W b)`. Depthwise conv is

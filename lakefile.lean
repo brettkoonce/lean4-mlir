@@ -198,7 +198,13 @@ lean_lib «Proofs» where
              -- relu6 conv/depthwise stages (selectMid kink), the SE-less inverted-
              -- residual body, and the whole-block capstone — the relu6 (_at)
              -- peer of EfficientNetBackB0.
-             `LeanMlir.Proofs.MobileNetV2BackB0]
+             `LeanMlir.Proofs.MobileNetV2BackB0,
+             -- ResNet-34 backward-graph faithfulness (den-level): the batched
+             -- conv-bn-relu stage (selectPos one-sided kink), the basic-block
+             -- body (conv-bn ∘ conv-bn-relu), and the identity-block capstone —
+             -- relu (_at) with an OUTER post-residual relu (the extra factor
+             -- vs the MBConv/inverted-residual blocks).
+             `LeanMlir.Proofs.ResNet34BackB0]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

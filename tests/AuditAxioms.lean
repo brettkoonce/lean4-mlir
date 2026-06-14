@@ -53,6 +53,7 @@ import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
 import LeanMlir.Proofs.EfficientNetBackB0
 import LeanMlir.Proofs.MobileNetV2BackB0
+import LeanMlir.Proofs.ResNet34BackB0
 
 open Proofs
 
@@ -1247,3 +1248,27 @@ open Proofs
 #print axioms StableHLO.mnv2BodyBackBatchedGraph_faithful
 -- Capstone: the whole batched MobileNetV2 inverted-residual block backward graph.
 #print axioms StableHLO.mnv2ResidBlockBackBatchedGraph_faithful
+
+-- ResNet-34 backward-graph faithfulness (den-level): the relu (_at) peer of the two
+-- blocks above, with the structural twist of an OUTER post-residual relu. The body
+-- is conv-bn ∘ conv-bn-relu and the block is `relu ∘ residual(F)`; relu's one-sided
+-- kink gives only a pointwise VJP (relu_has_vjp_at), so the stage/body/capstone are
+-- _at-form with TWO relu smoothness families threaded (body mid-relu + outer relu).
+-- The per-op relu back token is `.selectPos`.
+-- Batched conv-bn-relu stage backward graph.
+#print axioms StableHLO.cbReluBackBatchedGraph_faithful
+-- The basic-block body backward graph (projB ∘ cbReluB).
+#print axioms StableHLO.r34BodyBackBatchedGraph_faithful
+-- Capstone: the whole batched ResNet-34 identity basic block backward graph
+-- (residual fan-in + OUTER relu).
+#print axioms StableHLO.r34BasicBlockBackBatchedGraph_faithful
+
+-- ResNet-34 DOWNSAMPLE/STRIDED basic block backward-graph faithfulness: the
+-- `relu ∘ residualProj(proj, F_s)` peer of the identity block above, with a STRIDED
+-- conv1 in the body + a STRIDED conv-bn projection skip (both backward paths
+-- nontrivial). Built on the NEW stride-2 batched-conv VJP `convStridedBackBatched`
+-- (the stride-2 analog of `convBackBatched`).
+#print axioms StableHLO.convStridedBackBatched_faithful
+-- Capstone: the whole batched ResNet-34 downsample basic block backward graph
+-- (PROJECTED-residual fan-in [body + strided-proj skip] + OUTER relu).
+#print axioms StableHLO.r34DownBlockBackBatchedGraph_faithful
