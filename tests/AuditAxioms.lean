@@ -55,6 +55,7 @@ import LeanMlir.Proofs.EfficientNetBackB0
 import LeanMlir.Proofs.MobileNetV2BackB0
 import LeanMlir.Proofs.ResNet34BackB0
 import LeanMlir.Proofs.ConvNeXtBackB0
+import LeanMlir.Proofs.ViTBackB0
 
 open Proofs
 
@@ -1304,3 +1305,19 @@ open Proofs
 -- Capstone: the whole batched ResNet-34 downsample basic block backward graph
 -- (PROJECTED-residual fan-in [body + strided-proj skip] + OUTER relu).
 #print axioms StableHLO.r34DownBlockBackBatchedGraph_faithful
+
+-- ViT whole-block backward-graph faithfulness (den-level, per-token Mat-VJP,
+-- heads = 1): the transformer peer of the conv nets' *BackB0 capstones. The MHSA
+-- backward is collapsed at heads = 1 to the plain three-way dense fan-in over the
+-- proven sdpa_back_{Q,K,V} (mhsa_backward_collapse: tied to mhsa_has_vjp_mat by
+-- VJP determinism + the qkv-stack / column-slab one-head collapse + the inner-d ↔
+-- 1*d sdpa-back width bridges), expressed in ViTChainClose's vitCotD{Q,K,V} render
+-- forms (mhsaBackGraph_faithful). The MLP + attention sublayer graphs are residual
+-- fan-ins of an LN-back over the body back (mlpSublayerBackGraph_faithful,
+-- attnSublayerBackGraph_faithful), assembled into the whole block via the
+-- vjpMat_comp wiring block.backward A dY = attn.backward A (mlp.backward (attn A) dY).
+#print axioms StableHLO.mhsa_backward_collapse
+#print axioms StableHLO.mhsaBackGraph_faithful
+#print axioms StableHLO.mlpSublayerBackGraph_faithful
+#print axioms StableHLO.attnSublayerBackGraph_faithful
+#print axioms StableHLO.transformerBlockBackGraph_faithful

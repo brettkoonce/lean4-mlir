@@ -211,7 +211,14 @@ lean_lib «Proofs» where
              -- (depthwise → LN → expand → gelu → project → layerScale) + identity-skip
              -- residual capstone, plus the LN+2×2/s2 downsample capstone. GELU is a
              -- global VJP, so everything stays in the clean global HasVJP form.
-             `LeanMlir.Proofs.ConvNeXtBackB0]
+             `LeanMlir.Proofs.ConvNeXtBackB0,
+             -- ViT whole-block backward-graph faithfulness (den-level, heads = 1):
+             -- the per-token Mat-VJP peer of the conv nets' *BackB0 capstones. MLP +
+             -- attention sublayer backward graphs (residual fan-in + LN-back), with
+             -- the MHSA backward collapsed at heads = 1 to the plain three-way dense
+             -- fan-in over the proven sdpa_back_{Q,K,V} (tied to mhsa_has_vjp_mat by
+             -- VJP determinism), assembled into the whole transformerBlock VJP.
+             `LeanMlir.Proofs.ViTBackB0]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
