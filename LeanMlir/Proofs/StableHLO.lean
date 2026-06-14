@@ -258,6 +258,17 @@ inductive SHlo : Nat → Type where
   | patchEmbedF {ic H W P N D : Nat} (wName bName clsName posName : String)
       (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N+1) D) :
       SHlo (ic*H*W) → SHlo ((N+1)*D)
+  -- ViT patch-embedding input-VJP: the strided-P patchify conv's input gradient
+  -- (reversed-kernel `conv_transpose` on the patch-token rows of the `[N+1,D]`
+  -- cotangent; the CLS row and position-add contribute nothing — input-VJP = id
+  -- on a +constant). `den` via `patchEmbedBackFlat` (= the proven
+  -- `patchEmbed_input_grad_formula` = `patchEmbed_flat_has_vjp.backward`, the tie
+  -- is `rfl` in ViTBackB0). Linear in the cotangent — activation-independent, so
+  -- it routes through the generic `batched` Raw/Tok tag (like the strided-conv
+  -- backward batched ops) rather than a bespoke top-level Raw/Tok constructor.
+  | patchEmbedBack {ic H W P N D : Nat} (wName : String)
+      (Wc : Kernel4 D ic P P) :
+      SHlo ((N+1)*D) → SHlo (ic*H*W)
   -- CLS-token gather: row 0 of the `[N+1,D]` flat (`stablehlo.slice` after
   -- reshape) — the classifier head's input. `den` via `clsSliceFlat` (= the
   -- proven `cls_slice_flat`, Attention.lean).
@@ -447,6 +458,33 @@ noncomputable def patchEmbedFlat
                  img (finProdFinEquiv (finProdFinEquiv (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
                else 0))
 
+/-- **ViT patch-embedding input-VJP (flattened)** — a LOCAL re-spelling of the
+    proven `patchEmbed_input_grad_formula` (Attention.lean), kept here so
+    `StableHLO` needn't import `Attention` (the tie is an `rfl` lemma in
+    ViTBackB0). The closed-form image cotangent: a sum over patches `p : Fin N`
+    with reconstructed kernel offsets `(kh, kw)` matching the decoded input
+    position `(c, hh, ww)`. The CLS row (`n = 0`) and the position-add (a
+    +constant, input-VJP = id) contribute nothing — `idx_in` only flows through
+    the conv-projection branch (`n = p+1`), so this is purely the strided 16×16
+    patchify conv's input-VJP on the patch-token part of the cotangent. -/
+noncomputable def patchEmbedBackFlat
+    (ic H W patchSize N D : Nat)
+    (W_conv : Kernel4 D ic patchSize patchSize)
+    (dy : Vec ((N + 1) * D)) : Vec (ic * H * W) :=
+  fun idx_in =>
+    let c  := (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).1
+    let hh := (finProdFinEquiv.symm (finProdFinEquiv.symm idx_in).1).2
+    let ww := (finProdFinEquiv.symm idx_in).2
+    ∑ p : Fin N, ∑ kh : Fin patchSize, ∑ kw : Fin patchSize,
+      let W' := W / patchSize
+      let h' := p.val / W'
+      let w' := p.val % W'
+      if _h_match : h' * patchSize + kh.val = hh.val ∧
+                    w' * patchSize + kw.val = ww.val then
+        ∑ d : Fin D, W_conv d c kh kw *
+          dy (finProdFinEquiv (p.succ, d))
+      else 0
+
 /-- **CLS slice (flattened)** — gather row 0 of the `[N+1,D]` flat (= the proven
     `cls_slice_flat`, Attention.lean; tie is `rfl` in ViTFwdGraph). -/
 noncomputable def clsSliceFlat (N D : Nat) (v : Vec ((N+1)*D)) : Vec D :=
@@ -572,6 +610,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .denseRowBack (N := N) (a := a) (c := c) _ W e => rowDenseBackFlat N a c W (den e)
   | _, .patchEmbedF (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ _ _ _ Wc bc cls pos e =>
       patchEmbedFlat ic H W P N D Wc bc cls pos (den e)
+  | _, .patchEmbedBack (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ Wc e =>
+      patchEmbedBackFlat ic H W P N D Wc (den e)
   | _, .clsSliceF (N := N) (D := D) e => clsSliceFlat N D (den e)
   | _, .clsPadF (N := N) (D := D) e => clsPadFlat N D (den e)
   | _, .headSliceF (N := N) (heads := heads) (d := d) h e => headSliceFlat N heads d h (den e)
@@ -1120,6 +1160,14 @@ theorem denseRowBack_faithful {N a c : Nat} (wN : String) (W : Mat a c) (e : SHl
     (Wc : Kernel4 D ic P P) (bc cls : Vec D) (pos : Mat (N+1) D) (e : SHlo (ic*H*W)) :
     den (.patchEmbedF wN bN cN pN Wc bc cls pos e)
       = patchEmbedFlat ic H W P N D Wc bc cls pos (den e) := rfl
+
+/-- **Patch-embedding input-VJP faithfulness.** The reversed-kernel strided
+    `conv_transpose` (on the patch-token rows of the `[N+1,D]` cotangent) denotes
+    `patchEmbedBackFlat` (= the proven `patchEmbed_input_grad_formula`; the tie to
+    `patchEmbed_flat_has_vjp.backward` is `rfl` in ViTBackB0). (`rfl`.) -/
+@[simp] theorem patchEmbedBack_faithful {ic H W P N D : Nat} (wN : String)
+    (Wc : Kernel4 D ic P P) (e : SHlo ((N+1)*D)) :
+    den (.patchEmbedBack wN Wc e) = patchEmbedBackFlat ic H W P N D Wc (den e) := rfl
 
 /-- **CLS-slice faithfulness.** The row-0 `stablehlo.slice` denotes `clsSliceFlat`
     (= the proven `cls_slice_flat`). (`rfl`.) -/
@@ -1830,6 +1878,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .denseRowBack (N := N) (a := a) (c := c) wN _ e => .denseRowBack wN N a c (skel e)
   | _, .patchEmbedF (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) wN bN cN pN _ _ _ _ e =>
       .patchEmbedF wN bN cN pN ic H W P N D (skel e)
+  | _, .patchEmbedBack (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ _ e =>
+      .batched "patchEmbedBack" [ic, H, W, P, N, D] (skel e)
   | _, .clsSliceF (N := N) (D := D) e => .clsSliceF N D (skel e)
   | _, .clsPadF (N := N) (D := D) e => .clsPadF N D (skel e)
   | _, .headSliceF (N := N) (heads := heads) (d := d) h e => .headSliceF N heads d h.val (skel e)

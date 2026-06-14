@@ -1353,3 +1353,25 @@ open Proofs
 #print axioms StableHLO.mlpSublayerVBackGraph_faithfulMH
 #print axioms StableHLO.attnSublayerVBackGraphMH_faithful
 #print axioms StableHLO.transformerBlockVBackGraphMH_faithful
+
+-- ViT WHOLE-NET backward-graph faithfulness — the depth-k, multi-head, vector-LN
+-- production capstone. The backward analogue of vitFwdGraphKMHV_faithful: a reverse-
+-- composed backward graph (classifier-back → final-vec-LN-back → depth-k tower-back
+-- reverse fold → patchEmbed-back) whose denotation IS the proven whole-net VJP
+-- vitForwardKV_has_vjp.backward (ViTDepthK), at every input image + cotangent, every
+-- depth k. Stage 1 (classifierBackGraph_faithful): clsPadF (dotOut Wcls dy) =
+-- classifier_flat_has_vjp.backward. Stage 2 (finalLNBackGraph_faithful): the vec-LN
+-- LN-back fragment over N+1 tokens, bridged. Stage 3 (vitBodyBackGraphKMHV_den): the
+-- depth-k reverse fold of transformerBlockVBackGraphMHP, by induction on k chaining the
+-- bundled per-block faithful — the backward analogue of vitBodyGraphKMHV_den. Stage 4
+-- (patchEmbedBack_faithful + patchEmbedBackGraph_faithful): the new patchEmbedBack SHlo
+-- token (strided-patchify conv input-VJP) = patchEmbed_flat_has_vjp.backward, routed
+-- through the generic `batched` Raw/Tok tag. Stage 5 (vitNetBackGraph_faithful): the
+-- whole-net capstone, composing the four stages by the three vjp_comp backward rules.
+#print axioms StableHLO.classifierBackGraph_faithful
+#print axioms StableHLO.finalLNBackGraph_faithful
+#print axioms StableHLO.transformerBlockVBackGraphMHP_faithful
+#print axioms StableHLO.vitBodyBackGraphKMHV_den
+#print axioms StableHLO.patchEmbedBack_faithful
+#print axioms StableHLO.patchEmbedBackGraph_faithful
+#print axioms StableHLO.vitNetBackGraph_faithful
