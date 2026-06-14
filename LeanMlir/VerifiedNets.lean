@@ -144,11 +144,11 @@ def resnet34Verified : VerifiedNetSpec where
 -- Derived layout (146 params) == the audited hand-list ResNet34Layout.specs.
 #guard resnet34Verified.toSpecs == ResNet34Layout.specs
 
-/-- ch7 **MobileNetV2** on Imagenette 224²: 3×3-s2 stem → BN → relu6 → 6 inverted-residual
-    blocks `[t,c,n,s]` (4 strided depthwise downsamples, per-channel BN, relu6, linear
-    bottleneck) → 1×1 head conv → BN → relu6 → GAP → dense. 82 params. (The proof witness
-    `Proofs.mobilenetv2_has_vjp_at` is a representative stem+2-block scalar-BN net, not this
-    full render — B/C tie is therefore representative, see planning doc.) -/
+/-- ch7 **MobileNetV2** on Imagenette 224²: 3×3-s2 stem → BN → relu6 → 17 inverted-residual
+    blocks (full-paper `[t,c,n,s]` config, strided depthwise downsamples, per-channel BN,
+    relu6, linear bottleneck) → 1×1 head conv (320→1280) → BN → relu6 → GAP → dense. (The
+    proof witness `Proofs.mobilenetv2_has_vjp_at` is a representative stem+2-block scalar-BN
+    net, not this full render — B/C tie is therefore representative, see planning doc.) -/
 def mobilenetv2Verified : VerifiedNetSpec where
   name     := "MobileNetV2"
   slug     := "mobilenetv2"
@@ -158,26 +158,31 @@ def mobilenetv2Verified : VerifiedNetSpec where
   nClasses := 10
   data     := .imagenette
   layers   := [
-    .convBn 3 16 3 2,               -- stem 3×3-s2 → BN → relu6     224→112
-    .invertedResidual 16  64 24 2,  -- b1  s2                       112→56
-    .invertedResidual 24  96 24 1,  -- b2  s1                       @56
-    .invertedResidual 24  96 32 2,  -- b3  s2                       56→28
-    .invertedResidual 32 128 32 1,  -- b4  s1                       @28
-    .invertedResidual 32 128 64 2,  -- b5  s2                       28→14
-    .invertedResidual 64 256 64 2,  -- b6  s2                       14→7
-    .convBn 64 128 1 1,             -- head 1×1 → BN → relu6
+    .convBn 3 32 3 2,               -- stem
+    .invertedResidual 32  32  16 1,
+    .invertedResidual 16  96  24 2, .invertedResidual 24 144  24 1,
+    .invertedResidual 24 144  32 2, .invertedResidual 32 192  32 1, .invertedResidual 32 192  32 1,
+    .invertedResidual 32 192  64 2, .invertedResidual 64 384  64 1, .invertedResidual 64 384  64 1, .invertedResidual 64 384  64 1,
+    .invertedResidual 64 384  96 1, .invertedResidual 96 576  96 1, .invertedResidual 96 576  96 1,
+    .invertedResidual 96 576 160 2, .invertedResidual 160 960 160 1, .invertedResidual 160 960 160 1,
+    .invertedResidual 160 960 320 1,
+    .convBn 320 1280 1 1,           -- head
     .globalAvgPool,
-    .dense 128 10 ]
-  blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 6 inverted-residual blocks, 4 stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"
-  -- 20 BN layers in forward order (stem; per inverted-residual block expand-BN/depthwise-BN/project-BN;
+    .dense 1280 10 ]
+  blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"
+  -- 53 BN layers in forward order (stem; per inverted-residual block expand-BN/depthwise-BN/project-BN;
   -- head) — running-stats layout for trainAdamSched + @mobilenetv2_fwd_eval. Matches
   -- TestMobilenetV2TrainPC.bnLayers. True batch-norm (reduce [0,2,3]) → batch-BN eval degenerate on
   -- sorted val, so the adam trainer evals through running stats instead.
-  bnChannels := #[16,
-    64,64,24, 96,96,24, 96,96,32, 128,128,32, 128,128,64, 256,256,64,
-    128]
+  bnChannels := #[32,
+    32,32,16,  96,96,24, 144,144,24,  144,144,32, 192,192,32, 192,192,32,
+    192,192,64, 384,384,64, 384,384,64, 384,384,64,
+    384,384,96, 576,576,96, 576,576,96,
+    576,576,160, 960,960,160, 960,960,160,
+    960,960,320,
+    1280]
 
--- Derived layout (82 params) == the audited hand-list MobileNetV2Layout.specs.
+-- Derived layout (214 param tensors, ~2.25M scalars) == the audited hand-list MobileNetV2Layout.specs.
 #guard mobilenetv2Verified.toSpecs == MobileNetV2Layout.specs
 
 /-- ch8 **EfficientNet-B0** on Imagenette 224²: 3×3-s2 stem → 16 MBConv blocks (`[t,c,n,s,k]`

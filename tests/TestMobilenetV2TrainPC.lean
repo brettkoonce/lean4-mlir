@@ -19,8 +19,10 @@ away its proof-rendered-BN property: BN forward+backward become hand-emitted fla
 step also carries per-layer batch mean/var out in passthrough slots (running-stats BN eval — see
 `bnLayers` + `mobilenetv2Verified.bnChannels` + `@mobilenetv2_fwd_eval`).
 
-Same func signature (82 params, same names/order) as the committed `TestMobilenetV2Train.lean`, so it
-**swap-trains** `mobilenetv2-verified`.
+Full-paper MobileNetV2 (17 inverted-residual blocks, 214 param tensors / ~2.25M scalars) — the layout
+`mobilenetv2Verified.toSpecs` / `MobileNetV2Layout.specs` (#guard-locked) the verified-adam driver
+trains on (NOTE: `TestMobilenetV2Train.lean`, the committed SGD renderer, is still the reduced 6-block
+net — this PC/adam path is the full one).
 
 Run: `IREE_BACKEND=rocm lake env lean tests/TestMobilenetV2TrainPC.lean`
 -/
@@ -146,10 +148,14 @@ private structure FNames where  -- all flat SSA names from `pretty`
   bout : String  -- block output (pn or addV(pn,xin))
 
 private def blocks : List (String × Nat × Nat × Nat × Nat × Nat) :=
-  -- (p, ic, mid, oc, s, Hin)
-  [("b1", 16, 64,  24, 2, 112), ("b2", 24, 96,  24, 1, 56),
-   ("b3", 24, 96,  32, 2, 56),  ("b4", 32, 128, 32, 1, 28),
-   ("b5", 32, 128, 64, 2, 28),  ("b6", 64, 256, 64, 2, 14)]
+  -- (p, ic, mid, oc, s, Hin)  — full paper MobileNetV2
+  [("b1",  32,  32,  16, 1, 112),
+   ("b2",  16,  96,  24, 2, 112), ("b3",  24, 144,  24, 1, 56),
+   ("b4",  24, 144,  32, 2, 56),  ("b5",  32, 192,  32, 1, 28), ("b6",  32, 192,  32, 1, 28),
+   ("b7",  32, 192,  64, 2, 28),  ("b8",  64, 384,  64, 1, 14), ("b9",  64, 384,  64, 1, 14), ("b10", 64, 384,  64, 1, 14),
+   ("b11", 64, 384,  96, 1, 14),  ("b12", 96, 576,  96, 1, 14), ("b13", 96, 576,  96, 1, 14),
+   ("b14", 96, 576, 160, 2, 14),  ("b15",160, 960, 160, 1, 7),  ("b16",160, 960, 160, 1, 7),
+   ("b17",160, 960, 320, 1, 7)]
 
 /-- One inverted-residual block forward via `pretty`, capturing flat names. -/
 private def fwdBlock (p xin : String) (ic mid oc s Hin : Nat) : StateM Nat (String × FNames) := do
@@ -233,11 +239,11 @@ private def blockSgd (p : String) (ic mid oc : Nat) : String :=
 private def renderBody (cot : String → String) : String := Id.run do
   let go : StateM Nat String := do
     -- ═══ forward (proof-rendered) ═══
-    let (cStemC, stc) ← pretty BS (.flatConvStridedF (h := 112) (w := 112) "%sW" "%sb" (zK : Kernel4 16 3 3 3) zV (.operand "%x" zV))
-    let cStemB := bnB "stn" stc "%sg" "%sbt" 16 112 112
+    let (cStemC, stc) ← pretty BS (.flatConvStridedF (h := 112) (w := 112) "%sW" "%sb" (zK : Kernel4 32 3 3 3) zV (.operand "%x" zV))
+    let cStemB := bnB "stn" stc "%sg" "%sbt" 32 112 112
     let stn := "%stn"
-    let (cStemR, str) ← pretty BS (.relu6F (.operand stn (zV : Vec (16*112*112))))
-    -- 6 inverted-residual blocks
+    let (cStemR, str) ← pretty BS (.relu6F (.operand stn (zV : Vec (32*112*112))))
+    -- 17 inverted-residual blocks
     let mut fwd := cStemC ++ cStemB ++ cStemR
     let mut cur := str
     let mut bns : List (FNames × (String × Nat × Nat × Nat × Nat × Nat)) := []
@@ -247,30 +253,30 @@ private def renderBody (cot : String → String) : String := Id.run do
       fwd := fwd ++ code
       cur := bn.bout
       bns := bns ++ [(bn, blk)]
-    -- head: 1×1 conv (64→128) → bn → relu6 @7
-    let (cHc, hc) ← pretty BS (.flatConvF (h := 7) (w := 7) "%hW" "%hb" (zK : Kernel4 128 64 1 1) zV (.operand cur zV))
-    let cHb := bnB "hn" hc "%hg" "%hbt" 128 7 7
+    -- head: 1×1 conv (320→1280) → bn → relu6 @7
+    let (cHc, hc) ← pretty BS (.flatConvF (h := 7) (w := 7) "%hW" "%hb" (zK : Kernel4 1280 320 1 1) zV (.operand cur zV))
+    let cHb := bnB "hn" hc "%hg" "%hbt" 1280 7 7
     let hn := "%hn"
-    let (cHr, hr) ← pretty BS (.relu6F (.operand hn (zV : Vec (128*7*7))))
-    let (cGap, gap) ← pretty BS (.gapF (c := 128) (h := 7) (w := 7) (.operand hr zV))
-    let (cLog, logits) ← pretty BS (denseF "%Wd" "%bd" (zM : Mat 128 10) zV (.operand gap zV))
+    let (cHr, hr) ← pretty BS (.relu6F (.operand hn (zV : Vec (1280*7*7))))
+    let (cGap, gap) ← pretty BS (.gapF (c := 1280) (h := 7) (w := 7) (.operand hr zV))
+    let (cLog, logits) ← pretty BS (denseF "%Wd" "%bd" (zM : Mat 1280 10) zV (.operand gap zV))
     -- softmax(logits) [BS,10] — `cot` turns it into the loss cotangent `%dy` (+ `%loss`).
     let (cSm, sm) ← pretty BS (.softmaxDiv (.expe (.operand logits (zV : Vec 10))))
     fwd := fwd ++ cHc ++ cHb ++ cHr ++ cGap ++ cLog ++ cSm ++ cot sm
     -- ═══ backward cotangent chain (proof-rendered) ═══
     -- dense-back (dotOut, reads `%dy`) → gap-back (broadcast/÷49) → head relu6 → head bn → head conv
-    let (cDg, cotGap) ← pretty BS (.dotOut "%Wd" (zM : Mat 128 10) (.operand "%dy" zV))
+    let (cDg, cotGap) ← pretty BS (.dotOut "%Wd" (zM : Mat 1280 10) (.operand "%dy" zV))
     let mut bwd :=
       cDg ++
-      rs4 "%dgi" cotGap 128 1 1 ++  -- [BS,128] → [BS,128,1,1]
-      s!"    %dgb = stablehlo.broadcast_in_dim %dgi, dims = [0, 1, 2, 3] : ({ty [BS,128,1,1]}) -> {ty [BS,128,7,7]}\n" ++
-      s!"    %dgn = stablehlo.constant dense<49.0> : {ty [BS,128,7,7]}\n" ++
-      s!"    %dgd = stablehlo.divide %dgb, %dgn : {ty [BS,128,7,7]}\n" ++
-      s!"    %dgapf = stablehlo.reshape %dgd : ({ty [BS,128,7,7]}) -> {ty [BS, 128*7*7]}\n"
-    let (cHrB, cot_hn) ← pretty BS (.selectMid hn (zV : Vec (128*7*7)) (.operand "%dgapf" zV))
-    let cHbB := bnBackB "dhn" "hn" cot_hn 128 7 7
+      rs4 "%dgi" cotGap 1280 1 1 ++  -- [BS,1280] → [BS,1280,1,1]
+      s!"    %dgb = stablehlo.broadcast_in_dim %dgi, dims = [0, 1, 2, 3] : ({ty [BS,1280,1,1]}) -> {ty [BS,1280,7,7]}\n" ++
+      s!"    %dgn = stablehlo.constant dense<49.0> : {ty [BS,1280,7,7]}\n" ++
+      s!"    %dgd = stablehlo.divide %dgb, %dgn : {ty [BS,1280,7,7]}\n" ++
+      s!"    %dgapf = stablehlo.reshape %dgd : ({ty [BS,1280,7,7]}) -> {ty [BS, 1280*7*7]}\n"
+    let (cHrB, cot_hn) ← pretty BS (.selectMid hn (zV : Vec (1280*7*7)) (.operand "%dgapf" zV))
+    let cHbB := bnBackB "dhn" "hn" cot_hn 1280 7 7
     let cot_hc := "%dhn"
-    let (cHcB, cot_b6) ← pretty BS (.convBack (h := 7) (w := 7) "%hW" (zK : Kernel4 128 64 1 1) zV zV (.operand cot_hc zV))
+    let (cHcB, cot_b6) ← pretty BS (.convBack (h := 7) (w := 7) "%hW" (zK : Kernel4 1280 320 1 1) zV zV (.operand cot_hc zV))
     bwd := bwd ++ cHrB ++ cHbB ++ cHcB
     -- block backward (reversed), threading the cotangent + accumulating param grads
     let mut paramG := ""
@@ -282,21 +288,21 @@ private def renderBody (cot : String → String) : String := Id.run do
       paramG := paramG ++ blockParamGrads p bn cot_pc cot_dc cot_ec ic mid oc s Hin
       d := dxin
     -- stem backward: relu6 mask → bn-back → (strided 3×3 weight-grad). `d` = cot at stem relu6 out.
-    let (cStR, cot_stn) ← pretty BS (.selectMid stn (zV : Vec (16*112*112)) (.operand d zV))
-    let cStB := bnBackB "dstn" "stn" cot_stn 16 112 112
+    let (cStR, cot_stn) ← pretty BS (.selectMid stn (zV : Vec (32*112*112)) (.operand d zV))
+    let cStB := bnBackB "dstn" "stn" cot_stn 32 112 112
     let cot_stc := "%dstn"
     bwd := bwd ++ cStR ++ cStB
     -- ═══ param grads (hand-emitted) ═══
     -- head: 1×1 conv W/b  (BN γ/β folded into bnBackB → %dhndg/%dhndb)
     let headG :=
-      convWGrad "%dhW" cur cot_hc 64 128 7 7 1 ++ biasGrad "%dhb" cot_hc 128 7 7
+      convWGrad "%dhW" cur cot_hc 320 1280 7 7 1 ++ biasGrad "%dhb" cot_hc 1280 7 7
     -- stem: strided 3×3 conv W (upsample dy) + b  (BN γ/β → %dstndg/%dstndb)
     let stemG :=
-      upsampleFlat "%dsu" cot_stc 16 112 112 ++ convWGrad "%dsW" "%x" "%dsu" 3 16 224 224 3 ++
-      biasGrad "%dsb" cot_stc 16 112 112
+      upsampleFlat "%dsu" cot_stc 32 112 112 ++ convWGrad "%dsW" "%x" "%dsu" 3 32 224 224 3 ++
+      biasGrad "%dsb" cot_stc 32 112 112
     -- dense: Wd (gap ⊗ dy), bd (reduce dy)
     let denseG :=
-      s!"    %dWd = stablehlo.dot_general {gap}, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,128]}, {ty [BS,10]}) -> {ty [128,10]}\n" ++
+      s!"    %dWd = stablehlo.dot_general {gap}, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,1280]}, {ty [BS,10]}) -> {ty [1280,10]}\n" ++
       s!"    %dbd = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n"
     pure (fwd ++ bwd ++ paramG ++ headG ++ stemG ++ denseG)
   pure (go.run' 0)
@@ -308,20 +314,20 @@ private def sgdCot (sm : String) : String :=
 
 private def trainStep : String := Id.run do
   let body : String := renderBody sgdCot
-  -- ═══ SGD over all 82 params (allParams order) + signature ═══
-  let stemSgd := sgd "%sW" "%dsW" (ty [16,3,3,3]) ++ sgd "%sb" "%dsb" (ty [16]) ++ sgd "%sg" "%dstndg" (ty [16]) ++ sgd "%sbt" "%dstndb" (ty [16])
+  -- ═══ SGD over all params (allParams order) + signature ═══
+  let stemSgd := sgd "%sW" "%dsW" (ty [32,3,3,3]) ++ sgd "%sb" "%dsb" (ty [32]) ++ sgd "%sg" "%dstndg" (ty [32]) ++ sgd "%sbt" "%dstndb" (ty [32])
   let blkSgd := String.join (blocks.map (fun (p, ic, mid, oc, _, _) => blockSgd p ic mid oc))
-  let headSgd := sgd "%hW" "%dhW" (ty [128,64,1,1]) ++ sgd "%hb" "%dhb" (ty [128]) ++ sgd "%hg" "%dhndg" (ty [128]) ++ sgd "%hbt" "%dhndb" (ty [128])
-  let denseSgd := sgd "%Wd" "%dWd" (ty [128,10]) ++ sgd "%bd" "%dbd" (ty [10])
+  let headSgd := sgd "%hW" "%dhW" (ty [1280,320,1,1]) ++ sgd "%hb" "%dhb" (ty [1280]) ++ sgd "%hg" "%dhndg" (ty [1280]) ++ sgd "%hbt" "%dhndb" (ty [1280])
+  let denseSgd := sgd "%Wd" "%dWd" (ty [1280,10]) ++ sgd "%bd" "%dbd" (ty [10])
   -- param list (name, type) in allParams order
   let blkParams (p : String) (ic mid oc : Nat) : List (String × String) :=
     [(s!"{p}eW", ty [mid,ic,1,1]), (s!"{p}eb", ty [mid]), (s!"{p}eg", ty [mid]), (s!"{p}ebt", ty [mid]),
      (s!"{p}dW", ty [mid,1,3,3]), (s!"{p}db", ty [mid]), (s!"{p}dg", ty [mid]), (s!"{p}dbt", ty [mid]),
      (s!"{p}pW", ty [oc,mid,1,1]), (s!"{p}pb", ty [oc]), (s!"{p}pg", ty [oc]), (s!"{p}pbt", ty [oc])]
   let allParams : List (String × String) :=
-    [("sW", ty [16,3,3,3]), ("sb", ty [16]), ("sg", ty [16]), ("sbt", ty [16])]
+    [("sW", ty [32,3,3,3]), ("sb", ty [32]), ("sg", ty [32]), ("sbt", ty [32])]
     ++ (blocks.map (fun (p, ic, mid, oc, _, _) => blkParams p ic mid oc)).flatten
-    ++ [("hW", ty [128,64,1,1]), ("hb", ty [128]), ("hg", ty [128]), ("hbt", ty [128]), ("Wd", ty [128,10]), ("bd", ty [10])]
+    ++ [("hW", ty [1280,320,1,1]), ("hb", ty [1280]), ("hg", ty [1280]), ("hbt", ty [1280]), ("Wd", ty [1280,10]), ("bd", ty [10])]
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [BS,150528]) :: allParams.map (fun (nm, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])
   let retTyL := String.intercalate ", " (allParams.map (fun (_, t) => t))
@@ -334,11 +340,11 @@ private def trainStep : String := Id.run do
 
 -- ════════════ AdamW scheduled train step (loss-curve parity with mobilenet-v2-train) ════════════
 
-/-- (paramName, gradName, dims) for all 82 params, in `allParams` order (= `net.specs` order).
+/-- (paramName, gradName, dims) for all 214 param tensors, in `allParams` order (= `net.specs` order).
     Drives the per-param AdamW update and the packed `[θ|m|v]` signature. The grad names match
     those emitted by `renderBody`'s param-grad section (`%{p}d…` per block, `%d…` for stem/head/dense). -/
 private def adamParams : List (String × String × List Nat) :=
-  [("%sW", "%dsW", [16,3,3,3]), ("%sb", "%dsb", [16]), ("%sg", "%dstndg", [16]), ("%sbt", "%dstndb", [16])]
+  [("%sW", "%dsW", [32,3,3,3]), ("%sb", "%dsb", [32]), ("%sg", "%dstndg", [32]), ("%sbt", "%dstndb", [32])]
   ++ (blocks.map (fun (p, ic, mid, oc, _, _) =>
        [(s!"%{p}eW", s!"%{p}deW", [mid,ic,1,1]), (s!"%{p}eb", s!"%{p}deb", [mid]),
         (s!"%{p}eg", s!"%{p}dendg", [mid]), (s!"%{p}ebt", s!"%{p}dendb", [mid]),
@@ -346,8 +352,8 @@ private def adamParams : List (String × String × List Nat) :=
         (s!"%{p}dg", s!"%{p}ddndg", [mid]), (s!"%{p}dbt", s!"%{p}ddndb", [mid]),
         (s!"%{p}pW", s!"%{p}dpW", [oc,mid,1,1]), (s!"%{p}pb", s!"%{p}dpb", [oc]),
         (s!"%{p}pg", s!"%{p}dpndg", [oc]), (s!"%{p}pbt", s!"%{p}dpndb", [oc])])).flatten
-  ++ [("%hW", "%dhW", [128,64,1,1]), ("%hb", "%dhb", [128]), ("%hg", "%dhndg", [128]), ("%hbt", "%dhndb", [128]),
-      ("%Wd", "%dWd", [128,10]), ("%bd", "%dbd", [10])]
+  ++ [("%hW", "%dhW", [1280,320,1,1]), ("%hb", "%dhb", [1280]), ("%hg", "%dhndg", [1280]), ("%hbt", "%dhndb", [1280]),
+      ("%Wd", "%dWd", [1280,10]), ("%bd", "%dbd", [10])]
 
 /-- β₁/β₂/ε/wd baked (the mnv2 reference recipe); `%lr`/`%bc1`/`%bc2` arrive as runtime args. -/
 private def adamConsts : String :=
@@ -391,18 +397,18 @@ private def adamCot (sm : String) : String :=
     sums over `[0,2,3]`). Must match `mobilenetv2Verified.bnChannels` and `TestMobilenetV2Fwd`'s eval
     stat order. -/
 private def bnLayers : List (String × Nat × Nat) :=
-  ("stn", 16, 112*112) ::
+  ("stn", 32, 112*112) ::
   (blocks.flatMap (fun (p, _ic, mid, oc, s, Hin) =>
     let Hout := Hin / s
     [(s!"{p}en", mid, Hin*Hin), (s!"{p}dn", mid, Hout*Hout), (s!"{p}pn", oc, Hout*Hout)]))
-  ++ [("hn", 128, 7*7)]
+  ++ [("hn", 1280, 7*7)]
 
 /-- `@mobilenetv2_adam_train_step` — the proof-rendered (BN now hand-emitted) fwd/bwd/param-grads
     with the SGD update swapped for `ViTRender.emitAdamV` and the `[θ|m|v]` + scalar-tail packed
     signature the generic `VerifiedNet.trainAdamSched` driver expects, EXTENDED with per-BN-layer
     batch mean/var carried out in passthrough slots (running-stats BN; the func also takes matching
     dummy `[oc]` inputs so `#outputs = #inputs`):
-    `(x, θ×82, m×82, v×82, lr, bc1, bc2, μ/var×20, onehot) → (θ'×82, m'×82, v'×82, loss, bc1, bc2, μ/var×20)`.
+    `(x, θ×214, m×214, v×214, lr, bc1, bc2, μ/var×53, onehot) → (θ'×214, m'×214, v'×214, loss, bc1, bc2, μ/var×53)`.
     `lr`/`bc1`/`bc2` runtime; `bc1`/`bc2` + the stat-in slots pass through unchanged. -/
 private def trainStepAdamSched : String :=
   let body  := renderBody adamCot

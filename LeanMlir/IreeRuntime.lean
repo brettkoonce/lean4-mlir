@@ -287,14 +287,14 @@ end ResNet34Layout
 
 namespace MobileNetV2Layout
 /-- Chapter-7 **MobileNetV2** params (IMAGENETTE 3×224×224 — paper-native ImageNet
-    resolution, real downsampling `[t,c,n,s]`): stem {W,b,γ,β} (3×3 stride-2 conv
-    3→16), then 6 inverted-residual blocks — each expand 1×1 {W,b,γ,β}, depthwise 3×3
-    {W,b,γ,β} (a `[mid,1,3,3]` kernel, feature_group_count = mid; stride-2 for the 4
-    downsampling blocks b1/b3/b5/b6), project 1×1 {W,b,γ,β} — then the head 1×1 conv
-    {W,b,γ,β} (64→128, the MNv2 "features" layer: conv→BN→relu6 before GAP, so the
+    resolution, full-paper downsampling `[t,c,n,s]`): stem {W,b,γ,β} (3×3 stride-2 conv
+    3→32), then 17 inverted-residual blocks — each expand 1×1 {W,b,γ,β}, depthwise 3×3
+    {W,b,γ,β} (a `[mid,1,3,3]` kernel, feature_group_count = mid; stride-2 for the
+    downsampling blocks), project 1×1 {W,b,γ,β} — then the head 1×1 conv
+    {W,b,γ,β} (320→1280, the MNv2 "features" layer: conv→BN→relu6 before GAP, so the
     pooled tensor isn't the constant β of an instance-normed BN) and dense {W,b}.
-    Per-channel BN ⇒ γ/β are **rank-1 `[c]`**. 82 params. Spatial
-    224→112(stem)→56(b1,s2)→28(b3,s2)→14(b5,s2)→7(b6,s2) — the real MobileNetV2 /32
+    Per-channel BN ⇒ γ/β are **rank-1 `[c]`**. Spatial
+    224→112(stem)→56→28→14→7 — the real MobileNetV2 /32
     flow. The `(dims, initKind)` order MUST match `@mobilenetv2_train_step`'s signature
     (and `@mobilenetv2_fwd`'s) — both rendered from the same `blocks`/`allParams`
     (tests/TestMobilenetV2*.lean). Strides live only in the renderers (no param-shape
@@ -304,15 +304,21 @@ private def irBlk (ic mid oc : Nat) : Array (Array Nat × Nat) :=
   #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2),    -- expand 1×1
     (#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),     -- depthwise 3×3 (stride 1 or 2)
     (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]       -- project 1×1
-/-- (ic, mid, oc) per block — MUST match tests/TestMobilenetV2*.lean `blocks`. -/
+/-- (ic, mid, oc) per block — MUST match tests/TestMobilenetV2*.lean `blocks`. Full paper net (17). -/
 private def blocks : Array (Nat × Nat × Nat) :=
-  #[(16,64,24),(24,96,24),(24,96,32),(32,128,32),(32,128,64),(64,256,64)]
+  #[(32,32,16),
+    (16,96,24),(24,144,24),
+    (24,144,32),(32,192,32),(32,192,32),
+    (32,192,64),(64,384,64),(64,384,64),(64,384,64),
+    (64,384,96),(96,576,96),(96,576,96),
+    (96,576,160),(160,960,160),(160,960,160),
+    (160,960,320)]
 /-- `(dims, initKind)` for every param, in func-arg order. -/
 def specs : Array (Array Nat × Nat) := Id.run do
-  let mut a : Array (Array Nat × Nat) := #[(#[16,3,3,3],0),(#[16],2),(#[16],1),(#[16],2)]  -- stem
-  for (ic, mid, oc) in blocks do a := a ++ irBlk ic mid oc                                 -- 6 IR blocks
-  a := a ++ #[(#[128,64,1,1],0),(#[128],2),(#[128],1),(#[128],2)]                          -- head 1×1 conv→BN→relu6
-  a := a ++ #[(#[128,10],0),(#[10],2)]                                                     -- dense
+  let mut a : Array (Array Nat × Nat) := #[(#[32,3,3,3],0),(#[32],2),(#[32],1),(#[32],2)]  -- stem
+  for (ic, mid, oc) in blocks do a := a ++ irBlk ic mid oc                                 -- 17 IR blocks
+  a := a ++ #[(#[1280,320,1,1],0),(#[1280],2),(#[1280],1),(#[1280],2)]                     -- head 1×1 conv→BN→relu6
+  a := a ++ #[(#[1280,10],0),(#[10],2)]                                                    -- dense
   return a
 def paramShapes : Array (Array Nat) := specs.map (·.1)
 def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0

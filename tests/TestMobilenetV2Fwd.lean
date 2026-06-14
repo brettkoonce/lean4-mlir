@@ -8,17 +8,13 @@ Programmatic StableHLO for a real, DOWNSAMPLING MobileNetV2 forward (IMAGENETTE
 (inverted-residual `[t,c,n,s]` stages that shrink spatial via STRIDE-2 DEPTHWISE — the
 C3 `depthwiseStridedF` op), at the real MobileNetV2 /32 spatial flow:
 
-  stem  : 3×3 stride-2 conv (3→16, 224→112) + BN + relu6
-  b1    : IR  16→24, t≈4 (mid 64),  stride 2  (112→56)  [no skip]
-  b2    : IR  24→24, mid 96,        stride 1  (56×56)   [skip]
-  b3    : IR  24→32, mid 96,        stride 2  (56→28)   [no skip]
-  b4    : IR  32→32, mid 128,       stride 1  (28×28)   [skip]
-  b5    : IR  32→64, mid 128,       stride 2  (28→14)   [no skip]
-  b6    : IR  64→64, mid 256,       stride 2  (14→7)    [no skip]
-  head  : 1×1 conv (64→128) + BN + relu6  (MNv2 "features" layer @7×7)
-  tail  : global-average-pool → dense(128→10)
+  stem  : 3×3 stride-2 conv (3→32, 224→112) + BN + relu6
+  b1-b17: full-paper inverted-residual stack [t,c,n,s] (mid=t·ic, strided depthwise
+          downsamples), channels 16→24→32→64→96→160→320, spatial 112→56→28→14→7
+  head  : 1×1 conv (320→1280) + BN + relu6  (MNv2 "features" layer @7×7)
+  tail  : global-average-pool → dense(1280→10)
 
-Spatial: 224→112(stem)→56(b1)→28(b3)→14(b5)→7(b6) — four strided-depthwise
+Spatial: 224→112(stem)→56→28→14→7 — strided-depthwise
 downsamples (+ the strided stem) = the real MobileNetV2 /32 flow. Every
 fragment is the StableHLO a VERIFIED per-op emitter produces: depthwise stride-1
 (`depthwiseF`) / stride-2 (`depthwiseStridedF`), relu6 (`relu6F`), per-channel BN
@@ -134,12 +130,14 @@ private def irBlockFwd (p x : String) (ic mid oc Hin s : Nat) : String × String
 -- ── block config (p, ic, mid, oc, s); spatial threaded from the stem (16×16) ──
 
 private def blocks : List (String × Nat × Nat × Nat × Nat) :=
-  [("b1", 16, 64,  24, 2),   -- 112→56
-   ("b2", 24, 96,  24, 1),   -- skip @56
-   ("b3", 24, 96,  32, 2),   -- 56→28
-   ("b4", 32, 128, 32, 1),   -- skip @28
-   ("b5", 32, 128, 64, 2),   -- 28→14 (no skip)
-   ("b6", 64, 256, 64, 2)]   -- 14→7 (no skip)
+  -- (p, ic, mid, oc, s) — full paper MobileNetV2 (17 inverted-residual blocks)
+  [("b1",  32,  32,  16, 1),
+   ("b2",  16,  96,  24, 2), ("b3",  24, 144,  24, 1),
+   ("b4",  24, 144,  32, 2), ("b5",  32, 192,  32, 1), ("b6",  32, 192,  32, 1),
+   ("b7",  32, 192,  64, 2), ("b8",  64, 384,  64, 1), ("b9",  64, 384,  64, 1), ("b10", 64, 384,  64, 1),
+   ("b11", 64, 384,  96, 1), ("b12", 96, 576,  96, 1), ("b13", 96, 576,  96, 1),
+   ("b14", 96, 576, 160, 2), ("b15",160, 960, 160, 1), ("b16",160, 960, 160, 1),
+   ("b17",160, 960, 320, 1)]
 
 private def bnSig (p : String) (oc : Nat) : List String :=
   [s!"%{p}g: {ty [oc]}", s!"%{p}bt: {ty [oc]}"]
@@ -162,30 +160,30 @@ private def mobilenetv2Fwd : String := Id.run do
   -- stem: 3×3 stride-2 conv (3→16, 224→112) + BN + relu6
   let stemCode :=
     s!"    %xr = stablehlo.reshape %x : ({ty [BS,150528]}) -> {ty [BS,3,224,224]}\n" ++
-    conv3 "stc" "%xr" "%sW" "%sb" 16 3 224 224 112 112 2 ++
-    bnPC "stn" "%stc" "%sg" "%sbt" 16 112 112 (112*112) ++
-    relu6 "str" "%stn" 16 112 112
+    conv3 "stc" "%xr" "%sW" "%sb" 32 3 224 224 112 112 2 ++
+    bnPC "stn" "%stc" "%sg" "%sbt" 32 112 112 (112*112) ++
+    relu6 "str" "%stn" 32 112 112
   let mut blkCode := ""
   let mut cur := "%str"
   let mut curH := 112
   for (p, ic, mid, oc, s) in blocks do
     let (c, out) := irBlockFwd p cur ic mid oc curH s
     blkCode := blkCode ++ c; cur := out; curH := curH / s
-  -- head: 1×1 conv (64→128) + BN + relu6 @ curH×curH (=7×7)
+  -- head: 1×1 conv (320→1280) + BN + relu6 @ curH×curH (=7×7)
   let head :=
-    conv1 "h" cur "%hW" "%hb" 128 64 curH curH ++
-    bnPC "hn" "%h" "%hg" "%hbt" 128 curH curH (curH*curH) ++
-    relu6 "hr" "%hn" 128 curH curH
-  let tail := gapDense "out" "%hr" 128 10 curH curH
+    conv1 "h" cur "%hW" "%hb" 1280 320 curH curH ++
+    bnPC "hn" "%h" "%hg" "%hbt" 1280 curH curH (curH*curH) ++
+    relu6 "hr" "%hn" 1280 curH curH
+  let tail := gapDense "out" "%hr" 1280 10 curH curH
   let body :=
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     stemCode ++ blkCode ++ head ++ tail
   let sig : List String :=
     ["%x: " ++ ty [BS,150528]]
-    ++ [s!"%sW: {ty [16,3,3,3]}", s!"%sb: {ty [16]}"] ++ bnSig "s" 16
+    ++ [s!"%sW: {ty [32,3,3,3]}", s!"%sb: {ty [32]}"] ++ bnSig "s" 32
     ++ (blocks.map (fun (p, ic, mid, oc, _) => irBlockSig p ic mid oc)).flatten
-    ++ [s!"%hW: {ty [128,64,1,1]}", s!"%hb: {ty [128]}"] ++ bnSig "h" 128
-    ++ [s!"%Wd: {ty [128,10]}", s!"%bd: {ty [10]}"]
+    ++ [s!"%hW: {ty [1280,320,1,1]}", s!"%hb: {ty [1280]}"] ++ bnSig "h" 1280
+    ++ [s!"%Wd: {ty [1280,10]}", s!"%bd: {ty [10]}"]
   let argSig := String.intercalate ", " sig
   return "module @m {\n" ++ s!"  func.func @mobilenetv2_fwd({argSig}) -> {ty [BS,10]} " ++ "{\n" ++
     body ++ s!"    return %out : {ty [BS,10]}\n" ++ "  }\n}\n"
@@ -239,9 +237,9 @@ private def irBlockStatSig (p : String) (mid oc : Nat) : List String :=
 private def mobilenetv2FwdEval : String := Id.run do
   let stemCode :=
     s!"    %xr = stablehlo.reshape %x : ({ty [BS,150528]}) -> {ty [BS,3,224,224]}\n" ++
-    conv3 "stc" "%xr" "%sW" "%sb" 16 3 224 224 112 112 2 ++
-    bnEval "stn" "%stc" "%sg" "%sbt" 16 112 112 ++
-    relu6 "str" "%stn" 16 112 112
+    conv3 "stc" "%xr" "%sW" "%sb" 32 3 224 224 112 112 2 ++
+    bnEval "stn" "%stc" "%sg" "%sbt" 32 112 112 ++
+    relu6 "str" "%stn" 32 112 112
   let mut blkCode := ""
   let mut cur := "%str"
   let mut curH := 112
@@ -249,25 +247,25 @@ private def mobilenetv2FwdEval : String := Id.run do
     let (c, out) := irBlockEval p cur ic mid oc curH s
     blkCode := blkCode ++ c; cur := out; curH := curH / s
   let head :=
-    conv1 "h" cur "%hW" "%hb" 128 64 curH curH ++
-    bnEval "hn" "%h" "%hg" "%hbt" 128 curH curH ++
-    relu6 "hr" "%hn" 128 curH curH
-  let tail := gapDense "out" "%hr" 128 10 curH curH
+    conv1 "h" cur "%hW" "%hb" 1280 320 curH curH ++
+    bnEval "hn" "%h" "%hg" "%hbt" 1280 curH curH ++
+    relu6 "hr" "%hn" 1280 curH curH
+  let tail := gapDense "out" "%hr" 1280 10 curH curH
   let body :=
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     stemCode ++ blkCode ++ head ++ tail
   let paramSig : List String :=
     ["%x: " ++ ty [BS,150528]]
-    ++ [s!"%sW: {ty [16,3,3,3]}", s!"%sb: {ty [16]}"] ++ bnSig "s" 16
+    ++ [s!"%sW: {ty [32,3,3,3]}", s!"%sb: {ty [32]}"] ++ bnSig "s" 32
     ++ (blocks.map (fun (p, ic, mid, oc, _) => irBlockSig p ic mid oc)).flatten
-    ++ [s!"%hW: {ty [128,64,1,1]}", s!"%hb: {ty [128]}"] ++ bnSig "h" 128
-    ++ [s!"%Wd: {ty [128,10]}", s!"%bd: {ty [10]}"]
+    ++ [s!"%hW: {ty [1280,320,1,1]}", s!"%hb: {ty [1280]}"] ++ bnSig "h" 1280
+    ++ [s!"%Wd: {ty [1280,10]}", s!"%bd: {ty [10]}"]
   -- BN running-stats inputs, BN forward order (stem; per block en/dn/pn; head) — the driver's
   -- runningBnStats layout, matching mobilenetv2Verified.bnChannels and the adam step's stat outputs.
   let statSig : List String :=
-    bnStatSig "stn" 16
+    bnStatSig "stn" 32
     ++ (blocks.map (fun (p, _ic, mid, oc, _) => irBlockStatSig p mid oc)).flatten
-    ++ bnStatSig "hn" 128
+    ++ bnStatSig "hn" 1280
   let argSig := String.intercalate ", " (paramSig ++ statSig)
   return "module @m {\n" ++ s!"  func.func @mobilenetv2_fwd_eval({argSig}) -> {ty [BS,10]} " ++ "{\n" ++
     body ++ s!"    return %out : {ty [BS,10]}\n" ++ "  }\n}\n"
