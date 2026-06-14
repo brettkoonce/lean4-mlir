@@ -193,7 +193,12 @@ lean_lib «Proofs» where
              -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
              -- batched conv+depthwise), the whole per-example MBConv block, and
              -- the batched-stage backward primitives.
-             `LeanMlir.Proofs.EfficientNetBackB0]
+             `LeanMlir.Proofs.EfficientNetBackB0,
+             -- MobileNetV2 backward-graph faithfulness (den-level): the batched
+             -- relu6 conv/depthwise stages (selectMid kink), the SE-less inverted-
+             -- residual body, and the whole-block capstone — the relu6 (_at)
+             -- peer of EfficientNetBackB0.
+             `LeanMlir.Proofs.MobileNetV2BackB0]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

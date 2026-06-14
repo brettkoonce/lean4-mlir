@@ -52,6 +52,7 @@ import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
 import LeanMlir.Proofs.EfficientNetBackB0
+import LeanMlir.Proofs.MobileNetV2BackB0
 
 open Proofs
 
@@ -1233,3 +1234,16 @@ open Proofs
 -- Capstone: the whole batched MBConv residual block backward graph.
 #print axioms StableHLO.mbBodyBackBatchedGraph_faithful
 #print axioms StableHLO.mbResidBlockBackBatchedGraph_faithful
+
+-- MobileNetV2 backward-graph faithfulness (den-level): the relu6 (_at) peer of the
+-- EfficientNet block above. relu6's TWO-SIDED kink gives only a pointwise VJP
+-- (relu6_has_vjp_at), so the stages/body/capstone are _at-form with the relu6
+-- smoothness hypotheses threaded; the per-op relu6 back token is `.selectMid`. The
+-- block is the MBConv body MINUS squeeze-excite, with the same linear-bottleneck projB.
+-- Batched relu6 stage backward graphs (conv/depthwise → bn → relu6).
+#print axioms StableHLO.cbrBackBatchedGraph_faithful
+#print axioms StableHLO.dwbrBackBatchedGraph_faithful
+-- The SE-less inverted-residual body backward graph (projB ∘ dwbrB ∘ cbrB).
+#print axioms StableHLO.mnv2BodyBackBatchedGraph_faithful
+-- Capstone: the whole batched MobileNetV2 inverted-residual block backward graph.
+#print axioms StableHLO.mnv2ResidBlockBackBatchedGraph_faithful
