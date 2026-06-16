@@ -46,6 +46,9 @@ lean_lib «Proofs» where
              -- Chapter-4 MNIST 2D CNN (no BN): conditional whole-net VJP
              -- + a concrete instance with every smoothness hyp discharged.
              `LeanMlir.Proofs.MnistCNN,
+             -- Nonzero-Jacobian seal (planning/whole_network_backward.md Item B): the
+             -- generic "one nonzero Jacobian entry ⇒ non-trivial backward" bridge.
+             `LeanMlir.Proofs.JacobianSeal,
              -- Chapter-6 ResNet Milestone B: stride-2 SAME convolution (the hard
              -- new downsampling op) = decimate ∘ stride-1 conv, with its input-VJP.
              `LeanMlir.Proofs.StridedConv,

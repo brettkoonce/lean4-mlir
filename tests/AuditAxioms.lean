@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Tensor
 import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.JacobianSeal
 import LeanMlir.Proofs.CNN
 import LeanMlir.Proofs.BatchNorm
 import LeanMlir.Proofs.Residual
@@ -85,6 +86,21 @@ open Proofs
 #print axioms dense_bias_grad_correct
 #print axioms relu_has_vjp_correct
 #print axioms mlp_has_vjp_correct
+
+-- Nonzero-Jacobian seal (JacobianSeal.lean, planning/whole_network_backward.md Item B):
+-- the generic level-3 bridge. backward_ne_zero_of_pdiv_ne — one nonzero Jacobian entry
+-- ⇒ the proven backward is not the zero map (the basis cotangent collapses the correctness
+-- sum). fderiv_eq_zero_of_pdiv_all_zero / exists_pdiv_ne_of_fderiv_ne — the fderiv form
+-- (all entries zero ⇔ fderiv = 0, via the standard-basis decomposition sum_smul_basisVec).
+-- mnistLinear_backward_nontrivial — the linear-classifier demo (Jacobian = W). Upgrades a
+-- witness from "forward ≠ const" to "the backward here is non-trivial"; the deep kinked
+-- witnesses (Mnv2Live / a future ResNet34Live) discharge the pdiv ≠ 0 premise (Item B2).
+#print axioms HasVJP.backward_ne_zero_of_pdiv_ne
+#print axioms sum_smul_basisVec
+#print axioms fderiv_eq_zero_of_pdiv_all_zero
+#print axioms exists_pdiv_ne_of_fderiv_ne
+#print axioms HasVJP.backward_nontrivial_of_fderiv_ne
+#print axioms mnistLinear_backward_nontrivial
 
 -- CNN
 #print axioms maxPool2_has_vjp3_correct

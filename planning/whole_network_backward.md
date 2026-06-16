@@ -111,21 +111,28 @@ Pick genuine nonzero weights and discharge `resnet34_has_vjp_at`'s bundle:
 
 Effort: **medium-heavy** (the injectivity discharge dominates). No new VJP math.
 
-### Item B — the **nonzero-Jacobian seal** (level 3, generic) *(do once, instantiate everywhere)*
+### Item B — the **nonzero-Jacobian seal** (level 3, generic)
 
-Today even `Mnv2Live` stops at `forward ≠ const`. Upgrade to a genuine backward non-triviality:
+Today even `Mnv2Live` stops at `forward ≠ const`. The seal upgrades that to a genuine backward
+non-triviality.
 
-- **B1 — generic lemma.** `whole_net_jacobian_nonzero`: at a witness `x`, exhibit a coordinate
-  pair with `pdiv forward x i j ≠ 0`. The honest version computes one **directional derivative**
-  through the seal chain (`bn1_devSum_scale` already gives `∂(Σ bn)/∂(input deviation) = istd > 0`;
-  push it through the linear head). Equivalent statement: `fderiv ℝ forward x ≠ 0`. This is the
-  lemma that makes "the backward pass is non-trivial here" a theorem rather than a corollary of
-  forward-non-constancy.
-- **B2 — instantiate** for `Mnv2Live`, the new `ResNet34Live` (Item A), and the BN-CNN
-  (`CnnConcrete` → a `CnnLive`). Each is a few lines once B1 exists.
-
-Effort: **light once posed** (B1 is the only real content). High payoff — this is the exact
-sentence the fidelity caveat says is missing.
+- **B1 — generic bridge** ✅ **DONE** (`LeanMlir/Proofs/JacobianSeal.lean`, audited; gate 622/622):
+  - `HasVJP.backward_ne_zero_of_pdiv_ne` — one nonzero Jacobian entry `pdiv f x i₀ j₀ ≠ 0` ⇒ the
+    proven backward is **not the zero map** at `x` (`h.backward x (basisVec j₀) i₀ ≠ 0`); the basis
+    cotangent collapses `HasVJP.correct`'s sum to its diagonal term.
+  - `fderiv_eq_zero_of_pdiv_all_zero` / `exists_pdiv_ne_of_fderiv_ne` /
+    `HasVJP.backward_nontrivial_of_fderiv_ne` — the **`fderiv` form**: all entries zero ⇔
+    `fderiv ℝ f x = 0` (via the standard-basis decomposition `sum_smul_basisVec`), so the clean
+    analytic hypothesis `fderiv ℝ forward x ≠ 0` discharges the seal. No differentiability needed.
+  - `mnistLinear_backward_nontrivial` — end-to-end demo: `pdiv (mnistLinear W b) = W`, so any
+    `W i₀ j₀ ≠ 0` seals the linear classifier's backward as non-trivial.
+- **B2 — discharge the premise at the DEEP kinked witnesses** *(the remaining, harder part)*:
+  exhibit `pdiv forward x i j ≠ 0` (equivalently `fderiv ℝ forward x ≠ 0`) at `Mnv2Live`, a future
+  `ResNet34Live` (Item A), and the BN-CNN. This is **not** derivable from `forward ≠ const` (a
+  non-constant map can have a zero derivative at the witness); the honest route is an explicit
+  directional-derivative computation through the seal chain (`bn1_devSum_scale` gives
+  `∂(Σ bn)/∂(deviation) = istd > 0`; push it through the linear head). Per-net, genuinely hairy —
+  the natural fresh-session work, now unblocked by B1.
 
 ### Item C — ViT **full-depth, distinct-param** backward — ✅ **DONE**
 
@@ -176,7 +183,7 @@ there, not here.
 | Order | Item | Effort | Payoff | Status |
 |---|---|---|---|---|
 | 1 | **C** ViT distinct-param tower + `vitTiny` capstone | light–med | full-depth ViT-Tiny backward, looks real, no witness risk | ✅ **done** |
-| 2 | **B1** generic nonzero-Jacobian seal | light | the missing honesty sentence, reusable | next |
+| 2 | **B1** generic nonzero-Jacobian seal | light | the missing honesty sentence, reusable | ✅ **done** |
 | 3 | **A** ResNet-34 Live + **B2** seal | med–heavy | kills the headline "degenerate witness" caveat | next (the hairy part) |
 | 4 | **B2** BN-CNN Live | light (reuses A) | last degenerate kinked witness retired | |
 | 5 | **D** realistic dims | med | scale credibility | |
