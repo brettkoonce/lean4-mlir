@@ -204,6 +204,10 @@ lean_lib «Proofs» where
              -- the non-vacuity carrier). Build-checked; not yet a live witness, so
              -- also NOT in the AuditAxioms headline set.
              `LeanMlir.Proofs.ResNet34Live2,
+             -- Stage 3 (Item A1): the 2-channel layer rebuild — liveDownPC (the
+             -- signal-carrying 2-channel downsample, full VJP/diff) + per-coordinate
+             -- BN injectivity. Build-checked; not yet a live witness.
+             `LeanMlir.Proofs.ResNet34LivePC,
              -- Backward-graph faithfulness (den-level): fan-in bricks
              -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
              -- batched conv+depthwise), the whole per-example MBConv block, and
