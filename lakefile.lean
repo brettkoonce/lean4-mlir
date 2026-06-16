@@ -199,6 +199,11 @@ lean_lib «Proofs» where
              -- the file header). Build-checked so the mechanism doesn't rot; NOT
              -- a live witness and NOT in the AuditAxioms headline set.
              `LeanMlir.Proofs.ResNet34Live,
+             -- Stage 2 of the live ResNet-34 (Item A2): the channel-order invariant
+             -- kit (maxpool/BN/ReLU preserve strict pointwise channel domination —
+             -- the non-vacuity carrier). Build-checked; not yet a live witness, so
+             -- also NOT in the AuditAxioms headline set.
+             `LeanMlir.Proofs.ResNet34Live2,
              -- Backward-graph faithfulness (den-level): fan-in bricks
              -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
              -- batched conv+depthwise), the whole per-example MBConv block, and

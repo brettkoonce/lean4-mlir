@@ -113,24 +113,38 @@ averages away. At 32²→1×1 there is a *second* collapse: BN over the final 1 
 trivially. **This is the actual reason `ResNet34Concrete`/`CnnConcrete` are degenerate — structural,
 not zeroed weights.** A 1-channel ResNet-34 witness is impossible; no choice of weights escapes it.
 
-**What a live ResNet-34 needs (the open, multi-session work):**
-- **A1 — 2-channel + per-channel BN rebuild.** Mirror `Mnv2Live`'s escape: ≥2 channels with
-  **per-channel** BN (`bnPerChannelTensor3`, which the real ResNet uses anyway), and a head reading
-  *per-channel* GAP `(gap₀, gap₁)`. Cross-channel asymmetry (an asymmetric stem, `Mnv2Live`'s
-  `Ws(0)=1, Ws(1)=2`) survives per-channel BN because the convs *mix* channels while BN normalizes
-  *within* each — so the channel ratio at the head is input-dependent. Re-instantiate stem / `ids` /
-  downsamples / smoothness lemmas at `c=2` (most are generic in `c`; this is instantiation, the
-  current `liveDown` uses *scalar* `bnForward` and must move to per-channel).
-- **A2 — the non-vacuity crux (genuinely new, no `Mnv2Live` analogue): thread the asymmetry through
-  the MAXPOOL.** Maxpool is positively homogeneous (clean channel *ratios* survive it), but the
-  scalar/per-example BN mean-subtracts and can break those ratios — reconciling the two is the open
-  problem. Then `forward X ≠ forward 0` via a `chSum_convX`-style explicit channel-deviation
-  computation, and finally the **nonzero-Jacobian seal** via Item B1
-  (`HasVJP.backward_nontrivial_of_fderiv_ne`).
+**The non-vacuity strategy (refined — the `chSum`/argmax plan is superseded):** the clean carrier is
+a **pointwise strict channel-order invariant** — maintain `forward(z) ch 1 < forward(z) ch 0` at
+*every* spatial position, through every layer. *Strict* order at the head gives `forward X ≠ forward 0`
+(where the two channels coincide) **directly** — no channel-deviation sum, no maxpool-argmax tracking.
+This works with the **scalar** `bnForward` the witness already uses (no move to per-channel BN needed):
+even at the final 1×1 spatial collapse, scalar BN over the two channel values forces only their *mean*
+to `β`, so an asymmetric stem keeps `ch0 ≠ ch1` and the per-channel head reads it. Every layer
+preserves the invariant — and the maxpool, the supposed crux, is the easy case.
 
-Effort: **multi-session, research-flavored** — the non-vacuity (A2), not the smoothness, is the hard
-part, and it is a genuinely new argument (the maxpool×BN interaction). Stage 1 is the foundation; the
-next session should start at the 2-channel per-channel-BN `liveDownPC` and the maxpool-ratio lemma.
+**Stage 2 — DONE and banked** (`LeanMlir/Proofs/ResNet34Live2.lean`, build-checked, 3-axiom-clean, a
+Proofs root but — like Stage 1 — not yet in the AuditAxioms headline set):
+- `maxPool2_chan_lt` — **max preserves strict pointwise channel domination**
+  (`max ch0 ≥ ch0(argmax ch1) > ch1(argmax ch1) = max ch1`). The maxpool×order interaction the doc
+  feared is a four-line `max_lt` — *no* argmax computation.
+- `bnForward_chan_lt` — scalar BN (γ=1) preserves strict order between coordinates
+  (`bn k₀ − bn k₁ = (z k₀ − z k₁)·istd`, `istd > 0`).
+- `relu_chan_lt` / `relu_pos_eq` — ReLU preserves strict order in the kept-positive region.
+
+**What a live ResNet-34 still needs (the open, multi-session work):**
+- **A1 — 2-channel layer rebuild** at `c = 2`: stem (asymmetric `Ws(0) > Ws(1)`, input `> 0`),
+  `maxPoolFlat 2 …`, `liveDownPC`, `idBlk`, `idChainData`, and every smoothness lemma re-proven at
+  2 channels (Stage 1 hardcodes `1 * h * w`; these generalize — most underlying lemmas are generic
+  in the channel count). Scalar BN is retained; sizes grow so the positivity `β` must clear
+  `|γ|·√(2·h·w)` (Item D dimension-robustness).
+- **A2 — assembly**: thread the Stage-2 invariant from the asymmetric stem output through
+  maxpool → the four `liveDownPC` stages (decimate + scalar BN + `idBlk` `+const`) to the head, then
+  `forward X ≠ forward 0` and the **nonzero-Jacobian seal** via the now-done B1/B2 bridge
+  (`HasVJPAt.backward_nontrivial_of_fderiv_ne`), exactly as `Mnv2Live` did at level 3.
+
+Effort: **multi-session** — but the conceptual crux (A2 non-vacuity through the maxpool) is now
+*solved* (Stage 2); what remains is the mechanical-but-large 2-channel re-instantiation (A1) and
+threading the banked invariant through the assembly.
 
 ### Item B — the **nonzero-Jacobian seal** (level 3, generic)
 
@@ -213,7 +227,7 @@ there, not here.
 | 1 | **C** ViT distinct-param tower + `vitTiny` capstone | light–med | full-depth ViT-Tiny backward, looks real, no witness risk | ✅ **done** |
 | 2 | **B1** generic nonzero-Jacobian seal | light | the missing honesty sentence, reusable | ✅ **done** |
 | 2.5 | **B2** `Mnv2Live` seal | med | first kinked witness at level 3 (no longer level-2) | ✅ **done** (`MobileNetV2JacobianSeal.lean`; exact at input 0 via global smoothness) |
-| 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | Stage 1 done; **A2 non-vacuity is multi-session** (structural BN-before-GAP obstruction confirmed) |
+| 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | Stage 1 (smoothness) + **Stage 2 (the A2 non-vacuity crux — `maxPool2_chan_lt` channel-order invariant) DONE & banked**; remaining = mechanical 2-channel rebuild (A1) + assembly |
 | 4 | **B2** BN-CNN Live | light (reuses A) | last degenerate kinked witness retired | |
 | 5 | **D** realistic dims | med | scale credibility | |
 | 6 | **E** almost-everywhere | heavy | the principled statement (stretch) | |
