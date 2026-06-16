@@ -28,8 +28,9 @@ honest targets are, in increasing strength:
    kinks (the hypothesis bundle). ✅ **Done generically, full depth, for every net.**
 2. **A non-degenerate witness** — one concrete input/weight choice that (a) discharges the whole
    bundle with **genuine nonzero weights** (not a zero-weight collapse) and (b) has a **non-constant
-   forward**, so the witness is not vacuous. ⚠️ **Only `Mnv2Live` has this; it is tiny and proves
-   only `forward ≠ const`, not a nonzero Jacobian.**
+   forward**, so the witness is not vacuous. ✅ **Done for `Mnv2Live` (MobileNetV2) and `ResNet34LivePC`
+   (a 2-channel ResNet-34, `liveFwd2_nonconstant`).** Both prove `forward X ≠ forward 0`; `Mnv2Live`
+   additionally has the level-3 seal (below), ResNet-34 not yet.
 3. **A nonzero-Jacobian seal** — at the witness, `∃ i j, pdiv forward x i j ≠ 0`, i.e. the
    *backward map itself* is provably non-trivial there. ✅ **Done for `Mnv2Live`**
    (`MobileNetV2JacobianSeal.lean`, `fderiv ℝ forward 0 ≠ 0` ⇒ non-trivial backward, audited
@@ -74,7 +75,7 @@ already exists** (`vjp_comp_at`, `vjp_chain{,_at}`, `resStage_has_vjp_at`, all i
 
 | Net | Conditional apex (full depth, ✅) | Unconditional witness | Witness verdict |
 |---|---|---|---|
-| **ResNet-34** | `resnet34_has_vjp_at` (`ResNet34.lean:174`) | `ResNet34Concrete.resnet34Concrete_has_vjp_correct` (`:735`) | 🔴 **degenerate** — 16 zero-weight identity blocks, 1×32×32 |
+| **ResNet-34** | `resnet34_has_vjp_at` (`ResNet34.lean:174`) | `ResNet34Concrete.resnet34Concrete_has_vjp_correct` (`:735`) | 🔴 degenerate (1ch); **✅ live witness `ResNet34LivePC.liveFwd2_has_vjp_correct` + `liveFwd2_nonconstant` — level 2, 2-channel, `forward X ≠ forward 0`** |
 | **MobileNetV2** | `mobilenetv2_has_vjp_at_correct` (`MobileNetV2.lean:580`) | `MobileNetV2Concrete.*` (`:936`) | 🔴 **degenerate** — all-zero kernels, constant output |
 | ″ (live) | ″ | `Mnv2Live.mnv2Live_has_vjp_correct` (`:1008`) | ✅ **level-3 sealed** — `mnv2Live_jacobian_nonzero : fderiv ℝ forward 0 ≠ 0` ⇒ `mnv2Live_backward_nontrivial` (`MobileNetV2JacobianSeal.lean`); nonzero weights, 1×2×2 |
 | **BN-CNN** | `cnn_has_vjp_at` (`MnistCNN.lean`) | `CnnConcrete.cnnConcrete_has_vjp_correct` (`:957`) | 🔴 **degenerate** — zero-weight resblocks |
@@ -131,9 +132,9 @@ Proofs root but — like Stage 1 — not yet in the AuditAxioms headline set):
   (`bn k₀ − bn k₁ = (z k₀ − z k₁)·istd`, `istd > 0`).
 - `relu_chan_lt` / `relu_pos_eq` — ReLU preserves strict order in the kept-positive region.
 
-**Stage 3 — the whole 2-channel VJP is BUILT** (`LeanMlir/Proofs/ResNet34LivePC.lean`, build-checked,
-3-axiom-clean, a Proofs root, not in the AuditAxioms headline set). The entire **smoothness side** of
-the live witness is done at 2 channels:
+**Stage 3 — the level-2 live ResNet-34 witness is COMPLETE** (`LeanMlir/Proofs/ResNet34LivePC.lean`,
+**in the AuditAxioms headline set, gate 628/628 3-axiom-clean**). The first **non-degenerate**
+ResNet-34 whole-net backward witness — retires the "degenerate constant-output witness" caveat:
 - `liveDownPC` — the **2-channel signal-carrying strided downsample** (channel-diagonal
   identity-decimate projection `WsP2`, zeroed body), with its full whole-block VJP / `DifferentiableAt`
   / nonnegativity, mirroring Stage 1's `liveDown` at `oc = ic = 2`. `βp = 20 > √(2·h·w)` keeps proj `> 0`.
@@ -146,19 +147,22 @@ the live witness is done at 2 channels:
   maxpool ∘ stem2` with empty identity-block chains (`chainComp [] = id`; full depth = Item D), every
   hypothesis of the dimension-generic `resnet34_has_vjp_at` discharged. `liveFwd2_has_vjp_correct` exposes
   the `pdiv`-Jacobian. 3-axiom-clean.
+- **`liveFwd2_nonconstant`** — the **non-vacuity**: `liveFwd2 X2 ≠ liveFwd2 0`. The Stage-2 channel-order
+  invariant `Dom2` (channel 1 strictly dominates channel 0 at every spatial position) is threaded through
+  the assembly via `Dom2_bn` / `Dom2_relu` / `Dom2_maxpool` / `Dom2_decimate` / `Dom2_add_const`: the
+  positional input `X2 i = i` has channel 1 dominating (`Dom2_X2`, via the `finProdFinEquiv` channel-major
+  index), so the per-channel head gives `out 0 < out 1`; the zero input collapses channel-symmetric
+  (`liveFwd2_zero : liveFwd2 0 = const 21`).
 - `bnForward_coord_inj` — scalar BN injective per coordinate (a reusable no-tie ingredient).
 
-**What remains (the single open step):**
-- **A2 — non-vacuity**: `liveFwd2 X2 ≠ liveFwd2 0` (level 2). Thread the Stage-2 channel-order invariant
-  (now banked) through the assembly: input `X2 i = i` has one channel dominating pointwise, every layer
-  preserves it (`bnForward_chan_lt` / `relu_chan_lt` / `maxPool2_chan_lt` / decimate / `+const`), so the
-  per-channel head reads `ch0 ≠ ch1`; input `0` collapses symmetric (`ch0 = ch1`). The flat↔`Tensor3`
-  channel-index bookkeeping is the only labor left. The level-3 seal (`fderiv ≠ 0`) is a *separate*
-  follow-up — unlike `Mnv2Live`, the ReLUs/maxpool *do* bind off-witness, so the B2 input-0
+**What remains (now only the strengthenings):**
+- **Level 3 — the nonzero-Jacobian seal** for ResNet (`fderiv ℝ liveFwd2 X2 ≠ 0`): a *separate*
+  follow-up. Unlike `Mnv2Live`, the ReLUs/maxpool *do* bind off-witness, so the B2 input-0
   global-smoothness trick does not transfer; it needs a directional-derivative computation at the witness.
+- **Item D — full depth**: the empty identity-block chains (`chainComp [] = id`) can be filled with a
+  2-channel `idBlk` to recover the real `[3,4,6,3]` depth; `idBlk` generalizes to `c = 2` the same way.
 
-Effort: the conceptual crux (A2, Stage 2) is *solved*, the downsample + stem + **whole-net VJP** (Stage 3)
-are *built and audited 3-axiom-clean*; only the non-vacuity threading remains for the level-2 witness.
+Effort: **Item A's headline — a non-degenerate ResNet-34 whole-net backward — is DONE at level 2.**
 
 ### Item B — the **nonzero-Jacobian seal** (level 3, generic)
 
@@ -241,7 +245,7 @@ there, not here.
 | 1 | **C** ViT distinct-param tower + `vitTiny` capstone | light–med | full-depth ViT-Tiny backward, looks real, no witness risk | ✅ **done** |
 | 2 | **B1** generic nonzero-Jacobian seal | light | the missing honesty sentence, reusable | ✅ **done** |
 | 2.5 | **B2** `Mnv2Live` seal | med | first kinked witness at level 3 (no longer level-2) | ✅ **done** (`MobileNetV2JacobianSeal.lean`; exact at input 0 via global smoothness) |
-| 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | Stages 1+2+3 DONE: the **whole 2-channel ResNet-34 VJP `liveFwd2_has_vjp_at` is built & 3-axiom-clean** (stem + maxpool + 3 downsamples, all smoothness discharged); only the non-vacuity `liveFwd2 X2 ≠ liveFwd2 0` remains for the level-2 witness |
+| 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | ✅ **DONE at level 2**: `ResNet34LivePC.liveFwd2_has_vjp_correct` + `liveFwd2_nonconstant` — the first non-degenerate ResNet-34 whole-net backward witness (2-channel, all smoothness discharged, `forward X ≠ forward 0`), audited 628/628. Level-3 seal + full depth (Item D) are strengthenings |
 | 4 | **B2** BN-CNN Live | light (reuses A) | last degenerate kinked witness retired | |
 | 5 | **D** realistic dims | med | scale credibility | |
 | 6 | **E** almost-everywhere | heavy | the principled statement (stretch) | |

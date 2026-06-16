@@ -19,6 +19,7 @@ import LeanMlir.Proofs.StableHLO
 import LeanMlir.Proofs.StableHLOParse
 import LeanMlir.Proofs.StridedConv
 import LeanMlir.Proofs.ResNet34
+import LeanMlir.Proofs.ResNet34LivePC
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
 import LeanMlir.Proofs.MlpTrainStep
@@ -456,6 +457,13 @@ open Proofs
 -- hypothesis discharged. Makes the verified ResNet-34 non-vacuous; the ResNet-34
 -- peer of CnnConcrete.cnnConcrete_has_vjp_correct.
 #print axioms ResNet34Concrete.resnet34Concrete_has_vjp_correct
+-- The first NON-DEGENERATE ResNet-34 whole-net backward witness (Item A, level 2):
+-- a 2-channel real ResNet skeleton (strided stem + maxpool + 3 strided downsamples +
+-- GAP + dense), nonzero weights, every smoothness/no-tie hypothesis discharged, with
+-- forward X ≠ forward 0 (the channel-order invariant Dom2 threaded through the net).
+-- Retires the "degenerate constant-output witness" caveat for ResNet-34.
+#print axioms ResNet34LivePC.liveFwd2_has_vjp_correct
+#print axioms ResNet34LivePC.liveFwd2_nonconstant
 -- B8: per-channel BatchNorm — the real-ResNet BN (each channel-slice normalized with
 -- its own γ_c/β_c, γ/β : Vec oc). Block-diagonal VJP: each channel runs its own
 -- bn_has_vjp, cross-channel blocks vanish (pdivMat_rowIndep_perRow, a per-row

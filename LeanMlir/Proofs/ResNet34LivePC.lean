@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.ResNet34Live2
 
 /-!
-# Toward a live ResNet-34 witness — Stage 3: the 2-channel layer rebuild (A1, WIP)
+# A live ResNet-34 witness — the 2-channel non-degenerate witness (A1 complete, level 2)
 
 Stage 2 (`ResNet34Live2.lean`) banked the channel-order invariant kit (the A2
 non-vacuity crux). This file does the **mechanical 2-channel re-instantiation**
@@ -21,11 +21,18 @@ channel-generic VJP/differentiability machinery (`rblkPStrided_has_vjp_at`,
   non-degenerate witness; full depth is Item D), with *every* smoothness/no-tie hypothesis of the
   dimension-generic `resnet34_has_vjp_at` discharged. The entire **smoothness side** of the live
   witness, at 2 channels.
+- **`liveFwd2_nonconstant`** — **the non-vacuity**: `liveFwd2 X2 ≠ liveFwd2 0`. Threads the Stage-2
+  channel-order invariant `Dom2` (channel 1 strictly dominates channel 0 at every position) from the
+  positional input through stem → maxpool → the three downsamples to the per-channel head, so
+  `liveFwd2 X2 0 < liveFwd2 X2 1`; the zero input collapses channel-symmetric (`liveFwd2 0 = const 21`).
 - `bnForward_coord_inj` — scalar BN injective per coordinate (a reusable no-tie ingredient).
 
-Build-checked, 3-axiom clean. **Remaining for the level-2 witness:** the non-vacuity
-`liveFwd2 X2 ≠ liveFwd2 0` — thread the Stage-2 channel-order invariant (input `X2 i = i` has
-one channel dominating; input `0` is symmetric) through the assembly to the per-channel head.
+This is the **first non-degenerate ResNet-34 whole-net backward witness** (level 2): a real 34-layer
+ResNet skeleton (strided stem + maxpool + three strided downsamples + GAP + dense), nonzero weights,
+`forward X ≠ forward 0`, every smoothness/no-tie hypothesis discharged, 3-axiom clean. It retires the
+"degenerate (constant-output) witness" caveat for ResNet-34. (Full identity-block depth = Item D; the
+level-3 nonzero-Jacobian seal is a separate follow-up — the ReLUs/maxpool bind off-witness, so the
+`Mnv2Live` input-0 global-smoothness trick does not transfer.)
 -/
 
 namespace Proofs
@@ -286,6 +293,223 @@ noncomputable def liveFwd2_has_vjp_at : HasVJPAt liveFwd2 X2 :=
 theorem liveFwd2_has_vjp_correct (dy : Vec 2) (i : Fin (2 * (2 * 16) * (2 * 16))) :
     liveFwd2_has_vjp_at.backward dy i = ∑ j : Fin 2, pdiv liveFwd2 X2 i j * dy j :=
   liveFwd2_has_vjp_at.correct dy i
+
+-- ════════════════════════════════════════════════════════════════
+-- § Non-vacuity via the Stage-2 channel-order invariant (`Dom2`)
+--   `Dom2 v` := channel 1 strictly dominates channel 0 at every spatial position.
+--   Every layer of `liveFwd2` preserves it; `liveFwd2 0` collapses symmetric.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Channel 1 strictly dominates channel 0 at every spatial position. -/
+def Dom2 {h w : Nat} (v : Vec (2 * h * w)) : Prop :=
+  ∀ (hi : Fin h) (wi : Fin w),
+    (Tensor3.unflatten v : Tensor3 2 h w) 0 hi wi < (Tensor3.unflatten v) 1 hi wi
+
+/-- Scalar BN (γ=1) preserves the channel-order invariant. -/
+theorem Dom2_bn {h w : Nat} (β : ℝ) (z : Vec (2 * h * w)) (hz : Dom2 z) :
+    Dom2 (bnForward (2 * h * w) 1 1 β z) :=
+  fun hi wi => bnForward_chan_lt 1 β one_pos z _ _ (hz hi wi)
+
+/-- ReLU preserves the invariant in the kept-positive region. -/
+theorem Dom2_relu {h w : Nat} (z : Vec (2 * h * w)) (hpos : ∀ k, 0 < z k) (hz : Dom2 z) :
+    Dom2 (relu (2 * h * w) z) :=
+  fun hi wi => relu_chan_lt z _ _ (hpos _) (hz hi wi)
+
+/-- Adding a channel-symmetric constant preserves the invariant. -/
+theorem Dom2_add_const {h w : Nat} (z c : Vec (2 * h * w)) (hz : Dom2 z)
+    (hc : ∀ (hi : Fin h) (wi : Fin w),
+      (Tensor3.unflatten c : Tensor3 2 h w) 0 hi wi = (Tensor3.unflatten c) 1 hi wi) :
+    Dom2 (fun k => z k + c k) := by
+  intro hi wi
+  have h0 : (Tensor3.unflatten (fun k => z k + c k) : Tensor3 2 h w) 0 hi wi
+      = (Tensor3.unflatten z) 0 hi wi + (Tensor3.unflatten c) 0 hi wi := rfl
+  have h1 : (Tensor3.unflatten (fun k => z k + c k) : Tensor3 2 h w) 1 hi wi
+      = (Tensor3.unflatten z) 1 hi wi + (Tensor3.unflatten c) 1 hi wi := rfl
+  rw [h0, h1, hc hi wi]
+  linarith [hz hi wi]
+
+/-- Maxpool preserves the invariant (`maxPool2_chan_lt` lifted to the flat layer). -/
+theorem Dom2_maxpool {h w : Nat} (z : Vec (2 * (2 * h) * (2 * w))) (hz : Dom2 z) :
+    Dom2 (maxPoolFlat 2 h w z) := by
+  intro hi wi
+  have heq : (Tensor3.unflatten (maxPoolFlat 2 h w z) : Tensor3 2 h w)
+      = maxPool2 (Tensor3.unflatten z) := by
+    simp only [maxPoolFlat, Tensor3.unflatten_flatten]
+  rw [heq]
+  exact maxPool2_chan_lt (Tensor3.unflatten z) 1 0 (fun a b => hz a b) hi wi
+
+/-- Decimation reads `(c, 2·hi, 2·wi)`, preserving the channel and the invariant. -/
+theorem decimate_unflatten {h w : Nat} (z : Vec (2 * (2 * h) * (2 * w)))
+    (c : Fin 2) (hi : Fin h) (wi : Fin w) :
+    (Tensor3.unflatten (decimateFlat 2 h w z) : Tensor3 2 h w) c hi wi
+      = (Tensor3.unflatten z : Tensor3 2 (2 * h) (2 * w)) c
+          ⟨2 * hi.val, by have := hi.isLt; omega⟩ ⟨2 * wi.val, by have := wi.isLt; omega⟩ := by
+  simp only [Tensor3.unflatten, decimateFlat, decimateIdx, Equiv.symm_apply_apply]
+
+theorem Dom2_decimate {h w : Nat} (z : Vec (2 * (2 * h) * (2 * w))) (hz : Dom2 z) :
+    Dom2 (decimateFlat 2 h w z) := by
+  intro hi wi
+  rw [decimate_unflatten z 0 hi wi, decimate_unflatten z 1 hi wi]
+  exact hz _ _
+
+/-- A channel-diagonal 1×1 conv (`δ_oi`, zero bias) is the identity (generic dims). -/
+theorem flatConv_diag_id {h w : Nat} (W : Kernel4 2 2 1 1)
+    (hW : ∀ o i, W o i 0 0 = if o = i then 1 else 0) (v : Vec (2 * h * w)) :
+    flatConv (h := h) (w := w) W Zb2 v = v := by
+  have hc : conv2d W Zb2 (Tensor3.unflatten v) = Tensor3.unflatten v := by
+    funext o hi wi
+    rw [conv2d_1x1]
+    simp only [Zb2, hW, ite_mul, one_mul, zero_mul, zero_add]
+    rw [Finset.sum_ite_eq Finset.univ o (fun c => (Tensor3.unflatten v) c hi wi)]
+    simp [Finset.mem_univ]
+  simp only [flatConv, hc, Tensor3.flatten_unflatten]
+
+/-- The signal-carrying strided diagonal conv = decimation (generic dims). -/
+theorem flatConvStride2_diag {h w : Nat} (W : Kernel4 2 2 1 1)
+    (hW : ∀ o i, W o i 0 0 = if o = i then 1 else 0) (v : Vec (2 * (2 * h) * (2 * w))) :
+    flatConvStride2 W Zb2 v = decimateFlat 2 h w v := by
+  unfold flatConvStride2
+  simp only [Function.comp_apply]
+  rw [flatConv_diag_id (h := 2 * h) (w := 2 * w) W hW v]
+
+/-- The live downsample preserves the channel-order invariant: the projection is
+    `bn ∘ decimate` (order-preserving) and the body is a channel-symmetric constant. -/
+theorem Dom2_liveDownPC (h w : Nat) (hhw : 0 < 2 * h * w)
+    (hn : Real.sqrt ((2 * h * w : ℕ) : ℝ) < 20) (a : Vec (2 * (2 * h) * (2 * w))) (ha : Dom2 a) :
+    Dom2 (liveDownPC h w a) := by
+  show Dom2 (relu (2 * h * w) (residualProj
+    (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2)
+    ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
+      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a))
+  apply Dom2_relu _ (fun k => liveDownPC_sum_pos h w hhw hn a k)
+  apply Dom2_add_const _ _ ?_ ?_
+  · -- Dom2 of the projection  bn₂₀(decimate a)
+    show Dom2 (bnForward (2 * h * w) 1 1 20 (flatConvStride2 WsP2 Zb2 a))
+    rw [flatConvStride2_diag WsP2 (fun o i => rfl) a]
+    exact Dom2_bn 20 _ (Dom2_decimate a ha)
+  · -- the body is the channel-symmetric constant 1
+    intro hi wi
+    rw [show ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
+      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) a
+        = (fun _ => (1 : ℝ)) from liveDownPC_body_const h w hhw a]
+    rfl
+
+/-- The stem preserves the invariant: `relu ∘ bn ∘ decimate` of a dominating input. -/
+theorem Dom2_stem2 (a : Vec (2 * (2 * 16) * (2 * 16))) (ha : Dom2 a)
+    (hpos : ∀ k, 0 < bnForward (2 * 16 * 16) 1 1 30 (flatConvStride2 WsId2 Zb2 a) k) :
+    Dom2 (stem2 a) := by
+  show Dom2 (relu (2 * 16 * 16) (bnForward (2 * 16 * 16) 1 1 30 (flatConvStride2 WsId2 Zb2 a)))
+  apply Dom2_relu _ hpos
+  rw [flatConvStride2_diag WsId2 (fun o i => rfl) a]
+  exact Dom2_bn 30 _ (Dom2_decimate a ha)
+
+/-- The positional input `X₂ i = i` has channel 1 dominating channel 0 (the flat index
+    of channel 1 exceeds that of channel 0 at every position, by `finProdFinEquiv`). -/
+theorem Dom2_X2 : Dom2 (h := 2 * 16) (w := 2 * 16) X2 := by
+  intro hi wi
+  show X2 (finProdFinEquiv (finProdFinEquiv ((0 : Fin 2), hi), wi))
+     < X2 (finProdFinEquiv (finProdFinEquiv ((1 : Fin 2), hi), wi))
+  simp only [X2, finProdFinEquiv_apply_val, Fin.val_zero, Fin.val_one, mul_zero, mul_one]
+  push_cast
+  have : (0 : ℝ) < (2 * 16 : ℕ) := by positivity
+  nlinarith [this]
+
+-- ── the per-channel head reads the dominating channels ──
+
+/-- The identity dense head reads off channel `j`: `dense Wd2 bd2 u j = u j`. -/
+theorem dense_Wd2_apply (u : Vec 2) (j : Fin 2) : dense Wd2 bd2 u j = u j := by
+  simp only [dense, bd2, Wd2, add_zero, mul_ite, mul_one, mul_zero]
+  rw [Finset.sum_ite_eq' Finset.univ j (fun i => u i)]
+  simp
+
+/-- GAP at 1×1 reads each channel's single value: `gap v j = (unflatten v) j 0 0`. -/
+theorem gap_1x1 (v : Vec (2 * 1 * 1)) (j : Fin 2) :
+    globalAvgPoolFlat 2 1 1 v j = (Tensor3.unflatten v : Tensor3 2 1 1) j 0 0 := by
+  rw [globalAvgPoolFlat_as_sum]
+  show (∑ p : Fin 1 × Fin 1, (1 / ((1 : Nat) * (1 : Nat) : ℝ)) *
+    v (finProdFinEquiv (finProdFinEquiv (j, p.1), p.2))) = _
+  rw [Fintype.sum_prod_type]
+  simp only [Fin.sum_univ_one, Nat.cast_one, mul_one, ne_eq, one_ne_zero,
+    not_false_eq_true, div_self, one_mul]
+  rfl
+
+/-- **`liveFwd2 X2` is channel-asymmetric**: thread the `Dom2` invariant from the input
+    through stem → maxpool → the three downsamples to the per-channel head. -/
+theorem liveFwd2_X2_asym : liveFwd2 X2 0 < liveFwd2 X2 1 := by
+  have d0 : Dom2 (stem2 X2) := Dom2_stem2 X2 Dom2_X2 stem2_bn_pos
+  have d1 := Dom2_maxpool (h := 8) (w := 8) (stem2 X2) d0
+  have d2 := Dom2_liveDownPC 4 4 (by norm_num) (sqrt_lt_20 (by norm_num)) _ d1
+  have d3 := Dom2_liveDownPC 2 2 (by norm_num) (sqrt_lt_20 (by norm_num)) _ d2
+  have d4 := Dom2_liveDownPC 1 1 (by norm_num) (sqrt_lt_20 (by norm_num)) _ d3
+  simp only [liveFwd2, Function.comp_apply, dense_Wd2_apply, gap_1x1]
+  exact d4 0 0
+
+-- ── `liveFwd2 0` collapses to a constant (channel-symmetric) ──
+
+theorem relu_const_pos {n : Nat} (c : ℝ) (hc : 0 < c) : relu n (fun _ => c) = fun _ => c := by
+  funext k; simp only [relu]; rw [if_pos hc]
+
+theorem decimateFlat_const {h w : Nat} (c : ℝ) :
+    decimateFlat 2 h w (fun _ => c) = fun _ => c := by funext k; rfl
+
+theorem maxPoolFlat_const {h w : Nat} (c : ℝ) :
+    maxPoolFlat 2 h w (fun _ => c) = fun _ => c := by
+  funext k
+  simp only [maxPoolFlat, Tensor3.flatten, maxPool2, Tensor3.unflatten, max_self]
+
+theorem stem2_zero : stem2 (fun _ => (0 : ℝ)) = fun _ => (30 : ℝ) := by
+  show (relu (2 * 16 * 16) ∘ bnForward (2 * 16 * 16) 1 1 30 ∘ flatConvStride2 WsId2 Zb2)
+    (fun _ => 0) = _
+  simp only [Function.comp_apply]
+  rw [flatConvStride2_diag WsId2 (fun o i => rfl) (fun _ => 0), decimateFlat_const,
+      bnForward_const_eq (by norm_num), relu_const_pos 30 (by norm_num)]
+
+theorem liveDownPC_const {h w : Nat} (hhw : 0 < 2 * h * w) (c : ℝ) :
+    liveDownPC h w (fun _ => c) = fun _ => (21 : ℝ) := by
+  have hproj : (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2) (fun _ => c)
+      = fun _ => (20 : ℝ) := by
+    simp only [Function.comp_apply]
+    rw [flatConvStride2_diag WsP2 (fun o i => rfl) (fun _ => c), decimateFlat_const,
+        bnForward_const_eq hhw]
+  show relu (2 * h * w) (residualProj
+    (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2)
+    ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
+      (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) (fun _ => c)) = _
+  rw [show residualProj
+      (bnForward (2 * h * w) 1 1 20 ∘ flatConvStride2 WsP2 Zb2)
+      ((bnForward (2 * h * w) 1 0 1 ∘ flatConv Zk2 Zb2) ∘
+        (relu (2 * h * w) ∘ bnForward (2 * h * w) 1 0 1 ∘ flatConvStride2 Zk2 Zb2)) (fun _ => c)
+        = fun _ => (21 : ℝ) from ?_]
+  · exact relu_const_pos 21 (by norm_num)
+  · funext k
+    simp only [residualProj, biPath]
+    rw [hproj, liveDownPC_body_const h w hhw (fun _ => c)]; norm_num
+
+theorem gap_1x1_const (c : ℝ) : globalAvgPoolFlat 2 1 1 (fun _ => c) = fun _ => c := by
+  funext j; rw [gap_1x1]; rfl
+
+theorem dense_Wd2_const (c : ℝ) : dense Wd2 bd2 (fun _ => c) = fun _ => c := by
+  funext j; rw [dense_Wd2_apply]
+
+theorem liveFwd2_zero : liveFwd2 (fun _ => (0 : ℝ)) = fun _ => (21 : ℝ) := by
+  simp only [liveFwd2, Function.comp_apply, stem2_zero, maxPoolFlat_const,
+    liveDownPC_const (by norm_num) (h := 4) (w := 4),
+    liveDownPC_const (by norm_num) (h := 2) (w := 2),
+    liveDownPC_const (by norm_num) (h := 1) (w := 1),
+    gap_1x1_const, dense_Wd2_const]
+
+-- ── the level-2 live witness: forward is non-constant ──
+
+/-- **The 2-channel live ResNet-34 is non-degenerate**: `liveFwd2 X2 ≠ liveFwd2 0`.
+    At the positional input `X2` one channel strictly dominates the other through the whole
+    net (`liveFwd2_X2_asym`), so the per-channel head gives `out 0 < out 1`; at the zero input
+    everything collapses channel-symmetric (`liveFwd2_zero`, `out 0 = out 1 = 21`). This is the
+    first **non-degenerate** ResNet-34 whole-net backward witness (level 2). -/
+theorem liveFwd2_nonconstant : liveFwd2 X2 ≠ liveFwd2 (fun _ => (0 : ℝ)) := by
+  intro h
+  have h0 : liveFwd2 X2 0 = liveFwd2 X2 1 := by
+    rw [h, liveFwd2_zero]
+  exact absurd h0 (ne_of_lt liveFwd2_X2_asym)
 
 end ResNet34LivePC
 end Proofs
