@@ -69,8 +69,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake
-          key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}
-          restore-keys: lake-
+          # Rolling key (per-run suffix) so the cache refreshes each run instead of
+          # freezing at the last toolchain/lakefile/manifest change — see proofs.yml.
+          key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-
 
       - name: Build proof suite (warms Mathlib + Proofs oleans for comparator)
         run: |

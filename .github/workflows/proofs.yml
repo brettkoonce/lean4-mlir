@@ -30,8 +30,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake
-          key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}
-          restore-keys: lake-
+          # Rolling key (per-run suffix) so every run PERSISTS its freshly-built
+          # .lake. A static key is immutable once created, so source-only edits
+          # (which don't change toolchain/lakefile/manifest) never refresh the
+          # cache and every run rebuilds the heavy downstream cone (e.g. ViTBackB0)
+          # from a frozen snapshot. restore-keys still restores the latest match.
+          key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-
 
       - name: Install Python deps
         run: pip install scipy numpy
@@ -42,6 +49,9 @@ jobs:
           # axiom-closure check below can `lake env lean tests/AuditAxioms.lean`
           # against every proof module — including opt-in roots like MnistCNN
           # and MatBridge that AuditAxioms imports. Future roots are covered too.
+          # Fetch the Mathlib olean cache (fast no-op when the .lake cache already
+          # restored it) so a rolling-key cache miss never rebuilds Mathlib from source.
+          lake exe cache get || true
           lake build Proofs
 
       - name: Three-axiom closure check
