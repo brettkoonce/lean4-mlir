@@ -388,6 +388,333 @@ theorem cifarTinyCnn_has_vjp_correct (dy : Vec 2) (i : Fin (1 * (2*(2*1)) * (2*(
 end Tiny
 
 -- ════════════════════════════════════════════════════════════════
+-- § Deeper CIFAR CNN (no BN, 8 convs / FOUR conv→conv→pool stages)
+--
+-- The pedagogical-BN-demo backbone: 4 stages of (conv→conv→pool), channels
+-- ic→c1→c1→c2→c2→c3→c3→c4→c4, four 2×2 pools, then the SAME 3-dense head as the
+-- 4-conv net. Spatial bookkeeping is the 2-stage `(h,w)` convention nested two
+-- levels deeper: final pooled `(h,w)`, stage-4 at `(2h,2w)`, stage-3 at
+-- `(2(2h),2(2w))`, stage-2 at `(2(2(2h)),…)`, stage-1 at `(2(2(2(2h))),…)`. With
+-- CIFAR `ic=3, c1=c2'=16, c3=c4=32, h=w=2, d1=64, kH=kW=3`: input `3·32·32=3072`,
+-- flat pool out `32·2·2=128`. Built exactly as `cifarCnn_has_vjp_at` — a longer
+-- `vjp_comp_at` chain through `convRelu`×8 + `maxPool`×4 + `denseRelu`×2 + dense.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The deeper (8-conv) CIFAR forward, flattened. Four conv→conv→pool stages
+    (`ic→c1→c1`, `c1→c2→c2`, `c2→c3→c3`, `c3→c4→c4`) then dense 3-head. -/
+noncomputable def cifarCnn8Forward
+    {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1)
+    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2)
+    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
+    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3)
+    (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3)
+    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4)
+    (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4)
+    (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
+    (Wa : Mat d1 d1) (ba : Vec d1)
+    (Wb : Mat d1 nClasses) (bb : Vec nClasses) :
+    Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))) → Vec nClasses :=
+  dense Wb bb
+  ∘ (relu d1 ∘ dense Wa ba)
+  ∘ (relu d1 ∘ dense W₉ b₉)
+  ∘ maxPoolFlat c4 h w
+  ∘ (relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈)
+  ∘ (relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇)
+  ∘ maxPoolFlat c3 (2*h) (2*w)
+  ∘ (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆)
+  ∘ (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅)
+  ∘ maxPoolFlat c2 (2*(2*h)) (2*(2*w))
+  ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+  ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)
+  ∘ maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+  ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))) ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+  ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))) ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)
+
+/-- **Deeper (8-conv) CIFAR CNN (no BN) whole-network VJP at a smooth point.**
+    Conditional on the twelve ReLU smoothness kinks and the four MaxPools; built by
+    `vjp_comp_at` through `convRelu`×8 / `maxPool`×4 / `denseRelu`×2 / dense. The
+    4-stage sibling of `cifarCnn_has_vjp_at`. The smoothness side conditions are
+    supplied opaquely (`hf1 … hf12`, `hp1 … hp4`) — they discharge for a concrete
+    instance the same way `Tiny.cifarTinyCnn_has_vjp_at` discharges the 2-stage ones. -/
+noncomputable def cifarCnn8_has_vjp_at
+    {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1)
+    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2)
+    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
+    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3)
+    (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3)
+    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4)
+    (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4)
+    (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
+    (Wa : Mat d1 d1) (ba : Vec d1)
+    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
+    (hc1 : 0 < c1) (hc2 : 0 < c2) (hc3 : 0 < c3) (hc4 : 0 < c4)
+    (hh : 0 < h) (hw : 0 < w)
+    (x : Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))))
+    (hf1 : ∀ k, flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁ x k ≠ 0)
+    (hf2 : ∀ k, flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂
+            ((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+              ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁) x) k ≠ 0)
+    (hp1 : MaxPool2Smooth (Tensor3.unflatten
+            (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+              ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)
+            : Tensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w))))))
+    (hf3 : ∀ k, flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃
+            (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+              (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                  ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                  ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)) k ≠ 0)
+    (hf4 : ∀ k, flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄
+            ((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)
+              (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+                (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                    ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                  ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                    ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x))) k ≠ 0)
+    (hp2 : MaxPool2Smooth (Tensor3.unflatten
+            (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+              ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃))
+              (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+                (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                    ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                  ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                    ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))
+            : Tensor3 c2 (2*(2*(2*h))) (2*(2*(2*w)))))
+    (hf5 : ∀ k, flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅
+            (maxPoolFlat c2 (2*(2*h)) (2*(2*w))
+              (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+                ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃))
+                (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+                  (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                      ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                    ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                      ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))) k ≠ 0)
+    (hf6 : ∀ k, flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆
+            ((relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅)
+              (maxPoolFlat c2 (2*(2*h)) (2*(2*w))
+                (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+                  ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃))
+                  (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+                    (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                        ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                      ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                        ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x))))) k ≠ 0)
+    (hp3 : MaxPool2Smooth (Tensor3.unflatten
+            (((relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆)
+              ∘ (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅))
+              (maxPoolFlat c2 (2*(2*h)) (2*(2*w))
+                (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+                  ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃))
+                  (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+                    (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                        ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                      ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                        ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))))
+            : Tensor3 c3 (2*(2*h)) (2*(2*w))))
+    (hf7 : ∀ k, flatConv (h := 2*h) (w := 2*w) W₇ b₇
+            (maxPoolFlat c3 (2*h) (2*w)
+              (((relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆)
+                ∘ (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅))
+                (maxPoolFlat c2 (2*(2*h)) (2*(2*w))
+                  (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+                    ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃))
+                    (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+                      (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                          ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                        ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                          ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))))) k ≠ 0)
+    (hf8 : ∀ k, flatConv (h := 2*h) (w := 2*w) W₈ b₈
+            ((relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇)
+              (maxPoolFlat c3 (2*h) (2*w)
+                (((relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆)
+                  ∘ (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅))
+                  (maxPoolFlat c2 (2*(2*h)) (2*(2*w))
+                    (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+                      ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃))
+                      (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+                        (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                            ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                          ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                            ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x))))))) k ≠ 0)
+    (hp4 : MaxPool2Smooth (Tensor3.unflatten
+            (((relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈)
+              ∘ (relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇))
+              (maxPoolFlat c3 (2*h) (2*w)
+                (((relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆)
+                  ∘ (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅))
+                  (maxPoolFlat c2 (2*(2*h)) (2*(2*w))
+                    (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+                      ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃))
+                      (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+                        (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                            ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                          ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                            ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))))))
+            : Tensor3 c4 (2*h) (2*w)))
+    (hf9 : ∀ k, dense W₉ b₉ (maxPoolFlat c4 h w
+            (((relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈)
+              ∘ (relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇))
+              (maxPoolFlat c3 (2*h) (2*w)
+                (((relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆)
+                  ∘ (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅))
+                  (maxPoolFlat c2 (2*(2*h)) (2*(2*w))
+                    (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+                      ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃))
+                      (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+                        (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                            ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                          ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                            ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x))))))))  k ≠ 0)
+    (hfa : ∀ k, dense Wa ba ((relu d1 ∘ dense W₉ b₉) (maxPoolFlat c4 h w
+            (((relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈)
+              ∘ (relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇))
+              (maxPoolFlat c3 (2*h) (2*w)
+                (((relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆)
+                  ∘ (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅))
+                  (maxPoolFlat c2 (2*(2*h)) (2*(2*w))
+                    (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+                      ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃))
+                      (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+                        (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                            ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+                          ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                            ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x))))))))) k ≠ 0) :
+    HasVJPAt (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈
+      W₉ b₉ Wa ba Wb bb) x := by
+  unfold cifarCnn8Forward
+  -- stage 1: conv→relu ×2
+  have s1 := convRelu_has_vjp_at W₁ b₁ x hf1
+  have s1d := convRelu_differentiableAt W₁ b₁ x hf1
+  have s2v := convRelu_has_vjp_at W₂ b₂ _ hf2
+  have s2d2 := convRelu_differentiableAt W₂ b₂ _ hf2
+  have s2 := vjp_comp_at _ _ x s1d s2d2 s1 s2v
+  have s2d := s2d2.comp x s1d
+  -- pool 1
+  set z1 := (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+              ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+                ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x) with hz1
+  have hpt1 : Tensor3.flatten (Tensor3.unflatten z1 : Tensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w))))) = z1 :=
+    Tensor3.flatten_unflatten z1
+  have mp1_v : HasVJPAt (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
+    rw [← hpt1]; exact maxPoolFlat_has_vjp_at _ hp1
+  have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
+    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ hp1 hc1 (by omega) (by omega)
+  have s3 := vjp_comp_at _ _ x s2d mp1_d s2 mp1_v
+  have s3d := mp1_d.comp x s2d
+  -- stage 2: conv→relu ×2
+  set zp1 := maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) z1 with hzp1
+  have s4v := convRelu_has_vjp_at W₃ b₃ zp1 hf3
+  have s4d3 := convRelu_differentiableAt W₃ b₃ zp1 hf3
+  have s4 := vjp_comp_at _ _ x s3d s4d3 s3 s4v
+  have s4d := s4d3.comp x s3d
+  set z3 := (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃) zp1 with hz3
+  have s5v := convRelu_has_vjp_at W₄ b₄ z3 hf4
+  have s5d4 := convRelu_differentiableAt W₄ b₄ z3 hf4
+  have s5 := vjp_comp_at _ _ x s4d s5d4 s4 s5v
+  have s5d := s5d4.comp x s4d
+  -- pool 2
+  set z2 := (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) z3 with hz2
+  have hpt2 : Tensor3.flatten (Tensor3.unflatten z2 : Tensor3 c2 (2*(2*(2*h))) (2*(2*(2*w)))) = z2 :=
+    Tensor3.flatten_unflatten z2
+  have mp2_v : HasVJPAt (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
+    rw [← hpt2]; exact maxPoolFlat_has_vjp_at _ hp2
+  have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
+    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ hp2 hc2 (by omega) (by omega)
+  have s6 := vjp_comp_at _ _ x s5d mp2_d s5 mp2_v
+  have s6d := mp2_d.comp x s5d
+  -- stage 3: conv→relu ×2
+  set zp2 := maxPoolFlat c2 (2*(2*h)) (2*(2*w)) z2 with hzp2
+  have s7v := convRelu_has_vjp_at W₅ b₅ zp2 hf5
+  have s7d5 := convRelu_differentiableAt W₅ b₅ zp2 hf5
+  have s7 := vjp_comp_at _ _ x s6d s7d5 s6 s7v
+  have s7d := s7d5.comp x s6d
+  set z5 := (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅) zp2 with hz5
+  have s8v := convRelu_has_vjp_at W₆ b₆ z5 hf6
+  have s8d6 := convRelu_differentiableAt W₆ b₆ z5 hf6
+  have s8 := vjp_comp_at _ _ x s7d s8d6 s7 s8v
+  have s8d := s8d6.comp x s7d
+  -- pool 3
+  set z3p := (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆) z5 with hz3p
+  have hpt3 : Tensor3.flatten (Tensor3.unflatten z3p : Tensor3 c3 (2*(2*h)) (2*(2*w))) = z3p :=
+    Tensor3.flatten_unflatten z3p
+  have mp3_v : HasVJPAt (maxPoolFlat c3 (2*h) (2*w)) z3p := by
+    rw [← hpt3]; exact maxPoolFlat_has_vjp_at _ hp3
+  have mp3_d : DifferentiableAt ℝ (maxPoolFlat c3 (2*h) (2*w)) z3p := by
+    rw [← hpt3]; exact maxPoolFlat_differentiableAt _ hp3 hc3 (by omega) (by omega)
+  have s9 := vjp_comp_at _ _ x s8d mp3_d s8 mp3_v
+  have s9d := mp3_d.comp x s8d
+  -- stage 4: conv→relu ×2
+  set zp3 := maxPoolFlat c3 (2*h) (2*w) z3p with hzp3
+  have s10v := convRelu_has_vjp_at W₇ b₇ zp3 hf7
+  have s10d7 := convRelu_differentiableAt W₇ b₇ zp3 hf7
+  have s10 := vjp_comp_at _ _ x s9d s10d7 s9 s10v
+  have s10d := s10d7.comp x s9d
+  set z7 := (relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇) zp3 with hz7
+  have s11v := convRelu_has_vjp_at W₈ b₈ z7 hf8
+  have s11d8 := convRelu_differentiableAt W₈ b₈ z7 hf8
+  have s11 := vjp_comp_at _ _ x s10d s11d8 s10 s11v
+  have s11d := s11d8.comp x s10d
+  -- pool 4
+  set z4p := (relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈) z7 with hz4p
+  have hpt4 : Tensor3.flatten (Tensor3.unflatten z4p : Tensor3 c4 (2*h) (2*w)) = z4p :=
+    Tensor3.flatten_unflatten z4p
+  have mp4_v : HasVJPAt (maxPoolFlat c4 h w) z4p := by
+    rw [← hpt4]; exact maxPoolFlat_has_vjp_at _ hp4
+  have mp4_d : DifferentiableAt ℝ (maxPoolFlat c4 h w) z4p := by
+    rw [← hpt4]; exact maxPoolFlat_differentiableAt _ hp4 hc4 hh hw
+  have s12 := vjp_comp_at _ _ x s11d mp4_d s11 mp4_v
+  have s12d := mp4_d.comp x s11d
+  -- dense→relu ×2
+  set zp4 := maxPoolFlat c4 h w z4p with hzp4
+  have s13v := denseRelu_has_vjp_at W₉ b₉ zp4 hf9
+  have s13d9 := denseRelu_differentiableAt W₉ b₉ zp4 hf9
+  have s13 := vjp_comp_at _ _ x s12d s13d9 s12 s13v
+  have s13d := s13d9.comp x s12d
+  set z9 := (relu d1 ∘ dense W₉ b₉) zp4 with hz9
+  have s14v := denseRelu_has_vjp_at Wa ba z9 hfa
+  have s14da := denseRelu_differentiableAt Wa ba z9 hfa
+  have s14 := vjp_comp_at _ _ x s13d s14da s13 s14v
+  have s14d := s14da.comp x s13d
+  -- final dense
+  exact vjp_comp_at _ _ x s14d ((dense_differentiable Wb bb) _) s14
+    ((dense_has_vjp Wb bb).toHasVJPAt _)
+
+/-- **Public correctness theorem for `cifarCnn8_has_vjp_at`** — backward equals the
+    `pdiv`-contracted Jacobian. -/
+theorem cifarCnn8_has_vjp_at_correct
+    {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1)
+    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2)
+    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
+    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3)
+    (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3)
+    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4)
+    (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4)
+    (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
+    (Wa : Mat d1 d1) (ba : Vec d1)
+    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
+    (hc1 : 0 < c1) (hc2 : 0 < c2) (hc3 : 0 < c3) (hc4 : 0 < c4)
+    (hh : 0 < h) (hw : 0 < w)
+    (x : Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))))
+    (hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa)
+    (dy : Vec nClasses) (i : Fin (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))) :
+    (cifarCnn8_has_vjp_at W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb
+        hc1 hc2 hc3 hc4 hh hw x hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa).backward dy i =
+      ∑ j : Fin nClasses,
+        pdiv (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈
+          W₉ b₉ Wa ba Wb bb) x i j * dy j :=
+  (cifarCnn8_has_vjp_at W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb
+      hc1 hc2 hc3 hc4 hh hw x hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa).correct dy i
+
+-- ════════════════════════════════════════════════════════════════
 -- § Chapter-5 BatchNorm variant — conv→BN→relu blocks
 --
 -- The BN-CIFAR net inserts a per-example **per-channel** BatchNorm
@@ -650,5 +977,309 @@ theorem cifarCnnBn_has_vjp_at_correct
   (cifarCnnBn_has_vjp_at W₁ b₁ ε₁ γ₁ β₁ hε₁ W₂ b₂ ε₂ γ₂ β₂ hε₂ W₃ b₃ ε₃ γ₃ β₃ hε₃
       W₄ b₄ ε₄ γ₄ β₄ hε₄ W₅ b₅ W₆ b₆ W₇ b₇ hc1 hc2 hh hw x
       h1 h2 h_mp1 h3 h4 h_mp2 h5 h6).correct dy i
+
+
+-- ════════════════════════════════════════════════════════════════
+-- § Deeper CIFAR CNN **with per-channel BatchNorm** (8 convs / 4 stages)
+--
+-- The BN peer of `cifarCnn8_has_vjp_at`: a per-channel `bnPerChannelTensor3`
+-- (`m=h·w`) inserted after each of the eight convs (before its ReLU). Chains
+-- `convBnReluPC → convBnReluPC → maxPool` ×4 → `denseRelu` ×2 → dense through
+-- `vjp_comp_at`. Conditional on `0 < εᵢ` (×8), the twelve post-BN ReLU kinks, and
+-- the four MaxPools. The 4-stage sibling of `cifarCnnBn_has_vjp_at`.
+-- ════════════════════════════════════════════════════════════════
+
+noncomputable def cifarCnnBn8Forward
+    {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)
+    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ : ℝ) (γ₂ β₂ : Vec c1)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (ε₃ : ℝ) (γ₃ β₃ : Vec c2)
+    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2) (ε₄ : ℝ) (γ₄ β₄ : Vec c2)
+    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (ε₅ : ℝ) (γ₅ β₅ : Vec c3)
+    (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3) (ε₆ : ℝ) (γ₆ β₆ : Vec c3)
+    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (ε₇ : ℝ) (γ₇ β₇ : Vec c4)
+    (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4) (ε₈ : ℝ) (γ₈ β₈ : Vec c4)
+    (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
+    (Wa : Mat d1 d1) (ba : Vec d1)
+    (Wb : Mat d1 nClasses) (bb : Vec nClasses) :
+    Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))) → Vec nClasses :=
+  dense Wb bb
+  ∘ (relu d1 ∘ dense Wa ba)
+  ∘ (relu d1 ∘ dense W₉ b₉)
+  ∘ maxPoolFlat c4 h w
+  ∘ (relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₈ γ₈ β₈ ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈)
+  ∘ (relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₇ γ₇ β₇ ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇)
+  ∘ maxPoolFlat c3 (2*h) (2*w)
+  ∘ (relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ β₆ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆)
+  ∘ (relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ β₅ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅)
+  ∘ maxPoolFlat c2 (2*(2*h)) (2*(2*w))
+  ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄)
+  ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)
+  ∘ maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))
+  ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
+  ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)
+
+noncomputable def cifarCnnBn8_has_vjp_at
+    {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1) (hε₁ : 0 < ε₁)
+    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ : ℝ) (γ₂ β₂ : Vec c1) (hε₂ : 0 < ε₂)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (ε₃ : ℝ) (γ₃ β₃ : Vec c2) (hε₃ : 0 < ε₃)
+    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2) (ε₄ : ℝ) (γ₄ β₄ : Vec c2) (hε₄ : 0 < ε₄)
+    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (ε₅ : ℝ) (γ₅ β₅ : Vec c3) (hε₅ : 0 < ε₅)
+    (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3) (ε₆ : ℝ) (γ₆ β₆ : Vec c3) (hε₆ : 0 < ε₆)
+    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (ε₇ : ℝ) (γ₇ β₇ : Vec c4) (hε₇ : 0 < ε₇)
+    (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4) (ε₈ : ℝ) (γ₈ β₈ : Vec c4) (hε₈ : 0 < ε₈)
+    (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
+    (Wa : Mat d1 d1) (ba : Vec d1)
+    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
+    (hc1 : 0 < c1) (hc2 : 0 < c2) (hc3 : 0 < c3) (hc4 : 0 < c4)
+    (hh : 0 < h) (hw : 0 < w)
+    (x : Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))))
+    (h1 : ∀ k, bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁
+            (flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁
+              x) k ≠ 0)
+    (h2 : ∀ k, bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂
+            (flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂
+              ((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁) x)) k ≠ 0)
+    (h3 : ∀ k, bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃
+            (flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃
+              (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x))) k ≠ 0)
+    (h4 : ∀ k, bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄
+            (flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄
+              ((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃) (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))) k ≠ 0)
+    (h5 : ∀ k, bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ β₅
+            (flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅
+              (maxPoolFlat c2 (2*(2*h)) (2*(2*w)) (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)) (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x))))) k ≠ 0)
+    (h6 : ∀ k, bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ β₆
+            (flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆
+              ((relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ β₅ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅) (maxPoolFlat c2 (2*(2*h)) (2*(2*w)) (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)) (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))))) k ≠ 0)
+    (h7 : ∀ k, bnPerChannelTensor3 c4 (2*h) (2*w) ε₇ γ₇ β₇
+            (flatConv (h := 2*h) (w := 2*w) W₇ b₇
+              (maxPoolFlat c3 (2*h) (2*w) (((relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ β₆ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆) ∘ (relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ β₅ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅)) (maxPoolFlat c2 (2*(2*h)) (2*(2*w)) (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)) (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x))))))) k ≠ 0)
+    (h8 : ∀ k, bnPerChannelTensor3 c4 (2*h) (2*w) ε₈ γ₈ β₈
+            (flatConv (h := 2*h) (w := 2*w) W₈ b₈
+              ((relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₇ γ₇ β₇ ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇) (maxPoolFlat c3 (2*h) (2*w) (((relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ β₆ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆) ∘ (relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ β₅ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅)) (maxPoolFlat c2 (2*(2*h)) (2*(2*w)) (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)) (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))))))) k ≠ 0)
+    (h_mp1 : MaxPool2Smooth (Tensor3.unflatten
+            (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)
+            : Tensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w))))))
+    (h_mp2 : MaxPool2Smooth (Tensor3.unflatten
+            (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)) (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))
+            : Tensor3 c2 (2*(2*(2*h))) (2*(2*(2*w)))))
+    (h_mp3 : MaxPool2Smooth (Tensor3.unflatten
+            (((relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ β₆ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆) ∘ (relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ β₅ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅)) (maxPoolFlat c2 (2*(2*h)) (2*(2*w)) (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)) (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))))
+            : Tensor3 c3 (2*(2*h)) (2*(2*w))))
+    (h_mp4 : MaxPool2Smooth (Tensor3.unflatten
+            (((relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₈ γ₈ β₈ ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈) ∘ (relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₇ γ₇ β₇ ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇)) (maxPoolFlat c3 (2*h) (2*w) (((relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ β₆ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆) ∘ (relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ β₅ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅)) (maxPoolFlat c2 (2*(2*h)) (2*(2*w)) (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)) (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))))))
+            : Tensor3 c4 (2*h) (2*w)))
+    (h9 : ∀ k, dense W₉ b₉ (maxPoolFlat c4 h w (((relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₈ γ₈ β₈ ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈) ∘ (relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₇ γ₇ β₇ ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇)) (maxPoolFlat c3 (2*h) (2*w) (((relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ β₆ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆) ∘ (relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ β₅ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅)) (maxPoolFlat c2 (2*(2*h)) (2*(2*w)) (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)) (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x)))))))) k ≠ 0)
+    (ha : ∀ k, dense Wa ba ((relu d1 ∘ dense W₉ b₉) (maxPoolFlat c4 h w (((relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₈ γ₈ β₈ ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈) ∘ (relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₇ γ₇ β₇ ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇)) (maxPoolFlat c3 (2*h) (2*w) (((relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ β₆ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆) ∘ (relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ β₅ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅)) (maxPoolFlat c2 (2*(2*h)) (2*(2*w)) (((relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) ∘ (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃)) (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x))))))))) k ≠ 0) :
+    HasVJPAt (cifarCnnBn8Forward W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
+      W₅ b₅ ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈
+      W₉ b₉ Wa ba Wb bb) x := by
+  unfold cifarCnnBn8Forward
+  -- stage 1
+  have s1 := convBnReluPC_has_vjp_at W₁ b₁ ε₁ γ₁ β₁ hε₁ x h1
+  have s1d := convBnReluPC_differentiableAt W₁ b₁ ε₁ γ₁ β₁ hε₁ x h1
+  have s2v := convBnReluPC_has_vjp_at W₂ b₂ ε₂ γ₂ β₂ hε₂ _ h2
+  have s2d2 := convBnReluPC_differentiableAt W₂ b₂ ε₂ γ₂ β₂ hε₂ _ h2
+  have s2 := vjp_comp_at _ _ x s1d s2d2 s1 s2v
+  have s2d := s2d2.comp x s1d
+  -- pool 1
+  set z1 := (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
+      ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x) with hz1
+  have hpt1 : Tensor3.flatten (Tensor3.unflatten z1 : Tensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w))))) = z1 :=
+    Tensor3.flatten_unflatten z1
+  have mp1_v : HasVJPAt (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
+    rw [← hpt1]; exact maxPoolFlat_has_vjp_at _ h_mp1
+  have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
+    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ h_mp1 hc1 (by omega) (by omega)
+  have s3 := vjp_comp_at _ _ x s2d mp1_d s2 mp1_v
+  have s3d := mp1_d.comp x s2d
+  -- stage 2
+  set zp1 := maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w))) z1 with hzp1
+  have s4v := convBnReluPC_has_vjp_at W₃ b₃ ε₃ γ₃ β₃ hε₃ zp1 h3
+  have s4d3 := convBnReluPC_differentiableAt W₃ b₃ ε₃ γ₃ β₃ hε₃ zp1 h3
+  have s4 := vjp_comp_at _ _ x s3d s4d3 s3 s4v
+  have s4d := s4d3.comp x s3d
+  set z3 := (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ β₃ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₃ b₃) zp1 with hz3
+  have s5v := convBnReluPC_has_vjp_at W₄ b₄ ε₄ γ₄ β₄ hε₄ z3 h4
+  have s5d4 := convBnReluPC_differentiableAt W₄ b₄ ε₄ γ₄ β₄ hε₄ z3 h4
+  have s5 := vjp_comp_at _ _ x s4d s5d4 s4 s5v
+  have s5d := s5d4.comp x s4d
+  -- pool 2
+  set z2 := (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
+      ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) z3 with hz2
+  have hpt2 : Tensor3.flatten (Tensor3.unflatten z2 : Tensor3 c2 (2*(2*(2*h))) (2*(2*(2*w)))) = z2 :=
+    Tensor3.flatten_unflatten z2
+  have mp2_v : HasVJPAt (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
+    rw [← hpt2]; exact maxPoolFlat_has_vjp_at _ h_mp2
+  have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
+    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ h_mp2 hc2 (by omega) (by omega)
+  have s6 := vjp_comp_at _ _ x s5d mp2_d s5 mp2_v
+  have s6d := mp2_d.comp x s5d
+  -- stage 3
+  set zp2 := maxPoolFlat c2 (2*(2*h)) (2*(2*w)) z2 with hzp2
+  have s7v := convBnReluPC_has_vjp_at W₅ b₅ ε₅ γ₅ β₅ hε₅ zp2 h5
+  have s7d5 := convBnReluPC_differentiableAt W₅ b₅ ε₅ γ₅ β₅ hε₅ zp2 h5
+  have s7 := vjp_comp_at _ _ x s6d s7d5 s6 s7v
+  have s7d := s7d5.comp x s6d
+  set z5 := (relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ β₅ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₅ b₅) zp2 with hz5
+  have s8v := convBnReluPC_has_vjp_at W₆ b₆ ε₆ γ₆ β₆ hε₆ z5 h6
+  have s8d6 := convBnReluPC_differentiableAt W₆ b₆ ε₆ γ₆ β₆ hε₆ z5 h6
+  have s8 := vjp_comp_at _ _ x s7d s8d6 s7 s8v
+  have s8d := s8d6.comp x s7d
+  -- pool 3
+  set z3p := (relu (c3 * (2*(2*h)) * (2*(2*w)))
+      ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ β₆ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆) z5 with hz3p
+  have hpt3 : Tensor3.flatten (Tensor3.unflatten z3p : Tensor3 c3 (2*(2*h)) (2*(2*w))) = z3p :=
+    Tensor3.flatten_unflatten z3p
+  have mp3_v : HasVJPAt (maxPoolFlat c3 (2*h) (2*w)) z3p := by
+    rw [← hpt3]; exact maxPoolFlat_has_vjp_at _ h_mp3
+  have mp3_d : DifferentiableAt ℝ (maxPoolFlat c3 (2*h) (2*w)) z3p := by
+    rw [← hpt3]; exact maxPoolFlat_differentiableAt _ h_mp3 hc3 (by omega) (by omega)
+  have s9 := vjp_comp_at _ _ x s8d mp3_d s8 mp3_v
+  have s9d := mp3_d.comp x s8d
+  -- stage 4
+  set zp3 := maxPoolFlat c3 (2*h) (2*w) z3p with hzp3
+  have s10v := convBnReluPC_has_vjp_at W₇ b₇ ε₇ γ₇ β₇ hε₇ zp3 h7
+  have s10d7 := convBnReluPC_differentiableAt W₇ b₇ ε₇ γ₇ β₇ hε₇ zp3 h7
+  have s10 := vjp_comp_at _ _ x s9d s10d7 s9 s10v
+  have s10d := s10d7.comp x s9d
+  set z7 := (relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₇ γ₇ β₇ ∘ flatConv (h := 2*h) (w := 2*w) W₇ b₇) zp3 with hz7
+  have s11v := convBnReluPC_has_vjp_at W₈ b₈ ε₈ γ₈ β₈ hε₈ z7 h8
+  have s11d8 := convBnReluPC_differentiableAt W₈ b₈ ε₈ γ₈ β₈ hε₈ z7 h8
+  have s11 := vjp_comp_at _ _ x s10d s11d8 s10 s11v
+  have s11d := s11d8.comp x s10d
+  -- pool 4
+  set z4p := (relu (c4 * (2*h) * (2*w))
+      ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₈ γ₈ β₈ ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈) z7 with hz4p
+  have hpt4 : Tensor3.flatten (Tensor3.unflatten z4p : Tensor3 c4 (2*h) (2*w)) = z4p :=
+    Tensor3.flatten_unflatten z4p
+  have mp4_v : HasVJPAt (maxPoolFlat c4 h w) z4p := by
+    rw [← hpt4]; exact maxPoolFlat_has_vjp_at _ h_mp4
+  have mp4_d : DifferentiableAt ℝ (maxPoolFlat c4 h w) z4p := by
+    rw [← hpt4]; exact maxPoolFlat_differentiableAt _ h_mp4 hc4 hh hw
+  have s12 := vjp_comp_at _ _ x s11d mp4_d s11 mp4_v
+  have s12d := mp4_d.comp x s11d
+  -- dense head
+  set zp4 := maxPoolFlat c4 h w z4p with hzp4
+  have s13v := denseRelu_has_vjp_at W₉ b₉ zp4 h9
+  have s13d9 := denseRelu_differentiableAt W₉ b₉ zp4 h9
+  have s13 := vjp_comp_at _ _ x s12d s13d9 s12 s13v
+  have s13d := s13d9.comp x s12d
+  set z9 := (relu d1 ∘ dense W₉ b₉) zp4 with hz9
+  have s14v := denseRelu_has_vjp_at Wa ba z9 ha
+  have s14da := denseRelu_differentiableAt Wa ba z9 ha
+  have s14 := vjp_comp_at _ _ x s13d s14da s13 s14v
+  have s14d := s14da.comp x s13d
+  exact vjp_comp_at _ _ x s14d ((dense_differentiable Wb bb) _) s14
+    ((dense_has_vjp Wb bb).toHasVJPAt _)
+
+theorem cifarCnnBn8_has_vjp_at_correct
+    {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1) (hε₁ : 0 < ε₁)
+    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ : ℝ) (γ₂ β₂ : Vec c1) (hε₂ : 0 < ε₂)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (ε₃ : ℝ) (γ₃ β₃ : Vec c2) (hε₃ : 0 < ε₃)
+    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2) (ε₄ : ℝ) (γ₄ β₄ : Vec c2) (hε₄ : 0 < ε₄)
+    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (ε₅ : ℝ) (γ₅ β₅ : Vec c3) (hε₅ : 0 < ε₅)
+    (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3) (ε₆ : ℝ) (γ₆ β₆ : Vec c3) (hε₆ : 0 < ε₆)
+    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (ε₇ : ℝ) (γ₇ β₇ : Vec c4) (hε₇ : 0 < ε₇)
+    (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4) (ε₈ : ℝ) (γ₈ β₈ : Vec c4) (hε₈ : 0 < ε₈)
+    (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
+    (Wa : Mat d1 d1) (ba : Vec d1)
+    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
+    (hc1 : 0 < c1) (hc2 : 0 < c2) (hc3 : 0 < c3) (hc4 : 0 < c4)
+    (hh : 0 < h) (hw : 0 < w)
+    (x : Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))))
+    (h1 h2 h3 h4 h5 h6 h7 h8 h_mp1 h_mp2 h_mp3 h_mp4 h9 ha)
+    (dy : Vec nClasses) (i : Fin (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))) :
+    (cifarCnnBn8_has_vjp_at W₁ b₁ ε₁ γ₁ β₁ hε₁ W₂ b₂ ε₂ γ₂ β₂ hε₂ W₃ b₃ ε₃ γ₃ β₃ hε₃ W₄ b₄ ε₄ γ₄ β₄ hε₄
+        W₅ b₅ ε₅ γ₅ β₅ hε₅ W₆ b₆ ε₆ γ₆ β₆ hε₆ W₇ b₇ ε₇ γ₇ β₇ hε₇ W₈ b₈ ε₈ γ₈ β₈ hε₈
+        W₉ b₉ Wa ba Wb bb hc1 hc2 hc3 hc4 hh hw x
+        h1 h2 h3 h4 h5 h6 h7 h8 h_mp1 h_mp2 h_mp3 h_mp4 h9 ha).backward dy i =
+      ∑ j : Fin nClasses,
+        pdiv (cifarCnnBn8Forward W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
+          W₅ b₅ ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈ W₉ b₉ Wa ba Wb bb) x i j * dy j :=
+  (cifarCnnBn8_has_vjp_at W₁ b₁ ε₁ γ₁ β₁ hε₁ W₂ b₂ ε₂ γ₂ β₂ hε₂ W₃ b₃ ε₃ γ₃ β₃ hε₃ W₄ b₄ ε₄ γ₄ β₄ hε₄
+        W₅ b₅ ε₅ γ₅ β₅ hε₅ W₆ b₆ ε₆ γ₆ β₆ hε₆ W₇ b₇ ε₇ γ₇ β₇ hε₇ W₈ b₈ ε₈ γ₈ β₈ hε₈
+        W₉ b₉ Wa ba Wb bb hc1 hc2 hc3 hc4 hh hw x
+      h1 h2 h3 h4 h5 h6 h7 h8 h_mp1 h_mp2 h_mp3 h_mp4 h9 ha).correct dy i
+
 
 end Proofs

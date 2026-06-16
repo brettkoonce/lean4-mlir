@@ -23,6 +23,7 @@ import LeanMlir.Proofs.MlpTrainStep
 import LeanMlir.Proofs.CnnTrainStep
 import LeanMlir.Proofs.CifarBnClose
 import LeanMlir.Proofs.CnnChainClose
+import LeanMlir.Proofs.Cifar8Close
 import LeanMlir.Proofs.MobileNetV2Close
 import LeanMlir.Proofs.MobileNetV2RenderPC
 import LeanMlir.Proofs.MobileNetV2ChainClose
@@ -369,6 +370,19 @@ open Proofs
 #print axioms StableHLO.cifarBnFwdGraph_faithful
 #print axioms StableHLO.bnBack_faithful
 
+-- Deeper 8-conv CIFAR (the pedagogical BN-acceleration demo, FOUR conv→conv→pool
+-- stages [16,16,32,32], four maxpools): the conditional whole-network VJP capstones
+-- for both ±BN halves (twelve ReLU kinks + four maxpools; BN adds 0<εᵢ ×8). GPU-trained
+-- by the `cifar8-verified` / `cifar8-bn-verified` exes through the proof-side VJP.
+#print axioms cifarCnn8_has_vjp_at_correct
+#print axioms cifarCnnBn8_has_vjp_at_correct
+-- ...and the rendered-FORWARD peer: the deeper 8-conv CIFAR-CNN forward graph (four
+-- conv→conv→pool stages [16,16,32,32] then 3-dense head) denotes the proven
+-- cifarCnn8{Bn}Forward, by chaining the per-op faithfulness lemmas (the cifarBnFwdGraph
+-- recipe extended by two conv stages). The deeper peer of cifar{,Bn}FwdGraph_faithful.
+#print axioms StableHLO.cifar8FwdGraph_faithful
+#print axioms StableHLO.cifar8BnFwdGraph_faithful
+
 -- Chapter-6 ResNet-style net: the verified forward-graph faithfulness for the
 -- structure the proven whole-network VJP `cnn_has_vjp_at` already covers
 -- (stem → maxpool → identity block → projection block → GAP → dense). The
@@ -479,6 +493,26 @@ open Proofs
 #print axioms cnn_render_convb2_chain_certified
 #print axioms cnn_render_convW1_chain_certified
 #print axioms cnn_render_convb1_chain_certified
+-- DEEPER 8-conv CIFAR (cifar8) close — the backward peer of cifar8{,Bn}FwdGraph_faithful:
+-- each conv W/b, BN γ/β, and dense W/b output pinned to the cotangent the ACTUAL 4-stage
+-- backward chain delivers. The chain reuses CnnChainClose's pieces (dense-head flat Back
+-- chain cnnDenseHeadCot → maxpool-back Back3 via flatDenote → relu mask → conv-back Back3)
+-- + per-channel BN-back (bnPerChannelTensor3_grad_input, 0<ε), the MNV2 stride-1 recipe,
+-- through two more conv→conv→pool stages. Each θ output denotes θ − lr·(certified ∂/∂θ ·
+-- the-actual-chain cotangent), via cnn_render_conv{W,b}_certified / weight_grad_bridge /
+-- bias_grad_bridge / cifar_bn_render_{gamma,beta}_certified instantiated at the cifar8
+-- cotangents (cifar8DenseHeadCot / cifar8CotBn8 / cifar8CotConv8 / cifar8CotBn7 / cifar8CotConv7).
+#print axioms cifar8DenseHeadCot_denote
+#print axioms cifar8_render_denseWb_chain_certified
+#print axioms cifar8_render_densebb_chain_certified
+#print axioms cifar8_render_denseW9_chain_certified
+#print axioms cifar8_render_denseb9_chain_certified
+#print axioms cifar8_render_convW8_chain_certified
+#print axioms cifar8_render_convb8_chain_certified
+#print axioms cifar8_render_bn8gamma_chain_certified
+#print axioms cifar8_render_bn8beta_chain_certified
+#print axioms cifar8_render_convW7_chain_certified
+#print axioms cifar8_render_convb7_chain_certified
 -- MobileNetV2 CLOSE (planning/mobilenetv2_close.md Item C) — the "free close" generic in the
 -- cotangent: every MobileNetV2 train-step parameter output denotes θ − lr·(certified Jacobian ·
 -- cotangent). Three genuinely-new bridge families (the 1×1 conv W/b, BN γ/β, and dense W/b

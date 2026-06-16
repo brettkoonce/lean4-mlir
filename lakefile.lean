@@ -86,6 +86,10 @@ lean_lib «Proofs» where
              -- CNN conv-close upgrade: the conv param closes pinned to the actual
              -- backward-chain cotangent (Back3 maxpool/conv via flatDenote + relu masks).
              `LeanMlir.Proofs.CnnChainClose,
+             -- Deeper (8-conv) CIFAR-CNN close: cifar8{,Bn}FwdGraph_faithful's backward
+             -- peer — each conv W/b, BN γ/β, dense W/b output pinned to the actual 4-stage
+             -- backward-chain cotangent (the CnnChainClose recipe + BN, two more pool stages).
+             `LeanMlir.Proofs.Cifar8Close,
              -- MobileNetV2 close (Item C): the depthwise (stride-1/2) + strided-conv
              -- parameter-gradient bridges — every MobileNetV2 train-step param output
              -- certified θ − lr·(certified Jacobian · cotangent).
@@ -346,6 +350,18 @@ lean_exe «cifar-verified» where
 -- VERIFIED-rendered StableHLO (Proofs.StableHLO.cifarBnTrainStepText).
 lean_exe «cifar-bn-verified» where
   root := `MainCifarBnVerified
+  moreLinkArgs := ireeLink
+
+-- Deeper 8-conv CIFAR-10 CNN (no BN; [16,16,32,32], 4 pools) on the VERIFIED-rendered
+-- StableHLO (verified_mlir/cifar8_train_step.mlir = Proofs.StableHLO.cifar8TrainStepText).
+lean_exe «cifar8-verified» where
+  root := `MainCifar8Verified
+  moreLinkArgs := ireeLink
+
+-- Deeper 8-conv CIFAR-10 CNN + per-channel BN on the VERIFIED-rendered StableHLO
+-- (Proofs.StableHLO.cifar8BnTrainStepText). The pedagogical BN-acceleration demo.
+lean_exe «cifar8-bn-verified» where
+  root := `MainCifar8BnVerified
   moreLinkArgs := ireeLink
 
 -- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
