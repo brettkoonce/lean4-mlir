@@ -182,9 +182,15 @@ fidelity:
 
     4. FULL-NET RESULTS are "the network composes and has a VJP at a witness
        point". To rule out a vacuous (e.g. all-zero-weight) witness, separate
-       non-degeneracy proofs exist: `Mnv2Live.mnv2Live_forward_nonconstant`
-       proves the live MobileNetV2 forward is non-constant. The analogous
-       ResNet-34 live witness is in progress (Stage 1), not complete.
+       non-degeneracy proofs exist, now at the strongest level for both deep
+       kinked nets: `Mnv2Live` and the 2-channel live ResNet-34
+       `ResNet34LivePC.liveFwd2` each prove a non-constant forward
+       (`*_nonconstant`, level 2) AND a nonzero whole-net Jacobian at a witness
+       point (`Mnv2Live.mnv2Live_jacobian_nonzero`,
+       `ResNet34LiveSeal.liveFwd2_jacobian_nonzero`, level 3) — so the rendered
+       backward is genuinely not the zero map there. All audited 3-axiom-clean.
+       Full identity-block depth for the ResNet witness and a BN-CNN live
+       witness remain follow-ups.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
@@ -240,11 +246,11 @@ alignment:
       module: "LeanMlir/Proofs/MLP.lean, LeanMlir/Proofs/CNN.lean"
       status: "proved"
       note: "smooth-point bridge only; non-smooth points are a disclosed trust boundary"
-    - source: "Live-network non-degeneracy (ResNet-34)"
-      lean: "(ResNet-34 live witness, Stage 1)"
-      module: "LeanMlir/Proofs/ResNet34Live.lean"
-      status: "in-progress"
-      note: "MobileNetV2 analogue is proved; R34 is partial"
+    - source: "Live-network non-degeneracy + nonzero-Jacobian seal (ResNet-34)"
+      lean: "liveFwd2_nonconstant (level 2) / liveFwd2_jacobian_nonzero + liveFwd2_backward_nontrivial (level 3)"
+      module: "LeanMlir/Proofs/ResNet34LivePC.lean, LeanMlir/Proofs/ResNet34LiveSeal.lean"
+      status: "proved"
+      note: "2-channel live ResNet-34; sealed at a channel-symmetric base Y (maxpool no-tie + carrier vanishes). Full identity-block depth remains a follow-up"
     - source: "StableHLO/IREE codegen faithfulness, JAX numeric agreement, training accuracy"
       lean: "(none — empirical)"
       module: ""

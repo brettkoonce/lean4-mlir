@@ -209,6 +209,12 @@ lean_lib «Proofs» where
              -- dense, every smoothness hypothesis discharged, forward X ≠ forward 0
              -- via the channel-order invariant. In the AuditAxioms headline set.
              `LeanMlir.Proofs.ResNet34LivePC,
+             -- Item A level 3: the nonzero-Jacobian SEAL for the live ResNet-34
+             -- witness (fderiv ℝ liveFwd2 Y ≠ 0 ⇒ backward not the zero map). Sealed
+             -- at a channel-symmetric base Y via the BN channel-difference identity
+             -- (carrier vanishes ⇒ no BN-variance derivative needed). The ResNet peer
+             -- of MobileNetV2JacobianSeal. In the AuditAxioms headline set.
+             `LeanMlir.Proofs.ResNet34LiveSeal,
              -- Backward-graph faithfulness (den-level): fan-in bricks
              -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
              -- batched conv+depthwise), the whole per-example MBConv block, and

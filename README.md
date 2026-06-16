@@ -269,10 +269,14 @@ empirical probe.
 **Concrete-instance honesty.** The conditional capstones (MLP, MNIST-CNN, CIFAR,
 MobileNetV2, ResNet-34) are instantiated to discharge their off-the-kink
 hypotheses. `MlpConcrete`, `Micro`/`Mini`/`Spatial` (MNIST) and `Tiny` (CIFAR) are
-live witnesses (non-constant forward, nonzero Jacobian). `MobileNetV2Concrete`,
-`CnnConcrete`, and `ResNet34Concrete` are degenerate constant-output nets (zero
-Jacobian) — they prove the hypothesis bundle is satisfiable but say nothing about a
-realistic gradient; live witnesses for the deep/BN/ReLU6 nets are follow-up.
+live witnesses (non-constant forward, nonzero Jacobian). The deep ReLU/BN nets now
+also have **non-degenerate, nonzero-Jacobian-sealed** live witnesses: `Mnv2Live`
+(`MobileNetV2JacobianSeal`) and `ResNet34LivePC.liveFwd2` (`ResNet34LiveSeal`) both
+prove a non-constant forward **and** `fderiv ≠ 0` at a witness point ⇒ the rendered
+backward is genuinely not the zero map (audited 3-axiom-clean). The old degenerate
+constant-output instances `MobileNetV2Concrete`, `CnnConcrete`, `ResNet34Concrete`
+(zero Jacobian) remain only as satisfiability checks; the BN-CNN live witness is the
+last follow-up.
 
 ## Pipeline
 

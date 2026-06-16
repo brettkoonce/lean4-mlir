@@ -20,6 +20,7 @@ import LeanMlir.Proofs.StableHLOParse
 import LeanMlir.Proofs.StridedConv
 import LeanMlir.Proofs.ResNet34
 import LeanMlir.Proofs.ResNet34LivePC
+import LeanMlir.Proofs.ResNet34LiveSeal
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
 import LeanMlir.Proofs.MlpTrainStep
@@ -464,6 +465,14 @@ open Proofs
 -- Retires the "degenerate constant-output witness" caveat for ResNet-34.
 #print axioms ResNet34LivePC.liveFwd2_has_vjp_correct
 #print axioms ResNet34LivePC.liveFwd2_nonconstant
+-- Item A level 3: the nonzero-Jacobian SEAL for the live ResNet-34 (ResNet34LiveSeal.lean).
+-- Unlike Mnv2Live (globally smooth, sealed at input 0), the maxpool binds off-witness, so
+-- the seal is at a channel-symmetric base Y where the channel-difference carrier vanishes;
+-- the BN channel-diff identity then makes every istd-derivative cross-term carry a factor t
+-- (drops at 0), so fderiv ℝ liveFwd2 Y ≠ 0 needs no BN-variance derivative. Upgrades the
+-- live ResNet-34 from level 2 (forward ≠ const) to level 3 (backward not the zero map).
+#print axioms ResNet34LiveSeal.liveFwd2_jacobian_nonzero
+#print axioms ResNet34LiveSeal.liveFwd2_backward_nontrivial
 -- B8: per-channel BatchNorm — the real-ResNet BN (each channel-slice normalized with
 -- its own γ_c/β_c, γ/β : Vec oc). Block-diagonal VJP: each channel runs its own
 -- bn_has_vjp, cross-channel blocks vanish (pdivMat_rowIndep_perRow, a per-row
