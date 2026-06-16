@@ -2728,8 +2728,9 @@ them} --- the takeaways are concrete:
   (Theorem~\ref{thm:bnNormalize_has_vjp}).
 \item The formula needs \(\varepsilon > 0\) to stay bounded
   (Theorem~\ref{ax:bnIstdBroadcast_diff}).
-\item BN's whole purpose is to let deeper networks train --- the
-  example in \S\ref{sec:bn_cifar_example} demonstrates that directly.
+\item BN's payoff is \emph{speed}: a deeper network reaches the same
+  accuracy in far fewer epochs with it than without. The example in
+  \S\ref{sec:bn_cifar_example} measures that directly.
 \end{itemize}
 
 The proofs themselves use Mathlib's \texttt{HasFDerivAt.sqrt},
@@ -2981,143 +2982,109 @@ Mechanical; see \leandocref{Proofs.bn\_has\_vjp}.
 \section{Example: the BN lift on CIFAR}
 \label{sec:bn_cifar_example}
 
-The previous two chapters trained MNIST classifiers with SGD at
-learning rate 0.1, no regularization, no tricks. That configuration
-works on MNIST. The moment you swap in CIFAR-10 --- color
-$32 \times 32$ images, harder learning problem, a real test of
-whether the training actually does anything --- the same config
-\textbf{fails completely} unless you add BatchNorm.
+The previous two chapters trained MNIST classifiers with SGD, and a
+four-convolution net was plenty. CIFAR-10 --- color $32 \times 32$
+images, a genuinely harder problem --- rewards going deeper, and depth
+is exactly where BatchNorm earns its keep. So this chapter's demo
+\textbf{doubles the depth}: an eight-convolution network (twice the
+four-conv MNIST CNN), trained two ways --- with BN and without --- to
+watch what BN does to the training curve.
 
-Here's the demo. Two CIFAR CNNs, same architecture, same SGD 0.1
-training config. One has BN. The other doesn't. Same
-\texttt{s4tfBaseline} we've been using.
+The headline, stated up front so the graph below is no surprise:
+\textbf{BN does not change where the network ends up; it changes how
+fast it gets there.} Both nets converge to about the same test
+accuracy. The BN net just reaches it in roughly half the epochs. BN is
+an accelerator, not a capacity boost --- and this section measures
+that directly, with the proof-rendered training step from this chapter
+running on a GPU.
 
 \subsection*{The two specs, differing by one keyword per layer}
+
+Eight $3 \times 3$ convolutions in four stages (channel widths
+$16, 16, 32, 32$, a max-pool after each stage), then a small dense
+head. Without BN, each convolution is followed by a plain ReLU; with
+BN, a per-channel BatchNorm sits between the convolution and the ReLU.
+That one keyword per conv layer is the entire difference.
 
 Without BN:
 
 \begin{verbatim}
-def cifarCnnNoBn : NetSpec where
-  name := "CIFAR-CNN-noBN"
+def cifar8NoBn : NetSpec where
+  name := "CIFAR-CNN8-noBN"
   imageH := 32
   imageW := 32
   layers := [
-    .conv2d 3  32 3 .same .relu,
-    .conv2d 32 32 3 .same .relu,
-    .maxPool 2 2,
-    .conv2d 32 64 3 .same .relu,
-    .conv2d 64 64 3 .same .relu,
-    .maxPool 2 2,
+    .conv2d 3  16 3 .same .relu,  .conv2d 16 16 3 .same .relu, .maxPool 2 2,
+    .conv2d 16 16 3 .same .relu,  .conv2d 16 16 3 .same .relu, .maxPool 2 2,
+    .conv2d 16 32 3 .same .relu,  .conv2d 32 32 3 .same .relu, .maxPool 2 2,
+    .conv2d 32 32 3 .same .relu,  .conv2d 32 32 3 .same .relu, .maxPool 2 2,
     .flatten,
-    .dense 4096 512 .relu,
-    .dense 512  512 .relu,
-    .dense 512  10 .identity
+    .dense 128 64 .relu, .dense 64 64 .relu, .dense 64 10 .identity
   ]
 \end{verbatim}
 
 With BN:
 
 \begin{verbatim}
-def cifarCnnBn : NetSpec where
-  name := "CIFAR-CNN-BN"
+def cifar8Bn : NetSpec where
+  name := "CIFAR-CNN8-BN"
   imageH := 32
   imageW := 32
   layers := [
-    .convBn 3  32 3 1 .same,
-    .convBn 32 32 3 1 .same,
-    .maxPool 2 2,
-    .convBn 32 64 3 1 .same,
-    .convBn 64 64 3 1 .same,
-    .maxPool 2 2,
+    .convBn 3  16 3 1 .same,  .convBn 16 16 3 1 .same, .maxPool 2 2,
+    .convBn 16 16 3 1 .same,  .convBn 16 16 3 1 .same, .maxPool 2 2,
+    .convBn 16 32 3 1 .same,  .convBn 32 32 3 1 .same, .maxPool 2 2,
+    .convBn 32 32 3 1 .same,  .convBn 32 32 3 1 .same, .maxPool 2 2,
     .flatten,
-    .dense 4096 512 .relu,
-    .dense 512  512 .relu,
-    .dense 512  10 .identity
+    .dense 128 64 .relu, .dense 64 64 .relu, .dense 64 10 .identity
   ]
 \end{verbatim}
 
-The diff: four \texttt{.conv2d $\cdot$ $\cdot$ 3 .same .relu} layers
-become four \texttt{.convBn $\cdot$ $\cdot$ 3 1 .same} layers. That's
-it. The dense head, the max-pool, and the training config are all
-identical.
+The diff: eight \texttt{.conv2d $\cdots$ .relu} layers become eight
+\texttt{.convBn $\cdots$} layers. The dense head, the max-pools, and
+the training config are all identical. Both nets are verified end to
+end --- forward, gradient, and the rendered StableHLO training step
+are machine-checked (\texttt{Proofs/CifarCNN.lean},
+\texttt{Proofs/Cifar8Close.lean}) --- and both run through the same
+IREE FFI path on the GPU.
 
-\subsection*{Training: one learns, one doesn't}
+\subsection*{Training: same destination, BN gets there faster}
 
-\textbf{[TODO: these results are tied to the init parameters and need to be redone.]}
-%
-% WHY THIS NEEDS UPDATING (investigation 2026-06-08, GPU-validated):
-% The "one learns, one doesn't" framing overstates the no-BN result. The no-BN
-% freeze at SGD lr=0.1 is NOT a law of the architecture --- it is an
-% init-conditioning artifact sitting on a knife-edge stability boundary:
-%   * This cifar-nobn-sgd ablation cell freezes at log(10)=2.302 (10% = chance).
-%   * But the *proof-verified* no-BN net (same architecture, same He init scale,
-%     same effective lr=0.1) TRAINS to ~67% --- and does so across all 5 random
-%     seeds tested (LEAN_MLIR_SEED). It only collapses above its ~0.25 LR ceiling.
-%   * The two differ ONLY in the He-init draw: the ablation uses consecutive
-%     seeds (base 42) whose xorshift streams are correlated -> worse-conditioned
-%     init -> ceiling drops below 0.1; the verified net uses stride-2 seeds ->
-%     ceiling ~0.25. The frozen cell also TRAINS fine at lr=0.05 (~67%), i.e. it
-%     is LR-limited, not broken.
-% So the honest statement is "no-BN is fragile right at lr=0.1 --- whether a given
-% init lands above or below the dead-ReLU collapse edge is luck, and BN removes
-% that fragility," NOT "no-BN cannot learn." The verified math was never wrong.
-%
-% BN SIDE: the 61.57% here is per-channel BN. The verified BN net is now also
-% per-channel (commit a8b91ed) and reaches ~71% at lr=0.1; the earlier
-% scalar-global verified BN actually UNDERPERFORMED no-BN (~58% < ~67%).
-%
-% CAVEAT to not overclaim: per-example per-channel (instance-norm) BN gives the
-% accuracy lift but NOT extra LR headroom --- it collapses at lr>=0.2, same as
-% no-BN. "BN lets you crank the LR" needs batch-statistic BN (train != eval).
-%
-Both runs use \texttt{s4tfBaseline} (SGD 0.1, 30 epochs). Output
-captured from \texttt{logs/ablation\_cifar-nobn-sgd.log} and
-\texttt{logs/ablation\_cifar-bn-sgd.log}:
+Both nets train with plain SGD at learning rate \textbf{0.02} for 40
+epochs --- a stable rate at which \emph{both} learn, no schedule and no
+tricks. Per-epoch test accuracy, captured from the verified runs
+(\texttt{runs/cifar8\_verified\_lr0.02\_40ep.log} and its
+\texttt{\_bn\_} sibling):
 
 \begin{verbatim}
-# cifar-nobn-sgd — same config, no BN
-Epoch 1/30:  loss=2.318085 lr=0.100000
-Epoch 2/30:  loss=2.305088 lr=0.100000
-Epoch 3/30:  loss=2.301315 lr=0.100000
-Epoch 4/30:  loss=2.304873 lr=0.100000
-Epoch 5/30:  loss=2.304378 lr=0.100000
-Epoch 6/30:  loss=2.304410 lr=0.100000
-Epoch 7/30:  loss=2.304158 lr=0.100000
-...
-Epoch 30/30: loss=~2.304    lr=0.100000
-  val accuracy: 998/9984 = 10.00%      ← random-guess on 10 classes
-
-# cifar-bn-sgd — same config, add BN
-Epoch 1/30:  loss=2.360751 lr=0.100000
-Epoch 2/30:  loss=1.618361 lr=0.100000
-Epoch 3/30:  loss=1.485531 lr=0.100000
-Epoch 4/30:  loss=1.391280 lr=0.100000
-Epoch 5/30:  loss=1.295481 lr=0.100000
-Epoch 6/30:  loss=1.191307 lr=0.100000
-Epoch 7/30:  loss=1.110645 lr=0.100000
-...
-Epoch 30/30: loss=~0.35     lr=0.100000
-  val accuracy: 6147/9984 = 61.57%
+   no BN                       with BN
+epoch  1:  31.6%            epoch  1:  35.0%
+epoch  2:  35.0%            epoch  2:  42.3%    <- BN already +7
+epoch  5:  47.6%            epoch  5:  52.9%
+epoch 10:  53.4%            epoch 10:  58.4%    <- BN ~8 epochs ahead
+epoch 20:  59.7%            epoch 20:  59.6%    <- the curves meet
+epoch 40:  61.3%            epoch 40:  59.4%    <- no-BN nudges ahead
+  best:    62.0%              best:    60.3%
 \end{verbatim}
 
-The no-BN run is not diverging. It's frozen. Loss 2.302 is
-$\log(10)$ --- the cross-entropy of uniform random prediction on 10
-classes. The network's output distribution is essentially unchanged
-after 30 epochs. Gradients at learning rate 0.1 are too noisy for
-the optimizer to make coherent progress; every step nudges
-parameters into meaningless neighborhoods. The model is
-computationally a random classifier from step zero to the end of
-training.
+Neither net freezes; both climb to about the same place. The whole
+difference is in the \emph{rate}. BN is already at 42\% after two
+epochs (the no-BN net needs five), reaches the high-50s by epoch~10
+(the no-BN net takes until about epoch~18), and has essentially
+flattened by epoch~20. The no-BN net arrives at the same plateau a
+dozen epochs later and, given the extra room, even edges slightly
+ahead by the end. Same ceiling --- about 60\% --- and BN takes roughly
+half the epochs to reach it.
 
 \begin{center}
 \begin{tikzpicture}
 \begin{axis}[
     width=0.92\linewidth, height=6.5cm,
-    xlabel={Epoch}, ylabel={Training loss},
-    xmin=0, xmax=31, ymin=0, ymax=2.5,
-    xtick={0,5,10,15,20,25,30},
-    ytick={0,0.5,1.0,1.5,2.0},
-    legend pos=north east,
+    xlabel={Epoch}, ylabel={Test accuracy (\%)},
+    xmin=0, xmax=41, ymin=30, ymax=65,
+    xtick={0,5,10,15,20,25,30,35,40},
+    ytick={30,35,40,45,50,55,60,65},
+    legend pos=south east,
     legend cell align={left},
     grid=major, grid style={gray!18},
     tick label style={font=\small},
@@ -3125,74 +3092,70 @@ training.
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,2.36075) (2,1.61836) (3,1.48553) (4,1.39128) (5,1.29548) (6,1.19131) (7,1.11065) (8,1.05191) (9,0.983761) (10,0.921144) (11,0.870569) (12,0.845268) (13,0.799192) (14,0.764295) (15,0.713148) (16,0.688528) (17,0.663081) (18,0.640917) (19,0.608307) (20,0.584896) (21,0.556536) (22,0.524438) (23,0.524305) (24,0.507538) (25,0.505498) (26,0.478927) (27,0.445653) (28,0.424414) (29,0.419859) (30,0.419897)
+(1,34.97) (2,42.26) (3,48.91) (4,51.26) (5,52.94) (6,54.65) (7,56.20) (8,57.17) (9,57.31) (10,58.42) (11,58.79) (12,58.68) (13,58.87) (14,59.46) (15,58.89) (16,59.12) (17,59.09) (18,59.45) (19,59.44) (20,59.64) (21,59.65) (22,59.84) (23,59.79) (24,59.56) (25,60.05) (26,59.31) (27,59.63) (28,59.61) (29,59.80) (30,59.65) (31,59.51) (32,59.45) (33,58.37) (34,60.18) (35,59.75) (36,60.05) (37,59.46) (38,60.23) (39,60.29) (40,59.36)
 };
 \addlegendentry{with BN}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,2.31808) (2,2.30509) (3,2.30132) (4,2.30487) (5,2.30438) (6,2.30441) (7,2.30416) (8,2.3045) (9,2.30428) (10,2.30442) (11,2.30435) (12,2.30482) (13,2.30471) (14,2.30438) (15,2.30456) (16,2.30438) (17,2.30441) (18,2.30465) (19,2.30469) (20,2.30442) (21,2.30446) (22,2.30441) (23,2.30477) (24,2.30441) (25,2.30465) (26,2.30468) (27,2.30432) (28,2.30422) (29,2.30457) (30,2.30434)
+(1,31.60) (2,34.97) (3,40.43) (4,45.65) (5,47.60) (6,48.95) (7,50.29) (8,51.37) (9,51.42) (10,53.40) (11,54.16) (12,54.85) (13,55.28) (14,56.87) (15,57.11) (16,57.75) (17,58.21) (18,58.30) (19,58.94) (20,59.70) (21,59.88) (22,60.24) (23,60.17) (24,60.90) (25,59.86) (26,60.98) (27,60.85) (28,61.55) (29,60.99) (30,61.59) (31,62.02) (32,61.35) (33,61.58) (34,61.80) (35,61.31) (36,61.67) (37,61.36) (38,62.01) (39,61.46) (40,61.28)
 };
 \addlegendentry{no BN}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent CIFAR-10, 4-conv arch, SGD~0.1, 30 epochs (BN vs no-BN;
-\texttt{logs/ablation\_cifar-\{bn,nobn\}-sgd.log}). The no-BN run sits at
-$\log 10 \approx 2.30$ --- random-guess loss --- for the entire run.
+\noindent CIFAR-10, 8-conv arch, SGD~0.02, 40 epochs, BN vs no-BN,
+through the verified renderer
+(\texttt{runs/cifar8\_\{,bn\_\}verified\_lr0.02\_40ep.log}). Both
+curves climb to roughly the same accuracy; the BN curve is the same
+shape shifted left.
 
-The BN run's loss halves by epoch 2 and keeps dropping. Same
+The BN net leads from epoch one and is essentially done by epoch~20;
+the no-BN net traces the same arc about a dozen epochs behind. Same
 optimizer, same learning rate, same dataset, same architecture plus
-the BN theorems we proved in this chapter. The three-term formula
-from \S~\ref{thm:bnNormalize_has_vjp} is what makes this lift
-possible --- BN standardizes each layer's input distribution
-(\(\mu = 0\), \(\sigma = 1\)) and its backward pass returns a
-gradient that accounts for how that standardization affected every
-other sample in the batch. The result: gradients are well-
-conditioned, SGD steps are meaningful, training proceeds.
+the BN theorems we proved in this chapter. The three-term formula from
+\S~\ref{thm:bnNormalize_has_vjp} is what buys the speed --- BN
+standardizes each layer's input distribution (\(\mu = 0\),
+\(\sigma = 1\)) and its backward pass returns a gradient that accounts
+for how that standardization affected every other sample in the batch.
+The result: gradients stay well-conditioned, every SGD step makes
+reliable progress, and the network reaches its ceiling in half the
+passes over the data.
 
-\subsection*{Where the BN lift actually lives}
+\subsection*{Where the BN lift lives}
 
-Why does normalizing help at all? Each layer is tuned for the
-distribution of its inputs --- but those inputs are the outputs of every
-layer below, which are themselves changing every step. So each layer
-chases a moving target, and at a high learning rate the target moves
-fast: activations drift to scales where the nonlinearity saturates or
-gradients blow up, and the step that helped one layer wrecks the next.
-BN removes the moving part --- by pinning every layer's input to
-mean-zero, unit-variance before the learnable \(\gamma, \beta\) get a
-say, each layer always sees a well-conditioned input no matter what the
-layers below just did. Ioffe \& Szegedy framed this as reducing
-``internal covariate shift''; later analysis (Santurkar et al., 2018)
-argued the sharper reason is that normalization smooths the loss
-landscape --- gradients stay predictable from one step to the next ---
-which is exactly what lets you take the bigger steps the rest of this
-section measures. Either way: BN decouples a layer's job from the chaos
-below it, and that decoupling is worth an order of magnitude of learning
-rate.
+Why does normalizing buy speed? Each layer is tuned for the
+distribution of its inputs --- but those inputs are the outputs of
+every layer below, which are themselves changing every step. So each
+layer chases a moving target: activations drift to scales where the
+nonlinearity saturates or gradients blow up, and the step that helped
+one layer wrecks the next. BN removes the moving part --- by pinning
+every layer's input to mean-zero, unit-variance before the learnable
+\(\gamma, \beta\) get a say, each layer always sees a well-conditioned
+input no matter what the layers below just did. Ioffe \& Szegedy framed
+this as reducing ``internal covariate shift''; later analysis
+(Santurkar et al., 2018) argued the sharper reason is that
+normalization \emph{smooths the loss landscape} --- the gradient stays
+predictable from one step to the next. Either way, a smoother landscape
+means each SGD step makes more reliable progress, and reliable progress
+compounds across epochs: that is precisely the left-shifted curve the
+graph measures.
 
-If you rerun the no-BN CIFAR config at a smaller learning rate ---
-SGD at 0.02 instead of 0.1, for example --- it trains fine and hits
-72.5\% (\texttt{logs/ablation\_cifar-nobn-sgd002.log}). At the same
-smaller rate, the BN version hits 72.9\% (\texttt{cifar-bn-sgd002}).
-So BN isn't magically giving you more model capacity --- both specs
-top out around the same accuracy when you tune the learning rate.
+BN is not buying capacity. Both specs top out around the same accuracy
+--- the no-BN net gets there too, just later. What BN buys is the
+\emph{rate}: the same destination in roughly half the epochs. (On
+larger networks, and with true batch-statistic normalization, the
+effect is stronger still --- it also opens up learning rates that are
+unstable without it --- but at this depth and this stable rate, what we
+can honestly measure and verify is the speed, so that is the claim we
+make here.)
 
-What BN \emph{is} doing is giving you roughly an order of magnitude
-of \textbf{learning-rate headroom for free}. The lr=0.1 setting
-that diverges without BN trains fine with it. That matters because
-the lr-0.1 regime trains faster per epoch and reaches the same
-final accuracy in fewer passes over the data. Over a multi-day
-ImageNet training run that difference is the difference between
-experimentally tractable and not.
-
-This is also why every post-2015 image architecture has BN baked
-in by default. Before BN, picking the right lr schedule was a dark
-art; after BN, you just set lr to 0.1 and let the network figure
-itself out. The proof suite we built in this chapter is what
-mechanically guarantees the BN pass is computing the correct VJP
-at every step --- so the empirical result (``BN lets you train with
-a 5$\times$ bigger learning rate'') rests on a machine-checked
-mathematical claim.
+That speed is why every image architecture since 2015 bakes a
+normalization layer in by default: on a multi-day ImageNet run,
+reaching the same accuracy in half the passes over the data is the
+difference between experimentally tractable and not. The proof suite we
+built in this chapter is what mechanically guarantees the BN backward
+computes the correct VJP at every one of those steps --- so the curve
+above rests on a machine-checked claim, not a trusted kernel.
 
 \section{MLIR: BatchNorm}
 
