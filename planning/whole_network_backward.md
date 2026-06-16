@@ -131,34 +131,34 @@ Proofs root but — like Stage 1 — not yet in the AuditAxioms headline set):
   (`bn k₀ − bn k₁ = (z k₀ − z k₁)·istd`, `istd > 0`).
 - `relu_chan_lt` / `relu_pos_eq` — ReLU preserves strict order in the kept-positive region.
 
-**Stage 3 — STARTED and banked** (`LeanMlir/Proofs/ResNet34LivePC.lean`, build-checked, 3-axiom-clean,
-a Proofs root, not in the AuditAxioms headline set):
+**Stage 3 — the whole 2-channel VJP is BUILT** (`LeanMlir/Proofs/ResNet34LivePC.lean`, build-checked,
+3-axiom-clean, a Proofs root, not in the AuditAxioms headline set). The entire **smoothness side** of
+the live witness is done at 2 channels:
 - `liveDownPC` — the **2-channel signal-carrying strided downsample** (channel-diagonal
   identity-decimate projection `WsP2`, zeroed body), with its full whole-block VJP / `DifferentiableAt`
-  / nonnegativity, mirroring Stage 1's `liveDown` at `oc = ic = 2` via the channel-generic
-  `rblkPStrided_has_vjp_at` / `convBnStrided_differentiable`. `βp = 20 > √(2·h·w)` keeps the proj `> 0`.
-- `bnForward_coord_inj` — scalar BN is injective *per coordinate* (contrapositive of `bnForward_chan_lt`).
+  / nonnegativity, mirroring Stage 1's `liveDown` at `oc = ic = 2`. `βp = 20 > √(2·h·w)` keeps proj `> 0`.
+- `stem2` + `stem2_inj` + `stem2_maxpool_smooth` — the 2-channel stem. The maxpool no-tie turned out
+  *clean*: a **channel-diagonal identity** stem conv (`WsId2 = δ_oi`) makes `flatConvStride2 = decimate`
+  (lemma `flatConv_WsId2_X2`, the 2-channel peer of Stage-1 `flatConv_id_X`), so the stem is **globally**
+  injective and the no-tie reuses Stage-1's `bnForward_injective` / `finProdFinEquiv.injective` pattern
+  wholesale (asymmetry rides on the input, not the conv). `β = 30 > √512` positivity.
+- **`liveFwd2_has_vjp_at`** — the **whole 2-channel ResNet-34 backward**: `dense ∘ gap ∘ liveDownPC×3 ∘
+  maxpool ∘ stem2` with empty identity-block chains (`chainComp [] = id`; full depth = Item D), every
+  hypothesis of the dimension-generic `resnet34_has_vjp_at` discharged. `liveFwd2_has_vjp_correct` exposes
+  the `pdiv`-Jacobian. 3-axiom-clean.
+- `bnForward_coord_inj` — scalar BN injective per coordinate (a reusable no-tie ingredient).
 
-**What a live ResNet-34 still needs (the open work):**
-- **A1 — the stem** (the gating piece): a 2-channel stem `relu ∘ bn ∘ flatConvStride2 Ws₂ bs₂` whose
-  maxpool no-tie is dischargeable. Refined plan: a **large** weight gap `Ws₂(0) = 2000, Ws₂(1) = 1`
-  with a positive positional input `X₂ i = i + 1` keeps the two channels in **disjoint value ranges**
-  (`ch0 = 2000·X₂' ≥ 2000`, `ch1 = X₂' ≤ √…`), so the stem is **globally** injective and the maxpool
-  no-tie reuses Stage-1's `bnForward_injective` pattern wholesale — *and* `ch0 − ch1 = 1999·X₂' > 0`
-  (the channel-order invariant) while at input `0` both channels are `0` (symmetric). Needs the conv
-  value formula (`flatConv Ws₂ bs₂ X₂ = (channel o ↦ w_o · X₂)`, the 2-channel peer of Stage-1
-  `flatConv_id_X` / `stem_conv_eq`) and the `√512 < β` positivity. `idBlk`/`idChainData` can be the
-  empty list (`chainComp [] = id`) for a first witness — full depth is Item D.
-- **A2 — assembly**: thread the Stage-2 invariant (now banked) from the stem through maxpool → the
-  three `liveDownPC` stages to a channel-reading head, giving `forward X ≠ forward 0` (level 2: input
-  0 symmetric ⇒ `ch0 = ch1`, input X ⇒ `ch0 > ch1`). The level-3 seal (`fderiv ≠ 0`) is a separate
+**What remains (the single open step):**
+- **A2 — non-vacuity**: `liveFwd2 X2 ≠ liveFwd2 0` (level 2). Thread the Stage-2 channel-order invariant
+  (now banked) through the assembly: input `X2 i = i` has one channel dominating pointwise, every layer
+  preserves it (`bnForward_chan_lt` / `relu_chan_lt` / `maxPool2_chan_lt` / decimate / `+const`), so the
+  per-channel head reads `ch0 ≠ ch1`; input `0` collapses symmetric (`ch0 = ch1`). The flat↔`Tensor3`
+  channel-index bookkeeping is the only labor left. The level-3 seal (`fderiv ≠ 0`) is a *separate*
   follow-up — unlike `Mnv2Live`, the ReLUs/maxpool *do* bind off-witness, so the B2 input-0
-  global-smoothness trick does not transfer; it needs a directional-derivative computation at the
-  witness.
+  global-smoothness trick does not transfer; it needs a directional-derivative computation at the witness.
 
-Effort: **multi-session** — the conceptual crux (A2 non-vacuity, Stage 2) is *solved* and the core
-downsample (Stage 3) is *built*; what remains is the stem (one intricate injectivity proof, plan
-above) and the mechanical assembly to the level-2 witness.
+Effort: the conceptual crux (A2, Stage 2) is *solved*, the downsample + stem + **whole-net VJP** (Stage 3)
+are *built and audited 3-axiom-clean*; only the non-vacuity threading remains for the level-2 witness.
 
 ### Item B — the **nonzero-Jacobian seal** (level 3, generic)
 
@@ -241,7 +241,7 @@ there, not here.
 | 1 | **C** ViT distinct-param tower + `vitTiny` capstone | light–med | full-depth ViT-Tiny backward, looks real, no witness risk | ✅ **done** |
 | 2 | **B1** generic nonzero-Jacobian seal | light | the missing honesty sentence, reusable | ✅ **done** |
 | 2.5 | **B2** `Mnv2Live` seal | med | first kinked witness at level 3 (no longer level-2) | ✅ **done** (`MobileNetV2JacobianSeal.lean`; exact at input 0 via global smoothness) |
-| 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | Stage 1 (smoothness) + Stage 2 (A2 non-vacuity crux) + **Stage 3 (`liveDownPC` 2-channel downsample + coord-inj) DONE & banked**; remaining = the stem injectivity (plan in §2) + assembly → level-2 witness |
+| 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | Stages 1+2+3 DONE: the **whole 2-channel ResNet-34 VJP `liveFwd2_has_vjp_at` is built & 3-axiom-clean** (stem + maxpool + 3 downsamples, all smoothness discharged); only the non-vacuity `liveFwd2 X2 ≠ liveFwd2 0` remains for the level-2 witness |
 | 4 | **B2** BN-CNN Live | light (reuses A) | last degenerate kinked witness retired | |
 | 5 | **D** realistic dims | med | scale credibility | |
 | 6 | **E** almost-everywhere | heavy | the principled statement (stretch) | |
