@@ -31,7 +31,10 @@ honest targets are, in increasing strength:
    forward**, so the witness is not vacuous. ⚠️ **Only `Mnv2Live` has this; it is tiny and proves
    only `forward ≠ const`, not a nonzero Jacobian.**
 3. **A nonzero-Jacobian seal** — at the witness, `∃ i j, pdiv forward x i j ≠ 0`, i.e. the
-   *backward map itself* is provably non-trivial there. 🔴 **Missing everywhere.**
+   *backward map itself* is provably non-trivial there. ✅ **Done for `Mnv2Live`**
+   (`MobileNetV2JacobianSeal.lean`, `fderiv ℝ forward 0 ≠ 0` ⇒ non-trivial backward, audited
+   3-axiom-clean); 🔴 still missing for the deep zero-weight kinked witnesses (ResNet-34 / BN-CNN,
+   which need a live witness first — Item A).
 4. **Almost-everywhere** — the bundle holds off a measure-zero set (the principled "the backward
    is correct for a.e. input/weight"). 🔴 **Not attempted.** (Stretch; needs `MeasureTheory`.)
 
@@ -73,7 +76,7 @@ already exists** (`vjp_comp_at`, `vjp_chain{,_at}`, `resStage_has_vjp_at`, all i
 |---|---|---|---|
 | **ResNet-34** | `resnet34_has_vjp_at` (`ResNet34.lean:174`) | `ResNet34Concrete.resnet34Concrete_has_vjp_correct` (`:735`) | 🔴 **degenerate** — 16 zero-weight identity blocks, 1×32×32 |
 | **MobileNetV2** | `mobilenetv2_has_vjp_at_correct` (`MobileNetV2.lean:580`) | `MobileNetV2Concrete.*` (`:936`) | 🔴 **degenerate** — all-zero kernels, constant output |
-| ″ (live) | ″ | `Mnv2Live.mnv2Live_has_vjp_correct` (`:1008`) | ⚠️ **non-degenerate but level-2 only** — `forward ≠ const`, no nonzero-Jacobian seal; 1×2×2 |
+| ″ (live) | ″ | `Mnv2Live.mnv2Live_has_vjp_correct` (`:1008`) | ✅ **level-3 sealed** — `mnv2Live_jacobian_nonzero : fderiv ℝ forward 0 ≠ 0` ⇒ `mnv2Live_backward_nontrivial` (`MobileNetV2JacobianSeal.lean`); nonzero weights, 1×2×2 |
 | **BN-CNN** | `cnn_has_vjp_at` (`MnistCNN.lean`) | `CnnConcrete.cnnConcrete_has_vjp_correct` (`:957`) | 🔴 **degenerate** — zero-weight resblocks |
 | **MNIST/CIFAR CNN** | `mnistCnnNoBn_has_vjp_at`, `cifarCnn8_has_vjp_at_correct` | `Mini`/`Spatial`/`Tiny.*` | ⚠️ mixed — `Spatial` (3×3 SAME) is genuinely-nonzero but tiny |
 
@@ -90,26 +93,44 @@ already exists** (`vjp_comp_at`, `vjp_chain{,_at}`, `resStage_has_vjp_at`, all i
 
 ## 2. The remaining work
 
-### Item A — ResNet-34 **Live** witness *(headline; the audit's "Stage 1, in progress")*
+### Item A — ResNet-34 **Live** witness *(headline; genuinely multi-session)*
 
-Build `ResNet34Live.resnet34Live_has_vjp_correct`, the `Mnv2Live` analogue at ResNet-34 depth.
-Pick genuine nonzero weights and discharge `resnet34_has_vjp_at`'s bundle:
+**Stage 1 — DONE and banked** (`LeanMlir/Proofs/ResNet34Live.lean`, a pure leaf; built but
+deliberately *excluded* from the audit, lakefile note "a live witness and NOT in the AuditAxioms
+headline set", because it is not yet a real witness). `liveDown` — a signal-carrying strided
+downsample whose **projection skip** `relu(bn₂₀(decimate x) + 1)` reads the input (identity-decimate
+proj via `rblkPStrided_has_vjp_at`, body zeroed, `βp=20` keeps proj `>0` so ReLU is smooth) — plus
+`liveFwd_has_vjp_at`/`_correct` assembling the whole-net VJP with every smoothness/no-tie hypothesis
+discharged. So the smoothness side (the old A1/A2) is solved; the discharge routes (`bnForward_lb`
+positivity, `maxPool2Smooth_of_injective`) work as planned.
 
-- **A1 — ReLU smoothness at every block.** Two reusable routes, both already in the toolbox:
-  - *positivity route*: `bnForward_lb` (dimension-robust BN lower bound) with `β` large enough
-    that `bn ≥ β − |γ|√n > 0`, so the post-BN pre-ReLU is everywhere positive (ReLU acts as
-    identity, smooth). Cleanest for the stem and the down-blocks.
-  - *window route*: a `bn13_window`-style two-sided bound, generalized off `n ≤ 8` to the
-    ResNet spatial sizes (new lemma `bnAB_window n ε γ β` — same `(zₖ−μ)² < …` algebra, no
-    sqrt/variance evaluation). Needed where positivity is too strong an ask.
-- **A2 — maxpool no-tie** via `maxPool2Smooth_of_injective` on an injective stem output.
-  Injectivity of `flatConvStride2 ∘ (1×1 identity)` of an injective input + `bnForward_injective`
-  (γ≠0). This is the heaviest single discharge; isolate it as `r34Stem_injective`.
-- **A3 — non-degeneracy.** Choose ≥1 block with genuine identity convs (not zero) so the body is
-  non-constant, exactly as `Mnv2Live` uses an identity `block2`. Reuse `vjp_chain_at` for the
-  zero-or-identity blocks so depth stays a `List.length` fold.
+**The blocker (confirmed this session — a real structural obstruction, not a missing lemma):**
+`liveFwd` is still **constant-output**. A **1-channel** net with **BN before the final GAP** is
+necessarily constant: `gap` (1 channel) = spatial mean = BN's global mean = `β` (`bnForward_mean`),
+and keeping ReLU in its identity region (required for smoothness) makes the post-BN map affine, so
+`gap = β + consts` for *every* input — the signal lives in the BN-normalized *deviations*, which GAP
+averages away. At 32²→1×1 there is a *second* collapse: BN over the final 1 spatial element is `β`
+trivially. **This is the actual reason `ResNet34Concrete`/`CnnConcrete` are degenerate — structural,
+not zeroed weights.** A 1-channel ResNet-34 witness is impossible; no choice of weights escapes it.
 
-Effort: **medium-heavy** (the injectivity discharge dominates). No new VJP math.
+**What a live ResNet-34 needs (the open, multi-session work):**
+- **A1 — 2-channel + per-channel BN rebuild.** Mirror `Mnv2Live`'s escape: ≥2 channels with
+  **per-channel** BN (`bnPerChannelTensor3`, which the real ResNet uses anyway), and a head reading
+  *per-channel* GAP `(gap₀, gap₁)`. Cross-channel asymmetry (an asymmetric stem, `Mnv2Live`'s
+  `Ws(0)=1, Ws(1)=2`) survives per-channel BN because the convs *mix* channels while BN normalizes
+  *within* each — so the channel ratio at the head is input-dependent. Re-instantiate stem / `ids` /
+  downsamples / smoothness lemmas at `c=2` (most are generic in `c`; this is instantiation, the
+  current `liveDown` uses *scalar* `bnForward` and must move to per-channel).
+- **A2 — the non-vacuity crux (genuinely new, no `Mnv2Live` analogue): thread the asymmetry through
+  the MAXPOOL.** Maxpool is positively homogeneous (clean channel *ratios* survive it), but the
+  scalar/per-example BN mean-subtracts and can break those ratios — reconciling the two is the open
+  problem. Then `forward X ≠ forward 0` via a `chSum_convX`-style explicit channel-deviation
+  computation, and finally the **nonzero-Jacobian seal** via Item B1
+  (`HasVJP.backward_nontrivial_of_fderiv_ne`).
+
+Effort: **multi-session, research-flavored** — the non-vacuity (A2), not the smoothness, is the hard
+part, and it is a genuinely new argument (the maxpool×BN interaction). Stage 1 is the foundation; the
+next session should start at the 2-channel per-channel-BN `liveDownPC` and the maxpool-ratio lemma.
 
 ### Item B — the **nonzero-Jacobian seal** (level 3, generic)
 
@@ -126,13 +147,20 @@ non-triviality.
     analytic hypothesis `fderiv ℝ forward x ≠ 0` discharges the seal. No differentiability needed.
   - `mnistLinear_backward_nontrivial` — end-to-end demo: `pdiv (mnistLinear W b) = W`, so any
     `W i₀ j₀ ≠ 0` seals the linear classifier's backward as non-trivial.
-- **B2 — discharge the premise at the DEEP kinked witnesses** *(the remaining, harder part)*:
-  exhibit `pdiv forward x i j ≠ 0` (equivalently `fderiv ℝ forward x ≠ 0`) at `Mnv2Live`, a future
-  `ResNet34Live` (Item A), and the BN-CNN. This is **not** derivable from `forward ≠ const` (a
-  non-constant map can have a zero derivative at the witness); the honest route is an explicit
-  directional-derivative computation through the seal chain (`bn1_devSum_scale` gives
-  `∂(Σ bn)/∂(deviation) = istd > 0`; push it through the linear head). Per-net, genuinely hairy —
-  the natural fresh-session work, now unblocked by B1.
+- **B2 — discharge the premise at the kinked witnesses.** ✅ **`Mnv2Live` done**
+  (`MobileNetV2JacobianSeal.lean`; also adds the pointwise `HasVJPAt` seal variants the kinked
+  witnesses actually consume — B1 was `HasVJP`-only). The honest computation, as anticipated: an
+  explicit directional derivative, **not** derivable from `forward ≠ const`. The decisive trick is
+  the choice of witness point. Because `bn13_window` holds for *every* input, `Mnv2Live` is
+  **globally smooth** (the ReLU6 kinks never bind), so `forward` equals a ReLU6-free closed form
+  (`forward_eq`) and `forward(z)₀ = 3 + (1/4)·P(z)·L(z)` with `L = chSum∘conv` **linear**
+  (`chSum_convX_smul`, `L(X) = -3`) and `P` a product of four **positive** `bnIstd` (`bnIstd_pos`).
+  Along `t ↦ t·X` this is `3 - (3/4)·t·P(t·X)`, whose product-rule cross-term carries a factor `t`
+  — so it **vanishes at `t = 0`**, leaving `g'(0) = -(3/4)·P(0) < 0` with *no* BN-variance derivative
+  (the hairy `∂istd` piece) ever needed. So the seal is exact and constructive at the input `0`
+  (not an MVT/nonconstructive point — and the doc's "MVT point may not be a smooth VJP point" worry
+  is void here since *every* point is smooth). Remaining: a future `ResNet34Live` (needs Item A
+  first) and the BN-CNN — those are deep zero-weight witnesses with no live forward yet.
 
 ### Item C — ViT **full-depth, distinct-param** backward — ✅ **DONE**
 
@@ -184,7 +212,8 @@ there, not here.
 |---|---|---|---|---|
 | 1 | **C** ViT distinct-param tower + `vitTiny` capstone | light–med | full-depth ViT-Tiny backward, looks real, no witness risk | ✅ **done** |
 | 2 | **B1** generic nonzero-Jacobian seal | light | the missing honesty sentence, reusable | ✅ **done** |
-| 3 | **A** ResNet-34 Live + **B2** seal | med–heavy | kills the headline "degenerate witness" caveat | next (the hairy part) |
+| 2.5 | **B2** `Mnv2Live` seal | med | first kinked witness at level 3 (no longer level-2) | ✅ **done** (`MobileNetV2JacobianSeal.lean`; exact at input 0 via global smoothness) |
+| 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | Stage 1 done; **A2 non-vacuity is multi-session** (structural BN-before-GAP obstruction confirmed) |
 | 4 | **B2** BN-CNN Live | light (reuses A) | last degenerate kinked witness retired | |
 | 5 | **D** realistic dims | med | scale credibility | |
 | 6 | **E** almost-everywhere | heavy | the principled statement (stretch) | |
@@ -220,6 +249,8 @@ the `*_close.md` axis) and does **not** claim anything about the GPU float compu
   recheck). No `sorry`, no project axiom.
 - For each kinked net: a witness theorem whose construction uses **nonzero** weights, a
   `*_forward_nonconstant` (level 2) **and** a `*_jacobian_nonzero` (level 3, from Item B).
+  ✅ Met for `Mnv2Live` (`mnv2Live_forward_nonconstant` + `mnv2Live_jacobian_nonzero` /
+  `mnv2Live_backward_nontrivial`). Open for the BN-CNN and a future ResNet-34 Live.
 - ViT: `vitFullTiny_has_vjp_correct` at 12 distinct-param blocks / 3 heads.
 - Doc-drift: update `formalization.yaml` fidelity §4 and `README.md` §"Concrete-instance honesty"
   to point at the Live witnesses once they land (they currently say ResNet-34 live is "in progress").

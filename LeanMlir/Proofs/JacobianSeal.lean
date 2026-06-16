@@ -103,6 +103,38 @@ theorem HasVJP.backward_nontrivial_of_fderiv_ne {m n : Nat} {f : Vec m → Vec n
   exact ⟨j₀, i₀, h.backward_ne_zero_of_pdiv_ne x hpd⟩
 
 -- ════════════════════════════════════════════════════════════════
+-- § The seal, pointwise (`HasVJPAt`)
+--   The deep kinked witnesses (`Mnv2Live`, a future `ResNet34Live`) are
+--   built as *pointwise* `HasVJPAt f x`, not the global `HasVJP f`. Their
+--   `.correct` field has the same `backward = pdiv`-contraction shape, so
+--   the seal transfers verbatim — this is the form Item B2 actually consumes.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The nonzero-Jacobian seal, pointwise.** `HasVJPAt` analogue of
+    `HasVJP.backward_ne_zero_of_pdiv_ne`: one nonzero Jacobian entry at the
+    witness point `x` makes the proven backward there not the zero map. -/
+theorem HasVJPAt.backward_ne_zero_of_pdiv_ne {m n : Nat} {f : Vec m → Vec n}
+    {x : Vec m} (h : HasVJPAt f x) {i₀ : Fin m} {j₀ : Fin n}
+    (hpd : pdiv f x i₀ j₀ ≠ 0) :
+    h.backward (basisVec j₀) i₀ ≠ 0 := by
+  rw [h.correct]
+  have hsum : (∑ j : Fin n, pdiv f x i₀ j * basisVec j₀ j) = pdiv f x i₀ j₀ := by
+    rw [Finset.sum_eq_single j₀]
+    · rw [basisVec_apply, if_pos rfl, mul_one]
+    · intro j _ hj; rw [basisVec_apply, if_neg hj, mul_zero]
+    · intro hni; exact absurd (Finset.mem_univ j₀) hni
+  rw [hsum]; exact hpd
+
+/-- **The seal in `fderiv` form, pointwise.** `HasVJPAt` analogue of
+    `HasVJP.backward_nontrivial_of_fderiv_ne`: a nonzero Fréchet derivative
+    at the witness `x` ⇒ the proven backward there is non-trivial. -/
+theorem HasVJPAt.backward_nontrivial_of_fderiv_ne {m n : Nat} {f : Vec m → Vec n}
+    {x : Vec m} (h : HasVJPAt f x) (hfd : fderiv ℝ f x ≠ 0) :
+    ∃ (j₀ : Fin n) (i₀ : Fin m), h.backward (basisVec j₀) i₀ ≠ 0 := by
+  obtain ⟨i₀, j₀, hpd⟩ := exists_pdiv_ne_of_fderiv_ne f x hfd
+  exact ⟨j₀, i₀, h.backward_ne_zero_of_pdiv_ne hpd⟩
+
+-- ════════════════════════════════════════════════════════════════
 -- § Demonstration — the linear classifier (Jacobian = W)
 -- ════════════════════════════════════════════════════════════════
 

@@ -9,6 +9,7 @@ import LeanMlir.Proofs.SE
 import LeanMlir.Proofs.LayerNorm
 import LeanMlir.Proofs.Attention
 import LeanMlir.Proofs.MobileNetV2
+import LeanMlir.Proofs.MobileNetV2JacobianSeal
 import LeanMlir.Proofs.ConvNeXt
 import LeanMlir.Proofs.EfficientNet
 import LeanMlir.Proofs.MnistCNN
@@ -101,6 +102,15 @@ open Proofs
 #print axioms exists_pdiv_ne_of_fderiv_ne
 #print axioms HasVJP.backward_nontrivial_of_fderiv_ne
 #print axioms mnistLinear_backward_nontrivial
+-- The pointwise (HasVJPAt) seal variants — the kinked witnesses are HasVJPAt, not HasVJP.
+#print axioms HasVJPAt.backward_ne_zero_of_pdiv_ne
+#print axioms HasVJPAt.backward_nontrivial_of_fderiv_ne
+-- Item B2 discharged at the live MobileNetV2 witness (MobileNetV2JacobianSeal.lean): the
+-- whole-net Jacobian is genuinely nonzero at the input 0 (the product-rule cross-term
+-- vanishes there, so no BN-variance derivative is needed), hence the proven backward is
+-- not the zero map. Upgrades Mnv2Live from level 2 (forward ≠ const) to level 3.
+#print axioms Mnv2Live.mnv2Live_jacobian_nonzero
+#print axioms Mnv2Live.mnv2Live_backward_nontrivial
 
 -- CNN
 #print axioms maxPool2_has_vjp3_correct

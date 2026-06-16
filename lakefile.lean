@@ -49,6 +49,9 @@ lean_lib «Proofs» where
              -- Nonzero-Jacobian seal (planning/whole_network_backward.md Item B): the
              -- generic "one nonzero Jacobian entry ⇒ non-trivial backward" bridge.
              `LeanMlir.Proofs.JacobianSeal,
+             -- Item B2: the seal discharged at the live MobileNetV2 witness —
+             -- `fderiv ℝ forward 0 ≠ 0` ⇒ non-trivial whole-net backward (level 3).
+             `LeanMlir.Proofs.MobileNetV2JacobianSeal,
              -- Chapter-6 ResNet Milestone B: stride-2 SAME convolution (the hard
              -- new downsampling op) = decimate ∘ stride-1 conv, with its input-VJP.
              `LeanMlir.Proofs.StridedConv,
