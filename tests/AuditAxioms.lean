@@ -873,6 +873,11 @@ open Proofs
 #print axioms vitForwardKV_two_eq
 #print axioms vitForwardKV_has_vjp
 #print axioms vitForwardKV_has_vjp_correct
+-- Production capstone: vitForwardKV_has_vjp_correct instantiated at the real ViT-Tiny spec
+-- (3×224² image, 16×16 patches → N=196 + CLS, D=192=3×64, MLP 768, 12 DISTINCT-param blocks,
+-- 10 classes — MainVitTrain.lean's `vitTiny`). The full-architecture whole-net backward, the
+-- ViT peer of convNextForwardT_has_vjp (18-block) / efficientnetForwardB_full_has_vjp (16-block).
+#print axioms vitTiny_has_vjp_correct
 #print axioms StableHLO.vitBodyGraphKMHV_den
 #print axioms StableHLO.vitFwdGraphKMHV_faithful
 

@@ -260,6 +260,43 @@ theorem vitForwardKV_has_vjp_correct
   (vitForwardKV_has_vjp ic H W patchSize N mlpDim heads d_head nClasses k
     W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).correct x dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § 3. The production capstone — ViT-Tiny at its real dimensions
+-- ════════════════════════════════════════════════════════════════
+
+/-- **ViT-Tiny whole-network VJP — the production capstone.**
+
+    `vitForwardKV_has_vjp_correct` instantiated at the exact `MainVitTrain.lean`
+    `vitTiny` spec: a `3×224×224` image, `16×16` patches (`N = 196` patch tokens
+    + the CLS token), embedding dim `D = 192 = 3 heads × 64`, MLP dim `768`,
+    **12 transformer blocks with DISTINCT per-block parameters**
+    (`ps : Fin 12 → BlockParamsV 192 768`), and Imagenette's `10` classes.
+
+    The full 12-block / 3-head ViT-Tiny's backward pass equals its Mathlib-`fderiv`
+    Jacobian-transpose contracted with the cotangent, at **every** input image —
+    UNCONDITIONAL except `0 < ε` (softmax / GELU / vector-LN are kink-free, so no
+    smoothness witness is needed, and the statement is generic in the weights, so
+    it is non-degenerate by construction). The ViT peer of `convNextForwardT_has_vjp`
+    (18-block ConvNeXt-T) and `efficientnetForwardB_full_has_vjp` (16-block
+    EfficientNet-B0): a full-spec, real-architecture whole-network backward. -/
+theorem vitTiny_has_vjp_correct
+    (W_conv : Kernel4 (3 * 64) 3 16 16)
+    (b_conv : Vec (3 * 64))
+    (cls_token : Vec (3 * 64))
+    (pos_embed : Mat (196 + 1) (3 * 64))
+    (ε : ℝ) (hε : 0 < ε)
+    (ps : Fin 12 → BlockParamsV (3 * 64) 768)
+    (γF βF : Vec (3 * 64))
+    (Wcls : Mat (3 * 64) 10) (bcls : Vec 10)
+    (x : Vec (3 * 224 * 224)) (dy : Vec 10) (i : Fin (3 * 224 * 224)) :
+    (vitForwardKV_has_vjp 3 224 224 16 196 768 3 64 10 12
+      W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x dy i =
+      ∑ j : Fin 10,
+        pdiv (vitForwardKV 3 224 224 16 196 768 3 64 10 12
+          W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) x i j * dy j :=
+  vitForwardKV_has_vjp_correct 3 224 224 16 196 768 3 64 10 12
+    W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls x dy i
+
 end Proofs
 
 namespace Proofs.StableHLO
