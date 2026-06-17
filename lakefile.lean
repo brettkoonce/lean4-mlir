@@ -86,6 +86,10 @@ lean_lib «Proofs» where
              -- CNN render half: the CNN train-step text rendered from `cnnFwdGraph`,
              -- with flat→NCHW reshape glue bridging the conv param-grad tail.
              `LeanMlir.Proofs.CnnRender,
+             -- ResNet-34 render half: the full [3,4,6,3] train step (146 params) rendered
+             -- from the verified AST — stem/16 residual blocks/GAP/dense, residual cotangent-
+             -- sums at the skip merges; regenerates verified_mlir/resnet34_train_step.mlir.
+             `LeanMlir.Proofs.ResNet34Render,
              -- CIFAR-BN close: the per-channel BN scale/shift (dγ, dβ) param-grad
              -- bridges — the affine BN analogue of `bias_grad_bridge`.
              `LeanMlir.Proofs.CifarBnClose,
@@ -276,7 +280,12 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.CifarBnFaithfulPoC,
              -- deeper 8-conv cifar8 (no-BN): pure reuse — conv via CifarPoC generics,
              -- dense via the new generic denseW/denseB_den (Cifar8FaithfulPoC.lean).
-             `LeanMlir.Proofs.Cifar8FaithfulPoC]
+             `LeanMlir.Proofs.Cifar8FaithfulPoC,
+             -- ch6-ResNet-34 (full [3,4,6,3], 146 params): the 2 new strided-conv SGD ops
+             -- (convStrided{Weight,Bias}Sgd) for the 7×7 stem + 3×3 downsample/projection
+             -- convs den-certified via mnv2_render_stem_conv{W,b}_certified; the 142 other
+             -- params reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics (ResNet34FaithfulPoC.lean).
+             `LeanMlir.Proofs.ResNet34FaithfulPoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

@@ -54,7 +54,7 @@ emitter does **not** print (independent hand-written string emitter).
 | **cifar-bn (ch5)** | committed `.mlir` | ✅ `cifarBnFwdGraph` rendered (BN incl.) | ✅ **CLOSED** — `cifarBnTrainStepFaithfulV` (CnnRender.lean) renders the whole BN train step (22 params) as `pretty(provenGraph)`; conv layers reuse `CifarPoC.conv{W,B}_den`, dense head `CifarPoC.{dW,db}{5,6,7}_den`, per-channel BN γ/β via new `bnGammaSgd`/`bnBetaSgd` ops (`CifarBnPoC.bn{Gamma,Beta}_den` ← `cifar_bn_render_{gamma,beta}_certified`, bridged `oc·h·w↔oc·m` by `reassocFwd`) | **2 new core ops** `bnGammaSgd`/`bnBetaSgd`; committed bytes iree-compile on rocm/gfx1100 (259 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + BN `0<ε` + ℝ→Float32) |
 | **cifar8 (8-conv, no-BN)** | committed `.mlir` | ❌ `cifar8FwdText` hand-written | ✅ **CLOSED** — `cifar8TrainStepFaithfulV` (CnnRender.lean) renders the whole 4-stage train step (8 conv + 3 dense, 22 params) as `pretty(provenGraph)`; conv via `CifarPoC.conv{W,B}_den` (generic), dense via the new generic `Cifar8PoC.dense{W,B}_den` | **NO new core ops** (pure reuse); committed bytes iree-compile on rocm/gfx1100 (271 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + ℝ→Float32) |
 | **cifar8-bn** | committed `.mlir` | ❌ `cifar8BnFwdText` hand-written | ✅ **CLOSED** — `cifar8BnTrainStepFaithfulV` (CnnRender.lean) renders the whole BN train step (8 conv + 8 BN + 3 dense, 38 params) as `pretty(provenGraph)`; **no new ops, NO new proof** — every output's `den` = certified by the existing generics (`CifarPoC.conv{W,B}_den`, `CifarBnPoC.bn{Gamma,Beta}_den`, `Cifar8PoC.dense{W,B}_den`) | committed bytes iree-compile on rocm/gfx1100 (393 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + BN `0<ε` + ℝ→Float32) |
-| **r34** | committed `.mlir` | ❌ hand-written (`TestResnet34Fwd`) | ❌ `renderBody` hand-written (`TestResnet34Train`) | `resnet34FwdGraphFullPC_faithful` (**full 34-layer, 146 params**); backward per-param `r34_render_*_chain_certified` | strongest parallel proofs, zero tie to emitted bytes |
+| **r34** | committed `.mlir` | ❌ hand-written (`TestResnet34Fwd`) | ✅ **CLOSED** — `resnet34TrainStepFaithfulV` (ResNet34Render.lean) renders the whole `[3,4,6,3]` train step (146 params) as `pretty(provenGraph)`: 7×7/s2 stem + 16 residual blocks (residual cotangent-sum via `addV` at each skip merge) + GAP + dense; **2 new core ops** `convStridedWeightSgd`/`convStridedBiasSgd` (7×7 stem + 3×3 strided down/proj), den-certified via `mnv2_render_stem_conv{W,b}_certified` (`ResNet34PoC.convStrided{W,B}_den`); 142 other params reuse the cifar conv/BN/dense generics | committed bytes iree-compile on rocm/gfx1100 (537 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin incl. residual fan-in sums + BN `0<ε` + ℝ→Float32) |
 | **mnv2** | committed `.mlir` | ❌ hand-written | ❌ hand-written, **reduced 6-block net** | `mobilenetv2FwdGraphFullPC_faithful` (full 17-block); **whole-net VJP witness only 2-block representative** | double gap: committed net ≠ proven full net; VJP representative |
 | **enet** | committed `.mlir` | ❌ hand-written | ❌ `renderBody` hand-written | `efficientnetFwdGraphB_full_faithful` (full 16 MBConv); backward per-block, **no whole-net** | no whole-net backward; emitted untied |
 | **convnext** | committed `.mlir` | ❌ hand-written | ❌ `renderBody` hand-written | `convNextFwdGraphT_faithful` (full [3,3,9,3]); backward per-block, **no whole-net** | no whole-net backward; emitted untied |
@@ -269,16 +269,18 @@ What's needed:
 
 ## 5. Session handoff — r34 next, then the rest
 
-_State: **7 nets fully folded** (`render(provenGraph)` with every output `den = certified`,
+_State: **8 nets fully folded** (`render(provenGraph)` with every output `den = certified`,
 axiom-clean, iree-validated on rocm/gfx1100): **linear, mlp, cnn, cifar (ch5), cifar-bn (ch5),
-cifar8 (8-conv), cifar8-bn**. Commits: linear/mlp `e4d2a46`/`7ed4c2a`; then this run —
-cnn `4d6a07a` (added `convWeightSgd`/`convBiasSgd`), cifar `31dedf8` (reuse), cifar-bn
-`805ff04` (added `bnGammaSgd`/`bnBetaSgd`), cifar8 `1957930` (reuse + generic dense lemmas),
-cifar8-bn `1441754` (reuse, **zero new proof**), CI scorecard rows `4dc953a`. The core
-SGD-op kit is now complete + proven generic: `weightSgd`/`biasSgd` (dense),
-`convWeightSgd`/`convBiasSgd` (stride-1 conv), `bnGammaSgd`/`bnBetaSgd` (per-channel BN).
-Blueprint intentionally NOT touched. This section is the recipe + per-net plan for the rest;
-**r34 is next** (see the dedicated subsection below)._
+cifar8 (8-conv), cifar8-bn, r34 (ch6, full [3,4,6,3], 146 params)**. Commits: linear/mlp
+`e4d2a46`/`7ed4c2a`; then a prior run — cnn `4d6a07a` (added `convWeightSgd`/`convBiasSgd`),
+cifar `31dedf8` (reuse), cifar-bn `805ff04` (added `bnGammaSgd`/`bnBetaSgd`), cifar8 `1957930`
+(reuse + generic dense lemmas), cifar8-bn `1441754` (reuse, **zero new proof**), CI scorecard rows
+`4dc953a`; r34 this run (added `convStridedWeightSgd`/`convStridedBiasSgd` + ResNet34Render.lean +
+ResNet34FaithfulPoC.lean). The core SGD-op kit is now complete + proven generic: `weightSgd`/
+`biasSgd` (dense), `convWeightSgd`/`convBiasSgd` (stride-1 conv), `convStridedWeightSgd`/
+`convStridedBiasSgd` (stride-2 conv, 7×7 stem + 3×3 down/proj), `bnGammaSgd`/`bnBetaSgd`
+(per-channel BN). Blueprint intentionally NOT touched. This section is the recipe + per-net plan
+for the rest; **mnv2 is next** (it has a blocker — see its bullet below)._
 
 _**cnn close notes (the conv template — reuse for cifar-bn/r34):** the dense head is a
 3-layer MLP, so its cotangents are literally IR `mlpCotOut0/1` and its `den`s close via
@@ -368,10 +370,22 @@ For chapter net `N` with committed `verified_mlir/N_train_step.mlir`:
   `verified_mlir/cifar8_bn_train_step.mlir` (iree-compiles, 393 KB vmfb); every param's
   `den` = certified by the existing generics (conv `CifarPoC`, BN `CifarBnPoC`, dense `Cifar8PoC`).
   This is the payoff of building generic op-lemmas: a 38-param net folds with zero new theorems.
-- **r34 — NEXT (see the dedicated plan below).** Strongest proof side: full-depth forward
-  faithful (`resnet34FwdGraphFullPC_faithful`, 146 params) + per-layer backward
-  `r34_render_*_chain_certified`. Needs **2 new core ops** (strided-conv weight/bias grad) +
-  the big residual-block renderer. All the math certs already exist.
+- **r34 — ✅ DONE (this run).** The concrete plan below was executed. Added **2 new core ops**
+  `convStridedWeightSgd`/`convStridedBiasSgd` (clone of `convWeightSgd`/`convBiasSgd`: weight gets
+  the full 9-site treatment with the zero-upsample weight-grad emit; **bias `skel` aliases
+  `convBiasSgd`** since the bias grad is stride-independent — same `reduce` text, only `den`
+  differs). `flatConvStride2_bias_grad_has_vjp` + `conv2d_bias_differentiable` **relocated**
+  MobileNetV2Close→StridedConv so the bias op's `den` can reference them upstream (same pattern as
+  the per-channel BN grads). `ResNet34FaithfulPoC.lean`: `convStrided{W,B}_den` are one-line
+  delegations to `mnv2_render_stem_conv{W,b}_certified` (generic kH/kW → covers the 7×7 stem AND
+  every 3×3 strided down/proj); the 142 other params reuse the cifar conv/BN/dense generics (no
+  other new theorems — the cifar8-bn lesson). `resnet34TrainStepFaithfulV` (ResNet34Render.lean,
+  `maxRecDepth 1000000`, factored into `idFwd`/`downFwd`/`idBackSgd`/`downBackSgd` block helpers
+  returning `String` records) renders the whole 146-param step and writes
+  `verified_mlir/resnet34_train_step.mlir` (iree-compiles, 537 KB vmfb). Capstones in the 3-axiom
+  closure (all benign); scorecard row ✅. Gotcha hit: emitter reduce-regions use literal block-args
+  `%sa`/`%sb`/`%sc`/`%ss`, so the stem-bias param had to be renamed `%sb`→`%sbi` (MLIR forbids a
+  region block-arg shadowing a func arg; func args are positional in the vmfb so the rename is free).
 - **mnv2 — has a blocker.** The committed trainer is the *reduced 6-block* net; the full
   17-block proof-render is `TestMobilenetV2TrainPC` (not committed), and the whole-net VJP
   witness is only a 2-block representative. Promote the full net + upgrade the VJP witness
@@ -384,7 +398,7 @@ For chapter net `N` with committed `verified_mlir/N_train_step.mlir`:
   uses *per-channel* `[D]` LN. Reconcile (prove per-channel-LN whole-net backward, or emit
   scalar LN) before the fold lands honestly.
 
-### Next session: r34 — concrete plan
+### r34 — concrete plan (✅ EXECUTED this run; kept for the record / as the template for mnv2+)
 
 r34 is the [3,4,6,3] ResNet-34 (146 params): a 3×3/s2 stem, 16 residual blocks (each
 `conv→BN→relu→conv→BN` + skip-add → relu; downsample blocks add a strided projection skip),

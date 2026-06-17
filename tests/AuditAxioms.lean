@@ -40,6 +40,7 @@ import LeanMlir.Proofs.EfficientNetFullB0
 import LeanMlir.Proofs.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
+import LeanMlir.Proofs.ResNet34FaithfulPoC
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
@@ -390,6 +391,11 @@ open Proofs
 -- layers via the generic denseW_den/denseB_den (Cifar8FaithfulPoC.lean).
 #print axioms Cifar8PoC.denseW_den
 #print axioms Cifar8PoC.denseB_den
+-- ch6-ResNet-34 fully folded (full [3,4,6,3], 146 params): the 2 new strided-conv SGD ops
+-- (convStrided{Weight,Bias}Sgd) for the 7×7 stem + 3×3 downsample/projection convs denote the
+-- certified step; the 142 other params reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics.
+#print axioms ResNet34PoC.convStridedW_den
+#print axioms ResNet34PoC.convStridedB_den
 -- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
 -- weight/bias bridges completing all three layers; Crux A).
 #print axioms IR.mlp_layer0_weight_grad_bridge

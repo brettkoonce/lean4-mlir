@@ -157,32 +157,10 @@ theorem depthwise_bias_differentiable {c h w kH kW : Nat}
   unfold depthwiseConv2d Tensor3.flatten
   fun_prop
 
-/-- **`conv2d` (as a function of its bias) is differentiable** — the `vjp_comp` hypothesis for the
-    strided-conv bias-grad (the stem `sb`). -/
-theorem conv2d_bias_differentiable {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w) :
-    Differentiable ℝ (fun b : Vec oc => Tensor3.flatten (conv2d W b x)) := by
-  unfold conv2d Tensor3.flatten
-  fun_prop
-
 -- ── C.1 Stem strided-conv bias (`sb`) ──
-
-/-- **Stride-2 conv bias-VJP.** `fun b => flatConvStride2 W b x = decimate ∘ (conv2d-in-b)`; by
-    `vjp_comp` of the proven stride-1 `conv2d_bias_grad_has_vjp` with `decimateFlat_has_vjp`. The
-    bias peer of `flatConvStride2_weight_grad_has_vjp`. -/
-noncomputable def flatConvStride2_bias_grad_has_vjp {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (x : Vec (ic * (2 * h) * (2 * w))) :
-    HasVJP (fun b : Vec oc =>
-      flatConvStride2 W b x : Vec oc → Vec (oc * h * w)) :=
-  let g : Vec oc → Vec (oc * (2 * h) * (2 * w)) :=
-    fun b => Tensor3.flatten (conv2d W b (Tensor3.unflatten x))
-  let hg_diff : Differentiable ℝ g :=
-    conv2d_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
-  let hg_vjp : HasVJP g :=
-    conv2d_bias_grad_has_vjp (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
-  show HasVJP (decimateFlat oc h w ∘ g) from
-  vjp_comp g (decimateFlat oc h w) hg_diff (decimateFlat_differentiable oc h w)
-    hg_vjp (decimateFlat_has_vjp oc h w)
+-- `conv2d_bias_differentiable` and `flatConvStride2_bias_grad_has_vjp` were RELOCATED to
+-- `StridedConv.lean` (next to their weight peers) so the `convStridedBiasSgd` op's `den` in
+-- `StableHLO` can reference the bias-VJP upstream; they are still in scope here by import.
 
 /-- **Stem conv bias output, certified.** `sbⁿ = sb − lr·(spatial reduce)` denotes
     `sb − lr·(certified ∂(flatConvStride2)/∂sb · cotangent)`. -/

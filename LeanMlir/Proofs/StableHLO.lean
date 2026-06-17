@@ -178,6 +178,21 @@ inductive SHlo : Nat → Type where
       (W : Kernel4 oc ic kH kW) (b : Vec oc)              : SHlo (ic*(2*h)*(2*w)) → SHlo (oc*h*w)
   | convStridedBack  {ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*(2*h)*(2*w))) : SHlo (oc*h*w) → SHlo (ic*(2*h)*(2*w))
+  -- Chapter 6 Milestone B (ResNet-34 downsampling) param-SGD tail: the strided conv
+  -- kernel/bias update ops — the stride-2 analogues of `convWeightSgd`/`convBiasSgd`.
+  -- `convStridedWeightSgd`: `W − lr·(flatConvStride2_weight_grad(b,x)·dy)` — zero-upsample
+  -- the cotangent (the decimate-backward) then the SAME transpose-trick stride-1 weight-grad
+  -- conv on the 2h×2w grid; `den` = the generic strided weight bridge (covers the 3×3
+  -- downsample/projection AND the 7×7 stem, kH/kW-generic). `convStridedBiasSgd`: the bias
+  -- grad is stride-INDEPENDENT (`Σ_{batch,spatial} dy`), so it emits the SAME `reduce` text
+  -- as `convBiasSgd` (its `skel` aliases that op's Raw); only its `den` differs (the strided
+  -- VJP). ResNet34FaithfulPoC proves both `den`s = the certified loss-descent step.
+  | convStridedWeightSgd {ic oc h w kH kW : Nat} (xName wName lrStr : String)
+      (b : Vec oc) (x : Vec (ic*(2*h)*(2*w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
+                                                           : SHlo (oc*h*w) → SHlo (oc*ic*kH*kW)
+  | convStridedBiasSgd   {ic oc h w kH kW : Nat} (bName lrStr : String)
+      (W : Kernel4 oc ic kH kW) (x : Vec (ic*(2*h)*(2*w))) (b : Vec oc) (lr : ℝ)
+                                                           : SHlo (oc*h*w) → SHlo oc
   -- Chapter 9 scaling pass (full ConvNeXt-T): stride-4 SAME conv forward — the
   -- 4×4/s4 patchify stem (`stablehlo.convolution` with `window_strides=[4,4]`).
   -- `den` via the proven `flatConvStride4` (= decimate ∘ decimate ∘ stride-1 conv).
@@ -626,6 +641,11 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .flatConvStridedF _ _ W b e => flatConvStride2 W b (den e)
   | _, .flatConvStride4F _ _ W b e => flatConvStride4 W b (den e)
   | _, .convStridedBack _ W b v e => (flatConvStride2_has_vjp W b).backward v (den e)
+  | _, .convStridedWeightSgd _ _ _ b x W lr e =>
+      fun idx => Kernel4.flatten W idx
+        - lr * (flatConvStride2_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e) idx
+  | _, .convStridedBiasSgd _ _ W x b lr e =>
+      fun o => b o - lr * (flatConvStride2_bias_grad_has_vjp W x).backward b (den e) o
   | _, .bnPerChannelF (oc := oc) (h := h) (w := w) _ _ _ ε γ β e =>
       bnPerChannelTensor3 oc h w ε γ β (den e)
   | _, .bnPerChannelBack (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
@@ -1939,6 +1959,7 @@ inductive Raw where
   | broadcastBack (c h w : Nat)            : Raw → Raw
   | flatConvStridedF (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | convStridedBack  (w : String) (ic oc h w' kH kW : Nat) : Raw → Raw
+  | convStridedWeightSgd (xName wName lrStr : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | flatConvStride4F (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | bnPerChannelF    (g b eps : String) (oc h w : Nat) : Raw → Raw
   | bnPerChannelBack (g x eps : String) (oc h w : Nat) : Raw → Raw
@@ -2015,6 +2036,10 @@ def skel : {k : Nat} → SHlo k → Raw
       .flatConvStridedF wN bN ic oc h w kH kW (skel e)
   | _, .convStridedBack (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
       .convStridedBack wN ic oc h w kH kW (skel e)
+  | _, .convStridedWeightSgd (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
+      .convStridedWeightSgd xN wN lrS ic oc h w kH kW (skel e)
+  | _, .convStridedBiasSgd (oc := oc) (h := h) (w := w) bN lrS _ _ _ _ e =>
+      .convBiasSgd bN lrS oc h w (skel e)
   | _, .flatConvStride4F (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
       .flatConvStride4F wN bN ic oc h w kH kW (skel e)
   | _, .bnPerChannelF (oc := oc) (h := h) (w := w) gN bN es _ _ _ e =>
@@ -2105,6 +2130,7 @@ inductive Tok where
   | broadcastBack (c h w : Nat)            : Tok
   | flatConvStridedF (w b : String) (ic oc h w' kH kW : Nat) : Tok
   | convStridedBack  (w : String) (ic oc h w' kH kW : Nat) : Tok
+  | convStridedWeightSgd (xName wName lrStr : String) (ic oc h w' kH kW : Nat) : Tok
   | flatConvStride4F (w b : String) (ic oc h w' kH kW : Nat) : Tok
   | bnPerChannelF    (g b eps : String) (oc h w : Nat) : Tok
   | bnPerChannelBack (g x eps : String) (oc h w : Nat) : Tok
@@ -2170,6 +2196,7 @@ def toToks : Raw → List Tok
   | .broadcastBack c h w e => toToks e ++ [.broadcastBack c h w]
   | .flatConvStridedF w b ic oc h w' kH kW e => toToks e ++ [.flatConvStridedF w b ic oc h w' kH kW]
   | .convStridedBack w ic oc h w' kH kW e => toToks e ++ [.convStridedBack w ic oc h w' kH kW]
+  | .convStridedWeightSgd xN wN lrS ic oc h w' kH kW e => toToks e ++ [.convStridedWeightSgd xN wN lrS ic oc h w' kH kW]
   | .flatConvStride4F w b ic oc h w' kH kW e => toToks e ++ [.flatConvStride4F w b ic oc h w' kH kW]
   | .bnPerChannelF g b eps oc h w e => toToks e ++ [.bnPerChannelF g b eps oc h w]
   | .bnPerChannelBack g x eps oc h w e => toToks e ++ [.bnPerChannelBack g x eps oc h w]
@@ -2547,6 +2574,30 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
         s!" : ({ty [B,oc,2*h,2*w']}, {ty [ic,oc,kH,kW]}) -> {ty [B,ic,2*h,2*w']}\n" ++
         s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,2*h,2*w']}) -> {ty [B, ic*(2*h)*(2*w')]}\n", o :: st)
+  | .convStridedWeightSgd xN wN lrS ic oc h w kH kW, r :: st => do
+      -- strided (stride-2) conv weight grad then SGD: reshape x to the 2h×2w grid and dy
+      -- to h×w, zero-upsample dy (interior+high=1 → 2h×2w, the decimate-backward), then the
+      -- SAME transpose-trick stride-1 weight-grad conv as `convWeightSgd` on the 2h×2w grid →
+      -- [oc,ic,kH,kW], then θ' = θ − lr·dW. Same op text as `TestResnet34Train.convWGradStrided`.
+      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
+      let raw ← fresh; let g ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
+      pure (
+        s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
+        s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,2*h,2*w]}\n" ++
+        s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,2*h,2*w]}) -> {ty [ic,B,2*h,2*w]}\n" ++
+        s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,2*h,2*w]}) -> {ty [oc,B,2*h,2*w]}\n" ++
+        s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+        s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,2*h,2*w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+        s!"    {g} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n" ++
+        s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [oc,ic,kH,kW]}\n" ++
+        s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [oc,ic,kH,kW]}\n" ++
+        s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [oc,ic,kH,kW]}\n", o :: st)
   | .bnPerChannelF gN bN epsStr oc h w, r :: st => do
       -- PER-CHANNEL BatchNorm forward: reshape to [B,oc,h,w], reduce μ/var over the
       -- spatial axes [2,3] (per channel), normalize, then γ·x̂+β with rank-1 γ/β

@@ -78,6 +78,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.flatConvStridedF w b ic oc h w' kH kW e :: st)
   | .convStridedBack w ic oc h w' kH kW :: ts, e :: st =>
       parseStack ts (.convStridedBack w ic oc h w' kH kW e :: st)
+  | .convStridedWeightSgd xN wN lrS ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.convStridedWeightSgd xN wN lrS ic oc h w' kH kW e :: st)
   | .flatConvStride4F w b ic oc h w' kH kW :: ts, e :: st =>
       parseStack ts (.flatConvStride4F w b ic oc h w' kH kW e :: st)
   | .bnPerChannelF g b eps oc h w :: ts, e :: st =>
@@ -165,6 +167,7 @@ theorem parseStack_toToks (r : Raw) :
   | broadcastBack c h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | flatConvStridedF w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | convStridedBack w ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | convStridedWeightSgd xN wN lrS ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | flatConvStride4F w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | bnPerChannelF g b eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | bnPerChannelBack g x eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
