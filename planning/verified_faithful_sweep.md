@@ -264,3 +264,94 @@ What's needed:
    transition (`verified` vs `verified-forward` vs `in-progress`) — don't relabel a
    net "verified" before its train-step capstone lands.
 
+## 5. Session handoff — cnn next, then the rest
+
+_State: linear + mlp train steps are fully folded (`render(provenGraph)` with every
+output `den = certified`), committed (`e4d2a46`, `7ed4c2a`) and pushed; the CI
+scorecard (`256da11`) prints ✅ for both. Blueprint intentionally NOT touched.
+This section is the recipe + per-net plan for finishing the rest._
+
+### The proven recipe (what worked for linear + mlp)
+For chapter net `N` with committed `verified_mlir/N_train_step.mlir`:
+1. **Find the proven param-grad certs.** Each net has `N_render_*_certified` /
+   `N_layer*_*_grad_bridge` (analogs of `linWeightDen_is_loss_descent`):
+   `θ − lr·emit{Weight,Bias}Grad(activation, cotangent) = θ − lr·(certified pdiv
+   Jacobian · cotangent)`. These already exist for linear/mlp/cnn/cifar/r34. Reuse them.
+2. **Express the train step as `SHlo` nodes.** Forward via `denseF`/`reluF`/`bnF`/
+   conv ops (already proof-rendered in `*TrainStepStructured`); backward chain via
+   existing `dotOut`/`selectPos`/`convBack`/`maxPoolBack`/`bnBack`; param updates via
+   `weightSgd`/`biasSgd` (dense) — **add new SGD ops only for param grads the existing
+   ones can't express** (see per-net below).
+3. **`*FaithfulPoC.lean`:** for each emitted param op, prove `den(op) = certified`
+   by `have step : den(op) = θ − lr·emit*Grad(...) := by simp [den, emit*, Mat.outer,
+   Mat.flatten, Equiv.symm_apply_apply, ...]` then `rw [step, N_render_*_certified ...]`.
+   Cotangent subgraph lemmas: `den(selectPos p (dotOut W e)) = (chain cotangent).denote`
+   (cf. `MlpPoC.cot{1,0}_den`).
+4. **`*TrainStepFaithfulV` renderer** (in `*Render.lean`): forward + cotangent chain
+   (shared once) + the param SGD ops, all via `pretty`, multi-output. Switch the
+   `#eval` that writes `verified_mlir/N_train_step.mlir` to it (move it out of
+   `StableHLO.lean` if the renderer lives in `*Render.lean`).
+5. **Wire + verify:** add `*FaithfulPoC` to `lakefile.lean` `Proofs` roots + the
+   capstones to `tests/AuditAxioms.lean`; `lake build Proofs`; re-run the closure
+   (must stay all-benign); `iree-compile` the regenerated `.mlir` (rocm/gfx1100);
+   add the net's row to the CI scorecard in `proofs.yml`; update the §1 matrix here.
+
+### Gotchas (learned the hard way)
+- **Capstone names must be short.** The closure check greps `#print axioms` output
+  per line; Lean wraps past ~120 cols, splitting the benign triple across lines and
+  false-failing. Keep `Proofs.<NS>.<name>` short (e.g. `Proofs.MlpPoC.W0_den_certified`).
+- **Render is value-independent; `den` needs real values.** `skel` erases `ℝ`/operand
+  values, so the renderer passes placeholders (`fun _ => 0`, `lr := 0`) and stays
+  computable for `#eval`; the `den` theorems use the real values. A bare `lr : ℝ` field
+  is fine to `#eval` only as the placeholder `(0:ℝ)` — don't pass a real `lr` literal to
+  the renderer (noncomputable).
+- **`den(op) = certified` is usually `rfl`-close** once `wGrad`/`Mat.outer`/`bGrad`
+  unfold; if `simp` stalls on the `Mat.flatten ∘ finProdFinEquiv` step use
+  `simp [Mat.flatten, Equiv.symm_apply_apply]`.
+- **Core `SHlo` extension is contained**: only `den` + `skel` match `SHlo`
+  constructors; a new op also needs `Tok`/`Raw` ctors, `toToks`, `emitTok` (the MLIR
+  text — copy the committed hand-written op text), and `parseStack` + the one-line
+  `parseStack_toToks` case (keeps `roundtrip` true). `weightSgd`/`biasSgd` (in
+  `StableHLO.lean`) are the worked template.
+- iree-compile lives at `/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-compile`
+  (rocm/gfx1100); the drift gate is `scripts/validate_linear_faithful.sh` (generalize
+  per net). CI's ubuntu runner can't iree-compile — keep that gate local.
+
+### Per-net plan
+- **cnn (2d) — NEXT.** Has `cnn_render_{convW,convb}_certified` + `conv_weight_grad_bridge`
+  (`conv2d_weight_grad_has_vjp.backward`, the transpose-trick) + `cnnTrainStepStructured`
+  (forward rendered). Backward ops exist (`convBack`, `maxPoolBack`, `selectPos`). **Needs
+  2 new core SGD ops** the dense `weightSgd`/`biasSgd` can't express: `convWeightSgd`
+  (kernel grad = the transpose-trick conv, `den = flatten(W − lr·conv2d_weight_grad…)`,
+  emit = the `cnnTrainStepText` conv-W-grad text) and `convBiasSgd` (reduce over batch+
+  spatial). Dense head reuses `weightSgd`/`biasSgd`. `#eval`: `StableHLO.lean:4246`
+  (`cnnTrainStepText 128 1 32 28 28 3 3 512 10`).
+- **cifar-bn.** Like cnn + per-channel BN. Has `cifar_bn_render_{gamma,beta}_certified`
+  + `bnBack` (input grad). Needs the BN scale/shift (dγ,dβ) param grads as ops (+ the
+  conv ops from cnn). `cifarBnTrainStepStructured` exists.
+- **r34.** Strongest proof side: full-depth forward faithful (`resnet34FwdGraphFullPC_faithful`,
+  146 params) + per-layer backward `r34_render_*_chain_certified`. Needs the strided-conv
+  weight-grad op + the multi-block assembly (big, but all certs exist). Best conv net to
+  do after cnn since the per-param certs are already there.
+- **mnv2 — has a blocker.** The committed trainer is the *reduced 6-block* net; the full
+  17-block proof-render is `TestMobilenetV2TrainPC` (not committed), and the whole-net VJP
+  witness is only a 2-block representative. Promote the full net + upgrade the VJP witness
+  BEFORE folding, else the fold certifies a non-representative net.
+- **enet / convnext — blocker.** Full forward faithful but **no whole-net backward graph**
+  (only per-block `mbconvBodyBackGraph`/`cnxBlockBodyBackGraph`). Compose a whole-net
+  backward + per-param certs first, then fold.
+- **vit — granularity blocker.** Richest (`vitNetBackGraph_faithful` + full
+  `vit_render_*_chain_certified`) BUT proven for *scalar* LayerNorm while the emitted net
+  uses *per-channel* `[D]` LN. Reconcile (prove per-channel-LN whole-net backward, or emit
+  scalar LN) before the fold lands honestly.
+
+### Commands
+```
+lake build Proofs                                  # whole suite (≈ rebuilds on core edits)
+lake env lean tests/AuditAxioms.lean               # 3-axiom closure (must be all-benign)
+lake env lean LeanMlir/Proofs/<Net>Render.lean     # regenerate that net's committed .mlir
+IREE=/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-compile
+$IREE verified_mlir/<net>_train_step.mlir --iree-hal-target-backends=rocm \
+  --iree-rocm-target=gfx1100 --iree-codegen-llvmgpu-use-reduction-vector-distribution=false -o /tmp/x.vmfb
+```
+
