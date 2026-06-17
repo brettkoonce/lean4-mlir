@@ -118,6 +118,7 @@ jobs:
             echo "| cifar (ch5, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful CifarPoC.db7_den) | \`conv{W,B}_den\` + \`{dW,db}{5,6,7}_den\` |"
             echo "| cifar-bn (ch5) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful CifarBnPoC.bnBeta_den) | \`bnGamma_den\`/\`bnBeta_den\` + cifar conv/dense |"
             echo "| cifar8 (8-conv, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful Cifar8PoC.denseB_den) | \`conv{W,B}_den\` + \`dense{W,B}_den\` |"
+            echo "| cifar8-bn (8-conv) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful Cifar8PoC.denseB_den) | reuse: conv/BN/dense generics (no new proof) |"
             echo "| r34 / mnv2 / enet / convnext / vit | ⚠️ WIP | ⚠️ WIP | ℝ whole-net VJP proven; fold pending |"
           } >> $GITHUB_STEP_SUMMARY
 
