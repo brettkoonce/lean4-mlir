@@ -249,7 +249,13 @@ lean_lib «Proofs» where
              -- the MHSA backward collapsed at heads = 1 to the plain three-way dense
              -- fan-in over the proven sdpa_back_{Q,K,V} (tied to mhsa_has_vjp_mat by
              -- VJP determinism), assembled into the whole transformerBlock VJP.
-             `LeanMlir.Proofs.ViTBackB0]
+             `LeanMlir.Proofs.ViTBackB0,
+             -- PoC: the mnist-linear train step proof-tied to the certified
+             -- loss-descent SGD step (the renderer `MainMnistLinearVerified`
+             -- trains on), incl. the param-grad/SGD "tail fold". Template for
+             -- making each chapter's verified trainer faithful — see
+             -- planning/verified_faithful_sweep.md.
+             `LeanMlir.Proofs.LinearFaithfulPoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

@@ -62,6 +62,7 @@ import LeanMlir.Proofs.MobileNetV2BackB0
 import LeanMlir.Proofs.ResNet34BackB0
 import LeanMlir.Proofs.ConvNeXtBackB0
 import LeanMlir.Proofs.ViTBackB0
+import LeanMlir.Proofs.LinearFaithfulPoC
 
 open Proofs
 
@@ -327,6 +328,19 @@ open Proofs
 -- each rendered parameter output denotes the certified SGD step.
 #print axioms StableHLO.linWeightDen_is_loss_descent
 #print axioms StableHLO.linBiasDen_is_certified
+-- PoC capstones (LinearFaithfulPoC.lean): the mnist-linear trainer's render is
+-- the certified loss-descent step — forward end-to-end tied, train step certified,
+-- and the param-grad/SGD tail given a structural denotation proven certified.
+-- See planning/verified_faithful_sweep.md; the byte tie (committed .mlir == render)
+-- is the CI "Verified-render drift guard" step in proofs.yml.
+#print axioms LinPoC.poc_fwd_faithful
+#print axioms LinPoC.poc_fwd_is_render
+#print axioms LinPoC.poc_train_step_certified
+-- Tail fold closed: the emitted weightSgd/biasSgd SHlo nodes (what
+-- linTrainStepFaithfulV prints) denote the certified loss-descent step.
+#print axioms LinPoC.poc_weightSgd_den_eq
+#print axioms LinPoC.poc_biasSgd_den_eq
+#print axioms LinPoC.poc_train_step_tail_certified
 -- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
 -- weight/bias bridges completing all three layers; Crux A).
 #print axioms IR.mlp_layer0_weight_grad_bridge

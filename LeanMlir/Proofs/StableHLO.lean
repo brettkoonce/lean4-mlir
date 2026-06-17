@@ -98,6 +98,14 @@ inductive SHlo : Nat → Type where
   | expe       {n : Nat}                                        : SHlo n → SHlo n
   | softmaxDiv {n : Nat}                                        : SHlo n → SHlo n
   | sub        {n : Nat}                                        : SHlo n → SHlo n → SHlo n
+  -- Chapter-2 SGD tail (the linear train step, folded into the AST): the two
+  -- fused parameter-update ops that take the loss cotangent and emit the
+  -- weight/bias SGD step. `weightSgd`: `W − lr·(x⊗dy)` (`dot_general` batch-
+  -- contract → const → multiply → subtract), `den` = the certified `sgdW` step
+  -- at B=1. `biasSgd`: `b − lr·(Σ_batch dy)` (`reduce` → const → mul → sub).
+  -- LinearFaithfulPoC proves both `den`s = the certified loss-descent step.
+  | weightSgd  {m n : Nat} (xName wName lrStr : String) (x : Vec m) (W : Mat m n) (lr : ℝ) : SHlo n → SHlo (m*n)
+  | biasSgd    {n : Nat} (bName lrStr : String) (b : Vec n) (lr : ℝ)                        : SHlo n → SHlo n
   -- Chapter 3 (MLP): ReLU forward (`maximum(·,0)`) and its backward mask
   -- (`select(x>0,·,0)`); `xName`/`x` is the saved pre-activation.
   | reluF      {n : Nat}                                        : SHlo n → SHlo n
@@ -563,6 +571,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .expe e         => fun j => Real.exp (den e j)
   | _, .softmaxDiv e   => fun j => den e j / ∑ k, den e k
   | _, .sub a b        => fun j => den a j - den b j
+  | _, .weightSgd _ _ _ x W lr e => Mat.flatten (fun i j => W i j - lr * (x i * den e j))
+  | _, .biasSgd _ _ b lr e       => fun j => b j - lr * den e j
   | _, .reluF e        => fun i => max (den e i) 0
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
   | _, .relu6F e       => fun i => min (max (den e i) 0) 6
@@ -1873,6 +1883,8 @@ inductive Raw where
   | expe       (n : Nat)                   : Raw → Raw
   | softmaxDiv (n : Nat)                   : Raw → Raw
   | sub        (n : Nat)                   : Raw → Raw → Raw
+  | weightSgd  (xName wName lrStr : String) (m n : Nat) : Raw → Raw
+  | biasSgd    (bName lrStr : String) (n : Nat)         : Raw → Raw
   | reluF      (n : Nat)                   : Raw → Raw
   | selectPos  (x : String) (n : Nat)      : Raw → Raw
   | relu6F     (n : Nat)                   : Raw → Raw
@@ -1935,6 +1947,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .expe e                => .expe k (skel e)
   | k, .softmaxDiv e          => .softmaxDiv k (skel e)
   | k, .sub a b               => .sub k (skel a) (skel b)
+  | _, .weightSgd (m := m) (n := n) xN wN lrS _ _ _ e => .weightSgd xN wN lrS m n (skel e)
+  | k, .biasSgd bN lrS _ _ e  => .biasSgd bN lrS k (skel e)
   | k, .reluF e               => .reluF k (skel e)
   | k, .selectPos x _ e       => .selectPos x k (skel e)
   | k, .relu6F e              => .relu6F k (skel e)
@@ -2023,6 +2037,8 @@ inductive Tok where
   | expe       (n : Nat)                   : Tok
   | softmaxDiv (n : Nat)                   : Tok
   | sub        (n : Nat)                   : Tok
+  | weightSgd  (xName wName lrStr : String) (m n : Nat) : Tok
+  | biasSgd    (bName lrStr : String) (n : Nat)         : Tok
   | reluF      (n : Nat)                   : Tok
   | selectPos  (x : String) (n : Nat)      : Tok
   | relu6F     (n : Nat)                   : Tok
@@ -2082,6 +2098,8 @@ def toToks : Raw → List Tok
   | .expe n e        => toToks e ++ [.expe n]
   | .softmaxDiv n e  => toToks e ++ [.softmaxDiv n]
   | .sub n a b       => toToks a ++ toToks b ++ [.sub n]
+  | .weightSgd xN wN lrS m n e => toToks e ++ [.weightSgd xN wN lrS m n]
+  | .biasSgd bN lrS n e        => toToks e ++ [.biasSgd bN lrS n]
   | .reluF n e       => toToks e ++ [.reluF n]
   | .selectPos x n e => toToks e ++ [.selectPos x n]
   | .relu6F n e      => toToks e ++ [.relu6F n]
@@ -2161,6 +2179,19 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
   | .sub n, b :: a :: st => do
       let o ← fresh
       pure (s!"    {o} = stablehlo.subtract {a}, {b} : {ty [B,n]}\n", o :: st)
+  | .weightSgd xN wN lrS m n, r :: st => do
+      let dW ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
+      pure (s!"    {dW} = stablehlo.dot_general {xN}, {r}, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,m]}, {ty [B,n]}) -> {ty [m,n]}\n" ++
+            s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [m,n]}\n" ++
+            s!"    {sW} = stablehlo.multiply {dW}, {lW} : {ty [m,n]}\n" ++
+            s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [m,n]}\n", o :: st)
+  | .biasSgd bN lrS n, r :: st => do
+      let z ← fresh; let dB ← fresh; let lB ← fresh; let sB ← fresh; let o ← fresh
+      pure (s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {dB} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [0] : ({ty [B,n]}, tensor<f32>) -> {ty [n]}\n" ++
+            s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [n]}\n" ++
+            s!"    {sB} = stablehlo.multiply {dB}, {lB} : {ty [n]}\n" ++
+            s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [n]}\n", o :: st)
   | .reluF n, r :: st => do
       let z ← fresh; let o ← fresh
       pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
@@ -2901,6 +2932,32 @@ def linearTrainStepModuleV (B d₀ d₁ : Nat) (lr : String)
   s!"    %sb0 = stablehlo.multiply %db0, %lb0 : {ty [d₁]}\n" ++
   s!"    %b0n = stablehlo.subtract %b0, %sb0 : {ty [d₁]}\n" ++
   s!"    return %W0n, %b0n : {ty [d₀,d₁]}, {ty [d₁]}\n" ++
+  "  }\n}\n"
+
+/-- **The linear train step rendered ENTIRELY from the verified AST.** Unlike
+    `linearTrainStepModuleV` (forward via `pretty`, tail hand-written), here the
+    *whole* module is `pretty` of denoted nodes: the cotangent (`lossCotGraph`,
+    rendered once → shared `%dy`), then the two fused SGD ops `weightSgd`/`biasSgd`
+    that consume `%dy`. So every emitted line is `pretty(provenNode)` and
+    `LinearFaithfulPoC` proves the two outputs' `den` = the certified loss-descent
+    SGD step. The `lr` ℝ / operand values are `skel`-erased (render is
+    value-independent), so placeholders here render identically to the live graph
+    the `den` theorems use. -/
+def linTrainStepFaithfulV (B m n : Nat) (lrStr : String)
+    (W : Mat m n) (b : Vec n) (x : Vec m) : String :=
+  let act : StateM Nat (String × String × String) := do
+    let (cotBody, dy) ← pretty B (lossCotGraph W b x (fun _ => 0))
+    let zeroN : Vec n := fun _ => 0
+    let (wBody, wRes) ← pretty B (SHlo.weightSgd "%x" "%W0" lrStr x W 0 (.operand dy zeroN))
+    let (bBody, bRes) ← pretty B (SHlo.biasSgd "%b0" lrStr b 0 (.operand dy zeroN))
+    pure (cotBody ++ wBody ++ bBody, wRes, bRes)
+  let (body, wRes, bRes) := act.run' 0
+  "module @m {\n" ++
+  s!"  func.func @linear_train_step(%x: {ty [B,m]}, %W0: {ty [m,n]}, %b0: {ty [n]}, " ++
+  s!"%onehot: {ty [B,n]}) -> ({ty [m,n]}, {ty [n]}) " ++ "{\n" ++
+  "    // ── linear train step: every line is pretty(verified AST node) ──\n" ++
+  body ++
+  s!"    return {wRes}, {bRes} : {ty [m,n]}, {ty [n]}\n" ++
   "  }\n}\n"
 
 /-- `@mlp_fwd` rendered from the verified forward AST `mlpFwdGraph`. -/
@@ -4164,8 +4221,12 @@ end Proofs
   IO.FS.createDirAll "verified_mlir"
   IO.FS.writeFile "verified_mlir/linear_fwd.mlir"
     (Proofs.StableHLO.linearFwdModuleV 128 784 10 (fun _ _ => 0) (fun _ => 0) (fun _ => 0))
+  -- Whole train step rendered from the verified AST (cotangent + weightSgd/biasSgd
+  -- nodes), the den-certified renderer LinearFaithfulPoC proves; see that file +
+  -- planning/verified_faithful_sweep.md. (linearTrainStepModuleV — forward-AST +
+  -- hand-written tail — is its structural predecessor, kept for reference.)
   IO.FS.writeFile "verified_mlir/linear_train_step.mlir"
-    (Proofs.StableHLO.linearTrainStepModuleV 128 784 10 "0.00078125"
+    (Proofs.StableHLO.linTrainStepFaithfulV 128 784 10 "0.00078125"
        (fun _ _ => 0) (fun _ => 0) (fun _ => 0))
   -- Chapter 3 MLP (784→512→512→10): forward + full SGD train step.
   IO.FS.writeFile "verified_mlir/mlp_fwd.mlir"

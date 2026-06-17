@@ -48,6 +48,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .expe n :: ts, e :: st       => parseStack ts (.expe n e :: st)
   | .softmaxDiv n :: ts, e :: st => parseStack ts (.softmaxDiv n e :: st)
   | .sub n :: ts, b :: a :: st   => parseStack ts (.sub n a b :: st)
+  | .weightSgd xN wN lrS m n :: ts, e :: st => parseStack ts (.weightSgd xN wN lrS m n e :: st)
+  | .biasSgd bN lrS n :: ts, e :: st        => parseStack ts (.biasSgd bN lrS n e :: st)
   | .reluF n :: ts, e :: st      => parseStack ts (.reluF n e :: st)
   | .selectPos x n :: ts, e :: st => parseStack ts (.selectPos x n e :: st)
   | .relu6F n :: ts, e :: st     => parseStack ts (.relu6F n e :: st)
@@ -133,6 +135,8 @@ theorem parseStack_toToks (r : Raw) :
   | expe n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | softmaxDiv n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | sub n a b iha ihb => intro ts st; simp only [toToks, List.append_assoc, iha, ihb]; rfl
+  | weightSgd xN wN lrS m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | biasSgd bN lrS n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | reluF n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | selectPos x n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | relu6F n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl

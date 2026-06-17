@@ -54,6 +54,19 @@ jobs:
           lake exe cache get || true
           lake build Proofs
 
+      - name: Verified-render drift guard (committed .mlir == proven renderer)
+        # Re-elaborate StableHLO.lean (re-runs its #eval writers) so the
+        # committed verified_mlir/linear_* equal `linearTrainStepModuleV` /
+        # `linearFwdModuleV` — the renderer LinearFaithfulPoC.lean certifies and
+        # MainMnistLinearVerified trains on. If they drift, fail (regenerate with
+        # `lake env lean LeanMlir/Proofs/StableHLO.lean`). The PoC tie for the
+        # mnist-linear chapter trainer; extend per net as renderers are proven.
+        run: |
+          set -e
+          lake env lean LeanMlir/Proofs/StableHLO.lean
+          git diff --exit-code -- verified_mlir/linear_train_step.mlir verified_mlir/linear_fwd.mlir \
+            || { echo "::error::committed verified_mlir/linear_*.mlir drifted from the proven renderer"; exit 1; }
+
       - name: Three-axiom closure check
         run: |
           set -e
