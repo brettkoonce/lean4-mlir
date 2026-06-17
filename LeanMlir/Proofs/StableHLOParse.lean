@@ -54,6 +54,10 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.convWeightSgd xN wN lrS ic oc h w kH kW e :: st)
   | .convBiasSgd bN lrS oc h w :: ts, e :: st =>
       parseStack ts (.convBiasSgd bN lrS oc h w e :: st)
+  | .bnGammaSgd gN vN es lrS oc h w :: ts, e :: st =>
+      parseStack ts (.bnGammaSgd gN vN es lrS oc h w e :: st)
+  | .bnBetaSgd bN lrS oc h w :: ts, e :: st =>
+      parseStack ts (.bnBetaSgd bN lrS oc h w e :: st)
   | .reluF n :: ts, e :: st      => parseStack ts (.reluF n e :: st)
   | .selectPos x n :: ts, e :: st => parseStack ts (.selectPos x n e :: st)
   | .relu6F n :: ts, e :: st     => parseStack ts (.relu6F n e :: st)
@@ -143,6 +147,8 @@ theorem parseStack_toToks (r : Raw) :
   | biasSgd bN lrS n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | convWeightSgd xN wN lrS ic oc h w kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | convBiasSgd bN lrS oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | bnGammaSgd gN vN es lrS oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | bnBetaSgd bN lrS oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | reluF n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | selectPos x n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | relu6F n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl

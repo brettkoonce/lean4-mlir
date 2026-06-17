@@ -646,6 +646,117 @@ def cifarBnTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr 
   s!"    return %W1n, %b1n, %g1n, %bt1n, %W2n, %b2n, %g2n, %bt2n, %W3n, %b3n, %g3n, %bt3n, %W4n, %b4n, %g4n, %bt4n, %W5n, %b5n, %W6n, %b6n, %W7n, %b7n : {ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
   "  }\n}\n"
 
+/-- **CIFAR-BN (Chapter 5, per-channel BatchNorm) train step rendered ENTIRELY from the
+    verified AST.** The BN peer of `cifarTrainStepFaithfulV` (`conv→BN→relu ×4, 2 pools,
+    3 dense`; 22 params). Forward + the BN input-grad backward were already proof-rendered
+    (`bnPerChannelF`/`bnPerChannelBack`); now the whole backward chain
+    (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`/`bnPerChannelBack`) AND all 22 param SGD
+    updates are `pretty` of denoted nodes — conv via `convWeightSgd`/`convBiasSgd`, dense via
+    `weightSgd`/`biasSgd`, and the per-channel BN γ/β via the new `bnGammaSgd`/`bnBetaSgd`
+    ops. `CifarBnFaithfulPoC` proves each output's `den` = certified. The whole module is
+    built inside the `StateM` (so the fresh param-result names are in scope for the `return`).
+    Dim convention matches `cifarBnTrainStepStructured`. -/
+def cifarBnTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr lrStr : String)
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
+    (W₅ : Mat (c2*h*w) d1) (b₅ : Vec d1) (W₆ : Mat d1 d1) (b₆ : Vec d1)
+    (W₇ : Mat d1 nClasses) (b₇ : Vec nClasses) (x : Vec (ic*(2*(2*h))*(2*(2*w)))) : String :=
+  let flat := c2*h*w
+  let zF1 : Vec (c1*(2*(2*h))*(2*(2*w))) := fun _ => 0
+  let zP1 : Vec (c1*(2*h)*(2*w)) := fun _ => 0
+  let zF2 : Vec (c2*(2*h)*(2*w)) := fun _ => 0
+  let zFlat : Vec (c2*h*w) := fun _ => 0
+  let zD1 : Vec d1 := fun _ => 0
+  let zNC : Vec nClasses := fun _ => 0
+  let zVc1 : Vec c1 := fun _ => 0
+  let zVc2 : Vec c2 := fun _ => 0
+  let zTic4 : Tensor3 ic (2*(2*h)) (2*(2*w)) := fun _ _ _ => 0
+  let zTc14 : Tensor3 c1 (2*(2*h)) (2*(2*w)) := fun _ _ _ => 0
+  let zTc12 : Tensor3 c1 (2*h) (2*w) := fun _ _ _ => 0
+  let zTc22 : Tensor3 c2 (2*h) (2*w) := fun _ _ _ => 0
+  let go : StateM Nat String := do
+    -- ═══ forward (proof-rendered, incl. BN forward) ═══
+    let (cHc1, nHc1) ← pretty B (.flatConvF (h := 2*(2*h)) (w := 2*(2*w)) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
+    let (cBn1, nBn1) ← pretty B (.bnPerChannelF (oc := c1) (h := 2*(2*h)) (w := 2*(2*w)) "%g1" "%bt1" epsStr 0 zVc1 zVc1 (.operand nHc1 zF1))
+    let (cAc1, nAc1) ← pretty B (.reluF (.operand nBn1 zF1))
+    let (cHc2, nHc2) ← pretty B (.flatConvF (h := 2*(2*h)) (w := 2*(2*w)) "%W2" "%b2" W₂ b₂ (.operand nAc1 zF1))
+    let (cBn2, nBn2) ← pretty B (.bnPerChannelF (oc := c1) (h := 2*(2*h)) (w := 2*(2*w)) "%g2" "%bt2" epsStr 0 zVc1 zVc1 (.operand nHc2 zF1))
+    let (cAc2, nAc2) ← pretty B (.reluF (.operand nBn2 zF1))
+    let (cP1, nPool1) ← pretty B (.maxPoolF (c := c1) (h := 2*h) (w := 2*w) (.operand nAc2 zF1))
+    let (cHc3, nHc3) ← pretty B (.flatConvF (h := 2*h) (w := 2*w) "%W3" "%b3" W₃ b₃ (.operand nPool1 zP1))
+    let (cBn3, nBn3) ← pretty B (.bnPerChannelF (oc := c2) (h := 2*h) (w := 2*w) "%g3" "%bt3" epsStr 0 zVc2 zVc2 (.operand nHc3 zF2))
+    let (cAc3, nAc3) ← pretty B (.reluF (.operand nBn3 zF2))
+    let (cHc4, nHc4) ← pretty B (.flatConvF (h := 2*h) (w := 2*w) "%W4" "%b4" W₄ b₄ (.operand nAc3 zF2))
+    let (cBn4, nBn4) ← pretty B (.bnPerChannelF (oc := c2) (h := 2*h) (w := 2*w) "%g4" "%bt4" epsStr 0 zVc2 zVc2 (.operand nHc4 zF2))
+    let (cAc4, nAc4) ← pretty B (.reluF (.operand nBn4 zF2))
+    let (cP2, nPool2) ← pretty B (.maxPoolF (c := c2) (h := h) (w := w) (.operand nAc4 zF2))
+    let (cH5, nH5) ← pretty B (denseF "%W5" "%b5" W₅ b₅ (.operand nPool2 zFlat))
+    let (cA5, nA5) ← pretty B (.reluF (.operand nH5 zD1))
+    let (cH6, nH6) ← pretty B (denseF "%W6" "%b6" W₆ b₆ (.operand nA5 zD1))
+    let (cA6, nA6) ← pretty B (.reluF (.operand nH6 zD1))
+    let (cLog, nLog) ← pretty B (denseF "%W7" "%b7" W₇ b₇ (.operand nA6 zD1))
+    let (cDy, nDy) ← pretty B
+      (.sub (.softmaxDiv (.expe (.operand nLog zNC))) (.operand "%onehot" zNC))
+    -- ═══ backward chain: dense head → (scatter → relu-back → BN-back → conv-back) per block ═══
+    let (cDy6, nDy6) ← pretty B (.selectPos nH6 zD1 (.dotOut "%W7" W₇ (.operand nDy zNC)))
+    let (cDy5, nDy5) ← pretty B (.selectPos nH5 zD1 (.dotOut "%W6" W₆ (.operand nDy6 zD1)))
+    let (cDx5, nDx5) ← pretty B (.dotOut "%W5" W₅ (.operand nDy5 zD1))
+    -- stage-2 block 4
+    let (cDac4, nDac4) ← pretty B (.maxPoolBack (c := c2) (h := h) (w := w) nAc4 zF2 (.operand nDx5 zFlat))
+    let (cDbn4, nDbn4) ← pretty B (.selectPos nBn4 zF2 (.operand nDac4 zF2))
+    let (cDhc4, nDhc4) ← pretty B (.bnPerChannelBack (oc := c2) (h := 2*h) (w := 2*w) "%g4" nHc4 epsStr 0 zVc2 zF2 (.operand nDbn4 zF2))
+    -- stage-2 block 3
+    let (cDac3, nDac3) ← pretty B (.convBack (h := 2*h) (w := 2*w) "%W4" W₄ b₄ zF2 (.operand nDhc4 zF2))
+    let (cDbn3, nDbn3) ← pretty B (.selectPos nBn3 zF2 (.operand nDac3 zF2))
+    let (cDhc3, nDhc3) ← pretty B (.bnPerChannelBack (oc := c2) (h := 2*h) (w := 2*w) "%g3" nHc3 epsStr 0 zVc2 zF2 (.operand nDbn3 zF2))
+    let (cDpl1, nDpool1) ← pretty B (.convBack (h := 2*h) (w := 2*w) "%W3" W₃ b₃ zP1 (.operand nDhc3 zF2))
+    -- stage-1 block 2
+    let (cDac2, nDac2) ← pretty B (.maxPoolBack (c := c1) (h := 2*h) (w := 2*w) nAc2 zF1 (.operand nDpool1 zP1))
+    let (cDbn2, nDbn2) ← pretty B (.selectPos nBn2 zF1 (.operand nDac2 zF1))
+    let (cDhc2, nDhc2) ← pretty B (.bnPerChannelBack (oc := c1) (h := 2*(2*h)) (w := 2*(2*w)) "%g2" nHc2 epsStr 0 zVc1 zF1 (.operand nDbn2 zF1))
+    -- stage-1 block 1
+    let (cDac1, nDac1) ← pretty B (.convBack (h := 2*(2*h)) (w := 2*(2*w)) "%W2" W₂ b₂ zF1 (.operand nDhc2 zF1))
+    let (cDbn1, nDbn1) ← pretty B (.selectPos nBn1 zF1 (.operand nDac1 zF1))
+    let (cDhc1, nDhc1) ← pretty B (.bnPerChannelBack (oc := c1) (h := 2*(2*h)) (w := 2*(2*w)) "%g1" nHc1 epsStr 0 zVc1 zF1 (.operand nDbn1 zF1))
+    -- ═══ param SGD updates: conv + BN γ/β + dense ═══
+    let (cW1g, nW1g) ← pretty B (SHlo.convWeightSgd "%x" "%W1" lrStr b₁ zTic4 W₁ 0 (.operand nDhc1 zF1))
+    let (cb1g, nb1g) ← pretty B (SHlo.convBiasSgd "%b1" lrStr W₁ zTic4 b₁ 0 (.operand nDhc1 zF1))
+    let (cg1, ng1) ← pretty B (SHlo.bnGammaSgd "%g1" nHc1 epsStr lrStr 0 zVc1 zF1 0 (.operand nDbn1 zF1))
+    let (cbt1, nbt1) ← pretty B (SHlo.bnBetaSgd "%bt1" lrStr zVc1 0 (.operand nDbn1 zF1))
+    let (cW2g, nW2g) ← pretty B (SHlo.convWeightSgd nAc1 "%W2" lrStr b₂ zTc14 W₂ 0 (.operand nDhc2 zF1))
+    let (cb2g, nb2g) ← pretty B (SHlo.convBiasSgd "%b2" lrStr W₂ zTc14 b₂ 0 (.operand nDhc2 zF1))
+    let (cg2, ng2) ← pretty B (SHlo.bnGammaSgd "%g2" nHc2 epsStr lrStr 0 zVc1 zF1 0 (.operand nDbn2 zF1))
+    let (cbt2, nbt2) ← pretty B (SHlo.bnBetaSgd "%bt2" lrStr zVc1 0 (.operand nDbn2 zF1))
+    let (cW3g, nW3g) ← pretty B (SHlo.convWeightSgd nPool1 "%W3" lrStr b₃ zTc12 W₃ 0 (.operand nDhc3 zF2))
+    let (cb3g, nb3g) ← pretty B (SHlo.convBiasSgd "%b3" lrStr W₃ zTc12 b₃ 0 (.operand nDhc3 zF2))
+    let (cg3, ng3) ← pretty B (SHlo.bnGammaSgd "%g3" nHc3 epsStr lrStr 0 zVc2 zF2 0 (.operand nDbn3 zF2))
+    let (cbt3, nbt3) ← pretty B (SHlo.bnBetaSgd "%bt3" lrStr zVc2 0 (.operand nDbn3 zF2))
+    let (cW4g, nW4g) ← pretty B (SHlo.convWeightSgd nAc3 "%W4" lrStr b₄ zTc22 W₄ 0 (.operand nDhc4 zF2))
+    let (cb4g, nb4g) ← pretty B (SHlo.convBiasSgd "%b4" lrStr W₄ zTc22 b₄ 0 (.operand nDhc4 zF2))
+    let (cg4, ng4) ← pretty B (SHlo.bnGammaSgd "%g4" nHc4 epsStr lrStr 0 zVc2 zF2 0 (.operand nDbn4 zF2))
+    let (cbt4, nbt4) ← pretty B (SHlo.bnBetaSgd "%bt4" lrStr zVc2 0 (.operand nDbn4 zF2))
+    let (cW5, nW5) ← pretty B (SHlo.weightSgd nPool2 "%W5" lrStr zFlat W₅ 0 (.operand nDy5 zD1))
+    let (cb5, nb5) ← pretty B (SHlo.biasSgd "%b5" lrStr zD1 0 (.operand nDy5 zD1))
+    let (cW6, nW6) ← pretty B (SHlo.weightSgd nA5 "%W6" lrStr zD1 W₆ 0 (.operand nDy6 zD1))
+    let (cb6, nb6) ← pretty B (SHlo.biasSgd "%b6" lrStr zD1 0 (.operand nDy6 zD1))
+    let (cW7, nW7) ← pretty B (SHlo.weightSgd nA6 "%W7" lrStr zD1 W₇ 0 (.operand nDy zNC))
+    let (cb7, nb7) ← pretty B (SHlo.biasSgd "%b7" lrStr zNC 0 (.operand nDy zNC))
+    let body := cHc1 ++ cBn1 ++ cAc1 ++ cHc2 ++ cBn2 ++ cAc2 ++ cP1 ++
+      cHc3 ++ cBn3 ++ cAc3 ++ cHc4 ++ cBn4 ++ cAc4 ++ cP2 ++ cH5 ++ cA5 ++ cH6 ++ cA6 ++ cLog ++ cDy ++
+      cDy6 ++ cDy5 ++ cDx5 ++ cDac4 ++ cDbn4 ++ cDhc4 ++ cDac3 ++ cDbn3 ++ cDhc3 ++ cDpl1 ++
+      cDac2 ++ cDbn2 ++ cDhc2 ++ cDac1 ++ cDbn1 ++ cDhc1 ++
+      cW1g ++ cb1g ++ cg1 ++ cbt1 ++ cW2g ++ cb2g ++ cg2 ++ cbt2 ++
+      cW3g ++ cb3g ++ cg3 ++ cbt3 ++ cW4g ++ cb4g ++ cg4 ++ cbt4 ++
+      cW5 ++ cb5 ++ cW6 ++ cb6 ++ cW7 ++ cb7
+    pure <|
+      "    // ── cifar-bn train step: every line is pretty(verified AST node) ──\n" ++ body ++
+      s!"    return {nW1g}, {nb1g}, {ng1}, {nbt1}, {nW2g}, {nb2g}, {ng2}, {nbt2}, {nW3g}, {nb3g}, {ng3}, {nbt3}, {nW4g}, {nb4g}, {ng4}, {nbt4}, {nW5}, {nb5}, {nW6}, {nb6}, {nW7}, {nb7} : {ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n"
+  let inner : String := go.run' 0
+  "module @m {\n" ++
+  s!"  func.func @cifar_bn_train_step(%x: {ty [B,ic*(2*(2*h))*(2*(2*w))]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %g1: {ty [c1]}, %bt1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %g2: {ty [c1]}, %bt2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %g3: {ty [c2]}, %bt3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %g4: {ty [c2]}, %bt4: {ty [c2]}, %W5: {ty [flat,d1]}, %b5: {ty [d1]}, %W6: {ty [d1,d1]}, %b6: {ty [d1]}, %W7: {ty [d1,nClasses]}, %b7: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
+  inner ++
+  "  }\n}\n"
+
 end Proofs.StableHLO
 
 -- Regenerate `verified_mlir/cnn_train_step.mlir` (what MainMnistCnnVerified trains on)
@@ -666,6 +777,17 @@ end Proofs.StableHLO
 -- (final pooled, image 32×32), d1=512, nClasses=10, 3×3 kernels; lr = 0.1/128.
 #eval IO.FS.writeFile "verified_mlir/cifar_train_step.mlir"
   (Proofs.StableHLO.cifarTrainStepFaithfulV 128 3 32 64 8 8 512 10 3 3 "0.00078125"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0))
+
+-- Regenerate `verified_mlir/cifar_bn_train_step.mlir` (what MainCifarBnVerified trains on)
+-- from the faithful renderer; the den-certified proofs live in CifarBnFaithfulPoC.lean.
+-- (cifarBnTrainStepText — the hand-written predecessor — is kept in StableHLO.lean for
+-- reference.) Dims `128 3 32 64 8 8 512 10 3 3`, ε=1e-5, lr = 0.1/128.
+#eval IO.FS.writeFile "verified_mlir/cifar_bn_train_step.mlir"
+  (Proofs.StableHLO.cifarBnTrainStepFaithfulV 128 3 32 64 8 8 512 10 3 3 "1.0e-05" "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)

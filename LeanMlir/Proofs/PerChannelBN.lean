@@ -306,6 +306,17 @@ noncomputable def reassocBack (oc h w : Nat) :
     Vec (oc * (h * w)) → Vec (oc * h * w) :=
   fun y k => y (reassocBackIdx oc h w k)
 
+/-- The rendered **per-channel γ gradient**: `dγ_c = Σ_{s} dy_(c,s) · x̂_(c,s)` (the
+    `reduce` over batch/spatial of `dy·x̂` in `cifarBnTrainStepStructured`'s `bnParamGradPC`).
+    `x̂` is recomputed from the saved BN input `v` (the conv output). Lives here (not
+    `CifarBnClose`) so the `bnGammaSgd` `SHlo` op's `den` can reference it. -/
+noncomputable def bnPerChannel_grad_gamma (oc m : Nat) (ε : ℝ) (v dy : Vec (oc * m)) : Vec oc :=
+  fun c => ∑ s : Fin m, dy (finProdFinEquiv (c, s)) * bnXhat m ε (Mat.unflatten v c) s
+
+/-- The rendered **per-channel β gradient**: `dβ_c = Σ_{s} dy_(c,s)`. -/
+noncomputable def bnPerChannel_grad_beta (oc m : Nat) (dy : Vec (oc * m)) : Vec oc :=
+  fun c => ∑ s : Fin m, dy (finProdFinEquiv (c, s))
+
 theorem reassocFwd_differentiable (oc h w : Nat) :
     Differentiable ℝ (reassocFwd oc h w) :=
   (reindexCLM (reassocFwdIdx oc h w)).differentiable

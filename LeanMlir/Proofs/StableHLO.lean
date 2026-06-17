@@ -142,6 +142,16 @@ inductive SHlo : Nat → Type where
   | convBiasSgd   {ic oc h w kH kW : Nat} (bName lrStr : String)
       (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w) (b : Vec oc) (lr : ℝ)
                                                            : SHlo (oc*h*w) → SHlo oc
+  -- Chapter 5 (per-channel BatchNorm) param-SGD tail (the BN train step, folded into
+  -- the AST): the fused per-channel γ/β update ops. `bnGammaSgd`: `γ − lr·dγ`,
+  -- `dγ_c = Σ_{b,h,w} dy·x̂` (x̂ recomputed from the saved BN input `v` = conv output,
+  -- `den` = `cifar_bn_render_gamma_certified` via `reassocFwd`); `bnBetaSgd`: `β − lr·dβ`,
+  -- `dβ_c = Σ_{b,h,w} dy`. `gName`/`bName`/`vName` are the γ/β/conv-output SSA names;
+  -- `epsStr` the ε literal. CifarBnFaithfulPoC proves both `den`s = the certified step.
+  | bnGammaSgd {oc h w : Nat} (gName vName epsStr lrStr : String) (ε : ℝ) (γ : Vec oc)
+      (v : Vec (oc*h*w)) (lr : ℝ)                          : SHlo (oc*h*w) → SHlo oc
+  | bnBetaSgd  {oc h w : Nat} (bName lrStr : String) (β : Vec oc) (lr : ℝ)
+                                                           : SHlo (oc*h*w) → SHlo oc
   -- Chapter 5 (BatchNorm): per-example normalization over the whole feature
   -- vec (reduce mean/var over axis [1], scalar γ/β). `gName,bName` are the γ,β
   -- scalar SSA inputs, `epsStr` the rendered ε literal; ε,γ,β carry the den.
@@ -592,6 +602,11 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         - lr * (conv2d_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e) idx
   | _, .convBiasSgd _ _ W x b lr e =>
       fun o => b o - lr * (conv2d_bias_grad_has_vjp W x).backward b (den e) o
+  | _, .bnGammaSgd (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
+      fun c => γ c - lr *
+        bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e)) c
+  | _, .bnBetaSgd (oc := oc) (h := h) (w := w) _ _ β lr e =>
+      fun c => β c - lr * bnPerChannel_grad_beta oc (h*w) (reassocFwd oc h w (den e)) c
   | _, .reluF e        => fun i => max (den e i) 0
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
   | _, .relu6F e       => fun i => min (max (den e i) 0) 6
@@ -1906,6 +1921,8 @@ inductive Raw where
   | biasSgd    (bName lrStr : String) (n : Nat)         : Raw → Raw
   | convWeightSgd (xName wName lrStr : String) (ic oc h w kH kW : Nat) : Raw → Raw
   | convBiasSgd   (bName lrStr : String) (oc h w : Nat)               : Raw → Raw
+  | bnGammaSgd    (gName vName epsStr lrStr : String) (oc h w : Nat)  : Raw → Raw
+  | bnBetaSgd     (bName lrStr : String) (oc h w : Nat)               : Raw → Raw
   | reluF      (n : Nat)                   : Raw → Raw
   | selectPos  (x : String) (n : Nat)      : Raw → Raw
   | relu6F     (n : Nat)                   : Raw → Raw
@@ -1974,6 +1991,10 @@ def skel : {k : Nat} → SHlo k → Raw
       .convWeightSgd xN wN lrS ic oc h w kH kW (skel e)
   | _, .convBiasSgd (oc := oc) (h := h) (w := w) bN lrS _ _ _ _ e =>
       .convBiasSgd bN lrS oc h w (skel e)
+  | _, .bnGammaSgd (oc := oc) (h := h) (w := w) gN vN es lrS _ _ _ _ e =>
+      .bnGammaSgd gN vN es lrS oc h w (skel e)
+  | _, .bnBetaSgd (oc := oc) (h := h) (w := w) bN lrS _ _ e =>
+      .bnBetaSgd bN lrS oc h w (skel e)
   | k, .reluF e               => .reluF k (skel e)
   | k, .selectPos x _ e       => .selectPos x k (skel e)
   | k, .relu6F e              => .relu6F k (skel e)
@@ -2066,6 +2087,8 @@ inductive Tok where
   | biasSgd    (bName lrStr : String) (n : Nat)         : Tok
   | convWeightSgd (xName wName lrStr : String) (ic oc h w kH kW : Nat) : Tok
   | convBiasSgd   (bName lrStr : String) (oc h w : Nat)               : Tok
+  | bnGammaSgd    (gName vName epsStr lrStr : String) (oc h w : Nat)  : Tok
+  | bnBetaSgd     (bName lrStr : String) (oc h w : Nat)               : Tok
   | reluF      (n : Nat)                   : Tok
   | selectPos  (x : String) (n : Nat)      : Tok
   | relu6F     (n : Nat)                   : Tok
@@ -2129,6 +2152,8 @@ def toToks : Raw → List Tok
   | .biasSgd bN lrS n e        => toToks e ++ [.biasSgd bN lrS n]
   | .convWeightSgd xN wN lrS ic oc h w kH kW e => toToks e ++ [.convWeightSgd xN wN lrS ic oc h w kH kW]
   | .convBiasSgd bN lrS oc h w e               => toToks e ++ [.convBiasSgd bN lrS oc h w]
+  | .bnGammaSgd gN vN es lrS oc h w e          => toToks e ++ [.bnGammaSgd gN vN es lrS oc h w]
+  | .bnBetaSgd bN lrS oc h w e                 => toToks e ++ [.bnBetaSgd bN lrS oc h w]
   | .reluF n e       => toToks e ++ [.reluF n]
   | .selectPos x n e => toToks e ++ [.selectPos x n]
   | .relu6F n e      => toToks e ++ [.relu6F n]
@@ -2252,6 +2277,47 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {g} = stablehlo.reduce({dr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
         s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [oc]}\n" ++
         s!"    {sB} = stablehlo.multiply {g}, {lB} : {ty [oc]}\n" ++
+        s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [oc]}\n", o :: st)
+  | .bnGammaSgd gN vN epsStr lrS oc h w, r :: st => do
+      -- BN per-channel γ grad: recompute x̂ from the saved conv output {vN} (reduce μ/var
+      -- over spatial [2,3]), dγ_c = Σ_{b,h,w} dy·x̂, then SGD. Same op text as the dγ half
+      -- of `CnnRender.bnParamGradPC`+`sgd`.
+      let z ← fresh; let xr ← fresh; let nf ← fresh; let ep ← fresh
+      let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+      let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+      let xhat ← fresh; let dyr ← fresh; let p ← fresh; let dg ← fresh
+      let lG ← fresh; let sG ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {xr} = stablehlo.reshape {vN} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,oc,h,w]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,oc,h,w]}\n" ++
+        s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc]}\n" ++
+        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,oc,h,w]}\n" ++
+        s!"    {xc} = stablehlo.subtract {xr}, {mu} : {ty [B,oc,h,w]}\n" ++
+        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,oc,h,w]}\n" ++
+        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc]}\n" ++
+        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,oc,h,w]}\n" ++
+        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+        s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {p} = stablehlo.multiply {dyr}, {xhat} : {ty [B,oc,h,w]}\n" ++
+        s!"    {dg} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+        s!"    {lG} = stablehlo.constant dense<{lrS}> : {ty [oc]}\n" ++
+        s!"    {sG} = stablehlo.multiply {dg}, {lG} : {ty [oc]}\n" ++
+        s!"    {o} = stablehlo.subtract {gN}, {sG} : {ty [oc]}\n", o :: st)
+  | .bnBetaSgd bN lrS oc h w, r :: st => do
+      -- BN per-channel β grad: dβ_c = Σ_{b,h,w} dy, then SGD (β grad needs no x̂).
+      let z ← fresh; let dyr ← fresh; let db ← fresh; let lB ← fresh; let sB ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {db} = stablehlo.reduce({dyr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+        s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [oc]}\n" ++
+        s!"    {sB} = stablehlo.multiply {db}, {lB} : {ty [oc]}\n" ++
         s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [oc]}\n", o :: st)
   | .reluF n, r :: st => do
       let z ← fresh; let o ← fresh
@@ -4319,9 +4385,8 @@ end Proofs
   -- the train-step) until the typed cifarBnFwdGraph is reconciled to per-channel.
   IO.FS.writeFile "verified_mlir/cifar_bn_fwd.mlir"
     (Proofs.StableHLO.cifarBnFwdTextPC 128 3 32 64 32 32 3 3 512 10 "1.0e-05")
-  -- Chapter 5 CIFAR **BatchNorm** full SGD train step (ε=1e-5; lr = 0.1/128).
-  IO.FS.writeFile "verified_mlir/cifar_bn_train_step.mlir"
-    (Proofs.StableHLO.cifarBnTrainStepText 128 3 32 64 32 32 3 3 512 10 "1.0e-05" "0.00078125")
+  -- cifar_bn_train_step.mlir is now generated by the faithful renderer in CnnRender.lean
+  -- (cifarBnTrainStepFaithfulV, den-certified in CifarBnFaithfulPoC.lean), not cifarBnTrainStepText.
   -- Deeper 8-conv CIFAR (no BN): 4 conv→conv→pool stages, channels [16,16,32,32],
   -- 32→16→8→4→2 spatial, flat 32·2·2 = 128 → 64 → 64 → 10. lr = 0.1/128.
   IO.FS.writeFile "verified_mlir/cifar8_fwd.mlir"

@@ -23,15 +23,8 @@ namespace Proofs
 
 open scoped BigOperators
 
-/-- The rendered **per-channel γ gradient**: `dγ_c = Σ_{s} dy_(c,s) · x̂_(c,s)` (the
-    `reduce` over batch/spatial of `dy·x̂` in `cifarBnTrainStepStructured`'s `bnParamGradPC`).
-    `x̂` is recomputed from the saved BN input `v` (the conv output). -/
-noncomputable def bnPerChannel_grad_gamma (oc m : Nat) (ε : ℝ) (v dy : Vec (oc * m)) : Vec oc :=
-  fun c => ∑ s : Fin m, dy (finProdFinEquiv (c, s)) * bnXhat m ε (Mat.unflatten v c) s
-
-/-- The rendered **per-channel β gradient**: `dβ_c = Σ_{s} dy_(c,s)`. -/
-noncomputable def bnPerChannel_grad_beta (oc m : Nat) (dy : Vec (oc * m)) : Vec oc :=
-  fun c => ∑ s : Fin m, dy (finProdFinEquiv (c, s))
+-- `bnPerChannel_grad_gamma` / `bnPerChannel_grad_beta` moved to `PerChannelBN.lean`
+-- (so the `bnGammaSgd`/`bnBetaSgd` `SHlo` ops' `den` can reference them upstream).
 
 /-- Channel index of a flat position `(c, s) ↦ c`. -/
 private noncomputable def chanOf (oc m : Nat) (k : Fin (oc * m)) : Fin oc :=

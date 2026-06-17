@@ -116,7 +116,7 @@ jobs:
             echo "| mnist-mlp (1d) | $(faithful MlpPoC.W0_den_certified) | $(faithful MlpPoC.b0_den_certified) | \`{W,b}{0,1,2}_den_certified\` |"
             echo "| mnist-cnn (2d) | $(faithful CnnPoC.cW1_den) | $(faithful CnnPoC.db5_den) | \`{cW,cb}{1,2}_den\` + \`{dW,db}{3,4,5}_den\` |"
             echo "| cifar (ch5, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful CifarPoC.db7_den) | \`conv{W,B}_den\` + \`{dW,db}{5,6,7}_den\` |"
-            echo "| cifar-bn       | ⚠️ WIP | ⚠️ WIP | forward-faithful; fold pending |"
+            echo "| cifar-bn (ch5) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful CifarBnPoC.bnBeta_den) | \`bnGamma_den\`/\`bnBeta_den\` + cifar conv/dense |"
             echo "| r34 / mnv2 / enet / convnext / vit | ⚠️ WIP | ⚠️ WIP | ℝ whole-net VJP proven; fold pending |"
           } >> $GITHUB_STEP_SUMMARY
 

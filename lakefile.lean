@@ -268,7 +268,12 @@ lean_lib «Proofs» where
              -- ch5-CIFAR peer (no-BN, deeper 2-scale net): reuses the cnn conv ops +
              -- dense bridges (NO new core ops) — generic convW/convB_den cover all 4
              -- conv layers, the 3-dense head via the M2 bridges (CifarFaithfulPoC.lean).
-             `LeanMlir.Proofs.CifarFaithfulPoC]
+             `LeanMlir.Proofs.CifarFaithfulPoC,
+             -- ch5-CIFAR-BN peer (per-channel BatchNorm): reuses the cnn conv ops + the
+             -- cifar dense head; the new bnGammaSgd/bnBetaSgd ops carry the per-channel
+             -- γ/β grads, den-certified via cifar_bn_render_{gamma,beta}_certified
+             -- (CifarBnFaithfulPoC.lean).
+             `LeanMlir.Proofs.CifarBnFaithfulPoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
