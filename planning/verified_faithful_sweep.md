@@ -94,7 +94,8 @@ leaves both green.
 |---|---|---|---|
 | **linear** | ✅ forward = `fwdGraph` (nested in `lossCotGraph`, fed directly) | ✅ `weightSgd`/`biasSgd` consume `lossCotGraph` directly | **✅ FULL** |
 | **mlp** | ✅ den-composed: real forward threaded; top cotangent `g` pinned to the composed softmax-CE (`mlpLossCot_den`) | ◐ level-2: consumers fed real forward dens at correctly-threaded SSAs; `W₂` folds to `∂CE/∂W₂` | **✅ TIED** |
-| **cnn / cifar / cifar-bn / cifar8 / cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
+| **cnn** | ◐ dense head: cotangent pinned to softmax-CE of the CONV forward (`cnnLossCot_den`); output `W₅` → `∂CE/∂W₅` (`cnn_W5_tied_totalloss`) | ❌ conv layers `W₁`/`W₂` (free conv acts; hand-written backward) | **◐ partial** |
+| **cifar / cifar-bn / cifar8 / cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
 | **r34** | ❌ parallel per-node render (`ResNet34Render`) | ❌ | **none** |
 | mnv2 / enet / convnext / vit | — (train-step fold WIP) | — | — |
 
@@ -138,6 +139,17 @@ tie (consumed graph as an `SHlo` child, à la linear, with no SSA reference at a
 would duplicate the forward O(depth²) times — that is the case a shared-SSA/DAG renderer with proven
 late-binding solves. So: mlp → capstone (cheap); conv → whole-net-backward composition + (eventually)
 the DAG renderer to keep it from blowing up.
+
+**cnn progress (first conv net, partial).** The dense head is now tied: `cnnLossCot_den` pins the
+top cotangent to `softmax(mnistCnnNoBnForward x) − onehot` (the softmax-CE of the *conv* forward,
+the analogue of `mlpLossCot_den`), and `cnn_W5_tied_totalloss` folds the dense output weight to
+`∂CE/∂W₅` through the whole conv+dense forward. What's left for the conv layers `W₁`/`W₂`: their
+`*_den_certified` carry **free** conv activations (`ac1`/`ac2`/`pool`) + cotangent chains
+(`cnnChainCotW1/2`), and the emitted conv backward is **hand-written string** (`selMask4`/`scatter`/
+`convBack`/`convWGrad`), not `pretty(SHlo)` like the later cifar renderers. So the conv-layer tie
+needs (a) the conv backward re-rendered as `SHlo` (à la `cifar8BnTrainStepFaithfulV`), (b) the conv
+cotangent-subgraph pins (the cnn analogue of `MlpPoC.cot{0,1}_den`, crossing `convBack`/`maxPoolBack`),
+and (c) threading the conv forward through `ac1`/`ac2`/`pool`. That is the real conv-side fold.
 
 ### Everything else
 The `*FwdGraph_faithful` / `*BackGraph_faithful` / `*_chain_certified` theorems

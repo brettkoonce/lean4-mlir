@@ -378,6 +378,11 @@ open Proofs
 #print axioms CnnPoC.db4_den
 #print axioms CnnPoC.dW5_den
 #print axioms CnnPoC.db5_den
+-- mnist-cnn dense-head TIE: the top loss cotangent pinned to the composed softmax-CE gradient of
+-- the CONV forward (cnnLossCot_den), and the dense output weight W₅ folded to ∂CE/∂W₅ through the
+-- whole conv+dense forward (cnn_W5_tied_totalloss). Conv layers W₁/W₂ remain (conv backward chain).
+#print axioms CnnPoC.cnnLossCot_den
+#print axioms CnnPoC.cnn_W5_tied_totalloss
 -- ch5-CIFAR fully folded (no-BN, 2-scale): the generic conv ops cover all 4 conv
 -- layers (convW_den/convB_den) and the 3-dense head's 6 outpus denote the certified
 -- step (CifarFaithfulPoC.lean) — reuses the cnn conv ops, no new core ops.

@@ -233,4 +233,65 @@ theorem db3_den {c h w d1 nClasses : Nat}
   rw [step, bias_grad_bridge W₃ b₃ pool
         (mlpCotOut0 W₄ W₅ (dense W₃ b₃ pool) (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))) dy i]
 
+/-! ## Tie (dense head) — the top loss cotangent is the composed softmax-CE of the CONV forward
+
+The cnn `*_den_certified` above hold for a free top cotangent `dy` and a free pool output. The
+renderer feeds the cotangent the emitted loss graph `sub(softmaxDiv(expe(logits)), onehot)` produces,
+with `logits` the REAL conv-forward output `mnistCnnNoBnForward … x`. The lemma below pins that graph
+to the composed softmax-CE gradient *of the conv forward* (the cnn analogue of `mlpLossCot_den`), and
+the headline folds the dense output weight `W₅` to the whole-loss gradient `∂CE/∂W₅` — so the output
+layer is tied forward(conv+dense)→softmax-CE→gradient. (The CONV layers `W₁`/`W₂` need the conv
+backward chain composed — the hand-written `selMask4`/`scatter`/`convBack` rendered as `SHlo` + the
+conv cotangent-subgraph pins — which is the bigger conv-side work; see §1a of the planning doc.) -/
+
+/-- **The emitted loss-cotangent graph denotes the composed softmax-CE gradient of the CONV forward**
+    (`= softmax(mnistCnnNoBnForward … x) − onehot = ∂CE/∂logits` at the real conv-forward logits). -/
+theorem cnnLossCot_den {ic c h w d1 nClasses kH kW : Nat}
+    (nlogN ohN : String)
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) (x : Vec (ic*(2*h)*(2*w))) (label : Fin nClasses) :
+    den (SHlo.sub (SHlo.softmaxDiv (SHlo.expe
+            (.operand nlogN (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x))))
+          (.operand ohN (oneHot nClasses label)))
+      = fun j => softmax nClasses (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x) j
+                  - oneHot nClasses label j := by
+  funext j; simp only [den, softmax]
+
+/-- **Dense output weight op, tied to the WHOLE softmax-CE loss through the conv forward.** With the
+    pool output = the real conv forward (`maxPoolFlat ∘ relu ∘ conv₂ ∘ relu ∘ conv₁`) and the
+    cotangent the emitted loss graph denotes (`cnnLossCot_den`), the `weightSgd` for `W₅` denotes
+    `W₅ − lr·∂(crossEntropy ∘ forward)/∂W₅`. -/
+theorem cnn_W5_tied_totalloss {ic c h w d1 nClasses kH kW : Nat}
+    (aN lrStr dyN : String)
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) (x : Vec (ic*(2*h)*(2*w))) (label : Fin nClasses)
+    (lr : ℝ) (i : Fin d1) (j : Fin nClasses) :
+    den (SHlo.weightSgd aN "%W5" lrStr
+          (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃
+            (maxPoolFlat c h w (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₂ b₂
+              (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₁ b₁ x))))))))) W₅ lr
+          (.operand dyN (fun k => softmax nClasses (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x) k
+              - oneHot nClasses label k)))
+        (finProdFinEquiv (i, j))
+      = W₅ i j - lr * pdiv (fun v : Vec (d1 * nClasses) => fun _ : Fin 1 =>
+            crossEntropy nClasses (dense (Mat.unflatten v) b₅
+              (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃
+                (maxPoolFlat c h w (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₂ b₂
+                  (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₁ b₁ x)))))))))) label)
+          (Mat.flatten W₅) (finProdFinEquiv (i, j)) 0 := by
+  rw [dW5_den aN lrStr dyN W₃ b₃ W₄ b₄ W₅ b₅
+        (maxPoolFlat c h w (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₂ b₂
+          (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₁ b₁ x)))))
+        (fun k => softmax nClasses (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x) k
+          - oneHot nClasses label k) lr i j,
+      mlp_output_total_loss_grad W₅ b₅
+        (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃
+          (maxPoolFlat c h w (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₂ b₂
+            (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₁ b₁ x))))))))) label i j]
+  -- both the threaded loss cotangent (`mnistCnnNoBnForward`) and the fold's `mnistLinear W₅ b₅ a₄`
+  -- are `dense W₅ b₅ (relu … pool)` — unfold both to match.
+  simp only [mnistCnnNoBnForward, mnistLinear, Function.comp_apply]
+
 end Proofs.CnnPoC
