@@ -119,7 +119,11 @@ jobs:
             echo "| cifar-bn (ch5) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful CifarBnPoC.bnBeta_den) | \`bnGamma_den\`/\`bnBeta_den\` + cifar conv/dense |"
             echo "| cifar8 (8-conv, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful Cifar8PoC.denseB_den) | \`conv{W,B}_den\` + \`dense{W,B}_den\` |"
             echo "| cifar8-bn (8-conv) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful Cifar8PoC.denseB_den) | reuse: conv/BN/dense generics (no new proof) |"
-            echo "| r34 / mnv2 / enet / convnext / vit | ⚠️ WIP | ⚠️ WIP | ℝ whole-net VJP proven; fold pending |"
+            echo "| r34 (ch6)          | ⚠️ WIP | ⚠️ WIP | fwd \`resnet34FwdGraphFullPC_faithful\` (34-layer, 146 params) + per-param \`r34_render_*_chain_certified\`; needs a strided-conv SGD op + block assembly |"
+            echo "| mobilenetv2 (ch7)  | ⚠️ WIP | ⚠️ WIP | fwd \`mobilenetv2FwdGraphFullPC_faithful\` (17-block); committed net = reduced 6-block + VJP 2-block representative (double gap) |"
+            echo "| efficientnet (ch8) | ⚠️ WIP | ⚠️ WIP | fwd \`efficientnetFwdGraphB_full_faithful\` (16 MBConv); backward per-block, no whole-net graph yet |"
+            echo "| convnext (ch9)     | ⚠️ WIP | ⚠️ WIP | fwd \`convNextFwdGraphT_faithful\` ([3,3,9,3]); backward per-block, no whole-net graph yet |"
+            echo "| vit (ch10)         | ⚠️ WIP | ⚠️ WIP | whole-net \`vitNetBackGraph_faithful\` (scalar LN) + per-param \`vit_render_*_chain_certified\`; granularity gap: emitted net uses per-channel LN |"
           } >> $GITHUB_STEP_SUMMARY
 
       - name: Summary
