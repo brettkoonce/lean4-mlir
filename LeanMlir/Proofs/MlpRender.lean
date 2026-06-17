@@ -78,4 +78,51 @@ def mlpTrainStepStructured (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
   s!"    return %W0n, %b0n, %W1n, %b1n, %W2n, %b2n : {ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}\n" ++
   "  }\n}\n"
 
+/-- **MLP train step rendered ENTIRELY from the verified AST.** Like
+    `mlpTrainStepStructured` for the forward, but the backward chain
+    (`dotOut`/`selectPos`) and the six parameter SGD updates (`weightSgd`/`biasSgd`)
+    are now `pretty` of denoted `SHlo` nodes too — so every emitted line is
+    `pretty(provenNode)`, and `MlpFaithfulPoC` proves each output's `den` = the
+    certified loss-descent step. Cotangents `%dy`/`nc1`/`nc0` are rendered once and
+    shared (operand leaves); operand/`lr`/weight VALUES are `skel`-erased, so these
+    placeholders print identically to the live graphs the `den` theorems use. -/
+def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) : String :=
+  let z₀ : Vec d₀ := fun _ => 0
+  let z₁ : Vec d₁ := fun _ => 0
+  let z₂ : Vec d₂ := fun _ => 0
+  let z₃ : Vec d₃ := fun _ => 0
+  let act : StateM Nat (String × String × String × String × String × String × String) := do
+    let (cp0, np0) ← pretty B (denseF "%W0" "%b0" W₀ b₀ (.operand "%x" x))
+    let (ca0, na0) ← pretty B (.reluF (.operand np0 z₁))
+    let (cp1, np1) ← pretty B (denseF "%W1" "%b1" W₁ b₁ (.operand na0 z₁))
+    let (ca1, na1) ← pretty B (.reluF (.operand np1 z₂))
+    let (clog, nlog) ← pretty B (denseF "%W2" "%b2" W₂ b₂ (.operand na1 z₂))
+    let (cdy, ndy) ← pretty B (.sub (.softmaxDiv (.expe (.operand nlog z₃))) (.operand "%onehot" z₃))
+    let (cc1, nc1) ← pretty B (.selectPos np1 z₂ (.dotOut "%W2" W₂ (.operand ndy z₃)))
+    let (cc0, nc0) ← pretty B (.selectPos np0 z₁ (.dotOut "%W1" W₁ (.operand nc1 z₂)))
+    let (cW2, nW2) ← pretty B (SHlo.weightSgd na1 "%W2" lrStr z₂ W₂ 0 (.operand ndy z₃))
+    let (cb2, nb2) ← pretty B (SHlo.biasSgd "%b2" lrStr z₃ 0 (.operand ndy z₃))
+    let (cW1, nW1) ← pretty B (SHlo.weightSgd na0 "%W1" lrStr z₁ W₁ 0 (.operand nc1 z₂))
+    let (cb1, nb1) ← pretty B (SHlo.biasSgd "%b1" lrStr z₂ 0 (.operand nc1 z₂))
+    let (cW0, nW0) ← pretty B (SHlo.weightSgd "%x" "%W0" lrStr z₀ W₀ 0 (.operand nc0 z₁))
+    let (cb0, nb0) ← pretty B (SHlo.biasSgd "%b0" lrStr z₁ 0 (.operand nc0 z₁))
+    pure (cp0 ++ ca0 ++ cp1 ++ ca1 ++ clog ++ cdy ++ cc1 ++ cc0 ++
+            cW2 ++ cb2 ++ cW1 ++ cb1 ++ cW0 ++ cb0,
+          nW0, nb0, nW1, nb1, nW2, nb2)
+  let (body, nW0, nb0, nW1, nb1, nW2, nb2) := act.run' 0
+  "module @m {\n" ++
+  s!"  func.func @mlp_train_step(%x: {ty [B,d₀]}, %W0: {ty [d₀,d₁]}, %b0: {ty [d₁]}, %W1: {ty [d₁,d₂]}, %b1: {ty [d₂]}, %W2: {ty [d₂,d₃]}, %b2: {ty [d₃]}, %onehot: {ty [B,d₃]}) -> ({ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}) " ++ "{\n" ++
+  "    // ── mlp train step: every line is pretty(verified AST node) ──\n" ++
+  body ++
+  s!"    return {nW0}, {nb0}, {nW1}, {nb1}, {nW2}, {nb2} : {ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}\n" ++
+  "  }\n}\n"
+
+-- Regenerate `verified_mlir/mlp_train_step.mlir` (what MainMnistMlpVerified trains on)
+-- from the faithful renderer; the den-certified proofs live in MlpFaithfulPoC.lean.
+#eval IO.FS.writeFile "verified_mlir/mlp_train_step.mlir"
+  (mlpTrainStepFaithfulV 128 784 512 512 10 "0.00078125"
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ => 0))
+
 end Proofs.StableHLO

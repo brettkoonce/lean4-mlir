@@ -63,6 +63,7 @@ import LeanMlir.Proofs.ResNet34BackB0
 import LeanMlir.Proofs.ConvNeXtBackB0
 import LeanMlir.Proofs.ViTBackB0
 import LeanMlir.Proofs.LinearFaithfulPoC
+import LeanMlir.Proofs.MlpFaithfulPoC
 
 open Proofs
 
@@ -341,6 +342,17 @@ open Proofs
 #print axioms LinPoC.poc_weightSgd_den_eq
 #print axioms LinPoC.poc_biasSgd_den_eq
 #print axioms LinPoC.poc_train_step_tail_certified
+-- mnist-MLP fully folded: backward-chain cotangent subgraphs denote mlpCotOut*,
+-- and the 6 emitted weightSgd/biasSgd ops (what mlpTrainStepFaithfulV prints)
+-- denote the certified per-layer loss-descent step (MlpFaithfulPoC.lean).
+#print axioms MlpPoC.cot1_den
+#print axioms MlpPoC.cot0_den
+#print axioms MlpPoC.W2_den_certified
+#print axioms MlpPoC.W1_den_certified
+#print axioms MlpPoC.W0_den_certified
+#print axioms MlpPoC.b2_den_certified
+#print axioms MlpPoC.b1_den_certified
+#print axioms MlpPoC.b0_den_certified
 -- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
 -- weight/bias bridges completing all three layers; Crux A).
 #print axioms IR.mlp_layer0_weight_grad_bridge

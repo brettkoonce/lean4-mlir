@@ -255,7 +255,11 @@ lean_lib «Proofs» where
              -- trains on), incl. the param-grad/SGD "tail fold". Template for
              -- making each chapter's verified trainer faithful — see
              -- planning/verified_faithful_sweep.md.
-             `LeanMlir.Proofs.LinearFaithfulPoC]
+             `LeanMlir.Proofs.LinearFaithfulPoC,
+             -- mnist-MLP peer: the whole 3-layer MLP train step folded into the
+             -- verified AST (forward + backward chain + 6 weightSgd/biasSgd), each
+             -- output's den proven = certified via mlp_render_*_certified.
+             `LeanMlir.Proofs.MlpFaithfulPoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
