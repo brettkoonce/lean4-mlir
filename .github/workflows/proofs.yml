@@ -97,6 +97,28 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Verified by \`tests/AuditAxioms.lean\` (no \`sorryAx\`, no project axioms)." >> $GITHUB_STEP_SUMMARY
 
+          # ── Verified-faithful train-step scorecard ──────────────────────────
+          # Durable per-run log of which chapters' committed
+          # verified_mlir/<net>_train_step.mlir is render(provenGraph) with every
+          # output's den proven = the certified fderiv-derived SGD step. A ✅ is
+          # data-driven: it only prints if the net's PoC capstone is in the
+          # 3-axiom closure above (so this table can't drift from what's proven).
+          faithful() { echo "$out" | grep -qE "'Proofs.$1' depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" && printf '✅' || printf '⚠️'; }
+          {
+            echo ""
+            echo "## Verified-faithful train steps"
+            echo ""
+            echo "✅ = the committed \`verified_mlir/<net>_train_step.mlir\` is \`pretty(provenGraph)\` and every parameter output's \`den\` is proven equal to the certified \`fderiv\`-derived loss-descent SGD step (within the 3-axiom closure above). WIP = ℝ VJP / forward proven, train-step fold pending. Residual for ✅ rows: per-op \`pretty\` lexing + ℝ→Float32."
+            echo ""
+            echo "| Chapter / net | train step = render(provenGraph) | den = certified | capstone |"
+            echo "|---|---|---|---|"
+            echo "| mnist-linear   | $(faithful LinPoC.poc_fwd_is_render) | $(faithful LinPoC.poc_train_step_tail_certified) | \`poc_train_step_tail_certified\` |"
+            echo "| mnist-mlp (1d) | $(faithful MlpPoC.W0_den_certified) | $(faithful MlpPoC.b0_den_certified) | \`{W,b}{0,1,2}_den_certified\` |"
+            echo "| mnist-cnn (2d) | ⚠️ WIP | ⚠️ WIP | forward-faithful; fold pending |"
+            echo "| cifar-bn       | ⚠️ WIP | ⚠️ WIP | forward-faithful; fold pending |"
+            echo "| r34 / mnv2 / enet / convnext / vit | ⚠️ WIP | ⚠️ WIP | ℝ whole-net VJP proven; fold pending |"
+          } >> $GITHUB_STEP_SUMMARY
+
       - name: Summary
         run: |
           echo "## Proof Verification" >> $GITHUB_STEP_SUMMARY
