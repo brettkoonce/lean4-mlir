@@ -20,11 +20,11 @@ and false-fail the check. Keep future per-chapter capstone names short.)
   ∧ `den(graph) = math`). **Forward: end-to-end tied.**
 * `poc_train_step_certified` — the three emitted outputs (`%dy`, `%W0n`, `%b0n`)
   each denote the certified step.
-* `poc_train_step_tail_certified` — **the tail fold.** The param-grad + SGD tail
-  is given a *structural* denotation `tailDenW`/`tailDenB` built from the emitted
-  ops (`dot_general → x⊗dy`, `reduce → dy`, `multiply`, `subtract`, single-example),
-  and that structural denotation is proven to equal the certified step — i.e. the
-  tail's meaning is derived from the ops it emits, not supplied.
+* `poc_train_step_tail_certified` — **fully tied.** The two emitted SGD ops consume
+  the proven `lossCotGraph` node *directly* (no SSA-name pin), so each output's `den`
+  is proven = the certified `fderiv`-derived step end-to-end, with the forward = the
+  proven `fwdGraph` (nested in `lossCotGraph`). `_fwd` and `_train_step` now share the
+  same forward graph — the connection §1a of the planning doc calls for.
 
 The committed-bytes tie (`verified_mlir/linear_train_step.mlir ==
 linearTrainStepModuleV(…)`) is enforced in CI (regenerate + `git diff`, the
@@ -92,53 +92,52 @@ theorem poc_train_step_certified (lr : ℝ) (label : Fin n) :
 
 /-! ## The tail fold (closed) — the emitted tail ops are `pretty(provenNode)`
 
-`StableHLO.linTrainStepFaithfulV` (what now generates `verified_mlir/linear_train_step.mlir`)
-renders the *whole* module as `pretty` of `SHlo` nodes: the cotangent
-(`lossCotGraph`), then `SHlo.weightSgd` / `SHlo.biasSgd` consuming it. These two
-ops carry a real `den` (`dot_general → const → multiply → subtract` /
-`reduce → …`, B=1), so the tail is now "under `den`" exactly like the forward:
-emitted text = `pretty(node)`, and the node's `den` is proven certified below.
-(`weightSgd.den` of `.operand dy v` reads `v`; threading the proven cotangent
-`den (lossCotGraph …)` recovers the certified step. Operand/lr/`W,b,x` *values*
-are `skel`-erased, so the render is value-independent — the placeholders
+`StableHLO.linTrainStepFaithfulV` (what generates `verified_mlir/linear_train_step.mlir`)
+renders the *whole* module as `pretty` of `SHlo` nodes, **fully tied**: each of
+`SHlo.weightSgd` / `SHlo.biasSgd` consumes the proven `lossCotGraph` node DIRECTLY
+(not a `.operand %dy <placeholder>` name-pin), so the forward = the proven `fwdGraph`
+(nested inside `lossCotGraph`) and `den(output) = certified` is one composed theorem
+below — no trusted SSA-name linkage between the cotangent and the SGD ops. The shared
+cotangent is rendered once per output (2×); iree CSEs the duplicate. (`lr`/`W,b,x`
+*values* are `skel`-erased, so the render is value-independent — the placeholders
 `linTrainStepFaithfulV` passes print the same text as the live graph here.) -/
 
-/-- The emitted `weightSgd` op denotes `linWeightDen` (the certified `sgdW` step). -/
-theorem poc_weightSgd_den_eq (lrStr dyName : String) (lr : ℝ) (label : Fin n) :
-    den (SHlo.weightSgd "%x" "%W0" lrStr x W lr
-          (.operand dyName (den (lossCotGraph W b x (oneHot n label)))))
+/-- The emitted `weightSgd` op — consuming the proven `lossCotGraph` node DIRECTLY (the
+    fully-tied render) — denotes `linWeightDen` (the certified `sgdW` step). -/
+theorem poc_weightSgd_den_eq (lrStr : String) (lr : ℝ) (label : Fin n) :
+    den (SHlo.weightSgd "%x" "%W0" lrStr x W lr (lossCotGraph W b x (oneHot n label)))
       = linWeightDen W b x lr label := rfl
 
-/-- The emitted `biasSgd` op denotes `linBiasDen` (the certified bias step). -/
-theorem poc_biasSgd_den_eq (lrStr dyName : String) (lr : ℝ) (label : Fin n) :
-    den (SHlo.biasSgd "%b0" lrStr b lr
-          (.operand dyName (den (lossCotGraph W b x (oneHot n label)))))
+/-- The emitted `biasSgd` op — consuming the proven `lossCotGraph` node DIRECTLY — denotes
+    `linBiasDen` (the certified bias step). -/
+theorem poc_biasSgd_den_eq (lrStr : String) (lr : ℝ) (label : Fin n) :
+    den (SHlo.biasSgd "%b0" lrStr b lr (lossCotGraph W b x (oneHot n label)))
       = linBiasDen W b x lr label := rfl
 
 /-- **Tail fold (in-kernel, closed).** The two emitted tail ops `weightSgd`/`biasSgd`
     — the actual `SHlo` nodes `linTrainStepFaithfulV` prints — denote the certified
     `fderiv`-derived loss-descent SGD step. The tail's meaning is now a property of
     the emitted node (via `den`), proven — not a separately-supplied model. -/
-theorem poc_train_step_tail_certified (lrStr dyName : String) (lr : ℝ) (label : Fin n) :
+theorem poc_train_step_tail_certified (lrStr : String) (lr : ℝ) (label : Fin n) :
     (∀ (i : Fin m) (j : Fin n),
         den (SHlo.weightSgd "%x" "%W0" lrStr x W lr
-              (.operand dyName (den (lossCotGraph W b x (oneHot n label))))) (finProdFinEquiv (i, j))
+              (lossCotGraph W b x (oneHot n label))) (finProdFinEquiv (i, j))
           = W i j - lr * pdiv
               (fun (v : Vec (m * n)) (_ : Fin 1) =>
                   crossEntropy n (dense (Mat.unflatten v) b x) label)
               (Mat.flatten W) (finProdFinEquiv (i, j)) 0)
   ∧ (∀ j : Fin n,
         den (SHlo.biasSgd "%b0" lrStr b lr
-              (.operand dyName (den (lossCotGraph W b x (oneHot n label))))) j
+              (lossCotGraph W b x (oneHot n label))) j
           = b j - lr * ∑ i : Fin n,
               pdiv (fun b' : Vec n => dense W b' x) b j i
                 * (softmax n (mnistLinear W b x) i - oneHot n label i)) := by
   refine ⟨?_, ?_⟩
   · intro i j
-    rw [poc_weightSgd_den_eq W b x lrStr dyName lr label]
+    rw [poc_weightSgd_den_eq W b x lrStr lr label]
     exact linWeightDen_is_loss_descent W b x lr label i j
   · intro j
-    rw [poc_biasSgd_den_eq W b x lrStr dyName lr label]
+    rw [poc_biasSgd_den_eq W b x lrStr lr label]
     exact linBiasDen_is_certified W b x lr label j
 
 end Proofs.LinPoC

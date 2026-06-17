@@ -65,8 +65,64 @@ emitter does **not** print (independent hand-written string emitter).
   cifar8-bn** — `<slug>_fwd.mlir` literally *is* `renderModule(provenGraph)` with a `den`-
   faithfulness theorem about that exact text (cifar8/cifar8-bn closed via `cifar8{,Bn}FwdModuleV`
   = `renderModule(cifar8{,Bn}FwdGraph)`, the graphs already audited faithful).
-- **Closest train step: linear** — `_train_step.mlir`'s forward+cotangent prefix
-  is `pretty(lossCotGraph)`; only the param-grad/SGD tail is hand-written.
+- **Closest train step: linear** — `_train_step.mlir`'s forward+cotangent is
+  `pretty(lossCotGraph)` (one composed proven graph, `den = CE-grad`); but the SGD
+  tail still consumes the cotangent via `.operand %dy <placeholder>` (SSA-name pin),
+  not the `lossCotGraph` node — so even linear isn't *fully* tied (see §1a).
+
+### 1a. Forward graph ⟷ train step: tied, or parallel? (the deepest residual)
+
+The `_fwd` closes above tie the **eval** modules to their proven forward graphs. The
+**train steps do NOT reuse those graphs.** Each `*TrainStepFaithfulV` re-renders the
+forward as a chain of separate `pretty (.flatConvF …)` / `pretty (denseF …)` nodes, and
+every node past the first is fed `.operand <name> <placeholder-zero>` — the SSA *name*
+of its predecessor, but a placeholder *value*. So:
+
+- The forward is **not** a single composed proven graph (each per-node `den` is about a
+  placeholder operand, never chained into `den(*FwdGraph)`); `*FwdGraph_faithful` is never
+  invoked by the train step.
+- The param-SGD `den` theorems are `∀ activation, cotangent` — genuinely certified, but for
+  *symbolic* operands. That the runtime SSA an op references actually carries the proven
+  forward activation / backward cotangent is **trusted by name**, not proven. This is the
+  "cotangent-subgraph⇄SHlo pin" residual every fold lists.
+
+So `den(_fwd graph) = forward` (proven, composed) and `den(SGD op) = certified ∀ c`
+(proven, per-op) are **two disconnected facts** — a bug wiring the wrong SSA into an SGD op
+leaves both green.
+
+| net | train step reuses proven fwd graph? | consumers composed (no SSA-name pin)? | **tie** |
+|---|---|---|---|
+| **linear** | ✅ forward = `fwdGraph` (nested in `lossCotGraph`, fed directly) | ✅ `weightSgd`/`biasSgd` consume `lossCotGraph` directly | **✅ FULL** |
+| **mlp** | ❌ `denseF`/`reluF` chain, placeholder operands | ❌ (see note) | **none** |
+| **cnn / cifar / cifar-bn / cifar8 / cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
+| **r34** | ❌ parallel per-node render (`ResNet34Render`) | ❌ | **none** |
+| mnv2 / enet / convnext / vit | — (train-step fold WIP) | — | — |
+
+**The close ("tie them together").** Feed the *proven* cotangent/forward subgraph directly
+into each consumer (`weightSgd … (lossCotGraph …)` instead of `.operand %dy …`), so each
+output's `den = certified` is **one composed theorem** with the forward = the proven
+`*FwdGraph` — no pin. Cost: a shared cotangent feeding K outputs is rendered K times (the
+`SHlo` is a *tree*, no DAG sharing); for the 1d nets (linear 2, mlp 6 outputs) that's fine
+and iree CSEs the duplicates. The scalable, no-duplication version needs a shared-SSA / DAG
+renderer with proven late-binding (the handoff §3 "the real work") — deferred until the 1d
+nets validate the pattern.
+
+**Status: linear FULLY TIED** (`linTrainStepFaithfulV` feeds `lossCotGraph` directly into
+`weightSgd`/`biasSgd`; `poc_train_step_tail_certified` is now one composed theorem with the
+forward = `fwdGraph`, no SSA-name pin; the regenerated `linear_train_step.mlir` iree-compiles
+to a **byte-identical-size vmfb** — iree CSEs the duplicated cotangent, so zero runtime cost).
+
+**Why mlp (and every conv net) needs more than linear's trick.** Linear tied cleanly because
+the cotangent is a self-contained composed graph (`lossCotGraph`) that the SGD ops take as an
+`SHlo` *child*. The deeper nets' backward/SGD ops take their forward-intermediate inputs as
+*values*, not `SHlo` children — `selectPos (x : Vec n)` (the relu-mask pre-activation),
+`weightSgd (x : Vec m)` (the input activation, a *computed* `relu`/`pool` output for layers > 0),
+`convBack`/`bnPerChannelBack`/`bnGammaSgd` (saved conv input / BN input). Those value fields are
+inherent SSA-name pins. (Linear escapes this only because its single `weightSgd`'s activation is
+the raw network input `%x` — a vacuous pin.) Tying them needs `SHlo`-*child* variants of those
+ops (so the forward subgraph composes in, duplicated + iree-CSE'd) — i.e. ~2–4 new core ops with
+the full 9-site treatment — or the shared-SSA/DAG renderer. That is the real next step for the
+mnist-mlp tie and the template the conv nets would inherit.
 
 ### Everything else
 The `*FwdGraph_faithful` / `*BackGraph_faithful` / `*_chain_certified` theorems

@@ -3123,12 +3123,14 @@ def linearTrainStepModuleV (B d₀ d₁ : Nat) (lr : String)
     the `den` theorems use. -/
 def linTrainStepFaithfulV (B m n : Nat) (lrStr : String)
     (W : Mat m n) (b : Vec n) (x : Vec m) : String :=
+  -- FULLY TIED: each SGD op consumes the proven `lossCotGraph` node DIRECTLY (not a
+  -- name-pinned `.operand %dy <placeholder>`), so `den(output) = certified` is one composed
+  -- theorem with the forward = the proven `fwdGraph` (nested inside `lossCotGraph`) — no
+  -- SSA-name pin. The shared cotangent is rendered once per output (2× here); iree CSEs it.
   let act : StateM Nat (String × String × String) := do
-    let (cotBody, dy) ← pretty B (lossCotGraph W b x (fun _ => 0))
-    let zeroN : Vec n := fun _ => 0
-    let (wBody, wRes) ← pretty B (SHlo.weightSgd "%x" "%W0" lrStr x W 0 (.operand dy zeroN))
-    let (bBody, bRes) ← pretty B (SHlo.biasSgd "%b0" lrStr b 0 (.operand dy zeroN))
-    pure (cotBody ++ wBody ++ bBody, wRes, bRes)
+    let (wBody, wRes) ← pretty B (SHlo.weightSgd "%x" "%W0" lrStr x W 0 (lossCotGraph W b x (fun _ => 0)))
+    let (bBody, bRes) ← pretty B (SHlo.biasSgd "%b0" lrStr b 0 (lossCotGraph W b x (fun _ => 0)))
+    pure (wBody ++ bBody, wRes, bRes)
   let (body, wRes, bRes) := act.run' 0
   "module @m {\n" ++
   s!"  func.func @linear_train_step(%x: {ty [B,m]}, %W0: {ty [m,n]}, %b0: {ty [n]}, " ++
