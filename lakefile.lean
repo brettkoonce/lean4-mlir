@@ -215,6 +215,11 @@ lean_lib «Proofs» where
              -- (carrier vanishes ⇒ no BN-variance derivative needed). The ResNet peer
              -- of MobileNetV2JacobianSeal. In the AuditAxioms headline set.
              `LeanMlir.Proofs.ResNet34LiveSeal,
+             -- Item A FULL DEPTH: the real [3,4,6,3] (16-block) live ResNet-34, level-3
+             -- sealed. The 13 identity blocks (zeroed body ⇒ relu(x+1)=x+1) wash out
+             -- through the downsamples' BN (bn(z+c)=bn(z)), so the full net = the
+             -- empty-chain witness + 2 and the seal reduces to ResNet34LiveSeal's.
+             `LeanMlir.Proofs.ResNet34LiveFull,
              -- Backward-graph faithfulness (den-level): fan-in bricks
              -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
              -- batched conv+depthwise), the whole per-example MBConv block, and

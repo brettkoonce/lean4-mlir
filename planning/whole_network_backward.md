@@ -171,11 +171,19 @@ ResNet-34 whole-net backward witness — retires the "degenerate constant-output
   whole chain: `liveFwd2(Y+t·V) 0 − liveFwd2(Y+t·V) 1 = t · Π(t)` with `Π` a product of four positive
   `istd`s, so every `istd`-derivative cross-term carries a factor `t` and drops at `0` — `g'(0) = Π(0) ≠ 0`,
   no variance derivative ever needed (exactly the Mnv2 mechanism, transplanted to base `Y`).
-- **Item D — full depth**: the empty identity-block chains (`chainComp [] = id`) can be filled with a
-  2-channel `idBlk` to recover the real `[3,4,6,3]` depth; `idBlk` generalizes to `c = 2` the same way.
+- **Item D — full depth** ✅ **DONE** (`ResNet34LiveFull.lean`): the empty identity-block chains are
+  filled with a 2-channel `idBlk2` to the real `[3,4,6,3] = 16`-block depth (3 strided downsamples +
+  13 identity blocks). Both level 2 (`liveFwd2Full_nonconstant`) and level 3
+  (`liveFwd2Full_jacobian_nonzero` ⇒ `liveFwd2Full_backward_nontrivial`) carry through, audited
+  3-axiom-clean. The identity blocks have a **zeroed body**, so on a nonnegative activation each is
+  the affine shift `relu(x+1) = x+1`; a chain of `k` is `x + k`, transparent to the channel-difference
+  carrier (`cd(x+c) = cd x`) and to the Jacobian (it is the identity). The shift then **washes out
+  through the next downsample's BN** (`bn(z+c) = bn(z)`), so `liveFwd2Full = liveFwd2 + 2` (the lone
+  surviving shift, after the final chain where no BN follows, cancels in the channel *difference*) —
+  and the whole seal reduces to `ResNet34LiveSeal`'s `gd_hasDerivAt` / `Rr` verbatim.
 
-Effort: **Item A's headline — a non-degenerate, nonzero-Jacobian-sealed ResNet-34 whole-net backward
-— is DONE at level 3.**
+Effort: **Item A is DONE — a full-depth `[3,4,6,3]`, non-degenerate, nonzero-Jacobian-sealed
+ResNet-34 whole-net backward (2-channel), audited 3-axiom-clean.**
 
 ### Item B — the **nonzero-Jacobian seal** (level 3, generic)
 
@@ -262,7 +270,7 @@ there, not here.
 | 1 | **C** ViT distinct-param tower + `vitTiny` capstone | light–med | full-depth ViT-Tiny backward, looks real, no witness risk | ✅ **done** |
 | 2 | **B1** generic nonzero-Jacobian seal | light | the missing honesty sentence, reusable | ✅ **done** |
 | 2.5 | **B2** `Mnv2Live` seal | med | first kinked witness at level 3 (no longer level-2) | ✅ **done** (`MobileNetV2JacobianSeal.lean`; exact at input 0 via global smoothness) |
-| 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | ✅ **DONE at level 3**: `ResNet34LivePC.liveFwd2_has_vjp_correct` + `liveFwd2_nonconstant` (level 2) **and** `ResNet34LiveSeal.liveFwd2_jacobian_nonzero` ⇒ `liveFwd2_backward_nontrivial` (level-3 seal, sealed at a channel-symmetric base `Y`). The first non-degenerate, nonzero-Jacobian-sealed ResNet-34 whole-net backward (2-channel), audited 3-axiom-clean. Only full depth (Item D) remains |
+| 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | ✅ **DONE at level 3, full depth**: `ResNet34LivePC.liveFwd2_*` (level 2) + `ResNet34LiveSeal.liveFwd2_jacobian_nonzero` (level-3 seal) **and** `ResNet34LiveFull.liveFwd2Full_*` — the real `[3,4,6,3]` (16-block) live ResNet-34, level-3 sealed (`liveFwd2Full_jacobian_nonzero` ⇒ `liveFwd2Full_backward_nontrivial`). Non-degenerate, nonzero-Jacobian-sealed, full depth, 2-channel, audited 3-axiom-clean |
 | 4 | **B2** BN-CNN Live | light (reuses A) | last degenerate kinked witness retired | |
 | 5 | **D** realistic dims | med | scale credibility | |
 | 6 | **E** almost-everywhere | heavy | the principled statement (stretch) | |

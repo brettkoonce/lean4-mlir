@@ -21,6 +21,7 @@ import LeanMlir.Proofs.StridedConv
 import LeanMlir.Proofs.ResNet34
 import LeanMlir.Proofs.ResNet34LivePC
 import LeanMlir.Proofs.ResNet34LiveSeal
+import LeanMlir.Proofs.ResNet34LiveFull
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
 import LeanMlir.Proofs.MlpTrainStep
@@ -473,6 +474,15 @@ open Proofs
 -- live ResNet-34 from level 2 (forward ≠ const) to level 3 (backward not the zero map).
 #print axioms ResNet34LiveSeal.liveFwd2_jacobian_nonzero
 #print axioms ResNet34LiveSeal.liveFwd2_backward_nontrivial
+-- Item A FULL DEPTH (ResNet34LiveFull.lean): the real [3,4,6,3] = 16-block live ResNet-34,
+-- both level 2 (nonconstant) and level 3 (seal). The 13 identity blocks have a zeroed body
+-- (relu(x+1) = x+1 on nonneg activations) and wash out through each downsample's BN
+-- (bn(z+c) = bn(z)), so liveFwd2Full = liveFwd2 + 2 and the seal/derivative reuse the
+-- empty-chain machinery verbatim. Full-depth, non-degenerate, nonzero-Jacobian-sealed.
+#print axioms ResNet34LiveFull.liveFwd2Full_has_vjp_correct
+#print axioms ResNet34LiveFull.liveFwd2Full_nonconstant
+#print axioms ResNet34LiveFull.liveFwd2Full_jacobian_nonzero
+#print axioms ResNet34LiveFull.liveFwd2Full_backward_nontrivial
 -- B8: per-channel BatchNorm — the real-ResNet BN (each channel-slice normalized with
 -- its own γ_c/β_c, γ/β : Vec oc). Block-diagonal VJP: each channel runs its own
 -- bn_has_vjp, cross-channel blocks vanish (pdivMat_rowIndep_perRow, a per-row
