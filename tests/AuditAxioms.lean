@@ -383,6 +383,10 @@ open Proofs
 -- whole conv+dense forward (cnn_W5_tied_totalloss). Conv layers W₁/W₂ remain (conv backward chain).
 #print axioms CnnPoC.cnnLossCot_den
 #print axioms CnnPoC.cnn_W5_tied_totalloss
+-- mnist-cnn CONV fold: all four conv kernel/bias ops, at the REAL conv forward (ac1/ac2/hc2 = the
+-- actual conv₁/relu/conv₂/relu outputs) and the composed softmax-CE cotangent, denote the certified
+-- step. With the dense-head tie above, the whole cnn train step is den-composed (no free acts).
+#print axioms CnnPoC.cnn_conv_tied_certified
 -- ch5-CIFAR fully folded (no-BN, 2-scale): the generic conv ops cover all 4 conv
 -- layers (convW_den/convB_den) and the 3-dense head's 6 outpus denote the certified
 -- step (CifarFaithfulPoC.lean) — reuses the cnn conv ops, no new core ops.

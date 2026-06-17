@@ -294,4 +294,69 @@ theorem cnn_W5_tied_totalloss {ic c h w d1 nClasses kH kW : Nat}
   -- are `dense W₅ b₅ (relu … pool)` — unfold both to match.
   simp only [mnistCnnNoBnForward, mnistLinear, Function.comp_apply]
 
+/-! ## The CONV fold — the conv kernels/biases tied through the real conv forward
+
+The four conv `*_den` theorems above hold for FREE conv activations (`ac1`/`ac2`/`hc2`) and a free
+cotangent. The capstone below instantiates them at the **real conv forward** (`ac1`/`hc1`/`hc2`/`ac2`
+= the actual `conv₁`/`relu`/`conv₂`/`relu` outputs, `h3`/`h4` the dense pre-acts the head-backward
+reads) and the **composed** top cotangent `g = softmax(mnistCnnNoBnForward x) − onehot` (`cnnLossCot_den`).
+So all four conv param ops denote `θ − lr·(certified ∂convₖ/∂θ · the conv backward-chain cotangent the
+real loss drives)` — `cnnChainCotW2` for conv₂, `cnnChainCotW1 W₂ hc1 cotW2` for conv₁ (it crosses one
+more conv-back). Together with the dense head (`cnn_W5_tied_totalloss` + the `*_den` at the composed
+cotangent) the WHOLE cnn train step is now den-composed forward→loss→backward — no free activations,
+no symbolic cotangent. (Residual: the conv backward is rendered hand-written, so the cotangent SSA
+↔ `cnnChainCot` correspondence is the per-op trust, same kind the whole suite carries; making it a
+printed `SHlo` subgraph with a `den` pin — the cnn analogue of `MlpPoC.cot{0,1}_den` — is the polish.) -/
+
+set_option maxRecDepth 4000 in
+/-- **Whole cnn conv tail, tied.** All four conv kernel/bias ops, at the real conv forward and the
+    composed softmax-CE cotangent, denote the certified loss-descent step. -/
+theorem cnn_conv_tied_certified {ic c h w d1 nClasses kH kW : Nat}
+    (xN wN bN lrStr cotN : String)
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) (x : Tensor3 ic (2*h) (2*w)) (label : Fin nClasses)
+    (lr : ℝ) :
+    -- the forward runs in flat `Vec` space (`flatConv`); the backward/SGD read `Tensor3`
+    -- activations (`conv2d`), so each conv activation has a `Vec` form (for `flatConv`/pool) and
+    -- the `Tensor3.unflatten` of it (for `conv2d`/`convWeightSgd`/`cnnChainCot`).
+    let xv : Vec (ic*(2*h)*(2*w)) := Tensor3.flatten x
+    let hc1 : Vec (c*(2*h)*(2*w)) := flatConv (h := 2*h) (w := 2*w) W₁ b₁ xv
+    let ac1v : Vec (c*(2*h)*(2*w)) := relu (c*(2*h)*(2*w)) hc1
+    let ac1 : Tensor3 c (2*h) (2*w) := Tensor3.unflatten ac1v
+    let hc2 : Vec (c*(2*h)*(2*w)) := flatConv (h := 2*h) (w := 2*w) W₂ b₂ ac1v
+    let ac2v : Vec (c*(2*h)*(2*w)) := relu (c*(2*h)*(2*w)) hc2
+    let ac2 : Tensor3 c (2*h) (2*w) := Tensor3.unflatten ac2v
+    let pool : Vec (c*h*w) := maxPoolFlat c h w ac2v
+    let h3 : Vec d1 := dense W₃ b₃ pool
+    let h4 : Vec d1 := dense W₄ b₄ (relu d1 h3)
+    let g : Vec nClasses := fun k =>
+      softmax nClasses (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ xv) k - oneHot nClasses label k
+    let cotW2 := cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 g
+    (∀ idx : Fin (c*c*kH*kW),
+        den (SHlo.convWeightSgd xN wN lrStr b₂ ac1 W₂ lr (.operand cotN cotW2)) idx
+          = Kernel4.flatten W₂ idx - lr * ∑ j : Fin (c*(2*h)*(2*w)),
+              pdiv (fun v' : Vec (c*c*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ ac1))
+                   (Kernel4.flatten W₂) idx j * cotW2 j)
+  ∧ (∀ o : Fin c,
+        den (SHlo.convBiasSgd bN lrStr W₂ ac1 b₂ lr (.operand cotN cotW2)) o
+          = b₂ o - lr * ∑ j : Fin (c*(2*h)*(2*w)),
+              pdiv (fun b' : Vec c => Tensor3.flatten (conv2d W₂ b' ac1)) b₂ o j * cotW2 j)
+  ∧ (∀ idx : Fin (c*ic*kH*kW),
+        den (SHlo.convWeightSgd xN wN lrStr b₁ x W₁ lr (.operand cotN (cnnChainCotW1 W₂ hc1 cotW2))) idx
+          = Kernel4.flatten W₁ idx - lr * ∑ j : Fin (c*(2*h)*(2*w)),
+              pdiv (fun v' : Vec (c*ic*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b₁ x))
+                   (Kernel4.flatten W₁) idx j * cnnChainCotW1 W₂ hc1 cotW2 j)
+  ∧ (∀ o : Fin c,
+        den (SHlo.convBiasSgd bN lrStr W₁ x b₁ lr (.operand cotN (cnnChainCotW1 W₂ hc1 cotW2))) o
+          = b₁ o - lr * ∑ j : Fin (c*(2*h)*(2*w)),
+              pdiv (fun b' : Vec c => Tensor3.flatten (conv2d W₁ b' x)) b₁ o j
+                * cnnChainCotW1 W₂ hc1 cotW2 j) := by
+  intro xv hc1 ac1v ac1 hc2 ac2v ac2 pool h3 h4 g cotW2
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · intro idx; exact cW2_den xN wN lrStr cotN b₂ ac1 ac2 W₂ W₃ W₄ W₅ h3 h4 hc2 g lr idx
+  · intro o;   exact cb2_den bN lrStr cotN ac1 ac2 W₂ W₃ W₄ W₅ b₂ h3 h4 hc2 g lr o
+  · intro idx; exact cW1_den xN wN lrStr cotN b₁ x W₁ W₂ hc1 cotW2 lr idx
+  · intro o;   exact cb1_den bN lrStr cotN W₁ x b₁ W₂ hc1 cotW2 lr o
+
 end Proofs.CnnPoC
