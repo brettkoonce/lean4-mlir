@@ -154,6 +154,74 @@ def cnnTrainStepStructured (B ic c h w d1 nClasses kH kW : Nat) (lr : String)
   s!"    return %W1n, %b1n, %W2n, %b2n, %W3n, %b3n, %W4n, %b4n, %W5n, %b5n : {ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
   "  }\n}\n"
 
+/-- **MNIST-CNN train step rendered ENTIRELY from the verified AST.** The peer of
+    `mlpTrainStepFaithfulV` for the conv net: like `cnnTrainStepStructured` for the
+    forward, but the backward chain (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`)
+    and ALL ten parameter SGD updates are now `pretty` of denoted `SHlo` nodes too —
+    the dense head via `weightSgd`/`biasSgd`, the conv layers via the new
+    `convWeightSgd`/`convBiasSgd` ops. So every emitted line is `pretty(provenNode)`,
+    and `CnnFaithfulPoC` proves each output's `den` = the certified loss-descent step.
+    Cotangents (`%dy`/`dy4`/`dy3`/`dac2`/`dhc2`/`dac1`/`dhc1`) are rendered once and
+    shared as operand leaves; operand/`lr`/weight VALUES are `skel`-erased, so these
+    placeholders print identically to the live graphs the `den` theorems use. Dim
+    convention matches `cnnTrainStepStructured` (`h,w` post-pool, image `2h×2w`). -/
+def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) (x : Vec (ic*(2*h)*(2*w))) : String :=
+  let flat := c*h*w
+  let zC : Vec (c*(2*h)*(2*w)) := fun _ => 0
+  let zPool : Vec (c*h*w) := fun _ => 0
+  let zD1 : Vec d1 := fun _ => 0
+  let zNC : Vec nClasses := fun _ => 0
+  let zT2 : Tensor3 c (2*h) (2*w) := fun _ _ _ => 0      -- conv-2 input (ac1) placeholder
+  let zTx : Tensor3 ic (2*h) (2*w) := fun _ _ _ => 0     -- conv-1 input (image) placeholder
+  let act : StateM Nat (String × (String × String × String × String × String × String × String × String × String × String)) := do
+    -- ═══ forward (proof-rendered, flat) ═══
+    let (cHc1, nHc1) ← pretty B (.flatConvF (h := 2*h) (w := 2*w) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
+    let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zC))
+    let (cHc2, nHc2) ← pretty B (.flatConvF (h := 2*h) (w := 2*w) "%W2" "%b2" W₂ b₂ (.operand nAc1 zC))
+    let (cAc2, nAc2) ← pretty B (.reluF (.operand nHc2 zC))
+    let (cPool, nPool) ← pretty B (.maxPoolF (c := c) (h := h) (w := w) (.operand nAc2 zC))
+    let (cH3, nH3) ← pretty B (denseF "%W3" "%b3" W₃ b₃ (.operand nPool zPool))
+    let (cA3, nA3) ← pretty B (.reluF (.operand nH3 zD1))
+    let (cH4, nH4) ← pretty B (denseF "%W4" "%b4" W₄ b₄ (.operand nA3 zD1))
+    let (cA4, nA4) ← pretty B (.reluF (.operand nH4 zD1))
+    let (cLog, nLog) ← pretty B (denseF "%W5" "%b5" W₅ b₅ (.operand nA4 zD1))
+    let (cDy, nDy) ← pretty B
+      (.sub (.softmaxDiv (.expe (.operand nLog zNC))) (.operand "%onehot" zNC))
+    -- ═══ backward chain (dense head → maxpool → conv), proof-rendered ═══
+    let (cDy4, nDy4) ← pretty B (.selectPos nH4 zD1 (.dotOut "%W5" W₅ (.operand nDy zNC)))
+    let (cDy3, nDy3) ← pretty B (.selectPos nH3 zD1 (.dotOut "%W4" W₄ (.operand nDy4 zD1)))
+    let (cDx3, nDx3) ← pretty B (.dotOut "%W3" W₃ (.operand nDy3 zD1))
+    let (cDac2, nDac2) ← pretty B (.maxPoolBack (c := c) (h := h) (w := w) nAc2 zC (.operand nDx3 zPool))
+    let (cDhc2, nDhc2) ← pretty B (.selectPos nHc2 zC (.operand nDac2 zC))
+    let (cDac1, nDac1) ← pretty B
+      (.convBack (h := 2*h) (w := 2*w) "%W2" W₂ b₂ zC (.operand nDhc2 zC))
+    let (cDhc1, nDhc1) ← pretty B (.selectPos nHc1 zC (.operand nDac1 zC))
+    -- ═══ param SGD updates: dense head (weightSgd/biasSgd), conv (convWeightSgd/convBiasSgd) ═══
+    let (cW5, nW5) ← pretty B (SHlo.weightSgd nA4 "%W5" lrStr zD1 W₅ 0 (.operand nDy zNC))
+    let (cb5, nb5) ← pretty B (SHlo.biasSgd "%b5" lrStr zNC 0 (.operand nDy zNC))
+    let (cW4, nW4) ← pretty B (SHlo.weightSgd nA3 "%W4" lrStr zD1 W₄ 0 (.operand nDy4 zD1))
+    let (cb4, nb4) ← pretty B (SHlo.biasSgd "%b4" lrStr zD1 0 (.operand nDy4 zD1))
+    let (cW3, nW3) ← pretty B (SHlo.weightSgd nPool "%W3" lrStr zPool W₃ 0 (.operand nDy3 zD1))
+    let (cb3, nb3) ← pretty B (SHlo.biasSgd "%b3" lrStr zD1 0 (.operand nDy3 zD1))
+    let (cW2g, nW2g) ← pretty B (SHlo.convWeightSgd nAc1 "%W2" lrStr b₂ zT2 W₂ 0 (.operand nDhc2 zC))
+    let (cb2g, nb2g) ← pretty B (SHlo.convBiasSgd "%b2" lrStr W₂ zT2 b₂ 0 (.operand nDhc2 zC))
+    let (cW1g, nW1g) ← pretty B (SHlo.convWeightSgd "%x" "%W1" lrStr b₁ zTx W₁ 0 (.operand nDhc1 zC))
+    let (cb1g, nb1g) ← pretty B (SHlo.convBiasSgd "%b1" lrStr W₁ zTx b₁ 0 (.operand nDhc1 zC))
+    pure (cHc1 ++ cAc1 ++ cHc2 ++ cAc2 ++ cPool ++ cH3 ++ cA3 ++ cH4 ++ cA4 ++ cLog ++ cDy ++
+            cDy4 ++ cDy3 ++ cDx3 ++ cDac2 ++ cDhc2 ++ cDac1 ++ cDhc1 ++
+            cW1g ++ cb1g ++ cW2g ++ cb2g ++ cW3 ++ cb3 ++ cW4 ++ cb4 ++ cW5 ++ cb5,
+          nW1g, nb1g, nW2g, nb2g, nW3, nb3, nW4, nb4, nW5, nb5)
+  let (body, n1W, n1b, n2W, n2b, n3W, n3b, n4W, n4b, n5W, n5b) := act.run' 0
+  "module @m {\n" ++
+  s!"  func.func @cnn_train_step(%x: {ty [B,ic*(2*h)*(2*w)]}, %W1: {ty [c,ic,kH,kW]}, %b1: {ty [c]}, %W2: {ty [c,c,kH,kW]}, %b2: {ty [c]}, %W3: {ty [flat,d1]}, %b3: {ty [d1]}, %W4: {ty [d1,d1]}, %b4: {ty [d1]}, %W5: {ty [d1,nClasses]}, %b5: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
+  "    // ── cnn train step: every line is pretty(verified AST node) ──\n" ++
+  body ++
+  s!"    return {n1W}, {n1b}, {n2W}, {n2b}, {n3W}, {n3b}, {n4W}, {n4b}, {n5W}, {n5b} : {ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
+  "  }\n}\n"
+
 /-- Structured **CIFAR CNN** train-step renderer (`@cifar_train_step`): the Chapter-5 peer of
     `cnnTrainStepStructured`, a re-parameterization across two conv→conv→pool stages at two
     spatial scales (channels `ic→c1→c1` then `c1→c2→c2`; spatial `H×W → H/2 → H/4`). Forward
@@ -491,3 +559,14 @@ def cifarBnTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr 
   "  }\n}\n"
 
 end Proofs.StableHLO
+
+-- Regenerate `verified_mlir/cnn_train_step.mlir` (what MainMnistCnnVerified trains on)
+-- from the faithful renderer; the den-certified proofs live in CnnFaithfulPoC.lean.
+-- (cnnTrainStepText — the hand-written predecessor — is kept in StableHLO.lean for
+-- reference.) Dims `128 1 32 14 14 512 10 3 3`: B=128, ic=1, c=32, h=w=14 (post-pool,
+-- image 28×28), d1=512, nClasses=10, 3×3 kernels; lr = 0.1/128 (mean-loss equiv).
+#eval IO.FS.writeFile "verified_mlir/cnn_train_step.mlir"
+  (Proofs.StableHLO.cnnTrainStepFaithfulV 128 1 32 14 14 512 10 3 3 "0.00078125"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0))

@@ -64,6 +64,7 @@ import LeanMlir.Proofs.ConvNeXtBackB0
 import LeanMlir.Proofs.ViTBackB0
 import LeanMlir.Proofs.LinearFaithfulPoC
 import LeanMlir.Proofs.MlpFaithfulPoC
+import LeanMlir.Proofs.CnnFaithfulPoC
 
 open Proofs
 
@@ -353,6 +354,20 @@ open Proofs
 #print axioms MlpPoC.b2_den_certified
 #print axioms MlpPoC.b1_den_certified
 #print axioms MlpPoC.b0_den_certified
+-- mnist-CNN fully folded: the 10 emitted param ops (what cnnTrainStepFaithfulV
+-- prints) denote the certified per-param loss-descent step (CnnFaithfulPoC.lean) —
+-- conv layers via the new convWeightSgd/convBiasSgd ops + chain bridges, dense head
+-- via weightSgd/biasSgd + the M2 dense bridges.
+#print axioms CnnPoC.cW1_den
+#print axioms CnnPoC.cb1_den
+#print axioms CnnPoC.cW2_den
+#print axioms CnnPoC.cb2_den
+#print axioms CnnPoC.dW3_den
+#print axioms CnnPoC.db3_den
+#print axioms CnnPoC.dW4_den
+#print axioms CnnPoC.db4_den
+#print axioms CnnPoC.dW5_den
+#print axioms CnnPoC.db5_den
 -- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
 -- weight/bias bridges completing all three layers; Crux A).
 #print axioms IR.mlp_layer0_weight_grad_bridge

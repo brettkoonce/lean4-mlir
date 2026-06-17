@@ -128,6 +128,20 @@ inductive SHlo : Nat → Type where
   -- Max-pool backward (`select_and_scatter`, route dy to the window argmax);
   -- `x` is the saved pre-pool input. Conditional (no-ties) like the ReLU kink.
   | maxPoolBack {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
+  -- Chapter 4 (CNN) param-SGD tail (the conv train step, folded into the AST):
+  -- the fused conv kernel/bias update ops — the conv analogue of `weightSgd`/`biasSgd`.
+  -- `convWeightSgd`: `W − lr·(conv2d_weight_grad(b,x)·dy)` via the transpose-trick conv
+  -- (transpose→transpose→convolution→transpose, then const→multiply→subtract), `den`
+  -- = `cnn_render_convW_certified`. `convBiasSgd`: `b − lr·(conv2d_bias_grad(W,x)·dy)`
+  -- (reduce over batch+spatial [0,2,3], then SGD). `xName`/`wName`/`bName` are the saved
+  -- activation/kernel/bias SSA names; `W,x,b,lr` carry the den. CnnFaithfulPoC proves
+  -- both `den`s = the certified loss-descent step (via the conv VJP bridges).
+  | convWeightSgd {ic oc h w kH kW : Nat} (xName wName lrStr : String)
+      (b : Vec oc) (x : Tensor3 ic h w) (W : Kernel4 oc ic kH kW) (lr : ℝ)
+                                                           : SHlo (oc*h*w) → SHlo (oc*ic*kH*kW)
+  | convBiasSgd   {ic oc h w kH kW : Nat} (bName lrStr : String)
+      (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w) (b : Vec oc) (lr : ℝ)
+                                                           : SHlo (oc*h*w) → SHlo oc
   -- Chapter 5 (BatchNorm): per-example normalization over the whole feature
   -- vec (reduce mean/var over axis [1], scalar γ/β). `gName,bName` are the γ,β
   -- scalar SSA inputs, `epsStr` the rendered ε literal; ε,γ,β carry the den.
@@ -573,6 +587,11 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .sub a b        => fun j => den a j - den b j
   | _, .weightSgd _ _ _ x W lr e => Mat.flatten (fun i j => W i j - lr * (x i * den e j))
   | _, .biasSgd _ _ b lr e       => fun j => b j - lr * den e j
+  | _, .convWeightSgd _ _ _ b x W lr e =>
+      fun idx => Kernel4.flatten W idx
+        - lr * (conv2d_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e) idx
+  | _, .convBiasSgd _ _ W x b lr e =>
+      fun o => b o - lr * (conv2d_bias_grad_has_vjp W x).backward b (den e) o
   | _, .reluF e        => fun i => max (den e i) 0
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
   | _, .relu6F e       => fun i => min (max (den e i) 0) 6
@@ -1885,6 +1904,8 @@ inductive Raw where
   | sub        (n : Nat)                   : Raw → Raw → Raw
   | weightSgd  (xName wName lrStr : String) (m n : Nat) : Raw → Raw
   | biasSgd    (bName lrStr : String) (n : Nat)         : Raw → Raw
+  | convWeightSgd (xName wName lrStr : String) (ic oc h w kH kW : Nat) : Raw → Raw
+  | convBiasSgd   (bName lrStr : String) (oc h w : Nat)               : Raw → Raw
   | reluF      (n : Nat)                   : Raw → Raw
   | selectPos  (x : String) (n : Nat)      : Raw → Raw
   | relu6F     (n : Nat)                   : Raw → Raw
@@ -1949,6 +1970,10 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .sub a b               => .sub k (skel a) (skel b)
   | _, .weightSgd (m := m) (n := n) xN wN lrS _ _ _ e => .weightSgd xN wN lrS m n (skel e)
   | k, .biasSgd bN lrS _ _ e  => .biasSgd bN lrS k (skel e)
+  | _, .convWeightSgd (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
+      .convWeightSgd xN wN lrS ic oc h w kH kW (skel e)
+  | _, .convBiasSgd (oc := oc) (h := h) (w := w) bN lrS _ _ _ _ e =>
+      .convBiasSgd bN lrS oc h w (skel e)
   | k, .reluF e               => .reluF k (skel e)
   | k, .selectPos x _ e       => .selectPos x k (skel e)
   | k, .relu6F e              => .relu6F k (skel e)
@@ -2039,6 +2064,8 @@ inductive Tok where
   | sub        (n : Nat)                   : Tok
   | weightSgd  (xName wName lrStr : String) (m n : Nat) : Tok
   | biasSgd    (bName lrStr : String) (n : Nat)         : Tok
+  | convWeightSgd (xName wName lrStr : String) (ic oc h w kH kW : Nat) : Tok
+  | convBiasSgd   (bName lrStr : String) (oc h w : Nat)               : Tok
   | reluF      (n : Nat)                   : Tok
   | selectPos  (x : String) (n : Nat)      : Tok
   | relu6F     (n : Nat)                   : Tok
@@ -2100,6 +2127,8 @@ def toToks : Raw → List Tok
   | .sub n a b       => toToks a ++ toToks b ++ [.sub n]
   | .weightSgd xN wN lrS m n e => toToks e ++ [.weightSgd xN wN lrS m n]
   | .biasSgd bN lrS n e        => toToks e ++ [.biasSgd bN lrS n]
+  | .convWeightSgd xN wN lrS ic oc h w kH kW e => toToks e ++ [.convWeightSgd xN wN lrS ic oc h w kH kW]
+  | .convBiasSgd bN lrS oc h w e               => toToks e ++ [.convBiasSgd bN lrS oc h w]
   | .reluF n e       => toToks e ++ [.reluF n]
   | .selectPos x n e => toToks e ++ [.selectPos x n]
   | .relu6F n e      => toToks e ++ [.relu6F n]
@@ -2192,6 +2221,38 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [n]}\n" ++
             s!"    {sB} = stablehlo.multiply {dB}, {lB} : {ty [n]}\n" ++
             s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [n]}\n", o :: st)
+  | .convWeightSgd xN wN lrS ic oc h w kH kW, r :: st => do
+      -- conv weight grad (transpose trick) then SGD: reshape flat acts/cotangent to
+      -- 4-D, transpose batch↔feature, convolve (batch as contraction), transpose back
+      -- to [oc,ic,kH,kW], then θ' = θ − lr·dW. Same op text as `CnnRender.convWGrad`+`sgd`.
+      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      let xr ← fresh; let dr ← fresh; let xt ← fresh; let dt ← fresh
+      let raw ← fresh; let g ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
+      pure (
+        s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*h*w]}) -> {ty [B,ic,h,w]}\n" ++
+        s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,h,w]}) -> {ty [ic,B,h,w]}\n" ++
+        s!"    {dt} = stablehlo.transpose {dr}, dims = [1, 0, 2, 3] : ({ty [B,oc,h,w]}) -> {ty [oc,B,h,w]}\n" ++
+        s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+        s!" : ({ty [ic,B,h,w]}, {ty [oc,B,h,w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+        s!"    {g} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n" ++
+        s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [oc,ic,kH,kW]}\n" ++
+        s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [oc,ic,kH,kW]}\n" ++
+        s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [oc,ic,kH,kW]}\n", o :: st)
+  | .convBiasSgd bN lrS oc h w, r :: st => do
+      -- conv bias grad (reduce over batch+spatial [0,2,3]) then SGD. Same op text as
+      -- `CnnRender.convBiasGrad`+`sgd`.
+      let dr ← fresh; let z ← fresh; let g ← fresh; let lB ← fresh; let sB ← fresh; let o ← fresh
+      pure (
+        s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {g} = stablehlo.reduce({dr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+        s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [oc]}\n" ++
+        s!"    {sB} = stablehlo.multiply {g}, {lB} : {ty [oc]}\n" ++
+        s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [oc]}\n", o :: st)
   | .reluF n, r :: st => do
       let z ← fresh; let o ← fresh
       pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
@@ -4241,9 +4302,8 @@ end Proofs
        (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
        (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
        (fun _ => 0))
-  -- Chapter 4 CNN full SGD train step (same dims; lr = 0.1/128 = mean-loss equiv).
-  IO.FS.writeFile "verified_mlir/cnn_train_step.mlir"
-    (Proofs.StableHLO.cnnTrainStepText 128 1 32 28 28 3 3 512 10 "0.00078125")
+  -- cnn_train_step.mlir is now generated by the faithful renderer in CnnRender.lean
+  -- (cnnTrainStepFaithfulV, den-certified in CnnFaithfulPoC.lean), not cnnTrainStepText.
   -- Chapter 5 CIFAR forward (3→32→32 conv, 32×32→16×16 pool, 32→64→64 conv,
   -- 16×16→8×8 pool, flatten 4096→512→512→10). h=w=8 ⇒ input 3·32·32 = 3072.
   IO.FS.writeFile "verified_mlir/cifar_fwd.mlir"

@@ -49,7 +49,7 @@ emitter does **not** print (independent hand-written string emitter).
 |---|---|---|---|---|---|
 | **mnist-linear** | committed `.mlir` | ✅ `linearFwdModuleV = renderModule(fwdGraph)`, `fwdGraph_faithful` | ✅ **CLOSED** — whole module is `pretty(provenGraph)` via `linTrainStepFaithfulV` (cotangent + `weightSgd`/`biasSgd` AST ops); `den = certified` by `rfl` | + `weightSgd`/`biasSgd` `SHlo` ops, `poc_{weightSgd,biasSgd}_den_eq`, `poc_train_step_tail_certified` | — (tail folded; only per-op `pretty` lexing + ℝ→Float32 remain) |
 | **mnist-mlp (1d)** | committed `.mlir` | ✅ `mlpFwdModuleV = renderModule(mlpFwdGraph)`, `mlpFwdGraph_faithful` | ✅ **CLOSED** — `mlpTrainStepFaithfulV`: whole 3-layer train step is `pretty(provenGraph)` (fwd + `dotOut`/`selectPos` backward chain + 6× `weightSgd`/`biasSgd`); each output `den = certified` (`MlpFaithfulPoC`, reusing `mlp_render_*_certified` + `mlpCotOut*_denote`) | `MlpPoC.{cot1,cot0}_den` + `MlpPoC.{W0,W1,W2,b0,b1,b2}_den_certified` | — (no new core ops; same residual as linear) |
-| **mnist-cnn (2d)** | committed `.mlir` | ✅ `cnnFwdModuleV = renderModule(cnnFwdGraph)`, `cnnFwdGraph_faithful` | ❌ `cnnTrainStepText` hand-written | `cnnFwdGraph_faithful`; backward per-op only | no whole-net back; emitted bytes untied |
+| **mnist-cnn (2d)** | committed `.mlir` | ✅ `cnnFwdModuleV = renderModule(cnnFwdGraph)`, `cnnFwdGraph_faithful` | ✅ **CLOSED** — `cnnTrainStepFaithfulV` (CnnRender.lean) renders the whole train step as `pretty(provenGraph)`: forward + backward chain (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`) + 10 param SGD ops (`convWeightSgd`/`convBiasSgd` conv + `weightSgd`/`biasSgd` dense head); each output `den = certified` via `CnnPoC.{cW,cb}{1,2}_den` (conv chain bridges) + `{dW,db}{3,4,5}_den` (M2 dense bridges) | **2 new core ops** `convWeightSgd`/`convBiasSgd` (9 sites each, `roundtrip` extended); committed bytes iree-compile on rocm/gfx1100 (121 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + ℝ→Float32) |
 | **cifar8 / cifar8-bn** | committed `.mlir` | ❌ `cifar8FwdText` hand-written | ❌ `cifar8TrainStepText` hand-written | `cifar8{Bn}FwdGraph_faithful` (fwd, full dims); backward = per-param `cifar8_render_*_chain_certified` | Tier-2: fwd proven (parallel), backward per-param |
 | **r34** | committed `.mlir` | ❌ hand-written (`TestResnet34Fwd`) | ❌ `renderBody` hand-written (`TestResnet34Train`) | `resnet34FwdGraphFullPC_faithful` (**full 34-layer, 146 params**); backward per-param `r34_render_*_chain_certified` | strongest parallel proofs, zero tie to emitted bytes |
 | **mnv2** | committed `.mlir` | ❌ hand-written | ❌ hand-written, **reduced 6-block net** | `mobilenetv2FwdGraphFullPC_faithful` (full 17-block); **whole-net VJP witness only 2-block representative** | double gap: committed net ≠ proven full net; VJP representative |
@@ -264,14 +264,29 @@ What's needed:
    transition (`verified` vs `verified-forward` vs `in-progress`) — don't relabel a
    net "verified" before its train-step capstone lands.
 
-## 5. Session handoff — cnn next, then the rest
+## 5. Session handoff — cifar-bn next, then the rest
 
-_State: linear + mlp train steps are fully folded (`render(provenGraph)` with every
-output `den = certified`), committed (`e4d2a46`, `7ed4c2a`) and pushed; the CI
-scorecard (`256da11`) prints ✅ for both. Blueprint intentionally NOT touched.
-This section is the recipe + per-net plan for finishing the rest._
+_State: linear + mlp + **cnn** train steps are fully folded (`render(provenGraph)`
+with every output `den = certified`); linear/mlp committed (`e4d2a46`, `7ed4c2a`)
+and pushed; cnn landed this session (uncommitted as of writing — `CnnFaithfulPoC.lean`
++ the two new core ops `convWeightSgd`/`convBiasSgd` + `cnnTrainStepFaithfulV` in
+CnnRender.lean; the committed `verified_mlir/cnn_train_step.mlir` regenerated from the
+faithful renderer, iree-compiles on rocm/gfx1100). The CI scorecard prints ✅ for all
+three. Blueprint intentionally NOT touched. This section is the recipe + per-net plan
+for finishing the rest._
 
-### The proven recipe (what worked for linear + mlp)
+_**cnn close notes (the conv template — reuse for cifar-bn/r34):** the dense head is a
+3-layer MLP, so its cotangents are literally IR `mlpCotOut0/1` and its `den`s close via
+the M2 `weight_grad_bridge`/`bias_grad_bridge` (copy `MlpFaithfulPoC`). The conv layers
+needed two new core SGD ops, cloned through all 9 sites from `weightSgd`/`biasSgd`:
+`convWeightSgd` (`den = flatten(W − lr·conv2d_weight_grad(b,x)·dy)`, emit = the
+transpose-trick conv + SGD wrap) and `convBiasSgd` (`den = b − lr·conv2d_bias_grad(W,x)·dy`,
+emit = reduce[0,2,3] + SGD). Their `den` reduces by `rfl` to the LHS of the existing
+`cnn_render_conv{W,b}{1,2}_chain_certified` (CnnChainClose), so `CnnPoC.{cW,cb}{1,2}_den`
+are one-line delegations. Gotcha hit: the `Back.cotangent` dense rows (`dW5`/`db5`) need a
+trailing `rfl` after the bridge `rw` to collapse `Back.cotangent.denote dy = dy`._
+
+### The proven recipe (what worked for linear + mlp + cnn)
 For chapter net `N` with committed `verified_mlir/N_train_step.mlir`:
 1. **Find the proven param-grad certs.** Each net has `N_render_*_certified` /
    `N_layer*_*_grad_bridge` (analogs of `linWeightDen_is_loss_descent`):
@@ -318,17 +333,20 @@ For chapter net `N` with committed `verified_mlir/N_train_step.mlir`:
   per net). CI's ubuntu runner can't iree-compile — keep that gate local.
 
 ### Per-net plan
-- **cnn (2d) — NEXT.** Has `cnn_render_{convW,convb}_certified` + `conv_weight_grad_bridge`
-  (`conv2d_weight_grad_has_vjp.backward`, the transpose-trick) + `cnnTrainStepStructured`
-  (forward rendered). Backward ops exist (`convBack`, `maxPoolBack`, `selectPos`). **Needs
-  2 new core SGD ops** the dense `weightSgd`/`biasSgd` can't express: `convWeightSgd`
-  (kernel grad = the transpose-trick conv, `den = flatten(W − lr·conv2d_weight_grad…)`,
-  emit = the `cnnTrainStepText` conv-W-grad text) and `convBiasSgd` (reduce over batch+
-  spatial). Dense head reuses `weightSgd`/`biasSgd`. `#eval`: `StableHLO.lean:4246`
-  (`cnnTrainStepText 128 1 32 28 28 3 3 512 10`).
-- **cifar-bn.** Like cnn + per-channel BN. Has `cifar_bn_render_{gamma,beta}_certified`
-  + `bnBack` (input grad). Needs the BN scale/shift (dγ,dβ) param grads as ops (+ the
-  conv ops from cnn). `cifarBnTrainStepStructured` exists.
+- **cnn (2d) — ✅ DONE (this session).** Added the 2 core ops `convWeightSgd`/`convBiasSgd`
+  (9 sites each, `roundtrip` extended); `CnnFaithfulPoC.lean` proves all 10 param outputs'
+  `den = certified` (conv via `cnn_render_conv{W,b}{1,2}_chain_certified`, dense head via the
+  M2 bridges); `cnnTrainStepFaithfulV` (CnnRender.lean) renders the whole step as
+  `pretty(provenGraph)` and now writes `verified_mlir/cnn_train_step.mlir` (iree-compiles,
+  121 KB vmfb). Capstones in `tests/AuditAxioms.lean` (3-axiom closure, all benign);
+  scorecard row flipped to ✅. (`cnnTrainStepText` kept in StableHLO.lean for reference.)
+- **cifar-bn — NEXT.** Like cnn + per-channel BN. Has `cifar_bn_render_{gamma,beta}_certified`
+  + `bnBack` (input grad) + `cifarBnTrainStepStructured` (forward + BN-back proof-rendered).
+  **Reuse the cnn conv ops** (`convWeightSgd`/`convBiasSgd`, now in core) + dense bridges;
+  **needs new** BN scale/shift param-grad ops (dγ=Σ dy·x̂, dβ=Σ dy — the BN analogue of
+  `convBiasSgd`, with the x̂ recompute the structured renderer hand-emits in `bnParamGradPC`).
+  Note cifar (no-BN) at two scales is also now unblocked (pure conv+dense, no new ops —
+  just more layers through `cifarTrainStepStructured`).
 - **r34.** Strongest proof side: full-depth forward faithful (`resnet34FwdGraphFullPC_faithful`,
   146 params) + per-layer backward `r34_render_*_chain_certified`. Needs the strided-conv
   weight-grad op + the multi-block assembly (big, but all certs exist). Best conv net to

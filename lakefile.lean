@@ -259,7 +259,12 @@ lean_lib «Proofs» where
              -- mnist-MLP peer: the whole 3-layer MLP train step folded into the
              -- verified AST (forward + backward chain + 6 weightSgd/biasSgd), each
              -- output's den proven = certified via mlp_render_*_certified.
-             `LeanMlir.Proofs.MlpFaithfulPoC]
+             `LeanMlir.Proofs.MlpFaithfulPoC,
+             -- mnist-CNN peer: the conv train step folded into the verified AST via
+             -- the new convWeightSgd/convBiasSgd ops (conv layers) + weightSgd/biasSgd
+             -- (dense head); each of the 10 outputs' den proven = certified via the
+             -- conv chain bridges + the M2 dense bridges (CnnFaithfulPoC.lean).
+             `LeanMlir.Proofs.CnnFaithfulPoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
