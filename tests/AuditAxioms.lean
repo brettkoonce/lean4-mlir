@@ -65,6 +65,7 @@ import LeanMlir.Proofs.ViTBackB0
 import LeanMlir.Proofs.LinearFaithfulPoC
 import LeanMlir.Proofs.MlpFaithfulPoC
 import LeanMlir.Proofs.CnnFaithfulPoC
+import LeanMlir.Proofs.CifarFaithfulPoC
 
 open Proofs
 
@@ -368,6 +369,17 @@ open Proofs
 #print axioms CnnPoC.db4_den
 #print axioms CnnPoC.dW5_den
 #print axioms CnnPoC.db5_den
+-- ch5-CIFAR fully folded (no-BN, 2-scale): the generic conv ops cover all 4 conv
+-- layers (convW_den/convB_den) and the 3-dense head's 6 outpus denote the certified
+-- step (CifarFaithfulPoC.lean) — reuses the cnn conv ops, no new core ops.
+#print axioms CifarPoC.convW_den
+#print axioms CifarPoC.convB_den
+#print axioms CifarPoC.dW5_den
+#print axioms CifarPoC.db5_den
+#print axioms CifarPoC.dW6_den
+#print axioms CifarPoC.db6_den
+#print axioms CifarPoC.dW7_den
+#print axioms CifarPoC.db7_den
 -- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
 -- weight/bias bridges completing all three layers; Crux A).
 #print axioms IR.mlp_layer0_weight_grad_bridge
