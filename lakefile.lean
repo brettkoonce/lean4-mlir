@@ -273,7 +273,10 @@ lean_lib «Proofs» where
              -- cifar dense head; the new bnGammaSgd/bnBetaSgd ops carry the per-channel
              -- γ/β grads, den-certified via cifar_bn_render_{gamma,beta}_certified
              -- (CifarBnFaithfulPoC.lean).
-             `LeanMlir.Proofs.CifarBnFaithfulPoC]
+             `LeanMlir.Proofs.CifarBnFaithfulPoC,
+             -- deeper 8-conv cifar8 (no-BN): pure reuse — conv via CifarPoC generics,
+             -- dense via the new generic denseW/denseB_den (Cifar8FaithfulPoC.lean).
+             `LeanMlir.Proofs.Cifar8FaithfulPoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

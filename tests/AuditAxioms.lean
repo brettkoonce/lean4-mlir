@@ -67,6 +67,7 @@ import LeanMlir.Proofs.MlpFaithfulPoC
 import LeanMlir.Proofs.CnnFaithfulPoC
 import LeanMlir.Proofs.CifarFaithfulPoC
 import LeanMlir.Proofs.CifarBnFaithfulPoC
+import LeanMlir.Proofs.Cifar8FaithfulPoC
 
 open Proofs
 
@@ -385,6 +386,10 @@ open Proofs
 -- channel BN γ/β ops (bnGammaSgd/bnBetaSgd) denote the certified step (CifarBnFaithfulPoC).
 #print axioms CifarBnPoC.bnGamma_den
 #print axioms CifarBnPoC.bnBeta_den
+-- deeper 8-conv cifar8 fully folded: conv layers reuse CifarPoC generics, the 3 dense
+-- layers via the generic denseW_den/denseB_den (Cifar8FaithfulPoC.lean).
+#print axioms Cifar8PoC.denseW_den
+#print axioms Cifar8PoC.denseB_den
 -- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
 -- weight/bias bridges completing all three layers; Crux A).
 #print axioms IR.mlp_layer0_weight_grad_bridge

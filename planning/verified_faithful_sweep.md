@@ -52,7 +52,8 @@ emitter does **not** print (independent hand-written string emitter).
 | **mnist-cnn (2d)** | committed `.mlir` | ✅ `cnnFwdModuleV = renderModule(cnnFwdGraph)`, `cnnFwdGraph_faithful` | ✅ **CLOSED** — `cnnTrainStepFaithfulV` (CnnRender.lean) renders the whole train step as `pretty(provenGraph)`: forward + backward chain (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`) + 10 param SGD ops (`convWeightSgd`/`convBiasSgd` conv + `weightSgd`/`biasSgd` dense head); each output `den = certified` via `CnnPoC.{cW,cb}{1,2}_den` (conv chain bridges) + `{dW,db}{3,4,5}_den` (M2 dense bridges) | **2 new core ops** `convWeightSgd`/`convBiasSgd` (9 sites each, `roundtrip` extended); committed bytes iree-compile on rocm/gfx1100 (121 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + ℝ→Float32) |
 | **cifar (ch5, no-BN)** | committed `.mlir` | ✅ `cifarFwdGraph` rendered | ✅ **CLOSED** — `cifarTrainStepFaithfulV` (CnnRender.lean) renders the whole 2-scale train step (4 conv + 3 dense) as `pretty(provenGraph)`; each of the 14 outputs `den = certified` via `CifarPoC.conv{W,B}_den` (generic, covers all 4 conv layers) + `{dW,db}{5,6,7}_den` (M2 dense bridges) | **NO new core ops** (reuses cnn's `convWeightSgd`/`convBiasSgd`); committed bytes iree-compile on rocm/gfx1100 (186 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + ℝ→Float32) |
 | **cifar-bn (ch5)** | committed `.mlir` | ✅ `cifarBnFwdGraph` rendered (BN incl.) | ✅ **CLOSED** — `cifarBnTrainStepFaithfulV` (CnnRender.lean) renders the whole BN train step (22 params) as `pretty(provenGraph)`; conv layers reuse `CifarPoC.conv{W,B}_den`, dense head `CifarPoC.{dW,db}{5,6,7}_den`, per-channel BN γ/β via new `bnGammaSgd`/`bnBetaSgd` ops (`CifarBnPoC.bn{Gamma,Beta}_den` ← `cifar_bn_render_{gamma,beta}_certified`, bridged `oc·h·w↔oc·m` by `reassocFwd`) | **2 new core ops** `bnGammaSgd`/`bnBetaSgd`; committed bytes iree-compile on rocm/gfx1100 (259 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + BN `0<ε` + ℝ→Float32) |
-| **cifar8 / cifar8-bn** | committed `.mlir` | ❌ `cifar8FwdText` hand-written | ❌ `cifar8TrainStepText` hand-written | `cifar8{Bn}FwdGraph_faithful` (fwd, full dims); backward = per-param `cifar8_render_*_chain_certified` | Tier-2: fwd proven (parallel), backward per-param |
+| **cifar8 (8-conv, no-BN)** | committed `.mlir` | ❌ `cifar8FwdText` hand-written | ✅ **CLOSED** — `cifar8TrainStepFaithfulV` (CnnRender.lean) renders the whole 4-stage train step (8 conv + 3 dense, 22 params) as `pretty(provenGraph)`; conv via `CifarPoC.conv{W,B}_den` (generic), dense via the new generic `Cifar8PoC.dense{W,B}_den` | **NO new core ops** (pure reuse); committed bytes iree-compile on rocm/gfx1100 (271 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + ℝ→Float32) |
+| **cifar8-bn** | committed `.mlir` | ❌ `cifar8BnFwdText` hand-written | ❌ `cifar8BnTrainStepText` hand-written | `cifar8BnFwdGraph_faithful` (fwd); backward per-param `cifar8_render_*_chain_certified` | reuse cifar8 conv/dense + the BN ops (bnGammaSgd/bnBetaSgd); fold pending |
 | **r34** | committed `.mlir` | ❌ hand-written (`TestResnet34Fwd`) | ❌ `renderBody` hand-written (`TestResnet34Train`) | `resnet34FwdGraphFullPC_faithful` (**full 34-layer, 146 params**); backward per-param `r34_render_*_chain_certified` | strongest parallel proofs, zero tie to emitted bytes |
 | **mnv2** | committed `.mlir` | ❌ hand-written | ❌ hand-written, **reduced 6-block net** | `mobilenetv2FwdGraphFullPC_faithful` (full 17-block); **whole-net VJP witness only 2-block representative** | double gap: committed net ≠ proven full net; VJP representative |
 | **enet** | committed `.mlir` | ❌ hand-written | ❌ `renderBody` hand-written | `efficientnetFwdGraphB_full_faithful` (full 16 MBConv); backward per-block, **no whole-net** | no whole-net backward; emitted untied |
@@ -268,7 +269,7 @@ What's needed:
 
 ## 5. Session handoff — r34/cifar8 next, then the rest
 
-_State: linear + mlp + **cnn** + **cifar (ch5, no-BN)** + **cifar-bn (ch5)** train steps are fully folded
+_State: linear + mlp + **cnn** + **cifar (ch5, no-BN)** + **cifar-bn (ch5)** + **cifar8 (8-conv, no-BN)** train steps are fully folded
 (`render(provenGraph)` with every output `den = certified`); linear/mlp committed
 earlier (`e4d2a46`, `7ed4c2a`); cnn committed this session (`4d6a07a`) — added the two
 new core ops `convWeightSgd`/`convBiasSgd` + `CnnFaithfulPoC.lean` + `cnnTrainStepFaithfulV`;
@@ -356,11 +357,16 @@ For chapter net `N` with committed `verified_mlir/N_train_step.mlir`:
   `verified_mlir/cifar_bn_train_step.mlir` (iree-compiles, 259 KB vmfb). Capstones in the
   closure (all benign). **`bnPerChannel_grad_{gamma,beta}` moved CifarBnClose→PerChannelBN**
   so `den` can reference them upstream. Unblocks cifar8-bn (same BN ops).
-- **r34 / cifar8 — NEXT.** r34: full-depth forward faithful + per-layer backward
-  `r34_render_*_chain_certified`; needs a strided-conv weight-grad op (the stride-2 analogue
-  of `convWeightSgd`) + the multi-block assembly. cifar8 (8-conv, ±BN): pure reuse of the
-  conv/dense/BN ops now in core (no new ops) + `cifar8_render_*_chain_certified` — the most
-  mechanical next, just more layers.
+- **cifar8 (8-conv, no-BN) — ✅ DONE (this session).** Pure reuse, ZERO new ops:
+  `cifar8TrainStepFaithfulV` (CnnRender.lean, 4 stages, 22 params) writes
+  `verified_mlir/cifar8_train_step.mlir` (iree-compiles, 271 KB vmfb); `Cifar8FaithfulPoC.lean`
+  adds the generic `dense{W,B}_den` (conv reuses `CifarPoC` generics). Note: the deep do-block
+  needs `set_option maxRecDepth 4000 in` (≈70 `pretty` binds).
+- **cifar8-bn — NEXT.** cifar8 + per-channel BN (38 params). Pure reuse: cifar8 conv/dense
+  (done) + the BN ops `bnGammaSgd`/`bnBetaSgd` (done for cifar-bn). Just the bigger renderer
+  + a PoC that reuses all the generics. No new core ops.
+- **r34 — after.** full-depth forward faithful + per-layer backward `r34_render_*_chain_certified`;
+  needs a strided-conv weight-grad op (the stride-2 analogue of `convWeightSgd`) + multi-block assembly.
 - **r34.** Strongest proof side: full-depth forward faithful (`resnet34FwdGraphFullPC_faithful`,
   146 params) + per-layer backward `r34_render_*_chain_certified`. Needs the strided-conv
   weight-grad op + the multi-block assembly (big, but all certs exist). Best conv net to
