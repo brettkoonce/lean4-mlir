@@ -358,6 +358,12 @@ open Proofs
 #print axioms MlpPoC.b2_den_certified
 #print axioms MlpPoC.b1_den_certified
 #print axioms MlpPoC.b0_den_certified
+-- mnist-mlp FULLY TIED: the top loss cotangent pinned to the composed softmax-CE gradient of the
+-- forward (mlpLossCot_den), so all 6 outputs denote the certified step driven by the real loss
+-- (output weight W₂ folded to the WHOLE-loss gradient ∂CE/∂W₂).
+#print axioms MlpPoC.mlpLossCot_den
+#print axioms MlpPoC.mlp_W2_tied_totalloss
+#print axioms MlpPoC.mlp_train_step_tied_certified
 -- mnist-CNN fully folded: the 10 emitted param ops (what cnnTrainStepFaithfulV
 -- prints) denote the certified per-param loss-descent step (CnnFaithfulPoC.lean) —
 -- conv layers via the new convWeightSgd/convBiasSgd ops + chain bridges, dense head

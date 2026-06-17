@@ -93,7 +93,7 @@ leaves both green.
 | net | train step reuses proven fwd graph? | consumers composed (no SSA-name pin)? | **tie** |
 |---|---|---|---|
 | **linear** | ✅ forward = `fwdGraph` (nested in `lossCotGraph`, fed directly) | ✅ `weightSgd`/`biasSgd` consume `lossCotGraph` directly | **✅ FULL** |
-| **mlp** | ❌ `denseF`/`reluF` chain, placeholder operands | ❌ (see note) | **none** |
+| **mlp** | ✅ den-composed: real forward threaded; top cotangent `g` pinned to the composed softmax-CE (`mlpLossCot_den`) | ◐ level-2: consumers fed real forward dens at correctly-threaded SSAs; `W₂` folds to `∂CE/∂W₂` | **✅ TIED** |
 | **cnn / cifar / cifar-bn / cifar8 / cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
 | **r34** | ❌ parallel per-node render (`ResNet34Render`) | ❌ | **none** |
 | mnv2 / enet / convnext / vit | — (train-step fold WIP) | — | — |
@@ -112,17 +112,32 @@ nets validate the pattern.
 forward = `fwdGraph`, no SSA-name pin; the regenerated `linear_train_step.mlir` iree-compiles
 to a **byte-identical-size vmfb** — iree CSEs the duplicated cotangent, so zero runtime cost).
 
-**Why mlp (and every conv net) needs more than linear's trick.** Linear tied cleanly because
-the cotangent is a self-contained composed graph (`lossCotGraph`) that the SGD ops take as an
-`SHlo` *child*. The deeper nets' backward/SGD ops take their forward-intermediate inputs as
-*values*, not `SHlo` children — `selectPos (x : Vec n)` (the relu-mask pre-activation),
-`weightSgd (x : Vec m)` (the input activation, a *computed* `relu`/`pool` output for layers > 0),
-`convBack`/`bnPerChannelBack`/`bnGammaSgd` (saved conv input / BN input). Those value fields are
-inherent SSA-name pins. (Linear escapes this only because its single `weightSgd`'s activation is
-the raw network input `%x` — a vacuous pin.) Tying them needs `SHlo`-*child* variants of those
-ops (so the forward subgraph composes in, duplicated + iree-CSE'd) — i.e. ~2–4 new core ops with
-the full 9-site treatment — or the shared-SSA/DAG renderer. That is the real next step for the
-mnist-mlp tie and the template the conv nets would inherit.
+**mnist-mlp tie — DONE (NOT via the DAG renderer).** On closer reading, `MlpFaithfulPoC` already
+threads the **real forward activations** into its backward/SGD `den` theorems (`cot1_den` feeds the
+real pre-activation `dense W₁ b₁ (relu …)`; `W2_den_certified` feeds the real activation
+`relu (dense W₁ b₁ (relu …))`). So mlp's backward is *already* den-composed — the value fields
+carry real forward dens, referenced by the correctly-threaded SSAs (the only residual there is the
+universal per-op `pretty` lexing trust, same as every net). The **one** open gap is the top loss
+cotangent `g`, left `∀ g`. Closing it = a capstone that instantiates the six `*_den_certified` at
+`g = softmax(mlpForward x) − onehot` and folds via the existing `mlp_{output,hidden,input}_total_loss_grad`
+(the `mlpForward` chain rule) — exactly the `lossCotGraph_isCEgrad` move linear used. **No new ops,
+no DAG renderer, no duplication, no renderer change** — just a PoC capstone (the emitted graph
+was already correctly threaded; skel erases the placeholder values). **Landed:** `mlpLossCot_den`
+(the emitted loss graph denotes `∂CE/∂logits` at the real forward logits), `mlp_W2_tied_totalloss`
+(the output weight op denotes `W₂ − lr·∂CE/∂W₂`, the WHOLE-loss gradient, via `mlp_output_total_loss_grad`),
+and `mlp_train_step_tied_certified` (all six outputs at the composed cotangent). The deeper total-loss
+*fold* for `W₁`/`W₀` (single `pdiv(crossEntropy∘forward)` form) needs the chain-cotangent↔loss-grad-at-
+preactivation lemma + the conditional relu-smoothness hyps — deferred; the level-2 composed tie (real
+forward dens threaded at correct SSAs) holds for all six now.
+
+**Where the DAG renderer is actually needed: the conv nets.** Unlike mlp, the conv PoCs
+(`CifarPoC.convW_den`, etc.) leave the activation `∀`-symbolic — so the conv nets need the *whole
+backward chain* composed (real values threaded, like mlp's backward already is) before `g` can be
+closed; that is the "compose a whole-net backward graph" step in §2, the bigger lift. A *structural*
+tie (consumed graph as an `SHlo` child, à la linear, with no SSA reference at all) on a deep net
+would duplicate the forward O(depth²) times — that is the case a shared-SSA/DAG renderer with proven
+late-binding solves. So: mlp → capstone (cheap); conv → whole-net-backward composition + (eventually)
+the DAG renderer to keep it from blowing up.
 
 ### Everything else
 The `*FwdGraph_faithful` / `*BackGraph_faithful` / `*_chain_certified` theorems
