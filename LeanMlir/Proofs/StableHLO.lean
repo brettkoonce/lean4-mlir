@@ -3540,6 +3540,43 @@ def cifarBnFwdModuleV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr : String)
     B nClasses (cifarBnFwdGraph epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
       W₅ b₅ W₆ b₆ W₇ b₇ x)
 
+/-- `@cifar8_fwd` rendered from the verified 8-conv CIFAR forward AST `cifar8FwdGraph`
+    (`cifar8FwdGraph_faithful` proves it denotes `cifarCnn8Forward`). The 4-stage peer of
+    `cifarFwdModuleV` — closes the cifar8 `_fwd` bytes (committed `verified_mlir/cifar8_fwd.mlir`
+    is now `renderModule(provenGraph)`, replacing the hand-written `cifar8FwdText`). -/
+def cifar8FwdModuleV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
+    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3)
+    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4)
+    (W₉ : Mat (c4*h*w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1) (ba : Vec d1)
+    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
+    (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))) : String :=
+  renderModule "cifar8_fwd"
+    s!"%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %W5: {ty [c3,c2,kH,kW]}, %b5: {ty [c3]}, %W6: {ty [c3,c3,kH,kW]}, %b6: {ty [c3]}, %W7: {ty [c4,c3,kH,kW]}, %b7: {ty [c4]}, %W8: {ty [c4,c4,kH,kW]}, %b8: {ty [c4]}, %W9: {ty [c4*h*w,d1]}, %b9: {ty [d1]}, %Wa: {ty [d1,d1]}, %ba: {ty [d1]}, %Wb: {ty [d1,nClasses]}, %bb: {ty [nClasses]}"
+    B nClasses (cifar8FwdGraph W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb x)
+
+/-- `@cifar8_bn_fwd` rendered from the verified 8-conv per-channel-BN CIFAR forward AST
+    `cifar8BnFwdGraph` (`cifar8BnFwdGraph_faithful` proves it denotes `cifarCnnBn8Forward`).
+    The BN peer of `cifar8FwdModuleV` — closes the cifar8-bn `_fwd` bytes, replacing the
+    hand-written `cifar8BnFwdTextPC`. -/
+def cifar8BnFwdModuleV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (epsStr : String)
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)
+    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ : ℝ) (γ₂ β₂ : Vec c1)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (ε₃ : ℝ) (γ₃ β₃ : Vec c2)
+    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2) (ε₄ : ℝ) (γ₄ β₄ : Vec c2)
+    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (ε₅ : ℝ) (γ₅ β₅ : Vec c3)
+    (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3) (ε₆ : ℝ) (γ₆ β₆ : Vec c3)
+    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (ε₇ : ℝ) (γ₇ β₇ : Vec c4)
+    (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4) (ε₈ : ℝ) (γ₈ β₈ : Vec c4)
+    (W₉ : Mat (c4*h*w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1) (ba : Vec d1)
+    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
+    (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))) : String :=
+  renderModule "cifar8_bn_fwd"
+    s!"%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %g1: {ty [c1]}, %bt1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %g2: {ty [c1]}, %bt2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %g3: {ty [c2]}, %bt3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %g4: {ty [c2]}, %bt4: {ty [c2]}, %W5: {ty [c3,c2,kH,kW]}, %b5: {ty [c3]}, %g5: {ty [c3]}, %bt5: {ty [c3]}, %W6: {ty [c3,c3,kH,kW]}, %b6: {ty [c3]}, %g6: {ty [c3]}, %bt6: {ty [c3]}, %W7: {ty [c4,c3,kH,kW]}, %b7: {ty [c4]}, %g7: {ty [c4]}, %bt7: {ty [c4]}, %W8: {ty [c4,c4,kH,kW]}, %b8: {ty [c4]}, %g8: {ty [c4]}, %bt8: {ty [c4]}, %W9: {ty [c4*h*w,d1]}, %b9: {ty [d1]}, %Wa: {ty [d1,d1]}, %ba: {ty [d1]}, %Wb: {ty [d1,nClasses]}, %bb: {ty [nClasses]}"
+    B nClasses (cifar8BnFwdGraph epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
+      W₅ b₅ ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈ W₉ b₉ Wa ba Wb bb x)
+
 /-- Full **BN-CIFAR** SGD train step (`@cifar_bn_train_step`). The Chapter-5
     BatchNorm peer of `cifarTrainStepText`: each conv→relu block becomes
     conv→BN→relu. The per-example BN forward (`bnFwd` = `renderLN`: reduce μ/var
@@ -4440,13 +4477,33 @@ end Proofs
   -- (cifarBnTrainStepFaithfulV, den-certified in CifarBnFaithfulPoC.lean), not cifarBnTrainStepText.
   -- Deeper 8-conv CIFAR (no BN): 4 conv→conv→pool stages, channels [16,16,32,32],
   -- 32→16→8→4→2 spatial, flat 32·2·2 = 128 → 64 → 64 → 10. lr = 0.1/128.
+  -- cifar8_fwd.mlir is now rendered from the verified cifar8FwdGraph (cifar8FwdGraph_faithful),
+  -- not the hand-written cifar8FwdText. Dims: h=w=2 final pooled (image 32×32, 4 pools).
   IO.FS.writeFile "verified_mlir/cifar8_fwd.mlir"
-    (Proofs.StableHLO.cifar8FwdText 128 3 16 16 32 32 32 32 3 3 64 10)
+    (Proofs.StableHLO.cifar8FwdModuleV 128 3 16 16 32 32 2 2 64 10 3 3
+      (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+      (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+      (fun _ => 0))
   -- cifar8_train_step.mlir is now generated by the faithful renderer in CnnRender.lean
   -- (cifar8TrainStepFaithfulV, den-certified in Cifar8FaithfulPoC.lean), not cifar8TrainStepText.
   -- Deeper 8-conv CIFAR **per-channel BatchNorm** (ε=1e-5; lr = 0.1/128).
+  -- cifar8_bn_fwd.mlir is now rendered from the verified cifar8BnFwdGraph (cifar8BnFwdGraph_faithful),
+  -- not the hand-written cifar8BnFwdTextPC. Per conv layer: W b ε γ β (ε render-erased; epsStr carries it).
   IO.FS.writeFile "verified_mlir/cifar8_bn_fwd.mlir"
-    (Proofs.StableHLO.cifar8BnFwdTextPC 128 3 16 16 32 32 32 32 3 3 64 10 "1.0e-05")
+    (Proofs.StableHLO.cifar8BnFwdModuleV 128 3 16 16 32 32 2 2 64 10 3 3 "1.0e-05"
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+      (fun _ => 0))
   -- cifar8_bn_train_step.mlir is now generated by the faithful renderer in CnnRender.lean
   -- (cifar8BnTrainStepFaithfulV, den-certified by the existing generics), not cifar8BnTrainStepText.
   pure () : IO Unit)
