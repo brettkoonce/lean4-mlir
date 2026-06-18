@@ -5,6 +5,37 @@ _Status note, 2026-06-17._ Audit + PoC. Question driving this doc: for each
 to the `Proofs/` math, or only validated numerically? And what would close the
 gap, net by net?
 
+> **▶ IN PROGRESS (2026-06-18): enet (EfficientNet-B0) — batched emit ("Item B") + param-SGD DONE; renderer next.**
+> The §1a-tie sweep has closed **9 nets** (linear, mlp, cnn, cifar, cifar-bn, cifar8, cifar8-bn, r34, mnv2).
+> enet is now under way (Tier-3: **enet → convnext → vit**). **DIAGNOSIS CORRECTED:** the blocker was NOT
+> "no whole-net backward graph" — the backward MATH already exists (`EfficientNetBackB0`/`ChainClose`:
+> `efficientnetFwdGraphB_full_faithful` whole-net forward, `efficientnetForwardB_full_has_vjp` whole-net
+> math VJP, den-faithful per-block backward bricks incl. batched bn/conv/depthwise/SE). The **real blocker
+> was the deferred batched MLIR emit ("Item B")**: every batched op skel'd to a lossy `.batched (tag,info)`
+> whose `emitTok` was a `// render TODO` stub, so neither `efficientnet_fwd.mlir` nor `_train_step.mlir`
+> was `render(provenGraph)`; plus there were no batched param-SGD ops. **DONE this session (5 commits
+> `af3e037`…`e7b6855`, every op iree-validated on rocm/gfx1100):** enriched `.batched` to carry SSA names
+> (+ round-trip repair, theorem holds); filled `emitTok` for ALL forward + backward batched tags (conv/
+> depthwise/bnBatch/swish/seBlock + bnBatchBack/conv·depthwise BackBatched/seBackBatched, self-contained
+> recompute); added EVERY batched param-SGD op (stem/conv/depthwise weights incl. 5×5, BN γ/β, dense W/b,
+> all biases via `bnBetaSgdB` = channel-sum). So every primitive the renderer needs now exists + compiles.
+> **REMAINING:** (5) the 262-param renderer `efficientnetTrainStepFaithfulV` (assemble fwd+backward+param-SGD
+> via `renderModule`, argSig from `EfficientNetLayout.specs`/the committed `efficientnet_fwd.mlir`); (6)
+> re-emit `efficientnet_train_step.mlir` + iree-validate the whole 262-param net (the "full-16 train step"
+> headline); (7) §1 fold `EfficientNetFaithfulPoC` (BN/dense/conv = ~1-line cert delegations; depthwise/stem
+> need the **Σ_n batch-sum bridge** — the proof long pole); (8) §1a tie `EfficientNetTiePoC` (new vs mnv2:
+> swish — smooth, no relu6 kink — + the SE gate fan-in). Then convnext (same per-block-only backward; 7×7
+> depthwise + scalar LN + layer-scale), then vit (reconcile scalar-proven vs per-channel-`[192]`-emitted LN).
+>
+> _NOTE: the §1 matrix row (§1) + §5 enet bullet below still describe the PRE-correction state in places —_
+> _the authoritative current status is this banner. enet's batched-emit core work is the new `StableHLO.lean`
+> `.batched` enrichment (`batchOpDescr` helper) + the `emitTok` `.batched` dispatch + the `*SgdB` ctors._
+>
+> **⏸ Parked (Brett, separate future session — NOT part of this sweep): full mnv2 VJP-witness upgrade**
+> (full-net scope task 5 below) — promote `Mnv2Live`'s nonzero-Jacobian seal from the 2-block
+> representative to the full 17-block net. Independent of the den-tie; the hardest math; the last open
+> mnv2 item.
+
 ## 0. The trust chain (what "faithful" means here)
 
 Two universes, today mostly disconnected:
@@ -56,7 +87,7 @@ emitter does **not** print (independent hand-written string emitter).
 | **cifar8-bn** | committed `.mlir` | ✅ `cifar8BnFwdGraph` rendered | ✅ **CLOSED** — `cifar8BnTrainStepFaithfulV` (CnnRender.lean) renders the whole BN train step (8 conv + 8 BN + 3 dense, 38 params) as `pretty(provenGraph)`; **no new ops, NO new proof** — every output's `den` = certified by the existing generics (`CifarPoC.conv{W,B}_den`, `CifarBnPoC.bn{Gamma,Beta}_den`, `Cifar8PoC.dense{W,B}_den`) | committed bytes iree-compile on rocm/gfx1100 (393 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + BN `0<ε` + ℝ→Float32) |
 | **r34** | committed `.mlir` | ❌ hand-written (`TestResnet34Fwd`) | ✅ **CLOSED** — `resnet34TrainStepFaithfulV` (ResNet34Render.lean) renders the whole `[3,4,6,3]` train step (146 params) as `pretty(provenGraph)`: 7×7/s2 stem + 16 residual blocks (residual cotangent-sum via `addV` at each skip merge) + GAP + dense; **2 new core ops** `convStridedWeightSgd`/`convStridedBiasSgd` (7×7 stem + 3×3 strided down/proj), den-certified via `mnv2_render_stem_conv{W,b}_certified` (`ResNet34PoC.convStrided{W,B}_den`); 142 other params reuse the cifar conv/BN/dense generics | committed bytes iree-compile on rocm/gfx1100 (537 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin incl. residual fan-in sums + BN `0<ε` + ℝ→Float32) |
 | **mnv2** | committed `.mlir` | ❌ hand-written | ✅ **CLOSED (§1 fold, reduced 6-block)** — `mnv2TrainStepFaithfulV` (MobileNetV2Render.lean) renders the whole reduced-6-block train step (82 params) as `pretty(provenGraph)`; each param `den = certified` via `MobileNetV2FaithfulPoC` — **4 new core ops** `depthwise{,Strided}{Weight,Bias}Sgd` (StableHLO.lean, the per-channel `batch_group_count=c` transpose-trick weight + `convBiasSgd`-aliased bias), expand/project conv via `CifarPoC.conv{W,B}_den`, BN via `CifarBnPoC.bn{Gamma,Beta}_den`, dense via `Cifar8PoC.dense{W,B}_den`; committed bytes iree-compile on rocm/gfx1100 (789 KB vmfb), drop-in positional param layout. **FULL 17-block paper net now also DONE**: §1 CLOSE (`mnv2TrainStepFaithfulVPaper`, 210 params, 559 KB vmfb), §1 fold den (`MobileNetV2FaithfulPoCPaper`), and §1a TIE (`mnv2_net_tied_certified`) all landed + 3-axiom clean | **§1a tie DONE** (full 17-block, `MobileNetV2TiePoCPaper`); remaining: trainer swap to the full `.mlir` (task 4) + 2-block→17-block VJP-witness upgrade (task 5, separate §4) |
-| **enet** | committed `.mlir` | ❌ hand-written | ❌ `renderBody` hand-written | `efficientnetFwdGraphB_full_faithful` (full 16 MBConv); backward per-block, **no whole-net** | no whole-net backward; emitted untied |
+| **enet** | committed `.mlir` | ◐ hand-written (batched emit "Item B" now BUILT — `pretty(provenGraph)` validates; renderer pending) | ◐ hand-written; all batched ops + param-SGD BUILT + iree-validated (Item B done); renderer pending | `efficientnetFwdGraphB_full_faithful` (full 16 MBConv) + `efficientnetForwardB_full_has_vjp` (whole-net VJP); den-faithful per-block backward bricks | **real blocker was Item B (batched `emitTok` stub) + missing batched param-SGD, NOT "no whole-net backward"** — both DONE (5 commits, 2026-06-18); renderer/fold/tie remain |
 | **convnext** | committed `.mlir` | ❌ hand-written | ❌ `renderBody` hand-written | `convNextFwdGraphT_faithful` (full [3,3,9,3]); backward per-block, **no whole-net** | no whole-net backward; emitted untied |
 | **vit** | committed `.mlir` | ❌ hand-written (`vitFwd`) | ❌ `vitBack` hand-written | **richest**: `vitFwdGraphKMHV_faithful` + whole-net `vitNetBackGraph_faithful` + full per-param `vit_render_*_chain_certified` | emitted untied **+ granularity gap**: whole-net backward proven for *scalar* LN, emitted uses *per-channel* `[192]` LN |
 
@@ -307,10 +338,16 @@ _**Full-net scope (tasks 3–6):**_
    (2267) + 3-axiom closure clean (the standardization ALIGNED the proofs (already 210) with the spec).
    `MainMobilenetV2Verified` docstring updated to the full 17-block 210-param net. (Stale
    `mobilenetv2_paper_train_step.mlir` removed — the train step IS the paper render now.)_
-5. _**VJP witness upgrade (separate §4 track, deferrable)** — `Mnv2Live` (`MobileNetV2JacobianSeal`) seals the
-   whole-net nonzero-Jacobian only at a **2-block structural representative** (1-ch, 2×2, sealed at input 0);
-   upgrade to the full 17-block net. The hardest math; does NOT block the §1 fold or §1a tie (those are
-   den=certified at the real cotangent, independent of the nonzero-Jacobian guarantee)._
+5. _**VJP witness upgrade (separate §4 track) — ⏸ DEFERRED to a dedicated future session (Brett, this
+   session)**. `Mnv2Live` (`MobileNetV2JacobianSeal`) seals the whole-net nonzero-Jacobian only at a
+   **2-block structural representative** (1-ch, 2×2, sealed at input 0); upgrade to the full 17-block net.
+   The hardest math (the level-3 nonzero-Jacobian seal at realistic dims), and the LAST open mnv2 item.
+   Does NOT block / is independent of everything else mnv2 (§1 fold, §1a tie, and the trainer are all
+   den=certified at the real cotangent — they don't rely on the nonzero-Jacobian guarantee). **Brett will
+   take this in a separate session at some point — not part of the current §1a-tie sweep.** When picked up:
+   start from `Mnv2Live` (the 2-block witness in `MobileNetV2JacobianSeal.lean`) + the [[whole-net-backward-b2]]
+   memory (r34 reached full [3,4,6,3] depth at level 3 — the mnv2 analogue is the target); the open frontier
+   there is BN-CNN + realistic-dims._
 
 **Goal (reduced-net, ALREADY DONE — kept as the worked foundation):** tie the committed MobileNetV2 train
 step to its real forward, the same §1a tie now landed on 9 nets. mnv2 is the first Tier-3 net; it has residual structure (inverted-residual / MBConv blocks),
@@ -765,9 +802,17 @@ For chapter net `N` with committed `verified_mlir/N_train_step.mlir`:
   17-block proof-render is `TestMobilenetV2TrainPC` (not committed), and the whole-net VJP
   witness is only a 2-block representative. Promote the full net + upgrade the VJP witness
   BEFORE folding, else the fold certifies a non-representative net.
-- **enet / convnext — blocker.** Full forward faithful but **no whole-net backward graph**
-  (only per-block `mbconvBodyBackGraph`/`cnxBlockBodyBackGraph`). Compose a whole-net
-  backward + per-param certs first, then fold.
+- **enet — IN PROGRESS (Item B emit + param-SGD DONE, 5 commits, 2026-06-18).** CORRECTED diagnosis: the
+  blocker was NOT "no whole-net backward graph" — the backward math exists (`efficientnetFwdGraphB_full_faithful`,
+  `efficientnetForwardB_full_has_vjp`, den-faithful per-block backward bricks). The real blocker was the
+  **deferred batched MLIR emit (Item B: the `.batched` `emitTok` stub)** + the missing batched param-SGD ops,
+  both now done + iree-validated on gfx1100. NEXT: the 262-param renderer `efficientnetTrainStepFaithfulV`,
+  then §1 fold (BN/dense/conv ≈ 1-line cert delegations; depthwise/stem need the Σ_n batch-sum bridge) + §1a
+  tie (swish + SE gate). See the IN-PROGRESS banner at the top for full detail.
+- **convnext — blocker.** Full forward faithful but **no whole-net backward graph** (only per-block
+  `cnxBlockBodyBackGraph`). Compose a whole-net backward + per-param certs first, then fold. (NB: the enet
+  experience suggests checking whether convnext's true blocker is also the batched/render emit rather than
+  the backward math — audit before assuming.)
 - **vit — granularity blocker.** Richest (`vitNetBackGraph_faithful` + full
   `vit_render_*_chain_certified`) BUT proven for *scalar* LayerNorm while the emitted net
   uses *per-channel* `[D]` LN. Reconcile (prove per-channel-LN whole-net backward, or emit
