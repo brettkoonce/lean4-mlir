@@ -155,6 +155,52 @@ trust (the universal residual); re-rendering it as `pretty(SHlo)` + a `den` pin 
 `MlpPoC.cot{0,1}_den`, crossing `convBack`/`maxPoolBack`) would remove even that. cifar/r34 inherit
 this exact pattern — the den-level conv fold is now a worked template.
 
+### Next session: cifar (ch5) tie — concrete plan
+
+Tie cifar (ch5 CIFAR-CNN, no-BN, 2-scale: `(conv→relu)×2→pool→(conv→relu)×2→pool→(dense→relu)×2→dense`,
+14 params: `W₁–W₄` conv + `W₅–W₇` dense + biases). **The cnn tie is the worked template — copy
+`CnnFaithfulPoC`'s last three theorems** (`cnnLossCot_den`, `cnn_W5_tied_totalloss`,
+`cnn_conv_tied_certified`). Forward: `cifarCnnForward` (CifarCNN.lean:45). Renderer:
+`cifarTrainStepFaithfulV` (CnnRender.lean). PoC to extend: `CifarFaithfulPoC.lean` (`namespace Proofs.CifarPoC`).
+
+**Easy — mirror cnn directly:**
+1. `cifarLossCot_den` — the emitted cotangent `sub(softmaxDiv(expe(logits)), onehot)` denotes
+   `softmax(cifarCnnForward … x) − onehot`. Copy `CnnPoC.cnnLossCot_den` verbatim, swapping
+   `mnistCnnNoBnForward`→`cifarCnnForward`. Proof: `funext j; simp only [den, softmax]`.
+2. `cifar_W7_tied_totalloss` — the dense output `W₇` folds to `∂CE/∂W₇`. Copy `cnn_W5_tied_totalloss`:
+   `rw [CifarPoC.dW7_den …, mlp_output_total_loss_grad W₇ b₇ a₆ label i j]; simp only [cifarCnnForward,
+   mnistLinear, Function.comp_apply]` (`a₆` = the dense activation feeding `W₇`).
+3. Dense head `W₅`/`W₆`/`b₅`/`b₆`/`b₇` at the composed cotangent: instantiate the existing
+   `CifarPoC.dW5/dW6/db5/db6/db7` at `g = softmax(cifarCnnForward x) − onehot` (they already thread
+   the real activations from `pool`).
+
+**The real work — cifar differs from cnn here.** `CifarPoC.convW_den`/`convB_den` are *fully generic*:
+BOTH the activation `x` AND the cotangent `c` are free (cnn's `cW*_den` had the pinned
+`cnnChainCotW1/2` baked in — cifar has **no** such chain). So `cifar_conv_tied_certified` (4 conv layers
+`W₁–W₄`) needs, per layer:
+- **`x` = the real cifar forward activation** — thread it via the SAME Vec↔Tensor3 bridge as
+  `cnn_conv_tied_certified`'s `let`-block (`Tensor3.unflatten` of the flat `flatConv`/`relu`/`maxPool`
+  chain). 2-scale: `conv₁,conv₂` at the outer spatial → `pool₁`; `conv₃,conv₄` at the halved spatial → `pool₂`.
+- **`c` = the real cifar conv backward cotangent — THIS MUST BE BUILT** (the cifar analogue of
+  `cnnChainCotW1/2` in `CnnChainClose`, which cnn got for free). Construct `cifarChainCotW1–4`:
+  backward through 2 pools + 4 convs + relus + the dense-head cotangent. Resources: the whole-net
+  `cifarCnn_has_vjp_at` (CifarCNN.lean:77) is the correctness reference; the backward building blocks
+  are `maxPoolBackFlat`, the conv input-VJP (`conv2d_has_vjp3`), `selectPos` relu masks, and the
+  `mlpCotOut`-style dense-head cotangent (already used by `dW5/dW6`). This is the "compose a whole-net
+  backward" step (§2.3) — the bulk of the cifar work, and the piece r34/enet/convnext also need.
+
+**Bonus cifar may have that cnn lacked:** check `cifarTrainStepFaithfulV`'s backward — if it already
+emits `SHlo` nodes (`.convBack`/`.maxPoolBack`/`.selectPos`, like `cifar8BnTrainStepFaithfulV`) rather
+than cnn's hand-written string, then the *stricter* cotangent-subgraph pins (the cifar analogue of
+`MlpPoC.cot{0,1}_den`) are also in reach — removing even the per-op-SSA residual. **Verify this first**;
+if true, build `cifarChainCotW1–4` as `den`s of those emitted subgraphs directly (a cleaner path than
+cnn's, since cnn's backward is hand-written).
+
+Wire: capstones → `tests/AuditAxioms.lean`; `lake build` + `lake env lean tests/AuditAxioms.lean`
+(3-axiom closure, all benign); flip the §1a tie-table cifar row to ✅. No renderer/mlir change needed
+for the den-level tie (as with cnn/mlp). Commit per-net; keep capstone names short (closure greps
+`#print axioms` per line, wraps past ~120 cols).
+
 ### Everything else
 The `*FwdGraph_faithful` / `*BackGraph_faithful` / `*_chain_certified` theorems
 are a **parallel universe**: about proof-side graphs the committed `.mlir`
