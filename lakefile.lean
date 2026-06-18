@@ -298,7 +298,12 @@ lean_lib «Proofs» where
              -- ch6-ResNet-34 §1a TIE: per-block-type tie lemmas (identity/downsample/stem) at the
              -- real forward + ResNet34ChainClose cotangents, the residual fan-in SUM constructors
              -- (idBlockCotIn/downBlockCotIn), loss-cot + dense fold (ResNet34TiePoC.lean).
-             `LeanMlir.Proofs.ResNet34TiePoC]
+             `LeanMlir.Proofs.ResNet34TiePoC,
+             -- ch7-MobileNetV2 §1 fold (depthwise half): the 4 new depthwise SGD ops
+             -- (depthwise{,Strided}{Weight,Bias}Sgd) den-certified via the mnv2_render_depthwise*
+             -- bridges; expand/project/BN/dense reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics
+             -- (MobileNetV2FaithfulPoC.lean).
+             `LeanMlir.Proofs.MobileNetV2FaithfulPoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

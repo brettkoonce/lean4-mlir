@@ -42,6 +42,7 @@ import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
 import LeanMlir.Proofs.ResNet34FaithfulPoC
 import LeanMlir.Proofs.ResNet34TiePoC
+import LeanMlir.Proofs.MobileNetV2FaithfulPoC
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
@@ -440,6 +441,13 @@ open Proofs
 -- certified step; the 142 other params reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics.
 #print axioms ResNet34PoC.convStridedW_den
 #print axioms ResNet34PoC.convStridedB_den
+-- ch7-MobileNetV2 §1 fold (depthwise half): the 4 new depthwise SGD ops denote the certified step.
+-- Stride-2 (b1/b3/b5/b6) one-line via the flat strided VJP; stride-1 (b2/b4) weight via the flat
+-- bridge (hasVJP3_to_hasVJP.correct, the 3-index→flat reindex), bias via the spatial reduce.
+#print axioms Mnv2PoC.depthwiseW_den
+#print axioms Mnv2PoC.depthwiseB_den
+#print axioms Mnv2PoC.depthwiseStridedW_den
+#print axioms Mnv2PoC.depthwiseStridedB_den
 -- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
 -- weight/bias bridges completing all three layers; Crux A).
 #print axioms IR.mlp_layer0_weight_grad_bridge
