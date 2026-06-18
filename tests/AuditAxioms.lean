@@ -45,6 +45,7 @@ import LeanMlir.Proofs.ResNet34TiePoC
 import LeanMlir.Proofs.MobileNetV2FaithfulPoC
 import LeanMlir.Proofs.MobileNetV2FaithfulPoCPaper
 import LeanMlir.Proofs.MobileNetV2TiePoCPaper
+import LeanMlir.Proofs.EfficientNetFaithfulPoC
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
@@ -459,6 +460,16 @@ open Proofs
 #print axioms Mnv2PaperPoC.mnv2Stride2ParamsCertified
 #print axioms Mnv2PaperPoC.mnv2HeadParamsCertified
 #print axioms Mnv2PaperPoC.mnv2DenseParamsCertified
+-- ch8-EfficientNet-B0 §1 fold (den): every batched param-SGD op type denotes the certified Σ_n
+-- batched gradient (the batch-sum bridge). Generic in dims+cotangent; covers all 262 params.
+#print axioms EnetPoC.convWB_den
+#print axioms EnetPoC.convStridedWB_den
+#print axioms EnetPoC.denseWB_den
+#print axioms EnetPoC.denseBB_den
+#print axioms EnetPoC.bnGammaB_den
+#print axioms EnetPoC.bnBetaB_den
+#print axioms EnetPoC.depthwiseWB_den
+#print axioms EnetPoC.depthwiseStridedWB_den
 -- ch7-MobileNetV2 FULL 17-block paper §1a TIE: the whole 210-param train step den-composed
 -- forward→loss→backward through the REAL mobilenetv2ForwardPaper + the residual-fan-in cotangent
 -- chain. Per-block-type tie lemmas applied across all 17 blocks + stem + conv-bn-relu6 head + dense.

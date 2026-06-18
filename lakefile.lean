@@ -320,7 +320,16 @@ lean_lib «Proofs» where
              -- two-kink masks, residual fan-in at every stride-1 skip). Per-block-type tie lemmas
              -- (no-exp/stride-1/stride-2/stem/head) applied across all 17 blocks via @[irreducible]
              -- FwdO/CotInAt/TiedAt wrappers (the r34 heartbeat lesson) (MobileNetV2TiePoCPaper.lean).
-             `LeanMlir.Proofs.MobileNetV2TiePoCPaper]
+             `LeanMlir.Proofs.MobileNetV2TiePoCPaper,
+             -- ch8-EfficientNet-B0 full-16 (262-param) train step rendered as pretty(provenGraph)
+             -- at the batched index (N=1, emit B = batch); un-fused SE for the SE param grads
+             -- (EfficientNetRender.lean); writes verified_mlir/efficientnet_train_step.mlir.
+             `LeanMlir.Proofs.EfficientNetRender,
+             -- ch8-EfficientNet-B0 §1 fold (den): every batched param-SGD op type denotes the
+             -- certified Σ_n batched gradient — conv/strided-stem/dense W,b + BN γ/β + depthwise
+             -- (the Σ_n batch-sum bridge = Finset.sum_congr of the per-example .correct)
+             -- (EfficientNetFaithfulPoC.lean).
+             `LeanMlir.Proofs.EfficientNetFaithfulPoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
