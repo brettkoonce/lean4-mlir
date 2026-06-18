@@ -529,10 +529,10 @@ theorem bnBatchLABack_faithful {N oc h w : Nat} (gN xN es : String)
     linear `convBackBatched`/`depthwiseBackBatched` — the backward threads each
     example's forward activation `v`; the rowwise `batchMap_has_vjp` structure
     handles that. The fourth (and last) MBConv stage's batch-separable backward. -/
-theorem seBackBatched_faithful {N c h w r : Nat} (w1N b1N w2N b2N : String)
+theorem seBackBatched_faithful {N c h w r : Nat} (w1N b1N w2N b2N vN : String)
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
     (v : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
-    den (SHlo.seBackBatched (N := N) w1N b1N w2N b2N W₁ b₁ W₂ b₂ v e)
+    den (SHlo.seBackBatched (N := N) w1N b1N w2N b2N vN W₁ b₁ W₂ b₂ v e)
       = (seB_has_vjp N (h := h) (w := w) W₁ b₁ W₂ b₂).backward v (den e) := by
   funext idx
   simp only [den, seB_has_vjp, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
@@ -651,7 +651,7 @@ noncomputable def mbBodyBackBatchedGraph {N c mid h w kHd kWd r : Nat}
   let xS := seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ xD
   cbsBackBatchedGraph We be εe γe βe x
     (dwbsBackBatchedGraph Wd bd εd γd βd xE
-      (.seBackBatched (N := N) "%seW1" "%seb1" "%seW2" "%seb2" Wz₁ bz₁ Wz₂ bz₂ xD
+      (.seBackBatched (N := N) "%seW1" "%seb1" "%seW2" "%seb2" "%seX" Wz₁ bz₁ Wz₂ bz₂ xD
         (projBackBatchedGraph Wp bp εp γp βp xS e)))
 
 theorem mbBodyBackBatchedGraph_faithful {N c mid h w kHd kWd r : Nat}
@@ -711,7 +711,7 @@ noncomputable def mbDownBodyBackBatchedGraph {N ic mid oc h w kHd kWd r : Nat}
   let xS := seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ xD
   cbsBackBatchedGraph We be εe γe βe x
     (dwbsSBackBatchedGraph Wd bd εd γd βd xE
-      (.seBackBatched (N := N) "%seW1" "%seb1" "%seW2" "%seb2" Wz₁ bz₁ Wz₂ bz₂ xD
+      (.seBackBatched (N := N) "%seW1" "%seb1" "%seW2" "%seb2" "%seX" Wz₁ bz₁ Wz₂ bz₂ xD
         (projBackBatchedGraph Wp bp εp γp βp xS e)))
 
 /-- **CAPSTONE — the batched EfficientNet DOWNSAMPLE MBConv body: backward graph ↔

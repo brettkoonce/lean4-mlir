@@ -431,7 +431,7 @@ inductive SHlo : Nat → Type where
   -- `seBlockFull` VJP. SE is non-linear, so the backward uses each example's forward
   -- activation `v` (unlike the linear conv/depthwise). `den` references the proven
   -- witness rowwise; renderable emission (batchMap-of-SE-subgraph) is deferred.
-  | seBackBatched {N c h w r : Nat} (w1Name b1Name w2Name b2Name : String)
+  | seBackBatched {N c h w r : Nat} (w1Name b1Name w2Name b2Name vName : String)
       (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
       (v : Vec (N * (c * h * w))) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * h * w))
@@ -736,7 +736,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
           (fun i' => ∑ k', if i' = (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w))) k'
                            then den e k' else 0) k
         else 0
-  | _, .seBackBatched (h := h) (w := w) _ _ _ _ W₁ b₁ W₂ b₂ v e =>
+  | _, .seBackBatched (h := h) (w := w) _ _ _ _ _ W₁ b₁ W₂ b₂ v e =>
       fun idx =>
         (seBlockFull_has_vjp (h := h) (w := w) W₁ b₁ W₂ b₂).backward
           (Mat.unflatten v (finProdFinEquiv.symm idx).1)
@@ -2161,8 +2161,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "depthwiseStridedBackBatched" [wN] [N, c, h, w, kH, kW] (skel e)
   | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) gN xN es _ _ _ e =>
       .batched "bnBatchLABack" [gN, xN, es] [N, oc, h, w] (skel e)
-  | _, .seBackBatched (N := N) (c := c) (h := h) (w := w) (r := r) w1 b1 w2 b2 _ _ _ _ _ e =>
-      .batched "seBackBatched" [w1, b1, w2, b2] [N, c, h, w, r] (skel e)
+  | _, .seBackBatched (N := N) (c := c) (h := h) (w := w) (r := r) w1 b1 w2 b2 vN _ _ _ _ _ e =>
+      .batched "seBackBatched" [w1, b1, w2, b2, vN] [N, c, h, w, r] (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -3284,6 +3284,165 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {gx} = stablehlo.multiply {xh}, {gb} : {ty [B,oc,h,w]}\n" ++
             s!"    {o4} = stablehlo.add {gx}, {btb} : {ty [B,oc,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {o4} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
+      | t, [gN, xN, es], [_N, oc, h, w] =>
+          -- bnBatchBack / bnBatchLABack: the 3-term true-BN input-VJP. Self-contained
+          -- recompute of x̂/istd from the saved BN input `xN` + γ `gN` + ε `es`
+          -- (mnv2 pattern), then dx = (istd/nf)·(nf·(γ⊙dy) − Σ(γ⊙dy) − x̂·Σ(x̂·γ⊙dy)).
+          -- `r` is the upstream cotangent dy. (dγ/dβ are param grads, not here.)
+          if t == "bnBatchBack" || t == "bnBatchLABack" then do
+            let xr ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh
+            let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh
+            let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh; let xh ← fresh
+            let gb ← fresh; let dyr ← fresh; let dxh ← fresh; let sdxr ← fresh; let sdx ← fresh
+            let xd ← fresh; let sxdr ← fresh; let sxd ← fresh; let t1 ← fresh; let i1 ← fresh
+            let xs ← fresh; let i2 ← fresh; let sN ← fresh; let dx4 ← fresh; let o ← fresh
+            pure (
+              s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+              s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+              s!"    {nf} = stablehlo.constant dense<{B*h*w}.0> : {ty [B,oc,h,w]}\n" ++
+              s!"    {ep} = stablehlo.constant dense<{es}> : {ty [B,oc,h,w]}\n" ++
+              s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+              s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+              s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,oc,h,w]}\n" ++
+              s!"    {xc} = stablehlo.subtract {xr}, {mu} : {ty [B,oc,h,w]}\n" ++
+              s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,oc,h,w]}\n" ++
+              s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+              s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+              s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,oc,h,w]}\n" ++
+              s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+              s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+              s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+              s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+              s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+              s!"    {dxh} = stablehlo.multiply {gb}, {dyr} : {ty [B,oc,h,w]}\n" ++
+              s!"    {sdxr} = stablehlo.reduce({dxh} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+              s!"    {sdx} = stablehlo.broadcast_in_dim {sdxr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+              s!"    {xd} = stablehlo.multiply {xh}, {dxh} : {ty [B,oc,h,w]}\n" ++
+              s!"    {sxdr} = stablehlo.reduce({xd} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+              s!"    {sxd} = stablehlo.broadcast_in_dim {sxdr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+              s!"    {t1} = stablehlo.multiply {dxh}, {nf} : {ty [B,oc,h,w]}\n" ++
+              s!"    {i1} = stablehlo.subtract {t1}, {sdx} : {ty [B,oc,h,w]}\n" ++
+              s!"    {xs} = stablehlo.multiply {xh}, {sxd} : {ty [B,oc,h,w]}\n" ++
+              s!"    {i2} = stablehlo.subtract {i1}, {xs} : {ty [B,oc,h,w]}\n" ++
+              s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,oc,h,w]}\n" ++
+              s!"    {dx4} = stablehlo.multiply {sN}, {i2} : {ty [B,oc,h,w]}\n" ++
+              s!"    {o} = stablehlo.reshape {dx4} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
+          else
+            pure (s!"    // [EfficientNet Item B] batched {tag} {names} {info} — render TODO\n", r :: st)
+      | "convBackBatched", [wN], [_N, ic, oc, h, w, kH, kW] => do
+          -- conv input-VJP: dx = conv(dy, reverse(W,[2,3])ᵀ), reversed+transposed
+          -- kernel, stride 1, same-pad p. (1×1 in enet ⇒ p=0, reverse a no-op.)
+          let p := (kH - 1) / 2
+          let dyr ← fresh; let rev ← fresh; let wt ← fresh; let dx ← fresh; let o ← fresh
+          pure (
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {rev} = stablehlo.reverse {wN}, dims = [2, 3] : {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {wt} = stablehlo.transpose {rev}, dims = [1, 0, 2, 3] : ({ty [oc,ic,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {dx} = stablehlo.convolution({dyr}, {wt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [B,oc,h,w]}, {ty [ic,oc,kH,kW]}) -> {ty [B,ic,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,h,w]}) -> {ty [B, ic*h*w]}\n", o :: st)
+      | "convStridedBackBatched", [wN], [_N, ic, oc, h, w, kH, kW] => do
+          -- stride-2 conv input-VJP: upsample dy (zero-interleave to 2h×2w) then the
+          -- stride-1 conv input-VJP. Produces dx at the 2h×2w input resolution.
+          let p := (kH - 1) / 2
+          let dyr ← fresh; let z ← fresh; let up ← fresh; let rev ← fresh; let wt ← fresh
+          let dx ← fresh; let o ← fresh
+          pure (
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {up} = stablehlo.pad {dyr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,2*h,2*w]}\n" ++
+            s!"    {rev} = stablehlo.reverse {wN}, dims = [2, 3] : {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {wt} = stablehlo.transpose {rev}, dims = [1, 0, 2, 3] : ({ty [oc,ic,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {dx} = stablehlo.convolution({up}, {wt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [B,oc,2*h,2*w]}, {ty [ic,oc,kH,kW]}) -> {ty [B,ic,2*h,2*w]}\n" ++
+            s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,2*h,2*w]}) -> {ty [B, ic*(2*h)*(2*w)]}\n", o :: st)
+      | "depthwiseBackBatched", [wN], [_N, c, h, w, kH, kW] => do
+          -- depthwise input-VJP: dx = depthwise_conv(dy, reverse(W,[2,3])), fgc=c,
+          -- same-pad p (no transpose — one input channel per group).
+          let p := (kH - 1) / 2
+          let dyr ← fresh; let rev ← fresh; let dx ← fresh; let o ← fresh
+          pure (
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {rev} = stablehlo.reverse {wN}, dims = [2, 3] : {ty [c,1,kH,kW]}\n" ++
+            s!"    {dx} = stablehlo.convolution({dyr}, {rev})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      " ++ "{" ++ s!"batch_group_count = 1 : i64, feature_group_count = {c} : i64" ++ "}" ++
+            s!" : ({ty [B,c,h,w]}, {ty [c,1,kH,kW]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+      | "depthwiseStridedBackBatched", [wN], [_N, c, h, w, kH, kW] => do
+          -- stride-2 depthwise input-VJP: upsample dy then the stride-1 depthwise
+          -- input-VJP. dx at the 2h×2w input resolution.
+          let p := (kH - 1) / 2
+          let dyr ← fresh; let z ← fresh; let up ← fresh; let rev ← fresh; let dx ← fresh; let o ← fresh
+          pure (
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {up} = stablehlo.pad {dyr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,2*h,2*w]}\n" ++
+            s!"    {rev} = stablehlo.reverse {wN}, dims = [2, 3] : {ty [c,1,kH,kW]}\n" ++
+            s!"    {dx} = stablehlo.convolution({up}, {rev})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      " ++ "{" ++ s!"batch_group_count = 1 : i64, feature_group_count = {c} : i64" ++ "}" ++
+            s!" : ({ty [B,c,2*h,2*w]}, {ty [c,1,kH,kW]}) -> {ty [B,c,2*h,2*w]}\n" ++
+            s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,2*h,2*w]}) -> {ty [B, c*(2*h)*(2*w)]}\n", o :: st)
+      | "seBackBatched", [w1, b1, w2, b2, vN], [_N, c, h, w, rr] => do
+          -- SE backward: recompute the SE forward (GAP → dense W₁ b₁ → swish → dense
+          -- W₂ b₂ → sigmoid gate) from the SE input `vN`, then the SE-input cotangent
+          -- dx = gate⊙dse + GAP-adjoint(W₁ᵀ·swish'·W₂ᵀ·(gate·(1−gate))·Σ(x⊙dse)).
+          -- `r` is the SE-output cotangent dse.
+          let xr ← fresh; let z ← fresh; let sqs ← fresh; let sqnf ← fresh; let sq ← fresh
+          let exd ← fresh; let exbb ← fresh; let ex ← fresh; let a1s ← fresh; let a1 ← fresh
+          let h2d ← fresh; let h2bb ← fresh; let h2 ← fresh; let gate ← fresh
+          let dser ← fresh; let gb2 ← fresh; let dleft ← fresh; let xdse ← fresh; let dgate ← fresh
+          let one ← fresh; let omg ← fresh; let sg ← fresh; let dh2 ← fresh; let da1 ← fresh
+          let dexs ← fresh; let dexone ← fresh; let dexom ← fresh; let dexxom ← fresh; let dexin ← fresh
+          let dexsp ← fresh; let dex ← fresh; let dsq ← fresh; let dsqnf ← fresh; let dsqd ← fresh
+          let dgsp ← fresh; let dds ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {vN} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {sqs} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n" ++
+            s!"    {sqnf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
+            s!"    {sq} = stablehlo.divide {sqs}, {sqnf} : {ty [B,c]}\n" ++
+            s!"    {exd} = stablehlo.dot_general {sq}, {w1}, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,c]}, {ty [c,rr]}) -> {ty [B,rr]}\n" ++
+            s!"    {exbb} = stablehlo.broadcast_in_dim {b1}, dims = [1] : ({ty [rr]}) -> {ty [B,rr]}\n" ++
+            s!"    {ex} = stablehlo.add {exd}, {exbb} : {ty [B,rr]}\n" ++
+            s!"    {a1s} = stablehlo.logistic {ex} : {ty [B,rr]}\n" ++
+            s!"    {a1} = stablehlo.multiply {ex}, {a1s} : {ty [B,rr]}\n" ++
+            s!"    {h2d} = stablehlo.dot_general {a1}, {w2}, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,rr]}, {ty [rr,c]}) -> {ty [B,c]}\n" ++
+            s!"    {h2bb} = stablehlo.broadcast_in_dim {b2}, dims = [1] : ({ty [c]}) -> {ty [B,c]}\n" ++
+            s!"    {h2} = stablehlo.add {h2d}, {h2bb} : {ty [B,c]}\n" ++
+            s!"    {gate} = stablehlo.logistic {h2} : {ty [B,c]}\n" ++
+            s!"    {dser} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {gb2} = stablehlo.broadcast_in_dim {gate}, dims = [0, 1] : ({ty [B,c]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {dleft} = stablehlo.multiply {gb2}, {dser} : {ty [B,c,h,w]}\n" ++
+            s!"    {xdse} = stablehlo.multiply {xr}, {dser} : {ty [B,c,h,w]}\n" ++
+            s!"    {dgate} = stablehlo.reduce({xdse} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n" ++
+            s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,c]}\n" ++
+            s!"    {omg} = stablehlo.subtract {one}, {gate} : {ty [B,c]}\n" ++
+            s!"    {sg} = stablehlo.multiply {gate}, {omg} : {ty [B,c]}\n" ++
+            s!"    {dh2} = stablehlo.multiply {dgate}, {sg} : {ty [B,c]}\n" ++
+            s!"    {da1} = stablehlo.dot_general {dh2}, {w2}, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [B,c]}, {ty [rr,c]}) -> {ty [B,rr]}\n" ++
+            s!"    {dexs} = stablehlo.logistic {ex} : {ty [B,rr]}\n" ++
+            s!"    {dexone} = stablehlo.constant dense<1.0> : {ty [B,rr]}\n" ++
+            s!"    {dexom} = stablehlo.subtract {dexone}, {dexs} : {ty [B,rr]}\n" ++
+            s!"    {dexxom} = stablehlo.multiply {ex}, {dexom} : {ty [B,rr]}\n" ++
+            s!"    {dexin} = stablehlo.add {dexone}, {dexxom} : {ty [B,rr]}\n" ++
+            s!"    {dexsp} = stablehlo.multiply {dexs}, {dexin} : {ty [B,rr]}\n" ++
+            s!"    {dex} = stablehlo.multiply {da1}, {dexsp} : {ty [B,rr]}\n" ++
+            s!"    {dsq} = stablehlo.dot_general {dex}, {w1}, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({ty [B,rr]}, {ty [c,rr]}) -> {ty [B,c]}\n" ++
+            s!"    {dsqnf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
+            s!"    {dsqd} = stablehlo.divide {dsq}, {dsqnf} : {ty [B,c]}\n" ++
+            s!"    {dgsp} = stablehlo.broadcast_in_dim {dsqd}, dims = [0, 1] : ({ty [B,c]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {dds} = stablehlo.add {dleft}, {dgsp} : {ty [B,c,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {dds} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
       | _, _, _ =>
           pure (s!"    // [EfficientNet Item B] batched {tag} {names} {info} — backward render TODO\n", r :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
