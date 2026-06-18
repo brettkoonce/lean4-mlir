@@ -5,9 +5,26 @@ _Status note, 2026-06-17._ Audit + PoC. Question driving this doc: for each
 to the `Proofs/` math, or only validated numerically? And what would close the
 gap, net by net?
 
-> **▶ IN PROGRESS (2026-06-18): enet (EfficientNet-B0) — batched emit ("Item B") + param-SGD DONE; renderer next.**
-> The §1a-tie sweep has closed **9 nets** (linear, mlp, cnn, cifar, cifar-bn, cifar8, cifar8-bn, r34, mnv2).
-> enet is now under way (Tier-3: **enet → convnext → vit**). **DIAGNOSIS CORRECTED:** the blocker was NOT
+> **✅ DONE (2026-06-18): enet (EfficientNet-B0) §1a TIE CLOSED — the whole 262-param train step tied through the real forward.**
+> The §1a-tie sweep has now closed **10 nets** (linear, mlp, cnn, cifar, cifar-bn, cifar8, cifar8-bn, r34, mnv2, **enet**).
+> **enet §1a TIE landed** (`EfficientNetTiePoC.lean`, commit `9533ec4` = 5 per-block ties; whole-net thread next commit):
+> the loss-cotangent den (`efficientnetLossCot_den`) + five per-block-type tie lemmas (`enet_{exp,strided,noexp,stem,head}_tied`,
+> covering all 262 params: 9 residual + 2 no-skip via the generic expand tie, 4 strided, b1 no-expand, stem, head) +
+> the whole-net thread `efficientnet_net_tied` composing them through the REAL `efficientnetForwardB_full` (block inputs =
+> its forward prefixes, the per-block dyOuts threaded top-down by the proven block VJPs `mb{Exp,Resid,Strided,NoExp}W_has_vjp`
+> + `headFwdB_has_vjp`; `@[irreducible]` `*TiedAt` wrappers for the heartbeat). The genuinely-new content vs mnv2 — **swish**
+> masks, the **SE gate fan-in** (`gateCotB`=`den seReduceB` → `sigBackB` → `rowDenseBackFlat` → `swBackB` → SE dense ops),
+> **true batch-norm** backward (`bnBackB`=`bnBatchLA` VJP), strided depthwise back, all **batched** at `N·(c·h·w)` with
+> `reassocB` bridging `(oc·h·w)`↔`(oc·(h·w))` — all PROVEN. Each per-block tie is a pure delegation to the §1-fold
+> `EnetPoC.*` generics at the chain cotangents; `lake build Proofs` green (2270), all 7 capstones 3-axiom clean + wired to
+> AuditAxioms. Residual: block backward rendered hand-written (cotangent SSA↔chain-cot per-op trust); per-op `pretty` lexing;
+> swish/true-BN `0<ε` smoothness; ℝ→Float32 — the boundary every fold carries. (Optional refinement: the dense-head total-loss
+> fold `Wfc → ∂CE/∂Wfc` — today the head dense ties at the loss cotangent `g` directly.) **Next: convnext, then vit.**
+>
+> _Earlier-this-session history (Item B emit, renderer, §1 fold) preserved below._
+>
+> **▶ (earlier 2026-06-18): enet — batched emit ("Item B") + param-SGD DONE; renderer + §1 fold DONE.**
+> enet was under way (Tier-3: **enet → convnext → vit**). **DIAGNOSIS CORRECTED:** the blocker was NOT
 > "no whole-net backward graph" — the backward MATH already exists (`EfficientNetBackB0`/`ChainClose`:
 > `efficientnetFwdGraphB_full_faithful` whole-net forward, `efficientnetForwardB_full_has_vjp` whole-net
 > math VJP, den-faithful per-block backward bricks incl. batched bn/conv/depthwise/SE). The **real blocker
@@ -160,7 +177,8 @@ leaves both green.
 | **cifar8-bn** | ✅ conv+BN+dense den-composed: real cifar8-BN forward threaded, cotangent = softmax-CE of the BN forward (`cifar8BnLossCot_den`), all 32 conv/BN params tied at the 4-stage BN backward chain (`cifar8Bn_convbn_tied_certified`); dense head via the pre-audited generics | ◐ level-2: cotangents at correctly-threaded SSAs (conv/BN backward rendered hand-written); cifar8's 4-stage chain + a BN-back at every conv — pure reuse, no new content | **✅ TIED** |
 | **r34** | ✅ **whole net** den-composed: all 16 residual blocks + stem threaded at the real `resnet34Forward_full_pc` activations, cotangent composed from the loss through dense/GAP-back + the **residual fan-in sum** at every skip (`idBlockCotIn`/`downBlockCotIn`); capstone `r34_net_tied_certified` bundles every block's tie + dense total-loss fold + `r34LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); the new fan-in-sum constructors add the skip+body cotangent merge cnn/cifar (no residuals) lacked | **✅ TIED** |
 | **mnv2** (full 17-block paper) | ✅ **whole net** den-composed: all 17 inverted-residual blocks + stem + conv-bn-relu6 head threaded at the real `mobilenetv2ForwardPaper` activations (single-ε), cotangent composed from the loss through dense/GAP-back + the head + the **residual fan-in `+ dyOut`** at every stride-1 skip (`ivS1SkipCotInAt`); capstone `mnv2_net_tied_certified` bundles all 210 params' ties + dense total-loss fold + `mnv2LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); relu6 two-kink mask + linear project bottleneck (project-BN cot = `dyOut` directly) are the new content vs r34 | **✅ TIED** |
-| enet / convnext / vit | — (train-step fold WIP) | — | — |
+| **enet** (full 16-MBConv, 262 params) | ✅ **whole net** den-composed: all 16 MBConv blocks + stem + conv-bn-swish head threaded at the real `efficientnetForwardB_full` activations (batched true-BN + SE), cotangent composed from the loss `g` down through the head VJP + every block's VJP (residual fan-in folded into `mbResidW`'s own VJP); capstone `efficientnet_net_tied` bundles all 262 params' ties + the loss-cotangent den (`efficientnetLossCot_den`) | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); **swish** masks + the **SE gate fan-in** (`gateCotB`/`sigBackB`/`rowDenseBackFlat`) + **true-BN** backs (`bnBatchLA` VJP) + strided depthwise, all **batched** — the new content vs mnv2 | **✅ TIED** |
+| convnext / vit | — (Tier-3, next) | — | — |
 
 **The close ("tie them together").** Feed the *proven* cotangent/forward subgraph directly
 into each consumer (`weightSgd … (lossCotGraph …)` instead of `.operand %dy …`), so each

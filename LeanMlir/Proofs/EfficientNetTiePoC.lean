@@ -39,14 +39,17 @@ gate fan-in), so each output's `den = certified` becomes a single composed theor
   the **batched index** `N·(c·h·w)`. `reassocB` bridges the conv/swish `(oc·h·w)` ↔ BN `(oc·(h·w))` index.
   Each per-block tie is a pure delegation to the §1-fold generics `EnetPoC.*` at the chain cotangents.
 
-## Remaining
-1. The whole-net thread `efficientnet_net_tied_certified` over the 16 blocks + stem + head, threading
-   the full forward `efficientnetForwardB_full` (FullB0): block inputs are its prefixes, the per-block
-   `dyOut`s are composed top-down by the proven block VJPs (`mb{Resid,Strided,Exp,NoExp}W_has_vjp` and
-   `headFwdB_has_vjp`), with `@[irreducible]` `FwdO`/`CotInAt`/`TiedAt` wrappers to dodge the heartbeat
-   blowup (the r34/mnv2 lesson, more acute at 16 blocks + SE). Mechanical enumeration over the bricks above.
-2. (Optional refinement) the dense-head total-loss fold (`Wfc → ∂CE/∂Wfc`) — the batched-`Σ_n` analogue
-   of `mlp_output_total_loss_grad`; today the head dense ties at the loss cotangent `g` directly. -/
+* **The whole-net thread `efficientnet_net_tied`** (DONE, 3-axiom clean) — all 262 params tied through
+  the REAL `efficientnetForwardB_full`: block inputs are its forward prefixes (`a0..a16`), the per-block
+  output cotangents (`dy0..dy16`) composed top-down by the proven block VJPs (`headFwdB_has_vjp`,
+  `mb{Exp,Resid,Strided,NoExp}W_has_vjp`) from the loss cotangent `g`. `@[irreducible]` `*TiedAt`
+  wrappers keep the 16-deep thread opaque (the r34/mnv2 heartbeat lesson). The residual fan-in at the 9
+  identity skips is folded into `mbResidW`'s own VJP (it includes the `+ x`), so it is automatic — the
+  whole 262-param train step is den-composed forward→loss→backward, no free activations, no symbolic cot.
+
+## Remaining (optional refinement)
+* The dense-head total-loss fold (`Wfc → ∂CE/∂Wfc`) — the batched-`Σ_n` analogue of
+  `mlp_output_total_loss_grad`; today the head dense ties at the loss cotangent `g` directly. -/
 
 open Proofs Proofs.StableHLO
 
@@ -726,5 +729,170 @@ theorem enet_head_tied {N c oc h w nC : Nat}
   · intro o;   exact EnetPoC.bnBetaB_den bN lrStr cotN εh (fun _ => 0) βh (fun _ => 0) (reassocB N oc h w cotHsw) lr o
   · intro i j; exact EnetPoC.denseWB_den dN wN lrStr cotN a_gap Wfc bfc g lr i j
   · intro j;   exact EnetPoC.denseBB_den dN lrStr cotN (0 : Mat nC nC) (0 : Vec nC) bfc g lr j
+
+/-! ## `@[irreducible]` bundle-taking `TiedAt` wrappers — one per block type, for the whole-net thread
+
+Each takes the `B0Weights` block bundle (`MBW`/`MBWNoExp`) + its ε-positivity + the block input + the
+downstream cotangent `dyOut`, and delegates to the per-block-type tie. `@[irreducible]` keeps the
+16-deep capstone thread opaque to the elaborator (the r34/mnv2 heartbeat lesson). -/
+
+@[irreducible] def enetExpTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
+    (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) : Prop :=
+  enetExpTied xN wN bN gN vN epsStr lrStr cotN p.eε he p.dε hd p.pε hp
+    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
+
+theorem enet_exp_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
+    (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) :
+    enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN h w p he hd hp xin dyOut lr := by
+  unfold enetExpTiedAt
+  exact enet_exp_tied xN wN bN gN vN epsStr lrStr cotN p.eε he p.dε hd p.pε hp
+    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
+
+@[irreducible] def enetStridedTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
+    (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) : Prop :=
+  enetStridedTied xN wN bN gN vN epsStr lrStr cotN p.eε he p.dε hd p.pε hp
+    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
+
+theorem enet_strided_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
+    (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) :
+    enetStridedTiedAt xN wN bN gN vN epsStr lrStr cotN h w p he hd hp xin dyOut lr := by
+  unfold enetStridedTiedAt
+  exact enet_strided_tied xN wN bN gN vN epsStr lrStr cotN p.eε he p.dε hd p.pε hp
+    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
+
+@[irreducible] def enetNoExpTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic oc r kh kw : Nat}
+    (h w : Nat) (p : MBWNoExp ic oc r kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) : Prop :=
+  enetNoExpTied xN wN bN gN vN epsStr lrStr cotN p.dε hd p.pε hp
+    p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
+
+theorem enet_noexp_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic oc r kh kw : Nat}
+    (h w : Nat) (p : MBWNoExp ic oc r kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) :
+    enetNoExpTiedAt xN wN bN gN vN epsStr lrStr cotN h w p hd hp xin dyOut lr := by
+  unfold enetNoExpTiedAt
+  exact enet_noexp_tied xN wN bN gN vN epsStr lrStr cotN p.dε hd p.pε hp
+    p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
+
+/-! ## The whole-net thread — all 262 params tied through the REAL `efficientnetForwardB_full`
+
+The capstone: `efficientnetForwardB_full`'s prefixes are the block inputs (`a0..a16` = stem, then the
+16 MBConv blocks), and the per-block output cotangents (`dy0..dy16`) are composed TOP-DOWN by the
+proven block VJPs (`headFwdB_has_vjp`, `mb{Exp,Resid,Strided,NoExp}W_has_vjp`) from the loss cotangent
+`g = rowSoftmax(logits) − onehot`. Each block's tie then holds at its real input + threaded `dyOut`.
+The full §1a tie: the WHOLE 16-MBConv (262-param) EfficientNet-B0 train step is den-composed
+forward→loss→backward, no free activations, no symbolic cotangent. The residual fan-in at the 9
+identity skips is folded into `mbResidW`'s own VJP (it includes the `+ x`), so it is automatic. -/
+
+set_option maxHeartbeats 4000000 in
+set_option maxRecDepth 100000 in
+/-- **The whole 16-MBConv EfficientNet-B0 train step, tied.** Threading the real batched (true-BN + SE)
+    forward `efficientnetForwardB_full` and the loss-driven backward cotangent chain (swish masks, SE
+    gate fan-in, true-BN backs, the residual fan-in folded into the block VJPs), the stem, all 16
+    MBConv blocks, the conv-bn-swish head, and the dense head all denote the certified batched Σ_n
+    loss-descent step. -/
+theorem efficientnet_net_tied (xN wN bN gN vN epsStr lrStr cotN dN : String) (N : Nat) (w : B0Weights)
+    (hsε : 0 < w.sε)
+    (hb1d : 0 < w.b1.dε) (hb1p : 0 < w.b1.pε)
+    (hb2e : 0 < w.b2.eε) (hb2d : 0 < w.b2.dε) (hb2p : 0 < w.b2.pε)
+    (hb3e : 0 < w.b3.eε) (hb3d : 0 < w.b3.dε) (hb3p : 0 < w.b3.pε)
+    (hb4e : 0 < w.b4.eε) (hb4d : 0 < w.b4.dε) (hb4p : 0 < w.b4.pε)
+    (hb5e : 0 < w.b5.eε) (hb5d : 0 < w.b5.dε) (hb5p : 0 < w.b5.pε)
+    (hb6e : 0 < w.b6.eε) (hb6d : 0 < w.b6.dε) (hb6p : 0 < w.b6.pε)
+    (hb7e : 0 < w.b7.eε) (hb7d : 0 < w.b7.dε) (hb7p : 0 < w.b7.pε)
+    (hb8e : 0 < w.b8.eε) (hb8d : 0 < w.b8.dε) (hb8p : 0 < w.b8.pε)
+    (hb9e : 0 < w.b9.eε) (hb9d : 0 < w.b9.dε) (hb9p : 0 < w.b9.pε)
+    (hb10e : 0 < w.b10.eε) (hb10d : 0 < w.b10.dε) (hb10p : 0 < w.b10.pε)
+    (hb11e : 0 < w.b11.eε) (hb11d : 0 < w.b11.dε) (hb11p : 0 < w.b11.pε)
+    (hb12e : 0 < w.b12.eε) (hb12d : 0 < w.b12.dε) (hb12p : 0 < w.b12.pε)
+    (hb13e : 0 < w.b13.eε) (hb13d : 0 < w.b13.dε) (hb13p : 0 < w.b13.pε)
+    (hb14e : 0 < w.b14.eε) (hb14d : 0 < w.b14.dε) (hb14p : 0 < w.b14.pε)
+    (hb15e : 0 < w.b15.eε) (hb15d : 0 < w.b15.dε) (hb15p : 0 < w.b15.pε)
+    (hb16e : 0 < w.b16.eε) (hb16d : 0 < w.b16.dε) (hb16p : 0 < w.b16.pε)
+    (hhε : 0 < w.hε)
+    (x : Vec (N * (3 * 224 * 224))) (onehot : Vec (N * 10)) (lr : ℝ) :
+    -- forward block inputs (the prefixes of efficientnetForwardB_full)
+    let a0  : Vec (N * (32 * 112 * 112)) := stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
+    let a1  : Vec (N * (16 * 112 * 112)) := mbNoExpW N 112 112 w.b1 a0
+    let a2  : Vec (N * (24 * 56 * 56))   := mbStridedW N 56 56 w.b2 a1
+    let a3  : Vec (N * (24 * 56 * 56))   := mbResidW N 56 56 w.b3 a2
+    let a4  : Vec (N * (40 * 28 * 28))   := mbStridedW N 28 28 w.b4 a3
+    let a5  : Vec (N * (40 * 28 * 28))   := mbResidW N 28 28 w.b5 a4
+    let a6  : Vec (N * (80 * 14 * 14))   := mbStridedW N 14 14 w.b6 a5
+    let a7  : Vec (N * (80 * 14 * 14))   := mbResidW N 14 14 w.b7 a6
+    let a8  : Vec (N * (80 * 14 * 14))   := mbResidW N 14 14 w.b8 a7
+    let a9  : Vec (N * (112 * 14 * 14))  := mbExpW N 14 14 w.b9 a8
+    let a10 : Vec (N * (112 * 14 * 14))  := mbResidW N 14 14 w.b10 a9
+    let a11 : Vec (N * (112 * 14 * 14))  := mbResidW N 14 14 w.b11 a10
+    let a12 : Vec (N * (192 * 7 * 7))    := mbStridedW N 7 7 w.b12 a11
+    let a13 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b13 a12
+    let a14 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b14 a13
+    let a15 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b15 a14
+    let a16 : Vec (N * (320 * 7 * 7))    := mbExpW N 7 7 w.b16 a15
+    -- loss cotangent + backward block-output cotangents (composed top-down by the block VJPs)
+    let g    : Vec (N * 10) := fun idx =>
+      rowSoftmaxFlat N 10 (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16) idx
+        - onehot idx
+    let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdB_has_vjp N (h := 7) (w := 7) w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW w.fcb).backward a16 g
+    let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpW_has_vjp N 7 7 w.b16 hb16e hb16d hb16p).backward a15 dy16
+    let dy14 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b15 hb15e hb15d hb15p).backward a14 dy15
+    let dy13 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b14 hb14e hb14d hb14p).backward a13 dy14
+    let dy12 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b13 hb13e hb13d hb13p).backward a12 dy13
+    let dy11 : Vec (N * (112 * 14 * 14)) := (mbStridedW_has_vjp N 7 7 w.b12 hb12e hb12d hb12p).backward a11 dy12
+    let dy10 : Vec (N * (112 * 14 * 14)) := (mbResidW_has_vjp N 14 14 w.b11 hb11e hb11d hb11p).backward a10 dy11
+    let dy9  : Vec (N * (112 * 14 * 14)) := (mbResidW_has_vjp N 14 14 w.b10 hb10e hb10d hb10p).backward a9 dy10
+    let dy8  : Vec (N * (80 * 14 * 14))  := (mbExpW_has_vjp N 14 14 w.b9 hb9e hb9d hb9p).backward a8 dy9
+    let dy7  : Vec (N * (80 * 14 * 14))  := (mbResidW_has_vjp N 14 14 w.b8 hb8e hb8d hb8p).backward a7 dy8
+    let dy6  : Vec (N * (80 * 14 * 14))  := (mbResidW_has_vjp N 14 14 w.b7 hb7e hb7d hb7p).backward a6 dy7
+    let dy5  : Vec (N * (40 * 28 * 28))  := (mbStridedW_has_vjp N 14 14 w.b6 hb6e hb6d hb6p).backward a5 dy6
+    let dy4  : Vec (N * (40 * 28 * 28))  := (mbResidW_has_vjp N 28 28 w.b5 hb5e hb5d hb5p).backward a4 dy5
+    let dy3  : Vec (N * (24 * 56 * 56))  := (mbStridedW_has_vjp N 28 28 w.b4 hb4e hb4d hb4p).backward a3 dy4
+    let dy2  : Vec (N * (24 * 56 * 56))  := (mbResidW_has_vjp N 56 56 w.b3 hb3e hb3d hb3p).backward a2 dy3
+    let dy1  : Vec (N * (16 * 112 * 112)) := (mbStridedW_has_vjp N 56 56 w.b2 hb2e hb2d hb2p).backward a1 dy2
+    let dy0  : Vec (N * (32 * 112 * 112)) := (mbNoExpW_has_vjp N 112 112 w.b1 hb1d hb1p).backward a0 dy1
+    -- every block + stem + head tied at its real input + threaded output cotangent
+    enetStemTied xN wN bN gN vN epsStr lrStr cotN w.sε hsε w.sW w.sb w.sγ w.sβ x dy0 lr
+  ∧ enetNoExpTiedAt xN wN bN gN vN epsStr lrStr cotN 112 112 w.b1 hb1d hb1p a0 dy1 lr
+  ∧ enetStridedTiedAt xN wN bN gN vN epsStr lrStr cotN 56 56 w.b2 hb2e hb2d hb2p a1 dy2 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 56 56 w.b3 hb3e hb3d hb3p a2 dy3 lr
+  ∧ enetStridedTiedAt xN wN bN gN vN epsStr lrStr cotN 28 28 w.b4 hb4e hb4d hb4p a3 dy4 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 28 28 w.b5 hb5e hb5d hb5p a4 dy5 lr
+  ∧ enetStridedTiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b6 hb6e hb6d hb6p a5 dy6 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b7 hb7e hb7d hb7p a6 dy7 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b8 hb8e hb8d hb8p a7 dy8 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b9 hb9e hb9d hb9p a8 dy9 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b10 hb10e hb10d hb10p a9 dy10 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b11 hb11e hb11d hb11p a10 dy11 lr
+  ∧ enetStridedTiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b12 hb12e hb12d hb12p a11 dy12 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b13 hb13e hb13d hb13p a12 dy13 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b14 hb14e hb14d hb14p a13 dy14 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b15 hb15e hb15d hb15p a14 dy15 lr
+  ∧ enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b16 hb16e hb16d hb16p a15 dy16 lr
+  ∧ enetHeadTied xN wN bN gN vN epsStr lrStr cotN dN w.hε hhε w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 onehot lr := by
+  intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16
+        g dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · exact enet_stem_tied xN wN bN gN vN epsStr lrStr cotN w.sε hsε w.sW w.sb w.sγ w.sβ x dy0 lr
+  · exact enet_noexp_tiedAt xN wN bN gN vN epsStr lrStr cotN 112 112 w.b1 hb1d hb1p a0 dy1 lr
+  · exact enet_strided_tiedAt xN wN bN gN vN epsStr lrStr cotN 56 56 w.b2 hb2e hb2d hb2p a1 dy2 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 56 56 w.b3 hb3e hb3d hb3p a2 dy3 lr
+  · exact enet_strided_tiedAt xN wN bN gN vN epsStr lrStr cotN 28 28 w.b4 hb4e hb4d hb4p a3 dy4 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 28 28 w.b5 hb5e hb5d hb5p a4 dy5 lr
+  · exact enet_strided_tiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b6 hb6e hb6d hb6p a5 dy6 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b7 hb7e hb7d hb7p a6 dy7 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b8 hb8e hb8d hb8p a7 dy8 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b9 hb9e hb9d hb9p a8 dy9 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b10 hb10e hb10d hb10p a9 dy10 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 14 14 w.b11 hb11e hb11d hb11p a10 dy11 lr
+  · exact enet_strided_tiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b12 hb12e hb12d hb12p a11 dy12 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b13 hb13e hb13d hb13p a12 dy13 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b14 hb14e hb14d hb14p a13 dy14 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b15 hb15e hb15d hb15p a14 dy15 lr
+  · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b16 hb16e hb16d hb16p a15 dy16 lr
+  · exact enet_head_tied xN wN bN gN vN epsStr lrStr cotN dN w.hε hhε w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 onehot lr
 
 end Proofs.EnetTiePoC
