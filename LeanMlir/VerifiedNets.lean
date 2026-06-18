@@ -227,19 +227,20 @@ def mobilenetv2Verified : VerifiedNetSpec where
     .globalAvgPool,
     .dense 1280 10 ]
   blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"
-  -- 53 BN layers in forward order (stem; per inverted-residual block expand-BN/depthwise-BN/project-BN;
-  -- head) — running-stats layout for trainAdamSched + @mobilenetv2_fwd_eval. Matches
-  -- TestMobilenetV2TrainPC.bnLayers. True batch-norm (reduce [0,2,3]) → batch-BN eval degenerate on
-  -- sorted val, so the adam trainer evals through running stats instead.
+  -- 52 BN layers in forward order (stem; per inverted-residual block expand-BN/depthwise-BN/project-BN,
+  -- but b1 is t=1 → NO expand, so only depthwise-BN/project-BN; head) — running-stats layout for
+  -- trainAdamSched + @mobilenetv2_fwd_eval. Matches TestMobilenetV2TrainPC.bnLayers. True batch-norm
+  -- (reduce [0,2,3]) → batch-BN eval degenerate on sorted val, so the adam trainer evals through running stats.
   bnChannels := #[32,
-    32,32,16,  96,96,24, 144,144,24,  144,144,32, 192,192,32, 192,192,32,
+    32,16,  96,96,24, 144,144,24,  144,144,32, 192,192,32, 192,192,32,
     192,192,64, 384,384,64, 384,384,64, 384,384,64,
     384,384,96, 576,576,96, 576,576,96,
     576,576,160, 960,960,160, 960,960,160,
     960,960,320,
     1280]
 
--- Derived layout (214 param tensors, ~2.25M scalars) == the audited hand-list MobileNetV2Layout.specs.
+-- Derived layout (210 param tensors == the canonical no-t=1-expand net, torchvision-standard:
+-- b1 is t=1 so its expand 1×1 is skipped) == the audited hand-list MobileNetV2Layout.specs.
 #guard mobilenetv2Verified.toSpecs == MobileNetV2Layout.specs
 
 /-- ch8 **EfficientNet-B0** on Imagenette 224²: 3×3-s2 stem → 16 MBConv blocks (`[t,c,n,s,k]`

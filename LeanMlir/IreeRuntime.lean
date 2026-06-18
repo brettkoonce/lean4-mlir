@@ -301,8 +301,8 @@ namespace MobileNetV2Layout
     effect). `initKind`: 0 = He(fan-in) (depthwise fan-in = 1·3·3 = 9), 1 = ones (γ),
     2 = zeros. -/
 private def irBlk (ic mid oc : Nat) : Array (Array Nat × Nat) :=
-  #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2),    -- expand 1×1
-    (#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),     -- depthwise 3×3 (stride 1 or 2)
+  (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2)] else #[]) ++  -- expand 1×1 (skip if t=1, mid=ic)
+  #[(#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),     -- depthwise 3×3 (stride 1 or 2)
     (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]       -- project 1×1
 /-- (ic, mid, oc) per block — MUST match tests/TestMobilenetV2*.lean `blocks`. Full paper net (17). -/
 private def blocks : Array (Nat × Nat × Nat) :=

@@ -160,10 +160,15 @@ private def blocks : List (String × Nat × Nat × Nat × Nat × Nat) :=
 /-- One inverted-residual block forward via `pretty`, capturing flat names. -/
 private def fwdBlock (p xin : String) (ic mid oc s Hin : Nat) : StateM Nat (String × FNames) := do
   let Hout := Hin / s
-  let (c1, ec) ← pretty BS (.flatConvF (h := Hin) (w := Hin) s!"%{p}eW" s!"%{p}eb" (zK : Kernel4 mid ic 1 1) zV (.operand xin zV))
-  let c2 := bnB s!"{p}en" ec s!"%{p}eg" s!"%{p}ebt" mid Hin Hin
-  let en := s!"%{p}en"
-  let (c3, er) ← pretty BS (.relu6F (.operand en (zV : Vec (mid*Hin*Hin))))
+  -- expand 1×1 → BN → relu6, SKIPPED when t=1 (mid=ic); then the depthwise reads `er` (= xin when
+  -- no-expand), so `ec`/`en`/`er` all alias xin in that case (downstream dwWGrad reads `b.er`).
+  let (cExp, ec, en, er) ←
+    if mid == ic then pure ("", xin, xin, xin)
+    else do
+      let (c1, ec) ← pretty BS (.flatConvF (h := Hin) (w := Hin) s!"%{p}eW" s!"%{p}eb" (zK : Kernel4 mid ic 1 1) zV (.operand xin zV))
+      let c2 := bnB s!"{p}en" ec s!"%{p}eg" s!"%{p}ebt" mid Hin Hin
+      let (c3, er) ← pretty BS (.relu6F (.operand s!"%{p}en" (zV : Vec (mid*Hin*Hin))))
+      pure (c1 ++ c2 ++ c3, ec, s!"%{p}en", er)
   let (c4, dc) ←
     if s == 2 then pretty BS (.depthwiseStridedF (h := Hout) (w := Hout) s!"%{p}dW" s!"%{p}db" (zD : DepthwiseKernel mid 3 3) zV (.operand er zV))
     else pretty BS (.depthwiseF (h := Hin) (w := Hin) s!"%{p}dW" s!"%{p}db" (zD : DepthwiseKernel mid 3 3) zV (.operand er zV))
@@ -173,7 +178,7 @@ private def fwdBlock (p xin : String) (ic mid oc s Hin : Nat) : StateM Nat (Stri
   let (c7, pc) ← pretty BS (.flatConvF (h := Hout) (w := Hout) s!"%{p}pW" s!"%{p}pb" (zK : Kernel4 oc mid 1 1) zV (.operand dr zV))
   let c8 := bnB s!"{p}pn" pc s!"%{p}pg" s!"%{p}pbt" oc Hout Hout
   let pn := s!"%{p}pn"
-  let fwd := c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8
+  let fwd := cExp ++ c4 ++ c5 ++ c6 ++ c7 ++ c8
   if s == 1 && ic == oc then
     let (c9, bout) ← pretty BS (.addV (.operand pn (zV : Vec (oc*Hout*Hout))) (.operand xin zV))
     pure (fwd ++ c9, ⟨xin, ec, en, er, dc, dn, dr, pc, pn, bout⟩)
@@ -197,6 +202,10 @@ private def bwdBlock (p dy : String) (b : FNames) (ic mid oc s Hin : Nat) :
   let (k5, cot_er) ←
     if s == 2 then pretty BS (.depthwiseStridedBack (h := Hout) (w := Hout) s!"%{p}dW" (zD : DepthwiseKernel mid 3 3) zV zV (.operand cot_dc zV))
     else pretty BS (.depthwiseBack (h := Hin) (w := Hin) s!"%{p}dW" (zD : DepthwiseKernel mid 3 3) zV zV (.operand cot_dc zV))
+  -- t=1 (mid=ic): NO expand — the depthwise reads the block input, so `cot_er` IS the block-input
+  -- cotangent (b1 has ic≠oc → no skip add); `cot_ec` is unused.
+  if mid == ic then
+    return (k1 ++ k2 ++ k3 ++ k4 ++ k5, cot_er, cot_pc, cot_dc, "")
   -- expand: relu6-mask → bn-back (%{p}dendg/%{p}dendb) → conv-back (1×1)
   let (k6, cot_en) ← pretty BS (.selectMid b.en (zV : Vec (mid*Hin*Hin)) (.operand cot_er zV))
   let k7 := bnBackB s!"{p}den" s!"{p}en" cot_en mid Hin Hin
@@ -220,13 +229,15 @@ private def blockParamGrads (p : String) (b : FNames) (cot_pc cot_dc cot_ec : St
   (if s == 2 then upsampleFlat s!"%{p}ddu" cot_dc mid Hout Hout ++ dwWGrad s!"%{p}ddW" b.er s!"%{p}ddu" mid (2*Hout) (2*Hout)
    else dwWGrad s!"%{p}ddW" b.er cot_dc mid Hin Hin) ++
   biasGrad s!"%{p}ddb" cot_dc mid Hout Hout ++
-  -- expand (1×1 @ Hin, ic→mid): W/b
-  convWGrad s!"%{p}deW" b.xin cot_ec ic mid Hin Hin 1 ++ biasGrad s!"%{p}deb" cot_ec mid Hin Hin
+  -- expand (1×1 @ Hin, ic→mid): W/b — SKIPPED when t=1 (mid=ic, no expand conv)
+  (if mid == ic then "" else
+    convWGrad s!"%{p}deW" b.xin cot_ec ic mid Hin Hin 1 ++ biasGrad s!"%{p}deb" cot_ec mid Hin Hin)
 
 /-- per-block SGD over the 12 params (matching `allParams` order/names). -/
 private def blockSgd (p : String) (ic mid oc : Nat) : String :=
-  sgd s!"%{p}eW" s!"%{p}deW" (ty [mid,ic,1,1]) ++ sgd s!"%{p}eb" s!"%{p}deb" (ty [mid]) ++
-  sgd s!"%{p}eg" s!"%{p}dendg" (ty [mid]) ++ sgd s!"%{p}ebt" s!"%{p}dendb" (ty [mid]) ++
+  (if mid == ic then "" else
+    sgd s!"%{p}eW" s!"%{p}deW" (ty [mid,ic,1,1]) ++ sgd s!"%{p}eb" s!"%{p}deb" (ty [mid]) ++
+    sgd s!"%{p}eg" s!"%{p}dendg" (ty [mid]) ++ sgd s!"%{p}ebt" s!"%{p}dendb" (ty [mid])) ++
   sgd s!"%{p}dW" s!"%{p}ddW" (ty [mid,1,3,3]) ++ sgd s!"%{p}db" s!"%{p}ddb" (ty [mid]) ++
   sgd s!"%{p}dg" s!"%{p}ddndg" (ty [mid]) ++ sgd s!"%{p}dbt" s!"%{p}ddndb" (ty [mid]) ++
   sgd s!"%{p}pW" s!"%{p}dpW" (ty [oc,mid,1,1]) ++ sgd s!"%{p}pb" s!"%{p}dpb" (ty [oc]) ++
@@ -321,8 +332,9 @@ private def trainStep : String := Id.run do
   let denseSgd := sgd "%Wd" "%dWd" (ty [1280,10]) ++ sgd "%bd" "%dbd" (ty [10])
   -- param list (name, type) in allParams order
   let blkParams (p : String) (ic mid oc : Nat) : List (String × String) :=
-    [(s!"{p}eW", ty [mid,ic,1,1]), (s!"{p}eb", ty [mid]), (s!"{p}eg", ty [mid]), (s!"{p}ebt", ty [mid]),
-     (s!"{p}dW", ty [mid,1,3,3]), (s!"{p}db", ty [mid]), (s!"{p}dg", ty [mid]), (s!"{p}dbt", ty [mid]),
+    (if mid == ic then [] else
+     [(s!"{p}eW", ty [mid,ic,1,1]), (s!"{p}eb", ty [mid]), (s!"{p}eg", ty [mid]), (s!"{p}ebt", ty [mid])]) ++
+    [(s!"{p}dW", ty [mid,1,3,3]), (s!"{p}db", ty [mid]), (s!"{p}dg", ty [mid]), (s!"{p}dbt", ty [mid]),
      (s!"{p}pW", ty [oc,mid,1,1]), (s!"{p}pb", ty [oc]), (s!"{p}pg", ty [oc]), (s!"{p}pbt", ty [oc])]
   let allParams : List (String × String) :=
     [("sW", ty [32,3,3,3]), ("sb", ty [32]), ("sg", ty [32]), ("sbt", ty [32])]
@@ -346,9 +358,10 @@ private def trainStep : String := Id.run do
 private def adamParams : List (String × String × List Nat) :=
   [("%sW", "%dsW", [32,3,3,3]), ("%sb", "%dsb", [32]), ("%sg", "%dstndg", [32]), ("%sbt", "%dstndb", [32])]
   ++ (blocks.map (fun (p, ic, mid, oc, _, _) =>
-       [(s!"%{p}eW", s!"%{p}deW", [mid,ic,1,1]), (s!"%{p}eb", s!"%{p}deb", [mid]),
-        (s!"%{p}eg", s!"%{p}dendg", [mid]), (s!"%{p}ebt", s!"%{p}dendb", [mid]),
-        (s!"%{p}dW", s!"%{p}ddW", [mid,1,3,3]), (s!"%{p}db", s!"%{p}ddb", [mid]),
+       (if mid == ic then [] else
+        [(s!"%{p}eW", s!"%{p}deW", [mid,ic,1,1]), (s!"%{p}eb", s!"%{p}deb", [mid]),
+         (s!"%{p}eg", s!"%{p}dendg", [mid]), (s!"%{p}ebt", s!"%{p}dendb", [mid])]) ++
+       [(s!"%{p}dW", s!"%{p}ddW", [mid,1,3,3]), (s!"%{p}db", s!"%{p}ddb", [mid]),
         (s!"%{p}dg", s!"%{p}ddndg", [mid]), (s!"%{p}dbt", s!"%{p}ddndb", [mid]),
         (s!"%{p}pW", s!"%{p}dpW", [oc,mid,1,1]), (s!"%{p}pb", s!"%{p}dpb", [oc]),
         (s!"%{p}pg", s!"%{p}dpndg", [oc]), (s!"%{p}pbt", s!"%{p}dpndb", [oc])])).flatten
@@ -398,9 +411,11 @@ private def adamCot (sm : String) : String :=
     stat order. -/
 private def bnLayers : List (String × Nat × Nat) :=
   ("stn", 32, 112*112) ::
-  (blocks.flatMap (fun (p, _ic, mid, oc, s, Hin) =>
+  (blocks.flatMap (fun (p, ic, mid, oc, s, Hin) =>
     let Hout := Hin / s
-    [(s!"{p}en", mid, Hin*Hin), (s!"{p}dn", mid, Hout*Hout), (s!"{p}pn", oc, Hout*Hout)]))
+    -- t=1 (mid=ic): NO expand-BN
+    (if mid == ic then [] else [(s!"{p}en", mid, Hin*Hin)]) ++
+    [(s!"{p}dn", mid, Hout*Hout), (s!"{p}pn", oc, Hout*Hout)]))
   ++ [("hn", 1280, 7*7)]
 
 /-- `@mobilenetv2_adam_train_step` — the proof-rendered (BN now hand-emitted) fwd/bwd/param-grads

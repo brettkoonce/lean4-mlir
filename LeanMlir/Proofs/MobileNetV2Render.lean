@@ -454,7 +454,8 @@ set_option maxRecDepth 4000000 in
     maxpool) → b1 (no-expand t=1, 32→16) → b2..b17 (4 stride-2 downsamples, 10 identity skips,
     2 stage-first widenings) → 1×1 conv-bn-relu6 head (320→1280) → GAP → dense (1280→nClasses).
     Per-block prefixes are the block index (`1`..`17`), matching `irSig`/`irSigNoExp`. -/
-def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String) : String :=
+def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String)
+    (funcName : String := "mobilenetv2_paper_train_step") : String :=
   let go : StateM Nat String := do
     -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → BN → relu6 (NO maxpool) ═══
     let zx   : Vec (3*224*224) := fun _ => 0
@@ -564,19 +565,19 @@ def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String) : Str
   let outSig := String.intercalate ", " (sigList.map (·.2))
   let inner : String := go.run' 0
   "module @m {\n" ++
-  s!"  func.func @mobilenetv2_paper_train_step({inSig}) -> ({outSig}) " ++ "{\n" ++
+  s!"  func.func @{funcName}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
   "  }\n}\n"
 
 end Proofs.StableHLO
 
 -- Regenerate `verified_mlir/mobilenetv2_train_step.mlir` (what MainMobilenetV2Verified trains on)
--- from the faithful renderer. B=32 (the committed batch), nClasses=10, ε=1e-5, lr=0.3 — matching
--- the literals `tests/TestMobilenetV2Train.lean` writes with.
+-- from the faithful renderer: the FULL 17-block paper-spec net (210 params, canonical t=1 no-expand
+-- b1, matching mobilenetv2Verified's 210-param spec). B=32, nClasses=10, ε=1e-5, lr=0.3.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_train_step.mlir"
-  (Proofs.StableHLO.mnv2TrainStepFaithfulV 32 10 "1.0e-5" "0.3")
+  (Proofs.StableHLO.mnv2TrainStepFaithfulVPaper 32 10 "1.0e-5" "0.3" "mobilenetv2_train_step")
 
--- The FULL 17-block paper-spec MobileNetV2 SGD train step rendered entirely from the verified AST.
--- B=32, nClasses=10, ε=1e-5, lr=0.3 (matching the committed config).
-#eval IO.FS.writeFile "verified_mlir/mobilenetv2_paper_train_step.mlir"
-  (Proofs.StableHLO.mnv2TrainStepFaithfulVPaper 32 10 "1.0e-5" "0.3")
+-- The reduced 6-block render kept as a demo / stepping-stone (the worked foundation that built the
+-- depthwise SGD core ops); NOT what the trainer reads.
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2_reduced_train_step.mlir"
+  (Proofs.StableHLO.mnv2TrainStepFaithfulV 32 10 "1.0e-5" "0.3")

@@ -287,9 +287,26 @@ _**Full-net scope (tasks 3–6):**_
    clean. ZERO new core ops, ZERO new bridges — pure thread + fan-in over the existing generics._
    _Residual: block backward rendered hand-written (cotangent SSA↔chain-cot per-op trust); per-op
    `pretty` lexing; relu6 two-kink + BN `0<ε` smoothness; ℝ→Float32 — the boundary every fold carries._
-4. _**Trainer swap** — point `MainMobilenetV2Verified`/`VerifiedTrain` at the full SGD `.mlir` (currently
-   reads the reduced 6-block `mobilenetv2_train_step.mlir`); validate it trains (the map flagged a
-   data-loader bug blocking the swap — investigate). Reduced renderer/PoC → demo/stepping-stone._
+4. _**Trainer swap + canonical standardization — ✅ DONE (this session, validated on the rocm box)**.
+   Decided (Brett): standardize the whole mnv2 stack on the **canonical 210-param net** (b1 is t=1 →
+   NO expand conv, torchvision-standard; matches the repo's own `mbConvSE` t=1-skip + the §1 fold/§1a
+   tie, which were already 210). Was: the spec/`fwd`/`fwd_eval`/adam carried a redundant b1 32→32
+   expand (214), while the SGD `train_step.mlir` was the STALE reduced 6-block (82). Changes:
+   `VerifiedSpec.invertedResidual` + `IreeRuntime.MobileNetV2Layout.irBlk` skip the expand when
+   `mid==ic` (mirrors `mbConvSE`); `bnChannels` drops b1's expand-BN (53→52 BN); `#guard
+   toSpecs==MobileNetV2Layout.specs` holds at **210**. The SGD `mobilenetv2_train_step.mlir` is now
+   `mnv2TrainStepFaithfulVPaper` (the PROOF-TIED 210 paper render, func renamed to `@mobilenetv2_train_step`
+   via a `funcName` param; reduced render → `mobilenetv2_reduced_train_step.mlir` demo). The hand-emitters
+   `TestMobilenetV2Fwd` (`fwd`+`fwd_eval`) and `TestMobilenetV2TrainPC` (adam + `bnLayers` running-stats)
+   got the same t=1 no-expand skip across fwd/bwd/param-grad/sgd/sig/adam-moment/bn-stat paths. All FOUR
+   committed `.mlir` regenerated at 210 and **iree-compile on gfx1100** (train_step 1.2 MB, fwd 367 KB,
+   fwd_eval 241 KB, adam 1.69 MB). **`mobilenetv2-verified` smoke-tested on-box**: both vmfbs compile,
+   imagenette loads clean (9469 train/3925 val — NO short read on the 256²-train data; the "short read"
+   was only an `LEAN_MLIR_IMAGENETTE_TRAIN` resolution mismatch, NOT mnv2-specific — same shared loader
+   as r34), 210 params/2.25M floats, He init, trains without FFI mismatch. `lake build Proofs` green
+   (2267) + 3-axiom closure clean (the standardization ALIGNED the proofs (already 210) with the spec).
+   `MainMobilenetV2Verified` docstring updated to the full 17-block 210-param net. (Stale
+   `mobilenetv2_paper_train_step.mlir` removed — the train step IS the paper render now.)_
 5. _**VJP witness upgrade (separate §4 track, deferrable)** — `Mnv2Live` (`MobileNetV2JacobianSeal`) seals the
    whole-net nonzero-Jacobian only at a **2-block structural representative** (1-ch, 2×2, sealed at input 0);
    upgrade to the full 17-block net. The hardest math; does NOT block the §1 fold or §1a tie (those are

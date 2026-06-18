@@ -105,9 +105,9 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
   | flatten                 => #[]
   | bn                      => #[(#[],1),(#[],2)]   -- scalar γ (ones), β (zeros)
   | bnPerChannel oc         => #[(#[oc],1),(#[oc],2)] -- per-channel γ:[oc] (ones), β:[oc] (zeros)
-  | invertedResidual ic mid oc _ =>                 -- expand 1×1 | depthwise 3×3 | project 1×1, each +BN
-    #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2),
-      (#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),
+  | invertedResidual ic mid oc _ =>                 -- (expand 1×1 if t≠1, i.e. mid≠ic) | depthwise 3×3 | project 1×1, each +BN
+    (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2)] else #[]) ++
+    #[(#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),
       (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]
   | mbConvSE ic mid oc r k =>                        -- (expand if t≠1) | depthwise k×k | SE | project, +BN
     (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2)] else #[]) ++

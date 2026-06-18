@@ -112,12 +112,16 @@ private def addOp (o a b : String) (oc Hh Ww : Nat) : String :=
 
 private def irBlockFwd (p x : String) (ic mid oc Hin s : Nat) : String × String :=
   let Hout := Hin / s
-  let body :=
+  -- t=1 (mid=ic): NO expand 1×1 — depthwise reads the block input directly (torchvision-canonical).
+  let dwIn := if mid == ic then x else s!"%{p}er"
+  let expandCode := if mid == ic then "" else
     conv1 s!"{p}e" x s!"%{p}eW" s!"%{p}eb" mid ic Hin Hin ++
     bnPC s!"{p}en" s!"%{p}e" s!"%{p}eg" s!"%{p}ebt" mid Hin Hin (Hin*Hin) ++
-    relu6 s!"{p}er" s!"%{p}en" mid Hin Hin ++
-    (if s == 2 then dwconvStrided s!"{p}d" s!"%{p}er" s!"%{p}dW" s!"%{p}db" mid Hout Hout
-     else dwconv s!"{p}d" s!"%{p}er" s!"%{p}dW" s!"%{p}db" mid Hin Hin) ++
+    relu6 s!"{p}er" s!"%{p}en" mid Hin Hin
+  let body :=
+    expandCode ++
+    (if s == 2 then dwconvStrided s!"{p}d" dwIn s!"%{p}dW" s!"%{p}db" mid Hout Hout
+     else dwconv s!"{p}d" dwIn s!"%{p}dW" s!"%{p}db" mid Hin Hin) ++
     bnPC s!"{p}dn" s!"%{p}d" s!"%{p}dg" s!"%{p}dbt" mid Hout Hout (Hout*Hout) ++
     relu6 s!"{p}dr" s!"%{p}dn" mid Hout Hout ++
     conv1 s!"{p}p" s!"%{p}dr" s!"%{p}pW" s!"%{p}pb" oc mid Hout Hout ++
@@ -142,8 +146,9 @@ private def blocks : List (String × Nat × Nat × Nat × Nat) :=
 private def bnSig (p : String) (oc : Nat) : List String :=
   [s!"%{p}g: {ty [oc]}", s!"%{p}bt: {ty [oc]}"]
 private def irBlockSig (p : String) (ic mid oc : Nat) : List String :=
-  [s!"%{p}eW: {ty [mid,ic,1,1]}", s!"%{p}eb: {ty [mid]}", s!"%{p}eg: {ty [mid]}", s!"%{p}ebt: {ty [mid]}",
-   s!"%{p}dW: {ty [mid,1,3,3]}", s!"%{p}db: {ty [mid]}", s!"%{p}dg: {ty [mid]}", s!"%{p}dbt: {ty [mid]}",
+  (if mid == ic then [] else
+   [s!"%{p}eW: {ty [mid,ic,1,1]}", s!"%{p}eb: {ty [mid]}", s!"%{p}eg: {ty [mid]}", s!"%{p}ebt: {ty [mid]}"]) ++
+  [s!"%{p}dW: {ty [mid,1,3,3]}", s!"%{p}db: {ty [mid]}", s!"%{p}dg: {ty [mid]}", s!"%{p}dbt: {ty [mid]}",
    s!"%{p}pW: {ty [oc,mid,1,1]}", s!"%{p}pb: {ty [oc]}", s!"%{p}pg: {ty [oc]}", s!"%{p}pbt: {ty [oc]}"]
 
 private def gapDense (o x : String) (c nC Hh Ww : Nat) : String :=
@@ -210,12 +215,15 @@ private def bnEval (o x g bt : String) (oc Hh Ww : Nat) : String :=
 /-- Inverted-residual block forward with affine running-stats BN (the eval block). -/
 private def irBlockEval (p x : String) (ic mid oc Hin s : Nat) : String × String :=
   let Hout := Hin / s
-  let body :=
+  let dwIn := if mid == ic then x else s!"%{p}er"
+  let expandCode := if mid == ic then "" else
     conv1 s!"{p}e" x s!"%{p}eW" s!"%{p}eb" mid ic Hin Hin ++
     bnEval s!"{p}en" s!"%{p}e" s!"%{p}eg" s!"%{p}ebt" mid Hin Hin ++
-    relu6 s!"{p}er" s!"%{p}en" mid Hin Hin ++
-    (if s == 2 then dwconvStrided s!"{p}d" s!"%{p}er" s!"%{p}dW" s!"%{p}db" mid Hout Hout
-     else dwconv s!"{p}d" s!"%{p}er" s!"%{p}dW" s!"%{p}db" mid Hin Hin) ++
+    relu6 s!"{p}er" s!"%{p}en" mid Hin Hin
+  let body :=
+    expandCode ++
+    (if s == 2 then dwconvStrided s!"{p}d" dwIn s!"%{p}dW" s!"%{p}db" mid Hout Hout
+     else dwconv s!"{p}d" dwIn s!"%{p}dW" s!"%{p}db" mid Hin Hin) ++
     bnEval s!"{p}dn" s!"%{p}d" s!"%{p}dg" s!"%{p}dbt" mid Hout Hout ++
     relu6 s!"{p}dr" s!"%{p}dn" mid Hout Hout ++
     conv1 s!"{p}p" s!"%{p}dr" s!"%{p}pW" s!"%{p}pb" oc mid Hout Hout ++
@@ -228,8 +236,8 @@ private def irBlockEval (p x : String) (ic mid oc Hin s : Nat) : String × Strin
 /-- BN running-stats input pair `(%{p}mu, %{p}var)`, both `[oc]` — canonical (forward) order. -/
 private def bnStatSig (p : String) (oc : Nat) : List String :=
   [s!"%{p}mu: {ty [oc]}", s!"%{p}var: {ty [oc]}"]
-private def irBlockStatSig (p : String) (mid oc : Nat) : List String :=
-  bnStatSig s!"{p}en" mid ++ bnStatSig s!"{p}dn" mid ++ bnStatSig s!"{p}pn" oc
+private def irBlockStatSig (p : String) (ic mid oc : Nat) : List String :=
+  (if mid == ic then [] else bnStatSig s!"{p}en" mid) ++ bnStatSig s!"{p}dn" mid ++ bnStatSig s!"{p}pn" oc
 
 /-- `@mobilenetv2_fwd_eval` — the eval forward with affine running-stats BN. Same params as
     `@mobilenetv2_fwd`, plus per-BN-layer `%{p}mu`/`%{p}var` `[oc]` inputs in BN forward order
@@ -264,7 +272,7 @@ private def mobilenetv2FwdEval : String := Id.run do
   -- runningBnStats layout, matching mobilenetv2Verified.bnChannels and the adam step's stat outputs.
   let statSig : List String :=
     bnStatSig "stn" 32
-    ++ (blocks.map (fun (p, _ic, mid, oc, _) => irBlockStatSig p mid oc)).flatten
+    ++ (blocks.map (fun (p, ic, mid, oc, _) => irBlockStatSig p ic mid oc)).flatten
     ++ bnStatSig "hn" 1280
   let argSig := String.intercalate ", " (paramSig ++ statSig)
   return "module @m {\n" ++ s!"  func.func @mobilenetv2_fwd_eval({argSig}) -> {ty [BS,10]} " ++ "{\n" ++
