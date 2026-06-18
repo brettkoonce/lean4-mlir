@@ -278,6 +278,9 @@ lean_lib «Proofs» where
              -- γ/β grads, den-certified via cifar_bn_render_{gamma,beta}_certified
              -- (CifarBnFaithfulPoC.lean).
              `LeanMlir.Proofs.CifarBnFaithfulPoC,
+             -- ch5-CIFAR-BN §1a TIE: conv+BN tied through the real forward + the BN backward chain
+             -- (BN-output cots relu-masked for γ/β, conv cots via BN-back) — CifarBnTiePoC.lean.
+             `LeanMlir.Proofs.CifarBnTiePoC,
              -- deeper 8-conv cifar8 (no-BN): pure reuse — conv via CifarPoC generics,
              -- dense via the new generic denseW/denseB_den (Cifar8FaithfulPoC.lean).
              `LeanMlir.Proofs.Cifar8FaithfulPoC,

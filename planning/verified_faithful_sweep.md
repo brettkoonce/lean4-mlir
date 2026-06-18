@@ -96,7 +96,8 @@ leaves both green.
 | **mlp** | ✅ den-composed: real forward threaded; top cotangent `g` pinned to the composed softmax-CE (`mlpLossCot_den`) | ◐ level-2: consumers fed real forward dens at correctly-threaded SSAs; `W₂` folds to `∂CE/∂W₂` | **✅ TIED** |
 | **cnn** | ✅ conv+dense den-composed: real conv forward threaded through `ac1`/`ac2`/`pool` (`cnn_conv_tied_certified`), cotangent = softmax-CE of the conv forward (`cnnLossCot_den`), output `W₅` → `∂CE/∂W₅` | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written, not `SHlo`) | **✅ TIED** |
 | **cifar (ch5)** | ✅ conv+dense den-composed: real 2-stage conv forward threaded through `ac1`–`ac4`/`zp1`/`pool2` (`cifar_conv_tied_certified`), cotangent = softmax-CE of the cifar forward (`cifarLossCot_den`), output `W₇` → `∂CE/∂W₇` (`cifar_W7_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written, not `SHlo`); the new `cifarChainCotW2` crosses pool₁ (conv₃-back then maxpool₁-back) — the step cnn (one pool) lacked | **✅ TIED** |
-| **cifar-bn / cifar8 / cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
+| **cifar-bn (ch5)** | ✅ conv+BN+dense den-composed: real cifar-BN forward threaded, cotangent = softmax-CE of the BN forward (`cifarBnLossCot_den`), all 16 conv/BN params tied at the BN backward chain (`cifarBn_convbn_tied_certified`), output `W₇` → `∂CE/∂W₇` (`cifarBn_W7_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv/BN backward rendered hand-written); the chain alternates BN-output cot (relu-masked, γ/β) and conv-output cot (BN input-VJP of it) — cifar's chain + a BN-back at every conv | **✅ TIED** |
+| **cifar8 / cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
 | **r34** | ✅ **whole net** den-composed: all 16 residual blocks + stem threaded at the real `resnet34Forward_full_pc` activations, cotangent composed from the loss through dense/GAP-back + the **residual fan-in sum** at every skip (`idBlockCotIn`/`downBlockCotIn`); capstone `r34_net_tied_certified` bundles every block's tie + dense total-loss fold + `r34LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); the new fan-in-sum constructors add the skip+body cotangent merge cnn/cifar (no residuals) lacked | **✅ TIED** |
 | mnv2 / enet / convnext / vit | — (train-step fold WIP) | — | — |
 
@@ -193,8 +194,19 @@ Engineering gotcha that mattered: the 16-deep forward/backward let-thread blew t
 eager unfolding — fixed by **irreducible aliases** for the forward steps (`idFwdO`/`downFwdO`/`stemMpO`)
 and **`@[irreducible]` on all the `*TiedAt`/`*CotInAt` wrappers**, so the elaborator keeps the thread
 opaque (the tie lemmas are generic in the block input, so opacity is harmless). **§1a row flipped to
-✅ TIED.** Next tie targets: cifar-bn / cifar8 / cifar8-bn (same recipe, +BN reuse), then mnv2/enet/
-convnext/vit (each with its own §5 blocker).
+✅ TIED.** Next tie targets: cifar8 / cifar8-bn, then mnv2/enet/convnext/vit (each with its own §5 blocker).
+
+### cifar-bn (ch5) §1a tie — ✅ DONE (this session)
+
+The cifar (ch5) tie + a BN-back at every conv, in `CifarBnTiePoC.lean`, 3-axiom clean. The cifar-BN
+backward chain alternates **BN-output cotangent** `dyBnᵢ` (relu-masked — what the `bnGammaSgd`/`bnBetaSgd`
+ops consume) and **conv-output cotangent** `cotCᵢ` (`bnPerChannelTensor3_grad_input` of `dyBnᵢ` — what
+the `convWeightSgd`/`convBiasSgd` ops consume); the cross-pool₁ step is cifar's `cifarChainCotW2` move
+(conv₃-back then maxpool₁-back) with a BN-back in front. `cifarBn_convbn_tied_certified` ties all 16
+conv/BN params at the real forward + these chain cots (conv via `CifarPoC.convW_den`/`convB_den`, BN via
+`CifarBnPoC.bnGamma_den`/`bnBeta_den` — all generic in the cotangent, **zero new ops/bridges**); the dense
+head + loss-cot (`cifarBnLossCot_den`) + W₇ total-loss fold (`cifarBn_W7_tied_totalloss`) mirror cifar.
+**§1a row flipped to ✅ TIED.**
 
 The original concrete plan (kept for the record / as the r34+ template):
 

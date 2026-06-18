@@ -69,6 +69,7 @@ import LeanMlir.Proofs.MlpFaithfulPoC
 import LeanMlir.Proofs.CnnFaithfulPoC
 import LeanMlir.Proofs.CifarFaithfulPoC
 import LeanMlir.Proofs.CifarBnFaithfulPoC
+import LeanMlir.Proofs.CifarBnTiePoC
 import LeanMlir.Proofs.Cifar8FaithfulPoC
 
 open Proofs
@@ -411,6 +412,12 @@ open Proofs
 -- channel BN γ/β ops (bnGammaSgd/bnBetaSgd) denote the certified step (CifarBnFaithfulPoC).
 #print axioms CifarBnPoC.bnGamma_den
 #print axioms CifarBnPoC.bnBeta_den
+-- ch5-CIFAR-BN §1a TIE: all 16 conv+BN params tied at the real forward + the BN backward chain
+-- (BN-output cots relu-masked for γ/β; conv cots = BN-back of them); loss-cot + dense W₇ total-loss
+-- fold. The cifar tie + a BN-back at every conv (CifarBnTiePoC.lean).
+#print axioms CifarBnPoC.cifarBnLossCot_den
+#print axioms CifarBnPoC.cifarBn_W7_tied_totalloss
+#print axioms CifarBnPoC.cifarBn_convbn_tied_certified
 -- deeper 8-conv cifar8 fully folded: conv layers reuse CifarPoC generics, the 3 dense
 -- layers via the generic denseW_den/denseB_den (Cifar8FaithfulPoC.lean).
 #print axioms Cifar8PoC.denseW_den
