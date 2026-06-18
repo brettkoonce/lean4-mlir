@@ -244,7 +244,12 @@ dims (channels up to 320) unchanged; my reduced renderer's per-block emitters (`
 `MobileNetV2Render.lean`) are dimension-generic and REUSABLE. So the full net reuses everything; the new work:_
 
 _**Full-net scope (tasks 3–6):**_
-1. _**Full §1 CLOSE** — `mnv2TrainStepFaithfulVPaper` (17-block SGD renderer): reuse the per-block emitters +
+1. _**Full §1 CLOSE — ✅ DONE (`eb4de9f`)**: `mnv2TrainStepFaithfulVPaper` (17-block paper SGD train step,
+   210 params, render(provenGraph)) appended to `MobileNetV2Render.lean` — reuses the dim-generic emitters +
+   2 new variants (`irFwd/irBackNoExp` for the t=1 no-expand b1; `irFwd/irBackNoSkip` for the ic≠oc widenings
+   b11/b17); writes `verified_mlir/mobilenetv2_paper_train_step.mlir` (iree 1.22 MB vmfb); reduced renderer
+   untouched, both coexist. Original scoping kept for the record:_
+   _`mnv2TrainStepFaithfulVPaper` (17-block SGD renderer): reuse the per-block emitters +
    ADD a no-expand variant for b1 (t=1, `IVWNoExp`: depthwise→project, no expand); assemble the
    `[t,c,n,s]` schedule (stem 3→32; stages 16/24/32/64/96/160/320; head 320→1280; dense 1280→10; 17 blocks).
    Crib the schedule from the TEST-ONLY `tests/TestMobilenetV2TrainPC.lean` (which already renders the full
