@@ -221,6 +221,77 @@ TIED.** Remaining: the Tier-3 nets mnv2 / enet / convnext / vit, each with its o
 reduced-net + 2-block VJP witness; enet/convnext: no whole-net backward graph; vit: scalar-vs-per-channel
 LN granularity).
 
+## NEXT SESSION: mnv2 §1a tie — handoff
+
+**Goal:** tie the committed MobileNetV2 train step to its real forward, the same §1a tie now landed on
+9 nets. mnv2 is the first Tier-3 net; it has residual structure (inverted-residual / MBConv blocks),
+so **r34 is the closest template** (`ResNet34TiePoC.lean`) — residual fan-in sums + the whole-net
+thread with `@[irreducible]` wrappers to dodge the heartbeat blowup.
+
+### The §1a tie recipe (proven on linear/mlp/cnn/cifar{,-bn}/cifar8{,-bn}/r34)
+1. The §1 fold already gives every param op `den = certified ∀ cotangent` (generic in the cotangent).
+2. Build the **whole-net backward chain cotangents** threading the REAL forward activations, with the
+   **fan-in SUM at every residual skip merge** (block-input cot = skip-branch + body-branch).
+3. Feed each op its chain cotangent into the generic `*_den` lemma — `exact <generic> … cot …`.
+4. `*LossCot_den` (loss graph denotes softmax-CE of the real forward) + the dense head total-loss fold.
+5. For deep/residual nets: per-block-type tie lemmas (proven once, applied per block) + the thread as a
+   theorem whose `let`-block threads inputs (via the forward) and dyOuts (via fan-in constructors);
+   **mark the forward-step + cotangent-in + tie wrappers `@[irreducible]`** so the elaborator keeps the
+   deep `let`-chain opaque (without this r34 blew the heartbeat limit at both statement and proof).
+
+### What already exists for mnv2 (a lot — most of the per-block work is done)
+- **`MobileNetV2Close.lean`** — the §1-fold den-certified lemmas, **generic in the cotangent**:
+  `mnv2_render_depthwiseW_certified` / `…b_certified` (stride-1), `…_strided_certified` (stride-2),
+  `mnv2_render_stem_conv{W,b}_certified` (the strided stem — also reused by r34). The expand/project
+  1×1 convs are stride-1 regular convs → reuse `CifarPoC.convW_den`/`convB_den`; BN γ/β →
+  `CifarBnPoC.bnGamma_den`/`bnBeta_den`; final dense → `Cifar8PoC.denseW_den`/`denseB_den`.
+- **`MobileNetV2ChainClose.lean`** — the **per-block cotangents already built**: `invresCotDc` (the MBConv
+  block's depthwise-output cotangent) + `mnv2StemCot`, with chain-certified theorems pinning each
+  depthwise/stem op to them. This is the mnv2 analogue of `ResNet34ChainClose` — the per-block backward
+  is done; what's missing is the cross-block composition (the fan-in sums + the whole-net thread).
+- **`MobileNetV2RenderPC.lean`** — `mobilenetv2Forward_full_pc` (the committed **reduced 6-block**
+  forward) + `mobilenetv2FwdGraphFullPC_faithful`. This is the forward to thread.
+- **`MobileNetV2BackB0.lean`** — the whole-block batched backward graph (the parallel-universe proof;
+  reference for the MBConv backward structure incl. the residual fan-in).
+
+### MBConv block structure (what the per-block-type tie lemma must cover)
+`expand 1×1 conv→BN→relu6 → depthwise 3×3 conv→BN→relu6 → project 1×1 conv→BN` (no relu6 after project);
+a **residual skip-add when stride=1 AND in_ch=out_ch** (else no skip). So the block has 3 convs (expand,
+depthwise, project) + 3 BN + 2 relu6. The new bits vs r34: (a) **relu6** masks (two kinks: `0<x ∧ x<6`)
+instead of relu — check `MobileNetV2BackB0`/`MobileNetV2Close` for the relu6 backward token/mask;
+(b) **depthwise** convs (covered by `mnv2_render_depthwise*_certified`, generic in cotangent);
+(c) the skip is **conditional** (only stride-1 same-channel blocks) — the fan-in sum applies to those,
+the others are a plain chain (no add).
+
+### The blocker, and the honest decision
+- The committed mnv2 trainer + `mobilenetv2Forward_full_pc` are the **reduced 6-block** net (the full
+  17-block paper net is `MobileNetV2FullPaper.mobilenetv2ForwardPaper`, NOT committed); the whole-net
+  VJP witness is a **2-block representative**.
+- **For the §1a tie this is fine:** the §1a tie certifies the *committed train step* against *its* forward
+  — and both are the reduced 6-block net. So **tie the reduced net** (it's honest: it ties exactly what
+  trains). The "promote to the full 17-block net" + "upgrade the 2-block VJP witness" are **separate §1/§4
+  concerns** (what the committed trainer *should be*), not §1a-tie blockers. Flip the §1a row to ✅ TIED
+  for the reduced net, and keep the size caveat in the row text (as the existing matrix already notes the
+  mnv2 reduced-net trap).
+
+### Concrete plan
+1. New file `MobileNetV2TiePoC.lean`, import `MobileNetV2ChainClose` + `MobileNetV2RenderPC` +
+   `Cifar8FaithfulPoC`/`CifarBnFaithfulPoC` (for the conv/BN/dense generics).
+2. `mbconvTied` (per-block-type tie, def+theorem like r34's `idblockTied`): the block's expand/depthwise/
+   project conv W/b + 3 BN γ/β tied at the real block activations + the block chain cotangents (reuse
+   `invresCotDc` + the depthwise/conv/BN generics). Two variants: with-skip (stride-1 same-ch) and
+   without (strided / channel-change).
+3. `mbconvCotIn` (fan-in sum, like r34's `idBlockCotIn`/`downBlockCotIn`): block-input cot = (skip cot if
+   present) + project-back→depthwise-back→expand-back of the block-output cot, with relu6 masks + BN-backs.
+4. `mnv2StemTied` (reuse `mnv2StemCot`) + the head (conv-bn-relu6 → GAP → dense) + `mnv2LossCot_den`.
+5. Whole-net thread `mnv2_net_tied_certified` over the 6 blocks + stem + head, `@[irreducible]` wrappers,
+   threading `mobilenetv2Forward_full_pc`. Wire to lakefile + `tests/AuditAxioms.lean`; `lake build Proofs`;
+   3-axiom closure; flip the §1a mnv2 row to ✅ TIED (reduced-net, with the size caveat).
+
+Gotcha to expect: relu6's two-kink mask, and the conditional skip — get the with-skip vs no-skip block
+types right (only stride-1 same-channel blocks have the `addV` fan-in). The heartbeat/`@[irreducible]`
+lesson from r34 applies if the thread is deep.
+
 ### cifar-bn (ch5) §1a tie — ✅ DONE (this session)
 
 The cifar (ch5) tie + a BN-back at every conv, in `CifarBnTiePoC.lean`, 3-axiom clean. The cifar-BN
