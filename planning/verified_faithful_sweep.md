@@ -232,8 +232,39 @@ core ops (4 `depthwise{,Strided}{Weight,Bias}Sgd`), `e8310c9` `MobileNetV2Faithf
 genuine §1a tie below — now a real TiePoC on top of the committed den lemmas** (`Mnv2PoC.depthwise*_den`).
 Lesson recorded: a "§1a tie" handoff is only valid if the matrix `_train_step` column is already ✅._
 
-**Goal:** tie the committed MobileNetV2 train step to its real forward, the same §1a tie now landed on
-9 nets. mnv2 is the first Tier-3 net; it has residual structure (inverted-residual / MBConv blocks),
+_**GOAL CHANGED 2026-06-18 → the FULL 17-block paper net** (Brett: "full net is the goal"). The reduced
+6-block §1 fold above is the FOUNDATION (it built the depthwise SGD core ops + validated the pattern), not
+the end state; mnv2 is the only reduced net among the 5 "verified" trainers (r34/enet/convnext/vit are full).
+Much full-net infra is ALREADY committed + 3-axiom clean: `MobileNetV2FullPaper.lean` has
+`mobilenetv2ForwardPaper` (full ℝ-forward, per-channel BN) AND `mobilenetv2FwdGraphPaper` +
+`mobilenetv2FwdGraphPaper_faithful` (`den(graph)=forward`), built from per-block graph helpers
+`iv{NoExp,ExpOnly,Resid,Strided}GraphW`(+`_faithful`); the param-grad render-math lemmas
+(`mnv2_render_depthwise*_certified`, conv/BN/dense generics) are **dimension-generic** so they apply at full
+dims (channels up to 320) unchanged; my reduced renderer's per-block emitters (`irFwd`/`irBack`/strided in
+`MobileNetV2Render.lean`) are dimension-generic and REUSABLE. So the full net reuses everything; the new work:_
+
+_**Full-net scope (tasks 3–6):**_
+1. _**Full §1 CLOSE** — `mnv2TrainStepFaithfulVPaper` (17-block SGD renderer): reuse the per-block emitters +
+   ADD a no-expand variant for b1 (t=1, `IVWNoExp`: depthwise→project, no expand); assemble the
+   `[t,c,n,s]` schedule (stem 3→32; stages 16/24/32/64/96/160/320; head 320→1280; dense 1280→10; 17 blocks).
+   Crib the schedule from the TEST-ONLY `tests/TestMobilenetV2TrainPC.lean` (which already renders the full
+   net for AdamW — forward via `pretty(mobilenetv2FwdGraphFullPC)`, hand-emitted tail). Write the committed
+   full SGD `.mlir` + iree-validate. ~214 param tensors (vs reduced 82; +132 = 11 extra blocks ×12)._
+2. _**Full §1 fold (den)** — `MobileNetV2FaithfulPoCPaper`: den=certified for all 214 params (generic-lemma
+   instantiation; the depthwise den lemmas already exist). Wire to lakefile + AuditAxioms._
+3. _**Full §1a TIE** — `MobileNetV2TiePoCPaper`: whole-net thread of `mobilenetv2ForwardPaper` (17 blocks),
+   per-block-type tie lemmas (no-expand/skip/strided) + fan-in cots + `@[irreducible]` wrappers (the r34
+   heartbeat lesson, MORE acute at 17 blocks). Reuse `MobileNetV2ChainClose` cotangents._
+4. _**Trainer swap** — point `MainMobilenetV2Verified`/`VerifiedTrain` at the full SGD `.mlir` (currently
+   reads the reduced 6-block `mobilenetv2_train_step.mlir`); validate it trains (the map flagged a
+   data-loader bug blocking the swap — investigate). Reduced renderer/PoC → demo/stepping-stone._
+5. _**VJP witness upgrade (separate §4 track, deferrable)** — `Mnv2Live` (`MobileNetV2JacobianSeal`) seals the
+   whole-net nonzero-Jacobian only at a **2-block structural representative** (1-ch, 2×2, sealed at input 0);
+   upgrade to the full 17-block net. The hardest math; does NOT block the §1 fold or §1a tie (those are
+   den=certified at the real cotangent, independent of the nonzero-Jacobian guarantee)._
+
+**Goal (reduced-net, ALREADY DONE — kept as the worked foundation):** tie the committed MobileNetV2 train
+step to its real forward, the same §1a tie now landed on 9 nets. mnv2 is the first Tier-3 net; it has residual structure (inverted-residual / MBConv blocks),
 so **r34 is the closest template** (`ResNet34TiePoC.lean`) — residual fan-in sums + the whole-net
 thread with `@[irreducible]` wrappers to dodge the heartbeat blowup.
 
