@@ -781,6 +781,10 @@ open Proofs
 #print axioms ResNet34PoC.r34LossCot_den
 #print axioms ResNet34PoC.r34_dense_tied_totalloss
 #print axioms ResNet34PoC.r34_dense_bias_den
+-- THE WHOLE-NET CAPSTONE: resnet34Forward_full_pc threaded through all 16 residual blocks + stem +
+-- dense, backward cotangents composed from the loss (dense/GAP-back + the residual fan-in sums at
+-- every skip), every block tied at its real input + threaded cotangent. The full §1a ✅ TIED.
+#print axioms ResNet34PoC.r34_net_tied_certified
 -- EfficientNet-B0 RENDER (Item A) — the BATCHED typed SHlo forward graph matching the render.
 -- EfficientNet's render emits TRUE batch-norm (reduce [0,2,3], batch-coupled), so unlike MNV2/r34
 -- the graph lives at the batched index N·(c·h·w): every batch-separable op is `batchMap N` of the

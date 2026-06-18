@@ -97,7 +97,7 @@ leaves both green.
 | **cnn** | ✅ conv+dense den-composed: real conv forward threaded through `ac1`/`ac2`/`pool` (`cnn_conv_tied_certified`), cotangent = softmax-CE of the conv forward (`cnnLossCot_den`), output `W₅` → `∂CE/∂W₅` | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written, not `SHlo`) | **✅ TIED** |
 | **cifar (ch5)** | ✅ conv+dense den-composed: real 2-stage conv forward threaded through `ac1`–`ac4`/`zp1`/`pool2` (`cifar_conv_tied_certified`), cotangent = softmax-CE of the cifar forward (`cifarLossCot_den`), output `W₇` → `∂CE/∂W₇` (`cifar_W7_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written, not `SHlo`); the new `cifarChainCotW2` crosses pool₁ (conv₃-back then maxpool₁-back) — the step cnn (one pool) lacked | **✅ TIED** |
 | **cifar-bn / cifar8 / cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
-| **r34** | ❌ parallel per-node render (`ResNet34Render`) | ❌ | **none** |
+| **r34** | ✅ **whole net** den-composed: all 16 residual blocks + stem threaded at the real `resnet34Forward_full_pc` activations, cotangent composed from the loss through dense/GAP-back + the **residual fan-in sum** at every skip (`idBlockCotIn`/`downBlockCotIn`); capstone `r34_net_tied_certified` bundles every block's tie + dense total-loss fold + `r34LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); the new fan-in-sum constructors add the skip+body cotangent merge cnn/cifar (no residuals) lacked | **✅ TIED** |
 | mnv2 / enet / convnext / vit | — (train-step fold WIP) | — | — |
 
 **The close ("tie them together").** Feed the *proven* cotangent/forward subgraph directly
@@ -176,7 +176,25 @@ backward is rendered hand-written, so the cotangent SSA ↔ chain-cot correspond
 the whole suite carries. **The bonus** (`cifarTrainStepFaithfulV` emitting `SHlo` backward nodes so the
 cotangent-subgraph could be pinned as a `den`, removing even the per-op-SSA residual) was NOT pursued
 — matching cnn's scope; it stays the polish. **§1a tie-table cifar (ch5) row flipped to ✅ TIED.**
-**r34 is the next tie target** (parallel per-node render → tie; see §5).
+
+### r34 (ch6) §1a tie — ✅ DONE (this session, the full whole-net thread)
+
+The §1a tie for the full `[3,4,6,3]` ResNet-34, all 3-axiom clean, in `ResNet34TiePoC.lean`:
+**`r34_net_tied_certified`** threads `resnet34Forward_full_pc`'s real activations through all 16
+residual blocks + stem + GAP/dense, composes the backward cotangent from the loss `g` down through
+dense (`dense_has_vjp`) + GAP (`globalAvgPoolFlat_has_vjp`) + the **residual fan-in sum at every one
+of the 16 skip merges**, and bundles every block's tie + the dense total-loss fold + the loss-cotangent
+denotation. r34's structural novelty vs cnn/cifar (no residuals): the block-INPUT cotangent is
+`skip-branch + body-branch` — the new constructors `idBlockCotIn`/`downBlockCotIn` (the cotangent ADD
+at each merge). Reusable per-block-type tie lemmas (`r34_idblock_tied` 8 params / `r34_downblock_tied`
+12 / `r34_stem_tied` 4, each pure instantiation of the generic `den = certified` lemmas at the
+`ResNet34ChainClose` cotangents) are proven once and applied 16×; **no new core ops, no new bridges.**
+Engineering gotcha that mattered: the 16-deep forward/backward let-thread blew the heartbeat limit via
+eager unfolding — fixed by **irreducible aliases** for the forward steps (`idFwdO`/`downFwdO`/`stemMpO`)
+and **`@[irreducible]` on all the `*TiedAt`/`*CotInAt` wrappers**, so the elaborator keeps the thread
+opaque (the tie lemmas are generic in the block input, so opacity is harmless). **§1a row flipped to
+✅ TIED.** Next tie targets: cifar-bn / cifar8 / cifar8-bn (same recipe, +BN reuse), then mnv2/enet/
+convnext/vit (each with its own §5 blocker).
 
 The original concrete plan (kept for the record / as the r34+ template):
 
