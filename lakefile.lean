@@ -303,7 +303,12 @@ lean_lib «Proofs» where
              -- (depthwise{,Strided}{Weight,Bias}Sgd) den-certified via the mnv2_render_depthwise*
              -- bridges; expand/project/BN/dense reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics
              -- (MobileNetV2FaithfulPoC.lean).
-             `LeanMlir.Proofs.MobileNetV2FaithfulPoC]
+             `LeanMlir.Proofs.MobileNetV2FaithfulPoC,
+             -- ch7-MobileNetV2 §1 CLOSE (render): the reduced 6-block train step rendered ENTIRELY
+             -- as pretty(provenGraph) — every line pretty of a verified SHlo node, the depthwise
+             -- param updates via the new depthwise SGD ops; writes verified_mlir/mobilenetv2_train_step.mlir
+             -- (MobileNetV2Render.lean, the peer of ResNet34Render.lean).
+             `LeanMlir.Proofs.MobileNetV2Render]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
