@@ -1342,4 +1342,106 @@ theorem depthwise_has_vjp3_correct {c h w kH kW : Nat}
             x ci hi wi co ho wo * dy co ho wo :=
   (depthwise_has_vjp3 (h := h) (w := w) W b).correct x dy ci hi wi
 
+-- ════════════════════════════════════════════════════════════════
+-- § Strided (stride-2) depthwise param VJPs — RELOCATED here from
+--   `MobileNetV2Close.lean` so the `depthwiseStrided{Weight,Bias}Sgd` ops'
+--   `den` in `StableHLO` can reference them upstream (the same move the strided
+--   *conv* bias VJP made into `StridedConv.lean`). Each strided forward is
+--   `decimateFlat ∘ (stride-1 depthwise op)`, so the param VJP is `vjp_comp`
+--   of a proven stride-1 depthwise VJP with the decimation VJP — the backward
+--   is "zero-upsample the cotangent (StableHLO `pad` interior=1), then the
+--   stride-1 grad", exactly the render's `dwconvWGradStrided`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **`depthwiseConv2d` (as a function of its kernel) is differentiable** — affine in `W`. The
+    depthwise peer of `conv2d_weight_differentiable`; the `vjp_comp` hypothesis for the strided
+    weight-grad. -/
+theorem depthwise_weight_differentiable {c h w kH kW : Nat} (b : Vec c) (x : Tensor3 c h w) :
+    Differentiable ℝ (fun v : Vec (c * kH * kW) =>
+      Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v : DepthwiseKernel c kH kW) b x)) := by
+  unfold depthwiseConv2d Tensor3.flatten Tensor3.unflatten
+  fun_prop
+
+/-- **`depthwiseConv2d` (as a function of its bias) is differentiable** — affine in `b`. The
+    `vjp_comp` hypothesis for the strided depthwise bias-grad. -/
+theorem depthwise_bias_differentiable {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w) :
+    Differentiable ℝ (fun b : Vec c => Tensor3.flatten (depthwiseConv2d W b x)) := by
+  unfold depthwiseConv2d Tensor3.flatten
+  fun_prop
+
+/-- **Stride-2 depthwise weight-VJP.** `fun v => depthwiseStride2Flat (unflatten v) b x =
+    decimate ∘ (depthwise-weight-in-v)`; by `vjp_comp` of the proven stride-1
+    `depthwise_weight_grad_has_vjp3` (flattened via `hasVJP3_to_hasVJP`) with `decimateFlat_has_vjp`.
+    The depthwise peer of `flatConvStride2_weight_grad_has_vjp`. -/
+noncomputable def depthwiseStride2_weight_grad_has_vjp {c h w kH kW : Nat}
+    (b : Vec c) (x : Vec (c * (2 * h) * (2 * w))) :
+    HasVJP (fun v : Vec (c * kH * kW) =>
+      depthwiseStride2Flat (Tensor3.unflatten v : DepthwiseKernel c kH kW) b x) :=
+  let f : Vec (c * kH * kW) → Vec (c * (2 * h) * (2 * w)) :=
+    fun v => Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v : DepthwiseKernel c kH kW) b
+              (Tensor3.unflatten x))
+  let hf_diff : Differentiable ℝ f :=
+    depthwise_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten x)
+  let hf_vjp : HasVJP f :=
+    hasVJP3_to_hasVJP (depthwise_weight_grad_has_vjp3 (h := 2 * h) (w := 2 * w) b
+      (Tensor3.unflatten x))
+  show HasVJP (decimateFlat c h w ∘ f) from
+  vjp_comp f (decimateFlat c h w) hf_diff (decimateFlat_differentiable c h w)
+    hf_vjp (decimateFlat_has_vjp c h w)
+
+/-- **Stride-2 depthwise bias-VJP.** `fun b => depthwiseStride2Flat W b x = decimate ∘
+    (depthwise-bias-in-b)`; by `vjp_comp` of the proven stride-1 `depthwise_bias_grad_has_vjp` with
+    `decimateFlat_has_vjp`. -/
+noncomputable def depthwiseStride2_bias_grad_has_vjp {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (x : Vec (c * (2 * h) * (2 * w))) :
+    HasVJP (fun b : Vec c =>
+      depthwiseStride2Flat W b x : Vec c → Vec (c * h * w)) :=
+  let g : Vec c → Vec (c * (2 * h) * (2 * w)) :=
+    fun b => Tensor3.flatten (depthwiseConv2d W b (Tensor3.unflatten x))
+  let hg_diff : Differentiable ℝ g :=
+    depthwise_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
+  let hg_vjp : HasVJP g :=
+    depthwise_bias_grad_has_vjp (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
+  show HasVJP (decimateFlat c h w ∘ g) from
+  vjp_comp g (decimateFlat c h w) hg_diff (decimateFlat_differentiable c h w)
+    hg_vjp (decimateFlat_has_vjp c h w)
+
+-- ════════════════════════════════════════════════════════════════
+-- § Depthwise SGD-tail denotations — non-reducing wrappers for the `SHlo`
+--   `depthwise{,Strided}{Weight,Bias}Sgd` `den` arms. Defined here (not inlined
+--   in `den`) so the `den` match stays small: `depthwise_weight_grad_has_vjp3` /
+--   `depthwise_bias_grad_has_vjp` are STRUCTURE LITERALS whose `.backward`
+--   reduces to a big sum, so inlining them in `den` would bloat the match and
+--   blow the heartbeat limit of every `simp only [den]` proof. The FaithfulPoC
+--   `den = certified` lemmas unfold these first, then close via the
+--   `mnv2_render_depthwise*_certified` bridges.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Stride-1 depthwise weight SGD step: `flatten W − lr·flatten(dwconv_weight_grad(b,x)·dy)`. -/
+noncomputable def depthwiseWeightSgdDen {c h w kH kW : Nat}
+    (b : Vec c) (x : Tensor3 c h w) (W : DepthwiseKernel c kH kW) (lr : ℝ) (dy : Vec (c*h*w)) :
+    Vec (c*kH*kW) :=
+  fun idx => Tensor3.flatten W idx
+    - lr * Tensor3.flatten ((depthwise_weight_grad_has_vjp3 b x).backward W (Tensor3.unflatten dy)) idx
+
+/-- Stride-1 depthwise bias SGD step: `b − lr·(dwconv_bias_grad(W,x)·dy)`. -/
+noncomputable def depthwiseBiasSgdDen {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w) (b : Vec c) (lr : ℝ) (dy : Vec (c*h*w)) :
+    Vec c :=
+  fun o => b o - lr * (depthwise_bias_grad_has_vjp W x).backward b dy o
+
+/-- Stride-2 depthwise weight SGD step: `flatten W − lr·(dwconvStride2_weight_grad(b,x)·dy)`. -/
+noncomputable def depthwiseStridedWeightSgdDen {c h w kH kW : Nat}
+    (b : Vec c) (x : Vec (c*(2*h)*(2*w))) (W : DepthwiseKernel c kH kW) (lr : ℝ) (dy : Vec (c*h*w)) :
+    Vec (c*kH*kW) :=
+  fun idx => Tensor3.flatten W idx
+    - lr * (depthwiseStride2_weight_grad_has_vjp b x).backward (Tensor3.flatten W) dy idx
+
+/-- Stride-2 depthwise bias SGD step: `b − lr·(dwconvStride2_bias_grad(W,x)·dy)`. -/
+noncomputable def depthwiseStridedBiasSgdDen {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (x : Vec (c*(2*h)*(2*w))) (b : Vec c) (lr : ℝ) (dy : Vec (c*h*w)) :
+    Vec c :=
+  fun o => b o - lr * (depthwiseStride2_bias_grad_has_vjp W x).backward b dy o
+
 end Proofs
