@@ -435,6 +435,16 @@ inductive SHlo : Nat → Type where
       (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
       (v : Vec (N * (c * h * w))) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * h * w))
+  -- Chapter 8 (EfficientNet, BATCHED) param-SGD tail: the fused per-channel BN
+  -- γ/β updates over the network layout `N·(oc·(h·w))`. `den` is the per-channel BN
+  -- grad at the merged batch+spatial axis `m = N·(h·w)` (via `bnchwFwd`, the
+  -- network→oc-major reindex), so it is *exactly* `enet_render_bn{gamma,beta}_certified`'s
+  -- LHS — the §1 fold is a one-line delegation. Emit recomputes x̂ from the saved BN
+  -- input `vName` then `reduce[0,2,3]` (the dγ/dβ in `bnBatchBack`). Output is `Vec oc`.
+  | bnGammaSgdB {N oc h w : Nat} (gName vName epsStr lrStr : String) (ε : ℝ) (γ : Vec oc)
+      (v : Vec (N * (oc * (h * w)))) (lr : ℝ)             : SHlo (N * (oc * (h * w))) → SHlo oc
+  | bnBetaSgdB  {N oc h w : Nat} (bName lrStr : String) (β : Vec oc) (lr : ℝ)
+                                                          : SHlo (N * (oc * (h * w))) → SHlo oc
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -652,6 +662,11 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e)) c
   | _, .bnBetaSgd (oc := oc) (h := h) (w := w) _ _ β lr e =>
       fun c => β c - lr * bnPerChannel_grad_beta oc (h*w) (reassocFwd oc h w (den e)) c
+  | _, .bnGammaSgdB (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
+      fun c => γ c - lr *
+        bnPerChannel_grad_gamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
+  | _, .bnBetaSgdB (N := N) (oc := oc) (h := h) (w := w) _ _ β lr e =>
+      fun c => β c - lr * bnPerChannel_grad_beta oc (N*(h*w)) (bnchwFwd N oc h w (den e)) c
   | _, .reluF e        => fun i => max (den e i) 0
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
   | _, .relu6F e       => fun i => min (max (den e i) 0) 6
@@ -2163,6 +2178,10 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "bnBatchLABack" [gN, xN, es] [N, oc, h, w] (skel e)
   | _, .seBackBatched (N := N) (c := c) (h := h) (w := w) (r := r) w1 b1 w2 b2 vN _ _ _ _ _ e =>
       .batched "seBackBatched" [w1, b1, w2, b2, vN] [N, c, h, w, r] (skel e)
+  | _, .bnGammaSgdB (N := N) (oc := oc) (h := h) (w := w) gN vN es lrS _ _ _ _ e =>
+      .batched "bnGammaSgd" [gN, vN, es, lrS] [N, oc, h, w] (skel e)
+  | _, .bnBetaSgdB (N := N) (oc := oc) (h := h) (w := w) bN lrS _ _ e =>
+      .batched "bnBetaSgd" [bN, lrS] [N, oc, h, w] (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -3443,6 +3462,45 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {dgsp} = stablehlo.broadcast_in_dim {dsqd}, dims = [0, 1] : ({ty [B,c]}) -> {ty [B,c,h,w]}\n" ++
             s!"    {dds} = stablehlo.add {dleft}, {dgsp} : {ty [B,c,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {dds} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+      | "bnGammaSgd", [gN, vN, es, lrS], [_N, oc, h, w] => do
+          -- BN γ update: recompute x̂ from the BN input `vN`, dγ = reduce[0,2,3](dy⊙x̂),
+          -- γ' = γ − lr·dγ. Output is the channel-shaped updated γ.
+          let xr ← fresh; let z ← fresh; let nf ← fresh; let smr ← fresh; let sm ← fresh
+          let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh; let vs ← fresh
+          let vr ← fresh; let ep ← fresh; let ve ← fresh; let istd ← fresh; let xh ← fresh
+          let dyr ← fresh; let dgp ← fresh; let dg ← fresh; let lc ← fresh; let sc ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {vN} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {nf} = stablehlo.constant dense<{B*h*w}.0> : {ty [B,oc,h,w]}\n" ++
+            s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,oc,h,w]}\n" ++
+            s!"    {xc} = stablehlo.subtract {xr}, {mu} : {ty [B,oc,h,w]}\n" ++
+            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,oc,h,w]}\n" ++
+            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,oc,h,w]}\n" ++
+            s!"    {ep} = stablehlo.constant dense<{es}> : {ty [B,oc,h,w]}\n" ++
+            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+            s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {dgp} = stablehlo.multiply {dyr}, {xh} : {ty [B,oc,h,w]}\n" ++
+            s!"    {dg} = stablehlo.reduce({dgp} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {lc} = stablehlo.constant dense<{lrS}> : {ty [oc]}\n" ++
+            s!"    {sc} = stablehlo.multiply {dg}, {lc} : {ty [oc]}\n" ++
+            s!"    {o} = stablehlo.subtract {gN}, {sc} : {ty [oc]}\n", o :: st)
+      | "bnBetaSgd", [bN, lrS], [_N, oc, h, w] => do
+          -- BN β update: dβ = reduce[0,2,3](dy), β' = β − lr·dβ.
+          let dyr ← fresh; let z ← fresh; let db ← fresh; let lc ← fresh; let sc ← fresh; let o ← fresh
+          pure (
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {db} = stablehlo.reduce({dyr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {lc} = stablehlo.constant dense<{lrS}> : {ty [oc]}\n" ++
+            s!"    {sc} = stablehlo.multiply {db}, {lc} : {ty [oc]}\n" ++
+            s!"    {o} = stablehlo.subtract {bN}, {sc} : {ty [oc]}\n", o :: st)
       | _, _, _ =>
           pure (s!"    // [EfficientNet Item B] batched {tag} {names} {info} — backward render TODO\n", r :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
