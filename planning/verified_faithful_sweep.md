@@ -36,11 +36,15 @@ gap, net by net?
 > `seReduceB` added through 4 sites (ctor/`den`/`skel`→`.batched "seReduceB"`/`emitTok`; the generic `.batched`
 > Raw/Tok/parseStack covers round-trip, NO new round-trip case); `lake build Proofs` green (2267 jobs, 0 err,
 > `StableHLOParse` roundtrip intact); iree-compiles on rocm/gfx1100 (10 KB vmfb).
-> **REMAINING:** (4b) ✅ `seReduceB` DONE (gating op landed, uncommitted); (5) the 262-param renderer
-> `efficientnetTrainStepFaithfulV` (assemble fwd+backward+param-SGD via `renderModule`, argSig from
-> `EfficientNetLayout.specs`/the committed `efficientnet_fwd.mlir`); (6)
-> re-emit `efficientnet_train_step.mlir` + iree-validate the whole 262-param net (the "full-16 train step"
-> headline); (7) §1 fold `EfficientNetFaithfulPoC` (BN/dense/conv/SE-dense = ~1-line cert delegations; depthwise/stem
+> **REMAINING:** (4b) ✅ `seReduceB` DONE (committed `cc652bc`) + ✅ `gapBackBatched` DONE (head GAP-back,
+> 2nd new op, same 4-site pattern, iree-validated, uncommitted); (5) ✅ **DONE** the 262-param renderer
+> `efficientnetTrainStepFaithfulV` (`EfficientNetRender.lean`) — hand-assembled module (NOT `renderModule`)
+> at SHlo **N=1** (so pointwise `swishF`/`sigmoidF` emit `[B,c·h·w]`; emit `B`=real batch), 4 fwd + 4 bwd
+> block emitters, un-fused SE; `lake build` green; (6) ✅ **DONE** re-emit + iree-validate: the whole 262-param
+> `efficientnet_train_step.mlir` (7466 lines) **iree-compiles CLEAN on rocm/gfx1100 (1.68 MB vmfb)**, 0 render-TODO
+> stubs, 262 return tensors, func sig BYTE-IDENTICAL to the committed (drop-in for `efficientnetVerified`) — the
+> **"full-16 train step" headline landed** (every line = `pretty(verified AST node)`); (7) §1 fold
+> `EfficientNetFaithfulPoC` (BN/dense/conv/SE-dense = ~1-line cert delegations; depthwise/stem
 > need the **Σ_n batch-sum bridge** — the proof long pole); (8) §1a tie `EfficientNetTiePoC` (new vs mnv2:
 > swish — smooth, no relu6 kink — + the SE gate fan-in via `seReduceB`). Then convnext (same per-block-only backward; 7×7
 > depthwise + scalar LN + layer-scale), then vit (reconcile scalar-proven vs per-channel-`[192]`-emitted LN).

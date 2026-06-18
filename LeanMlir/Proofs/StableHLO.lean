@@ -451,6 +451,11 @@ inductive SHlo : Nat → Type where
   -- `e` = the SE-output cotangent. `den` = batched `broadcastFlat_has_vjp.backward (x⊙dy)`.
   | seReduceB {N c h w : Nat} (xName : String) (x : Vec (N * (c * h * w))) :
       SHlo (N * (c * h * w)) → SHlo (N * c)
+  -- Batched GLOBAL-AVERAGE-POOL backward (VJP): `dx[n,c,h,w] = dgap[n,c]/(h·w)` — the
+  -- per-example `globalAvgPoolFlat_has_vjp` backward (broadcast over spatial, ÷h·w),
+  -- lifted by `batchMap N`. The head's GAP backward (`gapBack` is per-example, not a
+  -- `BatchableOp`, so it needs its own batched ctor). `den` = `batchMap N (gap-adjoint)`.
+  | gapBackBatched {N c h w : Nat} : SHlo (N * c) → SHlo (N * (c * h * w))
   -- Chapter 8 (EfficientNet, BATCHED) param-SGD tail: the fused per-channel BN
   -- γ/β updates over the network layout `N·(oc·(h·w))`. `den` is the per-channel BN
   -- grad at the merged batch+spatial axis `m = N·(h·w)` (via `bnchwFwd`, the
@@ -825,6 +830,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
             batchSlice N (c * h * w) x (finProdFinEquiv.symm idx).1 q
               * batchSlice N (c * h * w) (den e) (finProdFinEquiv.symm idx).1 q
           else 0
+  | _, .gapBackBatched (N := N) (c := c) (h := h) (w := w) e =>
+      batchMap N (fun dgap => (globalAvgPoolFlat_has_vjp c h w).backward (fun _ => 0) dgap) (den e)
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -2248,6 +2255,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "seBackBatched" [w1, b1, w2, b2, vN] [N, c, h, w, r] (skel e)
   | _, .seReduceB (N := N) (c := c) (h := h) (w := w) xN _ e =>
       .batched "seReduceB" [xN] [N, c, h, w] (skel e)
+  | _, .gapBackBatched (N := N) (c := c) (h := h) (w := w) e =>
+      .batched "gapBackBatched" [] [N, c, h, w] (skel e)
   | _, .bnGammaSgdB (N := N) (oc := oc) (h := h) (w := w) gN vN es lrS _ _ _ _ e =>
       .batched "bnGammaSgd" [gN, vN, es, lrS] [N, oc, h, w] (skel e)
   | _, .bnBetaSgdB (N := N) (oc := oc) (h := h) (w := w) bN lrS _ _ e =>
@@ -3692,6 +3701,15 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
             s!"    {xd} = stablehlo.multiply {xr}, {dyr} : {ty [B,c,h,w]}\n" ++
             s!"    {o} = stablehlo.reduce({xd} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n", o :: st)
+      | "gapBackBatched", [], [_N, c, h, w] => do
+          -- GAP backward: broadcast the per-channel cotangent `r` ([B,c]) over the h×w
+          -- grid and scale by 1/(h·w) — the `globalAvgPoolFlat` adjoint, batched.
+          let bb ← fresh; let nf ← fresh; let dv ← fresh; let o ← fresh
+          pure (
+            s!"    {bb} = stablehlo.broadcast_in_dim {r}, dims = [0, 1] : ({ty [B,c]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c,h,w]}\n" ++
+            s!"    {dv} = stablehlo.divide {bb}, {nf} : {ty [B,c,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {dv} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
       | _, _, _ =>
           pure (s!"    // [EfficientNet Item B] batched {tag} {names} {info} — backward render TODO\n", r :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
