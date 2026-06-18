@@ -72,6 +72,7 @@ import LeanMlir.Proofs.CifarBnFaithfulPoC
 import LeanMlir.Proofs.CifarBnTiePoC
 import LeanMlir.Proofs.Cifar8FaithfulPoC
 import LeanMlir.Proofs.Cifar8TiePoC
+import LeanMlir.Proofs.Cifar8BnTiePoC
 
 open Proofs
 
@@ -429,6 +430,11 @@ open Proofs
 #print axioms Cifar8PoC.cifar8LossCot_den
 #print axioms Cifar8PoC.cifar8_Wb_tied_totalloss
 #print axioms Cifar8PoC.cifar8_convs_tied_certified
+-- ch5-cifar8-bn §1a TIE: cifar8's 4-stage chain + a BN-back at every conv; all 32 conv+BN params
+-- tied at the real forward (BN-output cots relu-masked for γ/β, conv cots = BN-back); loss-cot.
+-- Pure reuse of CifarPoC/CifarBnPoC generics — zero new ops/bridges/constructors (Cifar8BnTiePoC.lean).
+#print axioms Cifar8BnPoC.cifar8BnLossCot_den
+#print axioms Cifar8BnPoC.cifar8Bn_convbn_tied_certified
 -- ch6-ResNet-34 fully folded (full [3,4,6,3], 146 params): the 2 new strided-conv SGD ops
 -- (convStrided{Weight,Bias}Sgd) for the 7×7 stem + 3×3 downsample/projection convs denote the
 -- certified step; the 142 other params reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics.

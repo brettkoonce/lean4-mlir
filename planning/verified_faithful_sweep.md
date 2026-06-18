@@ -98,7 +98,7 @@ leaves both green.
 | **cifar (ch5)** | ✅ conv+dense den-composed: real 2-stage conv forward threaded through `ac1`–`ac4`/`zp1`/`pool2` (`cifar_conv_tied_certified`), cotangent = softmax-CE of the cifar forward (`cifarLossCot_den`), output `W₇` → `∂CE/∂W₇` (`cifar_W7_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written, not `SHlo`); the new `cifarChainCotW2` crosses pool₁ (conv₃-back then maxpool₁-back) — the step cnn (one pool) lacked | **✅ TIED** |
 | **cifar-bn (ch5)** | ✅ conv+BN+dense den-composed: real cifar-BN forward threaded, cotangent = softmax-CE of the BN forward (`cifarBnLossCot_den`), all 16 conv/BN params tied at the BN backward chain (`cifarBn_convbn_tied_certified`), output `W₇` → `∂CE/∂W₇` (`cifarBn_W7_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv/BN backward rendered hand-written); the chain alternates BN-output cot (relu-masked, γ/β) and conv-output cot (BN input-VJP of it) — cifar's chain + a BN-back at every conv | **✅ TIED** |
 | **cifar8 (8-conv)** | ✅ conv+dense den-composed: real 4-stage forward threaded, cotangent = softmax-CE of the cifar8 forward (`cifar8LossCot_den`), all 16 conv params tied at the 4-stage backward chain (`cifar8_convs_tied_certified`), output `Wb` → `∂CE/∂Wb` (`cifar8_Wb_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written); cifar's chain repeated over 4 stages — all reused constructors (`cnnChainCotW2`/`cnnChainCotW1`/`cifarChainCotW2`), no new chain content | **✅ TIED** |
-| **cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
+| **cifar8-bn** | ✅ conv+BN+dense den-composed: real cifar8-BN forward threaded, cotangent = softmax-CE of the BN forward (`cifar8BnLossCot_den`), all 32 conv/BN params tied at the 4-stage BN backward chain (`cifar8Bn_convbn_tied_certified`); dense head via the pre-audited generics | ◐ level-2: cotangents at correctly-threaded SSAs (conv/BN backward rendered hand-written); cifar8's 4-stage chain + a BN-back at every conv — pure reuse, no new content | **✅ TIED** |
 | **r34** | ✅ **whole net** den-composed: all 16 residual blocks + stem threaded at the real `resnet34Forward_full_pc` activations, cotangent composed from the loss through dense/GAP-back + the **residual fan-in sum** at every skip (`idBlockCotIn`/`downBlockCotIn`); capstone `r34_net_tied_certified` bundles every block's tie + dense total-loss fold + `r34LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); the new fan-in-sum constructors add the skip+body cotangent merge cnn/cifar (no residuals) lacked | **✅ TIED** |
 | mnv2 / enet / convnext / vit | — (train-step fold WIP) | — | — |
 
@@ -206,8 +206,20 @@ The 4-stage backward chain reuses **every** existing constructor at the deeper d
 params at the real forward + these chain cots (via `CifarPoC.convW_den`/`convB_den`, generic in the
 cotangent); the dense head (3-layer MLP) is covered by the generic `denseW_den`/`denseB_den`; plus
 `cifar8LossCot_den` + the `Wb` total-loss fold. Pure reuse, **zero new ops/bridges/constructors**.
-**§1a row flipped to ✅ TIED.** Next: cifar8-bn (= cifar8's chain + a BN-back at every conv, exactly
-the cifar→cifar-bn step).
+**§1a row flipped to ✅ TIED.** Next: cifar8-bn.
+
+### cifar8-bn §1a tie — ✅ DONE (this session)
+
+cifar8's 4-stage chain + a BN-back at every conv (exactly the cifar→cifar-bn step, at 4 stages), in
+`Cifar8BnTiePoC.lean`, 3-axiom clean. `cifar8Bn_convbn_tied_certified` ties all 32 conv/BN params at
+the real forward + the BN backward chain (BN-output cots `dyBn1–8` relu-masked for γ/β, conv cots
+`cotC1–8` = `bnPerChannelTensor3_grad_input` of them for W/b), plus `cifar8BnLossCot_den`; the dense
+head is covered by the pre-audited `Cifar8PoC` generics. **Zero new ops/bridges/constructors** — conv
+via `CifarPoC.convW_den`/`convB_den`, BN via `CifarBnPoC.bnGamma_den`/`bnBeta_den`. **§1a row flipped to
+✅ TIED — the entire cifar family (cifar, cifar-bn, cifar8, cifar8-bn) + cnn/mlp/linear + r34 are now
+TIED.** Remaining: the Tier-3 nets mnv2 / enet / convnext / vit, each with its own §5 blocker (mnv2:
+reduced-net + 2-block VJP witness; enet/convnext: no whole-net backward graph; vit: scalar-vs-per-channel
+LN granularity).
 
 ### cifar-bn (ch5) §1a tie — ✅ DONE (this session)
 
