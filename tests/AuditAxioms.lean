@@ -41,6 +41,7 @@ import LeanMlir.Proofs.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.ResNet34ChainClose
 import LeanMlir.Proofs.ResNet34FaithfulPoC
+import LeanMlir.Proofs.ResNet34TiePoC
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
@@ -769,6 +770,17 @@ open Proofs
 #print axioms downBlock_render_convbp_chain_certified
 #print axioms stem_render_convW_chain_certified
 #print axioms stem_render_convb_chain_certified
+-- ch6-ResNet-34 §1a TIE — the train-step ops tied to the REAL forward + the loss-driven backward
+-- chain. Per-block-type tie lemmas (all params of an identity/downsample/stem block den = certified
+-- at the ResNet34ChainClose cotangents); the residual fan-in SUM constructors (idBlockCotIn/
+-- downBlockCotIn — r34's structural novelty, the skip+body cotangent add at each merge); the loss-cot
+-- pin + the dense head total-loss fold. The cnn/cifar tie scaled to the residual net.
+#print axioms ResNet34PoC.r34_idblock_tied
+#print axioms ResNet34PoC.r34_downblock_tied
+#print axioms ResNet34PoC.r34_stem_tied
+#print axioms ResNet34PoC.r34LossCot_den
+#print axioms ResNet34PoC.r34_dense_tied_totalloss
+#print axioms ResNet34PoC.r34_dense_bias_den
 -- EfficientNet-B0 RENDER (Item A) — the BATCHED typed SHlo forward graph matching the render.
 -- EfficientNet's render emits TRUE batch-norm (reduce [0,2,3], batch-coupled), so unlike MNV2/r34
 -- the graph lives at the batched index N·(c·h·w): every batch-separable op is `batchMap N` of the

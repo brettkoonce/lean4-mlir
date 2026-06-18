@@ -285,7 +285,11 @@ lean_lib «Proofs» where
              -- (convStrided{Weight,Bias}Sgd) for the 7×7 stem + 3×3 downsample/projection
              -- convs den-certified via mnv2_render_stem_conv{W,b}_certified; the 142 other
              -- params reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics (ResNet34FaithfulPoC.lean).
-             `LeanMlir.Proofs.ResNet34FaithfulPoC]
+             `LeanMlir.Proofs.ResNet34FaithfulPoC,
+             -- ch6-ResNet-34 §1a TIE: per-block-type tie lemmas (identity/downsample/stem) at the
+             -- real forward + ResNet34ChainClose cotangents, the residual fan-in SUM constructors
+             -- (idBlockCotIn/downBlockCotIn), loss-cot + dense fold (ResNet34TiePoC.lean).
+             `LeanMlir.Proofs.ResNet34TiePoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
