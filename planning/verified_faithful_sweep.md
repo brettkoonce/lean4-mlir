@@ -97,7 +97,8 @@ leaves both green.
 | **cnn** | ✅ conv+dense den-composed: real conv forward threaded through `ac1`/`ac2`/`pool` (`cnn_conv_tied_certified`), cotangent = softmax-CE of the conv forward (`cnnLossCot_den`), output `W₅` → `∂CE/∂W₅` | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written, not `SHlo`) | **✅ TIED** |
 | **cifar (ch5)** | ✅ conv+dense den-composed: real 2-stage conv forward threaded through `ac1`–`ac4`/`zp1`/`pool2` (`cifar_conv_tied_certified`), cotangent = softmax-CE of the cifar forward (`cifarLossCot_den`), output `W₇` → `∂CE/∂W₇` (`cifar_W7_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written, not `SHlo`); the new `cifarChainCotW2` crosses pool₁ (conv₃-back then maxpool₁-back) — the step cnn (one pool) lacked | **✅ TIED** |
 | **cifar-bn (ch5)** | ✅ conv+BN+dense den-composed: real cifar-BN forward threaded, cotangent = softmax-CE of the BN forward (`cifarBnLossCot_den`), all 16 conv/BN params tied at the BN backward chain (`cifarBn_convbn_tied_certified`), output `W₇` → `∂CE/∂W₇` (`cifarBn_W7_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv/BN backward rendered hand-written); the chain alternates BN-output cot (relu-masked, γ/β) and conv-output cot (BN input-VJP of it) — cifar's chain + a BN-back at every conv | **✅ TIED** |
-| **cifar8 / cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
+| **cifar8 (8-conv)** | ✅ conv+dense den-composed: real 4-stage forward threaded, cotangent = softmax-CE of the cifar8 forward (`cifar8LossCot_den`), all 16 conv params tied at the 4-stage backward chain (`cifar8_convs_tied_certified`), output `Wb` → `∂CE/∂Wb` (`cifar8_Wb_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written); cifar's chain repeated over 4 stages — all reused constructors (`cnnChainCotW2`/`cnnChainCotW1`/`cifarChainCotW2`), no new chain content | **✅ TIED** |
+| **cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
 | **r34** | ✅ **whole net** den-composed: all 16 residual blocks + stem threaded at the real `resnet34Forward_full_pc` activations, cotangent composed from the loss through dense/GAP-back + the **residual fan-in sum** at every skip (`idBlockCotIn`/`downBlockCotIn`); capstone `r34_net_tied_certified` bundles every block's tie + dense total-loss fold + `r34LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); the new fan-in-sum constructors add the skip+body cotangent merge cnn/cifar (no residuals) lacked | **✅ TIED** |
 | mnv2 / enet / convnext / vit | — (train-step fold WIP) | — | — |
 
@@ -194,7 +195,19 @@ Engineering gotcha that mattered: the 16-deep forward/backward let-thread blew t
 eager unfolding — fixed by **irreducible aliases** for the forward steps (`idFwdO`/`downFwdO`/`stemMpO`)
 and **`@[irreducible]` on all the `*TiedAt`/`*CotInAt` wrappers**, so the elaborator keeps the thread
 opaque (the tie lemmas are generic in the block input, so opacity is harmless). **§1a row flipped to
-✅ TIED.** Next tie targets: cifar8 / cifar8-bn, then mnv2/enet/convnext/vit (each with its own §5 blocker).
+✅ TIED.** Next tie targets: cifar8-bn, then mnv2/enet/convnext/vit (each with its own §5 blocker).
+
+### cifar8 (8-conv) §1a tie — ✅ DONE (this session)
+
+cifar (ch5)'s tie repeated over **four** conv→conv→pool stages, in `Cifar8TiePoC.lean`, 3-axiom clean.
+The 4-stage backward chain reuses **every** existing constructor at the deeper dims: `cnnChainCotW2`
+(conv₈, last before pool₄), `cnnChainCotW1` (conv₇/₅/₃/₁, within-stage conv-back), `cifarChainCotW2`
+(conv₆/₄/₂, the cross-pool move) — no new constructor. `cifar8_convs_tied_certified` ties all 16 conv
+params at the real forward + these chain cots (via `CifarPoC.convW_den`/`convB_den`, generic in the
+cotangent); the dense head (3-layer MLP) is covered by the generic `denseW_den`/`denseB_den`; plus
+`cifar8LossCot_den` + the `Wb` total-loss fold. Pure reuse, **zero new ops/bridges/constructors**.
+**§1a row flipped to ✅ TIED.** Next: cifar8-bn (= cifar8's chain + a BN-back at every conv, exactly
+the cifar→cifar-bn step).
 
 ### cifar-bn (ch5) §1a tie — ✅ DONE (this session)
 

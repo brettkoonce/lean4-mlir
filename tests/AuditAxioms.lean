@@ -71,6 +71,7 @@ import LeanMlir.Proofs.CifarFaithfulPoC
 import LeanMlir.Proofs.CifarBnFaithfulPoC
 import LeanMlir.Proofs.CifarBnTiePoC
 import LeanMlir.Proofs.Cifar8FaithfulPoC
+import LeanMlir.Proofs.Cifar8TiePoC
 
 open Proofs
 
@@ -422,6 +423,12 @@ open Proofs
 -- layers via the generic denseW_den/denseB_den (Cifar8FaithfulPoC.lean).
 #print axioms Cifar8PoC.denseW_den
 #print axioms Cifar8PoC.denseB_den
+-- ch5-cifar8 §1a TIE: all 16 conv params tied at the real 4-stage forward + the backward chain
+-- (cifar's chain repeated — cnnChainCotW2/cnnChainCotW1/cifarChainCotW2 reused, no new constructor);
+-- loss-cot + dense Wb total-loss fold (Cifar8TiePoC.lean).
+#print axioms Cifar8PoC.cifar8LossCot_den
+#print axioms Cifar8PoC.cifar8_Wb_tied_totalloss
+#print axioms Cifar8PoC.cifar8_convs_tied_certified
 -- ch6-ResNet-34 fully folded (full [3,4,6,3], 146 params): the 2 new strided-conv SGD ops
 -- (convStrided{Weight,Bias}Sgd) for the 7×7 stem + 3×3 downsample/projection convs denote the
 -- certified step; the 142 other params reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics.

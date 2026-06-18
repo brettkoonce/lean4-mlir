@@ -284,6 +284,9 @@ lean_lib «Proofs» where
              -- deeper 8-conv cifar8 (no-BN): pure reuse — conv via CifarPoC generics,
              -- dense via the new generic denseW/denseB_den (Cifar8FaithfulPoC.lean).
              `LeanMlir.Proofs.Cifar8FaithfulPoC,
+             -- ch5-cifar8 §1a TIE: 8-conv chain tied through the real forward — cifar's chain
+             -- repeated over 4 stages, all reused constructors (Cifar8TiePoC.lean).
+             `LeanMlir.Proofs.Cifar8TiePoC,
              -- ch6-ResNet-34 (full [3,4,6,3], 146 params): the 2 new strided-conv SGD ops
              -- (convStrided{Weight,Bias}Sgd) for the 7×7 stem + 3×3 downsample/projection
              -- convs den-certified via mnv2_render_stem_conv{W,b}_certified; the 142 other
