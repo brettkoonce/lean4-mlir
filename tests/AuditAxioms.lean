@@ -941,6 +941,13 @@ open Proofs
 -- pending layerScaleChGammaSgd core op. pdiv via the chanIdx reindex (pdiv_mul/pdiv_reindex/pdiv_const).
 #print axioms Proofs.CnxPoC.pdiv_layerScaleCh_gamma
 #print axioms Proofs.CnxPoC.cnx_render_lsgammaCh_certified
+-- ConvNeXt §1 fold — the three new core SHlo param-SGD ops' `den` = the certified loss-descent step.
+-- layerScaleChGammaSgd (per-channel layer-scale γ, the lsGradCh reduce + SGD), lnGammaSgd/lnBetaSgd
+-- (scalar LN γ/β, the lnParamGrad reduces + SGD, output SHlo 1 ≅ tensor<1xf32>). One-line delegations
+-- to the certs above / ConvNeXtClose. The ops build clean in StableHLO (roundtrip intact) + iree-compile.
+#print axioms Proofs.CnxPoC.layerScaleChGammaSgd_den
+#print axioms Proofs.CnxPoC.lnGammaSgd_den
+#print axioms Proofs.CnxPoC.lnBetaSgd_den
 -- ConvNeXt cotangent-chain CLOSE (planning/convnext_close.md Item D) — the MobileNetV2ChainClose/
 -- ResNet34ChainClose analogue: the Item C bridges pinned to the cotangent the ACTUAL backward chain
 -- delivers through a ConvNeXt block. The chain composes the rendered backward denotations —

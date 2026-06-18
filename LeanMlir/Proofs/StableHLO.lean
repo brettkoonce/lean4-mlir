@@ -230,6 +230,20 @@ inductive SHlo : Nat → Type where
   | depthwiseStridedBiasSgd   {c h w kH kW : Nat} (bName lrStr : String)
       (W : DepthwiseKernel c kH kW) (x : Vec (c*(2*h)*(2*w))) (b : Vec c) (lr : ℝ)
                                                            : SHlo (c*h*w) → SHlo c
+  -- Chapter 9 (ConvNeXt-T) param-SGD tail. `layerScaleChGammaSgd`: the PER-CHANNEL layer-scale γ
+  -- update `γ_c − lr·dγ_c`, `dγ_c = Σ_{b,h,w} x⊙dy` (the saved layer input `x` ⊙ the cotangent,
+  -- reduced over batch+spatial per channel — `lsGradCh`). `γ : Vec c`, broadcast over spatial via
+  -- `chanIdx` by the `layerScaleChF` forward; `den` = ConvNeXtFaithfulPoC's `cnx_render_lsgammaCh`.
+  | layerScaleChGammaSgd {c h w : Nat} (gName xName lrStr : String)
+      (x : Vec (c*h*w)) (γ : Vec c) (lr : ℝ)               : SHlo (c*h*w) → SHlo c
+  -- `lnGammaSgd`/`lnBetaSgd`: the SCALAR LayerNorm γ/β updates (the `bnF` sites — scalar LN over the
+  -- whole `n = c·h·w`, `γ β : Vec 1` ≅ `tensor<f32>`). `dγ = Σ_{b,k} dy·x̂` (x̂ recomputed from the
+  -- saved LN input `x`, `lnParamGrad`'s dγ half), `dβ = Σ_{b,k} dy`. `den` = the certified scalar-LN
+  -- grad (`cnx_render_ln{gamma,beta}_certified`, the Vec-1 embedding). Output `SHlo 1`.
+  | lnGammaSgd {n : Nat} (gName xName epsStr lrStr : String) (ε : ℝ) (x : Vec n) (γ : Vec 1) (lr : ℝ)
+                                                           : SHlo n → SHlo 1
+  | lnBetaSgd  {n : Nat} (bName lrStr : String) (β : Vec 1) (lr : ℝ)
+                                                           : SHlo n → SHlo 1
   -- Chapter 9 scaling pass (full ConvNeXt-T): stride-4 SAME conv forward — the
   -- 4×4/s4 patchify stem (`stablehlo.convolution` with `window_strides=[4,4]`).
   -- `den` via the proven `flatConvStride4` (= decimate ∘ decimate ∘ stride-1 conv).
@@ -706,6 +720,12 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e)) c
   | _, .bnBetaSgd (oc := oc) (h := h) (w := w) _ _ β lr e =>
       fun c => β c - lr * bnPerChannel_grad_beta oc (h*w) (reassocFwd oc h w (den e)) c
+  | _, .layerScaleChGammaSgd (c := c) (h := h) (w := w) _ _ _ x γ lr e =>
+      fun cc => γ cc - lr * ∑ k : Fin (c*h*w), (if chanIdx c h w k = cc then x k * den e k else 0)
+  | _, .lnGammaSgd (n := n) _ _ _ _ ε x γ lr e =>
+      fun _ => γ 0 - lr * bn_grad_gamma n ε x (den e)
+  | _, .lnBetaSgd (n := n) _ _ β lr e =>
+      fun _ => β 0 - lr * bn_grad_beta n (den e)
   | _, .bnGammaSgdB (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
         bnPerChannel_grad_gamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
@@ -2067,6 +2087,9 @@ inductive Raw where
   | convBiasSgd   (bName lrStr : String) (oc h w : Nat)               : Raw → Raw
   | bnGammaSgd    (gName vName epsStr lrStr : String) (oc h w : Nat)  : Raw → Raw
   | bnBetaSgd     (bName lrStr : String) (oc h w : Nat)               : Raw → Raw
+  | layerScaleChGammaSgd (gName xName lrStr : String) (c h w : Nat)   : Raw → Raw
+  | lnGammaSgd    (gName xName epsStr lrStr : String) (n : Nat)       : Raw → Raw
+  | lnBetaSgd     (bName lrStr : String) (n : Nat)                    : Raw → Raw
   | reluF      (n : Nat)                   : Raw → Raw
   | selectPos  (x : String) (n : Nat)      : Raw → Raw
   | relu6F     (n : Nat)                   : Raw → Raw
@@ -2162,6 +2185,12 @@ def skel : {k : Nat} → SHlo k → Raw
       .bnGammaSgd gN vN es lrS oc h w (skel e)
   | _, .bnBetaSgd (oc := oc) (h := h) (w := w) bN lrS _ _ e =>
       .bnBetaSgd bN lrS oc h w (skel e)
+  | _, .layerScaleChGammaSgd (c := c) (h := h) (w := w) gN xN lrS _ _ _ e =>
+      .layerScaleChGammaSgd gN xN lrS c h w (skel e)
+  | _, .lnGammaSgd (n := n) gN xN es lrS _ _ _ _ e =>
+      .lnGammaSgd gN xN es lrS n (skel e)
+  | _, .lnBetaSgd (n := n) bN lrS _ _ e =>
+      .lnBetaSgd bN lrS n (skel e)
   | k, .reluF e               => .reluF k (skel e)
   | k, .selectPos x _ e       => .selectPos x k (skel e)
   | k, .relu6F e              => .relu6F k (skel e)
@@ -2289,6 +2318,9 @@ inductive Tok where
   | convBiasSgd   (bName lrStr : String) (oc h w : Nat)               : Tok
   | bnGammaSgd    (gName vName epsStr lrStr : String) (oc h w : Nat)  : Tok
   | bnBetaSgd     (bName lrStr : String) (oc h w : Nat)               : Tok
+  | layerScaleChGammaSgd (gName xName lrStr : String) (c h w : Nat)   : Tok
+  | lnGammaSgd    (gName xName epsStr lrStr : String) (n : Nat)       : Tok
+  | lnBetaSgd     (bName lrStr : String) (n : Nat)                    : Tok
   | reluF      (n : Nat)                   : Tok
   | selectPos  (x : String) (n : Nat)      : Tok
   | relu6F     (n : Nat)                   : Tok
@@ -2357,6 +2389,9 @@ def toToks : Raw → List Tok
   | .convBiasSgd bN lrS oc h w e               => toToks e ++ [.convBiasSgd bN lrS oc h w]
   | .bnGammaSgd gN vN es lrS oc h w e          => toToks e ++ [.bnGammaSgd gN vN es lrS oc h w]
   | .bnBetaSgd bN lrS oc h w e                 => toToks e ++ [.bnBetaSgd bN lrS oc h w]
+  | .layerScaleChGammaSgd gN xN lrS c h w e    => toToks e ++ [.layerScaleChGammaSgd gN xN lrS c h w]
+  | .lnGammaSgd gN xN es lrS n e               => toToks e ++ [.lnGammaSgd gN xN es lrS n]
+  | .lnBetaSgd bN lrS n e                      => toToks e ++ [.lnBetaSgd bN lrS n]
   | .reluF n e       => toToks e ++ [.reluF n]
   | .selectPos x n e => toToks e ++ [.selectPos x n]
   | .relu6F n e      => toToks e ++ [.relu6F n]
@@ -2525,6 +2560,57 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [oc]}\n" ++
         s!"    {sB} = stablehlo.multiply {db}, {lB} : {ty [oc]}\n" ++
         s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [oc]}\n", o :: st)
+  | .layerScaleChGammaSgd gN xN lrS c h w, r :: st => do
+      -- per-channel layer-scale γ grad: dγ_c = reduce[0,2,3](x⊙dy), then SGD (`lsGradCh` + wrap).
+      let z ← fresh; let xr ← fresh; let dr ← fresh; let p ← fresh
+      let dg ← fresh; let lG ← fresh; let sG ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+        s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+        s!"    {p} = stablehlo.multiply {xr}, {dr} : {ty [B,c,h,w]}\n" ++
+        s!"    {dg} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [c]}\n" ++
+        s!"    {lG} = stablehlo.constant dense<{lrS}> : {ty [c]}\n" ++
+        s!"    {sG} = stablehlo.multiply {dg}, {lG} : {ty [c]}\n" ++
+        s!"    {o} = stablehlo.subtract {gN}, {sG} : {ty [c]}\n", o :: st)
+  | .lnGammaSgd gN xN epsStr lrS n, r :: st => do
+      -- scalar-LN γ grad: recompute x̂ from the saved LN input {xN} (μ/var over [1]),
+      -- dγ = Σ_{b,k} dy·x̂ → tensor<f32>, reshape to the Vec-1 param, SGD (`lnParamGrad` dγ half + wrap).
+      let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh; let sm ← fresh
+      let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh; let vs ← fresh
+      let vr ← fresh; let ve ← fresh; let istd ← fresh; let xh ← fresh; let p ← fresh
+      let dg ← fresh; let dg1 ← fresh; let lG ← fresh; let sG ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,n]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,n]}\n" ++
+        s!"    {smr} = stablehlo.reduce({xN} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,n]}\n" ++
+        s!"    {xc} = stablehlo.subtract {xN}, {mu} : {ty [B,n]}\n" ++
+        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,n]}\n" ++
+        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,n]}\n" ++
+        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,n]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,n]}\n" ++
+        s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,n]}\n" ++
+        s!"    {p} = stablehlo.multiply {r}, {xh} : {ty [B,n]}\n" ++
+        s!"    {dg} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,n]}, tensor<f32>) -> tensor<f32>\n" ++
+        s!"    {dg1} = stablehlo.reshape {dg} : (tensor<f32>) -> {ty [1]}\n" ++
+        s!"    {lG} = stablehlo.constant dense<{lrS}> : {ty [1]}\n" ++
+        s!"    {sG} = stablehlo.multiply {dg1}, {lG} : {ty [1]}\n" ++
+        s!"    {o} = stablehlo.subtract {gN}, {sG} : {ty [1]}\n", o :: st)
+  | .lnBetaSgd bN lrS n, r :: st => do
+      -- scalar-LN β grad: dβ = Σ_{b,k} dy → tensor<f32>, reshape to the Vec-1 param, SGD.
+      let z ← fresh; let db ← fresh; let db1 ← fresh; let lB ← fresh; let sB ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {db} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,n]}, tensor<f32>) -> tensor<f32>\n" ++
+        s!"    {db1} = stablehlo.reshape {db} : (tensor<f32>) -> {ty [1]}\n" ++
+        s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [1]}\n" ++
+        s!"    {sB} = stablehlo.multiply {db1}, {lB} : {ty [1]}\n" ++
+        s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [1]}\n", o :: st)
   | .reluF n, r :: st => do
       let z ← fresh; let o ← fresh
       pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++

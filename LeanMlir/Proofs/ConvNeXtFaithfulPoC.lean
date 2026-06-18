@@ -63,4 +63,40 @@ theorem cnx_render_lsgammaCh_certified {c h w : Nat} (x : Vec (c * h * w)) (γ :
   · rw [if_pos hcc, if_pos hcc.symm]
   · rw [if_neg hcc, if_neg (fun h => hcc h.symm)]; ring
 
+-- ════════════════════════════════════════════════════════════════
+-- § The §1 den-fold — each new core op `den`otes the certified loss-descent step
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Per-channel layer-scale γ op denotes the certified step.** The emitted `layerScaleChGammaSgd`
+    (the `lsGradCh` per-channel reduce + SGD) `den`otes `γ − lr·(certified ∂(layerScaleChF)/∂γ · cot)`.
+    One-line delegation to `cnx_render_lsgammaCh_certified`. -/
+theorem layerScaleChGammaSgd_den {c h w : Nat} (gN xN lrStr cotN : String)
+    (x : Vec (c * h * w)) (γ : Vec c) (dy : Vec (c * h * w)) (lr : ℝ) (cc : Fin c) :
+    den (SHlo.layerScaleChGammaSgd gN xN lrStr x γ lr (.operand cotN dy)) cc
+      = γ cc - lr * ∑ j : Fin (c * h * w),
+          pdiv (fun γ' : Vec c => layerScale (fun k => γ' (chanIdx c h w k)) x) γ cc j * dy j := by
+  simp only [den, den_operand]
+  exact cnx_render_lsgammaCh_certified x γ dy lr cc
+
+/-- **Scalar-LN γ op denotes the certified step** (`γ − lr·Σ dy·x̂`). Delegation to
+    `cnx_render_lngamma_certified` (the `Vec 1` embedding). The free `β` is the LN's β (the γ grad is
+    β-independent). -/
+theorem lnGammaSgd_den {n : Nat} (gN xN epsStr lrStr cotN : String)
+    (ε β : ℝ) (x : Vec n) (γ : Vec 1) (dy : Vec n) (lr : ℝ) (i : Fin 1) :
+    den (SHlo.lnGammaSgd gN xN epsStr lrStr ε x γ lr (.operand cotN dy)) i
+      = γ 0 - lr * ∑ j : Fin n,
+          pdiv (fun γ' : Vec 1 => layerNormForward n ε (γ' 0) β x) γ 0 j * dy j := by
+  simp only [den, den_operand]
+  exact cnx_render_lngamma_certified n ε β γ x dy lr
+
+/-- **Scalar-LN β op denotes the certified step** (`β − lr·Σ dy`). Delegation to
+    `cnx_render_lnbeta_certified`. The free `ε`/`γ` carry the LN constants (β grad is independent). -/
+theorem lnBetaSgd_den {n : Nat} (bN lrStr cotN : String)
+    (ε γ : ℝ) (β : Vec 1) (x : Vec n) (dy : Vec n) (lr : ℝ) (i : Fin 1) :
+    den (SHlo.lnBetaSgd bN lrStr β lr (.operand cotN dy)) i
+      = β 0 - lr * ∑ j : Fin n,
+          pdiv (fun β' : Vec 1 => layerNormForward n ε γ (β' 0) x) β 0 j * dy j := by
+  simp only [den, den_operand]
+  exact cnx_render_lnbeta_certified n ε γ β x dy lr
+
 end Proofs.CnxPoC
