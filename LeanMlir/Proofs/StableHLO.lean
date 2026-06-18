@@ -71,6 +71,13 @@ noncomputable def batchMap (N : Nat) {a b : Nat} (f : Vec a → Vec b) :
     let p := finProdFinEquiv.symm idx
     f (fun i : Fin a => x (finProdFinEquiv (p.1, i))) p.2
 
+/-- The `n`-th example's slice of a batch laid out row-major `[N, a]`. A shared
+    weight's batched gradient is the sum over `n` of the per-example gradient on
+    `batchSlice n` — the form the batched param-SGD dens take (so the §1 fold closes
+    via the per-example cert + sum-linearity). -/
+def batchSlice (N a : Nat) (v : Vec (N * a)) (n : Fin N) : Vec a :=
+  fun i => v (finProdFinEquiv (n, i))
+
 /-- **A batch-separable EfficientNet op**, shape-indexed by per-example in/out
     length. The descriptor carried by `SHlo.batchOp`; its `denOp` is the proven
     per-example forward, lifted by `batchMap`. (swish/sigmoid/relu/addV are
@@ -445,6 +452,18 @@ inductive SHlo : Nat → Type where
       (v : Vec (N * (oc * (h * w)))) (lr : ℝ)             : SHlo (N * (oc * (h * w))) → SHlo oc
   | bnBetaSgdB  {N oc h w : Nat} (bName lrStr : String) (β : Vec oc) (lr : ℝ)
                                                           : SHlo (N * (oc * (h * w))) → SHlo oc
+  -- Batched dense weight/bias SGD (SE squeeze/excite convs as `dot_general`, head dense).
+  -- `den` = θ − lr·(Σ_n per-example grad on `batchSlice n`); the shared-weight batch sum.
+  -- Emit reuses the `weightSgd`/`biasSgd` text (already batch-contracts over `B`).
+  | denseWeightSgdB {N a c : Nat} (xName wName lrStr : String) (x : Vec (N * a)) (W : Mat a c) (lr : ℝ)
+                                                          : SHlo (N * c) → SHlo (a * c)
+  | denseBiasSgdB   {N c : Nat} (bName lrStr : String) (b : Vec c) (lr : ℝ)
+                                                          : SHlo (N * c) → SHlo c
+  -- Batched conv weight SGD (1×1 expand/project/head; the transpose-trick wgrad).
+  -- `den` = flatten W − lr·(Σ_n per-example `conv2d_weight_grad` on `batchSlice n`).
+  | convWeightSgdB {N ic oc h w kH kW : Nat} (xName wName lrStr : String)
+      (b : Vec oc) (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
+                                                          : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -667,6 +686,14 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         bnPerChannel_grad_gamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
   | _, .bnBetaSgdB (N := N) (oc := oc) (h := h) (w := w) _ _ β lr e =>
       fun c => β c - lr * bnPerChannel_grad_beta oc (N*(h*w)) (bnchwFwd N oc h w (den e)) c
+  | _, .denseWeightSgdB (N := N) (a := a) (c := c) _ _ _ x W lr e =>
+      Mat.flatten (fun i j => W i j - lr * ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
+  | _, .denseBiasSgdB (N := N) (c := c) _ _ b lr e =>
+      fun j => b j - lr * ∑ n : Fin N, batchSlice N c (den e) n j
+  | _, .convWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ b x W lr e =>
+      fun idx => Kernel4.flatten W idx - lr * ∑ n : Fin N,
+        (conv2d_weight_grad_has_vjp b (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward
+          (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
   | _, .reluF e        => fun i => max (den e i) 0
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
   | _, .relu6F e       => fun i => min (max (den e i) 0) 6
@@ -2182,6 +2209,12 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "bnGammaSgd" [gN, vN, es, lrS] [N, oc, h, w] (skel e)
   | _, .bnBetaSgdB (N := N) (oc := oc) (h := h) (w := w) bN lrS _ _ e =>
       .batched "bnBetaSgd" [bN, lrS] [N, oc, h, w] (skel e)
+  | _, .denseWeightSgdB (N := N) (a := a) (c := c) xN wN lrS _ _ _ e =>
+      .batched "denseWeightSgd" [xN, wN, lrS] [N, a, c] (skel e)
+  | _, .denseBiasSgdB (N := N) (c := c) bN lrS _ _ e =>
+      .batched "denseBiasSgd" [bN, lrS] [N, c] (skel e)
+  | _, .convWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
+      .batched "convWeightSgd" [xN, wN, lrS] [N, ic, oc, h, w, kH, kW] (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -3501,6 +3534,43 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {lc} = stablehlo.constant dense<{lrS}> : {ty [oc]}\n" ++
             s!"    {sc} = stablehlo.multiply {db}, {lc} : {ty [oc]}\n" ++
             s!"    {o} = stablehlo.subtract {bN}, {sc} : {ty [oc]}\n", o :: st)
+      | "denseWeightSgd", [xN, wN, lrS], [_N, a, c] => do
+          -- dense weight update: dW = aᵀ·dy (dot_general contracts the batch), W' = W − lr·dW.
+          let dW ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
+          pure (
+            s!"    {dW} = stablehlo.dot_general {xN}, {r}, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,a]}, {ty [B,c]}) -> {ty [a,c]}\n" ++
+            s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [a,c]}\n" ++
+            s!"    {sW} = stablehlo.multiply {dW}, {lW} : {ty [a,c]}\n" ++
+            s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [a,c]}\n", o :: st)
+      | "denseBiasSgd", [bN, lrS], [_N, c] => do
+          -- dense bias update: dβ = reduce[0](dy) (sum over batch), β' = β − lr·dβ.
+          let z ← fresh; let dB ← fresh; let lB ← fresh; let sB ← fresh; let o ← fresh
+          pure (
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {dB} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [0] : ({ty [B,c]}, tensor<f32>) -> {ty [c]}\n" ++
+            s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [c]}\n" ++
+            s!"    {sB} = stablehlo.multiply {dB}, {lB} : {ty [c]}\n" ++
+            s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [c]}\n", o :: st)
+      | "convWeightSgd", [xN, wN, lrS], [_N, ic, oc, h, w, kH, kW] => do
+          -- conv weight update via the transpose-trick wgrad (batch as the conv
+          -- contraction), then W' = W − lr·dW. Same text as the per-example convWeightSgd.
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let xt ← fresh; let dt ← fresh
+          let raw ← fresh; let g ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*h*w]}) -> {ty [B,ic,h,w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,h,w]}) -> {ty [ic,B,h,w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {dr}, dims = [1, 0, 2, 3] : ({ty [B,oc,h,w]}) -> {ty [oc,B,h,w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [ic,B,h,w]}, {ty [oc,B,h,w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {g} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [oc,ic,kH,kW]}\n", o :: st)
       | _, _, _ =>
           pure (s!"    // [EfficientNet Item B] batched {tag} {names} {info} — backward render TODO\n", r :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
