@@ -442,6 +442,15 @@ inductive SHlo : Nat → Type where
       (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
       (v : Vec (N * (c * h * w))) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * h * w))
+  -- Batched SE GATE COTANGENT: `dgate[n,c] = Σ_{h,w} x[n,c,h,w]·dy[n,c,h,w]` — the
+  -- broadcast-adjoint of the Hadamard `x ⊙ dy`, i.e. the FIRST step of the SE gate
+  -- backward (the cotangent at the gate's sigmoid output). The un-fused-SE param-grad
+  -- ENTRY POINT: feeds `sigmoidBack → denseWeightSgdB(W₂)/denseBiasSgdB + denseRowBack(W₂)
+  -- → swishBack → denseWeightSgdB(W₁)/denseBiasSgdB`, exposing the SE dense param grads the
+  -- fused `seBackBatched` (input-cotangent only) cannot. `x` = the SE input (saved by name),
+  -- `e` = the SE-output cotangent. `den` = batched `broadcastFlat_has_vjp.backward (x⊙dy)`.
+  | seReduceB {N c h w : Nat} (xName : String) (x : Vec (N * (c * h * w))) :
+      SHlo (N * (c * h * w)) → SHlo (N * c)
   -- Chapter 8 (EfficientNet, BATCHED) param-SGD tail: the fused per-channel BN
   -- γ/β updates over the network layout `N·(oc·(h·w))`. `den` is the per-channel BN
   -- grad at the merged batch+spatial axis `m = N·(h·w)` (via `bnchwFwd`, the
@@ -807,6 +816,15 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
           (Mat.unflatten v (finProdFinEquiv.symm idx).1)
           (Mat.unflatten (den e) (finProdFinEquiv.symm idx).1)
           (finProdFinEquiv.symm idx).2
+  | _, .seReduceB (N := N) (c := c) (h := h) (w := w) _ x e =>
+      -- the SE gate cotangent: per example, the broadcast-adjoint of `x ⊙ dy`
+      -- (`broadcastFlat_has_vjp.backward` = sum each channel's spatial Hadamard).
+      fun idx =>
+        ∑ q : Fin (c * h * w),
+          if flatChannel c h w q = (finProdFinEquiv.symm idx).2 then
+            batchSlice N (c * h * w) x (finProdFinEquiv.symm idx).1 q
+              * batchSlice N (c * h * w) (den e) (finProdFinEquiv.symm idx).1 q
+          else 0
 
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
@@ -2228,6 +2246,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "bnBatchLABack" [gN, xN, es] [N, oc, h, w] (skel e)
   | _, .seBackBatched (N := N) (c := c) (h := h) (w := w) (r := r) w1 b1 w2 b2 vN _ _ _ _ _ e =>
       .batched "seBackBatched" [w1, b1, w2, b2, vN] [N, c, h, w, r] (skel e)
+  | _, .seReduceB (N := N) (c := c) (h := h) (w := w) xN _ e =>
+      .batched "seReduceB" [xN] [N, c, h, w] (skel e)
   | _, .bnGammaSgdB (N := N) (oc := oc) (h := h) (w := w) gN vN es lrS _ _ _ _ e =>
       .batched "bnGammaSgd" [gN, vN, es, lrS] [N, oc, h, w] (skel e)
   | _, .bnBetaSgdB (N := N) (oc := oc) (h := h) (w := w) bN lrS _ _ e =>
@@ -3661,6 +3681,17 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [c,1,kH,kW]}\n" ++
             s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [c,1,kH,kW]}\n" ++
             s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [c,1,kH,kW]}\n", o :: st)
+      | "seReduceB", [xN], [_N, c, h, w] => do
+          -- SE gate cotangent: dgate = reduce[2,3](x ⊙ dy). `xN` = SE input, `r` = the
+          -- SE-output cotangent dy. Output is the per-example per-channel gate cotangent
+          -- [B,c] (= the broadcast-adjoint of the Hadamard x⊙dy). Feeds the SE param grads.
+          let xr ← fresh; let dyr ← fresh; let z ← fresh; let xd ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {xd} = stablehlo.multiply {xr}, {dyr} : {ty [B,c,h,w]}\n" ++
+            s!"    {o} = stablehlo.reduce({xd} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n", o :: st)
       | _, _, _ =>
           pure (s!"    // [EfficientNet Item B] batched {tag} {names} {info} — backward render TODO\n", r :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)

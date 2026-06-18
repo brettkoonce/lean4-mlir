@@ -18,13 +18,31 @@ gap, net by net?
 > (+ round-trip repair, theorem holds); filled `emitTok` for ALL forward + backward batched tags (conv/
 > depthwise/bnBatch/swish/seBlock + bnBatchBack/conv·depthwise BackBatched/seBackBatched, self-contained
 > recompute); added EVERY batched param-SGD op (stem/conv/depthwise weights incl. 5×5, BN γ/β, dense W/b,
-> all biases via `bnBetaSgdB` = channel-sum). So every primitive the renderer needs now exists + compiles.
-> **REMAINING:** (5) the 262-param renderer `efficientnetTrainStepFaithfulV` (assemble fwd+backward+param-SGD
-> via `renderModule`, argSig from `EfficientNetLayout.specs`/the committed `efficientnet_fwd.mlir`); (6)
+> all biases via `bnBetaSgdB` = channel-sum).
+> **SCOPE CORRECTION (2026-06-18, found while starting the renderer — the doc UNDER-scoped item 5):** Item B's
+> SE work is the **fused** `batchOp seBlock` (fwd) + **fused** `seBackBatched` (bwd), which emits ONLY the SE
+> input-cotangent `dx`. But the committed trainer **un-fuses SE** and **trains all 4 SE dense params**
+> (`zW1/zb1/zW2/zb2` — 64 of the 262), and `EfficientNetClose` certifies them via the **dense** weight bridge
+> (needs the SE internals `s=GAP(x)`, `z=swish(dense W₁ s)` SAVED + internal cotangents). So the fused ops do
+> NOT suffice — the renderer needs an **un-fused batched SE** path, which Item B did not build. Minimal fix =
+> **ONE new core op `seReduceB`** ✅ DONE (2026-06-18, NOT yet committed): the bwd gate-cotangent
+> `dgate[n,c]=Σ_{h,w}(x⊙dy)` (= the batched `broadcastFlat_has_vjp.backward` — the FIRST step of the SE gate
+> backward). `seScaleB` turned out **unnecessary**: keep the FUSED `batchOp seBlock` for the forward `out`
+> (already iree-valid in `efficientnet_fwd.mlir`) and ADDITIONALLY emit the un-fused gate subnet `s=batchOp gap →
+> e1=batchOp dense W₁ → z=swishF → e2=batchOp dense W₂` ONLY to expose `s/e1/z/e2` for the param grads; `dx`
+> reuses the fused `seBackBatched`. So the SE param grads chain `seReduceB → sigmoidBack(e2) → denseWeightSgdB/
+> denseBiasSgdB (W₂) → denseRowBack(W₂) → swishBack(e1) → denseWeightSgdB/denseBiasSgdB (W₁)` — all existing ops.
+> Everything else (stem, 1×1 conv, depthwise 3×3/5×5, true-BN, dense head) uses the Item-B batched ops as-is.
+> `seReduceB` added through 4 sites (ctor/`den`/`skel`→`.batched "seReduceB"`/`emitTok`; the generic `.batched`
+> Raw/Tok/parseStack covers round-trip, NO new round-trip case); `lake build Proofs` green (2267 jobs, 0 err,
+> `StableHLOParse` roundtrip intact); iree-compiles on rocm/gfx1100 (10 KB vmfb).
+> **REMAINING:** (4b) ✅ `seReduceB` DONE (gating op landed, uncommitted); (5) the 262-param renderer
+> `efficientnetTrainStepFaithfulV` (assemble fwd+backward+param-SGD via `renderModule`, argSig from
+> `EfficientNetLayout.specs`/the committed `efficientnet_fwd.mlir`); (6)
 > re-emit `efficientnet_train_step.mlir` + iree-validate the whole 262-param net (the "full-16 train step"
-> headline); (7) §1 fold `EfficientNetFaithfulPoC` (BN/dense/conv = ~1-line cert delegations; depthwise/stem
+> headline); (7) §1 fold `EfficientNetFaithfulPoC` (BN/dense/conv/SE-dense = ~1-line cert delegations; depthwise/stem
 > need the **Σ_n batch-sum bridge** — the proof long pole); (8) §1a tie `EfficientNetTiePoC` (new vs mnv2:
-> swish — smooth, no relu6 kink — + the SE gate fan-in). Then convnext (same per-block-only backward; 7×7
+> swish — smooth, no relu6 kink — + the SE gate fan-in via `seReduceB`). Then convnext (same per-block-only backward; 7×7
 > depthwise + scalar LN + layer-scale), then vit (reconcile scalar-proven vs per-channel-`[192]`-emitted LN).
 >
 > _NOTE: the §1 matrix row (§1) + §5 enet bullet below still describe the PRE-correction state in places —_
