@@ -55,7 +55,7 @@ emitter does **not** print (independent hand-written string emitter).
 | **cifar8 (8-conv, no-BN)** | committed `.mlir` | ✅ `cifar8FwdGraph` rendered | ✅ **CLOSED** — `cifar8TrainStepFaithfulV` (CnnRender.lean) renders the whole 4-stage train step (8 conv + 3 dense, 22 params) as `pretty(provenGraph)`; conv via `CifarPoC.conv{W,B}_den` (generic), dense via the new generic `Cifar8PoC.dense{W,B}_den` | **NO new core ops** (pure reuse); committed bytes iree-compile on rocm/gfx1100 (271 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + ℝ→Float32) |
 | **cifar8-bn** | committed `.mlir` | ✅ `cifar8BnFwdGraph` rendered | ✅ **CLOSED** — `cifar8BnTrainStepFaithfulV` (CnnRender.lean) renders the whole BN train step (8 conv + 8 BN + 3 dense, 38 params) as `pretty(provenGraph)`; **no new ops, NO new proof** — every output's `den` = certified by the existing generics (`CifarPoC.conv{W,B}_den`, `CifarBnPoC.bn{Gamma,Beta}_den`, `Cifar8PoC.dense{W,B}_den`) | committed bytes iree-compile on rocm/gfx1100 (393 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin + BN `0<ε` + ℝ→Float32) |
 | **r34** | committed `.mlir` | ❌ hand-written (`TestResnet34Fwd`) | ✅ **CLOSED** — `resnet34TrainStepFaithfulV` (ResNet34Render.lean) renders the whole `[3,4,6,3]` train step (146 params) as `pretty(provenGraph)`: 7×7/s2 stem + 16 residual blocks (residual cotangent-sum via `addV` at each skip merge) + GAP + dense; **2 new core ops** `convStridedWeightSgd`/`convStridedBiasSgd` (7×7 stem + 3×3 strided down/proj), den-certified via `mnv2_render_stem_conv{W,b}_certified` (`ResNet34PoC.convStrided{W,B}_den`); 142 other params reuse the cifar conv/BN/dense generics | committed bytes iree-compile on rocm/gfx1100 (537 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin incl. residual fan-in sums + BN `0<ε` + ℝ→Float32) |
-| **mnv2** | committed `.mlir` | ❌ hand-written | ✅ **CLOSED (§1 fold, reduced 6-block)** — `mnv2TrainStepFaithfulV` (MobileNetV2Render.lean) renders the whole reduced-6-block train step (82 params) as `pretty(provenGraph)`; each param `den = certified` via `MobileNetV2FaithfulPoC` — **4 new core ops** `depthwise{,Strided}{Weight,Bias}Sgd` (StableHLO.lean, the per-channel `batch_group_count=c` transpose-trick weight + `convBiasSgd`-aliased bias), expand/project conv via `CifarPoC.conv{W,B}_den`, BN via `CifarBnPoC.bn{Gamma,Beta}_den`, dense via `Cifar8PoC.dense{W,B}_den`; committed bytes iree-compile on rocm/gfx1100 (789 KB vmfb), drop-in positional param layout | **§1a tie remains** (commit 3); the reduced-net + 2-block-VJP-witness are separate §1/§4 concerns (committed = reduced 6-block, NOT the full 17-block `mobilenetv2ForwardPaper`) |
+| **mnv2** | committed `.mlir` | ❌ hand-written | ✅ **CLOSED (§1 fold, reduced 6-block)** — `mnv2TrainStepFaithfulV` (MobileNetV2Render.lean) renders the whole reduced-6-block train step (82 params) as `pretty(provenGraph)`; each param `den = certified` via `MobileNetV2FaithfulPoC` — **4 new core ops** `depthwise{,Strided}{Weight,Bias}Sgd` (StableHLO.lean, the per-channel `batch_group_count=c` transpose-trick weight + `convBiasSgd`-aliased bias), expand/project conv via `CifarPoC.conv{W,B}_den`, BN via `CifarBnPoC.bn{Gamma,Beta}_den`, dense via `Cifar8PoC.dense{W,B}_den`; committed bytes iree-compile on rocm/gfx1100 (789 KB vmfb), drop-in positional param layout. **FULL 17-block paper net now also DONE**: §1 CLOSE (`mnv2TrainStepFaithfulVPaper`, 210 params, 559 KB vmfb), §1 fold den (`MobileNetV2FaithfulPoCPaper`), and §1a TIE (`mnv2_net_tied_certified`) all landed + 3-axiom clean | **§1a tie DONE** (full 17-block, `MobileNetV2TiePoCPaper`); remaining: trainer swap to the full `.mlir` (task 4) + 2-block→17-block VJP-witness upgrade (task 5, separate §4) |
 | **enet** | committed `.mlir` | ❌ hand-written | ❌ `renderBody` hand-written | `efficientnetFwdGraphB_full_faithful` (full 16 MBConv); backward per-block, **no whole-net** | no whole-net backward; emitted untied |
 | **convnext** | committed `.mlir` | ❌ hand-written | ❌ `renderBody` hand-written | `convNextFwdGraphT_faithful` (full [3,3,9,3]); backward per-block, **no whole-net** | no whole-net backward; emitted untied |
 | **vit** | committed `.mlir` | ❌ hand-written (`vitFwd`) | ❌ `vitBack` hand-written | **richest**: `vitFwdGraphKMHV_faithful` + whole-net `vitNetBackGraph_faithful` + full per-param `vit_render_*_chain_certified` | emitted untied **+ granularity gap**: whole-net backward proven for *scalar* LN, emitted uses *per-channel* `[192]` LN |
@@ -100,7 +100,8 @@ leaves both green.
 | **cifar8 (8-conv)** | ✅ conv+dense den-composed: real 4-stage forward threaded, cotangent = softmax-CE of the cifar8 forward (`cifar8LossCot_den`), all 16 conv params tied at the 4-stage backward chain (`cifar8_convs_tied_certified`), output `Wb` → `∂CE/∂Wb` (`cifar8_Wb_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written); cifar's chain repeated over 4 stages — all reused constructors (`cnnChainCotW2`/`cnnChainCotW1`/`cifarChainCotW2`), no new chain content | **✅ TIED** |
 | **cifar8-bn** | ✅ conv+BN+dense den-composed: real cifar8-BN forward threaded, cotangent = softmax-CE of the BN forward (`cifar8BnLossCot_den`), all 32 conv/BN params tied at the 4-stage BN backward chain (`cifar8Bn_convbn_tied_certified`); dense head via the pre-audited generics | ◐ level-2: cotangents at correctly-threaded SSAs (conv/BN backward rendered hand-written); cifar8's 4-stage chain + a BN-back at every conv — pure reuse, no new content | **✅ TIED** |
 | **r34** | ✅ **whole net** den-composed: all 16 residual blocks + stem threaded at the real `resnet34Forward_full_pc` activations, cotangent composed from the loss through dense/GAP-back + the **residual fan-in sum** at every skip (`idBlockCotIn`/`downBlockCotIn`); capstone `r34_net_tied_certified` bundles every block's tie + dense total-loss fold + `r34LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); the new fan-in-sum constructors add the skip+body cotangent merge cnn/cifar (no residuals) lacked | **✅ TIED** |
-| mnv2 / enet / convnext / vit | — (train-step fold WIP) | — | — |
+| **mnv2** (full 17-block paper) | ✅ **whole net** den-composed: all 17 inverted-residual blocks + stem + conv-bn-relu6 head threaded at the real `mobilenetv2ForwardPaper` activations (single-ε), cotangent composed from the loss through dense/GAP-back + the head + the **residual fan-in `+ dyOut`** at every stride-1 skip (`ivS1SkipCotInAt`); capstone `mnv2_net_tied_certified` bundles all 210 params' ties + dense total-loss fold + `mnv2LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); relu6 two-kink mask + linear project bottleneck (project-BN cot = `dyOut` directly) are the new content vs r34 | **✅ TIED** |
+| enet / convnext / vit | — (train-step fold WIP) | — | — |
 
 **The close ("tie them together").** Feed the *proven* cotangent/forward subgraph directly
 into each consumer (`weightSgd … (lossCotGraph …)` instead of `.operand %dy …`), so each
@@ -255,11 +256,37 @@ _**Full-net scope (tasks 3–6):**_
    Crib the schedule from the TEST-ONLY `tests/TestMobilenetV2TrainPC.lean` (which already renders the full
    net for AdamW — forward via `pretty(mobilenetv2FwdGraphFullPC)`, hand-emitted tail). Write the committed
    full SGD `.mlir` + iree-validate. ~214 param tensors (vs reduced 82; +132 = 11 extra blocks ×12)._
-2. _**Full §1 fold (den)** — `MobileNetV2FaithfulPoCPaper`: den=certified for all 214 params (generic-lemma
-   instantiation; the depthwise den lemmas already exist). Wire to lakefile + AuditAxioms._
-3. _**Full §1a TIE** — `MobileNetV2TiePoCPaper`: whole-net thread of `mobilenetv2ForwardPaper` (17 blocks),
-   per-block-type tie lemmas (no-expand/skip/strided) + fan-in cots + `@[irreducible]` wrappers (the r34
-   heartbeat lesson, MORE acute at 17 blocks). Reuse `MobileNetV2ChainClose` cotangents._
+2. _**Full §1 fold (den) — ✅ DONE (this session)**: `MobileNetV2FaithfulPoCPaper.lean`. Confirmed the
+   17-block paper renderer emits ONLY the twelve param-SGD op types the reduced net already exercises (no
+   new op type, no new block-level param op — the no-expand b1 / no-skip b11,b17 variants change the
+   forward/backward WIRING, not the param ops). So every one of the 210 params is den=certified by an
+   already-audited generic — the **cifar8-bn lesson at full scale, ZERO new ops/lemmas**. Added six
+   per-block-type capstones (`mnv2{Stem,NoExp,Stride1,Stride2,Head,Dense}ParamsCertified`), each GENERIC in
+   the block dims (so one theorem covers every block of that type) and each conjunct a direct delegation to
+   the audited `CifarPoC.conv{W,B}_den` (expand/project/head 1×1) / `Mnv2PoC.depthwise{,Strided}{W,B}_den` /
+   `ResNet34PoC.convStrided{W,B}_den` (stem) / `CifarBnPoC.bn{Gamma,Beta}_den` / `Cifar8PoC.dense{W,B}_den`.
+   210-param accounting (stem 4 + b1 no-exp 8 + b2..b17 16×12=192 + head 4 + dense 2). Wired to lakefile
+   `Proofs` root + `tests/AuditAxioms.lean`; `lake build Proofs` green (2266 jobs); all six capstones
+   3-axiom clean `[propext, Classical.choice, Quot.sound]`. Gotcha hit: a literal `-/` inside a header table
+   cell (`dim-/cotangent`) prematurely closed the module doc-comment — escaped it._
+3. _**Full §1a TIE — ✅ DONE (this session)**: `MobileNetV2TiePoCPaper.lean`. `mnv2_net_tied_certified`
+   threads `mobilenetv2ForwardPaper`'s real activations (single-ε per-channel-BN, = the renderer's
+   forward) through all 17 blocks + stem + conv-bn-relu6 head + dense, composing the backward cotangent
+   from the loss `g` down through dense (`dense_has_vjp`) + GAP (`globalAvgPoolFlat_has_vjp`) + the head +
+   every block's backward, with the **residual fan-in `+ dyOut` at each of the ten stride-1 skip merges**.
+   THREE per-block-type tie defs+theorems (`ivS1Tied` 12-param — covers all stride-1 skip AND the no-skip
+   widenings b11/b17; `ivS2Tied` 12-param strided; `ivNoExpTied` 8-param b1) + stem (4) + conv-bn-relu6
+   head (4) + dense fold + loss-cot. Each conjunct delegates to the §1-fold generics
+   (`CifarPoC.conv*`/`Mnv2PoC.depthwise{,Strided}*`/`CifarBnPoC.bn*`/`ResNet34PoC.convStrided*`/
+   `Cifar8PoC.dense*`) at the `MobileNetV2ChainClose` cotangents (`invresCotPc/Dc/EcS1/EcS2`, `mnv2StemCot`).
+   What's new vs r34: the **relu6 two-kink mask** (`if 0<x∧x<6`, the `selectMid` form) at the expand+
+   depthwise BN outputs, the **linear project bottleneck** (project-BN cot = `dyOut` directly, no relu6),
+   3 block variants + the conv-bn-relu6 head. `@[irreducible]` `FwdO`/`CotInAt`/`TiedAt` wrappers keep the
+   17-deep chain opaque (r34 heartbeat lesson; `maxHeartbeats 8000000`, capstone elaborates in ~2s).
+   Wired to lakefile + AuditAxioms; `lake build Proofs` green (2267 jobs); all 6 tie capstones 3-axiom
+   clean. ZERO new core ops, ZERO new bridges — pure thread + fan-in over the existing generics._
+   _Residual: block backward rendered hand-written (cotangent SSA↔chain-cot per-op trust); per-op
+   `pretty` lexing; relu6 two-kink + BN `0<ε` smoothness; ℝ→Float32 — the boundary every fold carries._
 4. _**Trainer swap** — point `MainMobilenetV2Verified`/`VerifiedTrain` at the full SGD `.mlir` (currently
    reads the reduced 6-block `mobilenetv2_train_step.mlir`); validate it trains (the map flagged a
    data-loader bug blocking the swap — investigate). Reduced renderer/PoC → demo/stepping-stone._

@@ -44,6 +44,7 @@ import LeanMlir.Proofs.ResNet34FaithfulPoC
 import LeanMlir.Proofs.ResNet34TiePoC
 import LeanMlir.Proofs.MobileNetV2FaithfulPoC
 import LeanMlir.Proofs.MobileNetV2FaithfulPoCPaper
+import LeanMlir.Proofs.MobileNetV2TiePoCPaper
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
@@ -458,6 +459,15 @@ open Proofs
 #print axioms Mnv2PaperPoC.mnv2Stride2ParamsCertified
 #print axioms Mnv2PaperPoC.mnv2HeadParamsCertified
 #print axioms Mnv2PaperPoC.mnv2DenseParamsCertified
+-- ch7-MobileNetV2 FULL 17-block paper §1a TIE: the whole 210-param train step den-composed
+-- forward→loss→backward through the REAL mobilenetv2ForwardPaper + the residual-fan-in cotangent
+-- chain. Per-block-type tie lemmas applied across all 17 blocks + stem + conv-bn-relu6 head + dense.
+#print axioms Mnv2TiePoC.mnv2_ivS1_tied
+#print axioms Mnv2TiePoC.mnv2_ivS2_tied
+#print axioms Mnv2TiePoC.mnv2_ivNoExp_tied
+#print axioms Mnv2TiePoC.mnv2_stem_tied
+#print axioms Mnv2TiePoC.mnv2_head_tied
+#print axioms Mnv2TiePoC.mnv2_net_tied_certified
 -- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
 -- weight/bias bridges completing all three layers; Crux A).
 #print axioms IR.mlp_layer0_weight_grad_bridge

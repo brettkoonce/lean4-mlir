@@ -314,7 +314,13 @@ lean_lib «Proofs» where
              -- cifar8-bn lesson at full scale. Six per-block-type capstones (stem/no-exp/stride-1/
              -- stride-2/head/dense), each delegating to the audited CifarPoC/CifarBnPoC/Cifar8PoC/
              -- Mnv2PoC/ResNet34PoC generics (MobileNetV2FaithfulPoCPaper.lean).
-             `LeanMlir.Proofs.MobileNetV2FaithfulPoCPaper]
+             `LeanMlir.Proofs.MobileNetV2FaithfulPoCPaper,
+             -- ch7-MobileNetV2 FULL 17-block paper §1a TIE: the whole 210-param train step tied
+             -- through the REAL mobilenetv2ForwardPaper + the loss-driven backward chain (relu6
+             -- two-kink masks, residual fan-in at every stride-1 skip). Per-block-type tie lemmas
+             -- (no-exp/stride-1/stride-2/stem/head) applied across all 17 blocks via @[irreducible]
+             -- FwdO/CotInAt/TiedAt wrappers (the r34 heartbeat lesson) (MobileNetV2TiePoCPaper.lean).
+             `LeanMlir.Proofs.MobileNetV2TiePoCPaper]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
