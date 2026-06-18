@@ -2027,10 +2027,30 @@ inductive Raw where
   | headPadF   (N heads d hIdx : Nat)      : Raw → Raw
   | rowScaleF  (g : String) (m n : Nat)    : Raw → Raw
   | rowBiasF   (b : String) (m n : Nat)    : Raw → Raw
-  -- EfficientNet batched ops (`batchOp`/`bnBatchF`): the renderable skeleton keeps
-  -- only a tag + shape info; the concrete batched StableHLO emission is Item B.
-  | batched    (tag : String) (info : List Nat) : Raw → Raw
+  -- EfficientNet batched ops (`batchOp`/`bnBatchF`/the batched backward ops): the
+  -- renderable skeleton keeps a tag discriminating the op, the SSA names the emit
+  -- references (weight/bias/BN-input/γ/ε/SE-input names), and shape info. The tag
+  -- is the BatchableOp variant ("conv"/"depthwise"/"seBlock"/…) for forward ops or
+  -- the backward op name; this is what lets `emitTok` reconstruct real StableHLO.
+  | batched    (tag : String) (names : List String) (info : List Nat) : Raw → Raw
 deriving DecidableEq, Repr, Inhabited
+
+/-- The `(tag, names, info)` skeleton descriptor of a batched per-example op — the
+    discriminator + the SSA names the emit references + the shape dims. Keeps the
+    `batchOp` skel one line and isolates the 7-variant match into a pure function. -/
+def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List String × List Nat)
+  | .conv (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
+      ("conv", [wN, bN], [N, ic, oc, h, w, kH, kW])
+  | .convStrided (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
+      ("convStrided", [wN, bN], [N, ic, oc, h, w, kH, kW])
+  | .depthwise (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
+      ("depthwise", [wN, bN], [N, c, h, w, kH, kW])
+  | .depthwiseStrided (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
+      ("depthwiseStrided", [wN, bN], [N, c, h, w, kH, kW])
+  | .dense (c := c) wN bN _ _ => ("dense", [wN, bN], [N, a, c])
+  | .gap (c := c) (h := h) (w := w) => ("gap", [], [N, c, h, w])
+  | .seBlock (c := c) (h := h) (w := w) (r := r) w1 b1 w2 b2 _ _ _ _ =>
+      ("seBlock", [w1, b1, w2, b2], [N, c, h, w, r])
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
     index; keeps op structure, shapes, leaf names). -/
@@ -2118,30 +2138,31 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .patchEmbedF (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) wN bN cN pN _ _ _ _ e =>
       .patchEmbedF wN bN cN pN ic H W P N D (skel e)
   | _, .patchEmbedBack (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ _ e =>
-      .batched "patchEmbedBack" [ic, H, W, P, N, D] (skel e)
+      .batched "patchEmbedBack" [] [ic, H, W, P, N, D] (skel e)
   | _, .clsSliceF (N := N) (D := D) e => .clsSliceF N D (skel e)
   | _, .clsPadF (N := N) (D := D) e => .clsPadF N D (skel e)
   | _, .headSliceF (N := N) (heads := heads) (d := d) h e => .headSliceF N heads d h.val (skel e)
   | _, .headPadF (N := N) (heads := heads) (d := d) h e => .headPadF N heads d h.val (skel e)
   | _, .rowScaleF (m := m) (n := n) gN _ e => .rowScaleF gN m n (skel e)
   | _, .rowBiasF (m := m) (n := n) bN _ e => .rowBiasF bN m n (skel e)
-  | _, .batchOp (N := N) (a := a) (b := b) _ e => .batched "batchOp" [N, a, b] (skel e)
-  | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
-      .batched "bnBatch" [N, oc, h, w] (skel e)
-  | _, .bnBatchBack (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
-      .batched "bnBatchBack" [N, oc, h, w] (skel e)
-  | _, .convBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ e =>
-      .batched "convBackBatched" [N, ic, oc, h, w] (skel e)
-  | _, .convStridedBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ e =>
-      .batched "convStridedBackBatched" [N, ic, oc, h, w] (skel e)
-  | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ _ _ e =>
-      .batched "depthwiseBackBatched" [N, c, h, w] (skel e)
-  | _, .depthwiseStridedBackBatched (N := N) (c := c) (h := h) (w := w) _ _ _ e =>
-      .batched "depthwiseStridedBackBatched" [N, c, h, w] (skel e)
-  | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ _ _ e =>
-      .batched "bnBatchLABack" [N, oc, h, w] (skel e)
-  | _, .seBackBatched (N := N) (c := c) (h := h) (w := w) _ _ _ _ _ _ _ _ _ e =>
-      .batched "seBackBatched" [N, c, h, w] (skel e)
+  | _, .batchOp (N := N) op e =>
+      let (tag, nms, inf) := batchOpDescr N op; .batched tag nms inf (skel e)
+  | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) gN bN es _ _ _ e =>
+      .batched "bnBatch" [gN, bN, es] [N, oc, h, w] (skel e)
+  | _, .bnBatchBack (N := N) (oc := oc) (h := h) (w := w) gN xN es _ _ _ e =>
+      .batched "bnBatchBack" [gN, xN, es] [N, oc, h, w] (skel e)
+  | _, .convBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ e =>
+      .batched "convBackBatched" [wN] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .convStridedBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ e =>
+      .batched "convStridedBackBatched" [wN] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ e =>
+      .batched "depthwiseBackBatched" [wN] [N, c, h, w, kH, kW] (skel e)
+  | _, .depthwiseStridedBackBatched (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ e =>
+      .batched "depthwiseStridedBackBatched" [wN] [N, c, h, w, kH, kW] (skel e)
+  | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) gN xN es _ _ _ e =>
+      .batched "bnBatchLABack" [gN, xN, es] [N, oc, h, w] (skel e)
+  | _, .seBackBatched (N := N) (c := c) (h := h) (w := w) (r := r) w1 b1 w2 b2 _ _ _ _ _ e =>
+      .batched "seBackBatched" [w1, b1, w2, b2] [N, c, h, w, r] (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -2208,7 +2229,7 @@ inductive Tok where
   | headPadF   (N heads d hIdx : Nat)      : Tok
   | rowScaleF  (g : String) (m n : Nat)    : Tok
   | rowBiasF   (b : String) (m n : Nat)    : Tok
-  | batched    (tag : String) (info : List Nat) : Tok
+  | batched    (tag : String) (names : List String) (info : List Nat) : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -2276,7 +2297,7 @@ def toToks : Raw → List Tok
   | .headPadF N heads d hIdx e   => toToks e ++ [.headPadF N heads d hIdx]
   | .rowScaleF g m n e    => toToks e ++ [.rowScaleF g m n]
   | .rowBiasF b m n e     => toToks e ++ [.rowBiasF b m n]
-  | .batched tag info e   => toToks e ++ [.batched tag info]
+  | .batched tag names info e   => toToks e ++ [.batched tag names info]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -3137,12 +3158,134 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [2] : ({ty [n]}) -> {ty [B,m,n]}\n" ++
         s!"    {ad} = stablehlo.add {xn}, {bb} : {ty [B,m,n]}\n" ++
         s!"    {o} = stablehlo.reshape {ad} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
-  | .batched tag info, r :: st =>
-      -- EfficientNet batched op: the concrete batched StableHLO emission (the
-      -- `[N,C,H,W]` conv/depthwise/SE fragments + the reduce-[0,2,3] batch-norm)
-      -- is Item B. Item A is forward-graph faithfulness (`den`), which never calls
-      -- `emit`; here we record the op and pass the result through.
-      pure (s!"    // [EfficientNet Item B] batched {tag} {info} — render TODO\n", r :: st)
+  | .batched tag names info, r :: st =>
+      -- EfficientNet batched op: emit the concrete `[N,C,H,W]` StableHLO from the
+      -- tag (which op) + names (weight/bias/BN-input/SE-input/γ/ε SSA names) + info
+      -- (shape dims). Batched values flow as 2-D `[B, c·h·w]` (B = batch); each op
+      -- reshapes its operand to 4-D, computes, reshapes back — uniform with the
+      -- per-example ops (`convWeightSgd`/`denseRowF` do the same). Backward ops are
+      -- self-contained: they recompute forward intermediates from the carried
+      -- input/weight names (the mnv2 pattern). `den` never calls `emit`; this text
+      -- is iree-validated, not theorem-tied (the per-op lexing trust the whole
+      -- suite carries). Backward tags are filled in the next pass.
+      match tag, names, info with
+      | "conv", [wN, bN], [_N, ic, oc, h, w, kH, kW] => do
+          let p := (kH - 1) / 2
+          let xr ← fresh; let cc ← fresh; let bb ← fresh; let ca ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, ic*h*w]}) -> {ty [B,ic,h,w]}\n" ++
+            s!"    {cc} = stablehlo.convolution({xr}, {wN})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [B,ic,h,w]}, {ty [oc,ic,kH,kW]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {ca} = stablehlo.add {cc}, {bb} : {ty [B,oc,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {ca} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
+      | "convStrided", [wN, bN], [_N, ic, oc, h, w, kH, kW] => do
+          let p := (kH - 1) / 2
+          let xr ← fresh; let cc ← fresh; let bb ← fresh; let ca ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
+            s!"    {cc} = stablehlo.convolution({xr}, {wN})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [2, 2], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [B,ic,2*h,2*w]}, {ty [oc,ic,kH,kW]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {ca} = stablehlo.add {cc}, {bb} : {ty [B,oc,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {ca} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
+      | "depthwise", [wN, bN], [_N, c, h, w, kH, kW] => do
+          let p := (kH - 1) / 2
+          let xr ← fresh; let cc ← fresh; let bb ← fresh; let ca ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {cc} = stablehlo.convolution({xr}, {wN})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      " ++ "{" ++ s!"batch_group_count = 1 : i64, feature_group_count = {c} : i64" ++ "}" ++
+            s!" : ({ty [B,c,h,w]}, {ty [c,1,kH,kW]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [c]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {ca} = stablehlo.add {cc}, {bb} : {ty [B,c,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {ca} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+      | "depthwiseStrided", [wN, bN], [_N, c, h, w, kH, kW] => do
+          let p := (kH - 1) / 2
+          let xr ← fresh; let cc ← fresh; let bb ← fresh; let ca ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
+            s!"    {cc} = stablehlo.convolution({xr}, {wN})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [2, 2], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      " ++ "{" ++ s!"batch_group_count = 1 : i64, feature_group_count = {c} : i64" ++ "}" ++
+            s!" : ({ty [B,c,2*h,2*w]}, {ty [c,1,kH,kW]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [c]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {ca} = stablehlo.add {cc}, {bb} : {ty [B,c,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {ca} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+      | "dense", [wN, bN], [_N, a, c] => do
+          let dg ← fresh; let bb ← fresh; let o ← fresh
+          pure (
+            s!"    {dg} = stablehlo.dot_general {r}, {wN}, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,a]}, {ty [a,c]}) -> {ty [B,c]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [c]}) -> {ty [B,c]}\n" ++
+            s!"    {o} = stablehlo.add {dg}, {bb} : {ty [B,c]}\n", o :: st)
+      | "gap", [], [_N, c, h, w] => do
+          let xr ← fresh; let z ← fresh; let sr ← fresh; let nf ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {sr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n" ++
+            s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
+            s!"    {o} = stablehlo.divide {sr}, {nf} : {ty [B,c]}\n", o :: st)
+      | "seBlock", [w1, b1, w2, b2], [_N, c, h, w, rr] => do
+          let xr ← fresh; let z ← fresh; let sqs ← fresh; let sqnf ← fresh; let sq ← fresh
+          let exd ← fresh; let exbb ← fresh; let ex ← fresh; let a1s ← fresh; let a1 ← fresh
+          let h2d ← fresh; let h2bb ← fresh; let h2 ← fresh; let gate ← fresh; let gb ← fresh
+          let se ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {sqs} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c]}\n" ++
+            s!"    {sqnf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
+            s!"    {sq} = stablehlo.divide {sqs}, {sqnf} : {ty [B,c]}\n" ++
+            s!"    {exd} = stablehlo.dot_general {sq}, {w1}, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,c]}, {ty [c,rr]}) -> {ty [B,rr]}\n" ++
+            s!"    {exbb} = stablehlo.broadcast_in_dim {b1}, dims = [1] : ({ty [rr]}) -> {ty [B,rr]}\n" ++
+            s!"    {ex} = stablehlo.add {exd}, {exbb} : {ty [B,rr]}\n" ++
+            s!"    {a1s} = stablehlo.logistic {ex} : {ty [B,rr]}\n" ++
+            s!"    {a1} = stablehlo.multiply {ex}, {a1s} : {ty [B,rr]}\n" ++
+            s!"    {h2d} = stablehlo.dot_general {a1}, {w2}, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,rr]}, {ty [rr,c]}) -> {ty [B,c]}\n" ++
+            s!"    {h2bb} = stablehlo.broadcast_in_dim {b2}, dims = [1] : ({ty [c]}) -> {ty [B,c]}\n" ++
+            s!"    {h2} = stablehlo.add {h2d}, {h2bb} : {ty [B,c]}\n" ++
+            s!"    {gate} = stablehlo.logistic {h2} : {ty [B,c]}\n" ++
+            s!"    {gb} = stablehlo.broadcast_in_dim {gate}, dims = [0, 1] : ({ty [B,c]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {se} = stablehlo.multiply {xr}, {gb} : {ty [B,c,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {se} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+      | "bnBatch", [gN, bN, es], [_N, oc, h, w] => do
+          let xr ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh
+          let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh
+          let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh; let xh ← fresh
+          let gb ← fresh; let btb ← fresh; let gx ← fresh; let o4 ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {nf} = stablehlo.constant dense<{B*h*w}.0> : {ty [B,oc,h,w]}\n" ++
+            s!"    {ep} = stablehlo.constant dense<{es}> : {ty [B,oc,h,w]}\n" ++
+            s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,oc,h,w]}\n" ++
+            s!"    {xc} = stablehlo.subtract {xr}, {mu} : {ty [B,oc,h,w]}\n" ++
+            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,oc,h,w]}\n" ++
+            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,oc,h,w]}\n" ++
+            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+            s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+            s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {btb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {gx} = stablehlo.multiply {xh}, {gb} : {ty [B,oc,h,w]}\n" ++
+            s!"    {o4} = stablehlo.add {gx}, {btb} : {ty [B,oc,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {o4} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
+      | _, _, _ =>
+          pure (s!"    // [EfficientNet Item B] batched {tag} {names} {info} — backward render TODO\n", r :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
