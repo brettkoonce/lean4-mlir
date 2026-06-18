@@ -464,6 +464,17 @@ inductive SHlo : Nat → Type where
   | convWeightSgdB {N ic oc h w kH kW : Nat} (xName wName lrStr : String)
       (b : Vec oc) (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
                                                           : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
+  -- Batched STEM 3×3-strided conv weight + DEPTHWISE weight (stride 1/2) SGD. Same
+  -- Σ_n shared-weight batch sum; the depthwise grad is HasVJP3 (flatten-bridged).
+  | convStridedWeightSgdB {N ic oc h w kH kW : Nat} (xName wName lrStr : String)
+      (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
+                                                          : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
+  | depthwiseWeightSgdB {N c h w kH kW : Nat} (xName wName lrStr : String)
+      (b : Vec c) (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW) (lr : ℝ)
+                                                          : SHlo (N * (c * h * w)) → SHlo (c * kH * kW)
+  | depthwiseStridedWeightSgdB {N c h w kH kW : Nat} (xName wName lrStr : String)
+      (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW) (lr : ℝ)
+                                                          : SHlo (N * (c * h * w)) → SHlo (c * kH * kW)
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -694,6 +705,18 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun idx => Kernel4.flatten W idx - lr * ∑ n : Fin N,
         (conv2d_weight_grad_has_vjp b (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
+  | _, .convStridedWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ b x W lr e =>
+      fun idx => Kernel4.flatten W idx - lr * ∑ n : Fin N,
+        (flatConvStride2_weight_grad_has_vjp b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
+          (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
+  | _, .depthwiseWeightSgdB (N := N) (c := c) (h := h) (w := w) _ _ _ b x W lr e =>
+      fun idx => Tensor3.flatten W idx - lr * ∑ n : Fin N,
+        Tensor3.flatten ((depthwise_weight_grad_has_vjp3 b (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward
+          W (Tensor3.unflatten (batchSlice N (c*h*w) (den e) n))) idx
+  | _, .depthwiseStridedWeightSgdB (N := N) (c := c) (h := h) (w := w) _ _ _ b x W lr e =>
+      fun idx => Tensor3.flatten W idx - lr * ∑ n : Fin N,
+        (depthwiseStride2_weight_grad_has_vjp b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
+          (Tensor3.flatten W) (batchSlice N (c*h*w) (den e) n) idx
   | _, .reluF e        => fun i => max (den e i) 0
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
   | _, .relu6F e       => fun i => min (max (den e i) 0) 6
@@ -2215,6 +2238,12 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "denseBiasSgd" [bN, lrS] [N, c] (skel e)
   | _, .convWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
       .batched "convWeightSgd" [xN, wN, lrS] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .convStridedWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
+      .batched "convStridedWeightSgd" [xN, wN, lrS] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .depthwiseWeightSgdB (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
+      .batched "depthwiseWeightSgd" [xN, wN, lrS] [N, c, h, w, kH, kW] (skel e)
+  | _, .depthwiseStridedWeightSgdB (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
+      .batched "depthwiseStridedWeightSgd" [xN, wN, lrS] [N, c, h, w, kH, kW] (skel e)
 
 /-- One serialized token: an opcode with shapes/names; operands are positional. -/
 inductive Tok where
@@ -3571,6 +3600,67 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [oc,ic,kH,kW]}\n" ++
             s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [oc,ic,kH,kW]}\n" ++
             s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [oc,ic,kH,kW]}\n", o :: st)
+      | "convStridedWeightSgd", [xN, wN, lrS], [_N, ic, oc, h, w, kH, kW] => do
+          -- stem 3×3 s2 weight: zero-upsample dy to 2h×2w then the transpose-trick wgrad.
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
+          let raw ← fresh; let g ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,2*h,2*w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,2*h,2*w]}) -> {ty [ic,B,2*h,2*w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,2*h,2*w]}) -> {ty [oc,B,2*h,2*w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,2*h,2*w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {g} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [oc,ic,kH,kW]}\n", o :: st)
+      | "depthwiseWeightSgd", [xN, wN, lrS], [_N, c, h, w, kH, kW] => do
+          -- depthwise weight: per-channel transpose-trick wgrad (batch_group_count=c).
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let xt ← fresh; let dt ← fresh
+          let raw ← fresh; let g ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,c,h,w]}) -> {ty [c,B,h,w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {dr}, dims = [1, 0, 2, 3] : ({ty [B,c,h,w]}) -> {ty [c,B,h,w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = " ++ toString c ++ " : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [c,B,h,w]}, {ty [c,B,h,w]}) -> {ty [1,c,kH,kW]}\n" ++
+            s!"    {g} = stablehlo.reshape {raw} : ({ty [1,c,kH,kW]}) -> {ty [c,1,kH,kW]}\n" ++
+            s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [c,1,kH,kW]}\n" ++
+            s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [c,1,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [c,1,kH,kW]}\n", o :: st)
+      | "depthwiseStridedWeightSgd", [xN, wN, lrS], [_N, c, h, w, kH, kW] => do
+          -- strided depthwise weight: upsample dy to 2h×2w then the per-channel wgrad.
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
+          let raw ← fresh; let g ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,2*h,2*w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,c,2*h,2*w]}) -> {ty [c,B,2*h,2*w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,c,2*h,2*w]}) -> {ty [c,B,2*h,2*w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = " ++ toString c ++ " : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [c,B,2*h,2*w]}, {ty [c,B,2*h,2*w]}) -> {ty [1,c,kH,kW]}\n" ++
+            s!"    {g} = stablehlo.reshape {raw} : ({ty [1,c,kH,kW]}) -> {ty [c,1,kH,kW]}\n" ++
+            s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [c,1,kH,kW]}\n" ++
+            s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [c,1,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [c,1,kH,kW]}\n", o :: st)
       | _, _, _ =>
           pure (s!"    // [EfficientNet Item B] batched {tag} {names} {info} — backward render TODO\n", r :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
