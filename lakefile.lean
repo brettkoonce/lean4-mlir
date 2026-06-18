@@ -308,7 +308,13 @@ lean_lib «Proofs» where
              -- as pretty(provenGraph) — every line pretty of a verified SHlo node, the depthwise
              -- param updates via the new depthwise SGD ops; writes verified_mlir/mobilenetv2_train_step.mlir
              -- (MobileNetV2Render.lean, the peer of ResNet34Render.lean).
-             `LeanMlir.Proofs.MobileNetV2Render]
+             `LeanMlir.Proofs.MobileNetV2Render,
+             -- ch7-MobileNetV2 FULL 17-block paper §1 fold (den): every one of the 210 params of
+             -- mnv2TrainStepFaithfulVPaper denotes the certified step — ZERO new ops/lemmas, the
+             -- cifar8-bn lesson at full scale. Six per-block-type capstones (stem/no-exp/stride-1/
+             -- stride-2/head/dense), each delegating to the audited CifarPoC/CifarBnPoC/Cifar8PoC/
+             -- Mnv2PoC/ResNet34PoC generics (MobileNetV2FaithfulPoCPaper.lean).
+             `LeanMlir.Proofs.MobileNetV2FaithfulPoCPaper]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

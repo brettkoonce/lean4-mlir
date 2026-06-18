@@ -43,6 +43,7 @@ import LeanMlir.Proofs.ResNet34ChainClose
 import LeanMlir.Proofs.ResNet34FaithfulPoC
 import LeanMlir.Proofs.ResNet34TiePoC
 import LeanMlir.Proofs.MobileNetV2FaithfulPoC
+import LeanMlir.Proofs.MobileNetV2FaithfulPoCPaper
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
@@ -448,6 +449,15 @@ open Proofs
 #print axioms Mnv2PoC.depthwiseB_den
 #print axioms Mnv2PoC.depthwiseStridedW_den
 #print axioms Mnv2PoC.depthwiseStridedB_den
+-- ch7-MobileNetV2 FULL 17-block paper §1 fold (den): all 210 params of the paper train step
+-- (mnv2TrainStepFaithfulVPaper) den-certified, one capstone per block-type param profile. ZERO
+-- new ops/lemmas — every conjunct delegates to the audited generics (cifar8-bn lesson at scale).
+#print axioms Mnv2PaperPoC.mnv2StemParamsCertified
+#print axioms Mnv2PaperPoC.mnv2NoExpParamsCertified
+#print axioms Mnv2PaperPoC.mnv2Stride1ParamsCertified
+#print axioms Mnv2PaperPoC.mnv2Stride2ParamsCertified
+#print axioms Mnv2PaperPoC.mnv2HeadParamsCertified
+#print axioms Mnv2PaperPoC.mnv2DenseParamsCertified
 -- M2: the MLP per-layer parameter-gradient assembly (layer-0 cotangent + the
 -- weight/bias bridges completing all three layers; Crux A).
 #print axioms IR.mlp_layer0_weight_grad_bridge
