@@ -534,10 +534,12 @@ theorem liveFwd2_jacobian_nonzero : fderiv ℝ liveFwd2 Y ≠ 0 := by
     simpa using ((hasDerivAt_id (0 : ℝ)).smul_const V).const_add Y
   have hcomp : HasDerivAt (fun t : ℝ => liveFwd2 (Y + t • V)) (0 : Vec 2) 0 := by
     have := HasFDerivAt.comp_hasDerivAt_of_eq (0 : ℝ) hfd hsmul (by simp)
-    simpa using this
+    exact this
   have hpi := hasDerivAt_pi.mp hcomp
   have hd : HasDerivAt (fun t : ℝ => liveFwd2 (Y + t • V) 0 - liveFwd2 (Y + t • V) 1) 0 0 := by
-    have := (hpi 0).sub (hpi 1); simpa using this
+    have := (hpi 0).sub (hpi 1)
+    simp only [Pi.zero_apply, sub_zero] at this
+    exact this
   rw [liveFwd2_eq_S] at hd
   exact (Rr_pos 0).ne' (gd_hasDerivAt.unique hd)
 

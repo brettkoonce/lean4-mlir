@@ -1914,12 +1914,12 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
             (conv2d (Kernel4.unflatten v) b₂ x₁)))) l > 0
           then (1:ℝ) else 0)
-        (fun l => by dsimp only; split_ifs <;> simp)
+        (fun l => by split_ifs <;> simp)
         (fun q => if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
             (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q > 0
           then (1:ℝ) else 0)
-        (fun q => by dsimp only; split_ifs <;> simp)
+        (fun q => by split_ifs <;> simp)
         (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
           (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))))))))))
@@ -4180,7 +4180,7 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
               (relu (c * (2*h) * (2*w)) (Tensor3.flatten
                 (conv2d (Kernel4.unflatten u) b₁ x₀)))))))) l > 0
           then (1:ℝ) else 0)
-        (fun l => by dsimp only; split_ifs <;> simp)
+        (fun l => by split_ifs <;> simp)
         (fun q => if dense W₄ b₄ (relu d₃ (dense W₃ b₃
           (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
@@ -4188,7 +4188,7 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
                 (conv2d (Kernel4.unflatten u)
                   b₁ x₀)))))))))) q > 0
           then (1:ℝ) else 0)
-        (fun q => by dsimp only; split_ifs <;> simp)
+        (fun q => by split_ifs <;> simp)
         (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
           (dense W₃ b₃ (maxPoolFlat c h w
             (relu (c * (2*h) * (2*w)) (Tensor3.flatten
@@ -5220,12 +5220,12 @@ theorem cnn_conv2_bias_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
             (conv2d W₂ b x₁)))) l > 0
           then (1:ℝ) else 0)
-        (fun l => by dsimp only; split_ifs <;> simp)
+        (fun l => by split_ifs <;> simp)
         (fun q => if dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
           (relu (c * (2*h) * (2*w)) (Tensor3.flatten
             (conv2d W₂ b x₁)))))) q > 0
           then (1:ℝ) else 0)
-        (fun q => by dsimp only; split_ifs <;> simp)
+        (fun q => by split_ifs <;> simp)
         (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
           (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d W₂ b x₁))))))))))
@@ -6573,7 +6573,7 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
               (relu (c * (2*h) * (2*w)) (Tensor3.flatten
                 (conv2d W₁ b x₀)))))))) l > 0
           then (1:ℝ) else 0)
-        (fun l => by dsimp only; split_ifs <;> simp)
+        (fun l => by split_ifs <;> simp)
         (fun q => if dense W₄ b₄ (relu d₃ (dense W₃ b₃
           (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
@@ -6581,7 +6581,7 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
                 (conv2d W₁
                   b x₀)))))))))) q > 0
           then (1:ℝ) else 0)
-        (fun q => by dsimp only; split_ifs <;> simp)
+        (fun q => by split_ifs <;> simp)
         (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
           (dense W₃ b₃ (maxPoolFlat c h w
             (relu (c * (2*h) * (2*w)) (Tensor3.flatten

@@ -256,7 +256,7 @@ theorem fwdCF_fderiv_ne : fderiv ℝ fwdCF 0 ≠ 0 := by
     simpa using (hasDerivAt_id (0 : ℝ)).smul_const X
   have hcomp : HasDerivAt (fun t : ℝ => fwdCF (t • X)) (0 : Vec 2) 0 := by
     have := HasFDerivAt.comp_hasDerivAt_of_eq (0 : ℝ) hfd hsmul (by simp)
-    simpa using this
+    exact this
   have hcomp0 : HasDerivAt (fun t : ℝ => fwdCF (t • X) 0) (0 : ℝ) 0 := by
     have := (hasDerivAt_pi.mp hcomp) (0 : Fin 2)
     simpa using this
