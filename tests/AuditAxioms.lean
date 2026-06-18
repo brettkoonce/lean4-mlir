@@ -471,8 +471,17 @@ open Proofs
 #print axioms EnetPoC.bnBetaB_den
 #print axioms EnetPoC.depthwiseWB_den
 #print axioms EnetPoC.depthwiseStridedWB_den
--- ch8-EfficientNet-B0 §1a TIE (in progress): the loss-cotangent den (top of the chain).
+-- ch8-EfficientNet-B0 §1a TIE (in progress): the loss-cotangent den (top of the chain) + the five
+-- per-block-type tie lemmas covering all 262 params — each param-SGD op denotes the certified batched
+-- Σ_n loss-descent step at the REAL loss-driven backward cotangent (swish masks, the SE gate fan-in
+-- via seReduceB→sigmoid→denseRow→swish, true batch-norm backs, strided depthwise). The whole-net
+-- 16-block thread (composing these through the real efficientnetForwardB_full) is the remaining step.
 #print axioms EnetTiePoC.efficientnetLossCot_den
+#print axioms EnetTiePoC.enet_exp_tied
+#print axioms EnetTiePoC.enet_strided_tied
+#print axioms EnetTiePoC.enet_noexp_tied
+#print axioms EnetTiePoC.enet_stem_tied
+#print axioms EnetTiePoC.enet_head_tied
 -- ch7-MobileNetV2 FULL 17-block paper §1a TIE: the whole 210-param train step den-composed
 -- forward→loss→backward through the REAL mobilenetv2ForwardPaper + the residual-fan-in cotangent
 -- chain. Per-block-type tie lemmas applied across all 17 blocks + stem + conv-bn-relu6 head + dense.
