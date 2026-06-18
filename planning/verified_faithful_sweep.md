@@ -43,8 +43,14 @@ gap, net by net?
 > block emitters, un-fused SE; `lake build` green; (6) ✅ **DONE** re-emit + iree-validate: the whole 262-param
 > `efficientnet_train_step.mlir` (7466 lines) **iree-compiles CLEAN on rocm/gfx1100 (1.68 MB vmfb)**, 0 render-TODO
 > stubs, 262 return tensors, func sig BYTE-IDENTICAL to the committed (drop-in for `efficientnetVerified`) — the
-> **"full-16 train step" headline landed** (every line = `pretty(verified AST node)`); (7) §1 fold
-> `EfficientNetFaithfulPoC` (BN/dense/conv/SE-dense = ~1-line cert delegations; depthwise/stem
+> **"full-16 train step" headline landed** (every line = `pretty(verified AST node)`); (7) ✅ **DONE**
+> §1 fold `EfficientNetFaithfulPoC` (commit `4791cb0`): 8 generic batched param-op `den=certified` lemmas
+> covering EVERY param family (conv/strided-stem/dense W,b + BN γ/β + depthwise stride-1/strided), each
+> generic in dims+cotangent; the **Σ_n batch-sum bridge** (the "long pole") was a clean `Finset.sum_congr`
+> of the per-example `.correct`, NOT a blocker; BN γ/β delegate to `cifar_bn_render_*_certified` at the
+> generic `m=N·(h·w)`. `lake build Proofs` green (2269), all 8 3-axiom clean + wired to AuditAxioms.
+> (Optional follow-up: per-block-type capstone bundling = mnv2-style "all 262 params" accounting.) The
+> ORIGINAL scoping kept: (BN/dense/conv/SE-dense = ~1-line cert delegations; depthwise/stem
 > need the **Σ_n batch-sum bridge** — the proof long pole); (8) §1a tie `EfficientNetTiePoC` (new vs mnv2:
 > swish — smooth, no relu6 kink — + the SE gate fan-in via `seReduceB`). Then convnext (same per-block-only backward; 7×7
 > depthwise + scalar LN + layer-scale), then vit (reconcile scalar-proven vs per-channel-`[192]`-emitted LN).
