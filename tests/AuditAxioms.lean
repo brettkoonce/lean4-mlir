@@ -68,6 +68,7 @@ import LeanMlir.Proofs.EfficientNetBackB0
 import LeanMlir.Proofs.MobileNetV2BackB0
 import LeanMlir.Proofs.ResNet34BackB0
 import LeanMlir.Proofs.ConvNeXtBackB0
+import LeanMlir.Proofs.ConvNeXtFaithfulPoC
 import LeanMlir.Proofs.ViTBackB0
 import LeanMlir.Proofs.LinearFaithfulPoC
 import LeanMlir.Proofs.MlpFaithfulPoC
@@ -932,6 +933,14 @@ open Proofs
 #print axioms cnx_lnBeta_grad_bridge
 #print axioms cnx_render_lngamma_certified
 #print axioms cnx_render_lnbeta_certified
+-- ConvNeXt §1 fold START — the per-channel layer-scale γ gradient cert (ConvNeXtFaithfulPoC). The
+-- committed ConvNeXt net trains PER-CHANNEL layer-scale γ : Vec c (the layerScaleChF forward, which
+-- broadcasts γ over c·h·w via chanIdx), so its γ-grad is the per-channel reduce dγ_c = Σ_{chanIdx=c} x·dy
+-- — NOT the per-element Vec n of cnx_render_lsgamma_certified. The one genuinely-new proof obligation for
+-- the ConvNeXt tie (depthwise/conv/dense/scalar-LN grads all reuse existing certs); the den target of the
+-- pending layerScaleChGammaSgd core op. pdiv via the chanIdx reindex (pdiv_mul/pdiv_reindex/pdiv_const).
+#print axioms Proofs.CnxPoC.pdiv_layerScaleCh_gamma
+#print axioms Proofs.CnxPoC.cnx_render_lsgammaCh_certified
 -- ConvNeXt cotangent-chain CLOSE (planning/convnext_close.md Item D) — the MobileNetV2ChainClose/
 -- ResNet34ChainClose analogue: the Item C bridges pinned to the cotangent the ACTUAL backward chain
 -- delivers through a ConvNeXt block. The chain composes the rendered backward denotations —

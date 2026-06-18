@@ -334,7 +334,12 @@ lean_lib «Proofs» where
              -- loss-driven backward chain. Landed: the loss-cotangent den (batched softmaxRowF − onehot);
              -- the whole-net thread (swish/SE-gate/true-BN chain-cot constructors) is the remaining
              -- dedicated effort (EfficientNetTiePoC.lean).
-             `LeanMlir.Proofs.EfficientNetTiePoC]
+             `LeanMlir.Proofs.EfficientNetTiePoC,
+             -- ch9-ConvNeXt-T §1 fold (started): the per-channel layer-scale γ gradient cert —
+             -- the one genuinely-new proof obligation (Vec c via the chanIdx broadcast, vs the
+             -- per-element Vec n cnx_render_lsgamma_certified); the den target of the pending
+             -- layerScaleChGammaSgd core op (ConvNeXtFaithfulPoC.lean).
+             `LeanMlir.Proofs.ConvNeXtFaithfulPoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
