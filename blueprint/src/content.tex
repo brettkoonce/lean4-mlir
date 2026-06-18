@@ -478,6 +478,25 @@ The smallest network that learns: a single dense layer mapping
 and plain SGD. About 7,850 parameters. \(\sim\)92\% test accuracy
 in seconds.
 
+\begin{center}
+\begin{tikzpicture}[
+  >={Stealth[length=1.8mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  col/.style    = {align=center, rounded corners=2pt, inner sep=2pt, minimum height=0.62cm, minimum width=4.2cm},
+  io/.style     = {col, draw=blue!55!black,   fill=blue!8},
+  head/.style   = {col, draw=red!60!black,    fill=red!8},
+  logits/.style = {col, draw=green!50!black,  fill=green!14, very thick},
+  arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
+]
+  % Vertical layer column: the whole "network" is one dense layer.
+  \node[io]                           (input) {Input \;\; $28\times28$ flatten $\to 784$};
+  \node[head, below=0.24cm of input]  (d1)    {\textbf{Dense} $784\to10$ \;(identity)};
+  \node[logits, below=0.24cm of d1]   (out)   {Logits \;\; 10 classes, softmax-CE};
+  \foreach \a/\b in {input/d1, d1/out}
+     \draw[arr] (\a) -- (\b);
+\end{tikzpicture}
+\end{center}
+
 \paragraph{The forward pass and loss, in math.}
 For an input image \(x \in \R^{784}\) and true class index
 \(t \in \{0, \dots, 9\}\):
@@ -1874,24 +1893,23 @@ spatial structure.
 
 \begin{center}
 \begin{tikzpicture}[
-  >={Stealth[length=2.5mm]},
-  node distance=0.75cm,
-  every node/.style={font=\sffamily\footnotesize},
-  io/.style     = {draw=blue!55!black,   rounded corners=2pt, fill=blue!8,    align=center, inner sep=4pt, minimum height=1.25cm, minimum width=2.0cm},
-  dense/.style  = {draw=orange!65!black, rounded corners=2pt, fill=orange!12,  align=center, inner sep=4pt, minimum height=1.25cm, minimum width=2.2cm},
-  head/.style   = {draw=red!60!black,    rounded corners=2pt, fill=red!8,      align=center, inner sep=4pt, minimum height=1.25cm, minimum width=2.2cm},
-  logits/.style = {draw=green!50!black,  rounded corners=2pt, fill=green!14, very thick, align=center, inner sep=4pt, minimum height=1.25cm, minimum width=2.0cm},
+  >={Stealth[length=1.8mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  col/.style    = {align=center, rounded corners=2pt, inner sep=2pt, minimum height=0.62cm, minimum width=4.0cm},
+  io/.style     = {col, draw=blue!55!black,   fill=blue!8},
+  dense/.style  = {col, draw=orange!65!black, fill=orange!12},
+  head/.style   = {col, draw=red!60!black,    fill=red!8},
+  logits/.style = {col, draw=green!50!black,  fill=green!14, very thick},
   arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
 ]
-  \node[io]                    (input) {Input\\$28\times28$ flatten\\$\to 784$};
-  \node[dense, right=of input] (d1)    {Dense\\$784 \to 512$\\ReLU\\401,920 params};
-  \node[dense, right=of d1]    (d2)    {Dense\\$512 \to 512$\\ReLU\\262,656 params};
-  \node[head,  right=of d2]    (d3)    {Dense\\$512 \to 10$\\(identity)\\5,130 params};
-  \node[logits, right=of d3]   (out)   {Logits\\10 classes};
-  \draw[arr] (input) -- (d1);
-  \draw[arr] (d1) -- (d2);
-  \draw[arr] (d2) -- (d3);
-  \draw[arr] (d3) -- (out);
+  % Vertical layer column: input at top -> logits at bottom.
+  \node[io]                           (input) {Input \;\; $28\times28$ flatten $\to 784$};
+  \node[dense, below=0.24cm of input] (d1)    {\textbf{Dense} $784\to512$, ReLU};
+  \node[dense, below=0.24cm of d1]    (d2)    {\textbf{Dense} $512\to512$, ReLU};
+  \node[head, below=0.24cm of d2]     (d3)    {\textbf{Dense} $512\to10$ \;(identity)};
+  \node[logits, below=0.24cm of d3]   (out)   {Logits \;\; 10 classes, softmax-CE};
+  \foreach \a/\b in {input/d1, d1/d2, d2/d3, d3/out}
+     \draw[arr] (\a) -- (\b);
 \end{tikzpicture}
 \end{center}
 
@@ -2405,37 +2423,30 @@ same dense head you already know.
 
 \begin{center}
 \begin{tikzpicture}[
-  >={Stealth[length=2.5mm]},
-  node distance=0.7cm,
-  every node/.style={font=\sffamily\footnotesize},
-  io/.style     = {draw=blue!55!black,    rounded corners=2pt, fill=blue!8,    align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.0cm},
-  conv/.style   = {draw=orange!65!black,  rounded corners=2pt, fill=orange!12,  align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.2cm},
-  pool/.style   = {draw=teal!60!black,    rounded corners=2pt, fill=teal!10,    align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.0cm},
-  flat/.style   = {draw=purple!60!black,  rounded corners=2pt, fill=purple!8,   align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.0cm},
-  dense/.style  = {draw=orange!65!black,  rounded corners=2pt, fill=orange!12,  align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.2cm},
-  head/.style   = {draw=red!60!black,     rounded corners=2pt, fill=red!8,      align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.2cm},
-  logits/.style = {draw=green!50!black,   rounded corners=2pt, fill=green!14, very thick, align=center, inner sep=4pt, minimum height=1.3cm, minimum width=2.0cm},
+  >={Stealth[length=1.8mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  col/.style    = {align=center, rounded corners=2pt, inner sep=2pt, minimum height=0.62cm, minimum width=4.0cm},
+  io/.style     = {col, draw=blue!55!black,   fill=blue!8},
+  conv/.style   = {col, draw=orange!65!black, fill=orange!12},
+  pool/.style   = {col, draw=teal!60!black,   fill=teal!10},
+  flat/.style   = {col, draw=purple!60!black, fill=purple!8},
+  dense/.style  = {col, draw=orange!65!black, fill=orange!12},
+  head/.style   = {col, draw=red!60!black,    fill=red!8},
+  logits/.style = {col, draw=green!50!black,  fill=green!14, very thick},
   arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
 ]
-  % Row 1: input -> conv -> conv -> pool -> flatten
-  \node[io]                  (input) {Input\\$28\times28\times1$};
-  \node[conv, right=of input] (c1)   {Conv2D\\$1 \to 32$ ch\\$3\times3$, ReLU\\320 p};
-  \node[conv, right=of c1]    (c2)   {Conv2D\\$32 \to 32$ ch\\$3\times3$, ReLU\\9,248 p};
-  \node[pool, right=of c2]    (p1)   {maxPool\\$2\times2$\\$28 \to 14$};
-  \node[flat, right=of p1]    (fl)   {flatten\\$14\times14\times32$\\$\to 6272$};
-  % Row 2: dense -> dense -> dense -> logits (wraps below row 1)
-  \node[dense, below=1.4cm of input] (d1) {Dense\\$6272 \to 512$\\ReLU\\3,211,776 p};
-  \node[dense, right=of d1]   (d2)   {Dense\\$512 \to 512$\\ReLU\\262,656 p};
-  \node[head,  right=of d2]   (d3)   {Dense\\$512 \to 10$\\(identity)\\5,130 p};
-  \node[logits, right=of d3]  (out)  {Logits\\10 classes};
-  \draw[arr] (input) -- (c1);
-  \draw[arr] (c1) -- (c2);
-  \draw[arr] (c2) -- (p1);
-  \draw[arr] (p1) -- (fl);
-  \draw[arr] (fl.south) -- ++(0,-0.55) -| (d1.north);   % wrap end-of-row-1 to start-of-row-2
-  \draw[arr] (d1) -- (d2);
-  \draw[arr] (d2) -- (d3);
-  \draw[arr] (d3) -- (out);
+  % Vertical layer column: input at top -> logits at bottom.
+  \node[io]                          (input) {Input \;\; $28\times28\times1$};
+  \node[conv, below=0.24cm of input] (c1)    {\textbf{Conv2D} $1\to32$, $3\times3$, ReLU};
+  \node[conv, below=0.24cm of c1]    (c2)    {\textbf{Conv2D} $32\to32$, $3\times3$, ReLU};
+  \node[pool, below=0.24cm of c2]    (p1)    {\textbf{maxPool} $2\times2$ \;\; $28\to14$};
+  \node[flat, below=0.24cm of p1]    (fl)    {flatten \;\; $14\times14\times32 \to 6272$};
+  \node[dense, below=0.24cm of fl]   (d1)    {\textbf{Dense} $6272\to512$, ReLU};
+  \node[dense, below=0.24cm of d1]   (d2)    {\textbf{Dense} $512\to512$, ReLU};
+  \node[head, below=0.24cm of d2]    (d3)    {\textbf{Dense} $512\to10$ \;(identity)};
+  \node[logits, below=0.24cm of d3]  (out)   {Logits \;\; 10 classes, softmax-CE};
+  \foreach \a/\b in {input/c1, c1/c2, c2/p1, p1/fl, fl/d1, d1/d2, d2/d3, d3/out}
+     \draw[arr] (\a) -- (\b);
 \end{tikzpicture}
 \end{center}
 
@@ -6623,6 +6634,70 @@ they've seen), not to the codebase (where some bestiary primitives
 were drafted earlier and already sit in \texttt{Types.lean}).
 Formalizing every sub-op of every modern architecture would be an
 asymptote we don't approach.
+
+\begin{center}
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\sffamily,
+  chip/.style = {draw, rounded corners=2pt, align=center, minimum height=0.46cm, minimum width=2.0cm, font=\sffamily\scriptsize, inner sep=1pt},
+  cOr/.style  = {chip, draw=orange!65!black, fill=orange!12},
+  cGy/.style  = {chip, draw=gray!60!black,   fill=gray!10},
+  cTe/.style  = {chip, draw=teal!60!black,   fill=teal!10},
+  cBr/.style  = {chip, draw=brown!60!black,  fill=brown!12},
+  cVi/.style  = {chip, draw=violet!60!black, fill=violet!10},
+  cRd/.style  = {chip, draw=red!55!black,    fill=red!10},
+  catlbl/.style = {font=\sffamily\bfseries\footnotesize, align=right, anchor=east},
+  hdr/.style  = {font=\sffamily\bfseries\small, align=center},
+  emptylbl/.style = {font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west},
+  band/.style = {gray!30, line width=0.4pt},
+]
+% wrapping row of chips (3 per row): #1 colorstyle  #2 x0  #3 y0  #4 comma list
+\newcommand{\opchiprow}[4]{%
+  \foreach \lbl [count=\i from 0] in {#4}{%
+    \pgfmathtruncatemacro\col{mod(\i,3)}%
+    \pgfmathtruncatemacro\rw{int(\i/3)}%
+    \pgfmathsetmacro\cx{#2 + \col*2.25}%
+    \pgfmathsetmacro\cy{#3 - \rw*0.6}%
+    \node[#1] at (\cx,\cy) {\lbl};%
+  }%
+}
+\def\PA{3.35}\def\PB{10.1}
+\node[font=\sffamily\bfseries\normalsize] at (8.7,0.95) {Operation inventory --- verified spine vs.\ bestiary primitives};
+\node[hdr] at (5.6,0.25)  {PART 1 --- Verified spine\\\footnotesize MLP $\to$ ViT (ch 2--10)};
+\node[hdr] at (12.35,0.25) {PART 2 --- Bestiary primitives\\\footnotesize ch 11 (bundled blocks)};
+\draw[gray!55, line width=0.8pt] (9.05,0.55) -- (9.05,-11.8);
+\node[catlbl] at (2.15,-1.1) {Dense /\\linear};
+\opchiprow{cOr}{\PA}{-1.1}{dense}
+\opchiprow{cOr}{\PB}{-1.1}{detrHeads, nerfMLP}
+\draw[band] (0,-1.65) -- (15.7,-1.65);
+\node[catlbl] at (2.15,-2.3) {Activation};
+\opchiprow{cGy}{\PA}{-2.0}{relu, relu6, sigmoid, swish/SiLU, gelu, softmax-CE}
+\node[emptylbl] at (\PB,-2.3) {--- recomposes Part 1 (zero new ops)};
+\draw[band] (0,-3.15) -- (15.7,-3.15);
+\node[catlbl] at (2.15,-3.8) {Convolution};
+\opchiprow{cOr}{\PA}{-3.5}{conv2d, convBn, depthwise, $1{\times}1$ conv}
+\opchiprow{cOr}{\PB}{-3.5}{sepConv, darknet}
+\draw[band] (0,-4.65) -- (15.7,-4.65);
+\node[catlbl] at (2.15,-5.6) {Norm $\cdot$ pool\\reshape $\cdot$ embed};
+\opchiprow{cTe}{\PA}{-5.0}{batchNorm, layerNorm, maxPool, globalAvgPool, flatten, patchEmbed, tokenEmbed}
+\opchiprow{cTe}{\PB}{-5.0}{patchMerge, transition, posEncode}
+\draw[band] (0,-6.75) -- (15.7,-6.75);
+\node[catlbl] at (2.15,-7.7) {Residual\\skip $\cdot$ merge};
+\opchiprow{cBr}{\PA}{-7.1}{residual, invResidual, layerScale}
+\opchiprow{cBr}{\PB}{-7.1}{bottleneck, highway, denseBlock, cspBlock, fpn, unetDown, unetUp}
+\draw[band] (0,-8.85) -- (15.7,-8.85);
+\node[catlbl] at (2.15,-9.5) {Multi-branch\\parallel};
+\opchiprow{cVi}{\PA}{-9.2}{squeeze-excite}
+\opchiprow{cVi}{\PB}{-9.2}{inception, fire, aspp, shuffle}
+\draw[band] (0,-10.35) -- (15.7,-10.35);
+\node[catlbl] at (2.15,-11.0) {Attention $\cdot$ transf.\\sequence};
+\opchiprow{cRd}{\PA}{-10.7}{MHSA, SDPA, tfEncoder}
+\opchiprow{cRd}{\PB}{-10.7}{swin, tfDecoder, mobileViT, mamba, waveNet, evoformer}
+\node[font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west] at (0,-12.3)
+  {color $=$ op-type (orange weights $\cdot$ gray activation $\cdot$ teal norm/reshape $\cdot$ brown skip $\cdot$ violet multi-branch $\cdot$ red attention) \quad\quad column $=$ which part \emph{introduces} the op};
+\end{tikzpicture}%
+}
+\end{center}
 
 \section{Bestiary-only \texttt{Layer} primitives}
 \label{sec:bestiary_primitives}
