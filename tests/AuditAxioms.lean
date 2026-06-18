@@ -398,6 +398,14 @@ open Proofs
 #print axioms CifarPoC.db6_den
 #print axioms CifarPoC.dW7_den
 #print axioms CifarPoC.db7_den
+-- ch5-CIFAR §1a TIE: the emitted loss-cotangent graph denotes softmax-CE of the cifar
+-- forward (cifarLossCot_den); the dense output W₇ folds to ∂CE/∂W₇ through the whole
+-- forward (cifar_W7_tied_totalloss); and all 4 conv layers are tied at the real backward-
+-- chain cotangent (cifar_conv_tied_certified) — the cnn tie scaled to 2 conv stages, the
+-- new cifarChainCotW2 crossing pool₁ (conv₃-back then maxpool₁-back).
+#print axioms CifarPoC.cifarLossCot_den
+#print axioms CifarPoC.cifar_W7_tied_totalloss
+#print axioms CifarPoC.cifar_conv_tied_certified
 -- ch5-CIFAR-BN fully folded: conv layers + dense head reuse the cifar fold; the per-
 -- channel BN γ/β ops (bnGammaSgd/bnBetaSgd) denote the certified step (CifarBnFaithfulPoC).
 #print axioms CifarBnPoC.bnGamma_den

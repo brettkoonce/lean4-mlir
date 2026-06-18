@@ -95,7 +95,8 @@ leaves both green.
 | **linear** | ✅ forward = `fwdGraph` (nested in `lossCotGraph`, fed directly) | ✅ `weightSgd`/`biasSgd` consume `lossCotGraph` directly | **✅ FULL** |
 | **mlp** | ✅ den-composed: real forward threaded; top cotangent `g` pinned to the composed softmax-CE (`mlpLossCot_den`) | ◐ level-2: consumers fed real forward dens at correctly-threaded SSAs; `W₂` folds to `∂CE/∂W₂` | **✅ TIED** |
 | **cnn** | ✅ conv+dense den-composed: real conv forward threaded through `ac1`/`ac2`/`pool` (`cnn_conv_tied_certified`), cotangent = softmax-CE of the conv forward (`cnnLossCot_den`), output `W₅` → `∂CE/∂W₅` | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written, not `SHlo`) | **✅ TIED** |
-| **cifar / cifar-bn / cifar8 / cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
+| **cifar (ch5)** | ✅ conv+dense den-composed: real 2-stage conv forward threaded through `ac1`–`ac4`/`zp1`/`pool2` (`cifar_conv_tied_certified`), cotangent = softmax-CE of the cifar forward (`cifarLossCot_den`), output `W₇` → `∂CE/∂W₇` (`cifar_W7_tied_totalloss`) | ◐ level-2: cotangents at correctly-threaded SSAs (conv backward rendered hand-written, not `SHlo`); the new `cifarChainCotW2` crosses pool₁ (conv₃-back then maxpool₁-back) — the step cnn (one pool) lacked | **✅ TIED** |
+| **cifar-bn / cifar8 / cifar8-bn** | ❌ parallel per-node render | ❌ | **none** |
 | **r34** | ❌ parallel per-node render (`ResNet34Render`) | ❌ | **none** |
 | mnv2 / enet / convnext / vit | — (train-step fold WIP) | — | — |
 
@@ -154,6 +155,30 @@ by every conv net):** the emitted conv backward is rendered **hand-written strin
 trust (the universal residual); re-rendering it as `pretty(SHlo)` + a `den` pin (the cnn analogue of
 `MlpPoC.cot{0,1}_den`, crossing `convBack`/`maxPoolBack`) would remove even that. cifar/r34 inherit
 this exact pattern — the den-level conv fold is now a worked template.
+
+### cifar (ch5) tie — ✅ DONE (this session)
+
+**Landed exactly as the plan below scoped it.** Three capstones in `CifarFaithfulPoC.lean`
+(`namespace Proofs.CifarPoC`), all 3-axiom clean (`[propext, Classical.choice, Quot.sound]`), wired
+into `tests/AuditAxioms.lean`: `cifarLossCot_den` (the emitted loss graph denotes
+`softmax(cifarCnnForward x) − onehot`; copy of `cnnLossCot_den`), `cifar_W7_tied_totalloss` (the
+dense output `W₇` folds to `∂CE/∂W₇` through the whole forward; copy of `cnn_W5_tied_totalloss` via
+`mlp_output_total_loss_grad`), and `cifar_conv_tied_certified` (all 4 conv layers den at the real
+forward + composed cotangent). **Key structural insight that made it cheap:** `CifarPoC.convW_den`/
+`convB_den` are already generic in the cotangent, so the conv tie only needed the backward-chain
+cotangents *built* and fed in — no new bridge theorems. Three of the four reuse the cnn chain cots
+verbatim (`cnnChainCotW2` for conv₄ at the cifar head dims, `cnnChainCotW1` for conv₃/conv₁); the
+**only new def** is `cifarChainCotW2` — conv₂'s cotangent crosses pool₁ at the relu-free conv₃ input,
+so it is relu₂-mask on `maxpool₁-back(conv₃-back(W₃, cotW3))` (a conv input-VJP *then* a maxpool
+input-VJP — the step cnn's single pool never had; same shape as `cifar8CotBn8`'s maxpool step, no BN).
+No renderer/mlir change (den-level tie, as with cnn/mlp). Residual unchanged from cnn: the conv
+backward is rendered hand-written, so the cotangent SSA ↔ chain-cot correspondence is the per-op trust
+the whole suite carries. **The bonus** (`cifarTrainStepFaithfulV` emitting `SHlo` backward nodes so the
+cotangent-subgraph could be pinned as a `den`, removing even the per-op-SSA residual) was NOT pursued
+— matching cnn's scope; it stays the polish. **§1a tie-table cifar (ch5) row flipped to ✅ TIED.**
+**r34 is the next tie target** (parallel per-node render → tie; see §5).
+
+The original concrete plan (kept for the record / as the r34+ template):
 
 ### Next session: cifar (ch5) tie — concrete plan
 
