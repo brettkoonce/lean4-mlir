@@ -46,6 +46,7 @@ import LeanMlir.Proofs.MobileNetV2FaithfulPoC
 import LeanMlir.Proofs.MobileNetV2FaithfulPoCPaper
 import LeanMlir.Proofs.MobileNetV2TiePoCPaper
 import LeanMlir.Proofs.EfficientNetFaithfulPoC
+import LeanMlir.Proofs.EfficientNetTiePoC
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
@@ -470,6 +471,8 @@ open Proofs
 #print axioms EnetPoC.bnBetaB_den
 #print axioms EnetPoC.depthwiseWB_den
 #print axioms EnetPoC.depthwiseStridedWB_den
+-- ch8-EfficientNet-B0 §1a TIE (in progress): the loss-cotangent den (top of the chain).
+#print axioms EnetTiePoC.efficientnetLossCot_den
 -- ch7-MobileNetV2 FULL 17-block paper §1a TIE: the whole 210-param train step den-composed
 -- forward→loss→backward through the REAL mobilenetv2ForwardPaper + the residual-fan-in cotangent
 -- chain. Per-block-type tie lemmas applied across all 17 blocks + stem + conv-bn-relu6 head + dense.

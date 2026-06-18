@@ -329,7 +329,12 @@ lean_lib «Proofs» where
              -- certified Σ_n batched gradient — conv/strided-stem/dense W,b + BN γ/β + depthwise
              -- (the Σ_n batch-sum bridge = Finset.sum_congr of the per-example .correct)
              -- (EfficientNetFaithfulPoC.lean).
-             `LeanMlir.Proofs.EfficientNetFaithfulPoC]
+             `LeanMlir.Proofs.EfficientNetFaithfulPoC,
+             -- ch8-EfficientNet-B0 §1a TIE (IN PROGRESS): pins each param cotangent to the actual
+             -- loss-driven backward chain. Landed: the loss-cotangent den (batched softmaxRowF − onehot);
+             -- the whole-net thread (swish/SE-gate/true-BN chain-cot constructors) is the remaining
+             -- dedicated effort (EfficientNetTiePoC.lean).
+             `LeanMlir.Proofs.EfficientNetTiePoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
