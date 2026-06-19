@@ -280,7 +280,12 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
     `lr`, and `bc₁=1−β₁ᵗ`, `bc₂=1−β₂ᵗ` (proper bias correction). Drives
     `ViTRender.vitTrainStepModuleAdamSched`. -/
 def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
-    (baseLR β1 β2 : Float) (warmupEpochs : Nat) : IO Unit := do
+    (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam") : IO Unit := do
+  -- `variant` selects the rendered train step `@<slug>_<variant>_train_step` (and its artifact /
+  -- vmfb / checkpoint names). Default "adam" = the AdamW render; "mom" = the Nesterov-momentum SGD
+  -- render (same packed [θ|m|v]+lr/bc1/bc2 signature; the momentum step ignores the m/bc slots and
+  -- reads only lr + v, so this driver is shared verbatim). β1/β2 still drive the (unused-by-mom)
+  -- bias-correction scalars; the cosine+warmup lr schedule is identical.
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
@@ -292,10 +297,10 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let hasBn := !net.bnChannels.isEmpty
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
-  let tsVmfb  := s!".lake/build/{net.slug}_adam_ts.vmfb"
+  let tsVmfb  := s!".lake/build/{net.slug}_{variant}_ts.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   let fwdEvalVmfb := s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_adam_train_step.mlir" tsVmfb
+  compileVmfb s!"verified_mlir/{net.slug}_{variant}_train_step.mlir" tsVmfb
   compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"             fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
@@ -308,7 +313,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   let nb  := nTrain / bs
   let nbt := nEval / bs
-  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} AdamW (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
+  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
   if hasBn then IO.println s!"  running-stats BN: {net.bnChannels.size} layers, {nBnStats} stat floats → eval via @{net.slug}_fwd_eval"
   (← IO.getStdout).flush
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes ++ #[#[], #[], #[]]
@@ -316,7 +321,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let fwdShapes := net.shapesBA
   let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
   let xShape := net.xShape bs
-  let tsFn  := s!"m.{net.slug}_adam_train_step"
+  let tsFn  := s!"m.{net.slug}_{variant}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut parts : Array ByteArray := #[]
   let mut seed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
@@ -337,7 +342,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- Auto checkpoint/resume: each epoch writes [θ|m|v] + the next-epoch counter;
   -- on startup, resume from the latest checkpoint if present (survives reaps).
   -- Delete `.lake/build/<slug>_adam_ckpt.bin{,.epoch}` to start fresh.
-  let ckptPath := s!".lake/build/{net.slug}_adam_ckpt.bin"
+  let ckptPath := s!".lake/build/{net.slug}_{variant}_ckpt.bin"
   let epPath := ckptPath ++ ".epoch"
   let mut startEpoch := 0
   if (← System.FilePath.pathExists ckptPath) && (← System.FilePath.pathExists epPath) then

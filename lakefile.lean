@@ -534,6 +534,30 @@ lean_exe «cifar8-bn-verified» where
   root := `MainCifar8BnVerified
   moreLinkArgs := ireeLink
 
+-- cifar8 (no BN) Adam peer: the proof-rendered fwd/bwd/param-grads with the SGD update
+-- swapped for AdamW (ViTRender.emitAdamV) + packed [θ|m|v] + runtime lr/bc threading via
+-- trainAdamSched. Render: tests/TestCifar8AdamTrain.lean. BN/noBN × SGD/Adam ablation.
+lean_exe «cifar8-verified-adam» where
+  root := `MainCifar8VerifiedAdam
+  moreLinkArgs := ireeLink
+
+-- cifar8 + per-channel BN Adam peer (38 params incl. 8× BN γ/β). Same as above with BN.
+-- Render: tests/TestCifar8AdamTrain.lean.
+lean_exe «cifar8-bn-verified-adam» where
+  root := `MainCifar8BnVerifiedAdam
+  moreLinkArgs := ireeLink
+
+-- cifar8 Nesterov-momentum SGD peers (v←μv+∇, θ←θ−lr(μv+∇), μ=0.9): same proof-rendered body +
+-- emitMomentum, driven by trainAdamSched variant "mom" (reuses [θ|m|v] packing + cosine+warmup lr).
+-- Render: tests/TestCifar8AdamTrain.lean. Completes the optimizer ablation (SGD/momentum/Adam).
+lean_exe «cifar8-verified-momentum» where
+  root := `MainCifar8VerifiedMomentum
+  moreLinkArgs := ireeLink
+
+lean_exe «cifar8-bn-verified-momentum» where
+  root := `MainCifar8BnVerifiedMomentum
+  moreLinkArgs := ireeLink
+
 -- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
 -- VERIFIED-rendered StableHLO (tests/TestResnet34{Train,Fwd}.lean); 146 params.
 lean_exe «resnet34-verified» where

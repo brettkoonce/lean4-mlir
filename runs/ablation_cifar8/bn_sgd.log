@@ -1,0 +1,45 @@
+Deeper CIFAR-10 CNN + per-channel BatchNorm (8× conv→BN→relu, [16,16,32,32], 4 pools → 128→64→64→10) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/cifar8_bn_train_step.mlir
+  iree-compile verified_mlir/cifar8_bn_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-BN (38 params, 53242 floats), mean-loss SGD lr=0.100000, He init
+  epoch 1: test_acc = 3785/9984 = 37.910657%
+  epoch 2: test_acc = 4627/9984 = 46.344151%
+  epoch 3: test_acc = 5182/9984 = 51.903045%
+  epoch 4: test_acc = 5758/9984 = 57.672276%
+  epoch 5: test_acc = 5935/9984 = 59.445112%
+  epoch 6: test_acc = 6047/9984 = 60.566907%
+  epoch 7: test_acc = 6288/9984 = 62.980769%
+  epoch 8: test_acc = 6162/9984 = 61.718750%
+  epoch 9: test_acc = 6436/9984 = 64.463141%
+  epoch 10: test_acc = 6416/9984 = 64.262821%
+  epoch 11: test_acc = 6503/9984 = 65.134215%
+  epoch 12: test_acc = 6295/9984 = 63.050881%
+  epoch 13: test_acc = 6573/9984 = 65.835337%
+  epoch 14: test_acc = 6578/9984 = 65.885417%
+  epoch 15: test_acc = 6552/9984 = 65.625000%
+  epoch 16: test_acc = 6672/9984 = 66.826923%
+  epoch 17: test_acc = 6607/9984 = 66.175881%
+  epoch 18: test_acc = 6617/9984 = 66.276042%
+  epoch 19: test_acc = 6609/9984 = 66.195913%
+  epoch 20: test_acc = 6553/9984 = 65.635016%
+  epoch 21: test_acc = 6644/9984 = 66.546474%
+  epoch 22: test_acc = 6612/9984 = 66.225962%
+  epoch 23: test_acc = 6537/9984 = 65.474760%
+  epoch 24: test_acc = 6559/9984 = 65.695112%
+  epoch 25: test_acc = 6658/9984 = 66.686699%
+  epoch 26: test_acc = 6627/9984 = 66.376202%
+  epoch 27: test_acc = 6648/9984 = 66.586538%
+  epoch 28: test_acc = 6590/9984 = 66.005609%
+  epoch 29: test_acc = 6605/9984 = 66.155849%
+  epoch 30: test_acc = 6632/9984 = 66.426282%
+  epoch 31: test_acc = 6632/9984 = 66.426282%
+  epoch 32: test_acc = 6582/9984 = 65.925481%
+  epoch 33: test_acc = 6601/9984 = 66.115785%
+  epoch 34: test_acc = 6648/9984 = 66.586538%
+  epoch 35: test_acc = 6625/9984 = 66.356170%
+  epoch 36: test_acc = 6599/9984 = 66.095753%
+  epoch 37: test_acc = 6628/9984 = 66.386218%
+  epoch 38: test_acc = 6615/9984 = 66.256010%
+  epoch 39: test_acc = 6587/9984 = 65.975561%
+  epoch 40: test_acc = 6592/9984 = 66.025641%
+done (trained CIFAR-CNN8-BN via the proof-rendered StableHLO).
