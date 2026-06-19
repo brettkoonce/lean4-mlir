@@ -1328,7 +1328,12 @@ kinked nets keep their whole-network contracts at representative depth
 force at-a-point statements --- while their \emph{full} architectures are
 closed on the forward side (graph faithfulness at all 34 layers, all 17
 bottlenecks) with parameter gradients certified family-by-family through
-the chain closes. (The underlying forward and witness \texttt{def}s, the
+the chain closes. Those per-family certificates are in turn composed end to
+end: every committed training step is \emph{tied} --- each parameter update
+proved to consume the cotangent its own backward pass delivers, threaded
+through the real forward --- in one whole-network theorem per net
+(\(\texttt{<net>\_net\_tied\_certified}\), \S~\ref{sec:verified_codegen}), across
+all twelve verified trainers. (The underlying forward and witness \texttt{def}s, the
 foundation \(\pdiv\) rules, and the differentiability lemmas are the
 supporting machinery these 48 contracts rest on; they are not counted in
 the table.)
