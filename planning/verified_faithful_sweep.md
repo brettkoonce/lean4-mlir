@@ -5,6 +5,30 @@ _Status note, 2026-06-17._ Audit + PoC. Question driving this doc: for each
 to the `Proofs/` math, or only validated numerically? And what would close the
 gap, net by net?
 
+> **▶ NEXT SESSION (2026-06-19): vit (Vision Transformer) — the LAST Tier-3 net.** Tier-3 order was
+> enet → convnext → vit; enet §1a TIE is CLOSED and convnext §1 (fold + render) is DONE (see the two
+> banners below). vit is the final §1a-tie target. **Heed [[section1a-tie-sweep]]'s lesson: ground-truth
+> vit's REAL state first** (the doc's §5 vit bullet flags a SCALAR-proven vs PER-CHANNEL-`[192]`-emitted
+> LayerNorm GRANULARITY gap — UNLIKE convnext, where proof + committed both use scalar LN, so vit's gap
+> may be a genuine blocker, not just engineering). vit DOES have the richest existing math
+> (`vitNetBackGraph_faithful` whole-net backward + full per-param `vit_render_*_chain_certified`), so check
+> whether §1 (render/fold) exists or needs building (mnv2/convnext situation) before assuming the §1a tie
+> is self-contained. Extract the committed `vit_*_train_step.mlir` func arg list to settle the LN param
+> granularity (the convnext `tensor<f32>` vs `tensor<1xf32>` lesson — don't infer from `head -c`/shape greps).
+>
+> **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1 — the fold + the full [3,3,9,3] render(provenGraph) train step.**
+> Commits `1bcbf70` (per-channel layer-scale γ cert — the one new proof) → `09b8195` (3 new core SHlo ops
+> `layerScaleChGammaSgd`/`lnGammaSgd`/`lnBetaSgd` across all 9 sites + den-fold, 3-axiom clean) → `0c0a4e7`
+> (`ConvNeXtRender.lean` `convNextTrainStepFaithfulV`: the full train step = pretty(provenGraph), regenerated
+> `verified_mlir/convnext_train_step.mlir` BYTE-IDENTICAL sig → drop-in, iree-validated 647884 B, `lake build
+> Proofs` green 2273). **178/182 params are render(provenGraph) with den=certified**; 4 documented hand-written
+> weight-grad gaps (stem 4×4/s4 + 3 downsample 2×2/s2 — the even-kernel/stride-4 weight grads have no VJP-cert
+> op; their bias grads DO use SHlo ops). convnext was the **mnv2 situation** (no §1 render/fold existed; committed
+> .mlir was hand-written), but the hard math (whole-net VJP, render-math param certs, chain cots in
+> `ConvNeXtChainClose`) already existed. **REMAINING for convnext (before vit, or after): full per-param den-fold
+> (wire each param through its cert) → `ConvNeXtTiePoC` (§1a tie — the EASY mnv2-style collection, chain cots
+> exist).** Full detail in [[convnext-tie-scope]].
+>
 > **✅ DONE (2026-06-18): enet (EfficientNet-B0) §1a TIE CLOSED — the whole 262-param train step tied through the real forward.**
 > The §1a-tie sweep has now closed **10 nets** (linear, mlp, cnn, cifar, cifar-bn, cifar8, cifar8-bn, r34, mnv2, **enet**).
 > **enet §1a TIE landed** (`EfficientNetTiePoC.lean`, commit `9533ec4` = 5 per-block ties; whole-net thread next commit):
