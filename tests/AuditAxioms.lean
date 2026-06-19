@@ -80,6 +80,7 @@ import LeanMlir.Proofs.CifarBnTiePoC
 import LeanMlir.Proofs.Cifar8FaithfulPoC
 import LeanMlir.Proofs.Cifar8TiePoC
 import LeanMlir.Proofs.Cifar8BnTiePoC
+import LeanMlir.Proofs.ViTFaithfulPoC
 
 open Proofs
 
@@ -1678,3 +1679,21 @@ open Proofs
 #print axioms StableHLO.patchEmbedBack_faithful
 #print axioms StableHLO.patchEmbedBackGraph_faithful
 #print axioms StableHLO.vitNetBackGraph_faithful
+-- ViT-Tiny §1 FOLD (ViTFaithfulPoC) — each emitted param-SGD op `den` = the certified loss-descent
+-- step, for every parameter family of the depth-12 ViT-Tiny train step. veclnGammaSgd (vector-[D] LN
+-- γ, the Σ_tokens dy·x̂ reduce) → vit_render_veclngamma_certified; rowDenseWeightSgd/rowDenseBiasSgd
+-- (per-token attn/MLP dense W/b) → vit_render_rowdense{W,b}_certified, and the SAME bias op against the
+-- vector-LN β forward (vit_render_veclnbeta_certified); patchEmbedWeightSgd/patchEmbedBiasSgd (the
+-- 16×16/s16 patchify conv W/b — vit HAS the patch-weight VJP, so NO even-kernel gap) →
+-- vit_render_patch{W,b}_certified; posEmbedSgd (identity pos-Jacobian) → vit_render_pos_certified; the
+-- classifier head reuses Cifar8PoC.dense{W,B}_den. One-/few-line delegations; the ops iree-compile
+-- (whole train step 366 KB vmfb). Covers every param family → vit is the first net with ZERO param gaps.
+#print axioms Proofs.ViTPoC.veclnGammaSgd_den
+#print axioms Proofs.ViTPoC.rowDenseWeightSgd_den
+#print axioms Proofs.ViTPoC.rowDenseBiasSgd_den
+#print axioms Proofs.ViTPoC.rowDenseBiasSgd_den_lnbeta
+#print axioms Proofs.ViTPoC.patchEmbedWeightSgd_den
+#print axioms Proofs.ViTPoC.patchEmbedBiasSgd_den
+#print axioms Proofs.ViTPoC.posEmbedSgd_den
+#print axioms Proofs.ViTPoC.headW_den
+#print axioms Proofs.ViTPoC.headB_den

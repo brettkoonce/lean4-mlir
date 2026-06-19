@@ -349,7 +349,15 @@ lean_lib «Proofs» where
              -- 18 blocks + 3 downsamples + GAP→LN→dense head + stem bias den-composed
              -- forward→loss→backward (GELU masks, identity-skip fan-in, downsample LN-back); the 4
              -- even-kernel weight grads are the documented render gap (ConvNeXtTiePoC.lean).
-             `LeanMlir.Proofs.ConvNeXtTiePoC]
+             `LeanMlir.Proofs.ConvNeXtTiePoC,
+             -- ch10-ViT-Tiny §1 RENDER: the full depth-12 train step rendered as pretty(provenGraph)
+             -- (fwd + per-head SDPA backward chain + 200-param SGD via the 6 new ops); iree-validated
+             -- (LeanMlir/Proofs/ViTRender.lean). NO param gap — vit has the patch-weight VJP cert.
+             `LeanMlir.Proofs.ViTRender,
+             -- ch10-ViT-Tiny §1 FOLD: each emitted param-SGD op den=certified — vecln γ/β, rowwise
+             -- dense W/b, patch conv W/b, pos (one-line delegations to ViTVecLN/ViTClose certs); the
+             -- head reuses Cifar8PoC.dense{W,B}_den, cls reuses denseBiasSgdB (ViTFaithfulPoC.lean).
+             `LeanMlir.Proofs.ViTFaithfulPoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

@@ -78,8 +78,24 @@ gap, net by net?
 > harness to flat args (re-iree-validated 17440 B). `lake build Proofs` + roundtrip theorem green. (Committed
 > `vit_train_step.mlir` NOT yet replaced: the new render uses **1D cls `tensor<192>`** vs the committed 2D
 > `tensor<1x192>` — a trivial FFI-layout reconcile that's the trainer-swap follow-up, NOT a backward-render blocker.)
-> **REMAINING for vit: regen the committed `.mlir` + cls-dim/FFI reconcile (trainer swap), then §1 fold
-> `ViTFaithfulPoC` → §1a tie `ViTTiePoC` (two residual fan-ins per block).**
+>
+> **✅ §1 FOLD — DONE (2026-06-19, `ViTFaithfulPoC.lean`, `Proofs.ViTPoC`).** Each emitted param-SGD op
+> `den = certified ∀ cotangent`, covering ALL 200 param families: **9 lemmas, all 3-axiom clean**
+> `[propext, Classical.choice, Quot.sound]`, each a one-/few-line delegation to the existing ViTVecLN/ViTClose
+> certs — `veclnGammaSgd_den`→`vit_render_veclngamma_certified` (25 LN-γ: the den's `Σ_tokens dy·x̂` IS
+> `vecLN_grad_gamma`), `rowDenseWeightSgd_den`→`vit_render_rowdenseW_certified` (72 attn/MLP W; `batchSlice=Mat.unflatten`
+> defeq), `rowDenseBiasSgd_den`→`vit_render_rowdenseb_certified` (72 dense b) + `rowDenseBiasSgd_den_lnbeta`→
+> `vit_render_veclnbeta_certified` (25 LN-β — SAME op, LN-β forward in the pdiv), `patchEmbedWeightSgd_den`→
+> `vit_render_patchW_certified` (wConv — **the patch-weight cert convnext lacked, so NO even-kernel gap**),
+> `patchEmbedBiasSgd_den`→`vit_render_patchb_certified` (bConv), `posEmbedSgd_den`→`vit_render_pos_certified`
+> (pos, identity Jacobian), `headW_den`/`headB_den`→`Cifar8PoC.dense{W,B}_den` (Wc/bc head reuse). cls reuses
+> `denseBiasSgdB` (its patch-embed cls-Jacobian connection threads at the tie, like every reused op). **200/200
+> param families folded → vit is on track to be the FIRST net with ZERO param gaps.** Wired to lakefile `Proofs`
+> root (`ViTRender` + `ViTFaithfulPoC`) + `tests/AuditAxioms.lean`; full closure green (747 lines, all benign).
+> GOTCHA: a literal `-/` in the docstring (`one-/few-line`) closed the doc-comment early — the convnext lesson.
+> **REMAINING for vit: §1a tie `ViTTiePoC`** (thread the 200 folds at the REAL backward chain cotangents,
+> two residual fan-ins per block — the last Tier-3 §1a tie) + the trainer swap (regen committed `.mlir` +
+> cls-dim/FFI reconcile).
 >
 > **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1 — the fold + the full [3,3,9,3] render(provenGraph) train step.**
 > Commits `1bcbf70` (per-channel layer-scale γ cert — the one new proof) → `09b8195` (3 new core SHlo ops
