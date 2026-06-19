@@ -17,8 +17,8 @@ def veclnGammaSgdSample : String :=
       (zV : Vec (197*192)) (zV : Vec 192) 0 (.operand "%dy" (zV : Vec (197*192)))
   let (body, res) := (pretty 32 op).run' 0
   "module @m {\n" ++
-  "  func.func @vecln_gamma_sgd(%x: tensor<32x197x192xf32>, %g: tensor<192xf32>, " ++
-  "%dy: tensor<32x197x192xf32>) -> tensor<192xf32> {\n" ++
+  "  func.func @vecln_gamma_sgd(%x: tensor<32x37824xf32>, %g: tensor<192xf32>, " ++
+  "%dy: tensor<32x37824xf32>) -> tensor<192xf32> {\n" ++
   body ++ s!"    return {res} : tensor<192xf32>\n" ++ "  }\n}\n"
 
 #eval IO.FS.writeFile "/tmp/vecln_gamma_sgd.mlir" veclnGammaSgdSample
@@ -69,3 +69,14 @@ def patchBSample : String :=
   "module @m {\n  func.func @patch_b(%bConv: tensor<192xf32>, %dy: tensor<32x37824xf32>) -> tensor<192xf32> {\n" ++
   body ++ s!"    return {res} : tensor<192xf32>\n" ++ "  }\n}\n"
 #eval IO.FS.writeFile "/tmp/patch_b.mlir" patchBSample
+
+/-- `posEmbedSgd` (N=196 patch tokens, D=192): reduce ONLY the batch axis [0], KEEPING the [197,192]
+    token×feature shape (vs the flat [37824] a `denseBiasSgd` would give). The 6th ViT core op. -/
+def posEmbedSample : String :=
+  let op : SHlo (197*192) :=
+    .posEmbedSgd (N := 196) (D := 192) "%pos" "0.1" (fun _ _ => 0 : Mat 197 192) 0
+      (.operand "%dy" (zV : Vec (197*192)))
+  let (body, res) := (pretty 32 op).run' 0
+  "module @m {\n  func.func @pos_e(%pos: tensor<197x192xf32>, %dy: tensor<32x37824xf32>) -> tensor<197x192xf32> {\n" ++
+  body ++ s!"    return {res} : tensor<197x192xf32>\n" ++ "  }\n}\n"
+#eval IO.FS.writeFile "/tmp/pos_e.mlir" posEmbedSample

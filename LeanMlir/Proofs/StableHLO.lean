@@ -264,6 +264,13 @@ inductive SHlo : Nat → Type where
   -- ViT patch-embed BIAS update: the conv bias only touches the N patch tokens (CLS row 0 excluded),
   -- so `db = Σ_{patches,batch} cot` (slice [1..N], reduce[0,1]). `den` = the certified `vit_render_patchb`.
   | patchEmbedBiasSgd {N c : Nat} (bName lrStr : String) (b : Vec c) (lr : ℝ) : SHlo ((N+1)*c) → SHlo c
+  -- ViT positional-embedding update: `pos : Mat (N+1) D` is added to EVERY token (broadcast over
+  -- batch), so its Jacobian is the identity ⇒ `dPos = dy` (the embed cotangent, KEEPING all N+1
+  -- tokens; only the emit batch is summed). Unlike `patchEmbedBiasSgd`/`denseBiasSgdB` (which reduce
+  -- to `[c]`), pos KEEPS the `(N+1)` token axis, so its update is the 2D `tensor<(N+1)xDxf32>` — a
+  -- flat `denseBiasSgd` would mismatch the `%pos: tensor<197x192xf32>` arg. `den` = `vit_render_pos_certified`.
+  | posEmbedSgd {N D : Nat} (pName lrStr : String) (pos : Mat (N+1) D) (lr : ℝ)
+                                                           : SHlo ((N+1)*D) → SHlo ((N+1)*D)
   -- Chapter 9 scaling pass (full ConvNeXt-T): stride-4 SAME conv forward — the
   -- 4×4/s4 patchify stem (`stablehlo.convolution` with `window_strides=[4,4]`).
   -- `den` via the proven `flatConvStride4` (= decimate ∘ decimate ∘ stride-1 conv).
@@ -784,6 +791,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun idx => Kernel4.flatten Wp idx - lr * patchEmbedWeightGradFlat ic H W P N D x (den e) idx
   | _, .patchEmbedBiasSgd (N := N) (c := c) _ _ b lr e =>
       fun i => b i - lr * ∑ p : Fin N, batchSlice (N+1) c (den e) p.succ i
+  | _, .posEmbedSgd (N := N) (D := D) _ _ pos lr e =>
+      fun i => Mat.flatten pos i - lr * (den e) i
   | _, .bnGammaSgdB (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
         bnPerChannel_grad_gamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
@@ -2368,6 +2377,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "rowDenseBiasSgd" [bN, lrS] [N, c] (skel e)
   | _, .patchEmbedBiasSgd (N := N) (c := c) bN lrS _ _ e =>
       .batched "patchEmbedBiasSgd" [bN, lrS] [N, c] (skel e)
+  | _, .posEmbedSgd (N := N) (D := D) pN lrS _ _ e =>
+      .batched "posEmbedSgd" [pN, lrS] [N, D] (skel e)
   | _, .convWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
       .batched "convWeightSgd" [xN, wN, lrS] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convStridedWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
@@ -2690,18 +2701,22 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
   | .veclnGammaSgd gN xN epsStr lrS N D, r :: st => do
       -- vector-[D] LN γ grad: recompute x̂ from the saved LN input {xN} (μ/var over [2], per token),
       -- dγ = Σ_{b,n} dy·x̂ → tensor<Dxf32> (reduce over [0,1], KEEP D), SGD (`lnParamGrad` dγ half + wrap).
+      -- {xN}/{r} arrive flat [B,N*D] (the SHlo thread convention) → reshape both to [B,N,D] first.
+      let x3 ← fresh; let d3 ← fresh
       let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh; let sm ← fresh
       let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh; let vs ← fresh
       let vr ← fresh; let ve ← fresh; let istd ← fresh; let xh ← fresh; let p ← fresh
       let dg ← fresh; let lG ← fresh; let sG ← fresh; let o ← fresh
       pure (
+        s!"    {x3} = stablehlo.reshape {xN} : ({ty [B, N*D]}) -> {ty [B,N,D]}\n" ++
+        s!"    {d3} = stablehlo.reshape {r} : ({ty [B, N*D]}) -> {ty [B,N,D]}\n" ++
         s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
         s!"    {nf} = stablehlo.constant dense<{D}.0> : {ty [B,N,D]}\n" ++
         s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,N,D]}\n" ++
-        s!"    {smr} = stablehlo.reduce({xN} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,N,D]}, tensor<f32>) -> {ty [B,N]}\n" ++
+        s!"    {smr} = stablehlo.reduce({x3} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,N,D]}, tensor<f32>) -> {ty [B,N]}\n" ++
         s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,N]}) -> {ty [B,N,D]}\n" ++
         s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,N,D]}\n" ++
-        s!"    {xc} = stablehlo.subtract {xN}, {mu} : {ty [B,N,D]}\n" ++
+        s!"    {xc} = stablehlo.subtract {x3}, {mu} : {ty [B,N,D]}\n" ++
         s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,N,D]}\n" ++
         s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,N,D]}, tensor<f32>) -> {ty [B,N]}\n" ++
         s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,N]}) -> {ty [B,N,D]}\n" ++
@@ -2709,7 +2724,7 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,N,D]}\n" ++
         s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,N,D]}\n" ++
         s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,N,D]}\n" ++
-        s!"    {p} = stablehlo.multiply {r}, {xh} : {ty [B,N,D]}\n" ++
+        s!"    {p} = stablehlo.multiply {d3}, {xh} : {ty [B,N,D]}\n" ++
         s!"    {dg} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,N,D]}, tensor<f32>) -> {ty [D]}\n" ++
         s!"    {lG} = stablehlo.constant dense<{lrS}> : {ty [D]}\n" ++
         s!"    {sG} = stablehlo.multiply {dg}, {lG} : {ty [D]}\n" ++
@@ -3859,6 +3874,17 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [c]}\n" ++
             s!"    {sB} = stablehlo.multiply {dB}, {lB} : {ty [c]}\n" ++
             s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [c]}\n", o :: st)
+      | "posEmbedSgd", [pN, lrS], [N, D] => do
+          -- pos-embed grad: reshape the embed cotangent [B,(N+1)*D] → [B,N+1,D], reduce ONLY the batch
+          -- axis [0] (KEEP all N+1 tokens) → [N+1,D], pos' = pos − lr·dpos. (identity pos-Jacobian.)
+          let z ← fresh; let dr ← fresh; let dP ← fresh; let lP ← fresh; let sP ← fresh; let o ← fresh
+          pure (
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, (N+1)*D]}) -> {ty [B, N+1, D]}\n" ++
+            s!"    {dP} = stablehlo.reduce({dr} init: {z}) applies stablehlo.add across dimensions = [0] : ({ty [B,N+1,D]}, tensor<f32>) -> {ty [N+1,D]}\n" ++
+            s!"    {lP} = stablehlo.constant dense<{lrS}> : {ty [N+1,D]}\n" ++
+            s!"    {sP} = stablehlo.multiply {dP}, {lP} : {ty [N+1,D]}\n" ++
+            s!"    {o} = stablehlo.subtract {pN}, {sP} : {ty [N+1,D]}\n", o :: st)
       | "convWeightSgd", [xN, wN, lrS], [_N, ic, oc, h, w, kH, kW] => do
           -- conv weight update via the transpose-trick wgrad (batch as the conv
           -- contraction), then W' = W − lr·dW. Same text as the per-example convWeightSgd.
