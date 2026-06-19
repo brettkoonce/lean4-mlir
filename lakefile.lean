@@ -235,6 +235,12 @@ lean_lib «Proofs» where
              -- full net = the 2-block witness + 45 and the seal reduces to
              -- MobileNetV2JacobianSeal's Qq / g_hasDerivAt. VJP composed through all 17.
              `LeanMlir.Proofs.MobileNetV2JacobianSealFull,
+             -- Item D (realistic dims): the live ResNet-34 whole-net backward at real
+             -- ImageNet 224×224 spatial resolution (the genuine 5-halving pyramid
+             -- 224→112→56→28→14→7). β-parametric downsample (β=64>√1568) + stem
+             -- (β=160>√25088); every smoothness/no-tie hyp discharged at n up to 25088,
+             -- forward X≠0 (level 2). Confirms no discharge secretly used a small n.
+             `LeanMlir.Proofs.ResNet34LiveRealistic,
              -- Backward-graph faithfulness (den-level): fan-in bricks
              -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
              -- batched conv+depthwise), the whole per-example MBConv block, and

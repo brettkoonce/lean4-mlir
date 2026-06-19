@@ -23,6 +23,7 @@ import LeanMlir.Proofs.ResNet34LivePC
 import LeanMlir.Proofs.ResNet34LiveSeal
 import LeanMlir.Proofs.ResNet34LiveFull
 import LeanMlir.Proofs.MobileNetV2JacobianSealFull
+import LeanMlir.Proofs.ResNet34LiveRealistic
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
 import LeanMlir.Proofs.MlpTrainStep
@@ -665,6 +666,13 @@ open Proofs
 #print axioms Mnv2Live.fwdFull_nonconstant
 #print axioms Mnv2Live.fwdFull_jacobian_nonzero
 #print axioms Mnv2Live.fwdFull_backward_nontrivial
+-- Item D (ResNet34LiveRealistic.lean): the live ResNet-34 whole-net backward at real
+-- ImageNet 224×224 spatial resolution — the genuine 5-halving pyramid (224→112→56→28→14→7,
+-- the conv1→maxpool→layer2→layer3→layer4 downsampling skeleton). β-parametric downsample
+-- (β=64>√1568) + stem (β=160>√25088) keep every ReLU/maxpool smooth at n up to 2·112·112=25088;
+-- forward X224≠forward 0 (level 2). Confirms the witness machinery used no hidden small-n cap.
+#print axioms ResNet34LiveRealistic.liveFwd224_has_vjp_correct
+#print axioms ResNet34LiveRealistic.liveFwd224_nonconstant
 -- B8: per-channel BatchNorm — the real-ResNet BN (each channel-slice normalized with
 -- its own γ_c/β_c, γ/β : Vec oc). Block-diagonal VJP: each channel runs its own
 -- bn_has_vjp, cross-channel blocks vanish (pdivMat_rowIndep_perRow, a per-row

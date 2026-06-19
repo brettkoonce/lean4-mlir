@@ -244,13 +244,29 @@ change away (the production capstone needs only the P=16/D=192/heads=3 instantia
 
 Net effect: all three **smooth** flagships have a named full-architecture whole-net backward.
 
-### Item D — realistic input dimensions for the kinked witnesses *(optional, scale hardening)*
+### Item D — realistic input dimensions for the kinked witnesses *(scale hardening)*
 
 The Live witnesses sit at 1×2×2 / 1×32×32. Lift at least `ResNet34Live` toward 3×224×224. The
 dim-sensitive obligations are exactly A1/A2 (BN bounds and injectivity scale with `n`); keep them
 dimension-generic so the witness construction is parametric and the dims are just instantiation.
 Effort: **medium**, mostly re-checking that no discharge secretly used `n ≤ 8` (it shouldn't if
 A1 takes the positivity route + a generalized window).
+
+✅ **DONE for ResNet-34, level 2** (`LeanMlir/Proofs/ResNet34LiveRealistic.lean`,
+`liveFwd224_has_vjp_correct` + `liveFwd224_nonconstant`, audited 3-axiom-clean). The whole-net
+backward + non-vacuity now hold at real **ImageNet 224×224** resolution — the genuine ResNet-34
+5-halving pyramid `224 →stem/s2 112 →maxpool/s2 56 →down 28 →down 14 →down 7 →GAP` (the
+`conv1 → maxpool → layer2 → layer3 → layer4` skeleton). The audit confirmed the doc's worry is
+void: **no discharge used a small `n`** — everything goes through the positivity route
+`bnForward_lb : β − |γ|·√n ≤ bn`, so the only change was making `β` parametric (`liveDownβ`,
+generalizing `liveDownPC`'s hardcoded `β=20`) and instantiating `β = 64 > √1568` for the
+downsamples (largest BN length `2·28·28`) and `β = 160 > √25088` for the stem (`2·112·112`).
+Everything else — the channel-diagonal decimating convs, the `Dom2` carrier, `resnet34_has_vjp_at`
+— was already dimension-generic and reused verbatim. (2-channel carrier kept; channel-width
+realism is orthogonal.) **Remaining:** the level-3 *seal* at 224×224 — same mechanism as
+`ResNet34LiveSeal` but its window/decimate index arithmetic (`Ytensor`'s `-(i·32+j)`,
+`decimY_win`'s `64·a'+2·b'`, `winRowInv (0:Fin 8)`) is hardcoded to 16/8 and must be re-derived
+at 112/56; mechanical-but-tedious, not yet done. mnv2 realistic dims also pending.
 
 ### Item E — almost-everywhere backward *(stretch; the principled level-4 target)*
 
@@ -279,7 +295,7 @@ there, not here.
 | 2.5 | **B2** `Mnv2Live` seal | med | first kinked witness at level 3 (no longer level-2) | ✅ **done** (`MobileNetV2JacobianSeal.lean`; exact at input 0 via global smoothness) — **now also full 17-block depth** (`MobileNetV2JacobianSealFull.lean`, `fwdFull_jacobian_nonzero`/`_backward_nontrivial`) |
 | 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | ✅ **DONE at level 3, full depth**: `ResNet34LivePC.liveFwd2_*` (level 2) + `ResNet34LiveSeal.liveFwd2_jacobian_nonzero` (level-3 seal) **and** `ResNet34LiveFull.liveFwd2Full_*` — the real `[3,4,6,3]` (16-block) live ResNet-34, level-3 sealed (`liveFwd2Full_jacobian_nonzero` ⇒ `liveFwd2Full_backward_nontrivial`). Non-degenerate, nonzero-Jacobian-sealed, full depth, 2-channel, audited 3-axiom-clean |
 | 4 | **B2** BN-CNN Live | light (reuses A) | last degenerate kinked witness retired | |
-| 5 | **D** realistic dims | med | scale credibility | |
+| 5 | **D** realistic dims | med | scale credibility | ◐ **r34 level-2 DONE** (`ResNet34LiveRealistic`, whole-net VJP + nonconstant at **224×224**, 3-axiom-clean); r34 level-3 seal + mnv2 still open |
 | 6 | **E** almost-everywhere | heavy | the principled statement (stretch) | |
 
 After 1–4, every flagship net has a **full-depth, non-degenerate, nonzero-Jacobian** whole-net
