@@ -598,4 +598,217 @@ theorem vit_net_tiedMHV {N heads d mlpDim nClasses : Nat}
   · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11 mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 fb2_11 ib11 dy11 lr
   · exact vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12 mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 fb2_12 ib12 dy12 lr
 
+
+/-! ## Task 3 — the non-block param bundle + the all-200-params capstone (committed ViT-Tiny config)
+
+`vitFinalLNTied`/`vitHeadTied`/`vitEmbedTied` bundle the final vector-LN γ/β, the classifier Wcls/bcls,
+and the patch-embed wConv/bConv/cls/pos as `den = certified` at their chain cotangents — each a direct
+delegation to the §1-fold generics (`ViTPoC.*_den`), with the cls op (`denseBiasSgdB` N=1) folded by
+`vit_cls_den` (its row-0 batch slice IS `cls_token_grad`, closed by `vit_render_cls_certified`). Then
+`vit_net_tied_certified` threads the REAL forward + loss-driven backward and bundles all 200 params. -/
+
+-- cls-param op den at the committed ViT-Tiny dims
+set_option linter.unusedSimpArgs false in
+theorem vit_cls_den (clsN lrStr cotN : String)
+    (Wc : Kernel4 192 3 16 16) (bc cls : Vec 192) (pos : Mat 197 192)
+    (img : Vec (3 * 224 * 224)) (dyEmbed : Vec (197 * 192)) (lr : ℝ) (i : Fin 192) :
+    den (SHlo.denseBiasSgdB (N := 1) (c := 192) clsN lrStr cls lr
+            (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i
+      = cls i - lr * ∑ j : Fin (197 * 192),
+          pdiv (fun cl : Vec 192 =>
+                  patchEmbed_flat 3 224 224 16 196 192 Wc bc cl pos img) cls i j * dyEmbed j := by
+  have hstep : den (SHlo.denseBiasSgdB (N := 1) (c := 192) clsN lrStr cls lr
+            (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i
+      = cls i - lr * cls_token_grad dyEmbed i := by
+    simp only [den, batchSlice, clsSliceFlat, cls_token_grad]; rw [Fin.sum_univ_one]; rfl
+  rw [hstep, vit_render_cls_certified Wc bc cls pos img dyEmbed lr i]
+
+/-- Final vector-LN γF/βF tied at the classifier-back cot `vitCotFl`. -/
+def vitFinalLNTied (gN xN bN epsStr lrStr cotN : String) (ε : ℝ)
+    (γF βF : Vec 192) (Wcls : Mat 192 10) (b12out : Vec (197 * 192)) (g : Vec 10) (lr : ℝ) : Prop :=
+  (∀ k : Fin 192,
+      den (SHlo.veclnGammaSgd gN xN epsStr lrStr ε b12out γF lr (.operand cotN (vitCotFl 196 192 10 Wcls g))) k
+        = γF k - lr * ∑ o : Fin (197 * 192),
+            pdiv (fun gv : Vec 192 => Mat.flatten (fun r => layerNormVec 192 ε gv βF (Mat.unflatten b12out r))) γF k o * vitCotFl 196 192 10 Wcls g o)
+  ∧ (∀ i : Fin 192,
+      den (SHlo.rowDenseBiasSgd bN lrStr βF lr (.operand cotN (vitCotFl 196 192 10 Wcls g))) i
+        = βF i - lr * ∑ o : Fin (197 * 192),
+            pdiv (fun bv : Vec 192 => Mat.flatten (fun r => layerNormVec 192 ε γF bv (Mat.unflatten b12out r))) βF i o * vitCotFl 196 192 10 Wcls g o)
+
+theorem vit_finalLN_tied (gN xN bN epsStr lrStr cotN : String) (ε : ℝ)
+    (γF βF : Vec 192) (Wcls : Mat 192 10) (b12out : Vec (197 * 192)) (g : Vec 10) (lr : ℝ) :
+    vitFinalLNTied gN xN bN epsStr lrStr cotN ε γF βF Wcls b12out g lr := by
+  refine ⟨?_, ?_⟩
+  · intro k; exact ViTPoC.veclnGammaSgd_den (N := 197) gN xN epsStr lrStr cotN ε βF b12out γF (vitCotFl 196 192 10 Wcls g) lr k
+  · intro i; exact ViTPoC.rowDenseBiasSgd_den_lnbeta (N := 197) bN lrStr cotN ε γF (Mat.unflatten b12out) βF (vitCotFl 196 192 10 Wcls g) lr i
+
+/-- Classifier Wcls/bcls tied at the loss cotangent `g`. -/
+def vitHeadTied (aN wN bN lrStr cotN : String)
+    (hn : Vec 192) (Wcls : Mat 192 10) (bcls : Vec 10) (g : Vec 10) (lr : ℝ) : Prop :=
+  (∀ (i : Fin 192) (j : Fin 10),
+      den (SHlo.weightSgd aN wN lrStr hn Wcls lr (.operand cotN g)) (finProdFinEquiv (i, j))
+        = Wcls i j - lr * ∑ k : Fin 10,
+            pdiv (fun v : Vec (192 * 10) => dense (Mat.unflatten v) bcls hn) (Mat.flatten Wcls) (finProdFinEquiv (i, j)) k * g k)
+  ∧ (∀ i : Fin 10,
+      den (SHlo.biasSgd bN lrStr bcls lr (.operand cotN g)) i
+        = bcls i - lr * ∑ j : Fin 10, pdiv (fun b' : Vec 10 => dense Wcls b' hn) bcls i j * g j)
+
+theorem vit_head_tied (aN wN bN lrStr cotN : String)
+    (hn : Vec 192) (Wcls : Mat 192 10) (bcls : Vec 10) (g : Vec 10) (lr : ℝ) :
+    vitHeadTied aN wN bN lrStr cotN hn Wcls bcls g lr := by
+  refine ⟨?_, ?_⟩
+  · intro i j; exact ViTPoC.headW_den aN wN lrStr cotN hn Wcls bcls g lr i j
+  · intro i;   exact ViTPoC.headB_den bN lrStr cotN Wcls hn bcls g lr i
+
+/-- Patch embed wConv/bConv/cls/pos tied at the embed-output cot `dyEmbed`. -/
+def vitEmbedTied (wN xN bN clsN pN lrStr cotN : String)
+    (Wc : Kernel4 192 3 16 16) (bc cls : Vec 192) (pos : Mat 197 192)
+    (img : Vec (3 * 224 * 224)) (dyEmbed : Vec (197 * 192)) (lr : ℝ) : Prop :=
+  (∀ (d : Fin 192) (c : Fin 3) (kh kw : Fin 16),
+      den (SHlo.patchEmbedWeightSgd wN xN lrStr img Wc lr (.operand cotN dyEmbed))
+          (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw))
+        = Wc d c kh kw - lr * ∑ o : Fin (197 * 192),
+            pdiv (fun v : Vec (192 * 3 * 16 * 16) =>
+                    patchEmbed_flat 3 224 224 16 196 192 (Kernel4.unflatten v) bc cls pos img)
+              (Kernel4.flatten Wc)
+              (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o * dyEmbed o)
+  ∧ (∀ i : Fin 192,
+      den (SHlo.patchEmbedBiasSgd bN lrStr bc lr (.operand cotN dyEmbed)) i
+        = bc i - lr * ∑ o : Fin (197 * 192),
+            pdiv (fun b' : Vec 192 => patchEmbed_flat 3 224 224 16 196 192 Wc b' cls pos img) bc i o * dyEmbed o)
+  ∧ (∀ i : Fin 192,
+      den (SHlo.denseBiasSgdB (N := 1) (c := 192) clsN lrStr cls lr (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i
+        = cls i - lr * ∑ j : Fin (197 * 192),
+            pdiv (fun cl : Vec 192 => patchEmbed_flat 3 224 224 16 196 192 Wc bc cl pos img) cls i j * dyEmbed j)
+  ∧ (∀ i : Fin (197 * 192),
+      den (SHlo.posEmbedSgd pN lrStr pos lr (.operand cotN dyEmbed)) i
+        = Mat.flatten pos i - lr * ∑ j : Fin (197 * 192),
+            pdiv (fun p : Vec (197 * 192) => patchEmbed_flat 3 224 224 16 196 192 Wc bc cls (Mat.unflatten p) img) (Mat.flatten pos) i j * dyEmbed j)
+
+theorem vit_embed_tied (wN xN bN clsN pN lrStr cotN : String)
+    (Wc : Kernel4 192 3 16 16) (bc cls : Vec 192) (pos : Mat 197 192)
+    (img : Vec (3 * 224 * 224)) (dyEmbed : Vec (197 * 192)) (lr : ℝ) :
+    vitEmbedTied wN xN bN clsN pN lrStr cotN Wc bc cls pos img dyEmbed lr := by
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · intro d c kh kw; exact ViTPoC.patchEmbedWeightSgd_den wN xN lrStr cotN bc cls pos img Wc dyEmbed lr d c kh kw
+  · intro i; exact ViTPoC.patchEmbedBiasSgd_den bN lrStr cotN Wc bc cls pos img dyEmbed lr i
+  · intro i; exact vit_cls_den clsN lrStr cotN Wc bc cls pos img dyEmbed lr i
+  · intro i; exact ViTPoC.posEmbedSgd_den pN lrStr cotN Wc bc cls pos img dyEmbed lr i
+
+
+set_option maxHeartbeats 16000000 in
+set_option maxRecDepth 400000 in
+/-- **The whole depth-12 MULTI-HEAD ViT-Tiny train step, tied — ALL 200 params** (the vit peer of
+    convnext's `cnx_net_tied_certified`, at the committed config: 3 heads, d_head=64, D=192, N=196,
+    mlpDim=768, 10 classes, 16×16 patches). The real forward `patchEmbed → 12 multi-head vector-LN
+    blocks → final vector-LN → CLS-slice → dense head` and the loss-driven backward cotangent chain
+    (the per-block multi-head fan-ins, the final-LN-back `vitCotB2outV`, the classifier-back `vitCotFl`,
+    the embed-output cot = block-1's `vitBlockCotInAtMHV` output) are threaded, and EVERY param op
+    `den`otes the certified loss-descent step: the 12 blocks' 192 params (`vitBlockTiedAtMHV`), the
+    final-LN γ/β, the classifier Wcls/bcls, and the patch-embed wConv/bConv/cls/pos — 200/200, the
+    FIRST net with zero param gaps (vit has the patch-weight cert). 3-axiom clean. -/
+theorem vit_net_tied_certified
+    (xN wN bN gN aN clsN pN epsStr lrStr cotN : String) (ε : ℝ)
+    (Wc : Kernel4 192 3 16 16) (bc cls : Vec 192) (pos : Mat 197 192)
+    (γF βF : Vec 192) (Wcls : Mat 192 10) (bcls : Vec 10)
+    -- block 1
+    (lnG1_1 lnB1_1 lnG2_1 lnB2_1 : Vec 192) (mWq_1 mWk_1 mWv_1 mWo_1 : Mat 192 192) (mbq_1 mbk_1 mbv_1 mbo_1 : Vec 192)
+    (fW1_1 : Mat 192 768) (fb1_1 : Vec 768) (fW2_1 : Mat 768 192) (fb2_1 : Vec 192)
+    -- block 2
+    (lnG1_2 lnB1_2 lnG2_2 lnB2_2 : Vec 192) (mWq_2 mWk_2 mWv_2 mWo_2 : Mat 192 192) (mbq_2 mbk_2 mbv_2 mbo_2 : Vec 192)
+    (fW1_2 : Mat 192 768) (fb1_2 : Vec 768) (fW2_2 : Mat 768 192) (fb2_2 : Vec 192)
+    -- block 3
+    (lnG1_3 lnB1_3 lnG2_3 lnB2_3 : Vec 192) (mWq_3 mWk_3 mWv_3 mWo_3 : Mat 192 192) (mbq_3 mbk_3 mbv_3 mbo_3 : Vec 192)
+    (fW1_3 : Mat 192 768) (fb1_3 : Vec 768) (fW2_3 : Mat 768 192) (fb2_3 : Vec 192)
+    -- block 4
+    (lnG1_4 lnB1_4 lnG2_4 lnB2_4 : Vec 192) (mWq_4 mWk_4 mWv_4 mWo_4 : Mat 192 192) (mbq_4 mbk_4 mbv_4 mbo_4 : Vec 192)
+    (fW1_4 : Mat 192 768) (fb1_4 : Vec 768) (fW2_4 : Mat 768 192) (fb2_4 : Vec 192)
+    -- block 5
+    (lnG1_5 lnB1_5 lnG2_5 lnB2_5 : Vec 192) (mWq_5 mWk_5 mWv_5 mWo_5 : Mat 192 192) (mbq_5 mbk_5 mbv_5 mbo_5 : Vec 192)
+    (fW1_5 : Mat 192 768) (fb1_5 : Vec 768) (fW2_5 : Mat 768 192) (fb2_5 : Vec 192)
+    -- block 6
+    (lnG1_6 lnB1_6 lnG2_6 lnB2_6 : Vec 192) (mWq_6 mWk_6 mWv_6 mWo_6 : Mat 192 192) (mbq_6 mbk_6 mbv_6 mbo_6 : Vec 192)
+    (fW1_6 : Mat 192 768) (fb1_6 : Vec 768) (fW2_6 : Mat 768 192) (fb2_6 : Vec 192)
+    -- block 7
+    (lnG1_7 lnB1_7 lnG2_7 lnB2_7 : Vec 192) (mWq_7 mWk_7 mWv_7 mWo_7 : Mat 192 192) (mbq_7 mbk_7 mbv_7 mbo_7 : Vec 192)
+    (fW1_7 : Mat 192 768) (fb1_7 : Vec 768) (fW2_7 : Mat 768 192) (fb2_7 : Vec 192)
+    -- block 8
+    (lnG1_8 lnB1_8 lnG2_8 lnB2_8 : Vec 192) (mWq_8 mWk_8 mWv_8 mWo_8 : Mat 192 192) (mbq_8 mbk_8 mbv_8 mbo_8 : Vec 192)
+    (fW1_8 : Mat 192 768) (fb1_8 : Vec 768) (fW2_8 : Mat 768 192) (fb2_8 : Vec 192)
+    -- block 9
+    (lnG1_9 lnB1_9 lnG2_9 lnB2_9 : Vec 192) (mWq_9 mWk_9 mWv_9 mWo_9 : Mat 192 192) (mbq_9 mbk_9 mbv_9 mbo_9 : Vec 192)
+    (fW1_9 : Mat 192 768) (fb1_9 : Vec 768) (fW2_9 : Mat 768 192) (fb2_9 : Vec 192)
+    -- block 10
+    (lnG1_10 lnB1_10 lnG2_10 lnB2_10 : Vec 192) (mWq_10 mWk_10 mWv_10 mWo_10 : Mat 192 192) (mbq_10 mbk_10 mbv_10 mbo_10 : Vec 192)
+    (fW1_10 : Mat 192 768) (fb1_10 : Vec 768) (fW2_10 : Mat 768 192) (fb2_10 : Vec 192)
+    -- block 11
+    (lnG1_11 lnB1_11 lnG2_11 lnB2_11 : Vec 192) (mWq_11 mWk_11 mWv_11 mWo_11 : Mat 192 192) (mbq_11 mbk_11 mbv_11 mbo_11 : Vec 192)
+    (fW1_11 : Mat 192 768) (fb1_11 : Vec 768) (fW2_11 : Mat 768 192) (fb2_11 : Vec 192)
+    -- block 12
+    (lnG1_12 lnB1_12 lnG2_12 lnB2_12 : Vec 192) (mWq_12 mWk_12 mWv_12 mWo_12 : Mat 192 192) (mbq_12 mbk_12 mbv_12 mbo_12 : Vec 192)
+    (fW1_12 : Mat 192 768) (fb1_12 : Vec 768) (fW2_12 : Mat 768 192) (fb2_12 : Vec 192)
+    (img : Vec (3 * 224 * 224)) (label : Fin 10) (lr : ℝ) :
+    let ib1    : Vec (197 * 192) := patchEmbed_flat 3 224 224 16 196 192 Wc bc cls pos img
+    let ib2    : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_1 lnB1_1 lnG2_1 lnB2_1 mWq_1 mWk_1 mWv_1 mWo_1 mbq_1 mbk_1 mbv_1 mbo_1 fW1_1 fb1_1 fW2_1 fb2_1 ib1
+    let ib3    : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_2 lnB1_2 lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2 mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 fb2_2 ib2
+    let ib4    : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_3 lnB1_3 lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3 mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 fb2_3 ib3
+    let ib5    : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_4 lnB1_4 lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4 mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 fb2_4 ib4
+    let ib6    : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_5 lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5 mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 fb2_5 ib5
+    let ib7    : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_6 lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6 mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 fb2_6 ib6
+    let ib8    : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_7 lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7 mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 fb2_7 ib7
+    let ib9    : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_8 lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8 mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 fb2_8 ib8
+    let ib10   : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9 mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9 fb2_9 ib9
+    let ib11   : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10 mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10 fb1_10 fW2_10 fb2_10 ib10
+    let ib12   : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11 mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 fb2_11 ib11
+    let b12out : Vec (197 * 192) := vitBlockFwdOMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12 mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 fb2_12 ib12
+    let fl     : Vec (197 * 192) := Mat.flatten (fun r => layerNormVec 192 ε γF βF (Mat.unflatten b12out r))
+    let hn     : Vec 192 := clsSliceFlat 196 192 fl
+    let logits : Vec 10 := dense Wcls bcls hn
+    let g      : Vec 10 := fun c => softmax 10 logits c - oneHot 10 label c
+    let dy12   : Vec (197 * 192) := vitCotB2outV 196 192 10 ε γF Wcls b12out g
+    let dy11   : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12 mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 ib12 dy12
+    let dy10   : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11 mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 ib11 dy11
+    let dy9    : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10 mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10 fb1_10 fW2_10 ib10 dy10
+    let dy8    : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9 mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9 ib9 dy9
+    let dy7    : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_8 lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8 mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 ib8 dy8
+    let dy6    : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_7 lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7 mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 ib7 dy7
+    let dy5    : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_6 lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6 mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 ib6 dy6
+    let dy4    : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_5 lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5 mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 ib5 dy5
+    let dy3    : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_4 lnB1_4 lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4 mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 ib4 dy4
+    let dy2    : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_3 lnB1_3 lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3 mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 ib3 dy3
+    let dy1    : Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_2 lnB1_2 lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2 mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 ib2 dy2
+    let dyEmbed: Vec (197 * 192) := vitBlockCotInAtMHV (Np1 := 197) (heads := 3) (d := 64) ε lnG1_1 lnB1_1 lnG2_1 lnB2_1 mWq_1 mWk_1 mWv_1 mWo_1 mbq_1 mbk_1 mbv_1 mbo_1 fW1_1 fb1_1 fW2_1 ib1 dy1
+    vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_1 lnB1_1 lnG2_1 lnB2_1 mWq_1 mWk_1 mWv_1 mWo_1 mbq_1 mbk_1 mbv_1 mbo_1 fW1_1 fb1_1 fW2_1 fb2_1 ib1 dy1 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_2 lnB1_2 lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2 mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 fb2_2 ib2 dy2 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_3 lnB1_3 lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3 mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 fb2_3 ib3 dy3 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_4 lnB1_4 lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4 mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 fb2_4 ib4 dy4 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_5 lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5 mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 fb2_5 ib5 dy5 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_6 lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6 mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 fb2_6 ib6 dy6 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_7 lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7 mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 fb2_7 ib7 dy7 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_8 lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8 mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 fb2_8 ib8 dy8 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9 mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9 fb2_9 ib9 dy9 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10 mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10 fb1_10 fW2_10 fb2_10 ib10 dy10 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11 mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 fb2_11 ib11 dy11 lr
+  ∧ vitBlockTiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12 mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 fb2_12 ib12 dy12 lr
+  ∧ vitFinalLNTied gN xN bN epsStr lrStr cotN ε γF βF Wcls b12out g lr
+  ∧ vitHeadTied aN wN bN lrStr cotN hn Wcls bcls g lr
+  ∧ vitEmbedTied wN xN bN clsN pN lrStr cotN Wc bc cls pos img dyEmbed lr := by
+  intro ib1 ib2 ib3 ib4 ib5 ib6 ib7 ib8 ib9 ib10 ib11 ib12 b12out fl hn logits g dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dyEmbed
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_1 lnB1_1 lnG2_1 lnB2_1 mWq_1 mWk_1 mWv_1 mWo_1 mbq_1 mbk_1 mbv_1 mbo_1 fW1_1 fb1_1 fW2_1 fb2_1 ib1 dy1 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_2 lnB1_2 lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2 mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 fb2_2 ib2 dy2 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_3 lnB1_3 lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3 mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 fb2_3 ib3 dy3 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_4 lnB1_4 lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4 mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 fb2_4 ib4 dy4 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_5 lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5 mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 fb2_5 ib5 dy5 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_6 lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6 mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 fb2_6 ib6 dy6 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_7 lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7 mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 fb2_7 ib7 dy7 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_8 lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8 mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 fb2_8 ib8 dy8 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9 mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9 fb2_9 ib9 dy9 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10 mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10 fb1_10 fW2_10 fb2_10 ib10 dy10 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11 mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 fb2_11 ib11 dy11 lr
+  · exact vit_block_tiedAtMHV (Np1 := 197) (heads := 3) (d := 64) xN wN bN gN epsStr lrStr cotN ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12 mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 fb2_12 ib12 dy12 lr
+  · exact vit_finalLN_tied gN xN bN epsStr lrStr cotN ε γF βF Wcls b12out g lr
+  · exact vit_head_tied aN wN bN lrStr cotN hn Wcls bcls g lr
+  · exact vit_embed_tied wN xN bN clsN pN lrStr cotN Wc bc cls pos img dyEmbed lr
+
 end Proofs.ViTTiePoC

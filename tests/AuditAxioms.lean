@@ -1735,3 +1735,16 @@ open Proofs
 #print axioms Proofs.ViTTiePoC.vit_block_tiedMHV
 #print axioms Proofs.ViTTiePoC.vit_block_tiedAtMHV
 #print axioms Proofs.ViTTiePoC.vit_net_tiedMHV
+-- ViT-Tiny §1a TIE — the ALL-200-PARAMS capstone (vit_net_tied_certified, committed ViT-Tiny config:
+-- 3 heads, d_head=64, D=192, N=196, mlpDim=768, 10 classes, 16×16 patches). Threads the REAL forward
+-- (patchEmbed → 12 multi-head vector-LN blocks → final vector-LN → CLS-slice → dense head) + the
+-- loss-driven backward, and bundles EVERY param op den=certified: the 12 blocks' 192 params, the
+-- final-LN γ/β (vitFinalLNTied), the classifier Wcls/bcls (vitHeadTied), and the patch-embed
+-- wConv/bConv/cls/pos (vitEmbedTied; cls via vit_cls_den — its row-0 batch slice IS cls_token_grad).
+-- 200/200 — the FIRST net with zero param gaps (vit has the patch-weight VJP cert). The vit peer of
+-- convnext's cnx_net_tied_certified; this CLOSES the last Tier-3 §1a tie.
+#print axioms Proofs.ViTTiePoC.vit_cls_den
+#print axioms Proofs.ViTTiePoC.vit_finalLN_tied
+#print axioms Proofs.ViTTiePoC.vit_head_tied
+#print axioms Proofs.ViTTiePoC.vit_embed_tied
+#print axioms Proofs.ViTTiePoC.vit_net_tied_certified

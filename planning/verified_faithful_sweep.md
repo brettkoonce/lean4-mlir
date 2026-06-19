@@ -126,12 +126,15 @@ thread, 2-block). The ONLY remaining gap: the tie certifies the **single-head 2-
 committed render is **multi-head (3 heads, d_head=64), depth-12**. Promote the tie to match. This is the mnv2
 reduced→full analogue — the math all exists, it's a thread + a small multi-head-cotangent construction._
 
-_**Progress (2026-06-19): tasks 1 + 2 of 4 DONE**, 3-axiom clean, `lake build Proofs` green (2278). Task 1
-(committed `c2de104`): the multi-head chain cotangents (`ViTMultiHeadChain.lean`) — `vitCotD{Q,K,V}mh` pinned
-to the audited per-head `sdpa_back_{Q,K,V}` via `vitCotD{Q,K,V}mh_eq`. Task 2 (in `ViTTiePoC.lean`, uncommitted):
-the multi-head per-block tie `vit_block_tiedMHV` + the `@[irreducible]` thread wrappers + the depth-12 thread
-`vit_net_tiedMHV` (instantiates at the committed `@vit_net_tiedMHV 196 3 64 768 10`). Tasks 3–4 (the non-block-param
-bundle/`vit_net_tied_certified` capstone, the trainer swap) remain._
+_**Progress (2026-06-19): tasks 1 + 2 + 3 of 4 DONE — the vit §1a TIE IS CLOSED**, 3-axiom clean, `lake
+build Proofs` green (2278), full AuditAxioms closure benign. Task 1 (committed `c2de104`): the multi-head
+chain cotangents (`ViTMultiHeadChain.lean`) — `vitCotD{Q,K,V}mh` pinned to the audited per-head
+`sdpa_back_{Q,K,V}`. Task 2 (committed `81d9336`): the multi-head per-block tie `vit_block_tiedMHV` + the
+`@[irreducible]` thread wrappers + the depth-12 thread `vit_net_tiedMHV`. Task 3 (in `ViTTiePoC.lean`,
+uncommitted): the non-block bundle (`vitFinalLNTied`/`vitHeadTied`/`vitEmbedTied` + `vit_cls_den`) + the
+**all-200-params capstone `vit_net_tied_certified`** — vit is the FIRST net with zero param gaps. Only task 4
+(the trainer swap: regen the committed `.mlir`, reconcile the cls dim, iree-validate + smoke-test) remains —
+it's independent of the tie. With this, all 12 nets are §1a TIED._
 
 **Key files:** `ViTTiePoC.lean` (the tie — extend here), `ViTChainClose.lean` (single-head SDPA cots
 `vitCotD{Q,K,V}`/`vitCotLn1`, LN-agnostic), `ViTVecLN.lean` (the `*V` vector-LN cots + `vecln*_chain_certified`),
@@ -176,11 +179,23 @@ render — `vBlockFwd`'s per-head slice/pad structure is the ground truth to mat
    committed ViT-Tiny config `@vit_net_tiedMHV 196 3 64 768 10` (heads=3, d_head=64 → D=192, sdpa_scale=1/√64
    matching the committed). A depth-2 `vit_net_tiedMHV2` is kept as a lightweight smoke test. **Next: task 3
    (bundle the non-block params into a `vit_net_tied_certified` capstone).**
-3. **Bundle the non-block params** (cheap, all certs exist): final-LN γ/β (`veclnGammaSgd_den` +
-   `rowDenseBiasSgd_den_lnbeta` at `vitCotFl`/`vitCotB2outV`), classifier Wc/bc (`ViTPoC.headW_den`/`headB_den`),
-   patch embed wConv/bConv/cls/pos (`patchEmbedWeightSgd_den`/`patchEmbedBiasSgd_den`/`clsSgd`-via-`denseBiasSgdB`/
-   `posEmbedSgd_den` at the embed cotangent = block-1's `vitBlockCotInAtV` output). Then a `vit_net_tied_certified`
-   capstone bundling all 200 params (the convnext-style "all params" accounting).
+3. **✅ DONE (2026-06-19): the non-block param bundle + the all-200-params capstone.** In `ViTTiePoC.lean`,
+   3-axiom clean, `lake build Proofs` green (2278). Three helper ties (def + theorem), each a direct
+   delegation to the §1-fold generics: **`vitFinalLNTied`** (final-LN γF via `veclnGammaSgd_den`, βF via
+   `rowDenseBiasSgd_den_lnbeta`, both at `vitCotFl 196 192 10 Wcls g`), **`vitHeadTied`** (classifier Wcls via
+   `ViTPoC.headW_den`, bcls via `headB_den`, at the loss cot `g`), **`vitEmbedTied`** (patch wConv via
+   `patchEmbedWeightSgd_den`, bConv via `patchEmbedBiasSgd_den`, pos via `posEmbedSgd_den`, and cls via the new
+   `vit_cls_den` — the cls op is `denseBiasSgdB` N=1, whose row-0 batch slice IS `cls_token_grad`, closed by
+   `vit_render_cls_certified`). Then the capstone **`vit_net_tied_certified`** (the committed ViT-Tiny config:
+   3 heads, d_head=64, D=192, N=196, mlpDim=768, 10 classes, 16×16 patches) threads the REAL forward
+   `patchEmbed_flat → 12 vitBlockFwdOMHV → final layerNormVec → clsSliceFlat → dense head → softmax-CE` and the
+   loss-driven backward (`vitCotB2outV` at the top, `vitBlockCotInAtMHV` per block down to the embed cot
+   `dyEmbed`), and bundles **all 200 params** den=certified (192 block + 2 final-LN + 2 classifier + 4 embed).
+   **vit is the FIRST net with ZERO param gaps** (it has the patch-weight VJP cert convnext lacked). Wired into
+   `tests/AuditAxioms.lean`; full closure 3-axiom clean, no sorries. (Optional polish, NOT done: a total-loss
+   fold for Wcls + a `vitLossCot_den` pinning `g` to the emitted `sub(softmaxDiv(expe …), onehot)` graph — the
+   head ties at `g` directly, the enet/convnext-permitted convention.) **This CLOSES the §1a tie for vit — the
+   12th and last net.** Only task 4 (the trainer swap, independent of the tie) remains.
 4. **Trainer swap** (independent of the tie): regen committed `verified_mlir/vit_train_step.mlir` from
    `vitTrainStepRenderV` (currently writes `/tmp/`); reconcile the **1D cls `tensor<192>`** (new render) vs **2D
    `tensor<1x192>`** (committed FFI layout) — update `IreeRuntime`/the vit layout's cls shape to 1D, or change the
