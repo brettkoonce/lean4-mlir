@@ -59,3 +59,13 @@ def rowDenseBSample : String :=
 
 #eval IO.FS.writeFile "/tmp/row_w.mlir" rowDenseWSample
 #eval IO.FS.writeFile "/tmp/row_b.mlir" rowDenseBSample
+
+/-- `patchEmbedBiasSgd` (N=196 patch tokens, c=192): slice CLS-excluded + reduce[0,1]. -/
+def patchBSample : String :=
+  let op : SHlo 192 :=
+    .patchEmbedBiasSgd (N := 196) (c := 192) "%bConv" "0.1" (zV : Vec 192) 0
+      (.operand "%dy" (zV : Vec (197*192)))
+  let (body, res) := (pretty 32 op).run' 0
+  "module @m {\n  func.func @patch_b(%bConv: tensor<192xf32>, %dy: tensor<32x37824xf32>) -> tensor<192xf32> {\n" ++
+  body ++ s!"    return {res} : tensor<192xf32>\n" ++ "  }\n}\n"
+#eval IO.FS.writeFile "/tmp/patch_b.mlir" patchBSample

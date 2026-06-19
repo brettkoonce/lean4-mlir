@@ -31,7 +31,8 @@ gap, net by net?
 > `vitTrainStepFaithfulV`) + §1 fold (`ViTFaithfulPoC`) + §1a tie (`ViTTiePoC`, **two residual fan-ins per block** —
 > attn-sublayer + mlp-sublayer) + the new core SHlo param-SGD ops.
 >
-> **CORE OPS — ✅ DONE (2026-06-19): FOUR new ops (corrected from "2"), all iree-validated.** ⚠️ **Gotcha caught
+> **CORE OPS — 5 new ops built (corrected from "2"→"4"→"5"; a 6th `posEmbedSgd` still needed — see the BACKWARD
+> banner below), all iree-validated.** ⚠️ **Gotcha caught
 > before building a broken backward: enet's batched `denseWeightSgdB`/`denseBiasSgdB` match vit's `rowDense_*_grad`
 > only at the `den` level, NOT the EMIT** — their `.batched` emit is 2D (`dot_general [B,a]×[B,c]`, batch-only
 > contraction), but `denseRowF`/`denseRowBack` are 3D token-matrix `[B,197,a]`, so the rowdense weight grad must
@@ -57,11 +58,17 @@ gap, net by net?
 > fc1→GELU→fc2→+res, mirroring `vitBlockGraphMHV`) → final vector-LN → CLS-slice → dense head. Renders a 2477-line
 > module that **iree-compiles clean on rocm/gfx1100 (136 KB vmfb)**; `den = vitForward` via `vitFwdGraphMHV_faithful`
 > at depth-12. Module preamble defines `%one`/`%zero`/`%sc` (the lnRow γ=1/β=0 + reduce-init `tensor<f32>` consts).
-> **REMAINING for the §1 render: the BACKWARD cotangent chain** (reverse via `denseRowBack`/`geluBack`/`softmaxRowBack`/
-> `lnRowBack` + per-head matmul/transpose backs + `clsPadF`/`patchEmbedBack`; the multi-head SDPA backward is the
-> intricate part) **+ the param-SGD tail** (`veclnGammaSgd` LN γ, `rowDenseWeightSgd` attn/MLP/classifier W,
-> `rowDenseBiasSgd` LN β/per-block biases/patch-b, `denseBiasSgdB` pos/cls, `patchEmbedWeightSgd` patch W — note the
-> 3D rowdense ops, NOT the enet 2D `denseWeightSgdB`/`denseBiasSgdB`, per the emit gotcha above) → re-emit +
+> **▶ §1 RENDER — BACKWARD: IN PROGRESS (2026-06-19). 5 param-SGD core ops done (a 6th still needed); the chain is
+> drafted but the param EMIT shapes are BESPOKE — bigger than the "reuse" plan.** The recurring gotcha: every "reuse"
+> breaks at the EMIT (not the den) — the enet 2D `denseWeightSgdB`/`denseBiasSgdB` → needed the 3D `rowDenseWeightSgd`/
+> `rowDenseBiasSgd`; patch-bias needed CLS-excluded slicing → `patchEmbedBiasSgd` (all 5 iree-validated: vecln 17440 B,
+> patch-W 16552 B, rowDenseW 12928 B, rowDenseB 10584 B, patch-b 10346 B). **STILL NEEDED: a 6th `posEmbedSgd`** (pos
+> reduces batch KEEPING `[197,192]`; the 2D `denseBiasSgd` gives flat `[37824]` which mismatches the `%pos` arg). cls
+> = `clsSliceF`(dEmbed)→`denseBiasSgdB{N=1,c=192}`; patch-W needs `%ximg = reshape %x` in the preamble. The forward
+> `FwdSaves` already exposes the saves; `vBlockBack`/per-head SDPA backward + vector-LN backward worked out in
+> [[vit-tie-scope]]. **REMAINING: the 6th op + the full node-by-node backward assembly** (reverse via `denseRowBack`/
+> `geluBack`/`softmaxRowBack`/`lnRowBack` + per-head matmul/transpose backs + `clsPadF`; multi-head SDPA backward is
+> the intricate part) **+ the ~5000-line train-step assembly + 200-param return + iree-iteration** → re-emit +
 > iree-validate the whole train step. **Then §1 fold `ViTFaithfulPoC` → §1a tie `ViTTiePoC` (two residual fan-ins
 > per block). The forward render's `vBlockFwd`/`vitFwd12` already expose the saved SSA names (`BSaves`/`FwdSaves`)
 > the backward references.**

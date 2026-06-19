@@ -23,6 +23,7 @@ namespace Proofs.StableHLO
 private def vBS : Nat := 32
 private def vEPS : String := "1.0e-5"
 private def vSCALE : String := "0.125"
+private def vLR : String := "0.1"
 private def vDEPTH : Nat := 12
 
 private def zVv {n : Nat} : Vec n := fun _ => 0
@@ -109,7 +110,8 @@ private structure FwdSaves where
   embed : String
   blocks : Array BSaves
   flnIn : String        -- final-LN input (= last block output)
-  gap : String          -- final-LN output (= CLS-slice input)
+  fln : String          -- final-LN output (= CLS-slice input)
+  clsTok : String       -- CLS-slice output (= head-dense input)
   logits : String
   deriving Inhabited
 
@@ -126,7 +128,7 @@ private def vitFwd12 : StateM Nat (String × FwdSaves) := do
   let (cf, fl) ← vlnFwd "%gF" "%btF" cur
   let (cs, sl) ← pretty vBS (.clsSliceF (N := 196) (D := 192) (.operand fl (zVv : Vec (197*192))))
   let (cl, logits) ← pretty vBS (denseF "%Wc" "%bc" (zMm : Mat 192 10) zVv (.operand sl (zVv : Vec 192)))
-  pure (code ++ cf ++ cs ++ cl, { embed, blocks, flnIn := cur, gap := fl, logits })
+  pure (code ++ cf ++ cs ++ cl, { embed, blocks, flnIn := cur, fln := fl, clsTok := sl, logits })
 
 /-- Per-block func-arg signature (committed forward order). -/
 private def blkArgSig (i : Nat) : String :=
