@@ -100,15 +100,22 @@ gap, net by net?
 > = dyOut + LN₂-back`, attention residual `vitCotXinV = cotH + LN₁-back`) + the **three-way fan-in at LN₁** (Q/K/V
 > dense-backs SUM in `vitCotLn1`) + the **per-head SDPA backward** pinned to the audited `sdpa_back_{Q,K,V}`
 > (`vitCotD{Q,K,V}`). Pure thread + fan-in: each of the 16 conjuncts delegates to a §1-fold `ViTPoC.*_den` generic
-> at the chain cot (`ViTVecLN`/`ViTChainClose`'s `vitCot*`) — ZERO new ops/bridges; compiled first try. Wired to
-> lakefile `Proofs` + `AuditAxioms`, full closure green.
-> **REMAINING for vit (2 steps): (1) the whole-net THREAD** — instantiate `vit_block_tiedV` at the real
-> `vitForward2V` activations + thread `vitCotXinV` block→block + patch/final-LN/head ties + loss cot → the
-> `vit_net_tied*` capstone (mechanical assembly, like convnext's `cnx_net_tied_certified`); **(2) the multi-head/
-> depth-12 promotion** — the chain infra (`vitForward2V`, `*V` cots) is **single-head 2-block**, the committed
-> render is **multi-head (3) depth-12**, so promoting needs multi-head chain cots (per-head `headSlice`/`headPad`
-> backs summed) — the mnv2 reduced→full analogue. Plus the trainer swap (regen committed `.mlir` + cls-dim/FFI
-> reconcile). The vector-LN granularity that SHIPS is modeled (NOT the scalar-LN `vitNetBackGraph` universe).
+> at the chain cot (`ViTVecLN`/`ViTChainClose`'s `vitCot*`) — ZERO new ops/bridges; compiled first try.
+>
+> **✅ §1a TIE — WHOLE-NET THREAD DONE (2026-06-19, 2-block representative).** `vit_block_tiedAtV` (the input-only
+> block tie — recomputes the 11 saved activations from the block INPUT via the `vitBlockSpelledV` let-chain,
+> then `vit_block_tiedV` holds; the vit peer of `cnxBlockTiedAt`) + `vit_net_tiedV` (**BOTH blocks of the 2-block
+> ViT tied through the REAL forward** `ib1 → vitBlockFwdOV → ib2 → b2out`, with the **inter-block cotangent
+> fan-in** threaded: block 2's `vitBlockCotInAtV` = the attention-residual `vitCotXinV` IS block 1's `dyOut`, and
+> the final-LN input-VJP of the classifier-back `vitCotB2outV` is block 2's `dyOut`). `@[irreducible]` forward/
+> cot-in/tied wrappers (the r34/mnv2 heartbeat lesson). The convnext `cnx_net_tied_certified` pattern at the
+> single-head representative; **3-axiom clean**, wired to lakefile `Proofs` + `AuditAxioms`, full closure green.
+> **REMAINING for vit: the multi-head/depth-12 promotion** — the chain infra (`vitForward2V`, the `*V` cots,
+> `vit_net_tiedV`) is **single-head 2-block**, the committed render is **multi-head (3) depth-12**, so promoting
+> needs multi-head chain cots (per-head `headSlice`/`headPad` backs summed over heads) + the depth-12 thread —
+> the mnv2 reduced→full analogue. Plus the final-LN/classifier/patch-embed tie bundling (reuse the §1-fold + chain
+> certs directly) and the trainer swap (regen committed `.mlir` + cls-dim/FFI reconcile). The vector-LN
+> granularity that SHIPS is modeled throughout (NOT the scalar-LN `vitNetBackGraph` parallel universe).
 >
 > **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1 — the fold + the full [3,3,9,3] render(provenGraph) train step.**
 > Commits `1bcbf70` (per-channel layer-scale γ cert — the one new proof) → `09b8195` (3 new core SHlo ops

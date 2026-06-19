@@ -152,4 +152,121 @@ theorem vit_block_tiedV {Np1 D mlpDim : Nat}
   · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bfc2 g Wfc2 dyOut lr i j
   · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wfc2 (Mat.unflatten g) bfc2 dyOut lr i
 
+/-! ## Whole-net thread (single-head vector-LN, 2-block representative) — the convnext pattern
+
+`vitBlockFwdOV` is the forward block step (= `vitBlockSpelledV`, exposing the block output);
+`vitBlockTiedAtV` recomputes the 11 saved activations from the block INPUT (the `vitBlockSpelledV`
+let-chain) and delegates to `vit_block_tiedV` — so the block's params tie at the REAL forward + the
+threaded `dyOut`. `vitBlockCotInAtV` is the attention-residual fan-in (`vitCotXinV`), the block's input
+cotangent (= the previous block's `dyOut`). `@[irreducible]` so the nested 2-block composition stays
+opaque (the r34/mnv2 heartbeat lesson). -/
+
+@[irreducible] noncomputable def vitBlockFwdOV {Np1 D mlpDim : Nat} (ε : ℝ)
+    (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
+    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
+    (xin : Vec (Np1 * D)) : Vec (Np1 * D) :=
+  -- inline `vitBlockSpelledV` at D (it is stated at `1 * D`, not defeq) — the block output
+  let X    : Mat Np1 D := Mat.unflatten xin
+  let ln1  : Mat Np1 D := fun r k => layerScale γ1 (fun s => layerNormForward D ε 1 0 (X r) s) k + β1 k
+  let Q    : Mat Np1 D := fun r => dense Wq bq (ln1 r)
+  let K    : Mat Np1 D := fun r => dense Wk bk (ln1 r)
+  let V    : Mat Np1 D := fun r => dense Wv bv (ln1 r)
+  let P    : Mat Np1 Np1 := rowSoftmax (fun i j => sdpa_scale D * Mat.mul Q (Mat.transpose K) i j)
+  let h    : Mat Np1 D := fun r s => X r s + dense Wo bo (Mat.mul P V r) s
+  let ln2  : Mat Np1 D := fun r k => layerScale γ2 (fun s => layerNormForward D ε 1 0 (h r) s) k + β2 k
+  let g    : Mat Np1 mlpDim := fun r => gelu mlpDim (dense Wfc1 bfc1 (ln2 r))
+  Mat.flatten (fun r s => h r s + dense Wfc2 bfc2 (g r) s)
+
+/-- Attention-residual fan-in: the block-input cotangent the chain hands upstream (`vitCotXinV`,
+    recomputing the saves from `xin`). -/
+@[irreducible] noncomputable def vitBlockCotInAtV {Np1 D mlpDim : Nat} (ε : ℝ)
+    (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
+    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D)
+    (xin dyOut : Vec (Np1 * D)) : Vec (Np1 * D) :=
+  let X    : Mat Np1 D := Mat.unflatten xin
+  let ln1  : Mat Np1 D := fun r k => layerScale γ1 (fun s => layerNormForward D ε 1 0 (X r) s) k + β1 k
+  let Q    : Mat Np1 D := fun r => dense Wq bq (ln1 r)
+  let K    : Mat Np1 D := fun r => dense Wk bk (ln1 r)
+  let V    : Mat Np1 D := fun r => dense Wv bv (ln1 r)
+  let ss   : Mat Np1 Np1 := fun i j => sdpa_scale D * Mat.mul Q (Mat.transpose K) i j
+  let P    : Mat Np1 Np1 := rowSoftmax ss
+  let att  : Mat Np1 D := Mat.mul P V
+  let h    : Mat Np1 D := fun r s => X r s + dense Wo bo (att r) s
+  let ln2  : Mat Np1 D := fun r k => layerScale γ2 (fun s => layerNormForward D ε 1 0 (h r) s) k + β2 k
+  let m1   : Mat Np1 mlpDim := fun r => dense Wfc1 bfc1 (ln2 r)
+  let dAtt := vitCotAttV ε γ2 Wo Wfc1 Wfc2 (Mat.flatten h) (Mat.flatten m1) dyOut
+  let dQ   := vitCotDQ D (Mat.flatten ss) (Mat.flatten K) (Mat.flatten V) dAtt
+  let dK   := vitCotDK D (Mat.flatten ss) (Mat.flatten Q) (Mat.flatten V) dAtt
+  let dV   := vitCotDV (Mat.flatten P) dAtt
+  let cotH := vitCotHV ε γ2 Wfc1 Wfc2 (Mat.flatten h) (Mat.flatten m1) dyOut
+  vitCotXinV ε γ1 Wq Wk Wv xin dQ dK dV cotH
+
+/-- **Input-only block tie** — recompute the 11 saves from `xin` (the `vitBlockSpelledV` let-chain),
+    then the generic block tie holds. The vit peer of `cnxBlockTiedAt`. -/
+@[irreducible] def vitBlockTiedAtV {Np1 D mlpDim : Nat}
+    (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
+    (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
+    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
+    (xin dyOut : Vec (Np1 * D)) (lr : ℝ) : Prop :=
+  let X    : Mat Np1 D := Mat.unflatten xin
+  let ln1  : Mat Np1 D := fun r k => layerScale γ1 (fun s => layerNormForward D ε 1 0 (X r) s) k + β1 k
+  let Q    : Mat Np1 D := fun r => dense Wq bq (ln1 r)
+  let K    : Mat Np1 D := fun r => dense Wk bk (ln1 r)
+  let V    : Mat Np1 D := fun r => dense Wv bv (ln1 r)
+  let ss   : Mat Np1 Np1 := fun i j => sdpa_scale D * Mat.mul Q (Mat.transpose K) i j
+  let P    : Mat Np1 Np1 := rowSoftmax ss
+  let att  : Mat Np1 D := Mat.mul P V
+  let h    : Mat Np1 D := fun r s => X r s + dense Wo bo (att r) s
+  let ln2  : Mat Np1 D := fun r k => layerScale γ2 (fun s => layerNormForward D ε 1 0 (h r) s) k + β2 k
+  let m1   : Mat Np1 mlpDim := fun r => dense Wfc1 bfc1 (ln2 r)
+  let g    : Mat Np1 mlpDim := fun r => gelu mlpDim (m1 r)
+  vitBlockTiedV xN wN bN gN epsStr lrStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
+    Wfc1 bfc1 Wfc2 bfc2 xin (Mat.flatten ln1) (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V)
+    (Mat.flatten att) (Mat.flatten h) (Mat.flatten ln2) (Mat.flatten g)
+    (Mat.flatten ss) (Mat.flatten P) (Mat.flatten m1) dyOut lr
+
+/-- **The input-only block tie holds.** Unfold the saves, delegate to `vit_block_tiedV`. -/
+theorem vit_block_tiedAtV {Np1 D mlpDim : Nat}
+    (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
+    (γ1 β1 γ2 β2 : Vec D) (Wq Wk Wv Wo : Mat D D) (bq bk bv bo : Vec D)
+    (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
+    (xin dyOut : Vec (Np1 * D)) (lr : ℝ) :
+    vitBlockTiedAtV xN wN bN gN epsStr lrStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
+      Wfc1 bfc1 Wfc2 bfc2 xin dyOut lr := by
+  unfold vitBlockTiedAtV
+  exact vit_block_tiedV xN wN bN gN epsStr lrStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
+    Wfc1 bfc1 Wfc2 bfc2 xin _ _ _ _ _ _ _ _ _ _ _ dyOut lr
+
+set_option maxHeartbeats 4000000 in
+/-- **The 2-block vector-LN ViT, tied through the real forward + the inter-block cotangent fan-in.**
+    Block inputs are the real forward prefixes (`ib1` the embedded tokens, `ib2 = vitBlockFwdOV(ib1)`);
+    the block-2 output cotangent is the final-LN input-VJP of the classifier-back (`vitCotB2outV`), and
+    block 1's `dyOut` is what block 2 hands upstream (`vitBlockCotInAtV` — the attention-residual fan-in).
+    BOTH blocks' 16 params then `den = θ − lr·(certified ∂/∂θ · real-chain cotangent)`. The vit peer of
+    convnext's `cnx_net_tied_certified` at the 2-block single-head representative. (Final-LN γ/β, the
+    classifier, and the patch embed reuse the §1-fold + chain certs directly; not bundled here.) -/
+theorem vit_net_tiedV {N D mlpDim nClasses : Nat}
+    (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ) (γF : Vec D) (Wcls : Mat D nClasses)
+    -- block 1
+    (γ1₁ β1₁ γ2₁ β2₁ : Vec D) (Wq₁ Wk₁ Wv₁ Wo₁ : Mat D D) (bq₁ bk₁ bv₁ bo₁ : Vec D)
+    (Wfc1₁ : Mat D mlpDim) (bfc1₁ : Vec mlpDim) (Wfc2₁ : Mat mlpDim D) (bfc2₁ : Vec D)
+    -- block 2
+    (γ1₂ β1₂ γ2₂ β2₂ : Vec D) (Wq₂ Wk₂ Wv₂ Wo₂ : Mat D D) (bq₂ bk₂ bv₂ bo₂ : Vec D)
+    (Wfc1₂ : Mat D mlpDim) (bfc1₂ : Vec mlpDim) (Wfc2₂ : Mat mlpDim D) (bfc2₂ : Vec D)
+    (ib1 : Vec ((N + 1) * D)) (dy : Vec nClasses) (lr : ℝ) :
+    let ib2    : Vec ((N + 1) * D) := vitBlockFwdOV ε γ1₁ β1₁ γ2₁ β2₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁ ib1
+    let b2out  : Vec ((N + 1) * D) := vitBlockFwdOV ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂ ib2
+    let dyOut2 : Vec ((N + 1) * D) := vitCotB2outV N D nClasses ε γF Wcls b2out dy
+    let dyOut1 : Vec ((N + 1) * D) := vitBlockCotInAtV ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ Wfc1₂ bfc1₂ Wfc2₂ ib2 dyOut2
+    -- block 1 tied at its real input (ib1) + the cotangent block 2 hands upstream (dyOut1)
+    vitBlockTiedAtV xN wN bN gN epsStr lrStr cotN ε γ1₁ β1₁ γ2₁ β2₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁
+        Wfc1₁ bfc1₁ Wfc2₁ bfc2₁ ib1 dyOut1 lr
+    -- block 2 tied at its real input (ib2) + the final-LN-back cotangent (dyOut2)
+  ∧ vitBlockTiedAtV xN wN bN gN epsStr lrStr cotN ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂
+        Wfc1₂ bfc1₂ Wfc2₂ bfc2₂ ib2 dyOut2 lr := by
+  intro ib2 b2out dyOut2 dyOut1
+  refine ⟨?_, ?_⟩
+  · exact vit_block_tiedAtV xN wN bN gN epsStr lrStr cotN ε γ1₁ β1₁ γ2₁ β2₁ Wq₁ Wk₁ Wv₁ Wo₁ bq₁ bk₁ bv₁ bo₁ Wfc1₁ bfc1₁ Wfc2₁ bfc2₁ ib1 dyOut1 lr
+  · exact vit_block_tiedAtV xN wN bN gN epsStr lrStr cotN ε γ1₂ β1₂ γ2₂ β2₂ Wq₂ Wk₂ Wv₂ Wo₂ bq₂ bk₂ bv₂ bo₂ Wfc1₂ bfc1₂ Wfc2₂ bfc2₂ ib2 dyOut2 lr
+
 end Proofs.ViTTiePoC

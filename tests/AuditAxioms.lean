@@ -1707,3 +1707,13 @@ open Proofs
 -- Single-head vector-LN representative (heads=1); the multi-head/depth-12 thread (per-head headSlice/
 -- headPad backs summed) is the remaining step, the analogue of mnv2's reduced→full.
 #print axioms Proofs.ViTTiePoC.vit_block_tiedV
+-- ViT-Tiny §1a TIE — whole-net thread (2-block vector-LN representative). vit_block_tiedAtV: the
+-- per-block tie at the block INPUT, recomputing the 11 saved activations from xin (the vitBlockSpelledV
+-- let-chain) — the vit peer of cnxBlockTiedAt. vit_net_tiedV: BOTH blocks of the 2-block ViT tied
+-- through the REAL forward (ib1 → vitBlockFwdOV → ib2 → b2out) + the inter-block cotangent fan-in
+-- (block 2's vitBlockCotInAtV = the attention-residual fan-in vitCotXinV is block 1's dyOut; the
+-- final-LN input-VJP of the classifier-back vitCotB2outV is block 2's dyOut) — the convnext
+-- cnx_net_tied_certified pattern at the single-head representative. Single-head/2-block; the
+-- multi-head/depth-12 promotion (per-head headSlice/headPad backs summed) is the remaining step.
+#print axioms Proofs.ViTTiePoC.vit_block_tiedAtV
+#print axioms Proofs.ViTTiePoC.vit_net_tiedV
