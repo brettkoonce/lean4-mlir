@@ -116,7 +116,54 @@ gap, net by net?
 > the mnv2 reduced→full analogue. Plus the final-LN/classifier/patch-embed tie bundling (reuse the §1-fold + chain
 > certs directly) and the trainer swap (regen committed `.mlir` + cls-dim/FFI reconcile). The vector-LN
 > granularity that SHIPS is modeled throughout (NOT the scalar-LN `vitNetBackGraph` parallel universe).
->
+
+## NEXT SESSION: vit multi-head/depth-12 promotion — handoff (the last thing to finish vit)
+
+_State after 2026-06-19: vit §1 render (fwd+bwd) + §1 fold + §1a tie (per-block + 2-block whole-net thread)
+are ALL DONE + committed + 3-axiom clean. 6 commits: `b21f49f` (posEmbedSgd + vecln emit fix) → `e808ef0`
+(§1 render backward) → `fe317f4` (§1 fold, 200/200) → `673602d` (§1a per-block tie) → `92bd55e` (§1a whole-net
+thread, 2-block). The ONLY remaining gap: the tie certifies the **single-head 2-block representative**; the
+committed render is **multi-head (3 heads, d_head=64), depth-12**. Promote the tie to match. This is the mnv2
+reduced→full analogue — the math all exists, it's a thread + a small multi-head-cotangent construction._
+
+**Key files:** `ViTTiePoC.lean` (the tie — extend here), `ViTChainClose.lean` (single-head SDPA cots
+`vitCotD{Q,K,V}`/`vitCotLn1`, LN-agnostic), `ViTVecLN.lean` (the `*V` vector-LN cots + `vecln*_chain_certified`),
+`ViTMultiHead.lean` (the multi-head forward `vitBlockGraphMHV` + `transformerBlockVBackGraphMHP_faithful`),
+`ViTFaithfulPoC.lean` (the §1 folds `ViTPoC.*_den` to thread), `LeanMlir/Proofs/ViTRender.lean` (the committed
+render — `vBlockFwd`'s per-head slice/pad structure is the ground truth to match).
+
+**The four remaining tasks (in order):**
+1. **Multi-head chain cotangents (the one substantive build).** In the committed render `Wq/Wk/Wv/Wo` are
+   single `[192,192]` matrices: the dense produces all 3 heads' Q, then `headSliceF h` slices `[197,64]` per
+   head, per-head SDPA (scale `1/√64`), `headPadF h` scatters back `[197,192]`, summed over heads. So the
+   multi-head Q-dense cotangent is `dQ_mh := Σ_{h<3} headPadFlat 197 3 64 h (vitCotDQ 64 ss_h k_h v_h dAtt_h)`
+   where `ss_h`/`k_h`/`v_h`/`dAtt_h` are head `h`'s saved slices (`headSliceFlat` of the full q/k/v/dAtt). The
+   per-head SDPA backs are the EXISTING `vitCotD{Q,K,V}` at `d=64`. Define `vitCotLn1MH` (= the 3-way fan-in of
+   the 3 heads' Q/K/V dense-backs, each from `dQ_mh`/`dK_mh`/`dV_mh`) and prove `headPadFlat`/`headSliceFlat`
+   compose to the multi-head dense backward. The fold lemmas (`rowDenseWeightSgd_den` etc.) are head-agnostic
+   (generic in the cotangent) — only the COTANGENT changes from single-head `vitCotDQ` to `dQ_mh`. NB the scale:
+   single-head rep uses `sdpa_scale 192`, multi-head uses `sdpa_scale 64` (d_head=64) — match the committed.
+2. **Depth-12 thread.** Extend `vit_net_tiedV` from 2 blocks to 12 (mechanical — more `let`-bindings, exactly
+   like convnext's 18-block `cnx_net_tied_certified`). `@[irreducible]` wrappers + `maxHeartbeats` already proven
+   to keep it opaque. Thread `ib1 → … → ib12 → b12out`, dyOut backward via `vitBlockCotInAtV` (the per-block
+   fan-in, now multi-head) + `vitCotB2outV` (final-LN-back) at the top.
+3. **Bundle the non-block params** (cheap, all certs exist): final-LN γ/β (`veclnGammaSgd_den` +
+   `rowDenseBiasSgd_den_lnbeta` at `vitCotFl`/`vitCotB2outV`), classifier Wc/bc (`ViTPoC.headW_den`/`headB_den`),
+   patch embed wConv/bConv/cls/pos (`patchEmbedWeightSgd_den`/`patchEmbedBiasSgd_den`/`clsSgd`-via-`denseBiasSgdB`/
+   `posEmbedSgd_den` at the embed cotangent = block-1's `vitBlockCotInAtV` output). Then a `vit_net_tied_certified`
+   capstone bundling all 200 params (the convnext-style "all params" accounting).
+4. **Trainer swap** (independent of the tie): regen committed `verified_mlir/vit_train_step.mlir` from
+   `vitTrainStepRenderV` (currently writes `/tmp/`); reconcile the **1D cls `tensor<192>`** (new render) vs **2D
+   `tensor<1x192>`** (committed FFI layout) — update `IreeRuntime`/the vit layout's cls shape to 1D, or change the
+   render's `patchEmbedF`. Then iree-validate on gfx1100 + smoke-test `MainViTVerified`.
+
+**Recipe (proven on the 2-block tie):** the per-block tie `vit_block_tiedV` (generic in cotangent) + the §1
+folds are DONE and head-agnostic; the ONLY new content is the multi-head cotangent in task 1. The
+`@[irreducible]` wrapper pattern (`vitBlockFwdOV`/`vitBlockCotInAtV`/`vitBlockTiedAtV`) is the heartbeat-safe
+thread template — copy it for the multi-head/depth-12 version. Keep capstone names short (closure greps
+`#print axioms` per line). `lake build Proofs` + `lake env lean tests/AuditAxioms.lean` (3-axiom closure) +
+iree-compile the regenerated `.mlir` at each step.
+
 > **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1 — the fold + the full [3,3,9,3] render(provenGraph) train step.**
 > Commits `1bcbf70` (per-channel layer-scale γ cert — the one new proof) → `09b8195` (3 new core SHlo ops
 > `layerScaleChGammaSgd`/`lnGammaSgd`/`lnBetaSgd` across all 9 sites + den-fold, 3-axiom clean) → `0c0a4e7`
