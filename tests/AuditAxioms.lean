@@ -1339,6 +1339,26 @@ open Proofs
 #print axioms dense_unflatten_drift
 #print axioms linear_loss_grad_lipschitz
 #print axioms linear_sgd_descends
+-- Item D / G1 — the η-composition, the "two halves finally meet"
+-- (SgdDescentLinear.lean): the descent side (linear_sgd_descends) and the
+-- rounding side (FloatBridge's cotErr/mulErr head budget) fused into one
+-- statement. linearFloatGrad is the ACTUAL binary32 gradient the rendered
+-- trainer computes (float forward logits → rounded softmax−onehot cotangent
+-- → one rounded multiply by the exact input); linear_grad_close proves it is
+-- within mulErr u a 1 0 (cotErr …) of the certified ∂L/∂W (softmax_ce_cot_close
+-- for the head, mul_close for the input multiply with an exact left operand);
+-- linear_float_sgd_descends discharges linear_sgd_descends' abstract η with
+-- THAT proven budget — so "one binary32 SGD step on MNIST-linear provably
+-- decreases the cross-entropy loss" holds with NO abstract gradient-accuracy
+-- parameter. Depth-1 ⇒ no per-layer η-threading; the chain binary32 →
+-- proximity → smoothness → descent is closed end-to-end for one net. The only
+-- residue is the documented FloatModel → kernel trust boundary (exp accuracy
+-- eexp, a-posteriori logit drift δ) + checkable arithmetic (small-step,
+-- dominance).
+#print axioms FloatModel.linearFloatGrad
+#print axioms linearFloatGrad_apply
+#print axioms linear_grad_close
+#print axioms linear_float_sgd_descends
 -- The smoothness hypothesis discharged through the Chapter-3 MLP
 -- (SgdDescentMlp.lean), layer by layer. The key is the MARGIN hypothesis
 -- (the step's ℓ1 radius keeps every ReLU pre-activation away from its

@@ -253,3 +253,161 @@ theorem linear_sgd_descends {m n : Nat} (W : Mat m n) (b : Vec n)
       simpa [hf] using this)
     h1 h2
   simpa [hf] using hmain
+
+-- ════════════════════════════════════════════════════════════════
+-- § Item D: the η-composition — feed the FloatBridge budget into the
+--   descent η-slot, so "one binary32 SGD step decreases the loss" holds
+--   with NO abstract gradient-accuracy parameter.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The binary32 gradient of the MNIST-linear loss**, exactly as the
+    rendered trainer computes it: float forward logits `z̃ = M.dense W b x`,
+    the rounded softmax−onehot cotangent head, and one final rounded
+    multiply by the (exact) input `xᵢ` to form the outer-product weight
+    gradient `∂L/∂Wᵢⱼ = xᵢ·(softmax(z)ⱼ − onehotⱼ)`. Flattened to the
+    `Vec (m*n)` parameter layout that `gradAt`/`linear_sgd_descends` use. -/
+noncomputable def FloatModel.linearFloatGrad (M : FloatModel) {m n : Nat}
+    (W : Mat m n) (b : Vec n) (x : Vec m) (fexp : ℝ → ℝ) (label : Fin n) :
+    Vec (m * n) :=
+  Mat.flatten fun i j =>
+    M.mul (x i) (M.softmaxCECotF fexp (M.dense W b x) label j)
+
+@[simp] theorem linearFloatGrad_apply (M : FloatModel) {m n : Nat}
+    (W : Mat m n) (b : Vec n) (x : Vec m) (fexp : ℝ → ℝ) (label : Fin n)
+    (i : Fin m) (j : Fin n) :
+    M.linearFloatGrad W b x fexp label (finProdFinEquiv (i, j)) =
+      M.mul (x i) (M.softmaxCECotF fexp (M.dense W b x) label j) := by
+  simp [FloatModel.linearFloatGrad, Mat.flatten, Equiv.symm_apply_apply]
+
+/-- **The binary32 gradient is within `mulErr u a 1 0 (cotErr …)` of the
+    certified real gradient**, per entry. The head accuracy is the existing
+    `softmax_ce_cot_close` (`cotErr`); the final input-multiply is one
+    `mul_close` with an *exact* left operand (`ea = 0`) bounded by `a`, and a
+    right operand `softmax−onehot ∈ [−1,1]` (`C = 1`). This is the bridge
+    that discharges `linear_sgd_descends`' abstract `η`. -/
+theorem linear_grad_close {m n : Nat} (M : FloatModel) (W : Mat m n)
+    (b : Vec n) (x : Vec m) (label : Fin n) (fexp : ℝ → ℝ) {eexp δ a : ℝ}
+    (hx : ∀ i, |x i| ≤ a)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp n < 1)
+    (hδ : ∀ k', |M.dense W b x k' - dense W b x k'| ≤ δ)
+    (i : Fin m) (j : Fin n) :
+    |M.linearFloatGrad W b x fexp label (finProdFinEquiv (i, j)) -
+        gradAt (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+          (Mat.flatten W) (finProdFinEquiv (i, j))| ≤
+      FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n) := by
+  rw [linearFloatGrad_apply, linear_loss_gradAt, Mat.unflatten_flatten]
+  -- head accuracy: rounded cotangent within `cotErr` of `softmax − onehot`
+  have hcot := M.softmax_ce_cot_close fexp (M.dense W b x) (dense W b x)
+    label heexp0 heexp1 hfexp hρ1 hδ j
+  -- `softmax − onehot ∈ [−1, 1]`
+  have hs0 : 0 ≤ softmax n (dense W b x) j :=
+    div_nonneg (Real.exp_pos _).le
+      (Finset.sum_nonneg fun k _ => (Real.exp_pos _).le)
+  have hs1 : softmax n (dense W b x) j ≤ 1 := by
+    have hD : 0 < ∑ k, Real.exp (dense W b x k) :=
+      Finset.sum_pos (fun k _ => Real.exp_pos _) ⟨j, Finset.mem_univ j⟩
+    exact (div_le_one hD).mpr
+      (Finset.single_le_sum (fun k _ => (Real.exp_pos _).le)
+        (Finset.mem_univ j))
+  have hy : |softmax n (dense W b x) j - oneHot n label j| ≤ 1 := by
+    simp only [oneHot]
+    by_cases h : j = label
+    · rw [if_pos h, abs_le]; constructor <;> linarith
+    · rw [if_neg h, abs_le]; constructor <;> linarith
+  -- the input multiply: exact left operand (`|xᵢ − xᵢ| = 0 ≤ 0`)
+  have hxx : |x i - x i| ≤ (0:ℝ) := by simp
+  exact M.mul_close hxx hcot (hx i) hy
+
+/-- **One binary32 SGD step on the MNIST-linear classifier provably
+    decreases the cross-entropy loss — with NO abstract gradient-accuracy
+    parameter.** This is Item D / G1, the η-composition: the descent side
+    (`linear_sgd_descends`) and the rounding side (FloatBridge's
+    `cotErr`/`mulErr` head budget) are fused into one statement. The
+    gradient `gh` is the *actual* float-computed gradient
+    (`M.linearFloatGrad`), and its accuracy `η = mulErr u a 1 0 (cotErr …)`
+    is *proven* by `linear_grad_close`, not assumed.
+
+    What remains as hypotheses is exactly the honest residue: the input
+    bound `a`, `0 ≤ lr`, the GPU `exp` accuracy `eexp` and the a-posteriori
+    logit drift `δ` (the documented FloatModel → kernel trust boundary,
+    `softmax_ce_cot_close`), and the checkable-arithmetic small-step + two
+    dominance conditions. Depth-1 means there is no per-layer η-threading —
+    the clean pilot for the chain `binary32 → proximity → smoothness →
+    descent`, closed end-to-end for one net. -/
+theorem linear_float_sgd_descends {m n : Nat} (M : FloatModel) (W : Mat m n)
+    (b : Vec n) (x : Vec m) (label : Fin n) (fexp : ℝ → ℝ) {lr a eexp δ : ℝ}
+    (ha : 0 ≤ a) (hx : ∀ i, |x i| ≤ a) (hlr : 0 ≤ lr)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1) (hδ0 : 0 ≤ δ)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp n < 1)
+    (hδ : ∀ k', |M.dense W b x k' - dense W b x k'| ≤ δ)
+    (hsmall : 2 * (a * (lr * ((∑ idx, |gradAt
+        (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+        (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) *
+          FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)))) < 1)
+    (h1 : lr * (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)) *
+        (∑ idx, |gradAt
+          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+          (Mat.flatten W) idx|) ≤
+      lr * (∑ idx, gradAt
+        (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+        (Mat.flatten W) idx ^ 2) / 4)
+    (h2 : (2 * a ^ 2 / (1 - 2 * (a * (lr * ((∑ idx, |gradAt
+          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+          (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) *
+            FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)))))) *
+        (lr * ((∑ idx, |gradAt
+          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+          (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) *
+            FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n))) ^ 2 ≤
+      lr * (∑ idx, gradAt
+        (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+        (Mat.flatten W) idx ^ 2) / 4) :
+    crossEntropy n (dense (Mat.unflatten (Mat.flatten W -
+        lr • M.linearFloatGrad W b x fexp label)) b x) label ≤
+      crossEntropy n (dense (Mat.unflatten (Mat.flatten W)) b x) label -
+        lr * (∑ idx, gradAt
+          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+          (Mat.flatten W) idx ^ 2) / 2 := by
+  -- the head budget is nonnegative (it bounds an absolute value)
+  have hu := M.u_nonneg
+  have hcot0 : 0 ≤ FloatModel.cotErr M.u eexp δ n := by
+    have hpow : (1:ℝ) ≤ (1 + M.u) ^ (n + 1) := one_le_pow₀ (by linarith)
+    have hρ0 : 0 ≤ FloatModel.smRho M.u eexp n := by
+      simp only [FloatModel.smRho]
+      have := mul_nonneg (by linarith : (0:ℝ) ≤ (1 + M.u) ^ (n + 1) - 1)
+        (by linarith : (0:ℝ) ≤ 1 + eexp)
+      linarith
+    have hκ0 : 0 ≤ FloatModel.smKappa M.u eexp n := by
+      simp only [FloatModel.smKappa]
+      exact div_nonneg (by linarith) (by linarith)
+    have hexp0 : 0 ≤ Real.exp (2 * δ) - 1 := by
+      have := Real.add_one_le_exp (2 * δ); linarith
+    have hsm0 : 0 ≤ FloatModel.smErr M.u eexp δ n := by
+      simp only [FloatModel.smErr]
+      have := mul_nonneg hu
+        (by linarith : (0:ℝ) ≤ 1 + FloatModel.smKappa M.u eexp n)
+      linarith
+    simp only [FloatModel.cotErr]
+    have := mul_nonneg hu
+      (by linarith : (0:ℝ) ≤ 1 + FloatModel.smErr M.u eexp δ n)
+    linarith
+  have hηF0 : 0 ≤ FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n) := by
+    have e1 : (0:ℝ) ≤ M.u * ((a + 0) * (1 + FloatModel.cotErr M.u eexp δ n)) :=
+      mul_nonneg hu (mul_nonneg (by linarith) (by linarith))
+    have e2 : (0:ℝ) ≤ a * FloatModel.cotErr M.u eexp δ n := mul_nonneg ha hcot0
+    simp only [FloatModel.mulErr]
+    nlinarith [e1, e2]
+  -- discharge the abstract gradient-accuracy hypothesis by `linear_grad_close`
+  have hgh : ∀ idx, |M.linearFloatGrad W b x fexp label idx -
+      gradAt (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+        (Mat.flatten W) idx| ≤
+      FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n) := by
+    intro idx
+    obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    exact linear_grad_close M W b x label fexp hx heexp0 heexp1 hfexp hρ1
+      hδ i j
+  exact linear_sgd_descends W b x label (M.linearFloatGrad W b x fexp label)
+    ha hx hlr hηF0 hgh hsmall h1 h2

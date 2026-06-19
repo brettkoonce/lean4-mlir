@@ -1,6 +1,8 @@
 # Planning — FloatBridge: finish the MNIST chain, then low-precision quantization (→ an E4M3 demo)
 
-_Status note, 2026-06-19._ Forward-looking plan. Two threads that share one foundation
+_Status note, 2026-06-19._ Forward-looking plan. **Item D / G1 (§1a) is DONE** — see
+`linear_float_sgd_descends` in `SgdDescentLinear.lean` (axiom-clean, in `AuditAxioms.lean`).
+The rest below is still forward-looking. Two threads that share one foundation
 (`LeanMlir/Proofs/FloatBridge.lean`, the `FloatModel` relative-error model, parametric in the
 unit roundoff `u`):
 
@@ -53,10 +55,23 @@ model's assumptions break* (§2).
 
 ## 1. Finish the MNIST float chain (all near-term, all tractable)
 
-### 1a. Item D — the η-composition (do this FIRST, on linear)
+### 1a. Item D — the η-composition (do this FIRST, on linear) — ✅ DONE (2026-06-19)
 
 **The cheapest, highest-leverage thing in the whole float story.** Instantiate the descent η-slot
 with the actual rounding budget so the two halves become one theorem.
+
+**Landed** in `SgdDescentLinear.lean` (3-axiom clean, audited):
+- `FloatModel.linearFloatGrad` — the *actual* binary32 gradient the rendered trainer computes:
+  float forward logits `M.dense W b x` → rounded softmax−onehot cotangent (`softmaxCECotF`) → one
+  rounded multiply by the exact input `xᵢ`, flattened to the `Vec (m*n)` parameter layout.
+- `linear_grad_close` — that gradient is within `mulErr u a 1 0 (cotErr u eexp δ n)` of the
+  certified `∂L/∂Wᵢⱼ`, per entry (head via `softmax_ce_cot_close`; the input multiply via one
+  `mul_close` with an exact left operand `ea = 0`, `C = 1` since `softmax−onehot ∈ [−1,1]`).
+- `linear_float_sgd_descends` — discharges `linear_sgd_descends`' abstract `η` with that proven
+  budget: **one binary32 SGD step on MNIST-linear provably decreases the cross-entropy loss, no
+  abstract gradient-accuracy parameter.** Residue = the documented FloatModel→kernel trust boundary
+  (`exp` accuracy `eexp`, a-posteriori logit drift `δ`) + checkable arithmetic (small-step, the two
+  dominance conditions). Depth-1 ⇒ no per-layer η-threading, exactly as predicted.
 
 - `linear_sgd_descends` (`SgdDescentLinear.lean`) currently: `∀ η, (gradient is within η) → loss
   drops by ≥ lr‖∇‖²/2 − taxes(η)`. The FloatBridge budget that bounds the rounded gradient is the
@@ -200,7 +215,7 @@ to *show* the compounding so the regime change from §2 is visible on a real net
 
 | Order | Item | Effort | Payoff |
 |---|---|---|---|
-| 1 | **G1/Item D on linear** (`linear_float_sgd_descends`) | light | closes the chain end-to-end for one net — the biggest honesty win |
+| ✅ | **G1/Item D on linear** (`linear_float_sgd_descends`) | light | **DONE 2026-06-19** — closes the chain end-to-end for one net, the biggest honesty win |
 | 2 | **§1c two-`u` `dot_close_mixed`** | light | bf16-mixed (shipped artifact) falls out + sets up fp8 |
 | 3 | **A/B/C — CNN rounding side** | medium | brings the 3rd MNIST net to mlp parity ("FloatBridge to the rest of MNIST") |
 | 4 | **3a E4M3 MNIST empirical demo** | light | the "precision drops elegantly" headline |
