@@ -6,8 +6,8 @@ to the `Proofs/` math, or only validated numerically? And what would close the
 gap, net by net?
 
 > **▶ NEXT SESSION (2026-06-19): vit (Vision Transformer) — the LAST Tier-3 net.** Tier-3 order was
-> enet → convnext → vit; enet §1a TIE is CLOSED and convnext §1 (fold + render) is DONE (see the two
-> banners below). vit is the final §1a-tie target. **Heed [[section1a-tie-sweep]]'s lesson: ground-truth
+> enet → convnext → vit; enet AND convnext §1a TIE are both CLOSED (see the banners below). vit is the
+> final §1a-tie target — the only Tier-3 net left. **Heed [[section1a-tie-sweep]]'s lesson: ground-truth
 > vit's REAL state first** (the doc's §5 vit bullet flags a SCALAR-proven vs PER-CHANNEL-`[192]`-emitted
 > LayerNorm GRANULARITY gap — UNLIKE convnext, where proof + committed both use scalar LN, so vit's gap
 > may be a genuine blocker, not just engineering). vit DOES have the richest existing math
@@ -25,9 +25,25 @@ gap, net by net?
 > weight-grad gaps (stem 4×4/s4 + 3 downsample 2×2/s2 — the even-kernel/stride-4 weight grads have no VJP-cert
 > op; their bias grads DO use SHlo ops). convnext was the **mnv2 situation** (no §1 render/fold existed; committed
 > .mlir was hand-written), but the hard math (whole-net VJP, render-math param certs, chain cots in
-> `ConvNeXtChainClose`) already existed. **REMAINING for convnext (before vit, or after): full per-param den-fold
-> (wire each param through its cert) → `ConvNeXtTiePoC` (§1a tie — the EASY mnv2-style collection, chain cots
-> exist).** Full detail in [[convnext-tie-scope]].
+> `ConvNeXtChainClose`) already existed. (The "178/182" count above was a miscount — the committed render emits
+> **180** return tensors: stem 2 + 18 blocks × 9 + 3 downsamples × 4 + head 4; **176** are den-certified, 4 are the
+> even-kernel weight-grad gaps.) Full detail in [[convnext-tie-scope]].
+>
+> **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1a TIE CLOSED — the whole [3,3,9,3] train step tied through the real forward.**
+> `ConvNeXtTiePoC.lean` (`Proofs.CnxTiePoC`): `cnx_net_tied_certified` threads all **176** SHlo-op params (every param
+> EXCEPT the 4 even-kernel weight-grad gaps) through the REAL `convNextTrainStepFaithfulV` forward
+> (`cnxStemFwdO`/`cnxBlockFwdO`/`cnxDownFwdO`, `@[irreducible]`) + the loss-driven backward cotangent chain, with the
+> **identity-skip fan-in `+ dyOut`** at each of the 18 block merges + the LN-back at each of the 3 downsamples. Per-type
+> tie lemmas (`cnx_block_tied` 9-param, `cnx_down_tied` 3-param LN+strided-bias, `cnx_stem_bias_tied`, `cnx_head_tied`
+> GAP→LN→dense), each a pure delegation to the §1-fold generics (`Mnv2PoC.depthwise*`/`CifarPoC.conv*`/`CnxPoC.{lnGamma,
+> lnBeta,layerScaleChGamma}Sgd_den`/`ResNet34PoC.convStridedB_den`/`Cifar8PoC.dense*`) at the `ConvNeXtChainClose`
+> cotangents (`cnxCotP`/`cnxCotE`/`cnxCotN`/`cnxCotD`). **ZERO new core ops, ZERO new bridges** — pure thread + fan-in.
+> New content vs mnv2: **GELU mask** (smooth, no kink), **scalar LayerNorm** γ/β (`Vec 1`), **per-channel layer-scale**
+> γ (`Vec c`, `chanIdx` broadcast). Wired to lakefile `Proofs` root + `tests/AuditAxioms.lean`; `lake build Proofs`
+> green (2274); all 6 capstones 3-axiom clean `[propext, Classical.choice, Quot.sound]`. Den-level tie (no
+> renderer/.mlir change, as r34/mnv2). Residual: block backward rendered hand-written (cotangent SSA↔chain-cot per-op
+> trust); per-op `pretty` lexing; LN `0<ε` smoothness; ℝ→Float32. **This closes the 11th net; vit (the last Tier-3) is
+> the only §1a-tie target left.**
 >
 > **✅ DONE (2026-06-18): enet (EfficientNet-B0) §1a TIE CLOSED — the whole 262-param train step tied through the real forward.**
 > The §1a-tie sweep has now closed **10 nets** (linear, mlp, cnn, cifar, cifar-bn, cifar8, cifar8-bn, r34, mnv2, **enet**).
@@ -157,7 +173,7 @@ emitter does **not** print (independent hand-written string emitter).
 | **r34** | committed `.mlir` | ❌ hand-written (`TestResnet34Fwd`) | ✅ **CLOSED** — `resnet34TrainStepFaithfulV` (ResNet34Render.lean) renders the whole `[3,4,6,3]` train step (146 params) as `pretty(provenGraph)`: 7×7/s2 stem + 16 residual blocks (residual cotangent-sum via `addV` at each skip merge) + GAP + dense; **2 new core ops** `convStridedWeightSgd`/`convStridedBiasSgd` (7×7 stem + 3×3 strided down/proj), den-certified via `mnv2_render_stem_conv{W,b}_certified` (`ResNet34PoC.convStrided{W,B}_den`); 142 other params reuse the cifar conv/BN/dense generics | committed bytes iree-compile on rocm/gfx1100 (537 KB vmfb) | — (per-op `pretty` lexing + cotangent-subgraph⇄SHlo pin incl. residual fan-in sums + BN `0<ε` + ℝ→Float32) |
 | **mnv2** | committed `.mlir` | ❌ hand-written | ✅ **CLOSED (§1 fold, reduced 6-block)** — `mnv2TrainStepFaithfulV` (MobileNetV2Render.lean) renders the whole reduced-6-block train step (82 params) as `pretty(provenGraph)`; each param `den = certified` via `MobileNetV2FaithfulPoC` — **4 new core ops** `depthwise{,Strided}{Weight,Bias}Sgd` (StableHLO.lean, the per-channel `batch_group_count=c` transpose-trick weight + `convBiasSgd`-aliased bias), expand/project conv via `CifarPoC.conv{W,B}_den`, BN via `CifarBnPoC.bn{Gamma,Beta}_den`, dense via `Cifar8PoC.dense{W,B}_den`; committed bytes iree-compile on rocm/gfx1100 (789 KB vmfb), drop-in positional param layout. **FULL 17-block paper net now also DONE**: §1 CLOSE (`mnv2TrainStepFaithfulVPaper`, 210 params, 559 KB vmfb), §1 fold den (`MobileNetV2FaithfulPoCPaper`), and §1a TIE (`mnv2_net_tied_certified`) all landed + 3-axiom clean | **§1a tie DONE** (full 17-block, `MobileNetV2TiePoCPaper`); remaining: trainer swap to the full `.mlir` (task 4) + 2-block→17-block VJP-witness upgrade (task 5, separate §4) |
 | **enet** | committed `.mlir` | ◐ hand-written (batched emit "Item B" now BUILT — `pretty(provenGraph)` validates; renderer pending) | ◐ hand-written; all batched ops + param-SGD BUILT + iree-validated (Item B done); renderer pending | `efficientnetFwdGraphB_full_faithful` (full 16 MBConv) + `efficientnetForwardB_full_has_vjp` (whole-net VJP); den-faithful per-block backward bricks | **real blocker was Item B (batched `emitTok` stub) + missing batched param-SGD, NOT "no whole-net backward"** — both DONE (5 commits, 2026-06-18); renderer/fold/tie remain |
-| **convnext** | committed `.mlir` | ❌ hand-written | ❌ `renderBody` hand-written | `convNextFwdGraphT_faithful` (full [3,3,9,3]); backward per-block, **no whole-net** | no whole-net backward; emitted untied |
+| **convnext** | committed `.mlir` | ❌ hand-written | ✅ **CLOSED (§1 render + §1a tie)** — `convNextTrainStepFaithfulV` renders the full [3,3,9,3] train step (**180 params**) as `pretty(provenGraph)`, iree-validated (647884 B); §1a tie `CnxTiePoC.cnx_net_tied_certified` threads all **176** SHlo-op params through the REAL render forward + the loss-driven backward (GELU masks, identity-skip fan-in ×18, downsample LN-back ×3, scalar-LN γ/β + per-channel layer-scale γ); the **4 even-kernel weight grads** (stem 4×4/s4 `psW` + 3 downsample 2×2/s2 `d{0,1,2}W`) are the documented render gap (no even/stride-4 weight-grad VJP op), outside the den-tie — their *bias* grads ARE tied | **§1a TIED** (176/180; 4 even-kernel weight-grad gaps; the §1 fold added 3 ConvNeXt core ops `layerScaleChGammaSgd`/`lnGammaSgd`/`lnBetaSgd`, the tie reuses them — ZERO new ops/bridges) |
 | **vit** | committed `.mlir` | ❌ hand-written (`vitFwd`) | ❌ `vitBack` hand-written | **richest**: `vitFwdGraphKMHV_faithful` + whole-net `vitNetBackGraph_faithful` + full per-param `vit_render_*_chain_certified` | emitted untied **+ granularity gap**: whole-net backward proven for *scalar* LN, emitted uses *per-channel* `[192]` LN |
 
 ### What is genuinely proof-tied to emitted bytes today
@@ -202,7 +218,8 @@ leaves both green.
 | **r34** | ✅ **whole net** den-composed: all 16 residual blocks + stem threaded at the real `resnet34Forward_full_pc` activations, cotangent composed from the loss through dense/GAP-back + the **residual fan-in sum** at every skip (`idBlockCotIn`/`downBlockCotIn`); capstone `r34_net_tied_certified` bundles every block's tie + dense total-loss fold + `r34LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); the new fan-in-sum constructors add the skip+body cotangent merge cnn/cifar (no residuals) lacked | **✅ TIED** |
 | **mnv2** (full 17-block paper) | ✅ **whole net** den-composed: all 17 inverted-residual blocks + stem + conv-bn-relu6 head threaded at the real `mobilenetv2ForwardPaper` activations (single-ε), cotangent composed from the loss through dense/GAP-back + the head + the **residual fan-in `+ dyOut`** at every stride-1 skip (`ivS1SkipCotInAt`); capstone `mnv2_net_tied_certified` bundles all 210 params' ties + dense total-loss fold + `mnv2LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); relu6 two-kink mask + linear project bottleneck (project-BN cot = `dyOut` directly) are the new content vs r34 | **✅ TIED** |
 | **enet** (full 16-MBConv, 262 params) | ✅ **whole net** den-composed: all 16 MBConv blocks + stem + conv-bn-swish head threaded at the real `efficientnetForwardB_full` activations (batched true-BN + SE), cotangent composed from the loss `g` down through the head VJP + every block's VJP (residual fan-in folded into `mbResidW`'s own VJP); capstone `efficientnet_net_tied` bundles all 262 params' ties + the loss-cotangent den (`efficientnetLossCot_den`) | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); **swish** masks + the **SE gate fan-in** (`gateCotB`/`sigBackB`/`rowDenseBackFlat`) + **true-BN** backs (`bnBatchLA` VJP) + strided depthwise, all **batched** — the new content vs mnv2 | **✅ TIED** |
-| convnext / vit | — (Tier-3, next) | — | — |
+| **convnext** (full [3,3,9,3], 176 tied params) | ✅ **whole net** den-composed: all 18 ConvNeXt blocks + 3 downsamples + GAP→LN→dense head + stem bias threaded at the real `convNextTrainStepFaithfulV` forward activations (`cnxStemFwdO`/`cnxBlockFwdO`/`cnxDownFwdO`), cotangent composed from the loss `g` down through dense (`dense_has_vjp`) + head-LN + GAP (`globalAvgPoolFlat_has_vjp`) + every block's backward, with the **identity-skip fan-in `+ dyOut`** at each of the 18 block merges + the LN-back at each of the 3 downsamples; capstone `cnx_net_tied_certified` bundles all 176 params' ties + the dense total-loss fold + `cnxLossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); **GELU mask** (smooth, no kink — `geluScalarDeriv`) + **scalar LayerNorm** γ/β (`Vec 1`) + **per-channel layer-scale** γ (`Vec c`, `chanIdx` broadcast) are the new content vs mnv2's relu6/per-channel-BN | **✅ TIED** |
+| vit | — (Tier-3, last) | — | — |
 
 **The close ("tie them together").** Feed the *proven* cotangent/forward subgraph directly
 into each consumer (`weightSgd … (lossCotGraph …)` instead of `.operand %dy …`), so each

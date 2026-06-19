@@ -69,6 +69,7 @@ import LeanMlir.Proofs.MobileNetV2BackB0
 import LeanMlir.Proofs.ResNet34BackB0
 import LeanMlir.Proofs.ConvNeXtBackB0
 import LeanMlir.Proofs.ConvNeXtFaithfulPoC
+import LeanMlir.Proofs.ConvNeXtTiePoC
 import LeanMlir.Proofs.ViTBackB0
 import LeanMlir.Proofs.LinearFaithfulPoC
 import LeanMlir.Proofs.MlpFaithfulPoC
@@ -970,6 +971,19 @@ open Proofs
 #print axioms cnx_render_dw7b_chain_certified
 #print axioms cnx_stem_render_convW_chain_certified
 #print axioms cnx_stem_render_convb_chain_certified
+-- ch9-ConvNeXt-T FULL [3,3,9,3] §1a TIE — the whole train step den-composed forward→loss→backward
+-- through the REAL committed render forward (cnxStemFwdO/cnxBlockFwdO/cnxDownFwdO) + the loss-driven
+-- cotangent chain: GELU masks (smooth, no kink), the residual fan-in `+ dyOut` at each of the 18
+-- identity-skip merges, the LN-back at each of the 3 downsamples, scalar-LN γ/β + per-channel
+-- layer-scale γ. Per-block / down / head / stem-bias ties applied across all 18 blocks. The 4
+-- even-kernel weight grads (stem 4×4/s4 + 3 downsample 2×2/s2) are the documented render gap, outside
+-- this den-tie. ZERO new ops/bridges — pure thread + fan-in over the §1-fold generics.
+#print axioms Proofs.CnxTiePoC.cnx_block_tied
+#print axioms Proofs.CnxTiePoC.cnx_down_tied
+#print axioms Proofs.CnxTiePoC.cnx_stem_bias_tied
+#print axioms Proofs.CnxTiePoC.cnx_head_tied
+#print axioms Proofs.CnxTiePoC.cnxLossCot_den
+#print axioms Proofs.CnxTiePoC.cnx_net_tied_certified
 -- ViT RENDER (planning/vit_close.md Item A) — the representative distinct-param 2-block ViT.
 -- The proven transformerTower/vit_full share ONE param tuple across blocks; the close needs distinct
 -- per-block params, so `vitForward2` (patchEmbed → block₁ → block₂ → final per-token LN → CLS slice →

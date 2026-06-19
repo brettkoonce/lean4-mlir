@@ -344,7 +344,12 @@ lean_lib «Proofs» where
              -- (fwd + bwd-cotangent chain + param-SGD via the new ops); writes
              -- verified_mlir/convnext_train_step.mlir. 2 documented hand-written gaps (the stem 4×4/s4
              -- + downsample 2×2/s2 weight grads — no even/stride-4 weight-grad VJP yet) (ConvNeXtRender.lean).
-             `LeanMlir.Proofs.ConvNeXtRender]
+             `LeanMlir.Proofs.ConvNeXtRender,
+             -- ch9-ConvNeXt-T §1a TIE: the whole [3,3,9,3] train step tied through the REAL forward —
+             -- 18 blocks + 3 downsamples + GAP→LN→dense head + stem bias den-composed
+             -- forward→loss→backward (GELU masks, identity-skip fan-in, downsample LN-back); the 4
+             -- even-kernel weight grads are the documented render gap (ConvNeXtTiePoC.lean).
+             `LeanMlir.Proofs.ConvNeXtTiePoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
