@@ -977,11 +977,14 @@ than the linear classifier: the shallow chapters' train steps (MLP, CNN,
 CIFAR$\pm$BN) are closed both ways, and all five Part~I architectures ---
 ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT --- are proved at
 full architecture: machine-checked forward graphs throughout; whole-network
-backward at full depth for the smooth three, at representative depth for the
-two ReLU nets (their parameter gradients certified through the chain closes);
-three classical axioms. For ViT-Tiny and ConvNeXt-T the proven graphs were
-re-rendered at the committed trainers' signatures and agree on GPU to float
-rounding. The one open gap: the
+backward at full depth, with the non-triviality seal (that the proven backward
+is nonzero at a witness) at full depth for four of the five and at a
+representative two-block witness for MobileNetV2 --- the one deferred item;
+three classical axioms. All five committed training steps were then re-rendered
+at the production trainers' exact signatures and \emph{tied}: every parameter
+update is proved to consume the cotangent its own backward pass delivers,
+threaded through the real forward, and each agrees on GPU to float rounding. The
+one open gap: the
 theorems are over $\mathbb{R}$, the GPU runs \texttt{float32}. Part~II's
 bestiary is deliberately lighter --- decomposed into the same proved
 primitives, not carried to whole-step closes. The book's official claim is
@@ -9049,8 +9052,9 @@ project axiom slipped into a proof, so ``proven'' means proven-clean.
 written but \emph{printed} from the same datatype the proofs reason about,
 with a bridge theorem pinning it to the proven formula, so the code cannot
 drift from the math --- and this now covers whole training steps (forward,
-backward, update), for ViT-Tiny and ConvNeXt-T at the production trainers'
-exact signatures. \textbf{Cross-checked} (empirical): because IREE cannot itself be
+backward, parameter update) for all twelve verified networks at the production
+trainers' exact signatures, each emitted step tied operator-by-operator to the
+network's own forward pass. \textbf{Cross-checked} (empirical): because IREE cannot itself be
 proven, and \texttt{float32} only conditionally --- its rounding now
 carries a theorem layer whose interface constants are empirically anchored
 (\S~\ref{sec:float32}) --- three independent oracles ---
@@ -9068,9 +9072,9 @@ each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\), now
 including the full-architecture closes of all five Part~I networks --- on
 top of the foundation \(\pdiv\) calculus and the
 differentiability/forward/witness machinery they rest on, plus 22
-architecture definitions in the bestiary, across 54 Lean proof files,
+architecture definitions in the bestiary, across 97 Lean proof files,
 with zero project axioms. The axiom audit
-(\texttt{tests/AuditAxioms.lean}) re-checks \textbf{421 theorems} in all
+(\texttt{tests/AuditAxioms.lean}) re-checks \textbf{761 theorems} in all
 --- the VJP contracts plus the forward-graph faithfulness, render, and
 cotangent-chain results --- every one closing under the same three core
 axioms. The most recent additions are the
@@ -9126,7 +9130,7 @@ core (\texttt{propext}, \texttt{Classical.choice},
 
 \section{Finite-difference gradient checks}
 
-The script \texttt{LeanMlir/Proofs/check\_jacobians.py} runs 25
+The script \texttt{LeanMlir/Proofs/check\_jacobians.py} runs 30
 finite-difference gradient checks. For each, it perturbs the input by
 \(\varepsilon\), compares the claimed VJP against the centered
 difference
@@ -9149,7 +9153,9 @@ depthwise input/weight/bias VJPs, the maxPool2 input VJP, the
 softmax Jacobian, the three single-head SDPA Q/K/V backwards,
 GELU, the bundled multi-head SDPA reduction (per-head
 \texttt{sdpa\_back} stacked over the head axis), the patch-embed
-input VJP, and the full-network MLP composition.
+input VJP, the full-network MLP composition, and bestiary
+spot-checks (bilinear upsample, channel concat, per-pixel
+softmax cross-entropy, U-Net skip plumbing).
 
 What the FD pass catches that the symbolic proof can't: typos
 between the proof and the prose that uses the same Jacobian.
@@ -9210,7 +9216,7 @@ flips, wrong contraction axis, swapped indices).
 \texttt{tests/comparator/} wires the project up to
 \href{https://github.com/leanprover/comparator}{leanprover/comparator},
 the Lean community's trustworthy-judge tool for projects that claim
-zero project axioms. It runs 49 theorems --- the foundation rules,
+zero project axioms. It runs 51 theorems --- the foundation rules,
 every chapter's headline Jacobian, the public
 \texttt{*\_has\_vjp\_correct} wrappers, and three smooth-point
 pointwise variants (\texttt{relu\_has\_vjp\_at\_correct},
@@ -9226,7 +9232,7 @@ the run.
 This is what closes the gap between ``the elaborator accepted my
 proofs'' (which \texttt{lake build} confirms) and ``the kernel
 agrees, audited from a separate process'' (which comparator confirms).
-The 49-theorem coverage is illustrative rather than exhaustive ---
+The 51-theorem coverage is illustrative rather than exhaustive ---
 the same recipe scales to any subset of the proof suite, and the
 same allowlist applies because every theorem in the project closes
 the same way.
@@ -9303,6 +9309,31 @@ therefore carries \emph{no new proof obligation}: every architecture's
 operators were proven once, and the emitter reuses them, adding only the
 printer and the numerical check. Build the mathematical foundation
 per-operator and generic, and the code generation becomes mechanical.
+
+\medskip\noindent\textbf{From operators to whole training steps.} The
+per-operator bridge is the demonstration; the verified trainers run the full
+construction. Each reads a single committed \texttt{.mlir} --- its entire
+training step, forward through backward through the parameter update --- and that
+file is the printout of one graph (\texttt{SHlo}, the StableHLO syntax tree in
+\texttt{LeanMlir/Proofs/}) whose denotation $[\![\cdot]\!]$ a faithfulness
+theorem proves equal to the certified loss-descent step, output by output. A
+second theorem then closes the gap a per-output bridge leaves open: that the
+cotangent each parameter update consumes is the one the network's \emph{own}
+backward pass delivers at that site, not an arbitrary one fed in by name. These
+\emph{tie} theorems --- one per network, \texttt{<net>\_net\_tied\_certified} ---
+thread the real forward activations and the loss-driven backward chain through
+every parameter, with the fan-in sum at each residual skip, the per-head
+attention backward, and the layer-norm input-VJP rendered explicitly, so each
+output becomes one composed equation rooted at the proven forward rather than a
+quantifier over a free cotangent. All twelve chapter networks are tied this way,
+from the MNIST linear classifier to depth-12 ViT-Tiny (200 parameters, the first
+network with no rendered-gradient gaps); the axiom audit re-derives every tie
+under the same three axioms, and the project's CI prints a green cell for a
+network only when its tie capstone is in that closure --- so the scorecard cannot
+claim more than the kernel checked. What stays trusted is exactly what the
+per-operator story already trusted, now carried across the whole step: the one
+printer, and that each emitted operation's text denotes what $[\![\cdot]\!]$ says
+it does.
 
 \medskip\noindent\textbf{The one conditional.} For the smooth operators ---
 BatchNorm and LayerNorm (given $\varepsilon > 0$), GELU, swish, sigmoid,
