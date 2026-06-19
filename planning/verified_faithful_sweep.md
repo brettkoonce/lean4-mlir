@@ -126,10 +126,12 @@ thread, 2-block). The ONLY remaining gap: the tie certifies the **single-head 2-
 committed render is **multi-head (3 heads, d_head=64), depth-12**. Promote the tie to match. This is the mnv2
 reduced→full analogue — the math all exists, it's a thread + a small multi-head-cotangent construction._
 
-_**Progress (2026-06-19): task 1 of 4 DONE** — the multi-head chain cotangents (`ViTMultiHeadChain.lean`),
-3-axiom clean, `lake build Proofs` green (2278), NOT yet committed. The substantive build (`vitCotD{Q,K,V}mh`
-pinned to the audited per-head `sdpa_back_{Q,K,V}` via `vitCotD{Q,K,V}mh_eq`) is in hand; tasks 2–4 (the
-multi-head per-block tie + depth-12 thread, the non-block-param bundle/capstone, the trainer swap) remain._
+_**Progress (2026-06-19): tasks 1 + 2 of 4 DONE**, 3-axiom clean, `lake build Proofs` green (2278). Task 1
+(committed `c2de104`): the multi-head chain cotangents (`ViTMultiHeadChain.lean`) — `vitCotD{Q,K,V}mh` pinned
+to the audited per-head `sdpa_back_{Q,K,V}` via `vitCotD{Q,K,V}mh_eq`. Task 2 (in `ViTTiePoC.lean`, uncommitted):
+the multi-head per-block tie `vit_block_tiedMHV` + the `@[irreducible]` thread wrappers + the depth-12 thread
+`vit_net_tiedMHV` (instantiates at the committed `@vit_net_tiedMHV 196 3 64 768 10`). Tasks 3–4 (the non-block-param
+bundle/`vit_net_tied_certified` capstone, the trainer swap) remain._
 
 **Key files:** `ViTTiePoC.lean` (the tie — extend here), `ViTChainClose.lean` (single-head SDPA cots
 `vitCotD{Q,K,V}`/`vitCotLn1`, LN-agnostic), `ViTVecLN.lean` (the `*V` vector-LN cots + `vecln*_chain_certified`),
@@ -157,10 +159,23 @@ render — `vBlockFwd`'s per-head slice/pad structure is the ground truth to mat
    scale: the cots use `sdpa_scale d` (d_head=64), matching the committed (the single-head rep used `sdpa_scale
    192`). ZERO new core ops/bridges. Registered as a lakefile `Proofs` root. **Next: task 2 (the multi-head
    per-block tie `vitBlockTiedMHV` swapping `vitCotD{Q,K,V}` → the `…mh` cots, then the depth-12 thread).**
-2. **Depth-12 thread.** Extend `vit_net_tiedV` from 2 blocks to 12 (mechanical — more `let`-bindings, exactly
-   like convnext's 18-block `cnx_net_tied_certified`). `@[irreducible]` wrappers + `maxHeartbeats` already proven
-   to keep it opaque. Thread `ib1 → … → ib12 → b12out`, dyOut backward via `vitBlockCotInAtV` (the per-block
-   fan-in, now multi-head) + `vitCotB2outV` (final-LN-back) at the top.
+2. **✅ DONE (2026-06-19): the multi-head per-block tie + the depth-12 thread.** In `ViTTiePoC.lean`
+   (now imports `ViTMultiHeadChain`), 3-axiom clean, `lake build Proofs` green (2278). Built the multi-head
+   peer of the single-head per-block infra — `vitBlockTiedMHV` + `vit_block_tiedMHV` (= `vitBlockTiedV` with
+   the 3 SDPA-cot `let`s swapped to the task-1 `vitCotD{Q,K,V}mh`, and no separate `ss`/`p` saves — the per-head
+   scores/weights are recomputed inside the `…mh` cots; the 16 conjuncts + proof delegations to the
+   head-agnostic `ViTPoC.*_den` generics are otherwise IDENTICAL), the `@[irreducible]` thread wrappers
+   `vitBlockFwdOMHV` (= `Mat.flatten ∘ vitBlockSpelledMHV ∘ Mat.unflatten`, the committed render's multi-head
+   block forward, which IS `transformerBlockV` by `vitBlockSpelledMHV_eq`), `vitBlockCotInAtMHV` (the
+   attention-residual fan-in, reusing `vitCotXinV` at the multi-head dQ/dK/dV — `vitCotLn1 Wq Wk Wv dQmh dKmh
+   dVmh` IS the multi-head LN₁ fan-in), and `vitBlockTiedAtMHV` + `vit_block_tiedAtMHV`. Then the depth-12
+   thread **`vit_net_tiedMHV`** (the vit peer of convnext's 18-block `cnx_net_tied_certified`): `ib1 → … → ib12
+   → b12out` via `vitBlockFwdOMHV`, the loss-driven backward `dy12 = vitCotB2outV(b12out)` then `dy_k =
+   vitBlockCotInAtMHV(block_{k+1}, ib_{k+1}, dy_{k+1})` top-down, all 12 blocks tied at `(ib_k, dy_k)`. Stays
+   opaque under the `@[irreducible]` wrappers (`maxHeartbeats 16000000`, elaborates in ~2s). Instantiates at the
+   committed ViT-Tiny config `@vit_net_tiedMHV 196 3 64 768 10` (heads=3, d_head=64 → D=192, sdpa_scale=1/√64
+   matching the committed). A depth-2 `vit_net_tiedMHV2` is kept as a lightweight smoke test. **Next: task 3
+   (bundle the non-block params into a `vit_net_tied_certified` capstone).**
 3. **Bundle the non-block params** (cheap, all certs exist): final-LN γ/β (`veclnGammaSgd_den` +
    `rowDenseBiasSgd_den_lnbeta` at `vitCotFl`/`vitCotB2outV`), classifier Wc/bc (`ViTPoC.headW_den`/`headB_den`),
    patch embed wConv/bConv/cls/pos (`patchEmbedWeightSgd_den`/`patchEmbedBiasSgd_den`/`clsSgd`-via-`denseBiasSgdB`/

@@ -54,6 +54,7 @@ import LeanMlir.Proofs.ViTClose
 import LeanMlir.Proofs.ViTChainClose
 import LeanMlir.Proofs.ViTVecLN
 import LeanMlir.Proofs.ViTMultiHead
+import LeanMlir.Proofs.ViTMultiHeadChain
 import LeanMlir.Proofs.ViTDepthK
 import LeanMlir.Proofs.MobileNetV2FullPaper
 import LeanMlir.Proofs.ConvNeXtFullT
@@ -1717,3 +1718,20 @@ open Proofs
 -- multi-head/depth-12 promotion (per-head headSlice/headPad backs summed) is the remaining step.
 #print axioms Proofs.ViTTiePoC.vit_block_tiedAtV
 #print axioms Proofs.ViTTiePoC.vit_net_tiedV
+-- ViT-Tiny §1a TIE — MULTI-HEAD promotion (ViTMultiHeadChain + ViTTiePoC). The committed render is
+-- multi-head (heads=3, d_head=64 → D=192); only the SDPA-internal backward dAtt → dQ/dK/dV changes
+-- (the out-proj Wo, LN₂, the MLP are head-agnostic). vitCotD{Q,K,V}mh_eq: the rendered slice → per-head
+-- SDPA-back → pad chain IS Mat.flatten (Σ_h headPadMat h (sdpa_back_{Q,K,V} d_head Q_h K_h V_h dOut_h))
+-- — the concat of the audited per-head SDPA backwards (each via the single-head pin
+-- vitCotD{Q,K,V}_eq_sdpa_back_{Q,K,V} at d_head, slid through the slice/pad/flatten-sum bridges).
+#print axioms Proofs.vitCotDQmh_eq
+#print axioms Proofs.vitCotDKmh_eq
+#print axioms Proofs.vitCotDVmh_eq
+-- The multi-head per-block tie (vit_block_tiedMHV = vit_block_tiedV with the SDPA cots swapped to the
+-- …mh cots; the 16 conjuncts delegate to the head-agnostic ViTPoC.*_den generics unchanged) and the
+-- depth-12 whole-net thread (vit_net_tiedMHV: 12 blocks tied through the real multi-head forward
+-- ib1 → … → ib12 → b12out + the loss-driven backward, the convnext 18-block cnx_net_tied_certified
+-- pattern at the committed ViT-Tiny config @vit_net_tiedMHV 196 3 64 768 10). @[irreducible] wrappers.
+#print axioms Proofs.ViTTiePoC.vit_block_tiedMHV
+#print axioms Proofs.ViTTiePoC.vit_block_tiedAtMHV
+#print axioms Proofs.ViTTiePoC.vit_net_tiedMHV
