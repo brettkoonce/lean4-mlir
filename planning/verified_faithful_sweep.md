@@ -93,9 +93,22 @@ gap, net by net?
 > param families folded → vit is on track to be the FIRST net with ZERO param gaps.** Wired to lakefile `Proofs`
 > root (`ViTRender` + `ViTFaithfulPoC`) + `tests/AuditAxioms.lean`; full closure green (747 lines, all benign).
 > GOTCHA: a literal `-/` in the docstring (`one-/few-line`) closed the doc-comment early — the convnext lesson.
-> **REMAINING for vit: §1a tie `ViTTiePoC`** (thread the 200 folds at the REAL backward chain cotangents,
-> two residual fan-ins per block — the last Tier-3 §1a tie) + the trainer swap (regen committed `.mlir` +
-> cls-dim/FFI reconcile).
+> **◐ §1a TIE — PER-BLOCK DONE (2026-06-19, `ViTTiePoC.lean`, `Proofs.ViTTiePoC`).** `vit_block_tiedV`: every
+> one of a vector-LN transformer block's **16 params**, fed the cotangent the REAL backward chain delivers at its
+> site, `den = θ − lr·(certified ∂/∂θ · chain-cot)` — **3-axiom clean**, the substantive heart of the tie. The
+> genuinely-new content vs every prior net (all landed): **TWO residual fan-ins per block** (MLP residual `vitCotHV
+> = dyOut + LN₂-back`, attention residual `vitCotXinV = cotH + LN₁-back`) + the **three-way fan-in at LN₁** (Q/K/V
+> dense-backs SUM in `vitCotLn1`) + the **per-head SDPA backward** pinned to the audited `sdpa_back_{Q,K,V}`
+> (`vitCotD{Q,K,V}`). Pure thread + fan-in: each of the 16 conjuncts delegates to a §1-fold `ViTPoC.*_den` generic
+> at the chain cot (`ViTVecLN`/`ViTChainClose`'s `vitCot*`) — ZERO new ops/bridges; compiled first try. Wired to
+> lakefile `Proofs` + `AuditAxioms`, full closure green.
+> **REMAINING for vit (2 steps): (1) the whole-net THREAD** — instantiate `vit_block_tiedV` at the real
+> `vitForward2V` activations + thread `vitCotXinV` block→block + patch/final-LN/head ties + loss cot → the
+> `vit_net_tied*` capstone (mechanical assembly, like convnext's `cnx_net_tied_certified`); **(2) the multi-head/
+> depth-12 promotion** — the chain infra (`vitForward2V`, `*V` cots) is **single-head 2-block**, the committed
+> render is **multi-head (3) depth-12**, so promoting needs multi-head chain cots (per-head `headSlice`/`headPad`
+> backs summed) — the mnv2 reduced→full analogue. Plus the trainer swap (regen committed `.mlir` + cls-dim/FFI
+> reconcile). The vector-LN granularity that SHIPS is modeled (NOT the scalar-LN `vitNetBackGraph` universe).
 >
 > **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1 — the fold + the full [3,3,9,3] render(provenGraph) train step.**
 > Commits `1bcbf70` (per-channel layer-scale γ cert — the one new proof) → `09b8195` (3 new core SHlo ops

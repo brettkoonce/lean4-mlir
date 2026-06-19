@@ -81,6 +81,7 @@ import LeanMlir.Proofs.Cifar8FaithfulPoC
 import LeanMlir.Proofs.Cifar8TiePoC
 import LeanMlir.Proofs.Cifar8BnTiePoC
 import LeanMlir.Proofs.ViTFaithfulPoC
+import LeanMlir.Proofs.ViTTiePoC
 
 open Proofs
 
@@ -1697,3 +1698,12 @@ open Proofs
 #print axioms Proofs.ViTPoC.posEmbedSgd_den
 #print axioms Proofs.ViTPoC.headW_den
 #print axioms Proofs.ViTPoC.headB_den
+-- ViT-Tiny §1a TIE — per-block (ViTTiePoC). Every one of a vector-LN transformer block's 16 params,
+-- fed the cotangent the REAL backward chain delivers at its site, den=certified (θ - lr·certified·chain-cot).
+-- The new content vs every prior net: TWO residual fan-ins per block (MLP residual vitCotHV, attention
+-- residual vitCotXinV) + the three-way fan-in at LN₁ (Q/K/V dense-backs SUM in vitCotLn1) + the per-head
+-- SDPA backward pinned to the audited sdpa_back_{Q,K,V} (vitCotD{Q,K,V}). Pure thread + fan-in: every
+-- conjunct delegates to a §1-fold ViTPoC.*_den generic at the chain cotangent — ZERO new ops/bridges.
+-- Single-head vector-LN representative (heads=1); the multi-head/depth-12 thread (per-head headSlice/
+-- headPad backs summed) is the remaining step, the analogue of mnv2's reduced→full.
+#print axioms Proofs.ViTTiePoC.vit_block_tiedV

@@ -357,7 +357,12 @@ lean_lib «Proofs» where
              -- ch10-ViT-Tiny §1 FOLD: each emitted param-SGD op den=certified — vecln γ/β, rowwise
              -- dense W/b, patch conv W/b, pos (one-line delegations to ViTVecLN/ViTClose certs); the
              -- head reuses Cifar8PoC.dense{W,B}_den, cls reuses denseBiasSgdB (ViTFaithfulPoC.lean).
-             `LeanMlir.Proofs.ViTFaithfulPoC]
+             `LeanMlir.Proofs.ViTFaithfulPoC,
+             -- ch10-ViT-Tiny §1a TIE (per-block): every one of a vector-LN transformer block's 16 params,
+             -- fed the cotangent the REAL backward chain delivers (vitCot* — two residual fan-ins + the
+             -- three-way LN₁ fan-in + the SDPA backs), den=certified. Single-head representative; the
+             -- multi-head/depth-12 thread is the remaining step (mnv2 reduced→full) (ViTTiePoC.lean).
+             `LeanMlir.Proofs.ViTTiePoC]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
