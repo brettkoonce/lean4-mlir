@@ -15,6 +15,51 @@ a *legit* accuracy run), and measured time estimates. Written 2026-05-30.
   the ~72% ViT-Tiny is capable of. The fixes needed are gradient clipping
   + the DeiT augmentation suite (both codegen work).
 
+## UPDATE 2026-06-19 — most of the "What's needed" list is DONE; one codegen item remains
+
+The "What's needed for a LEGIT accuracy run" list further down (written 2026-05-30) is
+largely superseded. Items 1 (grad clipping) and 2 (the DeiT aug suite) are now wired into
+the codegen and live in `vitTinyImagenetConfig`:
+- **Gradient clipping** — `gradClipNorm := 1.0` (global-norm clip in the emitted Adam
+  step). The unlock: LR is now the proper DeiT **5e-4** (was crippled at 1e-4 to dodge
+  collapse).
+- **Aug suite ON** — Mixup 0.8, CutMix 1.0, RandAugment (color subset, M9), Random
+  Erasing 0.25, AdamW decoupled decay, label smoothing 0.1 (all now actually applied).
+
+So the remaining delta to a paper-faithful DeiT-Ti run is:
+
+1. **Stochastic depth in `transformer_block` — the one real codegen item (~half-day).**
+   `dropPath` is wired only into the conv blocks (mbconv / convnext / invres); the
+   **`transformer_block` does not participate.** Verified against `jax/Jax/Codegen.lean`
+   on 2026-06-19:
+   - `transformer_block(params, x, idx, n_heads)` (~L713) takes no drop args; the
+     `.transformerEncoder` forward dispatch (~L1654) calls it without dpkeys.
+   - all `dropPath`/`dpkeys` machinery lives in the conv-stage SD-dispatch arms
+     (~L1500–1582, `convNextStage` + `mbconv` only).
+   To add it (mirror `convnext_block`):
+   - give `transformer_block` `drop_key`/`keep_prob` args; DeiT drops each *sublayer
+     residual independently* → split 2 sub-keys per block, apply inverted drop
+     (`branch * bernoulli(keep_prob)/keep_prob`) to the attention branch AND the MLP
+     branch before each residual add.
+   - add a `.transformerEncoder` branch to the SD-dispatch: loop `nBlocks`, pass
+     `dpkeys[dbi]` + a linear keep schedule + `n_heads`.
+   - include transformer blocks in the `totalDrop` count that sizes the `dpkeys` split.
+   - then set `dropPath := 0.1` in `vitTinyImagenetConfig`.
+   Risk low: additive, inference-safe via `drop_key=None` default; the rng / scaling /
+   schedule infra is already proven on the convnets. Full spec also in
+   `jax_imagenet_sweep.md` (ViT section).
+2. **Geometric RandAugment — FREE flag.** The impl already exists
+   (`cfg.randAugmentGeometric`, geometric ops via `ImageProjectiveTransformV3`); the
+   config currently runs color-only. Add `randAugmentGeometric := true`. DeiT uses full
+   (color + geometric) RA.
+3. **300 epochs** — bump `epochs := 300` + re-emit (currently 80).
+4. **Repeated augmentation (3×) — DEFER** (low ROI for Ti; data-pipeline change).
+5. **Distillation — SKIP** (plain DeiT-Ti ~72.2% doesn't use it; only DeiT⚗ does).
+
+With #1–#3 (+ the existing grad-clip/aug), DeiT-Ti should approach its ~72% headline.
+Box note: this recipe was developed on mars (2× 7900 XTX, ROCm — see the RCCL gotcha
+below); the convnet sweep ran on ares (6× 4060 Ti, CUDA), where RCCL is a non-issue.
+
 ## Architecture / spec
 
 ViT-Tiny = DeiT-Ti: patch16, embed 192, 12 transformer blocks, 3 heads,

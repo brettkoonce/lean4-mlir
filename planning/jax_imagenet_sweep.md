@@ -49,6 +49,35 @@ ENet's 300ep+AA+lr0.01 is wanted eventually but not now. Gate long runs on stabl
 power (the 2026-06-19 outage killed the ConvNeXt smoke test) + a checkpoint/resume sanity
 pass at the longer horizon.
 
+### 80ep vs 300ep — accuracy & wall-clock estimates (R34→ViT)
+
+6× 4060 Ti (ares, CUDA, bf16) **except ViT** = 2× 7900 XTX (mars, ROCm). **Bold top-1 =
+measured this project; bold hours = run actually happened.** Everything else is an estimate.
+
+| net | 80ep top-1 | 80ep hrs | 300ep top-1 | 300ep hrs | paper |
+|-----|-----------|----------|-------------|-----------|-------|
+| ResNet-34 | **72.1%** | ~12 | ~74–75% | ~45 | 73.3% |
+| ResNet-50 | ~76% | ~16 | ~79–79.5% | ~60 | 79.8% (RSB-A2) |
+| MobileNetV2 | **68.8%** | **~10** | ~72% | ~38 | 72.0% |
+| EfficientNet-B0 | ~70–73% | **~10.5** | ~77% | ~47* | 77.1% |
+| ConvNeXt-T | **75.9%** | **~15.5** | ~82% | ~63 | 82.1% |
+| ViT-Ti (DeiT) | ~55–65% | ~10 | ~72% | ~38 | 72.2% |
+
+Per-epoch (min/ep): MNv2 7.5, ENet 8, ConvNeXt 12.6 (measured); R34 ~9, R50 ~12, ViT 7.6
+(est/other-box). *ENet's paper-faithful schedule is 350ep (~47 hr), not 300; the rest are 300ep.
+
+Totals if the full long sweep ran: ~253 hr for the five convnets+R50 at 300ep (~10.5 days of
+ares time) + ~38 hr ViT on mars ≈ **~12 days** end-to-end. Best value: ConvNeXt 300ep (~63 hr,
++6pt → ~82%); cheapest interesting win: R50 300ep (~60 hr → the ~80% milestone — see
+`planning/resnet50_imagenet.md`, near-zero new code). ViT is its own codegen project
+(`planning/vit_imagenet.md`, transformer stochastic depth).
+
+Use each net's **paper-faithful epoch count** for the long runs (300 everywhere except
+ENet's 350); R50 at 300 = a fair RSB-A2 comparison. The **R34+R50 pair at a matched 300ep
+modern recipe** is the proposed first concrete step (basic-block vs bottleneck, ~105 hr /
+~4.4 days back-to-back, R34 is just an epochs bump on the existing trainer) — see
+`planning/resnet50_imagenet.md`.
+
 ## The 3 runs to do (non-ViT)
 
 All 6-GPU (`CUDA_VISIBLE_DEVICES=0,1,2,3,4,5`), batch 256 → 252 (6×42), bf16+bf16Conv,
