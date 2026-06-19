@@ -64,6 +64,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.lnGammaSgd gN xN es lrS n e :: st)
   | .veclnGammaSgd gN xN es lrS N D :: ts, e :: st =>
       parseStack ts (.veclnGammaSgd gN xN es lrS N D e :: st)
+  | .patchEmbedWeightSgd wN xN lrS ic H W P N D :: ts, e :: st =>
+      parseStack ts (.patchEmbedWeightSgd wN xN lrS ic H W P N D e :: st)
   | .lnBetaSgd bN lrS n :: ts, e :: st =>
       parseStack ts (.lnBetaSgd bN lrS n e :: st)
   | .reluF n :: ts, e :: st      => parseStack ts (.reluF n e :: st)
@@ -166,6 +168,7 @@ theorem parseStack_toToks (r : Raw) :
   | layerScaleChGammaSgd gN xN lrS c h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | lnGammaSgd gN xN es lrS n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | veclnGammaSgd gN xN es lrS N D e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | patchEmbedWeightSgd wN xN lrS ic H W P N D e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | lnBetaSgd bN lrS n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | reluF n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | selectPos x n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl

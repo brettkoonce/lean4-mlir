@@ -252,6 +252,15 @@ inductive SHlo : Nat → Type where
   -- `denseWeightSgdB`/`denseBiasSgdB` (their N-axis sum = vit's `rowDense_*_grad`).
   | veclnGammaSgd {N D : Nat} (gName xName epsStr lrStr : String) (ε : ℝ) (x : Vec (N*D)) (γ : Vec D) (lr : ℝ)
                                                            : SHlo (N*D) → SHlo D
+  -- `patchEmbedWeightSgd`: the Chapter-10 ViT patch-embed (16×16/s16 non-overlapping patchify) conv
+  -- WEIGHT update. The embed-output cotangent `SHlo ((N+1)*D)` (CLS token at row 0, excluded) drives
+  -- the strided patchifyWGrad (dilate the patch-token grad interior P-1, valid conv with the saved
+  -- image) → `dW : Kernel4 D ic P P`. `den` = the certified patch-weight grad
+  -- (`vit_render_patchW_certified`, via the local `patchEmbedWeightGradFlat`). Output `SHlo (D*ic*P*P)`.
+  -- The ViT analogue of ConvNeXt's stem 4×4/s4 weight — but here a VJP-cert EXISTS, so it is tied
+  -- (vit has no even-kernel weight gap). Patch bias + cls + pos reuse the batched `denseBiasSgdB`.
+  | patchEmbedWeightSgd {ic H W P N D : Nat} (wName xName lrStr : String)
+      (x : Vec (ic*H*W)) (Wp : Kernel4 D ic P P) (lr : ℝ) : SHlo ((N+1)*D) → SHlo (D*ic*P*P)
   -- Chapter 9 scaling pass (full ConvNeXt-T): stride-4 SAME conv forward — the
   -- 4×4/s4 patchify stem (`stablehlo.convolution` with `window_strides=[4,4]`).
   -- `den` via the proven `flatConvStride4` (= decimate ∘ decimate ∘ stride-1 conv).
@@ -638,6 +647,28 @@ noncomputable def patchEmbedBackFlat
           dy (finProdFinEquiv (p.succ, d))
       else 0
 
+/-- **ViT patch-embedding weight-grad (flattened)** — a LOCAL re-spelling of the proven
+    `patchEmbed_weight_grad` (Attention.lean), kept here so `StableHLO` needn't import
+    `Attention` (the tie is the §1-fold `vit_render_patchW_certified`). The non-overlapping
+    16×16/s16 patchify conv's weight-VJP: `dW_(d,c,kh,kw) = Σ_patches (patch pixel read)·
+    dy_(patch.succ, d)` — token 0 is the CLS row (excluded); the pixel read mirrors
+    `patchEmbedFlat`'s, and `dy (finProdFinEquiv (p.succ, d))` mirrors `patchEmbedBackFlat`. -/
+noncomputable def patchEmbedWeightGradFlat
+    (ic H W patchSize N D : Nat)
+    (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) :
+    Vec (D * ic * patchSize * patchSize) :=
+  Kernel4.flatten (fun (d : Fin D) (c : Fin ic) (kh kw : Fin patchSize) =>
+    ∑ p : Fin N,
+      (let W' := W / patchSize
+       let h' := p.val / W'
+       let w' := p.val % W'
+       let hh := h' * patchSize + kh.val
+       let ww := w' * patchSize + kw.val
+       if hpad : hh < H ∧ ww < W then
+         img (finProdFinEquiv (finProdFinEquiv (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
+       else 0)
+      * dy (finProdFinEquiv (p.succ, d)))
+
 /-- **CLS slice (flattened)** — gather row 0 of the `[N+1,D]` flat (= the proven
     `cls_slice_flat`, Attention.lean; tie is `rfl` in ViTFwdGraph). -/
 noncomputable def clsSliceFlat (N D : Nat) (v : Vec ((N+1)*D)) : Vec D :=
@@ -737,6 +768,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .veclnGammaSgd (N := N) (D := D) _ _ _ _ ε x γ lr e =>
       fun k => γ k - lr * ∑ r : Fin N,
         Mat.unflatten (den e) r k * layerNormForward D ε 1 0 (Mat.unflatten x r) k
+  | _, .patchEmbedWeightSgd (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ _ _ x Wp lr e =>
+      fun idx => Kernel4.flatten Wp idx - lr * patchEmbedWeightGradFlat ic H W P N D x (den e) idx
   | _, .bnGammaSgdB (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
         bnPerChannel_grad_gamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
@@ -2102,6 +2135,7 @@ inductive Raw where
   | lnGammaSgd    (gName xName epsStr lrStr : String) (n : Nat)       : Raw → Raw
   | lnBetaSgd     (bName lrStr : String) (n : Nat)                    : Raw → Raw
   | veclnGammaSgd (gName xName epsStr lrStr : String) (N D : Nat)     : Raw → Raw
+  | patchEmbedWeightSgd (wName xName lrStr : String) (ic H W P N D : Nat) : Raw → Raw
   | reluF      (n : Nat)                   : Raw → Raw
   | selectPos  (x : String) (n : Nat)      : Raw → Raw
   | relu6F     (n : Nat)                   : Raw → Raw
@@ -2205,6 +2239,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .lnBetaSgd bN lrS n (skel e)
   | _, .veclnGammaSgd (N := N) (D := D) gN xN es lrS _ _ _ _ e =>
       .veclnGammaSgd gN xN es lrS N D (skel e)
+  | _, .patchEmbedWeightSgd (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) wN xN lrS _ _ _ e =>
+      .patchEmbedWeightSgd wN xN lrS ic H W P N D (skel e)
   | k, .reluF e               => .reluF k (skel e)
   | k, .selectPos x _ e       => .selectPos x k (skel e)
   | k, .relu6F e              => .relu6F k (skel e)
@@ -2336,6 +2372,7 @@ inductive Tok where
   | lnGammaSgd    (gName xName epsStr lrStr : String) (n : Nat)       : Tok
   | lnBetaSgd     (bName lrStr : String) (n : Nat)                    : Tok
   | veclnGammaSgd (gName xName epsStr lrStr : String) (N D : Nat)     : Tok
+  | patchEmbedWeightSgd (wName xName lrStr : String) (ic H W P N D : Nat) : Tok
   | reluF      (n : Nat)                   : Tok
   | selectPos  (x : String) (n : Nat)      : Tok
   | relu6F     (n : Nat)                   : Tok
@@ -2408,6 +2445,7 @@ def toToks : Raw → List Tok
   | .lnGammaSgd gN xN es lrS n e               => toToks e ++ [.lnGammaSgd gN xN es lrS n]
   | .lnBetaSgd bN lrS n e                      => toToks e ++ [.lnBetaSgd bN lrS n]
   | .veclnGammaSgd gN xN es lrS N D e          => toToks e ++ [.veclnGammaSgd gN xN es lrS N D]
+  | .patchEmbedWeightSgd wN xN lrS ic H W P N D e => toToks e ++ [.patchEmbedWeightSgd wN xN lrS ic H W P N D]
   | .reluF n e       => toToks e ++ [.reluF n]
   | .selectPos x n e => toToks e ++ [.selectPos x n]
   | .relu6F n e      => toToks e ++ [.relu6F n]
@@ -2652,6 +2690,33 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {lG} = stablehlo.constant dense<{lrS}> : {ty [D]}\n" ++
         s!"    {sG} = stablehlo.multiply {dg}, {lG} : {ty [D]}\n" ++
         s!"    {o} = stablehlo.subtract {gN}, {sG} : {ty [D]}\n", o :: st)
+  | .patchEmbedWeightSgd wN xN lrS ic H W P N D, r :: st => do
+      -- patch-embed (16×16/s16) conv WEIGHT grad: slice patch tokens [1..N] from the embed cotangent
+      -- {r} [B,(N+1)*D] (drop CLS row 0), reshape→[B,ph,pw,D]→transpose→[B,D,ph,pw], dilate interior P-1,
+      -- valid conv with the saved image {xN} [B,ic,H,W] → dW [D,ic,P,P], SGD: W − lr·dW.
+      let ph := H / P; let pw := W / P
+      let dilH := H - (P - 1); let dilW := W - (P - 1)
+      let zc ← fresh; let dtr ← fresh; let dsl ← fresh; let drs ← fresh; let dy3 ← fresh
+      let u ← fresh; let xt ← fresh; let dt ← fresh; let raw ← fresh; let dw ← fresh
+      let lW ← fresh; let sW ← fresh; let o ← fresh
+      pure (
+        s!"    {zc} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {dtr} = stablehlo.reshape {r} : ({ty [B, (N+1)*D]}) -> {ty [B, N+1, D]}\n" ++
+        s!"    {dsl} = stablehlo.slice {dtr} [0:{B}, 1:{N+1}, 0:{D}] : ({ty [B,N+1,D]}) -> {ty [B,N,D]}\n" ++
+        s!"    {drs} = stablehlo.reshape {dsl} : ({ty [B,N,D]}) -> {ty [B,ph,pw,D]}\n" ++
+        s!"    {dy3} = stablehlo.transpose {drs}, dims = [0, 3, 1, 2] : ({ty [B,ph,pw,D]}) -> {ty [B,D,ph,pw]}\n" ++
+        s!"    {u} = stablehlo.pad {dy3}, {zc}, low = [0, 0, 0, 0], high = [0, 0, 0, 0], interior = [0, 0, {P-1}, {P-1}] : ({ty [B,D,ph,pw]}, tensor<f32>) -> {ty [B,D,dilH,dilW]}\n" ++
+        s!"    {xt} = stablehlo.transpose {xN}, dims = [1, 0, 2, 3] : ({ty [B,ic,H,W]}) -> {ty [ic,B,H,W]}\n" ++
+        s!"    {dt} = stablehlo.transpose {u}, dims = [1, 0, 2, 3] : ({ty [B,D,dilH,dilW]}) -> {ty [D,B,dilH,dilW]}\n" ++
+        s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        "      window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+        s!" : ({ty [ic,B,H,W]}, {ty [D,B,dilH,dilW]}) -> {ty [ic,D,P,P]}\n" ++
+        s!"    {dw} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,D,P,P]}) -> {ty [D,ic,P,P]}\n" ++
+        s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [D,ic,P,P]}\n" ++
+        s!"    {sW} = stablehlo.multiply {dw}, {lW} : {ty [D,ic,P,P]}\n" ++
+        s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [D,ic,P,P]}\n", o :: st)
   | .reluF n, r :: st => do
       let z ← fresh; let o ← fresh
       pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++

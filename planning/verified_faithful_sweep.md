@@ -31,13 +31,23 @@ gap, net by net?
 > `vitTrainStepFaithfulV`) + §1 fold (`ViTFaithfulPoC`) + §1a tie (`ViTTiePoC`, **two residual fan-ins per block** —
 > attn-sublayer + mlp-sublayer) + the new core SHlo param-SGD ops.
 >
-> **CORE-OPS SCOPE (step 1) — only ONE genuinely-new op.** The rowwise-dense W/b (attn/MLP/classifier) REUSE enet's
-> batched `denseWeightSgdB`/`denseBiasSgdB` (their den sums over the leading N axis = vit's `rowDense_{weight,bias}_grad`,
-> verified). vit's vecln **β** (`Σ_tokens dy`) ALSO = `denseBiasSgdB`. So the ONLY new op is **`veclnGammaSgd`** (the
-> vector-LN γ: recompute x̂ = LN(1,0) per token, weight by dy, reduce over the N=BS·197 row axis → `Vec D`;
-> N-generic cert `vit_render_veclngamma_certified`). Patch-W/b + cls + pos (4 of 200 params) are a small later step
-> (their certs exist; check whether batched conv/bias ops cover them or need 1-2 more ops). **Step 1 = add
-> `veclnGammaSgd` to StableHLO.lean (9 sites + roundtrip), build + iree-validate.**
+> **CORE OPS — ✅ DONE (2026-06-19): exactly TWO new ops, both iree-validated; everything else reuses existing ops.**
+> Most params reuse enet's batched `denseWeightSgdB`/`denseBiasSgdB` (their den sums over the leading N axis):
+> rowwise-dense W (attn Wq/Wk/Wv/Wo, MLP Wfc1/Wfc2, classifier Wc) → `denseWeightSgdB`; rowwise-dense b + vecln **β**
+> (`Σ_tokens dy`) + **pos** (`Σ_batch dy`, all tokens) + **cls** (row-0 token slice, `Σ_batch`) + **patch bias**
+> (`Σ_{batch,spatial}`, CLS-excluded) → `denseBiasSgdB` (on the appropriately sliced/reshaped cotangent — the slices
+> are backward-chain ops, not param ops). Confirmed against the committed `LeanMlir/ViTRender.lean` `clsPosBack`/
+> `patchEmbedBack`. The TWO genuinely-new ops (commit step "vit core ops"):
+> 1. **`veclnGammaSgd`** (committed `e662aef`) — vector-LN γ: recompute x̂ = LN(1,0) per token over D, weight by dy,
+>    reduce over the N=BS·197 row axis → `Vec D`; den = `vit_render_veclngamma_certified` verbatim; emit 3D `[B,N,D]`.
+> 2. **`patchEmbedWeightSgd`** — the 16×16/s16 patchify conv WEIGHT grad: slice patch tokens [1..N] (drop CLS),
+>    reshape→`[B,D,ph,pw]`, dilate interior P-1, valid conv with the saved image → `dW : Kernel4 D ic P P`; den via
+>    the local re-spelling `patchEmbedWeightGradFlat` (= `vit_render_patchW_certified`). **vit HAS the patch-weight
+>    cert (unlike convnext's gapped 4×4/s4 stem), so it is tied — vit will be the FIRST net with ZERO param gaps
+>    (200/200).** Both: `lake build Proofs` green (2274, roundtrip + den-faithfulness hold), iree-compile on gfx1100
+>    (vecln 17440 B, patch-W 16552 B), harness `tests/TestVeclnGammaSgd.lean`. **NEXT: §1 render
+>    `vitTrainStepFaithfulV` (full depth-12, pretty(provenGraph) via the generic `vitBlockGraphV`) → §1 fold
+>    `ViTFaithfulPoC` (den=certified, mostly delegations) → §1a tie `ViTTiePoC` (two residual fan-ins per block).**
 >
 > **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1 — the fold + the full [3,3,9,3] render(provenGraph) train step.**
 > Commits `1bcbf70` (per-channel layer-scale γ cert — the one new proof) → `09b8195` (3 new core SHlo ops
