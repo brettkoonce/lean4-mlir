@@ -274,9 +274,8 @@ This is the technically hardest chapter in the book, by design. Going
 from nothing to a complete trained model --- the \(\pdiv\) calculus,
 the VJP framework, a forward pass, a loss, a backward pass, an SGD
 step, all the way down to the GPU --- is the entire machinery, built in a single
-chapter. We do it on a trivial network (one matrix multiply: the
-MNIST linear classifier), because the network is not the point ---
-building the whole machinery is. Once that machinery exists, every later
+chapter. We do it on the smallest possible network (one matrix multiply: the
+MNIST linear classifier) to demonstrate the pattern. Once that machinery exists, every later
 chapter is just adding a layer: one new primitive dropped into the
 same forward / loss / backward / optimize loop.
 
