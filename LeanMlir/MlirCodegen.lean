@@ -1695,7 +1695,7 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
         curShape := btd
         pidx := pidx + 2
       | _ => code := code ++ "    // tokenPositionEmbed error: input not [B, _]\n"
-    | .lmHead d v t =>
+    | .lmHead _d v t =>
       -- Per-position dense [B, T, D] → [B, T, V] via dot_general + bias,
       -- then reshape to flat [B, T*V] so the existing CE machinery accepts it.
       match curShape with
@@ -1970,7 +1970,7 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
       | [b, _, h, w] => curShape := [b, oc, h / 2, w / 2]
       | _ => pure ()
       outShape := curShape
-    | .maxPool size stride =>
+    | .maxPool _size stride =>
       match curShape with
       | [b, c, h, w] =>
         let oH := (h + stride - 1) / stride
@@ -3221,7 +3221,7 @@ private def emitConvBnBackward (r : FwdRec) (gradSSA : String) : String × Strin
   let oH := r.outShape[2]!
   let oW := r.outShape[3]!
   let outTy := tensorTy r.outShape
-  let spatialN := oH * oW
+  let _spatialN := oH * oW
   let mut s := ""
   -- Block header for the generated MLIR: cite the backing theorems so a
   -- reader of the .mlir file can jump straight from any op to its proof.
@@ -5872,7 +5872,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           let act := r.cnbAct
           let blockTy := tensorTy r.inShape
           let cTy := tensorTy [c]
-          let bhwTy := tensorTy [b, h, w]
+          let _bhwTy := tensorTy [b, h, w]
           let expShape := [b, 4*c, h, w]
           let expTy := tensorTy expShape
           let exB := tensorTy [4*c]
@@ -6068,7 +6068,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           let outTy := tensorTy outShape
           let icTy := tensorTy [ic]
           let ocTy := tensorTy [oc]
-          let bhwTy := tensorTy [b, h, w]
+          let _bhwTy := tensorTy [b, h, w]
           let icF := ic.toFloat
           let tag := s!"cnds{basePidx}"
           let dy := gradSSA
@@ -6242,7 +6242,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           let btv := [b, t, v]
           let btdTy := tensorTy btd
           let btvTy := tensorTy btv
-          let tag := s!"tpe{r.pos}"
+          let _tag := s!"tpe{r.pos}"
           code := code ++ s!"    // ─── tokenPositionEmbed backward: position grad = sum batch; emb grad = btv^T @ d_out ───\n"
           -- d_position [T, D] = sum over batch of grad
           code := code ++ s!"    %d_W{pIdx + 1} = stablehlo.reduce({gradSSA} init: %zf) applies stablehlo.add across dimensions = [0]\n"
@@ -6650,7 +6650,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
   -- Walk layers to build param/m/v argument lists
   for l in spec.layers do
     match l with
-    | .conv2d ic oc kSize _ _ =>
+    | .conv2d _ic oc _kSize _ _ =>
       let (pStr, pTys) := emitLayerParams "" l pidx paramRetTypes
       params := params ++ pStr; paramRetTypes := pTys
       mRetTypes := (emitLayerParams "" l pidx mRetTypes).2
@@ -6659,14 +6659,14 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       | [b, _, h, w] => curShape := [b, oc, h, w]
       | _ => pure ()
       pidx := pidx + 1
-    | .dense fanIn fanOut _ =>
+    | .dense _fanIn fanOut _ =>
       let (pStr, pTys) := emitLayerParams "" l pidx paramRetTypes
       params := params ++ pStr; paramRetTypes := pTys
       mRetTypes := (emitLayerParams "" l pidx mRetTypes).2
       vRetTypes := (emitLayerParams "" l pidx vRetTypes).2
       curShape := [B, fanOut]
       pidx := pidx + 1
-    | .convBn ic oc kSize stride _ =>
+    | .convBn _ic oc _kSize stride _ =>
       let (pStr, pTys) := emitLayerParams "" l pidx paramRetTypes
       params := params ++ pStr; paramRetTypes := pTys
       mRetTypes := (emitLayerParams "" l pidx mRetTypes).2

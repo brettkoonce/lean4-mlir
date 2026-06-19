@@ -197,7 +197,8 @@ theorem conv_back_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
     convBackDenote W dy = (conv2d_has_vjp3 W b).backward x dy := by
   show conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy
   funext ci hi wi
-  fin_cases ci <;> fin_cases hi <;> fin_cases wi <;>
+  fin_cases ci
+  fin_cases hi <;> fin_cases wi <;>
     simp [conv2d, conv2d_input_grad_formula, reverseSwap, kRev, Fin.sum_univ_succ]
 
 /-- **Conv backward bridge, 2→2 channels (the Spatial instance's second

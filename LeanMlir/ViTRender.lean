@@ -403,7 +403,7 @@ def vitFwd (p x wConv bConv cls pos gF bF Wc bc : String)
 /-- **Whole-ViT backward**, prefix `p`. Reuses `vitFwd p` saves. `dlog` `[b,nc]` is
     the logits cotangent. `x` is the (fixed) input image (for the patch weight-grad).
     Produces all param grads (see `vitGradNames`); NO image grad (first layer). -/
-def vitBack (p dlog x wConv Wc gF : String)
+def vitBack (p dlog x _wConv Wc gF : String)
     (blocks : List BlockParams) (cfg : ViTConfig) : String :=
   let n0 := cfg.ph * cfg.pw
   let n := n0 + 1
@@ -506,7 +506,7 @@ def vitTinyBlocks (depth : Nat) : List BlockParams :=
       g2 := s!"%g2_{i}", b2 := s!"%b2_{i}",
       Wfc1 := s!"%Wfc1_{i}", bfc1 := s!"%bfc1_{i}", Wfc2 := s!"%Wfc2_{i}", bfc2 := s!"%bfc2_{i}" })
 
-def vitTinyConfig (b depth : Nat) : ViTConfig :=
+def vitTinyConfig (b _depth : Nat) : ViTConfig :=
   { b := b, ic := 3, d := 192, ph := 14, pw := 14, s := 16, m := 768, h := 3, dh := 64,
     nc := 10, eps := "1.0e-5", scale := "0.125" }   -- 1/√64 = 0.125
 

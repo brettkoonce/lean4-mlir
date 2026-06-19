@@ -53,7 +53,7 @@ noncomputable def liveDown (h w : Nat) : Vec (1 * (2 * h) * (2 * w)) → Vec (1 
       (relu (1 * h * w) ∘ bnForward (1 * h * w) 1 0 1 ∘ flatConvStride2 Zk Zb))
 
 /-- The live block's projection is strictly positive: `bn₂₀ ≥ 20 − √(h·w) > 0`. -/
-theorem liveDown_proj_pos (h w : Nat) (hhw : 0 < 1 * h * w)
+theorem liveDown_proj_pos (h w : Nat) (_hhw : 0 < 1 * h * w)
     (hn : Real.sqrt ((1 * h * w : ℕ) : ℝ) < 20) (a : Vec (1 * (2 * h) * (2 * w))) (k : Fin (1 * h * w)) :
     0 < (bnForward (1 * h * w) 1 1 20 ∘ flatConvStride2 Ws bs) a k := by
   simp only [Function.comp_apply]

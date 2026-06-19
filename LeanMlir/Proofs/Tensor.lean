@@ -153,7 +153,7 @@ theorem pdiv_mul {m n : Nat} (f g : Vec m → Vec n) (x : Vec m)
   unfold pdiv
   rw [show (fun y : Vec m => fun k => f y k * g y k) = (f * g) from rfl]
   rw [fderiv_mul hf hg]
-  simp only [ContinuousLinearMap.add_apply, ContinuousLinearMap.smul_apply,
+  simp only [add_apply, smul_apply,
              smul_eq_mul, Pi.add_apply, Pi.mul_apply]
   ring
 

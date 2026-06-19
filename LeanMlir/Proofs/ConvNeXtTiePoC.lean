@@ -149,7 +149,7 @@ No skip. Backward from `dyOut`: strided-conv-back (`cotN`) → LN-back. The stri
 /-- **Downsample, tied.** The LN γ/β (at the `ci·(2h)·(2w)` input grid) + the strided-conv bias, at
     the real forward + the chain cotangents. (The strided weight is the gap.) -/
 def cnxDownTied {ci co h w : Nat}
-    (wN bN gN xN epsStr lrStr cotN : String) (ε : ℝ)
+    (_wN bN gN xN epsStr lrStr cotN : String) (ε : ℝ)
     (dng dnbt : Vec 1) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin : Vec (ci*(2*h)*(2*w))) (n : Vec (ci*(2*h)*(2*w)))
     (dyOut : Vec (co*h*w)) (lr : ℝ) : Prop :=

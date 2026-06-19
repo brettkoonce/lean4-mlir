@@ -43,7 +43,7 @@ theorem convWB_den {N ic oc h w kH kW : Nat}
                   Tensor3.flatten (conv2d (Kernel4.unflatten v') b
                     (Tensor3.unflatten (batchSlice N (ic * h * w) x n))))
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j := by
-  simp only [den, den_operand]
+  simp only [den]
   congr 1
   apply congrArg (lr * ·)
   apply Finset.sum_congr rfl
@@ -61,7 +61,7 @@ theorem convStridedWB_den {N ic oc h w kH kW : Nat}
           pdiv (fun v' : Vec (oc * ic * kH * kW) =>
                   flatConvStride2 (Kernel4.unflatten v') b (batchSlice N (ic * (2*h) * (2*w)) x n))
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j := by
-  simp only [den, den_operand]
+  simp only [den]
   congr 1
   apply congrArg (lr * ·)
   apply Finset.sum_congr rfl
@@ -83,7 +83,7 @@ theorem denseWB_den {N a c : Nat}
       = W i j - lr * ∑ n : Fin N, ∑ k : Fin c,
           pdiv (fun v : Vec (a * c) => dense (Mat.unflatten v) b (batchSlice N a x n))
                (Mat.flatten W) (finProdFinEquiv (i, j)) k * batchSlice N c cot n k := by
-  simp only [den, den_operand, Mat.flatten, Equiv.symm_apply_apply]
+  simp only [den, Mat.flatten, Equiv.symm_apply_apply]
   congr 1
   apply congrArg (lr * ·)
   apply Finset.sum_congr rfl
@@ -98,7 +98,7 @@ theorem denseBB_den {N c : Nat}
     den (SHlo.denseBiasSgdB bN lrStr b lr (.operand cotN cot)) j
       = b j - lr * ∑ n : Fin N, ∑ k : Fin c,
           pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k := by
-  simp only [den, den_operand]
+  simp only [den]
   congr 1
   apply congrArg (lr * ·)
   apply Finset.sum_congr rfl
@@ -122,7 +122,7 @@ theorem bnGammaB_den {N oc h w : Nat}
           pdiv (fun γ' : Vec oc =>
                   bnPerChannelFlat oc (N * (h * w)) ε γ' β (bnchwFwd N oc h w v))
                γ idx j * bnchwFwd N oc h w cot j := by
-  simp only [den, den_operand]
+  simp only [den]
   exact cifar_bn_render_gamma_certified oc (N * (h * w)) ε γ β
     (bnchwFwd N oc h w v) (bnchwFwd N oc h w cot) lr idx
 
@@ -137,7 +137,7 @@ theorem bnBetaB_den {N oc h w : Nat}
       = β idx - lr * ∑ j : Fin (oc * (N * (h * w))),
           pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) ε γ β' v)
                β idx j * bnchwFwd N oc h w cot j := by
-  simp only [den, den_operand]
+  simp only [den]
   exact cifar_bn_render_beta_certified oc (N * (h * w)) ε γ β v (bnchwFwd N oc h w cot) lr idx
 
 -- ════════════════════════════════════════════════════════════════
@@ -156,7 +156,7 @@ theorem depthwiseWB_den {N c h w kH kW : Nat}
                   Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') b
                     (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
                (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
-  simp only [den, den_operand]
+  simp only [den]
   congr 1
   apply congrArg (lr * ·)
   apply Finset.sum_congr rfl
@@ -176,7 +176,7 @@ theorem depthwiseStridedWB_den {N c h w kH kW : Nat}
           pdiv (fun v' : Vec (c * kH * kW) =>
                   depthwiseStride2Flat (Tensor3.unflatten v') b (batchSlice N (c * (2*h) * (2*w)) x n))
                (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
-  simp only [den, den_operand]
+  simp only [den]
   congr 1
   apply congrArg (lr * ·)
   apply Finset.sum_congr rfl

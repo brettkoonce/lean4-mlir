@@ -413,7 +413,7 @@ noncomputable def projStridedB_has_vjp (N : Nat) {ic oc h w kH kW : Nat}
     `convStridedBackBatched ∘ bnBatchLABack`, at the skip's forward activation. The
     strided sibling of `projBackBatchedGraph`. -/
 noncomputable def projStridedBackBatchedGraph {N ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ _β : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
     SHlo (N * (ic * (2 * h) * (2 * w))) :=
   .convStridedBackBatched (N := N) "%psW" W b

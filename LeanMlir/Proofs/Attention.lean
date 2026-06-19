@@ -286,8 +286,8 @@ theorem pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
     (h_exp j).mul h_inv
   rw [h_mul.fderiv]
   -- Evaluate the resulting CLM at basisVec i and simplify.
-  simp only [ContinuousLinearMap.add_apply, ContinuousLinearMap.smul_apply, smul_eq_mul,
-             ContinuousLinearMap.sum_apply, ContinuousLinearMap.proj_apply, basisVec_apply]
+  simp only [add_apply, smul_apply, smul_eq_mul,
+             _root_.sum_apply, ContinuousLinearMap.proj_apply, basisVec_apply]
   -- Collapse the Kronecker sum: Σ_k exp(z k) * (if k = i then 1 else 0) = exp(z i).
   rw [show (∑ k : Fin (c' + 1), Real.exp (z k) * (if k = i then (1 : ℝ) else 0)) =
         Real.exp (z i) from by
@@ -421,7 +421,7 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
     exact h_log_at.neg
   rw [h_ce_at.fderiv]
   -- Step 3: simplify CLM application at basisVec j.
-  simp only [ContinuousLinearMap.neg_apply, ContinuousLinearMap.smul_apply, smul_eq_mul]
+  simp only [neg_apply, smul_apply, smul_eq_mul]
   -- Step 4: rewrite fderiv of `softmax z label` (in z) as pdiv softmax, then apply pdiv_softmax.
   rw [show fderiv ℝ (fun z : Vec (c' + 1) => softmax (c' + 1) z label) logits (basisVec j)
         = pdiv (softmax (c' + 1)) logits j label from by
@@ -1257,7 +1257,7 @@ theorem mhsa_g_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
     by_cases hc' : c' = c
     · subst hc'
       rw [if_pos rfl]
-      simp [if_pos rfl]
+      simp
     · rw [if_neg hc']
       rw [if_neg hc']
       unfold Mat.flatten mhsa_proj_c
@@ -1269,7 +1269,7 @@ theorem mhsa_g_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
     have h0 := h_proj_match (0 : Fin 3)
     have h1 := h_proj_match (1 : Fin 3)
     have h2 := h_proj_match (2 : Fin 3)
-    simp [if_pos rfl] at h0
+    simp at h0
     simp [show (1 : Fin 3) ≠ (0 : Fin 3) from by decide] at h1
     simp [show (2 : Fin 3) ≠ (0 : Fin 3) from by decide] at h2
     show Mat.flatten (sdpa n d
@@ -1288,7 +1288,7 @@ theorem mhsa_g_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
       have h1 := h_proj_match (1 : Fin 3)
       have h2 := h_proj_match (2 : Fin 3)
       simp [show (0 : Fin 3) ≠ (1 : Fin 3) from by decide] at h0
-      simp [if_pos rfl] at h1
+      simp at h1
       simp [show (2 : Fin 3) ≠ (1 : Fin 3) from by decide] at h2
       show Mat.flatten (sdpa n d (mhsa_proj_c (0 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (1 : Fin 3) slab u)))
         (mhsa_proj_c (1 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (1 : Fin 3) slab u)))
@@ -1306,7 +1306,7 @@ theorem mhsa_g_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
       have h2 := h_proj_match (2 : Fin 3)
       simp [show (0 : Fin 3) ≠ (2 : Fin 3) from by decide] at h0
       simp [show (1 : Fin 3) ≠ (2 : Fin 3) from by decide] at h1
-      simp [if_pos rfl] at h2
+      simp at h2
       show Mat.flatten (sdpa n d (mhsa_proj_c (0 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (2 : Fin 3) slab u)))
         (mhsa_proj_c (1 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (2 : Fin 3) slab u)))
         (mhsa_proj_c (2 : Fin 3) (Mat.unflatten (mhsa_embed_c n d (2 : Fin 3) slab u)))) = _

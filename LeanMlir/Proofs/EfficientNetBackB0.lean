@@ -243,7 +243,7 @@ theorem dwBnSwishBackGraph_faithful {c h w kH kW : Nat}
 
 /-- conv → bn backward graph (the MBConv project stage, no swish). -/
 noncomputable def convBnBackGraph {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ _β : ℝ)
     (x : Vec (ic * h * w)) (e : SHlo (oc * h * w)) : SHlo (ic * h * w) :=
   .convBack "%pW" W b x
     (.bnBack "%pG" "%pX" "pE" ε γ (flatConv W b x) e)
@@ -601,7 +601,7 @@ theorem dwbsSBackBatchedGraph_faithful {N c h w kH kW : Nat}
 
 /-- Batched **conv → bn** stage backward graph (MBConv project, no swish). -/
 noncomputable def projBackBatchedGraph {N ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ _β : Vec oc)
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) : SHlo (N * (ic * h * w)) :=
   .convBackBatched (N := N) "%pbW" W b
     (.bnBatchLABack "%pbG" "%pbX" "pbE" ε γ (batchMap N (flatConv W b) x) e)

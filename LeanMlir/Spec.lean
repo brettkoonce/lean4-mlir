@@ -23,7 +23,7 @@ def Layer.nParams : Layer → Nat
       firstBlock + (n - 1) * idBlock
   | .separableConv ic oc _ =>
       (ic * 9 + 2 * ic) + (oc * ic + 2 * oc)
-  | .invertedResidual ic oc expand stride n =>
+  | .invertedResidual ic oc expand _stride n =>
       let mid := ic * expand
       let expandP := if expand == 1 then 0 else (mid * ic + 2 * mid)
       let dwP := mid * 9 + 2 * mid
@@ -35,7 +35,7 @@ def Layer.nParams : Layer → Nat
       let projR := oc * midR + 2 * oc
       let restBlock := expandR + dwR + projR
       firstBlock + (n - 1) * restBlock
-  | .mbConv ic oc expand k stride n useSE _act =>
+  | .mbConv ic oc expand k _stride n useSE _act =>
       let mid := ic * expand
       let expandP := if expand == 1 then 0 else (mid * ic + 2 * mid)
       let dwP := mid * k * k + 2 * mid
@@ -58,7 +58,7 @@ def Layer.nParams : Layer → Nat
       let seP := if useSE then (seMid * expandCh + seMid) + (expandCh * seMid + expandCh) else 0
       let projP := oc * expandCh + 2 * oc
       expandP + dwP + seP + projP
-  | .fusedMbConv ic oc expand k stride n useSE =>
+  | .fusedMbConv ic oc expand k _stride n useSE =>
       let mid := if expand == 1 then oc else ic * expand
       let expandP := mid * ic * k * k + 2 * mid
       let seMid := Nat.max 1 (mid / 4)
@@ -72,7 +72,7 @@ def Layer.nParams : Layer → Nat
       let projR := if expand == 1 then 0 else (oc * midR + 2 * oc)
       let restBlock := expandR + seR + projR
       firstBlock + (n - 1) * restBlock
-  | .uib ic oc expand stride preDWk postDWk =>
+  | .uib ic oc expand _stride preDWk postDWk =>
       let mid := ic * expand
       let preDW := if preDWk > 0 then ic * preDWk * preDWk + 2 * ic else 0
       let expandP := mid * ic + 2 * mid

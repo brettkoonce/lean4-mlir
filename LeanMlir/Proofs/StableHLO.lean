@@ -891,9 +891,9 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       bnBatchLA N oc h w ε γ β (den e)
   | _, .bnBatchBack (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
       bnBatchTensor4_grad_input N oc h w ε γ x (den e)
-  | _, .convBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ W b e =>
+  | _, .convBackBatched (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) _ W b e =>
       batchMap N (fun dy => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
-  | _, .convStridedBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ W b e =>
+  | _, .convStridedBackBatched (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) _ W b e =>
       batchMap N (fun dy => (flatConvStride2_has_vjp W b).backward (fun _ => 0) dy) (den e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
       batchMap N (fun dy => (hasVJP3_to_hasVJP (depthwise_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)

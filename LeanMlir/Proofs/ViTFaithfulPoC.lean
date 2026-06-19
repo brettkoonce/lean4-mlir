@@ -34,7 +34,7 @@ theorem veclnGammaSgd_den {N D : Nat} (gN xN epsStr lrStr cotN : String)
       = γ k - lr * ∑ o : Fin (N * D),
           pdiv (fun gv : Vec D =>
                   Mat.flatten (fun r => layerNormVec D ε gv βv (Mat.unflatten x r))) γ k o * dy o := by
-  simp only [den, den_operand]
+  simp only [den]
   exact vit_render_veclngamma_certified ε βv γ (Mat.unflatten x) dy lr k
 
 /-- **Per-token dense weight op denotes the certified step.** `den(rowDenseWeightSgd) (flat (i,j))` =
@@ -47,7 +47,7 @@ theorem rowDenseWeightSgd_den {N a c : Nat} (xN wN lrStr cotN : String)
           pdiv (fun v : Vec (a * c) =>
                   Mat.flatten (fun r => dense (Mat.unflatten v) bb (Mat.unflatten x r)))
                (Mat.flatten W) (finProdFinEquiv (i, j)) o * dy o := by
-  simp only [den, den_operand, Mat.flatten, Equiv.symm_apply_apply]
+  simp only [den, Mat.flatten, Equiv.symm_apply_apply]
   exact vit_render_rowdenseW_certified bb (Mat.unflatten x) W dy lr i j
 
 /-- **Per-token dense bias op denotes the certified step** (dense-bias forward). `den(rowDenseBiasSgd)`
@@ -57,7 +57,7 @@ theorem rowDenseBiasSgd_den {N a c : Nat} (bN lrStr cotN : String)
     den (SHlo.rowDenseBiasSgd bN lrStr b lr (.operand cotN dy)) i
       = b i - lr * ∑ o : Fin (N * c),
           pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (X r))) b i o * dy o := by
-  simp only [den, den_operand]
+  simp only [den]
   exact vit_render_rowdenseb_certified W X b dy lr i
 
 /-- **The SAME per-token bias op, certified against the vector-LN β forward.** The LN β grad is
@@ -69,7 +69,7 @@ theorem rowDenseBiasSgd_den_lnbeta {N D : Nat} (bN lrStr cotN : String)
       = β i - lr * ∑ o : Fin (N * D),
           pdiv (fun bv : Vec D =>
                   Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o * dy o := by
-  simp only [den, den_operand]
+  simp only [den]
   exact vit_render_veclnbeta_certified ε γv β X dy lr i
 
 /-- **Patch-embed conv weight op denotes the certified step.** `den(patchEmbedWeightSgd) (flat
@@ -86,7 +86,7 @@ theorem patchEmbedWeightSgd_den {ic H W P N D : Nat} (wN xN lrStr cotN : String)
                   patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
             (Kernel4.flatten Wp)
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o * dy o := by
-  simp only [den, den_operand, patchEmbedWeightGradFlat, Kernel4.flatten, Equiv.symm_apply_apply]
+  simp only [den, patchEmbedWeightGradFlat, Kernel4.flatten, Equiv.symm_apply_apply]
   exact vit_render_patchW_certified Wp bc cls pos img dy lr d c kh kw
 
 /-- **Patch-embed conv bias op denotes the certified step.** `den(patchEmbedBiasSgd)` = `b − lr·(Σ_patches
@@ -97,7 +97,7 @@ theorem patchEmbedBiasSgd_den {ic H W P N D : Nat} (bN lrStr cotN : String)
     den (SHlo.patchEmbedBiasSgd bN lrStr bc lr (.operand cotN dy)) i
       = bc i - lr * ∑ o : Fin ((N + 1) * D),
           pdiv (fun b' : Vec D => patchEmbed_flat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
-  simp only [den, den_operand]
+  simp only [den]
   exact vit_render_patchb_certified Wc bc cls pos img dy lr i
 
 /-- **Positional-embed op denotes the certified step.** `den(posEmbedSgd)` = `pos − lr·dy` (the pos
@@ -110,7 +110,7 @@ theorem posEmbedSgd_den {ic H W P N D : Nat} (pN lrStr cotN : String)
           pdiv (fun p : Vec ((N + 1) * D) =>
                   patchEmbed_flat ic H W P N D Wc bc cls (Mat.unflatten p) img)
             (Mat.flatten pos) i j * dy j := by
-  simp only [den, den_operand]
+  simp only [den]
   exact vit_render_pos_certified Wc bc cls pos img dy lr i
 
 -- The **CLS token** reuses the batched `denseBiasSgdB` (the render takes `clsSliceF`'s row-0 slice of

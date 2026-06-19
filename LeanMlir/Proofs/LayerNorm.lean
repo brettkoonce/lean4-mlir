@@ -251,7 +251,7 @@ theorem pdiv_gelu (n : Nat) (x : Vec n) (i j : Fin n) :
   by_cases hij : i = j
   · subst hij
     show basisVec i i * deriv geluScalar (x i) = if i = i then geluScalarDeriv (x i) else 0
-    simp only [basisVec_apply, if_pos rfl, one_mul]
+    simp only [if_pos rfl, one_mul]
     rfl
   · have h_basis : basisVec i j = 0 := by
       simp only [basisVec_apply]
@@ -372,7 +372,7 @@ theorem pdiv_swish (n : Nat) (x : Vec n) (i j : Fin n) :
   show basisVec i j * deriv swishScalar (x j) = _
   by_cases hij : i = j
   · subst hij
-    simp only [basisVec_apply, if_pos rfl, one_mul]
+    simp only [if_pos rfl, one_mul]
     rfl
   · have h_basis : basisVec i j = 0 := by
       simp only [basisVec_apply]

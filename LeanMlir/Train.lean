@@ -70,7 +70,7 @@ private def runIreeCached (mlirPath outPath mlir : String) : IO (Bool × Bool) :
   let hashExists ← System.FilePath.pathExists hashPath
   if vmfbExists && hashExists then
     let cached ← IO.FS.readFile hashPath
-    if cached.trim == key then
+    if cached.trimAscii == key then
       return (false, true)  -- cache hit, skip the slow path
   -- Cache miss → compile and write the sidecar.
   let ok ← runIree mlirPath outPath

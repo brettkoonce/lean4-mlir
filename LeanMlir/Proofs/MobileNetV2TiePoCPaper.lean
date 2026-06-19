@@ -639,7 +639,7 @@ stride-1 skip blocks, the identity-skip branch (`+ dyOut`). -/
 /-- Stride-1 skip block input cotangent: `expand-conv-back(invresCotEcS1) + dyOut` (the fan-in sum). -/
 @[irreducible] noncomputable def ivS1SkipCotInAt {c mid h w : Nat} (ε : ℝ)
     (We : Kernel4 mid c 1 1) (be γe βe : Vec mid) (Wd : DepthwiseKernel mid 3 3) (bd γd βd : Vec mid)
-    (Wp : Kernel4 c mid 1 1) (bp γp βp : Vec c) (xin dyOut : Vec (c*h*w)) : Vec (c*h*w) :=
+    (Wp : Kernel4 c mid 1 1) (bp γp _βp : Vec c) (xin dyOut : Vec (c*h*w)) : Vec (c*h*w) :=
   let ec := flatConv We be xin
   let en := bnPerChannelTensor3 mid h w ε γe βe ec
   let er := relu6 (mid*h*w) en
@@ -653,7 +653,7 @@ stride-1 skip blocks, the identity-skip branch (`+ dyOut`). -/
 /-- Stride-1 no-skip (widening b11/b17) block input cotangent: body branch only. -/
 @[irreducible] noncomputable def ivS1NoSkipCotInAt {ic mid oc h w : Nat} (ε : ℝ)
     (We : Kernel4 mid ic 1 1) (be γe βe : Vec mid) (Wd : DepthwiseKernel mid 3 3) (bd γd βd : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc) (xin : Vec (ic*h*w)) (dyOut : Vec (oc*h*w)) :
+    (Wp : Kernel4 oc mid 1 1) (bp γp _βp : Vec oc) (xin : Vec (ic*h*w)) (dyOut : Vec (oc*h*w)) :
     Vec (ic*h*w) :=
   let ec := flatConv We be xin
   let en := bnPerChannelTensor3 mid h w ε γe βe ec
@@ -668,7 +668,7 @@ stride-1 skip blocks, the identity-skip branch (`+ dyOut`). -/
 /-- Stride-2 downsampling block input cotangent (at `2h×2w`): body branch only. -/
 @[irreducible] noncomputable def ivS2CotInAt {ic mid oc h w : Nat} (ε : ℝ)
     (We : Kernel4 mid ic 1 1) (be γe βe : Vec mid) (Wd : DepthwiseKernel mid 3 3) (bd γd βd : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc) (xin : Vec (ic*(2*h)*(2*w))) (dyOut : Vec (oc*h*w)) :
+    (Wp : Kernel4 oc mid 1 1) (bp γp _βp : Vec oc) (xin : Vec (ic*(2*h)*(2*w))) (dyOut : Vec (oc*h*w)) :
     Vec (ic*(2*h)*(2*w)) :=
   let ec := flatConv We be xin
   let en := bnPerChannelTensor3 mid (2*h) (2*w) ε γe βe ec
@@ -682,7 +682,7 @@ stride-1 skip blocks, the identity-skip branch (`+ dyOut`). -/
 
 /-- No-expand block input cotangent: depthwise input-VJP of `invresCotDc`. -/
 @[irreducible] noncomputable def ivNoExpCotInAt {ic oc h w : Nat} (ε : ℝ)
-    (Wd : DepthwiseKernel ic 3 3) (bd γd βd : Vec ic) (Wp : Kernel4 oc ic 1 1) (bp γp βp : Vec oc)
+    (Wd : DepthwiseKernel ic 3 3) (bd γd βd : Vec ic) (Wp : Kernel4 oc ic 1 1) (bp γp _βp : Vec oc)
     (xin : Vec (ic*h*w)) (dyOut : Vec (oc*h*w)) : Vec (ic*h*w) :=
   let dc := depthwiseFlat Wd bd xin
   let dn := bnPerChannelTensor3 ic h w ε γd βd dc

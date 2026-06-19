@@ -498,11 +498,11 @@ theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i 
       C k y = y k - bnMean (n' + 1) y := by
     intros k y
     show ((ContinuousLinearMap.proj k : Vec (n' + 1) →L[ℝ] ℝ) - mean_clm) y = _
-    rw [ContinuousLinearMap.sub_apply]
+    rw [sub_apply]
     show y k - mean_clm y = _
     show y k - (((n' + 1 : Nat) : ℝ)⁻¹ •
       ∑ i' : Fin (n' + 1), (ContinuousLinearMap.proj i' : Vec (n' + 1) →L[ℝ] ℝ)) y = _
-    rw [ContinuousLinearMap.smul_apply, ContinuousLinearMap.sum_apply, smul_eq_mul]
+    rw [smul_apply, _root_.sum_apply, smul_eq_mul]
     show y k - ((n' + 1 : Nat) : ℝ)⁻¹ * ∑ i' : Fin (n' + 1), y i' = _
     unfold bnMean
     rw [div_eq_inv_mul]
@@ -574,8 +574,8 @@ theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i 
   -- Compute the sum CLM applied to basisVec i: equals 2 (x i - μ).
   have h_sum_eval : (∑ k : Fin (n' + 1), (2 * C k x) • C k) (basisVec i) =
                     2 * (x i - bnMean (n' + 1) x) := by
-    rw [ContinuousLinearMap.sum_apply]
-    simp only [ContinuousLinearMap.smul_apply, smul_eq_mul]
+    rw [_root_.sum_apply]
+    simp only [smul_apply, smul_eq_mul]
     -- First rewrite C k (basisVec i) using hC_basis (specific form), then C k x using hC_apply.
     simp_rw [hC_basis]
     simp_rw [hC_apply]
@@ -612,7 +612,7 @@ theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i 
         ring]
     ring
   -- Apply CLM step by step at basisVec i.
-  simp only [ContinuousLinearMap.smul_apply, smul_eq_mul]
+  simp only [smul_apply, smul_eq_mul]
   rw [h_sum_eval]
   -- Goal: -(s²)⁻¹ * ((1/(2s)) * (N⁻¹ * (2 * (x_i - μ)))) =
   --       -(bnIstd N x ε)^3 * (x_i - μ) / N
@@ -711,7 +711,7 @@ noncomputable def bnNormalize_has_vjp (n : Nat) (ε : ℝ) (hε : 0 < ε) :
     rw [← Finset.mul_sum, Finset.sum_sub_distrib, Finset.sum_sub_distrib]
     -- Step 3: Kronecker delta
     rw [show ∑ j : Fin n, ↑n * (if i = j then dxhat j else 0) = ↑n * dxhat i from by
-      simp [Finset.sum_ite_eq', Finset.mem_univ]]
+      simp [Finset.mem_univ]]
     -- Step 4: factor xh i out
     rw [show ∑ j : Fin n, xh i * (xh j * dxhat j) =
         xh i * ∑ j : Fin n, xh j * dxhat j from by rw [← Finset.mul_sum]]

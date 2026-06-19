@@ -75,7 +75,7 @@ theorem layerScaleChGammaSgd_den {c h w : Nat} (gN xN lrStr cotN : String)
     den (SHlo.layerScaleChGammaSgd gN xN lrStr x γ lr (.operand cotN dy)) cc
       = γ cc - lr * ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => layerScale (fun k => γ' (chanIdx c h w k)) x) γ cc j * dy j := by
-  simp only [den, den_operand]
+  simp only [den]
   exact cnx_render_lsgammaCh_certified x γ dy lr cc
 
 /-- **Scalar-LN γ op denotes the certified step** (`γ − lr·Σ dy·x̂`). Delegation to
@@ -86,7 +86,7 @@ theorem lnGammaSgd_den {n : Nat} (gN xN epsStr lrStr cotN : String)
     den (SHlo.lnGammaSgd gN xN epsStr lrStr ε x γ lr (.operand cotN dy)) i
       = γ 0 - lr * ∑ j : Fin n,
           pdiv (fun γ' : Vec 1 => layerNormForward n ε (γ' 0) β x) γ 0 j * dy j := by
-  simp only [den, den_operand]
+  simp only [den]
   exact cnx_render_lngamma_certified n ε β γ x dy lr
 
 /-- **Scalar-LN β op denotes the certified step** (`β − lr·Σ dy`). Delegation to
@@ -96,7 +96,7 @@ theorem lnBetaSgd_den {n : Nat} (bN lrStr cotN : String)
     den (SHlo.lnBetaSgd bN lrStr β lr (.operand cotN dy)) i
       = β 0 - lr * ∑ j : Fin n,
           pdiv (fun β' : Vec 1 => layerNormForward n ε γ (β' 0) x) β 0 j * dy j := by
-  simp only [den, den_operand]
+  simp only [den]
   exact cnx_render_lnbeta_certified n ε γ β x dy lr
 
 end Proofs.CnxPoC

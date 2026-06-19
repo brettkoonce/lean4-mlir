@@ -355,7 +355,7 @@ private lemma qkv_back_fanin (N d : Nat) (Wq Wk Wv : Mat (1 * d) (1 * d))
     over `sdpa_back_{Q,K,V}` at the inner-`d` dense projections of `X` and the
     `Wo`-back of the cotangent `dh`. -/
 noncomputable def mhsaBackCollapsed (N d : Nat)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
+    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv _bo : Vec (1 * d))
     (X dh : Mat N (1 * d)) : Mat N (1 * d) :=
   let Qg : Mat N d := fun r j => dense Wq bq (X r) (finProdFinEquiv ((0:Fin 1), j))
   let Kg : Mat N d := fun r j => dense Wk bk (X r) (finProdFinEquiv ((0:Fin 1), j))
@@ -556,7 +556,7 @@ private lemma qkv_back_fanin_MH (N heads d : Nat)
     run `sdpa_back_{Q,K,V}` at `d`, then contract per-head against the
     `finProdFinEquiv (h, ·)` columns of `Wq/Wk/Wv`, summed over heads. -/
 noncomputable def mhsaBackCollapsedMH (N heads d : Nat)
-    (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
+    (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv _bo : Vec (heads * d))
     (X dh : Mat N (heads * d)) : Mat N (heads * d) :=
   let Qg : Fin heads → Mat N d := fun h r j => dense Wq bq (X r) (finProdFinEquiv (h, j))
   let Kg : Fin heads → Mat N d := fun h r j => dense Wk bk (X r) (finProdFinEquiv (h, j))
@@ -1020,7 +1020,7 @@ theorem mhsaBackGraph_faithful (Np1 d : Nat)
     `x` (saved pre-LN₁ block input) feeds the LN₁ backward; the saved Q/K/V/scores/
     weights inside `mhsaBackGraph` are computed at `X = LN₁ x`. -/
 noncomputable def attnSublayerInnerBackGraph (Np1 d : Nat) (ε γ1 : ℝ)
-    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv bo : Vec (1 * d))
+    (Wq Wk Wv Wo : Mat (1 * d) (1 * d)) (bq bk bv _bo : Vec (1 * d))
     (x : Vec (Np1 * (1 * d))) (X : Mat Np1 (1 * d)) (e : SHlo (Np1 * (1 * d))) :
     SHlo (Np1 * (1 * d)) :=
   .lnRowBack "%g1" "%x" "ε" ε γ1 x
@@ -1385,7 +1385,7 @@ theorem mhsaBackGraphMH_faithful {Np1 hm1 d : Nat}
 
 /-- Attn-sublayer non-trivial arm (`mhsa ∘ LN₁`), multi-head. -/
 noncomputable def attnSublayerInnerBackGraphMH {Np1 hm1 d : Nat} (ε γ1 : ℝ)
-    (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv bo : Vec ((hm1+1) * d))
+    (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv _bo : Vec ((hm1+1) * d))
     (x : Vec (Np1 * ((hm1+1) * d))) (X : Mat Np1 ((hm1+1) * d))
     (e : SHlo (Np1 * ((hm1+1) * d))) : SHlo (Np1 * ((hm1+1) * d)) :=
   SHlo.lnRowBack "%g1" "%x" "ε" ε γ1 x
@@ -1657,7 +1657,7 @@ theorem mlpSublayerVBackGraph_faithfulMH {Np1 hm1 d mlpDim : Nat}
     is the LN-back fragment: `lnRowBack(γ=1) ∘ rowScaleF γ1v`. -/
 noncomputable def attnSublayerVInnerBackGraphMH {Np1 hm1 d : Nat} (ε : ℝ)
     (γ1v : Vec ((hm1+1) * d))
-    (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv bo : Vec ((hm1+1) * d))
+    (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv _bo : Vec ((hm1+1) * d))
     (x : Vec (Np1 * ((hm1+1) * d))) (X : Mat Np1 ((hm1+1) * d))
     (e : SHlo (Np1 * ((hm1+1) * d))) : SHlo (Np1 * ((hm1+1) * d)) :=
   SHlo.lnRowBack "%g1" "%x" "ε" ε 1 x
