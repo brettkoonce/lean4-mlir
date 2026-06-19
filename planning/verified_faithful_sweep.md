@@ -126,6 +126,11 @@ thread, 2-block). The ONLY remaining gap: the tie certifies the **single-head 2-
 committed render is **multi-head (3 heads, d_head=64), depth-12**. Promote the tie to match. This is the mnv2
 reduced→full analogue — the math all exists, it's a thread + a small multi-head-cotangent construction._
 
+_**Progress (2026-06-19): task 1 of 4 DONE** — the multi-head chain cotangents (`ViTMultiHeadChain.lean`),
+3-axiom clean, `lake build Proofs` green (2278), NOT yet committed. The substantive build (`vitCotD{Q,K,V}mh`
+pinned to the audited per-head `sdpa_back_{Q,K,V}` via `vitCotD{Q,K,V}mh_eq`) is in hand; tasks 2–4 (the
+multi-head per-block tie + depth-12 thread, the non-block-param bundle/capstone, the trainer swap) remain._
+
 **Key files:** `ViTTiePoC.lean` (the tie — extend here), `ViTChainClose.lean` (single-head SDPA cots
 `vitCotD{Q,K,V}`/`vitCotLn1`, LN-agnostic), `ViTVecLN.lean` (the `*V` vector-LN cots + `vecln*_chain_certified`),
 `ViTMultiHead.lean` (the multi-head forward `vitBlockGraphMHV` + `transformerBlockVBackGraphMHP_faithful`),
@@ -133,16 +138,25 @@ reduced→full analogue — the math all exists, it's a thread + a small multi-h
 render — `vBlockFwd`'s per-head slice/pad structure is the ground truth to match).
 
 **The four remaining tasks (in order):**
-1. **Multi-head chain cotangents (the one substantive build).** In the committed render `Wq/Wk/Wv/Wo` are
-   single `[192,192]` matrices: the dense produces all 3 heads' Q, then `headSliceF h` slices `[197,64]` per
-   head, per-head SDPA (scale `1/√64`), `headPadF h` scatters back `[197,192]`, summed over heads. So the
-   multi-head Q-dense cotangent is `dQ_mh := Σ_{h<3} headPadFlat 197 3 64 h (vitCotDQ 64 ss_h k_h v_h dAtt_h)`
-   where `ss_h`/`k_h`/`v_h`/`dAtt_h` are head `h`'s saved slices (`headSliceFlat` of the full q/k/v/dAtt). The
-   per-head SDPA backs are the EXISTING `vitCotD{Q,K,V}` at `d=64`. Define `vitCotLn1MH` (= the 3-way fan-in of
-   the 3 heads' Q/K/V dense-backs, each from `dQ_mh`/`dK_mh`/`dV_mh`) and prove `headPadFlat`/`headSliceFlat`
-   compose to the multi-head dense backward. The fold lemmas (`rowDenseWeightSgd_den` etc.) are head-agnostic
-   (generic in the cotangent) — only the COTANGENT changes from single-head `vitCotDQ` to `dQ_mh`. NB the scale:
-   single-head rep uses `sdpa_scale 192`, multi-head uses `sdpa_scale 64` (d_head=64) — match the committed.
+1. **✅ DONE (2026-06-19): Multi-head chain cotangents (the one substantive build).** New file
+   `LeanMlir/Proofs/ViTMultiHeadChain.lean` (imports `ViTMultiHead`; the backward symmetry of its forward),
+   3-axiom clean, `lake build Proofs` green (2278). The committed render's `Wq/Wk/Wv/Wo` are single `[192,192]`
+   matrices: the dense produces all 3 heads' Q, then `headSliceF h` slices `[197,64]` per head, per-head SDPA
+   (scale `1/√64`), `headPadF h` scatters back `[197,192]`, summed over heads. Defined: the per-head saved
+   score/weight helpers `headScoresF`/`headWeightsF` (recomputed from the full saved Q/K), the multi-head Q/K/V
+   dense cotangents `vitCotD{Q,K,V}mh Np1 heads d q k v dAtt = Σ_{h} headPadFlat Np1 heads d h (vitCotD{Q,K,V} d
+   (headScoresF/headWeightsF …) (headSliceFlat … k/q) (headSliceFlat … v) (headSliceFlat … dAtt))` — the EXISTING
+   per-head `vitCotD{Q,K,V}` at `d=64`, sliced/padded — and `vitCotLn1MH = vitCotLn1 Wq Wk Wv dQ_mh dK_mh dV_mh`
+   (the 3-way fan-in, same shape, multi-head cots). **The substantive proofs** `vitCotD{Q,K,V}mh_eq`: the rendered
+   slice → per-head SDPA-back → pad chain IS `Mat.flatten (Σ_h headPadMat h (sdpa_back_{Q,K,V} d Q_h K_h V_h
+   dOut_h))` — the concat of the **audited** per-head SDPA backwards (each via the single-head pin
+   `vitCotD{Q,K,V}_eq_sdpa_back_{Q,K,V}` at d_head, slid through the `headSliceFlat_flat`/`headPadFlat_flat`/
+   `flatten_sum` commutation bridges from `ViTMultiHead`). So the cotangent the Q/K/V dense ops contract with is
+   the genuine multi-head attention gradient. The fold lemmas (`rowDenseWeightSgd_den` etc.) are head-agnostic
+   (generic in the cotangent) — only the COTANGENT changes from single-head `vitCotDQ` to `vitCotDQmh`. NB the
+   scale: the cots use `sdpa_scale d` (d_head=64), matching the committed (the single-head rep used `sdpa_scale
+   192`). ZERO new core ops/bridges. Registered as a lakefile `Proofs` root. **Next: task 2 (the multi-head
+   per-block tie `vitBlockTiedMHV` swapping `vitCotD{Q,K,V}` → the `…mh` cots, then the depth-12 thread).**
 2. **Depth-12 thread.** Extend `vit_net_tiedV` from 2 blocks to 12 (mechanical — more `let`-bindings, exactly
    like convnext's 18-block `cnx_net_tied_certified`). `@[irreducible]` wrappers + `maxHeartbeats` already proven
    to keep it opaque. Thread `ib1 → … → ib12 → b12out`, dyOut backward via `vitBlockCotInAtV` (the per-block

@@ -154,6 +154,11 @@ lean_lib «Proofs» where
              -- mhsa at general heads, then the distinct-param depth-k tower
              -- (vitForwardKV). ViTDepthK imports ViTMultiHead, covering both.
              `LeanMlir.Proofs.ViTDepthK,
+             -- ViT multi-head backward cotangents: the per-head SDPA backward the real
+             -- chain delivers at the Q/K/V dense outputs (Σ_h pad ∘ vitCotD{Q,K,V}(d_head)
+             -- ∘ slice), pinned to the audited sdpa_back_{Q,K,V} (vitCotD{Q,K,V}mh_eq).
+             -- The multi-head/depth-12 tie's substantive build (mnv2 reduced→full).
+             `LeanMlir.Proofs.ViTMultiHeadChain,
              -- EfficientNet-B0 at full depth (16 distinct MBConv blocks, true BN+SE):
              -- batched forward graph + whole-net VJP. Imports the EfficientNet
              -- RenderPC + ChainClose modules, covering all three.
