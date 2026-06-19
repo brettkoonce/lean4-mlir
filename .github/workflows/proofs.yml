@@ -55,17 +55,21 @@ jobs:
           lake build Proofs
 
       - name: Verified-render drift guard (committed .mlir == proven renderer)
-        # Re-elaborate StableHLO.lean (re-runs its #eval writers) so the
-        # committed verified_mlir/linear_* equal `linearTrainStepModuleV` /
-        # `linearFwdModuleV` — the renderer LinearFaithfulPoC.lean certifies and
-        # MainMnistLinearVerified trains on. If they drift, fail (regenerate with
-        # `lake env lean LeanMlir/Proofs/StableHLO.lean`). The PoC tie for the
-        # mnist-linear chapter trainer; extend per net as renderers are proven.
+        # Re-elaborate the renderer files (re-runs their #eval writers) so the
+        # committed verified_mlir/<net>_* equal the proven renderer the net's
+        # FaithfulPoC certifies and Main<Net>Verified trains on. If they drift,
+        # fail (regenerate with the `lake env lean …` shown). Extended per net
+        # as renderers are proven; covers linear (StableHLO.lean) + vit
+        # (ViTRender.lean, the §1a-tied depth-12 ViT-Tiny — bytes are
+        # pretty(vit_net_tied_certified's graph), 1D CLS).
         run: |
           set -e
           lake env lean LeanMlir/Proofs/StableHLO.lean
           git diff --exit-code -- verified_mlir/linear_train_step.mlir verified_mlir/linear_fwd.mlir \
-            || { echo "::error::committed verified_mlir/linear_*.mlir drifted from the proven renderer"; exit 1; }
+            || { echo "::error::committed verified_mlir/linear_*.mlir drifted from the proven renderer (regen: lake env lean LeanMlir/Proofs/StableHLO.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/ViTRender.lean
+          git diff --exit-code -- verified_mlir/vit_train_step.mlir verified_mlir/vit_fwd.mlir \
+            || { echo "::error::committed verified_mlir/vit_*.mlir drifted from the proven renderer (regen: lake env lean LeanMlir/Proofs/ViTRender.lean)"; exit 1; }
 
       - name: Three-axiom closure check
         run: |
@@ -108,22 +112,22 @@ jobs:
             echo ""
             echo "## Verified-faithful train steps"
             echo ""
-            echo "✅ = the committed \`verified_mlir/<net>_train_step.mlir\` is \`pretty(provenGraph)\` and every parameter output's \`den\` is proven equal to the certified \`fderiv\`-derived loss-descent SGD step (within the 3-axiom closure above). WIP = ℝ VJP / forward proven, train-step fold pending. Residual for ✅ rows: per-op \`pretty\` lexing + ℝ→Float32."
+            echo "✅ = the committed \`verified_mlir/<net>_train_step.mlir\` is \`pretty(provenGraph)\`, every parameter output's \`den\` is proven equal to the certified \`fderiv\`-derived loss-descent SGD step, AND the **§1a whole-net tie** holds — every param op is fed the genuine loss-driven backward-chain cotangent threaded through the REAL forward (not a free ∀cotangent) — all within the 3-axiom closure above. **All 12 chapter nets are now ✅ §1a-tied.** Residual: per-op \`pretty\` lexing + ℝ→Float32 (+ convnext's 4 even-kernel weight-grad gaps; vit has ZERO param gaps)."
             echo ""
-            echo "| Chapter / net | train step = render(provenGraph) | den = certified | capstone |"
-            echo "|---|---|---|---|"
-            echo "| mnist-linear   | $(faithful LinPoC.poc_fwd_is_render) | $(faithful LinPoC.poc_train_step_tail_certified) | \`poc_train_step_tail_certified\` |"
-            echo "| mnist-mlp (1d) | $(faithful MlpPoC.W0_den_certified) | $(faithful MlpPoC.b0_den_certified) | \`{W,b}{0,1,2}_den_certified\` |"
-            echo "| mnist-cnn (2d) | $(faithful CnnPoC.cW1_den) | $(faithful CnnPoC.db5_den) | \`{cW,cb}{1,2}_den\` + \`{dW,db}{3,4,5}_den\` |"
-            echo "| cifar (ch5, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful CifarPoC.db7_den) | \`conv{W,B}_den\` + \`{dW,db}{5,6,7}_den\` |"
-            echo "| cifar-bn (ch5) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful CifarBnPoC.bnBeta_den) | \`bnGamma_den\`/\`bnBeta_den\` + cifar conv/dense |"
-            echo "| cifar8 (8-conv, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful Cifar8PoC.denseB_den) | \`conv{W,B}_den\` + \`dense{W,B}_den\` |"
-            echo "| cifar8-bn (8-conv) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful Cifar8PoC.denseB_den) | reuse: conv/BN/dense generics (no new proof) |"
-            echo "| r34 (ch6)          | $(faithful ResNet34PoC.convStridedW_den) | $(faithful ResNet34PoC.convStridedB_den) | \`convStrided{W,B}_den\` (7×7 stem + 3×3 strided down/proj) + reuse cifar conv/BN/dense generics (146 params) |"
-            echo "| mobilenetv2 (ch7)  | ⚠️ WIP | ⚠️ WIP | fwd \`mobilenetv2FwdGraphFullPC_faithful\` (17-block); committed net = reduced 6-block + VJP 2-block representative (double gap) |"
-            echo "| efficientnet (ch8) | ⚠️ WIP | ⚠️ WIP | fwd \`efficientnetFwdGraphB_full_faithful\` (16 MBConv); backward per-block, no whole-net graph yet |"
-            echo "| convnext (ch9)     | ⚠️ WIP | ⚠️ WIP | fwd \`convNextFwdGraphT_faithful\` ([3,3,9,3]); backward per-block, no whole-net graph yet |"
-            echo "| vit (ch10)         | ⚠️ WIP | ⚠️ WIP | whole-net \`vitNetBackGraph_faithful\` (scalar LN) + per-param \`vit_render_*_chain_certified\`; granularity gap: emitted net uses per-channel LN |"
+            echo "| Chapter / net | render(provenGraph) | den = certified | §1a tied (whole-net) | capstone |"
+            echo "|---|---|---|---|---|"
+            echo "| mnist-linear   | $(faithful LinPoC.poc_fwd_is_render) | $(faithful LinPoC.poc_train_step_tail_certified) | $(faithful LinPoC.poc_train_step_tail_certified) | \`poc_train_step_tail_certified\` |"
+            echo "| mnist-mlp (1d) | $(faithful MlpPoC.W0_den_certified) | $(faithful MlpPoC.b0_den_certified) | $(faithful MlpPoC.mlp_train_step_tied_certified) | \`mlp_train_step_tied_certified\` |"
+            echo "| mnist-cnn (2d) | $(faithful CnnPoC.cW1_den) | $(faithful CnnPoC.db5_den) | $(faithful CnnPoC.cnn_conv_tied_certified) | \`cnn_conv_tied_certified\` |"
+            echo "| cifar (ch5, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful CifarPoC.db7_den) | $(faithful CifarPoC.cifar_conv_tied_certified) | \`cifar_conv_tied_certified\` |"
+            echo "| cifar-bn (ch5) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful CifarBnPoC.bnBeta_den) | $(faithful CifarBnPoC.cifarBn_convbn_tied_certified) | \`cifarBn_convbn_tied_certified\` |"
+            echo "| cifar8 (8-conv, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful Cifar8PoC.denseB_den) | $(faithful Cifar8PoC.cifar8_convs_tied_certified) | \`cifar8_convs_tied_certified\` |"
+            echo "| cifar8-bn (8-conv) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful Cifar8PoC.denseB_den) | $(faithful Cifar8BnPoC.cifar8Bn_convbn_tied_certified) | \`cifar8Bn_convbn_tied_certified\` |"
+            echo "| r34 (ch6)          | $(faithful ResNet34PoC.convStridedW_den) | $(faithful ResNet34PoC.convStridedB_den) | $(faithful ResNet34PoC.r34_net_tied_certified) | \`r34_net_tied_certified\` (full [3,4,6,3], 146 params) |"
+            echo "| mobilenetv2 (ch7)  | $(faithful Mnv2PaperPoC.mnv2Stride1ParamsCertified) | $(faithful Mnv2PaperPoC.mnv2DenseParamsCertified) | $(faithful Mnv2TiePoC.mnv2_net_tied_certified) | \`mnv2_net_tied_certified\` (full 17-block paper, 210 params) |"
+            echo "| efficientnet (ch8) | $(faithful EnetPoC.convWB_den) | $(faithful EnetPoC.bnGammaB_den) | $(faithful EnetTiePoC.efficientnet_net_tied) | \`efficientnet_net_tied\` (full 16-MBConv B0, 262 params; batched true-BN + SE) |"
+            echo "| convnext (ch9)     | $(faithful CnxPoC.lnGammaSgd_den) | $(faithful CnxPoC.lnBetaSgd_den) | $(faithful CnxTiePoC.cnx_net_tied_certified) | \`cnx_net_tied_certified\` (full [3,3,9,3], 176/180 params; 4 even-kernel weight-grad gaps) |"
+            echo "| vit (ch10)         | $(faithful ViTPoC.rowDenseWeightSgd_den) | $(faithful ViTPoC.veclnGammaSgd_den) | $(faithful ViTTiePoC.vit_net_tied_certified) | \`vit_net_tied_certified\` (ViT-Tiny depth-12 multi-head, 200 params — ZERO param gaps) |"
           } >> $GITHUB_STEP_SUMMARY
 
       - name: Summary

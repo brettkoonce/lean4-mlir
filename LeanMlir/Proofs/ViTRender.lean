@@ -342,9 +342,10 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
 
 end Proofs.StableHLO
 
--- Render the depth-12 forward to a scratch file for iree validation.
-#eval IO.FS.writeFile "/tmp/vit_fwd_rendered.mlir" (Proofs.StableHLO.vitFwdRenderV "vit_fwd")
-
--- Render the depth-12 train step (forward + backward + 200-param SGD) for iree validation.
-#eval IO.FS.writeFile "/tmp/vit_train_step_rendered.mlir"
+-- Regenerate the committed verified_mlir/vit_{fwd,train_step}.mlir from the certified renderer
+-- (pure Lean, no iree) — the drift-guard source: `lake env lean LeanMlir/Proofs/ViTRender.lean`
+-- rewrites both, and proofs.yml git-diffs them. The bytes `MainViTVerified` trains on ARE these.
+-- (tests/TestViT{Train,Fwd}.lean write the SAME render + additionally iree-compile on the rocm box.)
+#eval IO.FS.writeFile "verified_mlir/vit_fwd.mlir" (Proofs.StableHLO.vitFwdRenderV "vit_fwd")
+#eval IO.FS.writeFile "verified_mlir/vit_train_step.mlir"
   (Proofs.StableHLO.vitTrainStepRenderV "vit_train_step" "0.003125")
