@@ -6184,7 +6184,7 @@ def main (args : List String) : IO Unit :=
   vitTiny.train vitTinyConfig (args.head?.getD "data/imagenette")
 \end{verbatim}
 
-Three layers. Literally three. The entire model body is
+Three layers. The entire model body is
 \texttt{patchEmbed}, \texttt{transformerEncoder}, \texttt{dense}.
 \texttt{.patchEmbed 3 192 16 196} chops the $224 \times 224 \times 3$
 image into $14 \times 14 = 196$ non-overlapping $16 \times 16$
@@ -6199,7 +6199,7 @@ has its backward pass proved --- the composition of all of them is
 
 Note the learning rate is 0.0003 (a third of what the ConvNets
 used) and warmup is 5 epochs (longer than the ConvNets' 3). ViTs
-famously need gentler optimization schedules --- the attention
+need gentler optimization schedules --- the attention
 softmax is prone to collapse if gradients push logits too hard
 early, and warmup keeps the first few epochs slow enough to avoid
 that failure mode.
