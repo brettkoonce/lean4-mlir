@@ -45,9 +45,20 @@ gap, net by net?
 >    the local re-spelling `patchEmbedWeightGradFlat` (= `vit_render_patchW_certified`). **vit HAS the patch-weight
 >    cert (unlike convnext's gapped 4×4/s4 stem), so it is tied — vit will be the FIRST net with ZERO param gaps
 >    (200/200).** Both: `lake build Proofs` green (2274, roundtrip + den-faithfulness hold), iree-compile on gfx1100
->    (vecln 17440 B, patch-W 16552 B), harness `tests/TestVeclnGammaSgd.lean`. **NEXT: §1 render
->    `vitTrainStepFaithfulV` (full depth-12, pretty(provenGraph) via the generic `vitBlockGraphV`) → §1 fold
->    `ViTFaithfulPoC` (den=certified, mostly delegations) → §1a tie `ViTTiePoC` (two residual fan-ins per block).**
+>    (vecln 17440 B, patch-W 16552 B), harness `tests/TestVeclnGammaSgd.lean`.
+>
+> **▶ §1 RENDER — FORWARD half DONE (2026-06-19, `LeanMlir/Proofs/ViTRender.lean`).** The full depth-12 ViT-Tiny
+> forward rendered NODE-BY-NODE (the computable ConvNeXt pattern — each `pretty` emits one op with `.operand
+> <prevSSA> <zero>`; a composed-graph term is noncomputable, can't `#eval`): patch embed → 12× `vBlockFwd`
+> (LN1→Q/K/V dense→per-head SDPA slice/matmul/scale/softmax/matmul/pad summed over 3 heads→out dense→+res→LN2→
+> fc1→GELU→fc2→+res, mirroring `vitBlockGraphMHV`) → final vector-LN → CLS-slice → dense head. Renders a 2477-line
+> module that **iree-compiles clean on rocm/gfx1100 (136 KB vmfb)**; `den = vitForward` via `vitFwdGraphMHV_faithful`
+> at depth-12. Module preamble defines `%one`/`%zero`/`%sc` (the lnRow γ=1/β=0 + reduce-init `tensor<f32>` consts).
+> **REMAINING for the §1 render: the BACKWARD cotangent chain** (reverse via `denseRowBack`/`geluBack`/`softmaxRowBack`/
+> `lnRowBack` + per-head matmul/transpose backs + `clsPadF`/`patchEmbedBack`; the multi-head SDPA backward is the
+> intricate part) **+ the param-SGD tail** (`veclnGammaSgd` LN γ, `denseBiasSgdB` LN β/biases/pos/cls/patch-b,
+> `denseWeightSgdB` attn/MLP/classifier W, `patchEmbedWeightSgd` patch W) → re-emit + iree-validate the whole
+> train step. **Then §1 fold `ViTFaithfulPoC` → §1a tie `ViTTiePoC` (two residual fan-ins per block).**
 >
 > **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1 — the fold + the full [3,3,9,3] render(provenGraph) train step.**
 > Commits `1bcbf70` (per-channel layer-scale γ cert — the one new proof) → `09b8195` (3 new core SHlo ops
