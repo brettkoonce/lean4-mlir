@@ -22,6 +22,7 @@ import LeanMlir.Proofs.ResNet34
 import LeanMlir.Proofs.ResNet34LivePC
 import LeanMlir.Proofs.ResNet34LiveSeal
 import LeanMlir.Proofs.ResNet34LiveFull
+import LeanMlir.Proofs.MobileNetV2JacobianSealFull
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
 import LeanMlir.Proofs.MlpTrainStep
@@ -654,6 +655,16 @@ open Proofs
 #print axioms ResNet34LiveFull.liveFwd2Full_nonconstant
 #print axioms ResNet34LiveFull.liveFwd2Full_jacobian_nonzero
 #print axioms ResNet34LiveFull.liveFwd2Full_backward_nontrivial
+-- Item B2 FULL DEPTH (MobileNetV2JacobianSealFull.lean): the real 17-block live
+-- MobileNetV2, both level 2 (nonconstant) and level 3 (seal). The 15 identity skip
+-- blocks have a zeroed body and NO final relu (linear bottleneck), so ivId a = a + 3
+-- for every input; the chain shifts by +45, which GAP + the identity head pass, so
+-- fwdFull = fwd + 45 and the seal/derivative reuse MobileNetV2JacobianSeal's Qq /
+-- g_hasDerivAt. The whole-net VJP is genuinely composed through all 17 block backwards.
+#print axioms Mnv2Live.fwdFull_has_vjp_correct
+#print axioms Mnv2Live.fwdFull_nonconstant
+#print axioms Mnv2Live.fwdFull_jacobian_nonzero
+#print axioms Mnv2Live.fwdFull_backward_nontrivial
 -- B8: per-channel BatchNorm — the real-ResNet BN (each channel-slice normalized with
 -- its own γ_c/β_c, γ/β : Vec oc). Block-diagonal VJP: each channel runs its own
 -- bn_has_vjp, cross-channel blocks vanish (pdivMat_rowIndep_perRow, a per-row

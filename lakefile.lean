@@ -229,6 +229,12 @@ lean_lib «Proofs» where
              -- through the downsamples' BN (bn(z+c)=bn(z)), so the full net = the
              -- empty-chain witness + 2 and the seal reduces to ResNet34LiveSeal's.
              `LeanMlir.Proofs.ResNet34LiveFull,
+             -- MobileNetV2 FULL DEPTH: the real 17-block live MobileNetV2, level-3
+             -- sealed. 15 identity skip blocks (zeroed body ⇒ ivId a = a+3, no relu —
+             -- linear bottleneck) shift by +45; GAP + identity head pass it, so the
+             -- full net = the 2-block witness + 45 and the seal reduces to
+             -- MobileNetV2JacobianSeal's Qq / g_hasDerivAt. VJP composed through all 17.
+             `LeanMlir.Proofs.MobileNetV2JacobianSealFull,
              -- Backward-graph faithfulness (den-level): fan-in bricks
              -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
              -- batched conv+depthwise), the whole per-example MBConv block, and

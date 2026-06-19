@@ -633,16 +633,22 @@ _**Full-net scope (tasks 3–6):**_
    (2267) + 3-axiom closure clean (the standardization ALIGNED the proofs (already 210) with the spec).
    `MainMobilenetV2Verified` docstring updated to the full 17-block 210-param net. (Stale
    `mobilenetv2_paper_train_step.mlir` removed — the train step IS the paper render now.)_
-5. _**VJP witness upgrade (separate §4 track) — ⏸ DEFERRED to a dedicated future session (Brett, this
-   session)**. `Mnv2Live` (`MobileNetV2JacobianSeal`) seals the whole-net nonzero-Jacobian only at a
-   **2-block structural representative** (1-ch, 2×2, sealed at input 0); upgrade to the full 17-block net.
-   The hardest math (the level-3 nonzero-Jacobian seal at realistic dims), and the LAST open mnv2 item.
-   Does NOT block / is independent of everything else mnv2 (§1 fold, §1a tie, and the trainer are all
-   den=certified at the real cotangent — they don't rely on the nonzero-Jacobian guarantee). **Brett will
-   take this in a separate session at some point — not part of the current §1a-tie sweep.** When picked up:
-   start from `Mnv2Live` (the 2-block witness in `MobileNetV2JacobianSeal.lean`) + the [[whole-net-backward-b2]]
-   memory (r34 reached full [3,4,6,3] depth at level 3 — the mnv2 analogue is the target); the open frontier
-   there is BN-CNN + realistic-dims._
+5. _**VJP witness upgrade (separate §4 track) — ✅ FULL-DEPTH DONE (2026-06-19)**.
+   `MobileNetV2JacobianSealFull.lean` (`Proofs.Mnv2Live`) takes `Mnv2Live`'s level-3 nonzero-Jacobian
+   seal from the **2-block representative** to the **full 17-block count** (`fwdFull_jacobian_nonzero`
+   ⇒ `fwdFull_backward_nontrivial` + `fwdFull_nonconstant` + `fwdFull_has_vjp_correct`, all 3-axiom
+   clean, wired to lakefile `Proofs` + `tests/AuditAxioms.lean`; `lake build Proofs` green 2279, closure
+   765 lines all benign). The r34 `ResNet34LiveFull` "identity blocks wash out" template, **cleaner for
+   mnv2**: the inverted-residual block has NO final relu (linear bottleneck), and block-1 is already a
+   zeroed-body skip block, so the identity block `ivId a = residual(invresBody-zeroed) a = a + 3` for
+   **every** input (no nonnegativity bookkeeping ResNet's `idBlk2` needed). 15 such blocks shift by
+   `+45`; GAP + the identity head pass it, so `fwdFull = fwd + 45` and the seal reduces to
+   `MobileNetV2JacobianSeal`'s `Qq`/`g_hasDerivAt` verbatim — while the whole-net VJP is **genuinely
+   composed through all 17 block backward maps** via the net-agnostic `chainComp`/`chain_vjp_diff_at`
+   kit (from `ResNet34.lean`). Independent of §1 fold / §1a tie / the trainer (those don't rely on the
+   nonzero-Jacobian guarantee). **Remaining frontier (still open, NOT this item):** realistic dims
+   (224×224, real channel/width schedule — Item D in `planning/whole_network_backward.md`; the witness
+   stays 2-channel/2×2, the block COUNT is what's now full) + the BN-CNN live witness._
 
 **Goal (reduced-net, ALREADY DONE — kept as the worked foundation):** tie the committed MobileNetV2 train
 step to its real forward, the same §1a tie now landed on 9 nets. mnv2 is the first Tier-3 net; it has residual structure (inverted-residual / MBConv blocks),
