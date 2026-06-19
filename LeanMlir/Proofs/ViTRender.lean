@@ -41,10 +41,31 @@ private def vlnFwd (gName btName xin : String) : StateM Nat (String × String) :
   let (c3, o) ← pretty vBS (.rowBiasF btName (zVv : Vec 192) (.operand b (zVv : Vec (197*192))))
   pure (c1 ++ c2 ++ c3, o)
 
+/-- The forward SSA names a block's backward + param-SGD reference (the ConvNeXt-`FNames` analogue).
+    Per-head arrays hold the 3 heads' slices + pre-softmax + softmax-output. -/
+private structure BSaves where
+  xin : String       -- block input (LN1 input, residual1)
+  ln1 : String       -- LN1 output (Q/K/V dense input)
+  q : String         -- Q output
+  k : String         -- K output
+  v : String         -- V output
+  qss : Array String -- per-head Q slices
+  kss : Array String -- per-head K slices
+  vss : Array String -- per-head V slices
+  scs : Array String -- per-head pre-softmax (softmaxRowBack)
+  sms : Array String -- per-head softmax output
+  att : String       -- attn output (Wo dense input)
+  hres : String      -- residual1 (LN2 input, residual2)
+  ln2 : String       -- LN2 output (fc1 dense input)
+  f1 : String        -- pre-gelu (geluBack)
+  g : String         -- gelu output (fc2 dense input)
+  bout : String      -- block output
+  deriving Inhabited
+
 /-- One **transformer block** forward (pre-norm, multi-head vector-LN), prefix `pfx`. Mirrors
     `vitBlockGraphMHV` node-by-node: LN1 → Q/K/V dense → per-head SDPA (slice→QKᵀ→scale→softmax→·V→pad,
-    summed) → out dense → +res → LN2 → fc1 → GELU → fc2 → +res. Returns the block-output SSA. -/
-private def vBlockFwd (pfx xin : String) : StateM Nat (String × String) := do
+    summed) → out dense → +res → LN2 → fc1 → GELU → fc2 → +res. Returns (code, the saved SSA names). -/
+private def vBlockFwd (pfx xin : String) : StateM Nat (String × BSaves) := do
   let (c1, ln1) ← vlnFwd s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let (cq, q) ← pretty vBS (.denseRowF s!"%{pfx}Wq" s!"%{pfx}bq" (zMm : Mat 192 192) zVv (.operand ln1 (zVv : Vec (197*192))))
   let (ck, k) ← pretty vBS (.denseRowF s!"%{pfx}Wk" s!"%{pfx}bk" (zMm : Mat 192 192) zVv (.operand ln1 (zVv : Vec (197*192))))
@@ -52,6 +73,8 @@ private def vBlockFwd (pfx xin : String) : StateM Nat (String × String) := do
   -- per-head SDPA, accumulate the padded heads with addV
   let mut code := c1 ++ cq ++ ck ++ cv
   let mut acc : String := ""
+  let mut qss : Array String := #[]; let mut kss : Array String := #[]; let mut vss : Array String := #[]
+  let mut scs : Array String := #[]; let mut sms : Array String := #[]
   for hh in [0:3] do
     let h : Fin 3 := ⟨hh % 3, by omega⟩
     let (cqs, qs) ← pretty vBS (.headSliceF (N := 197) (heads := 3) (d := 64) h (.operand q (zVv : Vec (197*(3*64)))))
@@ -64,6 +87,7 @@ private def vBlockFwd (pfx xin : String) : StateM Nat (String × String) := do
     let (cpv, pv) ← pretty vBS (.matmulF (m := 197) (k := 197) (n := 64) (.operand sm (zVv : Vec (197*197))) (.operand vs (zVv : Vec (197*64))))
     let (cpd, pd) ← pretty vBS (.headPadF (N := 197) (heads := 3) (d := 64) h (.operand pv (zVv : Vec (197*64))))
     code := code ++ cqs ++ cks ++ cvs ++ ckt ++ cmm ++ csc ++ csm ++ cpv ++ cpd
+    qss := qss.push qs; kss := kss.push ks; vss := vss.push vs; scs := scs.push sc; sms := sms.push sm
     if hh == 0 then
       acc := pd
     else
@@ -76,21 +100,33 @@ private def vBlockFwd (pfx xin : String) : StateM Nat (String × String) := do
   let (cg, g) ← pretty vBS (.geluF (.operand f1 (zVv : Vec (197*768))))
   let (cf2, f2) ← pretty vBS (.denseRowF s!"%{pfx}Wfc2" s!"%{pfx}bfc2" (zMm : Mat 768 192) zVv (.operand g (zVv : Vec (197*768))))
   let (cr, bout) ← pretty vBS (.addV (.operand hres (zVv : Vec (197*192))) (.operand f2 (zVv : Vec (197*192))))
-  pure (code ++ co ++ ch ++ c2 ++ cf1 ++ cg ++ cf2 ++ cr, bout)
+  pure (code ++ co ++ ch ++ c2 ++ cf1 ++ cg ++ cf2 ++ cr,
+    { xin, ln1, q, k, v, qss, kss, vss, scs, sms, att := acc, hres, ln2, f1, g, bout })
 
-/-- The depth-12 ViT-Tiny **forward**, node-by-node. Returns (body, logits SSA). -/
-private def vitFwd12 : StateM Nat (String × String) := do
+/-- Forward saves the whole-net backward references: the patch embed SSA, the per-block saves, the
+    final-LN input (last block output) + output, and the logits SSA. -/
+private structure FwdSaves where
+  embed : String
+  blocks : Array BSaves
+  flnIn : String        -- final-LN input (= last block output)
+  gap : String          -- final-LN output (= CLS-slice input)
+  logits : String
+  deriving Inhabited
+
+/-- The depth-12 ViT-Tiny **forward**, node-by-node. Returns (body, saves). -/
+private def vitFwd12 : StateM Nat (String × FwdSaves) := do
   let (ce, embed) ← pretty vBS (.patchEmbedF "%wConv" "%bConv" "%cls" "%pos"
     (zKk : Kernel4 192 3 16 16) zVv zVv (zMm : Mat 197 192) (.operand "%x" (zVv : Vec (3*224*224))))
   let mut code := ce
   let mut cur := embed
+  let mut blocks : Array BSaves := #[]
   for i in [0:vDEPTH] do
-    let (cb, bout) ← vBlockFwd s!"b{i}_" cur
-    code := code ++ cb; cur := bout
+    let (cb, sv) ← vBlockFwd s!"b{i}_" cur
+    code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
   let (cf, fl) ← vlnFwd "%gF" "%btF" cur
   let (cs, sl) ← pretty vBS (.clsSliceF (N := 196) (D := 192) (.operand fl (zVv : Vec (197*192))))
   let (cl, logits) ← pretty vBS (denseF "%Wc" "%bc" (zMm : Mat 192 10) zVv (.operand sl (zVv : Vec 192)))
-  pure (code ++ cf ++ cs ++ cl, logits)
+  pure (code ++ cf ++ cs ++ cl, { embed, blocks, flnIn := cur, gap := fl, logits })
 
 /-- Per-block func-arg signature (committed forward order). -/
 private def blkArgSig (i : Nat) : String :=
@@ -108,7 +144,8 @@ private def blkArgSig (i : Nat) : String :=
     verified `SHlo` node; `den(graph) = vitForward` by `vitFwdGraphMHV_faithful` (at depth-12). The
     output is the `[BS,10]` logits. (FORWARD half of the §1 train-step render.) -/
 def vitFwdRenderV (funcName : String := "vit_fwd") : String :=
-  let (body, res) := vitFwd12.run' 0
+  let (body, sv) := vitFwd12.run' 0
+  let res := sv.logits
   let blkSigs := String.intercalate ", " ((List.range vDEPTH).map blkArgSig)
   let argSig := s!"%x: {ty [vBS, 3*224*224]}, %wConv: {ty [192,3,16,16]}, %bConv: {ty [192]}, " ++
     s!"%cls: {ty [192]}, %pos: {ty [197,192]}, " ++ blkSigs ++

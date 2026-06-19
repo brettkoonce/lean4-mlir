@@ -31,13 +31,16 @@ gap, net by net?
 > `vitTrainStepFaithfulV`) + §1 fold (`ViTFaithfulPoC`) + §1a tie (`ViTTiePoC`, **two residual fan-ins per block** —
 > attn-sublayer + mlp-sublayer) + the new core SHlo param-SGD ops.
 >
-> **CORE OPS — ✅ DONE (2026-06-19): exactly TWO new ops, both iree-validated; everything else reuses existing ops.**
-> Most params reuse enet's batched `denseWeightSgdB`/`denseBiasSgdB` (their den sums over the leading N axis):
-> rowwise-dense W (attn Wq/Wk/Wv/Wo, MLP Wfc1/Wfc2, classifier Wc) → `denseWeightSgdB`; rowwise-dense b + vecln **β**
-> (`Σ_tokens dy`) + **pos** (`Σ_batch dy`, all tokens) + **cls** (row-0 token slice, `Σ_batch`) + **patch bias**
-> (`Σ_{batch,spatial}`, CLS-excluded) → `denseBiasSgdB` (on the appropriately sliced/reshaped cotangent — the slices
-> are backward-chain ops, not param ops). Confirmed against the committed `LeanMlir/ViTRender.lean` `clsPosBack`/
-> `patchEmbedBack`. The TWO genuinely-new ops (commit step "vit core ops"):
+> **CORE OPS — ✅ DONE (2026-06-19): FOUR new ops (corrected from "2"), all iree-validated.** ⚠️ **Gotcha caught
+> before building a broken backward: enet's batched `denseWeightSgdB`/`denseBiasSgdB` match vit's `rowDense_*_grad`
+> only at the `den` level, NOT the EMIT** — their `.batched` emit is 2D (`dot_general [B,a]×[B,c]`, batch-only
+> contraction), but `denseRowF`/`denseRowBack` are 3D token-matrix `[B,197,a]`, so the rowdense weight grad must
+> contract batch×tokens. So I added 2 MORE ops (cheap via the generic `.batched` path — ctor+den (same as
+> denseWeightSgdB, Σ over N)+skel+1 emit case each): **`rowDenseWeightSgd`** (3D, contract `[0,1]x[0,1]`→`[a,c]`) +
+> **`rowDenseBiasSgd`** (3D, `reduce[0,1]`→`[c]`; covers per-block biases + vector-LN β + patch-b). STILL reuse the
+> 2D `denseBiasSgdB` for **pos** (c=197·192, keeps tokens, reduces batch) + **cls** (c=192 on the row-0-sliced
+> `[B,192]` cotangent — a backward-chain slice). The FOUR new ops (vecln γ + patch W committed; the 2 rowdense
+> built+suite-validated, `lake build Proofs` green 2274):
 > 1. **`veclnGammaSgd`** (committed `e662aef`) — vector-LN γ: recompute x̂ = LN(1,0) per token over D, weight by dy,
 >    reduce over the N=BS·197 row axis → `Vec D`; den = `vit_render_veclngamma_certified` verbatim; emit 3D `[B,N,D]`.
 > 2. **`patchEmbedWeightSgd`** — the 16×16/s16 patchify conv WEIGHT grad: slice patch tokens [1..N] (drop CLS),
@@ -56,9 +59,12 @@ gap, net by net?
 > at depth-12. Module preamble defines `%one`/`%zero`/`%sc` (the lnRow γ=1/β=0 + reduce-init `tensor<f32>` consts).
 > **REMAINING for the §1 render: the BACKWARD cotangent chain** (reverse via `denseRowBack`/`geluBack`/`softmaxRowBack`/
 > `lnRowBack` + per-head matmul/transpose backs + `clsPadF`/`patchEmbedBack`; the multi-head SDPA backward is the
-> intricate part) **+ the param-SGD tail** (`veclnGammaSgd` LN γ, `denseBiasSgdB` LN β/biases/pos/cls/patch-b,
-> `denseWeightSgdB` attn/MLP/classifier W, `patchEmbedWeightSgd` patch W) → re-emit + iree-validate the whole
-> train step. **Then §1 fold `ViTFaithfulPoC` → §1a tie `ViTTiePoC` (two residual fan-ins per block).**
+> intricate part) **+ the param-SGD tail** (`veclnGammaSgd` LN γ, `rowDenseWeightSgd` attn/MLP/classifier W,
+> `rowDenseBiasSgd` LN β/per-block biases/patch-b, `denseBiasSgdB` pos/cls, `patchEmbedWeightSgd` patch W — note the
+> 3D rowdense ops, NOT the enet 2D `denseWeightSgdB`/`denseBiasSgdB`, per the emit gotcha above) → re-emit +
+> iree-validate the whole train step. **Then §1 fold `ViTFaithfulPoC` → §1a tie `ViTTiePoC` (two residual fan-ins
+> per block). The forward render's `vBlockFwd`/`vitFwd12` already expose the saved SSA names (`BSaves`/`FwdSaves`)
+> the backward references.**
 >
 > **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1 — the fold + the full [3,3,9,3] render(provenGraph) train step.**
 > Commits `1bcbf70` (per-channel layer-scale γ cert — the one new proof) → `09b8195` (3 new core SHlo ops

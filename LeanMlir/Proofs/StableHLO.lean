@@ -504,6 +504,15 @@ inductive SHlo : Nat → Type where
                                                           : SHlo (N * c) → SHlo (a * c)
   | denseBiasSgdB   {N c : Nat} (bName lrStr : String) (b : Vec c) (lr : ℝ)
                                                           : SHlo (N * c) → SHlo c
+  -- ViT per-token (rowwise) dense W/b SGD — the `denseRowF` partners. SAME `den` as
+  -- `denseWeightSgdB`/`denseBiasSgdB` (Σ over the N rows), but a 3D `[B,N,·]` token-matrix EMIT
+  -- (the weight grad contracts batch×tokens `[0,1]x[0,1]`; the bias reduces `[0,1]`), vs the enet
+  -- ops' 2D `[B,·]` batch-only emit. Used for attn Wq/Wk/Wv/Wo + MLP Wfc1/Wfc2 + classifier Wc + the
+  -- per-block biases + the vector-LN β (and patch bias). Emit via the generic `.batched` path.
+  | rowDenseWeightSgd {N a c : Nat} (xName wName lrStr : String) (x : Vec (N * a)) (W : Mat a c) (lr : ℝ)
+                                                          : SHlo (N * c) → SHlo (a * c)
+  | rowDenseBiasSgd   {N c : Nat} (bName lrStr : String) (b : Vec c) (lr : ℝ)
+                                                          : SHlo (N * c) → SHlo c
   -- Batched conv weight SGD (1×1 expand/project/head; the transpose-trick wgrad).
   -- `den` = flatten W − lr·(Σ_n per-example `conv2d_weight_grad` on `batchSlice n`).
   | convWeightSgdB {N ic oc h w kH kW : Nat} (xName wName lrStr : String)
@@ -778,6 +787,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .denseWeightSgdB (N := N) (a := a) (c := c) _ _ _ x W lr e =>
       Mat.flatten (fun i j => W i j - lr * ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
   | _, .denseBiasSgdB (N := N) (c := c) _ _ b lr e =>
+      fun j => b j - lr * ∑ n : Fin N, batchSlice N c (den e) n j
+  | _, .rowDenseWeightSgd (N := N) (a := a) (c := c) _ _ _ x W lr e =>
+      Mat.flatten (fun i j => W i j - lr * ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
+  | _, .rowDenseBiasSgd (N := N) (c := c) _ _ b lr e =>
       fun j => b j - lr * ∑ n : Fin N, batchSlice N c (den e) n j
   | _, .convWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ b x W lr e =>
       fun idx => Kernel4.flatten W idx - lr * ∑ n : Fin N,
@@ -2344,6 +2357,10 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "denseWeightSgd" [xN, wN, lrS] [N, a, c] (skel e)
   | _, .denseBiasSgdB (N := N) (c := c) bN lrS _ _ e =>
       .batched "denseBiasSgd" [bN, lrS] [N, c] (skel e)
+  | _, .rowDenseWeightSgd (N := N) (a := a) (c := c) xN wN lrS _ _ _ e =>
+      .batched "rowDenseWeightSgd" [xN, wN, lrS] [N, a, c] (skel e)
+  | _, .rowDenseBiasSgd (N := N) (c := c) bN lrS _ _ e =>
+      .batched "rowDenseBiasSgd" [bN, lrS] [N, c] (skel e)
   | _, .convWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
       .batched "convWeightSgd" [xN, wN, lrS] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convStridedWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
@@ -3798,6 +3815,28 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           pure (
             s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
             s!"    {dB} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [0] : ({ty [B,c]}, tensor<f32>) -> {ty [c]}\n" ++
+            s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [c]}\n" ++
+            s!"    {sB} = stablehlo.multiply {dB}, {lB} : {ty [c]}\n" ++
+            s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [c]}\n", o :: st)
+      | "rowDenseWeightSgd", [xN, wN, lrS], [N, a, c] => do
+          -- per-token (rowwise) dense weight grad: reshape activation/cotangent to the [B,N,·] token
+          -- matrix, dW = Σ_{B,N} xᵀ·dy (contract batch×tokens [0,1]x[0,1]), W' = W − lr·dW.
+          let xn ← fresh; let dn ← fresh; let dW ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
+          pure (
+            s!"    {xn} = stablehlo.reshape {xN} : ({ty [B, N*a]}) -> {ty [B,N,a]}\n" ++
+            s!"    {dn} = stablehlo.reshape {r} : ({ty [B, N*c]}) -> {ty [B,N,c]}\n" ++
+            s!"    {dW} = stablehlo.dot_general {xn}, {dn}, contracting_dims = [0, 1] x [0, 1], precision = [DEFAULT, DEFAULT] : ({ty [B,N,a]}, {ty [B,N,c]}) -> {ty [a,c]}\n" ++
+            s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [a,c]}\n" ++
+            s!"    {sW} = stablehlo.multiply {dW}, {lW} : {ty [a,c]}\n" ++
+            s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [a,c]}\n", o :: st)
+      | "rowDenseBiasSgd", [bN, lrS], [N, c] => do
+          -- per-token dense bias grad: db = reduce[0,1](dy) over batch×tokens ([B,N,c] → [c]),
+          -- b' = b − lr·db. (Also the vector-LN β and the patch-bias reduce.)
+          let z ← fresh; let dn ← fresh; let dB ← fresh; let lB ← fresh; let sB ← fresh; let o ← fresh
+          pure (
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {dn} = stablehlo.reshape {r} : ({ty [B, N*c]}) -> {ty [B,N,c]}\n" ++
+            s!"    {dB} = stablehlo.reduce({dn} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,N,c]}, tensor<f32>) -> {ty [c]}\n" ++
             s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [c]}\n" ++
             s!"    {sB} = stablehlo.multiply {dB}, {lB} : {ty [c]}\n" ++
             s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [c]}\n", o :: st)
