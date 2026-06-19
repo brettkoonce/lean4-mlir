@@ -277,8 +277,20 @@ entire eventual-selection / `Eventually` / continuity block of `ResNet34LiveSeal
 like `Dom2`: each BN multiplies `δ` by its positive global `istd` (`bnForward_chan_diff`),
 decimate/maxpool/`+1` leave it fixed. So the output difference along the ray is `t · Rr(t)` (`Rr` = a
 product of four positive `istd`s) and `g'(0) = Rr 0 ≠ 0` — same final mechanism as both prior seals,
-no BN-variance derivative. The result is *cleaner* than the toy seal. **Remaining for Item D:** mnv2
-realistic dims (the mnv2 witness is 1×2×2).
+no BN-variance derivative. The result is *cleaner* than the toy seal.
+
+✅ **MobileNetV2 ALSO DONE at 224×224, level 3** (`LeanMlir/Proofs/MobileNetV2SealRealistic.lean`,
+`Mnv2RealSeal.fwdR_jacobian_nonzero` ⇒ `fwdR_backward_nontrivial` + `fwdR_has_vjp_correct`,
+audited 3-axiom-clean). The obstacle here is *different* from ResNet's: MobileNetV2's **ReLU6** needs
+the BN output inside the **bounded** `(0,6)`, so the positivity route (`β` grows with `√n`) would
+clamp at 6. The fix is to **scale `γ` down** — `γ = 1/128` keeps `bn ∈ (3 − |γ|√n, 3 + |γ|√n) ⊆ (0,6)`
+at `n = 2·112·112` (`(1/128)·√25088 ≈ 2.48 < 3`). The MobileNetV2 weights are all 1×1 channel maps —
+dimension-independent — so they're reused verbatim; only the spatial size and `γ` change. The seal
+reuses the `UDiff` machinery: the asymmetric stem turns a uniform input perturbation `t` into the
+channel difference `−t`, each BN multiplies it by `γ·istd`, so the output difference is `−t · Rr`
+(`Rr` = four positive `γ·istd`s) and `g'(0) = −Rr 0 ≠ 0`. **Item D is now CLOSED: both ResNet-34 and
+MobileNetV2 are level-3-sealed at real ImageNet 224×224.** (New foundation lemma `bnForward_ub`, the
+`bnForward_lb` companion, and a γ-general `UDiff_bn_γ` were added along the way.)
 
 ### Item E — almost-everywhere backward *(stretch; the principled level-4 target)*
 
@@ -307,7 +319,7 @@ there, not here.
 | 2.5 | **B2** `Mnv2Live` seal | med | first kinked witness at level 3 (no longer level-2) | ✅ **done** (`MobileNetV2JacobianSeal.lean`; exact at input 0 via global smoothness) — **now also full 17-block depth** (`MobileNetV2JacobianSealFull.lean`, `fwdFull_jacobian_nonzero`/`_backward_nontrivial`) |
 | 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | ✅ **DONE at level 3, full depth**: `ResNet34LivePC.liveFwd2_*` (level 2) + `ResNet34LiveSeal.liveFwd2_jacobian_nonzero` (level-3 seal) **and** `ResNet34LiveFull.liveFwd2Full_*` — the real `[3,4,6,3]` (16-block) live ResNet-34, level-3 sealed (`liveFwd2Full_jacobian_nonzero` ⇒ `liveFwd2Full_backward_nontrivial`). Non-degenerate, nonzero-Jacobian-sealed, full depth, 2-channel, audited 3-axiom-clean |
 | 4 | **B2** BN-CNN Live | light (reuses A) | last degenerate kinked witness retired | |
-| 5 | **D** realistic dims | med | scale credibility | ◐ **r34 DONE at 224×224, level 2 AND level 3** (`ResNet34LiveRealistic` VJP+nonconstant; `R34RealSeal.liveFwd224_jacobian_nonzero`⇒`backward_nontrivial`, both 3-axiom-clean); only mnv2 realistic dims open |
+| 5 | **D** realistic dims | med | scale credibility | ✅ **DONE — r34 AND mnv2 level-3-sealed at 224×224** (`R34RealSeal.liveFwd224_jacobian_nonzero`; `Mnv2RealSeal.fwdR_jacobian_nonzero`, both ⇒ `backward_nontrivial`, 3-axiom-clean). r34 via β-positivity, mnv2 via γ-scaling (ReLU6 window) |
 | 6 | **E** almost-everywhere | heavy | the principled statement (stretch) | |
 
 After 1–4, every flagship net has a **full-depth, non-degenerate, nonzero-Jacobian** whole-net

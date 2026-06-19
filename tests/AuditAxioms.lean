@@ -25,6 +25,7 @@ import LeanMlir.Proofs.ResNet34LiveFull
 import LeanMlir.Proofs.MobileNetV2JacobianSealFull
 import LeanMlir.Proofs.ResNet34LiveRealistic
 import LeanMlir.Proofs.ResNet34LiveRealisticSeal
+import LeanMlir.Proofs.MobileNetV2SealRealistic
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
 import LeanMlir.Proofs.MlpTrainStep
@@ -683,6 +684,14 @@ open Proofs
 -- realistic-spatial seal, n up to 25088, maxpool no-tie via the decreasing per-channel-injective base.
 #print axioms R34RealSeal.liveFwd224_jacobian_nonzero
 #print axioms R34RealSeal.liveFwd224_backward_nontrivial
+-- Item D LEVEL 3 for MobileNetV2 (MobileNetV2SealRealistic.lean): the nonzero-Jacobian SEAL
+-- at 224×224. ReLU6 is a BOUNDED window (0,6), so (unlike ResNet's β-grows-with-√n positivity
+-- route) γ is SCALED DOWN — γ=1/128 keeps bn ∈ (3−|γ|√n, 3+|γ|√n) ⊆ (0,6) at n=2·112·112=25088.
+-- The 1×1 channel-map weights are dimension-independent and reused. Uniform-perturbation UDiff
+-- seal: the asymmetric stem turns a uniform input t into the channel difference −t, each BN
+-- multiplies it by γ·istd, so the output diff is −t·Rr (Rr = four positive γ·istds), g'(0)=−Rr 0 ≠ 0.
+#print axioms Mnv2RealSeal.fwdR_jacobian_nonzero
+#print axioms Mnv2RealSeal.fwdR_backward_nontrivial
 -- B8: per-channel BatchNorm — the real-ResNet BN (each channel-slice normalized with
 -- its own γ_c/β_c, γ/β : Vec oc). Block-diagonal VJP: each channel runs its own
 -- bn_has_vjp, cross-channel blocks vanish (pdivMat_rowIndep_perRow, a per-row

@@ -247,6 +247,13 @@ lean_lib «Proofs» where
              -- max(a,b)+δ) — no eventual-selection topology. UDiff invariant threaded like
              -- Dom2; output diff = t·Rr (4 positive istds), g'(0)=Rr 0 ≠ 0.
              `LeanMlir.Proofs.ResNet34LiveRealisticSeal,
+             -- Item D level 3 for MobileNetV2: the nonzero-Jacobian SEAL at 224×224. ReLU6
+             -- is a BOUNDED window (0,6), so unlike ResNet's β-grows route, γ is SCALED DOWN
+             -- (γ=1/128 ⇒ |γ|√n < 3 keeps bn∈(0,6) at n=2·112·112). The 1×1 weights are
+             -- dimension-independent and reused. Uniform-perturbation UDiff seal: the
+             -- asymmetric stem turns input t into channel-diff −t, each BN ×γ·istd, so the
+             -- output diff is −t·Rr (4 positive γ·istds), g'(0)=−Rr 0 ≠ 0.
+             `LeanMlir.Proofs.MobileNetV2SealRealistic,
              -- Backward-graph faithfulness (den-level): fan-in bricks
              -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
              -- batched conv+depthwise), the whole per-example MBConv block, and
