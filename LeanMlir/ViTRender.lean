@@ -320,17 +320,17 @@ def patchEmbedBack (p x dtok : String) (b ic d ph pw s : Nat) : String :=
   s!" : ({ty [ic,b,s*ph,s*pw]}, {ty [d,b,dilH,dilW]}) -> {ty [ic,d,s,s]}\n" ++
   s!"    %{p}dw = stablehlo.transpose %{p}raw, dims = [1, 0, 2, 3] : ({ty [ic,d,s,s]}) -> {ty [d,ic,s,s]}\n"
 
-/-- **CLS-token + positional-embed forward**, prefix `p`: prepend a learned `[1,d]`
+/-- **CLS-token + positional-embed forward**, prefix `p`: prepend a learned `[d]`
     CLS at row 0 of the `n0` patch tokens → `[b,n0+1,d]`, then add a learned `[n0+1,d]`
     positional embedding (broadcast over batch). Result `%{p}z` `[b,n0+1,d]`. -/
 def clsPosFwd (p tok cls pos : String) (b n0 d : Nat) : String :=
-  s!"    %{p}clsb = stablehlo.broadcast_in_dim {cls}, dims = [1, 2] : ({ty [1,d]}) -> {ty [b,1,d]}\n" ++
+  s!"    %{p}clsb = stablehlo.broadcast_in_dim {cls}, dims = [2] : ({ty [d]}) -> {ty [b,1,d]}\n" ++
   s!"    %{p}cat = stablehlo.concatenate %{p}clsb, {tok}, dim = 1 : ({ty [b,1,d]}, {ty [b,n0,d]}) -> {ty [b,n0+1,d]}\n" ++
   s!"    %{p}posb = stablehlo.broadcast_in_dim {pos}, dims = [1, 2] : ({ty [n0+1,d]}) -> {ty [b,n0+1,d]}\n" ++
   s!"    %{p}z = stablehlo.add %{p}cat, %{p}posb : {ty [b,n0+1,d]}\n"
 
 /-- **CLS + pos backward**, prefix `p`. `dz` `[b,n0+1,d]`. Produces `%{p}dtok`
-    `[b,n0,d]` (patch-token grad), `%{p}dcls` `[1,d]` (Σ over batch of row 0),
+    `[b,n0,d]` (patch-token grad), `%{p}dcls` `[d]` (Σ over batch of row 0),
     `%{p}dpos` `[n0+1,d]` (Σ over batch). -/
 def clsPosBack (p dz : String) (b n0 d : Nat) : String :=
   -- pos: sum over batch
@@ -339,7 +339,6 @@ def clsPosBack (p dz : String) (b n0 d : Nat) : String :=
   s!"    %{p}cslc = stablehlo.slice {dz} [0:{b}, 0:1, 0:{d}] : ({ty [b,n0+1,d]}) -> {ty [b,1,d]}\n" ++
   s!"    %{p}cr = stablehlo.reshape %{p}cslc : ({ty [b,1,d]}) -> {ty [b,d]}\n" ++
   s!"    %{p}dcls = stablehlo.reduce(%{p}cr init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [b,d]}, tensor<f32>) -> {ty [d]}\n" ++
-  s!"    %{p}dcls2 = stablehlo.reshape %{p}dcls : ({ty [d]}) -> {ty [1,d]}\n" ++
   -- patch tokens: rows 1..n0
   s!"    %{p}dtok = stablehlo.slice {dz} [0:{b}, 1:{n0+1}, 0:{d}] : ({ty [b,n0+1,d]}) -> {ty [b,n0,d]}\n"
 
@@ -430,14 +429,14 @@ def vitParamNames (blocks : List BlockParams) : List String :=
 
 /-- Param grad SSA names produced by `vitBack p`, SAME order as `vitParamNames`. -/
 def vitGradNames (p : String) (blocks : List BlockParams) : List String :=
-  [s!"%{p}pedw", s!"%{p}pedb", s!"%{p}cpdcls2", s!"%{p}cpdpos"] ++
+  [s!"%{p}pedw", s!"%{p}pedb", s!"%{p}cpdcls", s!"%{p}cpdpos"] ++
   ((List.range blocks.length).flatMap (fun i => blockGradNames s!"{p}b{i}_")) ++
   [s!"%{p}flndg", s!"%{p}flndb", s!"%{p}hddWc", s!"%{p}hddbc"]
 
 /-- Param dims in canonical order (matches `vitParamNames`). -/
 def vitParamDims (blocks : List BlockParams) (cfg : ViTConfig) : List (List Nat) :=
   let n := cfg.ph * cfg.pw + 1
-  [[cfg.d, cfg.ic, cfg.s, cfg.s], [cfg.d], [1, cfg.d], [n, cfg.d]] ++
+  [[cfg.d, cfg.ic, cfg.s, cfg.s], [cfg.d], [cfg.d], [n, cfg.d]] ++   -- CLS [d] (1D — matches the proof render + ViTLayout)
   (blocks.flatMap (fun _ =>
     [[cfg.d], [cfg.d],
      [cfg.d, cfg.d], [cfg.d], [cfg.d, cfg.d], [cfg.d], [cfg.d, cfg.d], [cfg.d], [cfg.d, cfg.d], [cfg.d],

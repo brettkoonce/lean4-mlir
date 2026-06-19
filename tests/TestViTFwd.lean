@@ -1,27 +1,25 @@
+import LeanMlir.Proofs.ViTRender
 import LeanMlir.ViTRender
 import LeanMlir.Types
 
-/-! # ch10 V6b — production ViT-Tiny forward renderer (eval, Imagenette 224², depth-12)
+/-! # ch10 V6b — ViT-Tiny forward (eval), the PROOF-TIED render (Imagenette 224², depth-12)
 
-Renders `@vit_fwd` (image → logits) for the depth-12 ViT-Tiny — the eval peer of
-`@vit_train_step` (tests/TestViTTrain.lean), SAME `vitFwd` fragments and param order
-(`ViTLayout`). Writes `verified_mlir/vit_fwd.mlir` and iree-compiles to ROCm.
+Writes `verified_mlir/vit_fwd.mlir` from the **certified** forward renderer
+`Proofs.StableHLO.vitFwdRenderV` (the eval peer of `vitTrainStepRenderV`, same param order
+as `ViTLayout`), then iree-compiles to ROCm. Swapped from the hand renderer
+(`ViTRender.vitFwdModule`) so eval reads the certified bytes too — 1D CLS `tensor<192>`,
+matching the train step + `ViTLayout`.
 
 Run (rocm):
   export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
   lake env lean tests/TestViTFwd.lean
 -/
 
-open ViTRender
-
-private def BS : Nat := 32
-
 private def main : IO Unit := do
   IO.FS.createDirAll "verified_mlir"
-  let cfg := vitTinyConfig BS 12
-  let fwd := vitFwdModule cfg (vitTinyBlocks 12)
+  let fwd := Proofs.StableHLO.vitFwdRenderV "vit_fwd"
   IO.FS.writeFile "verified_mlir/vit_fwd.mlir" fwd
-  IO.println s!"rendered ViT-Tiny forward (BS={BS}, depth 12): {fwd.length} chars → verified_mlir/vit_fwd.mlir"
+  IO.println s!"rendered ViT-Tiny forward (proof-tied, BS=32, depth 12): {fwd.length} chars → verified_mlir/vit_fwd.mlir"
   let cargs ← ireeCompileArgs "verified_mlir/vit_fwd.mlir" ".lake/build/vit_fwd_v.vmfb"
   let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
   if r.exitCode != 0 then

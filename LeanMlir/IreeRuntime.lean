@@ -405,7 +405,7 @@ end ConvNeXtLayout
 namespace ViTLayout
 /-- Chapter-10 **ViT-Tiny** params (IMAGENETTE 3×224×224, patch-16): a 16×16/s16 conv
     patch embed {W=`[192,3,16,16]`,b} (224→14×14=196 patches), a learned CLS token
-    `[1,192]` + positional embed `[197,192]`, then 12 pre-norm transformer blocks
+    `[192]` (1D, matching the proof-tied render) + positional embed `[197,192]`, then 12 pre-norm transformer blocks
     (dim 192, 3 heads, MLP 768), final LayerNorm γ/β, CLS-slice dense head {W=`[192,10]`,b}.
     LayerNorm γ/β are **per-channel `[192]`** (the non-scalar form — beyond the scalar
     proof witness `vit_full`, faithful per-op: normalize ∘ per-channel affine). Each block
@@ -429,7 +429,7 @@ private def blockSpec : Array (Array Nat × Nat) :=
 /-- `(dims, initKind)` for every param, in `@vit_train_step` func-arg order. -/
 def specs : Array (Array Nat × Nat) := Id.run do
   let mut a : Array (Array Nat × Nat) :=
-    #[(#[D,3,S,S],0),(#[D],2),(#[1,D],2),(#[NTOK,D],2)]   -- patch W,b ; CLS ; pos
+    #[(#[D,3,S,S],0),(#[D],2),(#[D],2),(#[NTOK,D],2)]   -- patch W,b ; CLS [192] (1D) ; pos
   for _ in [0:DEPTH] do a := a ++ blockSpec
   a := a ++ #[(#[D],1),(#[D],2),(#[D,NC],0),(#[NC],2)]   -- final LN γ,β ; head W,b
   return a

@@ -332,7 +332,7 @@ def vitVerified : VerifiedNetSpec where
   data     := .imagenette
   layers   := [
     .conv 3 192 16 16,            -- patch embed 16×16/s16 (3→192)   224→14×14=196
-    .param #[1, 192] 2,           -- CLS token  [1,192]
+    .param #[192] 2,              -- CLS token  [192] (1D — matches the proof-tied render's `cls : Vec 192`)
     .param #[197, 192] 2,         -- positional embedding  [197,192]
     .transformerBlock 192 768,    -- 12 pre-norm blocks @ dim 192, MLP 768
     .transformerBlock 192 768,

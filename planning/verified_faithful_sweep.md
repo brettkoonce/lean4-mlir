@@ -126,15 +126,16 @@ thread, 2-block). The ONLY remaining gap: the tie certifies the **single-head 2-
 committed render is **multi-head (3 heads, d_head=64), depth-12**. Promote the tie to match. This is the mnv2
 reduced→full analogue — the math all exists, it's a thread + a small multi-head-cotangent construction._
 
-_**Progress (2026-06-19): tasks 1 + 2 + 3 of 4 DONE — the vit §1a TIE IS CLOSED**, 3-axiom clean, `lake
-build Proofs` green (2278), full AuditAxioms closure benign. Task 1 (committed `c2de104`): the multi-head
-chain cotangents (`ViTMultiHeadChain.lean`) — `vitCotD{Q,K,V}mh` pinned to the audited per-head
-`sdpa_back_{Q,K,V}`. Task 2 (committed `81d9336`): the multi-head per-block tie `vit_block_tiedMHV` + the
-`@[irreducible]` thread wrappers + the depth-12 thread `vit_net_tiedMHV`. Task 3 (in `ViTTiePoC.lean`,
-uncommitted): the non-block bundle (`vitFinalLNTied`/`vitHeadTied`/`vitEmbedTied` + `vit_cls_den`) + the
-**all-200-params capstone `vit_net_tied_certified`** — vit is the FIRST net with zero param gaps. Only task 4
-(the trainer swap: regen the committed `.mlir`, reconcile the cls dim, iree-validate + smoke-test) remains —
-it's independent of the tie. With this, all 12 nets are §1a TIED._
+_**Progress (2026-06-19): ALL 4 TASKS DONE — vit is fully verified-trained on the certified render. The §1a
+sweep is COMPLETE across all 12 nets.** 3-axiom clean, `lake build Proofs` green (2278), full AuditAxioms
+closure benign. Task 1 (committed `c2de104`): the multi-head chain cotangents (`ViTMultiHeadChain.lean`) —
+`vitCotD{Q,K,V}mh` pinned to the audited per-head `sdpa_back_{Q,K,V}`. Task 2 (committed `81d9336`): the
+multi-head per-block tie `vit_block_tiedMHV` + the `@[irreducible]` thread wrappers + the depth-12 thread
+`vit_net_tiedMHV`. Task 3 (committed `b8d3f42`): the non-block bundle + the all-200-params capstone
+`vit_net_tied_certified` — vit is the FIRST net with zero param gaps. Task 4 (uncommitted): the trainer swap —
+`MainViTVerified` now trains on the 1D-cls certified render (`verified_mlir/vit_{train_step,fwd}.mlir`
+byte-identical to `vitTrainStepRenderV`/`vitFwdRenderV`, iree-validated on gfx1100, smoke-tested training on the
+rocm box at GPU 93%); ViTLayout/spec/hand-render all flipped 1D, both vit exes build green._
 
 **Key files:** `ViTTiePoC.lean` (the tie — extend here), `ViTChainClose.lean` (single-head SDPA cots
 `vitCotD{Q,K,V}`/`vitCotLn1`, LN-agnostic), `ViTVecLN.lean` (the `*V` vector-LN cots + `vecln*_chain_certified`),
@@ -196,10 +197,25 @@ render — `vBlockFwd`'s per-head slice/pad structure is the ground truth to mat
    fold for Wcls + a `vitLossCot_den` pinning `g` to the emitted `sub(softmaxDiv(expe …), onehot)` graph — the
    head ties at `g` directly, the enet/convnext-permitted convention.) **This CLOSES the §1a tie for vit — the
    12th and last net.** Only task 4 (the trainer swap, independent of the tie) remains.
-4. **Trainer swap** (independent of the tie): regen committed `verified_mlir/vit_train_step.mlir` from
-   `vitTrainStepRenderV` (currently writes `/tmp/`); reconcile the **1D cls `tensor<192>`** (new render) vs **2D
-   `tensor<1x192>`** (committed FFI layout) — update `IreeRuntime`/the vit layout's cls shape to 1D, or change the
-   render's `patchEmbedF`. Then iree-validate on gfx1100 + smoke-test `MainViTVerified`.
+4. **✅ DONE (2026-06-19): trainer swap — `MainViTVerified` now trains on the certified bytes.** Chose the
+   **1D-cls-everywhere** reconcile (the proof render is the source of truth — its `cls : Vec 192` is 1D — so the
+   committed bytes stay EXACTLY `pretty(provenGraph)`, no I/O reshape wrapper). Rewired `tests/TestViTTrain.lean`
+   + `tests/TestViTFwd.lean` to render from `Proofs.StableHLO.vitTrainStepRenderV`/`vitFwdRenderV` (was the hand
+   `ViTRender.vitTrainStepModule`/`vitFwdModule`); regenerated `verified_mlir/vit_{train_step,fwd}.mlir` —
+   **BYTE-IDENTICAL to the proof render**, both **iree-compile clean on rocm/gfx1100** (train_step 375 KB,
+   fwd 137 KB vmfb). Flipped the cls shape to 1D `[192]` in `ViTLayout.specs` (IreeRuntime) + the `vitVerified`
+   spec (`#guard vitVerified.toSpecs == ViTLayout.specs` still holds) + the hand render `ViTRender.lean`
+   (`vitParamDims` + the `clsPosFwd` broadcast `dims=[2]` + dropping the `clsPosBack` `[d]→[1,d]` reshape) so the
+   adam path stays 1D-consistent. **Smoke-test `MainViTVerified` on the rocm box: PASS** — both vmfbs compile,
+   imagenette loads (9469/3925), 200 params/5.53M floats init, and it TRAINS on GPU (GPU[0] 93%, sustained) —
+   past the cls layout check the pre-swap 2D binary hard-failed at (`input3 rank mismatch`). The AdamW path
+   regenerated 1D too (`vit_adam_train_step.mlir`, iree-compiles 507 KB; both `vit-verified` + `vit-verified-adam`
+   exes build green). lr 0.003125 = 0.1/32 (mean folded into lr) — the SAME effective update as the old hand
+   render's lr=0.1 + mean loss cot (the displayed `lr=0.1` is config-cosmetic; the real step is baked in the
+   mlir). **GOTCHA:** lake's exe target caches — `lake build MainViTVerified` rebuilds the olean but NOT the
+   `vit-verified` binary; `lake build vit-verified` (the exe name) or `rm .lake/build/bin/vit-verified` forces
+   the relink (the first smoke-test ran a stale 2D binary). **vit is fully verified-trained on the certified
+   render — all 4 tasks done, the §1a sweep is COMPLETE across all 12 nets.**
 
 **Recipe (proven on the 2-block tie):** the per-block tie `vit_block_tiedV` (generic in cotangent) + the §1
 folds are DONE and head-agnostic; the ONLY new content is the multi-head cotangent in task 1. The
