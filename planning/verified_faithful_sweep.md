@@ -58,20 +58,28 @@ gap, net by net?
 > fc1→GELU→fc2→+res, mirroring `vitBlockGraphMHV`) → final vector-LN → CLS-slice → dense head. Renders a 2477-line
 > module that **iree-compiles clean on rocm/gfx1100 (136 KB vmfb)**; `den = vitForward` via `vitFwdGraphMHV_faithful`
 > at depth-12. Module preamble defines `%one`/`%zero`/`%sc` (the lnRow γ=1/β=0 + reduce-init `tensor<f32>` consts).
-> **▶ §1 RENDER — BACKWARD: IN PROGRESS (2026-06-19). 5 param-SGD core ops done (a 6th still needed); the chain is
-> drafted but the param EMIT shapes are BESPOKE — bigger than the "reuse" plan.** The recurring gotcha: every "reuse"
-> breaks at the EMIT (not the den) — the enet 2D `denseWeightSgdB`/`denseBiasSgdB` → needed the 3D `rowDenseWeightSgd`/
-> `rowDenseBiasSgd`; patch-bias needed CLS-excluded slicing → `patchEmbedBiasSgd` (all 5 iree-validated: vecln 17440 B,
-> patch-W 16552 B, rowDenseW 12928 B, rowDenseB 10584 B, patch-b 10346 B). **STILL NEEDED: a 6th `posEmbedSgd`** (pos
-> reduces batch KEEPING `[197,192]`; the 2D `denseBiasSgd` gives flat `[37824]` which mismatches the `%pos` arg). cls
-> = `clsSliceF`(dEmbed)→`denseBiasSgdB{N=1,c=192}`; patch-W needs `%ximg = reshape %x` in the preamble. The forward
-> `FwdSaves` already exposes the saves; `vBlockBack`/per-head SDPA backward + vector-LN backward worked out in
-> [[vit-tie-scope]]. **REMAINING: the 6th op + the full node-by-node backward assembly** (reverse via `denseRowBack`/
-> `geluBack`/`softmaxRowBack`/`lnRowBack` + per-head matmul/transpose backs + `clsPadF`; multi-head SDPA backward is
-> the intricate part) **+ the ~5000-line train-step assembly + 200-param return + iree-iteration** → re-emit +
-> iree-validate the whole train step. **Then §1 fold `ViTFaithfulPoC` → §1a tie `ViTTiePoC` (two residual fan-ins
-> per block). The forward render's `vBlockFwd`/`vitFwd12` already expose the saved SSA names (`BSaves`/`FwdSaves`)
-> the backward references.**
+> **✅ §1 RENDER — BACKWARD: DONE (2026-06-19). The whole depth-12 ViT-Tiny train step renders as
+> `pretty(provenGraph)` and iree-compiles clean on rocm/gfx1100 (366 KB vmfb, 7578 lines, 200 return tensors,
+> ZERO render-TODO stubs).** The 6th core op **`posEmbedSgd` landed** (the pos grad reduces ONLY the batch axis,
+> KEEPING `[197,192]`, so it emits the 2D `tensor<197x192>` the flat `denseBiasSgd` couldn't; cheap `.batched`
+> path like patchEmbedBiasSgd, den = `vit_render_pos_certified`'s identity-Jacobian `pos − lr·dy`; standalone
+> iree-validated 10776 B). The full node-by-node backward is in `LeanMlir/Proofs/ViTRender.lean`: `vlnBack`
+> (vector-LN back = β-SGD `rowDenseBiasSgd` + γ-SGD `veclnGammaSgd` + `rowScaleF(γ)` then `lnRowBack(γ=1)` for the
+> input cot) and `vBlockBack` (reverse of `vBlockFwd`: res₂ fan-out → fc2-back/`geluBack`/fc1-back → LN2-back →
+> res₁ fan-in → out-dense-back → **per-head SDPA backward** [`headSliceF`/`matmulF`+`transposeF` backs/`softmaxRowBack`/
+> `scaleF`/`headPadF`, summed over 3 heads] → Q/K/V-dense-back summed → LN1-back → res₁ fan-in), then the whole-net
+> `vitTrainStepRenderV`: loss cot (`softmax−onehot`, mean folded into lr=0.1/32=0.003125, r34 convention) → head
+> back (`dotOut`+`weightSgd`/`biasSgd`) → `clsPadF` → final-LN back → 12× `vBlockBack` → patch-embed back
+> (`patchEmbedWeightSgd` w/ `%ximg = reshape %x` preamble + `patchEmbedBiasSgd` + `clsSliceF`→`denseBiasSgdB` for cls
+> + `posEmbedSgd` for pos). The SDPA backward was verified against the gradcheck-validated hand-written `mhsaBack`
+> (matmul/transpose backs + softmax-back all match). **GOTCHA fixed:** `veclnGammaSgd`'s emit used `{xN}`/`{r}` as 3D
+> `[B,N,D]` (it required a 3D arg, validated that way in its harness) but the whole-net thread is FLAT `[B,N*D]` like
+> every other op (`lnRowBack`/`rowDenseWeightSgd` reshape internally) — added the two internal reshapes + updated the
+> harness to flat args (re-iree-validated 17440 B). `lake build Proofs` + roundtrip theorem green. (Committed
+> `vit_train_step.mlir` NOT yet replaced: the new render uses **1D cls `tensor<192>`** vs the committed 2D
+> `tensor<1x192>` — a trivial FFI-layout reconcile that's the trainer-swap follow-up, NOT a backward-render blocker.)
+> **REMAINING for vit: regen the committed `.mlir` + cls-dim/FFI reconcile (trainer swap), then §1 fold
+> `ViTFaithfulPoC` → §1a tie `ViTTiePoC` (two residual fan-ins per block).**
 >
 > **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1 — the fold + the full [3,3,9,3] render(provenGraph) train step.**
 > Commits `1bcbf70` (per-channel layer-scale γ cert — the one new proof) → `09b8195` (3 new core SHlo ops
