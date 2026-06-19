@@ -2579,7 +2579,7 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh; let sm ← fresh
       let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh; let vs ← fresh
       let vr ← fresh; let ve ← fresh; let istd ← fresh; let xh ← fresh; let p ← fresh
-      let dg ← fresh; let dg1 ← fresh; let lG ← fresh; let sG ← fresh; let o ← fresh
+      let dg ← fresh; let lG ← fresh; let sG ← fresh; let o ← fresh
       pure (
         s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
         s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,n]}\n" ++
@@ -2597,20 +2597,18 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,n]}\n" ++
         s!"    {p} = stablehlo.multiply {r}, {xh} : {ty [B,n]}\n" ++
         s!"    {dg} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,n]}, tensor<f32>) -> tensor<f32>\n" ++
-        s!"    {dg1} = stablehlo.reshape {dg} : (tensor<f32>) -> {ty [1]}\n" ++
-        s!"    {lG} = stablehlo.constant dense<{lrS}> : {ty [1]}\n" ++
-        s!"    {sG} = stablehlo.multiply {dg1}, {lG} : {ty [1]}\n" ++
-        s!"    {o} = stablehlo.subtract {gN}, {sG} : {ty [1]}\n", o :: st)
+        s!"    {lG} = stablehlo.constant dense<{lrS}> : tensor<f32>\n" ++
+        s!"    {sG} = stablehlo.multiply {dg}, {lG} : tensor<f32>\n" ++
+        s!"    {o} = stablehlo.subtract {gN}, {sG} : tensor<f32>\n", o :: st)
   | .lnBetaSgd bN lrS n, r :: st => do
-      -- scalar-LN β grad: dβ = Σ_{b,k} dy → tensor<f32>, reshape to the Vec-1 param, SGD.
-      let z ← fresh; let db ← fresh; let db1 ← fresh; let lB ← fresh; let sB ← fresh; let o ← fresh
+      -- scalar-LN β grad: dβ = Σ_{b,k} dy → tensor<f32> (rank-0, matches the scalar-LN bnF param), SGD.
+      let z ← fresh; let db ← fresh; let lB ← fresh; let sB ← fresh; let o ← fresh
       pure (
         s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
         s!"    {db} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,n]}, tensor<f32>) -> tensor<f32>\n" ++
-        s!"    {db1} = stablehlo.reshape {db} : (tensor<f32>) -> {ty [1]}\n" ++
-        s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [1]}\n" ++
-        s!"    {sB} = stablehlo.multiply {db1}, {lB} : {ty [1]}\n" ++
-        s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [1]}\n", o :: st)
+        s!"    {lB} = stablehlo.constant dense<{lrS}> : tensor<f32>\n" ++
+        s!"    {sB} = stablehlo.multiply {db}, {lB} : tensor<f32>\n" ++
+        s!"    {o} = stablehlo.subtract {bN}, {sB} : tensor<f32>\n", o :: st)
   | .reluF n, r :: st => do
       let z ← fresh; let o ← fresh
       pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++

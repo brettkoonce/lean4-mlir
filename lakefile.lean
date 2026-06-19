@@ -339,7 +339,12 @@ lean_lib «Proofs» where
              -- the one genuinely-new proof obligation (Vec c via the chanIdx broadcast, vs the
              -- per-element Vec n cnx_render_lsgamma_certified); the den target of the pending
              -- layerScaleChGammaSgd core op (ConvNeXtFaithfulPoC.lean).
-             `LeanMlir.Proofs.ConvNeXtFaithfulPoC]
+             `LeanMlir.Proofs.ConvNeXtFaithfulPoC,
+             -- ch9-ConvNeXt-T §1 RENDER: the full [3,3,9,3] train step rendered as pretty(provenGraph)
+             -- (fwd + bwd-cotangent chain + param-SGD via the new ops); writes
+             -- verified_mlir/convnext_train_step.mlir. 2 documented hand-written gaps (the stem 4×4/s4
+             -- + downsample 2×2/s2 weight grads — no even/stride-4 weight-grad VJP yet) (ConvNeXtRender.lean).
+             `LeanMlir.Proofs.ConvNeXtRender]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
