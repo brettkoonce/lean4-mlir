@@ -24,6 +24,7 @@ import LeanMlir.Proofs.ResNet34LiveSeal
 import LeanMlir.Proofs.ResNet34LiveFull
 import LeanMlir.Proofs.MobileNetV2JacobianSealFull
 import LeanMlir.Proofs.ResNet34LiveRealistic
+import LeanMlir.Proofs.ResNet34LiveRealisticSeal
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
 import LeanMlir.Proofs.MlpTrainStep
@@ -673,6 +674,15 @@ open Proofs
 -- forward X224≠forward 0 (level 2). Confirms the witness machinery used no hidden small-n cap.
 #print axioms ResNet34LiveRealistic.liveFwd224_has_vjp_correct
 #print axioms ResNet34LiveRealistic.liveFwd224_nonconstant
+-- Item D LEVEL 3 (ResNet34LiveRealisticSeal.lean): the nonzero-Jacobian SEAL at 224×224.
+-- A uniform channel-0 perturbation (vs the toy's single coordinate) makes channel0 = channel1 + δ
+-- everywhere, so the 7×7 GAP of a uniform diff is δ and maxpool(ch0)=maxpool(ch1)+δ holds for ALL t
+-- (max(a+δ,b+δ)=max(a,b)+δ) — eliminating the toy's eventual-selection topology. The UDiff invariant
+-- threads like Dom2 (each BN ×istd via bnForward_chan_diff), so the output diff along the ray is
+-- t·Rr (Rr = 4 positive istds) ⇒ fderiv ℝ liveFwd224 Y ≠ 0 ⇒ backward not the zero map. Full depth
+-- realistic-spatial seal, n up to 25088, maxpool no-tie via the decreasing per-channel-injective base.
+#print axioms R34RealSeal.liveFwd224_jacobian_nonzero
+#print axioms R34RealSeal.liveFwd224_backward_nontrivial
 -- B8: per-channel BatchNorm — the real-ResNet BN (each channel-slice normalized with
 -- its own γ_c/β_c, γ/β : Vec oc). Block-diagonal VJP: each channel runs its own
 -- bn_has_vjp, cross-channel blocks vanish (pdivMat_rowIndep_perRow, a per-row

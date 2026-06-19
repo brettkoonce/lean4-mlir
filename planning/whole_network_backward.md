@@ -263,10 +263,22 @@ generalizing `liveDownPC`'s hardcoded `β=20`) and instantiating `β = 64 > √1
 downsamples (largest BN length `2·28·28`) and `β = 160 > √25088` for the stem (`2·112·112`).
 Everything else — the channel-diagonal decimating convs, the `Dom2` carrier, `resnet34_has_vjp_at`
 — was already dimension-generic and reused verbatim. (2-channel carrier kept; channel-width
-realism is orthogonal.) **Remaining:** the level-3 *seal* at 224×224 — same mechanism as
-`ResNet34LiveSeal` but its window/decimate index arithmetic (`Ytensor`'s `-(i·32+j)`,
-`decimY_win`'s `64·a'+2·b'`, `winRowInv (0:Fin 8)`) is hardcoded to 16/8 and must be re-derived
-at 112/56; mechanical-but-tedious, not yet done. mnv2 realistic dims also pending.
+realism is orthogonal.)
+
+✅ **ResNet-34 level 3 ALSO DONE at 224×224** (`LeanMlir/Proofs/ResNet34LiveRealisticSeal.lean`,
+`R34RealSeal.liveFwd224_jacobian_nonzero` ⇒ `liveFwd224_backward_nontrivial`, audited 3-axiom-clean).
+The toy seal's top-left-carrier + "maxpool eventually selects top-left" topology does **not** survive
+the **7×7 GAP** (the carrier isn't the output). The fix was a **better witness, not more arithmetic**:
+a *uniform* channel-0 perturbation `V224u` (the whole channel, not one coordinate) makes
+`channel 0 = channel 1 + δ` at **every** position, so (a) GAP of a uniform difference is `δ` and (b)
+`maxpool(ch0) = maxpool(ch1) + δ` holds for **all `t`** by `max(a+δ,b+δ)=max(a,b)+δ` — eliminating the
+entire eventual-selection / `Eventually` / continuity block of `ResNet34LiveSeal`. The carrier is a
+`UDiff δ u` invariant ("the two channels differ by the uniform `δ`") threaded through the net exactly
+like `Dom2`: each BN multiplies `δ` by its positive global `istd` (`bnForward_chan_diff`),
+decimate/maxpool/`+1` leave it fixed. So the output difference along the ray is `t · Rr(t)` (`Rr` = a
+product of four positive `istd`s) and `g'(0) = Rr 0 ≠ 0` — same final mechanism as both prior seals,
+no BN-variance derivative. The result is *cleaner* than the toy seal. **Remaining for Item D:** mnv2
+realistic dims (the mnv2 witness is 1×2×2).
 
 ### Item E — almost-everywhere backward *(stretch; the principled level-4 target)*
 
@@ -295,7 +307,7 @@ there, not here.
 | 2.5 | **B2** `Mnv2Live` seal | med | first kinked witness at level 3 (no longer level-2) | ✅ **done** (`MobileNetV2JacobianSeal.lean`; exact at input 0 via global smoothness) — **now also full 17-block depth** (`MobileNetV2JacobianSealFull.lean`, `fwdFull_jacobian_nonzero`/`_backward_nontrivial`) |
 | 3 | **A** ResNet-34 Live + **B2** seal | research | kills the headline "degenerate witness" caveat | ✅ **DONE at level 3, full depth**: `ResNet34LivePC.liveFwd2_*` (level 2) + `ResNet34LiveSeal.liveFwd2_jacobian_nonzero` (level-3 seal) **and** `ResNet34LiveFull.liveFwd2Full_*` — the real `[3,4,6,3]` (16-block) live ResNet-34, level-3 sealed (`liveFwd2Full_jacobian_nonzero` ⇒ `liveFwd2Full_backward_nontrivial`). Non-degenerate, nonzero-Jacobian-sealed, full depth, 2-channel, audited 3-axiom-clean |
 | 4 | **B2** BN-CNN Live | light (reuses A) | last degenerate kinked witness retired | |
-| 5 | **D** realistic dims | med | scale credibility | ◐ **r34 level-2 DONE** (`ResNet34LiveRealistic`, whole-net VJP + nonconstant at **224×224**, 3-axiom-clean); r34 level-3 seal + mnv2 still open |
+| 5 | **D** realistic dims | med | scale credibility | ◐ **r34 DONE at 224×224, level 2 AND level 3** (`ResNet34LiveRealistic` VJP+nonconstant; `R34RealSeal.liveFwd224_jacobian_nonzero`⇒`backward_nontrivial`, both 3-axiom-clean); only mnv2 realistic dims open |
 | 6 | **E** almost-everywhere | heavy | the principled statement (stretch) | |
 
 After 1–4, every flagship net has a **full-depth, non-degenerate, nonzero-Jacobian** whole-net

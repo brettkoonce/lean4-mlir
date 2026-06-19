@@ -241,6 +241,12 @@ lean_lib «Proofs» where
              -- (β=160>√25088); every smoothness/no-tie hyp discharged at n up to 25088,
              -- forward X≠0 (level 2). Confirms no discharge secretly used a small n.
              `LeanMlir.Proofs.ResNet34LiveRealistic,
+             -- Item D level 3: the nonzero-Jacobian SEAL at 224×224. A uniform channel-0
+             -- perturbation makes channel0 = channel1 + δ everywhere, so 7×7 GAP of a
+             -- uniform diff = δ and maxpool(ch0)=maxpool(ch1)+δ for ALL t (max(a+δ,b+δ)=
+             -- max(a,b)+δ) — no eventual-selection topology. UDiff invariant threaded like
+             -- Dom2; output diff = t·Rr (4 positive istds), g'(0)=Rr 0 ≠ 0.
+             `LeanMlir.Proofs.ResNet34LiveRealisticSeal,
              -- Backward-graph faithfulness (den-level): fan-in bricks
              -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
              -- batched conv+depthwise), the whole per-example MBConv block, and
