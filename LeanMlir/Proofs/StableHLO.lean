@@ -244,6 +244,14 @@ inductive SHlo : Nat → Type where
                                                            : SHlo n → SHlo 1
   | lnBetaSgd  {n : Nat} (bName lrStr : String) (β : Vec 1) (lr : ℝ)
                                                            : SHlo n → SHlo 1
+  -- `veclnGammaSgd`: the Chapter-10 ViT VECTOR-[D] LayerNorm γ update. Per-token normalize over the
+  -- `D` feature axis (x̂ = `layerNormForward D ε 1 0`), then per-channel affine `γ⊙x̂+β`; the γ grad
+  -- `dγ_k = Σ_rows dy·x̂` reduces over the N=tokens row axis but KEEPS `D` (output `SHlo D` ≅
+  -- `tensor<Dxf32>`, vs `lnGammaSgd`'s scalar `SHlo 1`). `den` = the per-channel certified grad
+  -- (`vit_render_veclngamma_certified`). The rowwise dense W/b + vecln β reuse the enet batched
+  -- `denseWeightSgdB`/`denseBiasSgdB` (their N-axis sum = vit's `rowDense_*_grad`).
+  | veclnGammaSgd {N D : Nat} (gName xName epsStr lrStr : String) (ε : ℝ) (x : Vec (N*D)) (γ : Vec D) (lr : ℝ)
+                                                           : SHlo (N*D) → SHlo D
   -- Chapter 9 scaling pass (full ConvNeXt-T): stride-4 SAME conv forward — the
   -- 4×4/s4 patchify stem (`stablehlo.convolution` with `window_strides=[4,4]`).
   -- `den` via the proven `flatConvStride4` (= decimate ∘ decimate ∘ stride-1 conv).
@@ -726,6 +734,9 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun _ => γ 0 - lr * bn_grad_gamma n ε x (den e)
   | _, .lnBetaSgd (n := n) _ _ β lr e =>
       fun _ => β 0 - lr * bn_grad_beta n (den e)
+  | _, .veclnGammaSgd (N := N) (D := D) _ _ _ _ ε x γ lr e =>
+      fun k => γ k - lr * ∑ r : Fin N,
+        Mat.unflatten (den e) r k * layerNormForward D ε 1 0 (Mat.unflatten x r) k
   | _, .bnGammaSgdB (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
         bnPerChannel_grad_gamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
@@ -2090,6 +2101,7 @@ inductive Raw where
   | layerScaleChGammaSgd (gName xName lrStr : String) (c h w : Nat)   : Raw → Raw
   | lnGammaSgd    (gName xName epsStr lrStr : String) (n : Nat)       : Raw → Raw
   | lnBetaSgd     (bName lrStr : String) (n : Nat)                    : Raw → Raw
+  | veclnGammaSgd (gName xName epsStr lrStr : String) (N D : Nat)     : Raw → Raw
   | reluF      (n : Nat)                   : Raw → Raw
   | selectPos  (x : String) (n : Nat)      : Raw → Raw
   | relu6F     (n : Nat)                   : Raw → Raw
@@ -2191,6 +2203,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .lnGammaSgd gN xN es lrS n (skel e)
   | _, .lnBetaSgd (n := n) bN lrS _ _ e =>
       .lnBetaSgd bN lrS n (skel e)
+  | _, .veclnGammaSgd (N := N) (D := D) gN xN es lrS _ _ _ _ e =>
+      .veclnGammaSgd gN xN es lrS N D (skel e)
   | k, .reluF e               => .reluF k (skel e)
   | k, .selectPos x _ e       => .selectPos x k (skel e)
   | k, .relu6F e              => .relu6F k (skel e)
@@ -2321,6 +2335,7 @@ inductive Tok where
   | layerScaleChGammaSgd (gName xName lrStr : String) (c h w : Nat)   : Tok
   | lnGammaSgd    (gName xName epsStr lrStr : String) (n : Nat)       : Tok
   | lnBetaSgd     (bName lrStr : String) (n : Nat)                    : Tok
+  | veclnGammaSgd (gName xName epsStr lrStr : String) (N D : Nat)     : Tok
   | reluF      (n : Nat)                   : Tok
   | selectPos  (x : String) (n : Nat)      : Tok
   | relu6F     (n : Nat)                   : Tok
@@ -2392,6 +2407,7 @@ def toToks : Raw → List Tok
   | .layerScaleChGammaSgd gN xN lrS c h w e    => toToks e ++ [.layerScaleChGammaSgd gN xN lrS c h w]
   | .lnGammaSgd gN xN es lrS n e               => toToks e ++ [.lnGammaSgd gN xN es lrS n]
   | .lnBetaSgd bN lrS n e                      => toToks e ++ [.lnBetaSgd bN lrS n]
+  | .veclnGammaSgd gN xN es lrS N D e          => toToks e ++ [.veclnGammaSgd gN xN es lrS N D]
   | .reluF n e       => toToks e ++ [.reluF n]
   | .selectPos x n e => toToks e ++ [.selectPos x n]
   | .relu6F n e      => toToks e ++ [.relu6F n]
@@ -2609,6 +2625,33 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {lB} = stablehlo.constant dense<{lrS}> : tensor<f32>\n" ++
         s!"    {sB} = stablehlo.multiply {db}, {lB} : tensor<f32>\n" ++
         s!"    {o} = stablehlo.subtract {bN}, {sB} : tensor<f32>\n", o :: st)
+  | .veclnGammaSgd gN xN epsStr lrS N D, r :: st => do
+      -- vector-[D] LN γ grad: recompute x̂ from the saved LN input {xN} (μ/var over [2], per token),
+      -- dγ = Σ_{b,n} dy·x̂ → tensor<Dxf32> (reduce over [0,1], KEEP D), SGD (`lnParamGrad` dγ half + wrap).
+      let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh; let sm ← fresh
+      let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh; let vs ← fresh
+      let vr ← fresh; let ve ← fresh; let istd ← fresh; let xh ← fresh; let p ← fresh
+      let dg ← fresh; let lG ← fresh; let sG ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {nf} = stablehlo.constant dense<{D}.0> : {ty [B,N,D]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,N,D]}\n" ++
+        s!"    {smr} = stablehlo.reduce({xN} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,N,D]}, tensor<f32>) -> {ty [B,N]}\n" ++
+        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,N]}) -> {ty [B,N,D]}\n" ++
+        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,N,D]}\n" ++
+        s!"    {xc} = stablehlo.subtract {xN}, {mu} : {ty [B,N,D]}\n" ++
+        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,N,D]}\n" ++
+        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,N,D]}, tensor<f32>) -> {ty [B,N]}\n" ++
+        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,N]}) -> {ty [B,N,D]}\n" ++
+        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,N,D]}\n" ++
+        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,N,D]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,N,D]}\n" ++
+        s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,N,D]}\n" ++
+        s!"    {p} = stablehlo.multiply {r}, {xh} : {ty [B,N,D]}\n" ++
+        s!"    {dg} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,N,D]}, tensor<f32>) -> {ty [D]}\n" ++
+        s!"    {lG} = stablehlo.constant dense<{lrS}> : {ty [D]}\n" ++
+        s!"    {sG} = stablehlo.multiply {dg}, {lG} : {ty [D]}\n" ++
+        s!"    {o} = stablehlo.subtract {gN}, {sG} : {ty [D]}\n", o :: st)
   | .reluF n, r :: st => do
       let z ← fresh; let o ← fresh
       pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++

@@ -5,16 +5,39 @@ _Status note, 2026-06-17._ Audit + PoC. Question driving this doc: for each
 to the `Proofs/` math, or only validated numerically? And what would close the
 gap, net by net?
 
-> **▶ NEXT SESSION (2026-06-19): vit (Vision Transformer) — the LAST Tier-3 net.** Tier-3 order was
-> enet → convnext → vit; enet AND convnext §1a TIE are both CLOSED (see the banners below). vit is the
-> final §1a-tie target — the only Tier-3 net left. **Heed [[section1a-tie-sweep]]'s lesson: ground-truth
-> vit's REAL state first** (the doc's §5 vit bullet flags a SCALAR-proven vs PER-CHANNEL-`[192]`-emitted
-> LayerNorm GRANULARITY gap — UNLIKE convnext, where proof + committed both use scalar LN, so vit's gap
-> may be a genuine blocker, not just engineering). vit DOES have the richest existing math
-> (`vitNetBackGraph_faithful` whole-net backward + full per-param `vit_render_*_chain_certified`), so check
-> whether §1 (render/fold) exists or needs building (mnv2/convnext situation) before assuming the §1a tie
-> is self-contained. Extract the committed `vit_*_train_step.mlir` func arg list to settle the LN param
-> granularity (the convnext `tensor<f32>` vs `tensor<1xf32>` lesson — don't infer from `head -c`/shape greps).
+> **▶ IN PROGRESS (2026-06-19): vit (Vision Transformer) — the LAST Tier-3 net. GROUND-TRUTHED; step 1 (core ops) started.**
+> Tier-3 order enet → convnext → vit; enet AND convnext §1a TIE both CLOSED. vit is the only §1a-tie target left.
+>
+> **GROUND-TRUTH VERDICT (2026-06-19 — the feared LN-granularity gap is NOT a blocker):** the committed
+> `vit_train_step.mlir` (ViT-Tiny, depth-12, D=192, 3 heads, MLP 768, 200 params, BS=32) confirms **per-channel
+> `tensor<192xf32>` LN** (`%g1_*/%b1_*/%g2_*/%b2_*/%gF/%bF`). BUT `LeanMlir/Proofs/ViTVecLN.lean` is a full
+> **"scaling pass" that already models exactly this**: `layerNormVec` (per-token normalize then per-channel affine
+> `γ⊙x̂+β`, *"the committed ViTRender LN form"*) + `layerNormVec_has_vjp` + the vector-LN transformer-block VJP +
+> a 2-block whole-net VJP (`vitForward2V_has_vjp`) + a **render graph + faithfulness** (`vitFwdGraphV`/`_faithful`)
+> + per-channel LN param certs (`vit_render_vecln{gamma,beta}_certified`) AND their chain-pinned forms
+> (`vit_render_vecln{1,2,F}{gamma,beta}_chain_certified`) + the chain cotangents (`vitCot{H,Att,Xin,B2out}V`). The
+> doc's "scalar-LN whole-net backward" worry refers to the OLD `vitNetBackGraph_faithful` parallel universe — which
+> the §1a tie does NOT use (the tie builds its backward from per-op chain cots, like convnext used ConvNeXtChainClose).
+> **So the per-channel `[192]` LN that ships IS modeled end-to-end.**
+>
+> **vit = the convnext situation (full §1 stack to build), at transformer scale.** No `ViTRender`/`ViTFaithfulPoC`/
+> `ViTTiePoC` in `Proofs/`; the committed `.mlir` is rendered by `LeanMlir/ViTRender.lean` — a hand-written
+> **String-fragment emitter** (*"NOT a single `den(trainStep)` theorem — faithful PER-OP, validated by gradchecks
+> and training"*), not `pretty(provenGraph)`. EXISTS (rich): per-channel LN fwd/VJP/graph/param-certs/chain-certs
+> (`ViTVecLN`); rowwise-dense certs `vit_render_rowdense{W,b}_certified` (attn Wq/Wk/Wv/Wo, MLP Wfc1/Wfc2, classifier
+> Wc); patch-conv **weight**+bias certs `vit_render_patch{W,b}_certified` (vit HAS the patch-weight VJP convnext
+> lacked → likely NO even-kernel gap); cls/pos certs `vit_render_{cls,pos}_certified`; forward graph `vitFwdGraphV`
+> (2-block → needs depth-12 instantiation via the generic `vitBlockGraphV`). TO BUILD: §1 render (Proofs
+> `vitTrainStepFaithfulV`) + §1 fold (`ViTFaithfulPoC`) + §1a tie (`ViTTiePoC`, **two residual fan-ins per block** —
+> attn-sublayer + mlp-sublayer) + the new core SHlo param-SGD ops.
+>
+> **CORE-OPS SCOPE (step 1) — only ONE genuinely-new op.** The rowwise-dense W/b (attn/MLP/classifier) REUSE enet's
+> batched `denseWeightSgdB`/`denseBiasSgdB` (their den sums over the leading N axis = vit's `rowDense_{weight,bias}_grad`,
+> verified). vit's vecln **β** (`Σ_tokens dy`) ALSO = `denseBiasSgdB`. So the ONLY new op is **`veclnGammaSgd`** (the
+> vector-LN γ: recompute x̂ = LN(1,0) per token, weight by dy, reduce over the N=BS·197 row axis → `Vec D`;
+> N-generic cert `vit_render_veclngamma_certified`). Patch-W/b + cls + pos (4 of 200 params) are a small later step
+> (their certs exist; check whether batched conv/bias ops cover them or need 1-2 more ops). **Step 1 = add
+> `veclnGammaSgd` to StableHLO.lean (9 sites + roundtrip), build + iree-validate.**
 >
 > **✅ DONE (2026-06-19): convnext (ConvNeXt-T) §1 — the fold + the full [3,3,9,3] render(provenGraph) train step.**
 > Commits `1bcbf70` (per-channel layer-scale γ cert — the one new proof) → `09b8195` (3 new core SHlo ops
@@ -174,7 +197,7 @@ emitter does **not** print (independent hand-written string emitter).
 | **mnv2** | committed `.mlir` | ❌ hand-written | ✅ **CLOSED (§1 fold, reduced 6-block)** — `mnv2TrainStepFaithfulV` (MobileNetV2Render.lean) renders the whole reduced-6-block train step (82 params) as `pretty(provenGraph)`; each param `den = certified` via `MobileNetV2FaithfulPoC` — **4 new core ops** `depthwise{,Strided}{Weight,Bias}Sgd` (StableHLO.lean, the per-channel `batch_group_count=c` transpose-trick weight + `convBiasSgd`-aliased bias), expand/project conv via `CifarPoC.conv{W,B}_den`, BN via `CifarBnPoC.bn{Gamma,Beta}_den`, dense via `Cifar8PoC.dense{W,B}_den`; committed bytes iree-compile on rocm/gfx1100 (789 KB vmfb), drop-in positional param layout. **FULL 17-block paper net now also DONE**: §1 CLOSE (`mnv2TrainStepFaithfulVPaper`, 210 params, 559 KB vmfb), §1 fold den (`MobileNetV2FaithfulPoCPaper`), and §1a TIE (`mnv2_net_tied_certified`) all landed + 3-axiom clean | **§1a tie DONE** (full 17-block, `MobileNetV2TiePoCPaper`); remaining: trainer swap to the full `.mlir` (task 4) + 2-block→17-block VJP-witness upgrade (task 5, separate §4) |
 | **enet** | committed `.mlir` | ◐ hand-written (batched emit "Item B" now BUILT — `pretty(provenGraph)` validates; renderer pending) | ◐ hand-written; all batched ops + param-SGD BUILT + iree-validated (Item B done); renderer pending | `efficientnetFwdGraphB_full_faithful` (full 16 MBConv) + `efficientnetForwardB_full_has_vjp` (whole-net VJP); den-faithful per-block backward bricks | **real blocker was Item B (batched `emitTok` stub) + missing batched param-SGD, NOT "no whole-net backward"** — both DONE (5 commits, 2026-06-18); renderer/fold/tie remain |
 | **convnext** | committed `.mlir` | ❌ hand-written | ✅ **CLOSED (§1 render + §1a tie)** — `convNextTrainStepFaithfulV` renders the full [3,3,9,3] train step (**180 params**) as `pretty(provenGraph)`, iree-validated (647884 B); §1a tie `CnxTiePoC.cnx_net_tied_certified` threads all **176** SHlo-op params through the REAL render forward + the loss-driven backward (GELU masks, identity-skip fan-in ×18, downsample LN-back ×3, scalar-LN γ/β + per-channel layer-scale γ); the **4 even-kernel weight grads** (stem 4×4/s4 `psW` + 3 downsample 2×2/s2 `d{0,1,2}W`) are the documented render gap (no even/stride-4 weight-grad VJP op), outside the den-tie — their *bias* grads ARE tied | **§1a TIED** (176/180; 4 even-kernel weight-grad gaps; the §1 fold added 3 ConvNeXt core ops `layerScaleChGammaSgd`/`lnGammaSgd`/`lnBetaSgd`, the tie reuses them — ZERO new ops/bridges) |
-| **vit** | committed `.mlir` | ❌ hand-written (`vitFwd`) | ❌ `vitBack` hand-written | **richest**: `vitFwdGraphKMHV_faithful` + whole-net `vitNetBackGraph_faithful` + full per-param `vit_render_*_chain_certified` | emitted untied **+ granularity gap**: whole-net backward proven for *scalar* LN, emitted uses *per-channel* `[192]` LN |
+| **vit** | committed `.mlir` | ❌ hand-written (`LeanMlir/ViTRender.lean` String emitter, faithful per-op, NOT `pretty(provenGraph)`) | ❌ hand-written String emitter (depth-12, 200 params) | **richest — per-channel `[192]` LN fully modeled**: `ViTVecLN` (`layerNormVec` fwd/VJP + `vitFwdGraphV`/`_faithful` render graph + `vitForward2V_has_vjp` + `vit_render_vecln*_certified` + chain cots `vitCot*V`); `ViTClose` rowdense/patch/cls/pos certs; (old scalar `vitNetBackGraph_faithful` is a separate parallel universe the tie doesn't use) | **convnext situation (full §1 stack to build) — NOT blocked by the LN granularity gap** (per-channel `[192]` is modeled by ViTVecLN). TO BUILD: §1 render + fold + §1a tie + core ops. Core ops: only **`veclnGammaSgd`** is new (rowdense W/b + vecln β reuse enet's `denseWeightSgdB`/`denseBiasSgdB`) |
 
 ### What is genuinely proof-tied to emitted bytes today
 - **Forward-eval modules of linear, mlp, cnn, cifar (ch5), cifar-bn (ch5), cifar8 (8-conv),
@@ -219,7 +242,7 @@ leaves both green.
 | **mnv2** (full 17-block paper) | ✅ **whole net** den-composed: all 17 inverted-residual blocks + stem + conv-bn-relu6 head threaded at the real `mobilenetv2ForwardPaper` activations (single-ε), cotangent composed from the loss through dense/GAP-back + the head + the **residual fan-in `+ dyOut`** at every stride-1 skip (`ivS1SkipCotInAt`); capstone `mnv2_net_tied_certified` bundles all 210 params' ties + dense total-loss fold + `mnv2LossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); relu6 two-kink mask + linear project bottleneck (project-BN cot = `dyOut` directly) are the new content vs r34 | **✅ TIED** |
 | **enet** (full 16-MBConv, 262 params) | ✅ **whole net** den-composed: all 16 MBConv blocks + stem + conv-bn-swish head threaded at the real `efficientnetForwardB_full` activations (batched true-BN + SE), cotangent composed from the loss `g` down through the head VJP + every block's VJP (residual fan-in folded into `mbResidW`'s own VJP); capstone `efficientnet_net_tied` bundles all 262 params' ties + the loss-cotangent den (`efficientnetLossCot_den`) | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); **swish** masks + the **SE gate fan-in** (`gateCotB`/`sigBackB`/`rowDenseBackFlat`) + **true-BN** backs (`bnBatchLA` VJP) + strided depthwise, all **batched** — the new content vs mnv2 | **✅ TIED** |
 | **convnext** (full [3,3,9,3], 176 tied params) | ✅ **whole net** den-composed: all 18 ConvNeXt blocks + 3 downsamples + GAP→LN→dense head + stem bias threaded at the real `convNextTrainStepFaithfulV` forward activations (`cnxStemFwdO`/`cnxBlockFwdO`/`cnxDownFwdO`), cotangent composed from the loss `g` down through dense (`dense_has_vjp`) + head-LN + GAP (`globalAvgPoolFlat_has_vjp`) + every block's backward, with the **identity-skip fan-in `+ dyOut`** at each of the 18 block merges + the LN-back at each of the 3 downsamples; capstone `cnx_net_tied_certified` bundles all 176 params' ties + the dense total-loss fold + `cnxLossCot_den` | ◐ level-2: cotangents at correctly-threaded SSAs (block backward rendered hand-written, not `SHlo`); **GELU mask** (smooth, no kink — `geluScalarDeriv`) + **scalar LayerNorm** γ/β (`Vec 1`) + **per-channel layer-scale** γ (`Vec c`, `chanIdx` broadcast) are the new content vs mnv2's relu6/per-channel-BN | **✅ TIED** |
-| vit | — (Tier-3, last) | — | — |
+| vit | — (Tier-3, last — IN PROGRESS: §1 render/fold/tie to build; per-channel `[192]` LN modeled by `ViTVecLN`, NOT a blocker) | — | **▶ building** |
 
 **The close ("tie them together").** Feed the *proven* cotangent/forward subgraph directly
 into each consumer (`weightSgd … (lossCotGraph …)` instead of `.operand %dy …`), so each
@@ -577,10 +600,15 @@ established only empirically (JAX `value_and_grad` oracle, cross-backend ULP).
   proof-render lives only in the non-committed `TestMobilenetV2TrainPC`), and the
   whole-net VJP witness is a 2-block representative — so even the parallel proof
   is representative, not the trained net.
-- **vit**: whole-net backward (`vitNetBackGraph_faithful`) is proven for *scalar*
-  LayerNorm; the emitted net uses *per-channel* `[192]` LN. The per-param
-  `vit_render_*_chain_certified` cover the per-channel render chain (per param),
-  but not as a printed-graph tie.
+- **vit** (UPDATED 2026-06-19 — the granularity gap is NOT a tie blocker): the OLD whole-net backward
+  `vitNetBackGraph_faithful` is proven for *scalar* LN, and the emitted net uses *per-channel* `[192]`
+  LN — but the **`ViTVecLN` scaling pass already models the per-channel `[192]` LN end-to-end**
+  (`layerNormVec` fwd/VJP, render graph `vitFwdGraphV`/`_faithful`, param certs
+  `vit_render_vecln{gamma,beta}_certified`, chain-pinned `vit_render_vecln{1,2,F}*_chain_certified`,
+  chain cots `vitCot*V`). The §1a tie builds its backward from those per-op chain cots (like convnext),
+  NOT from the scalar `vitNetBackGraph_faithful` — so the scalar/per-channel mismatch in the *parallel
+  universe* doesn't block the tie. What remains is the convnext-style full §1 build (render + fold + tie
+  + the `veclnGammaSgd` core op), still "not a printed-graph tie" until that lands.
 
 ## 2. What's needed, net by net (Edge B/A close-out)
 
