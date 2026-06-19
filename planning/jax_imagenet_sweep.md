@@ -12,6 +12,43 @@ the working tree by request). Box = ares, 6× RTX 4060 Ti, PCIe Gen3 (BIOS-cappe
 see reference_ares_pcie_aer). **Re-runs gated on cooling/fan setup** (the box runs
 hot; the 6-GPU runs are ~10–16 hr each).
 
+## UPDATE 2026-06-19 — what actually happened + paper-length TODO
+
+The short (80–90ep) validation runs are largely done. Outcomes:
+
+- **MNv2 — DONE.** 90ep RMSProp (ρ0.9/μ0.9/**ε1.0**, lr 0.045, crop/flip, AA off) →
+  **68.77% top-1 / 88.53% top-5** (full-50k EMA). Only +0.44 over the old SGD 68.33%
+  — the optimizer swap barely moved it; the gap is schedule. blueprint **§7.3** updated
+  (config block, 6-GPU budget, result table, narrative, per-epoch curve, paper-length
+  TODO). One AER mid-run, watchdog auto-resumed. Final ckpt `~/mnv2_imagenet_bf16.bin`.
+- **ENet — PARKED (LR-fragile).** RMSProp **ε1e-3** is too hot: **lr 0.045 fully diverged**
+  (val→random by ep6); **lr 0.016 eroded** (val 31%@e4 → 19% and stalled). Trains fine up
+  to lr≈0.0128 → wants peak **~0.01**. AA also under-trains at 80ep. Diverged ckpts archived
+  (`~/archive_enet_diverged_lr045_jun14`, `~/archive_enet_eroded_lr016_jun14`). Config edit
+  to lr 0.016 is UNCOMMITTED and **known-wrong** — set to ~0.01 before the real run. See
+  memory `project_enet_lr_instability`.
+- **ConvNeXt — CONFIG VALIDATED.** AdamW lr 4e-4 + grad-clip 1.0 + full aug
+  (Mixup/CutMix/RandErase) is stable — val climbed cleanly 0.3→2.8% (e1–3) → 39.9% (e9 eval)
+  through the warmup peak, no erosion (the opposite of ENet). Power outage 2026-06-19 killed
+  it at e9 (`/tmp` logs lost; ckpts e1–9 survived). 80ep is a dry-run anyway.
+
+### TODO: paper-faithful long runs (the gap-closers)
+
+The short runs validated the recipes/pipeline; the gap to paper numbers is **schedule
+length**, not the formalization (MNv2 proved optimizer/precision/pipeline are faithful).
+Each net at its full schedule on the 6-GPU box is ~**35 hr apiece**:
+
+| net | short-run | paper | gap | full-schedule recipe |
+|-----|-----------|-------|-----|----------------------|
+| MNv2 | 68.77% (90ep) | ~72.0% | ~3.2pt | RMSProp + exp-decay LR, ~300–480ep |
+| ENet-B0 | (no stable run) | ~77.1% | — | **lr~0.01** + AA + stoch-depth 0.2, ~350ep |
+| ConvNeXt-T | 75.93% (old 80ep RandAug) | ~82.1% | ~6pt | AdamW + full aug, 300ep (where Mixup/CutMix pay off) |
+
+Priority per user (2026-06-19): validate configs first (done-ish), long runs **later**;
+ENet's 300ep+AA+lr0.01 is wanted eventually but not now. Gate long runs on stable wall
+power (the 2026-06-19 outage killed the ConvNeXt smoke test) + a checkpoint/resume sanity
+pass at the longer horizon.
+
 ## The 3 runs to do (non-ViT)
 
 All 6-GPU (`CUDA_VISIBLE_DEVICES=0,1,2,3,4,5`), batch 256 → 252 (6×42), bf16+bf16Conv,
