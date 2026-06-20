@@ -336,6 +336,67 @@ theorem dot_close_mixed_uniform (L : FloatModel) {n : ℕ} (x y : Vec n) :
     Finset.sum_nonneg fun i _ => abs_nonneg _
   nlinarith [mul_le_mul_of_nonneg_left hmag hγ0, hsum0]
 
+/-- **Mixed-precision dense layer** — leaf precision `L` on the matmul (the
+    `dotMixed`), accumulate precision `M` on the bias add. The deployed
+    bf16-mixed dense layer (fp32 master/accumulate, bf16 leaf compute). -/
+noncomputable def denseMixed (L : FloatModel) {m n : Nat} (W : Mat m n)
+    (b : Vec n) (x : Vec m) : Vec n :=
+  fun j => M.add (M.dotMixed L x (fun i => W i j)) (b j)
+
+/-- **Mixed-precision dense forward error.** The leaf precision enters only
+    through the flat `dotMixed` term; the accumulate precision rides the bias
+    add and the fan-in γ. The bf16-mixed / fp8 dense layer falls out by setting
+    `L.u`. -/
+theorem dense_close_mixed (L : FloatModel) {m n : Nat} (W : Mat m n)
+    (b : Vec n) (x : Vec m) (j : Fin n) :
+    |M.denseMixed L W b x j - Proofs.dense W b x j| ≤
+      M.u * ((∑ i, |x i * W i j|) + |b j|)
+        + (1 + M.u) * ((((1 + M.u) ^ (m + 1) - 1) * (1 + L.u) ^ 2
+          + (2 * L.u + L.u ^ 2)) * ∑ i, |x i * W i j|) := by
+  have hu := M.u_nonneg
+  set br := ((1 + M.u) ^ (m + 1) - 1) * (1 + L.u) ^ 2 + (2 * L.u + L.u ^ 2)
+    with hbr
+  set S := ∑ i, |x i * W i j| with hS
+  set P := ∑ i, x i * W i j with hP
+  set p := M.dotMixed L x (fun i => W i j) with hp
+  have hD : |p - P| ≤ br * S := by
+    have h := M.dot_close_mixed_uniform L x (fun i => W i j)
+    simpa [hp, hP, hS, hbr] using h
+  have hS0 : (0:ℝ) ≤ S := Finset.sum_nonneg fun i _ => abs_nonneg _
+  have hbr0 : 0 ≤ br := by
+    have h1 : (0:ℝ) ≤ (1 + M.u) ^ (m + 1) - 1 :=
+      sub_nonneg.mpr (one_le_pow₀ (by linarith))
+    have h2 : (0:ℝ) ≤ (1 + L.u) ^ 2 := sq_nonneg _
+    have h3 : (0:ℝ) ≤ 2 * L.u + L.u ^ 2 := by
+      have := L.u_nonneg; positivity
+    rw [hbr]; positivity
+  have hPS : |P| ≤ S := by rw [hP, hS]; exact Finset.abs_sum_le_sum_abs _ _
+  have hpabs : |p| ≤ S + br * S := by
+    have h1 : |p| ≤ |P| + |p - P| := by
+      calc |p| = |P + (p - P)| := by ring_nf
+        _ ≤ |P| + |p - P| := abs_add_le _ _
+    have h2 : br * S ≤ br * S := le_rfl
+    linarith [hPS, hD]
+  -- denseMixed j = M.add p (b j); real = P + b j
+  have hreal : Proofs.dense W b x j = P + b j := rfl
+  have hmix : M.denseMixed L W b x j = M.add p (b j) := rfl
+  rw [hmix, hreal]
+  have hadd : |M.add p (b j) - (p + b j)| ≤ M.u * |p + b j| := M.err _
+  have htri : |M.add p (b j) - (P + b j)| ≤
+      M.u * |p + b j| + |p - P| := by
+    have h1 := abs_sub_le (M.add p (b j)) (p + b j) (P + b j)
+    have h2 : |p + b j - (P + b j)| = |p - P| := by
+      rw [show p + b j - (P + b j) = p - P from by ring]
+    linarith [hadd]
+  have hpbj : |p + b j| ≤ (S + br * S) + |b j| :=
+    (abs_add_le p (b j)).trans (by linarith [hpabs])
+  calc |M.add p (b j) - (P + b j)|
+      ≤ M.u * |p + b j| + |p - P| := htri
+    _ ≤ M.u * ((S + br * S) + |b j|) + br * S := by
+        have hm := mul_le_mul_of_nonneg_left hpbj hu
+        linarith [hm, hD]
+    _ = M.u * (S + |b j|) + (1 + M.u) * (br * S) := by ring
+
 -- ════════════════════════════════════════════════════════════════
 -- § Dense layer: rounded-at-perturbed-input vs real-at-real-input
 -- ════════════════════════════════════════════════════════════════
@@ -677,7 +738,7 @@ theorem mlp_float_close_uniform {d₀ d₁ d₂ d₃ : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- γ-form at a concrete exponent and target, monotone through `u ≤ u32`. -/
-private theorem gamma_num (hMu : M.u ≤ u32) {k : ℕ} {q : ℝ}
+theorem gamma_num (hMu : M.u ≤ u32) {k : ℕ} {q : ℝ}
     (hk : (k : ℝ) * u32 < 1)
     (hq : (k : ℝ) * u32 / (1 - (k : ℝ) * u32) ≤ q) :
     (1 + M.u) ^ k - 1 ≤ q := by
@@ -883,7 +944,7 @@ private theorem mulErr_mono {u u' A C ea ea' ec : ℝ}
   have t3 : ea * ec ≤ ea' * ec := mul_le_mul_of_nonneg_right hea hec
   exact add_le_add t1 (by linarith)
 
-private theorem sgdErr_mono {u u' lr Θ Θ' G eg eg' : ℝ}
+theorem sgdErr_mono {u u' lr Θ Θ' G eg eg' : ℝ}
     (hu : 0 ≤ u) (huu : u ≤ u') (hlr : 0 ≤ lr) (hΘ0 : 0 ≤ Θ) (hΘ : Θ ≤ Θ')
     (hG : 0 ≤ G) (heg0 : 0 ≤ eg) (heg : eg ≤ eg') :
     sgdErr u lr Θ G eg ≤ sgdErr u' lr Θ' G eg' := by
@@ -1426,6 +1487,32 @@ theorem sum_close : ∀ {n : ℕ} (x : Vec n),
       (by simp only [sub_self, abs_zero]
           exact mul_nonneg M.u_nonneg (abs_nonneg _))
       (M.err _)
+
+-- ════════════════════════════════════════════════════════════════
+-- § Gradient-is-a-reduction SGD step (the conv-grad reuse, planning §1b-B)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **SGD step whose gradient is a rounded dot product.** When the gradient is
+    a correlation `g = Σ pᵢqᵢ` computed in float as `M.dot p q` — the shape of
+    a conv *weight* gradient (`Σ_{hi,wi} convPad · cot`) and of any dense weight
+    gradient — the rounded update `fl(θ − fl(lr·fl(p·q)))` is within `sgdErr` of
+    the real step `θ − lr·g`, with the dot's Higham γ as the gradient-error
+    slot `eg`. This is `dot_close` feeding `sgd_step_close`. -/
+theorem dotSgd_step_close (θ : ℝ) {n : ℕ} (p q : Vec n) {lr G : ℝ}
+    (hG : |∑ i, p i * q i| ≤ G) (hlr : 0 ≤ lr) :
+    |M.sub θ (M.mul lr (M.dot p q)) - (θ - lr * ∑ i, p i * q i)| ≤
+      sgdErr M.u lr |θ| G (((1 + M.u) ^ (n + 1) - 1) * ∑ i, |p i * q i|) :=
+  M.sgd_step_close θ (M.dot_close p q) hG hlr
+
+/-- **SGD step whose gradient is a rounded sum.** When the gradient is a plain
+    reduction `g = Σ xᵢ` computed in float as `M.sum x` — the shape of a conv
+    *bias* gradient (`Σ_{hi,wi} cot`) — the rounded update is within `sgdErr` of
+    the real step, with the sum's Higham γ as the `eg` slot. -/
+theorem sumSgd_step_close (θ : ℝ) {n : ℕ} (x : Vec n) {lr G : ℝ}
+    (hG : |∑ i, x i| ≤ G) (hlr : 0 ≤ lr) :
+    |M.sub θ (M.mul lr (M.sum x)) - (θ - lr * ∑ i, x i)| ≤
+      sgdErr M.u lr |θ| G (((1 + M.u) ^ (n + 1) - 1) * ∑ i, |x i|) :=
+  M.sgd_step_close θ (M.sum_close x) hG hlr
 
 /-- The float softmax: rounded `exp`, rounded sum, rounded division — the
     structure of the rendered loss head. `fexp` is hypothesis-supplied

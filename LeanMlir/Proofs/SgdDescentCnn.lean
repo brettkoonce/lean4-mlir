@@ -1332,6 +1332,172 @@ theorem conv2d_weight_pdiv_row_l1 {ic oc h w kH kW : Nat} (b : Vec oc)
           nsmul_eq_mul]
 
 -- ════════════════════════════════════════════════════════════════
+-- § Conv gradient-step rounding (planning §1b-B): the conv weight grad is
+--   a spatial correlation (a dot), the bias grad a spatial sum — so both
+--   rounded SGD steps reduce to the generic dot/sum step closes.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The spatial `(hi, wi)` sum collapses to one flat sum over `Fin (h·w)`. -/
+theorem sum_s2 {h w : Nat} (g : Fin (h * w) → ℝ) :
+    ∑ s, g s = ∑ hi : Fin h, ∑ wi : Fin w, g (finProdFinEquiv (hi, wi)) := by
+  calc ∑ s, g s = ∑ p : Fin h × Fin w, g (finProdFinEquiv p) :=
+        (Equiv.sum_comp finProdFinEquiv g).symm
+    _ = ∑ hi : Fin h, ∑ wi : Fin w, g (finProdFinEquiv (hi, wi)) :=
+        Fintype.sum_prod_type _
+
+/-- The padded-input window for a fixed kernel slot, flattened over the
+    `(hi, wi)` spatial grid — the left operand of the conv weight-grad dot. -/
+noncomputable def convPadWin {ic h w : Nat} (kH kW : Nat) (x : Tensor3 ic h w)
+    (cc : Fin ic) (kh : Fin kH) (kw : Fin kW) : Vec (h * w) :=
+  fun s => convPad kH kW x cc kh kw (finProdFinEquiv.symm s).1
+    (finProdFinEquiv.symm s).2
+
+/-- The cotangent slab for a fixed output channel, flattened over `(hi, wi)`. -/
+noncomputable def cotWin {oc h w : Nat} (cot : Tensor3 oc h w) (o : Fin oc) :
+    Vec (h * w) :=
+  fun s => cot o (finProdFinEquiv.symm s).1 (finProdFinEquiv.symm s).2
+
+@[simp] theorem convPadWin_apply {ic h w : Nat} (kH kW : Nat)
+    (x : Tensor3 ic h w) (cc : Fin ic) (kh : Fin kH) (kw : Fin kW)
+    (hi : Fin h) (wi : Fin w) :
+    convPadWin kH kW x cc kh kw (finProdFinEquiv (hi, wi)) =
+      convPad kH kW x cc kh kw hi wi := by
+  simp [convPadWin, Equiv.symm_apply_apply]
+
+@[simp] theorem cotWin_apply {oc h w : Nat} (cot : Tensor3 oc h w)
+    (o : Fin oc) (hi : Fin h) (wi : Fin w) :
+    cotWin cot o (finProdFinEquiv (hi, wi)) = cot o hi wi := by
+  simp [cotWin, Equiv.symm_apply_apply]
+
+/-- **The conv weight gradient is the spatial dot** `Σ_{hi,wi} convPad · cot`
+    (the contraction `conv2d_weight_pdiv` certifies as `∂L/∂W_{o,cc,kh,kw}`),
+    re-expressed as a flat `Fin (h·w)` dot of the padded-input window against
+    the cotangent slab — the form the float dot rounds. -/
+theorem convWeightGrad_eq_dot {ic oc h w kH kW : Nat} (x : Tensor3 ic h w)
+    (cot : Tensor3 oc h w) (o : Fin oc) (cc : Fin ic) (kh : Fin kH)
+    (kw : Fin kW) :
+    ∑ s, convPadWin kH kW x cc kh kw s * cotWin cot o s =
+      ∑ hi : Fin h, ∑ wi : Fin w,
+        convPad kH kW x cc kh kw hi wi * cot o hi wi := by
+  rw [sum_s2 (fun s => convPadWin kH kW x cc kh kw s * cotWin cot o s)]
+  refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
+  rw [convPadWin_apply, cotWin_apply]
+
+/-- The conv bias gradient is the spatial sum `Σ_{hi,wi} cot`. -/
+theorem convBiasGrad_eq_sum {oc h w : Nat} (cot : Tensor3 oc h w) (o : Fin oc) :
+    ∑ s, cotWin cot o s = ∑ hi : Fin h, ∑ wi : Fin w, cot o hi wi := by
+  rw [sum_s2 (fun s => cotWin cot o s)]
+  refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
+  rw [cotWin_apply]
+
+/-- **Rounded conv weight update (Item B).** The float update
+    `fl(Wₒ,cc,kh,kw − fl(lr·fl(convPadWin · cotWin)))` — the conv weight
+    gradient is a correlation, a dot over the `h·w` spatial positions — is
+    within `sgdErr` of the real step `W − lr·(Σ_{hi,wi} convPad·cot)`, the
+    dot's Higham γ (fan-in `h·w`) as the gradient-error slot. Reuses the
+    generic `dotSgd_step_close`; the cotangent is supplied (the loss-head
+    `exp` accuracy lives in `cotErr`). -/
+theorem FloatModel.cnn_convW_step_float_close {ic oc h w kH kW : Nat}
+    (M : FloatModel) (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w)
+    (cot : Tensor3 oc h w) {lr G : ℝ} (o : Fin oc) (cc : Fin ic)
+    (kh : Fin kH) (kw : Fin kW)
+    (hG : |∑ s, convPadWin kH kW x cc kh kw s * cotWin cot o s| ≤ G)
+    (hlr : 0 ≤ lr) :
+    |M.sub (W o cc kh kw)
+        (M.mul lr (M.dot (convPadWin kH kW x cc kh kw) (cotWin cot o))) -
+      (W o cc kh kw - lr * ∑ s,
+        convPadWin kH kW x cc kh kw s * cotWin cot o s)| ≤
+      sgdErr M.u lr |W o cc kh kw| G
+        (((1 + M.u) ^ (h * w + 1) - 1) *
+          ∑ s, |convPadWin kH kW x cc kh kw s * cotWin cot o s|) :=
+  M.dotSgd_step_close (W o cc kh kw) (convPadWin kH kW x cc kh kw)
+    (cotWin cot o) hG hlr
+
+/-- **Rounded conv bias update (Item B)** — the bias gradient is the spatial
+    sum `Σ cot`, so the rounded update reduces to `sumSgd_step_close`. -/
+theorem FloatModel.cnn_convb_step_float_close {oc h w : Nat} (M : FloatModel)
+    (b : Vec oc) (cot : Tensor3 oc h w) {lr G : ℝ} (o : Fin oc)
+    (hG : |∑ s, cotWin cot o s| ≤ G) (hlr : 0 ≤ lr) :
+    |M.sub (b o) (M.mul lr (M.sum (cotWin cot o))) -
+      (b o - lr * ∑ s, cotWin cot o s)| ≤
+      sgdErr M.u lr |b o| G
+        (((1 + M.u) ^ (h * w + 1) - 1) * ∑ s, |cotWin cot o s|) :=
+  M.sumSgd_step_close (b o) (cotWin cot o) hG hlr
+
+/-- **Numeric conv-weight-step capstone at the committed MNIST-CNN dims (Item
+    C).** The Chapter-4 conv2 is `32→32`, `3×3`, at `28×28` (the conv output
+    grid, before maxpool), so the weight gradient is a dot over `28·28 = 784`
+    spatial positions. At binary32 (`u ≤ 2⁻²⁴`), `lr = 1/10`, kernel `|W| ≤ 3/5`
+    (the trained-magnitude bound, matching the MLP capstone), every rounded
+    conv2 weight SGD entry is within **`(a·g)/250 + 10⁻⁷`** of the certified
+    real step — where `a` bounds the conv2-input activation and `g` the conv2
+    cotangent magnitude.
+
+    Both `a` and `g` are **a-posteriori / measured** quantities (the conv input
+    and back-propagated cotangent are not intrinsically `≤ 1`, unlike the
+    softmax−onehot loss head), supplied as hypotheses — the same worst-case→
+    measured hand-off as the forward `δ`. The decimal rate `1/250 ≈ 0.4%` is
+    dominated by `lr·γ₇₈₅` (the gradient's Higham error at learning-rate scale):
+    the conv weight step is as accurate as the gradient itself, no worse. -/
+theorem FloatModel.mnist_cnn_convW_step_float_budget (M : FloatModel)
+    (hMu : M.u ≤ u32) (W : Kernel4 32 32 3 3) (act : Tensor3 32 28 28)
+    (cot : Tensor3 32 28 28) {a g : ℝ} (ha : 0 ≤ a) (hg : 0 ≤ g)
+    (hW : ∀ o cc kh kw, |W o cc kh kw| ≤ 3/5)
+    (hact : ∀ c i j, |act c i j| ≤ a) (hcot : ∀ o i j, |cot o i j| ≤ g)
+    (o cc : Fin 32) (kh kw : Fin 3) :
+    |M.sub (W o cc kh kw)
+        (M.mul (1/10) (M.dot (convPadWin 3 3 act cc kh kw) (cotWin cot o))) -
+      (W o cc kh kw - (1/10) * ∑ s,
+        convPadWin 3 3 act cc kh kw s * cotWin cot o s)| ≤
+      (a * g) / 250 + 1/10000000 := by
+  have hu := M.u_nonneg
+  -- per-term and summed magnitude of the conv weight gradient
+  have hterm : ∀ s, |convPadWin 3 3 act cc kh kw s * cotWin cot o s| ≤ a * g := by
+    intro s
+    rw [abs_mul]
+    refine mul_le_mul ?_ ?_ (abs_nonneg _) ha
+    · simp only [convPadWin]; exact abs_convPad_le act ha hact _ _ _ _ _
+    · simp only [cotWin]; exact hcot _ _ _
+  have hsum : ∑ s, |convPadWin 3 3 act cc kh kw s * cotWin cot o s| ≤
+      784 * (a * g) := by
+    calc ∑ s, |convPadWin 3 3 act cc kh kw s * cotWin cot o s|
+        ≤ ∑ _s : Fin (28 * 28), a * g := Finset.sum_le_sum fun s _ => hterm s
+      _ = 784 * (a * g) := by
+          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
+            nsmul_eq_mul]; norm_num
+  have hG : |∑ s, convPadWin 3 3 act cc kh kw s * cotWin cot o s| ≤ 784 * (a * g) :=
+    (Finset.abs_sum_le_sum_abs _ _).trans hsum
+  -- the conv weight step budget (Item B), with G := 784·a·g
+  have hstep := M.cnn_convW_step_float_close W act cot o cc kh kw hG
+    (by norm_num : (0:ℝ) ≤ 1/10)
+  refine hstep.trans ?_
+  -- eg ≤ (47/10⁶)·784·a·g  (γ₇₈₅ × the summed gradient mass)
+  have hk1 : ((28 * 28 + 1 : ℕ) : ℝ) * u32 < 1 := by norm_num [u32]
+  have hk2 : ((28 * 28 + 1 : ℕ) : ℝ) * u32 / (1 - ((28 * 28 + 1 : ℕ) : ℝ) * u32)
+      ≤ 47/1000000 := by norm_num [u32]
+  have hhigham : (1 + M.u) ^ (28 * 28 + 1) - 1 ≤ 47/1000000 :=
+    M.gamma_num hMu hk1 hk2
+  have hhigham0 : 0 ≤ (1 + M.u) ^ (28 * 28 + 1) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith))
+  have hsum0 : 0 ≤ ∑ s, |convPadWin 3 3 act cc kh kw s * cotWin cot o s| :=
+    Finset.sum_nonneg fun s _ => abs_nonneg _
+  have heg : ((1 + M.u) ^ (28 * 28 + 1) - 1) *
+      ∑ s, |convPadWin 3 3 act cc kh kw s * cotWin cot o s| ≤
+      (47/1000000) * (784 * (a * g)) :=
+    mul_le_mul hhigham hsum hsum0 (by norm_num)
+  have hag0 : (0:ℝ) ≤ a * g := mul_nonneg ha hg
+  have h1 : u32 ≤ 1/16000000 := by norm_num [u32]
+  -- push u → the LITERAL 1/16000000, |W| → 3/5, eg → its rational bound (G fixed),
+  -- so the closing goal is linear in a·g with constant coefficients
+  refine (sgdErr_mono hu (hMu.trans h1) (by norm_num) (abs_nonneg _)
+    (hW o cc kh kw) (mul_nonneg (by norm_num) hag0)
+    (mul_nonneg hhigham0 hsum0) heg).trans ?_
+  set s := a * g with hs
+  have hs0 : (0:ℝ) ≤ s := hag0
+  unfold FloatModel.sgdErr
+  linarith [hs0]
+
+-- ════════════════════════════════════════════════════════════════
 -- § The conv2 loss-of-kernel map: differentiability and gradient
 -- ════════════════════════════════════════════════════════════════
 

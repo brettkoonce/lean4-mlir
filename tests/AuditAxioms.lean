@@ -1257,6 +1257,12 @@ open Proofs
 #print axioms FloatModel.dot_close_mixed
 #print axioms FloatModel.dot_close_mixed_uniform
 #print axioms FloatModel.dotMixed_exact_leaf
+-- §1c threaded through the dense layer: denseMixed (leaf precision L on the
+-- matmul, accumulate M on the bias add) is the deployed bf16-mixed dense layer;
+-- dense_close_mixed = the leaf precision enters only via the flat dotMixed term,
+-- the accumulate rides the bias add + fan-in γ. bf16/fp8 dense fall out by L.u.
+#print axioms FloatModel.denseMixed
+#print axioms FloatModel.dense_close_mixed
 #print axioms FloatModel.dense_close
 #print axioms FloatModel.dense_close_fresh
 #print axioms FloatModel.relu_close
@@ -1294,6 +1300,30 @@ open Proofs
 #print axioms FloatModel.flatConvF_close
 #print axioms FloatModel.mnistCnnNoBnForwardF
 #print axioms FloatModel.cnn_float_close
+-- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
+-- spatial correlation (a dot over the h·w positions), the bias gradient a
+-- spatial sum — so both rounded SGD steps reduce to the generic step closes.
+-- dotSgd_step_close / sumSgd_step_close (FloatBridge.lean): dot_close / sum_close
+-- feeding sgd_step_close — the reusable cores. convWeightGrad_eq_dot /
+-- convBiasGrad_eq_sum re-express the certified conv gradient (conv2d_weight_pdiv)
+-- as the flat spatial dot/sum (sum_s2 collapses the (hi,wi) grid).
+-- cnn_convW_step_float_close / cnn_convb_step_float_close: the rounded conv
+-- weight/bias updates within sgdErr of the real step, the dot/sum Higham γ at
+-- fan-in h·w as the gradient-error slot.
+#print axioms FloatModel.dotSgd_step_close
+#print axioms FloatModel.sumSgd_step_close
+#print axioms sum_s2
+#print axioms convWeightGrad_eq_dot
+#print axioms convBiasGrad_eq_sum
+#print axioms FloatModel.cnn_convW_step_float_close
+#print axioms FloatModel.cnn_convb_step_float_close
+-- Item C — the numeric conv-weight-step capstone (SgdDescentCnn.lean) at the
+-- committed Chapter-4 dims (conv2 32→32, 3×3, 28×28 → fan-in 784), u ≤ 2⁻²⁴,
+-- lr = 1/10, |W| ≤ 3/5: every rounded conv2 weight SGD entry is within
+-- (a·g)/250 + 10⁻⁷ of the certified step (a = conv-input activation bound,
+-- g = conv cotangent bound, both a-posteriori / measured). The 0.4% rate is
+-- lr·γ₇₈₅ — the gradient's Higham error at learning-rate scale.
+#print axioms FloatModel.mnist_cnn_convW_step_float_budget
 #print axioms FloatModel.pow_one_add_sub_one_le
 #print axioms FloatModel.linear_float_close
 #print axioms FloatModel.mlp_float_close
