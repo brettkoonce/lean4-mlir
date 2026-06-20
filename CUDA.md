@@ -73,6 +73,22 @@ nm ffi/libiree_ffi.so | grep cuda_driver
 > If ares already ran the CUDA comparator traces, this `.so` is probably
 > already built — just confirm the `nm` check above and skip to Step 4.
 
+**Stale `.so` gotcha (seen on ares, 2026-06-20).** A `.so` left over from an
+earlier bring-up can predate FFI entry points the Lean shim now references,
+so `lake build` fails at *link* time (not compile) with e.g.:
+
+```
+ld.lld: error: undefined symbol: iree_ffi_train_step_adam_softlabel
+```
+
+`ffi/iree_ffi.c` defines these (`grep iree_ffi_train_step_adam_ ffi/iree_ffi.c`),
+but the prebuilt `.so` doesn't export them (`nm ffi/libiree_ffi.so | grep
+train_step_adam_softlabel` → empty). Fix: rebuild the `.so` from current
+source via [`IREE_BUILD.md`](IREE_BUILD.md) §4 (recompile `iree_ffi.o`,
+relink against the runtime + flatcc archives). Quick check that a `.so` is
+current: `nm ffi/libiree_ffi.so | grep -c iree_ffi_train_step_adam_seg`
+should be `1`.
+
 ## Step 4: Run recipe (CUDA)
 
 ```bash

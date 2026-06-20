@@ -259,6 +259,7 @@ uses the same unified `spec.train` loop as every other architecture.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `cannot find -liree_ffi` at link time | `ffi/libiree_ffi.so` missing | redo §4 |
+| `undefined symbol: iree_ffi_train_step_adam_*` at link time | prebuilt `.so` predates FFI entry points added to `iree_ffi.c` | rebuild the `.so` (redo §4); verify with `nm ffi/libiree_ffi.so \| grep train_step_adam_seg` |
 | `undefined reference to iree_allocator_system` | forgot `-DIREE_ALLOCATOR_SYSTEM_CTL=...` | add the define in §4a |
 | `undefined reference to flatcc_verify_*` | flatcc archives missing or wrong order | add both `libflatcc_*.a` inside `--start-group` |
 | `no HAL driver matching 'cuda'` at runtime | `--whole-archive` was dropped | redo §4b with the wrap intact |
