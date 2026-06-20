@@ -7155,40 +7155,60 @@ asymptote we don't approach.
     \node[#1] at (\cx,\cy) {\lbl};%
   }%
 }
+% Part-1 variant: each item is "label/status"; stamps a build-order dot.
+\newcommand{\opchiprowD}[4]{%
+  \foreach \lbl/\st [count=\i from 0] in {#4}{%
+    \pgfmathtruncatemacro\col{mod(\i,3)}%
+    \pgfmathtruncatemacro\rw{int(\i/3)}%
+    \pgfmathsetmacro\cx{#2 + \col*2.25}%
+    \pgfmathsetmacro\cy{#3 - \rw*0.6}%
+    \node[#1] at (\cx,\cy) {\lbl};%
+    \fill[dot\st] ({\cx+0.9},{\cy+0.155}) circle (0.082);%
+    \draw[black!45, line width=0.25pt] ({\cx+0.9},{\cy+0.155}) circle (0.082);%
+  }%
+}
+\colorlet{dotg}{green!60!black}\colorlet{doty}{yellow!82!orange}\colorlet{dotr}{red!72!black}
 \def\PA{3.35}\def\PB{10.1}
 \node[font=\sffamily\bfseries\normalsize] at (8.7,0.95) {Operation inventory --- verified spine vs.\ bestiary primitives};
 \node[hdr] at (5.6,0.25)  {PART 1 --- Verified spine\\\footnotesize MLP $\to$ ViT (ch 2--10)};
 \node[hdr] at (12.35,0.25) {PART 2 --- Bestiary primitives\\\footnotesize ch 11 (bundled blocks)};
 \draw[gray!55, line width=0.8pt] (9.05,0.55) -- (9.05,-11.8);
 \node[catlbl] at (2.15,-1.1) {Dense /\\linear};
-\opchiprow{cOr}{\PA}{-1.1}{dense}
+\opchiprowD{cOr}{\PA}{-1.1}{dense/g}
 \opchiprow{cOr}{\PB}{-1.1}{detrHeads, nerfMLP}
 \draw[band] (0,-1.65) -- (15.7,-1.65);
 \node[catlbl] at (2.15,-2.3) {Activation};
-\opchiprow{cGy}{\PA}{-2.0}{relu, relu6, sigmoid, swish/SiLU, gelu, softmax-CE}
+\opchiprowD{cGy}{\PA}{-2.0}{relu/g, softmax-CE/g, relu6/y, sigmoid/y, SiLU (swish)/y, gelu/r}
 \node[emptylbl] at (\PB,-2.3) {--- recomposes Part 1 (zero new ops)};
 \draw[band] (0,-3.15) -- (15.7,-3.15);
 \node[catlbl] at (2.15,-3.8) {Convolution};
-\opchiprow{cOr}{\PA}{-3.5}{conv2d, convBn, depthwise, $1{\times}1$ conv}
+\opchiprowD{cOr}{\PA}{-3.5}{conv2d/g, convBn/g, depthwise/y, $1{\times}1$ conv/y}
 \opchiprow{cOr}{\PB}{-3.5}{sepConv, darknet}
 \draw[band] (0,-4.65) -- (15.7,-4.65);
 \node[catlbl] at (2.15,-5.6) {Norm $\cdot$ pool\\reshape $\cdot$ embed};
-\opchiprow{cTe}{\PA}{-5.0}{batchNorm, layerNorm, maxPool, globalAvgPool, flatten, patchEmbed, tokenEmbed}
+\opchiprowD{cTe}{\PA}{-5.0}{batchNorm/g, maxPool/g, globalAvgPool/g, flatten/g, layerNorm/r, patchEmbed/r, tokenEmbed/r}
 \opchiprow{cTe}{\PB}{-5.0}{patchMerge, transition, posEncode}
 \draw[band] (0,-6.75) -- (15.7,-6.75);
 \node[catlbl] at (2.15,-7.7) {Residual\\skip $\cdot$ merge};
-\opchiprow{cBr}{\PA}{-7.1}{residual, invResidual, layerScale}
+\opchiprowD{cBr}{\PA}{-7.1}{residual/g, invResidual/y, layerScale/r}
 \opchiprow{cBr}{\PB}{-7.1}{bottleneck, highway, denseBlock, cspBlock, fpn, unetDown, unetUp}
 \draw[band] (0,-8.85) -- (15.7,-8.85);
 \node[catlbl] at (2.15,-9.5) {Multi-branch\\parallel};
-\opchiprow{cVi}{\PA}{-9.2}{squeeze-excite}
+\opchiprowD{cVi}{\PA}{-9.2}{squeeze-excite/y}
 \opchiprow{cVi}{\PB}{-9.2}{inception, fire, aspp, shuffle}
 \draw[band] (0,-10.35) -- (15.7,-10.35);
 \node[catlbl] at (2.15,-11.0) {Attention $\cdot$ transf.\\sequence};
-\opchiprow{cRd}{\PA}{-10.7}{MHSA, SDPA, tfEncoder}
+\opchiprowD{cRd}{\PA}{-10.7}{MHSA/r, SDPA/r, tfEncoder/r}
 \opchiprow{cRd}{\PB}{-10.7}{swin, tfDecoder, mobileViT, mamba, waveNet, evoformer}
 \node[font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west] at (0,-12.3)
-  {color $=$ op-type (orange weights $\cdot$ gray activation $\cdot$ teal norm/reshape $\cdot$ brown skip $\cdot$ violet multi-branch $\cdot$ red attention) \quad\quad column $=$ which part \emph{introduces} the op};
+  {box color $=$ op-type (orange weights $\cdot$ gray activation $\cdot$ teal norm/reshape $\cdot$ brown skip $\cdot$ violet multi-branch $\cdot$ red attention) \quad column $=$ Part 1 vs Part 2};
+\node[font=\sffamily\bfseries\scriptsize, anchor=west] at (0,-12.85) {Part-1 dot $=$ first appears by:};
+\fill[dotg] (3.2,-12.85) circle (0.082); \draw[black!45,line width=0.25pt] (3.2,-12.85) circle (0.082);
+\node[font=\sffamily\scriptsize, anchor=west] at (3.37,-12.85) {ResNet-34 (ch 2--6)};
+\fill[doty] (6.5,-12.85) circle (0.082); \draw[black!45,line width=0.25pt] (6.5,-12.85) circle (0.082);
+\node[font=\sffamily\scriptsize, anchor=west] at (6.67,-12.85) {MobileNetV2 $\to$ EfficientNet (ch 7--8)};
+\fill[dotr] (11.95,-12.85) circle (0.082); \draw[black!45,line width=0.25pt] (11.95,-12.85) circle (0.082);
+\node[font=\sffamily\scriptsize, anchor=west] at (12.12,-12.85) {ConvNeXt $\to$ ViT (ch 9--10)};
 \end{tikzpicture}%
 }
 \end{center}
