@@ -146,6 +146,36 @@ stays at the 0.9.2 that produced the reference traces. Aligning both to
 against the comparator traces. To refresh a lock after changing the env,
 `pip freeze > requirements-<backend>-lock.txt` from the matching venv.
 
+### CUDA status (June 2026)
+
+Tested on **ares** — 6× RTX 4060 Ti (Ada, `sm_89`) — with CUDA 12.9 /
+cuDNN 9.20.0.48 / NCCL 2.29.7 and jax 0.9.2 (`jax-cuda12-plugin 0.9.2`).
+This is the env that produced the reference comparator traces, so the
+CUDA lock stays pinned at 0.9.2 on purpose (see **Pinned environments**).
+All models above run JIT'd on GPU out of the box — no `JAX_DISABLE_JIT`
+or platform workarounds.
+
+Unlike the IREE/verified-codegen path (see [`../CUDA.md`](../CUDA.md)),
+the JAX path needs **no `sm_89` target pinning** — XLA targets Ada
+natively, so there's nothing to forward-JIT.
+
+**Multi-GPU on ares:** mask out the two cards that storm PCIe AER
+(`BadTLP`) and hard-reset the box under load — idx 1 (bus02) and idx 5
+(bus62); it's a link/riser fault, not power:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,2,3,4 .lake/build/bin/resnet34
+```
+
+`jax.sharding` then builds the mesh over the 4 visible cards
+automatically.
+
+> **Lock note:** the CUDA lock pins `iree-base-compiler==3.11.0` while the
+> ROCm lock (and `../CUDA.md` / the verified-codegen path) want
+> `>=3.12.0rc20260428` for the ConvNeXt distribute fixes. Harmless for the
+> JAX comparator — JAX lowers through XLA, not `iree-compile` — but worth
+> aligning when the CUDA lock is next refreshed so both locks agree.
+
 ### ROCm status (April 2026)
 
 Tested on 2× RX 7900 XTX (gfx1100) with ROCm 7.2.0 + jax 0.10.0
