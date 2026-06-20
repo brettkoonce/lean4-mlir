@@ -6637,25 +6637,20 @@ to a dense head. The inset shows one of the twelve transformer blocks
   flow/.style={->, thick, gray!60, shorten >=1.5pt, shorten <=1.5pt},
   skip/.style={->, thick, blue!45!violet, shorten >=1.5pt},
 ]
-  \node[term] (x) at (0,0){$x$};
-  \node[op]   (s1) at (3.0,0){$+$};
-  \node[op]   (s2) at (6.6,0){$+$};
-  \node[term] (y)  at (8.0,0){$y$};
-  \node[proc] (ln1) at (1.3,-1.25){LN};
-  \node[proc, right=8mm of ln1] (mh){MHSA};
-  \node[proc] (ln2) at (4.6,-1.25){LN};
-  \node[proc, right=8mm of ln2] (ml){MLP};
-  \draw[skip](x)--(s1);
-  \draw[skip](s1)--(s2) node[midway, above, term, blue!45!violet]{$z$};
-  \draw[flow](s2)--(y);
-  \draw[flow](x) -- (x|-ln1) -- (ln1);
-  \draw[flow](ln1)--(mh);
-  \draw[flow](mh) -- (mh|-s1) -- (s1);
-  \draw[flow](s1) -- (s1|-ln2) -- (ln2);
-  \draw[flow](ln2)--(ml);
-  \draw[flow](ml) -- (ml|-s2) -- (s2);
-  \node[term, below=1.95cm of x, anchor=west, gray!55!black] at (0,0)
-    {one transformer block: $z = x + \mathrm{MHSA}(\mathrm{LN}\,x)$, \ $y = z + \mathrm{MLP}(\mathrm{LN}\,z)$};
+  \node[term] (x){$x$};
+  \node[proc, right=0.5cm of x]   (ln1){LN};
+  \node[proc, right=0.35cm of ln1](mh){MHSA};
+  \node[op,   right=0.5cm of mh]  (s1){$+$};
+  \node[proc, right=0.5cm of s1]  (ln2){LN};
+  \node[proc, right=0.35cm of ln2](ml){MLP};
+  \node[op,   right=0.5cm of ml]  (s2){$+$};
+  \node[term, right=0.5cm of s2]  (y){$y$};
+  \foreach \a/\b in {x/ln1,ln1/mh,mh/s1,s1/ln2,ln2/ml,ml/s2,s2/y}\draw[flow](\a)--(\b);
+  \draw[skip] (x.north) .. controls +(0,0.72) and +(0,0.72) .. (s1.north)
+        node[midway, above, term, blue!45!violet]{$+\,x$};
+  \draw[skip] (s1.north) .. controls +(0,0.72) and +(0,0.72) .. (s2.north)
+        node[midway, above, term, blue!45!violet]{$+\,z$};
+  \node[term, below=0.18cm of ln2, gray!55!black]{one transformer block: $z = x + \mathrm{MHSA}(\mathrm{LN}\,x)$, \ $y = z + \mathrm{MLP}(\mathrm{LN}\,z)$};
 \end{tikzpicture}
 \end{center}
 
