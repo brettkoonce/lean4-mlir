@@ -2702,6 +2702,84 @@ noncomputable def maxPoolFlat_has_vjp_at {c h w : Nat}
     HasVJPAt (maxPoolFlat c h w) (Tensor3.flatten x) :=
   hasVJPAt3_to_hasVJPAt (maxPool2_has_vjp_at3 x h_smooth)
 
+-- ════════════════════════════════════════════════════════════════
+-- § MaxPool is exact in floating point (the float-bridge pass-through)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Max is exact in floating point + 1-Lipschitz.** `max a b` is a
+    compare-and-select: it returns one of `a, b` verbatim, rounding nothing.
+    So a float `max` over operands within `e` of the reals stays within `e` —
+    the `max`-peer of `relu_close` (`FloatBridge.lean`), with no rounding term
+    and no amplification. The one genuinely-new fact the MNIST-CNN forward
+    rounding budget (planning §1b-A) needs beyond the dense/relu machinery. -/
+theorem max_close {a b c d e : ℝ} (h1 : |a - c| ≤ e) (h2 : |b - d| ≤ e) :
+    |max a b - max c d| ≤ e := by
+  rw [abs_le] at h1 h2 ⊢
+  refine ⟨?_, ?_⟩
+  · have h : max c d - e ≤ max a b := by
+      rcases le_total c d with hcd | hcd
+      · rw [max_eq_right hcd]
+        exact le_trans (by linarith [h2.1]) (le_max_right a b)
+      · rw [max_eq_left hcd]
+        exact le_trans (by linarith [h1.1]) (le_max_left a b)
+    linarith
+  · have h : max a b - e ≤ max c d := by
+      rcases le_total a b with hab | hab
+      · rw [max_eq_right hab]
+        exact le_trans (by linarith [h2.2]) (le_max_right c d)
+      · rw [max_eq_left hab]
+        exact le_trans (by linarith [h1.2]) (le_max_left c d)
+    linarith
+
+/-- **MaxPool2 is exact in floating point + 1-Lipschitz.** Four window cells
+    through three `max`-selections, no arithmetic — inherited input error `e`
+    passes through with no rounding term and no amplification. -/
+theorem maxPool2_close {c h w : Nat} (xt xa : Tensor3 c (2*h) (2*w)) {e : ℝ}
+    (hx : ∀ ci hi wi, |xt ci hi wi - xa ci hi wi| ≤ e)
+    (ci : Fin c) (hi : Fin h) (wi : Fin w) :
+    |maxPool2 xt ci hi wi - maxPool2 xa ci hi wi| ≤ e := by
+  simp only [maxPool2]
+  exact max_close (max_close (hx _ _ _) (hx _ _ _))
+    (max_close (hx _ _ _) (hx _ _ _))
+
+/-- Flattened `maxPoolFlat` peer of `maxPool2_close` — the form the
+    `Vec`-space MNIST-CNN forward (`mnistCnnNoBnForward`) composes. -/
+theorem maxPoolFlat_close {c h w : Nat} (vt va : Vec (c * (2*h) * (2*w)))
+    {e : ℝ} (hv : ∀ k, |vt k - va k| ≤ e) (k : Fin (c * h * w)) :
+    |maxPoolFlat c h w vt k - maxPoolFlat c h w va k| ≤ e := by
+  have huf : ∀ ci hi wi,
+      |Tensor3.unflatten vt ci hi wi - Tensor3.unflatten va ci hi wi| ≤ e := by
+    intro ci hi wi
+    simp only [Tensor3.unflatten]
+    exact hv _
+  simp only [maxPoolFlat, Tensor3.flatten]
+  exact maxPool2_close (Tensor3.unflatten vt) (Tensor3.unflatten va) huf _ _ _
+
+/-- `|max a b| ≤ A` when both operands are. -/
+theorem abs_max_le {a b A : ℝ} (ha : |a| ≤ A) (hb : |b| ≤ A) : |max a b| ≤ A := by
+  rcases le_total a b with h | h
+  · rwa [max_eq_right h]
+  · rwa [max_eq_left h]
+
+/-- **MaxPool2 never grows magnitudes** (it selects an existing cell). -/
+theorem maxPool2_abs_le {c h w : Nat} {x : Tensor3 c (2*h) (2*w)} {A : ℝ}
+    (hx : ∀ ci hi wi, |x ci hi wi| ≤ A) (ci : Fin c) (hi : Fin h) (wi : Fin w) :
+    |maxPool2 x ci hi wi| ≤ A := by
+  simp only [maxPool2]
+  exact abs_max_le (abs_max_le (hx _ _ _) (hx _ _ _))
+    (abs_max_le (hx _ _ _) (hx _ _ _))
+
+/-- Flattened `maxPoolFlat` magnitude bound — the form the CNN forward threads. -/
+theorem maxPoolFlat_abs_le {c h w : Nat} {v : Vec (c * (2*h) * (2*w))} {A : ℝ}
+    (hv : ∀ k, |v k| ≤ A) (k : Fin (c * h * w)) :
+    |maxPoolFlat c h w v k| ≤ A := by
+  have huf : ∀ ci hi wi, |Tensor3.unflatten v ci hi wi| ≤ A := by
+    intro ci hi wi
+    simp only [Tensor3.unflatten]
+    exact hv _
+  simp only [maxPoolFlat, Tensor3.flatten]
+  exact maxPool2_abs_le huf _ _ _
+
 -- resblock (identity) output diffAt: relu ∘ residual F
 theorem resblock_differentiableAt {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c)

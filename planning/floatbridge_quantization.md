@@ -93,6 +93,24 @@ or a per-coordinate decomposition — already flagged as open in `SgdDescentMlp`
 CNN already has the *descent* side (`SgdDescentCnn.lean`, 6771 lines: `MaxPool2MarginQ`, pool drift,
 conv = dense-with-sharing). It lacks the *rounding* side. Reuse ~70%.
 
+**Item A is DONE (2026-06-19) — `cnn_float_close` closed end-to-end.** All 3-axiom clean, audited.
+- *Exact maxpool* — `max_close` / `maxPool2_close` / `maxPoolFlat_close` (+ `maxPoolFlat_abs_le`)
+  (`CNN.lean`): max is compare-and-select, rounds nothing, so inherited error `e` passes through with
+  no rounding term and no amplification — the `max`-peer of `relu_close`.
+- *Conv forward budget* — `conv2d_eq_dense` / `FloatModel.convF` / `FloatModel.convF_close` plus the
+  `Vec`-space `FloatModel.flatConvF` / `flatConvF_close` and magnitude bound `flatConv_abs_le`
+  (`SgdDescentCnn.lean`): `conv2d_eq_dense` makes "conv = dense-with-sharing" exact (each output coord
+  is `Proofs.dense` of the kernel slab against the flattened window, via `sum_w3` collapsing the
+  triple sum to one fan-in sum); `convF` = `M.dense` on the window; `convF_close`/`flatConvF_close` =
+  `dense_close`/`layerBudget` at fan-in `ic·kH·kW` — so a conv layer threads **identically to a dense
+  layer**.
+- *Whole-net capstone* — `FloatModel.mnistCnnNoBnForwardF` (float forward) + `FloatModel.cnn_float_close`
+  (`SgdDescentCnn.lean`): the binary32 forward-error bound for the whole Chapter-4 CNN, an explicit
+  closed-form `layerBudget` nest over `conv→relu→conv→relu→maxpool→dense→relu→dense→relu→dense`
+  (the `mlp_float_close_uniform` pattern extended to six layers; relu/maxpool exact-in-float pass
+  error through unamplified). **The chain `binary32 → certified proximity` is now closed for all three
+  MNIST nets (linear / mlp / cnn).**
+
 - **A — `cnn_float_close` (forward rounding budget).** Conv is a sum-of-products ⇒ the **dense
   Higham budget (`dot_close`/`layerBudget`) at conv fan-in `kH·kW·ic`**. The structural fact
   `conv = dense-with-sharing` already exists (`SgdDescentCnn`: `conv2d_eq_convPad`, affine-in-kernel).
@@ -231,7 +249,7 @@ to *show* the compounding so the regime change from §2 is visible on a real net
 |---|---|---|---|
 | ✅ | **G1/Item D on linear** (`linear_float_sgd_descends`) | light | **DONE 2026-06-19** — closes the chain end-to-end for one net, the biggest honesty win |
 | ✅ | **§1c two-`u` `dot_close_mixed`** (foundation) | light | **DONE 2026-06-19** — bf16-mixed (shipped artifact) falls out + sets up fp8; dense/conv threading lands with A/B |
-| 3 | **A/B/C — CNN rounding side** | medium | brings the 3rd MNIST net to mlp parity ("FloatBridge to the rest of MNIST") |
+| 🚧 | **A/B/C — CNN rounding side** | medium | **A (forward `cnn_float_close`) DONE 2026-06-19** (conv-as-dense + exact maxpool, whole-net capstone); **B/C (gradient-step rounding + numeric capstone) remain.** Forward chain now closed for all 3 MNIST nets |
 | 4 | **3a E4M3 MNIST empirical demo** | light | the "precision drops elegantly" headline |
 | 5 | **3b E4M3 structural faithfulness** | medium | a *complete* verified claim at fp8 (the right kind) |
 | 6 | **3c E4M3 per-matmul accuracy + margin fraction** | medium | the honest end-to-end fp8 accuracy bound (depth-1) |

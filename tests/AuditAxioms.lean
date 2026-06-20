@@ -1260,6 +1260,40 @@ open Proofs
 #print axioms FloatModel.dense_close
 #print axioms FloatModel.dense_close_fresh
 #print axioms FloatModel.relu_close
+-- MaxPool exact-in-float (CNN.lean, planning §1b-A): max is compare-and-select,
+-- so it rounds nothing — inherited input error e passes through with no
+-- rounding term and no amplification (the max-peer of relu_close). max_close is
+-- the scalar core; maxPool2_close lifts it to the 2×2 window; maxPoolFlat_close
+-- is the Vec-space form the MNIST-CNN forward composes. The one genuinely-new
+-- forward-budget fact the CNN rounding side needs beyond dense/relu.
+#print axioms max_close
+#print axioms maxPool2_close
+#print axioms maxPoolFlat_close
+-- Conv forward rounding budget (SgdDescentCnn.lean, planning §1b-A): conv =
+-- dense at the conv fan-in. conv2d_eq_dense makes "conv = dense-with-sharing"
+-- exact — each output coordinate is Proofs.dense of the kernel slab against the
+-- flattened window (sum_w3 collapses the triple window sum to one fan-in sum).
+-- convF is the float conv (M.dense on the window); convF_close is then
+-- dense_close at the fan-in ic·kH·kW (the Higham γ rides that fan-in), with
+-- convPad_close passing the inherited input error through the padded reads.
+-- This is the conv half of cnn_float_close; combine with relu_close +
+-- maxPoolFlat_close + the dense head for the whole-net forward budget.
+#print axioms sum_w3
+#print axioms conv2d_eq_dense
+#print axioms convPad_close
+#print axioms FloatModel.convF
+#print axioms FloatModel.convF_close
+-- Whole-net capstone (SgdDescentCnn.lean, planning §1b-A): flatConvF is the
+-- Vec-space float conv; flatConvF_close gives the uniform conv-fan-in
+-- layerBudget (conv threads exactly like a dense layer). cnn_float_close is the
+-- binary32 forward-error bound for the whole Chapter-4 MNIST CNN — the
+-- mlp_float_close_uniform nest extended to conv→relu→conv→relu→maxpool→3×dense,
+-- with relu/maxpool exact-in-float passing error through unamplified. The
+-- forward chain "binary32 → certified proximity" now closed for the CNN too.
+#print axioms FloatModel.flatConvF
+#print axioms FloatModel.flatConvF_close
+#print axioms FloatModel.mnistCnnNoBnForwardF
+#print axioms FloatModel.cnn_float_close
 #print axioms FloatModel.pow_one_add_sub_one_le
 #print axioms FloatModel.linear_float_close
 #print axioms FloatModel.mlp_float_close

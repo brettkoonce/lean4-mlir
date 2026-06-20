@@ -477,8 +477,348 @@ theorem sum_abs_k4 {oc ic kH kW : Nat} (e : Vec (oc * ic * kH * kW)) :
     _ = ∑ o : Fin oc, ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
           |e (k4Idx o c kh kw)| := Fintype.sum_prod_type _
 
-/-- The conv output difference under a kernel perturbation, exactly:
-    `conv2d` is affine in the kernel. -/
+-- ════════════════════════════════════════════════════════════════
+-- § Conv forward rounding budget (planning §1b-A): conv = dense at the
+--   conv fan-in, so the float conv close IS `dense_close` on the
+--   per-output-coordinate flattened window.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Flat index of a conv *window* slot `(c, kh, kw)` — `k4Idx` without the
+    output channel (row-major, fan-in `ic·kH·kW`). -/
+def w3Idx {ic kH kW : Nat} (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
+    Fin (ic * kH * kW) :=
+  finProdFinEquiv (finProdFinEquiv (c, kh), kw)
+
+/-- The triple conv-window sum collapses to one flat sum over the fan-in —
+    the conv analogue of `dot` being a single-index sum (mirrors `sum_abs_k4`,
+    one fewer axis). -/
+theorem sum_w3 {ic kH kW : Nat} (g : Fin (ic * kH * kW) → ℝ) :
+    ∑ idx, g idx =
+      ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW, g (w3Idx c kh kw) := by
+  calc ∑ idx, g idx
+      = ∑ p : Fin (ic * kH) × Fin kW, g (finProdFinEquiv p) :=
+        (Equiv.sum_comp finProdFinEquiv g).symm
+    _ = ∑ q : Fin (ic * kH), ∑ kw : Fin kW, g (finProdFinEquiv (q, kw)) :=
+        Fintype.sum_prod_type _
+    _ = ∑ p : Fin ic × Fin kH, ∑ kw : Fin kW,
+          g (finProdFinEquiv (finProdFinEquiv p, kw)) :=
+        (Equiv.sum_comp finProdFinEquiv (fun q => ∑ kw : Fin kW,
+          g (finProdFinEquiv (q, kw)))).symm
+    _ = ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW, g (w3Idx c kh kw) :=
+        Fintype.sum_prod_type _
+
+/-- The per-output-coordinate conv *window* as a flat `Vec` over the fan-in:
+    the (padded) input reads that the kernel slab dots against. -/
+noncomputable def convWindow {ic h w : Nat} (kH kW : Nat) (x : Tensor3 ic h w)
+    (hi : Fin h) (wi : Fin w) : Vec (ic * kH * kW) :=
+  fun idx =>
+    let p := finProdFinEquiv.symm idx
+    let q := finProdFinEquiv.symm p.1
+    convPad kH kW x q.1 q.2 p.2 hi wi
+
+/-- The kernel as a `Mat (ic·kH·kW) oc` — column `o` is the flattened slab. -/
+noncomputable def convKernelMat {oc ic kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) : Mat (ic * kH * kW) oc :=
+  fun idx o =>
+    let p := finProdFinEquiv.symm idx
+    let q := finProdFinEquiv.symm p.1
+    W o q.1 q.2 p.2
+
+@[simp] theorem convWindow_w3 {ic h w : Nat} (kH kW : Nat) (x : Tensor3 ic h w)
+    (hi : Fin h) (wi : Fin w) (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
+    convWindow kH kW x hi wi (w3Idx c kh kw) = convPad kH kW x c kh kw hi wi := by
+  simp [convWindow, w3Idx, Equiv.symm_apply_apply]
+
+@[simp] theorem convKernelMat_w3 {oc ic kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (o : Fin oc) (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
+    convKernelMat W (w3Idx c kh kw) o = W o c kh kw := by
+  simp [convKernelMat, w3Idx, Equiv.symm_apply_apply]
+
+/-- **conv2d is a dense layer at the conv fan-in** — `conv = dense-with-sharing`
+    made exact: each output coordinate is `Proofs.dense` of the kernel slab
+    against the flattened window. The structural fact that lets the float conv
+    budget reuse `dense_close`. -/
+theorem conv2d_eq_dense {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Tensor3 ic h w)
+    (o : Fin oc) (hi : Fin h) (wi : Fin w) :
+    conv2d W b x o hi wi =
+      Proofs.dense (convKernelMat W) b (convWindow kH kW x hi wi) o := by
+  rw [conv2d_eq_convPad]
+  show b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
+      W o c kh kw * convPad kH kW x c kh kw hi wi
+    = (∑ idx, convWindow kH kW x hi wi idx * convKernelMat W idx o) + b o
+  rw [sum_w3 (fun idx => convWindow kH kW x hi wi idx * convKernelMat W idx o),
+      add_comm]
+  refine congrArg (· + b o) ?_
+  refine Finset.sum_congr rfl fun c _ => Finset.sum_congr rfl fun kh _ =>
+    Finset.sum_congr rfl fun kw _ => ?_
+  rw [convWindow_w3, convKernelMat_w3]; ring
+
+/-- Padded reads of inputs within `e` stay within `e` (the read is either a
+    coordinate, diff `≤ e`, or `0`, diff `0`). -/
+theorem convPad_close {ic h w kH kW : Nat} (xt xa : Tensor3 ic h w) {e : ℝ}
+    (he : 0 ≤ e) (hx : ∀ c i j, |xt c i j - xa c i j| ≤ e)
+    (c : Fin ic) (kh : Fin kH) (kw : Fin kW) (hi : Fin h) (wi : Fin w) :
+    |convPad kH kW xt c kh kw hi wi - convPad kH kW xa c kh kw hi wi| ≤ e := by
+  unfold convPad
+  split_ifs with h
+  · exact hx _ _ _
+  · simpa using he
+
+/-- **The float conv layer** — `M.dense` of the kernel slab against the
+    flattened window, per output coordinate. The float peer of `conv2d`
+    (every product/accumulate/bias-add rounded), in the dense form. -/
+noncomputable def FloatModel.convF {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Tensor3 ic h w) :
+    Tensor3 oc h w :=
+  fun o hi wi => M.dense (convKernelMat W) b (convWindow kH kW x hi wi) o
+
+/-- **Conv forward rounding budget (Item A).** The rounded conv at a float input
+    within `e` of the real activation is within the conv-fan-in `denseErr` of the
+    real conv — `dense_close` at the flattened window. The compounded Higham
+    factor rides the fan-in `ic·kH·kW` (the dense column length here), exactly as
+    the planning doc calls for. -/
+theorem FloatModel.convF_close {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (xt xa : Tensor3 ic h w) {e : ℝ}
+    (he : 0 ≤ e) (hx : ∀ c i j, |xt c i j - xa c i j| ≤ e)
+    (o : Fin oc) (hi : Fin h) (wi : Fin w) :
+    |M.convF W b xt o hi wi - conv2d W b xa o hi wi| ≤
+      M.denseErr (convKernelMat W) b (convWindow kH kW xa hi wi) e o := by
+  rw [conv2d_eq_dense, FloatModel.convF]
+  refine M.dense_close (convKernelMat W) b (convWindow kH kW xt hi wi)
+    (convWindow kH kW xa hi wi) e he ?_ o
+  intro idx
+  simp only [convWindow]
+  exact convPad_close xt xa he hx _ _ _ hi wi
+
+/-- Kernel-slab entries inherit the uniform kernel magnitude bound. -/
+theorem convKernelMat_abs_le {oc ic kH kW : Nat} {W : Kernel4 oc ic kH kW}
+    {w' : ℝ} (hW : ∀ o c kh kw, |W o c kh kw| ≤ w')
+    (i : Fin (ic * kH * kW)) (j : Fin oc) : |convKernelMat W i j| ≤ w' := by
+  simp only [convKernelMat]; exact hW _ _ _ _
+
+/-- Window reads inherit the uniform input magnitude bound (padding reads 0). -/
+theorem convWindow_abs_le {ic h w kH kW : Nat} {x : Tensor3 ic h w} {a : ℝ}
+    (ha : 0 ≤ a) (hx : ∀ c i j, |x c i j| ≤ a) (hi : Fin h) (wi : Fin w)
+    (idx : Fin (ic * kH * kW)) : |convWindow kH kW x hi wi idx| ≤ a := by
+  simp only [convWindow]; exact abs_convPad_le x ha hx _ _ _ hi wi
+
+/-- **Conv output magnitude bound** = `dense_abs_le` at the fan-in: conv is a
+    dense layer, so `|conv2dⱼ| ≤ layerAct (ic·kH·kW) w β a`. -/
+theorem conv2d_abs_le {ic oc h w kH kW : Nat} {W : Kernel4 oc ic kH kW}
+    {b : Vec oc} {x : Tensor3 ic h w} {w' β a : ℝ} (ha : 0 ≤ a)
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β)
+    (hx : ∀ c i j, |x c i j| ≤ a) (o : Fin oc) (hi : Fin h) (wi : Fin w) :
+    |conv2d W b x o hi wi| ≤ FloatModel.layerAct (ic * kH * kW) w' β a := by
+  rw [conv2d_eq_dense]
+  exact FloatModel.dense_abs_le ha (fun i j => convKernelMat_abs_le hW i j) hb
+    (fun idx => convWindow_abs_le ha hx hi wi idx) o
+
+-- ════════════════════════════════════════════════════════════════
+-- § Vec-space float conv: the form the MNIST-CNN forward composes
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Vec-space float conv** — the float peer of `flatConv`
+    (`flatten ∘ conv2d ∘ unflatten`), with the rounded `convF` inside. -/
+noncomputable def FloatModel.flatConvF {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Vec (ic * h * w) → Vec (oc * h * w) :=
+  fun v => Tensor3.flatten (M.convF W b (Tensor3.unflatten v))
+
+/-- **Vec-space conv forward budget, uniform.** The rounded `flatConvF` at a
+    float input within `e` of the real activation is within the conv-fan-in
+    `layerBudget` of the real `flatConv` — every output coordinate, one closed
+    form. The conv layer threads exactly like a dense layer at fan-in
+    `ic·kH·kW`. -/
+theorem FloatModel.flatConvF_close {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (vt va : Vec (ic * h * w))
+    {w' β a e : ℝ} (hw' : 0 ≤ w') (ha : 0 ≤ a) (he : 0 ≤ e)
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β)
+    (hva : ∀ k, |va k| ≤ a) (hvte : ∀ k, |vt k - va k| ≤ e)
+    (k : Fin (oc * h * w)) :
+    |M.flatConvF W b vt k - flatConv W b va k| ≤
+      FloatModel.layerBudget M.u (ic * kH * kW) w' β a e := by
+  have huf_e : ∀ c i j,
+      |Tensor3.unflatten vt c i j - Tensor3.unflatten va c i j| ≤ e := by
+    intro c i j; simp only [Tensor3.unflatten]; exact hvte _
+  have huf_a : ∀ c i j, |Tensor3.unflatten va c i j| ≤ a := by
+    intro c i j; simp only [Tensor3.unflatten]; exact hva _
+  simp only [FloatModel.flatConvF, flatConv, Tensor3.flatten]
+  refine (M.convF_close W b (Tensor3.unflatten vt) (Tensor3.unflatten va)
+    he huf_e _ _ _).trans ?_
+  exact M.denseErr_le_uniform hw' he (fun i j => convKernelMat_abs_le hW i j) hb
+    (fun idx => convWindow_abs_le ha huf_a _ _ idx) _
+
+/-- Vec-space conv magnitude bound (the activation-norm pass-through). -/
+theorem flatConv_abs_le {ic oc h w kH kW : Nat} {W : Kernel4 oc ic kH kW}
+    {b : Vec oc} {v : Vec (ic * h * w)} {w' β a : ℝ} (ha : 0 ≤ a)
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β)
+    (hv : ∀ k, |v k| ≤ a) (k : Fin (oc * h * w)) :
+    |flatConv W b v k| ≤ FloatModel.layerAct (ic * kH * kW) w' β a := by
+  have huf : ∀ c i j, |Tensor3.unflatten v c i j| ≤ a := by
+    intro c i j; simp only [Tensor3.unflatten]; exact hv _
+  simp only [flatConv, Tensor3.flatten]
+  exact conv2d_abs_le ha hW hb huf _ _ _
+
+-- ════════════════════════════════════════════════════════════════
+-- § Whole-net MNIST-CNN forward rounding budget (Item A capstone)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The float MNIST-CNN (no BN) forward** — the float peer of
+    `mnistCnnNoBnForward`: rounded conv (`flatConvF`) and rounded dense
+    (`M.dense`); `relu` and `maxPoolFlat` appear bare (exact in float). -/
+noncomputable def FloatModel.mnistCnnNoBnForwardF
+    {ic c h w d1 nClasses kH kW : Nat} (M : FloatModel)
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
+    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c * h * w) d1) (b₃ : Vec d1)
+    (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) :
+    Vec (ic * (2*h) * (2*w)) → Vec nClasses :=
+  M.dense W₅ b₅
+  ∘ (relu d1 ∘ M.dense W₄ b₄)
+  ∘ (relu d1 ∘ M.dense W₃ b₃)
+  ∘ maxPoolFlat c h w
+  ∘ (relu (c * (2*h) * (2*w)) ∘ M.flatConvF (h := 2*h) (w := 2*w) W₂ b₂)
+  ∘ (relu (c * (2*h) * (2*w)) ∘ M.flatConvF (h := 2*h) (w := 2*w) W₁ b₁)
+
+/-- **Whole-net MNIST-CNN forward rounding budget (Item A capstone).** The
+    rounded forward is within an explicit closed-form `layerBudget` of the real
+    `conv→relu→conv→relu→maxpool→dense→relu→dense→relu→dense` forward, per
+    output logit — the binary32 forward-error bound for the Chapter-4 CNN.
+
+    Each weight layer threads identically: conv layers as `dense` at their
+    fan-in (`ic·kH·kW`, then `c·kH·kW`), the dense head at `c·h·w` / `d1`; relu
+    and maxpool pass error through exactly (no rounding, no amplification). The
+    budget is the `mlp_float_close_uniform` nest extended to the CNN's six
+    layers — `norm_num`-evaluable at a concrete net and magnitude profile. -/
+theorem FloatModel.cnn_float_close
+    {ic c h w d1 nClasses kH kW : Nat} (M : FloatModel)
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
+    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c * h * w) d1) (b₃ : Vec d1)
+    (W₄ : Mat d1 d1) (b₄ : Vec d1)
+    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) (x : Vec (ic * (2*h) * (2*w)))
+    {w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ a : ℝ}
+    (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
+    (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃) (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄)
+    (hw₅ : 0 ≤ w₅) (ha : 0 ≤ a)
+    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w₁) (hb₁ : ∀ o, |b₁ o| ≤ β₁)
+    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂) (hb₂ : ∀ o, |b₂ o| ≤ β₂)
+    (hW₃ : ∀ i j, |W₃ i j| ≤ w₃) (hb₃ : ∀ j, |b₃ j| ≤ β₃)
+    (hW₄ : ∀ i j, |W₄ i j| ≤ w₄) (hb₄ : ∀ j, |b₄ j| ≤ β₄)
+    (hW₅ : ∀ i j, |W₅ i j| ≤ w₅) (hb₅ : ∀ j, |b₅ j| ≤ β₅)
+    (hx : ∀ i, |x i| ≤ a) (k : Fin nClasses) :
+    |M.mnistCnnNoBnForwardF W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x k -
+        mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x k| ≤
+      FloatModel.layerBudget M.u d1 w₅ β₅
+        (FloatModel.layerAct d1 w₄ β₄
+          (FloatModel.layerAct (c * h * w) w₃ β₃
+            (FloatModel.layerAct (c * kH * kW) w₂ β₂
+              (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a))))
+        (FloatModel.layerBudget M.u d1 w₄ β₄
+          (FloatModel.layerAct (c * h * w) w₃ β₃
+            (FloatModel.layerAct (c * kH * kW) w₂ β₂
+              (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)))
+          (FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+            (FloatModel.layerAct (c * kH * kW) w₂ β₂
+              (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a))
+            (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂
+              (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)
+              (FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0)))) := by
+  simp only [FloatModel.mnistCnnNoBnForwardF, mnistCnnNoBnForward, Function.comp]
+  -- real activation magnitudes, layer by layer
+  set A1 := FloatModel.layerAct (ic * kH * kW) w₁ β₁ a with hA1
+  set A2 := FloatModel.layerAct (c * kH * kW) w₂ β₂ A1 with hA2
+  set A3 := FloatModel.layerAct (c * h * w) w₃ β₃ A2 with hA3
+  set A4 := FloatModel.layerAct d1 w₄ β₄ A3 with hA4
+  set E1 := FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0 with hE1
+  set E2 := FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ A1 E1 with hE2
+  set E3 := FloatModel.layerBudget M.u (c * h * w) w₃ β₃ A2 E2 with hE3
+  set E4 := FloatModel.layerBudget M.u d1 w₄ β₄ A3 E3 with hE4
+  have hA1_0 : 0 ≤ A1 := FloatModel.layerAct_nonneg hw₁ hβ₁ ha
+  have hE1_0 : 0 ≤ E1 := FloatModel.layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl
+  have hA2_0 : 0 ≤ A2 := FloatModel.layerAct_nonneg hw₂ hβ₂ hA1_0
+  have hE2_0 : 0 ≤ E2 := FloatModel.layerBudget_nonneg M.u_nonneg hw₂ hβ₂ hA1_0 hE1_0
+  have hA3_0 : 0 ≤ A3 := FloatModel.layerAct_nonneg hw₃ hβ₃ hA2_0
+  have hE3_0 : 0 ≤ E3 := FloatModel.layerBudget_nonneg M.u_nonneg hw₃ hβ₃ hA2_0 hE2_0
+  have hA4_0 : 0 ≤ A4 := FloatModel.layerAct_nonneg hw₄ hβ₄ hA3_0
+  -- real activation magnitude bounds
+  have mA1 : ∀ j, |relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x) j| ≤ A1 :=
+    fun j => (FloatModel.relu_abs_le _ j).trans (flatConv_abs_le ha hW₁ hb₁ hx j)
+  have mA2 : ∀ j, |relu (c * (2*h) * (2*w))
+      (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x))) j| ≤ A2 :=
+    fun j => (FloatModel.relu_abs_le _ j).trans
+      (flatConv_abs_le hA1_0 hW₂ hb₂ mA1 j)
+  have mAp : ∀ j, |maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w))
+        (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))) j| ≤ A2 :=
+    fun j => maxPoolFlat_abs_le mA2 j
+  have mA3 : ∀ j, |relu d1 (Proofs.dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w))
+        (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))))) j| ≤ A3 :=
+    fun j => (FloatModel.relu_abs_le _ j).trans (FloatModel.dense_abs_le hA2_0 hW₃ hb₃ mAp j)
+  have mA4 : ∀ j, |relu d1 (Proofs.dense W₄ b₄ (relu d1 (Proofs.dense W₃ b₃
+      (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (flatConv W₂ b₂
+        (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))))))) j| ≤ A4 :=
+    fun j => (FloatModel.relu_abs_le _ j).trans (FloatModel.dense_abs_le hA3_0 hW₄ hb₄ mA3 j)
+  -- float-vs-real error, layer by layer
+  have e1 : ∀ j, |M.flatConvF W₁ b₁ x j - flatConv W₁ b₁ x j| ≤ E1 :=
+    fun j => M.flatConvF_close W₁ b₁ x x hw₁ ha le_rfl hW₁ hb₁ hx
+      (fun i => by simp) j
+  have r1 : ∀ j, |relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x) j -
+      relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x) j| ≤ E1 :=
+    fun j => FloatModel.relu_close _ _ E1 e1 j
+  have e2 : ∀ j, |M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x)) j -
+      flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)) j| ≤ E2 :=
+    fun j => M.flatConvF_close W₂ b₂ _ _ hw₂ hA1_0 hE1_0 hW₂ hb₂ mA1 r1 j
+  have r2 : ∀ j, |relu (c * (2*h) * (2*w))
+      (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x))) j -
+      relu (c * (2*h) * (2*w))
+      (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x))) j| ≤ E2 :=
+    fun j => FloatModel.relu_close _ _ E2 e2 j
+  have ep : ∀ j, |maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w))
+        (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x)))) j -
+      maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w))
+        (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))) j| ≤ E2 :=
+    fun j => maxPoolFlat_close _ _ r2 j
+  have e3 : ∀ j, |M.dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w))
+          (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x))))) j -
+      Proofs.dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w))
+          (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x))))) j| ≤ E3 :=
+    fun j => (M.dense_close W₃ b₃ _ _ E2 hE2_0 ep j).trans
+      (M.denseErr_le_uniform hw₃ hE2_0 hW₃ hb₃ mAp j)
+  have r3 : ∀ j, |relu d1 (M.dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w))
+          (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x)))))) j -
+      relu d1 (Proofs.dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w))
+          (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))))) j| ≤ E3 :=
+    fun j => FloatModel.relu_close _ _ E3 e3 j
+  have e4 : ∀ j, |M.dense W₄ b₄ (relu d1 (M.dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w))
+          (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x))))))) j -
+      Proofs.dense W₄ b₄ (relu d1 (Proofs.dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w))
+          (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x))))))) j| ≤ E4 :=
+    fun j => (M.dense_close W₄ b₄ _ _ E3 hE3_0 r3 j).trans
+      (M.denseErr_le_uniform hw₄ hE3_0 hW₄ hb₄ mA3 j)
+  have r4 : ∀ j, |relu d1 (M.dense W₄ b₄ (relu d1 (M.dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w))
+          (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x)))))))) j -
+      relu d1 (Proofs.dense W₄ b₄ (relu d1 (Proofs.dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w))
+          (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))))))) j| ≤ E4 :=
+    fun j => FloatModel.relu_close _ _ E4 e4 j
+  -- final dense layer
+  have hE4_0 : 0 ≤ E4 :=
+    FloatModel.layerBudget_nonneg M.u_nonneg hw₄ hβ₄ hA3_0 hE3_0
+  exact (M.dense_close W₅ b₅ _ _ E4 hE4_0 r4 k).trans
+    (M.denseErr_le_uniform hw₅ hE4_0 hW₅ hb₅ mA4 k)
 theorem conv2d_kernel_sub {ic oc h w kH kW : Nat} (b : Vec oc)
     (x : Tensor3 ic h w) (v e : Vec (oc * ic * kH * kW))
     (o : Fin oc) (hi : Fin h) (wi : Fin w) :
