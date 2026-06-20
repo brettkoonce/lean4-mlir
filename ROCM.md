@@ -6,9 +6,9 @@ runtime library change.
 
 ## Prerequisites
 
-- AMD GPU with ROCm support (7900 XTX = gfx1100)
-- ROCm 6.x installed (`/opt/rocm`)
-- Lean 4 toolchain (elan)
+- AMD GPU with ROCm support (7900 XTX = gfx1100; the reference box has two)
+- ROCm 7.2.0 installed (`/opt/rocm-7.2.0`, with `/opt/rocm` symlinked to it)
+- Lean 4 toolchain via elan (pinned to **v4.31.0** by `lean-toolchain`)
 - Python 3.10+ with pip
 
 ## Step 1: Clone and build Lean project
@@ -179,25 +179,41 @@ python3 preprocess_imagenette.py data/imagenette/imagenette2-320 data/imagenette
 
 ## Step 7: Build and run
 
-```bash
-# Build the trainer
-lake build resnet34-train
+The trainer shells out to `iree-compile` at startup and loads
+`ffi/libiree_ffi.so` via a relative `./ffi/` path, so: `iree-compile`
+must be on `PATH` (use the `.venv`), the ROCm libraries must be on
+`LD_LIBRARY_PATH`, and you must **run from the repo root**.
 
-# Train. IREE_BACKEND=rocm tells iree-compile to target ROCm/gfx1100;
-# HIP_VISIBLE_DEVICES=0 pins to a single GPU (multi-GPU JAX-ROCm has a
-# known hang on gfx1100 — see upstream-issues/).
-IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
-  .lake/build/bin/resnet34-train data/imagenette
+```bash
+# Build a trainer (e.g. the verified-codegen ResNet-34)
+lake build resnet34-verified
+
+# Current run recipe (gfx1100):
+export PATH="$PWD/.venv/bin:$PATH"           # iree-compile (pip wrapper)
+export LD_LIBRARY_PATH=/opt/rocm-7.2.0/lib   # HIP runtime libs
+export IREE_BACKEND=rocm                      # target ROCm...
+export IREE_CHIP=gfx1100                       # ...on the 7900 XTX
+.lake/build/bin/resnet34-verified data         # data dir as argv[0]
 ```
 
-Equivalent via the shell wrapper, which sets the env vars for you:
-```bash
-./run.sh resnet34 0 rocm
-```
+`IREE_BACKEND` routes everything downstream (iree-compile flags,
+target chip, HAL device); `gfx1100` is the default chip when
+`IREE_BACKEND=rocm`, so `IREE_CHIP` is only needed to override it.
 
-The first run compiles the vmfbs (~10-15 min for ResNet-sized models).
-Subsequent runs reuse the cached vmfb unless `.lake/build/` is cleared
-or the MLIR hash changes.
+**Two GPUs.** The IREE runtime is single-device. To use both cards,
+launch two processes pinned with `HIP_VISIBLE_DEVICES=0` and `=1` (one
+each). The multi-GPU *hang* noted in `upstream-issues/` is
+JAX-ROCm-specific — the IREE/Lean path here runs fine on either card.
+
+The `*-verified` exes (`mnist-{linear,mlp,cnn}-verified`,
+`cifar8{,w}{,-bn}{,-verified,-ablation}`, `resnet34-verified`,
+`mobilenetv2-verified`, …) train on the proof-rendered StableHLO. Data:
+the MNIST/CIFAR loaders read the dir passed as `argv[0]` (CIFAR under
+`<dir>/cifar-10/`); Imagenette nets read `<dir>/imagenette/`.
+
+The first run compiles the vmfbs (seconds for the small CIFAR/MNIST
+nets, ~10–15 min for ResNet-sized models). Subsequent runs reuse the
+cached vmfb in `.lake/build/` unless it is cleared or the MLIR changes.
 
 ## Expected performance
 

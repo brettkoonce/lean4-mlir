@@ -19,7 +19,7 @@ were hit) lives in [`IREE.md`](IREE.md). The ROCm-specific variant is in
 | Lean 4.29.0 | builds the trainer | `elan` (see main README §1) |
 | `iree-compile` | Lean shells out to it to lower StableHLO → `.vmfb` | `pip install 'iree-base-compiler>=3.12.0rc20260428'` |
 | IREE runtime (static `.a`) | linked into `libiree_ffi.so` | build from source, runtime-only |
-| GPU toolchain | runtime needs a backend | CUDA toolkit *or* ROCm 6.x |
+| GPU toolchain | runtime needs a backend | CUDA toolkit *or* ROCm 7.2.0 (gfx1100) |
 | `ffi/libiree_ffi.so` | every Lean trainer links `-liree_ffi` | the link command in §4 |
 | MNIST data | input | `./download_mnist.sh` |
 

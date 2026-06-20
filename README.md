@@ -634,7 +634,7 @@ VJPs and (for BN) running statistics for eval.
 
 ## Lean version
 
-Tested with Lean 4.30.0 / Lake 5.0.0, IREE built from source against
+Tested with Lean 4.31.0 / Lake 5.0.0, IREE built from source against
 ROCm 7.2.0 / gfx1100.
 
 ## Citing this work
