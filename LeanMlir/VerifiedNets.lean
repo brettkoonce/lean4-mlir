@@ -168,6 +168,59 @@ def cifar8BnVerified : VerifiedNetSpec where
     (#[32, 32, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
     (#[128, 64], 0), (#[64], 2), (#[64, 64], 0), (#[64], 2), (#[64, 10], 0), (#[10], 2)]
 
+/-- `cifar8Verified` with the MNIST-style **wide 2×512 dense head** (`d1=512`): flatten 128 →
+    512 → relu → 512 → relu → 10. Same 8-conv backbone; the head jumps from 13K to 334K floats
+    (whole net 52,858 → 373,626). Same parametric VJP `Proofs.cifarCnn8_has_vjp_at` (the dense
+    bridge is generic in width). Slug `cifar8w` (render `tests/TestCifar8WideTrain.lean`). -/
+def cifar8wVerified : VerifiedNetSpec where
+  name     := "CIFAR-CNN8-wide"
+  slug     := "cifar8w"
+  inC      := 3
+  imageH   := 32
+  imageW   := 32
+  nClasses := 10
+  data     := .cifar
+  layers   := [.conv 3 16 3 1, .relu, .conv 16 16 3 1, .relu, .maxPool 2 2,
+               .conv 16 16 3 1, .relu, .conv 16 16 3 1, .relu, .maxPool 2 2,
+               .conv 16 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
+               .conv 32 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
+               .dense 128 512, .relu, .dense 512 512, .relu, .dense 512 10]
+  blurb    := "Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → IREE FFI → GPU"
+
+#guard cifar8wVerified.toSpecs ==
+  #[(#[16, 3, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
+    (#[16, 16, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
+    (#[32, 16, 3, 3], 0), (#[32], 2), (#[32, 32, 3, 3], 0), (#[32], 2),
+    (#[32, 32, 3, 3], 0), (#[32], 2), (#[32, 32, 3, 3], 0), (#[32], 2),
+    (#[128, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
+
+/-- `cifar8BnVerified` with the wide 2×512 dense head (`d1=512`). Slug `cifar8w_bn`. -/
+def cifar8wBnVerified : VerifiedNetSpec where
+  name     := "CIFAR-CNN8-wide-BN"
+  slug     := "cifar8w_bn"
+  inC      := 3
+  imageH   := 32
+  imageW   := 32
+  nClasses := 10
+  data     := .cifar
+  layers   := [.conv 3 16 3 1, .bnPerChannel 16, .relu, .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
+               .conv 16 16 3 1, .bnPerChannel 16, .relu, .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
+               .conv 16 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
+               .conv 32 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2, .flatten,
+               .dense 128 512, .relu, .dense 512 512, .relu, .dense 512 10]
+  blurb    := "Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → IREE FFI → GPU"
+
+#guard cifar8wBnVerified.toSpecs ==
+  #[(#[16, 3, 3, 3], 0), (#[16], 2), (#[16], 1), (#[16], 2),
+    (#[16, 16, 3, 3], 0), (#[16], 2), (#[16], 1), (#[16], 2),
+    (#[16, 16, 3, 3], 0), (#[16], 2), (#[16], 1), (#[16], 2),
+    (#[16, 16, 3, 3], 0), (#[16], 2), (#[16], 1), (#[16], 2),
+    (#[32, 16, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
+    (#[32, 32, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
+    (#[32, 32, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
+    (#[32, 32, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
+    (#[128, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
+
 /-- ch6 **ResNet-34** on Imagenette 224²: 7×7-s2 stem → BN → relu → maxpool →
     [3,4,6,3] basic-block stages (per-channel BN, strided downsample at the first block of
     stages 2–4) → GAP → dense. 146 params. VJP: the audited parametric skeleton

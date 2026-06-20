@@ -2731,7 +2731,23 @@ whole CNN backward is covered, op by op.
 \chapter{CIFAR with BatchNorm}
 \label{chap:bn}
 
-This is structurally the hardest chapter in the book. BN's
+This chapter is the bridge between the MNIST chapters and the
+deep-network chapters that follow. Chapter~\ref{chap:cnn} did MNIST
+with a two-convolution net and a 2$\times$512 dense head;
+Chapter~\ref{chap:residual} (ResNet-34) goes thirty-four layers deep.
+The network here sits exactly in between --- it keeps MNIST's
+\emph{same} 2$\times$512 head and the same conv/ReLU/max-pool
+machinery, but stacks the convolutions four stages deep (eight in all)
+on a harder dataset (CIFAR-10). That is the first point in the book
+where depth is enough to make two things bite: \textbf{BatchNorm starts
+to earn its keep, and the choice of optimizer starts to matter} --- and
+the depth itself is what ResNet then scales to thirty-four layers. So
+the chapter has two jobs: prove the one new operator (BatchNorm), and
+use the deeper net to measure what actually governs training
+(\S\ref{sec:bn_cifar_example}).
+
+Proving BN is also what makes this \textbf{structurally the hardest
+chapter in the book}. BN's
 inverse-stddev term \(1/\sqrt{\sigma^2 + \varepsilon}\) has a
 gradient that blows up as \(\sigma^2 \to 0\); proving the
 backward pass exists and is bounded requires
@@ -2999,39 +3015,44 @@ Mechanical; see \leandocref{Proofs.bn\_has\_vjp}.
 \section{Example: training dynamics on CIFAR}
 \label{sec:bn_cifar_example}
 
-The previous two chapters trained MNIST classifiers and a
-four-convolution net was plenty. CIFAR-10 --- color $32 \times 32$
-images, a genuinely harder problem --- rewards going deeper, so this
-chapter's demo \textbf{doubles the depth}: an eight-convolution network
-(twice the four-conv MNIST CNN). Depth also lets us ask a sharper
-question than ``does it train?'' --- namely, \emph{what governs how it
-trains?}
+Chapter~\ref{chap:cnn} did MNIST with two convolutions and a
+2$\times$512 dense head. This chapter keeps that \emph{exact} head and
+the same conv/ReLU/max-pool machinery, but --- CIFAR-10 being a
+genuinely harder problem --- stacks the convolutions four stages deep:
+eight $3 \times 3$ convolutions in all. \textbf{Same head, four times
+the body.} That extra depth is the whole point of the chapter: it is
+where BatchNorm starts to pay, where the optimizer starts to matter,
+and the same depth ResNet-34 will scale to thirty-four layers. It also
+lets us ask a sharper question than ``does it train?'' --- \emph{what
+governs how it trains?}
 
-Two levers do most of the work, and the proof suite lets us move each
-one against an \emph{identical, machine-checked gradient}. The first is
-\textbf{normalization} --- the BatchNorm we just proved, dropped between
-each convolution and its ReLU. The second is the \textbf{optimizer} ---
-the rule that turns a gradient into a weight update. We hold everything
-else fixed (same architecture, same data pipeline: per-epoch shuffle,
-random horizontal flip, a cosine learning-rate schedule with warmup;
-same 40 epochs) and move one lever at a time. Two findings, stated up
-front so the graphs below are no surprise:
+Two levers govern the answer --- \textbf{normalization} and the
+\textbf{optimizer} --- and a third knob, the width of the head, turns
+out not to. We move each against an \emph{identical, machine-checked
+gradient}, holding everything else fixed (same architecture, same data
+pipeline --- per-epoch shuffle, random horizontal flip, cosine
+learning-rate schedule with warmup --- same 40 epochs). The findings,
+stated up front so the graphs are no surprise:
 
 \begin{itemize}
-\item \textbf{Normalization buys speed, not ceiling.} BN reaches a given
-  accuracy in fewer epochs, but both nets top out in the same place ---
-  at this depth BN's \emph{final} number even lands a hair below the
-  un-normalized net's. It is an accelerator, not a capacity boost.
-\item \textbf{The optimizer moves the ceiling.} Trading plain SGD for
-  SGD-with-momentum is worth two to three points of final accuracy ---
-  more than normalization changes anything here. Adam, notably, is a
-  wash with plain SGD on a net this small: its per-coordinate
-  adaptivity earns nothing it can keep.
+\item \textbf{Normalization buys speed.} BatchNorm (dropped between each
+  conv and its ReLU) reaches a given accuracy in markedly fewer epochs;
+  at convergence it lands level-to-slightly-above the un-normalized net.
+  An accelerator first of all.
+\item \textbf{The optimizer moves the ceiling most.} Trading plain SGD
+  for SGD-with-momentum is worth three to four points of final accuracy
+  --- more than anything else here. Adam is roughly a wash with plain
+  SGD; its per-coordinate adaptivity earns little it can keep.
+\item \textbf{The head barely matters.} This 2$\times$512 head carries
+  about 25$\times$ the parameters of a narrow 64-wide one, yet trains to
+  within a point of it --- the convolutional \emph{body}, not the head,
+  is doing the work. That is also why we can borrow MNIST's head
+  wholesale: it was never the bottleneck.
 \end{itemize}
 
 \noindent Every run below shares one proof-rendered backward pass; only
-the BN layers or the rendered optimizer tail change between them. The
-numbers are from that verified training step running on a GPU.
+the BN layers or the rendered optimizer tail change. The numbers are
+from that verified training step running on a GPU.
 
 \subsection*{Architecture}
 
@@ -3039,7 +3060,12 @@ The same vertical column as the MNIST CNN in
 Chapter~\ref{chap:cnn}, just deeper: eight $3 \times 3$ convolutions
 in four stages (a max-pool after each) lift the $32 \times 32 \times 3$
 input to a $2 \times 2 \times 32$ feature grid, which flattens to 128
-and runs through the same three-layer dense head.
+and runs through the \emph{same} 2$\times$512 dense head as that net
+(only the first layer changes width, $6272$ vs.\ $128$, because the
+deeper stack pools the grid down further). Eight convolutions is four
+times the MNIST net's two --- and that growth in depth, not width, is
+the lineage ResNet-34 (Ch~\ref{chap:residual}) carries to thirty-four
+layers.
 
 \begin{center}
 \begin{tikzpicture}[
@@ -3071,9 +3097,9 @@ and runs through the same three-layer dense head.
   \node[convbn, below=0.18cm of c7]    (c8)   {\textbf{ConvBN} $32\to32$, $3\times3$, ReLU};
   \node[pool,   below=0.18cm of c8]    (p4)   {\textbf{maxPool} $2\times2$ \;\; $4\to2$};
   \node[flat,   below=0.18cm of p4]    (fl)   {flatten \;\; $2\times2\times32 \to 128$};
-  \node[dense,  below=0.18cm of fl]    (d1)   {\textbf{Dense} $128\to64$, ReLU};
-  \node[dense,  below=0.18cm of d1]    (d2)   {\textbf{Dense} $64\to64$, ReLU};
-  \node[head,   below=0.18cm of d2]    (d3)   {\textbf{Dense} $64\to10$ \;(identity)};
+  \node[dense,  below=0.18cm of fl]    (d1)   {\textbf{Dense} $128\to512$, ReLU};
+  \node[dense,  below=0.18cm of d1]    (d2)   {\textbf{Dense} $512\to512$, ReLU};
+  \node[head,   below=0.18cm of d2]    (d3)   {\textbf{Dense} $512\to10$ \;(identity)};
   \node[logits, below=0.18cm of d3]    (out)  {Logits \;\; 10 classes, softmax-CE};
   \foreach \a/\b in {input/c1, c1/c2, c2/p1, p1/c3, c3/c4, c4/p2, p2/c5,
                      c5/c6, c6/p3, p3/c7, c7/c8, c8/p4, p4/fl, fl/d1,
@@ -3084,6 +3110,8 @@ and runs through the same three-layer dense head.
   \node[stage] at ($(c3.east)!0.5!(p2.east) + (0.35,0)$) {stage 2};
   \node[stage] at ($(c5.east)!0.5!(p3.east) + (0.35,0)$) {stage 3};
   \node[stage] at ($(c7.east)!0.5!(p4.east) + (0.35,0)$) {stage 4};
+  % Bridge cue: the dense head is exactly the MNIST CNN's.
+  \node[stage, align=left] at ($(d1.east)!0.5!(d2.east) + (0.35,0)$) {= MNIST CNN\\head (Ch~\ref{chap:cnn})};
 \end{tikzpicture}
 \end{center}
 
@@ -3094,8 +3122,9 @@ net is identical with each \texttt{ConvBN} replaced by a plain
 \subsection*{The two specs, differing by one keyword per layer}
 
 Eight $3 \times 3$ convolutions in four stages (channel widths
-$16, 16, 32, 32$, a max-pool after each stage), then a small dense
-head. Without BN, each convolution is followed by a plain ReLU; with
+$16, 16, 32, 32$, a max-pool after each stage), then the 2$\times$512
+dense head lifted straight from the MNIST CNN. Without BN, each
+convolution is followed by a plain ReLU; with
 BN, a per-channel BatchNorm sits between the convolution and the ReLU.
 That one keyword per conv layer is the entire difference.
 
@@ -3112,7 +3141,7 @@ def cifar8NoBn : NetSpec where
     .conv2d 16 32 3 .same .relu,  .conv2d 32 32 3 .same .relu, .maxPool 2 2,
     .conv2d 32 32 3 .same .relu,  .conv2d 32 32 3 .same .relu, .maxPool 2 2,
     .flatten,
-    .dense 128 64 .relu, .dense 64 64 .relu, .dense 64 10 .identity
+    .dense 128 512 .relu, .dense 512 512 .relu, .dense 512 10 .identity
   ]
 \end{verbatim}
 
@@ -3129,7 +3158,7 @@ def cifar8Bn : NetSpec where
     .convBn 16 32 3 1 .same,  .convBn 32 32 3 1 .same, .maxPool 2 2,
     .convBn 32 32 3 1 .same,  .convBn 32 32 3 1 .same, .maxPool 2 2,
     .flatten,
-    .dense 128 64 .relu, .dense 64 64 .relu, .dense 64 10 .identity
+    .dense 128 512 .relu, .dense 512 512 .relu, .dense 512 10 .identity
   ]
 \end{verbatim}
 
@@ -3164,33 +3193,35 @@ verified runs
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,30.80) (2,42.83) (3,47.53) (4,55.43) (5,58.87) (6,64.16) (7,62.85) (8,66.18) (9,65.74) (10,68.93) (11,69.16) (12,69.69) (13,71.15) (14,70.15) (15,70.45) (16,72.10) (17,72.15) (18,71.62) (19,73.01) (20,73.28) (21,73.70) (22,73.02) (23,73.77) (24,73.76) (25,73.58) (26,73.93) (27,73.56) (28,73.69) (29,74.13) (30,73.98) (31,73.82) (32,74.01) (33,73.94) (34,74.07) (35,73.93) (36,74.15) (37,73.86) (38,74.04) (39,74.02) (40,73.98)
+(1,36.51) (2,44.34) (3,50.14) (4,54.30) (5,60.84) (6,63.31) (7,62.39) (8,66.26) (9,66.06) (10,67.92) (11,69.88) (12,70.40) (13,71.39) (14,68.93) (15,71.61) (16,72.27) (17,72.36) (18,71.83) (19,73.11) (20,73.41) (21,73.02) (22,73.87) (23,73.72) (24,72.99) (25,73.69) (26,73.23) (27,73.66) (28,73.87) (29,74.08) (30,73.91) (31,73.85) (32,74.14) (33,74.22) (34,74.20) (35,74.24) (36,74.12) (37,74.28) (38,74.24) (39,74.15) (40,74.23)
 };
 \addlegendentry{with BN}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,29.37) (2,31.83) (3,42.01) (4,46.92) (5,51.07) (6,55.18) (7,56.00) (8,59.91) (9,59.46) (10,62.36) (11,64.89) (12,64.32) (13,66.80) (14,66.89) (15,68.00) (16,68.45) (17,69.20) (18,70.25) (19,70.22) (20,71.60) (21,71.56) (22,71.34) (23,71.73) (24,72.06) (25,72.56) (26,73.03) (27,72.31) (28,73.12) (29,73.18) (30,73.46) (31,73.51) (32,73.55) (33,73.86) (34,74.06) (35,73.96) (36,73.74) (37,73.66) (38,73.73) (39,73.73) (40,73.78)
+(1,33.90) (2,28.36) (3,34.98) (4,47.56) (5,51.55) (6,51.41) (7,57.98) (8,58.01) (9,58.40) (10,62.19) (11,62.64) (12,64.23) (13,65.03) (14,64.50) (15,64.94) (16,67.52) (17,68.46) (18,68.73) (19,68.52) (20,70.13) (21,70.42) (22,69.69) (23,70.82) (24,70.15) (25,70.32) (26,70.59) (27,71.44) (28,71.06) (29,71.97) (30,71.99) (31,71.61) (32,72.16) (33,72.26) (34,71.96) (35,72.34) (36,72.24) (37,72.40) (38,72.42) (39,72.39) (40,72.39)
 };
 \addlegendentry{no BN}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent CIFAR-10, 8-conv arch, plain SGD (lr~0.1, cosine${+}$warmup)
-on the shared pipeline, 40 epochs, BN vs no-BN, through the verified
-renderer (\texttt{runs/ablation\_cifar8/\{nobn,bn\}\_sgdsched.log}).
+\noindent CIFAR-10, wide 8-conv net, plain SGD (lr~0.1,
+cosine${+}$warmup) on the shared pipeline, 40 epochs, BN vs no-BN,
+through the verified renderer
+(\texttt{runs/ablation\_cifar8w/\{nobn,bn\}.log}, the SGD phase).
 
-\noindent BN leads from the second epoch and is essentially flat by
-epoch~16; the un-normalized net traces the same arc about a dozen epochs
-behind and pulls dead level by the end. Same ceiling --- about 74\% ---
-reached sooner. BN is not buying capacity here, only time: under this
-optimizer the two finish in a statistical tie. The head start is largest
-precisely for plain SGD, where conditioning matters most; the momentum
-and Adam runs below smooth the gradient enough on their own that BN's
-lead shrinks --- and there, as the next table shows, the un-normalized
-net actually ends a touch ahead. The three-term backward from
-\S\ref{thm:bnNormalize_has_vjp} is what makes the curve trustworthy: the
-machine-checked VJP guarantees every one of those faster steps computes
-the right gradient.
+\noindent BN leads from the second epoch --- 44\% to the bare net's
+28\% --- and keeps the lead the whole way, finishing about two points
+up (74\% vs 72\%); the un-normalized net traces the same arc roughly a
+dozen epochs behind. Most of that is \emph{speed} (the curves are the
+same shape, shifted left), but at this depth on plain SGD it is also a
+small, real convergence margin --- the conditioning the three-term
+backward (\S\ref{thm:bnNormalize_has_vjp}) buys is worth more the deeper
+the stack, exactly the trend that makes BN standard equipment by
+ResNet's thirty-four layers. That margin is largest precisely for plain
+SGD; under momentum and Adam (next) both nets already train well enough
+that BN's lead all but vanishes. The machine-checked VJP is what makes
+the curve trustworthy: every one of those faster steps computes the
+right gradient.
 
 \subsection*{Lever 2: the optimizer}
 
@@ -3204,19 +3235,22 @@ pipeline and the same 40 epochs (final \% / best \%):
        & SGD & momentum & AdamW \\
        & (lr 0.1) & ($\mu$ 0.9, lr 0.02) & (lr $10^{-3}$) \\
 \hline
-no BN  & 73.8 / 74.1 & \textbf{77.0 / 77.2} & 74.1 / 74.3 \\
-BN     & 74.0 / 74.1 & \textbf{76.1 / 76.3} & 73.5 / 73.7 \\
+no BN  & 72.4 / 72.4 & \textbf{76.7 / 76.9} & 73.6 / 73.7 \\
+BN     & 74.2 / 74.3 & \textbf{77.1 / 77.1} & 73.3 / 73.4 \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Momentum wins outright --- two to three points over plain SGD
-in both nets. Plain SGD and Adam, by contrast, are a statistical tie: on
-a convolutional net this small, Adam's per-coordinate second-moment
-scaling has nothing to grip. And reading \emph{down} the columns
-recovers Lever~1 from the other side --- BN moves the final number by at
-most a fraction of a point (a touch down under momentum and Adam, even
-under SGD), confirming that its contribution is timing, not ceiling.
+\noindent Momentum wins outright --- three to four points over plain
+SGD in both nets, and the best result on the board (BN${+}$momentum,
+77\%). Plain SGD and Adam are a rough tie: Adam's per-coordinate
+second-moment scaling earns nothing it can keep here, even with the wide
+head's extra parameters to exploit. And reading \emph{down} the columns
+recovers Lever~1 --- BN helps most under plain SGD ($\approx{+}1.8$) and
+its margin shrinks to nothing under momentum and Adam, which already
+condition the gradient well. Normalization, in other words, mostly
+compensates for a weak optimizer; give it a good one and the depth
+alone carries the net.
 
 The reason we can make this comparison \emph{and trust it} is that the
 optimizer is one swappable rendered tail. The forward pass, the
@@ -3245,12 +3279,30 @@ and Adam beat SGD by some ten points. That gap was mostly an artifact:
 the momentum and Adam runs happened to go through a data pipeline with
 shuffling and flip augmentation that the plain-SGD baseline lacked.
 Holding the pipeline genuinely fixed --- the table above --- collapsed
-the difference to the two-to-three points that are really about the
+the difference to the few points that are really about the
 optimizer. It is exactly the kind of mistake a verified gradient does
 \emph{not} catch: the math was correct in every run; the experiment
 design was what needed fixing. An ablation measures the thing you varied
 only if everything else is held constant --- and ``everything else''
 includes the parts that live outside the network.
+
+\subsection*{Does the head width matter?}
+
+Almost not at all --- which is exactly why we could borrow MNIST's head
+untouched. The 2$\times$512 head carries about $334{,}000$ of the net's
+$374{,}000$ parameters; swap it for a narrow 64-wide head ($13{,}000$
+params, whole net down to $53{,}000$) and the same six runs land within
+a point either way --- best-of-board $77.1\%$ wide vs $77.2\%$ narrow,
+with the optimizer ordering unchanged. Seven times the parameters buys
+no accuracy, and only about $1.4\times$ the wall-clock per epoch
+(${\approx}14$ vs ${\approx}10$ seconds on a gfx1100): the eight
+convolutions over the $32 \times 32$ maps dominate the compute, while
+the head --- big as it is --- is cheap matmul. That is the lesson the
+bridge makes concrete: at this scale the \emph{depth} of the
+convolutional body is the lever, not the width of the classifier on top.
+It is why the head can stay MNIST's, and why the next chapter spends its
+budget on \emph{more convolution} --- thirty-four layers of it --- not a
+bigger head.
 
 \subsection*{Why the levers work}
 

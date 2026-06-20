@@ -586,6 +586,16 @@ lean_exe «cifar8-bn-verified-sgdsched» where
   root := `MainCifar8BnVerifiedSgdSched
   moreLinkArgs := ireeLink
 
+-- Wide-head (MNIST-style 2×512 dense, d1=512) cifar8 optimizer ablation: each exe runs SGD /
+-- momentum / AdamW in sequence on the controlled pipeline. Render: tests/TestCifar8WideTrain.lean.
+lean_exe «cifar8w-ablation» where
+  root := `MainCifar8WideAblation
+  moreLinkArgs := ireeLink
+
+lean_exe «cifar8w-bn-ablation» where
+  root := `MainCifar8WideBnAblation
+  moreLinkArgs := ireeLink
+
 -- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
 -- VERIFIED-rendered StableHLO (tests/TestResnet34{Train,Fwd}.lean); 146 params.
 lean_exe «resnet34-verified» where
