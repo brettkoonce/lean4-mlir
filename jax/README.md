@@ -46,14 +46,21 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf 
 
 ### 2. Install JAX
 
+CPU-only (no GPU):
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install jax jaxlib
 ```
 
-For GPU (ROCm — see ROCm status below for caveats):
+GPU: install the **pinned** environment for your backend. The jax version
+differs per backend on purpose right now (ROCm 0.10.0, CUDA 0.9.2) — see
+**Pinned environments** below.
 ```bash
-.venv/bin/pip install jax==0.9.2 jax-rocm7-plugin==0.9.1.post3 jax-rocm7-pjrt==0.9.1.post3
+# AMD / ROCm — jax 0.10.0 (tested on gfx1100; see ROCm status below):
+.venv/bin/pip install -r requirements-rocm-lock.txt
+
+# NVIDIA / CUDA — jax 0.9.2:
+.venv/bin/pip install -r requirements-cuda-lock.txt
 ```
 
 ### 3. Get data
@@ -108,18 +115,36 @@ The generated Python is GPU-ready — **zero code changes needed**. JAX
 auto-dispatches to GPU when one is available:
 
 ```bash
-# CUDA (NVIDIA)
-pip install jax[cuda12]
+# CUDA (NVIDIA) — jax 0.9.2:
+pip install -r requirements-cuda-lock.txt
 
-# ROCm (AMD) — manual install
-pip install jax==0.10.0 jaxlib==0.10.0 \
-            jax-rocm7-plugin==0.9.1.post4 jax-rocm7-pjrt==0.9.1.post4
+# ROCm (AMD) — jax 0.10.0:
+pip install -r requirements-rocm-lock.txt
 ```
 
 **Multi-GPU data parallelism** is automatic via `jax.sharding`. The codegen
 emits a `Mesh` + `NamedSharding` setup that detects all available GPUs,
 replicates params, and shards batches across devices. No changes to the
 Lean spec or training config — just add more GPUs.
+
+### Pinned environments
+
+Each backend's environment is a `pip freeze` lock, so a newcomer gets a
+known-good set rather than whatever is newest on PyPI:
+
+| backend | jax | lock file |
+|---|---|---|
+| CUDA (NVIDIA) | **0.9.2** | `requirements-cuda-lock.txt` |
+| ROCm (AMD) | **0.10.0** | `requirements-rocm-lock.txt` |
+
+Both are committed; they share the same comparator dependency set, with
+only the GPU stack swapped (`jax-cuda12-*` + `nvidia-*-cu12` ↔
+`jax-rocm7-*`). The jax versions differ **on purpose** for now: ROCm
+needed 0.10.0 to clear the conv/JIT bugs (see ROCm status), while CUDA
+stays at the 0.9.2 that produced the reference traces. Aligning both to
+0.10.0 is in progress — the 0.9.2 → 0.10.0 bump is being validated
+against the comparator traces. To refresh a lock after changing the env,
+`pip freeze > requirements-<backend>-lock.txt` from the matching venv.
 
 ### ROCm status (April 2026)
 
