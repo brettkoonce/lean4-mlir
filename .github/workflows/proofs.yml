@@ -221,14 +221,24 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Component | Files | Lines |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          for category in "Proofs:LeanMlir/Proofs/*.lean" "Core Library:LeanMlir/*.lean" "Bestiary:Bestiary/*.lean" "Trainers:Main*Train*.lean" "Tests:tests/*.lean" "FFI (C):ffi/*.c ffi/*.h"; do
-            name="${category%%:*}"
-            pattern="${category##*:}"
-            files=$(ls $pattern 2>/dev/null | wc -l)
-            lines=$(cat $pattern 2>/dev/null | wc -l)
-            echo "| ${name} | ${files} | ${lines} |" >> $GITHUB_STEP_SUMMARY
-          done
-          total_lean=$(find . -name "*.lean" -not -path "./.lake/*" -not -path "./jax/*" -not -path "./mnist-lean4/*" | xargs cat | wc -l)
+          # Rows partition the Lean tree and sum to Total Lean. Each is a `find` that excludes
+          # any nested .lake build tree (e.g. tests/comparator/.lake/packages/mathlib — which a
+          # plain `*.lean` walk would otherwise add ~millions of Mathlib lines for).
+          lf() { find "$@" -name "*.lean" -not -path "*/.lake/*" 2>/dev/null | wc -l; }      # file count
+          ll() { find "$@" -name "*.lean" -not -path "*/.lake/*" -print0 2>/dev/null | xargs -0 cat 2>/dev/null | wc -l; }  # line count
+          # Core Library = LeanMlir/ minus the Proofs/ subtree, plus the root umbrella.
+          core() { find LeanMlir -name "*.lean" -not -path "LeanMlir/Proofs/*" -not -path "*/.lake/*"; ls LeanMlir.lean 2>/dev/null; }
+          echo "| Proofs | $(lf LeanMlir/Proofs) | $(ll LeanMlir/Proofs) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core Library | $(core | wc -l) | $(core | xargs cat 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bestiary | $(lf Bestiary) | $(ll Bestiary) |" >> $GITHUB_STEP_SUMMARY
+          # Trainers = root Main*.lean (all backends/optimizers) + the historical/ trainers.
+          echo "| Trainers | $(ls Main*.lean historical/Main*.lean 2>/dev/null | wc -l) | $(cat Main*.lean historical/Main*.lean 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Demos | $(ls demos/*.lean 2>/dev/null | wc -l) | $(cat demos/*.lean 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | $(lf tests) | $(ll tests) |" >> $GITHUB_STEP_SUMMARY
+          echo "| FFI (C) | $(ls ffi/*.c ffi/*.h 2>/dev/null | wc -l) | $(cat ffi/*.c ffi/*.h 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          # Total Lean: every *.lean except build files (lakefile.lean), any nested .lake tree,
+          # and the jax/ + phase-1 mnist-lean4/ subprojects.
+          total_lean=$(find . -name "*.lean" -not -name "lakefile.lean" -not -path "*/.lake/*" -not -path "./jax/*" -not -path "./mnist-lean4/*" -print0 | xargs -0 cat 2>/dev/null | wc -l)
           total_c=$(cat ffi/*.c ffi/*.h 2>/dev/null | wc -l)
           echo "| **Total Lean** | | **${total_lean}** |" >> $GITHUB_STEP_SUMMARY
           echo "| **Total C** | | **${total_c}** |" >> $GITHUB_STEP_SUMMARY
