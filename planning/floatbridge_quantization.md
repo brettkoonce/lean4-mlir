@@ -1,9 +1,12 @@
 # Planning — FloatBridge: finish the MNIST chain, then low-precision quantization (→ an E4M3 demo)
 
-_Status note, 2026-06-19._ Forward-looking plan. **Item D / G1 (§1a) is DONE** —
-`linear_float_sgd_descends` in `SgdDescentLinear.lean`. **§1c two-`u` foundation is DONE** —
-`dot_close_mixed` (+ `_uniform`, `dotMixed_exact_leaf`) in `FloatBridge.lean`. Both axiom-clean and
-in `AuditAxioms.lean`. The rest below is still forward-looking. Two threads that share one foundation
+_Status note, updated 2026-06-20._ Large parts now LANDED (all axiom-clean, in `AuditAxioms.lean`):
+**Item D/G1 §1a** (`linear_float_sgd_descends`), **§1c** (`dot_close_mixed` + `dense_close_mixed`:
+two-roundoff dot AND dense), **Items A/B/C** (`cnn_float_close` whole-net forward, `cnn_conv{W,b}_step_float_close`
+gradient-step, `mnist_cnn_convW_step_float_budget` numeric) — so FloatBridge covers all 3 MNIST nets,
+forward + gradient-step + numeric. **E4M3 demo §3a DONE** (`scripts/mnist_e4m3_demo.py`: fp32 92.25% →
+E4M3 92.30%, 92.89% margin>2B verified-region). Still forward-looking: §3b (render-tie), §3c (the Lean
+per-matmul fp8 bound). Two threads that share one foundation
 (`LeanMlir/Proofs/FloatBridge.lean`, the `FloatModel` relative-error model, parametric in the
 unit roundoff `u`):
 
@@ -23,23 +26,22 @@ model's assumptions break* (§2).
 
 ---
 
-## 0. Where FloatBridge is now (the honest baseline)
+## 0. Where FloatBridge is now (baseline → current)
 
 | Net | Rounding-proximity (`*_float_close`) | Descent (Lipschitz + `sgd_descends`) |
 |---|---|---|
-| **linear** | ✅ `linear_float_close` (fwd) | ✅ `linear_loss_grad_lipschitz` + `linear_sgd_descends` |
+| **linear** | ✅ `linear_float_close` (fwd) + `linear_grad_close` + **`linear_float_sgd_descends`** (η closed) | ✅ `linear_loss_grad_lipschitz` + `linear_sgd_descends` |
 | **mlp** | ✅ fwd + **all 6** param `*_step_float_close` + 2 numeric capstones (`mnist_mlp_float_budget`, `mnist_w2_step_float_budget`) | ✅ per-layer `mlp_{output,hidden,input}_sgd_descends` |
-| **cnn** | ❌ **none** (`SgdDescentCnn.lean` has only the descent side) | ✅ `cnn_conv{1,2}{,_bias}_sgd_descends` + Lipschitz |
+| **cnn** | ✅ **`cnn_float_close`** (whole-net fwd) + `cnn_conv{W,b}_step_float_close` + `mnist_cnn_convW_step_float_budget` | ✅ `cnn_conv{1,2}{,_bias}_sgd_descends` + Lipschitz |
 
-**Two structural gaps:**
+**The two structural gaps that drove this plan — both now CLOSED:**
 
-- **G1 — the η-composition ("the two halves never meet").** `*_sgd_descends` takes the gradient
-  accuracy `η` as an **abstract** parameter (`hgh : |gh − gradAt f| ≤ η`); **no theorem feeds a
-  FloatBridge budget (`sgdErr`/`cotErr`) into that `η`-slot.** So the rounding side and the descent
-  side coexist but never compose into one statement. This is the single biggest honesty win
-  available, and it is *independent of which net*.
-- **G2 — CNN has no rounding side.** Linear/mlp have `*_float_close`; cnn does not. Bringing
-  FloatBridge "to the rest of the MNIST models" is essentially this.
+- **G1 — the η-composition ("the two halves never meet").** Was: `*_sgd_descends` took gradient
+  accuracy `η` as an **abstract** parameter with no theorem feeding a FloatBridge budget into it.
+  **Closed on linear** (`linear_float_sgd_descends`, §1a) — rounding and descent now compose into one
+  statement. (mlp/cnn η-composition still open — needs the mlp joint-step refinement; §4.)
+- **G2 — CNN has no rounding side.** Was: linear/mlp had `*_float_close`, cnn didn't. **Closed**
+  (§1b, Items A/B/C) — cnn now has forward + gradient-step + numeric rounding budgets.
 
 **The precision-scaling insight (from the bf16/fp8/fp4 discussion):**
 - `u`: fp32 `2⁻²⁴`, bf16 `2⁻⁸`, fp8-E4M3 `2⁻⁴` (6.25%), fp8-E5M2 `2⁻³`, fp4-E2M1 `2⁻²` (25%).
@@ -74,24 +76,14 @@ with the actual rounding budget so the two halves become one theorem.
   (`exp` accuracy `eexp`, a-posteriori logit drift `δ`) + checkable arithmetic (small-step, the two
   dominance conditions). Depth-1 ⇒ no per-layer η-threading, exactly as predicted.
 
-- `linear_sgd_descends` (`SgdDescentLinear.lean`) currently: `∀ η, (gradient is within η) → loss
-  drops by ≥ lr‖∇‖²/2 − taxes(η)`. The FloatBridge budget that bounds the rounded gradient is the
-  per-entry `sgdErr`/`cotErr` family (`FloatBridge.lean:683,1446`).
-- **The theorem to add:** `linear_float_sgd_descends` — discharge `η` by the FloatBridge budget at
-  the linear net's single layer, so the statement becomes unconditional-given-float:
-  *"one binary32 SGD step on MNIST-linear decreases the cross-entropy loss"* — no abstract `η`.
-- Linear is **depth-1**, so there is no per-layer η-threading and no joint-step subtlety — this is
-  the clean pilot. Effort: **light** (it is a wiring + one inequality chain). Payoff: the chain
-  `binary32 → proximity → smoothness → descent` is *closed end-to-end for one net*.
-
-Then replicate for mlp (per-layer η from `mlp_*_step_float_close`) — heavier only because of the
-**joint-step** refinement (logits aren't affine when all params move at once; needs a joint Lipschitz
-or a per-coordinate decomposition — already flagged as open in `SgdDescentMlp`).
+*Still open (§4):* replicate the η-composition for mlp (per-layer η from `mlp_*_step_float_close`) —
+heavier only because of the **joint-step** refinement (logits aren't affine when all params move at
+once; needs a joint Lipschitz or a per-coordinate decomposition — already flagged in `SgdDescentMlp`).
 
 ### 1b. Items A/B/C — bring the rounding side to CNN (= "FloatBridge to the rest of MNIST")
 
-CNN already has the *descent* side (`SgdDescentCnn.lean`, 6771 lines: `MaxPool2MarginQ`, pool drift,
-conv = dense-with-sharing). It lacks the *rounding* side. Reuse ~70%.
+CNN already had the *descent* side (`SgdDescentCnn.lean`: `MaxPool2MarginQ`, pool drift,
+conv = dense-with-sharing); it lacked the *rounding* side. **Now added** (A/B/C below), ~70% reuse.
 
 **Item A is DONE (2026-06-19) — `cnn_float_close` closed end-to-end.** All 3-axiom clean, audited.
 - *Exact maxpool* — `max_close` / `maxPool2_close` / `maxPoolFlat_close` (+ `maxPoolFlat_abs_le`)
@@ -111,25 +103,29 @@ conv = dense-with-sharing). It lacks the *rounding* side. Reuse ~70%.
   error through unamplified). **The chain `binary32 → certified proximity` is now closed for all three
   MNIST nets (linear / mlp / cnn).**
 
-- **A — `cnn_float_close` (forward rounding budget).** Conv is a sum-of-products ⇒ the **dense
-  Higham budget (`dot_close`/`layerBudget`) at conv fan-in `kH·kW·ic`**. The structural fact
-  `conv = dense-with-sharing` already exists (`SgdDescentCnn`: `conv2d_eq_convPad`, affine-in-kernel).
-  Two kink/pool facts:
-  - **maxpool is exact in float** — `max(a,b)` is one of `a,b` (compare-and-select, no arithmetic, no
-    rounding). The float peer of exact-ℝ max; FloatBridge already notes "relu = max-with-0 is exact in
-    float" (`:84`) — this just lifts it to the 2×2 window. **The one genuinely-new lemma, and it's easy.**
-  - **relu exact in float** — already have (`reluMask_close`, the quantitative margin `ez < |z|`).
-  So `cnn_float_close` = the dense float-close at conv fan-in, threaded through exact relu + exact
-  maxpool + the (done) dense head.
-- **B — `cnn_convW/convb_step_float_close` (gradient-step rounding).** The conv weight grad is a
-  **correlation** = another dot product ⇒ reuse the dense-gradient machinery (`mlp_w*_step_float_close`)
-  at the conv grad fan-in. The backward routing is exact-in-float under the margins *already proven*
-  on the descent side (`MaxPool2MarginQ` freezes the argmax; the relu mask is the margin condition).
-- **C — numeric capstone at trained magnitudes** (`mnist_cnn_*_step_float_budget`). Instantiate B at
-  the CNN's measured trained `|W|` (mirroring `mnist_w2_step_float_budget`). `norm_num` once B exists.
+- **B — `cnn_convW/convb_step_float_close` (gradient-step rounding). ✅ DONE (2026-06-19).** The conv
+  weight grad is a **correlation = a dot** over the `h·w` spatial positions; the bias grad is a
+  spatial **sum**. Both rounded SGD steps reduce to two reusable generic cores in `FloatBridge.lean` —
+  `dotSgd_step_close` / `sumSgd_step_close` (= `dot_close` / `sum_close` feeding `sgd_step_close`).
+  `convWeightGrad_eq_dot` / `convBiasGrad_eq_sum` (`SgdDescentCnn.lean`, via `sum_s2` + the
+  `convPadWin` / `cotWin` flattenings) re-express the certified conv gradient (`conv2d_weight_pdiv`)
+  as that flat dot/sum; `cnn_convW_step_float_close` / `cnn_convb_step_float_close` are then the
+  generic cores instantiated — the rounded conv weight/bias update within `sgdErr` of the real step,
+  the dot/sum Higham γ (fan-in `h·w`) as the gradient-error slot. The cotangent is hypothesis-supplied
+  (same as `mlp_w2_step_float_close`; the loss-head `exp` accuracy lives in `cotErr`). All 3-axiom
+  clean, audited.
+- **C — numeric capstone (`mnist_cnn_convW_step_float_budget`). ✅ DONE (2026-06-20).** At the
+  committed Chapter-4 dims (conv2 `32→32`, `3×3`, `28×28` ⇒ weight-grad fan-in `28·28 = 784`),
+  `u ≤ 2⁻²⁴`, `lr = 1/10`, `|W| ≤ 3/5` (the trained-magnitude bound, matching the MLP capstone): every
+  rounded conv2 weight SGD entry is within **`(a·g)/250 + 10⁻⁷`** of the certified step. Here `a`
+  bounds the conv-input activation and `g` the conv cotangent — both **a-posteriori / measured**
+  (supplied as hypotheses, since the conv input and back-propagated cotangent are not intrinsically
+  `≤ 1`, unlike the softmax−onehot head). The `1/250 ≈ 0.4%` rate is `lr·γ₇₈₅` — the gradient's
+  Higham error at learning-rate scale: the conv weight step is as accurate as the gradient itself.
+  3-axiom clean, audited. (Plugging the measured `a, g` from a `margin_probe`-style run yields the
+  final single decimal.)
 
-Effort: A/B **medium** (mostly gluing dense budgets + existing CNN margin lemmas; the only fresh
-content is maxpool-exact-in-float); C **easy**.
+Effort: A/B/C **all DONE** — the CNN rounding side is complete.
 
 ### 1c. Do A/B *parametric in two roundoffs* (the free bf16 + fp8 setup) — ✅ foundation DONE (2026-06-19)
 
@@ -151,9 +147,13 @@ This is a localized generalization of `dot_close` (`FloatBridge.lean:218`).
 - `dot_close_mixed_uniform` — folded to one `Σ|xy|` factor `[γ_acc·(1+u_leaf)² + 2u_leaf + u_leaf²]`,
   the directly-instantiable shipped-artifact form.
 - `dotMixed_exact_leaf` — `u_leaf = 0` collapses it to `dot_close` (a genuine generalization).
+- **`FloatModel.denseMixed` + `dense_close_mixed`** — `dotMixed` threaded through the **dense layer**
+  (leaf precision `L` on the matmul, accumulate `M` on the bias add): the leaf precision enters only
+  via the flat `dotMixed` term, the accumulate rides the bias add + fan-in γ. The deployed bf16-mixed
+  dense layer; bf16 / fp8 dense fall out by setting `L.u`.
 
-What remains for §1c: thread `dotMixed` through the **dense/conv** layer budget (lands naturally with
-A/B, §1b), then the three numeric instantiations. The reusable core is now in place. It buys:
+The three numeric instantiations now drop straight out of `dot_close_mixed_uniform` / `dense_close_mixed`
+by choosing `L.u`:
 - **fp32**: `u_leaf = u_acc = 2⁻²⁴` (current behavior).
 - **bf16-mixed** (the deployed config): `u_leaf = 2⁻⁸`, `u_acc = 2⁻²⁴` — non-vacuous because the
   fan-in term rides at fp32; the leaf term is a flat `~2·2⁻⁸ ≈ 0.8%`. Reductions (BN/softmax/GAP)
@@ -207,15 +207,17 @@ per-matmul leaf bound *is* the end-to-end bound — **no vacuous depth compoundi
 realistic case where an **honest end-to-end accuracy bound at fp8 exists**. Three deliverables,
 increasing in ambition:
 
-### 3a. Empirical demo (runnable, JAX/numpy — the "it works" headline)
-- Quantize the trained MNIST-linear (or a 784→64→10 mlp) to **E4M3**: per-row weight scale, per-tensor
-  activation scale, **fp32 accumulate**, fp32 softmax. Mirror `jax/scripts/jax_r34_bf16_bench.py`'s
-  mixed-precision structure (a `compute_dtype` knob; here add a fake-quant `to_e4m3(x/s)*s`).
-- Measure: top-1 vs. the fp32 baseline (92.1% for linear). Expectation: small drop — MNIST is
-  well-separated; this is the "precision drops elegantly" demo. Also log the **logit-margin
-  distribution** (needed for 3c).
-- Deliverable: `jax/scripts/mnist_e4m3_demo.py` + a one-line result in the README/blueprint.
-- Effort: **light** (a day of numpy/JAX).
+### 3a. Empirical demo (runnable, numpy — the "it works" headline) — ✅ DONE (2026-06-20)
+- **Landed:** `scripts/mnist_e4m3_demo.py` (numpy-only, sibling of `scripts/margin_probe.py`; no JAX
+  dep needed). Trains an fp32 MNIST-linear baseline, then fake-quantizes the trained weights AND test
+  activations to **E4M3** (per-row weight scale, per-tensor activation scale, **fp32 accumulate**,
+  fp32 softmax) — exactly the `dotMixed` model (u_leaf = E4M3, u_acc = fp32). `to_e4m3` is a faithful
+  round-to-nearest E4M3 (1-4-3, bias 7, max 448, subnormals to 2⁻⁹, saturating).
+- **Result (seed 0, 20 epochs):** fp32 **92.25%**, E4M3 **92.30%** — a *+0.05pt* "drop" (statistical
+  noise); prediction agreement 99.63%; logit drift mean 0.047 / max 0.38. **"Precision drops
+  elegantly" confirmed.** Also logs the fp32 logit-margin distribution (mean 4.25) for 3c.
+- The script also computes the **3c argmax-preservation fraction empirically** (see 3c): 92.89% of
+  the test set has margin > 2B, and a built-in check confirms 100% of those keep their prediction.
 
 ### 3b. Structural faithfulness (the verified part that's *complete*)
 - Add E4M3 `quantize`/`dequantize` (with a per-row scale) as `den`-able ops, and prove the emitted
@@ -249,17 +251,17 @@ to *show* the compounding so the regime change from §2 is visible on a real net
 |---|---|---|---|
 | ✅ | **G1/Item D on linear** (`linear_float_sgd_descends`) | light | **DONE 2026-06-19** — closes the chain end-to-end for one net, the biggest honesty win |
 | ✅ | **§1c two-`u` `dot_close_mixed`** (foundation) | light | **DONE 2026-06-19** — bf16-mixed (shipped artifact) falls out + sets up fp8; dense/conv threading lands with A/B |
-| 🚧 | **A/B/C — CNN rounding side** | medium | **A (forward `cnn_float_close`) DONE 2026-06-19** (conv-as-dense + exact maxpool, whole-net capstone); **B/C (gradient-step rounding + numeric capstone) remain.** Forward chain now closed for all 3 MNIST nets |
-| 4 | **3a E4M3 MNIST empirical demo** | light | the "precision drops elegantly" headline |
+| ✅ | **A/B/C — CNN rounding side** | medium | **DONE 2026-06-19/20.** A (forward `cnn_float_close`), B (`cnn_conv{W,b}_step_float_close`), C (`mnist_cnn_convW_step_float_budget`, decimal `(a·g)/250 + 10⁻⁷`). FloatBridge is now on all 3 MNIST nets, forward + gradient-step + numeric |
+| ✅ | **3a E4M3 MNIST empirical demo** | light | **DONE 2026-06-20** — fp32 92.25% → E4M3 92.30%, the "precision drops elegantly" headline; computes the 3c margin fraction empirically (92.89%) |
 | 5 | **3b E4M3 structural faithfulness** | medium | a *complete* verified claim at fp8 (the right kind) |
-| 6 | **3c E4M3 per-matmul accuracy + margin fraction** | medium | the honest end-to-end fp8 accuracy bound (depth-1) |
+| 6 | **3c E4M3 per-matmul accuracy + margin fraction** | medium | the honest end-to-end fp8 accuracy bound (depth-1); the Lean side of what 3a measured |
 | — | G1 for mlp/cnn + mlp joint-step | medium | finishes the descent composition across the chain |
 | — | fp4 / block-scaled `FloatModel` field / probabilistic budgets | heavy/research | only if pushing below fp8; expect structural-only claims |
 
 **Definition of done (per item):** every new theorem `#print axioms`-closes under
 `[propext, Classical.choice, Quot.sound]`, added to `tests/AuditAxioms.lean`; no `sorry`, no project
-axiom. The demo scripts live in `jax/scripts/` with reference numbers in the header (like
-`scripts/margin_probe.py`). README/blueprint float section updated.
+axiom. The demo scripts live in `scripts/` with reference numbers in the header (like
+`scripts/margin_probe.py` — `scripts/mnist_e4m3_demo.py` follows it). README/blueprint float section updated.
 
 ---
 
