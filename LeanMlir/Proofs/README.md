@@ -4,6 +4,46 @@ Machine-checked proofs that the backward pass (VJP) of every layer
 matches its forward-pass Jacobian. Zero `sorry`s. If `lake build`
 succeeds, every theorem is correct.
 
+> New here? Read the **Start here** section directly below before the rest of this
+> file — it's a reference, not an on-ramp.
+
+## Start here — the minimum working set
+
+The suite is large, but you don't need the big files to understand it. Two things are
+proved for each net, and the **Linear classifier** shows both in ~650 lines total:
+
+1. **Faithfulness** — the *emitted* StableHLO train-step denotes the *certified*
+   forward + gradient + SGD math.
+2. **Descent** — that SGD step provably *decreases the loss*.
+
+Read these three, in order:
+
+1. [`LinearTrainStep.lean`](LinearTrainStep.lean) (~250 L) — the linear train-step spec + ops.
+2. [`LinearFaithfulPoC.lean`](LinearFaithfulPoC.lean) (~145 L) — **capstone**: emitted step = certified math.
+3. [`SgdDescentLinear.lean`](SgdDescentLinear.lean) (~255 L) — **capstone**: that step decreases the loss.
+
+Build *just* this slice (Linear + the shared foundation it needs, nothing else):
+
+```bash
+lake build ProofsMinimal
+```
+
+**Foundation (read once; shared by every net — big because reusable, not per-net work):**
+`Tensor.lean` (chain rule / `fderiv`), `StableHLO.lean` (the AST + `den` denotation),
+`FloatBridge.lean`, `IR`/`IRPrint.lean`, `SpecVJP.lean`.
+
+**Per-net chapters** repeat the Linear pattern in small files (MLP → CIFAR-CNN → ResNet34
+→ MobileNetV2 → EfficientNet → ConvNeXt → ViT), each following a fixed stage vocabulary:
+`*BackB0` (block backward) → `*ChainClose` (pin through depth) → `*Render`/`*RenderPC`
+(forward = math) → `*Close` (param grads) → `*FaithfulPoC` / `*TiePoC` (whole train step)
+→ `*Live`/`*Seal` (nonzero-Jacobian witness).
+
+**Don't start with the big files:** `SgdDescentCnn.lean` (~6.8k), `Attention.lean` (~3.8k),
+`ViTBackB0.lean` (~2.1k), or the `StableHLO.lean` denotation internals. You do not need any
+of them to understand the approach — `StableHLO.lean` is one big file by design (its `den`
+embeds the whole layer library), so read the small per-net `*Render` files, which specialize
+it, rather than the monolith. (Rationale: `planning/proofs_minimal_set.md`.)
+
 ## Foundation: Mathlib's `fderiv`
 
 Earlier drafts of this suite axiomatized the entire calculus

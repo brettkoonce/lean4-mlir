@@ -399,6 +399,18 @@ lean_lib «Proofs» where
              -- multi-head/depth-12 thread is the remaining step (mnv2 reduced→full) (ViTTiePoC.lean).
              `LeanMlir.Proofs.ViTTiePoC]
 
+/-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
+    end-to-end story (the Linear classifier), both halves — faithfulness
+    (`LinearFaithfulPoC`: emitted train-step = certified math) and descent
+    (`SgdDescentLinear`: that step decreases the loss). Their transitive closure is
+    exactly the minimum working set (LinearTrainStep + the shared StableHLO/Tensor/
+    FloatBridge/IR foundation), nothing per-net beyond Linear. Point a newcomer here
+    before the full `Proofs` target. See `LeanMlir/Proofs/README.md` (Start here) and
+    `planning/proofs_minimal_set.md`. -/
+lean_lib «ProofsMinimal» where
+  srcDir := "."
+  roots := #[`LeanMlir.Proofs.LinearFaithfulPoC, `LeanMlir.Proofs.SgdDescentLinear]
+
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
 lean_lib «Codegen» where
