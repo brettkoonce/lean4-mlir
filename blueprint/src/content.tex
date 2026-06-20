@@ -977,9 +977,8 @@ CIFAR$\pm$BN) are closed both ways, and all five Part~I architectures ---
 ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT --- are proved at
 full architecture: machine-checked forward graphs throughout; whole-network
 backward at full depth, with the non-triviality seal (that the proven backward
-is nonzero at a witness) at full depth for four of the five and at a
-representative two-block witness for MobileNetV2 --- the one deferred item;
-three classical axioms. All five committed training steps were then re-rendered
+is nonzero at a witness) at full depth for all five; three classical axioms.
+All five committed training steps were then re-rendered
 at the production trainers' exact signatures and \emph{tied}: every parameter
 update is proved to consume the cotangent its own backward pass delivers,
 threaded through the real forward, and each agrees on GPU to float rounding. The
