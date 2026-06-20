@@ -9546,8 +9546,37 @@ skip IREE entirely. The proofs don't depend on the runtime.
 git clone https://github.com/brettkoonce/lean4-mlir.git
 cd lean4-mlir
 lake exe cache get             # pull ~5 GB of precompiled Mathlib
-lake build Proofs              # type-checks the entire VJP proof suite
+lake build ProofsMinimal       # the smallest end-to-end story (~seconds)
+lake build Proofs              # type-checks the ENTIRE VJP proof suite
 \end{verbatim}
+
+\textbf{Start with \texttt{ProofsMinimal}.} The full \texttt{Proofs}
+build type-checks every chapter at once --- the real verification, but a
+lot to meet head-on. \texttt{lake build ProofsMinimal} instead compiles
+just the suite's ``hello world'': the linear softmax classifier ---
+the book's first end-to-end-verified example --- in both halves of its
+claim.
+\begin{itemize}
+  \item \texttt{LinearFaithfulPoC} ($\sim$145 lines) --- the
+    \emph{faithfulness} half: the StableHLO training step the codegen
+    emits is, line for line, the certified softmax--cross-entropy
+    gradient.
+  \item \texttt{SgdDescentLinear} ($\sim$255 lines) --- the
+    \emph{descent} half: one SGD step on that certified gradient
+    provably decreases the loss.
+\end{itemize}
+Their transitive closure \emph{is} the minimum working set: those two
+files plus the shared StableHLO / tensor / float-bridge foundation, and
+nothing per-network beyond the linear case. \textbf{This is the
+jumping-off point for the code.} Open
+\texttt{LeanMlir/Proofs/LinearFaithfulPoC.lean} and
+\texttt{SgdDescentLinear.lean} and read them top to bottom: you will
+have seen the entire shape of the argument the rest of the suite scales
+up --- every later chapter is these same two halves at a larger network.
+The \textbf{Start here} section of \texttt{LeanMlir/Proofs/README.md}
+lays out that read order and flags which large files to skip on a first
+pass. Once \texttt{ProofsMinimal} builds green, graduate to the whole
+suite:
 
 The \texttt{Proofs} target's roots are the apex VJP modules; their
 transitive imports cover every chapter's proof file, so this single
