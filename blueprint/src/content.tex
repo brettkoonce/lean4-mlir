@@ -4308,6 +4308,77 @@ these blocks and call it a network.
 
 \subsection*{The architecture}
 
+The same vertical column as ResNet-34, now built from
+inverted-residual blocks: a $3 \times 3$ stride-2 stem, seven stages of
+\texttt{.invertedResidual} blocks (17 in all, widths $16$ to $320$,
+expansion $t{=}6$ except the first), a $1 \times 1$ lift to 1280
+channels, global average pool, and a dense head --- and \emph{no}
+max-pools, since every downsample is folded into a strided block. The
+inset shows one inverted-residual block: the cheap depthwise spatial mix
+happens at the wide point.
+
+\begin{center}
+\begin{tikzpicture}[
+  >={Stealth[length=1.8mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  col/.style    = {align=center, rounded corners=2pt, inner sep=2pt, minimum height=0.56cm, minimum width=6.3cm},
+  io/.style     = {col, draw=blue!55!black,   fill=blue!8},
+  convbn/.style = {col, draw=orange!65!black, fill=orange!12},
+  invres/.style = {col, draw=teal!65!black,   fill=teal!10, minimum height=0.6cm},
+  gap/.style    = {col, draw=purple!60!black, fill=purple!8},
+  head/.style   = {col, draw=red!60!black,    fill=red!8},
+  logits/.style = {col, draw=green!50!black,  fill=green!14, very thick},
+  arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
+  stage/.style  = {font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west},
+]
+  \node[io]                            (input) {Input \;\; $224\times224\times3$};
+  \node[convbn, below=0.16cm of input] (stem) {\textbf{ConvBN} stem $3\to32$, $3\times3$, /2 \;\; $112{\times}112$};
+  \node[invres, below=0.16cm of stem]  (s1)   {$1\times$ \textbf{InvRes} $32\to16$, $t{=}1$ \;\; $112{\times}112$};
+  \node[invres, below=0.16cm of s1]    (s2)   {$2\times$ \textbf{InvRes} $16\to24$, $t{=}6$, /2 \;\; $56{\times}56$};
+  \node[invres, below=0.16cm of s2]    (s3)   {$3\times$ \textbf{InvRes} $24\to32$, $t{=}6$, /2 \;\; $28{\times}28$};
+  \node[invres, below=0.16cm of s3]    (s4)   {$4\times$ \textbf{InvRes} $32\to64$, $t{=}6$, /2 \;\; $14{\times}14$};
+  \node[invres, below=0.16cm of s4]    (s5)   {$3\times$ \textbf{InvRes} $64\to96$, $t{=}6$ \;\; $14{\times}14$};
+  \node[invres, below=0.16cm of s5]    (s6)   {$3\times$ \textbf{InvRes} $96\to160$, $t{=}6$, /2 \;\; $7{\times}7$};
+  \node[invres, below=0.16cm of s6]    (s7)   {$1\times$ \textbf{InvRes} $160\to320$, $t{=}6$ \;\; $7{\times}7$};
+  \node[convbn, below=0.16cm of s7]    (pw)   {\textbf{ConvBN} $1\times1$ $320\to1280$ \;\; $7{\times}7$};
+  \node[gap,    below=0.16cm of pw]    (g)    {global avg pool \;\; $7\times7\times1280 \to 1280$};
+  \node[head,   below=0.16cm of g]     (d)    {\textbf{Dense} $1280\to10$ \;(identity)};
+  \node[logits, below=0.16cm of d]     (out)  {Logits \;\; 10 classes, softmax-CE};
+  \foreach \a/\b in {input/stem, stem/s1, s1/s2, s2/s3, s3/s4, s4/s5, s5/s6,
+                     s6/s7, s7/pw, pw/g, g/d, d/out}
+     \draw[arr] (\a) -- (\b);
+  \foreach \n/\k in {s1/1, s2/2, s3/3, s4/4, s5/5, s6/6, s7/7}
+     \node[stage] at ($(\n.east) + (0.30,0)$) {stage \k};
+\end{tikzpicture}
+
+\vspace{0.45cm}
+
+\begin{tikzpicture}[
+  >={Stealth[length=1.6mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  box/.style  = {align=center, rounded corners=2pt, inner sep=3pt, minimum height=0.62cm, draw=teal!70!black, fill=teal!10},
+  dot/.style  = {circle, draw=teal!70!black, fill=teal!14, inner sep=0pt, minimum size=0.42cm},
+  term/.style = {font=\sffamily\scriptsize\itshape, inner sep=1pt},
+  arr/.style  = {->, thick, gray!65, shorten >=1pt, shorten <=1pt},
+  skip/.style = {->, thick, teal!70!black, shorten >=1pt},
+]
+  \node[term]                       (x)   {$x$};
+  \node[box, right=0.5cm of x]      (e)   {$1\times1$ expand\\$C\!\to\!tC$, ReLU6};
+  \node[box, right=0.4cm of e]      (dw)  {$3\times3$ DW\\ReLU6};
+  \node[box, right=0.4cm of dw]     (p)   {$1\times1$ project\\(linear)};
+  \node[dot, right=0.5cm of p]      (sum) {$+$};
+  \node[term, right=0.5cm of sum]   (y)   {$y$};
+  \draw[arr] (x)  -- (e);
+  \draw[arr] (e)  -- (dw);
+  \draw[arr] (dw) -- (p);
+  \draw[arr] (p)  -- (sum);
+  \draw[arr] (sum) -- (y);
+  \draw[skip] (x.north) .. controls +(0,0.85) and +(0,0.85) .. (sum.north)
+        node[midway, above, term, teal!70!black] {skip if stride 1, $C_{\text{in}}{=}C_{\text{out}}$};
+  \node[term, below=0.16cm of dw, gray!55!black] {one inverted-residual block: depthwise spatial mix at the wide point};
+\end{tikzpicture}
+\end{center}
+
 \begin{verbatim}
 -- 1
 import LeanMlir
@@ -4786,6 +4857,70 @@ the B0 baseline's architectural novelty over MobileNet V2 is
 essentially ``add SE blocks.''
 
 \subsection*{The architecture}
+
+EfficientNet-B0 is the MobileNetV2 column with Squeeze-and-Excitation
+in every block: the same $3 \times 3$ stride-2 stem, seven stages of
+\texttt{.mbConv} blocks (kernel sizes mixing $3 \times 3$ and
+$5 \times 5$ depthwise), the $1 \times 1$ lift to 1280, global average
+pool, and dense head. The inset shows one MBConv block --- an inverted
+residual with an SE gate (highlighted) inserted before the project.
+
+\begin{center}
+\begin{tikzpicture}[
+  >={Stealth[length=1.8mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  col/.style    = {align=center, rounded corners=2pt, inner sep=2pt, minimum height=0.56cm, minimum width=6.7cm},
+  io/.style     = {col, draw=blue!55!black,    fill=blue!8},
+  convbn/.style = {col, draw=orange!65!black,  fill=orange!12},
+  blk/.style    = {col, draw=magenta!70!black, fill=magenta!9},
+  gap/.style    = {col, draw=purple!60!black,  fill=purple!8},
+  head/.style   = {col, draw=red!60!black,     fill=red!8},
+  logits/.style = {col, draw=green!50!black,   fill=green!14, very thick},
+  arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
+  stage/.style  = {font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west},
+]
+  \node[io]                            (input){Input \;\; $224\times224\times3$};
+  \node[convbn, below=0.16cm of input] (stem) {\textbf{ConvBN} stem $3\to32$, $3\times3$, /2 \;\; $112{\times}112$};
+  \node[blk, below=0.16cm of stem]     (m1)   {$1\times$ \textbf{MBConv} $32\to16$, $t1,k3$ \;\; $112{\times}112$};
+  \node[blk, below=0.16cm of m1]       (m2)   {$2\times$ \textbf{MBConv} $16\to24$, $t6,k3$, /2 \;\; $56{\times}56$};
+  \node[blk, below=0.16cm of m2]       (m3)   {$2\times$ \textbf{MBConv} $24\to40$, $t6,k5$, /2 \;\; $28{\times}28$};
+  \node[blk, below=0.16cm of m3]       (m4)   {$3\times$ \textbf{MBConv} $40\to80$, $t6,k3$, /2 \;\; $14{\times}14$};
+  \node[blk, below=0.16cm of m4]       (m5)   {$3\times$ \textbf{MBConv} $80\to112$, $t6,k5$ \;\; $14{\times}14$};
+  \node[blk, below=0.16cm of m5]       (m6)   {$4\times$ \textbf{MBConv} $112\to192$, $t6,k5$, /2 \;\; $7{\times}7$};
+  \node[blk, below=0.16cm of m6]       (m7)   {$1\times$ \textbf{MBConv} $192\to320$, $t6,k3$ \;\; $7{\times}7$};
+  \node[convbn, below=0.16cm of m7]    (pw)   {\textbf{ConvBN} $1\times1$ $320\to1280$ \;\; $7{\times}7$};
+  \node[gap, below=0.16cm of pw]       (g)    {global avg pool \;\; $7\times7\times1280 \to 1280$};
+  \node[head, below=0.16cm of g]       (d)    {\textbf{Dense} $1280\to10$ \;(identity)};
+  \node[logits, below=0.16cm of d]     (out)  {Logits \;\; 10 classes, softmax-CE};
+  \foreach \a/\b in {input/stem,stem/m1,m1/m2,m2/m3,m3/m4,m4/m5,m5/m6,m6/m7,m7/pw,pw/g,g/d,d/out}\draw[arr](\a)--(\b);
+  \foreach \n/\k in {m1/1,m2/2,m3/3,m4/4,m5/5,m6/6,m7/7}\node[stage] at ($(\n.east)+(0.30,0)$){stage \k};
+\end{tikzpicture}
+
+\vspace{0.45cm}
+
+\begin{tikzpicture}[
+  >={Stealth[length=1.6mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  box/.style ={align=center, rounded corners=2pt, inner sep=3pt, minimum height=0.6cm, draw=magenta!70!black, fill=magenta!9},
+  se/.style  ={align=center, rounded corners=2pt, inner sep=3pt, minimum height=0.6cm, draw=orange!70!black, fill=orange!12},
+  dot/.style ={circle, draw=magenta!70!black, fill=magenta!14, inner sep=0pt, minimum size=0.42cm},
+  term/.style={font=\sffamily\scriptsize\itshape, inner sep=1pt},
+  arr/.style ={->, thick, gray!65, shorten >=1pt, shorten <=1pt},
+  skip/.style={->, thick, magenta!70!black, shorten >=1pt},
+]
+  \node[term] (x){$x$};
+  \node[box, right=0.45cm of x]   (e){$1\times1$ expand\\$C\!\to\!tC$, ReLU6};
+  \node[box, right=0.4cm of e]    (dw){$k\times k$ DW\\ReLU6};
+  \node[se, right=0.4cm of dw]    (s){SE gate\\$\times g$};
+  \node[box, right=0.4cm of s]    (p){$1\times1$ project\\(linear)};
+  \node[dot, right=0.45cm of p]   (sum){$+$};
+  \node[term, right=0.45cm of sum] (y){$y$};
+  \foreach \a/\b in {x/e,e/dw,dw/s,s/p,p/sum,sum/y}\draw[arr](\a)--(\b);
+  \draw[skip] (x.north) .. controls +(0,0.9) and +(0,0.9) .. (sum.north)
+        node[midway, above, term, magenta!70!black]{skip if stride 1, $C_{\text{in}}{=}C_{\text{out}}$};
+  \node[term, below=0.16cm of s, gray!55!black]{one MBConv block: inverted residual $+$ squeeze-excitation};
+\end{tikzpicture}
+\end{center}
 
 \begin{verbatim}
 -- 1
@@ -5385,6 +5520,74 @@ compute budget. At our 9.5K-image Imagenette scale, the data
 regime is different but the architectural story still holds.
 
 \subsection*{The architecture}
+
+ConvNeXt-Tiny replaces the convolutional stages with
+\texttt{.convNextStage} blocks at four widths ($96, 192, 384, 768$;
+depths $3, 3, 9, 3$), glued by \texttt{.convNextDownsample} transitions
+(LayerNorm $+$ $2 \times 2$ stride-2 conv). A $4 \times 4$ stride-4
+patchify stem and a global-average-pool head bracket the stack. The
+inset shows one ConvNeXt block --- an inverted bottleneck with a single
+LayerNorm and GELU, scaled by a learnable $\gamma$ before the residual
+add.
+
+\begin{center}
+\begin{tikzpicture}[
+  >={Stealth[length=1.8mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  col/.style    = {align=center, rounded corners=2pt, inner sep=2pt, minimum height=0.56cm, minimum width=6.7cm},
+  io/.style     = {col, draw=blue!55!black,   fill=blue!8},
+  convbn/.style = {col, draw=orange!65!black, fill=orange!12},
+  blk/.style    = {col, draw=brown!70!black,  fill=brown!12},
+  norm/.style   = {col, draw=teal!60!black,   fill=teal!10},
+  gap/.style    = {col, draw=purple!60!black, fill=purple!8},
+  head/.style   = {col, draw=red!60!black,    fill=red!8},
+  logits/.style = {col, draw=green!50!black,  fill=green!14, very thick},
+  arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
+  stage/.style  = {font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west},
+]
+  \node[io]                          (input){Input \;\; $224\times224\times3$};
+  \node[convbn, below=0.16cm of input] (stem) {\textbf{ConvBN} patchify $3\to96$, $4\times4$, /4 \;\; $56{\times}56$};
+  \node[blk, below=0.16cm of stem]   (c1)   {$3\times$ \textbf{ConvNeXt} block @\,96 \;\; $56{\times}56$};
+  \node[norm, below=0.16cm of c1]    (n1)   {downsample $96\to192$ (LN $+$ $2\times2$/2) \;\; $28{\times}28$};
+  \node[blk, below=0.16cm of n1]     (c2)   {$3\times$ \textbf{ConvNeXt} block @\,192 \;\; $28{\times}28$};
+  \node[norm, below=0.16cm of c2]    (n2)   {downsample $192\to384$ \;\; $14{\times}14$};
+  \node[blk, below=0.16cm of n2]     (c3)   {$9\times$ \textbf{ConvNeXt} block @\,384 \;\; $14{\times}14$};
+  \node[norm, below=0.16cm of c3]    (n3)   {downsample $384\to768$ \;\; $7{\times}7$};
+  \node[blk, below=0.16cm of n3]     (c4)   {$3\times$ \textbf{ConvNeXt} block @\,768 \;\; $7{\times}7$};
+  \node[gap, below=0.16cm of c4]     (g)    {global avg pool \;\; $7\times7\times768 \to 768$};
+  \node[head, below=0.16cm of g]     (d)    {\textbf{Dense} $768\to10$ \;(identity)};
+  \node[logits, below=0.16cm of d]   (out)  {Logits \;\; 10 classes, softmax-CE};
+  \foreach \a/\b in {input/stem,stem/c1,c1/n1,n1/c2,c2/n2,n2/c3,c3/n3,n3/c4,c4/g,g/d,d/out}
+     \draw[arr](\a)--(\b);
+  \foreach \n/\k in {c1/1,c2/2,c3/3,c4/4}\node[stage] at ($(\n.east)+(0.30,0)$){stage \k};
+\end{tikzpicture}
+
+\vspace{0.45cm}
+
+\begin{tikzpicture}[
+  >={Stealth[length=1.6mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  box/.style  = {align=center, rounded corners=2pt, inner sep=2.5pt, minimum height=0.58cm, draw=brown!70!black, fill=brown!12},
+  dot/.style  = {circle, draw=brown!70!black, fill=brown!16, inner sep=0pt, minimum size=0.42cm},
+  term/.style = {font=\sffamily\scriptsize\itshape, inner sep=1pt},
+  arr/.style  = {->, thick, gray!65, shorten >=1pt, shorten <=1pt},
+  skip/.style = {->, thick, brown!70!black, shorten >=1pt},
+]
+  \node[term] (x){$x$};
+  \node[box, right=0.4cm of x]  (dw){DW $7\!\times\!7$};
+  \node[box, right=0.32cm of dw](ln){LN};
+  \node[box, right=0.32cm of ln](ex){$1\!\times\!1$\\$\uparrow4\times$};
+  \node[box, right=0.32cm of ex](ge){GELU};
+  \node[box, right=0.32cm of ge](pr){$1\!\times\!1$\\proj};
+  \node[box, right=0.32cm of pr](ls){LayerScale\\$\gamma$};
+  \node[dot, right=0.4cm of ls] (sum){$+$};
+  \node[term, right=0.4cm of sum](y){$y$};
+  \foreach \a/\b in {x/dw,dw/ln,ln/ex,ex/ge,ge/pr,pr/ls,ls/sum,sum/y}\draw[arr](\a)--(\b);
+  \draw[skip] (x.north) .. controls +(0,0.95) and +(0,0.95) .. (sum.north)
+        node[midway, above, term, brown!70!black]{residual};
+  \node[term, below=0.16cm of ge, gray!55!black]{one ConvNeXt block: inverted bottleneck, one norm $+$ one activation};
+\end{tikzpicture}
+\end{center}
 
 \begin{verbatim}
 -- 1
@@ -6391,6 +6594,70 @@ point: transformers are not a universal improvement, they are a
 different scaling regime.
 
 \subsection*{The architecture}
+
+ViT-Tiny is the shortest spec in Part 1: \texttt{.patchEmbed} chops the
+image into $16 \times 16$ patches and projects each to a 192-dim token
+(196 of them, plus a prepended CLS token), \texttt{.transformerEncoder}
+runs twelve pre-norm blocks, and a final LayerNorm feeds the CLS token
+to a dense head. The inset shows one of the twelve transformer blocks
+--- two residual sub-blocks, attention then MLP, each pre-normed.
+
+\begin{center}
+\begin{tikzpicture}[
+  >={Stealth[length=1.8mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  col/.style    = {align=center, rounded corners=2pt, inner sep=2pt, minimum height=0.56cm, minimum width=6.7cm},
+  io/.style     = {col, draw=blue!55!black,   fill=blue!8},
+  norm/.style   = {col, draw=teal!60!black,   fill=teal!10},
+  blk/.style    = {col, draw=blue!45!violet,  fill=violet!8},
+  head/.style   = {col, draw=red!60!black,    fill=red!8},
+  logits/.style = {col, draw=green!50!black,  fill=green!14, very thick},
+  arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
+  stage/.style  = {font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west},
+]
+  \node[io]                          (input){Input \;\; $224\times224\times3$};
+  \node[norm, below=0.16cm of input] (pe)   {\textbf{PatchEmbed} $16\times16$ patches $\to 196\times192$};
+  \node[norm, below=0.16cm of pe]    (cls)  {prepend CLS token $+$ pos embed \;\; $197\times192$};
+  \node[blk, below=0.16cm of cls]    (enc)  {$12\times$ \textbf{Transformer encoder}\\dim 192, 3 heads, MLP 768};
+  \node[norm, below=0.16cm of enc]   (ln)   {final LayerNorm};
+  \node[head, below=0.16cm of ln]    (d)    {\textbf{Dense} $192\to10$ \;(identity), on CLS};
+  \node[logits, below=0.16cm of d]   (out)  {Logits \;\; 10 classes, softmax-CE};
+  \foreach \a/\b in {input/pe,pe/cls,cls/enc,enc/ln,ln/d,d/out}\draw[arr](\a)--(\b);
+  \node[stage] at ($(enc.east)+(0.30,0)$){$\times 12$ blocks};
+\end{tikzpicture}
+
+\vspace{0.45cm}
+
+\begin{tikzpicture}[
+  >={Stealth[length=1.6mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  proc/.style={align=center, rounded corners=2pt, inner sep=3pt, minimum height=0.58cm, draw=blue!45!violet, fill=violet!8},
+  op/.style  ={circle, draw=blue!45!violet, fill=violet!14, inner sep=0pt, minimum size=0.46cm},
+  term/.style={font=\sffamily\scriptsize\itshape, inner sep=1.5pt},
+  flow/.style={->, thick, gray!60, shorten >=1.5pt, shorten <=1.5pt},
+  skip/.style={->, thick, blue!45!violet, shorten >=1.5pt},
+]
+  \node[term] (x) at (0,0){$x$};
+  \node[op]   (s1) at (3.0,0){$+$};
+  \node[op]   (s2) at (6.6,0){$+$};
+  \node[term] (y)  at (8.0,0){$y$};
+  \node[proc] (ln1) at (1.3,-1.25){LN};
+  \node[proc, right=8mm of ln1] (mh){MHSA};
+  \node[proc] (ln2) at (4.6,-1.25){LN};
+  \node[proc, right=8mm of ln2] (ml){MLP};
+  \draw[skip](x)--(s1);
+  \draw[skip](s1)--(s2) node[midway, above, term, blue!45!violet]{$z$};
+  \draw[flow](s2)--(y);
+  \draw[flow](x) -- (x|-ln1) -- (ln1);
+  \draw[flow](ln1)--(mh);
+  \draw[flow](mh) -- (mh|-s1) -- (s1);
+  \draw[flow](s1) -- (s1|-ln2) -- (ln2);
+  \draw[flow](ln2)--(ml);
+  \draw[flow](ml) -- (ml|-s2) -- (s2);
+  \node[term, below=1.95cm of x, anchor=west, gray!55!black] at (0,0)
+    {one transformer block: $z = x + \mathrm{MHSA}(\mathrm{LN}\,x)$, \ $y = z + \mathrm{MLP}(\mathrm{LN}\,z)$};
+\end{tikzpicture}
+\end{center}
 
 \begin{verbatim}
 -- 1
