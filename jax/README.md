@@ -52,14 +52,13 @@ python3 -m venv .venv
 .venv/bin/pip install jax jaxlib
 ```
 
-GPU: install the **pinned** environment for your backend. The jax version
-differs per backend on purpose right now (ROCm 0.10.0, CUDA 0.9.2) — see
-**Pinned environments** below.
+GPU: install the **pinned** environment for your backend. Both backends are
+on jax 0.10.0 — see **Pinned environments** below.
 ```bash
 # AMD / ROCm — jax 0.10.0 (tested on gfx1100; see ROCm status below):
 .venv/bin/pip install -r requirements-rocm-lock.txt
 
-# NVIDIA / CUDA — jax 0.9.2:
+# NVIDIA / CUDA — jax 0.10.0 (tested on ares 6× 4060 Ti; see CUDA status below):
 .venv/bin/pip install -r requirements-cuda-lock.txt
 ```
 
@@ -115,7 +114,7 @@ The generated Python is GPU-ready — **zero code changes needed**. JAX
 auto-dispatches to GPU when one is available:
 
 ```bash
-# CUDA (NVIDIA) — jax 0.9.2:
+# CUDA (NVIDIA) — jax 0.10.0:
 pip install -r requirements-cuda-lock.txt
 
 # ROCm (AMD) — jax 0.10.0:
@@ -134,26 +133,34 @@ known-good set rather than whatever is newest on PyPI:
 
 | backend | jax | lock file |
 |---|---|---|
-| CUDA (NVIDIA) | **0.9.2** | `requirements-cuda-lock.txt` |
+| CUDA (NVIDIA) | **0.10.0** | `requirements-cuda-lock.txt` |
 | ROCm (AMD) | **0.10.0** | `requirements-rocm-lock.txt` |
 
 Both are committed; they share the same comparator dependency set, with
 only the GPU stack swapped (`jax-cuda12-*` + `nvidia-*-cu12` ↔
-`jax-rocm7-*`). The jax versions differ **on purpose** for now: ROCm
-needed 0.10.0 to clear the conv/JIT bugs (see ROCm status), while CUDA
-stays at the 0.9.2 that produced the reference traces. Aligning both to
-0.10.0 is in progress — the 0.9.2 → 0.10.0 bump is being validated
-against the comparator traces. To refresh a lock after changing the env,
+`jax-rocm7-*`). Both backends are aligned at jax 0.10.0 and
+`iree-base-compiler 3.12.0rc20260428` — the CUDA bump from 0.9.2 was
+validated against the comparator (mnist-mlp, cifar-cnn, and the bf16 +
+4-GPU-sharded R34/ImageNet warmup all matched 0.9.2 within run-noise; see
+CUDA status). To refresh a lock after changing the env,
 `pip freeze > requirements-<backend>-lock.txt` from the matching venv.
 
 ### CUDA status (June 2026)
 
 Tested on **ares** — 6× RTX 4060 Ti (Ada, `sm_89`) — with CUDA 12.9 /
-cuDNN 9.20.0.48 / NCCL 2.29.7 and jax 0.9.2 (`jax-cuda12-plugin 0.9.2`).
-This is the env that produced the reference comparator traces, so the
-CUDA lock stays pinned at 0.9.2 on purpose (see **Pinned environments**).
+cuDNN 9.23.2.1 / NCCL 2.30.7 and jax 0.10.0 (`jax-cuda12-plugin 0.10.0`).
 All models above run JIT'd on GPU out of the box — no `JAX_DISABLE_JIT`
 or platform workarounds.
+
+**0.9.2 → 0.10.0 bump (validated 2026-06-20).** Adopted after a comparator
+pass on ares: mnist-mlp (98.45%→98.59%) and cifar-cnn (62.85%→62.79%) both
+within run-noise, and the bf16 + bf16-conv + 4-GPU-sharded R34/ImageNet
+warmup produced an identical loss curve (7.27/6.99/6.92 → 7.26/7.00/6.90)
+at ~140–150 ms/step. The version delta is small — the CUDA 12.9 toolkit
+base is unchanged; only jax/jaxlib/jax-cuda12-* (0.9.2→0.10.0), cuDNN
+(9.20.0.48→9.23.2.1), NCCL (2.29.7→2.30.7), and nvshmem (3.6.5→3.7.0) move.
+Note: jax 0.10.0 requires **Python ≥3.11** (ares uses `python3.12`; a fresh
+`python3 -m venv` on a 3.10 box will fail to resolve jax).
 
 Unlike the IREE/verified-codegen path (see [`../CUDA.md`](../CUDA.md)),
 the JAX path needs **no `sm_89` target pinning** — XLA targets Ada
@@ -169,12 +176,6 @@ CUDA_VISIBLE_DEVICES=0,2,3,4 .lake/build/bin/resnet34
 
 `jax.sharding` then builds the mesh over the 4 visible cards
 automatically.
-
-> **Lock note:** the CUDA lock pins `iree-base-compiler==3.11.0` while the
-> ROCm lock (and `../CUDA.md` / the verified-codegen path) want
-> `>=3.12.0rc20260428` for the ConvNeXt distribute fixes. Harmless for the
-> JAX comparator — JAX lowers through XLA, not `iree-compile` — but worth
-> aligning when the CUDA lock is next refreshed so both locks agree.
 
 ### ROCm status (April 2026)
 
