@@ -4363,9 +4363,9 @@ happens at the wide point.
   skip/.style = {->, thick, teal!70!black, shorten >=1pt},
 ]
   \node[term]                       (x)   {$x$};
-  \node[box, right=0.5cm of x]      (e)   {$1\times1$ expand\\$C\!\to\!tC$, ReLU6};
-  \node[box, right=0.4cm of e]      (dw)  {$3\times3$ DW\\ReLU6};
-  \node[box, right=0.4cm of dw]     (p)   {$1\times1$ project\\(linear)};
+  \node[box, right=0.5cm of x]      (e)   {$1\times1$ expand\\$C\!\to\!tC$, BN, ReLU6};
+  \node[box, right=0.4cm of e]      (dw)  {$3\times3$ DW\\BN, ReLU6};
+  \node[box, right=0.4cm of dw]     (p)   {$1\times1$ project\\BN (linear)};
   \node[dot, right=0.5cm of p]      (sum) {$+$};
   \node[term, right=0.5cm of sum]   (y)   {$y$};
   \draw[arr] (x)  -- (e);
@@ -4909,10 +4909,10 @@ residual with an SE gate (highlighted) inserted before the project.
   skip/.style={->, thick, magenta!70!black, shorten >=1pt},
 ]
   \node[term] (x){$x$};
-  \node[box, right=0.45cm of x]   (e){$1\times1$ expand\\$C\!\to\!tC$, ReLU6};
-  \node[box, right=0.4cm of e]    (dw){$k\times k$ DW\\ReLU6};
+  \node[box, right=0.45cm of x]   (e){$1\times1$ expand\\$C\!\to\!tC$, BN, ReLU6};
+  \node[box, right=0.4cm of e]    (dw){$k\times k$ DW\\BN, ReLU6};
   \node[se, right=0.4cm of dw]    (s){SE gate\\$\times g$};
-  \node[box, right=0.4cm of s]    (p){$1\times1$ project\\(linear)};
+  \node[box, right=0.4cm of s]    (p){$1\times1$ project\\BN (linear)};
   \node[dot, right=0.45cm of p]   (sum){$+$};
   \node[term, right=0.45cm of sum] (y){$y$};
   \foreach \a/\b in {x/e,e/dw,dw/s,s/p,p/sum,sum/y}\draw[arr](\a)--(\b);
