@@ -200,10 +200,13 @@ export IREE_CHIP=gfx1100                       # ...on the 7900 XTX
 target chip, HAL device); `gfx1100` is the default chip when
 `IREE_BACKEND=rocm`, so `IREE_CHIP` is only needed to override it.
 
-**Two GPUs.** The IREE runtime is single-device. To use both cards,
-launch two processes pinned with `HIP_VISIBLE_DEVICES=0` and `=1` (one
-each). The multi-GPU *hang* noted in `upstream-issues/` is
-JAX-ROCm-specific — the IREE/Lean path here runs fine on either card.
+**Two GPUs.** The IREE runtime is single-device per process; use both
+cards by launching two trainers pinned with `HIP_VISIBLE_DEVICES=0` and
+`=1` (verified — both gfx1100s sit at ~80% concurrently, no contention).
+The JAX-ROCm multi-GPU `Mesh` hang that once forced single-GPU
+(`upstream-issues/2026-04-jax-rocm-multigpu-mesh-hang/`, ROCm/jax#746) is
+**fixed as of jax 0.10.0**, so the JAX comparator's `jax.sharding` path
+runs data-parallel across cards too (see `jax/README.md`).
 
 The `*-verified` exes (`mnist-{linear,mlp,cnn}-verified`,
 `cifar8{,w}{,-bn}{,-verified,-ablation}`, `resnet34-verified`,
