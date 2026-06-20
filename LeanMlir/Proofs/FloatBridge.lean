@@ -1639,6 +1639,26 @@ private theorem smRho_nonneg {eexp : ℝ} {n : ℕ} (heexp : 0 ≤ eexp) :
       (by linarith))
     heexp
 
+/-- **`cotErr` is nonnegative** (it bounds an absolute value) — under `eexp ≥ 0`,
+    `δ ≥ 0`, and the denominator condition `smRho < 1`. The `cot_step_close`
+    precondition for any backward grad-close that runs the softmax−onehot head
+    (e.g. the per-layer η-composition rungs). -/
+theorem cotErr_nonneg {eexp δ : ℝ} {n : ℕ} (heexp : 0 ≤ eexp) (hδ0 : 0 ≤ δ)
+    (hρ1 : smRho M.u eexp n < 1) : 0 ≤ cotErr M.u eexp δ n := by
+  have hu := M.u_nonneg
+  have hρ0 : 0 ≤ smRho M.u eexp n := M.smRho_nonneg heexp
+  have hκ0 : 0 ≤ smKappa M.u eexp n := by
+    simp only [smKappa]; exact div_nonneg (by linarith) (by linarith)
+  have hexp0 : 0 ≤ Real.exp (2 * δ) - 1 := by
+    have := Real.add_one_le_exp (2 * δ); linarith
+  have hsm0 : 0 ≤ smErr M.u eexp δ n := by
+    simp only [smErr]
+    have := mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smKappa M.u eexp n)
+    linarith
+  simp only [cotErr]
+  have := mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smErr M.u eexp δ n)
+  linarith
+
 /-- **Float softmax vs real softmax at the same logits** (part A): the
     rounded `exp`/`sum`/`div` head is within `u·(1+κ) + κ` absolutely, where
     `κ = (eexp + ρ)/(1 − ρ)` compounds the `exp` accuracy and the sum

@@ -85,11 +85,17 @@ with the actual rounding budget so the two halves become one theorem.
 clean, audited) — the output layer sits directly below softmax-CE with no ReLU between, so its
 loss-of-`W₂` map *is* the linear net at the hidden activation `a₁`; the η-composition is
 `linear_float_sgd_descends` instantiated there (margin-free, the actual `M.linearFloatGrad W₂ b₂ a₁`,
-η proven by `linear_grad_close`). *Still open:* the hidden/input rungs — their float gradients run
-back through the ReLU masks and the `W₂`-cotangent fan-in, so the η-composition needs a per-layer
-float-backward grad-close (`mlp_w{1,0}_grad_close`) under the descent margins (the **joint-step**
-refinement: logits aren't affine when all params move at once — a joint Lipschitz or per-coordinate
-decomposition, flagged in `SgdDescentMlp`).
+η proven by `linear_grad_close`). *MLP hidden grad-close DONE (2026-06-20):* `mlp_w1_grad_close`
+(`SgdDescentMlp.lean`, 3-axiom clean, audited) — with `a₀` frozen exact, the binary32 `W₁` gradient
+`fl(a₀ᵢ·c̃₁ⱼ)` (float layer-1 cotangent `c̃₁ = mask(z̃₁, W₂ᵀ·c̃₂)` from the float softmax−onehot head)
+is within `mulErr … 0 (layerBudget … (cotErr …))` of the certified `a₀ᵢ·mask(z₁,W₂ᵀ·(softmax−onehot))ⱼ`
+(= `mlp_hidden_loss_gradAt`), assembled from `softmax_ce_cot_close` (head) + `cot_step_close` (the masked
+`W₂ᵀ` contraction, **under the margin** `E₁ < |z₁ⱼ|`) + `mul_close` (exact `a₀` operand, `ea = 0`);
+`FloatModel.cotErr_nonneg` factored out as the reusable `cot_step_close` precondition. *Still open:*
+the input rung `mlp_w0_grad_close` (one mask deeper) and wiring the grad-closes into
+`mlp_{hidden,input}_sgd_descends`' η-slot (the descent capstones; mechanical given the grad-close, but
+verbose — and the **joint** all-layers step still wants a joint Lipschitz, logits not being affine in
+all params at once).
 
 ### 1b. Items A/B/C — bring the rounding side to CNN (= "FloatBridge to the rest of MNIST")
 
@@ -292,7 +298,7 @@ to *show* the compounding so the regime change from §2 is visible on a real net
 | ✅ | **3a E4M3 MNIST empirical demo** | light | **DONE 2026-06-20** — fp32 92.25% → E4M3 92.30%, the "precision drops elegantly" headline; computes the 3c margin fraction empirically (92.89%) |
 | ✅ | **3c E4M3 per-matmul accuracy + margin fraction** | medium | **DONE 2026-06-20** — `argmax_preserved` + `linear_e4m3_logit_budget` (worst-case B ≤ 61) + `linear_e4m3_argmax_preserved` (margin > 122 ⟹ same prediction); measured B = 0.38 ⟹ 92.89% of test set. The honest end-to-end fp8 accuracy bound (depth-1); the Lean side of what 3a measured |
 | ✅ | **3b E4M3 structural faithfulness** | medium | **DONE 2026-06-20** — `e4m3_render_faithful` (emitted block-scaled int-matmul graph denotes the dequant-first algorithm) + `dequant_factors` (scale factors out of fp32 accumulate); zero new SHlo constructors. The *complete* verified claim at fp8 (the right kind). **All of §3 landed.** |
-| ◑ | G1 for mlp/cnn + mlp joint-step | medium | **mlp OUTPUT rung DONE 2026-06-20** (`mlp_output_float_sgd_descends` = `linear_float_sgd_descends` at the hidden activation, margin-free). Hidden/input rungs + cnn conv layers need a per-layer float-backward grad-close under the margins (the joint-step) — open |
+| ◑ | G1 for mlp/cnn + mlp joint-step | medium | **mlp OUTPUT rung + HIDDEN grad-close DONE 2026-06-20** (`mlp_output_float_sgd_descends`; `mlp_w1_grad_close` + `cotErr_nonneg`). Remaining: input rung `mlp_w0_grad_close` (one mask deeper), wiring grad-closes into the hidden/input descent capstones, cnn conv layers, and the joint all-layers step |
 | — | fp4 / block-scaled `FloatModel` field / probabilistic budgets | heavy/research | only if pushing below fp8; expect structural-only claims |
 
 **Definition of done (per item):** every new theorem `#print axioms`-closes under

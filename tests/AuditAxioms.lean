@@ -1511,6 +1511,16 @@ open Proofs
 -- Hidden/input rungs still take abstract η (the joint-step float-backward
 -- grad-close under the margins is left open).
 #print axioms mlp_output_float_sgd_descends
+-- Hidden-layer float-backward grad-close (planning §1a/§4, the joint-step engine):
+-- with a₀ frozen exact, the binary32 W₁ gradient fl(a₀ᵢ·c̃₁ⱼ) — float layer-1
+-- cotangent c̃₁ = mask(z̃₁, W₂ᵀ·c̃₂) from the float softmax−onehot head — is within
+-- mulErr … 0 (layerBudget … (cotErr …)) of the certified a₀ᵢ·mask(z₁, W₂ᵀ·(softmax−onehot))ⱼ
+-- (= mlp_hidden_loss_gradAt). Three reusable closes: softmax_ce_cot_close (head),
+-- cot_step_close (masked W₂ᵀ contraction, under the margin E₁ < |z₁ⱼ|), mul_close
+-- (input multiply, exact a₀ operand ea=0). FloatModel.cotErr_nonneg is the reusable
+-- cot_step_close precondition (factored from linear_float_sgd_descends).
+#print axioms FloatModel.cotErr_nonneg
+#print axioms mlp_w1_grad_close
 #print axioms mlp_input_loss_differentiableAt
 #print axioms mlp_input_loss_gradAt
 #print axioms mlp_input_logit_drift

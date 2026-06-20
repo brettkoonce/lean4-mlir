@@ -1411,4 +1411,112 @@ theorem mlp_output_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatMode
     (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label fexp
     ha hx hlr heexp0 heexp1 hδ0 hfexp hρ1 hδ hsmall h1 h2
 
+-- ════════════════════════════════════════════════════════════════
+-- § Hidden layer W₁: the float-backward grad-close (the joint-step engine)
+-- ════════════════════════════════════════════════════════════════
+
+open FloatModel in
+/-- **The binary32 hidden-layer (W₁) gradient is within an explicit budget of
+    the certified one**, per entry — the float-backward grad-close that the
+    hidden η-composition needs. With the layer-1 input activation `a₀` *frozen
+    exact* (the descent moves only `W₁`), the rendered trainer computes the
+    `W₁` gradient as `fl(a₀ᵢ · c̃₁ⱼ)` where the float layer-1 cotangent
+    `c̃₁ = mask(z̃₁, W₂ᵀ·c̃₂)` reads the float pre-activation `z̃₁ = M.dense W₁ b₁ a₀`
+    and the float softmax−onehot head `c̃₂` at the float logits. This is within
+    `mulErr M.u a … 0 (layerBudget … (cotErr …))` of the certified
+    `a₀ᵢ · mask(z₁, W₂ᵀ·(softmax−onehot))ⱼ` (= `mlp_hidden_loss_gradAt`), built
+    from three reusable closes: the head (`softmax_ce_cot_close`, accuracy
+    `cotErr`), the masked `W₂ᵀ` contraction (`cot_step_close`, **under the
+    quantitative margin** `E₁ < |z₁ⱼ|` — forward rounding must not flip the
+    layer-1 ReLU), and the final input multiply (`mul_close`, with the *exact*
+    `a₀` operand, `ea = 0`, exactly as the linear grad-close). -/
+theorem mlp_w1_grad_close {d₁ d₂ d₃ : Nat} (M : FloatModel)
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
+    (a₀ : Vec d₁) (label : Fin d₃) (fexp : ℝ → ℝ)
+    {a w₁ β₁ w₂ β₂ eexp : ℝ}
+    (ha : 0 ≤ a) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp d₃ < 1)
+    (hx : ∀ i, |a₀ i| ≤ a)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w₂) (hb₂ : ∀ j, |b₂ j| ≤ β₂)
+    (hmargin : ∀ j', layerBudget M.u d₁ w₁ β₁ a 0 <
+      |Proofs.dense W₁ b₁ a₀ j'|)
+    (i : Fin d₁) (j : Fin d₂) :
+    |M.mul (a₀ i)
+        (reluMask (M.dense W₁ b₁ a₀)
+          (M.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+            (M.softmaxCECotF fexp
+              (M.dense W₂ b₂ (relu d₂ (M.dense W₁ b₁ a₀))) label)) j) -
+      a₀ i * reluMask (Proofs.dense W₁ b₁ a₀)
+        (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+          (fun k => softmax d₃
+            (Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀))) k -
+            oneHot d₃ label k)) j| ≤
+    FloatModel.mulErr M.u a (layerAct d₃ w₂ 0 1) 0
+      (layerBudget M.u d₃ w₂ 0 1
+        (FloatModel.cotErr M.u eexp
+          (layerBudget M.u d₂ w₂ β₂ (layerAct d₁ w₁ β₁ a)
+            (layerBudget M.u d₁ w₁ β₁ a 0)) d₃)) := by
+  set E₁ := layerBudget M.u d₁ w₁ β₁ a 0 with hE₁
+  have hE₁0 : 0 ≤ E₁ := layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl
+  -- layer-1 forward (a₀ exact ⇒ inherited error 0)
+  have l1 : ∀ j', |M.dense W₁ b₁ a₀ j' - Proofs.dense W₁ b₁ a₀ j'| ≤ E₁ :=
+    fun j' => (M.dense_close_fresh W₁ b₁ a₀ j').trans
+      (M.denseErr_le_uniform hw₁ le_rfl hW₁ hb₁ hx j')
+  have r1 : ∀ j', |relu d₂ (M.dense W₁ b₁ a₀) j' -
+      relu d₂ (Proofs.dense W₁ b₁ a₀) j'| ≤ E₁ := fun j' => relu_close _ _ _ l1 j'
+  have ha₁ : ∀ j', |relu d₂ (Proofs.dense W₁ b₁ a₀) j'| ≤ layerAct d₁ w₁ β₁ a :=
+    fun j' => (relu_abs_le _ j').trans (dense_abs_le ha hW₁ hb₁ hx j')
+  -- layer-2 forward (logits), inherited error E₁
+  set δ := layerBudget M.u d₂ w₂ β₂ (layerAct d₁ w₁ β₁ a) E₁ with hδdef
+  have hδ0 : 0 ≤ δ := layerBudget_nonneg M.u_nonneg hw₂ hβ₂
+    (layerAct_nonneg hw₁ hβ₁ ha) hE₁0
+  have l2 : ∀ k, |M.dense W₂ b₂ (relu d₂ (M.dense W₁ b₁ a₀)) k -
+      Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀)) k| ≤ δ := fun k =>
+    (M.dense_close W₂ b₂ _ _ E₁ hE₁0 r1 k).trans
+      (M.denseErr_le_uniform hw₂ hE₁0 hW₂ hb₂ ha₁ k)
+  -- the float softmax−onehot head within `cotErr`
+  have hcot2 : ∀ k, |M.softmaxCECotF fexp
+      (M.dense W₂ b₂ (relu d₂ (M.dense W₁ b₁ a₀))) label k -
+      (softmax d₃ (Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀))) k -
+        oneHot d₃ label k)| ≤ FloatModel.cotErr M.u eexp δ d₃ := fun k =>
+    M.softmax_ce_cot_close fexp _ _ label heexp0 heexp1 hfexp hρ1 l2 k
+  -- the real cotangent `softmax − onehot ∈ [−1, 1]`
+  have hC2 : ∀ k, |softmax d₃
+      (Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀))) k -
+      oneHot d₃ label k| ≤ 1 := by
+    intro k
+    have hD : 0 < ∑ t, Real.exp (Proofs.dense W₂ b₂
+        (relu d₂ (Proofs.dense W₁ b₁ a₀)) t) :=
+      Finset.sum_pos (fun t _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
+    have hs0 : 0 ≤ softmax d₃
+        (Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀))) k :=
+      div_nonneg (Real.exp_pos _).le (Finset.sum_nonneg fun t _ => (Real.exp_pos _).le)
+    have hs1 : softmax d₃
+        (Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀))) k ≤ 1 :=
+      (div_le_one hD).mpr
+        (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
+    simp only [oneHot]
+    by_cases h : k = label
+    · rw [if_pos h, abs_le]; constructor <;> linarith
+    · rw [if_neg h, abs_le]; constructor <;> linarith
+  -- the masked W₂ᵀ contraction within `layerBudget … cotErr`
+  have hcot1 := M.cot_step_close W₂ (M.dense W₁ b₁ a₀) (Proofs.dense W₁ b₁ a₀)
+    (M.softmaxCECotF fexp (M.dense W₂ b₂ (relu d₂ (M.dense W₁ b₁ a₀))) label)
+    (fun k => softmax d₃
+      (Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀))) k - oneHot d₃ label k)
+    hw₂ (by norm_num) (M.cotErr_nonneg heexp0 hδ0 hρ1) hW₂ hC2 hcot2 l1 hmargin j
+  -- the real layer-1 cotangent magnitude
+  have hc1 : |reluMask (Proofs.dense W₁ b₁ a₀)
+      (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+        (fun k => softmax d₃
+          (Proofs.dense W₂ b₂ (relu d₂ (Proofs.dense W₁ b₁ a₀))) k -
+          oneHot d₃ label k)) j| ≤ layerAct d₃ w₂ 0 1 :=
+    (reluMask_abs_le _ _ j).trans
+      (dense_abs_le (by norm_num) (fun j' i' => hW₂ i' j') (fun _ => by simp) hC2 j)
+  -- the final input multiply: exact left operand `a₀` (`ea = 0`)
+  exact M.mul_close (by simp : |a₀ i - a₀ i| ≤ (0:ℝ)) hcot1 (hx i) hc1
+
 end Proofs
