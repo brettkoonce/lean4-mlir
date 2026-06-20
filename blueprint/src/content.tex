@@ -3015,6 +3015,64 @@ an accelerator, not a capacity boost --- and this section measures
 that directly, with the proof-rendered training step from this chapter
 running on a GPU.
 
+\subsection*{Architecture}
+
+The same vertical column as the MNIST CNN in
+Chapter~\ref{chap:cnn}, just deeper: eight $3 \times 3$ convolutions
+in four stages (a max-pool after each) lift the $32 \times 32 \times 3$
+input to a $2 \times 2 \times 32$ feature grid, which flattens to 128
+and runs through the same three-layer dense head.
+
+\begin{center}
+\begin{tikzpicture}[
+  >={Stealth[length=1.8mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  col/.style    = {align=center, rounded corners=2pt, inner sep=2pt, minimum height=0.58cm, minimum width=4.7cm},
+  io/.style     = {col, draw=blue!55!black,   fill=blue!8},
+  convbn/.style = {col, draw=orange!65!black, fill=orange!12},
+  pool/.style   = {col, draw=teal!60!black,   fill=teal!10},
+  flat/.style   = {col, draw=purple!60!black, fill=purple!8},
+  dense/.style  = {col, draw=orange!65!black, fill=orange!12},
+  head/.style   = {col, draw=red!60!black,    fill=red!8},
+  logits/.style = {col, draw=green!50!black,  fill=green!14, very thick},
+  arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
+  stage/.style  = {font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west},
+]
+  % Vertical layer column: input at top -> logits at bottom.
+  \node[io]                            (input) {Input \;\; $32\times32\times3$};
+  \node[convbn, below=0.18cm of input] (c1)   {\textbf{ConvBN} $3\to16$, $3\times3$, ReLU};
+  \node[convbn, below=0.18cm of c1]    (c2)   {\textbf{ConvBN} $16\to16$, $3\times3$, ReLU};
+  \node[pool,   below=0.18cm of c2]    (p1)   {\textbf{maxPool} $2\times2$ \;\; $32\to16$};
+  \node[convbn, below=0.18cm of p1]    (c3)   {\textbf{ConvBN} $16\to16$, $3\times3$, ReLU};
+  \node[convbn, below=0.18cm of c3]    (c4)   {\textbf{ConvBN} $16\to16$, $3\times3$, ReLU};
+  \node[pool,   below=0.18cm of c4]    (p2)   {\textbf{maxPool} $2\times2$ \;\; $16\to8$};
+  \node[convbn, below=0.18cm of p2]    (c5)   {\textbf{ConvBN} $16\to32$, $3\times3$, ReLU};
+  \node[convbn, below=0.18cm of c5]    (c6)   {\textbf{ConvBN} $32\to32$, $3\times3$, ReLU};
+  \node[pool,   below=0.18cm of c6]    (p3)   {\textbf{maxPool} $2\times2$ \;\; $8\to4$};
+  \node[convbn, below=0.18cm of p3]    (c7)   {\textbf{ConvBN} $32\to32$, $3\times3$, ReLU};
+  \node[convbn, below=0.18cm of c7]    (c8)   {\textbf{ConvBN} $32\to32$, $3\times3$, ReLU};
+  \node[pool,   below=0.18cm of c8]    (p4)   {\textbf{maxPool} $2\times2$ \;\; $4\to2$};
+  \node[flat,   below=0.18cm of p4]    (fl)   {flatten \;\; $2\times2\times32 \to 128$};
+  \node[dense,  below=0.18cm of fl]    (d1)   {\textbf{Dense} $128\to64$, ReLU};
+  \node[dense,  below=0.18cm of d1]    (d2)   {\textbf{Dense} $64\to64$, ReLU};
+  \node[head,   below=0.18cm of d2]    (d3)   {\textbf{Dense} $64\to10$ \;(identity)};
+  \node[logits, below=0.18cm of d3]    (out)  {Logits \;\; 10 classes, softmax-CE};
+  \foreach \a/\b in {input/c1, c1/c2, c2/p1, p1/c3, c3/c4, c4/p2, p2/c5,
+                     c5/c6, c6/p3, p3/c7, c7/c8, c8/p4, p4/fl, fl/d1,
+                     d1/d2, d2/d3, d3/out}
+     \draw[arr] (\a) -- (\b);
+  % Stage brackets on the right.
+  \node[stage] at ($(c1.east)!0.5!(p1.east) + (0.35,0)$) {stage 1};
+  \node[stage] at ($(c3.east)!0.5!(p2.east) + (0.35,0)$) {stage 2};
+  \node[stage] at ($(c5.east)!0.5!(p3.east) + (0.35,0)$) {stage 3};
+  \node[stage] at ($(c7.east)!0.5!(p4.east) + (0.35,0)$) {stage 4};
+\end{tikzpicture}
+\end{center}
+
+\noindent The \texttt{ConvBN} boxes are the with-BN variant; the no-BN
+net is identical with each \texttt{ConvBN} replaced by a plain
+\texttt{Conv2D~+~ReLU}. Both specs are written out next.
+
 \subsection*{The two specs, differing by one keyword per layer}
 
 Eight $3 \times 3$ convolutions in four stages (channel widths
@@ -3400,6 +3458,73 @@ layers worth of these blocks just composes the fan-in rule 34 times
 (well, 16 residual blocks deep and 34 convs across all of them).
 
 \subsection*{The architecture}
+
+The same vertical column as the previous chapters, now at production
+scale: a $7 \times 7$ stride-2 stem and a max-pool drop the
+$224 \times 224 \times 3$ input to $56 \times 56 \times 64$, then four
+stages of residual blocks (depths $3, 4, 6, 3$ at widths
+$64, 128, 256, 512$) do the work, and a global average pool replaces
+the flatten-plus-fat-dense head. The inset shows the one new piece:
+each residual block adds its input back, $y = f(x) + x$.
+
+\begin{center}
+\begin{tikzpicture}[
+  >={Stealth[length=1.8mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  col/.style    = {align=center, rounded corners=2pt, inner sep=2pt, minimum height=0.58cm, minimum width=5.4cm},
+  io/.style     = {col, draw=blue!55!black,   fill=blue!8},
+  convbn/.style = {col, draw=orange!65!black, fill=orange!12},
+  pool/.style   = {col, draw=teal!60!black,   fill=teal!10},
+  resid/.style  = {col, draw=violet!70!black, fill=violet!9, minimum height=0.66cm},
+  gap/.style    = {col, draw=purple!60!black, fill=purple!8},
+  head/.style   = {col, draw=red!60!black,    fill=red!8},
+  logits/.style = {col, draw=green!50!black,  fill=green!14, very thick},
+  arr/.style    = {->, thick, gray!60, shorten >=1pt, shorten <=1pt},
+  stage/.style  = {font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west},
+]
+  \node[io]                            (input) {Input \;\; $224\times224\times3$};
+  \node[convbn, below=0.18cm of input] (stem) {\textbf{ConvBN} stem $3\to64$, $7\times7$, /2};
+  \node[pool,   below=0.18cm of stem]  (mp)   {\textbf{maxPool} $2\times2$ \;\; $112\to56$};
+  \node[resid,  below=0.18cm of mp]    (s1)   {$3\times$ \textbf{Residual} $64\to64$ \;\; $56\times56$};
+  \node[resid,  below=0.18cm of s1]    (s2)   {$4\times$ \textbf{Residual} $64\to128$, /2 \;\; $28\times28$};
+  \node[resid,  below=0.18cm of s2]    (s3)   {$6\times$ \textbf{Residual} $128\to256$, /2 \;\; $14\times14$};
+  \node[resid,  below=0.18cm of s3]    (s4)   {$3\times$ \textbf{Residual} $256\to512$, /2 \;\; $7\times7$};
+  \node[gap,    below=0.18cm of s4]    (g)    {global avg pool \;\; $7\times7\times512 \to 512$};
+  \node[head,   below=0.18cm of g]     (d)    {\textbf{Dense} $512\to10$ \;(identity)};
+  \node[logits, below=0.18cm of d]     (out)  {Logits \;\; 10 classes, softmax-CE};
+  \foreach \a/\b in {input/stem, stem/mp, mp/s1, s1/s2, s2/s3, s3/s4, s4/g, g/d, d/out}
+     \draw[arr] (\a) -- (\b);
+  \node[stage] at ($(s1.east) + (0.30,0)$) {stage 1};
+  \node[stage] at ($(s2.east) + (0.30,0)$) {stage 2};
+  \node[stage] at ($(s3.east) + (0.30,0)$) {stage 3};
+  \node[stage] at ($(s4.east) + (0.30,0)$) {stage 4};
+\end{tikzpicture}
+
+\vspace{0.45cm}
+
+\begin{tikzpicture}[
+  >={Stealth[length=1.6mm]},
+  every node/.style={font=\sffamily\scriptsize},
+  box/.style  = {align=center, rounded corners=2pt, inner sep=3pt, minimum height=0.62cm, draw=violet!70!black, fill=violet!9},
+  dot/.style  = {circle, draw=violet!70!black, fill=violet!12, inner sep=0pt, minimum size=0.42cm},
+  term/.style = {font=\sffamily\scriptsize\itshape, inner sep=1pt},
+  arr/.style  = {->, thick, gray!65, shorten >=1pt, shorten <=1pt},
+  skip/.style = {->, thick, violet!70!black, shorten >=1pt},
+]
+  \node[term]                       (x)   {$x$};
+  \node[box, right=0.55cm of x]     (f1)  {ConvBN, ReLU};
+  \node[box, right=0.45cm of f1]    (f2)  {ConvBN};
+  \node[dot, right=0.55cm of f2]    (sum) {$+$};
+  \node[term, right=0.55cm of sum]  (y)   {ReLU $\to y$};
+  \draw[arr] (x)  -- (f1);
+  \draw[arr] (f1) -- (f2);
+  \draw[arr] (f2) -- (sum);
+  \draw[arr] (sum) -- (y);
+  \draw[skip] (x.north) .. controls +(0,0.75) and +(0,0.75) .. (sum.north)
+        node[midway, above, term, violet!70!black] {identity skip ($+\,x$)};
+  \node[term, below=0.18cm of f2, gray!55!black] {one residual block: \; $y = f(x) + x$};
+\end{tikzpicture}
+\end{center}
 
 \begin{verbatim}
 -- 1
