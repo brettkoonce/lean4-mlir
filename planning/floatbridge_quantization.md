@@ -5,8 +5,13 @@ _Status note, updated 2026-06-20._ Large parts now LANDED (all axiom-clean, in `
 two-roundoff dot AND dense), **Items A/B/C** (`cnn_float_close` whole-net forward, `cnn_conv{W,b}_step_float_close`
 gradient-step, `mnist_cnn_convW_step_float_budget` numeric) — so FloatBridge covers all 3 MNIST nets,
 forward + gradient-step + numeric. **E4M3 demo §3a DONE** (`scripts/mnist_e4m3_demo.py`: fp32 92.25% →
-E4M3 92.30%, 92.89% margin>2B verified-region). Still forward-looking: §3b (render-tie), §3c (the Lean
-per-matmul fp8 bound). Two threads that share one foundation
+E4M3 92.30%, 92.89% margin>2B verified-region). **§3c DONE** (`FloatBridge.lean`:
+`argmax_preserved` + `dense_close_mixed_uniform_budget` + `linear_e4m3_logit_budget` (worst-case `B ≤ 61`)
++ the capstone `linear_e4m3_argmax_preserved` — margin > 2B ⟹ provably same prediction; all 3-axiom clean,
+audited). **§3b DONE** (`E4M3FaithfulPoC.lean`: `e4m3_render_faithful` — the emitted block-scaled
+int-matmul graph denotes the intended dequant-first algorithm, `dequant_factors` the scale-factors-out
+heart; zero new SHlo constructors, 3-axiom clean, audited). **All of §3 (3a/3b/3c) now landed.**
+Two threads that share one foundation
 (`LeanMlir/Proofs/FloatBridge.lean`, the `FloatModel` relative-error model, parametric in the
 unit roundoff `u`):
 
@@ -219,25 +224,51 @@ increasing in ambition:
 - The script also computes the **3c argmax-preservation fraction empirically** (see 3c): 92.89% of
   the test set has margin > 2B, and a built-in check confirms 100% of those keep their prediction.
 
-### 3b. Structural faithfulness (the verified part that's *complete*)
-- Add E4M3 `quantize`/`dequantize` (with a per-row scale) as `den`-able ops, and prove the emitted
-  quantized-linear graph denotes `dequant(fp32-accumulate(quant(W), quant(x)))` — the **render-tie
-  for the E4M3 scheme**. This says "the bytes correctly implement block-scaled-E4M3 matmul with fp32
-  accumulate," with no accuracy claim. Reuses the `SHlo`/`den`/`pretty` machinery.
-- Effort: **medium** (new quantize/dequantize op `den`s + a faithfulness lemma; the linear render is
-  the smallest existing template).
+### 3b. Structural faithfulness (the verified part that's *complete*) — ✅ DONE (2026-06-20)
+**Landed** in `E4M3FaithfulPoC.lean` (3-axiom clean, audited):
+- `actCode`/`weightCode` — the stored integer-grid codes: activation `q(xᵢ/sx)` (per-tensor `sx`),
+  weight `q(Wᵢⱼ/sWⱼ)` (per-output-column block scale `sWⱼ`). `q : ℝ → ℝ` is the quantizer, left
+  **abstract** (E4M3 round-to-nearest is one instance) — the scheme is faithful for any grid.
+- `e4m3LinearGraph` — the emitted block-scaled-E4M3 graph: `operand` (int activation code) → `dotIn`
+  (int weight code; its `den` `∑` is the fp32 accumulate) → `layerScaleF` (the per-output dequant
+  block-scale `sx·sWⱼ`) → `addBcast` (fp32 bias). Built **only from existing `den`-faithful ops** —
+  **zero new `SHlo` constructors** (so it's also fully printable via the existing `pretty`/parser).
+- `dequant_factors` — the arithmetic heart: `(sx·sWⱼ)·∑ᵢ q(xᵢ/sx)·q(Wᵢⱼ/sWⱼ) = ∑ᵢ (sx·q(xᵢ/sx))·(sWⱼ·q(Wᵢⱼ/sWⱼ))`.
+  The per-output dequant scale **factors out of the accumulate**, so "int matmul then one dequant" =
+  "dequantize each operand then matmul" — exactly what fp32 accumulate buys (scales constant across
+  the reduction).
+- `e4m3_render_faithful` — the **render-tie**: `den(e4m3LinearGraph) = quantLinear` (the intended
+  dequant-first algorithm = `mnistLinear` on the round-tripped tensors). "The bytes correctly
+  implement block-scaled-E4M3 matmul with fp32 accumulate," **no accuracy claim**.
+- *Design note.* Modeled quantize-to-code as the offline/runtime byte preparation that produces the
+  operands (how real fp8 inference works), so no abstract `quantF` op was needed — dequant/block-scale
+  *is* a `den`-able op (`layerScaleF`). The committed-bytes tie (a quantized `.mlir` trainer) isn't set
+  up (no fp8 trainer exists yet); the `renderModule` text half is mechanical (all ops printable) but
+  unwired — the den-level faithfulness is the verified render-tie, same boundary as the other PoCs.
 
-### 3c. Per-matmul accuracy bound (the honest fp8 accuracy statement — only because depth-1)
-- Instantiate the §1c two-`u` dot budget at `u_leaf = 2⁻⁴` (E4M3), `u_acc = 2⁻²⁴` (fp32 accumulate),
-  with the per-row scale `s`. Result: each logit is within `B = (E4M3 leaf term) + (fp32 Higham at
-  fan-in 784)` of the exact-ℝ logit. The leaf term dominates (~6%·‖row‖-scaled).
-- **Argmax-preservation form** (the useful claim, conditional like the existing ReLU margins):
-  *for any input whose fp32 logit margin exceeds `2B`, the E4M3 prediction equals the fp32
-  prediction.* Then **measure** (from 3a's margin histogram) the fraction of the MNIST test set that
-  satisfies it — the a-posteriori number (expected ~95%+). This is the honest "verified E4M3 MNIST"
-  statement: *provably same prediction on the margin-`>2B` inputs, empirically that's X% of the test set.*
-- Effort: **medium** (the bound is the two-`u` `dot_close_mixed` at one layer + an argmax-margin
-  lemma; the depth-1 structure removes all the compounding pain).
+### 3c. Per-matmul accuracy bound (the honest fp8 accuracy statement — only because depth-1) — ✅ DONE (2026-06-20)
+**Landed** in `FloatBridge.lean` (all 3-axiom clean, audited):
+- `argmax_preserved` — the pure conditional core: if every logit of `z'` is within `B` of `z` and `z`'s
+  strict top-1 margin at `k` exceeds `2B`, then `k` is still the strict argmax of `z'`. `B` is a
+  *hypothesis*, so the same theorem covers both the proven worst-case bound and the demo's measured
+  a-posteriori drift. Conditional exactly like the suite's quantitative ReLU margins.
+- `denseMixedBudget` + `dense_close_mixed_uniform_budget` (+ the `denseMixedBudget_le_of` monotone
+  helper, the `layerBudget_le_of` analogue) — one *uniform* per-logit `B` over all outputs, from the
+  §1c `dense_close_mixed`. The fan-in power is kept abstract through `denseMixedBudget_le_of` so the
+  concrete instance never unfolds the 785-fold `npow`.
+- `u_e4m3 := 2⁻⁴`; `linear_e4m3_logit_budget` — at the committed 784→n dims, `u_leaf ≤ 2⁻⁴`,
+  `u_acc ≤ 2⁻²⁴`, `|x| ≤ 1`, `|W| ≤ 3/5`, `|b| ≤ 1`: every E4M3-mixed logit is within **61** of the
+  exact-ℝ logit (worst-case; the flat `2·2⁻⁴ ≈ 12.5%` leaf term dominates, the fp32 fan-in
+  γ₇₈₅ ≈ 5·10⁻⁵ is negligible).
+- `linear_e4m3_argmax_preserved` — the capstone: margin > `2·61 = 122` ⟹ the E4M3 forward keeps the
+  top class, **provably the same prediction**. Depth-1 makes the single-matmul bound the end-to-end
+  bound (no vacuous compounding).
+- **The honesty.** The *worst-case* threshold 122 is vacuous on real data (mean fp32 margin ≈ 4.25).
+  The same `argmax_preserved` with the demo's **measured** `B = 0.38` (errors cancel; worst-case
+  assumes them aligned) covers the `>0.76`-margin inputs — empirically **92.89%** of the MNIST test
+  set, and a built-in check confirms 100% of those keep their prediction (`scripts/mnist_e4m3_demo.py`).
+  So: *provably same prediction on the margin-`>2B` inputs; with the measured `B` that is 92.89% of
+  the test set.* (`fp32 ≈ exact-ℝ` within `u_acc`, so the demo's fp32 margins are the relevant quantity.)
 
 **Stretch:** the 784→64→10 mlp at E4M3 — now depth-2, so the end-to-end accuracy bound starts to
 compound and you'd lean on 3c per-layer + the margin fraction (still honest, larger decimals). Good
@@ -253,8 +284,8 @@ to *show* the compounding so the regime change from §2 is visible on a real net
 | ✅ | **§1c two-`u` `dot_close_mixed`** (foundation) | light | **DONE 2026-06-19** — bf16-mixed (shipped artifact) falls out + sets up fp8; dense/conv threading lands with A/B |
 | ✅ | **A/B/C — CNN rounding side** | medium | **DONE 2026-06-19/20.** A (forward `cnn_float_close`), B (`cnn_conv{W,b}_step_float_close`), C (`mnist_cnn_convW_step_float_budget`, decimal `(a·g)/250 + 10⁻⁷`). FloatBridge is now on all 3 MNIST nets, forward + gradient-step + numeric |
 | ✅ | **3a E4M3 MNIST empirical demo** | light | **DONE 2026-06-20** — fp32 92.25% → E4M3 92.30%, the "precision drops elegantly" headline; computes the 3c margin fraction empirically (92.89%) |
-| 5 | **3b E4M3 structural faithfulness** | medium | a *complete* verified claim at fp8 (the right kind) |
-| 6 | **3c E4M3 per-matmul accuracy + margin fraction** | medium | the honest end-to-end fp8 accuracy bound (depth-1); the Lean side of what 3a measured |
+| ✅ | **3c E4M3 per-matmul accuracy + margin fraction** | medium | **DONE 2026-06-20** — `argmax_preserved` + `linear_e4m3_logit_budget` (worst-case B ≤ 61) + `linear_e4m3_argmax_preserved` (margin > 122 ⟹ same prediction); measured B = 0.38 ⟹ 92.89% of test set. The honest end-to-end fp8 accuracy bound (depth-1); the Lean side of what 3a measured |
+| ✅ | **3b E4M3 structural faithfulness** | medium | **DONE 2026-06-20** — `e4m3_render_faithful` (emitted block-scaled int-matmul graph denotes the dequant-first algorithm) + `dequant_factors` (scale factors out of fp32 accumulate); zero new SHlo constructors. The *complete* verified claim at fp8 (the right kind). **All of §3 landed.** |
 | — | G1 for mlp/cnn + mlp joint-step | medium | finishes the descent composition across the chain |
 | — | fp4 / block-scaled `FloatModel` field / probabilistic budgets | heavy/research | only if pushing below fp8; expect structural-only claims |
 

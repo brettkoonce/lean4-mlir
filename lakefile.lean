@@ -290,6 +290,11 @@ lean_lib «Proofs» where
              -- making each chapter's verified trainer faithful — see
              -- planning/verified_faithful_sweep.md.
              `LeanMlir.Proofs.LinearFaithfulPoC,
+             -- E4M3 (fp8) render-tie (planning §3b): the emitted block-scaled
+             -- int-matmul graph denotes the intended dequant-first algorithm
+             -- (the per-output dequant scale factors out of the fp32 accumulate),
+             -- via existing den-faithful ops only — E4M3FaithfulPoC.lean.
+             `LeanMlir.Proofs.E4M3FaithfulPoC,
              -- mnist-MLP peer: the whole 3-layer MLP train step folded into the
              -- verified AST (forward + backward chain + 6 weightSgd/biasSgd), each
              -- output's den proven = certified via mlp_render_*_certified.

@@ -48,6 +48,12 @@ structure FloatModel where
 /-- The unit roundoff of IEEE-754 binary32 (round-to-nearest-even). -/
 noncomputable def u32 : ℝ := ((2 : ℝ) ^ (24 : ℕ))⁻¹
 
+/-- The normal-range unit roundoff of fp8 **E4M3** (1-4-3, 3 mantissa bits):
+    `2⁻⁴ = 1/16` (6.25%) — the leaf precision of the §3c E4M3 MNIST demo
+    (`scripts/mnist_e4m3_demo.py`). Outside the normal range (subnormals,
+    near the 448 max) the relative model degrades; see §2/§5 of the plan. -/
+noncomputable def u_e4m3 : ℝ := ((2 : ℝ) ^ (4 : ℕ))⁻¹
+
 namespace FloatModel
 
 variable (M : FloatModel)
@@ -1920,6 +1926,176 @@ theorem mnist_cot_budget (hMu : M.u ≤ u32) (fexp : ℝ → ℝ) {eexp : ℝ}
   have h2 : (1/16777216 : ℝ) * (1 + 41/2000) + 41/2000 ≤ 21/1000 := by
     norm_num
   linarith
+
+-- ════════════════════════════════════════════════════════════════
+-- § §3c: E4M3 argmax-preservation (the honest depth-1 fp8 statement)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Argmax preservation under a bounded logit perturbation** (planning §3c).
+    If every coordinate of the perturbed logits `z'` is within `B` of the
+    reference logits `z`, and `z`'s *strict* top-1 margin at `k` exceeds `2B`
+    (`z k − z i > 2B` for every other class `i`), then `k` is still the strict
+    argmax of `z'`. The depth-1 honest fp8 claim: a `B`-accurate matmul cannot
+    flip the prediction on a `>2B`-margin input. `B` is a hypothesis, so the
+    statement holds *both* for the proven worst-case bound
+    (`dense_close_mixed`) and for any measured a-posteriori drift — the demo's
+    empirical `B = max|Δlogit|` plugs into the same theorem. Conditional like
+    the suite's quantitative ReLU margins. -/
+theorem argmax_preserved {n : ℕ} {z z' : Vec n} {k : Fin n} {B : ℝ}
+    (hB : ∀ i, |z' i - z i| ≤ B)
+    (hmargin : ∀ i, i ≠ k → 2 * B < z k - z i) :
+    ∀ i, i ≠ k → z' i < z' k := by
+  intro i hik
+  have hk := abs_le.mp (hB k)
+  have hi := abs_le.mp (hB i)
+  have hm := hmargin i hik
+  -- z' k ≥ z k − B and z' i ≤ z i + B, while z k − z i > 2B
+  linarith [hk.1, hi.2]
+
+/-- Uniform (magnitude-bounded) per-logit budget of the mixed-precision dense
+    layer — `dense_close_mixed` specialized by `∑ᵢ|xᵢWᵢⱼ| ≤ m·w·a`, `|bⱼ| ≤ β`,
+    so it is one constant `B` over *all* outputs `j` (the input
+    `argmax_preserved` needs). The accumulate `u_acc` rides the bias add and the
+    fan-in γ-factor `(1+u_acc)^(m+1)`; the leaf `u_leaf` enters only via the flat
+    `(2·u_leaf + u_leaf²)` term — the two-roundoff separation of §1c. -/
+noncomputable def denseMixedBudget (uacc uleaf : ℝ) (m : ℕ) (w β a : ℝ) : ℝ :=
+  uacc * ((m : ℝ) * w * a + β)
+    + (1 + uacc) * ((((1 + uacc) ^ (m + 1) - 1) * (1 + uleaf) ^ 2
+        + (2 * uleaf + uleaf ^ 2)) * ((m : ℝ) * w * a))
+
+/-- **Mixed-precision dense forward error, uniform-magnitude budget.** Under
+    `|Wᵢⱼ| ≤ w`, `|bⱼ| ≤ β`, `|xᵢ| ≤ a`, every E4M3-mixed logit is within the
+    closed-form `denseMixedBudget` of the exact-ℝ logit — evaluable by `norm_num`
+    at a concrete net. -/
+theorem dense_close_mixed_uniform_budget (L : FloatModel) {m n : ℕ}
+    {W : Mat m n} {b : Vec n} {x : Vec m} {w β a : ℝ} (ha : 0 ≤ a)
+    (hW : ∀ i j, |W i j| ≤ w) (hb : ∀ j, |b j| ≤ β) (hx : ∀ i, |x i| ≤ a)
+    (j : Fin n) :
+    |M.denseMixed L W b x j - Proofs.dense W b x j| ≤
+      denseMixedBudget M.u L.u m w β a := by
+  have hu := M.u_nonneg
+  have hbase := M.dense_close_mixed L W b x j
+  have hSb : (∑ i, |x i * W i j|) ≤ (m : ℝ) * w * a := by
+    calc (∑ i, |x i * W i j|) ≤ ∑ _i : Fin m, a * w := by
+          refine Finset.sum_le_sum fun i _ => ?_
+          rw [abs_mul]; exact mul_le_mul (hx i) (hW i j) (abs_nonneg _) ha
+      _ = (m : ℝ) * (a * w) := by rw [Finset.sum_const]; simp [nsmul_eq_mul]
+      _ = (m : ℝ) * w * a := by ring
+  have hbabs : |b j| ≤ β := hb j
+  set S := ∑ i, |x i * W i j| with hS
+  set br := ((1 + M.u) ^ (m + 1) - 1) * (1 + L.u) ^ 2 + (2 * L.u + L.u ^ 2)
+    with hbr
+  have hbr0 : 0 ≤ br := by
+    have h1 : (0 : ℝ) ≤ (1 + M.u) ^ (m + 1) - 1 :=
+      sub_nonneg.mpr (one_le_pow₀ (by linarith))
+    have h3 : (0 : ℝ) ≤ 2 * L.u + L.u ^ 2 := by
+      have := L.u_nonneg; nlinarith [sq_nonneg L.u]
+    rw [hbr]; exact add_nonneg (mul_nonneg h1 (sq_nonneg _)) h3
+  have h1u : (0 : ℝ) ≤ 1 + M.u := by linarith
+  have step1 : M.u * (S + |b j|) ≤ M.u * ((m : ℝ) * w * a + β) :=
+    mul_le_mul_of_nonneg_left (by linarith) hu
+  have step2 : (1 + M.u) * (br * S) ≤ (1 + M.u) * (br * ((m : ℝ) * w * a)) :=
+    mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left hSb hbr0) h1u
+  calc |M.denseMixed L W b x j - Proofs.dense W b x j|
+      ≤ M.u * (S + |b j|) + (1 + M.u) * (br * S) := hbase
+    _ ≤ M.u * ((m : ℝ) * w * a + β) + (1 + M.u) * (br * ((m : ℝ) * w * a)) := by
+        linarith [step1, step2]
+    _ = denseMixedBudget M.u L.u m w β a := by simp only [denseMixedBudget, hbr]
+
+/-- Monotone upper bound for `denseMixedBudget`, keeping the `(1+uacc)^(m+1)`
+    power abstract: replace the accumulate by `U ≥ uacc`, the fan-in γ-factor by
+    `g ≥ (1+uacc)^(m+1)−1`, and the two leaf pieces by `P ≥ (1+uleaf)²`,
+    `Q ≥ 2·uleaf+uleaf²`. The result has no power left, so a concrete instance
+    (e.g. m = 784) evaluates by `norm_num` **without** unfolding the 785-fold
+    `npow` — the `layerBudget_le_of` analogue for the two-roundoff budget. -/
+theorem denseMixedBudget_le_of {uacc uleaf : ℝ} {m : ℕ} {w β a g P Q U : ℝ}
+    (hU : 0 ≤ U) (huacc0 : 0 ≤ uacc) (huleaf0 : 0 ≤ uleaf) (huacc : uacc ≤ U)
+    (hw : 0 ≤ w) (hβ : 0 ≤ β) (ha : 0 ≤ a)
+    (hg0 : 0 ≤ g) (hg : (1 + uacc) ^ (m + 1) - 1 ≤ g)
+    (hP : (1 + uleaf) ^ 2 ≤ P) (hQ : 2 * uleaf + uleaf ^ 2 ≤ Q) :
+    denseMixedBudget uacc uleaf m w β a ≤
+      U * ((m : ℝ) * w * a + β) + (1 + U) * ((g * P + Q) * ((m : ℝ) * w * a)) := by
+  unfold denseMixedBudget
+  have hmwa : (0 : ℝ) ≤ (m : ℝ) * w * a :=
+    mul_nonneg (mul_nonneg (Nat.cast_nonneg m) hw) ha
+  have hxb : (0 : ℝ) ≤ (m : ℝ) * w * a + β := by linarith
+  have hpow0 : 0 ≤ (1 + uacc) ^ (m + 1) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith))
+  have hleafpos : 0 ≤ 2 * uleaf + uleaf ^ 2 := by nlinarith [huleaf0, sq_nonneg uleaf]
+  have hQ0 : 0 ≤ Q := le_trans hleafpos hQ
+  have hbrkpos : 0 ≤ ((1 + uacc) ^ (m + 1) - 1) * (1 + uleaf) ^ 2
+      + (2 * uleaf + uleaf ^ 2) :=
+    add_nonneg (mul_nonneg hpow0 (sq_nonneg _)) hleafpos
+  have hbrk : ((1 + uacc) ^ (m + 1) - 1) * (1 + uleaf) ^ 2 + (2 * uleaf + uleaf ^ 2)
+      ≤ g * P + Q := add_le_add (mul_le_mul hg hP (sq_nonneg _) hg0) hQ
+  have t1 : uacc * ((m : ℝ) * w * a + β) ≤ U * ((m : ℝ) * w * a + β) :=
+    mul_le_mul_of_nonneg_right huacc hxb
+  have t2 : (1 + uacc) * ((((1 + uacc) ^ (m + 1) - 1) * (1 + uleaf) ^ 2
+        + (2 * uleaf + uleaf ^ 2)) * ((m : ℝ) * w * a))
+      ≤ (1 + U) * ((g * P + Q) * ((m : ℝ) * w * a)) :=
+    mul_le_mul (by linarith) (mul_le_mul_of_nonneg_right hbrk hmwa)
+      (mul_nonneg hbrkpos hmwa) (by linarith)
+  linarith [t1, t2]
+
+/-- **The worst-case E4M3 per-logit budget at the MNIST-linear dims** (784→n;
+    E4M3 leaf `u_leaf ≤ 2⁻⁴`, fp32 accumulate `u_acc ≤ 2⁻²⁴`; pixels `|x| ≤ 1`,
+    trained `|W| ≤ 3/5`, `|b| ≤ 1`): every E4M3-mixed logit is within **61** of
+    the exact-ℝ logit. The leaf term `(2·2⁻⁴ ≈ 12.5%)·∑|xW|` dominates (the fp32
+    fan-in γ at 784 is ≈5·10⁻⁵, negligible) — this is the *worst-case*, all-errors-
+    aligned figure. The demo (`scripts/mnist_e4m3_demo.py`) measures the actual
+    drift at `max|Δlogit| = 0.38` (errors cancel), the a-posteriori `B`; both
+    feed `argmax_preserved`. -/
+theorem linear_e4m3_logit_budget (L : FloatModel) (hMu : M.u ≤ u32)
+    (hLu : L.u ≤ u_e4m3) :
+    denseMixedBudget M.u L.u 784 (3 / 5) 1 1 ≤ 61 := by
+  have hu := M.u_nonneg
+  have hLu0 := L.u_nonneg
+  have hue : (u_e4m3 : ℝ) = 1 / 16 := by norm_num [u_e4m3]
+  rw [hue] at hLu
+  -- a clean coarse accumulate bound keeps the assembly out of 2⁻²⁴-land
+  have hu6 : M.u ≤ 1 / 1000000 := hMu.trans (by norm_num [u32])
+  -- the two flat E4M3 leaf pieces at u_leaf ≤ 1/16 (prove these BEFORE hγ:
+  -- nlinarith ring-normalizes every in-scope hypothesis, so a concrete
+  -- `(1+M.u)^785` in context would blow up the 785-fold npow)
+  have hprodhint : (0 : ℝ) ≤ L.u * (1 / 16 - L.u) := mul_nonneg hLu0 (by linarith)
+  have hsq : (1 + L.u) ^ 2 ≤ 289 / 256 := by nlinarith [hLu, hLu0, hprodhint]
+  have hleaf : 2 * L.u + L.u ^ 2 ≤ 33 / 256 := by nlinarith [hLu, hLu0, hprodhint]
+  -- the fan-in γ at 784 (cheap via gamma_num; no big-power evaluation)
+  have hγ : (1 + M.u) ^ (784 + 1) - 1 ≤ 5 / 100000 :=
+    M.gamma_num (k := 784 + 1) hMu (by norm_num [u32]) (by norm_num [u32])
+  refine (denseMixedBudget_le_of (U := 1 / 1000000) (g := 5 / 100000)
+      (P := 289 / 256) (Q := 33 / 256) (by norm_num) hu hLu0 hu6
+      (by norm_num) (by norm_num) (by norm_num) (by norm_num) hγ
+      hsq hleaf).trans ?_
+  norm_num
+
+/-- **Verified E4M3 MNIST-linear argmax preservation** (planning §3c capstone).
+    For the certified linear classifier at E4M3 leaf precision / fp32 accumulate,
+    pixels `|x| ≤ 1`, trained `|W| ≤ 3/5`, `|b| ≤ 1`: whenever the exact-ℝ logit
+    margin at the top class `k` exceeds `2·61 = 122`, the E4M3-mixed forward keeps
+    `k` as the strict argmax — **provably the same prediction**. Depth-1 makes
+    the single-matmul bound the end-to-end bound, so this is the one realistic
+    fp8 case with an honest accuracy guarantee (no vacuous depth compounding).
+    The 122 is the worst-case threshold; with the demo's measured `B = 0.38`
+    the same `argmax_preserved` covers the `>0.76`-margin inputs — empirically
+    92.89% of the MNIST test set (`scripts/mnist_e4m3_demo.py`). fp32 ≈ exact-ℝ
+    (within `u_acc`), so the demo's fp32 margins are the relevant quantity. -/
+theorem linear_e4m3_argmax_preserved (L : FloatModel) (hMu : M.u ≤ u32)
+    (hLu : L.u ≤ u_e4m3) {n : ℕ} {W : Mat 784 n} {b : Vec n} {x : Vec 784}
+    (hW : ∀ i j, |W i j| ≤ 3 / 5) (hb : ∀ j, |b j| ≤ 1) (hx : ∀ i, |x i| ≤ 1)
+    (k : Fin n)
+    (hmargin : ∀ i, i ≠ k →
+      (122 : ℝ) < Proofs.dense W b x k - Proofs.dense W b x i) :
+    ∀ i, i ≠ k → M.denseMixed L W b x i < M.denseMixed L W b x k := by
+  set B := denseMixedBudget M.u L.u 784 (3 / 5) 1 1 with hBdef
+  have hB : ∀ j, |M.denseMixed L W b x j - Proofs.dense W b x j| ≤ B := fun j => by
+    rw [hBdef]
+    exact M.dense_close_mixed_uniform_budget L (a := 1) (by norm_num) hW hb hx j
+  have hBle : B ≤ 61 := by rw [hBdef]; exact M.linear_e4m3_logit_budget L hMu hLu
+  refine argmax_preserved (z := Proofs.dense W b x) (z' := M.denseMixed L W b x)
+    (k := k) (B := B) hB (fun i hik => ?_)
+  have := hmargin i hik
+  linarith [hBle]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Sanity: the exact model inhabits the interface, budgets collapse

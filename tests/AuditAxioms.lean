@@ -77,6 +77,7 @@ import LeanMlir.Proofs.ConvNeXtFaithfulPoC
 import LeanMlir.Proofs.ConvNeXtTiePoC
 import LeanMlir.Proofs.ViTBackB0
 import LeanMlir.Proofs.LinearFaithfulPoC
+import LeanMlir.Proofs.E4M3FaithfulPoC
 import LeanMlir.Proofs.MlpFaithfulPoC
 import LeanMlir.Proofs.CnnFaithfulPoC
 import LeanMlir.Proofs.CifarFaithfulPoC
@@ -1389,6 +1390,40 @@ open Proofs
 #print axioms FloatModel.softmaxF_close
 #print axioms FloatModel.softmax_ce_cot_close
 #print axioms FloatModel.mnist_cot_budget
+-- §3c (planning/floatbridge_quantization.md): the E4M3 (fp8) argmax-preservation
+-- statement — the honest end-to-end accuracy claim that exists ONLY because
+-- MNIST-linear is depth-1 (the single-matmul leaf bound IS the end-to-end bound,
+-- no vacuous depth compounding). argmax_preserved: a B-accurate logit
+-- perturbation cannot flip the prediction on any input whose strict top-1 margin
+-- exceeds 2B (B is a hypothesis, so it holds for the proven worst-case bound AND
+-- the demo's measured a-posteriori drift alike). denseMixedBudget /
+-- dense_close_mixed_uniform_budget / denseMixedBudget_le_of: a single uniform
+-- per-logit B over all outputs from dense_close_mixed (the layerBudget_le_of
+-- analogue, keeping the fan-in power abstract). linear_e4m3_logit_budget: at the
+-- committed 784→n dims, u_leaf ≤ 2⁻⁴, u_acc ≤ 2⁻²⁴, |x| ≤ 1, |W| ≤ 3/5, every
+-- E4M3-mixed logit is within 61 of the exact-ℝ logit (worst-case; the leaf 12.5%
+-- dominates, the fp32 fan-in γ₇₈₅ ≈ 5e-5 is negligible). linear_e4m3_argmax_preserved:
+-- the capstone — margin > 122 ⟹ provably same prediction. Empirically (the demo,
+-- measured B = 0.38) that region is 92.89% of the MNIST test set.
+#print axioms FloatModel.argmax_preserved
+#print axioms FloatModel.denseMixedBudget
+#print axioms FloatModel.dense_close_mixed_uniform_budget
+#print axioms FloatModel.denseMixedBudget_le_of
+#print axioms u_e4m3
+#print axioms FloatModel.linear_e4m3_logit_budget
+#print axioms FloatModel.linear_e4m3_argmax_preserved
+-- §3b (planning/floatbridge_quantization.md): the E4M3 (fp8) STRUCTURAL render-tie
+-- (E4M3FaithfulPoC.lean) — correctness-of-implementation, NO accuracy claim. The
+-- deployed fp8 kernel is block-scaled with fp32 accumulate: int weight code (per-output
+-- column scale sWⱼ), int activation code (per-tensor sx), fp32 accumulate, one per-output
+-- dequant sx·sWⱼ, fp32 bias. dequant_factors: the per-output scale factors out of the
+-- accumulate ((sx·sWⱼ)·∑ q q = ∑ (sx q)(sWⱼ q)) — the arithmetic that makes "int matmul
+-- then dequant" = "dequant then matmul", i.e. why fp32 accumulate is the faithful choice.
+-- e4m3_render_faithful: the emitted graph (built ONLY from den-faithful ops operand/dotIn/
+-- layerScaleF/addBcast — zero new SHlo constructors) denotes the intended dequant-first
+-- algorithm quantLinear, for ANY quantizer q (E4M3 is one instance; q left abstract).
+#print axioms QuantPoC.dequant_factors
+#print axioms QuantPoC.e4m3_render_faithful
 -- Inexact-gradient descent over ℝ (SgdDescent.lean): the keystone that
 -- turns the FloatBridge budgets into a TRAINING statement. descent_segment
 -- is the MVT-form descent lemma (segment-local differentiability +
