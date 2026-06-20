@@ -253,6 +253,45 @@ The worst-case-vs-measured gap (up to ~10⁸) is the quantitative case for
 a-posteriori certificates past toy depth; the zero flip count says the
 margin hypotheses describe real training, not a technicality.
 
+#### Low precision: bf16-mixed and fp8 (E4M3)
+
+`FloatModel`'s `u` is a *parameter*, so precision is an instantiation, not a
+rewrite — up to where the model's assumptions break.
+
+- **Two-roundoff model** (`dot_close_mixed`, `dense_close_mixed`): split the
+  single `u` into a leaf precision `u_leaf` (the matmul inputs) and an
+  accumulate `u_acc` (the reduction). The leaf contributes only a *flat*
+  `(2·u_leaf + u_leaf²)·Σ|xy|` term; the fan-in Higham γ rides entirely on
+  `u_acc`. So the `1/u` fan-in wall sits at `u_acc = 2⁻²⁴`, **not** at the leaf
+  — which is exactly why **bf16-mixed** (the deployed config: bf16 leaf, fp32
+  accumulate — the shipped `r34_imagenet_bf16.bin` checkpoints) is non-vacuous
+  where pure bf16 (`γ_k` vacuous at fan-in 256) is not.
+- **fp8 (E4M3), depth-1.** MNIST-linear is a single 784→10 matmul, so the
+  per-matmul leaf bound *is* the end-to-end bound — the one realistic fp8 case
+  with an honest end-to-end accuracy guarantee.
+  - *Empirical* (`scripts/mnist_e4m3_demo.py`): fp32 92.25% → E4M3 **92.30%**
+    (per-row weight scale, per-tensor activation scale, fp32 accumulate) —
+    precision drops elegantly.
+  - *Accuracy* (`argmax_preserved`, `linear_e4m3_argmax_preserved`): a
+    `B`-accurate matmul cannot flip the prediction on a `>2B`-margin input. At
+    the trained magnitudes the worst-case `B ≤ 61` (`linear_e4m3_logit_budget`,
+    the flat 12.5% leaf term dominating), so margin > 122 ⟹ provably the same
+    prediction. That worst-case is vacuous on real data (mean margin ≈ 4.25);
+    the demo's *measured* `B = 0.38` feeds the **same** theorem ⟹ **92.89%** of
+    the MNIST test set provably unchanged (and 100% of those keep their label).
+  - *Structural* (`e4m3_render_faithful`, `dequant_factors`): the emitted
+    block-scaled int-matmul graph denotes the intended algorithm — the
+    per-output dequant scale factors out of the fp32 accumulate
+    (`(sx·sWⱼ)·∑ q q = ∑ (sx q)(sWⱼ q)`), so "int matmul then dequant" = "dequant
+    then matmul". "The bytes implement block-scaled-E4M3 matmul with fp32
+    accumulate," with no accuracy claim — built from existing `den`-faithful ops,
+    no new IR constructors.
+- The honest regime ladder: **fp32** and **bf16-mixed** are accuracy-provable;
+  **fp8** is per-matmul-provable, end-to-end only a-posteriori past depth-1;
+  **fp4** is structural-faithfulness + statistical robustness (the relative
+  `|rnd x−x| ≤ u|x|` model gives way to block-scaled quantization). All the
+  above is 3-axiom-clean and audited; see `planning/floatbridge_quantization.md`.
+
 **Not yet verified anywhere:** the ~7500-line `MlirCodegen.lean` (zero
 theorems); outside Tier 1, the train-step text that `iree-compile` actually
 consumes; and, within the float bridge, subnormals (the model is

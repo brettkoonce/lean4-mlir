@@ -9712,6 +9712,47 @@ flip count is zero across 29.5 million measured pre-activations: the
 margin hypotheses are not a technicality the proofs hide behind; they
 are what training actually looks like.
 
+\paragraph{Lower precision, by instantiation.}
+The model's unit roundoff \(u\) is a field, not a literal, so every budget
+is stated for abstract \(u\) and a precision is an \emph{instantiation} ---
+up to the point where the relative model \(|\mathrm{rnd}(x) - x| \le u\,|x|\)
+itself breaks. The deployed kernels are not fp32 but \emph{bf16-mixed}: bf16
+leaf compute, fp32 accumulate. The two-roundoff budget
+\texttt{dot\_close\_mixed} splits the single \(u\) into a leaf roundoff
+\(u_{\mathrm{leaf}}\) (the matmul inputs) and an accumulate \(u_{\mathrm{acc}}\)
+(the reduction), and proves the leaf contributes only a \emph{flat} term
+\((2u_{\mathrm{leaf}} + u_{\mathrm{leaf}}^2)\sum_i |x_i y_i|\) while the fan-in
+Higham factor rides entirely on \(u_{\mathrm{acc}}\). The \(1/u\) fan-in wall
+therefore sits at \(u_{\mathrm{acc}} = 2^{-24}\), not at the leaf --- which is
+precisely why bf16-mixed (the shipped \texttt{r34\_imagenet\_bf16.bin}) is
+non-vacuous where pure bf16, whose \(\gamma_k\) goes vacuous at fan-in
+\(256\), is not.
+
+\paragraph{fp8, and where accuracy gives way to faithfulness.}
+At fp8 (E4M3, \(u_{\mathrm{leaf}} = 2^{-4}\)) the worst-case leaf term is
+\(\approx 12.5\%\), so over depth it compounds to nothing. The exception is
+depth one: MNIST-linear is a single \(784 \to 10\) matmul, where the
+per-matmul leaf bound \emph{is} the end-to-end bound, and an honest fp8
+accuracy statement survives. It takes the conditional, margin form the kink
+theorems already taught: \texttt{argmax\_preserved} proves a \(B\)-accurate
+matmul cannot change the prediction on any input whose top-1 logit margin
+exceeds \(2B\). At the trained magnitudes the worst-case budget is
+\(B \le 61\) (\texttt{linear\_e4m3\_logit\_budget}), so a margin past \(122\)
+freezes the label --- a threshold that, like the \(5100\) logit bound above,
+is vacuous against a mean measured margin of \(\approx 4.25\). The same
+theorem with the \emph{measured} \(B = 0.38\)
+(\texttt{scripts/mnist\_e4m3\_demo.py}, where fp32 \(92.25\%\) becomes E4M3
+\(92.30\%\)) covers \(92.89\%\) of the test set, every one of which provably
+keeps its prediction. Below this --- deeper, or at fp4 --- the relative model
+gives way to block-scaled quantization, and the verifiable claim migrates from
+\emph{numerical accuracy} to \emph{structural faithfulness}:
+\texttt{e4m3\_render\_faithful} proves the emitted block-scaled int-matmul
+graph denotes the intended algorithm (the per-output dequant scale factors out
+of the fp32 accumulate, \texttt{dequant\_factors}), so the bytes implement
+block-scaled-E4M3 matmul with fp32 accumulate --- a
+correctness-of-implementation theorem that makes no accuracy claim and does not
+pretend to one.
+
 \section{The five layers, as three kinds of certainty}
 
 The five mechanisms are three kinds of certainty about a single claim ---
