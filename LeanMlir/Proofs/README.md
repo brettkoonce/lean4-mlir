@@ -269,6 +269,25 @@ same gap. The numerical FD checks in `check_jacobians.py` and the
 end-to-end oracles in `tests/vjp_oracle/` cover the codegen-emitted
 formula at the kinks.
 
+**Two emit paths.** The kink discussion above is about `MlirCodegen.lean`
+(~7500 lines, zero theorems) — the path the full-recipe `*-train` trainers behind
+the headline accuracy numbers use. The `*-verified` trainers instead consume the
+StableHLO-subset render (the `SHlo` AST + its `den : SHlo n → Vec n` denotation),
+and there the proof↔emitted link is a **theorem**, not just a numerical check:
+for all 12 chapter nets the §1a whole-net ties (`LinearFaithfulPoC`'s
+`poc_train_step_tail_certified` up through `r34_net_tied_certified`,
+`mnv2_net_tied_certified`, `cnx_net_tied_certified`, `efficientnet_net_tied`,
+`vit_net_tied_certified`) prove every emitted parameter-SGD node's `den` equals
+the certified `fderiv`-derived loss-descent step, with the cotangent threaded
+through the **real** forward and the proven per-block VJP backward (residual
+fan-in included — not a free `∀`-cotangent). All 3-axiom-clean in
+`tests/AuditAxioms.lean`. The residuals on *that* path are narrower: (a) `den` is
+the `ℝ` denotation, so the `den`→`Float32` rounding gap, the per-op `pretty`
+lexing, `iree-compile`, the runtime, and the FFI stay trusted; (b) the same
+ReLU/MaxPool/ReLU6 kink convention above; and (c) the CI drift guard byte-checks
+`linear` + `vit` against the regenerated renderer so far (extended per net), with
+convnext's 4 even-kernel weight-grad gaps the only per-op hole (vit has none).
+
 ## The three rules
 
 All of backpropagation:

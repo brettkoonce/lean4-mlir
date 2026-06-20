@@ -145,9 +145,14 @@ Axiom closure on every one of these is a CI invariant
 theorems are additionally re-checked by the independent
 [`tests/comparator/`](tests/comparator/) kernel pass.
 
-These proofs are about the reference `ℝ` definitions in `Proofs/`, **not** the
-`Float32` StableHLO the codegen emits — the two are written separately and no
-Lean theorem currently links them. The connection is instead twofold. (1)
+These proofs are about the reference `ℝ` definitions in `Proofs/`. They are now
+tied to the emitted StableHLO **at the denotational level**: for every chapter
+net the rendered train-step graph's `ℝ` denotation (`den : SHlo n → Vec n`) is
+proven equal to the certified `fderiv`-derived loss-descent step (the §1a
+whole-net ties — see Tier 3 below). What is *not* yet bridged is the
+`den`→`Float32` numerics, and the separate `Float32` `MlirCodegen.lean` path the
+full-recipe trainers behind the headline accuracy numbers use. Two further
+checks corroborate the emitted formulas independently of `den`. (1)
 *Structural*: codegen and proofs were developed independently and arrived at
 the same decomposition — every backward pass factors through the standalone
 gradient of one new primitive per architecture (softmax for attention, the
@@ -159,8 +164,10 @@ and JAX `value_and_grad` oracles ([`tests/vjp_oracle/`](tests/vjp_oracle/))
 exercise the emitted formulas — including at the ReLU/MaxPool kinks, where the
 codegen substitutes the standard subgradient convention. See the "Codegen
 trust boundary" section of [`LeanMlir/Proofs/README.md`](LeanMlir/Proofs/README.md)
-for the precise gap. Closing it formally — a forward-extraction lemma tying a
-proven `*Forward` to the codegen's emitted graph — is open future work.
+for the precise gap. The forward-and-backward extraction that ties a proven
+graph to the emitted render is now done at the `den` level for all chapter nets
+(the §1a ties); what remains open is carrying it across the `den`→`Float32`/IREE
+boundary.
 
 ## What is and isn't verified
 
@@ -173,26 +180,45 @@ forward and backward are proven faithful to the Mathlib `fderiv` math as rendere
 StableHLO graphs (`mlpFwdGraph_faithful`, `mlpBackGraph_faithful`,
 `cnnFwdGraph_faithful`, `cnnBackGraph_faithful`; for linear also the param-grad
 Jacobians `wGrad/bGrad_is*Jacobian` and `sgdW/sgdB_descends_certified_grad`).
-All audited to the 3-axiom closure. Caveat: the train-step `.mlir` is currently
-assembled from these proven op-graphs with a hand-written grad/SGD tail (see
-`linearTrainStepModuleV`); folding that tail into the rendered AST so the whole
-train-step module is `render(provenGraph)` is in progress. Tier 1 also now
+All audited to the 3-axiom closure. The whole train-step module is now
+`render(provenGraph)`: `linTrainStepFaithfulV` (the fully-tied renderer in
+`StableHLO.lean` that generates `verified_mlir/linear_train_step.mlir`) renders
+every node — grad/SGD tail included — as `pretty` of proven `SHlo` nodes, and
+`poc_train_step_tail_certified` proves each emitted `weightSgd`/`biasSgd`
+output's `den` is the certified loss-descent step (the older hand-tailed
+`linearTrainStepModuleV` is kept only for reference; the committed bytes are
+byte-tied to the renderer in CI). Tier 1 also now
 carries the `ℝ`→`Float32` bridge (below): forward, gradient, and SGD-step
 rounding budgets for the linear/MLP nets, and for linear a proven descent
 guarantee.
 
-**Tier 2 — CIFAR (cifar, cifar-bn): forward bridged, backward WIP.**
+**Tier 2 — CIFAR (cifar, cifar-bn): whole train step bridged.**
 `cifarFwdGraph_faithful` / `cifarBnFwdGraph_faithful` (plus op-level
-`bnBack_faithful`) hold; the whole-net backward graph and the train step are
-not yet rendered from a proof.
+`bnBack_faithful`) hold, and the §1a whole-net ties now cover the train step:
+`cifar_conv_tied_certified` / `cifarBn_convbn_tied_certified` prove every emitted
+conv/BN/dense parameter-SGD node denotes (`den`) the certified loss-descent step
+at the real CIFAR forward + composed softmax-CE cotangent (same `den`→`Float32`
+trust boundary as Tier 3).
 
 **Tier 3 — Imagenette (ResNet-34, MobileNetV2, ConvNeXt, EfficientNet, ViT):
-ℝ whole-net VJP proven; codegen bridge WIP.** The whole-network VJP is proven
-over `ℝ` (`resnet34_has_vjp_at`, `vit_full_has_vjp`, `convnext_has_vjp`,
-`efficientnet_has_vjp`, `mobilenetv2_has_vjp_at`). The rendered-MLIR bridge is
-forward-graph-only (resnet/mnv2/convnext) or op-level-only (efficientnet/vit),
-and the GPU trainers behind the Imagenette numbers below run the **unverified**
-`MlirCodegen.lean` path. No theorem links those proofs to that codegen yet.
+ℝ whole-net VJP proven *and* the whole train step bridged to the emitted
+graph.** The whole-network VJP is proven over `ℝ` (`resnet34_has_vjp_at`,
+`vit_full_has_vjp`, `convnext_has_vjp`, `efficientnet_has_vjp`,
+`mobilenetv2_has_vjp_at`). On top of that, the **§1a whole-net ties** now bridge
+the entire train step: one capstone per net — `r34_net_tied_certified`,
+`mnv2_net_tied_certified`, `cnx_net_tied_certified`, `efficientnet_net_tied`,
+`vit_net_tied_certified` — proves every emitted parameter-SGD node of the committed
+`verified_mlir/<net>_train_step.mlir` render denotes (`den`) the certified
+`fderiv`-derived `θ − lr·∂Loss/∂θ` step, with the cotangent threaded through the
+**real** full forward and the loss-driven backward composed from the proven
+per-block VJPs (residual fan-in at every skip — not a free `∀`-cotangent). All
+3-axiom-clean (`tests/AuditAxioms.lean`), and the `<net>-verified` exes train on
+exactly that committed render. What stays trusted: the `den`→`Float32` numerics,
+the per-op `pretty` lexing, and `iree-compile`/runtime/FFI (the CI drift guard
+currently byte-checks `linear` + `vit` against the regenerated renderer,
+extended per net; convnext has 4 even-kernel weight-grad gaps, vit has none).
+The headline accuracy numbers below still come from the mature full-recipe
+`*-train` trainers on the unverified `MlirCodegen.lean` path.
 
 **Tier 4 — ImageNet-1k (phase-2 Lean→JAX bridge): scale baseline, gradients
 not Lean-verified.** Full 1000-class ImageNet runs use the phase-2 path
@@ -299,8 +325,10 @@ rewrite — up to where the model's assumptions break.
   above is 3-axiom-clean and audited; see `planning/floatbridge_quantization.md`.
 
 **Not yet verified anywhere:** the ~7500-line `MlirCodegen.lean` (zero
-theorems); outside Tier 1, the train-step text that `iree-compile` actually
-consumes; and, within the float bridge, subnormals (the model is
+theorems — the path behind the headline accuracy numbers); the printed `.mlir`
+text that `iree-compile` actually consumes (the per-op `pretty` lexing step — the
+train-step *graph* it prints is now `den`-certified for all chapter nets, not
+just Tier 1); and, within the float bridge, subnormals (the model is
 relative-error-only), the joint all-layers descent step and bias columns
 (the per-weight-layer constants are proven for linear + MLP; for the CNN
 the new ingredients are proven — quantitative max-pool selection margins
