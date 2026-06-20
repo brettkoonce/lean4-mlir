@@ -2996,24 +2996,42 @@ Mechanical; see \leandocref{Proofs.bnAffine\_has\_vjp}.
 Mechanical; see \leandocref{Proofs.bn\_has\_vjp}.
 \end{proof}
 
-\section{Example: the BN lift on CIFAR}
+\section{Example: training dynamics on CIFAR}
 \label{sec:bn_cifar_example}
 
-The previous two chapters trained MNIST classifiers with SGD, and a
+The previous two chapters trained MNIST classifiers and a
 four-convolution net was plenty. CIFAR-10 --- color $32 \times 32$
-images, a genuinely harder problem --- rewards going deeper, and depth
-is exactly where BatchNorm earns its keep. So this chapter's demo
-\textbf{doubles the depth}: an eight-convolution network (twice the
-four-conv MNIST CNN), trained two ways --- with BN and without --- to
-watch what BN does to the training curve.
+images, a genuinely harder problem --- rewards going deeper, so this
+chapter's demo \textbf{doubles the depth}: an eight-convolution network
+(twice the four-conv MNIST CNN). Depth also lets us ask a sharper
+question than ``does it train?'' --- namely, \emph{what governs how it
+trains?}
 
-The headline, stated up front so the graph below is no surprise:
-\textbf{BN does not change where the network ends up; it changes how
-fast it gets there.} Both nets converge to about the same test
-accuracy. The BN net just reaches it in roughly half the epochs. BN is
-an accelerator, not a capacity boost --- and this section measures
-that directly, with the proof-rendered training step from this chapter
-running on a GPU.
+Two levers do most of the work, and the proof suite lets us move each
+one against an \emph{identical, machine-checked gradient}. The first is
+\textbf{normalization} --- the BatchNorm we just proved, dropped between
+each convolution and its ReLU. The second is the \textbf{optimizer} ---
+the rule that turns a gradient into a weight update. We hold everything
+else fixed (same architecture, same data pipeline: per-epoch shuffle,
+random horizontal flip, a cosine learning-rate schedule with warmup;
+same 40 epochs) and move one lever at a time. Two findings, stated up
+front so the graphs below are no surprise:
+
+\begin{itemize}
+\item \textbf{Normalization buys speed, not ceiling.} BN reaches a given
+  accuracy in fewer epochs, but both nets top out in the same place ---
+  at this depth BN's \emph{final} number even lands a hair below the
+  un-normalized net's. It is an accelerator, not a capacity boost.
+\item \textbf{The optimizer moves the ceiling.} Trading plain SGD for
+  SGD-with-momentum is worth two to three points of final accuracy ---
+  more than normalization changes anything here. Adam, notably, is a
+  wash with plain SGD on a net this small: its per-coordinate
+  adaptivity earns nothing it can keep.
+\end{itemize}
+
+\noindent Every run below shares one proof-rendered backward pass; only
+the BN layers or the rendered optimizer tail change between them. The
+numbers are from that verified training step running on a GPU.
 
 \subsection*{Architecture}
 
@@ -3123,42 +3141,21 @@ are machine-checked (\texttt{Proofs/CifarCNN.lean},
 \texttt{Proofs/Cifar8Close.lean}) --- and both run through the same
 IREE FFI path on the GPU.
 
-\subsection*{Training: same destination, BN gets there faster}
+\subsection*{Lever 1: normalization}
 
-Both nets train with plain SGD at learning rate \textbf{0.02} for 40
-epochs --- a stable rate at which \emph{both} learn, no schedule and no
-tricks. Per-epoch test accuracy, captured from the verified runs
-(\texttt{runs/cifar8\_verified\_lr0.02\_40ep.log} and its
-\texttt{\_bn\_} sibling):
-
-\begin{verbatim}
-   no BN                       with BN
-epoch  1:  31.6%            epoch  1:  35.0%
-epoch  2:  35.0%            epoch  2:  42.3%    <- BN already +7
-epoch  5:  47.6%            epoch  5:  52.9%
-epoch 10:  53.4%            epoch 10:  58.4%    <- BN ~8 epochs ahead
-epoch 20:  59.7%            epoch 20:  59.6%    <- the curves meet
-epoch 40:  61.3%            epoch 40:  59.4%    <- no-BN nudges ahead
-  best:    62.0%              best:    60.3%
-\end{verbatim}
-
-Neither net freezes; both climb to about the same place. The whole
-difference is in the \emph{rate}. BN is already at 42\% after two
-epochs (the no-BN net needs five), reaches the high-50s by epoch~10
-(the no-BN net takes until about epoch~18), and has essentially
-flattened by epoch~20. The no-BN net arrives at the same plateau a
-dozen epochs later and, given the extra room, even edges slightly
-ahead by the end. Same ceiling --- about 60\% --- and BN takes roughly
-half the epochs to reach it.
+Fix the optimizer at plain SGD and toggle BN. Both nets train for 40
+epochs on the shared pipeline; per-epoch test accuracy, from the
+verified runs
+(\texttt{runs/ablation\_cifar8/\{nobn,bn\}\_sgdsched.log}):
 
 \begin{center}
 \begin{tikzpicture}
 \begin{axis}[
     width=0.92\linewidth, height=6.5cm,
     xlabel={Epoch}, ylabel={Test accuracy (\%)},
-    xmin=0, xmax=41, ymin=30, ymax=65,
+    xmin=0, xmax=41, ymin=28, ymax=76,
     xtick={0,5,10,15,20,25,30,35,40},
-    ytick={30,35,40,45,50,55,60,65},
+    ytick={30,40,50,60,70},
     legend pos=south east,
     legend cell align={left},
     grid=major, grid style={gray!18},
@@ -3167,70 +3164,118 @@ half the epochs to reach it.
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,34.97) (2,42.26) (3,48.91) (4,51.26) (5,52.94) (6,54.65) (7,56.20) (8,57.17) (9,57.31) (10,58.42) (11,58.79) (12,58.68) (13,58.87) (14,59.46) (15,58.89) (16,59.12) (17,59.09) (18,59.45) (19,59.44) (20,59.64) (21,59.65) (22,59.84) (23,59.79) (24,59.56) (25,60.05) (26,59.31) (27,59.63) (28,59.61) (29,59.80) (30,59.65) (31,59.51) (32,59.45) (33,58.37) (34,60.18) (35,59.75) (36,60.05) (37,59.46) (38,60.23) (39,60.29) (40,59.36)
+(1,30.80) (2,42.83) (3,47.53) (4,55.43) (5,58.87) (6,64.16) (7,62.85) (8,66.18) (9,65.74) (10,68.93) (11,69.16) (12,69.69) (13,71.15) (14,70.15) (15,70.45) (16,72.10) (17,72.15) (18,71.62) (19,73.01) (20,73.28) (21,73.70) (22,73.02) (23,73.77) (24,73.76) (25,73.58) (26,73.93) (27,73.56) (28,73.69) (29,74.13) (30,73.98) (31,73.82) (32,74.01) (33,73.94) (34,74.07) (35,73.93) (36,74.15) (37,73.86) (38,74.04) (39,74.02) (40,73.98)
 };
 \addlegendentry{with BN}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,31.60) (2,34.97) (3,40.43) (4,45.65) (5,47.60) (6,48.95) (7,50.29) (8,51.37) (9,51.42) (10,53.40) (11,54.16) (12,54.85) (13,55.28) (14,56.87) (15,57.11) (16,57.75) (17,58.21) (18,58.30) (19,58.94) (20,59.70) (21,59.88) (22,60.24) (23,60.17) (24,60.90) (25,59.86) (26,60.98) (27,60.85) (28,61.55) (29,60.99) (30,61.59) (31,62.02) (32,61.35) (33,61.58) (34,61.80) (35,61.31) (36,61.67) (37,61.36) (38,62.01) (39,61.46) (40,61.28)
+(1,29.37) (2,31.83) (3,42.01) (4,46.92) (5,51.07) (6,55.18) (7,56.00) (8,59.91) (9,59.46) (10,62.36) (11,64.89) (12,64.32) (13,66.80) (14,66.89) (15,68.00) (16,68.45) (17,69.20) (18,70.25) (19,70.22) (20,71.60) (21,71.56) (22,71.34) (23,71.73) (24,72.06) (25,72.56) (26,73.03) (27,72.31) (28,73.12) (29,73.18) (30,73.46) (31,73.51) (32,73.55) (33,73.86) (34,74.06) (35,73.96) (36,73.74) (37,73.66) (38,73.73) (39,73.73) (40,73.78)
 };
 \addlegendentry{no BN}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent CIFAR-10, 8-conv arch, SGD~0.02, 40 epochs, BN vs no-BN,
-through the verified renderer
-(\texttt{runs/cifar8\_\{,bn\_\}verified\_lr0.02\_40ep.log}). Both
-curves climb to roughly the same accuracy; the BN curve is the same
-shape shifted left.
+\noindent CIFAR-10, 8-conv arch, plain SGD (lr~0.1, cosine${+}$warmup)
+on the shared pipeline, 40 epochs, BN vs no-BN, through the verified
+renderer (\texttt{runs/ablation\_cifar8/\{nobn,bn\}\_sgdsched.log}).
 
-The BN net leads from epoch one and is essentially done by epoch~20;
-the no-BN net traces the same arc about a dozen epochs behind. Same
-optimizer, same learning rate, same dataset, same architecture plus
-the BN theorems we proved in this chapter. The three-term formula from
-\S~\ref{thm:bnNormalize_has_vjp} is what buys the speed --- BN
-standardizes each layer's input distribution (\(\mu = 0\),
-\(\sigma = 1\)) and its backward pass returns a gradient that accounts
-for how that standardization affected every other sample in the batch.
-The result: gradients stay well-conditioned, every SGD step makes
-reliable progress, and the network reaches its ceiling in half the
-passes over the data.
+\noindent BN leads from the second epoch and is essentially flat by
+epoch~16; the un-normalized net traces the same arc about a dozen epochs
+behind and pulls dead level by the end. Same ceiling --- about 74\% ---
+reached sooner. BN is not buying capacity here, only time: under this
+optimizer the two finish in a statistical tie. The head start is largest
+precisely for plain SGD, where conditioning matters most; the momentum
+and Adam runs below smooth the gradient enough on their own that BN's
+lead shrinks --- and there, as the next table shows, the un-normalized
+net actually ends a touch ahead. The three-term backward from
+\S\ref{thm:bnNormalize_has_vjp} is what makes the curve trustworthy: the
+machine-checked VJP guarantees every one of those faster steps computes
+the right gradient.
 
-\subsection*{Where the BN lift lives}
+\subsection*{Lever 2: the optimizer}
 
-Why does normalizing buy speed? Each layer is tuned for the
-distribution of its inputs --- but those inputs are the outputs of
-every layer below, which are themselves changing every step. So each
-layer chases a moving target: activations drift to scales where the
-nonlinearity saturates or gradients blow up, and the step that helped
-one layer wrecks the next. BN removes the moving part --- by pinning
-every layer's input to mean-zero, unit-variance before the learnable
-\(\gamma, \beta\) get a say, each layer always sees a well-conditioned
-input no matter what the layers below just did. Ioffe \& Szegedy framed
-this as reducing ``internal covariate shift''; later analysis
-(Santurkar et al., 2018) argued the sharper reason is that
-normalization \emph{smooths the loss landscape} --- the gradient stays
-predictable from one step to the next. Either way, a smoother landscape
-means each SGD step makes more reliable progress, and reliable progress
-compounds across epochs: that is precisely the left-shifted curve the
-graph measures.
+Now hold the architecture fixed and change only the update rule. Three
+optimizers, each at its own tuned learning rate, all on the identical
+pipeline and the same 40 epochs (final \% / best \%):
 
-BN is not buying capacity. Both specs top out around the same accuracy
---- the no-BN net gets there too, just later. What BN buys is the
-\emph{rate}: the same destination in roughly half the epochs. (On
-larger networks, and with true batch-statistic normalization, the
-effect is stronger still --- it also opens up learning rates that are
-unstable without it --- but at this depth and this stable rate, what we
-can honestly measure and verify is the speed, so that is the claim we
-make here.)
+\begin{center}
+\begin{tabular}{l c c c}
+\hline
+       & SGD & momentum & AdamW \\
+       & (lr 0.1) & ($\mu$ 0.9, lr 0.02) & (lr $10^{-3}$) \\
+\hline
+no BN  & 73.8 / 74.1 & \textbf{77.0 / 77.2} & 74.1 / 74.3 \\
+BN     & 74.0 / 74.1 & \textbf{76.1 / 76.3} & 73.5 / 73.7 \\
+\hline
+\end{tabular}
+\end{center}
 
-That speed is why every image architecture since 2015 bakes a
-normalization layer in by default: on a multi-day ImageNet run,
-reaching the same accuracy in half the passes over the data is the
-difference between experimentally tractable and not. The proof suite we
-built in this chapter is what mechanically guarantees the BN backward
-computes the correct VJP at every one of those steps --- so the curve
-above rests on a machine-checked claim, not a trusted kernel.
+\noindent Momentum wins outright --- two to three points over plain SGD
+in both nets. Plain SGD and Adam, by contrast, are a statistical tie: on
+a convolutional net this small, Adam's per-coordinate second-moment
+scaling has nothing to grip. And reading \emph{down} the columns
+recovers Lever~1 from the other side --- BN moves the final number by at
+most a fraction of a point (a touch down under momentum and Adam, even
+under SGD), confirming that its contribution is timing, not ceiling.
+
+The reason we can make this comparison \emph{and trust it} is that the
+optimizer is one swappable rendered tail. The forward pass, the
+softmax--cross-entropy loss, the backward pass, and every parameter
+gradient are the same proof-rendered graph in each column; only the
+final per-parameter update op changes:
+
+\begin{itemize}
+  \item \textbf{SGD}: $\theta \leftarrow \theta - \mathrm{lr}\cdot g$.
+  \item \textbf{Momentum (Nesterov)}: $v \leftarrow \mu v + g$, then
+    $\theta \leftarrow \theta - \mathrm{lr}\,(\mu v + g)$.
+  \item \textbf{AdamW}: the bias-corrected first/second-moment step,
+    rendered op-for-op as \texttt{Proofs.adamWParam}.
+\end{itemize}
+
+\noindent Each tail is emitted onto the \emph{same} certified gradient
+(\texttt{emitSgd}, \texttt{emitMomentum}, \texttt{ViTRender.emitAdamV}),
+so the ablation is honest in the strong sense: identical, machine-checked
+gradients with different arithmetic stacked on top --- and for plain
+SGD, that the binary32 step actually decreases the loss is itself a
+proved theorem.
+
+\medskip\noindent\textbf{One honest note on the comparison.} The first
+time we ran this, the optimizers looked far more separated --- momentum
+and Adam beat SGD by some ten points. That gap was mostly an artifact:
+the momentum and Adam runs happened to go through a data pipeline with
+shuffling and flip augmentation that the plain-SGD baseline lacked.
+Holding the pipeline genuinely fixed --- the table above --- collapsed
+the difference to the two-to-three points that are really about the
+optimizer. It is exactly the kind of mistake a verified gradient does
+\emph{not} catch: the math was correct in every run; the experiment
+design was what needed fixing. An ablation measures the thing you varied
+only if everything else is held constant --- and ``everything else''
+includes the parts that live outside the network.
+
+\subsection*{Why the levers work}
+
+Both levers do the same underlying thing --- they make each step's
+gradient a more reliable guide to the next --- by attacking different
+sources of noise. Each layer is tuned for the distribution of its
+inputs, but those inputs are the outputs of every layer below, which
+shift every step; so each layer chases a moving target, and the step
+that helps one layer can wreck the next. \textbf{BN} removes the moving
+part by pinning every layer's input to mean-zero, unit-variance before
+the learnable $\gamma,\beta$ get a say --- Ioffe \& Szegedy framed this
+as reducing ``internal covariate shift,'' while Santurkar et al.\ (2018)
+argued the sharper effect is a smoother loss landscape.
+\textbf{Momentum} attacks a different noise: by averaging successive
+gradients it cancels the mini-batch jitter and accumulates the
+consistent direction. Both make the per-step direction more trustworthy,
+and reliable progress compounds across epochs --- precisely what the
+curve and the table measure. (On larger networks, and with true
+batch-statistic normalization, BN's effect is stronger still --- it
+opens up learning rates that diverge without it --- but at this depth,
+what we can honestly measure and verify is the speed, so that is the
+claim we make here.) That is why every image architecture since 2015
+bakes a normalization layer in by default, and why the optimizer is the
+first knob any practitioner reaches for: between them they decide not
+whether the net can learn this data, but how many passes it takes.
 
 \section{MLIR: BatchNorm}
 

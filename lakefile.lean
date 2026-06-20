@@ -563,6 +563,17 @@ lean_exe «cifar8-bn-verified-momentum» where
   root := `MainCifar8BnVerifiedMomentum
   moreLinkArgs := ireeLink
 
+-- cifar8 plain-SGD CONTROL on the momentum/Adam pipeline (trainAdamSched variant "sgd": same
+-- per-epoch shuffle + hflip + cosine-warmup, update θ←θ−lr·∇). Makes the SGD/momentum/Adam
+-- comparison differ ONLY in the optimizer. Render: tests/TestCifar8AdamTrain.lean.
+lean_exe «cifar8-verified-sgdsched» where
+  root := `MainCifar8VerifiedSgdSched
+  moreLinkArgs := ireeLink
+
+lean_exe «cifar8-bn-verified-sgdsched» where
+  root := `MainCifar8BnVerifiedSgdSched
+  moreLinkArgs := ireeLink
+
 -- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
 -- VERIFIED-rendered StableHLO (tests/TestResnet34{Train,Fwd}.lean); 146 params.
 lean_exe «resnet34-verified» where

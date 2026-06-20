@@ -1,46 +1,60 @@
-# cifar8 optimizer ablation: {plain SGD, Nesterov momentum, AdamW} × {no-BN, BN} (2026-06-19)
+# cifar8 optimizer ablation: {SGD, Nesterov momentum, AdamW} × {no-BN, BN} (2026-06-19/20)
 
 Optimizer ablation on the deeper 8-conv CIFAR-10 CNN (`cifar8Verified` /
 `cifar8BnVerified`; [16,16,32,32], 4 pools 32→2, → 128→64→64→10). All cells
 share the proof-rendered forward + backward + parameter-gradient body — **only
-the optimizer update op differs** (plain SGD `θ−lr·∇`, Nesterov momentum
-`v←μv+∇; θ←θ−lr·(μv+∇)`, or AdamW). The Adam/momentum updates are
-`ViTRender.emitAdamV` / `emitMomentum` swapped onto the same gradient; cotangent
-divided by B (mean gradients), no label smoothing → a clean optimizer comparison.
+the optimizer update op differs** (SGD `θ−lr·∇`, Nesterov momentum
+`v←μv+∇; θ←θ−lr·(μv+∇)`, AdamW). The updates are `emitSgd` / `emitMomentum` /
+`ViTRender.emitAdamV` swapped onto the same certified gradient; cotangent divided
+by B (mean gradients), no label smoothing.
 
 ## Setup
 
 - Net: no-BN = 22 params / 52,858 floats; BN = 38 params (8× per-channel γ/β added)
-- Schedule: 40 epochs each, batch=128, He init, random-hflip augment
-- Plain SGD: flat lr (no schedule, no momentum) — the pre-existing baseline
-- Momentum: μ=0.9 Nesterov, baseLR 0.02, 3-epoch warmup + cosine decay, no weight decay
-- AdamW: lr 1e-3, β (.9,.999), wd 1e-4, 3-epoch warmup + cosine decay
-- Backend: IREE + ROCm/HIP on RX 7900 XTX (gfx1100); runs share the GPU (pairwise concurrent)
-- Renders: `tests/TestCifar8AdamTrain.lean` (adam + mom), `tests/RenderCifar8Sgd02.lean` (lr sweep)
+- 40 epochs each, batch=128, He init
+- **Shared modern pipeline** (the controlled comparison): per-epoch shuffle + random
+  hflip + cosine-warmup(3) schedule, all via `trainAdamSched` (variants `sgd`/`mom`/`adam`)
+- Per-optimizer tuned lr: SGD 0.1, momentum μ=0.9/lr 0.02, AdamW lr 1e-3 (wd 1e-4)
+- Backend: IREE + ROCm/HIP on RX 7900 XTX (gfx1100)
+- Renders: `tests/TestCifar8AdamTrain.lean` (all six train steps); `tests/RenderCifar8Sgd02.lean` (lr sweep)
 
-## Results (test accuracy: final epoch / best)
+## Controlled results — modern pipeline, optimizer is the only variable (final % / best %)
 
-| net | plain SGD (lr 0.1, flat) | Nesterov momentum (μ.9, lr.02) | AdamW (lr 1e-3) |
+| net | SGD (lr 0.1) | Nesterov momentum (μ.9, lr.02) | AdamW (lr 1e-3) |
 |---|---|---|---|
-| no-BN | 66.72% / 68.36% | **76.99% / 77.20%** | 74.13% / 74.32% |
-| BN    | 66.03% / 66.83% | **76.08% / 76.26%** | 73.52% / 73.74% |
-
-Extra SGD point — no-BN flat lr=0.02: 65.00% / 65.71% (below lr=0.1).
+| no-BN | 73.78 / 74.06 | **76.99 / 77.20** | 74.13 / 74.32 |
+| BN    | 73.98 / 74.15 | **76.08 / 76.26** | 73.52 / 73.74 |
 
 Findings:
-- **Nesterov momentum wins both rows** — ~+3 pts over AdamW, ~+10 pts over plain flat SGD.
-  On a small vision net, well-tuned SGD+momentum edges out Adam's per-parameter adaptive
-  scaling (a frequently-observed generalization gap).
-- **The large plain-SGD↔Adam gap was the optimizer, not the lr.** Dropping SGD's lr to 0.02
-  made it *worse* (65.0% < 66.7%), so the plain-SGD optimum was already ≥0.1; lr tuning alone
-  never reaches Adam. Adding momentum is what closes (and reverses) the gap.
-- **BN is ~neutral** here — a touch below no-BN under every optimizer — consistent with the
-  earlier finding that BN's benefit for this net is init/lr-conditioning-sensitive.
-- All seven runs converged cleanly (no NaN / loss spikes).
+- **Nesterov momentum wins both rows** — ~2–3 pts over SGD and over Adam. On a small vision
+  net, well-tuned SGD+momentum edges out Adam's per-parameter adaptive scaling.
+- **SGD ≈ Adam** once the pipeline is controlled — Adam's adaptivity earns nothing it keeps.
+- **BN is ~neutral at convergence** (a fraction of a point either way; down under momentum/Adam,
+  even under SGD) but a clear *early* accelerator — see `{nobn,bn}_sgdsched.log` per-epoch:
+  BN leads from epoch 2, both converge to ~74% (this is the BN-vs-no-BN curve in Ch5 §5.1).
+
+## Methodology note: the confound we caught
+
+The FIRST cut (the `nobn_sgd.log`/`bn_sgd.log` SGD baselines, run via `VerifiedNet.train`)
+had **NO per-epoch shuffle and NO hflip**, while the momentum/Adam runs (`trainAdamSched`)
+**did**. That made the naive table below look like a ~10-pt optimizer gap that was really
+mostly the data pipeline:
+
+| net | SGD naive (no shuffle/aug, flat lr 0.1) |
+|---|---|
+| no-BN | 66.72 / 68.36 |
+| BN    | 66.03 / 66.83 |
+(extra: no-BN flat lr=0.02 = 65.00 / 65.71 — *below* lr=0.1, so the flat-SGD optimum is ≥0.1.)
+
+Holding the pipeline fixed (the `*_sgdsched.log` runs, plain SGD on the SAME shuffle+hflip+cosine
+path) lifts SGD to ~74% and collapses the gap to the real ~2–3 optimizer points. Lesson: an
+ablation only measures the variable you changed if everything else is genuinely held constant —
+and a verified gradient does not catch an experiment-design slip.
 
 ## Files
 
-- `nobn_sgd.log` / `bn_sgd.log` — plain SGD, lr 0.1 (`cifar8{,-bn}-verified`)
-- `nobn_sgd_lr02.log` — plain SGD, lr 0.02, no-BN (re-rendered train step; committed artifact restored after)
+- `nobn_sgdsched.log` / `bn_sgdsched.log` — **SGD on the controlled pipeline** (`cifar8{,-bn}-verified-sgdsched`)
 - `nobn_mom.log` / `bn_mom.log` — Nesterov momentum (`cifar8{,-bn}-verified-momentum`)
 - `nobn_adam.log` / `bn_adam.log` — AdamW (`cifar8{,-bn}-verified-adam`)
+- `nobn_sgd.log` / `bn_sgd.log` — SGD naive baseline (no shuffle/aug, `cifar8{,-bn}-verified`)
+- `nobn_sgd_lr02.log` — SGD naive, lr 0.02, no-BN (re-rendered train step; committed artifact restored after)

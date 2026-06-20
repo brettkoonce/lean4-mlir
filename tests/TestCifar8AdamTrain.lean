@@ -524,6 +524,60 @@ private def cifar8BnMomTrainStep : String :=
   "module @m {\n" ++ s!"  func.func @cifar8_bn_mom_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
     cifar8BnAdamBody ++ momentumConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
 
+-- ════════════ plain SGD on the SAME pipeline (controlled optimizer ablation) ════════════
+
+/-- **Plain SGD update for one parameter.** `θ' = θ − lr·g`. Reads only `%lr` (runtime). The
+    `m`/`v` slots pass through unchanged — kept solely so this shares the Adam driver's `[θ|m|v]`
+    packing, hence the SAME shuffle + hflip + cosine-warmup pipeline as the momentum/Adam runs.
+    This makes the three-way optimizer comparison controlled (only the update rule differs). -/
+private def emitSgd (θ g m v : String) (ds : List Nat) (t : String) : String × String × String × String :=
+  let T := ty ds
+  let s :=
+    s!"    %sgdlr{t} = stablehlo.broadcast_in_dim %lr, dims = [] : (tensor<f32>) -> {T}\n" ++
+    s!"    %sgdst{t} = stablehlo.multiply %sgdlr{t}, {g} : {T}\n" ++
+    s!"    %sgdnew{t} = stablehlo.subtract {θ}, %sgdst{t} : {T}\n"
+  (s, s!"%sgdnew{t}", m, v)
+
+/-- `@cifar8_sgd_train_step` — the no-BN body + per-param `emitSgd`, same packed signature. -/
+private def cifar8SgdTrainStep : String :=
+  let updParts := params.map (fun (nm, gr, ds) =>
+    emitSgd ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
+  let upd := String.join (updParts.map (·.1))
+  let thetaN := updParts.map (·.2.1)
+  let mN := updParts.map (·.2.2.1)
+  let vN := updParts.map (·.2.2.2)
+  let psig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
+  let msig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
+  let vsig := String.intercalate ", " (params.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
+  let dims := params.map (fun (_, _, ds) => ds)
+  let allDims := dims ++ dims ++ dims
+  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
+  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
+  let argSig := s!"%x: {ty [B,IC*IMH*IMW]}, " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
+    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,NC]}"
+  "module @m {\n" ++ s!"  func.func @cifar8_sgd_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
+    cifar8AdamBody ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+
+/-- `@cifar8_bn_sgd_train_step` — the BN body + per-param `emitSgd`. -/
+private def cifar8BnSgdTrainStep : String :=
+  let updParts := paramsBn.map (fun (nm, gr, ds) =>
+    emitSgd ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
+  let upd := String.join (updParts.map (·.1))
+  let thetaN := updParts.map (·.2.1)
+  let mN := updParts.map (·.2.2.1)
+  let vN := updParts.map (·.2.2.2)
+  let psig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
+  let msig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
+  let vsig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
+  let dims := paramsBn.map (fun (_, _, ds) => ds)
+  let allDims := dims ++ dims ++ dims
+  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
+  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
+  let argSig := s!"%x: {ty [B,IC*IMH*IMW]}, " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
+    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,NC]}"
+  "module @m {\n" ++ s!"  func.func @cifar8_bn_sgd_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
+    cifar8BnAdamBody ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+
 private def tryCompile (src dst label : String) : IO Unit := do
   try
     let cargs ← ireeCompileArgs src dst
@@ -547,9 +601,17 @@ def main : IO Unit := do
   let bmmlir := cifar8BnMomTrainStep
   IO.println s!"rendered cifar8_bn Nesterov-mom train step: {bmmlir.length} chars, {paramsBn.length} params"
   IO.FS.writeFile "verified_mlir/cifar8_bn_mom_train_step.mlir" bmmlir
+  let smlir := cifar8SgdTrainStep
+  IO.println s!"rendered cifar8 SGD-sched train step: {smlir.length} chars, {params.length} params"
+  IO.FS.writeFile "verified_mlir/cifar8_sgd_train_step.mlir" smlir
+  let bsmlir := cifar8BnSgdTrainStep
+  IO.println s!"rendered cifar8_bn SGD-sched train step: {bsmlir.length} chars, {paramsBn.length} params"
+  IO.FS.writeFile "verified_mlir/cifar8_bn_sgd_train_step.mlir" bsmlir
   tryCompile "verified_mlir/cifar8_adam_train_step.mlir" "/tmp/cifar8_adam_ts.vmfb" "cifar8 AdamW"
   tryCompile "verified_mlir/cifar8_bn_adam_train_step.mlir" "/tmp/cifar8_bn_adam_ts.vmfb" "cifar8_bn AdamW"
   tryCompile "verified_mlir/cifar8_mom_train_step.mlir" "/tmp/cifar8_mom_ts.vmfb" "cifar8 Nesterov-mom"
   tryCompile "verified_mlir/cifar8_bn_mom_train_step.mlir" "/tmp/cifar8_bn_mom_ts.vmfb" "cifar8_bn Nesterov-mom"
+  tryCompile "verified_mlir/cifar8_sgd_train_step.mlir" "/tmp/cifar8_sgd_ts.vmfb" "cifar8 SGD-sched"
+  tryCompile "verified_mlir/cifar8_bn_sgd_train_step.mlir" "/tmp/cifar8_bn_sgd_ts.vmfb" "cifar8_bn SGD-sched"
 
 #eval main
