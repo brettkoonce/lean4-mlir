@@ -1503,6 +1503,14 @@ open Proofs
 #print axioms mlp_hidden_loss_grad_lipschitz
 #print axioms mlp_hidden_sgd_descends
 #print axioms mlp_output_sgd_descends
+-- Output-layer η-composition (planning §1a/§4, G1 for the MLP): the output rung
+-- with NO abstract gradient-accuracy parameter — the actual binary32 output-layer
+-- gradient M.linearFloatGrad W₂ b₂ a₁, its accuracy η = mulErr u a 1 0 (cotErr …)
+-- proven (linear_grad_close), is fed into the output-layer descent. The output
+-- layer IS linear_float_sgd_descends at the hidden activation a₁ (margin-free).
+-- Hidden/input rungs still take abstract η (the joint-step float-backward
+-- grad-close under the margins is left open).
+#print axioms mlp_output_float_sgd_descends
 #print axioms mlp_input_loss_differentiableAt
 #print axioms mlp_input_loss_gradAt
 #print axioms mlp_input_logit_drift

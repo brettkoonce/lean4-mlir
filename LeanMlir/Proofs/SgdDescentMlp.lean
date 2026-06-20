@@ -1334,4 +1334,81 @@ theorem mlp_input_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (W₀ : Mat d₀ d₁
     h1 h2
   simpa [hf] using hmain
 
+-- ════════════════════════════════════════════════════════════════
+-- § Output layer η-composition: feed the FloatBridge budget into the
+--   output-layer descent slot, so "one binary32 output-layer SGD step
+--   decreases the loss" holds with NO abstract gradient-accuracy parameter.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **One binary32 SGD step on the MLP's output weights provably decreases the
+    cross-entropy loss — with NO abstract gradient-accuracy parameter.** The
+    output-layer rung of the η-composition (Item D / G1 for the MLP). Since the
+    top dense layer sits directly below the softmax-CE loss with no ReLU between,
+    the loss-of-`W₂` map *is* the linear net's loss at the hidden activation
+    `a₁ = relu(dense W₁ b₁ (relu(dense W₀ b₀ x)))` — so this is
+    `linear_float_sgd_descends` instantiated there. The gradient is the *actual*
+    binary32 output-layer gradient `M.linearFloatGrad W₂ b₂ a₁` and its accuracy
+    `η = mulErr u a 1 0 (cotErr …)` is *proven* (by `linear_grad_close`, inside
+    the linear theorem), not assumed. No margin needed — the output layer never
+    crosses a kink.
+
+    The hidden/input rungs (`mlp_{hidden,input}_sgd_descends`) still take an
+    abstract `η`: their float gradients run back through the ReLU masks and the
+    `W₂`-cotangent fan-in, so the η-composition there needs a per-layer
+    float-backward grad-close (a `mlp_w{1,0}_grad_close`) under the descent
+    margins — the joint-step refinement flagged at the top of this file, left
+    open. -/
+theorem mlp_output_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel)
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃) (fexp : ℝ → ℝ)
+    {lr a eexp δ : ℝ}
+    (ha : 0 ≤ a)
+    (hx : ∀ i, |relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))) i| ≤ a)
+    (hlr : 0 ≤ lr) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1) (hδ0 : 0 ≤ δ)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp d₃ < 1)
+    (hδ : ∀ k', |M.dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) k' -
+        dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) k'| ≤ δ)
+    (hsmall : 2 * (a * (lr * ((∑ idx, |gradAt
+        (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
+          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+        (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) *
+          FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)))) < 1)
+    (h1 : lr * (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)) *
+        (∑ idx, |gradAt
+          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
+            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+          (Mat.flatten W₂) idx|) ≤
+      lr * (∑ idx, gradAt
+        (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
+          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+        (Mat.flatten W₂) idx ^ 2) / 4)
+    (h2 : (2 * a ^ 2 / (1 - 2 * (a * (lr * ((∑ idx, |gradAt
+          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
+            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+          (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) *
+            FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)))))) *
+        (lr * ((∑ idx, |gradAt
+          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
+            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+          (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) *
+            FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃))) ^ 2 ≤
+      lr * (∑ idx, gradAt
+        (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
+          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+        (Mat.flatten W₂) idx ^ 2) / 4) :
+    crossEntropy d₃ (dense (Mat.unflatten (Mat.flatten W₂ -
+        lr • M.linearFloatGrad W₂ b₂
+          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) fexp label)) b₂
+        (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label ≤
+      crossEntropy d₃ (dense (Mat.unflatten (Mat.flatten W₂)) b₂
+        (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label -
+        lr * (∑ idx, gradAt
+          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
+            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+          (Mat.flatten W₂) idx ^ 2) / 2 :=
+  linear_float_sgd_descends M W₂ b₂
+    (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label fexp
+    ha hx hlr heexp0 heexp1 hδ0 hfexp hρ1 hδ hsmall h1 h2
+
 end Proofs
