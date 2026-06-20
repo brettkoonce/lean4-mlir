@@ -244,6 +244,99 @@ theorem dot_close_linear {n : ℕ} (x y : Vec n) :
     (Finset.sum_nonneg fun i _ => abs_nonneg _)
 
 -- ════════════════════════════════════════════════════════════════
+-- § Mixed-precision dot: a leaf roundoff `u_leaf` + an accumulate `u_acc`
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Mixed-precision dot product.** The matmul inputs are first rounded by a
+    *leaf* model `L` (low precision, `u_leaf` — e.g. bf16 `2⁻⁸` or fp8-E4M3
+    `2⁻⁴`); the accumulation `M.dot` then rounds every `+`/`·` at the
+    *accumulate* precision `M.u` (`u_acc`, typically fp32 `2⁻²⁴`). This is the
+    deployed bf16-mixed kernel shape: bf16 leaf compute, fp32 accumulate. -/
+noncomputable def dotMixed (L : FloatModel) {n : Nat} (x y : Vec n) : ℝ :=
+  M.dot (fun i => L.rnd (x i)) (fun i => L.rnd (y i))
+
+/-- **Mixed-precision dot forward error, decomposed.** The leaf precision
+    contributes only a **flat per-leaf term** `(2·u_leaf + u_leaf²)·Σ|xᵢyᵢ|`
+    (NOT fan-in amplified); the fan-in amplification rides entirely on the
+    *accumulate* precision as the Higham γ-factor `((1+u_acc)^(n+1) − 1)`. That
+    separation is exactly why bf16-mixed is non-vacuous where pure bf16 is not:
+    the `1/u` fan-in wall sits at `u_acc = 2⁻²⁴`, not at the leaf precision. -/
+theorem dot_close_mixed (L : FloatModel) {n : ℕ} (x y : Vec n) :
+    |M.dotMixed L x y - ∑ i, x i * y i| ≤
+      ((1 + M.u) ^ (n + 1) - 1) * (∑ i, |L.rnd (x i) * L.rnd (y i)|)
+        + (2 * L.u + L.u ^ 2) * ∑ i, |x i * y i| := by
+  -- the flat per-leaf perturbation: ∑x̃ỹ vs ∑xy, each term ≤ (2u+u²)|xy|
+  have hleaf : |(∑ i, L.rnd (x i) * L.rnd (y i)) - ∑ i, x i * y i| ≤
+      (2 * L.u + L.u ^ 2) * ∑ i, |x i * y i| := by
+    rw [← Finset.sum_sub_distrib, Finset.mul_sum]
+    refine (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum fun i _ => ?_)
+    have hxe : |L.rnd (x i) - x i| ≤ L.u * |x i| := L.err (x i)
+    have hye : |L.rnd (y i) - y i| ≤ L.u * |y i| := L.err (y i)
+    have hxb : |L.rnd (x i)| ≤ (1 + L.u) * |x i| :=
+      calc |L.rnd (x i)| ≤ |L.rnd (x i) - x i| + |x i| := by
+            simpa using abs_sub_le (L.rnd (x i)) (x i) 0
+        _ ≤ (1 + L.u) * |x i| := by linarith
+    have t1 : |L.rnd (x i)| * |L.rnd (y i) - y i| ≤
+        (1 + L.u) * |x i| * (L.u * |y i|) :=
+      mul_le_mul hxb hye (abs_nonneg _)
+        (mul_nonneg (by linarith [L.u_nonneg]) (abs_nonneg _))
+    have t2 : |y i| * |L.rnd (x i) - x i| ≤ |y i| * (L.u * |x i|) :=
+      mul_le_mul_of_nonneg_left hxe (abs_nonneg _)
+    calc |L.rnd (x i) * L.rnd (y i) - x i * y i|
+        = |L.rnd (x i) * (L.rnd (y i) - y i) + y i * (L.rnd (x i) - x i)| := by
+          rw [show L.rnd (x i) * L.rnd (y i) - x i * y i =
+            L.rnd (x i) * (L.rnd (y i) - y i) + y i * (L.rnd (x i) - x i) from by
+            ring]
+      _ ≤ |L.rnd (x i) * (L.rnd (y i) - y i)| + |y i * (L.rnd (x i) - x i)| :=
+          abs_add_le _ _
+      _ = |L.rnd (x i)| * |L.rnd (y i) - y i| + |y i| * |L.rnd (x i) - x i| := by
+          rw [abs_mul, abs_mul]
+      _ ≤ (1 + L.u) * |x i| * (L.u * |y i|) + |y i| * (L.u * |x i|) := by linarith
+      _ = (2 * L.u + L.u ^ 2) * |x i * y i| := by rw [abs_mul]; ring
+  rw [FloatModel.dotMixed]
+  refine (abs_sub_le _ (∑ i, L.rnd (x i) * L.rnd (y i)) _).trans ?_
+  have hacc' : |M.dot (fun i => L.rnd (x i)) (fun i => L.rnd (y i)) -
+      ∑ i, L.rnd (x i) * L.rnd (y i)| ≤
+      ((1 + M.u) ^ (n + 1) - 1) * ∑ i, |L.rnd (x i) * L.rnd (y i)| := by
+    simpa using M.dot_close (fun i => L.rnd (x i)) (fun i => L.rnd (y i))
+  linarith [hacc', hleaf]
+
+/-- `dot_close_mixed` folded to a single `Σ|xᵢyᵢ|` factor — the directly
+    instantiable form. Bounds the leaf-rounded magnitudes by `(1+u_leaf)²`,
+    so the whole error is `[γ_acc·(1+u_leaf)² + (2u_leaf + u_leaf²)]·Σ|xᵢyᵢ|`.
+    At bf16 leaf / fp32 accumulate (`u_leaf = 2⁻⁸`, `u_acc = 2⁻²⁴`, fan-in a
+    few hundred) the bracket is ≈ the flat `2·2⁻⁸ ≈ 0.8%` leaf term plus a
+    negligible accumulate γ — the shipped-artifact budget. -/
+theorem dot_close_mixed_uniform (L : FloatModel) {n : ℕ} (x y : Vec n) :
+    |M.dotMixed L x y - ∑ i, x i * y i| ≤
+      (((1 + M.u) ^ (n + 1) - 1) * (1 + L.u) ^ 2 + (2 * L.u + L.u ^ 2))
+        * ∑ i, |x i * y i| := by
+  refine (M.dot_close_mixed L x y).trans ?_
+  have hγ0 : (0:ℝ) ≤ (1 + M.u) ^ (n + 1) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
+  have hmag : (∑ i, |L.rnd (x i) * L.rnd (y i)|) ≤
+      (1 + L.u) ^ 2 * ∑ i, |x i * y i| := by
+    rw [Finset.mul_sum]
+    refine Finset.sum_le_sum fun i _ => ?_
+    have hxb : |L.rnd (x i)| ≤ (1 + L.u) * |x i| :=
+      calc |L.rnd (x i)| ≤ |L.rnd (x i) - x i| + |x i| := by
+            simpa using abs_sub_le (L.rnd (x i)) (x i) 0
+        _ ≤ (1 + L.u) * |x i| := by linarith [L.err (x i)]
+    have hyb : |L.rnd (y i)| ≤ (1 + L.u) * |y i| :=
+      calc |L.rnd (y i)| ≤ |L.rnd (y i) - y i| + |y i| := by
+            simpa using abs_sub_le (L.rnd (y i)) (y i) 0
+        _ ≤ (1 + L.u) * |y i| := by linarith [L.err (y i)]
+    rw [abs_mul, abs_mul]
+    calc |L.rnd (x i)| * |L.rnd (y i)|
+        ≤ (1 + L.u) * |x i| * ((1 + L.u) * |y i|) :=
+          mul_le_mul hxb hyb (abs_nonneg _)
+            (mul_nonneg (by linarith [L.u_nonneg]) (abs_nonneg _))
+      _ = (1 + L.u) ^ 2 * (|x i| * |y i|) := by ring
+  have hsum0 : (0:ℝ) ≤ ∑ i, |x i * y i| :=
+    Finset.sum_nonneg fun i _ => abs_nonneg _
+  nlinarith [mul_le_mul_of_nonneg_left hmag hγ0, hsum0]
+
+-- ════════════════════════════════════════════════════════════════
 -- § Dense layer: rounded-at-perturbed-input vs real-at-real-input
 -- ════════════════════════════════════════════════════════════════
 
@@ -1768,6 +1861,15 @@ def exactModel : FloatModel where
 @[simp] theorem exactModel_denseErr {m n : Nat} (W : Mat m n) (b : Vec n)
     (xa : Vec m) (j : Fin n) : exactModel.denseErr W b xa 0 j = 0 := by
   simp [FloatModel.denseErr, exactModel]
+
+/-- **`dotMixed` with an exact leaf (`u_leaf = 0`) is the plain rounded dot.**
+    The fp32 specialization: no input rounding ⇒ `dot_close_mixed` collapses to
+    `dot_close` (the leaf term `2·0 + 0² = 0` vanishes, the leaf-rounded
+    magnitudes become the real ones). Confirms the two-roundoff budget is a
+    genuine *generalization* of the single-`u` budget, not a reparametrization. -/
+@[simp] theorem dotMixed_exact_leaf {n : ℕ} (x y : Vec n) :
+    M.dotMixed exactModel x y = M.dot x y := by
+  simp [FloatModel.dotMixed, exactModel]
 
 end FloatModel
 

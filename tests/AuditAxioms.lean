@@ -1243,6 +1243,20 @@ open Proofs
 -- pass-through, and the linear/MLP forward-extraction capstones.
 #print axioms FloatModel.dot_close
 #print axioms FloatModel.dot_close_linear
+-- §1c (planning/floatbridge_quantization.md): the two-roundoff generalization
+-- of the dot budget — a leaf precision u_leaf (FloatModel L, e.g. bf16 2⁻⁸ /
+-- fp8-E4M3 2⁻⁴ on the matmul inputs) and an accumulate precision u_acc (M.u,
+-- fp32 2⁻²⁴). dot_close_mixed: the leaf contributes only a FLAT per-leaf term
+-- (2·u_leaf + u_leaf²)·Σ|xy| while the fan-in amplification rides entirely on
+-- the accumulate γ-factor ((1+u_acc)^(n+1)−1) — the reason bf16-mixed is
+-- non-vacuous where pure bf16 is not (the 1/u fan-in wall sits at u_acc, not at
+-- the leaf). dot_close_mixed_uniform folds it to a single Σ|xy| factor (the
+-- directly-instantiable, shipped-artifact form); dotMixed_exact_leaf shows
+-- u_leaf = 0 collapses it back to dot_close (a genuine generalization).
+#print axioms FloatModel.dotMixed
+#print axioms FloatModel.dot_close_mixed
+#print axioms FloatModel.dot_close_mixed_uniform
+#print axioms FloatModel.dotMixed_exact_leaf
 #print axioms FloatModel.dense_close
 #print axioms FloatModel.dense_close_fresh
 #print axioms FloatModel.relu_close

@@ -1,8 +1,9 @@
 # Planning — FloatBridge: finish the MNIST chain, then low-precision quantization (→ an E4M3 demo)
 
-_Status note, 2026-06-19._ Forward-looking plan. **Item D / G1 (§1a) is DONE** — see
-`linear_float_sgd_descends` in `SgdDescentLinear.lean` (axiom-clean, in `AuditAxioms.lean`).
-The rest below is still forward-looking. Two threads that share one foundation
+_Status note, 2026-06-19._ Forward-looking plan. **Item D / G1 (§1a) is DONE** —
+`linear_float_sgd_descends` in `SgdDescentLinear.lean`. **§1c two-`u` foundation is DONE** —
+`dot_close_mixed` (+ `_uniform`, `dotMixed_exact_leaf`) in `FloatBridge.lean`. Both axiom-clean and
+in `AuditAxioms.lean`. The rest below is still forward-looking. Two threads that share one foundation
 (`LeanMlir/Proofs/FloatBridge.lean`, the `FloatModel` relative-error model, parametric in the
 unit roundoff `u`):
 
@@ -112,7 +113,7 @@ conv = dense-with-sharing). It lacks the *rounding* side. Reuse ~70%.
 Effort: A/B **medium** (mostly gluing dense budgets + existing CNN margin lemmas; the only fresh
 content is maxpool-exact-in-float); C **easy**.
 
-### 1c. Do A/B *parametric in two roundoffs* (the free bf16 + fp8 setup)
+### 1c. Do A/B *parametric in two roundoffs* (the free bf16 + fp8 setup) — ✅ foundation DONE (2026-06-19)
 
 When writing the conv/dense dot budget for A/B, split the single `u` into **`u_leaf`** (rounding the
 matmul inputs) and **`u_acc`** (the accumulation):
@@ -121,7 +122,20 @@ matmul inputs) and **`u_acc`** (the accumulation):
 dot_close_mixed : |fl_mixed(x·y) − x·y| ≤ (per-leaf term at u_leaf) + (Higham γ_k at u_acc)
 ```
 
-This is a localized generalization of `dot_close` (`FloatBridge.lean:218`). It costs little and buys:
+This is a localized generalization of `dot_close` (`FloatBridge.lean:218`).
+
+**Landed** in `FloatBridge.lean` (3-axiom clean, audited): the leaf precision is a second
+`FloatModel L` (`u_leaf`), the accumulate is `M` (`u_acc`).
+- `FloatModel.dotMixed L x y` = `M.dot (L.rnd ∘ x) (L.rnd ∘ y)` — the bf16-mixed kernel shape.
+- `dot_close_mixed` — `|dotMixed − x·y| ≤ ((1+u_acc)^(n+1) − 1)·Σ|x̃ỹ| + (2·u_leaf + u_leaf²)·Σ|xy|`:
+  the leaf term is **flat** (not fan-in amplified); the fan-in γ rides entirely on `u_acc`. The
+  formal statement of "the `1/u` fan-in wall sits at `u_acc`, not the leaf."
+- `dot_close_mixed_uniform` — folded to one `Σ|xy|` factor `[γ_acc·(1+u_leaf)² + 2u_leaf + u_leaf²]`,
+  the directly-instantiable shipped-artifact form.
+- `dotMixed_exact_leaf` — `u_leaf = 0` collapses it to `dot_close` (a genuine generalization).
+
+What remains for §1c: thread `dotMixed` through the **dense/conv** layer budget (lands naturally with
+A/B, §1b), then the three numeric instantiations. The reusable core is now in place. It buys:
 - **fp32**: `u_leaf = u_acc = 2⁻²⁴` (current behavior).
 - **bf16-mixed** (the deployed config): `u_leaf = 2⁻⁸`, `u_acc = 2⁻²⁴` — non-vacuous because the
   fan-in term rides at fp32; the leaf term is a flat `~2·2⁻⁸ ≈ 0.8%`. Reductions (BN/softmax/GAP)
@@ -216,7 +230,7 @@ to *show* the compounding so the regime change from §2 is visible on a real net
 | Order | Item | Effort | Payoff |
 |---|---|---|---|
 | ✅ | **G1/Item D on linear** (`linear_float_sgd_descends`) | light | **DONE 2026-06-19** — closes the chain end-to-end for one net, the biggest honesty win |
-| 2 | **§1c two-`u` `dot_close_mixed`** | light | bf16-mixed (shipped artifact) falls out + sets up fp8 |
+| ✅ | **§1c two-`u` `dot_close_mixed`** (foundation) | light | **DONE 2026-06-19** — bf16-mixed (shipped artifact) falls out + sets up fp8; dense/conv threading lands with A/B |
 | 3 | **A/B/C — CNN rounding side** | medium | brings the 3rd MNIST net to mlp parity ("FloatBridge to the rest of MNIST") |
 | 4 | **3a E4M3 MNIST empirical demo** | light | the "precision drops elegantly" headline |
 | 5 | **3b E4M3 structural faithfulness** | medium | a *complete* verified claim at fp8 (the right kind) |
