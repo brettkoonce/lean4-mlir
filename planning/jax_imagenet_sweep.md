@@ -61,13 +61,16 @@ measured this project; bold hours = run actually happened.** Everything else is 
 | MobileNetV2 | **68.8%** | **~10** | ~72% | ~38 | 72.0% |
 | EfficientNet-B0 | ~70–73% | **~10.5** | ~77% | ~47* | 77.1% |
 | ConvNeXt-T | **75.9%** | **~15.5** | ~82% | ~63 | 82.1% |
-| ViT-Ti (DeiT) | ~55–65% | ~10 | ~72% | ~38 | 72.2% |
+| ViT-Ti (DeiT) | **65.6%** | ~11 | ~72% | ~47† | 72.2% |
 
-Per-epoch (min/ep): MNv2 7.5, ENet 8, ConvNeXt 12.6 (measured); R34 ~9, R50 ~12, ViT 7.6
-(est/other-box). *ENet's paper-faithful schedule is 350ep (~47 hr), not 300; the rest are 300ep.
+Per-epoch (min/ep): MNv2 7.5, ENet 8, ConvNeXt 12.6 (measured); R34 ~9, R50 ~12, ViT **9.1**
+(measured 2026-06-21, faithful recipe, mars 2-GPU). *ENet's paper-faithful schedule is 350ep
+(~47 hr), not 300; the rest are 300ep. †ViT 300ep hrs is a measured-step-time projection
+(~218 ms/step on 2× 7900 XTX with the full faithful recipe — EMA + stochastic depth + geometric
+RA push it ~18% above the old ~38 hr estimate); the run itself hasn't happened yet.
 
 Totals if the full long sweep ran: ~253 hr for the five convnets+R50 at 300ep (~10.5 days of
-ares time) + ~38 hr ViT on mars ≈ **~12 days** end-to-end. Best value: ConvNeXt 300ep (~63 hr,
+ares time) + ~47 hr ViT on mars (measured-step-time projection) ≈ **~12.5 days** end-to-end. Best value: ConvNeXt 300ep (~63 hr,
 +6pt → ~82%); cheapest interesting win: R50 300ep (~60 hr → the ~80% milestone — see
 `planning/resnet50_imagenet.md`, near-zero new code). ViT is its own codegen project
 (`planning/vit_imagenet.md`, transformer stochastic depth).
@@ -133,36 +136,44 @@ nohup bash scripts/supervise_<net>_6gpu.sh >/tmp/<net>_driver.log 2>&1 &
   (copy an existing runs/*/ as template), fill blueprint §, update planning/imagenet_sweep.md.
 - **Thermal**: one run at a time, watch temps (~50°C was fine pre-reshuffle; confirm after cooling work).
 
-## ViT — what's still needed before a paper-faithful re-run
+## ViT — paper-faithful re-run: READY (config + codegen landed 2026-06-21)
 
-ViT-Tiny (DeiT-Ti) config is the closest to faithful, but has **2 gaps** + 1 deferred. The
-completed ViT-80 (65.6%) ran without these.
+ViT-Tiny (DeiT-Ti) is now paper-faithful (no distillation). The 2 gaps below are CLOSED, the
+config is flipped, it's smoke-tested on ROCm and perf is measured. **Staged on main, not yet
+committed/launched.** The completed ViT-80 (65.6%) ran without these.
 
-1. **Geometric RandAugment — one flag (free).** Config has `useRandAugment := true` but the
-   comment says "color subset only (no geometric — tfa N/A)." That's now STALE — geometric
-   RandAug was wired this pull (`randAugmentGeometric`, via ImageProjectiveTransformV3). Add
-   `randAugmentGeometric := true` to `vitTinyImagenetConfig`. (DeiT uses full RandAug.)
+1. **Geometric RandAugment — DONE.** `randAugmentGeometric := true` in `vitTinyImagenetConfig`
+   (full color+geometric RandAug via ImageProjectiveTransformV3; DeiT uses full RA).
 
-2. **Stochastic depth — NOT just a flag (~half-day codegen).** DeiT-Ti uses dropPath 0.1, but
-   `dropPath` is wired ONLY into conv blocks (`mbconv_block`, `convnext_block`, invres) — the
-   **`transformer_block` does not participate.** To add it (in jax/Jax/Codegen.lean):
-   - `transformer_block(params, x, idx, n_heads)` (~line 713): add `drop_key`/`keep_prob` args;
-     DeiT drops each *sublayer residual independently* — split into 2 sub-keys, apply inverted
-     drop (`branch * bernoulli/keep_prob`) to the attention-branch AND the mlp-branch before
-     each residual add (mirror convnext_block lines ~757-761).
-   - forward SD-dispatch (~lines 1480-1590): add a `.transformerEncoder` branch mirroring
-     `.convNextStage` — loop over nBlocks, pass `dpkeys[dbi]` + linear keep schedule + n_heads.
-   - include transformer blocks in the `totalDrop` count that sizes the dpkeys split.
-   - Risk low (additive, inference-safe via drop_key=None default; rng/scaling/schedule infra
-     all proven on the convnets). ~half-day with testing.
+2. **Stochastic depth — DONE (wired into `transformer_block`).** dropPath 0.1, linear keep ramp
+   1.000000→0.900000 across the 12 blocks (block 0 never drops, block 11 keeps 0.9). In
+   jax/Jax/Codegen.lean:
+   - new `_drop_branch` helper + `transformer_block(..., drop_key=None, keep_prob=1.0)`:
+     per-sample inverted DropPath ((B,1,1) mask, timm/DeiT semantics), TWO independent sub-keys
+     so the attention and MLP residual branches drop separately.
+   - `.transformerEncoder` arm added to the forward SD-dispatch — passes `dpkeys[dbi]` + the
+     per-block keep schedule; transformer blocks now counted in `totalDrop`.
+   - Inference-safe (drop_key=None → identity); convnet SD rng/scaling/schedule infra reused.
+   Same config also flipped `useEMA := true` (decay 0.99996) and `epochs := 300` (was 80).
 
-3. **Repeated augmentation — DEFER (low ROI).** DeiT uses 3× repeated-aug; it's a data-pipeline
+3. **Repeated augmentation — STILL DEFERRED (low ROI).** DeiT uses 3× repeated-aug; data-pipeline
    change (~15-20 lines in build_imagenet_iter, flat_map each example to 3 aug copies, new
-   `repeatedAug` config field). But: benefit is <0.5% for Ti and only at 300ep, and it adds CPU
-   aug load (worsens the data-pipeline bottleneck). Skip unless doing a definitive DeiT-300 run.
+   `repeatedAug` config field). Benefit <0.5% for Ti and only at 300ep, and it adds CPU aug load.
+   Skip unless doing a definitive DeiT-300 run.
 
-So a paper-faithful ViT re-run = flag #1 (free) + codegen #2 (half-day). Skip distillation
-(plain DeiT-Ti ~72% doesn't use it; only DeiT⚗ does) and #3.
+**GPU smoke test (ROCm, gfx1100):** `jax/scripts/smoke_vit_droppath_gpu.py` — imports the
+generated trainer (training loop behind `__main__`), runs forward+train_step on a synthetic
+batch: eval determinism, drop-path activity (same-key identical / diff-key max|Δ|=1.36 / train≠eval),
+6-step loss descent. PASS on RocmDevice.
+
+**Measured perf (2026-06-21, 2× 7900 XTX / mars, batch 512, full faithful recipe):** ~218 ms/step
+steady (216/218/216/221 over 4 intervals), both GPUs 100% (compute-bound), ~66s one-time compile.
+→ ~9.1 min/epoch → **~45 hr train / ~47 hr with val for 300 epochs.** ~18% above the old ~38 hr
+estimate — the faithful recipe adds per-step EMA (full 5.7M-param tree), 24 drop-masks/step, and
+heavier geometric RA. Cheapest time lever if needed: drop EMA. CUDA-box cross-check pending.
+
+So the paper-faithful ViT re-run is staged and ready. Skip distillation (plain DeiT-Ti ~72%
+doesn't use it; only DeiT⚗ → 74.5%) and #3.
 
 ## Environment / version pinning
 
@@ -182,4 +193,8 @@ So a paper-faithful ViT re-run = flag #1 (free) + codegen #2 (half-day). Skip di
 - `jax/MainMobilenetV2Imagenet.lean` — AA off (paper-faithful), docstring updated.
 - `jax/MainConvNeXtImagenet.lean` — Mixup + CutMix + Random Erasing turned on (full pack).
 - `jax/requirements-cuda-lock.txt` — new, the env pin.
-- ViT config NOT yet edited (flag #1 + codegen #2 above pending your go-ahead).
+- `jax/Jax/Codegen.lean` — transformer stochastic depth wired (`_drop_branch` + `transformer_block`
+  drop args + `.transformerEncoder` SD-dispatch + `totalDrop` count). STAGED on main 2026-06-21.
+- `jax/MainVitImagenet.lean` — paper-faithful flip: dropPath 0.1, randAugmentGeometric, EMA, 300ep.
+  STAGED on main 2026-06-21.
+- `jax/scripts/smoke_vit_droppath_gpu.py` — new ROCm GPU smoke test for the drop-path wiring. STAGED.

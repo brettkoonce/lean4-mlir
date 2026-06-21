@@ -710,20 +710,33 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    attn = jax.nn.softmax(mm(q, k.transpose(0, 1, 3, 2)) / scale, axis=-1)\n" ++
       "    out = mm(attn, v).transpose(0, 2, 1, 3).reshape(B, N, D)\n" ++
       "    return mm(out, wo.T) + bo\n\n" ++
-      "def transformer_block(params, x, idx, n_heads):\n" ++
+      "def _drop_branch(branch, drop_key, keep_prob):\n" ++
+      "    # Inverted per-sample stochastic depth (DeiT/timm DropPath): keep the\n" ++
+      "    # whole sample's residual branch w.p. keep_prob, scale survivors by\n" ++
+      "    # 1/keep_prob so inference (drop_key=None) is identity. The (B,1,1)\n" ++
+      "    # mask broadcasts over the token and feature axes.\n" ++
+      "    if drop_key is None or keep_prob >= 1.0:\n" ++
+      "        return branch\n" ++
+      "    shape = (branch.shape[0],) + (1,) * (branch.ndim - 1)\n" ++
+      "    keep = jax.random.bernoulli(drop_key, keep_prob, shape).astype(branch.dtype)\n" ++
+      "    return branch * keep / keep_prob\n\n" ++
+      "def transformer_block(params, x, idx, n_heads, drop_key=None, keep_prob=1.0):\n" ++
+      "    # DeiT stochastic depth: each of the two residual branches (attention,\n" ++
+      "    # MLP) drops independently, so split one sub-key per branch.\n" ++
+      "    ka, km = jax.random.split(drop_key) if drop_key is not None else (None, None)\n" ++
       "    g1, b1 = params[idx]\n" ++
       "    x2 = layer_norm(x, g1, b1)\n" ++
       "    wq, bq = params[idx+1]\n" ++
       "    wk, bk = params[idx+2]\n" ++
       "    wv, bv = params[idx+3]\n" ++
       "    wo, bo = params[idx+4]\n" ++
-      "    x = x + mhsa(x2, wq, bq, wk, bk, wv, bv, wo, bo, n_heads)\n" ++
+      "    x = x + _drop_branch(mhsa(x2, wq, bq, wk, bk, wv, bv, wo, bo, n_heads), ka, keep_prob)\n" ++
       "    g2, b2 = params[idx+5]\n" ++
       "    x2 = layer_norm(x, g2, b2)\n" ++
       "    w1, b1m = params[idx+6]\n" ++
       "    w2, b2m = params[idx+7]\n" ++
       "    h = jax.nn.gelu(mm(x2, w1.T) + b1m)\n" ++
-      "    x = x + (mm(h, w2.T) + b2m)\n" ++
+      "    x = x + _drop_branch(mm(h, w2.T) + b2m, km, keep_prob)\n" ++
       "    return x\n\n"
   let hasConvNext := spec.layers.any (fun l => match l with
     | .convNextStage .. => true | .convNextDownsample .. => true | _ => false)
@@ -1465,6 +1478,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
   let totalDrop := (spec.layers.filterMap (fun l => match l with
     | .convNextStage _ n _ _ => some n
     | .mbConv _ _ _ _ _ n _  => some n
+    | .transformerEncoder _ _ _ n => some n
     | _ => none)).foldl (· + ·) 0
   let mut code := "def forward(params, x, drop_key=None):\n"
   -- Reshape flat images to NCHW if first layer is conv
@@ -1651,7 +1665,14 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       pidx := pidx + 1
     | .transformerEncoder _dim heads _mlpDim nBlocks =>
       for _ in List.range nBlocks do
-        code := code ++ "    x = transformer_block(params, x, " ++ toString pidx ++ ", " ++ toString heads ++ ")\n"
+        if cfg.dropPath > 0 then
+          let denom := Float.ofNat (Nat.max 1 (totalDrop - 1))
+          let keep := 1.0 - cfg.dropPath * Float.ofNat dbi / denom
+          code := code ++ "    x = transformer_block(params, x, " ++ toString pidx ++ ", " ++
+            toString heads ++ ", dpkeys[" ++ toString dbi ++ "], " ++ toString keep ++ ")\n"
+          dbi := dbi + 1
+        else
+          code := code ++ "    x = transformer_block(params, x, " ++ toString pidx ++ ", " ++ toString heads ++ ")\n"
         pidx := pidx + 8
       -- Final layer norm
       code := code ++ "    x = layer_norm(x, params[" ++ toString pidx ++ "][0], params[" ++ toString pidx ++ "][1])\n"

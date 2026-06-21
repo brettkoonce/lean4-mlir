@@ -21,17 +21,19 @@ def vitTinyImagenet : NetSpec where
     .dense 192 1000 .identity             -- 1000-class head
   ]
 
-/-- DeiT-flavored 80-epoch recipe: AdamW, 5-epoch warmup + cosine, weight
-    decay 0.05, label smoothing 0.1, augmentation on. bf16 matmuls.
-    Peak LR 1e-4 (provisional): 5e-4 and 2e-4 both collapsed to chance the
-    moment warmup ramped LR past ~1.6e-4 (train loss pinned at ln(1000)) —
-    the classic no-grad-clip ViT instability. Now FIXED via gradClipNorm:
-    grad clipping lets us run the proper DeiT LR (5e-4 at batch 512) — the
-    very LR that collapsed to chance without clipping. -/
+/-- Paper-faithful DeiT-Ti recipe (300 epochs): AdamW, 5-epoch warmup +
+    cosine, weight decay 0.05, label smoothing 0.1, grad-clip 1.0, the full
+    DeiT aug suite (Mixup/CutMix/RandAugment color+geometric/Random Erasing),
+    stochastic depth 0.1, model EMA, bf16 matmuls. Peak LR 5e-4 at batch 512.
+    Grad clipping is the unlock: 5e-4/2e-4 collapsed to chance the moment
+    warmup ramped LR past ~1.6e-4 (train loss pinned at ln(1000)) without it.
+    The 80-epoch grad-clip-only ancestor of this recipe reached 65.6% top-1;
+    the additions here (geometric RA, stochastic depth, EMA, 300ep) target the
+    ~72% DeiT-Ti headline (no distillation). -/
 def vitTinyImagenetConfig : TrainConfig where
   learningRate   := 0.0005          -- proper DeiT batch-512 LR (was crippled at 1e-4)
   batchSize      := 512
-  epochs         := 80
+  epochs         := 300             -- full DeiT-Ti schedule (was 80; closes ~65→72%)
   useAdam        := true
   weightDecay    := 0.05            -- now applied as AdamW decoupled decay (was toxic coupled-L2)
   cosineDecay    := true
@@ -43,10 +45,14 @@ def vitTinyImagenetConfig : TrainConfig where
   mixupAlpha     := 0.8
   useCutmix      := true
   cutmixAlpha    := 1.0
-  useRandAugment := true            -- color subset only (no geometric — tfa N/A on tf2.21)
+  useRandAugment := true            -- full DeiT RandAugment (color + geometric, below)
+  randAugmentGeometric := true      -- shear/rotate/translate via ImageProjectiveTransformV3
   randAugmentM   := 9.0
   randomErasing  := true
   randomErasingProb := 0.25
+  dropPath       := 0.1             -- DeiT-Ti stochastic depth (linear ramp 0→0.1 over blocks)
+  useEMA         := true            -- DeiT model EMA; eval + checkpoints use the shadow weights
+  emaDecay       := 0.99996         -- DeiT default
   bf16           := true            -- bf16 exonerated (fp32 collapsed identically); back on for speed
 
 #eval vitTinyImagenet.validate!

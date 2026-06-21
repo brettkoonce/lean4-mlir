@@ -15,6 +15,43 @@ a *legit* accuracy run), and measured time estimates. Written 2026-05-30.
   the ~72% ViT-Tiny is capable of. The fixes needed are gradient clipping
   + the DeiT augmentation suite (both codegen work).
 
+## UPDATE 2026-06-21 — paper-faithful DeiT-Ti recipe LANDED + GPU perf measured
+
+The one remaining codegen item (stochastic depth in `transformer_block`) and the two config
+flips (geometric RA, 300 epochs) from the 2026-06-19 list below are all DONE. `vitTinyImagenetConfig`
+is now paper-faithful DeiT-Ti (no distillation): `dropPath := 0.1`, `randAugmentGeometric := true`,
+`useEMA := true` (0.99996), `epochs := 300` (was 80). **Staged on main, not yet committed/launched.**
+
+**Stochastic depth in `transformer_block` (the codegen work, jax/Jax/Codegen.lean):**
+- new `_drop_branch` helper + `transformer_block(..., drop_key=None, keep_prob=1.0)`: per-sample
+  inverted DropPath ((B,1,1) mask, timm/DeiT semantics), TWO independent sub-keys so the attention
+  and MLP residual branches drop separately.
+- `.transformerEncoder` now counted in `totalDrop` and dispatched with `dpkeys[dbi]` + a linear
+  keep schedule. Emit verified: `dpkeys = split(drop_key, 12)`, keeps 1.000000→0.900000 (block 0
+  never drops, block 11 keeps 0.9).
+- inference-safe (drop_key=None → identity); convnet SD rng/scaling/schedule infra reused unchanged.
+
+**GPU smoke test (ROCm, gfx1100):** `jax/scripts/smoke_vit_droppath_gpu.py` imports the generated
+trainer (training loop behind `__main__`) and exercises forward+train_step on a synthetic batch —
+eval determinism, drop-path activity (same-key identical / diff-key max|Δ|=1.36 / train≠eval),
+6-step loss descent (7.15→1.49 on a fixed batch). PASS on RocmDevice.
+
+**Measured perf (2× 7900 XTX / mars, batch 512, full faithful recipe):**
+- ~218 ms/step steady-state (216/218/216/221 over 4 intervals), both GPUs 100% (compute-bound).
+- ~66s one-time XLA compile; ~9.1 min/epoch train + ~0.3-0.5 min/epoch val.
+- **300 epochs ≈ 45 hr train / ~47 hr with val (~2 days).**
+- This REVISES the ~38 hr estimate (below) UP ~18% — the faithful recipe costs more per step:
+  per-step EMA over 5.7M params, 24 drop-masks/step, heavier geometric RA. Cheapest time lever
+  if needed: drop EMA.
+
+**bf16 note:** XLA logs `no matching matrix core intrinsic for wmma ... bf16` on some dot ops
+(gfx1100). Benign + pre-existing — numerics finite/correct/deterministic, the 65.6% run used bf16
+on this box, and the new code adds zero matmuls (only bernoulli/split/elementwise). Worth confirming
+it doesn't surface differently on the CUDA box.
+
+**Pending:** commit (held for tree-clear) + the 300-ep launch (supervisor needs a 300-ep tweak +
+`LD_PRELOAD` baked in, per the RCCL note below) + a CUDA-box perf cross-check.
+
 ## UPDATE 2026-06-19 — most of the "What's needed" list is DONE; one codegen item remains
 
 The "What's needed for a LEGIT accuracy run" list further down (written 2026-05-30) is
