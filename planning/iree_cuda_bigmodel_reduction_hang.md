@@ -32,8 +32,11 @@ cd ~/src/iree-build
 .venv/bin/ninja iree_runtime_unified flatcc_runtime flatcc_parsing   # ninja = project .venv's
 # then relink ffi/libiree_ffi.so per IREE_BUILD.md §4 (new .so is rriiii, matches wheel vmfbs)
 ```
-After the swap, `mobilenetv2-verified-adam` ran past step 3 cleanly (FFI invoke #90+, vs old
-hang at invoke #3). **Lesson:** pin the from-source FFI runtime commit to the SAME release as
+After the swap the hang cleared on every big trainer (runtime-level, not model-specific):
+`mobilenetv2` → step 100/295 loss 2.20 (invoke #112), `resnet34` invoke #7, and
+**`vit-verified-adam` invoke #7** (loss 3.51→3.32→2.88) — so ViT was the same stale-runtime
+bug, not an attention-codegen bug. efficientnet/convnext share the runtime. Old hang was
+always at invoke #3. **Lesson:** pin the from-source FFI runtime commit to the SAME release as
 the `iree-base-compiler` wheel — extends the pip-lock rule to the FFI runtime.
 
 Diagnostic harness (parse the 739-arg signature, split the packed
