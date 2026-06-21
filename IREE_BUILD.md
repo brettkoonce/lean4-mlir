@@ -12,6 +12,18 @@ The narrative version of how this came together (with the gotchas as they
 were hit) lives in [`IREE.md`](IREE.md). The ROCm-specific variant is in
 [`ROCM.md`](ROCM.md). This file is the consolidated recipe.
 
+> ⚠️ **Pin the runtime commit to the compiler wheel.** The static-archive
+> runtime you build in §2 MUST come from the *same IREE release* as the
+> `iree-base-compiler` wheel in §1 (the wheel prints its commit via
+> `iree-compile --version`). A skew of even a few days can silently link a
+> runtime with a CUDA bug the compiler assumes is fixed — this is exactly what
+> caused the big-model "step 3 hang" (runtime `32b074edda` Apr-20 vs compiler
+> `af030e43` Apr-28; see `planning/iree_cuda_bigmodel_reduction_hang.md`). It
+> can also fail loudly as a HAL ABI mismatch (`hal.command_buffer.dispatch
+> signature mismatch … expected rriiii… but got rrIiii…`) — same root cause,
+> just caught at module-load instead of at runtime. `git checkout <wheel-commit>`
+> in `$IREE_SRC` before building the archives.
+
 ## What you need
 
 | Thing | Why | How |
