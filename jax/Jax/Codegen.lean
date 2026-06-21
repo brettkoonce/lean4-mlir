@@ -1933,9 +1933,34 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   let warmup := toString cfg.warmupEpochs
   let hasCosine := cfg.cosineDecay
   let opt := effOpt cfg
+  -- Suspend/resume state tuple: the python variables that fully describe the
+  -- training trajectory (weights + optimizer moments + EMA shadow). Saved/
+  -- restored together so a segmented run continues bit-for-bit.
+  let optStateVar : Option String := match opt with
+    | .adam | .rmsprop => some "opt_state"
+    | .sgd => if hasMomentum then some "velocity" else none
+  let stateVars : List String := ["params"] ++ optStateVar.toList ++
+    (if cfg.useEMA then ["ema_params"] else [])
+  let stateTuple : String := "(" ++ String.intercalate ", " stateVars ++
+    (if stateVars.length == 1 then "," else "") ++ ")"
   "# ═══════════════════════════════════════════════════════════════════════\n" ++
   "#  Main (ImageNet streaming variant)\n" ++
   "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
+  "def save_train_state(path, state, step):\n" ++
+  "    \"\"\"Full suspend/resume: flatten (params, opt_state[, ema]) + global step into\n" ++
+  "    one .npz so a segmented run (train N epochs, stop, resume) continues bit-for-\n" ++
+  "    bit — Adam m/v and the EMA shadow survive, not just the weights. Structure is\n" ++
+  "    rebuilt at load from a fresh template, so this is optimizer-agnostic.\"\"\"\n" ++
+  "    leaves = jax.tree.leaves(state)\n" ++
+  "    arrs = {f'l{i}': np.asarray(x) for i, x in enumerate(leaves)}\n" ++
+  "    arrs['step'] = np.int64(step)\n" ++
+  "    np.savez(path, **arrs)\n" ++
+  "    print(f'  saved full train state -> {path} ({len(leaves)} arrays, step={step})')\n\n" ++
+  "def load_train_state(path, template):\n" ++
+  "    d = np.load(path)\n" ++
+  "    n = len(jax.tree.leaves(template))\n" ++
+  "    leaves = [jnp.asarray(d[f'l{i}']) for i in range(n)]\n" ++
+  "    return jax.tree.unflatten(jax.tree.structure(template), leaves), int(d['step'])\n\n" ++
   "if __name__ == \"__main__\":\n" ++
   "    print(\"" ++ spec.name ++ " · Lean 4 → JAX\")\n" ++
   "    print(\"  \" + \"" ++ spec.archStr ++ "\")\n" ++
@@ -2011,6 +2036,17 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "    t0 = time.time()\n" ++
   (if cfg.useEMA then "    ema_params = params  # EMA shadow starts at the (fresh or resumed) weights\n" else "") ++
   (if cfg.dropPath > 0.0 then "    _drop_base = random.PRNGKey(" ++ seed ++ " + 1)  # stochastic-depth RNG stream\n" else "") ++
+  -- Lossless full-state resume. LEAN_MLIR_RESUME points at a .npz written by
+  -- save_train_state; it overrides params + optimizer moments + EMA shadow +
+  -- global step (unlike LEAN_MLIR_INIT_LOAD, which restores weights only). The
+  -- drop-path RNG stays deterministic across the boundary because it folds in
+  -- the restored _global_step.
+  "    _resume = os.environ.get('LEAN_MLIR_RESUME')\n" ++
+  "    if _resume:\n" ++
+  "        _rstate, _global_step = load_train_state(_resume, " ++ stateTuple ++ ")\n" ++
+  "        " ++ stateTuple ++ " = jax.device_put(_rstate, replicated_sharding)\n" ++
+  "        _start_epoch = _global_step // steps_per_epoch\n" ++
+  "        print(f'Resumed full train state from {_resume}: step={_global_step} (epoch {_start_epoch + 1}/{EPOCHS})')\n" ++
   "    for epoch in range(_start_epoch, EPOCHS):\n" ++
   (if hasCosine then
     "        # Per-step cosine LR (computed inside the inner loop below)\n" ++
@@ -2110,11 +2146,13 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        _ckpt_every = int(os.environ.get('LEAN_MLIR_CKPT_EVERY', '10'))\n" ++
   "        if _ckpt_base and _ckpt_every > 0 and (epoch + 1) % _ckpt_every == 0:\n" ++
   "            _ckpt_path = f'{_ckpt_base}_e{epoch+1}.bin'\n" ++
-  "            params_to_file(" ++ (if cfg.useEMA then "ema_params" else "params") ++ ", _ckpt_path)\n\n" ++
+  "            params_to_file(" ++ (if cfg.useEMA then "ema_params" else "params") ++ ", _ckpt_path)\n" ++
+  "            save_train_state(f'{_ckpt_base}_e{epoch+1}.state.npz', " ++ stateTuple ++ ", _global_step)\n\n" ++
   "    # Final save (always, if LEAN_MLIR_PARAMS_OUT was set).\n" ++
   "    _ckpt_base = os.environ.get('LEAN_MLIR_PARAMS_OUT')\n" ++
   "    if _ckpt_base:\n" ++
-  "        params_to_file(" ++ (if cfg.useEMA then "ema_params" else "params") ++ ", f'{_ckpt_base}.bin')\n\n" ++
+  "        params_to_file(" ++ (if cfg.useEMA then "ema_params" else "params") ++ ", f'{_ckpt_base}.bin')\n" ++
+  "        save_train_state(f'{_ckpt_base}.state.npz', " ++ stateTuple ++ ", _global_step)\n\n" ++
   "    print(\"\")\n" ++
   "    print(\"Done. Total time: \" + str(round(time.time() - t0, 1)) + \"s\")\n" ++
   "    if _trace_f: _trace_f.close()\n"
