@@ -67,6 +67,7 @@ def mobilenetV2ImagenetConfig : TrainConfig where
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true    -- now reaches the inverted-residual blocks
+  runningBN      := true    -- paper-faithful eval (gap A): running BN stats, not eval-batch stats
 
 #eval mobilenetV2Imagenet.validate!
 

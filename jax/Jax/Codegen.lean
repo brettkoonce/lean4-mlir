@@ -374,7 +374,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    ds = ds.prefetch(tf.data.AUTOTUNE)\n" ++
     "    return tfds.as_numpy(ds)\n\n"
 
-private def emitHelpers (spec : NetSpec) : String := Id.run do
+private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run do
   let mut code := ""
   if spec.hasConv then
     code := code ++
@@ -391,6 +391,37 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    return jax.lax.reduce_window(x, -jnp.inf, jax.lax.max,\n" ++
       "             (1, 1, size, size), (1, 1, stride, stride), 'SAME')\n\n"
   if spec.hasBn then
+    if cfg.runningBN then
+      -- Running-BN (gap A): train normalises with batch stats + EMA-updates the
+      -- running buffers; eval normalises with the running buffers. `_bn` does the
+      -- BN part (factored so the inline-BN block helpers share it); conv_bn = conv
+      -- then _bn. Both return (out, (running_mean, running_var)).
+      let bnChans := (spec.layers.flatMap (fun l => match l with
+        | .convBn _ oc _ _ _ => [oc]
+        | .invertedResidual ic oc expand _ n =>
+          let blk (inc : Nat) := if expand != 1 then [inc*expand, inc*expand, oc] else [inc, oc]
+          (blk ic) ++ (List.range (n-1)).flatMap (fun _ => blk oc)
+        | _ => [])).map toString
+      code := code ++
+        "def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=0.99):\n" ++
+        "    rm, rv = prev\n" ++
+        "    if training:\n" ++
+        "        bm = jnp.mean(x, axis=(0, 2, 3)); bv = jnp.var(x, axis=(0, 2, 3))\n" ++
+        "        xn = (x - bm.reshape(1, -1, 1, 1)) / jnp.sqrt(bv.reshape(1, -1, 1, 1) + eps)\n" ++
+        "        new = (momentum * rm + (1.0 - momentum) * bm, momentum * rv + (1.0 - momentum) * bv)\n" ++
+        "    else:\n" ++
+        "        xn = (x - rm.reshape(1, -1, 1, 1)) / jnp.sqrt(rv.reshape(1, -1, 1, 1) + eps)\n" ++
+        "        new = (rm, rv)\n" ++
+        "    return xn * gamma.reshape(1, -1, 1, 1) + beta.reshape(1, -1, 1, 1), new\n\n" ++
+        "def conv_bn(x, w, gamma, beta, prev, training, stride=(1,1), padding='SAME'):\n" ++
+        "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n" ++
+        "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
+        "    return _bn(x, gamma, beta, prev, training)\n\n" ++
+        "# Per-BN-layer channel counts, in forward order (PyTorch-style init: mean 0, var 1).\n" ++
+        "_BN_CHANNELS = [" ++ String.intercalate ", " bnChans ++ "]\n" ++
+        "def init_bn_state():\n" ++
+        "    return [(jnp.zeros(c, jnp.float32), jnp.ones(c, jnp.float32)) for c in _BN_CHANNELS]\n\n"
+    else
     code := code ++
       "def conv_bn(x, w, gamma, beta, stride=(1,1), padding='SAME'):\n" ++
       "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n" ++
@@ -454,6 +485,28 @@ private def emitHelpers (spec : NetSpec) : String := Id.run do
       "    x = x * pw_g.reshape(1, -1, 1, 1) + pw_b.reshape(1, -1, 1, 1)\n" ++
       "    return jnp.minimum(jax.nn.relu(x), 6.0)\n\n"
   if spec.hasInvertedResidual then
+    if cfg.runningBN then
+      -- Running-BN variant: threads bn[bn_start..] through each inline BN via _bn,
+      -- returns (x, new_bn_entries) so forward can accumulate the updated stats.
+      code := code ++
+        "def invres_block(params, x, idx, stride, expand, use_skip, bn, bn_start, training):\n" ++
+        "    residual = x\n" ++
+        "    i = idx; bi = bn_start; out = []\n" ++
+        "    if expand > 1:\n" ++
+        "        x = jax.lax.conv_general_dilated(convdt(x), convdt(params[i][0]), (1,1), 'SAME',\n" ++
+        "              dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
+        "        x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
+        "        x = jnp.minimum(jax.nn.relu(x), 6.0); i += 1\n" ++
+        "    x = depthwise_conv(x, params[i][0], stride=(stride,stride))\n" ++
+        "    x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
+        "    x = jnp.minimum(jax.nn.relu(x), 6.0); i += 1\n" ++
+        "    x = jax.lax.conv_general_dilated(convdt(x), convdt(params[i][0]), (1,1), 'SAME',\n" ++
+        "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
+        "    x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns)\n" ++
+        "    if use_skip:\n" ++
+        "        x = x + residual\n" ++
+        "    return x, out\n\n"
+    else
     code := code ++
       "def invres_block(params, x, idx, stride, expand, use_skip):\n" ++
       "    \"\"\"Inverted residual: expand 1x1 → depthwise 3x3 → project 1x1, + skip.\"\"\"\n" ++
@@ -1480,7 +1533,9 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     | .mbConv _ _ _ _ _ n _  => some n
     | .transformerEncoder _ _ _ n => some n
     | _ => none)).foldl (· + ·) 0
-  let mut code := "def forward(params, x, drop_key=None):\n"
+  let mut code := if cfg.runningBN
+    then "def forward(params, x, bn, training, drop_key=None):\n    bn_out = []\n    bn_i = 0\n"
+    else "def forward(params, x, drop_key=None):\n"
   -- Reshape flat images to NCHW if first layer is conv
   match spec.layers.head? with
   | some (.conv2d ic _ _ _ _) =>
@@ -1510,9 +1565,15 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     | .convBn _ _ _ s pad =>
       let padStr := match pad with | .same => "SAME" | .valid => "VALID"
       let strideStr := if s == 1 then "" else ", stride=(" ++ toString s ++ "," ++ toString s ++ ")"
-      code := code ++ "    x = conv_bn(x, params[" ++ toString pidx ++ "][0], params[" ++
-        toString pidx ++ "][1], params[" ++ toString pidx ++ "][2]" ++
-        strideStr ++ ", padding='" ++ padStr ++ "')\n"
+      if cfg.runningBN then
+        code := code ++ "    x, _ns = conv_bn(x, params[" ++ toString pidx ++ "][0], params[" ++
+          toString pidx ++ "][1], params[" ++ toString pidx ++ "][2], bn[bn_i], training" ++
+          strideStr ++ ", padding='" ++ padStr ++ "')\n"
+        code := code ++ "    bn_out.append(_ns); bn_i += 1\n"
+      else
+        code := code ++ "    x = conv_bn(x, params[" ++ toString pidx ++ "][0], params[" ++
+          toString pidx ++ "][1], params[" ++ toString pidx ++ "][2]" ++
+          strideStr ++ ", padding='" ++ padStr ++ "')\n"
       code := code ++ "    x = jax.nn.relu(x)\n"
       pidx := pidx + 1
     | .convNextStage _c nBlocks _ _ =>
@@ -1604,13 +1665,23 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       let hasExpand := expand != 1
       -- First block: may have stride, no skip (ic≠oc or stride≠1 typically)
       let useSkip := if ic == oc && stride == 1 then "True" else "False"
-      code := code ++ "    x = invres_block(params, x, " ++ toString pidx ++ ", " ++
-        toString stride ++ ", " ++ toString expand ++ ", " ++ useSkip ++ ")\n"
+      let bnTail := if cfg.runningBN then ", bn, bn_i, training" else ""
+      let bnAcc := "    bn_out.extend(_ne); bn_i += len(_ne)\n"
+      if cfg.runningBN then
+        code := code ++ "    x, _ne = invres_block(params, x, " ++ toString pidx ++ ", " ++
+          toString stride ++ ", " ++ toString expand ++ ", " ++ useSkip ++ bnTail ++ ")\n" ++ bnAcc
+      else
+        code := code ++ "    x = invres_block(params, x, " ++ toString pidx ++ ", " ++
+          toString stride ++ ", " ++ toString expand ++ ", " ++ useSkip ++ ")\n"
       pidx := pidx + nParamsPerBlock hasExpand
       -- Remaining blocks: stride=1, skip when oc==oc (always true)
       for _ in List.range (n - 1) do
-        code := code ++ "    x = invres_block(params, x, " ++ toString pidx ++ ", 1, " ++
-          toString expand ++ ", True)\n"
+        if cfg.runningBN then
+          code := code ++ "    x, _ne = invres_block(params, x, " ++ toString pidx ++ ", 1, " ++
+            toString expand ++ ", True" ++ bnTail ++ ")\n" ++ bnAcc
+        else
+          code := code ++ "    x = invres_block(params, x, " ++ toString pidx ++ ", 1, " ++
+            toString expand ++ ", True)\n"
         pidx := pidx + nParamsPerBlock hasExpand
     | .mbConvV3 ic _ expandCh kSize stride useSE act =>
       let nP := (if expandCh != ic then 1 else 0) + 1 + (if useSE then 2 else 0) + 1
@@ -1684,7 +1755,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       -- transformerDecoder, etc.) are not supported by phase-2 codegen;
       -- they're bestiary-only and emit UNSUPPORTED on phase-3 too.
       code := code ++ "    # UNSUPPORTED layer in phase-2 codegen\n"
-  code := code ++ "    return x\n\n"
+  code := code ++ (if cfg.runningBN then "    return x, bn_out\n\n" else "    return x\n\n")
   code
 
 /-- Effective optimizer for the JAX backend: `cfg.optimizer` when set away from
@@ -1700,8 +1771,8 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   let lr := toString cfg.learningRate
   let hasMomentum := cfg.momentum > 0.0
   let hasCosine := cfg.cosineDecay
-  "def loss_fn(params, x, y, drop_key=None):\n" ++
-  "    logits = forward(params, x, drop_key)\n" ++
+  (if cfg.runningBN then "def loss_fn(params, bn, x, y, drop_key=None):\n" else "def loss_fn(params, x, y, drop_key=None):\n") ++
+  (if cfg.runningBN then "    logits, _new_bn = forward(params, x, bn, True, drop_key)\n" else "    logits = forward(params, x, drop_key)\n") ++
   "    log_probs = jax.nn.log_softmax(logits, axis=-1)\n" ++
   "    # y is int32 [B] (hard labels) or float [B,NC] (soft labels, mixup/cutmix).\n" ++
   "    # y.ndim is static at trace time, so this branch is jit-safe.\n" ++
@@ -1713,7 +1784,9 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
    else "") ++
   "    else:\n" ++
   "        tgt = y\n" ++
-  "    return -jnp.mean(jnp.sum(log_probs * tgt, axis=-1))\n\n" ++
+  (if cfg.runningBN
+   then "    return -jnp.mean(jnp.sum(log_probs * tgt, axis=-1)), _new_bn\n\n"
+   else "    return -jnp.mean(jnp.sum(log_probs * tgt, axis=-1))\n\n") ++
   let ic := match spec.layers.head? with
     | some (.conv2d ic ..) => ic | some (.convBn ic ..) => ic
     | some (.patchEmbed ic ..) => ic | _ => 3
@@ -1760,8 +1833,8 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   (match opt with
    | .adam =>
     "@jit\n" ++
-    "def train_step(params, opt_state, x, y, lr, drop_key=None):\n" ++
-    "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
+    (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
+    (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
     -- AdamW: DECOUPLED weight decay — applied to params directly, not folded into
     -- the gradient. Adam+coupled-L2 ≠ AdamW; coupled L2 at the AdamW-tuned wd=0.05
     -- collapses ViT at high LR (Loshchilov & Hutter 2017). SGD/momentum paths below
@@ -1776,37 +1849,37 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
       "    params = jax.tree.map(lambda p, mi, vi: p - lr * (mi / (jnp.sqrt(vi) + 1e-8) + WD * p), params, mc, vc)\n"
      else
       "    params = jax.tree.map(lambda p, mi, vi: p - lr * mi / (jnp.sqrt(vi) + 1e-8), params, mc, vc)\n") ++
-    "    return params, (m, v, t), loss\n\n"
+    (if cfg.runningBN then "    return params, (m, v, t), _new_bn, loss\n\n" else "    return params, (m, v, t), loss\n\n")
    | .rmsprop =>
     -- RMSprop + momentum (MobileNet/EfficientNet native). opt_state = (sq, buf):
     -- sq is the running mean-square of the gradient, buf the momentum buffer on
     -- the normalized gradient. WD stays coupled into the gradient (so it flows
     -- through the accumulator), matching those papers' L2 form — NOT decoupled.
     "@jit\n" ++
-    "def train_step(params, opt_state, x, y, lr, drop_key=None):\n" ++
-    "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
+    (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
+    (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    sq, buf = opt_state\n" ++
     "    sq = jax.tree.map(lambda s, g: RHO * s + (1.0 - RHO) * g * g, sq, grads)\n" ++
     "    buf = jax.tree.map(lambda b, g, s: MOMENTUM * b + g / (jnp.sqrt(s) + EPS), buf, grads, sq)\n" ++
     "    params = jax.tree.map(lambda p, b: p - lr * b, params, buf)\n" ++
-    "    return params, (sq, buf), loss\n\n"
+    (if cfg.runningBN then "    return params, (sq, buf), _new_bn, loss\n\n" else "    return params, (sq, buf), loss\n\n")
    | .sgd =>
     if hasMomentum then
     "@jit\n" ++
-    "def train_step(params, velocity, x, y, lr, drop_key=None):\n" ++
-    "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
+    (if cfg.runningBN then "def train_step(params, velocity, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, velocity, x, y, lr, drop_key=None):\n") ++
+    (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    velocity = jax.tree.map(lambda v, g: MOMENTUM * v + g, velocity, grads)\n" ++
     "    params = jax.tree.map(lambda p, v: p - lr * v, params, velocity)\n" ++
-    "    return params, velocity, loss\n\n"
+    (if cfg.runningBN then "    return params, velocity, _new_bn, loss\n\n" else "    return params, velocity, loss\n\n")
     else
     "@jit\n" ++
-    "def train_step(params, x, y, lr, drop_key=None):\n" ++
-    "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n" ++ clipLine ++
+    (if cfg.runningBN then "def train_step(params, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, x, y, lr, drop_key=None):\n") ++
+    (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    params = jax.tree.map(lambda p, g: p - lr * g, params, grads)\n" ++
-    "    return params, loss\n\n") ++
+    (if cfg.runningBN then "    return params, _new_bn, loss\n\n" else "    return params, loss\n\n")) ++
   -- EMA (exponential moving average of weights): a shadow param tree updated
   -- each step; eval + checkpoints use it (see the imagenet main loop). Kept
   -- decoupled from the optimizer so the three train_step variants above stay
@@ -1853,8 +1926,8 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    return x4m.reshape(B, -1), ym\n\n"
    else "") ++
   "@jit\n" ++
-  "def eval_batch(params, x, y):\n" ++
-  "    logits = forward(params, x)\n" ++
+  (if cfg.runningBN then "def eval_batch(params, bn, x, y):\n" else "def eval_batch(params, x, y):\n") ++
+  (if cfg.runningBN then "    logits, _ = forward(params, x, bn, False)\n" else "    logits = forward(params, x)\n") ++
   "    preds = jnp.argmax(logits, axis=-1)\n" ++
   "    log_probs = jax.nn.log_softmax(logits, axis=-1)\n" ++
   "    loss = -jnp.mean(jnp.sum(log_probs * jax.nn.one_hot(y, " ++ toString nClasses ++ "), axis=-1))\n" ++
@@ -1940,7 +2013,8 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     | .adam | .rmsprop => some "opt_state"
     | .sgd => if hasMomentum then some "velocity" else none
   let stateVars : List String := ["params"] ++ optStateVar.toList ++
-    (if cfg.useEMA then ["ema_params"] else [])
+    (if cfg.useEMA then ["ema_params"] else []) ++
+    (if cfg.runningBN then ["bn_state"] else [])
   let stateTuple : String := "(" ++ String.intercalate ", " stateVars ++
     (if stateVars.length == 1 then "," else "") ++ ")"
   "# ═══════════════════════════════════════════════════════════════════════\n" ++
@@ -1954,8 +2028,26 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "    leaves = jax.tree.leaves(state)\n" ++
   "    arrs = {f'l{i}': np.asarray(x) for i, x in enumerate(leaves)}\n" ++
   "    arrs['step'] = np.int64(step)\n" ++
-  "    np.savez(path, **arrs)\n" ++
+  "    tmp = path + '.tmp'\n" ++
+  "    with open(tmp, 'wb') as _f:  # pass a file object so np.savez won't append .npz\n" ++
+  "        np.savez(_f, **arrs)\n" ++
+  "    os.replace(tmp, path)        # atomic rename: a crash mid-save can't corrupt `path`\n" ++
   "    print(f'  saved full train state -> {path} ({len(leaves)} arrays, step={step})')\n\n" ++
+  "def _prune_state_ckpts(base):\n" ++
+  "    \"\"\"Keep only the newest LEAN_MLIR_KEEP_STATE (default 3) <base>_e{N}.state.npz\n" ++
+  "    files. Each is ~4x the weights, so an every-epoch run would otherwise pile up\n" ++
+  "    tens of GB; only resumes from the newest are ever needed.\"\"\"\n" ++
+  "    import glob\n" ++
+  "    keep = int(os.environ.get('LEAN_MLIR_KEEP_STATE', '3'))\n" ++
+  "    if keep <= 0:\n" ++
+  "        return\n" ++
+  "    paths = glob.glob(f'{base}_e*.state.npz')\n" ++
+  "    paths.sort(key=lambda p: int(p.rsplit('_e', 1)[1].split('.state.npz')[0]))\n" ++
+  "    for _old in paths[:-keep]:\n" ++
+  "        try:\n" ++
+  "            os.remove(_old)\n" ++
+  "        except OSError:\n" ++
+  "            pass\n\n" ++
   "def load_train_state(path, template):\n" ++
   "    d = np.load(path)\n" ++
   "    n = len(jax.tree.leaves(template))\n" ++
@@ -1997,6 +2089,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "    opt_buf = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_sq, opt_buf)\n"
    | .sgd => if hasMomentum then "    velocity = jax.tree.map(jnp.zeros_like, params)\n" else "") ++
+  (if cfg.runningBN then "    bn_state = init_bn_state()  # running BN mean/var (gap A), threaded through train/eval\n" else "") ++
   "\n" ++
   "    # Trace emission (opt-in; matches phase-3 format).\n" ++
   "    _trace_path = os.environ.get('LEAN_MLIR_TRACE_OUT')\n" ++
@@ -2084,14 +2177,17 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    else if cfg.useCutmix then
      "            x, y = _cutmix(x, y, " ++ mk ++ ")\n"
    else "") ++
-  (match opt with
+  (let dk := if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else ""
+   let bnIn := if cfg.runningBN then ", bn_state" else ""
+   let bnOut := if cfg.runningBN then ", bn_state" else ""
+   match opt with
    | .adam | .rmsprop =>
-    "            params, opt_state, loss = train_step(params, opt_state, x, y, lr" ++ (if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else "") ++ ")\n"
+    "            params, opt_state" ++ bnOut ++ ", loss = train_step(params, opt_state" ++ bnIn ++ ", x, y, lr" ++ dk ++ ")\n"
    | .sgd =>
     if hasMomentum then
-    "            params, velocity, loss = train_step(params, velocity, x, y, lr" ++ (if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else "") ++ ")\n"
+    "            params, velocity" ++ bnOut ++ ", loss = train_step(params, velocity" ++ bnIn ++ ", x, y, lr" ++ dk ++ ")\n"
     else
-    "            params, loss = train_step(params, x, y, lr" ++ (if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else "") ++ ")\n") ++
+    "            params" ++ bnOut ++ ", loss = train_step(params" ++ bnIn ++ ", x, y, lr" ++ dk ++ ")\n") ++
   "            epoch_loss += float(loss)\n" ++
   "            n_batches += 1\n" ++
   (if cfg.useEMA then "            ema_params = ema_update(ema_params, params)\n" else "") ++
@@ -2119,7 +2215,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        for x, y in v_iter:\n" ++
   "            x = jax.device_put(x, data_sharding)\n" ++
   "            y = jax.device_put(y, data_sharding)\n" ++
-  "            c1, c5, l = eval_batch(" ++ (if cfg.useEMA then "ema_params" else "params") ++ ", x, y)\n" ++
+  "            c1, c5, l = eval_batch(" ++ (if cfg.useEMA then "ema_params" else "params") ++ (if cfg.runningBN then ", bn_state" else "") ++ ", x, y)\n" ++
   "            correct1 += int(c1)\n" ++
   "            correct5 += int(c5)\n" ++
   "            total   += y.shape[0]\n" ++
@@ -2147,7 +2243,8 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        if _ckpt_base and _ckpt_every > 0 and (epoch + 1) % _ckpt_every == 0:\n" ++
   "            _ckpt_path = f'{_ckpt_base}_e{epoch+1}.bin'\n" ++
   "            params_to_file(" ++ (if cfg.useEMA then "ema_params" else "params") ++ ", _ckpt_path)\n" ++
-  "            save_train_state(f'{_ckpt_base}_e{epoch+1}.state.npz', " ++ stateTuple ++ ", _global_step)\n\n" ++
+  "            save_train_state(f'{_ckpt_base}_e{epoch+1}.state.npz', " ++ stateTuple ++ ", _global_step)\n" ++
+  "            _prune_state_ckpts(_ckpt_base)\n\n" ++
   "    # Final save (always, if LEAN_MLIR_PARAMS_OUT was set).\n" ++
   "    _ckpt_base = os.environ.get('LEAN_MLIR_PARAMS_OUT')\n" ++
   "    if _ckpt_base:\n" ++
@@ -2352,7 +2449,7 @@ def generate (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : 
   emitImports ++
   emitDataLoading ds cfg ++
   emitDtype cfg ++
-  emitHelpers spec ++
+  emitHelpers spec cfg ++
   emitShardingSetup ++
   emitInitParams spec ++
   emitParamsToFile spec ++

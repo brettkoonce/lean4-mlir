@@ -447,6 +447,16 @@ structure TrainConfig where
       when `bf16 := true`. Depthwise/separable convs (MobileNet/EfficientNet)
       still stay fp32. -/
   bf16Conv : Bool := false
+  /-- Running batch-norm statistics (gap A). When true, the JAX imagenet
+      trainer tracks per-BN-layer running mean/var (EMA of batch stats,
+      momentum 0.99) threaded through `forward` as `has_aux`, and EVAL
+      normalizes with the running stats instead of the eval batch's own —
+      the paper-faithful behaviour. Off (default) keeps the current
+      batch-stats-at-eval path, so every existing net is byte-identical.
+      Currently wired for the convBn + invertedResidual path (MobileNetV2);
+      extend the BN-threading to mbconv/basic/bottleneck blocks for the other
+      convnets. See planning/jax_imagenet_sweep.md "Gap A". -/
+  runningBN : Bool := false
   /-- Clip gradients by global L2 norm before the optimizer step. 0 = off.
       DeiT default 1.0 — essential for stable ViT-from-scratch training: it
       lets you use the proper ~1e-3 LR without the collapse-to-chance seen at
