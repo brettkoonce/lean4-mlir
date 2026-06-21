@@ -111,6 +111,10 @@ def paramShapes (spec : NetSpec) : Array (Array Nat) := Id.run do
       -- LN/BN (γ, β) on `ic` channels, then 2×2 conv stride 2 (W, b).
       shapes := shapes.push #[ic] |>.push #[ic]
       shapes := shapes.push #[oc, ic, 2, 2] |>.push #[oc]
+    | .convNextStem ic oc p =>
+      -- patchify conv p×p stride p (W, b), then channels-first LN (γ, β) on oc.
+      shapes := shapes.push #[oc, ic, p, p] |>.push #[oc]
+      shapes := shapes.push #[oc] |>.push #[oc]
     | .patchEmbed ic dim p nP =>
       shapes := shapes.push #[dim, ic, p, p] |>.push #[dim]    -- W, b
       shapes := shapes.push #[dim]                              -- cls token
@@ -420,6 +424,11 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
     let (gLN, bLN) ← heLN ic
     let (Wcv, bcv, s') ← heConvB oc ic 2 seed
     return (#[gLN, bLN, Wcv, bcv], s')
+  | .convNextStem ic oc p =>
+    -- patchify p×p conv (W, b) + channels-first LN (γ, β) on oc.
+    let (Wcv, bcv, s') ← heConvB oc ic p seed
+    let (gLN, bLN) ← heLN oc
+    return (#[Wcv, bcv, gLN, bLN], s')
   | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq =>
     let mut parts : Array ByteArray := #[]
     let mut s := seed

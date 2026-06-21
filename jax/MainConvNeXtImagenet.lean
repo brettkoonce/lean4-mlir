@@ -23,7 +23,7 @@ def convNeXtTinyImagenet : NetSpec where
   imageH := 224
   imageW := 224
   layers := [
-    .convBn 3 96 4 4 .same,                    -- patchify stem (4×4 stride 4) → 56×56
+    .convNextStem 3 96 4,                      -- patchify stem: 4×4 s4 conv → channel-LN (faithful, no BN/ReLU)
     .convNextStage 96 3 .ln .gelu,             -- stage 1: 3 blocks @ 96
     .convNextDownsample 96 192,                -- 56→28
     .convNextStage 192 3 .ln .gelu,            -- stage 2: 3 blocks @ 192
@@ -60,7 +60,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   useAdam        := true
   weightDecay    := 0.05
   cosineDecay    := true
-  warmupEpochs   := 5
+  warmupEpochs   := 20      -- ConvNeXt paper warmup (was 5)
   augment        := true
   useRandAugment       := true   -- ConvNeXt recipe RandAugment...
   randAugmentGeometric := true   -- ...the full color+geometric sampler (N=2, M=9)

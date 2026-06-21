@@ -212,7 +212,7 @@ modern AdamW+aug recipe is already supported (only warmup-epochs + the shared Ra
 remain). The three BN convnets all bottleneck on **A (running-BN-stats)**; fixing it once unblocks
 enet + mnv2 + r34. Everything else is trivial config (epochs/LR/warmup) or the two moderate shared
 codegen items (**B** exp-LR, **C** dropout). **A/B/C/D are all DONE** — every cross-cutting faithfulness gap is closed. What remains is per-net
-trivia (epochs, convnext warmup 5→20 + stem, mnv2 LS, ViT RepeatedAug-deferred). The real gains now
+trivia (epochs, mnv2 LS, ViT RepeatedAug-deferred). The real gains now
 come from the schedule length (epochs 80/90→300/350) and actually running the trainings; distillation
 (DeiT⚗) is the only structural lever left.
 

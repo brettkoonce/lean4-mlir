@@ -138,6 +138,11 @@ inductive Layer where
   -- The `norm` field selects LN (default) vs BN; same purpose as in
   -- `convNextStage` so a stage and its downsample stay in sync.
   | convNextDownsample (ic oc : Nat) (norm : Normalization := .ln)
+  -- ConvNeXt patchify stem (Liu et al. 2022): a `patch`×`patch` stride-`patch`
+  -- conv (ic → oc, non-overlapping patches) followed by a channels-first
+  -- LayerNorm and NO activation — the canonical stem. (The convBn stem was a
+  -- param-equivalent shortcut with a spurious BN+ReLU; this is the faithful form.)
+  | convNextStem (ic oc patch : Nat)
   -- WaveNet (van den Oord 2016) residual-block stack with exponentially
   -- growing dilation. One stack = `nLayers` blocks with dilation rates
   -- 2⁰, 2¹, ..., 2^(nLayers−1). Per block: dilated causal conv + gated

@@ -242,6 +242,9 @@ def Layer.nParams : Layer → Nat
   | .convNextDownsample ic oc _ =>
       -- LayerNorm on ic channels + 2×2 conv stride-2 (ic → oc) with bias
       2 * ic + 4 * ic * oc + oc
+  | .convNextStem ic oc p =>
+      -- patchify p×p conv (ic → oc) with bias + channels-first LN (γ, β) on oc
+      oc * ic * p * p + oc + 2 * oc
   | .waveNetBlock residualCh skipCh nLayers =>
       -- Per dilated residual block:
       --   Dilated causal conv (kernel 2), res → 2·res (filter + gate):
@@ -412,6 +415,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .mobileVitBlock ic d h m n => s!"MobileViT(ic={ic},d={d},h={h},mlp={m},L={n})"
     | .convNextStage c n _ _     => s!"ConvNeXt{n}(c={c})"
     | .convNextDownsample i o _   => s!"CNXDown({i}→{o})"
+    | .convNextStem ic oc p       => s!"CNXStem({ic}→{oc},{p}x{p})+LN"
     | .waveNetBlock r s n        => s!"WaveNet{n}(res={r},skip={s})"
     | .positionalEncoding d L    => s!"PE({d}→{d * 2 * L},L={L})"
     | .nerfMLP eP eD h           => s!"NeRF-MLP(p={eP},d={eD},h={h})"
@@ -462,6 +466,7 @@ def Layer.outChannels : Layer → Nat
   | .mobileVitBlock ic _ _ _ _      => ic     -- block is ic → ic
   | .convNextStage c _ _ _          => c      -- stage preserves channels
   | .convNextDownsample _ oc _      => oc
+  | .convNextStem _ oc _            => oc
   | .waveNetBlock _ skipCh _        => skipCh     -- skip-sum is what flows to the head
   | .positionalEncoding inputDim numFreq => inputDim * 2 * numFreq
   | .nerfMLP _ _ _                  => 4    -- 1-dim density + 3-dim RGB (flattened)
@@ -508,6 +513,7 @@ def Layer.inChannels : Layer → Nat
   | .mobileVitBlock ic _ _ _ _      => ic
   | .convNextStage c _ _ _          => c
   | .convNextDownsample ic _ _      => ic
+  | .convNextStem ic _ _            => ic
   | .waveNetBlock residualCh _ _    => residualCh
   | .positionalEncoding inputDim _  => inputDim
   | .nerfMLP encodedPosDim _ _      => encodedPosDim

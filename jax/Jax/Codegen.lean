@@ -858,7 +858,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    x = x + _drop_branch(mm(h, w2.T) + b2m, km, keep_prob)\n" ++
       "    return x\n\n"
   let hasConvNext := spec.layers.any (fun l => match l with
-    | .convNextStage .. => true | .convNextDownsample .. => true | _ => false)
+    | .convNextStage .. => true | .convNextDownsample .. => true | .convNextStem .. => true | _ => false)
   if hasConvNext then
     code := code ++
       "# ── ConvNeXt: channels-first LayerNorm (over C, per spatial loc), block, downsample ──\n" ++
@@ -899,7 +899,14 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    w, bc = params[idx+1]\n" ++
       "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), (2,2), 'VALID',\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
-      "    return x + bc.reshape(1, -1, 1, 1)\n\n"
+      "    return x + bc.reshape(1, -1, 1, 1)\n\n" ++
+      "def convnext_stem(params, x, idx, patch):\n" ++
+      "    \"\"\"Patchify: p×p stride-p conv → channels-first LayerNorm (no activation).\"\"\"\n" ++
+      "    w, bc = params[idx]\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), (patch,patch), 'VALID',\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32) + bc.reshape(1, -1, 1, 1)\n" ++
+      "    g, b = params[idx+1]\n" ++
+      "    return channel_layer_norm(x, g, b)\n\n"
   code
 
 -- Helper: emit init code for one conv+BN param group (w, gamma, beta)
@@ -1055,6 +1062,9 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
     | .convNextDownsample ic oc _ =>
       code := code ++ emitLNInit s!"CNXDown LN {ic}" ic
       code := code ++ emitConvBiasInit s!"CNXDown conv 2x2 {ic}→{oc}" oc ic 2 2
+    | .convNextStem ic oc p =>
+      code := code ++ emitConvBiasInit s!"CNXStem conv {p}x{p} {ic}→{oc}" oc ic p p
+      code := code ++ emitLNInit s!"CNXStem LN {oc}" oc
     | .dense fi fo _ =>
       code := code ++
         "    # Dense " ++ toString fi ++ "→" ++ toString fo ++ "\n" ++
@@ -1325,6 +1335,9 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
     | .convNextDownsample ic oc _ =>
       code := code ++ emitLNFromBuf s!"CNXDown LN {ic}" ic
       code := code ++ emitConvBiasFromBuf s!"CNXDown conv 2x2 {ic}→{oc}" oc ic 2 2
+    | .convNextStem ic oc p =>
+      code := code ++ emitConvBiasFromBuf s!"CNXStem conv {p}x{p} {ic}→{oc}" oc ic p p
+      code := code ++ emitLNFromBuf s!"CNXStem LN {oc}" oc
     | .residualBlock ic oc nBlocks firstStride =>
       -- Order matches LeanMlir.SpecHelpers.paramShapes: for each sub-block,
       -- (conv1 W,γ,β) + (conv2 W,γ,β), plus projection (W,γ,β) on sub-block 0
@@ -1514,6 +1527,9 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
     | .convNextDownsample _ic _oc _ =>
       code := code ++ emitLNToBuf s!"CNXDown LN"
       code := code ++ emitConvBiasToBuf s!"CNXDown conv 2x2"
+    | .convNextStem _ic _oc _ =>
+      code := code ++ emitConvBiasToBuf s!"CNXStem conv"
+      code := code ++ emitLNToBuf s!"CNXStem LN"
     | .residualBlock ic oc nBlocks firstStride =>
       let needsProj := !(ic == oc && firstStride == 1)
       for bi in [:nBlocks] do
@@ -1613,6 +1629,9 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
   | some (.patchEmbed ic _ _ _) =>
     code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
       toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
+  | some (.convNextStem ic _ _) =>
+    code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
+      toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
   | _ => pure ()
   if cfg.dropPath > 0 && totalDrop > 0 then
     code := code ++ "    dpkeys = (jax.random.split(drop_key, " ++ toString totalDrop ++
@@ -1655,6 +1674,9 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         pidx := pidx + 5
     | .convNextDownsample _ic _oc _ =>
       code := code ++ "    x = convnext_downsample(params, x, " ++ toString pidx ++ ")\n"
+      pidx := pidx + 2
+    | .convNextStem _ic _oc p =>
+      code := code ++ "    x = convnext_stem(params, x, " ++ toString pidx ++ ", " ++ toString p ++ ")\n"
       pidx := pidx + 2
     | .maxPool size stride =>
       code := code ++ "    x = max_pool2d(x, " ++ toString size ++ ", " ++ toString stride ++ ")\n"
