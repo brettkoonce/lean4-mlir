@@ -1657,6 +1657,13 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     | .flatten =>
       code := code ++ "    x = x.reshape(x.shape[0], -1)\n"
     | .dense _ _ act =>
+      -- Classifier dropout (gap C): inverted dropout before the (single, head)
+      -- dense, active in training only (eval passes drop_key=None → identity).
+      if cfg.dropout > 0.0 then
+        code := code ++ "    if drop_key is not None:\n" ++
+          "        x = x * jax.random.bernoulli(jax.random.fold_in(drop_key, 999983), " ++
+          toString (1.0 - cfg.dropout) ++ ", x.shape).astype(x.dtype) / " ++
+          toString (1.0 - cfg.dropout) ++ "\n"
       code := code ++ "    x = mm(x, params[" ++ toString pidx ++ "][0].T) + params[" ++
         toString pidx ++ "][1]\n"
       if act == .relu then code := code ++ "    x = jax.nn.relu(x)\n"
@@ -2182,7 +2189,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        print(f'Resuming at global_step={_global_step} (= epoch {_start_epoch + 1}/{EPOCHS}); LR schedule continues from there')\n" ++
   "    t0 = time.time()\n" ++
   (if cfg.useEMA then "    ema_params = params  # EMA shadow starts at the (fresh or resumed) weights\n" else "") ++
-  (if cfg.dropPath > 0.0 then "    _drop_base = random.PRNGKey(" ++ seed ++ " + 1)  # stochastic-depth RNG stream\n" else "") ++
+  (if cfg.dropPath > 0.0 || cfg.dropout > 0.0 then "    _drop_base = random.PRNGKey(" ++ seed ++ " + 1)  # stochastic-depth + dropout RNG stream\n" else "") ++
   -- Lossless full-state resume. LEAN_MLIR_RESUME points at a .npz written by
   -- save_train_state; it overrides params + optimizer moments + EMA shadow +
   -- global step (unlike LEAN_MLIR_INIT_LOAD, which restores weights only). The
@@ -2195,8 +2202,8 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        _start_epoch = _global_step // steps_per_epoch\n" ++
   "        print(f'Resumed full train state from {_resume}: step={_global_step} (epoch {_start_epoch + 1}/{EPOCHS})')\n" ++
   "    for epoch in range(_start_epoch, EPOCHS):\n" ++
-  (if hasCosine then
-    "        # Per-step cosine LR (computed inside the inner loop below)\n" ++
+  (if hasCosine || cfg.expLRDecayRate > 0.0 then
+    "        # Per-step LR (computed inside the inner loop below)\n" ++
     "        pass\n"
    else
     "        lr = jnp.float32(LR)\n") ++
@@ -2205,18 +2212,30 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        n_batches = 0\n" ++
   "        for _ in range(steps_per_epoch):\n" ++
   "            x, y = next(train_iter)\n" ++
-  (if hasCosine then
-    "            # Per-step LR (warmup → cosine)\n" ++
+  (let hasExpLR := cfg.expLRDecayRate > 0.0
+   let rate := toString cfg.expLRDecayRate
+   let dEp := toString cfg.expLRDecayEpochs
+   -- post-warmup decay formula (exp-decay = EfficientNet/MobileNet schedule, else cosine)
+   let decayWarmup := if hasExpLR then
+       "                _ep = _global_step / steps_per_epoch\n" ++
+       "                lr = jnp.float32(LR * (" ++ rate ++ " ** ((_ep - " ++ warmup ++ ") / " ++ dEp ++ ")))\n"
+     else
+       "                prog = (_global_step - warmup_steps) / max(total_steps - warmup_steps, 1)\n" ++
+       "                lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n"
+   let decayNoWarmup := if hasExpLR then
+       "            _ep = _global_step / steps_per_epoch\n" ++
+       "            lr = jnp.float32(LR * (" ++ rate ++ " ** (_ep / " ++ dEp ++ ")))\n"
+     else
+       "            prog = _global_step / max(total_steps, 1)\n" ++
+       "            lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n"
+   if hasCosine || hasExpLR then
+    "            # Per-step LR (warmup → " ++ (if hasExpLR then "exp-decay" else "cosine") ++ ")\n" ++
     (if cfg.warmupEpochs > 0 then
       "            warmup_steps = steps_per_epoch * " ++ warmup ++ "\n" ++
       "            if _global_step < warmup_steps:\n" ++
       "                lr = jnp.float32(LR * (_global_step + 1) / warmup_steps)\n" ++
-      "            else:\n" ++
-      "                prog = (_global_step - warmup_steps) / max(total_steps - warmup_steps, 1)\n" ++
-      "                lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n"
-     else
-      "            prog = _global_step / max(total_steps, 1)\n" ++
-      "            lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n")
+      "            else:\n" ++ decayWarmup
+     else decayNoWarmup)
    else "") ++
   "            x = jax.device_put(x, data_sharding)\n" ++
   "            y = jax.device_put(y, data_sharding)\n" ++
@@ -2231,7 +2250,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    else if cfg.useCutmix then
      "            x, y = _cutmix(x, y, " ++ mk ++ ")\n"
    else "") ++
-  (let dk := if cfg.dropPath > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else ""
+  (let dk := if cfg.dropPath > 0.0 || cfg.dropout > 0.0 then ", jax.random.fold_in(_drop_base, _global_step)" else ""
    let bnIn := if cfg.runningBN then ", bn_state" else ""
    let bnOut := if cfg.runningBN then ", bn_state" else ""
    match opt with
@@ -2397,7 +2416,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "        _trace_f.write(json.dumps(_hdr) + '\\n')\n" ++
   "    _global_step = 0\n" ++
   "    t0 = time.time()\n" ++
-  (if cfg.dropPath > 0.0 then "    _drop_base = random.PRNGKey(" ++ seed ++ " + 1)  # stochastic-depth RNG stream\n" else "") ++
+  (if cfg.dropPath > 0.0 || cfg.dropout > 0.0 then "    _drop_base = random.PRNGKey(" ++ seed ++ " + 1)  # stochastic-depth + dropout RNG stream\n" else "") ++
   "    for epoch in range(EPOCHS):\n" ++
   (if hasCosine then
   "        # Cosine LR schedule" ++ (if cfg.warmupEpochs > 0 then " with warmup" else "") ++ "\n" ++

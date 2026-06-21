@@ -60,7 +60,10 @@ def mobilenetV2ImagenetConfig : TrainConfig where
   rmspropDecay   := 0.9       -- ρ, the running mean-square decay
   rmspropEps     := 1.0       -- MobileNetV2 uses ε=1.0
   weightDecay    := 4e-5
-  cosineDecay    := true
+  cosineDecay      := false   -- replaced by the paper exp-decay schedule (gap B)
+  expLRDecayRate   := 0.98    -- MobileNetV2: ×0.98 per epoch (after warmup)
+  expLRDecayEpochs := 1.0
+  dropout          := 0.2     -- MobileNetV2 classifier dropout (gap C)
   warmupEpochs   := 5
   augment        := true    -- random-crop + horizontal flip (MNv2 paper aug)
   useAutoAugment := false   -- MNv2 paper used crop/flip only; AA is beyond the paper

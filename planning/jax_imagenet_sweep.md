@@ -187,10 +187,10 @@ AdamW + aug-suite (LayerNorm, no BN); enet/mnv2/r34 use the classic BN-convnet r
   (per-shard) stats, not training running stats. Hits **enet + mnv2 + r34**; ConvNeXt and ViT
   (both LayerNorm) are immune. ~½–1 day, **highest leverage — the only gap likely to move numbers**
   (~0.5–1%). The phase-3 IREE path already has running stats; this is a phase-2-wide limitation.
-- **B. Exp-decay LR schedule** (paper: ×0.97/2.4ep enet, ×0.98/ep mnv2) — only cosine is wired.
-  Hits **enet + mnv2**. ~15–20 lines (new schedule kind in the per-step LR).
-- **C. Classifier dropout 0.2** — no dropout field/layer exists. Hits **enet + mnv2**. ~10–15
-  lines + an RNG-thread (the `drop_key` infra from stochastic depth is already there).
+- **B. Exp-decay LR schedule — DONE (2026-06-21).** `expLRDecayRate`/`expLRDecayEpochs` fields +
+  per-step `LR·rate^((epoch−warmup)/decayEpochs)` in the imagenet loop. enet ×0.97/2.4ep, mnv2 ×0.98/ep.
+- **C. Classifier dropout 0.2 — DONE (2026-06-21).** `dropout` field; inverted dropout before the
+  head dense (eval drop-free), threaded via drop_key. enet+mnv2 set 0.2. GPU-validated (dropout live).
 - **D. RandAugment `mstd0.5`/`inc1`** — fixed-m9 only. Hits **vit + convnext**. ~½ day (see the
   ViT spike block in `vit_imagenet.md`).
 
@@ -200,8 +200,8 @@ AdamW + aug-suite (LayerNorm, no BN); enet/mnv2/r34 use the classic BN-convnet r
 |---|---|---|---|
 | **ViT-Ti** | arch, AdamW, cosine+warmup, full DeiT aug, SD 0.1, EMA | RepeatedAug (deferred), RandAug mstd/inc1 **(D)** | ~95% |
 | **ConvNeXt-T** | arch (DW7+chLN+invbtl+GELU+**LayerScale 1e-6 ✓**), AdamW WD0.05, LR4e-4@256, SD0.1, EMA, Mixup/CutMix/RErase, **no BN** | warmup 5→**20** (paper), stem convBn vs conv+LN (documented), RandAug mstd/inc1 **(D)** | ~90% |
-| **EfficientNet-B0** | arch+SE+**Swish✓**, RMSprop(ρ.9/μ.9/ε1e-3), WD1e-5, AutoAugment, SD0.2, EMA, LS0.1, **running-BN✓ (A)** | LR cosine→exp **(B)**, dropout0.2 **(C)** | **~90%** |
-| **MobileNetV2** | arch+**ReLU6✓**, RMSprop(ρ.9/μ.9/ε1.0), LR0.045, WD4e-5, **crop/flip-only + no mixup/SD/EMA (correct)**, **running-BN✓ (A)** | LR cosine→exp0.98 **(B)**, dropout0.2 **(C)**, LS0.1 vs paper-0 (minor) | **~90%** |
+| **EfficientNet-B0** | arch+SE+**Swish✓**, RMSprop(ρ.9/μ.9/ε1e-3), WD1e-5, AutoAugment, SD0.2, EMA, LS0.1, **running-BN✓ (A)** | ~~B~~ ~~C~~ both done; epochs 80→350 only | **~95%** |
+| **MobileNetV2** | arch+**ReLU6✓**, RMSprop(ρ.9/μ.9/ε1.0), LR0.045, WD4e-5, **crop/flip-only + no mixup/SD/EMA (correct)**, **running-BN✓ (A)** | ~~B~~ ~~C~~ both done; LS0.1-vs-0 (minor), epochs 90→300 | **~95%** |
 
 (r34 not re-audited; shares **A**, otherwise the classic ResNet recipe.)
 

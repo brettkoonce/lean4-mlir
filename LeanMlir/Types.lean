@@ -457,6 +457,18 @@ structure TrainConfig where
       extend the BN-threading to mbconv/basic/bottleneck blocks for the other
       convnets. See planning/jax_imagenet_sweep.md "Gap A". -/
   runningBN : Bool := false
+  /-- Exponential LR decay (gap B), the EfficientNet/MobileNet schedule: after
+      warmup, `lr = LR · rate^((epoch − warmup) / decayEpochs)`. 0 = off (use
+      cosine). EfficientNet: rate 0.97, decayEpochs 2.4; MobileNetV2: rate 0.98,
+      decayEpochs 1.0. Selected over cosine when `> 0`. -/
+  expLRDecayRate   : Float := 0.0
+  expLRDecayEpochs : Float := 1.0
+  /-- Classifier dropout (gap C): dropout rate applied before the final dense
+      head during training (inverted, scaled by 1/keep so eval is drop-free).
+      0 = off. EfficientNet-B0 / MobileNetV2 use 0.2. Threaded via the same
+      drop_key as stochastic depth; requires the running-BN `training` flag (or
+      drop_key≠None) to gate train-vs-eval. -/
+  dropout : Float := 0.0
   /-- Clip gradients by global L2 norm before the optimizer step. 0 = off.
       DeiT default 1.0 — essential for stable ViT-from-scratch training: it
       lets you use the proper ~1e-3 LR without the collapse-to-chance seen at

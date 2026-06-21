@@ -61,7 +61,10 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   rmspropDecay   := 0.9       -- ρ, the running mean-square decay
   rmspropEps     := 1e-3      -- EfficientNet uses ε=1e-3
   weightDecay    := 1e-5
-  cosineDecay    := true
+  cosineDecay      := false   -- replaced by the paper exp-decay schedule (gap B)
+  expLRDecayRate   := 0.97    -- EfficientNet: ×0.97 every 2.4 epochs (after warmup)
+  expLRDecayEpochs := 2.4
+  dropout          := 0.2     -- EfficientNet-B0 classifier dropout (gap C)
   warmupEpochs   := 5
   augment        := true
   useAutoAugment := true     -- full AutoAugment ImageNet policy (incl. geometric)
