@@ -26,6 +26,7 @@ private def autoAugmentPy : String :=
 # ════════════════════════════════════════════════════════════════
 
 _AA_MAX = 10.0
+_RA_INC = False   # timm inc1; overridden to True by the RandAugment(inc) emit
 
 def _aa_blend(a, b, f):  # a,b float32 HWC; returns uint8
     return tf.cast(tf.clip_by_value(a + f * (b - a), 0.0, 255.0), tf.uint8)
@@ -100,12 +101,15 @@ def _aa_sharpness(img, f):
     return tf.where(interior, res, img)   # keep original 1px border (PIL SMOOTH)
 
 # ---- op registry: name -> (fn, magnitude->arg, signed) ----
-def _aa_enh(m): return (m/_AA_MAX)*1.8 + 0.1
+# _RA_INC (timm inc1): higher magnitude = monotonically more distortion. Enhancement
+# ops center at 1.0 with a random sign; solarize/posterize flip direction. Default
+# False (standard RandAugment / AutoAugment mappings).
+def _aa_enh(m): return (1.0 + tf.where(tf.random.uniform([]) < 0.5, 1.0, -1.0) * (m/_AA_MAX)*0.9) if _RA_INC else ((m/_AA_MAX)*1.8 + 0.1)
 def _aa_she(m): return (m/_AA_MAX)*0.3
 def _aa_trn(m): return (m/_AA_MAX)*100.0
 def _aa_rot(m): return (m/_AA_MAX)*30.0
-def _aa_pos(m): return int((m/_AA_MAX)*4)
-def _aa_sol(m): return int((m/_AA_MAX)*256)
+def _aa_pos(m): return (int(4 - (m/_AA_MAX)*4) if _RA_INC else int((m/_AA_MAX)*4))
+def _aa_sol(m): return (int(256 - (m/_AA_MAX)*256) if _RA_INC else int((m/_AA_MAX)*256))
 
 _AA_OPS = {
   'ShearX': (_aa_shear_x,_aa_she,True), 'ShearY': (_aa_shear_y,_aa_she,True),
@@ -178,11 +182,12 @@ _RA_OPS = ['Identity','AutoContrast','Equalize','Rotate','Solarize','Color',
            'Posterize','Contrast','Brightness','Sharpness','ShearX','ShearY',
            'TranslateX','TranslateY']
 
-def _randaugment(img, n, m):
+def _randaugment(img, n, m, mstd=0.0):
     img = tf.cast(tf.clip_by_value(img, 0.0, 255.0), tf.uint8)
     for _ in range(n):
         k = tf.random.uniform([], 0, len(_RA_OPS), dtype=tf.int32)
-        branches = [(lambda nm=nm, x=img: _aa_apply_op(x, nm, m)) for nm in _RA_OPS]
+        mg = m if mstd <= 0.0 else tf.clip_by_value(tf.random.normal([], m, mstd), 0.0, _AA_MAX)
+        branches = [(lambda nm=nm, x=img, mv=mg: _aa_apply_op(x, nm, mv)) for nm in _RA_OPS]
         img = tf.switch_case(k, branches)
     return tf.cast(img, tf.float32)"
 
@@ -286,6 +291,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     -- geometric RandAugment sampler; emit it if either is on.
     (if cfg.useAutoAugment || (cfg.useRandAugment && cfg.randAugmentGeometric)
        then autoAugmentPy ++ "\n" else "") ++
+    (if cfg.randAugmentInc then "_RA_INC = True   # timm inc1 (gap D)\n\n" else "") ++
     (if cfg.useRandAugment && cfg.randAugmentGeometric then randAugmentPy ++ "\n" else "") ++
     "def _imagenet_decode_random_crop_flip(image_bytes):\n" ++
     "    shape = tf.io.extract_jpeg_shape(image_bytes)\n" ++
@@ -304,8 +310,8 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    img = tf.image.random_flip_left_right(img)\n" ++
     (if cfg.useAutoAugment then "    img = _autoaugment(img)\n" else "") ++
     (if cfg.useRandAugment && cfg.randAugmentGeometric then
-      -- Geometric RandAugment: N ops at magnitude M over the full color+geometric set.
-      "    img = _randaugment(img, " ++ toString cfg.randAugmentN ++ ", " ++ toString cfg.randAugmentM ++ ")\n"
+      -- Geometric RandAugment: N ops at magnitude M (mstd jitter via gap D) over the set.
+      "    img = _randaugment(img, " ++ toString cfg.randAugmentN ++ ", " ++ toString cfg.randAugmentM ++ ", " ++ toString cfg.randAugmentMstd ++ ")\n"
      else if cfg.useRandAugment then
       "    # RandAugment-lite: color subset (no geometric — set randAugmentGeometric for full RA).\n" ++
       "    # Magnitude M scales the jitter strength.\n" ++

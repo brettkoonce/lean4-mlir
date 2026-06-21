@@ -191,15 +191,17 @@ AdamW + aug-suite (LayerNorm, no BN); enet/mnv2/r34 use the classic BN-convnet r
   per-step `LR·rate^((epoch−warmup)/decayEpochs)` in the imagenet loop. enet ×0.97/2.4ep, mnv2 ×0.98/ep.
 - **C. Classifier dropout 0.2 — DONE (2026-06-21).** `dropout` field; inverted dropout before the
   head dense (eval drop-free), threaded via drop_key. enet+mnv2 set 0.2. GPU-validated (dropout live).
-- **D. RandAugment `mstd0.5`/`inc1`** — fixed-m9 only. Hits **vit + convnext**. ~½ day (see the
-  ViT spike block in `vit_imagenet.md`).
+- **D. RandAugment `mstd0.5`/`inc1` — DONE (2026-06-21).** `randAugmentMstd` (per-op magnitude
+  ~N(M,0.5) clip [0,10]) + `randAugmentInc` (`_RA_INC` gate: solarize/posterize flip to increasing,
+  enhancement centers at 1.0±sign). vit + convnext set both. Validated: inc mappings increasing,
+  mstd sampling runs in the TF pipeline. AutoAugment nets (enet) keep `_RA_INC` False.
 
 **Per net** (besides the trivial epochs / LR-value flips every net needs):
 
 | Net | Already faithful | Real gaps | ~faithful |
 |---|---|---|---|
-| **ViT-Ti** | arch, AdamW, cosine+warmup, full DeiT aug, SD 0.1, EMA | RepeatedAug (deferred), RandAug mstd/inc1 **(D)** | ~95% |
-| **ConvNeXt-T** | arch (DW7+chLN+invbtl+GELU+**LayerScale 1e-6 ✓**), AdamW WD0.05, LR4e-4@256, SD0.1, EMA, Mixup/CutMix/RErase, **no BN** | warmup 5→**20** (paper), stem convBn vs conv+LN (documented), RandAug mstd/inc1 **(D)** | ~90% |
+| **ViT-Ti** | arch, AdamW, cosine+warmup, full DeiT aug, SD 0.1, EMA | RepeatedAug (deferred only) | **~97%** |
+| **ConvNeXt-T** | arch (DW7+chLN+invbtl+GELU+**LayerScale 1e-6 ✓**), AdamW WD0.05, LR4e-4@256, SD0.1, EMA, Mixup/CutMix/RErase, **no BN** | warmup 5→**20** (paper), stem convBn vs conv+LN (documented) | **~93%** |
 | **EfficientNet-B0** | arch+SE+**Swish✓**, RMSprop(ρ.9/μ.9/ε1e-3), WD1e-5, AutoAugment, SD0.2, EMA, LS0.1, **running-BN✓ (A)** | ~~B~~ ~~C~~ both done; epochs 80→350 only | **~95%** |
 | **MobileNetV2** | arch+**ReLU6✓**, RMSprop(ρ.9/μ.9/ε1.0), LR0.045, WD4e-5, **crop/flip-only + no mixup/SD/EMA (correct)**, **running-BN✓ (A)** | ~~B~~ ~~C~~ both done; LS0.1-vs-0 (minor), epochs 90→300 | **~95%** |
 
@@ -209,9 +211,10 @@ AdamW + aug-suite (LayerNorm, no BN); enet/mnv2/r34 use the classic BN-convnet r
 modern AdamW+aug recipe is already supported (only warmup-epochs + the shared RandAug variant
 remain). The three BN convnets all bottleneck on **A (running-BN-stats)**; fixing it once unblocks
 enet + mnv2 + r34. Everything else is trivial config (epochs/LR/warmup) or the two moderate shared
-codegen items (**B** exp-LR, **C** dropout). **A (the one accuracy mover) is now DONE** — what's
-left (B/C/D) is sub-percent faithfulness polish; the real gains now come from the schedule length
-(epochs 80/90→300/350) and actually running the trainings.
+codegen items (**B** exp-LR, **C** dropout). **A/B/C/D are all DONE** — every cross-cutting faithfulness gap is closed. What remains is per-net
+trivia (epochs, convnext warmup 5→20 + stem, mnv2 LS, ViT RepeatedAug-deferred). The real gains now
+come from the schedule length (epochs 80/90→300/350) and actually running the trainings; distillation
+(DeiT⚗) is the only structural lever left.
 
 ### Gap A — running-BN: DONE for all 3 BN convnets, GPU-validated (2026-06-21)
 

@@ -48,6 +48,8 @@ def vitTinyImagenetConfig : TrainConfig where
   useRandAugment := true            -- full DeiT RandAugment (color + geometric, below)
   randAugmentGeometric := true      -- shear/rotate/translate via ImageProjectiveTransformV3
   randAugmentM   := 9.0
+  randAugmentMstd := 0.5            -- DeiT rand-m9-mstd0.5 (gap D)
+  randAugmentInc  := true           -- ...-inc1 increasing-severity mappings
   randomErasing  := true
   randomErasingProb := 0.25
   dropPath       := 0.1             -- DeiT-Ti stochastic depth (linear ramp 0→0.1 over blocks)

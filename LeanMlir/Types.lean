@@ -360,6 +360,14 @@ structure TrainConfig where
       is what ConvNeXt's recipe wants. Only meaningful when `useRandAugment` is
       on; leaving it false keeps the back-compat color-lite path (e.g. ViT). -/
   randAugmentGeometric : Bool := false
+  /-- DeiT/ConvNeXt RandAugment refinements (gap D), meaningful only with the
+      geometric sampler on. `randAugmentMstd` (timm `mstd`, DeiT uses 0.5) draws
+      each op's magnitude from N(M, mstd) clipped to [0,10] instead of a fixed M.
+      `randAugmentInc` (timm `inc1`) uses the increasing-severity magnitude→arg
+      mappings: solarize/posterize flip so higher M = more distortion, and the
+      enhancement ops center at 1.0 ± sign·scaled (random direction). -/
+  randAugmentMstd : Float := 0.0
+  randAugmentInc  : Bool  := false
   /-- AutoAugment, ImageNet learned policy (Cubuk et al. 2018) — the full 25
       sub-policies, applied per-image after crop/hflip on the imagenet (tfds)
       path. Unlike `useRandAugment` (color subset only), this includes the
