@@ -175,6 +175,68 @@ heavier geometric RA. Cheapest time lever if needed: drop EMA. CUDA-box cross-ch
 So the paper-faithful ViT re-run is staged and ready. Skip distillation (plain DeiT-Ti ~72%
 doesn't use it; only DeiT⚗ → 74.5%) and #3.
 
+## Paper-faithfulness deltas — per net (2026-06-21)
+
+Audit of each committed imagenet trainer vs its paper recipe. ViT/ConvNeXt use the modern
+AdamW + aug-suite (LayerNorm, no BN); enet/mnv2/r34 use the classic BN-convnet recipes.
+
+**Cross-cutting gaps (one fix → several nets):**
+- **A. Running-BN-stats at eval.** Phase-2 `conv_bn` computes true *batch* stats
+  (`axis=(0,2,3)`) but tracks NO running mean/var, so eval normalizes with the eval batch's
+  (per-shard) stats, not training running stats. Hits **enet + mnv2 + r34**; ConvNeXt and ViT
+  (both LayerNorm) are immune. ~½–1 day, **highest leverage — the only gap likely to move numbers**
+  (~0.5–1%). The phase-3 IREE path already has running stats; this is a phase-2-wide limitation.
+- **B. Exp-decay LR schedule** (paper: ×0.97/2.4ep enet, ×0.98/ep mnv2) — only cosine is wired.
+  Hits **enet + mnv2**. ~15–20 lines (new schedule kind in the per-step LR).
+- **C. Classifier dropout 0.2** — no dropout field/layer exists. Hits **enet + mnv2**. ~10–15
+  lines + an RNG-thread (the `drop_key` infra from stochastic depth is already there).
+- **D. RandAugment `mstd0.5`/`inc1`** — fixed-m9 only. Hits **vit + convnext**. ~½ day (see the
+  ViT spike block in `vit_imagenet.md`).
+
+**Per net** (besides the trivial epochs / LR-value flips every net needs):
+
+| Net | Already faithful | Real gaps | ~faithful |
+|---|---|---|---|
+| **ViT-Ti** | arch, AdamW, cosine+warmup, full DeiT aug, SD 0.1, EMA | RepeatedAug (deferred), RandAug mstd/inc1 **(D)** | ~95% |
+| **ConvNeXt-T** | arch (DW7+chLN+invbtl+GELU+**LayerScale 1e-6 ✓**), AdamW WD0.05, LR4e-4@256, SD0.1, EMA, Mixup/CutMix/RErase, **no BN** | warmup 5→**20** (paper), stem convBn vs conv+LN (documented), RandAug mstd/inc1 **(D)** | ~90% |
+| **EfficientNet-B0** | arch+SE+**Swish✓**, RMSprop(ρ.9/μ.9/ε1e-3), WD1e-5, AutoAugment, SD0.2, EMA, LS0.1 | LR cosine→exp **(B)**, dropout0.2 **(C)**, running-BN **(A)** | ~85% |
+| **MobileNetV2** | arch+**ReLU6✓**, RMSprop(ρ.9/μ.9/ε1.0), LR0.045, WD4e-5, **crop/flip-only + no mixup/SD/EMA (all correct for MNv2)** | LR cosine→exp0.98 **(B)**, dropout0.2 **(C)**, running-BN **(A)**, LS0.1 vs paper-0 (minor over-reg) | ~85% |
+
+(r34 not re-audited; shares **A**, otherwise the classic ResNet recipe.)
+
+**Takeaway:** ConvNeXt is the closest convnet to faithful — LayerNorm dodges **A**, and its
+modern AdamW+aug recipe is already supported (only warmup-epochs + the shared RandAug variant
+remain). The three BN convnets all bottleneck on **A (running-BN-stats)**; fixing it once unblocks
+enet + mnv2 + r34. Everything else is trivial config (epochs/LR/warmup) or the two moderate shared
+codegen items (**B** exp-LR, **C** dropout). Only **A** is an accuracy mover.
+
+### Gap A — running-BN: MNv2 DONE + GPU-validated (2026-06-21), enet/r34 pending
+
+Implemented, gated behind **`runningBN : Bool := false`** (off → every existing net byte-identical;
+verified ViT's `forward` is unchanged). The mechanism (de-risked first via `jax/scripts/poc_running_bn.py`)
+threads per-BN-layer running mean/var through `forward` as `has_aux`: `conv_bn`/`_bn` EMA-update the
+buffers (momentum 0.99) on batch stats during train and normalize with the running buffers at eval;
+`loss_fn`/`train_step` use `value_and_grad(has_aux=True)` (gradients hit params only); `eval_batch`
+runs `training=False`; the main loop inits `bn_state` via baked `_BN_CHANNELS` (PyTorch init 0/1) and
+threads it through train/eval + the `save_train_state` tuple (resume restores running stats too).
+
+**MNv2 wired + validated on gfx1100** (`jax/scripts/smoke_mnv2_runningbn_gpu.py`): 52 BN buffers
+(matches the full-net BN count — `_BN_CHANNELS` enumeration is exact), all EMA-updated + finite after
+6 steps, loss 6.94→3.05, and **eval(running) vs eval(batch) Δ=31.9** — the fix is genuinely live.
+`runningBN := true` is set in `MainMobilenetV2Imagenet.lean`.
+
+**Multi-GPU caveat RESOLVED (2026-06-21).** Validated on the 2× 7900 XTX box
+(`jax/scripts/smoke_mnv2_runningbn_sharded_gpu.py`): under `jit`+`NamedSharding` (GSPMD), a
+`jnp.mean` over the batch-sharded axis equals the single-device global mean to **4.66e-10** — XLA
+inserts the cross-device all-reduce, so BN stats are **global, not per-shard**. MNv2 trains cleanly
+across 2 GPUs (loss 7.006→3.846, BN buffers finite); 1-GPU vs 2-GPU running stats match at 8e-4
+(params differ 6e-2, pure bf16 conv reassociation). The README's "BN diverged under sharding" note
+was a `pmap`-era artifact and does not apply to the GSPMD path.
+
+Remaining: **enet** (thread the inline BN in `mbconv_block` + SE) and **r34** (`basic/bottleneck_block`)
+— same pattern, just more block helpers; then flip their `runningBN`. Est. ~2-4 hr each now that MNv2
+is the template and the sharding question is settled.
+
 ## Environment / version pinning
 
 - **No lockfile existed** — the JAX stack lived only in the gitignored `.venv`. Captured this

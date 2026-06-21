@@ -15,6 +15,53 @@ a *legit* accuracy run), and measured time estimates. Written 2026-05-30.
   the ~72% ViT-Tiny is capable of. The fixes needed are gradient clipping
   + the DeiT augmentation suite (both codegen work).
 
+## UPDATE 2026-06-21b — lossless suspend/resume + supervisor rewire + faithfulness spikes
+
+Follow-on to the 06-21 paper-faithful landing below. Two things shipped (committed `1e60884`
++ uncommitted hardening/supervisor) and two scoped.
+
+**Lossless suspend/resume (codegen).** A segmented run (train N epochs → stop → resume) now
+continues *bit-for-bit*, not just weight-wise. The imagenet trainer emits
+`save_train_state`/`load_train_state` that flatten `(params, opt_state, ema)` + global step
+into one optimizer-agnostic `.npz`; new env var **`LEAN_MLIR_RESUME`** restores all of it
+(the old `LEAN_MLIR_INIT_LOAD`/`START_STEP` path restored weights only → Adam m/v and the EMA
+shadow reset on every restart). Per-epoch + final checkpoints now also write `_e{N}.state.npz`.
+- **Atomic**: writes `.tmp` then `os.replace` (a crash mid-save can't corrupt the file; the
+  open-file-object avoids np.savez's `.npz` auto-append).
+- **Keep-last-3**: `_prune_state_ckpts` retains the newest `LEAN_MLIR_KEEP_STATE` (default 3)
+  `.state.npz` — each is ~4× the weights (~91 MB for ViT-Ti), so every-epoch checkpointing
+  would otherwise pile up ~27 GB over 300ep; now bounded to ~273 MB.
+- Proven on gfx1100 by `jax/scripts/smoke_vit_resume_gpu.py`: restore exact (params/Adam
+  m,v,t/EMA all max|Δ|=0) AND a continuation step is bit-for-bit identical to an uninterrupted
+  run (if Adam/EMA were lost it would diverge). Plus a keep-last-3 prune unit test.
+
+**Supervisor rewired** (`scripts/supervise_vit_80ep.sh`): now resumes from the newest
+`_e{N}.state.npz` via `LEAN_MLIR_RESUME` (lossless AER crash-recovery, no more START_STEP math);
+defaults to ROCm (`HIP_VISIBLE_DEVICES=0,1` + librccl `LD_PRELOAD`) with a `BACKEND=cuda` toggle
+for ares; paths derived from `$0` (the old hardcoded checkout path was dead); schedule-agnostic
+(stops on `Done.`). Filename still says 80ep but the committed config is 300ep.
+
+**Segmented workflow:**
+```
+LEAN_MLIR_PARAMS_OUT=ckpt/vit LEAN_MLIR_CKPT_EVERY=30 <run>     # writes ckpt/vit_e30.state.npz; kill after it lands
+LEAN_MLIR_RESUME=ckpt/vit_e30.state.npz \
+LEAN_MLIR_PARAMS_OUT=ckpt/vit LEAN_MLIR_CKPT_EVERY=30 <run>     # lossless resume; .npz carries the step
+```
+
+**Remaining DeiT-Ti faithfulness gaps (spiked, both ~½ day, both <0.5% at Ti):**
+1. **Repeated Augmentation (3-repeat)** — insert `flat_map(repeat 3)` before `_pp` in
+   `build_imagenet_iter` (+ a shuffle so copies spread) + a `repeatedAug` config field. ~15-25
+   lines. Risk = **throughput**: 3× CPU decode+RandAug, and ViT-Ti is near input-bound; could
+   flip compute-bound→input-bound (needs a measured check + pipeline tuning). tfds streaming
+   can't do timm's true index-level RASampler — it's a close approximation.
+2. **RandAugment variant `mstd0.5`+`inc1`** — `mstd` (per-op magnitude ~N(m,0.5), clip [0,10])
+   is ~½ hr trivial; `inc1` is a ~2-3 hr audit of the 6 magnitude→arg fns vs timm's
+   `_RAND_INCREASING_TRANSFORMS` (flip `_aa_sol`/`_aa_pos` direction, center `_aa_enh` at 1.0±;
+   the registry already carries a `signed` flag). Risk = faithfulness drift, not breakage.
+
+Neither moves accuracy much (<1% combined). The real lever above ~72% remains **distillation**
+(~+2.3%, separate build: distillation token + frozen convnet teacher + dual-head hard-distill).
+
 ## UPDATE 2026-06-21 — paper-faithful DeiT-Ti recipe LANDED + GPU perf measured
 
 The one remaining codegen item (stochastic depth in `transformer_block`) and the two config
