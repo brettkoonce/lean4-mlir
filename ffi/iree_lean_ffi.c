@@ -8,6 +8,7 @@
 #include <lean/lean.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include "iree_ffi.h"
 
 // ---- External class for IreeSession ----
@@ -1025,6 +1026,32 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v(
     int rank = sp[sp_idx++]; int64_t sz = 1;
     for (int d = 0; d < rank; d++) sz *= sp[sp_idx++];
     out_totals[i] = sz; outputs[i] = out + off; off += sz;
+  }
+
+  // ---- Optional input dump for hang isolation (env IREE_DUMP_STEP=N) ----
+  // Writes the EXACT bytes IREE receives at the N-th invocation of this
+  // function, so they can be replayed standalone (FFI-vs-pure-IREE split).
+  {
+    static int g_call_idx = -1;
+    static int g_dump_at = -2;  // -2 unread, -1 disabled
+    if (g_dump_at == -2) {
+      const char* e = getenv("IREE_DUMP_STEP");
+      g_dump_at = e ? atoi(e) : -1;
+    }
+    g_call_idx++;
+    if (g_dump_at >= 0 && g_call_idx == g_dump_at) {
+      FILE* fm = fopen("/tmp/dump_meta.txt", "w");
+      if (fm) { fprintf(fm, "batch=%zu d0=%zu d3=%zu n_params=%d n_total=%lld\n",
+                        batch, d0, d3, n_params, (long long)n_total); fclose(fm); }
+      FILE* fx = fopen("/tmp/dump_x.bin", "wb");
+      if (fx) { fwrite(in_data[0], sizeof(float), (size_t)batch * d0, fx); fclose(fx); }
+      FILE* fp = fopen("/tmp/dump_params.bin", "wb");
+      if (fp) { fwrite(pf, sizeof(float), (size_t)n_total, fp); fclose(fp); }
+      FILE* fy = fopen("/tmp/dump_y.bin", "wb");
+      if (fy) { fwrite(y, sizeof(int32_t), batch, fy); fclose(fy); }
+      fprintf(stderr, "[DUMP] wrote step %d inputs (batch=%zu n_total=%lld) to /tmp/dump_*\n",
+              g_call_idx, batch, (long long)n_total); fflush(stderr);
+    }
   }
 
   int rc = iree_ffi_invoke_f32(sess, fn_name,

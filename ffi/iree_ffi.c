@@ -182,14 +182,23 @@ int iree_ffi_invoke_f32(
   if (!iree_status_is_ok(status)) { print_status("push_input", status);
     iree_runtime_call_deinitialize(&call); return 2; }
 
+  // Granular hang-isolation trace (env IREE_FFI_TRACE=1).
+  static int s_trace = -1;
+  if (s_trace < 0) { const char* e = getenv("IREE_FFI_TRACE"); s_trace = (e && atoi(e)) ? 1 : 0; }
+  static int s_invoke_idx = -1;
+  s_invoke_idx++;
+  if (s_trace) { fprintf(stderr, "[FFI] invoke #%d: before call_invoke\n", s_invoke_idx); fflush(stderr); }
+
   // Invoke.
   status = iree_runtime_call_invoke(&call, 0);
   if (!iree_status_is_ok(status)) { print_status("invoke", status);
     iree_runtime_call_deinitialize(&call); return 3; }
+  if (s_trace) { fprintf(stderr, "[FFI] invoke #%d: call_invoke returned; popping %d outputs\n", s_invoke_idx, n_outputs); fflush(stderr); }
 
   // Pop outputs.
   for (int i = 0; i < n_outputs && iree_status_is_ok(status); i++) {
     status = pop_output_f32(&call, sess->device, output_totals[i], output_data[i]);
+    if (s_trace && (i < 2 || i == n_outputs - 1)) { fprintf(stderr, "[FFI] invoke #%d: popped output %d\n", s_invoke_idx, i); fflush(stderr); }
   }
   if (!iree_status_is_ok(status)) { print_status("pop_output", status);
     iree_runtime_call_deinitialize(&call); return 4; }
