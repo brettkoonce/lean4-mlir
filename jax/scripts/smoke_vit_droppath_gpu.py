@@ -23,8 +23,9 @@ spec = importlib.util.spec_from_file_location("vit_gen", GEN)
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
-print("devices:", jax.devices())
-assert "rocm" in str(jax.devices()[0]).lower(), "not on a ROCm device!"
+print("devices:", jax.devices(), "| kind:", jax.devices()[0].device_kind)
+# Works on both ROCm and CUDA: jax reports platform 'gpu' for either.
+assert jax.devices()[0].platform == "gpu", f"not on a GPU: {jax.devices()[0]}"
 
 B = 8
 key = random.PRNGKey(0)
