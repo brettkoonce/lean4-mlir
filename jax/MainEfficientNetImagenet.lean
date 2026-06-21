@@ -70,6 +70,7 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   bf16Conv       := true    -- now reaches the MBConv expand/depthwise/project
   useEMA         := true     -- weight averaging (decay 0.9999) — eval + ckpt use it
   dropPath       := 0.2      -- stochastic depth, EfficientNet-B0 drop-connect rate
+  runningBN      := true     -- paper-faithful eval (gap A): running BN stats, not eval-batch stats
 
 #eval efficientNetB0Imagenet.validate!
 

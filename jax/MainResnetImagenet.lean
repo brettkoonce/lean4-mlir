@@ -45,6 +45,7 @@ def resnet34ImagenetConfig : TrainConfig where
   -- set bf16Conv := false (bf16 conv is slower there); see reference_ares_pcie_aer.
   bf16           := true
   bf16Conv       := true
+  runningBN      := true    -- paper-faithful eval (gap A): running BN stats, not eval-batch stats
 
 #eval resnet34Imagenet.validate!
 

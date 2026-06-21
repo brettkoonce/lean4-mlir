@@ -181,7 +181,8 @@ Audit of each committed imagenet trainer vs its paper recipe. ViT/ConvNeXt use t
 AdamW + aug-suite (LayerNorm, no BN); enet/mnv2/r34 use the classic BN-convnet recipes.
 
 **Cross-cutting gaps (one fix → several nets):**
-- **A. Running-BN-stats at eval.** Phase-2 `conv_bn` computes true *batch* stats
+- **A. Running-BN-stats at eval — DONE (2026-06-21, gated `runningBN`, GPU-validated mnv2/enet/r34).**
+  Phase-2 `conv_bn` computes true *batch* stats
   (`axis=(0,2,3)`) but tracks NO running mean/var, so eval normalizes with the eval batch's
   (per-shard) stats, not training running stats. Hits **enet + mnv2 + r34**; ConvNeXt and ViT
   (both LayerNorm) are immune. ~½–1 day, **highest leverage — the only gap likely to move numbers**
@@ -199,8 +200,8 @@ AdamW + aug-suite (LayerNorm, no BN); enet/mnv2/r34 use the classic BN-convnet r
 |---|---|---|---|
 | **ViT-Ti** | arch, AdamW, cosine+warmup, full DeiT aug, SD 0.1, EMA | RepeatedAug (deferred), RandAug mstd/inc1 **(D)** | ~95% |
 | **ConvNeXt-T** | arch (DW7+chLN+invbtl+GELU+**LayerScale 1e-6 ✓**), AdamW WD0.05, LR4e-4@256, SD0.1, EMA, Mixup/CutMix/RErase, **no BN** | warmup 5→**20** (paper), stem convBn vs conv+LN (documented), RandAug mstd/inc1 **(D)** | ~90% |
-| **EfficientNet-B0** | arch+SE+**Swish✓**, RMSprop(ρ.9/μ.9/ε1e-3), WD1e-5, AutoAugment, SD0.2, EMA, LS0.1 | LR cosine→exp **(B)**, dropout0.2 **(C)**, running-BN **(A)** | ~85% |
-| **MobileNetV2** | arch+**ReLU6✓**, RMSprop(ρ.9/μ.9/ε1.0), LR0.045, WD4e-5, **crop/flip-only + no mixup/SD/EMA (all correct for MNv2)** | LR cosine→exp0.98 **(B)**, dropout0.2 **(C)**, running-BN **(A)**, LS0.1 vs paper-0 (minor over-reg) | ~85% |
+| **EfficientNet-B0** | arch+SE+**Swish✓**, RMSprop(ρ.9/μ.9/ε1e-3), WD1e-5, AutoAugment, SD0.2, EMA, LS0.1, **running-BN✓ (A)** | LR cosine→exp **(B)**, dropout0.2 **(C)** | **~90%** |
+| **MobileNetV2** | arch+**ReLU6✓**, RMSprop(ρ.9/μ.9/ε1.0), LR0.045, WD4e-5, **crop/flip-only + no mixup/SD/EMA (correct)**, **running-BN✓ (A)** | LR cosine→exp0.98 **(B)**, dropout0.2 **(C)**, LS0.1 vs paper-0 (minor) | **~90%** |
 
 (r34 not re-audited; shares **A**, otherwise the classic ResNet recipe.)
 
@@ -208,9 +209,21 @@ AdamW + aug-suite (LayerNorm, no BN); enet/mnv2/r34 use the classic BN-convnet r
 modern AdamW+aug recipe is already supported (only warmup-epochs + the shared RandAug variant
 remain). The three BN convnets all bottleneck on **A (running-BN-stats)**; fixing it once unblocks
 enet + mnv2 + r34. Everything else is trivial config (epochs/LR/warmup) or the two moderate shared
-codegen items (**B** exp-LR, **C** dropout). Only **A** is an accuracy mover.
+codegen items (**B** exp-LR, **C** dropout). **A (the one accuracy mover) is now DONE** — what's
+left (B/C/D) is sub-percent faithfulness polish; the real gains now come from the schedule length
+(epochs 80/90→300/350) and actually running the trainings.
 
-### Gap A — running-BN: MNv2 DONE + GPU-validated (2026-06-21), enet/r34 pending
+### Gap A — running-BN: DONE for all 3 BN convnets, GPU-validated (2026-06-21)
+
+**Rollout complete: MNv2 + EfficientNet-B0 + ResNet-34** all wired and GPU-validated on gfx1100,
+each gated behind `runningBN := true`. BN-layer counts come out exact (the `_BN_CHANNELS`
+enumeration matches forward order): **MNv2 52, enet 49, r34 36**. Each trains, EMA-updates its
+buffers, and eval(running) ≠ eval(batch). enet threads BN alongside stochastic depth in
+`mbconv_block` (SE has no BN); r34's `basic_block`/`basic_block_down` thread the (out,new) `conv_bn`.
+ViT/ConvNeXt need no change (LayerNorm). The MNv2-era detail below (single-net writeup) generalised
+cleanly; ConvNeXt-stem convBn stays batch-stat (it's one minor layer, LN net otherwise).
+
+(original MNv2 writeup ↓)
 
 Implemented, gated behind **`runningBN : Bool := false`** (off → every existing net byte-identical;
 verified ViT's `forward` is unchanged). The mechanism (de-risked first via `jax/scripts/poc_running_bn.py`)
@@ -233,9 +246,11 @@ across 2 GPUs (loss 7.006→3.846, BN buffers finite); 1-GPU vs 2-GPU running st
 (params differ 6e-2, pure bf16 conv reassociation). The README's "BN diverged under sharding" note
 was a `pmap`-era artifact and does not apply to the GSPMD path.
 
-Remaining: **enet** (thread the inline BN in `mbconv_block` + SE) and **r34** (`basic/bottleneck_block`)
-— same pattern, just more block helpers; then flip their `runningBN`. Est. ~2-4 hr each now that MNv2
-is the template and the sharding question is settled.
+Done across all three (2026-06-21): enet's `mbconv_block` (inline BN + stochastic depth) and r34's
+`basic_block`/`basic_block_down` (conv_bn-call threading) both landed + GPU-validated, same as MNv2.
+Remaining for full A: flip the trivial config gaps (B exp-LR schedule, C classifier dropout) and run
+the real trainings to measure the accuracy gain. r50 (`bottleneck_block`) is the only un-threaded BN
+block helper left, a copy of the basic_block pattern when wanted.
 
 ## Environment / version pinning
 

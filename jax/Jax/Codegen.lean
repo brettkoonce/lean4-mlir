@@ -401,6 +401,15 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         | .invertedResidual ic oc expand _ n =>
           let blk (inc : Nat) := if expand != 1 then [inc*expand, inc*expand, oc] else [inc, oc]
           (blk ic) ++ (List.range (n-1)).flatMap (fun _ => blk oc)
+        | .mbConv ic oc expand _ _ n _ =>
+          -- expand/depthwise/project BN (SE has none); same shape as invres
+          let blk (inc : Nat) := if expand != 1 then [inc*expand, inc*expand, oc] else [inc, oc]
+          (blk ic) ++ (List.range (n-1)).flatMap (fun _ => blk oc)
+        | .residualBlock ic oc n fs =>
+          -- basic_block_down (conv1, conv2, shortcut) on the first block when channels
+          -- change, else basic_block (conv1, conv2); all BN are `oc`-wide.
+          let b0 := if !(ic == oc && fs == 1) then [oc, oc, oc] else [oc, oc]
+          b0 ++ (List.range (n-1)).flatMap (fun _ => [oc, oc])
         | _ => [])).map toString
       code := code ++
         "def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=0.99):\n" ++
@@ -433,7 +442,22 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    return x * gamma.reshape(1, -1, 1, 1) + beta.reshape(1, -1, 1, 1)\n\n"
-  if spec.hasResidual then
+  if spec.hasResidual && cfg.runningBN then
+    -- Running-BN variant: blocks call the (out, new) conv_bn and thread bn[bn_start..],
+    -- returning (x, new_bn_entries) in conv_bn-call order.
+    code := code ++
+      "def basic_block(params, x, idx, bn, bn_start, training):\n" ++
+      "    out, n0 = conv_bn(x, params[idx][0], params[idx][1], params[idx][2], bn[bn_start], training)\n" ++
+      "    out = jax.nn.relu(out)\n" ++
+      "    out, n1 = conv_bn(out, params[idx+1][0], params[idx+1][1], params[idx+1][2], bn[bn_start+1], training)\n" ++
+      "    return jax.nn.relu(out + x), [n0, n1]\n\n" ++
+      "def basic_block_down(params, x, idx, stride, bn, bn_start, training):\n" ++
+      "    out, n0 = conv_bn(x, params[idx][0], params[idx][1], params[idx][2], bn[bn_start], training, stride=(stride,stride))\n" ++
+      "    out = jax.nn.relu(out)\n" ++
+      "    out, n1 = conv_bn(out, params[idx+1][0], params[idx+1][1], params[idx+1][2], bn[bn_start+1], training)\n" ++
+      "    shortcut, n2 = conv_bn(x, params[idx+2][0], params[idx+2][1], params[idx+2][2], bn[bn_start+2], training, stride=(stride,stride))\n" ++
+      "    return jax.nn.relu(out + shortcut), [n0, n1, n2]\n\n"
+  else if spec.hasResidual then
     code := code ++
       "def basic_block(params, x, idx):\n" ++
       "    out = conv_bn(x, params[idx][0], params[idx][1], params[idx][2])\n" ++
@@ -548,7 +572,43 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    return x * jnp.minimum(jax.nn.relu(x + 3.0), 6.0) / 6.0\n\n" ++
       "def hard_sigmoid(x):\n" ++
       "    return jnp.minimum(jax.nn.relu(x + 3.0), 6.0) / 6.0\n\n"
-  if spec.hasMbConv then
+  if spec.hasMbConv && cfg.runningBN then
+    -- Running-BN variant: threads bn[bn_start..] through the 3 inline BNs (expand,
+    -- depthwise, project) via _bn; SE has no BN. Keeps stochastic depth. Returns
+    -- (x, new_bn_entries).
+    code := code ++
+      "def mbconv_block(params, x, idx, stride, expand, ksize, use_se, bn, bn_start, training, drop_key=None, keep_prob=1.0):\n" ++
+      "    residual = x\n" ++
+      "    i = idx; bi = bn_start; out = []\n" ++
+      "    if expand > 1:\n" ++
+      "        x = jax.lax.conv_general_dilated(convdt(x), convdt(params[i][0]), (1,1), 'SAME',\n" ++
+      "              dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
+      "        x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
+      "        x = swish(x); i += 1\n" ++
+      "    pad = ((ksize - 1) // 2, (ksize - 1) // 2)\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(params[i][0]), (stride,stride), (pad,pad),\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'),\n" ++
+      "          feature_group_count=x.shape[1]).astype(jnp.float32)\n" ++
+      "    x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
+      "    x = swish(x); i += 1\n" ++
+      "    if use_se:\n" ++
+      "        se = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
+      "        se = jax.lax.conv_general_dilated(se, params[i][0], (1,1), 'SAME',\n" ++
+      "              dimension_numbers=('NCHW', 'OIHW', 'NCHW')) + params[i][1].reshape(1, -1, 1, 1)\n" ++
+      "        se = swish(se); i += 1\n" ++
+      "        se = jax.lax.conv_general_dilated(se, params[i][0], (1,1), 'SAME',\n" ++
+      "              dimension_numbers=('NCHW', 'OIHW', 'NCHW')) + params[i][1].reshape(1, -1, 1, 1)\n" ++
+      "        x = x * jax.nn.sigmoid(se); i += 1\n" ++
+      "    x = jax.lax.conv_general_dilated(convdt(x), convdt(params[i][0]), (1,1), 'SAME',\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
+      "    x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns)\n" ++
+      "    if residual.shape == x.shape and stride == 1:\n" ++
+      "        if drop_key is not None and keep_prob < 1.0:\n" ++
+      "            keep = jax.random.bernoulli(drop_key, keep_prob).astype(x.dtype)\n" ++
+      "            x = x * keep / keep_prob\n" ++
+      "        x = x + residual\n" ++
+      "    return x, out\n\n"
+  else if spec.hasMbConv then
     code := code ++
       "def mbconv_block(params, x, idx, stride, expand, ksize, use_se, drop_key=None, keep_prob=1.0):\n" ++
       "    \"\"\"MBConv: expand → depthwise → SE → project, with Swish.\"\"\"\n" ++
@@ -1604,14 +1664,17 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       pidx := pidx + 1
     | .residualBlock ic oc n fs =>
       let needsProj := !(ic == oc && fs == 1)
+      let bnArgs := if cfg.runningBN then ", bn, bn_i, training" else ""
+      let bnAcc := if cfg.runningBN then "    bn_out.extend(_ne); bn_i += len(_ne)\n" else ""
+      let lhs := if cfg.runningBN then "    x, _ne = " else "    x = "
       if needsProj then
-        code := code ++ "    x = basic_block_down(params, x, " ++ toString pidx ++ ", " ++ toString fs ++ ")\n"
+        code := code ++ lhs ++ "basic_block_down(params, x, " ++ toString pidx ++ ", " ++ toString fs ++ bnArgs ++ ")\n" ++ bnAcc
         pidx := pidx + 3
       else
-        code := code ++ "    x = basic_block(params, x, " ++ toString pidx ++ ")\n"
+        code := code ++ lhs ++ "basic_block(params, x, " ++ toString pidx ++ bnArgs ++ ")\n" ++ bnAcc
         pidx := pidx + 2
       for _ in List.range (n - 1) do
-        code := code ++ "    x = basic_block(params, x, " ++ toString pidx ++ ")\n"
+        code := code ++ lhs ++ "basic_block(params, x, " ++ toString pidx ++ bnArgs ++ ")\n" ++ bnAcc
         pidx := pidx + 2
     | .bottleneckBlock ic oc n fs =>
       let needsProj := !(ic == oc && fs == 1)
@@ -1636,29 +1699,20 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         (if blockExpand != 1 then 1 else 0) + 1 + (if se then 2 else 0) + 1
       let seArg := if useSE then "True" else "False"
       let denom := Float.ofNat (Nat.max 1 (totalDrop - 1))
-      -- First block (may carry stride / channel change).
-      if cfg.dropPath > 0 then
-        let keep := 1.0 - cfg.dropPath * Float.ofNat dbi / denom
-        code := code ++ "    x = mbconv_block(params, x, " ++ toString pidx ++ ", " ++
-          toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++
-          seArg ++ ", dpkeys[" ++ toString dbi ++ "], " ++ toString keep ++ ")\n"
-        dbi := dbi + 1
-      else
-        code := code ++ "    x = mbconv_block(params, x, " ++ toString pidx ++ ", " ++
-          toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++
-          seArg ++ ")\n"
-      pidx := pidx + nPerBlock expand useSE
-      for _ in List.range (n - 1) do
-        if cfg.dropPath > 0 then
-          let keep := 1.0 - cfg.dropPath * Float.ofNat dbi / denom
-          code := code ++ "    x = mbconv_block(params, x, " ++ toString pidx ++ ", 1, " ++
-            toString expand ++ ", " ++ toString kSize ++ ", " ++
-            seArg ++ ", dpkeys[" ++ toString dbi ++ "], " ++ toString keep ++ ")\n"
-          dbi := dbi + 1
-        else
-          code := code ++ "    x = mbconv_block(params, x, " ++ toString pidx ++ ", 1, " ++
-            toString expand ++ ", " ++ toString kSize ++ ", " ++
-            seArg ++ ")\n"
+      let bnArgs := if cfg.runningBN then ", bn, bn_i, training" else ""
+      let bnAcc := if cfg.runningBN then "    bn_out.extend(_ne); bn_i += len(_ne)\n" else ""
+      let lhs := if cfg.runningBN then "    x, _ne = " else "    x = "
+      -- First block (may carry stride / channel change), then n-1 stride-1 blocks.
+      for bIdx in List.range n do
+        let st := if bIdx == 0 then toString stride else "1"
+        let dropArgs := if cfg.dropPath > 0 then
+            ", dpkeys[" ++ toString dbi ++ "], " ++
+            toString (1.0 - cfg.dropPath * Float.ofNat dbi / denom)
+          else ""
+        code := code ++ lhs ++ "mbconv_block(params, x, " ++ toString pidx ++ ", " ++
+          st ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++
+          seArg ++ bnArgs ++ dropArgs ++ ")\n" ++ bnAcc
+        if cfg.dropPath > 0 then dbi := dbi + 1
         pidx := pidx + nPerBlock expand useSE
     | .invertedResidual ic oc expand stride n =>
       let nParamsPerBlock (hasExpand : Bool) := (if hasExpand then 1 else 0) + 1 + 1  -- expand? + dw + proj
