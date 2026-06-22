@@ -37,7 +37,44 @@ at a fixed, fair 300-epoch schedule.
 No `Codegen.lean` changes needed (unlike the ViT stochastic-depth item) — *unless*
 we want stochastic depth (see open questions).
 
-## Recipe (300ep, modern SGD — "Bag of Tricks"/RSB-flavored)
+## TARGET: literal RSB-A2 (chosen 2026-06-22)
+
+Decision: reproduce the **actual timm RSB-A2 recipe** (Wightman et al. 2021, 300ep → **79.8%**),
+not the SGD "Bag of Tricks" approximation below. RSB-A2 is *the* recognizable modern ResNet-50
+baseline and an honest one to put in the book — worth the new code. The SGD recipe in the next
+section becomes the fallback / fair-comparison point (and is near-free given what's landed).
+
+**RSB-A2 spec:** LAMB optimizer, lr 5e-3 @ batch 2048 (scaled), 300ep, 5ep warmup + cosine, WD 0.02,
+**BCE loss** (multi-hot targets, no label smoothing), Mixup 0.1 + CutMix 1.0, RandAugment m7/mstd0.5,
+**Repeated Augmentation (3×)**, stochastic depth 0.05, bf16, test crop ratio 0.95.
+
+**Gap to RSB-A2** (vs everything landed through 2026-06-22):
+
+*Config-only / exists:* bottleneck arch (proven in `MainResnet50.lean`), `.imagenet` path, the aug
+pack incl. RandAugment **mstd/inc1** (gap D), grad-clip, EMA, cosine+warmup, plus the new
+`MainResnet50Imagenet.lean` (config merge, no codegen — see "Code delta" above). RSB knobs (RA m7,
+mixup 0.1, WD 0.02) are one-liners.
+
+*Mechanical (mirror the gap-A / stochastic-depth threading just done for basic_block):*
+- **Bottleneck running-BN** — gap A is wired for `basic_block` (r34) but NOT `bottleneck_block`
+  (the only un-threaded BN block helper left). ~2–3 hr, same pattern.
+- **Bottleneck stochastic depth** — `dropPath` exists but isn't threaded into `bottleneck_block`
+  (only conv/mbconv/convnext). ~couple hr.
+
+*Genuinely new — the RSB-A2 signature, ~2–3 days total with the above:*
+1. **LAMB optimizer** — A2's defining optimizer; repo has only sgd/adam/rmsprop. New
+   `OptimizerKind.lamb` + the layer-wise trust-ratio update + state. ~½ day (biggest piece).
+2. **BCE loss** — binary cross-entropy over multi-hot mixup/cutmix targets (RSB showed BCE > CE
+   for this recipe). New `LossKind.bce` (current: classCE/softLabelCE/perPixelCE). ~2–3 hr.
+3. **Repeated Augmentation (3×)** — still unimplemented (the deferred ViT-spike gap); data-pipeline
+   change + throughput risk. ~½ day. **Double-counts**: it also unlocks faithful DeiT-Ti (ViT's one
+   remaining gap), so build it once for both.
+
+So: literal RSB-A2 = **3 new features (LAMB, BCE, repeated-aug) + bottleneck running-BN/SD threading
++ the new Main**. Everything else rode in on the gap-A–D work. Compute below (~60–65 hr) is unchanged;
+LAMB at batch 2048 may shift the per-step cost — measure first 400 steps.
+
+## Recipe (300ep, modern SGD — "Bag of Tricks"/RSB-flavored) — FALLBACK / comparison point
 
 Reference points: RSB-A2 (Wightman et al. 2021, 300ep, LAMB) hits 79.8%; "Bag of
 Tricks" (He et al. 2018, 120ep, SGD) hits ~79.3% for ResNet-50-D. We have SGD, not
