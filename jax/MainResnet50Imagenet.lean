@@ -74,11 +74,28 @@ def resnet50ImagenetConfig : TrainConfig where
 
 #eval resnet50Imagenet.validate!
 
-/-- Quick validation subrun: identical RSB-A2 recipe at a 50-epoch tier (enough
-    to confirm the curve climbs before committing the ~60-65 hr 300-ep run).
+/-- The short / validation tier is the **literal RSB-A3** (timm "ResNet Strikes
+    Back" A3, the 100-epoch tier) → **78.1% top-1** — a faithful, far cheaper
+    validation than truncating A2. Same LAMB + BCE core, but: 100 epochs, **train
+    @160 / test @224 (crop 0.95)** — the resolution split is ~2× faster/step, so A3
+    is ~6× cheaper than the 300-ep A2 (~10-11 hr on ares vs ~60-65 hr).
+
+    Deltas vs A2 (decoded from timm's a3 args
+    `lamb-cosine-lr0.008-wd0.02-n0-rand-m6-mstd0.5-inc1-m0.1-sd0.0-d0.0-ls0.0-100`):
+    lr 8e-3@2048 → 0.002@512, RandAugment m7→m6, NO repeated-aug (n0), NO stochastic
+    depth (sd0.0), NO model-EMA, 100 ep, 160/224 split. Mixup 0.1 / CutMix 1.0,
+    wd 0.02, BCE, geo-RA mstd0.5-inc1 all carry over from A2.
     Selected with `LEAN_MLIR_SHORT=1`; writes a separate `_short.py`. -/
 def resnet50ImagenetConfigShort : TrainConfig :=
-  { resnet50ImagenetConfig with epochs := 50 }
+  { resnet50ImagenetConfig with
+      learningRate  := 0.002    -- RSB-A3 lr 8e-3 @ batch 2048, linear-scaled to 512
+      epochs        := 100
+      randAugmentM  := 6.0      -- A3 rand-m6 (A2 is m7)
+      repeatedAug   := 1        -- A3: no repeated augmentation (n0)
+      dropPath      := 0.0      -- A3: no stochastic depth (sd0.0)
+      useEMA        := false    -- A3: no model EMA
+      trainRes      := 160      -- A3: train @160×160
+      testCropRatio := 0.95 }   -- A3: eval @224, center-crop ratio 0.95
 
 def main (args : List String) : IO Unit := do
   let short := (← IO.getEnv "LEAN_MLIR_SHORT").isSome

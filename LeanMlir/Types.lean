@@ -405,6 +405,15 @@ structure TrainConfig where
       is unchanged, so an epoch sees ~1/K as many unique images ×K views, per
       the RSB recipe. 1 disables. -/
   repeatedAug    : Nat   := 1
+  /-- Train/test resolution split (RSB-A3): TRAIN at `trainRes`×`trainRes`, EVAL at
+      the spec's `imageH/imageW`. 0 = no split (train and eval same resolution). The
+      generated `forward` infers the square resolution from the flat input length, so
+      the conv stack + global-avg-pool run at either size (A3 trains @160, tests @224
+      → ~2× cheaper per step). imagenet (tfds) path only. -/
+  trainRes       : Nat   := 0
+  /-- Explicit test-time center-crop ratio (RSB-A3 uses 0.95). 0 = the default
+      `_IMG_SIZE/(_IMG_SIZE+32)` ≈ 0.875 ratio. imagenet (tfds) path only. -/
+  testCropRatio  : Float := 0.0
   /-- Stochastic depth (Huang et al. 2016): drop each residual block's
       branch with a probability that ramps linearly from 0 to `dropPath`
       across the network's residual blocks; surviving branches are scaled

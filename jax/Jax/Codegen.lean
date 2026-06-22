@@ -285,6 +285,8 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "import tensorflow_datasets as tfds\n\n" ++
     "_IMG_SIZE = 224\n" ++
     "_CROP_PADDING = 32\n" ++
+    (if cfg.trainRes > 0 then "_TRAIN_SIZE = " ++ toString cfg.trainRes ++
+       "   # RSB-A3 train resolution; eval stays _IMG_SIZE (forward infers from flat len)\n" else "") ++
     "_MEAN_RGB = tf.constant([0.485 * 255, 0.456 * 255, 0.406 * 255], dtype=tf.float32)\n" ++
     "_STD_RGB  = tf.constant([0.229 * 255, 0.224 * 255, 0.225 * 255], dtype=tf.float32)\n\n" ++
     -- The _aa_* op block (color + geometric) is shared by AutoAugment and the
@@ -305,7 +307,8 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    th, tw, _ = tf.unstack(bbox_size)\n" ++
     "    window = tf.stack([oy, ox, th, tw])\n" ++
     "    img = tf.io.decode_and_crop_jpeg(image_bytes, window, channels=3)\n" ++
-    "    img = tf.image.resize([img], [_IMG_SIZE, _IMG_SIZE],\n" ++
+    "    img = tf.image.resize([img], " ++
+      (if cfg.trainRes > 0 then "[_TRAIN_SIZE, _TRAIN_SIZE]" else "[_IMG_SIZE, _IMG_SIZE]") ++ ",\n" ++
     "                          method=tf.image.ResizeMethod.BICUBIC)[0]\n" ++
     "    img = tf.image.random_flip_left_right(img)\n" ++
     (if cfg.useAutoAugment then "    img = _autoaugment(img)\n" else "") ++
@@ -327,9 +330,13 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "def _imagenet_decode_center_crop(image_bytes):\n" ++
     "    shape = tf.io.extract_jpeg_shape(image_bytes)\n" ++
     "    h, w = shape[0], shape[1]\n" ++
-    "    padded = tf.cast(\n" ++
-    "        ((_IMG_SIZE / (_IMG_SIZE + _CROP_PADDING)) *\n" ++
-    "         tf.cast(tf.minimum(h, w), tf.float32)), tf.int32)\n" ++
+    (if cfg.testCropRatio > 0.0 then
+      "    padded = tf.cast((" ++ toString cfg.testCropRatio ++
+        " * tf.cast(tf.minimum(h, w), tf.float32)), tf.int32)   # explicit test crop ratio (RSB-A3 0.95)\n"
+     else
+      "    padded = tf.cast(\n" ++
+      "        ((_IMG_SIZE / (_IMG_SIZE + _CROP_PADDING)) *\n" ++
+      "         tf.cast(tf.minimum(h, w), tf.float32)), tf.int32)\n") ++
     "    oy = (h - padded) // 2\n" ++
     "    ox = (w - padded) // 2\n" ++
     "    window = tf.stack([oy, ox, padded, padded])\n" ++
@@ -370,7 +377,10 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
       "            img = _random_erase(img)\n"
      else "") ++
     "        img = tf.transpose(img, [2, 0, 1])          # HWC -> CHW\n" ++
-    "        img = tf.reshape(img, [3 * _IMG_SIZE * _IMG_SIZE])  # flat to match forward()\n" ++
+    (if cfg.trainRes > 0 then
+      "        img = tf.reshape(img, [-1])  # flat; forward infers res (train _TRAIN_SIZE / eval _IMG_SIZE)\n"
+     else
+      "        img = tf.reshape(img, [3 * _IMG_SIZE * _IMG_SIZE])  # flat to match forward()\n") ++
     "        return img, ex['label']\n" ++
     "    if training:\n" ++
     "        ds = ds.shuffle(8192, seed=42, reshuffle_each_iteration=True)\n" ++
@@ -1679,8 +1689,14 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
       toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
   | some (.convBn ic _ _ _ _) =>
-    code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
-      toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
+    if cfg.trainRes > 0 then
+      -- A3 train/test resolution split: infer the square side from the flat length
+      -- (static under jit) so one forward runs at trainRes (train) and imageH (eval).
+      code := code ++ "    _s = int(round((x.shape[-1] // " ++ toString ic ++ ") ** 0.5)); x = x.reshape(-1, " ++
+        toString ic ++ ", _s, _s)\n"
+    else
+      code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
+        toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
   | some (.patchEmbed ic _ _ _) =>
     code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
       toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
