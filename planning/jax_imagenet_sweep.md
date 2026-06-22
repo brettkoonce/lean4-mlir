@@ -99,8 +99,14 @@ other (separate .py + checkpoints), and default behaviour/filenames are unchange
 ./efficientnet-b0-imagenet                 # 80ep validation subrun -> generated_..._imagenet.py
 LEAN_MLIR_FULL=1 ./efficientnet-b0-imagenet # 350ep official run    -> generated_..._imagenet_full.py
 ```
-ViT (300) and r34 (90) are already at their paper schedule, so no Full variant (add a `…Short` the
-same way if a quick subrun is wanted there).
+ViT and r34 default to their paper schedule and take the *inverse* toggle — `LEAN_MLIR_SHORT=1`
+selects a `…ConfigShort` quick subrun (→ `_short.py`): ViT 300→**80** (the proven 65.6% point),
+r34 90→**30**. So every net has a validation/official pair, just named for whichever is non-default.
+
+| net | default | toggle |
+|---|---|---|
+| mnv2 / enet / convnext | short validation | `LEAN_MLIR_FULL=1` → paper |
+| vit / r34 | paper schedule | `LEAN_MLIR_SHORT=1` → subrun |
 
 ## The 3 runs to do (non-ViT)
 

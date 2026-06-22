@@ -59,7 +59,16 @@ def vitTinyImagenetConfig : TrainConfig where
 
 #eval vitTinyImagenet.validate!
 
-def main (args : List String) : IO Unit :=
-  runJax vitTinyImagenet vitTinyImagenetConfig .imagenet
-    (args.head? |>.getD "data/imagenet")
-    "generated_vit_tiny_imagenet.py"
+/-- Quick validation subrun: identical recipe at the 80-epoch tier (the proven
+    historical point — that schedule reached 65.6%). Selected with
+    `LEAN_MLIR_SHORT=1`; writes a separate `_short.py` so it never clobbers the
+    300-epoch official run. -/
+def vitTinyImagenetConfigShort : TrainConfig :=
+  { vitTinyImagenetConfig with epochs := 80 }
+
+def main (args : List String) : IO Unit := do
+  let short := (← IO.getEnv "LEAN_MLIR_SHORT").isSome
+  let cfg := if short then vitTinyImagenetConfigShort else vitTinyImagenetConfig
+  let out := if short then "generated_vit_tiny_imagenet_short.py"
+                      else "generated_vit_tiny_imagenet.py"
+  runJax vitTinyImagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out

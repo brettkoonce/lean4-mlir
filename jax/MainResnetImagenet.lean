@@ -49,7 +49,15 @@ def resnet34ImagenetConfig : TrainConfig where
 
 #eval resnet34Imagenet.validate!
 
-def main (args : List String) : IO Unit :=
-  runJax resnet34Imagenet resnet34ImagenetConfig .imagenet
-    (args.head? |>.getD "data/imagenet")
-    "generated_resnet34_imagenet.py"
+/-- Quick validation subrun: identical recipe at a 30-epoch tier (r34 trains
+    fast; enough to confirm the curve climbs before the 90-epoch run). Selected
+    with `LEAN_MLIR_SHORT=1`; writes a separate `_short.py`. -/
+def resnet34ImagenetConfigShort : TrainConfig :=
+  { resnet34ImagenetConfig with epochs := 30 }
+
+def main (args : List String) : IO Unit := do
+  let short := (← IO.getEnv "LEAN_MLIR_SHORT").isSome
+  let cfg := if short then resnet34ImagenetConfigShort else resnet34ImagenetConfig
+  let out := if short then "generated_resnet34_imagenet_short.py"
+                      else "generated_resnet34_imagenet.py"
+  runJax resnet34Imagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out
