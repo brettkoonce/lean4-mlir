@@ -38,11 +38,12 @@ def resnet50Imagenet : NetSpec where
     512 (2× 7900 XTX, 256/GPU) → 5e-3 × 512/2048 = 1.25e-3. No label smoothing —
     BCE over the mixup/cutmix soft targets subsumes it (the RSB recipe).
 
-    ROCm note: `bf16Conv := false` — bf16 conv is SLOWER on MIOpen/gfx1100 (a
-    CUDA/cuDNN win only). R50 is conv-bound, so the CUDA box (ares) is the real
-    run's better home; this config runs correctly on either (set `bf16Conv :=
-    true` on CUDA). RandAugment + 3× repeated-aug are CPU-side tf.data — watch
-    input throughput (the warmup ETA check confirms it's not input-bound). -/
+    Conv dtype: `bf16Conv := true` — R50 is conv-bound and its real home is the
+    CUDA box (ares), where bf16 conv on cuDNN tensor cores is ~1.6× faster
+    (measured: 458→ vs 737 ms/step on 4× 4060 Ti, A2@224). On ROCm/MIOpen bf16
+    conv is slower but still correct, so this stays on for both. RandAugment +
+    3× repeated-aug are CPU-side tf.data — watch input throughput (the warmup
+    ETA check confirms it's not input-bound). -/
 def resnet50ImagenetConfig : TrainConfig where
   learningRate   := 0.00125  -- RSB-A2 lr 5e-3 @ batch 2048, linear-scaled to batch 512
   batchSize      := 512
@@ -69,7 +70,7 @@ def resnet50ImagenetConfig : TrainConfig where
   useEMA         := true     -- model EMA; eval + checkpoints use the shadow
   emaDecay       := 0.9999
   bf16           := true
-  bf16Conv       := false    -- ROCm/MIOpen: bf16 conv is slower; keep conv fp32
+  bf16Conv       := true     -- CUDA/cuDNN: bf16 conv ~1.6× faster (R50 is conv-bound, ares is its home); slower-but-correct on ROCm
   runningBN      := true     -- paper-faithful eval (gap A) + bottleneck running-BN
 
 #eval resnet50Imagenet.validate!
