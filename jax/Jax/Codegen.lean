@@ -1985,18 +1985,23 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   let ic := match spec.layers.head? with
     | some (.conv2d ic ..) => ic | some (.convBn ic ..) => ic
     | some (.patchEmbed ic ..) => ic | _ => 3
+  -- Train-time spatial resolution: when a train/test split is set (RSB-A3,
+  -- `trainRes`), host-side batch ops (numpy crop, cutmix) operate on the
+  -- TRAIN-res batch (eval uses the spec's resolution via forward's infer).
+  let trH := if cfg.trainRes > 0 then cfg.trainRes else spec.imageH
+  let trW := if cfg.trainRes > 0 then cfg.trainRes else spec.imageW
   (if cfg.augment && spec.imageH > 32 then
     let pad := 14  -- pad each side by 14 pixels (224→252)
-    let padded := spec.imageH + 2 * pad
+    let padded := trH + 2 * pad
     "def augment_batch(x, rng):\n" ++
-    "    \"\"\"Random crop (numpy, CPU): pad " ++ toString spec.imageH ++ "→" ++ toString padded ++
-      ", crop back to " ++ toString spec.imageH ++ "x" ++ toString spec.imageW ++ ".\"\"\"\n" ++
-    "    x = x.reshape(-1, " ++ toString ic ++ ", " ++ toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n" ++
+    "    \"\"\"Random crop (numpy, CPU): pad " ++ toString trH ++ "→" ++ toString padded ++
+      ", crop back to " ++ toString trH ++ "x" ++ toString trW ++ ".\"\"\"\n" ++
+    "    x = x.reshape(-1, " ++ toString ic ++ ", " ++ toString trH ++ ", " ++ toString trW ++ ")\n" ++
     "    x = np.pad(x, ((0,0), (0,0), (" ++ toString pad ++ "," ++ toString pad ++
       "), (" ++ toString pad ++ "," ++ toString pad ++ ")))\n" ++
     "    top = rng.randint(0, " ++ toString (2 * pad + 1) ++ ")\n" ++
     "    left = rng.randint(0, " ++ toString (2 * pad + 1) ++ ")\n" ++
-    "    x = x[:, :, top:top+" ++ toString spec.imageH ++ ", left:left+" ++ toString spec.imageW ++ "]\n" ++
+    "    x = x[:, :, top:top+" ++ toString trH ++ ", left:left+" ++ toString trW ++ "]\n" ++
     "    return x.reshape(x.shape[0], -1)\n\n"
   else "") ++
   let opt := effOpt cfg
@@ -2124,7 +2129,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   -- CutMix (on-device, jit-friendly box via a comparison mask — no dynamic slice).
   -- Partner = batch-reverse (flip). λ reweighted by actual pasted area.
   (if cfg.useCutmix then
-    let H := toString spec.imageH; let W := toString spec.imageW
+    let H := toString trH; let W := toString trW
     "@jit\n" ++
     "def _cutmix(x, y, key):\n" ++
     "    B = x.shape[0]\n" ++
