@@ -11,6 +11,30 @@ bestiary. The run is a bonus.
 
 ---
 
+## BUILD STATUS — all phases landed + smoke-tested (updated 2026-06-22)
+
+Phases 1–5 are DONE on `main`, each smoke-tested on the ROCm box (2× 7900 XTX, gfx1100):
+- **P1** bottleneck running-BN + stochastic-depth threading; `MainResnet50Imagenet.lean`
+  (`resnet50-imagenet` exe). 25,557,032 params (exact torchvision R50), 53 BN layers.
+- **P2** `repeatedAug` (tfds `flat_map(repeat K)` + reshuffle); verified exactly K independent copies.
+- **P3** `OptimizerKind.lamb` (trust-ratio + decoupled WD); smoke loss decreased smoothly.
+- **P4** `LossKind.bce` (BCE-with-logits over multi-hot, timm mean-over-B×C); manual cross-check matched.
+- **P5** literal RSB-A2 `resnet50ImagenetConfig` (LAMB lr 5e-3@2048 → 1.25e-3@512, BCE, mixup0.1/
+  cutmix1.0, RA m7-mstd0.5-inc1, repeatedAug 3, dropPath0.05, wd0.02, EMA0.9999, 300ep). End-to-end
+  smoke passed; `supervise_r50_300ep.sh` + `eval_r50_full50k.py` written.
+- Bug fixed along the way: `_aa_posterize` uint8/int32 shift dtype mismatch broke the whole geometric-
+  RandAugment dataloader (latent — affected ConvNeXt/ViT too; their geo-RA had never run end-to-end).
+
+**Measured warmup ETA (this ROCm box, 2× 7900 XTX, batch 512 = 2×256, bf16Conv=false):**
+steady-state **~1.04 s/step** (3 consecutive 100-step intervals: 104s, 103s, 104s). At
+total_steps = 2502/epoch × 300 = **750,600**, the full run is **~216 h ≈ 9 days** (≈43 min/epoch),
+training-only. This is FAR above the 60–65 hr plan estimate (which assumed bf16-conv on the CUDA box).
+→ Confirms R50 is conv-bound and belongs on the **CUDA box (ares, 6× 4060 Ti, bf16Conv=true)** for the
+real burn; this ROCm box is for build + smoke only. (The ~10× gap from ideal also suggests MIOpen
+fp32-conv and/or the 3× CPU RandAugment pipeline as ROCm-side bottlenecks — re-measure on CUDA.)
+
+---
+
 ## Starting state (what's already landed — read first)
 
 The phase-2 JAX codegen (`jax/Jax/Codegen.lean`) emits idiomatic JAX from a `NetSpec` +

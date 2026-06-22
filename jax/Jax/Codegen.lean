@@ -57,7 +57,7 @@ def _aa_rotate(img, deg):
 def _aa_invert(img):       return 255 - img
 def _aa_solarize(img, thr):return tf.where(img < tf.cast(thr, img.dtype), img, 255 - img)
 def _aa_posterize(img, bits):
-    shift = 8 - bits
+    shift = tf.cast(8 - bits, img.dtype)   # match img (uint8) — right_shift needs same dtype
     return tf.bitwise.left_shift(tf.bitwise.right_shift(img, shift), shift)
 
 def _aa_autocontrast(img):
