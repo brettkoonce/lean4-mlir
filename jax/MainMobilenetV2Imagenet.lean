@@ -35,15 +35,15 @@ def mobilenetV2Imagenet : NetSpec where
     edit + re-emit, no env override).
 
     RMSProp + momentum 0.9, base lr 0.045 at batch 256 with a 5-epoch warmup +
-    cosine decay — MobileNetV2's *original* optimizer (was SGD+momentum lr 0.1,
+    paper exp-LR-decay (×0.98 per epoch) — MobileNetV2's *original* optimizer (was SGD+momentum lr 0.1,
     the borrowed R34 pipeline). Two MobileNet-specific departures kept:
       * weight decay 4e-5 (not 1e-4): large wd hurts the tiny depthwise
         weights; 4e-5 is the standard MobileNet value.
       * no mixup/cutmix: not standard for MobileNetV2 and a net loss at
         short schedules.
     RMSProp knobs: ρ=0.9 (rmspropDecay), μ=0.9 (momentum), ε=1.0 (rmspropEps —
-    MobileNetV2's value, NOT 1e-8). LR schedule stays cosine (the repo's wired
-    schedule), not the paper's 0.98/epoch exponential decay.
+    MobileNetV2's value, NOT 1e-8). LR schedule is the paper's exponential decay
+    (×0.98 per epoch after warmup; cosineDecay off).
 
     TODO(recipe): this is a CHANGE on one axis — optimizer SGD→RMSProp (the
     paper's optimizer). Aug stays paper-faithful: crop/flip only, NOT

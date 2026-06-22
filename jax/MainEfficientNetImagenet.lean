@@ -32,7 +32,7 @@ def efficientNetB0Imagenet : NetSpec where
 /-- EfficientNet-B0 80-epoch recipe — the validation tier of the 80→300
     ladder (EPOCHS is baked from this spec; bump to 300 + re-emit for the
     real run). RMSProp + momentum 0.9, base lr 0.045 at batch 256, 5-epoch
-    warmup + cosine, weight decay 1e-5 (EfficientNet's small value — protects
+    warmup + paper exp-LR-decay (×0.97 every 2.4 epochs), weight decay 1e-5 (EfficientNet's small value — protects
     the depthwise/SE params), label smoothing 0.1, random-crop + flip,
     bf16 + bf16Conv.
 
@@ -42,7 +42,7 @@ def efficientNetB0Imagenet : NetSpec where
     ImageProjectiveTransformV3) + stochastic depth + EMA. This is the faithful
     B0 recipe; the remaining gap to 77% is schedule/length, not missing pieces.
     RMSProp knobs: ρ=0.9, μ=0.9, ε=1e-3 (EfficientNet's value). LR schedule
-    stays cosine, not the paper's 0.97-every-2.4-epochs exponential decay.
+    is the paper's exponential decay (×0.97 every 2.4 epochs after warmup; cosineDecay off).
 
     TODO(recipe): this is a CHANGE on two axes (optimizer SGD→RMSProp, aug
     color-RandAugment→full AutoAugment) — prior results no longer apply. Re-run

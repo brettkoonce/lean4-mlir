@@ -19,7 +19,7 @@ away its proof-rendered-BN property: BN forward+backward become hand-emitted fla
 step also carries per-layer batch mean/var out in passthrough slots (running-stats BN eval — see
 `bnLayers` + `mobilenetv2Verified.bnChannels` + `@mobilenetv2_fwd_eval`).
 
-Full-paper MobileNetV2 (17 inverted-residual blocks, 214 param tensors / ~2.25M scalars) — the layout
+Full-paper MobileNetV2 (17 inverted-residual blocks, 210 param tensors / ~2.25M scalars) — the layout
 `mobilenetv2Verified.toSpecs` / `MobileNetV2Layout.specs` (#guard-locked) the verified-adam driver
 trains on (NOTE: `TestMobilenetV2Train.lean`, the committed SGD renderer, is still the reduced 6-block
 net — this PC/adam path is the full one).
@@ -352,7 +352,7 @@ private def trainStep : String := Id.run do
 
 -- ════════════ AdamW scheduled train step (loss-curve parity with mobilenet-v2-train) ════════════
 
-/-- (paramName, gradName, dims) for all 214 param tensors, in `allParams` order (= `net.specs` order).
+/-- (paramName, gradName, dims) for all 210 param tensors, in `allParams` order (= `net.specs` order).
     Drives the per-param AdamW update and the packed `[θ|m|v]` signature. The grad names match
     those emitted by `renderBody`'s param-grad section (`%{p}d…` per block, `%d…` for stem/head/dense). -/
 private def adamParams : List (String × String × List Nat) :=
@@ -423,7 +423,7 @@ private def bnLayers : List (String × Nat × Nat) :=
     signature the generic `VerifiedNet.trainAdamSched` driver expects, EXTENDED with per-BN-layer
     batch mean/var carried out in passthrough slots (running-stats BN; the func also takes matching
     dummy `[oc]` inputs so `#outputs = #inputs`):
-    `(x, θ×214, m×214, v×214, lr, bc1, bc2, μ/var×53, onehot) → (θ'×214, m'×214, v'×214, loss, bc1, bc2, μ/var×53)`.
+    `(x, θ×210, m×210, v×210, lr, bc1, bc2, μ/var×52, onehot) → (θ'×210, m'×210, v'×210, loss, bc1, bc2, μ/var×52)`.
     `lr`/`bc1`/`bc2` runtime; `bc1`/`bc2` + the stat-in slots pass through unchanged. -/
 private def trainStepAdamSched : String :=
   let body  := renderBody adamCot

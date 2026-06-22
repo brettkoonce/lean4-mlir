@@ -87,8 +87,8 @@ def cifarVerified : VerifiedNetSpec where
     (#[64, 32, 3, 3], 0), (#[64], 2), (#[64, 64, 3, 3], 0), (#[64], 2),
     (#[4096, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
 
-/-- The Chapter-5 CIFAR-10 CNN **with scalar BatchNorm** (`bnForward`, one γ/β over the
-    whole c·h·w map) after each conv. Same backbone as `cifarVerified` + 4 `.bn` layers.
+/-- The Chapter-5 CIFAR-10 CNN **with per-channel BatchNorm** (`.bnPerChannel`, γ/β
+    per channel) after each conv. Same backbone as `cifarVerified` + 4 `.bnPerChannel` layers.
     VJP: `cifarBnVerified_has_vjp` (the conditional fold is `cifarCnnBn_has_vjp_at`). -/
 def cifarBnVerified : VerifiedNetSpec where
   name     := "CIFAR-CNN-BN"

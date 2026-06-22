@@ -40,7 +40,7 @@ def convNeXtTinyImagenet : NetSpec where
     features train cleanly before the ~80-hour 300ep run (bump EPOCHS to 300 +
     re-emit for the real run). ConvNeXt needs AdamW, not SGD: decoupled weight
     decay 0.05, peak LR 4e-4 at batch 256 (≈ the 4e-3@4096 official LR linearly
-    scaled), 5-epoch warmup + cosine, label smoothing 0.1, grad-clip 1.0 (cheap
+    scaled), 20-epoch warmup + cosine, label smoothing 0.1, grad-clip 1.0 (cheap
     insurance — unlocked the ViT run). bf16 + bf16 conv. EMA (decay 0.9999) +
     stochastic depth (dropPath 0.1, the ConvNeXt-T paper value) now on. Geometric
     RandAugment (N=2, M=9, the ConvNeXt recipe value) is now on too — the full

@@ -11,9 +11,10 @@ scalars (cosine + warmup + per-step bias correction) through the unchanged FFI (
 
 Recipe matches `efficientnet-train` (`MainEfficientNetTrain.lean`'s `efficientNetB0Config`): AdamW
 lr 1e-3 / wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment, 80 epochs, bs 32.
-**Loss-curve-first parity**: both this and the reference batch-norm in train mode, so the train-loss
-curve tracks; eval here uses the eval-batch's own BN stats (running-stats BN deferred), so val-acc
-is close-not-exact. Weight decay uniform (incl. BN/bias), matching the ViT/mnv2 verified paths.
+**Exact BN parity**: true batch-norm (reduce `[0,2,3]`) in train + running-stats eval —
+`efficientnetVerified.bnChannels` (49 layers) drives the generic `trainAdamSched` to thread
+per-layer EMA batch stats and eval through `@efficientnet_fwd_eval` (class-batch-independent on
+the sorted val set). Weight decay uniform (incl. BN/bias), matching the ViT/mnv2 verified paths.
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/efficientnet-verified-adam data` (loader reads
 `data/imagenette`).

@@ -12,7 +12,7 @@ bias correction) through the unchanged FFI (`n_params = 3k`).
 Recipe matches `mobilenet-v2-train` (`MainMobilenetV2Train.lean`'s `mobilenetV2Config`): AdamW
 lr 1e-3 / wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment, 80 epochs, bs 32
 (no EMA, no grad-clip). **Exact BN parity**: TRUE batch-norm (reduce `[0,2,3]`) in the train step
-+ running-stats eval — `mobilenetv2Verified.bnChannels` (20 layers) is non-empty, so the generic
++ running-stats eval — `mobilenetv2Verified.bnChannels` (52 layers, full-paper 17-block net) is non-empty, so the generic
 `trainAdamSched` threads per-layer EMA batch stats and evals through `@mobilenetv2_fwd_eval` (affine
 BN with the running stats), class-batch-independent on the sorted val set (GPU-validated: epoch-1
 loss 2.18, running-stats val_acc 32.9%). The BN is hand-emitted (not a proof token — see

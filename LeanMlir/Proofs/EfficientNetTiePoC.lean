@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.EfficientNetFaithfulPoC
 import LeanMlir.Proofs.EfficientNetFullB0
 
-/-! # PoC: the full-16 EfficientNet-B0 train step §1a TIE (whole-net thread) — IN PROGRESS
+/-! # PoC: the full-16 EfficientNet-B0 train step §1a TIE (whole-net thread) — DONE (capstone `efficientnet_net_tied`, all 262 params, 3-axiom clean; only the optional dense-head fold below remains)
 
 The EfficientNet peer of `MobileNetV2TiePoCPaper` (the §1a tie). The §1 fold
 (`EfficientNetFaithfulPoC`) gives every batched param-SGD op `den = certified ∀ cotangent`; this
