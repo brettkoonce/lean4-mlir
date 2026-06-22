@@ -77,7 +77,15 @@ def efficientNetB0ImagenetConfig : TrainConfig where
 
 #eval efficientNetB0Imagenet.validate!
 
-def main (args : List String) : IO Unit :=
-  runJax efficientNetB0Imagenet efficientNetB0ImagenetConfig .imagenet
-    (args.head? |>.getD "data/imagenet")
-    "generated_efficientnet_b0_imagenet.py"
+/-- Paper-faithful full run: identical recipe at the 350-epoch schedule and the
+    stable peak LR (0.045 diverges at 80ep — see config TODO; ~0.01 trains).
+    Selected with `LEAN_MLIR_FULL=1`; writes a separate `_full.py`. -/
+def efficientNetB0ImagenetConfigFull : TrainConfig :=
+  { efficientNetB0ImagenetConfig with epochs := 350, learningRate := 0.01 }
+
+def main (args : List String) : IO Unit := do
+  let full := (← IO.getEnv "LEAN_MLIR_FULL").isSome
+  let cfg := if full then efficientNetB0ImagenetConfigFull else efficientNetB0ImagenetConfig
+  let out := if full then "generated_efficientnet_b0_imagenet_full.py"
+                     else "generated_efficientnet_b0_imagenet.py"
+  runJax efficientNetB0Imagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out

@@ -81,7 +81,15 @@ def convNeXtTinyImagenetConfig : TrainConfig where
 
 #eval convNeXtTinyImagenet.validate!
 
-def main (args : List String) : IO Unit :=
-  runJax convNeXtTinyImagenet convNeXtTinyImagenetConfig .imagenet
-    (args.head? |>.getD "data/imagenet")
-    "generated_convnext_tiny_imagenet.py"
+/-- Paper-faithful full run: identical recipe at the 300-epoch schedule (where
+    Mixup/CutMix actually pay off). Selected with `LEAN_MLIR_FULL=1`; writes a
+    separate `_full.py`. -/
+def convNeXtTinyImagenetConfigFull : TrainConfig :=
+  { convNeXtTinyImagenetConfig with epochs := 300 }
+
+def main (args : List String) : IO Unit := do
+  let full := (← IO.getEnv "LEAN_MLIR_FULL").isSome
+  let cfg := if full then convNeXtTinyImagenetConfigFull else convNeXtTinyImagenetConfig
+  let out := if full then "generated_convnext_tiny_imagenet_full.py"
+                     else "generated_convnext_tiny_imagenet.py"
+  runJax convNeXtTinyImagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out

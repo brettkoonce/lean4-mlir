@@ -81,6 +81,27 @@ modern recipe** is the proposed first concrete step (basic-block vs bottleneck, 
 ~4.4 days back-to-back, R34 is just an epochs bump on the existing trainer) — see
 `planning/resnet50_imagenet.md`.
 
+## Validation vs full (subrun) selector
+
+Each short-schedule trainer (mnv2 / enet / convnext) now carries BOTH configs side by side:
+the committed default is the quick validation tier; `LEAN_MLIR_FULL=1` selects the paper-faithful
+`…ConfigFull` (derived via record-update, so no recipe duplication) and emits a separate
+`generated_<net>_full.py`. So a quick subrun and the multi-day official run never clobber each
+other (separate .py + checkpoints), and default behaviour/filenames are unchanged.
+
+| net | default (subrun) | `LEAN_MLIR_FULL=1` |
+|---|---|---|
+| MobileNetV2 | 90ep | **350ep** |
+| EfficientNet-B0 | 80ep, lr 0.045 | **350ep, lr 0.01** (stable peak) |
+| ConvNeXt-T | 80ep | **300ep** |
+
+```bash
+./efficientnet-b0-imagenet                 # 80ep validation subrun -> generated_..._imagenet.py
+LEAN_MLIR_FULL=1 ./efficientnet-b0-imagenet # 350ep official run    -> generated_..._imagenet_full.py
+```
+ViT (300) and r34 (90) are already at their paper schedule, so no Full variant (add a `…Short` the
+same way if a quick subrun is wanted there).
+
 ## The 3 runs to do (non-ViT)
 
 All 6-GPU (`CUDA_VISIBLE_DEVICES=0,1,2,3,4,5`), batch 256 → 252 (6×42), bf16+bf16Conv,

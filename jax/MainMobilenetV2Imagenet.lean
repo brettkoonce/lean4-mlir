@@ -74,7 +74,15 @@ def mobilenetV2ImagenetConfig : TrainConfig where
 
 #eval mobilenetV2Imagenet.validate!
 
-def main (args : List String) : IO Unit :=
-  runJax mobilenetV2Imagenet mobilenetV2ImagenetConfig .imagenet
-    (args.head? |>.getD "data/imagenet")
-    "generated_mobilenet_v2_imagenet.py"
+/-- Paper-faithful full run: identical recipe, the long (350-epoch) schedule.
+    Selected at launch with `LEAN_MLIR_FULL=1`; writes a separate `_full.py` so
+    a quick validation subrun and the multi-day run never clobber each other. -/
+def mobilenetV2ImagenetConfigFull : TrainConfig :=
+  { mobilenetV2ImagenetConfig with epochs := 350 }
+
+def main (args : List String) : IO Unit := do
+  let full := (← IO.getEnv "LEAN_MLIR_FULL").isSome
+  let cfg := if full then mobilenetV2ImagenetConfigFull else mobilenetV2ImagenetConfig
+  let out := if full then "generated_mobilenet_v2_imagenet_full.py"
+                     else "generated_mobilenet_v2_imagenet.py"
+  runJax mobilenetV2Imagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out
