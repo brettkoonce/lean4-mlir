@@ -16,10 +16,12 @@ name: Comparator (independent kernel re-check)
 # makes the kernel legible if the sandbox ever fails.
 #
 # Tool pinning: lean4export reads the project's `.olean`s, so its build
-# must stay olean-compatible with the project's Lean (v4.30.0). The refs
-# below are upstream HEAD at authoring time; if a future bump breaks the
-# build, pin LEAN4EXPORT_REF/COMPARATOR_REF to the first commit that went
-# green here (or to a commit whose lean-toolchain matches v4.30.0).
+# must stay olean-compatible with the project's Lean (v4.31.0 — bumped from
+# v4.30.0; the pinned LEAN4EXPORT_REF below still builds cleanly at v4.31.0,
+# verified locally). The refs below are upstream HEAD at authoring time; if a
+# future bump breaks the build, pin LEAN4EXPORT_REF/COMPARATOR_REF to the first
+# commit that went green here (or to a commit whose lean-toolchain matches the
+# project's).
 
 on:
   push:
@@ -111,8 +113,9 @@ jobs:
           git clone https://github.com/leanprover/lean4export ~/lean4export
           git -C ~/lean4export checkout "$LEAN4EXPORT_REF"
           # lean4export reads the project's .oleans, so it must be built with
-          # the project's exact Lean — its HEAD pins a newer toolchain whose
-          # olean reader rejects our v4.30.0 headers ("incompatible header").
+          # the project's exact Lean (v4.31.0) — the `cp lean-toolchain` below
+          # forces that; a mismatched build rejects our headers ("incompatible
+          # header").
           cp lean-toolchain ~/lean4export/lean-toolchain
           (cd ~/lean4export && lake build)
 
