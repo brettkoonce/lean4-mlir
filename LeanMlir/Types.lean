@@ -301,6 +301,14 @@ inductive OptimizerKind where
       `rmspropDecay`, μ = `momentum`, ε = `rmspropEps`. Weight decay stays
       coupled into the gradient (the form those papers use), unlike AdamW. -/
   | rmsprop
+  /-- LAMB (You et al. 2019) — the large-batch optimizer in timm's "ResNet
+      Strikes Back" RSB-A2 recipe. Adam moments `(m, v, t)` form the per-param
+      direction `r = m̂/(√v̂+ε) + λ·θ` (DECOUPLED weight decay `λ = weightDecay`
+      folded into the direction), then a layer-wise **trust ratio**
+      `‖θ‖ / ‖r‖` rescales the step: `θ -= lr · (‖θ‖/‖r‖) · r`. The trust ratio
+      is 1.0 wherever `‖θ‖` or `‖r‖` is 0 (timm convention). β1=0.9, β2=0.999,
+      ε=1e-6. opt_state shape matches `.adam`: `(m, v, t)`. -/
+  | lamb
 deriving Repr, BEq, DecidableEq
 
 structure TrainConfig where
@@ -382,6 +390,14 @@ structure TrainConfig where
       Subsumes the color RandAugment, so leave `useRandAugment` off when this
       is on. EfficientNet's original recipe; no labels touched. -/
   useAutoAugment : Bool  := false
+  /-- Repeated Augmentation (Hoffer et al. 2020; timm RASampler), RSB-A2's `3×`.
+      Each image contributes `repeatedAug` independently-augmented copies per
+      epoch. On the tfds path this is a stream-level `flat_map(repeat K)` before
+      the augment `_pp`, plus a re-shuffle so the copies spread across batches —
+      an APPROXIMATION of timm's exact index-level RASampler. `steps_per_epoch`
+      is unchanged, so an epoch sees ~1/K as many unique images ×K views, per
+      the RSB recipe. 1 disables. -/
+  repeatedAug    : Nat   := 1
   /-- Stochastic depth (Huang et al. 2016): drop each residual block's
       branch with a probability that ramps linearly from 0 to `dropPath`
       across the network's residual blocks; surviving branches are scaled

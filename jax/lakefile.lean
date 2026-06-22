@@ -59,6 +59,11 @@ lean_exe «vit-tiny» where
 lean_exe «resnet34-imagenet» where
   root := `MainResnetImagenet
 
+-- ResNet-50 (bottleneck) on 1000-class ImageNet — RSB-A2 build host (phase 1
+-- skeleton; see planning/rsb_a2_resnet50.md). runningBN + bottleneck SD threaded.
+lean_exe «resnet50-imagenet» where
+  root := `MainResnet50Imagenet
+
 -- ViT-Tiny on 1000-class ImageNet, bf16 mixed precision, 2-GPU.
 lean_exe «vit-tiny-imagenet» where
   root := `MainVitImagenet

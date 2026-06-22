@@ -375,6 +375,18 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    if training:\n" ++
     "        ds = ds.shuffle(8192, seed=42, reshuffle_each_iteration=True)\n" ++
     "        ds = ds.repeat()\n" ++
+    (if cfg.repeatedAug > 1 then
+      "        # Repeated Augmentation (RSB-A2 " ++ toString cfg.repeatedAug ++
+        "×; Hoffer et al. 2020 / timm RASampler). flat_map gives K raw copies of\n" ++
+      "        # each image; _pp below augments each copy independently (its crop/\n" ++
+      "        # flip use per-call tf.random). The re-shuffle spreads the K copies\n" ++
+      "        # across batches. APPROXIMATION: stream-level repeat+shuffle, not\n" ++
+      "        # timm's exact index-level RASampler. steps_per_epoch is unchanged,\n" ++
+      "        # so an epoch sees ~1/K unique images ×K views (the RSB recipe).\n" ++
+      "        ds = ds.flat_map(lambda ex: tf.data.Dataset.from_tensors(ex).repeat(" ++
+        toString cfg.repeatedAug ++ "))\n" ++
+      "        ds = ds.shuffle(8192, seed=43, reshuffle_each_iteration=True)\n"
+     else "") ++
     "    ds = ds.map(_pp, num_parallel_calls=tf.data.AUTOTUNE)\n" ++
     "    ds = ds.batch(batch_size, drop_remainder=True)\n" ++
     "    ds = ds.prefetch(tf.data.AUTOTUNE)\n" ++
@@ -416,6 +428,14 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
           -- change, else basic_block (conv1, conv2); all BN are `oc`-wide.
           let b0 := if !(ic == oc && fs == 1) then [oc, oc, oc] else [oc, oc]
           b0 ++ (List.range (n-1)).flatMap (fun _ => [oc, oc])
+        | .bottleneckBlock ic oc n fs =>
+          -- bottleneck_block_down (1×1 reduce, 3×3, 1×1 expand, shortcut) on the
+          -- first block when channels change, else bottleneck_block (3 conv_bn).
+          -- BN order matches the conv_bn call order in the block helpers; the two
+          -- 1×1's straddle mid=oc/4, the expand+shortcut are oc-wide.
+          let mid := oc / 4
+          let b0 := if !(ic == oc && fs == 1) then [mid, mid, oc, oc] else [mid, mid, oc]
+          b0 ++ (List.range (n-1)).flatMap (fun _ => [mid, mid, oc])
         | _ => [])).map toString
       code := code ++
         "def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=0.99):\n" ++
@@ -476,22 +496,56 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    out = conv_bn(out, params[idx+1][0], params[idx+1][1], params[idx+1][2])\n" ++
       "    shortcut = conv_bn(x, params[idx+2][0], params[idx+2][1], params[idx+2][2], stride=(stride,stride))\n" ++
       "    return jax.nn.relu(out + shortcut)\n\n"
-  if spec.hasBottleneck then
+  if spec.hasBottleneck && cfg.runningBN then
+    -- Running-BN variant (mirrors basic_block running variant): each conv_bn
+    -- returns (out, new), threaded through bn[bn_start..]; the block returns
+    -- (x, new_bn_entries) in conv_bn-call order. Stochastic depth (inverted)
+    -- drops the residual branch `out` before the skip add; drop_key=None /
+    -- keep_prob=1.0 (eval) is identity. Stride is on the 3×3 (torchvision v1.5).
     code := code ++
-      "def bottleneck_block(params, x, idx):\n" ++
+      "def bottleneck_block(params, x, idx, bn, bn_start, training, drop_key=None, keep_prob=1.0):\n" ++
+      "    out, n0 = conv_bn(x, params[idx][0], params[idx][1], params[idx][2], bn[bn_start], training)\n" ++
+      "    out = jax.nn.relu(out)\n" ++
+      "    out, n1 = conv_bn(out, params[idx+1][0], params[idx+1][1], params[idx+1][2], bn[bn_start+1], training)\n" ++
+      "    out = jax.nn.relu(out)\n" ++
+      "    out, n2 = conv_bn(out, params[idx+2][0], params[idx+2][1], params[idx+2][2], bn[bn_start+2], training)\n" ++
+      "    if drop_key is not None and keep_prob < 1.0:\n" ++
+      "        keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)\n" ++
+      "        out = out * keep / keep_prob\n" ++
+      "    return jax.nn.relu(out + x), [n0, n1, n2]\n\n" ++
+      "def bottleneck_block_down(params, x, idx, stride, bn, bn_start, training, drop_key=None, keep_prob=1.0):\n" ++
+      "    out, n0 = conv_bn(x, params[idx][0], params[idx][1], params[idx][2], bn[bn_start], training)\n" ++
+      "    out = jax.nn.relu(out)\n" ++
+      "    out, n1 = conv_bn(out, params[idx+1][0], params[idx+1][1], params[idx+1][2], bn[bn_start+1], training, stride=(stride,stride))\n" ++
+      "    out = jax.nn.relu(out)\n" ++
+      "    out, n2 = conv_bn(out, params[idx+2][0], params[idx+2][1], params[idx+2][2], bn[bn_start+2], training)\n" ++
+      "    shortcut, n3 = conv_bn(x, params[idx+3][0], params[idx+3][1], params[idx+3][2], bn[bn_start+3], training, stride=(stride,stride))\n" ++
+      "    if drop_key is not None and keep_prob < 1.0:\n" ++
+      "        keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)\n" ++
+      "        out = out * keep / keep_prob\n" ++
+      "    return jax.nn.relu(out + shortcut), [n0, n1, n2, n3]\n\n"
+  else if spec.hasBottleneck then
+    code := code ++
+      "def bottleneck_block(params, x, idx, drop_key=None, keep_prob=1.0):\n" ++
       "    out = conv_bn(x, params[idx][0], params[idx][1], params[idx][2])\n" ++
       "    out = jax.nn.relu(out)\n" ++
       "    out = conv_bn(out, params[idx+1][0], params[idx+1][1], params[idx+1][2])\n" ++
       "    out = jax.nn.relu(out)\n" ++
       "    out = conv_bn(out, params[idx+2][0], params[idx+2][1], params[idx+2][2])\n" ++
+      "    if drop_key is not None and keep_prob < 1.0:\n" ++
+      "        keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)\n" ++
+      "        out = out * keep / keep_prob\n" ++
       "    return jax.nn.relu(out + x)\n\n" ++
-      "def bottleneck_block_down(params, x, idx, stride):\n" ++
+      "def bottleneck_block_down(params, x, idx, stride, drop_key=None, keep_prob=1.0):\n" ++
       "    out = conv_bn(x, params[idx][0], params[idx][1], params[idx][2])\n" ++
       "    out = jax.nn.relu(out)\n" ++
       "    out = conv_bn(out, params[idx+1][0], params[idx+1][1], params[idx+1][2], stride=(stride,stride))\n" ++
       "    out = jax.nn.relu(out)\n" ++
       "    out = conv_bn(out, params[idx+2][0], params[idx+2][1], params[idx+2][2])\n" ++
       "    shortcut = conv_bn(x, params[idx+3][0], params[idx+3][1], params[idx+3][2], stride=(stride,stride))\n" ++
+      "    if drop_key is not None and keep_prob < 1.0:\n" ++
+      "        keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)\n" ++
+      "        out = out * keep / keep_prob\n" ++
       "    return jax.nn.relu(out + shortcut)\n\n"
   if spec.hasSeparable then
     code := code ++
@@ -1613,6 +1667,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
   let totalDrop := (spec.layers.filterMap (fun l => match l with
     | .convNextStage _ n _ _ => some n
     | .mbConv _ _ _ _ _ n _  => some n
+    | .bottleneckBlock _ _ n _ => some n
     | .transformerEncoder _ _ _ n => some n
     | _ => none)).foldl (· + ·) 0
   let mut code := if cfg.runningBN
@@ -1713,15 +1768,27 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         pidx := pidx + 2
     | .bottleneckBlock ic oc n fs =>
       let needsProj := !(ic == oc && fs == 1)
-      if needsProj then
-        code := code ++ "    x = bottleneck_block_down(params, x, " ++ toString pidx ++ ", " ++ toString fs ++ ")\n"
-        pidx := pidx + 4
-      else
-        code := code ++ "    x = bottleneck_block(params, x, " ++ toString pidx ++ ")\n"
-        pidx := pidx + 3
-      for _ in List.range (n - 1) do
-        code := code ++ "    x = bottleneck_block(params, x, " ++ toString pidx ++ ")\n"
-        pidx := pidx + 3
+      let denom := Float.ofNat (Nat.max 1 (totalDrop - 1))
+      let bnArgs := if cfg.runningBN then ", bn, bn_i, training" else ""
+      let bnAcc := if cfg.runningBN then "    bn_out.extend(_ne); bn_i += len(_ne)\n" else ""
+      let lhs := if cfg.runningBN then "    x, _ne = " else "    x = "
+      -- First block (may downsample / change channels → projection shortcut),
+      -- then n-1 identity blocks. Stochastic-depth keep ramps over dbi (shared
+      -- linear schedule across all residual-bearing blocks in the net).
+      for bIdx in List.range n do
+        let dropArgs := if cfg.dropPath > 0 then
+            ", dpkeys[" ++ toString dbi ++ "], " ++
+            toString (1.0 - cfg.dropPath * Float.ofNat dbi / denom)
+          else ""
+        if bIdx == 0 && needsProj then
+          code := code ++ lhs ++ "bottleneck_block_down(params, x, " ++ toString pidx ++
+            ", " ++ toString fs ++ bnArgs ++ dropArgs ++ ")\n" ++ bnAcc
+          pidx := pidx + 4
+        else
+          code := code ++ lhs ++ "bottleneck_block(params, x, " ++ toString pidx ++
+            bnArgs ++ dropArgs ++ ")\n" ++ bnAcc
+          pidx := pidx + 3
+        if cfg.dropPath > 0 then dbi := dbi + 1
     | .separableConv _ _ s =>
       let strideStr := "(" ++ toString s ++ "," ++ toString s ++ ")"
       code := code ++ "    x = sep_conv(x, params[" ++ toString pidx ++ "][0], params[" ++
@@ -1897,6 +1964,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   let optName := match opt with
     | .adam => "Adam"
     | .rmsprop => "RMSprop"
+    | .lamb => "LAMB"
     | .sgd => "SGD" ++ (if hasMomentum then " + momentum" else "")
   "# ═══════════════════════════════════════════════════════════════════════\n" ++
   "#  Training  (" ++ optName ++
@@ -1916,6 +1984,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
      "RHO = " ++ toString cfg.rmspropDecay ++ "\n" ++
      "EPS = " ++ toString cfg.rmspropEps ++ "\n"
    | .sgd => if hasMomentum then "MOMENTUM = " ++ toString cfg.momentum ++ "\n" else ""
+   | .lamb => "BETA1 = 0.9\nBETA2 = 0.999\nEPS = 1e-6\n"
    | .adam => "") ++
   (if hasWD then "WD = " ++ wd ++ "\n" else "") ++
   "\n" ++
@@ -1938,6 +2007,29 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
       "    params = jax.tree.map(lambda p, mi, vi: p - lr * (mi / (jnp.sqrt(vi) + 1e-8) + WD * p), params, mc, vc)\n"
      else
       "    params = jax.tree.map(lambda p, mi, vi: p - lr * mi / (jnp.sqrt(vi) + 1e-8), params, mc, vc)\n") ++
+    (if cfg.runningBN then "    return params, (m, v, t), _new_bn, loss\n\n" else "    return params, (m, v, t), loss\n\n")
+   | .lamb =>
+    -- LAMB (You et al. 2019), timm RSB-A2's optimizer. Adam moments give the
+    -- direction r = m̂/(√v̂+ε) + λθ (DECOUPLED weight decay, λ=WD, folded into the
+    -- direction BEFORE the trust ratio, as in timm.Lamb), then a per-param-tensor
+    -- trust ratio ‖θ‖/‖r‖ rescales the step (=1.0 when either norm is 0). The
+    -- per-leaf jax.tree.map gives the layer-wise scaling LAMB calls for.
+    "@jit\n" ++
+    (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
+    (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
+    "    m, v, t = opt_state\n" ++
+    "    t = t + 1\n" ++
+    "    m = jax.tree.map(lambda mi, g: BETA1 * mi + (1 - BETA1) * g, m, grads)\n" ++
+    "    v = jax.tree.map(lambda vi, g: BETA2 * vi + (1 - BETA2) * g * g, v, grads)\n" ++
+    "    mc = jax.tree.map(lambda mi: mi / (1 - BETA1 ** t), m)\n" ++
+    "    vc = jax.tree.map(lambda vi: vi / (1 - BETA2 ** t), v)\n" ++
+    "    def _lamb(p, mi, vi):\n" ++
+    (if hasWD then "        r = mi / (jnp.sqrt(vi) + EPS) + WD * p\n"
+     else "        r = mi / (jnp.sqrt(vi) + EPS)\n") ++
+    "        wn = jnp.sqrt(jnp.sum(p * p)); rn = jnp.sqrt(jnp.sum(r * r))\n" ++
+    "        trust = jnp.where(wn > 0, jnp.where(rn > 0, wn / rn, 1.0), 1.0)\n" ++
+    "        return p - lr * trust * r\n" ++
+    "    params = jax.tree.map(_lamb, params, mc, vc)\n" ++
     (if cfg.runningBN then "    return params, (m, v, t), _new_bn, loss\n\n" else "    return params, (m, v, t), loss\n\n")
    | .rmsprop =>
     -- RMSprop + momentum (MobileNet/EfficientNet native). opt_state = (sq, buf):
@@ -2099,7 +2191,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   -- training trajectory (weights + optimizer moments + EMA shadow). Saved/
   -- restored together so a segmented run continues bit-for-bit.
   let optStateVar : Option String := match opt with
-    | .adam | .rmsprop => some "opt_state"
+    | .adam | .rmsprop | .lamb => some "opt_state"
     | .sgd => if hasMomentum then some "velocity" else none
   let stateVars : List String := ["params"] ++ optStateVar.toList ++
     (if cfg.useEMA then ["ema_params"] else []) ++
@@ -2160,6 +2252,10 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "          \"  epochs=\" + str(EPOCHS) + \"  params=" ++ nParams ++ "\")\n" ++
   "    print(\"steps_per_epoch=\" + str(steps_per_epoch) + \"  total_steps=\" + str(total_steps))\n" ++
   "    print(\"backend=\" + str(jax.default_backend()) + \"  devices=\" + str(jax.devices()))\n" ++
+  (if cfg.repeatedAug > 1 then
+    "    print(\"repeated-aug=" ++ toString cfg.repeatedAug ++
+      "x (RSB / timm RASampler approximation: stream-level repeat+shuffle)\")\n"
+   else "") ++
   "    print(\"Starting training...\")\n\n" ++
   "    _init_load = os.environ.get('LEAN_MLIR_INIT_LOAD')\n" ++
   "    if _init_load:\n" ++
@@ -2169,7 +2265,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        params = init_params(random.PRNGKey(" ++ seed ++ "))\n" ++
   "    params = jax.device_put(params, replicated_sharding)\n" ++
   (match opt with
-   | .adam =>
+   | .adam | .lamb =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
@@ -2282,7 +2378,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    let bnIn := if cfg.runningBN then ", bn_state" else ""
    let bnOut := if cfg.runningBN then ", bn_state" else ""
    match opt with
-   | .adam | .rmsprop =>
+   | .adam | .rmsprop | .lamb =>
     "            params, opt_state" ++ bnOut ++ ", loss = train_step(params, opt_state" ++ bnIn ++ ", x, y, lr" ++ dk ++ ")\n"
    | .sgd =>
     if hasMomentum then
@@ -2391,7 +2487,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "    rng = np.random.RandomState(42)\n" ++
   let opt := effOpt cfg
   (match opt with
-   | .adam =>
+   | .adam | .lamb =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
@@ -2486,7 +2582,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "            x = jax.device_put(shuf_images[i:i+BATCH_SIZE], data_sharding)\n") ++
   "            y = jax.device_put(shuf_labels[i:i+BATCH_SIZE], data_sharding)\n" ++
   (match opt with
-   | .adam | .rmsprop =>
+   | .adam | .rmsprop | .lamb =>
      "            params, opt_state, loss = train_step(params, opt_state, x, y, lr)\n"
    | .sgd =>
      if hasMomentum then
