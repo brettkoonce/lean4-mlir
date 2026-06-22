@@ -285,6 +285,13 @@ inductive LossKind where
       `[B, gridH, gridW]` per-cell mask. 5-term masked MSE with √ ε-floor
       on the box-dim terms (see `planning/yolo_demo_v2.md` Phase 1). -/
   | yolov1Masked
+  /-- Binary cross-entropy with logits over multi-hot `[B, NC]` targets —
+      timm "ResNet Strikes Back" RSB-A2's loss. Each class is an independent
+      sigmoid; the mixup/cutmix soft-label path produces the `[B,NC]` target
+      directly (hard labels are one-hot'd, with optional label smoothing).
+      JAX-only (the IREE/MLIR backend does not implement it). Reduction is
+      timm's `mean` over B×C. See `planning/rsb_a2_resnet50.md`. -/
+  | bce
 deriving Repr, BEq
 
 /-- Optimizer selector for the training loop. Added additively over the legacy

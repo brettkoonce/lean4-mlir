@@ -139,6 +139,10 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
       throw <| IO.userError "yolov1Masked is incompatible with segmentation — different target shape ([B,30,7,7] float vs [B,H,W] int32)"
     if cfg.labelSmoothing != 0.0 then
       throw <| IO.userError "yolov1Masked is incompatible with labelSmoothing — smoothing applies to one-hot CE, not box-regression MSE"
+  | .bce =>
+    -- BCE-with-logits (RSB-A2) is implemented on the JAX backend only; the
+    -- IREE/MLIR train-step codegen (this path) has no sigmoid-BCE emitter.
+    throw <| IO.userError "lossKind = .bce is JAX-only (RSB-A2) — the IREE/MLIR backend does not implement BCE-with-logits; run it via runJax"
   let useYolov1Codegen := lossKind == .yolov1Masked
   let trainMlir := MlirCodegen.generateTrainStep spec cfg.batchSize ("jit_" ++ spec.sanitizedName ++ "_train_step")
     (labelSmoothing := cfg.labelSmoothing)

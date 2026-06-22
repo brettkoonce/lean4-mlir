@@ -1929,20 +1929,43 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   let hasCosine := cfg.cosineDecay
   (if cfg.runningBN then "def loss_fn(params, bn, x, y, drop_key=None):\n" else "def loss_fn(params, x, y, drop_key=None):\n") ++
   (if cfg.runningBN then "    logits, _new_bn = forward(params, x, bn, True, drop_key)\n" else "    logits = forward(params, x, drop_key)\n") ++
-  "    log_probs = jax.nn.log_softmax(logits, axis=-1)\n" ++
-  "    # y is int32 [B] (hard labels) or float [B,NC] (soft labels, mixup/cutmix).\n" ++
-  "    # y.ndim is static at trace time, so this branch is jit-safe.\n" ++
-  "    if y.ndim == 1:\n" ++
-  "        tgt = jax.nn.one_hot(y, " ++ toString nClasses ++ ")\n" ++
-  (if cfg.labelSmoothing > 0.0 then
-    "        tgt = tgt * (1.0 - " ++ toString cfg.labelSmoothing ++ ") + " ++
-      toString cfg.labelSmoothing ++ " / " ++ toString nClasses ++ "\n"
-   else "") ++
-  "    else:\n" ++
-  "        tgt = y\n" ++
-  (if cfg.runningBN
-   then "    return -jnp.mean(jnp.sum(log_probs * tgt, axis=-1)), _new_bn\n\n"
-   else "    return -jnp.mean(jnp.sum(log_probs * tgt, axis=-1))\n\n") ++
+  (let isBCE := match cfg.lossKind with | .bce => true | _ => false
+   if isBCE then
+    -- BCE-with-logits over multi-hot [B,NC] targets (RSB-A2). Hard labels ->
+    -- (smoothed) one-hot; soft labels (mixup/cutmix) consumed directly. softplus
+    -- is the stable log-sigmoid: per-class BCE = tgt·softplus(-z)+(1-tgt)·softplus(z).
+    "    # BCE-with-logits over multi-hot [B,NC] targets (RSB-A2); each class an\n" ++
+    "    # independent sigmoid. y.ndim is static at trace time, so this is jit-safe.\n" ++
+    "    if y.ndim == 1:\n" ++
+    "        tgt = jax.nn.one_hot(y, " ++ toString nClasses ++ ")\n" ++
+    (if cfg.labelSmoothing > 0.0 then
+      "        tgt = tgt * (1.0 - " ++ toString cfg.labelSmoothing ++ ") + " ++
+        toString cfg.labelSmoothing ++ " / " ++ toString nClasses ++ "\n"
+     else "") ++
+    "    else:\n" ++
+    "        tgt = y\n" ++
+    "    # stable log-sigmoid via softplus: -log(sig(z))=softplus(-z), -log(1-sig(z))=softplus(z)\n" ++
+    "    bce = tgt * jax.nn.softplus(-logits) + (1.0 - tgt) * jax.nn.softplus(logits)\n" ++
+    -- timm BCE reduction='mean' over B×C (NOT mean(sum-over-classes); that would be
+    -- NC× larger and need an NC× smaller lr — RSB-A2's lr 5e-3 is tuned to this form).
+    (if cfg.runningBN
+     then "    return jnp.mean(bce), _new_bn\n\n"
+     else "    return jnp.mean(bce)\n\n")
+   else
+    "    log_probs = jax.nn.log_softmax(logits, axis=-1)\n" ++
+    "    # y is int32 [B] (hard labels) or float [B,NC] (soft labels, mixup/cutmix).\n" ++
+    "    # y.ndim is static at trace time, so this branch is jit-safe.\n" ++
+    "    if y.ndim == 1:\n" ++
+    "        tgt = jax.nn.one_hot(y, " ++ toString nClasses ++ ")\n" ++
+    (if cfg.labelSmoothing > 0.0 then
+      "        tgt = tgt * (1.0 - " ++ toString cfg.labelSmoothing ++ ") + " ++
+        toString cfg.labelSmoothing ++ " / " ++ toString nClasses ++ "\n"
+     else "") ++
+    "    else:\n" ++
+    "        tgt = y\n" ++
+    (if cfg.runningBN
+     then "    return -jnp.mean(jnp.sum(log_probs * tgt, axis=-1)), _new_bn\n\n"
+     else "    return -jnp.mean(jnp.sum(log_probs * tgt, axis=-1))\n\n")) ++
   let ic := match spec.layers.head? with
     | some (.conv2d ic ..) => ic | some (.convBn ic ..) => ic
     | some (.patchEmbed ic ..) => ic | _ => 3
