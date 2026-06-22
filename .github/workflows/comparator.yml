@@ -136,7 +136,7 @@ jobs:
           ln -sf ~/comparator/.lake/build/bin/comparator  "$HOME/.local/bin/comparator"
           command -v landrun lean4export comparator
 
-      - name: Run comparator (49 theorems, kernel + axiom-closure re-check)
+      - name: Run comparator (52 theorems, kernel + axiom-closure re-check)
         run: |
           cd tests/comparator
           ./run.sh

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run leanprover/comparator against the 27 theorems in Solution.lean.
+# Run leanprover/comparator against the 52 theorems in Solution.lean.
 #
 # What it verifies (per Lean's kernel, independently of the elaborator):
 #   1. Solution's theorem statements bit-identically match Challenge's

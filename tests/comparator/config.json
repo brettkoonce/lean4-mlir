@@ -2,6 +2,7 @@
     "challenge_module": "Challenge",
     "solution_module": "Solution",
     "theorem_names": [
+        "chk_pdiv_is_fderiv",
         "chk_pdiv_comp",
         "chk_pdiv_add",
         "chk_pdiv_mul",

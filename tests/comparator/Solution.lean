@@ -16,6 +16,10 @@ open scoped Real
 
 -- Foundation ────────────────────────────────────────────────────────
 
+theorem chk_pdiv_is_fderiv {m n : Nat} (f : Vec m → Vec n) (x : Vec m)
+    (i : Fin m) (j : Fin n) :
+    pdiv f x i j = fderiv ℝ f x (basisVec i) j := rfl
+
 theorem chk_pdiv_comp {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
     (x : Vec m) (hf : DifferentiableAt ℝ f x)
     (hg : DifferentiableAt ℝ g (f x))

@@ -24,15 +24,39 @@ appear in each Solution-side proof's transitive axiom closure, and
 (c) the Solution typechecks against Lean's kernel independently of the
 elaborator. See `README.md` for the full prereq + run instructions.
 
-The 51 theorems below span the foundation rules, every chapter's headline
+The 52 theorems below span the foundation rules, every chapter's headline
 Jacobian, and the public `*_has_vjp_correct` wrappers — enough to verify
 "zero project axioms" reaches everywhere. The
 docstrings give each theorem's mathematical content in regular LaTeX (so
 non-Lean readers can follow the math) and a one-line note on its role in
 the proof tree.
+
+## Mathlib grounding (the audit surface)
+
+Although this file imports `LeanMlir.Proofs.*`, every `chk_` reduces to a
+statement about **Mathlib's Fréchet derivative** of a named forward function.
+The calculus vocabulary is a thin, kernel-checked layer over Mathlib:
+* `Vec n := Fin n → ℝ`, `Mat m n := Fin m → Fin n → ℝ` (type abbreviations);
+  `basisVec i` = the i-th standard basis vector.
+* `pdiv f x i j := fderiv ℝ f x (basisVec i) j` — Mathlib `fderiv`, i-th input
+  direction / j-th output coord. Pinned by `chk_pdiv_is_fderiv` (`rfl`).
+* `pdivMat` / `pdiv3` = `pdiv` of the row-major `flatten ∘ f ∘ unflatten`.
+* `HasVJP.backward` = the rendered reverse map; each `*_has_vjp_correct` states
+  it equals `∑ j, pdiv (forward) x i j * dy j` (the fderiv-contracted VJP).
+So the only project-specific objects a reviewer must trust beyond Mathlib are
+the forward functions themselves — the architectures under test.
 -/
 
 -- Foundation: structural calculus rules ────────────────────────────
+
+/-- **`pdiv` is Mathlib's Fréchet derivative** (grounding):
+$\mathrm{pdiv}\,f\,x\,i\,j = \big(\mathrm{fderiv}_{\mathbb{R}}\,f\,x\,(e_i)\big)_j$
+— the directional Fréchet derivative along the i-th basis vector, j-th output
+coord. Pins this file's calculus vocabulary to Mathlib: every other `chk_` is
+stated via `pdiv`, and `pdivMat`/`pdiv3` are `pdiv` of the row-major flatten. -/
+theorem chk_pdiv_is_fderiv {m n : Nat} (f : Vec m → Vec n) (x : Vec m)
+    (i : Fin m) (j : Fin n) :
+    pdiv f x i j = fderiv ℝ f x (basisVec i) j := by sorry
 
 /-- **Chain rule** (foundation):
 $\frac{\partial (g \circ f)_k}{\partial x_i} = \sum_j \frac{\partial f_j}{\partial x_i} \cdot \frac{\partial g_k}{\partial f_j}$
