@@ -189,7 +189,14 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     parts := parts.push (← mkParam seed spec.1 spec.2)
     seed := seed + 1
   let mut params := F32.concat parts
-  for ep in [0:cfg.epochs] do
+  -- LEAN_MLIR_MAX_EPOCHS caps the epoch count (opt-in; absent → full cfg.epochs).
+  -- Used by `lake run benchmark` to probe steady-state per-epoch wall-clock with
+  -- only a few epochs; harmless otherwise (timing per epoch is LR-independent).
+  let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
+    | some n => min n cfg.epochs
+    | none   => cfg.epochs
+  for ep in [0:nEpochs] do
+    let tEp0 ← IO.monoMsNow
     for bi in [0:nb] do
       let xbRaw := F32.sliceImages trainImg (bi * bs) bs trainPix
       let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
@@ -206,7 +213,8 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}%"
+    let epMs := (← IO.monoMsNow) - tEp0
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}% ({epMs}ms)"
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."
 
@@ -454,7 +462,13 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut W0 ← F32.const (d0 * d1).toUSize 0.0
   let mut b0 ← F32.const d1.toUSize 0.0
-  for ep in [0:cfg.epochs] do
+  -- LEAN_MLIR_MAX_EPOCHS cap + per-epoch (Nms) timing, matching `train` (used by
+  -- `lake run benchmark`); opt-in, full cfg.epochs otherwise.
+  let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
+    | some n => min n cfg.epochs
+    | none   => cfg.epochs
+  for ep in [0:nEpochs] do
+    let tEp0 ← IO.monoMsNow
     for bi in [0:nb] do
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
@@ -473,6 +487,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}%"
+    let epMs := (← IO.monoMsNow) - tEp0
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}% ({epMs}ms)"
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."

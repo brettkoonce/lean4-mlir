@@ -1106,3 +1106,147 @@ script imagenette do
   runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
                 "efficientnet-verified-adam", "convnext-verified-adam",
                 "vit-verified-adam"]
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- `lake run benchmark` — estimate the book's training time on YOUR gpu.
+-- Probes two fast verified nets for a few epochs (the only thing that runs),
+-- reads steady-state ms/epoch from the trainer's own per-epoch print, and
+-- scales the reference per-chapter wall-clock by the measured hardware factor.
+-- Backend auto-detects (cuda if nvidia-smi present, else rocm) — works on
+-- either vendor out of the box. A dense factor (MNIST-MLP) and a conv factor
+-- (CIFAR-8-BN) scale the dense- vs conv-dominated chapters independently.
+--
+-- REFERENCE NUMBERS below are per-chapter *training* wall-clock on a single AMD
+-- 7900 XTX (gfx1100, ROCm 7.2), verified-IREE path. The MNIST/CIFAR rows and both
+-- probe anchors were MEASURED directly from these verified trainers (steady-state
+-- ms/epoch × the trainer's epoch count); the Imagenette rows (Ch6–10) are the
+-- verified-adam runs from the `imagenette` tier breakdown (R34 9.5h / MNv2 5.4h /
+-- ENet 6.2h / ConvNeXt 13.3h / ViT 2.3h). All EXCLUDE the one-time IREE compile
+-- (~10–15 min/arch, CPU-bound, ~hardware-independent). Re-running this benchmark on
+-- a 7900 XTX reproduces the two anchors (both factors read ~1.0×); regenerate the
+-- Imagenette rows from a clean full run.
+-- ═══════════════════════════════════════════════════════════════════════
+
+structure BenchItem where
+  chapter : String
+  family  : String          -- "dense" | "conv"
+  refSec  : Nat             -- reference training wall-clock (s) on the 7900 XTX
+  tier    : String          -- "" | "mnist" | "cifar" | "imagenette"
+
+def benchTable : List BenchItem :=
+  [ { chapter := "2  MNIST linear", family := "dense", refSec := 6,     tier := "mnist" },      -- 535ms × 12
+    { chapter := "3  MNIST MLP",    family := "dense", refSec := 38,    tier := "mnist" },      -- 3200ms × 12
+    { chapter := "4  MNIST CNN",    family := "conv",  refSec := 238,   tier := "mnist" },      -- 23764ms × 10
+    { chapter := "5  CIFAR x6",     family := "conv",  refSec := 2038,  tier := "cifar" },      -- 8490ms × 40 × 6
+    { chapter := "6  ResNet-34",    family := "conv",  refSec := 34200, tier := "imagenette" }, -- 9.5h
+    { chapter := "7  MobileNetV2",  family := "conv",  refSec := 19440, tier := "imagenette" }, -- 5.4h
+    { chapter := "8  EfficientNet", family := "conv",  refSec := 22320, tier := "imagenette" }, -- 6.2h
+    { chapter := "9  ConvNeXt",     family := "conv",  refSec := 47880, tier := "imagenette" }, -- 13.3h
+    { chapter := "10 ViT",          family := "conv",  refSec := 8280,  tier := "imagenette" } ]-- 2.3h
+
+/-- Measured steady-state ms/epoch on the reference 7900 XTX for the two anchors. -/
+def probeDenseRefMs : Nat := 3200   -- mnist-mlp-verified  (784→512→512→10)
+def probeConvRefMs  : Nat := 8490   -- cifar8-bn-verified  (8-conv + BN, 512 head)
+
+/-- Scale a chapter's reference seconds by the measured per-family factor. -/
+def yourSecOf (it : BenchItem) (dMs cMs : Nat) : Nat :=
+  if it.family == "dense" then it.refSec * dMs / probeDenseRefMs
+  else it.refSec * cMs / probeConvRefMs
+
+/-- Human duration from whole seconds: `45s` / `12m` / `9.5h`. -/
+def fmtDur (sec : Nat) : String :=
+  if sec < 90 then s!"{sec}s"
+  else if sec < 5400 then s!"{(sec + 30) / 60}m"
+  else let t := (sec * 10 + 1800) / 3600; s!"{t / 10}.{t % 10}h"
+
+/-- `num/den` as a 2-decimal multiplier string, e.g. `1.24`. -/
+def fmtFactor (num den : Nat) : String :=
+  if den == 0 then "?" else
+  let h := num * 100 / den
+  s!"{h / 100}.{(h % 100) / 10}{h % 10}"
+
+/-- Right-pad to a fixed width for column alignment. -/
+def padR (s : String) (n : Nat) : String :=
+  if s.length < n then s ++ String.ofList (List.replicate (n - s.length) ' ') else s
+
+/-- Pull the steady-state (last) `(<n>ms)` epoch timing out of a trainer's stdout. -/
+def lastEpochMs (out : String) : Option Nat :=
+  let eps := (out.splitOn "\n").filter fun l =>
+    (l.splitOn "epoch ").length > 1 && (l.splitOn "ms)").length > 1
+  match eps.getLast? with
+  | none => none
+  | some line =>
+    match (line.splitOn "(").getLast? with
+    | none => none
+    | some s => match s.splitOn "ms)" with
+                | h :: _ => h.toNat?
+                | []     => none
+
+/-- Build + run one probe net for ~3 epochs; return its steady-state ms/epoch. -/
+def runProbe (bin family : String) (refMs : Nat) (backend gpu : String)
+    (runEnv : Array (String × Option String)) : IO (Option Nat) := do
+  IO.println s!"\n  ▸ probing {bin} ({family}) — build + 3 epochs (~1 min)…"
+  let bp ← IO.Process.spawn { cmd := "lake", args := #["build", bin] }
+  if (← bp.wait) != 0 then
+    IO.eprintln s!"    build failed: {bin}"
+    return none
+  let vis := if backend == "cuda" then "CUDA_VISIBLE_DEVICES" else "HIP_VISIBLE_DEVICES"
+  let env := runEnv ++ #[("LEAN_MLIR_MAX_EPOCHS", some "3"),
+                         ("IREE_BACKEND", some backend), (vis, some gpu)]
+  let o ← IO.Process.output { cmd := s!".lake/build/bin/{bin}", args := #["data"], env := env }
+  match lastEpochMs o.stdout with
+  | none =>
+      IO.eprintln s!"    no epoch timing for {bin} (data present? exit {o.exitCode})"
+      pure none
+  | some ms =>
+      IO.println s!"    {ms} ms/epoch   [ref {refMs}]   → {fmtFactor ms refMs}× the 7900 XTX"
+      pure (some ms)
+
+/-- `lake run benchmark` — probe this GPU, print a per-chapter training-time estimate. -/
+script benchmark do
+  let backend ← match ← IO.getEnv "IREE_BACKEND" with
+    | some b => pure b
+    | none   => detectBackend
+  let gpu := (← IO.getEnv "LEAN_DEMO_GPU").getD "0"
+  let venvBin := (← IO.currentDir) / ".venv" / "bin"
+  let runEnv ← do
+    if ← System.FilePath.pathExists (venvBin / "iree-compile") then
+      pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}")]
+    else pure #[]
+  IO.println "━━━ lake run benchmark ━━━ verified-NN training throughput on your GPU"
+  IO.println s!"  backend: {backend}   gpu: {gpu}"
+  if !(← System.FilePath.pathExists "data") then
+    IO.eprintln "  no ./data — run ./download_mnist.sh and ./download_cifar.sh first."
+    return 1
+  let denseMs ← runProbe "mnist-mlp-verified" "dense" probeDenseRefMs backend gpu runEnv
+  let convMs  ← runProbe "cifar8-bn-verified" "conv"  probeConvRefMs  backend gpu runEnv
+  match denseMs, convMs with
+  | some dMs, some cMs =>
+    IO.println "\n  ESTIMATED training time on YOUR gpu  (ref = single AMD 7900 XTX):\n"
+    let rule := "  " ++ String.ofList (List.replicate 47 '-')
+    IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR "ref(7900 XTX)" 15}your gpu"
+    IO.println rule
+    let mut yourTotal := 0
+    let mut refTotal := 0
+    for it in benchTable do
+      let yourSec := yourSecOf it dMs cMs
+      yourTotal := yourTotal + yourSec
+      refTotal := refTotal + it.refSec
+      IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR (fmtDur it.refSec) 15}{fmtDur yourSec}"
+    IO.println rule
+    IO.println s!"  {padR "Full Part-1 training" 26}{padR (fmtDur refTotal) 15}{fmtDur yourTotal}"
+    IO.println "\n  `lake run` tiers on your gpu (training time):"
+    for (tier, label) in [("mnist", "lake run mnist"), ("cifar", "lake run cifar"),
+                          ("imagenette", "lake run imagenette")] do
+      let items := benchTable.filter (·.tier == tier)
+      let refS := (items.map (·.refSec)).foldl (· + ·) 0
+      let yourS := (items.map (fun it => yourSecOf it dMs cMs)).foldl (· + ·) 0
+      IO.println s!"    {padR label 22}{padR (fmtDur refS) 9}→  {fmtDur yourS}"
+    IO.println "\n  * MNIST/CIFAR rows are the probed nets themselves (tight). The 224² rows are"
+    IO.println "    extrapolated from the 32² conv probe — order-of-magnitude. Estimate is training"
+    IO.println "    time only; add a one-time IREE compile (~10–15 min/arch, CPU) on first run."
+    return 0
+  | _, _ =>
+    IO.eprintln "\n  probe failed — need data (./download_mnist.sh, ./download_cifar.sh) and the"
+    IO.eprintln "  IREE venv from Track 2. No estimate produced."
+    return 1
