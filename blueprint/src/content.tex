@@ -3182,7 +3182,7 @@ verified runs
 \begin{axis}[
     width=0.92\linewidth, height=6.5cm,
     xlabel={Epoch}, ylabel={Test accuracy (\%)},
-    xmin=0, xmax=41, ymin=28, ymax=76,
+    xmin=0, xmax=41, ymin=28, ymax=78,
     xtick={0,5,10,15,20,25,30,35,40},
     ytick={30,40,50,60,70},
     legend pos=south east,
@@ -3251,6 +3251,84 @@ its margin shrinks to nothing under momentum and Adam, which already
 condition the gradient well. Normalization, in other words, mostly
 compensates for a weak optimizer; give it a good one and the depth
 alone carries the net.
+
+\medskip\noindent The Lever-1 graph drew this for the SGD column ---
+fixed optimizer, BN toggled. The same per-epoch picture for the other
+two columns, on the same axes, is what reading \emph{down} the table
+looks like drawn out:
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    title={Nesterov momentum ($\mu$ 0.9, lr 0.02)},
+    title style={font=\small},
+    xlabel={Epoch}, ylabel={Test accuracy (\%)},
+    xmin=0, xmax=41, ymin=28, ymax=78,
+    xtick={0,5,10,15,20,25,30,35,40},
+    ytick={30,40,50,60,70},
+    legend pos=south east,
+    legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=1pt},
+]
+\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+(1,43.86) (2,55.08) (3,60.85) (4,64.31) (5,67.17) (6,70.11) (7,71.45) (8,72.60) (9,72.77) (10,73.21) (11,74.21) (12,73.47) (13,74.56) (14,74.60) (15,75.14) (16,75.62) (17,75.57) (18,75.62) (19,76.66) (20,76.63) (21,76.23) (22,76.19) (23,75.88) (24,76.01) (25,76.41) (26,75.99) (27,76.85) (28,76.68) (29,76.70) (30,76.63) (31,76.65) (32,76.79) (33,76.80) (34,76.99) (35,77.04) (36,76.92) (37,76.99) (38,76.93) (39,77.01) (40,77.08)
+};
+\addlegendentry{with BN}
+\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
+(1,39.65) (2,49.78) (3,54.17) (4,59.18) (5,64.09) (6,65.48) (7,67.74) (8,68.40) (9,67.12) (10,69.62) (11,70.27) (12,72.04) (13,71.82) (14,71.47) (15,71.36) (16,72.83) (17,73.02) (18,73.77) (19,73.16) (20,74.77) (21,75.10) (22,74.88) (23,75.34) (24,75.44) (25,76.24) (26,75.53) (27,76.10) (28,76.68) (29,76.68) (30,76.76) (31,76.85) (32,76.60) (33,76.69) (34,76.60) (35,76.78) (36,76.61) (37,76.55) (38,76.63) (39,76.77) (40,76.70)
+};
+\addlegendentry{no BN}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    title={AdamW (lr $10^{-3}$)},
+    title style={font=\small},
+    xlabel={Epoch}, ylabel={Test accuracy (\%)},
+    xmin=0, xmax=41, ymin=28, ymax=78,
+    xtick={0,5,10,15,20,25,30,35,40},
+    ytick={30,40,50,60,70},
+    legend pos=south east,
+    legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=1pt},
+]
+\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+(1,33.63) (2,44.98) (3,51.91) (4,57.84) (5,60.84) (6,63.50) (7,65.32) (8,65.34) (9,67.08) (10,68.37) (11,68.88) (12,69.65) (13,70.75) (14,70.49) (15,72.12) (16,72.41) (17,71.72) (18,72.01) (19,71.86) (20,72.54) (21,72.78) (22,73.29) (23,72.56) (24,73.19) (25,72.32) (26,73.04) (27,73.30) (28,73.20) (29,73.15) (30,73.21) (31,73.36) (32,73.30) (33,73.42) (34,73.37) (35,73.38) (36,73.29) (37,73.40) (38,73.41) (39,73.36) (40,73.35)
+};
+\addlegendentry{with BN}
+\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
+(1,40.87) (2,47.06) (3,53.37) (4,58.26) (5,59.70) (6,61.16) (7,63.41) (8,65.70) (9,65.20) (10,68.51) (11,68.28) (12,67.93) (13,69.26) (14,70.59) (15,70.54) (16,71.65) (17,72.09) (18,71.44) (19,71.59) (20,73.10) (21,73.06) (22,73.27) (23,73.46) (24,73.00) (25,72.68) (26,73.11) (27,72.95) (28,73.45) (29,73.58) (30,73.21) (31,73.44) (32,73.51) (33,73.58) (34,73.70) (35,73.45) (36,73.66) (37,73.52) (38,73.52) (39,73.57) (40,73.57)
+};
+\addlegendentry{no BN}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent Same wide 8-conv net, same shared pipeline, same 40 epochs ---
+only the optimizer changes from the SGD panel above
+(\texttt{runs/ablation\_cifar8w/\{nobn,bn\}.log}, the momentum and AdamW
+phases). Under \textbf{momentum} BN still takes the early lead --- 44\% to
+40\% at epoch~1, and a visible margin through the first dozen epochs --- but
+the un-normalized net pulls level around epoch~28 and both finish at 77\%,
+BN ahead by only a couple of tenths. Under \textbf{AdamW} even that early
+gap is gone: the two curves are tangled from the first epoch and the no-BN
+net actually ends a hair in front ($73.6$ vs $73.4$), because Adam's
+per-coordinate second-moment scaling already conditions the step that BN
+would otherwise smooth. Read top-to-bottom --- SGD, then momentum, then
+Adam --- the blue--orange gap collapses panel by panel: the same
+``BN helps most under a weak optimizer'' story the table tells in two
+columns of numbers, now drawn epoch by epoch.
 
 The reason we can make this comparison \emph{and trust it} is that the
 optimizer is one swappable rendered tail. The forward pass, the
