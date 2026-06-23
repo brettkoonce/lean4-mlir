@@ -9490,6 +9490,99 @@ with two layers; the actual graph is a much larger DAG with the dual
 representation and the cross-stage handoff. \S~\ref{layer:evoformerBlock}
 and \S~\ref{layer:structureModule} document the bundling explicitly.
 
+\chapter{Data availability}
+\label{app:data}
+
+Every dataset in this book is public, and every one except ImageNet is
+fetched by a script in the repository root that drops it under
+\texttt{data/} where the trainers expect it. The table below lists each
+with its standard reference, homepage, and that fetch path. Four image
+datasets span the book's whole range: \textbf{MNIST} and
+\textbf{CIFAR-10} drive the verified-codegen chapters of Part~1
+(\S\ref{chap:cnn}, \S\ref{chap:bn}); \textbf{Imagenette} --- a ten-class
+subset of ImageNet at $224\times224$ --- is the ResNet-scale recipe
+(\S\ref{sec:residual_r34_example}); and full \textbf{ImageNet-1k} backs
+the JAX-bridge runs of the larger architectures (ResNet-34, MobileNetV2,
+EfficientNet-B0, ConvNeXt-T, ViT-Ti).
+
+\begin{center}
+\small
+\begin{tabular}{@{}l l l p{4.6cm} p{4.2cm}@{}}
+\hline
+Dataset & Abbrev. & Reference & Homepage & Path in repo \\
+\hline
+MNIST & MN & LeCun et al., 1998 &
+  \href{http://yann.lecun.com/exdb/mnist/}{\nolinkurl{yann.lecun.com/exdb/mnist}} &
+  \texttt{download\_mnist.sh} $\to$ \texttt{data/} \\[2pt]
+CIFAR-10 & CF10 & Krizhevsky, 2009 &
+  \href{https://www.cs.toronto.edu/~kriz/cifar.html}{\nolinkurl{cs.toronto.edu/~kriz/cifar.html}} &
+  \texttt{download\_cifar.sh} $\to$ \texttt{data/cifar-10/} \\[2pt]
+Imagenette & IN10 & Howard, 2019 &
+  \href{https://github.com/fastai/imagenette}{\nolinkurl{github.com/fastai/imagenette}} &
+  \texttt{download\_imagenette.sh} $\to$ \texttt{data/imagenette/} \\[2pt]
+ImageNet-1k & IN1K & Deng et al., 2009 &
+  \href{https://www.image-net.org/}{\nolinkurl{image-net.org}} &
+  \textit{manual}\,\textsuperscript{*} \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent\small Dataset information: name, abbreviation, standard
+reference, homepage, and the repository script (with the on-disk path
+under \texttt{data/}) that fetches it. MNIST is pulled from the CVDF
+mirror (\nolinkurl{storage.googleapis.com/cvdf-datasets/mnist}); the
+homepage above is the canonical reference.
+\textsuperscript{*}ImageNet-1k is license-gated and not
+redistributable, so the repository ships no fetch script: obtain it from
+\nolinkurl{image-net.org} under its terms and point the JAX-bridge
+trainers (\texttt{jax/runs/*\_imagenet\_*}) at the local copy.
+\normalsize
+
+\section{Demo datasets}
+\label{sec:data_demos}
+
+The \texttt{demos/} trainers step past image classification into the
+three other task families in the book --- detection, segmentation, and
+language --- and each pulls a dataset of its own. \textbf{Pascal
+VOC~2007} backs the YOLO detector (\texttt{yolov1-voc-train-bootstrap},
+trained on the \texttt{person} class); \textbf{Oxford-IIIT Pets} backs
+the UNet segmenter (\texttt{unet-pets-train}); and \textbf{tiny
+Shakespeare} --- a single 1\,MB character stream --- is what the TinyGPT
+char-level transformer (\texttt{tinygpt-shakespeare}) trains on. Same
+fetch-and-unpack story as the table above, with one extra step: each is
+tokenized or tiled into the trainer's input format by the matching
+\texttt{preprocess\_*.py} script before the first \texttt{lake exe} run.
+
+\begin{center}
+\small
+\begin{tabular}{@{}l l l p{4.6cm} p{4.2cm}@{}}
+\hline
+Dataset & Abbrev. & Reference & Homepage & Path in repo \\
+\hline
+Pascal VOC 2007 & VOC07 & Everingham et al., 2010 &
+  \href{http://host.robots.ox.ac.uk/pascal/VOC/voc2007/}{\nolinkurl{host.robots.ox.ac.uk/pascal/VOC/voc2007}} &
+  \texttt{download\_voc.sh} $\to$ \texttt{data/voc2007/} \\[2pt]
+Oxford-IIIT Pets & Pets & Parkhi et al., 2012 &
+  \href{https://www.robots.ox.ac.uk/~vgg/data/pets/}{\nolinkurl{robots.ox.ac.uk/~vgg/data/pets}} &
+  \texttt{download\_pets.sh} $\to$ \texttt{data/pets/} \\[2pt]
+tiny Shakespeare & TShk & Karpathy, 2015 &
+  \href{https://github.com/karpathy/char-rnn}{\nolinkurl{github.com/karpathy/char-rnn}} &
+  \texttt{download\_shakespeare.sh} $\to$ \texttt{data/shakespeare/} \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent\small The demo datasets, in the same columns as above. Each
+also has a \texttt{preprocess\_*.py} step (e.g.\
+\texttt{preprocess\_shakespeare.py} builds
+\texttt{train.bin}/\texttt{val.bin}/\texttt{vocab.txt}) between download
+and training. Pascal VOC is fetched from the
+\nolinkurl{pjreddie.com} mirror with the official
+\nolinkurl{host.robots.ox.ac.uk} server as fallback; the homepage above
+is the official one. (The repository uses VOC~\textbf{2007}, the
+20-class detection benchmark, not the later 2012 release.)
+\normalsize
+
 \chapter{Getting started}
 \label{app:getting_started}
 
