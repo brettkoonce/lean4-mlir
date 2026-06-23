@@ -1045,3 +1045,54 @@ lean_exe «bestiary-qanet» where
   root := `Bestiary.QANet
 
 require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- Demo groups: one command that builds + runs a curated chunk of trainers,
+-- tiered by time budget. `lake run mnist` (~30 min) / `lake run cifar` (~1 hr);
+-- anything bigger is a deliberate single-model run (see run.sh). Backend
+-- auto-detects (cuda if `nvidia-smi` is present, else rocm) but `IREE_BACKEND`
+-- overrides; GPU honors `LEAN_DEMO_GPU` (default 0). Each trainer streams live
+-- and tees to `<name>.log` via run.sh.
+-- ═══════════════════════════════════════════════════════════════════════
+
+/-- cuda when an NVIDIA GPU is visible (`nvidia-smi -L` succeeds), else rocm. -/
+private def detectBackend : IO String := do
+  try
+    let o ← IO.Process.output { cmd := "nvidia-smi", args := #["-L"] }
+    pure (if o.exitCode == 0 then "cuda" else "rocm")
+  catch _ => pure "rocm"
+
+/-- Build then run each named trainer in sequence (streaming) via `run.sh`. -/
+private def runDemoGroup (names : List String) : IO UInt32 := do
+  let backend ← match ← IO.getEnv "IREE_BACKEND" with
+    | some b => pure b
+    | none   => detectBackend
+  let gpu := (← IO.getEnv "LEAN_DEMO_GPU").getD "0"
+  -- The trainers shell out to `iree-compile`; put the project venv on PATH so
+  -- `lake run` works without pre-activating it (the usual one-click footgun).
+  let venvBin := (← IO.currentDir) / ".venv" / "bin"
+  let runEnv ← do
+    if ← System.FilePath.pathExists (venvBin / "iree-compile") then
+      pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}")]
+    else pure #[]
+  for n in names do
+    IO.println s!"\n━━━ {n}: build ━━━"
+    let bp ← IO.Process.spawn { cmd := "lake", args := #["build", n] }
+    if (← bp.wait) != 0 then
+      IO.eprintln s!"build failed: {n}"
+      return 1
+    IO.println s!"━━━ {n}: run (gpu {gpu}, {backend}) ━━━"
+    let rp ← IO.Process.spawn { cmd := "./run.sh", args := #[n, gpu, backend], env := runEnv }
+    let _ ← rp.wait
+  return 0
+
+/-- `lake run mnist` — the verified-MNIST demos (linear/MLP/CNN), ~30 min. -/
+script mnist do
+  runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified", "mnist-cnn-verified"]
+
+/-- `lake run cifar` — the ch.5 verified cifar8 variants: SGD/momentum/adam ×
+    bn/no-bn, ~1 hr. -/
+script cifar do
+  runDemoGroup ["cifar8-verified", "cifar8-bn-verified",
+                "cifar8-verified-momentum", "cifar8-bn-verified-momentum",
+                "cifar8-verified-adam", "cifar8-bn-verified-adam"]

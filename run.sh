@@ -26,12 +26,18 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-# Normalize the trainer name. Accept both "resnet34" and "resnet34-train".
+# Normalize the trainer name. Accept an exact binary name first (e.g. the
+# verified trainers "cifar8-bn-verified-adam"), then fall back to the
+# "<name>" → "<name>-train" convention (e.g. "resnet34" → "resnet34-train").
 trainer="$1"
-case "$trainer" in
-  *-train) bin="$trainer" ;;
-  *)       bin="$trainer-train" ;;
-esac
+if [ -x ".lake/build/bin/$trainer" ]; then
+  bin="$trainer"
+else
+  case "$trainer" in
+    *-train) bin="$trainer" ;;
+    *)       bin="$trainer-train" ;;
+  esac
+fi
 
 binpath=".lake/build/bin/$bin"
 if [ ! -x "$binpath" ]; then
