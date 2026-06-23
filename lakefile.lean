@@ -1156,6 +1156,55 @@ script imagenette do
                 "vit-verified-adam"]
 
 -- ═══════════════════════════════════════════════════════════════════════
+-- `lake run download` — fetch the core datasets the verified trainers + the
+-- benchmark need. Each entry pairs a download script with a sentinel file that
+-- proves the dataset is already on disk, so re-running is a fast no-op. Used both
+-- by `lake run download` and by `lake run benchmark` (which auto-downloads any
+-- missing dataset as its first step, instead of soft-failing on imagenette).
+-- ═══════════════════════════════════════════════════════════════════════
+
+/-- The core datasets: `(label, download script, sentinel that exists once it's
+    downloaded)`. MNIST + CIFAR feed the benchmark's dense/conv probes; Imagenette
+    feeds the ViT/attn probe and the `lake run imagenette` tier. -/
+def coreDatasets : List (String × String × String) :=
+  [ ("MNIST",      "download_mnist.sh",      "data/train-images-idx3-ubyte"),
+    ("CIFAR-10",   "download_cifar.sh",      "data/cifar-10/data_batch_1.bin"),
+    ("Imagenette", "download_imagenette.sh", "data/imagenette/train.bin") ]
+
+/-- Run a dataset's download script (via `bash`, so the exec bit doesn't matter)
+    if its sentinel file is missing. Returns `false` on a download failure. -/
+def ensureDataset (label sh sentinel : String) : IO Bool := do
+  if ← System.FilePath.pathExists sentinel then
+    IO.println s!"  ✓ {label} present ({sentinel})"
+    return true
+  IO.println s!"  ▸ {label} missing — running ./{sh} …"
+  let rp ← IO.Process.spawn { cmd := "bash", args := #[sh] }
+  if (← rp.wait) != 0 then
+    IO.eprintln s!"    ✗ download failed: ./{sh}"
+    return false
+  pure (← System.FilePath.pathExists sentinel)
+
+/-- Download any missing core dataset. Returns `false` if any download failed. -/
+def ensureCoreData : IO Bool := do
+  let mut ok := true
+  for (label, sh, sentinel) in coreDatasets do
+    if !(← ensureDataset label sh sentinel) then ok := false
+  pure ok
+
+/-- `lake run download` — fetch the core datasets (MNIST, CIFAR-10, Imagenette)
+    that the verified trainers and `lake run benchmark` need, downloading only the
+    ones not already on disk. Imagenette additionally needs `python3` + Pillow for
+    the binary preprocessing step (see ./download_imagenette.sh). -/
+script download do
+  IO.println "━━━ lake run download ━━━ core datasets: MNIST, CIFAR-10, Imagenette"
+  if ← ensureCoreData then
+    IO.println "\n  ✓ all core datasets present."
+    return 0
+  else
+    IO.eprintln "\n  ✗ one or more downloads failed (see above)."
+    return 1
+
+-- ═══════════════════════════════════════════════════════════════════════
 -- `lake run benchmark` — estimate the book's training time on YOUR gpu.
 -- Probes two fast verified nets for a few epochs (the only thing that runs),
 -- reads steady-state ms/epoch from the trainer's own per-epoch print, and
@@ -1294,9 +1343,15 @@ script benchmark do
     else pure #[]
   IO.println "━━━ lake run benchmark ━━━ verified-NN training throughput on your GPU"
   IO.println s!"  backend: {backend}   gpu: {gpu}"
+  -- First step: make sure every probe has its data. Auto-download anything
+  -- missing (incl. imagenette for the ViT/attn probe) rather than soft-failing.
+  IO.println "\n  ▸ ensuring core datasets are present (auto-download if missing)…"
+  let dataOk ← ensureCoreData
   if !(← System.FilePath.pathExists "data") then
-    IO.eprintln "  no ./data — run ./download_mnist.sh and ./download_cifar.sh first."
+    IO.eprintln "  no ./data and download failed — fix networking, or run `lake run download`."
     return 1
+  if !dataOk then
+    IO.eprintln "  ⚠ some downloads failed; probing with whatever data is present."
   let denseMs ← runProbe "mnist-mlp-verified" "dense" probeDenseRefMs backend gpu runEnv
   let convMs  ← runProbe "cifar8-bn-verified" "conv"  probeConvRefMs  backend gpu runEnv
   -- The attn anchor (ViT) is an Imagenette trainer, so it needs data/imagenette.
@@ -1304,7 +1359,7 @@ script benchmark do
   let attnMs ← if ← System.FilePath.pathExists "data/imagenette" then
       runProbe "vit-verified-adam" "attn" probeAttnRefMs backend gpu runEnv (stepProbe := some 40)
     else do
-      IO.println "\n  ▸ ViT/attn probe SKIPPED — no data/imagenette (./download_imagenette.sh)."
+      IO.println "\n  ▸ ViT/attn probe SKIPPED — data/imagenette download failed above."
       IO.println "    The ViT row falls back to the conv proxy, which underestimates it ~3.5×."
       pure none
   match denseMs, convMs with
@@ -1337,6 +1392,6 @@ script benchmark do
     IO.println "    factor (~3.5× low). Training time only; first run adds ~10–15 min/arch compile."
     return 0
   | _, _ =>
-    IO.eprintln "\n  probe failed — need data (./download_mnist.sh, ./download_cifar.sh) and the"
-    IO.eprintln "  IREE venv from Track 2. No estimate produced."
+    IO.eprintln "\n  probe failed — need data (`lake run download`) and the IREE venv from"
+    IO.eprintln "  Track 2. No estimate produced."
     return 1
