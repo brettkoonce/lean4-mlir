@@ -599,6 +599,21 @@ lean_exe «cifar8-verified-momentum» where
   root := `MainCifar8VerifiedMomentum
   moreLinkArgs := ireeLink
 
+-- fp8 (E4M3) optimizer sweep on the cifar8 CNN: the SGD / Nesterov-momentum / Adam
+-- demos run through the E4M3 host-quant path (fp8 weights+input, fp32 accumulate,
+-- fp32 master). Same verified train-step MLIR as their fp32 peers.
+lean_exe «cifar8-e4m3-verified» where
+  root := `MainCifar8E4M3Verified
+  moreLinkArgs := ireeLink
+
+lean_exe «cifar8-e4m3-verified-momentum» where
+  root := `MainCifar8E4M3VerifiedMomentum
+  moreLinkArgs := ireeLink
+
+lean_exe «cifar8-e4m3-verified-adam» where
+  root := `MainCifar8E4M3VerifiedAdam
+  moreLinkArgs := ireeLink
+
 lean_exe «cifar8-bn-verified-momentum» where
   root := `MainCifar8BnVerifiedMomentum
   moreLinkArgs := ireeLink

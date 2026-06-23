@@ -650,3 +650,141 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}% (fp8 E4M3)"
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} in fp8 E4M3 on the proof-rendered StableHLO)."
+
+/-- **fp8 (E4M3) variant of `trainAdamSched`** — runs the Adam / Nesterov-momentum
+    optimizer demos in fp8. Keeps an fp32 master `[θ|m|v]`; each step projects the
+    *weight* third `θ` onto the E4M3 grid (`quantPackedParams`: dense per-column,
+    conv per-channel; biases fp32) and the input per-tensor, runs the *same*
+    verified `@<slug>_<variant>_train_step` (the optimizer is baked into the MLIR,
+    so fp8 needs no new module — operand byte-prep only; fp32 accumulate), and folds
+    the optimizer-step delta back into the fp32 master θ (`addDelta`), keeping the
+    returned `m'/v'` moments in fp32. Distinct `_e4m3` checkpoint (won't resume an
+    fp32 run); honors `LEAN_MLIR_MAX_EPOCHS`. Same scope as `trainE4M3`: fp8
+    weights + input, fp32 intermediates / moments. -/
+def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
+    (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam") : IO Unit := do
+  let bs := cfg.batchSize
+  let d0 := net.d0
+  let nc := net.nClasses
+  IO.println net.blurb
+  IO.println s!"  [fp8 E4M3] fp32 master [θ|m|v] · per-slot θ quant + per-tensor input · fp32 accumulate ({variant})"
+  let hasBn := !net.bnChannels.isEmpty
+  let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
+  let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
+  let tsVmfb  := s!".lake/build/{net.slug}_{variant}_ts.vmfb"
+  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
+  let fwdEvalVmfb := s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
+  compileVmfb s!"verified_mlir/{net.slug}_{variant}_train_step.mlir" tsVmfb
+  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"             fwdVmfb
+  let tsSess  ← IreeSession.create tsVmfb
+  let fwdSess ← IreeSession.create fwdVmfb
+  let fwdEvalSess ← if hasBn then do
+      compileVmfb s!"verified_mlir/{net.slug}_fwd_eval.mlir" fwdEvalVmfb
+      IreeSession.create fwdEvalVmfb
+    else pure fwdSess
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
+    loadData net.data d0 dataDir
+  let evalName := match net.data with | .imagenette => "val" | _ => "test"
+  let nb  := nTrain / bs
+  let nbt := nEval / bs
+  let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
+    | some n => min n cfg.epochs
+    | none   => cfg.epochs
+  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} fp8 (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
+  (← IO.getStdout).flush
+  let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes ++ #[#[], #[], #[]]
+                                ++ (if hasBn then bnStatShapes else #[]))
+  let fwdShapes := net.shapesBA
+  let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
+  let xShape := net.xShape bs
+  let tsFn  := s!"m.{net.slug}_{variant}_train_step"
+  let fwdFn := s!"m.{net.slug}_fwd"
+  let mut parts : Array ByteArray := #[]
+  let mut seed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
+  for spec in net.specs do
+    parts := parts.push (← mkParam seed spec.1 spec.2)
+    seed := seed + 1
+  let theta := F32.concat parts
+  let zeros ← F32.const net.nParams.toUSize 0.0
+  let mut thetamv := F32.concat #[theta, zeros, zeros]
+  let mvBytes := 3 * net.nParams * 4
+  let pBytes := net.nParams * 4
+  let mut runningBnStats ← F32.const nBnStats.toUSize 0.0
+  let mut bnFirst := true
+  let totalSteps := (cfg.epochs * nb).toFloat
+  let warmSteps := (warmupEpochs * nb).toFloat
+  let ckptPath := s!".lake/build/{net.slug}_{variant}_e4m3_ckpt.bin"   -- distinct from the fp32 runs
+  let epPath := ckptPath ++ ".epoch"
+  let mut startEpoch := 0
+  if (← System.FilePath.pathExists ckptPath) && (← System.FilePath.pathExists epPath) then
+    thetamv ← IO.FS.readBinFile ckptPath
+    startEpoch := ((← IO.FS.readFile epPath).toNat?).getD 0
+    IO.println s!"  ▸ resuming from fp8 checkpoint at epoch {startEpoch}"
+    (← IO.getStdout).flush
+  -- pre-quantize the train images ONCE (per-tensor E4M3); shuffle + hflip preserve the grid.
+  let mut curImg := F32E4M3.quantPerTensor trainImg
+  let mut curLbl := trainLbl
+  for ep in [startEpoch:nEpochs] do
+    let mut epochLossSum := 0.0
+    let mut lastLr := 0.0
+    let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize (ep + 42).toUSize
+    curImg := sImg; curLbl := sLbl
+    for bi in [0:nb] do
+      let gstep := (ep * nb + bi + 1).toFloat
+      let lrt := if gstep ≤ warmSteps then baseLR * gstep / warmSteps
+                 else baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (gstep - warmSteps) / (totalSteps - warmSteps)))
+      let bc1 := 1.0 - Float.exp (gstep * Float.log β1)
+      let bc2 := 1.0 - Float.exp (gstep * Float.log β2)
+      let tail := F32.concat #[← F32.const (1 : USize) lrt, ← F32.const (1 : USize) bc1, ← F32.const (1 : USize) bc2]
+      -- fp8: project the θ third onto the E4M3 grid (weights per-slot; biases + m/v stay fp32).
+      let thetaMaster := thetamv.extract 0 pBytes
+      let thetaQ := F32E4M3.quantPackedParams thetaMaster net.specs
+      let thetamvQ := F32.concat #[thetaQ, thetamv.extract pBytes mvBytes]
+      let params := if hasBn then F32.concat #[thetamvQ, tail, runningBnStats] else F32.concat #[thetamvQ, tail]
+      let augSeed := (ep * nb + bi + 1).toUSize
+      let xbRaw := F32.sliceImages curImg (bi * bs) bs trainPix
+      let xb ← match net.data with
+        | .imagenette =>
+            let c ← if crop then F32.randomCrop xbRaw bs.toUSize 3 256 256 224 224 augSeed
+                    else pure xbRaw
+            F32.randomHFlip c bs.toUSize 3 224 224 (augSeed + 7777)
+        | .cifar => F32.randomHFlip xbRaw bs.toUSize 3 32 32 augSeed
+        | _ => pure xbRaw
+      let yb := F32.sliceLabels curLbl (bi * bs) bs
+      let out ← IreeSession.mlpTrainStepV tsSess tsFn xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
+      let stepLoss := F32.read out (3 * net.nParams).toUSize
+      epochLossSum := epochLossSum + stepLoss
+      lastLr := lrt
+      if bi < 3 || bi % 100 == 0 then
+        IO.println s!"  step {bi}/{nb}: loss={stepLoss}"
+        (← IO.getStdout).flush
+      -- fp8 master recovery: θ_master += (θ' − θ_q); keep the returned fp32 m'/v'.
+      let thetaPrime := out.extract 0 pBytes
+      let mvPrime := out.extract pBytes mvBytes
+      let thetaMasterNew := F32E4M3.addDelta thetaMaster thetaPrime thetaQ
+      thetamv := F32.concat #[thetaMasterNew, mvPrime]
+      if hasBn then
+        let batchBn := out.extract ((3 * net.nParams + 3) * 4) ((3 * net.nParams + 3 + nBnStats) * 4)
+        runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.1)
+        bnFirst := false
+    IO.println s!"Epoch {ep + 1}/{nEpochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
+    let thetaCur := thetamv.extract 0 pBytes
+    let evalSess := if hasBn then fwdEvalSess else fwdSess
+    let evalFn := if hasBn then s!"m.{net.slug}_fwd_eval" else fwdFn
+    let evalParams := if hasBn then F32.concat #[thetaCur, runningBnStats] else thetaCur
+    let evalShapes := if hasBn then fwdEvalShapes else fwdShapes
+    let mut correct := 0
+    for bi in [0:nbt] do
+      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let logits ← IreeSession.forwardF32 evalSess evalFn evalParams evalShapes
+                      xb xShape bs.toUSize nc.toUSize
+      for j in [0:bs] do
+        let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
+        let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
+        if pred == lbl then correct := correct + 1
+    let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}% (fp8 E4M3, {variant})"
+    (← IO.getStdout).flush
+    IO.FS.writeBinFile ckptPath thetamv
+    IO.FS.writeFile epPath (toString (ep + 1))
+  IO.println s!"done (trained {net.name} {variant} in fp8 E4M3 on the proof-rendered StableHLO)."
