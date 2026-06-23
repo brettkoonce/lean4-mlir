@@ -9818,6 +9818,23 @@ $224\times224$ --- a deliberate investment, not a quick look. Anything
 beyond these stays a single, deliberate \texttt{run.sh} invocation
 (Track 2).
 
+\medskip\noindent\textbf{Which tier fits your GPU?} Before committing to one
+--- especially the 37-hour Imagenette tier --- run \texttt{lake run
+benchmark}. It briefly times a couple of the verified nets on your card and
+prints how long each chapter and each tier above would take on it:
+
+\begin{verbatim}
+$ lake run benchmark
+  backend: rocm   gpu: 0
+  ...
+  6  ResNet-34            9.5h
+  Full Part-1 training   37.3h
+  lake run mnist 5m | cifar 34m | imagenette 36.7h
+\end{verbatim}
+
+\noindent Backend auto-detects (CUDA or ROCm), so the numbers come out scaled
+to whatever card you run it on.
+
 \section*{Common troubleshooting}
 
 \begin{itemize}
