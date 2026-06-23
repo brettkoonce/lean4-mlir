@@ -90,7 +90,8 @@ LEAN_EXPORT lean_obj_res lean_f32_load_idx_images(b_lean_obj_arg path_obj, lean_
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
     uint8_t* raw = (uint8_t*)malloc(fsize);
-    fread(raw, 1, fsize, f);
+    if (fread(raw, 1, fsize, f) != (size_t)fsize) { free(raw); fclose(f);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("short read on IDX image file"))); }
     fclose(f);
 
     uint32_t magic = read_be32(raw);
@@ -127,7 +128,8 @@ LEAN_EXPORT lean_obj_res lean_f32_load_idx_labels(b_lean_obj_arg path_obj, lean_
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
     uint8_t* raw = (uint8_t*)malloc(fsize);
-    fread(raw, 1, fsize, f);
+    if (fread(raw, 1, fsize, f) != (size_t)fsize) { free(raw); fclose(f);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("short read on IDX label file"))); }
     fclose(f);
 
     uint32_t magic = read_be32(raw);
