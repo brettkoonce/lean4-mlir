@@ -1096,3 +1096,13 @@ script cifar do
   runDemoGroup ["cifar8-verified", "cifar8-bn-verified",
                 "cifar8-verified-momentum", "cifar8-bn-verified-momentum",
                 "cifar8-verified-adam", "cifar8-bn-verified-adam"]
+
+/-- `lake run imagenette` — the Part-I verified Imagenette trainers (the rest of
+    the chapters: ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT-Tiny),
+    80-epoch AdamW at 224². **~37 h end-to-end** (9.5 + 5.4 + 6.2 + 13.3 + 2.3,
+    single 7900 XTX — per the ViT-chapter results table) — a real time
+    investment, not a quick demo. -/
+script imagenette do
+  runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
+                "efficientnet-verified-adam", "convnext-verified-adam",
+                "vit-verified-adam"]
