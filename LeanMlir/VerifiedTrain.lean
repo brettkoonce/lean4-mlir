@@ -1,6 +1,7 @@
 import LeanMlir.Types
 import LeanMlir.F32Array
 import LeanMlir.IreeRuntime
+import LeanMlir.E4M3Quant
 
 /-! # Shared driver for the `*-verified` trainers
 
@@ -508,3 +509,144 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}% ({epMs}ms)"
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."
+
+/-- **fp8 (E4M3) Lean trainer** — the low-precision sibling of `trainLinear`.
+
+    Keeps **fp32 master weights** and, each step, projects the weights
+    (per-output-column) and the activations (per-tensor) onto the **E4M3** grid
+    (`LeanMlir/E4M3Quant.lean`), runs the *same* verified `@<slug>_train_step`
+    kernel (the matmul accumulates in fp32 — the `dotMixed` model: `u_leaf =
+    E4M3`, `u_acc = fp32`), and applies the recovered gradient delta to the fp32
+    master via `addDelta` (`master += Wout − Wq = master − lr·∇`). The MLIR and
+    FFI are **unchanged**: fp8 here is host-side operand byte-prep, exactly the
+    §3b render-tie model (`Proofs/E4M3FaithfulPoC.lean`). Eval runs the fp32
+    master through `@<slug>_fwd` (the "fp32-infer" accuracy of the fp8-trained
+    model, mirroring `scripts/mnist_e4m3_demo.py`).
+
+    Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mnist-linear-e4m3-verified data` -/
+def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do
+  let bs := cfg.batchSize
+  let d0 := net.d0
+  let d1 := net.nClasses
+  IO.println net.blurb
+  IO.println "  [fp8 E4M3] fp32 master · per-column W / per-tensor x → E4M3 grid · fp32 accumulate"
+  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
+  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
+  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  let tsSess  ← IreeSession.create tsVmfb
+  let fwdSess ← IreeSession.create fwdVmfb
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
+    loadData net.data d0 dataDir
+  let evalName := match net.data with | .imagenette => "val" | _ => "test"
+  IO.println s!"  train {nTrain}, {evalName} {nEval}; dense {d0}->{d1}, bs {bs}, fp8-SGD (E4M3 leaf / fp32 acc)"
+  (← IO.getStdout).flush
+  let nb  := nTrain / bs
+  let nbt := nEval / bs
+  let shapes := net.shapesBA
+  let xShape := net.xShape bs
+  let tsFn  := s!"m.{net.slug}_train_step"
+  let fwdFn := s!"m.{net.slug}_fwd"
+  -- Static per-tensor activation scale ⇒ quantize the whole train set ONCE.
+  let trainImgQ := F32E4M3.quantPerTensor trainImg
+  let mut mW ← F32.const (d0 * d1).toUSize 0.0     -- fp32 master weights (zero-init)
+  let mut mb ← F32.const d1.toUSize 0.0            -- fp32 master bias (unquantized)
+  for ep in [0:cfg.epochs] do
+    for bi in [0:nb] do
+      let xb := F32.sliceImages trainImgQ (bi * bs) bs d0     -- E4M3 activations
+      let yb := F32.sliceLabels trainLbl (bi * bs) bs
+      let Wq := F32E4M3.quantPerColumn mW d0 d1               -- E4M3 weight operand
+      let out ← IreeSession.linearTrainStepV tsSess tsFn
+                  xb Wq mb yb bs.toUSize d0.toUSize d1.toUSize
+      let Wout := out.extract 0 (d0 * d1 * 4)
+      let bout := out.extract (d0 * d1 * 4) ((d0 * d1 + d1) * 4)
+      mW := F32E4M3.addDelta mW Wout Wq                       -- master += (Wout − Wq)
+      mb := bout                                              -- bias update is exact (unquantized)
+    let params := mW ++ mb
+    let mut correct := 0
+    for bi in [0:nbt] do
+      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
+                      xb xShape bs.toUSize d1.toUSize
+      for j in [0:bs] do
+        let pred := (F32.argmax10 logits (j * d1).toUSize).toNat
+        let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
+        if pred == lbl then correct := correct + 1
+    let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}% (fp8 E4M3)"
+    (← IO.getStdout).flush
+  IO.println s!"done (trained {net.name} in fp8 E4M3 on the proof-rendered StableHLO)."
+
+/-- **fp8 (E4M3) packed-params trainer** — the low-precision sibling of
+    `VerifiedNet.train`, for the depth>1 nets (MLP, CNN). Keeps **fp32 master
+    params** and, each step, projects every *weight* slot onto the E4M3 grid
+    (dense per-output-column, conv per-output-channel; biases kept fp32 —
+    `F32E4M3.quantPackedParams`) and the *input* per-tensor, runs the *same*
+    verified `@<slug>_train_step` (fp32 accumulate inside), and folds the
+    gradient delta back into the master with `addDelta` over the whole packed
+    buffer (`master += out − paramsQ`: weight slots get `−lr·∇`, bias slots the
+    exact update). MLIR/FFI unchanged.
+
+    **Scope (honest):** host-side prep reaches weights + the *input* activation
+    only. The intermediate activations (relu/pool/flatten outputs feeding the
+    deeper matmuls) and the backward-chain cotangents are computed *inside* the
+    fused kernel and stay fp32 — quantizing them needs in-graph E4M3 ops (the
+    next, codegen-level step), not host byte-prep. So this is honest **fp8
+    weights + fp8 input, fp32 intermediates**. Eval runs the fp32 master.
+
+    Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mnist-mlp-e4m3-verified data` -/
+def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do
+  let bs := cfg.batchSize
+  let d0 := net.d0
+  let nc := net.nClasses
+  IO.println net.blurb
+  IO.println "  [fp8 E4M3] fp32 master · per-slot weight quant (dense per-col / conv per-channel) + per-tensor input · fp32 accumulate"
+  IO.println "  note: depth>1 ⇒ intermediate activations & cotangents stay fp32 (inside the kernel); weights + input are E4M3"
+  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
+  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
+  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  let tsSess  ← IreeSession.create tsVmfb
+  let fwdSess ← IreeSession.create fwdVmfb
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
+    loadData net.data d0 dataDir
+  let evalName := match net.data with | .imagenette => "val" | _ => "test"
+  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} ({net.specs.size} params, {net.nParams} floats), fp8-SGD (E4M3 leaf / fp32 acc), He init"
+  (← IO.getStdout).flush
+  let nb  := nTrain / bs
+  let nbt := nEval / bs
+  let shapes := net.shapesBA
+  let xShape := net.xShape bs
+  let tsFn  := s!"m.{net.slug}_train_step"
+  let fwdFn := s!"m.{net.slug}_fwd"
+  let mut parts : Array ByteArray := #[]
+  let mut seed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
+  for spec in net.specs do
+    parts := parts.push (← mkParam seed spec.1 spec.2)
+    seed := seed + 1
+  let mut params := F32.concat parts                       -- fp32 master params
+  -- Static per-tensor input scale ⇒ quantize the train images ONCE (crop, if any,
+  -- only selects grid-valued pixels, so quantize-then-crop stays on the grid).
+  let trainImgQ := F32E4M3.quantPerTensor trainImg
+  for ep in [0:cfg.epochs] do
+    for bi in [0:nb] do
+      let xbRaw := F32.sliceImages trainImgQ (bi * bs) bs trainPix
+      let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
+      let yb := F32.sliceLabels trainLbl (bi * bs) bs
+      let paramsQ := F32E4M3.quantPackedParams params net.specs   -- E4M3 weight operands
+      let out ← IreeSession.mlpTrainStepV tsSess tsFn
+                  xb paramsQ shapes yb bs.toUSize d0.toUSize nc.toUSize
+      params := F32E4M3.addDelta params out paramsQ              -- master += (out − paramsQ)
+    let mut correct := 0
+    for bi in [0:nbt] do
+      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
+                      xb xShape bs.toUSize nc.toUSize
+      for j in [0:bs] do
+        let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
+        let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
+        if pred == lbl then correct := correct + 1
+    let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}% (fp8 E4M3)"
+    (← IO.getStdout).flush
+  IO.println s!"done (trained {net.name} in fp8 E4M3 on the proof-rendered StableHLO)."

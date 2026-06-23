@@ -515,16 +515,37 @@ lean_exe «mnist-linear-verified» where
   root := `MainMnistLinearVerified
   moreLinkArgs := ireeLink
 
+-- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
+-- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
+-- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).
+lean_exe «mnist-linear-e4m3-verified» where
+  root := `MainMnistLinearE4M3Verified
+  moreLinkArgs := ireeLink
+
 -- Chapter 3: trains the MNIST MLP on the VERIFIED-rendered StableHLO
 -- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepText).
 lean_exe «mnist-mlp-verified» where
   root := `MainMnistMlpVerified
   moreLinkArgs := ireeLink
 
+-- Chapter 3 (low precision): fp8 (E4M3) MLP training on the SAME verified StableHLO.
+-- fp32 master, per-column weight quant + per-tensor input, fp32 accumulate.
+-- fp8 weights+input, fp32 intermediates. See MainMnistMlpE4M3Verified.lean.
+lean_exe «mnist-mlp-e4m3-verified» where
+  root := `MainMnistMlpE4M3Verified
+  moreLinkArgs := ireeLink
+
 -- Chapter 4: trains the MNIST CNN on the VERIFIED-rendered StableHLO
 -- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepText).
 lean_exe «mnist-cnn-verified» where
   root := `MainMnistCnnVerified
+  moreLinkArgs := ireeLink
+
+-- Chapter 4 (low precision): fp8 (E4M3) CNN training on the SAME verified StableHLO.
+-- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
+-- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainMnistCnnE4M3Verified.lean.
+lean_exe «mnist-cnn-e4m3-verified» where
+  root := `MainMnistCnnE4M3Verified
   moreLinkArgs := ireeLink
 
 -- Chapter 5: trains the CIFAR-10 CNN (no BN) on the VERIFIED-rendered StableHLO
