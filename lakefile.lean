@@ -1224,10 +1224,10 @@ def lastEpochMs (out : String) : Option Nat :=
 def probeMsStep (out : String) : Option Nat :=
   match ((out.splitOn "\n").filter fun l => (l.splitOn "PROBE:").length > 1).getLast? with
   | none => none
-  | some line => match (line.splitOn "PROBE:").getLast? with
+  | some line => match (line.splitOn "PROBE: ").getLast? with
     | none => none
     | some s => match s.splitOn " ms/step" with
-                | h :: _ => h.trim.toNat?
+                | h :: _ => h.toNat?
                 | []     => none
 
 /-- Build + run one probe net and return its steady-state timing. With `stepProbe`
