@@ -9588,7 +9588,7 @@ is the official one. (The repository uses VOC~\textbf{2007}, the
 
 If you want to just see it run --- train a real neural network, end
 to end, with the Lean $\to$ MLIR $\to$ IREE pipeline from Part 1 --- this
-appendix is the smallest path from zero to a trained model. Three
+appendix is the smallest path from zero to a trained model. Four
 tracks are included:
 
 \begin{enumerate}
@@ -9602,6 +9602,11 @@ tracks are included:
   \item \textbf{Lean-only (no IREE).} Read, build, and verify the
     proofs without running any neural-network training. Covers
     everything in Part 1 at the proof level.
+  \item \textbf{One-command demo tiers.} With the native setup
+    (Track 2) in place, a single \texttt{lake run mnist},
+    \texttt{cifar}, or \texttt{imagenette} builds and runs a curated,
+    time-budgeted group of \emph{verified} trainers --- no env vars or
+    trainer list to assemble by hand.
 \end{enumerate}
 
 \section*{Track 1: No-GPU Docker demo}
@@ -9770,6 +9775,48 @@ Every closed-form Jacobian formula in the suite has a
 finite-difference test that compares the formula against the
 numerical derivative. The check typically completes in under a
 minute and reports pass/fail per formula.
+
+\section*{Track 4: One-command demo tiers}
+
+Track 2 is the full manual path --- pick a trainer, set the backend
+env vars, run. Once that setup works, you rarely want to assemble a
+trainer list and environment by hand every time. Three Lake
+\texttt{script}s bundle the common cases into one command that builds
+and runs a curated, time-budgeted group of \emph{verified} trainers
+back to back:
+
+\begin{verbatim}
+lake run mnist        # verified MNIST: linear, MLP, CNN            (~30 min)
+lake run cifar        # ch.5 cifar8: SGD/momentum/Adam x bn/no-bn   (~1 hr)
+lake run imagenette   # the 5 Part-I nets at 224^2, 80-epoch AdamW  (~37 h)
+\end{verbatim}
+
+Each script streams every trainer live and tees it to
+\texttt{<name>.log}. Two conveniences make it genuinely one-click on
+top of the Track 2 install:
+
+\begin{itemize}
+  \item \textbf{Backend auto-detects.} \texttt{cuda} when an NVIDIA GPU
+    is visible (\texttt{nvidia-smi -L} succeeds), otherwise
+    \texttt{rocm}. Set \texttt{IREE\_BACKEND} to override and
+    \texttt{LEAN\_DEMO\_GPU} to pick the card (default \texttt{0}).
+  \item \textbf{The venv is found for you.} The trainers shell out to
+    \texttt{iree-compile}; the script prepends the project's
+    \texttt{.venv/bin} to \texttt{PATH} for the run, so it resolves
+    without activating the venv first --- the usual one-click footgun.
+\end{itemize}
+
+The tiers escalate by time budget. \texttt{lake run mnist}
+($\sim$30 min) is the quickest end-to-end confirmation that the GPU
+path works; \texttt{lake run cifar} ($\sim$1 hr) is the
+Chapter~\ref{chap:bn} optimizer ablation in full --- the six runs
+(SGD/momentum/AdamW $\times$ BN/no-BN) behind that chapter's accuracy
+curves and table; and \texttt{lake run imagenette} ($\sim$37 h on a
+single 7900 XTX) trains all five Part-I architectures
+(ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT-Ti) at full
+$224\times224$ --- a deliberate investment, not a quick look. Anything
+beyond these stays a single, deliberate \texttt{run.sh} invocation
+(Track 2).
 
 \section*{Common troubleshooting}
 
