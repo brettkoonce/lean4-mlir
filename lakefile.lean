@@ -295,6 +295,11 @@ lean_lib «Proofs» where
              -- (the per-output dequant scale factors out of the fp32 accumulate),
              -- via existing den-faithful ops only — E4M3FaithfulPoC.lean.
              `LeanMlir.Proofs.E4M3FaithfulPoC,
+             -- bf16-mixed render-tie (planning §5, the symmetric gap): the emitted
+             -- bf16-leaf/fp32-accumulate linear graph denotes the rounded-operand
+             -- linear (no scale to factor — simpler than the E4M3 twin). Unlike fp8,
+             -- this graph lowers on CUDA. Bf16FaithfulPoC.lean.
+             `LeanMlir.Proofs.Bf16FaithfulPoC,
              -- mnist-MLP peer: the whole 3-layer MLP train step folded into the
              -- verified AST (forward + backward chain + 6 weightSgd/biasSgd), each
              -- output's den proven = certified via mlp_render_*_certified.
