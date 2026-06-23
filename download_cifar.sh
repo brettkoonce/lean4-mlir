@@ -5,7 +5,9 @@ cd data/cifar-10
 URL="https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz"
 if [ ! -f "data_batch_1.bin" ]; then
   echo "Downloading CIFAR-10..."
-  curl -O "$URL"
+  # -L: follow the cs.toronto.edu -> cave.cs.toronto.edu 301 redirect.
+  # -f: fail (non-zero) on an HTTP error instead of saving the error page as the tarball.
+  curl -LfO "$URL"
   tar xzf cifar-10-binary.tar.gz --strip-components=1
   rm cifar-10-binary.tar.gz
 fi
