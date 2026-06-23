@@ -554,6 +554,13 @@ lean_exe «cifar-verified» where
   root := `MainCifarVerified
   moreLinkArgs := ireeLink
 
+-- Chapter 5 (low precision): fp8 (E4M3) CIFAR-10 training on the SAME verified StableHLO.
+-- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
+-- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainCifarE4M3Verified.lean.
+lean_exe «cifar-e4m3-verified» where
+  root := `MainCifarE4M3Verified
+  moreLinkArgs := ireeLink
+
 -- Chapter 5 (BatchNorm): trains the CIFAR-10 CNN + per-example BN on the
 -- VERIFIED-rendered StableHLO (Proofs.StableHLO.cifarBnTrainStepText).
 lean_exe «cifar-bn-verified» where
