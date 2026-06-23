@@ -12,8 +12,9 @@ the workaround for each is documented in the relevant folder's README.
 
 ## Currently open
 
-_None._ All previously-open ROCm-side reports have been resolved by
-the `jax 0.10.0` upgrade or by IREE 3.12.
+| folder | upstream | status |
+|---|---|---|
+| [`2026-06-iree-cuda-fp8-nvptx-lowering/`](2026-06-iree-cuda-fp8-nvptx-lowering/) | iree-org/iree (to file) | f8E4M3FN/E5M2 don't lower on CUDA/NVPTX (`unrealized_conversion_cast` i8↔f8); CPU + fp32 OK. Repros on rc20260428 **and** rc20260623. |
 
 ## Fixed upstream
 
