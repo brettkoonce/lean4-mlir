@@ -366,6 +366,13 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- set (5.3 GiB) per epoch → OOM after ~30 epochs on a 188 GB box.
   let mut curImg := trainImg
   let mut curLbl := trainLbl
+  -- LEAN_MLIR_MAX_STEPS: run a short steady-state ms/step probe then exit. This is
+  -- the benchmark's `attn` anchor — ViT is matmul/attention-bound, so its per-step
+  -- cost scales very differently from conv across GPUs and can't borrow the conv
+  -- factor. A full ViT epoch is too slow to probe, so we time a step window.
+  let probeSteps := (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?)
+  let probeWarm := 8
+  let mut probeT0 := 0
   for ep in [startEpoch:cfg.epochs] do
     let mut epochLossSum := 0.0
     let mut lastLr := 0.0
@@ -410,6 +417,16 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
         let batchBn := out.extract ((3 * net.nParams + 3) * 4) ((3 * net.nParams + 3 + nBnStats) * 4)
         runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.1)
         bnFirst := false
+      -- ms/step probe: start the clock past warmup, report + exit at the cap.
+      match probeSteps with
+      | some ps =>
+        if bi == probeWarm then probeT0 := (← IO.monoMsNow)
+        else if bi == ps && ps > probeWarm then
+          let dt := (← IO.monoMsNow) - probeT0
+          IO.println s!"  PROBE: {dt / (ps - probeWarm)} ms/step (steps {probeWarm}..{ps}, {net.name})"
+          (← IO.getStdout).flush
+          return ()
+      | none => pure ()
     IO.println s!"Epoch {ep + 1}/{cfg.epochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
     let thetaCur := thetamv.extract 0 pBytes
     -- BN nets eval through `@<slug>_fwd_eval` with the running stats appended; others use `@<slug>_fwd`.

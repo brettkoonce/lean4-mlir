@@ -1142,15 +1142,25 @@ def benchTable : List BenchItem :=
     { chapter := "7  MobileNetV2",  family := "conv",  refSec := 19440, tier := "imagenette" }, -- 5.4h
     { chapter := "8  EfficientNet", family := "conv",  refSec := 22320, tier := "imagenette" }, -- 6.2h
     { chapter := "9  ConvNeXt",     family := "conv",  refSec := 47880, tier := "imagenette" }, -- 13.3h
-    { chapter := "10 ViT",          family := "conv",  refSec := 8280,  tier := "imagenette" } ]-- 2.3h
+    { chapter := "10 ViT",          family := "attn",  refSec := 8280,  tier := "imagenette" } ]-- 2.3h
 
 /-- Measured steady-state ms/epoch on the reference 7900 XTX for the two anchors. -/
 def probeDenseRefMs : Nat := 3200   -- mnist-mlp-verified  (784→512→512→10)
 def probeConvRefMs  : Nat := 8490   -- cifar8-bn-verified  (8-conv + BN, 512 head)
+/-- ms/STEP on the 7900 XTX for the `attn` anchor (ViT-Tiny, 360 ms/step per the
+    ViT-chapter results table). Step-based, not per-epoch: a ViT epoch is too slow
+    to probe, and ViT's matmul/attention cost scales unlike conv across GPUs — so
+    transformers get their own factor instead of borrowing the conv one. -/
+def probeAttnRefMs : Nat := 360
 
-/-- Scale a chapter's reference seconds by the measured per-family factor. -/
-def yourSecOf (it : BenchItem) (dMs cMs : Nat) : Nat :=
+/-- Scale a chapter's reference seconds by the measured per-family factor. `aMs` is
+    the attn ms/step probe (0 when no imagenette → attn falls back to the conv
+    factor, which is known ~3.5x low for ViT). -/
+def yourSecOf (it : BenchItem) (dMs cMs aMs : Nat) : Nat :=
   if it.family == "dense" then it.refSec * dMs / probeDenseRefMs
+  else if it.family == "attn" then
+    if aMs == 0 then it.refSec * cMs / probeConvRefMs        -- fallback: conv proxy
+    else it.refSec * aMs / probeAttnRefMs
   else it.refSec * cMs / probeConvRefMs
 
 /-- Human duration from whole seconds: `45s` / `12m` / `9.5h`. -/
@@ -1182,24 +1192,41 @@ def lastEpochMs (out : String) : Option Nat :=
                 | h :: _ => h.toNat?
                 | []     => none
 
-/-- Build + run one probe net for ~3 epochs; return its steady-state ms/epoch. -/
+/-- Pull `<n> ms/step` out of a `PROBE:` line (the LEAN_MLIR_MAX_STEPS path). -/
+def probeMsStep (out : String) : Option Nat :=
+  match ((out.splitOn "\n").filter fun l => (l.splitOn "PROBE:").length > 1).getLast? with
+  | none => none
+  | some line => match (line.splitOn "PROBE:").getLast? with
+    | none => none
+    | some s => match s.splitOn " ms/step" with
+                | h :: _ => h.trim.toNat?
+                | []     => none
+
+/-- Build + run one probe net and return its steady-state timing. With `stepProbe`
+    set (`attn` anchor) it caps at N steps and reads ms/step; otherwise it runs 3
+    epochs and reads ms/epoch. -/
 def runProbe (bin family : String) (refMs : Nat) (backend gpu : String)
-    (runEnv : Array (String × Option String)) : IO (Option Nat) := do
-  IO.println s!"\n  ▸ probing {bin} ({family}) — build + 3 epochs (~1 min)…"
+    (runEnv : Array (String × Option String)) (stepProbe : Option Nat := none) : IO (Option Nat) := do
+  let what := match stepProbe with | some n => s!"{n} steps" | none => "3 epochs"
+  IO.println s!"\n  ▸ probing {bin} ({family}) — build + {what}…"
   let bp ← IO.Process.spawn { cmd := "lake", args := #["build", bin] }
   if (← bp.wait) != 0 then
     IO.eprintln s!"    build failed: {bin}"
     return none
   let vis := if backend == "cuda" then "CUDA_VISIBLE_DEVICES" else "HIP_VISIBLE_DEVICES"
-  let env := runEnv ++ #[("LEAN_MLIR_MAX_EPOCHS", some "3"),
-                         ("IREE_BACKEND", some backend), (vis, some gpu)]
+  let capEnv := match stepProbe with
+    | some n => #[("LEAN_MLIR_MAX_STEPS", some (toString n))]
+    | none   => #[("LEAN_MLIR_MAX_EPOCHS", some "3")]
+  let env := runEnv ++ capEnv ++ #[("IREE_BACKEND", some backend), (vis, some gpu)]
   let o ← IO.Process.output { cmd := s!".lake/build/bin/{bin}", args := #["data"], env := env }
-  match lastEpochMs o.stdout with
+  let parsed := match stepProbe with | some _ => probeMsStep o.stdout | none => lastEpochMs o.stdout
+  match parsed with
   | none =>
-      IO.eprintln s!"    no epoch timing for {bin} (data present? exit {o.exitCode})"
+      IO.eprintln s!"    no timing for {bin} (data present? exit {o.exitCode})"
       pure none
   | some ms =>
-      IO.println s!"    {ms} ms/epoch   [ref {refMs}]   → {fmtFactor ms refMs}× the 7900 XTX"
+      let unit := match stepProbe with | some _ => "ms/step" | none => "ms/epoch"
+      IO.println s!"    {ms} {unit}   [ref {refMs}]   → {fmtFactor ms refMs}× the 7900 XTX"
       pure (some ms)
 
 /-- `lake run benchmark` — probe this GPU, print a per-chapter training-time estimate. -/
@@ -1220,8 +1247,17 @@ script benchmark do
     return 1
   let denseMs ← runProbe "mnist-mlp-verified" "dense" probeDenseRefMs backend gpu runEnv
   let convMs  ← runProbe "cifar8-bn-verified" "conv"  probeConvRefMs  backend gpu runEnv
+  -- The attn anchor (ViT) is an Imagenette trainer, so it needs data/imagenette.
+  -- Without it ViT falls back to the conv proxy (known ~3.5x low for transformers).
+  let attnMs ← if ← System.FilePath.pathExists "data/imagenette" then
+      runProbe "vit-verified-adam" "attn" probeAttnRefMs backend gpu runEnv (stepProbe := some 40)
+    else do
+      IO.println "\n  ▸ ViT/attn probe SKIPPED — no data/imagenette (./download_imagenette.sh)."
+      IO.println "    The ViT row falls back to the conv proxy, which underestimates it ~3.5×."
+      pure none
   match denseMs, convMs with
   | some dMs, some cMs =>
+    let aMs := attnMs.getD 0
     IO.println "\n  ESTIMATED training time on YOUR gpu  (ref = single AMD 7900 XTX):\n"
     let rule := "  " ++ String.ofList (List.replicate 47 '-')
     IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR "ref(7900 XTX)" 15}your gpu"
@@ -1229,10 +1265,11 @@ script benchmark do
     let mut yourTotal := 0
     let mut refTotal := 0
     for it in benchTable do
-      let yourSec := yourSecOf it dMs cMs
+      let yourSec := yourSecOf it dMs cMs aMs
       yourTotal := yourTotal + yourSec
       refTotal := refTotal + it.refSec
-      IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR (fmtDur it.refSec) 15}{fmtDur yourSec}"
+      let flag := if it.family == "attn" && aMs == 0 then " *proxy" else ""
+      IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR (fmtDur it.refSec) 15}{fmtDur yourSec}{flag}"
     IO.println rule
     IO.println s!"  {padR "Full Part-1 training" 26}{padR (fmtDur refTotal) 15}{fmtDur yourTotal}"
     IO.println "\n  `lake run` tiers on your gpu (training time):"
@@ -1240,11 +1277,12 @@ script benchmark do
                           ("imagenette", "lake run imagenette")] do
       let items := benchTable.filter (·.tier == tier)
       let refS := (items.map (·.refSec)).foldl (· + ·) 0
-      let yourS := (items.map (fun it => yourSecOf it dMs cMs)).foldl (· + ·) 0
+      let yourS := (items.map (fun it => yourSecOf it dMs cMs aMs)).foldl (· + ·) 0
       IO.println s!"    {padR label 22}{padR (fmtDur refS) 9}→  {fmtDur yourS}"
-    IO.println "\n  * MNIST/CIFAR rows are the probed nets themselves (tight). The 224² rows are"
-    IO.println "    extrapolated from the 32² conv probe — order-of-magnitude. Estimate is training"
-    IO.println "    time only; add a one-time IREE compile (~10–15 min/arch, CPU) on first run."
+    IO.println "\n  * dense/conv/attn rows each use their own probe (mnist-mlp, cifar8-bn, ViT);"
+    IO.println "    other 224² convnets are extrapolated from the 32² conv probe — order-of-"
+    IO.println "    magnitude. A `*proxy` ViT row means no imagenette, so it borrowed the conv"
+    IO.println "    factor (~3.5× low). Training time only; first run adds ~10–15 min/arch compile."
     return 0
   | _, _ =>
     IO.eprintln "\n  probe failed — need data (./download_mnist.sh, ./download_cifar.sh) and the"
