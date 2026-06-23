@@ -1145,14 +1145,15 @@ script imagenette do
 -- (CIFAR-8-BN) scale the dense- vs conv-dominated chapters independently.
 --
 -- REFERENCE NUMBERS below are per-chapter *training* wall-clock on a single AMD
--- 7900 XTX (gfx1100, ROCm 7.2), verified-IREE path. The MNIST/CIFAR rows and both
--- probe anchors were MEASURED directly from these verified trainers (steady-state
--- ms/epoch × the trainer's epoch count); the Imagenette rows (Ch6–10) are the
--- verified-adam runs from the `imagenette` tier breakdown (R34 9.5h / MNv2 5.4h /
--- ENet 6.2h / ConvNeXt 13.3h / ViT 2.3h). All EXCLUDE the one-time IREE compile
--- (~10–15 min/arch, CPU-bound, ~hardware-independent). Re-running this benchmark on
--- a 7900 XTX reproduces the two anchors (both factors read ~1.0×); regenerate the
--- Imagenette rows from a clean full run.
+-- 7900 XTX (gfx1100, ROCm 7.2), verified-IREE path. The MNIST/CIFAR rows and all
+-- three probe anchors (dense/conv/attn) were MEASURED directly from these verified
+-- trainers (steady-state ms/{epoch,step} × the trainer's epoch/step count); the
+-- R34/MNv2/ENet/ConvNeXt Imagenette rows are the verified-adam tier runs (9.5h /
+-- 5.4h / 6.2h / 13.3h) and the ViT row is measured here (7.8h warm — the 2.3h
+-- figure elsewhere is the JAX bf16 path, not this verified trainer). All EXCLUDE the
+-- one-time IREE compile (~10–15 min/arch, CPU-bound, ~hardware-independent).
+-- Re-running this benchmark on a 7900 XTX reproduces all three anchors (every
+-- factor reads ~1.0×); regenerate the other Imagenette rows from a clean full run.
 -- ═══════════════════════════════════════════════════════════════════════
 
 structure BenchItem where
@@ -1170,16 +1171,19 @@ def benchTable : List BenchItem :=
     { chapter := "7  MobileNetV2",  family := "conv",  refSec := 19440, tier := "imagenette" }, -- 5.4h
     { chapter := "8  EfficientNet", family := "conv",  refSec := 22320, tier := "imagenette" }, -- 6.2h
     { chapter := "9  ConvNeXt",     family := "conv",  refSec := 47880, tier := "imagenette" }, -- 13.3h
-    { chapter := "10 ViT",          family := "attn",  refSec := 8280,  tier := "imagenette" } ]-- 2.3h
+    { chapter := "10 ViT",          family := "attn",  refSec := 27966, tier := "imagenette" } ]-- 7.8h (1185ms/step × 295 × 80, warm steady-state)
 
 /-- Measured steady-state ms/epoch on the reference 7900 XTX for the two anchors. -/
 def probeDenseRefMs : Nat := 3200   -- mnist-mlp-verified  (784→512→512→10)
 def probeConvRefMs  : Nat := 8490   -- cifar8-bn-verified  (8-conv + BN, 512 head)
-/-- ms/STEP on the 7900 XTX for the `attn` anchor (ViT-Tiny, 360 ms/step per the
-    ViT-chapter results table). Step-based, not per-epoch: a ViT epoch is too slow
-    to probe, and ViT's matmul/attention cost scales unlike conv across GPUs — so
-    transformers get their own factor instead of borrowing the conv one. -/
-def probeAttnRefMs : Nat := 360
+/-- ms/STEP on the reference 7900 XTX for the `attn` anchor — warm steady-state
+    from vit-verified-adam (steps 8..40, bs 32). Step-based, not per-epoch: a ViT
+    epoch is too slow to probe, and ViT's matmul/attention cost scales unlike conv
+    across GPUs — so transformers get their own factor instead of borrowing the
+    conv one. (The 2.3h ViT figure elsewhere is the JAX bf16 path, not this
+    verified-IREE trainer, which is ~7.8h here. The 40-step window is noisier than
+    the epoch-based dense/conv probes — expect ±10%.) -/
+def probeAttnRefMs : Nat := 1185
 
 /-- Scale a chapter's reference seconds by the measured per-family factor. `aMs` is
     the attn ms/step probe (0 when no imagenette → attn falls back to the conv
