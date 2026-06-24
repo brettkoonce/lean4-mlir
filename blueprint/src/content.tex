@@ -9522,7 +9522,7 @@ Imagenette & IN10 & Howard, 2019 &
   \texttt{download\_imagenette.sh} $\to$ \texttt{data/imagenette/} \\[2pt]
 ImageNet-1k & IN1K & Deng et al., 2009 &
   \href{https://www.image-net.org/}{\nolinkurl{image-net.org}} &
-  \textit{manual}\,\textsuperscript{*} \\
+  \textit{TFDS\,$\to$\,JAX}\,\textsuperscript{*} \\
 \hline
 \end{tabular}
 \end{center}
@@ -9533,15 +9533,14 @@ under \texttt{data/}) that fetches it. MNIST is pulled from the CVDF
 mirror (\nolinkurl{storage.googleapis.com/cvdf-datasets/mnist}); the
 homepage above is the canonical reference.
 \textsuperscript{*}ImageNet-1k is license-gated and not
-redistributable, so the repository ships no fetch script: obtain it from
-\nolinkurl{image-net.org} under its terms and point the JAX-bridge
-trainers (\texttt{jax/runs/*\_imagenet\_*}) at the local copy.
+redistributable, so the repository ships no fetch script: download it from
+\nolinkurl{image-net.org} under its terms, prepare it through TensorFlow
+Datasets (the standard \texttt{tfds} \texttt{imagenet2012} route), and load
+it via the JAX dataset handlers that drive the bridge's ImageNet runs
+(\texttt{jax/runs/*\_imagenet\_*}).
 \normalsize
 
-\section{Demo datasets}
-\label{sec:data_demos}
-
-The \texttt{demos/} trainers step past image classification into the
+\medskip\noindent\textbf{Demo datasets.} The \texttt{demos/} trainers step past image classification into the
 three other task families in the book --- detection, segmentation, and
 language --- and each pulls a dataset of its own. \textbf{Pascal
 VOC~2007} backs the YOLO detector (\texttt{yolov1-voc-train-bootstrap},
