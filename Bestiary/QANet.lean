@@ -141,34 +141,27 @@ def qanetModelEncoderStack : NetSpec where
   imageH := 400
   imageW := 1
   layers := [
-    -- Approximate the 7-block stack by giving each "block" its
-    -- 4 separable convs and one transformer-encoder block. For spec
-    -- compactness we stack 7 copies inline.
-    .separableConv 128 128 1, .separableConv 128 128 1,
-    .separableConv 128 128 1, .separableConv 128 128 1,
-    .transformerEncoder 128 8 512 1,
-
-    .separableConv 128 128 1, .separableConv 128 128 1,
+    -- Each model-encoder block = 2 separable convs (paper: kernel 5)
+    -- + one transformer-encoder block. (The *embedding* encoder block
+    -- uses 4 convs; the model-encoder blocks use 2.) 7 copies inline.
     .separableConv 128 128 1, .separableConv 128 128 1,
     .transformerEncoder 128 8 512 1,
 
     .separableConv 128 128 1, .separableConv 128 128 1,
+    .transformerEncoder 128 8 512 1,
+
     .separableConv 128 128 1, .separableConv 128 128 1,
     .transformerEncoder 128 8 512 1,
 
     .separableConv 128 128 1, .separableConv 128 128 1,
+    .transformerEncoder 128 8 512 1,
+
     .separableConv 128 128 1, .separableConv 128 128 1,
     .transformerEncoder 128 8 512 1,
 
     .separableConv 128 128 1, .separableConv 128 128 1,
-    .separableConv 128 128 1, .separableConv 128 128 1,
     .transformerEncoder 128 8 512 1,
 
-    .separableConv 128 128 1, .separableConv 128 128 1,
-    .separableConv 128 128 1, .separableConv 128 128 1,
-    .transformerEncoder 128 8 512 1,
-
-    .separableConv 128 128 1, .separableConv 128 128 1,
     .separableConv 128 128 1, .separableConv 128 128 1,
     .transformerEncoder 128 8 512 1
   ]

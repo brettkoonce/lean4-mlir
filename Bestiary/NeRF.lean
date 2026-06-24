@@ -94,8 +94,8 @@ def nerf : NetSpec where
     -- Positional encoding of 3D position (3 coords × 2 × 10 freqs = 60-dim)
     .positionalEncoding 3 10,
     -- 8-layer MLP with mid-skip and dual output heads (density + RGB).
-    -- encodedDirDim = 2·2·4 = 16 (NeRF uses 2D direction; 4 frequencies)
-    .nerfMLP 60 16 256
+    -- encodedDirDim = 3·2·4 = 24 (NeRF encodes the 3D view direction; 4 frequencies)
+    .nerfMLP 60 24 256
   ]
 
 -- ════════════════════════════════════════════════════════════════
@@ -108,7 +108,7 @@ def nerfFast : NetSpec where
   imageW := 1
   layers := [
     .positionalEncoding 3 10,
-    .nerfMLP 60 16 128
+    .nerfMLP 60 24 128
   ]
 
 -- ════════════════════════════════════════════════════════════════

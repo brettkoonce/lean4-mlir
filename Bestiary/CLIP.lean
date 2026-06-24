@@ -17,8 +17,9 @@ CLIP is **two encoders** trained together:
 - An **image encoder** (ResNet-50 with attention pooling, or a ViT-B).
 - A **text encoder** (a 12-layer causal transformer).
 
-Both project their output to a **shared 512-dim embedding space** via a
-final linear layer. Training uses a **contrastive loss**: in each batch
+Both project their output to a **shared embedding space** via a final
+linear layer (its width is per-variant: 512 for ViT-B/32, 768 for
+ViT-L/14, 1024 for RN50). Training uses a **contrastive loss**: in each batch
 of $N$ image-text pairs, compute the $N \times N$ matrix of cosine
 similarities and drive the diagonal up (matched pair) and off-diagonal
 down (mismatched). Temperature-scaled softmax cross-entropy in both
@@ -105,9 +106,9 @@ def clipRN50ImageEncoder : NetSpec where
     .dense 2048 1024 .identity   -- shared 1024-dim for RN50 variant
   ]
 
-/-- Text encoder for CLIP-RN50 / ViT-B/32: 12-layer causal transformer
+/-- Text encoder for CLIP-ViT-B/32: 12-layer causal transformer
     at dim 512 with 8 heads, followed by a projection to the shared
-    embedding space. NetSpec treats the transformer as `.transformerEncoder`
+    512-dim embedding space. NetSpec treats the transformer as `.transformerEncoder`
     (our primitive doesn't distinguish causal vs non-causal masking — same
     params, same layer shape; mask is a training-time attention pattern). -/
 def clipTextEncoder : NetSpec where
@@ -123,7 +124,20 @@ def clipTextEncoder : NetSpec where
     -- [EOS]-token pooling + projection to shared embedding space.
     -- Paper uses the [EOS] position's output; we approximate with the
     -- first-token pool (flatten + dense does the rough shape).
-    .dense 512 512 .identity      -- shared embedding dim for RN50/ViT-B
+    .dense 512 512 .identity      -- project to the 512-dim shared space (ViT-B/32)
+  ]
+
+/-- Text encoder for CLIP-RN50: the same 512-wide / 8-head / 12-layer
+    transformer as ViT-B/32's, but projected to RN50's wider 1024-dim
+    shared embedding space (RN50's image tower also projects to 1024). -/
+def clipRN50TextEncoder : NetSpec where
+  name := "CLIP-RN50 (text encoder)"
+  imageH := 77
+  imageW := 1
+  layers := [
+    .dense 49408 512 .identity,
+    .transformerEncoder 512 8 2048 12,
+    .dense 512 1024 .identity      -- project to RN50's 1024-dim shared space
   ]
 
 -- ════════════════════════════════════════════════════════════════
@@ -218,7 +232,7 @@ def main : IO Unit := do
   IO.println ""
   IO.println "──────────── CLIP-RN50 ────────────"
   summarize clipRN50ImageEncoder
-  summarize clipTextEncoder
+  summarize clipRN50TextEncoder
 
   IO.println ""
   IO.println "──────────── CLIP-ViT-B/32 ────────────"
