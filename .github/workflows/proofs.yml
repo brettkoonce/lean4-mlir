@@ -57,19 +57,47 @@ jobs:
       - name: Verified-render drift guard (committed .mlir == proven renderer)
         # Re-elaborate the renderer files (re-runs their #eval writers) so the
         # committed verified_mlir/<net>_* equal the proven renderer the net's
-        # FaithfulPoC certifies and Main<Net>Verified trains on. If they drift,
-        # fail (regenerate with the `lake env lean …` shown). Extended per net
-        # as renderers are proven; covers linear (StableHLO.lean) + vit
-        # (ViTRender.lean, the §1a-tied depth-12 ViT-Tiny — bytes are
-        # pretty(vit_net_tied_certified's graph), 1D CLS).
+        # FaithfulPoC/TiePoC certifies and Main<Net>Verified trains on. If they
+        # drift, fail (regenerate with the `lake env lean …` shown). Covers the
+        # full proof-rendered set — every committed forward + SGD train-step the
+        # §1a ties certify. NOT covered (exe-generated, not pure-Lean renders):
+        # the optimizer variants (*_adam/_sgd/_mom_train_step), *_fwd_eval, and
+        # cifar8w_* — those are written by the Main<Net>Verified* exes, see gap #2.
         run: |
           set -e
+          # StableHLO.lean writes all 8 proof-rendered forwards + the linear train step.
           lake env lean LeanMlir/Proofs/StableHLO.lean
-          git diff --exit-code -- verified_mlir/linear_train_step.mlir verified_mlir/linear_fwd.mlir \
-            || { echo "::error::committed verified_mlir/linear_*.mlir drifted from the proven renderer (regen: lake env lean LeanMlir/Proofs/StableHLO.lean)"; exit 1; }
+          git diff --exit-code -- \
+              verified_mlir/linear_fwd.mlir verified_mlir/linear_train_step.mlir \
+              verified_mlir/mlp_fwd.mlir verified_mlir/cnn_fwd.mlir \
+              verified_mlir/cifar_fwd.mlir verified_mlir/cifar_bn_fwd.mlir \
+              verified_mlir/cifar8_fwd.mlir verified_mlir/cifar8_bn_fwd.mlir \
+            || { echo "::error::committed verified_mlir/{linear,mlp,cnn,cifar,cifar_bn,cifar8,cifar8_bn}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/StableHLO.lean)"; exit 1; }
+          # Per-net train-step renderers.
+          lake env lean LeanMlir/Proofs/MlpRender.lean
+          git diff --exit-code -- verified_mlir/mlp_train_step.mlir \
+            || { echo "::error::committed verified_mlir/mlp_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/MlpRender.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/CnnRender.lean
+          git diff --exit-code -- \
+              verified_mlir/cnn_train_step.mlir \
+              verified_mlir/cifar_train_step.mlir verified_mlir/cifar_bn_train_step.mlir \
+              verified_mlir/cifar8_train_step.mlir verified_mlir/cifar8_bn_train_step.mlir \
+            || { echo "::error::committed verified_mlir/{cnn,cifar,cifar_bn,cifar8,cifar8_bn}_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/CnnRender.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/ResNet34Render.lean
+          git diff --exit-code -- verified_mlir/resnet34_train_step.mlir \
+            || { echo "::error::committed verified_mlir/resnet34_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/ResNet34Render.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/MobileNetV2Render.lean
+          git diff --exit-code -- verified_mlir/mobilenetv2_train_step.mlir verified_mlir/mobilenetv2_reduced_train_step.mlir \
+            || { echo "::error::committed verified_mlir/mobilenetv2_*train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/MobileNetV2Render.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/ConvNeXtRender.lean
+          git diff --exit-code -- verified_mlir/convnext_train_step.mlir \
+            || { echo "::error::committed verified_mlir/convnext_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/ConvNeXtRender.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/EfficientNetRender.lean
+          git diff --exit-code -- verified_mlir/efficientnet_train_step.mlir \
+            || { echo "::error::committed verified_mlir/efficientnet_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/EfficientNetRender.lean)"; exit 1; }
           lake env lean LeanMlir/Proofs/ViTRender.lean
           git diff --exit-code -- verified_mlir/vit_train_step.mlir verified_mlir/vit_fwd.mlir \
-            || { echo "::error::committed verified_mlir/vit_*.mlir drifted from the proven renderer (regen: lake env lean LeanMlir/Proofs/ViTRender.lean)"; exit 1; }
+            || { echo "::error::committed verified_mlir/vit_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/ViTRender.lean)"; exit 1; }
 
       - name: Three-axiom closure check
         run: |
