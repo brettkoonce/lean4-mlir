@@ -193,6 +193,9 @@ lean_lib «Proofs» where
              -- max-pool selection margins (the argmax freezes along the step
              -- segment), pool 1-Lipschitz/ℓ1-contraction, conv kernel drift.
              `LeanMlir.Proofs.SgdDescentCnn,
+             -- ℝ→Float32 forward rounding budget for the no-BN CIFAR CNN
+             -- (cnn_float_close scaled to 4 conv + 2 maxpool + 3 dense).
+             `LeanMlir.Proofs.CifarFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

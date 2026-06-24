@@ -66,6 +66,7 @@ import LeanMlir.Proofs.FloatBridge
 import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
 import LeanMlir.Proofs.SgdDescentCnn
+import LeanMlir.Proofs.CifarFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1301,6 +1302,23 @@ open Proofs
 #print axioms FloatModel.flatConvF_close
 #print axioms FloatModel.mnistCnnNoBnForwardF
 #print axioms FloatModel.cnn_float_close
+-- Chapter-5 no-BN CIFAR CNN (CifarFloatBridge.lean): cnn_float_close scaled to
+-- the deeper net (4 conv in two conv→conv→pool stages + 3-dense head) — the
+-- binary32 forward-error bound for cifarCnnForward, same layerBudget machinery,
+-- zero new numerical primitives. First pass of the MNIST→CIFAR bridge step (BN
+-- deferred). cifar_float_close is the CIFAR peer of cnn_float_close.
+#print axioms FloatModel.cifarCnnForwardF
+#print axioms FloatModel.cifar_float_close
+-- CIFAR conv SGD-step rounding budgets (CifarFloatBridge.lean): the cotangent-
+-- generic cnn_convW/convb_step_float_close instantiated at the two committed
+-- CIFAR spatial scales — 32×32 (fan-in 1024, conv₁/conv₂) and 16×16 (256,
+-- conv₃/conv₄). Each rounded conv weight/bias SGD entry is within an explicit
+-- (a·g)/150 / (a·g)/2000 (+10⁻⁷) of the certified step. CIFAR peers of
+-- mnist_cnn_convW_step_float_budget; the dense head reuses the MLP step closes.
+#print axioms FloatModel.cifar_stage1_convW_step_float_budget
+#print axioms FloatModel.cifar_stage1_convb_step_float_budget
+#print axioms FloatModel.cifar_stage2_convW_step_float_budget
+#print axioms FloatModel.cifar_stage2_convb_step_float_budget
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.
