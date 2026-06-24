@@ -156,6 +156,22 @@ private def loadData (data : VerifiedData) (d0 : Nat) (dataDir : String) :
     let (evI, evL, nEv) ← loadCifarSplit [s!"{cdir}/test_batch.bin"]
     return (trI, trL, nTr, evI, evL, nEv, d0, false)
 
+/-- Synthetic-input data for the `lake run benchmark` probes (`LEAN_MLIR_BENCH_SYNTH`):
+    ONE constant batch, reused every step, but with the dataset's *real* `nTrain` so the
+    per-epoch step count — and thus the per-epoch / per-step timing — matches the on-disk
+    anchors (train-step throughput is value-independent). Lets the benchmark run with zero
+    data downloaded. The per-step crop/hflip stays in the loop (so timing matches); eval is
+    skipped in synth, so `nEval` is a placeholder. -/
+private def mkSynthData (data : VerifiedData) (d0 bs : Nat) :
+    IO (ByteArray × ByteArray × Nat × ByteArray × ByteArray × Nat × Nat × Bool) := do
+  let (nTr, px, crop) := match data with
+    | .imagenette => (9469, 3 * 256 * 256, true)   -- 256² pre-crop → 224² each step
+    | .cifar      => (50000, d0, false)
+    | _           => (60000, d0, false)             -- mnist
+  let img ← F32.const (bs * px).toUSize 0.1
+  let lbl ← F32.const bs.toUSize 0.0               -- bs int32 zero labels (4 bytes each)
+  pure (img, lbl, nTr, img, lbl, bs, px, crop)
+
 /-- Train a `VerifiedNet` end-to-end on its proof-rendered StableHLO: compile both
     MLIRs → IREE sessions → load data → He/spec init → SGD train + eval loop. The
     SGD update (and lr) are baked into `<slug>_train_step.mlir`; we only feed batches. -/
@@ -170,10 +186,11 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
+  let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
-    loadData net.data d0 dataDir
+    if synth then mkSynthData net.data d0 bs else loadData net.data d0 dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
-  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} ({net.specs.size} params, {net.nParams} floats), mean-loss SGD lr={cfg.lr}, He init"
+  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} ({net.specs.size} params, {net.nParams} floats), mean-loss SGD lr={cfg.lr}, He init{if synth then " [SYNTH]" else ""}"
   (← IO.getStdout).flush
   let nb  := nTrain / bs
   let nbt := nEval / bs
@@ -199,20 +216,21 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   for ep in [0:nEpochs] do
     let tEp0 ← IO.monoMsNow
     for bi in [0:nb] do
-      let xbRaw := F32.sliceImages trainImg (bi * bs) bs trainPix
+      let xbRaw := if synth then trainImg else F32.sliceImages trainImg (bi * bs) bs trainPix
       let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
-      let yb := F32.sliceLabels trainLbl (bi * bs) bs
+      let yb := if synth then trainLbl else F32.sliceLabels trainLbl (bi * bs) bs
       params ← IreeSession.mlpTrainStepV tsSess tsFn
                   xb params shapes yb bs.toUSize d0.toUSize nc.toUSize
     let mut correct := 0
-    for bi in [0:nbt] do
-      let xb := F32.sliceImages evalImg (bi * bs) bs d0
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
-                      xb xShape bs.toUSize nc.toUSize
-      for j in [0:bs] do
-        let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
-        let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
-        if pred == lbl then correct := correct + 1
+    if !synth then          -- synth probe: skip eval (no eval split on disk)
+      for bi in [0:nbt] do
+        let xb := F32.sliceImages evalImg (bi * bs) bs d0
+        let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
+                        xb xShape bs.toUSize nc.toUSize
+        for j in [0:bs] do
+          let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
+          let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
+          if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}% ({epMs}ms)"
@@ -317,8 +335,9 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
       compileVmfb s!"verified_mlir/{net.slug}_fwd_eval.mlir" fwdEvalVmfb
       IreeSession.create fwdEvalVmfb
     else pure fwdSess
+  let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
-    loadData net.data d0 dataDir
+    if synth then mkSynthData net.data d0 bs else loadData net.data d0 dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   let nb  := nTrain / bs
   let nbt := nEval / bs
@@ -373,14 +392,16 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- factor. A full ViT epoch is too slow to probe, so we time a step window.
   let probeSteps := (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?)
   let probeWarm := 8
-  let mut probeT0 := 0
+  let mut probePrev := 0
+  let mut probeTimes : Array Nat := #[]
   for ep in [startEpoch:cfg.epochs] do
     let mut epochLossSum := 0.0
     let mut lastLr := 0.0
     -- Per-epoch Fisher-Yates shuffle (the reference does this; the data is
     -- class-sorted, so without it every batch is a single class — degenerate).
-    let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize (ep + 42).toUSize
-    curImg := sImg; curLbl := sLbl
+    if !synth then
+      let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize (ep + 42).toUSize
+      curImg := sImg; curLbl := sLbl
     for bi in [0:nb] do
       let gstep := (ep * nb + bi + 1).toFloat
       let lrt := if gstep ≤ warmSteps then baseLR * gstep / warmSteps
@@ -391,7 +412,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
       -- BN nets append the (ignored) stat-in passthrough slots; the step writes batch stats out.
       let params := if hasBn then F32.concat #[thetamv, tail, runningBnStats] else F32.concat #[thetamv, tail]
       let augSeed := (ep * nb + bi + 1).toUSize
-      let xbRaw := F32.sliceImages curImg (bi * bs) bs trainPix
+      let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * bs) bs trainPix
       -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
       -- lives in the data pipeline, not the network): Imagenette = random crop
       -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
@@ -403,7 +424,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
             F32.randomHFlip c bs.toUSize 3 224 224 (augSeed + 7777)
         | .cifar => F32.randomHFlip xbRaw bs.toUSize 3 32 32 augSeed
         | _ => pure xbRaw
-      let yb := F32.sliceLabels curLbl (bi * bs) bs
+      let yb := if synth then curLbl else F32.sliceLabels curLbl (bi * bs) bs
       let out ← IreeSession.mlpTrainStepV tsSess tsFn xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
       -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']
       let stepLoss := F32.read out (3 * net.nParams).toUSize
@@ -421,12 +442,16 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
       -- ms/step probe: start the clock past warmup, report + exit at the cap.
       match probeSteps with
       | some ps =>
-        if bi == probeWarm then probeT0 := (← IO.monoMsNow)
-        else if bi == ps && ps > probeWarm then
-          let dt := (← IO.monoMsNow) - probeT0
-          IO.println s!"  PROBE: {dt / (ps - probeWarm)} ms/step (steps {probeWarm}..{ps}, {net.name})"
-          (← IO.getStdout).flush
-          return ()
+        if bi == probeWarm then probePrev := (← IO.monoMsNow)
+        else if bi > probeWarm && bi ≤ ps then
+          let t ← IO.monoMsNow
+          probeTimes := probeTimes.push (t - probePrev); probePrev := t
+          if bi == ps then
+            -- robust: median per-step time (drops the cold-cache / GC-blip outliers)
+            let sorted := probeTimes.qsort Nat.blt
+            IO.println s!"  PROBE: {sorted[sorted.size / 2]!} ms/step (median of {sorted.size} steps {probeWarm+1}..{ps}, {net.name})"
+            (← IO.getStdout).flush
+            return ()
       | none => pure ()
     IO.println s!"Epoch {ep + 1}/{cfg.epochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
     let thetaCur := thetamv.extract 0 pBytes

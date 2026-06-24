@@ -1242,17 +1242,20 @@ def benchTable : List BenchItem :=
     { chapter := "9  ConvNeXt",     family := "conv",  refSec := 47880, tier := "imagenette" }, -- 13.3h
     { chapter := "10 ViT",          family := "attn",  refSec := 27966, tier := "imagenette" } ]-- 7.8h (1185ms/step × 295 × 80, warm steady-state)
 
-/-- Measured steady-state ms/epoch on the reference 7900 XTX for the two anchors. -/
-def probeDenseRefMs : Nat := 3200   -- mnist-mlp-verified  (784→512→512→10)
-def probeConvRefMs  : Nat := 8490   -- cifar8-bn-verified  (8-conv + BN, 512 head)
-/-- ms/STEP on the reference 7900 XTX for the `attn` anchor — warm steady-state
-    from vit-verified-adam (steps 8..40, bs 32). Step-based, not per-epoch: a ViT
-    epoch is too slow to probe, and ViT's matmul/attention cost scales unlike conv
-    across GPUs — so transformers get their own factor instead of borrowing the
-    conv one. (The 2.3h ViT figure elsewhere is the JAX bf16 path, not this
-    verified-IREE trainer, which is ~7.8h here. The 40-step window is noisier than
-    the epoch-based dense/conv probes — expect ±10%.) -/
-def probeAttnRefMs : Nat := 1185
+/-- Steady-state ms/epoch on the reference 7900 XTX for the two anchors, measured by
+    the synthetic-input probe (`LEAN_MLIR_BENCH_SYNTH`): one constant batch reused at
+    the dataset's real step count, eval skipped — so the on-reference factor reads ~1.0×
+    and no dataset download is needed. -/
+def probeDenseRefMs : Nat := 3030   -- mnist-mlp-verified  (784→512→512→10)
+def probeConvRefMs  : Nat := 8020   -- cifar8-bn-verified  (8-conv + BN, 512 head)
+/-- ms/STEP on the reference 7900 XTX for the `attn` anchor — synthetic-input probe of
+    vit-verified-adam, reported as the median of a 100-step window (robust to the
+    cold-cache / GC-blip outliers that made the old 40-step mean swing ±10%+).
+    Step-based, not per-epoch: a ViT epoch is too slow to probe, and ViT's
+    matmul/attention cost scales unlike conv across GPUs — so transformers get their
+    own factor. (The 2.3h ViT figure elsewhere is the JAX bf16 path, not this
+    verified-IREE trainer, which is ~7.8h here.) -/
+def probeAttnRefMs : Nat := 1173
 
 /-- Scale a chapter's reference seconds by the measured per-family factor. `aMs` is
     the attn ms/step probe (0 when no imagenette → attn falls back to the conv
@@ -1303,6 +1306,22 @@ def probeMsStep (out : String) : Option Nat :=
                 | h :: _ => h.toNat?
                 | []     => none
 
+/-- First run of consecutive digits in `s` as a Nat (tolerates surrounding text). -/
+def firstNat (s : String) : Option Nat :=
+  let ds := (s.toList.dropWhile (fun c => !c.isDigit)).takeWhile (·.isDigit)
+  if ds.isEmpty then none else (String.ofList ds).toNat?
+
+/-- Best-effort GPU utilization % (rocm-smi / nvidia-smi); none if the tool is absent. -/
+def gpuBusyPct (backend : String) : IO (Option Nat) := do
+  try
+    if backend == "cuda" then
+      let o ← IO.Process.output { cmd := "nvidia-smi", args := #["--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"] }
+      pure (firstNat o.stdout)
+    else
+      let o ← IO.Process.output { cmd := "rocm-smi", args := #["--showuse"] }
+      pure (((o.stdout.splitOn "\n").find? (fun l => (l.splitOn "use (%)").length > 1)).bind firstNat)
+  catch _ => pure none
+
 /-- Build + run one probe net and return its steady-state timing. With `stepProbe`
     set (`attn` anchor) it caps at N steps and reads ms/step; otherwise it runs 3
     epochs and reads ms/epoch. -/
@@ -1318,7 +1337,8 @@ def runProbe (bin family : String) (refMs : Nat) (backend gpu : String)
   let capEnv := match stepProbe with
     | some n => #[("LEAN_MLIR_MAX_STEPS", some (toString n))]
     | none   => #[("LEAN_MLIR_MAX_EPOCHS", some "3")]
-  let env := runEnv ++ capEnv ++ #[("IREE_BACKEND", some backend), (vis, some gpu)]
+  let env := runEnv ++ capEnv ++ #[("IREE_BACKEND", some backend), (vis, some gpu),
+                                    ("LEAN_MLIR_BENCH_SYNTH", some "1")]
   let o ← IO.Process.output { cmd := s!".lake/build/bin/{bin}", args := #["data"], env := env }
   let parsed := match stepProbe with | some _ => probeMsStep o.stdout | none => lastEpochMs o.stdout
   match parsed with
@@ -1342,26 +1362,18 @@ script benchmark do
       pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}")]
     else pure #[]
   IO.println "━━━ lake run benchmark ━━━ verified-NN training throughput on your GPU"
-  IO.println s!"  backend: {backend}   gpu: {gpu}"
-  -- First step: make sure every probe has its data. Auto-download anything
-  -- missing (incl. imagenette for the ViT/attn probe) rather than soft-failing.
-  IO.println "\n  ▸ ensuring core datasets are present (auto-download if missing)…"
-  let dataOk ← ensureCoreData
-  if !(← System.FilePath.pathExists "data") then
-    IO.eprintln "  no ./data and download failed — fix networking, or run `lake run download`."
-    return 1
-  if !dataOk then
-    IO.eprintln "  ⚠ some downloads failed; probing with whatever data is present."
+  IO.println s!"  backend: {backend}   gpu: {gpu}   (synthetic-input probes — no dataset needed)"
+  -- Pre-flight: a busy GPU inflates every probe. Warn if the card isn't idle.
+  match ← gpuBusyPct backend with
+  | some u => IO.println (if u > 20 then
+      s!"  ⚠ GPU is {u}% busy — close other GPU jobs first or the estimate will inflate."
+      else s!"  GPU idle ({u}%).")
+  | none   => pure ()
+  -- Synthetic input (LEAN_MLIR_BENCH_SYNTH, set in runProbe): one constant batch reused
+  -- at the dataset's real step count, so no MNIST/CIFAR/Imagenette download is required.
   let denseMs ← runProbe "mnist-mlp-verified" "dense" probeDenseRefMs backend gpu runEnv
   let convMs  ← runProbe "cifar8-bn-verified" "conv"  probeConvRefMs  backend gpu runEnv
-  -- The attn anchor (ViT) is an Imagenette trainer, so it needs data/imagenette.
-  -- Without it ViT falls back to the conv proxy (known ~3.5x low for transformers).
-  let attnMs ← if ← System.FilePath.pathExists "data/imagenette" then
-      runProbe "vit-verified-adam" "attn" probeAttnRefMs backend gpu runEnv (stepProbe := some 40)
-    else do
-      IO.println "\n  ▸ ViT/attn probe SKIPPED — data/imagenette download failed above."
-      IO.println "    The ViT row falls back to the conv proxy, which underestimates it ~3.5×."
-      pure none
+  let attnMs ← runProbe "vit-verified-adam" "attn" probeAttnRefMs backend gpu runEnv (stepProbe := some 100)
   match denseMs, convMs with
   | some dMs, some cMs =>
     let aMs := attnMs.getD 0
