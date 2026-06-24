@@ -231,8 +231,8 @@ jobs:
           echo "| Proofs | $(lf LeanMlir/Proofs) | $(ll LeanMlir/Proofs) |" >> $GITHUB_STEP_SUMMARY
           echo "| Core Library | $(core | wc -l) | $(core | xargs cat 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
           echo "| Bestiary | $(lf Bestiary) | $(ll Bestiary) |" >> $GITHUB_STEP_SUMMARY
-          # Trainers = root Main*.lean (all backends/optimizers) + the historical/ trainers.
-          echo "| Trainers | $(ls Main*.lean historical/Main*.lean 2>/dev/null | wc -l) | $(cat Main*.lean historical/Main*.lean 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          # Trainers = apps/**/Main*.lean (all backends/optimizers) + the historical/ trainers.
+          echo "| Trainers | $(find apps historical -name 'Main*.lean' 2>/dev/null | wc -l) | $(find apps historical -name 'Main*.lean' -exec cat {} + 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
           echo "| Demos | $(ls demos/*.lean 2>/dev/null | wc -l) | $(cat demos/*.lean 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
           echo "| Tests | $(lf tests) | $(ll tests) |" >> $GITHUB_STEP_SUMMARY
           echo "| FFI (C) | $(ls ffi/*.c ffi/*.h 2>/dev/null | wc -l) | $(cat ffi/*.c ffi/*.h 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY

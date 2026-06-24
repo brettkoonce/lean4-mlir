@@ -551,11 +551,10 @@ lean4-mlir/
 │       ├── FloatBridge.lean        -- ℝ→Float32 rounding budgets (Tier 1)
 │       └── SgdDescent{,Linear,Mlp,Cnn}.lean  -- inexact-gradient descent over ℝ
 │
-├── Main*Verified*.lean     -- verified-render trainers (what `lake run` builds):
-│                              mnist-{linear,mlp,cnn}-verified, the six
-│                              cifar8{,-bn}-verified{,-momentum,-adam}, and
-│                              {resnet34,mobilenetv2,efficientnet,convnext,vit}-verified-adam
-├── Main*Train.lean         -- unverified full-recipe trainers (resnet34, vgg, …)
+├── apps/                   -- one Main per exe, grouped by the Part-1 path:
+│   ├── mnist/ cifar/ imagenette/   -- the verified `lake run` tiers (30 exes)
+│   ├── baselines/          -- 15 unverified full-recipe trainers (resnet34, vgg, …)
+│   └── ablation/           -- the cifar8 optimizer / head-width ablations
 │
 ├── Bestiary/               -- 41 read-only NetSpec catalog entries
 │                              (ResNet, ViT, AlphaZero, MuZero, CLIP, Mamba, …)

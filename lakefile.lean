@@ -454,200 +454,200 @@ private def ireeLink : Array String :=
   #["-L", "./ffi", "-liree_ffi", "-Wl,-rpath,./ffi", "-Wl,--allow-shlib-undefined"]
 
 lean_exe «resnet34-train» where
-  root := `MainResnetTrain
+  root := `apps.baselines.MainResnetTrain
   moreLinkArgs := ireeLink
 
 lean_exe «resnet50-train» where
-  root := `MainResnet50Train
+  root := `apps.baselines.MainResnet50Train
   moreLinkArgs := ireeLink
 
 lean_exe «mobilenet-v2-train» where
-  root := `MainMobilenetV2Train
+  root := `apps.baselines.MainMobilenetV2Train
   moreLinkArgs := ireeLink
 
 lean_exe «mobilenet-v3-train» where
-  root := `MainMobilenetV3Train
+  root := `apps.baselines.MainMobilenetV3Train
   moreLinkArgs := ireeLink
 
 lean_exe «mobilenet-v4-train» where
-  root := `MainMobilenetV4Train
+  root := `apps.baselines.MainMobilenetV4Train
   moreLinkArgs := ireeLink
 
 lean_exe «efficientnet-train» where
-  root := `MainEfficientNetTrain
+  root := `apps.baselines.MainEfficientNetTrain
   moreLinkArgs := ireeLink
 
 lean_exe «efficientnet-v2-train» where
-  root := `MainEfficientNetV2Train
+  root := `apps.baselines.MainEfficientNetV2Train
   moreLinkArgs := ireeLink
 
 lean_exe «convnext-tiny-train» where
-  root := `MainConvNeXtTrain
+  root := `apps.baselines.MainConvNeXtTrain
   moreLinkArgs := ireeLink
 
 lean_exe «vit-tiny-train» where
-  root := `MainVitTrain
+  root := `apps.baselines.MainVitTrain
   moreLinkArgs := ireeLink
 
 lean_exe «ablation» where
-  root := `MainAblation
+  root := `apps.ablation.MainAblation
   moreLinkArgs := ireeLink
 
 lean_exe «vgg-train» where
-  root := `MainVggTrain
+  root := `apps.baselines.MainVggTrain
   moreLinkArgs := ireeLink
 
 lean_exe «mnist-cnn-train» where
-  root := `MainMnistCnnTrain
+  root := `apps.baselines.MainMnistCnnTrain
   moreLinkArgs := ireeLink
 
 lean_exe «cifar-bn-train» where
-  root := `MainCifarCnnBnTrain
+  root := `apps.baselines.MainCifarCnnBnTrain
   moreLinkArgs := ireeLink
 
 lean_exe «mnist-mlp-train» where
-  root := `MainMnistMlpTrain
+  root := `apps.baselines.MainMnistMlpTrain
   moreLinkArgs := ireeLink
 
 lean_exe «mnist-linear-train» where
-  root := `MainMnistLinearTrain
+  root := `apps.baselines.MainMnistLinearTrain
   moreLinkArgs := ireeLink
 
 -- Trains MNIST-linear on the VERIFIED-rendered StableHLO
 -- (`verified_mlir/`, = Proofs.StableHLO.linearTrainStepModuleV) through the
 -- real Lean/IREE FFI. See MainMnistLinearVerified.lean.
 lean_exe «mnist-linear-verified» where
-  root := `MainMnistLinearVerified
+  root := `apps.mnist.MainMnistLinearVerified
   moreLinkArgs := ireeLink
 
 -- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
 -- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
 -- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).
 lean_exe «mnist-linear-e4m3-verified» where
-  root := `MainMnistLinearE4M3Verified
+  root := `apps.mnist.MainMnistLinearE4M3Verified
   moreLinkArgs := ireeLink
 
 -- Chapter 3: trains the MNIST MLP on the VERIFIED-rendered StableHLO
 -- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepText).
 lean_exe «mnist-mlp-verified» where
-  root := `MainMnistMlpVerified
+  root := `apps.mnist.MainMnistMlpVerified
   moreLinkArgs := ireeLink
 
 -- Chapter 3 (low precision): fp8 (E4M3) MLP training on the SAME verified StableHLO.
 -- fp32 master, per-column weight quant + per-tensor input, fp32 accumulate.
 -- fp8 weights+input, fp32 intermediates. See MainMnistMlpE4M3Verified.lean.
 lean_exe «mnist-mlp-e4m3-verified» where
-  root := `MainMnistMlpE4M3Verified
+  root := `apps.mnist.MainMnistMlpE4M3Verified
   moreLinkArgs := ireeLink
 
 -- Chapter 4: trains the MNIST CNN on the VERIFIED-rendered StableHLO
 -- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepText).
 lean_exe «mnist-cnn-verified» where
-  root := `MainMnistCnnVerified
+  root := `apps.mnist.MainMnistCnnVerified
   moreLinkArgs := ireeLink
 
 -- Chapter 4 (low precision): fp8 (E4M3) CNN training on the SAME verified StableHLO.
 -- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
 -- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainMnistCnnE4M3Verified.lean.
 lean_exe «mnist-cnn-e4m3-verified» where
-  root := `MainMnistCnnE4M3Verified
+  root := `apps.mnist.MainMnistCnnE4M3Verified
   moreLinkArgs := ireeLink
 
 -- Chapter 5: trains the CIFAR-10 CNN (no BN) on the VERIFIED-rendered StableHLO
 -- (verified_mlir/cifar_train_step.mlir = Proofs.StableHLO.cifarTrainStepText).
 lean_exe «cifar-verified» where
-  root := `MainCifarVerified
+  root := `apps.cifar.MainCifarVerified
   moreLinkArgs := ireeLink
 
 -- Chapter 5 (low precision): fp8 (E4M3) CIFAR-10 training on the SAME verified StableHLO.
 -- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
 -- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainCifarE4M3Verified.lean.
 lean_exe «cifar-e4m3-verified» where
-  root := `MainCifarE4M3Verified
+  root := `apps.cifar.MainCifarE4M3Verified
   moreLinkArgs := ireeLink
 
 -- Chapter 5 (BatchNorm): trains the CIFAR-10 CNN + per-example BN on the
 -- VERIFIED-rendered StableHLO (Proofs.StableHLO.cifarBnTrainStepText).
 lean_exe «cifar-bn-verified» where
-  root := `MainCifarBnVerified
+  root := `apps.cifar.MainCifarBnVerified
   moreLinkArgs := ireeLink
 
 -- Deeper 8-conv CIFAR-10 CNN (no BN; [16,16,32,32], 4 pools) on the VERIFIED-rendered
 -- StableHLO (verified_mlir/cifar8_train_step.mlir = Proofs.StableHLO.cifar8TrainStepText).
 lean_exe «cifar8-verified» where
-  root := `MainCifar8Verified
+  root := `apps.cifar.MainCifar8Verified
   moreLinkArgs := ireeLink
 
 -- Deeper 8-conv CIFAR-10 CNN + per-channel BN on the VERIFIED-rendered StableHLO
 -- (Proofs.StableHLO.cifar8BnTrainStepText). The pedagogical BN-acceleration demo.
 lean_exe «cifar8-bn-verified» where
-  root := `MainCifar8BnVerified
+  root := `apps.cifar.MainCifar8BnVerified
   moreLinkArgs := ireeLink
 
 -- cifar8 (no BN) Adam peer: the proof-rendered fwd/bwd/param-grads with the SGD update
 -- swapped for AdamW (ViTRender.emitAdamV) + packed [θ|m|v] + runtime lr/bc threading via
 -- trainAdamSched. Render: tests/TestCifar8AdamTrain.lean. BN/noBN × SGD/Adam ablation.
 lean_exe «cifar8-verified-adam» where
-  root := `MainCifar8VerifiedAdam
+  root := `apps.cifar.MainCifar8VerifiedAdam
   moreLinkArgs := ireeLink
 
 -- cifar8 + per-channel BN Adam peer (38 params incl. 8× BN γ/β). Same as above with BN.
 -- Render: tests/TestCifar8AdamTrain.lean.
 lean_exe «cifar8-bn-verified-adam» where
-  root := `MainCifar8BnVerifiedAdam
+  root := `apps.cifar.MainCifar8BnVerifiedAdam
   moreLinkArgs := ireeLink
 
 -- cifar8 Nesterov-momentum SGD peers (v←μv+∇, θ←θ−lr(μv+∇), μ=0.9): same proof-rendered body +
 -- emitMomentum, driven by trainAdamSched variant "mom" (reuses [θ|m|v] packing + cosine+warmup lr).
 -- Render: tests/TestCifar8AdamTrain.lean. Completes the optimizer ablation (SGD/momentum/Adam).
 lean_exe «cifar8-verified-momentum» where
-  root := `MainCifar8VerifiedMomentum
+  root := `apps.cifar.MainCifar8VerifiedMomentum
   moreLinkArgs := ireeLink
 
 -- fp8 (E4M3) optimizer sweep on the cifar8 CNN: the SGD / Nesterov-momentum / Adam
 -- demos run through the E4M3 host-quant path (fp8 weights+input, fp32 accumulate,
 -- fp32 master). Same verified train-step MLIR as their fp32 peers.
 lean_exe «cifar8-e4m3-verified» where
-  root := `MainCifar8E4M3Verified
+  root := `apps.cifar.MainCifar8E4M3Verified
   moreLinkArgs := ireeLink
 
 lean_exe «cifar8-e4m3-verified-momentum» where
-  root := `MainCifar8E4M3VerifiedMomentum
+  root := `apps.cifar.MainCifar8E4M3VerifiedMomentum
   moreLinkArgs := ireeLink
 
 lean_exe «cifar8-e4m3-verified-adam» where
-  root := `MainCifar8E4M3VerifiedAdam
+  root := `apps.cifar.MainCifar8E4M3VerifiedAdam
   moreLinkArgs := ireeLink
 
 lean_exe «cifar8-bn-verified-momentum» where
-  root := `MainCifar8BnVerifiedMomentum
+  root := `apps.cifar.MainCifar8BnVerifiedMomentum
   moreLinkArgs := ireeLink
 
 -- cifar8 plain-SGD CONTROL on the momentum/Adam pipeline (trainAdamSched variant "sgd": same
 -- per-epoch shuffle + hflip + cosine-warmup, update θ←θ−lr·∇). Makes the SGD/momentum/Adam
 -- comparison differ ONLY in the optimizer. Render: tests/TestCifar8AdamTrain.lean.
 lean_exe «cifar8-verified-sgdsched» where
-  root := `MainCifar8VerifiedSgdSched
+  root := `apps.cifar.MainCifar8VerifiedSgdSched
   moreLinkArgs := ireeLink
 
 lean_exe «cifar8-bn-verified-sgdsched» where
-  root := `MainCifar8BnVerifiedSgdSched
+  root := `apps.cifar.MainCifar8BnVerifiedSgdSched
   moreLinkArgs := ireeLink
 
 -- Wide-head (MNIST-style 2×512 dense, d1=512) cifar8 optimizer ablation: each exe runs SGD /
 -- momentum / AdamW in sequence on the controlled pipeline. Render: tests/TestCifar8WideTrain.lean.
 lean_exe «cifar8w-ablation» where
-  root := `MainCifar8WideAblation
+  root := `apps.ablation.MainCifar8WideAblation
   moreLinkArgs := ireeLink
 
 lean_exe «cifar8w-bn-ablation» where
-  root := `MainCifar8WideBnAblation
+  root := `apps.ablation.MainCifar8WideBnAblation
   moreLinkArgs := ireeLink
 
 -- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
 -- VERIFIED-rendered StableHLO (tests/TestResnet34{Train,Fwd}.lean); 146 params.
 lean_exe «resnet34-verified» where
-  root := `MainResnet34Verified
+  root := `apps.imagenette.MainResnet34Verified
   moreLinkArgs := ireeLink
 
 -- r34 peer of mnv2/enet-verified-adam: the proof-rendered train step (per-channel BN + strided
@@ -655,14 +655,14 @@ lean_exe «resnet34-verified» where
 -- lr/bc threading via trainAdamSched. Recipe matches the reference (lr 1e-3, wd 1e-4, cosine+warmup
 -- 3, label-smoothing 0.1). Render: tests/TestResnet34Train.lean.
 lean_exe «resnet34-verified-adam» where
-  root := `MainResnet34VerifiedAdam
+  root := `apps.imagenette.MainResnet34VerifiedAdam
   moreLinkArgs := ireeLink
 
 -- ch7 C4: small MobileNetV2 (inverted-residual blocks: depthwise conv + relu6 +
 -- per-channel BN) trained on VERIFIED-rendered StableHLO
 -- (tests/TestMobilenetV2{Train,Fwd}.lean); 30 params.
 lean_exe «mobilenetv2-verified» where
-  root := `MainMobilenetV2Verified
+  root := `apps.imagenette.MainMobilenetV2Verified
   moreLinkArgs := ireeLink
 
 -- mnv2 peer of vit-verified-adam: the proof-rendered train step with the SGD update swapped for
@@ -670,14 +670,14 @@ lean_exe «mobilenetv2-verified» where
 -- matches mobilenet-v2-train (lr 1e-3, wd 1e-4, cosine+warmup 3, label-smoothing 0.1). Loss-curve
 -- parity; batch-BN eval (running-stats BN deferred). Render: tests/TestMobilenetV2TrainPC.lean.
 lean_exe «mobilenetv2-verified-adam» where
-  root := `MainMobilenetV2VerifiedAdam
+  root := `apps.imagenette.MainMobilenetV2VerifiedAdam
   moreLinkArgs := ireeLink
 
 -- ch8 E4/E5/E6: EfficientNet-B0 (faithful [t,c,n,s,k] config — 16 MBConv layers,
 -- inverted-residual + squeeze-excite + swish + BATCH norm, 3×3/5×5 depthwise) trained
 -- on VERIFIED-rendered StableHLO (tests/TestEfficientNet{Train,Fwd}.lean); 262 params.
 lean_exe «efficientnet-verified» where
-  root := `MainEfficientNetVerified
+  root := `apps.imagenette.MainEfficientNetVerified
   moreLinkArgs := ireeLink
 
 -- enet peer of mnv2-verified-adam: the proof-rendered train step (all-swish + squeeze-excite +
@@ -685,14 +685,14 @@ lean_exe «efficientnet-verified» where
 -- lr/bc threading via trainAdamSched. Recipe matches efficientnet-train (lr 1e-3, wd 1e-4,
 -- cosine+warmup 3, label-smoothing 0.1). Render: tests/TestEfficientNetTrain.lean.
 lean_exe «efficientnet-verified-adam» where
-  root := `MainEfficientNetVerifiedAdam
+  root := `apps.imagenette.MainEfficientNetVerifiedAdam
   moreLinkArgs := ireeLink
 
 -- Chapter 9: ConvNeXt-T (Liu et al. 2022 — patchify stem + [3,3,9,3] depthwise-7×7
 -- blocks with LN + GELU + layerScale + 3 between-stage downsamples) trained on
 -- VERIFIED-rendered StableHLO (tests/TestConvNeXt{Train,Fwd}.lean); 180 params.
 lean_exe «convnext-verified» where
-  root := `MainConvNeXtVerified
+  root := `apps.imagenette.MainConvNeXtVerified
   moreLinkArgs := ireeLink
 
 -- convnext peer of r34-verified-adam: the proof-rendered train step (all-smooth — LayerNorm +
@@ -700,21 +700,21 @@ lean_exe «convnext-verified» where
 -- θ|m|v + runtime lr/bc threading via trainAdamSched. Recipe matches the reference (lr 1e-3, wd
 -- 1e-4, cosine+warmup 3, label-smoothing 0.1). Render: tests/TestConvNeXtTrain.lean.
 lean_exe «convnext-verified-adam» where
-  root := `MainConvNeXtVerifiedAdam
+  root := `apps.imagenette.MainConvNeXtVerifiedAdam
   moreLinkArgs := ireeLink
 
 lean_exe «vit-verified» where
-  root := `MainViTVerified
+  root := `apps.imagenette.MainViTVerified
   moreLinkArgs := ireeLink
 
 -- Phase 3c: ViT-Tiny with the VERIFIED-rendered AdamW step (packed θ|m|v threading
 -- through the generic FFI; ViTRender.vitTrainStepModuleAdamPacked / trainAdamPacked).
 lean_exe «vit-verified-adam» where
-  root := `MainViTVerifiedAdam
+  root := `apps.imagenette.MainViTVerifiedAdam
   moreLinkArgs := ireeLink
 
 lean_exe «cifar-cnn-train» where
-  root := `MainCifarCnnTrain
+  root := `apps.baselines.MainCifarCnnTrain
   moreLinkArgs := ireeLink
 
 lean_exe «autoencoder-pets-train» where
