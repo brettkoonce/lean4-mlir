@@ -16,77 +16,51 @@ Companion code for the upcoming book *Verified Deep Learning with Lean 4*
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg)](https://doi.org/10.5281/zenodo.20402133)
 
-**Current version: `v0.6.1`** — Verified training reaches low precision.
-A FloatBridge proof layer carries the MNIST chain into fp8 (E4M3) and
-bf16-mixed: per-operation rounding budgets, a "one binary32 SGD step
-decreases the loss" descent theorem, and argmax-preservation under
-quantization (with an E4M3 MNIST-linear demo). Chapter 5 is recast as the
-MNIST→ResNet bridge — the same 2×512 head on a deeper conv body — with a
-controlled SGD / momentum / AdamW × BatchNorm optimizer ablation (momentum
-wins; head width barely moves the result). The base toolchain moves to
-Lean 4.31.0. On-ramp polish: a `ProofsMinimal` "hello world" build target,
-refreshed ROCm/CUDA setup guides (`ROCM.md` / `CUDA.md`), and pinned
-per-backend JAX comparator environments.
+**Current version: `v0.6.1`** — verified training reaches low precision
+(fp8/E4M3 + bf16-mixed), Chapter 5 recast as the MNIST→ResNet bridge,
+toolchain on Lean 4.31.0. Full release history in [CHANGELOG.md](CHANGELOG.md).
 
-The `v0.6.0` headline still holds: object detection joined the framework —
-a YOLOv1 person detector on Pascal VOC off Chapter 6's ResNet-34 backbone
-(1×1 convolutional detection head), plus global-norm gradient clipping,
-env-var checkpoint resume (`LEAN_MLIR_INIT_LOAD` / `LEAN_MLIR_START_STEP`),
-per-step LR warmup, and demo-anchored blueprint intros for detection and
-diffusion.
+## Quick start
 
-The `v0.5.7` headline still holds: two parallel-agent audits closed.
-The "canonical `correct := rfl`" pattern at non-smooth operators
-(ReLU, the composed MLP, MaxPool2) now has machine-checked
-smooth-point bridges: `relu_codegen_matches_canonical` and
-`maxPool2_codegen_matches_canonical` prove the canonical-witness
-backward equals the codegen formula wherever every coordinate
-avoids the kink. A `HasVJPAt` pointwise framework provides
-smooth-input variants of the three kinked-operator instances
-whose `correct` field is a real chain-rule proof rather than
-`rfl`. The comparator suite extends from 38 → 41 theorems
-independently kernel-rechecked against `[propext, Quot.sound,
-Classical.choice]`. Blueprint gets a half-dozen flow improvements
-(GAP defined at first material use in Ch 6, Diffusion split into
-its own Bestiary subsection, ResNet entry expanded to the full
-standard family including R-18, Tomáš Skřivan's *Scientific
-Computing in Lean* credited at the top of the acknowledgments).
-Android bottom-cutoff bug fixed (issue #2); Umami cookieless
-analytics replaces planned GA. First Zenodo deposit lands with
-this release.
+Train a real, verified neural net end to end — fastest path first.
 
-The `v0.5.6` headline still holds: Chapter 9 lands its ConvNeXt-T
-worked example (84.94% val on Imagenette, paper-faithful recipe);
-Chapter 10 gets a Data Augmentation section with a 9-row ViT
-recipe ablation table — CutMix is the load-bearing knob at 9.5K
-images, and stacking RandAugment + Random Erasing on top of it
-*hurts* val accuracy. Bestiary gets paper-exact entries for VGG,
-ResNet-50/101/152, WRN, and DenseNet, plus the "N new primitives"
-claim reframed around the Ch 2-10 reader's toolbox (what's free)
-rather than the codebase (what's already in `Types.lean`). Found
-and fixed a long-standing eval-pipeline bug along the way:
-`centerCrop` was running on already-224 val data, reading past
-per-image bounds and making heavy-aug runs appear to collapse.
-New `LEAN_MLIR_EVAL_ONLY=1` mode re-evals saved checkpoints in
-~5 sec each.
+**No GPU, just Docker (~5 min):**
 
-The `v0.5.5` headline still holds: Swish/SiLU as a first-class
-activation (forward + backward + proved `swish_has_vjp_correct`)
-plus the independent-kernel comparator re-check covering 38
-theorems via public `*_has_vjp_correct` wrappers, and Ch 2's
-"Why VJPs, not Jacobians?" bridge + canonical-pdiv witness
-explainer + three-pillar TikZ spine diagram.
+```bash
+git clone https://github.com/brettkoonce/lean4-mlir.git && cd lean4-mlir
+docker build -t lean4-mlir-demo .
+docker run --rm lean4-mlir-demo
+```
 
-On top of that, a differential-test suite in
-[`tests/vjp_oracle/`](tests/vjp_oracle/) uses JAX's `value_and_grad`
-as an oracle for the hand-derived VJPs in `LeanMlir/Proofs/`. Nine
-test cases cover every axiom family — dense, conv, BN, maxPool,
-residual (biPath), depthwise, SE (elementwise product), attention,
-and the transformer block — each verified to 1–2 ULP of JAX autodiff.
-The ULP-floor cross-backend agreement (Lean→IREE→GPU vs Lean→JAX→XLA
-on both NVIDIA and AMD) established in v0.5.4 still holds; see
-[`traces/CROSS_BACKEND_RESULTS.md`](traces/CROSS_BACKEND_RESULTS.md)
-for the four-corner verification tables.
+Trains the Chapter-3 MNIST MLP on CPU to ~97.9% test accuracy through the
+full Lean → MLIR → IREE pipeline — no GPU, no Python, ~300 MB image. (First
+build ~10 min, dominated by building the IREE CPU runtime; reruns reuse the
+cached image.)
+
+**With a GPU — one command per tier:**
+
+After a one-time native setup (Lean 4 + an IREE runtime for your backend —
+see [ROCM.md](ROCM.md) / [CUDA.md](CUDA.md), or [Native setup](#native-setup-gpu-training) below):
+
+```bash
+./download_mnist.sh     # fetch MNIST
+lake run mnist          # build + train the verified MNIST nets (linear / MLP / CNN)
+```
+
+Then scale up: `lake run cifar` (the Chapter-5 BatchNorm × optimizer ablation)
+and `lake run imagenette` (the five Part-I nets at 224²). Not sure how long
+those take on your card? `lake run benchmark` probes your GPU and prints a
+per-chapter time estimate first.
+
+**Just the proofs (no IREE, no GPU):**
+
+```bash
+lake exe cache get         # pull prebuilt Mathlib
+lake build ProofsMinimal   # smallest end-to-end-verified example, ~seconds
+lake build Proofs          # type-check the entire VJP proof suite
+```
+
+The full clickable proof DAG is the [interactive blueprint](https://brettkoonce.github.io/lean4-mlir/blueprint/).
 
 ## Three phases
 
@@ -189,8 +163,9 @@ output's `den` is the certified loss-descent step (the older hand-tailed
 `linearTrainStepModuleV` is kept only for reference; the committed bytes are
 byte-tied to the renderer in CI). Tier 1 also now
 carries the `ℝ`→`Float32` bridge (below): forward, gradient, and SGD-step
-rounding budgets for the linear/MLP nets, and for linear a proven descent
-guarantee.
+rounding budgets for all three nets (linear / MLP / CNN), each with a proven
+loss-descent guarantee — the CNN (`cnn_conv2_sgd_descends` &c.) carries descent
+through the max-pool selection margins.
 
 **Tier 2 — CIFAR (cifar, cifar-bn): whole train step bridged.**
 `cifarFwdGraph_faithful` / `cifarBnFwdGraph_faithful` (plus op-level
@@ -239,8 +214,8 @@ ImageNet scale is open.
 ### The ℝ→Float32 bridge (Tier 1)
 
 All tier proofs are over exact reals; `LeanMlir/Proofs/FloatBridge.lean` +
-`SgdDescent.lean`/`SgdDescentLinear.lean`/`SgdDescentMlp.lean` close the
-rounding gap for the
+`SgdDescent.lean`/`SgdDescentLinear.lean`/`SgdDescentMlp.lean`/`SgdDescentCnn.lean`
+close the rounding gap for the
 Tier-1 nets, hypothesis-style (zero project axioms — a `FloatModel` is any
 rounding operator with relative error `u`; binary32 instantiates it with
 `u = 2⁻²⁴` on the normal range, subnormals open). The chain, every link in
@@ -449,12 +424,15 @@ crop (256→224) + horizontal flip, **running BN stats for eval**.
 | EfficientNet-B0 | 7.2M | **87.58%** |
 | MobileNetV2 | 2.2M | **87.09%** |
 | MobileNetV3-Large | 3.0M | **86.48%** |
-| MobileNetV4-Medium | 4.1M | **84.58%** |
 | ViT-Tiny | 5.5M | **71.70%** |
 
 Per-epoch eval histories and ablation tables in [`RESULTS.md`](RESULTS.md).
 
-## Quick start
+## Native setup (GPU training)
+
+The Quick start above is the fastest path; this is the full native install
+behind it — for running the GPU tiers (`lake run mnist`/`cifar`/`imagenette`)
+and individual trainers.
 
 ### 1. Install Lean 4
 
@@ -476,34 +454,40 @@ See [`IREE_BUILD.md`](IREE_BUILD.md) for build instructions.
 ./download_imagenette.sh   # Imagenette 320px → preprocessed binary (Ch 6+)
 ```
 
-### 4. Build a trainer
+### 4. Build + run a tier (or one trainer)
+
+The `lake run` tiers build and run a curated group of verified trainers in
+one command (backend auto-detected — `cuda` if `nvidia-smi` is present, else
+`rocm`):
 
 ```bash
-lake build resnet34-train
+lake run mnist        # verified MNIST: linear / MLP / CNN          (~30 min)
+lake run cifar        # ch.5 cifar8: SGD/momentum/Adam × bn/no-bn   (~1 hr)
+lake run imagenette   # the 5 Part-I nets at 224², 80-epoch AdamW   (~37 h)
+lake run benchmark    # probe this GPU, print per-chapter time estimates
 ```
 
-This compiles the Lean trainer (which generates MLIR + drives IREE + runs
-the training loop). Other targets, in roughly book order:
-`mnist-mlp-train`, `mnist-cnn-train`, `cifar-cnn-train`, `cifar-bn-train`,
-`resnet50-train`, `mobilenet-v2-train`, `mobilenet-v3-train`,
-`mobilenet-v4-train`, `efficientnet-train`, `efficientnet-v2-train`,
-`vgg-train`, `vit-tiny-train`.
+To build and run a single trainer instead, the targets are the verified nets
+those tiers bundle — e.g. `mnist-mlp-verified`, `cifar8-bn-verified`,
+`resnet34-verified-adam`, `vit-verified-adam` (the six `cifar8{,-bn}-verified`
+SGD/`-momentum`/`-adam` variants and the five `*-verified-adam` Imagenette
+nets). Unverified `<arch>-train` targets (`vgg-train`, `resnet50-train`,
+`mobilenet-v3-train`, …) also build, for nets outside the verified set.
 
-### 5. Run
-
-The first invocation generates and compiles the vmfbs (slow — IREE
-compilation takes 10-15 min for ResNet-sized models). Subsequent
-runs reuse the cached vmfbs unless you clear `.lake/build/`.
+The first run of any trainer compiles its vmfb (slow — 10–15 min for a
+ResNet-sized model); reruns reuse the cache under `.lake/build/`. To run a
+single binary directly with the env vars set:
 
 ```bash
-HIP_VISIBLE_DEVICES=0 IREE_BACKEND=rocm .lake/build/bin/resnet34-train
+HIP_VISIBLE_DEVICES=0 IREE_BACKEND=rocm .lake/build/bin/resnet34-verified-adam
 
-# Or via the included shell wrapper that sets the env vars correctly
-bash run.sh resnet34                  # GPU 0, ROCm (defaults)
-bash run.sh efficientnet-v2 1 cuda    # GPU 1, CUDA
+# Or the shell wrapper that sets them for you
+bash run.sh resnet34-verified-adam        # GPU 0, ROCm (defaults)
+bash run.sh efficientnet-verified-adam 1 cuda   # GPU 1, CUDA
 ```
 
-For CUDA, set `IREE_BACKEND=cuda` (the default) and use `CUDA_VISIBLE_DEVICES`.
+For CUDA, set `IREE_BACKEND=cuda` and use `CUDA_VISIBLE_DEVICES`; set
+`IREE_CHIP` for your arch (`sm_86`/`sm_89`/`sm_90`, or `gfx1100` on ROCm).
 
 ## Lean specs
 
@@ -535,113 +519,59 @@ def vitTiny : NetSpec where
     .transformerEncoder 192 3 768 12,     -- 12 blocks, 3 heads, MLP dim 768
     .dense 192 10 .identity
   ]
-
-def mobilenetV4Medium : NetSpec where
-  name := "MobileNet V4-Medium"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 32 3 2 .same,
-    .fusedMbConv 32 48 4 3 2 1 false,
-    .uib  48  80 4 2 3 5,    -- ExtraDW
-    .uib  80 160 6 2 0 3,    -- IB (= MBConv)
-    .uib 160 160 4 1 5 0,    -- ConvNeXt
-    .uib 160 160 4 1 0 0,    -- FFN
-    -- ... 11 more UIB blocks
-    .convBn 256 1280 1 1 .same,
-    .globalAvgPool,
-    .dense 1280 10 .identity
-  ]
 ```
 
 ## Project structure
 
 ```
 lean4-mlir/
-├── README.md               -- this file (phase 3)
+├── README.md               -- this file
+├── CHANGELOG.md            -- release history
 ├── RESULTS.md              -- per-architecture eval histories + ablations
 ├── IREE_BUILD.md           -- how to build libiree_ffi.so from scratch
-├── ROCM.md                 -- ROCm setup notes
+├── ROCM.md / CUDA.md       -- per-backend setup notes
 ├── BENCHMARK.md            -- ROCm vs CUDA performance comparison
-├── lakefile.lean           -- Lake build config (libraries + ~30 execs)
+├── lakefile.lean           -- Lake build (libs + ~150 execs + the
+│                              `lake run mnist/cifar/imagenette/benchmark` tiers)
 │
 ├── LeanMlir.lean           -- umbrella module
 ├── LeanMlir/
-│   ├── MlirCodegen.lean    -- ~7500 lines, NetSpec → StableHLO MLIR
+│   ├── MlirCodegen.lean    -- ~7500 lines, NetSpec → StableHLO MLIR (phase 3)
+│   ├── Spec.lean, Types.lean       -- NetSpec / Layer / Activation / param counts
+│   ├── Train.lean          -- unverified training driver (the `*-train` path)
+│   ├── Verified{Spec,Nets,Train}.lean
+│   │                       -- verified-render trainers (the `*-verified` path)
+│   ├── ViTRender.lean      -- proof-tied StableHLO renderer (incl. AdamW tail)
+│   ├── E4M3Quant.lean      -- fp8 (E4M3) quantization for the float bridge
 │   ├── IreeRuntime.lean    -- Lean ↔ libiree_ffi.so bindings
 │   ├── F32Array.lean       -- ByteArray-backed float32 helpers
-│   ├── Spec.lean           -- NetSpec / Layer / param-counting
-│   ├── Types.lean          -- core types (Layer, Activation, Padding, ...)
-│   ├── MnistData.lean      -- IDX file loader (older training paths)
-│   └── Proofs/             -- VJP correctness proofs (~36,700 lines)
-│       ├── Tensor.lean
-│       ├── MLP.lean
-│       ├── CNN.lean
-│       ├── Residual.lean
-│       ├── BatchNorm.lean
-│       ├── Depthwise.lean
-│       ├── SE.lean
-│       ├── LayerNorm.lean
-│       ├── Attention.lean
-│       ├── FloatBridge.lean      -- ℝ→Float32: rounding budgets (Tier 1)
-│       ├── SgdDescent.lean       -- inexact-gradient descent over ℝ
-│       ├── SgdDescentLinear.lean -- Lipschitz constants, linear loss
-│       ├── SgdDescentMlp.lean    -- ...through the MLP's ReLU kinks (margins)
-│       └── SgdDescentCnn.lean    -- ...toward the CNN: pool selection margins
+│   └── Proofs/             -- VJP correctness proofs (~67k lines, 103 files)
+│       ├── MLP, CNN, Residual, BatchNorm, Depthwise, SE, LayerNorm, Attention
+│       │                          -- per-operator VJP correctness
+│       ├── FloatBridge.lean        -- ℝ→Float32 rounding budgets (Tier 1)
+│       └── SgdDescent{,Linear,Mlp,Cnn}.lean  -- inexact-gradient descent over ℝ
 │
-├── Main*Train.lean         -- phase 3 trainers (one per architecture)
-│   ├── MainResnetTrain.lean
-│   ├── MainResnet50Train.lean
-│   ├── MainMobilenetV2Train.lean
-│   ├── MainMobilenetV3Train.lean
-│   ├── MainMobilenetV4Train.lean
-│   ├── MainEfficientNetTrain.lean
-│   ├── MainEfficientNetV2Train.lean
-│   ├── MainVitTrain.lean
-│   ├── MainVggTrain.lean
-│   ├── MainMnistMlpTrain.lean
-│   ├── MainMnistCnnTrain.lean
-│   ├── MainCifarCnnBnTrain.lean
-│   ├── MainCifarCnnTrain.lean
-│   └── MainAblation.lean
+├── Main*Verified*.lean     -- verified-render trainers (what `lake run` builds):
+│                              mnist-{linear,mlp,cnn}-verified, the six
+│                              cifar8{,-bn}-verified{,-momentum,-adam}, and
+│                              {resnet34,mobilenetv2,efficientnet,convnext,vit}-verified-adam
+├── Main*Train.lean         -- unverified full-recipe trainers (resnet34, vgg, …)
 │
-├── tests/                  -- unit tests + smoke tests + differential tests
-│   ├── Test*.lean          -- runtime / FFI / codegen sanity tests
-│   ├── BenchResnet.lean
-│   ├── diff_traces.py      -- JSONL trace diff helper
-│   ├── cross_backend_mnist_mlp.sh
-│   └── vjp_oracle/         -- JAX-autodiff oracle for hand-derived VJPs
-│       ├── README.md
-│       ├── run.sh
-│       ├── diff_step.py
-│       ├── phase3/         -- Lean→IREE test trainers
-│       └── phase2/         -- (mirrored at jax/tests/vjp_oracle/phase2/)
+├── Bestiary/               -- 41 read-only NetSpec catalog entries
+│                              (ResNet, ViT, AlphaZero, MuZero, CLIP, Mamba, …)
+├── demos/                  -- 18 task demos (YOLO detection, UNet segmentation,
+│                              TinyGPT, DDPM diffusion)
+├── verified_mlir/          -- committed proof-rendered StableHLO the verified exes run
 │
-├── upstream-issues/        -- isolated reproducers + backtraces for bugs
-│   └── 2026-04-rocm-miopen-conv-segv/  -- ROCm/MIOpen#3955
-│
-├── ffi/
-│   ├── iree_ffi.{c,h}      -- IREE runtime wrapper
-│   ├── iree_lean_ffi.c     -- Lean FFI bindings
-│   ├── f32_helpers.c       -- data loading, He init, EMA, augmentation
-│   └── libiree_ffi.so      -- compiled shared library
-│
-├── jax/                    -- phase 2 (Lean → JAX Python)
-│   ├── README.md
-│   ├── Jax.lean
-│   ├── Jax/{Codegen,Runner}.lean
-│   ├── Main*.lean          -- 14 JAX-driven architecture specs
-│   └── tests/vjp_oracle/phase2/  -- phase-2 mirror of oracle specs
-│
+├── tests/                  -- unit / smoke / differential tests
+│   └── vjp_oracle/         -- JAX-autodiff oracle for the hand-derived VJPs
+├── jax/                    -- phase 2 (Lean → JAX Python); the ImageNet-scale path
 ├── mnist-lean4/            -- phase 1 (pure Lean 4 + C BLAS)
-│
+├── blueprint/              -- interactive proof-blueprint source (LaTeX / plasTeX)
+├── ffi/                    -- IREE runtime wrapper + data-loading C (libiree_ffi.so)
 ├── traces/                 -- committed cross-backend training traces
-│   ├── CROSS_BACKEND_RESULTS.md
-│   ├── TRACE_FORMAT.md
-│   └── mnist_{mlp,cnn}.*.jsonl
-│
-├── data/                   -- downloaded + preprocessed datasets
-└── run_*.sh                -- shell wrappers for tmux env propagation
+├── upstream-issues/        -- isolated reproducers for upstream bugs
+└── data/                   -- downloaded + preprocessed datasets
 ```
 
 ## Supported layers (phase 3 codegen)
