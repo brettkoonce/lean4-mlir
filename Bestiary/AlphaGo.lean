@@ -76,19 +76,19 @@ def alphaGoPolicyNet : NetSpec where
   imageW := 19
   layers := [
     -- First conv: 5×5 filter on 48-ch input (the paper's design)
-    .convBn 48 192 5 1 .same,
+    .conv2d 48 192 5 .same .relu,
     -- 11 more 3×3 convs at 192 channels
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
     -- Final 1×1 conv: 192 → 1 (per-position move logit)
     -- The 19×19 output + pass move is handled by the forward pass
     -- reshaping the 19×19×1 output + concatenating a learned scalar.
@@ -105,18 +105,18 @@ def alphaGoValueNet : NetSpec where
   imageW := 19
   layers := [
     -- Same 13-layer conv body as the policy net
-    .convBn 48 192 5 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
-    .convBn 192 192 3 1 .same,
+    .conv2d 48 192 5 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
     -- Head: 1×1 conv to 1 channel, flatten, then FC 361 → 256 → 1
     .conv2d 192 1 1 .same .relu,
     .flatten,
@@ -155,10 +155,10 @@ def tinyAlphaGo : NetSpec where
   imageH := 9
   imageW := 9
   layers := [
-    .convBn 12 64 5 1 .same,     -- 12 input planes, 64 filters
-    .convBn 64 64 3 1 .same,
-    .convBn 64 64 3 1 .same,
-    .convBn 64 64 3 1 .same,
+    .conv2d 12 64 5 .same .relu, -- 12 input planes, 64 filters
+    .conv2d 64 64 3 .same .relu,
+    .conv2d 64 64 3 .same .relu,
+    .conv2d 64 64 3 .same .relu,
     .conv2d 64 1 1 .same .identity
   ]
 
@@ -195,7 +195,9 @@ def main : IO Unit := do
   IO.println "  Notes"
   IO.println "────────────────────────────────────────────────────────────────"
   IO.println "  • ZERO new Layer primitives. Policy and value networks are"
-  IO.println "    plain convBn stacks; rollout is a flat dense projection."
+  IO.println "    plain conv+ReLU stacks — no residual blocks, no BatchNorm"
+  IO.println "    (2016 predates both in this lineage; AlphaGo Zero added"
+  IO.println "    them). Rollout is a flat dense projection."
   IO.println "  • AlphaGo Zero (2017) replaced all three networks with a"
   IO.println "    single two-headed net (see AlphaZero.lean) trained purely"
   IO.println "    via self-play on the raw board. Went from 3140 Elo to"
