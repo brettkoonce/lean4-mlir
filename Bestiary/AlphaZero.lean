@@ -26,7 +26,7 @@ the ResNet body from Chapter-N, forked at the end into two tiny heads.
                      │
           ┌──────────┴──────────────┐
           ▼                         ▼
-  Policy head (2 filters)    Value head (1 filter)
+  Policy head (convBn→2)     Value head (convBn→1)
    → flatten                  → flatten
    → dense(2·H·W → nMoves)    → dense(H·W → 256, ReLU)
                               → dense(256 → 1)
@@ -70,7 +70,7 @@ def alphaGoZeroPolicy : NetSpec where
   layers := [
     .convBn 17 256 3 1 .same,                        -- 17 planes → 256
     .residualBlock 256 256 19 1,                     -- 19 residual blocks
-    .conv2d 256 2 1 .same .identity,                 -- policy head: 2 filters
+    .convBn 256 2 1 1 .same,                         -- policy head: conv→BN→ReLU (2 filters)
     .flatten,
     .dense (2 * 19 * 19) 362 .identity               -- 361 moves + pass
   ]
@@ -83,7 +83,7 @@ def alphaGoZeroValue : NetSpec where
   layers := [
     .convBn 17 256 3 1 .same,
     .residualBlock 256 256 19 1,
-    .conv2d 256 1 1 .same .identity,                 -- value head: 1 filter
+    .convBn 256 1 1 1 .same,                         -- value head: conv→BN→ReLU (1 filter)
     .flatten,
     .dense (1 * 19 * 19) 256 .relu,
     .dense 256 1 .identity                            -- tanh applied downstream
@@ -101,7 +101,7 @@ def alphaZeroChessPolicy : NetSpec where
   layers := [
     .convBn 119 256 3 1 .same,
     .residualBlock 256 256 40 1,
-    .conv2d 256 73 1 .same .identity,
+    .convBn 256 73 1 1 .same,
     .flatten,
     .dense (73 * 8 * 8) (73 * 8 * 8) .identity
   ]
@@ -113,7 +113,7 @@ def alphaZeroChessValue : NetSpec where
   layers := [
     .convBn 119 256 3 1 .same,
     .residualBlock 256 256 40 1,
-    .conv2d 256 1 1 .same .identity,
+    .convBn 256 1 1 1 .same,
     .flatten,
     .dense (1 * 8 * 8) 256 .relu,
     .dense 256 1 .identity
@@ -131,7 +131,7 @@ def tinyAlphaZeroPolicy : NetSpec where
   layers := [
     .convBn 17 64 3 1 .same,
     .residualBlock 64 64 3 1,
-    .conv2d 64 2 1 .same .identity,
+    .convBn 64 2 1 1 .same,
     .flatten,
     .dense (2 * 9 * 9) 82 .identity
   ]
@@ -143,7 +143,7 @@ def tinyAlphaZeroValue : NetSpec where
   layers := [
     .convBn 17 64 3 1 .same,
     .residualBlock 64 64 3 1,
-    .conv2d 64 1 1 .same .identity,
+    .convBn 64 1 1 1 .same,
     .flatten,
     .dense (1 * 9 * 9) 64 .relu,
     .dense 64 1 .identity

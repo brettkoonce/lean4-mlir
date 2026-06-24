@@ -96,8 +96,8 @@ def deeplabv3plusResnet101 : NetSpec where
     -- stage 2 (512-ch low-level features) that gives v3+ its "plus" is
     -- architecturally a concat-with-skip — not expressible linearly
     -- here, so we note it in prose and run the convs in-line.
-    .conv2d 256 256 3 .same .relu,
-    .conv2d 256 256 3 .same .relu,
+    .convBn 256 256 3 1 .same,
+    .convBn 256 256 3 1 .same,
     -- Output: per-pixel class logits (Pascal VOC: 21 classes)
     .conv2d 256 21 1 .same .identity
   ]
@@ -126,8 +126,8 @@ def deeplabv3plusMobilenet : NetSpec where
     -- ASPP at a smaller width: 320 → 256 (paper uses 256 everywhere)
     .asppModule 320 256,
     -- Decoder
-    .conv2d 256 256 3 .same .relu,
-    .conv2d 256 256 3 .same .relu,
+    .convBn 256 256 3 1 .same,
+    .convBn 256 256 3 1 .same,
     .conv2d 256 21 1 .same .identity
   ]
 
@@ -144,7 +144,7 @@ def tinyDeepLab : NetSpec where
     .bottleneckBlock 32 64 2 2,
     .bottleneckBlock 64 128 2 2,
     .asppModule 128 64,
-    .conv2d 64 32 3 .same .relu,
+    .convBn 64 32 3 1 .same,
     .conv2d 32 10 1 .same .identity
   ]
 

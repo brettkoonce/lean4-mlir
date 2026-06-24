@@ -97,8 +97,8 @@ def mobileViTS : NetSpec where
     .invertedResidual 128 160 4 2 1,
     .mobileVitBlock 160 240 4 480 3,
 
-    -- Output: 1×1 expansion conv + GAP + classifier
-    .conv2d 160 640 1 .same .relu,
+    -- Output: 1×1 expansion conv→BN→ReLU + GAP + classifier
+    .convBn 160 640 1 1 .same,
     .globalAvgPool,
     .dense 640 1000 .identity
   ]
@@ -121,7 +121,7 @@ def mobileViTXS : NetSpec where
     .mobileVitBlock 80 120 4 240 4,
     .invertedResidual 80 96 4 2 1,
     .mobileVitBlock 96 144 4 288 3,
-    .conv2d 96 384 1 .same .relu,
+    .convBn 96 384 1 1 .same,
     .globalAvgPool,
     .dense 384 1000 .identity
   ]
@@ -144,7 +144,7 @@ def mobileViTXXS : NetSpec where
     .mobileVitBlock 64 80 4 160 4,
     .invertedResidual 64 80 2 2 1,
     .mobileVitBlock 80 96 4 192 3,
-    .conv2d 80 320 1 .same .relu,
+    .convBn 80 320 1 1 .same,
     .globalAvgPool,
     .dense 320 1000 .identity
   ]
@@ -162,7 +162,7 @@ def tinyMobileViT : NetSpec where
     .invertedResidual 16 32 2 1 1,
     .invertedResidual 32 48 2 2 2,
     .mobileVitBlock 48 64 2 128 2,
-    .conv2d 48 128 1 .same .relu,
+    .convBn 48 128 1 1 .same,
     .globalAvgPool,
     .dense 128 10 .identity
   ]

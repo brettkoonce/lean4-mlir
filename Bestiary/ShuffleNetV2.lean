@@ -91,7 +91,7 @@ def shuffleV2_0_5 : NetSpec where
     .shuffleV2Block 24  48 4,      -- stage 2
     .shuffleV2Block 48  96 8,      -- stage 3
     .shuffleV2Block 96 192 4,      -- stage 4
-    .conv2d 192 1024 1 .same .relu, -- 1×1 head conv
+    .convBn 192 1024 1 1 .same,    -- 1×1 head conv→BN→ReLU (Conv5)
     .globalAvgPool,
     .dense 1024 1000 .identity
   ]
@@ -110,7 +110,7 @@ def shuffleV2_1_0 : NetSpec where
     .shuffleV2Block  24 116 4,
     .shuffleV2Block 116 232 8,
     .shuffleV2Block 232 464 4,
-    .conv2d 464 1024 1 .same .relu,
+    .convBn 464 1024 1 1 .same,
     .globalAvgPool,
     .dense 1024 1000 .identity
   ]
@@ -129,7 +129,7 @@ def shuffleV2_1_5 : NetSpec where
     .shuffleV2Block  24 176 4,
     .shuffleV2Block 176 352 8,
     .shuffleV2Block 352 704 4,
-    .conv2d 704 1024 1 .same .relu,
+    .convBn 704 1024 1 1 .same,
     .globalAvgPool,
     .dense 1024 1000 .identity
   ]
@@ -149,7 +149,7 @@ def shuffleV2_2_0 : NetSpec where
     .shuffleV2Block 244 488 8,
     .shuffleV2Block 488 976 4,
     -- Last-stage output conv width grows from 1024 to 2048 at 2.0×.
-    .conv2d 976 2048 1 .same .relu,
+    .convBn 976 2048 1 1 .same,
     .globalAvgPool,
     .dense 2048 1000 .identity
   ]
@@ -166,7 +166,7 @@ def tinyShuffleV2 : NetSpec where
     .convBn 3 24 3 1 .same,
     .shuffleV2Block 24 48 2,
     .shuffleV2Block 48 96 2,
-    .conv2d 96 256 1 .same .relu,
+    .convBn 96 256 1 1 .same,
     .globalAvgPool,
     .dense 256 10 .identity
   ]

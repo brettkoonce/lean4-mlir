@@ -103,7 +103,7 @@ def muZeroGoDynamicsReward : NetSpec where
   imageH := 19
   imageW := 19
   layers := [
-    .conv2d 256 1 1 .same .identity,  -- 1×1 conv to 1 channel
+    .convBn 256 1 1 1 .same,          -- 1×1 conv→BN→ReLU to 1 channel
     .flatten,
     .dense (1 * 19 * 19) 128 .relu,
     .dense 128 1 .identity            -- scalar reward
@@ -117,7 +117,7 @@ def muZeroGoPredictionPolicy : NetSpec where
   imageW := 19
   layers := [
     .residualBlock 256 256 2 1,       -- small head body (2 ResBlocks)
-    .conv2d 256 2 1 .same .identity,
+    .convBn 256 2 1 1 .same,
     .flatten,
     .dense (2 * 19 * 19) 362 .identity   -- 361 board positions + pass
   ]
@@ -129,7 +129,7 @@ def muZeroGoPredictionValue : NetSpec where
   imageW := 19
   layers := [
     .residualBlock 256 256 2 1,
-    .conv2d 256 1 1 .same .identity,
+    .convBn 256 1 1 1 .same,
     .flatten,
     .dense (1 * 19 * 19) 256 .relu,
     .dense 256 1 .identity
