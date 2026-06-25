@@ -953,6 +953,27 @@ theorem MaxPool2MarginQ.pdiv3_eq {c h w : Nat} {δ : ℝ} (hδ0 : 0 ≤ δ)
   · have hAy : ¬ MaxPool2IsArgmax y ci hi wi := fun h => hA (hiff.mp h)
     simp [hA, hAy]
 
+/-- **Float pool-backward closeness** (Increment 1 keystone). Under the pool
+    margin the float post-relu argmax matches the real one
+    (`isArgmax_iff`), so the pool's backward selector
+    `𝟙[(ci,hi,wi) is its window's argmax]·(pooled cotangent)` differs from the
+    certified one only through the pooled cotangent value — an indicator
+    pass-through (`indicator ∈ {0,1}`), the pool peer of `reluMask_close`.
+    The two cotangent values `ay` (float) / `ax` (real) enter only via their
+    closeness `|ay − ax| ≤ e`. -/
+theorem MaxPool2MarginQ.poolBack_close {c h w : Nat} {δ : ℝ}
+    {x y : Tensor3 c (2*h) (2*w)} (hm : MaxPool2MarginQ δ x)
+    (hclose : ∀ ci hi wi, |y ci hi wi - x ci hi wi| ≤ δ)
+    (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w))
+    {ay ax e : ℝ} (ha : |ay - ax| ≤ e) :
+    |(if MaxPool2IsArgmax y ci hi wi then ay else 0) -
+      (if MaxPool2IsArgmax x ci hi wi then ax else 0)| ≤ e := by
+  have hiff := hm.isArgmax_iff hclose ci hi wi
+  by_cases hA : MaxPool2IsArgmax x ci hi wi
+  · rw [if_pos hA, if_pos (hiff.mpr hA)]; exact ha
+  · rw [if_neg hA, if_neg (fun h => hA (hiff.mp h)), sub_zero, abs_zero]
+    exact le_trans (abs_nonneg _) ha
+
 -- ════════════════════════════════════════════════════════════════
 -- § The 3-dense head above the pool: input-gradient closed form
 -- ════════════════════════════════════════════════════════════════
@@ -1674,6 +1695,119 @@ theorem cnn_conv2_loss_gradAt {c h w d₃ d₄ nC kH kW : Nat}
         rw [conv2d_weight_pdiv b₂ x₁ _ o cc kh kw ci hi wi,
           pool_relu_input_grad W₃ b₃ W₄ b₄ W₅ b₅ label _ hz2 hmp hz3 hz4
             ci hi wi]
+
+/-- The unmasked peer of `reluMask_dense_transpose_eq`: a bare `Wᵀ`
+    contraction `∑ₖ Wₗₖ·cₖ = dense (transpose W) 0 c l`. The pool feeds
+    `dense W₃` with **no** leading ReLU mask, so the W₃ contraction in the
+    certified conv-2 gradient collapses through this, where the masked W₄/W₅
+    contractions collapse through `reluMask_dense_transpose_eq`. NB this is
+    generic in `(W, c)`, so fire it only where the goal has no *other* matrix
+    contraction (e.g. the spatial `∑ convPad·cot`) — see `head3_cot_reluMask`. -/
+theorem dense_transpose_eq {p n : Nat} (W : Mat p n) (c : Vec n) (l : Fin p) :
+    (∑ k, W l k * c k) = dense (fun j i' => W i' j) (fun _ => 0) c l := by
+  show (∑ k, W l k * c k) = (∑ k, c k * W l k) + (0:ℝ)
+  rw [add_zero]
+  exact Finset.sum_congr rfl fun k _ => mul_comm _ _
+
+/-- **The 3-dense head cotangent in `dense`/`reluMask` form.** The raw nested
+    `∑ₗ W₃·(𝟙[z₃]·∑_q W₄·(𝟙[z₄]·∑_k W₅·(softmax−onehot)))` that
+    `pool_relu_input_grad` / `cnn_conv2_loss_gradAt` leave at the pooled vector
+    `u` equals `dense W₃ᵀ 0 (mask z₃ (dense W₄ᵀ 0 (mask z₄ (dense W₅ᵀ 0
+    (softmax−onehot)))))` — the two masked contractions via
+    `reluMask_dense_transpose_eq`, the unmasked W₃ via `dense_transpose_eq`.
+    Stated head-locally (no spatial sum) so the generic `dense_transpose_eq`
+    fires only on the W₃ row. The head peer the conv grad-close bounds against
+    via `dense_close` (W₃) and `cot_step_close` (W₄/W₅). -/
+theorem head3_cot_reluMask {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃) (b₃ : Vec d₃)
+    (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
+    (label : Fin nC) (u : Vec p) (j : Fin p) :
+    (∑ l, W₃ j l *
+        ((if dense W₃ b₃ u l > 0 then (1:ℝ) else 0) *
+          ∑ q, W₄ l q *
+            ((if dense W₄ b₄ (relu d₃ (dense W₃ b₃ u)) q > 0 then (1:ℝ) else 0) *
+              ∑ k, W₅ q k *
+                (softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄
+                    (relu d₃ (dense W₃ b₃ u))))) k - oneHot nC label k))))
+      = dense (fun j' i' => W₃ i' j') (fun _ => 0)
+          (FloatModel.reluMask (dense W₃ b₃ u)
+            (dense (fun j' i' => W₄ i' j') (fun _ => 0)
+              (FloatModel.reluMask (dense W₄ b₄ (relu d₃ (dense W₃ b₃ u)))
+                (dense (fun j' i' => W₅ i' j') (fun _ => 0)
+                  (fun k => softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄
+                      (relu d₃ (dense W₃ b₃ u))))) k - oneHot nC label k)))))
+          j := by
+  simp_rw [reluMask_dense_transpose_eq]
+  rw [dense_transpose_eq]
+
+/-- **The certified conv-2 loss gradient, head restated in `dense`/`reluMask`
+    form** — the conv peer of `mlp_input_loss_gradAt_reluMask` (Increment 1
+    keystone). The two head `Wᵀ` contractions (under the d₄/d₃ ReLU masks)
+    collapse via `reluMask_dense_transpose_eq`, the unmasked W₃ contraction via
+    `dense_transpose_eq`; the conv-output ReLU mask `𝟙[z₂>0]` and the pool
+    argmax selector are kept explicit (their float closeness is handled by
+    `reluMask_close` and `MaxPool2MarginQ.poolBack_close`). The whole conv
+    gradient is then packaged as the spatial dot `∑ₛ convPadWin·cotWin`
+    (`convWeightGrad_eq_dot`) — the exact quantity the rendered trainer's float
+    conv-weight dot rounds, so the conv grad-close bounds against this. -/
+theorem cnn_conv2_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
+    (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
+    (hh : 0 < h) (hw : 0 < w)
+    (v : Vec (c * c * kH * kW))
+    (hz2 : ∀ k, Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k ≠ 0)
+    (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))) :
+      Tensor3 c (2*h) (2*w)))
+    (hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))) l ≠ 0)
+    (hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)))))) q ≠ 0)
+    (o cc : Fin c) (kh : Fin kH) (kw : Fin kW) :
+    gradAt (fun v' : Vec (c * c * kH * kW) =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+          label)
+        v (k4Idx o cc kh kw)
+      = ∑ s, convPadWin kH kW x₁ cc kh kw s *
+          cotWin (fun ci hi wi =>
+            (if Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁)
+                  (t3Idx ci hi wi) > 0 then (1:ℝ) else 0) *
+              (if MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+                    (Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁))))
+                  ci hi wi
+                then dense (fun j i' => W₃ i' j) (fun _ => 0)
+                  (FloatModel.reluMask (dense W₃ b₃ (maxPoolFlat c h w
+                      (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                        (conv2d (Kernel4.unflatten v) b₂ x₁)))))
+                    (dense (fun j i' => W₄ i' j) (fun _ => 0)
+                      (FloatModel.reluMask (dense W₄ b₄ (relu d₃
+                          (dense W₃ b₃ (maxPoolFlat c h w
+                            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                              (conv2d (Kernel4.unflatten v) b₂ x₁)))))))
+                        (dense (fun j i' => W₅ i' j) (fun _ => 0)
+                          (fun k => softmax nC (dense W₅ b₅ (relu d₄
+                              (dense W₄ b₄ (relu d₃ (dense W₃ b₃
+                                (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                                  (Tensor3.flatten (conv2d (Kernel4.unflatten v)
+                                    b₂ x₁))))))))) k - oneHot nC label k)))))
+                  (t3Idx ci (winRow hi) (winCol wi))
+                else 0)) o s := by
+  rw [cnn_conv2_loss_gradAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw v hz2 hmp hz3
+      hz4 o cc kh kw]
+  -- restate the head into dense/reluMask form (head-local lemma — does not
+  -- touch the spatial `∑ convPad·cot` sum), then package as the spatial dot
+  simp_rw [head3_cot_reluMask]
+  rw [convWeightGrad_eq_dot x₁ _ o cc kh kw]
+  -- collapse the `if ci = o` conv-channel selector
+  rw [Finset.sum_eq_single o
+    (fun ci _ hne => Finset.sum_eq_zero fun hi _ => Finset.sum_eq_zero fun wi _ =>
+      by rw [if_neg hne, zero_mul])
+    (fun habs => absurd (Finset.mem_univ o) habs)]
+  refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
+  rw [if_pos (rfl : o = o)]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Drift transport: conv → relu → pool → dense → relu → dense → logits

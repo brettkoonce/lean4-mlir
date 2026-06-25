@@ -1902,6 +1902,12 @@ open Proofs
 #print axioms MaxPool2MarginQ.smooth
 #print axioms MaxPool2MarginQ.isArgmax_iff
 #print axioms MaxPool2MarginQ.pdiv3_eq
+-- Float-bridge §3 (CNN descent, Increment 1 keystone): the same pool margin
+-- that freezes the pdiv3 routing also makes the FLOAT post-relu argmax equal
+-- the real one, so the pool's backward selector 𝟙[argmax]·(pooled cotangent)
+-- is an indicator pass-through in the cotangent value — the pool peer of
+-- reluMask_close (poolBack_close).
+#print axioms MaxPool2MarginQ.poolBack_close
 #print axioms conv2d_eq_convPad
 #print axioms abs_convPad_le
 #print axioms k4Idx_inj
@@ -1937,6 +1943,17 @@ open Proofs
 #print axioms conv2d_weight_pdiv_row_l1
 #print axioms cnn_conv2_loss_differentiableAt
 #print axioms cnn_conv2_loss_gradAt
+-- Float-bridge §3 (CNN descent, Increment 1 keystone): the certified conv-2
+-- gradient restated in dense/reluMask form — the conv peer of
+-- mlp_input_loss_gradAt_reluMask. The masked W₄/W₅ contractions collapse via
+-- reluMask_dense_transpose_eq, the unmasked W₃ via dense_transpose_eq
+-- (head-localised in head3_cot_reluMask so it never hits the spatial sum),
+-- and the whole conv gradient packages as the spatial dot ∑ convPadWin·cotWin
+-- (convWeightGrad_eq_dot) the float conv-weight dot rounds. This is the form
+-- the conv2 grad-close (Increment 2) bounds against.
+#print axioms dense_transpose_eq
+#print axioms head3_cot_reluMask
+#print axioms cnn_conv2_loss_gradAt_reluMask
 #print axioms cnn_pool_l1_drift
 #print axioms cnn_conv2_logit_drift
 #print axioms cnn_margin2_keeps_offkink

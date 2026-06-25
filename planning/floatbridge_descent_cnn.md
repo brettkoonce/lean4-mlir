@@ -114,10 +114,21 @@ hgh : ∀ idx, |gh idx − gradAt (loss-of-W₂) (Kernel4.flatten W₂) idx| ≤
 
 ## Increment plan (land each independently, 3-axiom clean + audited)
 
-**Increment 1 — keystone primitives.**
-- The float pool-backward close lemma (new #1 above).
-- `cnn_conv2_loss_gradAt_reluMask` bridge (new #2). Reuse `reluMask_dense_transpose_eq`
-  (SgdDescentMlp.lean) for the dense-Wᵀ steps.
+**Increment 1 — keystone primitives. ✅ DONE (3-axiom clean, audited).**
+- The float pool-backward close lemma (new #1 above) = `MaxPool2MarginQ.poolBack_close`
+  (SgdDescentCnn.lean, just after `pdiv3_eq`).
+- `cnn_conv2_loss_gradAt_reluMask` bridge (new #2, just after `cnn_conv2_loss_gradAt`),
+  built on two helpers: `head3_cot_reluMask` (the 3-dense head restated to
+  `dense W₃ᵀ 0 (mask z₃ (dense W₄ᵀ 0 (mask z₄ (dense W₅ᵀ 0 (softmax−onehot))))`) and
+  `dense_transpose_eq` (the unmasked peer of `reluMask_dense_transpose_eq`, for the W₃ rung).
+  **Gotcha learned:** `dense_transpose_eq` is generic in `(W, c)`, so a blanket
+  `simp_rw [dense_transpose_eq]` ALSO collapses the spatial `∑ convPad·cot` sum (matched as
+  `∑ k W l k · c k`). Fix: confine the W₃ collapse to the head-local `head3_cot_reluMask`
+  (no spatial sum present), and only THEN package via `convWeightGrad_eq_dot`. The bridge
+  keeps the conv-output ReLU mask `𝟙[z₂>0]` and the pool argmax selector explicit — their
+  float closeness is `reluMask_close` / `poolBack_close` in Increment 2.
+- All 4 new theorems added to `tests/AuditAxioms.lean`; `lake build …SgdDescentCnn` clean,
+  `check_audit_coverage.py` passes. *(Effort was medium-high, as estimated.)*
 Land + audit before touching the grad-close. *Effort: medium-high (the bridge plumbing).*
 
 **Increment 2 — `cnn_conv2_grad_close`.** Mirror `mlp_w0_grad_close` (the model), extended:
