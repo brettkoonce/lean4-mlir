@@ -9267,4 +9267,927 @@ theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     h1 h2
   simpa [hf] using hmain
 
+-- ════════════════════════════════════════════════════════════════
+-- § Increment 5 — the conv BIASES (the last descent rung)
+--
+-- The bias gradient is the spatial SUM of the conv-output cotangent
+-- (`convBiasGrad_eq_sum`), the Kronecker channel-indicator Jacobian
+-- collapsing the `∑ ci` to `ci = o`. The cotangent chains are reused
+-- wholesale from the conv-WEIGHT rungs (Increments 1–4): the one new
+-- core is `sum_perturbed_close`, the `M.sum` peer of `dot_perturbed_close`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Float sum against a perturbed summand** — the conv-BIAS grad-close's
+    final reduction, the `M.sum` peer of `dot_perturbed_close` (no left
+    operand `A`: the bias Jacobian is the bare channel indicator, so the
+    contraction is a plain reduction, not a dot). `M.sum B̃` vs the certified
+    `∑ Bᵢ` splits into the Higham sum rounding on `B̃` (`sum_close`, fan-in `n`)
+    plus the per-entry drift `|B̃ᵢ − Bᵢ| ≤ eB`. With `|B̃ᵢ| ≤ Ct` the bound is
+    closed-form. -/
+theorem FloatModel.sum_perturbed_close {n : ℕ} (M : FloatModel)
+    (Bt B : Vec n) {Ct eB : ℝ}
+    (hBt : ∀ i, |Bt i| ≤ Ct) (hB : ∀ i, |Bt i - B i| ≤ eB) :
+    |M.sum Bt - ∑ i, B i| ≤
+      ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * Ct) + (n : ℝ) * eB := by
+  have hγ0 : (0:ℝ) ≤ (1 + M.u) ^ (n + 1) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
+  -- rounding term: ∑|B̃| ≤ n·Ct
+  have h2 : (∑ i, |Bt i|) ≤ (n : ℝ) * Ct := by
+    calc (∑ i, |Bt i|) ≤ ∑ _i : Fin n, Ct := Finset.sum_le_sum fun i _ => hBt i
+      _ = (n : ℝ) * Ct := by
+          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  have h1' : |M.sum Bt - ∑ i, Bt i| ≤ ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * Ct) :=
+    (M.sum_close Bt).trans (mul_le_mul_of_nonneg_left h2 hγ0)
+  -- drift term: ∑|B̃ − B| ≤ n·eB
+  have h3 : |(∑ i, Bt i) - ∑ i, B i| ≤ (n : ℝ) * eB := by
+    rw [← Finset.sum_sub_distrib]
+    refine (Finset.abs_sum_le_sum_abs _ _).trans ?_
+    calc (∑ i, |Bt i - B i|) ≤ ∑ _i : Fin n, eB := Finset.sum_le_sum fun i _ => hB i
+      _ = (n : ℝ) * eB := by
+          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  calc |M.sum Bt - ∑ i, B i|
+      ≤ |M.sum Bt - ∑ i, Bt i| + |(∑ i, Bt i) - ∑ i, B i| := abs_sub_le _ _ _
+    _ ≤ ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * Ct) + (n : ℝ) * eB := add_le_add h1' h3
+
+/-- **The binary32 conv-2 bias gradient the rendered trainer computes** — the
+    bias peer of `cnnConv2FloatGrad`: at output channel `o` it is the float SUM
+    `M.sum (cotWin c̃Conv o)` of the same float conv-2-output cotangent slab
+    (the bias Jacobian is the channel indicator, so there is no `convPadWin`
+    left operand and no per-slot kernel index — one entry per channel). -/
+noncomputable def FloatModel.cnnConv2BiasFloatGrad {c h w d₃ d₄ nC kH kW : Nat}
+    (M : FloatModel) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w))
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (fexp : ℝ → ℝ) (label : Fin nC) : Vec c :=
+  fun o =>
+    M.sum (cotWin (fun ci hi wi =>
+      (if Tensor3.flatten (M.convF W₂ b₂ x₁) (t3Idx ci hi wi) > 0
+          then (1:ℝ) else 0) *
+        (if MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (M.convF W₂ b₂ x₁)))) ci hi wi
+          then M.dense (fun j i' => W₃ i' j) (fun _ => 0)
+            (FloatModel.reluMask (M.dense W₃ b₃ (maxPoolFlat c h w
+                (relu (c * (2*h) * (2*w)) (Tensor3.flatten (M.convF W₂ b₂ x₁)))))
+              (M.dense (fun j i' => W₄ i' j) (fun _ => 0)
+                (FloatModel.reluMask (M.dense W₄ b₄ (relu d₃
+                    (M.dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                      (Tensor3.flatten (M.convF W₂ b₂ x₁)))))))
+                  (M.dense (fun j i' => W₅ i' j) (fun _ => 0)
+                    (M.softmaxCECotF fexp (M.dense W₅ b₅ (relu d₄
+                        (M.dense W₄ b₄ (relu d₃ (M.dense W₃ b₃
+                          (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                            (Tensor3.flatten (M.convF W₂ b₂ x₁))))))))) label)))))
+            (t3Idx ci (winRow hi) (winCol wi))
+          else 0)) o)
+
+/-- **The certified conv-2 BIAS loss gradient, restated as the spatial SUM of
+    the `reluMask`-form cotangent** — the bias peer of
+    `cnn_conv2_loss_gradAt_reluMask`. The 3-dense head collapses via
+    `head3_cot_reluMask`; the channel-Kronecker Jacobian `if ci = o` collapses
+    the `∑ ci` to `ci = o` (`Finset.sum_eq_single`); the remaining spatial
+    `∑ hi wi` is packaged as `∑ s, cotWin c o s` (`convBiasGrad_eq_sum`) — the
+    quantity the rendered trainer's float bias SUM rounds. -/
+theorem cnn_conv2_bias_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
+    (W₂ : Kernel4 c c kH kW) (x₁ : Tensor3 c (2*h) (2*w))
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
+    (hh : 0 < h) (hw : 0 < w)
+    (b : Vec c)
+    (hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b x₁) k ≠ 0)
+    (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₂ b x₁))) : Tensor3 c (2*h) (2*w)))
+    (hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₂ b x₁)))) l ≠ 0)
+    (hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b x₁)))))) q ≠ 0)
+    (o : Fin c) :
+    gradAt (fun b' : Vec c =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label)
+        b o
+      = ∑ s, cotWin (fun ci hi wi =>
+          (if Tensor3.flatten (conv2d W₂ b x₁) (t3Idx ci hi wi) > 0
+                then (1:ℝ) else 0) *
+            (if MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b x₁)))) ci hi wi
+              then dense (fun j i' => W₃ i' j) (fun _ => 0)
+                (FloatModel.reluMask (dense W₃ b₃ (maxPoolFlat c h w
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b x₁)))))
+                  (dense (fun j i' => W₄ i' j) (fun _ => 0)
+                    (FloatModel.reluMask (dense W₄ b₄ (relu d₃
+                        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                          (Tensor3.flatten (conv2d W₂ b x₁)))))))
+                      (dense (fun j i' => W₅ i' j) (fun _ => 0)
+                        (fun k => softmax nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄
+                            (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu
+                              (c * (2*h) * (2*w)) (Tensor3.flatten
+                                (conv2d W₂ b x₁))))))))) k - oneHot nC label k)))))
+                (t3Idx ci (winRow hi) (winCol wi))
+              else 0)) o s := by
+  rw [cnn_conv2_bias_loss_gradAt W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw b hz2 hmp hz3
+      hz4 o]
+  simp_rw [head3_cot_reluMask]
+  rw [convBiasGrad_eq_sum _ o]
+  rw [Finset.sum_eq_single o
+    (fun ci _ hne => Finset.sum_eq_zero fun hi _ => Finset.sum_eq_zero fun wi _ =>
+      by rw [if_neg hne, zero_mul])
+    (fun habs => absurd (Finset.mem_univ o) habs)]
+  refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
+  rw [if_pos (rfl : o = o), one_mul]
+
+/-- **The conv-2 bias-gradient grad-close budget** — `cnnConv2GradBudget` with
+    the `a·` input factor stripped (the bias Jacobian carries no input window):
+    the spatial sum's Higham γ over `(2h)·(2w)` against the float-cotangent
+    magnitude (`cnnConv2CotMag + cnnConv2CotBudget`) plus the per-entry
+    cotangent drift `cnnConv2CotBudget`. The cotangent chain is the exact
+    conv-2-input (`aX2 = a`, `eX2 = 0`) instance of the factored
+    `cnnConv2CotBudget` / `cnnConv2CotMag`. -/
+noncomputable def FloatModel.cnnConv2BiasGradBudget (M : FloatModel)
+    (c h w d₃ d₄ nC kH kW : ℕ) (a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ) : ℝ :=
+  let CotMag := FloatModel.cnnConv2CotMag d₃ d₄ nC w₃ w₄ w₅
+  let CotBudget := M.cnnConv2CotBudget c h w d₃ d₄ nC kH kW a 0 w₂ β₂ w₃ β₃ w₄ β₄
+    w₅ β₅ eexp
+  ((1 + M.u) ^ ((2 * h) * (2 * w) + 1) - 1) *
+      (((2 * h) * (2 * w) : ℕ) * (CotMag + CotBudget)) +
+    (((2 * h) * (2 * w) : ℕ) * CotBudget)
+
+open FloatModel in
+/-- **The binary32 conv-2 BIAS gradient is within an explicit budget of the
+    certified one** — the bias peer of `cnn_conv2_grad_close`, built on the
+    factored conv-2 cotangent chain at the exact conv-2 input `x₁`
+    (`cnn_conv2_cot_close` with `aX2 = a`, `eX2 = 0`) and the spatial-SUM core
+    `sum_perturbed_close`. The bridge `cnn_conv2_bias_loss_gradAt_reluMask`
+    turns the `gradAt` into the sum the float bias gradient rounds. Four
+    quantitative margins (conv-output, pool POST-relu, z̃₃, z̃₄) freeze the
+    routing. -/
+theorem cnn_conv2_bias_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
+    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (fexp : ℝ → ℝ)
+    {a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
+    (hh : 0 < h) (hw : 0 < w)
+    (ha : 0 ≤ a) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂) (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃)
+    (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅) (hβ₅ : 0 ≤ β₅)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp nC < 1)
+    (hx₁ : ∀ ci i j, |x₁ ci i j| ≤ a)
+    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂) (hb₂ : ∀ o, |b₂ o| ≤ β₂)
+    (hW₃ : ∀ i j, |W₃ i j| ≤ w₃) (hb₃ : ∀ j, |b₃ j| ≤ β₃)
+    (hW₄ : ∀ i j, |W₄ i j| ≤ w₄) (hb₄ : ∀ j, |b₄ j| ≤ β₄)
+    (hW₅ : ∀ i j, |W₅ i j| ≤ w₅) (hb₅ : ∀ j, |b₅ j| ≤ β₅)
+    (hmarginConv : ∀ k, FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ a 0 <
+      |Tensor3.flatten (conv2d W₂ b₂ x₁) k|)
+    (hmarginPool : MaxPool2MarginQ
+      (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ a 0)
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ x₁)))))
+    (hmargin3 : ∀ l, FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+        (FloatModel.layerAct (c * kH * kW) w₂ β₂ a)
+        (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ a 0) <
+      |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ x₁)))) l|)
+    (hmargin4 : ∀ q, FloatModel.layerBudget M.u d₃ w₄ β₄
+        (FloatModel.layerAct (c * h * w) w₃ β₃
+          (FloatModel.layerAct (c * kH * kW) w₂ β₂ a))
+        (FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+          (FloatModel.layerAct (c * kH * kW) w₂ β₂ a)
+          (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ a 0)) <
+      |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q|)
+    (o : Fin c) :
+    |M.cnnConv2BiasFloatGrad W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp label o -
+      gradAt (fun b' : Vec c =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|
+      ≤ M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
+          eexp := by
+  -- off-kink + smooth conditions from the quantitative margins
+  have hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ x₁) k ≠ 0 :=
+    fun k => abs_pos.mp (lt_of_le_of_lt
+      (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ ha le_rfl) (hmarginConv k))
+  have hmp := hmarginPool.smooth (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ ha le_rfl)
+  have hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₂ b₂ x₁)))) l ≠ 0 :=
+    fun l => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
+      (layerAct_nonneg hw₂ hβ₂ ha)
+      (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ ha le_rfl)) (hmargin3 l))
+  have hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q ≠ 0 :=
+    fun q => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₄ hβ₄
+      (layerAct_nonneg hw₃ hβ₃ (layerAct_nonneg hw₂ hβ₂ ha))
+      (layerBudget_nonneg M.u_nonneg hw₃ hβ₃ (layerAct_nonneg hw₂ hβ₂ ha)
+        (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ ha le_rfl))) (hmargin4 q))
+  -- per-cell conv-2 cotangent closeness / magnitudes (exact conv-2 input x₁)
+  have hc2close := fun (co : Fin c) (ho : Fin (2*h)) (wo : Fin (2*w)) =>
+    cnn_conv2_cot_close M x₁ x₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label fexp ha (le_refl 0)
+      hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅ heexp0 heexp1 hfexp hρ1
+      (fun _ _ _ => by simp) hx₁ hW₂ hb₂ hW₃ hb₃ hW₄ hb₄ hW₅ hb₅
+      hmarginConv hmarginPool hmargin3 hmargin4 co ho wo
+  have hc2realmag := fun (co : Fin c) (ho : Fin (2*h)) (wo : Fin (2*w)) =>
+    cnn_conv2_cot_real_abs_le x₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label hw₃ hw₄ hw₅
+      hW₃ hW₄ hW₅ co ho wo
+  have hc2floatmag := fun (co : Fin c) (ho : Fin (2*h)) (wo : Fin (2*w)) =>
+    abs_le_of_close (hc2close co ho wo) (hc2realmag co ho wo)
+  -- assemble: unfold the float grad, rewrite gradAt to the sum (bridge), apply
+  simp only [FloatModel.cnnConv2BiasFloatGrad]
+  rw [cnn_conv2_bias_loss_gradAt_reluMask W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw
+      b₂ hz2 hmp hz3 hz4 o]
+  simp only [FloatModel.cnnConv2BiasGradBudget]
+  refine M.sum_perturbed_close _ _
+    (fun s => by simp only [cotWin]; exact hc2floatmag o _ _)
+    (fun s => by simp only [cotWin]; exact hc2close o _ _)
+
+open FloatModel in
+/-- **One inexact SGD step on the CNN's second conv BIAS provably decreases the
+    cross-entropy loss** — the bias peer of `cnn_conv2_float_sgd_descends`: the
+    gradient is the actual binary32 bias gradient `M.cnnConv2BiasFloatGrad …`,
+    and its accuracy is *proven* by `cnn_conv2_bias_grad_close`
+    (η := `cnnConv2BiasGradBudget`, discharged per output channel — the bias IS
+    a vector, so no flatten/unflatten plumbing), not assumed. The two
+    rounding-margin families are carried as the honest first cut, exactly as the
+    weight rungs. -/
+theorem cnn_conv2_bias_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
+    (M : FloatModel) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w))
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (fexp : ℝ → ℝ)
+    {lr a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (ha : 0 ≤ a) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂) (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃)
+    (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅) (hβ₅ : 0 ≤ β₅) (hlr : 0 ≤ lr)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp nC < 1)
+    (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
+    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂) (hb₂ : ∀ o, |b₂ o| ≤ β₂)
+    (hW₃ : ∀ i j, |W₃ i j| ≤ w₃) (hb₃ : ∀ j, |b₃ j| ≤ β₃)
+    (hW₄ : ∀ i j, |W₄ i j| ≤ w₄) (hb₄ : ∀ j, |b₄ j| ≤ β₄)
+    (hW₅ : ∀ i j, |W₅ i j| ≤ w₅) (hb₅ : ∀ j, |b₅ j| ≤ β₅)
+    (hmarginConv : ∀ k, FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ a 0 <
+      |Tensor3.flatten (conv2d W₂ b₂ x₁) k|)
+    (hmarginPool : MaxPool2MarginQ
+      (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ a 0)
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ x₁)))))
+    (hmargin3 : ∀ l, FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+        (FloatModel.layerAct (c * kH * kW) w₂ β₂ a)
+        (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ a 0) <
+      |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ x₁)))) l|)
+    (hmargin4 : ∀ q, FloatModel.layerBudget M.u d₃ w₄ β₄
+        (FloatModel.layerAct (c * h * w) w₃ β₃
+          (FloatModel.layerAct (c * kH * kW) w₂ β₂ a))
+        (FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+          (FloatModel.layerAct (c * kH * kW) w₂ β₂ a)
+          (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ a 0)) <
+      |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q|)
+    (hm2 : ∀ k, lr * ((∑ o, |gradAt
+        (fun b' : Vec c =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+        (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
+          w₅ β₅ eexp) <
+      |Tensor3.flatten (conv2d W₂ b₂ x₁) k|)
+    (hmq : MaxPool2MarginQ (lr * ((∑ o, |gradAt
+        (fun b' : Vec c =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+        (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
+          w₅ β₅ eexp))
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ x₁)))))
+    (hm3 : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ o,
+        |gradAt (fun b' : Vec c =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+        (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
+          w₅ β₅ eexp))) <
+      |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ x₁)))) l|)
+    (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
+        (lr * ((∑ o, |gradAt
+          (fun b' : Vec c =>
+            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+          (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄
+            β₄ w₅ β₅ eexp))))) <
+      |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q|)
+    (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ o, |gradAt
+        (fun b' : Vec c =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+        (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
+          w₅ β₅ eexp)))))))) < 1)
+    (h1 : lr * (M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
+          w₅ β₅ eexp) * (∑ o, |gradAt
+        (fun b' : Vec c =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) ≤
+      lr * (∑ o, gradAt
+        (fun b' : Vec c =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o ^ 2) / 4)
+    (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
+        (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 /
+        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
+          (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ o, |gradAt
+            (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label)
+              b₂ o|) +
+            (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃
+              w₄ β₄ w₅ β₅ eexp)))))))))) *
+        (lr * ((∑ o, |gradAt
+          (fun b' : Vec c =>
+            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+          (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄
+            β₄ w₅ β₅ eexp)) ^ 2 ≤
+      lr * (∑ o, gradAt
+        (fun b' : Vec c =>
+          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o ^ 2) / 4) :
+    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d W₂
+            (b₂ - lr • M.cnnConv2BiasFloatGrad W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp
+              label) x₁))))))))) label ≤
+      crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d W₂ b₂ x₁))))))))) label -
+        lr * (∑ o, gradAt
+          (fun b' : Vec c =>
+            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label)
+            b₂ o ^ 2) / 2 := by
+  have hCotMagnn : 0 ≤ FloatModel.cnnConv2CotMag d₃ d₄ nC w₃ w₄ w₅ := by
+    rw [FloatModel.cnnConv2CotMag]
+    exact layerAct_nonneg hw₃ le_rfl (layerAct_nonneg hw₄ le_rfl
+      (layerAct_nonneg hw₅ le_rfl zero_le_one))
+  have hCotBudnn : 0 ≤ M.cnnConv2CotBudget c h w d₃ d₄ nC kH kW a 0 w₂ β₂ w₃ β₃ w₄
+      β₄ w₅ β₅ eexp := by
+    rw [FloatModel.cnnConv2CotBudget]
+    exact layerBudget_nonneg M.u_nonneg hw₃ le_rfl
+      (layerAct_nonneg hw₄ le_rfl (layerAct_nonneg hw₅ le_rfl zero_le_one))
+      (layerBudget_nonneg M.u_nonneg hw₄ le_rfl
+        (layerAct_nonneg hw₅ le_rfl zero_le_one)
+        (layerBudget_nonneg M.u_nonneg hw₅ le_rfl zero_le_one
+          (M.cotErr_nonneg heexp0 (layerBudget_nonneg M.u_nonneg hw₅ hβ₅
+            (layerAct_nonneg hw₄ hβ₄ (layerAct_nonneg hw₃ hβ₃
+              (layerAct_nonneg hw₂ hβ₂ ha)))
+            (layerBudget_nonneg M.u_nonneg hw₄ hβ₄ (layerAct_nonneg hw₃ hβ₃
+              (layerAct_nonneg hw₂ hβ₂ ha))
+              (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
+                (layerAct_nonneg hw₂ hβ₂ ha)
+                (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ ha le_rfl)))) hρ1)))
+  have hη0 : 0 ≤ M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
+      w₅ β₅ eexp := by
+    simp only [FloatModel.cnnConv2BiasGradBudget]
+    have hγ : (0:ℝ) ≤ (1 + M.u) ^ ((2 * h) * (2 * w) + 1) - 1 :=
+      sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
+    have hn : (0:ℝ) ≤ (((2 * h) * (2 * w) : ℕ) : ℝ) := Nat.cast_nonneg _
+    exact add_nonneg
+      (mul_nonneg hγ (mul_nonneg hn (add_nonneg hCotMagnn hCotBudnn)))
+      (mul_nonneg hn hCotBudnn)
+  -- discharge the abstract gradient accuracy per output channel (bias = vector)
+  have hgh : ∀ o, |M.cnnConv2BiasFloatGrad W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp label o -
+      gradAt (fun b' : Vec c =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o| ≤
+      M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp :=
+    fun o => cnn_conv2_bias_grad_close M W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label fexp
+      hh hw ha hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅ heexp0 heexp1 hfexp hρ1 hx hW₂ hb₂
+      hW₃ hb₃ hW₄ hb₄ hW₅ hb₅ hmarginConv hmarginPool hmargin3 hmargin4 o
+  exact cnn_conv2_bias_sgd_descends W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label
+    (M.cnnConv2BiasFloatGrad W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp label)
+    hc hh hw hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm2 hmq hm3 hm4 hsmall h1 h2
+
+noncomputable def FloatModel.cnnConv1BiasFloatGrad {ic c h w d₃ d₄ nC kH kW : Nat}
+    (M : FloatModel) (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
+    (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (fexp : ℝ → ℝ) (label : Fin nC) : Vec c :=
+  fun o =>
+    M.sum (cotWin (fun ci hi wi =>
+        (if Tensor3.flatten (M.convF W₁ b₁ x₀)
+              (t3Idx ci hi wi) > 0 then (1:ℝ) else 0) *
+          M.dot (Tensor3.flatten (fun co ho wo => convTap W₂ ci hi wi co ho wo))
+            (Tensor3.flatten (fun co ho wo =>
+              (if Tensor3.flatten (M.convF W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (M.convF W₁ b₁ x₀)))))
+                    (t3Idx co ho wo) > 0 then (1:ℝ) else 0) *
+                (if MaxPool2IsArgmax (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+                      (Tensor3.flatten (M.convF W₂ b₂ (Tensor3.unflatten
+                        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                          (M.convF W₁ b₁ x₀)))))))) co ho wo
+                  then M.dense (fun j i' => W₃ i' j) (fun _ => 0)
+                    (FloatModel.reluMask (M.dense W₃ b₃ (maxPoolFlat c h w
+                        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                          (M.convF W₂ b₂ (Tensor3.unflatten (relu
+                            (c * (2*h) * (2*w)) (Tensor3.flatten
+                              (M.convF W₁ b₁ x₀)))))))))
+                      (M.dense (fun j i' => W₄ i' j) (fun _ => 0)
+                        (FloatModel.reluMask (M.dense W₄ b₄ (relu d₃
+                            (M.dense W₃ b₃ (maxPoolFlat c h w (relu
+                              (c * (2*h) * (2*w)) (Tensor3.flatten
+                                (M.convF W₂ b₂ (Tensor3.unflatten (relu
+                                  (c * (2*h) * (2*w)) (Tensor3.flatten
+                                    (M.convF W₁
+                                      b₁ x₀)))))))))))
+                          (M.dense (fun j i' => W₅ i' j) (fun _ => 0)
+                            (M.softmaxCECotF fexp (M.dense W₅ b₅ (relu d₄
+                                (M.dense W₄ b₄ (relu d₃ (M.dense W₃ b₃
+                                  (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                                    (Tensor3.flatten (M.convF W₂ b₂
+                                      (Tensor3.unflatten (relu
+                                        (c * (2*h) * (2*w)) (Tensor3.flatten
+                                          (M.convF W₁
+                                            b₁ x₀))))))))))))) label)))))
+                    (t3Idx co (winRow ho) (winCol wo))
+                  else 0)))) o)
+
+/-- **The certified conv-1 BIAS loss gradient, restated as the spatial SUM of
+    the `reluMask`-form cotangent** — the bias peer of
+    `cnn_conv1_loss_gradAt_reluMask`, one conv-backward deeper. The head
+    collapses via `head3_cot_reluMask`, the conv-2 backward stays the explicit
+    `∑ convTap·c₂`, and the channel-Kronecker conv-1 Jacobian collapses the
+    `∑ ci` (`Finset.sum_eq_single` + `convBiasGrad_eq_sum`) to the spatial SUM
+    the float bias gradient rounds. -/
+theorem cnn_conv1_bias_loss_gradAt_reluMask {ic c h w d₃ d₄ nC kH kW : Nat}
+    (W₁ : Kernel4 c ic kH kW) (x₀ : Tensor3 ic (2*h) (2*w))
+    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (hh : 0 < h) (hw : 0 < w)
+    (b : Vec c)
+    (hz1 : ∀ k, Tensor3.flatten (conv2d W₁ b x₀) k ≠ 0)
+    (hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b x₀))))) k ≠ 0)
+    (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b x₀))))))) :
+      Tensor3 c (2*h) (2*w)))
+    (hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b x₀)))))))) l ≠ 0)
+    (hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂
+        (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+          (conv2d W₁ b x₀)))))))))) q ≠ 0)
+    (o : Fin c) :
+    gradAt (fun b' : Vec c =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+              (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                (conv2d W₁ b' x₀)))))))))))))
+          label)
+        b o
+      = ∑ s,
+          cotWin (fun ci hi wi =>
+            (if Tensor3.flatten (conv2d W₁ b x₀)
+                  (t3Idx ci hi wi) > 0 then (1:ℝ) else 0) *
+              ∑ co : Fin c, ∑ ho : Fin (2*h), ∑ wo : Fin (2*w),
+                convTap W₂ ci hi wi co ho wo *
+                  ((if Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                          (conv2d W₁ b x₀)))))
+                        (t3Idx co ho wo) > 0 then (1:ℝ) else 0) *
+                    (if MaxPool2IsArgmax (Tensor3.unflatten
+                          (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                            (conv2d W₂ b₂ (Tensor3.unflatten
+                              (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                                (conv2d W₁ b x₀))))))))
+                          co ho wo
+                      then dense (fun j i' => W₃ i' j) (fun _ => 0)
+                        (FloatModel.reluMask (dense W₃ b₃ (maxPoolFlat c h w
+                            (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                              (conv2d W₂ b₂ (Tensor3.unflatten
+                                (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                                  (conv2d W₁ b x₀)))))))))
+                          (dense (fun j i' => W₄ i' j) (fun _ => 0)
+                            (FloatModel.reluMask (dense W₄ b₄ (relu d₃
+                                (dense W₃ b₃ (maxPoolFlat c h w (relu
+                                  (c * (2*h) * (2*w)) (Tensor3.flatten
+                                    (conv2d W₂ b₂ (Tensor3.unflatten (relu
+                                      (c * (2*h) * (2*w)) (Tensor3.flatten
+                                        (conv2d W₁
+                                          b x₀)))))))))))
+                              (dense (fun j i' => W₅ i' j) (fun _ => 0)
+                                (fun k => softmax nC (dense W₅ b₅ (relu d₄
+                                    (dense W₄ b₄ (relu d₃ (dense W₃ b₃
+                                      (maxPoolFlat c h w (relu
+                                        (c * (2*h) * (2*w)) (Tensor3.flatten
+                                          (conv2d W₂ b₂ (Tensor3.unflatten
+                                            (relu (c * (2*h) * (2*w))
+                                              (Tensor3.flatten (conv2d
+                                                W₁
+                                                b x₀))))))))))))) k -
+                                  oneHot nC label k)))))
+                        (t3Idx co (winRow ho) (winCol wo))
+                      else 0))) o s := by
+  rw [cnn_conv1_bias_loss_gradAt W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw b
+      hz1 hz2 hmp hz3 hz4 o]
+  simp_rw [head3_cot_reluMask]
+  rw [convBiasGrad_eq_sum _ o]
+  rw [Finset.sum_eq_single o
+    (fun ci _ hne => Finset.sum_eq_zero fun hi _ => Finset.sum_eq_zero fun wi _ =>
+      by rw [if_neg hne, zero_mul])
+    (fun habs => absurd (Finset.mem_univ o) habs)]
+  refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
+  rw [if_pos (rfl : o = o), one_mul]
+
+/-- **The conv-1 bias-gradient grad-close budget** — `cnnConv1GradBudget` with
+    the `a·` input factors stripped (the bias Jacobian carries no input window):
+    the spatial sum's Higham γ over `(2h)·(2w)` against the float conv-1
+    cotangent magnitude `C1t = c(2h)(2w)·w₂·CP + eback` plus the per-entry drift
+    `eback` (the conv-2 backward budget). Reuses the factored `cnnConv2CotMag`
+    /`cnnConv2CotBudget` at the FLOAT conv-2 input (`aX2 = A₁`, `eX2 = E₁`). -/
+noncomputable def FloatModel.cnnConv1BiasGradBudget (M : FloatModel)
+    (ic c h w d₃ d₄ nC kH kW : ℕ)
+    (a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ) : ℝ :=
+  let A1 := FloatModel.layerAct (ic * kH * kW) w₁ β₁ a
+  let E1 := FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0
+  let CP := FloatModel.cnnConv2CotMag d₃ d₄ nC w₃ w₄ w₅
+  let e2 := M.cnnConv2CotBudget c h w d₃ d₄ nC kH kW A1 E1 w₂ β₂ w₃ β₃ w₄ β₄
+    w₅ β₅ eexp
+  let eback := ((1 + M.u) ^ ((c * (2 * h) * (2 * w)) + 1) - 1) *
+        (((c * (2 * h) * (2 * w) : ℕ) : ℝ) * (w₂ * (CP + e2))) +
+      (((c * (2 * h) * (2 * w) : ℕ) : ℝ) * (w₂ * e2))
+  let C1t := ((c * (2 * h) * (2 * w) : ℕ) : ℝ) * (w₂ * CP) + eback
+  ((1 + M.u) ^ ((2 * h) * (2 * w) + 1) - 1) *
+      (((2 * h) * (2 * w) : ℕ) * C1t) +
+    (((2 * h) * (2 * w) : ℕ) * eback)
+
+open FloatModel in
+/-- **The binary32 conv-1 BIAS gradient is within an explicit budget of the
+    certified one** — the bias peer of `cnn_conv1_grad_close`, built on the
+    factored conv-2 cotangent chain at the FLOAT conv-2 input `relu(z̃₁)`
+    (`cnn_conv2_cot_close`), the conv-2 backward `convTap_back_close`, the
+    conv-1 ReLU-mask freeze (`mask_scalar_close`), and the spatial-SUM core
+    `sum_perturbed_close`. Five quantitative margins freeze the routing; the
+    bridge `cnn_conv1_bias_loss_gradAt_reluMask` turns the `gradAt` into the
+    sum. -/
+theorem cnn_conv1_bias_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
+    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (x₀ : Tensor3 ic (2*h) (2*w))
+    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
+    (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
+    (fexp : ℝ → ℝ)
+    {a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
+    (hh : 0 < h) (hw : 0 < w)
+    (ha : 0 ≤ a) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
+    (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃) (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅)
+    (hβ₅ : 0 ≤ β₅) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp nC < 1)
+    (hx₀ : ∀ ci i j, |x₀ ci i j| ≤ a)
+    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w₁) (hb₁ : ∀ o, |b₁ o| ≤ β₁)
+    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂) (hb₂ : ∀ o, |b₂ o| ≤ β₂)
+    (hW₃ : ∀ i j, |W₃ i j| ≤ w₃) (hb₃ : ∀ j, |b₃ j| ≤ β₃)
+    (hW₄ : ∀ i j, |W₄ i j| ≤ w₄) (hb₄ : ∀ j, |b₄ j| ≤ β₄)
+    (hW₅ : ∀ i j, |W₅ i j| ≤ w₅) (hb₅ : ∀ j, |b₅ j| ≤ β₅)
+    (hmargin1 : ∀ k, FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0 <
+      |Tensor3.flatten (conv2d W₁ b₁ x₀) k|)
+    (hmargin2 : ∀ k, FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂
+        (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)
+        (FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0) <
+      |Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₁ b₁ x₀))))) k|)
+    (hmarginPool : MaxPool2MarginQ
+      (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂
+        (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)
+        (FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0))
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))
+    (hmargin3 : ∀ l, FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+        (FloatModel.layerAct (c * kH * kW) w₂ β₂
+          (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a))
+        (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂
+          (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)
+          (FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0)) <
+      |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))) l|)
+    (hmargin4 : ∀ q, FloatModel.layerBudget M.u d₃ w₄ β₄
+        (FloatModel.layerAct (c * h * w) w₃ β₃ (FloatModel.layerAct (c * kH * kW)
+          w₂ β₂ (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)))
+        (FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+          (FloatModel.layerAct (c * kH * kW) w₂ β₂
+            (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a))
+          (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂
+            (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)
+            (FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0))) <
+      |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))) q|)
+    (o : Fin c) :
+    |M.cnnConv1BiasFloatGrad W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp label o -
+      gradAt (fun b' : Vec c =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+              (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                (conv2d W₁ b' x₀)))))))))))))
+          label) b₁ o|
+      ≤ M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
+          w₅ β₅ eexp := by
+  have hz1 : ∀ k, Tensor3.flatten (conv2d W₁ b₁ x₀) k ≠ 0 :=
+    fun k => abs_pos.mp (lt_of_le_of_lt
+      (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl) (hmargin1 k))
+  have hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))) k ≠ 0 :=
+    fun k => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₂ hβ₂
+      (layerAct_nonneg hw₁ hβ₁ ha)
+      (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl)) (hmargin2 k))
+  have hmp := hmarginPool.smooth (layerBudget_nonneg M.u_nonneg hw₂ hβ₂
+    (layerAct_nonneg hw₁ hβ₁ ha)
+    (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl))
+  have hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))) l ≠ 0 :=
+    fun l => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
+      (layerAct_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha))
+      (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha)
+        (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl))) (hmargin3 l))
+  have hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))) ) q ≠ 0 :=
+    fun q => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₄ hβ₄
+      (layerAct_nonneg hw₃ hβ₃ (layerAct_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha)))
+      (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
+        (layerAct_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha))
+        (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha)
+          (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl)))) (hmargin4 q))
+  simp only [FloatModel.cnnConv1BiasFloatGrad]
+  rw [cnn_conv1_bias_loss_gradAt_reluMask W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw
+      b₁ hz1 hz2 hmp hz3 hz4 o]
+  set Z1C := Tensor3.flatten (conv2d W₁ b₁ x₀) with hZ1C
+  set Z1CF := Tensor3.flatten (M.convF W₁ b₁ x₀) with hZ1CF
+  set X2 := Tensor3.unflatten (relu (c * (2*h) * (2*w)) Z1C) with hX2
+  set X2F := Tensor3.unflatten (relu (c * (2*h) * (2*w)) Z1CF) with hX2F
+  set A1 := FloatModel.layerAct (ic * kH * kW) w₁ β₁ a with hA1
+  set E1 := FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0 with hE1
+  set e2 := M.cnnConv2CotBudget c h w d₃ d₄ nC kH kW A1 E1 w₂ β₂ w₃ β₃ w₄ β₄ w₅
+    β₅ eexp with he2
+  set CP := FloatModel.cnnConv2CotMag d₃ d₄ nC w₃ w₄ w₅ with hCP
+  set eback := ((1 + M.u) ^ ((c * (2*h) * (2*w)) + 1) - 1) *
+      (((c * (2*h) * (2*w) : ℕ) : ℝ) * (w₂ * (CP + e2))) +
+      (((c * (2*h) * (2*w) : ℕ) : ℝ) * (w₂ * e2)) with heback
+  have hA1nn : 0 ≤ A1 := layerAct_nonneg hw₁ hβ₁ ha
+  have hE1nn : 0 ≤ E1 := layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl
+  have hCPnn : 0 ≤ CP := by
+    rw [hCP, FloatModel.cnnConv2CotMag]
+    exact layerAct_nonneg hw₃ le_rfl (layerAct_nonneg hw₄ le_rfl
+      (layerAct_nonneg hw₅ le_rfl zero_le_one))
+  have he2nn : 0 ≤ e2 := by
+    rw [he2, FloatModel.cnnConv2CotBudget]
+    exact layerBudget_nonneg M.u_nonneg hw₃ le_rfl
+      (layerAct_nonneg hw₄ le_rfl (layerAct_nonneg hw₅ le_rfl zero_le_one))
+      (layerBudget_nonneg M.u_nonneg hw₄ le_rfl
+        (layerAct_nonneg hw₅ le_rfl zero_le_one)
+        (layerBudget_nonneg M.u_nonneg hw₅ le_rfl zero_le_one
+          (M.cotErr_nonneg heexp0 (layerBudget_nonneg M.u_nonneg hw₅ hβ₅
+            (layerAct_nonneg hw₄ hβ₄ (layerAct_nonneg hw₃ hβ₃
+              (layerAct_nonneg hw₂ hβ₂ hA1nn)))
+            (layerBudget_nonneg M.u_nonneg hw₄ hβ₄ (layerAct_nonneg hw₃ hβ₃
+              (layerAct_nonneg hw₂ hβ₂ hA1nn))
+              (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
+                (layerAct_nonneg hw₂ hβ₂ hA1nn)
+                (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ hA1nn hE1nn)))) hρ1)))
+  have hebacknn : 0 ≤ eback := by
+    rw [heback]
+    have hγ : (0:ℝ) ≤ (1 + M.u) ^ ((c * (2*h) * (2*w)) + 1) - 1 :=
+      sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
+    have hn : (0:ℝ) ≤ ((c * (2*h) * (2*w) : ℕ) : ℝ) := Nat.cast_nonneg _
+    exact add_nonneg (mul_nonneg hγ (mul_nonneg hn (mul_nonneg hw₂
+      (add_nonneg hCPnn he2nn)))) (mul_nonneg hn (mul_nonneg hw₂ he2nn))
+  have hZ1close : ∀ k, |Z1CF k - Z1C k| ≤ E1 := by
+    intro k; obtain ⟨ci, hi, wi, rfl⟩ := t3Idx_surj k
+    rw [hZ1CF, hZ1C, flatten_t3Idx, flatten_t3Idx]
+    exact (M.convF_close W₁ b₁ x₀ x₀ le_rfl
+        (fun _ _ _ => by simp) ci hi wi).trans
+      (M.denseErr_le_uniform hw₁ le_rfl (fun i j => convKernelMat_abs_le hW₁ i j)
+        hb₁ (fun idx => convWindow_abs_le ha hx₀ hi wi idx) ci)
+  have hX2close : ∀ co i j, |X2F co i j - X2 co i j| ≤ E1 := by
+    intro co i j; rw [hX2F, hX2, unflatten_t3Idx, unflatten_t3Idx]
+    exact relu_close _ _ _ hZ1close (t3Idx co i j)
+  have hX2mag : ∀ co i j, |X2 co i j| ≤ A1 := by
+    intro co i j; rw [hX2, unflatten_t3Idx]
+    refine (relu_abs_le _ _).trans ?_
+    rw [hZ1C, flatten_t3Idx]; exact conv2d_abs_le ha hW₁ hb₁ hx₀ co i j
+  have hc2close := fun (co : Fin c) (ho : Fin (2*h)) (wo : Fin (2*w)) =>
+    cnn_conv2_cot_close M X2 X2F W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label fexp hA1nn hE1nn
+      hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅ heexp0 heexp1 hfexp hρ1 hX2close hX2mag
+      hW₂ hb₂ hW₃ hb₃ hW₄ hb₄ hW₅ hb₅ hmargin2 hmarginPool hmargin3 hmargin4 co ho wo
+  have hc2realmag := fun (co : Fin c) (ho : Fin (2*h)) (wo : Fin (2*w)) =>
+    cnn_conv2_cot_real_abs_le X2 W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label hw₃ hw₄ hw₅
+      hW₃ hW₄ hW₅ co ho wo
+  have hc2floatmag := fun (co : Fin c) (ho : Fin (2*h)) (wo : Fin (2*w)) =>
+    abs_le_of_close (hc2close co ho wo) (hc2realmag co ho wo)
+  simp only [FloatModel.cnnConv1BiasGradBudget]
+  refine M.sum_perturbed_close _ _
+    (fun s => by
+      simp only [cotWin]; rw [abs_mul]
+      refine le_trans (mul_le_mul (by split_ifs <;> simp) ?_ (abs_nonneg _)
+        zero_le_one) (le_of_eq (one_mul _))
+      exact abs_le_of_close
+        (convTap_back_close M W₂ _ _ hw₂ hW₂ hc2floatmag hc2close o _ _)
+        (convTap_back_abs_le W₂ _ hw₂ hW₂ hc2realmag o _ _))
+    (fun s => by
+      simp only [cotWin]
+      exact mask_scalar_close (hZ1close _) (hmargin1 _)
+        (convTap_back_close M W₂ _ _ hw₂ hW₂ hc2floatmag hc2close o _ _) hebacknn)
+
+open FloatModel in
+/-- **One inexact SGD step on the CNN's first conv BIAS provably decreases the
+    cross-entropy loss** — the bias peer of `cnn_conv1_float_sgd_descends`, the
+    deepest descent rung: the gradient is the actual binary32 bias gradient
+    `M.cnnConv1BiasFloatGrad …`, accuracy *proven* by `cnn_conv1_bias_grad_close`
+    (η := `cnnConv1BiasGradBudget`, discharged per output channel — the bias IS a
+    vector), not assumed. With this, every conv weight AND bias of the
+    Chapter-4 CNN is a float-faithful descent step. -/
+theorem cnn_conv1_bias_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
+    (M : FloatModel) (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
+    (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (fexp : ℝ → ℝ)
+    {lr a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (ha : 0 ≤ a) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
+    (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃) (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅)
+    (hβ₅ : 0 ≤ β₅) (hlr : 0 ≤ lr)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp nC < 1)
+    (hx : ∀ cc i j, |x₀ cc i j| ≤ a)
+    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w₁) (hb₁ : ∀ o, |b₁ o| ≤ β₁)
+    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂) (hb₂ : ∀ o, |b₂ o| ≤ β₂)
+    (hW₃ : ∀ i j, |W₃ i j| ≤ w₃) (hb₃ : ∀ j, |b₃ j| ≤ β₃)
+    (hW₄ : ∀ i j, |W₄ i j| ≤ w₄) (hb₄ : ∀ j, |b₄ j| ≤ β₄)
+    (hW₅ : ∀ i j, |W₅ i j| ≤ w₅) (hb₅ : ∀ j, |b₅ j| ≤ β₅)
+    (hmargin1 : ∀ k, FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0 <
+      |Tensor3.flatten (conv2d W₁ b₁ x₀) k|)
+    (hmargin2 : ∀ k, FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂
+        (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)
+        (FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0) <
+      |Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₁ b₁ x₀))))) k|)
+    (hmarginPool : MaxPool2MarginQ
+      (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂
+        (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)
+        (FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0))
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))
+    (hmargin3 : ∀ l, FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+        (FloatModel.layerAct (c * kH * kW) w₂ β₂
+          (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a))
+        (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂
+          (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)
+          (FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0)) <
+      |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))) l|)
+    (hmargin4 : ∀ q, FloatModel.layerBudget M.u d₃ w₄ β₄
+        (FloatModel.layerAct (c * h * w) w₃ β₃ (FloatModel.layerAct (c * kH * kW)
+          w₂ β₂ (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)))
+        (FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+          (FloatModel.layerAct (c * kH * kW) w₂ β₂
+            (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a))
+          (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂
+            (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)
+            (FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0))) <
+      |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+          (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))) q|)
+    (hm1 : ∀ k, lr * (((∑ idx, |gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp))) < |(Tensor3.flatten (conv2d W₁ b₁ x₀)) k|)
+    (hm2 : ∀ k, ((c * kH * kW : ℕ) : ℝ) * (w₂ * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp))))) < |(Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))) k|)
+    (hmq : MaxPool2MarginQ (((c * kH * kW : ℕ) : ℝ) * (w₂ * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp)))))) (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))
+    (hm3 : ∀ l, w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp))))))) < |(dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))) l|)
+    (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp)))))))))
+      < |(dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))))) q|)
+    (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp)))))))))))) < 1)
+    (h1 : lr * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp) * (∑ idx, |gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁ idx|) ≤
+      lr * (∑ idx, (gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁) idx ^ 2) / 4)
+    (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 / (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp)))))))))))))) * (lr * ((∑ idx, |gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp))) ^ 2 ≤
+      lr * (∑ idx, (gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁) idx ^ 2) / 4) :
+    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ (b₁ - lr • M.cnnConv1BiasFloatGrad W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp label) x₀))))))))))))) label ≤
+      crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))))))) label -
+        lr * (∑ idx, (gradAt (fun b' : Vec c =>
+              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                      (conv2d W₁ b' x₀))))))))))))) label)
+              b₁) idx ^ 2) / 2 := by
+  have hgh : ∀ idx, |M.cnnConv1BiasFloatGrad W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp
+      label idx -
+      gradAt (fun b' : Vec c =>
+        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
+          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+            (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
+              (relu (c * (2*h) * (2*w)) (Tensor3.flatten
+                (conv2d W₁ b' x₀)))))))))))))
+          label) b₁ idx| ≤
+      M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
+        w₅ β₅ eexp :=
+    fun idx => cnn_conv1_bias_grad_close M W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
+      fexp hh hw ha hw₁ hβ₁ hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅ heexp0 heexp1 hfexp hρ1
+      hx hW₁ hb₁ hW₂ hb₂ hW₃ hb₃ hW₄ hb₄ hW₅ hb₅
+      hmargin1 hmargin2 hmarginPool hmargin3 hmargin4 idx
+  have hη0 : 0 ≤ M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃
+      w₄ β₄ w₅ β₅ eexp := le_trans (abs_nonneg _) (hgh ⟨0, hc⟩)
+  exact cnn_conv1_bias_sgd_descends W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
+    (M.cnnConv1BiasFloatGrad W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp label)
+    hc hh hw hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm1 hm2 hmq hm3 hm4 hsmall
+    h1 h2
+
+
 end Proofs

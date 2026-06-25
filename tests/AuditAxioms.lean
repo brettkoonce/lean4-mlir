@@ -2110,6 +2110,35 @@ open Proofs
 #print axioms cnn_conv1_bias_loss_gradAt
 #print axioms cnn_conv1_bias_loss_grad_lipschitz
 #print axioms cnn_conv1_bias_sgd_descends
+-- Float-bridge §3 (CNN descent, Increment 5): the conv BIAS rungs CLOSED with
+-- the gradient accuracy PROVEN. The bias gradient is the spatial SUM of the
+-- conv-output cotangent (the Kronecker channel-indicator Jacobian collapses the
+-- ∑ ci to ci=o, convBiasGrad_eq_sum), so the one new core is
+-- FloatModel.sum_perturbed_close — the M.sum peer of dot_perturbed_close (Higham
+-- sum-γ on the float summand plus the per-entry drift). Everything else is
+-- reused: the cotangent chains are the factored cnn_conv2_cot_close /
+-- cnn_conv2_cot_real_abs_le / convTap_back_close at the exact (conv2 bias) and
+-- FLOAT (conv1 bias) conv-2 input, the head bridge head3_cot_reluMask, the
+-- conv-mask freeze mask_scalar_close. The binary32 conv-2 / conv-1 bias
+-- gradients (cnnConv{2,1}BiasFloatGrad) stay within cnnConv{2,1}BiasGradBudget
+-- of the certified gradient (cnn_conv{2,1}_bias_grad_close, via the bridges
+-- cnn_conv{2,1}_bias_loss_gradAt_reluMask), and one binary32 SGD step on either
+-- conv bias provably decreases the loss with the accuracy PROVEN
+-- (cnn_conv{2,1}_bias_float_sgd_descends), wired into the abstract
+-- cnn_conv{2,1}_bias_sgd_descends. With these, EVERY conv weight AND bias of the
+-- Chapter-4 CNN is a float-faithful descent step — the §3 descent program is
+-- closed for the deployed CNN.
+#print axioms FloatModel.sum_perturbed_close
+#print axioms FloatModel.cnnConv2BiasFloatGrad
+#print axioms cnn_conv2_bias_loss_gradAt_reluMask
+#print axioms FloatModel.cnnConv2BiasGradBudget
+#print axioms cnn_conv2_bias_grad_close
+#print axioms cnn_conv2_bias_float_sgd_descends
+#print axioms FloatModel.cnnConv1BiasFloatGrad
+#print axioms cnn_conv1_bias_loss_gradAt_reluMask
+#print axioms FloatModel.cnnConv1BiasGradBudget
+#print axioms cnn_conv1_bias_grad_close
+#print axioms cnn_conv1_bias_float_sgd_descends
 -- Adam/AdamW optimizer step over ℝ (Phase 3a, vit_train_to_vit_verified.md): the
 -- emitted-update spec (adamWParam_apply), denominator well-definedness, and the
 -- second-moment nonneg invariant. Faithfulness/well-definedness only — no descent.

@@ -21,8 +21,14 @@ small-step + dominance arithmetic.
 | **MLP output `W₂`** | (= linear at `a₁`) | `mlp_output_float_sgd_descends` | ✅ CLOSED (no ReLU below ⇒ no margin) |
 | **MLP hidden `W₁`** | `mlp_w1_grad_close` ✅ | `mlp_hidden_float_sgd_descends` ✅ | ✅ CLOSED (Step 1, 2026-06-25) |
 | **MLP input `W₀`** | `mlp_w0_grad_close` ✅ | `mlp_input_float_sgd_descends` ✅ | ✅ CLOSED (Step 2, 2026-06-25) |
-| **CNN conv `W₁/W₂`** | `cnn_conv*_grad_close` ❌ | (`cnn_conv*_sgd_descends`, abstract η ✅) | OPEN (float fusion + capstone) ← next |
+| **CNN conv `W₁/W₂`** | `cnn_conv*_grad_close` ✅ | `cnn_conv*_float_sgd_descends` ✅ | ✅ CLOSED (Step 3, Increments 1–4) |
+| **CNN conv `b₁/b₂` bias** | `cnn_conv*_bias_grad_close` ✅ | `cnn_conv*_bias_float_sgd_descends` ✅ | ✅ CLOSED (Step 3, Increment 5) |
 | **deep nets / joint step** | — | — | OUT OF SCOPE (honest stop, below) |
+
+**Step 3 is fully closed**: every conv weight AND bias of the Chapter-4 CNN is a
+float-faithful descent step. With the MLP (all three layers) already done, the §3
+descent program is complete for the deployed MLP and CNN — only the honest-stop
+line (joint all-layers step, deep nets) remains, by design.
 
 The **abstract-η smoothness side is fully proven** everywhere it matters:
 `mlp_{output,hidden,input}_sgd_descends` (explicit constants `2d₃w₂²a²/(1−2w₂aD)`,
@@ -163,6 +169,9 @@ own focused session, after Steps 1–2 (done).
 2. ~~**Step 2** (input rung)~~ ✅ DONE — `mlp_w0_grad_close` + `mlp_input_float_sgd_descends`;
    the **MLP is complete** — "one binary32 SGD step on any single MLP weight layer
    provably decreases the loss" is now a clean closed statement for all three layers.
-3. **Step 3** (CNN) — only if the CNN deployed-descent headline is wanted. ← next open rung
-4. Re-run the §5 honesty pass (`planning/floatbridge_honesty_pass.md`) after each —
-   keep the per-layer vs net-wide / step vs decreases lines exactly honest.
+3. ~~**Step 3** (CNN)~~ ✅ DONE — `cnn_conv{1,2}_float_sgd_descends` (weights, Increments 1–4)
+   + `cnn_conv{1,2}_bias_float_sgd_descends` (biases, Increment 5). The CNN deployed-descent
+   headline is closed; see `planning/floatbridge_descent_cnn.md` for the full increment log.
+4. **NEXT:** Re-run the §5 honesty pass (`planning/floatbridge_honesty_pass.md`) —
+   keep the per-layer vs net-wide / step vs decreases lines exactly honest. The new CNN bias
+   rungs do **not** make "descent" read net-wide (the per-param rung is still the honest unit).
