@@ -61,6 +61,10 @@ lean_lib «Proofs» where
              -- Chapter-6 ResNet Milestone B8: per-channel BatchNorm (block-diagonal
              -- VJP via a per-row generalization of `rowwise_has_vjp_mat`).
              `LeanMlir.Proofs.PerChannelBN,
+             -- Limit-D strengthening: the 224×224 live ResNet-34 whole-net VJP with
+             -- the three downsample projection convs generalized to ARBITRARY kernels
+             -- (the β-positivity discharge is weight-independent). 3-axiom clean.
+             `LeanMlir.Proofs.ResNet34LiveGeneric,
              -- opt-in Mathlib.Matrix interop; not imported by the suite,
              -- listed here so CI keeps it green.
              `LeanMlir.Proofs.MatBridge,
@@ -453,6 +457,16 @@ lean_lib «Proofs» where
 lean_lib «ProofsMinimal» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.LinearFaithfulPoC, `LeanMlir.Proofs.SgdDescentLinear]
+
+/-- **`lake build TrustedBridge`** — the named ℝ→Float32 trust bridge. Kept SEPARATE from
+    `Proofs` on purpose: it carries the explicit IEEE rounding axioms (`ieeeRnd`/`ieeeRnd_err`,
+    the one thing Lean can't prove about opaque hardware `Float`) and discharges concrete
+    binary32/fp8 corollaries from them. CI builds this, then `tests/AuditTrustedBridge.lean`
+    bounds its axiom footprint to exactly the 3-axiom triple + those two named axioms (no
+    `sorryAx`, no other axiom) — so the zero-axiom `Proofs` invariant stays untouched. -/
+lean_lib «TrustedBridge» where
+  srcDir := "."
+  roots := #[`LeanMlir.Proofs.Binary32Instance]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

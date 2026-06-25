@@ -25,6 +25,7 @@ import LeanMlir.Proofs.ResNet34LiveFull
 import LeanMlir.Proofs.MobileNetV2JacobianSealFull
 import LeanMlir.Proofs.ResNet34LiveRealistic
 import LeanMlir.Proofs.ResNet34LiveRealisticSeal
+import LeanMlir.Proofs.ResNet34LiveGeneric
 import LeanMlir.Proofs.MobileNetV2SealRealistic
 import LeanMlir.Proofs.PerChannelBN
 import LeanMlir.Proofs.LinearTrainStep
@@ -689,6 +690,13 @@ open Proofs
 -- forward X224≠forward 0 (level 2). Confirms the witness machinery used no hidden small-n cap.
 #print axioms ResNet34LiveRealistic.liveFwd224_has_vjp_correct
 #print axioms ResNet34LiveRealistic.liveFwd224_nonconstant
+-- Item D WEIGHT-GENERICITY (ResNet34LiveGeneric.lean): the same 224×224 live ResNet-34
+-- whole-net VJP, but with the three strided downsample projection convs as ARBITRARY free
+-- kernels W₂ W₃ W₄ (the β-positivity smoothness discharge is weight-independent) — not the
+-- identity convs the earlier witnesses fixed. `_mixing_` instantiates at a concrete all-ones
+-- (channel-mixing, off-diagonal) kernel to show the ∀-kernel result is non-vacuous.
+#print axioms liveFwdW_has_vjp_correct
+#print axioms liveFwdW_mixing_has_vjp_correct
 -- Item D LEVEL 3 (ResNet34LiveRealisticSeal.lean): the nonzero-Jacobian SEAL at 224×224.
 -- A uniform channel-0 perturbation (vs the toy's single coordinate) makes channel0 = channel1 + δ
 -- everywhere, so the 7×7 GAP of a uniform diff is δ and maxpool(ch0)=maxpool(ch1)+δ holds for ALL t

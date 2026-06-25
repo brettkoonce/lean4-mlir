@@ -158,6 +158,46 @@ jobs:
             echo "| vit (ch10)         | $(faithful ViTPoC.rowDenseWeightSgd_den) | $(faithful ViTPoC.veclnGammaSgd_den) | $(faithful ViTTiePoC.vit_net_tied_certified) | \`vit_net_tied_certified\` (ViT-Tiny depth-12 multi-head, 200 params — ZERO param gaps) |"
           } >> $GITHUB_STEP_SUMMARY
 
+      - name: Trusted-bridge axiom-footprint check
+        # Binary32Instance.lean DELIBERATELY introduces the IEEE rounding trust axioms
+        # (ieeeRnd/ieeeRnd_err) — the named ℝ→Float32 boundary Lean can't prove about opaque
+        # hardware Float. It is kept OUT of the zero-axiom Proofs/AuditAxioms suite; this step
+        # BOUNDS its footprint: every bridge capstone may depend on exactly the 3-axiom triple
+        # PLUS those two named axioms, and NOTHING else (in particular, no sorryAx). The sed
+        # join collapses Lean's wrapped (multi-line) axiom lists back to one line first.
+        run: |
+          set -e
+          # Build the quarantined bridge lib so its olean exists for the audit elaboration.
+          lake build TrustedBridge
+          out=$(lake env lean tests/AuditTrustedBridge.lean 2>&1 | sed ':a;N;$!ba;s/,\n /, /g')
+          total=$(echo "$out" | grep -c "depends on axioms:" || true)
+          ok=$(echo "$out" | grep -cE "depends on axioms: \[propext, Classical\.choice, Proofs\.ieeeRnd, Proofs\.ieeeRnd_err, Quot\.sound\]$" || true)
+
+          echo "Total bridge #print axioms lines:        $total"
+          echo "Lines matching the allowed footprint:    $ok"
+
+          if [ "$total" -eq 0 ]; then
+            echo "::error::tests/AuditTrustedBridge.lean produced no #print axioms output"
+            echo "$out"
+            exit 1
+          fi
+          if echo "$out" | grep -q "sorryAx"; then
+            echo "::error::a trusted-bridge theorem depends on sorryAx"
+            echo "$out"
+            exit 1
+          fi
+          if [ "$total" -ne "$ok" ]; then
+            echo "::error::a trusted-bridge theorem depends on axioms outside [propext, Classical.choice, Proofs.ieeeRnd, Proofs.ieeeRnd_err, Quot.sound]:"
+            echo "$out" | grep "depends on axioms:" \
+              | grep -vE "depends on axioms: \[propext, Classical\.choice, Proofs\.ieeeRnd, Proofs\.ieeeRnd_err, Quot\.sound\]$" || true
+            exit 1
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Trusted ℝ→Float32 bridge (named-axiom footprint)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **All ${total} binary32/fp8 bridge capstones depend on exactly [\`propext\`, \`Classical.choice\`, \`Quot.sound\`] + the named \`ieeeRnd\`/\`ieeeRnd_err\` trust axioms — no \`sorryAx\`, no other axiom.**" >> $GITHUB_STEP_SUMMARY
+
       - name: Summary
         run: |
           echo "## Proof Verification" >> $GITHUB_STEP_SUMMARY
