@@ -251,4 +251,302 @@ theorem floatBridges_vitBlockSelf {n d dff : Nat} (M : FloatModel)
   floatBridges_vitBlock M W₁ b₁ W₂ b₂ fgelu hw' hβ hegelu hd hdff hg hW₁ hb₁ hW₂ hb₂ hln
     ((floatBridges_sdpaSelf M fexp hn heexp0 heexp1 hfexp hscaleA hρ1).residual M)
 
+-- ════════════════════════════════════════════════════════════════
+-- § Projected attention: Q=XWq, K=XWk, V=XWv (the real MHSA, single head)
+--
+-- Q/K/V are per-token denses of X (a three-way fan-in at X). Each projection's
+-- float-vs-real drift threads into sdpa's Q/K/V slots: its rounding via `dense_close`
+-- (≤ layerBudget), its magnitude via `dense_abs_le` (≤ layerAct). sdpa_close (rounding
+-- at the float projections) + sdpa_input_close (sensitivity, projection drift as the
+-- perturbation) then bound the projected attention. The output projection Wo is a plain
+-- per-token dense AFTER sdpa, so it composes via `perRowFlat (dense Wo bo)`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Real per-token projection `X ↦ (Xᵢ·W + b)ᵢ` on the flattened sequence. -/
+noncomputable def projR {n d : Nat} (W : Mat d d) (b : Vec d) (v : Vec (n * d)) : Mat n d :=
+  fun i => Proofs.dense W b (Mat.unflatten v i)
+
+/-- Float per-token projection. -/
+noncomputable def projF (M : FloatModel) {n d : Nat} (W : Mat d d) (b : Vec d)
+    (v : Vec (n * d)) : Mat n d :=
+  fun i => M.dense W b (Mat.unflatten v i)
+
+/-- Real projection magnitude: `|projR W b v i k| ≤ layerAct d w' β A`. -/
+theorem projR_abs_le {n d : Nat} (W : Mat d d) (b : Vec d) {w' β A : ℝ}
+    (hA : 0 ≤ A) (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β)
+    (v : Vec (n * d)) (hv : ∀ idx, |v idx| ≤ A) (i : Fin n) (k : Fin d) :
+    |projR W b v i k| ≤ layerAct d w' β A :=
+  dense_abs_le hA hW hb (fun l => hv (finProdFinEquiv (i, l))) k
+
+/-- Float projection magnitude: `|projF M W b v i k| ≤ layerAct + layerBudget(e=0)`. -/
+theorem projF_abs_le (M : FloatModel) {n d : Nat} (W : Mat d d) (b : Vec d) {w' β A : ℝ}
+    (hw' : 0 ≤ w') (hA : 0 ≤ A) (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β)
+    (v : Vec (n * d)) (hv : ∀ idx, |v idx| ≤ A) (i : Fin n) (k : Fin d) :
+    |projF M W b v i k| ≤ layerAct d w' β A + layerBudget M.u d w' β A 0 := by
+  have hround : |M.dense W b (Mat.unflatten v i) k - Proofs.dense W b (Mat.unflatten v i) k|
+      ≤ layerBudget M.u d w' β A 0 :=
+    (M.dense_close_fresh W b (Mat.unflatten v i) k).trans
+      (M.denseErr_le_uniform hw' le_rfl hW hb (fun l => hv (finProdFinEquiv (i, l))) k)
+  have hreal : |Proofs.dense W b (Mat.unflatten v i) k| ≤ layerAct d w' β A :=
+    dense_abs_le hA hW hb (fun l => hv (finProdFinEquiv (i, l))) k
+  show |M.dense W b (Mat.unflatten v i) k| ≤ layerAct d w' β A + layerBudget M.u d w' β A 0
+  calc |M.dense W b (Mat.unflatten v i) k|
+      ≤ |M.dense W b (Mat.unflatten v i) k - Proofs.dense W b (Mat.unflatten v i) k|
+        + |Proofs.dense W b (Mat.unflatten v i) k| := by
+        simpa using abs_sub_le (M.dense W b (Mat.unflatten v i) k)
+          (Proofs.dense W b (Mat.unflatten v i) k) 0
+    _ ≤ layerBudget M.u d w' β A 0 + layerAct d w' β A := add_le_add hround hreal
+    _ = layerAct d w' β A + layerBudget M.u d w' β A 0 := by ring
+
+/-- Float-projection-of-`vt` vs real-projection-of-`va`: `≤ layerBudget d w' β A e`
+    (`dense_close` at the perturbed token row, uniform-magnitude `denseErr`). -/
+theorem projFR_close (M : FloatModel) {n d : Nat} (W : Mat d d) (b : Vec d) {w' β A e : ℝ}
+    (hw' : 0 ≤ w') (he : 0 ≤ e) (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β)
+    (vt va : Vec (n * d)) (hva : ∀ idx, |va idx| ≤ A)
+    (hd : ∀ idx, |vt idx - va idx| ≤ e) (i : Fin n) (k : Fin d) :
+    |projF M W b vt i k - projR W b va i k| ≤ layerBudget M.u d w' β A e :=
+  (M.dense_close W b (Mat.unflatten vt i) (Mat.unflatten va i) e he
+    (fun l => hd (finProdFinEquiv (i, l))) k).trans
+    (M.denseErr_le_uniform hw' he hW hb (fun l => hva (finProdFinEquiv (i, l))) k)
+
+/-- Real projected attention `X ↦ sdpa(XWq+bq, XWk+bk, XWv+bv)` on the flattened sequence. -/
+noncomputable def projAttnFlat {n d : Nat} (Wq Wk Wv : Mat d d) (bq bk bv : Vec d)
+    (v : Vec (n * d)) : Vec (n * d) :=
+  Mat.flatten (sdpa n d (projR Wq bq v) (projR Wk bk v) (projR Wv bv v))
+
+/-- Float projected attention. -/
+noncomputable def projAttnFlatF (M : FloatModel) (fexp : ℝ → ℝ) {n d : Nat}
+    (Wq Wk Wv : Mat d d) (bq bk bv : Vec d) (v : Vec (n * d)) : Vec (n * d) :=
+  Mat.flatten (M.sdpaF fexp (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v))
+
+/-- Propagated magnitude: the float-projection bound `layerAct + layerBudget(0)` plus the
+    sdpa rounding at that magnitude. -/
+noncomputable def projAttnB (M : FloatModel) (n d : Nat) (w' β A scaleA eexp : ℝ) : ℝ :=
+  (layerAct d w' β A + layerBudget M.u d w' β A 0)
+    + M.attnOutErr n d (layerAct d w' β A + layerBudget M.u d w' β A 0)
+        (layerAct d w' β A + layerBudget M.u d w' β A 0)
+        (layerAct d w' β A + layerBudget M.u d w' β A 0) scaleA eexp
+
+/-- Error modulus: sdpa rounding at the float-projection magnitude + sdpa input-sensitivity
+    at the real-projection magnitude with the projection drift `layerBudget(e)` as δ. -/
+noncomputable def projAttnL (M : FloatModel) (n d : Nat) (w' β A scaleA eexp e : ℝ) : ℝ :=
+  M.attnOutErr n d (layerAct d w' β A + layerBudget M.u d w' β A 0)
+      (layerAct d w' β A + layerBudget M.u d w' β A 0)
+      (layerAct d w' β A + layerBudget M.u d w' β A 0) scaleA eexp
+    + attnOutInErr n d (layerAct d w' β A) (layerAct d w' β A) (layerAct d w' β A)
+        scaleA (layerBudget M.u d w' β A e)
+
+/-- **Projected single-head attention is a `FloatClose`.** `X ↦ sdpa(XWq+bq, XWk+bk, XWv+bv)`
+    — Q/K/V are per-token denses of the SAME `X` (the three-way fan-in). Each projection's
+    float drift threads into `sdpa`'s slots: rounding via `dense_close` (≤ `layerBudget`),
+    magnitude via `dense_abs_le` (≤ `layerAct`). The error modulus is `sdpa_close` (rounding at
+    the float projections, magnitude `layerAct+layerBudget(0)`) + `sdpa_input_close` (sensitivity,
+    the projection drift `layerBudget(e)` as the per-row logit shift). The genuine MHSA core. -/
+theorem floatClose_projAttn (M : FloatModel) (fexp : ℝ → ℝ) {n d : Nat}
+    (Wq Wk Wv : Mat d d) (bq bk bv : Vec d) {w' β A scaleA eexp : ℝ}
+    (hn : 0 < n) (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d : ℝ)| ≤ scaleA) (hρ1 : smRho M.u eexp n < 1)
+    (hWq : ∀ i j, |Wq i j| ≤ w') (hbq : ∀ j, |bq j| ≤ β)
+    (hWk : ∀ i j, |Wk i j| ≤ w') (hbk : ∀ j, |bk j| ≤ β)
+    (hWv : ∀ i j, |Wv i j| ≤ w') (hbv : ∀ j, |bv j| ≤ β) :
+    FloatClose A (projAttnB M n d w' β A scaleA eexp)
+      (projAttnFlat (n := n) Wq Wk Wv bq bk bv) (projAttnFlatF (n := n) M fexp Wq Wk Wv bq bk bv)
+      (fun e => projAttnL M n d w' β A scaleA eexp e) := by
+  have hscaleA0 : 0 ≤ scaleA := (abs_nonneg _).trans hscaleA
+  have hLa0 : 0 ≤ layerAct d w' β A := layerAct_nonneg hw' hβ hA
+  have hLb00 : 0 ≤ layerBudget M.u d w' β A 0 := layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl
+  have hqAF0 : 0 ≤ layerAct d w' β A + layerBudget M.u d w' β A 0 := by linarith
+  have hAttnF0 : 0 ≤ M.attnOutErr n d (layerAct d w' β A + layerBudget M.u d w' β A 0)
+      (layerAct d w' β A + layerBudget M.u d w' β A 0)
+      (layerAct d w' β A + layerBudget M.u d w' β A 0) scaleA eexp :=
+    M.attnOutErr_nonneg n d hqAF0 hqAF0 hqAF0 hscaleA0 heexp0 hρ1
+  refine ⟨fun v hv idx => ?_, fun vt va e hva hvt hd idx => ?_⟩
+  · -- magnitudes
+    have hVR : ∀ a b, |projR Wv bv v a b| ≤ layerAct d w' β A :=
+      fun a b => projR_abs_le Wv bv hA hWv hbv v hv a b
+    have hVF : ∀ a b, |projF M Wv bv v a b| ≤ layerAct d w' β A + layerBudget M.u d w' β A 0 :=
+      fun a b => projF_abs_le M Wv bv hw' hA hWv hbv v hv a b
+    have hQF : ∀ a b, |projF M Wq bq v a b| ≤ layerAct d w' β A + layerBudget M.u d w' β A 0 :=
+      fun a b => projF_abs_le M Wq bq hw' hA hWq hbq v hv a b
+    have hKF : ∀ a b, |projF M Wk bk v a b| ≤ layerAct d w' β A + layerBudget M.u d w' β A 0 :=
+      fun a b => projF_abs_le M Wk bk hw' hA hWk hbk v hv a b
+    have hrealR : |sdpa n d (projR Wq bq v) (projR Wk bk v) (projR Wv bv v)
+                   (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2| ≤ layerAct d w' β A :=
+      sdpa_abs_le hn (projR Wq bq v) (projR Wk bk v) (projR Wv bv v) hVR _ _
+    have hrealF : |sdpa n d (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+                   (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+                  ≤ layerAct d w' β A + layerBudget M.u d w' β A 0 :=
+      sdpa_abs_le hn (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v) hVF _ _
+    have hroundF : |M.sdpaF fexp (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+                     (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+                   - sdpa n d (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+                     (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+                  ≤ M.attnOutErr n d (layerAct d w' β A + layerBudget M.u d w' β A 0)
+                      (layerAct d w' β A + layerBudget M.u d w' β A 0)
+                      (layerAct d w' β A + layerBudget M.u d w' β A 0) scaleA eexp :=
+      M.sdpa_close fexp (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+        hqAF0 hqAF0 hqAF0 heexp0 heexp1 hfexp hscaleA hρ1 hQF hKF hVF _ _
+    refine ⟨le_trans hrealR (by unfold projAttnB; linarith), ?_⟩
+    show |M.sdpaF fexp (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+            (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+         ≤ projAttnB M n d w' β A scaleA eexp
+    calc |M.sdpaF fexp (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+            (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+        ≤ |M.sdpaF fexp (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+           - sdpa n d (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+          + |sdpa n d (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2| := by
+          simpa using abs_sub_le
+            (M.sdpaF fexp (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+              (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2)
+            (sdpa n d (projF M Wq bq v) (projF M Wk bk v) (projF M Wv bv v)
+              (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2) 0
+      _ ≤ M.attnOutErr n d (layerAct d w' β A + layerBudget M.u d w' β A 0)
+            (layerAct d w' β A + layerBudget M.u d w' β A 0)
+            (layerAct d w' β A + layerBudget M.u d w' β A 0) scaleA eexp
+          + (layerAct d w' β A + layerBudget M.u d w' β A 0) := add_le_add hroundF hrealF
+      _ = projAttnB M n d w' β A scaleA eexp := by unfold projAttnB; ring
+  · -- error
+    have he0 : 0 ≤ e := (abs_nonneg _).trans (hd idx)
+    have hLbe0 : 0 ≤ layerBudget M.u d w' β A e := layerBudget_nonneg M.u_nonneg hw' hβ hA he0
+    have hQaR : ∀ a b, |projR Wq bq va a b| ≤ layerAct d w' β A :=
+      fun a b => projR_abs_le Wq bq hA hWq hbq va hva a b
+    have hKaR : ∀ a b, |projR Wk bk va a b| ≤ layerAct d w' β A :=
+      fun a b => projR_abs_le Wk bk hA hWk hbk va hva a b
+    have hVaR : ∀ a b, |projR Wv bv va a b| ≤ layerAct d w' β A :=
+      fun a b => projR_abs_le Wv bv hA hWv hbv va hva a b
+    have hQFt : ∀ a b, |projF M Wq bq vt a b| ≤ layerAct d w' β A + layerBudget M.u d w' β A 0 :=
+      fun a b => projF_abs_le M Wq bq hw' hA hWq hbq vt hvt a b
+    have hKFt : ∀ a b, |projF M Wk bk vt a b| ≤ layerAct d w' β A + layerBudget M.u d w' β A 0 :=
+      fun a b => projF_abs_le M Wk bk hw' hA hWk hbk vt hvt a b
+    have hVFt : ∀ a b, |projF M Wv bv vt a b| ≤ layerAct d w' β A + layerBudget M.u d w' β A 0 :=
+      fun a b => projF_abs_le M Wv bv hw' hA hWv hbv vt hvt a b
+    have hQe : ∀ a b, |projF M Wq bq vt a b - projR Wq bq va a b| ≤ layerBudget M.u d w' β A e :=
+      fun a b => projFR_close M Wq bq hw' he0 hWq hbq vt va hva hd a b
+    have hKe : ∀ a b, |projF M Wk bk vt a b - projR Wk bk va a b| ≤ layerBudget M.u d w' β A e :=
+      fun a b => projFR_close M Wk bk hw' he0 hWk hbk vt va hva hd a b
+    have hVe : ∀ a b, |projF M Wv bv vt a b - projR Wv bv va a b| ≤ layerBudget M.u d w' β A e :=
+      fun a b => projFR_close M Wv bv hw' he0 hWv hbv vt va hva hd a b
+    have hroundF : |M.sdpaF fexp (projF M Wq bq vt) (projF M Wk bk vt) (projF M Wv bv vt)
+                     (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+                   - sdpa n d (projF M Wq bq vt) (projF M Wk bk vt) (projF M Wv bv vt)
+                     (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+                  ≤ M.attnOutErr n d (layerAct d w' β A + layerBudget M.u d w' β A 0)
+                      (layerAct d w' β A + layerBudget M.u d w' β A 0)
+                      (layerAct d w' β A + layerBudget M.u d w' β A 0) scaleA eexp :=
+      M.sdpa_close fexp (projF M Wq bq vt) (projF M Wk bk vt) (projF M Wv bv vt)
+        hqAF0 hqAF0 hqAF0 heexp0 heexp1 hfexp hscaleA hρ1 hQFt hKFt hVFt _ _
+    have hsens : |sdpa n d (projF M Wq bq vt) (projF M Wk bk vt) (projF M Wv bv vt)
+                   (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+                 - sdpa n d (projR Wq bq va) (projR Wk bk va) (projR Wv bv va)
+                   (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+                 ≤ attnOutInErr n d (layerAct d w' β A) (layerAct d w' β A) (layerAct d w' β A)
+                     scaleA (layerBudget M.u d w' β A e) :=
+      sdpa_input_close (projF M Wq bq vt) (projF M Wk bk vt) (projF M Wv bv vt)
+        (projR Wq bq va) (projR Wk bk va) (projR Wv bv va)
+        hLa0 hLa0 hLa0 hLbe0 hscaleA hQaR hKaR hVaR hQe hKe hVe _ _
+    show |M.sdpaF fexp (projF M Wq bq vt) (projF M Wk bk vt) (projF M Wv bv vt)
+            (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+          - sdpa n d (projR Wq bq va) (projR Wk bk va) (projR Wv bv va)
+            (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+         ≤ projAttnL M n d w' β A scaleA eexp e
+    calc |M.sdpaF fexp (projF M Wq bq vt) (projF M Wk bk vt) (projF M Wv bv vt)
+            (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+          - sdpa n d (projR Wq bq va) (projR Wk bk va) (projR Wv bv va)
+            (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+        ≤ |M.sdpaF fexp (projF M Wq bq vt) (projF M Wk bk vt) (projF M Wv bv vt)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+           - sdpa n d (projF M Wq bq vt) (projF M Wk bk vt) (projF M Wv bv vt)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+          + |sdpa n d (projF M Wq bq vt) (projF M Wk bk vt) (projF M Wv bv vt)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+           - sdpa n d (projR Wq bq va) (projR Wk bk va) (projR Wv bv va)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2| := abs_sub_le _ _ _
+      _ ≤ M.attnOutErr n d (layerAct d w' β A + layerBudget M.u d w' β A 0)
+            (layerAct d w' β A + layerBudget M.u d w' β A 0)
+            (layerAct d w' β A + layerBudget M.u d w' β A 0) scaleA eexp
+          + attnOutInErr n d (layerAct d w' β A) (layerAct d w' β A) (layerAct d w' β A)
+              scaleA (layerBudget M.u d w' β A e) := add_le_add hroundF hsens
+      _ = projAttnL M n d w' β A scaleA eexp e := rfl
+
+/-- Projected attention float-bridges. -/
+theorem floatBridges_projAttn (M : FloatModel) (fexp : ℝ → ℝ) {n d : Nat}
+    (Wq Wk Wv : Mat d d) (bq bk bv : Vec d) {w' β scaleA eexp : ℝ}
+    (hn : 0 < n) (hw' : 0 ≤ w') (hβ : 0 ≤ β)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d : ℝ)| ≤ scaleA) (hρ1 : smRho M.u eexp n < 1)
+    (hWq : ∀ i j, |Wq i j| ≤ w') (hbq : ∀ j, |bq j| ≤ β)
+    (hWk : ∀ i j, |Wk i j| ≤ w') (hbk : ∀ j, |bk j| ≤ β)
+    (hWv : ∀ i j, |Wv i j| ≤ w') (hbv : ∀ j, |bv j| ≤ β) :
+    FloatBridges (projAttnFlat (n := n) Wq Wk Wv bq bk bv) := by
+  intro A hA
+  have hLa0 : 0 ≤ layerAct d w' β A := layerAct_nonneg hw' hβ hA
+  have hLb00 : 0 ≤ layerBudget M.u d w' β A 0 := layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl
+  have hqAF0 : 0 ≤ layerAct d w' β A + layerBudget M.u d w' β A 0 := by linarith
+  have hscaleA0 : 0 ≤ scaleA := (abs_nonneg _).trans hscaleA
+  refine ⟨projAttnB M n d w' β A scaleA eexp, _, _, ?_,
+    floatClose_projAttn M fexp Wq Wk Wv bq bk bv hn hw' hβ hA heexp0 heexp1 hfexp hscaleA hρ1
+      hWq hbq hWk hbk hWv hbv⟩
+  unfold projAttnB
+  exact add_nonneg hqAF0 (M.attnOutErr_nonneg n d hqAF0 hqAF0 hqAF0 hscaleA0 heexp0 hρ1)
+
+/-- **Full single-head MHSA (with the output projection Wo) float-bridges.** The attention
+    sublayer body `X ↦ Wo·sdpa(XWq, XWk, XWv)` — the projected attention (`floatBridges_projAttn`)
+    composed with the per-token output projection `Wo` (`floatBridges_dense.perRow`). All four
+    projections Wq/Wk/Wv/Wo are now genuine learned denses (no longer the identity-projection
+    Q=K=V=X of `floatBridges_sdpaSelf`). -/
+theorem floatBridges_mhsaProj (M : FloatModel) (fexp : ℝ → ℝ) {n d : Nat}
+    (Wq Wk Wv Wo : Mat d d) (bq bk bv bo : Vec d) {w' β scaleA eexp : ℝ}
+    (hn : 0 < n) (hd : 0 < d) (hw' : 0 ≤ w') (hβ : 0 ≤ β)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d : ℝ)| ≤ scaleA) (hρ1 : smRho M.u eexp n < 1)
+    (hWq : ∀ i j, |Wq i j| ≤ w') (hbq : ∀ j, |bq j| ≤ β)
+    (hWk : ∀ i j, |Wk i j| ≤ w') (hbk : ∀ j, |bk j| ≤ β)
+    (hWv : ∀ i j, |Wv i j| ≤ w') (hbv : ∀ j, |bv j| ≤ β)
+    (hWo : ∀ i j, |Wo i j| ≤ w') (hbo : ∀ j, |bo j| ≤ β) :
+    FloatBridges (perRowFlat n d (Proofs.dense Wo bo)
+      ∘ projAttnFlat (n := n) Wq Wk Wv bq bk bv) :=
+  FloatBridges.comp
+    (floatBridges_projAttn M fexp Wq Wk Wv bq bk bv hn hw' hβ heexp0 heexp1 hfexp hscaleA hρ1
+      hWq hbq hWk hbk hWv hbv)
+    (FloatBridges.perRow n (floatBridges_dense M Wo bo hw' hβ hd hWo hbo))
+
+/-- **THE FULLY-PROJECTED ViT BLOCK** (genuine Wq/Wk/Wv/Wo, single head). The encoder block
+    `LN → MHSA → +x → LN → MLP → +x` with the real projected MHSA, float-bridges with nothing
+    supplied — `floatBridges_vitBlock`'s `hattn` is discharged by `floatBridges_mhsaProj.residual`.
+    The self-attention `floatBridges_vitBlockSelf` is the `Wq=Wk=Wv=I, Wo=I` special case;
+    this is the deployed form. Every piece — projections, sdpa rounding, sdpa sensitivity, LN,
+    GELU, MLP — proved in rounding, a-posteriori in the activation magnitude. -/
+theorem floatBridges_vitBlockProj {n d dff : Nat} (M : FloatModel)
+    (W₁ : Mat d dff) (b₁ : Vec dff) (W₂ : Mat dff d) (b₂ : Vec d)
+    (Wq Wk Wv Wo : Mat d d) (bq bk bv bo : Vec d) (fgelu fexp : ℝ → ℝ)
+    {εln γln βln w' β egelu scaleA eexp : ℝ}
+    (hn : 0 < n) (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hegelu : 0 ≤ egelu) (hd : 0 < d) (hdff : 0 < dff)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hb₁ : ∀ j, |b₁ j| ≤ β)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w') (hb₂ : ∀ j, |b₂ j| ≤ β)
+    (hWq : ∀ i j, |Wq i j| ≤ w') (hbq : ∀ j, |bq j| ≤ β)
+    (hWk : ∀ i j, |Wk i j| ≤ w') (hbk : ∀ j, |bk j| ≤ β)
+    (hWv : ∀ i j, |Wv i j| ≤ w') (hbv : ∀ j, |bv j| ≤ β)
+    (hWo : ∀ i j, |Wo i j| ≤ w') (hbo : ∀ j, |bo j| ≤ β)
+    (hln : FloatBridges (layerNormForward d εln γln βln))
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp n < 1) :
+    FloatBridges
+      (perRowFlat n d (Proofs.residual
+          (Proofs.dense W₂ b₂ ∘ gelu dff ∘ Proofs.dense W₁ b₁ ∘ layerNormForward d εln γln βln))
+        ∘ Proofs.residual (perRowFlat n d (Proofs.dense Wo bo)
+            ∘ projAttnFlat (n := n) Wq Wk Wv bq bk bv)) :=
+  floatBridges_vitBlock M W₁ b₁ W₂ b₂ fgelu hw' hβ hegelu hd hdff hg hW₁ hb₁ hW₂ hb₂ hln
+    ((floatBridges_mhsaProj M fexp Wq Wk Wv Wo bq bk bv bo hn hd hw' hβ heexp0 heexp1 hfexp
+      hscaleA hρ1 hWq hbq hWk hbk hWv hbv hWo hbo).residual M)
+
 end Proofs

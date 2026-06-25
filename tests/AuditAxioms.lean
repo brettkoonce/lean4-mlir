@@ -1544,6 +1544,20 @@ open Proofs
 #print axioms floatClose_sdpaSelf
 #print axioms floatBridges_sdpaSelf
 #print axioms floatBridges_vitBlockSelf
+-- ── §2c-projections (genuine Wq/Wk/Wv/Wo — the deployed MHSA, single head) ──
+-- Q=XWq, K=XWk, V=XWv are per-token denses of the SAME X (the three-way fan-in); each
+-- projection's float drift threads into sdpa's slots (dense_close → layerBudget rounding,
+-- dense_abs_le → layerAct magnitude). floatClose_projAttn = sdpa_close (rounding at the float
+-- projections) + sdpa_input_close (sensitivity, projection drift as δ). floatBridges_mhsaProj
+-- adds the output projection Wo (perRowFlat dense, the post-sdpa per-token dense).
+-- floatBridges_vitBlockProj: the FULLY-PROJECTED ViT block, unconditional (hattn discharged);
+-- floatBridges_vitBlockSelf is its Wq=Wk=Wv=Wo=I special case.
+#print axioms projF_abs_le
+#print axioms projFR_close
+#print axioms floatClose_projAttn
+#print axioms floatBridges_projAttn
+#print axioms floatBridges_mhsaProj
+#print axioms floatBridges_vitBlockProj
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.

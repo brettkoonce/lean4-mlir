@@ -237,7 +237,16 @@ number" questions.
    packages self-attention (Q=K=V=X) as a full `FloatClose` (rounding `sdpa_close` + sensitivity
    `sdpa_input_close`), and **`floatBridges_vitBlockSelf`** is the **UNCONDITIONAL** ViT encoder
    block — `hattn` discharged, nothing supplied, every piece proved in rounding. Composes to
-   depth via `FloatBridges.comp`. The whole ViT float story (LN/GELU/MLP/attention/block) is closed.
+   depth via `FloatBridges.comp`.
+   ~~adding the Wq/Wk/Wv/Wo projections~~ **DONE** (`ViTBlockFloatBridge.lean`): Q=XWq, K=XWk,
+   V=XWv are per-token denses of the same `X` (the three-way fan-in) — each projection's float
+   drift threads into `sdpa`'s slots (`dense_close` → `layerBudget` rounding, `dense_abs_le` →
+   `layerAct` magnitude). `floatClose_projAttn` = `sdpa_close` (rounding at the float projections)
+   + `sdpa_input_close` (sensitivity, projection drift as δ); `floatBridges_mhsaProj` adds the
+   output projection Wo (`perRowFlat (dense Wo bo)`); **`floatBridges_vitBlockProj`** is the
+   **fully-projected unconditional ViT block** (the deployed single-head form — `…vitBlockSelf`
+   is its Wq=Wk=Wv=Wo=I special case). The whole ViT float story (LN/GELU/MLP/projected attention/
+   block) is closed; the only standing item is multi-head reshape (boilerplate over single-head).
 6. Whichever of §3.1/§3.5/§3.6 the writeup needs to be honest about (the kernel gap,
    the closeness-not-descent framing, the eval-mode quick win).
 
