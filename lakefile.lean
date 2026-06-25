@@ -196,6 +196,9 @@ lean_lib «Proofs» where
              -- ℝ→Float32 forward rounding budget for the no-BN CIFAR CNN
              -- (cnn_float_close scaled to 4 conv + 2 maxpool + 3 dense).
              `LeanMlir.Proofs.CifarFloatBridge,
+             -- BN float keystone: 1/√ Lipschitz on [ε,∞) + the inverse-stddev
+             -- rounding budget (rsqrt accuracy + variance error, ε-floor).
+             `LeanMlir.Proofs.BnFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

@@ -67,6 +67,7 @@ import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
 import LeanMlir.Proofs.SgdDescentCnn
 import LeanMlir.Proofs.CifarFloatBridge
+import LeanMlir.Proofs.BnFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1319,6 +1320,26 @@ open Proofs
 #print axioms FloatModel.cifar_stage1_convb_step_float_budget
 #print axioms FloatModel.cifar_stage2_convW_step_float_budget
 #print axioms FloatModel.cifar_stage2_convb_step_float_budget
+-- BN float keystone (BnFloatBridge.lean): the new numerical op BatchNorm adds is
+-- the inverse-stddev 1/√(σ²+ε), uncovered by the relative-error model. rsqrt_lipschitz
+-- bounds 1/√ on [ε,∞) (constant 1/(2ε√ε), via 1/√a−1/√b = (b−a)/((√a+√b)√a√b));
+-- bnIstd_close composes a supplied rsqrt accuracy `ers` with the variance rounding
+-- `evar` ⇒ |fistd − bnIstd| ≤ ers/√ε + evar/(2ε√ε). The BN analog of the exp/eexp
+-- softmax handoff; the mean/var Higham budgets + normalize chain are the mechanical tail.
+#print axioms rsqrt_lipschitz
+#print axioms bnVar_nonneg
+#print axioms bnIstd_close
+-- BN float tail (BnFloatBridge.lean): the full per-example bnForward closeness,
+-- composed from the keystone. bnMean_close / bnVar_close are the mean/variance
+-- Higham reductions (sum_close fan-in + per-term mul_close + division rounding);
+-- bnForward_close_of is the normalize chain (sub + 2 mul + add); bnForward_close
+-- assembles them — mean discharged by bnMean_close, istd by the rsqrt keystone,
+-- normalize by bnForward_close_of, only the variance budget supplied (bnVar_close).
+#print axioms FloatModel.bnForwardF
+#print axioms FloatModel.bnMean_close
+#print axioms FloatModel.bnVar_close
+#print axioms FloatModel.bnForward_close_of
+#print axioms FloatModel.bnForward_close
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.
