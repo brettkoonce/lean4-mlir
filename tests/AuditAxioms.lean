@@ -73,6 +73,8 @@ import LeanMlir.Proofs.BnInputBridge
 import LeanMlir.Proofs.Resnet34BlockBridge
 import LeanMlir.Proofs.FloatComposeBridge
 import LeanMlir.Proofs.EnetFloatBridge
+import LeanMlir.Proofs.DepthwiseFloatBridge
+import LeanMlir.Proofs.ViTFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1430,6 +1432,74 @@ open Proofs
 -- gate net (GAP→dense→swish→dense→sigmoid, broadcast) is the .comp feeding it;
 -- depthwise conv is the remaining standard-but-new conv-family wrap.
 #print axioms floatClose_seScale
+-- ── planning/floatbridge_enet_vit.md §1a–§1d (EfficientNet float bridge finished) ──
+-- §1a: the additive MBConv/transformer skip (no trailing activation) and a closed
+-- smooth residual block conv→swish→conv + skip. floatClose_addResidual is the no-relu
+-- cousin of floatClose_residualBlock; floatClose_smoothResBlock folds the body through
+-- .comp and wraps it. The smooth-world floatClose_resBlock (no sign margins).
+#print axioms floatClose_addResidual
+#print axioms floatClose_smoothResBlock
+-- §1b: the remaining FloatClose instances, all wraps of existing closeness. floatClose_bn
+-- (BN alone, error from the relu-free bnStep_close = bnForward_close_of + bnForward_input_close,
+-- same bnReluBudget modulus); floatClose_dense (dense layerBudget, the dense peer of
+-- floatClose_flatConv); floatClose_gap (GAP = per-channel bnMean: bnMean_abs_le magnitude +
+-- bnMean_input_close 1-Lipschitz shift + gapFlat_close rounding, via globalAvgPoolFlat_eq_bnMean);
+-- floatClose_broadcast (channel→spatial reindex, exact in float, modulus id);
+-- floatClose_sigmoid (the SE nonlinearity, σ∈(0,1) ⇒ output ≤ 1+esig).
+#print axioms FloatModel.bnStep_close
+#print axioms floatClose_bn
+#print axioms floatClose_dense
+#print axioms globalAvgPoolFlat_eq_bnMean
+#print axioms floatClose_gap
+#print axioms floatClose_broadcast
+#print axioms floatClose_sigmoid
+-- §1c: depthwise conv — the one genuinely-new conv lemma. The depthwise read IS convPad
+-- (same SAME-padding), so each output channel is a single-output dense over the kH·kW
+-- window (depthwiseConv2d_eq_dense), fan-in kH·kW (no channel sum — the depthwise advantage
+-- carries into the budget). depthwiseFlatF_close reuses dense_close/denseErr_le_uniform;
+-- floatClose_depthwise is the FloatClose wrap, the depthwise peer of floatClose_flatConv.
+#print axioms depthwiseConv2d_eq_dense
+#print axioms FloatModel.depthwiseConv2dF_close
+#print axioms FloatModel.depthwiseFlatF_close
+#print axioms floatClose_depthwise
+-- §1d: the SE gate net + MBConv fold (pure assembly). floatClose_seGate folds
+-- broadcast∘sigmoid∘dense∘swish∘dense∘GAP through six .comp's; floatClose_seBlockFull feeds
+-- it into floatClose_seScale for the full x⊙gate(x). FloatBridges (∃-closure of FloatClose
+-- over the magnitude domain) makes whole-net assembly thread magnitudes automatically:
+-- FloatBridges.comp chains stages, and floatBridges_mbconvBody folds the entire MBConv body
+-- project∘BN∘SE∘(swish∘BN∘depthwise)∘(swish∘BN∘expand) — the three BNs entering as the
+-- operating-point FloatBridges hypotheses (discharged by floatClose_bn + bnIstd_close_at, §3).
+#print axioms floatClose_seGate
+#print axioms floatClose_seBlockFull
+#print axioms FloatClose.cod_nonneg
+#print axioms FloatClose.modulus_zero_nonneg
+#print axioms FloatBridges.comp
+#print axioms floatClose_residual
+#print axioms FloatBridges.residual
+#print axioms floatBridges_flatConv
+#print axioms floatBridges_dense
+#print axioms floatBridges_swish
+#print axioms floatBridges_depthwise
+#print axioms floatBridges_seBlockFull
+#print axioms floatBridges_mbconvBody
+-- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
+-- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
+-- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
+-- point bnIstd_close_at port verbatim, no new math. §2b GELU (the one new transcendental):
+-- tanh is 1-Lipschitz (Real.tanh_lipschitz_abs, from the repo's hasDerivAt_tanh: tanh'=1-tanh²,
+-- |tanh|<1), so the tanh-form GELU is bounded-Lipschitz by the SAME algebra as Swish
+-- (geluScalar_lipschitz_abs: split + tanh 1-Lip + |a²+ab+b²|≤3A², no global derivative analysis);
+-- gelu_close is the rounding half (egelu, the eexp/esig pattern); floatClose_gelu the wrap.
+-- §2d the per-token MLP residual sub-block LN→dense→GELU→dense + skip folds via FloatBridges
+-- (LN enters as the operating-point hypothesis, like the MBConv BNs). The attention half
+-- (§2c) mixes across tokens in Mat-space — a separate track from this Vec-space framework.
+#print axioms floatClose_layerNorm
+#print axioms Real.tanh_lipschitz_abs
+#print axioms geluScalar_lipschitz_abs
+#print axioms gelu_close
+#print axioms floatClose_gelu
+#print axioms floatBridges_gelu
+#print axioms floatBridges_vitMlpResidual
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.

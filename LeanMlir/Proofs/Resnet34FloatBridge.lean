@@ -161,4 +161,19 @@ theorem gapFlat_close {c h w : Nat} (M : FloatModel) (v : Vec (c * h * w)) {A : 
 
 end FloatModel
 
+/-- **GAP as a per-channel `bnMean`.** `globalAvgPoolFlat c h w v ci` is the mean of
+    channel `ci`'s spatial slice — `bnMean (h·w)` of the `Fin (h·w)`-indexed gather.
+    The reduction `gapFlat_close` performs inline, exposed so the float-bridge
+    magnitude/input-shift bounds (`bnMean_abs_le` / `bnMean_input_close`) apply. -/
+theorem globalAvgPoolFlat_eq_bnMean {c h w : Nat} (v : Vec (c * h * w)) (ci : Fin c) :
+    globalAvgPoolFlat c h w v ci
+      = bnMean (h * w) (fun s => Tensor3.unflatten v ci
+          (finProdFinEquiv.symm s).1 (finProdFinEquiv.symm s).2) := by
+  simp only [globalAvgPoolFlat, globalAvgPool, bnMean]
+  congr 1
+  · rw [sum_s2 _]
+    refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
+    simp only [Equiv.symm_apply_apply]
+  · push_cast; ring
+
 end Proofs

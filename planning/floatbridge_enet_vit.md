@@ -33,6 +33,21 @@ binary32), instantiated at the repo's reference ℝ ops. Status by file:
   `swishScalar_lipschitz_abs` (Swish (1+A/4)-Lip), `floatClose_swish`,
   `floatClose_seScale` (the SE multiplicative-branch combinator).
 
+**§1 (EfficientNet) — DONE 2026-06-25** (all 3-axiom-clean, audited):
+- §1a `floatClose_addResidual` (FloatComposeBridge, the no-relu skip) + `floatClose_smoothResBlock`
+  (EnetFloatBridge, conv→swish→conv + skip).
+- §1b `floatClose_bn` (BN alone, via the extracted relu-free `bnStep_close` in Resnet34BlockBridge),
+  `floatClose_dense`, `floatClose_gap` (via new `globalAvgPoolFlat_eq_bnMean` helper +
+  `bnMean_abs_le`/`bnMean_input_close`), `floatClose_broadcast`, `floatClose_sigmoid`.
+- §1c `DepthwiseFloatBridge.lean` — the one new conv lemma: depthwise read IS `convPad`, so
+  `depthwiseConv2d_eq_dense` (single-output dense at fan-in kH·kW) → `depthwiseFlatF_close`
+  reuses `dense_close`; `floatClose_depthwise` is the wrap.
+- §1d `floatClose_seGate` (the SE gate net, 6-stage `.comp` fold) + `floatClose_seBlockFull`
+  (feeds `floatClose_seScale`). NEW abstraction **`FloatBridges`** (∃-closure of `FloatClose`
+  over the magnitude domain) + `FloatBridges.comp` automate magnitude threading;
+  `floatBridges_mbconvBody` folds the WHOLE MBConv body (the 3 BNs enter as operating-point
+  `FloatBridges (bnForward …)` hypotheses, discharged by `floatClose_bn` + `bnIstd_close_at`, §3).
+
 All 3-axiom-clean (`tests/AuditAxioms.lean`).
 
 ### The reusable framework
@@ -108,6 +123,20 @@ Whole net = stem `.comp` (`floatClose_iterate` per stage at the B0 block counts)
 ViT is all-smooth too. The expensive primitive is **already done**: LayerNorm is
 BN over a different axis.
 
+**§2 status (started 2026-06-25, `ViTFloatBridge.lean`):**
+- §2a **DONE** — `floatClose_layerNorm` is literally `floatClose_bn` (`layerNormForward =
+  bnForward` *definitionally* in this repo; the whole BN bridge ports verbatim).
+- §2b **DONE** — `Real.tanh_lipschitz_abs` (tanh 1-Lipschitz, from the repo's
+  `hasDerivAt_tanh`), `geluScalar_lipschitz_abs` (bounded-domain Lipschitz by the Swish
+  algebra: split + tanh 1-Lip + `|a²+ab+b²| ≤ 3A²`, no global derivative analysis),
+  `gelu_close` (rounding), `floatClose_gelu` + `floatBridges_gelu`.
+- §2d (MLP half) **DONE** — `floatBridges_vitMlpResidual`: `LN→dense→GELU→dense + skip`
+  folds via `FloatBridges` (LN enters as the operating-point hypothesis, like the MBConv
+  BNs). All 3-axiom-clean.
+- §2c **REMAINING** — attention mixes across tokens in `Mat n d` space; the `FloatClose`
+  framework is `Vec`-space, so attention needs a matrix-space float closeness (softmax-
+  per-row via the existing `softmaxF`/`smErr` model + the `QKᵀ`/`·V` matmuls). Separate track.
+
 ### 2a. LayerNorm (a re-axis port of the BN bridge)
 LN normalizes per-token over the feature dim; BN normalizes per-channel over spatial.
 Same `mean → var → istd → affine`. Port `bnMean_close`/`bnVar_close`/`bnIstd_close(_at)`/
@@ -178,13 +207,27 @@ number" questions.
 
 ## 4. Suggested order
 
-1. Re-land §1a (addResidual + smoothResBlock) — 20 min, restores a closed enet block.
-2. §1b instances (bn / dense / gap / broadcast) — unblocks the SE gate net + heads.
-3. §1c depthwise — the last new analysis; then §1d MBConv fold closes enet.
-4. §3.2 — pin `esig` (and later `egelu`) empirically via the probe.
-5. ViT: §2a LN port → §2b GELU → §2c attention → §2d fold.
+1. ~~Re-land §1a~~ **DONE** — addResidual + smoothResBlock.
+2. ~~§1b instances~~ **DONE** — bn / dense / gap / broadcast (+ sigmoid).
+3. ~~§1c depthwise~~ **DONE** (`DepthwiseFloatBridge.lean`); ~~§1d MBConv fold~~ **DONE**
+   (`floatBridges_mbconvBody` via the new `FloatBridges` whole-net-assembly abstraction).
+4. ~~ViT §2a LN~~ **DONE**, ~~§2b GELU~~ **DONE**, ~~§2d MLP-block~~ **DONE**.
+5. **NEXT:** §2c attention (the Mat-space track — softmax-per-row + `QKᵀ`/`·V` matmuls);
+   §3.2 — pin `esig`/`egelu` empirically via the probe; then the full ViT block needs §2c.
 6. Whichever of §3.1/§3.5/§3.6 the writeup needs to be honest about (the kernel gap,
    the closeness-not-descent framing, the eval-mode quick win).
+
+**Landed (all 3-axiom-clean, audited in `tests/AuditAxioms.lean`):**
+`FloatComposeBridge.lean` — `floatClose_addResidual`/`_dense`/`_bn`/`_gap`/`_residual`,
+the `FloatBridges` abstraction (`.comp`, `.residual`, `cod_nonneg`, `modulus_zero_nonneg`)
++ `floatBridges_relu`/`_maxPool`/`_flatConv`/`_dense`. `Resnet34BlockBridge.lean` —
+`bnStep_close` (relu-free, extracted from `bnRelu_close`). `Resnet34FloatBridge.lean` —
+`globalAvgPoolFlat_eq_bnMean`. `DepthwiseFloatBridge.lean` (new) — `depthwiseConv2d_eq_dense`,
+`depthwiseFlatF_close`, `floatClose_depthwise`, `floatBridges_depthwise`.
+`EnetFloatBridge.lean` — `floatClose_smoothResBlock`/`_broadcast`/`_sigmoid`/`_seGate`/
+`_seBlockFull`, `floatBridges_swish`/`_seBlockFull`/`_mbconvBody`. `ViTFloatBridge.lean`
+(new) — `floatClose_layerNorm`, `Real.tanh_lipschitz_abs`, `geluScalar_lipschitz_abs`,
+`gelu_close`, `floatClose_gelu`, `floatBridges_gelu`, `floatBridges_vitMlpResidual`.
 
 The novel methodological core (compose rounding budgets as a fold, split by
 smooth/kinked, instantiate a-posteriori) is in place; everything above is reuse,
