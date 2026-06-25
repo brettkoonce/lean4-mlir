@@ -634,4 +634,125 @@ theorem floatBridges_vitBlockMH {h n dh dff : Nat} (M : FloatModel)
   floatBridges_vitBlock M W₁ b₁ W₂ b₂ fgelu hw' hβ hegelu hd hdff hg hW₁ hb₁ hW₂ hb₂ hln
     ((floatBridges_mhSdpaSelf M fexp hn heexp0 heexp1 hfexp hscaleA hρ1).residual M)
 
+-- ════════════════════════════════════════════════════════════════
+-- § Projected multi-head: per-head Wq/Wk/Wv (block-diagonal) via indexed perRow
+--
+-- The `perRow` seam, but with a DIFFERENT per-token map per block — so each head can carry
+-- its own projections. Multi-head projected attention is then `perRowIdx` of the single-head
+-- `projAttn` (each head's `Wq/Wk/Wv : Mat dh dh` over its own slab), wrapped by the head
+-- reshape. Uniform budget across heads (the bound depends on w'/β/A, not the specific weights),
+-- exactly what `FloatClose.perRowIdx` needs.
+-- ════════════════════════════════════════════════════════════════
+
+/-- `perRow` with a per-block function `g : Fin n → (Vec d → Vec d)` (block hd gets `g hd`). -/
+noncomputable def perRowIdxFlat (n d : Nat) (g : Fin n → (Vec d → Vec d)) :
+    Vec (n * d) → Vec (n * d) :=
+  fun v => Mat.flatten (fun i => g i (Mat.unflatten v i))
+
+theorem perRowIdxFlat_apply {n d : Nat} (g : Fin n → (Vec d → Vec d)) (v : Vec (n * d))
+    (idx : Fin (n * d)) :
+    perRowIdxFlat n d g v idx
+      = g (finProdFinEquiv.symm idx).1 (Mat.unflatten v (finProdFinEquiv.symm idx).1)
+          (finProdFinEquiv.symm idx).2 := rfl
+
+/-- **Indexed per-row seam.** If every block's map is `FloatClose A B (g i) (gF i) L` with the
+    SAME `A`/`B`/`L`, the indexed per-row map is `FloatClose A B` with that same budget (blocks
+    independent). The per-head version of `FloatClose.perRow`. -/
+theorem FloatClose.perRowIdx {d : Nat} (n : Nat) {A B : ℝ}
+    {g gF : Fin n → (Vec d → Vec d)} {L : ℝ → ℝ}
+    (hg : ∀ i, FloatClose A B (g i) (gF i) L) :
+    FloatClose A B (perRowIdxFlat n d g) (perRowIdxFlat n d gF) L := by
+  refine ⟨fun v hv idx => ?_, fun vt va e hva hvt hd idx => ?_⟩
+  · have hrow : ∀ j', |Mat.unflatten v (finProdFinEquiv.symm idx).1 j'| ≤ A :=
+      fun j' => hv (finProdFinEquiv ((finProdFinEquiv.symm idx).1, j'))
+    have hboth := (hg (finProdFinEquiv.symm idx).1).1
+      (Mat.unflatten v (finProdFinEquiv.symm idx).1) hrow (finProdFinEquiv.symm idx).2
+    rw [perRowIdxFlat_apply, perRowIdxFlat_apply]
+    exact hboth
+  · have hva' : ∀ j', |Mat.unflatten va (finProdFinEquiv.symm idx).1 j'| ≤ A :=
+      fun j' => hva (finProdFinEquiv ((finProdFinEquiv.symm idx).1, j'))
+    have hvt' : ∀ j', |Mat.unflatten vt (finProdFinEquiv.symm idx).1 j'| ≤ A :=
+      fun j' => hvt (finProdFinEquiv ((finProdFinEquiv.symm idx).1, j'))
+    have hd' : ∀ j', |Mat.unflatten vt (finProdFinEquiv.symm idx).1 j'
+                    - Mat.unflatten va (finProdFinEquiv.symm idx).1 j'| ≤ e :=
+      fun j' => hd (finProdFinEquiv ((finProdFinEquiv.symm idx).1, j'))
+    rw [perRowIdxFlat_apply, perRowIdxFlat_apply]
+    exact (hg (finProdFinEquiv.symm idx).1).2 (Mat.unflatten vt (finProdFinEquiv.symm idx).1)
+      (Mat.unflatten va (finProdFinEquiv.symm idx).1) e hva' hvt' hd' (finProdFinEquiv.symm idx).2
+
+/-- **Multi-head PROJECTED attention** (per-head Wq/Wk/Wv : `Mat dh dh`, block-diagonal). Reshape
+    to head-major, apply the single-head projected attention `projAttn` with head hd's own
+    weights to each head-block, reshape back. The `h=1` case is `projAttnFlat`. -/
+noncomputable def mhProjAttnFlat (h n dh : Nat) (Wq Wk Wv : Fin h → Mat dh dh)
+    (bq bk bv : Fin h → Vec dh) : Vec (n * (h * dh)) → Vec (n * (h * dh)) :=
+  gather (mhReshape h n dh).symm
+    ∘ perRowIdxFlat h (n * dh)
+        (fun hd => projAttnFlat (n := n) (Wq hd) (Wk hd) (Wv hd) (bq hd) (bk hd) (bv hd))
+    ∘ gather (mhReshape h n dh)
+
+/-- **Multi-head projected attention float-bridges.** `FloatClose.comp` over reshape /
+    `FloatClose.perRowIdx` of the per-head `floatClose_projAttn` (uniform budget `projAttnB`
+    at head dim `dh`) / reshape-back. Genuine per-head learned projections, multi-head. -/
+theorem floatBridges_mhProjAttn (M : FloatModel) (fexp : ℝ → ℝ) {h n dh : Nat}
+    (Wq Wk Wv : Fin h → Mat dh dh) (bq bk bv : Fin h → Vec dh) {w' β scaleA eexp : ℝ}
+    (hn : 0 < n) (hw' : 0 ≤ w') (hβ : 0 ≤ β)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (dh : ℝ)| ≤ scaleA) (hρ1 : smRho M.u eexp n < 1)
+    (hWq : ∀ hd i j, |Wq hd i j| ≤ w') (hbq : ∀ hd j, |bq hd j| ≤ β)
+    (hWk : ∀ hd i j, |Wk hd i j| ≤ w') (hbk : ∀ hd j, |bk hd j| ≤ β)
+    (hWv : ∀ hd i j, |Wv hd i j| ≤ w') (hbv : ∀ hd j, |bv hd j| ≤ β) :
+    FloatBridges (mhProjAttnFlat h n dh Wq Wk Wv bq bk bv) := by
+  intro A hA
+  have hLa0 : 0 ≤ layerAct dh w' β A := layerAct_nonneg hw' hβ hA
+  have hLb00 : 0 ≤ layerBudget M.u dh w' β A 0 := layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl
+  have hqAF0 : 0 ≤ layerAct dh w' β A + layerBudget M.u dh w' β A 0 := by linarith
+  have hscaleA0 : 0 ≤ scaleA := (abs_nonneg _).trans hscaleA
+  have hnn : 0 ≤ projAttnB M n dh w' β A scaleA eexp := by
+    unfold projAttnB
+    exact add_nonneg hqAF0 (M.attnOutErr_nonneg n dh hqAF0 hqAF0 hqAF0 hscaleA0 heexp0 hρ1)
+  have hfc := (floatClose_gather (mhReshape h n dh) A).comp
+    ((FloatClose.perRowIdx h (fun hd =>
+        floatClose_projAttn M fexp (Wq hd) (Wk hd) (Wv hd) (bq hd) (bk hd) (bv hd)
+          hn hw' hβ hA heexp0 heexp1 hfexp hscaleA hρ1
+          (hWq hd) (hbq hd) (hWk hd) (hbk hd) (hWv hd) (hbv hd))).comp
+      (floatClose_gather (mhReshape h n dh).symm (projAttnB M n dh w' β A scaleA eexp)))
+  exact ⟨projAttnB M n dh w' β A scaleA eexp, _, _, hnn, hfc⟩
+
+/-- **THE PROJECTED-MULTI-HEAD ViT BLOCK** (per-head Wq/Wk/Wv, shared output Wo). The block
+    with multi-head projected MHSA float-bridges unconditionally — `hattn` discharged by
+    `floatBridges_mhProjAttn` composed with the per-token output projection `Wo`
+    (`floatBridges_dense.perRow`), wrapped `residual`. This combines all three extensions —
+    projections, multi-head reshape, and the unconditional block — into the deployed ViT layer. -/
+theorem floatBridges_vitBlockMHProj {h n dh dff : Nat} (M : FloatModel)
+    (W₁ : Mat (h * dh) dff) (b₁ : Vec dff) (W₂ : Mat dff (h * dh)) (b₂ : Vec (h * dh))
+    (Wq Wk Wv : Fin h → Mat dh dh) (bq bk bv : Fin h → Vec dh)
+    (Wo : Mat (h * dh) (h * dh)) (bo : Vec (h * dh)) (fgelu fexp : ℝ → ℝ)
+    {εln γln βln w' β egelu scaleA eexp : ℝ}
+    (hn : 0 < n) (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hegelu : 0 ≤ egelu)
+    (hd : 0 < h * dh) (hdff : 0 < dff)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hb₁ : ∀ j, |b₁ j| ≤ β)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w') (hb₂ : ∀ j, |b₂ j| ≤ β)
+    (hWq : ∀ hd' i j, |Wq hd' i j| ≤ w') (hbq : ∀ hd' j, |bq hd' j| ≤ β)
+    (hWk : ∀ hd' i j, |Wk hd' i j| ≤ w') (hbk : ∀ hd' j, |bk hd' j| ≤ β)
+    (hWv : ∀ hd' i j, |Wv hd' i j| ≤ w') (hbv : ∀ hd' j, |bv hd' j| ≤ β)
+    (hWo : ∀ i j, |Wo i j| ≤ w') (hbo : ∀ j, |bo j| ≤ β)
+    (hln : FloatBridges (layerNormForward (h * dh) εln γln βln))
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (dh : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp n < 1) :
+    FloatBridges
+      (perRowFlat n (h * dh) (Proofs.residual
+          (Proofs.dense W₂ b₂ ∘ gelu dff ∘ Proofs.dense W₁ b₁
+            ∘ layerNormForward (h * dh) εln γln βln))
+        ∘ Proofs.residual (perRowFlat n (h * dh) (Proofs.dense Wo bo)
+            ∘ mhProjAttnFlat h n dh Wq Wk Wv bq bk bv)) :=
+  floatBridges_vitBlock M W₁ b₁ W₂ b₂ fgelu hw' hβ hegelu hd hdff hg hW₁ hb₁ hW₂ hb₂ hln
+    ((FloatBridges.comp
+      (floatBridges_mhProjAttn M fexp Wq Wk Wv bq bk bv hn hw' hβ heexp0 heexp1 hfexp hscaleA hρ1
+        hWq hbq hWk hbk hWv hbv)
+      (FloatBridges.perRow n (floatBridges_dense M Wo bo hw' hβ hd hWo hbo))).residual M)
+
 end Proofs

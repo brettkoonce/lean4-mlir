@@ -253,7 +253,15 @@ number" questions.
    `FloatClose`. `mhSdpaSelfFlat = gather(reshape⁻¹) ∘ perRowFlat h (n·dh) (sdpaSelfFlat n dh) ∘
    gather(reshape)` (per-head scale `1/√dh`); `floatBridges_mhSdpaSelf` is one `FloatBridges.comp`
    chain; **`floatBridges_vitBlockMH`** is the multi-head ViT block (`h=1` = `…vitBlockSelf`).
-   The whole ViT float story — LN/GELU/MLP/projected & multi-head attention/full block — is CLOSED.
+   ~~projected multi-head~~ **DONE** (`ViTBlockFloatBridge.lean`): `FloatClose.perRowIdx` (the
+   *indexed* perRow seam — each block gets its own per-token map, so each head carries its own
+   `Wq/Wk/Wv : Mat dh dh`; uniform budget across heads since it depends on `w'/β/A`, not the
+   weights) → `mhProjAttnFlat = reshape ∘ perRowIdx (per-head `floatClose_projAttn` at dim `dh`)
+   ∘ reshape` → **`floatBridges_vitBlockMHProj`**, the projected-multi-head ViT block combining
+   ALL three extensions (per-head projections + multi-head reshape + unconditional block). The
+   whole ViT float story — LN/GELU/MLP, attention (rounding + Lipschitz), projections, multi-head,
+   full block — is CLOSED. (Block-diagonal per-head projections; full-`d` cross-head projections
+   would need a ternary per-head sdpa core — the one architectural variant not covered.)
 6. Whichever of §3.1/§3.5/§3.6 the writeup needs to be honest about (the kernel gap,
    the closeness-not-descent framing, the eval-mode quick win).
 

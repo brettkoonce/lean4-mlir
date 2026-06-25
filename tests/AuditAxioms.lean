@@ -1569,6 +1569,15 @@ open Proofs
 #print axioms floatBridges_gather
 #print axioms floatBridges_mhSdpaSelf
 #print axioms floatBridges_vitBlockMH
+-- ── §2c-projected-multihead (per-head Wq/Wk/Wv, block-diagonal) ──
+-- The indexed perRow seam (FloatClose.perRowIdx): each block gets its OWN per-token map, so
+-- each head can carry its own projections (uniform budget across heads — depends on w'/β/A,
+-- not the weights). mhProjAttnFlat = reshape ∘ perRowIdx (per-head floatClose_projAttn at dim dh)
+-- ∘ reshape; floatBridges_vitBlockMHProj = the projected-multi-head ViT block (all three
+-- extensions — projections + multi-head reshape + unconditional block — combined).
+#print axioms FloatClose.perRowIdx
+#print axioms floatBridges_mhProjAttn
+#print axioms floatBridges_vitBlockMHProj
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.
