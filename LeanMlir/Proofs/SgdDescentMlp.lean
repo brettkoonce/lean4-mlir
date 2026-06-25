@@ -1519,4 +1519,736 @@ theorem mlp_w1_grad_close {d₁ d₂ d₃ : Nat} (M : FloatModel)
   -- the final input multiply: exact left operand `a₀` (`ea = 0`)
   exact M.mul_close (by simp : |a₀ i - a₀ i| ≤ (0:ℝ)) hcot1 (hx i) hc1
 
+-- ════════════════════════════════════════════════════════════════
+-- § Hidden layer η-composition: feed the FloatBridge `W₁` grad-close
+--   budget into the hidden-layer descent slot, so "one binary32
+--   hidden-layer SGD step decreases the loss" holds with NO abstract
+--   gradient-accuracy parameter.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The binary32 hidden-layer (`W₁`) gradient of the MLP loss**, exactly
+    as the rendered trainer computes it (with the layer-1 input activation
+    `a₀` frozen exact): `fl(a₀ᵢ · c̃₁ⱼ)` where the float layer-1 cotangent
+    `c̃₁ = mask(z̃₁, W₂ᵀ·c̃₂)` reads the float pre-activation
+    `z̃₁ = M.dense W₁ b₁ a₀` and the float softmax−onehot head `c̃₂` at the
+    float logits. Flattened to the `Vec (d₁*d₂)` parameter layout that
+    `gradAt`/`mlp_hidden_sgd_descends` use. The hidden-layer peer of
+    `linearFloatGrad`. -/
+noncomputable def FloatModel.mlpHiddenFloatGrad (M : FloatModel)
+    {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃)
+    (b₂ : Vec d₃) (a₀ : Vec d₁) (fexp : ℝ → ℝ) (label : Fin d₃) :
+    Vec (d₁ * d₂) :=
+  Mat.flatten fun i j =>
+    M.mul (a₀ i)
+      (FloatModel.reluMask (M.dense W₁ b₁ a₀)
+        (M.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+          (M.softmaxCECotF fexp
+            (M.dense W₂ b₂ (relu d₂ (M.dense W₁ b₁ a₀))) label)) j)
+
+@[simp] theorem mlpHiddenFloatGrad_apply (M : FloatModel) {d₁ d₂ d₃ : Nat}
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
+    (a₀ : Vec d₁) (fexp : ℝ → ℝ) (label : Fin d₃) (i : Fin d₁) (j : Fin d₂) :
+    M.mlpHiddenFloatGrad W₁ b₁ W₂ b₂ a₀ fexp label (finProdFinEquiv (i, j)) =
+      M.mul (a₀ i)
+        (FloatModel.reluMask (M.dense W₁ b₁ a₀)
+          (M.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+            (M.softmaxCECotF fexp
+              (M.dense W₂ b₂ (relu d₂ (M.dense W₁ b₁ a₀))) label)) j) := by
+  simp [FloatModel.mlpHiddenFloatGrad, Mat.flatten, Equiv.symm_apply_apply]
+
+/-- **The certified hidden-layer loss gradient, in the `reluMask` form that
+    `mlp_w1_grad_close` bounds against.** At an off-kink parameter point
+    (`hz`), `mlp_hidden_loss_gradAt`'s closed form
+    `a₀ᵢ·relu'(z₁ⱼ)·∑ₖ W₂ⱼₖ·(softmax−onehot)ₖ` equals the masked-`W₂ᵀ`-
+    contraction form `a₀ᵢ · reluMask(z₁, dense (fun j' i' => W₂ i' j') 0 (softmax−onehot))ⱼ`.
+    The bridge that lets the float grad-close (stated with `reluMask`) discharge
+    `mlp_hidden_sgd_descends`' abstract `η` (stated with `gradAt`). -/
+theorem mlp_hidden_loss_gradAt_reluMask {d₁ d₂ d₃ : Nat}
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
+    (a₀ : Vec d₁) (label : Fin d₃)
+    (hz : ∀ k, dense W₁ b₁ a₀ k ≠ 0) (i : Fin d₁) (j : Fin d₂) :
+    gradAt (fun w => crossEntropy d₃
+        (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (Mat.flatten W₁) (finProdFinEquiv (i, j))
+      = a₀ i * FloatModel.reluMask (dense W₁ b₁ a₀)
+          (dense (fun j' i' => W₂ i' j') (fun _ => 0)
+            (fun k => softmax d₃
+              (dense W₂ b₂ (relu d₂ (dense W₁ b₁ a₀))) k -
+              oneHot d₃ label k)) j := by
+  rw [mlp_hidden_loss_gradAt b₁ W₂ b₂ a₀ label (Mat.flatten W₁)
+        (fun k => by rw [Mat.unflatten_flatten]; exact hz k) i j,
+      Mat.unflatten_flatten]
+  congr 1
+  rw [FloatModel.reluMask]
+  by_cases h : dense W₁ b₁ a₀ j > 0
+  · rw [if_pos h, if_pos h, one_mul]
+    simp only [dense, add_zero]
+    exact Finset.sum_congr rfl fun k _ => mul_comm _ _
+  · rw [if_neg h, if_neg h, zero_mul]
+
+/-- **One binary32 SGD step on the MLP's hidden weights provably decreases
+    the cross-entropy loss — with NO abstract gradient-accuracy parameter.**
+    The hidden-layer rung of the η-composition (Item D / G1 for the MLP).
+    The gradient is the *actual* binary32 `W₁` gradient
+    `M.mlpHiddenFloatGrad W₁ b₁ W₂ b₂ a₀ fexp label`, and its accuracy
+    `η = mulErr u a (layerAct …) 0 (layerBudget … (cotErr …))` is *proven*
+    by `mlp_w1_grad_close` (via the `reluMask`↔`gradAt` bridge
+    `mlp_hidden_loss_gradAt_reluMask`), not assumed.
+
+    Two margins are carried — the honest, lower-risk first cut (the linear
+    rung also carries several hypotheses): the **rounding** margin
+    `hmargin_round` (`layerBudget < |z₁|`, forward rounding must not flip the
+    layer-1 ReLU — the grad-close precondition) and the **step** margin
+    `hmargin_step` (`a·D < |z₁|`, the parameter step must not flip it along
+    the segment — the smoothness precondition). They are the same shape
+    ("nothing flips the layer-1 ReLU"); collapsing one into the other is left
+    as a refinement. This is the hidden-layer peer of
+    `linear_float_sgd_descends` / `mlp_output_float_sgd_descends`. -/
+theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
+    (a₀ : Vec d₁) (label : Fin d₃) (fexp : ℝ → ℝ)
+    {lr a w₁ β₁ w₂ β₂ eexp : ℝ}
+    (ha : 0 ≤ a) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
+    (hlr : 0 ≤ lr) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp d₃ < 1)
+    (hx : ∀ i, |a₀ i| ≤ a)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w₂) (hb₂ : ∀ j, |b₂ j| ≤ β₂)
+    (hmargin_round : ∀ j', FloatModel.layerBudget M.u d₁ w₁ β₁ a 0 <
+      |dense W₁ b₁ a₀ j'|)
+    (hmargin_step : ∀ j, a * (lr * ((∑ idx, |gradAt
+        (fun w => crossEntropy d₃
+          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
+          FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
+            (FloatModel.layerBudget M.u d₃ w₂ 0 1
+              (FloatModel.cotErr M.u eexp
+                (FloatModel.layerBudget M.u d₂ w₂ β₂
+                  (FloatModel.layerAct d₁ w₁ β₁ a)
+                  (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))) <
+      |dense W₁ b₁ a₀ j|)
+    (hsmall : 2 * (w₂ * (a * (lr * ((∑ idx, |gradAt
+        (fun w => crossEntropy d₃
+          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
+          FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
+            (FloatModel.layerBudget M.u d₃ w₂ 0 1
+              (FloatModel.cotErr M.u eexp
+                (FloatModel.layerBudget M.u d₂ w₂ β₂
+                  (FloatModel.layerAct d₁ w₁ β₁ a)
+                  (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))))) < 1)
+    (h1 : lr * (FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
+          (FloatModel.layerBudget M.u d₃ w₂ 0 1
+            (FloatModel.cotErr M.u eexp
+              (FloatModel.layerBudget M.u d₂ w₂ β₂
+                (FloatModel.layerAct d₁ w₁ β₁ a)
+                (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃))) *
+        (∑ idx, |gradAt
+          (fun w => crossEntropy d₃
+            (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+          (Mat.flatten W₁) idx|) ≤
+      lr * (∑ idx, gradAt
+        (fun w => crossEntropy d₃
+          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (Mat.flatten W₁) idx ^ 2) / 4)
+    (h2 : (2 * (d₃ : ℝ) * w₂ ^ 2 * a ^ 2 / (1 - 2 * (w₂ * (a * (lr *
+          ((∑ idx, |gradAt (fun w => crossEntropy d₃
+              (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+            (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
+              FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
+                (FloatModel.layerBudget M.u d₃ w₂ 0 1
+                  (FloatModel.cotErr M.u eexp
+                    (FloatModel.layerBudget M.u d₂ w₂ β₂
+                      (FloatModel.layerAct d₁ w₁ β₁ a)
+                      (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))))))) *
+        (lr * ((∑ idx, |gradAt (fun w => crossEntropy d₃
+            (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+          (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
+            FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
+              (FloatModel.layerBudget M.u d₃ w₂ 0 1
+                (FloatModel.cotErr M.u eexp
+                  (FloatModel.layerBudget M.u d₂ w₂ β₂
+                    (FloatModel.layerAct d₁ w₁ β₁ a)
+                    (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))) ^ 2 ≤
+      lr * (∑ idx, gradAt
+        (fun w => crossEntropy d₃
+          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (Mat.flatten W₁) idx ^ 2) / 4) :
+    crossEntropy d₃ (dense W₂ b₂ (relu d₂
+        (dense (Mat.unflatten (Mat.flatten W₁ -
+          lr • M.mlpHiddenFloatGrad W₁ b₁ W₂ b₂ a₀ fexp label)) b₁ a₀))) label ≤
+      crossEntropy d₃ (dense W₂ b₂ (relu d₂
+        (dense (Mat.unflatten (Mat.flatten W₁)) b₁ a₀))) label -
+        lr * (∑ idx, gradAt
+          (fun w => crossEntropy d₃
+            (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+          (Mat.flatten W₁) idx ^ 2) / 2 := by
+  have hu := M.u_nonneg
+  -- the proven accuracy budget η of `mlp_w1_grad_close`
+  set η : ℝ := FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
+    (FloatModel.layerBudget M.u d₃ w₂ 0 1
+      (FloatModel.cotErr M.u eexp
+        (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ a)
+          (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)) with hη
+  -- the budget is nonnegative (it bounds an absolute value)
+  have hB1 : 0 ≤ FloatModel.layerBudget M.u d₁ w₁ β₁ a 0 :=
+    FloatModel.layerBudget_nonneg hu hw₁ hβ₁ ha le_rfl
+  have hcotB : 0 ≤ FloatModel.cotErr M.u eexp
+      (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ a)
+        (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃ :=
+    M.cotErr_nonneg heexp0
+      (FloatModel.layerBudget_nonneg hu hw₂ hβ₂
+        (FloatModel.layerAct_nonneg hw₁ hβ₁ ha) hB1) hρ1
+  have hcotB2 : 0 ≤ FloatModel.layerBudget M.u d₃ w₂ 0 1
+      (FloatModel.cotErr M.u eexp
+        (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ a)
+          (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃) :=
+    FloatModel.layerBudget_nonneg hu hw₂ le_rfl zero_le_one hcotB
+  have hAct : 0 ≤ FloatModel.layerAct d₃ w₂ 0 1 :=
+    FloatModel.layerAct_nonneg hw₂ le_rfl zero_le_one
+  have hη0 : 0 ≤ η := by
+    rw [hη]
+    have e1 : (0:ℝ) ≤ M.u * ((a + 0) * (FloatModel.layerAct d₃ w₂ 0 1 +
+        FloatModel.layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp
+          (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ a)
+            (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃))) :=
+      mul_nonneg hu (mul_nonneg (by linarith) (by linarith))
+    have e2 : (0:ℝ) ≤ a * FloatModel.layerBudget M.u d₃ w₂ 0 1
+        (FloatModel.cotErr M.u eexp (FloatModel.layerBudget M.u d₂ w₂ β₂
+          (FloatModel.layerAct d₁ w₁ β₁ a)
+          (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃) := mul_nonneg ha hcotB2
+    simp only [FloatModel.mulErr]
+    nlinarith [e1, e2]
+  -- the layer-1 pre-activations are off the kink (from the rounding margin)
+  have hz : ∀ k, dense W₁ b₁ a₀ k ≠ 0 := fun k hzero => by
+    have h := hmargin_round k
+    rw [hzero, abs_zero] at h
+    exact absurd h (not_lt.mpr hB1)
+  -- discharge `mlp_hidden_sgd_descends`' abstract η by the proven grad-close
+  have hgh : ∀ idx, |M.mlpHiddenFloatGrad W₁ b₁ W₂ b₂ a₀ fexp label idx -
+      gradAt (fun w => crossEntropy d₃
+          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (Mat.flatten W₁) idx| ≤ η := by
+    intro idx
+    obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    rw [mlpHiddenFloatGrad_apply,
+      mlp_hidden_loss_gradAt_reluMask W₁ b₁ W₂ b₂ a₀ label hz i j]
+    exact mlp_w1_grad_close M W₁ b₁ W₂ b₂ a₀ label fexp ha hw₁ hβ₁ hw₂ hβ₂
+      heexp0 heexp1 hfexp hρ1 hx hW₁ hb₁ hW₂ hb₂ hmargin_round i j
+  exact mlp_hidden_sgd_descends W₁ b₁ W₂ b₂ a₀ label
+    (M.mlpHiddenFloatGrad W₁ b₁ W₂ b₂ a₀ fexp label)
+    ha hx hw₂ hW₂ hlr hη0 hgh hmargin_step hsmall h1 h2
+
+-- ════════════════════════════════════════════════════════════════
+-- § Input layer W₀: the float-backward grad-close + η-composition
+--   (one mask deeper than the hidden rung — two ReLU layers, two
+--   masked Wᵀ contractions, two rounding margins).
+-- ════════════════════════════════════════════════════════════════
+
+/-- **A masked `Wᵀ` contraction in if-then-else form equals the `reluMask`
+    form.** `(relu'(zₗ))·∑ₖ Wₗₖ·cₖ = reluMask z (Wᵀ·c) l` — the per-step
+    identity behind the `gradAt`↔`reluMask` bridges (`mlp_hidden_/`
+    `mlp_input_loss_gradAt_reluMask`): one ReLU-sign case split + `mul_comm`
+    (the transpose `dense (fun j i' => W i' j) 0 c` reads `∑ₖ cₖ·Wₗₖ`). -/
+theorem reluMask_dense_transpose_eq {p n : Nat} (z : Vec p) (W : Mat p n)
+    (c : Vec n) (l : Fin p) :
+    (if z l > 0 then (1:ℝ) else 0) * ∑ k, W l k * c k =
+      FloatModel.reluMask z (dense (fun j i' => W i' j) (fun _ => 0) c) l := by
+  rw [FloatModel.reluMask]
+  by_cases h : z l > 0
+  · rw [if_pos h, if_pos h, one_mul]
+    show (∑ k, W l k * c k) = (∑ k, c k * W l k) + (0:ℝ)
+    rw [add_zero]
+    exact Finset.sum_congr rfl fun k _ => mul_comm _ _
+  · rw [if_neg h, if_neg h, zero_mul]
+
+/-- **The binary32 input-layer (`W₀`) gradient of the MLP loss**, exactly as
+    the rendered trainer computes it (`x` the exact input): `fl(xᵢ · c̃₀ⱼ)`
+    where the float layer-0 cotangent `c̃₀ = mask(z̃₀, W₁ᵀ·c̃₁)` reads the float
+    layer-1 cotangent `c̃₁ = mask(z̃₁, W₂ᵀ·c̃₂)` and the float softmax−onehot head
+    `c̃₂`, all at the float pre-activations. Flattened to the `Vec (d₀*d₁)`
+    parameter layout. The two-mask peer of `mlpHiddenFloatGrad`. -/
+noncomputable def FloatModel.mlpInputFloatGrad (M : FloatModel)
+    {d₀ d₁ d₂ d₃ : Nat} (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂)
+    (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (fexp : ℝ → ℝ)
+    (label : Fin d₃) : Vec (d₀ * d₁) :=
+  Mat.flatten fun i j =>
+    M.mul (x i)
+      (FloatModel.reluMask (M.dense W₀ b₀ x)
+        (M.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+          (FloatModel.reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+            (M.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+              (M.softmaxCECotF fexp
+                (M.dense W₂ b₂ (relu d₂
+                  (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))))) label)))) j)
+
+@[simp] theorem mlpInputFloatGrad_apply (M : FloatModel) {d₀ d₁ d₂ d₃ : Nat}
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (fexp : ℝ → ℝ) (label : Fin d₃)
+    (i : Fin d₀) (j : Fin d₁) :
+    M.mlpInputFloatGrad W₀ b₀ W₁ b₁ W₂ b₂ x fexp label
+        (finProdFinEquiv (i, j)) =
+      M.mul (x i)
+        (FloatModel.reluMask (M.dense W₀ b₀ x)
+          (M.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+            (FloatModel.reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+              (M.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+                (M.softmaxCECotF fexp
+                  (M.dense W₂ b₂ (relu d₂
+                    (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))))) label)))) j) := by
+  simp [FloatModel.mlpInputFloatGrad, Mat.flatten, Equiv.symm_apply_apply]
+
+/-- **The certified input-layer loss gradient, in the nested `reluMask` form
+    that `mlp_w0_grad_close` bounds against.** At an off-kink point (both
+    `hz0`, `hz1`), `mlp_input_loss_gradAt`'s two-mask if-then-else closed form
+    equals `xᵢ · reluMask(z₀, W₁ᵀ·reluMask(z₁, W₂ᵀ·(softmax−onehot)))ⱼ`. Two
+    applications of `reluMask_dense_transpose_eq` (inner W₂ᵀ then outer W₁ᵀ),
+    fired by `simp_rw`. -/
+theorem mlp_input_loss_gradAt_reluMask {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁)
+    (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
+    (W₀ : Mat d₀ d₁) (x : Vec d₀) (label : Fin d₃)
+    (hz0 : ∀ k, dense W₀ b₀ x k ≠ 0)
+    (hz1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0)
+    (i : Fin d₀) (j : Fin d₁) :
+    gradAt (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+        (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (Mat.flatten W₀) (finProdFinEquiv (i, j))
+      = x i * FloatModel.reluMask (dense W₀ b₀ x)
+          (dense (fun j' i' => W₁ i' j') (fun _ => 0)
+            (FloatModel.reluMask (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))
+              (dense (fun j' i' => W₂ i' j') (fun _ => 0)
+                (fun k => softmax d₃ (dense W₂ b₂ (relu d₂
+                  (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k -
+                  oneHot d₃ label k)))) j := by
+  rw [mlp_input_loss_gradAt b₀ W₁ b₁ W₂ b₂ x label (Mat.flatten W₀)
+        (fun k => by rw [Mat.unflatten_flatten]; exact hz0 k)
+        (fun k => by rw [Mat.unflatten_flatten]; exact hz1 k) i j,
+      Mat.unflatten_flatten]
+  simp_rw [reluMask_dense_transpose_eq]
+
+open FloatModel in
+/-- **The binary32 input-layer (`W₀`) gradient is within an explicit budget of
+    the certified one**, per entry — the float-backward grad-close for the
+    deepest rung. With `x` exact, the rendered trainer computes the `W₀`
+    gradient `fl(xᵢ·c̃₀ⱼ)`, `c̃₀ = mask(z̃₀, W₁ᵀ·mask(z̃₁, W₂ᵀ·c̃₂))` from the float
+    softmax−onehot head `c̃₂` back through *two* ReLU masks. This is within
+    `mulErr … 0 (layerBudget … (layerBudget … (cotErr …)))` of the certified
+    `xᵢ·mask(z₀, W₁ᵀ·mask(z₁, W₂ᵀ·(softmax−onehot)))ⱼ` (= `mlp_input_loss_gradAt`,
+    via `mlp_input_loss_gradAt_reluMask`). Built like `mlp_w1_grad_close` with
+    one more `cot_step_close`: head (`softmax_ce_cot_close`), masked `W₂ᵀ`
+    contraction (`cot_step_close`, **under the layer-1 margin** `E₁ < |z₁|`),
+    masked `W₁ᵀ` contraction (`cot_step_close`, **under the layer-0 margin**
+    `E₀ < |z₀|`), final exact-`x` multiply (`mul_close`, `ea = 0`). -/
+theorem mlp_w0_grad_close {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel)
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃) (fexp : ℝ → ℝ)
+    {a w₀ β₀ w₁ β₁ w₂ β₂ eexp : ℝ}
+    (ha : 0 ≤ a) (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁)
+    (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp d₃ < 1)
+    (hx : ∀ i, |x i| ≤ a)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w₂) (hb₂ : ∀ j, |b₂ j| ≤ β₂)
+    (hmargin0 : ∀ j', layerBudget M.u d₀ w₀ β₀ a 0 < |Proofs.dense W₀ b₀ x j'|)
+    (hmargin1 : ∀ l', layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a 0) <
+      |Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) l'|)
+    (i : Fin d₀) (j : Fin d₁) :
+    |M.mul (x i)
+        (reluMask (M.dense W₀ b₀ x)
+          (M.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+            (reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+              (M.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+                (M.softmaxCECotF fexp
+                  (M.dense W₂ b₂ (relu d₂
+                    (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))))) label)))) j) -
+      x i * reluMask (Proofs.dense W₀ b₀ x)
+        (Proofs.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+          (reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+            (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+              (fun k => softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
+                (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))))) k -
+                oneHot d₃ label k)))) j| ≤
+    mulErr M.u a (layerAct d₂ w₁ 0 (layerAct d₃ w₂ 0 1)) 0
+      (layerBudget M.u d₂ w₁ 0 (layerAct d₃ w₂ 0 1)
+        (layerBudget M.u d₃ w₂ 0 1
+          (FloatModel.cotErr M.u eexp
+            (layerBudget M.u d₂ w₂ β₂
+              (layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a))
+              (layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+                (layerBudget M.u d₀ w₀ β₀ a 0))) d₃))) := by
+  -- layer-0 forward (x exact ⇒ inherited error 0)
+  set E₀ := layerBudget M.u d₀ w₀ β₀ a 0 with hE₀
+  have hE₀0 : 0 ≤ E₀ := layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
+  have hA₀0 : 0 ≤ layerAct d₀ w₀ β₀ a := layerAct_nonneg hw₀ hβ₀ ha
+  have l0 : ∀ k, |M.dense W₀ b₀ x k - Proofs.dense W₀ b₀ x k| ≤ E₀ :=
+    fun k => (M.dense_close_fresh W₀ b₀ x k).trans
+      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx k)
+  have r0 : ∀ k, |relu d₁ (M.dense W₀ b₀ x) k -
+      relu d₁ (Proofs.dense W₀ b₀ x) k| ≤ E₀ := fun k => relu_close _ _ _ l0 k
+  have ha₀ : ∀ k, |relu d₁ (Proofs.dense W₀ b₀ x) k| ≤ layerAct d₀ w₀ β₀ a :=
+    fun k => (relu_abs_le _ k).trans (dense_abs_le ha hW₀ hb₀ hx k)
+  -- layer-1 forward, inherited E₀
+  set E₁ := layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) E₀ with hE₁
+  have hA₁0 : 0 ≤ layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) :=
+    layerAct_nonneg hw₁ hβ₁ hA₀0
+  have hE₁0 : 0 ≤ E₁ := layerBudget_nonneg M.u_nonneg hw₁ hβ₁ hA₀0 hE₀0
+  have l1 : ∀ k, |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) k -
+      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) k| ≤ E₁ := fun k =>
+    (M.dense_close W₁ b₁ _ _ E₀ hE₀0 r0 k).trans
+      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₀ k)
+  have r1 : ∀ k, |relu d₂ (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))) k -
+      relu d₂ (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))) k| ≤ E₁ :=
+    fun k => relu_close _ _ _ l1 k
+  have ha₁ : ∀ k, |relu d₂ (Proofs.dense W₁ b₁
+      (relu d₁ (Proofs.dense W₀ b₀ x))) k| ≤
+      layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) :=
+    fun k => (relu_abs_le _ k).trans (dense_abs_le hA₀0 hW₁ hb₁ ha₀ k)
+  -- layer-2 forward (logits), inherited E₁
+  set δ := layerBudget M.u d₂ w₂ β₂ (layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)) E₁
+    with hδdef
+  have hδ0 : 0 ≤ δ := layerBudget_nonneg M.u_nonneg hw₂ hβ₂ hA₁0 hE₁0
+  have l2 : ∀ k, |M.dense W₂ b₂ (relu d₂
+      (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))) k -
+      Proofs.dense W₂ b₂ (relu d₂
+        (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))) k| ≤ δ := fun k =>
+    (M.dense_close W₂ b₂ _ _ E₁ hE₁0 r1 k).trans
+      (M.denseErr_le_uniform hw₂ hE₁0 hW₂ hb₂ ha₁ k)
+  -- head: float softmax−onehot within `cotErr`
+  have hcot2 : ∀ k, |M.softmaxCECotF fexp
+      (M.dense W₂ b₂ (relu d₂ (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))))) label k -
+      (softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
+        (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))))) k -
+        oneHot d₃ label k)| ≤ FloatModel.cotErr M.u eexp δ d₃ := fun k =>
+    M.softmax_ce_cot_close fexp _ _ label heexp0 heexp1 hfexp hρ1 l2 k
+  -- real head cotangent `softmax − onehot ∈ [−1, 1]`
+  have hC2 : ∀ k, |softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
+      (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))))) k -
+      oneHot d₃ label k| ≤ 1 := by
+    intro k
+    have hD : 0 < ∑ t, Real.exp (Proofs.dense W₂ b₂ (relu d₂
+        (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))) t) :=
+      Finset.sum_pos (fun t _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
+    have hs0 : 0 ≤ softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
+        (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))) ) k :=
+      div_nonneg (Real.exp_pos _).le (Finset.sum_nonneg fun t _ => (Real.exp_pos _).le)
+    have hs1 : softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
+        (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))) ) k ≤ 1 :=
+      (div_le_one hD).mpr
+        (Finset.single_le_sum (fun t _ => (Real.exp_pos _).le) (Finset.mem_univ k))
+    simp only [oneHot]
+    by_cases h : k = label
+    · rw [if_pos h, abs_le]; constructor <;> linarith
+    · rw [if_neg h, abs_le]; constructor <;> linarith
+  -- first masked W₂ᵀ contraction: layer-1 cotangent (under the layer-1 margin)
+  have hcot1 : ∀ l, |reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+        (M.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+          (M.softmaxCECotF fexp (M.dense W₂ b₂ (relu d₂
+            (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))))) label)) l -
+      reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+        (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+          (fun k => softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
+            (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))))) k -
+            oneHot d₃ label k)) l| ≤
+      layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp δ d₃) := fun l =>
+    M.cot_step_close W₂ (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+      (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+      (M.softmaxCECotF fexp (M.dense W₂ b₂ (relu d₂
+        (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))))) label)
+      (fun k => softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
+        (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))))) k -
+        oneHot d₃ label k)
+      hw₂ (by norm_num) (M.cotErr_nonneg heexp0 hδ0 hρ1) hW₂ hC2 hcot2 l1
+      hmargin1 l
+  -- real layer-1 cotangent magnitude
+  have hC1 : ∀ l, |reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+      (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+        (fun k => softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
+          (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))))) k -
+          oneHot d₃ label k)) l| ≤ layerAct d₃ w₂ 0 1 := fun l =>
+    (reluMask_abs_le _ _ l).trans
+      (dense_abs_le (by norm_num) (fun j' i' => hW₂ i' j') (fun _ => by simp) hC2 l)
+  -- second masked W₁ᵀ contraction: layer-0 cotangent (under the layer-0 margin)
+  have hcot0 := M.cot_step_close W₁ (M.dense W₀ b₀ x) (Proofs.dense W₀ b₀ x)
+    (reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
+      (M.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+        (M.softmaxCECotF fexp (M.dense W₂ b₂ (relu d₂
+          (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))))) label)))
+    (reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+      (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+        (fun k => softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
+          (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))))) k -
+          oneHot d₃ label k)))
+    hw₁ (layerAct_nonneg hw₂ le_rfl zero_le_one)
+    (layerBudget_nonneg M.u_nonneg hw₂ le_rfl zero_le_one
+      (M.cotErr_nonneg heexp0 hδ0 hρ1)) hW₁ hC1 hcot1 l0 hmargin0 j
+  -- real layer-0 cotangent magnitude
+  have hC0 : |reluMask (Proofs.dense W₀ b₀ x)
+      (Proofs.dense (fun j' i' => W₁ i' j') (fun _ => 0)
+        (reluMask (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)))
+          (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0)
+            (fun k => softmax d₃ (Proofs.dense W₂ b₂ (relu d₂
+              (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))))) k -
+              oneHot d₃ label k)))) j| ≤
+      layerAct d₂ w₁ 0 (layerAct d₃ w₂ 0 1) :=
+    (reluMask_abs_le _ _ j).trans
+      (dense_abs_le (layerAct_nonneg hw₂ le_rfl zero_le_one)
+        (fun j' i' => hW₁ i' j') (fun _ => by simp) hC1 j)
+  -- the final input multiply: exact left operand `x` (`ea = 0`)
+  exact M.mul_close (by simp : |x i - x i| ≤ (0:ℝ)) hcot0 (hx i) hC0
+
+/-- **One binary32 SGD step on the MLP's input weights provably decreases the
+    cross-entropy loss — with NO abstract gradient-accuracy parameter.** The
+    input-layer rung of the η-composition (Item D / G1 for the MLP), one mask
+    deeper than the hidden rung. The gradient is the *actual* binary32 `W₀`
+    gradient `M.mlpInputFloatGrad …`, and its accuracy is *proven* by
+    `mlp_w0_grad_close` (via the nested `reluMask`↔`gradAt` bridge
+    `mlp_input_loss_gradAt_reluMask`), not assumed.
+
+    Four margins are carried as hypotheses (the honest first cut): the two
+    **rounding** margins `hmargin0_round`/`hmargin1_round` (forward rounding
+    must not flip either ReLU — the grad-close preconditions) and the two
+    **step** margins `hmargin0_step`/`hmargin1_step` (the parameter step must
+    not flip either along the segment — the smoothness preconditions). With
+    this, "one binary32 SGD step on any single MLP weight layer provably
+    decreases the loss" is closed for all three layers. -/
+theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel)
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃) (fexp : ℝ → ℝ)
+    {lr a w₀ β₀ w₁ β₁ w₂ β₂ eexp : ℝ}
+    (ha : 0 ≤ a) (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁)
+    (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂) (hlr : 0 ≤ lr)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : FloatModel.smRho M.u eexp d₃ < 1)
+    (hx : ∀ i, |x i| ≤ a)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w₂) (hb₂ : ∀ j, |b₂ j| ≤ β₂)
+    (hmargin0_round : ∀ j', FloatModel.layerBudget M.u d₀ w₀ β₀ a 0 <
+      |dense W₀ b₀ x j'|)
+    (hmargin1_round : ∀ l', FloatModel.layerBudget M.u d₁ w₁ β₁
+        (FloatModel.layerAct d₀ w₀ β₀ a)
+        (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0) <
+      |dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) l'|)
+    (hmargin0_step : ∀ j, a * (lr * ((∑ idx, |gradAt
+        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
+          FloatModel.mulErr M.u a
+            (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
+            (FloatModel.layerBudget M.u d₂ w₁ 0
+                (FloatModel.layerAct d₃ w₂ 0 1)
+              (FloatModel.layerBudget M.u d₃ w₂ 0 1
+                (FloatModel.cotErr M.u eexp
+                  (FloatModel.layerBudget M.u d₂ w₂ β₂
+                    (FloatModel.layerAct d₁ w₁ β₁
+                      (FloatModel.layerAct d₀ w₀ β₀ a))
+                    (FloatModel.layerBudget M.u d₁ w₁ β₁
+                      (FloatModel.layerAct d₀ w₀ β₀ a)
+                      (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))) <
+      |dense W₀ b₀ x j|)
+    (hmargin1_step : ∀ l, w₁ * (a * (lr * ((∑ idx, |gradAt
+        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
+          FloatModel.mulErr M.u a
+            (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
+            (FloatModel.layerBudget M.u d₂ w₁ 0
+                (FloatModel.layerAct d₃ w₂ 0 1)
+              (FloatModel.layerBudget M.u d₃ w₂ 0 1
+                (FloatModel.cotErr M.u eexp
+                  (FloatModel.layerBudget M.u d₂ w₂ β₂
+                    (FloatModel.layerAct d₁ w₁ β₁
+                      (FloatModel.layerAct d₀ w₀ β₀ a))
+                    (FloatModel.layerBudget M.u d₁ w₁ β₁
+                      (FloatModel.layerAct d₀ w₀ β₀ a)
+                      (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)))))) <
+      |dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) l|)
+    (hsmall : 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (lr * ((∑ idx, |gradAt
+        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
+          FloatModel.mulErr M.u a
+            (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
+            (FloatModel.layerBudget M.u d₂ w₁ 0
+                (FloatModel.layerAct d₃ w₂ 0 1)
+              (FloatModel.layerBudget M.u d₃ w₂ 0 1
+                (FloatModel.cotErr M.u eexp
+                  (FloatModel.layerBudget M.u d₂ w₂ β₂
+                    (FloatModel.layerAct d₁ w₁ β₁
+                      (FloatModel.layerAct d₀ w₀ β₀ a))
+                    (FloatModel.layerBudget M.u d₁ w₁ β₁
+                      (FloatModel.layerAct d₀ w₀ β₀ a)
+                      (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))))))) < 1)
+    (h1 : lr * (FloatModel.mulErr M.u a
+          (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
+          (FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)
+            (FloatModel.layerBudget M.u d₃ w₂ 0 1
+              (FloatModel.cotErr M.u eexp
+                (FloatModel.layerBudget M.u d₂ w₂ β₂
+                  (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a))
+                  (FloatModel.layerBudget M.u d₁ w₁ β₁
+                    (FloatModel.layerAct d₀ w₀ β₀ a)
+                    (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)))) *
+        (∑ idx, |gradAt
+          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+          (Mat.flatten W₀) idx|) ≤
+      lr * (∑ idx, gradAt
+        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (Mat.flatten W₀) idx ^ 2) / 4)
+    (h2 : (2 * (d₃ : ℝ) * (d₂ : ℝ) ^ 2 * w₁ ^ 2 * w₂ ^ 2 * a ^ 2 /
+        (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (lr * ((∑ idx, |gradAt
+          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+          (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
+            FloatModel.mulErr M.u a
+              (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
+              (FloatModel.layerBudget M.u d₂ w₁ 0
+                  (FloatModel.layerAct d₃ w₂ 0 1)
+                (FloatModel.layerBudget M.u d₃ w₂ 0 1
+                  (FloatModel.cotErr M.u eexp
+                    (FloatModel.layerBudget M.u d₂ w₂ β₂
+                      (FloatModel.layerAct d₁ w₁ β₁
+                        (FloatModel.layerAct d₀ w₀ β₀ a))
+                      (FloatModel.layerBudget M.u d₁ w₁ β₁
+                        (FloatModel.layerAct d₀ w₀ β₀ a)
+                        (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))))))))) *
+        (lr * ((∑ idx, |gradAt
+          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+          (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
+            FloatModel.mulErr M.u a
+              (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
+              (FloatModel.layerBudget M.u d₂ w₁ 0
+                  (FloatModel.layerAct d₃ w₂ 0 1)
+                (FloatModel.layerBudget M.u d₃ w₂ 0 1
+                  (FloatModel.cotErr M.u eexp
+                    (FloatModel.layerBudget M.u d₂ w₂ β₂
+                      (FloatModel.layerAct d₁ w₁ β₁
+                        (FloatModel.layerAct d₀ w₀ β₀ a))
+                      (FloatModel.layerBudget M.u d₁ w₁ β₁
+                        (FloatModel.layerAct d₀ w₀ β₀ a)
+                        (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))) ^ 2 ≤
+      lr * (∑ idx, gradAt
+        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (Mat.flatten W₀) idx ^ 2) / 4) :
+    crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁
+        (dense (Mat.unflatten (Mat.flatten W₀ -
+          lr • M.mlpInputFloatGrad W₀ b₀ W₁ b₁ W₂ b₂ x fexp label))
+          b₀ x))))) label ≤
+      crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁
+        (dense (Mat.unflatten (Mat.flatten W₀)) b₀ x))))) label -
+        lr * (∑ idx, gradAt
+          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+          (Mat.flatten W₀) idx ^ 2) / 2 := by
+  have hu := M.u_nonneg
+  -- the proven accuracy budget η of `mlp_w0_grad_close`
+  set η : ℝ := FloatModel.mulErr M.u a
+    (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
+    (FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)
+      (FloatModel.layerBudget M.u d₃ w₂ 0 1
+        (FloatModel.cotErr M.u eexp
+          (FloatModel.layerBudget M.u d₂ w₂ β₂
+            (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a))
+            (FloatModel.layerBudget M.u d₁ w₁ β₁
+              (FloatModel.layerAct d₀ w₀ β₀ a)
+              (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))) with hη
+  -- nonnegativity of every layer in the budget
+  have hE₀0 : 0 ≤ FloatModel.layerBudget M.u d₀ w₀ β₀ a 0 :=
+    FloatModel.layerBudget_nonneg hu hw₀ hβ₀ ha le_rfl
+  have hA₀0 : 0 ≤ FloatModel.layerAct d₀ w₀ β₀ a := FloatModel.layerAct_nonneg hw₀ hβ₀ ha
+  have hE₁0 : 0 ≤ FloatModel.layerBudget M.u d₁ w₁ β₁
+      (FloatModel.layerAct d₀ w₀ β₀ a)
+      (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0) :=
+    FloatModel.layerBudget_nonneg hu hw₁ hβ₁ hA₀0 hE₀0
+  have hA₁0 : 0 ≤ FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a) :=
+    FloatModel.layerAct_nonneg hw₁ hβ₁ hA₀0
+  have hδ0 : 0 ≤ FloatModel.layerBudget M.u d₂ w₂ β₂
+      (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a))
+      (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)
+        (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0)) :=
+    FloatModel.layerBudget_nonneg hu hw₂ hβ₂ hA₁0 hE₁0
+  have hcotδ : 0 ≤ FloatModel.cotErr M.u eexp
+      (FloatModel.layerBudget M.u d₂ w₂ β₂
+        (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a))
+        (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)
+          (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃ :=
+    M.cotErr_nonneg heexp0 hδ0 hρ1
+  have hAct1 : 0 ≤ FloatModel.layerAct d₃ w₂ 0 1 :=
+    FloatModel.layerAct_nonneg hw₂ le_rfl zero_le_one
+  have hec1 : 0 ≤ FloatModel.layerBudget M.u d₃ w₂ 0 1
+      (FloatModel.cotErr M.u eexp
+        (FloatModel.layerBudget M.u d₂ w₂ β₂
+          (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a))
+          (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)
+            (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃) :=
+    FloatModel.layerBudget_nonneg hu hw₂ le_rfl zero_le_one hcotδ
+  have hAct0 : 0 ≤ FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1) :=
+    FloatModel.layerAct_nonneg hw₁ le_rfl hAct1
+  have hec0 : 0 ≤ FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)
+      (FloatModel.layerBudget M.u d₃ w₂ 0 1
+        (FloatModel.cotErr M.u eexp
+          (FloatModel.layerBudget M.u d₂ w₂ β₂
+            (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a))
+            (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)
+              (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)) :=
+    FloatModel.layerBudget_nonneg hu hw₁ le_rfl hAct1 hec1
+  have hη0 : 0 ≤ η := by
+    rw [hη]
+    have e1 : (0:ℝ) ≤ M.u * ((a + 0) *
+        (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1) +
+          FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)
+            (FloatModel.layerBudget M.u d₃ w₂ 0 1
+              (FloatModel.cotErr M.u eexp
+                (FloatModel.layerBudget M.u d₂ w₂ β₂
+                  (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a))
+                  (FloatModel.layerBudget M.u d₁ w₁ β₁
+                    (FloatModel.layerAct d₀ w₀ β₀ a)
+                    (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)))) :=
+      mul_nonneg hu (mul_nonneg (by linarith) (by linarith))
+    have e2 : (0:ℝ) ≤ a * FloatModel.layerBudget M.u d₂ w₁ 0
+        (FloatModel.layerAct d₃ w₂ 0 1)
+        (FloatModel.layerBudget M.u d₃ w₂ 0 1
+          (FloatModel.cotErr M.u eexp
+            (FloatModel.layerBudget M.u d₂ w₂ β₂
+              (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a))
+              (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)
+                (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)) :=
+      mul_nonneg ha hec0
+    simp only [FloatModel.mulErr]
+    nlinarith [e1, e2]
+  -- the two pre-activations are off the kink (from the rounding margins)
+  have hz0 : ∀ k, dense W₀ b₀ x k ≠ 0 := fun k hzero => by
+    have h := hmargin0_round k
+    rw [hzero, abs_zero] at h
+    exact absurd h (not_lt.mpr hE₀0)
+  have hz1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0 := fun k hzero => by
+    have h := hmargin1_round k
+    rw [hzero, abs_zero] at h
+    exact absurd h (not_lt.mpr hE₁0)
+  -- discharge `mlp_input_sgd_descends`' abstract η by the proven grad-close
+  have hgh : ∀ idx, |M.mlpInputFloatGrad W₀ b₀ W₁ b₁ W₂ b₂ x fexp label idx -
+      gradAt (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
+          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (Mat.flatten W₀) idx| ≤ η := by
+    intro idx
+    obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    rw [mlpInputFloatGrad_apply,
+      mlp_input_loss_gradAt_reluMask b₀ W₁ b₁ W₂ b₂ W₀ x label hz0 hz1 i j]
+    exact mlp_w0_grad_close M W₀ b₀ W₁ b₁ W₂ b₂ x label fexp ha hw₀ hβ₀ hw₁ hβ₁
+      hw₂ hβ₂ heexp0 heexp1 hfexp hρ1 hx hW₀ hb₀ hW₁ hb₁ hW₂ hb₂
+      hmargin0_round hmargin1_round i j
+  exact mlp_input_sgd_descends W₀ b₀ W₁ b₁ W₂ b₂ x label
+    (M.mlpInputFloatGrad W₀ b₀ W₁ b₁ W₂ b₂ x fexp label)
+    ha hx hw₁ hW₁ hw₂ hW₂ hlr hη0 hgh hmargin0_step hmargin1_step hsmall h1 h2
+
 end Proofs

@@ -1825,8 +1825,9 @@ open Proofs
 -- gradient M.linearFloatGrad W₂ b₂ a₁, its accuracy η = mulErr u a 1 0 (cotErr …)
 -- proven (linear_grad_close), is fed into the output-layer descent. The output
 -- layer IS linear_float_sgd_descends at the hidden activation a₁ (margin-free).
--- Hidden/input rungs still take abstract η (the joint-step float-backward
--- grad-close under the margins is left open).
+-- The hidden rung is now float-fused too (mlp_hidden_float_sgd_descends, below);
+-- the input rung still takes abstract η (mlp_w0_grad_close left open), as does
+-- the joint all-layers step.
 #print axioms mlp_output_float_sgd_descends
 -- Hidden-layer float-backward grad-close (planning §1a/§4, the joint-step engine):
 -- with a₀ frozen exact, the binary32 W₁ gradient fl(a₀ᵢ·c̃₁ⱼ) — float layer-1
@@ -1838,11 +1839,40 @@ open Proofs
 -- cot_step_close precondition (factored from linear_float_sgd_descends).
 #print axioms FloatModel.cotErr_nonneg
 #print axioms mlp_w1_grad_close
+-- Hidden-layer η-composition (planning §3 descent, Step 1): the W₁ grad-close
+-- above is wired into the hidden-layer descent. mlp_hidden_loss_gradAt_reluMask
+-- bridges mlp_hidden_loss_gradAt's gradAt closed form to the reluMask/masked-W₂ᵀ
+-- form mlp_w1_grad_close bounds against; mlp_hidden_float_sgd_descends then
+-- discharges mlp_hidden_sgd_descends' abstract η with the proven budget — one
+-- binary32 hidden-layer SGD step provably decreases the loss, no abstract
+-- gradient-accuracy parameter. Carries both margins (rounding: no forward-round
+-- ReLU flip; step: no along-segment flip) as the honest first cut.
+#print axioms FloatModel.mlpHiddenFloatGrad
+#print axioms mlpHiddenFloatGrad_apply
+#print axioms mlp_hidden_loss_gradAt_reluMask
+#print axioms mlp_hidden_float_sgd_descends
 #print axioms mlp_input_loss_differentiableAt
 #print axioms mlp_input_loss_gradAt
 #print axioms mlp_input_logit_drift
 #print axioms mlp_input_loss_grad_lipschitz
 #print axioms mlp_input_sgd_descends
+-- Input-layer η-composition (planning §3 descent, Step 2): the deepest MLP
+-- rung, one mask deeper than the hidden one. reluMask_dense_transpose_eq is the
+-- reusable per-step identity (relu'(z)·∑ W·c = reluMask z (Wᵀ·c)); the float W₀
+-- gradient mlpInputFloatGrad runs the head back through TWO masked Wᵀ
+-- contractions; mlp_input_loss_gradAt_reluMask bridges the nested gradAt form to
+-- the reluMask form (two simp_rw of the identity); mlp_w0_grad_close is the
+-- grad-close (mlp_w1_grad_close + one extra cot_step_close, under TWO rounding
+-- margins); mlp_input_float_sgd_descends discharges mlp_input_sgd_descends'
+-- abstract η — one binary32 input-layer SGD step provably decreases the loss.
+-- Carries all four margins (two rounding + two step) as the honest first cut.
+-- With this, all three MLP weight layers are float-fused descent.
+#print axioms reluMask_dense_transpose_eq
+#print axioms FloatModel.mlpInputFloatGrad
+#print axioms mlpInputFloatGrad_apply
+#print axioms mlp_input_loss_gradAt_reluMask
+#print axioms mlp_w0_grad_close
+#print axioms mlp_input_float_sgd_descends
 -- The descent program reaches the Chapter-4 CNN (SgdDescentCnn.lean):
 -- the three genuinely-new ingredient families beyond the MLP. (1) The
 -- POOL SELECTION MARGIN: MaxPool2MarginQ δ (pairwise window gaps > 2δ)

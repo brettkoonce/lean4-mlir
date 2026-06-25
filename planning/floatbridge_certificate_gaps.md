@@ -104,23 +104,32 @@ or already-bounded so subnormals there don't propagate error. **Effort: small–
 clean, architecture-agnostic, converts a caveat into a lemma.** New file `*SubnormalBridge.lean`
 or a section in `FloatBridge.lean`.
 
-## 3. Descent, not just closeness — the scientific punchline (§3.5)
+## 3. Descent, not just closeness — the scientific punchline (§3.5)  → handoff: `planning/floatbridge_descent_pass.md`
 
 **The gap.** Everything past MNIST is *closeness* (`|float − real| ≤ budget`). The headline
 "a rounded training step still **decreases the loss**" exists only for MNIST. Closeness says
 "the float net computes ~the real gradient"; descent says "it provably trains."
 
-**Where it stands (see memory `floatbridge-mnist-chain`).** The Item-D η-composition rungs are
-partway: MLP **output** rung (`mlp_output_float_sgd_descends`) + **hidden** grad-close
-(`mlp_w1_grad_close` + `cotErr_nonneg`) done. Remaining: the **input rung**, the
-**descent-wiring** (compose the rungs into a single-step loss-decrease), then **cnn** / the
-**joint-step**.
+**Where it stands (verified 2026-06-25; full cold-start plan in
+`planning/floatbridge_descent_pass.md`).** Pattern = one master theorem
+(`linear_float_sgd_descends`, η *proven* not assumed) + a per-rung float grad-close as the
+η source. CLOSED: **linear** end-to-end + the **entire MLP** — output (`mlp_output_float_sgd_descends`),
+hidden (`mlp_hidden_float_sgd_descends`, Step 1), and input (`mlp_input_float_sgd_descends`,
+Step 2) — all DONE 2026-06-25: each per-layer grad-close (`mlp_w{1,0}_grad_close`) wired into
+its `mlp_{hidden,input}_sgd_descends` via the `gradAt`↔`reluMask` bridges
+(`mlp_{hidden,input}_loss_gradAt_reluMask`, the latter factored through the reusable
+`reluMask_dense_transpose_eq`), margins carried as the honest first cut. OPEN: **cnn** float
+fusion (Step 3). The abstract-η smoothness side (`mlp_{…}_sgd_descends`, cnn ingredients) is
+fully proven — only the cnn float fusion is missing.
 
-**Next.** Push the MLP to a full single-step descent (input rung + wiring), then decide per
-architecture whether descent is the goal or whether to bank closeness and state it honestly.
-Descent for a *deep* net needs a loss-gradient Lipschitz (smoothness) constant — brutal at
-depth, tiny lr; likely only tractable for shallow nets. **Effort: high, highest ceiling,
-highest risk.** Don't let "descent" be *implied* for the deep nets where only closeness holds.
+**Next (see the handoff doc for exact theorem names + the wiring template).** Step 3: the
+**cnn** conv rungs — `cnn_conv{1,2}_grad_close` (reuse the conv weight-grad bridges) wired into
+the existing abstract-η `cnn_conv{1,2}_sgd_descends`, plus the whole-CNN capstone assembly.
+**Honest stop line:** the joint all-layers step (logits non-affine) and the deep nets stay
+closeness-only — descent needs a loss-gradient Lipschitz constant brutal at depth (no
+`*_sgd_descends` exists for any deep net). **Effort: Step 3 high.** Don't let "descent" be
+*implied* net-wide (honesty-pass flag F1: "loss-descent *step*" ≠ "the loss provably
+*decreases*").
 
 ## 4. Eval-mode normalization — a quick deployed-forward win (§3.6)  ✅ DONE (2026-06-25)
 
@@ -168,9 +177,10 @@ and it's what makes a skeptical reviewer trust the *proven* parts.
    `FloatModel` = its `η=0` face, BN/LN stays-normal invariant, residual floor negligible.
 3. ~~**§4 eval-mode BN**~~ ✅ DONE — `BnEvalFloatBridge.lean`: eval BN = fixed affine
    (`bnEvalAffine_fold`), bridged with no `rsqrt`/fan-in γ (`floatClose_bnEval`).
-4. **§3 descent** — highest ceiling, highest risk; push the MLP rungs, be honest about depth.
-   (NB: the *linear* float→descent composition is already closed — `linear_float_sgd_descends`,
-   η proven via `linear_grad_close`; the open work is the MLP input rung + wiring, then deep nets.)
+4. **§3 descent** — highest ceiling, highest risk; be honest about depth.
+   (NB: linear + the **whole MLP** float→descent are now closed —
+   `linear_float_sgd_descends` / `mlp_{output,hidden,input}_float_sgd_descends`, η proven not
+   assumed; the open work is the **cnn** rungs (Step 3), then the honest stop at deep nets.)
 5. ~~**§5 honesty pass**~~ ✅ DONE — `planning/floatbridge_honesty_pass.md` (7 flags; key: F1
    "loss-descent step"≠"loss decreases", F2 cite `linear_float_sgd_descends`, F3/F4 promote
    kernel/subnormals to their true tiers). Re-run before any writeup/submission.
