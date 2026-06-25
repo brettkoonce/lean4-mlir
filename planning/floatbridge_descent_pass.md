@@ -114,12 +114,17 @@ runs back through **two** ReLU masks + the `W₁`,`W₂` cotangent fan-in, so it
 margin), final exact-operand multiply (`mul_close`, `ea = 0`). Then wire as Step 1.
 Effort: **medium** (two margins, deeper cotangent chain; no new machinery).
 
-## Step 3 — CNN float fusion (stretch)
+## Step 3 — CNN float fusion (stretch)  → full cold-start plan: `planning/floatbridge_descent_cnn.md`
 
 `cnn_conv2_grad_close` (then `cnn_conv1_grad_close`) reusing the conv weight-grad
-bridges, wired into the existing abstract-η `cnn_conv{1,2}_sgd_descends`. Plus the
-whole-CNN capstone assembly (the layer chain), still open — see
-`planning/sgd_descent_cnn.md`. Effort: **high**; do only after Steps 1–2.
+bridges, wired into the existing abstract-η `cnn_conv{1,2}_sgd_descends`. The float
+backward runs through the dense head **and** the max-pool selection (frozen by the
+existing `MaxPool2MarginQ.isArgmax_iff` under a rounding margin) **and** a ReLU mask
+before the conv-weight correlation. The single **largest** rung; scoped into
+independently-audited increments (pool-back primitive + bridge → grad-close → wiring
+→ conv1 → biases) in **`planning/floatbridge_descent_cnn.md`** — the abstract-η
+descent side is already done (`planning/sgd_descent_cnn.md`). Effort: **high**; its
+own focused session, after Steps 1–2 (done).
 
 ## The honest stop line (do NOT cross)
 
