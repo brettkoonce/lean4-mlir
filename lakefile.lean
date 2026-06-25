@@ -211,6 +211,9 @@ lean_lib «Proofs» where
              -- whole-net certificate backbone: FloatClose composes (moduli ∘, magnitudes
              -- thread) — the whole net is the fold of per-op budgets.
              `LeanMlir.Proofs.FloatComposeBridge,
+             -- EfficientNet float bridge step 1: Swish/sigmoid (bounded, rounding
+             -- closeness, σ is ¼-Lipschitz) — the shared smooth-activation transcendental.
+             `LeanMlir.Proofs.EnetFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

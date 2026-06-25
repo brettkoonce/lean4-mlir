@@ -72,6 +72,7 @@ import LeanMlir.Proofs.Resnet34FloatBridge
 import LeanMlir.Proofs.BnInputBridge
 import LeanMlir.Proofs.Resnet34BlockBridge
 import LeanMlir.Proofs.FloatComposeBridge
+import LeanMlir.Proofs.EnetFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1406,6 +1407,29 @@ open Proofs
 #print axioms floatClose_id
 #print axioms floatClose_iterate
 #print axioms floatClose_r34_stages
+-- EfficientNet float bridge, step 1 (EnetFloatBridge.lean): the smooth activations.
+-- enet is all-smooth (Swish + sigmoid SE gate, no kinks) → clean float story. The shared
+-- transcendental is sigmoid (modeled by supplied fsig, accuracy esig, like eexp/ers):
+-- sigmoidScalar_pos/_lt_one (bounded (0,1)), sigmoid_close/swish_close (rounding budget,
+-- the SE-gate/Swish piece), and sigmoidScalar_lipschitz_abs (σ is ¼-Lipschitz — the
+-- input-sensitivity, the bnForward_input_close analogue). Conv/BN/GAP/residual reuse r34.
+#print axioms sigmoidScalar_pos
+#print axioms sigmoid_close
+#print axioms swish_close
+#print axioms sigmoidScalar_lipschitz_abs
+-- Swish closed as a composable FloatClose: swishScalar_lipschitz_abs (Swish is
+-- (1+A/4)-Lipschitz on |·|≤A — pure algebra from σ's ¼-Lipschitz, no MVT) and
+-- floatClose_swish (rounding via swish_close + that input-shift). The smooth-world
+-- floatClose_relu — so enet's conv→BN→Swish backbone folds through .comp. (SE block
+-- + depthwise conv are the remaining MBConv-specific FloatClose wraps.)
+#print axioms swishScalar_lipschitz_abs
+#print axioms floatClose_swish
+-- SE block (the architecturally-distinctive enet op): floatClose_seScale — the
+-- multiplicative-branch combinator x ⊙ gate(x) (residual's cousin), FloatClose via
+-- mul_close given the gate is FloatClose (Bg=1 for a sigmoid gate). The squeeze→excite
+-- gate net (GAP→dense→swish→dense→sigmoid, broadcast) is the .comp feeding it;
+-- depthwise conv is the remaining standard-but-new conv-family wrap.
+#print axioms floatClose_seScale
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.
