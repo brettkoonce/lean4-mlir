@@ -98,7 +98,10 @@ jobs:
           # lib, whose roots cover every proof module — including opt-in roots
           # the umbrella does not import (MatBridge, MnistCNN). Using the lib
           # target keeps this future-proof: new Proofs roots are built here too.
-          lake build LeanMlir Proofs
+          # `TrustedBridge` (the quarantined named-axiom ℝ→Float32 bridge,
+          # Binary32Instance.lean) is a separate lib that neither umbrella imports,
+          # so build it explicitly — else checkdecls dies on its missing olean.
+          lake build LeanMlir Proofs TrustedBridge
 
       - name: Install graphviz (libcgraph for leanblueprint's dep-graph plugin)
         # leanblueprint's `dep_graph` plugin imports pygraphviz, which dlopens
