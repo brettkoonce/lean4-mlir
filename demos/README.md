@@ -38,6 +38,40 @@ predicted mask matches the ground truth pretty closely after
 
 ---
 
+## YOLOv1 — object detection
+
+Cat-vs-dog head detector on Oxford-IIIT Pets. A ResNet-34 backbone
+(bootstrapped from the ImageNet checkpoint) + a deep convolutional
+detection head over a 7×7 grid, with sigmoid focal-BCE objectness —
+all on the verified `.yolov1Masked` train-step path, no new VJP
+machinery.
+
+`MainYolov1PetsTrainBootstrap.lean`, `MainYolov1PetsInfer.lean`. See
+`planning/yolo_final.md`.
+
+```bash
+./download_pets.sh
+python3 preprocess_pets_mosaic.py data/pets data/pets_mosaic_bal
+lake exe yolov1-pets-train-bootstrap data/pets_mosaic_bal
+lake exe yolov1-pets-infer 16 data/pets_mosaic_bal /tmp/pets_det
+python3 scripts/yolo_render.py /tmp/pets_det --sigmoid-conf --max-per-image 4
+```
+
+![YOLO Pets detection](figures/yolo_pets.png)
+
+Boxes on cat/dog faces, labeled (blue = cat, pink = dog). The real
+lesson is in the planning doc: on a coarse 7×7 grid, *centered* objects
+make "predict the average location" a better loss minimum than
+localizing each one — so detection collapses to a fixed center-prior on
+plain (centered) data, and the training loss keeps dropping the whole
+time. Training on 2×2 **mosaics** of four pets scatters the heads and
+breaks that positional marginal (localization 0 → 64/64); a 50/50
+cat/dog sampler breaks the matching class-collapse to the majority
+breed. A weakness of the data distribution, turned into the demo's
+main lesson.
+
+---
+
 ## DDPM — diffusion generative models
 
 Denoising Diffusion Probabilistic Models on MNIST and CIFAR-10.
@@ -192,6 +226,8 @@ demos/
 ├── MainUnetPetsTrain.lean                 # UNet segmentation trainer
 ├── MainAutoencoderPetsTrain.lean          # plain autoencoder baseline (no skips)
 ├── MainPetsPredict.lean                   # render predicted masks from checkpoint
+├── MainYolov1PetsTrainBootstrap.lean      # YOLOv1 cat/dog detector (Pets mosaic)
+├── MainYolov1PetsInfer.lean               # detection inference dump → yolo_render.py
 ├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST
 ├── MainCifarDdpmTrain.lean  / Sample      # DDPM on CIFAR-10
 ├── MainCifarDdpmAttnTrain.lean / Sample   # bottleneck-attention variant (codegen ✓, recipe ✗)

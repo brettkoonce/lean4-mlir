@@ -90,14 +90,14 @@ opaque loadImagenetteSized (path : @& String) (imgSize : USize) : IO (ByteArray 
 @[extern "lean_f32_load_pets"]
 opaque loadPets (path : @& String) : IO (ByteArray × ByteArray × Nat)
 
-/-- Pascal VOC 2007 + YOLOv1 loader. Returns `(images_f32_normalized,
+/-- YOLOv1 detection-bin loader (target+mask format; used by Pets). Returns `(images_f32_normalized,
     yLabels_concat, count)` where `yLabels_concat` carries 6076 bytes
     per image: 30×7×7 float32 target (5880 bytes), then 7×7 float32
     mask (196 bytes). The Lean dispatcher (`runTraining`) splits this
     into target + mask before calling `trainStepAdamF32Yolov1`. See
-    `preprocess_voc.py` for the on-disk format. -/
+    `preprocess_pets_mosaic.py` for the on-disk format. -/
 @[extern "lean_f32_load_voc"]
-opaque loadVoc (path : @& String) : IO (ByteArray × ByteArray × Nat)
+opaque loadDetBin (path : @& String) : IO (ByteArray × ByteArray × Nat)
 
 /-- Split an interleaved YOLOv1 batch slice (per-record `[target||mask]`,
     6076 bytes/record) into separately-contiguous target + mask tensors
@@ -105,7 +105,7 @@ opaque loadVoc (path : @& String) : IO (ByteArray × ByteArray × Nat)
     `(target_concat, mask_concat)` with sizes `batch * 5880` and
     `batch * 196` bytes respectively. -/
 @[extern "lean_voc_split_batch"]
-opaque vocSplitBatch (interleaved : @& ByteArray) (batch : USize)
+opaque detSplitBatch (interleaved : @& ByteArray) (batch : USize)
     : IO (ByteArray × ByteArray)
 
 /-- Bbox-aware horizontal flip for a YOLOv1 batch. Per-image p=0.5
@@ -114,7 +114,7 @@ opaque vocSplitBatch (interleaved : @& ByteArray) (batch : USize)
     x_cell channel with `1 - x_cell` on cells where mask=1 (since the
     cell itself mirrors). Returns the augmented (images, target, mask)
     triple as fresh ByteArrays; inputs are not modified.
-    See `planning/yolo_demo_v3.md` Phase 3. LEGACY — superseded by
+    See `planning/yolo_final.md` Phase 3. LEGACY — superseded by
     `yoloAugment` (Phase 3b) which operates on raw bboxes. -/
 @[extern "lean_f32_yolo_hflip"]
 opaque yoloHflip (images : @& ByteArray) (target : @& ByteArray) (mask : @& ByteArray)
@@ -138,7 +138,7 @@ opaque yoloHflip (images : @& ByteArray) (target : @& ByteArray) (mask : @& Byte
     * `seed`: xorshift seed.
 
     Returns `(new_image, new_target, new_mask)` as fresh ByteArrays.
-    See `planning/yolo_demo_v3.md` Phase 3. -/
+    See `planning/yolo_final.md` Phase 3. -/
 @[extern "lean_f32_yolo_augment"]
 opaque yoloAugment (images : @& ByteArray) (boxes : @& ByteArray)
     (batch : USize) (channels : USize) (imgH : USize) (imgW : USize)

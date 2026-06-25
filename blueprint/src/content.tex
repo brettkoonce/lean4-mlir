@@ -4215,7 +4215,7 @@ keep reading through Ch~\ref{chap:attention} (ViT) for the full
 image-classification arc and then run the trainers in
 \texttt{demos/}:
 \begin{verbatim}
-lake exe yolov1-voc-train-bootstrap  # detection (YOLO on Pascal VOC)
+lake exe yolov1-pets-train-bootstrap # detection (YOLO on Pets, cat/dog)
 lake exe unet-pets-train         # segmentation (UNet on Pets)
 lake exe cifar-ddpm-train        # diffusion generative models
 lake exe gradcam                 # explainability
@@ -8264,68 +8264,66 @@ Localize and classify. Detection heads are where the linear
 graph, not a list. The bestiary entries show the single-scale view and
 defer the multi-head refactor to the limitations discussion.
 
-\paragraph{YOLO on VOC persons, in passing.}
-\textbf{[TODO: actually get this working --- the objectness loss still
-needs the focal rebalance described in the third bullet below before the
-rendered boxes are clean. The trajectory and numbers in this paragraph are
-the \emph{target}, not a measured result yet; see
-\texttt{planning/yolo\_v5.md} for the current state.]}
-The \texttt{demos/MainYolov1VocTrainBootstrap.lean} trainer is a
-single-class \emph{person} detector: a ResNet-34 backbone (bootstrapped
-from the repo's ImageNet ResNet-34 checkpoint, \texttt{jax\_r34\_imagenet.bin},
-$\sim$21M backbone params) with a \emph{convolutional} detection head,
-trained on Pascal VOC~2007 filtered to the \texttt{person} class
-($224 \times 224$ RGB $\to$ a $7 \times 7$ prediction grid). After training,
-it draws boxes that track people on held-out validation images (see
-\texttt{demos/README.md} for the rendered grid). Three things change
-relative to the image \emph{classifiers} of Part~2 and the segmentation
-nets above:
+\paragraph{YOLO on Oxford-IIIT Pets.}
+The \texttt{demos/MainYolov1PetsTrainBootstrap.lean} trainer is a cat-vs-dog
+\emph{head} detector: a ResNet-34 backbone (bootstrapped from the repo's
+ImageNet ResNet-34 checkpoint, \texttt{jax\_r34\_imagenet.bin}, $\sim$21M
+backbone params) with a convolutional detection head, trained on
+Oxford-IIIT Pets head boxes ($224 \times 224$ RGB $\to$ a $7 \times 7$
+prediction grid). After training it draws boxes that land on cat and dog
+faces and labels them, on held-out images (see \texttt{demos/README.md} for
+the rendered grid). Three things change relative to the image
+\emph{classifiers} of Part~2 and the segmentation nets above --- and the
+third is the whole lesson:
 
 \begin{itemize}
-  \item \textbf{The label is a variable-length set of boxes, baked onto a
-    grid.} A classifier compares one logit vector to one class; a
-    segmentation net compares per-pixel logits to a per-pixel mask.
-    Detection has a \emph{variable} number of objects per image, each a
-    (class, box). YOLO fixes the shape by tiling the image into a
-    $7 \times 7$ grid and making the cell containing an object's
-    \emph{center} responsible for it: the target tensor carries, per cell,
-    the box center/size, an objectness $=1$, and a class slot --- zero
-    everywhere else. The loss is multi-part (coordinate regression +
-    objectness + class), \emph{masked} to the object cells, riding the
-    \texttt{lossKind := .yolov1Masked} path in \texttt{TrainConfig} ---
-    no new VJP machinery, just the Part~2 squared-error and cross-entropy
-    backwards fired on slices of the grid.
-  \item \textbf{The head is convolutional, and that is load-bearing.} The
-    paper flattens the final feature map into two fully-connected layers
-    (shown in the catalog entry below). This demo uses a $1 \times 1$
-    convolution as the head instead ($512 \to$ per-cell channels over the
-    $7 \times 7$ map). The reason is both pedagogical and practical: an FC
-    head must \emph{learn} the spatial correspondence ``these features
-    $\to$ a box \emph{there}'' through a dense layer, and on a small
-    dataset it collapses to predicting the average box in the image
-    center; the conv head predicts each cell from its \emph{own} feature
-    column with shared weights, so localization is structural rather than
-    learned. (This is precisely the v1$\to$v2 change.)
-  \item \textbf{Class \emph{and} foreground/background imbalance shape the
-    loss.} Two imbalances bite. The first is why this demo is single-class:
-    on full 20-class VOC the network collapses to predicting the dominant
-    ``person'' label everywhere, so we narrow to person-only and let the
-    box head carry the demo. The second is intrinsic --- most of the $49$
-    cells are empty, so a naive objectness term drives every prediction to
-    ``no object''; a \emph{focal}-weighted objectness loss down-weights the
-    easy background cells so the few foreground cells survive. Inference
-    then adds a post-processing step the classifiers never needed:
-    \emph{decode} each cell's box (cell-relative $\to$ absolute), score it
-    (objectness $\times$ class), threshold, and run \emph{non-max
-    suppression} to collapse overlapping boxes (\texttt{scripts/yolo\_render.py}).
+  \item \textbf{The label is a variable-length set of boxes on a grid.} A
+    classifier compares one logit vector to one class; a segmentation net
+    compares per-pixel logits to a per-pixel mask. Detection has a
+    \emph{variable} number of objects per image, each a (class, box). YOLO
+    fixes the shape by tiling the image into a $7 \times 7$ grid and making
+    the cell containing an object's \emph{center} responsible for it: the
+    target tensor carries, per cell, the box center/size, an objectness
+    $=1$, and a class slot --- zero everywhere else. The loss is multi-part
+    (coordinate regression + objectness + class), \emph{masked} to the
+    object cells, riding the \texttt{lossKind := .yolov1Masked} path in
+    \texttt{TrainConfig} --- no new VJP machinery, just the Part~2
+    squared-error and cross-entropy backwards fired on slices of the grid.
+  \item \textbf{The head is convolutional} --- a $1 \times 1$ (here, a
+    $3 \times 3$ then $1 \times 1$) convolution over the $7 \times 7$ map
+    instead of the paper's two fully-connected layers, so each cell
+    predicts from its \emph{own} feature column with shared weights. This
+    makes localization \emph{structural} rather than routed through a dense
+    layer --- necessary, but, as the next point shows, not sufficient.
+  \item \textbf{Detection is hard here because of the data distribution,
+    not the architecture --- and that is the demo's real content.} On a
+    coarse $7 \times 7$ grid, when objects \emph{cluster} (centered people
+    in VOC, centered pet heads in Pets) the loss has a cheap minimum:
+    predict \emph{where objects usually are} (the marginal) instead of
+    localizing each one. The objectness map collapses to a fixed,
+    image-independent center-prior that scores well on average --- and the
+    training loss keeps dropping the whole time, so loss is \emph{not} a
+    proxy for detector quality. The fix is to make the marginal useless:
+    train on a $2 \times 2$ \emph{mosaic} of four pet images, which
+    scatters the heads across the grid (and keeps backgrounds natural ---
+    a flat synthetic canvas pushes the ImageNet backbone out of
+    distribution and regresses). With heads decentered, localization goes
+    from a degenerate $0$ to all heads found. A \emph{second}, independent
+    imbalance is the class label --- Pets is $\sim 1{:}2$ cat:dog, so the
+    class head defaults to always-``dog'' until the mosaic sampler is
+    balanced. Inference then adds a post-processing step the classifiers
+    never needed: \emph{decode} each cell's box (cell-relative $\to$
+    absolute), score it (objectness $\times$ class), threshold, and run
+    \emph{non-max suppression} to collapse overlapping boxes
+    (\texttt{scripts/yolo\_render.py}).
 \end{itemize}
 
 The catalog entry below keeps the paper-exact YOLOv1 \emph{shape} ($448$
 input, FC head, all 20 classes) for the historical record; the working
-demo deliberately narrows to the simplest thing that detects --- one class,
-one scale, conv head --- and defers anchors and the multi-scale FPN heads
-(which don't fit the linear \texttt{NetSpec}) to the limitations
-discussion.
+demo deliberately narrows to the simplest thing that detects --- two
+classes, one scale, conv head, mosaic training --- and defers anchors and
+the multi-scale FPN heads (which don't fit the linear \texttt{NetSpec}) to
+the limitations discussion.
 
 \subsubsection*{YOLO v1/v3/v5/v8/v11 (\texttt{Bestiary/YOLO.lean})}
 v1 (Redmon et al.\ 2016,
@@ -9542,10 +9540,10 @@ it via the JAX dataset handlers that drive the bridge's ImageNet runs
 
 \medskip\noindent\textbf{Demo datasets.} The \texttt{demos/} trainers step past image classification into the
 three other task families in the book --- detection, segmentation, and
-language --- and each pulls a dataset of its own. \textbf{Pascal
-VOC~2007} backs the YOLO detector (\texttt{yolov1-voc-train-bootstrap},
-trained on the \texttt{person} class); \textbf{Oxford-IIIT Pets} backs
-the UNet segmenter (\texttt{unet-pets-train}); and \textbf{tiny
+language --- and each pulls a dataset of its own. \textbf{Oxford-IIIT
+Pets} backs both the UNet segmenter (\texttt{unet-pets-train}, via
+trimaps) and the YOLO detector (\texttt{yolov1-pets-train-bootstrap}, via
+head boxes tiled into $2 \times 2$ mosaics); and \textbf{tiny
 Shakespeare} --- a single 1\,MB character stream --- is what the TinyGPT
 char-level transformer (\texttt{tinygpt-shakespeare}) trains on. Same
 fetch-and-unpack story as the table above, with one extra step: each is
@@ -9558,9 +9556,6 @@ tokenized or tiled into the trainer's input format by the matching
 \hline
 Dataset & Abbrev. & Reference & Homepage & Path in repo \\
 \hline
-Pascal VOC 2007 & VOC07 & Everingham et al., 2010 &
-  \href{http://host.robots.ox.ac.uk/pascal/VOC/voc2007/}{\nolinkurl{host.robots.ox.ac.uk/pascal/VOC/voc2007}} &
-  \texttt{download\_voc.sh} $\to$ \texttt{data/voc2007/} \\[2pt]
 Oxford-IIIT Pets & Pets & Parkhi et al., 2012 &
   \href{https://www.robots.ox.ac.uk/~vgg/data/pets/}{\nolinkurl{robots.ox.ac.uk/~vgg/data/pets}} &
   \texttt{download\_pets.sh} $\to$ \texttt{data/pets/} \\[2pt]
@@ -9575,11 +9570,10 @@ tiny Shakespeare & TShk & Karpathy, 2015 &
 also has a \texttt{preprocess\_*.py} step (e.g.\
 \texttt{preprocess\_shakespeare.py} builds
 \texttt{train.bin}/\texttt{val.bin}/\texttt{vocab.txt}) between download
-and training. Pascal VOC is fetched from the
-\nolinkurl{pjreddie.com} mirror with the official
-\nolinkurl{host.robots.ox.ac.uk} server as fallback; the homepage above
-is the official one. (The repository uses VOC~\textbf{2007}, the
-20-class detection benchmark, not the later 2012 release.)
+and training. For detection, \texttt{preprocess\_pets\_mosaic.py} tiles
+the Pets head boxes into class-balanced $2 \times 2$ mosaics
+(\texttt{data/pets\_mosaic\_bal/}); the same \texttt{download\_pets.sh}
+download feeds both the segmenter and the detector.
 \normalsize
 
 \chapter{Getting started}

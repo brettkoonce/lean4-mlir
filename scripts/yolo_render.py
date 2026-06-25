@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Render YOLOv1 predictions over the val images dumped by yolov1-voc-infer.
+"""Render YOLOv1 predictions over the val images dumped by yolov1-pets-infer.
 
 Reads:
   <dump_dir>/logits.bin    [N, 1470] float32
   <dump_dir>/images.bin    [N, 3, 224, 224] float32 (ImageNet-normalized)
-  <dump_dir>/indices.txt   N lines of VOC test IDs (for labeling only)
+  <dump_dir>/indices.txt   N lines of per-image IDs (for labeling only)
 
 Writes:
   <dump_dir>/grid.png      4x4 (or floor(√N)²) grid with boxes drawn
@@ -26,7 +26,7 @@ Decoding (per cell at grid (i, j) in [0, 7)):
 
 Per-class greedy NMS with IoU > 0.5 dropped; drops detections with score < 0.1.
 
-See planning/yolo_demo_v3.md Phase 5.
+See planning/yolo_final.md Phase 5.
 """
 import argparse
 import math
@@ -173,7 +173,7 @@ def draw_dets(img_rgb, dets, voc_id=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("dump_dir", help="output dir of yolov1-voc-infer (default figures/yolo_voc)")
+    ap.add_argument("dump_dir", help="output dir of yolov1-pets-infer (default figures/yolo_pets)")
     ap.add_argument("--score-thresh", type=float, default=0.1)
     ap.add_argument("--nms-iou", type=float, default=0.5)
     ap.add_argument("--sigmoid-conf", action="store_true",

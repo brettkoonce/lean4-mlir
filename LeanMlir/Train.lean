@@ -97,7 +97,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
   IO.eprintln "Generating train step MLIR..."
   -- Mixup / CutMix / KNN-Mixup produce fractional labels; switch to the soft-label codegen.
   let useSoftLabels := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
-  -- ── Resolve effective LossKind (planning/yolo_demo_v3.md R1) ──
+  -- ── Resolve effective LossKind (planning/yolo_final.md R1) ──
   -- If `cfg.lossKind` is at its default `.classCE`, derive from the
   -- legacy booleans for back-compat with every existing trainer.
   let lossKind : LossKind :=
@@ -135,7 +135,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
       throw <| IO.userError "yolov1Masked is incompatible with useMixup/useCutmix/useKnnMixup — YOLOv1 targets are per-cell float tensors, not class-mixable"
     -- useFocal IS allowed here: for YOLOv1 it selects the sigmoid focal-BCE
     -- objectness path (T3/T4/T5) instead of raw-MSE — the fg/bg imbalance fix
-    -- (planning/yolo_v5.md §3). The class term (T6) stays softmax-CE either way.
+    -- (planning/yolo_final.md §3). The class term (T6) stays softmax-CE either way.
     if useSeg then
       throw <| IO.userError "yolov1Masked is incompatible with segmentation — different target shape ([B,30,7,7] float vs [B,H,W] int32)"
     if cfg.labelSmoothing != 0.0 then
@@ -304,23 +304,21 @@ private def petsIO : DatasetIO where
   loadVal   := fun dir => F32.loadPets (dir ++ "/val.bin")
   augmentBatch := fun raw _ _ => return raw
 
-/-- Pascal VOC 2007 for YOLOv1. 224×224 RGB images; "labels" buffer
-    carries the 30×7×7 float32 target tensor concatenated with the
+/-- YOLOv1 detection (Oxford-IIIT Pets). 224×224 RGB images; the "labels"
+    buffer carries the 30×7×7 float32 target tensor concatenated with the
     7×7 float32 per-cell objectness mask (6076 bytes per record). The
-    `runTraining` dispatch splits this into target + mask before
-    calling `trainStepAdamF32Yolov1`. See `preprocess_voc.py` for the
-    on-disk format and `planning/yolo_demo_v3.md` Phase 2 for the
-    integration plan. Phase 2 ships without bbox-aware augmentation
-    (Phase 3 work). -/
-private def pascalVocIO : DatasetIO where
+    `runTraining` dispatch splits this into target + mask before calling
+    `trainStepAdamF32Yolov1`. See `preprocess_pets_mosaic.py` for the on-disk
+    format and `planning/yolo_final.md` for the recipe. -/
+private def petsDetIO : DatasetIO where
   trainPixels := 3 * 224 * 224
   valPixels   := 3 * 224 * 224
   channels    := 3
   -- Phase 3b layout: target (5880) + mask (196) + numBoxes (4) +
   -- raw_boxes (56 × 20 = 1120) = 7200 bytes/record.
   labelBytesPerRecord := 30 * 7 * 7 * 4 + 7 * 7 * 4 + 4 + 56 * 20
-  loadTrain := fun dir => F32.loadVoc (dir ++ "/train.bin")
-  loadVal   := fun dir => F32.loadVoc (dir ++ "/val.bin")
+  loadTrain := fun dir => F32.loadDetBin (dir ++ "/train.bin")
+  loadVal   := fun dir => F32.loadDetBin (dir ++ "/val.bin")
   augmentBatch := fun raw _ _ => return raw
 
 private def datasetIO : DatasetKind → DatasetIO
@@ -328,7 +326,7 @@ private def datasetIO : DatasetKind → DatasetIO
   | .mnist      => mnistIO
   | .cifar10    => cifar10IO
   | .pets       => petsIO
-  | .pascalVoc  => pascalVocIO
+  | .petsDet  => petsDetIO
   | .imagenet   =>
     -- Phase 3 doesn't yet support full 1000-class ImageNet — the 1.28M
     -- training set needs a C-side streaming reader, not the current
@@ -349,17 +347,17 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let batchN : Nat := cfg.batchSize
   let batch  : USize := cfg.batchSize.toUSize
   let dio := datasetIO ds
-  -- Derive effective LossKind (planning/yolo_demo_v3.md R1). Existing
+  -- Derive effective LossKind (planning/yolo_final.md R1). Existing
   -- callers leave cfg.lossKind at the default .classCE and we infer from
   -- the older booleans + the dataset kind:
-  --   * pascalVoc + useYolov1   → yolov1Masked (target+mask f32 batch dispatch)
+  --   * petsDet + useYolov1   → yolov1Masked (target+mask f32 batch dispatch)
   --   * label record != 4 bytes → perPixelCE  (segmentation; pets path)
   --   * mixup/cutmix/knnMixup   → softLabelCE
   --   * else                    → classCE (with optional useFocal modifier)
   let useSoftLabelsTop := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
   let lossKind : LossKind :=
     if cfg.lossKind != .classCE then cfg.lossKind
-    else if cfg.useYolov1 || ds matches .pascalVoc then .yolov1Masked
+    else if cfg.useYolov1 || ds matches .petsDet then .yolov1Masked
     else if dio.labelBytesPerRecord != 4 then .perPixelCE
     else if useSoftLabelsTop then .softLabelCE
     else .classCE
@@ -437,7 +435,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           | .imagenette => "imagenette"
           | .pets       => "pets"
           | .imagenet   => "imagenet"
-          | .pascalVoc  => "pascal_voc"
+          | .petsDet  => "pets_det"
         let hdr :=
           "{\"kind\":\"header\",\"phase\":\"phase3\"" ++
           s!",\"netspec_name\":\"{spec.name}\"" ++
@@ -608,15 +606,15 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                   --   * cfg.augment := true   → call yoloAugment which applies bbox-aware
                   --     hflip (p=0.5) + random crop (p=0.5, scale [0.8, 1.0]) and
                   --     re-encodes target+mask from the surviving bboxes.
-                  -- Hard-coded 7×7 grid, 30-channel, 20-class VOC layout. See
-                  -- planning/yolo_demo_v3.md Phase 3.
+                  -- Hard-coded 7×7 grid, 30-channel, 20-class detection layout. See
+                  -- planning/yolo_final.md Phase 3.
                   let (xAug, yTgtAug, yMskAug) ← if cfg.augment then
                         F32.yoloAugment xba yArg batch augC.toUSize
                           augH.toUSize augW.toUSize
                           (7 : USize) (7 : USize) (30 : USize) (20 : USize)
                           0.5 0.5 0.8 (stepSeed ^^^ (11 : USize))
                       else do
-                        let (yTgt, yMsk) ← F32.vocSplitBatch yArg batch
+                        let (yTgt, yMsk) ← F32.detSplitBatch yArg batch
                         pure (xba, yTgt, yMsk)
                   IreeSession.trainStepAdamF32Yolov1 sess spec.trainFnName
                     packed allShapes xAug xSh yTgtAug yMskAug lr globalStep.toFloat bnShapes batch
@@ -679,7 +677,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         swagDeviations := swagDeviations.push dev
       swaCount := swaCount + 1
 
-    -- Per-N-epoch checkpoint (planning/yolo_demo_v3.md Phase 4
+    -- Per-N-epoch checkpoint (planning/yolo_final.md Phase 4
     -- infrastructure). Writes params + BN stats with the epoch number
     -- in the filename so a killed training run can pick up from the
     -- last save, OR downstream tasks (e.g. YOLOv1 bootstrap) can borrow
@@ -698,8 +696,8 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
        -- read past the mask buffer.
        IO.eprintln s!"  (seg eval skipped — Phase 0; train loss above is the signal)"
      else if useYolov1Run then
-       -- mAP@0.5 eval for YOLOv1 is Phase 5 work (planning/yolo_demo_v3.md).
-       -- Phase 2 verifies the train step runs + loss drops on real VOC; the
+       -- mAP@0.5 eval for YOLOv1 is Phase 5 work (planning/yolo_final.md).
+       -- the train step runs + loss drops on real detection data; the
        -- classification eval block below would interpret the 1470-flat
        -- output as class logits, which is nonsensical for detection.
        IO.eprintln s!"  (yolov1 eval skipped — Phase 2; train loss above is the signal)"
@@ -885,7 +883,7 @@ def train (spec : NetSpec) (cfg : TrainConfig) (dataDir : String)
   let useSoftLabelsTop := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
   let lossKind : LossKind :=
     if cfg.lossKind != .classCE then cfg.lossKind
-    else if cfg.useYolov1 || ds matches .pascalVoc then .yolov1Masked
+    else if cfg.useYolov1 || ds matches .petsDet then .yolov1Masked
     else if (datasetIO ds).labelBytesPerRecord != 4 then .perPixelCE
     else if useSoftLabelsTop then .softLabelCE
     else .classCE

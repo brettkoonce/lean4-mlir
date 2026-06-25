@@ -267,7 +267,7 @@ deriving Repr
     (`useYolov1`, `useSeg`, `useMixup`/`useCutmix`/`useKnnMixup`) so
     callers don't have to update.
 
-    See `planning/yolo_demo_v3.md` Refactor R1 for the motivation. -/
+    See `planning/yolo_final.md` Refactor R1 for the motivation. -/
 inductive LossKind where
   /-- Default: int32 `[B]` class label, softmax cross-entropy. Compatible
       with `useFocal` (focal modifier) and `labelSmoothing`. -/
@@ -283,7 +283,7 @@ inductive LossKind where
   | floatTargetMse
   /-- YOLOv1: float `[B, perCell, gridH, gridW]` target + float
       `[B, gridH, gridW]` per-cell mask. 5-term masked MSE with √ ε-floor
-      on the box-dim terms (see `planning/yolo_demo_v2.md` Phase 1). -/
+      on the box-dim terms (see `planning/yolo_final.md` Phase 1). -/
   | yolov1Masked
   /-- Binary cross-entropy with logits over multi-hot `[B, NC]` targets —
       timm "ResNet Strikes Back" RSB-A2's loss. Each class is an independent
@@ -448,8 +448,8 @@ structure TrainConfig where
       cost, M× eval cost. -/
   useTTA         : Bool  := false
   ttaSamples     : Nat   := 5
-  /-- YOLOv1 5-term masked-MSE loss. See `planning/yolo_demo_v2.md`
-      Phase 1 + `planning/yolo_demo_v3.md` for integration scope.
+  /-- YOLOv1 5-term masked-MSE loss. See `planning/yolo_final.md`
+      Phase 1 + `planning/yolo_final.md` for integration scope.
       Equivalent to `lossKind := .yolov1Masked`; the bool form predates
       LossKind and is retained for back-compat. -/
   useYolov1      : Bool  := false
@@ -467,7 +467,7 @@ structure TrainConfig where
       match the spec's BN layer count + sizes — true for YOLOv1 loading
       R34 weights since both have identical backbone layers).
 
-      Phase 4 of `planning/yolo_demo_v3.md`. Example for YOLOv1+R34:
+      Phase 4 of `planning/yolo_final.md`. Example for YOLOv1+R34:
       `bootstrapBackbone := some (".lake/build/resnet_34_params.bin", 21284672)`. -/
   bootstrapBackbone : Option (String × Nat) := none
   /-- Save intermediate `{pfx}_params_e{N}.bin` and
@@ -524,7 +524,7 @@ structure TrainConfig where
       for bootstrap fine-tuning where the He-init head must learn input-
       dependence far faster than the backbone should drift — a single LR can't
       do both (head under-trains → collapse-to-marginal; raise it globally and
-      the backbone destabilizes). e.g. YOLOv1-VOC uses ~10. -/
+      the backbone destabilizes). e.g. YOLOv1 detection uses ~10. -/
   headLrMult : Float := 1.0
 deriving Repr
 
@@ -534,14 +534,13 @@ inductive DatasetKind where
   | imagenette
   | pets
   | imagenet
-  /-- Pascal VOC 2007 for YOLOv1 detection (trainval: 5011 images, test:
-      4952). Images are 224×224×3 (resized at preprocess time, ImageNet-
-      normalized on Lean read). Labels carry the YOLOv1 target tensor +
+  /-- YOLOv1 detection on Oxford-IIIT Pets (cat/dog head boxes, tiled into
+      2×2 mosaics). Images are 224×224×3 (resized at preprocess time,
+      ImageNet-normalized on Lean read). Labels carry the YOLOv1 target tensor +
       per-cell mask concatenated as 6076 bytes/image. See
-      `planning/yolo_demo_v2.md` Phase 1 + `planning/yolo_demo_v3.md`
-      Phase 2 for the on-disk format. Only valid with
-      `lossKind := .yolov1Masked` (or `useYolov1 := true`). -/
-  | pascalVoc
+      `planning/yolo_final.md` and `preprocess_pets_mosaic.py` for the on-disk
+      format. Only valid with `lossKind := .yolov1Masked` (or `useYolov1 := true`). -/
+  | petsDet
 deriving Repr, BEq
 
 /-- IREE compile flags from environment. Defaults to CUDA (sm_86).

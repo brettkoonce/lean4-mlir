@@ -262,10 +262,10 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     -- doesn't currently emit a segmentation loss/train loop, so this
     -- branch is unreachable at runtime; keep it stubbed for exhaustivity.
     "# Pets segmentation is phase-3-only; phase 2 emits nothing for .pets.\n\n"
-  | .pascalVoc =>
-    -- YOLOv1/Pascal VOC detection is phase-3-only (see planning/yolo_demo_v3.md).
+  | .petsDet =>
+    -- YOLOv1/detection is phase-3-only (see planning/yolo_final.md).
     -- JAX codegen has no detection emit; stub for exhaustivity.
-    "# Pascal VOC detection is phase-3-only; phase 2 emits nothing for .pascalVoc.\n\n"
+    "# detection is phase-3-only; phase 2 emits nothing for .petsDet.\n\n"
   | .imagenet =>
     -- ImageNet (full 1000-class, 1.28M training, 50K val) — streaming
     -- pipeline via TFDS + tf.data. Requires `tensorflow` and
@@ -1557,7 +1557,7 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
 -- `params` list, and writes the constituent tensors as float32 bytes. The
 -- on-disk byte order matches LeanMlir.SpecHelpers.paramShapes exactly, so a
 -- file written here drops into the phase-3 Lean trainer's `bootstrapBackbone`
--- prefix-loader without conversion. See planning/yolo_demo_v3.md Phase 4.
+-- prefix-loader without conversion. See planning/yolo_final.md Phase 4.
 private def emitParamsToFile (spec : NetSpec) : String := Id.run do
   let mut code := "def params_to_file(params, path):\n"
   code := code ++ "    \"\"\"Mirror of init_params_from_file. Walks the JAX `params`\n"
@@ -2206,9 +2206,9 @@ private def emitDataLoadCalls (ds : DatasetKind) (dataDir : String) (spec : NetS
   | .pets =>
     -- Phase-3-only kind. Stub for exhaustivity.
     "    raise RuntimeError(\"phase 2 doesn't emit a pets/segmentation trainer\")\n\n"
-  | .pascalVoc =>
+  | .petsDet =>
     -- Phase-3-only kind. Stub for exhaustivity.
-    "    raise RuntimeError(\"phase 2 doesn't emit a pascalVoc/detection trainer\")\n\n"
+    "    raise RuntimeError(\"phase 2 doesn't emit a petsDet/detection trainer\")\n\n"
   | .imagenet =>
     -- Streaming: no upfront load. Just record the canonical example counts
     -- (tfds knows them too, but we don't need to round-trip through it for
@@ -2577,7 +2577,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
                                 | .cifar10 => "'cifar10'"
                                 | .imagenette => "'imagenette'"
                                 | .pets => "'pets'"
-                                | .pascalVoc => "'pascal_voc'"
+                                | .petsDet => "'pets_det'"
                                 | .imagenet => "'imagenet'") ++ ",\n" ++
   "            'emitter_version': '1',\n" ++
   "        }\n" ++

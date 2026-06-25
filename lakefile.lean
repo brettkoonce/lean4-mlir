@@ -798,20 +798,15 @@ lean_exe «cifar-ddpm-sincos-sample» where
   root := `demos.MainCifarDdpmSincosSample
   moreLinkArgs := ireeLink
 
--- YOLOv1 Phase 2: Pascal VOC 2007 smoke trainer.
--- See planning/yolo_demo_v3.md Phase 2.
-lean_exe «yolov1-voc-train» where
-  root := `demos.MainYolov1VocTrain
+-- YOLOv1 cat/dog head detector on Oxford-IIIT Pets (2×2 mosaic, R34 backbone
+-- bootstrap, focal objectness). See planning/yolo_final.md.
+lean_exe «yolov1-pets-train-bootstrap» where
+  root := `demos.MainYolov1PetsTrainBootstrap
   moreLinkArgs := ireeLink
 
--- YOLOv1 Phase 4: bootstrap from R34-Imagenette pretrained backbone.
-lean_exe «yolov1-voc-train-bootstrap» where
-  root := `demos.MainYolov1VocTrainBootstrap
-  moreLinkArgs := ireeLink
-
--- YOLOv1 Phase 5: inference dump (logits + images + IDs) for Python viz.
-lean_exe «yolov1-voc-infer» where
-  root := `demos.MainYolov1VocInfer
+-- Inference dump (logits + images + IDs) for scripts/yolo_render.py.
+lean_exe «yolov1-pets-infer» where
+  root := `demos.MainYolov1PetsInfer
   moreLinkArgs := ireeLink
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -926,7 +921,7 @@ lean_exe «test-focal-emit» where
   root := `tests.TestFocalEmit
   moreLinkArgs := ireeLink
 
--- YOLOv1 Phase 1 tests (planning/yolo_demo_v2.md decisions D10-D11).
+-- YOLOv1 Phase 1 tests (planning/yolo_final.md decisions D10-D11).
 lean_exe «test-yolov1-emit» where
   root := `tests.TestYolov1Emit
   moreLinkArgs := ireeLink
