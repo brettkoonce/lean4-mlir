@@ -23,7 +23,7 @@ below, each independently audited (3-axiom clean).
 |---|---|---|---|
 | linear / MLP (all 3 layers) | ✅ | ✅ | ✅ CLOSED (committed 39f05f9) |
 | **CNN conv2 `W₂`** | `cnn_conv2_grad_close` ✅ | `cnn_conv2_float_sgd_descends` ✅ | ✅ CLOSED (Increments 1–3) |
-| **CNN conv1 `W₁`** | `cnn_conv1_grad_close` ❌ | `cnn_conv1_sgd_descends` ✅ | OPEN (Increment 4 — one layer deeper) |
+| **CNN conv1 `W₁`** | `cnn_conv1_grad_close` ✅ | `cnn_conv1_float_sgd_descends` ✅ | ✅ CLOSED (Increment 4) |
 | CNN conv2/1 **bias** | `cnn_conv{2,1}_bias_grad_close` ❌ | `cnn_conv{2,1}_bias_sgd_descends` ✅ | OPEN (strictly easier; optional) |
 | deep nets / joint step | — | — | OUT OF SCOPE (honest stop) |
 
@@ -181,10 +181,35 @@ conv2-kernel SGD step provably decreases the cross-entropy loss"** with the grad
   doc-comment, not after — the `open … in` must precede the `/-- -/`). All 3 decls in
   `tests/AuditAxioms.lean`; build + coverage clean. *Effort: medium (mostly transcription).*
 
-**Increment 4 — conv1** (`cnn_conv1_grad_close` → `cnn_conv1_float_sgd_descends`). One layer
-deeper: the cotangent runs back through conv2-as-input as well (locality, not spatial count —
-`convTap`, `cnn1_*` machinery; see `planning/sgd_descent_cnn.md`). Reuse Increment 1–3 wholesale.
-*Effort: high.*
+**Increment 4 — conv1. ✅ DONE (3-axiom clean, audited).** The deepest rung —
+`cnn_conv1_grad_close` → `cnn_conv1_float_sgd_descends`, one conv-backward deeper than conv2.
+Landed (in dependency order):
+- `cnn_conv1_loss_gradAt_reluMask` (the bridge — reuses `head3_cot_reluMask` one level deeper, built first try).
+- `FloatModel.cnnConv1FloatGrad` (+ `_apply`), `FloatModel.cnnConv1GradBudget`.
+- **Factored conv-2 cotangent chain** (the key reuse move): `FloatModel.cnnConv2CotBudget` (the `e₂`),
+  `FloatModel.cnnConv2CotMag` (the real cot magnitude `CP`), `cnn_conv2_cot_close` (Increment 2's chain,
+  generalised to a conv-2 input `X2`/`X2F` with `|X2F−X2| ≤ eX2`), `cnn_conv2_cot_real_abs_le`. The conv-1
+  rung instantiates `X2 = relu(z₁)`, `X2F = relu(z̃₁)`, `eX2 = E₁` — the conv-2 input is FLOAT, so
+  `cnn_conv2_grad_close` (which assumes an exact conv-2 input) can't be reused directly; the factored
+  closeness lemma can.
+- **Conv-2 backward as a rounded tap-dot**: `convTap_back_close` / `convTap_back_abs_le` (generic in the
+  cotangent tensors), via `convTap_abs_le` (the per-tap `≤ w₂` bound) + `sum_t3` (flattening) + the
+  `dot_perturbed_close` core (fan-in `c·(2h)·(2w)`). Plus `abs_le_of_close` (float mag = real mag + drift).
+- `cnn_conv1_grad_close` — forward (conv-1 `convF_close` → `cnn_conv2_cot_close` at the float input) →
+  conv-2 backward (`convTap_back_close`) → conv-1 ReLU mask (`mask_scalar_close`) → conv-1 weight dot
+  (`dot_perturbed_close`). The per-cell facts are stated via the **helpers** (which infer the cotangent
+  tensors by higher-order unification from the magnitude/closeness hyps) so the giant cells are never
+  re-typed in `have`s.
+- `cnn_conv1_float_sgd_descends` — the wiring (5 round + 5 step margins + `hsmall`/`h1`/`h2`, η := budget,
+  built first try — budget-as-def keeps the carried hyps compact).
+- **Gotchas:** the float-grad def's deepest softmax needs **13** closes before `label` (4 more than conv2,
+  for the `unflatten(relu(flatten(convF conv1)))` conv-2-input wrapper) — `awk … tr -cd '()'` cumulative
+  check pinned it; a `softmax nC (… conv2d W₂ …) k` head inside a `fun k =>` generalised `conv2d`'s
+  `kH`/`kW` over `k` (metavar `?m k`) — the real cause was a **missing `W₂` parameter declaration** (auto-bound
+  with a metavar type), NOT the fun-k (a clean reminder to declare every kernel param explicitly);
+  `cnnConv2CotMag` doesn't auto-unfold for `exact` nonneg goals → `rw [cnnConv2CotMag]` first. All 15
+  new decls in `tests/AuditAxioms.lean`; build + coverage clean. *Effort: high, as estimated (the single
+  largest proof in the program).*
 
 **Increment 5 (optional) — the conv biases.** Strictly easier (bias is affine, no `a`, no kernel
 mass; `conv2d_bias_pdiv` is the Kronecker channel indicator). Same chain with `a·‖e‖₁ ↦ ‖e‖₁`.

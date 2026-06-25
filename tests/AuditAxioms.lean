@@ -2034,8 +2034,38 @@ open Proofs
 #print axioms cnn1_pool_head_input_grad
 #print axioms cnn_conv1_loss_differentiableAt
 #print axioms cnn_conv1_loss_gradAt
+-- Float-bridge §3 (CNN descent, Increment 4 keystone): the certified conv-1
+-- gradient restated in dense/reluMask form — one conv-backward deeper than the
+-- conv-2 bridge. The 3-dense head collapses via head3_cot_reluMask (reused),
+-- the conv-1/conv-2 ReLU masks, the convTap conv-2 backward and the pool
+-- selector stay explicit, packaged as the spatial dot ∑ convPadWin x₀·cotWin.
+#print axioms cnn_conv1_loss_gradAt_reluMask
 #print axioms cnn_conv1_loss_grad_lipschitz
 #print axioms cnn_conv1_sgd_descends
+-- Float-bridge §3 (CNN descent, Increment 4): the conv-1 rung CLOSED. The
+-- binary32 W₁ gradient (cnnConv1FloatGrad — the M.dot of convPadWin x₀ with
+-- the conv-1-output cotangent, which is the conv-1 ReLU mask times the rounded
+-- conv-2 backward M.dot of the convTap slab against the float conv-2 cotangent)
+-- is within cnnConv1GradBudget of the certified gradient (cnn_conv1_grad_close),
+-- and one binary32 W₁ SGD step provably decreases the loss with the accuracy
+-- PROVEN (cnn_conv1_float_sgd_descends). The conv-2 cotangent chain is FACTORED
+-- (cnn_conv2_cot_close / cnn_conv2_cot_real_abs_le, parameterised by the conv-2
+-- input) and reused at a FLOAT conv-2 input relu(z̃₁); the conv-2 backward is a
+-- generic rounded tap-dot (convTap_back_close / convTap_back_abs_le, via
+-- convTap_abs_le + the dot_perturbed_close core).
+#print axioms convTap_abs_le
+#print axioms FloatModel.cnnConv2CotBudget
+#print axioms FloatModel.cnnConv2CotMag
+#print axioms cnn_conv2_cot_close
+#print axioms cnn_conv2_cot_real_abs_le
+#print axioms abs_le_of_close
+#print axioms convTap_back_close
+#print axioms convTap_back_abs_le
+#print axioms FloatModel.cnnConv1FloatGrad
+#print axioms FloatModel.cnnConv1FloatGrad_apply
+#print axioms FloatModel.cnnConv1GradBudget
+#print axioms cnn_conv1_grad_close
+#print axioms cnn_conv1_float_sgd_descends
 -- The conv BIAS rungs (SgdDescentCnn.lean): conv2d is affine in its
 -- bias with the simplest possible Jacobian — a Kronecker channel
 -- indicator (conv2d_bias_pdiv, extracted from the certified bias VJP
