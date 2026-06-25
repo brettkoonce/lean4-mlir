@@ -1332,6 +1332,11 @@ open Proofs
 #print axioms rsqrt_lipschitz
 #print axioms bnVar_nonneg
 #print axioms bnIstd_close
+-- bnIstd_close at the OPERATING POINT: the 1/√ Lipschitz floor is a variance lower
+-- bound V ≤ σ²+ε (not ε), so the istd budget is ers/√V + evar/(2V√V). Since measured
+-- σ² is O(1) (never near 0), this is ~(σ²/ε)^{3/2} ≈ 1e7× tighter than the ε-floor
+-- bnIstd_close — the non-vacuous BN certificate (scripts/cifar_bn_margin_probe.py).
+#print axioms bnIstd_close_at
 -- BN float tail (BnFloatBridge.lean): the full per-example bnForward closeness,
 -- composed from the keystone. bnMean_close / bnVar_close are the mean/variance
 -- Higham reductions (sum_close fan-in + per-term mul_close + division rounding);

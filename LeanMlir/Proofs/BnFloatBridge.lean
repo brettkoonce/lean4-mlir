@@ -105,6 +105,39 @@ theorem bnIstd_close {n : ℕ} {ε ers evar fvarε : ℝ} (x : Vec n)
         abs_sub_le _ _ _
     _ ≤ ers / Real.sqrt ε + evar / (2 * ε * Real.sqrt ε) := add_le_add ht1 ht2
 
+/-- **BN inverse-stddev budget at the OPERATING POINT (a-posteriori).** Identical
+    to `bnIstd_close`, but the `1/√` Lipschitz floor is a *variance lower bound*
+    `V ≤ σ²+ε` (both float and real), not the `ε`-floor. `rsqrt_lipschitz` is
+    floor-agnostic, so the bound becomes `ers/√V + evar/(2V√V)` — and since the
+    measured `σ²` is `O(1)` (never near 0), `V ≈ σ²+ε ≫ ε` makes this ~`(σ²/ε)^{3/2}`
+    tighter than the `ε`-floor `bnIstd_close` (empirically ~10⁷× on the CIFAR-BN
+    probe, `scripts/cifar_bn_margin_probe.py`). The non-vacuous BN certificate. -/
+theorem bnIstd_close_at {n : ℕ} {ε ers evar fvarε V : ℝ} (x : Vec n)
+    (fistd : ℝ → ℝ) (hV0 : 0 < V) (hers : 0 ≤ ers)
+    (hVfv : V ≤ fvarε) (hVbn : V ≤ bnVar n x + ε)
+    (hrs : |fistd fvarε - 1 / Real.sqrt fvarε| ≤ ers * (1 / Real.sqrt fvarε))
+    (hclose : |fvarε - (bnVar n x + ε)| ≤ evar) :
+    |fistd fvarε - bnIstd n x ε| ≤
+      ers / Real.sqrt V + evar / (2 * V * Real.sqrt V) := by
+  have hsV : 0 < Real.sqrt V := Real.sqrt_pos.mpr hV0
+  -- term 1: rsqrt accuracy, lifted from 1/√fvarε up to 1/√V (fvarε ≥ V)
+  have hinv : 1 / Real.sqrt fvarε ≤ 1 / Real.sqrt V :=
+    one_div_le_one_div_of_le hsV (Real.sqrt_le_sqrt hVfv)
+  have ht1 : |fistd fvarε - 1 / Real.sqrt fvarε| ≤ ers / Real.sqrt V := by
+    calc |fistd fvarε - 1 / Real.sqrt fvarε| ≤ ers * (1 / Real.sqrt fvarε) := hrs
+      _ ≤ ers * (1 / Real.sqrt V) := mul_le_mul_of_nonneg_left hinv hers
+      _ = ers / Real.sqrt V := by rw [mul_one_div]
+  -- term 2: the variance shift through rsqrt_lipschitz at floor V (not ε)
+  have ht2 : |1 / Real.sqrt fvarε - bnIstd n x ε| ≤ evar / (2 * V * Real.sqrt V) := by
+    unfold bnIstd
+    calc |1 / Real.sqrt fvarε - 1 / Real.sqrt (bnVar n x + ε)|
+        ≤ |fvarε - (bnVar n x + ε)| / (2 * V * Real.sqrt V) := rsqrt_lipschitz hV0 hVfv hVbn
+      _ ≤ evar / (2 * V * Real.sqrt V) := by gcongr
+  calc |fistd fvarε - bnIstd n x ε|
+      ≤ |fistd fvarε - 1 / Real.sqrt fvarε| + |1 / Real.sqrt fvarε - bnIstd n x ε| :=
+        abs_sub_le _ _ _
+    _ ≤ ers / Real.sqrt V + evar / (2 * V * Real.sqrt V) := add_le_add ht1 ht2
+
 -- ════════════════════════════════════════════════════════════════
 -- § The normalize chain: BN forward closeness given mean + istd errors
 -- ════════════════════════════════════════════════════════════════
