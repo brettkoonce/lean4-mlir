@@ -71,6 +71,7 @@ import LeanMlir.Proofs.BnFloatBridge
 import LeanMlir.Proofs.Resnet34FloatBridge
 import LeanMlir.Proofs.BnInputBridge
 import LeanMlir.Proofs.Resnet34BlockBridge
+import LeanMlir.Proofs.FloatComposeBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1374,6 +1375,37 @@ open Proofs
 -- carried through relu_close. The full residual block chains this with flatConvF_close
 -- (each conv) and reluAdd_close (the skip) — same parts, no new numerical content.
 #print axioms FloatModel.bnRelu_close
+-- Whole-net certificate backbone (FloatComposeBridge.lean): FloatClose packages
+-- magnitude propagation + an input-error→output-error modulus, and FloatClose.comp
+-- proves it COMPOSES (moduli ∘, magnitudes thread A→B→C) — so a whole net is
+-- FloatClose with the folded modulus, no per-net re-proof. Instances: floatClose_relu
+-- (exact, modulus id), floatClose_flatConv (conv layerBudget modulus); floatClose_reluConv
+-- = (conv).comp(relu), the composed demo. BN/maxpool/skip slot in the same way.
+#print axioms FloatClose.comp
+#print axioms floatClose_relu
+#print axioms floatClose_flatConv
+#print axioms floatClose_reluConv
+-- THE FOLD: floatClose_maxPool (exact, id modulus) + floatClose_cifarStage — a whole
+-- CIFAR stage conv→relu→conv→relu→maxpool folded through .comp into one FloatClose
+-- (∃ propagated magnitude B and composed error modulus L). The whole r34 net is this
+-- same fold at scale, with the BN/skip instances slotted in. No bespoke per-net proof.
+#print axioms floatClose_maxPool
+#print axioms floatClose_cifarStage
+-- The r34 wraps that let the fold RUN on a real block: floatClose_residualBlock (the
+-- branching skip combinator, relu(F(x)+x) via reluAdd_close), floatClose_resBlock (a
+-- whole no-BN basic block conv→relu→conv→skip→relu folded), and floatClose_bnRelu
+-- (BN→relu as a FloatClose, error from bnRelu_close, float-magnitude from
+-- bnForward_close_of). With these the r34 identity block folds entirely through .comp.
+#print axioms floatClose_residualBlock
+#print axioms floatClose_resBlock
+#print axioms floatClose_bnRelu
+-- THE FINAL FOLD: floatClose_id + floatClose_iterate (a magnitude-stable block iterated
+-- to any depth is FloatClose, modulus L^[n]) — the depth-generic whole-net certificate;
+-- floatClose_r34_stages instantiates it at r34's [3,4,6,3] stage depths. The full
+-- r34_float_close is these iterates .comp the stem / downsamples / GAP / dense.
+#print axioms floatClose_id
+#print axioms floatClose_iterate
+#print axioms floatClose_r34_stages
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.

@@ -208,6 +208,9 @@ lean_lib «Proofs» where
              -- first assembled ResNet block step: relu(BN(·)) at a perturbed BN
              -- input = rounding (bnForward_close_of) + input-shift (bnForward_input_close).
              `LeanMlir.Proofs.Resnet34BlockBridge,
+             -- whole-net certificate backbone: FloatClose composes (moduli ∘, magnitudes
+             -- thread) — the whole net is the fold of per-op budgets.
+             `LeanMlir.Proofs.FloatComposeBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent
