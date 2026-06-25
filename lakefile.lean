@@ -202,6 +202,9 @@ lean_lib «Proofs» where
              -- residual additive fan-in float closeness (add_close / reluAdd_close)
              -- — the new structural op toward the ResNet-34 float bridge.
              `LeanMlir.Proofs.Resnet34FloatBridge,
+             -- real-BN input-sensitivity (mean/var/istd/forward Lipschitz) — the
+             -- per-block composition enabler (the float BN's input is perturbed).
+             `LeanMlir.Proofs.BnInputBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

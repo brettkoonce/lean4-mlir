@@ -69,6 +69,7 @@ import LeanMlir.Proofs.SgdDescentCnn
 import LeanMlir.Proofs.CifarFloatBridge
 import LeanMlir.Proofs.BnFloatBridge
 import LeanMlir.Proofs.Resnet34FloatBridge
+import LeanMlir.Proofs.BnInputBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1352,6 +1353,15 @@ open Proofs
 #print axioms FloatModel.flatConvStride2F_close
 #print axioms FloatModel.bnPerChannelFlat_close_of
 #print axioms FloatModel.gapFlat_close
+-- Real-BN input-sensitivity (BnInputBridge.lean): the per-block composition enabler.
+-- bnForward_close_of compares float/real BN at the SAME input (rounding only); in a
+-- block the BN input is itself the perturbed float activation, so composition needs
+-- how real bnForward moves with its input — the Lipschitz chain mean→var→istd (via
+-- rsqrt_lipschitz)→forward. With it, per-block float closeness = rounding + this shift.
+#print axioms bnMean_input_close
+#print axioms bnVar_input_close
+#print axioms bnIstd_input_close
+#print axioms bnForward_input_close
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.
