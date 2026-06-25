@@ -1954,6 +1954,25 @@ open Proofs
 #print axioms dense_transpose_eq
 #print axioms head3_cot_reluMask
 #print axioms cnn_conv2_loss_gradAt_reluMask
+-- Float-bridge §3 (CNN descent, Increment 2): the binary32 conv-2 weight
+-- gradient (cnnConv2FloatGrad — the M.dot of convPadWin with the float
+-- conv-output cotangent slab) is within cnnConv2GradBudget of the certified
+-- gradient (cnn_conv2_grad_close), the project's deepest float-backward
+-- grad-close. Two reusable cores: mask_scalar_close (the scalar 𝟙[z>0]·x peer
+-- of reluMask_close) and FloatModel.dot_perturbed_close (the float dot against
+-- a perturbed cotangent — Higham γ on A·B̃ plus the per-entry drift); plus
+-- t3Idx_surj to lift per-cell conv bounds to ∀ k. The chain runs the float
+-- forward (convF_close → dense_close, relu/pool error-transparent), the head
+-- (softmax_ce_cot_close), two cot_step_close (W₅/W₄), the unmasked W₃
+-- dense_close, the pool-back freeze (poolBack_close) and conv-mask freeze
+-- (mask_scalar_close), closed by dot_perturbed_close.
+#print axioms t3Idx_surj
+#print axioms mask_scalar_close
+#print axioms FloatModel.dot_perturbed_close
+#print axioms FloatModel.cnnConv2FloatGrad
+#print axioms FloatModel.cnnConv2FloatGrad_apply
+#print axioms FloatModel.cnnConv2GradBudget
+#print axioms cnn_conv2_grad_close
 #print axioms cnn_pool_l1_drift
 #print axioms cnn_conv2_logit_drift
 #print axioms cnn_margin2_keeps_offkink

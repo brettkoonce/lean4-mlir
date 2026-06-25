@@ -131,15 +131,31 @@ hgh : ∀ idx, |gh idx − gradAt (loss-of-W₂) (Kernel4.flatten W₂) idx| ≤
   `check_audit_coverage.py` passes. *(Effort was medium-high, as estimated.)*
 Land + audit before touching the grad-close. *Effort: medium-high (the bridge plumbing).*
 
-**Increment 2 — `cnn_conv2_grad_close`.** Mirror `mlp_w0_grad_close` (the model), extended:
-- float forward chain (copy `cnn_float_close`'s `set A_/E_` skeleton) → `z̃_conv`, `z̃₃`, `z̃₄`, `z̃₅`;
-- head (`softmax_ce_cot_close`) → `cot_step_close` (W₅ᵀ, z̃₄ mask) → `cot_step_close` (W₄ᵀ, z̃₃ mask)
-  → plain `dense_close` (W₃ᵀ, no mask — pool feeds it) → pool-backward close (Increment 1) under
-  the conv-output rounding margin → `reluMask_close` (z_conv) → `dot_close` (conv correlation,
-  fan-in `h·w`, cotangent error `ecot`);
-- output via the bridge so the RHS is the certified `gradAt`.
-Budget `η = (Higham γ at fan-in h·w)·(a · ecot-magnitude) + …` — derive it from the chain.
-*Effort: high (≈250–400 lines, tensor-index plumbing).*
+**Increment 2 — `cnn_conv2_grad_close`. ✅ DONE (3-axiom clean, audited).**
+Mirrors `mlp_w0_grad_close`, deeper by the pool + the dot. Landed:
+- `FloatModel.cnnConv2FloatGrad` (+ `_apply`) — the rendered trainer's `W₂` gradient =
+  `M.dot (convPadWin x₁) (cotWin c̃Conv o)`, the float conv-output cotangent rounding every step.
+- `FloatModel.cnnConv2GradBudget` — the closed-form `η` as a `let`-nest **def** (NOT inlined —
+  the deep nest is far less error-prone named once; the final `exact dot_perturbed_close` closes
+  by defeq after `simp only [cnnConv2GradBudget]`).
+- `cnn_conv2_grad_close` — `|cnnConv2FloatGrad … (k4Idx o cc kh kw) − gradAt …| ≤ cnnConv2GradBudget`.
+  States against `gradAt` directly and applies the bridge **inside** (cleaner than the MLP's
+  separate-bridge split). Chain exactly as planned: forward (`convF_close`→`dense_close`×3, relu/pool
+  error-transparent) → head `softmax_ce_cot_close` → `cot_step_close`×2 (W₅/W₄) → unmasked W₃
+  `dense_close` → `poolBack_close` (Inc 1) → `mask_scalar_close` (conv ReLU mask) → `dot_perturbed_close`.
+- Two **reusable cores** + one helper, all generic & landed first: `mask_scalar_close` (scalar
+  `𝟙[z>0]·x` peer of `reluMask_close`), `FloatModel.dot_perturbed_close` (float dot vs perturbed
+  cotangent: `dot_close` Higham γ on `A·B̃` + per-entry drift `∑|A|·eB`), `t3Idx_surj` (lift per-cell
+  conv bounds to `∀ k`).
+- **Four margins carried** as hypotheses: conv-output `Econv`, pool `Econv` (POST-relu,
+  `MaxPool2MarginQ`), z̃₃ `E₃`, z̃₄ `E₄`. Conv-2 input `x₁` is **exact** (the MLP `x`-exact pattern).
+- **Gotchas learned:** the giant float-cotangent def is paren-fragile (the deepest softmax needs 9
+  closes through `M.dense W₅ b₅` before `label`, not 8 — use the `awk … tr -cd '()'` per-line cumulative
+  check); `softmax_nonneg`/`softmax_le_one` are **private** in FloatBridge — unfold softmax = `exp/∑exp`
+  (the MLP `hC2` route) instead; derive the bridge's `hz2/hz3/hz4` off-kink hyps from the margins via
+  `abs_pos.mp (lt_of_le_of_lt E_nn (hmargin …))` (NOT `rw [hl] at this` — `set` hides the expr behind
+  its name so the rewrite pattern is gone). All 7 decls in `tests/AuditAxioms.lean`; build + coverage clean.
+- *(Effort was high, ≈260 lines for the theorem, as estimated.)*
 
 **Increment 3 — `cnn_conv2_float_sgd_descends`** (the wiring). Mirror `mlp_input_float_sgd_descends`:
 `set η`, prove `0 ≤ η`, derive the off-kink `hz*` from the rounding margins, discharge `hgh` via
