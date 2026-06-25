@@ -205,6 +205,9 @@ lean_lib «Proofs» where
              -- real-BN input-sensitivity (mean/var/istd/forward Lipschitz) — the
              -- per-block composition enabler (the float BN's input is perturbed).
              `LeanMlir.Proofs.BnInputBridge,
+             -- first assembled ResNet block step: relu(BN(·)) at a perturbed BN
+             -- input = rounding (bnForward_close_of) + input-shift (bnForward_input_close).
+             `LeanMlir.Proofs.Resnet34BlockBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

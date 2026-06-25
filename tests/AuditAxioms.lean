@@ -70,6 +70,7 @@ import LeanMlir.Proofs.CifarFloatBridge
 import LeanMlir.Proofs.BnFloatBridge
 import LeanMlir.Proofs.Resnet34FloatBridge
 import LeanMlir.Proofs.BnInputBridge
+import LeanMlir.Proofs.Resnet34BlockBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1362,6 +1363,12 @@ open Proofs
 #print axioms bnVar_input_close
 #print axioms bnIstd_input_close
 #print axioms bnForward_input_close
+-- First assembled ResNet block step (Resnet34BlockBridge.lean): relu(BN(·)) where the
+-- BN input is the perturbed float activation — the composition split made concrete:
+-- bnRelu_close = rounding (bnForward_close_of) + input-shift (bnForward_input_close),
+-- carried through relu_close. The full residual block chains this with flatConvF_close
+-- (each conv) and reluAdd_close (the skip) — same parts, no new numerical content.
+#print axioms FloatModel.bnRelu_close
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.
