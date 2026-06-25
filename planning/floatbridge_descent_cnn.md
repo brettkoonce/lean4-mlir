@@ -22,8 +22,8 @@ below, each independently audited (3-axiom clean).
 | rung | grad-close (η source) | descent wiring (abstract η ✅) | status |
 |---|---|---|---|
 | linear / MLP (all 3 layers) | ✅ | ✅ | ✅ CLOSED (committed 39f05f9) |
-| **CNN conv2 `W₂`** | `cnn_conv2_grad_close` ❌ | `cnn_conv2_sgd_descends` ✅ | OPEN ← this doc |
-| **CNN conv1 `W₁`** | `cnn_conv1_grad_close` ❌ | `cnn_conv1_sgd_descends` ✅ | OPEN (one layer deeper) |
+| **CNN conv2 `W₂`** | `cnn_conv2_grad_close` ✅ | `cnn_conv2_float_sgd_descends` ✅ | ✅ CLOSED (Increments 1–3) |
+| **CNN conv1 `W₁`** | `cnn_conv1_grad_close` ❌ | `cnn_conv1_sgd_descends` ✅ | OPEN (Increment 4 — one layer deeper) |
 | CNN conv2/1 **bias** | `cnn_conv{2,1}_bias_grad_close` ❌ | `cnn_conv{2,1}_bias_sgd_descends` ✅ | OPEN (strictly easier; optional) |
 | deep nets / joint step | — | — | OUT OF SCOPE (honest stop) |
 
@@ -157,13 +157,29 @@ Mirrors `mlp_w0_grad_close`, deeper by the pool + the dot. Landed:
   its name so the rewrite pattern is gone). All 7 decls in `tests/AuditAxioms.lean`; build + coverage clean.
 - *(Effort was high, ≈260 lines for the theorem, as estimated.)*
 
-**Increment 3 — `cnn_conv2_float_sgd_descends`** (the wiring). Mirror `mlp_input_float_sgd_descends`:
-`set η`, prove `0 ≤ η`, derive the off-kink `hz*` from the rounding margins, discharge `hgh` via
-`grad-close + bridge`, `exact cnn_conv2_sgd_descends … hη0 hgh hm2 hmq hm3 hm4 hsmall h1 h2`.
-**The wiring hypotheses are enormous** (`hsmall`/`h1`/`h2` are ~60 lines *each* in the abstract
-theorem, and the inlined budget η balloons them) — this is the paren-fragility minefield. Use the
-per-binder `awk … | tr -cd '()'` balance check religiously (see gotchas). *Effort: high (mostly
-transcription + paren bookkeeping).*
+**Increment 3 — `cnn_conv2_float_sgd_descends`. ✅ DONE (3-axiom clean, audited).**
+The wiring, mirroring `mlp_input_float_sgd_descends`: prove `0 ≤ cnnConv2GradBudget`, derive the
+flattened-kernel bound (`hv2` via `flatten_k4Idx` + `k4Idx_surj`), discharge `hgh` per kernel
+entry (`k4Idx_surj` → `cnn_conv2_grad_close`, which already folds the bridge in), then
+`exact cnn_conv2_sgd_descends … hη0 hgh hm2 hmq hm3 hm4 hsmall h1 h2`. Closes **"one binary32
+conv2-kernel SGD step provably decreases the cross-entropy loss"** with the gradient accuracy
+*proven*, not assumed. Plus two index helpers: `flatten_k4Idx` / `k4Idx_surj` (the `k4Idx` peers of
+`flatten_t3Idx` / `t3Idx_surj`).
+- **The doc's paren-minefield warning did NOT materialize** — because Increment 2 made the η a
+  **def** (`cnnConv2GradBudget`), the carried `hsmall`/`h1`/`h2`/step-margins reference η as a
+  compact `M.cnnConv2GradBudget c h w … eexp` term (≈1.5 lines), NOT the 60-line inlined nest. The
+  whole wiring is straight transcription of `cnn_conv2_sgd_descends`'s hyps with `η → the budget term`.
+- **Two margin families carried** (the honest first cut): per-layer ROUND margins
+  (`hmarginConv/Pool/3/4`, about `conv2d W₂ b₂ x₁`, fed to the grad-close via `Kernel4.unflatten_flatten`)
+  + the gradient-radius STEP margins `hm2/hmq/hm3/hm4` + `hsmall`/`h1`/`h2` (fed straight to
+  `cnn_conv2_sgd_descends`). **Gotchas:** the abstract descent uses `Kernel4.flatten W₂` as the param
+  point, so the round margins (stated about `conv2d W₂ …`) are converted to the
+  `conv2d (Kernel4.unflatten (Kernel4.flatten W₂)) …` form via `rw [Kernel4.unflatten_flatten]` when
+  passed; `0 ≤ budget` proved by `simp only [cnnConv2GradBudget]` + `add_nonneg`/`mul_nonneg` on the
+  component `layerAct`/`layerBudget`/`cotErr` nonnegs (positivity can't see the smRho condition);
+  `layerAct_nonneg`/`layerBudget_nonneg` live in `FloatModel` → `open FloatModel in` (before the
+  doc-comment, not after — the `open … in` must precede the `/-- -/`). All 3 decls in
+  `tests/AuditAxioms.lean`; build + coverage clean. *Effort: medium (mostly transcription).*
 
 **Increment 4 — conv1** (`cnn_conv1_grad_close` → `cnn_conv1_float_sgd_descends`). One layer
 deeper: the cotangent runs back through conv2-as-input as well (locality, not spatial count —

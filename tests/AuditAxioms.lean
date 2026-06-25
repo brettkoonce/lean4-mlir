@@ -1981,6 +1981,17 @@ open Proofs
 #print axioms head3_sum_drift
 #print axioms cnn_conv2_loss_grad_lipschitz
 #print axioms cnn_conv2_sgd_descends
+-- Float-bridge §3 (CNN descent, Increment 3): the η-composition capstone.
+-- One binary32 SGD step on the second conv kernel provably decreases the
+-- cross-entropy loss with NO abstract gradient-accuracy parameter — the
+-- gradient is the actual cnnConv2FloatGrad and its accuracy is PROVEN by
+-- cnn_conv2_grad_close (η := cnnConv2GradBudget, discharged per kernel entry
+-- via k4Idx_surj), wired into the abstract cnn_conv2_sgd_descends. The conv
+-- peer of mlp_input_float_sgd_descends. flatten_k4Idx / k4Idx_surj are the
+-- forward index plumbing (the k4Idx peers of flatten_t3Idx / t3Idx_surj).
+#print axioms flatten_k4Idx
+#print axioms k4Idx_surj
+#print axioms cnn_conv2_float_sgd_descends
 -- The conv1 rung (SgdDescentCnn.lean): the deepest descent statement.
 -- The new mathematics is conv AS A FUNCTION OF ITS INPUT: conv is
 -- linear there, and its Jacobian entry is a single kernel tap
