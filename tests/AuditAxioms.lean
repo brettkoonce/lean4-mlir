@@ -63,6 +63,7 @@ import LeanMlir.Proofs.ViTDepthK
 import LeanMlir.Proofs.MobileNetV2FullPaper
 import LeanMlir.Proofs.ConvNeXtFullT
 import LeanMlir.Proofs.FloatBridge
+import LeanMlir.Proofs.FloatSubnormalBridge
 import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
 import LeanMlir.Proofs.SgdDescentCnn
@@ -72,6 +73,7 @@ import LeanMlir.Proofs.Resnet34FloatBridge
 import LeanMlir.Proofs.BnInputBridge
 import LeanMlir.Proofs.Resnet34BlockBridge
 import LeanMlir.Proofs.FloatComposeBridge
+import LeanMlir.Proofs.BnEvalFloatBridge
 import LeanMlir.Proofs.EnetFloatBridge
 import LeanMlir.Proofs.DepthwiseFloatBridge
 import LeanMlir.Proofs.ViTFloatBridge
@@ -1278,6 +1280,25 @@ open Proofs
 #print axioms FloatModel.dense_close
 #print axioms FloatModel.dense_close_fresh
 #print axioms FloatModel.relu_close
+-- Subnormal-floor closure (FloatSubnormalBridge.lean, planning §2): FloatBridge's
+-- FloatModel.err is binary32-true only on the normal range; near 0 the honest
+-- bound carries a gradual-underflow floor η≈2⁻¹⁵⁰. FaithfulFloatModel is the
+-- honest rounder (relative err_rel on normals + absolute err_abs everywhere +
+-- rnd 0 = 0); toFloatModel shows FloatModel is exactly its η=0 (no-underflow)
+-- face, and err_of_normal collapses the honest bound to the clean FloatModel.err
+-- on normal arguments — "stays normal ⇒ the whole bridge applies verbatim".
+#print axioms Proofs.FaithfulFloatModel.toFloatModel
+#print axioms Proofs.FaithfulFloatModel.err_of_normal
+#print axioms Proofs.FaithfulFloatModel.exactFaithful
+-- The stays-normal invariant for BN/LN: the denominator var+ε, its root √(var+ε),
+-- and the inverse-stddev istd=1/√(var+ε) are all ≥ minNormal (since ε≫minNormal),
+-- so the rsqrt keystone (BnFloatBridge.rsqrt_lipschitz) never touches subnormals
+-- — why LN/BN keep activations O(1). Plus subFloor_total_negligible: even if all
+-- n≤2⁶⁴ rounded values underflowed, the total floor ≤2⁻⁸⁶, below every budget.
+#print axioms Proofs.bnDenom_normal
+#print axioms Proofs.bnSqrt_normal
+#print axioms Proofs.istd_ge_minNormal
+#print axioms Proofs.subFloor_total_negligible
 -- MaxPool exact-in-float (CNN.lean, planning §1b-A): max is compare-and-select,
 -- so it rounds nothing — inherited input error e passes through with no
 -- rounding term and no amplification (the max-peer of relu_close). max_close is
@@ -1390,6 +1411,15 @@ open Proofs
 #print axioms floatClose_relu
 #print axioms floatClose_flatConv
 #print axioms floatClose_reluConv
+-- Eval-mode BN/LN as a fixed affine (BnEvalFloatBridge.lean, planning §4): the
+-- DEPLOYED-forward win. Running-stats BN at eval = a·x+b with a=γ/√(σ²+ε),
+-- b=β−γμ/√(σ²+ε) precomputed offline — no batch reduce, no runtime rsqrt (the
+-- BnFloatBridge rsqrt keystone is unneeded). bnEvalAffine_fold proves the eval-BN
+-- formula γ(x−μ)/√(σ²+ε)+β IS that affine (√ only in the constants); floatClose_bnEval
+-- is the FloatClose instance (one mul + one add, fan-in 1 ⇒ NO Higham γ), modulus
+-- bnEvalErr. Drops into FloatClose.comp to build a deployed eval-forward fold.
+#print axioms Proofs.bnEvalAffine_fold
+#print axioms Proofs.floatClose_bnEval
 -- THE FOLD: floatClose_maxPool (exact, id modulus) + floatClose_cifarStage — a whole
 -- CIFAR stage conv→relu→conv→relu→maxpool folded through .comp into one FloatClose
 -- (∃ propagated magnitude B and composed error modulus L). The whole r34 net is this

@@ -25,7 +25,17 @@ boundary is crisp.
 
 The four items below shrink the TRUSTED column.
 
-## 1. Kernel faithfulness — turn the biggest trusted item into a MEASURED one  ⭐ recommended
+## 1. Kernel faithfulness — turn the biggest trusted item into a MEASURED one  ✅ DONE (2026-06-25)
+
+**Delivered:** `scripts/kernel_faithfulness_probe.py` (run under the IREE/JAX venv). Both
+parts run on real gfx1100. **(1) dot_general core:** GPU f32 vs f64, checked against the
+`dot_close` Higham budget `((1+u)^(n+1)−1)·Σ|xᵢyᵢ|` — the real kernel is INSIDE the proven
+budget at every fan-in, which is ~20× (n=64) to ~10⁴× (n=25088) conservative w.r.t. silicon.
+**(2) whole MNIST-CNN forward:** the committed render, emitted with every stage as a result,
+run once on GPU; each conv/dense stage's measured drift sits at ratio 4e-2 … 2e-6 of its
+proven `layerBudget`, maxpool passes error through without amplification. The TRUSTED residual
+(IREE lowering, FFI boundary, single magnitude profile) is now stated precisely in the script's
+closing block — boundary validated on real silicon, not formally closed. Original plan below.
 
 **The gap (§3.1).** The bridge bounds the *model*. Does the model bound the *kernel IREE
 actually runs*? Today: trusted. Can't be *formally* closed without a verified compiler — so
@@ -66,7 +76,19 @@ on real silicon and documents it precisely. That is the honest, runnable, highes
 deliverable. **Effort: medium, mostly Python + IREE plumbing, no Lean.** Reference style:
 `scripts/transcendental_probe.py`, `scripts/cifar_bn_margin_probe.py`, `mlir_poc/validate_cnn.py`.
 
-## 2. Subnormals — a genuinely *closeable* proof gap (§3.3)
+## 2. Subnormals — a genuinely *closeable* proof gap (§3.3)  ✅ DONE (2026-06-25)
+
+**Delivered:** `LeanMlir/Proofs/FloatSubnormalBridge.lean` (root + audited, 3-axiom-clean).
+`FaithfulFloatModel` is the honest binary32 rounder — the clean relative bound on the normal
+range (`err_rel`) *plus* the gradual-underflow absolute floor `η≈2⁻¹⁵⁰` everywhere (`err_abs`)
+*plus* `rnd 0 = 0`. `toFloatModel` proves `FloatModel` **is** its `η=0` (no-underflow) face, and
+`err_of_normal` collapses the honest bound to the clean `FloatModel.err` on normal arguments —
+the precise "stays-normal ⇒ the whole bridge applies verbatim." The stays-normal invariant is
+proved for the BN/LN normalization denominator: `bnDenom_normal`/`bnSqrt_normal`/`istd_ge_minNormal`
+show `var+ε`, `√(var+ε)`, and `istd=1/√(var+ε)` are all `≥ minNormal` (since `ε≫minNormal`), so the
+`rsqrt` keystone never touches subnormals. `subFloor_total_negligible` handles the residual
+near-zero coordinates (post-ReLU tails) honestly: even if all `n≤2⁶⁴` rounded values underflowed,
+the total floor `≤2⁻⁸⁶`, below every budget. Caveat → lemmas, as planned. Original plan below.
 
 **The gap.** The relative-error `FloatModel` (`|rnd x − x| ≤ u·|x|`) holds only in the normal
 range; near 0 it should be `|rnd x − x| ≤ u·|x| + η` (a subnormal floor `η ≈ 2⁻¹⁴⁹`). Deep
@@ -100,7 +122,17 @@ Descent for a *deep* net needs a loss-gradient Lipschitz (smoothness) constant �
 depth, tiny lr; likely only tractable for shallow nets. **Effort: high, highest ceiling,
 highest risk.** Don't let "descent" be *implied* for the deep nets where only closeness holds.
 
-## 4. Eval-mode normalization — a quick deployed-forward win (§3.6)
+## 4. Eval-mode normalization — a quick deployed-forward win (§3.6)  ✅ DONE (2026-06-25)
+
+**Delivered:** `LeanMlir/Proofs/BnEvalFloatBridge.lean` (root + audited, 3-axiom-clean).
+`bnEvalAffine a b` (per-coordinate `aᵢ·xᵢ + bᵢ`) + its rounded peer `bnEvalAffineF`
+(`fl(fl(aᵢ·xᵢ)⊕bᵢ)`). `bnEvalAffine_fold` proves the eval-BN formula `γ(x−μ)/√(σ²+ε)+β`
+**equals** `a·x+b` with `a=γ/√(σ²+ε)`, `b=β−γμ/√(σ²+ε)` — the `√` lives only in the offline
+constants, so the runtime map is a bare affine. `floatClose_bnEval` is the `FloatClose`
+instance: one rounded mul + one rounded add, **fan-in 1 ⇒ no Higham γ, no `rsqrt`** (the whole
+`BnFloatBridge` keystone — `rsqrt_lipschitz`/`bnIstd_close_at` — is unneeded), modulus
+`bnEvalErr` (a `mulErr` + a constant rounding floor, affine in the inherited error). Drops into
+`FloatClose.comp` to fold a deployed eval-forward. Original plan below.
 
 Deployed accuracy uses **running-stats BN/LN at eval** = a fixed per-channel affine (no
 reduction, no `rsqrt`!) — *far* simpler to bridge than the training-mode BN already built (the
@@ -109,7 +141,18 @@ reduction, no `rsqrt`!) — *far* simpler to bridge than the training-mode BN al
 the deployed-accuracy story tight. **Effort: small Lean.** A `floatClose_bnEval` (fixed affine)
 + swap it into the eval-forward fold.
 
-## 5. Honesty pass (cross-cutting, do alongside whichever above)
+## 5. Honesty pass (cross-cutting, do alongside whichever above)  ✅ DONE (2026-06-25)
+
+**Delivered:** `planning/floatbridge_honesty_pass.md` — a claim-by-claim tier ledger (PROVEN/
+MEASURED/TRUSTED) of the float-bridge headlines with 7 flags + recommended rewordings (author's
+call on the actual README edits). Headlines: F1 disambiguate "loss-descent *step*" (certified
+update, all nets) from "the loss provably *decreases*" (linear end-to-end; MLP/CNN per-layer;
+deep nets none) — the one overclaim risk (README L167); F2 take the linear win — cite
+`linear_float_sgd_descends` (the float budget IS now fused into descent, `η` proven via
+`linear_grad_close`), retiring the prior audit's "the two halves never meet" caveat — the biggest
+underclaim; F3/F4 promote the kernel boundary (now MEASURED on silicon, §1) and subnormals (now a
+lemma, §2) out of the "unverified" list; F5 optional eval-BN add (§4); F6/F7 affirm the existing
+vacuous-budget + degenerate-witness honesty (keep worst-case decimals paired with measured). Original plan below.
 
 Given the submission context (memories `project-diderot-comparator`, `repo-verification-reality`):
 a short pass aligning headline claims with the PROVEN / MEASURED / TRUSTED tiers above —
@@ -119,12 +162,18 @@ and it's what makes a skeptical reviewer trust the *proven* parts.
 
 ## 6. Suggested order
 
-1. **§1 kernel faithfulness** — biggest credibility gain, unblocked, runnable now, no Lean.
-   Start with the matmul/dot probe (the FMA + reduction-order core), then the whole-net forward.
-2. **§2 subnormals** — best pure-proof follow-up; small, clean, closes a real gap with a lemma.
-3. **§4 eval-mode BN** — quick win if the deployed forward is a headline.
+1. ~~**§1 kernel faithfulness**~~ ✅ DONE — `scripts/kernel_faithfulness_probe.py`, both the
+   dot/FMA core and the whole-CNN forward validated inside-budget on real gfx1100.
+2. ~~**§2 subnormals**~~ ✅ DONE — `FloatSubnormalBridge.lean`: honest `FaithfulFloatModel`,
+   `FloatModel` = its `η=0` face, BN/LN stays-normal invariant, residual floor negligible.
+3. ~~**§4 eval-mode BN**~~ ✅ DONE — `BnEvalFloatBridge.lean`: eval BN = fixed affine
+   (`bnEvalAffine_fold`), bridged with no `rsqrt`/fan-in γ (`floatClose_bnEval`).
 4. **§3 descent** — highest ceiling, highest risk; push the MLP rungs, be honest about depth.
-5. **§5 honesty pass** — fold into whichever, before any writeup/submission.
+   (NB: the *linear* float→descent composition is already closed — `linear_float_sgd_descends`,
+   η proven via `linear_grad_close`; the open work is the MLP input rung + wiring, then deep nets.)
+5. ~~**§5 honesty pass**~~ ✅ DONE — `planning/floatbridge_honesty_pass.md` (7 flags; key: F1
+   "loss-descent step"≠"loss decreases", F2 cite `linear_float_sgd_descends`, F3/F4 promote
+   kernel/subnormals to their true tiers). Re-run before any writeup/submission.
 
 **The one-line recommendation:** do §1 first. It's the single thing that most changes how a
 skeptical reviewer reads the entire (large, genuinely-proven) body of work — and it's a

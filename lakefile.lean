@@ -173,6 +173,13 @@ lean_lib «Proofs» where
              -- no axioms) + forward error bounds for the linear/MLP nets
              -- (dot/dense budgets, ReLU exact-in-float Lipschitz pass-through).
              `LeanMlir.Proofs.FloatBridge,
+             -- Subnormal-floor closure (planning §2): the honest FaithfulFloatModel
+             -- (relative bound on normals + the gradual-underflow absolute floor),
+             -- FloatModel = its η→0 face, the BN/LN denominator stays-normal
+             -- invariant (rsqrt keystone never underflows), and the residual floor
+             -- proved globally negligible. Converts FloatBridge's subnormal caveat
+             -- into lemmas.
+             `LeanMlir.Proofs.FloatSubnormalBridge,
              -- Inexact-gradient descent over ℝ (MVT form): an η-accurate gradient
              -- oracle + segment smoothness ⇒ the SGD step still decreases the loss,
              -- with an explicit decrease. The keystone the FloatBridge budgets
@@ -211,6 +218,12 @@ lean_lib «Proofs» where
              -- whole-net certificate backbone: FloatClose composes (moduli ∘, magnitudes
              -- thread) — the whole net is the fold of per-op budgets.
              `LeanMlir.Proofs.FloatComposeBridge,
+             -- Eval-mode BN/LN as a fixed affine (planning §4): running-stats at
+             -- eval = a·x+b with a=γ/√(σ²+ε), b=β−γμ/√(σ²+ε) precomputed offline
+             -- (no batch reduce, no runtime rsqrt). bnEvalAffine_fold proves the
+             -- eval-BN formula IS that affine; floatClose_bnEval bridges it (one
+             -- mul + one add, no fan-in γ) — the deployed-forward win.
+             `LeanMlir.Proofs.BnEvalFloatBridge,
              -- EfficientNet float bridge step 1: Swish/sigmoid (bounded, rounding
              -- closeness, σ is ¼-Lipschitz) — the shared smooth-activation transcendental.
              `LeanMlir.Proofs.EnetFloatBridge,
