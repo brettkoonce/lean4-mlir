@@ -1558,6 +1558,17 @@ open Proofs
 #print axioms floatBridges_projAttn
 #print axioms floatBridges_mhsaProj
 #print axioms floatBridges_vitBlockProj
+-- ── §2c-multihead (the reshape: h parallel single-heads) ──
+-- Multi-head attention is h independent single-head attentions over feature slabs. In a
+-- head-major layout that is exactly perRowFlat (heads = blocks); the token-major↔head-major
+-- split/concat is a pure coordinate PERMUTATION (gather/floatClose_gather — exact in float,
+-- magnitude-stable, modulus id), so it preserves FloatClose. mhSdpaSelfFlat = gather(reshape⁻¹)
+-- ∘ perRow(sdpaSelfFlat n dh) ∘ gather(reshape); floatBridges_mhSdpaSelf is one FloatBridges.comp
+-- chain. floatBridges_vitBlockMH: the multi-head ViT block, unconditional (h=1 = vitBlockSelf).
+#print axioms floatClose_gather
+#print axioms floatBridges_gather
+#print axioms floatBridges_mhSdpaSelf
+#print axioms floatBridges_vitBlockMH
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.

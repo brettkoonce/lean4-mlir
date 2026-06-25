@@ -549,4 +549,89 @@ theorem floatBridges_vitBlockProj {n d dff : Nat} (M : FloatModel)
     ((floatBridges_mhsaProj M fexp Wq Wk Wv Wo bq bk bv bo hn hd hw' hβ heexp0 heexp1 hfexp
       hscaleA hρ1 hWq hbq hWk hbk hWv hbv hWo hbo).residual M)
 
+-- ════════════════════════════════════════════════════════════════
+-- § Multi-head: the reshape is a pure reindex (exact in float)
+--
+-- Multi-head attention is `h` independent single-head attentions over disjoint feature
+-- slabs. In a HEAD-MAJOR layout (heads contiguous) that is exactly `perRowFlat` (heads =
+-- blocks). The split/concat between the token-major `Vec (n·(h·dh))` and the head-major
+-- `Vec (h·(n·dh))` is a coordinate PERMUTATION — exact in float, magnitude-stable, 1-Lip —
+-- so it preserves FloatClose. Multi-head = reshape⁻¹ ∘ perRow(single-head) ∘ reshape.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Reindex a vector by a bijection of index sets (`v ∘ e`). A pure permutation/reshape:
+    no arithmetic, so exact in float. -/
+noncomputable def gather {p q : Nat} (e : Fin p ≃ Fin q) (v : Vec q) : Vec p := fun i => v (e i)
+
+/-- **A reindex is `FloatClose` with modulus `id`** — exact in float, magnitude-stable
+    (`|v (e i)| ≤ A`), 1-Lipschitz on the inherited error. The reshape/split/concat backbone. -/
+theorem floatClose_gather {p q : Nat} (e : Fin p ≃ Fin q) (A : ℝ) :
+    FloatClose A A (gather e) (gather e) (id : ℝ → ℝ) :=
+  ⟨fun _v hv i => ⟨hv (e i), hv (e i)⟩, fun _vt _va _e _ _ hd i => hd (e i)⟩
+
+/-- A reindex float-bridges (magnitude-stable). -/
+theorem floatBridges_gather {p q : Nat} (e : Fin p ≃ Fin q) : FloatBridges (gather e) :=
+  fun A hA => ⟨A, _, _, hA, floatClose_gather e A⟩
+
+/-- **The head-split reshape** `Vec (h·(n·dh)) ↔ Vec (n·(h·dh))` — the `(h,n,dh)` head-major
+    order vs the `(n,h,dh)` token-major order (swap the head and token axes). Built from
+    `finProdFinEquiv` + `prodAssoc`/`prodComm`; its exact coordinate action is irrelevant to
+    the bridge (`floatClose_gather` holds for ANY equiv), only that it is a bijection. -/
+def mhReshape (h n dh : Nat) : Fin (h * (n * dh)) ≃ Fin (n * (h * dh)) :=
+  finProdFinEquiv.symm.trans
+    ((Equiv.prodCongr (Equiv.refl (Fin h)) finProdFinEquiv.symm).trans
+      ((Equiv.prodAssoc (Fin h) (Fin n) (Fin dh)).symm.trans
+        ((Equiv.prodCongr (Equiv.prodComm (Fin h) (Fin n)) (Equiv.refl (Fin dh))).trans
+          ((Equiv.prodAssoc (Fin n) (Fin h) (Fin dh)).trans
+            ((Equiv.prodCongr (Equiv.refl (Fin n)) finProdFinEquiv).trans finProdFinEquiv)))))
+
+/-- **Multi-head self-attention** on the token-major sequence: reshape to head-major, apply
+    single-head `sdpaSelfFlat` (per-head scale `1/√dh`) to each head-block, reshape back. -/
+noncomputable def mhSdpaSelfFlat (h n dh : Nat) : Vec (n * (h * dh)) → Vec (n * (h * dh)) :=
+  gather (mhReshape h n dh).symm ∘ perRowFlat h (n * dh) (sdpaSelfFlat n dh)
+    ∘ gather (mhReshape h n dh)
+
+/-- **Multi-head self-attention float-bridges.** One `FloatBridges.comp` chain over the
+    reshape (`floatBridges_gather`) / per-head (`FloatBridges.perRow` of `floatBridges_sdpaSelf`)
+    / reshape-back — multi-head is `h` parallel single-heads, the reshape being exact in float.
+    The `reshape` IS the "multi-head reshape"; no new analysis, just the layout permutation. -/
+theorem floatBridges_mhSdpaSelf (M : FloatModel) (fexp : ℝ → ℝ) {h n dh : Nat}
+    {scaleA eexp : ℝ} (hn : 0 < n) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (dh : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp n < 1) :
+    FloatBridges (mhSdpaSelfFlat h n dh) := by
+  unfold mhSdpaSelfFlat
+  exact ((floatBridges_gather (mhReshape h n dh)).comp
+      (FloatBridges.perRow h
+        (floatBridges_sdpaSelf M fexp hn heexp0 heexp1 hfexp hscaleA hρ1))).comp
+    (floatBridges_gather (mhReshape h n dh).symm)
+
+/-- **THE MULTI-HEAD ViT BLOCK** (`h` heads, self-attention per head). The encoder block with
+    multi-head MHSA float-bridges unconditionally — `floatBridges_vitBlock`'s `hattn` is
+    discharged by `floatBridges_mhSdpaSelf.residual`. The single-head `floatBridges_vitBlockSelf`
+    is the `h = 1` case. The reshape contributed no new budget (exact in float); each head is the
+    proved single-head attention at feature dim `dh`. -/
+theorem floatBridges_vitBlockMH {h n dh dff : Nat} (M : FloatModel)
+    (W₁ : Mat (h * dh) dff) (b₁ : Vec dff) (W₂ : Mat dff (h * dh)) (b₂ : Vec (h * dh))
+    (fgelu fexp : ℝ → ℝ)
+    {εln γln βln w' β egelu scaleA eexp : ℝ}
+    (hn : 0 < n) (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hegelu : 0 ≤ egelu)
+    (hd : 0 < h * dh) (hdff : 0 < dff)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hb₁ : ∀ j, |b₁ j| ≤ β)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w') (hb₂ : ∀ j, |b₂ j| ≤ β)
+    (hln : FloatBridges (layerNormForward (h * dh) εln γln βln))
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (dh : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp n < 1) :
+    FloatBridges
+      (perRowFlat n (h * dh) (Proofs.residual
+          (Proofs.dense W₂ b₂ ∘ gelu dff ∘ Proofs.dense W₁ b₁
+            ∘ layerNormForward (h * dh) εln γln βln))
+        ∘ Proofs.residual (mhSdpaSelfFlat h n dh)) :=
+  floatBridges_vitBlock M W₁ b₁ W₂ b₂ fgelu hw' hβ hegelu hd hdff hg hW₁ hb₁ hW₂ hb₂ hln
+    ((floatBridges_mhSdpaSelf M fexp hn heexp0 heexp1 hfexp hscaleA hρ1).residual M)
+
 end Proofs

@@ -245,8 +245,15 @@ number" questions.
    + `sdpa_input_close` (sensitivity, projection drift as δ); `floatBridges_mhsaProj` adds the
    output projection Wo (`perRowFlat (dense Wo bo)`); **`floatBridges_vitBlockProj`** is the
    **fully-projected unconditional ViT block** (the deployed single-head form — `…vitBlockSelf`
-   is its Wq=Wk=Wv=Wo=I special case). The whole ViT float story (LN/GELU/MLP/projected attention/
-   block) is closed; the only standing item is multi-head reshape (boilerplate over single-head).
+   is its Wq=Wk=Wv=Wo=I special case).
+   ~~multi-head reshape~~ **DONE** (`ViTBlockFloatBridge.lean`): multi-head attention is `h`
+   parallel single-heads over feature slabs — in a head-major layout that is exactly `perRowFlat`
+   (heads = blocks); the token-major↔head-major split/concat is a pure coordinate PERMUTATION
+   (`gather`/`floatClose_gather` — exact in float, magnitude-stable, modulus `id`), so it preserves
+   `FloatClose`. `mhSdpaSelfFlat = gather(reshape⁻¹) ∘ perRowFlat h (n·dh) (sdpaSelfFlat n dh) ∘
+   gather(reshape)` (per-head scale `1/√dh`); `floatBridges_mhSdpaSelf` is one `FloatBridges.comp`
+   chain; **`floatBridges_vitBlockMH`** is the multi-head ViT block (`h=1` = `…vitBlockSelf`).
+   The whole ViT float story — LN/GELU/MLP/projected & multi-head attention/full block — is CLOSED.
 6. Whichever of §3.1/§3.5/§3.6 the writeup needs to be honest about (the kernel gap,
    the closeness-not-descent framing, the eval-mode quick win).
 
