@@ -75,6 +75,7 @@ import LeanMlir.Proofs.FloatComposeBridge
 import LeanMlir.Proofs.EnetFloatBridge
 import LeanMlir.Proofs.DepthwiseFloatBridge
 import LeanMlir.Proofs.ViTFloatBridge
+import LeanMlir.Proofs.ViTAttentionFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1491,8 +1492,7 @@ open Proofs
 -- (geluScalar_lipschitz_abs: split + tanh 1-Lip + |a²+ab+b²|≤3A², no global derivative analysis);
 -- gelu_close is the rounding half (egelu, the eexp/esig pattern); floatClose_gelu the wrap.
 -- §2d the per-token MLP residual sub-block LN→dense→GELU→dense + skip folds via FloatBridges
--- (LN enters as the operating-point hypothesis, like the MBConv BNs). The attention half
--- (§2c) mixes across tokens in Mat-space — a separate track from this Vec-space framework.
+-- (LN enters as the operating-point hypothesis, like the MBConv BNs).
 #print axioms floatClose_layerNorm
 #print axioms Real.tanh_lipschitz_abs
 #print axioms geluScalar_lipschitz_abs
@@ -1500,6 +1500,23 @@ open Proofs
 #print axioms floatClose_gelu
 #print axioms floatBridges_gelu
 #print axioms floatBridges_vitMlpResidual
+-- ── planning/floatbridge_enet_vit.md §2c (ViT float bridge: ATTENTION, Mat-space) ──
+-- Attention mixes across tokens, so it lives in Mat n d space (not the Vec-space FloatClose
+-- framework) and the per-row softmax couples a whole row of logits. The capstone sdpa_close
+-- (ViTAttentionFloatBridge.lean) bounds each output entry of the float attention sdpaF against
+-- the real sdpa, chaining four reused pieces: score dot_close (Higham γ over fan-in d) →
+-- 1/√d mul_close → per-row softmaxF_close_at (softmaxF_close rounding + softmax_perturb logit
+-- shift, within smErr) → output dot_close at perturbed softmax weights. The reusable engine
+-- softmaxF_close_at (+ smErr_nonneg, softmax_abs_le_one) is extracted into FloatBridge.lean.
+-- All-smooth ⇒ no sign-flip margins; budget a-posteriori in qA/kA/vA/scaleA, proved in rounding.
+#print axioms FloatModel.softmaxF_close_at
+#print axioms FloatModel.smErr_nonneg
+#print axioms FloatModel.softmax_abs_le_one
+#print axioms FloatModel.attnScore_close
+#print axioms FloatModel.attnScaled_close
+#print axioms FloatModel.attnDot_close
+#print axioms FloatModel.rowSoftmaxF_close
+#print axioms FloatModel.sdpa_close
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.

@@ -1869,6 +1869,44 @@ theorem softmax_ce_cot_close (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
   simp only [cotErr]
   linarith
 
+/-- **`|softmax z k| ≤ 1`** — the real softmax is a probability (public face of the
+    `softmax_nonneg`/`softmax_le_one` pair, the magnitude attention's output matmul needs). -/
+theorem softmax_abs_le_one {n : ℕ} (z : Vec n) (k : Fin n) :
+    |softmax n z k| ≤ 1 := by
+  rw [abs_of_nonneg (softmax_nonneg z k)]; exact softmax_le_one z k
+
+/-- **`smErr` is nonnegative** under `eexp ≥ 0`, `δ ≥ 0`, and `smRho < 1` — the absolute
+    softmax-vs-softmax budget bounds an absolute value, so it is itself `≥ 0`. (Extracted
+    from `softmax_ce_cot_close`'s internal `hsm0`; needed as the `0 ≤ eweight` precondition
+    of any downstream dot at perturbed softmax weights, e.g. attention's output matmul.) -/
+theorem smErr_nonneg {eexp δ : ℝ} {n : ℕ} (heexp0 : 0 ≤ eexp) (hδ0 : 0 ≤ δ)
+    (hρ1 : smRho M.u eexp n < 1) : 0 ≤ smErr M.u eexp δ n := by
+  have hu := M.u_nonneg
+  have hκ0 : 0 ≤ smKappa M.u eexp n :=
+    div_nonneg (by linarith [M.smRho_nonneg (eexp := eexp) (n := n) heexp0]) (by linarith)
+  have hexp0 : 0 ≤ Real.exp (2 * δ) - 1 := by have := Real.add_one_le_exp (2 * δ); linarith
+  simp only [smErr]
+  nlinarith [mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smKappa M.u eexp n)]
+
+/-- **Float softmax at float logits vs real softmax at real logits — within `smErr`.**
+    The rounding half (`softmaxF_close`, float-vs-real at the *same* logits) plus the
+    logit-perturbation half (`softmax_perturb`, real-vs-real under a coordinatewise
+    logit error `δ`), assembled by the triangle inequality. This is the per-row engine
+    for attention's softmax (each row's logits are the float scores, off the real scores
+    by `δ`); extracted from `softmax_ce_cot_close`'s internal `hsm` (here without the
+    onehot subtraction, so it applies to any softmax position, not just the loss head). -/
+theorem softmaxF_close_at (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
+    (zt z : Vec n) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hρ1 : smRho M.u eexp n < 1)
+    (hδ : ∀ k', |zt k' - z k'| ≤ δ) (k : Fin n) :
+    |M.softmaxF fexp zt k - softmax n z k| ≤ smErr M.u eexp δ n := by
+  have hA := M.softmaxF_close fexp zt heexp0 heexp1 hfexp hρ1 k
+  have hB := softmax_perturb zt z hδ k
+  have htri := abs_sub_le (M.softmaxF fexp zt k) (softmax n zt k) (softmax n z k)
+  simp only [smErr]
+  linarith
+
 /-- `e^x − 1 ≤ x/(1−x)` for `0 ≤ x < 1` — the exp analogue of the γ-form,
     from `1 − x ≤ e^(−x)` alone; keeps the numeric head budget in
     `norm_num` country. -/

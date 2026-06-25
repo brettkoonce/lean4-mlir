@@ -133,9 +133,16 @@ BN over a different axis.
 - §2d (MLP half) **DONE** — `floatBridges_vitMlpResidual`: `LN→dense→GELU→dense + skip`
   folds via `FloatBridges` (LN enters as the operating-point hypothesis, like the MBConv
   BNs). All 3-axiom-clean.
-- §2c **REMAINING** — attention mixes across tokens in `Mat n d` space; the `FloatClose`
-  framework is `Vec`-space, so attention needs a matrix-space float closeness (softmax-
-  per-row via the existing `softmaxF`/`smErr` model + the `QKᵀ`/`·V` matmuls). Separate track.
+- §2c **DONE 2026-06-25** (`ViTAttentionFloatBridge.lean`, 3-axiom-clean) — the `Mat`-space
+  attention track. Capstone `sdpa_close`: each output entry of the float `sdpaF` is within
+  `attnOutErr` of the real `sdpa` (Attention.lean), chaining four reused pieces — score
+  `dot_close` (Higham γ over fan-in `d`) → `1/√d` `mul_close` → per-row `softmaxF_close_at`
+  (= `softmaxF_close` rounding + `softmax_perturb` logit shift, within `smErr`) → output
+  `dot_close` at perturbed softmax weights (`attnDot_close`). The reusable softmax engine
+  `softmaxF_close_at` + `smErr_nonneg` + `softmax_abs_le_one` was extracted into
+  `FloatBridge.lean`. All-smooth ⇒ no sign-flip margins; budget a-posteriori in the supplied
+  `qA`/`kA`/`vA`/`scaleA` magnitudes, proved in rounding. The transformer-block fold
+  (LN→MHSA→+→LN→MLP→+) now has both halves: this `Mat`-space MHSA + the §2d `Vec`-space MLP.
 
 ### 2a. LayerNorm (a re-axis port of the BN bridge)
 LN normalizes per-token over the feature dim; BN normalizes per-channel over spatial.
@@ -180,8 +187,12 @@ number" questions.
    the biggest standing gap; today it's *trusted* (the `iree-compile`/runtime/FFI
    boundary). The float bridge bounds the *model*; the kernel faithfulness is separate.
 2. **Supplied transcendental constants.** `eexp` is empirically validated; `ers`
-   (rsqrt) was measured ≈`2u32` by the CIFAR-BN probe; `esig`/`egelu` still need the
-   same empirical pin against real ROCm/CUDA. Each unvalidated constant is a soft spot.
+   (rsqrt) was measured ≈`2u32` by the CIFAR-BN probe. `esig`/`egelu` now **pinned on real
+   gfx1100 silicon** (`scripts/transcendental_probe.py`, IREE rocm, the deployed
+   `stablehlo.logistic`/tanh-form ops, 4M-pt sweep vs f64-exact): **`esig` ≤ 9.0e-8 ≈ 1.5·u32**,
+   **`egelu` ≤ 4.3e-7 ≈ 7.3·u32** (the gelu const-truncation `0.7978845608` vs `√(2/π)` adds
+   only ~7e-9; the rest is the silicon `tanh`). Safe pinned values: `esig ≤ 2·u32`, `egelu ≤ 8·u32`.
+   Each *un*validated constant is a soft spot — these two no longer are.
 3. **Subnormals.** The relative-error `FloatModel` is normal-range only. Deep
    activations *can* go subnormal (BN/LN keeping things O(1) mitigates but doesn't
    prove it). Either add a subnormal-aware model term or prove activations stay normal.
@@ -212,8 +223,11 @@ number" questions.
 3. ~~§1c depthwise~~ **DONE** (`DepthwiseFloatBridge.lean`); ~~§1d MBConv fold~~ **DONE**
    (`floatBridges_mbconvBody` via the new `FloatBridges` whole-net-assembly abstraction).
 4. ~~ViT §2a LN~~ **DONE**, ~~§2b GELU~~ **DONE**, ~~§2d MLP-block~~ **DONE**.
-5. **NEXT:** §2c attention (the Mat-space track — softmax-per-row + `QKᵀ`/`·V` matmuls);
-   §3.2 — pin `esig`/`egelu` empirically via the probe; then the full ViT block needs §2c.
+5. ~~§2c attention~~ **DONE** (`ViTAttentionFloatBridge.lean`, `sdpa_close`).
+   ~~§3.2 — pin `esig`/`egelu`~~ **DONE** (`scripts/transcendental_probe.py`, real gfx1100).
+   **NEXT:** the full ViT transformer-block fold (LN→MHSA→+→LN→MLP→+) now that both halves
+   exist — the `Mat`↔`Vec` seam (MHSA is `Mat n d`→`Mat n d`, the MLP is per-token `Vec`) is
+   the only new plumbing.
 6. Whichever of §3.1/§3.5/§3.6 the writeup needs to be honest about (the kernel gap,
    the closeness-not-descent framing, the eval-mode quick win).
 
@@ -228,6 +242,11 @@ the `FloatBridges` abstraction (`.comp`, `.residual`, `cod_nonneg`, `modulus_zer
 `_seBlockFull`, `floatBridges_swish`/`_seBlockFull`/`_mbconvBody`. `ViTFloatBridge.lean`
 (new) — `floatClose_layerNorm`, `Real.tanh_lipschitz_abs`, `geluScalar_lipschitz_abs`,
 `gelu_close`, `floatClose_gelu`, `floatBridges_gelu`, `floatBridges_vitMlpResidual`.
+`FloatBridge.lean` — `softmaxF_close_at`, `smErr_nonneg`, `softmax_abs_le_one` (the reusable
+softmax-at-perturbed-logits engine, extracted from `softmax_ce_cot_close`).
+`ViTAttentionFloatBridge.lean` (new, §2c) — `matScore_eq`, `attnScore_abs_le`, `mulErr_nonneg`,
+the `attn{Score,Scaled,Weight,Out}Err` budgets (+ nonneg), `attnScore_close`/`attnScaled_close`/
+`attnDot_close`, `rowSoftmaxF`/`rowSoftmaxF_close`, `sdpaF`, and the capstone `sdpa_close`.
 
 The novel methodological core (compose rounding budgets as a fold, split by
 smooth/kinked, instantiate a-posteriori) is in place; everything above is reuse,
