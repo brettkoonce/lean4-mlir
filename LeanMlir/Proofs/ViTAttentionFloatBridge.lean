@@ -108,6 +108,25 @@ theorem attnScaledErr_nonneg (d : Nat) {qA kA scaleA : ℝ}
   mulErr_nonneg M.u_nonneg hscaleA (mul_nonneg (mul_nonneg (Nat.cast_nonneg d) hqA) hkA)
     le_rfl (M.attnScoreErr_nonneg d hqA hkA)
 
+theorem attnWeightErr_nonneg (n d : Nat) {qA kA scaleA eexp : ℝ}
+    (hqA : 0 ≤ qA) (hkA : 0 ≤ kA) (hscaleA : 0 ≤ scaleA) (heexp0 : 0 ≤ eexp)
+    (hρ1 : smRho M.u eexp n < 1) : 0 ≤ M.attnWeightErr n d qA kA scaleA eexp :=
+  M.smErr_nonneg heexp0 (M.attnScaledErr_nonneg d hqA hkA hscaleA) hρ1
+
+theorem attnOutErr_nonneg (n d : Nat) {qA kA vA scaleA eexp : ℝ}
+    (hqA : 0 ≤ qA) (hkA : 0 ≤ kA) (hvA : 0 ≤ vA) (hscaleA : 0 ≤ scaleA) (heexp0 : 0 ≤ eexp)
+    (hρ1 : smRho M.u eexp n < 1) : 0 ≤ M.attnOutErr n d qA kA vA scaleA eexp := by
+  unfold FloatModel.attnOutErr
+  have hG : (0 : ℝ) ≤ (1 + M.u) ^ (n + 1) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by have := M.u_nonneg; linarith))
+  have hew := M.attnWeightErr_nonneg n d hqA hkA hscaleA heexp0 hρ1
+  have h1 : 0 ≤ ((1 + M.u) ^ (n + 1) - 1)
+      * ((n : ℝ) * (1 + M.attnWeightErr n d qA kA scaleA eexp) * vA) :=
+    mul_nonneg hG (mul_nonneg (mul_nonneg (Nat.cast_nonneg n) (by linarith)) hvA)
+  have h2 : 0 ≤ (n : ℝ) * (M.attnWeightErr n d qA kA scaleA eexp) * vA :=
+    mul_nonneg (mul_nonneg (Nat.cast_nonneg n) hew) hvA
+  linarith
+
 -- ════════════════════════════════════════════════════════════════
 -- § The three closeness stages
 -- ════════════════════════════════════════════════════════════════
@@ -261,6 +280,159 @@ theorem sdpa_close (fexp : ℝ → ℝ) {n d : Nat} (Q K V : Mat n d)
     heweight zero_le_one hvA hwclose (fun k => softmax_abs_le_one _ k) (fun k => hV k j)
   rw [sdpaF_eq, sdpa_eq]
   exact key
+
+-- ════════════════════════════════════════════════════════════════
+-- § Attention INPUT-sensitivity (the Lipschitz-through-softmax bound)
+--
+-- The real-vs-real companion of sdpa_close: how the real `sdpa` output moves when
+-- the inputs Q/K/V are each perturbed by `e` per entry. This is the genuinely new
+-- analysis (no longer assembly) — the softmax is the only nonlinearity, and its
+-- input-sensitivity is `softmax_perturb` (e^(2δ)−1, NOT a derivative bound). With
+-- sdpa_close (rounding), this discharges the attention sublayer's FloatClose modulus.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Score-matmul input-sensitivity budget: `d·((qA+e)·e + kA·e)`. -/
+noncomputable def attnScoreInErr (d : Nat) (qA kA e : ℝ) : ℝ :=
+  (d : ℝ) * ((qA + e) * e + kA * e)
+
+/-- Per-row softmax-weight input-sensitivity (`softmax_perturb` at logit shift `scaleA·attnScoreInErr`). -/
+noncomputable def attnWeightInErr (d : Nat) (qA kA scaleA e : ℝ) : ℝ :=
+  Real.exp (2 * (scaleA * attnScoreInErr d qA kA e)) - 1
+
+/-- Full per-entry SDPA output input-sensitivity: `n·(e + vA·attnWeightInErr)` — V's own
+    perturbation (weights ≤ 1) plus the weight perturbation against V (≤ vA). -/
+noncomputable def attnOutInErr (n d : Nat) (qA kA vA scaleA e : ℝ) : ℝ :=
+  (n : ℝ) * (e + vA * attnWeightInErr d qA kA scaleA e)
+
+/-- **Score-matmul input-sensitivity.** `|(Qt·Ktᵀ)ᵢⱼ − (Qa·Kaᵀ)ᵢⱼ| ≤ attnScoreInErr` — each
+    term `QtKt − QaKa = Qt(Kt−Ka) + Ka(Qt−Qa)`, bounded by `(qA+e)·e + kA·e`, summed over `d`. -/
+theorem attnScore_input_close {n d : Nat} (Qt Kt Qa Ka : Mat n d) {qA kA e : ℝ}
+    (hqA : 0 ≤ qA) (hkA : 0 ≤ kA) (he : 0 ≤ e)
+    (hQa : ∀ i k, |Qa i k| ≤ qA) (hKa : ∀ j k, |Ka j k| ≤ kA)
+    (hQe : ∀ i k, |Qt i k - Qa i k| ≤ e) (hKe : ∀ j k, |Kt j k - Ka j k| ≤ e)
+    (i j : Fin n) :
+    |Mat.mul Qt (Mat.transpose Kt) i j - Mat.mul Qa (Mat.transpose Ka) i j|
+      ≤ attnScoreInErr d qA kA e := by
+  have hbound : (∑ k, |Qt i k * Kt j k - Qa i k * Ka j k|) ≤ attnScoreInErr d qA kA e := by
+    unfold attnScoreInErr
+    calc (∑ k, |Qt i k * Kt j k - Qa i k * Ka j k|)
+        ≤ ∑ _k : Fin d, ((qA + e) * e + kA * e) := by
+          refine Finset.sum_le_sum fun k _ => ?_
+          rw [show Qt i k * Kt j k - Qa i k * Ka j k
+              = Qt i k * (Kt j k - Ka j k) + Ka j k * (Qt i k - Qa i k) from by ring]
+          refine (abs_add_le _ _).trans ?_
+          rw [abs_mul, abs_mul]
+          have hQtik : |Qt i k| ≤ qA + e := by
+            have h := abs_sub_le (Qt i k) (Qa i k) 0; simp only [sub_zero] at h
+            linarith [hQe i k, hQa i k]
+          have t1 : |Qt i k| * |Kt j k - Ka j k| ≤ (qA + e) * e :=
+            mul_le_mul hQtik (hKe j k) (abs_nonneg _) (by linarith)
+          have t2 : |Ka j k| * |Qt i k - Qa i k| ≤ kA * e :=
+            mul_le_mul (hKa j k) (hQe i k) (abs_nonneg _) hkA
+          linarith
+      _ = (d : ℝ) * ((qA + e) * e + kA * e) := by
+          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  rw [matScore_eq, matScore_eq, ← Finset.sum_sub_distrib]
+  exact (Finset.abs_sum_le_sum_abs _ _).trans hbound
+
+/-- **SDPA INPUT-SENSITIVITY (the attention Lipschitz bound).** When the inputs `Q/K/V` are
+    each perturbed by `e` per entry (on magnitudes `qA/kA/vA`), each output entry of the real
+    `sdpa` moves by at most `attnOutInErr`. The chain: score sensitivity (`attnScore_input_close`)
+    → `1/√d` scale → **per-row softmax sensitivity `softmax_perturb`** (the `e^(2δ)−1` bound, the
+    only nonlinear step, no derivatives) → output matmul (V's own shift + the weight shift). This
+    is the piece `sdpa_close` was missing: with it, the attention sublayer is a full `FloatClose`. -/
+theorem sdpa_input_close {n d : Nat} (Qt Kt Vt Qa Ka Va : Mat n d)
+    {qA kA vA scaleA e : ℝ}
+    (hqA : 0 ≤ qA) (hkA : 0 ≤ kA) (hvA : 0 ≤ vA) (he : 0 ≤ e)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d : ℝ)| ≤ scaleA)
+    (hQa : ∀ i k, |Qa i k| ≤ qA) (hKa : ∀ j k, |Ka j k| ≤ kA) (hVa : ∀ k j, |Va k j| ≤ vA)
+    (hQe : ∀ i k, |Qt i k - Qa i k| ≤ e) (hKe : ∀ j k, |Kt j k - Ka j k| ≤ e)
+    (hVe : ∀ k j, |Vt k j - Va k j| ≤ e) (i : Fin n) (j : Fin d) :
+    |sdpa n d Qt Kt Vt i j - sdpa n d Qa Ka Va i j| ≤ attnOutInErr n d qA kA vA scaleA e := by
+  have hscaleA0 : 0 ≤ scaleA := (abs_nonneg _).trans hscaleA
+  set Δsc : ℝ := scaleA * attnScoreInErr d qA kA e with hΔ
+  have hΔ0 : 0 ≤ Δsc := by
+    rw [hΔ]; refine mul_nonneg hscaleA0 ?_
+    unfold attnScoreInErr
+    exact mul_nonneg (Nat.cast_nonneg d)
+      (by have := mul_nonneg (by linarith : (0:ℝ) ≤ qA + e) he
+          have := mul_nonneg hkA he; linarith)
+  -- (B) the scaled per-row logit shift
+  have hsc : ∀ k', |(1 / Real.sqrt (d : ℝ)) * Mat.mul Qt (Mat.transpose Kt) i k'
+                  - (1 / Real.sqrt (d : ℝ)) * Mat.mul Qa (Mat.transpose Ka) i k'| ≤ Δsc := by
+    intro k'
+    rw [← mul_sub, abs_mul]
+    exact mul_le_mul hscaleA (attnScore_input_close Qt Kt Qa Ka hqA hkA he hQa hKa hQe hKe i k')
+      (abs_nonneg _) hscaleA0
+  -- (C) the per-row softmax sensitivity
+  have hw : ∀ k, |softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qt (Mat.transpose Kt) i jj) k
+                - softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qa (Mat.transpose Ka) i jj) k|
+              ≤ Real.exp (2 * Δsc) - 1 :=
+    fun k => softmax_perturb _ _ hsc k
+  -- (D) output: V's own shift (weights ≤ 1) + the weight shift against V
+  rw [sdpa_eq, sdpa_eq, ← Finset.sum_sub_distrib]
+  refine (Finset.abs_sum_le_sum_abs _ _).trans ?_
+  have hbound : (∑ k, |softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qt (Mat.transpose Kt) i jj) k * Vt k j
+                     - softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qa (Mat.transpose Ka) i jj) k * Va k j|)
+              ≤ attnOutInErr n d qA kA vA scaleA e := by
+    unfold attnOutInErr attnWeightInErr
+    rw [← hΔ]
+    calc (∑ k, |softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qt (Mat.transpose Kt) i jj) k * Vt k j
+              - softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qa (Mat.transpose Ka) i jj) k * Va k j|)
+        ≤ ∑ _k : Fin n, (e + vA * (Real.exp (2 * Δsc) - 1)) := by
+          refine Finset.sum_le_sum fun k _ => ?_
+          rw [show softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qt (Mat.transpose Kt) i jj) k * Vt k j
+                 - softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qa (Mat.transpose Ka) i jj) k * Va k j
+              = softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qt (Mat.transpose Kt) i jj) k * (Vt k j - Va k j)
+                + Va k j * (softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qt (Mat.transpose Kt) i jj) k
+                          - softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qa (Mat.transpose Ka) i jj) k)
+              from by ring]
+          refine (abs_add_le _ _).trans ?_
+          rw [abs_mul, abs_mul]
+          have he1 : 0 ≤ Real.exp (2 * Δsc) - 1 := by
+            have := Real.add_one_le_exp (2 * Δsc); linarith [hΔ0]
+          have t1 : |softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qt (Mat.transpose Kt) i jj) k|
+                    * |Vt k j - Va k j| ≤ 1 * e :=
+            mul_le_mul (softmax_abs_le_one _ k) (hVe k j) (abs_nonneg _) (by norm_num)
+          have t2 : |Va k j| * |softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qt (Mat.transpose Kt) i jj) k
+                              - softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Qa (Mat.transpose Ka) i jj) k|
+                    ≤ vA * (Real.exp (2 * Δsc) - 1) :=
+            mul_le_mul (hVa k j) (hw k) (abs_nonneg _) hvA
+          linarith
+      _ = (n : ℝ) * (e + vA * (Real.exp (2 * Δsc) - 1)) := by
+          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  exact hbound
+
+/-- **Softmax rows sum to 1** (`n ≥ 1`) — `∑ exp(zₖ)/S = S/S = 1`. -/
+theorem softmax_sum_one {n : ℕ} (hn : 0 < n) (z : Vec n) : ∑ k, softmax n z k = 1 := by
+  have hS : (0 : ℝ) < ∑ j, Real.exp (z j) :=
+    Finset.sum_pos (fun j _ => Real.exp_pos _) ⟨⟨0, hn⟩, Finset.mem_univ _⟩
+  have hk : ∀ k, softmax n z k = Real.exp (z k) / ∑ j, Real.exp (z j) := fun k => rfl
+  simp_rw [hk, div_eq_mul_inv, ← Finset.sum_mul]
+  rw [mul_inv_cancel₀ hS.ne']
+
+/-- **Attention is magnitude-stable** — `|sdpa Q K V i j| ≤ A` whenever `|V| ≤ A`: the output
+    is a convex combination of `V`'s rows (softmax weights are a probability distribution, by
+    `softmax_sum_one` + nonnegativity), so it never exceeds `V`'s magnitude. The attention
+    analogue of `relu`/`maxpool` magnitude-stability — what makes the sublayer compose to depth
+    with a FIXED `A` (no magnitude growth). -/
+theorem sdpa_abs_le {n d : Nat} (hn : 0 < n) (Q K V : Mat n d) {A : ℝ}
+    (hV : ∀ k j, |V k j| ≤ A) (i : Fin n) (j : Fin d) :
+    |sdpa n d Q K V i j| ≤ A := by
+  rw [sdpa_eq]
+  have hw0 : ∀ k, 0 ≤ softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Q (Mat.transpose K) i jj) k :=
+    fun k => div_nonneg (Real.exp_pos _).le (Finset.sum_nonneg fun jj _ => (Real.exp_pos _).le)
+  calc |∑ k, softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Q (Mat.transpose K) i jj) k * V k j|
+      ≤ ∑ k, |softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Q (Mat.transpose K) i jj) k * V k j| :=
+        Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ k, softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Q (Mat.transpose K) i jj) k * A := by
+        refine Finset.sum_le_sum fun k _ => ?_
+        rw [abs_mul, abs_of_nonneg (hw0 k)]
+        exact mul_le_mul_of_nonneg_left (hV k j) (hw0 k)
+    _ = (∑ k, softmax n (fun jj => (1 / Real.sqrt (d : ℝ)) * Mat.mul Q (Mat.transpose K) i jj) k) * A := by
+        rw [Finset.sum_mul]
+    _ = 1 * A := by rw [softmax_sum_one hn]
+    _ = A := one_mul A
 
 end FloatModel
 

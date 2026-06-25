@@ -115,4 +115,140 @@ theorem floatBridges_vitBlock {n d dff : Nat} (M : FloatModel)
       (floatBridges_vitMlpResidual M W₁ b₁ W₂ b₂ fgelu hw' hβ hegelu hd hdff hg
         hW₁ hb₁ hW₂ hb₂ hln))
 
+-- ════════════════════════════════════════════════════════════════
+-- § Discharging `hattn`: self-attention as a full FloatClose → UNCONDITIONAL block
+-- ════════════════════════════════════════════════════════════════
+
+/-- Self-attention `X ↦ sdpa(X,X,X)` (Q=K=V=X) on the flattened sequence `Vec (n·d)`. -/
+noncomputable def sdpaSelfFlat (n d : Nat) (X : Vec (n * d)) : Vec (n * d) :=
+  Mat.flatten (sdpa n d (Mat.unflatten X) (Mat.unflatten X) (Mat.unflatten X))
+
+/-- Float self-attention `X ↦ sdpaF(X,X,X)`. -/
+noncomputable def sdpaSelfFlatF (M : FloatModel) (fexp : ℝ → ℝ) (n d : Nat)
+    (X : Vec (n * d)) : Vec (n * d) :=
+  Mat.flatten (M.sdpaF fexp (Mat.unflatten X) (Mat.unflatten X) (Mat.unflatten X))
+
+/-- **Self-attention is a full `FloatClose`** — the piece that discharges the attention
+    sublayer's modulus with NOTHING supplied. Magnitude-STABLE (`B = A + rounding`, the real
+    output `≤ A` by `sdpa_abs_le`, attention being a convex average — so the block composes to
+    depth with a fixed `A`); the error modulus combines the fresh-input rounding `M.attnOutErr`
+    (`sdpa_close`, §2c) with the input-sensitivity `attnOutInErr` (`sdpa_input_close`, the
+    Lipschitz-through-softmax bound). Q=K=V=X (identity projections). -/
+theorem floatClose_sdpaSelf (M : FloatModel) (fexp : ℝ → ℝ) {n d : Nat} {A scaleA eexp : ℝ}
+    (hn : 0 < n) (hA : 0 ≤ A) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp n < 1) :
+    FloatClose A (A + M.attnOutErr n d A A A scaleA eexp)
+      (sdpaSelfFlat n d) (sdpaSelfFlatF M fexp n d)
+      (fun e => M.attnOutErr n d A A A scaleA eexp + attnOutInErr n d A A A scaleA e) := by
+  have hscaleA0 : 0 ≤ scaleA := (abs_nonneg _).trans hscaleA
+  have hAttn0 : 0 ≤ M.attnOutErr n d A A A scaleA eexp :=
+    M.attnOutErr_nonneg n d hA hA hA hscaleA0 heexp0 hρ1
+  refine ⟨fun v hv idx => ?_, fun vt va e hva hvt hd idx => ?_⟩
+  · -- magnitude: real ≤ A (convex), float ≤ A + rounding
+    have hX : ∀ a b, |Mat.unflatten v a b| ≤ A := fun a b => hv (finProdFinEquiv (a, b))
+    have hreal : |sdpa n d (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v)
+                   (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2| ≤ A :=
+      sdpa_abs_le hn (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v) hX _ _
+    have hround : |M.sdpaF fexp (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v)
+                    (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+                  - sdpa n d (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v)
+                    (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+                  ≤ M.attnOutErr n d A A A scaleA eexp :=
+      M.sdpa_close fexp (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v)
+        hA hA hA heexp0 heexp1 hfexp hscaleA hρ1 hX hX hX _ _
+    refine ⟨le_trans hreal (by linarith), ?_⟩
+    calc |sdpaSelfFlatF M fexp n d v idx|
+        = |M.sdpaF fexp (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v)
+            (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2| := rfl
+      _ ≤ |M.sdpaF fexp (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+           - sdpa n d (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+          + |sdpa n d (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2| := by
+          simpa using abs_sub_le
+            (M.sdpaF fexp (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v)
+              (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2)
+            (sdpa n d (Mat.unflatten v) (Mat.unflatten v) (Mat.unflatten v)
+              (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2) 0
+      _ ≤ M.attnOutErr n d A A A scaleA eexp + A := add_le_add hround hreal
+      _ = A + M.attnOutErr n d A A A scaleA eexp := by ring
+  · -- error: rounding at the float input (sdpa_close) + sensitivity float-vs-real input
+    have hXt : ∀ a b, |Mat.unflatten vt a b| ≤ A := fun a b => hvt (finProdFinEquiv (a, b))
+    have hXa : ∀ a b, |Mat.unflatten va a b| ≤ A := fun a b => hva (finProdFinEquiv (a, b))
+    have hXe : ∀ a b, |Mat.unflatten vt a b - Mat.unflatten va a b| ≤ e :=
+      fun a b => hd (finProdFinEquiv (a, b))
+    have he0 : 0 ≤ e := (abs_nonneg _).trans (hd idx)
+    have hround : |M.sdpaF fexp (Mat.unflatten vt) (Mat.unflatten vt) (Mat.unflatten vt)
+                    (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+                  - sdpa n d (Mat.unflatten vt) (Mat.unflatten vt) (Mat.unflatten vt)
+                    (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+                  ≤ M.attnOutErr n d A A A scaleA eexp :=
+      M.sdpa_close fexp (Mat.unflatten vt) (Mat.unflatten vt) (Mat.unflatten vt)
+        hA hA hA heexp0 heexp1 hfexp hscaleA hρ1 hXt hXt hXt _ _
+    have hsens : |sdpa n d (Mat.unflatten vt) (Mat.unflatten vt) (Mat.unflatten vt)
+                   (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+                 - sdpa n d (Mat.unflatten va) (Mat.unflatten va) (Mat.unflatten va)
+                   (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+                 ≤ attnOutInErr n d A A A scaleA e :=
+      sdpa_input_close (Mat.unflatten vt) (Mat.unflatten vt) (Mat.unflatten vt)
+        (Mat.unflatten va) (Mat.unflatten va) (Mat.unflatten va)
+        hA hA hA he0 hscaleA hXa hXa hXa hXe hXe hXe _ _
+    calc |sdpaSelfFlatF M fexp n d vt idx - sdpaSelfFlat n d va idx|
+        = |M.sdpaF fexp (Mat.unflatten vt) (Mat.unflatten vt) (Mat.unflatten vt)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+           - sdpa n d (Mat.unflatten va) (Mat.unflatten va) (Mat.unflatten va)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2| := rfl
+      _ ≤ |M.sdpaF fexp (Mat.unflatten vt) (Mat.unflatten vt) (Mat.unflatten vt)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+           - sdpa n d (Mat.unflatten vt) (Mat.unflatten vt) (Mat.unflatten vt)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2|
+          + |sdpa n d (Mat.unflatten vt) (Mat.unflatten vt) (Mat.unflatten vt)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2
+           - sdpa n d (Mat.unflatten va) (Mat.unflatten va) (Mat.unflatten va)
+             (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2| := abs_sub_le _ _ _
+      _ ≤ M.attnOutErr n d A A A scaleA eexp + attnOutInErr n d A A A scaleA e :=
+          add_le_add hround hsens
+
+/-- Self-attention float-bridges (magnitude-stable, `B = A + rounding`). -/
+theorem floatBridges_sdpaSelf (M : FloatModel) (fexp : ℝ → ℝ) {n d : Nat} {scaleA eexp : ℝ}
+    (hn : 0 < n) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp n < 1) :
+    FloatBridges (sdpaSelfFlat n d) := by
+  intro A hA
+  have hscaleA0 : 0 ≤ scaleA := (abs_nonneg _).trans hscaleA
+  exact ⟨A + M.attnOutErr n d A A A scaleA eexp, _, _,
+    add_nonneg hA (M.attnOutErr_nonneg n d hA hA hA hscaleA0 heexp0 hρ1),
+    floatClose_sdpaSelf M fexp hn hA heexp0 heexp1 hfexp hscaleA hρ1⟩
+
+/-- **THE UNCONDITIONAL TRANSFORMER-BLOCK FOLD** (self-attention, Q=K=V=X). The block
+    `LN → MHSA → +x → LN → MLP → +x` float-bridges with NO supplied attention hypothesis —
+    `floatBridges_vitBlock`'s `hattn` is discharged by `floatBridges_sdpaSelf` (its rounding
+    is `sdpa_close`, its input-sensitivity is `sdpa_input_close`, both proved). Every piece of
+    the ViT encoder block is now proved in rounding, a-posteriori in the activation magnitude.
+    Composes to depth: a 12-layer encoder is `FloatBridges.comp`/`floatClose_iterate` of this. -/
+theorem floatBridges_vitBlockSelf {n d dff : Nat} (M : FloatModel)
+    (W₁ : Mat d dff) (b₁ : Vec dff) (W₂ : Mat dff d) (b₂ : Vec d)
+    (fgelu fexp : ℝ → ℝ)
+    {εln γln βln w' β egelu scaleA eexp : ℝ}
+    (hn : 0 < n) (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hegelu : 0 ≤ egelu) (hd : 0 < d) (hdff : 0 < dff)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hb₁ : ∀ j, |b₁ j| ≤ β)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w') (hb₂ : ∀ j, |b₂ j| ≤ β)
+    (hln : FloatBridges (layerNormForward d εln γln βln))
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp n < 1) :
+    FloatBridges
+      (perRowFlat n d (Proofs.residual
+          (Proofs.dense W₂ b₂ ∘ gelu dff ∘ Proofs.dense W₁ b₁ ∘ layerNormForward d εln γln βln))
+        ∘ Proofs.residual (sdpaSelfFlat n d)) :=
+  floatBridges_vitBlock M W₁ b₁ W₂ b₂ fgelu hw' hβ hegelu hd hdff hg hW₁ hb₁ hW₂ hb₂ hln
+    ((floatBridges_sdpaSelf M fexp hn heexp0 heexp1 hfexp hscaleA hρ1).residual M)
+
 end Proofs

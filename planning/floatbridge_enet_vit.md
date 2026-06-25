@@ -229,10 +229,15 @@ number" questions.
    the `Mat`↔`Vec` seam is `perRowFlat` + `FloatClose.perRow`/`FloatBridges.perRow` (lift a
    per-token bridge to the flattened `Vec (n·d)` sequence, same magnitude + same modulus, rows
    independent). The block is one `FloatBridges.comp` — MLP+LN₂ sublayer fully discharged
-   (§2d `.perRow`), attention sublayer **supplied** (`hattn`, the BN/LN-as-hypothesis pattern).
-   **NEXT (the one open analysis):** attention **input-sensitivity** — how `sdpa` responds to a
-   perturbed `X` (softmax-through-`QKᵀ` Lipschitz). Its *rounding* is already `sdpa_close`;
-   discharging `hattn` end-to-end (rounding + sensitivity) closes the block unconditionally.
+   (§2d `.perRow`), attention sublayer supplied (`hattn`).
+   ~~attention **input-sensitivity**~~ **DONE — THE CAPSTONE**: `sdpa_input_close` (the
+   Lipschitz-through-softmax bound: score sensitivity → `1/√d` → per-row `softmax_perturb`
+   `e^(2δ)−1`, the only nonlinear step, no derivatives → output matmul). With `sdpa_abs_le`
+   (attention is a convex average ⇒ magnitude-stable, via `softmax_sum_one`), `floatClose_sdpaSelf`
+   packages self-attention (Q=K=V=X) as a full `FloatClose` (rounding `sdpa_close` + sensitivity
+   `sdpa_input_close`), and **`floatBridges_vitBlockSelf`** is the **UNCONDITIONAL** ViT encoder
+   block — `hattn` discharged, nothing supplied, every piece proved in rounding. Composes to
+   depth via `FloatBridges.comp`. The whole ViT float story (LN/GELU/MLP/attention/block) is closed.
 6. Whichever of §3.1/§3.5/§3.6 the writeup needs to be honest about (the kernel gap,
    the closeness-not-descent framing, the eval-mode quick win).
 
@@ -253,7 +258,10 @@ softmax-at-perturbed-logits engine, extracted from `softmax_ce_cot_close`).
 the `attn{Score,Scaled,Weight,Out}Err` budgets (+ nonneg), `attnScore_close`/`attnScaled_close`/
 `attnDot_close`, `rowSoftmaxF`/`rowSoftmaxF_close`, `sdpaF`, and the capstone `sdpa_close`.
 `ViTBlockFloatBridge.lean` (new, the block fold) — the `Mat`↔`Vec` seam `perRowFlat` +
-`FloatClose.perRow`/`FloatBridges.perRow`, and the capstone `floatBridges_vitBlock`.
+`FloatClose.perRow`/`FloatBridges.perRow`, `floatBridges_vitBlock` (supplied-attn), and THE
+CAPSTONE: `floatClose_sdpaSelf`/`floatBridges_sdpaSelf` + the unconditional `floatBridges_vitBlockSelf`.
+`ViTAttentionFloatBridge.lean` also now carries `sdpa_input_close` (attention Lipschitz),
+`sdpa_abs_le`, `softmax_sum_one`, and the `attn{Score,Weight,Out}InErr` sensitivity budgets.
 
 The novel methodological core (compose rounding budgets as a fold, split by
 smooth/kinked, instantiate a-posteriori) is in place; everything above is reuse,

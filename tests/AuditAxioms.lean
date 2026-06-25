@@ -1529,6 +1529,21 @@ open Proofs
 #print axioms FloatClose.perRow
 #print axioms FloatBridges.perRow
 #print axioms floatBridges_vitBlock
+-- ── planning/floatbridge_enet_vit.md §2c-capstone (ATTENTION INPUT-SENSITIVITY → UNCONDITIONAL block) ──
+-- The one piece sdpa_close was missing: how the real sdpa output moves under a perturbed
+-- input. sdpa_input_close (the attention Lipschitz bound) — score sensitivity → 1/√d scale →
+-- per-row softmax_perturb (the e^(2δ)−1 bound, the only nonlinear step, NO derivatives) →
+-- output matmul. sdpa_abs_le (attention is a convex average ⇒ magnitude-stable, via
+-- softmax_sum_one). floatClose_sdpaSelf packages self-attention (Q=K=V=X) as a full FloatClose
+-- (rounding sdpa_close + sensitivity sdpa_input_close); floatBridges_sdpaSelf its bridge form.
+-- floatBridges_vitBlockSelf: the UNCONDITIONAL ViT encoder block — hattn discharged, nothing
+-- supplied, every piece proved in rounding (a-posteriori in the activation magnitude).
+#print axioms FloatModel.sdpa_input_close
+#print axioms FloatModel.sdpa_abs_le
+#print axioms FloatModel.softmax_sum_one
+#print axioms floatClose_sdpaSelf
+#print axioms floatBridges_sdpaSelf
+#print axioms floatBridges_vitBlockSelf
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.
