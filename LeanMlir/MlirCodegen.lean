@@ -4966,24 +4966,93 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         code := code ++ s!"    %y1_sum_wh = stablehlo.reduce(%y1_msq_wh init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
         code := code ++ s!"           : ({tensorTy shapeWH}, tensor<f32>) -> tensor<f32>\n"
         code := code ++ s!"    %y1_t2 = stablehlo.multiply %y1_sum_wh, %y1_lcoord : tensor<f32>\n"
-        -- T3: conf positive box 0
-        code := code ++ s!"    %y1_diff_c0pos = stablehlo.subtract %y1_pred_c0, %y1_oneC1 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_sq_c0pos = stablehlo.multiply %y1_diff_c0pos, %y1_diff_c0pos : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_msq_c0pos = stablehlo.multiply %y1_sq_c0pos, %y1_mask_c1 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_t3 = stablehlo.reduce(%y1_msq_c0pos init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
-        code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
-        -- T4: conf negative box 0
-        code := code ++ s!"    %y1_inv_mask_c1 = stablehlo.subtract %y1_oneC1, %y1_mask_c1 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_sq_c0neg = stablehlo.multiply %y1_pred_c0, %y1_pred_c0 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_msq_c0neg = stablehlo.multiply %y1_sq_c0neg, %y1_inv_mask_c1 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_sum_c0neg = stablehlo.reduce(%y1_msq_c0neg init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
-        code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
-        code := code ++ s!"    %y1_t4 = stablehlo.multiply %y1_sum_c0neg, %y1_lnoobj : tensor<f32>\n"
-        -- T5: conf negative box 1 (always)
-        code := code ++ s!"    %y1_sq_c1neg = stablehlo.multiply %y1_pred_c1, %y1_pred_c1 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_sum_c1neg = stablehlo.reduce(%y1_sq_c1neg init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
-        code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
-        code := code ++ s!"    %y1_t5 = stablehlo.multiply %y1_sum_c1neg, %y1_lnoobj : tensor<f32>\n"
+        -- ── T3 / T4 / T5: objectness confidence ──────────────────────────────
+        -- Two paths.
+        --   Non-focal (default): raw-MSE on raw conf — YOLOv1 as published.
+        --   Focal (useFocal):    sigmoid + focal-BCE on the conf *logit*, with a
+        --     DETACHED focal weight (1-p_t)^γ. This is the fix for the fg/bg
+        --     objectness collapse (planning/yolo_v5.md §3): ~1-2 object cells vs
+        --     ~47 background cells make "predict 0 everywhere" an MSE minimum, so
+        --     the conv head localizes early then decays to a center-prior. Focal
+        --     down-weights easy (well-classified) cells so the rare foreground keeps
+        --     a gradient. α-balance = {1 on object cells, λ_noobj on background};
+        --     box 1 is always background (target 0). The focal weight is computed
+        --     once here and reused verbatim in the backward, so it is constant w.r.t.
+        --     the gradient ("detached"):  d/dz = α · (1-p_t)^γ · (sigmoid(z) - t).
+        if useFocal then
+          code := code ++ s!"    // T3+T4 (box0) / T5 (box1): sigmoid focal-BCE objectness (γ={focalGamma})\n"
+          code := code ++ s!"    %y1f_zero = stablehlo.constant dense<0.0> : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_eps = stablehlo.constant dense<1.0e-12> : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_gamma = stablehlo.constant dense<{focalGamma}> : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_lnoobj = stablehlo.constant dense<{lambdaNoobj}> : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_1mt = stablehlo.subtract %y1_oneC1, %y1_mask_c1 : {shapeC1Ty}\n"
+          -- box 0: p0 = sigmoid(z0), target t0 = mask
+          code := code ++ s!"    %y1f_p0 = stablehlo.logistic %y1_pred_c0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_1mp0 = stablehlo.subtract %y1_oneC1, %y1f_p0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_tp0 = stablehlo.multiply %y1_mask_c1, %y1f_p0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_1mt1mp0 = stablehlo.multiply %y1f_1mt, %y1f_1mp0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_pt0 = stablehlo.add %y1f_tp0, %y1f_1mt1mp0 : {shapeC1Ty}\n"
+          -- detached focal weight w0 = (1 - p_t0)^γ = exp(γ·log(max(1-p_t0, ε)))
+          code := code ++ s!"    %y1f_1mpt0 = stablehlo.subtract %y1_oneC1, %y1f_pt0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_1mpt0c = stablehlo.maximum %y1f_1mpt0, %y1f_eps : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_log0 = stablehlo.log %y1f_1mpt0c : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_glog0 = stablehlo.multiply %y1f_gamma, %y1f_log0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_w0 = stablehlo.exponential %y1f_glog0 : {shapeC1Ty}\n"
+          -- α0 = mask·1 + (1-mask)·λ_noobj
+          code := code ++ s!"    %y1f_a0bg = stablehlo.multiply %y1f_1mt, %y1f_lnoobj : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_a0 = stablehlo.add %y1_mask_c1, %y1f_a0bg : {shapeC1Ty}\n"
+          -- stable BCE-with-logits: bce0 = max(z,0) - z·t + log(1 + exp(-|z|))
+          code := code ++ s!"    %y1f_relu0 = stablehlo.maximum %y1_pred_c0, %y1f_zero : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_zt0 = stablehlo.multiply %y1_pred_c0, %y1_mask_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_absz0 = stablehlo.abs %y1_pred_c0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_nabsz0 = stablehlo.negate %y1f_absz0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_en0 = stablehlo.exponential %y1f_nabsz0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_1pen0 = stablehlo.add %y1_oneC1, %y1f_en0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_sp0 = stablehlo.log %y1f_1pen0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_bce0a = stablehlo.subtract %y1f_relu0, %y1f_zt0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_bce0 = stablehlo.add %y1f_bce0a, %y1f_sp0 : {shapeC1Ty}\n"
+          -- T3 = Σ α0 · w0 · bce0 (covers both object and background cells); T4 folded in → 0
+          code := code ++ s!"    %y1f_wb0 = stablehlo.multiply %y1f_a0, %y1f_w0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_t3cell = stablehlo.multiply %y1f_wb0, %y1f_bce0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_t3 = stablehlo.reduce(%y1f_t3cell init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+          code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
+          code := code ++ s!"    %y1_t4 = stablehlo.constant dense<0.0> : tensor<f32>\n"
+          -- box 1: target t1 = 0 always → p_t1 = 1-p1, w1 = (1-p_t1)^γ = p1^γ
+          code := code ++ s!"    %y1f_p1 = stablehlo.logistic %y1_pred_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_p1c = stablehlo.maximum %y1f_p1, %y1f_eps : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_log1 = stablehlo.log %y1f_p1c : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_glog1 = stablehlo.multiply %y1f_gamma, %y1f_log1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_w1 = stablehlo.exponential %y1f_glog1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_relu1 = stablehlo.maximum %y1_pred_c1, %y1f_zero : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_absz1 = stablehlo.abs %y1_pred_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_nabsz1 = stablehlo.negate %y1f_absz1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_en1 = stablehlo.exponential %y1f_nabsz1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_1pen1 = stablehlo.add %y1_oneC1, %y1f_en1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_sp1 = stablehlo.log %y1f_1pen1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_bce1 = stablehlo.add %y1f_relu1, %y1f_sp1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_wb1 = stablehlo.multiply %y1f_lnoobj, %y1f_w1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_t5cell = stablehlo.multiply %y1f_wb1, %y1f_bce1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_t5 = stablehlo.reduce(%y1f_t5cell init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+          code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
+        else
+          -- T3: conf positive box 0
+          code := code ++ s!"    %y1_diff_c0pos = stablehlo.subtract %y1_pred_c0, %y1_oneC1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_sq_c0pos = stablehlo.multiply %y1_diff_c0pos, %y1_diff_c0pos : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_msq_c0pos = stablehlo.multiply %y1_sq_c0pos, %y1_mask_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_t3 = stablehlo.reduce(%y1_msq_c0pos init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+          code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
+          -- T4: conf negative box 0
+          code := code ++ s!"    %y1_inv_mask_c1 = stablehlo.subtract %y1_oneC1, %y1_mask_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_sq_c0neg = stablehlo.multiply %y1_pred_c0, %y1_pred_c0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_msq_c0neg = stablehlo.multiply %y1_sq_c0neg, %y1_inv_mask_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_sum_c0neg = stablehlo.reduce(%y1_msq_c0neg init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+          code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
+          code := code ++ s!"    %y1_t4 = stablehlo.multiply %y1_sum_c0neg, %y1_lnoobj : tensor<f32>\n"
+          -- T5: conf negative box 1 (always)
+          code := code ++ s!"    %y1_sq_c1neg = stablehlo.multiply %y1_pred_c1, %y1_pred_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_sum_c1neg = stablehlo.reduce(%y1_sq_c1neg init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+          code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
+          code := code ++ s!"    %y1_t5 = stablehlo.multiply %y1_sum_c1neg, %y1_lnoobj : tensor<f32>\n"
         -- T6: class — softmax cross-entropy over the numC class channels (dim 1),
         -- masked to object cells. (Replaces the original SSE class term, which was
         -- too weak to sharpen the 20-way class logits — see planning/yolo notes.)
@@ -5035,18 +5104,31 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         code := code ++ s!"    %y1_zero_wh = stablehlo.constant dense<0.0> : {tensorTy shapeWH}\n"
         code := code ++ s!"    %y1_g_wh_m = \"stablehlo.select\"(%y1_active_wh, %y1_g_wh_c, %y1_zero_wh) : ({i1WHTy}, {tensorTy shapeWH}, {tensorTy shapeWH}) -> {tensorTy shapeWH}\n"
         code := code ++ s!"    %y1_g_wh = stablehlo.divide %y1_g_wh_m, %y1_Bf_xy : {tensorTy shapeWH}\n"
-        -- d/dpred_c0 = (2·mask·(pred-1) + 2·λ_noobj·(1-mask)·pred) / B
-        code := code ++ s!"    %y1_g_c0pos_a = stablehlo.multiply %y1_two_c1, %y1_mask_c1 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_g_c0pos_b = stablehlo.multiply %y1_g_c0pos_a, %y1_diff_c0pos : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_g_c0neg_a = stablehlo.multiply %y1_two_c1, %y1_lnoobj_c1 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_g_c0neg_b = stablehlo.multiply %y1_g_c0neg_a, %y1_inv_mask_c1 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_g_c0neg_c = stablehlo.multiply %y1_g_c0neg_b, %y1_pred_c0 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_g_c0_sum = stablehlo.add %y1_g_c0pos_b, %y1_g_c0neg_c : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_g_c0 = stablehlo.divide %y1_g_c0_sum, %y1_Bf_c1 : {shapeC1Ty}\n"
-        -- d/dpred_c1 = 2 · λ_noobj · pred / B
-        code := code ++ s!"    %y1_g_c1_a = stablehlo.multiply %y1_two_c1, %y1_lnoobj_c1 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_g_c1_b = stablehlo.multiply %y1_g_c1_a, %y1_pred_c1 : {shapeC1Ty}\n"
-        code := code ++ s!"    %y1_g_c1 = stablehlo.divide %y1_g_c1_b, %y1_Bf_c1 : {shapeC1Ty}\n"
+        if useFocal then
+          -- focal-BCE objectness backward (detached weight): d/dz = α·w·(sigmoid(z) - t) / B.
+          -- p0, w0, a0 (box0) and p1, w1 (box1) come from the focal forward above; the
+          -- weights w0/w1 are reused as constants → "detached" focal weight.
+          code := code ++ s!"    %y1f_pmt0 = stablehlo.subtract %y1f_p0, %y1_mask_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_g0a = stablehlo.multiply %y1f_a0, %y1f_w0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_g0b = stablehlo.multiply %y1f_g0a, %y1f_pmt0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_g_c0 = stablehlo.divide %y1f_g0b, %y1_Bf_c1 : {shapeC1Ty}\n"
+          -- box1: t1 = 0 → (p1 - t1) = p1
+          code := code ++ s!"    %y1f_g1a = stablehlo.multiply %y1f_lnoobj, %y1f_w1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1f_g1b = stablehlo.multiply %y1f_g1a, %y1f_p1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_g_c1 = stablehlo.divide %y1f_g1b, %y1_Bf_c1 : {shapeC1Ty}\n"
+        else
+          -- d/dpred_c0 = (2·mask·(pred-1) + 2·λ_noobj·(1-mask)·pred) / B
+          code := code ++ s!"    %y1_g_c0pos_a = stablehlo.multiply %y1_two_c1, %y1_mask_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_g_c0pos_b = stablehlo.multiply %y1_g_c0pos_a, %y1_diff_c0pos : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_g_c0neg_a = stablehlo.multiply %y1_two_c1, %y1_lnoobj_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_g_c0neg_b = stablehlo.multiply %y1_g_c0neg_a, %y1_inv_mask_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_g_c0neg_c = stablehlo.multiply %y1_g_c0neg_b, %y1_pred_c0 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_g_c0_sum = stablehlo.add %y1_g_c0pos_b, %y1_g_c0neg_c : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_g_c0 = stablehlo.divide %y1_g_c0_sum, %y1_Bf_c1 : {shapeC1Ty}\n"
+          -- d/dpred_c1 = 2 · λ_noobj · pred / B
+          code := code ++ s!"    %y1_g_c1_a = stablehlo.multiply %y1_two_c1, %y1_lnoobj_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_g_c1_b = stablehlo.multiply %y1_g_c1_a, %y1_pred_c1 : {shapeC1Ty}\n"
+          code := code ++ s!"    %y1_g_c1 = stablehlo.divide %y1_g_c1_b, %y1_Bf_c1 : {shapeC1Ty}\n"
         -- d/dpred_cls = mask · (softmax(pred) - tgt) / B   [softmax-CE gradient,
         -- reusing exp/sumexp from the forward; no factor of 2 unlike the SSE term]
         code := code ++ s!"    %y1_cls_sumexpb = stablehlo.broadcast_in_dim %y1_cls_sumexp, dims = [0, 2, 3] : ({shapeClsRedTy}) -> {shapeClassTy}\n"

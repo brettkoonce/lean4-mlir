@@ -32,14 +32,14 @@ import LeanMlir
     = 21,284,672.) -/
 
 def r34Yolov1 : NetSpec where
-  -- Conv detection head (v1.5): the backbone's [B,512,7,7] map goes straight
-  -- through a 1×1 conv → [B,30,7,7] → flatten → [B,1470], instead of the old
-  -- flatten→dense(25088→1470) FC head. The conv head predicts each cell from
-  -- its OWN 512-feature column with shared weights, so spatial localization is
-  -- structural (not learned through a giant dense layer) — fixes the box/
-  -- objectness collapse-to-center the FC head couldn't escape. Distinct name →
-  -- own checkpoint files. Backbone prefix (21,284,672) is unchanged.
-  name := "ResNet-34 + YOLOv1 conv-head (person VOC)"
+  -- Deep detection head (attempt #1): the 1×1-linear conf head collapsed to a
+  -- center-prior by ~e16 even with focal — a single linear per-cell readout
+  -- can't decode "person here" from the 512-d feature column, and WD zeros its
+  -- sparse-signal weights (verdict in planning/yolo_v5.md). Replace it with a
+  -- 3×3 conv 512→256 + ReLU (nonlinear capacity + 3×3 spatial context) then a
+  -- 1×1 → 30. New name → own checkpoints. Backbone prefix (21,284,672) unchanged
+  -- (the two head convs are He-init, after the prefix).
+  name := "ResNet-34 + YOLOv1 deep-head (person VOC)"
   imageH := 224
   imageW := 224
   layers := [
@@ -49,7 +49,8 @@ def r34Yolov1 : NetSpec where
     .residualBlock  64 128 4 2,
     .residualBlock 128 256 6 2,
     .residualBlock 256 512 3 2,
-    .conv2d 512 30 1 .same .identity,   -- 1×1 conv detection head → [B,30,7,7]
+    .conv2d 512 256 3 .same .relu,      -- deep head L1: 3×3, nonlinear, spatial context
+    .conv2d 256 30 1 .same .identity,   -- deep head L2: 1×1 → [B,30,7,7]
     .flatten                            -- → [B,1470] for the YOLOv1 masked loss
   ]
 
@@ -64,7 +65,9 @@ def r34Yolov1BootstrapConfig : TrainConfig where
   batchSize    := 16
   epochs       := 80
   useAdam      := true
-  weightDecay  := 5.0e-4
+  weightDecay  := 0.0          -- attempt #1: WD off. WD 5e-4 zeroed the conf head's
+                               -- input-dependent weights faster than the ~2 person
+                               -- cells/image could build them → flat center-prior.
   cosineDecay  := true
   warmupEpochs := 3
   gradClipNorm := 4.0          -- global-L2-norm gradient clip (essential at this LR)
@@ -75,9 +78,16 @@ def r34Yolov1BootstrapConfig : TrainConfig where
   checkpointEveryNEpochs := 2  -- frequent ckpts: mars segfaults ~ep4-11; auto-resume needs recent state
   augment      := true        -- Phase 3: bbox-aware hflip + random crop
   lossKind     := LossKind.yolov1Masked
+  -- Focal-BCE objectness (planning/yolo_v5.md §3): sigmoid + focal-BCE on the
+  -- conf channel instead of raw-MSE, so the ~1-2 foreground cells aren't drowned
+  -- by ~47 background cells. This is the fix for the objectness collapse-to-
+  -- center-prior the conv head otherwise decays into by ~ep20. γ=2 (RetinaNet).
+  useFocal     := true
+  focalGamma   := 2.0
   bootstrapBackbone := some (".lake/build/jax_r34_imagenet.bin", 21284672)
 
 def main (args : List String) : IO Unit := do
-  let dataDir := args.head?.getD "data/voc2007"
-  IO.println s!"YOLOv1 VOC trainer with R34 bootstrap — data dir: {dataDir}"
+  -- Person-only data dir (data/voc2007_person) is the v5 recipe; pass it as argv[0].
+  let dataDir := args.head?.getD "data/voc2007_person"
+  IO.println s!"YOLOv1 VOC trainer with R34 bootstrap (focal objectness) — data dir: {dataDir}"
   r34Yolov1.train r34Yolov1BootstrapConfig dataDir DatasetKind.pascalVoc

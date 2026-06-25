@@ -71,6 +71,10 @@ def softmax(x):
     return e / e.sum()
 
 
+def sigmoid(x):
+    return 1.0 / (1.0 + np.exp(-x))
+
+
 def iou(a, b):
     """IoU between two [xmin, ymin, xmax, ymax] boxes."""
     ix0 = max(a[0], b[0]); iy0 = max(a[1], b[1])
@@ -84,8 +88,12 @@ def iou(a, b):
     return inter / union if union > 0 else 0.0
 
 
-def decode(pred_1470, score_thresh=0.1, nms_iou=0.5):
-    """Decode one [1470] flat YOLOv1 prediction → list of (cid, score, [xmin,ymin,xmax,ymax])."""
+def decode(pred_1470, score_thresh=0.1, nms_iou=0.5, sigmoid_conf=False):
+    """Decode one [1470] flat YOLOv1 prediction → list of (cid, score, [xmin,ymin,xmax,ymax]).
+
+    `sigmoid_conf=True` for models trained with the focal-BCE objectness head
+    (useFocal): there the conf channel is a raw logit, so apply sigmoid to recover
+    P(object). For the raw-MSE objectness head the conf already lives in [0,1]."""
     pred = pred_1470.reshape(PER_CELL, GRID, GRID)
     dets = []
     for i in range(GRID):
@@ -94,7 +102,7 @@ def decode(pred_1470, score_thresh=0.1, nms_iou=0.5):
             y_cell = pred[1, i, j]
             w_rel  = max(pred[2, i, j], 0.0)
             h_rel  = max(pred[3, i, j], 0.0)
-            conf   = pred[4, i, j]
+            conf   = sigmoid(pred[4, i, j]) if sigmoid_conf else pred[4, i, j]
             class_logits = pred[10:30, i, j]
             class_probs = softmax(class_logits)
             cid = int(class_probs.argmax())
@@ -168,6 +176,10 @@ def main():
     ap.add_argument("dump_dir", help="output dir of yolov1-voc-infer (default figures/yolo_voc)")
     ap.add_argument("--score-thresh", type=float, default=0.1)
     ap.add_argument("--nms-iou", type=float, default=0.5)
+    ap.add_argument("--sigmoid-conf", action="store_true",
+                    help="apply sigmoid to the conf channel (use for focal-BCE objectness models)")
+    ap.add_argument("--max-per-image", type=int, default=0,
+                    help="keep only the top-K highest-score detections per image (0 = no cap)")
     args = ap.parse_args()
 
     dump_dir = Path(args.dump_dir)
@@ -191,7 +203,9 @@ def main():
     # Per-image PNGs.
     grid_imgs = []
     for i in range(n):
-        dets = decode(logits[i], args.score_thresh, args.nms_iou)
+        dets = decode(logits[i], args.score_thresh, args.nms_iou, args.sigmoid_conf)
+        if args.max_per_image > 0:                       # keep only the top-K by score
+            dets = sorted(dets, key=lambda d: -d[1])[:args.max_per_image]
         img_rgb = denormalize_chw(images[i])
         pil = draw_dets(img_rgb, dets, voc_id=indices[i] if i < len(indices) else None)
         per_path = dump_dir / f"det_{i:03d}.png"

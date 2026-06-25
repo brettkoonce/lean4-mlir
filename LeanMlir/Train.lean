@@ -133,8 +133,9 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
   | .yolov1Masked =>
     if useSoftLabels then
       throw <| IO.userError "yolov1Masked is incompatible with useMixup/useCutmix/useKnnMixup — YOLOv1 targets are per-cell float tensors, not class-mixable"
-    if cfg.useFocal then
-      throw <| IO.userError "yolov1Masked is incompatible with useFocal — focal applies to softmax-CE, not masked-MSE"
+    -- useFocal IS allowed here: for YOLOv1 it selects the sigmoid focal-BCE
+    -- objectness path (T3/T4/T5) instead of raw-MSE — the fg/bg imbalance fix
+    -- (planning/yolo_v5.md §3). The class term (T6) stays softmax-CE either way.
     if useSeg then
       throw <| IO.userError "yolov1Masked is incompatible with segmentation — different target shape ([B,30,7,7] float vs [B,H,W] int32)"
     if cfg.labelSmoothing != 0.0 then

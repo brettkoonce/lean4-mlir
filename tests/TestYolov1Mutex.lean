@@ -64,11 +64,20 @@ def main : IO Unit := do
   | some f => failures := failures.push f
   | none => IO.println "OK [C3]: useYolov1 + useKnnMixup → throws"
 
-  -- C4: useYolov1 + useFocal → throw
-  let c4 := { baseConfig with useFocal := true }
-  match (← expectThrow "useYolov1 + useFocal" (do let _ ← tinyYoloSpec.compileVmfbs c4; pure ())) with
-  | some f => failures := failures.push f
-  | none => IO.println "OK [C4]: useYolov1 + useFocal → throws"
+  -- C4: useYolov1 + useFocal → COMPILES. Focal now selects the sigmoid
+  -- focal-BCE objectness path (planning/yolo_v5.md §3), so this combo is
+  -- valid and the train step should compile cleanly (was: forbidden → throw).
+  let c4 := { baseConfig with useFocal := true, focalGamma := 2.0 }
+  let c4_ok ← try
+    let _ ← tinyYoloSpec.compileVmfbs c4
+    pure true
+  catch e =>
+    IO.eprintln s!"FAIL [C4]: useYolov1 + useFocal should compile (focal objectness), but threw: {e}"
+    pure false
+  if c4_ok then
+    IO.println "OK [C4]: useYolov1 + useFocal → focal-objectness train step compiles"
+  else
+    failures := failures.push "C4 failed"
 
   -- C5: useYolov1 + labelSmoothing != 0 → throw
   let c5 := { baseConfig with labelSmoothing := 0.1 }
@@ -93,7 +102,7 @@ def main : IO Unit := do
     failures := failures.push "C6 failed"
 
   if failures.isEmpty then
-    IO.println "T7 PASS: 5 mutex throws + 1 R1-integration success"
+    IO.println "T7 PASS: 4 mutex throws + 2 integration successes (incl. focal objectness)"
   else
     for f in failures do IO.eprintln f
     IO.eprintln s!"T7 FAIL: {failures.size}/6 checks failed"

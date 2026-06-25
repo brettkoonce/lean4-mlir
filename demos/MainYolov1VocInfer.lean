@@ -21,7 +21,7 @@ import LeanMlir
 
 def r34Yolov1 : NetSpec where
   -- Must match the trainer spec (name → checkpoint prefix; layers → eval graph).
-  name := "ResNet-34 + YOLOv1 conv-head (person VOC)"
+  name := "ResNet-34 + YOLOv1 deep-head (person VOC)"
   imageH := 224
   imageW := 224
   layers := [
@@ -31,7 +31,8 @@ def r34Yolov1 : NetSpec where
     .residualBlock  64 128 4 2,
     .residualBlock 128 256 6 2,
     .residualBlock 256 512 3 2,
-    .conv2d 512 30 1 .same .identity,
+    .conv2d 512 256 3 .same .relu,
+    .conv2d 256 30 1 .same .identity,
     .flatten
   ]
 
