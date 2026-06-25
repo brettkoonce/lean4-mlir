@@ -68,6 +68,7 @@ import LeanMlir.Proofs.SgdDescentLinear
 import LeanMlir.Proofs.SgdDescentCnn
 import LeanMlir.Proofs.CifarFloatBridge
 import LeanMlir.Proofs.BnFloatBridge
+import LeanMlir.Proofs.Resnet34FloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1340,6 +1341,17 @@ open Proofs
 #print axioms FloatModel.bnVar_close
 #print axioms FloatModel.bnForward_close_of
 #print axioms FloatModel.bnForward_close
+-- ResNet-34 structural float ops (Resnet34FloatBridge.lean) — no new numerical
+-- content past the rsqrt keystone. add_close: two-operand rounded-add closeness
+-- (additive peer of mul_close); reluAdd_close: post-skip relu(F(x)+skip(x)).
+-- flatConvStride2F_close: strided conv = flatConvF_close at the decimated coord.
+-- bnPerChannelFlat_close_of: per-channel BN = bnForward_close_of per channel-row.
+-- gapFlat_close: global-avg-pool = bnMean_close on the channel slice (sum_s2).
+#print axioms FloatModel.add_close
+#print axioms FloatModel.reluAdd_close
+#print axioms FloatModel.flatConvStride2F_close
+#print axioms FloatModel.bnPerChannelFlat_close_of
+#print axioms FloatModel.gapFlat_close
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.

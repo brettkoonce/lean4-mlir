@@ -199,6 +199,9 @@ lean_lib «Proofs» where
              -- BN float keystone: 1/√ Lipschitz on [ε,∞) + the inverse-stddev
              -- rounding budget (rsqrt accuracy + variance error, ε-floor).
              `LeanMlir.Proofs.BnFloatBridge,
+             -- residual additive fan-in float closeness (add_close / reluAdd_close)
+             -- — the new structural op toward the ResNet-34 float bridge.
+             `LeanMlir.Proofs.Resnet34FloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent
