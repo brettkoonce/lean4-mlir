@@ -1548,6 +1548,60 @@ theorem FloatModel.mnist_cnn_convW_step_float_budget (M : FloatModel)
   unfold FloatModel.sgdErr
   linarith [hs0]
 
+/-- **Numeric conv-BIAS-step capstone at the committed MNIST-CNN dims** — the
+    bias peer of `mnist_cnn_convW_step_float_budget`. The conv2 bias gradient is
+    the spatial SUM `∑ₛ cotWin cot o` over the `28·28 = 784` conv-output
+    positions (no input window, so no `a` factor — the bias Jacobian is the bare
+    channel indicator). At binary32 (`u ≤ 2⁻²⁴`), `lr = 1/10`, `|b| ≤ 3/5`, every
+    rounded conv2 bias SGD entry is within **`g/250 + 10⁻⁷`** of the certified
+    real step — where `g` bounds the conv2 cotangent magnitude. The same `1/250`
+    rate as the weight step (it is `lr·γ₇₈₅`, the gradient's Higham error at
+    learning-rate scale), with `a·g ↦ g` — the bias step is as accurate as the
+    gradient, no worse. -/
+theorem FloatModel.mnist_cnn_convb_step_float_budget (M : FloatModel)
+    (hMu : M.u ≤ u32) (b : Vec 32) (cot : Tensor3 32 28 28)
+    {g : ℝ} (hg : 0 ≤ g)
+    (hb : ∀ o, |b o| ≤ 3/5) (hcot : ∀ o i j, |cot o i j| ≤ g)
+    (o : Fin 32) :
+    |M.sub (b o) (M.mul (1/10) (M.sum (cotWin cot o))) -
+      (b o - (1/10) * ∑ s, cotWin cot o s)| ≤
+      g / 250 + 1/10000000 := by
+  have hu := M.u_nonneg
+  -- per-term and summed magnitude of the conv bias gradient
+  have hterm : ∀ s, |cotWin cot o s| ≤ g := by
+    intro s; simp only [cotWin]; exact hcot _ _ _
+  have hsum : ∑ s, |cotWin cot o s| ≤ 784 * g := by
+    calc ∑ s, |cotWin cot o s|
+        ≤ ∑ _s : Fin (28 * 28), g := Finset.sum_le_sum fun s _ => hterm s
+      _ = 784 * g := by
+          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
+            nsmul_eq_mul]; norm_num
+  have hG : |∑ s, cotWin cot o s| ≤ 784 * g :=
+    (Finset.abs_sum_le_sum_abs _ _).trans hsum
+  -- the conv bias step budget (Item B), with G := 784·g
+  have hstep := M.cnn_convb_step_float_close b cot o hG (by norm_num : (0:ℝ) ≤ 1/10)
+  refine hstep.trans ?_
+  -- eg ≤ (47/10⁶)·784·g  (γ₇₈₅ × the summed gradient mass)
+  have hk1 : ((28 * 28 + 1 : ℕ) : ℝ) * u32 < 1 := by norm_num [u32]
+  have hk2 : ((28 * 28 + 1 : ℕ) : ℝ) * u32 / (1 - ((28 * 28 + 1 : ℕ) : ℝ) * u32)
+      ≤ 47/1000000 := by norm_num [u32]
+  have hhigham : (1 + M.u) ^ (28 * 28 + 1) - 1 ≤ 47/1000000 :=
+    M.gamma_num hMu hk1 hk2
+  have hhigham0 : 0 ≤ (1 + M.u) ^ (28 * 28 + 1) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith))
+  have hsum0 : 0 ≤ ∑ s, |cotWin cot o s| :=
+    Finset.sum_nonneg fun s _ => abs_nonneg _
+  have heg : ((1 + M.u) ^ (28 * 28 + 1) - 1) * ∑ s, |cotWin cot o s| ≤
+      (47/1000000) * (784 * g) :=
+    mul_le_mul hhigham hsum hsum0 (by norm_num)
+  have h1 : u32 ≤ 1/16000000 := by norm_num [u32]
+  -- push u → the LITERAL 1/16000000, |b| → 3/5, eg → its rational bound (G fixed)
+  refine (sgdErr_mono hu (hMu.trans h1) (by norm_num) (abs_nonneg _)
+    (hb o) (mul_nonneg (by norm_num) hg)
+    (mul_nonneg hhigham0 hsum0) heg).trans ?_
+  unfold FloatModel.sgdErr
+  linarith [hg]
+
 -- ════════════════════════════════════════════════════════════════
 -- § The conv2 loss-of-kernel map: differentiability and gradient
 -- ════════════════════════════════════════════════════════════════

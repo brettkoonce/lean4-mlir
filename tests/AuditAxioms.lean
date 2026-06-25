@@ -1642,6 +1642,12 @@ open Proofs
 -- g = conv cotangent bound, both a-posteriori / measured). The 0.4% rate is
 -- lr·γ₇₈₅ — the gradient's Higham error at learning-rate scale.
 #print axioms FloatModel.mnist_cnn_convW_step_float_budget
+-- Item C, bias peer (SgdDescentCnn.lean): the conv2 BIAS gradient is the spatial
+-- SUM ∑ₛ cotWin cot o over the 784 conv-output positions (no input window ⇒ no a
+-- factor — the bias Jacobian is the bare channel indicator), so every rounded
+-- conv2 bias SGD entry is within g/250 + 10⁻⁷ of the certified step (g = cotangent
+-- bound). Same 1/250 = lr·γ₇₈₅ rate as the weight step, with a·g ↦ g.
+#print axioms FloatModel.mnist_cnn_convb_step_float_budget
 #print axioms FloatModel.pow_one_add_sub_one_le
 #print axioms FloatModel.linear_float_close
 #print axioms FloatModel.mlp_float_close

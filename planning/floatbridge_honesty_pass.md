@@ -44,24 +44,31 @@ Two different claims share the word *descent* and the README rides the ambiguity
   direction* being the certified gradient step — proven over ℝ for **all** nets
   (Tier 1/2/3), strong and real. README calls it the "loss-descent step".
 - **The loss actually decreasing.** The `*_sgd_descends` theorems prove an
-  η-accurate step *decreases the loss* (smoothness discharged). This holds for:
-  **linear** end-to-end (F2); **MLP** per weight layer (abstract η); **CNN** per
-  conv layer only (`cnn_conv{1,2}_sgd_descends` + bias — abstract η, whole-CNN
-  capstone open); **no deep net at all** (verified: zero `*_sgd_descends` for
-  ViT/ConvNeXt/r34/enet/mnv2).
+  η-accurate step *decreases the loss* (smoothness discharged), and the
+  `*_float_sgd_descends` theorems **fuse a *proven* float η** so the step is the
+  actual binary32 gradient. This is float-fused for: **linear** end-to-end (F2);
+  the **entire MLP** (`mlp_{output,hidden,input}_float_sgd_descends`, all three
+  weight layers); the **entire Chapter-4 CNN** — both conv *weights*
+  (`cnn_conv{1,2}_float_sgd_descends`) AND both conv *biases*
+  (`cnn_conv{1,2}_bias_float_sgd_descends`), η proven by the per-rung grad-closes,
+  + numeric capstones `mnist_cnn_conv{W,b}_step_float_budget`. **No deep net at
+  all** (verified: zero `*_sgd_descends` for ViT/ConvNeXt/r34/enet/mnv2).
 
 **Flag.** README L167: *"forward, gradient, and SGD-step rounding budgets for all
 three nets (linear / MLP / CNN), each with a proven loss-descent guarantee — the
 CNN (`cnn_conv2_sgd_descends` &c.) carries descent through the max-pool selection
-margins."* "loss-descent guarantee … carries descent" reads as *the loss
-decreases* for all three, but for the CNN only the per-conv-layer ingredients are
-proven (abstract η, no whole-net assembly), and it is not float-fused.
+margins."* The claim is now stronger than the wording: every **per-parameter** step
+of the deployed linear / MLP / CNN nets provably decreases the loss with the
+gradient accuracy *proven* (not just the abstract-η ingredients). The remaining
+honest gap is only the **joint all-layers** step (per-parameter, not net-wide) and
+the **deep nets** (closeness-only).
 
 **Recommend.** Disambiguate the two senses once, explicitly: the **loss-descent
 step** (certified update direction; all nets) vs the **loss provably decreasing**
-(linear end-to-end; MLP/CNN per weight layer under margins; whole-CNN + deep nets
-open). For the CNN, say "per-conv-layer descent ingredients (capstone assembly
-open)" rather than "carries descent".
+(now: every per-parameter step of linear / MLP / CNN, float-fused; OPEN: the joint
+all-layers step and all deep nets). The CNN line should now read "per-conv-layer
+(weight + bias) float-fused descent" — *not* "capstone assembly open" (that is
+done) and *not* "carries descent" net-wide.
 
 ### F2 — the linear float→descent composition is now CLOSED (correct an underclaim)
 
@@ -165,8 +172,10 @@ The float-bridge claims are, on the whole, unusually honest — the work needed 
 small and cuts both ways:
 
 1. **F1** — disambiguate "loss-descent *step*" (certified update, all nets) from
-   "the loss provably *decreases*" (linear end-to-end; MLP/CNN per-layer; deep nets
-   none). The one genuine overclaim risk.
+   "the loss provably *decreases*" — now float-fused for **every per-parameter step
+   of linear / MLP / the whole Chapter-4 CNN** (weights + biases, η proven), with
+   the joint all-layers step and all deep nets the honest stop. (Updated 2026-06-25:
+   the CNN float fusion that this flag previously listed as open is now CLOSED.)
 2. **F2** — take the linear win: cite `linear_float_sgd_descends`; retire the prior
    audit's "the two halves never meet" caveat for linear. The biggest underclaim.
 3. **F3/F4** — promote the kernel boundary (now MEASURED on silicon, §1) and
