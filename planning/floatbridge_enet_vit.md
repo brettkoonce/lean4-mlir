@@ -225,9 +225,14 @@ number" questions.
 4. ~~ViT §2a LN~~ **DONE**, ~~§2b GELU~~ **DONE**, ~~§2d MLP-block~~ **DONE**.
 5. ~~§2c attention~~ **DONE** (`ViTAttentionFloatBridge.lean`, `sdpa_close`).
    ~~§3.2 — pin `esig`/`egelu`~~ **DONE** (`scripts/transcendental_probe.py`, real gfx1100).
-   **NEXT:** the full ViT transformer-block fold (LN→MHSA→+→LN→MLP→+) now that both halves
-   exist — the `Mat`↔`Vec` seam (MHSA is `Mat n d`→`Mat n d`, the MLP is per-token `Vec`) is
-   the only new plumbing.
+   ~~the transformer-block fold~~ **DONE** (`ViTBlockFloatBridge.lean`, `floatBridges_vitBlock`):
+   the `Mat`↔`Vec` seam is `perRowFlat` + `FloatClose.perRow`/`FloatBridges.perRow` (lift a
+   per-token bridge to the flattened `Vec (n·d)` sequence, same magnitude + same modulus, rows
+   independent). The block is one `FloatBridges.comp` — MLP+LN₂ sublayer fully discharged
+   (§2d `.perRow`), attention sublayer **supplied** (`hattn`, the BN/LN-as-hypothesis pattern).
+   **NEXT (the one open analysis):** attention **input-sensitivity** — how `sdpa` responds to a
+   perturbed `X` (softmax-through-`QKᵀ` Lipschitz). Its *rounding* is already `sdpa_close`;
+   discharging `hattn` end-to-end (rounding + sensitivity) closes the block unconditionally.
 6. Whichever of §3.1/§3.5/§3.6 the writeup needs to be honest about (the kernel gap,
    the closeness-not-descent framing, the eval-mode quick win).
 
@@ -247,6 +252,8 @@ softmax-at-perturbed-logits engine, extracted from `softmax_ce_cot_close`).
 `ViTAttentionFloatBridge.lean` (new, §2c) — `matScore_eq`, `attnScore_abs_le`, `mulErr_nonneg`,
 the `attn{Score,Scaled,Weight,Out}Err` budgets (+ nonneg), `attnScore_close`/`attnScaled_close`/
 `attnDot_close`, `rowSoftmaxF`/`rowSoftmaxF_close`, `sdpaF`, and the capstone `sdpa_close`.
+`ViTBlockFloatBridge.lean` (new, the block fold) — the `Mat`↔`Vec` seam `perRowFlat` +
+`FloatClose.perRow`/`FloatBridges.perRow`, and the capstone `floatBridges_vitBlock`.
 
 The novel methodological core (compose rounding budgets as a fold, split by
 smooth/kinked, instantiate a-posteriori) is in place; everything above is reuse,

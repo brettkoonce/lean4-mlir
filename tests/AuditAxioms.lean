@@ -76,6 +76,7 @@ import LeanMlir.Proofs.EnetFloatBridge
 import LeanMlir.Proofs.DepthwiseFloatBridge
 import LeanMlir.Proofs.ViTFloatBridge
 import LeanMlir.Proofs.ViTAttentionFloatBridge
+import LeanMlir.Proofs.ViTBlockFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1517,6 +1518,17 @@ open Proofs
 #print axioms FloatModel.attnDot_close
 #print axioms FloatModel.rowSoftmaxF_close
 #print axioms FloatModel.sdpa_close
+-- ── planning/floatbridge_enet_vit.md §2 (ViT TRANSFORMER-BLOCK FOLD: the Mat↔Vec seam) ──
+-- The block LN→MHSA→+→LN→MLP→+ mixes per-token ops (Vec d) with cross-token attention
+-- (Mat n d). The seam perRowFlat + FloatClose.perRow/FloatBridges.perRow lifts a per-token
+-- bridge to the flattened whole-sequence Vec (n·d) with the SAME magnitude and SAME modulus
+-- (rows independent). floatBridges_vitBlock then folds the block in one FloatBridges.comp:
+-- the MLP+LN₂ sublayer fully (floatBridges_vitMlpResidual.perRow), the attention sublayer
+-- supplied (rounding = sdpa_close, input-sensitivity the one open piece) — the BN/LN-as-
+-- hypothesis pattern. The whole block proved modulo that single attention constant.
+#print axioms FloatClose.perRow
+#print axioms FloatBridges.perRow
+#print axioms floatBridges_vitBlock
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.
