@@ -211,8 +211,37 @@ Landed (in dependency order):
   new decls in `tests/AuditAxioms.lean`; build + coverage clean. *Effort: high, as estimated (the single
   largest proof in the program).*
 
-**Increment 5 (optional) — the conv biases.** Strictly easier (bias is affine, no `a`, no kernel
-mass; `conv2d_bias_pdiv` is the Kronecker channel indicator). Same chain with `a·‖e‖₁ ↦ ‖e‖₁`.
+**Increment 5 (optional, the only remaining rung) — the conv biases.** Cold-start for the fresh
+session. `cnn_conv2_bias_*` then `cnn_conv1_bias_*` — strictly easier than the weight rungs (no
+input window, no kernel mass): the bias Jacobian is the **Kronecker channel indicator**
+(`conv2d_bias_pdiv`), so the bias gradient is a bare **spatial sum** of the conv-output cotangent
+(`∑ₛ cotWin cConv o`, `convBiasGrad_eq_sum` at SgdDescentCnn.lean:1438) — a SUM, not a dot.
+
+*Certified targets (already proven, abstract-η):* `cnn_conv2_bias_loss_gradAt` (:7297) /
+`cnn_conv2_bias_sgd_descends` (:7749); `cnn_conv1_bias_loss_gradAt` (:8380) /
+`cnn_conv1_bias_sgd_descends` (:9118). The cotangent in each is **identical** to the weight rung's
+(same `cConv`/`c1Conv`) — only the leading Jacobian changes (Kronecker `if co=o` vs `convPad`/`convTap`).
+
+*Reuse wholesale (all from Increments 1–4):* `cnn_conv2_cot_close` (conv2-bias: exact conv2 input
+`X2 = x₁`, `eX2 = 0`; conv1-bias: float input `relu(z̃₁)`, `eX2 = E₁` — same instantiations as the
+weight rungs), `cnn_conv2_cot_real_abs_le`, `convTap_back_close`/`_abs_le` (conv1-bias only),
+`mask_scalar_close`, `poolBack_close`, the bridge pattern (`head3_cot_reluMask` + `convBiasGrad_eq_sum`
+instead of `convWeightGrad_eq_dot`), and the budget-as-`def` + `k4Idx_surj` wiring pattern.
+
+*The one genuinely-new core:* a **`sum_perturbed_close`** — the `M.sum` peer of `dot_perturbed_close`:
+`|M.sum B̃ − ∑ᵢ Bᵢ| ≤ (Higham sum-γ on B̃) + ∑|B̃ᵢ − Bᵢ|` (mirror `dot_perturbed_close`'s proof with
+`M.sum`/`sumSgd_step_close`/`M.sum_close` in place of `M.dot`/`dot_close`; the bias step uses
+`cnn_convBias_step_float_close` at :1470, peer of `cnn_convW_step_float_close`). The float bias grad is
+`M.sum (cotWin c̃Conv o)` (`Vec c`, one entry per output channel — no `convPadWin`, no `a`-scaling).
+
+*Budget shape:* drop the `a·` input factor and the `convPad`/`convTap` mass — `η_bias` is the same
+cotangent budget (`e₂`, `eback`) packaged through the sum's Higham-γ instead of the dot's. conv1-bias
+keeps the conv-2 backward (`convTap_back_close`) but its conv-1 Jacobian is the channel-Kronecker, so
+the final contraction is `∑_{spatial}` not `∑ convPadWin·`.
+
+*Effort: medium (≈½ each weight rung, since the cotangent chains are factored and reused).* This is
+the LAST rung; after it, every conv weight AND bias of the Chapter-4 CNN is a float-faithful descent
+step, and the whole §3 descent program is closed except the honest stop line below.
 
 ## The MLP template to mirror (exact names, committed 39f05f9)
 
@@ -255,13 +284,18 @@ mass; `conv2d_bias_pdiv` is the Kronecker channel indicator). Same chain with `a
 
 ## Suggested order
 
-1. **Increment 1** (pool-back primitive + bridge) — keystone, unblocks everything.
-2. **Increment 2** (`cnn_conv2_grad_close`).
-3. **Increment 3** (`cnn_conv2_float_sgd_descends`) — then "one binary32 conv2-kernel SGD step
-   provably decreases the loss" is closed.
-4. **Increment 4** (conv1), **5** (biases) — only if the full deployed-CNN-descent headline is wanted.
-5. Re-run the §5 honesty pass (`planning/floatbridge_honesty_pass.md`) and update
-   `planning/floatbridge_descent_pass.md` / `floatbridge_certificate_gaps.md` after each.
+1. ~~**Increment 1** (pool-back primitive + bridge)~~ ✅ DONE (commit `2620353`).
+2. ~~**Increment 2** (`cnn_conv2_grad_close`)~~ ✅ DONE (commit `407c705`).
+3. ~~**Increment 3** (`cnn_conv2_float_sgd_descends`)~~ ✅ DONE (commit `a28a2bd`) — "one binary32
+   conv2-kernel SGD step provably decreases the loss" is CLOSED.
+4. ~~**Increment 4** (conv1)~~ ✅ DONE (commit `8467787`) — conv1 rung CLOSED; both conv weights done.
+5. **Increment 5** (biases) ← **NEXT (this is where the fresh session starts)**, only if the full
+   deployed-CNN-descent headline is wanted. The one new core is `sum_perturbed_close`; everything
+   else is reuse (see the Increment 5 cold-start above).
+6. Re-run the §5 honesty pass (`planning/floatbridge_honesty_pass.md`) and update
+   `planning/floatbridge_descent_pass.md` / `floatbridge_certificate_gaps.md` (the §3 descent rung
+   is now the CNN's full conv-weight set, not just the MLP — those docs still say "only §3 descent
+   remains" / "cnn (Step 3)" as OPEN).
 
 **Definition of done (per increment):** every new theorem `#print axioms`-closes under
 `[propext, Classical.choice, Quot.sound]`, added to `tests/AuditAxioms.lean`; no `sorry`, no
