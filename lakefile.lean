@@ -214,6 +214,10 @@ lean_lib «Proofs» where
              -- EfficientNet float bridge step 1: Swish/sigmoid (bounded, rounding
              -- closeness, σ is ¼-Lipschitz) — the shared smooth-activation transcendental.
              `LeanMlir.Proofs.EnetFloatBridge,
+             -- ViT float bridge apex: transitively imports ViTFloatBridge (LN/GELU/MLP) and
+             -- ViTAttentionFloatBridge (sdpa_close + input-sensitivity); adds the transformer
+             -- block fold + projections + single/multi-head (block-diagonal & full-d MHA).
+             `LeanMlir.Proofs.ViTBlockFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent
