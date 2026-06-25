@@ -755,4 +755,285 @@ theorem floatBridges_vitBlockMHProj {h n dh dff : Nat} (M : FloatModel)
         hWq hbq hWk hbk hWv hbv)
       (FloatBridges.perRow n (floatBridges_dense M Wo bo hw' hβ hd hWo hbo))).residual M)
 
+-- ════════════════════════════════════════════════════════════════
+-- § Full-d cross-head projections (standard MHA: each head reads all d features)
+--
+-- Unlike the block-diagonal variant, Wq/Wk/Wv : Mat (h·dh) (h·dh) project the FULL input;
+-- head hd's Q/K/V are the column slab [hd·dh, (hd+1)·dh) of the full projection. So head hd
+-- runs sdpa over the head-slabs of projR Wq/Wk/Wv (dim dh, scale 1/√dh). The per-entry bounds
+-- are the SAME as the full projection (a column restriction doesn't change them), so projR/projF
+-- and their helpers reuse verbatim at the head's columns; only the output index carries the extra
+-- (head, within-head) split.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The column slab `[hd·dh, (hd+1)·dh)` of a `Mat n (h·dh)` as a `Mat n dh` (head hd's view). -/
+noncomputable def headSlab {n h dh : Nat} (hd : Fin h) (Q : Mat n (h * dh)) : Mat n dh :=
+  fun i c => Q i (finProdFinEquiv (hd, c))
+
+/-- Full-d MHA propagated magnitude (dense fan-in `h·dh`, sdpa dim `dh`). -/
+noncomputable def mhpB (M : FloatModel) (n h dh : Nat) (w' β A scaleA eexp : ℝ) : ℝ :=
+  (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+    + M.attnOutErr n dh (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+        (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+        (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0) scaleA eexp
+
+/-- Full-d MHA error modulus. -/
+noncomputable def mhpL (M : FloatModel) (n h dh : Nat) (w' β A scaleA eexp e : ℝ) : ℝ :=
+  M.attnOutErr n dh (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+      (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+      (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0) scaleA eexp
+    + attnOutInErr n dh (layerAct (h * dh) w' β A) (layerAct (h * dh) w' β A)
+        (layerAct (h * dh) w' β A) scaleA (layerBudget M.u (h * dh) w' β A e)
+
+/-- Full-d multi-head projected attention `X ↦ concat_hd sdpa_dh(headSlab hd (XWq), …)`. -/
+noncomputable def mhProjAttnFullFlat (h n dh : Nat) (Wq Wk Wv : Mat (h * dh) (h * dh))
+    (bq bk bv : Vec (h * dh)) (v : Vec (n * (h * dh))) : Vec (n * (h * dh)) :=
+  Mat.flatten (fun i j =>
+    sdpa n dh (headSlab (finProdFinEquiv.symm j).1 (projR Wq bq v))
+              (headSlab (finProdFinEquiv.symm j).1 (projR Wk bk v))
+              (headSlab (finProdFinEquiv.symm j).1 (projR Wv bv v))
+              i (finProdFinEquiv.symm j).2)
+
+/-- Float full-d multi-head projected attention. -/
+noncomputable def mhProjAttnFullFlatF (M : FloatModel) (fexp : ℝ → ℝ) (h n dh : Nat)
+    (Wq Wk Wv : Mat (h * dh) (h * dh)) (bq bk bv : Vec (h * dh))
+    (v : Vec (n * (h * dh))) : Vec (n * (h * dh)) :=
+  Mat.flatten (fun i j =>
+    M.sdpaF fexp (headSlab (finProdFinEquiv.symm j).1 (projF M Wq bq v))
+                 (headSlab (finProdFinEquiv.symm j).1 (projF M Wk bk v))
+                 (headSlab (finProdFinEquiv.symm j).1 (projF M Wv bv v))
+                 i (finProdFinEquiv.symm j).2)
+
+theorem mhProjAttnFullFlat_apply (h n dh : Nat) (Wq Wk Wv : Mat (h * dh) (h * dh))
+    (bq bk bv : Vec (h * dh)) (v : Vec (n * (h * dh))) (idx : Fin (n * (h * dh))) :
+    mhProjAttnFullFlat h n dh Wq Wk Wv bq bk bv v idx
+      = sdpa n dh
+          (headSlab (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 (projR Wq bq v))
+          (headSlab (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 (projR Wk bk v))
+          (headSlab (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 (projR Wv bv v))
+          (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2 := rfl
+
+theorem mhProjAttnFullFlatF_apply (M : FloatModel) (fexp : ℝ → ℝ) (h n dh : Nat)
+    (Wq Wk Wv : Mat (h * dh) (h * dh)) (bq bk bv : Vec (h * dh)) (v : Vec (n * (h * dh)))
+    (idx : Fin (n * (h * dh))) :
+    mhProjAttnFullFlatF M fexp h n dh Wq Wk Wv bq bk bv v idx
+      = M.sdpaF fexp
+          (headSlab (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 (projF M Wq bq v))
+          (headSlab (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 (projF M Wk bk v))
+          (headSlab (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 (projF M Wv bv v))
+          (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2 := rfl
+
+/-- **Full-d multi-head projected attention is a `FloatClose`.** Head hd runs sdpa over the
+    head-slabs (`headSlab hd`) of the full projections `XWq/XWk/XWv` (each `Mat (h·dh) (h·dh)`,
+    reading ALL `h·dh` input features), at dim `dh`, scale `1/√dh`. The proof is exactly
+    `floatClose_projAttn` per head — `sdpa_close` (rounding at the float-projection head-slabs)
+    + `sdpa_input_close` (sensitivity, projection drift `layerBudget`) — the slab bounds reusing
+    `projR/projF_abs_le`/`projFR_close` at the head's columns. The standard MHA projection. -/
+theorem floatClose_mhProjAttnFull (M : FloatModel) (fexp : ℝ → ℝ) {h n dh : Nat}
+    (Wq Wk Wv : Mat (h * dh) (h * dh)) (bq bk bv : Vec (h * dh)) {w' β A scaleA eexp : ℝ}
+    (hn : 0 < n) (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (dh : ℝ)| ≤ scaleA) (hρ1 : smRho M.u eexp n < 1)
+    (hWq : ∀ i j, |Wq i j| ≤ w') (hbq : ∀ j, |bq j| ≤ β)
+    (hWk : ∀ i j, |Wk i j| ≤ w') (hbk : ∀ j, |bk j| ≤ β)
+    (hWv : ∀ i j, |Wv i j| ≤ w') (hbv : ∀ j, |bv j| ≤ β) :
+    FloatClose A (mhpB M n h dh w' β A scaleA eexp)
+      (mhProjAttnFullFlat h n dh Wq Wk Wv bq bk bv)
+      (mhProjAttnFullFlatF M fexp h n dh Wq Wk Wv bq bk bv)
+      (fun e => mhpL M n h dh w' β A scaleA eexp e) := by
+  have hscaleA0 : 0 ≤ scaleA := (abs_nonneg _).trans hscaleA
+  have hLa0 : 0 ≤ layerAct (h * dh) w' β A := layerAct_nonneg hw' hβ hA
+  have hLb00 : 0 ≤ layerBudget M.u (h * dh) w' β A 0 := layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl
+  have hqAF0 : 0 ≤ layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0 := by linarith
+  have hAttnF0 : 0 ≤ M.attnOutErr n dh (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+      (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+      (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0) scaleA eexp :=
+    M.attnOutErr_nonneg n dh hqAF0 hqAF0 hqAF0 hscaleA0 heexp0 hρ1
+  refine ⟨fun v hv idx => ?_, fun vt va e hva hvt hd idx => ?_⟩
+  · -- magnitude
+    simp only [mhProjAttnFullFlat_apply, mhProjAttnFullFlatF_apply]
+    set ii := (finProdFinEquiv.symm idx).1 with hii
+    set jj := (finProdFinEquiv.symm idx).2 with hjj
+    set hh := (finProdFinEquiv.symm jj).1 with hhh
+    set cc := (finProdFinEquiv.symm jj).2 with hcc
+    have hVR : ∀ a b, |headSlab hh (projR Wv bv v) a b| ≤ layerAct (h * dh) w' β A :=
+      fun a b => projR_abs_le Wv bv hA hWv hbv v hv a (finProdFinEquiv (hh, b))
+    have hVF : ∀ a b, |headSlab hh (projF M Wv bv v) a b|
+        ≤ layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0 :=
+      fun a b => projF_abs_le M Wv bv hw' hA hWv hbv v hv a (finProdFinEquiv (hh, b))
+    have hQF : ∀ a b, |headSlab hh (projF M Wq bq v) a b|
+        ≤ layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0 :=
+      fun a b => projF_abs_le M Wq bq hw' hA hWq hbq v hv a (finProdFinEquiv (hh, b))
+    have hKF : ∀ a b, |headSlab hh (projF M Wk bk v) a b|
+        ≤ layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0 :=
+      fun a b => projF_abs_le M Wk bk hw' hA hWk hbk v hv a (finProdFinEquiv (hh, b))
+    have hrealR : |sdpa n dh (headSlab hh (projR Wq bq v)) (headSlab hh (projR Wk bk v))
+                   (headSlab hh (projR Wv bv v)) ii cc| ≤ layerAct (h * dh) w' β A :=
+      sdpa_abs_le hn (headSlab hh (projR Wq bq v)) (headSlab hh (projR Wk bk v))
+        (headSlab hh (projR Wv bv v)) hVR _ _
+    have hrealF : |sdpa n dh (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+                   (headSlab hh (projF M Wv bv v)) ii cc|
+                  ≤ layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0 :=
+      sdpa_abs_le hn (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+        (headSlab hh (projF M Wv bv v)) hVF _ _
+    have hroundF : |M.sdpaF fexp (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+                     (headSlab hh (projF M Wv bv v)) ii cc
+                   - sdpa n dh (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+                     (headSlab hh (projF M Wv bv v)) ii cc|
+                  ≤ M.attnOutErr n dh (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+                      (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+                      (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0) scaleA eexp :=
+      M.sdpa_close fexp (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+        (headSlab hh (projF M Wv bv v)) hqAF0 hqAF0 hqAF0 heexp0 heexp1 hfexp hscaleA hρ1
+        hQF hKF hVF _ _
+    refine ⟨le_trans hrealR (by unfold mhpB; linarith), ?_⟩
+    calc |M.sdpaF fexp (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+            (headSlab hh (projF M Wv bv v)) ii cc|
+        ≤ |M.sdpaF fexp (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+             (headSlab hh (projF M Wv bv v)) ii cc
+           - sdpa n dh (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+             (headSlab hh (projF M Wv bv v)) ii cc|
+          + |sdpa n dh (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+             (headSlab hh (projF M Wv bv v)) ii cc| := by
+          simpa using abs_sub_le
+            (M.sdpaF fexp (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+              (headSlab hh (projF M Wv bv v)) ii cc)
+            (sdpa n dh (headSlab hh (projF M Wq bq v)) (headSlab hh (projF M Wk bk v))
+              (headSlab hh (projF M Wv bv v)) ii cc) 0
+      _ ≤ M.attnOutErr n dh (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+            (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+            (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0) scaleA eexp
+          + (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0) := add_le_add hroundF hrealF
+      _ = mhpB M n h dh w' β A scaleA eexp := by unfold mhpB; ring
+  · -- error
+    simp only [mhProjAttnFullFlat_apply, mhProjAttnFullFlatF_apply]
+    set ii := (finProdFinEquiv.symm idx).1 with hii
+    set jj := (finProdFinEquiv.symm idx).2 with hjj
+    set hh := (finProdFinEquiv.symm jj).1 with hhh
+    set cc := (finProdFinEquiv.symm jj).2 with hcc
+    have he0 : 0 ≤ e := (abs_nonneg _).trans (hd idx)
+    have hLbe0 : 0 ≤ layerBudget M.u (h * dh) w' β A e := layerBudget_nonneg M.u_nonneg hw' hβ hA he0
+    have hQaR : ∀ a b, |headSlab hh (projR Wq bq va) a b| ≤ layerAct (h * dh) w' β A :=
+      fun a b => projR_abs_le Wq bq hA hWq hbq va hva a (finProdFinEquiv (hh, b))
+    have hKaR : ∀ a b, |headSlab hh (projR Wk bk va) a b| ≤ layerAct (h * dh) w' β A :=
+      fun a b => projR_abs_le Wk bk hA hWk hbk va hva a (finProdFinEquiv (hh, b))
+    have hVaR : ∀ a b, |headSlab hh (projR Wv bv va) a b| ≤ layerAct (h * dh) w' β A :=
+      fun a b => projR_abs_le Wv bv hA hWv hbv va hva a (finProdFinEquiv (hh, b))
+    have hQFt : ∀ a b, |headSlab hh (projF M Wq bq vt) a b|
+        ≤ layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0 :=
+      fun a b => projF_abs_le M Wq bq hw' hA hWq hbq vt hvt a (finProdFinEquiv (hh, b))
+    have hKFt : ∀ a b, |headSlab hh (projF M Wk bk vt) a b|
+        ≤ layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0 :=
+      fun a b => projF_abs_le M Wk bk hw' hA hWk hbk vt hvt a (finProdFinEquiv (hh, b))
+    have hVFt : ∀ a b, |headSlab hh (projF M Wv bv vt) a b|
+        ≤ layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0 :=
+      fun a b => projF_abs_le M Wv bv hw' hA hWv hbv vt hvt a (finProdFinEquiv (hh, b))
+    have hQe : ∀ a b, |headSlab hh (projF M Wq bq vt) a b - headSlab hh (projR Wq bq va) a b|
+        ≤ layerBudget M.u (h * dh) w' β A e :=
+      fun a b => projFR_close M Wq bq hw' he0 hWq hbq vt va hva hd a (finProdFinEquiv (hh, b))
+    have hKe : ∀ a b, |headSlab hh (projF M Wk bk vt) a b - headSlab hh (projR Wk bk va) a b|
+        ≤ layerBudget M.u (h * dh) w' β A e :=
+      fun a b => projFR_close M Wk bk hw' he0 hWk hbk vt va hva hd a (finProdFinEquiv (hh, b))
+    have hVe : ∀ a b, |headSlab hh (projF M Wv bv vt) a b - headSlab hh (projR Wv bv va) a b|
+        ≤ layerBudget M.u (h * dh) w' β A e :=
+      fun a b => projFR_close M Wv bv hw' he0 hWv hbv vt va hva hd a (finProdFinEquiv (hh, b))
+    have hroundF : |M.sdpaF fexp (headSlab hh (projF M Wq bq vt)) (headSlab hh (projF M Wk bk vt))
+                     (headSlab hh (projF M Wv bv vt)) ii cc
+                   - sdpa n dh (headSlab hh (projF M Wq bq vt)) (headSlab hh (projF M Wk bk vt))
+                     (headSlab hh (projF M Wv bv vt)) ii cc|
+                  ≤ M.attnOutErr n dh (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+                      (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+                      (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0) scaleA eexp :=
+      M.sdpa_close fexp (headSlab hh (projF M Wq bq vt)) (headSlab hh (projF M Wk bk vt))
+        (headSlab hh (projF M Wv bv vt)) hqAF0 hqAF0 hqAF0 heexp0 heexp1 hfexp hscaleA hρ1
+        hQFt hKFt hVFt _ _
+    have hsens : |sdpa n dh (headSlab hh (projF M Wq bq vt)) (headSlab hh (projF M Wk bk vt))
+                   (headSlab hh (projF M Wv bv vt)) ii cc
+                 - sdpa n dh (headSlab hh (projR Wq bq va)) (headSlab hh (projR Wk bk va))
+                   (headSlab hh (projR Wv bv va)) ii cc|
+                 ≤ attnOutInErr n dh (layerAct (h * dh) w' β A) (layerAct (h * dh) w' β A)
+                     (layerAct (h * dh) w' β A) scaleA (layerBudget M.u (h * dh) w' β A e) :=
+      sdpa_input_close (headSlab hh (projF M Wq bq vt)) (headSlab hh (projF M Wk bk vt))
+        (headSlab hh (projF M Wv bv vt)) (headSlab hh (projR Wq bq va)) (headSlab hh (projR Wk bk va))
+        (headSlab hh (projR Wv bv va)) hLa0 hLa0 hLa0 hLbe0 hscaleA hQaR hKaR hVaR hQe hKe hVe _ _
+    calc |M.sdpaF fexp (headSlab hh (projF M Wq bq vt)) (headSlab hh (projF M Wk bk vt))
+            (headSlab hh (projF M Wv bv vt)) ii cc
+          - sdpa n dh (headSlab hh (projR Wq bq va)) (headSlab hh (projR Wk bk va))
+            (headSlab hh (projR Wv bv va)) ii cc|
+        ≤ |M.sdpaF fexp (headSlab hh (projF M Wq bq vt)) (headSlab hh (projF M Wk bk vt))
+             (headSlab hh (projF M Wv bv vt)) ii cc
+           - sdpa n dh (headSlab hh (projF M Wq bq vt)) (headSlab hh (projF M Wk bk vt))
+             (headSlab hh (projF M Wv bv vt)) ii cc|
+          + |sdpa n dh (headSlab hh (projF M Wq bq vt)) (headSlab hh (projF M Wk bk vt))
+             (headSlab hh (projF M Wv bv vt)) ii cc
+           - sdpa n dh (headSlab hh (projR Wq bq va)) (headSlab hh (projR Wk bk va))
+             (headSlab hh (projR Wv bv va)) ii cc| := abs_sub_le _ _ _
+      _ ≤ M.attnOutErr n dh (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+            (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0)
+            (layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0) scaleA eexp
+          + attnOutInErr n dh (layerAct (h * dh) w' β A) (layerAct (h * dh) w' β A)
+              (layerAct (h * dh) w' β A) scaleA (layerBudget M.u (h * dh) w' β A e) :=
+          add_le_add hroundF hsens
+      _ = mhpL M n h dh w' β A scaleA eexp e := rfl
+
+/-- Full-d multi-head projected attention float-bridges. -/
+theorem floatBridges_mhProjAttnFull (M : FloatModel) (fexp : ℝ → ℝ) {h n dh : Nat}
+    (Wq Wk Wv : Mat (h * dh) (h * dh)) (bq bk bv : Vec (h * dh)) {w' β scaleA eexp : ℝ}
+    (hn : 0 < n) (hw' : 0 ≤ w') (hβ : 0 ≤ β)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (dh : ℝ)| ≤ scaleA) (hρ1 : smRho M.u eexp n < 1)
+    (hWq : ∀ i j, |Wq i j| ≤ w') (hbq : ∀ j, |bq j| ≤ β)
+    (hWk : ∀ i j, |Wk i j| ≤ w') (hbk : ∀ j, |bk j| ≤ β)
+    (hWv : ∀ i j, |Wv i j| ≤ w') (hbv : ∀ j, |bv j| ≤ β) :
+    FloatBridges (mhProjAttnFullFlat h n dh Wq Wk Wv bq bk bv) := by
+  intro A hA
+  have hLa0 : 0 ≤ layerAct (h * dh) w' β A := layerAct_nonneg hw' hβ hA
+  have hLb00 : 0 ≤ layerBudget M.u (h * dh) w' β A 0 := layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl
+  have hqAF0 : 0 ≤ layerAct (h * dh) w' β A + layerBudget M.u (h * dh) w' β A 0 := by linarith
+  have hscaleA0 : 0 ≤ scaleA := (abs_nonneg _).trans hscaleA
+  refine ⟨mhpB M n h dh w' β A scaleA eexp, _, _, ?_,
+    floatClose_mhProjAttnFull M fexp Wq Wk Wv bq bk bv hn hw' hβ hA heexp0 heexp1 hfexp hscaleA hρ1
+      hWq hbq hWk hbk hWv hbv⟩
+  unfold mhpB
+  exact add_nonneg hqAF0 (M.attnOutErr_nonneg n dh hqAF0 hqAF0 hqAF0 hscaleA0 heexp0 hρ1)
+
+/-- **THE FULL-d MULTI-HEAD ViT BLOCK** (standard MHA: each head reads all `h·dh` features via
+    `Wq/Wk/Wv : Mat (h·dh) (h·dh)`). The block with the standard projected multi-head MHSA
+    float-bridges unconditionally — `hattn` discharged by `floatBridges_mhProjAttnFull` composed
+    with the output projection `Wo`. This is the deployed ViT encoder layer in full generality:
+    every piece — full cross-head projections, per-head sdpa rounding + Lipschitz, LN, GELU,
+    MLP, both residual skips — proved in rounding, a-posteriori in the activation magnitude. -/
+theorem floatBridges_vitBlockMHFull {h n dh dff : Nat} (M : FloatModel)
+    (W₁ : Mat (h * dh) dff) (b₁ : Vec dff) (W₂ : Mat dff (h * dh)) (b₂ : Vec (h * dh))
+    (Wq Wk Wv : Mat (h * dh) (h * dh)) (bq bk bv : Vec (h * dh))
+    (Wo : Mat (h * dh) (h * dh)) (bo : Vec (h * dh)) (fgelu fexp : ℝ → ℝ)
+    {εln γln βln w' β egelu scaleA eexp : ℝ}
+    (hn : 0 < n) (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hegelu : 0 ≤ egelu)
+    (hd : 0 < h * dh) (hdff : 0 < dff)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hb₁ : ∀ j, |b₁ j| ≤ β)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w') (hb₂ : ∀ j, |b₂ j| ≤ β)
+    (hWq : ∀ i j, |Wq i j| ≤ w') (hbq : ∀ j, |bq j| ≤ β)
+    (hWk : ∀ i j, |Wk i j| ≤ w') (hbk : ∀ j, |bk j| ≤ β)
+    (hWv : ∀ i j, |Wv i j| ≤ w') (hbv : ∀ j, |bv j| ≤ β)
+    (hWo : ∀ i j, |Wo i j| ≤ w') (hbo : ∀ j, |bo j| ≤ β)
+    (hln : FloatBridges (layerNormForward (h * dh) εln γln βln))
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (dh : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp n < 1) :
+    FloatBridges
+      (perRowFlat n (h * dh) (Proofs.residual
+          (Proofs.dense W₂ b₂ ∘ gelu dff ∘ Proofs.dense W₁ b₁
+            ∘ layerNormForward (h * dh) εln γln βln))
+        ∘ Proofs.residual (perRowFlat n (h * dh) (Proofs.dense Wo bo)
+            ∘ mhProjAttnFullFlat h n dh Wq Wk Wv bq bk bv)) :=
+  floatBridges_vitBlock M W₁ b₁ W₂ b₂ fgelu hw' hβ hegelu hd hdff hg hW₁ hb₁ hW₂ hb₂ hln
+    ((FloatBridges.comp
+      (floatBridges_mhProjAttnFull M fexp Wq Wk Wv bq bk bv hn hw' hβ heexp0 heexp1 hfexp
+        hscaleA hρ1 hWq hbq hWk hbk hWv hbv)
+      (FloatBridges.perRow n (floatBridges_dense M Wo bo hw' hβ hd hWo hbo))).residual M)
+
 end Proofs

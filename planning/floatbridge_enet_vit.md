@@ -260,8 +260,14 @@ number" questions.
    ∘ reshape` → **`floatBridges_vitBlockMHProj`**, the projected-multi-head ViT block combining
    ALL three extensions (per-head projections + multi-head reshape + unconditional block). The
    whole ViT float story — LN/GELU/MLP, attention (rounding + Lipschitz), projections, multi-head,
-   full block — is CLOSED. (Block-diagonal per-head projections; full-`d` cross-head projections
-   would need a ternary per-head sdpa core — the one architectural variant not covered.)
+   full block — is CLOSED.
+   ~~full-`d` cross-head projections~~ **DONE** (`ViTBlockFloatBridge.lean`): standard MHA where
+   `Wq/Wk/Wv : Mat (h·dh) (h·dh)` project the FULL input and head hd runs sdpa over the column
+   slab (`headSlab hd`) of the projected Q/K/V (dim `dh`, scale `1/√dh`). The slab's per-entry
+   bounds equal the full projection's, so `projR/projF_abs_le`/`projFR_close` reuse at the head's
+   columns; only the output index carries the (head, within-head) split. `floatClose_mhProjAttnFull`
+   is `floatClose_projAttn` per head; **`floatBridges_vitBlockMHFull`** is the standard-MHA ViT
+   block — the deployed encoder layer in FULL generality. **Nothing architectural left uncovered.**
 6. Whichever of §3.1/§3.5/§3.6 the writeup needs to be honest about (the kernel gap,
    the closeness-not-descent framing, the eval-mode quick win).
 

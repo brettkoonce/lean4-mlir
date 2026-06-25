@@ -1578,6 +1578,16 @@ open Proofs
 #print axioms FloatClose.perRowIdx
 #print axioms floatBridges_mhProjAttn
 #print axioms floatBridges_vitBlockMHProj
+-- ── §2c-full-d-multihead (STANDARD MHA: each head reads all h·dh features) ──
+-- Wq/Wk/Wv : Mat (h·dh) (h·dh) project the FULL input; head hd runs sdpa over the column
+-- slab (headSlab) of the projected Q/K/V (dim dh, scale 1/√dh). The per-entry bounds are the
+-- same as the full projection, so projR/projF_abs_le/projFR_close reuse at the head's columns;
+-- only the output index carries the (head, within-head) split. floatClose_mhProjAttnFull is
+-- floatClose_projAttn per head; floatBridges_vitBlockMHFull is the standard-MHA ViT block —
+-- the deployed encoder layer in full generality.
+#print axioms floatClose_mhProjAttnFull
+#print axioms floatBridges_mhProjAttnFull
+#print axioms floatBridges_vitBlockMHFull
 -- Conv gradient-step rounding (planning §1b-B): the conv weight gradient is a
 -- spatial correlation (a dot over the h·w positions), the bias gradient a
 -- spatial sum — so both rounded SGD steps reduce to the generic step closes.
