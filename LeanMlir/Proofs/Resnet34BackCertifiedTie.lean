@@ -4,6 +4,8 @@ import LeanMlir.Proofs.Resnet34BackFloatBridge
 import LeanMlir.Proofs.EfficientNetChainClose
 import LeanMlir.Proofs.StridedConvBackFloatBridge
 import LeanMlir.Proofs.Resnet34DownBackFloatBridge
+import LeanMlir.Proofs.Resnet34WholeBackFloatBridge
+import LeanMlir.Proofs.IR
 
 /-! # §B: the r34 identity-block backward float bridge targets the CERTIFIED VJP
 
@@ -40,9 +42,17 @@ certified strided block VJP `rblkPStridedPC_has_vjp_at` (mirrors `resblockProj_h
 `residualProj` two-branch fan-in), and the tie `r34DownBlockBack_eq_rblkPStridedPC_vjp`. So **both r34
 block types** (identity + downsample) now target the certified gradient, b1-free.
 
-(Remaining §B: the stem/GAP/maxpool/dense endpoints, and the whole-net fold — the latter still gated
-by the fact that the certified whole-net VJP `resnet34_has_vjp_at` is parametric / only concretely
-instantiated at toy `resnet34Concrete` dims.)
+The **endpoint leaf ties** (`§ The ENDPOINT leaf ties` below) close the rest of the per-op set:
+`dense_transpose_eq_vjp_backward` (the dense head, `Wᵀ·dy` = certified `Mat.mulVec W`),
+`gapBack_eq_vjp_backward` (GAP broadcast-÷, `rfl`), `maxPoolFlatBack_eq_vjp_backward` (the smooth-point
+arg-max scatter). With these + the conv/strided-conv leaves above, **every per-op backward of the r34
+whole-net `r34InputGrad` is now individually tied to its certified VJP.**
+
+(Remaining §B: only the whole-net FOLD — assembling the per-op/per-block ties into
+`r34InputGrad = (resnet34 …_has_vjp).backward` — which stays gated by the fact that the certified
+whole-net VJP `resnet34_has_vjp_at` is parametric / only concretely instantiated at toy
+`resnet34Concrete` dims, so the honest whole-net statement is "every piece ties" + the parametric
+skeleton, not a full-dim concrete certified term.)
 -/
 
 namespace Proofs
@@ -258,5 +268,37 @@ theorem r34DownBlockBack_eq_rblkPStridedPC_vjp {ic oc h w : Nat}
       convFlatBack_eq_vjp_backward (by decide) (by decide) W₂ b₂
         ((relu (oc*h*w) ∘ bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v)]
   rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § The ENDPOINT leaf ties — dense head, GAP, maxpool
+--   (the stem's strided conv is `flatConvStride2Back_eq_vjp_backward` above)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Dense head input-VJP leaf tie.** The float-bridge dense backward `dense (Wᵀ) 0` (= `Wᵀ·dy`)
+    IS the certified dense input-VJP `(dense_has_vjp W b).backward x` (= `Mat.mulVec W dy`), conv is
+    linear so the activation `x` is ignored. One `mul_comm` per term. -/
+theorem dense_transpose_eq_vjp_backward {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) :
+    dense (Mat.transpose W) (0 : Vec m) = (dense_has_vjp W b).backward x := by
+  funext dy i
+  simp only [dense, dense_has_vjp, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
+  exact Finset.sum_congr rfl fun j _ => mul_comm _ _
+
+/-- **GAP input-VJP leaf tie.** The float-bridge `gapBack c h w` (broadcast `dy(channel)/(h·w)`)
+    IS the certified GAP input-VJP `(globalAvgPoolFlat_has_vjp c h w).backward x` — definitionally
+    the same broadcast-÷ map (the VJP ignores its primal argument). -/
+theorem gapBack_eq_vjp_backward (c h w : Nat) (x : Vec (c * h * w)) :
+    gapBack c h w = (globalAvgPoolFlat_has_vjp c h w).backward x := rfl
+
+/-- **Maxpool input-VJP leaf tie (smooth point).** The float-bridge `maxPoolFlatBack x` (scatter
+    `dy` to the arg-max cell, 0 elsewhere) IS the certified maxpool input-VJP
+    `(maxPoolFlat_has_vjp_at x h_smooth).backward` at a smooth point (unique arg-max per window).
+    Both denote `if MaxPool2IsArgmax then dy(winRow,winCol) else 0` (`IR.maxPoolBackDenote` =
+    `maxPool2_has_vjp_at3.backward`). -/
+theorem maxPoolFlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
+    (h_smooth : MaxPool2Smooth x) :
+    maxPoolFlatBack x = (maxPoolFlat_has_vjp_at x h_smooth).backward := by
+  funext dy idx
+  simp only [maxPoolFlatBack, Tensor3.flatten, maxPoolFlat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
+    IR.maxPoolBackDenote, maxPool2_has_vjp_at3]
 
 end Proofs

@@ -202,10 +202,26 @@ Same module, same recipe, b1-free. The down block `rblkPStridedPC = relu ∘ res
 All 3-axiom-clean, in `Resnet34BackCertifiedTie.lean` + `AuditAxioms`. **So both r34 block types
 (identity + downsample) now have float-backward = certified-VJP.**
 
-**Remaining §B:** the stem/GAP/maxpool/dense endpoints (small leaf ties); and the whole-net fold
-`r34InputGrad` — still gated by b3 (the certified whole-net VJP `resnet34_has_vjp_at` is parametric,
-only concretely instantiated at toy `resnet34Concrete` dims), so the honest whole-net statement remains
-the per-block ties + the parametric skeleton, not a full-dim concrete certified term.
+### §B-endpoints DONE (2026-06-26) — every per-op backward of r34InputGrad is now certified-tied
+
+The endpoint leaf ties (in `Resnet34BackCertifiedTie.lean`, 3-axiom-clean + `AuditAxioms`):
+- `dense_transpose_eq_vjp_backward` — the dense head: `dense (Wᵀ) 0` (= `Wᵀ·dy`) = certified
+  `(dense_has_vjp W b).backward x` (= `Mat.mulVec W dy`). One `mul_comm` per term.
+- `gapBack_eq_vjp_backward` — GAP: `gapBack` (broadcast `dy(channel)/(h·w)`) = certified
+  `(globalAvgPoolFlat_has_vjp).backward x`, by **`rfl`** (same broadcast-÷, VJP ignores its primal).
+- `maxPoolFlatBack_eq_vjp_backward` — maxpool at a **smooth point** (`MaxPool2Smooth`, unique arg-max):
+  `maxPoolFlatBack x` (scatter to the arg-max cell) = certified `(maxPoolFlat_has_vjp_at x h_smooth).backward`
+  (`IR.maxPoolBackDenote` = `maxPool2_has_vjp_at3.backward`, the `if MaxPool2IsArgmax then dy else 0` form).
+
+The stem's strided conv is already `flatConvStride2Back_eq_vjp_backward`; its BN/relu are pin-+-defeq.
+So **every per-op backward of the whole-net `r34InputGrad`** (stem conv/bn/relu · maxpool · 16 blocks ·
+GAP · dense) is now individually tied to its certified VJP.
+
+**Remaining §B:** only the whole-net **FOLD** — assembling the per-op/per-block ties into
+`r34InputGrad = (resnet34 …_has_vjp).backward` — still gated by b3 (the certified whole-net VJP
+`resnet34_has_vjp_at` is parametric, only concretely instantiated at toy `resnet34Concrete` dims), so
+the honest whole-net statement is "every piece ties" + the parametric skeleton, not a full-dim concrete
+certified term.
 
 ---
 

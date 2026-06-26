@@ -1694,6 +1694,12 @@ open Proofs
 #print axioms Proofs.flatConvStride2Back_eq_vjp_backward
 #print axioms Proofs.rblkPStridedPC_has_vjp_at
 #print axioms Proofs.r34DownBlockBack_eq_rblkPStridedPC_vjp
+-- §B endpoint leaf ties: the dense head (Wᵀ·dy = certified Mat.mulVec), GAP (broadcast-÷, rfl), and
+-- the smooth-point maxpool scatter — each float-bridge endpoint backward = its certified per-op VJP.
+-- With the conv/strided-conv leaves, every per-op backward of r34InputGrad is now certified-tied.
+#print axioms Proofs.dense_transpose_eq_vjp_backward
+#print axioms Proofs.gapBack_eq_vjp_backward
+#print axioms Proofs.maxPoolFlatBack_eq_vjp_backward
 -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
 -- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
 -- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0
