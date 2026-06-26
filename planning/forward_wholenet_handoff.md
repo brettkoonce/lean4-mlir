@@ -1,7 +1,7 @@
 # Forward whole-net float-bridge — handoff
 
 **Goal:** fold each net's *forward* float bridge at whole-net scale, the way the backward already
-does for all five. r34 and **efficientnet** are **DONE**; the other three (mnv2 / convnext / vit)
+does for all five. r34, **efficientnet**, and **mnv2** are **DONE**; the other two (convnext / vit)
 are still block-level. This doc is the pick-up plan.
 
 Parent context: `planning/a3_backward_deepnet_assembly.md` (the backward, which is the blueprint).
@@ -10,6 +10,19 @@ Memory: `[[float-tier23-and-lexer-gap]]` (A1/A3 state).
 ---
 
 ## STATUS (2026-06-26)
+
+**mnv2 forward whole-net — DONE, uncommitted** (2026-06-26),
+`LeanMlir/Proofs/MobileNetV2WholeFloatBridge.lean`, 3-axiom-clean (8 new decls), builds + `AuditAxioms`
+green. Clean r34-shape replay (the forward target `mobilenetv2Forward_full_pc` is already in `∘`-form,
+so NO efficientnet nested-app kernel-timeout): `mnv2Forward` skeleton (concrete stem/head/GAP/dense,
+stem/head BNs + 6 invres blocks supplied — peer of the backward's `mnv2InputGrad` `b1B..b6B`) +
+`mnv2Forward_floatBridges` (the same incremental-`have` left-fold as r34) + the named block bridges
+`floatBridges_invresBody{,Strided}PC` (forward peers of the `*BackPC` blocks). **mnv2 has NO SE** — the
+one new op-bridge is `floatBridges_relu6` (relu6 = `min(max(·,0),6)` is exact in float + 1-Lipschitz,
+a mirror of `floatClose_relu` via mathlib `abs_max_sub_max_le_abs`/`abs_min_sub_min_le_max`); the
+strided depthwise REUSED `floatBridges_depthwiseStride2Flat` (built for efficientnet). Like r34 (and
+unlike efficientnet), `mnv2Forward` is a fresh skeleton NOT proven `= mobilenetv2Forward_full_pc`
+(cosmetic tie #5, symmetric with the backward `mnv2InputGrad`).
 
 **efficientnet forward whole-net — DONE, uncommitted** (2026-06-26),
 `LeanMlir/Proofs/EfficientNetWholeFloatBridge.lean`, 3-axiom-clean (7 new decls audited), builds +
@@ -43,7 +56,7 @@ This file is **the worked example — copy its shape for the other four.** It co
 - `floatBridges_r34IdBlock` / `floatBridges_r34DownBlock` — the named per-block dischargers (about the
   ACTUAL `rblkPC` / `rblkPStridedPC`), so the fold's block hyps discharge by name like the backward's.
 
-**Remaining = mnv2 / convnext / vit forwards + the r34/mnv2/convnext/vit cosmetic ties (efficientnet
+**Remaining = convnext / vit forwards + the r34/mnv2/convnext/vit cosmetic skeleton ties (efficientnet
 already ties to the real net via the ∘-form).**
 
 ---
@@ -55,7 +68,7 @@ block decomposition, same `FloatBridges.comp` backbone — just forward ops inst
 
 | net | forward target def | backward blueprint file | forward block bridge |
 |---|---|---|---|
-| mnv2 | `mobilenetv2Forward_full_pc` (`ResNet34RenderPC`-style PC file) | `MobileNetV2BackFloatBridge.lean` (`mnv2_grad_floatBridges`) | `floatBridges_mbconvBody` ✓ (no-SE invres variant — VERIFY/build) |
+| mnv2 | ✅ **DONE** `MobileNetV2WholeFloatBridge.lean` (`mnv2Forward_floatBridges`) | `MobileNetV2BackFloatBridge.lean` (`mnv2_grad_floatBridges`) | `floatBridges_invresBody{,Strided}PC` (no SE; new `floatBridges_relu6`) |
 | efficientnet | ✅ **DONE** `EfficientNetWholeFloatBridge.lean` (`efficientnetForwardB_floatBridges`) | `EfficientNetBackFloatBridge.lean` | per-block batched bridges (`floatBridges_{stemB,cbsB,dwbsB,dwbsSB,seB,projB,mbNoExpFwdB,mbStridedFwdB,mbResidFwdB,headFwdB}`) |
 | convnext | `convNextForwardT` | `ConvNeXtBackFloatBridge.lean` (`convnext_grad_floatBridges`) | **MISSING** — build `floatBridges_cnxBlock` (peer of `cnxBlockBodyBack`) |
 | vit | `vit_full` | `MhsaBackFloatBridge.lean` + `PatchEmbedBackFloatBridge.lean` (`vit_grad_floatBridges_concrete`) | `floatBridges_vitBlock` ✓ |
@@ -83,13 +96,12 @@ correction above: it's a `.comp` chain of per-block **batched** stages with **tr
 (`bnBatchLA`). Done by lifting each batch-separable op with `FloatBridges.batchMap`, supplying the 10
 `bnBatchLA`s abstractly, swish block-diagonal; stated on the `∘`-form (= `efficientnetForwardB`).
 
-### 2. mnv2 forward — Effort S–M, risk low.
-Mirror `mnv2_grad_floatBridges`: concrete stem(`flatConvStride2 ∘ bn ∘ relu`, reuse r34's bridge)/
-head/GAP/dense + the inverted-residual blocks. **VERIFY** whether `floatBridges_mbconvBody` covers
-mnv2's no-SE block or whether a `floatBridges_invresBody` (expand∘depthwise∘project, no SE) wrap is
-needed — the backward built `invresBodyBackPC` separately, so likely build the forward peer (thin:
-`floatBridges_depthwise` ✓ + `floatBridges_flatConv` + BN + relu6-mask-as-relu). Target the **ch7
-6-block per-channel render** (same target r34/backward used), NOT the 17-block paper trainer.
+### 2. mnv2 forward — ✅ DONE (2026-06-26). `MobileNetV2WholeFloatBridge.lean`.
+Built the forward peer `floatBridges_invresBody{,Strided}PC` (mnv2 has NO SE — `floatBridges_mbconvBody`
+does NOT apply; the block is `project∘depthwise∘expand`, each `relu6∘bnPC∘conv`). New op-bridge
+`floatBridges_relu6` (the forward relu6 clamp, NOT the backward's reluMaskBack); strided depthwise
+reused efficientnet's `floatBridges_depthwiseStride2Flat`. Same r34 ∘-skeleton + incremental-`have`
+left-fold; targeted the ch7 6-block per-channel render.
 
 ### 3. vit forward — Effort M, risk low–med.
 Mirror `vit_grad_floatBridges_concrete` (`MhsaBackFloatBridge` + `PatchEmbedBackFloatBridge`).

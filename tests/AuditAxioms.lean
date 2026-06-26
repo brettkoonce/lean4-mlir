@@ -99,6 +99,7 @@ import LeanMlir.Proofs.SEBackFloatBridge
 import LeanMlir.Proofs.MobileNetV2BackFloatBridge
 import LeanMlir.Proofs.EfficientNetBackFloatBridge
 import LeanMlir.Proofs.EfficientNetWholeFloatBridge
+import LeanMlir.Proofs.MobileNetV2WholeFloatBridge
 import LeanMlir.Proofs.ConvNeXtBackFloatBridge
 import LeanMlir.Proofs.LossHeadCotFloatBridge
 import LeanMlir.Proofs.SoftmaxBackFloatBridge
@@ -1746,6 +1747,19 @@ open Proofs
 #print axioms Proofs.floatBridges_invresBodyBackPC
 #print axioms Proofs.floatBridges_invresBodyStridedBackPC
 #print axioms Proofs.mnv2_grad_floatBridges
+-- MobileNetV2 WHOLE-NET FORWARD (forward peer of mnv2_grad_floatBridges, ch7 6-block per-channel
+-- render): new op-bridge floatBridges_relu6 (relu6 exact in float + 1-Lipschitz, mirror of
+-- floatClose_relu); the 4 inverted-residual stage bridges + the 2 named block bridges
+-- floatBridges_invresBody{,Strided}PC (forward peers of the *BackPC blocks, no SE); mnv2Forward_
+-- floatBridges = the ∘ skeleton fold (concrete stem/head/GAP/dense, stem/head BNs + 6 blocks supplied).
+#print axioms Proofs.floatBridges_relu6
+#print axioms Proofs.floatBridges_ivExpandPC
+#print axioms Proofs.floatBridges_ivDepthwisePC
+#print axioms Proofs.floatBridges_ivDepthwiseStridedPC
+#print axioms Proofs.floatBridges_ivProjectPC
+#print axioms Proofs.floatBridges_invresBodyPC
+#print axioms Proofs.floatBridges_invresBodyStridedPC
+#print axioms Proofs.mnv2Forward_floatBridges
 -- EfficientNet: whole-net forward is batched, so (peer of floatBridges_mbconvBody) the per-example
 -- MBConv body backward = expandBack ∘ depthwiseBack ∘ seBack ∘ projectBack — the first block where BOTH
 -- §1e ops land (depthwiseFlatBack concrete + the SE product-rule seB supplied, dischargeable by

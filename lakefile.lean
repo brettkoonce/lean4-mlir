@@ -327,6 +327,13 @@ lean_lib «Proofs» where
              -- has NO SE) + strided variant; mnv2_grad_floatBridges = whole-net fold (reverse of
              -- mobilenetv2Forward_full_pc), concrete stem/head/GAP/dense, 6 blocks supplied.
              `LeanMlir.Proofs.MobileNetV2BackFloatBridge,
+             -- MobileNetV2 WHOLE-NET FORWARD (forward peer of mnv2_grad_floatBridges): the ch7 6-block
+             -- per-channel render mobilenetv2Forward_full_pc. New op-bridge floatBridges_relu6 (relu6 =
+             -- min(max(·,0),6) exact in float + 1-Lipschitz, mirror of floatClose_relu via the mathlib
+             -- clamp lemmas); strided depthwise reuses floatBridges_depthwiseStride2Flat. mnv2Forward =
+             -- the ∘ skeleton (concrete stem/head/GAP/dense, stem/head BNs + 6 invres blocks supplied);
+             -- named block bridges floatBridges_invresBody{,Strided}PC discharge them (no SE).
+             `LeanMlir.Proofs.MobileNetV2WholeFloatBridge,
              -- EfficientNet MBConv body backward (whole-net is batched → per-example body, peer of
              -- floatBridges_mbconvBody): expandBack∘depthwiseBack∘seBack∘projectBack — BOTH §1e ops
              -- (depthwiseFlatBack concrete + seBack supplied) land here. + the additive-skip variant.
