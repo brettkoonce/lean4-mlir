@@ -282,6 +282,12 @@ lean_lib «Proofs» where
              -- FloatBridges.residual (NO new combinator; the rounded skip-add is the backward's too),
              -- bF = convFlatBack∘bnBack∘reluMaskBack∘convFlatBack∘bnBack. The dominant r34 block.
              `LeanMlir.Proofs.Resnet34BackFloatBridge,
+             -- A3 strided-conv backward (r34 down-blocks + stem): flatConvStride2 = decimateFlat ∘
+             -- flatConv, so its input-VJP = convFlatBack ∘ decimateBack (zero-upsample scatter then
+             -- reversed-kernel conv). floatBridges_flatConvStride2Back via floatBridges_decimateBack
+             -- (the scatter, exact in float / magnitude-nonincreasing by decimateIdx_injective —
+             -- decimateBack IS the certified decimateFlat VJP, decimateBack_eq_vjp) .comp convBack.
+             `LeanMlir.Proofs.StridedConvBackFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

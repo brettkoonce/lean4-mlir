@@ -89,6 +89,7 @@ import LeanMlir.Proofs.CnnBackFloatBridge
 import LeanMlir.Proofs.BnBackComposeBridge
 import LeanMlir.Proofs.BnPerChannelBackFloatBridge
 import LeanMlir.Proofs.Resnet34BackFloatBridge
+import LeanMlir.Proofs.StridedConvBackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1630,6 +1631,15 @@ open Proofs
 -- too), bF = convFlatBack∘bnBack∘reluMaskBack∘convFlatBack∘bnBack. BN-backs supplied (floatBridges_
 -- bnPerChannelBack). The dominant r34 block (13 of 16). Down-block/stem need a strided-conv backward.
 #print axioms Proofs.floatBridges_r34IdBlockBack
+-- Strided-conv backward (r34 down-blocks + stem). flatConvStride2 = decimateFlat ∘ flatConv, so the
+-- input-VJP = convFlatBack ∘ decimateBack (zero-upsample scatter, then reversed-kernel conv).
+-- decimateIdx_injective ⇒ each output cell receives from ≤1 input cell ⇒ decimateBack (= the certified
+-- decimateFlat VJP, decimateBack_eq_vjp by rfl) is exact in float & magnitude-nonincreasing (modulus id).
+-- floatBridges_flatConvStride2Back = floatBridges_decimateBack .comp floatBridges_convBack
+-- (decimateIdx_injective reused from ResNet34).
+#print axioms Proofs.decimateBack_eq_vjp
+#print axioms Proofs.floatClose_decimateBack
+#print axioms Proofs.floatBridges_flatConvStride2Back
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
