@@ -107,10 +107,17 @@ stride-4 + §1f/§1g batch landed as **`029d29d`** (8 source files: 7 new `*Back
   the `Vec(N·a)→Vec(N·b)` generalization of `FloatClose.perRow` (a backward swaps cin↔cout); the batched
   whole-net = `FloatBridges.batchMap N` over the per-example `.comp` chain, with
   `floatBridges_mbconvBatched{Body,Resid}Back` the repeating units.
-- **Forward whole-net assembly** — NOTE the *forward* r34 whole-net float bridge is itself only
-  block-level in the repo, so the backward is now AHEAD at whole-net scale. The
-  `r34_grad_floatBridges` file is the BLUEPRINT for assembling both directions (concrete endpoints +
-  abstract blocks supplied as `FloatBridges`).
+- **Forward whole-net assembly — DONE** (2026-06-26, `Resnet34WholeFloatBridge.lean`, 3-axiom-clean):
+  `r34_floatBridges` folds the forward `[3,4,6,3]` skeleton of `resnet34Forward_full_pc`
+  (`dense ∘ GAP ∘ 16 blocks ∘ maxpool ∘ (relu ∘ bn ∘ stride-2-conv)`) as one `.comp` chain — the
+  forward peer of `r34_grad_floatBridges`, same blueprint (concrete stem/maxpool/GAP/dense endpoints;
+  the stem BN + 16 blocks supplied as `FloatBridges`). Two forward op-bridges were missing and are
+  built here, each a thin wrap of an existing `_close`: `floatBridges_flatConvStride2` (the stem —
+  `flatConvStride2 = decimateFlat ∘ flatConv`, so its `FloatClose` is `floatClose_flatConv` on the
+  `2h×2w` grid read at `decimateIdx`, same conv-fan-in `layerBudget`) + `floatBridges_gap` (wraps the
+  existing `floatClose_gap`). The repo previously had the r34 forward float story only at the per-op
+  `_close` level (`Resnet34FloatBridge.lean`) while the backward folded the whole net; this closes
+  that asymmetry. **Both directions now fold at whole-net scale on the same blueprint.**
 
 ---
 
@@ -244,8 +251,10 @@ peer of the forward bridge. convnext: whole-net fold + block body, stem now conc
    `linBack`s) + transformer-block/whole-net fold; enet batched whole-net (Item-B).
 3. **1g (loss-head lift)** anytime — upgrades each `<net>_grad_floatBridges` from "≈ at an abstract
    `dy`" to "≈ from the loss."
-4. **(optional) forward whole-net assembly** — reuse the `r34InputGrad` blueprint to land the forward
-   `r34_float_close`/`mnv2`/etc. whole-net (currently block-level only), closing both directions.
+4. ✅ **forward whole-net assembly (r34)** — DONE: `r34_floatBridges` (`Resnet34WholeFloatBridge.lean`)
+   reuses the `r34InputGrad` blueprint to fold the forward whole net, closing the r34 forward/backward
+   asymmetry. (Still block-level only for mnv2/enet/convnext/vit forwards — same blueprint applies if
+   wanted; backward is whole-net for all five.)
 
 ---
 

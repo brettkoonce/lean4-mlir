@@ -298,6 +298,12 @@ lean_lib «Proofs» where
              -- stem/GAP/maxpool/dense endpoints, the 16 blocks supplied as FloatBridges (discharged
              -- by floatBridges_r34IdBlockBack/DownBlockBack). The exact reverse of resnet34Forward.
              `LeanMlir.Proofs.Resnet34WholeBackFloatBridge,
+             -- A3 r34 WHOLE-NET FORWARD (the forward peer of r34_grad_floatBridges): the missing
+             -- forward op-bridges floatBridges_flatConvStride2 (stem, = flatConv read at decimateIdx)
+             -- + floatBridges_gap (wraps floatClose_gap) + the [3,4,6,3] .comp fold (r34_floatBridges)
+             -- — concrete stem/maxpool/GAP/dense endpoints, stem BN + 16 blocks supplied as
+             -- FloatBridges. Closes the forward/backward whole-net asymmetry.
+             `LeanMlir.Proofs.Resnet34WholeFloatBridge,
              -- §B integrity tie: the r34 IDENTITY-BLOCK backward float bridge targets the CERTIFIED
              -- VJP. Same-vocabulary (per-channel BN, non-batched) target rblkPC_has_vjp_at — built
              -- here, mirrors resblock_has_vjp_at — + the conv-leaf tie (convFlatBack_eq_vjp_backward,

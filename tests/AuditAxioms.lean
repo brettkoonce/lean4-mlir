@@ -92,6 +92,7 @@ import LeanMlir.Proofs.Resnet34BackFloatBridge
 import LeanMlir.Proofs.StridedConvBackFloatBridge
 import LeanMlir.Proofs.Resnet34DownBackFloatBridge
 import LeanMlir.Proofs.Resnet34WholeBackFloatBridge
+import LeanMlir.Proofs.Resnet34WholeFloatBridge
 import LeanMlir.Proofs.Resnet34BackCertifiedTie
 import LeanMlir.Proofs.DepthwiseBackFloatBridge
 import LeanMlir.Proofs.SEBackFloatBridge
@@ -1678,6 +1679,14 @@ open Proofs
 -- nonincreasing, one rounding). Stem/GAP/maxpool/dense concrete; the 16 blocks supplied as FloatBridges.
 #print axioms Proofs.floatClose_gapBack
 #print axioms Proofs.r34_grad_floatBridges
+-- r34 WHOLE-NET FORWARD (the forward peer of r34_grad_floatBridges): r34_floatBridges = the [3,4,6,3]
+-- .comp fold of resnet34Forward_full_pc's skeleton (dense ∘ GAP ∘ blocks ∘ maxpool ∘ stem). The two
+-- missing forward op-bridges: floatBridges_flatConvStride2 (stem stride-2 conv = floatClose_flatConv on
+-- the 2h×2w grid read at decimateIdx) + floatBridges_gap (wraps floatClose_gap). Stem/maxpool/GAP/dense
+-- concrete; the stem BN + 16 blocks supplied as FloatBridges. Closes the forward/backward asymmetry.
+#print axioms Proofs.floatBridges_flatConvStride2
+#print axioms Proofs.floatBridges_gap
+#print axioms Proofs.r34_floatBridges
 -- §B integrity tie (the r34 identity block): the float-bridge backward `r34IdBlockBack` (per-channel
 -- BN, non-batched) IS the certified VJP. convFlatBack_eq_vjp_backward = the conv-leaf tie (via the
 -- general IR.convBackDenote_eq_input_grad_formula); rblkPC_has_vjp_at = the certified per-channel-BN
