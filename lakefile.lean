@@ -363,6 +363,25 @@ lean_lib «Proofs» where
              -- blocks; these rfl lemmas plug the concrete blocks (idFwd/downFwd, invresBody*PC,
              -- convNextStageK/cnxDownW) into the slots ⇒ each skeleton = THE committed real ℝ-forward def.
              `LeanMlir.Proofs.WholeNetForwardTies,
+             -- §B shared prerequisite: the DEPTHWISE adjoint gate (the depthwise twin of
+             -- IR.convBackDenote_eq_input_grad_formula) — depthwiseConv2d (dwReverse W) 0 =
+             -- depthwiseConv2d_input_grad_formula W, all dims/odd kernels, via Finset.sum_bij' on the
+             -- pad supports (no Σ co) — plus the flat + strided depthwise leaf ties (depthwiseFlatBack
+             -- = certified depthwise input-VJP). Unblocks the convnext/mnv2/enet §B ties.
+             `LeanMlir.Proofs.DepthwiseBackCertifiedTie,
+             -- §B integrity tie (convnext): cnxBlockBodyBack(pinned LN/gelu/layerScale backs) = the
+             -- certified convNextBlockBody_has_vjp.backward — depthwise gate + 1×1 conv leaves + rfl;
+             -- plus the residual-wrapped block tie. b1-free.
+             `LeanMlir.Proofs.ConvNeXtBackCertifiedTie,
+             -- §B integrity tie (mnv2): build the per-channel-BN certified body VJP invresBodyPC_has_vjp_at
+             -- (fresh, like r34's rblkPC) then tie invresBodyBackPC (+ strided) — relu6 masks pinned to the
+             -- 0<preact<6 clamp-window signs, BN backs to bnPerChannelTensor3_has_vjp, depthwise via the
+             -- gate. b1-free.
+             `LeanMlir.Proofs.MobileNetV2BackCertifiedTie,
+             -- §B integrity tie (efficientnet): mbconvBodyBack(pinned bn/swish/SE backs) = the certified
+             -- mbconvBody_has_vjp.backward — SE back pinned to seBlockFull_has_vjp, swish to swish_has_vjp,
+             -- depthwise via the gate. Certified per-example body VJP already exists (global bnForward).
+             `LeanMlir.Proofs.EfficientNetBackCertifiedTie,
              -- A3 §1g loss-head cotangent seed: lift softmax_ce_cot_close to a FloatBridges seed
              -- (z ↦ softmax(z)−onehot, the CE input-gradient; bounded by 1+cotErr(0) since softmax∈[0,1])
              -- so any <net>_grad .comp it = the whole "logits → input-gradient" backward "from the loss".

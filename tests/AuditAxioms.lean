@@ -94,6 +94,10 @@ import LeanMlir.Proofs.Resnet34DownBackFloatBridge
 import LeanMlir.Proofs.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.Resnet34WholeFloatBridge
 import LeanMlir.Proofs.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.DepthwiseBackCertifiedTie
+import LeanMlir.Proofs.ConvNeXtBackCertifiedTie
+import LeanMlir.Proofs.MobileNetV2BackCertifiedTie
+import LeanMlir.Proofs.EfficientNetBackCertifiedTie
 import LeanMlir.Proofs.DepthwiseBackFloatBridge
 import LeanMlir.Proofs.SEBackFloatBridge
 import LeanMlir.Proofs.MobileNetV2BackFloatBridge
@@ -1717,6 +1721,29 @@ open Proofs
 #print axioms Proofs.flatConvStride2Back_eq_vjp_backward
 #print axioms Proofs.rblkPStridedPC_has_vjp_at
 #print axioms Proofs.r34DownBlockBack_eq_rblkPStridedPC_vjp
+-- §B DEPTHWISE adjoint gate (shared prereq for convnext/mnv2/enet): the depthwise twin of the conv
+-- gate — depthwiseConv2d (dwReverse W) 0 = depthwiseConv2d_input_grad_formula W (Finset.sum_bij' on the
+-- pad supports, no Σ co) — plus the flat + strided depthwise leaf ties (depthwiseFlatBack = the
+-- certified depthwise input-VJP).
+#print axioms Proofs.depthwiseConv2d_dwReverse_eq_input_grad_formula
+#print axioms Proofs.depthwiseFlatBack_eq_vjp_backward
+#print axioms Proofs.depthwiseStride2FlatBack_eq_vjp_backward
+-- §B integrity tie (convnext): cnxBlockBodyBack with its LN/gelu/layerScale backs pinned to the
+-- certified layerNorm/gelu/layerScale backwards at the saved activations = convNextBlockBody_has_vjp's
+-- backward (depthwise gate + 1×1 conv leaves + rfl); the residual-wrapped block tie on top. b1-free.
+#print axioms Proofs.cnxBlockBodyBack_eq_convNextBlockBody_vjp
+#print axioms Proofs.cnxBlockBack_eq_convNextBlock_vjp
+-- §B integrity tie (mnv2): build the certified per-channel-BN body VJP invresBodyPC_has_vjp_at (fresh,
+-- like r34's rblkPC) then tie invresBodyBackPC (+ strided) — relu6 masks pinned to the 0<preact<6
+-- clamp-window signs, BN backs to bnPerChannelTensor3_has_vjp, depthwise via the gate. b1-free.
+#print axioms Proofs.invresBodyPC_has_vjp_at
+#print axioms Proofs.invresBodyBackPC_eq_invresBodyPC_vjp
+#print axioms Proofs.invresBodyStridedPC_has_vjp_at
+#print axioms Proofs.invresBodyStridedBackPC_eq_invresBodyStridedPC_vjp
+-- §B integrity tie (efficientnet): mbconvBodyBack with its bn/swish/SE backs pinned to the certified
+-- bn_has_vjp/swish_has_vjp/seBlockFull_has_vjp backwards = mbconvBody_has_vjp's backward (the certified
+-- per-example body VJP already exists, global bnForward); depthwise via the gate. b1-free.
+#print axioms Proofs.mbconvBodyBack_eq_mbconvBody_vjp
 -- §B endpoint leaf ties: the dense head (Wᵀ·dy = certified Mat.mulVec), GAP (broadcast-÷, rfl), and
 -- the smooth-point maxpool scatter — each float-bridge endpoint backward = its certified per-op VJP.
 -- With the conv/strided-conv leaves, every per-op backward of r34InputGrad is now certified-tied.

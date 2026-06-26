@@ -18,7 +18,37 @@ Memory: `[[float-tier23-and-lexer-gap]]`, `[[floatbridge-b-certified-tie]]` (the
 
 ---
 
-## PART A — the backward §B ties (Item 2)
+## PART A — the backward §B ties (Item 2) — convnext/mnv2/efficientnet ✅ DONE 2026-06-26
+
+**Status (2026-06-26):** depthwise gate (shared prereq) + convnext + mnv2 + efficientnet §B ties all
+landed, 3-axiom-clean, audited (1133 clean prints). vit §B = sdpa cores are certified-`sdpa_back`-grounded
+**by construction** (no leaf gate needed, unlike CNNs) + block-level Mat↔flat reconciliation remaining
+(see the vit note at the end of Part A).
+
+- **Depthwise adjoint gate** (`DepthwiseBackCertifiedTie.lean`): `depthwiseConv2d_dwReverse_eq_input_grad_formula`
+  (the depthwise twin of `IR.convBackDenote_eq_input_grad_formula` — `Finset.sum_bij'` on the pad supports,
+  no `Σ co`) + `depthwiseFlatBack_eq_vjp_backward` (stride-1) + `depthwiseStride2FlatBack_eq_vjp_backward`.
+  The gate did NOT pre-exist; built once here, unblocks all three CNNs.
+- **convnext** (`ConvNeXtBackCertifiedTie.lean`): `cnxBlockBodyBack_eq_convNextBlockBody_vjp` (+ residual-
+  wrapped `cnxBlockBack_eq_convNextBlock_vjp`). Certified `convNextBlockBody_has_vjp` already existed; pin
+  LN/gelu/layerScale backs to certified at the saved activations, tie 1×1 convs + depthwise via leaf gates,
+  `rfl`.
+- **mnv2** (`MobileNetV2BackCertifiedTie.lean`): the certified VJP did NOT exist in the deployed per-channel
+  vocabulary, so built `invresBodyPC_has_vjp_at` / `invresBodyStridedPC_has_vjp_at` fresh (like r34's
+  `rblkPC_has_vjp_at`), then `invresBodyBackPC_eq_invresBodyPC_vjp` (+ strided). relu6 masks pinned to the
+  `0 < preact < 6` clamp-window signs (relu6's certified backward); per-channel BN backs to
+  `bnPerChannelTensor3_has_vjp`. MobileNetV2.lean has no `open Classical`, so the relu6 `DecidableAnd` mask
+  instance matches `reluMaskBack`'s inferred one — `rfl` closes.
+- **efficientnet** (`EfficientNetBackCertifiedTie.lean`): `mbconvBodyBack_eq_mbconvBody_vjp`. Certified
+  `mbconvBody_has_vjp` already existed (global `bnForward`, per-example — the in-scope body, b1-free). The SE
+  backward is **pinned** to `seBlockFull_has_vjp.backward` (abstract in the float bridge), NOT a leaf gate —
+  the "product-rule" complexity lives in the float-bridge discharge (`floatBridges_seBack`), not the §B tie.
+
+**Reusable recipe that worked first-try for all three:** pin every abstract back (BN / swish / gelu /
+layerScale / SE) to the certified op-VJP `.backward` at the exact saved forward activation; tie the
+concrete conv/depthwise leaves via the gates (conv/depthwise backwards ignore their linear primal, so any
+`x` works); then `funext dy; unfold <floatBack>; rw [the 2-3 leaves]; rfl`. The certified `vjp_comp(_at)`
+backward unfolds definitionally to the nested op-backwards; `set`-built certified VJPs still close by `rfl`.
 
 ### The r34 §B blueprint (the pattern to replicate)
 
@@ -72,10 +102,20 @@ flip the float bridge already uses). This single lemma unblocks the depthwise le
    (`seBack(dy) = (g⊙dy) + gateBack(x⊙dy)`); the certified `seBlockFull_has_vjp` exists, so the tie is
    the product-rule leaf. Per-example body is non-batched ⇒ `b1`-free like r34 (the batched whole-net
    stays at the batched-block level, as the forward does).
-4. **vit** — the hardest: the sdpa adjoint. The certified `sdpa_back_{Q,K,V}` (Attention.lean) and the
-   float `sdpaBack*_close` already exist; the tie is `vitBlockBack`'s sdpa cores = the certified
-   `sdpa_back` (the softmaxBack row-VJP + the 3 matmuls), then LN/dense/gelu leaves. Watch the
-   Mat↔flat (`perRow`) reindex.
+4. **vit** — the hardest: the sdpa adjoint. **FINDING (2026-06-26):** the sdpa cores are NOT a
+   free hand-transcription needing a gate (unlike the CNN `convFlatBack`) — `coreQFlat = flatten ∘
+   mhsaSdpaBackQ ∘ unflatten` and `mhsaSdpaBackQ Q K V dOut i j = sdpa_back_Q … (mhSlab … )` is **built
+   directly from the certified `sdpa_back_Q`** (per head over the `mhSlab` slabs, `SdpaBackFloatBridge.lean`).
+   So vit's §B core integrity holds **by construction** — the float bridge was assembled ON the certified
+   `sdpa_back`, not a look-alike. The remaining vit §B work is the **block-level reconciliation**: the float
+   `vitBlockBack`/`mhsaBackFlat` is a flat per-head fan-in assembly (separate Q/K/V projBacks + cores +
+   `biPathSum`), while the certified `transformerBlock_has_vjp_mat` is Mat-space (`vjpMat_comp` over the
+   qkv-MERGED projection + `colSlabApply` sdpa). Reconciling these two *different* VJP assemblies (merged-
+   then-split vs separate-then-fan-in) + the Mat↔flat (`perRow`) reindex is a genuinely larger effort than
+   the CNN per-op leaf gates — NOT a `rfl` after rewriting leaves. ViTBackB0's `transformerBlockBackGraph`
+   already did this reconciliation for the EMITTED MLIR graph (`den … = flatten ((transformerBlock_has_vjp_mat
+   …).backward …)`); reusing that for the float `vitBlockBack` (if `mhsaBackFlat` = the graph's ℝ-denotation)
+   is the suggested next step. Left as the honest remaining piece.
 
 ### Honest scope note
 
