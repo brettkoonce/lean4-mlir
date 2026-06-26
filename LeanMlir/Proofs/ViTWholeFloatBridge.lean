@@ -99,4 +99,122 @@ theorem vit_floatBridges {N D nClasses imgDim : Nat} (M : FloatModel)
     (FloatBridges.perRow (N + 1) hFinalLN)).comp
     (floatBridges_vitHead M Wcls bcls hw' hβ hD hWcls hbcls))
 
+-- ════════════════════════════════════════════════════════════════
+-- § The forward tie — `vit_full` IS `vitForwardFlat` at concrete blocks
+-- ════════════════════════════════════════════════════════════════
+
+/-- `towerBack` of `k` copies of one block is the `k`-fold iterate: the head-first list fold
+    (`towerBack (g :: gs) = towerBack gs ∘ g`) over `List.replicate k g` is `g^[k]`. -/
+theorem towerBack_replicate {m : Nat} (g : Vec m → Vec m) (k : Nat) :
+    towerBack (List.replicate k g) = g^[k] := by
+  induction k with
+  | zero => rfl
+  | succ k ih =>
+      rw [List.replicate_succ]
+      show towerBack (List.replicate k g) ∘ g = g^[k + 1]
+      rw [ih, Function.iterate_succ]
+
+/-- **The flattened transformer tower is the `k`-fold iterate of the flattened block.** The encoder
+    tower `transformerTower k` shares one parameter tuple across blocks, so its flatten/unflatten
+    conjugation is exactly `blockFlat^[k]` — the structural bridge between the real-net `Nat.rec` fold
+    and the `towerBack`/`List.replicate` fold of `vitForwardFlat`. Induction on `k`: the base is the
+    `Mat.flatten_unflatten` round-trip; the step pushes `Mat.unflatten_flatten` through one block and
+    matches `Function.iterate_succ'` (`f^[k+1] = f ∘ f^[k]`, block applied last, as in the tower). -/
+theorem transformerTower_flatten_eq_iterate
+    (k N heads d_head mlpDim : Nat) (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head)) (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
+    (fun v : Vec (N * (heads * d_head)) =>
+       Mat.flatten (transformerTower k N heads d_head mlpDim ε γ1 β1
+         Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v)))
+      = (fun v : Vec (N * (heads * d_head)) =>
+           Mat.flatten (transformerBlock N heads d_head mlpDim ε γ1 β1
+             Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v)))^[k] := by
+  induction k with
+  | zero =>
+      funext v
+      simp only [Function.iterate_zero, id_eq]
+      show Mat.flatten (Mat.unflatten v) = v
+      exact Mat.flatten_unflatten v
+  | succ k ih =>
+      show (fun v : Vec (N * (heads * d_head)) =>
+             Mat.flatten (((transformerBlock N heads d_head mlpDim ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
+               (transformerTower k N heads d_head mlpDim ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2))
+              (Mat.unflatten v)))
+          = (fun v : Vec (N * (heads * d_head)) =>
+               Mat.flatten (transformerBlock N heads d_head mlpDim ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v)))^[k + 1]
+      have h_eq : (fun v : Vec (N * (heads * d_head)) =>
+             Mat.flatten (((transformerBlock N heads d_head mlpDim ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
+               (transformerTower k N heads d_head mlpDim ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2))
+              (Mat.unflatten v)))
+          = (fun u : Vec (N * (heads * d_head)) =>
+               Mat.flatten (transformerBlock N heads d_head mlpDim ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten u)))
+            ∘ (fun v : Vec (N * (heads * d_head)) =>
+                 Mat.flatten (transformerTower k N heads d_head mlpDim ε γ1 β1
+                   Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))) := by
+        funext v; simp [Function.comp, Mat.unflatten_flatten]
+      rw [h_eq, ih, ← Function.iterate_succ']
+
+/-- **THE ViT FORWARD TIE.** The committed real-net `vit_full` IS the `vitForwardFlat` skeleton with
+    the final LayerNorm, the `kBlocks` (shared-parameter) flattened transformer blocks, and the
+    patch-embed plugged into its supplied slots — the ViT peer of `r34Forward`/`mnv2Forward`/
+    `convnextForward`'s `_eq_skeleton` ties. Unlike those (pure `rfl`), ViT needs a genuine
+    decomposition: `flatten ∘ vit_body ∘ unflatten = perRowFlat finalLN ∘ towerBack blocks`. Since
+    `vit_body = (per-token finalLN) ∘ transformerTower`, the LN rides a `perRowFlat`/`Mat.unflatten_flatten`
+    reindex (`hmid`'s final `simp`), and the tower's `Nat.rec` fold is reconciled with the
+    `towerBack`/`List.replicate` fold through `transformerTower_flatten_eq_iterate` +
+    `towerBack_replicate` (both routed via `Function.iterate`). So `vit_floatBridges` provably bounds
+    the actual `vit_full`, not a look-alike skeleton. -/
+theorem vit_full_eq_vitForwardFlat
+    (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
+    (ε γ1 β1 : ℝ)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head)) (γ2 β2 : ℝ)
+    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) (γF βF : ℝ)
+    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
+    vit_full ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+        W_conv b_conv cls_token pos_embed ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
+        γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls
+      = vitForwardFlat Wcls bcls
+          (layerNormForward (heads * d_head) ε γF βF)
+          (List.replicate kBlocks
+            (fun v : Vec ((N + 1) * (heads * d_head)) =>
+               Mat.flatten (transformerBlock (N + 1) heads d_head mlpDim ε γ1 β1
+                 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))))
+          (patchEmbed_flat ic H W patchSize N (heads * d_head)
+            W_conv b_conv cls_token pos_embed) := by
+  have hmid :
+      (fun v : Vec ((N + 1) * (heads * d_head)) =>
+         Mat.flatten (vit_body kBlocks (N + 1) heads d_head mlpDim ε γ1 β1
+           Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF (Mat.unflatten v)))
+        = perRowFlat (N + 1) (heads * d_head) (layerNormForward (heads * d_head) ε γF βF)
+          ∘ towerBack (List.replicate kBlocks
+              (fun v : Vec ((N + 1) * (heads * d_head)) =>
+                 Mat.flatten (transformerBlock (N + 1) heads d_head mlpDim ε γ1 β1
+                   Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v)))) := by
+    rw [towerBack_replicate,
+        ← transformerTower_flatten_eq_iterate kBlocks (N + 1) heads d_head mlpDim ε γ1 β1
+            Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2]
+    funext v
+    show Mat.flatten (vit_body kBlocks (N + 1) heads d_head mlpDim ε γ1 β1
+           Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF (Mat.unflatten v))
+       = perRowFlat (N + 1) (heads * d_head) (layerNormForward (heads * d_head) ε γF βF)
+           (Mat.flatten (transformerTower kBlocks (N + 1) heads d_head mlpDim ε γ1 β1
+             Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v)))
+    unfold vit_body perRowFlat
+    simp only [Function.comp_apply, Mat.unflatten_flatten]
+  unfold vit_full vitForwardFlat
+  rw [hmid, Function.comp_assoc]
+
 end Proofs

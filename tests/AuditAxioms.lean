@@ -1924,6 +1924,15 @@ open Proofs
 #print axioms Proofs.floatClose_patchEmbed
 #print axioms Proofs.floatBridges_patchEmbed
 #print axioms Proofs.vit_floatBridges_concrete
+-- ViT FORWARD TIE (the forward peer of the §B backward tie): the committed real-net vit_full IS the
+-- vitForwardFlat skeleton at concrete blocks — so vit_floatBridges bounds the actual net, not a
+-- look-alike. Unlike r34/mnv2/convnext's rfl ties, ViT decomposes vit_body = (per-token finalLN) ∘
+-- transformerTower: the LN rides a perRowFlat/unflatten_flatten reindex; the Nat.rec tower fold ties to
+-- the towerBack/List.replicate fold via transformerTower_flatten_eq_iterate + towerBack_replicate (both
+-- through Function.iterate). Completes the 5-net forward tie sweep. 3-axiom clean.
+#print axioms Proofs.towerBack_replicate
+#print axioms Proofs.transformerTower_flatten_eq_iterate
+#print axioms Proofs.vit_full_eq_vitForwardFlat
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-

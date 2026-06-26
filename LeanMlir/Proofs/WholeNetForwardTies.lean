@@ -13,10 +13,13 @@ look-alike skeletons.
 
 All three are pure definitional unfolds (`rfl`, modulo the nested-application `convNextForwardT` which
 goes through its `_eq_chain` to dodge the kernel blow-up). EfficientNet already ties directly (its
-bridge is stated on the `∘`-form that IS `efficientnetForwardB`). ViT's tie would instead require
-decomposing `vit_body` into a flattened `perRowFlat finalLN ∘ tower` — NOT a definitional unfold, so
-out of scope for the cosmetic pass. The backward skeletons' "real def" is the certified VJP (the §B
-work, done for r34), a genuinely different tie than these forward net-def unfolds.
+bridge is stated on the `∘`-form that IS `efficientnetForwardB`). ViT's tie is NOT a definitional
+unfold — it decomposes `vit_body = (per-token finalLN) ∘ transformerTower` into the flattened
+`perRowFlat finalLN ∘ towerBack blocks`, reconciling the tower's `Nat.rec` fold with the
+`towerBack`/`List.replicate` fold via `Function.iterate`; it lives next to `vitForwardFlat` as
+`vit_full_eq_vitForwardFlat` (`ViTWholeFloatBridge.lean`), completing the 5-net forward tie sweep. The
+backward skeletons' "real def" is the certified VJP (the §B work, done for r34), a genuinely different
+tie than these forward net-def unfolds.
 -/
 
 namespace Proofs
