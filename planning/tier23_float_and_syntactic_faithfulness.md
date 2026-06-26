@@ -158,15 +158,20 @@ descent). The per-block backward graphs are already proven faithful over `ℝ`
 (`*BackGraph_faithful`/`*BackBatchedGraph_faithful`, `vitNetBackGraph_faithful`,
 `convBnBackGraph_faithful`, `mhsaBackGraph_faithful`, …). Mirror the forward `FloatBridges`
 assembly on the backward:
-1. A `FloatClose`-style certificate for each **backward** block op (conv-grad, BN-grad **✅**,
-   depthwise-grad, SE-grad, attention-grad), reusing the forward moduli where the backward
-   reuses the forward intermediates (`FwdRec`). *BN-grad done; the linear input-VJP
-   (transpose-matmul, like the MNIST `dot_perturbed_close`), ReLU-mask, maxpool-scatter, and the
-   smooth-activation (swish/gelu) grads remain.*
-2. Compose them (residual fan-in adds with modulus `id`, exactly as the forward) into a per-net
-   `<net>_grad_floatBridges`: "the deployed float backward is within an explicit budget of the
-   certified `fderiv` gradient threaded through the real loss-driven cotangent." *The per-net
-   assembly (5 architectures) is the large mechanical remainder.*
+1. A `FloatClose`-style certificate for each **backward** block op — **DONE** for BN-grad
+   (`bnGradInput_close`), the **linear input-VJP** (`floatBridges_linBack`: `dx = Wᵀ·dy` is a
+   bias-free dense over the transpose, so it *reuses `floatBridges_dense`*), and the **ReLU-back**
+   (`floatBridges_reluMaskBack`: the `selectPos` mask, exact in float, modulus `id`, the backward
+   peer of `floatClose_relu`). *Remaining: conv input-VJP (`convBackDenote`, a reversed-kernel
+   conv — its own bridge, not a `flatConv` reuse), depthwise/SE/attention grads, and the loss-head
+   cotangent (`softmax_ce_cot_close`, exists per-entry; lift to a `FloatBridges` map).*
+2. Compose them into a per-net `<net>_grad_floatBridges` — **the fold WORKS**: the backward of a
+   feed-forward net at a smooth point is itself a *forward* composition of maps on the cotangent,
+   so it threads through the **same** `FloatBridges.comp` backbone. Witness:
+   **`mlpInputGrad_floatBridges`** (`LinBackFloatBridge.lean`, 3-axiom-clean) — the whole 3-layer
+   MLP input-gradient VJP `Wᵀ₀·(mask₁⊙Wᵀ₁·(mask₂⊙Wᵀ₂·dy))` float-bridges in one `.comp` chain, the
+   backward peer of `cifar8_floatBridges`. *Remaining: the conv/BN/attention per-net assemblies
+   (5 deep architectures) — mechanical once their per-op backward bridges land.*
 
 This makes the §1a den-ties **mean something at float** for the deep nets, which is the single
 biggest credibility jump for the Imagenette tier.
@@ -273,7 +278,7 @@ is the finite per-op lexer and its inverse lemma.
 |---|---|---|---|---|
 | **A1** per-net forward capstones | "deployed float forward ≈ certified `ℝ` forward", named per net | S–M (CIFAR family ✅: 4/8-conv + BN; deep nets L) | low | medium |
 | **A2** BN-backward + CIFAR grad-close (+opt descent) | float gradient closeness one rung above MNIST; maybe Tier-2 descent | M | med | medium |
-| **A3** deep-net grad-close (backward float) | makes the §1a ties mean something at float for Imagenette | L (BN-back keystone ✅; linear/relu/pool/act grads + per-net assembly remain) | med | **high** |
+| **A3** deep-net grad-close (backward float) | makes the §1a ties mean something at float for Imagenette | L (BN-back + linear-back + relu-back ✅; whole MLP backward fold ✅; conv/attn grads + deep-net assembly remain) | med | **high** |
 | **B1/B2** per-op `lexTok` inverse → `parse (lex (pretty g)) = skel g` | text→graph faithfulness; retires the per-op lexical audit | M | low | **high** |
 
 *A1 CIFAR family DONE (2026-06-26): `cifar8_floatBridges` (`Cifar8FloatBridge.lean`) + the BN

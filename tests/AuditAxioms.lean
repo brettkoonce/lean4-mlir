@@ -84,6 +84,7 @@ import LeanMlir.Proofs.Cifar8FloatBridge
 import LeanMlir.Proofs.BnPerChannelFloatBridge
 import LeanMlir.Proofs.CifarBnFloatBridge
 import LeanMlir.Proofs.BnBackFloatBridge
+import LeanMlir.Proofs.LinBackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1566,6 +1567,17 @@ open Proofs
 #print axioms Proofs.bnBetaGrad_close
 #print axioms Proofs.bnGammaGrad_close
 #print axioms Proofs.bnGradInput_close
+-- The backward whole-net FOLD: at a smooth point the input-gradient VJP is a forward
+-- composition of maps on the cotangent, so it folds through the SAME FloatBridges.comp backbone.
+-- floatBridges_linBack: the linear input-VJP dx = Wᵀ·dy is dense (Mat.transpose W) 0, so it
+-- reuses floatBridges_dense (no new proof). floatBridges_reluMaskBack: the ReLU-back selectPos
+-- mask is a pure select — EXACT in float, modulus id (the backward peer of floatClose_relu); the
+-- mask is the fixed smooth-point sign pattern. mlpInputGrad_floatBridges: the whole 3-layer MLP
+-- input-gradient VJP Wᵀ₀·(mask₁⊙Wᵀ₁·(mask₂⊙Wᵀ₂·dy)) float-bridges in one .comp chain — the
+-- backward peer of cifar8_floatBridges.
+#print axioms Proofs.floatClose_reluMaskBack
+#print axioms Proofs.floatBridges_linBack
+#print axioms Proofs.mlpInputGrad_floatBridges
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-

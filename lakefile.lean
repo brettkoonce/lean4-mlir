@@ -254,6 +254,12 @@ lean_lib «Proofs» where
              -- reduction_close / sub_close' helpers. The shared backward op every deep
              -- net's gradient folds (r34/mnv2/enet/convnext LN/vit LN).
              `LeanMlir.Proofs.BnBackFloatBridge,
+             -- A3 backward fold: the linear input-VJP (dx = Wᵀ·dy = bias-free dense over the
+             -- transpose, reuses floatBridges_dense) + the exact ReLU-back selectPos mask
+             -- (floatBridges_reluMaskBack) compose via FloatBridges.comp into a whole-net
+             -- backward gradient bridge (mlpInputGrad_floatBridges) — the backward peer of
+             -- cifar8_floatBridges.
+             `LeanMlir.Proofs.LinBackFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent
