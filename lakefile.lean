@@ -358,6 +358,11 @@ lean_lib «Proofs» where
              -- depth-k stage fold, induction) + floatBridges_cnxDownW; convnextForward ∘-skeleton with
              -- stem-conv/GAP/dense concrete, stem/head LN + 4 stages + 3 downsamples supplied.
              `LeanMlir.Proofs.ConvNeXtWholeFloatBridge,
+             -- The skeleton↔real-net forward ties (item #5, cosmetic polish): each whole-net forward
+             -- bridge is stated on a fresh skeleton (r34Forward/mnv2Forward/convnextForward) with abstract
+             -- blocks; these rfl lemmas plug the concrete blocks (idFwd/downFwd, invresBody*PC,
+             -- convNextStageK/cnxDownW) into the slots ⇒ each skeleton = THE committed real ℝ-forward def.
+             `LeanMlir.Proofs.WholeNetForwardTies,
              -- A3 §1g loss-head cotangent seed: lift softmax_ce_cot_close to a FloatBridges seed
              -- (z ↦ softmax(z)−onehot, the CE input-gradient; bounded by 1+cotErr(0) since softmax∈[0,1])
              -- so any <net>_grad .comp it = the whole "logits → input-gradient" backward "from the loss".

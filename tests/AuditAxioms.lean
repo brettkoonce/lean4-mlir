@@ -103,6 +103,7 @@ import LeanMlir.Proofs.MobileNetV2WholeFloatBridge
 import LeanMlir.Proofs.ViTWholeFloatBridge
 import LeanMlir.Proofs.PatchEmbedFloatBridge
 import LeanMlir.Proofs.ConvNeXtWholeFloatBridge
+import LeanMlir.Proofs.WholeNetForwardTies
 import LeanMlir.Proofs.ConvNeXtBackFloatBridge
 import LeanMlir.Proofs.LossHeadCotFloatBridge
 import LeanMlir.Proofs.SoftmaxBackFloatBridge
@@ -1814,6 +1815,13 @@ open Proofs
 #print axioms Proofs.floatBridges_convNextStageK
 #print axioms Proofs.floatBridges_cnxDownW
 #print axioms Proofs.convnext_floatBridges
+-- The skeleton↔real-net forward ties (item #5, cosmetic): each whole-net forward skeleton, with the
+-- concrete blocks plugged into its abstract slots, IS the committed real ℝ-forward def (rfl, modulo
+-- convNextForwardT's nested-app going through its _eq_chain). So the forward bridges provably apply to
+-- the actual nets, not just look-alike skeletons. (efficientnet already ties via its ∘-form statement.)
+#print axioms Proofs.convNextForwardT_eq_skeleton
+#print axioms Proofs.mobilenetv2Forward_full_pc_eq_skeleton
+#print axioms Proofs.resnet34Forward_full_pc_eq_skeleton
 -- A3 §1g loss-head cotangent seed ("from the loss"): floatClose_lossSeed wraps the per-entry
 -- softmax_ce_cot_close (|M.softmaxCECotF − (softmax−onehot)| ≤ cotErr) into a FloatClose/FloatBridges
 -- (real z↦softmax(z)−onehot, bounded by 1 since softmax∈[0,1], modulus cotErr(e)); floatBridges_gradFromLoss

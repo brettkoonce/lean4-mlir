@@ -108,9 +108,11 @@ This file is **the worked example — copy its shape for the other four.** It co
 - `floatBridges_r34IdBlock` / `floatBridges_r34DownBlock` — the named per-block dischargers (about the
   ACTUAL `rblkPC` / `rblkPStridedPC`), so the fold's block hyps discharge by name like the backward's.
 
-**Remaining = ONLY the r34/mnv2/convnext/vit cosmetic skeleton↔real-def ties (item #5, pure polish;
-efficientnet already ties to the real net via the ∘-form). All 5 whole-net forward folds + the concrete
-vit patch-embed are DONE — nothing architectural left.**
+**Remaining = essentially nothing.** All 5 whole-net forward folds + the concrete vit patch-embed are
+DONE; the cosmetic skeleton↔real-def ties are DONE for r34/mnv2/convnext (`WholeNetForwardTies.lean`).
+The only un-tied skeletons are vit-forward (needs a real `vit_body` decomposition, not cosmetic) and
+the backward skeletons (their real-def is the certified VJP — the §B work). efficientnet ties via its
+∘-form. Nothing architectural left.
 
 ---
 
@@ -173,10 +175,18 @@ depth-`k` stage fold `floatBridges_convNextStageK` (induction — the convnext t
 `floatBridges_flatConvStride4` is the two-decimation cousin of `flatConvStride2` (read at
 `decimateOddIdx∘decimateIdx`). LNs supplied abstractly. See the STATUS block above for the gotchas.
 
-### 5. (cosmetic) skeleton ↔ actual-net defeq ties — Effort S each, low value.
-`r34Forward` (and each `<net>Forward`) is a fresh structural skeleton, NOT proven
-`= <net>Forward_full_pc`. A `<net>Forward_eq` unfold/defeq lemma ties the bridge to *the* net. Same
-gap exists on the backward side (`r34InputGrad` etc.) — do both directions or neither. Pure polish.
+### 5. (cosmetic) skeleton ↔ actual-net defeq ties — ✅ DONE for r34/mnv2/convnext (2026-06-26).
+`LeanMlir/Proofs/WholeNetForwardTies.lean` (3-axiom-clean): `resnet34Forward_full_pc_eq_skeleton`,
+`mobilenetv2Forward_full_pc_eq_skeleton`, `convNextForwardT_eq_skeleton` — each proves the committed
+real ℝ-forward def **=** my `<net>Forward` skeleton with the concrete blocks (`idFwd`/`downFwd`,
+`invresBody*PC`, `convNextStageK`/`cnxDownW`) plugged into its abstract slots. Pure `rfl` for the
+`∘`-form real defs (r34/mnv2); convnext goes through `convNextForwardT_eq_chain` (nested-app → `∘`,
+kernel-safe) then `rfl`. So the forward bridges provably apply to **the** nets, not look-alikes.
+NOT done (NOT cosmetic): (a) **vit** — `vit_full`'s body is `flatten ∘ vit_body ∘ unflatten`; tying it
+to my `perRowFlat finalLN ∘ towerBack blocks` needs a real `vit_body` decomposition, not a `rfl`.
+(b) **the backward skeletons** (`r34InputGrad` etc.) — their "real def" is the certified VJP (the §B
+work, done only for r34), a genuinely different tie than these forward net-def unfolds. efficientnet
+needs no tie (its bridge is stated on the `∘`-form that already IS `efficientnetForwardB`).
 
 ---
 
