@@ -161,6 +161,37 @@ structural mismatches — batched↔non-batched vocabulary, pinning the abstract
 missing full-dim concrete certified whole-net VJP (`resnet34Concrete` is toy-only). Those are the next
 §B rungs; the load-bearing leaf math is done.
 
+### §B-identity-block DONE (2026-06-26) — float backward = CERTIFIED VJP, b1-free, 3-axiom-clean
+
+`LeanMlir/Proofs/Resnet34BackCertifiedTie.lean` (new module; in lib `roots` + `AuditAxioms`):
+the r34 **identity block** float-bridge backward is now tied to the certified gradient.
+
+**The b1 dodge (the key move).** b1 (batched↔non-batched) is *avoided*, not reconciled: the
+float-bridge `r34IdBlockBack` is the reverse of `rblkPC` — the **per-channel-BN, non-batched**
+block — so the right certified target is a VJP of `rblkPC` in the *same vocabulary*, NOT the
+batched true-BN `r34BasicBlockB_has_vjp_at` (`ResNet34BackB0`). That object didn't exist, so:
+- `rblkPC_has_vjp_at` — **built it** (the certified per-channel-BN identity-block VJP), mirroring
+  the scalar-BN `resblock_has_vjp_at`, reusing `convBnReluPC_has_vjp_at` + `bnPerChannelTensor3_has_vjp`
+  + `residual_has_vjp_at`. No `batchMap`/`N`/`Fin.cast` anywhere.
+- `convFlatBack_eq_vjp_backward` — the conv **leaf** tie (general, odd kernels), via the committed
+  `IR.convBackDenote_eq_input_grad_formula`.
+- `r34IdBlockBack_eq_rblkPC_vjp` — **the tie**: `r34IdBlockBack` with its abstract BN-backs pinned to
+  the certified per-channel backwards (`bnPerChannelTensor3_has_vjp.backward` at the conv outputs) and
+  its ReLU masks pinned to the pre-activation signs **equals** `(rblkPC_has_vjp_at …).backward`. Both
+  sides are `fun dy ↦ bodyBack(mask dy) + mask dy`; closes by rewriting the two conv leaves, the rest
+  definitional (residual fan-in, `∘`-reversal, pinned BN-backs, relu masks). All 3-axiom-clean.
+
+So **b2 is closed for the identity block** (the pinning is explicit and the tie proven), and **b1 is
+shown dodgeable** (build the same-vocabulary certified object). For the r34 identity block the float
+bridge's closeness is now closeness to **the certified gradient**, not a hand-map.
+
+**Remaining §B:** the down-block (`r34DownBlockBack` ↔ a `rblkPStridedPC` VJP — same recipe, +
+strided-conv leaf via `flatConvStride2Back` + the `residualProj` two-branch fan-in); the
+stem/GAP/maxpool/dense endpoints; and the whole-net fold `r34InputGrad` — the last still gated by b3
+(the certified whole-net VJP `resnet34_has_vjp_at` is parametric, only concretely instantiated at toy
+`resnet34Concrete` dims), so the honest whole-net statement remains the per-block ties + the parametric
+skeleton, not a full-dim concrete certified term.
+
 ---
 
 ## §C — Descent: the joint step + BN-in-the-loop (NOT "shallow CNN" — that's done)

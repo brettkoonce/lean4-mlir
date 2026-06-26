@@ -92,6 +92,7 @@ import LeanMlir.Proofs.Resnet34BackFloatBridge
 import LeanMlir.Proofs.StridedConvBackFloatBridge
 import LeanMlir.Proofs.Resnet34DownBackFloatBridge
 import LeanMlir.Proofs.Resnet34WholeBackFloatBridge
+import LeanMlir.Proofs.Resnet34BackCertifiedTie
 import LeanMlir.Proofs.DepthwiseBackFloatBridge
 import LeanMlir.Proofs.SEBackFloatBridge
 import LeanMlir.Proofs.MobileNetV2BackFloatBridge
@@ -1677,6 +1678,15 @@ open Proofs
 -- nonincreasing, one rounding). Stem/GAP/maxpool/dense concrete; the 16 blocks supplied as FloatBridges.
 #print axioms Proofs.floatClose_gapBack
 #print axioms Proofs.r34_grad_floatBridges
+-- §B integrity tie (the r34 identity block): the float-bridge backward `r34IdBlockBack` (per-channel
+-- BN, non-batched) IS the certified VJP. convFlatBack_eq_vjp_backward = the conv-leaf tie (via the
+-- general IR.convBackDenote_eq_input_grad_formula); rblkPC_has_vjp_at = the certified per-channel-BN
+-- block VJP (same vocabulary, so no batched↔non-batched reconciliation); r34IdBlockBack_eq_rblkPC_vjp
+-- = r34IdBlockBack with BN-backs pinned to the certified per-channel backwards + ReLU masks pinned to
+-- the pre-activation signs equals (rblkPC_has_vjp_at …).backward.
+#print axioms Proofs.convFlatBack_eq_vjp_backward
+#print axioms Proofs.rblkPC_has_vjp_at
+#print axioms Proofs.r34IdBlockBack_eq_rblkPC_vjp
 -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
 -- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
 -- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0

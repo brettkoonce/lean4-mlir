@@ -298,6 +298,12 @@ lean_lib «Proofs» where
              -- stem/GAP/maxpool/dense endpoints, the 16 blocks supplied as FloatBridges (discharged
              -- by floatBridges_r34IdBlockBack/DownBlockBack). The exact reverse of resnet34Forward.
              `LeanMlir.Proofs.Resnet34WholeBackFloatBridge,
+             -- §B integrity tie: the r34 IDENTITY-BLOCK backward float bridge targets the CERTIFIED
+             -- VJP. Same-vocabulary (per-channel BN, non-batched) target rblkPC_has_vjp_at — built
+             -- here, mirrors resblock_has_vjp_at — + the conv-leaf tie (convFlatBack_eq_vjp_backward,
+             -- via IR.convBackDenote_eq_input_grad_formula) ⇒ r34IdBlockBack(pinned) = its .backward.
+             -- b1-free (no batched↔non-batched reconciliation).
+             `LeanMlir.Proofs.Resnet34BackCertifiedTie,
              -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a
              -- forward depthwise conv at the spatially-reversed kernel (dwReverse, FREE reuse of
              -- floatBridges_depthwise — the depthwise twin of convBack); strided variant =
