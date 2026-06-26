@@ -100,6 +100,7 @@ import LeanMlir.Proofs.ConvNeXtBackFloatBridge
 import LeanMlir.Proofs.LossHeadCotFloatBridge
 import LeanMlir.Proofs.SoftmaxBackFloatBridge
 import LeanMlir.Proofs.SdpaBackFloatBridge
+import LeanMlir.Proofs.MhsaBackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1749,6 +1750,18 @@ open Proofs
 #print axioms Proofs.mhsaSdpaBackV_close
 #print axioms Proofs.mhsaSdpaBackQ_close
 #print axioms Proofs.mhsaSdpaBackK_close
+-- FULL multi-head self-attention input-gradient backward (the backward peer of mhProjAttnFull).
+-- dY ↦ dX = WoBack (linBack Wo, per token) → the 3 flattened sdpa cores (floatBridges_core{V,Q,K},
+-- each the FloatClose lift of mhsaSdpaBack* — linear in the cotangent, so modulus = rounding budget +
+-- real magnitude at e) → Q/K/V projBacks (free per-token linBacks) + the 3-way fan-in at X (biPathSum
+-- twice). floatBridges_mhsaBack assembles it with comp/biPathSum/perRow — budgets thread automatically.
+#print axioms Proofs.floatClose_coreV
+#print axioms Proofs.floatClose_coreQ
+#print axioms Proofs.floatClose_coreK
+#print axioms Proofs.floatBridges_coreV
+#print axioms Proofs.floatBridges_coreQ
+#print axioms Proofs.floatBridges_coreK
+#print axioms Proofs.floatBridges_mhsaBack
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-

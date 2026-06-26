@@ -338,6 +338,11 @@ lean_lib «Proofs» where
              -- floats reuse attnScore_close (dw), attnDot_close (dQ/dK/dV at perturbed weights),
              -- softmaxBack_close/sub_abs_le (the row VJP), mul_close (scale). sdpaBack{V,Q,K}_close.
              `LeanMlir.Proofs.SdpaBackFloatBridge,
+             -- A3 §1f FULL multi-head self-attention backward assembly: the backward peer of
+             -- floatBridges_mhProjAttnFull. dY ↦ dX = WoBack → 3 sdpa cores → Q/K/V projBacks + fan-in.
+             -- The projBacks are FREE (per-token linBack); the cores (floatBridges_core{V,Q,K}) lift the
+             -- flattened mhsaSdpaBack* to FloatClose (linear-in-cotangent). floatBridges_mhsaBack.
+             `LeanMlir.Proofs.MhsaBackFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

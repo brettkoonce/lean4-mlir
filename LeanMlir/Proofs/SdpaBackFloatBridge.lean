@@ -307,6 +307,154 @@ theorem sdpaBackK_close (M : FloatModel) {n d : Nat} (Q K V dOut : Mat n d) (fp 
   exact key
 
 -- ════════════════════════════════════════════════════════════════
+-- § Real cotangent magnitude + linearity (for the FloatClose lift)
+--
+-- Each certified `sdpa_back_{V,Q,K}` is LINEAR in the cotangent `dOut` (the saved softmax weights
+-- `p`, Q/K/V are fixed at the smooth point). So — like `bn_grad_input`/`softmaxBack` — its FloatClose
+-- modulus is the rounding budget plus the real magnitude AT the input-error `e`. These give the real
+-- magnitude (`_abs_le`) and the linearity/Lipschitz-in-cotangent (`_sub_abs_le`) needed for that lift.
+-- ════════════════════════════════════════════════════════════════
+
+/-- `|dV| = |pᵀ·dOut| ≤ n·dA` (softmax weights are probabilities, `|p| ≤ 1`). -/
+theorem sdpa_back_V_abs_le {n d : Nat} (Q K V dOut : Mat n d) {dA : ℝ}
+    (hdOut : ∀ i k, |dOut i k| ≤ dA) (i : Fin n) (j : Fin d) :
+    |sdpa_back_V n d Q K V dOut i j| ≤ (n : ℝ) * dA := by
+  unfold sdpa_back_V Mat.mul Mat.transpose
+  calc |∑ k, sdpa_weights n d Q K k i * dOut k j| ≤ ∑ k, |sdpa_weights n d Q K k i * dOut k j| :=
+        Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ _k : Fin n, (1 * dA) := Finset.sum_le_sum fun k _ => by
+        rw [abs_mul]
+        exact mul_le_mul (sdpa_weights_abs_le_one Q K k i) (hdOut k j) (abs_nonneg _) zero_le_one
+    _ = (n : ℝ) * dA := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring
+
+/-- `dV` is linear in `dOut`: `|dV(dOutt) − dV(dOuta)| ≤ n·e`. -/
+theorem sdpa_back_V_sub_abs_le {n d : Nat} (Q K V dOutt dOuta : Mat n d) {e : ℝ}
+    (hd : ∀ i k, |dOutt i k - dOuta i k| ≤ e) (i : Fin n) (j : Fin d) :
+    |sdpa_back_V n d Q K V dOutt i j - sdpa_back_V n d Q K V dOuta i j| ≤ (n : ℝ) * e := by
+  unfold sdpa_back_V Mat.mul Mat.transpose
+  rw [← Finset.sum_sub_distrib]
+  calc |∑ k, (sdpa_weights n d Q K k i * dOutt k j - sdpa_weights n d Q K k i * dOuta k j)|
+      ≤ ∑ k, |sdpa_weights n d Q K k i * dOutt k j - sdpa_weights n d Q K k i * dOuta k j| :=
+        Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ _k : Fin n, (1 * e) := Finset.sum_le_sum fun k _ => by
+        rw [← mul_sub, abs_mul]
+        exact mul_le_mul (sdpa_weights_abs_le_one Q K k i) (hd k j) (abs_nonneg _) zero_le_one
+    _ = (n : ℝ) * e := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring
+
+/-- `dw = dOut·Vᵀ` is linear in `dOut`: `|dw(dOutt) − dw(dOuta)| ≤ d·e·vA`. -/
+theorem sdpa_dWeights_sub_abs_le {n d : Nat} (V dOutt dOuta : Mat n d) {vA e : ℝ}
+    (hV : ∀ j k, |V j k| ≤ vA) (hd : ∀ i k, |dOutt i k - dOuta i k| ≤ e) (i j : Fin n) :
+    |sdpa_dWeights V dOutt i j - sdpa_dWeights V dOuta i j| ≤ (d : ℝ) * e * vA := by
+  show |Mat.mul dOutt (Mat.transpose V) i j - Mat.mul dOuta (Mat.transpose V) i j| ≤ _
+  unfold Mat.mul Mat.transpose
+  rw [← Finset.sum_sub_distrib]
+  calc |∑ k, (dOutt i k * V j k - dOuta i k * V j k)|
+      ≤ ∑ k, |dOutt i k * V j k - dOuta i k * V j k| := Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ _k : Fin d, (e * vA) := Finset.sum_le_sum fun k _ => by
+        rw [show dOutt i k * V j k - dOuta i k * V j k = (dOutt i k - dOuta i k) * V j k from by ring,
+          abs_mul]
+        exact mul_le_mul (hd i k) (hV j k) (abs_nonneg _) ((abs_nonneg _).trans (hd i k))
+    _ = (d : ℝ) * e * vA := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring
+
+/-- `dScaled = softmaxBack(p, dw)` is linear in `dOut` (`p` fixed): `|Δ| ≤ sdpaDScaledMag(e)`. -/
+theorem sdpa_dScaled_sub_abs_le {n d : Nat} (Q K V dOutt dOuta : Mat n d) {vA e : ℝ}
+    (hV : ∀ j k, |V j k| ≤ vA) (hd : ∀ i k, |dOutt i k - dOuta i k| ≤ e) (i j : Fin n) :
+    |sdpa_dScaled n d Q K V dOutt i j - sdpa_dScaled n d Q K V dOuta i j| ≤ sdpaDScaledMag n d e vA := by
+  rw [sdpa_dScaled_eq, sdpa_dScaled_eq]
+  unfold sdpaDScaledMag sdpaDwMag
+  exact softmaxBack_sub_abs_le (sdpa_weights n d Q K i) (sdpa_dWeights V dOutt i)
+    (sdpa_dWeights V dOuta i) zero_le_one (fun k => sdpa_weights_abs_le_one Q K i k)
+    (fun k => sdpa_dWeights_sub_abs_le V dOutt dOuta hV hd i k) j
+
+/-- `dScores = (1/√d)·dScaled` is linear in `dOut`: `|Δ| ≤ sdpaDScoresMag(e)`. -/
+theorem sdpa_dScores_sub_abs_le {n d : Nat} (Q K V dOutt dOuta : Mat n d) {vA scaleA e : ℝ}
+    (hscaleA : |sdpa_scale d| ≤ scaleA) (hV : ∀ j k, |V j k| ≤ vA)
+    (hd : ∀ i k, |dOutt i k - dOuta i k| ≤ e) (i j : Fin n) :
+    |sdpa_dScores n d Q K V dOutt i j - sdpa_dScores n d Q K V dOuta i j|
+      ≤ sdpaDScoresMag n d e vA scaleA := by
+  unfold sdpa_dScores sdpaDScoresMag
+  rw [← mul_sub, abs_mul]
+  exact mul_le_mul hscaleA (sdpa_dScaled_sub_abs_le Q K V dOutt dOuta hV hd i j)
+    (abs_nonneg _) ((abs_nonneg _).trans hscaleA)
+
+/-- `|dQ| = |dScores·K| ≤ n·sdpaDScoresMag·kA`. -/
+theorem sdpa_back_Q_abs_le {n d : Nat} (Q K V dOut : Mat n d) {kA vA dA scaleA : ℝ}
+    (hdA : 0 ≤ dA) (hscaleA : |sdpa_scale d| ≤ scaleA) (hK : ∀ i k, |K i k| ≤ kA)
+    (hV : ∀ j k, |V j k| ≤ vA) (hdOut : ∀ i k, |dOut i k| ≤ dA) (i : Fin n) (j : Fin d) :
+    |sdpa_back_Q n d Q K V dOut i j| ≤ (n : ℝ) * sdpaDScoresMag n d dA vA scaleA * kA := by
+  have hmag0 : 0 ≤ sdpaDScoresMag n d dA vA scaleA :=
+    (abs_nonneg _).trans (sdpa_dScores_abs_le Q K V dOut hdA hV hdOut hscaleA i i)
+  unfold sdpa_back_Q Mat.mul
+  calc |∑ k, sdpa_dScores n d Q K V dOut i k * K k j|
+      ≤ ∑ k, |sdpa_dScores n d Q K V dOut i k * K k j| := Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ _k : Fin n, (sdpaDScoresMag n d dA vA scaleA * kA) := Finset.sum_le_sum fun k _ => by
+        rw [abs_mul]
+        exact mul_le_mul (sdpa_dScores_abs_le Q K V dOut hdA hV hdOut hscaleA i k) (hK k j)
+          (abs_nonneg _) hmag0
+    _ = (n : ℝ) * sdpaDScoresMag n d dA vA scaleA * kA := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring
+
+/-- `dQ` is linear in `dOut`: `|dQ(dOutt) − dQ(dOuta)| ≤ n·sdpaDScoresMag(e)·kA`. -/
+theorem sdpa_back_Q_sub_abs_le {n d : Nat} (Q K V dOutt dOuta : Mat n d) {kA vA scaleA e : ℝ}
+    (hscaleA : |sdpa_scale d| ≤ scaleA) (hK : ∀ i k, |K i k| ≤ kA)
+    (hV : ∀ j k, |V j k| ≤ vA) (hd : ∀ i k, |dOutt i k - dOuta i k| ≤ e) (i : Fin n) (j : Fin d) :
+    |sdpa_back_Q n d Q K V dOutt i j - sdpa_back_Q n d Q K V dOuta i j|
+      ≤ (n : ℝ) * sdpaDScoresMag n d e vA scaleA * kA := by
+  unfold sdpa_back_Q Mat.mul
+  rw [← Finset.sum_sub_distrib]
+  calc |∑ k, (sdpa_dScores n d Q K V dOutt i k * K k j - sdpa_dScores n d Q K V dOuta i k * K k j)|
+      ≤ ∑ k, |sdpa_dScores n d Q K V dOutt i k * K k j - sdpa_dScores n d Q K V dOuta i k * K k j| :=
+        Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ _k : Fin n, (sdpaDScoresMag n d e vA scaleA * kA) := Finset.sum_le_sum fun k _ => by
+        rw [show sdpa_dScores n d Q K V dOutt i k * K k j - sdpa_dScores n d Q K V dOuta i k * K k j
+              = (sdpa_dScores n d Q K V dOutt i k - sdpa_dScores n d Q K V dOuta i k) * K k j from by
+            ring, abs_mul]
+        exact mul_le_mul (sdpa_dScores_sub_abs_le Q K V dOutt dOuta hscaleA hV hd i k) (hK k j)
+          (abs_nonneg _) ((abs_nonneg _).trans (sdpa_dScores_sub_abs_le Q K V dOutt dOuta hscaleA hV hd i k))
+    _ = (n : ℝ) * sdpaDScoresMag n d e vA scaleA * kA := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring
+
+/-- `|dK| = |dScoresᵀ·Q| ≤ n·sdpaDScoresMag·qA`. -/
+theorem sdpa_back_K_abs_le {n d : Nat} (Q K V dOut : Mat n d) {qA vA dA scaleA : ℝ}
+    (hdA : 0 ≤ dA) (hscaleA : |sdpa_scale d| ≤ scaleA) (hQ : ∀ i k, |Q i k| ≤ qA)
+    (hV : ∀ j k, |V j k| ≤ vA) (hdOut : ∀ i k, |dOut i k| ≤ dA) (i : Fin n) (j : Fin d) :
+    |sdpa_back_K n d Q K V dOut i j| ≤ (n : ℝ) * sdpaDScoresMag n d dA vA scaleA * qA := by
+  have hmag0 : 0 ≤ sdpaDScoresMag n d dA vA scaleA :=
+    (abs_nonneg _).trans (sdpa_dScores_abs_le Q K V dOut hdA hV hdOut hscaleA i i)
+  unfold sdpa_back_K Mat.mul Mat.transpose
+  calc |∑ k, sdpa_dScores n d Q K V dOut k i * Q k j|
+      ≤ ∑ k, |sdpa_dScores n d Q K V dOut k i * Q k j| := Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ _k : Fin n, (sdpaDScoresMag n d dA vA scaleA * qA) := Finset.sum_le_sum fun k _ => by
+        rw [abs_mul]
+        exact mul_le_mul (sdpa_dScores_abs_le Q K V dOut hdA hV hdOut hscaleA k i) (hQ k j)
+          (abs_nonneg _) hmag0
+    _ = (n : ℝ) * sdpaDScoresMag n d dA vA scaleA * qA := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring
+
+/-- `dK` is linear in `dOut`: `|dK(dOutt) − dK(dOuta)| ≤ n·sdpaDScoresMag(e)·qA`. -/
+theorem sdpa_back_K_sub_abs_le {n d : Nat} (Q K V dOutt dOuta : Mat n d) {qA vA scaleA e : ℝ}
+    (hscaleA : |sdpa_scale d| ≤ scaleA) (hQ : ∀ i k, |Q i k| ≤ qA)
+    (hV : ∀ j k, |V j k| ≤ vA) (hd : ∀ i k, |dOutt i k - dOuta i k| ≤ e) (i : Fin n) (j : Fin d) :
+    |sdpa_back_K n d Q K V dOutt i j - sdpa_back_K n d Q K V dOuta i j|
+      ≤ (n : ℝ) * sdpaDScoresMag n d e vA scaleA * qA := by
+  unfold sdpa_back_K Mat.mul Mat.transpose
+  rw [← Finset.sum_sub_distrib]
+  calc |∑ k, (sdpa_dScores n d Q K V dOutt k i * Q k j - sdpa_dScores n d Q K V dOuta k i * Q k j)|
+      ≤ ∑ k, |sdpa_dScores n d Q K V dOutt k i * Q k j - sdpa_dScores n d Q K V dOuta k i * Q k j| :=
+        Finset.abs_sum_le_sum_abs _ _
+    _ ≤ ∑ _k : Fin n, (sdpaDScoresMag n d e vA scaleA * qA) := Finset.sum_le_sum fun k _ => by
+        rw [show sdpa_dScores n d Q K V dOutt k i * Q k j - sdpa_dScores n d Q K V dOuta k i * Q k j
+              = (sdpa_dScores n d Q K V dOutt k i - sdpa_dScores n d Q K V dOuta k i) * Q k j from by
+            ring, abs_mul]
+        exact mul_le_mul (sdpa_dScores_sub_abs_le Q K V dOutt dOuta hscaleA hV hd k i) (hQ k j)
+          (abs_nonneg _) ((abs_nonneg _).trans (sdpa_dScores_sub_abs_le Q K V dOutt dOuta hscaleA hV hd k i))
+    _ = (n : ℝ) * sdpaDScoresMag n d e vA scaleA * qA := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring
+
+-- ════════════════════════════════════════════════════════════════
 -- § Multi-head wrap — the per-head sdpa-core backward over the head axis
 --
 -- Multi-head attention runs `sdpa` independently on each of the `h` head-slabs of the (projected)
@@ -423,5 +571,79 @@ theorem mhsaSdpaBackK_close (M : FloatModel) {h N dh : Nat} (Q K V dOut : Mat N 
     (fun a b => hV a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
     (fun a b => hdOut a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
     (hfp (finProdFinEquiv.symm j).1) i (finProdFinEquiv.symm j).2
+
+-- Real cotangent magnitude + linearity for the multi-head core (per-head decode of the single-head
+-- `sdpa_back_*_{abs,sub}_le`) — feeds the FloatClose lift of the flattened core in MhsaBackFloatBridge.
+
+/-- `|dV| ≤ N·dA` per multi-head entry. -/
+theorem mhsaSdpaBackV_abs_le {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) {dA : ℝ}
+    (hdOut : ∀ i k, |dOut i k| ≤ dA) (i : Fin N) (j : Fin (h * dh)) :
+    |mhsaSdpaBackV Q K V dOut i j| ≤ (N : ℝ) * dA := by
+  unfold mhsaSdpaBackV
+  exact sdpa_back_V_abs_le (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+    (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
+    (fun a b => hdOut a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b))) i (finProdFinEquiv.symm j).2
+
+/-- `dV` linear in the cotangent: `|Δ| ≤ N·e` per multi-head entry. -/
+theorem mhsaSdpaBackV_sub_abs_le {h N dh : Nat} (Q K V dOutt dOuta : Mat N (h * dh)) {e : ℝ}
+    (hd : ∀ i k, |dOutt i k - dOuta i k| ≤ e) (i : Fin N) (j : Fin (h * dh)) :
+    |mhsaSdpaBackV Q K V dOutt i j - mhsaSdpaBackV Q K V dOuta i j| ≤ (N : ℝ) * e := by
+  unfold mhsaSdpaBackV
+  exact sdpa_back_V_sub_abs_le (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+    (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOutt)
+    (mhSlab (finProdFinEquiv.symm j).1 dOuta)
+    (fun a b => hd a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b))) i (finProdFinEquiv.symm j).2
+
+/-- `|dQ| ≤ N·sdpaDScoresMag·kA` per multi-head entry (head dim `dh`). -/
+theorem mhsaSdpaBackQ_abs_le {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) {kA vA dA scaleA : ℝ}
+    (hdA : 0 ≤ dA) (hscaleA : |sdpa_scale dh| ≤ scaleA) (hK : ∀ i k, |K i k| ≤ kA)
+    (hV : ∀ i k, |V i k| ≤ vA) (hdOut : ∀ i k, |dOut i k| ≤ dA) (i : Fin N) (j : Fin (h * dh)) :
+    |mhsaSdpaBackQ Q K V dOut i j| ≤ (N : ℝ) * sdpaDScoresMag N dh dA vA scaleA * kA := by
+  unfold mhsaSdpaBackQ
+  exact sdpa_back_Q_abs_le (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+    (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut) hdA hscaleA
+    (fun a b => hK a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hV a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hdOut a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b))) i (finProdFinEquiv.symm j).2
+
+/-- `dQ` linear in the cotangent: `|Δ| ≤ N·sdpaDScoresMag(e)·kA` per multi-head entry. -/
+theorem mhsaSdpaBackQ_sub_abs_le {h N dh : Nat} (Q K V dOutt dOuta : Mat N (h * dh))
+    {kA vA scaleA e : ℝ} (hscaleA : |sdpa_scale dh| ≤ scaleA) (hK : ∀ i k, |K i k| ≤ kA)
+    (hV : ∀ i k, |V i k| ≤ vA) (hd : ∀ i k, |dOutt i k - dOuta i k| ≤ e) (i : Fin N) (j : Fin (h * dh)) :
+    |mhsaSdpaBackQ Q K V dOutt i j - mhsaSdpaBackQ Q K V dOuta i j|
+      ≤ (N : ℝ) * sdpaDScoresMag N dh e vA scaleA * kA := by
+  unfold mhsaSdpaBackQ
+  exact sdpa_back_Q_sub_abs_le (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+    (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOutt)
+    (mhSlab (finProdFinEquiv.symm j).1 dOuta) hscaleA
+    (fun a b => hK a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hV a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hd a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b))) i (finProdFinEquiv.symm j).2
+
+/-- `|dK| ≤ N·sdpaDScoresMag·qA` per multi-head entry. -/
+theorem mhsaSdpaBackK_abs_le {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) {qA vA dA scaleA : ℝ}
+    (hdA : 0 ≤ dA) (hscaleA : |sdpa_scale dh| ≤ scaleA) (hQ : ∀ i k, |Q i k| ≤ qA)
+    (hV : ∀ i k, |V i k| ≤ vA) (hdOut : ∀ i k, |dOut i k| ≤ dA) (i : Fin N) (j : Fin (h * dh)) :
+    |mhsaSdpaBackK Q K V dOut i j| ≤ (N : ℝ) * sdpaDScoresMag N dh dA vA scaleA * qA := by
+  unfold mhsaSdpaBackK
+  exact sdpa_back_K_abs_le (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+    (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut) hdA hscaleA
+    (fun a b => hQ a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hV a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hdOut a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b))) i (finProdFinEquiv.symm j).2
+
+/-- `dK` linear in the cotangent: `|Δ| ≤ N·sdpaDScoresMag(e)·qA` per multi-head entry. -/
+theorem mhsaSdpaBackK_sub_abs_le {h N dh : Nat} (Q K V dOutt dOuta : Mat N (h * dh))
+    {qA vA scaleA e : ℝ} (hscaleA : |sdpa_scale dh| ≤ scaleA) (hQ : ∀ i k, |Q i k| ≤ qA)
+    (hV : ∀ i k, |V i k| ≤ vA) (hd : ∀ i k, |dOutt i k - dOuta i k| ≤ e) (i : Fin N) (j : Fin (h * dh)) :
+    |mhsaSdpaBackK Q K V dOutt i j - mhsaSdpaBackK Q K V dOuta i j|
+      ≤ (N : ℝ) * sdpaDScoresMag N dh e vA scaleA * qA := by
+  unfold mhsaSdpaBackK
+  exact sdpa_back_K_sub_abs_le (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+    (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOutt)
+    (mhSlab (finProdFinEquiv.symm j).1 dOuta) hscaleA
+    (fun a b => hQ a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hV a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hd a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b))) i (finProdFinEquiv.symm j).2
 
 end Proofs
