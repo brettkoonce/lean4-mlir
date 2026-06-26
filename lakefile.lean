@@ -298,6 +298,41 @@ lean_lib «Proofs» where
              -- stem/GAP/maxpool/dense endpoints, the 16 blocks supplied as FloatBridges (discharged
              -- by floatBridges_r34IdBlockBack/DownBlockBack). The exact reverse of resnet34Forward.
              `LeanMlir.Proofs.Resnet34WholeBackFloatBridge,
+             -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a
+             -- forward depthwise conv at the spatially-reversed kernel (dwReverse, FREE reuse of
+             -- floatBridges_depthwise — the depthwise twin of convBack); strided variant =
+             -- depthwiseFlatBack ∘ decimateBack. floatBridges_depthwiseBack/depthwiseStride2Back.
+             `LeanMlir.Proofs.DepthwiseBackFloatBridge,
+             -- A3 §1e Squeeze-Excite backward (the architecturally-distinctive product-rule op):
+             -- seBack(dy) = (g⊙dy) + gateBack(x⊙dy), the two-branch multiplicative fan-in
+             -- (FloatBridges.biPathSum of two diagBacks) with the gate sub-net backward gateBack
+             -- supplied/assembled. floatBridges_seBack + floatBridges_seGateBack (gapBack∘linBack∘
+             -- swishBack∘linBack∘sigmoidBack∘broadcastBack) + floatBridges_broadcastBack (the new
+             -- spatial-reduce op, via the BN-back reduction_close machinery).
+             `LeanMlir.Proofs.SEBackFloatBridge,
+             -- A3 Part 2 per-net backward assembly (consumes §1e). MobileNetV2: the inverted-residual
+             -- body backward (expandBack∘depthwiseBack∘projectBack, depthwiseFlatBack concrete — mnv2
+             -- has NO SE) + strided variant; mnv2_grad_floatBridges = whole-net fold (reverse of
+             -- mobilenetv2Forward_full_pc), concrete stem/head/GAP/dense, 6 blocks supplied.
+             `LeanMlir.Proofs.MobileNetV2BackFloatBridge,
+             -- EfficientNet MBConv body backward (whole-net is batched → per-example body, peer of
+             -- floatBridges_mbconvBody): expandBack∘depthwiseBack∘seBack∘projectBack — BOTH §1e ops
+             -- (depthwiseFlatBack concrete + seBack supplied) land here. + the additive-skip variant.
+             `LeanMlir.Proofs.EfficientNetBackFloatBridge,
+             -- ConvNeXt-T backward (per-example): block body backward (depthwiseBack∘lnBack∘convBack∘
+             -- geluBack∘convBack∘layerScaleBack) + residual block + downsample (lnBack∘stride2Back);
+             -- convnext_grad_floatBridges = whole-net [3,3,9,3] fold, concrete GAP/dense, stem/stages/
+             -- downsamples supplied.
+             `LeanMlir.Proofs.ConvNeXtBackFloatBridge,
+             -- A3 §1g loss-head cotangent seed: lift softmax_ce_cot_close to a FloatBridges seed
+             -- (z ↦ softmax(z)−onehot, the CE input-gradient; bounded by 1+cotErr(0) since softmax∈[0,1])
+             -- so any <net>_grad .comp it = the whole "logits → input-gradient" backward "from the loss".
+             `LeanMlir.Proofs.LossHeadCotFloatBridge,
+             -- A3 §1f softmax-Jacobian backward (the vit/attention crux): the row-coupled VJP
+             -- diag(p)−p·pᵀ, softmaxBack p dy i = pᵢ(dyᵢ−⟨p,dy⟩). Linear in dy (modulus = magnitude at
+             -- Cdy:=e, like bnGradInput); float threads mul_close/reduction_close/sub_close' with the
+             -- softmax weights supplied within smErr. floatClose_softmaxBack / floatBridges_softmaxBack.
+             `LeanMlir.Proofs.SoftmaxBackFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

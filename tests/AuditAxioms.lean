@@ -92,6 +92,13 @@ import LeanMlir.Proofs.Resnet34BackFloatBridge
 import LeanMlir.Proofs.StridedConvBackFloatBridge
 import LeanMlir.Proofs.Resnet34DownBackFloatBridge
 import LeanMlir.Proofs.Resnet34WholeBackFloatBridge
+import LeanMlir.Proofs.DepthwiseBackFloatBridge
+import LeanMlir.Proofs.SEBackFloatBridge
+import LeanMlir.Proofs.MobileNetV2BackFloatBridge
+import LeanMlir.Proofs.EfficientNetBackFloatBridge
+import LeanMlir.Proofs.ConvNeXtBackFloatBridge
+import LeanMlir.Proofs.LossHeadCotFloatBridge
+import LeanMlir.Proofs.SoftmaxBackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1642,6 +1649,13 @@ open Proofs
 #print axioms Proofs.decimateBack_eq_vjp
 #print axioms Proofs.floatClose_decimateBack
 #print axioms Proofs.floatBridges_flatConvStride2Back
+-- stride-4 (ConvNeXt 4×4/s4 patchify) backward: flatConvStride4 = decimateFlat ∘ decimateOddFlat ∘
+-- flatConv, so its input-VJP = convFlatBack ∘ decimateOddBack ∘ decimateBack (zero-upsample TWICE then
+-- reversed-kernel conv). decimateOddBack = the certified decimateOddFlat VJP (decimateOddBack_eq_vjp),
+-- exact/modulus-id (decimateOddIdx_injective ⇒ card ≤ 1, same proof as decimateIdx_injective).
+#print axioms Proofs.decimateOddIdx_injective
+#print axioms Proofs.floatBridges_decimateOddBack
+#print axioms Proofs.floatBridges_flatConvStride4Back
 -- r34 downsample-block backward: relu(proj(x)+body(x)) reversed = ReLU mask, then the two-branch
 -- fan-in bProj(dy)+bBody(dy). floatClose_biPathSum/FloatBridges.biPathSum: the general f(x)+g(x)
 -- rounded-sum combinator (floatClose_addResidual's f(x)+x is the g=id case). Branch backwards reuse
@@ -1655,6 +1669,63 @@ open Proofs
 -- nonincreasing, one rounding). Stem/GAP/maxpool/dense concrete; the 16 blocks supplied as FloatBridges.
 #print axioms Proofs.floatClose_gapBack
 #print axioms Proofs.r34_grad_floatBridges
+-- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
+-- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
+-- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0
+-- float-bridges FREE via floatBridges_depthwise (the depthwise twin of convBack). Strided variant
+-- depthwiseStride2FlatBack = depthwiseFlatBack ∘ decimateBack (zero-upsample scatter then reversed
+-- depthwise conv), the depthwise twin of flatConvStride2Back.
+#print axioms Proofs.floatBridges_depthwiseBack
+#print axioms Proofs.floatBridges_depthwiseStride2Back
+-- A3 §1e Squeeze-Excite backward (the architecturally-distinctive product-rule op). SE = x⊙gate(x),
+-- so the input-VJP is the two-path fan-in seBack(dy) = (g⊙dy) + gateBack(x⊙dy): main path scales dy
+-- by the saved gate g (diagBack g, a stop-gradient multiplier), gate path pre-scales dy by the saved
+-- input x (diagBack x) then threads gateBack, the two ADD (FloatBridges.biPathSum — the multiplicative
+-- cousin of the residual fan-in). gateBack fully assembled = gapBack ∘ linBack W₁ ∘ swishBack ∘
+-- linBack W₂ ∘ sigmoidBack ∘ broadcastBack (every op already bridged except broadcastBack — the gate's
+-- broadcast adjoint = sum-over-spatial of each channel's h·w cells, bridged via reduction_close).
+#print axioms Proofs.broadcastBackFlat_eq_vjp
+#print axioms Proofs.floatBridges_broadcastBack
+#print axioms Proofs.floatBridges_seGateBack
+#print axioms Proofs.floatBridges_seBack
+-- ── A3 Part 2: per-net backward assembly (consumes §1e depthwise + SE backward) ──
+-- MobileNetV2 (no SE): the inverted-residual body backward = expandBack ∘ depthwiseBack ∘ projectBack
+-- (the §1e depthwiseFlatBack / depthwiseStride2FlatBack concrete, conv/BN/relu6-mask reused); the skip
+-- blocks reverse to residual(bodyBack). mnv2_grad_floatBridges = the WHOLE-NET fold (exact reverse of
+-- mobilenetv2Forward_full_pc: dense∘GAP∘head∘b6∘b5∘res b4∘b3∘res b2∘b1∘stem), concrete stem/head/GAP/
+-- dense endpoints, the 6 inverted-residual block backwards supplied as FloatBridges (à la r34's blocks).
+#print axioms Proofs.floatBridges_invresBodyBackPC
+#print axioms Proofs.floatBridges_invresBodyStridedBackPC
+#print axioms Proofs.mnv2_grad_floatBridges
+-- EfficientNet: whole-net forward is batched, so (peer of floatBridges_mbconvBody) the per-example
+-- MBConv body backward = expandBack ∘ depthwiseBack ∘ seBack ∘ projectBack — the first block where BOTH
+-- §1e ops land (depthwiseFlatBack concrete + the SE product-rule seB supplied, dischargeable by
+-- floatBridges_seBack). + the additive-skip residual variant.
+#print axioms Proofs.floatBridges_mbconvBodyBack
+#print axioms Proofs.floatBridges_mbconvResidBack
+-- ConvNeXt-T (per-example): block body backward = depthwiseBack ∘ lnBack ∘ convBack ∘ geluBack ∘
+-- convBack ∘ layerScaleBack (depthwiseFlatBack concrete; LN/GELU/layer-scale diagBacks supplied); full
+-- block = residual(body); the stage downsample = lnBack ∘ flatConvStride2Back. convnext_grad_floatBridges
+-- = the WHOLE-NET [3,3,9,3] fold (reverse of convNextForwardT), concrete GAP/dense, stem/4 stages/3
+-- downsamples/head-LN supplied as FloatBridges.
+#print axioms Proofs.floatBridges_cnxBlockBodyBack
+#print axioms Proofs.floatBridges_cnxBlockBack
+#print axioms Proofs.floatBridges_cnxDownBack
+#print axioms Proofs.convnext_grad_floatBridges
+-- A3 §1g loss-head cotangent seed ("from the loss"): floatClose_lossSeed wraps the per-entry
+-- softmax_ce_cot_close (|M.softmaxCECotF − (softmax−onehot)| ≤ cotErr) into a FloatClose/FloatBridges
+-- (real z↦softmax(z)−onehot, bounded by 1 since softmax∈[0,1], modulus cotErr(e)); floatBridges_gradFromLoss
+-- = the seed .comp any <net>_grad ⇒ the whole "logits → input-gradient" backward float-bridges from the loss.
+#print axioms Proofs.floatBridges_lossSeed
+#print axioms Proofs.floatBridges_gradFromLoss
+-- A3 §1f softmax-Jacobian backward (the vit/attention crux): the certified row VJP softmaxBack p dy i =
+-- pᵢ·(dyᵢ − ⟨p,dy⟩) = (diag(p) − p·pᵀ)·dy. Unlike diagBack it couples a whole row (the ⟨p,dy⟩ reduction),
+-- so softmaxBack_close threads mul_close/reduction_close/sub_close' exactly like bnGradInput_close, with
+-- the float softmax weights fp supplied within ep (= smErr). LINEAR in dy ⇒ FloatClose modulus IS the
+-- magnitude bound at Cdy:=e (softmaxBack_sub_abs_le). The heart of sdpaBack; P-general (P=1 for softmax).
+#print axioms Proofs.softmaxBack_close
+#print axioms Proofs.floatClose_softmaxBack
+#print axioms Proofs.floatBridges_softmaxBack
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
