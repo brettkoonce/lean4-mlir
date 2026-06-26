@@ -14,7 +14,39 @@ concrete, and r34/mnv2/convnext forward skeletons are tied to their real net def
 
 When this is finalized, the next pillar is **Gap-3 (syntactic / lexer faithfulness)** — see the bottom.
 
-Memory: `[[float-tier23-and-lexer-gap]]`, `[[floatbridge-b-certified-tie]]` (the r34 §B record).
+Memory: `[[float-tier23-and-lexer-gap]]`, `[[floatbridge-b-certified-tie]]` (the §B record).
+
+---
+
+## ✅ STATUS / NEXT-SESSION HANDOFF (updated 2026-06-26)
+
+**Committed this run:** `a27aa74` (vit-forward tie) · `93b38bd` (depthwise gate + convnext/mnv2/efficientnet
+§B ties) · `c614fb7` (vit MHSA leaf tie) · `cfcf1a6` (vit attn-sublayer reconciliation). Audit = **1138
+3-axiom-clean prints**, full `tests/AuditAxioms.lean` elaborates clean.
+
+**DONE:**
+- **Forward sweep** — all 5 nets' forward bridges tie to their real net def (Item 3 / Part B closed).
+- **Backward §B (Item 2)** — r34 (prior) + **convnext + mnv2 + efficientnet** block backwards tie to their
+  certified per-block VJPs, b1-free, via the shared **depthwise adjoint gate** (`DepthwiseBackCertifiedTie.lean`).
+  Files: `ConvNeXtBackCertifiedTie.lean`, `MobileNetV2BackCertifiedTie.lean`, `EfficientNetBackCertifiedTie.lean`.
+- **vit MHSA leaf** (`mhsaBackFlat_eq_mhsa_vjp`) + **vit attn-sublayer reconciliation**
+  (`transformerAttnSublayerBack_flat_decomp`) — `ViTMhsaBackCertifiedTie.lean`. The sdpa adjoint = certified
+  MHSA VJP, grounded through the attn sublayer.
+
+**THE ONE REMAINING PIECE (start here next session): the full `vitBlockBack` tie.** It is NOT a proof gap —
+it is a **float-bridge definitional enrichment**. `vitBlockBack` (`MhsaBackFloatBridge.lean`) lifts the LN
+backward as a SINGLE `lnB₁ : Vec → Vec` via `perRowFlat`, but the certified per-token LN backward
+(`layerNorm_per_token_has_vjp_mat.backward A` = `rowwise` of the single-token LN VJP) threads each token's
+saved input `A r`. A single map can't carry that. **Plan:** (a) define a per-token-input-aware LN-back lift
+(the flat analogue of `rowwise`, threading the saved Mat input) and re-state `vitBlockBack`'s LN slots with
+it; (b) the attn-sublayer tie is then `transformerAttnSublayerBack_flat_decomp` verbatim (already proven);
+(c) the MLP-sublayer tie is the analogous decomposition (dense/gelu via `dense_transpose`/`diagBack` leaves,
+same per-token-LN lift, no MHSA — easier); (d) assemble the block via `transformerBlock_backward_unfold`
+(ViTBackB0, `rfl` at heads=1 — for general heads expect the same `maxHeartbeats 10000000`/~kernel-heavy cost
+as the attn-sublayer unfold). Watch: the general-heads VJP `rfl` unfolds are kernel-expensive (set
+`maxHeartbeats` high, BEFORE the docstring).
+
+**After that:** Gap-3 (lexer / syntactic faithfulness) — see the bottom of this doc.
 
 ---
 
@@ -179,15 +211,16 @@ helpers:
 
 ## ORDER / EFFORT
 
-1. ~~**vit-forward tie (Part B)**~~ — ✅ DONE 2026-06-26 (`vit_full_eq_vitForwardFlat`). ALL 5 forwards
-   now tie. **Part A (the backward §B ties) is the remaining work.**
-2. **convnext + mnv2 backward ties** — validate the depthwise gate + `diagBack`/`bnBack` pins.
-3. **efficientnet backward tie** — the SE product-rule leaf.
-4. **vit backward tie** — the sdpa adjoint (hardest).
+1. ~~**vit-forward tie (Part B)**~~ — ✅ DONE (`vit_full_eq_vitForwardFlat`). ALL 5 forwards tie.
+2. ~~**convnext + mnv2 backward ties**~~ — ✅ DONE (depthwise gate + `diagBack`/`bnBack` pins).
+3. ~~**efficientnet backward tie**~~ — ✅ DONE (SE-back pinned, not gated).
+4. **vit backward tie** — ✅ MHSA leaf + attn-sublayer reconciliation DONE; the **full `vitBlockBack`
+   tie** is the one open item → the per-token-LN float-bridge enrichment (see the NEXT-SESSION HANDOFF at
+   the top of this doc, and the vit bullet in Part A).
 
-Each is its own commit + `AuditAxioms` 3-axiom check (the `[propext, Classical.choice, Quot.sound]`
-gate). Reuse the r34 §B file as the literal template; most of the machinery (leaf gates, certified
-VJPs, the float bridges) already exists — this is *connection* work, not new analysis.
+Each was its own commit + `AuditAxioms` 3-axiom check (the `[propext, Classical.choice, Quot.sound]` gate).
+The r34 §B file was the literal template for the CNNs (leaf gates + same-vocab certified VJP + pin + `rfl`);
+vit needed genuinely new work (the qkv-merge MHSA reconciliation + the per-token-LN finding).
 
 ---
 
