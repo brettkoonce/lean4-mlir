@@ -260,6 +260,23 @@ lean_lib «Proofs» where
              -- backward gradient bridge (mlpInputGrad_floatBridges) — the backward peer of
              -- cifar8_floatBridges.
              `LeanMlir.Proofs.LinBackFloatBridge,
+             -- A3 CNN backward (planning/a3_backward_deepnet_assembly.md 1a/1b + cifar8 witness):
+             -- the maxpool-back select_and_scatter (floatBridges_maxPoolBack, exact masked gather,
+             -- modulus id) + the conv input-VJP as a reversed-kernel flatConv (floatBridges_convBack,
+             -- reuses floatBridges_flatConv) compose into the whole 8-conv CIFAR input-gradient VJP
+             -- (cifar8_grad_floatBridges) — the backward peer of cifar8_floatBridges.
+             `LeanMlir.Proofs.CnnBackFloatBridge,
+             -- A3 1c: BatchNorm BACKWARD as a composable FloatClose MAP over the cotangent
+             -- (floatClose_bnBack / floatBridges_bnBack) — wraps the bnGradInput_close keystone
+             -- with the real map's magnitude (bn_grad_input_abs_le) + Lipschitz-in-dy modulus
+             -- (bn_grad_input_diff_abs_le, the real BN-back is linear in dy). The shared BN/LN
+             -- backward op cifarBn/r34/convnext/vit gradients fold via .comp.
+             `LeanMlir.Proofs.BnBackComposeBridge,
+             -- A3: per-channel BatchNorm BACKWARD float-bridge (floatBridges_bnPerChannelBack) —
+             -- the block-diagonal FloatClose.perRowIdx lift of floatClose_bnBack conjugated by the
+             -- reassoc layout gathers, bridging the certified bnPerChannelTensor3_grad_input. The
+             -- backward peer of floatBridges_bnPerChannelTensor3; discharges cifarBn_grad's BN hyps.
+             `LeanMlir.Proofs.BnPerChannelBackFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

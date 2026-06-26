@@ -85,6 +85,9 @@ import LeanMlir.Proofs.BnPerChannelFloatBridge
 import LeanMlir.Proofs.CifarBnFloatBridge
 import LeanMlir.Proofs.BnBackFloatBridge
 import LeanMlir.Proofs.LinBackFloatBridge
+import LeanMlir.Proofs.CnnBackFloatBridge
+import LeanMlir.Proofs.BnBackComposeBridge
+import LeanMlir.Proofs.BnPerChannelBackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1578,6 +1581,48 @@ open Proofs
 #print axioms Proofs.floatClose_reluMaskBack
 #print axioms Proofs.floatBridges_linBack
 #print axioms Proofs.mlpInputGrad_floatBridges
+-- 1d smooth-activation backward (diagonal Jacobian): GELU/Swish/sigmoid backward is dy ⊙ act'(saved)
+-- — a single multiply by the saved derivative s (emitActBack/scale). floatClose_diagBack: the float
+-- dy ↦ fl(fsᵢ·dyᵢ) (fs within es of s — the egelu/esig transcendental budgets) is within mulErr(A)+Sd·e
+-- of dy ↦ sᵢ·dyᵢ; linear in dy, one mul_close per coord. The smooth peer of floatClose_reluMaskBack.
+#print axioms Proofs.floatClose_diagBack
+#print axioms Proofs.floatBridges_diagBack
+-- ── planning/a3_backward_deepnet_assembly.md (1a/1b + the first conv backward witness) ──
+-- The CNN backward float story. floatBridges_maxPoolBack: the rendered select_and_scatter
+-- (maxPoolFlatBack, maxpool-back through the flatten boundary) routes each saved-input cell's
+-- cotangent to its window's arg-max position — a masked gather, EXACT in float, modulus id (the
+-- pooling peer of floatClose_reluMaskBack). floatBridges_convBack: the conv input-VJP dx =
+-- convBackDenote W dy is a forward conv2d (reverseSwap W) 0 = flatConv (reverseSwap W) 0 in flat
+-- space, so it reuses floatBridges_flatConv at the reversed kernel (|reverseSwap W| = |W|) — no
+-- new proof, the conv analogue of floatBridges_linBack. cifar8_grad_floatBridges: the whole
+-- 8-conv CIFAR input-gradient VJP (the exact reverse of cifarCnn8Forward) float-bridges in one
+-- .comp chain over convBack ×8 / maxPoolBack ×4 / reluMaskBack ×10 / linBack ×3 — the backward
+-- peer of cifar8_floatBridges.
+#print axioms Proofs.floatBridges_maxPoolBack
+#print axioms Proofs.floatBridges_convBack
+#print axioms Proofs.cifar8_grad_floatBridges
+-- ── planning/a3_backward_deepnet_assembly.md 1c (BN backward as a composable FloatClose map) ──
+-- floatClose_bnBack / floatBridges_bnBack: the BN-backward keystone bnGradInput_close bounds the
+-- float input-gradient per-entry at a FIXED cotangent; this wraps it into a FloatClose over the
+-- cotangent dy. The real BN-back map is LINEAR in dy (bn_grad_input_diff_abs_le), so its modulus
+-- is the magnitude bound (bn_grad_input_abs_le) at Cdy := e; output magnitude is ReMag(A)+budget(A),
+-- modulus budget(A)+ReMag(e). The shared BN/LN backward op every BN/LN net's gradient folds.
+#print axioms Proofs.bn_grad_input_diff_abs_le
+#print axioms Proofs.floatClose_bnBack
+#print axioms Proofs.floatBridges_bnBack
+-- cifarBn_grad_floatBridges: the BatchNorm CIFAR input-gradient VJP (the exact reverse of
+-- cifarCnnBnForward — each conv→BN→ReLU block reverses to convFlatBack ∘ bnBack ∘ reluMaskBack)
+-- float-bridges in one .comp chain, the four BN-backward maps supplied as FloatBridges facts
+-- (discharged by floatBridges_bnBack / the per-channel lift, exactly as cifarBn_floatBridges
+-- supplies the forward BNs). The backward peer of cifarBn_floatBridges.
+#print axioms Proofs.cifarBn_grad_floatBridges
+-- floatBridges_bnPerChannelBack: the per-channel BatchNorm BACKWARD on the network Tensor3 layout
+-- float-bridges — the block-diagonal FloatClose.perRowIdx lift of floatClose_bnBack (uniform budget
+-- across channels) conjugated by the reassoc layout gathers, bridging the certified
+-- bnPerChannelTensor3_grad_input. The backward peer of floatBridges_bnPerChannelTensor3; discharges
+-- the abstract FloatBridges bnB… hypotheses of cifarBn_grad_floatBridges (and r34/convnext/vit LN).
+#print axioms Proofs.floatBridges_bnPerChannelFlatBack
+#print axioms Proofs.floatBridges_bnPerChannelBack
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-

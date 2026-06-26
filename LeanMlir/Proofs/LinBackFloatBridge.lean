@@ -65,6 +65,70 @@ theorem floatBridges_reluMaskBack {n : Nat} (cond : Fin n → Prop) [DecidablePr
   fun A hA => ⟨A, _, _, hA, floatClose_reluMaskBack cond A⟩
 
 -- ════════════════════════════════════════════════════════════════
+-- § Smooth-activation backward: the diagonal `dy ⊙ act'(saved)` scale
+-- ════════════════════════════════════════════════════════════════
+
+/-- Smooth-activation backward (the rendered `emitActBack`/`scale`): multiply the cotangent
+    pointwise by the **saved derivative** `s = act'(preact)`. GELU, Swish/SiLU and sigmoid all have
+    a diagonal Jacobian, so their backward is this single `multiply`. A fixed vector `s` (the
+    smooth-point saved derivative). -/
+noncomputable def diagBack {n : Nat} (s : Vec n) (dy : Vec n) : Vec n := fun i => s i * dy i
+
+/-- Float smooth-activation backward at a supplied float derivative `fs` (within `es` of `s` — the
+    transcendental budgets `esig`/`egelu`, since the activation derivatives have no IEEE spec). -/
+noncomputable def FloatModel.diagBackF {n : Nat} (M : FloatModel) (fs : Vec n) (dy : Vec n) :
+    Vec n := fun i => M.mul (fs i) (dy i)
+
+/-- **Smooth-activation backward is `FloatClose`** (over the cotangent). The deployed float
+    `dy ↦ fl(fsᵢ · dyᵢ)` (at a float derivative `fs` within `es` of the saved `s`, `|s| ≤ Sd`) is
+    within `mulErr(A) + Sd·e` of the certified `dy ↦ sᵢ · dyᵢ`, both outputs bounded by
+    `Sd·A + mulErr(A)`. The map is linear in `dy` (one `mul_close` per coordinate), so its modulus
+    is the per-coordinate rounding `mulErr` plus the real Lipschitz `Sd·e`. Covers GELU/Swish/
+    sigmoid backward (diagonal Jacobian); the smooth peer of `floatClose_reluMaskBack`. -/
+theorem floatClose_diagBack {n : Nat} (M : FloatModel) (s fs : Vec n) {Sd es A : ℝ}
+    (hs : ∀ i, |s i| ≤ Sd) (hfs : ∀ i, |fs i - s i| ≤ es) :
+    FloatClose A (Sd * A + FloatModel.mulErr M.u Sd A es 0)
+      (diagBack s) (M.diagBackF fs)
+      (fun e => FloatModel.mulErr M.u Sd A es 0 + Sd * e) := by
+  have hu := M.u_nonneg
+  refine ⟨fun v hv i => ?_, fun vt va e _ hvt hd i => ?_⟩
+  · have hSd0 : 0 ≤ Sd := (abs_nonneg _).trans (hs i)
+    have hAge : 0 ≤ A := (abs_nonneg _).trans (hv i)
+    have hes0 : 0 ≤ es := (abs_nonneg _).trans (hfs i)
+    have hmerr : 0 ≤ FloatModel.mulErr M.u Sd A es 0 := by
+      unfold FloatModel.mulErr; positivity
+    have hreal : |s i * v i| ≤ Sd * A := by
+      rw [abs_mul]; exact mul_le_mul (hs i) (hv i) (abs_nonneg _) hSd0
+    have hclose : |M.mul (fs i) (v i) - s i * v i| ≤ FloatModel.mulErr M.u Sd A es 0 :=
+      M.mul_close (hfs i) (by simp) (hs i) (hv i)
+    have hstep : |M.mul (fs i) (v i)| ≤ |M.mul (fs i) (v i) - s i * v i| + |s i * v i| := by
+      have h := abs_sub_le (M.mul (fs i) (v i)) (s i * v i) 0
+      rwa [sub_zero, sub_zero] at h
+    refine ⟨hreal.trans (le_add_of_nonneg_right hmerr), ?_⟩
+    calc |M.diagBackF fs v i|
+        = |M.mul (fs i) (v i)| := rfl
+      _ ≤ |M.mul (fs i) (v i) - s i * v i| + |s i * v i| := hstep
+      _ ≤ FloatModel.mulErr M.u Sd A es 0 + Sd * A := add_le_add hclose hreal
+      _ = Sd * A + FloatModel.mulErr M.u Sd A es 0 := by ring
+  · have hSd0 : 0 ≤ Sd := (abs_nonneg _).trans (hs i)
+    have hclose : |M.mul (fs i) (vt i) - s i * vt i| ≤ FloatModel.mulErr M.u Sd A es 0 :=
+      M.mul_close (hfs i) (by simp) (hs i) (hvt i)
+    have hrealdiff : |s i * vt i - s i * va i| ≤ Sd * e := by
+      rw [← mul_sub, abs_mul]; exact mul_le_mul (hs i) (hd i) (abs_nonneg _) hSd0
+    calc |M.diagBackF fs vt i - diagBack s va i|
+        ≤ |M.mul (fs i) (vt i) - s i * vt i| + |s i * vt i - s i * va i| := abs_sub_le _ _ _
+      _ ≤ FloatModel.mulErr M.u Sd A es 0 + Sd * e := add_le_add hclose hrealdiff
+
+/-- Smooth-activation backward float-bridges. The GELU/Swish/sigmoid backward op (diagonal
+    Jacobian) every smooth net's gradient folds; instantiate `s := act'(saved preact)`, `es :=`
+    the activation's transcendental budget (`egelu`/`esig`). -/
+theorem floatBridges_diagBack {n : Nat} (M : FloatModel) (s fs : Vec n) {Sd es : ℝ}
+    (hn : 0 < n) (hs : ∀ i, |s i| ≤ Sd) (hfs : ∀ i, |fs i - s i| ≤ es) :
+    FloatBridges (diagBack s) := fun A hA =>
+  ⟨_, _, _, (floatClose_diagBack M s fs hs hfs (A := A)).cod_nonneg hA hn,
+    floatClose_diagBack M s fs hs hfs⟩
+
+-- ════════════════════════════════════════════════════════════════
 -- § Linear input-VJP: `dx = Wᵀ·dy` = bias-free dense over the transpose
 -- ════════════════════════════════════════════════════════════════
 
