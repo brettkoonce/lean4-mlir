@@ -187,29 +187,107 @@ noncomputable def convBackDenote {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) : Tensor3 oc h w → Tensor3 ic h w :=
   conv2d (reverseSwap W) (fun _ => 0)
 
+/-- **The general conv-adjoint identity (odd kernels), all dims.** The emitted
+    reversed-kernel forward conv `conv2d (reverseSwap W) 0` equals the certified
+    conv input-gradient `conv2d_input_grad_formula W`, for ARBITRARY
+    `ic oc h w kH kW` with odd `kH`, `kW` (`2·⌊(kH-1)/2⌋+1 = kH`). This is the
+    reversed-kernel ⇒ correlation-adjoint reindex that `conv_back_bridge_{1to2,2to2}`
+    previously asserted only at two toy 4×4 shapes by exhaustive `fin_cases`.
+
+    Proof: per output coordinate, both sides sum over the input channel `co`; the
+    inner `(kh,kw)` sum (LHS, over the kernel window) and the `(ho,wo)` sum (RHS,
+    over output positions) range over the SAME set of valid alignments via the
+    partial bijection `(kh,kw) ↦ (kh+hi-pH, kw+wi-pW)` on the pad supports. Under
+    oddness `2·pH = kH-1`, the reversed-kernel index `kH-1-kh` matches the formula's
+    `hi+pH-ho`, and the data indices coincide — so the matched summands are equal.
+    `Finset.sum_bij'` over the pad-filtered supports; all index arithmetic by `omega`.
+
+    The single load-bearing leaf for the §B certified-VJP tie: every conv-heavy
+    net's backward (`convFlatBack`) routes its conv input-grad through this. -/
+theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
+    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
+    (W : Kernel4 oc ic kH kW) (dy : Tensor3 oc h w) :
+    conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy := by
+  funext ci hi wi
+  simp only [conv2d, reverseSwap, kRev, zero_add, conv2d_input_grad_formula]
+  apply Finset.sum_congr rfl
+  intro co _
+  rw [← Finset.sum_product', ← Finset.sum_product', Finset.univ_product_univ,
+      Finset.univ_product_univ]
+  rw [← Finset.sum_subset (Finset.filter_subset
+        (fun p : Fin kH × Fin kW => (kH-1)/2 ≤ p.1.val + hi.val ∧ p.1.val + hi.val - (kH-1)/2 < h ∧
+             (kW-1)/2 ≤ p.2.val + wi.val ∧ p.2.val + wi.val - (kW-1)/2 < w) Finset.univ) ?lv,
+      ← Finset.sum_subset (Finset.filter_subset
+        (fun q : Fin h × Fin w => q.1.val ≤ hi.val + (kH-1)/2 ∧ hi.val + (kH-1)/2 - q.1.val < kH ∧
+             q.2.val ≤ wi.val + (kW-1)/2 ∧ wi.val + (kW-1)/2 - q.2.val < kW) Finset.univ) ?rv]
+  case lv =>
+    intro p _ hp
+    rw [Finset.mem_filter] at hp
+    rw [dif_neg (fun hpr => hp ⟨Finset.mem_univ p, hpr⟩), mul_zero]
+  case rv =>
+    intro q _ hq
+    rw [Finset.mem_filter] at hq
+    rw [dif_neg (fun hpr => hq ⟨Finset.mem_univ q, hpr⟩)]
+  -- the partial bijection on the pad supports
+  refine Finset.sum_bij'
+    (fun p hp => ((⟨p.1.val + hi.val - (kH-1)/2, by
+        have := (Finset.mem_filter.mp hp).2; omega⟩ : Fin h),
+       (⟨p.2.val + wi.val - (kW-1)/2, by
+        have := (Finset.mem_filter.mp hp).2; omega⟩ : Fin w)))
+    (fun q _ => ((⟨kH - 1 - (hi.val + (kH-1)/2 - q.1.val), by omega⟩ : Fin kH),
+       (⟨kW - 1 - (wi.val + (kW-1)/2 - q.2.val), by omega⟩ : Fin kW)))
+    ?hi ?hj ?linv ?rinv ?heq
+  case hi =>
+    intro p hp
+    have hb := (Finset.mem_filter.mp hp).2
+    have := p.1.isLt; have := p.2.isLt
+    rw [Finset.mem_filter]
+    refine ⟨Finset.mem_univ _, ?_, ?_, ?_, ?_⟩ <;> simp only <;> omega
+  case hj =>
+    intro q hq
+    have hb := (Finset.mem_filter.mp hq).2
+    have := q.1.isLt; have := q.2.isLt
+    rw [Finset.mem_filter]
+    refine ⟨Finset.mem_univ _, ?_, ?_, ?_, ?_⟩ <;> simp only <;> omega
+  case linv =>
+    intro p hp
+    have hb := (Finset.mem_filter.mp hp).2
+    have := p.1.isLt; have := p.2.isLt
+    apply Prod.ext <;> apply Fin.ext <;> simp only <;> omega
+  case rinv =>
+    intro q hq
+    have hb := (Finset.mem_filter.mp hq).2
+    have := q.1.isLt; have := q.2.isLt
+    apply Prod.ext <;> apply Fin.ext <;> simp only <;> omega
+  case heq =>
+    intro p hp
+    have hb := (Finset.mem_filter.mp hp).2
+    have h1 := p.1.isLt; have h2 := p.2.isLt
+    rw [dif_pos hb, dif_pos (by refine ⟨?_, ?_, ?_, ?_⟩ <;> simp only <;> omega)]
+    dsimp only
+    have ea : kH - 1 - p.1.val = hi.val + (kH - 1) / 2 - (p.1.val + hi.val - (kH - 1) / 2) := by omega
+    have eb : kW - 1 - p.2.val = wi.val + (kW - 1) / 2 - (p.2.val + wi.val - (kW - 1) / 2) := by omega
+    simp only [ea, eb]
+
 /-- **Conv backward bridge, 1→2 channels (the Spatial instance's first
     conv: `Kernel4 2 1 3 3` at 4×4).** The emitted transposed-convolution
     graph denotes the proven conv input-VJP `(conv2d_has_vjp3 W b).backward`.
-    This discharges the reversed-kernel identity `CNN.lean` only asserts,
-    by expansion at the concrete shape. -/
+    Now a one-line instance of the general `convBackDenote_eq_input_grad_formula`
+    (3×3 is odd) — no longer the brute-force `fin_cases` expansion. -/
 theorem conv_back_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
     (x : Tensor3 1 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
     convBackDenote W dy = (conv2d_has_vjp3 W b).backward x dy := by
   show conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy
-  funext ci hi wi
-  fin_cases ci
-  fin_cases hi <;> fin_cases wi <;>
-    simp [conv2d, conv2d_input_grad_formula, reverseSwap, kRev, Fin.sum_univ_succ]
+  exact convBackDenote_eq_input_grad_formula (by decide) (by decide) W dy
 
 /-- **Conv backward bridge, 2→2 channels (the Spatial instance's second
-    conv: `Kernel4 2 2 3 3` at 4×4).** Same identity at the 2→2 shape. -/
+    conv: `Kernel4 2 2 3 3` at 4×4).** Same identity at the 2→2 shape — also a
+    one-line instance of the general lemma. -/
 theorem conv_back_bridge_2to2 (W : Kernel4 2 2 3 3) (b : Vec 2)
     (x : Tensor3 2 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
     convBackDenote W dy = (conv2d_has_vjp3 W b).backward x dy := by
   show conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy
-  funext ci hi wi
-  fin_cases ci <;> fin_cases hi <;> fin_cases wi <;>
-    simp [conv2d, conv2d_input_grad_formula, reverseSwap, kRev, Fin.sum_univ_succ]
+  exact convBackDenote_eq_input_grad_formula (by decide) (by decide) W dy
 
 -- ════════════════════════════════════════════════════════════════
 -- § Phase 2 — max-pool (the other kinked op)

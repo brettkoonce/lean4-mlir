@@ -309,6 +309,11 @@ open Proofs
 -- Spatial instance's conv shapes).
 #print axioms IR.conv_back_bridge_1to2
 #print axioms IR.conv_back_bridge_2to2
+-- The GENERAL conv-adjoint reindex (all dims, odd kernels): the reversed-kernel
+-- forward conv = the certified conv input-grad formula. Subsumes the two toy
+-- `conv_back_bridge_*` (now one-line instances of it). The load-bearing leaf for
+-- the §B certified-VJP tie of every conv-heavy net's backward.
+#print axioms IR.convBackDenote_eq_input_grad_formula
 -- Phase 2: the emitted tile-compare-select graph denotes the canonical
 -- maxpool backward at smooth points (no argmax ties).
 #print axioms IR.maxpool_back_bridge
