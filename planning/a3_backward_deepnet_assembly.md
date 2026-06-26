@@ -100,8 +100,13 @@ stride-4 + §1f/§1g batch landed as **`029d29d`** (8 source files: 7 new `*Back
   backs + final LN are supplied as `FloatBridges` (dischargeable by `floatBridges_vitBlockBack` /
   `bnBack`), exactly the `r34_grad_floatBridges` pattern. **The deployed float ViT input-gradient
   backward ≈ the certified ℝ gradient, end to end.** Nothing architectural remains for vit.
-- **efficientnet batched whole-net** — needs the batched-emit lift (the forward's Item-B stub); the
-  per-example MBConv body is done.
+- **efficientnet batched whole-net — DONE** (`EfficientNetBackFloatBridge.lean`, 3-axiom-clean,
+  audit=1071): the batched-emit "Item-B" lift for the backward. `efficientnetForwardB` is batched
+  (`batchMap N (per-example net)`, BNs eval-mode flat ⇒ no cross-batch coupling), so the batched whole-net
+  backward is `batchMap N (per-example net backward)`. `FloatClose.batchMap`/`FloatBridges.batchMap` =
+  the `Vec(N·a)→Vec(N·b)` generalization of `FloatClose.perRow` (a backward swaps cin↔cout); the batched
+  whole-net = `FloatBridges.batchMap N` over the per-example `.comp` chain, with
+  `floatBridges_mbconvBatched{Body,Resid}Back` the repeating units.
 - **Forward whole-net assembly** — NOTE the *forward* r34 whole-net float bridge is itself only
   block-level in the repo, so the backward is now AHEAD at whole-net scale. The
   `r34_grad_floatBridges` file is the BLUEPRINT for assembling both directions (concrete endpoints +
@@ -208,7 +213,7 @@ the per-entry `softmax − onehot` `cotErr` bound) to a `FloatClose`/`FloatBridg
 | **cifarBn** | ✅ `cifarBn_grad_floatBridges` | + bnBack (per-channel) | — |
 | **r34** | ✅ `r34_grad_floatBridges` (WHOLE NET) | convBack, strided-convBack, bnBack, residual + biPathSum fan-in, maxPoolBack, gapBack, linBack | — |
 | **mnv2** | ✅ `mnv2_grad_floatBridges` (WHOLE NET) | + depthwiseBack ✅, smooth (relu6 mask ✅), NO SE | **1e ✅** |
-| **efficientnet** | ✅ `floatBridges_mbconvBodyBack` (per-ex body; whole-net batched) | + swishBack (1d✅), seBack ✅, depthwiseBack ✅ | **1e ✅** |
+| **efficientnet** | ✅ per-ex body `floatBridges_mbconvBodyBack` + BATCHED whole-net (`FloatBridges.batchMap` lift + `floatBridges_mbconvBatched{Body,Resid}Back`) | + swishBack (1d✅), seBack ✅, depthwiseBack ✅, batchMap lift ✅ | **1e ✅** |
 | **convnext** | ✅ `convnext_grad_floatBridges` (WHOLE NET) + block body | LN-back (= bnBack ✅), geluBack (1d ✅), depthwiseBack ✅, layerScale (diagBack ✅) | **1e ✅** |
 | **vit** | ✅ FULLY-CONCRETE WHOLE-NET (`vit_grad_floatBridges_concrete`): encoder tower + ALL endpoints concrete (patch-embed/cls-slice/head); only per-block + final-LN backs supplied | MHSA ✅, block ✅, tower ✅, patch-embed ✅, cls-slice ✅, head ✅, LN-back ✅, geluBack ✅, linBack ✅, residual ✅ | **1f ✅** |
 
