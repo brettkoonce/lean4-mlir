@@ -98,6 +98,7 @@ import LeanMlir.Proofs.DepthwiseBackFloatBridge
 import LeanMlir.Proofs.SEBackFloatBridge
 import LeanMlir.Proofs.MobileNetV2BackFloatBridge
 import LeanMlir.Proofs.EfficientNetBackFloatBridge
+import LeanMlir.Proofs.EfficientNetWholeFloatBridge
 import LeanMlir.Proofs.ConvNeXtBackFloatBridge
 import LeanMlir.Proofs.LossHeadCotFloatBridge
 import LeanMlir.Proofs.SoftmaxBackFloatBridge
@@ -1760,6 +1761,19 @@ open Proofs
 #print axioms Proofs.FloatBridges.batchMap
 #print axioms Proofs.floatBridges_mbconvBatchedBodyBack
 #print axioms Proofs.floatBridges_mbconvBatchedResidBack
+-- EfficientNet WHOLE-NET FORWARD (forward peer of efficientnetForwardB_has_vjp, stated identically on
+-- the ∘-composition that IS efficientnetForwardB). New op-bridge floatBridges_depthwiseStride2Flat
+-- (mbStrided downsample = depthwise read at decimateIdx, peer of floatBridges_flatConvStride2); the
+-- batched stage/block bridges (each batch-separable op FloatBridges.batchMap-lifted, swish block-
+-- diagonal, the 10 true-batch-norms bnBatchLA supplied); efficientnetForwardB_floatBridges = the
+-- stem→MBConv1→MBConv6-strided→MBConv6-resid→head .comp fold.
+#print axioms Proofs.floatBridges_depthwiseStride2Flat
+#print axioms Proofs.floatBridges_stemB
+#print axioms Proofs.floatBridges_mbNoExpFwdB
+#print axioms Proofs.floatBridges_mbStridedFwdB
+#print axioms Proofs.floatBridges_mbResidFwdB
+#print axioms Proofs.floatBridges_headFwdB
+#print axioms Proofs.efficientnetForwardB_floatBridges
 -- ConvNeXt-T (per-example): block body backward = depthwiseBack ∘ lnBack ∘ convBack ∘ geluBack ∘
 -- convBack ∘ layerScaleBack (depthwiseFlatBack concrete; LN/GELU/layer-scale diagBacks supplied); full
 -- block = residual(body); the stage downsample = lnBack ∘ flatConvStride2Back. convnext_grad_floatBridges

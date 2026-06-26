@@ -331,6 +331,13 @@ lean_lib «Proofs» where
              -- floatBridges_mbconvBody): expandBack∘depthwiseBack∘seBack∘projectBack — BOTH §1e ops
              -- (depthwiseFlatBack concrete + seBack supplied) land here. + the additive-skip variant.
              `LeanMlir.Proofs.EfficientNetBackFloatBridge,
+             -- EfficientNet WHOLE-NET FORWARD (forward peer of efficientnetForwardB_has_vjp): stated
+             -- on the ACTUAL batched efficientnetForwardB (stem→MBConv1→MBConv6-strided→MBConv6-resid
+             -- →head). Each batch-separable op is FloatBridges.batchMap of its op-bridge, swish is
+             -- block-diagonal at the batched index, and the 10 true-batch-norms (bnBatchLA, batch-
+             -- coupled) are supplied as FloatBridges facts. New op-bridge: floatBridges_depthwiseStride2Flat
+             -- (mbStrided downsample, = depthwise read at decimateIdx, peer of floatBridges_flatConvStride2).
+             `LeanMlir.Proofs.EfficientNetWholeFloatBridge,
              -- ConvNeXt-T backward (per-example): block body backward (depthwiseBack∘lnBack∘convBack∘
              -- geluBack∘convBack∘layerScaleBack) + residual block + downsample (lnBack∘stride2Back);
              -- convnext_grad_floatBridges = whole-net [3,3,9,3] fold, concrete GAP/dense, stem/stages/
