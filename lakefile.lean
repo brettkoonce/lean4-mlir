@@ -235,6 +235,19 @@ lean_lib «Proofs» where
              -- ViTAttentionFloatBridge (sdpa_close + input-sensitivity); adds the transformer
              -- block fold + projections + single/multi-head (block-diagonal & full-d MHA).
              `LeanMlir.Proofs.ViTBlockFloatBridge,
+             -- A1 forward float-bridge capstones (planning/tier23…): the deeper 8-conv
+             -- no-BN CIFAR via the FloatBridges.comp existential path (cifar8_floatBridges).
+             `LeanMlir.Proofs.Cifar8FloatBridge,
+             -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
+             -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
+             -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network
+             -- Tensor3-layout conjugation by the reassoc permutations
+             -- (floatBridges_bnPerChannelTensor3). The "do-it-once" BN infra A1/A3 share.
+             `LeanMlir.Proofs.BnPerChannelFloatBridge,
+             -- A1 BatchNorm CIFAR forward capstone: cifarCnnBnForward float-bridges, the
+             -- four per-channel BNs supplied as FloatBridges (each discharged by
+             -- floatBridges_bnPerChannelTensor3). The BN-net peer of cifar8_floatBridges.
+             `LeanMlir.Proofs.CifarBnFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

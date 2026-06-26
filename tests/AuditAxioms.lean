@@ -80,6 +80,9 @@ import LeanMlir.Proofs.DepthwiseFloatBridge
 import LeanMlir.Proofs.ViTFloatBridge
 import LeanMlir.Proofs.ViTAttentionFloatBridge
 import LeanMlir.Proofs.ViTBlockFloatBridge
+import LeanMlir.Proofs.Cifar8FloatBridge
+import LeanMlir.Proofs.BnPerChannelFloatBridge
+import LeanMlir.Proofs.CifarBnFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1522,6 +1525,32 @@ open Proofs
 #print axioms floatBridges_depthwise
 #print axioms floatBridges_seBlockFull
 #print axioms floatBridges_mbconvBody
+-- ── planning/tier23_float_and_syntactic_faithfulness.md A1 (per-net FORWARD float
+-- capstones via the FloatBridges.comp existential path) ──
+-- cifar8_floatBridges: the deeper 8-conv no-BN CIFAR forward as a 25-op .comp chain over
+-- floatBridges_{flatConv,relu,maxPool,dense} — validates the existential assembly path the
+-- deep nets reuse (no hand-written float-forward F, no per-net budget term).
+#print axioms Proofs.cifar8_floatBridges
+-- The BatchNorm FloatBridges keystone. floatBridges_bn packages floatClose_bn into the
+-- ∃-closure form, discharging the two generic operating-point facts: the centered-deviation
+-- bound D=2A (bn_centered_le, via bnMean_abs_le) and the inverse-stddev bound S=1/√ε
+-- (bnIstd_abs_le, via bnVar≥0) — the supplied obligations are just the float-stat accuracy
+-- moduli emean/eistd (rsqrt has no IEEE spec, so the float stats are modelled, like fexp/fsig).
+-- It directly discharges the EfficientNet MBConv hbnE/D/P (those are flat/global bnForward).
+-- floatBridges_bnPerChannelFlat lifts it block-diagonally via FloatClose.perRowIdx
+-- (bnPerChannelFlat = perRowIdxFlat oc m (fun c => bnForward …) definitionally), uniform
+-- budget from uniform G/Bbnd. floatBridges_bnPerChannelTensor3 conjugates to the network's
+-- Tensor3 activation layout by the reassoc permutations (= gather E / gather E.symm,
+-- floatBridges_gather) — the BatchNorm op the CIFAR-BN / ResNet-34 forwards actually contain.
+#print axioms Proofs.bn_centered_le
+#print axioms Proofs.floatBridges_bn
+#print axioms Proofs.floatBridges_bnPerChannelFlat
+#print axioms Proofs.floatBridges_bnPerChannelTensor3
+-- cifarBn_floatBridges: the whole BatchNorm CIFAR forward float-bridges — the .comp assembly
+-- over conv / per-channel BN / ReLU / maxpool / dense, the four per-channel BNs supplied as
+-- FloatBridges (each discharged by floatBridges_bnPerChannelTensor3). The BN-net peer of
+-- cifar8_floatBridges; closes the A1 CIFAR family (no-BN 4-conv/8-conv + BN-CIFAR).
+#print axioms Proofs.cifarBn_floatBridges
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
