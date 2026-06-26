@@ -91,6 +91,7 @@ import LeanMlir.Proofs.BnPerChannelBackFloatBridge
 import LeanMlir.Proofs.Resnet34BackFloatBridge
 import LeanMlir.Proofs.StridedConvBackFloatBridge
 import LeanMlir.Proofs.Resnet34DownBackFloatBridge
+import LeanMlir.Proofs.Resnet34WholeBackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1647,6 +1648,13 @@ open Proofs
 -- flatConvStride2Back + convFlatBack + supplied BN-backs. Completes the r34 block set (id + down).
 #print axioms Proofs.floatClose_biPathSum
 #print axioms Proofs.floatBridges_r34DownBlockBack
+-- r34 WHOLE-NET backward (the first Imagenette whole-net backward): r34_grad_floatBridges = the exact
+-- reverse of resnet34Forward_full_pc (dense ∘ GAP ∘ [3,4,6,3] blocks ∘ maxpool ∘ stem), one .comp fold
+-- over linBack/gapBack/16 block-backs/maxPoolFlatBack/stem(flatConvStride2Back∘bnBack∘reluMaskBack).
+-- gapBack (the one new op): the certified GAP VJP dy(channel)/(h·w), a scaled broadcast (magnitude-
+-- nonincreasing, one rounding). Stem/GAP/maxpool/dense concrete; the 16 blocks supplied as FloatBridges.
+#print axioms Proofs.floatClose_gapBack
+#print axioms Proofs.r34_grad_floatBridges
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-

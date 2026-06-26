@@ -293,6 +293,11 @@ lean_lib «Proofs» where
              -- block's f(x)+x is the g=id case) of the projection backward and the strided body
              -- backward, both using flatConvStride2Back. Completes the r34 block set.
              `LeanMlir.Proofs.Resnet34DownBackFloatBridge,
+             -- A3 r34 WHOLE-NET backward (the first Imagenette whole-net backward): gapBack (GAP
+             -- VJP = broadcast÷(h·w)) + the [3,4,6,3] .comp fold (r34_grad_floatBridges) — concrete
+             -- stem/GAP/maxpool/dense endpoints, the 16 blocks supplied as FloatBridges (discharged
+             -- by floatBridges_r34IdBlockBack/DownBlockBack). The exact reverse of resnet34Forward.
+             `LeanMlir.Proofs.Resnet34WholeBackFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent
