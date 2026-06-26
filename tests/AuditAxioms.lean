@@ -101,6 +101,7 @@ import LeanMlir.Proofs.LossHeadCotFloatBridge
 import LeanMlir.Proofs.SoftmaxBackFloatBridge
 import LeanMlir.Proofs.SdpaBackFloatBridge
 import LeanMlir.Proofs.MhsaBackFloatBridge
+import LeanMlir.Proofs.PatchEmbedBackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1781,6 +1782,21 @@ open Proofs
 #print axioms Proofs.floatBridges_clsScatter
 #print axioms Proofs.floatBridges_vitHeadBack
 #print axioms Proofs.vit_grad_floatBridges
+-- The PATCH-EMBED backward — the last whole-net endpoint, now CONCRETE. The certified
+-- patchEmbed_input_grad_formula (the transposed conv: a guarded triple-sum ∑p∑kh∑kw (if patch covers
+-- pixel then ∑d W_conv·dy else 0), linear in the cotangent) float-bridges via dot_close (inner ∑d,
+-- fan-in D) folded through nested reduction_close (the kw/kh/p sums); the guard is a fixed index
+-- predicate (identical float/real). floatBridges_patchEmbedBack discharges vit_grad_floatBridges's
+-- hPatch ⇒ the whole ViT input-gradient backward is fully concrete (head/cls-slice/patch-embed).
+#print axioms Proofs.patchEmbed_formula_abs_le
+#print axioms Proofs.patchEmbedBack_round_close
+#print axioms Proofs.floatClose_patchEmbedBack
+#print axioms Proofs.floatBridges_patchEmbedBack
+-- THE FULLY-CONCRETE ViT WHOLE-NET BACKWARD: vit_grad_floatBridges with the patch-embed discharged by
+-- floatBridges_patchEmbedBack — EVERY endpoint (patch-embed/cls-slice/head) concrete, only per-block
+-- backs + final LN supplied (dischargeable by floatBridges_vitBlockBack / bnBack). The deployed float
+-- ViT input-gradient backward ≈ the certified ℝ gradient, end to end (closeness at a smooth point).
+#print axioms Proofs.vit_grad_floatBridges_concrete
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-

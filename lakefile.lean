@@ -343,6 +343,11 @@ lean_lib «Proofs» where
              -- The projBacks are FREE (per-token linBack); the cores (floatBridges_core{V,Q,K}) lift the
              -- flattened mhsaSdpaBack* to FloatClose (linear-in-cotangent). floatBridges_mhsaBack.
              `LeanMlir.Proofs.MhsaBackFloatBridge,
+             -- A3 §1f the ViT PATCH-EMBED backward (the last whole-net endpoint): the certified
+             -- patchEmbed_input_grad_formula (a transposed-conv / guarded patch-scatter triple-sum, linear
+             -- in the cotangent) float-bridges via dot_close (fan-in D) + nested reduction_close (the
+             -- kw/kh/p sums). floatBridges_patchEmbedBack discharges vit_grad_floatBridges's hPatch.
+             `LeanMlir.Proofs.PatchEmbedBackFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent
