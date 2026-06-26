@@ -11,9 +11,24 @@ maps), mirroring the §1a backward ties' nonzero-kink hypotheses.
 
 ---
 
-## STATUS (2026-06-26, after the §1e + per-net + §1f/§1g session)
+## STATUS (2026-06-26, after the §1e + per-net + §1f/§1g + sdpa-assembly session)
 
-**DONE — committed, all 3-axiom-clean, full `tests/AuditAxioms.lean` elaborates clean (1040 decls):**
+**DONE — committed, all 3-axiom-clean, full `tests/AuditAxioms.lean` elaborates clean (1046 decls):**
+
+- **§1f Mat-space SDPA BACKWARD assembly — DONE** (2026-06-26, the vit-crux capstone; 3-axiom-clean,
+  audit=1046, uncommitted). `SdpaBackFloatBridge.lean`: the backward peer of the forward `sdpa_close`.
+  The certified `sdpa_back_{Q,K,V}` (`Attention.lean`) decompose as `dw = dOut·Vᵀ` (matmul) → `dScaled =
+  softmaxBack(p,dw)` per query-row (the §1f row VJP) → `dScores = (1/√d)·dScaled` (scalar scale) → `dQ =
+  dScores·K`, `dK = dScoresᵀ·Q`, `dV = pᵀ·dOut` (matmuls). **No new analysis** — every piece reuses an
+  existing bridge: `dw` via `attnScore_close`; `dQ/dK/dV` via `attnDot_close` (a rounded dot at the
+  PERTURBED softmax weights `fp`, within `ew = attnWeightErr` of `p` — the same shape as the forward
+  output matmul); the row VJP via `softmaxBack_close` (rounding) + `softmaxBack_sub_abs_le` (the
+  `dw`-perturbation Lipschitz half, `softmaxBack` linear in the cotangent); the scale via `mul_close`.
+  Capstones `sdpaBack{V,Q,K}_close`: each deployed-float backward entry within an explicit `sdpaBackErr`
+  of the certified `sdpa_back_{V,Q,K}`. The float weights `fp` supplied abstractly within `ew` (the
+  saved-activation operating point, the honest smooth-point framing). **Remaining vit work is now pure
+  ASSEMBLY** (no new architectural op): multi-head wrap (per-head `sdpaBack` + Q/K/V/O projection
+  `linBack`s) + transformer-block fold (LN-back + residual + the Vec-space MLP half) + whole-net.
 
 - **The entire CIFAR backward family** — `cifar8_grad_floatBridges`, `cifarBn_grad_floatBridges`
   (peers of the A1 forward family).
@@ -61,10 +76,13 @@ stride-4 + §1f/§1g batch landed as **`029d29d`** (8 source files: 7 new `*Back
   `floatClose_softmaxBack` / `floatBridges_softmaxBack`, `P`-general (`P = 1` for softmax).
 
 **REMAINING:**
-- **vit whole-net** — the §1f softmax-Jacobian (the crux) is done; remaining is the **Mat-space sdpa
-  assembly** (compose `softmaxBack` per query-row with the V-matmul + score-matmul backwards, each a
-  rounded dot `dot_close`) + the transformer-block / whole-net fold. NOTE the `FloatBridges` backbone is
-  Vec-space; attention is Mat-space (mixes across tokens), so this needs a Mat-space lift (or flatten).
+- **vit whole-net** — the §1f softmax-Jacobian (the crux) AND the **Mat-space sdpa assembly**
+  (`SdpaBackFloatBridge.lean`, `sdpaBack{V,Q,K}_close`) are now BOTH done. What's left is **pure assembly,
+  no new op**: (a) multi-head wrap (per-head `sdpaBack{V,Q,K}_close` + the Q/K/V/O projection `linBack`s
+  over the head slabs — the backward peer of `floatBridges_vitBlockMHFull`); (b) the transformer-block
+  fold (LN-back + the `residual` fan-in + the Vec-space MLP-half backward); (c) the whole-net fold. NOTE
+  the per-entry `sdpaBack*_close` bounds are `Mat`-space (like the forward `sdpa_close`); the block/net
+  fold pairs them with the Vec-space halves, or lifts via a flatten — same as the forward block fold.
 - **efficientnet batched whole-net** — needs the batched-emit lift (the forward's Item-B stub); the
   per-example MBConv body is done.
 - **Forward whole-net assembly** — NOTE the *forward* r34 whole-net float bridge is itself only
@@ -145,12 +163,17 @@ Plus the forward bridges reused via the transpose trick, and `FloatBridges.comp`
 Delivered `floatBridges_depthwiseBack`, `floatBridges_depthwiseStride2Back`, `floatBridges_seBack`,
 `floatBridges_seGateBack`, `floatBridges_broadcastBack`. **Effort was: M. Risk was: med.**
 
-### ✅ 1f. Attention grad — softmax-Jacobian backward (the vit crux) — CORE DONE (2026-06-26)
+### ✅ 1f. Attention grad — softmax-Jacobian backward + Mat-space sdpa assembly (the vit crux) — DONE (2026-06-26)
 The softmax Jacobian couples a whole row (`diag(p) − p pᵀ`). `SoftmaxBackFloatBridge.floatClose_softmaxBack`
 / `floatBridges_softmaxBack` deliver the row VJP `pᵢ·(dyᵢ − ⟨p, dy⟩)` as a composable Vec-space bridge
 (threads `mul_close`/`reduction_close`/`sub_close'`, weights within `smErr`, linear-in-`dy` modulus).
-REMAINING for the full vit backward: the **Mat-space sdpa assembly** (this row map ∘ the V-matmul +
-score-matmul backwards, `dot_close`) — the `Mat`-space peer of the forward `sdpa_close`.
+**The Mat-space sdpa assembly is now DONE** (`SdpaBackFloatBridge.lean`): `sdpaBack{V,Q,K}_close` — each
+certified `sdpa_back_{V,Q,K}` entry is float-close via the chain `dw = dOut·Vᵀ` (`attnScore_close`) →
+`dScaled = softmaxBack(p,dw)` (`softmaxBack_close` + `softmaxBack_sub_abs_le`) → `dScores = (1/√d)·dScaled`
+(`mul_close`) → the three output matmuls `dQ/dK/dV` (`attnDot_close`, the rounded dot at perturbed
+weights). The `Mat`-space peer of the forward `sdpa_close`; **no new analysis, all reuse**. Per-stage
+budgets `sdpaDScaledErr`/`sdpaDScoresErr`/`sdpaBackErr`; float maps `sdpaDwF`/`sdpaDScaledF`/`sdpaDScoresF`/
+`sdpaBack{V,Q,K}F` mirror the certified ops op-for-op in `M`-rounded arithmetic.
 
 ### ✅ 1g. Loss-head cotangent lift — DONE (2026-06-26)
 `LossHeadCotFloatBridge.floatBridges_lossSeed` lifts `M.softmax_ce_cot_close` (`FloatBridge.lean:1808`,
@@ -170,7 +193,7 @@ the per-entry `softmax − onehot` `cotErr` bound) to a `FloatClose`/`FloatBridg
 | **mnv2** | ✅ `mnv2_grad_floatBridges` (WHOLE NET) | + depthwiseBack ✅, smooth (relu6 mask ✅), NO SE | **1e ✅** |
 | **efficientnet** | ✅ `floatBridges_mbconvBodyBack` (per-ex body; whole-net batched) | + swishBack (1d✅), seBack ✅, depthwiseBack ✅ | **1e ✅** |
 | **convnext** | ✅ `convnext_grad_floatBridges` (WHOLE NET) + block body | LN-back (= bnBack ✅), geluBack (1d ✅), depthwiseBack ✅, layerScale (diagBack ✅) | **1e ✅** |
-| **vit** | softmax-Jacobian ✅ (`floatBridges_softmaxBack`); Mat-space sdpa assembly TODO | sdpaBack-row ✅, LN-back ✅, geluBack ✅, linBack ✅, residual ✅ | **1f ✅ (core)** |
+| **vit** | softmax-Jacobian ✅ + Mat-space sdpa assembly ✅ (`sdpaBack{V,Q,K}_close`); MHSA-wrap + block/net fold TODO (assembly only) | sdpaBack-row ✅, sdpa matmuls ✅, LN-back ✅, geluBack ✅, linBack ✅, residual ✅ | **1f ✅** |
 
 (mnv2: full whole-net, per-example forward. enet: whole-net is batched ⇒ per-example MBConv body is the
 peer of the forward bridge. convnext: whole-net fold + block body, stem now concrete via
@@ -194,8 +217,9 @@ peer of the forward bridge. convnext: whole-net fold + block body, stem now conc
 2. ✅ **Part 2 per-net assembly** — DONE: mnv2 (whole-net), efficientnet (per-ex MBConv body),
    convnext (whole-net + block body + concrete `flatConvStride4Back` stem).
 3. ✅ **1g (loss-head lift)** — DONE.
-4. ✅ **1f softmax-Jacobian (the crux)** — DONE; remaining = the Mat-space sdpa assembly + vit whole-net.
-5. Remaining follow-ons: vit Mat-space sdpa assembly; enet batched whole-net (Item-B).
+4. ✅ **1f softmax-Jacobian (the crux) + Mat-space sdpa assembly** — DONE (`sdpaBack{V,Q,K}_close`).
+5. Remaining follow-ons (all ASSEMBLY, no new op): vit MHSA-wrap (per-head `sdpaBack` + projection
+   `linBack`s) + transformer-block/whole-net fold; enet batched whole-net (Item-B).
 3. **1g (loss-head lift)** anytime — upgrades each `<net>_grad_floatBridges` from "≈ at an abstract
    `dy`" to "≈ from the loss."
 4. **(optional) forward whole-net assembly** — reuse the `r34InputGrad` blueprint to land the forward

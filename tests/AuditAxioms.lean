@@ -99,6 +99,7 @@ import LeanMlir.Proofs.EfficientNetBackFloatBridge
 import LeanMlir.Proofs.ConvNeXtBackFloatBridge
 import LeanMlir.Proofs.LossHeadCotFloatBridge
 import LeanMlir.Proofs.SoftmaxBackFloatBridge
+import LeanMlir.Proofs.SdpaBackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1726,6 +1727,19 @@ open Proofs
 #print axioms Proofs.softmaxBack_close
 #print axioms Proofs.floatClose_softmaxBack
 #print axioms Proofs.floatBridges_softmaxBack
+-- A3 §1f Mat-space SDPA BACKWARD assembly (the vit-crux capstone): the backward peer of sdpa_close.
+-- The certified sdpa_back_{Q,K,V} (Attention.lean) = dw = dOut·Vᵀ (matmul) → dScaled = softmaxBack(p,dw)
+-- per row (the §1f row VJP) → dScores = (1/√d)·dScaled (scale) → dQ = dScores·K, dK = dScoresᵀ·Q,
+-- dV = pᵀ·dOut (matmuls). No new analysis: dw reuses attnScore_close, dQ/dK/dV reuse attnDot_close (a
+-- rounded dot at PERTURBED softmax weights fp, within ew=attnWeightErr of p), the row VJP reuses
+-- softmaxBack_close (rounding) + softmaxBack_sub_abs_le (the dw-perturbation Lipschitz half), the scale
+-- reuses mul_close. sdpaBack{V,Q,K}_close: each float backward entry within sdpaBackErr of the certified.
+#print axioms Proofs.sdpaDwF_close
+#print axioms Proofs.sdpaDScaledF_close
+#print axioms Proofs.sdpaDScoresF_close
+#print axioms Proofs.sdpaBackV_close
+#print axioms Proofs.sdpaBackQ_close
+#print axioms Proofs.sdpaBackK_close
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
