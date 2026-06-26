@@ -361,4 +361,91 @@ theorem floatBridges_mhsaBack (M : FloatModel) (Wq Wk Wv Wo : Mat (h * dh) (h * 
         (FloatBridges.comp (floatBridges_coreV M Q K V fp hN hhd hew hfp)
           (FloatBridges.perRow N (floatBridges_linBack M Wv hw' hhd hWv)))))
 
+-- ════════════════════════════════════════════════════════════════
+-- § The transformer-block backward (the reverse of the ViT encoder block)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The ViT encoder-block input-gradient backward** — the reverse of `LN → MHSA → +x → LN → MLP → +x`.
+    The block is `mlpResidual ∘ attnSub` (forward), so the backward is `attnSubBack ∘ mlpResidualBack`:
+
+    * **MLP-residual backward** (per token): `residual (LN₂-back ∘ linBack W₁ ∘ geluBack ∘ linBack W₂)`
+      — the reverse of `dense W₂ ∘ gelu ∘ dense W₁ ∘ LN₂`, lifted over the sequence (`perRow`);
+    * **attention-sublayer backward**: `residual (LN₁-back ∘ mhsaBack)` — the residual skip's cotangent
+      flows both through the MHSA backward (`floatBridges_mhsaBack`) and directly to `x`.
+
+    The LN backwards (`lnB₁`/`lnB₂`) are supplied as `FloatBridges` (= the per-token BatchNorm backward,
+    dischargeable by `floatBridges_bnBack`), exactly as the forward `floatBridges_vitBlock` supplies `hln`;
+    `geluBack` is the saved-derivative `diagBack`. -/
+noncomputable def vitBlockBack {dff : Nat} (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Mat N (h * dh))
+    (lnB₁ : Vec (h * dh) → Vec (h * dh)) (W₁ : Mat (h * dh) dff) (W₂ : Mat dff (h * dh))
+    (sgelu : Vec dff) (lnB₂ : Vec (h * dh) → Vec (h * dh)) :
+    Vec (N * (h * dh)) → Vec (N * (h * dh)) :=
+  Proofs.residual (perRowFlat N (h * dh) lnB₁ ∘ mhsaBackFlat Wq Wk Wv Wo Q K V)
+    ∘ perRowFlat N (h * dh) (Proofs.residual
+        (lnB₂ ∘ Proofs.dense (Mat.transpose W₁) (0 : Vec (h * dh)) ∘ diagBack sgelu
+          ∘ Proofs.dense (Mat.transpose W₂) (0 : Vec dff)))
+
+/-- **THE TRANSFORMER-BLOCK BACKWARD FLOAT-BRIDGES.** One `FloatBridges.comp` of the MLP-residual
+    backward (per token) and the attention-sublayer backward (`residual` of `LN₁-back ∘ mhsaBack`).
+    Pure assembly — `comp` / `residual` / `perRow` over `floatBridges_mhsaBack`, the free `linBack`s,
+    the `geluBack` `diagBack`, and the supplied LN backwards. The backward peer of the forward
+    `floatBridges_vitBlock`; a 12-layer encoder backward is `.comp` of this block (the whole-net fold,
+    blocks supplied — the `r34_grad_floatBridges` blueprint). A3 = closeness at a smooth point. -/
+theorem floatBridges_vitBlockBack {dff : Nat} (M : FloatModel)
+    (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Mat N (h * dh)) (fp : Fin h → Mat N N)
+    (lnB₁ : Vec (h * dh) → Vec (h * dh)) (W₁ : Mat (h * dh) dff) (W₂ : Mat dff (h * dh))
+    (sgelu fsgelu : Vec dff) (lnB₂ : Vec (h * dh) → Vec (h * dh))
+    {w' qA kA vA scaleA ew Sd es : ℝ} (hN : 0 < N) (hhd : 0 < h * dh) (hdff : 0 < dff)
+    (hw' : 0 ≤ w') (hqA : 0 ≤ qA) (hkA : 0 ≤ kA) (hew : 0 ≤ ew)
+    (hscaleA : |sdpa_scale dh| ≤ scaleA)
+    (hQ : ∀ i k, |Q i k| ≤ qA) (hK : ∀ i k, |K i k| ≤ kA) (hV : ∀ i k, |V i k| ≤ vA)
+    (hWq : ∀ i j, |Wq i j| ≤ w') (hWk : ∀ i j, |Wk i j| ≤ w')
+    (hWv : ∀ i j, |Wv i j| ≤ w') (hWo : ∀ i j, |Wo i j| ≤ w')
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hW₂ : ∀ i j, |W₂ i j| ≤ w')
+    (hsgelu : ∀ i, |sgelu i| ≤ Sd) (hfsgelu : ∀ i, |fsgelu i - sgelu i| ≤ es)
+    (hlnB₁ : FloatBridges lnB₁) (hlnB₂ : FloatBridges lnB₂)
+    (hfp : ∀ hd i j, |fp hd i j - sdpa_weights N dh (mhSlab hd Q) (mhSlab hd K) i j| ≤ ew) :
+    FloatBridges (vitBlockBack Wq Wk Wv Wo Q K V lnB₁ W₁ W₂ sgelu lnB₂) := by
+  unfold vitBlockBack
+  exact FloatBridges.comp
+    (FloatBridges.perRow N (FloatBridges.residual M
+      (FloatBridges.comp
+        (FloatBridges.comp
+          (FloatBridges.comp (floatBridges_linBack M W₂ hw' hhd hW₂)
+            (floatBridges_diagBack M sgelu fsgelu hdff hsgelu hfsgelu))
+          (floatBridges_linBack M W₁ hw' hdff hW₁))
+        hlnB₂)))
+    (FloatBridges.residual M
+      (FloatBridges.comp
+        (floatBridges_mhsaBack M Wq Wk Wv Wo Q K V fp hN hhd hw' hqA hkA hew hscaleA
+          hQ hK hV hWq hWk hWv hWo hfp)
+        (FloatBridges.perRow N hlnB₁)))
+
+-- ════════════════════════════════════════════════════════════════
+-- § The encoder-tower backward (depth fold over distinct blocks)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Identity float-bridges (the cotangent passes through unchanged — exact, modulus `id`). The base
+    case of the tower fold and the positional-embedding `+pos` backward. -/
+theorem floatBridges_id {m : Nat} : FloatBridges (id : Vec m → Vec m) :=
+  fun A hA => ⟨A, _, _, hA, ⟨fun _v hv i => ⟨hv i, hv i⟩, fun _ _ _ _ _ hd i => hd i⟩⟩
+
+/-- Compose a list of dim-preserving maps: `towerBack [g₁, …, gₖ] = gₖ ∘ … ∘ g₁` (the head is applied
+    first). The ViT encoder backward is `towerBack` of the per-layer block backwards. -/
+noncomputable def towerBack {m : Nat} : List (Vec m → Vec m) → (Vec m → Vec m)
+  | [] => id
+  | f :: fs => towerBack fs ∘ f
+
+/-- **THE ENCODER-TOWER BACKWARD FLOAT-BRIDGES** — the whole `k`-layer encoder backward is the `.comp`
+    fold of the per-block backwards (each `floatBridges_vitBlockBack`). Blocks have DISTINCT params, so
+    this is the explicit list fold (the depth thread), not a uniform iterate — the `r34_grad_floatBridges`
+    blueprint, generic in depth. Discharges every transformer tower (12 layers for ViT-Tiny). -/
+theorem floatBridges_towerBack {m : Nat} (l : List (Vec m → Vec m))
+    (hl : ∀ f ∈ l, FloatBridges f) : FloatBridges (towerBack l) := by
+  induction l with
+  | nil => exact floatBridges_id
+  | cons f fs ih =>
+      exact FloatBridges.comp (hl f (List.mem_cons.mpr (Or.inl rfl)))
+        (ih (fun g hg => hl g (List.mem_cons.mpr (Or.inr hg))))
+
 end Proofs

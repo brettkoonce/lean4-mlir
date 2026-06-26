@@ -1762,6 +1762,17 @@ open Proofs
 #print axioms Proofs.floatBridges_coreQ
 #print axioms Proofs.floatBridges_coreK
 #print axioms Proofs.floatBridges_mhsaBack
+-- THE TRANSFORMER-BLOCK BACKWARD (reverse of LN→MHSA→+x→LN→MLP→+x): one FloatBridges.comp of the
+-- MLP-residual backward (residual of LN₂-back ∘ linBack W₁ ∘ geluBack ∘ linBack W₂, per token) and the
+-- attention-sublayer backward (residual of LN₁-back ∘ mhsaBack). Pure assembly — comp/residual/perRow
+-- over floatBridges_mhsaBack, the free linBacks, geluBack diagBack, supplied LN backs. The backward
+-- peer of floatBridges_vitBlock; a 12-layer encoder backward is .comp of this (the whole-net fold).
+#print axioms Proofs.floatBridges_vitBlockBack
+-- THE ENCODER-TOWER BACKWARD — the whole k-layer encoder backward is the .comp fold of the per-block
+-- backwards (floatBridges_vitBlockBack). Distinct-param blocks ⇒ explicit list fold (the depth thread,
+-- not a uniform iterate), generic in depth; floatBridges_id is the base case (cotangent passes through).
+#print axioms Proofs.floatBridges_id
+#print axioms Proofs.floatBridges_towerBack
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
