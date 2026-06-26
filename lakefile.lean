@@ -248,6 +248,12 @@ lean_lib «Proofs» where
              -- four per-channel BNs supplied as FloatBridges (each discharged by
              -- floatBridges_bnPerChannelTensor3). The BN-net peer of cifar8_floatBridges.
              `LeanMlir.Proofs.CifarBnFloatBridge,
+             -- A3 "other side" keystone (planning/tier23… A3): the BatchNorm BACKWARD
+             -- float closeness — param grads (bnBetaGrad_close / bnGammaGrad_close) + the
+             -- genuinely-new three-term input gradient (bnGradInput_close) + the reusable
+             -- reduction_close / sub_close' helpers. The shared backward op every deep
+             -- net's gradient folds (r34/mnv2/enet/convnext LN/vit LN).
+             `LeanMlir.Proofs.BnBackFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

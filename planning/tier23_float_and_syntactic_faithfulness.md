@@ -140,17 +140,33 @@ backward denotes the certified gradient **over `ℝ`**. There is **no float stor
 backward at all** — so for the deployed Imagenette nets, "the float gradient ≈ the real
 gradient" is currently unproven (only the forward bridges).
 
-**Plan.** This is the float analogue of the §1a ties, stopping at *closeness* (not descent).
-The per-block backward graphs are already proven faithful over `ℝ`
+**BN-backward keystone — DONE (2026-06-26), `LeanMlir/Proofs/BnBackFloatBridge.lean`.** The
+"other side" mirror started where the forward did: with the BatchNorm backward, the one
+genuinely-new backward op every deep net's gradient folds (the §1a ties denote
+`bn_grad_{gamma,beta,input}` over `ℝ`; these bridge them to float). All 3-axiom-clean:
+- **Parameter grads** (the easy reductions): `bnBetaGrad_close` (`Σ dy`, pure `sum_close`) and
+  `bnGammaGrad_close` (`Σ dy·x̂`, `sum_close` + `mul_close` at the supplied float `x̂`).
+- **Input gradient** (the new op): `bnGradInput_close` — the three-term
+  `dx = (1/n)·s·(n·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))` (`dx̂ = γ·dy`, `s = istd`) bridged by threading
+  `mul_close`/`sum_close`/`M.err` through the assembly. Reusable helpers `reduction_close`
+  (float `Σ` of close terms) + `sub_close'`/`sub_mag` (rounded subtraction). Float `istd`/`x̂`
+  supplied close (`es`/`exh` — discharged by the forward `bnIstd_close` + centered closeness at
+  instantiation, exactly the forward's supplied-stats discipline).
+
+**Plan (remaining).** This is the float analogue of the §1a ties, stopping at *closeness* (not
+descent). The per-block backward graphs are already proven faithful over `ℝ`
 (`*BackGraph_faithful`/`*BackBatchedGraph_faithful`, `vitNetBackGraph_faithful`,
 `convBnBackGraph_faithful`, `mhsaBackGraph_faithful`, …). Mirror the forward `FloatBridges`
 assembly on the backward:
-1. A `FloatClose`-style certificate for each **backward** block op (conv-grad, BN-grad,
+1. A `FloatClose`-style certificate for each **backward** block op (conv-grad, BN-grad **✅**,
    depthwise-grad, SE-grad, attention-grad), reusing the forward moduli where the backward
-   reuses the forward intermediates (`FwdRec`).
+   reuses the forward intermediates (`FwdRec`). *BN-grad done; the linear input-VJP
+   (transpose-matmul, like the MNIST `dot_perturbed_close`), ReLU-mask, maxpool-scatter, and the
+   smooth-activation (swish/gelu) grads remain.*
 2. Compose them (residual fan-in adds with modulus `id`, exactly as the forward) into a per-net
    `<net>_grad_floatBridges`: "the deployed float backward is within an explicit budget of the
-   certified `fderiv` gradient threaded through the real loss-driven cotangent."
+   certified `fderiv` gradient threaded through the real loss-driven cotangent." *The per-net
+   assembly (5 architectures) is the large mechanical remainder.*
 
 This makes the §1a den-ties **mean something at float** for the deep nets, which is the single
 biggest credibility jump for the Imagenette tier.
@@ -257,7 +273,7 @@ is the finite per-op lexer and its inverse lemma.
 |---|---|---|---|---|
 | **A1** per-net forward capstones | "deployed float forward ≈ certified `ℝ` forward", named per net | S–M (CIFAR family ✅: 4/8-conv + BN; deep nets L) | low | medium |
 | **A2** BN-backward + CIFAR grad-close (+opt descent) | float gradient closeness one rung above MNIST; maybe Tier-2 descent | M | med | medium |
-| **A3** deep-net grad-close (backward float) | makes the §1a ties mean something at float for Imagenette | L | med | **high** |
+| **A3** deep-net grad-close (backward float) | makes the §1a ties mean something at float for Imagenette | L (BN-back keystone ✅; linear/relu/pool/act grads + per-net assembly remain) | med | **high** |
 | **B1/B2** per-op `lexTok` inverse → `parse (lex (pretty g)) = skel g` | text→graph faithfulness; retires the per-op lexical audit | M | low | **high** |
 
 *A1 CIFAR family DONE (2026-06-26): `cifar8_floatBridges` (`Cifar8FloatBridge.lean`) + the BN

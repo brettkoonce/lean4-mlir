@@ -83,6 +83,7 @@ import LeanMlir.Proofs.ViTBlockFloatBridge
 import LeanMlir.Proofs.Cifar8FloatBridge
 import LeanMlir.Proofs.BnPerChannelFloatBridge
 import LeanMlir.Proofs.CifarBnFloatBridge
+import LeanMlir.Proofs.BnBackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1551,6 +1552,20 @@ open Proofs
 -- FloatBridges (each discharged by floatBridges_bnPerChannelTensor3). The BN-net peer of
 -- cifar8_floatBridges; closes the A1 CIFAR family (no-BN 4-conv/8-conv + BN-CIFAR).
 #print axioms Proofs.cifarBn_floatBridges
+-- ── planning/tier23_float_and_syntactic_faithfulness.md A3 (the BACKWARD "other side") ──
+-- The BatchNorm backward float closeness — the shared backward keystone every deep net's
+-- gradient folds (the §1a ties denote bn_grad_{gamma,beta,input} over ℝ; this bridges them to
+-- float). Parameter grads are the easy reductions: bnBetaGrad_close (Σ dy, pure sum_close) and
+-- bnGammaGrad_close (Σ dy·x̂, sum_close + mul_close at the supplied float x̂). The genuinely-new
+-- op is the three-term input gradient bnGradInput_close — dx = (1/n)·s·(n·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))
+-- bridged by threading mul_close/sum_close/M.err (reduction_close + sub_close'/sub_mag helpers)
+-- through the assembly, the float istd/x̂ supplied close (es/exh, discharged by the forward
+-- bnIstd_close + centered closeness at instantiation). All 3-axiom-clean.
+#print axioms Proofs.reduction_close
+#print axioms Proofs.sub_close'
+#print axioms Proofs.bnBetaGrad_close
+#print axioms Proofs.bnGammaGrad_close
+#print axioms Proofs.bnGradInput_close
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
