@@ -374,6 +374,13 @@ lean_lib «Proofs» where
              -- in the cotangent) float-bridges via dot_close (fan-in D) + nested reduction_close (the
              -- kw/kh/p sums). floatBridges_patchEmbedBack discharges vit_grad_floatBridges's hPatch.
              `LeanMlir.Proofs.PatchEmbedBackFloatBridge,
+             -- ViT WHOLE-NET FORWARD (forward peer of vit_grad_floatBridges): vit_full reversed =
+             -- classifier ∘ perRowFlat finalLN ∘ tower blocks ∘ patchEmbed. The encoder tower REUSES
+             -- towerBack (its head-first fold IS the forward order) + floatBridges_towerBack; the LN
+             -- rides FloatBridges.perRow; the head (dense ∘ cls-slice) is concrete with the one new
+             -- op-bridge floatBridges_clsSlice (the cls-slice gather, peer of clsScatter, exact). The
+             -- per-row LN / blocks / patch-embed supplied as FloatBridges (blocks via floatBridges_vitBlock).
+             `LeanMlir.Proofs.ViTWholeFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

@@ -100,6 +100,7 @@ import LeanMlir.Proofs.MobileNetV2BackFloatBridge
 import LeanMlir.Proofs.EfficientNetBackFloatBridge
 import LeanMlir.Proofs.EfficientNetWholeFloatBridge
 import LeanMlir.Proofs.MobileNetV2WholeFloatBridge
+import LeanMlir.Proofs.ViTWholeFloatBridge
 import LeanMlir.Proofs.ConvNeXtBackFloatBridge
 import LeanMlir.Proofs.LossHeadCotFloatBridge
 import LeanMlir.Proofs.SoftmaxBackFloatBridge
@@ -1879,6 +1880,15 @@ open Proofs
 -- backs + final LN supplied (dischargeable by floatBridges_vitBlockBack / bnBack). The deployed float
 -- ViT input-gradient backward ≈ the certified ℝ gradient, end to end (closeness at a smooth point).
 #print axioms Proofs.vit_grad_floatBridges_concrete
+-- ViT WHOLE-NET FORWARD (forward peer of vit_grad_floatBridges): vit_full reversed = classifier ∘
+-- perRowFlat finalLN ∘ tower blocks ∘ patchEmbed. New op-bridge floatBridges_clsSlice (the cls-slice
+-- gather = read row 0, exact + magnitude-stable, peer of clsScatter); floatBridges_vitHead = the
+-- concrete head (dense ∘ cls-slice); vit_floatBridges = the fold, the encoder tower via the reused
+-- floatBridges_towerBack (head-first fold = forward order) + FloatBridges.perRow LN, blocks/LN/patch-
+-- embed supplied (blocks via floatBridges_vitBlock). Concrete forward patch-embed = the open follow-on.
+#print axioms Proofs.floatBridges_clsSlice
+#print axioms Proofs.floatBridges_vitHead
+#print axioms Proofs.vit_floatBridges
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
