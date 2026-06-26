@@ -1,5 +1,7 @@
 import LeanMlir.Proofs.FloatComposeBridge
 import LeanMlir.Proofs.Resnet34FloatBridge
+import LeanMlir.Proofs.ResNet34RenderPC
+import LeanMlir.Proofs.Resnet34DownBackFloatBridge
 
 /-! # ℝ→Float32 bridge: the WHOLE ResNet-34 FORWARD — the [3,4,6,3] fold
 
@@ -20,6 +22,12 @@ Two forward op-bridges were missing and are built here (each a thin wrap of an e
   flatConv` is the stride-1 conv read at the decimated output coordinate, so its `FloatClose` is
   `floatClose_flatConv` (at the `2h×2w` grid) evaluated at `decimateIdx`.
 * `floatBridges_gap` — the GAP squeeze, wrapping the existing `floatClose_gap`.
+
+Finally the **named per-block forward bridges** `floatBridges_r34IdBlock` / `floatBridges_r34DownBlock`
+(the forward peers of `floatBridges_r34IdBlockBack` / `floatBridges_r34DownBlockBack`) discharge the
+fold's block hypotheses *by name* — convs/relu concrete, the per-channel BNs supplied as
+`FloatBridges` (via `floatBridges_bnPerChannelTensor3`), the skip via `FloatBridges.residual` /
+`FloatBridges.biPathSum`. So the forward whole net now stands exactly as strong as the backward.
 -/
 
 namespace Proofs
@@ -145,5 +153,60 @@ theorem r34_floatBridges (M : FloatModel)
   have hE := (hD4.comp he0).comp he1
   have hGAP := hE.comp (floatBridges_gap (c := 512) (h := 7) (w := 7) M (by norm_num) (by norm_num))
   exact hGAP.comp (floatBridges_dense M Wd bd hwd hbdβ (by norm_num) hWd hbd)
+
+-- ════════════════════════════════════════════════════════════════
+-- § The named per-block forward bridges (peers of floatBridges_r34IdBlockBack/DownBlockBack)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The r34 identity basic block forward float-bridges** — the forward peer of
+    `floatBridges_r34IdBlockBack`. `rblkPC = relu ∘ residual ((bn₂ ∘ conv₂) ∘ (relu ∘ bn₁ ∘ conv₁))`
+    is assembled in one chain: the inner body `F` (a `flatConv`/`relu`/BN `.comp` chain) is wrapped
+    by `FloatBridges.residual` (the residual skip — same combinator the forward fold uses), then
+    composed after the outer ReLU. The two per-channel BNs are supplied as `FloatBridges` facts
+    (discharge with `floatBridges_bnPerChannelTensor3`), exactly as the backward supplies its
+    BN-backs. The dominant r34 block (13 of 16). Closes under `[propext, Classical.choice, Quot.sound]`. -/
+theorem floatBridges_r34IdBlock {c h w kH₁ kW₁ kH₂ kW₂ : Nat} (M : FloatModel)
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (γ₁ β₁ : Vec c)
+    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (γ₂ β₂ : Vec c)
+    {w' β' : ℝ} (hw' : 0 ≤ w') (hβ' : 0 ≤ β') (hn : 0 < c * h * w)
+    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w') (hb₁ : ∀ o, |b₁ o| ≤ β')
+    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w') (hb₂ : ∀ o, |b₂ o| ≤ β')
+    (hbn1 : FloatBridges (bnPerChannelTensor3 c h w ε₁ γ₁ β₁))
+    (hbn2 : FloatBridges (bnPerChannelTensor3 c h w ε₂ γ₂ β₂)) :
+    FloatBridges (rblkPC (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂) := by
+  unfold rblkPC
+  have hH := ((floatBridges_flatConv (h := h) (w := w) M W₁ b₁ hw' hβ' hn hW₁ hb₁).comp hbn1).comp
+    (floatBridges_relu (n := c * h * w))
+  have hG := (floatBridges_flatConv (h := h) (w := w) M W₂ b₂ hw' hβ' hn hW₂ hb₂).comp hbn2
+  exact (FloatBridges.residual M (hH.comp hG)).comp (floatBridges_relu (n := c * h * w))
+
+/-- **The r34 downsample basic block forward float-bridges** — the forward peer of
+    `floatBridges_r34DownBlockBack`. `rblkPStridedPC = relu ∘ residualProj proj body` with
+    `proj = bnₚ ∘ stride2conv Wp` and `body = (bn₂ ∘ conv₂) ∘ (relu ∘ bn₁ ∘ stride2conv W₁)`. The
+    two-branch fan-in `proj(x) + body(x)` is `FloatBridges.biPathSum` (the general `g≠id` cousin of
+    `FloatBridges.residual`); the strided convs use `floatBridges_flatConvStride2`. The three
+    per-channel BNs are supplied as `FloatBridges` facts. Completes the r34 forward block set
+    (identity + downsample). Closes under `[propext, Classical.choice, Quot.sound]`. -/
+theorem floatBridges_r34DownBlock {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat} (M : FloatModel)
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (γ₁ β₁ : Vec oc)
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (γ₂ β₂ : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    {w' β' : ℝ} (hw' : 0 ≤ w') (hβ' : 0 ≤ β')
+    (hn : 0 < oc * h * w) (hni : 0 < ic * (2 * h) * (2 * w))
+    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w') (hb₁ : ∀ o, |b₁ o| ≤ β')
+    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w') (hb₂ : ∀ o, |b₂ o| ≤ β')
+    (hWp : ∀ o cc kh kw, |Wp o cc kh kw| ≤ w') (hbp : ∀ o, |bp o| ≤ β')
+    (hbn1 : FloatBridges (bnPerChannelTensor3 oc h w ε₁ γ₁ β₁))
+    (hbn2 : FloatBridges (bnPerChannelTensor3 oc h w ε₂ γ₂ β₂))
+    (hbnp : FloatBridges (bnPerChannelTensor3 oc h w εp γp βp)) :
+    FloatBridges (rblkPStridedPC (h := h) (w := w)
+      W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp) := by
+  unfold rblkPStridedPC residualProj biPath
+  have hproj :=
+    (floatBridges_flatConvStride2 (h := h) (w := w) M Wp bp hw' hβ' hni hWp hbp).comp hbnp
+  have hH := ((floatBridges_flatConvStride2 (h := h) (w := w) M W₁ b₁ hw' hβ' hni hW₁ hb₁).comp
+    hbn1).comp (floatBridges_relu (n := oc * h * w))
+  have hG := (floatBridges_flatConv (h := h) (w := w) M W₂ b₂ hw' hβ' hn hW₂ hb₂).comp hbn2
+  exact (FloatBridges.biPathSum M hproj (hH.comp hG)).comp (floatBridges_relu (n := oc * h * w))
 
 end Proofs

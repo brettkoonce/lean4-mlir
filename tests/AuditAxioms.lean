@@ -1687,6 +1687,14 @@ open Proofs
 #print axioms Proofs.floatBridges_flatConvStride2
 #print axioms Proofs.floatBridges_gap
 #print axioms Proofs.r34_floatBridges
+-- The named per-block FORWARD bridges (peers of floatBridges_r34IdBlockBack/DownBlockBack), so the
+-- whole-net fold's block hypotheses are discharged by name exactly as the backward's are:
+-- floatBridges_r34IdBlock (rblkPC = relu∘residual(body); FloatBridges.residual skip) +
+-- floatBridges_r34DownBlock (rblkPStridedPC = relu∘residualProj(proj)(body); FloatBridges.biPathSum
+-- two-branch fan-in). Convs/relu concrete; the per-channel BNs supplied as FloatBridges (discharge
+-- with floatBridges_bnPerChannelTensor3) — the exact mirror of the backward's abstract-BN-back shape.
+#print axioms Proofs.floatBridges_r34IdBlock
+#print axioms Proofs.floatBridges_r34DownBlock
 -- §B integrity tie (the r34 identity block): the float-bridge backward `r34IdBlockBack` (per-channel
 -- BN, non-batched) IS the certified VJP. convFlatBack_eq_vjp_backward = the conv-leaf tie (via the
 -- general IR.convBackDenote_eq_input_grad_formula); rblkPC_has_vjp_at = the certified per-channel-BN

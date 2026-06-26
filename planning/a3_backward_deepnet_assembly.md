@@ -118,6 +118,12 @@ stride-4 + §1f/§1g batch landed as **`029d29d`** (8 source files: 7 new `*Back
   existing `floatClose_gap`). The repo previously had the r34 forward float story only at the per-op
   `_close` level (`Resnet34FloatBridge.lean`) while the backward folded the whole net; this closes
   that asymmetry. **Both directions now fold at whole-net scale on the same blueprint.**
+  - **Named per-block forward bridges DONE too** (same file): `floatBridges_r34IdBlock` (`rblkPC`) +
+    `floatBridges_r34DownBlock` (`rblkPStridedPC`) — the forward peers of
+    `floatBridges_r34IdBlockBack`/`DownBlockBack`, so the fold's block hypotheses are discharged **by
+    name** exactly as the backward's are. Convs/relu concrete; the per-channel BNs supplied as
+    `FloatBridges` (via `floatBridges_bnPerChannelTensor3`); skip via `FloatBridges.residual` (id) /
+    the general `FloatBridges.biPathSum` (downsample). **Full forward/backward parity for r34.**
 
 ---
 
