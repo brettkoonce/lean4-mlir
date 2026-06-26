@@ -350,6 +350,14 @@ lean_lib «Proofs» where
              -- convnext_grad_floatBridges = whole-net [3,3,9,3] fold, concrete GAP/dense, stem/stages/
              -- downsamples supplied.
              `LeanMlir.Proofs.ConvNeXtBackFloatBridge,
+             -- ConvNeXt-T WHOLE-NET FORWARD (forward peer of convnext_grad_floatBridges): the [3,3,9,3]
+             -- fold of convNextForwardT. Two new op-bridges: floatBridges_layerScale (γ⊙x = diagBack γ
+             -- definitionally, γ exact ⇒ es=0) + floatBridges_flatConvStride4 (the 4×4/s4 patchify stem
+             -- = flatConv read at decimateOddIdx∘decimateIdx, two-decimation cousin of stride2). Named
+             -- bridges floatBridges_convNextBlock (residual body) + floatBridges_convNextStageK (the
+             -- depth-k stage fold, induction) + floatBridges_cnxDownW; convnextForward ∘-skeleton with
+             -- stem-conv/GAP/dense concrete, stem/head LN + 4 stages + 3 downsamples supplied.
+             `LeanMlir.Proofs.ConvNeXtWholeFloatBridge,
              -- A3 §1g loss-head cotangent seed: lift softmax_ce_cot_close to a FloatBridges seed
              -- (z ↦ softmax(z)−onehot, the CE input-gradient; bounded by 1+cotErr(0) since softmax∈[0,1])
              -- so any <net>_grad .comp it = the whole "logits → input-gradient" backward "from the loss".

@@ -1,10 +1,10 @@
 # Forward whole-net float-bridge — handoff
 
 **Goal:** fold each net's *forward* float bridge at whole-net scale, the way the backward already
-does for all five. r34, **efficientnet**, **mnv2**, and **vit** (the encoder-tower fold, peer of
-`vit_grad_floatBridges`) are **DONE**; **convnext** is the last net still block-level, and the one
-remaining vit piece is the concrete forward patch-embed (peer of `vit_grad_floatBridges_concrete`).
-This doc is the pick-up plan.
+does for all five. ✅ **SWEEP COMPLETE — all 5 nets DONE** (r34, efficientnet, mnv2, vit, convnext).
+The only remaining piece is the concrete vit forward patch-embed (peer of
+`vit_grad_floatBridges_concrete`) — separable, ~200 lines, supplied abstractly for now. This doc is
+the pick-up plan / record.
 
 Parent context: `planning/a3_backward_deepnet_assembly.md` (the backward, which is the blueprint).
 Memory: `[[float-tier23-and-lexer-gap]]` (A1/A3 state).
@@ -12,6 +12,24 @@ Memory: `[[float-tier23-and-lexer-gap]]` (A1/A3 state).
 ---
 
 ## STATUS (2026-06-26)
+
+**convnext forward whole-net — DONE, uncommitted** (2026-06-26),
+`LeanMlir/Proofs/ConvNeXtWholeFloatBridge.lean`, 3-axiom-clean (7 new decls), builds + `AuditAxioms`
+green. The heaviest net, as predicted. `convnext_floatBridges` = the `[3,3,9,3]` fold (peer of
+`convnext_grad_floatBridges`), `convnextForward` ∘-skeleton (concrete stem-conv/GAP/dense; stem/head
+LN + 4 stages + 3 downsamples supplied — mirrors `convnextInputGrad`). TWO new op-bridges: (1)
+`floatBridges_layerScale` — `layerScale γ = diagBack γ` DEFINITIONALLY (both `fun s x i => s i * x i`),
+and γ is an exact stored weight (no transcendental), so it's `floatBridges_diagBack` at `fγ=γ, es=0`
+(a 1-liner). (2) `floatBridges_flatConvStride4` — the 4×4/s4 patchify stem, `flatConvStride4 =
+decimateFlat ∘ decimateOddFlat ∘ flatConv` read at the COMPOSITE `decimateOddIdx ∘ decimateIdx`
+coordinate (the two-decimation cousin of r34's `floatBridges_flatConvStride2`). The named dischargers:
+`floatBridges_convNextBlock` (the block = `residual(layerScale∘conv∘gelu∘conv∘LN∘depthwise)`, LN
+supplied), `floatBridges_convNextStageK` (the depth-`k` stage fold BY INDUCTION on stage depth — the
+ConvNeXt analogue of vit's `floatBridges_towerBack`, since blocks have distinct params), and
+`floatBridges_cnxDownW` (the downsample `flatConvStride2∘LN`). Gotchas hit: the block's giant inline
+`.comp` chain mis-counted parens → switched to incremental `have`s (the carried-forward gotcha);
+`floatBridges_gelu`'s `n` isn't inferable in a bare `have` (only in the conclusion) → pin `(n := …)`.
+Like r34/mnv2, `convnextForward` is a fresh ∘-skeleton (cosmetic tie open, symmetric with backward).
 
 **vit forward whole-net (encoder-tower fold) — DONE, uncommitted** (2026-06-26),
 `LeanMlir/Proofs/ViTWholeFloatBridge.lean`, 3-axiom-clean (3 new decls), builds + `AuditAxioms` green.
@@ -75,8 +93,8 @@ This file is **the worked example — copy its shape for the other four.** It co
 - `floatBridges_r34IdBlock` / `floatBridges_r34DownBlock` — the named per-block dischargers (about the
   ACTUAL `rblkPC` / `rblkPStridedPC`), so the fold's block hyps discharge by name like the backward's.
 
-**Remaining = convnext forward + the concrete vit forward patch-embed + the r34/mnv2/convnext/vit
-cosmetic skeleton ties (efficientnet already ties to the real net via the ∘-form).**
+**Remaining = the concrete vit forward patch-embed + the r34/mnv2/convnext/vit cosmetic skeleton ties
+(efficientnet already ties to the real net via the ∘-form). All 5 whole-net forward folds are DONE.**
 
 ---
 
@@ -89,7 +107,7 @@ block decomposition, same `FloatBridges.comp` backbone — just forward ops inst
 |---|---|---|---|
 | mnv2 | ✅ **DONE** `MobileNetV2WholeFloatBridge.lean` (`mnv2Forward_floatBridges`) | `MobileNetV2BackFloatBridge.lean` (`mnv2_grad_floatBridges`) | `floatBridges_invresBody{,Strided}PC` (no SE; new `floatBridges_relu6`) |
 | efficientnet | ✅ **DONE** `EfficientNetWholeFloatBridge.lean` (`efficientnetForwardB_floatBridges`) | `EfficientNetBackFloatBridge.lean` | per-block batched bridges (`floatBridges_{stemB,cbsB,dwbsB,dwbsSB,seB,projB,mbNoExpFwdB,mbStridedFwdB,mbResidFwdB,headFwdB}`) |
-| convnext | `convNextForwardT` | `ConvNeXtBackFloatBridge.lean` (`convnext_grad_floatBridges`) | **MISSING** — build `floatBridges_cnxBlock` (peer of `cnxBlockBodyBack`) |
+| convnext | ✅ **DONE** `ConvNeXtWholeFloatBridge.lean` (`convnext_floatBridges`) | `ConvNeXtBackFloatBridge.lean` (`convnext_grad_floatBridges`) | `floatBridges_convNextBlock` + `_convNextStageK` + `_cnxDownW` (new `_layerScale`, `_flatConvStride4`) |
 | vit | ✅ **DONE** (tower fold) `ViTWholeFloatBridge.lean` (`vit_floatBridges`) — concrete patch-embed remaining | `MhsaBackFloatBridge.lean` + `PatchEmbedBackFloatBridge.lean` | `floatBridges_vitBlock` ✓ (reused `floatBridges_towerBack` + `FloatBridges.perRow`) |
 
 Per-net steps:
@@ -131,14 +149,13 @@ by the pre-existing `floatBridges_vitBlock`. **One follow-on for full parity: th
 patch-embed bridge** (see the STATUS block above) — the ~200-line guarded triple-sum, peer of
 `floatBridges_patchEmbedBack`; supplied abstractly (`hPatch`) for now.
 
-### 4. convnext forward — HEAVIEST (forward block bridge missing). Effort M, risk med.
-Mirror `convnext_grad_floatBridges`. **Build `floatBridges_cnxBlock`** first (peer of
-`cnxBlockBodyBack` = `depthwise ∘ LN ∘ conv ∘ gelu ∘ conv ∘ layerScale`, wrapped in `residual`): all
-op-bridges exist (`floatBridges_depthwise` ✓, `_bnPerChannelTensor3`/LN ✓, `_flatConv` ✓, `_gelu` ✓,
-layerScale = a `diag`/`gather`-style scale — check for a forward bridge or build a 1-liner). Then the
-`[3,3,9,3]` fold with the **stride-4 stem** (`flatConvStride4 = decimateFlat ∘ decimateOddFlat ∘
-flatConv` — the backward built `flatConvStride4Back`; build the forward `floatBridges_flatConvStride4`
-the same way, or supply the stem BN abstractly).
+### 4. convnext forward — ✅ DONE (2026-06-26). `ConvNeXtWholeFloatBridge.lean`. (Was the heaviest.)
+Built `floatBridges_convNextBlock` (block = `residual(layerScale∘conv∘gelu∘conv∘LN∘depthwise)`), the
+depth-`k` stage fold `floatBridges_convNextStageK` (induction — the convnext towerBack), the downsample
+`floatBridges_cnxDownW`, and the `[3,3,9,3]` fold `convnext_floatBridges`. layerScale turned out to be
+`diagBack` definitionally (γ exact ⇒ `floatBridges_diagBack` at `es=0`, a 1-liner); the stride-4 stem
+`floatBridges_flatConvStride4` is the two-decimation cousin of `flatConvStride2` (read at
+`decimateOddIdx∘decimateIdx`). LNs supplied abstractly. See the STATUS block above for the gotchas.
 
 ### 5. (cosmetic) skeleton ↔ actual-net defeq ties — Effort S each, low value.
 `r34Forward` (and each `<net>Forward`) is a fresh structural skeleton, NOT proven

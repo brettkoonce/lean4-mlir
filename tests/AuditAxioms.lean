@@ -101,6 +101,7 @@ import LeanMlir.Proofs.EfficientNetBackFloatBridge
 import LeanMlir.Proofs.EfficientNetWholeFloatBridge
 import LeanMlir.Proofs.MobileNetV2WholeFloatBridge
 import LeanMlir.Proofs.ViTWholeFloatBridge
+import LeanMlir.Proofs.ConvNeXtWholeFloatBridge
 import LeanMlir.Proofs.ConvNeXtBackFloatBridge
 import LeanMlir.Proofs.LossHeadCotFloatBridge
 import LeanMlir.Proofs.SoftmaxBackFloatBridge
@@ -1798,6 +1799,20 @@ open Proofs
 #print axioms Proofs.floatBridges_cnxBlockBack
 #print axioms Proofs.floatBridges_cnxDownBack
 #print axioms Proofs.convnext_grad_floatBridges
+-- ConvNeXt-T WHOLE-NET FORWARD (forward peer of convnext_grad_floatBridges, the [3,3,9,3] fold of
+-- convNextForwardT). New op-bridges: floatBridges_layerScale (γ⊙x = diagBack γ, γ exact ⇒ es=0) +
+-- floatBridges_flatConvStride4 (4×4/s4 patchify stem = flatConv read at decimateOddIdx∘decimateIdx).
+-- Named bridges floatBridges_convNextBlock (residual body) + floatBridges_convNextStageK (depth-k
+-- stage fold, induction — the analogue of ViT's towerBack) + floatBridges_cnxDownW; convnext_
+-- floatBridges = the ∘-skeleton fold (stem-conv/GAP/dense concrete, stem/head LN + 4 stages + 3
+-- downsamples supplied). COMPLETES the 5-net forward whole-net sweep.
+#print axioms Proofs.floatBridges_layerScale
+#print axioms Proofs.floatBridges_flatConvStride4
+#print axioms Proofs.floatBridges_convNextBlock
+#print axioms Proofs.floatBridges_cnxBlockW
+#print axioms Proofs.floatBridges_convNextStageK
+#print axioms Proofs.floatBridges_cnxDownW
+#print axioms Proofs.convnext_floatBridges
 -- A3 §1g loss-head cotangent seed ("from the loss"): floatClose_lossSeed wraps the per-entry
 -- softmax_ce_cot_close (|M.softmaxCECotF − (softmax−onehot)| ≤ cotErr) into a FloatClose/FloatBridges
 -- (real z↦softmax(z)−onehot, bounded by 1 since softmax∈[0,1], modulus cotErr(e)); floatBridges_gradFromLoss
