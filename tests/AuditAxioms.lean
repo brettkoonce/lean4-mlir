@@ -1687,6 +1687,13 @@ open Proofs
 #print axioms Proofs.convFlatBack_eq_vjp_backward
 #print axioms Proofs.rblkPC_has_vjp_at
 #print axioms Proofs.r34IdBlockBack_eq_rblkPC_vjp
+-- §B integrity tie (the r34 DOWNSAMPLE block): same recipe with strided convs + the residualProj
+-- two-branch fan-in. flatConvStride2Back_eq_vjp_backward = the strided-conv leaf tie (conv leaf +
+-- decimateBack rfl); rblkPStridedPC_has_vjp_at = the certified per-channel-BN strided block VJP;
+-- r34DownBlockBack_eq_rblkPStridedPC_vjp = the tie. Completes both r34 block types.
+#print axioms Proofs.flatConvStride2Back_eq_vjp_backward
+#print axioms Proofs.rblkPStridedPC_has_vjp_at
+#print axioms Proofs.r34DownBlockBack_eq_rblkPStridedPC_vjp
 -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a forward
 -- depthwise conv at the spatially-reversed kernel (dwReverse, channel axis kept — no transpose,
 -- since depthwise has no cross-channel mixing), so depthwiseFlatBack = depthwiseFlat (dwReverse W) 0

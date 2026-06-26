@@ -2,6 +2,8 @@ import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.CifarCNN
 import LeanMlir.Proofs.Resnet34BackFloatBridge
 import LeanMlir.Proofs.EfficientNetChainClose
+import LeanMlir.Proofs.StridedConvBackFloatBridge
+import LeanMlir.Proofs.Resnet34DownBackFloatBridge
 
 /-! # §B: the r34 identity-block backward float bridge targets the CERTIFIED VJP
 
@@ -30,9 +32,17 @@ Three pieces:
    BN-backs) matches definitionally.
 
 The honest upgrade: for the r34 identity block, the float bridge's closeness is now closeness
-to **the certified gradient**, not merely to a hand-map. (Remaining §B: the down-block, the
-stem/GAP/dense endpoints, and the whole-net fold — the latter still gated by the fact that the
-certified whole-net VJP is parametric / only concretely instantiated at toy dims.)
+to **the certified gradient**, not merely to a hand-map.
+
+The **downsample block** is closed the same way (`§ The DOWNSAMPLE block` below): a strided-conv
+leaf tie (`flatConvStride2Back_eq_vjp_backward` = conv leaf + the `decimateBack` `rfl`), the
+certified strided block VJP `rblkPStridedPC_has_vjp_at` (mirrors `resblockProj_has_vjp_at`, with the
+`residualProj` two-branch fan-in), and the tie `r34DownBlockBack_eq_rblkPStridedPC_vjp`. So **both r34
+block types** (identity + downsample) now target the certified gradient, b1-free.
+
+(Remaining §B: the stem/GAP/maxpool/dense endpoints, and the whole-net fold — the latter still gated
+by the fact that the certified whole-net VJP `resnet34_has_vjp_at` is parametric / only concretely
+instantiated at toy `resnet34Concrete` dims.)
 -/
 
 namespace Proofs
@@ -127,6 +137,126 @@ theorem r34IdBlockBack_eq_rblkPC_vjp {c h w : Nat}
       convFlatBack_eq_vjp_backward (b := b₂)
         (x := (relu (c*h*w) ∘ bnPerChannelTensor3 c h w ε₁ γ₁ β₁ ∘ flatConv W₁ b₁) v)
         (by decide) (by decide)]
+  rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § The DOWNSAMPLE block — `relu ∘ residualProj(proj, F_s)`, strided convs
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Strided conv input-VJP leaf tie.** `flatConvStride2Back W` (= `convFlatBack ∘ decimateBack`)
+    IS the certified strided conv input-VJP `(flatConvStride2_has_vjp W b).backward x`, for odd
+    kernels. Decomposes into the conv leaf tie (`convFlatBack_eq_vjp_backward`) and the decimate
+    leaf (`decimateBack_eq_vjp`, `rfl`), matching `flatConvStride2 = decimateFlat ∘ flatConv`. -/
+theorem flatConvStride2Back_eq_vjp_backward {ic oc h w : Nat}
+    (W : Kernel4 oc ic 3 3) (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) :
+    flatConvStride2Back (h := h) (w := w) W = (flatConvStride2_has_vjp W b).backward x := by
+  funext dy
+  show convFlatBack (h := 2*h) (w := 2*w) W (decimateBack oc h w dy) = _
+  rw [convFlatBack_eq_vjp_backward (by decide) (by decide) W b x]
+  rfl
+
+/-- **Certified VJP of the per-channel-BN downsample block `rblkPStridedPC`** (non-batched).
+    `relu ∘ residualProj(proj, F_s)` — `proj = bnPC∘convStride2(Wp)` (the 3×3-stride-2 skip),
+    `F_s = (bnPC₂∘conv₂) ∘ (relu∘bnPC₁∘convStride2(W₁))` (first conv strided). The same-vocabulary
+    certified target for `r34DownBlockBack`. Mirrors the scalar-BN `resblockProj_has_vjp_at` with
+    `bnPerChannelTensor3` + `flatConvStride2`; per-op VJPs assembled by `vjp_comp_at`. -/
+noncomputable def rblkPStridedPC_has_vjp_at {ic oc h w : Nat}
+    (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (ε₁ : ℝ) (γ₁ β₁ : Vec oc)
+    (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc) (ε₂ : ℝ) (γ₂ β₂ : Vec oc)
+    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (hεp : 0 < εp)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth₁ : ∀ k, bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ (flatConvStride2 W₁ b₁ v) k ≠ 0)
+    (h_smooth_out : ∀ k,
+      (bnPerChannelTensor3 oc h w εp γp βp ∘ flatConvStride2 Wp bp) v k
+      + ((bnPerChannelTensor3 oc h w ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+          (relu (oc*h*w) ∘ bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)) v k ≠ 0) :
+    HasVJPAt (rblkPStridedPC (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp) v := by
+  set proj := bnPerChannelTensor3 oc h w εp γp βp ∘ flatConvStride2 Wp bp with hproj
+  have hproj_diff : DifferentiableAt ℝ proj v :=
+    ((bnPerChannelTensor3_differentiable oc h w εp hεp γp βp).comp
+      (flatConvStride2_differentiable Wp bp)) v
+  have hproj_vjp : HasVJPAt proj v :=
+    vjp_comp_at (flatConvStride2 Wp bp) (bnPerChannelTensor3 oc h w εp γp βp) v
+      (flatConvStride2_differentiable Wp bp _)
+      ((bnPerChannelTensor3_differentiable oc h w εp hεp γp βp) _)
+      ((flatConvStride2_has_vjp Wp bp).toHasVJPAt v)
+      ((bnPerChannelTensor3_has_vjp oc h w εp hεp γp βp).toHasVJPAt _)
+  set stage1 := relu (oc*h*w) ∘ bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁ with hs1
+  have hs1in_diff : DifferentiableAt ℝ
+      (bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v :=
+    ((bnPerChannelTensor3_differentiable oc h w ε₁ hε₁ γ₁ β₁).comp
+      (flatConvStride2_differentiable W₁ b₁)) v
+  have hs1in_vjp : HasVJPAt (bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v :=
+    vjp_comp_at (flatConvStride2 W₁ b₁) (bnPerChannelTensor3 oc h w ε₁ γ₁ β₁) v
+      (flatConvStride2_differentiable W₁ b₁ _)
+      ((bnPerChannelTensor3_differentiable oc h w ε₁ hε₁ γ₁ β₁) _)
+      ((flatConvStride2_has_vjp W₁ b₁).toHasVJPAt v)
+      ((bnPerChannelTensor3_has_vjp oc h w ε₁ hε₁ γ₁ β₁).toHasVJPAt _)
+  have hstage1_vjp : HasVJPAt stage1 v :=
+    vjp_comp_at _ (relu (oc*h*w)) v hs1in_diff
+      (relu_differentiableAt_of_smooth (oc*h*w) _ h_smooth₁) hs1in_vjp
+      (relu_has_vjp_at (oc*h*w) _ h_smooth₁)
+  have hstage1_diff : DifferentiableAt ℝ stage1 v :=
+    (relu_differentiableAt_of_smooth (oc*h*w) _ h_smooth₁).comp v hs1in_diff
+  set stage2 := bnPerChannelTensor3 oc h w ε₂ γ₂ β₂ ∘ flatConv W₂ b₂ with hs2
+  have hstage2_diff : DifferentiableAt ℝ stage2 (stage1 v) :=
+    ((bnPerChannelTensor3_differentiable oc h w ε₂ hε₂ γ₂ β₂).comp (flatConv_differentiable W₂ b₂))
+      (stage1 v)
+  have hstage2_vjp : HasVJPAt stage2 (stage1 v) :=
+    vjp_comp_at (flatConv W₂ b₂) (bnPerChannelTensor3 oc h w ε₂ γ₂ β₂) (stage1 v)
+      (flatConv_differentiable W₂ b₂ _)
+      ((bnPerChannelTensor3_differentiable oc h w ε₂ hε₂ γ₂ β₂) _)
+      ((hasVJP3_to_hasVJP (conv2d_has_vjp3 W₂ b₂)).toHasVJPAt _)
+      ((bnPerChannelTensor3_has_vjp oc h w ε₂ hε₂ γ₂ β₂).toHasVJPAt _)
+  set F := stage2 ∘ stage1 with hF
+  have hF_vjp : HasVJPAt F v :=
+    vjp_comp_at stage1 stage2 v hstage1_diff hstage2_diff hstage1_vjp hstage2_vjp
+  have hF_diff : DifferentiableAt ℝ F v := DifferentiableAt.comp v hstage2_diff hstage1_diff
+  have hres_vjp : HasVJPAt (residualProj proj F) v :=
+    residualProj_has_vjp_at proj F v hproj_diff hF_diff hproj_vjp hF_vjp
+  have hres_diff : DifferentiableAt ℝ (residualProj proj F) v := DifferentiableAt.add hproj_diff hF_diff
+  have h_smooth_res : ∀ k, residualProj proj F v k ≠ 0 := h_smooth_out
+  exact vjp_comp_at (residualProj proj F) (relu (oc*h*w)) v hres_diff
+    (relu_differentiableAt_of_smooth (oc*h*w) _ h_smooth_res) hres_vjp
+    (relu_has_vjp_at (oc*h*w) _ h_smooth_res)
+
+/-- **The §B downsample-block tie: float-bridge backward = certified VJP.** `r34DownBlockBack`,
+    with BN-backs pinned to the certified per-channel backwards and ReLU masks pinned to the pre-
+    activation signs, equals `(rblkPStridedPC_has_vjp_at …).backward`. Both sides are
+    `fun dy ↦ projBack(mask dy) + bodyBack(mask dy)` (the `residualProj` two-branch fan-in over the
+    outer-relu mask). Closes by rewriting the two strided-conv leaves
+    (`flatConvStride2Back_eq_vjp_backward`) and the one non-strided conv leaf
+    (`convFlatBack_eq_vjp_backward`); the rest is definitional. Completes the r34 block set
+    (identity + downsample). 3-axiom-clean. -/
+theorem r34DownBlockBack_eq_rblkPStridedPC_vjp {ic oc h w : Nat}
+    (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (ε₁ : ℝ) (γ₁ β₁ : Vec oc)
+    (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc) (ε₂ : ℝ) (γ₂ β₂ : Vec oc)
+    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (hεp : 0 < εp)
+    (v : Vec (ic * (2 * h) * (2 * w)))
+    (h_smooth₁ : ∀ k, bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ (flatConvStride2 W₁ b₁ v) k ≠ 0)
+    (h_smooth_out : ∀ k,
+      (bnPerChannelTensor3 oc h w εp γp βp ∘ flatConvStride2 Wp bp) v k
+      + ((bnPerChannelTensor3 oc h w ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+          (relu (oc*h*w) ∘ bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)) v k ≠ 0) :
+    r34DownBlockBack W₁ W₂ Wp
+      ((bnPerChannelTensor3_has_vjp oc h w ε₁ hε₁ γ₁ β₁).backward (flatConvStride2 W₁ b₁ v))
+      ((bnPerChannelTensor3_has_vjp oc h w ε₂ hε₂ γ₂ β₂).backward
+        (flatConv W₂ b₂ ((relu (oc*h*w) ∘ bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v)))
+      ((bnPerChannelTensor3_has_vjp oc h w εp hεp γp βp).backward (flatConvStride2 Wp bp v))
+      (fun i => residualProj (bnPerChannelTensor3 oc h w εp γp βp ∘ flatConvStride2 Wp bp)
+        ((bnPerChannelTensor3 oc h w ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) ∘
+          (relu (oc*h*w) ∘ bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁)) v i > 0)
+      (fun i => bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ (flatConvStride2 W₁ b₁ v) i > 0)
+      = (rblkPStridedPC_has_vjp_at W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp
+          hε₁ hε₂ hεp v h_smooth₁ h_smooth_out).backward := by
+  funext dy
+  unfold r34DownBlockBack
+  rw [flatConvStride2Back_eq_vjp_backward Wp bp v,
+      flatConvStride2Back_eq_vjp_backward W₁ b₁ v,
+      convFlatBack_eq_vjp_backward (by decide) (by decide) W₂ b₂
+        ((relu (oc*h*w) ∘ bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v)]
   rfl
 
 end Proofs

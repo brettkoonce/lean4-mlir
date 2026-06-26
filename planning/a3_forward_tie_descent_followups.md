@@ -185,12 +185,27 @@ So **b2 is closed for the identity block** (the pinning is explicit and the tie 
 shown dodgeable** (build the same-vocabulary certified object). For the r34 identity block the float
 bridge's closeness is now closeness to **the certified gradient**, not a hand-map.
 
-**Remaining §B:** the down-block (`r34DownBlockBack` ↔ a `rblkPStridedPC` VJP — same recipe, +
-strided-conv leaf via `flatConvStride2Back` + the `residualProj` two-branch fan-in); the
-stem/GAP/maxpool/dense endpoints; and the whole-net fold `r34InputGrad` — the last still gated by b3
-(the certified whole-net VJP `resnet34_has_vjp_at` is parametric, only concretely instantiated at toy
-`resnet34Concrete` dims), so the honest whole-net statement remains the per-block ties + the parametric
-skeleton, not a full-dim concrete certified term.
+### §B-down-block DONE (2026-06-26) — both r34 block types now target the certified gradient
+
+Same module, same recipe, b1-free. The down block `rblkPStridedPC = relu ∘ residualProj(proj, F_s)`
+(strided proj + strided first conv):
+- `flatConvStride2Back_eq_vjp_backward` — the **strided-conv leaf tie**: `flatConvStride2Back` (=
+  `convFlatBack ∘ decimateBack`) = the certified `flatConvStride2_has_vjp.backward`. Decomposes into
+  the conv leaf tie + the decimate leaf (`decimateBack_eq_vjp`, already `rfl`), matching
+  `flatConvStride2 = decimateFlat ∘ flatConv`. The one genuinely new primitive — and it was cheap.
+- `rblkPStridedPC_has_vjp_at` — **built** the certified per-channel-BN strided block VJP (mirrors the
+  scalar-BN `resblockProj_has_vjp_at`, with the `residualProj` two-branch fan-in).
+- `r34DownBlockBack_eq_rblkPStridedPC_vjp` — **the tie**: `r34DownBlockBack` with BN-backs pinned +
+  ReLU masks pinned = `(rblkPStridedPC_has_vjp_at).backward`. Both sides `fun dy ↦ projBack(mask dy) +
+  bodyBack(mask dy)`; closes by rewriting the 2 strided-conv leaves + 1 conv leaf, rest definitional.
+
+All 3-axiom-clean, in `Resnet34BackCertifiedTie.lean` + `AuditAxioms`. **So both r34 block types
+(identity + downsample) now have float-backward = certified-VJP.**
+
+**Remaining §B:** the stem/GAP/maxpool/dense endpoints (small leaf ties); and the whole-net fold
+`r34InputGrad` — still gated by b3 (the certified whole-net VJP `resnet34_has_vjp_at` is parametric,
+only concretely instantiated at toy `resnet34Concrete` dims), so the honest whole-net statement remains
+the per-block ties + the parametric skeleton, not a full-dim concrete certified term.
 
 ---
 
