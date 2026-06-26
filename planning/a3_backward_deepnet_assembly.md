@@ -33,9 +33,15 @@ maps), mirroring the §1a backward ties' nonzero-kink hypotheses.
     concat); the multi-head backward is per-head `sdpa_back_{V,Q,K}` on the `mhSlab hd` head slabs, each
     entry reducing to its head's `sdpaBack*_close` with a **head-independent** budget (every head dim
     `dh`, scale `1/√dh`). The attention-CORE backward (Q/K/V/dOut in head-concat layout).
-  - **Remaining vit work is now pure ASSEMBLY** (no new op): the Q/K/V/O projection `linBack`s
-    (input + param VJPs, existing) around the core, the three-way Q+K+V fan-in at X (`biPathSum`),
-    the transformer-block fold (LN-back + residual + the Vec-space MLP half), and the whole-net fold.
+  - **Full MHSA + transformer-block + encoder-tower backward DONE** (2026-06-26, `MhsaBackFloatBridge.lean`,
+    3-axiom-clean, audit=1059, commits `48e696b`+`3da718c`): `floatBridges_mhsaBack` (the whole MHSA
+    input-grad `dY ↦ dX = WoBack → 3 sdpa cores → Q/K/V projBacks + fan-in`; the projBacks are FREE
+    per-token `linBack`s, the cores `floatBridges_core{V,Q,K}` lift the flattened `mhsaSdpaBack*` to
+    `FloatClose` via cotangent-linearity) → `floatBridges_vitBlockBack` (the block = `comp` of the
+    MLP-residual back + the attention-sublayer `residual(LN-back ∘ mhsaBack)`) → `floatBridges_towerBack`
+    (the whole k-layer encoder backward = `.comp` fold of the per-block backs, generic in depth). The
+    whole ViT ENCODER backward now float-bridges to depth; **only the input patch-embed + output head
+    endpoints remain** (separate endpoint bridges — the analogue of r34's concrete stem/gap/head).
 
 - **The entire CIFAR backward family** — `cifar8_grad_floatBridges`, `cifarBn_grad_floatBridges`
   (peers of the A1 forward family).
@@ -83,15 +89,14 @@ stride-4 + §1f/§1g batch landed as **`029d29d`** (8 source files: 7 new `*Back
   `floatClose_softmaxBack` / `floatBridges_softmaxBack`, `P`-general (`P = 1` for softmax).
 
 **REMAINING:**
-- **vit whole-net** — the §1f softmax-Jacobian (the crux), the **Mat-space sdpa assembly**
-  (`SdpaBackFloatBridge.lean`, `sdpaBack{V,Q,K}_close`), AND the **multi-head sdpa-core wrap**
-  (`mhsaSdpaBack{V,Q,K}_close`) are now all done. What's left is **pure assembly, no new op**: (a) the
-  Q/K/V/O projection `linBack`s (input + param VJPs) composed around the multi-head core + the three-way
-  Q+K+V fan-in at X (`biPathSum`) — finishing the backward peer of `floatBridges_vitBlockMHFull`; (b) the
-  transformer-block fold (LN-back + the `residual` fan-in + the Vec-space MLP-half backward); (c) the
-  whole-net fold. NOTE the per-entry `sdpaBack*_close`/`mhsaSdpaBack*_close` bounds are `Mat`-space (like
-  the forward `sdpa_close`); the block/net fold pairs them with the Vec-space halves or lifts via flatten
-  — same as the forward block fold.
+- **vit ENCODER backward — DONE** (softmax-Jacobian → Mat-space sdpa assembly → multi-head core →
+  full MHSA → transformer block → encoder tower, all in `SdpaBackFloatBridge.lean` +
+  `MhsaBackFloatBridge.lean`, 3-axiom-clean). The whole transformer encoder backward float-bridges to
+  depth (`floatBridges_towerBack` of `floatBridges_vitBlockBack`). **Only the input/output endpoints
+  remain**: the patch-embed backward (a strided-conv VJP — reuse `flatConvStride*Back`), the cls-slice
+  scatter (exact gather), and the classifier head backward (`linBack` — free). These wrap the encoder
+  exactly as r34's concrete stem/gap/head wrap its blocks; a `vit_grad_floatBridges` whole-net is then
+  the endpoint `.comp` thread over the tower (the `r34_grad_floatBridges` blueprint).
 - **efficientnet batched whole-net** — needs the batched-emit lift (the forward's Item-B stub); the
   per-example MBConv body is done.
 - **Forward whole-net assembly** — NOTE the *forward* r34 whole-net float bridge is itself only
@@ -202,7 +207,7 @@ the per-entry `softmax − onehot` `cotErr` bound) to a `FloatClose`/`FloatBridg
 | **mnv2** | ✅ `mnv2_grad_floatBridges` (WHOLE NET) | + depthwiseBack ✅, smooth (relu6 mask ✅), NO SE | **1e ✅** |
 | **efficientnet** | ✅ `floatBridges_mbconvBodyBack` (per-ex body; whole-net batched) | + swishBack (1d✅), seBack ✅, depthwiseBack ✅ | **1e ✅** |
 | **convnext** | ✅ `convnext_grad_floatBridges` (WHOLE NET) + block body | LN-back (= bnBack ✅), geluBack (1d ✅), depthwiseBack ✅, layerScale (diagBack ✅) | **1e ✅** |
-| **vit** | softmax-Jacobian ✅ + Mat-space sdpa assembly ✅ (`sdpaBack{V,Q,K}_close`); MHSA-wrap + block/net fold TODO (assembly only) | sdpaBack-row ✅, sdpa matmuls ✅, LN-back ✅, geluBack ✅, linBack ✅, residual ✅ | **1f ✅** |
+| **vit** | ✅ ENCODER backward (`floatBridges_towerBack`∘`floatBridges_vitBlockBack`∘`floatBridges_mhsaBack`); patch-embed/head endpoints TODO | sdpaBack-row ✅, sdpa matmuls ✅, MHSA ✅, block ✅, tower ✅, LN-back ✅, geluBack ✅, linBack ✅, residual ✅ | **1f ✅** |
 
 (mnv2: full whole-net, per-example forward. enet: whole-net is batched ⇒ per-example MBConv body is the
 peer of the forward bridge. convnext: whole-net fold + block body, stem now concrete via
