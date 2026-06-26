@@ -288,6 +288,11 @@ lean_lib «Proofs» where
              -- (the scatter, exact in float / magnitude-nonincreasing by decimateIdx_injective —
              -- decimateBack IS the certified decimateFlat VJP, decimateBack_eq_vjp) .comp convBack.
              `LeanMlir.Proofs.StridedConvBackFloatBridge,
+             -- A3 r34 downsample-block backward: relu(proj+body) reversed — the two-branch fan-in
+             -- (FloatBridges.biPathSum, the general f(x)+g(x) rounded sum, of which the identity
+             -- block's f(x)+x is the g=id case) of the projection backward and the strided body
+             -- backward, both using flatConvStride2Back. Completes the r34 block set.
+             `LeanMlir.Proofs.Resnet34DownBackFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

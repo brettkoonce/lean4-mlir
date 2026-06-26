@@ -90,6 +90,7 @@ import LeanMlir.Proofs.BnBackComposeBridge
 import LeanMlir.Proofs.BnPerChannelBackFloatBridge
 import LeanMlir.Proofs.Resnet34BackFloatBridge
 import LeanMlir.Proofs.StridedConvBackFloatBridge
+import LeanMlir.Proofs.Resnet34DownBackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1640,6 +1641,12 @@ open Proofs
 #print axioms Proofs.decimateBack_eq_vjp
 #print axioms Proofs.floatClose_decimateBack
 #print axioms Proofs.floatBridges_flatConvStride2Back
+-- r34 downsample-block backward: relu(proj(x)+body(x)) reversed = ReLU mask, then the two-branch
+-- fan-in bProj(dy)+bBody(dy). floatClose_biPathSum/FloatBridges.biPathSum: the general f(x)+g(x)
+-- rounded-sum combinator (floatClose_addResidual's f(x)+x is the g=id case). Branch backwards reuse
+-- flatConvStride2Back + convFlatBack + supplied BN-backs. Completes the r34 block set (id + down).
+#print axioms Proofs.floatClose_biPathSum
+#print axioms Proofs.floatBridges_r34DownBlockBack
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
