@@ -26,9 +26,16 @@ maps), mirroring the §1a backward ties' nonzero-kink hypotheses.
   `dw`-perturbation Lipschitz half, `softmaxBack` linear in the cotangent); the scale via `mul_close`.
   Capstones `sdpaBack{V,Q,K}_close`: each deployed-float backward entry within an explicit `sdpaBackErr`
   of the certified `sdpa_back_{V,Q,K}`. The float weights `fp` supplied abstractly within `ew` (the
-  saved-activation operating point, the honest smooth-point framing). **Remaining vit work is now pure
-  ASSEMBLY** (no new architectural op): multi-head wrap (per-head `sdpaBack` + Q/K/V/O projection
-  `linBack`s) + transformer-block fold (LN-back + residual + the Vec-space MLP half) + whole-net.
+  saved-activation operating point, the honest smooth-point framing).
+  - **Multi-head wrap (sdpa-core) DONE** (same file, 2026-06-26, audit=1049): `mhsaSdpaBack{V,Q,K}_close`
+    — the per-head concatenation of the single-head capstones over the head axis. Column `j` of a
+    `Mat N (h·dh)` decodes `finProdFinEquiv.symm j = (head hd, within c)` (matching `mhsa_layer`'s
+    concat); the multi-head backward is per-head `sdpa_back_{V,Q,K}` on the `mhSlab hd` head slabs, each
+    entry reducing to its head's `sdpaBack*_close` with a **head-independent** budget (every head dim
+    `dh`, scale `1/√dh`). The attention-CORE backward (Q/K/V/dOut in head-concat layout).
+  - **Remaining vit work is now pure ASSEMBLY** (no new op): the Q/K/V/O projection `linBack`s
+    (input + param VJPs, existing) around the core, the three-way Q+K+V fan-in at X (`biPathSum`),
+    the transformer-block fold (LN-back + residual + the Vec-space MLP half), and the whole-net fold.
 
 - **The entire CIFAR backward family** — `cifar8_grad_floatBridges`, `cifarBn_grad_floatBridges`
   (peers of the A1 forward family).
@@ -76,13 +83,15 @@ stride-4 + §1f/§1g batch landed as **`029d29d`** (8 source files: 7 new `*Back
   `floatClose_softmaxBack` / `floatBridges_softmaxBack`, `P`-general (`P = 1` for softmax).
 
 **REMAINING:**
-- **vit whole-net** — the §1f softmax-Jacobian (the crux) AND the **Mat-space sdpa assembly**
-  (`SdpaBackFloatBridge.lean`, `sdpaBack{V,Q,K}_close`) are now BOTH done. What's left is **pure assembly,
-  no new op**: (a) multi-head wrap (per-head `sdpaBack{V,Q,K}_close` + the Q/K/V/O projection `linBack`s
-  over the head slabs — the backward peer of `floatBridges_vitBlockMHFull`); (b) the transformer-block
-  fold (LN-back + the `residual` fan-in + the Vec-space MLP-half backward); (c) the whole-net fold. NOTE
-  the per-entry `sdpaBack*_close` bounds are `Mat`-space (like the forward `sdpa_close`); the block/net
-  fold pairs them with the Vec-space halves, or lifts via a flatten — same as the forward block fold.
+- **vit whole-net** — the §1f softmax-Jacobian (the crux), the **Mat-space sdpa assembly**
+  (`SdpaBackFloatBridge.lean`, `sdpaBack{V,Q,K}_close`), AND the **multi-head sdpa-core wrap**
+  (`mhsaSdpaBack{V,Q,K}_close`) are now all done. What's left is **pure assembly, no new op**: (a) the
+  Q/K/V/O projection `linBack`s (input + param VJPs) composed around the multi-head core + the three-way
+  Q+K+V fan-in at X (`biPathSum`) — finishing the backward peer of `floatBridges_vitBlockMHFull`; (b) the
+  transformer-block fold (LN-back + the `residual` fan-in + the Vec-space MLP-half backward); (c) the
+  whole-net fold. NOTE the per-entry `sdpaBack*_close`/`mhsaSdpaBack*_close` bounds are `Mat`-space (like
+  the forward `sdpa_close`); the block/net fold pairs them with the Vec-space halves or lifts via flatten
+  — same as the forward block fold.
 - **efficientnet batched whole-net** — needs the batched-emit lift (the forward's Item-B stub); the
   per-example MBConv body is done.
 - **Forward whole-net assembly** — NOTE the *forward* r34 whole-net float bridge is itself only

@@ -1740,6 +1740,15 @@ open Proofs
 #print axioms Proofs.sdpaBackV_close
 #print axioms Proofs.sdpaBackQ_close
 #print axioms Proofs.sdpaBackK_close
+-- Multi-head wrap: per-head sdpa-core backward over the head axis. Column j of a Mat N (h·dh)
+-- decodes (finProdFinEquiv.symm j) to (head hd, within c), matching mhsa_layer's concat. The
+-- multi-head backward is the per-head concatenation of the single-head sdpa_back_{V,Q,K} on the
+-- mhSlab head slabs; each output entry reduces to its head's sdpaBack*_close, budget head-independent
+-- (every head dim dh, scale 1/√dh). The attention-CORE backward; the Q/K/V/O projections are linBack
+-- and the X fan-in is biPathSum (existing combinators). mhsaSdpaBack{V,Q,K}_close.
+#print axioms Proofs.mhsaSdpaBackV_close
+#print axioms Proofs.mhsaSdpaBackQ_close
+#print axioms Proofs.mhsaSdpaBackK_close
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-

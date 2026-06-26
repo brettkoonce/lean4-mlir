@@ -306,4 +306,122 @@ theorem sdpaBackK_close (M : FloatModel) {n d : Nat} (Q K V dOut : Mat n d) (fp 
   unfold sdpa_back_K Mat.mul Mat.transpose FloatModel.sdpaBackErr
   exact key
 
+-- ════════════════════════════════════════════════════════════════
+-- § Multi-head wrap — the per-head sdpa-core backward over the head axis
+--
+-- Multi-head attention runs `sdpa` independently on each of the `h` head-slabs of the (projected)
+-- Q/K/V, then concatenates (`mhsa_layer`, `Attention.lean`). At a column `j : Fin (h·dh)` of a
+-- `Mat N (h·dh)`, `finProdFinEquiv.symm j = (head hd, within-head c)` decodes which head owns it
+-- (matching the certified concat `output[n, fPF(hd, c)] = perHead hd n c`). So the multi-head sdpa
+-- backward is the per-head concatenation of the certified single-head `sdpa_back_{V,Q,K}` over the
+-- head slabs — a thin reindexing wrap, with the budget head-INDEPENDENT (every head is dim `dh`,
+-- scale `1/√dh`). Each output entry reduces to its head's single-head capstone (`sdpaBack*_close`).
+--
+-- Scope: this is the attention-CORE backward (Q/K/V/dOut already in head-concat layout). The full
+-- MHSA backward composes this with the Q/K/V/O projection denses' `linBack` (input/param VJPs) and
+-- the three-way Q+K+V fan-in at X (`biPathSum`/`residual`) — existing combinators, no new op.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The column slab `[hd·dh, (hd+1)·dh)` of a `Mat n (h·dh)` as a `Mat n dh` (head hd's view) — the
+    `finProdFinEquiv (hd, ·)` column restriction, matching `mhsa_layer`'s per-head extraction. -/
+noncomputable def mhSlab {n h dh : Nat} (hd : Fin h) (Q : Mat n (h * dh)) : Mat n dh :=
+  fun i c => Q i (finProdFinEquiv (hd, c))
+
+/-- **Multi-head sdpa backward w.r.t. V** (real) — per head, the certified `sdpa_back_V` on the head
+    slabs; concatenated by the `finProdFinEquiv` column layout. -/
+noncomputable def mhsaSdpaBackV {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
+  fun i j => sdpa_back_V N dh (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+              (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
+              i (finProdFinEquiv.symm j).2
+
+/-- **Multi-head sdpa backward w.r.t. Q** (real). -/
+noncomputable def mhsaSdpaBackQ {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
+  fun i j => sdpa_back_Q N dh (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+              (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
+              i (finProdFinEquiv.symm j).2
+
+/-- **Multi-head sdpa backward w.r.t. K** (real). -/
+noncomputable def mhsaSdpaBackK {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
+  fun i j => sdpa_back_K N dh (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+              (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
+              i (finProdFinEquiv.symm j).2
+
+/-- **Float multi-head sdpa backward w.r.t. V** — per head, `sdpaBackVF` at the saved float weights
+    `fp hd` (within `ew` of head hd's softmax weights) and the head-slab of the cotangent. -/
+noncomputable def FloatModel.mhsaSdpaBackVF (M : FloatModel) {h N dh : Nat} (fp : Fin h → Mat N N)
+    (dOut : Mat N (h * dh)) : Mat N (h * dh) :=
+  fun i j => M.sdpaBackVF (fp (finProdFinEquiv.symm j).1) (mhSlab (finProdFinEquiv.symm j).1 dOut)
+              i (finProdFinEquiv.symm j).2
+
+/-- **Float multi-head sdpa backward w.r.t. Q** — per head, the full `dw → dScaled → dScores → dScores·K`
+    float chain on head hd's slabs. -/
+noncomputable def FloatModel.mhsaSdpaBackQF (M : FloatModel) {h N dh : Nat} (fp : Fin h → Mat N N)
+    (K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
+  fun i j =>
+    M.sdpaBackQF (M.sdpaDScoresF dh (M.sdpaDScaledF (fp (finProdFinEquiv.symm j).1)
+        (M.sdpaDwF (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut))))
+      (mhSlab (finProdFinEquiv.symm j).1 K) i (finProdFinEquiv.symm j).2
+
+/-- **Float multi-head sdpa backward w.r.t. K** — per head, the float chain feeding `dScoresᵀ·Q`. -/
+noncomputable def FloatModel.mhsaSdpaBackKF (M : FloatModel) {h N dh : Nat} (fp : Fin h → Mat N N)
+    (Q V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
+  fun i j =>
+    M.sdpaBackKF (M.sdpaDScoresF dh (M.sdpaDScaledF (fp (finProdFinEquiv.symm j).1)
+        (M.sdpaDwF (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut))))
+      (mhSlab (finProdFinEquiv.symm j).1 Q) i (finProdFinEquiv.symm j).2
+
+/-- **Multi-head sdpa backward w.r.t. V — float-close.** Each entry reduces to head hd's single-head
+    `sdpaBackV_close`; the budget `sdpaBackErr N 1 ew dA` is head-independent. The per-head float
+    weights `fp hd` are within `ew` of head hd's softmax weights `sdpa_weights N dh (mhSlab hd Q) …`. -/
+theorem mhsaSdpaBackV_close (M : FloatModel) {h N dh : Nat} (Q K V dOut : Mat N (h * dh))
+    (fp : Fin h → Mat N N) {dA ew : ℝ} (hdA : 0 ≤ dA) (hew : 0 ≤ ew)
+    (hdOut : ∀ i k, |dOut i k| ≤ dA)
+    (hfp : ∀ hd i j, |fp hd i j - sdpa_weights N dh (mhSlab hd Q) (mhSlab hd K) i j| ≤ ew)
+    (i : Fin N) (j : Fin (h * dh)) :
+    |M.mhsaSdpaBackVF fp dOut i j - mhsaSdpaBackV Q K V dOut i j| ≤ M.sdpaBackErr N 1 ew dA := by
+  unfold FloatModel.mhsaSdpaBackVF mhsaSdpaBackV
+  exact sdpaBackV_close M (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+    (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
+    (fp (finProdFinEquiv.symm j).1) hdA hew
+    (fun a b => hdOut a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (hfp (finProdFinEquiv.symm j).1) i (finProdFinEquiv.symm j).2
+
+/-- **Multi-head sdpa backward w.r.t. Q — float-close.** Each entry reduces to head hd's
+    `sdpaBackQ_close`; the budget is head-independent (dim `dh`, scale `1/√dh`). -/
+theorem mhsaSdpaBackQ_close (M : FloatModel) {h N dh : Nat} (Q K V dOut : Mat N (h * dh))
+    (fp : Fin h → Mat N N) {kA vA dA scaleA ew : ℝ}
+    (hkA : 0 ≤ kA) (hdA : 0 ≤ dA) (hscaleA : |sdpa_scale dh| ≤ scaleA)
+    (hK : ∀ i k, |K i k| ≤ kA) (hV : ∀ i k, |V i k| ≤ vA) (hdOut : ∀ i k, |dOut i k| ≤ dA)
+    (hfp : ∀ hd i j, |fp hd i j - sdpa_weights N dh (mhSlab hd Q) (mhSlab hd K) i j| ≤ ew)
+    (i : Fin N) (j : Fin (h * dh)) :
+    |M.mhsaSdpaBackQF fp K V dOut i j - mhsaSdpaBackQ Q K V dOut i j|
+      ≤ M.sdpaBackErr N (sdpaDScoresMag N dh dA vA scaleA) (M.sdpaDScoresErr N dh dA vA scaleA ew) kA := by
+  unfold FloatModel.mhsaSdpaBackQF mhsaSdpaBackQ
+  exact sdpaBackQ_close M (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+    (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
+    (fp (finProdFinEquiv.symm j).1) hkA hdA hscaleA
+    (fun a b => hK a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hV a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hdOut a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (hfp (finProdFinEquiv.symm j).1) i (finProdFinEquiv.symm j).2
+
+/-- **Multi-head sdpa backward w.r.t. K — float-close.** Each entry reduces to head hd's
+    `sdpaBackK_close`. -/
+theorem mhsaSdpaBackK_close (M : FloatModel) {h N dh : Nat} (Q K V dOut : Mat N (h * dh))
+    (fp : Fin h → Mat N N) {qA vA dA scaleA ew : ℝ}
+    (hqA : 0 ≤ qA) (hdA : 0 ≤ dA) (hscaleA : |sdpa_scale dh| ≤ scaleA)
+    (hQ : ∀ i k, |Q i k| ≤ qA) (hV : ∀ i k, |V i k| ≤ vA) (hdOut : ∀ i k, |dOut i k| ≤ dA)
+    (hfp : ∀ hd i j, |fp hd i j - sdpa_weights N dh (mhSlab hd Q) (mhSlab hd K) i j| ≤ ew)
+    (i : Fin N) (j : Fin (h * dh)) :
+    |M.mhsaSdpaBackKF fp Q V dOut i j - mhsaSdpaBackK Q K V dOut i j|
+      ≤ M.sdpaBackErr N (sdpaDScoresMag N dh dA vA scaleA) (M.sdpaDScoresErr N dh dA vA scaleA ew) qA := by
+  unfold FloatModel.mhsaSdpaBackKF mhsaSdpaBackK
+  exact sdpaBackK_close M (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
+    (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
+    (fp (finProdFinEquiv.symm j).1) hqA hdA hscaleA
+    (fun a b => hQ a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hV a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (fun a b => hdOut a (finProdFinEquiv ((finProdFinEquiv.symm j).1, b)))
+    (hfp (finProdFinEquiv.symm j).1) i (finProdFinEquiv.symm j).2
+
 end Proofs
