@@ -1706,6 +1706,15 @@ open Proofs
 -- floatBridges_seBack). + the additive-skip residual variant.
 #print axioms Proofs.floatBridges_mbconvBodyBack
 #print axioms Proofs.floatBridges_mbconvResidBack
+-- The BATCHED-EMIT lift (the forward's Item-B, for the backward): efficientnetForwardB is batched
+-- (batchMap N (per-example net); BNs eval-mode flat ⇒ no cross-batch coupling), so the batched whole-net
+-- backward is batchMap N (per-example net back). FloatClose/FloatBridges.batchMap = the Vec(N·a)→Vec(N·b)
+-- generalization of FloatClose.perRow (a backward swaps cin↔cout). floatBridges_mbconvBatched{Body,Resid}Back
+-- = batchMap N of the per-example MBConv backs — the repeating unit of the batched whole-net backward.
+#print axioms Proofs.FloatClose.batchMap
+#print axioms Proofs.FloatBridges.batchMap
+#print axioms Proofs.floatBridges_mbconvBatchedBodyBack
+#print axioms Proofs.floatBridges_mbconvBatchedResidBack
 -- ConvNeXt-T (per-example): block body backward = depthwiseBack ∘ lnBack ∘ convBack ∘ geluBack ∘
 -- convBack ∘ layerScaleBack (depthwiseFlatBack concrete; LN/GELU/layer-scale diagBacks supplied); full
 -- block = residual(body); the stage downsample = lnBack ∘ flatConvStride2Back. convnext_grad_floatBridges
