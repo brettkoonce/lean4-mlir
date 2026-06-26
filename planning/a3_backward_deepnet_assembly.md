@@ -30,7 +30,8 @@ maps), mirroring the §1a backward ties' nonzero-kink hypotheses.
 
 Prior commits: `e1504ad` (CIFAR family + the op bridges), `77f1741` (r34 id-block), `6a4f403`
 (strided-conv back), `a656528` (r34 down-block), `7e91c0a` (whole r34 backward). The §1e + per-net +
-stride-4 + §1f/§1g batch is its own follow-on commit (8 files; see `git log`).
+stride-4 + §1f/§1g batch landed as **`029d29d`** (8 source files: 7 new `*BackFloatBridge.lean` +
+`StridedConvBackFloatBridge.lean`, + lakefile/AuditAxioms).
 
 - **Part 2 per-net assembly — mnv2 / efficientnet / convnext DONE** (2026-06-26,
   3-axiom-clean, audit=1032). `MobileNetV2BackFloatBridge.lean`: the inverted-residual body backward
