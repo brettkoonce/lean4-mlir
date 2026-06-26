@@ -83,6 +83,72 @@ theorem FloatBridges.perRow (n : Nat) {d : Nat} {f : Vec d → Vec d} (hf : Floa
   exact ⟨B, L, perRowFlat n d fF, hB, hfc.perRow n⟩
 
 -- ════════════════════════════════════════════════════════════════
+-- § The per-token-input-aware seam (the BACKWARD peer of `perRowFlat`)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Per-token-input-aware flat lift.** Each row `r` gets its OWN per-token map `g r`,
+    rather than the single shared `f` of `perRowFlat`. The flat analogue of `rowwise`
+    (`Tensor.lean`): the seam the BACKWARD needs, because a per-token op's input-VJP
+    Jacobian depends on that token's saved activation (LayerNorm-back threads the saved
+    input `A r`, GELU-back threads the saved pre-activation), so one shared map cannot
+    carry it. The forward `perRowFlat f` is the special case `g = fun _ => f`. -/
+noncomputable def perRowFlatPR (n d : Nat) (g : Fin n → (Vec d → Vec d)) :
+    Vec (n * d) → Vec (n * d) :=
+  fun v => Mat.flatten (fun i => g i (Mat.unflatten v i))
+
+/-- `perRowFlatPR` reads coordinatewise as row `r`'s own map at `(row, col)`. -/
+theorem perRowFlatPR_apply {n d : Nat} (g : Fin n → (Vec d → Vec d))
+    (v : Vec (n * d)) (idx : Fin (n * d)) :
+    perRowFlatPR n d g v idx
+      = g (finProdFinEquiv.symm idx).1 (Mat.unflatten v (finProdFinEquiv.symm idx).1)
+          (finProdFinEquiv.symm idx).2 := rfl
+
+/-- A `perRowFlatPR` over `g = fun _ => f` is the plain `perRowFlat f`. -/
+theorem perRowFlatPR_const {n d : Nat} (f : Vec d → Vec d) :
+    perRowFlatPR n d (fun _ => f) = perRowFlat n d f := rfl
+
+/-- **Composition of per-row families fuses** — `(perRowFlatPR g) ∘ (perRowFlatPR g')`
+    is `perRowFlatPR (fun r => g r ∘ g' r)` (each row is independent, so the two
+    per-row maps just compose row-by-row). The flat reflection of `rowwise`'s
+    `vjpMat_comp`. -/
+theorem perRowFlatPR_comp {n d : Nat} (g g' : Fin n → (Vec d → Vec d)) :
+    perRowFlatPR n d g ∘ perRowFlatPR n d g' = perRowFlatPR n d (fun r => g r ∘ g' r) := by
+  funext v
+  simp only [Function.comp, perRowFlatPR, Mat.unflatten_flatten]
+
+/-- **`FloatBridges.perRowPR`** — the per-row-family seam in bridge form. Each row's map
+    `g r` float-bridges; so does the whole sequence, with the uniform magnitude `⊔ᵣ Bᵣ`
+    and modulus `e ↦ ⊔ᵣ Lᵣ e` (finitely many rows, `n > 0` for the nonempty `sup'`). -/
+theorem FloatBridges.perRowPR {n d : Nat} (hn : 0 < n) {g : Fin n → (Vec d → Vec d)}
+    (hg : ∀ r, FloatBridges (g r)) : FloatBridges (perRowFlatPR n d g) := by
+  intro A hA
+  haveI : Nonempty (Fin n) := ⟨⟨0, hn⟩⟩
+  have hne : (Finset.univ : Finset (Fin n)).Nonempty := Finset.univ_nonempty
+  choose B L gF hB hfc using fun r => hg r A hA
+  refine ⟨Finset.univ.sup' hne B, fun e => Finset.univ.sup' hne (fun r => L r e),
+    perRowFlatPR n d gF, le_trans (hB (Classical.arbitrary _))
+      (Finset.le_sup' B (Finset.mem_univ _)), ?_, ?_⟩
+  · -- magnitude: restrict the per-coordinate bound to the row, apply that row's `g r` bound
+    intro v hv idx
+    set r := (finProdFinEquiv.symm idx).1
+    have hrow : ∀ j', |Mat.unflatten v r j'| ≤ A :=
+      fun j' => hv (finProdFinEquiv (r, j'))
+    have hboth := (hfc r).1 (Mat.unflatten v r) hrow (finProdFinEquiv.symm idx).2
+    rw [perRowFlatPR_apply, perRowFlatPR_apply]
+    exact ⟨hboth.1.trans (Finset.le_sup' B (Finset.mem_univ r)),
+           hboth.2.trans (Finset.le_sup' B (Finset.mem_univ r))⟩
+  · -- error: the row perturbation is the inherited `e`, row `r`'s modulus `L r e ≤ ⊔ L`
+    intro vt va e hva hvt hd idx
+    set r := (finProdFinEquiv.symm idx).1
+    have hva' : ∀ j', |Mat.unflatten va r j'| ≤ A := fun j' => hva (finProdFinEquiv (r, j'))
+    have hvt' : ∀ j', |Mat.unflatten vt r j'| ≤ A := fun j' => hvt (finProdFinEquiv (r, j'))
+    have hd' : ∀ j', |Mat.unflatten vt r j' - Mat.unflatten va r j'| ≤ e :=
+      fun j' => hd (finProdFinEquiv (r, j'))
+    rw [perRowFlatPR_apply, perRowFlatPR_apply]
+    exact ((hfc r).2 (Mat.unflatten vt r) (Mat.unflatten va r) e hva' hvt' hd'
+      (finProdFinEquiv.symm idx).2).trans (Finset.le_sup' (fun r => L r e) (Finset.mem_univ r))
+
+-- ════════════════════════════════════════════════════════════════
 -- § The transformer-block fold
 -- ════════════════════════════════════════════════════════════════
 

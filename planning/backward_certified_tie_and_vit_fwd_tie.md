@@ -20,9 +20,11 @@ Memory: `[[float-tier23-and-lexer-gap]]`, `[[floatbridge-b-certified-tie]]` (the
 
 ## ✅ STATUS / NEXT-SESSION HANDOFF (updated 2026-06-26)
 
-**Committed this run:** `a27aa74` (vit-forward tie) · `93b38bd` (depthwise gate + convnext/mnv2/efficientnet
-§B ties) · `c614fb7` (vit MHSA leaf tie) · `cfcf1a6` (vit attn-sublayer reconciliation). Audit = **1138
-3-axiom-clean prints**, full `tests/AuditAxioms.lean` elaborates clean.
+**Committed earlier this run:** `a27aa74` (vit-forward tie) · `93b38bd` (depthwise gate + convnext/mnv2/
+efficientnet §B ties) · `c614fb7` (vit MHSA leaf tie) · `cfcf1a6` (vit attn-sublayer reconciliation).
+**Uncommitted (the full `vitBlockBack` tie — done this session, awaiting sign-off):** the per-token-aware
+enrichment + the block-level §B capstone. Audit now = **1147 3-axiom-clean prints** (was 1138; +9 new),
+full `tests/AuditAxioms.lean` elaborates clean.
 
 **DONE:**
 - **Forward sweep** — all 5 nets' forward bridges tie to their real net def (Item 3 / Part B closed).
@@ -32,19 +34,14 @@ Memory: `[[float-tier23-and-lexer-gap]]`, `[[floatbridge-b-certified-tie]]` (the
 - **vit MHSA leaf** (`mhsaBackFlat_eq_mhsa_vjp`) + **vit attn-sublayer reconciliation**
   (`transformerAttnSublayerBack_flat_decomp`) — `ViTMhsaBackCertifiedTie.lean`. The sdpa adjoint = certified
   MHSA VJP, grounded through the attn sublayer.
+- **✅ THE FULL `vitBlockBack` TIE — DONE 2026-06-26** (`vitBlockBackPR_eq_transformerBlock_vjp`,
+  `ViTMhsaBackCertifiedTie.lean`, 3-axiom-clean). The per-token-LN enrichment from the plan, exactly as
+  predicted. See **PART C** below for the full record. The float ViT-block backward now provably IS the
+  certified `transformerBlock_has_vjp_mat`, flattened — both directions of the block tie closed.
 
-**THE ONE REMAINING PIECE (start here next session): the full `vitBlockBack` tie.** It is NOT a proof gap —
-it is a **float-bridge definitional enrichment**. `vitBlockBack` (`MhsaBackFloatBridge.lean`) lifts the LN
-backward as a SINGLE `lnB₁ : Vec → Vec` via `perRowFlat`, but the certified per-token LN backward
-(`layerNorm_per_token_has_vjp_mat.backward A` = `rowwise` of the single-token LN VJP) threads each token's
-saved input `A r`. A single map can't carry that. **Plan:** (a) define a per-token-input-aware LN-back lift
-(the flat analogue of `rowwise`, threading the saved Mat input) and re-state `vitBlockBack`'s LN slots with
-it; (b) the attn-sublayer tie is then `transformerAttnSublayerBack_flat_decomp` verbatim (already proven);
-(c) the MLP-sublayer tie is the analogous decomposition (dense/gelu via `dense_transpose`/`diagBack` leaves,
-same per-token-LN lift, no MHSA — easier); (d) assemble the block via `transformerBlock_backward_unfold`
-(ViTBackB0, `rfl` at heads=1 — for general heads expect the same `maxHeartbeats 10000000`/~kernel-heavy cost
-as the attn-sublayer unfold). Watch: the general-heads VJP `rfl` unfolds are kernel-expensive (set
-`maxHeartbeats` high, BEFORE the docstring).
+**THE BLOCK-LEVEL §B IS COMPLETE for all 5 nets.** The only thing past the per-block stopping point is the
+WHOLE-NET backward fold, gated (as for r34) by a fully-certified whole-net VJP in the same vocabulary
+(toy-only today — an honest stop, NOT remaining work; see HONEST STOPS).
 
 **After that:** Gap-3 (lexer / syntactic faithfulness) — see the bottom of this doc.
 
@@ -209,14 +206,60 @@ helpers:
 
 ---
 
+## PART C — the full `vitBlockBack` tie (the per-token-LN enrichment) — ✅ DONE 2026-06-26
+
+The plan from the handoff worked verbatim. Capstone `vitBlockBackPR_eq_transformerBlock_vjp`
+(`ViTMhsaBackCertifiedTie.lean`, 3-axiom-clean): the enriched float ViT-block backward, with every saved
+activation pinned to the real forward, **IS** the certified `transformerBlock_has_vjp_mat`, flattened.
+
+**(a) the per-token-input-aware lift** (`ViTBlockFloatBridge.lean`): `perRowFlatPR n d (g : Fin n → Vec d →
+Vec d)` applies row `r`'s OWN map `g r` to row `r` — the flat analogue of `rowwise`, the BACKWARD peer of
+`perRowFlat` (the forward's single shared `f` is the special case `g = fun _ => f`). Bridged by
+`FloatBridges.perRowPR` (uniform `⊔ᵣ Bᵣ` magnitude / `e ↦ ⊔ᵣ Lᵣ e` modulus over the `N` rows via
+`Finset.sup'`, `0 < N`). Plus `perRowFlatPR_comp` (per-row maps fuse: `perRowFlatPR g ∘ perRowFlatPR g' =
+perRowFlatPR (fun r => g r ∘ g' r)`) and `perRowFlatPR_residual` (`residual` lifts to `+ v`).
+
+**(b) the enriched block backward** (`MhsaBackFloatBridge.lean`): `vitBlockBackPR` — `vitBlockBack` with
+`lnB₁`/`lnB₂` now per-token families `Fin N → (Vec → Vec)` and `sgelu` a per-token family `Fin N → Vec dff`,
+LN/GELU slots via `perRowFlatPR`. Bridged by `floatBridges_vitBlockBackPR` (same `comp`/`residual` assembly
+as `floatBridges_vitBlockBack`, `FloatBridges.perRowPR` for the per-token seams). The old `vitBlockBack` is
+kept (it's the all-rows-share-one-map special case); the enriched one is what the tie equals.
+
+**(c) the two sublayer flat ties + assembly** (`ViTMhsaBackCertifiedTie.lean`):
+- `perRowFlatPR_LN_back` (`rfl`): the certified per-token LN backward (`layerNorm_per_token_has_vjp_mat.backward
+  A`), flattened, IS `perRowFlatPR (fun r => layerNorm_has_vjp.backward (A r))` — the seam the enrichment needed.
+- `transformerMlp_back_flat_eq_perRowFlatPR` (L2): the certified MLP-body backward, flattened, IS
+  `perRowFlatPR` of the float chain `dense Wᵀ₁ 0 ∘ diagBack(act'(dense₁ Y)) ∘ dense Wᵀ₂ 0` — via the
+  per-token reduction `transformerMlp_backward_pertoken` (`rfl`) + `dense_transpose_eq_mulVec` +
+  `diagBack_eq_gelu_vjp`. (Watch: the dense-back ignores its affine activation, so the `x` arg is free —
+  pass a correctly-typed dummy; `Wfc2`'s saved activation is `Vec dff`, not `Vec D`.)
+- `attnSubFlatTie` / `mlpSubFlatTie`: each float sublayer half = `flatten ∘ sublayer.backward (saved) ∘
+  unflatten`. The attn one is `transformerAttnSublayerBack_flat_decomp` repackaged; the MLP one is the
+  analogous decomposition (`transformerMlpSublayer_backward_decomp`, `rfl`) + L2 + the LN-back seam + the
+  `perRowFlatPR` fusion, finished with `add_comm` (skip term).
+- `transformerBlock_backward_unfold_gen` (general heads, `rfl`): `block.backward A dz = attn.backward A
+  (mlp.backward (attn A) dz)`. **Cheap** (the outer `vjpMat_comp` projection — NOT kernel-heavy like the
+  attn-sublayer unfold; `maxHeartbeats 4000000` is ample, builds in ~1s). The capstone composes the two
+  sublayer ties through it with `Mat.unflatten_flatten`.
+
+**Gotchas hit:** `set_option maxHeartbeats N in` goes **before** the docstring (else
+`unexpected token 'set_option'; expected 'lemma'`). `rw [← perRowFlatPR_comp]` leaves `(f∘g) v` defeq to
+`f (g v)` but not closed under `with_reducible` — finish with `Function.comp_apply`. `Mat.unflatten v r c =
+v idx` needs `Prod.mk.eta` + `Equiv.apply_symm_apply`.
+
+The whole-block backward tie is itself the per-block honest stop (same as r34): the whole-NET backward fold
+stays gated on a fully-certified whole-net VJP in the same vocabulary. State it that way.
+
+---
+
 ## ORDER / EFFORT
 
 1. ~~**vit-forward tie (Part B)**~~ — ✅ DONE (`vit_full_eq_vitForwardFlat`). ALL 5 forwards tie.
 2. ~~**convnext + mnv2 backward ties**~~ — ✅ DONE (depthwise gate + `diagBack`/`bnBack` pins).
 3. ~~**efficientnet backward tie**~~ — ✅ DONE (SE-back pinned, not gated).
 4. **vit backward tie** — ✅ MHSA leaf + attn-sublayer reconciliation DONE; the **full `vitBlockBack`
-   tie** is the one open item → the per-token-LN float-bridge enrichment (see the NEXT-SESSION HANDOFF at
-   the top of this doc, and the vit bullet in Part A).
+   tie** — ✅ DONE 2026-06-26 (the per-token-LN enrichment; `vitBlockBackPR_eq_transformerBlock_vjp`).
+   See PART C.
 
 Each was its own commit + `AuditAxioms` 3-axiom check (the `[propext, Classical.choice, Quot.sound]` gate).
 The r34 §B file was the literal template for the CNNs (leaf gates + same-vocab certified VJP + pin + `rfl`);

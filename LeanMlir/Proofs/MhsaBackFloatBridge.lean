@@ -422,6 +422,65 @@ theorem floatBridges_vitBlockBack {dff : Nat} (M : FloatModel)
         (FloatBridges.perRow N hlnB₁)))
 
 -- ════════════════════════════════════════════════════════════════
+-- § The per-token-input-aware transformer-block backward (the tie-able form)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The per-token-input-aware ViT encoder-block backward** — the enrichment of
+    `vitBlockBack` whose LayerNorm and GELU slots thread *each token's* saved activation
+    (`perRowFlatPR` instead of `perRowFlat`). Structurally identical to `vitBlockBack`
+    (residual MLP-sublayer back, then residual attention-sublayer back), but `lnB₁`/`lnB₂`
+    are now per-token *families* `Fin N → (Vec → Vec)` and the GELU derivative `sgelu` is a
+    per-token family `Fin N → Vec dff`. This is the form the certified per-token block VJP
+    actually takes: `layerNorm_per_token_has_vjp_mat.backward A` runs the single-token LN
+    backward at each token's own saved input `A r` (its Jacobian differs per token), which a
+    single shared `lnB₁` cannot carry. `vitBlockBack` is the special case of all rows sharing
+    one map; this is the general one the §B tie equals. -/
+noncomputable def vitBlockBackPR {dff : Nat} (Wq Wk Wv Wo : Mat (h * dh) (h * dh))
+    (Q K V : Mat N (h * dh))
+    (lnB₁ : Fin N → (Vec (h * dh) → Vec (h * dh))) (W₁ : Mat (h * dh) dff) (W₂ : Mat dff (h * dh))
+    (sgelu : Fin N → Vec dff) (lnB₂ : Fin N → (Vec (h * dh) → Vec (h * dh))) :
+    Vec (N * (h * dh)) → Vec (N * (h * dh)) :=
+  Proofs.residual (perRowFlatPR N (h * dh) lnB₁ ∘ mhsaBackFlat Wq Wk Wv Wo Q K V)
+    ∘ perRowFlatPR N (h * dh) (fun r => Proofs.residual
+        (lnB₂ r ∘ Proofs.dense (Mat.transpose W₁) (0 : Vec (h * dh)) ∘ diagBack (sgelu r)
+          ∘ Proofs.dense (Mat.transpose W₂) (0 : Vec dff)))
+
+/-- **THE PER-TOKEN-AWARE TRANSFORMER-BLOCK BACKWARD FLOAT-BRIDGES.** Same `comp`/`residual`
+    assembly as `floatBridges_vitBlockBack`, with the per-token seams `FloatBridges.perRowPR`
+    (each token's LN/GELU slot bridges independently — uniform `⊔` magnitude/modulus over the
+    `N` rows). The bridge for the certified-tie-able block backward; the §B peer of the
+    forward `floatBridges_vitBlock`. A3 = closeness at a smooth point. -/
+theorem floatBridges_vitBlockBackPR {dff : Nat} (M : FloatModel)
+    (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Mat N (h * dh)) (fp : Fin h → Mat N N)
+    (lnB₁ : Fin N → (Vec (h * dh) → Vec (h * dh))) (W₁ : Mat (h * dh) dff) (W₂ : Mat dff (h * dh))
+    (sgelu fsgelu : Fin N → Vec dff) (lnB₂ : Fin N → (Vec (h * dh) → Vec (h * dh)))
+    {w' qA kA vA scaleA ew Sd es : ℝ} (hN : 0 < N) (hhd : 0 < h * dh) (hdff : 0 < dff)
+    (hw' : 0 ≤ w') (hqA : 0 ≤ qA) (hkA : 0 ≤ kA) (hew : 0 ≤ ew)
+    (hscaleA : |sdpa_scale dh| ≤ scaleA)
+    (hQ : ∀ i k, |Q i k| ≤ qA) (hK : ∀ i k, |K i k| ≤ kA) (hV : ∀ i k, |V i k| ≤ vA)
+    (hWq : ∀ i j, |Wq i j| ≤ w') (hWk : ∀ i j, |Wk i j| ≤ w')
+    (hWv : ∀ i j, |Wv i j| ≤ w') (hWo : ∀ i j, |Wo i j| ≤ w')
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hW₂ : ∀ i j, |W₂ i j| ≤ w')
+    (hsgelu : ∀ r i, |sgelu r i| ≤ Sd) (hfsgelu : ∀ r i, |fsgelu r i - sgelu r i| ≤ es)
+    (hlnB₁ : ∀ r, FloatBridges (lnB₁ r)) (hlnB₂ : ∀ r, FloatBridges (lnB₂ r))
+    (hfp : ∀ hd i j, |fp hd i j - sdpa_weights N dh (mhSlab hd Q) (mhSlab hd K) i j| ≤ ew) :
+    FloatBridges (vitBlockBackPR Wq Wk Wv Wo Q K V lnB₁ W₁ W₂ sgelu lnB₂) := by
+  unfold vitBlockBackPR
+  exact FloatBridges.comp
+    (FloatBridges.perRowPR hN (fun r => FloatBridges.residual M
+      (FloatBridges.comp
+        (FloatBridges.comp
+          (FloatBridges.comp (floatBridges_linBack M W₂ hw' hhd hW₂)
+            (floatBridges_diagBack M (sgelu r) (fsgelu r) hdff (hsgelu r) (hfsgelu r)))
+          (floatBridges_linBack M W₁ hw' hdff hW₁))
+        (hlnB₂ r))))
+    (FloatBridges.residual M
+      (FloatBridges.comp
+        (floatBridges_mhsaBack M Wq Wk Wv Wo Q K V fp hN hhd hw' hqA hkA hew hscaleA
+          hQ hK hV hWq hWk hWv hWo hfp)
+        (FloatBridges.perRowPR hN hlnB₁)))
+
+-- ════════════════════════════════════════════════════════════════
 -- § The encoder-tower backward (depth fold over distinct blocks)
 -- ════════════════════════════════════════════════════════════════
 

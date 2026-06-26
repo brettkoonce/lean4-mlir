@@ -1762,6 +1762,27 @@ open Proofs
 -- bridge's single-lnB₁ perRowFlat lift is the remaining piece for a full vitBlockBack tie).
 #print axioms Proofs.transformerAttnSublayer_backward_decomp
 #print axioms Proofs.transformerAttnSublayerBack_flat_decomp
+-- §B THE FULL vitBlockBack TIE (the per-token-LN enrichment that closes the structural gap above).
+-- perRowFlatPR = the per-token-input-aware flat lift (each token's LN/GELU slot threads its OWN saved
+-- input A r — the flat analogue of `rowwise`, the seam a single shared `lnB₁` couldn't carry);
+-- FloatBridges.perRowPR bridges it (uniform ⊔ magnitude/modulus over the N rows). vitBlockBackPR =
+-- the enriched block backward, floatBridges_vitBlockBackPR its bridge. The capstone
+-- vitBlockBackPR_eq_transformerBlock_vjp: with every saved activation pinned to the real forward
+-- (Q/K/V at LN₁ A, LN₁/LN₂ backs at each token's A r / (attn A) r, GELU' at dense₁(LN₂(attn A))), the
+-- float block backward IS the certified transformerBlock_has_vjp_mat, flattened. Assembled from the
+-- general-heads block unfold + the attn/MLP sublayer flat ties (attnSubFlatTie / mlpSubFlatTie), the
+-- MLP body L2 (transformerMlp backward = perRowFlatPR of dense Wᵀ₁ 0 ∘ diagBack(act') ∘ dense Wᵀ₂ 0),
+-- and the per-token LN-back seam (perRowFlatPR_LN_back). So the deployed float ViT-BLOCK backward is
+-- within an explicit budget of THE certified block gradient — both directions of the block tie closed.
+#print axioms Proofs.FloatBridges.perRowPR
+#print axioms Proofs.floatBridges_vitBlockBackPR
+#print axioms Proofs.perRowFlatPR_LN_back
+#print axioms Proofs.transformerMlp_back_flat_eq_perRowFlatPR
+#print axioms Proofs.transformerMlpSublayer_backward_decomp
+#print axioms Proofs.transformerBlock_backward_unfold_gen
+#print axioms Proofs.attnSubFlatTie
+#print axioms Proofs.mlpSubFlatTie
+#print axioms Proofs.vitBlockBackPR_eq_transformerBlock_vjp
 -- §B endpoint leaf ties: the dense head (Wᵀ·dy = certified Mat.mulVec), GAP (broadcast-÷, rfl), and
 -- the smooth-point maxpool scatter — each float-bridge endpoint backward = its certified per-op VJP.
 -- With the conv/strided-conv leaves, every per-op backward of r34InputGrad is now certified-tied.
