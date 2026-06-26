@@ -1773,6 +1773,14 @@ open Proofs
 -- not a uniform iterate), generic in depth; floatBridges_id is the base case (cotangent passes through).
 #print axioms Proofs.floatBridges_id
 #print axioms Proofs.floatBridges_towerBack
+-- The ViT endpoints + the WHOLE-NET fold. clsScatter = the cls-slice backward (scatter the head
+-- cotangent to row 0 of the (N+1)×D sequence, zero on patch rows; exact, modulus id). vitHeadBack =
+-- classifier backward (clsScatter ∘ linBack Wcls). vit_grad_floatBridges = the whole-net .comp thread
+-- over the concrete head/cls-slice + the encoder tower + the supplied final-LN and patch-embed
+-- backwards (each separately dischargeable) — the r34_grad_floatBridges blueprint for ViT.
+#print axioms Proofs.floatBridges_clsScatter
+#print axioms Proofs.floatBridges_vitHeadBack
+#print axioms Proofs.vit_grad_floatBridges
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-

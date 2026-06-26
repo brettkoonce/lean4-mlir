@@ -448,4 +448,74 @@ theorem floatBridges_towerBack {m : Nat} (l : List (Vec m → Vec m))
       exact FloatBridges.comp (hl f (List.mem_cons.mpr (Or.inl rfl)))
         (ih (fun g hg => hl g (List.mem_cons.mpr (Or.inr hg))))
 
+-- ════════════════════════════════════════════════════════════════
+-- § The endpoints — cls-slice scatter + classifier head + the whole-net fold
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The CLS-slice backward** — the adjoint of `cls_slice_flat` (gather row 0 of the `(N+1)×D`
+    sequence): scatter the head cotangent `dy` back to row 0 (the CLS token), zero on the patch rows.
+    The certified `cls_slice_flat_has_vjp.backward`; exact in float (a structural select/zero). -/
+noncomputable def clsScatter (N D : Nat) (dy : Vec D) : Vec ((N + 1) * D) :=
+  fun idx =>
+    if (finProdFinEquiv.symm idx).1 = (0 : Fin (N + 1)) then dy (finProdFinEquiv.symm idx).2 else 0
+
+/-- The CLS-slice scatter is `FloatClose` with modulus `id` — exact (real = float), magnitude-stable
+    (`B = A`): row 0 carries `|dy| ≤ A`, every other row is `0 ≤ A`. -/
+theorem floatClose_clsScatter (N D : Nat) {A : ℝ} (hA : 0 ≤ A) :
+    FloatClose A A (clsScatter N D) (clsScatter N D) (fun e => e) := by
+  refine ⟨fun v hv idx => ⟨?_, ?_⟩, fun vt va e _ _ hd idx => ?_⟩
+  · by_cases h : (finProdFinEquiv.symm idx).1 = (0 : Fin (N + 1))
+    · simpa only [clsScatter, if_pos h] using hv _
+    · simpa only [clsScatter, if_neg h, abs_zero] using hA
+  · by_cases h : (finProdFinEquiv.symm idx).1 = (0 : Fin (N + 1))
+    · simpa only [clsScatter, if_pos h] using hv _
+    · simpa only [clsScatter, if_neg h, abs_zero] using hA
+  · by_cases h : (finProdFinEquiv.symm idx).1 = (0 : Fin (N + 1))
+    · simpa only [clsScatter, if_pos h] using hd _
+    · simp only [clsScatter, if_neg h, sub_zero, abs_zero]
+      exact (abs_nonneg _).trans (hd (finProdFinEquiv.symm idx).2)
+
+/-- The CLS-slice scatter float-bridges (magnitude-stable). -/
+theorem floatBridges_clsScatter (N D : Nat) : FloatBridges (clsScatter N D) :=
+  fun A hA => ⟨A, _, _, hA, floatClose_clsScatter N D hA⟩
+
+/-- **The classifier-head backward** — `classifier_flat = dense Wcls ∘ cls_slice` reverses to
+    `clsScatter ∘ linBack Wcls`: the head dense's input VJP (free `linBack`) then the CLS-slice scatter. -/
+theorem floatBridges_vitHeadBack {N D nClasses : Nat} (M : FloatModel) (Wcls : Mat D nClasses)
+    {w' : ℝ} (hw' : 0 ≤ w') (hnc : 0 < nClasses) (hWcls : ∀ i j, |Wcls i j| ≤ w') :
+    FloatBridges (clsScatter N D ∘ Proofs.dense (Mat.transpose Wcls) (0 : Vec D)) :=
+  FloatBridges.comp (floatBridges_linBack M Wcls hw' hnc hWcls) (floatBridges_clsScatter N D)
+
+/-- **The whole ViT input-gradient backward** — the reverse of `vit_full = classifier ∘ (finalLN ∘
+    tower) ∘ patchEmbed`: `patchEmbedBack ∘ towerBack ∘ finalLN-back ∘ (clsScatter ∘ linBack Wcls)`.
+    The head + CLS-slice fold concretely; the encoder tower is `floatBridges_towerBack` over the
+    per-block backwards; the patch-embed backward, the final LN backward, and the per-block backwards
+    are supplied as `FloatBridges` (each separately dischargeable — `patchEmbedBack` by the
+    strided-conv VJP machinery, the LNs by `bnBack`, the blocks by `floatBridges_vitBlockBack`),
+    exactly as `r34_grad_floatBridges` supplies its 16 blocks around concrete endpoints. -/
+noncomputable def vitGradFlat {N D nClasses imgDim : Nat} (Wcls : Mat D nClasses)
+    (finalLNBack : Vec D → Vec D) (blockBacks : List (Vec ((N + 1) * D) → Vec ((N + 1) * D)))
+    (patchEmbedBack : Vec ((N + 1) * D) → Vec imgDim) : Vec nClasses → Vec imgDim :=
+  patchEmbedBack ∘ towerBack blockBacks ∘ perRowFlat (N + 1) D finalLNBack
+    ∘ clsScatter N D ∘ Proofs.dense (Mat.transpose Wcls) (0 : Vec D)
+
+/-- **THE WHOLE-NET ViT BACKWARD FLOAT-BRIDGES.** One `.comp` thread over the concrete head/CLS-slice
+    endpoints, the encoder tower (`floatBridges_towerBack`), the supplied final-LN backward, and the
+    supplied patch-embed backward — the `r34_grad_floatBridges` blueprint for ViT. -/
+theorem vit_grad_floatBridges {N D nClasses imgDim : Nat} (M : FloatModel) (Wcls : Mat D nClasses)
+    (finalLNBack : Vec D → Vec D) (blockBacks : List (Vec ((N + 1) * D) → Vec ((N + 1) * D)))
+    (patchEmbedBack : Vec ((N + 1) * D) → Vec imgDim)
+    {w' : ℝ} (hw' : 0 ≤ w') (hnc : 0 < nClasses) (hWcls : ∀ i j, |Wcls i j| ≤ w')
+    (hFinalLN : FloatBridges finalLNBack) (hblocks : ∀ f ∈ blockBacks, FloatBridges f)
+    (hPatch : FloatBridges patchEmbedBack) :
+    FloatBridges (vitGradFlat Wcls finalLNBack blockBacks patchEmbedBack) := by
+  unfold vitGradFlat
+  exact FloatBridges.comp
+    (FloatBridges.comp
+      (FloatBridges.comp
+        (FloatBridges.comp (floatBridges_linBack M Wcls hw' hnc hWcls) (floatBridges_clsScatter N D))
+        (FloatBridges.perRow (N + 1) hFinalLN))
+      (floatBridges_towerBack blockBacks hblocks))
+    hPatch
+
 end Proofs
