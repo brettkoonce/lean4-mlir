@@ -1,10 +1,10 @@
 # Forward whole-net float-bridge — handoff
 
 **Goal:** fold each net's *forward* float bridge at whole-net scale, the way the backward already
-does for all five. ✅ **SWEEP COMPLETE — all 5 nets DONE** (r34, efficientnet, mnv2, vit, convnext).
-The only remaining piece is the concrete vit forward patch-embed (peer of
-`vit_grad_floatBridges_concrete`) — separable, ~200 lines, supplied abstractly for now. This doc is
-the pick-up plan / record.
+does for all five. ✅ **SWEEP COMPLETE — all 5 nets DONE** (r34, efficientnet, mnv2, vit, convnext),
+**including the concrete vit forward patch-embed** (`vit_floatBridges_concrete`, the fully-concrete ViT
+forward — peer of `vit_grad_floatBridges_concrete`). Nothing architectural remains; only the cosmetic
+skeleton↔real-def ties (item #5, pure polish, same gap on the backward). This doc is the record.
 
 Parent context: `planning/a3_backward_deepnet_assembly.md` (the backward, which is the blueprint).
 Memory: `[[float-tier23-and-lexer-gap]]` (A1/A3 state).
@@ -30,6 +30,21 @@ ConvNeXt analogue of vit's `floatBridges_towerBack`, since blocks have distinct 
 `.comp` chain mis-counted parens → switched to incremental `have`s (the carried-forward gotcha);
 `floatBridges_gelu`'s `n` isn't inferable in a bare `have` (only in the conclusion) → pin `(n := …)`.
 Like r34/mnv2, `convnextForward` is a fresh ∘-skeleton (cosmetic tie open, symmetric with backward).
+
+**vit FULLY-CONCRETE — the forward patch-embed bridge DONE, uncommitted** (2026-06-26),
+`LeanMlir/Proofs/PatchEmbedFloatBridge.lean`, 3-axiom-clean (6 new decls), builds + `AuditAxioms` green.
+`vit_floatBridges_concrete` = `vit_floatBridges` with `hPatch` discharged ⇒ the fully-concrete ViT
+forward (peer of `vit_grad_floatBridges_concrete`). `patchEmbed_flat` is `pos_embed + (cls_token |
+b_conv + ∑c∑kh∑kw W·guarded-img)` — **affine** in the image, so the constants cancel in the diff and
+the sensitivity is the linear conv-dot (`patchEmbed_flat_sub_abs_le`, peer of the backward's `_sub`).
+`M.patchEmbedF` rounds the leaf mul (`mul_close`), the 3 c/kh/kw sums (nested `reduction_close`), and
+the 2 constant adds (`add_close`); `patchEmbedF_round_close` is the heaviest single proof of the sweep
+(~120 lines, the backward's `patchEmbedBack_round_close` + the 2 extra adds + the n=0/n>0 branch). New
+budget/nonneg helpers (`redErr_nonneg`, `patchEmbed{ConvMag,TripleErr,BranchErr}_nonneg`); reused the
+public `mulErr_nonneg`. GOTCHAS: the `let`-wrapped dite blocks `split_ifs` → use explicit `by_cases <no-let
+condition>` (the lets ARE inlined after `unfold`, so the explicit form matches); `0 ≤ e` in the modulus
+clause needs the INPUT-domain witness `0 < ic·H·W` (the image, NOT `(N+1)·D`); `positivity` does use
+local `0 ≤ x` hyps but NOT `M.u_nonneg` (a projection) nor `redErr`'s `(1+u)^n−1` → manual nonneg lemmas.
 
 **vit forward whole-net (encoder-tower fold) — DONE, uncommitted** (2026-06-26),
 `LeanMlir/Proofs/ViTWholeFloatBridge.lean`, 3-axiom-clean (3 new decls), builds + `AuditAxioms` green.
@@ -93,8 +108,9 @@ This file is **the worked example — copy its shape for the other four.** It co
 - `floatBridges_r34IdBlock` / `floatBridges_r34DownBlock` — the named per-block dischargers (about the
   ACTUAL `rblkPC` / `rblkPStridedPC`), so the fold's block hyps discharge by name like the backward's.
 
-**Remaining = the concrete vit forward patch-embed + the r34/mnv2/convnext/vit cosmetic skeleton ties
-(efficientnet already ties to the real net via the ∘-form). All 5 whole-net forward folds are DONE.**
+**Remaining = ONLY the r34/mnv2/convnext/vit cosmetic skeleton↔real-def ties (item #5, pure polish;
+efficientnet already ties to the real net via the ∘-form). All 5 whole-net forward folds + the concrete
+vit patch-embed are DONE — nothing architectural left.**
 
 ---
 
@@ -108,7 +124,7 @@ block decomposition, same `FloatBridges.comp` backbone — just forward ops inst
 | mnv2 | ✅ **DONE** `MobileNetV2WholeFloatBridge.lean` (`mnv2Forward_floatBridges`) | `MobileNetV2BackFloatBridge.lean` (`mnv2_grad_floatBridges`) | `floatBridges_invresBody{,Strided}PC` (no SE; new `floatBridges_relu6`) |
 | efficientnet | ✅ **DONE** `EfficientNetWholeFloatBridge.lean` (`efficientnetForwardB_floatBridges`) | `EfficientNetBackFloatBridge.lean` | per-block batched bridges (`floatBridges_{stemB,cbsB,dwbsB,dwbsSB,seB,projB,mbNoExpFwdB,mbStridedFwdB,mbResidFwdB,headFwdB}`) |
 | convnext | ✅ **DONE** `ConvNeXtWholeFloatBridge.lean` (`convnext_floatBridges`) | `ConvNeXtBackFloatBridge.lean` (`convnext_grad_floatBridges`) | `floatBridges_convNextBlock` + `_convNextStageK` + `_cnxDownW` (new `_layerScale`, `_flatConvStride4`) |
-| vit | ✅ **DONE** (tower fold) `ViTWholeFloatBridge.lean` (`vit_floatBridges`) — concrete patch-embed remaining | `MhsaBackFloatBridge.lean` + `PatchEmbedBackFloatBridge.lean` | `floatBridges_vitBlock` ✓ (reused `floatBridges_towerBack` + `FloatBridges.perRow`) |
+| vit | ✅ **DONE + FULLY CONCRETE** `ViTWholeFloatBridge.lean` (`vit_floatBridges`) + `PatchEmbedFloatBridge.lean` (`vit_floatBridges_concrete`) | `MhsaBackFloatBridge.lean` + `PatchEmbedBackFloatBridge.lean` | `floatBridges_vitBlock` ✓ + `floatBridges_patchEmbed` (new) |
 
 Per-net steps:
 1. **Define `<net>Forward`** = the structural `.comp` chain (concrete endpoints; repeated blocks +

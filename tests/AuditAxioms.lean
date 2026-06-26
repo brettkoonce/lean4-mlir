@@ -101,6 +101,7 @@ import LeanMlir.Proofs.EfficientNetBackFloatBridge
 import LeanMlir.Proofs.EfficientNetWholeFloatBridge
 import LeanMlir.Proofs.MobileNetV2WholeFloatBridge
 import LeanMlir.Proofs.ViTWholeFloatBridge
+import LeanMlir.Proofs.PatchEmbedFloatBridge
 import LeanMlir.Proofs.ConvNeXtWholeFloatBridge
 import LeanMlir.Proofs.ConvNeXtBackFloatBridge
 import LeanMlir.Proofs.LossHeadCotFloatBridge
@@ -1904,6 +1905,17 @@ open Proofs
 #print axioms Proofs.floatBridges_clsSlice
 #print axioms Proofs.floatBridges_vitHead
 #print axioms Proofs.vit_floatBridges
+-- ViT PATCH-EMBED FORWARD (the last vit forward endpoint, forward peer of floatBridges_patchEmbedBack):
+-- patchEmbed_flat is affine in the image (pos_embed/cls_token/b_conv cancel in the diff ⇒ sensitivity is
+-- the linear conv-dot). M.patchEmbedF rounds the leaf mul (mul_close) + the 3 c/kh/kw sums (nested
+-- reduction_close) + the 2 constant adds (add_close). floatBridges_patchEmbed discharges vit_floatBridges's
+-- hPatch ⇒ vit_floatBridges_concrete = the FULLY-CONCRETE ViT forward (every endpoint concrete).
+#print axioms Proofs.patchEmbed_flat_abs_le
+#print axioms Proofs.patchEmbed_flat_sub_abs_le
+#print axioms Proofs.patchEmbedF_round_close
+#print axioms Proofs.floatClose_patchEmbed
+#print axioms Proofs.floatBridges_patchEmbed
+#print axioms Proofs.vit_floatBridges_concrete
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-

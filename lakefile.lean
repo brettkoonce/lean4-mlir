@@ -389,6 +389,12 @@ lean_lib «Proofs» where
              -- op-bridge floatBridges_clsSlice (the cls-slice gather, peer of clsScatter, exact). The
              -- per-row LN / blocks / patch-embed supplied as FloatBridges (blocks via floatBridges_vitBlock).
              `LeanMlir.Proofs.ViTWholeFloatBridge,
+             -- ViT PATCH-EMBED FORWARD (the last vit forward endpoint, peer of floatBridges_patchEmbedBack):
+             -- patchEmbed_flat = pos_embed + (cls_token | b_conv + ∑c∑kh∑kw W·guarded-img), affine in the
+             -- image (constants cancel in the diff). M.patchEmbedF rounds the leaf mul (mul_close), the 3
+             -- c/kh/kw sums (nested reduction_close) and the 2 constant adds (add_close). floatBridges_
+             -- patchEmbed discharges vit_floatBridges's hPatch ⇒ vit_floatBridges_concrete (fully concrete).
+             `LeanMlir.Proofs.PatchEmbedFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent
