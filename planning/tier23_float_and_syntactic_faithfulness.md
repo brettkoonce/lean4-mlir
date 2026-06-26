@@ -173,6 +173,10 @@ assembly on the backward:
    backward peer of `cifar8_floatBridges`. *Remaining: the conv/BN/attention per-net assemblies
    (5 deep architectures) — mechanical once their per-op backward bridges land.*
 
+**→ The remaining deep-net backward assembly has its own pick-up plan:
+`planning/a3_backward_deepnet_assembly.md`** (per-op backward bridges still needed, per-net
+assembly table, suggested order `cifar8 → cifarBn → r34 → …`, and the gotchas carried forward).
+
 This makes the §1a den-ties **mean something at float** for the deep nets, which is the single
 biggest credibility jump for the Imagenette tier.
 
