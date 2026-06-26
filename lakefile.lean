@@ -277,6 +277,11 @@ lean_lib «Proofs» where
              -- reassoc layout gathers, bridging the certified bnPerChannelTensor3_grad_input. The
              -- backward peer of floatBridges_bnPerChannelTensor3; discharges cifarBn_grad's BN hyps.
              `LeanMlir.Proofs.BnPerChannelBackFloatBridge,
+             -- A3 r34 backward: the residual identity-block input-VJP (floatBridges_r34IdBlockBack) —
+             -- relu(F(x)+x) backward = residual bF ∘ reluMaskBack, the residual-skip backward reusing
+             -- FloatBridges.residual (NO new combinator; the rounded skip-add is the backward's too),
+             -- bF = convFlatBack∘bnBack∘reluMaskBack∘convFlatBack∘bnBack. The dominant r34 block.
+             `LeanMlir.Proofs.Resnet34BackFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent

@@ -88,6 +88,7 @@ import LeanMlir.Proofs.LinBackFloatBridge
 import LeanMlir.Proofs.CnnBackFloatBridge
 import LeanMlir.Proofs.BnBackComposeBridge
 import LeanMlir.Proofs.BnPerChannelBackFloatBridge
+import LeanMlir.Proofs.Resnet34BackFloatBridge
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.AdamStep
 import LeanMlir.Proofs.AdamRender
@@ -1623,6 +1624,12 @@ open Proofs
 -- the abstract FloatBridges bnB… hypotheses of cifarBn_grad_floatBridges (and r34/convnext/vit LN).
 #print axioms Proofs.floatBridges_bnPerChannelFlatBack
 #print axioms Proofs.floatBridges_bnPerChannelBack
+-- floatBridges_r34IdBlockBack: the ResNet-34 identity basic-block input-gradient VJP (the reverse of
+-- rblkPC = relu(F(x)+x)) float-bridges. The KEY r34 element — the residual-skip backward = residual bF
+-- ∘ reluMaskBack reuses FloatBridges.residual (NO new combinator; the rounded skip-add is the backward's
+-- too), bF = convFlatBack∘bnBack∘reluMaskBack∘convFlatBack∘bnBack. BN-backs supplied (floatBridges_
+-- bnPerChannelBack). The dominant r34 block (13 of 16). Down-block/stem need a strided-conv backward.
+#print axioms Proofs.floatBridges_r34IdBlockBack
 -- ── planning/floatbridge_enet_vit.md §2a–§2d (ViT float bridge: LN + GELU) ──
 -- §2a LayerNorm: layerNormForward = bnForward definitionally (per-token feature-axis
 -- reduction), so floatClose_layerNorm IS floatClose_bn — the rsqrt keystone + operating-
