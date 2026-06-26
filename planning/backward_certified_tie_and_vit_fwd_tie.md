@@ -115,16 +115,26 @@ flip the float bridge already uses). This single lemma unblocks the depthwise le
    separate projBack sums regroup into the certified `Σₕ(Q+K+V)` via `Finset.sum_add_distrib` (+ `ring` for
    the `Q+(K+V)` vs `(Q+K)+V` association).
 
-   **Remaining for the FULL block tie + the structural finding:** wrapping the MHSA leaf in the attn/MLP
-   sublayer + residual is NOT just mechanical. The certified per-token LayerNorm backward
-   (`layerNorm_per_token_has_vjp_mat.backward A`) is **input-dependent per token** (the LN Jacobian at `A r`
-   differs per token r), but the float `vitBlockBack` lifts a SINGLE `lnB₁ : Vec → Vec` via `perRowFlat`
-   (the same backward map applied to every token). For the FORWARD this is fine (`layerNormForward` is one
-   pure function of each token's own input); for the BACKWARD a single cotangent→grad map can't carry the
-   per-token saved-input dependence. So the block tie needs either a per-token-input-aware lift (not plain
-   `perRowFlat lnB₁`) or the observation that the float bridge's LN-back is a per-token-uniform
-   representation. The MHSA half (the genuinely-new sdpa adjoint) ties cleanly; the LN-sublayer half is this
-   structural consideration, to resolve next.
+   **ATTN-SUBLAYER RECONCILIATION DONE 2026-06-26** (`transformerAttnSublayerBack_flat_decomp`, same file,
+   3-axiom-clean): the certified attn-sublayer VJP, flattened, IS the residual skip `v` plus the certified
+   per-token LayerNorm backward of (the unflatten of) `mhsaBackFlat` — so the MHSA leaf is now grounded in
+   the certified gradient *through the sublayer*. Route: `transformerAttnSublayer_backward_decomp` (the
+   `biPathMat`/`vjpMat_comp` unfold = skip + `LN₁-back ∘ mhsa-back`, `rfl` — but needs `set_option
+   maxHeartbeats 10000000` and the build is ~222s: the general-heads `transformerAttnSublayer_has_vjp_mat.backward`
+   is heavy for the kernel, unlike ViTBackB0's heads=1 `transformerBlock_backward_unfold`) + plug in the
+   MHSA leaf (`congrFun mhsaBackFlat_eq_mhsa_vjp` + `unflatten_flatten`) + flatten the residual sum.
+
+   **The structural finding (the genuine remaining piece):** the certified LayerNorm-back is
+   `layerNorm_per_token_has_vjp_mat.backward A` = `rowwise` of the single-token LN VJP, which threads each
+   token's saved input `A r` (its Jacobian differs per token). The float `vitBlockBack` instead lifts a
+   SINGLE `lnB₁ : Vec → Vec` via `perRowFlat` (one cotangent→grad map for every token). For the FORWARD
+   this is fine (`layerNormForward` is one pure function of each token's own input); for the BACKWARD a
+   single map can't carry the per-token saved-input dependence. So the attn-sublayer reconciliation above
+   uses the CORRECT per-token LN-back (not the float's `perRowFlat lnB₁`); closing the full `vitBlockBack`
+   tie needs `vitBlockBack` enriched with a per-token-input-aware LN lift (not plain `perRowFlat` of a
+   single `lnB₁`). The sdpa half ties; the LN-back half is this float-bridge enrichment. (The MLP sublayer
+   is the analogous decomposition with dense/gelu instead of MHSA — same per-token-LN consideration, no new
+   analysis.)
 
 ### Honest scope note
 

@@ -1754,6 +1754,14 @@ open Proofs
 #print axioms Proofs.projBack_core_coord
 #print axioms Proofs.woback_unflatten
 #print axioms Proofs.mhsaBackFlat_eq_mhsa_vjp
+-- §B vit attn-SUBLAYER reconciliation (grounds the MHSA leaf in the block): the certified
+-- transformerAttnSublayer VJP decomposes (biPathMat unfold) to skip + LN₁-back ∘ mhsa-back; flattened,
+-- it IS the residual skip v + the certified per-token LayerNorm backward of (unflatten of) mhsaBackFlat
+-- — so the MHSA half of the ViT block backward is grounded in the certified gradient through the
+-- sublayer. The per-token LN-back threads each token's saved input A r (the structural reason the float
+-- bridge's single-lnB₁ perRowFlat lift is the remaining piece for a full vitBlockBack tie).
+#print axioms Proofs.transformerAttnSublayer_backward_decomp
+#print axioms Proofs.transformerAttnSublayerBack_flat_decomp
 -- §B endpoint leaf ties: the dense head (Wᵀ·dy = certified Mat.mulVec), GAP (broadcast-÷, rfl), and
 -- the smooth-point maxpool scatter — each float-bridge endpoint backward = its certified per-op VJP.
 -- With the conv/strided-conv leaves, every per-op backward of r34InputGrad is now certified-tied.

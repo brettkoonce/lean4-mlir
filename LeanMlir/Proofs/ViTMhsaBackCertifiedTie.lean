@@ -111,4 +111,61 @@ theorem mhsaBackFlat_eq_mhsa_vjp
   unfold mhSlab
   ring
 
+-- ════════════════════════════════════════════════════════════════
+-- § The attention-sublayer reconciliation — grounding the MHSA leaf in the block
+-- ════════════════════════════════════════════════════════════════
+
+set_option maxHeartbeats 10000000 in
+/-- **The certified attention-sublayer VJP decomposes** (the `biPathMat` unfold, `rfl`): the residual
+    skip passes the cotangent through (`identityMat` backward = `dY`), and the non-trivial arm is the
+    chain `LN₁-back ∘ mhsa-back` at the saved LayerNorm output `LN₁ A` (`vjpMat_comp`). The Mat-space
+    analogue of `transformerBlock_backward_unfold`. -/
+theorem transformerAttnSublayer_backward_decomp (ε γ1 β1 : ℝ) (hε : 0 < ε)
+    (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh)) (A dY : Mat N (h * dh)) :
+    (transformerAttnSublayer_has_vjp_mat N h dh ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo).backward A dY
+      = (fun i j => dY i j +
+          (layerNorm_per_token_has_vjp_mat N (h * dh) ε γ1 β1 hε).backward A
+            ((mhsa_has_vjp_mat N h dh Wq Wk Wv Wo bq bk bv bo).backward
+              (fun n => layerNormForward (h * dh) ε γ1 β1 (A n)) dY) i j) := rfl
+
+/-- **The attention-sublayer backward, flat, with the MHSA leaf plugged in.** The certified
+    attention-sublayer VJP (flattened) IS the residual skip `v` plus the certified **per-token**
+    LayerNorm backward of (the unflatten of) `mhsaBackFlat` — the proven sdpa-adjoint leaf
+    (`mhsaBackFlat_eq_mhsa_vjp`). So the MHSA half of the ViT encoder block backward is now grounded in
+    the certified gradient end to end through the sublayer.
+
+    Note the LayerNorm-back is `layerNorm_per_token_has_vjp_mat.backward A` — `rowwise` of the
+    single-token LN VJP, which threads each token's saved input `A r` (its Jacobian differs per token).
+    This is precisely why the float bridge's single-`lnB₁` `perRowFlat` lift (one cotangent→grad map for
+    every token) is the remaining piece for a full `vitBlockBack` tie: the forward LN rides one pure
+    function per token, but the backward needs the per-token saved input. The sdpa half ties; the LN-back
+    half wants a per-token-input-aware lift. 3-axiom-clean. -/
+theorem transformerAttnSublayerBack_flat_decomp (ε γ1 β1 : ℝ) (hε : 0 < ε)
+    (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh))
+    (A : Mat N (h * dh)) (v : Vec (N * (h * dh))) :
+    Mat.flatten ((transformerAttnSublayer_has_vjp_mat N h dh ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo).backward
+        A (Mat.unflatten v))
+      = (fun idx => v idx +
+          Mat.flatten ((layerNorm_per_token_has_vjp_mat N (h * dh) ε γ1 β1 hε).backward A
+            (Mat.unflatten (mhsaBackFlat Wq Wk Wv Wo
+              (fun r => Proofs.dense Wq bq ((fun n => layerNormForward (h * dh) ε γ1 β1 (A n)) r))
+              (fun r => Proofs.dense Wk bk ((fun n => layerNormForward (h * dh) ε γ1 β1 (A n)) r))
+              (fun r => Proofs.dense Wv bv ((fun n => layerNormForward (h * dh) ε γ1 β1 (A n)) r))
+              v))) idx) := by
+  have hmhsa : (mhsa_has_vjp_mat N h dh Wq Wk Wv Wo bq bk bv bo).backward
+        (fun n => layerNormForward (h * dh) ε γ1 β1 (A n)) (Mat.unflatten v)
+      = Mat.unflatten (mhsaBackFlat Wq Wk Wv Wo
+          (fun r => Proofs.dense Wq bq ((fun n => layerNormForward (h * dh) ε γ1 β1 (A n)) r))
+          (fun r => Proofs.dense Wk bk ((fun n => layerNormForward (h * dh) ε γ1 β1 (A n)) r))
+          (fun r => Proofs.dense Wv bv ((fun n => layerNormForward (h * dh) ε γ1 β1 (A n)) r))
+          v) := by
+    rw [congrFun (mhsaBackFlat_eq_mhsa_vjp Wq Wk Wv Wo bq bk bv bo
+          (fun n => layerNormForward (h * dh) ε γ1 β1 (A n))) v, Mat.unflatten_flatten]
+  rw [transformerAttnSublayer_backward_decomp ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo A (Mat.unflatten v),
+      hmhsa]
+  funext idx
+  simp only [Mat.flatten]
+  congr 1
+  exact congrFun (Mat.flatten_unflatten v) idx
+
 end Proofs
