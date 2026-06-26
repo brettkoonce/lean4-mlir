@@ -382,6 +382,12 @@ lean_lib «Proofs» where
              -- mbconvBody_has_vjp.backward — SE back pinned to seBlockFull_has_vjp, swish to swish_has_vjp,
              -- depthwise via the gate. Certified per-example body VJP already exists (global bnForward).
              `LeanMlir.Proofs.EfficientNetBackCertifiedTie,
+             -- §B integrity tie (vit MHSA — the sdpa adjoint): mhsaBackFlat (Q/K/V pinned to the actual
+             -- dense projections at the saved input X) = the certified mhsa_has_vjp_mat.backward,
+             -- flattened. Via ViTBackB0's mhsa_backward_collapseMH (certified Mat backward = per-head
+             -- merged sum) + the projBack_core_coord/woback_unflatten coordinate match (dense Wᵀ = mulVec,
+             -- Σk over h·dh reindexes to Σh Σj, separate projBacks regroup via sum_add_distrib).
+             `LeanMlir.Proofs.ViTMhsaBackCertifiedTie,
              -- A3 §1g loss-head cotangent seed: lift softmax_ce_cot_close to a FloatBridges seed
              -- (z ↦ softmax(z)−onehot, the CE input-gradient; bounded by 1+cotErr(0) since softmax∈[0,1])
              -- so any <net>_grad .comp it = the whole "logits → input-gradient" backward "from the loss".

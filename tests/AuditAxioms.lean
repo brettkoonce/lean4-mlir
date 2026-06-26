@@ -98,6 +98,7 @@ import LeanMlir.Proofs.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.MobileNetV2BackCertifiedTie
 import LeanMlir.Proofs.EfficientNetBackCertifiedTie
+import LeanMlir.Proofs.ViTMhsaBackCertifiedTie
 import LeanMlir.Proofs.DepthwiseBackFloatBridge
 import LeanMlir.Proofs.SEBackFloatBridge
 import LeanMlir.Proofs.MobileNetV2BackFloatBridge
@@ -1744,6 +1745,15 @@ open Proofs
 -- bn_has_vjp/swish_has_vjp/seBlockFull_has_vjp backwards = mbconvBody_has_vjp's backward (the certified
 -- per-example body VJP already exists, global bnForward); depthwise via the gate. b1-free.
 #print axioms Proofs.mbconvBodyBack_eq_mbconvBody_vjp
+-- §B integrity tie (vit MHSA — the sdpa adjoint, the substantive vit-specific piece): the float MHSA
+-- backward mhsaBackFlat (with Q/K/V pinned to the actual dense projections at the saved input X) IS the
+-- certified mhsa_has_vjp_mat.backward, flattened. Unlike the CNN convFlatBack (a free reversed-kernel
+-- conv), the sdpa cores are certified-sdpa_back-grounded by CONSTRUCTION; this closes the assembly
+-- reconciliation (separate dense Wᵀq/k/v projBacks ↔ the qkv-merged certified VJP) via ViTBackB0's
+-- mhsa_backward_collapseMH + the projBack_core_coord/woback_unflatten coordinate match.
+#print axioms Proofs.projBack_core_coord
+#print axioms Proofs.woback_unflatten
+#print axioms Proofs.mhsaBackFlat_eq_mhsa_vjp
 -- §B endpoint leaf ties: the dense head (Wᵀ·dy = certified Mat.mulVec), GAP (broadcast-÷, rfl), and
 -- the smooth-point maxpool scatter — each float-bridge endpoint backward = its certified per-op VJP.
 -- With the conv/strided-conv leaves, every per-op backward of r34InputGrad is now certified-tied.

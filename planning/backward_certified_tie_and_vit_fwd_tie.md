@@ -102,20 +102,29 @@ flip the float bridge already uses). This single lemma unblocks the depthwise le
    (`seBack(dy) = (g⊙dy) + gateBack(x⊙dy)`); the certified `seBlockFull_has_vjp` exists, so the tie is
    the product-rule leaf. Per-example body is non-batched ⇒ `b1`-free like r34 (the batched whole-net
    stays at the batched-block level, as the forward does).
-4. **vit** — the hardest: the sdpa adjoint. **FINDING (2026-06-26):** the sdpa cores are NOT a
-   free hand-transcription needing a gate (unlike the CNN `convFlatBack`) — `coreQFlat = flatten ∘
-   mhsaSdpaBackQ ∘ unflatten` and `mhsaSdpaBackQ Q K V dOut i j = sdpa_back_Q … (mhSlab … )` is **built
-   directly from the certified `sdpa_back_Q`** (per head over the `mhSlab` slabs, `SdpaBackFloatBridge.lean`).
-   So vit's §B core integrity holds **by construction** — the float bridge was assembled ON the certified
-   `sdpa_back`, not a look-alike. The remaining vit §B work is the **block-level reconciliation**: the float
-   `vitBlockBack`/`mhsaBackFlat` is a flat per-head fan-in assembly (separate Q/K/V projBacks + cores +
-   `biPathSum`), while the certified `transformerBlock_has_vjp_mat` is Mat-space (`vjpMat_comp` over the
-   qkv-MERGED projection + `colSlabApply` sdpa). Reconciling these two *different* VJP assemblies (merged-
-   then-split vs separate-then-fan-in) + the Mat↔flat (`perRow`) reindex is a genuinely larger effort than
-   the CNN per-op leaf gates — NOT a `rfl` after rewriting leaves. ViTBackB0's `transformerBlockBackGraph`
-   already did this reconciliation for the EMITTED MLIR graph (`den … = flatten ((transformerBlock_has_vjp_mat
-   …).backward …)`); reusing that for the float `vitBlockBack` (if `mhsaBackFlat` = the graph's ℝ-denotation)
-   is the suggested next step. Left as the honest remaining piece.
+4. **vit** — the hardest: the sdpa adjoint. **MHSA LEAF TIE DONE 2026-06-26** (`mhsaBackFlat_eq_mhsa_vjp`,
+   `ViTMhsaBackCertifiedTie.lean`, 3-axiom-clean): the float MHSA backward `mhsaBackFlat` (with Q/K/V pinned
+   to the actual `dense W· b· (X·)` projections at the saved input X) **IS the certified
+   `mhsa_has_vjp_mat.backward`, flattened**. The sdpa cores were already certified-`sdpa_back`-grounded by
+   construction (`coreQFlat = flatten ∘ mhsaSdpaBackQ ∘ unflatten`, `mhsaSdpaBackQ = sdpa_back_Q` per
+   `mhSlab` head); what's closed is the **assembly reconciliation** — the float's SEPARATE `dense Wᵀq/Wᵀk/Wᵀv`
+   projBacks vs the certified qkv-MERGED VJP. Route: ViTBackB0's `mhsa_backward_collapseMH` (certified Mat
+   backward = the per-head merged sum `mhsaBackCollapsedMH`) + a coordinate match — `dense Wᵀ 0 = Mat.mulVec
+   W` (`projBack_core_coord`/`woback_unflatten`), the `Σ k` over `h·dh` reindexes to `Σₕ Σⱼ`
+   (`Equiv.sum_comp` + `Fintype.sum_prod_type`), `mhSlab h Q' = Qg h` definitionally, and the float's three
+   separate projBack sums regroup into the certified `Σₕ(Q+K+V)` via `Finset.sum_add_distrib` (+ `ring` for
+   the `Q+(K+V)` vs `(Q+K)+V` association).
+
+   **Remaining for the FULL block tie + the structural finding:** wrapping the MHSA leaf in the attn/MLP
+   sublayer + residual is NOT just mechanical. The certified per-token LayerNorm backward
+   (`layerNorm_per_token_has_vjp_mat.backward A`) is **input-dependent per token** (the LN Jacobian at `A r`
+   differs per token r), but the float `vitBlockBack` lifts a SINGLE `lnB₁ : Vec → Vec` via `perRowFlat`
+   (the same backward map applied to every token). For the FORWARD this is fine (`layerNormForward` is one
+   pure function of each token's own input); for the BACKWARD a single cotangent→grad map can't carry the
+   per-token saved-input dependence. So the block tie needs either a per-token-input-aware lift (not plain
+   `perRowFlat lnB₁`) or the observation that the float bridge's LN-back is a per-token-uniform
+   representation. The MHSA half (the genuinely-new sdpa adjoint) ties cleanly; the LN-sublayer half is this
+   structural consideration, to resolve next.
 
 ### Honest scope note
 
