@@ -9884,7 +9884,7 @@ with a bridge theorem pinning it to the proven formula, so the code cannot
 drift from the math --- and this now covers whole training steps (forward,
 backward, parameter update) for all twelve verified networks at the production
 trainers' exact signatures, each emitted step tied operator-by-operator to the
-network's own forward pass. \textbf{Cross-checked} (empirical): because IREE cannot itself be
+network's own forward and backward pass. \textbf{Cross-checked} (empirical): because IREE cannot itself be
 proven, and \texttt{float32} only conditionally --- its rounding now
 carries a theorem layer whose interface constants are empirically anchored
 (\S~\ref{sec:float32}) --- three independent oracles ---
@@ -9896,21 +9896,23 @@ empirical one split among its witnesses.
 
 \section{Trust kernel}
 
-The Verified VJP Proofs suite proves \textbf{48 VJP correctness
+The Verified VJP Proofs suite proves \textbf{70 VJP correctness
 theorems} --- one per layer, operator, and whole-network architecture,
 each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\), now
 including the full-architecture closes of all five Part~I networks --- on
 top of the foundation \(\pdiv\) calculus and the
-differentiability/forward/witness machinery they rest on, plus 22
-architecture definitions in the bestiary, across 97 Lean proof files,
+differentiability/forward/witness machinery they rest on, plus 41
+architecture definitions in the bestiary, across 156 Lean proof files,
 with zero project axioms. The axiom audit
-(\texttt{tests/AuditAxioms.lean}) re-checks \textbf{761 theorems} in all
---- the VJP contracts plus the forward-graph faithfulness, render, and
-cotangent-chain results --- every one closing under the same three core
-axioms. The most recent additions are the
-\(\mathbb{R}\to\texttt{float32}\) bridge and the descent results
-(\S~\ref{sec:float32}): 38 theorems --- rounding budgets, the
-inexact-descent lemma, the linear loss's Lipschitz constants --- all
+(\texttt{tests/AuditAxioms.lean}) re-checks \textbf{1{,}153 theorems} in all
+--- the VJP contracts plus the forward-graph faithfulness, render,
+cotangent-chain, and backward certified-VJP tie results --- every one
+closing under the same three core axioms. The most recent additions are
+the \(\mathbb{R}\to\texttt{float32}\) bridge and the descent results
+(\S~\ref{sec:float32}): roughly 600 theorems --- the rounding budgets,
+now architecture-complete across every operator of all the convolutional
+and transformer nets; the per-layer float-fused descent guarantees for the
+shallow nets; and the subnormal and eval-mode-BN lemmas --- all
 \emph{hypothesis-style}, so the audit still closes under the same three
 axioms with zero project axioms.
 
@@ -10118,10 +10120,14 @@ and bounded:
   \item \emph{By construction}: the emitted StableHLO is the rendering of
     exactly that IR.
   \item \emph{Trusted} (validated numerically, not proven): that the
-    StableHLO \emph{text} faithfully denotes $[\![\cdot]\!]$ --- a property
-    that would need a formal semantics of StableHLO text, which does not yet
-    exist; that IREE lowers the text correctly; and that \texttt{float32}
-    approximates $\mathbb{R}$.
+    StableHLO \emph{text} faithfully denotes $[\![\cdot]\!]$. Its
+    \emph{syntactic} half is now partly closed --- the emitted text lexes and
+    parses back to the proven op-graph (\texttt{StableHLOLex.lean},
+    \texttt{StableHLOParse.lean}) --- leaving a formal StableHLO
+    \emph{semantics}, which does not yet exist; that IREE lowers the text
+    correctly; and that \texttt{float32} approximates $\mathbb{R}$, the last
+    now a conditional theorem validated on real silicon
+    (\S~\ref{sec:float32}) rather than a bare assumption.
 \end{itemize}
 So the gradient the GPU computes is, by a machine-checked theorem, the
 network's exact reverse-mode derivative over $\mathbb{R}$ --- up to one
@@ -10160,7 +10166,14 @@ from the MNIST linear classifier to depth-12 ViT-Tiny (200 parameters, the first
 network with no rendered-gradient gaps); the axiom audit re-derives every tie
 under the same three axioms, and the project's CI prints a green cell for a
 network only when its tie capstone is in that closure --- so the scorecard cannot
-claim more than the kernel checked. What stays trusted is exactly what the
+claim more than the kernel checked. The backward direction is now tied the same
+way: each deep net's rendered block-backward is pinned to that block's certified
+VJP (\texttt{vitBlockBackPR\_eq\_transformerBlock\_vjp} and its peers for
+ResNet-34, MobileNetV2, ConvNeXt, and EfficientNet), so the emitted backward
+denotes the certified reverse-mode derivative graph-for-graph at block
+granularity --- the whole-net backward fold assembled for ResNet-34 and
+EfficientNet, and elsewhere gated only by a realistic-dimension whole-net VJP
+that stays an honest stop, not remaining work. What stays trusted is exactly what the
 per-operator story already trusted, now carried across the whole step: the one
 printer, and that each emitted operation's text denotes what $[\![\cdot]\!]$ says
 it does.
@@ -10279,16 +10292,25 @@ the proven gradient'' is a theorem about a value, not a hope about a comment.
 Every theorem in this book is over exact reals; the GPU computes in
 binary32. Until recently that gap lived entirely in the empirical layer
 --- the oracles agree to 1--2 ULP, and you were asked to find that
-persuasive. For the Tier-1 nets it is now a theorem chain
-(\texttt{LeanMlir/Proofs/FloatBridge.lean}, \texttt{SgdDescent.lean},
-\texttt{SgdDescentLinear.lean}), and the way it avoids new axioms is the
-part worth explaining.
+persuasive. It is now a theorem layer, and it has two halves of different
+reach --- keeping them apart is the honest part. The \emph{closeness} half
+(\(|\,\text{float op} - \text{real op}\,| \le\) budget) is
+architecture-complete: \texttt{FloatBridge.lean} and the per-net
+\texttt{*FloatBridge} files budget every operator of every network, forward
+and backward, from the MNIST linear classifier to ViT-Tiny. The
+\emph{descent} half (a rounded step provably \emph{decreases the loss})
+closes only for the shallow nets
+(\texttt{SgdDescent\{Linear,Mlp,Cnn,Cifar\}.lean}). The way the chain avoids
+new axioms is the part worth explaining.
 
 \paragraph{The model is a hypothesis, not an axiom.}
 A \texttt{FloatModel} is \emph{any} rounding operator \(\mathrm{rnd}\)
 with relative error \(u\): \(|\mathrm{rnd}(x) - x| \le u\,|x|\).
 Binary32 round-to-nearest satisfies this with \(u = 2^{-24}\) on the
-normal range (subnormals are open); the exact-arithmetic model
+normal range (the subnormal range is characterized separately in
+\texttt{FloatSubnormalBridge.lean} --- the normalized blocks provably stay
+normal, and the residual underflow floor is proven negligible,
+\(\le 2^{-86}\)); the exact-arithmetic model
 (\(\mathrm{rnd} = \mathrm{id}\), \(u = 0\)) shows the interface is
 inhabited and collapses every budget to zero. Nothing about IEEE-754 is
 postulated --- the theorems are conditional on the standard model, the
@@ -10318,11 +10340,24 @@ proven gradient. \emph{The loss head}:
 softmax-minus-onehot cotangent against the certified
 \(\partial(\mathrm{crossEntropy})/\partial(\mathrm{logits})\).
 \emph{Descent}: \texttt{sgd\_descends} proves an \(\eta\)-accurate
-gradient step still \emph{decreases the loss}, and for the linear
-classifier \texttt{linear\_sgd\_descends} discharges its smoothness
-hypothesis with the explicit constant \(2a^2/(1-2aD)\) --- no Hessian:
-the softmax ratio sandwich that powers the float budgets turns out to be
-the Lipschitz engine too.
+gradient step still \emph{decreases the loss}, and
+\texttt{linear\_sgd\_descends} discharges its smoothness hypothesis with
+the explicit constant \(2a^2/(1-2aD)\) --- no Hessian: the softmax ratio
+sandwich that powers the float budgets turns out to be the Lipschitz
+engine too. With the float budget \emph{fused in} --- the step's
+\(\eta\) is the \emph{proven} binary32 gradient accuracy, not an assumed
+parameter --- this closes end-to-end for the linear classifier
+(\texttt{linear\_float\_sgd\_descends}), the entire MLP
+(\texttt{mlp\_\{output,hidden,input\}\_float\_sgd\_descends}), and the
+entire Chapter-4 CNN, both conv weights and biases
+(\texttt{cnn\_conv\{1,2\}\_float\_sgd\_descends}). The \(\mathbb{R}\)-side
+argument reaches one layer further:
+\texttt{cifar8\_lastConv\_sgd\_descends} is the first non-MNIST descent ---
+CIFAR-8's last conv, proved as an \emph{instance} of the CNN lemma at its
+frozen earlier features --- and that framing is exactly why it stops there.
+The admissible \(\mathrm{lr}\) is a product of per-layer operator-norm
+factors, so each added layer shrinks it geometrically; full-depth CIFAR and
+all five deep nets stay closeness-only, by design, not for want of effort.
 
 \paragraph{The kink, quantitatively.}
 Over \(\mathbb{R}\), ReLU forced the hypotheses \(x_k \ne 0\). In
@@ -10354,7 +10389,7 @@ ReLU mask flips & \(0\) under margins & \(\mathbf{0}\,/\,29.5\mathrm{M}\) \\
 \end{tabular}
 \end{center}
 
-Read the gap honestly, in both directions. The worst-case bounds hold
+The worst-case bounds hold
 with up to \(10^{8}\) to spare because worst-case composition
 compounds magnitude bounds the way no real activation pattern does ---
 that gap is the quantitative argument for a-posteriori certificates
@@ -10362,47 +10397,6 @@ past toy depth, now visible in a theorem rather than asserted. And the
 flip count is zero across 29.5 million measured pre-activations: the
 margin hypotheses are not a technicality the proofs hide behind; they
 are what training actually looks like.
-
-\paragraph{Lower precision, by instantiation.}
-The model's unit roundoff \(u\) is a field, not a literal, so every budget
-is stated for abstract \(u\) and a precision is an \emph{instantiation} ---
-up to the point where the relative model \(|\mathrm{rnd}(x) - x| \le u\,|x|\)
-itself breaks. The deployed kernels are not fp32 but \emph{bf16-mixed}: bf16
-leaf compute, fp32 accumulate. The two-roundoff budget
-\texttt{dot\_close\_mixed} splits the single \(u\) into a leaf roundoff
-\(u_{\mathrm{leaf}}\) (the matmul inputs) and an accumulate \(u_{\mathrm{acc}}\)
-(the reduction), and proves the leaf contributes only a \emph{flat} term
-\((2u_{\mathrm{leaf}} + u_{\mathrm{leaf}}^2)\sum_i |x_i y_i|\) while the fan-in
-Higham factor rides entirely on \(u_{\mathrm{acc}}\). The \(1/u\) fan-in wall
-therefore sits at \(u_{\mathrm{acc}} = 2^{-24}\), not at the leaf --- which is
-precisely why bf16-mixed (the shipped \texttt{r34\_imagenet\_bf16.bin}) is
-non-vacuous where pure bf16, whose \(\gamma_k\) goes vacuous at fan-in
-\(256\), is not.
-
-\paragraph{fp8, and where accuracy gives way to faithfulness.}
-At fp8 (E4M3, \(u_{\mathrm{leaf}} = 2^{-4}\)) the worst-case leaf term is
-\(\approx 12.5\%\), so over depth it compounds to nothing. The exception is
-depth one: MNIST-linear is a single \(784 \to 10\) matmul, where the
-per-matmul leaf bound \emph{is} the end-to-end bound, and an honest fp8
-accuracy statement survives. It takes the conditional, margin form the kink
-theorems already taught: \texttt{argmax\_preserved} proves a \(B\)-accurate
-matmul cannot change the prediction on any input whose top-1 logit margin
-exceeds \(2B\). At the trained magnitudes the worst-case budget is
-\(B \le 61\) (\texttt{linear\_e4m3\_logit\_budget}), so a margin past \(122\)
-freezes the label --- a threshold that, like the \(5100\) logit bound above,
-is vacuous against a mean measured margin of \(\approx 4.25\). The same
-theorem with the \emph{measured} \(B = 0.38\)
-(\texttt{scripts/mnist\_e4m3\_demo.py}, where fp32 \(92.25\%\) becomes E4M3
-\(92.30\%\)) covers \(92.89\%\) of the test set, every one of which provably
-keeps its prediction. Below this --- deeper, or at fp4 --- the relative model
-gives way to block-scaled quantization, and the verifiable claim migrates from
-\emph{numerical accuracy} to \emph{structural faithfulness}:
-\texttt{e4m3\_render\_faithful} proves the emitted block-scaled int-matmul
-graph denotes the intended algorithm (the per-output dequant scale factors out
-of the fp32 accumulate, \texttt{dequant\_factors}), so the bytes implement
-block-scaled-E4M3 matmul with fp32 accumulate --- a
-correctness-of-implementation theorem that makes no accuracy claim and does not
-pretend to one.
 
 \section{The five layers, as three kinds of certainty}
 
