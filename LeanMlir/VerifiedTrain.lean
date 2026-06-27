@@ -476,7 +476,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     IO.FS.writeFile epPath (toString (ep + 1))
   IO.println s!"done (trained {net.name} with AdamW + cosine/warmup via packed threading)."
 
-/-- Train driver for the **2-parameter linear** path (Chapter 2). The verified
+/-- Train driver for the **2-parameter linear** path (Chapter 1). The verified
     `@<slug>_train_step` takes `W0`/`b0` as *separate* arguments (`linearTrainStepV`),
     weights are zero-initialized, and the loss/lr are baked into the MLIR — distinct
     from the packed-params, He-init `train` above. Only the linear classifier uses this;

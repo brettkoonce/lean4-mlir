@@ -2,9 +2,9 @@ import LeanMlir.Proofs.ResNet34Close
 import LeanMlir.Proofs.Cifar8FaithfulPoC
 import LeanMlir.Proofs.CifarBnFaithfulPoC
 
-/-! # PoC: the ResNet-34 (Chapter 6) train step, proof-tied to the certified SGD step
+/-! # PoC: the ResNet-34 (Chapter 5) train step, proof-tied to the certified SGD step
 
-The Chapter-6 capstone — the full `[3,4,6,3]` ResNet-34 (146 params: a 7×7/s2 stem, 16
+The Chapter-5 capstone — the full `[3,4,6,3]` ResNet-34 (146 params: a 7×7/s2 stem, 16
 residual blocks, GAP + final dense). `MainResnet34Verified` trains on
 `verified_mlir/resnet34_train_step.mlir`; this file makes its parameter updates
 `den`-faithful — each emitted SGD op denotes the certified loss-descent step.

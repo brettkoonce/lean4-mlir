@@ -1,9 +1,9 @@
 import LeanMlir.Proofs.CNN
 import LeanMlir.Proofs.MLP
 
-/-! # Chapter 4: MNIST 2D CNN (no BatchNorm) — whole-network VJP
+/-! # Chapter 3: MNIST 2D CNN (no BatchNorm) — whole-network VJP
 
-The Chapter-4 demo model `mnistCnnNoBn`:
+The Chapter-3 demo model `mnistCnnNoBn`:
 
   conv2d 1→c (relu) → conv2d c→c (relu) → maxPool 2×2 → flatten
     → dense (relu) → dense (relu) → dense (identity)
@@ -13,7 +13,7 @@ This file builds two things:
 * `mnistCnnNoBn_has_vjp_at` — the **structural** whole-network VJP: the
   composed backward equals the `pdiv`-Jacobian VJP of the full forward
   pass, *conditional* on smoothness hypotheses (no ReLU kink / MaxPool
-  tie at the running activations). The Chapter-4 sibling of
+  tie at the running activations). The Chapter-3 sibling of
   `cnn_has_vjp_at`, minus BN and residual blocks.
 
 * `mnistMicroCnn_has_vjp_correct` — a **concrete tiny instance** where
@@ -70,10 +70,10 @@ theorem denseRelu_differentiableAt {m n : Nat}
   (relu_differentiableAt_of_smooth n _ h_smooth).comp v ((dense_differentiable W b) v)
 
 -- ════════════════════════════════════════════════════════════════
--- § Chapter-4 forward pass (BN-free)
+-- § Chapter-3 forward pass (BN-free)
 -- ════════════════════════════════════════════════════════════════
 
-/-- The Chapter-4 `mnistCnnNoBn` forward, in flattened `Vec` space.
+/-- The Chapter-3 `mnistCnnNoBn` forward, in flattened `Vec` space.
     Conv stage runs at spatial `(2*h, 2*w)`; the `maxPool` halves it to
     `(h, w)`; then three dense layers (two with ReLU). -/
 noncomputable def mnistCnnNoBnForward
@@ -92,17 +92,17 @@ noncomputable def mnistCnnNoBnForward
   ∘ (relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁)
 
 -- ════════════════════════════════════════════════════════════════
--- § Structural whole-network VJP (Chapter-4 capstone, conditional)
+-- § Structural whole-network VJP (Chapter-3 capstone, conditional)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **MNIST 2D CNN (no BN) whole-network VJP at a smooth point.**
 
-    The composed backward of the full Chapter-4 forward equals the
+    The composed backward of the full Chapter-3 forward equals the
     `pdiv`-contracted Jacobian (Jacobian-transpose applied to the
     cotangent), conditional on smoothness at the four ReLU kinks and
     the one MaxPool. Built by `vjp_comp_at` through
     `convRelu → convRelu → maxPool → denseRelu → denseRelu → dense`.
-    The Chapter-4 sibling of `cnn_has_vjp_at` (BN-free, no resblocks). -/
+    The Chapter-3 sibling of `cnn_has_vjp_at` (BN-free, no resblocks). -/
 noncomputable def mnistCnnNoBn_has_vjp_at
     {ic c h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
@@ -163,7 +163,7 @@ noncomputable def mnistCnnNoBn_has_vjp_at
     ((dense_has_vjp W₅ b₅).toHasVJPAt _)
 
 /-- **Public correctness theorem for `mnistCnnNoBn_has_vjp_at`** — the
-    Chapter-4 CNN's backward equals the `pdiv`-contracted Jacobian. -/
+    Chapter-3 CNN's backward equals the `pdiv`-contracted Jacobian. -/
 theorem mnistCnnNoBn_has_vjp_at_correct
     {ic c h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
@@ -767,7 +767,7 @@ theorem spatialCnn_has_vjp_correct (dy : Vec 10) (i : Fin (1 * (2*2) * (2*2))) :
 end Spatial
 
 -- ════════════════════════════════════════════════════════════════
--- Chapter-3 MLP: a concrete whole-network instance with every ReLU
+-- Chapter-2 MLP: a concrete whole-network instance with every ReLU
 -- smoothness hypothesis discharged (the simplest kinked capstone — one
 -- non-smooth op, `relu`, two sites). Closes the gap that `mlp_has_vjp_at`
 -- is never instantiated. Inside the three-axiom closure.
@@ -780,7 +780,7 @@ namespace MlpConcrete
     is then strictly positive (hence `≠ 0`), so both smoothness hypotheses
     of `mlp_has_vjp_at` discharge. The net is non-constant, so this is a
     *live* witness (non-trivial Jacobian), not a degenerate one. The
-    Chapter-3 analogue of the `Micro`/`Mini`/`Spatial` CNN instances. -/
+    Chapter-2 analogue of the `Micro`/`Mini`/`Spatial` CNN instances. -/
 noncomputable def W₀ : Mat 2 2 := fun _ _ => 1
 noncomputable def b₀ : Vec 2 := fun _ => 1
 noncomputable def W₁ : Mat 2 2 := fun _ _ => 1

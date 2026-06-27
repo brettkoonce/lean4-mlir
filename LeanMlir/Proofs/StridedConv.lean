@@ -1,9 +1,9 @@
 import LeanMlir.Proofs.CNN
 
-/-! # Strided convolution (stride-2 SAME) — Chapter 6 Milestone B, the hard new op
+/-! # Strided convolution (stride-2 SAME) — Chapter 5 Milestone B, the hard new op
 
 Real ResNet-34 downsamples with **stride-2 convolutions**, the one genuinely-new
-operator the Chapter-6 handoff (`planning/verified_r34.md` §3.6) flags as gating
+operator the Chapter-5 handoff (`planning/verified_r34.md` §3.6) flags as gating
 the jump from the ch6-A ResNet-*style* net to a true 34-layer ResNet.
 
 **The key identity that makes this tractable.** A stride-2 SAME convolution is

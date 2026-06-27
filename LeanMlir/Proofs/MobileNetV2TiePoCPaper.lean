@@ -5,7 +5,7 @@ import LeanMlir.Proofs.MobileNetV2FullPaper
 
 /-! # PoC: the FULL 17-block paper MobileNetV2 §1a TIE — the whole net tied through the real forward
 
-The Chapter-7 §1a tie: r34's whole-net thread (`ResNet34TiePoC.r34_net_tied_certified`) scaled to the
+The Chapter-6 §1a tie: r34's whole-net thread (`ResNet34TiePoC.r34_net_tied_certified`) scaled to the
 full `[t,c,n,s]` MobileNetV2. The paper §1 fold (`MobileNetV2FaithfulPoCPaper`) already makes every
 one of the 210 params `den = certified ∀ c`; this file feeds each consumer the **real forward
 activations** of `mobilenetv2ForwardPaper` and the **loss-driven backward-chain cotangent** the

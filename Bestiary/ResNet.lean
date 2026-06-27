@@ -4,7 +4,7 @@ import LeanMlir
 
 ResNet (He et al.\ 2015,
 [arXiv:1512.03385](https://arxiv.org/abs/1512.03385)) is the residual
-revolution. Chapter 6 covers ResNet-34 (the basic-block variant —
+revolution. Chapter 5 covers ResNet-34 (the basic-block variant —
 two 3×3 convs per block + skip). This entry covers the smaller
 basic-block sibling **ResNet-18** plus the deeper **bottleneck
 variants** ResNet-50 / -101 / -152, where each bottleneck block is
@@ -25,7 +25,7 @@ at proportional compute cost. The plateau eventually arrives
 (R-200 is roughly equivalent to R-152), but the residual primitive
 doesn't degrade gracefully — it *just keeps working*.
 
-ResNet-34 is in Chapter 6 because it's the cleanest residual block to
+ResNet-34 is in Chapter 5 because it's the cleanest residual block to
 follow through the math (no bottleneck). ResNet-18 and the bottleneck
 variants go here because they're the same residual primitive at
 different depths — same chain rule, same fan-in.
@@ -159,7 +159,7 @@ def main : IO Unit := do
   IO.println "  Bestiary — ResNet (R-18 / R-50 / R-101 / R-152)"
   IO.println "════════════════════════════════════════════════════════════════"
   IO.println "  Basic-block (R-18) and bottleneck (R-50/101/152) residual"
-  IO.println "  variants. ResNet-34 lives in Chapter 6 of the book."
+  IO.println "  variants. ResNet-34 lives in Chapter 5 of the book."
 
   summarize resNet18
   summarize resNet50

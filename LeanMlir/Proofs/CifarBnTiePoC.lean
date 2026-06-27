@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.CifarBnFaithfulPoC
 import LeanMlir.Proofs.Cifar8FaithfulPoC
 
-/-! # PoC: the CIFAR-BN (Chapter 5, per-channel BN) §1a TIE — tied through the real forward
+/-! # PoC: the CIFAR-BN (Chapter 4, per-channel BN) §1a TIE — tied through the real forward
 
 The BatchNorm peer of `CifarFaithfulPoC`'s §1a tie (`cifar_conv_tied_certified` etc.). cifar-bn is
 cifar (ch5) with a per-channel `bnPerChannelTensor3` inserted between every conv and its ReLU, so the

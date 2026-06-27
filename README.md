@@ -17,7 +17,7 @@ Companion code for the upcoming book *Verified Deep Learning with Lean 4*
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg)](https://doi.org/10.5281/zenodo.20402133)
 
 **Current version: `v0.6.1`** — verified training reaches low precision
-(fp8/E4M3 + bf16-mixed), Chapter 5 recast as the MNIST→ResNet bridge,
+(fp8/E4M3 + bf16-mixed), Chapter 4 recast as the MNIST→ResNet bridge,
 toolchain on Lean 4.31.0. Full release history in [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
@@ -32,7 +32,7 @@ docker build -t lean4-mlir-demo .
 docker run --rm lean4-mlir-demo
 ```
 
-Trains the Chapter-3 MNIST MLP on CPU to ~97.9% test accuracy through the
+Trains the Chapter-2 MNIST MLP on CPU to ~97.9% test accuracy through the
 full Lean → MLIR → IREE pipeline — no GPU, no Python, ~300 MB image. (First
 build ~10 min, dominated by building the IREE CPU runtime; reruns reuse the
 cached image.)
@@ -47,7 +47,7 @@ see [ROCM.md](ROCM.md) / [CUDA.md](CUDA.md), or [Native setup](#native-setup-gpu
 lake run mnist          # build + train the verified MNIST nets (linear / MLP / CNN)
 ```
 
-Then scale up: `lake run cifar` (the Chapter-5 BatchNorm × optimizer ablation)
+Then scale up: `lake run cifar` (the Chapter-4 BatchNorm × optimizer ablation)
 and `lake run imagenette` (the five Part-I nets at 224²). Not sure how long
 those take on your card? `lake run benchmark` probes your GPU and prints a
 per-chapter time estimate first.
@@ -449,9 +449,9 @@ See [`IREE_BUILD.md`](IREE_BUILD.md) for build instructions.
 ### 3. Get data
 
 ```bash
-./download_mnist.sh        # MNIST (Ch 3-4 trainers)
-./download_cifar.sh        # CIFAR-10 (Ch 5 trainers)
-./download_imagenette.sh   # Imagenette 320px → preprocessed binary (Ch 6+)
+./download_mnist.sh        # MNIST (Ch 2-3 trainers)
+./download_cifar.sh        # CIFAR-10 (Ch 4 trainers)
+./download_imagenette.sh   # Imagenette 320px → preprocessed binary (Ch 5+)
 ```
 
 ### 4. Build + run a tier (or one trainer)

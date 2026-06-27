@@ -208,13 +208,13 @@ noncomputable def dense_has_vjp {m n : Nat} (W : Mat m n) (b : Vec n) :
     simp only [Mat.mulVec]
     congr 1; ext j; rw [pdiv_dense]
 
-/-- The Chapter-2 demo model: a linear classifier is a single dense layer. -/
+/-- The Chapter-1 demo model: a linear classifier is a single dense layer. -/
 noncomputable def mnistLinear {m n : Nat} (W : Mat m n) (b : Vec n) : Vec m → Vec n :=
   dense W b
 
 /-- Whole-model VJP contract for the linear classifier — the degenerate
 simplest case of the per-architecture `*_has_vjp_correct` capstones, built
-straight from the Chapter-2 kit. -/
+straight from the Chapter-1 kit. -/
 theorem mnistLinear_has_vjp_correct {m n : Nat} (W : Mat m n) (b : Vec n)
     (x : Vec m) (dy : Vec n) (i : Fin m) :
     (dense_has_vjp W b).backward x dy i =

@@ -282,7 +282,7 @@ def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
   "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § Chapter 2 — linear classifier: forward + full SGD train step
+-- § Chapter 1 — linear classifier: forward + full SGD train step
 --
 -- The single-dense-layer specialisation of the MLP pieces above (no ReLU,
 -- so no `compare`/`select` masks and no hidden pre-activations). It is the
@@ -301,7 +301,7 @@ def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
 --
 -- So forward, loss cotangent, and parameter gradients are ALL renderings of
 -- proof-backed IR; only the SGD arithmetic (and the printer / IREE / float)
--- stay trusted. This is the Chapter-2 ("You Are Here") peer of
+-- stay trusted. This is the Chapter-1 ("You Are Here") peer of
 -- `mlpTrainStepModule`.
 -- ════════════════════════════════════════════════════════════════
 
@@ -320,7 +320,7 @@ def linearFwdModule (B d₀ d₁ : Nat) : String :=
     cotangent `dy = softmax(logits) − onehot` is *computed* in-module, not
     supplied. Returns the two updated parameters. Forward / loss / param-grads
     are renderings of proof-backed IR; only the SGD arithmetic is the trusted
-    frame. The Chapter-2 peer of `mlpTrainStepModule`. -/
+    frame. The Chapter-1 peer of `mlpTrainStepModule`. -/
 def linearTrainStepModule (B d₀ d₁ : Nat) (lr : String) : String :=
   let (fwd, logits) := ((HloF.dense "%W0" "%b0" d₀ d₁ (.input "%x")).render B).run' (0, 0)
   "module @m {\n" ++
@@ -1809,7 +1809,7 @@ def convnextBackModule (c cExp H W kH kW : Nat) (eps : String) : String :=
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
 #eval IO.println (renderBlock "mlp 4→3→3→2 (B=2)" 2 (mlpHlo 4 3 3 2))
 #eval IO.FS.writeFile "/tmp/linear_back.mlir" (linearModule 2 4 3)
--- Chapter 2: the actual MNIST linear classifier (784→10), forward + full
+-- Chapter 1: the actual MNIST linear classifier (784→10), forward + full
 -- SGD train step at the book's batch=128 — the printer→codegen→run artifact.
 #eval IO.FS.writeFile "/tmp/linear_fwd.mlir" (linearFwdModule 128 784 10)
 -- lr literal = 0.1/128: the proof-bridged loss cotangent is the *summed*

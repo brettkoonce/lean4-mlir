@@ -162,7 +162,7 @@ def toNet (s : VerifiedNetSpec) : VerifiedNet :=
 def train (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   s.toNet.train cfg dataDir
 
-/-- Train the 2-parameter linear path (Chapter 2); see `VerifiedNet.trainLinear`. -/
+/-- Train the 2-parameter linear path (Chapter 1); see `VerifiedNet.trainLinear`. -/
 def trainLinear (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   s.toNet.trainLinear cfg dataDir
 

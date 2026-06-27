@@ -2,8 +2,8 @@ import LeanMlir.Proofs.StableHLO
 
 /-! # CNN + CIFAR render half — conv train-step text as a name-threaded render of proven graphs
 
-The peer of `MlpRender.lean` (`mlpTrainStepStructured`) for the Chapter-4 MNIST CNN
-(`cnnTrainStepStructured`), the Chapter-5 CIFAR CNN (`cifarTrainStepStructured`), and the
+The peer of `MlpRender.lean` (`mlpTrainStepStructured`) for the Chapter-3 MNIST CNN
+(`cnnTrainStepStructured`), the Chapter-4 CIFAR CNN (`cifarTrainStepStructured`), and the
 per-channel-BatchNorm CIFAR CNN (`cifarBnTrainStepStructured`).
 The MLP render was all-flat, so `pretty`'s flat result names fed the backward/param-grad
 templates directly. The CNN forward graph (`cnnFwdGraph`) is *also* rendered all-flat —
@@ -222,7 +222,7 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
   s!"    return {n1W}, {n1b}, {n2W}, {n2b}, {n3W}, {n3b}, {n4W}, {n4b}, {n5W}, {n5b} : {ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
   "  }\n}\n"
 
-/-- Structured **CIFAR CNN** train-step renderer (`@cifar_train_step`): the Chapter-5 peer of
+/-- Structured **CIFAR CNN** train-step renderer (`@cifar_train_step`): the Chapter-4 peer of
     `cnnTrainStepStructured`, a re-parameterization across two conv→conv→pool stages at two
     spatial scales (channels `ic→c1→c1` then `c1→c2→c2`; spatial `H×W → H/2 → H/4`). Forward
     rendered all-flat from the proven `cifarFwdGraph`; the conv tail's 4-D consumers are
@@ -367,7 +367,7 @@ def cifarTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lr : Stri
   s!"    return %W1n, %b1n, %W2n, %b2n, %W3n, %b3n, %W4n, %b4n, %W5n, %b5n, %W6n, %b6n, %W7n, %b7n : {ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
   "  }\n}\n"
 
-/-- **CIFAR-CNN (Chapter 5, no-BN) train step rendered ENTIRELY from the verified AST.**
+/-- **CIFAR-CNN (Chapter 4, no-BN) train step rendered ENTIRELY from the verified AST.**
     The deeper, two-spatial-scale peer of `cnnTrainStepFaithfulV`: like
     `cifarTrainStepStructured` for the forward, but the backward chain
     (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`, twice through) and all 14 parameter
@@ -646,7 +646,7 @@ def cifarBnTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr 
   s!"    return %W1n, %b1n, %g1n, %bt1n, %W2n, %b2n, %g2n, %bt2n, %W3n, %b3n, %g3n, %bt3n, %W4n, %b4n, %g4n, %bt4n, %W5n, %b5n, %W6n, %b6n, %W7n, %b7n : {ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
   "  }\n}\n"
 
-/-- **CIFAR-BN (Chapter 5, per-channel BatchNorm) train step rendered ENTIRELY from the
+/-- **CIFAR-BN (Chapter 4, per-channel BatchNorm) train step rendered ENTIRELY from the
     verified AST.** The BN peer of `cifarTrainStepFaithfulV` (`conv→BN→relu ×4, 2 pools,
     3 dense`; 22 params). Forward + the BN input-grad backward were already proof-rendered
     (`bnPerChannelF`/`bnPerChannelBack`); now the whole backward chain

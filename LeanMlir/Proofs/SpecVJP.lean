@@ -13,7 +13,7 @@ import LeanMlir.Proofs.StableHLO
 
 The shape `#guard` in `MainResnet34Verified` only checks the *parameter interface*
 (typechecking). This file is the first rung of connecting a readable `VerifiedNetSpec`
-to the actual **math** — the proven VJP — on the simplest net, the Chapter-2 linear
+to the actual **math** — the proven VJP — on the simplest net, the Chapter-1 linear
 classifier (`dense 784→10`).
 
 The pattern (extends to MLP → conv nets, each rigid/per-net):
@@ -33,7 +33,7 @@ open Proofs
    — the *same* object `MainMnistLinearVerified` trains, so the VJP below is about the
    trainer's exact spec, not a copy. The shape tie (`toSpecs == …`) lives there too. -/
 
-/-- Math denotation of the linear spec. The Chapter-2 model is a single dense layer, so
+/-- Math denotation of the linear spec. The Chapter-1 model is a single dense layer, so
     `[.dense 784 10]` denotes to the Mathlib `dense W b`. Any other layer list is not the
     linear model (`0`), which makes the tie below drift-sensitive. -/
 noncomputable def denoteLinear (layers : List VLayer) (W : Mat 784 10) (b : Vec 10) :
@@ -43,7 +43,7 @@ noncomputable def denoteLinear (layers : List VLayer) (W : Mat 784 10) (b : Vec 
   | _               => fun _ => 0
 
 /-- **Spec ≡ the proven model.** `linearVerified`'s denotation is exactly `mnistLinear`
-    (the function the Chapter-2 VJP capstone is about) — by `rfl`, so it's checked by the
+    (the function the Chapter-1 VJP capstone is about) — by `rfl`, so it's checked by the
     kernel and breaks if `linearVerified.layers` changes. -/
 theorem linearVerified_denote_eq (W : Mat 784 10) (b : Vec 10) :
     denoteLinear linearVerified.layers W b = mnistLinear W b := rfl
@@ -122,7 +122,7 @@ the input. Here we headline the unconditional canonical witness (`mlp_has_vjp` s
 spec is exactly the subject of that conditional fold via `cnnVerified_denote_eq`. -/
 
 /-- Math denotation of the CNN spec: the 11-layer list denotes to `mnistCnnNoBnForward`
-    (`c=32`, `h=w=14`, the Chapter-4 MNIST CNN). -/
+    (`c=32`, `h=w=14`, the Chapter-3 MNIST CNN). -/
 noncomputable def denoteCNN (layers : List VLayer)
     (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32) (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32)
     (W₃ : Mat 6272 512) (b₃ : Vec 512) (W₄ : Mat 512 512) (b₄ : Vec 512)
@@ -134,7 +134,7 @@ noncomputable def denoteCNN (layers : List VLayer)
   | _ => fun _ => 0
 
 /-- **Spec ≡ the proven model.** `cnnVerified`'s denotation is exactly `mnistCnnNoBnForward`
-    — the function the Chapter-4 fold `mnistCnnNoBn_has_vjp_at` is about — by `rfl`. -/
+    — the function the Chapter-3 fold `mnistCnnNoBn_has_vjp_at` is about — by `rfl`. -/
 theorem cnnVerified_denote_eq (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
     (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (W₃ : Mat 6272 512) (b₃ : Vec 512)
     (W₄ : Mat 512 512) (b₄ : Vec 512) (W₅ : Mat 512 10) (b₅ : Vec 10) :

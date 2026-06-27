@@ -12,10 +12,10 @@ widening) on CIFAR-10/100 at half the training time and a quarter
 the parameters. Width turned out to be a more efficient axis to
 scale than depth for the ResNet family.
 
-The architecture is exactly Chapter 6's ResNet-34 with two knobs
+The architecture is exactly Chapter 5's ResNet-34 with two knobs
 turned: depth pulled in (40 or 28 layers instead of 34), channels
 multiplied by k (10× the original 16-32-64 widths). No new
-primitive — `Layer.residualBlock` is the same one Ch 6 proves.
+primitive — `Layer.residualBlock` is the same one Ch 5 proves.
 The widening factor is a per-instance parameter on the existing
 constructor.
 
@@ -44,7 +44,7 @@ For CIFAR (32×32 input):
 We pack the canonical CIFAR variants here plus a fixture. ImageNet-
 style WRN (WRN-50-2, WRN-101-2) uses bottleneck blocks instead;
 those are a one-line variant on `.bottleneckBlock` and aren't worth
-their own entry given Ch 6 already covers the bottleneck path.
+their own entry given Ch 5 already covers the bottleneck path.
 -/
 
 -- ════════════════════════════════════════════════════════════════
@@ -142,7 +142,7 @@ def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
   IO.println "  Bestiary — WRN (Wide ResNet)"
   IO.println "════════════════════════════════════════════════════════════════"
-  IO.println "  Same .residualBlock as ResNet-34 in Chapter 6, just"
+  IO.println "  Same .residualBlock as ResNet-34 in Chapter 5, just"
   IO.println "  widened. Wider-not-deeper turns out to be the more"
   IO.println "  efficient ResNet scaling axis."
 

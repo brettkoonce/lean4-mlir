@@ -1,8 +1,8 @@
 import LeanMlir.Proofs.BatchNorm
 
-/-! # Per-channel BatchNorm (Chapter 6 Milestone B8) — the block-diagonal VJP
+/-! # Per-channel BatchNorm (Chapter 5 Milestone B8) — the block-diagonal VJP
 
-Chapters 5–6 used a per-example **global** BatchNorm: one scalar `(γ, β)` over the
+Chapters 4–5 used a per-example **global** BatchNorm: one scalar `(γ, β)` over the
 whole `oc·h·w` activation (LayerNorm-shaped). Real ResNet wants **per-channel** BN:
 normalize each channel-slice independently with its *own* `(γ_c, β_c)`, `γ/β : Vec oc`.
 
@@ -472,7 +472,7 @@ theorem bnPerChannelTensor3_grad_input_correct (oc h w : Nat) (ε : ℝ) (hε : 
       bnPerChannelFlat_has_vjp_correct oc (h * w) ε hε γ β]
 
 -- ════════════════════════════════════════════════════════════════
--- § Chapter 8 (EfficientNet) — BATCH norm per channel on the [N,C,H,W] layout
+-- § Chapter 7 (EfficientNet) — BATCH norm per channel on the [N,C,H,W] layout
 --
 -- EfficientNet uses batch-norm, not the per-example instance-norm above. The KEY
 -- observation: batch-norm normalizes each channel over its `N·H·W` (batch+spatial)

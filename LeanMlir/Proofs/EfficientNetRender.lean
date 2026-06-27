@@ -2,7 +2,7 @@ import LeanMlir.Proofs.StableHLO
 
 /-! # EfficientNet-B0 train step rendered ENTIRELY from the verified AST (batched)
 
-The Chapter-8 peer of `mnv2TrainStepFaithfulVPaper` (`MobileNetV2Render.lean`), for the committed
+The Chapter-7 peer of `mnv2TrainStepFaithfulVPaper` (`MobileNetV2Render.lean`), for the committed
 full-16-MBConv EfficientNet-B0 (262 params, the real `[t,c,n,s,k]` B0 spec). Unlike MobileNetV2/
 ResNet34 (per-example `SHlo` index, batch threaded only in emit), EfficientNet emits **true
 batch-norm**, which couples the batch — so the whole net lives at the **batched index** `N·(c·h·w)`

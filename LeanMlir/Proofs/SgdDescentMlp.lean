@@ -4,7 +4,7 @@ import LeanMlir.Proofs.MlpTrainStep
 /-! # Lipschitz constants for the MLP softmax-CE loss — descent through the ReLU kinks
 
 `SgdDescentLinear` discharged `sgd_descends`' smoothness hypothesis for the
-Chapter-2 linear net. This file extends the discharge through the Chapter-3
+Chapter-1 linear net. This file extends the discharge through the Chapter-2
 MLP (`dense → relu → dense → relu → dense`), layer by layer:
 
 * **Output layer `W₂` — free.** The top dense layer sees the loss with no

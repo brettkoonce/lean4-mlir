@@ -500,7 +500,7 @@ theorem relu_close {n : Nat} (xt xa : Vec n) (e : ℝ)
 -- § Capstones: the Tier-1 nets
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Linear-net forward extraction (Chapter 2).** The rounded `mnistLinear`
+/-- **Linear-net forward extraction (Chapter 1).** The rounded `mnistLinear`
     is within the explicit `denseErr` budget of the real one, per logit. With
     `u = 2⁻²⁴` this is the binary32 forward-error bound for the certified
     linear classifier. -/
@@ -509,7 +509,7 @@ theorem linear_float_close {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
     |M.dense W b x j - mnistLinear W b x j| ≤ M.denseErr W b x 0 j :=
   M.dense_close_fresh W b x j
 
-/-- **MLP forward extraction (Chapter 3).** The rounded 3-layer MLP is within
+/-- **MLP forward extraction (Chapter 2).** The rounded 3-layer MLP is within
     the layer-2 `denseErr` budget (at inherited error `e₁`) of the real MLP —
     the same `dense/relu` composition whose train step is certified in
     `MlpTrainStep.lean`. The hypotheses `h₀`/`h₁` uniformize the per-coordinate

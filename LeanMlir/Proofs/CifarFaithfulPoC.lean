@@ -2,9 +2,9 @@ import LeanMlir.Proofs.CnnChainClose
 import LeanMlir.Proofs.CnnRender
 import LeanMlir.Proofs.CifarCNN
 
-/-! # PoC: the CIFAR-CNN (Chapter 5, no-BN) train step, proof-tied to the certified SGD step
+/-! # PoC: the CIFAR-CNN (Chapter 4, no-BN) train step, proof-tied to the certified SGD step
 
-The Chapter-5 peer of `CnnFaithfulPoC` — a deeper, two-spatial-scale conv net
+The Chapter-4 peer of `CnnFaithfulPoC` — a deeper, two-spatial-scale conv net
 (`(conv→relu)×2 → pool → (conv→relu)×2 → pool → (dense→relu)×2 → dense`; 14 params:
 4 conv kernels/biases + 3 dense layers). `MainCifarVerified` trains on
 `verified_mlir/cifar_train_step.mlir`; this file makes its parameter updates

@@ -2,7 +2,7 @@ import LeanMlir.Proofs.CNN
 import LeanMlir.Proofs.MnistCNN
 import LeanMlir.Proofs.StridedConv
 
-/-! # Toward real ResNet-34 — the deep-block chain (Chapter 6 Milestone B4)
+/-! # Toward real ResNet-34 — the deep-block chain (Chapter 5 Milestone B4)
 
 A real ResNet-34 stacks **16 basic blocks** in four stages (3+4+6+3). Within a
 stage every block is a self-map `Vec n → Vec n` (same channel count) but with its

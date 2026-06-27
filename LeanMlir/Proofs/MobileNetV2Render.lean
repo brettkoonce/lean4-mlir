@@ -2,7 +2,7 @@ import LeanMlir.Proofs.StableHLO
 
 /-! # MobileNetV2 train step rendered ENTIRELY from the verified AST
 
-The Chapter-7 peer of `resnet34TrainStepFaithfulV` (`ResNet34Render.lean`), for the committed
+The Chapter-6 peer of `resnet34TrainStepFaithfulV` (`ResNet34Render.lean`), for the committed
 reduced-6-block MobileNetV2 (the net `mobilenetv2Forward_full_pc` / `mobilenetv2FwdGraphFullPC`
 compute). A strided stem (no maxpool), 6 inverted-residual blocks (`b1/b3/b5/b6` stride-2
 downsample, `b2/b4` stride-1 with an `addV` skip), a 1×1 conv-bn-relu6 head, global-average-pool

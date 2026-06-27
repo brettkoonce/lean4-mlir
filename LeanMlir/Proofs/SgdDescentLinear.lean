@@ -4,7 +4,7 @@ import LeanMlir.Proofs.FloatBridge
 
 /-! # Lipschitz constants for the linear softmax-CE loss
 
-The missing hypothesis of `sgd_descends`, discharged for the Chapter-2 net:
+The missing hypothesis of `sgd_descends`, discharged for the Chapter-1 net:
 the gradient of `v ↦ crossEntropy(dense(unflatten v, b, x), label)` is
 segment-Lipschitz with the **explicit** constant `2a²/(1 − 2aD)` (pixels
 bounded by `a`, step `ℓ1`-radius `D`, small-step condition `2aD < 1`).
@@ -182,7 +182,7 @@ theorem linear_loss_grad_lipschitz {m n : Nat} (b : Vec n) (x : Vec m)
 
 /-- **One inexact SGD step on the MNIST-linear classifier provably
     decreases the cross-entropy loss.** All of `sgd_descends`' hypotheses
-    discharged for the Chapter-2 net: differentiability is
+    discharged for the Chapter-1 net: differentiability is
     `lossWeightMap_differentiable`, the segment-Lipschitz constant is the
     explicit `C = 2a²/(1−2aD)` at step radius `D = lr·(‖∇L‖₁ + mn·η)`.
     Remaining hypotheses are checkable arithmetic: the oracle accuracy `η`

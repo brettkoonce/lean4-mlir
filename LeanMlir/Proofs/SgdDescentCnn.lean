@@ -5,7 +5,7 @@ import LeanMlir.Proofs.MnistCNN
 /-! # Lipschitz constants for the CNN softmax-CE loss — descent through the pool
 
 `SgdDescentMlp` discharged `sgd_descends`' smoothness hypothesis for every
-MLP weight layer; this file extends the program to the Chapter-4 MNIST CNN
+MLP weight layer; this file extends the program to the Chapter-3 MNIST CNN
 (`conv → relu → conv → relu → maxpool → dense → relu → dense → relu →
 dense`). What's genuinely new versus the MLP:
 
@@ -53,7 +53,7 @@ biases: the bias-map Jacobian is a Kronecker channel indicator
 per-entry drift is exactly `|e o|` (no input bound `a`), and the rungs
 are the kernel arguments verbatim with the conv stage's `a·D` radii
 replaced by the bare `D` and `a² ↦ 1` in the constants. EVERY parameter
-of the Chapter-4 CNN — both conv kernels, both conv biases, and the
+of the Chapter-3 CNN — both conv kernels, both conv biases, and the
 dense head — now has a proven descent statement. -/
 
 namespace Proofs
@@ -715,7 +715,7 @@ noncomputable def FloatModel.mnistCnnNoBnForwardF
 /-- **Whole-net MNIST-CNN forward rounding budget (Item A capstone).** The
     rounded forward is within an explicit closed-form `layerBudget` of the real
     `conv→relu→conv→relu→maxpool→dense→relu→dense→relu→dense` forward, per
-    output logit — the binary32 forward-error bound for the Chapter-4 CNN.
+    output logit — the binary32 forward-error bound for the Chapter-3 CNN.
 
     Each weight layer threads identically: conv layers as `dense` at their
     fan-in (`ic·kH·kW`, then `c·kH·kW`), the dense head at `c·h·w` / `d1`; relu
@@ -1476,7 +1476,7 @@ theorem FloatModel.cnn_convb_step_float_close {oc h w : Nat} (M : FloatModel)
   M.sumSgd_step_close (b o) (cotWin cot o) hG hlr
 
 /-- **Numeric conv-weight-step capstone at the committed MNIST-CNN dims (Item
-    C).** The Chapter-4 conv2 is `32→32`, `3×3`, at `28×28` (the conv output
+    C).** The Chapter-3 conv2 is `32→32`, `3×3`, at `28×28` (the conv output
     grid, before maxpool), so the weight gradient is a dot over `28·28 = 784`
     spatial positions. At binary32 (`u ≤ 2⁻²⁴`), `lr = 1/10`, kernel `|W| ≤ 3/5`
     (the trained-magnitude bound, matching the MLP capstone), every rounded
@@ -6493,7 +6493,7 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
     and the 3-dense head. Under the FIVE margins at the step radius
     `D = lr·(‖∇L‖₁ + |kernel|·η)`, every mask and the pool's routing
     pattern freeze along the step, and the loss drops by
-    ≥ `lr·‖∇L‖₂²/2`. With this, every conv kernel of the Chapter-4 CNN
+    ≥ `lr·‖∇L‖₂²/2`. With this, every conv kernel of the Chapter-3 CNN
     has a proven descent statement. -/
 theorem cnn_conv1_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (x₀ : Tensor3 ic (2*h) (2*w))
@@ -6701,7 +6701,7 @@ open FloatModel in
     wired into the abstract `cnn_conv1_sgd_descends`. Five per-layer ROUND
     margins feed the grad-close; the gradient-radius STEP margins +
     `hsmall`/`h1`/`h2` feed the drift-freeze and descent geometry. Every conv
-    kernel of the Chapter-4 CNN now has a float-faithful descent statement. -/
+    kernel of the Chapter-3 CNN now has a float-faithful descent statement. -/
 theorem cnn_conv1_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (M : FloatModel) (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
     (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
@@ -9166,7 +9166,7 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
     `D = lr·(‖∇L‖₁ + c·η)` carry no input bound `a` (the bias Jacobian
     is a Kronecker indicator) and the parameter needs no
     flatten/unflatten plumbing. With this theorem every parameter of
-    the Chapter-4 CNN — both conv kernels, both conv biases, and the
+    the Chapter-3 CNN — both conv kernels, both conv biases, and the
     three dense layers (weights and biases via the MLP rungs) — has a
     proven descent statement. -/
 theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
@@ -10080,7 +10080,7 @@ open FloatModel in
     `M.cnnConv1BiasFloatGrad …`, accuracy *proven* by `cnn_conv1_bias_grad_close`
     (η := `cnnConv1BiasGradBudget`, discharged per output channel — the bias IS a
     vector), not assumed. With this, every conv weight AND bias of the
-    Chapter-4 CNN is a float-faithful descent step. -/
+    Chapter-3 CNN is a float-faithful descent step. -/
 theorem cnn_conv1_bias_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (M : FloatModel) (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
     (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)

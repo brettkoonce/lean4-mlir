@@ -1,9 +1,9 @@
 import LeanMlir.Proofs.MnistCNN
 import LeanMlir.Proofs.PerChannelBN
 
-/-! # Chapter 5: CIFAR-10 2D CNN (no BatchNorm) — whole-network VJP
+/-! # Chapter 4: CIFAR-10 2D CNN (no BatchNorm) — whole-network VJP
 
-The Chapter-5 demo model `cifarCnn` (the no-BN spec of `MainCifarCnnTrain`):
+The Chapter-4 demo model `cifarCnn` (the no-BN spec of `MainCifarCnnTrain`):
 
   conv 3→32 (relu) → conv 32→32 (relu) → maxPool 2×2 →
   conv 32→64 (relu) → conv 64→64 (relu) → maxPool 2×2 → flatten →
@@ -12,17 +12,17 @@ The Chapter-5 demo model `cifarCnn` (the no-BN spec of `MainCifarCnnTrain`):
 i.e. **two** conv→conv→maxPool stages (channels 3→32→32, then 32→64→64) and
 a three-layer dense head, on 32×32 RGB input with two 2×2 pools (32→16→8).
 
-This is the Chapter-4 `mnistCnnNoBn` machinery scaled up: the same
+This is the Chapter-3 `mnistCnnNoBn` machinery scaled up: the same
 `convRelu`/`denseRelu`/`maxPoolFlat` building blocks, chained through
 `vjp_comp_at`, just longer and with **two** maxpool steps. Spatial bookkeeping
 uses the final pooled size `(h, w)` as the unit: the second conv stage runs at
-`(2h, 2w)`, the first at `(2·(2h), 2·(2w))` — exactly the Chapter-4 `(2h, 2w)`
+`(2h, 2w)`, the first at `(2·(2h), 2·(2w))` — exactly the Chapter-3 `(2h, 2w)`
 convention nested one level deeper (so the two pools read `maxPoolFlat _ (2h) (2w)`
 and `maxPoolFlat _ h w`).
 
 * `cifarCnn_has_vjp_at` — the **structural** whole-network VJP: the composed
   backward equals the `pdiv`-Jacobian VJP of the full forward pass, *conditional*
-  on smoothness at the six ReLU kinks and the two MaxPools. The Chapter-5 sibling
+  on smoothness at the six ReLU kinks and the two MaxPools. The Chapter-4 sibling
   of `mnistCnnNoBn_has_vjp_at`.
 
 * `Tiny.cifarTinyCnn_has_vjp_correct` — a **concrete instance** where every
@@ -33,10 +33,10 @@ and `maxPoolFlat _ h w`).
 namespace Proofs
 
 -- ════════════════════════════════════════════════════════════════
--- § Chapter-5 forward pass (BN-free, two conv→conv→pool stages)
+-- § Chapter-4 forward pass (BN-free, two conv→conv→pool stages)
 -- ════════════════════════════════════════════════════════════════
 
-/-- The Chapter-5 `cifarCnn` forward, in flattened `Vec` space. The conv stack
+/-- The Chapter-4 `cifarCnn` forward, in flattened `Vec` space. The conv stack
     runs at spatial `(2·(2h), 2·(2w))`; the first `maxPool` halves it to
     `(2h, 2w)` (where the second conv stage runs), the second to `(h, w)`; then
     three dense layers (two with ReLU). With the real CIFAR shapes
@@ -63,16 +63,16 @@ noncomputable def cifarCnnForward
   ∘ (relu (c1 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₁ b₁)
 
 -- ════════════════════════════════════════════════════════════════
--- § Structural whole-network VJP (Chapter-5 capstone, conditional)
+-- § Structural whole-network VJP (Chapter-4 capstone, conditional)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **CIFAR 2D CNN (no BN) whole-network VJP at a smooth point.**
 
-    The composed backward of the full Chapter-5 forward equals the
+    The composed backward of the full Chapter-4 forward equals the
     `pdiv`-contracted Jacobian, conditional on smoothness at the six ReLU kinks
     and the two MaxPools. Built by `vjp_comp_at` through
     `convRelu → convRelu → maxPool → convRelu → convRelu → maxPool →
-     denseRelu → denseRelu → dense`. The Chapter-5 sibling of
+     denseRelu → denseRelu → dense`. The Chapter-4 sibling of
     `mnistCnnNoBn_has_vjp_at` (two conv stages, two pools). -/
 noncomputable def cifarCnn_has_vjp_at
     {ic c1 c2 h w d1 nClasses kH kW : Nat}
@@ -194,7 +194,7 @@ noncomputable def cifarCnn_has_vjp_at
   exact vjp_comp_at _ _ x s8d ((dense_differentiable W₇ b₇) _) s8
     ((dense_has_vjp W₇ b₇).toHasVJPAt _)
 
-/-- **Public correctness theorem for `cifarCnn_has_vjp_at`** — the Chapter-5
+/-- **Public correctness theorem for `cifarCnn_has_vjp_at`** — the Chapter-4
     CIFAR CNN's backward equals the `pdiv`-contracted Jacobian. -/
 theorem cifarCnn_has_vjp_at_correct
     {ic c1 c2 h w d1 nClasses kH kW : Nat}
@@ -221,7 +221,7 @@ theorem cifarCnn_has_vjp_at_correct
 --
 -- A minimal `cifarCnn` at `ic=c1=c2=h=w=d1=1`, `nClasses=2`, `1×1` identity
 -- kernels, so the conv stack is the identity, every ReLU sees a positive input,
--- and BOTH maxpools have distinct-valued windows. The crux unique to Chapter 5
+-- and BOTH maxpools have distinct-valued windows. The crux unique to Chapter 4
 -- (two pools) is the SECOND pool's no-tie condition: it needs the FIRST pool's
 -- output to be positionally injective. With the 4×4 input `1,…,16` (row-major)
 -- the four 2×2 window maxima are `6,8,14,16` (= `8·r+2·s+6`, proved by folding
@@ -229,7 +229,7 @@ theorem cifarCnn_has_vjp_at_correct
 -- tensor is injective and the second pool is smooth. All eight smoothness
 -- hypotheses then discharge, yielding an **unconditional** whole-network VJP —
 -- the non-vacuity witness for the conditional capstone, inside the three-axiom
--- closure (no `native_decide`). The Chapter-5 peer of `Mini`/`Spatial`.
+-- closure (no `native_decide`). The Chapter-4 peer of `Mini`/`Spatial`.
 -- ════════════════════════════════════════════════════════════════
 
 namespace Tiny
@@ -715,7 +715,7 @@ theorem cifarCnn8_has_vjp_at_correct
       hc1 hc2 hc3 hc4 hh hw x hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
--- § Chapter-5 BatchNorm variant — conv→BN→relu blocks
+-- § Chapter-4 BatchNorm variant — conv→BN→relu blocks
 --
 -- The BN-CIFAR net inserts a per-example **per-channel** BatchNorm
 -- (`bnPerChannelTensor3`, `m=h·w`: normalize each channel over its own h·w spatial
@@ -769,7 +769,7 @@ theorem convBnReluPC_differentiableAt {ic oc h w kH kW : Nat}
     ((bnPerChannelTensor3_differentiable oc h w ε hε γ β).comp (flatConv_differentiable W b)) v
   exact (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth).comp v hinner
 
-/-- The Chapter-5 **BatchNorm** CIFAR forward: `cifarCnnForward` with a per-example
+/-- The Chapter-4 **BatchNorm** CIFAR forward: `cifarCnnForward` with a per-example
     **per-channel** `bnPerChannelTensor3` (`m=h·w`) inserted between each conv and its
     ReLU (four BN layers, scalar `εᵢ`, per-channel vector `γᵢ, βᵢ : Vec cᵢ`). -/
 noncomputable def cifarCnnBnForward

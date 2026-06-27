@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.CifarBnClose
 import LeanMlir.Proofs.CifarFaithfulPoC
 
-/-! # PoC: the CIFAR-BN (Chapter 5, per-channel BatchNorm) train step, proof-tied
+/-! # PoC: the CIFAR-BN (Chapter 4, per-channel BatchNorm) train step, proof-tied
 
 The per-channel-BatchNorm peer of `CifarFaithfulPoC`: `conv→BN→relu ×4, 2 pools,
 3 dense` — 22 params (4 conv kernels/biases, 4 BN scale/shift pairs γ/β, 3 dense

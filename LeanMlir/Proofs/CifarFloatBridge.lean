@@ -2,7 +2,7 @@ import LeanMlir.Proofs.SgdDescentCnn
 import LeanMlir.Proofs.CifarCNN
 
 /-!
-# ℝ→Float32 forward rounding budget for the Chapter-5 CIFAR CNN (no BN)
+# ℝ→Float32 forward rounding budget for the Chapter-4 CIFAR CNN (no BN)
 
 The Tier-1 `cnn_float_close` (`SgdDescentCnn.lean`) bound scaled from the
 MNIST CNN (2 conv + 1 maxpool + 3 dense) to the **no-BN CIFAR CNN**
@@ -81,7 +81,7 @@ noncomputable def cifarFwdBudget (u : ℝ)
 /-- **Whole-net no-BN CIFAR-CNN forward rounding budget.** The rounded forward
     is within the explicit `cifarFwdBudget` of the real
     `(conv→relu)²→pool→(conv→relu)²→pool→dense→relu→dense→relu→dense` forward,
-    per output logit — the binary32 forward-error bound for the Chapter-5
+    per output logit — the binary32 forward-error bound for the Chapter-4
     no-BN CIFAR net. The CIFAR peer of `cnn_float_close`. -/
 theorem FloatModel.cifar_float_close
     {ic c1 c2 h w d1 nClasses kH kW : Nat} (M : FloatModel)

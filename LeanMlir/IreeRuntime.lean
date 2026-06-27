@@ -256,7 +256,7 @@ def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
 end CifarBnLayout
 
 namespace ResNet34Layout
-/-- Chapter-6 **real ResNet-34** params (IMAGENETTE 3×224×224 — paper-native ImageNet
+/-- Chapter-5 **real ResNet-34** params (IMAGENETTE 3×224×224 — paper-native ImageNet
     resolution): **7×7 stride-2 stem** {W=`[64,3,7,7]`,b,γ,β} (224→112), then the
     16 basic blocks (3 strided downsample {W,b,γ,β}×2 + proj{W,b,γ,β}; 13 identity
     {W,b,γ,β}×2) at channels 64/128/256/512 (spatial 56/28/14/7), then dense {W,b}.
@@ -286,7 +286,7 @@ def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- 
 end ResNet34Layout
 
 namespace MobileNetV2Layout
-/-- Chapter-7 **MobileNetV2** params (IMAGENETTE 3×224×224 — paper-native ImageNet
+/-- Chapter-6 **MobileNetV2** params (IMAGENETTE 3×224×224 — paper-native ImageNet
     resolution, full-paper downsampling `[t,c,n,s]`): stem {W,b,γ,β} (3×3 stride-2 conv
     3→32), then 17 inverted-residual blocks — each expand 1×1 {W,b,γ,β}, depthwise 3×3
     {W,b,γ,β} (a `[mid,1,3,3]` kernel, feature_group_count = mid; stride-2 for the
@@ -327,7 +327,7 @@ def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- 
 end MobileNetV2Layout
 
 namespace EfficientNetLayout
-/-- Chapter-8 **EfficientNet-B0** params (CIFAR 3×32×32, E6 — faithful `[t,c,n,s,k]`
+/-- Chapter-7 **EfficientNet-B0** params (CIFAR 3×32×32, E6 — faithful `[t,c,n,s,k]`
     config, all-swish + BATCH norm): stem {W,b,γ,β} (3×3 stride-1 conv 3→32, CIFAR
     adaptation), then 16 MBConv layers across 7 stages (channels [16,24,40,80,112,192,320],
     kernels [3,3,5,3,5,5,3], expand [1,6,6,6,6,6,6] — the MBConv1 stage-1 blocks have NO
@@ -366,7 +366,7 @@ def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- 
 end EfficientNetLayout
 
 namespace ConvNeXtLayout
-/-- Chapter-9 **ConvNeXt-T** params (IMAGENETTE 3×224×224 — paper-native resolution):
+/-- Chapter-8 **ConvNeXt-T** params (IMAGENETTE 3×224×224 — paper-native resolution):
     4×4/s4 patchify stem {W=`[96,3,4,4]`,b} (224→56), then [3,3,9,3] blocks @ [96,192,
     384,768] (spatial 56/28/14/7) with 3 between-stage LN+2×2/s2 downsamples, then head
     GAP → LN(768) → dense {W,b}. ConvNeXt block (9 params): depthwise 7×7 {W=`[c,1,7,7]`,b}
@@ -403,7 +403,7 @@ def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- 
 end ConvNeXtLayout
 
 namespace ViTLayout
-/-- Chapter-10 **ViT-Tiny** params (IMAGENETTE 3×224×224, patch-16): a 16×16/s16 conv
+/-- Chapter-9 **ViT-Tiny** params (IMAGENETTE 3×224×224, patch-16): a 16×16/s16 conv
     patch embed {W=`[192,3,16,16]`,b} (224→14×14=196 patches), a learned CLS token
     `[192]` (1D, matching the proof-tied render) + positional embed `[197,192]`, then 12 pre-norm transformer blocks
     (dim 192, 3 heads, MLP 768), final LayerNorm γ/β, CLS-slice dense head {W=`[192,10]`,b}.

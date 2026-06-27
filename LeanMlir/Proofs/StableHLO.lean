@@ -8,14 +8,14 @@ import LeanMlir.Proofs.LayerNorm
 import LeanMlir.Proofs.EfficientNet
 import LeanMlir.Proofs.ConvNeXt
 
-/-! # R4 — printer faithfulness, Stage A (Chapter 2: the linear classifier)
+/-! # R4 — printer faithfulness, Stage A (Chapter 1: the linear classifier)
 
 The seed of `planning/validated_codegen_book.md`'s `Proofs/Hlo/{Syntax,Denote}`.
 
 `IR.lean` gives the backward/forward IR a denotation in `ℝ` and proves it equals
 the Mathlib-`fderiv` math. The remaining trusted link — **R4** — is that the
 StableHLO **text** the printer emits means the same function. This file closes
-R4 for Chapter 2, *both halves*, over a single typed AST `SHlo`:
+R4 for Chapter 1, *both halves*, over a single typed AST `SHlo`:
 
 * **Semantic half** (`den`, load-bearing): a denotation in StableHLO-spec terms
   (explicit contraction / reduce / divide), and faithfulness theorems
@@ -30,7 +30,7 @@ R4 for Chapter 2, *both halves*, over a single typed AST `SHlo`:
   are `pretty (emit g)` (the doc's "Step 0 consolidation": one AST, both
   denotable and renderable).
 
-**All together (the R4 chain for ch 2):**
+**All together (the R4 chain for ch 1):**
 `render text = pretty (emit g)` (syntactic, by construction);
 `den (emit g) = Mathlib fderiv` (semantic, the theorems below).
 
@@ -113,7 +113,7 @@ inductive SHlo : Nat → Type where
   | expe       {n : Nat}                                        : SHlo n → SHlo n
   | softmaxDiv {n : Nat}                                        : SHlo n → SHlo n
   | sub        {n : Nat}                                        : SHlo n → SHlo n → SHlo n
-  -- Chapter-2 SGD tail (the linear train step, folded into the AST): the two
+  -- Chapter-1 SGD tail (the linear train step, folded into the AST): the two
   -- fused parameter-update ops that take the loss cotangent and emit the
   -- weight/bias SGD step. `weightSgd`: `W − lr·(x⊗dy)` (`dot_general` batch-
   -- contract → const → multiply → subtract), `den` = the certified `sgdW` step
@@ -121,16 +121,16 @@ inductive SHlo : Nat → Type where
   -- LinearFaithfulPoC proves both `den`s = the certified loss-descent step.
   | weightSgd  {m n : Nat} (xName wName lrStr : String) (x : Vec m) (W : Mat m n) (lr : ℝ) : SHlo n → SHlo (m*n)
   | biasSgd    {n : Nat} (bName lrStr : String) (b : Vec n) (lr : ℝ)                        : SHlo n → SHlo n
-  -- Chapter 3 (MLP): ReLU forward (`maximum(·,0)`) and its backward mask
+  -- Chapter 2 (MLP): ReLU forward (`maximum(·,0)`) and its backward mask
   -- (`select(x>0,·,0)`); `xName`/`x` is the saved pre-activation.
   | reluF      {n : Nat}                                        : SHlo n → SHlo n
   | selectPos  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
-  -- Chapter 7 (MobileNetV2): ReLU6 forward (`clamp(·,0,6) = min(max(·,0),6)`) and
+  -- Chapter 6 (MobileNetV2): ReLU6 forward (`clamp(·,0,6) = min(max(·,0),6)`) and
   -- its backward mask (`select(0<x<6,·,0)` — the TWO-SIDED kink, smooth iff
   -- `x≠0 ∧ x≠6`). `selectMid`'s `xName`/`x` is the saved pre-activation.
   | relu6F     {n : Nat}                                        : SHlo n → SHlo n
   | selectMid  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
-  -- Chapter 4 (CNN): flattened conv forward (`stablehlo.convolution`) and
+  -- Chapter 3 (CNN): flattened conv forward (`stablehlo.convolution`) and
   -- 2×2 max-pool forward (`reduce_window`). Vec-indexed via the proofs'
   -- flattened forms `flatConv`/`maxPoolFlat`.
   | flatConvF  {ic oc h w kH kW : Nat} (wName bName : String)
@@ -143,7 +143,7 @@ inductive SHlo : Nat → Type where
   -- Max-pool backward (`select_and_scatter`, route dy to the window argmax);
   -- `x` is the saved pre-pool input. Conditional (no-ties) like the ReLU kink.
   | maxPoolBack {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
-  -- Chapter 4 (CNN) param-SGD tail (the conv train step, folded into the AST):
+  -- Chapter 3 (CNN) param-SGD tail (the conv train step, folded into the AST):
   -- the fused conv kernel/bias update ops — the conv analogue of `weightSgd`/`biasSgd`.
   -- `convWeightSgd`: `W − lr·(conv2d_weight_grad(b,x)·dy)` via the transpose-trick conv
   -- (transpose→transpose→convolution→transpose, then const→multiply→subtract), `den`
@@ -157,7 +157,7 @@ inductive SHlo : Nat → Type where
   | convBiasSgd   {ic oc h w kH kW : Nat} (bName lrStr : String)
       (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w) (b : Vec oc) (lr : ℝ)
                                                            : SHlo (oc*h*w) → SHlo oc
-  -- Chapter 5 (per-channel BatchNorm) param-SGD tail (the BN train step, folded into
+  -- Chapter 4 (per-channel BatchNorm) param-SGD tail (the BN train step, folded into
   -- the AST): the fused per-channel γ/β update ops. `bnGammaSgd`: `γ − lr·dγ`,
   -- `dγ_c = Σ_{b,h,w} dy·x̂` (x̂ recomputed from the saved BN input `v` = conv output,
   -- `den` = `cifar_bn_render_gamma_certified` via `reassocFwd`); `bnBetaSgd`: `β − lr·dβ`,
@@ -167,7 +167,7 @@ inductive SHlo : Nat → Type where
       (v : Vec (oc*h*w)) (lr : ℝ)                          : SHlo (oc*h*w) → SHlo oc
   | bnBetaSgd  {oc h w : Nat} (bName lrStr : String) (β : Vec oc) (lr : ℝ)
                                                            : SHlo (oc*h*w) → SHlo oc
-  -- Chapter 5 (BatchNorm): per-example normalization over the whole feature
+  -- Chapter 4 (BatchNorm): per-example normalization over the whole feature
   -- vec (reduce mean/var over axis [1], scalar γ/β). `gName,bName` are the γ,β
   -- scalar SSA inputs, `epsStr` the rendered ε literal; ε,γ,β carry the den.
   | bnF        {n : Nat} (gName bName epsStr : String) (ε γ β : ℝ)   : SHlo n → SHlo n
@@ -175,7 +175,7 @@ inductive SHlo : Nat → Type where
   -- recomputing x̂/istd from the saved BN input `x` (`xName`). Total in `x`;
   -- faithful (= pdiv-Jacobian) under `0 < ε` (`bn_input_grad_correct`).
   | bnBack     {n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec n) : SHlo n → SHlo n
-  -- Chapter 6 (ResNet): residual add (`stablehlo.add`) and global-average-pool.
+  -- Chapter 5 (ResNet): residual add (`stablehlo.add`) and global-average-pool.
   -- `addV` is binary (mirrors `.sub`); the residual skip reuses the block-input
   -- subtree in BOTH operands, so the graph stays a tree. `gapF` reduces the
   -- spatial axes (`reduce add over [2,3]`, ÷h·w), `Vec (c*h*w) → Vec c`.
@@ -185,7 +185,7 @@ inductive SHlo : Nat → Type where
   | gapBack    {c h w : Nat}                                    : SHlo c → SHlo (c*h*w)
   -- Broadcast backward (VJP = sum-over-spatial): the adjoint of `broadcastFlat`.
   | broadcastBack {c h w : Nat}                                 : SHlo (c*h*w) → SHlo c
-  -- Chapter 6 Milestone B (ResNet-34 downsampling): stride-2 SAME conv forward
+  -- Chapter 5 Milestone B (ResNet-34 downsampling): stride-2 SAME conv forward
   -- (`stablehlo.convolution` with `window_strides=[2,2]`) and its input-VJP
   -- (zero-upsample the cotangent — `lhs_dilation` — then the reversed-kernel
   -- conv). `den` via the proven `flatConvStride2` / `flatConvStride2_has_vjp`.
@@ -193,7 +193,7 @@ inductive SHlo : Nat → Type where
       (W : Kernel4 oc ic kH kW) (b : Vec oc)              : SHlo (ic*(2*h)*(2*w)) → SHlo (oc*h*w)
   | convStridedBack  {ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*(2*h)*(2*w))) : SHlo (oc*h*w) → SHlo (ic*(2*h)*(2*w))
-  -- Chapter 6 Milestone B (ResNet-34 downsampling) param-SGD tail: the strided conv
+  -- Chapter 5 Milestone B (ResNet-34 downsampling) param-SGD tail: the strided conv
   -- kernel/bias update ops — the stride-2 analogues of `convWeightSgd`/`convBiasSgd`.
   -- `convStridedWeightSgd`: `W − lr·(flatConvStride2_weight_grad(b,x)·dy)` — zero-upsample
   -- the cotangent (the decimate-backward) then the SAME transpose-trick stride-1 weight-grad
@@ -230,7 +230,7 @@ inductive SHlo : Nat → Type where
   | depthwiseStridedBiasSgd   {c h w kH kW : Nat} (bName lrStr : String)
       (W : DepthwiseKernel c kH kW) (x : Vec (c*(2*h)*(2*w))) (b : Vec c) (lr : ℝ)
                                                            : SHlo (c*h*w) → SHlo c
-  -- Chapter 9 (ConvNeXt-T) param-SGD tail. `layerScaleChGammaSgd`: the PER-CHANNEL layer-scale γ
+  -- Chapter 8 (ConvNeXt-T) param-SGD tail. `layerScaleChGammaSgd`: the PER-CHANNEL layer-scale γ
   -- update `γ_c − lr·dγ_c`, `dγ_c = Σ_{b,h,w} x⊙dy` (the saved layer input `x` ⊙ the cotangent,
   -- reduced over batch+spatial per channel — `lsGradCh`). `γ : Vec c`, broadcast over spatial via
   -- `chanIdx` by the `layerScaleChF` forward; `den` = ConvNeXtFaithfulPoC's `cnx_render_lsgammaCh`.
@@ -244,7 +244,7 @@ inductive SHlo : Nat → Type where
                                                            : SHlo n → SHlo 1
   | lnBetaSgd  {n : Nat} (bName lrStr : String) (β : Vec 1) (lr : ℝ)
                                                            : SHlo n → SHlo 1
-  -- `veclnGammaSgd`: the Chapter-10 ViT VECTOR-[D] LayerNorm γ update. Per-token normalize over the
+  -- `veclnGammaSgd`: the Chapter-9 ViT VECTOR-[D] LayerNorm γ update. Per-token normalize over the
   -- `D` feature axis (x̂ = `layerNormForward D ε 1 0`), then per-channel affine `γ⊙x̂+β`; the γ grad
   -- `dγ_k = Σ_rows dy·x̂` reduces over the N=tokens row axis but KEEPS `D` (output `SHlo D` ≅
   -- `tensor<Dxf32>`, vs `lnGammaSgd`'s scalar `SHlo 1`). `den` = the per-channel certified grad
@@ -252,7 +252,7 @@ inductive SHlo : Nat → Type where
   -- `denseWeightSgdB`/`denseBiasSgdB` (their N-axis sum = vit's `rowDense_*_grad`).
   | veclnGammaSgd {N D : Nat} (gName xName epsStr lrStr : String) (ε : ℝ) (x : Vec (N*D)) (γ : Vec D) (lr : ℝ)
                                                            : SHlo (N*D) → SHlo D
-  -- `patchEmbedWeightSgd`: the Chapter-10 ViT patch-embed (16×16/s16 non-overlapping patchify) conv
+  -- `patchEmbedWeightSgd`: the Chapter-9 ViT patch-embed (16×16/s16 non-overlapping patchify) conv
   -- WEIGHT update. The embed-output cotangent `SHlo ((N+1)*D)` (CLS token at row 0, excluded) drives
   -- the strided patchifyWGrad (dilate the patch-token grad interior P-1, valid conv with the saved
   -- image) → `dW : Kernel4 D ic P P`. `den` = the certified patch-weight grad
@@ -271,12 +271,12 @@ inductive SHlo : Nat → Type where
   -- flat `denseBiasSgd` would mismatch the `%pos: tensor<197x192xf32>` arg. `den` = `vit_render_pos_certified`.
   | posEmbedSgd {N D : Nat} (pName lrStr : String) (pos : Mat (N+1) D) (lr : ℝ)
                                                            : SHlo ((N+1)*D) → SHlo ((N+1)*D)
-  -- Chapter 9 scaling pass (full ConvNeXt-T): stride-4 SAME conv forward — the
+  -- Chapter 8 scaling pass (full ConvNeXt-T): stride-4 SAME conv forward — the
   -- 4×4/s4 patchify stem (`stablehlo.convolution` with `window_strides=[4,4]`).
   -- `den` via the proven `flatConvStride4` (= decimate ∘ decimate ∘ stride-1 conv).
   | flatConvStride4F {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) : SHlo (ic*(2*(2*h))*(2*(2*w))) → SHlo (oc*h*w)
-  -- Chapter 6 Milestone B8 (real-ResNet PER-CHANNEL BatchNorm): normalize each
+  -- Chapter 5 Milestone B8 (real-ResNet PER-CHANNEL BatchNorm): normalize each
   -- channel-slice over its h·w spatial cells with its OWN `(γ_c, β_c)`, γ/β : `Vec oc`
   -- (rank-1, `broadcast dims=[1]` — vs `bnF`'s rank-0 scalars). `den` via the proven
   -- `bnPerChannelTensor3` (the Mat-split block-diagonal BN bridged into the `(oc*h)*w`
@@ -285,7 +285,7 @@ inductive SHlo : Nat → Type where
                                                            : SHlo (oc*h*w) → SHlo (oc*h*w)
   | bnPerChannelBack {oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
       (x : Vec (oc*h*w))                                   : SHlo (oc*h*w) → SHlo (oc*h*w)
-  -- Chapter 7 (MobileNetV2): depthwise conv forward (`stablehlo.convolution` with
+  -- Chapter 6 (MobileNetV2): depthwise conv forward (`stablehlo.convolution` with
   -- `feature_group_count = c` and a `[c, 1, kH, kW]` kernel — one filter per channel,
   -- no cross-channel mixing) and its input-VJP (the SAME-pad reversed-kernel depthwise
   -- conv — spatial flip only, since the per-channel groups are 1×1; same
@@ -294,7 +294,7 @@ inductive SHlo : Nat → Type where
       (W : DepthwiseKernel c kH kW) (b : Vec c)            : SHlo (c*h*w) → SHlo (c*h*w)
   | depthwiseBack {c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*h*w)) : SHlo (c*h*w) → SHlo (c*h*w)
-  -- Chapter 7 C3: STRIDE-2 depthwise conv forward (`window_strides=[2,2]`,
+  -- Chapter 6 C3: STRIDE-2 depthwise conv forward (`window_strides=[2,2]`,
   -- `feature_group_count = c`, `[c,1,kH,kW]` kernel — halves spatial, the MNv2
   -- downsampling op) and its input-VJP (zero-upsample the cotangent via
   -- `stablehlo.pad` interior=1 then the reversed-kernel stride-1 depthwise — the
@@ -304,21 +304,21 @@ inductive SHlo : Nat → Type where
       (W : DepthwiseKernel c kH kW) (b : Vec c)            : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
   | depthwiseStridedBack {c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
-  -- Chapter 8 (EfficientNet): swish forward (`x · σ(x)`, σ = `stablehlo.logistic`)
+  -- Chapter 7 (EfficientNet): swish forward (`x · σ(x)`, σ = `stablehlo.logistic`)
   -- and its input-VJP (`dy · swish'(x)`, closed form `σ(x)·(1 + x·(1−σ(x)))`).
   -- Swish is SMOOTH everywhere (no kink, NO smoothness hyp — unlike relu6); the
   -- VJP is the GLOBAL `swish_has_vjp` (no `_at`). `swishBack`'s `xName`/`x` is the
   -- saved pre-activation. `den` via the proven `swish` / `swish_has_vjp` (LayerNorm.lean).
   | swishF     {n : Nat}                                        : SHlo n → SHlo n
   | swishBack  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
-  -- Chapter 8 (EfficientNet): sigmoid forward (`σ(x) = stablehlo.logistic`, the SE
+  -- Chapter 7 (EfficientNet): sigmoid forward (`σ(x) = stablehlo.logistic`, the SE
   -- gate's output nonlinearity) and its input-VJP (`dy · σ(x)·(1−σ(x))`). Like swish,
   -- SMOOTH everywhere (no kink, NO smoothness hyp — GLOBAL `sigmoid_has_vjp`, not `_at`).
   -- `sigmoidBack`'s `xName`/`x` is the saved pre-activation. `den` via the proven
   -- `sigmoid` / `sigmoid_has_vjp` (EfficientNet.lean).
   | sigmoidF     {n : Nat}                                      : SHlo n → SHlo n
   | sigmoidBack  {n : Nat} (xName : String) (x : Vec n)         : SHlo n → SHlo n
-  -- Chapter 9 (ConvNeXt): GELU forward (tanh approximation,
+  -- Chapter 8 (ConvNeXt): GELU forward (tanh approximation,
   -- `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))`, via `stablehlo.tanh`) and its
   -- input-VJP (`dy · gelu'(x)`, closed form from the tanh-approx derivative).
   -- Like swish/sigmoid, SMOOTH everywhere (no kink, NO smoothness hyp — the VJP is
@@ -326,14 +326,14 @@ inductive SHlo : Nat → Type where
   -- pre-activation. `den` via the proven `gelu` / `gelu_has_vjp` (LayerNorm.lean).
   | geluF      {n : Nat}                                        : SHlo n → SHlo n
   | geluBack   {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
-  -- Chapter 9 (ConvNeXt): per-element layer-scale `γ ⊙ x` (diagonal linear, `γ : Vec n`
+  -- Chapter 8 (ConvNeXt): per-element layer-scale `γ ⊙ x` (diagonal linear, `γ : Vec n`
   -- over the flattened `c·h·w` map). `den` via the proven `layerScale` (ConvNeXt.lean).
   | layerScaleF {n : Nat} (γName : String) (γ : Vec n)          : SHlo n → SHlo n
   -- Per-CHANNEL layer-scale (the paper's form, the committed full-T render's
   -- `tensor<c>` γ): `den` = the proven `layerScale` at the channel-expanded
   -- vector `γ ∘ chanIdx` (a constant reindex of the parameter).
   | layerScaleChF {c h w : Nat} (γName : String) (γ : Vec c)    : SHlo (c*h*w) → SHlo (c*h*w)
-  -- Chapter 10 (ViT): ROW-softmax forward — each of the `m` rows of an `[m,n]`
+  -- Chapter 9 (ViT): ROW-softmax forward — each of the `m` rows of an `[m,n]`
   -- matrix (flattened to `Vec (m*n)`, row-major) gets the 1-D `softmax` over its
   -- `n` columns (`reduce add` over the LAST axis, broadcast, divide — NO max-shift,
   -- matching the proven plain exp/sum `softmax`). `den` via `rowSoftmaxFlat` (=
@@ -344,7 +344,7 @@ inductive SHlo : Nat → Type where
   -- (`xName`/`preAct`). SMOOTH everywhere (softmax has no kink). `den` via
   -- `rowSoftmaxBackFlat` (= `Mat.flatten ∘ rowSoftmax_has_vjp_mat.backward ∘ Mat.unflatten`).
   | softmaxRowBack {m n : Nat} (xName : String) (preAct : Vec (m*n)) : SHlo (m*n) → SHlo (m*n)
-  -- Chapter 10 (ViT): matrix multiply `C = A·B` on row-major flattened operands
+  -- Chapter 9 (ViT): matrix multiply `C = A·B` on row-major flattened operands
   -- (reshape both to rank-3, `stablehlo.dot_general` batching dim 0, contract A's
   -- last axis with B's middle, reshape back). Binary like `.sub`/`.addV`. `den` via
   -- `matMulFlat` (= flatten ∘ `Mat.mul` ∘ unflatten). The attention BACKWARDS reuse
@@ -423,12 +423,12 @@ inductive SHlo : Nat → Type where
   -- Per-token broadcast bias `+ β` (`β : [n]` shared across rows). Translation —
   -- the input-VJP is the identity (cotangent passthrough). `den` via `rowBiasFlat`.
   | rowBiasF   {m n : Nat} (bName : String) (β : Vec n)         : SHlo (m*n) → SHlo (m*n)
-  -- Chapter 8 (EfficientNet, BATCHED): a batch-separable op (conv/depthwise/dense/
+  -- Chapter 7 (EfficientNet, BATCHED): a batch-separable op (conv/depthwise/dense/
   -- GAP/SE) lifted to `N` examples by `batchMap`; `den` is `batchMap N (denOp op)`.
   -- The whole EfficientNet forward graph lives at the batched index `N·(c·h·w)`;
   -- pointwise swish/sigmoid/relu/addV reuse their existing tokens at that index.
   | batchOp {N a b : Nat} (op : BatchableOp a b)               : SHlo (N * a) → SHlo (N * b)
-  -- Chapter 8 (EfficientNet, BATCHED): TRUE batch-norm — reduce μ/var over the
+  -- Chapter 7 (EfficientNet, BATCHED): TRUE batch-norm — reduce μ/var over the
   -- batch+spatial axes [0,2,3] per channel (NOT per-example). The one op that
   -- couples the batch; `den` is `bnBatchLA` (= the proven `bnBatchTensor4`,
   -- conjugated to the network's left-assoc `N·(oc·h·w)` flat index).
@@ -497,7 +497,7 @@ inductive SHlo : Nat → Type where
   -- lifted by `batchMap N`. The head's GAP backward (`gapBack` is per-example, not a
   -- `BatchableOp`, so it needs its own batched ctor). `den` = `batchMap N (gap-adjoint)`.
   | gapBackBatched {N c h w : Nat} : SHlo (N * c) → SHlo (N * (c * h * w))
-  -- Chapter 8 (EfficientNet, BATCHED) param-SGD tail: the fused per-channel BN
+  -- Chapter 7 (EfficientNet, BATCHED) param-SGD tail: the fused per-channel BN
   -- γ/β updates over the network layout `N·(oc·(h·w))`. `den` is the per-channel BN
   -- grad at the merged batch+spatial axis `m = N·(h·w)` (via `bnchwFwd`, the
   -- network→oc-major reindex), so it is *exactly* `enet_render_bn{gamma,beta}_certified`'s
@@ -572,7 +572,7 @@ noncomputable def rowSoftmaxBackFlat (m n : Nat) (preAct dy : Vec (m*n)) : Vec (
     let s := ∑ j, p j * dyi j
     fun c => p c * (dyi c - s))
 
--- ── Chapter 10 (ViT) den helpers — flattened matrix/row-wise forms, spelled
+-- ── Chapter 9 (ViT) den helpers — flattened matrix/row-wise forms, spelled
 --    with `Mat`/`bnForward`/`dense` so `StableHLO` needn't import `Attention`
 --    (the rfl ties to `rowSoftmax`-style Attention forms live in ViTFwdGraph). ──
 
@@ -984,7 +984,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
     den (.bnBatchF gN bN es ε γ β e) = bnBatchLA N oc h w ε γ β (den e) := rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § `emit`: the linear (Chapter-2) train-step graphs
+-- § `emit`: the linear (Chapter-1) train-step graphs
 -- ════════════════════════════════════════════════════════════════
 
 variable {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
@@ -1098,7 +1098,7 @@ theorem sgdB_descends_certified_grad (lr : ℝ) (label : Fin n) (j : Fin n) :
   rw [bGrad_isBiasJacobian W b x (den (lossCotGraph W b x (oneHot n label))) j]
 
 -- ════════════════════════════════════════════════════════════════
--- § Chapter 3 — MLP: ReLU + multi-layer composition (semantic)
+-- § Chapter 2 — MLP: ReLU + multi-layer composition (semantic)
 --
 -- The forward adds ReLU (`maximum(·,0)`); the backward chains the proven
 -- per-layer VJPs through `select(x>0,·,0)` ReLU masks. ReLU has a kink, so the
@@ -1180,7 +1180,7 @@ theorem mlpBackGraph_faithful (W₀ : Mat e₀ e₁) (b₀ : Vec e₁) (W₁ : M
   rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § Chapter 4 — CNN: conv + maxpool (forward, semantic)
+-- § Chapter 3 — CNN: conv + maxpool (forward, semantic)
 --
 -- The conv/maxpool *forward* ops, denoted by the proofs' flattened forms
 -- `flatConv`/`maxPoolFlat`. The whole MNIST-CNN forward graph denotes the
@@ -1508,9 +1508,9 @@ theorem cnnFwdGraph_faithful {ic c h w d1 nClasses kH kW : Nat}
   simp only [cnnFwdGraph, mnistCnnNoBnForward, Function.comp_apply,
              denseF_faithful, reluF_faithful, flatConvF_faithful, maxPoolF_faithful, den_operand]
 
-/-- Whole **CIFAR-CNN forward** graph (Chapter 5): two conv→relu→conv→relu→maxPool
+/-- Whole **CIFAR-CNN forward** graph (Chapter 4): two conv→relu→conv→relu→maxPool
     stages (channels `ic→c1→c1`, then `c1→c2→c2`) then `dense→relu→dense→relu→dense`.
-    The Chapter-5 peer of `cnnFwdGraph`. -/
+    The Chapter-4 peer of `cnnFwdGraph`. -/
 def cifarFwdGraph {ic c1 c2 h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
@@ -1541,7 +1541,7 @@ theorem cifarFwdGraph_faithful {ic c1 c2 h w d1 nClasses kH kW : Nat}
   simp only [cifarFwdGraph, cifarCnnForward, Function.comp_apply,
              denseF_faithful, reluF_faithful, flatConvF_faithful, maxPoolF_faithful, den_operand]
 
-/-- Whole **BN-CIFAR forward** graph (Chapter 5, BatchNorm variant): each conv is
+/-- Whole **BN-CIFAR forward** graph (Chapter 4, BatchNorm variant): each conv is
     followed by a per-example `bnF` before its ReLU. `epsStr` is the shared ε
     literal; the four BN layers carry scalar γ/β inputs `%g{i}`/`%bt{i}`. -/
 def cifarBnFwdGraph {ic c1 c2 h w d1 nClasses kH kW : Nat} (epsStr : String)
@@ -1695,7 +1695,7 @@ theorem cifar8BnFwdGraph_faithful {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat} (
              denseF_faithful, reluF_faithful, flatConvF_faithful, maxPoolF_faithful,
              bnPerChannelF_faithful, den_operand]
 
-/-- Whole **ResNet-style forward** graph (Chapter 6): the structure the proven
+/-- Whole **ResNet-style forward** graph (Chapter 5): the structure the proven
     whole-net VJP `cnn_has_vjp_at` already covers —
     `dense ∘ GAP ∘ rblkP ∘ rblk ∘ maxPool ∘ cbr(stem)`. The stem is `convBnRelu`
     (SAME conv on the `2h×2w` input), one maxpool to `h×w`, an identity basic
@@ -1704,7 +1704,7 @@ theorem cifar8BnFwdGraph_faithful {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat} (
     skip reuses the block-input **subtree** in BOTH `addV` operands, so the graph
     stays a tree (the §7 "tree-safe via operand leaves" trick, generalized to a
     computed input). `epsStr` is the shared ε literal; each BN carries scalar γ/β
-    SSA inputs (`%g*`/`%bt*`). The Chapter-6 peer of `cifarBnFwdGraph`. -/
+    SSA inputs (`%g*`/`%bt*`). The Chapter-5 peer of `cifarBnFwdGraph`. -/
 def resnetFwdGraph
     {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
     (epsStr : String)
@@ -2020,7 +2020,7 @@ theorem convNextFwdGraph_faithful {ic c cExp h w kH kW nClasses : Nat}
   simp only [Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
--- § Chapter 4 — CNN: whole-chain backward (A2c, the MLP-analog of
+-- § Chapter 3 — CNN: whole-chain backward (A2c, the MLP-analog of
 --   `mlpBackGraph_faithful`). The full backward graph denotes the proven
 --   conditional whole-network VJP `mnistCnnNoBn_has_vjp_at.backward`.
 -- ════════════════════════════════════════════════════════════════
@@ -2082,7 +2082,7 @@ noncomputable def cnnBackGraph
 
 -- **CNN backward faithfulness (smooth point) — A2c.** The whole-chain backward
 -- graph denotes the proven conditional whole-network VJP
--- `mnistCnnNoBn_has_vjp_at.backward` (the Chapter-4 peer of
+-- `mnistCnnNoBn_has_vjp_at.backward` (the Chapter-3 peer of
 -- `mlpBackGraph_faithful`). The per-op `convBack`/`selectPos`/`dotOut` ops
 -- assemble through `vjp_comp_at`; the one `maxPoolBack` matches via VJP
 -- uniqueness (`hasVJPAt_backward_det`) — sidestepping the `flatten∘unflatten`
@@ -4313,7 +4313,7 @@ def cnnTrainStepText (B ic c H W kH kW d1 nClasses : Nat) (lr : String) : String
   s!"    return %W1n, %b1n, %W2n, %b2n, %W3n, %b3n, %W4n, %b4n, %W5n, %b5n : {ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
   "  }\n}\n"
 
-/-- Full **CIFAR CNN** SGD train step (`@cifar_train_step`), the Chapter-5 peer of
+/-- Full **CIFAR CNN** SGD train step (`@cifar_train_step`), the Chapter-4 peer of
     `cnnTrainStepText`. Architecture (= `cifarCnnForward`):
     `conv 3→32 → relu → conv 32→32 → relu → maxpool → conv 32→64 → relu →
      conv 64→64 → relu → maxpool → flatten → dense 4096→512 → relu →
@@ -4519,7 +4519,7 @@ def cifar8BnFwdModuleV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (epsStr : 
     B nClasses (cifar8BnFwdGraph epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
       W₅ b₅ ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈ W₉ b₉ Wa ba Wb bb x)
 
-/-- Full **BN-CIFAR** SGD train step (`@cifar_bn_train_step`). The Chapter-5
+/-- Full **BN-CIFAR** SGD train step (`@cifar_bn_train_step`). The Chapter-4
     BatchNorm peer of `cifarTrainStepText`: each conv→relu block becomes
     conv→BN→relu. The per-example BN forward (`bnFwd` = `renderLN`: reduce μ/var
     over the feature axis, normalize, scalar-affine — denotes `bnForward`), its
@@ -5360,7 +5360,7 @@ def cifar8BnFwdTextPC (B ic c1 c2 c3 c4 H W kH kW d1 nClasses : Nat) (epsStr : S
 end StableHLO
 end Proofs
 
--- Emit the verified-renderer modules at the real ch-2 shapes (784→10, B=128).
+-- Emit the verified-renderer modules at the real ch-1 shapes (784→10, B=128).
 -- `pretty` ignores operand/param *values* (only names/shapes reach the text),
 -- so the constant placeholders below render exactly the text `den` is faithful
 -- to. The train-step lr literal is 0.1/128 (mean-loss equiv of the book's 0.1).
@@ -5385,14 +5385,14 @@ end Proofs
   IO.FS.writeFile "verified_mlir/linear_train_step.mlir"
     (Proofs.StableHLO.linTrainStepFaithfulV 128 784 10 "0.00078125"
        (fun _ _ => 0) (fun _ => 0) (fun _ => 0))
-  -- Chapter 3 MLP (784→512→512→10): forward + full SGD train step.
+  -- Chapter 2 MLP (784→512→512→10): forward + full SGD train step.
   IO.FS.writeFile "verified_mlir/mlp_fwd.mlir"
     (Proofs.StableHLO.mlpFwdModuleV 128 784 512 512 10
        (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
        (fun _ => 0))
   -- mlp_train_step.mlir is now generated by the faithful renderer in MlpRender.lean
   -- (mlpTrainStepFaithfulV, den-certified in MlpFaithfulPoC.lean), not mlpTrainStepText.
-  -- Chapter 4 CNN forward (1→32→32 conv, 28×28→14×14 maxpool, 6272→512→512→10).
+  -- Chapter 3 CNN forward (1→32→32 conv, 28×28→14×14 maxpool, 6272→512→512→10).
   IO.FS.writeFile "verified_mlir/cnn_fwd.mlir"
     (Proofs.StableHLO.cnnFwdModuleV 128 1 32 14 14 512 10 3 3
        (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -5400,7 +5400,7 @@ end Proofs
        (fun _ => 0))
   -- cnn_train_step.mlir is now generated by the faithful renderer in CnnRender.lean
   -- (cnnTrainStepFaithfulV, den-certified in CnnFaithfulPoC.lean), not cnnTrainStepText.
-  -- Chapter 5 CIFAR forward (3→32→32 conv, 32×32→16×16 pool, 32→64→64 conv,
+  -- Chapter 4 CIFAR forward (3→32→32 conv, 32×32→16×16 pool, 32→64→64 conv,
   -- 16×16→8×8 pool, flatten 4096→512→512→10). h=w=8 ⇒ input 3·32·32 = 3072.
   IO.FS.writeFile "verified_mlir/cifar_fwd.mlir"
     (Proofs.StableHLO.cifarFwdModuleV 128 3 32 64 8 8 512 10 3 3
@@ -5410,7 +5410,7 @@ end Proofs
        (fun _ => 0))
   -- cifar_train_step.mlir is now generated by the faithful renderer in CnnRender.lean
   -- (cifarTrainStepFaithfulV, den-certified in CifarFaithfulPoC.lean), not cifarTrainStepText.
-  -- Chapter 5 CIFAR **per-channel BatchNorm** forward (per-example per-channel BN
+  -- Chapter 4 CIFAR **per-channel BatchNorm** forward (per-example per-channel BN
   -- after each conv; ε=1e-5; H=W=32 full input spatial). String renderer (peer of
   -- the train-step) until the typed cifarBnFwdGraph is reconciled to per-channel.
   IO.FS.writeFile "verified_mlir/cifar_bn_fwd.mlir"

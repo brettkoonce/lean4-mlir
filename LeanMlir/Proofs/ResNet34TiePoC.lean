@@ -4,7 +4,7 @@ import LeanMlir.Proofs.ResNet34RenderPC
 
 /-! # PoC: the ResNet-34 §1a TIE — the whole net tied through the real forward
 
-The Chapter-6 §1a tie: the cnn/cifar tie (`cnn_conv_tied_certified` / `cifar_conv_tied_certified`)
+The Chapter-5 §1a tie: the cnn/cifar tie (`cnn_conv_tied_certified` / `cifar_conv_tied_certified`)
 scaled to the full `[3,4,6,3]` ResNet-34. r34's §1 fold (`ResNet34FaithfulPoC`) already makes every
 param op `den = certified ∀ c`; this file feeds each consumer the **real forward activations** and the
 **loss-driven backward-chain cotangent** the residual net actually delivers — so the WHOLE 146-param

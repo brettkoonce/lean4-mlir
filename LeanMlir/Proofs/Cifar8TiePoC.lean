@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Cifar8FaithfulPoC
 
-/-! # PoC: the cifar8 (Chapter 5 deeper, 8-conv no-BN) §1a TIE — tied through the real forward
+/-! # PoC: the cifar8 (Chapter 4 deeper, 8-conv no-BN) §1a TIE — tied through the real forward
 
 The 4-stage peer of `CifarFaithfulPoC`'s §1a tie (`cifar_conv_tied_certified`). cifar8 is cifar (ch5)
 with **four** conv→conv→pool stages instead of two, so its conv backward chain is the cifar chain

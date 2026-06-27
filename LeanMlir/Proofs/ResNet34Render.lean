@@ -2,7 +2,7 @@ import LeanMlir.Proofs.StableHLO
 
 /-! # ResNet-34 train step rendered ENTIRELY from the verified AST
 
-The Chapter-6 peer of `cifar8BnTrainStepFaithfulV` (`CnnRender.lean`), scaled to the full
+The Chapter-5 peer of `cifar8BnTrainStepFaithfulV` (`CnnRender.lean`), scaled to the full
 `[3,4,6,3]` ResNet-34 (146 params): a 7×7/s2 stem, 16 residual blocks (3 downsample, 13 identity),
 global-average-pool + final dense. `MainResnet34Verified` trains on
 `verified_mlir/resnet34_train_step.mlir`; this renderer emits that file as `pretty(provenGraph)` —

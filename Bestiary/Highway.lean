@@ -18,7 +18,7 @@ as
 `T` learned per element gives a continuous knob between
 ``pass through identity'' (`T → 0`) and ``transform fully''
 (`T → 1`). The gradient through the blend is exactly the product
-rule + additive fan-in from Chapter 2's VJP toolkit, so no new
+rule + additive fan-in from Chapter 1's VJP toolkit, so no new
 calculus is needed.
 
 ```
@@ -34,7 +34,7 @@ calculus is needed.
         y = T·H + (1−T)·x          ← carry path bypasses x verbatim
 ```
 
-ResNet (Chapter 6) is the special case where `T ≡ 1` on the
+ResNet (Chapter 5) is the special case where `T ≡ 1` on the
 transform side and the carry path becomes a constant identity skip
 — same calculus, fewer parameters, marginally better training.
 Highway showed in 2015 that *some kind of bypass* made very deep
@@ -145,7 +145,7 @@ def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
   IO.println "  Two-path block: main H(x) + transform gate T(x)."
   IO.println "  Combined as y = T·H + (1−T)·x — product rule + additive fan-in,"
-  IO.println "  both already in Ch 2's VJP toolkit. ResNet (Ch 6) is T ≡ 1."
+  IO.println "  both already in Ch 1's VJP toolkit. ResNet (Ch 5) is T ≡ 1."
 
   summarize highway50Main
   summarize highway50Gate
@@ -164,6 +164,6 @@ def main : IO Unit := do
   IO.println "    can't express the per-element gate at the spec level."
   IO.println "  • Sigmoid on the gate is applied at the blend, not in the spec."
   IO.println "    Same convention as the AlphaZero value head's tanh."
-  IO.println "  • ResNet (Ch 6) replaced T with a constant 1 — same calculus,"
+  IO.println "  • ResNet (Ch 5) replaced T with a constant 1 — same calculus,"
   IO.println "    fewer parameters. The bestiary entry pairs the two for"
   IO.println "    pedagogical contrast."
