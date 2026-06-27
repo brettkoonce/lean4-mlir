@@ -77,6 +77,10 @@ lean_lib «Proofs» where
              -- R4 syntactic core: op-graph serialization round-trip
              -- (parse (toToks (skel a)) = a).
              `LeanMlir.Proofs.StableHLOParse,
+             -- R4 syntactic LEXER numeric keystone: decimal Nat⟷String
+             -- round-trip (parseNat (toString n) = n), the load-bearing
+             -- first rung of text→token faithfulness.
+             `LeanMlir.Proofs.StableHLOLex,
              -- M1 (planning/verified_train_step.md): the linear train step bundled
              -- into one SGD-on-certified-softmax-CE-gradient theorem.
              `LeanMlir.Proofs.LinearTrainStep,

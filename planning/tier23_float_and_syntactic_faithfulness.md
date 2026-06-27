@@ -212,37 +212,82 @@ nets: never).
 
 ## Part B — Syntactic faithfulness: the verified lexer
 
-> ### ▶ START HERE — next clean session (updated 2026-06-27)
+> ### ▶ VERDICT — Part B DEPRIORITIZED, kept as a documented stub (decided 2026-06-27)
 >
-> **Part B is the ONLY remaining tractable Gap-3 item.** Everything else in this doc is done and
-> committed: A1 (all 5 forward whole-net capstones), A3 (all 5 backward `<net>_grad_floatBridges` — the
-> 5×2 matrix is complete, last was `efficientnet_grad_floatBridges`), A2 (the descent probe —
-> `cifar8_lastConv_sgd_descends`, first non-MNIST descent; full-depth = the compounding stop). Audit
-> 1152, 3-axiom-clean, full `Proofs` suite builds.
+> **Decision (Brett, 2026-06-27): do NOT pursue the full lexer.** The numeric keystone is kept as a
+> small self-contained stub (`StableHLOLex.lean`, `parseNat_toString`, 3-axiom-clean) — its value is
+> the proven down-payment **plus** this candid "why we stopped" record, so nobody re-discovers the
+> scope from scratch. The full `parse (lex (pretty g)) = some (skel g)` is **not worth the cost**:
 >
-> **The goal:** `parse (lex (pretty g)) = some (skel g)` — "tokenize-then-parse the emitted `.mlir`
-> text recovers exactly the proven op-graph skeleton," moving the per-op lexical map out of the
-> trusted surface into the kernel.
+> 1. **CI already guards the practical risk.** `proofs.yml` byte-for-byte diffs every committed
+>    `verified_mlir/<net>_train_step.mlir` against the renderer, so "text drifted from the proven
+>    graph" is *already caught*. The lexer would upgrade a byte-check to a kernel proof — incremental
+>    hardening, not a new capability.
+> 2. **It closes ONLY the lexer.** The load-bearing trusted edges — StableHLO *spec* conformance,
+>    IREE lowering, `float32 ≈ ℝ` — stay validated by `iree-compile` + GPU runs regardless (they need
+>    a verified MLIR/IREE, out of reach). A finished lexer leaves the real gap untouched.
+> 3. **It's large, not medium** — three under-modeled issues below. Multi-session for a narrow win;
+>    credibility-per-hour was far higher in A1/A3 (the float matrix) and A2 (the descent probe), all done.
+>
+> Everything below the keystone is recorded for completeness only — pick it up *only* if the
+> text→token kernel proof ever becomes independently wanted. ↓↓↓
+>
+> ---
+>
+> **Part B attempt pass (2026-06-27) — what was found.** The full lexer is **large / multi-session**
+> (volume + two design subtleties), NOT the "medium finite case-split" originally billed.
+>
+> Everything in Part A is done and committed: A1 (all 5 forward whole-net capstones), A3 (all 5
+> backward `<net>_grad_floatBridges` — the 5×2 matrix complete), A2 (descent probe
+> `cifar8_lastConv_sgd_descends`). Audit 1152→1153, 3-axiom-clean, full `Proofs` suite builds.
+>
+> **DONE this pass — the numeric keystone (`LeanMlir/Proofs/StableHLOLex.lean`, 3-axiom-clean):**
+> `parseNat_toString : parseNat (toString n) = n` — the decimal `Nat ⟷ String` round-trip. Every
+> per-op recognizer reads shapes (`784`, `10`, …) back out of `tensor<784x10xf32>` annotations, and
+> `emitTok` renders them with `toString`, so this is THE lemma the whole lexer rests on. Proved by a
+> fuel induction over `Nat.toDigitsCore` (`toDigitsCore_suffix` + Horner `foldl_dstep_toDigitsCore` +
+> `dstep_digitChar` + `lt_ten_pow_succ` + `toString_toList`). Wired into lakefile roots + AuditAxioms.
+>
+> **THREE findings that change the plan (code-evidenced):**
+> 1. **Core String parsing is kernel-opaque.** `String.toNat?` / `String.splitOn` do NOT reduce under
+>    `decide`/`rfl` (they fold over `String.Pos`/`Substring` iterators). ⇒ no off-the-shelf
+>    `(toString n).toNat?`, and **no concrete-`decide` shortcut on any committed net**. The lexer MUST
+>    be built at the `List Char` level with structural recursion + induction (which is what the
+>    keystone is). Rendering (`toString`/`ty`/`++`) *does* reduce by `rfl`, so the emit side is fine.
+> 2. **Operands emit the EMPTY string** (`emitTok (.operand nm _) = ("", nm::st)`, `StableHLO.lean:2541`).
+>    The name appears only as a *reference* inside a later op's line, yet `toToks (skel g)` *contains*
+>    operand tokens and `parse` *consumes* them. ⇒ the original step-2 target
+>    `lex (pretty g) = toToks (skel g)` is **FALSE as written**. `lex` must *regenerate* operand
+>    tokens from references (telling leaf names apart from fresh `%v{k}` results — `fresh` at
+>    `StableHLO.lean:2138`). Correct composite target: `parse (lex (pretty g)) = some (skel g)`.
+> 3. **~90 multi-line op templates with shared prefixes.** Each `Tok` emits a fixed-shape *block*
+>    (0 lines for `operand`, ~20 for BN-γ SGD); many start with the same
+>    `stablehlo.constant dense<0.0>` line, so recognition needs block-delimiting + lookahead, not a
+>    1-line-per-token map. This is the volume.
+>
+> **The goal (unchanged):** `parse (lex (pretty g)) = some (skel g)` — tokenize-then-parse the emitted
+> `.mlir` text recovers exactly the proven op-graph skeleton.
 >
 > **What's already proven (the structural core — do NOT redo):**
 > - `roundtrip : parse (toToks (skel a)) = some (skel a)` (`StableHLOParse.lean:239`).
+> - `parseNat_toString` — the decimal codec (THIS pass, `StableHLOLex.lean`).
 > - `pretty B g = serializeToks B (toToks (skel g))`, `serializeToks = List.foldl (emitTok B)`
->   (`StableHLO.lean:3994-4009`). So the text is a transparent per-token rendering — NO whole-text parser.
-> - SSA names are nameless/positional (a `StateM Nat` counter in emission order, resolved by
->   `parseStack` position). **No symbol table, no α-renaming** — the "names are hard" worry is dissolved.
+>   (`StableHLO.lean:3994-4009`). The text is a transparent per-token rendering — NO whole-text parser.
+> - SSA names are nameless/positional (a `StateM Nat` counter; `parseStack` resolves by position).
+>   No symbol table / α-renaming.
 >
-> **The work (3 steps, self-contained — string/list induction, no Mathlib analysis):**
-> 1. `lexTok : String → Option Tok` — the per-emitted-op-line inverse of `emitTok` (a finite case-split
->    over the `Tok` vocabulary; `emitTok` is at `StableHLO.lean:2540`). Operand refs resolve by stack
->    position (mirror `emitTok`'s push / `parseStack`'s pop) — no symbol table.
-> 2. `emitTok_lexTok : lexTok (emitTok B t st).1 = some t` per op (finite case-split), lifted by `foldl`
->    induction to `lex (pretty g) = toToks (skel g)`; compose with `roundtrip` for the end-to-end theorem.
-> 3. Pin the byte tie: assert the rendered `pretty` equals the committed `verified_mlir/<net>_train_step.mlir`
->    (the CI drift guard already byte-checks those against the renderer).
+> **The remaining work (on top of the keystone), suggested order:**
+> 1. `ty`-string parser: invert `ty dims` (a `List Char` splitter on `'x'` + `parseNat` per field).
+>    Needs a `split (intercalate)` round-trip at `List Char` level (core `splitOn` is kernel-opaque).
+> 2. A `List Char` block-lexer `lexTok` + `emitTok_lexTok` per op (finite but ~90-wide; share helpers).
+>    Resolve operand re-synthesis here (finding 2) — emit `.operand` tokens from references.
+> 3. Lift by `foldl` induction and compose with `roundtrip` ⇒ `parse (lex (pretty g)) = some (skel g)`.
+> 4. Pin the byte tie: rendered `pretty` = committed `verified_mlir/<net>_train_step.mlir` (CI already
+>    byte-checks those against the renderer).
 >
-> **Honest residue (state wherever cited):** this closes the LEXER only — NOT StableHLO spec conformance,
-> IREE lowering, or `float32 ≈ ℝ` (those stay validated by `iree-compile` + GPU runs; they need a verified
-> MLIR/IREE). Effort medium, risk low. Details + the per-op specifics in B0/B1/B2 below.
+> **Honest residue (state wherever cited):** this closes the LEXER only — NOT StableHLO spec
+> conformance, IREE lowering, or `float32 ≈ ℝ` (those stay validated by `iree-compile` + GPU runs).
+> Effort for the remainder: large, risk low-medium (volume + operand re-synthesis). Details in B0/B1/B2.
 
 ### B0. Where we are
 
@@ -330,7 +375,8 @@ is the finite per-op lexer and its inverse lemma.
 | **A1** per-net forward capstones | "deployed float forward ≈ certified `ℝ` forward", named per net | ✅ DONE (all 5 deep nets + cifar family) | low | medium |
 | **A2** BN-backward + CIFAR grad-close (+opt descent) | float gradient closeness one rung above MNIST; maybe Tier-2 descent | M | med | medium |
 | **A3** deep-net grad-close (backward float) | makes the §1a ties mean something at float for Imagenette | ✅ DONE (all 5 `<net>_grad_floatBridges` + cifar/mlp; the 5×2 whole-net matrix is complete) | med | **high** |
-| **B1/B2** per-op `lexTok` inverse → `parse (lex (pretty g)) = skel g` | text→graph faithfulness; retires the per-op lexical audit | M | low | **high** |
+| **B0 (keystone, DONE)** decimal `Nat⟷String` round-trip | `parseNat_toString`; the numeric core every recognizer reuses | ✅ DONE (`StableHLOLex.lean`) | low | **high** |
+| **B1/B2** `ty`-parser + per-op `lexTok` inverse → `parse (lex (pretty g)) = skel g` | text→graph faithfulness; retires the per-op lexical audit | **large** (volume + operand re-synthesis) | low-med | **high** |
 
 *A1 CIFAR family DONE (2026-06-26): `cifar8_floatBridges` (`Cifar8FloatBridge.lean`) + the BN
 keystone `floatBridges_bn`/`floatBridges_bnPerChannelFlat`/`floatBridges_bnPerChannelTensor3`
@@ -359,3 +405,14 @@ dissolved)** and **A2 (the CIFAR grad-closeness rung + optional Tier-2 descent)*
 "deployed artifact faithful both numerically AND syntactically" headline; A2 is a smaller numeric rung.
 **Deep-net descent stays open by design — do not target it.** The remaining §B *certified-VJP*
 whole-net folds stay gated by toy-only certified terms (honest stop).
+
+**Part B — DEPRIORITIZED (decided 2026-06-27, see the VERDICT block at the top of Part B).** The
+numeric **keystone is DONE and kept as a stub** (`StableHLOLex.lean`, `parseNat_toString`,
+3-axiom-clean); the full lexer is **not being pursued** — low ROI (CI byte-check already guards the
+risk; it closes only the lexer, not the spec/IREE/float edges; large/multi-session). The attempt
+found the full lexer is **large**, not the "medium finite case-split" originally billed — three
+code-evidenced reasons: (1) core `String.toNat?`/`splitOn` are kernel-opaque ⇒ mandatory from-scratch
+`List Char` codec, no concrete-`decide` shortcut; (2) operands emit the empty string ⇒ the doc's
+`lex (pretty g) = toToks (skel g)` is false as written, `lex` must re-synthesize operand tokens; (3)
+~90 multi-line op templates with shared prefixes. B1/B2 (ty-parser + per-op recognizers + operand
+re-synthesis + foldl lift) remain open by choice, not by blocker.

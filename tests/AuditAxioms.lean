@@ -17,6 +17,7 @@ import LeanMlir.Proofs.CifarCNN
 import LeanMlir.Proofs.IR
 import LeanMlir.Proofs.StableHLO
 import LeanMlir.Proofs.StableHLOParse
+import LeanMlir.Proofs.StableHLOLex
 import LeanMlir.Proofs.StridedConv
 import LeanMlir.Proofs.ResNet34
 import LeanMlir.Proofs.ResNet34LivePC
@@ -794,6 +795,11 @@ open Proofs
 -- lemma is even cleaner — `[propext]` only, no ℝ — but the exact-triple gate
 -- wants all three, so the ℝ-carrying headline `roundtrip` is the audited one.)
 #print axioms StableHLO.roundtrip
+-- R4 syntactic LEXER numeric keystone: the decimal Nat⟷String round-trip
+-- (parseNat (toString n) = n). The one lemma the whole verified lexer rests on
+-- (every per-op recognizer reads shapes back out of `tensor<…>` via `toString`);
+-- a fuel induction over `Nat.toDigitsCore`, no analysis.
+#print axioms StableHLO.parseNat_toString
 -- CIFAR-BN render CLOSE — the per-channel BN scale/shift parameter-gradient bridges
 -- (the last params of the CIFAR-BN train step). γ/β enter BN affinely (y = γ·x̂ + β,
 -- x̂ independent of both), so the rendered per-channel reduces dγ_c = Σ_s dy·x̂ and
