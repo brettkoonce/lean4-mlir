@@ -20,11 +20,22 @@ Memory: `[[float-tier23-and-lexer-gap]]`, `[[floatbridge-b-certified-tie]]` (the
 
 ## ✅ STATUS / NEXT-SESSION HANDOFF (updated 2026-06-26)
 
-**Committed earlier this run:** `a27aa74` (vit-forward tie) · `93b38bd` (depthwise gate + convnext/mnv2/
-efficientnet §B ties) · `c614fb7` (vit MHSA leaf tie) · `cfcf1a6` (vit attn-sublayer reconciliation).
-**Uncommitted (the full `vitBlockBack` tie — done this session, awaiting sign-off):** the per-token-aware
-enrichment + the block-level §B capstone. Audit now = **1147 3-axiom-clean prints** (was 1138; +9 new),
-full `tests/AuditAxioms.lean` elaborates clean.
+**Committed:** `a27aa74` (vit-forward tie) · `93b38bd` (depthwise gate + convnext/mnv2/efficientnet §B
+ties) · `c614fb7` (vit MHSA leaf tie) · `cfcf1a6` (vit attn-sublayer reconciliation) · **`1025bc4` (the
+full `vitBlockBack` tie — per-token-LN enrichment + block §B capstone, done 2026-06-26)**. Audit now =
+**1147 3-axiom-clean prints** (was 1138; +9 new); full `tests/AuditAxioms.lean` elaborates clean; the
+whole `Proofs` suite builds (2333 jobs). Working tree clean.
+
+**NEXT PILLAR — the lexer / syntactic faithfulness (Gap-3 Part B).** With the numeric block-level §B now
+closed for all 5 nets, the remaining provable faithfulness axis is *syntactic*: that the emitted `.mlir`
+**text** parses back to the proven op-graph. The structural roundtrip is already proven
+(`parse (toToks (skel a)) = some (skel a)`, `StableHLOParse.lean:239`); the only residue is the per-op
+`lexTok` inverse of `emitTok` (a finite case-split) lifted by `foldl` induction →
+`parse (lex (pretty g)) = some (skel g)`. SSA names are already nameless/positional (no symbol table —
+the scary part is dissolved). Self-contained, no dependency on the float work. Plan:
+`planning/tier23_float_and_syntactic_faithfulness.md` Part B (B1/B2). Effort medium, risk low. Honest
+residue (state wherever cited): it closes the LEXER, NOT StableHLO spec conformance / IREE lowering /
+`float32 ≈ ℝ` (those stay validated by `iree-compile` + GPU runs).
 
 **DONE:**
 - **Forward sweep** — all 5 nets' forward bridges tie to their real net def (Item 3 / Part B closed).

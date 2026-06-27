@@ -104,6 +104,7 @@ import LeanMlir.Proofs.SEBackFloatBridge
 import LeanMlir.Proofs.MobileNetV2BackFloatBridge
 import LeanMlir.Proofs.EfficientNetBackFloatBridge
 import LeanMlir.Proofs.EfficientNetWholeFloatBridge
+import LeanMlir.Proofs.EfficientNetWholeBackFloatBridge
 import LeanMlir.Proofs.MobileNetV2WholeFloatBridge
 import LeanMlir.Proofs.ViTWholeFloatBridge
 import LeanMlir.Proofs.PatchEmbedFloatBridge
@@ -1858,6 +1859,17 @@ open Proofs
 #print axioms Proofs.floatBridges_mbResidFwdB
 #print axioms Proofs.floatBridges_headFwdB
 #print axioms Proofs.efficientnetForwardB_floatBridges
+-- EfficientNet WHOLE-NET BACKWARD (the LAST whole-net float bridge — completes the 5-net × {fwd,bwd}
+-- matrix). efficientnet_grad_floatBridges = the batched .comp fold (reverse of head∘mbResid∘mbStrided∘
+-- mbNoExp∘stem): concrete batchMap-lifted classifier (linBack)/GAP (gapBack)/head-conv/stem-conv
+-- (convFlatBack/flatConvStride2Back) endpoints, with the stem/head BN+swish backs and the three MBConv
+-- block backs supplied (the mnv2_grad_floatBridges discipline). The two non-residual block backs are
+-- dischargeable too: mbNoExpBodyBack (b1B, expand arm dropped) + mbStridedBodyBack (b2B, stride-2
+-- depthwise back), so — with mbconvBatchedResidBack for the residual b3B — every supplied hypothesis is
+-- instantiable (mnv2 parity). A3 = gradient closeness at a smooth point.
+#print axioms Proofs.efficientnet_grad_floatBridges
+#print axioms Proofs.floatBridges_mbNoExpBodyBack
+#print axioms Proofs.floatBridges_mbStridedBodyBack
 -- ConvNeXt-T (per-example): block body backward = depthwiseBack ∘ lnBack ∘ convBack ∘ geluBack ∘
 -- convBack ∘ layerScaleBack (depthwiseFlatBack concrete; LN/GELU/layer-scale diagBacks supplied); full
 -- block = residual(body); the stage downsample = lnBack ∘ flatConvStride2Back. convnext_grad_floatBridges

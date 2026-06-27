@@ -87,15 +87,15 @@ three — so the capstone is the pure `.comp` assembly. **A1 CIFAR family now co
 4-conv `cifar_float_close` + 8-conv `cifar8_floatBridges` + BN `cifarBn_floatBridges`). All wired
 into `lakefile.lean` roots + `tests/AuditAxioms.lean`.
 
-**Remaining A1 gap:**
-- **deep nets** (`r34`, `mnv2`, `efficientnet`, `convnext`, `vit`) — *blocked on a
-  distinct-per-block fold.* Block bridges exist (`floatBridges_vitBlock`,
-  `floatBridges_mbconvBody`, `floatBridges_seBlockFull`, `floatClose_resBlock`/
-  `floatClose_r34_stages`), but real blocks have **distinct per-block params**, so the fold is a
-  `.comp` chain over distinct instances, **not** an `f^[n]` iterate (`floatClose_iterate`/
-  `floatClose_r34_stages` are the uniform-block abstractions — generic, not the instantiated net).
-  Also needs stem/patchEmbed and classifier/finalLN bridges in `FloatBridges` form (only
-  `floatBridges_dense` of the head pieces is ready). Follow the `cifar8_floatBridges` template.
+**Remaining A1 gap — ✅ CLOSED (deep-net forward capstones all exist).** Survey 2026-06-27: the
+distinct-per-block fold was already done for every deep net. Whole-net *forward* `FloatBridges`
+capstones exist and are audited: `r34Forward_floatBridges` (`Resnet34WholeFloatBridge.lean`),
+`mnv2Forward_floatBridges` (`MobileNetV2WholeFloatBridge.lean`), `efficientnetForwardB_floatBridges`
+(`EfficientNetWholeFloatBridge.lean`), `convnextForward…floatBridges` (`ConvNeXtWholeFloatBridge.lean`),
+`vit_floatBridges_concrete` (`PatchEmbedFloatBridge.lean`). Each is the `.comp` chain over distinct
+per-block instances + stem/patchEmbed + classifier/finalLN, with the per-block / BN / LN bridges
+**supplied** as `FloatBridges` hypotheses (the `cifar8_floatBridges` discipline — each separately
+dischargeable). So A1 is complete for all nets; nothing deep-net forward remains.
 
 Pair each finished capstone with a measured-vs-proven row (`scripts/cifar_bn_margin_probe.py`
 style) so the worst-case `L` sits next to the silicon number.
@@ -165,13 +165,18 @@ assembly on the backward:
    peer of `floatClose_relu`). *Remaining: conv input-VJP (`convBackDenote`, a reversed-kernel
    conv — its own bridge, not a `flatConv` reuse), depthwise/SE/attention grads, and the loss-head
    cotangent (`softmax_ce_cot_close`, exists per-entry; lift to a `FloatBridges` map).*
-2. Compose them into a per-net `<net>_grad_floatBridges` — **the fold WORKS**: the backward of a
-   feed-forward net at a smooth point is itself a *forward* composition of maps on the cotangent,
-   so it threads through the **same** `FloatBridges.comp` backbone. Witness:
-   **`mlpInputGrad_floatBridges`** (`LinBackFloatBridge.lean`, 3-axiom-clean) — the whole 3-layer
-   MLP input-gradient VJP `Wᵀ₀·(mask₁⊙Wᵀ₁·(mask₂⊙Wᵀ₂·dy))` float-bridges in one `.comp` chain, the
-   backward peer of `cifar8_floatBridges`. *Remaining: the conv/BN/attention per-net assemblies
-   (5 deep architectures) — mechanical once their per-op backward bridges land.*
+2. Compose them into a per-net `<net>_grad_floatBridges` — **DONE for all 5 deep nets + the cifar
+   pair** (2026-06-27 survey + the EfficientNet capstone): `r34_grad_floatBridges`
+   (`Resnet34WholeBackFloatBridge.lean`), `mnv2_grad_floatBridges` (`MobileNetV2BackFloatBridge.lean`),
+   `convnext_grad_floatBridges` (`ConvNeXtBackFloatBridge.lean`), `vit_grad_floatBridges(_concrete)`
+   (`MhsaBackFloatBridge`/`PatchEmbedBackFloatBridge.lean`), **`efficientnet_grad_floatBridges`
+   (`EfficientNetWholeBackFloatBridge.lean`, the last one — added 2026-06-27)**, plus
+   `cifar8/cifarBn_grad_floatBridges` (`CnnBackFloatBridge.lean`) and `mlpInputGrad_floatBridges`
+   (`LinBackFloatBridge.lean`). Each is the `.comp` fold over concrete endpoints + supplied
+   per-block / BN / activation backwards (the `mnv2_grad_floatBridges` discipline; each dischargeable).
+   **So the whole-net `FloatBridges` matrix is COMPLETE — all 5 nets × {forward, backward}.** What
+   stays open is genuinely-distinct: the §B *certified-VJP* whole-net fold (gated by toy-only certified
+   terms), and deep-net descent (open by design).
 
 **→ The remaining deep-net backward assembly has its own pick-up plan:
 `planning/a3_backward_deepnet_assembly.md`** (per-op backward bridges still needed, per-net
@@ -280,9 +285,9 @@ is the finite per-op lexer and its inverse lemma.
 
 | Item | What it delivers | Effort | Risk | Value |
 |---|---|---|---|---|
-| **A1** per-net forward capstones | "deployed float forward ≈ certified `ℝ` forward", named per net | S–M (CIFAR family ✅: 4/8-conv + BN; deep nets L) | low | medium |
+| **A1** per-net forward capstones | "deployed float forward ≈ certified `ℝ` forward", named per net | ✅ DONE (all 5 deep nets + cifar family) | low | medium |
 | **A2** BN-backward + CIFAR grad-close (+opt descent) | float gradient closeness one rung above MNIST; maybe Tier-2 descent | M | med | medium |
-| **A3** deep-net grad-close (backward float) | makes the §1a ties mean something at float for Imagenette | L (BN-back + linear-back + relu-back ✅; whole MLP backward fold ✅; conv/attn grads + deep-net assembly remain) | med | **high** |
+| **A3** deep-net grad-close (backward float) | makes the §1a ties mean something at float for Imagenette | ✅ DONE (all 5 `<net>_grad_floatBridges` + cifar/mlp; the 5×2 whole-net matrix is complete) | med | **high** |
 | **B1/B2** per-op `lexTok` inverse → `parse (lex (pretty g)) = skel g` | text→graph faithfulness; retires the per-op lexical audit | M | low | **high** |
 
 *A1 CIFAR family DONE (2026-06-26): `cifar8_floatBridges` (`Cifar8FloatBridge.lean`) + the BN
@@ -304,8 +309,11 @@ capstones (the per-block fold) remain in A1.*
 4. **B1/B2** — independent of A; can run in parallel (different files, no shared lemmas). Schedule
    when a string-induction build is wanted rather than analysis.
 
-**One-line recommendation:** do **A1 → A3**. The deep-net *forward* bridge is already done; the
-deep-net *backward* float-closeness (A3) is the one missing piece that makes the headline §1a
-ties (`r34_net_tied_certified` & co.) carry over to the float net that actually runs — and it
-needs no new mathematics, only the forward `FloatBridges` assembly mirrored onto the proven
-backward graphs. **Deep-net descent stays open by design — do not target it.**
+**One-line recommendation (updated 2026-06-27):** ~~A1 → A3~~ **both DONE** — the whole-net
+`FloatBridges` matrix is complete for all 5 nets × {forward, backward} (the last entry,
+`efficientnet_grad_floatBridges`, landed 2026-06-27). The remaining tractable items are **B1/B2 (the
+lexer / syntactic faithfulness — the other provable axis, self-contained, the SSA-names worry already
+dissolved)** and **A2 (the CIFAR grad-closeness rung + optional Tier-2 descent)**. Take B for the
+"deployed artifact faithful both numerically AND syntactically" headline; A2 is a smaller numeric rung.
+**Deep-net descent stays open by design — do not target it.** The remaining §B *certified-VJP*
+whole-net folds stay gated by toy-only certified terms (honest stop).
