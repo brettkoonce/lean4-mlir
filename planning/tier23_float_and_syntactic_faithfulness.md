@@ -104,34 +104,44 @@ style) so the worst-case `L` sits next to the silicon number.
 (volume + the per-block fold).** **Risk: low** — no new mathematics, the hard per-op moduli are
 done; the per-channel-BN lift is built (`BnPerChannelFloatBridge.lean`); the rest is assembly.
 
-### A2. BN **backward** + CIFAR float-gradient closeness (the next rung) — TRACTABLE
+### A2. BN backward + CIFAR float-gradient closeness — sub-steps 1–2 ✅ DONE; only the descent probe remains
 
-**Gap.** Float closeness is **forward-only**. The backward/gradient float story stops at the
-MNIST CNN: `*_float_sgd_descends` exists only in `SgdDescentCnn` (4: MNIST conv W/b),
-`SgdDescentLinear` (1), `SgdDescentMlp` (3). There is **no BN-backward float bridge** and **no
-CIFAR float-gradient closeness** — even though the §1a `cifarBn_convbn_tied_certified` ties the
-emitted CIFAR-BN train step at the `den`/`ℝ` level.
+**Corrected status (2026-06-27).** Sub-steps 1 and 2 below were absorbed into the A3 backward
+sweep and are **done, 3-axiom-clean**:
+1. **BN backward bridge — DONE.** `bnGradInput_close` (keystone) + `floatClose_bnBack`/`floatBridges_bnBack`
+   (`BnBackFloatBridge.lean` + `BnBackComposeBridge.lean`). The `rsqrt`-in-the-backward terms are
+   handled exactly as planned (forward `bnIstd_close` operating point + the stays-normal invariant).
+2. **CIFAR float-gradient closeness — DONE.** `cifar8_grad_floatBridges` (no-BN 8-conv) and
+   `cifarBn_grad_floatBridges` (BN) in `CnnBackFloatBridge.lean` — the whole-net input-gradient VJP
+   float-bridges (the float backward ≈ the certified gradient). The honest stop short of descent.
 
-**Plan (two sub-steps).**
-1. **Bridge the BN backward.** BN is the one Tier-2 op with `rsqrt` *in the backward*. The
-   forward keystone (`rsqrt_lipschitz`, `bnIstd_close_at`, `BnFloatBridge.lean`) is the model
-   for the backward `istd`/mean/var-grad terms. Deliver `bnBack_float_close` (the float analogue
-   of the proven `den`-level `bnBack_faithful`). The stays-normal invariant
-   (`bnDenom_normal`/`istd_ge_minNormal`, `FloatSubnormalBridge.lean`) already guarantees the
-   `rsqrt` argument never goes subnormal — reuse it.
-2. **CIFAR-8 float-gradient closeness.** Compose the conv-weight-grad bridge (the
-   `convTap_back_close` machinery from the MNIST CNN) with `bnBack_float_close` and the dense-head
-   cotangent (`cnn_conv2_cot_close` peer) to get `cifar8_grad_close`: "the float backward computes
-   ≈ the certified gradient." This is *closeness*, the honest stop short of descent.
+**So the ONLY open A2 item is the descent probe (sub-step 3).** This is the genuinely-uncertain
+research question, and the reason it's still worth doing: **CIFAR is the last shallow-enough net where
+descent might still be provable.** Today `*_float_sgd_descends` exists ONLY for MNIST (linear / MLP /
+CNN — `SgdDescentLinear`/`SgdDescentMlp`/`SgdDescentCnn`). For the deep Imagenette nets descent is
+off-limits BY DESIGN (compounding operator norms ⇒ vanishing admissible `lr`). CIFAR sits in between.
 
-**Optional stretch — CIFAR-8 descent (Tier-2 descent).** CIFAR-8 is shallow enough that the
-segment-Lipschitz route used for the MNIST CNN (`cnn_conv*_float_sgd_descends`) *may* still
-yield a non-vacuous admissible `lr` once BN is in the backward. Try it only after A2.1–A2.2;
-if the BN-induced Lipschitz constant kills the admissible `lr`, **stop and log it** (same honest
-stop line as the deep nets — do not force it).
+**✅ PROBE DONE (2026-06-27) — the first non-MNIST provable descent. `SgdDescentCifar.lean`, 3-axiom-clean.**
+The key discovery: **CIFAR-8's tail is byte-for-byte `cnn_conv2_sgd_descends`'s architecture** — last conv
+`W₈` (c4→c4) → relu → maxpool → three denses → CE is exactly conv→relu→maxpool→3×dense. So descent at the
+LAST conv layer reaches CIFAR-8 *for free*, with the SAME non-vacuous `lr` as MNIST. Two theorems:
+- `cifarCnn8Forward_factor` (`rfl`): the committed net factors `head ∘ (relu ∘ flatConv W₈) ∘ prefix7`
+  (`Function.comp` is definitionally associative).
+- `cifar8_lastConv_sgd_descends`: one SGD step on `W₈` (earlier 7 layers frozen — their output on `image`
+  is the feature map `x₁`) decreases the CIFAR-8 cross-entropy by `≥ lr·‖∇‖²/2`. Proved by reducing the
+  loss-as-a-function-of-`W₈` to the `cnn_conv2` program at `x₁` (via the factor lemma +
+  `flatConv = flatten∘conv2d∘unflatten`) and applying `cnn_conv2_sgd_descends`.
 
-**Effort: medium Lean.** BN backward is the real new content; the rest is reuse. **Risk:
-medium** — the BN-backward modulus algebra is fiddly but bounded.
+**The honest stop (logged, NOT forced):** descent through the DEPTH of all 8 conv layers stays open by
+design. `cnn_conv2_sgd_descends`'s admissible-`lr` condition `hsmall` is a PRODUCT of per-layer
+operator-norm factors; each extra conv layer multiplies another `(spatial · weight-bound)` factor in, so
+the admissible `lr` shrinks geometrically with depth ⇒ vacuous in any realistic regime — the SAME
+compounding mechanism that puts deep-net descent off-limits. CIFAR-BN (BN-in-the-backward Lipschitz) was
+not attempted: last-conv descent already answers "does descent reach CIFAR" (yes), and the full-depth
+stop is independent of BN. So **last-conv descent is the honest reach of provable descent for CIFAR.**
+
+**Result: medium Lean (reused the MNIST-CNN scaffold via an instantiation, not a reproof); the
+"compounding kills full-depth descent" outcome is the documented stop, exactly as the deep nets.**
 
 ### A3. Deep-net float **gradient** closeness (forward → + backward) — TRACTABLE, HIGH VALUE
 

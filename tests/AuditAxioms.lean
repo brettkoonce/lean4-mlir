@@ -68,6 +68,7 @@ import LeanMlir.Proofs.FloatSubnormalBridge
 import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
 import LeanMlir.Proofs.SgdDescentCnn
+import LeanMlir.Proofs.SgdDescentCifar
 import LeanMlir.Proofs.CifarFloatBridge
 import LeanMlir.Proofs.BnFloatBridge
 import LeanMlir.Proofs.Resnet34FloatBridge
@@ -2145,6 +2146,15 @@ open Proofs
 -- conv2 bias SGD entry is within g/250 + 10⁻⁷ of the certified step (g = cotangent
 -- bound). Same 1/250 = lr·γ₇₈₅ rate as the weight step, with a·g ↦ g.
 #print axioms FloatModel.mnist_cnn_convb_step_float_budget
+-- CIFAR-8 last-conv SGD descent (SgdDescentCifar.lean — the A2 probe, first non-MNIST descent).
+-- cifarCnn8Forward_factor: the committed CIFAR-8 net factors as head ∘ (relu∘flatConv W₈) ∘ prefix7
+-- (rfl). cifar8_lastConv_sgd_descends: one SGD step on the LAST conv W₈ (earlier 7 layers frozen — their
+-- output is the feature map x₁) decreases the CIFAR-8 cross-entropy by ≥ lr·‖∇‖²/2. CIFAR-8's tail is
+-- byte-for-byte cnn_conv2_sgd_descends's architecture, so this is an INSTANCE at x₁ (non-vacuous lr).
+-- Full-DEPTH descent stays open by design: hsmall's per-layer operator-norm product compounds to
+-- vacuity with each extra conv layer (same stop as the deep nets).
+#print axioms Proofs.cifarCnn8Forward_factor
+#print axioms Proofs.cifar8_lastConv_sgd_descends
 #print axioms FloatModel.pow_one_add_sub_one_le
 #print axioms FloatModel.linear_float_close
 #print axioms FloatModel.mlp_float_close

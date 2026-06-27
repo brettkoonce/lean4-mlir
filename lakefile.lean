@@ -204,6 +204,11 @@ lean_lib «Proofs» where
              -- max-pool selection margins (the argmax freezes along the step
              -- segment), pool 1-Lipschitz/ℓ1-contraction, conv kernel drift.
              `LeanMlir.Proofs.SgdDescentCnn,
+             -- CIFAR-8 last-conv SGD descent: the first non-MNIST provable descent. CIFAR-8's tail
+             -- (conv W₈ → relu → maxpool → 3 denses) IS cnn_conv2's architecture, so descent at the
+             -- last conv (earlier 7 layers frozen) is an instance — non-vacuous lr. Full-depth descent
+             -- stays open (the per-layer operator-norm product in hsmall compounds to vacuity).
+             `LeanMlir.Proofs.SgdDescentCifar,
              -- ℝ→Float32 forward rounding budget for the no-BN CIFAR CNN
              -- (cnn_float_close scaled to 4 conv + 2 maxpool + 3 dense).
              `LeanMlir.Proofs.CifarFloatBridge,
