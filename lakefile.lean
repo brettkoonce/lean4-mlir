@@ -449,12 +449,6 @@ lean_lib «Proofs» where
              -- adamWScalar of the certified gradient (sgdW_descends_certified_grad
              -- analogue, optimizer swapped for AdamW).
              `LeanMlir.Proofs.AdamRender,
-             -- WIP toward a live ResNet-34 witness (Mnv2Live peer): Stage-1
-             -- `liveDown` mechanism only — `liveFwd` is still constant-output at
-             -- 1 channel (structural: gap averages BN deviations back to β; see
-             -- the file header). Build-checked so the mechanism doesn't rot; NOT
-             -- a live witness and NOT in the AuditAxioms headline set.
-             `LeanMlir.Proofs.ResNet34Live,
              -- Stage 2 of the live ResNet-34 (Item A2): the channel-order invariant
              -- kit (maxpool/BN/ReLU preserve strict pointwise channel domination —
              -- the non-vacuity carrier). Build-checked; not yet a live witness, so
