@@ -212,6 +212,38 @@ nets: never).
 
 ## Part B — Syntactic faithfulness: the verified lexer
 
+> ### ▶ START HERE — next clean session (updated 2026-06-27)
+>
+> **Part B is the ONLY remaining tractable Gap-3 item.** Everything else in this doc is done and
+> committed: A1 (all 5 forward whole-net capstones), A3 (all 5 backward `<net>_grad_floatBridges` — the
+> 5×2 matrix is complete, last was `efficientnet_grad_floatBridges`), A2 (the descent probe —
+> `cifar8_lastConv_sgd_descends`, first non-MNIST descent; full-depth = the compounding stop). Audit
+> 1152, 3-axiom-clean, full `Proofs` suite builds.
+>
+> **The goal:** `parse (lex (pretty g)) = some (skel g)` — "tokenize-then-parse the emitted `.mlir`
+> text recovers exactly the proven op-graph skeleton," moving the per-op lexical map out of the
+> trusted surface into the kernel.
+>
+> **What's already proven (the structural core — do NOT redo):**
+> - `roundtrip : parse (toToks (skel a)) = some (skel a)` (`StableHLOParse.lean:239`).
+> - `pretty B g = serializeToks B (toToks (skel g))`, `serializeToks = List.foldl (emitTok B)`
+>   (`StableHLO.lean:3994-4009`). So the text is a transparent per-token rendering — NO whole-text parser.
+> - SSA names are nameless/positional (a `StateM Nat` counter in emission order, resolved by
+>   `parseStack` position). **No symbol table, no α-renaming** — the "names are hard" worry is dissolved.
+>
+> **The work (3 steps, self-contained — string/list induction, no Mathlib analysis):**
+> 1. `lexTok : String → Option Tok` — the per-emitted-op-line inverse of `emitTok` (a finite case-split
+>    over the `Tok` vocabulary; `emitTok` is at `StableHLO.lean:2540`). Operand refs resolve by stack
+>    position (mirror `emitTok`'s push / `parseStack`'s pop) — no symbol table.
+> 2. `emitTok_lexTok : lexTok (emitTok B t st).1 = some t` per op (finite case-split), lifted by `foldl`
+>    induction to `lex (pretty g) = toToks (skel g)`; compose with `roundtrip` for the end-to-end theorem.
+> 3. Pin the byte tie: assert the rendered `pretty` equals the committed `verified_mlir/<net>_train_step.mlir`
+>    (the CI drift guard already byte-checks those against the renderer).
+>
+> **Honest residue (state wherever cited):** this closes the LEXER only — NOT StableHLO spec conformance,
+> IREE lowering, or `float32 ≈ ℝ` (those stay validated by `iree-compile` + GPU runs; they need a verified
+> MLIR/IREE). Effort medium, risk low. Details + the per-op specifics in B0/B1/B2 below.
+
 ### B0. Where we are
 
 `StableHLOParse.lean` already lands the **structural core** of `parse (pretty a) = a`:
