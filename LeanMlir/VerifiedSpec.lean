@@ -188,4 +188,13 @@ def attackPgdSpectralCnn (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir :
     (caps : List Float) : IO Unit :=
   s.toNet.attackPgdSpectralCnn cfg dataDir caps
 
+/-- PGD attack on the CIFAR-10 CNN (the deeper conv rung); see `VerifiedNet.attackPgdCifar`. -/
+def attackPgdCifar (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
+  s.toNet.attackPgdCifar cfg dataDir
+
+/-- Spectral-norm-constrained CIFAR training study; see `VerifiedNet.attackPgdSpectralCifar`. -/
+def attackPgdSpectralCifar (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
+    (caps : List Float) : IO Unit :=
+  s.toNet.attackPgdSpectralCifar cfg dataDir caps
+
 end VerifiedNetSpec

@@ -814,6 +814,19 @@ lean_exe «mnist-cnn-spectral» where
   root := `apps.mnist.MainMnistCnnSpectral
   moreLinkArgs := ireeLink
 
+-- Phase-3 PGD attack on the verified CIFAR-10 CNN (planning/robustness_ladder.md, the deeper
+-- conv rung): input gradient = the proven 4-conv/2-pool input-VJP (genCifarPgdStep); cert = the
+-- 7-layer conv-aware product. Reuses the generic attackPgdConvNet driver.
+lean_exe «cifar-pgd» where
+  root := `apps.cifar.MainCifarPgd
+  moreLinkArgs := ireeLink
+
+-- Spectral-norm-constrained CIFAR-10 CNN training (planning/robustness_ladder.md): the 7-layer
+-- product compounds the loose conv bound harder still — tightest caps, smallest certified radii.
+lean_exe «cifar-spectral» where
+  root := `apps.cifar.MainCifarSpectral
+  moreLinkArgs := ireeLink
+
 -- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
 -- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
 -- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).

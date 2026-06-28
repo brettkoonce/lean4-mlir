@@ -1,0 +1,34 @@
+Phase-3 PGD attack on CIFAR-CNN (verified codegen → IREE → GPU)
+  iree-compile verified_mlir/cifar_train_step.mlir
+  iree-compile verified_mlir/cifar_fwd.mlir
+  training CIFAR-CNN (12 epochs, bs 128) ...
+    epoch 1/12: acc = 39.513221%
+    epoch 2/12: acc = 56.640625%
+    epoch 3/12: acc = 63.451522%
+    epoch 4/12: acc = 66.266026%
+    epoch 5/12: acc = 66.556490%
+    epoch 6/12: acc = 68.139022%
+    epoch 7/12: acc = 65.364583%
+    epoch 8/12: acc = 70.022035%
+    epoch 9/12: acc = 67.097356%
+    epoch 10/12: acc = 9.995994%
+    epoch 11/12: acc = 9.995994%
+    epoch 12/12: acc = 9.995994%
+clean test acc (best epoch) = 70.022035%
+  iree-compile .lake/build/cifar_pgd_step.mlir
+L∞ PGD eps=0.100000: adv acc = 0.000000%
+  iree-compile .lake/build/cifar_pgd_step.mlir
+L∞ PGD eps=0.200000: adv acc = 0.000000%
+  iree-compile .lake/build/cifar_pgd_step.mlir
+L∞ PGD eps=0.300000: adv acc = 0.000000%
+
+layer norms: conv3→32 Σtap‖·‖₂=21.502407  conv32→32 Σtap‖·‖₂=12.373501  conv32→64 Σtap‖·‖₂=12.243691  conv64→64 Σtap‖·‖₂=10.628027  dense4096→512 ‖·‖₂=3.118670  dense512→512 ‖·‖₂=3.033497  dense512→10 ‖·‖₂=2.876153  
+  →  global L = 942040.529377  (PRODUCT over conv+dense layers — astronomically loose)
+certified-robust acc (L2): ε=0.5 → 0.000000%, ε=1.0 → 0.000000%, ε=1.5 → 0.000000%
+  iree-compile .lake/build/cifar_pgd_step.mlir
+L2 PGD eps=0.500000: adv acc = 8.814103%
+  iree-compile .lake/build/cifar_pgd_step.mlir
+L2 PGD eps=1.000000: adv acc = 0.520833%
+  iree-compile .lake/build/cifar_pgd_step.mlir
+L2 PGD eps=1.500000: adv acc = 0.110176%
+done (phase-3 CIFAR-CNN PGD: input gradient = the proven conv/maxpool input-VJP via IREE).

@@ -1001,6 +1001,189 @@ private def genCnnPgdStep (bs : Nat) (eps alpha : Float) (linf : Bool) : String 
   s!"    return %clB : {bxd0}\n" ++
   "  }\n}\n"
 
+/-- **Phase-3 PGD-step kernel for the verified CIFAR-10 CNN** — the deeper sibling of
+    `genCnnPgdStep` (`conv 3→32 → relu → conv 32→32 → relu → maxpool → conv 32→64 → relu →
+    conv 64→64 → relu → maxpool → flatten(4096) → 512 → 512 → 10`). Same recipe — forward
+    (saving every pre-activation + both maxpool inputs) → softmax-CE seed → the full input-VJP
+    `dx`, mirroring `verified_mlir/cifar_train_step.mlir`'s backward (4 conv input-VJPs, 2
+    `select_and_scatter` maxpool-backs, ReLU masks, dense adjoints) + the final conv1 input-VJP
+    the train step omits — then the L∞/L2 step + ε-ball project + [0,1] clip. 3-channel 32×32,
+    `bs`/`eps`/`alpha` vary. -/
+private def genCifarPgdStep (bs : Nat) (eps alpha : Float) (linf : Bool) : String :=
+  let i4   := s!"tensor<{bs}x3x32x32xf32>"
+  let m32  := s!"tensor<{bs}x32x32x32xf32>"
+  let m32i := s!"tensor<{bs}x32x32x32xi1>"
+  let p32  := s!"tensor<{bs}x32x16x16xf32>"
+  let m64  := s!"tensor<{bs}x64x16x16xf32>"
+  let m64i := s!"tensor<{bs}x64x16x16xi1>"
+  let p64  := s!"tensor<{bs}x64x8x8xf32>"
+  let f2   := s!"tensor<{bs}x4096xf32>"
+  let h2   := s!"tensor<{bs}x512xf32>"
+  let h2i  := s!"tensor<{bs}x512xi1>"
+  let o2   := s!"tensor<{bs}x10xf32>"
+  let bxd0 := s!"tensor<{bs}x3072xf32>"
+  let rty  := s!"tensor<{bs}xf32>"
+  let convCfg := "dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+    "      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+    "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}"
+  let poolAttr := "{window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}"
+  let header :=
+    "module @m {\n" ++
+    s!"  func.func @cifar_pgd_step(%x: {bxd0}, %W1: tensor<32x3x3x3xf32>, %b1: tensor<32xf32>, %W2: tensor<32x32x3x3xf32>, %b2: tensor<32xf32>, %W3: tensor<64x32x3x3xf32>, %b3: tensor<64xf32>, %W4: tensor<64x64x3x3xf32>, %b4: tensor<64xf32>, %W5: tensor<4096x512xf32>, %b5: tensor<512xf32>, %W6: tensor<512x512xf32>, %b6: tensor<512xf32>, %W7: tensor<512x10xf32>, %b7: tensor<10xf32>, %onehot: {o2}, %x0: {bxd0}) -> {bxd0} " ++ "{\n" ++
+    "    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+    "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+    s!"    %alpha = stablehlo.constant dense<{alpha}> : tensor<f32>\n" ++
+    s!"    %eps = stablehlo.constant dense<{eps}> : tensor<f32>\n" ++
+    s!"    %z32 = stablehlo.constant dense<0.0> : {m32}\n" ++
+    s!"    %z64 = stablehlo.constant dense<0.0> : {m64}\n" ++
+    s!"    %zh = stablehlo.constant dense<0.0> : {h2}\n" ++
+    -- ── forward (save pre-acts z1,z2,z3,z4,z5,z6 + both maxpool inputs h2c,h4c) ──
+    s!"    %v0 = stablehlo.reshape %x : ({bxd0}) -> {i4}\n" ++
+    s!"    %c1 = stablehlo.convolution(%v0, %W1)\n      {convCfg} : ({i4}, tensor<32x3x3x3xf32>) -> {m32}\n" ++
+    s!"    %b1b = stablehlo.broadcast_in_dim %b1, dims = [1] : (tensor<32xf32>) -> {m32}\n" ++
+    s!"    %z1 = stablehlo.add %c1, %b1b : {m32}\n" ++
+    s!"    %h1 = stablehlo.maximum %z1, %z32 : {m32}\n" ++
+    s!"    %c2 = stablehlo.convolution(%h1, %W2)\n      {convCfg} : ({m32}, tensor<32x32x3x3xf32>) -> {m32}\n" ++
+    s!"    %b2b = stablehlo.broadcast_in_dim %b2, dims = [1] : (tensor<32xf32>) -> {m32}\n" ++
+    s!"    %z2 = stablehlo.add %c2, %b2b : {m32}\n" ++
+    s!"    %h2c = stablehlo.maximum %z2, %z32 : {m32}\n" ++
+    s!"    %pool1 = \"stablehlo.reduce_window\"(%h2c, %ninf) (\{\n" ++
+    "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
+    "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
+    "        stablehlo.return %pm : tensor<f32>\n" ++
+    s!"    }) {poolAttr} : ({m32}, tensor<f32>) -> {p32}\n" ++
+    s!"    %c3 = stablehlo.convolution(%pool1, %W3)\n      {convCfg} : ({p32}, tensor<64x32x3x3xf32>) -> {m64}\n" ++
+    s!"    %b3b = stablehlo.broadcast_in_dim %b3, dims = [1] : (tensor<64xf32>) -> {m64}\n" ++
+    s!"    %z3 = stablehlo.add %c3, %b3b : {m64}\n" ++
+    s!"    %h3 = stablehlo.maximum %z3, %z64 : {m64}\n" ++
+    s!"    %c4 = stablehlo.convolution(%h3, %W4)\n      {convCfg} : ({m64}, tensor<64x64x3x3xf32>) -> {m64}\n" ++
+    s!"    %b4b = stablehlo.broadcast_in_dim %b4, dims = [1] : (tensor<64xf32>) -> {m64}\n" ++
+    s!"    %z4 = stablehlo.add %c4, %b4b : {m64}\n" ++
+    s!"    %h4c = stablehlo.maximum %z4, %z64 : {m64}\n" ++
+    s!"    %pool2 = \"stablehlo.reduce_window\"(%h4c, %ninf) (\{\n" ++
+    "      ^bb0(%qa: tensor<f32>, %qb: tensor<f32>):\n" ++
+    "        %qm = stablehlo.maximum %qa, %qb : tensor<f32>\n" ++
+    "        stablehlo.return %qm : tensor<f32>\n" ++
+    s!"    }) {poolAttr} : ({m64}, tensor<f32>) -> {p64}\n" ++
+    s!"    %flat = stablehlo.reshape %pool2 : ({p64}) -> {f2}\n" ++
+    s!"    %d5 = stablehlo.dot_general %flat, %W5, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({f2}, tensor<4096x512xf32>) -> {h2}\n" ++
+    s!"    %b5b = stablehlo.broadcast_in_dim %b5, dims = [1] : (tensor<512xf32>) -> {h2}\n" ++
+    s!"    %z5 = stablehlo.add %d5, %b5b : {h2}\n" ++
+    s!"    %h5 = stablehlo.maximum %z5, %zh : {h2}\n" ++
+    s!"    %d6 = stablehlo.dot_general %h5, %W6, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({h2}, tensor<512x512xf32>) -> {h2}\n" ++
+    s!"    %b6b = stablehlo.broadcast_in_dim %b6, dims = [1] : (tensor<512xf32>) -> {h2}\n" ++
+    s!"    %z6 = stablehlo.add %d6, %b6b : {h2}\n" ++
+    s!"    %h6 = stablehlo.maximum %z6, %zh : {h2}\n" ++
+    s!"    %d7 = stablehlo.dot_general %h6, %W7, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({h2}, tensor<512x10xf32>) -> {o2}\n" ++
+    s!"    %b7b = stablehlo.broadcast_in_dim %b7, dims = [1] : (tensor<10xf32>) -> {o2}\n" ++
+    s!"    %logits = stablehlo.add %d7, %b7b : {o2}\n" ++
+    -- ── softmax-CE seed ──
+    s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({o2}, tensor<f32>) -> {rty}\n" ++
+    s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {o2}\n" ++
+    s!"    %shift = stablehlo.subtract %logits, %rmaxb : {o2}\n" ++
+    s!"    %expv = stablehlo.exponential %shift : {o2}\n" ++
+    s!"    %ssum = stablehlo.reduce(%expv init: %zero) applies stablehlo.add across dimensions = [1] : ({o2}, tensor<f32>) -> {rty}\n" ++
+    s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {o2}\n" ++
+    s!"    %softmax = stablehlo.divide %expv, %ssumb : {o2}\n" ++
+    s!"    %g = stablehlo.subtract %softmax, %onehot : {o2}\n" ++
+    -- ── backward to dx ──
+    s!"    %dh6 = stablehlo.dot_general %g, %W7, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({o2}, tensor<512x10xf32>) -> {h2}\n" ++
+    s!"    %rm6 = stablehlo.compare GT, %z6, %zh : ({h2}, {h2}) -> {h2i}\n" ++
+    s!"    %dz6 = stablehlo.select %rm6, %dh6, %zh : {h2i}, {h2}\n" ++
+    s!"    %dh5 = stablehlo.dot_general %dz6, %W6, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({h2}, tensor<512x512xf32>) -> {h2}\n" ++
+    s!"    %rm5 = stablehlo.compare GT, %z5, %zh : ({h2}, {h2}) -> {h2i}\n" ++
+    s!"    %dz5 = stablehlo.select %rm5, %dh5, %zh : {h2i}, {h2}\n" ++
+    s!"    %dflat = stablehlo.dot_general %dz5, %W5, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({h2}, tensor<4096x512xf32>) -> {f2}\n" ++
+    s!"    %dpool2 = stablehlo.reshape %dflat : ({f2}) -> {p64}\n" ++
+    -- maxpool2-back
+    s!"    %dpre4 = \"stablehlo.select_and_scatter\"(%h4c, %dpool2, %zf) (\{\n" ++
+    "      ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):\n" ++
+    "        %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+    "        stablehlo.return %sge : tensor<i1>\n" ++
+    "    }, {\n" ++
+    "      ^bb0(%sc: tensor<f32>, %sd: tensor<f32>):\n" ++
+    "        %ss = stablehlo.add %sc, %sd : tensor<f32>\n" ++
+    "        stablehlo.return %ss : tensor<f32>\n" ++
+    s!"    }) {poolAttr} : ({m64}, {p64}, tensor<f32>) -> {m64}\n" ++
+    s!"    %rmc4 = stablehlo.compare GT, %z4, %z64 : ({m64}, {m64}) -> {m64i}\n" ++
+    s!"    %dz4 = stablehlo.select %rmc4, %dpre4, %z64 : {m64i}, {m64}\n" ++
+    -- conv4 input-VJP
+    s!"    %w4t = stablehlo.transpose %W4, dims = [1, 0, 2, 3] : (tensor<64x64x3x3xf32>) -> tensor<64x64x3x3xf32>\n" ++
+    s!"    %w4r = stablehlo.reverse %w4t, dims = [2, 3] : tensor<64x64x3x3xf32>\n" ++
+    s!"    %dpost3 = stablehlo.convolution(%dz4, %w4r)\n      {convCfg} : ({m64}, tensor<64x64x3x3xf32>) -> {m64}\n" ++
+    s!"    %rmc3 = stablehlo.compare GT, %z3, %z64 : ({m64}, {m64}) -> {m64i}\n" ++
+    s!"    %dz3 = stablehlo.select %rmc3, %dpost3, %z64 : {m64i}, {m64}\n" ++
+    -- conv3 input-VJP (W3: 64x32x3x3 → 32x64x3x3): grad back to the pool1 output [bs,32,16,16]
+    s!"    %w3t = stablehlo.transpose %W3, dims = [1, 0, 2, 3] : (tensor<64x32x3x3xf32>) -> tensor<32x64x3x3xf32>\n" ++
+    s!"    %w3r = stablehlo.reverse %w3t, dims = [2, 3] : tensor<32x64x3x3xf32>\n" ++
+    s!"    %dpool1 = stablehlo.convolution(%dz3, %w3r)\n      {convCfg} : ({m64}, tensor<32x64x3x3xf32>) -> {p32}\n" ++
+    -- maxpool1-back
+    s!"    %dpre2 = \"stablehlo.select_and_scatter\"(%h2c, %dpool1, %zf) (\{\n" ++
+    "      ^bb0(%ta: tensor<f32>, %tb: tensor<f32>):\n" ++
+    "        %tge = stablehlo.compare GE, %ta, %tb : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+    "        stablehlo.return %tge : tensor<i1>\n" ++
+    "    }, {\n" ++
+    "      ^bb0(%tc: tensor<f32>, %td: tensor<f32>):\n" ++
+    "        %ts = stablehlo.add %tc, %td : tensor<f32>\n" ++
+    "        stablehlo.return %ts : tensor<f32>\n" ++
+    s!"    }) {poolAttr} : ({m32}, {p32}, tensor<f32>) -> {m32}\n" ++
+    s!"    %rmc2 = stablehlo.compare GT, %z2, %z32 : ({m32}, {m32}) -> {m32i}\n" ++
+    s!"    %dz2 = stablehlo.select %rmc2, %dpre2, %z32 : {m32i}, {m32}\n" ++
+    -- conv2 input-VJP
+    s!"    %w2t = stablehlo.transpose %W2, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>\n" ++
+    s!"    %w2r = stablehlo.reverse %w2t, dims = [2, 3] : tensor<32x32x3x3xf32>\n" ++
+    s!"    %dpost1 = stablehlo.convolution(%dz2, %w2r)\n      {convCfg} : ({m32}, tensor<32x32x3x3xf32>) -> {m32}\n" ++
+    s!"    %rmc1 = stablehlo.compare GT, %z1, %z32 : ({m32}, {m32}) -> {m32i}\n" ++
+    s!"    %dz1 = stablehlo.select %rmc1, %dpost1, %z32 : {m32i}, {m32}\n" ++
+    -- conv1 input-VJP → dx (W1: 32x3x3x3 → 3x32x3x3)
+    s!"    %w1t = stablehlo.transpose %W1, dims = [1, 0, 2, 3] : (tensor<32x3x3x3xf32>) -> tensor<3x32x3x3xf32>\n" ++
+    s!"    %w1r = stablehlo.reverse %w1t, dims = [2, 3] : tensor<3x32x3x3xf32>\n" ++
+    s!"    %dxi = stablehlo.convolution(%dz1, %w1r)\n      {convCfg} : ({m32}, tensor<3x32x3x3xf32>) -> {i4}\n" ++
+    s!"    %dx = stablehlo.reshape %dxi : ({i4}) -> {bxd0}\n" ++
+    s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+    s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+    s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n"
+  let step :=
+    if linf then
+      s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
+      s!"    %stp = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
+      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
+      s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+      s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
+      s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
+      s!"    %pj1 = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
+      s!"    %xp = stablehlo.minimum %pj1, %hi : {bxd0}\n"
+    else
+      s!"    %e12 = stablehlo.constant dense<1.0e-12> : tensor<f32>\n" ++
+      s!"    %e12r = stablehlo.broadcast_in_dim %e12, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %dx2 = stablehlo.multiply %dx, %dx : {bxd0}\n" ++
+      s!"    %dxs = stablehlo.reduce(%dx2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
+      s!"    %dxn = stablehlo.sqrt %dxs : {rty}\n" ++
+      s!"    %dxnp = stablehlo.add %dxn, %e12r : {rty}\n" ++
+      s!"    %dxnb = stablehlo.broadcast_in_dim %dxnp, dims = [0] : ({rty}) -> {bxd0}\n" ++
+      s!"    %gn = stablehlo.divide %dx, %dxnb : {bxd0}\n" ++
+      s!"    %stp = stablehlo.multiply %alphab, %gn : {bxd0}\n" ++
+      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
+      s!"    %delta = stablehlo.subtract %xn, %x0 : {bxd0}\n" ++
+      s!"    %dl2 = stablehlo.multiply %delta, %delta : {bxd0}\n" ++
+      s!"    %dls = stablehlo.reduce(%dl2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
+      s!"    %dln = stablehlo.sqrt %dls : {rty}\n" ++
+      s!"    %dlnp = stablehlo.add %dln, %e12r : {rty}\n" ++
+      s!"    %epsr = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %oner = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %ratio = stablehlo.divide %epsr, %dlnp : {rty}\n" ++
+      s!"    %fac = stablehlo.minimum %oner, %ratio : {rty}\n" ++
+      s!"    %facb = stablehlo.broadcast_in_dim %fac, dims = [0] : ({rty}) -> {bxd0}\n" ++
+      s!"    %dproj = stablehlo.multiply %delta, %facb : {bxd0}\n" ++
+      s!"    %xp = stablehlo.add %x0, %dproj : {bxd0}\n"
+  header ++ step ++
+  s!"    %clA = stablehlo.maximum %xp, %zerob : {bxd0}\n" ++
+  s!"    %clB = stablehlo.minimum %clA, %oneb : {bxd0}\n" ++
+  s!"    return %clB : {bxd0}\n" ++
+  "  }\n}\n"
+
 /-- **Phase-3 PGD attack on the verified MNIST MLP** (`planning/robustness.md`). Trains the
     784→512→512→10 ReLU MLP on the proof-rendered SGD step, then attacks through IREE with the
     proven `mlpInputGrad` VJP kernel. The Lipschitz certificate is the **product** of the three
@@ -1225,15 +1408,15 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   IO.println "\ndone (spectral-norm-constrained training: smaller c ⇒ smaller L ⇒ the product cert"
   IO.println "      goes non-vacuous, at the cost of clean accuracy — the gap-shrinking lever)."
 
-/-- **Phase-3 PGD attack on the verified MNIST CNN** (`planning/robustness_ladder.md`, the
-    first conv rung). Trains the `conv→conv→pool→512→512→10` net on the proof-rendered SGD
-    step, then attacks through IREE with `genCnnPgdStep` — whose input gradient is the full
-    proven backward (conv input-VJP + maxpool `select_and_scatter`-back, mirroring
-    `cnn_train_step.mlir`) run to `dx`. The certificate is the conv-aware spectral-norm
-    **product** (`specNormConvTapSum` for the two convs × `specNormW` for the three denses);
-    ReLU and maxpool are 1-Lipschitz. Over ~5 layers the product is even looser than the
-    MLP's — making the linear-tight → MLP-vacuous → CNN-more-vacuous depth-cliff visual. -/
-def VerifiedNet.attackPgdCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do
+/-- **Generic conv-net PGD attack** (`planning/robustness_ladder.md`). Trains any packed conv
+    net on its proof-rendered SGD step, then attacks through IREE with `genKernel` — the full
+    proven backward (conv input-VJPs + maxpool `select_and_scatter`-backs, mirroring the net's
+    `<slug>_train_step.mlir`) run to `dx`. Certificate = the conv-aware spectral-norm **product**
+    (`specNormConvTapSum` for convs × `specNormW` for denses; ReLU/maxpool are 1-Lipschitz) —
+    astronomically loose, the depth-cliff. `genKernel` and `net.slug` select the architecture
+    (`genCnnPgdStep`/MNIST-CNN, `genCifarPgdStep`/CIFAR-CNN). -/
+def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
+    (genKernel : Nat → Float → Float → Bool → String) (withCert : Bool := true) : IO Unit := do
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses
@@ -1257,31 +1440,40 @@ def VerifiedNet.attackPgdCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
     parts := parts.push (← mkParam seed spec.1 spec.2)
     seed := seed + 1
   let mut theta := F32.concat parts
+  -- Best-checkpoint training: eval each epoch and keep the highest-accuracy θ. Plain SGD on the
+  -- deeper nets (CIFAR) can diverge late; attacking the best checkpoint keeps the demo robust
+  -- (and the cert finite). Monotone nets (MNIST CNN) → best = final, so numbers are unchanged.
+  let mut bestTheta := theta
+  let mut bestAcc := -1.0
+  let evalAcc := fun (th : ByteArray) => do
+    let mut c := 0
+    for bi in [0:nbt] do
+      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn th shapes xb xShape bs.toUSize d1.toUSize
+      for j in [0:bs] do
+        if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          c := c + 1
+    pure (c.toFloat / (nbt*bs).toFloat * 100.0)
   IO.println s!"  training {net.name} ({cfg.epochs} epochs, bs {bs}) ..."
   for ep in [0:cfg.epochs] do
     for bi in [0:nb] do
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
       theta ← IreeSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
-    IO.println s!"    epoch {ep + 1}/{cfg.epochs} done"
+    let acc ← evalAcc theta
+    if acc > bestAcc then bestAcc := acc; bestTheta := theta
+    IO.println s!"    epoch {ep + 1}/{cfg.epochs}: acc = {acc}%"
     (← IO.getStdout).flush
-  -- clean accuracy
-  let mut clean := 0
-  for bi in [0:nbt] do
-    let xb := F32.sliceImages evalImg (bi * bs) bs d0
-    let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
-    for j in [0:bs] do
-      if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
-        clean := clean + 1
-  IO.println s!"clean test acc = {clean}/{nbt*bs} = {clean.toFloat/(nbt*bs).toFloat*100.0}%"
+  theta := bestTheta                       -- attack the best checkpoint
+  IO.println s!"clean test acc (best epoch) = {bestAcc}%"
   let K := 40
   let pgdShapes := packShapes (net.paramShapes ++ #[#[bs, d1], #[bs, d0]])
   let runSweep := fun (linf : Bool) (epsList : List Float) => do
     for eps in epsList do
       let alpha := 2.5 * eps / K.toFloat
-      IO.FS.writeFile ".lake/build/cnn_pgd_step.mlir" (genCnnPgdStep bs eps alpha linf)
-      compileVmfb ".lake/build/cnn_pgd_step.mlir" ".lake/build/cnn_pgd_step.vmfb"
-      let pgdSess ← IreeSession.create ".lake/build/cnn_pgd_step.vmfb"
+      IO.FS.writeFile s!".lake/build/{net.slug}_pgd_step.mlir" (genKernel bs eps alpha linf)
+      compileVmfb s!".lake/build/{net.slug}_pgd_step.mlir" s!".lake/build/{net.slug}_pgd_step.vmfb"
+      let pgdSess ← IreeSession.create s!".lake/build/{net.slug}_pgd_step.vmfb"
       let mut correct := 0
       for bi in [0:nbt] do
         let x0 := F32.sliceImages evalImg (bi * bs) bs d0
@@ -1289,7 +1481,7 @@ def VerifiedNet.attackPgdCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
         let pgdParams := F32.concat #[theta, oh, x0]
         let mut x := x0
         for _ in [0:K] do
-          x ← IreeSession.forwardF32 pgdSess "m.cnn_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+          x ← IreeSession.forwardF32 pgdSess s!"m.{net.slug}_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
         let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
         for j in [0:bs] do
           if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
@@ -1299,62 +1491,76 @@ def VerifiedNet.attackPgdCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
       (← IO.getStdout).flush
   runSweep true [0.1, 0.2, 0.3]
   -- ── certificate: conv-aware spectral-norm PRODUCT (ReLU/maxpool are 1-Lipschitz) ──
-  let mut L := 1.0
-  let mut off := 0
-  let mut msg := ""
-  for spec in net.specs do
-    let dims := spec.1
-    let len := dims.foldl (·*·) 1
-    let wslice := theta.extract (off*4) ((off+len)*4)
-    if dims.size == 4 then
-      let n := specNormConvTapSum wslice dims[0]! dims[1]! dims[2]! dims[3]!
-      L := L * n
-      msg := msg ++ s!"conv{dims[1]!}→{dims[0]!} Σtap‖·‖₂={n}  "
-    else if dims.size == 2 then
-      let n := specNormW wslice dims[0]! dims[1]!
-      L := L * n
-      msg := msg ++ s!"dense{dims[0]!}→{dims[1]!} ‖·‖₂={n}  "
-    off := off + len
-  IO.println s!"\nlayer norms: {msg}"
-  IO.println s!"  →  global L = {L}  (PRODUCT over conv+dense layers — astronomically loose)"
-  let tot := (nbt * bs).toFloat
-  let mut cert05 := 0
-  let mut cert10 := 0
-  let mut cert15 := 0
-  for bi in [0:nbt] do
-    let xb := F32.sliceImages evalImg (bi * bs) bs d0
-    let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
-    for j in [0:bs] do
-      let mut top := -1.0e30
-      let mut sec := -1.0e30
-      let mut topi := 0
-      for c in [0:d1] do
-        let v := F32.read logits (j * d1 + c).toUSize
-        if v > top then
-          sec := top
-          top := v
-          topi := c
-        else if v > sec then
-          sec := v
-      if topi == (evalLbl.get! (4 * (bi * bs + j))).toNat then
-        let r := (top - sec) / (1.4142135623730951 * L)
-        if r ≥ 0.5 then cert05 := cert05 + 1
-        if r ≥ 1.0 then cert10 := cert10 + 1
-        if r ≥ 1.5 then cert15 := cert15 + 1
-  IO.println s!"certified-robust acc (L2): ε=0.5 → {cert05.toFloat/tot*100.0}%, ε=1.0 → {cert10.toFloat/tot*100.0}%, ε=1.5 → {cert15.toFloat/tot*100.0}%"
+  -- Skipped for BN nets: instance norm absorbs the conv weight scale and its Lipschitz is
+  -- data-dependent (γ·istd), so the conv-product cert is meaningless — a separate problem.
+  if withCert then
+    let mut L := 1.0
+    let mut off := 0
+    let mut msg := ""
+    for spec in net.specs do
+      let dims := spec.1
+      let len := dims.foldl (·*·) 1
+      let wslice := theta.extract (off*4) ((off+len)*4)
+      if dims.size == 4 then
+        let n := specNormConvTapSum wslice dims[0]! dims[1]! dims[2]! dims[3]!
+        L := L * n
+        msg := msg ++ s!"conv{dims[1]!}→{dims[0]!} Σtap‖·‖₂={n}  "
+      else if dims.size == 2 then
+        let n := specNormW wslice dims[0]! dims[1]!
+        L := L * n
+        msg := msg ++ s!"dense{dims[0]!}→{dims[1]!} ‖·‖₂={n}  "
+      off := off + len
+    IO.println s!"\nlayer norms: {msg}"
+    IO.println s!"  →  global L = {L}  (PRODUCT over conv+dense layers — astronomically loose)"
+    let tot := (nbt * bs).toFloat
+    let mut cert05 := 0
+    let mut cert10 := 0
+    let mut cert15 := 0
+    for bi in [0:nbt] do
+      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+      for j in [0:bs] do
+        let mut top := -1.0e30
+        let mut sec := -1.0e30
+        let mut topi := 0
+        for c in [0:d1] do
+          let v := F32.read logits (j * d1 + c).toUSize
+          if v > top then
+            sec := top
+            top := v
+            topi := c
+          else if v > sec then
+            sec := v
+        if topi == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          let r := (top - sec) / (1.4142135623730951 * L)
+          if r ≥ 0.5 then cert05 := cert05 + 1
+          if r ≥ 1.0 then cert10 := cert10 + 1
+          if r ≥ 1.5 then cert15 := cert15 + 1
+    IO.println s!"certified-robust acc (L2): ε=0.5 → {cert05.toFloat/tot*100.0}%, ε=1.0 → {cert10.toFloat/tot*100.0}%, ε=1.5 → {cert15.toFloat/tot*100.0}%"
+  else
+    IO.println "\n(certificate N/A — instance-norm Lipschitz is data-dependent (γ·istd); deferred)"
   runSweep false [0.5, 1.0, 1.5]
-  IO.println "done (phase-3 CNN PGD: input gradient = the proven conv/maxpool input-VJP via IREE)."
+  IO.println s!"done (phase-3 {net.name} PGD: input gradient = the proven conv/maxpool input-VJP via IREE)."
+
+/-- PGD attack on the verified MNIST CNN (the first conv rung). -/
+def VerifiedNet.attackPgdCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
+  net.attackPgdConvNet cfg dataDir genCnnPgdStep
+
+/-- PGD attack on the verified CIFAR-10 CNN (the deeper conv rung: 4 conv + 2 pool + 3 dense). -/
+def VerifiedNet.attackPgdCifar (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
+  net.attackPgdConvNet cfg dataDir genCifarPgdStep
 
 /-- **Spectral-norm-constrained training of the verified MNIST CNN** (`planning/robustness_ladder.md`,
     the gap-shrinking lever applied to the conv net). The CNN sibling of `attackPgdSpectralMlp`:
     projected SGD onto the spectral ball — every `K` proof-rendered steps (and once at the end)
     `projectSpectral` caps **both** the dense `‖Wᵢ‖₂` and the conv tap-sum bound at `c` — then the
-    `cert ≤ TRUE ≤ PGD` sandwich (PGD via `genCnnPgdStep`, cert = the conv-aware product). Harder
-    than the MLP: it's a **5-layer** product (`L ≤ c⁵`) and the conv tap-sum is a *loose* bound, so
+    `cert ≤ TRUE ≤ PGD` sandwich (PGD via `genKernel`, cert = the conv-aware product). Harder than
+    the MLP: it's a `k`-layer product (`L ≤ cᵏ`) and the conv tap-sum is a *loose* bound, so
     projection over-penalizes the convs — the cert needs a tighter `c` (and pays more clean accuracy)
-    than the MLP did. The honest "depth + loose conv-norm ⇒ certifying the CNN is harder." -/
-def VerifiedNet.attackPgdSpectralCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
-    (caps : List Float) : IO Unit := do
+    than the MLP did, and certifies only at *smaller* radii. The honest "depth + loose conv-norm ⇒
+    certifying the conv net is harder." Generic over `genKernel`/`net.slug` (MNIST-CNN, CIFAR-CNN). -/
+def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
+    (caps : List Float) (genKernel : Nat → Float → Float → Bool → String) : IO Unit := do
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses
@@ -1377,9 +1583,9 @@ def VerifiedNet.attackPgdSpectralCnn (net : VerifiedNet) (cfg : VerifiedConfig) 
   let pgdShapes := packShapes (net.paramShapes ++ #[#[bs, d1], #[bs, d0]])
   let pgdAcc := fun (theta : ByteArray) (linf : Bool) (eps : Float) => do
     let alpha := 2.5 * eps / K.toFloat
-    IO.FS.writeFile ".lake/build/cnn_pgd_step.mlir" (genCnnPgdStep bs eps alpha linf)
-    compileVmfb ".lake/build/cnn_pgd_step.mlir" ".lake/build/cnn_pgd_step.vmfb"
-    let pgdSess ← IreeSession.create ".lake/build/cnn_pgd_step.vmfb"
+    IO.FS.writeFile s!".lake/build/{net.slug}_pgd_step.mlir" (genKernel bs eps alpha linf)
+    compileVmfb s!".lake/build/{net.slug}_pgd_step.mlir" s!".lake/build/{net.slug}_pgd_step.vmfb"
+    let pgdSess ← IreeSession.create s!".lake/build/{net.slug}_pgd_step.vmfb"
     let mut correct := 0
     for bi in [0:nbt] do
       let x0 := F32.sliceImages evalImg (bi * bs) bs d0
@@ -1387,7 +1593,7 @@ def VerifiedNet.attackPgdSpectralCnn (net : VerifiedNet) (cfg : VerifiedConfig) 
       let pgdParams := F32.concat #[theta, oh, x0]
       let mut x := x0
       for _ in [0:K] do
-        x ← IreeSession.forwardF32 pgdSess "m.cnn_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+        x ← IreeSession.forwardF32 pgdSess s!"m.{net.slug}_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
       let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
       for j in [0:bs] do
         if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
@@ -1404,6 +1610,8 @@ def VerifiedNet.attackPgdSpectralCnn (net : VerifiedNet) (cfg : VerifiedConfig) 
       parts := parts.push (← mkParam seed spec.1 spec.2)
       seed := seed + 1
     let mut theta := F32.concat parts
+    let mut bestTheta := theta
+    let mut bestAcc := -1.0
     let mut step := 0
     for _ in [0:cfg.epochs] do
       for bi in [0:nb] do
@@ -1413,6 +1621,17 @@ def VerifiedNet.attackPgdSpectralCnn (net : VerifiedNet) (cfg : VerifiedConfig) 
         step := step + 1
         if cap < 1.0e8 && step % projEvery == 0 then
           theta ← projectSpectral theta net.specs cap
+      -- best-checkpoint (the baseline ∞ cap can diverge late; constrained caps stay bounded)
+      let mut c := 0
+      for bi in [0:nbt] do
+        let xb := F32.sliceImages evalImg (bi * bs) bs d0
+        let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+        for j in [0:bs] do
+          if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+            c := c + 1
+      let acc := c.toFloat / (nbt*bs).toFloat * 100.0
+      if acc > bestAcc then bestAcc := acc; bestTheta := theta
+    theta := bestTheta
     if cap < 1.0e8 then theta ← projectSpectral theta net.specs cap
     -- conv-aware certificate product (specNormConvTapSum convs × specNormW denses)
     let mut L := 1.0
@@ -1458,11 +1677,21 @@ def VerifiedNet.attackPgdSpectralCnn (net : VerifiedNet) (cfg : VerifiedConfig) 
     IO.println s!"  L∞ PGD ε=0.1 = {pinf}%   L2 PGD ε=0.5 = {pl2}%"
     (← IO.getStdout).flush
     rows := rows.push s!"  {capStr}\t{cleanPct}\t{L}\t{cR2.toFloat/tot*100.0}\t{pl2}\t{pinf}"
-  IO.println "\n══ spectral-norm training (CNN): the cert ≤ TRUE ≤ PGD trade ══"
+  IO.println s!"\n══ spectral-norm training ({net.name}): the cert ≤ TRUE ≤ PGD trade ══"
   IO.println "  cap c\tclean%\tglobal L\tcert@L2 0.25\tL2 PGD 0.5\tL∞ PGD 0.1"
   for row in rows do IO.println row
-  IO.println "\ndone (spectral-norm-constrained CNN training: the 5-layer product + loose conv tap-sum"
+  IO.println "\ndone (spectral-norm-constrained conv training: the k-layer product + loose conv tap-sum"
   IO.println "      make certifying the conv net harder than the MLP — tighter c, more clean cost)."
+
+/-- Spectral-norm-constrained training of the verified MNIST CNN. -/
+def VerifiedNet.attackPgdSpectralCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
+    (caps : List Float) : IO Unit :=
+  net.attackPgdSpectralConvNet cfg dataDir caps genCnnPgdStep
+
+/-- Spectral-norm-constrained training of the verified CIFAR-10 CNN (7-layer product). -/
+def VerifiedNet.attackPgdSpectralCifar (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
+    (caps : List Float) : IO Unit :=
+  net.attackPgdSpectralConvNet cfg dataDir caps genCifarPgdStep
 
 /-- **Phase-3 PGD adversarial attack** on the verified linear classifier
     (`planning/robustness.md`). Trains via the proof-rendered train step, then attacks
