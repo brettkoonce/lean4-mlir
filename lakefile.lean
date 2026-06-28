@@ -827,6 +827,13 @@ lean_exe «cifar-spectral» where
   root := `apps.cifar.MainCifarSpectral
   moreLinkArgs := ireeLink
 
+-- Phase-3 PGD attack on the verified CIFAR-10 CNN + (instance) BatchNorm: genCifarBnPgdStep runs
+-- the proven input-VJP through 4 instance-norm layers (the BN grad-input 3-term formula). Cert
+-- N/A (instance-norm Lipschitz is data-dependent) — the attack rung only.
+lean_exe «cifar-bn-pgd» where
+  root := `apps.cifar.MainCifarBnPgd
+  moreLinkArgs := ireeLink
+
 -- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
 -- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
 -- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).

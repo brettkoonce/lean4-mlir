@@ -1,0 +1,32 @@
+Phase-3 PGD attack on CIFAR-CNN-BN (verified codegen → IREE → GPU)
+  iree-compile verified_mlir/cifar_bn_train_step.mlir
+  iree-compile verified_mlir/cifar_bn_fwd.mlir
+  training CIFAR-CNN-BN (12 epochs, bs 128) ...
+    epoch 1/12: acc = 40.655048%
+    epoch 2/12: acc = 55.468750%
+    epoch 3/12: acc = 62.650240%
+    epoch 4/12: acc = 66.085737%
+    epoch 5/12: acc = 67.778446%
+    epoch 6/12: acc = 69.491186%
+    epoch 7/12: acc = 69.991987%
+    epoch 8/12: acc = 70.803285%
+    epoch 9/12: acc = 70.893429%
+    epoch 10/12: acc = 70.653045%
+    epoch 11/12: acc = 71.664663%
+    epoch 12/12: acc = 71.834936%
+clean test acc (best epoch) = 71.834936%
+  iree-compile .lake/build/cifar_bn_pgd_step.mlir
+L∞ PGD eps=0.100000: adv acc = 0.000000%
+  iree-compile .lake/build/cifar_bn_pgd_step.mlir
+L∞ PGD eps=0.200000: adv acc = 0.000000%
+  iree-compile .lake/build/cifar_bn_pgd_step.mlir
+L∞ PGD eps=0.300000: adv acc = 0.000000%
+
+(certificate N/A — instance-norm Lipschitz is data-dependent (γ·istd); deferred)
+  iree-compile .lake/build/cifar_bn_pgd_step.mlir
+L2 PGD eps=0.500000: adv acc = 0.500801%
+  iree-compile .lake/build/cifar_bn_pgd_step.mlir
+L2 PGD eps=1.000000: adv acc = 0.010016%
+  iree-compile .lake/build/cifar_bn_pgd_step.mlir
+L2 PGD eps=1.500000: adv acc = 0.000000%
+done (phase-3 CIFAR-CNN-BN PGD: input gradient = the proven conv/maxpool input-VJP via IREE).

@@ -182,17 +182,29 @@ certificate is still a real theorem — it under-promises.
   it over-penalizes the convolutions. This is the case where the **exact (Sedghi–Gupta–Long FFT)
   conv spectral norm** would actually pay — the per-layer estimate, not just the product, is now the
   bottleneck. Run: `… .lake/build/bin/mnist-cnn-spectral data` (`SPECTRAL_EPOCHS=2` for a smoke).
-- **CIFAR rung — DONE 2026-06-28: `cifar-pgd` (the deeper conv rung).** The CNN attack + spectral
-  drivers were refactored into generic `attackPgdConvNet`/`attackPgdSpectralConvNet` (kernel-gen as a
-  parameter) and gained **best-θ checkpointing** (plain SGD on the deeper CIFAR net diverges late —
-  it peaked 70% at epoch 8 then went NaN; attacking the best checkpoint keeps the demo + cert finite).
-  `genCifarPgdStep` (4 conv input-VJPs + 2 maxpool-backs + conv1-VJP, `runs/pgd_cifar_phase3.log`):
-  clean **70.0%** → L∞ PGD ε=0.1/0.2/0.3 → **0%/0%/0%**; conv-aware **global L = 942,040** (7-layer
-  product) ⇒ cert 0% everywhere; L2 PGD ε=0.5 → 8.8%. The depth-cliff, four rungs:
-  **linear 5.3 → MLP 39 → MNIST-CNN 3,196 → CIFAR-CNN 942K.** The spectral-CIFAR study
-  (`cifar-spectral`) confirmed the limit: caps c=6/4/3 train (45–55%) but L stays vacuous (≥1357),
-  c≤2 kills the 7-layer net — **no cap makes CIFAR's cert non-vacuous** with the tap-sum bound. Run:
-  `… .lake/build/bin/cifar-pgd data` (`CIFAR_PGD_EPOCHS=1` for a smoke).
+- **CIFAR rung — DONE 2026-06-28: `cifar-pgd` + `cifar-bn-pgd` (the deeper conv rung).** The CNN
+  attack + spectral drivers were refactored into generic `attackPgdConvNet`/`attackPgdSpectralConvNet`
+  (kernel-gen as a parameter) and gained **best-θ checkpointing** (plain SGD on the deeper CIFAR net
+  diverges late — it peaked 70% at epoch 8 then went NaN; attacking the best checkpoint keeps the
+  demo + cert finite).
+  - **CIFAR-CNN** (`genCifarPgdStep`, 4 conv + 2 pool + 3 dense, `runs/pgd_cifar_phase3.log`): clean
+    **70.0%** → L∞ PGD ε=0.1/0.2/0.3 → **0%/0%/0%**; conv-aware **global L = 942,040** (7-layer
+    product) ⇒ cert 0% everywhere; L2 PGD ε=0.5 → 8.8%. The depth-cliff, four rungs:
+    **linear 5.3 → MLP 39 → MNIST-CNN 3,196 → CIFAR-CNN 942K.**
+  - **CIFAR-CNN-BN** (`genCifarBnPgdStep`, `cifar_bn`, `runs/pgd_cifar_bn_phase3.log`) — the **BN
+    input-VJP rung**, first BN-backward in the attack path. `cifar_bn`'s "BN" is *instance
+    normalization* (per-image over spatial), so the gradient is per-image and `cifar_bn_fwd` is the
+    deployed forward; `genCifarBnPgdStep` runs the proven BN grad-input 3-term formula `dx =
+    istd·(dxhat − meanₛ dxhat − xhat·meanₛ(dxhat·xhat))` through all 4 BN layers. Result: clean
+    **71.8%** (BN trained *monotonically*, no divergence — the rescue best-θ gives the no-BN net) →
+    L∞ PGD ε=0.1/0.2/0.3 → **0%/0%/0%**; L2 PGD ε=0.5/1.0/1.5 → **0.5%/0.01%/0%**. **BN is slightly
+    more accurate but *more* L2-fragile** than no-BN (0.5% vs 8.8% @ L2 0.5) — instance norm's `istd`
+    amplifies low-variance perturbations. **No certificate**: instance norm absorbs the conv weight
+    scale and its Lipschitz is data-dependent (`γ·istd`) — a separate problem (the `withCert := false`
+    path). The spectral-CIFAR study (`cifar-spectral`) confirmed the no-BN limit: caps c=6/4/3 train
+    (45–55%) but L stays vacuous (≥1357), c≤2 kills the 7-layer net — **no cap makes CIFAR's cert
+    non-vacuous** with the tap-sum bound. Run: `… .lake/build/bin/cifar-pgd data` /
+    `… cifar-bn-pgd data` (`CIFAR_PGD_EPOCHS=1` for a smoke).
 - Next: tighter-than-product composition (the actual research lever — the formalization now makes
   "tighten the bound" a concrete theorem-strengthening target), and the exact-FFT conv spectral norm
   for the CNN (the per-layer bottleneck the spectral-CNN study exposed). CIFAR is the same attack

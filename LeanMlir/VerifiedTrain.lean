@@ -1184,6 +1184,212 @@ private def genCifarPgdStep (bs : Nat) (eps alpha : Float) (linf : Bool) : Strin
   s!"    return %clB : {bxd0}\n" ++
   "  }\n}\n"
 
+/-- **Phase-3 PGD-step kernel for the verified CIFAR-10 CNN + per-channel BatchNorm** (`cifar_bn`).
+    The net's "BN" is **instance normalization** (`cifar_bn_fwd`: each image normalized over its
+    spatial dims per channel, `nf=H·W`) — so the per-image gradient is clean, there's no train/eval
+    split, and the deployed forward IS the attacked forward. Structure: `conv→+b→BN→relu` ×4 (2
+    maxpools) → 3 denses. Forward saves every BN's `istd`/`xhat` + post-acts; backward runs the full
+    input-VJP to `dx`: dense adjoints, ReLU masks, 2 maxpool `select_and_scatter`-backs, the BN
+    grad-input 3-term formula `dx = istd·(dxhat − meanₛ dxhat − xhat·meanₛ(dxhat·xhat))` (per image,
+    over spatial), and the 4 conv input-VJPs (transpose-`o,i`+`reverse`) + the conv1 VJP to the
+    pixels. `bnBlock`/`bnBack` emit the repeated BN forward/backward. **No certificate** — instance
+    norm absorbs the conv weight scale and its Lipschitz is data-dependent (`γ·istd`), a separate
+    problem; this is the attack rung only. -/
+private def genCifarBnPgdStep (bs : Nat) (eps alpha : Float) (linf : Bool) : String :=
+  let convCfg := "dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+    "      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+    "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}"
+  let poolAttr := "{window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}"
+  -- BN forward + bias + relu for block k (C channels, N spatial, H side): emits %hc{k} (conv+bias),
+  -- saves %istd{k}/%xhat{k}/%gb{k}/%znk{k}/%nfk{k}/%mask{k}, post-relu reshaped to 4D as %h{k}4.
+  let bnBlock := fun (k C N H : Nat) (convOut : String) =>
+    let t4 := s!"tensor<{bs}x{C}x{H}x{H}xf32>"
+    let tn := s!"tensor<{bs}x{C}x{N}xf32>"
+    let tc := s!"tensor<{bs}x{C}xf32>"
+    let tni := s!"tensor<{bs}x{C}x{N}xi1>"
+    let cty := s!"tensor<{C}xf32>"
+    s!"    %bbb{k} = stablehlo.broadcast_in_dim %b{k}, dims = [1] : ({cty}) -> {t4}\n" ++
+    s!"    %hc{k} = stablehlo.add {convOut}, %bbb{k} : {t4}\n" ++
+    s!"    %nfk{k} = stablehlo.constant dense<{N}.0> : {tn}\n" ++
+    s!"    %epk{k} = stablehlo.constant dense<1.0e-05> : {tn}\n" ++
+    s!"    %znk{k} = stablehlo.constant dense<0.0> : {tn}\n" ++
+    s!"    %xr{k} = stablehlo.reshape %hc{k} : ({t4}) -> {tn}\n" ++
+    s!"    %smr{k} = stablehlo.reduce(%xr{k} init: %zf) applies stablehlo.add across dimensions = [2] : ({tn}, tensor<f32>) -> {tc}\n" ++
+    s!"    %smb{k} = stablehlo.broadcast_in_dim %smr{k}, dims = [0, 1] : ({tc}) -> {tn}\n" ++
+    s!"    %mu{k} = stablehlo.divide %smb{k}, %nfk{k} : {tn}\n" ++
+    s!"    %xc{k} = stablehlo.subtract %xr{k}, %mu{k} : {tn}\n" ++
+    s!"    %sq{k} = stablehlo.multiply %xc{k}, %xc{k} : {tn}\n" ++
+    s!"    %vsr{k} = stablehlo.reduce(%sq{k} init: %zf) applies stablehlo.add across dimensions = [2] : ({tn}, tensor<f32>) -> {tc}\n" ++
+    s!"    %vsb{k} = stablehlo.broadcast_in_dim %vsr{k}, dims = [0, 1] : ({tc}) -> {tn}\n" ++
+    s!"    %var{k} = stablehlo.divide %vsb{k}, %nfk{k} : {tn}\n" ++
+    s!"    %ve{k} = stablehlo.add %var{k}, %epk{k} : {tn}\n" ++
+    s!"    %istd{k} = stablehlo.rsqrt %ve{k} : {tn}\n" ++
+    s!"    %xhat{k} = stablehlo.multiply %xc{k}, %istd{k} : {tn}\n" ++
+    s!"    %gb{k} = stablehlo.broadcast_in_dim %g{k}, dims = [1] : ({cty}) -> {tn}\n" ++
+    s!"    %btb{k} = stablehlo.broadcast_in_dim %bt{k}, dims = [1] : ({cty}) -> {tn}\n" ++
+    s!"    %gx{k} = stablehlo.multiply %xhat{k}, %gb{k} : {tn}\n" ++
+    s!"    %y{k} = stablehlo.add %gx{k}, %btb{k} : {tn}\n" ++
+    s!"    %hn{k} = stablehlo.maximum %y{k}, %znk{k} : {tn}\n" ++
+    s!"    %mask{k} = stablehlo.compare GT, %y{k}, %znk{k} : ({tn}, {tn}) -> {tni}\n" ++
+    s!"    %h{k}4 = stablehlo.reshape %hn{k} : ({tn}) -> {t4}\n"
+  -- BN backward for block k: grad w.r.t. post-relu (4D %dpost) → grad w.r.t. conv output %dco{k} (4D).
+  let bnBack := fun (k C N H : Nat) (dpost : String) =>
+    let t4 := s!"tensor<{bs}x{C}x{H}x{H}xf32>"
+    let tn := s!"tensor<{bs}x{C}x{N}xf32>"
+    let tc := s!"tensor<{bs}x{C}xf32>"
+    let tni := s!"tensor<{bs}x{C}x{N}xi1>"
+    s!"    %dpn{k} = stablehlo.reshape {dpost} : ({t4}) -> {tn}\n" ++
+    s!"    %dy{k} = stablehlo.select %mask{k}, %dpn{k}, %znk{k} : {tni}, {tn}\n" ++
+    s!"    %dxhat{k} = stablehlo.multiply %dy{k}, %gb{k} : {tn}\n" ++
+    s!"    %ds1r{k} = stablehlo.reduce(%dxhat{k} init: %zf) applies stablehlo.add across dimensions = [2] : ({tn}, tensor<f32>) -> {tc}\n" ++
+    s!"    %ds1b{k} = stablehlo.broadcast_in_dim %ds1r{k}, dims = [0, 1] : ({tc}) -> {tn}\n" ++
+    s!"    %s1{k} = stablehlo.divide %ds1b{k}, %nfk{k} : {tn}\n" ++
+    s!"    %dpr{k} = stablehlo.multiply %dxhat{k}, %xhat{k} : {tn}\n" ++
+    s!"    %ds2r{k} = stablehlo.reduce(%dpr{k} init: %zf) applies stablehlo.add across dimensions = [2] : ({tn}, tensor<f32>) -> {tc}\n" ++
+    s!"    %ds2b{k} = stablehlo.broadcast_in_dim %ds2r{k}, dims = [0, 1] : ({tc}) -> {tn}\n" ++
+    s!"    %s2{k} = stablehlo.divide %ds2b{k}, %nfk{k} : {tn}\n" ++
+    s!"    %xs2{k} = stablehlo.multiply %xhat{k}, %s2{k} : {tn}\n" ++
+    s!"    %dsa{k} = stablehlo.subtract %dxhat{k}, %s1{k} : {tn}\n" ++
+    s!"    %dsb{k} = stablehlo.subtract %dsa{k}, %xs2{k} : {tn}\n" ++
+    s!"    %dxn{k} = stablehlo.multiply %istd{k}, %dsb{k} : {tn}\n" ++
+    s!"    %dco{k} = stablehlo.reshape %dxn{k} : ({tn}) -> {t4}\n"
+  -- conv input-VJP: transpose-(o,i) + spatial-reverse W{k} ([oC,iC,3,3]→[iC,oC,3,3]), conv with %dco{k}
+  let convVjp := fun (k oC iC : Nat) (dco lhsTy outTy : String) (out : String) =>
+    s!"    %wt{k} = stablehlo.transpose %W{k}, dims = [1, 0, 2, 3] : (tensor<{oC}x{iC}x3x3xf32>) -> tensor<{iC}x{oC}x3x3xf32>\n" ++
+    s!"    %wr{k} = stablehlo.reverse %wt{k}, dims = [2, 3] : tensor<{iC}x{oC}x3x3xf32>\n" ++
+    s!"    {out} = stablehlo.convolution({dco}, %wr{k})\n      {convCfg} : ({lhsTy}, tensor<{iC}x{oC}x3x3xf32>) -> {outTy}\n"
+  let m32_4 := s!"tensor<{bs}x32x32x32xf32>"
+  let m64_4 := s!"tensor<{bs}x64x16x16xf32>"
+  let p32 := s!"tensor<{bs}x32x16x16xf32>"
+  let p64 := s!"tensor<{bs}x64x8x8xf32>"
+  let i4  := s!"tensor<{bs}x3x32x32xf32>"
+  let f2  := s!"tensor<{bs}x4096xf32>"
+  let h2  := s!"tensor<{bs}x512xf32>"
+  let h2i := s!"tensor<{bs}x512xi1>"
+  let o2  := s!"tensor<{bs}x10xf32>"
+  let bxd0 := s!"tensor<{bs}x3072xf32>"
+  let rty := s!"tensor<{bs}xf32>"
+  let poolFwd := fun (inTy outTy inp out : String) =>
+    s!"    {out} = \"stablehlo.reduce_window\"({inp}, %ninf) (\{\n" ++
+    "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
+    "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
+    "        stablehlo.return %pm : tensor<f32>\n" ++
+    s!"    }) {poolAttr} : ({inTy}, tensor<f32>) -> {outTy}\n"
+  let poolBack := fun (sfx : String) (srcTy gradTy inp grad out : String) =>
+    s!"    {out} = \"stablehlo.select_and_scatter\"({inp}, {grad}, %zf) (\{\n" ++
+    s!"      ^bb0(%sa{sfx}: tensor<f32>, %sb{sfx}: tensor<f32>):\n" ++
+    s!"        %sge{sfx} = stablehlo.compare GE, %sa{sfx}, %sb{sfx} : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+    s!"        stablehlo.return %sge{sfx} : tensor<i1>\n" ++
+    "    }, {\n" ++
+    s!"      ^bb0(%sc{sfx}: tensor<f32>, %sd{sfx}: tensor<f32>):\n" ++
+    s!"        %ss{sfx} = stablehlo.add %sc{sfx}, %sd{sfx} : tensor<f32>\n" ++
+    s!"        stablehlo.return %ss{sfx} : tensor<f32>\n" ++
+    s!"    }) {poolAttr} : ({srcTy}, {gradTy}, tensor<f32>) -> {srcTy}\n"
+  let header :=
+    "module @m {\n" ++
+    s!"  func.func @cifar_bn_pgd_step(%x: {bxd0}, %W1: tensor<32x3x3x3xf32>, %b1: tensor<32xf32>, %g1: tensor<32xf32>, %bt1: tensor<32xf32>, %W2: tensor<32x32x3x3xf32>, %b2: tensor<32xf32>, %g2: tensor<32xf32>, %bt2: tensor<32xf32>, %W3: tensor<64x32x3x3xf32>, %b3: tensor<64xf32>, %g3: tensor<64xf32>, %bt3: tensor<64xf32>, %W4: tensor<64x64x3x3xf32>, %b4: tensor<64xf32>, %g4: tensor<64xf32>, %bt4: tensor<64xf32>, %W5: tensor<4096x512xf32>, %b5: tensor<512xf32>, %W6: tensor<512x512xf32>, %b6: tensor<512xf32>, %W7: tensor<512x10xf32>, %b7: tensor<10xf32>, %onehot: {o2}, %x0: {bxd0}) -> {bxd0} " ++ "{\n" ++
+    "    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+    "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+    s!"    %alpha = stablehlo.constant dense<{alpha}> : tensor<f32>\n" ++
+    s!"    %eps = stablehlo.constant dense<{eps}> : tensor<f32>\n" ++
+    s!"    %zh = stablehlo.constant dense<0.0> : {h2}\n" ++
+    s!"    %v0 = stablehlo.reshape %x : ({bxd0}) -> {i4}\n" ++
+    -- forward: conv→BN→relu ×2, pool, ×2, pool, denses
+    s!"    %c1 = stablehlo.convolution(%v0, %W1)\n      {convCfg} : ({i4}, tensor<32x3x3x3xf32>) -> {m32_4}\n" ++
+    bnBlock 1 32 1024 32 "%c1" ++
+    s!"    %c2 = stablehlo.convolution(%h14, %W2)\n      {convCfg} : ({m32_4}, tensor<32x32x3x3xf32>) -> {m32_4}\n" ++
+    bnBlock 2 32 1024 32 "%c2" ++
+    poolFwd m32_4 p32 "%h24" "%pool1" ++
+    s!"    %c3 = stablehlo.convolution(%pool1, %W3)\n      {convCfg} : ({p32}, tensor<64x32x3x3xf32>) -> {m64_4}\n" ++
+    bnBlock 3 64 256 16 "%c3" ++
+    s!"    %c4 = stablehlo.convolution(%h34, %W4)\n      {convCfg} : ({m64_4}, tensor<64x64x3x3xf32>) -> {m64_4}\n" ++
+    bnBlock 4 64 256 16 "%c4" ++
+    poolFwd m64_4 p64 "%h44" "%pool2" ++
+    s!"    %flat = stablehlo.reshape %pool2 : ({p64}) -> {f2}\n" ++
+    s!"    %d5 = stablehlo.dot_general %flat, %W5, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({f2}, tensor<4096x512xf32>) -> {h2}\n" ++
+    s!"    %b5b = stablehlo.broadcast_in_dim %b5, dims = [1] : (tensor<512xf32>) -> {h2}\n" ++
+    s!"    %z5 = stablehlo.add %d5, %b5b : {h2}\n" ++
+    s!"    %h5 = stablehlo.maximum %z5, %zh : {h2}\n" ++
+    s!"    %d6 = stablehlo.dot_general %h5, %W6, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({h2}, tensor<512x512xf32>) -> {h2}\n" ++
+    s!"    %b6b = stablehlo.broadcast_in_dim %b6, dims = [1] : (tensor<512xf32>) -> {h2}\n" ++
+    s!"    %z6 = stablehlo.add %d6, %b6b : {h2}\n" ++
+    s!"    %h6 = stablehlo.maximum %z6, %zh : {h2}\n" ++
+    s!"    %d7 = stablehlo.dot_general %h6, %W7, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({h2}, tensor<512x10xf32>) -> {o2}\n" ++
+    s!"    %b7b = stablehlo.broadcast_in_dim %b7, dims = [1] : (tensor<10xf32>) -> {o2}\n" ++
+    s!"    %logits = stablehlo.add %d7, %b7b : {o2}\n" ++
+    -- softmax-CE
+    s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({o2}, tensor<f32>) -> {rty}\n" ++
+    s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {o2}\n" ++
+    s!"    %shift = stablehlo.subtract %logits, %rmaxb : {o2}\n" ++
+    s!"    %expv = stablehlo.exponential %shift : {o2}\n" ++
+    s!"    %ssum = stablehlo.reduce(%expv init: %zero) applies stablehlo.add across dimensions = [1] : ({o2}, tensor<f32>) -> {rty}\n" ++
+    s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {o2}\n" ++
+    s!"    %softmax = stablehlo.divide %expv, %ssumb : {o2}\n" ++
+    s!"    %g = stablehlo.subtract %softmax, %onehot : {o2}\n" ++
+    -- backward
+    s!"    %dh6 = stablehlo.dot_general %g, %W7, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({o2}, tensor<512x10xf32>) -> {h2}\n" ++
+    s!"    %rm6 = stablehlo.compare GT, %z6, %zh : ({h2}, {h2}) -> {h2i}\n" ++
+    s!"    %dz6 = stablehlo.select %rm6, %dh6, %zh : {h2i}, {h2}\n" ++
+    s!"    %dh5 = stablehlo.dot_general %dz6, %W6, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({h2}, tensor<512x512xf32>) -> {h2}\n" ++
+    s!"    %rm5 = stablehlo.compare GT, %z5, %zh : ({h2}, {h2}) -> {h2i}\n" ++
+    s!"    %dz5 = stablehlo.select %rm5, %dh5, %zh : {h2i}, {h2}\n" ++
+    s!"    %dflat = stablehlo.dot_general %dz5, %W5, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({h2}, tensor<4096x512xf32>) -> {f2}\n" ++
+    s!"    %dpool2 = stablehlo.reshape %dflat : ({f2}) -> {p64}\n" ++
+    poolBack "p2" m64_4 p64 "%h44" "%dpool2" "%dpre4" ++
+    bnBack 4 64 256 16 "%dpre4" ++
+    convVjp 4 64 64 "%dco4" m64_4 m64_4 "%dpre3" ++
+    bnBack 3 64 256 16 "%dpre3" ++
+    convVjp 3 64 32 "%dco3" m64_4 p32 "%dpool1" ++
+    poolBack "p1" m32_4 p32 "%h24" "%dpool1" "%dpre2" ++
+    bnBack 2 32 1024 32 "%dpre2" ++
+    convVjp 2 32 32 "%dco2" m32_4 m32_4 "%dpre1" ++
+    bnBack 1 32 1024 32 "%dpre1" ++
+    convVjp 1 32 3 "%dco1" m32_4 i4 "%dxi" ++
+    s!"    %dx = stablehlo.reshape %dxi : ({i4}) -> {bxd0}\n" ++
+    s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+    s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+    s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n"
+  let step :=
+    if linf then
+      s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
+      s!"    %stp = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
+      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
+      s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+      s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
+      s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
+      s!"    %pj1 = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
+      s!"    %xp = stablehlo.minimum %pj1, %hi : {bxd0}\n"
+    else
+      s!"    %e12 = stablehlo.constant dense<1.0e-12> : tensor<f32>\n" ++
+      s!"    %e12r = stablehlo.broadcast_in_dim %e12, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %dx2 = stablehlo.multiply %dx, %dx : {bxd0}\n" ++
+      s!"    %dxs = stablehlo.reduce(%dx2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
+      s!"    %dxnv = stablehlo.sqrt %dxs : {rty}\n" ++
+      s!"    %dxnp = stablehlo.add %dxnv, %e12r : {rty}\n" ++
+      s!"    %dxnb = stablehlo.broadcast_in_dim %dxnp, dims = [0] : ({rty}) -> {bxd0}\n" ++
+      s!"    %gn = stablehlo.divide %dx, %dxnb : {bxd0}\n" ++
+      s!"    %stp = stablehlo.multiply %alphab, %gn : {bxd0}\n" ++
+      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
+      s!"    %delta = stablehlo.subtract %xn, %x0 : {bxd0}\n" ++
+      s!"    %dl2 = stablehlo.multiply %delta, %delta : {bxd0}\n" ++
+      s!"    %dls = stablehlo.reduce(%dl2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
+      s!"    %dln = stablehlo.sqrt %dls : {rty}\n" ++
+      s!"    %dlnp = stablehlo.add %dln, %e12r : {rty}\n" ++
+      s!"    %epsr = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %oner = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %ratio = stablehlo.divide %epsr, %dlnp : {rty}\n" ++
+      s!"    %fac = stablehlo.minimum %oner, %ratio : {rty}\n" ++
+      s!"    %facb = stablehlo.broadcast_in_dim %fac, dims = [0] : ({rty}) -> {bxd0}\n" ++
+      s!"    %dproj = stablehlo.multiply %delta, %facb : {bxd0}\n" ++
+      s!"    %xp = stablehlo.add %x0, %dproj : {bxd0}\n"
+  header ++ step ++
+  s!"    %clA = stablehlo.maximum %xp, %zerob : {bxd0}\n" ++
+  s!"    %clB = stablehlo.minimum %clA, %oneb : {bxd0}\n" ++
+  s!"    return %clB : {bxd0}\n" ++
+  "  }\n}\n"
+
 /-- **Phase-3 PGD attack on the verified MNIST MLP** (`planning/robustness.md`). Trains the
     784→512→512→10 ReLU MLP on the proof-rendered SGD step, then attacks through IREE with the
     proven `mlpInputGrad` VJP kernel. The Lipschitz certificate is the **product** of the three
@@ -1549,6 +1755,13 @@ def VerifiedNet.attackPgdCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
 /-- PGD attack on the verified CIFAR-10 CNN (the deeper conv rung: 4 conv + 2 pool + 3 dense). -/
 def VerifiedNet.attackPgdCifar (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   net.attackPgdConvNet cfg dataDir genCifarPgdStep
+
+/-- PGD attack on the verified CIFAR-10 CNN **+ per-channel (instance) BatchNorm** (`cifar_bn`).
+    The BN input-VJP rung — `genCifarBnPgdStep` runs the proven backward through 4 instance-norm
+    layers (the BN grad-input 3-term formula). Certificate skipped (`withCert := false`): instance
+    norm's Lipschitz is data-dependent (`γ·istd`), a separate problem from the conv-product. -/
+def VerifiedNet.attackPgdCifarBn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
+  net.attackPgdConvNet cfg dataDir genCifarBnPgdStep (withCert := false)
 
 /-- **Spectral-norm-constrained training of the verified MNIST CNN** (`planning/robustness_ladder.md`,
     the gap-shrinking lever applied to the conv net). The CNN sibling of `attackPgdSpectralMlp`:
