@@ -77,9 +77,17 @@ certificate is still a real theorem — it under-promises.
   — but still collapses by ε=0.3.) Run: `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mnist-linear-pgd data`.
   Gotcha: `VerifiedTrain.compileVmfb` shells `iree-compile` from PATH (not the `.venv` lookup
   `Train.lean` uses) — put `.venv/bin` on PATH.
-- Next: add the certificate to the phase-3 driver (linear: a single `‖W‖₂` via power iteration);
-  climb to the MLP/CNN input-grad kernels; then the `Lipschitz f L` formalization (makes the
-  certificate a theorem). To shrink the PGD↔cert gap: Lipschitz-margin training / tighter composition.
+- **Certificate + L2 sandwich — DONE 2026-06-28 (in `attackPgd`).** `specNormW` (host power
+  iteration on the small `WᵀW` Gram matrix) gives the **exact** logit-map Lipschitz `‖W‖₂ = 5.29`
+  (linear = one layer, no product looseness); certified L2 radius `r(x)=margin/(√2·L)`; plus an L2
+  PGD variant of `genLinearPgdStep` for an apples-to-apples bracket. Result (cert ≤ TRUE ≤ PGD):
+  ε=0.5 **53.3% ≤ ? ≤ 79.4%**, ε=1.0 7.8% ≤ ? ≤ 52.3%, ε=1.5 0.5% ≤ ? ≤ 20.1%. The cert is
+  **meaningfully tight** here (vs the JAX MLP's vacuous ~0% from `L=185.6`, a product of 3 norms) —
+  the Thread-4 thesis shown empirically: tight cert ⟺ tight Lipschitz (one layer); the
+  product-over-layers looseness is the thing to formalize-then-tighten.
+- Next: climb to the MLP/CNN input-grad kernels (where the product bound goes loose); the
+  `Lipschitz f L` formalization (makes the certificate a theorem); Lipschitz-margin training to
+  shrink the gap.
 
 ## 6. References
 

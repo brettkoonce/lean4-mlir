@@ -542,46 +542,108 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
     `eps`/`alpha` baked as constants (recompiled per sweep point). Invoked via the generic
     `forwardF32` FFI with `onehot`+`x0` in the params blob and `nClasses := d0` (output size) —
     no new FFI/C shim. The whole PGD step runs on the GPU; the host just iterates. -/
-private def genLinearPgdStep (bs d0 d1 : Nat) (eps alpha : Float) : String :=
+private def genLinearPgdStep (bs d0 d1 : Nat) (eps alpha : Float) (linf : Bool) : String :=
   let bxd0 := s!"tensor<{bs}x{d0}xf32>"
   let bxd1 := s!"tensor<{bs}x{d1}xf32>"
   let wty  := s!"tensor<{d0}x{d1}xf32>"
   let bty  := s!"tensor<{d1}xf32>"
   let rty  := s!"tensor<{bs}xf32>"
-  "module @m {\n" ++
-  s!"  func.func @linear_pgd_step(%x: {bxd0}, %W0: {wty}, %b0: {bty}, %onehot: {bxd1}, %x0: {bxd0}) -> {bxd0} " ++ "{\n" ++
-  "    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
-  "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-  "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
-  s!"    %alpha = stablehlo.constant dense<{alpha}> : tensor<f32>\n" ++
-  s!"    %eps = stablehlo.constant dense<{eps}> : tensor<f32>\n" ++
-  s!"    %mm = stablehlo.dot_general %x, %W0, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({bxd0}, {wty}) -> {bxd1}\n" ++
-  s!"    %bb = stablehlo.broadcast_in_dim %b0, dims = [1] : ({bty}) -> {bxd1}\n" ++
-  s!"    %logits = stablehlo.add %mm, %bb : {bxd1}\n" ++
-  s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
-  s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {bxd1}\n" ++
-  s!"    %shift = stablehlo.subtract %logits, %rmaxb : {bxd1}\n" ++
-  s!"    %exp = stablehlo.exponential %shift : {bxd1}\n" ++
-  s!"    %ssum = stablehlo.reduce(%exp init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
-  s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {bxd1}\n" ++
-  s!"    %softmax = stablehlo.divide %exp, %ssumb : {bxd1}\n" ++
-  s!"    %g = stablehlo.subtract %softmax, %onehot : {bxd1}\n" ++
-  s!"    %dx = stablehlo.dot_general %g, %W0, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxd1}, {wty}) -> {bxd0}\n" ++
-  s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
-  s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-  s!"    %step = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
-  s!"    %xn = stablehlo.add %x, %step : {bxd0}\n" ++
-  s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-  s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
-  s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
-  s!"    %c1 = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
-  s!"    %c2 = stablehlo.minimum %c1, %hi : {bxd0}\n" ++
-  s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-  s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-  s!"    %c3 = stablehlo.maximum %c2, %zerob : {bxd0}\n" ++
+  -- shared: forward → softmax-CE input gradient %dx, then the broadcast constants
+  let header :=
+    "module @m {\n" ++
+    s!"  func.func @linear_pgd_step(%x: {bxd0}, %W0: {wty}, %b0: {bty}, %onehot: {bxd1}, %x0: {bxd0}) -> {bxd0} " ++ "{\n" ++
+    "    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+    "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+    s!"    %alpha = stablehlo.constant dense<{alpha}> : tensor<f32>\n" ++
+    s!"    %eps = stablehlo.constant dense<{eps}> : tensor<f32>\n" ++
+    s!"    %mm = stablehlo.dot_general %x, %W0, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({bxd0}, {wty}) -> {bxd1}\n" ++
+    s!"    %bb = stablehlo.broadcast_in_dim %b0, dims = [1] : ({bty}) -> {bxd1}\n" ++
+    s!"    %logits = stablehlo.add %mm, %bb : {bxd1}\n" ++
+    s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
+    s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {bxd1}\n" ++
+    s!"    %shift = stablehlo.subtract %logits, %rmaxb : {bxd1}\n" ++
+    s!"    %exp = stablehlo.exponential %shift : {bxd1}\n" ++
+    s!"    %ssum = stablehlo.reduce(%exp init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
+    s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {bxd1}\n" ++
+    s!"    %softmax = stablehlo.divide %exp, %ssumb : {bxd1}\n" ++
+    s!"    %g = stablehlo.subtract %softmax, %onehot : {bxd1}\n" ++
+    s!"    %dx = stablehlo.dot_general %g, %W0, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxd1}, {wty}) -> {bxd0}\n" ++
+    s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+    s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+    s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n"
+  -- step + projection: L∞ (sign, box-clip to x0±eps) or L2 (normalized grad, eps-ball)
+  let step :=
+    if linf then
+      s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
+      s!"    %step = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
+      s!"    %xn = stablehlo.add %x, %step : {bxd0}\n" ++
+      s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+      s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
+      s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
+      s!"    %c1 = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
+      s!"    %xp = stablehlo.minimum %c1, %hi : {bxd0}\n"
+    else
+      s!"    %e12 = stablehlo.constant dense<1.0e-12> : tensor<f32>\n" ++
+      s!"    %e12r = stablehlo.broadcast_in_dim %e12, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %dx2 = stablehlo.multiply %dx, %dx : {bxd0}\n" ++
+      s!"    %dxs = stablehlo.reduce(%dx2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
+      s!"    %dxn = stablehlo.sqrt %dxs : {rty}\n" ++
+      s!"    %dxnp = stablehlo.add %dxn, %e12r : {rty}\n" ++
+      s!"    %dxnb = stablehlo.broadcast_in_dim %dxnp, dims = [0] : ({rty}) -> {bxd0}\n" ++
+      s!"    %gn = stablehlo.divide %dx, %dxnb : {bxd0}\n" ++
+      s!"    %step = stablehlo.multiply %alphab, %gn : {bxd0}\n" ++
+      s!"    %xn = stablehlo.add %x, %step : {bxd0}\n" ++
+      s!"    %delta = stablehlo.subtract %xn, %x0 : {bxd0}\n" ++
+      s!"    %dl2 = stablehlo.multiply %delta, %delta : {bxd0}\n" ++
+      s!"    %dls = stablehlo.reduce(%dl2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
+      s!"    %dln = stablehlo.sqrt %dls : {rty}\n" ++
+      s!"    %dlnp = stablehlo.add %dln, %e12r : {rty}\n" ++
+      s!"    %epsr = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %oner = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %ratio = stablehlo.divide %epsr, %dlnp : {rty}\n" ++
+      s!"    %fac = stablehlo.minimum %oner, %ratio : {rty}\n" ++
+      s!"    %facb = stablehlo.broadcast_in_dim %fac, dims = [0] : ({rty}) -> {bxd0}\n" ++
+      s!"    %dproj = stablehlo.multiply %delta, %facb : {bxd0}\n" ++
+      s!"    %xp = stablehlo.add %x0, %dproj : {bxd0}\n"
+  header ++ step ++
+  s!"    %c3 = stablehlo.maximum %xp, %zerob : {bxd0}\n" ++
   s!"    %c4 = stablehlo.minimum %c3, %oneb : {bxd0}\n" ++
   s!"    return %c4 : {bxd0}\n" ++
   "  }\n}\n"
+
+/-- Spectral norm `‖W‖₂` of `W : [d0,d1]` (row-major) by power iteration on the small
+    `WᵀW : [d1,d1]` Gram matrix. For the linear net this IS the global Lipschitz constant
+    of the logit map (`logits = xW+b`, Jacobian `Wᵀ`). Host-side, pure. -/
+private def specNormW (W : ByteArray) (d0 d1 : Nat) : Float := Id.run do
+  let g := fun (i j : Nat) => Id.run do      -- WᵀW[i,j] = Σ_k W[k,i]·W[k,j]
+    let mut s := 0.0
+    for k in [0:d0] do
+      s := s + (F32.read W (k*d1+i).toUSize) * (F32.read W (k*d1+j).toUSize)
+    pure s
+  let mut wtw : Array Float := Array.replicate (d1*d1) 0.0
+  for i in [0:d1] do
+    for j in [0:d1] do
+      wtw := wtw.set! (i*d1+j) (g i j)
+  let mv := fun (v : Array Float) => Id.run do  -- WᵀW · v
+    let mut u : Array Float := Array.replicate d1 0.0
+    for i in [0:d1] do
+      let mut s := 0.0
+      for j in [0:d1] do s := s + wtw[i*d1+j]! * v[j]!
+      u := u.set! i s
+    pure u
+  let mut v : Array Float := Array.replicate d1 1.0
+  for _ in [0:60] do
+    let u := mv v
+    let mut nrm := 0.0
+    for i in [0:d1] do nrm := nrm + u[i]!*u[i]!
+    nrm := Float.sqrt nrm
+    if nrm > 1e-20 then
+      for i in [0:d1] do v := v.set! i (u[i]!/nrm)
+  let u := mv v
+  let mut lam := 0.0
+  for i in [0:d1] do lam := lam + v[i]! * u[i]!   -- Rayleigh quotient (‖v‖=1)
+  pure (Float.sqrt lam)
 
 /-- Build a one-hot `[bs, d1]` f32 batch from int32-LE labels (1.0 = bytes 00 00 80 3F). -/
 private def oneHotBatch (labels : ByteArray) (start bs d1 : Nat) : IO ByteArray := do
@@ -638,7 +700,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   let K := 40
   for eps in ([0.1, 0.2, 0.3] : List Float) do
     let alpha := 2.5 * eps / K.toFloat
-    IO.FS.writeFile ".lake/build/linear_pgd_step.mlir" (genLinearPgdStep bs d0 d1 eps alpha)
+    IO.FS.writeFile ".lake/build/linear_pgd_step.mlir" (genLinearPgdStep bs d0 d1 eps alpha true)
     compileVmfb ".lake/build/linear_pgd_step.mlir" ".lake/build/linear_pgd_step.vmfb"
     let pgdSess ← IreeSession.create ".lake/build/linear_pgd_step.vmfb"
     let pgdShapes := packShapes #[#[d0, d1], #[d1], #[bs, d1], #[bs, d0]]
@@ -655,6 +717,53 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
         if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
           correct := correct + 1
     IO.println s!"L∞ PGD eps={eps}: adv acc = {correct}/{nbt*bs} = {correct.toFloat/(nbt*bs).toFloat*100.0}%"
+  -- ── L2 sandwich: Lipschitz certificate (lower bound) vs L2 PGD (upper bound) ──
+  let L := specNormW W0 d0 d1
+  IO.println s!"\nglobal Lipschitz ‖W‖₂ = {L}  (linear: the logit map's exact L2 Lipschitz)"
+  let tot := (nbt * bs).toFloat
+  let mut cert05 := 0
+  let mut cert10 := 0
+  let mut cert15 := 0
+  for bi in [0:nbt] do
+    let xb := F32.sliceImages evalImg (bi * bs) bs d0
+    let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes xb xShape bs.toUSize d1.toUSize
+    for j in [0:bs] do
+      let mut top := -1.0e30
+      let mut sec := -1.0e30
+      let mut topi := 0
+      for c in [0:d1] do
+        let v := F32.read logits (j * d1 + c).toUSize
+        if v > top then
+          sec := top
+          top := v
+          topi := c
+        else if v > sec then
+          sec := v
+      if topi == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+        let r := (top - sec) / (1.4142135623730951 * L)    -- certified L2 radius m(x)/(√2 L)
+        if r ≥ 0.5 then cert05 := cert05 + 1
+        if r ≥ 1.0 then cert10 := cert10 + 1
+        if r ≥ 1.5 then cert15 := cert15 + 1
+  IO.println s!"certified-robust acc (L2): ε=0.5 → {cert05.toFloat/tot*100.0}%, ε=1.0 → {cert10.toFloat/tot*100.0}%, ε=1.5 → {cert15.toFloat/tot*100.0}%"
+  for eps in ([0.5, 1.0, 1.5] : List Float) do
+    let alpha := 2.5 * eps / K.toFloat
+    IO.FS.writeFile ".lake/build/linear_pgd_step.mlir" (genLinearPgdStep bs d0 d1 eps alpha false)
+    compileVmfb ".lake/build/linear_pgd_step.mlir" ".lake/build/linear_pgd_step.vmfb"
+    let pgdSess ← IreeSession.create ".lake/build/linear_pgd_step.vmfb"
+    let pgdShapes := packShapes #[#[d0, d1], #[d1], #[bs, d1], #[bs, d0]]
+    let mut correct := 0
+    for bi in [0:nbt] do
+      let x0 := F32.sliceImages evalImg (bi * bs) bs d0
+      let oh ← oneHotBatch evalLbl (bi * bs) bs d1
+      let pgdParams := F32.concat #[W0, b0, oh, x0]
+      let mut x := x0
+      for _ in [0:K] do
+        x ← IreeSession.forwardF32 pgdSess "m.linear_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes x xShape bs.toUSize d1.toUSize
+      for j in [0:bs] do
+        if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          correct := correct + 1
+    IO.println s!"L2 PGD eps={eps}: adv acc = {correct.toFloat/tot*100.0}%  (sandwich: cert ≤ true ≤ this)"
   IO.println "done (phase-3 PGD: gradient computed by the proven input-VJP kernel via IREE)."
 
 /-- **fp8 (E4M3) Lean trainer** — the low-precision sibling of `trainLinear`.
