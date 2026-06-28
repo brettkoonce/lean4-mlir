@@ -701,6 +701,61 @@ private def specNormConvTapSum (W : ByteArray) (outC inC kh kw : Nat) : Float :=
         (fun o i => F32.read W (((o*inC+i)*kh+ky)*kw+kx).toUSize) outC inC
   pure s
 
+/-- **Matrix-free** spectral norm `‖W‖₂` of `W : [d0,d1]` (row-major) — power iteration that
+    applies `W` and `Wᵀ` as mat-vecs (`σ = ‖W v‖`, `v` the top right singular vector) instead
+    of forming the `d1×d1` Gram. ~`2·d0·d1` per iteration vs `d0·d1²` for `specNormW`, so it's
+    cheap enough to call **during** training (the spectral-norm projection below). Fewer iters
+    (`iters`) trade a little precision for speed; `specNormW` stays the high-precision cert path. -/
+private def specNormMV (W : ByteArray) (d0 d1 : Nat) (iters : Nat := 15) : Float := Id.run do
+  let norm := fun (a : Array Float) (n : Nat) => Id.run do
+    let mut s := 0.0
+    for i in [0:n] do s := s + a[i]! * a[i]!
+    pure (Float.sqrt s)
+  let normalize := fun (a : Array Float) (n : Nat) => Id.run do
+    let s := norm a n
+    if s > 1e-20 then
+      let mut b := a
+      for i in [0:n] do b := b.set! i (a[i]! / s)
+      pure b
+    else pure a
+  let mut v : Array Float := normalize (Array.replicate d1 1.0) d1
+  let mut σ := 0.0
+  for _ in [0:iters] do
+    let mut u : Array Float := Array.replicate d0 0.0    -- u = W v
+    for r in [0:d0] do
+      let mut s := 0.0
+      for cc in [0:d1] do s := s + F32.read W (r*d1+cc).toUSize * v[cc]!
+      u := u.set! r s
+    σ := norm u d0                                       -- σ = ‖W v‖ (‖v‖ = 1)
+    let mut w : Array Float := Array.replicate d1 0.0    -- w = Wᵀ u
+    for cc in [0:d1] do
+      let mut s := 0.0
+      for r in [0:d0] do s := s + F32.read W (r*d1+cc).toUSize * u[r]!
+      w := w.set! cc s
+    v := normalize w d1
+  pure σ
+
+/-- **Spectral-norm projection** (projected SGD onto the spectral ball): rescale every dense
+    weight matrix `Wᵢ` with `‖Wᵢ‖₂ > c` down to `‖Wᵢ‖₂ = c` (`Wᵢ ← Wᵢ·(c/σ)`), leaving biases
+    and conv kernels untouched. Caps each layer's L2-Lipschitz constant at `c`, so the global
+    `L = ∏ᵢ ‖Wᵢ‖₂ ≤ cᵏ` — the lever that turns the (vacuous) product certificate non-vacuous.
+    `F32.scaleShift` does the rescale; `specNormMV` the cheap per-call norm. -/
+private def projectSpectral (theta : ByteArray) (specs : Array (Array Nat × Nat)) (c : Float)
+    : IO ByteArray := do
+  let mut parts : Array ByteArray := #[]
+  let mut off := 0
+  for spec in specs do
+    let dims := spec.1
+    let len := dims.foldl (·*·) 1
+    let slice := theta.extract (off*4) ((off+len)*4)
+    let slice' ← if dims.size == 2 then do
+        let σ := specNormMV slice dims[0]! dims[1]!
+        if σ > c then F32.scaleShift slice (c/σ) 0.0 else pure slice
+      else pure slice
+    parts := parts.push slice'
+    off := off + len
+  return F32.concat parts
+
 /-- Phase-3 PGD-step kernel for the 2-hidden-layer MLP (`d0→h→h→d1`, ReLU). Forward
     (saving the pre-activations `z0,z1`) → the proven `mlpInputGrad` VJP
     `dx = ((g·W₂ᵀ ⊙ relu'(z₁))·W₁ᵀ ⊙ relu'(z₀))·W₀ᵀ` (ReLU masks via `compare GT`/`select`,
@@ -1046,6 +1101,124 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   IO.println s!"certified-robust acc (L2): ε=0.5 → {cert05.toFloat/tot*100.0}%, ε=1.0 → {cert10.toFloat/tot*100.0}%, ε=1.5 → {cert15.toFloat/tot*100.0}%"
   runSweep false [0.5, 1.0, 1.5]
   IO.println "done (phase-3 MLP PGD: input gradient = the proven mlpInputGrad VJP via IREE)."
+
+/-- **Spectral-norm-constrained training of the verified MNIST MLP** (`planning/robustness_ladder.md`,
+    the research lever). Trains the 784→512→512→10 net with **projected SGD onto the spectral ball**
+    — after every `K` proof-rendered steps (and once at the end) each weight `Wᵢ` is rescaled to
+    `‖Wᵢ‖₂ ≤ c` (`projectSpectral`) — then runs the *same* `cert ≤ TRUE ≤ PGD` sandwich. Sweeps a
+    few caps `c` (plus an unconstrained baseline) so the table shows the trade: shrinking `c` pulls
+    the global `L = ∏‖Wᵢ‖₂` down (`L ≤ c³`), turning the **vacuous** product certificate
+    **non-vacuous** — at the cost of clean accuracy. The empirical face of
+    `lipschitz_margin_certified_radius` (`LeanMlir/Proofs/LipschitzCert.lean`): smaller `L` ⇒ larger
+    certified radius `m/(√2·L)`. The verified CE gradient stays in the proven kernel; the projection
+    is host-side weight rescaling only. -/
+def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
+    (caps : List Float) : IO Unit := do
+  let bs := cfg.batchSize
+  let d0 := net.d0
+  let hN := 512
+  let d1 := net.nClasses
+  let projEvery := 20            -- lazy projection: every 20 verified steps (+ once at the end)
+  IO.println s!"Spectral-norm-constrained PGD study on {net.name} (verified codegen → IREE → GPU)"
+  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
+  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
+  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  let tsSess  ← IreeSession.create tsVmfb
+  let fwdSess ← IreeSession.create fwdVmfb
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net.data d0 dataDir
+  let nb  := nTrain / bs
+  let nbt := nEval / bs
+  let shapes := net.shapesBA
+  let xShape := net.xShape bs
+  let tsFn := s!"m.{net.slug}_train_step"
+  let fwdFn := s!"m.{net.slug}_fwd"
+  let K := 40
+  let pgdShapes := packShapes #[#[d0,hN], #[hN], #[hN,hN], #[hN], #[hN,d1], #[d1], #[bs,d1], #[bs,d0]]
+  -- run one PGD eps point, returning adversarial accuracy (%) on the verified net
+  let pgdAcc := fun (theta : ByteArray) (linf : Bool) (eps : Float) => do
+    let alpha := 2.5 * eps / K.toFloat
+    IO.FS.writeFile ".lake/build/mlp_pgd_step.mlir" (genMlpPgdStep bs d0 hN d1 eps alpha linf)
+    compileVmfb ".lake/build/mlp_pgd_step.mlir" ".lake/build/mlp_pgd_step.vmfb"
+    let pgdSess ← IreeSession.create ".lake/build/mlp_pgd_step.vmfb"
+    let mut correct := 0
+    for bi in [0:nbt] do
+      let x0 := F32.sliceImages evalImg (bi * bs) bs d0
+      let oh ← oneHotBatch evalLbl (bi * bs) bs d1
+      let pgdParams := F32.concat #[theta, oh, x0]
+      let mut x := x0
+      for _ in [0:K] do
+        x ← IreeSession.forwardF32 pgdSess "m.mlp_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
+      for j in [0:bs] do
+        if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          correct := correct + 1
+    pure (correct.toFloat / (nbt*bs).toFloat * 100.0)
+  let tot := (nbt * bs).toFloat
+  let mut rows : Array String := #[]
+  for cap in caps do
+    let capStr := if cap ≥ 1.0e8 then "∞ (none)" else toString cap
+    IO.println s!"\n── cap c = {capStr} ──"
+    -- fresh He-init (same seeds ⇒ fair comparison across caps)
+    let mut parts : Array ByteArray := #[]
+    let mut seed := 1
+    for spec in net.specs do
+      parts := parts.push (← mkParam seed spec.1 spec.2)
+      seed := seed + 1
+    let mut theta := F32.concat parts
+    let mut step := 0
+    for _ in [0:cfg.epochs] do
+      for bi in [0:nb] do
+        let xb := F32.sliceImages trainImg (bi * bs) bs d0
+        let yb := F32.sliceLabels trainLbl (bi * bs) bs
+        theta ← IreeSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+        step := step + 1
+        if cap < 1.0e8 && step % projEvery == 0 then
+          theta ← projectSpectral theta net.specs cap
+    if cap < 1.0e8 then theta ← projectSpectral theta net.specs cap   -- enforce the cap on the final θ
+    -- split θ for the certificate
+    let W0 := theta.extract 0 (d0*hN*4)
+    let W1 := theta.extract ((d0*hN + hN)*4) ((d0*hN + hN + hN*hN)*4)
+    let W2 := theta.extract ((d0*hN + hN + hN*hN + hN)*4) ((d0*hN + hN + hN*hN + hN + hN*d1)*4)
+    let L0 := specNormW W0 d0 hN
+    let L1 := specNormW W1 hN hN
+    let L2 := specNormW W2 hN d1
+    let L := L0 * L1 * L2
+    -- clean accuracy + certified-robust accuracy at L2 {0.25, 0.5, 1.0}
+    let mut clean := 0
+    let mut c025 := 0
+    let mut c05 := 0
+    let mut c10 := 0
+    for bi in [0:nbt] do
+      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+      for j in [0:bs] do
+        let mut top := -1.0e30
+        let mut sec := -1.0e30
+        let mut topi := 0
+        for cidx in [0:d1] do
+          let v := F32.read logits (j * d1 + cidx).toUSize
+          if v > top then sec := top; top := v; topi := cidx
+          else if v > sec then sec := v
+        if topi == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          clean := clean + 1
+          let r := (top - sec) / (1.4142135623730951 * L)
+          if r ≥ 0.25 then c025 := c025 + 1
+          if r ≥ 0.5 then c05 := c05 + 1
+          if r ≥ 1.0 then c10 := c10 + 1
+    let cleanPct := clean.toFloat/tot*100.0
+    IO.println s!"  ‖W₀‖={L0}  ‖W₁‖={L1}  ‖W₂‖={L2}  →  L = {L}"
+    IO.println s!"  clean = {cleanPct}%   cert@L2 0.25/0.5/1.0 = {c025.toFloat/tot*100.0}% / {c05.toFloat/tot*100.0}% / {c10.toFloat/tot*100.0}%"
+    let pinf ← pgdAcc theta true 0.1
+    let pl2 ← pgdAcc theta false 0.5
+    IO.println s!"  L∞ PGD ε=0.1 = {pinf}%   L2 PGD ε=0.5 = {pl2}%"
+    (← IO.getStdout).flush
+    rows := rows.push s!"  {capStr}\t{cleanPct}\t{L}\t{c05.toFloat/tot*100.0}\t{pl2}\t{pinf}"
+  IO.println "\n══ spectral-norm training: the cert ≤ TRUE ≤ PGD trade ══"
+  IO.println "  cap c\tclean%\tglobal L\tcert@L2 0.5\tL2 PGD 0.5\tL∞ PGD 0.1"
+  for row in rows do IO.println row
+  IO.println "\ndone (spectral-norm-constrained training: smaller c ⇒ smaller L ⇒ the product cert"
+  IO.println "      goes non-vacuous, at the cost of clean accuracy — the gap-shrinking lever)."
 
 /-- **Phase-3 PGD attack on the verified MNIST CNN** (`planning/robustness_ladder.md`, the
     first conv rung). Trains the `conv→conv→pool→512→512→10` net on the proof-rendered SGD

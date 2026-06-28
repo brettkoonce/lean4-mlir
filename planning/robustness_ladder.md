@@ -48,7 +48,13 @@ So:
   data point (worth one rung to make the depth-cliff visual), but nothing past that.
 - The thing to **formalize** is still the single, honest statement: `Lipschitz f L` + per-layer
   spectral-norm composition ⇒ a *sound* (if loose) certified radius — a real theorem, the
-  verification payoff. Do it at the linear/MLP scale where it's checkable.
+  verification payoff. Do it at the linear/MLP scale where it's checkable. ✅ **DONE** —
+  `LeanMlir/Proofs/LipschitzCert.lean`.
+- The product being loose isn't the end: you can **train for a small `L`**. ✅ **DONE 2026-06-28:
+  `mnist-mlp-spectral`** — projected SGD onto `‖Wᵢ‖₂ ≤ c` (cap `L ≤ c³`) turns the MLP's vacuous
+  cert non-vacuous (at c=2.0: cert@L2 0.5 `0% → 24%`, L∞ PGD `5.8% → 53%`, clean `97.8% → 96.2%`;
+  c=1.5 peaks certified acc at 42%). A real accuracy↔robustness trade-off curve with an optimal `c`
+  — the empirical face of the formalized radius. `runs/spectral_mlp_phase3.log`.
 
 ## 3. The real deep-net certificate: randomized smoothing (the Imagenette answer)
 
@@ -81,6 +87,10 @@ hopeless.
    margin `m` ⇒ every `‖δ‖₂ < m/(√2·L)` keeps the argmax. The cert is now a *proof*, not a number.
    `LipschitzL2.comp` + `clm_lipschitzL2` prove the per-layer **product** `L = ∏‖Wᵢ‖₂` sound — and
    show why it's loose past one layer. The honest "this is verified DL."
+2b. ✅ **Spectral-norm training** (DONE 2026-06-28, `mnist-mlp-spectral`): the gap-shrinking lever —
+   projected SGD onto `‖Wᵢ‖₂ ≤ c` makes the formalized cert non-vacuous (cert@L2 0.5 `0% → 42%`).
+   Next research lever = tighter-than-product composition (the formalization makes it a concrete
+   theorem-strengthening target); or push the projection to the CNN (cap the conv tap-sum too).
 3. **CIFAR**: optional; mostly BN-folding bookkeeping over the CNN.
 4. **Imagenette**: **don't** chase the Lipschitz cert (vacuous). The attack is a cheap-ish add if
    you want the "deep verified nets are fragile" data point. The *certificate* there = a

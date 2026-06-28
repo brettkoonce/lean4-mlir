@@ -139,10 +139,33 @@ certificate is still a real theorem — it under-promises.
   exactly *why* the product is valid (and, past one layer, loose: the depth-cliff the demos show).
   Stated over `EuclideanSpace ℝ (Fin k)` (genuine L2 + the `√2`), domain any normed space. Audited
   in `tests/AuditAxioms.lean`.
-- Next: Lipschitz-margin / spectral-norm training to shrink the gap (the cert is sound but loose —
-  train *for* it); tighter-than-product composition (the actual research lever — the formalization
-  now makes "tighten the bound" a concrete theorem-strengthening target). CIFAR is the same attack
-  recipe + BN folding; Imagenette's real cert is randomized smoothing, not the product (vacuous).
+- **Spectral-norm training — DONE 2026-06-28: `mnist-mlp-spectral` (the gap-shrinking lever).**
+  `attackPgdSpectralMlp` trains the MLP with **projected SGD onto the spectral ball** — every 20
+  proof-rendered steps (+ once at the end) each weight `Wᵢ` is rescaled to `‖Wᵢ‖₂ ≤ c`
+  (`projectSpectral` via the matrix-free `specNormMV` + `F32.scaleShift`; the verified CE gradient
+  stays in the proven kernel, projection is host-side weight rescaling only) — capping `L ≤ c³`.
+  Sweeping `c` runs the **empirical face of `lipschitz_margin_certified_radius`** (smaller `L` ⇒
+  bigger certified radius `m/(√2·L)`). Result (12ep, `runs/spectral_mlp_phase3.log`):
+
+  | cap c | clean% | global L | cert@L2 0.5 | L2 PGD 0.5 | L∞ PGD 0.1 |
+  |---|---|---|---|---|---|
+  | ∞ (none) | 97.76 | 39.21 | **0.00%** | 86.0 | 5.8 |
+  | 3.0 | 97.81 | 27.89 | 0.00% | 87.8 | 8.6 |
+  | 2.0 | 96.19 | 8.38 | **24.16%** | 89.7 | **53.0** |
+  | 1.5 | 88.84 | 3.38 | **42.30%** | 79.0 | 49.9 |
+  | 1.0 | 64.38 | 1.02 | 27.12% | 54.2 | 38.3 |
+
+  The baseline reproduces the undefended MLP (97.8%, L=39.2, cert 0%). **The headline: at c=2.0 the
+  vacuous product cert goes 0% → 24.2% *and* L∞ PGD robustness jumps 5.8% → 53% (9×), for only 1.6%
+  clean accuracy.** The cert↔PGD gap at L2 0.5 shrinks 86 → 37 pts (c=1.5). It's a genuine
+  trade-off curve, non-monotone: c=1.5 maximizes certified acc (42.3%), and c=1.0 *over*-constrains
+  (cert falls to 27% as margins shrink faster than `L`, clean tanks to 64%) — there's an optimal `c`.
+  Run: `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mnist-mlp-spectral data`
+  (`SPECTRAL_EPOCHS=2` for a smoke).
+- Next: tighter-than-product composition (the actual research lever — the formalization now makes
+  "tighten the bound" a concrete theorem-strengthening target); push spectral training to the CNN
+  (cap the conv tap-sum too). CIFAR is the same attack recipe + BN folding; Imagenette's real cert
+  is randomized smoothing, not the product (vacuous).
 
 ## 6. References
 

@@ -1,0 +1,49 @@
+Spectral-norm-constrained PGD study on MNIST-MLP (verified codegen → IREE → GPU)
+  iree-compile verified_mlir/mlp_train_step.mlir
+  iree-compile verified_mlir/mlp_fwd.mlir
+
+── cap c = ∞ (none) ──
+  ‖W₀‖=3.157305  ‖W₁‖=3.640127  ‖W₂‖=3.411344  →  L = 39.206548
+  clean = 97.756410%   cert@L2 0.25/0.5/1.0 = 10.216346% / 0.000000% / 0.000000%
+  iree-compile .lake/build/mlp_pgd_step.mlir
+  iree-compile .lake/build/mlp_pgd_step.mlir
+  L∞ PGD ε=0.1 = 5.829327%   L2 PGD ε=0.5 = 85.997596%
+
+── cap c = 3.000000 ──
+  ‖W₀‖=3.038326  ‖W₁‖=3.008283  ‖W₂‖=3.050901  →  L = 27.885681
+  clean = 97.806490%   cert@L2 0.25/0.5/1.0 = 20.713141% / 0.000000% / 0.000000%
+  iree-compile .lake/build/mlp_pgd_step.mlir
+  iree-compile .lake/build/mlp_pgd_step.mlir
+  L∞ PGD ε=0.1 = 8.573718%   L2 PGD ε=0.5 = 87.810497%
+
+── cap c = 2.000000 ──
+  ‖W₀‖=2.015739  ‖W₁‖=2.034965  ‖W₂‖=2.043701  →  L = 8.383176
+  clean = 96.193910%   cert@L2 0.25/0.5/1.0 = 75.210337% / 24.158654% / 0.000000%
+  iree-compile .lake/build/mlp_pgd_step.mlir
+  iree-compile .lake/build/mlp_pgd_step.mlir
+  L∞ PGD ε=0.1 = 53.044872%   L2 PGD ε=0.5 = 89.673478%
+
+── cap c = 1.500000 ──
+  ‖W₀‖=1.501081  ‖W₁‖=1.501206  ‖W₂‖=1.500426  →  L = 3.381107
+  clean = 88.842147%   cert@L2 0.25/0.5/1.0 = 70.703125% / 42.297676% / 2.113381%
+  iree-compile .lake/build/mlp_pgd_step.mlir
+  iree-compile .lake/build/mlp_pgd_step.mlir
+  L∞ PGD ε=0.1 = 49.899840%   L2 PGD ε=0.5 = 78.966346%
+
+── cap c = 1.000000 ──
+  ‖W₀‖=1.011292  ‖W₁‖=1.006484  ‖W₂‖=1.006524  →  L = 1.024489
+  clean = 64.383013%   cert@L2 0.25/0.5/1.0 = 41.476362% / 27.123397% / 10.677083%
+  iree-compile .lake/build/mlp_pgd_step.mlir
+  iree-compile .lake/build/mlp_pgd_step.mlir
+  L∞ PGD ε=0.1 = 38.261218%   L2 PGD ε=0.5 = 54.196715%
+
+══ spectral-norm training: the cert ≤ TRUE ≤ PGD trade ══
+  cap c	clean%	global L	cert@L2 0.5	L2 PGD 0.5	L∞ PGD 0.1
+  ∞ (none)	97.756410	39.206548	0.000000	85.997596	5.829327
+  3.000000	97.806490	27.885681	0.000000	87.810497	8.573718
+  2.000000	96.193910	8.383176	24.158654	89.673478	53.044872
+  1.500000	88.842147	3.381107	42.297676	78.966346	49.899840
+  1.000000	64.383013	1.024489	27.123397	54.196715	38.261218
+
+done (spectral-norm-constrained training: smaller c ⇒ smaller L ⇒ the product cert
+      goes non-vacuous, at the cost of clean accuracy — the gap-shrinking lever).

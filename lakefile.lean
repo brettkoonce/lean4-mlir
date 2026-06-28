@@ -800,6 +800,13 @@ lean_exe «mnist-cnn-pgd» where
   root := `apps.mnist.MainMnistCnnPgd
   moreLinkArgs := ireeLink
 
+-- Spectral-norm-constrained MLP training (planning/robustness_ladder.md, the gap-shrinking
+-- lever): projected SGD onto ‖Wᵢ‖₂ ≤ c shrinks the global L = ∏‖Wᵢ‖₂, turning the vacuous
+-- product certificate non-vacuous — the empirical face of lipschitz_margin_certified_radius.
+lean_exe «mnist-mlp-spectral» where
+  root := `apps.mnist.MainMnistMlpSpectral
+  moreLinkArgs := ireeLink
+
 -- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
 -- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
 -- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).
