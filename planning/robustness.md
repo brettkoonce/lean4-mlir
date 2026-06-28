@@ -126,10 +126,23 @@ certificate is still a real theorem — it under-promises.
   the smoother conv loss surface; it still collapses to exactly 0% by ε=0.3.) Run:
   `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mnist-cnn-pgd data`
   (`CNN_PGD_EPOCHS=1` for a quick smoke). Log: `runs/pgd_cnn_phase3.log`.
-- Next: the `Lipschitz f L` formalization (makes the certificate a theorem — the verification
-  payoff at linear/MLP scale); Lipschitz-margin / spectral-norm training to shrink the gap;
-  tighter-than-product composition (the actual research lever). CIFAR is the same recipe + BN
-  folding; Imagenette's real cert is randomized smoothing, not the Lipschitz product (vacuous).
+- **Lipschitz-margin certificate FORMALIZED — DONE 2026-06-28: `LeanMlir/Proofs/LipschitzCert.lean`
+  (3-axiom clean).** The cert is no longer just a number — it's a **theorem**.
+  `lipschitz_margin_certified_radius` (Tsuzuku et al. 2018): if the logit map `f` is `L`-Lipschitz
+  in L2 and class `i` leads every other by margin `m` at `x`, then **every `δ` with
+  `‖δ‖₂ < m/(√2·L)` leaves `i` the argmax** — a provable safe radius vs *all* attacks (the lower
+  bound of `cert ≤ TRUE ≤ PGD`, where PGD only upper-bounds via one attack). Engine:
+  `logit_gap_stable` (a pairwise logit gap is `(√2·L)`-Lipschitz) built on `coord_pair_bound`
+  (`(vᵢ−vⱼ)² ≤ 2‖v‖²` — the `√2` is `‖eᵢ−eⱼ‖₂`). `LipschitzL2.comp` (constants multiply) +
+  `clm_lipschitzL2` (a linear layer is `‖A‖`-Lipschitz, `‖A‖` = the spectral norm `specNormW`
+  estimates) make the per-layer **product** `L = ∏ᵢ‖Wᵢ‖₂` a *sound* global constant — proving
+  exactly *why* the product is valid (and, past one layer, loose: the depth-cliff the demos show).
+  Stated over `EuclideanSpace ℝ (Fin k)` (genuine L2 + the `√2`), domain any normed space. Audited
+  in `tests/AuditAxioms.lean`.
+- Next: Lipschitz-margin / spectral-norm training to shrink the gap (the cert is sound but loose —
+  train *for* it); tighter-than-product composition (the actual research lever — the formalization
+  now makes "tighten the bound" a concrete theorem-strengthening target). CIFAR is the same attack
+  recipe + BN folding; Imagenette's real cert is randomized smoothing, not the product (vacuous).
 
 ## 6. References
 

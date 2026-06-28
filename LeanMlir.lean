@@ -50,6 +50,8 @@ import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.SgdDescentCnn
+-- Robustness certificate: the Lipschitz-margin certified radius (cert ≤ TRUE ≤ PGD).
+import LeanMlir.Proofs.LipschitzCert
 -- Verified-codegen bridges (denoted IR + per-op bridge theorems) so doc-gen4
 -- documents them. IRPrint.lean is deliberately left out: its file-writing
 -- #evals run at elaboration time (use `lake env lean …/IRPrint.lean`).

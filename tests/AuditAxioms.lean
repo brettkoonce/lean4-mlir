@@ -140,6 +140,7 @@ import LeanMlir.Proofs.Cifar8TiePoC
 import LeanMlir.Proofs.Cifar8BnTiePoC
 import LeanMlir.Proofs.ViTFaithfulPoC
 import LeanMlir.Proofs.ViTTiePoC
+import LeanMlir.Proofs.LipschitzCert
 
 open Proofs
 
@@ -2909,3 +2910,16 @@ open Proofs
 #print axioms Proofs.ViTTiePoC.vit_head_tied
 #print axioms Proofs.ViTTiePoC.vit_embed_tied
 #print axioms Proofs.ViTTiePoC.vit_net_tied_certified
+
+-- Robustness certificate (planning/robustness_ladder.md, the cert side of cert ≤ TRUE ≤ PGD):
+-- the Lipschitz-margin certified radius (Tsuzuku et al. 2018). lipschitz_margin_certified_radius —
+-- if the logit map is L-Lipschitz in L2 and class i leads by margin m, every ‖δ‖₂ < m/(√2·L) keeps
+-- i the argmax (provable safe radius vs all attacks). logit_gap_stable = the √2·L pairwise-gap
+-- engine; coord_pair_bound = the √2 of two one-hot class directions; LipschitzL2.comp/clm_lipschitzL2
+-- = why the per-layer spectral-norm PRODUCT is a sound (loose) global L.
+#print axioms Proofs.lipschitz_margin_certified_radius
+#print axioms Proofs.logit_gap_stable
+#print axioms Proofs.coord_pair_bound
+#print axioms Proofs.euclid_norm_sq
+#print axioms Proofs.LipschitzL2.comp
+#print axioms Proofs.clm_lipschitzL2

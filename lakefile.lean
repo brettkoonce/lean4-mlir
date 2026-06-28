@@ -643,7 +643,12 @@ lean_lib «Proofs» where
              -- fed the cotangent the REAL backward chain delivers (vitCot* — two residual fan-ins + the
              -- three-way LN₁ fan-in + the SDPA backs), den=certified. Single-head representative; the
              -- multi-head/depth-12 thread is the remaining step (mnv2 reduced→full) (ViTTiePoC.lean).
-             `LeanMlir.Proofs.ViTTiePoC]
+             `LeanMlir.Proofs.ViTTiePoC,
+             -- Robustness certificate (planning/robustness_ladder.md): the Lipschitz-margin
+             -- certified radius (Tsuzuku et al. 2018) — if the logit map is L-Lipschitz in L2
+             -- and the margin is m, every ‖δ‖₂ < m/(√2·L) leaves the argmax fixed (proof, vs
+             -- the PGD attack's one-attack upper bound). The cert side of cert ≤ TRUE ≤ PGD.
+             `LeanMlir.Proofs.LipschitzCert]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

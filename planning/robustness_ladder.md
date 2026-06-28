@@ -76,8 +76,11 @@ hopeless.
    (the codegen milestone — `select_and_scatter`-back + transpose/reverse conv VJP, all run on the
    GPU through IREE), and the conv-aware cert made the depth-cliff visual (linear L=5.3 tight →
    MLP L=39 vacuous → CNN L=3196 more vacuous). Built on `cnn_train_step.mlir`'s backward ops.
-2. **`Lipschitz f L` formalization** (the verification payoff, **do next**): a sound certified-radius theorem at
-   linear/MLP scale — turns the cert from a number into a proof. The honest "this is verified DL."
+2. ✅ **`Lipschitz f L` formalization** (DONE 2026-06-28, `LeanMlir/Proofs/LipschitzCert.lean`, 3-axiom
+   clean): `lipschitz_margin_certified_radius` (Tsuzuku et al. 2018) — `L`-Lipschitz logit map +
+   margin `m` ⇒ every `‖δ‖₂ < m/(√2·L)` keeps the argmax. The cert is now a *proof*, not a number.
+   `LipschitzL2.comp` + `clm_lipschitzL2` prove the per-layer **product** `L = ∏‖Wᵢ‖₂` sound — and
+   show why it's loose past one layer. The honest "this is verified DL."
 3. **CIFAR**: optional; mostly BN-folding bookkeeping over the CNN.
 4. **Imagenette**: **don't** chase the Lipschitz cert (vacuous). The attack is a cheap-ish add if
    you want the "deep verified nets are fragile" data point. The *certificate* there = a
