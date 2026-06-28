@@ -2923,3 +2923,12 @@ open Proofs
 #print axioms Proofs.euclid_norm_sq
 #print axioms Proofs.LipschitzL2.comp
 #print axioms Proofs.clm_lipschitzL2
+
+-- Randomized-smoothing certified radius (Cohen–Rosenfeld–Kolter 2019, the depth-INDEPENDENT cert of
+-- the *-smooth demos): same Lipschitz-margin shape, on the per-class probit score fields
+-- gᶜ(x)=Φ⁻¹(P[f(x+η)=c]). smoothing_certified_radius — Φ⁻¹∘pᶜ each (1/σ)-Lipschitz (the Cohen/Salman
+-- Gaussian content, a hypothesis as L is in the Tsuzuku theorem) + runner-up p_j ≤ 1−p_A ⇒ every
+-- ‖δ‖₂ < σ·Φ⁻¹(p_A) keeps i the argmax of the noise-probabilities (= the σ·Φ⁻¹(p_A) radius the
+-- driver reports). smoothed_margin_certified_radius = the core σ·m/2 margin step.
+#print axioms Proofs.smoothing_certified_radius
+#print axioms Proofs.smoothed_margin_certified_radius

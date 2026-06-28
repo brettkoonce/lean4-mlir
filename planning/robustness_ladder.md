@@ -116,7 +116,13 @@ hopeless.
    | CIFAR-CNN | 0% (L=942K) | 36.8% / 27.2% / 11.8% | 0.31 |
    The σ knob is the honest trade (bigger σ ⇒ bigger radius, lower clean acc); the guarantee is
    high-probability (`α=0.001`), not deterministic. Radii are in normalized-input L2. Logs:
-   `runs/smooth_{mlp,cnn,cifar}.log`.
+   `runs/smooth_{mlp,cnn,cifar}.log`. **The radius is also a theorem** (DONE 2026-06-28,
+   `LeanMlir/Proofs/LipschitzCert.lean`, 3-axiom clean): `smoothing_certified_radius` — the same
+   Lipschitz-margin argument as `lipschitz_margin_certified_radius`, but on the per-class **probit
+   score fields** `gᶜ(x)=Φ⁻¹(P[f(x+η)=c])`, each `(1/σ)`-Lipschitz (the Cohen/Salman Gaussian content
+   taken as a hypothesis, just as `L` is in the Tsuzuku theorem) ⇒ every `‖δ‖₂ < σ·Φ⁻¹(p_A)` keeps
+   class `i` the argmax of the noise-probabilities. So *both* certificates of the sandwich are now
+   proofs, not numbers.
 4. **Imagenette**: the Lipschitz cert is vacuous (don't chase it); the attack is a cheap-ish "deep
    verified nets are fragile" data point. The *certificate* there is the smoothing driver above —
    it already runs on any `VerifiedNet` via its rendered fwd, so Imagenette is just a longer run

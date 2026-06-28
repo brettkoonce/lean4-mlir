@@ -14,7 +14,15 @@ BatchNorm, formalized the certificate as a theorem, and added the gap-shrinking 
 > CIFAR-CNN (spectral cert 0% @ L=942K) → smoothing **36.8% / 27.2% / 11.8%** certified @ L2
 > 0.25/0.5/1.0 (σ=0.5); MNIST-CNN → **94.6% / 91.8% / 74.4%**; MNIST-MLP → **91.2% / 85.8% / 61.4%**.
 > See `planning/robustness_ladder.md` §4.3b for the full table; logs `runs/smooth_{mlp,cnn,cifar}.log`.
-> (UNCOMMITTED at time of writing — awaiting sign-off.) The cert paradigm is now complete on both ladders.
+> (Driver committed f30f857.) The cert paradigm is now complete on both ladders.
+>
+> **And the smoothing radius is now a THEOREM** (`LeanMlir/Proofs/LipschitzCert.lean`, 3-axiom clean,
+> alongside `lipschitz_margin_certified_radius`): `smoothing_certified_radius` — the `σ·Φ⁻¹(p_A)`
+> radius proved as the same Lipschitz-margin argument on the per-class probit score fields
+> `Φ⁻¹∘P[f(x+η)=·]` (each `(1/σ)`-Lipschitz — the Cohen/Salman Gaussian-isoperimetry content, taken as
+> a hypothesis exactly as `L` is in the Tsuzuku theorem; `smoothed_margin_certified_radius` = the core
+> `σ·m/2` step giving Cohen's `(σ/2)(Φ⁻¹(p_A)−Φ⁻¹(p_B))`). Both certificates of `cert ≤ TRUE ≤ PGD`
+> are now proofs. (UNCOMMITTED — awaiting sign-off.)
 
 ## 0. The one-paragraph state of the world
 

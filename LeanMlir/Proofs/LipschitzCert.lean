@@ -18,6 +18,11 @@ The `L` is supplied numerically by `specNormW` / `specNormConvTapSum`
 per-layer **product** `L = ∏ᵢ ‖Wᵢ‖₂` is a sound (if loose) global constant — the looseness
 the demos make visual (linear tight → MLP/CNN vacuous).
 
+The second half of the file formalizes the *other* certificate — **randomized smoothing**
+(Cohen–Rosenfeld–Kolter 2019, the `*-smooth` demos): `smoothing_certified_radius` gives the
+`σ·Φ⁻¹(p_A)` radius the driver reports, as the same Lipschitz-margin argument on the per-class
+probit score fields `Φ⁻¹∘P[f(x+η)=·]` — depth-independent, non-vacuous where the product collapses.
+
 All results are `propext / Classical.choice / Quot.sound`-clean (`tests/AuditAxioms.lean`). -/
 
 namespace Proofs
@@ -146,5 +151,85 @@ theorem lipschitz_margin_certified_radius
   have hgap := logit_gap_stable hf x δ hj.symm
   have hmj := hmargin j hj
   linarith [hgap, hmj, hswing]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Randomized-smoothing certified radius (Cohen–Rosenfeld–Kolter 2019)
+-- ════════════════════════════════════════════════════════════════
+
+/-! The *other* certificate of the `cifar-smooth` / `mnist-{mlp,cnn}-smooth` demos — the one that
+stays non-vacuous where the Lipschitz product collapses. The smoothed classifier
+`ĝ(x) = argmax_c P[f(x+η)=c]`, `η ~ N(0,σ²I)`, is certifiably robust in L2 with radius
+`σ·Φ⁻¹(p_A)` (the radius the driver reports). The proof factors exactly like the Tsuzuku theorem:
+a **Lipschitz-margin** argument over per-class **probit score fields**
+
+  `gᶜ(x) = Φ⁻¹(P[f(x+η)=c])`,
+
+each of which is `(1/σ)`-Lipschitz. That `(1/σ)`-Lipschitzness is the analytic heart of Cohen 2019
+(Neyman–Pearson over the Gaussian likelihood ratio; equivalently Gaussian isoperimetry, Salman et
+al. 2019 Lemma 2) — it is taken here as the **hypothesis** `hg`, in exactly the way
+`lipschitz_margin_certified_radius` takes the logit-map Lipschitz constant `L` as a hypothesis
+rather than re-deriving the spectral norms. Given it, the certified radius is pure margin algebra:
+no Gaussian measure theory leaks past the hypothesis, and the result is `Classical`-clean. -/
+
+/-- **Core smoothing margin step.** If the smoothed classifier's per-class probit score fields
+    `g c` are each `(1/σ)`-Lipschitz in L2 (`hg` — the Cohen/Salman Gaussian content), and class
+    `i` leads every other class in probit score at `x` by margin `m`, then for every `‖δ‖₂ < σ·m/2`
+    it **still leads** at `x+δ`. The radius is `σ·m/2`; with `m = Φ⁻¹(p_A)−Φ⁻¹(p_B)` this is Cohen's
+    `R = (σ/2)(Φ⁻¹(p_A)−Φ⁻¹(p_B))`. Since `Φ⁻¹` is increasing the `g`-argmax IS the smoothed
+    prediction `ĝ`, so `ĝ` cannot flip inside the L2 ball of radius `σ·m/2`. -/
+theorem smoothed_margin_certified_radius {σ : ℝ} (hσ : 0 < σ)
+    {g : Fin k → E → ℝ} (hg : ∀ c, LipschitzL2 (1 / σ) (g c))
+    {x δ : E} {i : Fin k} {m : ℝ}
+    (hmargin : ∀ j, j ≠ i → m ≤ g i x - g j x)
+    (hδ : ‖δ‖ < σ * m / 2) :
+    ∀ j, j ≠ i → g j (x + δ) < g i (x + δ) := by
+  intro j hj
+  -- each score field moves by at most (1/σ)·‖δ‖ under the perturbation δ
+  have hi := hg i (x + δ) x
+  have hjj := hg j (x + δ) x
+  rw [add_sub_cancel_left, Real.norm_eq_abs] at hi hjj
+  have hi' := (abs_le.mp hi).1   -- −(1/σ·‖δ‖) ≤ g i (x+δ) − g i x
+  have hj' := (abs_le.mp hjj).2  -- g j (x+δ) − g j x ≤ 1/σ·‖δ‖
+  have hmar := hmargin j hj
+  -- the perturbation can erode the margin by at most 2·(1/σ)·‖δ‖, which is < m
+  have hfrac : 2 * (1 / σ) * ‖δ‖ < m := by
+    have e : 2 * (1 / σ) * ‖δ‖ = 2 * ‖δ‖ / σ := by ring
+    rw [e, div_lt_iff₀ hσ]
+    nlinarith [hδ]
+  nlinarith [hi', hj', hmar, hfrac]
+
+/-- **Randomized-smoothing certified radius (Cohen–Rosenfeld–Kolter 2019).** The form the
+    `*-smooth` drivers report: with `p c x = P[f(x+η)=c]`, an (abstract) probit `Φ⁻¹ = Phiinv`
+    that is increasing (`hmono`) and odd about ½ (`hanti : Φ⁻¹(1−p) = −Φ⁻¹(p)` — the real inverse
+    Gaussian CDF is both), per-class scores `Φ⁻¹∘(p c)` each `(1/σ)`-Lipschitz (`hg`), and the
+    runner-up bound `p_j(x) ≤ 1 − p_A(x)` (the non-top mass; `hrunner`), **every `‖δ‖₂ < σ·Φ⁻¹(p_A(x))`
+    keeps class `i` the strict argmax of the noise-probabilities** — i.e. `ĝ(x+δ) = i`. This is the
+    `σ·Φ⁻¹(p_A)` radius, derived from the core step via `p_B ≤ 1−p_A ⇒ Φ⁻¹(p_B) ≤ −Φ⁻¹(p_A)`,
+    so the margin `Φ⁻¹(p_A)−Φ⁻¹(p_B) ≥ 2·Φ⁻¹(p_A)`. Depth-independent: no per-layer norm, no product. -/
+theorem smoothing_certified_radius {σ : ℝ} (hσ : 0 < σ)
+    {Phiinv : ℝ → ℝ} (hmono : Monotone Phiinv)
+    (hanti : ∀ p : ℝ, Phiinv (1 - p) = -Phiinv p)
+    {p : Fin k → E → ℝ}
+    (hg : ∀ c, LipschitzL2 (1 / σ) (fun x => Phiinv (p c x)))
+    {x δ : E} {i : Fin k}
+    (hrunner : ∀ j, j ≠ i → p j x ≤ 1 - p i x)
+    (hδ : ‖δ‖ < σ * Phiinv (p i x)) :
+    ∀ j, j ≠ i → p j (x + δ) < p i (x + δ) := by
+  -- probit scores: margin ≥ 2·Φ⁻¹(p_A) at x, then the core step in g-space
+  have hscore : ∀ j, j ≠ i →
+      Phiinv (p j (x + δ)) < Phiinv (p i (x + δ)) := by
+    refine smoothed_margin_certified_radius (g := fun c x => Phiinv (p c x)) hσ hg
+      (m := 2 * Phiinv (p i x)) ?_ ?_
+    · intro j hj
+      have h1 : Phiinv (p j x) ≤ Phiinv (1 - p i x) := hmono (hrunner j hj)
+      have h2 : Phiinv (1 - p i x) = -Phiinv (p i x) := hanti _
+      show 2 * Phiinv (p i x) ≤ Phiinv (p i x) - Phiinv (p j x)
+      linarith [h1, h2]
+    · have e : σ * (2 * Phiinv (p i x)) / 2 = σ * Phiinv (p i x) := by ring
+      rw [e]; exact hδ
+  -- Φ⁻¹ increasing ⇒ the strict score order forces the strict probability order
+  intro j hj
+  by_contra h
+  exact absurd (hmono (not_lt.mp h)) (not_le.mpr (hscore j hj))
 
 end Proofs
