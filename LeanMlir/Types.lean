@@ -316,6 +316,14 @@ inductive OptimizerKind where
       is 1.0 wherever `‖θ‖` or `‖r‖` is 0 (timm convention). β1=0.9, β2=0.999,
       ε=1e-6. opt_state shape matches `.adam`: `(m, v, t)`. -/
   | lamb
+  /-- Muon (Jordan 2024) — MomentUm Orthogonalized by Newton–Schulz. The
+      heavy-ball momentum buffer is polar-projected onto the (semi-)orthogonal
+      matrices (`G = UΣVᵀ ↦ UVᵀ`) by a fixed 5-step Newton–Schulz iteration
+      (pure matmul, no SVD), so every singular direction gets an equal-size
+      step. Applies ONLY to 2D weight matrices; non-2D params (biases, norms,
+      embeddings, small heads) fall back to AdamW. IREE/MLIR perf path reads
+      `TrainConfig.useMuon`. UNVERIFIED. See `planning/muon.md`. -/
+  | muon
 deriving Repr, BEq, DecidableEq
 
 structure TrainConfig where
@@ -330,6 +338,11 @@ structure TrainConfig where
       Adam) for back-compat; set explicitly to `.rmsprop` (or `.adam`) to
       override. The IREE/MLIR backend still reads `useAdam`. -/
   optimizer    : OptimizerKind := .sgd
+  /-- Muon selector for the IREE/MLIR perf path (additive over `useAdam`, like
+      `optimizer` is for JAX). When true, every 2D weight matrix is updated by
+      Muon (Newton–Schulz polar projection); all non-2D params use AdamW. Left
+      false by default so no existing config changes behavior. See `planning/muon.md`. -/
+  useMuon      : Bool := false
   /-- RMSprop running-mean-square decay ρ (only used when `optimizer = .rmsprop`). -/
   rmspropDecay : Float := 0.9
   /-- RMSprop denominator ε — NOT 1e-8: MobileNetV2 uses 1.0, EfficientNet 1e-3;

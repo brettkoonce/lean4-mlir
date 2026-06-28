@@ -740,6 +740,12 @@ lean_exe «vit-tiny-train» where
   root := `apps.baselines.MainVitTrain
   moreLinkArgs := ireeLink
 
+-- Muon (Newton–Schulz polar projection) on the 2D weights, AdamW on the rest.
+-- Same ViT-Tiny + recipe as vit-tiny-train → a compute-matched A/B. See planning/muon.md.
+lean_exe «vit-tiny-muon-train» where
+  root := `apps.baselines.MainVitMuonTrain
+  moreLinkArgs := ireeLink
+
 lean_exe «ablation» where
   root := `apps.ablation.MainAblation
   moreLinkArgs := ireeLink

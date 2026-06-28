@@ -3626,6 +3626,101 @@ private def emitMomentumUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : Li
   -- mNew = velocity (stored in m_ slot), vPassthrough = original v_ unchanged
   return (s, if applyWeightDecay then s!"%new_{tag}" else s!"%sub_{tag}", s!"%vn_{tag}", vSSA)
 
+/-- Emit a **Muon** update for one 2D weight matrix `W : [m, n]` (UNVERIFIED perf path).
+
+    Momentum-Orthogonalized-by-Newton–Schulz (Jordan 2024): the heavy-ball momentum
+    buffer is polar-projected onto the (semi-)orthogonal matrices — `G = UΣVᵀ ↦ UVᵀ`,
+    the nearest orthogonal matrix — by a fixed 5-step Newton–Schulz iteration, so every
+    singular direction gets an equal-size step.
+    ```
+      buf = μ·m + grad                                  -- heavy-ball momentum (m-slot)
+      X   = buf / (‖buf‖_F + 1e-7)                       -- normalize (σ ≤ 1)
+      repeat 5×:  A = X·Xᵀ;  X = a·X + b·(A·X) + c·(A·(A·X))   -- (a,b,c) = NS5 coeffs
+      W   = W − lr·s·X                                   -- s = max(1, m/n)^½ (RMS match)
+    ```
+    `X·Xᵀ` is built with `dot_general contracting_dims = [1] x [1]` (no transpose op);
+    the whole iteration is pure `dot_general` + scalar ops — same matmul vocabulary the
+    forward/attention path already emits, which is exactly why it renders cleanly (and,
+    per `planning/muon.md`, why a `den=` render-faithful tie is reachable). The momentum
+    buffer lives in the m-slot and the v-slot is an unused passthrough (like
+    `emitMomentumUpdate`), so the train-step signature/arity is unchanged. The NS
+    constants `%ns_a/%ns_b/%ns_c/%ns_eps` and `%mu` are emitted once in the optimizer
+    header. The `max(1,m/n)^½` shape-scale is a compile-time constant (`m`,`n` known here).
+    NOTE: this is the standard Muon shape-scale; descent is NOT proved (Muon's guarantee is
+    spectral-norm steepest descent, not the `lr·‖∇‖²/2` Frobenius bound) — render-faithful
+    only, by design. -/
+private def emitMuonUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : List Nat) (tag : String)
+    (applyWeightDecay : Bool := false) (clipScale : Option String := none) (lrSSA : String := "%lr")
+    : String × String × String × String := Id.run do
+  let m := shape.headD 1
+  let n := shape.getD 1 1
+  let ty := tensorTy [m, n]
+  let tyA := tensorTy [m, m]
+  let ratio : Float := m.toFloat / n.toFloat
+  let scale : Float := Float.sqrt (if ratio > 1.0 then ratio else 1.0)
+  let mut s := ""
+  -- optional global-norm gradient clipping (see emitAdamUpdate; none ⇒ identical IR)
+  let mut g := gradSSA
+  match clipScale with
+  | some sc =>
+    s := s ++ s!"    %gclbc_{tag} = stablehlo.broadcast_in_dim {sc}, dims = [] : (tensor<f32>) -> {ty}\n"
+    s := s ++ s!"    %gcl_{tag} = stablehlo.multiply {gradSSA}, %gclbc_{tag} : {ty}\n"
+    g := s!"%gcl_{tag}"
+  | none => pure ()
+  -- heavy-ball momentum (stored in m-slot): buf = μ·m + grad
+  s := s ++ s!"    %mmu_{tag} = stablehlo.broadcast_in_dim %mu, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %mvs_{tag} = stablehlo.multiply %mmu_{tag}, {mSSA} : {ty}\n"
+  s := s ++ s!"    %buf_{tag} = stablehlo.add %mvs_{tag}, {g} : {ty}\n"
+  -- normalize: X0 = buf / (‖buf‖_F + ε)   (‖·‖_F ≥ spectral, so σ ≤ 1)
+  s := s ++ s!"    %nsq_{tag} = stablehlo.multiply %buf_{tag}, %buf_{tag} : {ty}\n"
+  s := s ++ s!"    %nsum_{tag} = stablehlo.reduce(%nsq_{tag} init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
+  s := s ++ s!"          : ({ty}, tensor<f32>) -> tensor<f32>\n"
+  s := s ++ s!"    %nrm_{tag} = stablehlo.sqrt %nsum_{tag} : tensor<f32>\n"
+  s := s ++ s!"    %nrme_{tag} = stablehlo.add %nrm_{tag}, %ns_eps : tensor<f32>\n"
+  s := s ++ s!"    %nrmb_{tag} = stablehlo.broadcast_in_dim %nrme_{tag}, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %X0_{tag} = stablehlo.divide %buf_{tag}, %nrmb_{tag} : {ty}\n"
+  -- broadcast the NS5 coefficients once
+  s := s ++ s!"    %nsa_{tag} = stablehlo.broadcast_in_dim %ns_a, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %nsb_{tag} = stablehlo.broadcast_in_dim %ns_b, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %nsc_{tag} = stablehlo.broadcast_in_dim %ns_c, dims = [] : (tensor<f32>) -> {ty}\n"
+  -- 5 Newton–Schulz iterations:  A = X·Xᵀ;  X ← a·X + b·(A·X) + c·(A·(A·X))
+  let mut x := s!"%X0_{tag}"
+  for it in [0,1,2,3,4] do
+    let xn := s!"%X{it+1}_{tag}"
+    s := s ++ s!"    %A{it}_{tag} = stablehlo.dot_general {x}, {x},\n"
+    s := s ++ "              contracting_dims = [1] x [1],\n"
+    s := s ++ "              precision = [DEFAULT, DEFAULT]\n"
+    s := s ++ s!"            : ({ty}, {ty}) -> {tyA}\n"
+    s := s ++ s!"    %AX{it}_{tag} = stablehlo.dot_general %A{it}_{tag}, {x},\n"
+    s := s ++ "              contracting_dims = [1] x [0],\n"
+    s := s ++ "              precision = [DEFAULT, DEFAULT]\n"
+    s := s ++ s!"            : ({tyA}, {ty}) -> {ty}\n"
+    s := s ++ s!"    %AAX{it}_{tag} = stablehlo.dot_general %A{it}_{tag}, %AX{it}_{tag},\n"
+    s := s ++ "              contracting_dims = [1] x [0],\n"
+    s := s ++ "              precision = [DEFAULT, DEFAULT]\n"
+    s := s ++ s!"            : ({tyA}, {ty}) -> {ty}\n"
+    s := s ++ s!"    %aX{it}_{tag} = stablehlo.multiply %nsa_{tag}, {x} : {ty}\n"
+    s := s ++ s!"    %bAX{it}_{tag} = stablehlo.multiply %nsb_{tag}, %AX{it}_{tag} : {ty}\n"
+    s := s ++ s!"    %cAAX{it}_{tag} = stablehlo.multiply %nsc_{tag}, %AAX{it}_{tag} : {ty}\n"
+    s := s ++ s!"    %xt{it}_{tag} = stablehlo.add %aX{it}_{tag}, %bAX{it}_{tag} : {ty}\n"
+    s := s ++ s!"    {xn} = stablehlo.add %xt{it}_{tag}, %cAAX{it}_{tag} : {ty}\n"
+    x := xn
+  -- W_new = W − lr·s·X   (s = compile-time RMS shape-match scale)
+  s := s ++ s!"    %scl_{tag} = stablehlo.constant dense<{scale}> : tensor<f32>\n"
+  s := s ++ s!"    %lrs_{tag} = stablehlo.multiply {lrSSA}, %scl_{tag} : tensor<f32>\n"
+  s := s ++ s!"    %lrsb_{tag} = stablehlo.broadcast_in_dim %lrs_{tag}, dims = [] : (tensor<f32>) -> {ty}\n"
+  s := s ++ s!"    %upd_{tag} = stablehlo.multiply %lrsb_{tag}, {x} : {ty}\n"
+  s := s ++ s!"    %sub_{tag} = stablehlo.subtract {paramSSA}, %upd_{tag} : {ty}\n"
+  if applyWeightDecay then
+    -- decoupled weight decay: w = w − lr·s·X − wd·lr·w
+    s := s ++ s!"    %lrb_{tag} = stablehlo.broadcast_in_dim {lrSSA}, dims = [] : (tensor<f32>) -> {ty}\n"
+    s := s ++ s!"    %wd_{tag} = stablehlo.broadcast_in_dim %wdecay, dims = [] : (tensor<f32>) -> {ty}\n"
+    s := s ++ s!"    %wdlr_{tag} = stablehlo.multiply %wd_{tag}, %lrb_{tag} : {ty}\n"
+    s := s ++ s!"    %wdp_{tag} = stablehlo.multiply %wdlr_{tag}, {paramSSA} : {ty}\n"
+    s := s ++ s!"    %new_{tag} = stablehlo.subtract %sub_{tag}, %wdp_{tag} : {ty}\n"
+  -- buf in m-slot, v-slot passthrough (arity unchanged)
+  return (s, if applyWeightDecay then s!"%new_{tag}" else s!"%sub_{tag}", s!"%buf_{tag}", vSSA)
+
 /-- Emit Adam update for a convBn layer (W, gamma, beta). -/
 private def emitConvBnAdam (p ic oc kSize : Nat) (applyWeightDecay : Bool := true)
     (clipScale : Option String := none) : String × Array String × Array String := Id.run do
@@ -3727,13 +3822,15 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
     (yoloGridH : Nat := 7) (yoloGridW : Nat := 7)
     (yoloNumBoxes : Nat := 2) (yoloNumClasses : Nat := 20)
     (gradClipNorm : Float := 0.0) (headLrMult : Float := 1.0)
+    (useMuon : Bool := false)
     : String := Id.run do
   let B := batchSize
   let nClasses := spec.numClasses
   let mut code : String := ""
   code := code ++ "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n"
   code := code ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
-  if useAdam then
+  if useAdam || useMuon then
+    -- Adam constants (Muon's non-2D params fall back to AdamW, so it needs these too)
     code := code ++ "    // Adam constants\n"
     code := code ++ "    %beta1 = stablehlo.constant dense<0.9> : tensor<f32>\n"
     code := code ++ "    %beta2 = stablehlo.constant dense<0.999> : tensor<f32>\n"
@@ -3749,6 +3846,14 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   else
     code := code ++ "    // SGD+momentum constants\n"
     code := code ++ "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n"
+  if useMuon then
+    -- Muon (Newton–Schulz polar projection) constants — see emitMuonUpdate
+    code := code ++ "    // Muon constants\n"
+    code := code ++ "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n"
+    code := code ++ "    %ns_a = stablehlo.constant dense<3.4445> : tensor<f32>\n"
+    code := code ++ "    %ns_b = stablehlo.constant dense<-4.775> : tensor<f32>\n"
+    code := code ++ "    %ns_c = stablehlo.constant dense<2.0315> : tensor<f32>\n"
+    code := code ++ "    %ns_eps = stablehlo.constant dense<1.0e-07> : tensor<f32>\n"
   if weightDecay > 0.0 then
     code := code ++ s!"    %wdecay = stablehlo.constant dense<{weightDecay}> : tensor<f32>\n"
   code := code ++ "\n"
@@ -6409,9 +6514,14 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   let mut vRetNames : Array String := #[]
   let mut vRetTypes : Array String := #[]
   let mut processedPidx : Array Nat := #[]
-  -- Helper: choose Adam or momentum update for a single parameter
+  -- Helper: choose the per-parameter update. With useMuon, every 2D weight matrix
+  -- (both dims ≥ 16, so the small classifier head / embeddings stay on AdamW — Muon's
+  -- canonical exclusion) is updated by Muon; all other params fall back to AdamW.
+  -- Otherwise the original Adam/momentum dispatch is unchanged.
   let emitUpdate := fun (paramSSA gradSSA mSSA vSSA : String) (shape : List Nat) (tag : String) (applyWd : Bool) =>
-    if useAdam then emitAdamUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd) (clipScale := clipScale)
+    let is2DMuon : Bool := match shape with | [a, b] => decide (16 ≤ Nat.min a b) | _ => false
+    if useMuon && is2DMuon then emitMuonUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd) (clipScale := clipScale)
+    else if useAdam || useMuon then emitAdamUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd) (clipScale := clipScale)
     else emitMomentumUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd) (clipScale := clipScale)
   for r in records do
     match r.pidx with
@@ -7616,9 +7726,10 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
     (yoloGridH : Nat := 7) (yoloGridW : Nat := 7)
     (yoloNumBoxes : Nat := 2) (yoloNumClasses : Nat := 20)
     (gradClipNorm : Float := 0.0) (headLrMult : Float := 1.0)
+    (useMuon : Bool := false)
     : String :=
   s!"// {spec.name} train_step — Generated by Lean 4 → MLIR (StableHLO + VJPs)\n" ++
-  s!"// Batch size: {batchSize}, optimizer: {if useAdam then "Adam" else "SGD+momentum"}\n" ++
+  s!"// Batch size: {batchSize}, optimizer: {if useMuon then "Muon (2D) + AdamW (rest)" else if useAdam then "Adam" else "SGD+momentum"}\n" ++
   s!"// label_smoothing: {labelSmoothing}, weight_decay: {weightDecay}, soft_labels: {useSoftLabels}, focal: {useFocal} (γ={focalGamma}), seg: {useSeg}, ddpm: {useDdpm}, yolov1: {useYolov1}" ++
   (if useYolov1 then s!" (grid={yoloGridH}x{yoloGridW}, B={yoloNumBoxes}, C={yoloNumClasses})" else "") ++
   "\n\n" ++
@@ -7626,7 +7737,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
   emitTrainStepSig spec batchSize useSoftLabels useSeg useDdpm ddpmOutShape
     useYolov1 yoloGridH yoloGridW (yoloNumBoxes * 5 + yoloNumClasses) ++ " {\n" ++
   emitTrainStepBody spec batchSize moduleName labelSmoothing weightDecay useAdam useSoftLabels useFocal focalGamma useSeg useDdpm
-    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult ++
+    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult useMuon ++
   "  }\n" ++
   "}\n"
 
