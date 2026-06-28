@@ -648,7 +648,11 @@ lean_lib «Proofs» where
              -- certified radius (Tsuzuku et al. 2018) — if the logit map is L-Lipschitz in L2
              -- and the margin is m, every ‖δ‖₂ < m/(√2·L) leaves the argmax fixed (proof, vs
              -- the PGD attack's one-attack upper bound). The cert side of cert ≤ TRUE ≤ PGD.
-             `LeanMlir.Proofs.LipschitzCert]
+             `LeanMlir.Proofs.LipschitzCert,
+             -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
+             -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
+             -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).
+             `LeanMlir.Proofs.MuonGeometry]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

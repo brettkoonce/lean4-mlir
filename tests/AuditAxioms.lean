@@ -141,6 +141,7 @@ import LeanMlir.Proofs.Cifar8BnTiePoC
 import LeanMlir.Proofs.ViTFaithfulPoC
 import LeanMlir.Proofs.ViTTiePoC
 import LeanMlir.Proofs.LipschitzCert
+import LeanMlir.Proofs.MuonGeometry
 
 open Proofs
 
@@ -2932,3 +2933,14 @@ open Proofs
 -- driver reports). smoothed_margin_certified_radius = the core σ·m/2 margin step.
 #print axioms Proofs.smoothing_certified_radius
 #print axioms Proofs.smoothed_margin_certified_radius
+
+-- Muon geometry (planning/muon_geometry.md): every optimizer = steepest descent under a norm,
+-- d⋆ = argmax_{‖d‖≤1}⟨g,d⟩ = the dual-norm maximizer. steepest_l2_* = SGD (Euclidean/Cauchy-Schwarz,
+-- d⋆=g/‖g‖); steepest_linf_* = sign/Adam (L∞→L¹, d⋆=sign g); muon_polar_achieves_nuclear = Muon's
+-- polar factor UVᵀ realizes the nuclear norm Σσᵢ given an SVD (the achievability half; von Neumann
+-- upper bound + SVD construction are the next layers).
+#print axioms Proofs.MuonGeometry.steepest_l2_bound
+#print axioms Proofs.MuonGeometry.steepest_l2_attained
+#print axioms Proofs.MuonGeometry.steepest_linf_bound
+#print axioms Proofs.MuonGeometry.steepest_linf_attained
+#print axioms Proofs.MuonGeometry.muon_polar_achieves_nuclear
