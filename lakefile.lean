@@ -1027,6 +1027,13 @@ lean_exe «convnext-verified» where
   root := `apps.imagenette.MainConvNeXtVerified
   moreLinkArgs := ireeLink
 
+-- Randomized-smoothing certificate on the verified ConvNeXt-T (Imagenette 224²): the deep / real-
+-- resolution rung of the depth-INDEPENDENT cert (Cohen 2019). LayerNorm ⇒ per-sample fwd, so the
+-- generic smoothCertify driver applies unchanged. σ via SMOOTH_SIGMA_MILLI (split across 2 GPUs).
+lean_exe «convnext-smooth» where
+  root := `apps.imagenette.MainConvNeXtSmooth
+  moreLinkArgs := ireeLink
+
 -- convnext peer of r34-verified-adam: the proof-rendered train step (all-smooth — LayerNorm +
 -- GELU + layerScale, no BN) with the SGD update swapped for AdamW (ViTRender.emitAdamV) + packed
 -- θ|m|v + runtime lr/bc threading via trainAdamSched. Recipe matches the reference (lr 1e-3, wd

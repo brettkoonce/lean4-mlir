@@ -25,7 +25,18 @@ BatchNorm, formalized the certificate as a theorem, and added the gap-shrinking 
 > `Φ⁻¹∘P[f(x+η)=·]` (each `(1/σ)`-Lipschitz — the Cohen/Salman Gaussian-isoperimetry content, taken as
 > a hypothesis exactly as `L` is in the Tsuzuku theorem; `smoothed_margin_certified_radius` = the core
 > `σ·m/2` step giving Cohen's `(σ/2)(Φ⁻¹(p_A)−Φ⁻¹(p_B))`). Both certificates of `cert ≤ TRUE ≤ PGD`
-> are now proofs. (UNCOMMITTED — awaiting sign-off.)
+> are now proofs (committed ff2b8a2; estimation tightened to large-n af0218f).
+>
+> **Imagenette smoothing (2026-06-28): infra DONE, meaningful cert DEFERRED.** Extended `smoothCertify`
+> to 224² ConvNeXt-T (`convnext-smooth`): LayerNorm ⇒ per-sample fwd (smoothing-valid as-is) + new
+> driver support (256²→224² train crop; `batchSize=32`; `compileVmfb` skip-if-fresh **vmfb cache** so
+> two σ-streams share both gfx1100 GPUs; `SMOOTH_EVAL_BATCHES` cap). Validated end-to-end on the real
+> net, BUT the light pass gave a **degenerate cert** — SGD-from-scratch + noise **collapsed ConvNeXt to
+> a constant classifier** (natural acc 10% = random). The SGD `convnext_train_step` is the un-tuned
+> legacy path (verified net uses AdamW); a meaningful 224² radius needs the **AdamW train path**
+> (`convnext_adam_train_step` + `trainAdamSched`, noise-augmented) trained ~to convergence (20+ ep ≈
+> hours on conv-weak gfx1100). Next-session entry point. See `planning/robustness_ladder.md` §4;
+> collapse logs `runs/smooth_convnext_s0{25,50}.log`.
 
 ## 0. The one-paragraph state of the world
 

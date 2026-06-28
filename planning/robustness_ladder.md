@@ -131,10 +131,23 @@ hopeless.
    taken as a hypothesis, just as `L` is in the Tsuzuku theorem) ⇒ every `‖δ‖₂ < σ·Φ⁻¹(p_A)` keeps
    class `i` the argmax of the noise-probabilities. So *both* certificates of the sandwich are now
    proofs, not numbers.
-4. **Imagenette**: the Lipschitz cert is vacuous (don't chase it); the attack is a cheap-ish "deep
-   verified nets are fragile" data point. The *certificate* there is the smoothing driver above —
-   it already runs on any `VerifiedNet` via its rendered fwd, so Imagenette is just a longer run
-   (heavier forward; no new code), the natural next data point if wanted.
+4. **Imagenette** (smoothing infra DONE, meaningful cert DEFERRED, 2026-06-28, `convnext-smooth`):
+   the smoothing driver was extended to 224² **ConvNeXt-T** — LayerNorm (not BN) means
+   `convnext_fwd.mlir` is per-sample, so smoothing is well-defined on it unchanged. New driver
+   support landed and validated end-to-end on the real net: Imagenette 256²→224² center-crop in the
+   training loop, `batchSize=32` (the baked fwd batch), a `compileVmfb` **skip-if-fresh vmfb cache**
+   (avoids the ~min 224² recompile + lets two same-net σ-streams share both gfx1100 GPUs safely),
+   and a `SMOOTH_EVAL_BATCHES` best-θ-eval cap. **But the light pass produced a degenerate cert**:
+   SGD-from-scratch + Gaussian noise **collapsed ConvNeXt to a constant classifier** (natural acc =
+   10% = random, "certified" at the ceiling for the constant class) — the SGD `convnext_train_step`
+   is the un-tuned legacy path (the verified net uses **AdamW**), and on a 224² ConvNeXt plain SGD
+   just diverges. A *meaningful* Imagenette radius needs (a) the **AdamW train path**
+   (`convnext_adam_train_step` + `trainAdamSched`, noise-augmented) and (b) training ~to convergence
+   (20+ epochs ≈ hours, gfx1100 being conv-weak) — a multi-hour/overnight run, NOT a light pass. The
+   depth-independence thesis is already shown on CIFAR; Imagenette is the "scales to 224²" follow-up,
+   gated on that proper run. Infra: `MainConvNeXtSmooth`, `run_convnext_smooth_2gpu.sh`, logs
+   `runs/smooth_convnext_s0{25,50}.log` (the collapse evidence). The PGD **attack** on a deep net is
+   still the cheap-ish "fragile" data point if wanted.
 
 ## 5. References / in-repo anchors
 

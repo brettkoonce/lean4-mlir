@@ -87,8 +87,17 @@ def xShape (n : VerifiedNet) (batch : Nat) : ByteArray := packXShape #[batch, n.
 
 end VerifiedNet
 
-/-- iree-compile one `.mlir` → `.vmfb`, surfacing failures. -/
+/-- iree-compile one `.mlir` → `.vmfb`, surfacing failures. Skips when the `.vmfb` is already
+    newer than the `.mlir` (a content-stable cache): avoids the ~minutes-long 224² recompile, and
+    lets two same-net runs share one GPU-pair safely — they only *read* the cached vmfb (concurrent
+    reads are fine; it's the concurrent *writes* of an identical compile that would race). -/
 private def compileVmfb (mlirPath outPath : String) : IO Unit := do
+  if (← System.FilePath.pathExists outPath) then
+    let srcMd ← (System.FilePath.mk mlirPath).metadata
+    let outMd ← (System.FilePath.mk outPath).metadata
+    if outMd.modified.sec ≥ srcMd.modified.sec then
+      IO.println s!"  (cached vmfb) {outPath}"
+      return
   let cargs ← ireeCompileArgs mlirPath outPath
   IO.println s!"  iree-compile {mlirPath}"
   let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
@@ -2042,7 +2051,10 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
-  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net.data d0 dataDir
+  -- `trainPix`/`crop`: Imagenette train ships at 256² and is center-cropped to 224² per batch
+  -- (the val/eval split is already 224² = d0, so certify reads it directly). For MNIST/CIFAR
+  -- crop=false and trainPix=d0, so the crop below is a no-op.
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ← loadData net.data d0 dataDir
   let nb  := nTrain / bs
   let nbt := nEval / bs
   let shapes := net.shapesBA
@@ -2053,6 +2065,9 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   let n0      := ((← IO.getEnv "SMOOTH_N0").bind (·.toNat?)).getD 100
   let nSamp   := ((← IO.getEnv "SMOOTH_N").bind (·.toNat?)).getD 10000
   let maxCert := ((← IO.getEnv "SMOOTH_MAXCERT").bind (·.toNat?)).getD 200
+  -- per-epoch best-θ eval is a clean-acc proxy; cap it to a subsample on heavy 224² nets
+  -- (`SMOOTH_EVAL_BATCHES`, default = full val set).
+  let evalBatches := min nbt (((← IO.getEnv "SMOOTH_EVAL_BATCHES").bind (·.toNat?)).getD nbt)
   let alpha   := 0.001
   let radii : Array Float := #[0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
   let nCert   := min maxCert nEval
@@ -2086,18 +2101,19 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
     let mut nseed : USize := 1
     for ep in [0:cfg.epochs] do
       for bi in [0:nb] do
-        let xb := F32.sliceImages trainImg (bi * bs) bs d0
+        let xbRaw := F32.sliceImages trainImg (bi * bs) bs trainPix
+        let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
         let yb := F32.sliceLabels trainLbl (bi * bs) bs
         let xbN ← F32.addGaussianTiled xb 0 (bs*d0).toUSize 1 sigma nseed
         nseed := nseed + 1
         theta ← IreeSession.mlpTrainStepV tsSess tsFn xbN theta shapes yb bs.toUSize d0.toUSize d1.toUSize
       let mut c := 0
-      for bi in [0:nbt] do
+      for bi in [0:evalBatches] do
         let xb := F32.sliceImages evalImg (bi * bs) bs d0
         let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb (net.xShape bs) bs.toUSize d1.toUSize
         for j in [0:bs] do
           if (F32.argmax10 logits (j*d1).toUSize).toNat == (evalLbl.get! (4*(bi*bs+j))).toNat then c := c+1
-      let acc := c.toFloat/(nbt*bs).toFloat*100.0
+      let acc := c.toFloat/(evalBatches*bs).toFloat*100.0
       if acc > bestAcc then bestAcc := acc; bestTheta := theta
       IO.println s!"    epoch {ep+1}/{cfg.epochs}: clean acc = {acc}%"
       (← IO.getStdout).flush
