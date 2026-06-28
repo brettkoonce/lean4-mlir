@@ -1,6 +1,6 @@
 Randomized-smoothing certificate on MNIST-MLP (verified codegen → IREE → GPU, forward-only)
-  iree-compile verified_mlir/mlp_train_step.mlir
-  iree-compile verified_mlir/mlp_fwd.mlir
+  (cached vmfb) .lake/build/mlp_ts_v.vmfb
+  (cached vmfb) .lake/build/mlp_fwd_v.vmfb
   n0=128 (select)  n=10112 (estimate)  α=0.001000  certifying 200 test imgs (every 50th)
   p_A ceiling = 0.999317 (= α^(1/n))  →  max certifiable radius = σ · 3.201786
 
@@ -61,5 +61,6 @@ Randomized-smoothing certificate on MNIST-MLP (verified codegen → IREE → GPU
   0.250000	97.746394	98.000000	0.500000	88.500000	0.000000	0.000000	0.703179
   0.500000	97.345753	97.000000	2.000000	87.000000	67.500000	31.000000	1.130046
 
+per-image certified radii → runs/smooth_mlp_radii.csv (600 rows, all σ) — fine frontier curves + ACR
 done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —
       architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless).

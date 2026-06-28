@@ -1,6 +1,6 @@
 Randomized-smoothing certificate on CIFAR-CNN (verified codegen → IREE → GPU, forward-only)
-  iree-compile verified_mlir/cifar_train_step.mlir
-  iree-compile verified_mlir/cifar_fwd.mlir
+  (cached vmfb) .lake/build/cifar_ts_v.vmfb
+  (cached vmfb) .lake/build/cifar_fwd_v.vmfb
   n0=128 (select)  n=10112 (estimate)  α=0.001000  certifying 200 test imgs (every 50th)
   p_A ceiling = 0.999317 (= α^(1/n))  →  max certifiable radius = σ · 3.201786
 
@@ -47,5 +47,6 @@ Randomized-smoothing certificate on CIFAR-CNN (verified codegen → IREE → GPU
   0.250000	60.747196	53.500000	15.000000	32.000000	0.000000	0.000000	0.270617
   0.500000	54.537260	55.000000	20.000000	32.500000	18.500000	8.000000	0.402712
 
+per-image certified radii → runs/smooth_cifar_radii.csv (400 rows, all σ) — fine frontier curves + ACR
 done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —
       architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless).

@@ -2086,6 +2086,9 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   IO.println s!"  n0={n0Eff} (select)  n={nEff} (estimate)  α={alpha}  certifying {nCert} test imgs (every {stride}th)"
   IO.println s!"  p_A ceiling = {pMax} (= α^(1/n))  →  max certifiable radius = σ · {invNormCdf pMax}"
   let mut rows : Array String := #[]
+  -- per-image certified radius, dumped to CSV for arbitrarily-fine frontier curves (cert-acc at
+  -- radius r = fraction with correct ∧ radius ≥ r) + ACR + any threshold, all from one run.
+  let mut dumpRows : Array String := #["sigma,img_idx,label,pred,abstain,radius"]
   for sigma in sigmas do
     IO.println s!"\n── σ = {sigma}  (radius ceiling at this n = {sigma * invNormCdf pMax}) ──"
     -- (1) train a Gaussian-noise-augmented base classifier (the Cohen recipe): every batch is
@@ -2147,14 +2150,16 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
       if cHatA == label then natCorrect := natCorrect + 1
       let counts ← sampleCounts off nBatches (base + 524287)
       let pA := clopperPearsonLower counts[cHatA]! nEff alpha
-      if pA > 0.5 then
-        let radius := sigma * invNormCdf pA
+      let certified := pA > 0.5
+      let radius := if certified then sigma * invNormCdf pA else 0.0
+      if certified then
         if cHatA == label then
           acr := acr + radius
           for ri in [0:radii.size] do
             if radius ≥ radii[ri]! then certCnt := certCnt.set! ri (certCnt[ri]! + 1)
       else
         abstain := abstain + 1
+      dumpRows := dumpRows.push s!"{sigma},{imgIdx},{label},{cHatA},{if certified then 0 else 1},{radius}"
       if (t+1) % 100 == 0 then
         IO.println s!"    certified {t+1}/{nCert} ..."; (← IO.getStdout).flush
     let tot := nCert.toFloat
@@ -2168,7 +2173,10 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   IO.println s!"\n══ randomized smoothing ({net.name}): depth-independent certified L2 radius ══"
   IO.println "  σ\tclean%\tnat%\tabst%\tcert@.5\tcert@1.0\tcert@1.5\tACR"
   for row in rows do IO.println row
-  IO.println "\ndone (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —"
+  let csvPath := s!"runs/smooth_{net.slug}_radii.csv"
+  IO.FS.writeFile csvPath (String.intercalate "\n" dumpRows.toList ++ "\n")
+  IO.println s!"\nper-image certified radii → {csvPath} ({dumpRows.size - 1} rows, all σ) — fine frontier curves + ACR"
+  IO.println "done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —"
   IO.println "      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless)."
 
 /-- **Phase-3 PGD adversarial attack** on the verified linear classifier

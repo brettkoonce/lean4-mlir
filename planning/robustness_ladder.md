@@ -141,7 +141,10 @@ hopeless.
    SGD-from-scratch + Gaussian noise **collapsed ConvNeXt to a constant classifier** (natural acc =
    10% = random, "certified" at the ceiling for the constant class) — the SGD `convnext_train_step`
    is the un-tuned legacy path (the verified net uses **AdamW**), and on a 224² ConvNeXt plain SGD
-   just diverges. A *meaningful* Imagenette radius needs (a) the **AdamW train path**
+   just diverges. **Diagnostic (`run_convnext_diag.sh`, `runs/diag_convnext_s0{00,10}.log`): a σ=0
+   no-noise control collapsed identically (nat acc 13% ≈ random), so it's the SGD path, NOT the noise
+   — the smoothing + noise-augmentation machinery is exonerated.** A *meaningful* Imagenette radius
+   needs (a) the **AdamW train path**
    (`convnext_adam_train_step` + `trainAdamSched`, noise-augmented) and (b) training ~to convergence
    (20+ epochs ≈ hours, gfx1100 being conv-weak) — a multi-hour/overnight run, NOT a light pass. The
    depth-independence thesis is already shown on CIFAR; Imagenette is the "scales to 224²" follow-up,

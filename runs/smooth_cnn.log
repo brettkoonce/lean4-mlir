@@ -1,6 +1,6 @@
 Randomized-smoothing certificate on MNIST-CNN (verified codegen → IREE → GPU, forward-only)
-  iree-compile verified_mlir/cnn_train_step.mlir
-  iree-compile verified_mlir/cnn_fwd.mlir
+  (cached vmfb) .lake/build/cnn_ts_v.vmfb
+  (cached vmfb) .lake/build/cnn_fwd_v.vmfb
   n0=128 (select)  n=10112 (estimate)  α=0.001000  certifying 200 test imgs (every 50th)
   p_A ceiling = 0.999317 (= α^(1/n))  →  max certifiable radius = σ · 3.201786
 
@@ -61,5 +61,6 @@ Randomized-smoothing certificate on MNIST-CNN (verified codegen → IREE → GPU
   0.250000	98.818109	98.000000	0.000000	93.500000	0.000000	0.000000	0.753524
   0.500000	98.006811	99.000000	1.000000	93.000000	78.000000	48.500000	1.277687
 
+per-image certified radii → runs/smooth_cnn_radii.csv (600 rows, all σ) — fine frontier curves + ACR
 done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —
       architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless).

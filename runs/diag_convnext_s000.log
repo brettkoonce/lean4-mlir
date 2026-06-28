@@ -1,0 +1,20 @@
+Randomized-smoothing certificate on ConvNeXt-T (verified codegen → IREE → GPU, forward-only)
+  (cached vmfb) .lake/build/convnext_ts_v.vmfb
+  (cached vmfb) .lake/build/convnext_fwd_v.vmfb
+  n0=128 (select)  n=512 (estimate)  α=0.001000  certifying 15 test imgs (every 261th)
+  p_A ceiling = 0.986599 (= α^(1/n))  →  max certifiable radius = σ · 2.214386
+
+── σ = 0.000000  (radius ceiling at this n = 0.000000) ──
+    epoch 1/3: clean acc = 100.000000%
+    epoch 2/3: clean acc = 100.000000%
+    epoch 3/3: clean acc = 100.000000%
+  noise-trained clean acc = 100.000000%
+  smoothed natural acc = 13.333333%   abstain = 0.000000%   ACR = 0.000000
+  certified-robust acc (L2): 0.250000→0.000000% / 0.500000→0.000000% / 0.750000→0.000000% / 1.000000→0.000000% / 1.250000→0.000000% / 1.500000→0.000000%
+
+══ randomized smoothing (ConvNeXt-T): depth-independent certified L2 radius ══
+  σ	clean%	nat%	abst%	cert@.5	cert@1.0	cert@1.5	ACR
+  0.000000	100.000000	13.333333	0.000000	0.000000	0.000000	0.000000	0.000000
+
+done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —
+      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless).
