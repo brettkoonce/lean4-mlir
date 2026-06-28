@@ -130,7 +130,15 @@ hopeless.
    score fields** `gᶜ(x)=Φ⁻¹(P[f(x+η)=c])`, each `(1/σ)`-Lipschitz (the Cohen/Salman Gaussian content
    taken as a hypothesis, just as `L` is in the Tsuzuku theorem) ⇒ every `‖δ‖₂ < σ·Φ⁻¹(p_A)` keeps
    class `i` the argmax of the noise-probabilities. So *both* certificates of the sandwich are now
-   proofs, not numbers.
+   proofs, not numbers. **And the theorem's one hypothesis — that `Φ⁻¹∘p_c` is `(1/σ)`-Lipschitz — is
+   now MEASURED on the trained nets** (DONE 2026-06-28, `SMOOTH_LIP_PROBE`, `lean_f32_perturb_unit`):
+   shift a test input by a known `‖δ‖₂` in random directions, sample `p_ĉ` at `x` and `x+δ`, and
+   compare `|Φ⁻¹(p_ĉ(x+δ))−Φ⁻¹(p_ĉ(x))|` to the bound `‖δ‖/σ`. On MNIST-CNN, **717/720 measurements
+   fall under the bound** (the few over are at the smallest `‖δ‖`/largest `σ`, within Monte-Carlo
+   error of the finite-sample `p̂`) — the assumption the proof takes for granted, validated on the
+   real net (the repo's MEASURED tier). Figure: `scripts/emit_lipschitz_tikz.py` → `runs/lipschitz_<net>.tex`
+   (`Φ⁻¹∘p_ĉ·σ/‖δ‖ ≤ 1` scatter); data `runs/smooth_<net>_lipschitz.csv`. The frontier figure is
+   `runs/smoothing_frontier.tex` (per-image radii → fine pgfplots curves).
 4. **Imagenette** (smoothing infra DONE, meaningful cert DEFERRED, 2026-06-28, `convnext-smooth`):
    the smoothing driver was extended to 224² **ConvNeXt-T** — LayerNorm (not BN) means
    `convnext_fwd.mlir` is per-sample, so smoothing is well-defined on it unchanged. New driver

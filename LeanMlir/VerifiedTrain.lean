@@ -2089,6 +2089,13 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   -- per-image certified radius, dumped to CSV for arbitrarily-fine frontier curves (cert-acc at
   -- radius r = fraction with correct ∧ radius ≥ r) + ACR + any threshold, all from one run.
   let mut dumpRows : Array String := #["sigma,img_idx,label,pred,abstain,radius"]
+  -- Lipschitz-hypothesis probe (SMOOTH_LIP_PROBE): measures |Φ⁻¹(p_ĉ(x+δ))−Φ⁻¹(p_ĉ(x))| vs the
+  -- proven bound ‖δ‖/σ — the empirical grounding of `smoothing_certified_radius`'s (1/σ)-Lipschitz hyp.
+  let lipProbe := (← IO.getEnv "SMOOTH_LIP_PROBE").isSome
+  let mut lipRows : Array String := #["sigma,img_idx,delta,dg,bound,ratio"]
+  let mut lipMax := 0.0
+  let mut lipViol := 0
+  let mut lipN := 0
   for sigma in sigmas do
     IO.println s!"\n── σ = {sigma}  (radius ceiling at this n = {sigma * invNormCdf pMax}) ──"
     -- (1) train a Gaussian-noise-augmented base classifier (the Cohen recipe): every batch is
@@ -2124,15 +2131,16 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
     IO.println s!"  noise-trained clean acc = {bestAcc}%"
     -- (2) SampleUnderNoise: `nBatches·bs` noisy copies of ONE image (element offset `off`), each
     --     forward feeding exactly `bs` rows (the rendered fwd's static batch), argmax-vote → counts.
-    let sampleCounts := fun (off nBat : Nat) (sd : USize) => do
+    let sampleCountsB := fun (base : ByteArray) (off nBat : Nat) (sd : USize) => do
       let mut counts : Array Nat := Array.replicate d1 0
       for ci in [0:nBat] do
-        let xN ← F32.addGaussianTiled evalImg off.toUSize d0.toUSize bs.toUSize sigma (sd + ci.toUSize)
+        let xN ← F32.addGaussianTiled base off.toUSize d0.toUSize bs.toUSize sigma (sd + ci.toUSize)
         let logits ← IreeSession.forwardF32 fwdSess fwdFn th shapes xN (net.xShape bs) bs.toUSize d1.toUSize
         for j in [0:bs] do
           let a := (F32.argmax10 logits (j*d1).toUSize).toNat
           counts := counts.set! a (counts[a]! + 1)
       pure counts
+    let sampleCounts := fun (off nBat : Nat) (sd : USize) => sampleCountsB evalImg off nBat sd
     -- (3) certify each sampled test image: n0 select ĉ_A, n estimate p_A, radius σ·Φ⁻¹(p_A).
     let mut abstain := 0
     let mut natCorrect := 0
@@ -2162,6 +2170,37 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
       dumpRows := dumpRows.push s!"{sigma},{imgIdx},{label},{cHatA},{if certified then 0 else 1},{radius}"
       if (t+1) % 100 == 0 then
         IO.println s!"    certified {t+1}/{nCert} ..."; (← IO.getStdout).flush
+    -- (4) Lipschitz-hypothesis probe: shift x by r·(unit vector) and compare the probit-score change
+    --     |Φ⁻¹(p_ĉ(x+δ))−Φ⁻¹(p_ĉ(x))| to the PROVEN bound ‖δ‖/σ (Salman et al. 2019 Lemma 2 — the
+    --     hypothesis `smoothing_certified_radius` assumes). ratio = Δg·σ/‖δ‖ ≤ 1 ⟺ (1/σ)-Lipschitz holds.
+    if lipProbe then
+      let rGrid : Array Float := #[0.1, 0.2, 0.3, 0.5, 0.75, 1.0]
+      let mProbe := min 40 nEval
+      let pstride := max 1 (nEval / mProbe)
+      let clampP := fun (k : Nat) =>
+        let lo := 1.0 / (2.0 * nEff.toFloat)
+        max lo (min (1.0 - lo) (k.toFloat / nEff.toFloat))
+      for t in [0:mProbe] do
+        let imgIdx := t * pstride
+        let off := imgIdx * d0
+        let cnt0 ← sampleCountsB evalImg off nBatches ((imgIdx + 7).toUSize * 131 + 3)
+        let mut chat := 0
+        for c in [1:d1] do
+          if cnt0[c]! > cnt0[chat]! then chat := c
+        let gx := invNormCdf (clampP cnt0[chat]!)
+        for ri in [0:rGrid.size] do
+          let r := rGrid[ri]!
+          let xp ← F32.perturbUnit evalImg off.toUSize d0.toUSize r (imgIdx.toUSize * 17 + ri.toUSize + 1)
+          let cntp ← sampleCountsB xp 0 nBatches (imgIdx.toUSize * 53 + ri.toUSize + 11)
+          let gxp := invNormCdf (clampP cntp[chat]!)
+          let dg := Float.abs (gxp - gx)
+          let ratio := dg * sigma / r
+          if ratio > lipMax then lipMax := ratio
+          if ratio > 1.05 then lipViol := lipViol + 1
+          lipN := lipN + 1
+          lipRows := lipRows.push s!"{sigma},{imgIdx},{r},{dg},{r/sigma},{ratio}"
+      IO.println s!"  Lipschitz probe: {mProbe} imgs × {rGrid.size} shifts (Φ⁻¹∘p_ĉ vs ‖δ‖/σ)"
+      (← IO.getStdout).flush
     let tot := nCert.toFloat
     let pct := fun (k : Nat) => k.toFloat / tot * 100.0
     let certStr := String.intercalate " / " (radii.toList.zipIdx.map
@@ -2176,6 +2215,11 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   let csvPath := s!"runs/smooth_{net.slug}_radii.csv"
   IO.FS.writeFile csvPath (String.intercalate "\n" dumpRows.toList ++ "\n")
   IO.println s!"\nper-image certified radii → {csvPath} ({dumpRows.size - 1} rows, all σ) — fine frontier curves + ACR"
+  if lipProbe then
+    let lipPath := s!"runs/smooth_{net.slug}_lipschitz.csv"
+    IO.FS.writeFile lipPath (String.intercalate "\n" lipRows.toList ++ "\n")
+    IO.println s!"Lipschitz-hypothesis probe → {lipPath} ({lipN} measurements): max ratio Δg·σ/‖δ‖ = {lipMax}"
+    IO.println s!"  ⇒ Φ⁻¹∘p_ĉ is empirically (1/σ)-Lipschitz: {lipN - lipViol}/{lipN} measurements ≤ bound (violations>1.05: {lipViol})"
   IO.println "done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —"
   IO.println "      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless)."
 

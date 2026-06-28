@@ -1295,6 +1295,31 @@ LEAN_EXPORT lean_obj_res lean_f32_add_gaussian_tiled(
     return lean_io_result_mk_ok(ba);
 }
 
+// ---- Perturb one image by r·(random unit vector): x + r·u, ‖r·u‖₂ = r exactly ----
+// Returns `base[off .. off+d0)` shifted by a magnitude-`r` step in a uniformly-random direction
+// (Box-Muller draw of u ~ N(0,I), then normalized). Used by the Lipschitz-hypothesis probe to
+// measure how Φ⁻¹(P[f(x+η)=c]) moves under an input shift of known L2 size.
+LEAN_EXPORT lean_obj_res lean_f32_perturb_unit(
+        b_lean_obj_arg base, size_t off, size_t d0, double r, size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t nbytes = d0 * 4;
+    lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
+    float* p = (float*)lean_sarray_cptr(ba);
+    const float* src = (const float*)lean_sarray_cptr(base);
+    uint64_t s = (uint64_t)seed * 0x9E3779B97F4A7C15ULL + 1;
+    double norm2 = 0.0;
+    for (size_t i = 0; i < d0; i++) {
+        double z = f32_randn(&s);
+        p[i] = (float)z;                 // stash the raw direction
+        norm2 += z * z;
+    }
+    double scale = (norm2 > 0.0) ? (r / sqrt(norm2)) : 0.0;
+    for (size_t i = 0; i < d0; i++) {
+        p[i] = src[off + i] + (float)(scale * (double)p[i]);
+    }
+    return lean_io_result_mk_ok(ba);
+}
+
 // Marsaglia & Tsang gamma sampler for shape α > 0, scale 1.
 // For α < 1, use the boost trick: G(α) = G(α+1) · U^(1/α).
 static double f32_gamma_sample(double alpha, uint64_t* s) {

@@ -1,0 +1,65 @@
+Randomized-smoothing certificate on MNIST-CNN (verified codegen → IREE → GPU, forward-only)
+  (cached vmfb) .lake/build/cnn_ts_v.vmfb
+  (cached vmfb) .lake/build/cnn_fwd_v.vmfb
+  n0=128 (select)  n=2048 (estimate)  α=0.001000  certifying 20 test imgs (every 500th)
+  p_A ceiling = 0.996633 (= α^(1/n))  →  max certifiable radius = σ · 2.709696
+
+── σ = 0.120000  (radius ceiling at this n = 0.325164) ──
+    epoch 1/10: clean acc = 97.756410%
+    epoch 2/10: clean acc = 98.297276%
+    epoch 3/10: clean acc = 98.377404%
+    epoch 4/10: clean acc = 98.647837%
+    epoch 5/10: clean acc = 98.758013%
+    epoch 6/10: clean acc = 98.848157%
+    epoch 7/10: clean acc = 98.858173%
+    epoch 8/10: clean acc = 98.778045%
+    epoch 9/10: clean acc = 98.938301%
+    epoch 10/10: clean acc = 98.898237%
+  noise-trained clean acc = 98.938301%
+  Lipschitz probe: 40 imgs × 6 shifts (Φ⁻¹∘p_ĉ vs ‖δ‖/σ)
+  smoothed natural acc = 100.000000%   abstain = 0.000000%   ACR = 0.321895
+  certified-robust acc (L2): 0.250000→100.000000% / 0.500000→0.000000% / 0.750000→0.000000% / 1.000000→0.000000% / 1.250000→0.000000% / 1.500000→0.000000%
+
+── σ = 0.250000  (radius ceiling at this n = 0.677424) ──
+    epoch 1/10: clean acc = 96.784856%
+    epoch 2/10: clean acc = 97.806490%
+    epoch 3/10: clean acc = 98.407452%
+    epoch 4/10: clean acc = 98.447516%
+    epoch 5/10: clean acc = 98.627804%
+    epoch 6/10: clean acc = 98.687901%
+    epoch 7/10: clean acc = 98.788061%
+    epoch 8/10: clean acc = 98.788061%
+    epoch 9/10: clean acc = 98.818109%
+    epoch 10/10: clean acc = 98.818109%
+  noise-trained clean acc = 98.818109%
+  Lipschitz probe: 40 imgs × 6 shifts (Φ⁻¹∘p_ĉ vs ‖δ‖/σ)
+  smoothed natural acc = 95.000000%   abstain = 0.000000%   ACR = 0.609707
+  certified-robust acc (L2): 0.250000→95.000000% / 0.500000→85.000000% / 0.750000→0.000000% / 1.000000→0.000000% / 1.250000→0.000000% / 1.500000→0.000000%
+
+── σ = 0.500000  (radius ceiling at this n = 1.354848) ──
+    epoch 1/10: clean acc = 9.575321%
+    epoch 2/10: clean acc = 89.272837%
+    epoch 3/10: clean acc = 94.160657%
+    epoch 4/10: clean acc = 95.532853%
+    epoch 5/10: clean acc = 96.434295%
+    epoch 6/10: clean acc = 96.854968%
+    epoch 7/10: clean acc = 97.215545%
+    epoch 8/10: clean acc = 97.455929%
+    epoch 9/10: clean acc = 97.776442%
+    epoch 10/10: clean acc = 98.006811%
+  noise-trained clean acc = 98.006811%
+  Lipschitz probe: 40 imgs × 6 shifts (Φ⁻¹∘p_ĉ vs ‖δ‖/σ)
+  smoothed natural acc = 90.000000%   abstain = 0.000000%   ACR = 1.046984
+  certified-robust acc (L2): 0.250000→90.000000% / 0.500000→85.000000% / 0.750000→80.000000% / 1.000000→70.000000% / 1.250000→50.000000% / 1.500000→0.000000%
+
+══ randomized smoothing (MNIST-CNN): depth-independent certified L2 radius ══
+  σ	clean%	nat%	abst%	cert@.5	cert@1.0	cert@1.5	ACR
+  0.120000	98.938301	100.000000	0.000000	0.000000	0.000000	0.000000	0.321895
+  0.250000	98.818109	95.000000	0.000000	85.000000	0.000000	0.000000	0.609707
+  0.500000	98.006811	90.000000	0.000000	85.000000	70.000000	0.000000	1.046984
+
+per-image certified radii → runs/smooth_cnn_radii.csv (60 rows, all σ) — fine frontier curves + ACR
+Lipschitz-hypothesis probe → runs/smooth_cnn_lipschitz.csv (720 measurements): max ratio Δg·σ/‖δ‖ = 1.651726
+  ⇒ Φ⁻¹∘p_ĉ is empirically (1/σ)-Lipschitz: 717/720 measurements ≤ bound (violations>1.05: 3)
+done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —
+      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless).

@@ -35,6 +35,12 @@ opaque heInit (seed : USize) (n : USize) (scale : Float) : IO ByteArray
 opaque addGaussianTiled (base : @& ByteArray) (off d0 m : USize)
   (sigma : Float) (seed : USize) : IO ByteArray
 
+/-- Perturb one image `base[off .. off+d0)` by `r·u` for a uniformly-random unit vector `u`
+    (so `‖r·u‖₂ = r` exactly). Returns the `d0`-vector `x + r·u`. For the Lipschitz-hypothesis
+    probe: shift the input by a known L2 amount and watch `Φ⁻¹(P[f(x+η)=c])` respond. -/
+@[extern "lean_f32_perturb_unit"]
+opaque perturbUnit (base : @& ByteArray) (off d0 : USize) (r : Float) (seed : USize) : IO ByteArray
+
 /-- Concatenate multiple ByteArrays. Fast (memcpy per chunk). -/
 def concat (arrays : Array ByteArray) : ByteArray := Id.run do
   let mut out : ByteArray := .empty
