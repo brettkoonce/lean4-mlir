@@ -67,9 +67,19 @@ certificate is still a real theorem — it under-promises.
     radius **0.051**. At L2 ε=0.5: PGD 77.45% (upper) vs certified 0.00% (lower) — a huge gap.
   - Takeaway: the attack crushes it; the naive Lipschitz cert is **sound but very loose** (the
     spectral-norm product is large ⇒ tiny certified radius). The gap is the research.
-- Next: in-system `∇_x` kernel (reuse the proven input-VJP) → `Lipschitz f L` formalization (makes
-  the certificate a theorem — the part a general audience values on sight). To shrink the gap:
-  Lipschitz-margin training, or tighter-than-product spectral-norm composition.
+- **Phase-3 demo — DONE 2026-06-28: `mnist-linear-pgd` (verified net, real IREE pipeline).**
+  `LeanMlir/VerifiedTrain.lean` `attackPgd` + `genLinearPgdStep` (the PGD-step kernel: forward →
+  proven `dx=(softmax−onehot)·Wᵀ` input-VJP → L∞ sign-step → eps-ball project → [0,1] clip, all one
+  IREE kernel; host iterates). Invoked via the generic `forwardF32` FFI (`onehot`+`x0` in the
+  params blob, `nClasses:=d0`) — **no new FFI/C shim**. Attacks the ACTUAL verified net (vs the JAX
+  demo's throwaway). Result: clean **92.10%**; L∞ PGD ε=0.1 → 24.02%, ε=0.2 → 0.35%, **ε=0.3 → 0.00%**.
+  (Linear degrades more gracefully than the MLP at small ε — single small Lipschitz, smoother boundary
+  — but still collapses by ε=0.3.) Run: `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mnist-linear-pgd data`.
+  Gotcha: `VerifiedTrain.compileVmfb` shells `iree-compile` from PATH (not the `.venv` lookup
+  `Train.lean` uses) — put `.venv/bin` on PATH.
+- Next: add the certificate to the phase-3 driver (linear: a single `‖W‖₂` via power iteration);
+  climb to the MLP/CNN input-grad kernels; then the `Lipschitz f L` formalization (makes the
+  certificate a theorem). To shrink the PGD↔cert gap: Lipschitz-margin training / tighter composition.
 
 ## 6. References
 

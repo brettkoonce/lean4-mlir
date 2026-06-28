@@ -535,6 +535,128 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."
 
+/-- Phase-3 PGD-step kernel for the linear classifier (`planning/robustness.md`).
+    `forward → softmax-CE input gradient dx = (softmax(xW+b) − onehot)·Wᵀ` (the proven
+    linear input-VJP, `Proofs.mlpInputGrad`'s 1-layer case) → L∞ sign-step → project to the
+    `eps`-ball around `x0` → clip to [0,1]. Returns the advanced adversarial input `x_adv`.
+    `eps`/`alpha` baked as constants (recompiled per sweep point). Invoked via the generic
+    `forwardF32` FFI with `onehot`+`x0` in the params blob and `nClasses := d0` (output size) —
+    no new FFI/C shim. The whole PGD step runs on the GPU; the host just iterates. -/
+private def genLinearPgdStep (bs d0 d1 : Nat) (eps alpha : Float) : String :=
+  let bxd0 := s!"tensor<{bs}x{d0}xf32>"
+  let bxd1 := s!"tensor<{bs}x{d1}xf32>"
+  let wty  := s!"tensor<{d0}x{d1}xf32>"
+  let bty  := s!"tensor<{d1}xf32>"
+  let rty  := s!"tensor<{bs}xf32>"
+  "module @m {\n" ++
+  s!"  func.func @linear_pgd_step(%x: {bxd0}, %W0: {wty}, %b0: {bty}, %onehot: {bxd1}, %x0: {bxd0}) -> {bxd0} " ++ "{\n" ++
+  "    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+  "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+  s!"    %alpha = stablehlo.constant dense<{alpha}> : tensor<f32>\n" ++
+  s!"    %eps = stablehlo.constant dense<{eps}> : tensor<f32>\n" ++
+  s!"    %mm = stablehlo.dot_general %x, %W0, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({bxd0}, {wty}) -> {bxd1}\n" ++
+  s!"    %bb = stablehlo.broadcast_in_dim %b0, dims = [1] : ({bty}) -> {bxd1}\n" ++
+  s!"    %logits = stablehlo.add %mm, %bb : {bxd1}\n" ++
+  s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
+  s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {bxd1}\n" ++
+  s!"    %shift = stablehlo.subtract %logits, %rmaxb : {bxd1}\n" ++
+  s!"    %exp = stablehlo.exponential %shift : {bxd1}\n" ++
+  s!"    %ssum = stablehlo.reduce(%exp init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
+  s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {bxd1}\n" ++
+  s!"    %softmax = stablehlo.divide %exp, %ssumb : {bxd1}\n" ++
+  s!"    %g = stablehlo.subtract %softmax, %onehot : {bxd1}\n" ++
+  s!"    %dx = stablehlo.dot_general %g, %W0, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxd1}, {wty}) -> {bxd0}\n" ++
+  s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
+  s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+  s!"    %step = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
+  s!"    %xn = stablehlo.add %x, %step : {bxd0}\n" ++
+  s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+  s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
+  s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
+  s!"    %c1 = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
+  s!"    %c2 = stablehlo.minimum %c1, %hi : {bxd0}\n" ++
+  s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+  s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+  s!"    %c3 = stablehlo.maximum %c2, %zerob : {bxd0}\n" ++
+  s!"    %c4 = stablehlo.minimum %c3, %oneb : {bxd0}\n" ++
+  s!"    return %c4 : {bxd0}\n" ++
+  "  }\n}\n"
+
+/-- Build a one-hot `[bs, d1]` f32 batch from int32-LE labels (1.0 = bytes 00 00 80 3F). -/
+private def oneHotBatch (labels : ByteArray) (start bs d1 : Nat) : IO ByteArray := do
+  let mut oh ← F32.const (bs * d1).toUSize 0.0
+  for j in [0:bs] do
+    let lbl := (labels.get! (4 * (start + j))).toNat
+    let fi := j * d1 + lbl
+    oh := (((oh.set! (4*fi) 0).set! (4*fi+1) 0).set! (4*fi+2) 0x80).set! (4*fi+3) 0x3F
+  return oh
+
+/-- **Phase-3 PGD adversarial attack** on the verified linear classifier
+    (`planning/robustness.md`). Trains via the proof-rendered train step, then attacks
+    through the real IREE pipeline: each PGD step's input gradient is computed by the
+    `genLinearPgdStep` StableHLO kernel (the proven `dx = (softmax−onehot)·Wᵀ` VJP) on the
+    GPU. Reports clean vs L∞-PGD adversarial accuracy over an eps sweep. -/
+def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do
+  let bs := cfg.batchSize
+  let d0 := net.d0
+  let d1 := net.nClasses
+  IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → IREE → GPU)"
+  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
+  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
+  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  let tsSess  ← IreeSession.create tsVmfb
+  let fwdSess ← IreeSession.create fwdVmfb
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net.data d0 dataDir
+  let nb  := nTrain / bs
+  let nbt := nEval / bs
+  let shapes := net.shapesBA
+  let xShape := net.xShape bs
+  let tsFn  := s!"m.{net.slug}_train_step"
+  let fwdFn := s!"m.{net.slug}_fwd"
+  let mut W0 ← F32.const (d0 * d1).toUSize 0.0
+  let mut b0 ← F32.const d1.toUSize 0.0
+  IO.println s!"  training {net.name} ({cfg.epochs} epochs, bs {bs}) ..."
+  for _ in [0:cfg.epochs] do
+    for bi in [0:nb] do
+      let xb := F32.sliceImages trainImg (bi * bs) bs d0
+      let yb := F32.sliceLabels trainLbl (bi * bs) bs
+      let out ← IreeSession.linearTrainStepV tsSess tsFn xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize
+      W0 := out.extract 0 (d0 * d1 * 4)
+      b0 := out.extract (d0 * d1 * 4) ((d0 * d1 + d1) * 4)
+  -- clean accuracy
+  let mut clean := 0
+  for bi in [0:nbt] do
+    let xb := F32.sliceImages evalImg (bi * bs) bs d0
+    let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes xb xShape bs.toUSize d1.toUSize
+    for j in [0:bs] do
+      if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+        clean := clean + 1
+  IO.println s!"clean test acc = {clean}/{nbt*bs} = {clean.toFloat/(nbt*bs).toFloat*100.0}%"
+  -- L∞ PGD sweep
+  let K := 40
+  for eps in ([0.1, 0.2, 0.3] : List Float) do
+    let alpha := 2.5 * eps / K.toFloat
+    IO.FS.writeFile ".lake/build/linear_pgd_step.mlir" (genLinearPgdStep bs d0 d1 eps alpha)
+    compileVmfb ".lake/build/linear_pgd_step.mlir" ".lake/build/linear_pgd_step.vmfb"
+    let pgdSess ← IreeSession.create ".lake/build/linear_pgd_step.vmfb"
+    let pgdShapes := packShapes #[#[d0, d1], #[d1], #[bs, d1], #[bs, d0]]
+    let mut correct := 0
+    for bi in [0:nbt] do
+      let x0 := F32.sliceImages evalImg (bi * bs) bs d0
+      let oh ← oneHotBatch evalLbl (bi * bs) bs d1
+      let pgdParams := F32.concat #[W0, b0, oh, x0]
+      let mut x := x0
+      for _ in [0:K] do
+        x ← IreeSession.forwardF32 pgdSess "m.linear_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes x xShape bs.toUSize d1.toUSize
+      for j in [0:bs] do
+        if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          correct := correct + 1
+    IO.println s!"L∞ PGD eps={eps}: adv acc = {correct}/{nbt*bs} = {correct.toFloat/(nbt*bs).toFloat*100.0}%"
+  IO.println "done (phase-3 PGD: gradient computed by the proven input-VJP kernel via IREE)."
+
 /-- **fp8 (E4M3) Lean trainer** — the low-precision sibling of `trainLinear`.
 
     Keeps **fp32 master weights** and, each step, projects the weights

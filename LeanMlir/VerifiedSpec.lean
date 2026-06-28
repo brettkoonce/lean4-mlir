@@ -166,4 +166,8 @@ def train (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO U
 def trainLinear (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   s.toNet.trainLinear cfg dataDir
 
+/-- Phase-3 PGD adversarial attack (Chapter 1 linear); see `VerifiedNet.attackPgd`. -/
+def attackPgd (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
+  s.toNet.attackPgd cfg dataDir
+
 end VerifiedNetSpec
