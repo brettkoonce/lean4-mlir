@@ -1,0 +1,32 @@
+Phase-3 PGD attack on MNIST-CNN (verified codegen → IREE → GPU)
+  iree-compile verified_mlir/cnn_train_step.mlir
+  iree-compile verified_mlir/cnn_fwd.mlir
+  training MNIST-CNN (10 epochs, bs 128) ...
+    epoch 1/10 done
+    epoch 2/10 done
+    epoch 3/10 done
+    epoch 4/10 done
+    epoch 5/10 done
+    epoch 6/10 done
+    epoch 7/10 done
+    epoch 8/10 done
+    epoch 9/10 done
+    epoch 10/10 done
+clean test acc = 9883/9984 = 98.988381%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+L∞ PGD eps=0.100000: adv acc = 57.752404%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+L∞ PGD eps=0.200000: adv acc = 0.280449%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+L∞ PGD eps=0.300000: adv acc = 0.000000%
+
+layer norms: conv1→32 Σtap‖·‖₂=26.299738  conv32→32 Σtap‖·‖₂=9.531868  dense6272→512 ‖·‖₂=2.205885  dense512→512 ‖·‖₂=2.844712  dense512→10 ‖·‖₂=2.031884  
+  →  global L = 3196.314330  (PRODUCT over conv+dense layers — astronomically loose)
+certified-robust acc (L2): ε=0.5 → 0.000000%, ε=1.0 → 0.000000%, ε=1.5 → 0.000000%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+L2 PGD eps=0.500000: adv acc = 95.823317%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+L2 PGD eps=1.000000: adv acc = 81.199920%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+L2 PGD eps=1.500000: adv acc = 46.193910%
+done (phase-3 CNN PGD: input gradient = the proven conv/maxpool input-VJP via IREE).

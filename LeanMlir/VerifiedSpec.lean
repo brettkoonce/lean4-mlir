@@ -174,4 +174,8 @@ def attackPgd (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : 
 def attackPgdMlp (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   s.toNet.attackPgdMlp cfg dataDir
 
+/-- Phase-3 PGD attack on the CNN (Chapter 3, the conv rung); see `VerifiedNet.attackPgdCnn`. -/
+def attackPgdCnn (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
+  s.toNet.attackPgdCnn cfg dataDir
+
 end VerifiedNetSpec

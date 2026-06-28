@@ -789,6 +789,12 @@ lean_exe «mnist-mlp-pgd» where
   moreLinkArgs := ireeLink
   moreLinkArgs := ireeLink
 
+-- Phase-3 PGD attack on the verified CNN (planning/robustness_ladder.md, the conv rung):
+-- input gradient = the proven conv/maxpool input-VJP; certificate = the conv-aware product.
+lean_exe «mnist-cnn-pgd» where
+  root := `apps.mnist.MainMnistCnnPgd
+  moreLinkArgs := ireeLink
+
 -- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
 -- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
 -- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).

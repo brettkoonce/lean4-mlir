@@ -1,0 +1,94 @@
+# Planning — Robustness ladder: MNIST-CNN → CIFAR → Imagenette?
+
+Scoping how far to chase the phase-3 robustness demo (`planning/robustness.md`: PGD attack via the
+proven input-VJP kernel + Lipschitz certificate) up the architecture ladder. Done so far:
+**linear** (exact cert, certifies 53% @ L2 0.5) and **MLP** (product cert, vacuous 0%). The key
+realization that shapes everything below: **there are TWO ladders, and they diverge.**
+
+## 0. TL;DR — the two ladders diverge
+
+- **The ATTACK ladder scales** (mechanically). PGD just needs `∇_x loss`, which is the proven
+  whole-net backward your codegen already computes — thread it to `dx`, emit a kernel, iterate.
+  MNIST-CNN → CIFAR → Imagenette are all *possible*; cost (kernel size, compile time, PGD wall-clock)
+  is the only thing that grows.
+- **The naive-Lipschitz CERT ladder does NOT scale.** `L = ∏ᵢ ‖Wᵢ‖₂` is meaningful at **1 layer**
+  (linear: exact, tight) and **already vacuous at 3** (MLP: L=39, certifies nothing). Past that the
+  product is astronomically loose **by construction** — deeper nets only reconfirm vacuity. So the
+  cert *story* is essentially complete at linear-vs-MLP.
+- **Verdict on Imagenette:** the **attack** is possible but expensive (1–2 MB kernels, ~10–15 min
+  iree-compile each, slow PGD) and only reconfirms "deep nets are fragile." The naive **cert** is
+  pointless there. The honest deep-net certificate is a *different paradigm* — **randomized
+  smoothing** (Cohen et al. 2019), which is architecture-agnostic, doesn't degrade with depth, and
+  is itself a clean runnable demo. That, not the Lipschitz product, is the real Imagenette robustness story.
+
+## 1. The attack ladder (reuse the proven backward → `dx`)
+
+Each rung = a `gen<Net>PgdStep` kernel (forward, saving the pre-acts the backward needs → the
+proven input-VJP → L∞/L2 step+project) + an `attackPgd<Net>` driver (train on the proof-rendered
+step, attack). Pattern established by `mnist-linear-pgd` / `mnist-mlp-pgd`.
+
+| rung | new kernel ops vs MLP | cert (per-layer norm) | effort | notes |
+|---|---|---|---|---|
+| **MNIST-CNN** ✅ **DONE 2026-06-28** (`mnist-cnn-pgd`) | conv input-VJP (transpose-`o,i`+spatial-`reverse` kernel); **maxpool-back** (`select_and_scatter`); reshape glue — all mirrored from `cnn_train_step.mlir` + the final conv1 input-VJP it omits | conv-aware **product**: `specNormConvTapSum` (sound `Σ_tap‖W[:,:,ky,kx]‖₂`) × `specNormW` denses → **L = 3196** | **medium** (done) | clean **99.0%**, L∞ ε=0.3 → **0.0%** (collapse), cert 0% everywhere (vacuous). Depth-cliff now visual: linear L=5.3 → mlp L=39 → cnn L=3196. `runs/pgd_cnn_phase3.log` |
+| **CIFAR** (cifar / cifar-bn) | + **convBn-back** (eval BN = fixed affine `a·x+b`, folds into the conv for both fwd and Lipschitz); 3-channel, 32×32, more conv layers | conv norms × BN scale `γ/√(σ²+ε)`, product | **medium+** | BN folding is the only real new bookkeeping. `cifar_train_step.mlir` has the backward |
+| **Imagenette** (r34/mnv2/enet/convnext/vit) | the **whole-net backward** → `dx`; reuse the proven `*_grad_floatBridges` machinery | product over ~50–100 layers ⇒ **astronomically vacuous** | **high (cost, not novelty)** | kernels 1–2 MB, iree-compile ~10–15 min each, PGD slow but runnable. Confirms fragility; cert meaningless |
+
+**The attack is a "yes" all the way up** — it's the same proven-VJP-kernel recipe, just bigger. The
+question is only whether the wall-clock is worth it past CIFAR (it mostly isn't — Imagenette PGD
+tells you nothing the MLP didn't).
+
+## 2. The certificate reality (why the naive ladder stops)
+
+`Lip(f) ≤ ∏ᵢ ‖Wᵢ‖₂` (ReLU is 1-Lipschitz). Per-layer spectral norms sit around 2–4 after training,
+so the product blows up geometrically: linear `L=5.3` (tight, exact), MLP `L=39` (vacuous),
+a ~10-layer CNN `L~10³`, r34 `~10²⁰⁺`. Certified radius `= margin/(√2·L) → 0`. **Even *exact*
+per-layer conv norms (FFT) don't help — the looseness is the PRODUCT, not the per-layer estimate.**
+So:
+- The naive-Lipschitz cert **demo is done** at linear-vs-MLP. CNN/CIFAR add a vacuous-with-conv
+  data point (worth one rung to make the depth-cliff visual), but nothing past that.
+- The thing to **formalize** is still the single, honest statement: `Lipschitz f L` + per-layer
+  spectral-norm composition ⇒ a *sound* (if loose) certified radius — a real theorem, the
+  verification payoff. Do it at the linear/MLP scale where it's checkable.
+
+## 3. The real deep-net certificate: randomized smoothing (the Imagenette answer)
+
+For nets past ~3 layers, the scalable certificate is **randomized smoothing** (Cohen, Rosenfeld,
+Kolter 2019): define the smoothed classifier `ĝ(x) = argmax_c P[f(x+η)=c]`, `η ~ N(0,σ²I)`; then
+`ĝ` is **certifiably robust** in L2 with radius `σ·Φ⁻¹(p_top)`, where `p_top` is the top class's
+probability under noise. Properties that make it the Imagenette answer:
+- **Architecture-agnostic, depth-independent** — no per-layer Lipschitz, no product. Works on r34/vit
+  unchanged.
+- **It's just forward passes** — a Monte-Carlo estimate of `p_top` over N noisy samples; reuses your
+  existing forward kernels, no new backward, no new codegen. A *cheap* demo (no input-VJP kernel).
+- **Honest cost**: the radius shrinks with `σ` vs accuracy (the noise–robustness trade-off), and the
+  guarantee is high-probability (a confidence parameter), not deterministic. Still a real certificate.
+- Alternative for trained-for-it nets: **IBP / interval bound propagation** (deterministic, but needs
+  Lipschitz/IBP-aware training to be non-vacuous).
+
+So the deep-net robustness demo isn't "bigger Lipschitz product" — it's a **randomized-smoothing**
+driver (sample noise, forward, count, Clopper–Pearson lower bound on `p_top`, certified radius). That
+would be a genuinely new, scalable result on the Imagenette verified nets, where the Lipschitz cert is
+hopeless.
+
+## 4. Recommendation / sequencing
+
+1. ✅ **MNIST-CNN** (DONE 2026-06-28, `mnist-cnn-pgd`): exercised the conv/maxpool input-VJP kernel
+   (the codegen milestone — `select_and_scatter`-back + transpose/reverse conv VJP, all run on the
+   GPU through IREE), and the conv-aware cert made the depth-cliff visual (linear L=5.3 tight →
+   MLP L=39 vacuous → CNN L=3196 more vacuous). Built on `cnn_train_step.mlir`'s backward ops.
+2. **`Lipschitz f L` formalization** (the verification payoff, **do next**): a sound certified-radius theorem at
+   linear/MLP scale — turns the cert from a number into a proof. The honest "this is verified DL."
+3. **CIFAR**: optional; mostly BN-folding bookkeeping over the CNN.
+4. **Imagenette**: **don't** chase the Lipschitz cert (vacuous). The attack is a cheap-ish add if
+   you want the "deep verified nets are fragile" data point. The *certificate* there = a
+   **randomized-smoothing demo** (forward-only, scales) — the real next robustness direction, and
+   arguably more valuable than CNN/CIFAR Lipschitz.
+
+## 5. References / in-repo anchors
+
+- Madry et al. (PGD, 2017); Cohen, Rosenfeld, Kolter, *Certified Adversarial Robustness via
+  Randomized Smoothing* (2019); Gowal et al. (IBP, 2018); Sedghi, Gupta, Long, *The Singular Values
+  of Convolutional Layers* (2019, exact conv spectral norm); Tsuzuku et al. (Lipschitz-margin, 2018).
+- In-repo: `LeanMlir/VerifiedTrain.lean` (`attackPgd`/`attackPgdMlp`/`genLinearPgdStep`/`genMlpPgdStep`/
+  `specNormW` — the templates), `verified_mlir/cnn_train_step.mlir` (the CNN backward ops to mirror),
+  the proven `convBack`/`maxPoolBack`/`*_grad_floatBridges` (the deep-net input-VJPs), `planning/robustness.md`.

@@ -99,9 +99,37 @@ certificate is still a real theorem — it under-promises.
 
   More accurate ⇒ less robust; tight cert ⟺ tight Lipschitz (one layer) vs vacuous from the
   product-over-layers. The looseness to formalize-then-tighten is now concrete.
-- Next: CNN input-grad kernel (conv-transpose + maxpool-back); the `Lipschitz f L` formalization
-  (makes the certificate a theorem); Lipschitz-margin / spectral-norm training to shrink the gap;
-  tighter-than-product composition (the actual research lever).
+- **Phase-3 CNN — DONE 2026-06-28: `mnist-cnn-pgd` (the first conv rung,
+  `planning/robustness_ladder.md`).** `genCnnPgdStep` emits the full input-VJP to `dx` —
+  forward (saving every pre-act + the maxpool input) → softmax-CE seed → the proven backward,
+  mirroring `verified_mlir/cnn_train_step.mlir`: dense adjoints + ReLU masks, **maxpool-back**
+  (`select_and_scatter`, scatter the pooled cotangent to the argmax cells), and the two **conv
+  input-VJPs** (transpose-`o,i` + spatial-`reverse` of the kernel, same padded conv) — **plus the
+  final conv1 input-VJP the train step omits** (it only needs weight grads; the attack needs the
+  pixel gradient). Trained via the generic `mlpTrainStepV` FFI on `cnn_train_step` (10 packed
+  params); attack invoked through `forwardF32` (no new FFI). Conv-aware certificate:
+  `specNormConvTapSum` — a **sound** conv operator-norm bound `‖T‖₂ ≤ Σ_{ky,kx} ‖W[:,:,ky,kx]‖₂`
+  (each tap a `[out,in]` matrix; triangle inequality over norm-≤1 shifts) — times `specNormW` on
+  the three denses. Result (10ep): clean **98.99%**; L∞ PGD ε=0.1 → 57.8%, ε=0.2 → 0.28%,
+  **ε=0.3 → 0.00%** (catastrophic collapse at the Madry benchmark). Cert: conv1 Σtap=26.3 · conv2
+  Σtap=9.53 · dense 2.21·2.84·2.03 → **global L = 3196** ⇒ **certified acc 0% at every L2 radius**
+  (vacuous), vs L2 PGD ε=0.5 → 95.8%, ε=1.0 → 81.2%, ε=1.5 → 46.2%. **The depth-cliff, now with conv:**
+
+  | net | clean | L∞ ε=0.1 | L∞ ε=0.3 | global L | cert@L2 0.5 | L2 PGD 0.5 |
+  |---|---|---|---|---|---|---|
+  | linear | 92.1% | 24.0% | 0.0% | **5.29** (exact) | **53.3%** | 79.4% |
+  | mlp | 97.8% | 5.8% | 0.0% | **39.2** (3-layer product) | **0.0%** | 86.0% |
+  | cnn | 99.0% | 57.8% | **0.0%** | **3196** (conv-aware product) | **0.0%** | 95.8% |
+
+  linear-tight → MLP-vacuous → CNN-more-vacuous: even *exact* per-layer conv norms wouldn't help —
+  the looseness is the **product**, not the per-tap estimate. (The CNN's higher L∞ ε=0.1 number is
+  the smoother conv loss surface; it still collapses to exactly 0% by ε=0.3.) Run:
+  `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mnist-cnn-pgd data`
+  (`CNN_PGD_EPOCHS=1` for a quick smoke). Log: `runs/pgd_cnn_phase3.log`.
+- Next: the `Lipschitz f L` formalization (makes the certificate a theorem — the verification
+  payoff at linear/MLP scale); Lipschitz-margin / spectral-norm training to shrink the gap;
+  tighter-than-product composition (the actual research lever). CIFAR is the same recipe + BN
+  folding; Imagenette's real cert is randomized smoothing, not the Lipschitz product (vacuous).
 
 ## 6. References
 
