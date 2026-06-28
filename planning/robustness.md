@@ -85,9 +85,23 @@ certificate is still a real theorem — it under-promises.
   **meaningfully tight** here (vs the JAX MLP's vacuous ~0% from `L=185.6`, a product of 3 norms) —
   the Thread-4 thesis shown empirically: tight cert ⟺ tight Lipschitz (one layer); the
   product-over-layers looseness is the thing to formalize-then-tighten.
-- Next: climb to the MLP/CNN input-grad kernels (where the product bound goes loose); the
-  `Lipschitz f L` formalization (makes the certificate a theorem); Lipschitz-margin training to
-  shrink the gap.
+- **Phase-3 MLP — DONE 2026-06-28: `mnist-mlp-pgd` (784→512→512→10).** `genMlpPgdStep` emits the
+  proven `mlpInputGrad` VJP `dx=((g·W₂ᵀ⊙relu')·W₁ᵀ⊙relu')·W₀ᵀ` (ReLU masks via `compare GT`/`select`,
+  the codegen idiom); training via the generic `mlpTrainStepV` FFI on the proof-rendered SGD
+  `mlp_train_step` (6 weights in/out). Result: clean **97.8%**; L∞ PGD ε=0.1 → 5.8%, ε=0.2 → 0%.
+  Cert: `‖W₀‖·‖W₁‖·‖W₂‖ = 3.16·3.64·3.41 = 39.2` (product) ⇒ **certified acc 0% even at L2 ε=0.5**
+  (vacuous), vs L2 PGD 86%. **Linear vs MLP side-by-side (the Thread-4 thesis, empirical):**
+
+  | net | clean | L∞ ε=0.1 | global L | cert@L2 0.5 | PGD@L2 0.5 |
+  |---|---|---|---|---|---|
+  | linear | 92.1% | 24.0% | 5.29 (exact) | **53.3%** | 79.4% |
+  | mlp | 97.8% | 5.8% | 39.2 (product) | **0.0%** | 86.0% |
+
+  More accurate ⇒ less robust; tight cert ⟺ tight Lipschitz (one layer) vs vacuous from the
+  product-over-layers. The looseness to formalize-then-tighten is now concrete.
+- Next: CNN input-grad kernel (conv-transpose + maxpool-back); the `Lipschitz f L` formalization
+  (makes the certificate a theorem); Lipschitz-margin / spectral-norm training to shrink the gap;
+  tighter-than-product composition (the actual research lever).
 
 ## 6. References
 

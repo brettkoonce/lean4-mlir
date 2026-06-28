@@ -612,6 +612,15 @@ private def genLinearPgdStep (bs d0 d1 : Nat) (eps alpha : Float) (linf : Bool) 
   s!"    return %c4 : {bxd0}\n" ++
   "  }\n}\n"
 
+/-- Build a one-hot `[bs, d1]` f32 batch from int32-LE labels (1.0 = bytes 00 00 80 3F). -/
+private def oneHotBatch (labels : ByteArray) (start bs d1 : Nat) : IO ByteArray := do
+  let mut oh ← F32.const (bs * d1).toUSize 0.0
+  for j in [0:bs] do
+    let lbl := (labels.get! (4 * (start + j))).toNat
+    let fi := j * d1 + lbl
+    oh := (((oh.set! (4*fi) 0).set! (4*fi+1) 0).set! (4*fi+2) 0x80).set! (4*fi+3) 0x3F
+  return oh
+
 /-- Spectral norm `‖W‖₂` of `W : [d0,d1]` (row-major) by power iteration on the small
     `WᵀW : [d1,d1]` Gram matrix. For the linear net this IS the global Lipschitz constant
     of the logit map (`logits = xW+b`, Jacobian `Wᵀ`). Host-side, pure. -/
@@ -645,14 +654,206 @@ private def specNormW (W : ByteArray) (d0 d1 : Nat) : Float := Id.run do
   for i in [0:d1] do lam := lam + v[i]! * u[i]!   -- Rayleigh quotient (‖v‖=1)
   pure (Float.sqrt lam)
 
-/-- Build a one-hot `[bs, d1]` f32 batch from int32-LE labels (1.0 = bytes 00 00 80 3F). -/
-private def oneHotBatch (labels : ByteArray) (start bs d1 : Nat) : IO ByteArray := do
-  let mut oh ← F32.const (bs * d1).toUSize 0.0
-  for j in [0:bs] do
-    let lbl := (labels.get! (4 * (start + j))).toNat
-    let fi := j * d1 + lbl
-    oh := (((oh.set! (4*fi) 0).set! (4*fi+1) 0).set! (4*fi+2) 0x80).set! (4*fi+3) 0x3F
-  return oh
+/-- Phase-3 PGD-step kernel for the 2-hidden-layer MLP (`d0→h→h→d1`, ReLU). Forward
+    (saving the pre-activations `z0,z1`) → the proven `mlpInputGrad` VJP
+    `dx = ((g·W₂ᵀ ⊙ relu'(z₁))·W₁ᵀ ⊙ relu'(z₀))·W₀ᵀ` (ReLU masks via `compare GT`/`select`,
+    the codegen's idiom) → L∞/L2 step + projection. Returns `x_adv`. -/
+private def genMlpPgdStep (bs d0 h d1 : Nat) (eps alpha : Float) (linf : Bool) : String :=
+  let bxd0 := s!"tensor<{bs}x{d0}xf32>"
+  let bxh  := s!"tensor<{bs}x{h}xf32>"
+  let bxd1 := s!"tensor<{bs}x{d1}xf32>"
+  let bxhi := s!"tensor<{bs}x{h}xi1>"
+  let w0ty := s!"tensor<{d0}x{h}xf32>"
+  let w1ty := s!"tensor<{h}x{h}xf32>"
+  let w2ty := s!"tensor<{h}x{d1}xf32>"
+  let hbty := s!"tensor<{h}xf32>"
+  let d1bt := s!"tensor<{d1}xf32>"
+  let rty  := s!"tensor<{bs}xf32>"
+  let header :=
+    "module @m {\n" ++
+    s!"  func.func @mlp_pgd_step(%x: {bxd0}, %W0: {w0ty}, %b0: {hbty}, %W1: {w1ty}, %b1: {hbty}, %W2: {w2ty}, %b2: {d1bt}, %onehot: {bxd1}, %x0: {bxd0}) -> {bxd0} " ++ "{\n" ++
+    "    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+    "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+    s!"    %alpha = stablehlo.constant dense<{alpha}> : tensor<f32>\n" ++
+    s!"    %eps = stablehlo.constant dense<{eps}> : tensor<f32>\n" ++
+    s!"    %zh = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxh}\n" ++
+    -- forward (save preacts z0, z1)
+    s!"    %z0mm = stablehlo.dot_general %x, %W0, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({bxd0}, {w0ty}) -> {bxh}\n" ++
+    s!"    %b0b = stablehlo.broadcast_in_dim %b0, dims = [1] : ({hbty}) -> {bxh}\n" ++
+    s!"    %z0 = stablehlo.add %z0mm, %b0b : {bxh}\n" ++
+    s!"    %h0 = stablehlo.maximum %z0, %zh : {bxh}\n" ++
+    s!"    %z1mm = stablehlo.dot_general %h0, %W1, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({bxh}, {w1ty}) -> {bxh}\n" ++
+    s!"    %b1b = stablehlo.broadcast_in_dim %b1, dims = [1] : ({hbty}) -> {bxh}\n" ++
+    s!"    %z1 = stablehlo.add %z1mm, %b1b : {bxh}\n" ++
+    s!"    %h1 = stablehlo.maximum %z1, %zh : {bxh}\n" ++
+    s!"    %lgmm = stablehlo.dot_general %h1, %W2, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({bxh}, {w2ty}) -> {bxd1}\n" ++
+    s!"    %b2b = stablehlo.broadcast_in_dim %b2, dims = [1] : ({d1bt}) -> {bxd1}\n" ++
+    s!"    %logits = stablehlo.add %lgmm, %b2b : {bxd1}\n" ++
+    -- softmax-CE gradient g
+    s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
+    s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {bxd1}\n" ++
+    s!"    %shift = stablehlo.subtract %logits, %rmaxb : {bxd1}\n" ++
+    s!"    %expv = stablehlo.exponential %shift : {bxd1}\n" ++
+    s!"    %ssum = stablehlo.reduce(%expv init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
+    s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {bxd1}\n" ++
+    s!"    %softmax = stablehlo.divide %expv, %ssumb : {bxd1}\n" ++
+    s!"    %g = stablehlo.subtract %softmax, %onehot : {bxd1}\n" ++
+    -- backward: dx = ((g·W2ᵀ ⊙ relu'(z1))·W1ᵀ ⊙ relu'(z0))·W0ᵀ
+    s!"    %dh1 = stablehlo.dot_general %g, %W2, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxd1}, {w2ty}) -> {bxh}\n" ++
+    s!"    %rm1 = stablehlo.compare GT, %z1, %zh : ({bxh}, {bxh}) -> {bxhi}\n" ++
+    s!"    %dz1 = stablehlo.select %rm1, %dh1, %zh : {bxhi}, {bxh}\n" ++
+    s!"    %dh0 = stablehlo.dot_general %dz1, %W1, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxh}, {w1ty}) -> {bxh}\n" ++
+    s!"    %rm0 = stablehlo.compare GT, %z0, %zh : ({bxh}, {bxh}) -> {bxhi}\n" ++
+    s!"    %dz0 = stablehlo.select %rm0, %dh0, %zh : {bxhi}, {bxh}\n" ++
+    s!"    %dx = stablehlo.dot_general %dz0, %W0, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxh}, {w0ty}) -> {bxd0}\n" ++
+    s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+    s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+    s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n"
+  let step :=
+    if linf then
+      s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
+      s!"    %stp = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
+      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
+      s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+      s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
+      s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
+      s!"    %pj1 = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
+      s!"    %xp = stablehlo.minimum %pj1, %hi : {bxd0}\n"
+    else
+      s!"    %e12 = stablehlo.constant dense<1.0e-12> : tensor<f32>\n" ++
+      s!"    %e12r = stablehlo.broadcast_in_dim %e12, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %dx2 = stablehlo.multiply %dx, %dx : {bxd0}\n" ++
+      s!"    %dxs = stablehlo.reduce(%dx2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
+      s!"    %dxn = stablehlo.sqrt %dxs : {rty}\n" ++
+      s!"    %dxnp = stablehlo.add %dxn, %e12r : {rty}\n" ++
+      s!"    %dxnb = stablehlo.broadcast_in_dim %dxnp, dims = [0] : ({rty}) -> {bxd0}\n" ++
+      s!"    %gn = stablehlo.divide %dx, %dxnb : {bxd0}\n" ++
+      s!"    %stp = stablehlo.multiply %alphab, %gn : {bxd0}\n" ++
+      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
+      s!"    %delta = stablehlo.subtract %xn, %x0 : {bxd0}\n" ++
+      s!"    %dl2 = stablehlo.multiply %delta, %delta : {bxd0}\n" ++
+      s!"    %dls = stablehlo.reduce(%dl2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
+      s!"    %dln = stablehlo.sqrt %dls : {rty}\n" ++
+      s!"    %dlnp = stablehlo.add %dln, %e12r : {rty}\n" ++
+      s!"    %epsr = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %oner = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {rty}\n" ++
+      s!"    %ratio = stablehlo.divide %epsr, %dlnp : {rty}\n" ++
+      s!"    %fac = stablehlo.minimum %oner, %ratio : {rty}\n" ++
+      s!"    %facb = stablehlo.broadcast_in_dim %fac, dims = [0] : ({rty}) -> {bxd0}\n" ++
+      s!"    %dproj = stablehlo.multiply %delta, %facb : {bxd0}\n" ++
+      s!"    %xp = stablehlo.add %x0, %dproj : {bxd0}\n"
+  header ++ step ++
+  s!"    %clA = stablehlo.maximum %xp, %zerob : {bxd0}\n" ++
+  s!"    %clB = stablehlo.minimum %clA, %oneb : {bxd0}\n" ++
+  s!"    return %clB : {bxd0}\n" ++
+  "  }\n}\n"
+
+/-- **Phase-3 PGD attack on the verified MNIST MLP** (`planning/robustness.md`). Trains the
+    784→512→512→10 ReLU MLP on the proof-rendered SGD step, then attacks through IREE with the
+    proven `mlpInputGrad` VJP kernel. The Lipschitz certificate is the **product** of the three
+    layers' spectral norms — where the bound (and so the cert) goes loose. -/
+def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do
+  let bs := cfg.batchSize
+  let d0 := net.d0
+  let hN := 512
+  let d1 := net.nClasses
+  IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → IREE → GPU)"
+  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
+  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
+  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  let tsSess  ← IreeSession.create tsVmfb
+  let fwdSess ← IreeSession.create fwdVmfb
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net.data d0 dataDir
+  let nb  := nTrain / bs
+  let nbt := nEval / bs
+  let shapes := net.shapesBA
+  let xShape := net.xShape bs
+  let tsFn := s!"m.{net.slug}_train_step"
+  let fwdFn := s!"m.{net.slug}_fwd"
+  let nP := net.nParams
+  let mut parts : Array ByteArray := #[]
+  let mut seed := 1
+  for spec in net.specs do
+    parts := parts.push (← mkParam seed spec.1 spec.2)
+    seed := seed + 1
+  let mut theta := F32.concat parts
+  IO.println s!"  training {net.name} ({cfg.epochs} epochs, bs {bs}) ..."
+  for _ in [0:cfg.epochs] do
+    for bi in [0:nb] do
+      let xb := F32.sliceImages trainImg (bi * bs) bs d0
+      let yb := F32.sliceLabels trainLbl (bi * bs) bs
+      let out ← IreeSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+      theta := out.extract 0 (nP * 4)
+  -- split θ (func-arg order: W0 b0 W1 b1 W2 b2)
+  let W0 := theta.extract 0 (d0*hN*4)
+  let W1 := theta.extract ((d0*hN + hN)*4) ((d0*hN + hN + hN*hN)*4)
+  let W2 := theta.extract ((d0*hN + hN + hN*hN + hN)*4) ((d0*hN + hN + hN*hN + hN + hN*d1)*4)
+  let mut clean := 0
+  for bi in [0:nbt] do
+    let xb := F32.sliceImages evalImg (bi * bs) bs d0
+    let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+    for j in [0:bs] do
+      if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+        clean := clean + 1
+  IO.println s!"clean test acc = {clean}/{nbt*bs} = {clean.toFloat/(nbt*bs).toFloat*100.0}%"
+  let K := 40
+  let pgdShapes := packShapes #[#[d0,hN], #[hN], #[hN,hN], #[hN], #[hN,d1], #[d1], #[bs,d1], #[bs,d0]]
+  let runSweep := fun (linf : Bool) (epsList : List Float) => do
+    for eps in epsList do
+      let alpha := 2.5 * eps / K.toFloat
+      IO.FS.writeFile ".lake/build/mlp_pgd_step.mlir" (genMlpPgdStep bs d0 hN d1 eps alpha linf)
+      compileVmfb ".lake/build/mlp_pgd_step.mlir" ".lake/build/mlp_pgd_step.vmfb"
+      let pgdSess ← IreeSession.create ".lake/build/mlp_pgd_step.vmfb"
+      let mut correct := 0
+      for bi in [0:nbt] do
+        let x0 := F32.sliceImages evalImg (bi * bs) bs d0
+        let oh ← oneHotBatch evalLbl (bi * bs) bs d1
+        let pgdParams := F32.concat #[theta, oh, x0]
+        let mut x := x0
+        for _ in [0:K] do
+          x ← IreeSession.forwardF32 pgdSess "m.mlp_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+        let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
+        for j in [0:bs] do
+          if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+            correct := correct + 1
+      let lbl := if linf then "L∞" else "L2"
+      IO.println s!"{lbl} PGD eps={eps}: adv acc = {correct.toFloat/(nbt*bs).toFloat*100.0}%"
+  runSweep true [0.1, 0.2, 0.3]
+  -- certificate: product of the three layers' spectral norms (ReLU is 1-Lipschitz)
+  let L0 := specNormW W0 d0 hN
+  let L1 := specNormW W1 hN hN
+  let L2 := specNormW W2 hN d1
+  let L := L0 * L1 * L2
+  IO.println s!"\nspectral norms ‖W₀‖={L0}, ‖W₁‖={L1}, ‖W₂‖={L2}  →  global L = {L}  (PRODUCT over 3 layers — loose)"
+  let tot := (nbt * bs).toFloat
+  let mut cert05 := 0
+  let mut cert10 := 0
+  let mut cert15 := 0
+  for bi in [0:nbt] do
+    let xb := F32.sliceImages evalImg (bi * bs) bs d0
+    let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+    for j in [0:bs] do
+      let mut top := -1.0e30
+      let mut sec := -1.0e30
+      let mut topi := 0
+      for c in [0:d1] do
+        let v := F32.read logits (j * d1 + c).toUSize
+        if v > top then
+          sec := top
+          top := v
+          topi := c
+        else if v > sec then
+          sec := v
+      if topi == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+        let r := (top - sec) / (1.4142135623730951 * L)
+        if r ≥ 0.5 then cert05 := cert05 + 1
+        if r ≥ 1.0 then cert10 := cert10 + 1
+        if r ≥ 1.5 then cert15 := cert15 + 1
+  IO.println s!"certified-robust acc (L2): ε=0.5 → {cert05.toFloat/tot*100.0}%, ε=1.0 → {cert10.toFloat/tot*100.0}%, ε=1.5 → {cert15.toFloat/tot*100.0}%"
+  runSweep false [0.5, 1.0, 1.5]
+  IO.println "done (phase-3 MLP PGD: input gradient = the proven mlpInputGrad VJP via IREE)."
 
 /-- **Phase-3 PGD adversarial attack** on the verified linear classifier
     (`planning/robustness.md`). Trains via the proof-rendered train step, then attacks

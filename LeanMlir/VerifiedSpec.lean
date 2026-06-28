@@ -170,4 +170,8 @@ def trainLinear (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) 
 def attackPgd (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   s.toNet.attackPgd cfg dataDir
 
+/-- Phase-3 PGD attack on the MLP (Chapter 2); see `VerifiedNet.attackPgdMlp`. -/
+def attackPgdMlp (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
+  s.toNet.attackPgdMlp cfg dataDir
+
 end VerifiedNetSpec

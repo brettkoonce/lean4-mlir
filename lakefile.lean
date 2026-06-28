@@ -781,6 +781,12 @@ lean_exe «mnist-linear-verified» where
 lean_exe «mnist-linear-pgd» where
   root := `apps.mnist.MainMnistLinearPgd
   moreLinkArgs := ireeLink
+
+-- Phase-3 PGD attack on the verified MLP (planning/robustness.md): input gradient =
+-- the proven mlpInputGrad VJP; certificate = the loose product of layer spectral norms.
+lean_exe «mnist-mlp-pgd» where
+  root := `apps.mnist.MainMnistMlpPgd
+  moreLinkArgs := ireeLink
   moreLinkArgs := ireeLink
 
 -- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
