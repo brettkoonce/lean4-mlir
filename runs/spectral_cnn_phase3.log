@@ -1,0 +1,49 @@
+Spectral-norm-constrained PGD study on MNIST-CNN (verified codegen → IREE → GPU)
+  iree-compile verified_mlir/cnn_train_step.mlir
+  iree-compile verified_mlir/cnn_fwd.mlir
+
+── cap c = ∞ (none) ──
+  cv=26.299738 cv=9.531868 de=2.205885 de=2.844712 de=2.031884  →  L = 3196.314330
+  clean = 98.988381%   cert@L2 0.1/0.25/0.5 = 0.000000% / 0.000000% / 0.000000%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+  iree-compile .lake/build/cnn_pgd_step.mlir
+  L∞ PGD ε=0.1 = 57.752404%   L2 PGD ε=0.5 = 95.823317%
+
+── cap c = 2.000000 ──
+  cv=2.000000 cv=2.000000 de=2.048859 de=2.069265 de=2.010650  →  L = 34.097662
+  clean = 96.955128%   cert@L2 0.1/0.25/0.5 = 53.665865% / 0.000000% / 0.000000%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+  iree-compile .lake/build/cnn_pgd_step.mlir
+  L∞ PGD ε=0.1 = 53.475561%   L2 PGD ε=0.5 = 91.025641%
+
+── cap c = 1.500000 ──
+  cv=1.500000 cv=1.500000 de=1.503638 de=1.554188 de=1.532432  →  L = 8.057692
+  clean = 90.354567%   cert@L2 0.1/0.25/0.5 = 68.669872% / 17.347756% / 0.000000%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+  iree-compile .lake/build/cnn_pgd_step.mlir
+  L∞ PGD ε=0.1 = 70.472756%   L2 PGD ε=0.5 = 82.582131%
+
+── cap c = 1.200000 ──
+  cv=1.200000 cv=1.200000 de=1.201429 de=1.208037 de=1.245116  →  L = 2.602259
+  clean = 65.414663%   cert@L2 0.1/0.25/0.5 = 46.905048% / 21.254006% / 0.010016%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+  iree-compile .lake/build/cnn_pgd_step.mlir
+  L∞ PGD ε=0.1 = 47.175481%   L2 PGD ε=0.5 = 56.440304%
+
+── cap c = 1.000000 ──
+  cv=1.000000 cv=1.000000 de=1.000015 de=1.002786 de=1.007808  →  L = 1.010631
+  clean = 28.916266%   cert@L2 0.1/0.25/0.5 = 21.514423% / 12.980769% / 1.983173%
+  iree-compile .lake/build/cnn_pgd_step.mlir
+  iree-compile .lake/build/cnn_pgd_step.mlir
+  L∞ PGD ε=0.1 = 20.743189%   L2 PGD ε=0.5 = 24.429087%
+
+══ spectral-norm training (CNN): the cert ≤ TRUE ≤ PGD trade ══
+  cap c	clean%	global L	cert@L2 0.25	L2 PGD 0.5	L∞ PGD 0.1
+  ∞ (none)	98.988381	3196.314330	0.000000	95.823317	57.752404
+  2.000000	96.955128	34.097662	0.000000	91.025641	53.475561
+  1.500000	90.354567	8.057692	17.347756	82.582131	70.472756
+  1.200000	65.414663	2.602259	21.254006	56.440304	47.175481
+  1.000000	28.916266	1.010631	12.980769	24.429087	20.743189
+
+done (spectral-norm-constrained CNN training: the 5-layer product + loose conv tap-sum
+      make certifying the conv net harder than the MLP — tighter c, more clean cost).

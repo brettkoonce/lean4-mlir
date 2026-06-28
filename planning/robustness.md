@@ -162,10 +162,30 @@ certificate is still a real theorem — it under-promises.
   (cert falls to 27% as margins shrink faster than `L`, clean tanks to 64%) — there's an optimal `c`.
   Run: `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mnist-mlp-spectral data`
   (`SPECTRAL_EPOCHS=2` for a smoke).
+- **Spectral-norm training, CNN — DONE 2026-06-28: `mnist-cnn-spectral`.** `attackPgdSpectralCnn`
+  pushes the same projected-SGD lever to the conv net: `projectSpectral` now caps **both** the dense
+  `‖Wᵢ‖₂` and the **conv tap-sum bound** (`specNormConvTapSum`, the same quantity the CNN cert uses,
+  scaling the whole kernel) at `c`. Result (10ep, `runs/spectral_cnn_phase3.log`):
+
+  | cap c | clean% | global L | cert@L2 0.1 | cert@L2 0.25 | cert@L2 0.5 | L∞ PGD 0.1 |
+  |---|---|---|---|---|---|---|
+  | ∞ (none) | 98.99 | 3196 | 0.0% | 0.0% | 0.0% | 57.8 |
+  | 2.0 | **96.96** | 34.1 | **53.7%** | 0.0% | 0.0% | 53.5 |
+  | 1.5 | 90.35 | 8.06 | **68.7%** | 17.3% | 0.0% | 70.5 |
+  | 1.2 | 65.41 | 2.60 | 46.9% | 21.3% | 0.01% | 47.2 |
+  | 1.0 | 28.92 | 1.01 | 21.5% | 13.0% | 1.98% | 20.7 |
+
+  Baseline reproduces the verified CNN exactly (98.99%, L=3196). **The CNN certifies — but only at a
+  *smaller* radius than the MLP:** at c=2.0 the cert goes 0% → 53.7% **@ L2 ε=0.1** for −2% clean,
+  yet reaching cert@L2 0.5 needs collapsing to 29% clean (c=1.0). Why it's harder than the MLP: a
+  **5-layer** product (`L ≤ c⁵`) and the conv tap-sum is *loose* (by ≈√9/conv), so projecting onto
+  it over-penalizes the convolutions. This is the case where the **exact (Sedghi–Gupta–Long FFT)
+  conv spectral norm** would actually pay — the per-layer estimate, not just the product, is now the
+  bottleneck. Run: `… .lake/build/bin/mnist-cnn-spectral data` (`SPECTRAL_EPOCHS=2` for a smoke).
 - Next: tighter-than-product composition (the actual research lever — the formalization now makes
-  "tighten the bound" a concrete theorem-strengthening target); push spectral training to the CNN
-  (cap the conv tap-sum too). CIFAR is the same attack recipe + BN folding; Imagenette's real cert
-  is randomized smoothing, not the product (vacuous).
+  "tighten the bound" a concrete theorem-strengthening target), and the exact-FFT conv spectral norm
+  for the CNN (the per-layer bottleneck the spectral-CNN study exposed). CIFAR is the same attack
+  recipe + BN folding; Imagenette's real cert is randomized smoothing, not the product (vacuous).
 
 ## 6. References
 

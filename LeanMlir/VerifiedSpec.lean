@@ -183,4 +183,9 @@ def attackPgdSpectralMlp (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir :
     (caps : List Float) : IO Unit :=
   s.toNet.attackPgdSpectralMlp cfg dataDir caps
 
+/-- Spectral-norm-constrained CNN training study; see `VerifiedNet.attackPgdSpectralCnn`. -/
+def attackPgdSpectralCnn (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
+    (caps : List Float) : IO Unit :=
+  s.toNet.attackPgdSpectralCnn cfg dataDir caps
+
 end VerifiedNetSpec

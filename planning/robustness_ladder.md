@@ -87,10 +87,15 @@ hopeless.
    margin `m` ⇒ every `‖δ‖₂ < m/(√2·L)` keeps the argmax. The cert is now a *proof*, not a number.
    `LipschitzL2.comp` + `clm_lipschitzL2` prove the per-layer **product** `L = ∏‖Wᵢ‖₂` sound — and
    show why it's loose past one layer. The honest "this is verified DL."
-2b. ✅ **Spectral-norm training** (DONE 2026-06-28, `mnist-mlp-spectral`): the gap-shrinking lever —
-   projected SGD onto `‖Wᵢ‖₂ ≤ c` makes the formalized cert non-vacuous (cert@L2 0.5 `0% → 42%`).
-   Next research lever = tighter-than-product composition (the formalization makes it a concrete
-   theorem-strengthening target); or push the projection to the CNN (cap the conv tap-sum too).
+2b. ✅ **Spectral-norm training** (DONE 2026-06-28, `mnist-mlp-spectral` + `mnist-cnn-spectral`): the
+   gap-shrinking lever — projected SGD onto `‖Wᵢ‖₂ ≤ c` makes the formalized cert non-vacuous.
+   **MLP**: cert@L2 0.5 `0% → 42%` (c=1.5), or `0% → 24%` at 96% clean (c=2.0). **CNN**: certifies
+   only at a *smaller* radius — cert@L2 0.1 `0% → 54%` at 97% clean (c=2.0); reaching cert@L2 0.5
+   needs collapsing to 29% clean. The CNN is harder (5-layer product `L ≤ c⁵` + the *loose* conv
+   tap-sum over-penalizes convs when projected onto). Next research lever = tighter-than-product
+   composition (the formalization makes it a concrete theorem-strengthening target); and the **exact
+   (Sedghi–Gupta–Long FFT) conv spectral norm** — the spectral-CNN study showed the per-layer conv
+   *estimate* (not just the product) is now the CNN's bottleneck.
 3. **CIFAR**: optional; mostly BN-folding bookkeeping over the CNN.
 4. **Imagenette**: **don't** chase the Lipschitz cert (vacuous). The attack is a cheap-ish add if
    you want the "deep verified nets are fragile" data point. The *certificate* there = a

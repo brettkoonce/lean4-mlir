@@ -735,11 +735,13 @@ private def specNormMV (W : ByteArray) (d0 d1 : Nat) (iters : Nat := 15) : Float
     v := normalize w d1
   pure σ
 
-/-- **Spectral-norm projection** (projected SGD onto the spectral ball): rescale every dense
-    weight matrix `Wᵢ` with `‖Wᵢ‖₂ > c` down to `‖Wᵢ‖₂ = c` (`Wᵢ ← Wᵢ·(c/σ)`), leaving biases
-    and conv kernels untouched. Caps each layer's L2-Lipschitz constant at `c`, so the global
-    `L = ∏ᵢ ‖Wᵢ‖₂ ≤ cᵏ` — the lever that turns the (vacuous) product certificate non-vacuous.
-    `F32.scaleShift` does the rescale; `specNormMV` the cheap per-call norm. -/
+/-- **Spectral-norm projection** (projected SGD onto the spectral ball): rescale every weight
+    whose L2-Lipschitz bound exceeds `c` down to `c`, leaving biases untouched. Dense `[d0,d1]`:
+    cap the spectral norm `‖W‖₂` (`specNormMV`). Conv `[o,i,kh,kw]`: cap the **same** tap-sum
+    operator bound the CNN certificate uses (`specNormConvTapSum`, `‖T‖₂ ≤ Σ_tap‖W[:,:,ky,kx]‖₂`)
+    by scaling the whole kernel — so the projection and the cert control the identical quantity.
+    Caps each layer's Lipschitz constant at `c`, so the global `L = ∏ᵢ ≤ cᵏ` — the lever that
+    turns the (vacuous) product certificate non-vacuous. `F32.scaleShift` does the rescale. -/
 private def projectSpectral (theta : ByteArray) (specs : Array (Array Nat × Nat)) (c : Float)
     : IO ByteArray := do
   let mut parts : Array ByteArray := #[]
@@ -751,6 +753,9 @@ private def projectSpectral (theta : ByteArray) (specs : Array (Array Nat × Nat
     let slice' ← if dims.size == 2 then do
         let σ := specNormMV slice dims[0]! dims[1]!
         if σ > c then F32.scaleShift slice (c/σ) 0.0 else pure slice
+      else if dims.size == 4 then do
+        let s := specNormConvTapSum slice dims[0]! dims[1]! dims[2]! dims[3]!
+        if s > c then F32.scaleShift slice (c/s) 0.0 else pure slice
       else pure slice
     parts := parts.push slice'
     off := off + len
@@ -1339,6 +1344,125 @@ def VerifiedNet.attackPgdCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   IO.println s!"certified-robust acc (L2): ε=0.5 → {cert05.toFloat/tot*100.0}%, ε=1.0 → {cert10.toFloat/tot*100.0}%, ε=1.5 → {cert15.toFloat/tot*100.0}%"
   runSweep false [0.5, 1.0, 1.5]
   IO.println "done (phase-3 CNN PGD: input gradient = the proven conv/maxpool input-VJP via IREE)."
+
+/-- **Spectral-norm-constrained training of the verified MNIST CNN** (`planning/robustness_ladder.md`,
+    the gap-shrinking lever applied to the conv net). The CNN sibling of `attackPgdSpectralMlp`:
+    projected SGD onto the spectral ball — every `K` proof-rendered steps (and once at the end)
+    `projectSpectral` caps **both** the dense `‖Wᵢ‖₂` and the conv tap-sum bound at `c` — then the
+    `cert ≤ TRUE ≤ PGD` sandwich (PGD via `genCnnPgdStep`, cert = the conv-aware product). Harder
+    than the MLP: it's a **5-layer** product (`L ≤ c⁵`) and the conv tap-sum is a *loose* bound, so
+    projection over-penalizes the convs — the cert needs a tighter `c` (and pays more clean accuracy)
+    than the MLP did. The honest "depth + loose conv-norm ⇒ certifying the CNN is harder." -/
+def VerifiedNet.attackPgdSpectralCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
+    (caps : List Float) : IO Unit := do
+  let bs := cfg.batchSize
+  let d0 := net.d0
+  let d1 := net.nClasses
+  let projEvery := 20
+  IO.println s!"Spectral-norm-constrained PGD study on {net.name} (verified codegen → IREE → GPU)"
+  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
+  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
+  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  let tsSess  ← IreeSession.create tsVmfb
+  let fwdSess ← IreeSession.create fwdVmfb
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net.data d0 dataDir
+  let nb  := nTrain / bs
+  let nbt := nEval / bs
+  let shapes := net.shapesBA
+  let xShape := net.xShape bs
+  let tsFn  := s!"m.{net.slug}_train_step"
+  let fwdFn := s!"m.{net.slug}_fwd"
+  let K := 40
+  let pgdShapes := packShapes (net.paramShapes ++ #[#[bs, d1], #[bs, d0]])
+  let pgdAcc := fun (theta : ByteArray) (linf : Bool) (eps : Float) => do
+    let alpha := 2.5 * eps / K.toFloat
+    IO.FS.writeFile ".lake/build/cnn_pgd_step.mlir" (genCnnPgdStep bs eps alpha linf)
+    compileVmfb ".lake/build/cnn_pgd_step.mlir" ".lake/build/cnn_pgd_step.vmfb"
+    let pgdSess ← IreeSession.create ".lake/build/cnn_pgd_step.vmfb"
+    let mut correct := 0
+    for bi in [0:nbt] do
+      let x0 := F32.sliceImages evalImg (bi * bs) bs d0
+      let oh ← oneHotBatch evalLbl (bi * bs) bs d1
+      let pgdParams := F32.concat #[theta, oh, x0]
+      let mut x := x0
+      for _ in [0:K] do
+        x ← IreeSession.forwardF32 pgdSess "m.cnn_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
+      for j in [0:bs] do
+        if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          correct := correct + 1
+    pure (correct.toFloat / (nbt*bs).toFloat * 100.0)
+  let tot := (nbt * bs).toFloat
+  let mut rows : Array String := #[]
+  for cap in caps do
+    let capStr := if cap ≥ 1.0e8 then "∞ (none)" else toString cap
+    IO.println s!"\n── cap c = {capStr} ──"
+    let mut parts : Array ByteArray := #[]
+    let mut seed := 1
+    for spec in net.specs do
+      parts := parts.push (← mkParam seed spec.1 spec.2)
+      seed := seed + 1
+    let mut theta := F32.concat parts
+    let mut step := 0
+    for _ in [0:cfg.epochs] do
+      for bi in [0:nb] do
+        let xb := F32.sliceImages trainImg (bi * bs) bs d0
+        let yb := F32.sliceLabels trainLbl (bi * bs) bs
+        theta ← IreeSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+        step := step + 1
+        if cap < 1.0e8 && step % projEvery == 0 then
+          theta ← projectSpectral theta net.specs cap
+    if cap < 1.0e8 then theta ← projectSpectral theta net.specs cap
+    -- conv-aware certificate product (specNormConvTapSum convs × specNormW denses)
+    let mut L := 1.0
+    let mut off := 0
+    let mut msg := ""
+    for spec in net.specs do
+      let dims := spec.1
+      let len := dims.foldl (·*·) 1
+      let wslice := theta.extract (off*4) ((off+len)*4)
+      if dims.size == 4 then
+        let n := specNormConvTapSum wslice dims[0]! dims[1]! dims[2]! dims[3]!
+        L := L * n; msg := msg ++ s!"cv={n} "
+      else if dims.size == 2 then
+        let n := specNormW wslice dims[0]! dims[1]!
+        L := L * n; msg := msg ++ s!"de={n} "
+      off := off + len
+    let mut clean := 0
+    let mut cR1 := 0      -- certified @ L2 0.1
+    let mut cR2 := 0      -- certified @ L2 0.25  (the CNN's visible band — it certifies at small radii)
+    let mut cR3 := 0      -- certified @ L2 0.5
+    for bi in [0:nbt] do
+      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+      for j in [0:bs] do
+        let mut top := -1.0e30
+        let mut sec := -1.0e30
+        let mut topi := 0
+        for cidx in [0:d1] do
+          let v := F32.read logits (j * d1 + cidx).toUSize
+          if v > top then sec := top; top := v; topi := cidx
+          else if v > sec then sec := v
+        if topi == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          clean := clean + 1
+          let r := (top - sec) / (1.4142135623730951 * L)
+          if r ≥ 0.1 then cR1 := cR1 + 1
+          if r ≥ 0.25 then cR2 := cR2 + 1
+          if r ≥ 0.5 then cR3 := cR3 + 1
+    let cleanPct := clean.toFloat/tot*100.0
+    IO.println s!"  {msg} →  L = {L}"
+    IO.println s!"  clean = {cleanPct}%   cert@L2 0.1/0.25/0.5 = {cR1.toFloat/tot*100.0}% / {cR2.toFloat/tot*100.0}% / {cR3.toFloat/tot*100.0}%"
+    let pinf ← pgdAcc theta true 0.1
+    let pl2 ← pgdAcc theta false 0.5
+    IO.println s!"  L∞ PGD ε=0.1 = {pinf}%   L2 PGD ε=0.5 = {pl2}%"
+    (← IO.getStdout).flush
+    rows := rows.push s!"  {capStr}\t{cleanPct}\t{L}\t{cR2.toFloat/tot*100.0}\t{pl2}\t{pinf}"
+  IO.println "\n══ spectral-norm training (CNN): the cert ≤ TRUE ≤ PGD trade ══"
+  IO.println "  cap c\tclean%\tglobal L\tcert@L2 0.25\tL2 PGD 0.5\tL∞ PGD 0.1"
+  for row in rows do IO.println row
+  IO.println "\ndone (spectral-norm-constrained CNN training: the 5-layer product + loose conv tap-sum"
+  IO.println "      make certifying the conv net harder than the MLP — tighter c, more clean cost)."
 
 /-- **Phase-3 PGD adversarial attack** on the verified linear classifier
     (`planning/robustness.md`). Trains via the proof-rendered train step, then attacks
