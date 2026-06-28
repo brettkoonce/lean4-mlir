@@ -1,9 +1,10 @@
 Randomized-smoothing certificate on CIFAR-CNN (verified codegen → IREE → GPU, forward-only)
   iree-compile verified_mlir/cifar_train_step.mlir
   iree-compile verified_mlir/cifar_fwd.mlir
-  n0=128 (select)  n=1024 (estimate)  α=0.001000  certifying 500 test imgs (every 20th)
+  n0=128 (select)  n=10112 (estimate)  α=0.001000  certifying 200 test imgs (every 50th)
+  p_A ceiling = 0.999317 (= α^(1/n))  →  max certifiable radius = σ · 3.201786
 
-── σ = 0.250000 ──
+── σ = 0.250000  (radius ceiling at this n = 0.800447) ──
     epoch 1/12: clean acc = 41.085737%
     epoch 2/12: clean acc = 51.362179%
     epoch 3/12: clean acc = 53.956330%
@@ -17,15 +18,12 @@ Randomized-smoothing certificate on CIFAR-CNN (verified codegen → IREE → GPU
     epoch 11/12: clean acc = 56.800881%
     epoch 12/12: clean acc = 57.351763%
   noise-trained clean acc = 60.747196%
-    certified 100/500 ...
-    certified 200/500 ...
-    certified 300/500 ...
-    certified 400/500 ...
-    certified 500/500 ...
-  smoothed natural acc = 56.200000%   abstain = 16.200000%   ACR = 0.220879
-  certified-robust acc (L2): 0.250000→38.200000% / 0.500000→25.600000% / 0.750000→0.000000% / 1.000000→0.000000%
+    certified 100/200 ...
+    certified 200/200 ...
+  smoothed natural acc = 53.500000%   abstain = 15.000000%   ACR = 0.270617
+  certified-robust acc (L2): 0.250000→37.500000% / 0.500000→32.000000% / 0.750000→18.500000% / 1.000000→0.000000% / 1.250000→0.000000% / 1.500000→0.000000%
 
-── σ = 0.500000 ──
+── σ = 0.500000  (radius ceiling at this n = 1.600893) ──
     epoch 1/12: clean acc = 21.043670%
     epoch 2/12: clean acc = 39.443109%
     epoch 3/12: clean acc = 40.715144%
@@ -39,18 +37,15 @@ Randomized-smoothing certificate on CIFAR-CNN (verified codegen → IREE → GPU
     epoch 11/12: clean acc = 54.106571%
     epoch 12/12: clean acc = 54.056490%
   noise-trained clean acc = 54.537260%
-    certified 100/500 ...
-    certified 200/500 ...
-    certified 300/500 ...
-    certified 400/500 ...
-    certified 500/500 ...
-  smoothed natural acc = 53.200000%   abstain = 23.200000%   ACR = 0.305294
-  certified-robust acc (L2): 0.250000→36.800000% / 0.500000→27.200000% / 0.750000→20.400000% / 1.000000→11.800000%
+    certified 100/200 ...
+    certified 200/200 ...
+  smoothed natural acc = 55.000000%   abstain = 20.000000%   ACR = 0.402712
+  certified-robust acc (L2): 0.250000→41.500000% / 0.500000→32.500000% / 0.750000→26.000000% / 1.000000→18.500000% / 1.250000→11.500000% / 1.500000→8.000000%
 
 ══ randomized smoothing (CIFAR-CNN): depth-independent certified L2 radius ══
-  σ	clean%	nat%	abst%	cert@.25	cert@.5	cert@1.0	ACR
-  0.250000	60.747196	56.200000	16.200000	38.200000	25.600000	0.000000	0.220879
-  0.500000	54.537260	53.200000	23.200000	36.800000	27.200000	11.800000	0.305294
+  σ	clean%	nat%	abst%	cert@.5	cert@1.0	cert@1.5	ACR
+  0.250000	60.747196	53.500000	15.000000	32.000000	0.000000	0.000000	0.270617
+  0.500000	54.537260	55.000000	20.000000	32.500000	18.500000	8.000000	0.402712
 
 done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —
       architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless).

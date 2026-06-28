@@ -2024,7 +2024,12 @@ private def clopperPearsonLower (k n : Nat) (alpha : Float) : Float := Id.run do
     host-side before the proof-rendered SGD step — the forward/backward graph is untouched), the
     Cohen recipe. Architecture-agnostic + depth-independent, so it certifies a *non-vacuous* radius
     on the very nets (CIFAR, deep) where `∏‖Wᵢ‖₂` is astronomically loose. Generic over any
-    `VerifiedNet` (fwd + train-step only). -/
+    `VerifiedNet` (fwd + train-step only).
+
+    `n` (`SMOOTH_N`, default 10000 — Cohen's large-`n` regime) is the estimation budget and the only
+    honest tightening lever: the per-point radius is capped at `σ·Φ⁻¹(α^(1/n))` (a unanimous vote
+    still only certifies `p_A ≤ α^(1/n)`), so larger `n` lifts the ceiling and tightens the CP bound
+    toward the true noise-probability — bigger certified radii at the same `1−α` guarantee. -/
 def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
     (sigmas : List Float) : IO Unit := do
   let bs := cfg.batchSize
@@ -2043,12 +2048,13 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   let shapes := net.shapesBA
   let tsFn  := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
-  -- knobs (env-overridable for cheap smokes)
+  -- knobs (env-overridable; defaults are Cohen's large-n estimation regime — drop SMOOTH_N /
+  -- SMOOTH_MAXCERT for a cheap smoke).
   let n0      := ((← IO.getEnv "SMOOTH_N0").bind (·.toNat?)).getD 100
-  let nSamp   := ((← IO.getEnv "SMOOTH_N").bind (·.toNat?)).getD 1000
-  let maxCert := ((← IO.getEnv "SMOOTH_MAXCERT").bind (·.toNat?)).getD 500
+  let nSamp   := ((← IO.getEnv "SMOOTH_N").bind (·.toNat?)).getD 10000
+  let maxCert := ((← IO.getEnv "SMOOTH_MAXCERT").bind (·.toNat?)).getD 200
   let alpha   := 0.001
-  let radii : Array Float := #[0.25, 0.5, 0.75, 1.0]
+  let radii : Array Float := #[0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
   let nCert   := min maxCert nEval
   let stride  := max 1 (nEval / nCert)
   -- the rendered fwd has a STATIC batch = bs, so SampleUnderNoise feeds whole `bs`-batches;
@@ -2057,10 +2063,16 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   let nBatches  := max 1 ((nSamp + bs - 1) / bs)
   let n0Eff := n0Batches * bs
   let nEff  := nBatches * bs
+  -- the n→radius ceiling: even a UNANIMOUS vote gives only p_A ≤ α^(1/n) (the CP bound at n_A=n),
+  -- so EVERY point's radius is capped at σ·Φ⁻¹(α^(1/n)) regardless of how robust it truly is.
+  -- Larger n ⇒ p_A closer to the true noise-prob ⇒ higher ceiling — the only honest tightening
+  -- lever (shrinking α would just weaken the 1−α guarantee, not tighten the estimate).
+  let pMax := clopperPearsonLower nEff nEff alpha
   IO.println s!"  n0={n0Eff} (select)  n={nEff} (estimate)  α={alpha}  certifying {nCert} test imgs (every {stride}th)"
+  IO.println s!"  p_A ceiling = {pMax} (= α^(1/n))  →  max certifiable radius = σ · {invNormCdf pMax}"
   let mut rows : Array String := #[]
   for sigma in sigmas do
-    IO.println s!"\n── σ = {sigma} ──"
+    IO.println s!"\n── σ = {sigma}  (radius ceiling at this n = {sigma * invNormCdf pMax}) ──"
     -- (1) train a Gaussian-noise-augmented base classifier (the Cohen recipe): every batch is
     --     corrupted with N(0,σ²I) host-side before the proof-rendered SGD step — graph unchanged.
     --     Best-θ checkpoint on clean eval acc.
@@ -2136,9 +2148,9 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
     IO.println s!"  smoothed natural acc = {pct natCorrect}%   abstain = {pct abstain}%   ACR = {acr/tot}"
     IO.println s!"  certified-robust acc (L2): {certStr}"
     (← IO.getStdout).flush
-    rows := rows.push s!"  {sigma}\t{bestAcc}\t{pct natCorrect}\t{pct abstain}\t{pct certCnt[0]!}\t{pct certCnt[1]!}\t{pct certCnt[3]!}\t{acr/tot}"
+    rows := rows.push s!"  {sigma}\t{bestAcc}\t{pct natCorrect}\t{pct abstain}\t{pct certCnt[1]!}\t{pct certCnt[3]!}\t{pct certCnt[5]!}\t{acr/tot}"
   IO.println s!"\n══ randomized smoothing ({net.name}): depth-independent certified L2 radius ══"
-  IO.println "  σ\tclean%\tnat%\tabst%\tcert@.25\tcert@.5\tcert@1.0\tACR"
+  IO.println "  σ\tclean%\tnat%\tabst%\tcert@.5\tcert@1.0\tcert@1.5\tACR"
   for row in rows do IO.println row
   IO.println "\ndone (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —"
   IO.println "      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless)."

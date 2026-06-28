@@ -105,18 +105,26 @@ hopeless.
 3b. ✅ **Randomized smoothing** (DONE 2026-06-28, `mnist-mlp-smooth` / `mnist-cnn-smooth` /
    `cifar-smooth`): the §3 answer, built. **Forward-only** Monte-Carlo over the proof-rendered
    `<slug>_fwd` (no kernel, no input-VJP): noise-augment training (host-side `N(0,σ²I)`, graph
-   untouched), sample `n=1024` noisy copies, count argmax votes, Clopper–Pearson lower-bound `p_A`,
+   untouched), sample `n` noisy copies, count argmax votes, Clopper–Pearson lower-bound `p_A`,
    radius `σ·Φ⁻¹(p_A)`. The cert stats are hand-rolled pure-`Float` and **validated against
    scipy/`beta.ppf`** (the same procedure Cohen uses). The depth-independence is shown end-to-end —
-   the SAME driver certifies a *non-vacuous* L2 radius on every rung where `∏‖Wᵢ‖₂` was vacuous:
-   | net | spectral-product cert | smoothing cert @ σ=0.5 (cert@0.25/0.5/1.0) | ACR |
+   the SAME driver certifies a *non-vacuous* L2 radius on every rung where `∏‖Wᵢ‖₂` was vacuous
+   (numbers below at `n=10112`, σ=0.5, 200 certify images):
+   | net | spectral-product cert | smoothing cert @ σ=0.5 (cert@0.5/1.0/1.5) | ACR (σ=.25 / .5) |
    |---|---|---|---|
-   | MNIST-MLP | 0% (L=39) | 91.2% / 85.8% / 61.4% | 0.95 |
-   | MNIST-CNN | 0% (L=3196) | 94.6% / 91.8% / 74.4% | 1.05 |
-   | CIFAR-CNN | 0% (L=942K) | 36.8% / 27.2% / 11.8% | 0.31 |
+   | MNIST-MLP | 0% (L=39) | 87.0% / 67.5% / 31.0% | 0.70 / 1.13 |
+   | MNIST-CNN | 0% (L=3196) | 93.0% / 78.0% / 48.5% | 0.75 / 1.28 |
+   | CIFAR-CNN | 0% (L=942K) | 32.5% / 18.5% / 8.0% | 0.27 / 0.40 |
    The σ knob is the honest trade (bigger σ ⇒ bigger radius, lower clean acc); the guarantee is
    high-probability (`α=0.001`), not deterministic. Radii are in normalized-input L2. Logs:
-   `runs/smooth_{mlp,cnn,cifar}.log`. **The radius is also a theorem** (DONE 2026-06-28,
+   `runs/smooth_{mlp,cnn,cifar}.log` (run across both gfx1100 GPUs via `run_smooth_2gpu.sh`,
+   `HIP_VISIBLE_DEVICES` per stream — ~35 min).
+   **Tightened to Cohen's large-`n` regime** (2026-06-28): `n` is the only honest tightening lever —
+   even a unanimous vote certifies only `p_A ≤ α^(1/n)`, so the per-point radius is capped at
+   `σ·Φ⁻¹(α^(1/n))`. Going `n=1024 → 10112` lifts that ceiling `2.47σ → 3.20σ`, raises ACR ~25–30%
+   across the board (e.g. CNN σ=0.5 `1.05 → 1.28`), and makes cert@1.5 — *structurally impossible* at
+   `n=1024` (ceiling 1.235 < 1.5) — non-zero (CNN 48.5%, MLP 31%, CIFAR 8%). The driver prints the
+   `n→radius` ceiling so the cap is explicit. **The radius is also a theorem** (DONE 2026-06-28,
    `LeanMlir/Proofs/LipschitzCert.lean`, 3-axiom clean): `smoothing_certified_radius` — the same
    Lipschitz-margin argument as `lipschitz_margin_certified_radius`, but on the per-class **probit
    score fields** `gᶜ(x)=Φ⁻¹(P[f(x+η)=c])`, each `(1/σ)`-Lipschitz (the Cohen/Salman Gaussian content

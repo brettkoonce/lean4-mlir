@@ -1,0 +1,6 @@
+GPU1 cnn start Sun Jun 28 04:31:32 PM UTC 2026
+GPU0 cifar start Sun Jun 28 04:31:32 PM UTC 2026
+GPU0 cifar done Sun Jun 28 04:58:18 PM UTC 2026
+GPU1 cnn done; mlp start Sun Jun 28 04:58:57 PM UTC 2026
+GPU1 mlp done Sun Jun 28 05:06:32 PM UTC 2026
+ALL DONE Sun Jun 28 05:06:32 PM UTC 2026

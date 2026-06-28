@@ -1,9 +1,10 @@
 Randomized-smoothing certificate on MNIST-CNN (verified codegen → IREE → GPU, forward-only)
   iree-compile verified_mlir/cnn_train_step.mlir
   iree-compile verified_mlir/cnn_fwd.mlir
-  n0=128 (select)  n=1024 (estimate)  α=0.001000  certifying 500 test imgs (every 20th)
+  n0=128 (select)  n=10112 (estimate)  α=0.001000  certifying 200 test imgs (every 50th)
+  p_A ceiling = 0.999317 (= α^(1/n))  →  max certifiable radius = σ · 3.201786
 
-── σ = 0.120000 ──
+── σ = 0.120000  (radius ceiling at this n = 0.384214) ──
     epoch 1/10: clean acc = 97.756410%
     epoch 2/10: clean acc = 98.297276%
     epoch 3/10: clean acc = 98.377404%
@@ -15,15 +16,12 @@ Randomized-smoothing certificate on MNIST-CNN (verified codegen → IREE → GPU
     epoch 9/10: clean acc = 98.938301%
     epoch 10/10: clean acc = 98.898237%
   noise-trained clean acc = 98.938301%
-    certified 100/500 ...
-    certified 200/500 ...
-    certified 300/500 ...
-    certified 400/500 ...
-    certified 500/500 ...
-  smoothed natural acc = 99.000000%   abstain = 0.000000%   ACR = 0.288996
-  certified-robust acc (L2): 0.250000→96.400000% / 0.500000→0.000000% / 0.750000→0.000000% / 1.000000→0.000000%
+    certified 100/200 ...
+    certified 200/200 ...
+  smoothed natural acc = 100.000000%   abstain = 0.000000%   ACR = 0.379071
+  certified-robust acc (L2): 0.250000→98.500000% / 0.500000→0.000000% / 0.750000→0.000000% / 1.000000→0.000000% / 1.250000→0.000000% / 1.500000→0.000000%
 
-── σ = 0.250000 ──
+── σ = 0.250000  (radius ceiling at this n = 0.800447) ──
     epoch 1/10: clean acc = 96.784856%
     epoch 2/10: clean acc = 97.806490%
     epoch 3/10: clean acc = 98.407452%
@@ -35,15 +33,12 @@ Randomized-smoothing certificate on MNIST-CNN (verified codegen → IREE → GPU
     epoch 9/10: clean acc = 98.818109%
     epoch 10/10: clean acc = 98.818109%
   noise-trained clean acc = 98.818109%
-    certified 100/500 ...
-    certified 200/500 ...
-    certified 300/500 ...
-    certified 400/500 ...
-    certified 500/500 ...
-  smoothed natural acc = 98.400000%   abstain = 0.200000%   ACR = 0.581914
-  certified-robust acc (L2): 0.250000→96.000000% / 0.500000→92.000000% / 0.750000→0.000000% / 1.000000→0.000000%
+    certified 100/200 ...
+    certified 200/200 ...
+  smoothed natural acc = 98.000000%   abstain = 0.000000%   ACR = 0.753524
+  certified-robust acc (L2): 0.250000→97.500000% / 0.500000→93.500000% / 0.750000→84.500000% / 1.000000→0.000000% / 1.250000→0.000000% / 1.500000→0.000000%
 
-── σ = 0.500000 ──
+── σ = 0.500000  (radius ceiling at this n = 1.600893) ──
     epoch 1/10: clean acc = 9.575321%
     epoch 2/10: clean acc = 89.272837%
     epoch 3/10: clean acc = 94.160657%
@@ -55,19 +50,16 @@ Randomized-smoothing certificate on MNIST-CNN (verified codegen → IREE → GPU
     epoch 9/10: clean acc = 97.776442%
     epoch 10/10: clean acc = 98.006811%
   noise-trained clean acc = 98.006811%
-    certified 100/500 ...
-    certified 200/500 ...
-    certified 300/500 ...
-    certified 400/500 ...
-    certified 500/500 ...
-  smoothed natural acc = 97.600000%   abstain = 0.800000%   ACR = 1.049003
-  certified-robust acc (L2): 0.250000→94.600000% / 0.500000→91.800000% / 0.750000→86.000000% / 1.000000→74.400000%
+    certified 100/200 ...
+    certified 200/200 ...
+  smoothed natural acc = 99.000000%   abstain = 1.000000%   ACR = 1.277687
+  certified-robust acc (L2): 0.250000→96.500000% / 0.500000→93.000000% / 0.750000→86.000000% / 1.000000→78.000000% / 1.250000→66.000000% / 1.500000→48.500000%
 
 ══ randomized smoothing (MNIST-CNN): depth-independent certified L2 radius ══
-  σ	clean%	nat%	abst%	cert@.25	cert@.5	cert@1.0	ACR
-  0.120000	98.938301	99.000000	0.000000	96.400000	0.000000	0.000000	0.288996
-  0.250000	98.818109	98.400000	0.200000	96.000000	92.000000	0.000000	0.581914
-  0.500000	98.006811	97.600000	0.800000	94.600000	91.800000	74.400000	1.049003
+  σ	clean%	nat%	abst%	cert@.5	cert@1.0	cert@1.5	ACR
+  0.120000	98.938301	100.000000	0.000000	0.000000	0.000000	0.000000	0.379071
+  0.250000	98.818109	98.000000	0.000000	93.500000	0.000000	0.000000	0.753524
+  0.500000	98.006811	99.000000	1.000000	93.000000	78.000000	48.500000	1.277687
 
 done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —
       architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless).

@@ -10,9 +10,12 @@ BatchNorm, formalized the certificate as a theorem, and added the gap-shrinking 
 > (forward-only, depth-independent). Cohen 2019: noise-augment training (host-side `N(0,σ²I)`,
 > `lean_f32_add_gaussian_tiled`, graph untouched) → sample `n=1024` → Clopper–Pearson lower-bound
 > `p_A` (hand-rolled probit + incomplete-beta, **validated to 6 dp vs scipy**) → radius `σ·Φ⁻¹(p_A)`.
-> It certifies a *non-vacuous* L2 radius on every rung where the Lipschitz product was vacuous:
-> CIFAR-CNN (spectral cert 0% @ L=942K) → smoothing **36.8% / 27.2% / 11.8%** certified @ L2
-> 0.25/0.5/1.0 (σ=0.5); MNIST-CNN → **94.6% / 91.8% / 74.4%**; MNIST-MLP → **91.2% / 85.8% / 61.4%**.
+> It certifies a *non-vacuous* L2 radius on every rung where the Lipschitz product was vacuous
+> (tightened to Cohen's large-`n=10112` regime — n is the honest lever, ceiling `σ·Φ⁻¹(α^(1/n))` rose
+> `2.47σ→3.20σ` vs the first `n=1024` run; cert@1.5 newly non-zero; ACR up ~25–30%). At σ=0.5,
+> cert@0.5/1.0/1.5: CIFAR-CNN (spectral 0% @ L=942K) → **32.5/18.5/8.0%** (ACR 0.40); MNIST-CNN →
+> **93/78/48.5%** (ACR 1.28); MNIST-MLP → **87/67.5/31%** (ACR 1.13). Run across both gfx1100 GPUs
+> (`run_smooth_2gpu.sh`, HIP_VISIBLE_DEVICES per stream, ~35 min).
 > See `planning/robustness_ladder.md` §4.3b for the full table; logs `runs/smooth_{mlp,cnn,cifar}.log`.
 > (Driver committed f30f857.) The cert paradigm is now complete on both ladders.
 >
