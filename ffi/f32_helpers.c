@@ -1268,6 +1268,33 @@ static inline double f32_randn(uint64_t* s) {
     return sqrt(-2.0 * log(u1)) * cos(2.0 * 3.14159265358979323846 * u2);
 }
 
+// ---- Tile one image + add N(0, sigma^2) Gaussian noise (randomized smoothing) ----
+// `base[off .. off+d0)` is ONE flattened image (d0 floats, element offset `off`).
+// Returns `m*d0` floats: m independent noisy copies, copy k = image + N(0,sigma^2 I),
+// each coordinate an independent Box-Muller draw from an xorshift64 stream seeded by
+// `seed`. NO clipping — the smoothing certificate (Cohen–Rosenfeld–Kolter 2019) lives
+// in raw input L2 space, so clipping to [0,1] would break the Gaussian isometry.
+// (Used both to noise-augment a training batch — off=0, d0=bs*pix, m=1 — and to draw
+//  the m certify samples for one test image.)
+LEAN_EXPORT lean_obj_res lean_f32_add_gaussian_tiled(
+        b_lean_obj_arg base, size_t off, size_t d0, size_t m,
+        double sigma, size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t n = m * d0;
+    size_t nbytes = n * 4;
+    lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
+    float* p = (float*)lean_sarray_cptr(ba);
+    const float* src = (const float*)lean_sarray_cptr(base);
+    uint64_t s = (uint64_t)seed * 0x9E3779B97F4A7C15ULL + 1;
+    float fsig = (float)sigma;
+    for (size_t k = 0; k < m; k++) {
+        for (size_t i = 0; i < d0; i++) {
+            p[k * d0 + i] = src[off + i] + fsig * (float)f32_randn(&s);
+        }
+    }
+    return lean_io_result_mk_ok(ba);
+}
+
 // Marsaglia & Tsang gamma sampler for shape α > 0, scale 1.
 // For α < 1, use the boost trick: G(α) = G(α+1) · U^(1/α).
 static double f32_gamma_sample(double alpha, uint64_t* s) {

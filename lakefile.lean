@@ -834,6 +834,24 @@ lean_exe «cifar-bn-pgd» where
   root := `apps.cifar.MainCifarBnPgd
   moreLinkArgs := ireeLink
 
+-- Randomized-smoothing certificate (planning/robustness_ladder.md §3, Cohen 2019): the
+-- DEPTH-INDEPENDENT cert. Forward-only Monte-Carlo over the proof-rendered fwd (no kernel, no
+-- input-VJP) — sample noisy copies, Clopper-Pearson lower-bound p_A, radius = σ·Φ⁻¹(p_A). Base
+-- net trained with matched Gaussian augmentation. Non-vacuous where the spectral product is hopeless.
+lean_exe «mnist-mlp-smooth» where
+  root := `apps.mnist.MainMnistMlpSmooth
+  moreLinkArgs := ireeLink
+
+lean_exe «mnist-cnn-smooth» where
+  root := `apps.mnist.MainMnistCnnSmooth
+  moreLinkArgs := ireeLink
+
+-- The deep-net payoff: smoothing certifies a non-vacuous L2 radius on the 7-layer CIFAR CNN where
+-- the conv-aware spectral product was 942K-loose (cert 0%). Same forward-only procedure, any depth.
+lean_exe «cifar-smooth» where
+  root := `apps.cifar.MainCifarSmooth
+  moreLinkArgs := ireeLink
+
 -- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
 -- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
 -- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).

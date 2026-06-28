@@ -1,0 +1,73 @@
+Randomized-smoothing certificate on MNIST-MLP (verified codegen → IREE → GPU, forward-only)
+  iree-compile verified_mlir/mlp_train_step.mlir
+  iree-compile verified_mlir/mlp_fwd.mlir
+  n0=128 (select)  n=1024 (estimate)  α=0.001000  certifying 500 test imgs (every 20th)
+
+── σ = 0.120000 ──
+    epoch 1/10: clean acc = 92.588141%
+    epoch 2/10: clean acc = 95.362580%
+    epoch 3/10: clean acc = 96.564503%
+    epoch 4/10: clean acc = 96.935096%
+    epoch 5/10: clean acc = 97.325721%
+    epoch 6/10: clean acc = 97.375801%
+    epoch 7/10: clean acc = 97.676282%
+    epoch 8/10: clean acc = 97.626202%
+    epoch 9/10: clean acc = 97.786458%
+    epoch 10/10: clean acc = 97.856571%
+  noise-trained clean acc = 97.856571%
+    certified 100/500 ...
+    certified 200/500 ...
+    certified 300/500 ...
+    certified 400/500 ...
+    certified 500/500 ...
+  smoothed natural acc = 97.400000%   abstain = 0.200000%   ACR = 0.277644
+  certified-robust acc (L2): 0.250000→91.400000% / 0.500000→0.000000% / 0.750000→0.000000% / 1.000000→0.000000%
+
+── σ = 0.250000 ──
+    epoch 1/10: clean acc = 92.808494%
+    epoch 2/10: clean acc = 95.082131%
+    epoch 3/10: clean acc = 96.294071%
+    epoch 4/10: clean acc = 96.834936%
+    epoch 5/10: clean acc = 97.195513%
+    epoch 6/10: clean acc = 97.425881%
+    epoch 7/10: clean acc = 97.506010%
+    epoch 8/10: clean acc = 97.526042%
+    epoch 9/10: clean acc = 97.706330%
+    epoch 10/10: clean acc = 97.746394%
+  noise-trained clean acc = 97.746394%
+    certified 100/500 ...
+    certified 200/500 ...
+    certified 300/500 ...
+    certified 400/500 ...
+    certified 500/500 ...
+  smoothed natural acc = 96.800000%   abstain = 1.200000%   ACR = 0.552033
+  certified-robust acc (L2): 0.250000→92.000000% / 0.500000→83.800000% / 0.750000→0.000000% / 1.000000→0.000000%
+
+── σ = 0.500000 ──
+    epoch 1/10: clean acc = 91.195913%
+    epoch 2/10: clean acc = 93.780048%
+    epoch 3/10: clean acc = 95.132212%
+    epoch 4/10: clean acc = 95.933494%
+    epoch 5/10: clean acc = 96.284054%
+    epoch 6/10: clean acc = 96.654647%
+    epoch 7/10: clean acc = 96.945112%
+    epoch 8/10: clean acc = 96.915064%
+    epoch 9/10: clean acc = 97.165465%
+    epoch 10/10: clean acc = 97.345753%
+  noise-trained clean acc = 97.345753%
+    certified 100/500 ...
+    certified 200/500 ...
+    certified 300/500 ...
+    certified 400/500 ...
+    certified 500/500 ...
+  smoothed natural acc = 96.200000%   abstain = 2.400000%   ACR = 0.949966
+  certified-robust acc (L2): 0.250000→91.200000% / 0.500000→85.800000% / 0.750000→76.600000% / 1.000000→61.400000%
+
+══ randomized smoothing (MNIST-MLP): depth-independent certified L2 radius ══
+  σ	clean%	nat%	abst%	cert@.25	cert@.5	cert@1.0	ACR
+  0.120000	97.856571	97.400000	0.200000	91.400000	0.000000	0.000000	0.277644
+  0.250000	97.746394	96.800000	1.200000	92.000000	83.800000	0.000000	0.552033
+  0.500000	97.345753	96.200000	2.400000	91.200000	85.800000	61.400000	0.949966
+
+done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —
+      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless).

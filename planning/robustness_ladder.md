@@ -20,6 +20,10 @@ realization that shapes everything below: **there are TWO ladders, and they dive
   pointless there. The honest deep-net certificate is a *different paradigm* — **randomized
   smoothing** (Cohen et al. 2019), which is architecture-agnostic, doesn't degrade with depth, and
   is itself a clean runnable demo. That, not the Lipschitz product, is the real Imagenette robustness story.
+- ✅ **Randomized smoothing is BUILT** (2026-06-28, §3 + §4.3b): forward-only, depth-independent,
+  and shown end-to-end to certify a *non-vacuous* L2 radius on MLP/CNN/CIFAR — the very nets where
+  `∏‖Wᵢ‖₂` is vacuous (e.g. CIFAR-CNN: spectral cert 0% at L=942K → smoothing **36.8%/27.2%/11.8%**
+  certified @ L2 0.25/0.5/1.0, σ=0.5). The cert paradigm is now complete on both ladders.
 
 ## 1. The attack ladder (reuse the proven backward → `dx`)
 
@@ -96,11 +100,27 @@ hopeless.
    composition (the formalization makes it a concrete theorem-strengthening target); and the **exact
    (Sedghi–Gupta–Long FFT) conv spectral norm** — the spectral-CNN study showed the per-layer conv
    *estimate* (not just the product) is now the CNN's bottleneck.
-3. **CIFAR**: optional; mostly BN-folding bookkeeping over the CNN.
-4. **Imagenette**: **don't** chase the Lipschitz cert (vacuous). The attack is a cheap-ish add if
-   you want the "deep verified nets are fragile" data point. The *certificate* there = a
-   **randomized-smoothing demo** (forward-only, scales) — the real next robustness direction, and
-   arguably more valuable than CNN/CIFAR Lipschitz.
+3. ✅ **CIFAR** (DONE 2026-06-28, `cifar-pgd` + `cifar-bn-pgd`): the deeper conv rung + the first
+   BN-backward in the attack path; the cert cliff deepened to L=942K (the product is hopeless).
+3b. ✅ **Randomized smoothing** (DONE 2026-06-28, `mnist-mlp-smooth` / `mnist-cnn-smooth` /
+   `cifar-smooth`): the §3 answer, built. **Forward-only** Monte-Carlo over the proof-rendered
+   `<slug>_fwd` (no kernel, no input-VJP): noise-augment training (host-side `N(0,σ²I)`, graph
+   untouched), sample `n=1024` noisy copies, count argmax votes, Clopper–Pearson lower-bound `p_A`,
+   radius `σ·Φ⁻¹(p_A)`. The cert stats are hand-rolled pure-`Float` and **validated against
+   scipy/`beta.ppf`** (the same procedure Cohen uses). The depth-independence is shown end-to-end —
+   the SAME driver certifies a *non-vacuous* L2 radius on every rung where `∏‖Wᵢ‖₂` was vacuous:
+   | net | spectral-product cert | smoothing cert @ σ=0.5 (cert@0.25/0.5/1.0) | ACR |
+   |---|---|---|---|
+   | MNIST-MLP | 0% (L=39) | 91.2% / 85.8% / 61.4% | 0.95 |
+   | MNIST-CNN | 0% (L=3196) | 94.6% / 91.8% / 74.4% | 1.05 |
+   | CIFAR-CNN | 0% (L=942K) | 36.8% / 27.2% / 11.8% | 0.31 |
+   The σ knob is the honest trade (bigger σ ⇒ bigger radius, lower clean acc); the guarantee is
+   high-probability (`α=0.001`), not deterministic. Radii are in normalized-input L2. Logs:
+   `runs/smooth_{mlp,cnn,cifar}.log`.
+4. **Imagenette**: the Lipschitz cert is vacuous (don't chase it); the attack is a cheap-ish "deep
+   verified nets are fragile" data point. The *certificate* there is the smoothing driver above —
+   it already runs on any `VerifiedNet` via its rendered fwd, so Imagenette is just a longer run
+   (heavier forward; no new code), the natural next data point if wanted.
 
 ## 5. References / in-repo anchors
 

@@ -201,4 +201,10 @@ def attackPgdSpectralCifar (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir
     (caps : List Float) : IO Unit :=
   s.toNet.attackPgdSpectralCifar cfg dataDir caps
 
+/-- Randomized-smoothing certificate (Cohen 2019, depth-independent); see
+    `VerifiedNet.smoothCertify`. Forward-only — works on any spec via its rendered fwd. -/
+def smoothCertify (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
+    (sigmas : List Float) : IO Unit :=
+  s.toNet.smoothCertify cfg dataDir sigmas
+
 end VerifiedNetSpec

@@ -26,6 +26,15 @@ opaque const (n : USize) (v : Float) : IO ByteArray
 @[extern "lean_f32_he_init"]
 opaque heInit (seed : USize) (n : USize) (scale : Float) : IO ByteArray
 
+/-- Tile one flattened image `base[off .. off+d0)` (element offset `off`, `d0` floats)
+    into `m` copies, each with independent `N(0, σ²)` **exact** Gaussian noise added
+    (Box-Muller). Returns `m*d0` float32. NO clipping — the randomized-smoothing
+    certificate (Cohen–Rosenfeld–Kolter 2019) lives in raw input L2 space. With `m=1`,
+    `off=0`, `d0=bs·pix` it noises a whole training batch (Gaussian data augmentation). -/
+@[extern "lean_f32_add_gaussian_tiled"]
+opaque addGaussianTiled (base : @& ByteArray) (off d0 m : USize)
+  (sigma : Float) (seed : USize) : IO ByteArray
+
 /-- Concatenate multiple ByteArrays. Fast (memcpy per chunk). -/
 def concat (arrays : Array ByteArray) : ByteArray := Id.run do
   let mut out : ByteArray := .empty
