@@ -47,10 +47,15 @@ this with a different norm:
   values, not the factorization). **Remaining: the singular `G` case** = the orthonormal completion
   of `U` (when some `λᵢ = 0`, `Σ⁻¹` is degenerate; needs extending `U`'s columns to an orthonormal
   basis) — a genuine but bounded extra build, deferred.
-- ⬜ **L5 — the jewel**: single-step Shampoo `(GGᵀ)^{-1/4}G(GᵀG)^{-1/4} = UVᵀ = Muon`. Substitute
-  the SVD (L4 now provides it for invertible `G`). Pure linear algebra once the SVD is in hand —
-  but needs the `^{-1/4}` matrix power = `cfc` of `GᵀG`, or, since L4 already exposes `V, Σ`, a direct
-  `(VΣ⁻¹ᐟ²Vᵀ)`-style construction reusing `svd_of_isUnit`'s diagonal machinery. **Next entry point.**
+- ✅ **L5 — the jewel** DONE: single-step Shampoo `(GGᵀ)^{-1/4}G(GᵀG)^{-1/4} = UVᵀ = Muon`.
+  `shampoo_eq_muon` (parametrized by an SVD `G=UΣVᵀ`, `s>0`) proves the conjunction: `R⁴·(GᵀG)=1`
+  and `L⁴·(GGᵀ)=1` (so `R=V·diag(s^{-1/2})·Vᵀ`, `L=U·diag(s^{-1/2})·Uᵀ` genuinely ARE the inverse
+  fourth-roots) **and** the jewel `L·G·R = UVᵀ`. `shampoo_eq_muon_of_isUnit` makes it unconditional
+  for invertible `G`. **No `cfc` / abstract matrix power needed** — avoided it entirely: defined the
+  fourth-roots spectrally (`(√sᵢ)⁻¹ = sᵢ^{-1/2}` on the diagonal) and proved they earn the name via
+  `X⁴·M = 1`. Workhorse `conj_diag_pow`: `(W·diag d·Wᵀ)^k = W·diag(dᵏ)·Wᵀ` (matrix power → pointwise
+  scalar power, induction on k). Collapses: `(s^{-1/2})⁴·s² = 1` (roots) and `s^{-1/2}·s·s^{-1/2}=1`
+  (jewel), both `field_simp; nlinarith [√sᵢ·√sᵢ=sᵢ]`. 3 theorems, 3-axiom clean, audited.
 - ⬜ **L6 — manifold view** (the equivariance bridge): `UVᵀ ∈` Stiefel/`O(n)`; Newton–Schulz =
   retraction onto it. Mathlib `UnitaryGroup`. The Lie-group geometry of weight space.
 
@@ -92,14 +97,18 @@ Bernstein–Newhouse (modular norms / duality), Jordan (Muon), Gupta–Koren–S
   `U=GVΣ⁻¹`, no matrix square root — and the polar factor → nuclear-norm pairing is unconditional.
   SVD hypothesis of `muon_polar_achieves_nuclear` discharged for the full-rank case. Lemma map +
   gotchas recorded in §2 above.
-- **Next session — two open forks (pick one):**
+- **Session 3 (2026-06-29) DONE — L5 (the Shampoo=Muon jewel)**: `conj_diag_pow` + `shampoo_eq_muon`
+  + `shampoo_eq_muon_of_isUnit` (3 theorems, 3-axiom clean, audited). Avoided `cfc` entirely by
+  defining the inverse fourth-roots spectrally and proving the `X⁴·M=1` certs. Recipe + collapses in
+  §1 L5 above. The Shampoo row of the §0 table is now checked Lean.
+- **Next session — remaining forks:**
   - **(a) L3 upper bound (von Neumann's trace inequality)** — `⟨G,D⟩_F ≤ Σσᵢ` for `‖D‖op ≤ 1`, so
-    `UVᵀ` is the *max* not just an achiever. BLOCKER scouted: no `Matrix.l2OpNorm` found in
-    `Analysis/Matrix.lean`. First scout a matrix operator-norm: try `Matrix.instL2OpNormedAddCommGroup`
-    / the `EuclideanSpace`-CLM route (`Matrix.toEuclideanCLM` / `toEuclideanLin` ⇒ `‖·‖`), or prove
-    the inequality directly from the SVD substitution (`⟨UΣVᵀ,D⟩ = Σᵢ σᵢ ⟨uᵢ, D vᵢ⟩` then bound each
-    `⟨uᵢ,Dvᵢ⟩ ≤ ‖D‖op ≤ 1` — reduces to L2/Cauchy–Schwarz per singular vector).
-  - **(b) L5 the Shampoo=Muon jewel** — `(GGᵀ)^{-1/4}G(GᵀG)^{-1/4} = UVᵀ`. L4 exposes `V, Σ`; reuse
-    its diagonal machinery to build `(GᵀG)^{-1/4} = V diagonal(λ^{-1/4}) Vᵀ` and substitute. Pure
-    linear algebra, no new Mathlib surface — likely the faster win.
-  - (deferred) the **singular-`G` SVD** = orthonormal completion of `U`.
+    `UVᵀ` is the *max* not just an achiever. The one analytically-hard piece left. BLOCKER scouted:
+    no `Matrix.l2OpNorm` in `Analysis/Matrix.lean`. Scout a matrix operator-norm:
+    `Matrix.instL2OpNormedAddCommGroup` / the `EuclideanSpace`-CLM route (`Matrix.toEuclideanCLM` /
+    `toEuclideanLin` ⇒ `‖·‖`), or prove it directly from the SVD substitution
+    (`⟨UΣVᵀ,D⟩ = Σᵢ σᵢ ⟨uᵢ, D vᵢ⟩`, bound each `⟨uᵢ,Dvᵢ⟩ ≤ ‖D‖op ≤ 1` — per-singular-vector
+    Cauchy–Schwarz, reduces to L1's `steepest_l2_bound`).
+  - **(b) L6 manifold view** — `UVᵀ ∈ O(n)`/Stiefel, Newton–Schulz = retraction. `UnitaryGroup`.
+  - (deferred) the **singular-`G` SVD** = orthonormal completion of `U` (would make L4/L5's
+    `_of_isUnit` versions drop the invertibility hypothesis).

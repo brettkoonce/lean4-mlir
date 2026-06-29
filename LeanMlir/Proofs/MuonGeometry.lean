@@ -16,6 +16,7 @@ maximizer `d⋆ = argmax_{‖d‖≤1} ⟨g,d⟩`, with optimal value the dual n
 | SGD | Euclidean `‖·‖₂` | `g/‖g‖`, value `‖g‖₂` | `steepest_l2_*` |
 | sign / Adam-ish | `‖·‖∞` | `sign(g)`, value `‖g‖₁` | `steepest_linf_*` |
 | **Muon** | operator norm | **polar factor `UVᵀ`**, value nuclear `Σσᵢ` | `muon_polar_achieves_nuclear` |
+| Shampoo (1-step) | Kronecker-factored | `(GGᵀ)^{-1/4}G(GᵀG)^{-1/4} = UVᵀ` = Muon | `shampoo_eq_muon` |
 
 The SGD and sign rungs are the framework, proven outright. The Muon rung's *achievability* — the
 polar factor `UVᵀ` of `G = UΣVᵀ` realizes the nuclear norm `Σσᵢ` — is proven here **given an SVD**
@@ -28,6 +29,14 @@ No matrix square root is needed — only the spectral decomposition, scalar `√
 (invertibility makes every `λᵢ > 0`, so `Σ⁻¹` exists). Composing with the achievability half gives
 `muon_polar_achieves_nuclear_of_isUnit`: for any invertible `G`, the polar factor `UVᵀ` (Muon's
 update direction) pairs with `G` to the nuclear norm `Σσᵢ` — the SVD hypothesis fully discharged.
+
+**L5 (this layer): the Shampoo = Muon jewel.** Single-step Shampoo preconditions the gradient by the
+inverse fourth-roots of its Gram matrices, `G ↦ (GGᵀ)^{-1/4} G (GᵀG)^{-1/4}`, and `shampoo_eq_muon`
+proves this *equals* Muon's polar factor `UVᵀ` — two optimizers, one geometry. Reusing the L4 SVD
+pieces `V, Σ`: the fourth-roots are spectral (`(GᵀG)^{-1/4} = V (diagonal s^{-1/2}) Vᵀ`), the helper
+`conj_diag_pow` turns the matrix fourth-power into pointwise scalar powers, and the whole thing
+collapses by `s^{-1/2}·s·s^{-1/2} = 1`. `shampoo_eq_muon_of_isUnit` makes it unconditional for any
+invertible `G`.
 
 The matching upper bound (it is the *max*: von Neumann's trace inequality, needs the matrix operator
 norm) and the singular `G` case (the orthonormal completion of `U`) are the remaining layers. All
@@ -202,5 +211,138 @@ theorem muon_polar_achieves_nuclear_of_isUnit (G : Matrix (Fin n) (Fin n) ℝ) (
       G = U * Matrix.diagonal s * Vᵀ ∧ fInner G (U * Vᵀ) = ∑ i, s i := by
   obtain ⟨U, V, s, hU, hV, hs, hGeq⟩ := svd_of_isUnit G hG
   exact ⟨U, V, s, hU, hV, hs, hGeq, hGeq ▸ muon_polar_achieves_nuclear U V s hU hV⟩
+
+-- ════════════════════════════════════════════════════════════════
+-- § L5 — the jewel: single-step Shampoo `(GGᵀ)^{-1/4} G (GᵀG)^{-1/4}` = Muon's `UVᵀ`
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Powers of a diagonal conjugation become pointwise powers** — the spectral-calculus workhorse.
+    For orthonormal `W` (`WᵀW = 1`), `(W (diagonal d) Wᵀ)^k = W (diagonal dᵏ) Wᵀ`: conjugating a
+    diagonal commutes with raising to a power, sending a *matrix* power to a *scalar* power of each
+    diagonal entry. This is what lets the Shampoo preconditioners' inverse fourth-roots
+    `(GᵀG)^{-1/4}`, `(GGᵀ)^{-1/4}` collapse to diagonal arithmetic in `shampoo_eq_muon`. -/
+theorem conj_diag_pow (W : Matrix (Fin n) (Fin n) ℝ) (d : Fin n → ℝ)
+    (hWtW : Wᵀ * W = 1) (k : ℕ) :
+    (W * Matrix.diagonal d * Wᵀ) ^ k = W * Matrix.diagonal (fun i => (d i) ^ k) * Wᵀ := by
+  have hWWt : W * Wᵀ = 1 := mul_eq_one_comm.mp hWtW
+  induction k with
+  | zero => simp [hWWt]
+  | succ m ih =>
+    rw [pow_succ, ih,
+       show W * Matrix.diagonal (fun i => d i ^ m) * Wᵀ * (W * Matrix.diagonal d * Wᵀ)
+          = W * (Matrix.diagonal (fun i => d i ^ m) * (Wᵀ * W) * Matrix.diagonal d) * Wᵀ from by
+            simp only [Matrix.mul_assoc],
+       hWtW, Matrix.mul_one, Matrix.diagonal_mul_diagonal]
+    simp only [pow_succ]
+
+/-- **The Shampoo = Muon jewel.** Single-step Shampoo preconditions the gradient `G` by the inverse
+    fourth-roots of its two Gram matrices: `G ↦ (GGᵀ)^{-1/4} G (GᵀG)^{-1/4}`. This **equals Muon's
+    update** — the polar factor `UVᵀ` of `G = UΣVᵀ`. Two famous optimizers, one geometry.
+
+    Given the SVD `G = U (diagonal s) Vᵀ` (`U,V` orthonormal, `s > 0`), the inverse fourth-roots are
+    spectral: with `sᵢ^{-1/2} = (√sᵢ)⁻¹`, take `R := V (diagonal s^{-1/2}) Vᵀ` and
+    `L := U (diagonal s^{-1/2}) Uᵀ`. The three conjuncts are:
+    * `R⁴ · (GᵀG) = 1` — `R` really is `(GᵀG)^{-1/4}` (`GᵀG = V (diagonal s²) Vᵀ`, so `R⁴` inverts it);
+    * `L⁴ · (GGᵀ) = 1` — `L` really is `(GGᵀ)^{-1/4}`;
+    * `L · G · R = U Vᵀ` — **the jewel.** The collapse is the scalar identity
+      `s^{-1/2} · s · s^{-1/2} = 1` applied to each singular value (`conj_diag_pow` turns the matrix
+      fourth-roots into these pointwise powers). Cf. `muon_polar_achieves_nuclear` (the same `UVᵀ`,
+      now reached from Shampoo's side instead of the nuclear-norm side). -/
+theorem shampoo_eq_muon (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ)
+    (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) (hs : ∀ i, 0 < s i) :
+    ((V * Matrix.diagonal (fun i => (Real.sqrt (s i))⁻¹) * Vᵀ) ^ 4)
+        * ((U * Matrix.diagonal s * Vᵀ)ᵀ * (U * Matrix.diagonal s * Vᵀ)) = 1 ∧
+    ((U * Matrix.diagonal (fun i => (Real.sqrt (s i))⁻¹) * Uᵀ) ^ 4)
+        * ((U * Matrix.diagonal s * Vᵀ) * (U * Matrix.diagonal s * Vᵀ)ᵀ) = 1 ∧
+    (U * Matrix.diagonal (fun i => (Real.sqrt (s i))⁻¹) * Uᵀ)
+        * (U * Matrix.diagonal s * Vᵀ)
+        * (V * Matrix.diagonal (fun i => (Real.sqrt (s i))⁻¹) * Vᵀ) = U * Vᵀ := by
+  set d : Fin n → ℝ := fun i => (Real.sqrt (s i))⁻¹ with hd
+  -- reusable contraction `W (diag a) Wᵀ · W (diag b) Wᵀ = W (diag a·b) Wᵀ` (orthonormal `W`)
+  have contract : ∀ (W : Matrix (Fin n) (Fin n) ℝ) (a b : Fin n → ℝ), Wᵀ * W = 1 →
+      (W * Matrix.diagonal a * Wᵀ) * (W * Matrix.diagonal b * Wᵀ)
+        = W * Matrix.diagonal (fun i => a i * b i) * Wᵀ := by
+    intro W a b hW
+    rw [show (W * Matrix.diagonal a * Wᵀ) * (W * Matrix.diagonal b * Wᵀ)
+          = W * (Matrix.diagonal a * (Wᵀ * W) * Matrix.diagonal b) * Wᵀ from by
+            simp only [Matrix.mul_assoc],
+       hW, Matrix.mul_one, Matrix.diagonal_mul_diagonal]
+  have hVVt : V * Vᵀ = 1 := mul_eq_one_comm.mp hV
+  have hUUt : U * Uᵀ = 1 := mul_eq_one_comm.mp hU
+  -- pointwise collapses: `(s^{-1/2})⁴·s² = 1` (fourth-root certs) and `s^{-1/2}·s·s^{-1/2} = 1` (jewel)
+  have hpt4 : ∀ i, (d i) ^ 4 * (s i * s i) = 1 := by
+    intro i
+    have hsp := hs i
+    have hsqrt : Real.sqrt (s i) * Real.sqrt (s i) = s i := Real.mul_self_sqrt hsp.le
+    have hne : Real.sqrt (s i) ≠ 0 := (Real.sqrt_pos.mpr hsp).ne'
+    simp only [hd]; field_simp; nlinarith [hsqrt]
+  have hpt2 : ∀ i, d i * s i * d i = 1 := by
+    intro i
+    have hsp := hs i
+    have hsqrt : Real.sqrt (s i) * Real.sqrt (s i) = s i := Real.mul_self_sqrt hsp.le
+    have hne : Real.sqrt (s i) ≠ 0 := (Real.sqrt_pos.mpr hsp).ne'
+    simp only [hd]; field_simp; nlinarith [hsqrt]
+  -- the Gram matrices are spectral too: `GᵀG = V (diag s²) Vᵀ`, `GGᵀ = U (diag s²) Uᵀ`
+  have hGt : (U * Matrix.diagonal s * Vᵀ)ᵀ = V * Matrix.diagonal s * Uᵀ := by
+    simp only [Matrix.transpose_mul, Matrix.diagonal_transpose, Matrix.transpose_transpose,
+      Matrix.mul_assoc]
+  have hGtG : (U * Matrix.diagonal s * Vᵀ)ᵀ * (U * Matrix.diagonal s * Vᵀ)
+      = V * Matrix.diagonal (fun i => s i * s i) * Vᵀ := by
+    rw [hGt, show (V * Matrix.diagonal s * Uᵀ) * (U * Matrix.diagonal s * Vᵀ)
+          = V * (Matrix.diagonal s * (Uᵀ * U) * Matrix.diagonal s) * Vᵀ from by
+            simp only [Matrix.mul_assoc],
+       hU, Matrix.mul_one, Matrix.diagonal_mul_diagonal]
+  have hGGt : (U * Matrix.diagonal s * Vᵀ) * (U * Matrix.diagonal s * Vᵀ)ᵀ
+      = U * Matrix.diagonal (fun i => s i * s i) * Uᵀ := by
+    rw [hGt, show (U * Matrix.diagonal s * Vᵀ) * (V * Matrix.diagonal s * Uᵀ)
+          = U * (Matrix.diagonal s * (Vᵀ * V) * Matrix.diagonal s) * Uᵀ from by
+            simp only [Matrix.mul_assoc],
+       hV, Matrix.mul_one, Matrix.diagonal_mul_diagonal]
+  refine ⟨?_, ?_, ?_⟩
+  · -- `R⁴ · GᵀG = V (diag (s^{-1/2})⁴·s²) Vᵀ = V Vᵀ = 1`
+    rw [conj_diag_pow V d hV 4, hGtG, contract V _ _ hV,
+        show (fun i => d i ^ 4 * (s i * s i)) = (fun _ => (1 : ℝ)) from funext hpt4,
+        Matrix.diagonal_one, Matrix.mul_one, hVVt]
+  · -- `L⁴ · GGᵀ = 1`, the same on the left
+    rw [conj_diag_pow U d hU 4, hGGt, contract U _ _ hU,
+        show (fun i => d i ^ 4 * (s i * s i)) = (fun _ => (1 : ℝ)) from funext hpt4,
+        Matrix.diagonal_one, Matrix.mul_one, hUUt]
+  · -- `L · G · R = U (diag (s^{-1/2}·s·s^{-1/2})) Vᵀ = U Vᵀ`
+    rw [show (U * Matrix.diagonal d * Uᵀ) * (U * Matrix.diagonal s * Vᵀ)
+              * (V * Matrix.diagonal d * Vᵀ)
+            = U * (Matrix.diagonal d * (Uᵀ * U) * Matrix.diagonal s * (Vᵀ * V) * Matrix.diagonal d)
+                * Vᵀ from by simp only [Matrix.mul_assoc],
+         hU, hV]
+    simp only [Matrix.mul_one]
+    rw [Matrix.diagonal_mul_diagonal, Matrix.diagonal_mul_diagonal,
+        show (fun i => d i * s i * d i) = (fun _ => (1 : ℝ)) from funext hpt2,
+        Matrix.diagonal_one, Matrix.mul_one]
+
+/-- **The Shampoo = Muon jewel, unconditional for any invertible `G`.** Composing the constructed
+    SVD (`svd_of_isUnit`) with `shampoo_eq_muon`: for invertible `G` there are orthonormal `U, V` and
+    singular values `s > 0` (strict, since `diagonal s = Uᵀ G V` is a unit) with `G = U (diagonal s)
+    Vᵀ`, such that the two factors `R = V (diagonal s^{-1/2}) Vᵀ`, `L = U (diagonal s^{-1/2}) Uᵀ` are
+    the inverse fourth-roots of `GᵀG`, `GGᵀ` (`R⁴·GᵀG = L⁴·GGᵀ = 1`) and Shampoo's preconditioned
+    gradient is Muon's polar factor: `L · G · R = U Vᵀ`. -/
+theorem shampoo_eq_muon_of_isUnit (G : Matrix (Fin n) (Fin n) ℝ) (hG : IsUnit G) :
+    ∃ (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ),
+      Uᵀ * U = 1 ∧ Vᵀ * V = 1 ∧ (∀ i, 0 < s i) ∧ G = U * Matrix.diagonal s * Vᵀ ∧
+      ((V * Matrix.diagonal (fun i => (Real.sqrt (s i))⁻¹) * Vᵀ) ^ 4) * (Gᵀ * G) = 1 ∧
+      ((U * Matrix.diagonal (fun i => (Real.sqrt (s i))⁻¹) * Uᵀ) ^ 4) * (G * Gᵀ) = 1 ∧
+      (U * Matrix.diagonal (fun i => (Real.sqrt (s i))⁻¹) * Uᵀ) * G
+        * (V * Matrix.diagonal (fun i => (Real.sqrt (s i))⁻¹) * Vᵀ) = U * Vᵀ := by
+  obtain ⟨U, V, s, hU, hV, hs0, hGeq⟩ := svd_of_isUnit G hG
+  -- `diagonal s = Uᵀ G V` is a unit (product of units), so every `sᵢ ≠ 0`, hence `> 0`.
+  have hdiag : Matrix.diagonal s = Uᵀ * G * V := by
+    rw [hGeq, show Uᵀ * (U * Matrix.diagonal s * Vᵀ) * V
+          = (Uᵀ * U) * Matrix.diagonal s * (Vᵀ * V) from by simp only [Matrix.mul_assoc],
+       hU, hV, Matrix.one_mul, Matrix.mul_one]
+  have huUt : IsUnit Uᵀ := ⟨⟨Uᵀ, U, hU, mul_eq_one_comm.mp hU⟩, rfl⟩
+  have huV : IsUnit V := ⟨⟨V, Vᵀ, mul_eq_one_comm.mp hV, hV⟩, rfl⟩
+  have hunit : IsUnit (Matrix.diagonal s) := hdiag ▸ (huUt.mul hG).mul huV
+  have hspos : ∀ i, 0 < s i := fun i =>
+    lt_of_le_of_ne (hs0 i) (Ne.symm (Pi.isUnit_iff.mp (Matrix.isUnit_diagonal.mp hunit) i).ne_zero)
+  obtain ⟨hR, hL, hJ⟩ := shampoo_eq_muon U V s hU hV hspos
+  exact ⟨U, V, s, hU, hV, hspos, hGeq, hGeq ▸ hR, hGeq ▸ hL, hGeq ▸ hJ⟩
 
 end Proofs.MuonGeometry

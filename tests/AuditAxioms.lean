@@ -2948,3 +2948,9 @@ open Proofs
 #print axioms Proofs.MuonGeometry.muon_polar_achieves_nuclear
 #print axioms Proofs.MuonGeometry.svd_of_isUnit
 #print axioms Proofs.MuonGeometry.muon_polar_achieves_nuclear_of_isUnit
+-- L5 the jewel: single-step Shampoo (GGᵀ)^{-1/4} G (GᵀG)^{-1/4} = UVᵀ = Muon's polar factor. The
+-- inverse fourth-roots are spectral (conj_diag_pow: matrix power → pointwise scalar power), collapse
+-- via s^{-1/2}·s·s^{-1/2}=1; *_of_isUnit makes it unconditional for invertible G.
+#print axioms Proofs.MuonGeometry.conj_diag_pow
+#print axioms Proofs.MuonGeometry.shampoo_eq_muon
+#print axioms Proofs.MuonGeometry.shampoo_eq_muon_of_isUnit
