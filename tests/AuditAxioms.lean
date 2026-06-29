@@ -2970,19 +2970,25 @@ open Proofs
 -- = k steps are φ^[k] per singular value, so matrix convergence to UVᵀ reduces to scalar φ^[k](σᵢ)→1.
 #print axioms Proofs.MuonNewtonSchulz.nsStep_spectral
 #print axioms Proofs.MuonNewtonSchulz.nsStep_iterate_spectral
--- Newton–Schulz P2 (the scalar engine): the classic inverse-free cubic g(t)=½(3t−t³) = nsScalar
--- (3/2,−1/2,0) (gCubic_eq_nsScalar) monotonically drives every t₀∈(0,1] to 1
--- (gCubic_iterate_tendsto_one) — orbit trapped in [t₀,1] (t≤g t≤1), monotone+bounded ⟹ converges to
--- sup L (tendsto_atTop_ciSup), L a fixed point (isFixedPt_of_tendsto_iterate) ⟹ L=1 (only fixed
--- point of g in (0,1]). With nsStep_iterate_spectral this is "each σᵢ∈(0,1] flows to 1" = P3.
+-- Newton–Schulz P2 (the scalar engine): scalar_iterate_tendsto_one — ANY monotone self-map of [0,1]
+-- (t≤g t≤1) with 1 its only fixed point in (0,1] drives t₀∈(0,1]→1 (monotone+bounded → sup L
+-- (tendsto_atTop_ciSup), L a fixed point (isFixedPt_of_tendsto_iterate) → hfix pins L=1). Convergence
+-- is a COEFFICIENT property: the cubic g(t)=½(3t−t³)=nsScalar(3/2,−1/2,0) (gCubic_*, order 2) AND the
+-- principled quintic q₅=(15t−10t³+3t⁵)/8=nsScalar(15/8,−5/4,3/8) (q5Scalar_*, order 3) both instantiate.
+#print axioms Proofs.MuonNewtonSchulz.scalar_iterate_tendsto_one
 #print axioms Proofs.MuonNewtonSchulz.gCubic_eq_nsScalar
 #print axioms Proofs.MuonNewtonSchulz.gCubic_iterate_tendsto_one
--- Newton–Schulz P3 (CLOSES THE LOOP): nsStep_cubic_iterate_tendsto_polar — for full-rank pre-normalized
--- G = U(diagσ)Vᵀ with σᵢ∈(0,1], the cubic matmul iterate (nsStep (3/2)(−1/2)0)^[k] G → UVᵀ, the polar
--- factor L3–L6 proved optimal. P1 (matrix iterate = U diag(gCubic^[k]∘σ) Vᵀ) + P2 (each σᵢ→1) +
--- tendsto_pi_nhds + matrix-mul/diagonal continuity (Matrix.diagonal_one ⟹ limit U·1·Vᵀ = UVᵀ).
--- "The thing the hardware computes is the thing the theory says is optimal."
+#print axioms Proofs.MuonNewtonSchulz.q5Scalar_eq_nsScalar
+#print axioms Proofs.MuonNewtonSchulz.q5Scalar_iterate_tendsto_one
+-- Newton–Schulz P3 (CLOSES THE LOOP): nsStep_iterate_tendsto_polar — for full-rank pre-normalized
+-- G=U(diagσ)Vᵀ with σᵢ∈(0,1], ANY scalar g=nsScalar a b c that drives (0,1]→1 lifts to the matmul
+-- iterate (nsStep a b c)^[k] G → UVᵀ, the polar factor L3–L6 proved optimal. P1 (iterate =
+-- U diag(g^[k]∘σ) Vᵀ) + per-σ convergence + tendsto_pi_nhds + matrix-mul/diagonal continuity
+-- (Matrix.diagonal_one ⟹ U·1·Vᵀ=UVᵀ). Both the cubic (nsStep_cubic_*) and the convergent quintic
+-- (nsStep_q5_*) instantiate it. "The thing the hardware computes is the thing the theory says is optimal."
+#print axioms Proofs.MuonNewtonSchulz.nsStep_iterate_tendsto_polar
 #print axioms Proofs.MuonNewtonSchulz.nsStep_cubic_iterate_tendsto_polar
+#print axioms Proofs.MuonNewtonSchulz.nsStep_q5_iterate_tendsto_polar
 -- Newton–Schulz P4 (the HONEST tier): Muon's tuned quintic qScalar φ(t)=3.4445t−4.7750t³+2.0315t⁵ is
 -- band-landing, NOT asymptotically convergent. qScalar_one_lt_one (φ(1)=0.701<1, 1 not fixed) +
 -- qScalar_half_gt_one (φ(1/2)≈1.19>1, overshoots) ⟹ qScalar_not_le_one (the cubic's g≤1 bound FAILS,

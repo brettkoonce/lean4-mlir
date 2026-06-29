@@ -119,6 +119,16 @@ separately, the quintic band bound (P4). The repo's `Types.lean:319` already cal
 this work verifies the *cubic* NS → `UVᵀ` cleanly and the *quintic* only as a quantitative 5-step
 bound. Mirror the precision-tier honesty of [[trusted-bridge-and-limit-d]] / [[repo-verification-reality]].
 
+**REFINEMENT 2026-06-29 (Brett's catch — convergence is a COEFFICIENT property, not a degree property).**
+The original framing conflated "Jordan's quintic" with "the quintic." Corrected: there are TWO quintics.
+The **principled** order-5 Newton–Schulz for sign/polar (Higham), `q₅(t) = (15t−10t³+3t⁵)/8 =
+nsScalar (15/8, −5/4, 3/8)`, HAS `q₅(1)=1` and CONVERGES on `(0,1]` — faster than the cubic (third
+order: `1−q₅ = (1−t)³(3t²+9t+8)/8`). Only **Jordan's tuned** `(3.4445, −4.7750, 2.0315)` bands. So the
+refactor (below) extracts the shared monotone engine `scalar_iterate_tendsto_one` + matrix glue
+`nsStep_iterate_tendsto_polar`, and BOTH the cubic and `q5Scalar` instantiate them (`q5Scalar_iterate_
+tendsto_one`, `nsStep_q5_iterate_tendsto_polar`); Jordan's quintic stays the band-landing foil (P4).
+"Pick the init function and it converges" — exactly right.
+
 ## 5. Why this closes the loop (the payoff narrative)
 
 L3–L6 proved `UVᵀ` is the optimal object from four angles. P1–P3 prove the GPU-friendly matmul
