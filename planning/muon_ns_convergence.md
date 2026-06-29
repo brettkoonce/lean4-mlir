@@ -44,12 +44,17 @@ New file `LeanMlir/Proofs/MuonNewtonSchulz.lean`, in the `Proofs` lib roots, aud
   `nsStep_iterate_spectral` — `nsStep^[k] (U diagσ Vᵀ) = U·diag(fun i => (nsScalar a b c)^[k] (σ i))·Vᵀ`
   by induction reusing `nsStep_spectral` (`Function.iterate_succ_apply'`). ⟹ matrix convergence to `UVᵀ`
   reduces to scalar `φ^[k](σᵢ)→1`, the entry point for P2/P3.
-- ⬜ **P2 — scalar convergence (do the CUBIC first — see §4).** For the classic inverse-free polar
-  iteration `g(t) = (3t − t³)/2` (i.e. `a,b,c = 3/2, −1/2, 0`), prove `∀ t₀ ∈ (0,1], g^[k](t₀) → 1`.
-  The clean monotone argument: on `[0,1]`, `g` is increasing (`g'(t) = (3−3t²)/2 ≥ 0`), `g(t) ≥ t`
-  (`g(t)−t = t(1−t²)/2 ≥ 0`), `g(t) ≤ 1` (`1 − g(t) = (1−t)²(2+t)/2 ≥ 0`), and `g(1) = 1`. So the
-  orbit is monotone ↑, bounded above by 1 ⟹ converges; the limit is a fixed point of the continuous
-  `g` in `[t₀,1]`, and `1` is the only one there ⟹ limit `= 1`.
+- ✅ **P2 — scalar convergence (CUBIC).** DONE 2026-06-29, `MuonNewtonSchulz.lean`, 3-axiom clean.
+  `gCubic t := (3t − t³)/2` (`noncomputable`, Real division) + `gCubic_eq_nsScalar`
+  (`gCubic = nsScalar (3/2) (−1/2) 0`, the bridge to P1) + `gCubic_iterate_tendsto_one`:
+  `∀ t₀∈(0,1], Tendsto (fun k => gCubic^[k] t₀) atTop (𝓝 1)`. The monotone argument exactly as planned:
+  `hg_ge`/`hg_le` (`t ≤ g t ≤ 1` on `[0,1]`, each one `nlinarith` with the triple-product /
+  `(1−t)²(2+t)` hint) ⟹ orbit trapped in `[t₀,1]` (`hinv`, induction) ⟹ `Monotone`
+  (`monotone_nat_of_le_succ`) + `BddAbove` ⟹ `tendsto_atTop_ciSup` to `L = ⨆`, `L∈(0,1]` via
+  `ciSup_le`/`le_ciSup`; continuity (`fun_prop`) + `isFixedPt_of_tendsto_iterate` ⟹ `gCubic L = L` ⟹
+  `L(1−L²)=0` ∧ `L>0` ⟹ `L=1`. Gotchas: `gCubic` needs `noncomputable`; don't `set` the orbit (use the
+  explicit `fun k => gCubic^[k] t₀` lambda so `isFixedPt_of_tendsto_iterate` unifies `f,x` cleanly,
+  only `set L := ⨆…`); `simpa using ⟨…⟩` over-collapsed the base case → plain `exact ⟨le_refl t₀, h1⟩`.
 - ⬜ **P3 — assemble matrix convergence.** `X_k = U·diag(g^[k]∘σ)·Vᵀ → U·diag(1)·Vᵀ = U·1·Vᵀ = UVᵀ`.
   From P2 (each diagonal entry → 1) + continuity of `diagonal` and matrix `*` (finite-dim, entrywise
   topology) ⟹ `Tendsto (fun k => nsStep^[k] G) atTop (𝓝 (U * Vᵀ))`. Needs `G` pre-normalized so all

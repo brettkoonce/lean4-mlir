@@ -2970,3 +2970,10 @@ open Proofs
 -- = k steps are φ^[k] per singular value, so matrix convergence to UVᵀ reduces to scalar φ^[k](σᵢ)→1.
 #print axioms Proofs.MuonNewtonSchulz.nsStep_spectral
 #print axioms Proofs.MuonNewtonSchulz.nsStep_iterate_spectral
+-- Newton–Schulz P2 (the scalar engine): the classic inverse-free cubic g(t)=½(3t−t³) = nsScalar
+-- (3/2,−1/2,0) (gCubic_eq_nsScalar) monotonically drives every t₀∈(0,1] to 1
+-- (gCubic_iterate_tendsto_one) — orbit trapped in [t₀,1] (t≤g t≤1), monotone+bounded ⟹ converges to
+-- sup L (tendsto_atTop_ciSup), L a fixed point (isFixedPt_of_tendsto_iterate) ⟹ L=1 (only fixed
+-- point of g in (0,1]). With nsStep_iterate_spectral this is "each σᵢ∈(0,1] flows to 1" = P3.
+#print axioms Proofs.MuonNewtonSchulz.gCubic_eq_nsScalar
+#print axioms Proofs.MuonNewtonSchulz.gCubic_iterate_tendsto_one

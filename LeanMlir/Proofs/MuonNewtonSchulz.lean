@@ -1,5 +1,7 @@
 import LeanMlir.Proofs.MuonGeometry
 import Mathlib.Logic.Function.Iterate
+import Mathlib.Topology.Order.MonotoneConvergence
+import Mathlib.Dynamics.FixedPoints.Topology
 
 /-! # Newton–Schulz convergence, P1: the iteration is a *scalar* map in disguise
 
@@ -123,5 +125,84 @@ theorem nsStep_iterate_spectral (a b c : ℝ) (U V : Matrix (Fin n) (Fin n) ℝ)
         = (fun i => (nsScalar a b c)^[k + 1] (σ i)) :=
       funext fun i => (Function.iterate_succ_apply' (nsScalar a b c) k (σ i)).symm
     rw [this]
+
+-- ════════════════════════════════════════════════════════════════
+-- § P2 — the cubic scalar iteration `g(t) = ½(3t − t³)` converges to 1 on `(0,1]`
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The classic inverse-free polar iteration**, `g(t) = ½(3t − t³)` — the Newton–Schulz scalar map
+    `nsScalar (3/2) (−1/2) 0` (`gCubic_eq_nsScalar`). Unlike Muon's tuned quintic (which is band-landing,
+    not asymptotically convergent), this cubic is a genuine fixed-point iteration: it monotonically
+    drives every `t ∈ (0,1]` to `1` (`gCubic_iterate_tendsto_one`), so the matrix iteration built from
+    it lands exactly on the polar factor `UVᵀ`. -/
+noncomputable def gCubic (t : ℝ) : ℝ := (3 * t - t ^ 3) / 2
+
+/-- The cubic iteration is the `(a,b,c) = (3/2, −1/2, 0)` instance of the Newton–Schulz scalar map, so
+    `nsStep_iterate_spectral` carries its scalar convergence (`gCubic_iterate_tendsto_one`) up to the
+    matrix level in P3. -/
+theorem gCubic_eq_nsScalar : gCubic = nsScalar (3 / 2) (-1 / 2) 0 := by
+  funext t; simp only [gCubic, nsScalar]; ring
+
+/-- **P2 — the cubic Newton–Schulz scalar iteration converges to `1` on `(0,1]`.** For every
+    `t₀ ∈ (0,1]`, `g^[k](t₀) → 1` as `k → ∞`, where `g = gCubic`. This is the scalar engine of the
+    convergence proof: with `nsStep_iterate_spectral`, "each singular value `σᵢ ∈ (0,1]` flows to `1`"
+    is exactly "the matrix iterate flows to `UVᵀ`" (P3).
+
+    The argument is the textbook monotone one. On `[0,1]` the orbit is trapped in `[t₀,1]` (`hinv`):
+    `g(t) ≥ t` (`g(t) − t = t(1−t)(1+t)/2 ≥ 0`) pushes it up, `g(t) ≤ 1` (`1 − g(t) = (1−t)²(2+t)/2 ≥ 0`)
+    keeps it under `1`. So `k ↦ g^[k](t₀)` is monotone and bounded above, hence converges to its
+    supremum `L` (`tendsto_atTop_ciSup`), which lies in `(0,1]`. Continuity makes `L` a fixed point
+    (`isFixedPt_of_tendsto_iterate`), and the fixed points of `g` are `g(t) = t ⟺ t(1−t²) = 0 ⟺
+    t ∈ {0,±1}`; the only one in `(0,1]` is `1`, so `L = 1`. -/
+theorem gCubic_iterate_tendsto_one {t₀ : ℝ} (h0 : 0 < t₀) (h1 : t₀ ≤ 1) :
+    Filter.Tendsto (fun k => gCubic^[k] t₀) Filter.atTop (nhds 1) := by
+  -- the two monotone-iteration inequalities on `[0,1]`: `t ≤ g t ≤ 1`
+  have hg_ge : ∀ t : ℝ, 0 ≤ t → t ≤ 1 → t ≤ gCubic t := by
+    intro t ht0 ht1; simp only [gCubic]
+    nlinarith [mul_nonneg (mul_nonneg ht0 (by linarith : (0:ℝ) ≤ 1 - t))
+      (by linarith : (0:ℝ) ≤ 1 + t)]
+  have hg_le : ∀ t : ℝ, 0 ≤ t → t ≤ 1 → gCubic t ≤ 1 := by
+    intro t ht0 ht1; simp only [gCubic]
+    nlinarith [mul_nonneg (sq_nonneg (1 - t)) (by linarith : (0:ℝ) ≤ 2 + t)]
+  -- the orbit stays in `[t₀, 1]`
+  have hinv : ∀ k, t₀ ≤ gCubic^[k] t₀ ∧ gCubic^[k] t₀ ≤ 1 := by
+    intro k
+    induction k with
+    | zero => exact ⟨le_refl t₀, h1⟩
+    | succ k ih =>
+      obtain ⟨hlo, hhi⟩ := ih
+      have h0k : 0 ≤ gCubic^[k] t₀ := h0.le.trans hlo
+      rw [Function.iterate_succ_apply']
+      exact ⟨hlo.trans (hg_ge _ h0k hhi), hg_le _ h0k hhi⟩
+  -- monotone ↑ and bounded above by 1
+  have hmono : Monotone (fun k => gCubic^[k] t₀) := by
+    apply monotone_nat_of_le_succ
+    intro k
+    show gCubic^[k] t₀ ≤ gCubic^[k + 1] t₀
+    rw [Function.iterate_succ_apply']
+    exact hg_ge _ (h0.le.trans (hinv k).1) (hinv k).2
+  have hbdd : BddAbove (Set.range (fun k => gCubic^[k] t₀)) := by
+    refine ⟨1, ?_⟩; rintro x ⟨k, rfl⟩; exact (hinv k).2
+  -- converges to its supremum `L`
+  have htends : Filter.Tendsto (fun k => gCubic^[k] t₀) Filter.atTop
+      (nhds (⨆ i, gCubic^[i] t₀)) := tendsto_atTop_ciSup hmono hbdd
+  set L := ⨆ i, gCubic^[i] t₀ with hL
+  have hL_le : L ≤ 1 := by rw [hL]; exact ciSup_le (fun k => (hinv k).2)
+  have hL_ge : t₀ ≤ L := by rw [hL]; exact le_trans (hinv 0).1 (le_ciSup hbdd 0)
+  have hL0 : 0 < L := lt_of_lt_of_le h0 hL_ge
+  -- `L` is a fixed point of the continuous `g`, and `1` is the only fixed point in `(0,1]`
+  have hcont : Continuous gCubic := by unfold gCubic; fun_prop
+  have hfix : gCubic L = L := isFixedPt_of_tendsto_iterate htends hcont.continuousAt
+  have hLcube : L - L ^ 3 = 0 := by
+    have h := hfix; simp only [gCubic] at h; linarith
+  have hfactor : (1 - L) * (L * (1 + L)) = 0 := by
+    have hexp : (1 - L) * (L * (1 + L)) = L - L ^ 3 := by ring
+    rw [hexp, hLcube]
+  have h1pos : 0 < L * (1 + L) := mul_pos hL0 (by linarith)
+  have hL_eq : L = 1 := by
+    rcases mul_eq_zero.mp hfactor with h | h
+    · linarith
+    · exact absurd h h1pos.ne'
+  exact hL_eq ▸ htends
 
 end Proofs.MuonNewtonSchulz
