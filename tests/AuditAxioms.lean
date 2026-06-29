@@ -2959,3 +2959,7 @@ open Proofs
 #print axioms Proofs.MuonGeometry.conj_diag_pow
 #print axioms Proofs.MuonGeometry.shampoo_eq_muon
 #print axioms Proofs.MuonGeometry.shampoo_eq_muon_of_isUnit
+-- L6 manifold view: UVᵀ ∈ O(n) (muon_polar_orthogonal) and is the NEAREST orthogonal matrix to G
+-- (muon_polar_nearest_orthogonal, ‖G−UVᵀ‖_F ≤ ‖G−Q‖_F ∀ orthogonal Q) — reuses the von Neumann bound.
+#print axioms Proofs.MuonGeometry.muon_polar_orthogonal
+#print axioms Proofs.MuonGeometry.muon_polar_nearest_orthogonal

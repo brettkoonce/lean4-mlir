@@ -61,8 +61,16 @@ this with a different norm:
   `X⁴·M = 1`. Workhorse `conj_diag_pow`: `(W·diag d·Wᵀ)^k = W·diag(dᵏ)·Wᵀ` (matrix power → pointwise
   scalar power, induction on k). Collapses: `(s^{-1/2})⁴·s² = 1` (roots) and `s^{-1/2}·s·s^{-1/2}=1`
   (jewel), both `field_simp; nlinarith [√sᵢ·√sᵢ=sᵢ]`. 3 theorems, 3-axiom clean, audited.
-- ⬜ **L6 — manifold view** (the equivariance bridge): `UVᵀ ∈` Stiefel/`O(n)`; Newton–Schulz =
-  retraction onto it. Mathlib `UnitaryGroup`. The Lie-group geometry of weight space.
+- ✅ **L6 — manifold view** DONE 2026-06-29: `muon_polar_orthogonal` — `UVᵀ` is orthogonal
+  (`(UVᵀ)ᵀ(UVᵀ) = (UVᵀ)(UVᵀ)ᵀ = 1`), a point of `O(n)`/Stiefel. `muon_polar_nearest_orthogonal` —
+  `UVᵀ` is the **nearest orthogonal matrix to `G`** in Frobenius distance (`‖G−UVᵀ‖_F ≤ ‖G−Q‖_F` ∀
+  orthogonal `Q`, squared `fInner` form). The proof is the ladder's punchline: `‖G−Q‖_F² = ‖G‖_F²
+  − 2⟨G,Q⟩ + n` (orthogonal `Q` ⇒ `‖Q‖_F²=n` via `trace_one`/`card_fin`), so minimizing distance =
+  maximizing `⟨G,Q⟩` over `O(n) ⊆ contractions` = **the von Neumann bound `muon_polar_is_max`** —
+  "steepest" and "nearest orthogonal" are the SAME inequality. `fInner` is a symmetric bilinear form
+  (`hsym`/`hexp`). 2 theorems, 3-axiom clean, audited. (Newton–Schulz=retraction onto `O(n)` is the
+  implementation's role; the *target* `O(n)` is now formalized, the iteration's convergence is the
+  remaining heavy/optional piece.)
 
 ## 2. Mathlib support (scouted 2026-06-28)
 
@@ -110,11 +118,17 @@ Bernstein–Newhouse (modular norms / duality), Jordan (Muon), Gupta–Koren–S
   `muon_polar_steepest` (2 theorems, 3-axiom clean, audited). The Muon rung is now complete BOTH
   ways — `UVᵀ` is the provable argmax, value = nuclear norm = the dual norm. Avoided the matrix
   operator norm by spelling `‖D‖op≤1` as an elementary contraction. Recipe in §1 L3 above.
-- **Next session — remaining forks (the analytically-hard piece is now done):**
-  - **(a) L6 manifold view** — `UVᵀ ∈ O(n)`/Stiefel, Newton–Schulz = retraction onto it.
-    `Matrix.unitaryGroup` / `UnitaryGroup`. The Lie-group geometry of the update.
-  - **(b) singular-`G` SVD** = orthonormal completion of `U` (when some `λᵢ=0`); would drop the
-    invertibility hypothesis from L4/L5's `_of_isUnit` capstones (`svd` becomes total).
-  - (optional polish) bridge the elementary contraction hypothesis to Mathlib's actual L2 operator
-    norm (`Matrix.l2_opNorm_mulVec`, scoped `Matrix.Norms.L2Operator`) so the statements can *also*
-    read `‖D‖ ≤ 1` literally — friction is the `EuclideanSpace.equiv` PiLp coercion.
+- **Session 5 (2026-06-29) DONE — L6 manifold view**: `muon_polar_orthogonal` +
+  `muon_polar_nearest_orthogonal` (2 theorems, 3-axiom clean, audited). `UVᵀ ∈ O(n)` AND is the
+  Frobenius-nearest orthogonal matrix to `G` — reusing the von Neumann bound. The ladder L1–L6 is
+  now a connected whole: SGD/sign/Muon rungs (both directions for Muon) + SVD construction +
+  Shampoo=Muon + manifold projection. 14 theorems total in `MuonGeometry.lean`, all 3-axiom clean.
+- **Next session — only optional/heavy forks remain:**
+  - **(a) singular-`G` SVD** = orthonormal completion of `U` (when some `λᵢ=0`); would make `svd`
+    total and drop the invertibility hypothesis from L4/L5's `_of_isUnit` capstones.
+  - **(b) Newton–Schulz convergence** — formalize the implementation's NS iteration → `UVᵀ` (the
+    retraction *dynamics*, not just the target `O(n)`). Heavy: needs the polynomial-iteration
+    convergence analysis. The big-but-optional capstone.
+  - (polish) bridge the elementary contraction hypothesis to Mathlib's `Matrix.l2_opNorm_mulVec`
+    (scoped `Matrix.Norms.L2Operator`) so statements *also* read `‖D‖ ≤ 1` literally — friction is
+    the `EuclideanSpace.equiv` PiLp coercion.

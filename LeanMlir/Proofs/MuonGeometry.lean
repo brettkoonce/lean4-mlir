@@ -41,9 +41,15 @@ pieces `V, Σ`: the fourth-roots are spectral (`(GᵀG)^{-1/4} = V (diagonal s^{
 collapses by `s^{-1/2}·s·s^{-1/2} = 1`. `shampoo_eq_muon_of_isUnit` makes it unconditional for any
 invertible `G`.
 
-The singular `G` case (the orthonormal completion of `U`, which would drop the invertibility
-hypothesis from the `_of_isUnit` capstones) and the manifold/Newton–Schulz view are the remaining
-layers. All `propext / Classical.choice / Quot.sound`-clean. -/
+**L6 (manifold view): the polar factor lands on `O(n)`, and is the *nearest* orthogonal matrix to
+`G`.** `muon_polar_orthogonal` — `UVᵀ` is orthogonal (a point of the Stiefel manifold);
+`muon_polar_nearest_orthogonal` — `‖G − UVᵀ‖_F ≤ ‖G − Q‖_F` for every orthogonal `Q`, the projection
+of the gradient onto `O(n)`. The latter reuses the von Neumann bound: minimizing Frobenius distance
+to `O(n)` *is* maximizing `⟨G,·⟩_F` over it, so "steepest" and "nearest orthogonal" are the same fact.
+
+The only remaining layer is the singular `G` case (the orthonormal completion of `U`, which would
+drop the invertibility hypothesis from the `_of_isUnit` capstones). All
+`propext / Classical.choice / Quot.sound`-clean. -/
 
 namespace Proofs.MuonGeometry
 
@@ -437,5 +443,63 @@ theorem shampoo_eq_muon_of_isUnit (G : Matrix (Fin n) (Fin n) ℝ) (hG : IsUnit 
     lt_of_le_of_ne (hs0 i) (Ne.symm (Pi.isUnit_iff.mp (Matrix.isUnit_diagonal.mp hunit) i).ne_zero)
   obtain ⟨hR, hL, hJ⟩ := shampoo_eq_muon U V s hU hV hspos
   exact ⟨U, V, s, hU, hV, hspos, hGeq, hGeq ▸ hR, hGeq ▸ hL, hGeq ▸ hJ⟩
+
+-- ════════════════════════════════════════════════════════════════
+-- § L6 — manifold view: `UVᵀ` lands on `O(n)`, and is the *nearest* orthogonal matrix to `G`
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Muon's update lands on the orthogonal group.** The polar factor `UVᵀ` is orthogonal —
+    `(UVᵀ)ᵀ(UVᵀ) = (UVᵀ)(UVᵀ)ᵀ = 1` — i.e. a point of `O(n)` (the Stiefel manifold of orthonormal
+    frames). This is the geometric content of "Muon orthogonalizes the gradient": the update is not
+    a vector in flat weight space but a point on the manifold of orthogonal maps, and the
+    implementation's Newton–Schulz iteration is the retraction that computes this projection. -/
+theorem muon_polar_orthogonal (U V : Matrix (Fin n) (Fin n) ℝ)
+    (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) :
+    (U * Vᵀ)ᵀ * (U * Vᵀ) = 1 ∧ (U * Vᵀ) * (U * Vᵀ)ᵀ = 1 := by
+  constructor
+  · rw [Matrix.transpose_mul, Matrix.transpose_transpose,
+        show (V * Uᵀ) * (U * Vᵀ) = V * (Uᵀ * U) * Vᵀ from by simp only [Matrix.mul_assoc],
+        hU, Matrix.mul_one, mul_eq_one_comm.mp hV]
+  · rw [Matrix.transpose_mul, Matrix.transpose_transpose,
+        show (U * Vᵀ) * (V * Uᵀ) = U * (Vᵀ * V) * Uᵀ from by simp only [Matrix.mul_assoc],
+        hV, Matrix.mul_one, mul_eq_one_comm.mp hU]
+
+/-- **Muon's update is the nearest orthogonal matrix to `G`** — the projection of the raw gradient
+    onto `O(n)` in Frobenius distance: `‖G − UVᵀ‖_F ≤ ‖G − Q‖_F` for every orthogonal `Q` (stated in
+    squared `fInner` form to avoid `√`). This is *why* the polar factor is "the orthogonalized
+    gradient", and it is the ladder's punchline reusing its own prize: expanding
+    `‖G − Q‖_F² = ‖G‖_F² − 2⟨G,Q⟩_F + n` (orthogonal `Q` has `‖Q‖_F² = tr(QᵀQ) = n`), minimizing the
+    distance is *maximizing* `⟨G,Q⟩_F` over `O(n) ⊆ {contractions}` — exactly the von Neumann bound
+    `muon_polar_is_max`, attained at `UVᵀ`. The same inequality that makes `UVᵀ` the steepest
+    direction makes it the nearest orthogonal matrix. -/
+theorem muon_polar_nearest_orthogonal (U V Q : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ)
+    (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) (hs : ∀ i, 0 ≤ s i) (hQ : Qᵀ * Q = 1) :
+    fInner (U * Matrix.diagonal s * Vᵀ - U * Vᵀ) (U * Matrix.diagonal s * Vᵀ - U * Vᵀ)
+      ≤ fInner (U * Matrix.diagonal s * Vᵀ - Q) (U * Matrix.diagonal s * Vᵀ - Q) := by
+  -- `fInner` is a symmetric bilinear form; expand both squared distances
+  have hsym : ∀ A B : Matrix (Fin n) (Fin n) ℝ, fInner A B = fInner B A := by
+    intro A B; unfold fInner
+    rw [← Matrix.trace_transpose (Bᵀ * A), Matrix.transpose_mul, Matrix.transpose_transpose]
+  have hexp : ∀ A B : Matrix (Fin n) (Fin n) ℝ,
+      fInner (A - B) (A - B) = fInner A A - fInner A B - fInner B A + fInner B B := by
+    intro A B; unfold fInner
+    simp only [Matrix.transpose_sub, Matrix.sub_mul, Matrix.mul_sub, Matrix.trace_sub]; ring
+  -- an orthogonal matrix has constant Frobenius norm² `= n`, and is a contraction (isometry)
+  have hnn : ∀ W : Matrix (Fin n) (Fin n) ℝ, Wᵀ * W = 1 → fInner W W = (n : ℝ) := by
+    intro W hW; unfold fInner; rw [hW, Matrix.trace_one, Fintype.card_fin]
+  have hiso : ∀ x : Fin n → ℝ, (Q *ᵥ x) ⬝ᵥ (Q *ᵥ x) ≤ x ⬝ᵥ x := by
+    intro x; refine le_of_eq ?_
+    rw [Matrix.dotProduct_mulVec, ← Matrix.mulVec_transpose, Matrix.mulVec_mulVec, hQ,
+        Matrix.one_mulVec]
+  have hGUV : fInner (U * Matrix.diagonal s * Vᵀ) (U * Vᵀ) = ∑ i, s i :=
+    muon_polar_achieves_nuclear U V s hU hV
+  have hUVUV : fInner (U * Vᵀ) (U * Vᵀ) = (n : ℝ) := hnn _ (muon_polar_orthogonal U V hU hV).1
+  have hQQ : fInner Q Q = (n : ℝ) := hnn Q hQ
+  -- the cross term `⟨G,Q⟩_F ≤ Σσᵢ = ⟨G,UVᵀ⟩_F` is the von Neumann bound — the whole inequality
+  have hmax : fInner (U * Matrix.diagonal s * Vᵀ) Q ≤ ∑ i, s i :=
+    muon_polar_is_max U V Q s hU hV hs hiso
+  rw [hexp, hexp, hsym (U * Vᵀ) (U * Matrix.diagonal s * Vᵀ),
+      hsym Q (U * Matrix.diagonal s * Vᵀ), hGUV, hUVUV, hQQ]
+  linarith [hmax]
 
 end Proofs.MuonGeometry
