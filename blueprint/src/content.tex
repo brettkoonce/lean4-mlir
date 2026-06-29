@@ -4224,6 +4224,13 @@ just at different token alphabets. Image classification + detection
 + segmentation + diffusion + NLP, all on the same Lean$\to$MLIR$\to$IREE
 pipeline, covers most of what people mean by ``modern deep learning.''
 
+\paragraph{Going further.} For a reinforcement-learning detour, read
+the AlphaGo Zero paper (\hyperref[bestiary:alphagozero]{bestiary
+entry}), which combines reinforcement learning with a large residual
+network of $3\times 3$ convolutions. And if you have the compute, run
+the ResNet-50 ImageNet demo in the \texttt{jax/} folder
+(\texttt{jax/MainResnet50Imagenet.lean}).
+
 \chapter{MobileNetV2}
 \label{chap:depthwise}
 
@@ -7847,6 +7854,14 @@ Chapter~\ref{chap:residual} applies to bottleneck-block ResNets ---
 the bottleneck just composes three convolutions instead of two
 inside the residual branch. No new math.
 
+The modern ResNet-50 baseline is timm's ``ResNet Strikes Back'' A2
+recipe (Wightman et al.\ 2021,
+\href{https://arxiv.org/abs/2110.00476}{arXiv:2110.00476}) --- LAMB,
+BCE loss, repeated augmentation --- which trains this exact network
+to ${\sim}79.8\%$ top-1. The phase-2 JAX trainer
+(\texttt{jax/MainResnet50Imagenet.lean}) wires that recipe.
+\textbf{[TODO: run with phase-2 trainer]}
+
 \subsubsection*{WRN (Wide ResNet) (\texttt{Bestiary/WRN.lean})}
 \emph{Zero} new primitives --- same \texttt{.residualBlock} as
 Chapter~\ref{chap:residual}, just widened. Zagoruyko \& Komodakis
@@ -8803,12 +8818,15 @@ def alphaGoPolicyNet : NetSpec where
 \end{verbatim}
 
 \subsubsection*{AlphaZero (\texttt{Bestiary/AlphaZero.lean})}
+\phantomsection\label{bestiary:alphagozero}
 \emph{Zero} new primitives --- \texttt{convBn} + \texttt{residualBlock}
 + \texttt{dense}. Two-headed (policy + value) network
 (Silver et al.\ 2018,
 \href{https://arxiv.org/abs/1712.01815}{arXiv:1712.01815}),
 expressed as two separate \texttt{NetSpec} values sharing the body in
-prose. Variants: AlphaGo Zero (Go), AlphaZero chess, tiny fixture.
+prose. Variants: AlphaGo Zero (Go; Silver et al.\ 2017,
+\href{https://www.nature.com/articles/nature24270}{Nature}),
+AlphaZero chess, tiny fixture.
 
 \begin{verbatim}
 def alphaGoZeroPolicy : NetSpec where
