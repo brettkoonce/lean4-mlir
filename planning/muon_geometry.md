@@ -127,8 +127,11 @@ Bernstein–Newhouse (modular norms / duality), Jordan (Muon), Gupta–Koren–S
   - **(a) singular-`G` SVD** = orthonormal completion of `U` (when some `λᵢ=0`); would make `svd`
     total and drop the invertibility hypothesis from L4/L5's `_of_isUnit` capstones.
   - **(b) Newton–Schulz convergence** — formalize the implementation's NS iteration → `UVᵀ` (the
-    retraction *dynamics*, not just the target `O(n)`). Heavy: needs the polynomial-iteration
-    convergence analysis. The big-but-optional capstone.
+    retraction *dynamics*, not just the target `O(n)`). **Dedicated plan written:
+    `planning/muon_ns_convergence.md`** — key insight: NS acts only on singular values, so matrix
+    convergence reduces to scalar `φ^[k](σ)→1` (reuses L5's `conj_diag_pow`). Honest tier: the
+    *classic cubic* `½(3t−t³)` converges provably (P1–P3, the deliverable); the *Jordan quintic* is
+    only a finite-step band bound (P4), NOT asymptotic — don't overclaim. Start at P1.
   - (polish) bridge the elementary contraction hypothesis to Mathlib's `Matrix.l2_opNorm_mulVec`
     (scoped `Matrix.Norms.L2Operator`) so statements *also* read `‖D‖ ≤ 1` literally — friction is
     the `EuclideanSpace.equiv` PiLp coercion.
