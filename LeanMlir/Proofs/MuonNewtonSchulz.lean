@@ -247,4 +247,49 @@ theorem nsStep_cubic_iterate_tendsto_polar
     rw [Matrix.diagonal_one, Matrix.mul_one]]
   exact hcomp
 
+-- ════════════════════════════════════════════════════════════════
+-- § P4 — Muon's tuned quintic: band-landing, NOT asymptotic convergence (the honest tier)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Muon's actual tuned Newton–Schulz quintic** `φ(t) = 3.4445 t − 4.7750 t³ + 2.0315 t⁵`
+    (Jordan 2024 — `planning/muon.md`). Unlike the cubic `gCubic`, these coefficients are tuned for
+    *speed to a band near 1 in ~5 steps*, deliberately **not** for asymptotic convergence to exactly
+    `1`: the map straddles `1` (`qScalar_one_lt_one` ∧ `qScalar_half_gt_one`) and so oscillates. The
+    theorems below are the honest tier boundary — they prove the cubic's monotone-convergence argument
+    (P1–P3) structurally *cannot* transfer, so one must **not** state `qScalar^[k] → 1`. -/
+noncomputable def qScalar (t : ℝ) : ℝ := nsScalar 3.4445 (-4.7750) 2.0315 t
+
+/-- At the top of the normalized range, the tuned quintic pulls **below** `1`: `φ(1) = 0.701 < 1`. So
+    `1` is *not* a fixed point of `qScalar` (contrast the cubic, whose only relevant fixed point IS
+    `1`) — the asymptotic limit the cubic enjoys simply does not exist here. -/
+theorem qScalar_one_lt_one : qScalar 1 < 1 := by
+  simp only [qScalar, nsScalar]; norm_num
+
+/-- In mid-range the tuned quintic **overshoots** above `1`: `φ(1/2) ≈ 1.189 > 1`. Together with
+    `qScalar_one_lt_one` this shows `qScalar` takes values on *both* sides of `1` — it straddles the
+    target rather than approaching it monotonically. -/
+theorem qScalar_half_gt_one : 1 < qScalar (1 / 2) := by
+  simp only [qScalar, nsScalar]; norm_num
+
+/-- **The cubic's key bound fails for the tuned quintic** — `qScalar` is *not* `≤ 1` on `[0,1]` (it
+    overshoots at `1/2`). This is exactly the hypothesis `g(t) ≤ 1` that powered the monotone-bounded
+    convergence of `gCubic_iterate_tendsto_one` (P2); its failure is *why* the clean `→ 1` proof does
+    not transfer to Muon's quintic, and why claiming `qScalar^[k] → 1` would be an overclaim. -/
+theorem qScalar_not_le_one : ¬ ∀ t : ℝ, 0 ≤ t → t ≤ 1 → qScalar t ≤ 1 := by
+  intro h
+  linarith [h (1 / 2) (by norm_num) (by norm_num), qScalar_half_gt_one]
+
+/-- **The honest *positive* statement: a finite-5-step band bound** (the form P4 actually supports).
+    Five steps of Muon's tuned quintic from `σ = 1/2` land within `0.3` of `1`:
+    `|qScalar^[5] (1/2) − 1| ≤ 3/10` (the orbit `0.5 → 1.19 → 0.90 → 0.83 → 0.94 → 0.77` oscillates in a
+    band around `1`, never reaching it). This matches the implementation's fixed-5-step, "rough is
+    fine — we recompute next optimizer step anyway" design (`planning/muon.md`): not convergence, a
+    *band*. The universal interval version `∀ σ ∈ [σ_min, 1], |φ^[5](σ) − 1| ≤ δ` is a degree-5⁵
+    polynomial bound over an interval (genuine interval arithmetic) and is left open by hand. -/
+theorem qScalar_iterate_band_half : |qScalar^[5] (1 / 2) - 1| ≤ 3 / 10 := by
+  simp only [qScalar, Function.iterate_succ, Function.iterate_zero, Function.comp_apply, id_eq,
+    nsScalar]
+  rw [abs_le]
+  constructor <;> norm_num
+
 end Proofs.MuonNewtonSchulz

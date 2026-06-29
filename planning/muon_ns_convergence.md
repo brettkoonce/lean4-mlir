@@ -66,12 +66,18 @@ New file `LeanMlir/Proofs/MuonNewtonSchulz.lean`, in the `Proofs` lib roots, aud
   turns `U·diag(1)·Vᵀ` into `U·Vᵀ`. Full-rank (`σ i>0`) handled; `σ i=0` partial-isometry case left
   open by design (P2 needs `t₀>0`). **P1–P3 = the real deliverable: the cubic NS matmul iteration
   provably computes the polar factor the L3–L6 theory says is optimal.**
-- ⬜ **P4 — the Jordan quintic, as a finite-step BAND bound** (harder; honest — see §4). `(a,b,c) ≈
-  (3.4445, −4.7750, 2.0315)` is tuned for *speed to a band*, NOT asymptotic convergence to exactly 1,
-  and likely oscillates near 1. The honest theorem is *quantitative*: `∀ σ ∈ [σ_min, 1],
-  |φ^[5](σ) − 1| ≤ δ` for an explicit `δ`. Needs interval/explicit-bound reasoning (`norm_num`/
-  `polyrith`/`interval_cases`-flavored), matching the implementation's fixed-5-step nature. Optional;
-  P1–P3 (the cubic) is the real deliverable.
+- ✅ **P4 — the Jordan quintic, the HONEST tier (band-landing, NOT asymptotic).** DONE 2026-06-29,
+  `MuonNewtonSchulz.lean`, all 4 thms 3-axiom clean. `qScalar t := nsScalar 3.4445 (−4.7750) 2.0315 t`
+  (reuses `nsScalar`; scientific literals, `norm_num`-evaluable). **Tier-boundary (negative):**
+  `qScalar_one_lt_one` (φ(1)=0.701<1 ⟹ 1 NOT a fixed point) + `qScalar_half_gt_one` (φ(1/2)≈1.189>1,
+  overshoots) ⟹ `qScalar_not_le_one` (the cubic's load-bearing `g≤1` bound FAILS on [0,1], so P1–P3's
+  monotone-bounded argument structurally can't transfer — the rigorous form of "don't claim
+  `quintic^[k]→1`"). **Positive finite-5-step BAND:** `qScalar_iterate_band_half`
+  (`|qScalar^[5](1/2)−1| ≤ 3/10`, orbit `0.5→1.19→0.90→0.83→0.94→0.77` oscillates in a band, never
+  reaching 1 — matches the impl's fixed-5-step "rough is fine" design). **Left open (intractable by
+  hand):** the universal `∀ σ∈[σ_min,1], |φ^[5](σ)−1|≤δ` is a degree-5⁵=3125 polynomial bound over an
+  interval (real interval arithmetic); `nlinarith` can't even crack the tight one-step `φ([0,1])≤1.3`
+  (max ≈1.2023, interior min too small). The concrete-point band is the honest finite-step deliverable.
 
 ## 2. Mathlib support (scouted 2026-06-29)
 

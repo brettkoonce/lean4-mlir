@@ -2983,3 +2983,12 @@ open Proofs
 -- tendsto_pi_nhds + matrix-mul/diagonal continuity (Matrix.diagonal_one ⟹ limit U·1·Vᵀ = UVᵀ).
 -- "The thing the hardware computes is the thing the theory says is optimal."
 #print axioms Proofs.MuonNewtonSchulz.nsStep_cubic_iterate_tendsto_polar
+-- Newton–Schulz P4 (the HONEST tier): Muon's tuned quintic qScalar φ(t)=3.4445t−4.7750t³+2.0315t⁵ is
+-- band-landing, NOT asymptotically convergent. qScalar_one_lt_one (φ(1)=0.701<1, 1 not fixed) +
+-- qScalar_half_gt_one (φ(1/2)≈1.19>1, overshoots) ⟹ qScalar_not_le_one (the cubic's g≤1 bound FAILS,
+-- so P1–P3's monotone argument can't transfer — don't claim quintic^[k]→1). The positive form is a
+-- finite-5-step BAND: qScalar_iterate_band_half (|qScalar^[5](1/2)−1|≤0.3, the orbit oscillates ~0.77).
+#print axioms Proofs.MuonNewtonSchulz.qScalar_one_lt_one
+#print axioms Proofs.MuonNewtonSchulz.qScalar_half_gt_one
+#print axioms Proofs.MuonNewtonSchulz.qScalar_not_le_one
+#print axioms Proofs.MuonNewtonSchulz.qScalar_iterate_band_half
