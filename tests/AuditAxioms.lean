@@ -2977,3 +2977,9 @@ open Proofs
 -- point of g in (0,1]). With nsStep_iterate_spectral this is "each σᵢ∈(0,1] flows to 1" = P3.
 #print axioms Proofs.MuonNewtonSchulz.gCubic_eq_nsScalar
 #print axioms Proofs.MuonNewtonSchulz.gCubic_iterate_tendsto_one
+-- Newton–Schulz P3 (CLOSES THE LOOP): nsStep_cubic_iterate_tendsto_polar — for full-rank pre-normalized
+-- G = U(diagσ)Vᵀ with σᵢ∈(0,1], the cubic matmul iterate (nsStep (3/2)(−1/2)0)^[k] G → UVᵀ, the polar
+-- factor L3–L6 proved optimal. P1 (matrix iterate = U diag(gCubic^[k]∘σ) Vᵀ) + P2 (each σᵢ→1) +
+-- tendsto_pi_nhds + matrix-mul/diagonal continuity (Matrix.diagonal_one ⟹ limit U·1·Vᵀ = UVᵀ).
+-- "The thing the hardware computes is the thing the theory says is optimal."
+#print axioms Proofs.MuonNewtonSchulz.nsStep_cubic_iterate_tendsto_polar

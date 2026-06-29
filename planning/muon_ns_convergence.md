@@ -55,12 +55,17 @@ New file `LeanMlir/Proofs/MuonNewtonSchulz.lean`, in the `Proofs` lib roots, aud
   `L(1−L²)=0` ∧ `L>0` ⟹ `L=1`. Gotchas: `gCubic` needs `noncomputable`; don't `set` the orbit (use the
   explicit `fun k => gCubic^[k] t₀` lambda so `isFixedPt_of_tendsto_iterate` unifies `f,x` cleanly,
   only `set L := ⨆…`); `simpa using ⟨…⟩` over-collapsed the base case → plain `exact ⟨le_refl t₀, h1⟩`.
-- ⬜ **P3 — assemble matrix convergence.** `X_k = U·diag(g^[k]∘σ)·Vᵀ → U·diag(1)·Vᵀ = U·1·Vᵀ = UVᵀ`.
-  From P2 (each diagonal entry → 1) + continuity of `diagonal` and matrix `*` (finite-dim, entrywise
-  topology) ⟹ `Tendsto (fun k => nsStep^[k] G) atTop (𝓝 (U * Vᵀ))`. Needs `G` pre-normalized so all
-  `σ_i ∈ (0,1]` (the implementation's `G / ‖G‖` step; state as a hypothesis `∀ i, σ i ∈ (0,1]`).
-  Caveat: `σ_i = 0` stays `0` (`φ(0)=0`), giving the **partial isometry** `U·diag(1_{σ>0})·Vᵀ`, the
-  "semi-orthogonal" limit of `Types.lean:319` — handle full-rank (`σ_i>0`) for the clean `→ UVᵀ`.
+- ✅ **P3 — assemble matrix convergence. CLOSES THE LOOP.** DONE 2026-06-29, `MuonNewtonSchulz.lean`,
+  3-axiom clean. `nsStep_cubic_iterate_tendsto_polar`: for `G = U(diagσ)Vᵀ`, `UᵀU=VᵀV=1`, `∀ i, 0<σ i ∧
+  σ i≤1`, `Tendsto (fun k => (nsStep (3/2)(−1/2)0)^[k] G) atTop (𝓝 (U·Vᵀ))`. Exactly as planned:
+  `hseq` rewrites the iterate to `U·diag(gCubic^[k]∘σ)·Vᵀ` (P1 `nsStep_iterate_spectral` + `←
+  gCubic_eq_nsScalar`); `hpt`/`hpi` lift the per-entry P2 limit to `Fin n→ℝ` convergence
+  (`tendsto_pi_nhds.mpr`); `hF` = continuity of `d ↦ U(diag d)Vᵀ`
+  (`continuous_const.matrix_mul continuous_id.matrix_diagonal |>.matrix_mul continuous_const`);
+  `(hF.tendsto _).comp hpi` pushes the limit through; final `rw [Matrix.diagonal_one, Matrix.mul_one]`
+  turns `U·diag(1)·Vᵀ` into `U·Vᵀ`. Full-rank (`σ i>0`) handled; `σ i=0` partial-isometry case left
+  open by design (P2 needs `t₀>0`). **P1–P3 = the real deliverable: the cubic NS matmul iteration
+  provably computes the polar factor the L3–L6 theory says is optimal.**
 - ⬜ **P4 — the Jordan quintic, as a finite-step BAND bound** (harder; honest — see §4). `(a,b,c) ≈
   (3.4445, −4.7750, 2.0315)` is tuned for *speed to a band*, NOT asymptotic convergence to exactly 1,
   and likely oscillates near 1. The honest theorem is *quantitative*: `∀ σ ∈ [σ_min, 1],

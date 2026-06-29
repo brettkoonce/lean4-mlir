@@ -205,4 +205,46 @@ theorem gCubic_iterate_tendsto_one {t₀ : ℝ} (h0 : 0 < t₀) (h1 : t₀ ≤ 1
     · exact absurd h h1pos.ne'
   exact hL_eq ▸ htends
 
+-- ════════════════════════════════════════════════════════════════
+-- § P3 — assemble: the cubic Newton–Schulz matrix iterate converges to the polar factor `UVᵀ`
+-- ════════════════════════════════════════════════════════════════
+
+/-- **P3 — the cubic Newton–Schulz iteration converges to Muon's polar factor `UVᵀ`.** For a
+    pre-normalized full-rank gradient `G = U (diagonal σ) Vᵀ` with every singular value `σᵢ ∈ (0,1]`
+    (the implementation's `G / ‖G‖` step), the matmul iterate `(nsStep (3/2) (−1/2) 0)^[k] G` converges
+    to the polar factor `U Vᵀ` — exactly the object L3–L6 proved optimal (operator-norm steepest
+    descent / nuclear-norm argmax / Shampoo's step / nearest orthogonal matrix). **This closes the
+    loop: the thing the hardware computes is the thing the theory says is optimal.**
+
+    The proof is the spectral reduction (§0) cashed out: `nsStep_iterate_spectral` (P1) makes the
+    matrix iterate `U (diagonal (gCubic^[k] ∘ σ)) Vᵀ` (with `gCubic = nsScalar (3/2) (−1/2) 0`,
+    `gCubic_eq_nsScalar`); each diagonal entry `gCubic^[k] (σᵢ) → 1` by `gCubic_iterate_tendsto_one`
+    (P2); pointwise convergence in `Fin n → ℝ` (`tendsto_pi_nhds`) plus continuity of
+    `d ↦ U (diagonal d) Vᵀ` (`Continuous.matrix_diagonal`/`Continuous.matrix_mul`) pushes the limit
+    through to `U (diagonal 1) Vᵀ = U Vᵀ` (`Matrix.diagonal_one`). The rank hypothesis `σᵢ > 0` is what
+    makes the per-value limit `1` (P2 needs `t₀ > 0`); `σᵢ = 0` would stay `0`, giving the partial
+    isometry `U (diagonal 1_{σ>0}) Vᵀ` instead. -/
+theorem nsStep_cubic_iterate_tendsto_polar
+    (U V : Matrix (Fin n) (Fin n) ℝ) (σ : Fin n → ℝ)
+    (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) (hσ : ∀ i, 0 < σ i ∧ σ i ≤ 1) :
+    Filter.Tendsto (fun k => (nsStep (3 / 2) (-1 / 2) 0)^[k] (U * Matrix.diagonal σ * Vᵀ))
+      Filter.atTop (nhds (U * Vᵀ)) := by
+  -- P1: the matrix iterate is `U (diagonal (gCubic^[k] ∘ σ)) Vᵀ`
+  have hseq : (fun k => (nsStep (3 / 2) (-1 / 2) 0)^[k] (U * Matrix.diagonal σ * Vᵀ))
+      = (fun k => U * Matrix.diagonal (fun i => gCubic^[k] (σ i)) * Vᵀ) := by
+    funext k
+    rw [nsStep_iterate_spectral (3 / 2) (-1 / 2) 0 U V σ hU hV k, ← gCubic_eq_nsScalar]
+  -- P2: each singular value flows to 1 ⟹ the diagonal vectors converge to `1` in `Fin n → ℝ`
+  have hpt : ∀ i, Filter.Tendsto (fun k => gCubic^[k] (σ i)) Filter.atTop (nhds 1) :=
+    fun i => gCubic_iterate_tendsto_one (hσ i).1 (hσ i).2
+  have hpi : Filter.Tendsto (fun k => fun i => gCubic^[k] (σ i)) Filter.atTop
+      (nhds (fun _ : Fin n => (1 : ℝ))) := tendsto_pi_nhds.mpr hpt
+  -- continuity of `d ↦ U (diagonal d) Vᵀ` carries the limit through to `U (diagonal 1) Vᵀ = U Vᵀ`
+  have hF : Continuous (fun d : Fin n → ℝ => U * Matrix.diagonal d * Vᵀ) :=
+    (continuous_const.matrix_mul continuous_id.matrix_diagonal).matrix_mul continuous_const
+  have hcomp := (hF.tendsto _).comp hpi
+  rw [hseq, show U * Vᵀ = U * Matrix.diagonal (fun _ : Fin n => (1 : ℝ)) * Vᵀ from by
+    rw [Matrix.diagonal_one, Matrix.mul_one]]
+  exact hcomp
+
 end Proofs.MuonNewtonSchulz
