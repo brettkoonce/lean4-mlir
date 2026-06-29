@@ -108,6 +108,13 @@ machinery as Muon. So:
 Where it lives now: `OptimizerKind` (`Types.lean`), the `emit*Update` family + `emitMuonUpdate`
 (`MlirCodegen.lean`), `SgdDescent*.lean` (the descent proofs none-but-SGD fit yet).
 
+**Landed + concretized:** Muon geometry L1–L6 (`MuonGeometry.lean`) + Newton–Schulz convergence P1–P4
+(`MuonNewtonSchulz.lean`, cubic & principled-quintic matmul iterate → `UVᵀ`). The capstone that finishes
+this ladder is now a concrete plan: **`planning/natural_gradient.md`** — steepest descent under a metric
+`M` generalizes `steepest_l2_*`; Adam = diagonal `M`, **natural gradient = Fisher `M = JᵀJ`** (built from
+the VJP machinery), and Adam/Shampoo/Muon become structured approximations to `F⁻¹g`. The unifying
+NG1 lemma makes every existing rung a corollary.
+
 **First demo:** `OptimizerKind.shampoo` + `emitShampooUpdate` (matmul + the two NS inverse-roots),
 `vit-tiny-shampoo-train`, A/B vs Muon + AdamW — the **Muon harness is the template** (clone
 `MainVitMuonTrain.lean` + `run_vit_muon_ab.sh`). The one new wrinkle: Shampoo needs `L`(m×m)/`R`(n×n)
@@ -184,6 +191,14 @@ runnable demo a non-formalization audience reads instantly. Host-side mostly (at
 spectral-norm via FFT/power-iteration), light codegen.
 **Effort:** the largest to FORMALIZE (new predicate + per-op spectral-norm lemmas), but the demo
 is medium and the biggest "this isn't cookie-cutter" payoff. Pairs with Thread 2 (all spectral norms).
+
+**Landed + concretized:** the cert is a theorem (`LipschitzCert.lean`: `clm_lipschitzL2` +
+`LipschitzL2.comp` ⟹ `∏‖Wᵢ‖₂`; `lipschitz_margin_certified_radius`; randomized-smoothing
+`smoothing_certified_radius`). The open *computational* half — actually *producing* the `‖Wᵢ‖₂` the
+cert assumes — is now a concrete plan: **`planning/power_iteration_lipschitz.md`**. Power iteration is
+a Newton–Schulz cousin that reuses `conj_diag_pow` wholesale (the spectrum reduces to a scalar ratio
+`(λ₂/λ₁)ᵏ`), so it's the bridge from Thread 1's spectral engine to this cert. Honest catch carried over:
+it converges from *below*, so the sound *upper* bound for a finite-step cert is the separate harder rung.
 
 ---
 
