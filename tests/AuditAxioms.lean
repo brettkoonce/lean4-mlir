@@ -2946,6 +2946,11 @@ open Proofs
 #print axioms Proofs.MuonGeometry.steepest_linf_bound
 #print axioms Proofs.MuonGeometry.steepest_linf_attained
 #print axioms Proofs.MuonGeometry.muon_polar_achieves_nuclear
+-- L3 upper bound (von Neumann's trace inequality): UVᵀ is the MAX over the operator-norm ball, not
+-- just an achiever. muon_polar_is_max (⟨G,D⟩≤Σσᵢ ∀ contraction D, per-singular-vector Cauchy–Schwarz)
+-- + muon_polar_steepest (UVᵀ feasible/isometry ∧ attains ∧ unbeatable = Muon IS steepest descent).
+#print axioms Proofs.MuonGeometry.muon_polar_is_max
+#print axioms Proofs.MuonGeometry.muon_polar_steepest
 #print axioms Proofs.MuonGeometry.svd_of_isUnit
 #print axioms Proofs.MuonGeometry.muon_polar_achieves_nuclear_of_isUnit
 -- L5 the jewel: single-step Shampoo (GGᵀ)^{-1/4} G (GᵀG)^{-1/4} = UVᵀ = Muon's polar factor. The

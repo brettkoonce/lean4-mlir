@@ -28,11 +28,16 @@ this with a different norm:
   Dual norm of `‖·‖₂` is itself; maximizer = normalized gradient.
 - ✅ **L2 — sign rung (L∞→L¹)** DONE: `steepest_linf_bound` (`Σgᵢdᵢ ≤ Σ|gᵢ|` over `|dᵢ|≤1`) +
   `steepest_linf_attained` (`sign g` feasible, `Σ gᵢ·sign gᵢ = Σ|gᵢ|`). Sign/Adam geometry.
-- 🟡 **L3 — Muon rung (operator→nuclear)** ACHIEVABILITY DONE: `muon_polar_achieves_nuclear` —
-  given SVD `G = U·diagonal s·Vᵀ` (`UᵀU=VᵀV=1`), `fInner G (UVᵀ) = Σ sᵢ` (polar factor realizes the
-  nuclear norm; trace algebra). **OPEN: the upper bound** (`⟨G,D⟩_F ≤ Σσᵢ` ∀ `‖D‖op≤1`, so `UVᵀ` is
-  the MAX) = von Neumann's trace inequality. Diagonal core is elementary (`|Dᵢᵢ| ≤ ‖D‖op`, reduces
-  to L2) but needs the matrix operator norm (scout `Matrix.l2OpNorm`).
+- ✅ **L3 — Muon rung (operator→nuclear)** DONE BOTH WAYS:
+  - *achievability*: `muon_polar_achieves_nuclear` — given SVD `G = U·diagonal s·Vᵀ`, `fInner G (UVᵀ)
+    = Σ sᵢ` (polar factor realizes the nuclear norm; trace algebra).
+  - *upper bound (von Neumann's trace inequality)* DONE 2026-06-29: `muon_polar_is_max` —
+    `fInner G D ≤ Σ sᵢ` for every contraction `D`. **Sidestepped the matrix operator norm entirely**:
+    stated `‖D‖op≤1` elementarily as `(D*ᵥx)⬝ᵥ(D*ᵥx) ≤ x⬝ᵥx`, then the cyclic-trace reduction
+    `fInner G D = Σᵢ sᵢ·(UᵀDV)ᵢᵢ` + per-singular-vector Cauchy–Schwarz (`Finset.sum_mul_sq_le_sq_mul_sq`,
+    `(UᵀDV)ᵢᵢ = uᵢ·(Dvᵢ)`, `|·|≤1`). Capstone `muon_polar_steepest`: `UVᵀ` is feasible (isometry via
+    `dotProduct_mulVec`+`mulVec_transpose`) ∧ attains ∧ unbeatable — the full argmax characterization,
+    same `bound`+`attained` shape as L1/L2. 2 theorems, 3-axiom clean, audited.
 - ✅ **L4 — build the SVD** DONE (invertible/full-rank `G`): `svd_of_isUnit` — for `IsUnit G`,
   produces orthogonal `U, V` and `s ≥ 0` with `G = U (diagonal s) Vᵀ`, built from the **matrix**
   spectral theorem of `A := GᵀG`. `V` = `hAherm.eigenvectorUnitary` (eigenbasis), `sᵢ = √λᵢ` the
@@ -101,14 +106,15 @@ Bernstein–Newhouse (modular norms / duality), Jordan (Muon), Gupta–Koren–S
   + `shampoo_eq_muon_of_isUnit` (3 theorems, 3-axiom clean, audited). Avoided `cfc` entirely by
   defining the inverse fourth-roots spectrally and proving the `X⁴·M=1` certs. Recipe + collapses in
   §1 L5 above. The Shampoo row of the §0 table is now checked Lean.
-- **Next session — remaining forks:**
-  - **(a) L3 upper bound (von Neumann's trace inequality)** — `⟨G,D⟩_F ≤ Σσᵢ` for `‖D‖op ≤ 1`, so
-    `UVᵀ` is the *max* not just an achiever. The one analytically-hard piece left. BLOCKER scouted:
-    no `Matrix.l2OpNorm` in `Analysis/Matrix.lean`. Scout a matrix operator-norm:
-    `Matrix.instL2OpNormedAddCommGroup` / the `EuclideanSpace`-CLM route (`Matrix.toEuclideanCLM` /
-    `toEuclideanLin` ⇒ `‖·‖`), or prove it directly from the SVD substitution
-    (`⟨UΣVᵀ,D⟩ = Σᵢ σᵢ ⟨uᵢ, D vᵢ⟩`, bound each `⟨uᵢ,Dvᵢ⟩ ≤ ‖D‖op ≤ 1` — per-singular-vector
-    Cauchy–Schwarz, reduces to L1's `steepest_l2_bound`).
-  - **(b) L6 manifold view** — `UVᵀ ∈ O(n)`/Stiefel, Newton–Schulz = retraction. `UnitaryGroup`.
-  - (deferred) the **singular-`G` SVD** = orthonormal completion of `U` (would make L4/L5's
-    `_of_isUnit` versions drop the invertibility hypothesis).
+- **Session 4 (2026-06-29) DONE — L3 upper bound (von Neumann)**: `muon_polar_is_max` +
+  `muon_polar_steepest` (2 theorems, 3-axiom clean, audited). The Muon rung is now complete BOTH
+  ways — `UVᵀ` is the provable argmax, value = nuclear norm = the dual norm. Avoided the matrix
+  operator norm by spelling `‖D‖op≤1` as an elementary contraction. Recipe in §1 L3 above.
+- **Next session — remaining forks (the analytically-hard piece is now done):**
+  - **(a) L6 manifold view** — `UVᵀ ∈ O(n)`/Stiefel, Newton–Schulz = retraction onto it.
+    `Matrix.unitaryGroup` / `UnitaryGroup`. The Lie-group geometry of the update.
+  - **(b) singular-`G` SVD** = orthonormal completion of `U` (when some `λᵢ=0`); would drop the
+    invertibility hypothesis from L4/L5's `_of_isUnit` capstones (`svd` becomes total).
+  - (optional polish) bridge the elementary contraction hypothesis to Mathlib's actual L2 operator
+    norm (`Matrix.l2_opNorm_mulVec`, scoped `Matrix.Norms.L2Operator`) so the statements can *also*
+    read `‖D‖ ≤ 1` literally — friction is the `EuclideanSpace.equiv` PiLp coercion.

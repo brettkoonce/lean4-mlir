@@ -15,12 +15,15 @@ maximizer `d⋆ = argmax_{‖d‖≤1} ⟨g,d⟩`, with optimal value the dual n
 |---|---|---|---|
 | SGD | Euclidean `‖·‖₂` | `g/‖g‖`, value `‖g‖₂` | `steepest_l2_*` |
 | sign / Adam-ish | `‖·‖∞` | `sign(g)`, value `‖g‖₁` | `steepest_linf_*` |
-| **Muon** | operator norm | **polar factor `UVᵀ`**, value nuclear `Σσᵢ` | `muon_polar_achieves_nuclear` |
+| **Muon** | operator norm | **polar factor `UVᵀ`**, value nuclear `Σσᵢ` | `muon_polar_steepest` |
 | Shampoo (1-step) | Kronecker-factored | `(GGᵀ)^{-1/4}G(GᵀG)^{-1/4} = UVᵀ` = Muon | `shampoo_eq_muon` |
 
-The SGD and sign rungs are the framework, proven outright. The Muon rung's *achievability* — the
-polar factor `UVᵀ` of `G = UΣVᵀ` realizes the nuclear norm `Σσᵢ` — is proven here **given an SVD**
-(pure trace algebra, `muon_polar_achieves_nuclear`).
+The SGD and sign rungs are the framework, proven outright. The Muon rung is now proved **both ways**:
+the polar factor `UVᵀ` of `G = UΣVᵀ` *attains* the nuclear norm `Σσᵢ` (`muon_polar_achieves_nuclear`,
+trace algebra) **and** is the *maximum* — von Neumann's trace inequality, `⟨G,D⟩_F ≤ Σσᵢ` for every
+contraction `D` (`muon_polar_is_max`, per-singular-vector Cauchy–Schwarz). `muon_polar_steepest`
+packages them: `UVᵀ` is feasible (an isometry), attains, and is unbeatable — Muon's update IS the
+operator-norm steepest-ascent direction, the same `bound`+`attained` shape as the SGD/sign rungs.
 
 **L4 (this layer): the SVD is now constructed, not hypothesized** — for an invertible (full-rank) `G`,
 `svd_of_isUnit` builds `U, V` orthogonal and `s ≥ 0` with `G = U (diagonal s) Vᵀ` out of Mathlib's
@@ -38,9 +41,9 @@ pieces `V, Σ`: the fourth-roots are spectral (`(GᵀG)^{-1/4} = V (diagonal s^{
 collapses by `s^{-1/2}·s·s^{-1/2} = 1`. `shampoo_eq_muon_of_isUnit` makes it unconditional for any
 invertible `G`.
 
-The matching upper bound (it is the *max*: von Neumann's trace inequality, needs the matrix operator
-norm) and the singular `G` case (the orthonormal completion of `U`) are the remaining layers. All
-`propext / Classical.choice / Quot.sound`-clean. -/
+The singular `G` case (the orthonormal completion of `U`, which would drop the invertibility
+hypothesis from the `_of_isUnit` capstones) and the manifold/Newton–Schulz view are the remaining
+layers. All `propext / Classical.choice / Quot.sound`-clean. -/
 
 namespace Proofs.MuonGeometry
 
@@ -119,6 +122,96 @@ theorem muon_polar_achieves_nuclear
     Matrix.mul_assoc]
   rw [← Matrix.mul_assoc Uᵀ U Vᵀ, hU, Matrix.one_mul, Matrix.trace_mul_comm, Matrix.mul_assoc,
     hV, Matrix.mul_one, Matrix.trace_diagonal]
+
+-- ════════════════════════════════════════════════════════════════
+-- § L3′ — the upper bound (von Neumann): `UVᵀ` is the *maximum*, so Muon IS steepest descent
+-- ════════════════════════════════════════════════════════════════
+
+/-- **No feasible direction beats the polar factor — von Neumann's trace inequality.** Over the
+    operator-norm unit ball, the gradient pairing is bounded by the nuclear norm:
+    `⟨G, D⟩_F ≤ Σσᵢ` for every contraction `D`. Here `‖D‖op ≤ 1` is spelled elementarily as the
+    Euclidean contraction `(D x)·(D x) ≤ x·x` (`*ᵥ` = `mulVec`, `⬝ᵥ` = `dotProduct`), which avoids a
+    matrix operator-norm instance while saying exactly that.
+
+    Proof: with `G = U Σ Vᵀ`, cyclic trace gives `⟨G,D⟩_F = Σᵢ sᵢ Mᵢᵢ` for `M = Uᵀ D V`, and each
+    diagonal entry `Mᵢᵢ = uᵢ · (D vᵢ)` is bounded by `1` — Cauchy–Schwarz (`‖uᵢ‖ = 1`) then the
+    contraction (`‖D vᵢ‖ ≤ ‖vᵢ‖ = 1`), i.e. `Mᵢᵢ² ≤ (uᵢ·uᵢ)((Dvᵢ)·(Dvᵢ)) ≤ 1`. Since `sᵢ ≥ 0`,
+    `Σ sᵢ Mᵢᵢ ≤ Σ sᵢ`. This is L1's per-singular-vector Cauchy–Schwarz, summed against `Σ`. -/
+theorem muon_polar_is_max (U V D : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ)
+    (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) (hs : ∀ i, 0 ≤ s i)
+    (hD : ∀ x : Fin n → ℝ, (D *ᵥ x) ⬝ᵥ (D *ᵥ x) ≤ x ⬝ᵥ x) :
+    fInner (U * Matrix.diagonal s * Vᵀ) D ≤ ∑ i, s i := by
+  -- dotProduct Cauchy–Schwarz `(a·b)² ≤ (a·a)(b·b)`
+  have hCS : ∀ a b : Fin n → ℝ, (a ⬝ᵥ b) ^ 2 ≤ (a ⬝ᵥ a) * (b ⬝ᵥ b) := by
+    intro a b
+    have h := Finset.sum_mul_sq_le_sq_mul_sq Finset.univ a b
+    simp only [dotProduct]
+    calc (∑ j, a j * b j) ^ 2 ≤ (∑ j, (a j) ^ 2) * (∑ j, (b j) ^ 2) := h
+      _ = (∑ j, a j * a j) * (∑ j, b j * b j) := by simp only [sq]
+  -- columns of an orthonormal matrix are unit vectors: `(W col i)·(W col i) = 1`
+  have hcol : ∀ (W : Matrix (Fin n) (Fin n) ℝ), Wᵀ * W = 1 → ∀ i,
+      (fun j => W j i) ⬝ᵥ (fun j => W j i) = 1 := by
+    intro W hW i
+    have h : (Wᵀ * W) i i = (fun j => W j i) ⬝ᵥ (fun j => W j i) := by
+      simp [Matrix.mul_apply, Matrix.transpose_apply, dotProduct]
+    rw [← h, hW, Matrix.one_apply_eq]
+  -- cyclic-trace reduction: `⟨G,D⟩_F = Σᵢ sᵢ (Uᵀ D V)ᵢᵢ`
+  have htrace : fInner (U * Matrix.diagonal s * Vᵀ) D = ∑ i, s i * (Uᵀ * D * V) i i := by
+    unfold fInner
+    have ht : (U * Matrix.diagonal s * Vᵀ)ᵀ = V * Matrix.diagonal s * Uᵀ := by
+      simp only [Matrix.transpose_mul, Matrix.diagonal_transpose, Matrix.transpose_transpose,
+        Matrix.mul_assoc]
+    rw [ht, show V * Matrix.diagonal s * Uᵀ * D = V * (Matrix.diagonal s * Uᵀ * D) from by
+          simp only [Matrix.mul_assoc], Matrix.trace_mul_comm,
+        show Matrix.diagonal s * Uᵀ * D * V = Matrix.diagonal s * (Uᵀ * D * V) from by
+          simp only [Matrix.mul_assoc], Matrix.trace]
+    simp only [Matrix.diag_apply, Matrix.diagonal_mul]
+  rw [htrace]
+  refine Finset.sum_le_sum (fun i _ => ?_)
+  -- `(Uᵀ D V)ᵢᵢ = uᵢ · (D vᵢ)`
+  have hMrw : (Uᵀ * D * V) i i = (fun j => U j i) ⬝ᵥ (D *ᵥ (fun k => V k i)) := by
+    simp only [Matrix.mul_apply, Matrix.transpose_apply, Matrix.mulVec, dotProduct,
+      Finset.sum_mul, Finset.mul_sum]
+    rw [Finset.sum_comm]
+    refine Finset.sum_congr rfl (fun a _ => Finset.sum_congr rfl (fun b _ => ?_))
+    ring
+  -- `Mᵢᵢ² ≤ 1` by Cauchy–Schwarz then the contraction
+  have hMsq : ((Uᵀ * D * V) i i) ^ 2 ≤ 1 := by
+    rw [hMrw]
+    have haa : (fun j => U j i) ⬝ᵥ (fun j => U j i) = 1 := hcol U hU i
+    have hbb : (D *ᵥ (fun k => V k i)) ⬝ᵥ (D *ᵥ (fun k => V k i)) ≤ 1 := by
+      have := hD (fun k => V k i); rwa [hcol V hV i] at this
+    calc ((fun j => U j i) ⬝ᵥ (D *ᵥ (fun k => V k i))) ^ 2
+        ≤ ((fun j => U j i) ⬝ᵥ (fun j => U j i))
+            * ((D *ᵥ (fun k => V k i)) ⬝ᵥ (D *ᵥ (fun k => V k i))) := hCS _ _
+      _ = 1 * ((D *ᵥ (fun k => V k i)) ⬝ᵥ (D *ᵥ (fun k => V k i))) := by rw [haa]
+      _ ≤ 1 * 1 := by apply mul_le_mul_of_nonneg_left hbb; norm_num
+      _ = 1 := by norm_num
+  have hMle : (Uᵀ * D * V) i i ≤ 1 := by nlinarith [hMsq]
+  exact mul_le_of_le_one_right (hs i) hMle
+
+/-- **Muon's update `UVᵀ` IS the steepest-ascent direction under the operator norm** — the L3 claim,
+    both halves now proved. For an SVD `G = U Σ Vᵀ`, the polar factor `UVᵀ` is the `argmax` of
+    `⟨G,·⟩_F` over the operator-norm unit ball, with optimal value the dual (nuclear) norm `Σσᵢ`:
+    * **feasible** — `UVᵀ` is an isometry (`‖UVᵀ x‖ = ‖x‖`), hence a contraction, so it lies in the
+      ball;
+    * **attains** — `⟨G, UVᵀ⟩_F = Σσᵢ` (`muon_polar_achieves_nuclear`);
+    * **unbeatable** — every contraction `D` has `⟨G,D⟩_F ≤ Σσᵢ` (`muon_polar_is_max`).
+    Compare the SGD/sign rungs (`steepest_l2_*`, `steepest_linf_*`): same `bound`+`attained` shape,
+    one norm up. This is *why* Muon's `den = UVᵀ` Newton–Schulz update is steepest descent. -/
+theorem muon_polar_steepest (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ)
+    (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) (hs : ∀ i, 0 ≤ s i) :
+    (∀ x : Fin n → ℝ, ((U * Vᵀ) *ᵥ x) ⬝ᵥ ((U * Vᵀ) *ᵥ x) ≤ x ⬝ᵥ x) ∧
+    fInner (U * Matrix.diagonal s * Vᵀ) (U * Vᵀ) = ∑ i, s i ∧
+    (∀ D : Matrix (Fin n) (Fin n) ℝ, (∀ x, (D *ᵥ x) ⬝ᵥ (D *ᵥ x) ≤ x ⬝ᵥ x) →
+        fInner (U * Matrix.diagonal s * Vᵀ) D ≤ ∑ i, s i) := by
+  refine ⟨fun x => le_of_eq ?_, muon_polar_achieves_nuclear U V s hU hV,
+          fun D hD => muon_polar_is_max U V D s hU hV hs hD⟩
+  -- `UVᵀ` is an isometry: `(UVᵀ x)·(UVᵀ x) = x·((VUᵀ)(UVᵀ)) x = x·(V Vᵀ) x = x·x`
+  rw [Matrix.dotProduct_mulVec, ← Matrix.mulVec_transpose, Matrix.mulVec_mulVec,
+      Matrix.transpose_mul, Matrix.transpose_transpose,
+      show (V * Uᵀ) * (U * Vᵀ) = V * (Uᵀ * U) * Vᵀ from by simp only [Matrix.mul_assoc],
+      hU, Matrix.mul_one, mul_eq_one_comm.mp hV, Matrix.one_mulVec]
 
 -- ════════════════════════════════════════════════════════════════
 -- § L4 — build the SVD: `G = U (diagonal s) Vᵀ` from the spectral theorem of `GᵀG`
