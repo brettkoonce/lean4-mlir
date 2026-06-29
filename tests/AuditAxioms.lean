@@ -2937,10 +2937,14 @@ open Proofs
 -- Muon geometry (planning/muon_geometry.md): every optimizer = steepest descent under a norm,
 -- d⋆ = argmax_{‖d‖≤1}⟨g,d⟩ = the dual-norm maximizer. steepest_l2_* = SGD (Euclidean/Cauchy-Schwarz,
 -- d⋆=g/‖g‖); steepest_linf_* = sign/Adam (L∞→L¹, d⋆=sign g); muon_polar_achieves_nuclear = Muon's
--- polar factor UVᵀ realizes the nuclear norm Σσᵢ given an SVD (the achievability half; von Neumann
--- upper bound + SVD construction are the next layers).
+-- polar factor UVᵀ realizes the nuclear norm Σσᵢ given an SVD (the achievability half). L4:
+-- svd_of_isUnit BUILDS the SVD for invertible G from the spectral theorem of GᵀG (V=eigenbasis,
+-- sᵢ=√λᵢ, U=GVΣ⁻¹), discharging that hypothesis; muon_polar_achieves_nuclear_of_isUnit then makes
+-- the nuclear-norm pairing unconditional for invertible G (von Neumann upper bound = next layer).
 #print axioms Proofs.MuonGeometry.steepest_l2_bound
 #print axioms Proofs.MuonGeometry.steepest_l2_attained
 #print axioms Proofs.MuonGeometry.steepest_linf_bound
 #print axioms Proofs.MuonGeometry.steepest_linf_attained
 #print axioms Proofs.MuonGeometry.muon_polar_achieves_nuclear
+#print axioms Proofs.MuonGeometry.svd_of_isUnit
+#print axioms Proofs.MuonGeometry.muon_polar_achieves_nuclear_of_isUnit

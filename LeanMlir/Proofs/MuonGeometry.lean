@@ -1,6 +1,9 @@
 import Mathlib.Analysis.InnerProductSpace.Basic
 import Mathlib.Analysis.InnerProductSpace.PiL2
 import Mathlib.LinearAlgebra.Matrix.Trace
+import Mathlib.Analysis.Matrix.Spectrum
+import Mathlib.Analysis.Matrix.PosDef
+import Mathlib.Analysis.Matrix.Order
 
 /-! # Muon geometry: the optimizer as steepest descent under a norm
 
@@ -16,9 +19,19 @@ maximizer `d⋆ = argmax_{‖d‖≤1} ⟨g,d⟩`, with optimal value the dual n
 
 The SGD and sign rungs are the framework, proven outright. The Muon rung's *achievability* — the
 polar factor `UVᵀ` of `G = UΣVᵀ` realizes the nuclear norm `Σσᵢ` — is proven here **given an SVD**
-(pure trace algebra); the matching upper bound (it is the *max*: von Neumann's trace inequality) and
-the construction of the SVD itself from Mathlib's spectral theorem are the next layers (L4/L3-upper
-in the plan). All `propext / Classical.choice / Quot.sound`-clean. -/
+(pure trace algebra, `muon_polar_achieves_nuclear`).
+
+**L4 (this layer): the SVD is now constructed, not hypothesized** — for an invertible (full-rank) `G`,
+`svd_of_isUnit` builds `U, V` orthogonal and `s ≥ 0` with `G = U (diagonal s) Vᵀ` out of Mathlib's
+spectral theorem of `GᵀG`: `V` = eigenvector basis, `sᵢ = √λᵢ` the singular values, `U = G V Σ⁻¹`.
+No matrix square root is needed — only the spectral decomposition, scalar `√`, and diagonal inverses
+(invertibility makes every `λᵢ > 0`, so `Σ⁻¹` exists). Composing with the achievability half gives
+`muon_polar_achieves_nuclear_of_isUnit`: for any invertible `G`, the polar factor `UVᵀ` (Muon's
+update direction) pairs with `G` to the nuclear norm `Σσᵢ` — the SVD hypothesis fully discharged.
+
+The matching upper bound (it is the *max*: von Neumann's trace inequality, needs the matrix operator
+norm) and the singular `G` case (the orthonormal completion of `U`) are the remaining layers. All
+`propext / Classical.choice / Quot.sound`-clean. -/
 
 namespace Proofs.MuonGeometry
 
@@ -97,5 +110,97 @@ theorem muon_polar_achieves_nuclear
     Matrix.mul_assoc]
   rw [← Matrix.mul_assoc Uᵀ U Vᵀ, hU, Matrix.one_mul, Matrix.trace_mul_comm, Matrix.mul_assoc,
     hV, Matrix.mul_one, Matrix.trace_diagonal]
+
+-- ════════════════════════════════════════════════════════════════
+-- § L4 — build the SVD: `G = U (diagonal s) Vᵀ` from the spectral theorem of `GᵀG`
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The SVD of an invertible matrix, constructed.** For invertible `G`, there are orthogonal
+    `U, V` (`UᵀU = VᵀV = 1`) and nonnegative singular values `s` with `G = U (diagonal s) Vᵀ`.
+
+    The build is spectral, not a black box: `A := GᵀG` is symmetric positive definite (positive
+    definite ⇐ `G` invertible), so the spectral theorem gives an orthogonal eigenbasis `V` and
+    eigenvalues `λ` with `A = V (diagonal λ) Vᵀ`, all `λᵢ > 0`. Set the singular values
+    `sᵢ := √λᵢ` and `U := G V Σ⁻¹` (`Σ⁻¹ = diagonal (1/sᵢ)`, which exists because `λᵢ > 0`). Then
+    `UᵀU = Σ⁻¹ (Vᵀ A V) Σ⁻¹ = Σ⁻¹ (diagonal λ) Σ⁻¹ = 1` and `U Σ Vᵀ = G V Vᵀ = G`. **No matrix
+    square root is needed** — only the spectral decomposition, the scalar `√`, and diagonal
+    inverses. This discharges the SVD hypothesis of `muon_polar_achieves_nuclear` for full-rank `G`
+    (the singular case needs the orthonormal completion of `U`, the remaining layer). -/
+theorem svd_of_isUnit (G : Matrix (Fin n) (Fin n) ℝ) (hG : IsUnit G) :
+    ∃ (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ),
+      Uᵀ * U = 1 ∧ Vᵀ * V = 1 ∧ (∀ i, 0 ≤ s i) ∧ G = U * Matrix.diagonal s * Vᵀ := by
+  -- `A := GᵀG` is symmetric and positive definite (PSD always, PD because `G` is a unit).
+  have hAherm : (Gᵀ * G).IsHermitian := by
+    have := Matrix.isHermitian_conjTranspose_mul_self G
+    rwa [Matrix.conjTranspose_eq_transpose_of_trivial] at this
+  have hPSD : (Gᵀ * G).PosSemidef := by
+    have := Matrix.posSemidef_conjTranspose_mul_self G
+    rwa [Matrix.conjTranspose_eq_transpose_of_trivial] at this
+  have hAunit : IsUnit (Gᵀ * G) := ((Matrix.isUnit_transpose G).mpr hG).mul hG
+  have hPD : (Gᵀ * G).PosDef := hPSD.posDef_iff_isUnit.mpr hAunit
+  have hlampos : ∀ i, 0 < hAherm.eigenvalues i := hAherm.posDef_iff_eigenvalues_pos.mp hPD
+  -- Spectral data: `V` the orthogonal eigenbasis, `lam` the (positive) eigenvalues of `GᵀG`.
+  set V : Matrix (Fin n) (Fin n) ℝ := (hAherm.eigenvectorUnitary : Matrix (Fin n) (Fin n) ℝ)
+    with hVdef
+  set lam := hAherm.eigenvalues with hlamdef
+  have hstar : star V = Vᵀ := by
+    rw [Matrix.star_eq_conjTranspose, Matrix.conjTranspose_eq_transpose_of_trivial]
+  have hVtV : Vᵀ * V = 1 := by
+    have h2 := hAherm.eigenvectorUnitary.2
+    rw [Matrix.mem_unitaryGroup_iff'] at h2; rwa [hstar] at h2
+  have hVVt : V * Vᵀ = 1 := by
+    have h2 := hAherm.eigenvectorUnitary.2
+    rw [Matrix.mem_unitaryGroup_iff] at h2; rwa [hstar] at h2
+  have hAeq : Gᵀ * G = V * Matrix.diagonal lam * Vᵀ := by
+    have hsp := hAherm.spectral_theorem
+    rw [Unitary.conjStarAlgAut_apply, hstar] at hsp
+    have hof : (RCLike.ofReal ∘ hAherm.eigenvalues : Fin n → ℝ) = lam := by funext i; simp [hlamdef]
+    rw [hof] at hsp; exact hsp
+  -- Singular values `s = √λ` (all positive, with `sᵢ² = λᵢ`); `Σ⁻¹ = diagonal (1/sᵢ)`; `U = G V Σ⁻¹`.
+  set s : Fin n → ℝ := fun i => Real.sqrt (lam i) with hsdef
+  have hspos : ∀ i, 0 < s i := fun i => Real.sqrt_pos.mpr (hlampos i)
+  have hsq : ∀ i, s i * s i = lam i := fun i => Real.mul_self_sqrt (hlampos i).le
+  set Dinv : Matrix (Fin n) (Fin n) ℝ := Matrix.diagonal (fun i => (s i)⁻¹) with hDinvdef
+  set U : Matrix (Fin n) (Fin n) ℝ := G * V * Dinv with hUdef
+  refine ⟨U, V, s, ?_, hVtV, fun i => (hspos i).le, ?_⟩
+  · -- `UᵀU = Σ⁻¹ (Vᵀ (GᵀG) V) Σ⁻¹ = Σ⁻¹ (diagonal λ) Σ⁻¹ = 1`.
+    have key : Vᵀ * (Gᵀ * G) * V = Matrix.diagonal lam := by
+      rw [hAeq]
+      calc Vᵀ * (V * Matrix.diagonal lam * Vᵀ) * V
+          = (Vᵀ * V) * Matrix.diagonal lam * (Vᵀ * V) := by simp only [Matrix.mul_assoc]
+        _ = Matrix.diagonal lam := by rw [hVtV, Matrix.one_mul, Matrix.mul_one]
+    have hUtU : Uᵀ * U = Dinv * (Vᵀ * (Gᵀ * G) * V) * Dinv := by
+      rw [hUdef, hDinvdef]
+      simp only [Matrix.transpose_mul, Matrix.diagonal_transpose, Matrix.mul_assoc]
+    rw [hUtU, key, hDinvdef, Matrix.diagonal_mul_diagonal, Matrix.diagonal_mul_diagonal]
+    rw [show (fun i => (s i)⁻¹ * lam i * (s i)⁻¹) = (fun _ => (1 : ℝ)) from funext fun i => ?_,
+        Matrix.diagonal_one]
+    have hne : s i ≠ 0 := (hspos i).ne'
+    field_simp
+    linarith [hsq i]
+  · -- `U Σ Vᵀ = G V (Σ⁻¹ Σ) Vᵀ = G V Vᵀ = G`.
+    symm
+    have hDs : Dinv * Matrix.diagonal s = 1 := by
+      rw [hDinvdef, Matrix.diagonal_mul_diagonal,
+          show (fun i => (s i)⁻¹ * s i) = (fun _ => (1 : ℝ)) from
+            funext fun i => inv_mul_cancel₀ (hspos i).ne', Matrix.diagonal_one]
+    calc U * Matrix.diagonal s * Vᵀ
+        = G * V * (Dinv * Matrix.diagonal s) * Vᵀ := by rw [hUdef]; simp only [Matrix.mul_assoc]
+      _ = G * V * Vᵀ := by rw [hDs, Matrix.mul_one]
+      _ = G := by rw [Matrix.mul_assoc, hVVt, Matrix.mul_one]
+
+/-- **Muon's update is the steepest ascent in operator-norm geometry — unconditionally, for any
+    invertible `G`.** Combining the constructed SVD (`svd_of_isUnit`) with the achievability half
+    (`muon_polar_achieves_nuclear`): for invertible `G` there exist orthogonal `U, V` and singular
+    values `s ≥ 0` with `G = U (diagonal s) Vᵀ`, whose **polar factor `U Vᵀ`** — exactly Muon's
+    update direction — pairs with `G` to the **nuclear norm** `⟨G, UVᵀ⟩_F = Σ sᵢ`. The SVD is no
+    longer a hypothesis: it is built from the spectral theorem. (Von Neumann's trace inequality —
+    that `Σσᵢ` is the *max* over the operator-norm ball, not merely achieved — is the next layer.) -/
+theorem muon_polar_achieves_nuclear_of_isUnit (G : Matrix (Fin n) (Fin n) ℝ) (hG : IsUnit G) :
+    ∃ (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ),
+      Uᵀ * U = 1 ∧ Vᵀ * V = 1 ∧ (∀ i, 0 ≤ s i) ∧
+      G = U * Matrix.diagonal s * Vᵀ ∧ fInner G (U * Vᵀ) = ∑ i, s i := by
+  obtain ⟨U, V, s, hU, hV, hs, hGeq⟩ := svd_of_isUnit G hG
+  exact ⟨U, V, s, hU, hV, hs, hGeq, hGeq ▸ muon_polar_achieves_nuclear U V s hU hV⟩
 
 end Proofs.MuonGeometry
