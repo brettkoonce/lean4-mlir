@@ -154,10 +154,11 @@ real tooling, a growing math library (Mathlib), and an active community.
 What unblocked this book in particular was Mathlib's Fr\'echet-derivative
 API (\texttt{fderiv}) --- first-order calculus contributed by Avigad in
 2019, with the higher-order $C^n$ scaffolding around it stabilized by
-\href{https://arxiv.org/abs/2509.04922}{Gou\"ezel} over 2019--2025.
+\href{https://arxiv.org/abs/2509.04922}{Gou\"ezel} (\texttt{arXiv:2509.04922})
+over 2019--2025.
 Without that API --- chain rule, product rule, continuous-linear-map
 composition --- the central claim of this book, that the backward pass
-equals the true Jacobian, would not be provable.
+equals the true Jacobian, would not be feasible to prove.
 
 \textbf{MLIR and StableHLO stabilized.} MLIR is a compiler infrastructure
 for machine learning. StableHLO is a portable operation set built on
@@ -1504,10 +1505,10 @@ to training MNIST in one command.
 \section{MLIR: Training Step}
 \label{sec:mlir_training_step}
 
-Section~\ref{sec:mlp_inside_train} made a strong claim about the inner call:
+Section~\ref{sec:mlp_inside_train} made a claim about the inner call:
 \emph{one} dispatched \texttt{stablehlo} vmfb does the forward pass, the loss,
 the backward pass, \emph{and} the optimizer update --- no tape, no per-step
-graph construction. This is where we cash it. The ``MLIR: Linear'' section
+graph construction. The ``MLIR: Linear'' section
 above rendered a single operator's backward in isolation; here is the
 \emph{whole} thing the linear classifier compiles to. It is short enough to
 show essentially in full --- only the default \texttt{precision} attributes are
@@ -1601,7 +1602,7 @@ loop shuffles, schedules the learning rate, and counts epochs --- it never
 computes a gradient or touches a tensor. The lone \texttt{train\_step\_vmfb}
 call is the function above, and it is the only place arithmetic happens.
 
-\medskip\noindent\textbf{Where this stands.} The scheme above now covers more
+\medskip\noindent\textbf{Where this stands.} The scheme above covers more
 than the linear classifier: the shallow chapters' train steps (MLP, CNN,
 CIFAR$\pm$BN) are closed both ways, and all five Part~I architectures ---
 ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT --- are proved at
@@ -2093,14 +2094,6 @@ minutes and lands at the same accuracy.
 log-scale loss (\texttt{logs/ablation\_mlp-sgd.log}). Per-epoch training
 loss falls $\sim$200$\times$ from the first epoch to below $10^{-3}$; final
 test accuracy 98.57\%.
-
-Notice that the emitted MLIR is only 10\,375 characters --- about
-half of what the Adam variant would emit. Plain SGD's per-step
-update is a single \texttt{param = param - lr * grad} subtraction,
-while Adam has to maintain and update first- and second-moment
-estimate buffers and apply a bias-corrected update. Same network,
-same data, same backward pass --- the optimizer choice alone doubles
-the emitted compute.
 
 Chapter 1 (\texttt{MNIST 2D CNN}) runs the same \texttt{s4tfBaseline}
 config against a CNN architecture for a direct apples-to-apples
@@ -3224,9 +3217,7 @@ backward (\S\ref{thm:bnNormalize_has_vjp}) buys is worth more the deeper
 the stack, exactly the trend that makes BN standard equipment by
 ResNet's thirty-four layers. That margin is largest precisely for plain
 SGD; under momentum and Adam (next) both nets already train well enough
-that BN's lead all but vanishes. The machine-checked VJP is what makes
-the curve trustworthy: every one of those faster steps computes the
-right gradient.
+that BN's lead all but vanishes.
 
 \subsection*{Lever 2: the optimizer}
 
@@ -4438,8 +4429,7 @@ $3 \times 3$ conv over 64 channels uses $3 \times 3 \times 64
 \times 64 = 576$ weights. 64$\times$ fewer. The depthwise-separable
 block recovers the missing cross-channel expressivity with the
 surrounding $1 \times 1$ convs, at a combined cost far below a full
-$3 \times 3$. MobileNet V2 is what you get when you stack 17 of
-these blocks and call it a network.
+$3 \times 3$. MobileNet V2 is 17 of these blocks together.
 
 \subsection*{The architecture}
 
@@ -4599,10 +4589,7 @@ Final val accuracy \textbf{87.09\%} --- 3.2 points below ResNet-34's
 90.29\% on the same dataset and training config, at \textbf{9.5$\times$
 fewer parameters} (2.24M vs 21.29M). That's the depthwise-separable
 trade: you give up a couple of accuracy points to get an order-of-
-magnitude reduction in parameter count. For mobile and embedded
-deployment, that's a deal you want.
-
-A few observations worth calling out:
+magnitude reduction in parameter count.
 
 - \textbf{Per-step time is faster}, not slower: 830\,ms vs
   ResNet-34's 1400\,ms. Even though the network has \emph{more}
@@ -5422,8 +5409,7 @@ future work.
 \label{sec:enet_side_quests}
 
 Two EfficientNet follow-ups extended the family in orthogonal
-directions but neither lands in this book's spec. Pointers for the
-curious:
+directions:
 
 \textbf{Noisy Student}
 (\href{https://arxiv.org/abs/1911.04252}{Xie et al.\ 2019}).
@@ -5542,7 +5528,7 @@ residual unit:
 1 \times 1\ \text{project} \;\to\; \text{LayerScale} \;\to\; +\,\text{residual}.
 \]
 
-Two pieces are worth naming. The \emph{inverted bottleneck}
+Two pieces: the \emph{inverted bottleneck}
 ($1 \times 1$ expand 4$\times$, depthwise spatial conv at the wide
 point, $1 \times 1$ project) is exactly the MobileNetV2 inverted
 residual from Chapter~\ref{chap:depthwise}---ConvNeXt is paying the
@@ -6124,7 +6110,7 @@ multiply, plus the eight or ten matrix-machinery lemmas this
 chapter sets up. None of them is new in its own right; what's new
 is how high the composition rule can be pushed.
 
-\section*{What attention is, in one screen}
+\section*{Attention in one equation}
 
 A transformer encoder block does two things to its input sequence
 \(X \in \mathbb{R}^{N \times d}\) (think of \(N\) image patches,
@@ -7111,6 +7097,7 @@ GPU & Precision & Per epoch & Epochs & Wall-clock & Val top-1 & Val top-5 \\
 4$\times$ 4060 Ti (CUDA) & fp32 & $\sim$11.1 min & 80 & $\sim$15 hr & --- & --- \\
 4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 80 & $\sim$11 hr & $\mathbf{65.64\%}$ & $\mathbf{87.06\%}$ \\
 4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 300 & $\sim$41 hr & --- & --- \\
+2$\times$ 7900 XTX (ROCm) & fp32 & --- & 300 & $\sim$51 hr & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
