@@ -652,7 +652,12 @@ lean_lib «Proofs» where
              -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).
-             `LeanMlir.Proofs.MuonGeometry]
+             `LeanMlir.Proofs.MuonGeometry,
+             -- Newton–Schulz convergence (planning/muon_ns_convergence.md): the Muon matmul iteration
+             -- aX + b(XXᵀ)X + c(XXᵀ)²X actually COMPUTES the polar factor UVᵀ. P1 = the spectral-step
+             -- lemma: a step is the scalar map φ(t)=at+bt³+ct⁵ applied per singular value (U,V carried
+             -- through), so matrix convergence to UVᵀ reduces to scalar convergence φ^[k](σᵢ)→1.
+             `LeanMlir.Proofs.MuonNewtonSchulz]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

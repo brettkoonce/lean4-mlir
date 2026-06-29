@@ -32,13 +32,18 @@ spectral-conjugation machinery already built for L5 (`conj_diag_pow`: `(W·diag 
 New file `LeanMlir/Proofs/MuonNewtonSchulz.lean`, in the `Proofs` lib roots, audited in
 `tests/AuditAxioms.lean`, target 3-axiom clean (`propext / Classical.choice / Quot.sound`).
 
-- ⬜ **P1 — the spectral step lemma** (the bridge; reuses L5's machinery). For `nsStep a b c X :=
-  a • X + b • (X * Xᵀ) * X + c • (X * Xᵀ) * (X * Xᵀ) * X`, prove
-  `nsStep a b c (U * diagonal σ * Vᵀ) = U * diagonal (fun i => a*σ i + b*(σ i)³ + c*(σ i)⁵) * Vᵀ`
-  for `U,V` orthonormal. Pure `conj_diag_pow`-style algebra: `XXᵀ = U·diag(σ²)·Uᵀ`, and the `UᵀU=1`
-  contraction collapses each product to a diagonal. **The only matrix-level work** — everything
-  downstream is scalar. (Iterating: `nsStep^[k]` keeps the `U·diag(·)·Vᵀ` form with the diagonal =
-  `φ^[k]∘σ`, by induction reusing P1.)
+- ✅ **P1 — the spectral step lemma** (the bridge; reuses L5's machinery). DONE 2026-06-29,
+  `LeanMlir/Proofs/MuonNewtonSchulz.lean`, both theorems 3-axiom clean (`propext/Classical.choice/
+  Quot.sound`), wired into `lakefile.lean` + `tests/AuditAxioms.lean`. `nsStep a b c X :=
+  a • X + b • (X * Xᵀ * X) + c • (X * Xᵀ * (X * Xᵀ * X))` (quintic associated as `(XXᵀ)·((XXᵀ)X)` so
+  the collapse threads), `nsScalar a b c t := a*t + b*t³ + c*t⁵`, and `nsStep_spectral`:
+  `nsStep a b c (U * diagonal σ * Vᵀ) = U * diagonal (fun i => nsScalar a b c (σ i)) * Vᵀ` for `U,V`
+  orthonormal. Pure `UᵀU=1`/`VᵀV=1` collapse algebra (`conj_diag_pow` motif done inline as `hcollapse`):
+  `XXᵀ = U·diag(σ²)·Uᵀ`, cubic/quintic monomials collapse to `U·diag(σ³/σ⁵)·Vᵀ`, the three coeffs ride
+  through `•` (`hsmul`) and sum pointwise (`hsum3`) to `φ`. **The only matrix-level work.** Iterated:
+  `nsStep_iterate_spectral` — `nsStep^[k] (U diagσ Vᵀ) = U·diag(fun i => (nsScalar a b c)^[k] (σ i))·Vᵀ`
+  by induction reusing `nsStep_spectral` (`Function.iterate_succ_apply'`). ⟹ matrix convergence to `UVᵀ`
+  reduces to scalar `φ^[k](σᵢ)→1`, the entry point for P2/P3.
 - ⬜ **P2 — scalar convergence (do the CUBIC first — see §4).** For the classic inverse-free polar
   iteration `g(t) = (3t − t³)/2` (i.e. `a,b,c = 3/2, −1/2, 0`), prove `∀ t₀ ∈ (0,1], g^[k](t₀) → 1`.
   The clean monotone argument: on `[0,1]`, `g` is increasing (`g'(t) = (3−3t²)/2 ≥ 0`), `g(t) ≥ t`

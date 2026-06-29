@@ -142,6 +142,7 @@ import LeanMlir.Proofs.ViTFaithfulPoC
 import LeanMlir.Proofs.ViTTiePoC
 import LeanMlir.Proofs.LipschitzCert
 import LeanMlir.Proofs.MuonGeometry
+import LeanMlir.Proofs.MuonNewtonSchulz
 
 open Proofs
 
@@ -2963,3 +2964,9 @@ open Proofs
 -- (muon_polar_nearest_orthogonal, ‖G−UVᵀ‖_F ≤ ‖G−Q‖_F ∀ orthogonal Q) — reuses the von Neumann bound.
 #print axioms Proofs.MuonGeometry.muon_polar_orthogonal
 #print axioms Proofs.MuonGeometry.muon_polar_nearest_orthogonal
+-- Newton–Schulz P1 (planning/muon_ns_convergence.md): the Muon iteration aX+b(XXᵀ)X+c(XXᵀ)²X
+-- COMPUTES the polar factor. nsStep_spectral = one step is the scalar φ(t)=at+bt³+ct⁵ (nsScalar)
+-- applied per singular value (U,V carried through, the conj_diag_pow motif); nsStep_iterate_spectral
+-- = k steps are φ^[k] per singular value, so matrix convergence to UVᵀ reduces to scalar φ^[k](σᵢ)→1.
+#print axioms Proofs.MuonNewtonSchulz.nsStep_spectral
+#print axioms Proofs.MuonNewtonSchulz.nsStep_iterate_spectral
