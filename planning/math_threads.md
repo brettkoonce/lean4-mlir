@@ -199,6 +199,12 @@ cert assumes — is now a concrete plan: **`planning/power_iteration_lipschitz.m
 a Newton–Schulz cousin that reuses `conj_diag_pow` wholesale (the spectrum reduces to a scalar ratio
 `(λ₂/λ₁)ᵏ`), so it's the bridge from Thread 1's spectral engine to this cert. Honest catch carried over:
 it converges from *below*, so the sound *upper* bound for a finite-step cert is the separate harder rung.
+The *deterministic-local* sibling is **`planning/ibp_certification.md`** — verified Interval Bound
+Propagation (the crudest CROWN/LiRPA member, but **sound by construction** → tractable in Lean: interval
+monotonicity + induction, no relaxation gap). Gives non-vacuous L∞ certs where the global `∏‖Wᵢ‖₂` is
+hopeless, reuses `FloatModel.argmax_preserved` for the margin cert, and its certified-training variant
+(IBP-loss trainer) drops into the trainer-ablation engine. Robustness now has three corners: global
+Lipschitz (`LipschitzCert`), deterministic-local (IBP), probabilistic-scalable (Cohen smoothing).
 
 ---
 
