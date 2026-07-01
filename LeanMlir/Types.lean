@@ -446,6 +446,16 @@ structure TrainConfig where
       data-loading-bound (e.g. ImageNet: ~75s/epoch rebuilding the tfds val
       pipeline). ImageNet-streaming main only. -/
   valEveryEpochs : Nat := 1
+  /-- Gradient accumulation: run `gradAccumSteps` micro-batches of `batchSize`
+      before each optimizer update, giving an EFFECTIVE batch of
+      `batchSize × gradAccumSteps` at the peak-activation cost of ONE micro-batch.
+      The reproducibility lever for large-batch recipes (e.g. RSB LAMB @ bs2048)
+      on small GPUs: batchSize=512 × gradAccumSteps=4 on 4×16GB instead of an
+      8×A100 node. `learningRate` should target the EFFECTIVE batch. BatchNorm
+      uses per-micro-batch (Ghost-BN) statistics — not identical to true
+      large-batch BN, but a benign/beneficial variant at micro≥256. N ≤ 1 keeps
+      the single-shot update (byte-identical codegen). ImageNet-streaming main. -/
+  gradAccumSteps : Nat := 1
   /-- DeiT-style training-loop knobs that average weights for the eval
       checkpoint. Both can be on simultaneously; eval picks EMA when
       both are enabled. Storage cost: one extra `nParams`-sized buffer

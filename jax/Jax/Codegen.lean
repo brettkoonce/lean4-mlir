@@ -2030,7 +2030,65 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    gn = jnp.sqrt(sum(jnp.sum(g * g) for g in jax.tree.leaves(grads)))\n" ++
     "    grads = jax.tree.map(lambda g: g * jnp.minimum(1.0, " ++ toString cfg.gradClipNorm ++ " / (gn + 1e-6)), grads)\n"
   else ""
+  -- Gradient accumulation prelude. accum≤1 → the single-shot grad line (byte-
+  -- identical). accum>1 → reshape the EFFECTIVE batch into GRAD_ACCUM micro-
+  -- batches and scan grads before the (single) optimizer update below. The
+  -- with_sharding_constraint pins the MICRO axis sharded (not the accum axis),
+  -- so each forward is one micro-batch/device — peak activation = one micro.
+  -- BN is per-micro-batch (Ghost-BN). Produces the same `grads`/`_new_bn`/`loss`
+  -- names the optimizer blocks below consume, so those stay untouched.
+  let accum := cfg.gradAccumSteps
+  let hasDrop := cfg.dropPath > 0.0 || cfg.dropout > 0.0
+  let gradPrelude : String :=
+    if accum <= 1 then
+      (if cfg.runningBN
+       then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n"
+       else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine
+    else
+      "    _K = GRAD_ACCUM\n" ++
+      "    _xs = x.reshape(_K, x.shape[0] // _K, *x.shape[1:])\n" ++
+      "    _ys = y.reshape(_K, y.shape[0] // _K, *y.shape[1:])\n" ++
+      "    _xs = jax.lax.with_sharding_constraint(_xs, NamedSharding(mesh, P(None, 'batch')))\n" ++
+      "    _ys = jax.lax.with_sharding_constraint(_ys, NamedSharding(mesh, P(None, 'batch')))\n" ++
+      (if cfg.runningBN then
+        (if hasDrop then
+          "    _ks = jax.random.split(drop_key, _K)\n" ++
+          "    def _accum(_carry, _inp):\n" ++
+          "        _gacc, _bnc = _carry\n" ++
+          "        _xi, _yi, _ki = _inp\n" ++
+          "        (_l, _nbn), _g = value_and_grad(loss_fn, has_aux=True)(params, _bnc, _xi, _yi, _ki)\n" ++
+          "        return (jax.tree.map(jnp.add, _gacc, _g), _nbn), _l\n" ++
+          "    _g0 = jax.tree.map(jnp.zeros_like, params)\n" ++
+          "    (_gsum, _new_bn), _ls = jax.lax.scan(_accum, (_g0, bn), (_xs, _ys, _ks))\n"
+         else
+          "    def _accum(_carry, _inp):\n" ++
+          "        _gacc, _bnc = _carry\n" ++
+          "        _xi, _yi = _inp\n" ++
+          "        (_l, _nbn), _g = value_and_grad(loss_fn, has_aux=True)(params, _bnc, _xi, _yi)\n" ++
+          "        return (jax.tree.map(jnp.add, _gacc, _g), _nbn), _l\n" ++
+          "    _g0 = jax.tree.map(jnp.zeros_like, params)\n" ++
+          "    (_gsum, _new_bn), _ls = jax.lax.scan(_accum, (_g0, bn), (_xs, _ys))\n")
+       else
+        (if hasDrop then
+          "    _ks = jax.random.split(drop_key, _K)\n" ++
+          "    def _accum(_gacc, _inp):\n" ++
+          "        _xi, _yi, _ki = _inp\n" ++
+          "        _l, _g = value_and_grad(loss_fn)(params, _xi, _yi, _ki)\n" ++
+          "        return jax.tree.map(jnp.add, _gacc, _g), _l\n" ++
+          "    _g0 = jax.tree.map(jnp.zeros_like, params)\n" ++
+          "    _gsum, _ls = jax.lax.scan(_accum, _g0, (_xs, _ys, _ks))\n"
+         else
+          "    def _accum(_gacc, _inp):\n" ++
+          "        _xi, _yi = _inp\n" ++
+          "        _l, _g = value_and_grad(loss_fn)(params, _xi, _yi)\n" ++
+          "        return jax.tree.map(jnp.add, _gacc, _g), _l\n" ++
+          "    _g0 = jax.tree.map(jnp.zeros_like, params)\n" ++
+          "    _gsum, _ls = jax.lax.scan(_accum, _g0, (_xs, _ys))\n")) ++
+      "    grads = jax.tree.map(lambda _a: _a / _K, _gsum)\n" ++
+      "    loss = jnp.mean(_ls)\n" ++
+      clipLine
   "LR = " ++ lr ++ "\n" ++
+  (if accum > 1 then "GRAD_ACCUM = " ++ toString accum ++ "\n" else "") ++
   (match opt with
    | .rmsprop =>
      "MOMENTUM = " ++ toString cfg.momentum ++ "\n" ++
@@ -2058,7 +2116,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
    | .adam | .muon =>
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
-    (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
+    gradPrelude ++
     -- AdamW: DECOUPLED weight decay — applied to params directly, not folded into
     -- the gradient. Adam+coupled-L2 ≠ AdamW; coupled L2 at the AdamW-tuned wd=0.05
     -- collapses ViT at high LR (Loshchilov & Hutter 2017). SGD/momentum paths below
@@ -2085,7 +2143,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     -- per-leaf jax.tree.map gives the layer-wise scaling LAMB calls for.
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
-    (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
+    gradPrelude ++
     "    m, v, t = opt_state\n" ++
     "    t = t + 1\n" ++
     "    m = jax.tree.map(lambda mi, g: BETA1 * mi + (1 - BETA1) * g, m, grads)\n" ++
@@ -2107,7 +2165,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     -- through the accumulator), matching those papers' L2 form — NOT decoupled.
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
-    (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
+    gradPrelude ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    sq, buf = opt_state\n" ++
     "    sq = jax.tree.map(lambda s, g: RHO * s + (1.0 - RHO) * g * g, sq, grads)\n" ++
@@ -2118,7 +2176,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     if hasMomentum then
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, velocity, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, velocity, x, y, lr, drop_key=None):\n") ++
-    (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
+    gradPrelude ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    velocity = jax.tree.map(lambda v, g: MOMENTUM * v + g, velocity, grads)\n" ++
     "    params = jax.tree.map(lambda p, v: p - lr * v, params, velocity)\n" ++
@@ -2126,7 +2184,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     else
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, x, y, lr, drop_key=None):\n") ++
-    (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
+    gradPrelude ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    params = jax.tree.map(lambda p, g: p - lr * g, params, grads)\n" ++
     (if cfg.runningBN then "    return params, _new_bn, loss\n\n" else "    return params, loss\n\n")) ++
@@ -2248,6 +2306,10 @@ private def emitDataLoadCalls (ds : DatasetKind) (dataDir : String) (spec : NetS
     contract, and optimizer plumbing — only the data-source is different. -/
 private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : String) : String :=
   let bs := toString cfg.batchSize
+  -- With grad accumulation, BATCH_SIZE is the EFFECTIVE batch (micro × accum);
+  -- validation must use the MICRO batch (eval_batch does one forward, can't fit
+  -- the effective batch in activations).
+  let valBatch := if cfg.gradAccumSteps > 1 then "MICRO_BATCH" else "BATCH_SIZE"
   let ep := toString cfg.epochs
   let lr := toString cfg.learningRate
   let nParams := toString spec.totalParams
@@ -2311,7 +2373,11 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "    print(\"ImageNet (1000-class) — tfds streaming pipeline\")\n" ++
   "    train_examples = 1281167\n" ++
   "    val_examples   = 50000\n\n" ++
-  "    BATCH_SIZE = (" ++ bs ++ " // n_devices) * n_devices or n_devices\n" ++
+  (if cfg.gradAccumSteps > 1 then
+    "    MICRO_BATCH = (" ++ bs ++ " // n_devices) * n_devices or n_devices\n" ++
+    "    BATCH_SIZE = MICRO_BATCH * GRAD_ACCUM   # effective batch = micro × accum; train_step accumulates GRAD_ACCUM micro-batches/step\n"
+   else
+    "    BATCH_SIZE = (" ++ bs ++ " // n_devices) * n_devices or n_devices\n") ++
   "    EPOCHS = " ++ ep ++ "\n" ++
   "    LR = " ++ lr ++ "\n" ++
   "    steps_per_epoch = train_examples // BATCH_SIZE\n" ++
@@ -2320,6 +2386,9 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "          \" (\" + str(n_devices) + \" devices x \" + str(BATCH_SIZE // n_devices) + \")\" +\n" ++
   "          \"  epochs=\" + str(EPOCHS) + \"  params=" ++ nParams ++ "\")\n" ++
   "    print(\"steps_per_epoch=\" + str(steps_per_epoch) + \"  total_steps=\" + str(total_steps))\n" ++
+  (if cfg.gradAccumSteps > 1 then
+    "    print(\"grad-accum=\" + str(GRAD_ACCUM) + \"x  micro_batch=\" + str(MICRO_BATCH) + \" (\" + str(n_devices) + \" devices x \" + str(MICRO_BATCH // n_devices) + \")  -> effective_batch=\" + str(BATCH_SIZE) + \"  (LR targets effective)\")\n"
+   else "") ++
   "    print(\"backend=\" + str(jax.default_backend()) + \"  devices=\" + str(jax.devices()))\n" ++
   (if cfg.repeatedAug > 1 then
     "    print(\"repeated-aug=" ++ toString cfg.repeatedAug ++
@@ -2484,7 +2553,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "        ev_t0 = time.time()\n" ++
     "        if _do_val:\n" ++
     "            print(\"  Running validation ...\")\n" ++
-    "            v_iter = build_imagenet_iter('validation', BATCH_SIZE, training=False, augment=False)\n" ++
+    "            v_iter = build_imagenet_iter('validation', " ++ valBatch ++ ", training=False, augment=False)\n" ++
     "            for x, y in v_iter:\n" ++
     "                x = jax.device_put(x, data_sharding)\n" ++
     "                y = jax.device_put(y, data_sharding)\n" ++
@@ -2514,7 +2583,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "        # Validation pass: rebuild iterator each epoch (non-repeating).\n" ++
     "        print(\"  Running validation ...\")\n" ++
     "        ev_t0 = time.time()\n" ++
-    "        v_iter = build_imagenet_iter('validation', BATCH_SIZE, training=False, augment=False)\n" ++
+    "        v_iter = build_imagenet_iter('validation', " ++ valBatch ++ ", training=False, augment=False)\n" ++
     "        correct1 = 0\n" ++
     "        correct5 = 0\n" ++
     "        total = 0\n" ++

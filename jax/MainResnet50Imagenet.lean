@@ -98,9 +98,23 @@ def resnet50ImagenetConfigShort : TrainConfig :=
       trainRes      := 160      -- A3: train @160×160
       testCropRatio := 0.95 }   -- A3: eval @224, center-crop ratio 0.95
 
+/-- Optimizer-regime probe (diagnosing the ~41% RSB-A3 result). Same A3 recipe
+    but swaps LAMB→AdamW (LAMB is a large-batch optimizer; we run bs512) and adds
+    the timm no_weight_decay skip-list (BN γ/β + biases excluded from wd). NB on
+    the JAX path `.muon` also degrades to AdamW; we use `.adam` here for clarity.
+    Keeps epochs=100 so the cosine LR schedule matches the baseline — the probe
+    only RUNS the first ~10 epochs, so val@ep10 is comparable to the LAMB run. -/
+def resnet50ImagenetConfigAdamProbe : TrainConfig :=
+  { resnet50ImagenetConfigShort with
+      optimizer         := .adam   -- AdamW (== Muon's JAX fallback); bs512-appropriate
+      wdExcludeNormBias := true }  -- skip BN γ/β + biases from weight decay
+
 def main (args : List String) : IO Unit := do
   let short := (← IO.getEnv "LEAN_MLIR_SHORT").isSome
-  let cfg := if short then resnet50ImagenetConfigShort else resnet50ImagenetConfig
-  let out := if short then "generated_resnet50_imagenet_short.py"
-                      else "generated_resnet50_imagenet.py"
+  let adamProbe := (← IO.getEnv "LEAN_MLIR_ADAM_PROBE").isSome
+  let cfg := if adamProbe then resnet50ImagenetConfigAdamProbe
+             else if short then resnet50ImagenetConfigShort else resnet50ImagenetConfig
+  let out := if adamProbe then "generated_resnet50_imagenet_adamprobe.py"
+             else if short then "generated_resnet50_imagenet_short.py"
+             else "generated_resnet50_imagenet.py"
   runJax resnet50Imagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out
