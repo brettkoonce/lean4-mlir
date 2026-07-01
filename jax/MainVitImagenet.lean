@@ -37,6 +37,7 @@ def vitTinyImagenetConfig : TrainConfig where
   useAdam        := true
   weightDecay    := 0.05            -- now applied as AdamW decoupled decay (was toxic coupled-L2)
   wdExcludeNormBias := true          -- timm no_weight_decay: skip norm/bias/pos-embed/CLS (DeiT-faithful)
+  valEveryEpochs := 5                 -- ImageNet val is data-loading-bound (~75s/ep); every-5 saves ~5h over 300ep
   cosineDecay    := true
   warmupEpochs   := 5
   augment        := true

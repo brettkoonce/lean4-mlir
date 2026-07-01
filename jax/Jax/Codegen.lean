@@ -2473,34 +2473,72 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "                      \"  (\" + str(round((time.time()-t0)/_global_step*1000, 0)) + \"ms/step avg)\")\n" ++
   "\n" ++
   "        train_secs = time.time() - ep_t0  # train-only wall time (measured before validation)\n" ++
-  "        # Validation pass: rebuild iterator each epoch (non-repeating).\n" ++
-  "        print(\"  Running validation ...\")\n" ++
-  "        ev_t0 = time.time()\n" ++
-  "        v_iter = build_imagenet_iter('validation', BATCH_SIZE, training=False, augment=False)\n" ++
-  "        correct1 = 0\n" ++
-  "        correct5 = 0\n" ++
-  "        total = 0\n" ++
-  "        total_eval_loss = 0.0\n" ++
-  "        v_batches = 0\n" ++
-  "        for x, y in v_iter:\n" ++
-  "            x = jax.device_put(x, data_sharding)\n" ++
-  "            y = jax.device_put(y, data_sharding)\n" ++
-  "            c1, c5, l = eval_batch(" ++ (if cfg.useEMA then "ema_params" else "params") ++ (if cfg.runningBN then ", bn_state" else "") ++ ", x, y)\n" ++
-  "            correct1 += int(c1)\n" ++
-  "            correct5 += int(c5)\n" ++
-  "            total   += y.shape[0]\n" ++
-  "            total_eval_loss += float(l)\n" ++
-  "            v_batches += 1\n" ++
-  "        acc1 = correct1 / max(total, 1)\n" ++
-  "        acc5 = correct5 / max(total, 1)\n" ++
-  "        print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
-  "              \" loss(train_avg)=\" + str(round(epoch_loss / max(n_batches,1), 4)) +\n" ++
-  "              \" val_top1=\" + str(correct1) + \"/\" + str(total) +\n" ++
-  "              \" (\" + str(round(acc1, 4)) + \")\" +\n" ++
-  "              \" val_top5=\" + str(round(acc5, 4)) +\n" ++
-  "              \" val_loss=\" + str(round(total_eval_loss/max(v_batches,1), 4)) +\n" ++
-  "              \"  [\" + str(round(train_secs, 1)) + \"s train, \" +\n" ++
-  "              str(round(time.time()-ev_t0, 1)) + \"s val]\")\n" ++
+  (let valEvery := cfg.valEveryEpochs
+   let evalArgs := (if cfg.useEMA then "ema_params" else "params") ++ (if cfg.runningBN then ", bn_state" else "")
+   if valEvery > 1 then
+    -- Validate every `valEvery` epochs (+ always the final epoch). Counters are
+    -- pre-zeroed so the epoch print branches cleanly on skipped epochs.
+    "        # Validate every " ++ toString valEvery ++ " epochs (+ always the final epoch); ImageNet val is data-loading-bound.\n" ++
+    "        _do_val = ((epoch + 1) % " ++ toString valEvery ++ " == 0) or ((epoch + 1) == EPOCHS)\n" ++
+    "        correct1 = 0; correct5 = 0; total = 0; total_eval_loss = 0.0; v_batches = 0\n" ++
+    "        ev_t0 = time.time()\n" ++
+    "        if _do_val:\n" ++
+    "            print(\"  Running validation ...\")\n" ++
+    "            v_iter = build_imagenet_iter('validation', BATCH_SIZE, training=False, augment=False)\n" ++
+    "            for x, y in v_iter:\n" ++
+    "                x = jax.device_put(x, data_sharding)\n" ++
+    "                y = jax.device_put(y, data_sharding)\n" ++
+    "                c1, c5, l = eval_batch(" ++ evalArgs ++ ", x, y)\n" ++
+    "                correct1 += int(c1)\n" ++
+    "                correct5 += int(c5)\n" ++
+    "                total   += y.shape[0]\n" ++
+    "                total_eval_loss += float(l)\n" ++
+    "                v_batches += 1\n" ++
+    "        acc1 = correct1 / max(total, 1)\n" ++
+    "        acc5 = correct5 / max(total, 1)\n" ++
+    "        val_secs = time.time() - ev_t0\n" ++
+    "        if _do_val:\n" ++
+    "            print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
+    "                  \" loss(train_avg)=\" + str(round(epoch_loss / max(n_batches,1), 4)) +\n" ++
+    "                  \" val_top1=\" + str(correct1) + \"/\" + str(total) +\n" ++
+    "                  \" (\" + str(round(acc1, 4)) + \")\" +\n" ++
+    "                  \" val_top5=\" + str(round(acc5, 4)) +\n" ++
+    "                  \" val_loss=\" + str(round(total_eval_loss/max(v_batches,1), 4)) +\n" ++
+    "                  \"  [\" + str(round(train_secs, 1)) + \"s train, \" +\n" ++
+    "                  str(round(val_secs, 1)) + \"s val]\")\n" ++
+    "        else:\n" ++
+    "            print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
+    "                  \" loss(train_avg)=\" + str(round(epoch_loss / max(n_batches,1), 4)) +\n" ++
+    "                  \"  [\" + str(round(train_secs, 1)) + \"s train, val skipped]\")\n"
+   else
+    "        # Validation pass: rebuild iterator each epoch (non-repeating).\n" ++
+    "        print(\"  Running validation ...\")\n" ++
+    "        ev_t0 = time.time()\n" ++
+    "        v_iter = build_imagenet_iter('validation', BATCH_SIZE, training=False, augment=False)\n" ++
+    "        correct1 = 0\n" ++
+    "        correct5 = 0\n" ++
+    "        total = 0\n" ++
+    "        total_eval_loss = 0.0\n" ++
+    "        v_batches = 0\n" ++
+    "        for x, y in v_iter:\n" ++
+    "            x = jax.device_put(x, data_sharding)\n" ++
+    "            y = jax.device_put(y, data_sharding)\n" ++
+    "            c1, c5, l = eval_batch(" ++ evalArgs ++ ", x, y)\n" ++
+    "            correct1 += int(c1)\n" ++
+    "            correct5 += int(c5)\n" ++
+    "            total   += y.shape[0]\n" ++
+    "            total_eval_loss += float(l)\n" ++
+    "            v_batches += 1\n" ++
+    "        acc1 = correct1 / max(total, 1)\n" ++
+    "        acc5 = correct5 / max(total, 1)\n" ++
+    "        print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
+    "              \" loss(train_avg)=\" + str(round(epoch_loss / max(n_batches,1), 4)) +\n" ++
+    "              \" val_top1=\" + str(correct1) + \"/\" + str(total) +\n" ++
+    "              \" (\" + str(round(acc1, 4)) + \")\" +\n" ++
+    "              \" val_top5=\" + str(round(acc5, 4)) +\n" ++
+    "              \" val_loss=\" + str(round(total_eval_loss/max(v_batches,1), 4)) +\n" ++
+    "              \"  [\" + str(round(train_secs, 1)) + \"s train, \" +\n" ++
+    "              str(round(time.time()-ev_t0, 1)) + \"s val]\")\n") ++
   "\n" ++
   "        # Per-N-epoch checkpoint. LEAN_MLIR_PARAMS_OUT sets the base path;\n" ++
   "        # writes <base>_e{N}.bin every LEAN_MLIR_CKPT_EVERY epochs (default 10)\n" ++

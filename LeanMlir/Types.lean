@@ -440,6 +440,12 @@ structure TrainConfig where
       matrices. Matches the ViT/DeiT reference; off keeps the legacy
       decay-everything behavior for the other nets. AdamW path only. -/
   wdExcludeNormBias : Bool := false
+  /-- Validate every N epochs (plus always the final epoch) instead of every
+      epoch. N ≤ 1 keeps every-epoch validation (byte-identical codegen).
+      Cuts eval wall-time on large streaming datasets where the val pass is
+      data-loading-bound (e.g. ImageNet: ~75s/epoch rebuilding the tfds val
+      pipeline). ImageNet-streaming main only. -/
+  valEveryEpochs : Nat := 1
   /-- DeiT-style training-loop knobs that average weights for the eval
       checkpoint. Both can be on simultaneously; eval picks EMA when
       both are enabled. Storage cost: one extra `nParams`-sized buffer
