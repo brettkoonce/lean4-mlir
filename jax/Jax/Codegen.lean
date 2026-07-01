@@ -1936,6 +1936,8 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
 private def effOpt (cfg : TrainConfig) : OptimizerKind :=
   match cfg.optimizer with
   | .sgd => if cfg.useAdam then .adam else .sgd
+  | .muon => .adam  -- JAX backend has no Newton–Schulz kernel; Muon degrades to its
+                    -- AdamW fallback here. Muon proper is the IREE/MLIR path (planning/muon.md).
   | k    => k
 
 private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
@@ -2006,7 +2008,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   else "") ++
   let opt := effOpt cfg
   let optName := match opt with
-    | .adam => "Adam"
+    | .adam | .muon => "Adam"
     | .rmsprop => "RMSprop"
     | .lamb => "LAMB"
     | .sgd => "SGD" ++ (if hasMomentum then " + momentum" else "")
@@ -2016,6 +2018,13 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
   let hasWD := cfg.weightDecay > 0.0
   let wd := toString cfg.weightDecay
+  -- AdamW no_weight_decay (timm/DeiT): decay only ≥2-D weights, skip 1-D
+  -- params (biases, LayerNorm γ/β, CLS token) and the positional embedding.
+  let wdExclude := cfg.wdExcludeNormBias && hasWD
+  let posShape : Option (Nat × Nat) := spec.layers.findSome? (fun l =>
+    match l with
+    | .patchEmbed _ dim _ nP => some (nP + 1, dim)
+    | _ => none)
   -- Gradient clipping by global L2 norm (after value_and_grad, before WD + optimizer).
   let clipLine := if cfg.gradClipNorm > 0.0 then
     "    gn = jnp.sqrt(sum(jnp.sum(g * g) for g in jax.tree.leaves(grads)))\n" ++
@@ -2029,11 +2038,24 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
      "EPS = " ++ toString cfg.rmspropEps ++ "\n"
    | .sgd => if hasMomentum then "MOMENTUM = " ++ toString cfg.momentum ++ "\n" else ""
    | .lamb => "BETA1 = 0.9\nBETA2 = 0.999\nEPS = 1e-6\n"
-   | .adam => "") ++
+   | .adam | .muon => "") ++
   (if hasWD then "WD = " ++ wd ++ "\n" else "") ++
+  (if wdExclude then
+    (match posShape with
+     | some (n, d) => s!"_WD_POS_SHAPE = ({n}, {d})\n"
+     | none => "_WD_POS_SHAPE = None\n") ++
+    "def _wd_mask(params):\n" ++
+    "    # timm no_weight_decay: no decay on 1-D params (biases, LayerNorm γ/β,\n" ++
+    "    # CLS token) or the positional embedding (2-D but must not be decayed).\n" ++
+    "    def _leaf(p):\n" ++
+    "        if p.ndim <= 1: return jnp.zeros_like(p)\n" ++
+    "        if p.shape == _WD_POS_SHAPE: return jnp.zeros_like(p)\n" ++
+    "        return jnp.ones_like(p)\n" ++
+    "    return jax.tree.map(_leaf, params)\n"
+   else "") ++
   "\n" ++
   (match opt with
-   | .adam =>
+   | .adam | .muon =>
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
     (if cfg.runningBN then "    (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)\n" else "    loss, grads = value_and_grad(loss_fn)(params, x, y, drop_key)\n") ++ clipLine ++
@@ -2048,7 +2070,10 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    mc = jax.tree.map(lambda mi: mi / (1 - 0.9 ** t), m)\n" ++
     "    vc = jax.tree.map(lambda vi: vi / (1 - 0.999 ** t), v)\n" ++
     (if hasWD then
-      "    params = jax.tree.map(lambda p, mi, vi: p - lr * (mi / (jnp.sqrt(vi) + 1e-8) + WD * p), params, mc, vc)\n"
+      (if wdExclude then
+        "    params = jax.tree.map(lambda p, mi, vi, msk: p - lr * (mi / (jnp.sqrt(vi) + 1e-8) + WD * msk * p), params, mc, vc, WD_MASK)\n"
+       else
+        "    params = jax.tree.map(lambda p, mi, vi: p - lr * (mi / (jnp.sqrt(vi) + 1e-8) + WD * p), params, mc, vc)\n")
      else
       "    params = jax.tree.map(lambda p, mi, vi: p - lr * mi / (jnp.sqrt(vi) + 1e-8), params, mc, vc)\n") ++
     (if cfg.runningBN then "    return params, (m, v, t), _new_bn, loss\n\n" else "    return params, (m, v, t), loss\n\n")
@@ -2235,7 +2260,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   -- training trajectory (weights + optimizer moments + EMA shadow). Saved/
   -- restored together so a segmented run continues bit-for-bit.
   let optStateVar : Option String := match opt with
-    | .adam | .rmsprop | .lamb => some "opt_state"
+    | .adam | .rmsprop | .lamb | .muon => some "opt_state"
     | .sgd => if hasMomentum then some "velocity" else none
   let stateVars : List String := ["params"] ++ optStateVar.toList ++
     (if cfg.useEMA then ["ema_params"] else []) ++
@@ -2308,8 +2333,11 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "    else:\n" ++
   "        params = init_params(random.PRNGKey(" ++ seed ++ "))\n" ++
   "    params = jax.device_put(params, replicated_sharding)\n" ++
+  (if cfg.wdExcludeNormBias && cfg.weightDecay > 0.0 then
+    "    WD_MASK = _wd_mask(params)  # timm no_weight_decay mask (built once; shape-only, resume-safe)\n"
+   else "") ++
   (match opt with
-   | .adam | .lamb =>
+   | .adam | .lamb | .muon =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
@@ -2422,7 +2450,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    let bnIn := if cfg.runningBN then ", bn_state" else ""
    let bnOut := if cfg.runningBN then ", bn_state" else ""
    match opt with
-   | .adam | .rmsprop | .lamb =>
+   | .adam | .rmsprop | .lamb | .muon =>
     "            params, opt_state" ++ bnOut ++ ", loss = train_step(params, opt_state" ++ bnIn ++ ", x, y, lr" ++ dk ++ ")\n"
    | .sgd =>
     if hasMomentum then
@@ -2444,6 +2472,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "                      \"  lr=\" + str(round(float(lr), 5)) +\n" ++
   "                      \"  (\" + str(round((time.time()-t0)/_global_step*1000, 0)) + \"ms/step avg)\")\n" ++
   "\n" ++
+  "        train_secs = time.time() - ep_t0  # train-only wall time (measured before validation)\n" ++
   "        # Validation pass: rebuild iterator each epoch (non-repeating).\n" ++
   "        print(\"  Running validation ...\")\n" ++
   "        ev_t0 = time.time()\n" ++
@@ -2464,15 +2493,14 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "            v_batches += 1\n" ++
   "        acc1 = correct1 / max(total, 1)\n" ++
   "        acc5 = correct5 / max(total, 1)\n" ++
-  "        elapsed_ep = time.time() - ep_t0\n" ++
   "        print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
   "              \" loss(train_avg)=\" + str(round(epoch_loss / max(n_batches,1), 4)) +\n" ++
   "              \" val_top1=\" + str(correct1) + \"/\" + str(total) +\n" ++
   "              \" (\" + str(round(acc1, 4)) + \")\" +\n" ++
   "              \" val_top5=\" + str(round(acc5, 4)) +\n" ++
   "              \" val_loss=\" + str(round(total_eval_loss/max(v_batches,1), 4)) +\n" ++
-  "              \"  [\" + str(round(elapsed_ep, 1)) + \"s train, \" +\n" ++
-  "              str(round(time.time()-ev_t0 - elapsed_ep, 1)) + \"s val]\")\n" ++
+  "              \"  [\" + str(round(train_secs, 1)) + \"s train, \" +\n" ++
+  "              str(round(time.time()-ev_t0, 1)) + \"s val]\")\n" ++
   "\n" ++
   "        # Per-N-epoch checkpoint. LEAN_MLIR_PARAMS_OUT sets the base path;\n" ++
   "        # writes <base>_e{N}.bin every LEAN_MLIR_CKPT_EVERY epochs (default 10)\n" ++
@@ -2531,7 +2559,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "    rng = np.random.RandomState(42)\n" ++
   let opt := effOpt cfg
   (match opt with
-   | .adam | .lamb =>
+   | .adam | .lamb | .muon =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
@@ -2626,7 +2654,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "            x = jax.device_put(shuf_images[i:i+BATCH_SIZE], data_sharding)\n") ++
   "            y = jax.device_put(shuf_labels[i:i+BATCH_SIZE], data_sharding)\n" ++
   (match opt with
-   | .adam | .rmsprop | .lamb =>
+   | .adam | .rmsprop | .lamb | .muon =>
      "            params, opt_state, loss = train_step(params, opt_state, x, y, lr)\n"
    | .sgd =>
      if hasMomentum then

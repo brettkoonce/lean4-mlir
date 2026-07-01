@@ -434,6 +434,12 @@ structure TrainConfig where
       JAX path this threads a per-step RNG through `forward`; currently
       wired for ConvNeXt blocks. -/
   dropPath       : Float := 0.0
+  /-- AdamW `no_weight_decay` exclusion (timm/DeiT): when true, decoupled
+      weight decay skips 1-D params (all biases, LayerNorm γ/β, the CLS
+      token) and the positional embedding, decaying only ≥2-D weight
+      matrices. Matches the ViT/DeiT reference; off keeps the legacy
+      decay-everything behavior for the other nets. AdamW path only. -/
+  wdExcludeNormBias : Bool := false
   /-- DeiT-style training-loop knobs that average weights for the eval
       checkpoint. Both can be on simultaneously; eval picks EMA when
       both are enabled. Storage cost: one extra `nParams`-sized buffer

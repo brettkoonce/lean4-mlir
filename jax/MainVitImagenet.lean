@@ -36,6 +36,7 @@ def vitTinyImagenetConfig : TrainConfig where
   epochs         := 300             -- full DeiT-Ti schedule (was 80; closes ~65→72%)
   useAdam        := true
   weightDecay    := 0.05            -- now applied as AdamW decoupled decay (was toxic coupled-L2)
+  wdExcludeNormBias := true          -- timm no_weight_decay: skip norm/bias/pos-embed/CLS (DeiT-faithful)
   cosineDecay    := true
   warmupEpochs   := 5
   augment        := true
