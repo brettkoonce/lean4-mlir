@@ -1784,21 +1784,28 @@ theorem mhsa_layer_eq_compose (N heads d_head : Nat)
                  (finProdFinEquiv (p_k.1, finProdFinEquiv ((2 : Fin 3), j'')))
     simp only [mhsa_qkv_W_eq2, mhsa_qkv_b_eq2]
 
-/-- **Multi-head SDPA VJP (Phase 8).** Now a theorem (was an axiom),
-    composed from `mhsa_g_has_vjp_mat`, `colSlabwise_has_vjp_mat`, and
-    the per-token dense framework. -/
-noncomputable def mhsa_has_vjp_mat (N heads d_head : Nat)
+/-- **The composed MHSA VJP** — `Wo-dense ∘ colSlabApply mhsa_g ∘ qkv-dense`,
+    stated on the explicit composition (no `mhsa_layer_eq_compose` transport).
+    This is the substantive witness; `mhsa_has_vjp_mat` below re-types it to
+    `mhsa_layer` with the cast confined to the `correct` field.
+
+    **Why the split (kernel-cost lesson, 2026-07):** the previous
+    `mhsa_has_vjp_mat := by rw [show mhsa_layer = …]; exact vjpMat_comp …` made
+    the constant's VALUE an `Eq.mpr` cast around the structure. Any kernel
+    defeq that whnf'd `(mhsa_has_vjp_mat …).backward` had to replay the whole
+    `mhsa_layer` rewrite — ~200s of kernel type-checking PER downstream
+    declaration that forced it (no cross-declaration whnf cache), which was
+    almost all of `ViTBackB0`'s (3×) and `ViTMhsaBackCertifiedTie`'s (1×) build
+    time. With `backward` a direct field, the projection whnfs in one hop. -/
+noncomputable def mhsa_composed_has_vjp_mat (N heads d_head : Nat)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head)) :
-    HasVJPMat (mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo) := by
-  rw [show mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo =
-        (fun M : Mat N (heads * d_head) => fun n => dense Wo bo (M n)) ∘
-        (colSlabApply (mhsa_g N d_head) (heads := heads)) ∘
-        (fun X' : Mat N (heads * d_head) => fun n =>
-           dense (mhsa_qkv_W heads d_head Wq Wk Wv) (mhsa_qkv_b heads d_head bq bk bv) (X' n))
-      from by
-        funext X
-        exact mhsa_layer_eq_compose N heads d_head Wq Wk Wv Wo bq bk bv bo X]
+    HasVJPMat
+      ((fun M : Mat N (heads * d_head) => fun n => dense Wo bo (M n)) ∘
+       (colSlabApply (mhsa_g N d_head) (heads := heads)) ∘
+       (fun X' : Mat N (heads * d_head) => fun n =>
+          dense (mhsa_qkv_W heads d_head Wq Wk Wv)
+                (mhsa_qkv_b heads d_head bq bk bv) (X' n))) := by
   -- VJPs and diffs for each piece (inline `dense_per_token_has_vjp_mat` since
   -- it's defined later in this file; use `rowwise_has_vjp_mat` directly).
   have h_qkv_vjp : HasVJPMat (fun X' : Mat N (heads * d_head) => fun n =>
@@ -1849,6 +1856,30 @@ noncomputable def mhsa_has_vjp_mat (N heads d_head : Nat)
     exact h_body_diff.comp h_qkv_diff
   -- Final compose with output.
   exact vjpMat_comp _ _ h_body_qkv_diff h_output_diff h_body_qkv_vjp h_output_vjp
+
+/-- **Multi-head SDPA VJP (Phase 8).** Now a theorem (was an axiom),
+    composed from `mhsa_g_has_vjp_mat`, `colSlabwise_has_vjp_mat`, and
+    the per-token dense framework. `backward` is the composed witness's
+    field DIRECTLY (kernel-cheap projection); the `mhsa_layer_eq_compose`
+    transport lives only in `correct` — a `Prop` the kernel never reduces.
+    See `mhsa_composed_has_vjp_mat`'s docstring for why. -/
+noncomputable def mhsa_has_vjp_mat (N heads d_head : Nat)
+    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
+    (bq bk bv bo : Vec (heads * d_head)) :
+    HasVJPMat (mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo) where
+  backward := (mhsa_composed_has_vjp_mat N heads d_head Wq Wk Wv Wo bq bk bv bo).backward
+  correct := by
+    have hfun : mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo =
+        (fun M : Mat N (heads * d_head) => fun n => dense Wo bo (M n)) ∘
+        (colSlabApply (mhsa_g N d_head) (heads := heads)) ∘
+        (fun X' : Mat N (heads * d_head) => fun n =>
+           dense (mhsa_qkv_W heads d_head Wq Wk Wv)
+                 (mhsa_qkv_b heads d_head bq bk bv) (X' n)) := by
+      funext X
+      exact mhsa_layer_eq_compose N heads d_head Wq Wk Wv Wo bq bk bv bo X
+    intro A dY i j
+    rw [hfun]
+    exact (mhsa_composed_has_vjp_mat N heads d_head Wq Wk Wv Wo bq bk bv bo).correct A dY i j
 
 /-- **Differentiability of the flattened multi-head SDPA layer** — theorem
     (was an axiom). Composition of three `_flat_diff` lemmas. -/
