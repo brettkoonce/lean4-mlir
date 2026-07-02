@@ -697,7 +697,15 @@ lean_lib «Proofs» where
              -- dense3/dense4 kinks) discharged by exact in-kernel rationals. The
              -- no-tie condition is trained in (pool-tie margin regularizer), the
              -- h_mp analogue of the scorecard's spectral cap.
-             `LeanMlir.Proofs.TrainedCnnWitness]
+             `LeanMlir.Proofs.TrainedCnnWitness,
+             -- Level-3 seal for the trained CNN witness: one whole-net Jacobian
+             -- entry (∂logit₇/∂pixel(0,2) = −326103939411/2³⁵ ≈ −9.49) computed in
+             -- closed form — pdiv_comp peeling with exact backward-cotangent
+             -- tables, the max-pool argmax routing decided per position, the conv
+             -- input-VJPs via conv2d_input_grad_formula through HasVJPAt.correct.
+             -- Yields backward_nontrivial / jacobian_nonzero / not_constant, the
+             -- full TrainedMlpWitness theorem set at the conv rung.
+             `LeanMlir.Proofs.TrainedCnnSeal]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

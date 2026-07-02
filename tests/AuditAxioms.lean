@@ -144,6 +144,7 @@ import LeanMlir.Proofs.LipschitzCert
 import LeanMlir.Proofs.LipschitzCertInstance
 import LeanMlir.Proofs.TrainedMlpWitness
 import LeanMlir.Proofs.TrainedCnnWitness
+import LeanMlir.Proofs.TrainedCnnSeal
 import LeanMlir.Proofs.LipschitzCertScorecard
 import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
@@ -3092,6 +3093,20 @@ open Proofs
 #print axioms Proofs.TrainedCnn.d3_ne
 #print axioms Proofs.TrainedCnn.d4_ne
 #print axioms Proofs.TrainedCnn.trainedCnn_has_vjp_correct
+
+-- Level-3 seal for the CNN witness (TrainedCnnSeal.lean): the whole-net Jacobian entry
+-- ∂logit₇/∂pixel(0,2) = −326103939411/2³⁵ at the trained weights, in closed form — pdiv_comp
+-- peeling with exact backward-cotangent tables (dense head slices S4/S3, max-pool argmax routing
+-- S2, ReLU mask folds S2r/S0r, conv input-VJPs S1/final via HasVJPAt.correct + the explicit
+-- conv2d_input_grad_formula). Seals backward ≠ 0 (basisVec route), fderiv ≠ 0, non-constancy —
+-- the full TrainedMlpWitness level-3 set at the conv rung.
+#print axioms Proofs.TrainedCnn.S2
+#print axioms Proofs.TrainedCnn.S1
+#print axioms Proofs.TrainedCnn.pdiv_fwd_entry
+#print axioms Proofs.TrainedCnn.pdiv_fwd_entry_ne
+#print axioms Proofs.TrainedCnn.trainedCnn_backward_nontrivial
+#print axioms Proofs.TrainedCnn.trainedCnn_jacobian_nonzero
+#print axioms Proofs.TrainedCnn.trainedCnn_not_constant
 
 -- Muon geometry (planning/muon_geometry.md): every optimizer = steepest descent under a norm,
 -- d⋆ = argmax_{‖d‖≤1}⟨g,d⟩ = the dual-norm maximizer. steepest_l2_* = SGD (Euclidean/Cauchy-Schwarz,
