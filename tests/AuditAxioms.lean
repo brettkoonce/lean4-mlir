@@ -144,6 +144,7 @@ import LeanMlir.Proofs.LipschitzCert
 import LeanMlir.Proofs.LipschitzCertInstance
 import LeanMlir.Proofs.TrainedMlpWitness
 import LeanMlir.Proofs.LipschitzCertScorecard
+import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.MuonGeometry
 import LeanMlir.Proofs.MuonNewtonSchulz
 
@@ -3020,6 +3021,22 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.marginU82
 #print axioms Proofs.LipschitzCertDemo.certifiedU82
 #print axioms Proofs.LipschitzCertDemo.scorecard_counts
+
+-- THE IEEE AXIOMS, DISCHARGED (Binary32Instance.lean, post_audit_roadmap §2): the repo's only two
+-- axioms (ieeeRnd/ieeeRnd_err — "a rounding operator satisfying the standard model exists") are
+-- replaced by a CONSTRUCTION: rndP p = round-to-nearest on the unbounded-exponent p-bit-significand
+-- grid, with the standard relative-error model |rndP p x − x| ≤ 2⁻¹⁻ᵖ·|x| PROVED from Mathlib
+-- (rndP_err: Int.zpow_log_le_self binade scaling + abs_sub_round). binary32 = gridModel 23 @ u32,
+-- fp8E4M3 = gridModel 3 @ u_e4m3. The former TrustedBridge capstones — fp8 argmax preservation and
+-- one concrete binary32 SGD descent step — now sit in THIS ordinary zero-axiom closure (the separate
+-- tests/AuditTrustedBridge.lean + CI footprint step are gone; the repo has zero axiom declarations).
+-- Still trusted, unchanged: the kernel↔model boundary (FMA, reassociation, "the GPU rounds like
+-- this grid") per planning/floatbridge_certificate_gaps.md — the discharge is hygiene, not a
+-- smaller hardware trust base.
+#print axioms Proofs.rndP_err
+#print axioms Proofs.binary32_e4m3_argmax_preserved
+#print axioms Proofs.binary32_e4m3_argmax_small
+#print axioms Proofs.binary32_linear_sgd_descends_concrete
 
 -- TRAINED-WEIGHT whole-net VJP witness (TrainedMlpWitness.lean, the audit's "live witnesses are
 -- synthetic" gap closed at the MLP rung): the SAME trained /128-rationalized 49→8→10 pooled-MNIST

@@ -103,7 +103,19 @@ generator's exact-fraction path handles any power of two).
 aggregate + spot-checks, README/RESULTS gets the certified-accuracy table
 (unconstrained vs capped, cert vs PGD).
 
-## 2. Discharge the IEEE axioms (`ieeeRnd`/`ieeeRnd_err`)
+## 2. Discharge the IEEE axioms (`ieeeRnd`/`ieeeRnd_err`) — ✅ DONE 2026-07-02
+
+**Outcome:** exactly the construction below (`rndP`/`rndP_err`, ~45 lines — the
+estimate said 100–200; `Int.zpow_log_le_self` + `abs_sub_round` did all the
+work). Interface kept *parametric in `p`* via `gridModel p u (hu : 2⁻¹⁻ᵖ ≤ u)`
+rather than two ad-hoc instances — `binary32 = gridModel 23 u32`,
+`fp8E4M3 = gridModel 3 u_e4m3`, both `binary32_u`-style rfl-lemmas intact,
+downstream corollaries unchanged. Binary32Instance joined the `Proofs` roots +
+main AuditAxioms closure (1254 lines); `tests/AuditTrustedBridge.lean`, the
+`TrustedBridge` lib, and the CI footprint step are DELETED, replaced by a CI
+zero-`axiom`-declaration grep. Bonus theorems: only `rndP_zero` (note:
+`rndP_neg` is FALSE at ties — Mathlib `round` is half-up, so `round(−t) ≠
+−round t` at half-integers; monotonicity/idempotence parked, no consumer).
 
 **Goal:** replace the repo's only two axioms (`Binary32Instance.lean:47,51`)
 with a constructed operator + theorem; TrustedBridge joins the 3-axiom

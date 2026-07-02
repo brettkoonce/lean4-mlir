@@ -217,9 +217,14 @@ All tier proofs are over exact reals; `LeanMlir/Proofs/FloatBridge.lean` +
 `SgdDescent.lean`/`SgdDescentLinear.lean`/`SgdDescentMlp.lean`/`SgdDescentCnn.lean`
 close the rounding gap for the
 Tier-1 nets, hypothesis-style (zero project axioms — a `FloatModel` is any
-rounding operator with relative error `u`; binary32 instantiates it with
-`u = 2⁻²⁴` on the normal range, subnormals open). The chain, every link in
-the 3-axiom audit:
+rounding operator with relative error `u`; `binary32` instantiates it with
+`u = 2⁻²⁴` on the normal range, subnormals open). The named `binary32`/`fp8E4M3`
+models are **constructed**, not assumed (`Binary32Instance.lean`): `rndP p` =
+round-to-nearest on the unbounded-exponent `p`-bit grid, with the standard model
+`|rndP p x − x| ≤ 2⁻¹⁻ᵖ·|x|` *proved* (`rndP_err`) — the repo contains zero
+`axiom` declarations anywhere (CI-enforced). What stays trusted is the
+kernel↔model boundary (FMA, reassociation, "the GPU rounds like this grid"),
+not the operator's existence. The chain, every link in the 3-axiom audit:
 
 - **Forward** (`mlp_float_close_uniform`): dot/dense budgets in the
   classical compounded form, valid for *every* summation association (IREE

@@ -1,67 +1,113 @@
 import LeanMlir.Proofs.FloatBridge
 import LeanMlir.Proofs.SgdDescentLinear
+import Mathlib.Data.Int.Log
 
-/-! # The binary32 / E4M3 trust assumption, made a first-class axiom
+/-! # The binary32 / E4M3 rounding models, CONSTRUCTED (zero axioms)
 
 The whole `FloatBridge` suite is `∀ M : FloatModel, …` — abstract over any rounding
-operator satisfying the standard relative-error model `|rnd x − x| ≤ u·|x|`. The only
-concrete `FloatModel` inhabitant in the suite is `exactModel` (`u = 0`), which collapses
-every bound to `0`. So nothing in the suite connects the proofs to *actual* IEEE-754
-hardware arithmetic.
+operator satisfying the standard relative-error model `|rnd x − x| ≤ u·|x|`. This file
+provides the named hardware-precision inhabitants `binary32` / `fp8E4M3`.
 
-This file closes the audit's gap 1: it names the trust assumption as a single, explicit,
-**auditable** axiom (`ieeeRnd` / `ieeeRnd_err`) — "IEEE-754 round-to-nearest at unit
-roundoff `u` satisfies the standard model on the normal range" (Higham, *Accuracy and
-Stability*, §2.2). This is the one thing Lean cannot prove (`Float` is an opaque FFI type;
-the deployed GPU kernels are binary32, distinct from Lean's `Float` = binary64). Promoting
-it from README prose to a named axiom means every theorem that relies on it now *shows it*
-under `#print axioms`, instead of hiding the dependence.
+Historically it did so via two explicit axioms (`ieeeRnd`/`ieeeRnd_err` — "a rounding
+operator at unit roundoff `u` satisfying the standard model exists"), quarantined from
+the zero-axiom `Proofs` suite. Those axioms are now DISCHARGED (post_audit_roadmap §2):
+`rndP p` is round-to-nearest on the unbounded-exponent `p`-bit-significand grid —
+exactly the idealization the old axiom's docstring said it modeled ("the `∀x` form
+abstracts away overflow and the subnormal floor") — and `rndP_err` PROVES the standard
+model `|rndP p x − x| ≤ 2⁻¹⁻ᵖ·|x|` (Higham §2.2) from Mathlib alone: scale into the
+binade via `Int.zpow_log_le_self`, `|t − round t| ≤ 1/2`, unscale. `binary32` = the
+`p = 23` grid at `u32 = 2⁻²⁴`; `fp8E4M3` = the `p = 3` grid at `u_e4m3 = 2⁻⁴`.
 
-With the named models `binary32` and `fp8E4M3` in hand we then realize gaps 2 and 3:
-* **gap 2** — `binary32_e4m3_argmax_preserved`: the fp8 argmax-preservation theorem, now an
+With the named models in hand, the 2026-06 audit's gaps 2 and 3 stay realized:
+* **gap 2** — `binary32_e4m3_argmax_preserved`: the fp8 argmax-preservation theorem, an
   *unconditional* corollary about the named hardware models (no `∀ M ∀ L`).
 * **gap 3** — `binary32_linear_sgd_descends_concrete`: one binary32 SGD step on a concrete
   linear classifier provably decreases the real loss, with the descent smallness conditions
   `hsmall`/`h1`/`h2` *discharged* (not assumed) for a concrete `(W, x, lr)`.
 
-CAVEAT (kept honest): the axiom asserts existence of *a* rounding operator with the relative
-bound; it does **not** prove Lean's `Float` *is* that operator, and the `∀ x : ℝ` form
-abstracts away overflow and the subnormal floor (`FloatSubnormalBridge` handles the latter
-separately). It is the standard-model trust boundary, now explicit. This file is deliberately
-NOT imported by `LeanMlir.lean` / the `Proofs` target / `tests/AuditAxioms.lean`, so the
-suite's "zero project axioms" invariant is untouched; the new axiom lives only here and is
-surfaced by this file's own `#print axioms` block.
+WHAT THE DISCHARGE DOES **NOT** BUY (kept honest): the kernel↔model boundary — FMA
+contraction, reduction reassociation, "the GPU behaves like round-to-nearest on this
+grid" — remains trusted exactly as before (`planning/floatbridge_certificate_gaps.md`);
+true binary32 also has overflow and a subnormal floor `rndP` idealizes away
+(`FloatSubnormalBridge` models the latter hypothesis-style). The trust moves from "an
+operator with this bound exists" (mathematically mild — `id` satisfies it at any `u ≥ 0`)
+to a CONCRETE, inspectable operator with the bound proved. The win is hygiene and
+inspectability: the repo now contains zero `axiom` declarations anywhere, and this file
+sits inside the ordinary `Proofs`/`AuditAxioms` 3-axiom closure like everything else.
 -/
 
 namespace Proofs
 open Proofs
 
 -- ════════════════════════════════════════════════════════════════
--- § Gap 1 — the IEEE standard-model rounding axiom, made explicit
+-- § Gap 1 — the IEEE standard-model rounding operator, constructed
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The trust boundary, named.** A rounding operator at unit roundoff `u`. The companion
-    axiom `ieeeRnd_err` asserts it meets the standard relative-error model. This is the
-    IEEE-754 round-to-nearest assumption (normal range), the single thing the `ℝ` proofs
-    cannot themselves establish about opaque hardware `Float`. -/
-axiom ieeeRnd (u : ℝ) : ℝ → ℝ
+/-- **Round-to-nearest on the unbounded-exponent `p`-bit-significand grid.**
+    For `x ≠ 0` with binade exponent `e = Int.log 2 |x|` (i.e. `2^e ≤ |x| < 2^(e+1)`),
+    round `x` to the nearest multiple of `2^(e−p)` — a significand of `p` fractional
+    bits, every exponent available. This is IEEE round-to-nearest minus overflow and
+    subnormals, the standard-model idealization. -/
+noncomputable def rndP (p : ℕ) (x : ℝ) : ℝ :=
+  if x = 0 then 0 else
+    (round (x / (2 : ℝ) ^ (Int.log 2 |x| - (p : ℤ))) : ℝ) *
+      (2 : ℝ) ^ (Int.log 2 |x| - (p : ℤ))
 
-/-- **The standard model, as an axiom.** `|ieeeRnd u x − x| ≤ u·|x|` — IEEE-754
-    round-to-nearest at unit roundoff `u`, on the normal range (Higham §2.2). -/
-axiom ieeeRnd_err (u : ℝ) (hu : 0 ≤ u) : ∀ x : ℝ, |ieeeRnd u x - x| ≤ u * |x|
+@[simp] theorem rndP_zero (p : ℕ) : rndP p 0 = 0 := by simp [rndP]
 
-/-- The named `FloatModel` at unit roundoff `u`, backed by the IEEE axiom. -/
-noncomputable def ieeeModel (u : ℝ) (hu : 0 ≤ u) : FloatModel where
-  rnd := ieeeRnd u
+/-- **The standard model, PROVED** (formerly the `ieeeRnd_err` axiom):
+    `|rndP p x − x| ≤ 2⁻¹⁻ᵖ·|x|`. The grid spacing at `x` is `2^(e−p)`, nearest-rounding
+    contributes half a step `2^(e−p−1)`, and `2^e ≤ |x|` turns that into the relative
+    bound. Mathlib-only: `Int.zpow_log_le_self` + `abs_sub_round`. -/
+theorem rndP_err (p : ℕ) (x : ℝ) :
+    |rndP p x - x| ≤ ((2 : ℝ) ^ (p + 1))⁻¹ * |x| := by
+  rcases eq_or_ne x 0 with hx | hx
+  · simp [hx]
+  · have hax : (0 : ℝ) < |x| := abs_pos.mpr hx
+    unfold rndP
+    rw [if_neg hx]
+    set e : ℤ := Int.log 2 |x| with he
+    set s : ℝ := (2 : ℝ) ^ (e - (p : ℤ)) with hs
+    have hs0 : (0 : ℝ) < s := zpow_pos (by norm_num) _
+    have hkey : (round (x / s) : ℝ) * s - x = ((round (x / s) : ℝ) - x / s) * s := by
+      rw [sub_mul, div_mul_cancel₀ x (ne_of_gt hs0)]
+    rw [hkey, abs_mul, abs_of_pos hs0]
+    have h1 : |(round (x / s) : ℝ) - x / s| ≤ 1 / 2 := by
+      rw [abs_sub_comm]
+      exact abs_sub_round (x / s)
+    have h2 : (2 : ℝ) ^ e ≤ |x| := by
+      exact_mod_cast Int.zpow_log_le_self (by norm_num) hax
+    have hs_eq : (1 / 2 : ℝ) * s = ((2 : ℝ) ^ (p + 1))⁻¹ * (2 : ℝ) ^ e := by
+      rw [hs, show (1 / 2 : ℝ) = (2 : ℝ) ^ (-1 : ℤ) by norm_num,
+          ← zpow_add₀ (by norm_num : (2 : ℝ) ≠ 0),
+          ← zpow_natCast (2 : ℝ) (p + 1), ← zpow_neg,
+          ← zpow_add₀ (by norm_num : (2 : ℝ) ≠ 0)]
+      congr 1
+      push_cast
+      ring
+    calc |(round (x / s) : ℝ) - x / s| * s
+        ≤ (1 / 2) * s := mul_le_mul_of_nonneg_right h1 (le_of_lt hs0)
+      _ = ((2 : ℝ) ^ (p + 1))⁻¹ * (2 : ℝ) ^ e := hs_eq
+      _ ≤ ((2 : ℝ) ^ (p + 1))⁻¹ * |x| := by
+          exact mul_le_mul_of_nonneg_left h2 (by positivity)
+
+/-- The `FloatModel` of the constructed `p`-bit grid, at any unit roundoff
+    `u ≥ 2⁻¹⁻ᵖ` (formerly `ieeeModel`, whose `rnd` was the axiom). -/
+noncomputable def gridModel (p : ℕ) (u : ℝ) (hu : ((2 : ℝ) ^ (p + 1))⁻¹ ≤ u) :
+    FloatModel where
+  rnd := rndP p
   u := u
-  u_nonneg := hu
-  err := ieeeRnd_err u hu
+  u_nonneg := le_trans (by positivity) hu
+  err := fun x => (rndP_err p x).trans
+    (mul_le_mul_of_nonneg_right hu (abs_nonneg x))
 
-/-- **binary32** (IEEE-754 single, fp32 accumulate): unit roundoff `u32 = 2⁻²⁴`. -/
-noncomputable def binary32 : FloatModel := ieeeModel u32 (by norm_num [u32])
+/-- **binary32** (IEEE-754 single, fp32 accumulate): the `p = 23` grid (24-bit
+    significand) at unit roundoff `u32 = 2⁻²⁴` — the bound is tight for the grid. -/
+noncomputable def binary32 : FloatModel := gridModel 23 u32 (by norm_num [u32])
 
-/-- **fp8 E4M3** (the low-precision leaf): unit roundoff `u_e4m3 = 2⁻⁴` on the normal range. -/
-noncomputable def fp8E4M3 : FloatModel := ieeeModel u_e4m3 (by norm_num [u_e4m3])
+/-- **fp8 E4M3** (the low-precision leaf): the `p = 3` grid (3 mantissa bits) at
+    unit roundoff `u_e4m3 = 2⁻⁴`, normal-range model. -/
+noncomputable def fp8E4M3 : FloatModel := gridModel 3 u_e4m3 (by norm_num [u_e4m3])
 
 @[simp] theorem binary32_u : binary32.u = u32 := rfl
 @[simp] theorem fp8E4M3_u : fp8E4M3.u = u_e4m3 := rfl
@@ -78,8 +124,8 @@ theorem u32_le_u_e4m3 : u32 ≤ u_e4m3 := by norm_num [u32, u_e4m3]
     (`fp8E4M3`)** mixed forward, with trained `|W| ≤ 3/5`, `|b| ≤ 1`, pixels `|x| ≤ 1`:
     whenever the exact-`ℝ` logit margin at the top class `k` exceeds `122`, the deployed
     fp8 forward keeps `k` as the strict argmax. This is `linear_e4m3_argmax_preserved`
-    instantiated at the concrete models — no `∀ M ∀ L`; the only residual assumption is the
-    named `ieeeRnd` axiom (visible under `#print axioms`). -/
+    instantiated at the concrete models — no `∀ M ∀ L`, no axiom: the models are the
+    constructed `rndP` grids (bare 3-axiom closure under `#print axioms`). -/
 theorem binary32_e4m3_argmax_preserved {n : ℕ}
     {W : Mat 784 n} {b : Vec n} {x : Vec 784}
     (hW : ∀ i j, |W i j| ≤ 3 / 5) (hb : ∀ j, |b j| ≤ 1) (hx : ∀ i, |x i| ≤ 1)
@@ -159,8 +205,8 @@ def lbl : Fin 2 := 0
     smallness conditions discharged (not assumed).** The step uses the *actual*
     float-computed gradient `binary32.linearFloatGrad`; the conclusion bounds the *real*
     cross-entropy after the step by the real cross-entropy before minus `lr·‖∇‖²/2`. All
-    of `hsmall`/`h1`/`h2` are proved for the concrete `(W0, x0, lr = 1/100)`. Depends only
-    on the named `ieeeRnd` axiom (surfaced below). -/
+    of `hsmall`/`h1`/`h2` are proved for the concrete `(W0, x0, lr = 1/100)`. Axiom-free:
+    `binary32` is the constructed `rndP 23` grid (bare triple surfaced below). -/
 theorem binary32_linear_sgd_descends_concrete :
     crossEntropy 2 (dense (Mat.unflatten (Mat.flatten W0 -
         (1 / 100 : ℝ) • binary32.linearFloatGrad W0 b0 x0 Real.exp lbl)) b0 x0) lbl ≤

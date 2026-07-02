@@ -675,7 +675,14 @@ lean_lib «Proofs» where
              -- spectrally-capped (σ≤4 projected-SGD) /256 net vs 1/100 on the
              -- unconstrained net; per-image in-kernel margins, honest lower-bound
              -- aggregate. Same theorem, same ε — training decides if the cert bites.
-             `LeanMlir.Proofs.LipschitzCertScorecard]
+             `LeanMlir.Proofs.LipschitzCertScorecard,
+             -- The binary32/fp8-E4M3 hardware models, CONSTRUCTED (post_audit_roadmap §2):
+             -- rndP p = round-to-nearest on the unbounded-exponent p-bit grid, standard
+             -- model |rndP p x − x| ≤ 2⁻¹⁻ᵖ|x| PROVED (rndP_err) — the former
+             -- ieeeRnd/ieeeRnd_err axioms discharged, so the concrete argmax-preservation
+             -- and binary32-SGD-descent capstones now live in the ordinary zero-axiom
+             -- closure (this was the quarantined TrustedBridge lib, no longer needed).
+             `LeanMlir.Proofs.Binary32Instance]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness
@@ -688,16 +695,6 @@ lean_lib «Proofs» where
 lean_lib «ProofsMinimal» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.LinearFaithfulPoC, `LeanMlir.Proofs.SgdDescentLinear]
-
-/-- **`lake build TrustedBridge`** — the named ℝ→Float32 trust bridge. Kept SEPARATE from
-    `Proofs` on purpose: it carries the explicit IEEE rounding axioms (`ieeeRnd`/`ieeeRnd_err`,
-    the one thing Lean can't prove about opaque hardware `Float`) and discharges concrete
-    binary32/fp8 corollaries from them. CI builds this, then `tests/AuditTrustedBridge.lean`
-    bounds its axiom footprint to exactly the 3-axiom triple + those two named axioms (no
-    `sorryAx`, no other axiom) — so the zero-axiom `Proofs` invariant stays untouched. -/
-lean_lib «TrustedBridge» where
-  srcDir := "."
-  roots := #[`LeanMlir.Proofs.Binary32Instance]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/
