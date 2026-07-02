@@ -2957,6 +2957,26 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.xt_margin
 #print axioms Proofs.LipschitzCertDemo.trained_radius_pos
 #print axioms Proofs.LipschitzCertDemo.trained_demo_certified
+-- ...tightened by the power-iteration certificate (certified two-sided spectral sandwich).
+-- UPPER: denseE_lipschitzL2_gram — the Gram/Schatten-4 bound ‖W‖₂ ≤ ‖WWᵀ‖_F^(1/2) = (Σσ⁴)^(1/4)
+-- (G = WWᵀ supplied as data, verified entrywise by G1t_eq/G2t_eq; only k×k, so kernel-cheap even
+-- for wide layers). B₁ = 9.2, B₂ = 9.661 vs Frobenius 14.555/14.576 ⇒ L drops 212.2 → 88.88 and
+-- the certified radius grows 0.0463 → 0.1106 (2.4×) at the SAME margin (trained_demo_certified_gram).
+-- LOWER: lipschitzL2_lower_euclid — the rationalized power-iteration singular vector certifies
+-- ℓ ≤ L for ANY valid L (W1t/W2t_lip_lower: ℓ₁ = 7.452, ℓ₂ = 7.7), so ‖W1t‖₂ ∈ [7.452, 9.2] and
+-- ‖W2t‖₂ ∈ [7.7, 9.661] are PROVED sandwiches — the Gram bound sits within 24%/26% of optimal.
+#print axioms Proofs.LipschitzCertDemo.sum_sq_matvec_le
+#print axioms Proofs.LipschitzCertDemo.denseE_lipschitzL2_gram
+#print axioms Proofs.LipschitzCertDemo.lipschitzL2_lower_euclid
+#print axioms Proofs.LipschitzCertDemo.G1t_eq
+#print axioms Proofs.LipschitzCertDemo.G2t_eq
+#print axioms Proofs.LipschitzCertDemo.W1t_lip_gram
+#print axioms Proofs.LipschitzCertDemo.W2t_lip_gram
+#print axioms Proofs.LipschitzCertDemo.mlpT_lip_gram
+#print axioms Proofs.LipschitzCertDemo.trained_radius_gram_pos
+#print axioms Proofs.LipschitzCertDemo.trained_demo_certified_gram
+#print axioms Proofs.LipschitzCertDemo.W1t_lip_lower
+#print axioms Proofs.LipschitzCertDemo.W2t_lip_lower
 
 -- Muon geometry (planning/muon_geometry.md): every optimizer = steepest descent under a norm,
 -- d⋆ = argmax_{‖d‖≤1}⟨g,d⟩ = the dual-norm maximizer. steepest_l2_* = SGD (Euclidean/Cauchy-Schwarz,
