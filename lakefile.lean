@@ -682,7 +682,14 @@ lean_lib «Proofs» where
              -- ieeeRnd/ieeeRnd_err axioms discharged, so the concrete argmax-preservation
              -- and binary32-SGD-descent capstones now live in the ordinary zero-axiom
              -- closure (this was the quarantined TrustedBridge lib, no longer needed).
-             `LeanMlir.Proofs.Binary32Instance]
+             `LeanMlir.Proofs.Binary32Instance,
+             -- Descent at TRAINED weights (post_audit_roadmap §3): one binary32 SGD
+             -- step on the trained /128 pooled-MNIST linear classifier provably
+             -- decreases the real CE loss — the misclassified-witness trick makes the
+             -- descent window rational-checkable with zero exp evaluations (z_lbl ≤
+             -- z_pred exact ⇒ softmax_lbl ≤ 1/2 ⇒ Σ|∇| ≤ 2Σx, Σ∇² ≥ Σx²/4). Retires
+             -- the W=0 degeneracy caveat of binary32_linear_sgd_descends_concrete.
+             `LeanMlir.Proofs.TrainedLinearDescent]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

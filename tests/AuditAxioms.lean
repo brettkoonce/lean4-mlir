@@ -145,6 +145,7 @@ import LeanMlir.Proofs.LipschitzCertInstance
 import LeanMlir.Proofs.TrainedMlpWitness
 import LeanMlir.Proofs.LipschitzCertScorecard
 import LeanMlir.Proofs.Binary32Instance
+import LeanMlir.Proofs.TrainedLinearDescent
 import LeanMlir.Proofs.MuonGeometry
 import LeanMlir.Proofs.MuonNewtonSchulz
 
@@ -3037,6 +3038,25 @@ open Proofs
 #print axioms Proofs.binary32_e4m3_argmax_preserved
 #print axioms Proofs.binary32_e4m3_argmax_small
 #print axioms Proofs.binary32_linear_sgd_descends_concrete
+
+-- DESCENT AT TRAINED WEIGHTS (TrainedLinearDescent.lean, post_audit_roadmap §3): one binary32 SGD
+-- step on the TRAINED /128-rationalized bias-free 49→10 pooled-MNIST linear classifier (87.4%
+-- test acc) provably decreases the real cross-entropy — retiring the "only concrete descent
+-- instance is the degenerate W=0 net" caveat. The witness (test #8, label 5 → predicted 6) is
+-- MISCLASSIFIED, which closes the descent window with ZERO exp evaluations: hz_lbl_le (z₅ ≤ z₆,
+-- exact rationals) ⇒ sm_lbl_le_half (exp-monotonicity) ⇒ gradL1_le (Σ|∇| ≤ 2Σxᵢ, softmax sums
+-- to 1) + gradSq_lower (Σ∇² ≥ Σxᵢ²/4). hdelta = the proven dense_close_fresh budget evaluated
+-- exactly per class column (norm_num computes (1+2⁻²⁴)⁵¹); heta bounds the cotErr chain via the
+-- γ-form exp_sub_one_le. The rounding model is the CONSTRUCTED rndP 23 grid — nothing assumed.
+-- strictly_descends: the drop ≥ lr·(Σxᵢ²)/8 > 0.
+#print axioms Proofs.TrainedLinearDescent.hz_lbl_le
+#print axioms Proofs.TrainedLinearDescent.sm_lbl_le_half
+#print axioms Proofs.TrainedLinearDescent.gradL1_le
+#print axioms Proofs.TrainedLinearDescent.gradSq_lower
+#print axioms Proofs.TrainedLinearDescent.hdelta
+#print axioms Proofs.TrainedLinearDescent.heta
+#print axioms Proofs.TrainedLinearDescent.trained_linear_sgd_descends_concrete
+#print axioms Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends
 
 -- TRAINED-WEIGHT whole-net VJP witness (TrainedMlpWitness.lean, the audit's "live witnesses are
 -- synthetic" gap closed at the MLP rung): the SAME trained /128-rationalized 49→8→10 pooled-MNIST

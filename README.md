@@ -249,6 +249,13 @@ not the operator's existence. The chain, every link in the 3-axiom audit:
   `2d₃d₂²w₁²w₂²a²/(1−2w₂d₂w₁aD)` for the input layer; the output layer is
   the linear theorem at the hidden activation, margin-free. No Hessian
   anywhere (the same softmax ratio sandwich as the float budgets).
+  The concrete instances now include **trained weights**
+  (`TrainedLinearDescent.lean`): one binary32 SGD step on the trained /128
+  pooled-MNIST linear classifier (87.4% test acc) provably — and strictly —
+  decreases the real cross-entropy at a misclassified test digit, every
+  smallness condition discharged as exact rational arithmetic (the
+  misclassification makes `softmax_lbl ≤ 1/2` provable by exp-monotonicity
+  alone, so no exponential is ever evaluated).
 
 **Measured vs proven** (`scripts/margin_probe.py`, an f32/f64 twin of the
 97.8% GPU run; numeric capstones instantiated at the *trained* magnitudes

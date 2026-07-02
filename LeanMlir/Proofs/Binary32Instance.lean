@@ -195,7 +195,9 @@ theorem FloatModel.dot_right_zero (M : FloatModel) :
     one-hot input, label 0. The all-zero weights make the exact and float forward both
     `0`, the softmax uniform `1/2`, and every gradient sum an exact rational — so the
     descent smallness conditions reduce to checkable arithmetic. (A *satisfiability*
-    witness for the descent hypotheses, in the spirit of `CnnConcrete`.) -/
+    witness for the descent hypotheses, in the spirit of `CnnConcrete`. The
+    NON-degenerate sibling is `TrainedLinearDescent.trained_linear_sgd_descends_concrete`
+    — the same theorem at TRAINED weights and a real misclassified input.) -/
 noncomputable def W0 : Mat 2 2 := fun _ _ => 0
 noncomputable def b0 : Vec 2 := fun _ => 0
 noncomputable def x0 : Vec 2 := fun i => if i = 0 then 1 else 0

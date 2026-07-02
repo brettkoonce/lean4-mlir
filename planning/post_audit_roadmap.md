@@ -161,7 +161,26 @@ hygiene + inspectability, not a smaller hardware trust base.
 expected footprint is the bare triple, proofs.yml's trusted-bridge step is
 merged into the main closure check.
 
-## 3. Descent at trained weights (retire the W=0 caveat)
+## 3. Descent at trained weights (retire the W=0 caveat) — ✅ DONE 2026-07-02
+
+**Outcome** (`TrainedLinearDescent.lean`, generator
+`scripts/trained_linear_descent.py`): `trained_linear_sgd_descends_concrete` +
+`_strictly_descends` — one binary32 SGD step (lr = 1/8192) on the trained /128
+bias-free 49→10 pooled-MNIST linear classifier (87.4% test acc) provably
+decreases the real CE loss at MNIST test #8. All hypotheses discharged;
+rounding model = the constructed `rndP 23` grid, so the statement is
+axiom-free end-to-end.
+
+**The trick the plan below missed:** softmax at trained weights is
+transcendental, so hsmall/h1/h2 look norm_num-hopeless — UNLESS the witness is
+MISCLASSIFIED: then `z_lbl ≤ z_pred` is exact rational, exp-monotonicity alone
+gives `softmax_lbl ≤ 1/2`, and the window needs only `Σ|∇| ≤ 2Σxᵢ` (softmax
+sums to 1) and `Σ∇² ≥ Σxᵢ²/4` — all rational, ZERO exp evaluations. hδ =
+`dense_close_fresh` evaluated exactly per column (δ = 1/25000); the
+`exp(2δ)−1` inside cotErr via the γ-form `exp_sub_one_le` (η ≤ 8.1e-5);
+h2 margin 5×. Bonus: misclassification makes the guaranteed drop strictly
+positive. MLP rung stays open (per-layer margins at trained weights — the
+stretch goal below, park until needed).
 
 **Gap:** `binary32_linear_sgd_descends_concrete` (the only concrete descent
 instance) holds at the degenerate W=0, b=0 net — a satisfiability witness,

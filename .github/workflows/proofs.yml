@@ -102,7 +102,9 @@ jobs:
       - name: Three-axiom closure check
         run: |
           set -e
-          out=$(lake env lean tests/AuditAxioms.lean 2>&1)
+          # The sed join collapses Lean's wrapped (multi-line) axiom lists back to one
+          # line first — long theorem names otherwise break the per-line grep.
+          out=$(lake env lean tests/AuditAxioms.lean 2>&1 | sed ':a;N;$!ba;s/,\n /, /g')
           total=$(echo "$out" | grep -c "depends on axioms:" || true)
           ok=$(echo "$out" | grep -cE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true)
 
