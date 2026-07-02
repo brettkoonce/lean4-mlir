@@ -668,7 +668,14 @@ lean_lib «Proofs» where
              -- /128-rationalized net instantiates HasVJPAt at a REAL input — ReLU
              -- smoothness inherited from training (exact nonzero pre-activations),
              -- not engineered; level-3 sealed via an explicit Jacobian entry.
-             `LeanMlir.Proofs.TrainedMlpWitness]
+             `LeanMlir.Proofs.TrainedMlpWitness,
+             -- Certified-accuracy scorecard (post_audit_roadmap §1): the one-input
+             -- certificate scaled to a dataset-level claim — over the FIXED first-100
+             -- MNIST test subset at FIXED ε = 1/10 (pooled L2), 34/100 certified on a
+             -- spectrally-capped (σ≤4 projected-SGD) /256 net vs 1/100 on the
+             -- unconstrained net; per-image in-kernel margins, honest lower-bound
+             -- aggregate. Same theorem, same ε — training decides if the cert bites.
+             `LeanMlir.Proofs.LipschitzCertScorecard]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

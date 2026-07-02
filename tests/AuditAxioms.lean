@@ -143,6 +143,7 @@ import LeanMlir.Proofs.ViTTiePoC
 import LeanMlir.Proofs.LipschitzCert
 import LeanMlir.Proofs.LipschitzCertInstance
 import LeanMlir.Proofs.TrainedMlpWitness
+import LeanMlir.Proofs.LipschitzCertScorecard
 import LeanMlir.Proofs.MuonGeometry
 import LeanMlir.Proofs.MuonNewtonSchulz
 
@@ -2991,6 +2992,34 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.mlpT_lip_gram2
 #print axioms Proofs.LipschitzCertDemo.trained_radius_gram2_pos
 #print axioms Proofs.LipschitzCertDemo.trained_demo_certified_gram2
+
+-- CERTIFIED-ACCURACY SCORECARD (LipschitzCertScorecard.lean, post_audit_roadmap §1): the one-input
+-- certificate scaled to the FIXED first-100 MNIST test subset at FIXED ε = 1/10 (pooled L2).
+-- certified_at_eps = the fixed-ε specialization (rational radius check via √2 ≤ 14143/10000, no
+-- irrationals in-kernel); the capped net's Schatten-8 chain (G/H eq + product L = 19.76); then
+-- 34/100 capped vs 1/100 unconstrained per-image certificates. Spot-check ~10 of the 35 per-image
+-- theorems (first/middle/last of the capped set + the sole unconstrained survivor #82 on BOTH nets)
+-- + the aggregate — not all 35, to keep this file sane; all 35 build in the Proofs closure.
+#print axioms Proofs.LipschitzCertDemo.sqrt_two_le_rat
+#print axioms Proofs.LipschitzCertDemo.certified_at_eps
+#print axioms Proofs.LipschitzCertDemo.G1s_eq
+#print axioms Proofs.LipschitzCertDemo.G2s_eq
+#print axioms Proofs.LipschitzCertDemo.H1s_eq
+#print axioms Proofs.LipschitzCertDemo.H2s_eq
+#print axioms Proofs.LipschitzCertDemo.W1s_lip_gram2
+#print axioms Proofs.LipschitzCertDemo.W2s_lip_gram2
+#print axioms Proofs.LipschitzCertDemo.mlpS_lip_gram2
+#print axioms Proofs.LipschitzCertDemo.marginC0
+#print axioms Proofs.LipschitzCertDemo.certifiedC0
+#print axioms Proofs.LipschitzCertDemo.certifiedC3
+#print axioms Proofs.LipschitzCertDemo.certifiedC36
+#print axioms Proofs.LipschitzCertDemo.certifiedC52
+#print axioms Proofs.LipschitzCertDemo.certifiedC70
+#print axioms Proofs.LipschitzCertDemo.certifiedC82
+#print axioms Proofs.LipschitzCertDemo.certifiedC98
+#print axioms Proofs.LipschitzCertDemo.marginU82
+#print axioms Proofs.LipschitzCertDemo.certifiedU82
+#print axioms Proofs.LipschitzCertDemo.scorecard_counts
 
 -- TRAINED-WEIGHT whole-net VJP witness (TrainedMlpWitness.lean, the audit's "live witnesses are
 -- synthetic" gap closed at the MLP rung): the SAME trained /128-rationalized 49→8→10 pooled-MNIST

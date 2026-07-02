@@ -299,6 +299,21 @@ rewrite — up to where the model's assumptions break.
   `|rnd x−x| ≤ u|x|` model gives way to block-scaled quantization). All the
   above is 3-axiom-clean and audited; see `planning/floatbridge_quantization.md`.
 
+#### Certified robustness (Tsuzuku, instantiated at trained weights)
+
+`lipschitz_margin_certified_radius` (`LipschitzCert.lean`) is instantiated on a
+trained, rationalized 49→8→10 pooled-MNIST MLP with everything in the trust
+path proved in-kernel: Frobenius → Schatten-4 → Schatten-8 Lipschitz bounds
+(certified radius 0.046 → 0.111 → 0.154, `LipschitzCertInstance.lean`), plus
+power-iteration *lower* bounds sandwiching each layer's true σ₁ so the bound's
+looseness is itself certified. Scaled to a dataset-level **scorecard**
+(`LipschitzCertScorecard.lean`): over the fixed first 100 MNIST test images at
+fixed ε = 0.1 (pooled L2), a spectrally-capped (σ ≤ 4 projected-SGD) sibling
+net certifies **34/100** predictions vs **1/100** unconstrained — same theorem,
+same ε; training decides whether the certificate bites. Empirical L2-PGD
+brackets it from above (69–72/100): cert ≤ TRUE ≤ PGD. See the table in
+[`RESULTS.md`](RESULTS.md); all 3-axiom-clean.
+
 **Not yet verified anywhere:** the ~7500-line `MlirCodegen.lean` (zero
 theorems — the path behind the headline accuracy numbers); the printed `.mlir`
 text that `iree-compile` actually consumes (the per-op `pretty` lexing step — the
