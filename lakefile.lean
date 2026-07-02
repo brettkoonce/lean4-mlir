@@ -689,7 +689,15 @@ lean_lib «Proofs» where
              -- descent window rational-checkable with zero exp evaluations (z_lbl ≤
              -- z_pred exact ⇒ softmax_lbl ≤ 1/2 ⇒ Σ|∇| ≤ 2Σx, Σ∇² ≥ Σx²/4). Retires
              -- the W=0 degeneracy caveat of binary32_linear_sgd_descends_concrete.
-             `LeanMlir.Proofs.TrainedLinearDescent]
+             `LeanMlir.Proofs.TrainedLinearDescent,
+             -- Trained-weight whole-net VJP witness, CNN rung (post_audit gap #3):
+             -- the Chapter-3 mnistCnnNoBn conditional whole-net VJP instantiated at
+             -- TRAINED /128-rationalized weights + a REAL test digit — all five
+             -- smoothness hypotheses (conv1/conv2 ReLU kinks, maxpool no-tie,
+             -- dense3/dense4 kinks) discharged by exact in-kernel rationals. The
+             -- no-tie condition is trained in (pool-tie margin regularizer), the
+             -- h_mp analogue of the scorecard's spectral cap.
+             `LeanMlir.Proofs.TrainedCnnWitness]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

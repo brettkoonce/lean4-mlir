@@ -143,6 +143,7 @@ import LeanMlir.Proofs.ViTTiePoC
 import LeanMlir.Proofs.LipschitzCert
 import LeanMlir.Proofs.LipschitzCertInstance
 import LeanMlir.Proofs.TrainedMlpWitness
+import LeanMlir.Proofs.TrainedCnnWitness
 import LeanMlir.Proofs.LipschitzCertScorecard
 import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
@@ -3074,6 +3075,23 @@ open Proofs
 #print axioms Proofs.TrainedMlp.trainedMlp_backward_nontrivial
 #print axioms Proofs.TrainedMlp.trainedMlp_jacobian_nonzero
 #print axioms Proofs.TrainedMlp.trainedMlp_not_constant
+
+-- TRAINED-WEIGHT whole-net VJP witness, CNN rung (TrainedCnnWitness.lean, post_audit gap #3):
+-- a trained /128-rationalized 6×6-pooled-MNIST CNN (conv 1→2 3×3 SAME → relu → conv 2→2 → relu →
+-- maxpool 2×2 → dense 18→8→8→10, quantized test acc 0.850) instantiates the Chapter-3 conditional
+-- whole-net VJP mnistCnnNoBn_has_vjp_at at a REAL input (test digit #0, correctly classified).
+-- All five smoothness hypotheses discharged by exact in-kernel rationals: conv1_eq/c1_ne +
+-- conv2_eq/c2_ne (144 conv pre-activations nonzero), r2_smooth (all 18 maxpool windows pairwise
+-- tie-free — trained in via the pool-tie margin regularizer, the h_mp analogue of the scorecard's
+-- spectral cap), d3_ne/d4_ne. trainedCnn_has_vjp_correct: whole-net backward = fderiv-contracted
+-- Jacobian at the trained weights.
+#print axioms Proofs.TrainedCnn.conv1_eq
+#print axioms Proofs.TrainedCnn.conv2_eq
+#print axioms Proofs.TrainedCnn.r2_smooth
+#print axioms Proofs.TrainedCnn.pooled_eq
+#print axioms Proofs.TrainedCnn.d3_ne
+#print axioms Proofs.TrainedCnn.d4_ne
+#print axioms Proofs.TrainedCnn.trainedCnn_has_vjp_correct
 
 -- Muon geometry (planning/muon_geometry.md): every optimizer = steepest descent under a norm,
 -- d⋆ = argmax_{‖d‖≤1}⟨g,d⟩ = the dual-norm maximizer. steepest_l2_* = SGD (Euclidean/Cauchy-Schwarz,
