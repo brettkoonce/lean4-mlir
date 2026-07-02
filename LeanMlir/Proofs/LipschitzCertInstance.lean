@@ -527,5 +527,200 @@ theorem W2t_lip_lower : ∀ L : ℝ, LipschitzL2 L (denseE W2t) → ((77 : ℝ)/
     simp [W2t, v2t, Fin.sum_univ_succ]
     norm_num
 
+
+-- ════════════════════════════════════════════════════════════
+-- § Schatten-8: iterate the Gram trick once — ‖W‖₂ ≤ ‖G²‖_F^(1/4) = (Σσ⁸)^(1/8)
+-- ════════════════════════════════════════════════════════════
+
+/-- Sum-shuffle: `‖Aᵀy‖² = ⟨y, K y⟩` for `K = A·Aᵀ` supplied as data. The
+    rearrangement engine both Gram bounds share. -/
+theorem sum_sq_matTvec_eq {p q : ℕ} (A : Fin p → Fin q → ℝ) (y : Fin p → ℝ)
+    (K : Fin p → Fin p → ℝ) (hK : ∀ a b, K a b = ∑ j, A a j * A b j) :
+    ∑ j, (∑ i, A i j * y i) ^ 2 = ∑ a, y a * ∑ b, K a b * y b := by
+  calc ∑ j, (∑ i, A i j * y i) ^ 2
+      = ∑ j, ∑ a, ∑ b, (A a j * y a) * (A b j * y b) := by
+        refine Finset.sum_congr rfl fun j _ => ?_
+        rw [pow_two, Finset.sum_mul_sum]
+    _ = ∑ a, ∑ j, ∑ b, (A a j * y a) * (A b j * y b) := Finset.sum_comm
+    _ = ∑ a, ∑ b, ∑ j, (A a j * y a) * (A b j * y b) := by
+        exact Finset.sum_congr rfl fun a _ => Finset.sum_comm
+    _ = ∑ a, ∑ b, (y a * y b) * ∑ j, A a j * A b j := by
+        refine Finset.sum_congr rfl fun a _ => Finset.sum_congr rfl fun b _ => ?_
+        rw [Finset.mul_sum]
+        exact Finset.sum_congr rfl fun j _ => by ring
+    _ = ∑ a, y a * ∑ b, K a b * y b := by
+        refine Finset.sum_congr rfl fun a _ => ?_
+        rw [Finset.mul_sum]
+        exact Finset.sum_congr rfl fun b _ => by rw [hK]; ring
+
+/-- **Iterated Gram (Schatten-8) bound, proved.** One more squaring:
+    with `G = W·Wᵀ` and `H = Gᵀ·G` (= `G²` for the symmetric `G`) supplied as
+    data, `‖H‖_F² ≤ B⁸` gives `LipschitzL2 B (denseE W)` — i.e.
+    `‖W‖₂ ≤ ‖G²‖_F^(1/4) = (Σσᵢ⁸)^(1/8)`, one Cauchy–Schwarz level tighter
+    than the Schatten-4 bound. -/
+theorem denseE_lipschitzL2_gram2 {n k : ℕ} (W : Fin k → Fin n → ℝ)
+    (G : Fin k → Fin k → ℝ) (H : Fin k → Fin k → ℝ) {B : ℝ} (hB : 0 ≤ B)
+    (hG : ∀ a b, G a b = ∑ j, W a j * W b j)
+    (hH : ∀ a b, H a b = ∑ c, G c a * G c b)
+    (hHF : ∑ a, ∑ b, H a b ^ 2 ≤ B ^ 8) :
+    LipschitzL2 B (denseE W) := by
+  intro u w
+  set d : Fin n → ℝ := fun j => u j - w j with hdd
+  set y : Fin k → ℝ := fun i => ∑ j, W i j * d j with hyy
+  set z : Fin n → ℝ := fun j => ∑ i, W i j * y i with hzz
+  set S : ℝ := ∑ i, y i ^ 2 with hS
+  set Dq : ℝ := ∑ j, d j ^ 2 with hDq
+  have hS0 : 0 ≤ S := Finset.sum_nonneg fun i _ => sq_nonneg _
+  have hDq0 : 0 ≤ Dq := Finset.sum_nonneg fun j _ => sq_nonneg _
+  -- S = ⟨d, Wᵀy⟩
+  have hswap : S = ∑ j, d j * z j := by
+    calc S = ∑ i, y i * ∑ j, W i j * d j := by
+          exact Finset.sum_congr rfl fun i _ => by rw [pow_two]
+      _ = ∑ i, ∑ j, y i * (W i j * d j) := by
+          exact Finset.sum_congr rfl fun i _ => Finset.mul_sum ..
+      _ = ∑ j, ∑ i, y i * (W i j * d j) := Finset.sum_comm
+      _ = ∑ j, d j * z j := by
+          refine Finset.sum_congr rfl fun j _ => ?_
+          rw [hzz, Finset.mul_sum]
+          exact Finset.sum_congr rfl fun i _ => by ring
+  -- T := Σz² = ⟨y, Gy⟩
+  have hTz : ∑ j, z j ^ 2 = ∑ a, y a * ∑ b, G a b * y b :=
+    sum_sq_matTvec_eq W y G hG
+  have hT0 : 0 ≤ ∑ j, z j ^ 2 := Finset.sum_nonneg fun j _ => sq_nonneg _
+  -- CS1: S² ≤ Dq·T
+  have hCS1 : S ^ 2 ≤ Dq * ∑ j, z j ^ 2 := by
+    rw [hswap]
+    exact Finset.sum_mul_sq_le_sq_mul_sq _ _ _
+  -- Q := Σ_a (Gy)_a² = ⟨y, Hy⟩  (the extra squaring level)
+  have hQz : ∑ a, (∑ b, G a b * y b) ^ 2 = ∑ a, y a * ∑ b, H a b * y b := by
+    have := sum_sq_matTvec_eq (fun i j => G j i) y H
+      (fun a b => by rw [hH])
+    simpa using this
+  have hQ0 : 0 ≤ ∑ a, (∑ b, G a b * y b) ^ 2 :=
+    Finset.sum_nonneg fun a _ => sq_nonneg _
+  -- Q² ≤ S·(ΣH²·S) ≤ B⁸·S²
+  have hQ2 : (∑ a, (∑ b, G a b * y b) ^ 2) ^ 2 ≤ B ^ 8 * S ^ 2 := by
+    have h1 : (∑ a, (∑ b, G a b * y b) ^ 2) ^ 2
+        ≤ S * ∑ a, (∑ b, H a b * y b) ^ 2 := by
+      rw [hQz]
+      exact Finset.sum_mul_sq_le_sq_mul_sq _ _ _
+    have h2 : ∑ a, (∑ b, H a b * y b) ^ 2 ≤ (∑ a, ∑ b, H a b ^ 2) * S :=
+      sum_sq_matvec_le H y
+    have h3 : (∑ a, ∑ b, H a b ^ 2) * S ≤ B ^ 8 * S :=
+      mul_le_mul_of_nonneg_right hHF hS0
+    calc (∑ a, (∑ b, G a b * y b) ^ 2) ^ 2
+        ≤ S * ∑ a, (∑ b, H a b * y b) ^ 2 := h1
+      _ ≤ S * (B ^ 8 * S) := mul_le_mul_of_nonneg_left (h2.trans h3) hS0
+      _ = B ^ 8 * S ^ 2 := by ring
+  -- Q ≤ B⁴·S
+  have hQle : (∑ a, (∑ b, G a b * y b) ^ 2) ≤ B ^ 4 * S := by
+    have hb4 : 0 ≤ B ^ 4 * S := mul_nonneg (by positivity) hS0
+    nlinarith [hQ2, hQ0, hb4]
+  -- T² ≤ S·Q ≤ B⁴·S² ⇒ T ≤ B²·S
+  have hT2 : (∑ j, z j ^ 2) ^ 2 ≤ B ^ 4 * S ^ 2 := by
+    have h1 : (∑ j, z j ^ 2) ^ 2 ≤ S * ∑ a, (∑ b, G a b * y b) ^ 2 := by
+      rw [hTz]
+      exact Finset.sum_mul_sq_le_sq_mul_sq _ _ _
+    calc (∑ j, z j ^ 2) ^ 2
+        ≤ S * ∑ a, (∑ b, G a b * y b) ^ 2 := h1
+      _ ≤ S * (B ^ 4 * S) := mul_le_mul_of_nonneg_left hQle hS0
+      _ = B ^ 4 * S ^ 2 := by ring
+  have hTle : (∑ j, z j ^ 2) ≤ B ^ 2 * S := by
+    have hb2 : 0 ≤ B ^ 2 * S := mul_nonneg (sq_nonneg _) hS0
+    nlinarith [hT2, hT0, hb2]
+  -- S ≤ B²·Dq
+  have hSle : S ≤ B ^ 2 * Dq := by
+    rcases eq_or_lt_of_le hS0 with h0 | hpos
+    · rw [← h0]; exact mul_nonneg (sq_nonneg _) hDq0
+    · have : S ^ 2 ≤ Dq * (B ^ 2 * S) :=
+        hCS1.trans (mul_le_mul_of_nonneg_left hTle hDq0)
+      nlinarith [this, hpos]
+  -- back to norms (identical tail to the Schatten-4 lemma)
+  have hcoord : ∀ i, (denseE W u - denseE W w) i = y i := by
+    intro i
+    show (∑ j, W i j * u j) - (∑ j, W i j * w j) = _
+    rw [← Finset.sum_sub_distrib]
+    exact Finset.sum_congr rfl fun j _ => by
+      show W i j * u j - W i j * w j = W i j * (u j - w j); ring
+  have hnormsq : ‖denseE W u - denseE W w‖ ^ 2 ≤ (B * ‖u - w‖) ^ 2 := by
+    rw [euclid_norm_sq, mul_pow, euclid_norm_sq]
+    calc ∑ i, ((denseE W u - denseE W w) i) ^ 2
+        = S := Finset.sum_congr rfl fun i _ => by rw [hcoord]
+      _ ≤ B ^ 2 * Dq := hSle
+      _ = B ^ 2 * ∑ j, ((u - w) j) ^ 2 := rfl
+  calc ‖denseE W u - denseE W w‖
+      = Real.sqrt (‖denseE W u - denseE W w‖ ^ 2) :=
+        (Real.sqrt_sq (norm_nonneg _)).symm
+    _ ≤ Real.sqrt ((B * ‖u - w‖) ^ 2) := Real.sqrt_le_sqrt hnormsq
+    _ = B * ‖u - w‖ := Real.sqrt_sq (mul_nonneg hB (norm_nonneg _))
+
+
+/-- `H1t = G1t²` (= `G1tᵀ·G1t`, 8×8, denominators 16384² = 268435456). -/
+noncomputable def H1t : Fin 8 → Fin 8 → ℝ :=
+  ![![((381332164867 : ℝ)/268435456), ((-47465880949 : ℝ)/268435456), ((177999653658 : ℝ)/268435456), ((-86561467680 : ℝ)/268435456), ((-104293457991 : ℝ)/268435456), ((10828395667 : ℝ)/268435456), ((-92445641522 : ℝ)/268435456), ((-76464339304 : ℝ)/268435456)],
+    ![((-47465880949 : ℝ)/268435456), ((133299230401 : ℝ)/268435456), ((54198370774 : ℝ)/268435456), ((-4149457835 : ℝ)/268435456), ((-11727690771 : ℝ)/268435456), ((-27449614525 : ℝ)/268435456), ((-35493143767 : ℝ)/268435456), ((-8348761388 : ℝ)/268435456)],
+    ![((177999653658 : ℝ)/268435456), ((54198370774 : ℝ)/268435456), ((471878560057 : ℝ)/268435456), ((-29702498181 : ℝ)/268435456), ((-186845141077 : ℝ)/268435456), ((-118425395158 : ℝ)/268435456), ((-190683370373 : ℝ)/268435456), ((-50910988355 : ℝ)/268435456)],
+    ![((-86561467680 : ℝ)/268435456), ((-4149457835 : ℝ)/268435456), ((-29702498181 : ℝ)/268435456), ((218030459641 : ℝ)/268435456), ((37216491814 : ℝ)/268435456), ((-96207401852 : ℝ)/268435456), ((51466358618 : ℝ)/268435456), ((33184252901 : ℝ)/268435456)],
+    ![((-104293457991 : ℝ)/268435456), ((-11727690771 : ℝ)/268435456), ((-186845141077 : ℝ)/268435456), ((37216491814 : ℝ)/268435456), ((183008208623 : ℝ)/268435456), ((65455693299 : ℝ)/268435456), ((58378950753 : ℝ)/268435456), ((54263966873 : ℝ)/268435456)],
+    ![((10828395667 : ℝ)/268435456), ((-27449614525 : ℝ)/268435456), ((-118425395158 : ℝ)/268435456), ((-96207401852 : ℝ)/268435456), ((65455693299 : ℝ)/268435456), ((203129512810 : ℝ)/268435456), ((21006791861 : ℝ)/268435456), ((94638911450 : ℝ)/268435456)],
+    ![((-92445641522 : ℝ)/268435456), ((-35493143767 : ℝ)/268435456), ((-190683370373 : ℝ)/268435456), ((51466358618 : ℝ)/268435456), ((58378950753 : ℝ)/268435456), ((21006791861 : ℝ)/268435456), ((150515547253 : ℝ)/268435456), ((30723710906 : ℝ)/268435456)],
+    ![((-76464339304 : ℝ)/268435456), ((-8348761388 : ℝ)/268435456), ((-50910988355 : ℝ)/268435456), ((33184252901 : ℝ)/268435456), ((54263966873 : ℝ)/268435456), ((94638911450 : ℝ)/268435456), ((30723710906 : ℝ)/268435456), ((181179974310 : ℝ)/268435456)]]
+
+noncomputable def H2t : Fin 10 → Fin 10 → ℝ :=
+  ![![((154706574877 : ℝ)/268435456), ((-133154423928 : ℝ)/268435456), ((105162270548 : ℝ)/268435456), ((66616904064 : ℝ)/268435456), ((-136227062252 : ℝ)/268435456), ((38420763311 : ℝ)/268435456), ((14283159418 : ℝ)/268435456), ((-63730236730 : ℝ)/268435456), ((-29152700930 : ℝ)/268435456), ((-118665041676 : ℝ)/268435456)],
+    ![((-133154423928 : ℝ)/268435456), ((315048189041 : ℝ)/268435456), ((-83900165830 : ℝ)/268435456), ((-18997790332 : ℝ)/268435456), ((-7415928267 : ℝ)/268435456), ((105769853290 : ℝ)/268435456), ((71898469185 : ℝ)/268435456), ((-57955990883 : ℝ)/268435456), ((27856661667 : ℝ)/268435456), ((-92588568781 : ℝ)/268435456)],
+    ![((105162270548 : ℝ)/268435456), ((-83900165830 : ℝ)/268435456), ((284984878483 : ℝ)/268435456), ((124823686979 : ℝ)/268435456), ((-166694153962 : ℝ)/268435456), ((-103218270754 : ℝ)/268435456), ((-48789575816 : ℝ)/268435456), ((-132305244086 : ℝ)/268435456), ((19945143209 : ℝ)/268435456), ((-93433200902 : ℝ)/268435456)],
+    ![((66616904064 : ℝ)/268435456), ((-18997790332 : ℝ)/268435456), ((124823686979 : ℝ)/268435456), ((126639834428 : ℝ)/268435456), ((-150191603417 : ℝ)/268435456), ((10115431095 : ℝ)/268435456), ((-55754654619 : ℝ)/268435456), ((-48657743459 : ℝ)/268435456), ((-25610859957 : ℝ)/268435456), ((-105312396150 : ℝ)/268435456)],
+    ![((-136227062252 : ℝ)/268435456), ((-7415928267 : ℝ)/268435456), ((-166694153962 : ℝ)/268435456), ((-150191603417 : ℝ)/268435456), ((270749873136 : ℝ)/268435456), ((-72340307485 : ℝ)/268435456), ((34534871586 : ℝ)/268435456), ((90044010142 : ℝ)/268435456), ((18081190359 : ℝ)/268435456), ((206644002559 : ℝ)/268435456)],
+    ![((38420763311 : ℝ)/268435456), ((105769853290 : ℝ)/268435456), ((-103218270754 : ℝ)/268435456), ((10115431095 : ℝ)/268435456), ((-72340307485 : ℝ)/268435456), ((207230088439 : ℝ)/268435456), ((100211574032 : ℝ)/268435456), ((-68155927861 : ℝ)/268435456), ((-32175848646 : ℝ)/268435456), ((-174071170590 : ℝ)/268435456)],
+    ![((14283159418 : ℝ)/268435456), ((71898469185 : ℝ)/268435456), ((-48789575816 : ℝ)/268435456), ((-55754654619 : ℝ)/268435456), ((34534871586 : ℝ)/268435456), ((100211574032 : ℝ)/268435456), ((268540246657 : ℝ)/268435456), ((-102206602332 : ℝ)/268435456), ((-80097153395 : ℝ)/268435456), ((-196883283183 : ℝ)/268435456)],
+    ![((-63730236730 : ℝ)/268435456), ((-57955990883 : ℝ)/268435456), ((-132305244086 : ℝ)/268435456), ((-48657743459 : ℝ)/268435456), ((90044010142 : ℝ)/268435456), ((-68155927861 : ℝ)/268435456), ((-102206602332 : ℝ)/268435456), ((240492915630 : ℝ)/268435456), ((-28761135239 : ℝ)/268435456), ((186727506677 : ℝ)/268435456)],
+    ![((-29152700930 : ℝ)/268435456), ((27856661667 : ℝ)/268435456), ((19945143209 : ℝ)/268435456), ((-25610859957 : ℝ)/268435456), ((18081190359 : ℝ)/268435456), ((-32175848646 : ℝ)/268435456), ((-80097153395 : ℝ)/268435456), ((-28761135239 : ℝ)/268435456), ((95975758982 : ℝ)/268435456), ((96108682451 : ℝ)/268435456)],
+    ![((-118665041676 : ℝ)/268435456), ((-92588568781 : ℝ)/268435456), ((-93433200902 : ℝ)/268435456), ((-105312396150 : ℝ)/268435456), ((206644002559 : ℝ)/268435456), ((-174071170590 : ℝ)/268435456), ((-196883283183 : ℝ)/268435456), ((186727506677 : ℝ)/268435456), ((96108682451 : ℝ)/268435456), ((373892277385 : ℝ)/268435456)]]
+
+set_option maxHeartbeats 1600000 in
+theorem H1t_eq : ∀ a b, H1t a b = ∑ c, G1t c a * G1t c b := by
+  intro a b
+  fin_cases a <;> fin_cases b <;>
+    · simp [H1t, G1t, Fin.sum_univ_succ]
+      norm_num
+
+set_option maxHeartbeats 1600000 in
+theorem H2t_eq : ∀ a b, H2t a b = ∑ c, G2t c a * G2t c b := by
+  intro a b
+  fin_cases a <;> fin_cases b <;>
+    · simp [H2t, G2t, Fin.sum_univ_succ]
+      norm_num
+
+/-- Schatten-8 bound: B₁' = 7769/1000 ≈ (Σσ⁸)^(1/8) (true σ₁ ≈ 7.4525). -/
+theorem W1t_lip_gram2 : LipschitzL2 ((7769 : ℝ)/1000) (denseE W1t) := by
+  refine denseE_lipschitzL2_gram2 W1t G1t H1t (by norm_num) G1t_eq H1t_eq ?_
+  simp [H1t, Fin.sum_univ_succ]
+  norm_num
+
+theorem W2t_lip_gram2 : LipschitzL2 ((8211 : ℝ)/1000) (denseE W2t) := by
+  refine denseE_lipschitzL2_gram2 W2t G2t H2t (by norm_num) G2t_eq H2t_eq ?_
+  simp [H2t, Fin.sum_univ_succ]
+  norm_num
+
+/-- Schatten-8 product certificate: L = B₂'·(1·B₁') = 63791259/1000000 ≈ 63.79 — vs the
+    certified lower bounds ℓ₁·ℓ₂ = 57.38, provably within 11.2% of the
+    per-layer-optimal product. -/
+theorem mlpT_lip_gram2 : LipschitzL2 ((63791259 : ℝ)/1000000) mlpT := by
+  have h := W2t_lip_gram2.comp (reluE_lipschitzL2.comp W1t_lip_gram2 (by norm_num)) (by norm_num)
+  have e : ((8211 : ℝ)/1000) * (1 * ((7769 : ℝ)/1000)) = ((63791259 : ℝ)/1000000) := by norm_num
+  rw [e] at h; exact h
+
+theorem trained_radius_gram2_pos : 0 < ((6953 : ℝ)/500) / (Real.sqrt 2 * ((63791259 : ℝ)/1000000)) :=
+  div_pos (by norm_num)
+    (mul_pos (Real.sqrt_pos.mpr (by norm_num)) (by norm_num))
+
+/-- **Schatten-8 trained certificate**: radius ≈ 0.1541 (3.3× Frobenius,
+    1.4× Schatten-4; the true-σ ceiling for the product method is 0.171). -/
+theorem trained_demo_certified_gram2 (δ : EuclideanSpace ℝ (Fin 49))
+    (hδ : ‖δ‖ < ((6953 : ℝ)/500) / (Real.sqrt 2 * ((63791259 : ℝ)/1000000))) :
+    ∀ j, j ≠ 2 → mlpT (xt + δ) j < mlpT (xt + δ) 2 :=
+  lipschitz_margin_certified_radius mlpT_lip_gram2 (by norm_num) xt_margin hδ
+
 end LipschitzCertDemo
 end Proofs

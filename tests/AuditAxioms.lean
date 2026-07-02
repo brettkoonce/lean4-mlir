@@ -142,6 +142,7 @@ import LeanMlir.Proofs.ViTFaithfulPoC
 import LeanMlir.Proofs.ViTTiePoC
 import LeanMlir.Proofs.LipschitzCert
 import LeanMlir.Proofs.LipschitzCertInstance
+import LeanMlir.Proofs.TrainedMlpWitness
 import LeanMlir.Proofs.MuonGeometry
 import LeanMlir.Proofs.MuonNewtonSchulz
 
@@ -2977,6 +2978,36 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.trained_demo_certified_gram
 #print axioms Proofs.LipschitzCertDemo.W1t_lip_lower
 #print axioms Proofs.LipschitzCertDemo.W2t_lip_lower
+-- ...iterated once more (Schatten-8): denseE_lipschitzL2_gram2 — ‖W‖₂ ≤ ‖G²‖_F^(1/4) = (Σσ⁸)^(1/8)
+-- via H = GᵀG supplied as data (H1t/H2t_eq), one Cauchy-Schwarz level deeper. B₁' = 7.769,
+-- B₂' = 8.211 (true σ₁: 7.4525/7.7008 — within 4.3%/6.6% of the certified lower bounds) ⇒
+-- L = 63.79, radius 0.0463 → 0.1541 (3.3×); the product method's true-σ ceiling is 0.171.
+#print axioms Proofs.LipschitzCertDemo.sum_sq_matTvec_eq
+#print axioms Proofs.LipschitzCertDemo.denseE_lipschitzL2_gram2
+#print axioms Proofs.LipschitzCertDemo.H1t_eq
+#print axioms Proofs.LipschitzCertDemo.H2t_eq
+#print axioms Proofs.LipschitzCertDemo.W1t_lip_gram2
+#print axioms Proofs.LipschitzCertDemo.W2t_lip_gram2
+#print axioms Proofs.LipschitzCertDemo.mlpT_lip_gram2
+#print axioms Proofs.LipschitzCertDemo.trained_radius_gram2_pos
+#print axioms Proofs.LipschitzCertDemo.trained_demo_certified_gram2
+
+-- TRAINED-WEIGHT whole-net VJP witness (TrainedMlpWitness.lean, the audit's "live witnesses are
+-- synthetic" gap closed at the MLP rung): the SAME trained /128-rationalized 49→8→10 pooled-MNIST
+-- net instantiates the conditional VJP framework at a REAL input (test digit #1895). preact_ne —
+-- ReLU smoothness INHERITED from training (exact pre-activations, 7 on / 1 off, none on the kink),
+-- not engineered by synthetic β-shifts. trainedMlp_has_vjp_at/-_correct (level 1: whole-net
+-- backward = fderiv-contracted Jacobian); pdiv_fwd/-_val (the Jacobian in closed masked form +
+-- the entry ∂logit₁/∂x₂₃ = −85017/8192 exactly); trainedMlp_backward_nontrivial (level 3, via
+-- HasVJPAt.backward_ne_zero_of_pdiv_ne); trainedMlp_jacobian_nonzero / _not_constant (fderiv forms).
+#print axioms Proofs.TrainedMlp.preact_eq
+#print axioms Proofs.TrainedMlp.preact_ne
+#print axioms Proofs.TrainedMlp.trainedMlp_has_vjp_correct
+#print axioms Proofs.TrainedMlp.pdiv_fwd
+#print axioms Proofs.TrainedMlp.pdiv_fwd_val
+#print axioms Proofs.TrainedMlp.trainedMlp_backward_nontrivial
+#print axioms Proofs.TrainedMlp.trainedMlp_jacobian_nonzero
+#print axioms Proofs.TrainedMlp.trainedMlp_not_constant
 
 -- Muon geometry (planning/muon_geometry.md): every optimizer = steepest descent under a norm,
 -- d⋆ = argmax_{‖d‖≤1}⟨g,d⟩ = the dual-norm maximizer. steepest_l2_* = SGD (Euclidean/Cauchy-Schwarz,

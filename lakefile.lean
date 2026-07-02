@@ -663,7 +663,12 @@ lean_lib «Proofs» where
              -- no power-iteration estimate in the trust path), the hand-picked linear +
              -- dense→ReLU→dense demos, and the TRAINED tier: a /128-rationalized 49→8→10
              -- pooled-MNIST MLP with in-kernel margin and provably positive certified radius.
-             `LeanMlir.Proofs.LipschitzCertInstance]
+             `LeanMlir.Proofs.LipschitzCertInstance,
+             -- The trained-weight whole-net VJP witness (MLP rung): the same trained
+             -- /128-rationalized net instantiates HasVJPAt at a REAL input — ReLU
+             -- smoothness inherited from training (exact nonzero pre-activations),
+             -- not engineered; level-3 sealed via an explicit Jacobian entry.
+             `LeanMlir.Proofs.TrainedMlpWitness]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness
