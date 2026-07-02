@@ -141,6 +141,7 @@ import LeanMlir.Proofs.Cifar8BnTiePoC
 import LeanMlir.Proofs.ViTFaithfulPoC
 import LeanMlir.Proofs.ViTTiePoC
 import LeanMlir.Proofs.LipschitzCert
+import LeanMlir.Proofs.LipschitzCertInstance
 import LeanMlir.Proofs.MuonGeometry
 import LeanMlir.Proofs.MuonNewtonSchulz
 
@@ -2934,6 +2935,28 @@ open Proofs
 -- driver reports). smoothed_margin_certified_radius = the core σ·m/2 margin step.
 #print axioms Proofs.smoothing_certified_radius
 #print axioms Proofs.smoothed_margin_certified_radius
+
+-- ...and the Tsuzuku certificate INSTANTIATED (LipschitzCertInstance.lean): the Lipschitz constant
+-- is PROVED (denseE_lipschitzL2 — the Frobenius bound ‖W‖₂ ≤ ‖W‖_F via row-wise Cauchy-Schwarz, no
+-- power-iteration estimate in the trust path; reluE_lipschitzL2 = the activation's factor 1), the
+-- margin is computed in-kernel, and the certified radius is provably positive. Three tiers: the
+-- 2×2 linear demo, the dense→ReLU→dense product-certificate demo, and the TRAINED tier — a
+-- 49→8→10 MLP trained on 4×4-pooled MNIST, weights rationalized to /128 (the same weight-import
+-- boundary as the fp8/E4M3 grid), margin 6953/500 at a concrete test digit, radius
+-- m/(√2·L) ≈ 0.046 > 0. First concrete use of lipschitz_margin_certified_radius.
+#print axioms Proofs.LipschitzCertDemo.denseE_lipschitzL2
+#print axioms Proofs.LipschitzCertDemo.reluE_lipschitzL2
+#print axioms Proofs.LipschitzCertDemo.linear_demo_certified
+#print axioms Proofs.LipschitzCertDemo.linear_radius_pos
+#print axioms Proofs.LipschitzCertDemo.mlp_lip
+#print axioms Proofs.LipschitzCertDemo.mlp_demo_certified
+#print axioms Proofs.LipschitzCertDemo.mlp_radius_pos
+#print axioms Proofs.LipschitzCertDemo.W1t_lip
+#print axioms Proofs.LipschitzCertDemo.W2t_lip
+#print axioms Proofs.LipschitzCertDemo.mlpT_lip
+#print axioms Proofs.LipschitzCertDemo.xt_margin
+#print axioms Proofs.LipschitzCertDemo.trained_radius_pos
+#print axioms Proofs.LipschitzCertDemo.trained_demo_certified
 
 -- Muon geometry (planning/muon_geometry.md): every optimizer = steepest descent under a norm,
 -- d⋆ = argmax_{‖d‖≤1}⟨g,d⟩ = the dual-norm maximizer. steepest_l2_* = SGD (Euclidean/Cauchy-Schwarz,

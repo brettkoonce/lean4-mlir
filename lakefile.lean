@@ -657,7 +657,13 @@ lean_lib «Proofs» where
              -- aX + b(XXᵀ)X + c(XXᵀ)²X actually COMPUTES the polar factor UVᵀ. P1 = the spectral-step
              -- lemma: a step is the scalar map φ(t)=at+bt³+ct⁵ applied per singular value (U,V carried
              -- through), so matrix convergence to UVᵀ reduces to scalar convergence φ^[k](σᵢ)→1.
-             `LeanMlir.Proofs.MuonNewtonSchulz]
+             `LeanMlir.Proofs.MuonNewtonSchulz,
+             -- The robustness certificate INSTANTIATED (the 2026-07 audit's #1 gap):
+             -- certified Frobenius Lipschitz constants (denseE_lipschitzL2 — ‖W‖₂ ≤ ‖W‖_F,
+             -- no power-iteration estimate in the trust path), the hand-picked linear +
+             -- dense→ReLU→dense demos, and the TRAINED tier: a /128-rationalized 49→8→10
+             -- pooled-MNIST MLP with in-kernel margin and provably positive certified radius.
+             `LeanMlir.Proofs.LipschitzCertInstance]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness
