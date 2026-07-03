@@ -1,0 +1,148 @@
+tinygpt prompt suite — model=nano (T=64, D=64, 4 blocks)
+temperature=0.8 top-p=0.95, 300 chars per sample
+
+════════════════════════════════════════
+prompt: "ROMEO:\n"   seed: 1
+────────────────────────────────────────
+ROMEO:
+Ay, when I cannot thy would in sounded,
+And sir, all a traitors us the proof,
+We have been liege, this but a lamentable,
+That will cause to his general knows that he father
+I shall be pass more indeed him to field to you.
+
+COMINIUS:
+Make that the state is received of him.
+
+FRIAR LAURENCE:
+So she wit
+
+════════════════════════════════════════
+prompt: "ROMEO:\n"   seed: 2
+────────────────────────────────────────
+ROMEO:
+Here in my bones of my heart, and and not see your land.
+
+CORIOLANUS:
+The body up and friends are but for him?
+
+Provost:
+This is mind, so worthy shall never bands down thee,
+To the office therefore in this here;
+But I cannot cried be stock into my lord:
+Saint thou hast and we king, sir, it is the wh
+
+════════════════════════════════════════
+prompt: "KING HENRY VI:\n"   seed: 1
+────────────────────────────────────────
+KING HENRY VI:
+The thoughts are thine own say,
+And sister in my life with the rust, that call be it
+it shorter than the more in hand, shall remember stricians
+Since hither to fear, not his man: he must forth!
+
+KING EDWARD IV:
+Well you, if you mean, then I cannot so.
+
+AUTOLYCUS:
+And save you think to be me, though 
+
+════════════════════════════════════════
+prompt: "KING HENRY VI:\n"   seed: 2
+────────────────────────────────────────
+KING HENRY VI:
+But not be a gentleman of the craverer'd by my observes,
+I am here to see you more it not a part
+Than our chomise himself to the gods.
+
+BUCKINGHAM:
+Why, though so not the hand,
+And on his the speech and of a branches fair all,
+Will the looks strange foul plot of your father,
+To came the man and thes
+
+════════════════════════════════════════
+prompt: "First Citizen:\n"   seed: 1
+────────────────────────────────────────
+First Citizen:
+Where are I the heavy down was you are,
+Though the many comes at service here which you many last,
+As bring the first of the air and when is not
+of my hurt sons, and all a subsemer of our most
+Before the worse mother, bold thou say so well in the state
+Of no peace of my seat; and but
+As this another
+
+════════════════════════════════════════
+prompt: "First Citizen:\n"   seed: 2
+────────────────────────────────────────
+First Citizen:
+So many honour, my lord, that I prithee to be daughter.
+
+BUCKINGHAM:
+My lord, worthy life, and therefore but do must in his noble words,
+And then in and my helpet your honour crown.
+
+KING EDWARD IV:
+But love you blood her sprewhoes! though marry that
+Are spaked a man and heavens will the good of our
+
+════════════════════════════════════════
+prompt: "QUEEN MARGARET:\nMy lord,"   seed: 1
+────────────────────────────────────────
+QUEEN MARGARET:
+My lord, in his sonemned of unnevious my hand:
+Her lose that said and long against the assad,
+And accident to father battle to leave
+the deep and part to the threat of days.
+What come away to be boasts.
+
+ISABELLA:
+Though is young and there comes and from the world;
+When so in as here traitor.
+
+QUEEN ELIZABE
+
+════════════════════════════════════════
+prompt: "QUEEN MARGARET:\nMy lord,"   seed: 2
+────────────────────────────────────────
+QUEEN MARGARET:
+My lord, I have made on him of the bear light,
+I do reamply be life as a brace of your kingle and soldiers.
+
+ROMEO:
+More me well thee and false, and therefore,
+Come them the princely banish and dangerous for me.
+
+GLOUCESTER:
+O, be bawd, cousin with against their metiness.
+
+KING RICHARD II:
+So struck thou ta
+
+════════════════════════════════════════
+prompt: "To be, or not to be"   seed: 1
+────────────────────────────────────────
+To be, or not to be changed the will of
+friend you are attorning. I have you must able part
+I' the present to give me to our body.
+
+MARCIUS:
+I told you have from the head e'er this been,
+And then princely in as offence and here;
+Nor talk sure to the crown with me the people
+Procures of my serves perforced to be the go
+
+════════════════════════════════════════
+prompt: "To be, or not to be"   seed: 2
+────────────────────────────────────────
+To be, or not to be an will have found of the more.
+
+First Senator:
+No, that I am thing I will not, in will promised
+Hath the told men and and of his gone:
+That is the dance in for the prince, to the art
+The provided to bear in mine armour
+I dare not be peace: now the loaths'd and with the most more brings.
+
+DUKE VINC

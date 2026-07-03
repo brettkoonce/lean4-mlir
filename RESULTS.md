@@ -38,6 +38,25 @@ Hardware: AMD Radeon 7900 XTX (gfx1100) via ROCm 7.2 / IREE.
 |---|---|---|---|
 | CIFAR-10-BN | 3.7M | **83.50%** | 4× convBn + 3× dense + 2 max pools, batch 128, 30 epochs |
 
+## tinyshakespeare (char-level language modeling, vocab 65)
+
+1.0M train / 111K val tokens (90/10 split of the Karpathy corpus).
+Per-token CE rides the per-pixel-CE (`useSeg`) codegen path; validation
+is fixed-seed val chunks through the train-step vmfb with the update
+discarded. Cosine LR + 100-step warmup, Adam, wd 1e-4, batch 32.
+These runs: NVIDIA RTX 4060 Ti via CUDA / IREE. Lower bits/char is
+better; uniform-random = 6.02, bigram baseline = 3.55.
+
+| Model | Params | Val bits/char | Notes |
+|---|---|---|---|
+| tinyGPT-nano | 212K | **2.27** | T=64, D=64, 2 heads, 4 blocks, 10K steps (train 2.00 bits) |
+| tinyGPT-tiny (5K steps) | 1.2M | **2.30** | T=128, D=128, 4 heads, 6 blocks; val minimum 2.25 @ step 3500; samples more locally fluent than nano |
+| tinyGPT-tiny (10K steps) | 1.2M | 2.78 | overfit: val bottomed ≈2.27 @ step ~4500, train fell to 1.26 bits — kept as the "train loss lies" exhibit |
+
+The 10K-step tiny run is the metric's first catch: by train loss it
+"beats" nano by 0.7 bits while being worse on held-out text. v1 of
+this demo tracked train loss only (`planning/tinygpt_demo_v2.md`).
+
 ## Certified robustness scorecard (proved in Lean)
 
 The Lipschitz-margin certificate (`lipschitz_margin_certified_radius`, Tsuzuku

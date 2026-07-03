@@ -1,0 +1,144 @@
+tinygpt prompt suite — model=tiny (T=128, D=128, 6 blocks)
+temperature=0.8 top-p=0.95, 300 chars per sample
+
+════════════════════════════════════════
+prompt: "ROMEO:\n"   seed: 1
+────────────────────────────────────────
+ROMEO:
+That it is an art to fall of thy friend,
+Will her playfellow'd off the proceedings of the blocked
+With words will profess their heads of their caps?
+Take him that we loved her close a chair,
+And what thou hast inform my desire to him,
+Who doth come to the Capitol? I must we look'd
+Some interior such
+
+════════════════════════════════════════
+prompt: "ROMEO:\n"   seed: 2
+────────────────────────────────────────
+ROMEO:
+She hath a looker to him and his fortune is dead:
+And therefore be the people, dishonour'd,
+Where I say sent on the city of love,
+With more death and went a districture of chair,
+And then she speak with our children that he
+Is, most there beauty to them free the counsel of my wants;
+And so still my 
+
+════════════════════════════════════════
+prompt: "KING HENRY VI:\n"   seed: 1
+────────────────────────────────────────
+KING HENRY VI:
+Now, but that he was desired, how compound me
+And am I sent him. O, an else you are a gone,
+To whom out and the duke severity.
+
+LUCENTIO:
+Marry, and I hold a miserably in a discret
+That should compling all this watchful: but all
+Of doubt and with the tempts of bosom lie.
+
+DUKE OF YORK:
+God will your
+
+════════════════════════════════════════
+prompt: "KING HENRY VI:\n"   seed: 2
+────────────────────────────────────────
+KING HENRY VI:
+But is the walls of my love and noble with a broken hearts,
+Will be advanced from thy bloody cousin?
+O the halboys that even the passage of war
+And sometime that to the prison; the air thoughts
+Of thy bed were I born be safect,
+Brook an angry at the engry cheeks in the people,
+Because the noble abse
+
+════════════════════════════════════════
+prompt: "First Citizen:\n"   seed: 1
+────────────────────────────────────────
+First Citizen:
+What they have done, dear to thy day?
+But may live, I say, to lie this wounds
+Were thou not to me too advantage for these
+And the temples souls have then a while!
+
+HERMIONE:
+It shall think to defend:
+I will have heard her to prove a harm,
+And then he shall have hearing of this ear.
+
+QUEEN MARGARET:
+
+
+════════════════════════════════════════
+prompt: "First Citizen:\n"   seed: 2
+────────────────────────────────────────
+First Citizen:
+So that we were boy, and still day, sir.
+
+COMINIUS:
+Not the chamber of the common crimes, but that
+which is safety to my son: what news is grown in the king
+all this world of life fire to comfort it,
+I will not send to be and great stickly chose,
+But neither be seen by the time of royal masters.
+And
+
+════════════════════════════════════════
+prompt: "QUEEN MARGARET:\nMy lord,"   seed: 1
+────────────────────────────────────────
+QUEEN MARGARET:
+My lord, and to the king in roar's strokest triumph to him;
+And he shall part his king come to thee,
+Suppose to suffer them a torch or show:
+Who hath then forgot the power is all as things,
+Being shall thou high as who have too?
+The vile man they say them to the door, but that
+Showing laid a friend with his
+
+════════════════════════════════════════
+prompt: "QUEEN MARGARET:\nMy lord,"   seed: 2
+────────────────────────────────────────
+QUEEN MARGARET:
+My lord, my heart is honourable stay.
+
+RICHARD:
+Nay, I learn that have the crown of my tale.
+
+DUKE VINCENTIO:
+Mark you shall show you are guard, to answer you.
+But you will be a purpose with you more,
+Or you will admire me him with cherish'd him.
+
+ROMEO:
+So looks for the first of your woman, I am all,
+To to
+
+════════════════════════════════════════
+prompt: "To be, or not to be"   seed: 1
+────────────────────────────────────────
+To be, or not to be consul.
+
+BUCKINGHAM:
+And too lie, my father and my love to live out.
+
+DUKE VINCENTIO:
+I have rather, had a miserable that wear thee,
+Whom he is like a valour spirit by his chame,
+The matter of this woman of walls how to bed;
+And therefore it is the devil friends.
+
+FLORIZEL:
+I may this good time to 
+
+════════════════════════════════════════
+prompt: "To be, or not to be"   seed: 2
+────────────────────────────────────────
+To be, or not to be stink,
+I thought with the manner hangman's lance,
+With his mistress for the bowels of my father,
+I come to attended him they say she stand,
+And then a kingdom before the gentleman live,
+I call thee against thy senate of my kings:
+Come, were look upon his gentleman,
+Which they must we have been and 
