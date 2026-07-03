@@ -85,6 +85,22 @@ stale). Any number is fine — it's the baseline row.
 
 ## Workstream B — the real baseline run + the skip ablation
 
+**Status 2026-07-03: preliminary ablation run (3 ep), harness live,
+verdict pending a real budget.** Ran the matched-budget A/B at the
+default 3-ep smoke config: autoencoder mIoU 0.360 vs UNet 0.344 — i.e.
+Gate B does NOT pass yet, both boundary-collapsed to 0.000. Read as a
+**budget artifact, not a plumbing bug**: both models are underfit at
+3 ep, the UNet's extra 2.3M params haven't engaged, and the same
+`unetDown`/`unetUp` skip codegen trains the DDPM UNet fine. The real
+call needs the 60–80-ep run (per below), now a one-liner:
+`unet-pets-train data/pets 70` and `autoencoder-pets-train data/pets
+70` (epochs arg added). ~17 min/epoch host-bound on klawd → ~20 h
+for a 70-ep pair on 2 GPUs; much faster on mars — prefer it. NB the
+process-hygiene lesson from this session: launch each run as its own
+tracked job (one process per GPU); two runs sharing a GPU halved
+throughput and a `-9` kill of one corrupted the survivor's CUDA
+context.
+
 The compute is trivial next to the other demos (7.85M params,
 230 steps/epoch at batch 16 — minutes per epoch on mars), which
 makes the full recipe-ablation pattern from the classification

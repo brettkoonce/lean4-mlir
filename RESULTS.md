@@ -87,13 +87,21 @@ to validate the harness + the skip-connection ablation direction.
 | Model | Params | mIoU | fg IoU | bg IoU | boundary IoU |
 |---|---|---|---|---|---|
 | Autoencoder (skipless) | 5.5M | 0.360 | 0.425 | 0.655 | **0.000** |
-| UNet (with skips) | 7.85M | _running_ | | | |
+| UNet (with skips) | 7.85M | 0.344 | 0.386 | 0.646 | **0.000** |
 
-The per-class split is the point: at 3 epochs the skipless
-autoencoder collapses the thin boundary class (~12% of pixels) to
-**zero** IoU — a mean-of-3 alone would hide it. The UNet skip
-ablation tests whether the skip connections recover exactly that
-high-frequency boundary detail. See `planning/unet_demo_v2.md`.
+Two honest reads at this 3-epoch budget:
+1. The per-class split is the point: both models collapse the thin
+   boundary class (~12% of pixels) to **zero** IoU — a mean-of-3
+   alone would hide it.
+2. **The skip ablation is inconclusive at 3 epochs** — UNet does
+   NOT yet beat the skipless autoencoder (0.344 vs 0.360, within
+   noise, both boundary-collapsed). This is a budget artifact, not a
+   skip-plumbing bug (the same `unetDown`/`unetUp` codegen trains
+   the DDPM UNet fine; both models here are underfit at 3 ep and the
+   UNet's extra 2.3M params haven't paid off). Gate B — "do skips
+   help, especially on boundary?" — needs the real 60–80-ep run the
+   epochs arg now enables: `unet-pets-train data/pets 70`. See
+   `planning/unet_demo_v2.md`.
 
 ## Certified robustness scorecard (proved in Lean)
 
