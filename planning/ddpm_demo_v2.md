@@ -93,6 +93,27 @@ matched budget, stop and re-plan before touching attention.
 
 ## Workstream B — training recipe (cheap, do first)
 
+**Status 2026-07-03: B1–B3 DONE (Phase 0 shipped).** All three
+zero-codegen levers landed in `demos/MainCifarDdpmTrain.lean` and
+smoke-verified end-to-end (2.94M-param base80, train+eval compile,
+20-step loop, EMA `_params_ema.bin` written, fixed-seed grid
+rendered, hflip clean):
+- **B1 EMA** — shadow buffer `ema = 0.9999·ema + 0.0001·p` via the
+  existing `F32.ema`; saved as `_params_ema.bin`, and the periodic
+  grids sample from it.
+- **B2 fixed-seed grid** — `sampleGrid` folds the 50-step DDIM
+  sampler into the trainer, fixed noise seed `0xfeed5eed`, EMA
+  weights → `runs/ddpm_v2_base80/samples_ep{N}.ppm` every 5 epochs.
+  The honest-A/B infrastructure the whole plan leans on.
+- **B3 hflip** — new `F32.hflipNCHW` FFI (per-image p=0.5), applied
+  to each batch.
+Plus periodic checkpointing (params/EMA/BN every 5 ep) so long runs
+survive interruption, and a `maxSteps` arg for smoke tests. A base80
+40-epoch reference run is baking (klawd GPU 2, ~18 min/epoch
+host-bound → ~12h; grids every 5 ep show the EMA sample evolution).
+Still open: wiring the standalone sampler to prefer `_params_ema.bin`
+(currently the in-trainer grid is the EMA view), and B4/B5 below.
+
 Ordered by effort; B1–B3 need zero new codegen and can run before
 Workstream A lands.
 
@@ -214,6 +235,30 @@ Phase 6 (optional):                F  proof tie-in
 Phases 0–2 are the committed core (≈3–4 sessions of code + overnight
 runs) and alone should clear the "demo-quality grid" bar. 3–6 are
 independently droppable.
+
+## Running it (Phase 0, reproduce)
+
+```bash
+# CIFAR-10 must be at data/cifar-10/ (download_cifar.sh). Then:
+lake build cifar-ddpm-train
+
+# Train base80 (2.94M params) with EMA + fixed-seed grids + hflip.
+# args: [dataDir] [epochs] [maxSteps>0 caps steps/epoch for smoke].
+# ~18 min/epoch host-bound on klawd (RTX 4060 Ti); base80 quality
+# threshold is ep ~60–70 (v1). Grids + checkpoints land every 5 ep.
+CUDA_VISIBLE_DEVICES=2 .lake/build/bin/cifar-ddpm-train data 40
+
+# Outputs:
+#   runs/ddpm_v2_base80/samples_ep{5,10,...}.ppm   ← EMA sample grids
+#   .lake/build/<pfx>_params_ema.bin               ← EMA weights
+#   .lake/build/<pfx>_params.bin / _bn_stats.bin   ← raw weights + BN
+# Smoke test (compile + 20 steps + one grid): … cifar-ddpm-train data 1 20
+```
+
+The in-trainer grid already samples from the EMA weights, so
+`samples_ep{N}.ppm` is the EMA view over training. The standalone
+`cifar-ddpm-sample` exe still reads `_params.bin` (raw) — the small
+open item noted in Workstream B is pointing it at `_params_ema.bin`.
 
 ## Deliverables
 

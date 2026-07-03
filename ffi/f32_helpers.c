@@ -1040,6 +1040,40 @@ LEAN_EXPORT lean_obj_res lean_ddpm_sample_noise(size_t n, size_t seed, lean_obj_
     return lean_io_result_mk_ok(out);
 }
 
+// ---- per-image horizontal flip for an NCHW f32 batch ----
+// Each image gets an independent p=0.5 coin (xorshift64 seeded by `seed`);
+// when it comes up, the W axis is reversed for every channel/row. Plain
+// image aug for unconditional DDPM (no boxes/masks to co-transform) —
+// planning/ddpm_demo_v2.md Workstream B3.
+LEAN_EXPORT lean_obj_res lean_f32_hflip_nchw(
+    b_lean_obj_arg images, size_t batch, size_t channels,
+    size_t H, size_t W, size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t nbytes = lean_sarray_size(images);
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const float* in = (const float*)lean_sarray_cptr(images);
+    float* o = (float*)lean_sarray_cptr(out);
+    uint64_t s = seed ? seed : 0x9e3779b97f4a7c15ULL;
+    size_t plane = H * W;
+    size_t imgsz = channels * plane;
+    for (size_t b = 0; b < batch; b++) {
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        int flip = (s & 1);
+        const float* ib = in + b * imgsz;
+        float* ob = o + b * imgsz;
+        for (size_t c = 0; c < channels; c++) {
+            for (size_t y = 0; y < H; y++) {
+                const float* irow = ib + c * plane + y * W;
+                float* orow = ob + c * plane + y * W;
+                for (size_t x = 0; x < W; x++) {
+                    orow[x] = flip ? irow[W - 1 - x] : irow[x];
+                }
+            }
+        }
+    }
+    return lean_io_result_mk_ok(out);
+}
+
 // ---- int32 LE token IDs → f32 LE ByteArray (element for element) ----
 // Feeds the in-graph one-hot embedding path (tokenPositionEmbed with
 // idsInput = true): the model input becomes [B, T] f32 ids and the

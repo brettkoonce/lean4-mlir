@@ -190,6 +190,13 @@ opaque scaleShift (ba : @& ByteArray) (scale : Float) (shift : Float) : IO ByteA
 @[extern "lean_f32_ema"]
 opaque ema (running : @& ByteArray) (batch : @& ByteArray) (momentum : Float) : IO ByteArray
 
+/-- Per-image horizontal flip of an NCHW f32 batch (independent p=0.5
+    coin per image). Plain image aug for unconditional DDPM —
+    planning/ddpm_demo_v2.md Workstream B3. -/
+@[extern "lean_f32_hflip_nchw"]
+opaque hflipNCHW (images : @& ByteArray) (batch : USize) (channels : USize)
+    (H : USize) (W : USize) (seed : USize) : IO ByteArray
+
 /-- Random crop: batch of NCHW images from src_size to crop_size. -/
 @[extern "lean_f32_random_crop"]
 opaque randomCrop (images : @& ByteArray) (batch : USize) (channels : USize)
