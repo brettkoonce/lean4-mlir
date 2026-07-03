@@ -150,6 +150,9 @@ def paramShapes (spec : NetSpec) : Array (Array Nat) := Id.run do
     | .lmHead d v _ =>
       -- Dense W [D, V] + bias [V].
       shapes := shapes.push #[d, v] |>.push #[v]
+    | .timeCondAdd c nFreq =>
+      -- Time-conditioning dense: W [2·nFreq, C] + bias [C].
+      shapes := shapes.push #[2 * nFreq, c] |>.push #[c]
     | _ => pure ()
   return shapes
 
@@ -470,6 +473,13 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
     let emb ← F32.heInit seed (v * d).toUSize 0.02
     let pos ← F32.heInit (seed + 1) (t * d).toUSize 0.02
     return (#[emb, pos], seed + 2)
+  | .timeCondAdd c nFreq =>
+    -- Init W and b to ZERO so time conditioning starts as a no-op (pure
+    -- residual) and grows in — the layer-scale trick the DDPM v2 plan
+    -- wants (Workstream A / C). d_W = embᵀ·d_proj ≠ 0, so it trains.
+    let w ← F32.const (2 * nFreq * c).toUSize 0.0
+    let b ← F32.const c.toUSize 0.0
+    return (#[w, b], seed + 1)
   | .lmHead d v _ =>
     -- Dense W [D, V] He-init; zero bias.
     let (W, b, s') ← heDense d v seed

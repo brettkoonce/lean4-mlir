@@ -33,6 +33,29 @@ def tinyCifarDdpm : NetSpec where
     .conv2d 80 3 1 .same .identity  -- 3 RGB output channels
   ]
 
+/-- v2 Workstream A variant: per-block `timeCondAdd` injects a learned
+    sin/cos time projection after each stage (in-graph timestep, no ABI
+    change). `nFreq=8` → 16 sin/cos features per site. -/
+def tinyCifarDdpmTC : NetSpec where
+  name := "DDPM UNet timeCondAdd base80 (CIFAR 32x32x3)"
+  imageH := 32
+  imageW := 32
+  layers := [
+    .unetDown 4 80,
+    .timeCondAdd 80 8,
+    .unetDown 80 160,
+    .timeCondAdd 160 8,
+    .convBn 160 320 3 1 .same,
+    .timeCondAdd 320 8,
+    .convBn 320 320 3 1 .same,
+    .timeCondAdd 320 8,
+    .unetUp 320 160,
+    .timeCondAdd 160 8,
+    .unetUp 160 80,
+    .timeCondAdd 80 8,
+    .conv2d 80 3 1 .same .identity
+  ]
+
 def cifarDdpmConfig : TrainConfig where
   learningRate := 0.0005
   batchSize    := 32
@@ -110,7 +133,9 @@ def main (args : List String) : IO Unit := do
   let dataDir := args.head?.getD "data"
   let epochsOverride : Option Nat := (args[1]?).bind String.toNat?
   let maxSteps : Nat := ((args[2]?).bind String.toNat?).getD 0
-  let spec := tinyCifarDdpm
+  -- 4th arg "tc" selects the per-block timeCondAdd variant (v2 Workstream A).
+  let useTC := (args[3]?).getD "" == "tc"
+  let spec := if useTC then tinyCifarDdpmTC else tinyCifarDdpm
   let cfg := { cifarDdpmConfig with epochs := epochsOverride.getD cifarDdpmConfig.epochs }
   IO.eprintln s!"{spec.name}: {spec.totalParams} params (epochs={cfg.epochs})"
 

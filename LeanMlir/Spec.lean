@@ -321,6 +321,9 @@ def Layer.nParams : Layer → Nat
   | .lmHead d v _ =>
       -- Dense W [D, V] + bias [V].
       d * v + v
+  | .timeCondAdd c nFreq =>
+      -- Dense W [2·nFreq, C] + bias [C].
+      2 * nFreq * c + c
   | _                        => 0
 
 def NetSpec.totalParams (s : NetSpec) : Nat :=
@@ -427,6 +430,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .transitionLayer ic oc      => s!"Trans({ic}→{oc})"
     | .tokenPositionEmbed v t d ids => s!"TokPos({v}→{d},T={t}{if ids then ",ids" else ""})"
     | .lmHead d v t               => s!"LMHead({d}→{v},T={t})"
+    | .timeCondAdd c nFreq        => s!"TimeCond({c},{2*nFreq}f)"
     | .spatialFlatten             => "SpFlat"
     | .spatialUnflatten c h w     => s!"SpUnflat({c},{h}x{w})")
 
@@ -477,6 +481,7 @@ def Layer.outChannels : Layer → Nat
   | .transitionLayer _ oc           => oc
   | .tokenPositionEmbed _ _ d _     => d  -- output is [B, T, D]; D acts as the channel dim downstream
   | .lmHead _ v t                   => t * v  -- flat output [B, T*V] for the loss head
+  | .timeCondAdd c _                => c  -- added onto a [B, C, H, W] map; channels unchanged
   | .spatialFlatten                 => 0  -- pass-through (channel count unchanged on rank-3 reshape)
   | .spatialUnflatten c _ _         => c
   | _                               => 0  -- pool/flatten/GAP: pass-through

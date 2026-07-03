@@ -1466,6 +1466,60 @@ private def emitConvNextDownsample (startPidx : Nat) (curSSA : String) (curShape
     return (code, s!"%cnds_out{tag}", outShape, p)
   | _ => return ("    // convNextDownsample error\n", curSSA, curShape, startPidx)
 
+/-- The per-image timestep is carried by the last channel of the DDPM
+    network input (`prependTChannel` fills it with `t/Tmax`, constant
+    over the plane). Given the flat input `%x_flat : [B, inDim]` and the
+    channel layout, the timestep column offset is `(cIn-1)·H·W`. -/
+private def ddpmTStepOffset (spec : NetSpec) : Nat :=
+  let cIn := match spec.layers.head? with
+    | some (.unetDown ic _)      => ic
+    | some (.convBn ic _ _ _ _)  => ic
+    | some (.conv2d ic _ _ _ _)  => ic
+    | _ => 1
+  (cIn - 1) * spec.imageH * spec.imageW
+
+/-- Forward emit for `.timeCondAdd channels nFreq`, shared by the eval
+    and train-step forward walks. Reads the per-image timestep scalar
+    `s = t/Tmax` from `%x_flat[:, tOff]`, builds a `2·nFreq` sin/cos
+    embedding in-graph (frequencies `π·2^k`), projects it through the
+    learned dense `pW : [2·nFreq, C]` + `pB : [C]`, and adds the result
+    (broadcast over H,W) onto `featSSA : [B, C, H, W]`.
+    Returns `(code, outSSA, embSSA)` — `embSSA` (the `[B, 2·nFreq]`
+    sin/cos features) is stored by the train forward for the backward. -/
+private def emitTimeCondForward (tag : String) (xSSA : String) (B inDim tOff nFreq c : Nat)
+    (featSSA : String) (featShape : List Nat) (pW pB : String)
+    : String × String × String := Id.run do
+  let nf := nFreq
+  let embDim := 2 * nf
+  let bnf := tensorTy [B, nf]
+  let bemb := tensorTy [B, embDim]
+  let bc := tensorTy [B, c]
+  -- Frequency constant ω_k = π·2^k, k = 0 .. nFreq-1.
+  let freqs := (List.range nf).map (fun k => s!"{3.141592653589793 * (Float.ofNat (2 ^ k))}")
+  let mut s : String := ""
+  -- Slice the timestep column s : [B, 1] from the flat input : [B, inDim].
+  s := s ++ s!"    %tc_s{tag} = \"stablehlo.slice\"({xSSA}) " ++ "{" ++
+       s!" start_indices = array<i64: 0, {tOff}>, limit_indices = array<i64: {B}, {tOff+1}>, strides = array<i64: 1, 1>" ++
+       "} : " ++ s!"({tensorTy [B, inDim]}) -> {tensorTy [B, 1]}\n"
+  s := s ++ s!"    %tc_sb{tag} = stablehlo.broadcast_in_dim %tc_s{tag}, dims = [0, 1] : ({tensorTy [B, 1]}) -> {bnf}\n"
+  s := s ++ s!"    %tc_freq{tag} = stablehlo.constant dense<[{String.intercalate ", " freqs}]> : {tensorTy [nf]}\n"
+  s := s ++ s!"    %tc_freqb{tag} = stablehlo.broadcast_in_dim %tc_freq{tag}, dims = [1] : ({tensorTy [nf]}) -> {bnf}\n"
+  s := s ++ s!"    %tc_ph{tag} = stablehlo.multiply %tc_sb{tag}, %tc_freqb{tag} : {bnf}\n"
+  s := s ++ s!"    %tc_sin{tag} = stablehlo.sine %tc_ph{tag} : {bnf}\n"
+  s := s ++ s!"    %tc_cos{tag} = stablehlo.cosine %tc_ph{tag} : {bnf}\n"
+  s := s ++ s!"    %tc_emb{tag} = stablehlo.concatenate %tc_sin{tag}, %tc_cos{tag}, dim = 1 : ({bnf}, {bnf}) -> {bemb}\n"
+  -- Project: [B, 2nFreq] · [2nFreq, C] -> [B, C], + bias.
+  s := s ++ s!"    %tc_proj{tag} = stablehlo.dot_general %tc_emb{tag}, {pW},\n"
+  s := s ++ s!"              contracting_dims = [1] x [0],\n"
+  s := s ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+  s := s ++ s!"            : ({bemb}, {tensorTy [embDim, c]}) -> {bc}\n"
+  s := s ++ s!"    %tc_bb{tag} = stablehlo.broadcast_in_dim {pB}, dims = [1] : ({tensorTy [c]}) -> {bc}\n"
+  s := s ++ s!"    %tc_projb{tag} = stablehlo.add %tc_proj{tag}, %tc_bb{tag} : {bc}\n"
+  -- Broadcast [B, C] -> [B, C, H, W] and add onto the feature map.
+  s := s ++ s!"    %tc_bc{tag} = stablehlo.broadcast_in_dim %tc_projb{tag}, dims = [0, 1] : ({bc}) -> {tensorTy featShape}\n"
+  s := s ++ s!"    %tc_out{tag} = stablehlo.add {featSSA}, %tc_bc{tag} : {tensorTy featShape}\n"
+  return (s, s!"%tc_out{tag}", s!"%tc_emb{tag}")
+
 /-- Emit the `@forward` function body walking layers in order. When
     `stopAtGAP` is true (GradCAM mode), the walk halts at the first
     `.globalAvgPool` it encounters: instead of emitting GAP+dense, we
@@ -1723,6 +1777,18 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
         curShape := outShape
         pidx := pidx + 1
       | _ => code := code ++ "    // lmHead error: input not [B, T, D]\n"
+    | .timeCondAdd c nFreq =>
+      -- Per-block DDPM time conditioning; reads the timestep in-graph
+      -- from %x_flat's t-channel. Feature map passes through with the
+      -- projected sin/cos embedding added.
+      match curShape with
+      | [b, _, _, _] =>
+        let (snip, outSSA, _) := emitTimeCondForward s!"e{pos}" "%x" b (inputFlatDim spec)
+          (ddpmTStepOffset spec) nFreq c curSSA curShape s!"%W{pidx}" s!"%b{pidx}"
+        code := code ++ snip
+        curSSA := outSSA
+        pidx := pidx + 1
+      | _ => code := code ++ "    // timeCondAdd error: input not [B, C, H, W]\n"
     | .spatialFlatten =>
       -- [B, C, H, W] → transpose [0, 2, 3, 1] → [B, H, W, C] → reshape → [B, H*W, C]
       match curShape with
@@ -2067,6 +2133,11 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
       | [b, _, _] => curShape := [b, t * v]
       | _ => pure ()
       outShape := curShape
+    | .timeCondAdd c nFreq =>
+      -- Dense W [2·nFreq, C] + bias [C]. Shape passes through.
+      params := params ++ s!",\n    %W{pidx}: {tensorTy [2 * nFreq, c]}, %b{pidx}: {tensorTy [c]}"
+      pidx := pidx + 1
+      outShape := curShape
     | .spatialFlatten =>
       match curShape with
       | [b, c, h, w] => curShape := [b, h * w, c]
@@ -2232,6 +2303,9 @@ def collectBnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
       -- 2 slots (W_emb, W_pos). No BN.
       pidx := pidx + 2
     | .lmHead _ _ _ =>
+      pidx := pidx + 1
+    | .timeCondAdd _ _ =>
+      -- 1 slot (W, b). No BN.
       pidx := pidx + 1
     -- spatialFlatten / spatialUnflatten: no params, no pidx advance.
     | _ => pure ()
@@ -2531,6 +2605,11 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
       match curShape with
       | [b, _, _] => curShape := [b, t * v]
       | _ => pure ()
+      outShape := curShape
+    | .timeCondAdd c nFreq =>
+      -- Dense W [2·nFreq, C] + bias [C]. Shape passes through.
+      params := params ++ s!",\n    %W{pidx}: {tensorTy [2 * nFreq, c]}, %b{pidx}: {tensorTy [c]}"
+      pidx := pidx + 1
       outShape := curShape
     | .spatialFlatten =>
       match curShape with
@@ -4885,6 +4964,25 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         pidx := pidx + 1
       | _ => code := code ++ "    // lmHead train: input not [B, T, D]\n"
 
+    | .timeCondAdd c nFreq =>
+      -- Per-block DDPM time conditioning. Adds a learned sin/cos time
+      -- projection onto the feature map; timestep read in-graph from
+      -- %x_flat's t-channel. Store the sin/cos emb SSA (preActSSA) for
+      -- the backward's d_W. Residual add ⇒ gradient passes through.
+      match curShape with
+      | [b, _, _, _] =>
+        let inSSA := curSSA
+        let (snip, outSSA, embSSA) := emitTimeCondForward s!"t{pos}" "%x_flat" b (inputFlatDim spec)
+          (ddpmTStepOffset spec) nFreq c curSSA curShape s!"%W{pidx}" s!"%b{pidx}"
+        code := code ++ snip
+        records := records.push
+          { layer := l, pidx := some pidx, pos, inputSSA := inSSA,
+            preActSSA := embSSA, outputSSA := outSSA,
+            inShape := curShape, outShape := curShape }
+        curSSA := outSSA
+        pidx := pidx + 1
+      | _ => code := code ++ "    // timeCondAdd train: input not [B, C, H, W]\n"
+
     | .unetDown ic oc =>
       -- 2× convBn (ic→oc, oc→oc) → push pre-pool feature on encoder stack →
       -- maxPool 2 with `addSkipGrad := %unet_skip_g{e}` so the matching
@@ -6421,6 +6519,30 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         | _ => pure ()
       else pure ()
 
+    | .timeCondAdd c nFreq =>
+      -- Residual add ⇒ the gradient passes through to the pre-add feature
+      -- UNCHANGED (d_feat = d_out); we only bolt on the dense param grads.
+      match r.pidx, r.inShape with
+      | some pIdx, [b, _, h, w] =>
+        let embDim := 2 * nFreq
+        let bchw := tensorTy [b, c, h, w]
+        let bc := tensorTy [b, c]
+        let tag := s!"tc{r.pos}"
+        code := code ++ s!"    // ─── timeCondAdd backward: d_proj = sum_HW d_out; d_W = embᵀ·d_proj ───\n"
+        -- d_proj [b, c] = reduce d_out over spatial dims [2, 3]
+        code := code ++ s!"    %{tag}_dproj = stablehlo.reduce({gradSSA} init: %zf) applies stablehlo.add across dimensions = [2, 3]\n"
+        code := code ++ s!"          : ({bchw}, tensor<f32>) -> {bc}\n"
+        -- d_b [c] = sum d_proj over batch
+        code := code ++ s!"    %d_b{pIdx} = stablehlo.reduce(%{tag}_dproj init: %zf) applies stablehlo.add across dimensions = [0]\n"
+        code := code ++ s!"          : ({bc}, tensor<f32>) -> {tensorTy [c]}\n"
+        -- d_W [2·nFreq, c] = embᵀ @ d_proj (contract over batch)
+        code := code ++ s!"    %d_W{pIdx} = stablehlo.dot_general {r.preActSSA}, %{tag}_dproj,\n"
+        code := code ++ s!"              contracting_dims = [0] x [0],\n"
+        code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+        code := code ++ s!"            : ({tensorTy [b, embDim]}, {bc}) -> {tensorTy [embDim, c]}\n"
+        -- gradSSA / gradShape unchanged: the add routes d_out to the feature.
+      | _, _ => pure ()
+
     | .spatialFlatten =>
       -- Backward = inverse shape transformation. inShape is [B, C, H, W],
       -- outShape is [B, H*W, C]. The incoming gradSSA is on outShape.
@@ -6595,6 +6717,18 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           mRetTypes := mRetTypes ++ optTypes[3:6]
           vRetNames := vRetNames ++ optNames[6:]
           vRetTypes := vRetTypes ++ optTypes[6:]
+        | .timeCondAdd c nFreq =>
+          -- Plain dense update: W [2·nFreq, c] + b [c] (no head LR, wd on W).
+          let wShape := [2 * nFreq, c]; let bShape := [c]
+          let (s1, wN, mwN, vwN) := emitUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"tcW{p}" wdActive
+          let (s2, bN, mbN, vbN) := emitUpdate s!"%b{p}" s!"%d_b{p}" s!"%m_b{p}" s!"%v_b{p}" bShape s!"tcb{p}" false
+          code := code ++ s1 ++ s2
+          paramRetNames := paramRetNames.push wN |>.push bN
+          paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
+          mRetNames := mRetNames.push mwN |>.push mbN
+          mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
+          vRetNames := vRetNames.push vwN |>.push vbN
+          vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
         | _ => pure ()
     | none =>
       -- SE records (marker layer = globalAvgPool, isSE := true) carry 2 conv2d-style param
@@ -7352,6 +7486,15 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       match curShape with
       | [b, _, _] => curShape := [b, v, t, 1]
       | _ => pure ()
+    | .timeCondAdd c nFreq =>
+      let wTy := tensorTy [2 * nFreq, c]
+      let bTy := tensorTy [c]
+      params := params ++ s!"      %W{pidx}: {wTy}, %b{pidx}: {bTy},\n"
+      paramRetTypes := paramRetTypes.push wTy |>.push bTy
+      mRetTypes := mRetTypes.push wTy |>.push bTy
+      vRetTypes := vRetTypes.push wTy |>.push bTy
+      pidx := pidx + 1
+      -- curShape unchanged (added onto the feature map)
     | _ => pure ()
   -- m_ params (1st moment, same shapes)
   let mut mpidx : Nat := 0
@@ -7526,6 +7669,9 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     | .lmHead d v _ =>
       params := params ++ s!"      %m_W{mpidx}: {tensorTy [d, v]}, %m_b{mpidx}: {tensorTy [v]},\n"
       mpidx := mpidx + 1
+    | .timeCondAdd c nFreq =>
+      params := params ++ s!"      %m_W{mpidx}: {tensorTy [2 * nFreq, c]}, %m_b{mpidx}: {tensorTy [c]},\n"
+      mpidx := mpidx + 1
     | _ => pure ()
   -- v_ params (2nd moment, same shapes)
   let mut vpidx2 : Nat := 0
@@ -7698,6 +7844,9 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       vpidx2 := vpidx2 + 2
     | .lmHead d v _ =>
       params := params ++ s!"      %v_W{vpidx2}: {tensorTy [d, v]}, %v_b{vpidx2}: {tensorTy [v]},\n"
+      vpidx2 := vpidx2 + 1
+    | .timeCondAdd c nFreq =>
+      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [2 * nFreq, c]}, %v_b{vpidx2}: {tensorTy [c]},\n"
       vpidx2 := vpidx2 + 1
     | _ => pure ()
   if useDdpm then

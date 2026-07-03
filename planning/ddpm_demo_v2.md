@@ -52,6 +52,33 @@ everything else is training recipe.
 
 ## Workstream A — per-block time conditioning (the new codegen)
 
+**Status 2026-07-03: SHIPPED (a design better than the plan below).**
+`.timeCondAdd channels nFreq` is implemented and validated. The plan
+below called for a new `[B, D_t]` side input threaded through the
+DDPM ABI — but that would force a `libiree_ffi.so` relink (the
+fragile stale-FFI path). Instead, **the timestep is read in-graph**
+from the last channel of the network input (`prependTChannel`'s
+`t/Tmax` plane, sliced from `%x_flat`/`%x` at offset `(cIn-1)·H·W`),
+the `2·nFreq` sin/cos embedding is built in the MLIR (frequencies
+`π·2^k`), projected through a learned dense `[2·nFreq, C]`, and
+broadcast-added onto the `[B, C, H, W]` feature map — **zero ABI
+change**, same philosophy as the tinygpt in-graph one-hot. W and b
+init to **zero** so conditioning starts as a no-op and grows in (the
+layer-scale trick Workstream C wanted, for free). Backward: residual
+add ⇒ gradient passes through unchanged, plus standard dense-transpose
+param grads (`d_W = embᵀ·d_proj`, `d_b = Σ d_proj`) — the same idiom
+as the FD-verified tokenPositionEmbed/lmHead. Validation: iree-compile
+passes for train + eval (strict shape check over all ~15 codegen
+sites), param count exact (+19,040 for the 6-site base80 variant =
+Σ 17·C), loss drops on a smoke run. Follow-up: an isolated FD gradient
+test (awkward because the timestep enters via the input t-channel; the
+backward mirrors verified patterns by construction). Use it via
+`cifar-ddpm-train data <epochs> 0 tc` (`tinyCifarDdpmTC` spec).
+Remaining for a full Gate A: a matched-budget 50-ep train + fixed-seed
+grid vs the base80 baseline.
+
+The original side-input design (superseded, kept for context):
+
 The one genuinely new primitive. Design that fits the linear
 `NetSpec` without branch/merge syntax:
 

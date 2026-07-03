@@ -251,6 +251,14 @@ inductive Layer where
   -- per-pixel CE loss machinery handles `[B, V, T, 1]`-shaped logits
   -- by reshape. Params: dense W `[dModel, vocabSize]` + bias.
   | lmHead (dModel vocabSize seqLen : Nat)
+  -- Per-block diffusion time conditioning (DDPM v2 Workstream A). Added
+  -- onto a `[B, channels, H, W]` feature map: a learned dense projection
+  -- of a `2·nFreq` sin/cos embedding of the per-image timestep, broadcast
+  -- over H,W. The timestep is read in-graph from the last channel of the
+  -- network input (`prependTChannel`'s `t/Tmax` plane) — no new ABI input.
+  -- Params: W `[2·nFreq, channels]` + bias `[channels]`, both init 0 so
+  -- conditioning starts at zero (layer-scale spirit) and grows in.
+  | timeCondAdd (channels nFreq : Nat)
 deriving Repr
 
 structure NetSpec where
