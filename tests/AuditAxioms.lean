@@ -146,6 +146,7 @@ import LeanMlir.Proofs.TrainedMlpWitness
 import LeanMlir.Proofs.TrainedCnnWitness
 import LeanMlir.Proofs.TrainedCnnSeal
 import LeanMlir.Proofs.LipschitzCertScorecard
+import LeanMlir.Proofs.LipschitzCertFloat
 import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
 import LeanMlir.Proofs.MuonGeometry
@@ -3024,6 +3025,20 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.marginU82
 #print axioms Proofs.LipschitzCertDemo.certifiedU82
 #print axioms Proofs.LipschitzCertDemo.scorecard_counts
+
+-- The certificate × float bridge (LipschitzCertFloat.lean, 2026-07 audit gap #1): the scorecard's
+-- Tsuzuku certificates composed with the 2-layer FloatBridge budget (mlp2_float_close_uniform,
+-- input quantization included; γ-form rational B ≤ 5.96e-3 at the capped net's exact magnitude
+-- bounds). certifiedFloat_of_margin = the composed engine (margin clears (14143/10000)·L·ε + 2B ⇒
+-- the rounded forward of any quantized perturbed input keeps the class, ∀ M with M.u ≤ u32);
+-- certifiedC0_float = a representative per-image instance (33/34 ℝ-certified images survive).
+#print axioms Proofs.FloatModel.mlp2_float_close_uniform
+#print axioms Proofs.LipschitzCertDemo.certified_at_eps_close
+#print axioms Proofs.LipschitzCertDemo.capped_B_le
+#print axioms Proofs.LipschitzCertDemo.real_tie
+#print axioms Proofs.LipschitzCertDemo.certifiedFloat_of_margin
+#print axioms Proofs.LipschitzCertDemo.certifiedC0_float
+#print axioms Proofs.LipschitzCertDemo.float_scorecard_count
 
 -- THE IEEE AXIOMS, DISCHARGED (Binary32Instance.lean, post_audit_roadmap §2): the repo's only two
 -- axioms (ieeeRnd/ieeeRnd_err — "a rounding operator satisfying the standard model exists") are

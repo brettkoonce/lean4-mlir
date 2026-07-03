@@ -705,7 +705,14 @@ lean_lib «Proofs» where
              -- input-VJPs via conv2d_input_grad_formula through HasVJPAt.correct.
              -- Yields backward_nontrivial / jacobian_nonzero / not_constant, the
              -- full TrainedMlpWitness theorem set at the conv rung.
-             `LeanMlir.Proofs.TrainedCnnSeal]
+             `LeanMlir.Proofs.TrainedCnnSeal,
+             -- The robustness certificate composed with the float bridge (2026-07
+             -- audit gap #1): the scorecard's per-image Tsuzuku certificates ×
+             -- the 2-layer FloatBridge budget (γ-form, B ≤ 5.96e-3 at the capped
+             -- net's exact magnitudes, input quantization included) ⇒ 33/34
+             -- ℝ-certified images are certified for the FLOAT-EVALUATED net,
+             -- ∀ rounding models at binary32 accuracy (M.u ≤ u32).
+             `LeanMlir.Proofs.LipschitzCertFloat]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness
