@@ -43,6 +43,9 @@ def autoencoderPetsConfig : TrainConfig where
   warmupEpochs := 0
   augment      := false
 
-def main (args : List String) : IO Unit :=
-  autoencoderPets.train autoencoderPetsConfig
+def main (args : List String) : IO Unit := do
+  -- Optional 2nd arg overrides epochs (matched-budget skip ablation vs
+  -- unet-pets-train). See planning/unet_demo_v2.md Workstream B.
+  let epochs := (args[1]?.bind String.toNat?).getD autoencoderPetsConfig.epochs
+  autoencoderPets.train { autoencoderPetsConfig with epochs }
     (args.head?.getD "data/pets") .pets

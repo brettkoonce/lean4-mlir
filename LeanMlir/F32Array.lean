@@ -168,6 +168,14 @@ opaque yoloAugment (images : @& ByteArray) (boxes : @& ByteArray)
 @[extern "lean_f32_mask_u8_to_i32"]
 opaque maskU8ToI32 (mask : @& ByteArray) : IO ByteArray
 
+/-- Per-batch segmentation confusion matrix. `logits` is f32 `[B,NC,H,W]`,
+    `masks` is u8 `[B,H,W]` (per-pixel class). Returns int64 LE `[NC*NC]`
+    counts `conf[true*NC + pred]` (argmax over channels), for mIoU
+    accumulation across batches. planning/unet_demo_v2.md Workstream A. -/
+@[extern "lean_f32_seg_confusion"]
+opaque segConfusion (logits masks : @& ByteArray)
+    (B NC H W : USize) : IO ByteArray
+
 /-- Convert little-endian int32 token IDs to f32, element for element.
     Feeds the `idsInput` tokenPositionEmbed path: model input is `[B, T]`
     f32 ids, one-hot built in-graph — the host-side `[B, V·T]` one-hot

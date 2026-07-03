@@ -44,6 +44,10 @@ def unetPetsConfig : TrainConfig where
   warmupEpochs := 0
   augment      := false
 
-def main (args : List String) : IO Unit :=
-  unetPets.train unetPetsConfig
+def main (args : List String) : IO Unit := do
+  -- Optional 2nd arg overrides epochs (Phase 1 skip ablation wants a
+  -- real budget; default 3 stays a smoke test). mIoU prints every 10
+  -- epochs + at the end (planning/unet_demo_v2.md).
+  let epochs := (args[1]?.bind String.toNat?).getD unetPetsConfig.epochs
+  unetPets.train { unetPetsConfig with epochs }
     (args.head?.getD "data/pets") .pets

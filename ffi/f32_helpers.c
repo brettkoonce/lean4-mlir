@@ -1040,6 +1040,41 @@ LEAN_EXPORT lean_obj_res lean_ddpm_sample_noise(size_t n, size_t seed, lean_obj_
     return lean_io_result_mk_ok(out);
 }
 
+// ---- segmentation confusion matrix (per-batch) ----
+// logits : f32 [B, NC, H, W] (NCHW).  masks : u8 [B, H, W] (per-pixel
+// class in 0..NC-1).  Returns int64 LE [NC*NC] confusion counts,
+// conf[true*NC + pred], accumulated over the batch. The caller sums
+// these across batches in exact Nat and derives per-class IoU =
+// conf[c][c] / (row_c + col_c - conf[c][c]). planning/unet_demo_v2.md A.
+LEAN_EXPORT lean_obj_res lean_f32_seg_confusion(
+    b_lean_obj_arg logits, b_lean_obj_arg masks,
+    size_t B, size_t NC, size_t H, size_t W, lean_obj_arg w_) {
+    (void)w_;
+    const float* lg = (const float*)lean_sarray_cptr(logits);
+    const uint8_t* mk = (const uint8_t*)lean_sarray_cptr(masks);
+    size_t plane = H * W;
+    size_t imgsz = NC * plane;
+    size_t out_n = NC * NC;
+    lean_object* out = lean_alloc_sarray(1, out_n * 8, out_n * 8);
+    int64_t* conf = (int64_t*)lean_sarray_cptr(out);
+    for (size_t i = 0; i < out_n; i++) conf[i] = 0;
+    for (size_t b = 0; b < B; b++) {
+        const float* lb = lg + b * imgsz;
+        const uint8_t* mb = mk + b * plane;
+        for (size_t p = 0; p < plane; p++) {
+            size_t best = 0;
+            float bv = lb[p];
+            for (size_t c = 1; c < NC; c++) {
+                float v = lb[c * plane + p];
+                if (v > bv) { bv = v; best = c; }
+            }
+            size_t t = mb[p];
+            if (t < NC) conf[t * NC + best]++;
+        }
+    }
+    return lean_io_result_mk_ok(out);
+}
+
 // ---- per-image horizontal flip for an NCHW f32 batch ----
 // Each image gets an independent p=0.5 coin (xorshift64 seeded by `seed`);
 // when it comes up, the W axis is reversed for every channel/row. Plain

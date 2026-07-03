@@ -52,6 +52,19 @@ class collapse), so the metric comes first.
 
 ## Workstream A — mIoU + per-class IoU (do first, no codegen)
 
+**Status 2026-07-03: DONE.** The `Train.lean` seg-eval TODO is
+replaced with a per-class-IoU + mIoU harness: eval-forward → argmax
+over the NC channels via a new `F32.segConfusion` C helper (returns
+a per-batch `[NC*NC]` int64 confusion matrix) → accumulated in exact
+Nat across batches → `IoU_c = conf[c][c]/(row_c+col_c−conf[c][c])`,
+printed with the per-class breakdown every 10 ep + at the end. Both
+`unet-pets-train` and `autoencoder-pets-train` gained an optional
+epochs arg for the matched-budget ablation (Workstream B). NC is read
+from the last layer's `outChannels` (3 for the Pets trimap). Runtime
+validation lands when the first run reaches its eval epoch.
+
+Original plan:
+
 1. **mIoU harness** (~half session). Host-side over the val set:
    eval forward (the path `MainPetsPredict` already exercises) →
    argmax over the 3 channels → per-class intersection/union

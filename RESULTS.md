@@ -76,6 +76,25 @@ children's stories from a prompt — the TinyStories (Eldan & Li 2023)
 result reproduced inside the Lean → MLIR → IREE pipeline. Sample in
 `blueprint/src/figures/tinystories/`.
 
+## Oxford-IIIT Pets segmentation (3-class trimap, mIoU)
+
+~3.7K train / 3.7K val, 224×224. Per-pixel softmax CE (`useSeg`).
+mIoU via the `F32.segConfusion` harness (argmax over channels →
+per-class IoU = TP/(row+col−TP)). These are **3-epoch smoke runs**
+(the mains take an epochs arg for a real 60–80-ep budget); reported
+to validate the harness + the skip-connection ablation direction.
+
+| Model | Params | mIoU | fg IoU | bg IoU | boundary IoU |
+|---|---|---|---|---|---|
+| Autoencoder (skipless) | 5.5M | 0.360 | 0.425 | 0.655 | **0.000** |
+| UNet (with skips) | 7.85M | _running_ | | | |
+
+The per-class split is the point: at 3 epochs the skipless
+autoencoder collapses the thin boundary class (~12% of pixels) to
+**zero** IoU — a mean-of-3 alone would hide it. The UNet skip
+ablation tests whether the skip connections recover exactly that
+high-frequency boundary detail. See `planning/unet_demo_v2.md`.
+
 ## Certified robustness scorecard (proved in Lean)
 
 The Lipschitz-margin certificate (`lipschitz_margin_certified_radius`, Tsuzuku

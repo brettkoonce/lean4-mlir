@@ -690,12 +690,53 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
 
     if (epoch + 1) % 10 == 0 || epoch + 1 == epochs then
      if useSeg then
-       -- TODO: per-pixel accuracy / mIoU eval for seg. Phase 0 of the
-       -- UNet demo only verifies that loss decreases — see
-       -- planning/unet_demo.md. The classification eval block below
-       -- (argmax + int32 label compare) is invalid for seg and would
-       -- read past the mask buffer.
-       IO.eprintln s!"  (seg eval skipped — Phase 0; train loss above is the signal)"
+       -- Per-class IoU + mIoU over the val set (planning/unet_demo_v2.md
+       -- Workstream A). Eval-forward → argmax over the NC channels →
+       -- confusion matrix accumulated in exact Nat across batches →
+       -- IoU_c = conf[c][c] / (row_c + col_c − conf[c][c]).
+       let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+       if ← System.FilePath.pathExists evalVmfb then
+         let evalSess ← IreeSession.create evalVmfb
+         let (valImg, valLbl, nVal) ← dio.loadVal dataDir
+         let evalBatch := batchN
+         let evalSteps := nVal / evalBatch
+         let evalXSh := spec.xShape evalBatch
+         let evalShapesBA := spec.evalShapesBA
+         let evalParams := p.append runningBnStats
+         let H := spec.imageH; let W := spec.imageW
+         let plane := H * W
+         let NC := (spec.layers.getLast?.map (·.outChannels)).getD 3
+         let outElems : USize := (NC * plane).toUSize
+         let readI64 : ByteArray → Nat → Nat := fun ba idx => Id.run do
+           let mut v : Nat := 0
+           for k in [:8] do
+             v := v + ba.data[idx * 8 + k]!.toNat * (2 ^ (8 * k))
+           return v
+         let mut conf : Array Nat := Array.replicate (NC * NC) 0
+         for bi in [:evalSteps] do
+           let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch dio.valPixels
+           let logits ← IreeSession.forwardF32 evalSess spec.evalFnName
+                           evalParams evalShapesBA xba evalXSh evalBatch.toUSize outElems
+           let maskSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch dio.labelBytesPerRecord
+           let cb ← F32.segConfusion logits maskSlice
+                       evalBatch.toUSize NC.toUSize H.toUSize W.toUSize
+           for j in [:NC * NC] do
+             conf := conf.set! j (conf[j]! + readI64 cb j)
+         -- Per-class IoU + mean.
+         let mut ious : Array Float := #[]
+         for c in [:NC] do
+           let tp := conf[c * NC + c]!
+           let mut row : Nat := 0
+           let mut col : Nat := 0
+           for k in [:NC] do
+             row := row + conf[c * NC + k]!
+             col := col + conf[k * NC + c]!
+           let uni := row + col - tp
+           let iou := if uni == 0 then 0.0 else tp.toFloat / uni.toFloat
+           ious := ious.push iou
+         let miou := (ious.foldl (· + ·) 0.0) / NC.toFloat
+         let iouStr := String.intercalate " " (ious.toList.mapIdx fun i v => s!"c{i}={v}")
+         IO.eprintln s!"  val mIoU: {miou}  (per-class: {iouStr})"
      else if useYolov1Run then
        -- mAP@0.5 eval for YOLOv1 is Phase 5 work (planning/yolo_final.md).
        -- the train step runs + loss drops on real detection data; the
