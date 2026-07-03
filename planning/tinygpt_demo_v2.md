@@ -129,9 +129,12 @@ checkpoint at only step ~1000/12000 already produces a fully coherent,
 grammatical children's story — named character held across the whole
 piece, complete narrative arc — the paper's signature effect, inside
 the verified pipeline (sample in `blueprint/src/figures/tinystories/`).
-Val fell 8.4 → 3.89 bits/tok by step 1000 and kept dropping; the full
-run refines it. Option 2 (true gather/scatter) stays deferred — Option
-1 carried the whole path with zero new VJP machinery, as predicted.
+Val fell 8.4 → 3.06 bits/tok by step 3000; the run was stopped at
+step ~3200/12000 (2026-07-03) — `_params.bin` is checkpointed every
+500 steps, so resume by re-running `tinystories train 12000 …` for a
+sharper final model (or just sample from the saved checkpoint).
+Option 2 (true gather/scatter) stays deferred — Option 1 carried the
+whole path with zero new VJP machinery, as predicted.
 
 ## Why TinyStories, in one paragraph
 

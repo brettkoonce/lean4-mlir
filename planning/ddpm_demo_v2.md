@@ -118,6 +118,56 @@ sample grid vs the v1 50-ep diagnostic. Win = visibly more structure
 at 50 ep than v1's yellow-blob 50-ep baseline. If it loses at
 matched budget, stop and re-plan before touching attention.
 
+### Gate A — how to run it (2026-07-03)
+
+The codegen is done; Gate A is now purely two training runs + a
+visual compare. Both use the Phase-0 trainer (EMA + fixed-seed grids
++ hflip), same seed, same 50-ep budget — the ONLY difference is the
+spec (`tinyCifarDdpm` vs `tinyCifarDdpmTC`, selected by the trailing
+`tc` arg). Grids go to separate dirs (`runs/ddpm_v2_base80/` vs
+`runs/ddpm_v2_tc/`), checkpoints to distinct build prefixes (spec
+names differ), so the two runs never collide and can run in parallel
+on two GPUs.
+
+```bash
+lake build cifar-ddpm-train
+# Baseline (plain base80, ~2.94M params):
+CUDA_VISIBLE_DEVICES=0 .lake/build/bin/cifar-ddpm-train data 50      &
+# timeCondAdd variant (~2.96M params, 6 per-block conditioning sites):
+CUDA_VISIBLE_DEVICES=2 .lake/build/bin/cifar-ddpm-train data 50 0 tc &
+wait
+```
+
+Cost: base80 is **~19 min/epoch host-bound on klawd** → ~16 h per
+run (they overlap on 2 GPUs, so ~16 h wall). Each writes
+`samples_ep{5,10,...,50}.ppm` from EMA weights every 5 epochs, so the
+comparison is watchable mid-run (ep 20–30 already tells the story)
+and the runs survive interruption (checkpoint every 5 ep). On mars
+(7900 XTX) this is materially faster — prefer it if free.
+
+Judging (visual, per the "MSE ≠ quality" lesson — do NOT rank by the
+loss printout):
+- Put `runs/ddpm_v2_base80/samples_ep50.ppm` beside
+  `runs/ddpm_v2_tc/samples_ep50.ppm` (convert to PNG:
+  `convert x.ppm x.png`). Also compare the ep-25 pair.
+- **Win** = the tc grid shows visibly more object structure /
+  cleaner category shapes at matched epoch than plain base80 (which
+  v1 characterized as yellow animal-ish blobs at 50 ep). Log the
+  call + attach both grids to RESULTS.md.
+- **Loss ≈ same, tc grid better** → conditioning is the lever;
+  proceed to Workstream C (attention retry) with t-cond in place.
+- **Loss ≈ same, grids indistinguishable** → per-block conditioning
+  alone isn't enough at this budget; before re-planning, try the
+  shared time-MLP trunk (Workstream A "Optionally") and/or a longer
+  70-ep run (v1's quality threshold sits at ep 60–70).
+- **tc worse** → likely the zero-init hasn't grown in at 50 ep;
+  check whether the timeCondAdd `%d_W` grads are non-trivial (they
+  are emitted per site) and consider a small non-zero W init.
+
+Not yet run (the remaining Gate A work): launch the two commands
+above and record the verdict. Everything upstream (primitive,
+compile, param accounting, smoke train) is done and committed.
+
 ## Workstream B — training recipe (cheap, do first)
 
 **Status 2026-07-03: B1–B3 DONE (Phase 0 shipped).** All three

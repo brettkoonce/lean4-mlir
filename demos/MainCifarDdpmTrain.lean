@@ -197,7 +197,7 @@ def main (args : List String) : IO Unit := do
   let imgC : USize := 3
   let outH : USize := spec.imageH.toUSize
   let outW : USize := spec.imageW.toUSize
-  let runDir := "runs/ddpm_v2_base80"
+  let runDir := if useTC then "runs/ddpm_v2_tc" else "runs/ddpm_v2_base80"
   IO.FS.createDirAll runDir
 
   let mut p := params
