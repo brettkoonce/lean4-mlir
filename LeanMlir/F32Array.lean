@@ -168,6 +168,13 @@ opaque yoloAugment (images : @& ByteArray) (boxes : @& ByteArray)
 @[extern "lean_f32_mask_u8_to_i32"]
 opaque maskU8ToI32 (mask : @& ByteArray) : IO ByteArray
 
+/-- Convert little-endian int32 token IDs to f32, element for element.
+    Feeds the `idsInput` tokenPositionEmbed path: model input is `[B, T]`
+    f32 ids, one-hot built in-graph — the host-side `[B, V·T]` one-hot
+    buffer disappears. Exact for ids < 2²⁴. -/
+@[extern "lean_f32_ids_to_floats"]
+opaque idsToFloats (ids : @& ByteArray) : IO ByteArray
+
 /-- Shuffle images and labels in-place (Fisher-Yates). Returns (shuffled images, shuffled labels). -/
 @[extern "lean_f32_shuffle"]
 opaque shuffle (images : ByteArray) (labels : ByteArray)

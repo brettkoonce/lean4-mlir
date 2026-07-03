@@ -116,6 +116,23 @@ you can diff across runs instead of vibes. Refresh
 
 # Part II — TinyStories
 
+**Status 2026-07-03: Phases 3–5 DONE (Gate F met early).** Shipped:
+`preprocess_tinystories.py` (4096-vocab byte-level BPE → same int32
+stream the Shakespeare loader reads, 50.3M train / 4.86M val tokens,
+`<|endoftext|>`=0); the **in-graph one-hot** primitive
+(`tokenPositionEmbed idsInput`, Option 1) — validated byte-identical
+to the host one-hot on nano (`nano-ids` reproduces nano's loss
+sequence exactly), killing the ~134 MB/step upload at V=4096;
+`MainTinyStories.lean` (8.49M params: V=4096, T=256, D=256, 8h, 8
+blocks) + `scripts/tinystories_decode.py`. **Gate F result**: a
+checkpoint at only step ~1000/12000 already produces a fully coherent,
+grammatical children's story — named character held across the whole
+piece, complete narrative arc — the paper's signature effect, inside
+the verified pipeline (sample in `blueprint/src/figures/tinystories/`).
+Val fell 8.4 → 3.89 bits/tok by step 1000 and kept dropping; the full
+run refines it. Option 2 (true gather/scatter) stays deferred — Option
+1 carried the whole path with zero new VJP machinery, as predicted.
+
 ## Why TinyStories, in one paragraph
 
 Char-level Shakespeare caps out at "recognizable fragments" because
@@ -200,6 +217,39 @@ characters over ≥3 sentences — the paper's signature result
 reproduced inside the verified pipeline. Val bits/token reported
 alongside (expect roughly ~1.5–2.5 bits/token at this scale;
 the sample quality is the headline, the number keeps us honest).
+
+## Running it (reproduce Part II end-to-end)
+
+```bash
+# 1. Data: download (~1.9GB) + train a 4096-vocab BPE, encode 200M
+#    chars → data/tinystories/{train,val}.bin (~50M/4.9M tokens).
+#    Needs Python `tokenizers` + `numpy` in .venv. One-time, ~10 min.
+bash download_tinystories.sh
+python3 preprocess_tinystories.py 4096 200000000
+
+# 2. Build the exe.
+lake build tinystories
+
+# 3. Train. 8.49M params, T=256, V=4096. Checkpoints _params.bin every
+#    500 steps (safe to interrupt/resume-by-rerun), logs val bits/token.
+#    On klawd (RTX 4060 Ti, CUDA) ≈2.7 s/step host-bound → ~9h for the
+#    full 12K; coherent stories already emerge by step ~1000 (~1h).
+#    Pick a GPU with CUDA_VISIBLE_DEVICES; args: [steps] [batch] [lr_x1e4].
+CUDA_VISIBLE_DEVICES=0 .lake/build/bin/tinystories train 12000 32 30
+
+# 4. Sample. BPE encode a prompt, generate ids, BPE decode back to text.
+python3 scripts/tinystories_decode.py encode "Once upon a time, there was a little"
+CUDA_VISIBLE_DEVICES=0 .lake/build/bin/tinystories sample 200 80 40 95 1 > /tmp/gen.txt
+python3 scripts/tinystories_decode.py decode "Once upon a time, there was a little" < /tmp/gen.txt
+#   sample args: [n_toks] [temp_x100] [topk] [topp_x100] [seed]
+```
+
+Char-level Part I (Shakespeare) is self-contained and faster
+(minutes): `bash download_shakespeare.sh && python3
+preprocess_shakespeare.py`, then `lake build tinygpt-shakespeare` and
+`… train {nano|tiny} 10000`, `… sample {nano|tiny} …`, `… suite …`.
+The in-graph one-hot equivalence check is `… train nano-ids 200`
+(losses match `… train nano 200` byte-for-byte).
 
 ## Sequencing
 

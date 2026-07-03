@@ -240,7 +240,12 @@ inductive Layer where
   -- Params: token-embedding W `[vocabSize, dModel]` + learnable
   -- positional embedding `[seqLen, dModel]`. Vocab=65 keeps the
   -- one-hot path cheap (no gather primitive needed).
-  | tokenPositionEmbed (vocabSize seqLen dModel : Nat)
+  -- `idsInput = true` switches the model input to `[B, seqLen]` f32
+  -- token ids with the one-hot built in-graph (iota + compare +
+  -- select). Same params, same math, same backward — kills the
+  -- O(V·T) host upload at BPE vocab sizes
+  -- (planning/tinygpt_demo_v2.md Part II, Option 1).
+  | tokenPositionEmbed (vocabSize seqLen dModel : Nat) (idsInput : Bool := false)
   -- Language-modeling head: per-position logits. Input `[B, seqLen,
   -- dModel]`, output `[B, seqLen * vocabSize]` (flat) so existing
   -- per-pixel CE loss machinery handles `[B, V, T, 1]`-shaped logits

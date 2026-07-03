@@ -315,7 +315,7 @@ def Layer.nParams : Layer → Nat
   | .transitionLayer ic oc =>
       -- BN(ic) γ/β + 1×1 (ic → oc) + bias. Avg pool has no params.
       2 * ic + ic * oc + oc
-  | .tokenPositionEmbed v t d =>
+  | .tokenPositionEmbed v t d _ =>
       -- Token-embedding W [V, D] (no bias) + learnable position embedding [T, D].
       v * d + t * d
   | .lmHead d v _ =>
@@ -425,7 +425,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
         s!"Inc({ic}→{b1 + b2 + b3 + b4})"
     | .denseBlock ic gr n         => s!"Dense{n}({ic}→{ic + n * gr},gr={gr})"
     | .transitionLayer ic oc      => s!"Trans({ic}→{oc})"
-    | .tokenPositionEmbed v t d   => s!"TokPos({v}→{d},T={t})"
+    | .tokenPositionEmbed v t d ids => s!"TokPos({v}→{d},T={t}{if ids then ",ids" else ""})"
     | .lmHead d v t               => s!"LMHead({d}→{v},T={t})"
     | .spatialFlatten             => "SpFlat"
     | .spatialUnflatten c h w     => s!"SpUnflat({c},{h}x{w})")
@@ -475,7 +475,7 @@ def Layer.outChannels : Layer → Nat
   | .inceptionModule _ b1 _ b2 _ b3 b4 => b1 + b2 + b3 + b4  -- concat of branches
   | .denseBlock ic gr nLayers       => ic + nLayers * gr  -- concat grows by gr per layer
   | .transitionLayer _ oc           => oc
-  | .tokenPositionEmbed _ _ d       => d  -- output is [B, T, D]; D acts as the channel dim downstream
+  | .tokenPositionEmbed _ _ d _     => d  -- output is [B, T, D]; D acts as the channel dim downstream
   | .lmHead _ v t                   => t * v  -- flat output [B, T*V] for the loss head
   | .spatialFlatten                 => 0  -- pass-through (channel count unchanged on rank-3 reshape)
   | .spatialUnflatten c _ _         => c
@@ -522,7 +522,9 @@ def Layer.inChannels : Layer → Nat
   | .inceptionModule ic _ _ _ _ _ _ => ic
   | .denseBlock ic _ _              => ic
   | .transitionLayer ic _           => ic
-  | .tokenPositionEmbed v t _       => v * t  -- input is flat [B, V*T] one-hot
+  | .tokenPositionEmbed v t _ ids   =>
+      -- idsInput: [B, T] f32 token ids; else flat [B, V*T] one-hot.
+      if ids then t else v * t
   | .lmHead d _ _                   => d
   | .spatialFlatten                 => 0  -- accepts any [B, C, H, W]
   | .spatialUnflatten c _ _         => c
@@ -555,7 +557,7 @@ def NetSpec.validate (s : NetSpec) : Option String := Id.run do
         if !causalMask && !keepSeq then
           afterTransformer := true  -- ViT-style: CLS slice produces [B, dim]
         -- causal or keepSeq: shape stays [B, T, D], handled by outChannels=D
-    | .tokenPositionEmbed _ _ d =>
+    | .tokenPositionEmbed _ _ d _ =>
         prevOc := d
         afterTransformer := false; afterFlatten := false; afterGAP := false
     | .spatialFlatten =>

@@ -45,6 +45,11 @@ structure GptCfg where
   numHeads  : Nat
   mlpDim    : Nat
   numLayers : Nat
+  /-- Feed `[B, T]` f32 token ids and build the one-hot in-graph
+      (tokenPositionEmbed idsInput) instead of uploading a host-built
+      `[B, V·T]` one-hot. Mathematically identical; see
+      planning/tinygpt_demo_v2.md Part II Option 1. -/
+  ids       : Bool := false
 
 /-- The original 212K-param demo config (spec name unchanged so old
     checkpoints keep their build prefix). -/
@@ -57,9 +62,16 @@ def tinyCfg : GptCfg :=
   { key := "tiny", specName := "tinygpt-shakespeare-tiny"
     seqLen := 128, dModel := 128, numHeads := 4, mlpDim := 512, numLayers := 6 }
 
+/-- nano with the in-graph one-hot path — exists to validate loss
+    equivalence against nano (same seeds → same losses to float
+    tolerance). Distinct spec name so artifacts never collide. -/
+def nanoIdsCfg : GptCfg :=
+  { nanoCfg with key := "nano-ids", specName := "tinygpt-shakespeare-nanoids", ids := true }
+
 def pickCfg : String → Option GptCfg
   | "nano" => some nanoCfg
   | "tiny" => some tinyCfg
+  | "nano-ids" => some nanoIdsCfg
   | _ => none
 
 def mkSpec (g : GptCfg) : NetSpec :=
@@ -67,7 +79,7 @@ def mkSpec (g : GptCfg) : NetSpec :=
     imageH := g.seqLen     -- so y_seg shape becomes [B, T, 1]
     imageW := 1
     layers := [
-      .tokenPositionEmbed vocabSize g.seqLen g.dModel,
+      .tokenPositionEmbed vocabSize g.seqLen g.dModel (idsInput := g.ids),
       .transformerEncoder g.dModel g.numHeads g.mlpDim g.numLayers (causalMask := true),
       .lmHead g.dModel vocabSize g.seqLen
     ] }
@@ -168,7 +180,7 @@ def asSegLabels (ids : ByteArray) : ByteArray := ids
     val stream, via the train-step vmfb with the updated state
     discarded (the loss output is computed on the *incoming* params,
     so this is a pure eval — no separate eval codegen needed). -/
-def evalValLoss (sess : IreeSession) (spec : NetSpec)
+def evalValLoss (sess : IreeSession) (spec : NetSpec) (useIds : Bool)
     (packed allShapes xShape bnShapes : ByteArray)
     (valTokens : ByteArray) (nValTokens : USize)
     (batch T : Nat) (nBatches : Nat) : IO Float := do
@@ -182,7 +194,8 @@ def evalValLoss (sess : IreeSession) (spec : NetSpec)
     let chunks ← F32.sampleChunks valTokens nValTokens batch.toUSize T.toUSize seedU
     let inputIds  := chunks.extract 0 inputBytes
     let targetIds := chunks.extract inputBytes (2 * inputBytes)
-    let xba ← F32.tokenOneHot inputIds batch.toUSize T.toUSize vocabSize.toUSize
+    let xba ← if useIds then F32.idsToFloats inputIds
+              else F32.tokenOneHot inputIds batch.toUSize T.toUSize vocabSize.toUSize
     let outBA ← IreeSession.trainStepAdamF32Seg sess spec.trainFnName
                   packed allShapes xba xShape (asSegLabels targetIds) 0.0 1.0
                   bnShapes batch.toUSize T.toUSize 1
@@ -228,8 +241,10 @@ def runTinyGptTrain (g : GptCfg) (steps : Nat) (batch : Nat) (lrMax : Float)
     let inputBytes := batch * T * 4
     let inputIds  := chunks.extract 0 inputBytes
     let targetIds := chunks.extract inputBytes (2 * inputBytes)
-    -- One-hot encode → [B, V*T] f32 (matches inputFlatDim = V*T).
-    let xba ← F32.tokenOneHot inputIds batch.toUSize T.toUSize vocabSize.toUSize
+    -- ids mode: [B, T] f32 ids (one-hot built in-graph); else host
+    -- one-hot → [B, V*T] f32 (matches inputFlatDim).
+    let xba ← if g.ids then F32.idsToFloats inputIds
+              else F32.tokenOneHot inputIds batch.toUSize T.toUSize vocabSize.toUSize
     let t : Float := (step + 1).toFloat
     let outBA ← IreeSession.trainStepAdamF32Seg trainSess spec.trainFnName
                   packed allShapes xba xShape (asSegLabels targetIds) lr t
@@ -240,7 +255,7 @@ def runTinyGptTrain (g : GptCfg) (steps : Nat) (batch : Nat) (lrMax : Float)
     if step % 100 == 0 || step + 1 == steps then
       IO.eprintln s!"  step {step + 1}/{steps}: loss={loss} lr={lr}"
     if (step + 1) % evalEvery == 0 || step + 1 == steps then
-      let valNats ← evalValLoss trainSess spec packed allShapes xShape bnShapes
+      let valNats ← evalValLoss trainSess spec g.ids packed allShapes xShape bnShapes
                       valTokens nValTokens batch T nValBatches
       IO.eprintln s!"  ── val @ step {step + 1}: {valNats} nats/char = {valNats / ln2} bits/char"
   let finalParams := packed.extract 0 (nP * 4)
@@ -253,8 +268,9 @@ def readFloats (ba : ByteArray) (start n : Nat) : Array Float := Id.run do
     out := out.push (F32.read ba (start + i).toUSize)
   return out
 
-/-- Pack `[T]` int32 ids into a `[1, V*T]` f32 one-hot ByteArray. -/
-def packOneHotContext (ids : Array Nat) (T V : Nat) : IO ByteArray := do
+/-- Pack `[T]` int32 ids into the model input: `[1, V*T]` f32 one-hot,
+    or `[1, T]` f32 ids when `useIds`. -/
+def packContext (ids : Array Nat) (T V : Nat) (useIds : Bool) : IO ByteArray := do
   let mut idsBA : ByteArray := ByteArray.emptyWithCapacity (T * 4)
   for t in [:T] do
     let id := if t < ids.size then ids[t]! else 0
@@ -262,7 +278,8 @@ def packOneHotContext (ids : Array Nat) (T V : Nat) : IO ByteArray := do
                 |>.push ((id / 256) % 256).toUInt8
                 |>.push ((id / 65536) % 256).toUInt8
                 |>.push ((id / 16777216) % 256).toUInt8
-  F32.tokenOneHot idsBA 1 T.toUSize V.toUSize
+  if useIds then F32.idsToFloats idsBA
+  else F32.tokenOneHot idsBA 1 T.toUSize V.toUSize
 
 /-- Autoregressive sampling. The context is right-padded: positions
     `≥ curLen` hold token 0 but the causal mask keeps them from
@@ -310,7 +327,7 @@ def runTinyGptSample (g : GptCfg) (paramsPath : String) (nChars : Nat)
   let mut generated : Array Nat := #[]
   let outElems : USize := (T * vocabSize).toUSize
   for stepN in [:nChars] do
-    let xba ← packOneHotContext context T vocabSize
+    let xba ← packContext context T vocabSize g.ids
     let logitsFlat ← IreeSession.forwardF32 sess spec.evalFnName
                        evalParams evalShapesBA xba xShape 1 outElems
     -- logitsFlat layout: [1, T*V] row-major in (t, v); read the last

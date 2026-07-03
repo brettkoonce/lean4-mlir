@@ -1040,6 +1040,25 @@ LEAN_EXPORT lean_obj_res lean_ddpm_sample_noise(size_t n, size_t seed, lean_obj_
     return lean_io_result_mk_ok(out);
 }
 
+// ---- int32 LE token IDs → f32 LE ByteArray (element for element) ----
+// Feeds the in-graph one-hot embedding path (tokenPositionEmbed with
+// idsInput = true): the model input becomes [B, T] f32 ids and the
+// one-hot is built inside the MLIR, so the host never materializes a
+// [B, V*T] buffer. f32 is exact for ids < 2^24 — far past any vocab here.
+LEAN_EXPORT lean_obj_res lean_f32_ids_to_floats(
+    b_lean_obj_arg ids_i32, lean_obj_arg w) {
+    (void)w;
+    size_t nbytes = lean_sarray_size(ids_i32);
+    size_t n = nbytes / 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const int32_t* in = (const int32_t*)lean_sarray_cptr(ids_i32);
+    float* o = (float*)lean_sarray_cptr(out);
+    for (size_t i = 0; i < n; i++) {
+        o[i] = (float)in[i];
+    }
+    return lean_io_result_mk_ok(out);
+}
+
 // ---- uint8 mask → int32 LE mask ByteArray ----
 // Pets `loadPets` returns per-pixel class labels packed as one byte per pixel.
 // `trainStepAdamF32Seg` expects an int32 LE buffer (one 4-byte little-endian

@@ -57,6 +57,25 @@ The 10K-step tiny run is the metric's first catch: by train loss it
 "beats" nano by 0.7 bits while being worse on held-out text. v1 of
 this demo tracked train loss only (`planning/tinygpt_demo_v2.md`).
 
+## TinyStories (BPE language modeling, vocab 4096)
+
+50.3M train / 4.86M val BPE tokens (`preprocess_tinystories.py`).
+Model input is `[B, T]` f32 token ids with the one-hot built in-graph
+(`tokenPositionEmbed idsInput` — validated byte-identical to the host
+one-hot on the char-level nano model), so there is no O(V·T) host
+upload at BPE vocab. Same per-token CE (`useSeg`) loss. Bits/token
+(not char) — not comparable to the char rows above.
+
+| Model | Params | Val bits/tok | Notes |
+|---|---|---|---|
+| tinyStories-8m @ step 500 | 8.5M | 4.65 | T=256, D=256, 8 heads, 8 blocks, causal |
+| tinyStories-8m @ step 1000 | 8.5M | 3.89 | already emits coherent grammatical stories (named characters, full narrative arc) |
+
+The demo output: a checkpoint this early already generates complete
+children's stories from a prompt — the TinyStories (Eldan & Li 2023)
+result reproduced inside the Lean → MLIR → IREE pipeline. Sample in
+`blueprint/src/figures/tinystories/`.
+
 ## Certified robustness scorecard (proved in Lean)
 
 The Lipschitz-margin certificate (`lipschitz_margin_certified_radius`, Tsuzuku
