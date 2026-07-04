@@ -1482,6 +1482,299 @@ def enet_probe():
     print("  run as-is on gfx1100; oracle mirrors it op-for-op in f64.")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# (7) ConvNeXt-T — the COMMITTED RENDER (verified_mlir/convnext_fwd.mlir)
+#     run as-is on gfx1100 (batch 32 @224²; args from its parsed signature at
+#     the repo's own init: He convs, γ/layerScale = ones, β/biases = zeros).
+#     LayerNorm here is the committed SCALAR-LN: per-sample over the WHOLE
+#     C·H·W extent (n up to 301056!) with scalar γ/β, ε = 1e-6 — LN budgets
+#     from the same BnFloatBridge parts as §4 (mean/var/istd/norm) at the
+#     a-posteriori floor. GELU is the render's tanh form; fresh = egelu=8u32,
+#     gain = the floatClose_gelu magnitude-poly modulus (transcribed as-is).
+#     Chain = patchify / 18 blocks / 3 downsamples / GAP / head-LN / dense.
+# ═══════════════════════════════════════════════════════════════════════════
+EGELU = 8 * U32         # gelu accuracy on gfx1100 (transcendental_probe)
+
+
+def gelu_tanh_np(x):
+    inner = 0.7978845608028654 * (x + 0.044715 * x * x * x)
+    return 0.5 * x * (1.0 + np.tanh(inner))
+
+
+def gelu_gain(A):
+    """floatClose_gelu input-shift modulus coefficient (ViTFloatBridge)."""
+    return 1.0 + np.sqrt(2.0 / np.pi) / 2.0 * A * (1.0 + 3 * 0.044715 * A * A)
+
+
+def convnext_probe():
+    import jax
+    import jax.numpy as jnp
+    import re
+    import os
+
+    print("\n" + "═" * 78)
+    print("(7) ConvNeXt-T — the COMMITTED render (convnext_fwd), gfx1100")
+    print("═" * 78)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mlir = open(os.path.join(root,
+                             "verified_mlir/convnext_fwd.mlir")).read()
+    header = mlir[:mlir.index("{", mlir.index("func.func"))]
+    sig = [(m.group(1), tuple(int(d) for d in m.group(2).split("x")[:-1]))
+           for m in re.finditer(r"%(\w+): tensor<([^>]+)>", header)]
+
+    dt = np.float64
+    mags = lambda a: float(np.abs(a).max())
+    EPS_LN = 1e-6
+    stages_cfg = [(96, 3), (192, 3), (384, 9), (768, 3)]   # (c, nblocks)
+
+    # ── args at the repo's own init (kind 0/1/2 = He / ones / zeros) ───────
+    vals = {}
+    for name, shape in sig:
+        if name == "x":
+            vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
+        elif len(shape) == 4:
+            fan = shape[1] * shape[2] * shape[3]
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / fan) ** 0.5).astype(np.float32)
+        elif len(shape) == 2:
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+        elif name.endswith("g"):                 # LN γ (scalar) / layerScale
+            vals[name] = np.ones(shape if shape else (), np.float32)
+        else:                                    # LN β / biases
+            vals[name] = np.zeros(shape if shape else (), np.float32)
+
+    def ln_scalar(z, gname, btname):
+        """per-sample LN over the WHOLE flattened extent, scalar γ/β."""
+        N = z.shape[0]
+        flat = z.reshape(N, -1)
+        mu = flat.mean(axis=1, keepdims=True)
+        var = ((flat - mu) ** 2).mean(axis=1, keepdims=True)
+        y = (flat - mu) / np.sqrt(var + EPS_LN) \
+            * float(vals[gname]) + float(vals[btname])
+        return y.reshape(z.shape), flat - mu, var
+
+    def ln_budget_gain(z, E):
+        """scalar-LN fresh budget + input-shift gain at the operating
+        profile (BnFloatBridge parts; G=|γ|=1, B=|β|=0 at init)."""
+        N = z.shape[0]
+        n = z.reshape(N, -1).shape[1]
+        flat = z.reshape(N, -1)
+        mu = flat.mean(axis=1, keepdims=True)
+        var = ((flat - mu) ** 2).mean(axis=1)
+        D = float(np.abs(flat - mu).max())
+        floor = float(var.min()) + EPS_LN
+        S = 1.0 / np.sqrt(floor)
+        A = mags(flat)
+        emean = bn_mean_budget(U32, n, A)
+        evar = bn_var_budget(U32, D, emean, n)
+        eistd = bn_istd_budget(ERS, evar, floor)
+        fresh = bn_norm_budget(U32, D, S, 1.0, 0.0, emean, eistd)
+        gain = 1.0 * (2 * S + 2 * D * D / floor ** 1.5)
+        return gain * E + fresh, gain
+
+    def conv_budget(x_act, Wname, bname, stride, pad, E, depthwise=False):
+        W = vals[Wname]
+        Wd_ = np.abs(W.astype(dt))
+        if depthwise:
+            sumabs = float(dwconv_np(np.abs(x_act), Wd_, stride, pad,
+                                     dt).max())
+            m = W.shape[2] * W.shape[3]
+        else:
+            sumabs = float(conv_np(np.abs(x_act), Wd_, stride, pad, dt).max())
+            m = W.shape[1] * W.shape[2] * W.shape[3]
+        rowsum = float(Wd_.sum(axis=(1, 2, 3)).max())
+        b = ((1 + U32) ** (m + 2) - 1) * (sumabs + mags(vals[bname])
+                                          + rowsum * E) + rowsum * E
+        return b, rowsum
+
+    # ── the f64 oracle with inline budgets (mirrors the render op-for-op) ──
+    def oracle():
+        acts, names, bs_, gs = [], [], [], []
+        x4 = vals["x"].astype(dt).reshape(32, 3, 224, 224)
+        h = conv_np(x4, vals["psW"], 4, 0, dt) \
+            + vals["psb"].astype(dt)[None, :, None, None]
+        Ec, rs = conv_budget(x4, "psW", "psb", 4, 0, 0.0)
+        acts.append(h)
+        names.append("patchify")
+        bs_.append(Ec)
+        gs.append(rs)
+        for si, (c, nb) in enumerate(stages_cfg):
+            if si > 0:
+                d = f"d{si - 1}"
+                zn, _, _ = ln_scalar(h, d + "ng", d + "nbt")
+                E, g_ln = ln_budget_gain(h, 0.0)
+                h2 = conv_np(zn, vals[d + "W"], 2, 0, dt) \
+                    + vals[d + "b"].astype(dt)[None, :, None, None]
+                Ec, rs = conv_budget(zn, d + "W", d + "b", 2, 0, E)
+                h = h2
+                acts.append(h)
+                names.append(f"downsample{si - 1}")
+                bs_.append(Ec)
+                gs.append(rs * g_ln)
+            for bi in range(nb):
+                p = f"s{si}b{bi}"
+                inp = h
+                zd = dwconv_np(h, vals[p + "dW"], 1, 3, dt) \
+                    + vals[p + "db"].astype(dt)[None, :, None, None]
+                E, rs_d = conv_budget(h, p + "dW", p + "db", 1, 3, 0.0,
+                                      depthwise=True)
+                g_blk = rs_d
+                zn, _, _ = ln_scalar(zd, p + "ng", p + "nbt")
+                E, g_ln = ln_budget_gain(zd, E)
+                g_blk *= g_ln
+                del zd
+                ze = conv_np(zn, vals[p + "eW"], 1, 0, dt) \
+                    + vals[p + "eb"].astype(dt)[None, :, None, None]
+                Ec, rs = conv_budget(zn, p + "eW", p + "eb", 1, 0, E)
+                E = Ec
+                g_blk *= rs
+                del zn
+                A_e = mags(ze)
+                zg = gelu_tanh_np(ze)
+                E = gelu_gain(A_e) * E + EGELU
+                g_blk *= gelu_gain(A_e)
+                del ze
+                zp = conv_np(zg, vals[p + "pW"], 1, 0, dt) \
+                    + vals[p + "pb"].astype(dt)[None, :, None, None]
+                Ec, rs = conv_budget(zg, p + "pW", p + "pb", 1, 0, E)
+                E = Ec
+                g_blk *= rs
+                del zg
+                ls_max = mags(vals[p + "lg"])
+                out_b = zp * vals[p + "lg"].astype(dt)[None, :, None, None]
+                E = ls_max * E + U32 * mags(out_b)
+                g_blk *= ls_max
+                h = out_b + inp
+                E = E + U32 * mags(h)
+                g_blk += 1.0
+                del zp, out_b, inp
+                acts.append(h)
+                names.append(p)
+                bs_.append(E)
+                gs.append(g_blk)
+        g = h.mean(axis=(2, 3))
+        A_h = mags(h)
+        acts.append(g)
+        names.append("gap")
+        bs_.append(U32 * (1 + U32) ** 50 * A_h + ((1 + U32) ** 50 - 1) * A_h)
+        gs.append(1.0)
+        zn, _, _ = ln_scalar(g[:, :, None, None], "hng", "hnbt")
+        E, g_ln = ln_budget_gain(g[:, :, None, None], 0.0)
+        g2 = zn.reshape(g.shape)
+        acts.append(g2)
+        names.append("head LN")
+        bs_.append(E)
+        gs.append(g_ln)
+        out = g2 @ vals["Wd"].astype(dt) + vals["bd"].astype(dt)
+        acts.append(out)
+        names.append("dense (logits)")
+        sumabs_h = float((np.abs(g2) @ np.abs(vals["Wd"].astype(dt))).max())
+        bs_.append(((1 + U32) ** (768 + 2) - 1)
+                   * (sumabs_h + mags(vals["bd"])))
+        gs.append(float(np.abs(vals["Wd"].astype(dt)).sum(axis=0).max()))
+        return acts, names, bs_, gs
+
+    acts, names, bs_, gs = oracle()
+    out = acts[-1]
+    H_prov = [float(np.prod(gs[i + 1:])) for i in range(len(gs))]
+
+    out_g = run_iree(mlir, [vals[n] for n, _ in sig],
+                     fn="convnext_fwd", module_name="m").astype(np.float64)
+    true_err = float(np.abs(out_g - out).max())
+
+    # ── measured tail gains (f32; per-sample LN ⇒ no batch coupling) ───────
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def jln(z, gname, btname):
+        N = z.shape[0]
+        flat = z.reshape(N, -1)
+        mu = flat.mean(axis=1, keepdims=True)
+        var = ((flat - mu) ** 2).mean(axis=1, keepdims=True)
+        y = (flat - mu) / jnp.sqrt(var + EPS_LN) \
+            * float(vals[gname]) + float(vals[btname])
+        return y.reshape(z.shape)
+
+    def jgelu(x):
+        inner = 0.7978845608028654 * (x + 0.044715 * x * x * x)
+        return 0.5 * x * (1.0 + jnp.tanh(inner))
+
+    def jconv(a, W, s, p, groups=1):
+        return jax.lax.conv_general_dilated(
+            a, W, (s, s), ((p, p), (p, p)),
+            dimension_numbers=('NCHW', 'OIHW', 'NCHW'),
+            feature_group_count=groups)
+
+    def stage_fns():
+        fns = []
+        for si, (c, nb) in enumerate(stages_cfg):
+            if si > 0:
+                d = f"d{si - 1}"
+
+                def df(a, d=d):
+                    return jconv(jln(a, d + "ng", d + "nbt"),
+                                 jx(vals[d + "W"]), 2, 0) \
+                        + jx(vals[d + "b"])[None, :, None, None]
+                fns.append(df)
+            for bi in range(nb):
+                p = f"s{si}b{bi}"
+
+                def bf(a, p=p, c=c):
+                    inp = a
+                    a = jconv(a, jx(vals[p + "dW"]), 1, 3, groups=c) \
+                        + jx(vals[p + "db"])[None, :, None, None]
+                    a = jln(a, p + "ng", p + "nbt")
+                    a = jconv(a, jx(vals[p + "eW"]), 1, 0) \
+                        + jx(vals[p + "eb"])[None, :, None, None]
+                    a = jgelu(a)
+                    a = jconv(a, jx(vals[p + "pW"]), 1, 0) \
+                        + jx(vals[p + "pb"])[None, :, None, None]
+                    a = a * jx(vals[p + "lg"])[None, :, None, None]
+                    return a + inp
+                fns.append(bf)
+        fns.append(lambda a: a.mean(axis=(2, 3)))
+        fns.append(lambda a: jln(a[:, :, None, None], "hng",
+                                 "hnbt").reshape(a.shape[0], -1))
+        fns.append(lambda a: a @ jx(vals["Wd"]) + jx(vals["bd"]))
+        return fns
+
+    fns = stage_fns()
+    H_meas = []
+    for i in range(len(acts) - 1):
+        aout = acts[i]
+        gain = 0.0
+        for smp in range(2):
+            a1 = jx(aout[smp:smp + 1])
+
+            def tail(aa, i=i):
+                for f in fns[i:]:
+                    aa = f(aa)
+                return aa[0]
+            J = jax.jacrev(tail)(a1)
+            gain = max(gain, float(jnp.abs(J.reshape(10, -1))
+                                   .sum(axis=1).max()))
+        H_meas.append(gain)
+    H_meas.append(1.0)
+
+    cb_meas = sum(H * b for H, b in zip(H_meas, bs_))
+    cb_prov = sum(H * b for H, b in zip(H_prov, bs_))
+    print(f"\n{'stage':<16}{'fresh b_i':>12}{'H_i meas':>11}{'H_i·b_i':>11}"
+          f"{'H_i proven':>13}")
+    for name, b, Hm, Hp in zip(names, bs_, H_meas, H_prov):
+        print(f"{name:<16}{b:>12.3e}{Hm:>11.3e}{Hm * b:>11.3e}{Hp:>13.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget measured-H: {cb_meas:.3e}  "
+          f"({cb_meas / true_err:.1e}× true)")
+    print(f"  chainBudget proven-H  : {cb_prov:.3e}  "
+          f"({cb_prov / true_err:.1e}× true)   [= the interval fold]")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+    print("\n  THE COMMITTED RENDER (verified_mlir/convnext_fwd.mlir) run")
+    print("  as-is on gfx1100; scalar-LN over the whole C·H·W extent per")
+    print("  sample (n up to 301056) — its Higham mean/var budgets at that n")
+    print("  are the LN-analogue of the SE finding to watch in the table.")
+
+
 def main():
     print("═" * 78)
     print("adjoint-chain probe — chain_adjointClose budget vs real gfx1100 drift")
@@ -1557,5 +1850,8 @@ if __name__ == "__main__":
     cnn_probe()
     cifar8_probe()
     cifar8bn_probe()
-    r34_probe()   # note: run last — earlier sections pin jax to CPU; when run
-                  # standalone this section measures its gains on the GPU
+    # note: run these last — earlier sections pin jax to CPU; when run
+    # standalone they measure their gains on the GPU
+    r34_probe()
+    enet_probe()
+    convnext_probe()

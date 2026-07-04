@@ -205,6 +205,30 @@ dense/relu/softmax.
    gate combinator with measured (or per-path proven) sub-gains for parallel-path
    blocks (SE, skip), instead of interval-folding inside the block.**
 
+   **ConvNeXt-T (probe §7, 2026-07-04): the committed render
+   (`verified_mlir/convnext_fwd.mlir`) as-is on gfx1100, repo init (layerScale γ = ONES
+   per the kind-1 convention, not the paper's 1e-6):**
+
+   | | true GPU logits drift | logits magnitude | chainBudget measured-H | chainBudget proven-H |
+   |---|---|---|---|---|
+   | ConvNeXt-T (committed render) | 2.9e-06 | 2.9 | 9.4e+07 (3.2e13×) | **3.2e+139** (1.1e145×) |
+
+   All-time interval-fold record (~10¹³⁹). Cross-block composition is again clean
+   (H_meas ≤ 103 decaying to 18), but per-block fresh budgets hit ~10⁵ — the worst of
+   the ladder — from two identified WITHIN-block worst-case faces multiplying:
+   1. **The committed scalar-LN normalizes over the whole C·H·W extent (n = 301056 at
+      stage 0)** — its Higham mean/var face pays (1+u)^{n+1}−1 ≈ n·u ≈ 1.8e-2 where the
+      true reduction error is ~√n·u (≈500× smaller), and the D² variance-shift term at
+      D ≈ 20 inflates eistd. (Standard per-position channels-LN would have n = 96–768
+      and be trivial — the scalar-LN render is architecturally the expensive-to-certify
+      choice.)
+   2. **`floatClose_gelu`'s magnitude-polynomial gain** `1 + √(2/π)/2·A·(1+3·0.044715·A²)`
+      evaluates to ~400 at the actual expand magnitudes (A ≈ 20), while the TRUE global
+      GELU Lipschitz constant is ≈ 1.13 (tanh saturation). **Cheapest high-value Lean
+      lemma in the whole program: a saturation-aware `gelu_lipschitz : |gelu x − gelu y|
+      ≤ 1.13·|x−y|` — kills ~400× per ConvNeXt block (×18 blocks) and helps every
+      GELU/ViT budget too.**
+
    **Ladder summary (all on gfx1100, logits-scale certificates):**
 
    | net | stages | interval fold | adjoint chain | logit scale | verdict |
@@ -215,6 +239,7 @@ dense/relu/softmax.
    | CIFAR-8-BN | 23 | 3e+31 | 51 | 3.2 | 16× over |
    | r34 @224² | 20 | 7e+51 | 698 | 3.6 | 200× over |
    | ENet-B0 @224² (committed render) | 20 | 8e+106 | 6.8e+04 | 1.3 | 5e4× over (SE-in-block) |
+   | ConvNeXt-T @224² (committed render) | 25 | 3e+139 | 9.4e+07 | 2.9 | 3e7× over (scalar-LN n=301k + gelu poly-gain) |
 
    Composition is solved at every scale tried — the adjoint chain stays within 1–3
    orders of the logit scale where the interval fold loses 4–51 orders; what remains is
