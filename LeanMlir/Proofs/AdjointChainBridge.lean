@@ -128,6 +128,24 @@ theorem chain_adjointClose {m : Nat} {A : ℝ}
         _ ≤ chainBudget ls Hs + H * l.b := add_le_add h1 h2
         _ = H * l.b + chainBudget ls Hs := by ring
 
+/-- **The certificate as a decision guarantee: rounding-robust argmax.** If the
+    REAL chain's output at `j₀` beats every other coordinate by more than twice
+    the adjoint-chain budget, the FLOAT chain has the SAME argmax — the rounded
+    net makes the same prediction as the exact net. This is the whole-net float
+    certificate's payoff: the `Σᵢ Hᵢ·bᵢ` bound turns a margin into a proof that
+    rounding cannot flip the decision. -/
+theorem chain_argmaxSafe {m : Nat} {A : ℝ}
+    (ls : List (LayerCert m A)) (Hs : List ℝ) (hH : TailGains ls Hs)
+    (x : Vec m) (hx : ∀ k, |x k| ≤ A) (j₀ : Fin m)
+    (hmargin : ∀ j, j ≠ j₀ →
+      2 * chainBudget ls Hs < chainR ls x j₀ - chainR ls x j) :
+    ∀ j, j ≠ j₀ → chainF ls x j < chainF ls x j₀ := by
+  intro j hj
+  have b0 := abs_le.mp (chain_adjointClose ls Hs hH x hx j₀)
+  have bj := abs_le.mp (chain_adjointClose ls Hs hH x hx j)
+  have := hmargin j hj
+  linarith [b0.1, b0.2, bj.1, bj.2]
+
 -- ════════════════════════════════════════════════════════════════
 -- § Discharging the tail gains, PROVEN face: worst-case products
 --   (recovers the old interval-fold bound — the theorem subsumes it)

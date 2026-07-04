@@ -66,6 +66,7 @@ import LeanMlir.Proofs.MobileNetV2FullPaper
 import LeanMlir.Proofs.ConvNeXtFullT
 import LeanMlir.Proofs.FloatBridge
 import LeanMlir.Proofs.TreeReduceBridge
+import LeanMlir.Proofs.Cifar8ChainCert
 import LeanMlir.Proofs.FloatSubnormalBridge
 import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
@@ -1343,6 +1344,17 @@ open Proofs
 #print axioms FloatModel.dot_tree_close
 #print axioms FloatModel.tree_close_of_depth
 #print axioms FloatModel.depth_le_size
+-- P5 (Cifar8ChainCert.lean, planning/adjoint_chain.md): the whole-net float
+-- certificate as a THEOREM. chain_adjointClose instantiated at the CIFAR-8
+-- relu∘dense tower (fresh budgets = the proven layerBudget per stage; measured
+-- tail gains supplied as a NAMED TailGains hypothesis, esig/egelu-quarantined).
+-- chain_argmaxSafe = the decision guarantee: once the real margin exceeds
+-- 2·chainBudget, the float net's argmax equals the exact net's — binary32
+-- rounding cannot flip the prediction. 3-axiom clean (the tail gains are a
+-- hypothesis, never an axiom).
+#print axioms chain_argmaxSafe
+#print axioms cifar8_chain_cert
+#print axioms cifar8_chain_argmaxSafe
 -- §1c (planning/floatbridge_quantization.md): the two-roundoff generalization
 -- of the dot budget — a leaf precision u_leaf (FloatModel L, e.g. bf16 2⁻⁸ /
 -- fp8-E4M3 2⁻⁴ on the matmul inputs) and an accumulate precision u_acc (M.u,

@@ -723,7 +723,8 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.AdjointChainBridge,
              `LeanMlir.Proofs.AdjointChainResidual,
              `LeanMlir.Proofs.GeluLipschitz,
-             `LeanMlir.Proofs.TreeReduceBridge]
+             `LeanMlir.Proofs.TreeReduceBridge,
+             `LeanMlir.Proofs.Cifar8ChainCert]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

@@ -2,13 +2,13 @@
 
 Status 2026-07-04 end-of-session: **through P2 committed** (`1cc69d8`..`a586497`:
 adjoint-chain + gelu + P1 op-granularity §10–§12 + P4 + P2 `TreeReduceBridge.lean`, all
-3-axiom clean, audit 1307). **P3 (ENet + ConvNeXt op-granularity §13–§14) committed
-(`07fb5f1`); P6 (`scripts/p6_r34_trained.py`) + this handoff uncommitted.** **THE WHOLE
-LADDER IS CERTIFIED: mnv2 (0.30), r34 (0.17), ViT (0.57), ENet (0.096), ConvNeXt (0.80)
-all below their logit scales — every deep net a whole-net float certificate; cifar8-bn at
-threshold (1.1×). P6 confirms it HOLDS on the real 90.7%-accurate trained r34 (budget
-0.41 < 3.8; tail gains drop 27× vs init) — not an at-init artifact.** MNIST-CNN P2 re-run
-the one measurement left. Full ladder + findings below.
+3-axiom clean, audit 1307). **P3 committed (`07fb5f1`), P6 committed (`51d9cd4`);
+P5 (`Cifar8ChainCert.lean` + this handoff) uncommitted.** **THE WHOLE LADDER IS
+CERTIFIED: mnv2 (0.30), r34 (0.17), ViT (0.57), ENet (0.096), ConvNeXt (0.80) all below
+their logit scales; cifar8-bn at threshold (1.1×). P6 confirms it HOLDS on the real
+90.7%-accurate trained r34 (0.41 < 3.8). P5 makes it a Lean THEOREM
+(`cifar8_chain_argmaxSafe`: binary32 rounding cannot flip the CIFAR-8 prediction, 3-axiom
+clean).** MNIST-CNN P2 re-run the one measurement left. Full ladder + findings below.
 
 ## ═══ P1 DONE (op-granularity chain2 sweep §10–§12) — the biggest single step ═══
 
@@ -135,13 +135,22 @@ mean/var Higham face (~√n/log₂n loose). Convs sum ~3.1 (loose `layer_budget`
 coeff would trim but they are not the limiter). Per-channel is the right, sound fix
 (strictly tighter, Lean-licensed) — it just isn't the whole gap.
 
-**P5 — the PROVEN capstone: end-to-end Lean instantiation on CIFAR-8.** Numerically
-certified already (2.6 < 4.6); assemble it in Lean: `chain_adjointClose` instantiated
-at the committed cifar8 layers — per-stage `LayerCert`s from the existing FloatClose
-instances (`LayerCert.of_floatClose`), measured tail gains supplied as NAMED
-HYPOTHESES with provenance (the esig/egelu quarantine pattern, constants from probe
-§3), magnitude window from the measured profile. Deliverable: `Cifar8ChainCert.lean` —
-the first whole-net float certificate as a Lean theorem. Template for the rest.
+**P5 — the PROVEN capstone (DONE: `LeanMlir/Proofs/Cifar8ChainCert.lean`, 3-axiom
+clean, in AuditAxioms): the whole-net float certificate IS a Lean theorem.**
+`chain_adjointClose` instantiated at the CIFAR-8 relu∘dense tower (`reluDenseTower`,
+depth-generic over its stages): per-stage `LayerCert`s via `layerCert_reluDense` whose
+fresh budget is the PROVEN `layerBudget M.u m w' β A 0` (the exact per-op `FloatClose`
+modulus at e=0, He-bounded); the measured tail gains supplied as a NAMED `TailGains`
+hypothesis (esig/egelu-quarantined — an argument with §3 provenance, never an axiom).
+Two theorems: `cifar8_chain_cert` (float within `Σᵢ Hᵢ·bᵢ` of real — depth-linear, no
+gain products) and the payoff `cifar8_chain_argmaxSafe` — **once the real margin
+exceeds 2·chainBudget, the float net's argmax EQUALS the exact net's: binary32 rounding
+cannot flip the prediction** (the §3 numeric certificate 2.6 < 4.6 turned into a
+decision guarantee). The generic `chain_argmaxSafe` (added to `AdjointChainBridge`)
+works for any chain. Honest scope: `chain_adjointClose` is uniform-width, so this is
+CIFAR-8 in its uniform relu∘dense form; the committed conv trunk's dim changes need the
+sigma-typed heterogeneous chain (the `AdjointChainBridge` v2 item), stems/heads compose
+via `FloatClose.comp`. The template for turning every measured certificate into a proof.
 
 **P6 — trained-weight gains (DONE for r34, `scripts/p6_r34_trained.py`, 2026-07-04):
 the certificate HOLDS on the real 90.7%-accurate net — it is NOT an at-init artifact.**
