@@ -92,6 +92,152 @@ def layer_budget_fresh(u, m, wmax, beta, A):
     return ((1 + u) ** (m + 2) - 1) * (m * wmax * A + beta)
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# (2) COMMITTED MNIST-CNN — the adjoint chain on a real rendered net
+#     (heterogeneous per-stage windows — the v2-ladder item 3 shape, evaluated
+#     numerically; the induction is identical, the windows are just indexed)
+# ═══════════════════════════════════════════════════════════════════════════
+def conv_same3(x, W, b, dt):                              # NCHW / OIHW, 3×3 SAME
+    x, W, b = x.astype(dt), W.astype(dt), b.astype(dt)
+    N, C, H, Wd = x.shape
+    Oc = W.shape[0]
+    xp = np.zeros((N, C, H + 2, Wd + 2), dt)
+    xp[:, :, 1:H + 1, 1:Wd + 1] = x
+    out = np.zeros((N, Oc, H, Wd), dt)
+    for di in range(3):
+        for dj in range(3):
+            out += np.einsum('nchw,oc->nohw', xp[:, :, di:di + H, dj:dj + Wd],
+                             W[:, :, di, dj], optimize=True)
+    return out + b[None, :, None, None]
+
+
+def maxpool2(a):
+    N, C, H, Wd = a.shape
+    return a.reshape(N, C, H // 2, 2, Wd // 2, 2).max(axis=(3, 5))
+
+
+def cnn_probe():
+    """chainBudget = Σ_i H_i·b_i on the committed MNIST-CNN render
+    (conv1→relu→conv2→relu→maxpool→flatten→dense→relu→dense→relu→dense),
+    per-stage fresh budgets from the proven layerBudget, tail gains H_i
+    measured as the L∞ norm of the exact tail Jacobian (10 rows — one
+    backward pass per logit), vs the proven suffix-product face and the
+    true GPU drift from kernel_faithfulness_probe's per-stage render."""
+    from kernel_faithfulness_probe import cnn_mlir, layer_budget
+
+    import jax
+    import jax.numpy as jnp
+    jax.config.update("jax_enable_x64", True)
+    jax.config.update("jax_platform_name", "cpu")
+
+    print("\n" + "═" * 78)
+    print("(2) COMMITTED MNIST-CNN render — adjoint chain vs interval fold, gfx1100")
+    print("═" * 78)
+    # renderer-realistic magnitude profile (same as kernel_faithfulness_probe)
+    x = rng.standard_normal((4, 1, 28, 28)).astype(np.float32)
+    W0 = (rng.standard_normal((32, 1, 3, 3)) * 0.1).astype(np.float32)
+    b0 = (rng.standard_normal(32) * 0.1).astype(np.float32)
+    W1 = (rng.standard_normal((32, 32, 3, 3)) * 0.05).astype(np.float32)
+    b1 = (rng.standard_normal(32) * 0.1).astype(np.float32)
+    W2 = (rng.standard_normal((6272, 512)) * 0.02).astype(np.float32)
+    b2 = (rng.standard_normal(512) * 0.05).astype(np.float32)
+    W3 = (rng.standard_normal((512, 512)) * 0.05).astype(np.float32)
+    b3 = (rng.standard_normal(512) * 0.05).astype(np.float32)
+    W4 = (rng.standard_normal((512, 10)) * 0.05).astype(np.float32)
+    b4 = (rng.standard_normal(10) * 0.05).astype(np.float32)
+
+    # true GPU drift at the logits (whole committed render, one IREE run)
+    outs = run_iree(cnn_mlir(), [x, W0, b0, W1, b1, W2, b2, W3, b3, W4, b4])
+    out_g = outs[-1].astype(np.float64)
+
+    # f64 exact-ℝ trajectory
+    dt = np.float64
+    c0a = conv_same3(x, W0, b0, dt)
+    h0 = np.maximum(c0a, 0)
+    c1a = conv_same3(h0, W1, b1, dt)
+    h1 = np.maximum(c1a, 0)
+    pool = maxpool2(h1)
+    flat = pool.reshape(4, -1)
+    h2 = np.maximum(flat @ W2.astype(dt) + b2.astype(dt), 0)
+    h3 = np.maximum(h2 @ W3.astype(dt) + b3.astype(dt), 0)
+    out = h3 @ W4.astype(dt) + b4.astype(dt)
+    true_err = float(np.abs(out_g - out).max())
+
+    # ── per-stage FRESH budgets b_i (layerBudget at E=0, per-stage window) ──
+    mags = lambda a: float(np.abs(a).max())
+    stages = [   # (name, fan-in m, W, b, input activation)
+        ("conv1+relu", 9,     W0, b0, x),
+        ("conv2+relu", 288,   W1, b1, h0),
+        ("maxpool",    None,  None, None, h1),   # exact in float: b = 0
+        ("dense0+relu", 6272, W2, b2, flat),
+        ("dense1+relu", 512,  W3, b3, h2),
+        ("logits",      512,  W4, b4, h3),
+    ]
+    bs = [layer_budget(U32, m, mags(W), mags(b), mags(a), 0.0)
+          if m is not None else 0.0
+          for (_, m, W, b, a) in stages]
+
+    # ── PROVEN tail gains: suffix products of per-stage row-sum gains ──
+    gs = [9 * mags(W0), 288 * mags(W1), 1.0,
+          6272 * mags(W2), 512 * mags(W3), 512 * mags(W4)]
+    H_prov = [float(np.prod(gs[i + 1:])) for i in range(len(gs))]
+
+    # ── MEASURED tail gains: L∞ norm of the exact tail Jacobian (jacrev:
+    #    10 logits ⇒ 10 backward passes per stage), max over the 4 samples ──
+    jW0, jb0 = jnp.asarray(W0, dt), jnp.asarray(b0, dt)
+    jW1, jb1 = jnp.asarray(W1, dt), jnp.asarray(b1, dt)
+    jW2, jb2 = jnp.asarray(W2, dt), jnp.asarray(b2, dt)
+    jW3, jb3 = jnp.asarray(W3, dt), jnp.asarray(b3, dt)
+    jW4, jb4 = jnp.asarray(W4, dt), jnp.asarray(b4, dt)
+
+    def jconv(a, W, b):
+        y = jax.lax.conv_general_dilated(a, W, (1, 1), ((1, 1), (1, 1)),
+                                         dimension_numbers=('NCHW', 'OIHW',
+                                                            'NCHW'))
+        return y + b[None, :, None, None]
+
+    def jpool(a):
+        N, C, H, Wd = a.shape
+        return a.reshape(N, C, H // 2, 2, Wd // 2, 2).max(axis=(3, 5))
+
+    def tail(from_stage, a):
+        """logits from stage `from_stage`'s OUTPUT activation a (batch 1)."""
+        if from_stage <= 0:
+            a = jnp.maximum(jconv(a, jW0, jb0), 0.0) if from_stage < 0 else a
+        if from_stage <= 1:
+            a = jnp.maximum(jconv(a, jW1, jb1), 0.0)
+        if from_stage <= 2:
+            a = jpool(a).reshape(a.shape[0], -1)
+        if from_stage <= 3:
+            a = jnp.maximum(a @ jW2 + jb2, 0.0)
+        if from_stage <= 4:
+            a = jnp.maximum(a @ jW3 + jb3, 0.0)
+        return a @ jW4 + jb4
+
+    acts = [h0, h1, flat, h2, h3]                          # stage outputs 1..5
+    H_meas = []
+    for i, act in enumerate(acts, start=1):
+        gain = 0.0
+        for s in range(4):
+            a1 = jnp.asarray(act[s:s + 1], dt)
+            J = jax.jacrev(lambda aa: tail(i, aa)[0])(a1)  # (10, *act.shape)
+            gain = max(gain, float(jnp.abs(J.reshape(10, -1)).sum(axis=1).max()))
+        H_meas.append(gain)
+    H_meas.append(1.0)                                     # tail after logits = id
+
+    cb_meas = sum(H * b for H, b in zip(H_meas, bs))
+    cb_prov = sum(H * b for H, b in zip(H_prov, bs))
+    print(f"\n{'stage':<13}{'fresh b_i':>12}{'H_i meas':>11}{'H_i·b_i':>11}"
+          f"{'H_i proven':>12}")
+    for (name, *_), b, Hm, Hp in zip(stages, bs, H_meas, H_prov):
+        print(f"{name:<13}{b:>12.3e}{Hm:>11.3e}{Hm * b:>11.3e}{Hp:>12.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget measured-H: {cb_meas:.3e}  ({cb_meas / true_err:.1e}× true)")
+    print(f"  chainBudget proven-H  : {cb_prov:.3e}  ({cb_prov / true_err:.1e}× true)"
+          f"   [= the interval fold]")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+
+
 def main():
     print("═" * 78)
     print("adjoint-chain probe — chain_adjointClose budget vs real gfx1100 drift")
@@ -164,3 +310,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    cnn_probe()

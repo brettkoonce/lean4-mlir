@@ -97,10 +97,23 @@ dense/relu/softmax.
 3. **Heterogeneous windows/dims**: per-position `Aᵢ` (indexed lists or sigma-typed
    chains); v1 is uniform-width/uniform-window (the `towerBack` shape) with stems/heads
    composed at the ends via `FloatClose.comp`.
-4. **A committed-net instance**: run the probe on a committed render (MNIST-CNN via its
-   emitted stages, like `kernel_faithfulness_probe.py` §2) and state the measured-H
-   chain budget next to the interval one in the writeup — the one-table story of why
-   the adjoint chain is the scalable composition.
+4. ~~**A committed-net instance**~~ ✅ DONE 2026-07-04 — `adjoint_chain_probe.py` §2 runs
+   the committed MNIST-CNN render (kernel_faithfulness's per-stage emission, gfx1100),
+   heterogeneous per-stage windows (the item-3 shape, evaluated numerically):
+
+   | | true GPU logits drift | chainBudget measured-H | chainBudget proven-H (= interval fold) |
+   |---|---|---|---|
+   | MNIST-CNN | 1.6e-07 | 4.1e+00 (2.5e7×) | 2.1e+04 (1.3e11×) |
+
+   Adjoint chain beats the interval fold by ~5×10³ even at only 6 stages — but the
+   HONEST reading: on this shallow-wide net the budget (4.1) still exceeds the logits
+   magnitude (0.38), and the slack is NOT the gains (H_meas ≈ 20–100, fine) — it's the
+   fan-in-6272 Higham fresh budget `b_dense0 = 0.21` (the known 10³–10⁴× dot_close
+   conservatism at large n, cf. kernel_faithfulness_probe). Composition is no longer
+   the bottleneck; the per-op local budget is. So the leverage order flips per regime:
+   deep-narrow nets → gains dominate (adjoint chain wins big); shallow-wide nets →
+   local dot budgets dominate (a tighter proven dot bound — FMA-aware or probabilistic
+   — would multiply straight through the chain).
 
 ## Session artifacts (scratchpad, 2026-07-04)
 
