@@ -2,11 +2,13 @@
 
 Status 2026-07-04 end-of-session: **through P2 committed** (`1cc69d8`..`a586497`:
 adjoint-chain + gelu + P1 op-granularity §10–§12 + P4 + P2 `TreeReduceBridge.lean`, all
-3-axiom clean, audit 1307). **P3 (ENet + ConvNeXt op-granularity §13–§14 + this handoff)
-uncommitted.** **THE WHOLE LADDER IS CERTIFIED: mnv2 (0.30), r34 (0.17), ViT (0.57),
-ENet (0.096), ConvNeXt (0.80) all below their logit scales — every deep net is a
-whole-net float certificate; cifar8-bn at threshold (1.1×), MNIST-CNN the one P2 re-run
-left.** Full ladder + findings below.
+3-axiom clean, audit 1307). **P3 (ENet + ConvNeXt op-granularity §13–§14) committed
+(`07fb5f1`); P6 (`scripts/p6_r34_trained.py`) + this handoff uncommitted.** **THE WHOLE
+LADDER IS CERTIFIED: mnv2 (0.30), r34 (0.17), ViT (0.57), ENet (0.096), ConvNeXt (0.80)
+all below their logit scales — every deep net a whole-net float certificate; cifar8-bn at
+threshold (1.1×). P6 confirms it HOLDS on the real 90.7%-accurate trained r34 (budget
+0.41 < 3.8; tail gains drop 27× vs init) — not an at-init artifact.** MNIST-CNN P2 re-run
+the one measurement left. Full ladder + findings below.
 
 ## ═══ P1 DONE (op-granularity chain2 sweep §10–§12) — the biggest single step ═══
 
@@ -141,12 +143,33 @@ HYPOTHESES with provenance (the esig/egelu quarantine pattern, constants from pr
 §3), magnitude window from the measured profile. Deliverable: `Cifar8ChainCert.lean` —
 the first whole-net float certificate as a Lean theorem. Template for the rest.
 
-**P6 — trained-weight gains (background run).** All gains are at-init; early tail
-gains dominate several nets (stem 7.7e3 on mnv2, 2.2e3 on r34, block0 ≈ 600 on ViT).
-`.lake/build/resnet34_adam_ckpt.bin` (272MB, layout `ResNet34Layout.specs`, params +
-adam m/v + running stats) is on disk — parse, load into §5, re-measure. If trained
-gains drop ~10× (plausible: BN calibation + feature averaging), r34/mnv2 close from
-gains alone.
+**P6 — trained-weight gains (DONE for r34, `scripts/p6_r34_trained.py`, 2026-07-04):
+the certificate HOLDS on the real 90.7%-accurate net — it is NOT an at-init artifact.**
+Loaded the trained checkpoint (`.lake/build/resnet34_adam_ckpt.bin`, first nP of
+`[params, adam_m, adam_v]` in `ResNet34Layout.specs` order — mapping verified: γ≈1.03,
+β≈0.06), reconstructed the frozen eval-BN running stats (the 72 `*nmu/*nvar` args the
+`resnet34_fwd_eval` render takes — NOT persisted for r34) via a true-batch-norm pass
+over a real Imagenette calib batch, and re-measured the op-gran + tree-reduce budget at
+the net's real operating point. Gate: the reconstructed-stats eval recovers **90.6%
+top-1** (matching the trained 90.7%), so the operating point is faithful.
+
+| | budget | logits | max tail gain | early b1 gain |
+|---|---|---|---|---|
+| r34 at-init (§11, noise + He) | 0.17 (P1+P2) | 3.4 | ~1195 | 978 |
+| **r34 TRAINED (P6, real imgs)** | **0.41 (P1+P2)** | 3.8 | **44.8** | **6.8** |
+
+The finding is richer than the "gains drop 10×" hypothesis: **training drops the tail
+gains ~27× (1195 → 45; the early residual-stream sensitivity collapses — b1 978 → 6.8),
+CONFIRMING they were pessimistic at init — but the fresh budgets RISE** (trained weights
+are larger, real-image deep activations larger, so the per-op Higham dot terms grow), so
+the net budget is 0.41, not lower. The dominant residual SHIFTS from early tail gains
+(at init) to late-block fresh Higham (trained: b16/b15/b14 c1/c2, already P2-reduced).
+Both regimes certify comfortably (trained 0.41 < 3.8, i.e. 0.11×). **Bottom line: the
+whole-net float certificate is robust to init-vs-trained — it holds on the real deployed
+network.** Gotcha: `val.bin` has a 4-byte count header (3925) + class-SORTED records —
+skip 4 bytes and stride-sample or every image reads as class 0 / misaligned garbage
+(cost hours: the render gave 0% until the header was found). Follow-up: mnv2/vit/enet
+checkpoints are also on disk (`*_adam_ckpt.bin`) — same recipe.
 
 Fresh-session infra notes (hard-won):
 - Run everything from `scripts/` under `jax/.venv` (`HIP_VISIBLE_DEVICES=0`, python -u,
