@@ -1,11 +1,12 @@
 # Adjoint chain: depth-linear float composition (option-2 of the scaling question)
 
-Status 2026-07-04 end-of-session: **through probe §8b + P1 op-granularity §10–§12
-committed** (`1cc69d8`..`80bd988`; `AdjointChainBridge`/`GeluLipschitz`/
-`AdjointChainResidual` + the §9–§12 op-granularity probes + §4 P4 per-channel BN, all
-3-axiom clean). **P2 (`TreeReduceBridge.lean` + probe tree-reduce toggle + this handoff
-section) uncommitted** — audit re-elaborates clean at 1307 entries. **P1+P2 CERTIFIES
-mnv2 (0.30), r34 (0.17), ViT (0.57) below their logit scales.** Full ladder below.
+Status 2026-07-04 end-of-session: **through P2 committed** (`1cc69d8`..`a586497`:
+adjoint-chain + gelu + P1 op-granularity §10–§12 + P4 + P2 `TreeReduceBridge.lean`, all
+3-axiom clean, audit 1307). **P3 (ENet + ConvNeXt op-granularity §13–§14 + this handoff)
+uncommitted.** **THE WHOLE LADDER IS CERTIFIED: mnv2 (0.30), r34 (0.17), ViT (0.57),
+ENet (0.096), ConvNeXt (0.80) all below their logit scales — every deep net is a
+whole-net float certificate; cifar8-bn at threshold (1.1×), MNIST-CNN the one P2 re-run
+left.** Full ladder + findings below.
 
 ## ═══ P1 DONE (op-granularity chain2 sweep §10–§12) — the biggest single step ═══
 
@@ -28,11 +29,11 @@ covers it); mechanical probe restructure.
 Updated scoreboard (P1+P2 adjoint chainBudget vs logit magnitude, committed renders on
 gfx1100 unless noted): MLP-24 **✓ 0.8/21** · CIFAR-8 **✓ 2.6/4.6** · MNIST-CNN 4.1/0.38
 (P2 re-run pending) · mnv2 **✓ 0.30/0.99** · r34-twin **✓ 0.17/3.4** · ViT **✓ 0.57/4.3**
-· CIFAR-8-BN **3.4/3.2 (1.1×, P4+P2)** · ENet 6.8e4/1.3 (P1+P2 not yet run) · ConvNeXt
-3.2e6/2.9 (P1+P2 not yet run). **Five nets now CERTIFIED (budget < logit scale); cifar8-bn
-at the threshold.** P1 removed the within-block fold; P2 removed the per-op √n Higham
-slack. What remains everywhere is init tail gains (⇒ P6 trained checkpoint) — NO
-composition/fold/exponential/√n face left anywhere in the measured chain.
+· ENet **✓ 0.096/0.94** · ConvNeXt **✓ 0.80/2.94** · CIFAR-8-BN **3.4/3.2 (1.1×, P4+P2)**.
+**SEVEN nets now CERTIFIED (budget < logit scale) — every deep net; cifar8-bn at the
+threshold, MNIST-CNN the one P2 re-run left.** P1 removed the within-block fold; P2
+removed the per-op √n Higham slack. What remains everywhere is init tail gains (⇒ P6
+trained checkpoint) — NO composition/fold/exponential/√n face left in the measured chain.
 
 Three structural facts learned:
 1. **Op-granularity SUBSUMES the §8b (h,S) pair trick.** In the op chain the softmax is
@@ -86,21 +87,35 @@ each), ViT LN `n=192 → 8`, cifar8-bn BN `n=1024 → 10`. After P2 the residual
 P6 (init tail gains): ViT's is now the patch op (0.39 of 0.57, tail gain 1.7e4 at
 zero-init); r34/mnv2 the early conv tail gains. Trained weights (P6) would drop these.
 
-**Remaining "impossible" faces (P2 also closes, not yet re-run): MNIST-CNN's fan-in-6272
-dot (6273 → 13) and ConvNeXt's n=301056 scalar-LN (→ 19).** The two nets whose faces
-motivated P2; the machinery now covers them — a probe re-run is the mechanical follow-up.
+## ═══ P3 DONE (ENet + ConvNeXt op-granularity §13–§14) — THE WHOLE LADDER CERTIFIED ═══
 
-Two more LOCAL moves close what P1+P2 leaves (both now init-only, not compositional):
+**Result: the last two deep nets certify too — every deep net (mnv2, r34, ViT, ENet,
+ConvNeXt) is now a whole-net float certificate.** The two whose faces motivated the whole
+program (ENet's SE gate, ConvNeXt's n=301k scalar-LN) fall to the same P1/P2 machinery:
 
-**P3 — ENet-B0 + ConvNeXt-T op-granularity (probe §13–§14; mechanical, the ONLY deep
-nets not yet op-cut).** Run the §10–§12 machinery on the two committed renders. For ENet
-this SUBSUMES the bespoke SE-combinator idea: op-granularity makes the SE gate path
-(pool → dense → swish → dense → σ) its own op chain, so the σ is a stage with fresh =
-esig meeting a measured (tiny) tail gain — the §6 "×100/block SE face" was a within-
-block-fold artifact, gone by the same mechanism as ViT's softmax. Expected ENet
-6.8e4 → O(1e1-1e2) and ConvNeXt 3.2e6 → O(1e2) with the scalar-LN big-n Higham face
-(P2) then the only residual. Note ConvNeXt's scalar-LN n=301056 fresh is per-op already,
-so op-granularity mainly buys the cross-op fold removal; P2 is its real closer.
+| net | block-gran (§6/§7) | **P1 op-gran** | **P1+P2** | logit scale | verdict |
+|---|---|---|---|---|---|
+| EfficientNet-B0 @224² | 6.8e4 | **0.58** | **0.096** | 0.94–1.34 | **✓ CERTIFIED — P1 alone** |
+| ConvNeXt-T @224² | 3.2e6 | 5.2e3 | **0.80** | 2.94 | **✓ CERTIFIED — needs P2** |
+
+Two clean confirmations of the regime rule:
+1. **ENet (`enet_probe_ops`): op-granularity ALONE certifies (6.8e4 → 0.58, a 1e5× drop).**
+   The §6 "×100/block SE face" was ENTIRELY a within-block-fold artifact — op-granularity
+   makes the SE gate (pool→dense→swish→dense→σ) its own op chain, the σ its own stage with
+   fresh = esig meeting a measured tiny tail gain, exactly as ViT's softmax. ENet's SE
+   dense reductions (r = 8–48) are small, so its Higham fresh is already tiny; P2 just
+   tightens it 6× (0.58 → 0.096) via the SE-pool spatial reduction + conv fan-ins. The SE
+   DAG (ds forks into gate-path + direct multiply, merges at ds·gate) is handled by the
+   r34/ViT explicit-closure pattern: main-path ops recompute the full SE from ds, gate-
+   path ops bake ds and recompute only the gate.
+2. **ConvNeXt (`convnext_probe_ops`): op-granularity alone is NOT enough (3.2e6 → 5.2e3,
+   still 1.8e3× over) — P2 is the closer (5.2e3 → 0.80).** ConvNeXt is the mnv2 shape
+   (sequential + identity residual), but its committed scalar-LN normalizes over the whole
+   C·H·W extent (n up to 301056), and that n·u Higham fresh survives op-granularity (it is
+   already per-op). Tree-reduction turns it into ⌈log₂n⌉·u = 19·u — the n=301k LN face
+   that motivated P2, now closed. Clean apples-to-apples (same seed-42 init, logits 2.94).
+
+Two LOCAL follow-ups remain (both init-only, not compositional):
 
 **P4 — per-channel BN budgets for CIFAR-8-BN (DONE, probe §4 `per_channel_bn=True`,
 2026-07-04): 51 → 20.1 (16× → 6.3× over logits 3.17), a real 2.5× but NOT certifying —
@@ -499,6 +514,18 @@ dense/relu/softmax.
    committed CNN, residual CNN, and transformer renders. Remaining slack is init tail
    gains only (ViT's certificate is 0.39/0.57 the zero-init patch op ⇒ P6).
 
+   **P3 (ENet + ConvNeXt op-granularity §13–§14): the whole ladder certified —**
+
+   | net | block-gran | P1 op-gran | **P1+P2** | logit scale | verdict |
+   |---|---|---|---|---|---|
+   | EfficientNet-B0 @224² | 6.8e+04 | 0.58 | **0.096** | 0.94 | **✓ — P1 alone (SE face = fold artifact)** |
+   | ConvNeXt-T @224² | 3.2e+06 | 5.2e3 | **0.80** | 2.94 | **✓ — P2 essential (n=301k LN face)** |
+
+   ENet certifies on op-granularity ALONE (the SE "×100/block face" was pure within-block
+   fold; op-cutting dissolves it, SE reductions r=8–48 are tiny). ConvNeXt needs P2 (its
+   scalar-LN over n=301056 survives op-granularity — tree-reduction is its only closer).
+   Every deep net on the ladder is now a whole-net float certificate.
+
    Composition is solved at every scale tried — the adjoint chain stays within 1–6×
    of the logit scale where the interval fold loses 4–140 orders; what remains is
    local (per-op Higham budgets ⇒ P2, BN channel bookkeeping ⇒ P4, init-vs-trained
@@ -506,9 +533,10 @@ dense/relu/softmax.
 
 ## Committed / working artifacts
 
-P1+P2 lives in `scripts/adjoint_chain_probe.py` (§10 `mnv2_probe_ops`, §11
-`r34_probe_ops`, §12 `vit_probe_ops(nblocks=,tree_reduce=)`; §4 `cifar8bn_probe(
-per_channel_bn=,tree_reduce=)`; module-level `_TREE_REDUCE`/`_rexp`/`_rfac`) and
+P1+P2+P3 lives in `scripts/adjoint_chain_probe.py` (§10 `mnv2_probe_ops`, §11
+`r34_probe_ops`, §12 `vit_probe_ops(nblocks=,tree_reduce=)`, §13 `convnext_probe_ops`,
+§14 `enet_probe_ops`; §4 `cifar8bn_probe(per_channel_bn=,tree_reduce=)`; module-level
+`_TREE_REDUCE`/`_rexp`/`_rfac`) and
 `LeanMlir/Proofs/TreeReduceBridge.lean` (the P2 lemma; in `tests/AuditAxioms.lean`,
 lakefile Proofs roots). Run op-gran/P2 probes standalone under `jax/.venv`
 (`PYTHONPATH=scripts`, `HIP_VISIBLE_DEVICES=0`) — a §5+ probe pins CPU so measure GPU

@@ -3755,6 +3755,651 @@ def vit_probe_ops(nblocks=12, tree_reduce=False):
     _TREE_REDUCE = False
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# (13) ConvNeXt-T @224² at OP granularity (P1) + P2 — the committed render
+#     (convnext_fwd.mlir). Sequential block (dw-conv 7×7 / scalar-LN / expand
+#     1×1 / gelu / project 1×1 / layerScale) + IDENTITY residual — the mnv2
+#     shape, so the §10 replay applies verbatim (entry/add, baked skip). The
+#     scalar-LN over the WHOLE C·H·W extent (n up to 301056) is the P2 target:
+#     tree_reduce turns its n·u face into ⌈log₂n⌉·u = 19·u. Downsamples
+#     (LN + stride-2 conv between stages) carry no residual.
+# ═══════════════════════════════════════════════════════════════════════════
+def convnext_probe_ops(tree_reduce=False):
+    import jax
+    import jax.numpy as jnp
+    import re
+    import os
+
+    global _TREE_REDUCE
+    _TREE_REDUCE = tree_reduce
+    print("\n" + "═" * 78)
+    print("(13) ConvNeXt-T @224² — OP-GRANULARITY chain2 (P1), gfx1100"
+          + ("  [+P2 tree-reduce]" if tree_reduce else ""))
+    print("═" * 78)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mlir = open(os.path.join(root, "verified_mlir/convnext_fwd.mlir")).read()
+    header = mlir[:mlir.index("{", mlir.index("func.func"))]
+    sig = [(m.group(1), tuple(int(d) for d in m.group(2).split("x")[:-1]))
+           for m in re.finditer(r"%(\w+): tensor<([^>]+)>", header)]
+
+    dt = np.float64
+    mags = lambda a: float(np.abs(a).max())
+    EPS_LN = 1e-6
+    stages_cfg = [(96, 3), (192, 3), (384, 9), (768, 3)]
+
+    vals = {}
+    for name, shape in sig:
+        if name == "x":
+            vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
+        elif len(shape) == 4:
+            fan = shape[1] * shape[2] * shape[3]
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / fan) ** 0.5).astype(np.float32)
+        elif len(shape) == 2:
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+        elif name.endswith("g"):
+            vals[name] = np.ones(shape if shape else (), np.float32)
+        else:
+            vals[name] = np.zeros(shape if shape else (), np.float32)
+
+    def ln_scalar(z, gname, btname):
+        N = z.shape[0]
+        flat = z.reshape(N, -1)
+        mu = flat.mean(axis=1, keepdims=True)
+        var = ((flat - mu) ** 2).mean(axis=1, keepdims=True)
+        y = (flat - mu) / np.sqrt(var + EPS_LN) \
+            * float(vals[gname]) + float(vals[btname])
+        return y.reshape(z.shape)
+
+    def ln_fresh0(z):
+        """scalar-LN fresh budget at E=0 (BnFloatBridge parts, tree-aware)."""
+        N = z.shape[0]
+        flat = z.reshape(N, -1)
+        n = flat.shape[1]
+        mu = flat.mean(axis=1, keepdims=True)
+        var = ((flat - mu) ** 2).mean(axis=1)
+        D = float(np.abs(flat - mu).max())
+        floor = float(var.min()) + EPS_LN
+        S = 1.0 / np.sqrt(floor)
+        A = mags(flat)
+        emean = bn_mean_budget(U32, n, A)
+        evar = bn_var_budget(U32, D, emean, n)
+        eistd = bn_istd_budget(ERS, evar, floor)
+        return float(bn_norm_budget(U32, D, S, 1.0, 0.0, emean, eistd))
+
+    def conv_fresh0(x_act, Wname, bname, stride, pad, depthwise=False):
+        W = vals[Wname]
+        Wd_ = np.abs(W.astype(dt))
+        if depthwise:
+            sumabs = float(dwconv_np(np.abs(x_act), Wd_, stride, pad, dt).max())
+            m = W.shape[2] * W.shape[3]
+        else:
+            sumabs = float(conv_np(np.abs(x_act), Wd_, stride, pad, dt).max())
+            m = W.shape[1] * W.shape[2] * W.shape[3]
+        return _rfac(m, 2) * (sumabs + mags(vals[bname]))
+
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def jln(z, gname, btname):
+        N = z.shape[0]
+        flat = z.reshape(N, -1)
+        mu = flat.mean(axis=1, keepdims=True)
+        var = ((flat - mu) ** 2).mean(axis=1, keepdims=True)
+        y = (flat - mu) / jnp.sqrt(var + EPS_LN) \
+            * float(vals[gname]) + float(vals[btname])
+        return y.reshape(z.shape)
+
+    def jgelu(x):
+        inner = 0.7978845608028654 * (x + 0.044715 * x * x * x)
+        return 0.5 * x * (1.0 + jnp.tanh(inner))
+
+    def jconv(a, W, s, p, groups=1):
+        return jax.lax.conv_general_dilated(
+            a, W, (s, s), ((p, p), (p, p)),
+            dimension_numbers=('NCHW', 'OIHW', 'NCHW'),
+            feature_group_count=groups)
+
+    def jconv_op(Wname, s, p, groups=1):
+        W = jx(vals[Wname])
+        return lambda t: jconv(t, W, s, p, groups)
+
+    def jconv_bias_op(Wname, bname, s, p, groups=1):
+        W, b = jx(vals[Wname]), jx(vals[bname])
+        return lambda t: jconv(t, W, s, p, groups) + b[None, :, None, None]
+
+    # ── build the flat op list (mnv2 replay: entry/add + baked identity skip) ─
+    ops = []
+    inp_rec = {}
+
+    def emit_lin(name, out_act, fresh, jfwd):
+        ops.append(dict(kind="lin", name=name, out=out_act,
+                        fresh=fresh, jfwd=jfwd))
+
+    x4 = vals["x"].astype(dt).reshape(32, 3, 224, 224)
+    h = conv_np(x4, vals["psW"], 4, 0, dt) \
+        + vals["psb"].astype(dt)[None, :, None, None]
+    emit_lin("patchify", h, conv_fresh0(x4, "psW", "psb", 4, 0),
+             jconv_bias_op("psW", "psb", 4, 0))
+
+    blk_id = 0
+    for si, (c, nb) in enumerate(stages_cfg):
+        if si > 0:
+            d = f"d{si - 1}"
+            zn = ln_scalar(h, d + "ng", d + "nbt")
+            emit_lin(f"ds{si-1} LN", zn, ln_fresh0(h),
+                     (lambda t, d=d: jln(t, d + "ng", d + "nbt")))
+            h = conv_np(zn, vals[d + "W"], 2, 0, dt) \
+                + vals[d + "b"].astype(dt)[None, :, None, None]
+            emit_lin(f"ds{si-1} conv", h, conv_fresh0(zn, d + "W", d + "b",
+                                                      2, 0),
+                     jconv_bias_op(d + "W", d + "b", 2, 0))
+        for bi in range(nb):
+            p = f"s{si}b{bi}"
+            inp_rec[blk_id] = h
+            ops.append(dict(kind="entry", block=blk_id))
+            zd = dwconv_np(h, vals[p + "dW"], 1, 3, dt) \
+                + vals[p + "db"].astype(dt)[None, :, None, None]
+            emit_lin(f"{p} dw", zd, conv_fresh0(h, p + "dW", p + "db", 1, 3,
+                                                depthwise=True),
+                     jconv_bias_op(p + "dW", p + "db", 1, 3, groups=c))
+            zn = ln_scalar(zd, p + "ng", p + "nbt")
+            emit_lin(f"{p} LN", zn, ln_fresh0(zd),
+                     (lambda t, p=p: jln(t, p + "ng", p + "nbt")))
+            ze = conv_np(zn, vals[p + "eW"], 1, 0, dt) \
+                + vals[p + "eb"].astype(dt)[None, :, None, None]
+            emit_lin(f"{p} expand", ze, conv_fresh0(zn, p + "eW", p + "eb",
+                                                    1, 0),
+                     jconv_bias_op(p + "eW", p + "eb", 1, 0))
+            zg = gelu_tanh_np(ze)
+            emit_lin(f"{p} gelu", zg, EGELU, jgelu)
+            zp = conv_np(zg, vals[p + "pW"], 1, 0, dt) \
+                + vals[p + "pb"].astype(dt)[None, :, None, None]
+            emit_lin(f"{p} project", zp, conv_fresh0(zg, p + "pW", p + "pb",
+                                                     1, 0),
+                     jconv_bias_op(p + "pW", p + "pb", 1, 0))
+            out_b = zp * vals[p + "lg"].astype(dt)[None, :, None, None]
+            emit_lin(f"{p} layerScale", out_b, U32 * mags(out_b),
+                     (lambda t, p=p: t * jx(vals[p + "lg"])[None, :,
+                                                            None, None]))
+            h = out_b + inp_rec[blk_id]
+            ops.append(dict(kind="add", block=blk_id, name=f"{p} add",
+                            out=h, fresh=U32 * mags(h)))
+            blk_id += 1
+
+    A_h = mags(h)
+    hw_head = h.shape[2] * h.shape[3]
+    g = h.mean(axis=(2, 3))
+    emit_lin("gap", g, U32 * (1 + U32) ** _rexp(hw_head, 1) * A_h
+             + _rfac(hw_head, 1) * A_h,
+             (lambda t: t.mean(axis=(2, 3))))
+    g2 = ln_scalar(g[:, :, None, None], "hng", "hnbt").reshape(g.shape)
+    emit_lin("head LN", g2, ln_fresh0(g[:, :, None, None]),
+             (lambda t: jln(t[:, :, None, None], "hng",
+                            "hnbt").reshape(t.shape[0], -1)))
+    sumabs_h = float((np.abs(g2) @ np.abs(vals["Wd"].astype(dt))).max())
+    out = g2 @ vals["Wd"].astype(dt) + vals["bd"].astype(dt)
+    emit_lin("dense (logits)", out,
+             _rfac(768, 2) * (sumabs_h + mags(vals["bd"])),
+             (lambda t: t @ jx(vals["Wd"]) + jx(vals["bd"])))
+
+    out_g = run_iree(mlir, [vals[n] for n, _ in sig],
+                     fn="convnext_fwd", module_name="m").astype(np.float64)
+    true_err = float(np.abs(out_g - out).max())
+
+    def replay_from(g_idx, t, baked):
+        live = {}
+        for op in ops[g_idx:]:
+            k = op["kind"]
+            if k == "entry":
+                live[op["block"]] = t
+            elif k == "add":
+                b = op["block"]
+                t = t + (live[b] if b in live else baked[b])
+            else:
+                t = op["jfwd"](t)
+        return t
+
+    gpu = jax.devices()[0]
+    lin_idx = [g for g, op in enumerate(ops) if op["kind"] in ("lin", "add")]
+    with jax.default_device(gpu):
+        cb = 0.0
+        rows = []
+        for g_idx in lin_idx:
+            op = ops[g_idx]
+            if g_idx == lin_idx[-1]:
+                H = 1.0
+            else:
+                H = 0.0
+                for smp in range(2):
+                    baked = {b: jx(inp_rec[b][smp:smp + 1]) for b in inp_rec}
+                    a1 = jx(op["out"][smp:smp + 1])
+
+                    def tail(aa, g_idx=g_idx, baked=baked):
+                        return replay_from(g_idx + 1, aa, baked)[0]
+                    J = jax.jacrev(tail)(a1)
+                    H = max(H, float(jnp.abs(J.reshape(10, -1))
+                                     .sum(axis=1).max()))
+            contrib = H * op["fresh"]
+            cb += contrib
+            rows.append((op["name"], op["fresh"], H, contrib))
+
+    rows.sort(key=lambda r: -r[3])
+    print(f"\n  {len(lin_idx)} budget-bearing ops (conv/LN/gelu/layerScale/add)")
+    print(f"\n{'top op (by H·b)':<16}{'fresh b':>12}{'H meas':>11}{'H·b':>11}")
+    for name, b, H, c in rows[:14]:
+        print(f"{name:<16}{b:>12.3e}{H:>11.3e}{c:>11.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget2 (op-gran): {cb:.3e}  ({cb / true_err:.1e}× true)")
+    print(f"  vs §7 block-granularity: 3.2e+06 (gelu 3/2) — the P1+P2 win")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+    _TREE_REDUCE = False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# (14) EfficientNet-B0 @224² at OP granularity (P1) + P2 — the committed render
+#     (efficientnet_fwd_eval.mlir). The SE gate is a DAG: after dw+swish the
+#     activation `ds` forks into (a) the gate path pool→dense→swish→dense→σ and
+#     (b) a direct multiply, merging at `se = ds·gate`. Op-granularity SUBSUMES
+#     the §6 "×100/block SE face": σ is its own op with fresh = esig meeting a
+#     measured (tiny) tail gain — no within-block interval fold. Each op's tail
+#     bakes its sibling branch (main-path ops recompute the full SE from ds;
+#     gate-path ops bake ds and recompute only the gate) — the r34/ViT pattern.
+# ═══════════════════════════════════════════════════════════════════════════
+def enet_probe_ops(tree_reduce=False):
+    import jax
+    import jax.numpy as jnp
+    import re
+    import os
+
+    global _TREE_REDUCE
+    _TREE_REDUCE = tree_reduce
+    print("\n" + "═" * 78)
+    print("(14) EfficientNet-B0 @224² — OP-GRANULARITY chain2 (P1), gfx1100"
+          + ("  [+P2 tree-reduce]" if tree_reduce else ""))
+    print("═" * 78)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mlir = open(os.path.join(
+        root, "verified_mlir/efficientnet_fwd_eval.mlir")).read()
+    header = mlir[:mlir.index("{", mlir.index("func.func"))]
+    sig = [(m.group(1), tuple(int(d) for d in m.group(2).split("x")[:-1]))
+           for m in re.finditer(r"%(\w+): tensor<([^>]+)>", header)]
+
+    dt = np.float64
+    mags = lambda a: float(np.abs(a).max())
+    cfg = [(32, 32, 16, 8, 3, 1), (16, 96, 24, 4, 3, 2), (24, 144, 24, 6, 3, 1),
+           (24, 144, 40, 6, 5, 2), (40, 240, 40, 10, 5, 1),
+           (40, 240, 80, 10, 3, 2), (80, 480, 80, 20, 3, 1),
+           (80, 480, 80, 20, 3, 1), (80, 480, 112, 20, 5, 1),
+           (112, 672, 112, 28, 5, 1), (112, 672, 112, 28, 5, 1),
+           (112, 672, 192, 28, 5, 2), (192, 1152, 192, 48, 5, 1),
+           (192, 1152, 192, 48, 5, 1), (192, 1152, 192, 48, 5, 1),
+           (192, 1152, 320, 48, 3, 1)]
+
+    vals = {}
+    for name, shape in sig:
+        if name == "x":
+            vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
+        elif name.endswith("nmu") or name.endswith("nvar"):
+            vals[name] = None
+        elif len(shape) == 4:
+            fan = shape[1] * shape[2] * shape[3]
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / fan) ** 0.5).astype(np.float32)
+        elif len(shape) == 2:
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+        elif name.endswith("g"):
+            vals[name] = np.ones(shape, np.float32)
+        elif name.endswith("bt"):
+            vals[name] = np.zeros(shape, np.float32)
+        else:
+            vals[name] = (rng.standard_normal(shape) * 0.01).astype(np.float32)
+
+    GAMMA = lambda t: {"st": "sg", "h": "hg"}.get(t, t + "g")
+    BETA = lambda t: {"st": "sbt", "h": "hbt"}.get(t, t + "bt")
+
+    def bn_eval(z, tag):
+        mu = vals[tag + "nmu"].astype(z.dtype)
+        var = vals[tag + "nvar"].astype(z.dtype)
+        g = vals[GAMMA(tag)].astype(z.dtype)
+        bt = vals[BETA(tag)].astype(z.dtype)
+        istd = 1.0 / np.sqrt(var + 1e-5)
+        return (z - mu[None, :, None, None]) * (istd * g)[None, :, None, None] \
+            + bt[None, :, None, None]
+
+    def calib(tag, z):
+        if vals[tag + "nmu"] is None:
+            vals[tag + "nmu"] = z.mean(axis=(0, 2, 3)).astype(np.float32)
+            vals[tag + "nvar"] = z.var(axis=(0, 2, 3)).astype(np.float32)
+        return bn_eval(z, tag)
+
+    def swish(x):
+        return x * sigmoid_np(x)
+
+    def bn_gain(tag):
+        g = vals[GAMMA(tag)].astype(dt)
+        istd = 1.0 / np.sqrt(vals[tag + "nvar"].astype(dt) + 1e-5)
+        return float(np.abs(g * istd).max())
+
+    def bn_fresh0(tag, A):
+        return 5 * U32 * (bn_gain(tag) * A + A)
+
+    def swish_fresh0(A):
+        return (ESIG + 2 * U32) * A
+
+    def conv_fresh0(x_act, Wname, bname, stride, pad, depthwise=False):
+        W = vals[Wname]
+        Wd_ = np.abs(W.astype(dt))
+        if depthwise:
+            sumabs = float(dwconv_np(np.abs(x_act), Wd_, stride, pad, dt).max())
+            m = W.shape[2] * W.shape[3]
+        else:
+            sumabs = float(conv_np(np.abs(x_act), Wd_, stride, pad, dt).max())
+            m = W.shape[1] * W.shape[2] * W.shape[3]
+        return _rfac(m, 2) * (sumabs + mags(vals[bname]))
+
+    def dense_fresh0(x2d, Wname, bname):
+        W = np.abs(vals[Wname].astype(dt))
+        m = W.shape[0]
+        sumabs = float((np.abs(x2d) @ W).max())
+        return _rfac(m, 2) * (sumabs + mags(vals[bname]))
+
+    # ── calibration pass (block-structured forward populates nmu/nvar) ──────
+    x4 = vals["x"].astype(dt).reshape(32, 3, 224, 224)
+    z = conv_np(x4, vals["sW"], 2, 1, dt) \
+        + vals["sb"].astype(dt)[None, :, None, None]
+    h = swish(calib("st", z))
+    for i, (ic, mid, oc, r, k, s) in enumerate(cfg, start=1):
+        p = f"b{i}"
+        inp = h
+        if mid != ic:
+            ze = conv_np(h, vals[p + "eW"], 1, 0, dt) \
+                + vals[p + "eb"].astype(dt)[None, :, None, None]
+            h = swish(calib(p + "e", ze))
+        zd = dwconv_np(h, vals[p + "dW"], s, (k - 1) // 2, dt) \
+            + vals[p + "db"].astype(dt)[None, :, None, None]
+        ds = swish(calib(p + "d", zd))
+        sq = ds.mean(axis=(2, 3))
+        a1 = swish(sq @ vals[p + "zW1"].astype(dt) + vals[p + "zb1"].astype(dt))
+        gate = sigmoid_np(a1 @ vals[p + "zW2"].astype(dt)
+                          + vals[p + "zb2"].astype(dt))
+        se = ds * gate[:, :, None, None]
+        zp = conv_np(se, vals[p + "pW"], 1, 0, dt) \
+            + vals[p + "pb"].astype(dt)[None, :, None, None]
+        h2 = calib(p + "p", zp)
+        h = h2 + inp if (ic == oc and s == 1) else h2
+    zh = conv_np(h, vals["hW"], 1, 0, dt) \
+        + vals["hb"].astype(dt)[None, :, None, None]
+    _ = swish(calib("h", zh))
+
+    # ── jax ops ─────────────────────────────────────────────────────────────
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def jxs(arr, smp):
+        return jnp.asarray(arr[smp:smp + 1].astype(np.float32))
+
+    def jbn(z, tag):
+        istd = 1.0 / jnp.sqrt(jx(vals[tag + "nvar"]) + 1e-5)
+        return (z - jx(vals[tag + "nmu"])[None, :, None, None]) \
+            * (istd * jx(vals[GAMMA(tag)]))[None, :, None, None] \
+            + jx(vals[BETA(tag)])[None, :, None, None]
+
+    def jswish(x):
+        return x * jax.nn.sigmoid(x)
+
+    def jconv(a, W, s, p, groups=1):
+        return jax.lax.conv_general_dilated(
+            a, W, (s, s), ((p, p), (p, p)),
+            dimension_numbers=('NCHW', 'OIHW', 'NCHW'),
+            feature_group_count=groups)
+
+    def se_cont(p):
+        """gate-path fns AFTER the pool (dense1, swish, dense2, sigmoid)."""
+        return [lambda t: t @ jx(vals[p + "zW1"]) + jx(vals[p + "zb1"]),
+                jswish,
+                lambda t: t @ jx(vals[p + "zW2"]) + jx(vals[p + "zb2"]),
+                jax.nn.sigmoid]
+
+    def apply(fns, t):
+        for f in fns:
+            t = f(t)
+        return t
+
+    def se_gate(p, ds):
+        return apply(se_cont(p), ds.mean(axis=(2, 3)))
+
+    def block_fwd(bi, a):
+        ic, mid, oc, r, k, s = cfg[bi]
+        p = f"b{bi+1}"
+        inp = a
+        if mid != ic:
+            a = jswish(jbn(jconv(a, jx(vals[p + "eW"]), 1, 0)
+                           + jx(vals[p + "eb"])[None, :, None, None], p + "e"))
+        ds = jswish(jbn(jconv(a, jx(vals[p + "dW"]), s, (k - 1) // 2,
+                              groups=mid)
+                        + jx(vals[p + "db"])[None, :, None, None], p + "d"))
+        se = ds * se_gate(p, ds)[:, :, None, None]
+        a = jbn(jconv(se, jx(vals[p + "pW"]), 1, 0)
+                + jx(vals[p + "pb"])[None, :, None, None], p + "p")
+        return a + inp if (ic == oc and s == 1) else a
+
+    def rest_after(bi, h_out):
+        for bb in range(bi + 1, len(cfg)):
+            h_out = block_fwd(bb, h_out)
+        h_out = jswish(jbn(jconv(h_out, jx(vals["hW"]), 1, 0)
+                           + jx(vals["hb"])[None, :, None, None], "h"))
+        g = h_out.mean(axis=(2, 3))
+        return g @ jx(vals["Wd"]) + jx(vals["bd"])
+
+    # ── explicit tail closures (bind capture fns at emit time) ─────────────
+    def rest_after_head(h_out):
+        gg = h_out.mean(axis=(2, 3))
+        return gg @ jx(vals["Wd"]) + jx(vals["bd"])
+
+    def cap(arr):
+        """smp ↦ jax f32 slice of a recorded numpy activation."""
+        return lambda smp: jxs(arr, smp)
+
+    ops = []
+
+    def emit(name, out_act, fresh, mk):
+        ops.append(dict(name=name, out=out_act, fresh=fresh, mk=mk))
+
+    def mk_main(bi, role, inp_c):
+        """main-path op → recompute the FULL SE from ds, then project(+skip)."""
+        ic, mid, oc, r, k, s = cfg[bi]
+        p = f"b{bi+1}"
+
+        def tail(t, inp_b):
+            if role == "econv":
+                a = jswish(jbn(t, p + "e"))
+                ds = jswish(jbn(jconv(a, jx(vals[p + "dW"]), s, (k - 1) // 2,
+                                      groups=mid)
+                                + jx(vals[p + "db"])[None, :, None, None],
+                                p + "d"))
+            elif role == "ebn":
+                a = jswish(t)
+                ds = jswish(jbn(jconv(a, jx(vals[p + "dW"]), s, (k - 1) // 2,
+                                      groups=mid)
+                                + jx(vals[p + "db"])[None, :, None, None],
+                                p + "d"))
+            elif role == "eswish":
+                ds = jswish(jbn(jconv(t, jx(vals[p + "dW"]), s, (k - 1) // 2,
+                                      groups=mid)
+                                + jx(vals[p + "db"])[None, :, None, None],
+                                p + "d"))
+            elif role == "dconv":
+                ds = jswish(jbn(t, p + "d"))
+            elif role == "dbn":
+                ds = jswish(t)
+            elif role == "dswish":
+                ds = t
+            se = ds * se_gate(p, ds)[:, :, None, None]
+            hh = jbn(jconv(se, jx(vals[p + "pW"]), 1, 0)
+                     + jx(vals[p + "pb"])[None, :, None, None], p + "p")
+            hh = hh + inp_b if (ic == oc and s == 1) else hh
+            return rest_after(bi, hh)
+        return lambda smp: (lambda t: tail(t, inp_c(smp)))
+
+    def mk_gate(bi, cont_from, ds_c, inp_c):
+        """gate-path op → bake ds, recompute only the gate, then project(+skip)."""
+        ic, mid, oc, r, k, s = cfg[bi]
+        p = f"b{bi+1}"
+
+        def tail(t, ds_b, inp_b):
+            gate = apply(se_cont(p)[cont_from:], t)
+            se = ds_b * gate[:, :, None, None]
+            hh = jbn(jconv(se, jx(vals[p + "pW"]), 1, 0)
+                     + jx(vals[p + "pb"])[None, :, None, None], p + "p")
+            hh = hh + inp_b if (ic == oc and s == 1) else hh
+            return rest_after(bi, hh)
+        return lambda smp: (lambda t: tail(t, ds_c(smp), inp_c(smp)))
+
+    def mk_after_se(bi, role, inp_c):
+        """se-scale / project ops → project(+skip)+rest from their output."""
+        ic, mid, oc, r, k, s = cfg[bi]
+        p = f"b{bi+1}"
+
+        def tail(t, inp_b):
+            if role == "sescale":
+                hh = jbn(jconv(t, jx(vals[p + "pW"]), 1, 0)
+                         + jx(vals[p + "pb"])[None, :, None, None], p + "p")
+            elif role == "pconv":
+                hh = jbn(t, p + "p")
+            elif role == "pbn":
+                hh = t
+            hh = hh + inp_b if (ic == oc and s == 1) else hh
+            return rest_after(bi, hh)
+        return lambda smp: (lambda t: tail(t, inp_c(smp)))
+
+    # ── numpy reference forward: record ops with their bound tail closures ──
+    a = x4
+    z = conv_np(a, vals["sW"], 2, 1, dt) \
+        + vals["sb"].astype(dt)[None, :, None, None]
+    zb = bn_eval(z, "st")
+    hstem = swish(zb)
+    emit("stem-conv", z, conv_fresh0(a, "sW", "sb", 2, 1),
+         lambda smp: (lambda t: rest_after(-1, jswish(jbn(t, "st")))))
+    emit("stem-bn", zb, bn_fresh0("st", mags(z)),
+         lambda smp: (lambda t: rest_after(-1, jswish(t))))
+    emit("stem-swish", hstem, swish_fresh0(mags(hstem)),
+         lambda smp: (lambda t: rest_after(-1, t)))
+    h = hstem
+
+    for bi, (ic, mid, oc, r, k, s) in enumerate(cfg):
+        p = f"b{bi+1}"
+        inp = h
+        inp_c = cap(inp)
+        a = h
+        if mid != ic:
+            ze = conv_np(a, vals[p + "eW"], 1, 0, dt) \
+                + vals[p + "eb"].astype(dt)[None, :, None, None]
+            zeb = bn_eval(ze, p + "e")
+            a = swish(zeb)
+            emit(f"{p} e-conv", ze, conv_fresh0(h, p + "eW", p + "eb", 1, 0),
+                 mk_main(bi, "econv", inp_c))
+            emit(f"{p} e-bn", zeb, bn_fresh0(p + "e", mags(ze)),
+                 mk_main(bi, "ebn", inp_c))
+            emit(f"{p} e-swish", a, swish_fresh0(mags(a)),
+                 mk_main(bi, "eswish", inp_c))
+        zd = dwconv_np(a, vals[p + "dW"], s, (k - 1) // 2, dt) \
+            + vals[p + "db"].astype(dt)[None, :, None, None]
+        zdb = bn_eval(zd, p + "d")
+        ds = swish(zdb)
+        emit(f"{p} d-conv", zd, conv_fresh0(a, p + "dW", p + "db", s,
+                                            (k - 1) // 2, depthwise=True),
+             mk_main(bi, "dconv", inp_c))
+        emit(f"{p} d-bn", zdb, bn_fresh0(p + "d", mags(zd)),
+             mk_main(bi, "dbn", inp_c))
+        emit(f"{p} d-swish", ds, swish_fresh0(mags(ds)),
+             mk_main(bi, "dswish", inp_c))
+        ds_c = cap(ds)
+        A_ds = mags(ds)
+        hw = ds.shape[2] * ds.shape[3]
+        sq = ds.mean(axis=(2, 3))
+        d1 = sq @ vals[p + "zW1"].astype(dt) + vals[p + "zb1"].astype(dt)
+        a1 = swish(d1)
+        d2 = a1 @ vals[p + "zW2"].astype(dt) + vals[p + "zb2"].astype(dt)
+        gate = sigmoid_np(d2)
+        se = ds * gate[:, :, None, None]
+        emit(f"{p} se-pool", sq, _rfac(hw, 1) * A_ds, mk_gate(bi, 0, ds_c, inp_c))
+        emit(f"{p} se-d1", d1, dense_fresh0(sq, p + "zW1", p + "zb1"),
+             mk_gate(bi, 1, ds_c, inp_c))
+        emit(f"{p} se-swish", a1, swish_fresh0(mags(a1)),
+             mk_gate(bi, 2, ds_c, inp_c))
+        emit(f"{p} se-d2", d2, dense_fresh0(a1, p + "zW2", p + "zb2"),
+             mk_gate(bi, 3, ds_c, inp_c))
+        emit(f"{p} se-sigmoid", gate, ESIG, mk_gate(bi, 4, ds_c, inp_c))
+        emit(f"{p} se-scale", se, 2 * U32 * A_ds,
+             mk_after_se(bi, "sescale", inp_c))
+        zp = conv_np(se, vals[p + "pW"], 1, 0, dt) \
+            + vals[p + "pb"].astype(dt)[None, :, None, None]
+        h2 = bn_eval(zp, p + "p")
+        emit(f"{p} p-conv", zp, conv_fresh0(se, p + "pW", p + "pb", 1, 0),
+             mk_after_se(bi, "pconv", inp_c))
+        emit(f"{p} p-bn", h2, bn_fresh0(p + "p", mags(zp)),
+             mk_after_se(bi, "pbn", inp_c))
+        h = h2 + inp if (ic == oc and s == 1) else h2
+
+    zh = conv_np(h, vals["hW"], 1, 0, dt) \
+        + vals["hb"].astype(dt)[None, :, None, None]
+    zhb = bn_eval(zh, "h")
+    hheadsw = swish(zhb)
+    emit("head-conv", zh, conv_fresh0(h, "hW", "hb", 1, 0),
+         lambda smp: (lambda t: rest_after_head(jswish(jbn(t, "h")))))
+    emit("head-bn", zhb, bn_fresh0("h", mags(zh)),
+         lambda smp: (lambda t: rest_after_head(jswish(t))))
+    emit("head-swish", hheadsw, swish_fresh0(mags(hheadsw)),
+         lambda smp: (lambda t: rest_after_head(t)))
+    A_h = mags(hheadsw)
+    hw_h = hheadsw.shape[2] * hheadsw.shape[3]
+    g = hheadsw.mean(axis=(2, 3))
+    emit("gap", g, U32 * (1 + U32) ** _rexp(hw_h, 1) * A_h + _rfac(hw_h, 1) * A_h,
+         lambda smp: (lambda t: t @ jx(vals["Wd"]) + jx(vals["bd"])))
+    sumabs_h = float((np.abs(g) @ np.abs(vals["Wd"].astype(dt))).max())
+    out = g @ vals["Wd"].astype(dt) + vals["bd"].astype(dt)
+    emit("dense (logits)", out,
+         _rfac(1280, 2) * (sumabs_h + mags(vals["bd"])), None)
+
+    out_g = run_iree(mlir, [vals[n] for n, _ in sig],
+                     fn="efficientnet_fwd_eval",
+                     module_name="m").astype(np.float64)
+    true_err = float(np.abs(out_g - out).max())
+
+    gpu = jax.devices()[0]
+    with jax.default_device(gpu):
+        cb = 0.0
+        rows = []
+        for op in ops:
+            if op["mk"] is None:
+                H = 1.0
+            else:
+                H = 0.0
+                for smp in range(2):
+                    tf = op["mk"](smp)
+                    a1 = jx(op["out"][smp:smp + 1])
+                    J = jax.jacrev(lambda t: tf(t)[0])(a1)
+                    H = max(H, float(jnp.abs(J.reshape(10, -1))
+                                     .sum(axis=1).max()))
+            contrib = H * op["fresh"]
+            cb += contrib
+            rows.append((op["name"], op["fresh"], H, contrib))
+
+    rows.sort(key=lambda r: -r[3])
+    print(f"\n  {len(ops)} budget-bearing ops (SE gate = own op chain)")
+    print(f"\n{'top op (by H·b)':<16}{'fresh b':>12}{'H meas':>11}{'H·b':>11}")
+    for name, b, H, c in rows[:14]:
+        print(f"{name:<16}{b:>12.3e}{H:>11.3e}{c:>11.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget2 (op-gran): {cb:.3e}  ({cb / true_err:.1e}× true)")
+    print(f"  vs §6 block-granularity: 6.8e+04 — the P1+P2 win")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+    _TREE_REDUCE = False
+
+
 def main():
     print("═" * 78)
     print("adjoint-chain probe — chain_adjointClose budget vs real gfx1100 drift")
@@ -3838,9 +4483,12 @@ if __name__ == "__main__":
     vit_probe()
     vit_probe_residual()
     mnv2_probe()
-    # P1 — op-granularity chain2 sweep (§10-§12): cut the chain at every op,
-    # each fresh budget bare at E=0, each meeting its own measured tail gain
-    mnv2_probe_ops()
-    r34_probe_ops()
-    vit_probe_ops()
-    mnv2_probe()
+    # P1+P2 — op-granularity chain2 sweep (§10-§14): cut the chain at every op
+    # (fresh bare at E=0, each meeting its own measured tail gain); tree_reduce
+    # adds P2 (n→⌈log₂n⌉ reductions). Together they CERTIFY every deep net
+    # (budget < logit scale). Run standalone for canonical init (shared rng).
+    mnv2_probe_ops(tree_reduce=True)
+    r34_probe_ops(tree_reduce=True)
+    vit_probe_ops(tree_reduce=True)
+    convnext_probe_ops(tree_reduce=True)
+    enet_probe_ops(tree_reduce=True)
