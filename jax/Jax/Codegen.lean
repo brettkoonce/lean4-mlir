@@ -2240,10 +2240,11 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    log_probs = jax.nn.log_softmax(logits, axis=-1)\n" ++
   "    loss = -jnp.mean(jnp.sum(log_probs * jax.nn.one_hot(y, " ++ toString nClasses ++ "), axis=-1))\n" ++
   "    correct1 = jnp.sum(preds == y)\n" ++
-  "    # top-5: lax.top_k gives (values, indices) on the last axis; if any\n" ++
-  "    # of the top-5 indices equals the label, count as correct.\n" ++
-  "    _, top5 = jax.lax.top_k(logits, 5)\n" ++
-  "    correct5 = jnp.sum(jnp.any(top5 == y[:, None], axis=-1))\n" ++
+  "    # top-5: jax.lax.top_k's indices are broken on ROCm/gfx1100 (garbage on\n" ++
+  "    # device, HIP error to host), so rank the true class instead — top-5 is\n" ++
+  "    # correct iff fewer than 5 classes have a strictly-greater logit.\n" ++
+  "    true_logit = jnp.take_along_axis(logits, y[:, None], axis=1)\n" ++
+  "    correct5 = jnp.sum(jnp.sum(logits > true_logit, axis=1) < 5)\n" ++
   "    return correct1, correct5, loss\n\n" ++
   "def evaluate(params, images, labels, batch_size=512):\n" ++
   "    batch_size = (batch_size // n_devices) * n_devices or n_devices\n" ++
