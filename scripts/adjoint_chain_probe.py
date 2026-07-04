@@ -1502,8 +1502,11 @@ def gelu_tanh_np(x):
 
 
 def gelu_gain(A):
-    """floatClose_gelu input-shift modulus coefficient (ViTFloatBridge)."""
-    return 1.0 + np.sqrt(2.0 / np.pi) / 2.0 * A * (1.0 + 3 * 0.044715 * A * A)
+    """PROVEN gelu input-shift gain: min of floatClose_gelu's magnitude-poly
+    modulus (ViTFloatBridge) and the flat saturation-aware 3/2 bound
+    (Proofs.geluScalar_lipschitz, GeluLipschitz.lean) — both proven faces."""
+    poly = 1.0 + np.sqrt(2.0 / np.pi) / 2.0 * A * (1.0 + 3 * 0.044715 * A * A)
+    return min(poly, 1.5)
 
 
 def convnext_probe():

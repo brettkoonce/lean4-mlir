@@ -224,10 +224,16 @@ dense/relu/softmax.
       choice.)
    2. **`floatClose_gelu`'s magnitude-polynomial gain** `1 + √(2/π)/2·A·(1+3·0.044715·A²)`
       evaluates to ~400 at the actual expand magnitudes (A ≈ 20), while the TRUE global
-      GELU Lipschitz constant is ≈ 1.13 (tanh saturation). **Cheapest high-value Lean
-      lemma in the whole program: a saturation-aware `gelu_lipschitz : |gelu x − gelu y|
-      ≤ 1.13·|x−y|` — kills ~400× per ConvNeXt block (×18 blocks) and helps every
-      GELU/ViT budget too.**
+      GELU Lipschitz constant is ≈ 1.13 (tanh saturation).
+      **→ CLOSED same day: `LeanMlir/Proofs/GeluLipschitz.lean` (3-axiom clean, in
+      AuditAxioms) proves `|gelu′| ≤ 3/2` globally** — `sech²u ≤ 4e^{−2|u|}` beats the
+      cubic growth; the whole core is `(cs−½)² ≥ 0` + `π ≤ 4` + the cubic exp Taylor
+      bound. Products: `geluScalarDeriv_abs_le`, `geluScalar_lipschitz` (MVT),
+      `lipOnWindow_gelu` (adjoint-chain gain, window-free), `floatClose_gelu_sat`
+      (drop-in `floatClose_gelu` with flat modulus `egelu + 3/2·e`). Probe §7 rerun
+      with the proven flat gain: **adjoint chainBudget 9.4e7 → 3.2e6 (29× from one
+      lemma); interval fold 3.2e139 → 2.8e113 (10²⁶×)**. The dominant residual is now
+      purely the scalar-LN big-n Higham face (block budgets ~4e3–1e4, all LN).
 
    **Ladder summary (all on gfx1100, logits-scale certificates):**
 
@@ -240,6 +246,7 @@ dense/relu/softmax.
    | r34 @224² | 20 | 7e+51 | 698 | 3.6 | 200× over |
    | ENet-B0 @224² (committed render) | 20 | 8e+106 | 6.8e+04 | 1.3 | 5e4× over (SE-in-block) |
    | ConvNeXt-T @224² (committed render) | 25 | 3e+139 | 9.4e+07 | 2.9 | 3e7× over (scalar-LN n=301k + gelu poly-gain) |
+   | ConvNeXt-T + `gelu_lipschitz` (3/2 gain) | 25 | 2.8e+113 | 3.2e+06 | 2.9 | 1e6× over (scalar-LN only) |
 
    Composition is solved at every scale tried — the adjoint chain stays within 1–3
    orders of the logit scale where the interval fold loses 4–51 orders; what remains is

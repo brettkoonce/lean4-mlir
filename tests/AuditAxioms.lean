@@ -77,6 +77,7 @@ import LeanMlir.Proofs.BnInputBridge
 import LeanMlir.Proofs.Resnet34BlockBridge
 import LeanMlir.Proofs.FloatComposeBridge
 import LeanMlir.Proofs.AdjointChainBridge
+import LeanMlir.Proofs.GeluLipschitz
 import LeanMlir.Proofs.BnEvalFloatBridge
 import LeanMlir.Proofs.EnetFloatBridge
 import LeanMlir.Proofs.DepthwiseFloatBridge
@@ -1503,6 +1504,17 @@ open Proofs
 #print axioms Proofs.lipOnWindow_reluDense
 #print axioms Proofs.LayerCert.of_floatClose
 #print axioms Proofs.layerCert_reluDense
+-- GELU is globally 3/2-Lipschitz (GeluLipschitz.lean): the saturation-aware gain.
+-- floatClose_gelu's magnitude-poly modulus reaches ~400 at ConvNeXt's operating
+-- magnitudes (adjoint-chain probe §7); the true constant is ≈1.13. Proven here:
+-- |gelu′| ≤ 3/2 pointwise (sech²u ≤ 4e^{−2|u|} beats the cubic growth; the core
+-- is (cs−½)² ≥ 0 + π ≤ 4 + the cubic exp Taylor bound), MVT ⟹ global Lipschitz,
+-- lipOnWindow_gelu (the adjoint-chain gain, window-free), and floatClose_gelu_sat
+-- (drop-in floatClose_gelu with flat modulus egelu + 3/2·e).
+#print axioms Proofs.geluScalarDeriv_abs_le
+#print axioms Proofs.geluScalar_lipschitz
+#print axioms Proofs.lipOnWindow_gelu
+#print axioms Proofs.floatClose_gelu_sat
 -- Eval-mode BN/LN as a fixed affine (BnEvalFloatBridge.lean, planning §4): the
 -- DEPLOYED-forward win. Running-stats BN at eval = a·x+b with a=γ/√(σ²+ε),
 -- b=β−γμ/√(σ²+ε) precomputed offline — no batch reduce, no runtime rsqrt (the
