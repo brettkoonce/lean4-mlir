@@ -2633,6 +2633,1067 @@ def mnv2_probe():
     print("  [0,6] — no SE, no swish: the easiest deep net of the ladder.")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# (10) OP-GRANULARITY chain2 sweep (P1) — the biggest single closure step.
+#     The block-granularity probes (§4–§9) fold every op INSIDE a block into
+#     one chain stage: each conv/bn threads the inherited error E through the
+#     next op's WORST-CASE row sum (conv_budget/bn_fresh's `E` arg), so a
+#     block's fresh budget carries per-op gain PRODUCTS (rowsum×a_eff×… over
+#     the block) — a mini interval fold. chain2 makes that unnecessary: cut the
+#     chain at EVERY op, each op's fresh budget a BARE single-op Higham term at
+#     E=0, each meeting its OWN measured tail gain to the logits. Identity skips
+#     ride as chain2 streams (the residual source is carried; ops inside the
+#     block see it as an EXACT baked input — LayerCert2.stream, b=0). No row-sum
+#     products anywhere: chainBudget = Σ_op H_op·b_op(E=0), fully depth-linear
+#     AND op-linear. Committed mobilenetv2_fwd_eval.mlir, gfx1100, batch 2.
+#
+#     The general residual-aware replay: ops carry a `kind`. A tail from op g is
+#     replay_from(g+1): entry-ops seen DURING replay capture the stream live
+#     (perturbation flows through the skip); the block CONTAINING g has its
+#     entry BEFORE g, so its add uses the BAKED recorded stream (perturbing an
+#     inside-block op leaves the skip fixed — exactly chain2's block-diagonal
+#     two-part gain). Same machinery ports to r34/enet (add conv_d/bn_d ops on
+#     the stream part).
+# ═══════════════════════════════════════════════════════════════════════════
+def mnv2_probe_ops():
+    import jax
+    import jax.numpy as jnp
+    import re
+    import os
+
+    print("\n" + "═" * 78)
+    print("(10) MobileNetV2 — OP-GRANULARITY chain2 (P1), gfx1100")
+    print("═" * 78)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mlir = open(os.path.join(
+        root, "verified_mlir/mobilenetv2_fwd_eval.mlir")).read()
+    header = mlir[:mlir.index("{", mlir.index("func.func"))]
+    sig = [(m.group(1), tuple(int(d) for d in m.group(2).split("x")[:-1]))
+           for m in re.finditer(r"%(\w+): tensor<([^>]+)>", header)]
+
+    dt = np.float64
+    mags = lambda a: float(np.abs(a).max())
+    cfg = [(32, 32, 16, 1),
+           (16, 96, 24, 2), (24, 144, 24, 1),
+           (24, 144, 32, 2), (32, 192, 32, 1), (32, 192, 32, 1),
+           (32, 192, 64, 2), (64, 384, 64, 1), (64, 384, 64, 1),
+           (64, 384, 64, 1),
+           (64, 384, 96, 1), (96, 576, 96, 1), (96, 576, 96, 1),
+           (96, 576, 160, 2), (160, 960, 160, 1), (160, 960, 160, 1),
+           (160, 960, 320, 1)]
+
+    vals = {}
+    for name, shape in sig:
+        if name == "x":
+            vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
+        elif name.endswith("nmu") or name.endswith("nvar"):
+            vals[name] = None
+        elif len(shape) == 4:
+            fan = shape[1] * shape[2] * shape[3]
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / fan) ** 0.5).astype(np.float32)
+        elif len(shape) == 2:
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+        elif name.endswith("g"):
+            vals[name] = np.ones(shape, np.float32)
+        elif name.endswith("bt"):
+            vals[name] = np.zeros(shape, np.float32)
+        else:
+            vals[name] = (rng.standard_normal(shape) * 0.01).astype(np.float32)
+
+    GAMMA = lambda t: {"st": "sg", "h": "hg"}.get(t, t + "g")
+    BETA = lambda t: {"st": "sbt", "h": "hbt"}.get(t, t + "bt")
+
+    def bn_eval(z, tag):
+        mu = vals[tag + "nmu"].astype(z.dtype)
+        var = vals[tag + "nvar"].astype(z.dtype)
+        g = vals[GAMMA(tag)].astype(z.dtype)
+        bt = vals[BETA(tag)].astype(z.dtype)
+        istd = 1.0 / np.sqrt(var + 1e-5)
+        return (z - mu[None, :, None, None]) * (istd * g)[None, :, None, None] \
+            + bt[None, :, None, None]
+
+    def calib(tag, z):
+        if vals[tag + "nmu"] is None:
+            vals[tag + "nmu"] = z.mean(axis=(0, 2, 3)).astype(np.float32)
+            vals[tag + "nvar"] = z.var(axis=(0, 2, 3)).astype(np.float32)
+        return bn_eval(z, tag)
+
+    def relu6(x):
+        return np.minimum(np.maximum(x, 0.0), 6.0)
+
+    def bn_gain(tag):
+        g = vals[GAMMA(tag)].astype(dt)
+        istd = 1.0 / np.sqrt(vals[tag + "nvar"].astype(dt) + 1e-5)
+        return float(np.abs(g * istd).max())
+
+    def bn_fresh0(tag, A):
+        """BnEvalFloatBridge affine modulus at input-error E=0 (bare)."""
+        a_eff = bn_gain(tag)
+        return 5 * U32 * (a_eff * A + A)
+
+    def conv_fresh0(x_act, Wname, bname, stride, pad, depthwise=False):
+        """conv+bias dot_close modulus at E=0 (bare single-op Higham)."""
+        W = vals[Wname]
+        Wd_ = np.abs(W.astype(dt))
+        if depthwise:
+            sumabs = float(dwconv_np(np.abs(x_act), Wd_, stride, pad, dt).max())
+            m = W.shape[2] * W.shape[3]
+        else:
+            sumabs = float(conv_np(np.abs(x_act), Wd_, stride, pad, dt).max())
+            m = W.shape[1] * W.shape[2] * W.shape[3]
+        return ((1 + U32) ** (m + 2) - 1) * (sumabs + mags(vals[bname]))
+
+    # ── calibration pass: block-structured forward to populate nmu/nvar ─────
+    x4 = vals["x"].astype(dt).reshape(32, 3, 224, 224)
+    z = conv_np(x4, vals["sW"], 2, 1, dt) \
+        + vals["sb"].astype(dt)[None, :, None, None]
+    h = relu6(calib("st", z))
+    for i, (ic, mid, oc, s) in enumerate(cfg, start=1):
+        p = f"b{i}"
+        inp = h
+        cur = h
+        if mid != ic:
+            ze = conv_np(cur, vals[p + "eW"], 1, 0, dt) \
+                + vals[p + "eb"].astype(dt)[None, :, None, None]
+            cur = relu6(calib(p + "e", ze))
+        zd = dwconv_np(cur, vals[p + "dW"], s, 1, dt) \
+            + vals[p + "db"].astype(dt)[None, :, None, None]
+        cur = relu6(calib(p + "d", zd))
+        zp = conv_np(cur, vals[p + "pW"], 1, 0, dt) \
+            + vals[p + "pb"].astype(dt)[None, :, None, None]
+        h2 = calib(p + "p", zp)
+        if ic == oc and s == 1:
+            h2 = h2 + inp
+        h = h2
+    zh = conv_np(h, vals["hW"], 1, 0, dt) \
+        + vals["hb"].astype(dt)[None, :, None, None]
+    _ = relu6(calib("h", zh))
+
+    # ── jax op primitives ───────────────────────────────────────────────────
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def jbn(z, tag):
+        istd = 1.0 / jnp.sqrt(jx(vals[tag + "nvar"]) + 1e-5)
+        return (z - jx(vals[tag + "nmu"])[None, :, None, None]) \
+            * (istd * jx(vals[GAMMA(tag)]))[None, :, None, None] \
+            + jx(vals[BETA(tag)])[None, :, None, None]
+
+    def jrelu6(x):
+        return jnp.minimum(jnp.maximum(x, 0.0), 6.0)
+
+    def jconv(a, W, s, p, groups=1):
+        return jax.lax.conv_general_dilated(
+            a, W, (s, s), ((p, p), (p, p)),
+            dimension_numbers=('NCHW', 'OIHW', 'NCHW'),
+            feature_group_count=groups)
+
+    def jconv_op(Wname, bname, s, p, groups=1):
+        W = jx(vals[Wname])
+        b = jx(vals[bname])
+        return lambda t: jconv(t, W, s, p, groups) + b[None, :, None, None]
+
+    # ── build the flat op list (forward records out/fresh/jfwd + block inps) ─
+    ops = []            # dicts: kind in {lin, exact, entry, add}
+    inp_rec = {}        # block idx -> recorded stream source (f64 batch)
+
+    def emit_lin(name, out_act, fresh, jfwd):
+        ops.append(dict(kind="lin", name=name, out=out_act,
+                        fresh=fresh, jfwd=jfwd))
+
+    def emit_exact(name, out_act, jfwd):
+        ops.append(dict(kind="exact", name=name, out=out_act,
+                        fresh=0.0, jfwd=jrelu6 if jfwd is None else jfwd))
+
+    # stem
+    z = conv_np(x4, vals["sW"], 2, 1, dt) \
+        + vals["sb"].astype(dt)[None, :, None, None]
+    emit_lin("stem-conv", z, conv_fresh0(x4, "sW", "sb", 2, 1),
+             jconv_op("sW", "sb", 2, 1))
+    zb = bn_eval(z, "st")
+    emit_lin("stem-bn", zb, bn_fresh0("st", mags(zb)),
+             (lambda t: jbn(t, "st")))
+    h = relu6(zb)
+    emit_exact("stem-relu6", h, None)
+
+    for i, (ic, mid, oc, s) in enumerate(cfg, start=1):
+        p = f"b{i}"
+        has_skip = (ic == oc and s == 1)
+        inp_rec[i] = h
+        ops.append(dict(kind="entry", block=i))
+        cur = h
+        if mid != ic:
+            z = conv_np(cur, vals[p + "eW"], 1, 0, dt) \
+                + vals[p + "eb"].astype(dt)[None, :, None, None]
+            emit_lin(f"b{i} exp-conv", z, conv_fresh0(cur, p + "eW", p + "eb",
+                                                      1, 0),
+                     jconv_op(p + "eW", p + "eb", 1, 0))
+            zb = bn_eval(z, p + "e")
+            emit_lin(f"b{i} exp-bn", zb, bn_fresh0(p + "e", mags(zb)),
+                     (lambda t, tag=p + "e": jbn(t, tag)))
+            cur = relu6(zb)
+            emit_exact(f"b{i} exp-relu6", cur, None)
+        z = dwconv_np(cur, vals[p + "dW"], s, 1, dt) \
+            + vals[p + "db"].astype(dt)[None, :, None, None]
+        emit_lin(f"b{i} dw-conv", z,
+                 conv_fresh0(cur, p + "dW", p + "db", s, 1, depthwise=True),
+                 jconv_op(p + "dW", p + "db", s, 1, groups=mid))
+        zb = bn_eval(z, p + "d")
+        emit_lin(f"b{i} dw-bn", zb, bn_fresh0(p + "d", mags(zb)),
+                 (lambda t, tag=p + "d": jbn(t, tag)))
+        cur = relu6(zb)
+        emit_exact(f"b{i} dw-relu6", cur, None)
+        z = conv_np(cur, vals[p + "pW"], 1, 0, dt) \
+            + vals[p + "pb"].astype(dt)[None, :, None, None]
+        emit_lin(f"b{i} pj-conv", z, conv_fresh0(cur, p + "pW", p + "pb", 1, 0),
+                 jconv_op(p + "pW", p + "pb", 1, 0))
+        zb = bn_eval(z, p + "p")
+        emit_lin(f"b{i} pj-bn", zb, bn_fresh0(p + "p", mags(zb)),
+                 (lambda t, tag=p + "p": jbn(t, tag)))
+        cur = zb
+        if has_skip:
+            cur = cur + inp_rec[i]
+            ops.append(dict(kind="add", block=i, name=f"b{i} add",
+                            out=cur, fresh=U32 * mags(cur)))
+        h = cur
+
+    z = conv_np(h, vals["hW"], 1, 0, dt) \
+        + vals["hb"].astype(dt)[None, :, None, None]
+    emit_lin("head-conv", z, conv_fresh0(h, "hW", "hb", 1, 0),
+             jconv_op("hW", "hb", 1, 0))
+    zb = bn_eval(z, "h")
+    emit_lin("head-bn", zb, bn_fresh0("h", mags(zb)), (lambda t: jbn(t, "h")))
+    h = relu6(zb)
+    emit_exact("head-relu6", h, None)
+    A_h = mags(h)
+    g = h.mean(axis=(2, 3))
+    emit_lin("gap", g, U32 * (1 + U32) ** 50 * A_h
+             + ((1 + U32) ** 50 - 1) * A_h,
+             (lambda t: t.mean(axis=(2, 3))))
+    sumabs_h = float((np.abs(g) @ np.abs(vals["Wd"].astype(dt))).max())
+    out = g @ vals["Wd"].astype(dt) + vals["bd"].astype(dt)
+    emit_lin("dense (logits)", out,
+             ((1 + U32) ** (1280 + 2) - 1) * (sumabs_h + mags(vals["bd"])),
+             (lambda t: t @ jx(vals["Wd"]) + jx(vals["bd"])))
+
+    # ── true GPU drift (committed render, one IREE run) ─────────────────────
+    out_g = run_iree(mlir, [vals[n] for n, _ in sig],
+                     fn="mobilenetv2_fwd_eval",
+                     module_name="m").astype(np.float64)
+    true_err = float(np.abs(out_g - out).max())
+
+    # ── replay-from-op-g tail: entries seen live capture the stream;
+    #    the block containing g uses the BAKED recorded stream (chain2) ──────
+    def replay_from(g_idx, t, baked):
+        live = {}
+        for op in ops[g_idx:]:
+            k = op["kind"]
+            if k == "entry":
+                live[op["block"]] = t
+            elif k == "add":
+                b = op["block"]
+                t = t + (live[b] if b in live else baked[b])
+            else:
+                t = op["jfwd"](t)
+        return t
+
+    # ── measured per-op tail gains (f32, per-sample — eval BN, no coupling) ─
+    gpu = jax.devices()[0]
+    lin_idx = [g for g, op in enumerate(ops) if op["kind"] in ("lin", "add")]
+    with jax.default_device(gpu):
+        cb = 0.0
+        rows = []
+        for g_idx in lin_idx:
+            op = ops[g_idx]
+            if g_idx == lin_idx[-1]:          # logits: tail is identity, H=1
+                H = 1.0
+            else:
+                H = 0.0
+                for smp in range(2):
+                    baked = {b: jx(inp_rec[b][smp:smp + 1]) for b in inp_rec}
+                    a1 = jx(op["out"][smp:smp + 1])
+
+                    def tail(aa, g_idx=g_idx, baked=baked):
+                        return replay_from(g_idx + 1, aa, baked)[0]
+                    J = jax.jacrev(tail)(a1)
+                    H = max(H, float(jnp.abs(J.reshape(10, -1))
+                                     .sum(axis=1).max()))
+            contrib = H * op["fresh"]
+            cb += contrib
+            rows.append((op["name"], op["fresh"], H, contrib))
+
+    rows.sort(key=lambda r: -r[3])
+    print(f"\n  {len(lin_idx)} budget-bearing ops "
+          f"(conv/bn/add; relu6 exact, b=0)")
+    print(f"\n{'top op (by H·b)':<18}{'fresh b':>12}{'H meas':>11}"
+          f"{'H·b':>11}")
+    for name, b, H, c in rows[:12]:
+        print(f"{name:<18}{b:>12.3e}{H:>11.3e}{c:>11.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget2 (op-gran): {cb:.3e}  ({cb / true_err:.1e}× true)")
+    print(f"  vs §9 block-granularity: 7.1e+01 — the P1 win")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# (11) ResNet-34 @224² at OP granularity (P1) — the DOWNSAMPLE-skip case.
+#     Same cut-at-every-op idea as §10, but r34's skip is not identity:
+#     downsample blocks compute bn_d(conv_d(h)) on the stream. So the stream
+#     carries its OWN ops (conv_d, bn_d) — the chain2 two-part state with BOTH
+#     parts computed. Each op's fresh budget is bare (E=0); its tail gain is
+#     measured with the sibling branch BAKED as an exact constant (block-
+#     diagonal two-part gain), and downstream blocks recompute both branches
+#     live. Eval-mode BN (batch-calibrated running-stats affine, γ=1/β=0), the
+#     deployed forward. Block granularity (§5) was 698; op granularity below.
+# ═══════════════════════════════════════════════════════════════════════════
+def r34_probe_ops():
+    import jax
+    import jax.numpy as jnp
+
+    print("\n" + "═" * 78)
+    print("(11) ResNet-34 @224² — OP-GRANULARITY chain2 (P1), gfx1100")
+    print("═" * 78)
+    B = 2
+    EPS = 1e-5
+    dt = np.float64
+    mags = lambda arr: float(np.abs(arr).max())
+
+    stage_cfg = [(64, 64, 3, 1), (64, 128, 4, 2),
+                 (128, 256, 6, 2), (256, 512, 3, 2)]
+
+    def he_conv(oc, ic, k):
+        std = (2.0 / (ic * k * k)) ** 0.5
+        return (rng.standard_normal((oc, ic, k, k)) * std).astype(np.float32)
+
+    Wstem = he_conv(64, 3, 7)
+    blocks = []
+    for (ic, oc, n, s) in stage_cfg:
+        for j in range(n):
+            bic, bs = (ic, s) if j == 0 else (oc, 1)
+            blk = {"W1": he_conv(oc, bic, 3), "W2": he_conv(oc, oc, 3),
+                   "ic": bic, "oc": oc, "stride": bs,
+                   "down": (bs != 1 or bic != oc)}
+            if blk["down"]:
+                blk["Wd"] = he_conv(oc, bic, 1)
+            blocks.append(blk)
+    Whead = ((rng.standard_normal((512, 10)) * (2.0 / 512) ** 0.5)
+             .astype(np.float32))
+    bhead = (rng.standard_normal(10) * 0.01).astype(np.float32)
+    x = rng.standard_normal((B, 3, 224, 224)).astype(np.float32)
+
+    def calib(z):
+        mu = z.mean(axis=(0, 2, 3))
+        var = z.var(axis=(0, 2, 3))
+        a = (1.0 / np.sqrt(var + EPS)).astype(np.float32)
+        b = (-mu * a).astype(np.float32)
+        return a, b
+
+    def bn_apply(z, ab):
+        a, b = ab
+        return z * a.astype(z.dtype)[None, :, None, None] \
+            + b.astype(z.dtype)[None, :, None, None]
+
+    # ── calibrate eval-BN affines (f64 forward on f32-cast weights) ─────────
+    xa = x.astype(dt)
+    z = conv_np(xa, Wstem, 2, 3, dt)
+    ab_stem = calib(z)
+    h = maxpool2(np.maximum(bn_apply(z, ab_stem), 0))
+    for blk in blocks:
+        z1 = conv_np(h, blk["W1"], blk["stride"], 1, dt)
+        blk["ab1"] = calib(z1)
+        y1 = np.maximum(bn_apply(z1, blk["ab1"]), 0)
+        z2 = conv_np(y1, blk["W2"], 1, 1, dt)
+        blk["ab2"] = calib(z2)
+        y2 = bn_apply(z2, blk["ab2"])
+        if blk["down"]:
+            zd = conv_np(h, blk["Wd"], blk["stride"], 0, dt)
+            blk["abd"] = calib(zd)
+            sk = bn_apply(zd, blk["abd"])
+        else:
+            sk = h
+        h = np.maximum(y2 + sk, 0)
+
+    # ── fresh budgets at E=0 (bare single-op moduli) ────────────────────────
+    def conv_fresh0(x_act, W, stride, pad):
+        m = W.shape[1] * W.shape[2] * W.shape[3]
+        sumabs = float(conv_np(np.abs(x_act), np.abs(W.astype(dt)),
+                               stride, pad, dt).max())
+        return ((1 + U32) ** (m + 2) - 1) * sumabs
+
+    def bn_fresh0(ab, A):
+        amax, bmax = mags(ab[0]), mags(ab[1])
+        return (2 * U32 + U32 * U32) * (amax * A + bmax)
+
+    # ── jax primitives + per-block branch fns ───────────────────────────────
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def jxs(arr, smp):
+        return jnp.asarray(arr[smp:smp + 1].astype(np.float32))
+
+    def jconv(a, W, s, p):
+        return jax.lax.conv_general_dilated(
+            a, W, (s, s), ((p, p), (p, p)),
+            dimension_numbers=('NCHW', 'OIHW', 'NCHW'))
+
+    def jbn(a, ab):
+        return a * jx(ab[0])[None, :, None, None] + jx(ab[1])[None, :, None, None]
+
+    jrelu = lambda a: jnp.maximum(a, 0.0)
+
+    def make_seqs(blk):
+        s = blk["stride"]
+        jW1, jW2 = jx(blk["W1"]), jx(blk["W2"])
+        main = [lambda t, jW1=jW1, s=s: jconv(t, jW1, s, 1),
+                lambda t, ab=blk["ab1"]: jbn(t, ab),
+                jrelu,
+                lambda t, jW2=jW2: jconv(t, jW2, 1, 1),
+                lambda t, ab=blk["ab2"]: jbn(t, ab)]
+        if blk["down"]:
+            jWd = jx(blk["Wd"])
+            skip = [lambda t, jWd=jWd, s=s: jconv(t, jWd, s, 0),
+                    lambda t, ab=blk["abd"]: jbn(t, ab)]
+        else:
+            skip = None
+        return main, skip
+
+    seqs = [make_seqs(blk) for blk in blocks]
+
+    def apply(fns, t):
+        for f in fns:
+            t = f(t)
+        return t
+
+    def block_fwd(bi, h):
+        main, skip = seqs[bi]
+        m = apply(main, h)
+        s = apply(skip, h) if skip is not None else h
+        return jrelu(m + s)
+
+    def tail_from_blockout(bi, h):
+        for bb in range(bi + 1, len(blocks)):
+            h = block_fwd(bb, h)
+        g = h.mean(axis=(2, 3))
+        return g @ jx(Whead) + jx(bhead)
+
+    def maxpool2_j(a):
+        N, C, H, Wd = a.shape
+        return a.reshape(N, C, H // 2, 2, Wd // 2, 2).max(axis=(3, 5))
+
+    def jstem(t):
+        return maxpool2_j(jrelu(jbn(t, ab_stem)))
+
+    # ── numpy reference forward: record per-op outputs, fresh, and the
+    #    baked sibling-branch constants; assemble each op's tail closure ─────
+    ops = []      # dicts: name, out (f64 batch), fresh, mk_tail(smp)->(t->logits)
+
+    a = x.astype(dt)
+    z = conv_np(a, Wstem, 2, 3, dt)
+    ops.append(dict(name="stem-conv", out=z, fresh=conv_fresh0(a, Wstem, 2, 3),
+                    mk_tail=lambda smp: (lambda t: tail_from_blockout(
+                        -1, jstem(t)))))
+    zb = bn_apply(z, ab_stem)
+    ops.append(dict(name="stem-bn", out=zb, fresh=bn_fresh0(ab_stem, mags(z)),
+                    mk_tail=lambda smp: (lambda t: tail_from_blockout(
+                        -1, maxpool2_j(jrelu(t))))))
+    h = maxpool2(np.maximum(zb, 0))
+
+    def mk_main_tail(bi, j, sk_const):
+        main, _ = seqs[bi]
+        return lambda smp: (lambda t: tail_from_blockout(
+            bi, jrelu(apply(main[j + 1:], t) + jxs(sk_const, smp))))
+
+    def mk_skip_tail(bi, j, main_const):
+        _, skip = seqs[bi]
+        return lambda smp: (lambda t: tail_from_blockout(
+            bi, jrelu(jxs(main_const, smp) + apply(skip[j + 1:], t))))
+
+    def mk_add_tail(bi):
+        return lambda smp: (lambda t: tail_from_blockout(bi, jrelu(t)))
+
+    for bi, blk in enumerate(blocks):
+        s, dn = blk["stride"], f"{bi+1}" + ("↓" if blk["down"] else "")
+        inp = h
+        # main branch
+        z1 = conv_np(h, blk["W1"], s, 1, dt)
+        y1 = np.maximum(bn_apply(z1, blk["ab1"]), 0)
+        z2 = conv_np(y1, blk["W2"], 1, 1, dt)
+        y2 = bn_apply(z2, blk["ab2"])
+        # skip branch
+        if blk["down"]:
+            zd = conv_np(h, blk["Wd"], s, 0, dt)
+            sk = bn_apply(zd, blk["abd"])
+        else:
+            sk = inp
+        merged = y2 + sk
+        # main ops (sibling = skip output sk, baked)
+        ops.append(dict(name=f"b{dn} c1", out=z1,
+                        fresh=conv_fresh0(h, blk["W1"], s, 1),
+                        mk_tail=mk_main_tail(bi, 0, sk)))
+        ops.append(dict(name=f"b{dn} bn1", out=bn_apply(z1, blk["ab1"]),
+                        fresh=bn_fresh0(blk["ab1"], mags(z1)),
+                        mk_tail=mk_main_tail(bi, 1, sk)))
+        ops.append(dict(name=f"b{dn} c2", out=z2,
+                        fresh=conv_fresh0(y1, blk["W2"], 1, 1),
+                        mk_tail=mk_main_tail(bi, 3, sk)))
+        ops.append(dict(name=f"b{dn} bn2", out=y2,
+                        fresh=bn_fresh0(blk["ab2"], mags(z2)),
+                        mk_tail=mk_main_tail(bi, 4, sk)))
+        # skip ops (sibling = main output y2, baked)
+        if blk["down"]:
+            ops.append(dict(name=f"b{dn} cd", out=zd,
+                            fresh=conv_fresh0(h, blk["Wd"], s, 0),
+                            mk_tail=mk_skip_tail(bi, 0, y2)))
+            ops.append(dict(name=f"b{dn} bnd", out=sk,
+                            fresh=bn_fresh0(blk["abd"], mags(zd)),
+                            mk_tail=mk_skip_tail(bi, 1, y2)))
+        # add (skip-add rounding); relu is exact
+        ops.append(dict(name=f"b{dn} add", out=merged,
+                        fresh=U32 * mags(merged), mk_tail=mk_add_tail(bi)))
+        h = np.maximum(merged, 0)
+
+    hw = h.shape[2] * h.shape[3]
+    gap = h.mean(axis=(2, 3))
+    ops.append(dict(name="gap", out=gap,
+                    fresh=U32 * (1 + U32) ** (hw + 1) * mags(h)
+                    + ((1 + U32) ** (hw + 1) - 1) * mags(h),
+                    mk_tail=lambda smp: (lambda t: t @ jx(Whead) + jx(bhead))))
+    out = gap @ Whead.astype(dt) + bhead.astype(dt)
+    sumabs_h = float((np.abs(gap) @ np.abs(Whead.astype(dt))).max())
+    ops.append(dict(name="dense (logits)", out=out,
+                    fresh=((1 + U32) ** (512 + 2) - 1)
+                    * (sumabs_h + mags(bhead)), mk_tail=None))   # H=1
+
+    # ── true GPU drift: reuse §5's emitted kernel via the same helpers ──────
+    T = lambda *sp: "tensor<" + "x".join(map(str, sp)) + "xf32>"
+
+    def econv(o, xn, Wn, ic, oc, k, s, p, spi, spo):
+        src_t, w_t, out_t = T(B, ic, spi, spi), T(oc, ic, k, k), T(B, oc, spo, spo)
+        return (f'    {o} = "stablehlo.convolution"({xn}, {Wn}) {{\n'
+                f'        batch_group_count = 1 : i64,\n'
+                f'        dimension_numbers = #stablehlo.conv<raw\n'
+                f'          input_batch_dimension = 0, input_feature_dimension = 1,\n'
+                f'          input_spatial_dimensions = [2, 3],\n'
+                f'          kernel_output_feature_dimension = 0,\n'
+                f'          kernel_input_feature_dimension = 1,\n'
+                f'          kernel_spatial_dimensions = [2, 3],\n'
+                f'          output_batch_dimension = 0, output_feature_dimension = 1,\n'
+                f'          output_spatial_dimensions = [2, 3]>,\n'
+                f'        feature_group_count = 1 : i64,\n'
+                f'        padding = dense<[[{p}, {p}], [{p}, {p}]]> : tensor<2x2xi64>,\n'
+                f'        rhs_dilation = array<i64: 1, 1>,\n'
+                f'        window_strides = array<i64: {s}, {s}>\n'
+                f'      }} : ({src_t}, {w_t}) -> {out_t}\n')
+
+    def eaffine(tag, xn, an, bn_, c, sp):
+        t4 = T(B, c, sp, sp)
+        return (f"    %ab{tag} = stablehlo.broadcast_in_dim {an}, dims = [1] "
+                f": ({T(c)}) -> {t4}\n"
+                f"    %am{tag} = stablehlo.multiply {xn}, %ab{tag} : {t4}\n"
+                f"    %bb{tag} = stablehlo.broadcast_in_dim {bn_}, dims = [1] "
+                f": ({T(c)}) -> {t4}\n"
+                f"    %aa{tag} = stablehlo.add %am{tag}, %bb{tag} : {t4}\n")
+
+    def erelu(tag, xn, c, sp):
+        t4 = T(B, c, sp, sp)
+        return (f"    %rz{tag} = stablehlo.constant dense<0.0> : {t4}\n"
+                f"    %rl{tag} = stablehlo.maximum {xn}, %rz{tag} : {t4}\n")
+
+    def ewindow(o, xn, c, spi, wk, ws, red, init, tag):
+        spo = (spi - wk) // ws + 1
+        in_t, out_t = T(B, c, spi, spi), T(B, c, spo, spo)
+        return (f"    %wi{tag} = stablehlo.constant dense<{init}> : tensor<f32>\n"
+                f'    {o} = "stablehlo.reduce_window"({xn}, %wi{tag}) ({{\n'
+                f"      ^bb0(%a: tensor<f32>, %bb: tensor<f32>):\n"
+                f"        %m = stablehlo.{red} %a, %bb : tensor<f32>\n"
+                f'        "stablehlo.return"(%m) : (tensor<f32>) -> ()\n'
+                f"      }}) {{ window_dimensions = array<i64: 1, 1, {wk}, {wk}>,\n"
+                f"           window_strides    = array<i64: 1, 1, {ws}, {ws}> }}\n"
+                f"      : ({in_t}, tensor<f32>) -> {out_t}\n")
+
+    args = [f"%x: {T(B, 3, 224, 224)}",
+            f"%ws: {T(64, 3, 7, 7)}", f"%as: {T(64)}", f"%bs: {T(64)}"]
+    params = [x, Wstem, ab_stem[0], ab_stem[1]]
+    for i, blk in enumerate(blocks):
+        ic, oc = blk["ic"], blk["oc"]
+        args += [f"%w1_{i}: {T(oc, ic, 3, 3)}", f"%a1_{i}: {T(oc)}",
+                 f"%b1_{i}: {T(oc)}",
+                 f"%w2_{i}: {T(oc, oc, 3, 3)}", f"%a2_{i}: {T(oc)}",
+                 f"%b2_{i}: {T(oc)}"]
+        params += [blk["W1"], blk["ab1"][0], blk["ab1"][1],
+                   blk["W2"], blk["ab2"][0], blk["ab2"][1]]
+        if blk["down"]:
+            args += [f"%wd_{i}: {T(oc, ic, 1, 1)}", f"%ad_{i}: {T(oc)}",
+                     f"%bd_{i}: {T(oc)}"]
+            params += [blk["Wd"], blk["abd"][0], blk["abd"][1]]
+    args += [f"%wh: {T(512, 10)}", f"%bh: {T(10)}"]
+    params += [Whead, bhead]
+
+    body = [econv("%cs", "%x", "%ws", 3, 64, 7, 2, 3, 224, 112),
+            eaffine("s", "%cs", "%as", "%bs", 64, 112),
+            erelu("s", "%aas", 64, 112),
+            ewindow("%mp", "%rls", 64, 112, 2, 2, "maximum",
+                    "0xFF800000", "mp")]
+    cur, sp = "%mp", 56
+    for i, blk in enumerate(blocks):
+        ic, oc, s = blk["ic"], blk["oc"], blk["stride"]
+        spo = sp // s
+        body.append(econv(f"%c1_{i}", cur, f"%w1_{i}", ic, oc, 3, s, 1, sp, spo))
+        body.append(eaffine(f"x1_{i}", f"%c1_{i}", f"%a1_{i}", f"%b1_{i}",
+                            oc, spo))
+        body.append(erelu(f"x1_{i}", f"%aax1_{i}", oc, spo))
+        body.append(econv(f"%c2_{i}", f"%rlx1_{i}", f"%w2_{i}", oc, oc, 3, 1,
+                          1, spo, spo))
+        body.append(eaffine(f"x2_{i}", f"%c2_{i}", f"%a2_{i}", f"%b2_{i}",
+                            oc, spo))
+        if blk["down"]:
+            body.append(econv(f"%cd_{i}", cur, f"%wd_{i}", ic, oc, 1, s, 0,
+                              sp, spo))
+            body.append(eaffine(f"xd_{i}", f"%cd_{i}", f"%ad_{i}", f"%bd_{i}",
+                                oc, spo))
+            skip = f"%aaxd_{i}"
+        else:
+            skip = cur
+        t4 = T(B, oc, spo, spo)
+        body.append(f"    %sum{i} = stablehlo.add %aax2_{i}, {skip} : {t4}\n")
+        body.append(erelu(f"o{i}", f"%sum{i}", oc, spo))
+        cur, sp = f"%rlo{i}", spo
+    body.append(ewindow("%gs", cur, 512, 7, 7, 7, "add", "0.0", "gap"))
+    body.append(f"    %gc = stablehlo.constant dense<49.0> : {T(B, 512, 1, 1)}\n")
+    body.append(f"    %gd = stablehlo.divide %gs, %gc : {T(B, 512, 1, 1)}\n")
+    body.append(f"    %gf = stablehlo.reshape %gd : ({T(B, 512, 1, 1)}) -> "
+                f"{T(B, 512)}\n")
+    body.append(f"    %hd = stablehlo.dot_general %gf, %wh, "
+                f"contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT]"
+                f" : ({T(B, 512)}, {T(512, 10)}) -> {T(B, 10)}\n")
+    body.append(f"    %hbb = stablehlo.broadcast_in_dim %bh, dims = [1] : "
+                f"({T(10)}) -> {T(B, 10)}\n")
+    body.append(f"    %out = stablehlo.add %hd, %hbb : {T(B, 10)}\n")
+    mlir = ("module {\n  func.func @main(\n      "
+            + ",\n      ".join(args)
+            + f"\n    ) -> {T(B, 10)} {{\n"
+            + "".join(body)
+            + f"    return %out : {T(B, 10)}\n  }}\n}}\n")
+    out_g = run_iree(mlir, params).astype(np.float64)
+    true_err = float(np.abs(out_g - out).max())
+
+    # ── measured per-op tail gains (f32 on GPU) ─────────────────────────────
+    gpu = jax.devices()[0]
+    with jax.default_device(gpu):
+        cb = 0.0
+        rows = []
+        for k, op in enumerate(ops):
+            if op["mk_tail"] is None:      # logits: tail identity, H=1
+                H = 1.0
+            else:
+                H = 0.0
+                for smp in range(B):
+                    tailfn = op["mk_tail"](smp)
+                    a1 = jnp.asarray(op["out"][smp:smp + 1].astype(np.float32))
+                    J = jax.jacrev(lambda t: tailfn(t)[0])(a1)
+                    H = max(H, float(jnp.abs(J.reshape(10, -1))
+                                     .sum(axis=1).max()))
+            contrib = H * op["fresh"]
+            cb += contrib
+            rows.append((op["name"], op["fresh"], H, contrib))
+
+    rows.sort(key=lambda r: -r[3])
+    print(f"\n  {len(ops)} budget-bearing ops (conv/bn/add; relu/maxpool "
+          f"exact, b=0)")
+    print(f"\n{'top op (by H·b)':<16}{'fresh b':>12}{'H meas':>11}{'H·b':>11}")
+    for name, b, H, c in rows[:14]:
+        print(f"{name:<16}{b:>12.3e}{H:>11.3e}{c:>11.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget2 (op-gran): {cb:.3e}  ({cb / true_err:.1e}× true)")
+    print(f"  vs §5 block-granularity: 6.98e+02 — the P1 win")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# (12) ViT-Tiny @224² at OP granularity (P1) — the full sub-block cut.
+#     §8b's residual combinator got ViT to 1.5e3 by carrying the stream at
+#     3 stages/block; the residual 350× is the WITHIN-sublayer fold (dense
+#     row-sum × LN Higham products, like r34's within-block fold). Op
+#     granularity cuts every op — and SUBSUMES the (h,S) pair trick: the
+#     softmax becomes its own op whose fresh is the bare rounding smKappa
+#     (≈1e-5), and the score's fresh meets it through the MEASURED softmax
+#     tail gain (Jacobian L∞ ≤ ½), never the nonlinear e^{2δ}−1 modulus.
+#     The attention sublayer is a DAG (Wq/Wk/Wv fork from LN1; score merges
+#     Q,K; AV merges softmax,V), so each intra-sublayer op's tail bakes its
+#     SIBLING branches (chain2 block-diagonal) + the residual source. Committed
+#     vit_fwd.mlir, gfx1100. 14 ops/block × 12 + patch/finalLN/head.
+# ═══════════════════════════════════════════════════════════════════════════
+def vit_probe_ops(nblocks=12):
+    import jax
+    import jax.numpy as jnp
+    import re
+    import os
+
+    print("\n" + "═" * 78)
+    print(f"(12) ViT-Tiny @224² — OP-GRANULARITY chain2 (P1), gfx1100"
+          + (f"  [SMOKE nblocks={nblocks}]" if nblocks != 12 else ""))
+    print("═" * 78)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mlir = open(os.path.join(root, "verified_mlir/vit_fwd.mlir")).read()
+    header = mlir[:mlir.index("{", mlir.index("func.func"))]
+    sig = [(m.group(1), tuple(int(d) for d in m.group(2).split("x")[:-1]))
+           for m in re.finditer(r"%(\w+): tensor<([^>]+)>", header)]
+
+    dt = np.float64
+    mags = lambda a: float(np.abs(a).max())
+    D, NH, DH, NT = 192, 3, 64, 197
+    EPS_LN = 1e-5
+    EEXP = 2 * U32
+    rng2 = np.random.default_rng(42)
+
+    vals = {}
+    for name, shape in sig:
+        if name == "x":
+            vals[name] = rng2.standard_normal((32, 150528)).astype(np.float32)
+        elif len(shape) == 4:
+            fan = shape[1] * shape[2] * shape[3]
+            vals[name] = (rng2.standard_normal(shape)
+                          * (2.0 / fan) ** 0.5).astype(np.float32)
+        elif len(shape) == 2 and name != "pos":
+            vals[name] = (rng2.standard_normal(shape)
+                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+        elif name.endswith("g1") or name.endswith("g2") or name == "gF":
+            vals[name] = np.ones(shape, np.float32)
+        else:
+            vals[name] = np.zeros(shape, np.float32)
+
+    def ln_tok(z, gname, btname):
+        mu = z.mean(axis=-1, keepdims=True)
+        var = ((z - mu) ** 2).mean(axis=-1, keepdims=True)
+        xh = (z - mu) / np.sqrt(var + EPS_LN)
+        return xh * vals[gname].astype(z.dtype) + vals[btname].astype(z.dtype)
+
+    def ln_fresh(z, gname):
+        """per-token LN fresh budget at E=0 (perRowFlat granularity)."""
+        mu = z.mean(axis=-1, keepdims=True)
+        dev = z - mu
+        var = (dev ** 2).mean(axis=-1)
+        D_t = np.abs(dev).max(axis=-1)
+        A_t = np.abs(z).max(axis=-1)
+        floor_t = var + EPS_LN
+        S_t = 1.0 / np.sqrt(floor_t)
+        G = mags(vals[gname])
+        emean_t = bn_mean_budget(U32, D, A_t)
+        evar_t = bn_var_budget(U32, D_t, emean_t, D)
+        eistd_t = bn_istd_budget(ERS, evar_t, floor_t)
+        return float(bn_norm_budget(U32, D_t, S_t, G, 0.0,
+                                    emean_t, eistd_t).max())
+
+    def dense_fresh0(h2d, Wname, bname):
+        W = np.abs(vals[Wname].astype(dt))
+        m = W.shape[0]
+        sumabs = float((np.abs(h2d) @ W).max())
+        return ((1 + U32) ** (m + 2) - 1) * (sumabs + mags(vals[bname]))
+
+    rho = ((1 + U32) ** (NT + 1) - 1) * (1 + EEXP) + EEXP
+    kappa = (EEXP + rho) / (1 - rho)
+    SM_FRESH = U32 * (1 + kappa) + kappa
+
+    def softmax_np(s):
+        e = np.exp(s)
+        return e / e.sum(axis=-1, keepdims=True)
+
+    def score_np(q, k):
+        return np.stack([np.einsum('btd,bsd->bts',
+                                   q[:, :, hd * DH:(hd + 1) * DH],
+                                   k[:, :, hd * DH:(hd + 1) * DH]) * 0.125
+                         for hd in range(NH)], axis=1)
+
+    def av_np(al, v):
+        return np.concatenate(
+            [np.einsum('bts,bsd->btd', al[:, hd],
+                       v[:, :, hd * DH:(hd + 1) * DH]) for hd in range(NH)],
+            axis=-1)
+
+    def score_fresh0(q, k, S):
+        b = 0.0
+        for hd in range(NH):
+            qh = np.abs(q[:, :, hd * DH:(hd + 1) * DH])
+            kh = np.abs(k[:, :, hd * DH:(hd + 1) * DH])
+            sumabs_s = float(np.einsum('btd,bsd->bts', qh, kh).max()) * 0.125
+            b = max(b, ((1 + U32) ** (DH + 2) - 1) * sumabs_s
+                    + U32 * mags(S))
+        return b
+
+    def av_fresh0(al, v):
+        b = 0.0
+        for hd in range(NH):
+            vh = np.abs(v[:, :, hd * DH:(hd + 1) * DH])
+            sumabs_av = float(np.einsum('bts,bsd->btd', al[:, hd], vh).max())
+            b = max(b, ((1 + U32) ** (NT + 2) - 1) * sumabs_av)
+        return b
+
+    # ── jax primitives ──────────────────────────────────────────────────────
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def jxs(arr, smp):
+        return jnp.asarray(arr[smp:smp + 1].astype(np.float32))
+
+    def jln(z, gname, btname):
+        mu = z.mean(axis=-1, keepdims=True)
+        var = ((z - mu) ** 2).mean(axis=-1, keepdims=True)
+        return (z - mu) / jnp.sqrt(var + EPS_LN) * jx(vals[gname]) \
+            + jx(vals[btname])
+
+    def jgelu(x):
+        inner = 0.7978845608028654 * (x + 0.044715 * x * x * x)
+        return 0.5 * x * (1.0 + jnp.tanh(inner))
+
+    def jdense(z, Wname, bname):
+        return z @ jx(vals[Wname]) + jx(vals[bname])
+
+    def jscore(q, k):
+        return jnp.stack([jnp.einsum('btd,bsd->bts',
+                                     q[:, :, hd * DH:(hd + 1) * DH],
+                                     k[:, :, hd * DH:(hd + 1) * DH]) * 0.125
+                          for hd in range(NH)], axis=1)
+
+    def jsoftmax(S):
+        e = jnp.exp(S)
+        return e / e.sum(axis=-1, keepdims=True)
+
+    def jav(al, v):
+        return jnp.concatenate(
+            [jnp.einsum('bts,bsd->btd', al[:, hd],
+                        v[:, :, hd * DH:(hd + 1) * DH]) for hd in range(NH)],
+            axis=-1)
+
+    def jblock(bi, h):
+        p_ = f"b{bi}_"
+        ln1 = jln(h, p_ + "g1", p_ + "bt1")
+        q, k, v = (jdense(ln1, p_ + "Wq", p_ + "bq"),
+                   jdense(ln1, p_ + "Wk", p_ + "bk"),
+                   jdense(ln1, p_ + "Wv", p_ + "bv"))
+        att = jav(jsoftmax(jscore(q, k)), v)
+        hm = h + jdense(att, p_ + "Wo", p_ + "bo")
+        ln2 = jln(hm, p_ + "g2", p_ + "bt2")
+        f = jgelu(jdense(ln2, p_ + "Wfc1", p_ + "bfc1"))
+        return hm + jdense(f, p_ + "Wfc2", p_ + "bfc2")
+
+    def blocks_after(bi, h):
+        for bb in range(bi + 1, nblocks):
+            h = jblock(bb, h)
+        lnF = jln(h, "gF", "btF")
+        return lnF[:, 0, :] @ jx(vals["Wc"]) + jx(vals["bc"])
+
+    def block_mlp(bi, hm):
+        p_ = f"b{bi}_"
+        ln2 = jln(hm, p_ + "g2", p_ + "bt2")
+        f = jgelu(jdense(ln2, p_ + "Wfc1", p_ + "bfc1"))
+        return hm + jdense(f, p_ + "Wfc2", p_ + "bfc2")
+
+    def attn_wo(bi, role, t, C):
+        p_ = f"b{bi}_"
+        if role == "wo":
+            return t
+        if role == "ln1":
+            q, k, v = (jdense(t, p_ + "Wq", p_ + "bq"),
+                       jdense(t, p_ + "Wk", p_ + "bk"),
+                       jdense(t, p_ + "Wv", p_ + "bv"))
+            att = jav(jsoftmax(jscore(q, k)), v)
+        elif role == "wq":
+            att = jav(jsoftmax(jscore(t, C["K"])), C["V"])
+        elif role == "wk":
+            att = jav(jsoftmax(jscore(C["Q"], t)), C["V"])
+        elif role == "wv":
+            att = jav(C["alpha"], t)
+        elif role == "score":
+            att = jav(jsoftmax(t), C["V"])
+        elif role == "softmax":
+            att = jav(t, C["V"])
+        elif role == "av":
+            att = t
+        return jdense(att, p_ + "Wo", p_ + "bo")
+
+    def mlp_f2(bi, role, t):
+        p_ = f"b{bi}_"
+        if role == "ln2":
+            f = jgelu(jdense(t, p_ + "Wfc1", p_ + "bfc1"))
+            return jdense(f, p_ + "Wfc2", p_ + "bfc2")
+        elif role == "fc1":
+            return jdense(jgelu(t), p_ + "Wfc2", p_ + "bfc2")
+        elif role == "gelu":
+            return jdense(t, p_ + "Wfc2", p_ + "bfc2")
+        elif role == "fc2":
+            return t
+
+    # ── numpy reference forward: record constants, budgets, op list ─────────
+    ops = []
+
+    def mk_attn_tail(bi, role):
+        return lambda C, smp: (lambda t: blocks_after(bi, block_mlp(
+            bi, C["h1"] + attn_wo(bi, role, t, C))))
+
+    def mk_add1_tail(bi):
+        return lambda C, smp: (lambda t: blocks_after(
+            bi, block_mlp(bi, t)))
+
+    def mk_mlp_tail(bi, role):
+        return lambda C, smp: (lambda t: blocks_after(
+            bi, C["h_mid"] + mlp_f2(bi, role, t)))
+
+    def mk_add2_tail(bi):
+        return lambda C, smp: (lambda t: blocks_after(bi, t))
+
+    x4 = vals["x"].astype(dt).reshape(32, 3, 224, 224)
+    pconv = conv_np(x4, vals["wConv"], 16, 0, dt) \
+        + vals["bConv"].astype(dt)[None, :, None, None]
+    tok = pconv.transpose(0, 2, 3, 1).reshape(32, 196, D)
+    h = np.concatenate(
+        [np.broadcast_to(vals["cls"].astype(dt), (32, 1, D)), tok], axis=1)
+    h = h + vals["pos"].astype(dt)[None]
+    Wp = np.abs(vals["wConv"].astype(dt))
+    sumabs_p = float(conv_np(np.abs(x4), Wp, 16, 0, dt).max())
+
+    def jpatch(t):
+        pc = jax.lax.conv_general_dilated(
+            t, jx(vals["wConv"]), (16, 16), ((0, 0), (0, 0)),
+            dimension_numbers=('NCHW', 'OIHW', 'NCHW')) \
+            + jx(vals["bConv"])[None, :, None, None]
+        tk = pc.transpose(0, 2, 3, 1).reshape(pc.shape[0], 196, D)
+        hh = jnp.concatenate(
+            [jnp.broadcast_to(jx(vals["cls"]), (pc.shape[0], 1, D)), tk],
+            axis=1)
+        return hh + jx(vals["pos"])[None]
+    ops.append(dict(name="patch+cls+pos", out=h, role="patch",
+                    fresh=((1 + U32) ** 770 - 1) * (sumabs_p
+                          + mags(vals["bConv"])) + U32 * mags(h),
+                    Ckeys=[], mk=lambda bi=None: (
+                        lambda C, smp: (lambda t: blocks_after(-1, t)))))
+
+    consts = []          # per-block baked-constant recipe (numpy arrays)
+    for bi in range(nblocks):
+        p_ = f"b{bi}_"
+        h1 = h
+        ln1 = ln_tok(h, p_ + "g1", p_ + "bt1")
+        q = ln1 @ vals[p_ + "Wq"].astype(dt) + vals[p_ + "bq"].astype(dt)
+        k = ln1 @ vals[p_ + "Wk"].astype(dt) + vals[p_ + "bk"].astype(dt)
+        v = ln1 @ vals[p_ + "Wv"].astype(dt) + vals[p_ + "bv"].astype(dt)
+        S = score_np(q, k)
+        alpha = softmax_np(S)
+        att = av_np(alpha, v)
+        wo = att @ vals[p_ + "Wo"].astype(dt) + vals[p_ + "bo"].astype(dt)
+        h_mid = h1 + wo
+        ln2 = ln_tok(h_mid, p_ + "g2", p_ + "bt2")
+        f1 = ln2 @ vals[p_ + "Wfc1"].astype(dt) + vals[p_ + "bfc1"].astype(dt)
+        g1v = gelu_tanh_np(f1)
+        f2 = g1v @ vals[p_ + "Wfc2"].astype(dt) + vals[p_ + "bfc2"].astype(dt)
+        h_next = h_mid + f2
+        C = dict(h1=h1, Q=q, K=k, V=v, alpha=alpha, h_mid=h_mid)
+        consts.append(C)
+        ln1_2 = ln1.reshape(-1, D)
+        att_2 = att.reshape(-1, D)
+        ln2_2 = ln2.reshape(-1, D)
+        g1_2 = g1v.reshape(-1, g1v.shape[-1])       # MLP hidden dim (768)
+        # attention sublayer ops
+        ops.append(dict(name=f"b{bi} ln1", out=ln1, role="ln1",
+                        fresh=ln_fresh(h, p_ + "g1"),
+                        mk=mk_attn_tail(bi, "ln1"), blk=bi))
+        ops.append(dict(name=f"b{bi} Wq", out=q, role="wq",
+                        fresh=dense_fresh0(ln1_2, p_ + "Wq", p_ + "bq"),
+                        mk=mk_attn_tail(bi, "wq"), blk=bi))
+        ops.append(dict(name=f"b{bi} Wk", out=k, role="wk",
+                        fresh=dense_fresh0(ln1_2, p_ + "Wk", p_ + "bk"),
+                        mk=mk_attn_tail(bi, "wk"), blk=bi))
+        ops.append(dict(name=f"b{bi} Wv", out=v, role="wv",
+                        fresh=dense_fresh0(ln1_2, p_ + "Wv", p_ + "bv"),
+                        mk=mk_attn_tail(bi, "wv"), blk=bi))
+        ops.append(dict(name=f"b{bi} score", out=S, role="score",
+                        fresh=score_fresh0(q, k, S),
+                        mk=mk_attn_tail(bi, "score"), blk=bi))
+        ops.append(dict(name=f"b{bi} softmax", out=alpha, role="softmax",
+                        fresh=SM_FRESH, mk=mk_attn_tail(bi, "softmax"), blk=bi))
+        ops.append(dict(name=f"b{bi} AV", out=att, role="av",
+                        fresh=av_fresh0(alpha, v),
+                        mk=mk_attn_tail(bi, "av"), blk=bi))
+        ops.append(dict(name=f"b{bi} Wo", out=wo, role="wo",
+                        fresh=dense_fresh0(att_2, p_ + "Wo", p_ + "bo"),
+                        mk=mk_attn_tail(bi, "wo"), blk=bi))
+        ops.append(dict(name=f"b{bi} add1", out=h_mid, role="add1",
+                        fresh=U32 * mags(h_mid),
+                        mk=mk_add1_tail(bi), blk=bi))
+        # mlp sublayer ops
+        ops.append(dict(name=f"b{bi} ln2", out=ln2, role="ln2",
+                        fresh=ln_fresh(h_mid, p_ + "g2"),
+                        mk=mk_mlp_tail(bi, "ln2"), blk=bi))
+        ops.append(dict(name=f"b{bi} fc1", out=f1, role="fc1",
+                        fresh=dense_fresh0(ln2_2, p_ + "Wfc1", p_ + "bfc1"),
+                        mk=mk_mlp_tail(bi, "fc1"), blk=bi))
+        ops.append(dict(name=f"b{bi} gelu", out=g1v, role="gelu",
+                        fresh=EGELU, mk=mk_mlp_tail(bi, "gelu"), blk=bi))
+        ops.append(dict(name=f"b{bi} fc2", out=f2, role="fc2",
+                        fresh=dense_fresh0(g1_2, p_ + "Wfc2", p_ + "bfc2"),
+                        mk=mk_mlp_tail(bi, "fc2"), blk=bi))
+        ops.append(dict(name=f"b{bi} add2", out=h_next, role="add2",
+                        fresh=U32 * mags(h_next),
+                        mk=mk_add2_tail(bi), blk=bi))
+        h = h_next
+
+    lnF = ln_tok(h, "gF", "btF")
+    clsv = lnF[:, 0, :]
+    out = clsv @ vals["Wc"].astype(dt) + vals["bc"].astype(dt)
+    ops.append(dict(name="finalLN", out=lnF, role="finalLN",
+                    fresh=ln_fresh(h, "gF"),
+                    mk=lambda bi=None: (lambda C, smp: (
+                        lambda t: t[:, 0, :] @ jx(vals["Wc"]) + jx(vals["bc"]))),
+                    blk=None))
+    ops.append(dict(name="cls+dense", out=out, role="head",
+                    fresh=dense_fresh0(clsv.reshape(-1, D), "Wc", "bc"),
+                    mk=None, blk=None))
+
+    if nblocks == 12:
+        out_g = run_iree(mlir, [vals[n] for n, _ in sig],
+                         fn="vit_fwd", module_name="m").astype(np.float64)
+        true_err = float(np.abs(out_g - out).max())
+    else:
+        true_err = 1.0          # SMOKE: skip the 12-block committed render
+
+    # ── measured per-op tail gains (f32, per-sample) ────────────────────────
+    gpu = jax.devices()[0]
+    with jax.default_device(gpu):
+        cb = 0.0
+        rows = []
+        for op in ops:
+            if op["mk"] is None:                 # logits: H=1
+                H = 1.0
+            else:
+                blk = op.get("blk")
+                H = 0.0
+                for smp in range(2):
+                    if blk is not None:
+                        Cj = {kk: jxs(vv, smp)
+                              for kk, vv in consts[blk].items()}
+                    else:
+                        Cj = {}
+                    tailfn = op["mk"]()(Cj, smp) if op["role"] in (
+                        "patch", "finalLN") else op["mk"](Cj, smp)
+                    a1 = jnp.asarray(op["out"][smp:smp + 1].astype(np.float32))
+                    J = jax.jacrev(lambda t: tailfn(t)[0])(a1)
+                    H = max(H, float(jnp.abs(J.reshape(10, -1))
+                                     .sum(axis=1).max()))
+            contrib = H * op["fresh"]
+            cb += contrib
+            rows.append((op["name"], op["fresh"], H, contrib))
+
+    rows.sort(key=lambda r: -r[3])
+    print(f"\n  {len(ops)} budget-bearing ops (14/block × 12 + patch/lnF/head)")
+    print(f"\n{'top op (by H·b)':<16}{'fresh b':>12}{'H meas':>11}{'H·b':>11}")
+    for name, b, H, c in rows[:14]:
+        print(f"{name:<16}{b:>12.3e}{H:>11.3e}{c:>11.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget2 (op-gran): {cb:.3e}  ({cb / true_err:.1e}× true)")
+    print(f"  vs §8b residual (3/blk): 1.5e+03 — the P1 win")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+
+
 def main():
     print("═" * 78)
     print("adjoint-chain probe — chain_adjointClose budget vs real gfx1100 drift")
@@ -2715,4 +3776,10 @@ if __name__ == "__main__":
     convnext_probe()
     vit_probe()
     vit_probe_residual()
+    mnv2_probe()
+    # P1 — op-granularity chain2 sweep (§10-§12): cut the chain at every op,
+    # each fresh budget bare at E=0, each meeting its own measured tail gain
+    mnv2_probe_ops()
+    r34_probe_ops()
+    vit_probe_ops()
     mnv2_probe()

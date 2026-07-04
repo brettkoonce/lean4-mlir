@@ -3,29 +3,55 @@
 Status 2026-07-04 end-of-session: **everything below through probe §8b committed**
 (`1cc69d8`..`301c3d4`: `AdjointChainBridge.lean` + `GeluLipschitz.lean` +
 `AdjointChainResidual.lean`, all 3-axiom clean, audit at 1302 entries; probe §1–§8b);
-**§9 (mnv2) + this handoff section uncommitted**. Full ladder + findings log below.
+**§9 (mnv2) + P1 op-granularity §10–§12 + this handoff section uncommitted**. Full
+ladder + findings log below.
 
-## ═══ NEXT SESSION: the closure plan (get every net under its logit scale) ═══
+## ═══ P1 DONE (op-granularity chain2 sweep §10–§12) — the biggest single step ═══
 
-Current scoreboard (adjoint chainBudget vs logit magnitude, committed renders on
+**Result: op-granularity dropped every within-block-folding net ~54–64× in one pass,
+landing all three within 1–6× of the logit scale** (from 72–350× over). The mechanism
+that was theorized is confirmed: the dominant residual on the block-granularity probes
+was the WITHIN-block interval fold (per-block fresh budgets paying conv/dense-row-sum ×
+BN/LN-fresh PRODUCTS, because ops inside a block thread the inherited error E through
+the next op's worst-case row sum). Cutting the chain at EVERY op — each conv/bn/LN/dense
+its own stage, fresh budget BARE at E=0 (a single-op Higham term ~1e-5..1e-2), each
+meeting its OWN measured tail gain — removes every row-sum product. No new Lean (chain2
+covers it); mechanical probe restructure.
+
+| net | block-gran | **op-gran (§10–12)** | logit scale | verdict |
+|---|---|---|---|---|
+| MobileNetV2 | 71 (§9) | **1.11** | 0.99 | **1.1× over — at the certificate** |
+| ResNet-34 @224² | 698 (§5) | **12.6** | 3.55 | 3.5× over |
+| ViT-Tiny @224² | 1.5e3 (§8b) | **27.8** | 4.33 | 6.4× over |
+
+Updated scoreboard (adjoint chainBudget vs logit magnitude, committed renders on
 gfx1100 unless noted): MLP-24 **✓ 0.8/21** · CIFAR-8 **✓ 2.6/4.6** · MNIST-CNN 4.1/0.38
-· CIFAR-8-BN 51/3.2 (16×) · mnv2 71/0.99 (72×) · r34-twin 698/3.6 (200×) · ViT-chain2
-1.5e3/4.3 (350×) · ENet 6.8e4/1.3 (5e4×) · ConvNeXt 3.2e6/2.9 (1e6×). Composition and
-parallel paths are SOLVED (`chain_adjointClose` + `chain2_adjointClose`); every
-remaining gap is a local worst-case face. Two structural moves plausibly close almost
-everything:
+· mnv2 **1.1/0.99 (1.1×)** · CIFAR-8-BN 51/3.2 (16×) · r34-twin **12.6/3.6 (3.5×)** ·
+ViT **27.8/4.3 (6.4×)** · ENet 6.8e4/1.3 (5e4×, op-gran not yet run) · ConvNeXt 3.2e6/
+2.9 (1e6×, op-gran not yet run). After op-granularity the residual EVERYWHERE is purely
+local — per-op conv/dense/LN Higham fresh (~√n loose ⇒ P2 tree-reduction) × early-block
+tail gains at init (⇒ P6 trained checkpoint). NO composition/fold/exponential faces left
+anywhere in the measured chain.
 
-**P1 — OP-GRANULARITY chain2 sweep (probe §10; biggest single step).** The dominant
-residual on every deep net is the WITHIN-block fold: per-block fresh budgets pay
-(conv/dense row-sum × BN/LN fresh) products because ops inside a block are interval-
-folded. But `chain2` makes within-block folding unnecessary: cut the chain at EVERY op
-(each conv+bnE, each LN, each dense its own stage; skips carried as chain2 streams,
-exactly the §8b pattern). Then each op's fresh budget is a bare single-op Higham term
-(~1e-4..1e-2) meeting a measured tail gain directly — no row-sum products anywhere.
-Back-of-envelope: r34 ≈ 36 ops × (1e-3 × H≈10-100) ≈ O(1-10) — from 698. Expected to
-close r34, mnv2, CIFAR-8-BN, and pull ViT close. Mechanical probe restructure (the §8b
-machinery generalizes: stages already just lists of fns + budgets); no new Lean needed
-(chain2 covers it).
+Three structural facts learned:
+1. **Op-granularity SUBSUMES the §8b (h,S) pair trick.** In the op chain the softmax is
+   its own stage with fresh = the bare rounding `smKappa` (~1e-5); the score's inherited
+   error meets it through the MEASURED softmax tail gain (Jacobian L∞ ≤ ½), never the
+   nonlinear `e^{2δ}−1` modulus. So ViT needs no pair-carry — the exponential face is
+   gone by construction. (ENet's SE gate — P3 — is the same: op-granularity dissolves it
+   without a bespoke combinator; the §6 SE face is a within-block-fold artifact.)
+2. **The general residual-aware replay** (used for all three): entry/add markers per
+   sublayer; an op's tail bakes its SIBLING branches (chain2 block-diagonal two-part
+   gain) + the residual source, while downstream blocks recompute both branches live.
+   Handles identity skips (mnv2), downsample-conv skips (r34: conv_d/bn_d on the stream
+   part), and the attention DAG (ViT: Wq/Wk/Wv fork LN1, score merges Q,K, AV merges
+   softmax,V).
+3. **CIFAR-8-BN is NOT a P1 target — it is already op-granular** (conv | bn | relu are
+   separate stages, no within-block fold to break). Its 51 is BN-dominated: bn1+relu =
+   33, bn2+relu = 11.6 of 50.7 (convs sum ~3). That is the cross-channel-worst-case BN
+   budget (max-D paired with min-floor) ⇒ **P4** (per-channel budgets), not P1.
+
+Two structural moves close what op-granularity leaves (both now LOCAL, not compositional):
 
 **P2 — the TREE-REDUCTION quarantine (small Lean + probe toggle; closes the two
 "impossible" faces).** MNIST-CNN's fan-in-6272 dot budget and ConvNeXt's n=301056
@@ -40,16 +66,26 @@ the sequential bound) turns n·u into log₂n·u: fan-in 6272 ÷ ~500 (closes MN
 Lean shape: a `dotTree`/`sumTree` model + `dot_close` twin — same Higham algebra on a
 different recursion; est. 100-200 lines. Benefits EVERY conv/dense fresh budget too.
 
-**P3 — ENet SE chain2 split (probe §6b; mechanical).** Verbatim §8b pattern: stage A =
-(h, SE gate logits) with stream at b=0; stage B applies σ to an EXACT chain input
-(fresh = esig) and scales. Kills the ~×100/block within-block SE face; expected
-6.8e4 → mnv2-class O(1e2). Combine with P1 in the same pass.
+**P3 — ENet-B0 + ConvNeXt-T op-granularity (probe §13–§14; mechanical, the ONLY deep
+nets not yet op-cut).** Run the §10–§12 machinery on the two committed renders. For ENet
+this SUBSUMES the bespoke SE-combinator idea: op-granularity makes the SE gate path
+(pool → dense → swish → dense → σ) its own op chain, so the σ is a stage with fresh =
+esig meeting a measured (tiny) tail gain — the §6 "×100/block SE face" was a within-
+block-fold artifact, gone by the same mechanism as ViT's softmax. Expected ENet
+6.8e4 → O(1e1-1e2) and ConvNeXt 3.2e6 → O(1e2) with the scalar-LN big-n Higham face
+(P2) then the only residual. Note ConvNeXt's scalar-LN n=301056 fresh is per-op already,
+so op-granularity mainly buys the cross-op fold removal; P2 is its real closer.
 
-**P4 — per-channel BN budgets for CIFAR-8-BN (probe edit; small).** §4 still takes
-D/S/istd-floor as maxes/mins over ALL channels — one low-variance channel poisons the
-stage (bn1+bn2 = 45 of the 51). Pair each channel's D with its own floor (verbatim
-the per-token LN fix from §8, which the Lean `bnPerChannel`/`perRowFlat` machinery
-already licenses). Expected 51 → O(5-15); combined with P1 likely ✓.
+**P4 — per-channel BN budgets for CIFAR-8-BN (the CONFIRMED lever; probe §4 measured
+2026-07-04).** CIFAR-8-BN is already op-granular — P1 does not apply. Its 51 is entirely
+BN: **bn1+relu = 33.0 (b=2.5e-2, H=1313), bn2+relu = 11.6 (b=2.9e-2, H=399) of the 50.7
+total; all 8 convs sum ~3.1.** The BN fresh budgets take D/S/istd-floor as maxes/mins
+over ALL channels — one low-variance channel at init poisons the whole stage (pairs the
+worst-D channel with the min-variance floor). Pair each channel's D with its own floor
+(verbatim the per-token LN fix from §8, which the Lean `bnPerChannel`/`perRowFlat`
+machinery already licenses); the worst-to-typical channel ratio is the ~16× to recover.
+Expected 51 → O(3-8) ⇒ likely ✓. (BN also genuinely amplifies tail gains — H≈500-1300
+early vs 210 no-BN — that part is real, not slack.)
 
 **P5 — the PROVEN capstone: end-to-end Lean instantiation on CIFAR-8.** Numerically
 certified already (2.6 < 4.6); assemble it in Lean: `chain_adjointClose` instantiated
@@ -401,9 +437,24 @@ dense/relu/softmax.
    | ViT-Tiny + residual combinator (chain2) | 39 | — | **1.5e+03** | 4.3 | 350× over — r34-class; exponential faces gone |
    | MobileNetV2 @224² (committed render) | 20 | 2.7e+60 | **7.1e+01** | 0.99 | 72× over — best deep-net row; no named faces left |
 
-   Composition is solved at every scale tried — the adjoint chain stays within 1–3
-   orders of the logit scale where the interval fold loses 4–51 orders; what remains is
-   local (per-op budgets, BN channel bookkeeping, trained-vs-init gains).
+   **P1 op-granularity (§10–§12, 2026-07-04): cut the chain at EVERY op —**
+
+   | net | ops | block-gran | **op-gran** | logit scale | verdict |
+   |---|---|---|---|---|---|
+   | MobileNetV2 @224² | 116 | 7.1e+01 | **1.11** | 0.99 | **1.1× over — at the certificate** |
+   | ResNet-34 @224² | 90 | 6.98e+02 | **12.6** | 3.55 | 3.5× over |
+   | ViT-Tiny @224² | 171 | 1.5e+03 | **27.8** | 4.33 | 6.4× over — softmax face GONE (smKappa op) |
+
+   Op-granularity dropped the three within-block-folding nets 54–64× in one pass, all
+   to within 1–6× of the logit scale. The residual is now PURELY local everywhere: per-op
+   Higham fresh (P2 tree-reduction) × early-block init tail gains (P6 trained ckpt) — no
+   composition, fold, or exponential face left. (CIFAR-8-BN already op-granular ⇒ its 16×
+   is P4 per-channel BN, not P1. ENet/ConvNeXt op-gran = P3, not yet run.)
+
+   Composition is solved at every scale tried — the adjoint chain stays within 1–6×
+   of the logit scale where the interval fold loses 4–140 orders; what remains is
+   local (per-op Higham budgets ⇒ P2, BN channel bookkeeping ⇒ P4, init-vs-trained
+   gains ⇒ P6).
 
 ## Session artifacts (scratchpad, 2026-07-04)
 
