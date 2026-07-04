@@ -7042,20 +7042,25 @@ def vitTinyImagenet : NetSpec where
     .dense 192 1000 .identity            -- 1000-class head
   ]
 
--- 2. DeiT recipe: AdamW, cosine, the augmentation suite, grad clipping.
+-- 2. Full DeiT-Ti recipe: AdamW, cosine, the aug suite, stochastic depth, EMA.
 def vitTinyImagenetConfig : TrainConfig where
-  learningRate   := 5e-4            -- proper DeiT batch-512 LR
-  batchSize      := 512
-  epochs         := 80
-  useAdam        := true            -- AdamW (decoupled weight decay)
-  weightDecay    := 0.05
-  cosineDecay    := true
-  warmupEpochs   := 5
-  labelSmoothing := 0.1
-  gradClipNorm   := 1.0             -- the unlock for the 5e-4 LR (see below)
-  useMixup       := true            -- DeiT aug: mixup + cutmix alternate
-  useCutmix      := true
-  bf16           := true            -- bf16 matmul compute
+  learningRate      := 5e-4          -- proper DeiT batch-512 LR
+  batchSize         := 512
+  epochs            := 300           -- full DeiT-Ti schedule
+  useAdam           := true          -- AdamW (decoupled weight decay)
+  weightDecay       := 0.05
+  wdExcludeNormBias := true          -- no_weight_decay: skip norm/bias/pos-embed/CLS
+  cosineDecay       := true
+  warmupEpochs      := 5
+  labelSmoothing    := 0.1
+  gradClipNorm      := 1.0           -- the unlock for the 5e-4 LR (see below)
+  useMixup          := true          -- Mixup alpha 0.8
+  useCutmix         := true          -- CutMix alpha 1.0 (alternates with Mixup)
+  useRandAugment    := true          -- rand-m9-mstd0.5-inc1 (color + geometric)
+  randomErasing     := true          -- Random-Erase p 0.25
+  dropPath          := 0.1           -- stochastic depth (linear 0 -> 0.1)
+  useEMA            := true          -- model EMA decay 0.99996 (eval on shadow)
+  bf16              := true          -- bf16 matmul compute
 
 -- 3. Same .train entry point as every other chapter.
 def main (args : List String) : IO Unit :=
@@ -7094,7 +7099,15 @@ $\mathbf{1.48\times}$ faster per step than fp32 ($176$ vs $260$\,ms
 steady-state) --- a smaller multiple than the convnet's
 $1.6\times$, since ViT-Tiny's matmuls are narrow (embed $192$) and
 spend proportionally more time in the fp32 LayerNorm/softmax that
-bf16 leaves untouched. The run:
+bf16 leaves untouched. On the ROCm box the effect is
+\emph{larger}, not smaller: RDNA3's matmul units (WMMA) give bf16 a
+$\mathbf{2.75\times}$ compute speedup on the full ViT-Tiny step
+($428 \to 156$\,ms for forward + backward + AdamW at batch
+$256$/GPU), diluting to ${\sim}2\times$ end-to-end once the fp32
+LayerNorm/softmax and the tfds pipeline fold back in. The convnets
+see no such lift on gfx1100 --- MIOpen's bf16 convolution is no
+faster than fp32 there --- but ViT is all matmul, so the win is
+real. The runs:
 
 \begin{center}
 \begin{tabular}{l l r r r r r}
@@ -7104,32 +7117,23 @@ GPU & Precision & Per epoch & Epochs & Wall-clock & Val top-1 & Val top-5 \\
 4$\times$ 4060 Ti (CUDA) & fp32 & $\sim$11.1 min & 80 & $\sim$15 hr & --- & --- \\
 4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 80 & $\sim$11 hr & $\mathbf{65.64\%}$ & $\mathbf{87.06\%}$ \\
 4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 300 & $\sim$41 hr & --- & --- \\
-2$\times$ 7900 XTX (ROCm) & fp32 & --- & 300 & $\sim$51 hr & --- & --- \\
+2$\times$ 7900 XTX (ROCm) & bf16 & $\sim$10 min & 300 & $\sim$50 hr & $\mathbf{70.28\%}$ & $\mathbf{90.05\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent (The fp32 row is throughput-only --- steady-state
-ms/step measured over a few hundred steps, projected to 80 epochs;
-only the 80-epoch bf16 configuration was trained to completion. The
-300-epoch row is a linear projection of that wall-clock, not yet
-run. bf16 does not cost final accuracy here.)
-
-\noindent\textbf{[TODO: 300 epoch run]}
-
-\noindent\textbf{[TODO: geo ra (wired, needs to be hooked up),
-stochastic depth (needs to be scoped), repeated augmentation (needs
-to be scoped)]}
-
-The 80-epoch run reached $\mathbf{65.64\%}$ top-1 /
-$\mathbf{87.06\%}$ top-5 on the full 50{,}000-image validation
-split. That is below the ${\sim}72\%$ ViT-Tiny is capable of --- but
-that headline is a \emph{300-epoch} DeiT result with the full
-distillation-free recipe; at 80 epochs, ${\sim}66\%$ is the
-expected band, and the point here is the pipeline (proven attention
-backward $\to$ DeiT recipe $\to$ stable bf16 training to a sensible
-ImageNet number), not a SOTA chase. The validation curve shows the
-familiar shape --- fast climb through warmup, a long middle, a
+The full 300-epoch DeiT-Ti recipe reached $\mathbf{70.28\%}$ top-1 /
+$\mathbf{90.05\%}$ top-5 on the full 50{,}000-image validation split
+--- up from the 80-epoch ancestor's $65.64\%$ / $87.06\%$. That lands
+within ${\sim}2$ points of the ${\sim}72\%$ ViT-Tiny is capable of; the
+remaining gap is the one recipe knob still left on the table (repeated
+augmentation) plus two minor deviations (strict Mixup/CutMix alternation
+instead of a random switch, and Random-Erase to zero rather than to
+noise). The headline is a \emph{300-epoch} DeiT result with the full
+distillation-free recipe, and the point here is the pipeline (proven
+attention backward $\to$ DeiT recipe $\to$ stable bf16 training to a
+sensible ImageNet number), not a SOTA chase. The validation curve shows
+the familiar shape --- fast climb through warmup, a long middle, a
 final lift as the cosine schedule anneals to zero:
 
 \begin{center}
@@ -7137,33 +7141,48 @@ final lift as the cosine schedule anneals to zero:
 \begin{axis}[
     width=0.92\linewidth, height=6.5cm,
     xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=81, ymin=0, ymax=95,
-    xtick={0,10,20,30,40,50,60,70,80},
+    xmin=0, xmax=301, ymin=0, ymax=95,
+    xtick={0,50,100,150,200,250,300},
     ytick={20,40,60,80},
     legend pos=south east,
     legend cell align={left},
     grid=major, grid style={gray!18},
     tick label style={font=\small},
     label style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
+    every axis plot/.append style={line width=1pt, mark size=0.8pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,1.79) (2,4.78) (3,7.20) (4,10.64) (5,15.34) (6,20.05) (7,24.64) (8,28.83) (13,40.52) (14,41.53) (15,43.21) (16,44.33) (20,47.87) (21,49.00) (22,49.64) (23,50.11) (24,50.27) (30,53.26) (34,55.10) (35,55.70) (36,56.27) (37,56.34) (38,56.64) (46,59.11) (52,60.78) (53,61.25) (61,63.37) (69,64.76) (73,65.40) (74,65.47) (75,65.53) (78,65.66) (79,65.67) (80,65.68)
+(5,1.40) (10,6.82) (15,15.02) (20,24.81) (25,33.47) (30,40.08) (35,45.02) (40,48.33) (45,50.57) (50,52.47) (55,53.99) (60,55.23) (65,56.29) (70,57.00) (75,57.59) (80,58.27) (85,58.88) (90,59.32) (95,59.77) (100,60.26) (105,60.63) (110,61.07) (115,61.56) (120,61.95) (125,62.51) (130,62.86) (135,63.18) (140,63.59) (145,63.81) (150,64.08) (155,64.39) (160,64.77) (165,65.15) (170,65.43) (175,65.74) (180,66.00) (185,66.30) (190,66.60) (195,66.81) (200,67.03) (205,67.32) (210,67.55) (215,67.80) (220,68.02) (225,68.25) (230,68.51) (235,68.80) (240,68.97) (245,69.15) (250,69.36) (255,69.53) (260,69.62) (265,69.75) (270,69.86) (275,69.98) (280,70.11) (285,70.24) (290,70.26) (295,70.29) (300,70.28)
 };
 \addlegendentry{top-1}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,6.43) (2,13.98) (3,19.60) (4,26.20) (5,33.91) (6,41.79) (7,47.63) (8,53.16) (13,66.33) (14,67.47) (15,68.91) (16,69.56) (20,73.48) (21,74.21) (22,74.73) (23,75.47) (24,75.40) (30,77.91) (34,79.37) (35,80.08) (36,80.54) (37,80.66) (38,80.86) (46,82.49) (52,83.88) (53,84.03) (61,85.50) (69,86.54) (73,86.97) (74,86.95) (75,87.04) (78,87.07) (79,87.08) (80,87.08)
+(5,5.08) (10,18.23) (15,33.13) (20,47.34) (25,58.43) (30,65.54) (35,70.40) (40,73.52) (45,75.76) (50,77.35) (55,78.42) (60,79.38) (65,80.16) (70,81.00) (75,81.57) (80,81.98) (85,82.37) (90,82.78) (95,83.21) (100,83.48) (105,83.89) (110,84.20) (115,84.62) (120,84.95) (125,85.22) (130,85.39) (135,85.71) (140,85.99) (145,86.20) (150,86.39) (155,86.57) (160,86.79) (165,87.01) (170,87.17) (175,87.33) (180,87.53) (185,87.69) (190,87.84) (195,87.96) (200,88.15) (205,88.34) (210,88.49) (215,88.71) (220,88.87) (225,88.97) (230,89.05) (235,89.19) (240,89.28) (245,89.44) (250,89.51) (255,89.63) (260,89.67) (265,89.75) (270,89.77) (275,89.85) (280,89.88) (285,89.96) (290,90.00) (295,89.98) (300,90.05)
 };
 \addlegendentry{top-5}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent ViT-Tiny / ImageNet-1k validation accuracy per epoch
-(bf16, 4$\times$ 4060 Ti; sampled across the run, which was resumed
-from per-epoch checkpoints five times when the host's PCIe links
-threw transient errors under load --- the checkpoint/resume harness
-absorbed each without a lost epoch).
+\noindent ViT-Tiny / ImageNet-1k validation accuracy per epoch (bf16,
+2$\times$ RX 7900 XTX, ROCm; sampled every 5 epochs across the 300-epoch
+run).
+
+\textbf{Distance to the paper.} DeiT-Ti reaches $72.2\%$ without
+distillation; our $70.28\%$ is ${\sim}2$ points short, and the
+accounting is mundane. The largest single item is \emph{repeated
+augmentation} --- DeiT samples each image in a batch three times
+under different augmentations, which disproportionately helps the
+data-hungry tiny models; our pipeline does not, and it is the
+obvious next lever. The rest is augmentation-fidelity drift --- our
+RandAugment, RandomResizedCrop, and Random-Erasing are a
+from-scratch \texttt{tf.data} reimplementation rather than timm's
+exact code --- plus a few small knobs (batch $512$ vs.\ $1024$, the
+gradient clipping we add for stability, Random-Erase to zero rather
+than to noise). None of it is a bug: the loss curve is textbook
+DeiT. The further $+2.3$ points to DeiT-Ti's $74.5\%$ headline are a
+different thing entirely --- the \emph{distillation} variant (a
+second ``distillation token'' trained against a strong CNN teacher),
+which we do not implement.
 
 \subsection*{What Part 1 has established}
 
