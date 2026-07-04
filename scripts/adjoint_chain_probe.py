@@ -2353,6 +2353,286 @@ def vit_probe_residual():
     print(f"  logits magnitude       : {mags(out):.3e}")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# (9) MobileNetV2 — the COMMITTED RENDER (mobilenetv2_fwd_eval.mlir) as-is on
+#     gfx1100 (batch 32 @224², args from its parsed signature: He convs,
+#     γ=1/β=0, batch-calibrated running stats). ENet minus SE with relu6 —
+#     relu6 is EXACT in float (max/min) and 1-Lipschitz, and it CLIPS
+#     activations to [0,6]: no gate, no swish esig, no parallel path. The
+#     architecturally easiest deep net of the ladder.
+# ═══════════════════════════════════════════════════════════════════════════
+def mnv2_probe():
+    import jax
+    import jax.numpy as jnp
+    import re
+    import os
+
+    print("\n" + "═" * 78)
+    print("(9) MobileNetV2 — the COMMITTED render (fwd_eval), gfx1100")
+    print("═" * 78)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mlir = open(os.path.join(
+        root, "verified_mlir/mobilenetv2_fwd_eval.mlir")).read()
+    header = mlir[:mlir.index("{", mlir.index("func.func"))]
+    sig = [(m.group(1), tuple(int(d) for d in m.group(2).split("x")[:-1]))
+           for m in re.finditer(r"%(\w+): tensor<([^>]+)>", header)]
+
+    dt = np.float64
+    mags = lambda a: float(np.abs(a).max())
+    # (ic, mid, oc, stride) — full-paper [t,c,n,s]; strides verified against
+    # the render's s2 convs (stem, b2d, b4d, b7d, b14d)
+    cfg = [(32, 32, 16, 1),
+           (16, 96, 24, 2), (24, 144, 24, 1),
+           (24, 144, 32, 2), (32, 192, 32, 1), (32, 192, 32, 1),
+           (32, 192, 64, 2), (64, 384, 64, 1), (64, 384, 64, 1),
+           (64, 384, 64, 1),
+           (64, 384, 96, 1), (96, 576, 96, 1), (96, 576, 96, 1),
+           (96, 576, 160, 2), (160, 960, 160, 1), (160, 960, 160, 1),
+           (160, 960, 320, 1)]
+
+    vals = {}
+    for name, shape in sig:
+        if name == "x":
+            vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
+        elif name.endswith("nmu") or name.endswith("nvar"):
+            vals[name] = None
+        elif len(shape) == 4:
+            fan = shape[1] * shape[2] * shape[3]
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / fan) ** 0.5).astype(np.float32)
+        elif len(shape) == 2:
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+        elif name.endswith("g"):
+            vals[name] = np.ones(shape, np.float32)
+        elif name.endswith("bt"):
+            vals[name] = np.zeros(shape, np.float32)
+        else:
+            vals[name] = (rng.standard_normal(shape) * 0.01).astype(np.float32)
+
+    GAMMA = lambda t: {"st": "sg", "h": "hg"}.get(t, t + "g")
+    BETA = lambda t: {"st": "sbt", "h": "hbt"}.get(t, t + "bt")
+
+    def bn_eval(z, tag):
+        mu = vals[tag + "nmu"].astype(z.dtype)
+        var = vals[tag + "nvar"].astype(z.dtype)
+        g = vals[GAMMA(tag)].astype(z.dtype)
+        bt = vals[BETA(tag)].astype(z.dtype)
+        istd = 1.0 / np.sqrt(var + 1e-5)
+        return (z - mu[None, :, None, None]) * (istd * g)[None, :, None, None] \
+            + bt[None, :, None, None]
+
+    def calib(tag, z):
+        if vals[tag + "nmu"] is None:
+            vals[tag + "nmu"] = z.mean(axis=(0, 2, 3)).astype(np.float32)
+            vals[tag + "nvar"] = z.var(axis=(0, 2, 3)).astype(np.float32)
+        return bn_eval(z, tag)
+
+    def relu6(x):
+        return np.minimum(np.maximum(x, 0.0), 6.0)
+
+    def bn_gain(tag):
+        g = vals[GAMMA(tag)].astype(dt)
+        istd = 1.0 / np.sqrt(vals[tag + "nvar"].astype(dt) + 1e-5)
+        return float(np.abs(g * istd).max())
+
+    def bn_fresh(a_eff, A, E):
+        return 5 * U32 * (a_eff * (A + E) + A) + a_eff * E
+
+    def conv_budget(x_act, Wname, bname, stride, pad, E, depthwise=False):
+        W = vals[Wname]
+        Wd_ = np.abs(W.astype(dt))
+        if depthwise:
+            sumabs = float(dwconv_np(np.abs(x_act), Wd_, stride, pad,
+                                     dt).max())
+            m = W.shape[2] * W.shape[3]
+        else:
+            sumabs = float(conv_np(np.abs(x_act), Wd_, stride, pad, dt).max())
+            m = W.shape[1] * W.shape[2] * W.shape[3]
+        rowsum = float(Wd_.sum(axis=(1, 2, 3)).max())
+        b = ((1 + U32) ** (m + 2) - 1) * (sumabs + mags(vals[bname])
+                                          + rowsum * E) + rowsum * E
+        return b, rowsum
+
+    def oracle(with_budgets):
+        acts, names, bs_, gs = [], [], [], []
+        x4 = vals["x"].astype(dt).reshape(32, 3, 224, 224)
+        z = conv_np(x4, vals["sW"], 2, 1, dt) \
+            + vals["sb"].astype(dt)[None, :, None, None]
+        zb = calib("st", z)
+        h = relu6(zb)
+        acts.append(h)
+        names.append("stem")
+        if with_budgets:
+            Ec, rs = conv_budget(x4, "sW", "sb", 2, 1, 0.0)
+            a_eff = bn_gain("st")
+            bs_.append(bn_fresh(a_eff, mags(zb), Ec))     # relu6 exact
+            gs.append(a_eff * rs)
+        for i, (ic, mid, oc, s) in enumerate(cfg, start=1):
+            p = f"b{i}"
+            inp = h
+            E, g_blk = 0.0, 1.0
+            if mid != ic:
+                ze = conv_np(h, vals[p + "eW"], 1, 0, dt) \
+                    + vals[p + "eb"].astype(dt)[None, :, None, None]
+                zeb = calib(p + "e", ze)
+                if with_budgets:
+                    Ec, rs = conv_budget(h, p + "eW", p + "eb", 1, 0, E)
+                    a_eff = bn_gain(p + "e")
+                    E = bn_fresh(a_eff, mags(zeb), Ec)
+                    g_blk *= a_eff * rs
+                h = relu6(zeb)
+                del ze, zeb
+            zd = dwconv_np(h, vals[p + "dW"], s, 1, dt) \
+                + vals[p + "db"].astype(dt)[None, :, None, None]
+            zdb = calib(p + "d", zd)
+            if with_budgets:
+                Ec, rs = conv_budget(h, p + "dW", p + "db", s, 1, E,
+                                     depthwise=True)
+                a_eff = bn_gain(p + "d")
+                E = bn_fresh(a_eff, mags(zdb), Ec)
+                g_blk *= a_eff * rs
+            ds = relu6(zdb)
+            del zd, zdb, h
+            zp = conv_np(ds, vals[p + "pW"], 1, 0, dt) \
+                + vals[p + "pb"].astype(dt)[None, :, None, None]
+            h2 = calib(p + "p", zp)
+            if with_budgets:
+                Ec, rs = conv_budget(ds, p + "pW", p + "pb", 1, 0, E)
+                a_eff = bn_gain(p + "p")
+                E = bn_fresh(a_eff, mags(h2), Ec)
+                g_blk *= a_eff * rs
+            del ds, zp
+            if ic == oc and s == 1:
+                h2 = h2 + inp
+                if with_budgets:
+                    E = E + U32 * mags(h2)
+                    g_blk += 1.0
+            h = h2
+            del inp
+            acts.append(h)
+            names.append(f"block{i}" + ("↓" if s == 2 else ""))
+            if with_budgets:
+                bs_.append(E)
+                gs.append(g_blk)
+        zh = conv_np(h, vals["hW"], 1, 0, dt) \
+            + vals["hb"].astype(dt)[None, :, None, None]
+        zhb = calib("h", zh)
+        if with_budgets:
+            Ec, rs = conv_budget(h, "hW", "hb", 1, 0, 0.0)
+            a_eff = bn_gain("h")
+            bs_.append(bn_fresh(a_eff, mags(zhb), Ec))
+            gs.append(a_eff * rs)
+        h = relu6(zhb)
+        acts.append(h)
+        names.append("head conv")
+        g = h.mean(axis=(2, 3))
+        acts.append(g)
+        names.append("gap")
+        if with_budgets:
+            A_h = mags(h)
+            bs_.append(U32 * (1 + U32) ** 50 * A_h
+                       + ((1 + U32) ** 50 - 1) * A_h)
+            gs.append(1.0)
+        out = g @ vals["Wd"].astype(dt) + vals["bd"].astype(dt)
+        acts.append(out)
+        names.append("dense (logits)")
+        if with_budgets:
+            sumabs_h = float((np.abs(g) @ np.abs(vals["Wd"].astype(dt))).max())
+            bs_.append(((1 + U32) ** (1280 + 2) - 1)
+                       * (sumabs_h + mags(vals["bd"])))
+            gs.append(float(np.abs(vals["Wd"].astype(dt)).sum(axis=0).max()))
+        return acts, names, bs_, gs
+
+    oracle(False)
+    acts, names, bs_, gs = oracle(True)
+    out = acts[-1]
+    H_prov = [float(np.prod(gs[i + 1:])) for i in range(len(gs))]
+
+    out_g = run_iree(mlir, [vals[n] for n, _ in sig],
+                     fn="mobilenetv2_fwd_eval",
+                     module_name="m").astype(np.float64)
+    true_err = float(np.abs(out_g - out).max())
+
+    # ── measured tail gains (f32, per-sample — eval BN, no coupling) ───────
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def jbn(z, tag):
+        istd = 1.0 / jnp.sqrt(jx(vals[tag + "nvar"]) + 1e-5)
+        return (z - jx(vals[tag + "nmu"])[None, :, None, None]) \
+            * (istd * jx(vals[GAMMA(tag)]))[None, :, None, None] \
+            + jx(vals[BETA(tag)])[None, :, None, None]
+
+    def jrelu6(x):
+        return jnp.minimum(jnp.maximum(x, 0.0), 6.0)
+
+    def jconv(a, W, s, p, groups=1):
+        return jax.lax.conv_general_dilated(
+            a, W, (s, s), ((p, p), (p, p)),
+            dimension_numbers=('NCHW', 'OIHW', 'NCHW'),
+            feature_group_count=groups)
+
+    def stage_fns():
+        fns = []
+        for i, (ic, mid, oc, s) in enumerate(cfg, start=1):
+            p = f"b{i}"
+
+            def bf(a, p=p, ic=ic, mid=mid, oc=oc, s=s):
+                inp = a
+                if mid != ic:
+                    a = jrelu6(jbn(jconv(a, jx(vals[p + "eW"]), 1, 0)
+                                   + jx(vals[p + "eb"])[None, :, None, None],
+                                   p + "e"))
+                a = jrelu6(jbn(jconv(a, jx(vals[p + "dW"]), s, 1, groups=mid)
+                               + jx(vals[p + "db"])[None, :, None, None],
+                               p + "d"))
+                a = jbn(jconv(a, jx(vals[p + "pW"]), 1, 0)
+                        + jx(vals[p + "pb"])[None, :, None, None], p + "p")
+                return a + inp if (ic == oc and s == 1) else a
+            fns.append(bf)
+        fns.append(lambda a: jrelu6(jbn(
+            jconv(a, jx(vals["hW"]), 1, 0)
+            + jx(vals["hb"])[None, :, None, None], "h")))
+        fns.append(lambda a: a.mean(axis=(2, 3)))
+        fns.append(lambda a: a @ jx(vals["Wd"]) + jx(vals["bd"]))
+        return fns
+
+    fns = stage_fns()
+    H_meas = []
+    for i in range(len(acts) - 1):
+        aout = acts[i]
+        gain = 0.0
+        for smp in range(2):
+            a1 = jx(aout[smp:smp + 1])
+
+            def tail(aa, i=i):
+                for f in fns[i:]:
+                    aa = f(aa)
+                return aa[0]
+            J = jax.jacrev(tail)(a1)
+            gain = max(gain, float(jnp.abs(J.reshape(10, -1))
+                                   .sum(axis=1).max()))
+        H_meas.append(gain)
+    H_meas.append(1.0)
+
+    cb_meas = sum(H * b for H, b in zip(H_meas, bs_))
+    cb_prov = sum(H * b for H, b in zip(H_prov, bs_))
+    print(f"\n{'stage':<16}{'fresh b_i':>12}{'H_i meas':>11}{'H_i·b_i':>11}"
+          f"{'H_i proven':>13}")
+    for name, b, Hm, Hp in zip(names, bs_, H_meas, H_prov):
+        print(f"{name:<16}{b:>12.3e}{Hm:>11.3e}{Hm * b:>11.3e}{Hp:>13.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget measured-H: {cb_meas:.3e}  "
+          f"({cb_meas / true_err:.1e}× true)")
+    print(f"  chainBudget proven-H  : {cb_prov:.3e}  "
+          f"({cb_prov / true_err:.1e}× true)   [= the interval fold]")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+    print("\n  THE COMMITTED RENDER (verified_mlir/mobilenetv2_fwd_eval.mlir)")
+    print("  run as-is on gfx1100; relu6 is exact/1-Lipschitz and clips to")
+    print("  [0,6] — no SE, no swish: the easiest deep net of the ladder.")
+
+
 def main():
     print("═" * 78)
     print("adjoint-chain probe — chain_adjointClose budget vs real gfx1100 drift")
@@ -2435,3 +2715,4 @@ if __name__ == "__main__":
     convnext_probe()
     vit_probe()
     vit_probe_residual()
+    mnv2_probe()

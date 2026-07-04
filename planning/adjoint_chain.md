@@ -1,8 +1,90 @@
 # Adjoint chain: depth-linear float composition (option-2 of the scaling question)
 
-Status 2026-07-04: **v1 LANDED (uncommitted)** — `LeanMlir/Proofs/AdjointChainBridge.lean`
-(3-axiom clean, registered in `tests/AuditAxioms.lean`) + `scripts/adjoint_chain_probe.py`
-(the MEASURED-tier discharge artifact, validated on gfx1100).
+Status 2026-07-04 end-of-session: **everything below through probe §8b committed**
+(`1cc69d8`..`301c3d4`: `AdjointChainBridge.lean` + `GeluLipschitz.lean` +
+`AdjointChainResidual.lean`, all 3-axiom clean, audit at 1302 entries; probe §1–§8b);
+**§9 (mnv2) + this handoff section uncommitted**. Full ladder + findings log below.
+
+## ═══ NEXT SESSION: the closure plan (get every net under its logit scale) ═══
+
+Current scoreboard (adjoint chainBudget vs logit magnitude, committed renders on
+gfx1100 unless noted): MLP-24 **✓ 0.8/21** · CIFAR-8 **✓ 2.6/4.6** · MNIST-CNN 4.1/0.38
+· CIFAR-8-BN 51/3.2 (16×) · mnv2 71/0.99 (72×) · r34-twin 698/3.6 (200×) · ViT-chain2
+1.5e3/4.3 (350×) · ENet 6.8e4/1.3 (5e4×) · ConvNeXt 3.2e6/2.9 (1e6×). Composition and
+parallel paths are SOLVED (`chain_adjointClose` + `chain2_adjointClose`); every
+remaining gap is a local worst-case face. Two structural moves plausibly close almost
+everything:
+
+**P1 — OP-GRANULARITY chain2 sweep (probe §10; biggest single step).** The dominant
+residual on every deep net is the WITHIN-block fold: per-block fresh budgets pay
+(conv/dense row-sum × BN/LN fresh) products because ops inside a block are interval-
+folded. But `chain2` makes within-block folding unnecessary: cut the chain at EVERY op
+(each conv+bnE, each LN, each dense its own stage; skips carried as chain2 streams,
+exactly the §8b pattern). Then each op's fresh budget is a bare single-op Higham term
+(~1e-4..1e-2) meeting a measured tail gain directly — no row-sum products anywhere.
+Back-of-envelope: r34 ≈ 36 ops × (1e-3 × H≈10-100) ≈ O(1-10) — from 698. Expected to
+close r34, mnv2, CIFAR-8-BN, and pull ViT close. Mechanical probe restructure (the §8b
+machinery generalizes: stages already just lists of fns + budgets); no new Lean needed
+(chain2 covers it).
+
+**P2 — the TREE-REDUCTION quarantine (small Lean + probe toggle; closes the two
+"impossible" faces).** MNIST-CNN's fan-in-6272 dot budget and ConvNeXt's n=301056
+scalar-LN mean/var face are irreducible at PROVEN tier because StableHLO `reduce`
+has unspecified association ⇒ the sound any-order bound is Higham n·u. But IREE lowers
+reductions as balanced trees: a `dot_close_tree` lemma family (error ≤ ((1+u)^{⌈log₂n⌉+2}−1)·Σ|xy|,
+proven for the balanced-tree evaluation order) + ONE quarantined assumption "the
+deployed reduce is order-balanced" (TRUSTED-boundary style, validated by
+`kernel_faithfulness_probe` which already shows real kernels sit 20-10⁴× inside even
+the sequential bound) turns n·u into log₂n·u: fan-in 6272 ÷ ~500 (closes MNIST-CNN:
+4.1 → ~0.01 vs 0.38), n=301056 ÷ ~16000 (closes ConvNeXt's LN face; gelu already flat).
+Lean shape: a `dotTree`/`sumTree` model + `dot_close` twin — same Higham algebra on a
+different recursion; est. 100-200 lines. Benefits EVERY conv/dense fresh budget too.
+
+**P3 — ENet SE chain2 split (probe §6b; mechanical).** Verbatim §8b pattern: stage A =
+(h, SE gate logits) with stream at b=0; stage B applies σ to an EXACT chain input
+(fresh = esig) and scales. Kills the ~×100/block within-block SE face; expected
+6.8e4 → mnv2-class O(1e2). Combine with P1 in the same pass.
+
+**P4 — per-channel BN budgets for CIFAR-8-BN (probe edit; small).** §4 still takes
+D/S/istd-floor as maxes/mins over ALL channels — one low-variance channel poisons the
+stage (bn1+bn2 = 45 of the 51). Pair each channel's D with its own floor (verbatim
+the per-token LN fix from §8, which the Lean `bnPerChannel`/`perRowFlat` machinery
+already licenses). Expected 51 → O(5-15); combined with P1 likely ✓.
+
+**P5 — the PROVEN capstone: end-to-end Lean instantiation on CIFAR-8.** Numerically
+certified already (2.6 < 4.6); assemble it in Lean: `chain_adjointClose` instantiated
+at the committed cifar8 layers — per-stage `LayerCert`s from the existing FloatClose
+instances (`LayerCert.of_floatClose`), measured tail gains supplied as NAMED
+HYPOTHESES with provenance (the esig/egelu quarantine pattern, constants from probe
+§3), magnitude window from the measured profile. Deliverable: `Cifar8ChainCert.lean` —
+the first whole-net float certificate as a Lean theorem. Template for the rest.
+
+**P6 — trained-weight gains (background run).** All gains are at-init; early tail
+gains dominate several nets (stem 7.7e3 on mnv2, 2.2e3 on r34, block0 ≈ 600 on ViT).
+`.lake/build/resnet34_adam_ckpt.bin` (272MB, layout `ResNet34Layout.specs`, params +
+adam m/v + running stats) is on disk — parse, load into §5, re-measure. If trained
+gains drop ~10× (plausible: BN calibation + feature averaging), r34/mnv2 close from
+gains alone.
+
+Fresh-session infra notes (hard-won):
+- Run everything from `scripts/` under `jax/.venv` (`HIP_VISIBLE_DEVICES=0`, python -u,
+  nohup + log; full probe = `python adjoint_chain_probe.py`, per-section =
+  `python -c "import adjoint_chain_probe as p; p.<section>_probe()"`).
+- Committed renders are `module @m` ⇒ `run_iree(..., module_name="m")`; fn name =
+  `@<slug>_fwd[_eval]`. Args parse from the func signature; init by name convention
+  (He / γ=ones / β,bias,cls,pos=zeros — matches `IreeRuntime.lean` initKinds).
+- §1–§4 pin jax to CPU globally — run §5+ standalone for GPU gains, or last in main().
+- Shared RNG stream ⇒ per-section numbers shift when run standalone vs full-script;
+  conclusions don't. Suffix products overflow float64 on ViT/ConvNeXt — log10-space
+  (see §8).
+- Lean iteration: scratch file importing the cached olean (`lake env lean file.lean`,
+  seconds); `lake build LeanMlir.Proofs.<Mod>`; audit closure was fully built this
+  session — `lake env lean tests/AuditAxioms.lean` elaborates in ~2min, expect 1302
+  clean entries (+ new ones).
+- Mathlib names that bit: `abs_add_le` (not abs_add), `pow_le_pow_left₀`,
+  `Convex.norm_image_sub_le_of_norm_deriv_le`, `Real.sum_le_exp_of_nonneg`,
+  `Real.pi_le_four` (sufficed for gelu!), `not_le` + explicit `have`s over inline
+  `(by ...)` args when implicits must resolve.
 
 ## The problem this solves
 
@@ -287,6 +369,22 @@ dense/relu/softmax.
    A/B split applies verbatim to ENet's SE gate (stage A = gate logits, stream
    carry) — the mechanical follow-up expected to collapse §6's 5e4 similarly.
 
+   **MobileNetV2 (probe §9, 2026-07-04): the committed render
+   (`verified_mlir/mobilenetv2_fwd_eval.mlir`) as-is on gfx1100 — ENet minus SE with
+   relu6 (exact in float, 1-Lipschitz, clips to [0,6]), and it shows:**
+
+   | | true GPU logits drift | logits magnitude | chainBudget measured-H | chainBudget proven-H |
+   |---|---|---|---|---|
+   | MobileNetV2 (committed render) | 1.2e-05 | 0.99 | **7.1e+01** (6.1e6×) | 2.7e+60 (2.3e65×) |
+
+   The best deep-net adjoint result of the ladder (absolute budget 10× below r34's
+   despite 17 blocks + BN): per-block H·b flat at 0.7–15 across all 17 inverted
+   residuals, no parallel-path faces, no swish esig, eval-BN affine. 72× over the
+   logit scale — the residual is entirely the familiar per-block conv-Higham ×
+   BN-affine-gain products plus large-but-decaying early tail gains at init
+   (stem 7.7e3 → 9). Confirms the regime rule: remove the named worst-case faces
+   and a 20-stage BN-CNN at 224² sits within two orders of a real certificate.
+
    **Ladder summary (all on gfx1100, logits-scale certificates):**
 
    | net | stages | interval fold | adjoint chain | logit scale | verdict |
@@ -301,6 +399,7 @@ dense/relu/softmax.
    | ConvNeXt-T + `gelu_lipschitz` (3/2 gain) | 25 | 2.8e+113 | 3.2e+06 | 2.9 | 1e6× over (scalar-LN only) |
    | ViT-Tiny @224² (committed render) | 15 | ~1e+364 | 1.6e+16 | 4.3 | softmax-exponent-in-block (needs the residual-carrying sub-block combinator) |
    | ViT-Tiny + residual combinator (chain2) | 39 | — | **1.5e+03** | 4.3 | 350× over — r34-class; exponential faces gone |
+   | MobileNetV2 @224² (committed render) | 20 | 2.7e+60 | **7.1e+01** | 0.99 | 72× over — best deep-net row; no named faces left |
 
    Composition is solved at every scale tried — the adjoint chain stays within 1–3
    orders of the logit scale where the interval fold loses 4–51 orders; what remains is
