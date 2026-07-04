@@ -6,7 +6,8 @@ adjoint-chain + gelu + P1 op-granularity §10–§12 + P4 + P2 `TreeReduceBridge
 P5 (`Cifar8ChainCert.lean` + this handoff) uncommitted.** **THE WHOLE LADDER IS
 CERTIFIED: mnv2 (0.30), r34 (0.17), ViT (0.57), ENet (0.096), ConvNeXt (0.80) all below
 their logit scales; cifar8-bn at threshold (1.1×). P6 confirms it HOLDS on the real
-90.7%-accurate trained r34 (0.41 < 3.8). P5 makes it a Lean THEOREM
+trained net across ALL FIVE architectures (r34/mnv2/enet/ViT/ConvNeXt, every one
+certified — the pass is complete). P5 makes it a Lean THEOREM
 (`cifar8_chain_argmaxSafe`: binary32 rounding cannot flip the CIFAR-8 prediction, 3-axiom
 clean). P2 also certifies MNIST-CNN (fan-in-6272 dot → ⌈log₂⌉=13: 5.2 → 0.015 < 0.64).
 EVERY net on the ladder is now certified.** Full ladder + findings below.
@@ -199,27 +200,29 @@ their (under-trained, epoch-1 verified) accuracies (ViT 40.6% = log's 39.7%; Con
 |---|---|---|---|---|---|---|
 | ResNet-34 | BN-CNN | 0.17 | **0.41** | 3.4 | 0.11× | ↑ (He-init, fresh grows) |
 | MobileNetV2 | BN-CNN | 0.30 | **0.135** | 4.2 | 0.03× | ↓ (pathological stem gain removed) |
+| EfficientNet-B0 | BN-CNN + SE | 0.096 | **0.028** | 4.2 | 0.007× | ↓ (large logits + gains drop) |
 | ViT-Tiny | transformer | 0.57 | **0.22** | 4.5 | 0.05× | ↓ (zero-init patch removed) |
 | ConvNeXt-T | LN-CNN | 0.80 | **1.10** | 3.9 | 0.28× | ↑ (fresh grows) |
 
 **Bottom line: the whole-net float certificate is NOT an at-init artifact — it holds on
-the real trained net across BN-CNN, transformer, and LN-CNN (4 nets).** The DIRECTION of
-change is net-dependent, and the mechanism is now clear: where the at-init net has a
-PATHOLOGICAL init component, training removes it and the certificate TIGHTENS — ViT's
-zero-init cls/pos/patch (tail gain 1.7e4 → 2724, 0.57 → 0.22) and mnv2's huge He-init
-stem tail gain (7.7e3) plus its confident trained logits (0.99 → 4.24) give 0.30 → 0.135;
-where init is clean and the logit scale doesn't move much, training's larger weights +
-real deep activations grow the per-op fresh Higham faster than the tail gains drop, so it
-loosens slightly (r34, ConvNeXt) — but always well within the logit scale. **mnv2 gotcha
-(chased 2026-07-04):** its resume ckpt is `3×(nP+1120)` because the CHECKPOINT keeps
-block-1's `t=1` expand (32×32 conv + 3×32 = 1120) while the render/`MobileNetV2Layout.
-specs` OMIT it — skip those 1120 floats after the stem and every BN γ reads ~1. (That
-expand is a real trained conv, `‖W−I‖=1.68`, so the ckpt is a FULL-mnv2 trainer's, not
-the skip-expand verified net's; mapping onto the committed render gates at 60.9% not
-86.8% — a trained operating point, block-1 expand dropped. The tail-gain conclusion holds
-regardless.) One net remains: **enet** (SE-DAG + BN — ckpt clean `3×nP`; the frozen-stats
-gate needs the SE true-BN forward). Same architecture class as r34/mnv2; documented
-follow-up.
+the real trained net across ALL FIVE architectures (BN-CNN ×2, BN-CNN+SE, transformer,
+LN-CNN), every one certified.** The DIRECTION of change is net-dependent, and the
+mechanism is now clear: where the at-init net has a PATHOLOGICAL init component, training
+removes it and the certificate TIGHTENS — ViT's zero-init cls/pos/patch (tail gain
+1.7e4 → 2724, 0.57 → 0.22), mnv2's huge He-init stem tail gain (7.7e3) + confident trained
+logits (0.99 → 4.24: 0.30 → 0.135), enet's likewise (large logits + gains drop:
+0.096 → 0.028, the widest margin of the pass); where init is clean and the logit scale
+doesn't move much, training's larger weights + real deep activations grow the per-op
+fresh Higham faster than the tail gains drop, so it loosens slightly (r34, ConvNeXt) —
+but always well within the logit scale. Gates faithful in every case (r34 90.6%,
+enet 93.8%, mnv2 60.9%*, ViT 40.6%, ConvNeXt 37.5% — the last two are under-trained
+epoch-1 verified ckpts, faithfully reproduced). **mnv2 gotcha (chased 2026-07-04):** its
+resume ckpt is `3×(nP+1120)` because the CHECKPOINT keeps block-1's `t=1` expand (32×32
+conv + 3×32 = 1120) while the render/`MobileNetV2Layout.specs` OMIT it — skip those 1120
+floats after the stem and every BN γ reads ~1. (*That expand is a real trained conv,
+`‖W−I‖=1.68`, so the ckpt is a FULL-mnv2 trainer's, not the skip-expand verified net's;
+mapping onto the committed render gates 60.9%, not 86.8% — a trained operating point,
+block-1 expand dropped. The conclusion holds regardless.) The P6 pass is COMPLETE.
 
 Fresh-session infra notes (hard-won):
 - Run everything from `scripts/` under `jax/.venv` (`HIP_VISIBLE_DEVICES=0`, python -u,

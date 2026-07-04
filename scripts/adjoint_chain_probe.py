@@ -4026,7 +4026,7 @@ def convnext_probe_ops(tree_reduce=False, weights=None):
 #     bakes its sibling branch (main-path ops recompute the full SE from ds;
 #     gate-path ops bake ds and recompute only the gate) — the r34/ViT pattern.
 # ═══════════════════════════════════════════════════════════════════════════
-def enet_probe_ops(tree_reduce=False):
+def enet_probe_ops(tree_reduce=False, weights=None):
     import jax
     import jax.numpy as jnp
     import re
@@ -4056,25 +4056,28 @@ def enet_probe_ops(tree_reduce=False):
            (192, 1152, 192, 48, 5, 1), (192, 1152, 192, 48, 5, 1),
            (192, 1152, 320, 48, 3, 1)]
 
-    vals = {}
-    for name, shape in sig:
-        if name == "x":
-            vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
-        elif name.endswith("nmu") or name.endswith("nvar"):
-            vals[name] = None
-        elif len(shape) == 4:
-            fan = shape[1] * shape[2] * shape[3]
-            vals[name] = (rng.standard_normal(shape)
-                          * (2.0 / fan) ** 0.5).astype(np.float32)
-        elif len(shape) == 2:
-            vals[name] = (rng.standard_normal(shape)
-                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
-        elif name.endswith("g"):
-            vals[name] = np.ones(shape, np.float32)
-        elif name.endswith("bt"):
-            vals[name] = np.zeros(shape, np.float32)
-        else:
-            vals[name] = (rng.standard_normal(shape) * 0.01).astype(np.float32)
+    if weights is not None:                # P6: injected TRAINED weights + input
+        vals = weights
+    else:
+        vals = {}
+        for name, shape in sig:
+            if name == "x":
+                vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
+            elif name.endswith("nmu") or name.endswith("nvar"):
+                vals[name] = None
+            elif len(shape) == 4:
+                fan = shape[1] * shape[2] * shape[3]
+                vals[name] = (rng.standard_normal(shape)
+                              * (2.0 / fan) ** 0.5).astype(np.float32)
+            elif len(shape) == 2:
+                vals[name] = (rng.standard_normal(shape)
+                              * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+            elif name.endswith("g"):
+                vals[name] = np.ones(shape, np.float32)
+            elif name.endswith("bt"):
+                vals[name] = np.zeros(shape, np.float32)
+            else:
+                vals[name] = (rng.standard_normal(shape) * 0.01).astype(np.float32)
 
     GAMMA = lambda t: {"st": "sg", "h": "hg"}.get(t, t + "g")
     BETA = lambda t: {"st": "sbt", "h": "hbt"}.get(t, t + "bt")
