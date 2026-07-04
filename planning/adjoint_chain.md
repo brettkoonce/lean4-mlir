@@ -198,21 +198,28 @@ their (under-trained, epoch-1 verified) accuracies (ViT 40.6% = log's 39.7%; Con
 | net | arch | at-init | **TRAINED** | logit scale | over | direction |
 |---|---|---|---|---|---|---|
 | ResNet-34 | BN-CNN | 0.17 | **0.41** | 3.4 | 0.11× | ↑ (He-init, fresh grows) |
+| MobileNetV2 | BN-CNN | 0.30 | **0.135** | 4.2 | 0.03× | ↓ (pathological stem gain removed) |
 | ViT-Tiny | transformer | 0.57 | **0.22** | 4.5 | 0.05× | ↓ (zero-init patch removed) |
 | ConvNeXt-T | LN-CNN | 0.80 | **1.10** | 3.9 | 0.28× | ↑ (fresh grows) |
 
 **Bottom line: the whole-net float certificate is NOT an at-init artifact — it holds on
-the real trained net across CNN/transformer/LN-CNN.** The DIRECTION of change is
-net-dependent, and the mechanism is now clear: where the at-init net has a PATHOLOGICAL
-init component, training removes it and the certificate TIGHTENS (ViT's zero-init
-cls/pos/patch gave a tail gain 1.7e4 → 2724 trained, so 0.57 → 0.22); where init is clean
-He/normal, training's larger weights + real deep activations grow the per-op fresh Higham
-faster than the tail gains drop, so it loosens slightly (r34, ConvNeXt) — but always well
-within the logit scale. Two BN nets remain: **mnv2** (86.8%-trained, but its resume ckpt
-is `3×(nP+1120)` — an unexplained 1120-float offset from `MobileNetV2Layout.specs`; needs
-the exact resume-format layout) and **enet** (SE-DAG + BN — ckpt is clean `3×nP` but the
-frozen-stats gate needs the SE true-BN forward). Both are same-architecture-class as r34;
-documented follow-ups, not blockers.
+the real trained net across BN-CNN, transformer, and LN-CNN (4 nets).** The DIRECTION of
+change is net-dependent, and the mechanism is now clear: where the at-init net has a
+PATHOLOGICAL init component, training removes it and the certificate TIGHTENS — ViT's
+zero-init cls/pos/patch (tail gain 1.7e4 → 2724, 0.57 → 0.22) and mnv2's huge He-init
+stem tail gain (7.7e3) plus its confident trained logits (0.99 → 4.24) give 0.30 → 0.135;
+where init is clean and the logit scale doesn't move much, training's larger weights +
+real deep activations grow the per-op fresh Higham faster than the tail gains drop, so it
+loosens slightly (r34, ConvNeXt) — but always well within the logit scale. **mnv2 gotcha
+(chased 2026-07-04):** its resume ckpt is `3×(nP+1120)` because the CHECKPOINT keeps
+block-1's `t=1` expand (32×32 conv + 3×32 = 1120) while the render/`MobileNetV2Layout.
+specs` OMIT it — skip those 1120 floats after the stem and every BN γ reads ~1. (That
+expand is a real trained conv, `‖W−I‖=1.68`, so the ckpt is a FULL-mnv2 trainer's, not
+the skip-expand verified net's; mapping onto the committed render gates at 60.9% not
+86.8% — a trained operating point, block-1 expand dropped. The tail-gain conclusion holds
+regardless.) One net remains: **enet** (SE-DAG + BN — ckpt clean `3×nP`; the frozen-stats
+gate needs the SE true-BN forward). Same architecture class as r34/mnv2; documented
+follow-up.
 
 Fresh-session infra notes (hard-won):
 - Run everything from `scripts/` under `jax/.venv` (`HIP_VISIBLE_DEVICES=0`, python -u,

@@ -1,16 +1,12 @@
 """P6 — trained-weight gains for MobileNetV2 (BN ⇒ reconstruct frozen stats).
 
-WIP / BLOCKED (2026-07-04): the mnv2 net trained to 86.8% (runs/
-mobilenetv2_verified_crop_gpu0.log), but its resume checkpoint is
-3×(nP + 1120) floats — an unexplained 1120-float offset from the 3×nP that r34
-and (params-block) enet follow, and from MobileNetV2Layout.specs (== the render
-arg order, 210 params, 2253738 floats). So the simple [params,adam_m,adam_v]
-mapping drifts (BN γ after the stem read as ~0.02, not ~1) and the gate lands
-at random (10.9%). Needs the exact mnv2 resume-checkpoint layout (the extra
-1120 floats — SWA/SWAG state? an unlisted param block?) before the mapping is
-faithful. The frozen-stats reconstruction + injection machinery below is the
-right shape; only the param offset blocks it. The LN nets (p6_vit/p6_convnext)
-needed none of this and are the clean P6-pass results.
+The mnv2 net trained to 86.8% (runs/mobilenetv2_verified_crop_gpu0.log). Its
+resume checkpoint is 3×(nP + 1120) — the +1120 is block-1's t=1 EXPAND
+(32×32 conv + 3×32 for b/γ/β) which the CHECKPOINT keeps but the render /
+MobileNetV2Layout.specs OMIT (t=1 ⇒ expand is identity, skipped). So the fix is
+to skip those 1120 floats after the stem; the remaining params map 1:1 onto the
+render args (verified: every BN γ then reads ~1). The rest is the r34 recipe
+(reconstruct frozen eval-BN stats via a true-BN pass, gate, inject).
 
 Loads the trained verified MobileNetV2 checkpoint
 (.lake/build/mobilenetv2_adam_ckpt.bin, first nP of [params, adam_m, adam_v] —
@@ -47,11 +43,12 @@ cfg = [(32, 32, 16, 1), (16, 96, 24, 2), (24, 144, 24, 1),
 # ── trained params → the NON-stat render args (stats reconstructed below) ───
 param_args = [(n, sh) for n, sh in sig
               if n != "x" and not n.endswith("nmu") and not n.endswith("nvar")]
-nP = sum(int(np.prod(sh)) for _, sh in param_args)
-flat = np.fromfile(CKPT, dtype=np.float32, count=nP)
+flat = np.fromfile(CKPT, dtype=np.float32)          # full [params, m, v]
 vals, off = {}, 0
-for n, sh in param_args:
-    k = int(np.prod(sh))
+for i, (n, sh) in enumerate(param_args):
+    if i == 4:                                      # after the 4 stem args:
+        off += 1120                                 # skip block-1's t=1 expand
+    k = int(np.prod(sh))                            # (in ckpt, omitted by render)
     vals[n] = flat[off:off + k].reshape(sh)
     off += k
 
