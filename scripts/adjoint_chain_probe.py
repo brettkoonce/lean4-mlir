@@ -140,13 +140,15 @@ def maxpool2(a):
     return a.reshape(N, C, H // 2, 2, Wd // 2, 2).max(axis=(3, 5))
 
 
-def cnn_probe():
+def cnn_probe(tree_reduce=False):
     """chainBudget = Σ_i H_i·b_i on the committed MNIST-CNN render
     (conv1→relu→conv2→relu→maxpool→flatten→dense→relu→dense→relu→dense),
     per-stage fresh budgets from the proven layerBudget, tail gains H_i
     measured as the L∞ norm of the exact tail Jacobian (10 rows — one
     backward pass per logit), vs the proven suffix-product face and the
-    true GPU drift from kernel_faithfulness_probe's per-stage render."""
+    true GPU drift from kernel_faithfulness_probe's per-stage render.
+    tree_reduce=True (P2) swaps the fan-in Higham exponent m→⌈log₂m⌉ — the
+    dense0 fan-in 6272→13 that was this shallow-wide net's only residual."""
     from kernel_faithfulness_probe import cnn_mlir, layer_budget
 
     import jax
@@ -154,8 +156,11 @@ def cnn_probe():
     jax.config.update("jax_enable_x64", True)
     jax.config.update("jax_platform_name", "cpu")
 
+    global _TREE_REDUCE
+    _TREE_REDUCE = tree_reduce
     print("\n" + "═" * 78)
-    print("(2) COMMITTED MNIST-CNN render — adjoint chain vs interval fold, gfx1100")
+    print("(2) COMMITTED MNIST-CNN render — adjoint chain vs interval fold, gfx1100"
+          + ("  [+P2 tree-reduce]" if tree_reduce else ""))
     print("═" * 78)
     # renderer-realistic magnitude profile (same as kernel_faithfulness_probe)
     x = rng.standard_normal((4, 1, 28, 28)).astype(np.float32)
@@ -197,8 +202,12 @@ def cnn_probe():
         ("dense1+relu", 512,  W3, b3, h2),
         ("logits",      512,  W4, b4, h3),
     ]
-    bs = [layer_budget(U32, m, mags(W), mags(b), mags(a), 0.0)
-          if m is not None else 0.0
+    # fresh budget = ((1+u)^(Higham exp)−1)·(m·w·A + β); tree_reduce swaps the
+    # Higham exponent m→⌈log₂m⌉ (the fan-in reduction is a balanced tree), the
+    # uniform m·w·A magnitude bound unchanged. Flag off = layer_budget exactly.
+    def lb(m, W, b, a):
+        return _rfac(m, 2) * (m * mags(W) * mags(a) + mags(b))
+    bs = [lb(m, W, b, a) if m is not None else 0.0
           for (_, m, W, b, a) in stages]
 
     # ── PROVEN tail gains: suffix products of per-stage row-sum gains ──
@@ -260,6 +269,7 @@ def cnn_probe():
     print(f"  chainBudget proven-H  : {cb_prov:.3e}  ({cb_prov / true_err:.1e}× true)"
           f"   [= the interval fold]")
     print(f"  logits magnitude      : {mags(out):.3e}")
+    _TREE_REDUCE = False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -4472,7 +4482,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-    cnn_probe()
+    cnn_probe(tree_reduce=True)          # P2 certifies the fan-in-6272 face
     cifar8_probe()
     cifar8bn_probe()
     # note: run these last — earlier sections pin jax to CPU; when run

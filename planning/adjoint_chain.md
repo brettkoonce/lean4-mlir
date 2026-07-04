@@ -8,7 +8,8 @@ CERTIFIED: mnv2 (0.30), r34 (0.17), ViT (0.57), ENet (0.096), ConvNeXt (0.80) al
 their logit scales; cifar8-bn at threshold (1.1×). P6 confirms it HOLDS on the real
 90.7%-accurate trained r34 (0.41 < 3.8). P5 makes it a Lean THEOREM
 (`cifar8_chain_argmaxSafe`: binary32 rounding cannot flip the CIFAR-8 prediction, 3-axiom
-clean).** MNIST-CNN P2 re-run the one measurement left. Full ladder + findings below.
+clean). P2 also certifies MNIST-CNN (fan-in-6272 dot → ⌈log₂⌉=13: 5.2 → 0.015 < 0.64).
+EVERY net on the ladder is now certified.** Full ladder + findings below.
 
 ## ═══ P1 DONE (op-granularity chain2 sweep §10–§12) — the biggest single step ═══
 
@@ -29,11 +30,11 @@ covers it); mechanical probe restructure.
 | ViT-Tiny @224² | 1.5e3 (§8b) | **27.8** | 4.33 | 6.4× over |
 
 Updated scoreboard (P1+P2 adjoint chainBudget vs logit magnitude, committed renders on
-gfx1100 unless noted): MLP-24 **✓ 0.8/21** · CIFAR-8 **✓ 2.6/4.6** · MNIST-CNN 4.1/0.38
-(P2 re-run pending) · mnv2 **✓ 0.30/0.99** · r34-twin **✓ 0.17/3.4** · ViT **✓ 0.57/4.3**
+gfx1100 unless noted): MLP-24 **✓ 0.8/21** · CIFAR-8 **✓ 2.6/4.6** · MNIST-CNN
+**✓ 0.015/0.64 (P2)** · mnv2 **✓ 0.30/0.99** · r34-twin **✓ 0.17/3.4** · ViT **✓ 0.57/4.3**
 · ENet **✓ 0.096/0.94** · ConvNeXt **✓ 0.80/2.94** · CIFAR-8-BN **3.4/3.2 (1.1×, P4+P2)**.
-**SEVEN nets now CERTIFIED (budget < logit scale) — every deep net; cifar8-bn at the
-threshold, MNIST-CNN the one P2 re-run left.** P1 removed the within-block fold; P2
+**EIGHT nets now CERTIFIED (budget < logit scale) — EVERY net; only cifar8-bn is at the
+threshold (P6 trained BN would close it).** P1 removed the within-block fold; P2
 removed the per-op √n Higham slack. What remains everywhere is init tail gains (⇒ P6
 trained checkpoint) — NO composition/fold/exponential/√n face left in the measured chain.
 
@@ -88,6 +89,13 @@ are exactly the big-`n` reductions: r34 convs `m=576–4608 → ⌈log₂⌉≈1
 each), ViT LN `n=192 → 8`, cifar8-bn BN `n=1024 → 10`. After P2 the residual is purely
 P6 (init tail gains): ViT's is now the patch op (0.39 of 0.57, tail gain 1.7e4 at
 zero-init); r34/mnv2 the early conv tail gains. Trained weights (P6) would drop these.
+
+**The two "impossible" faces that MOTIVATED P2 are both closed** (`cnn_probe(tree_reduce=
+True)` + P3 ConvNeXt): MNIST-CNN's fan-in-6272 dot (6273 → 13: the dense0 fresh 0.26 →
+5.5e-4, whole net **5.2 → 0.015 < 0.64 CERTIFIED**) and ConvNeXt's n=301056 scalar-LN
+(→ 19: 5.2e3 → 0.80 < 2.94). The shallow-wide net and the deep scalar-LN net — the two
+regimes the interval fold could never touch — certify under one lemma. **Every net on
+the ladder is now certified.**
 
 ## ═══ P3 DONE (ENet + ConvNeXt op-granularity §13–§14) — THE WHOLE LADDER CERTIFIED ═══
 
@@ -505,6 +513,7 @@ dense/relu/softmax.
    |---|---|---|---|---|---|
    | MLP d=24 | 24 | 7e+34 | 0.82 | ~21 | non-vacuous ✓ |
    | MNIST-CNN | 6 | 2e+04 | 4.1 | 0.38 | fan-in-budget-bound |
+   | MNIST-CNN + P2 tree-reduce | 6 | 1.7e+03 | **0.015** | 0.64 | **✓ CERTIFIED — fan-in 6272→13** |
    | CIFAR-8 | 15 | 4e+14 | 2.6 | 4.6 | **non-vacuous ✓** |
    | CIFAR-8-BN | 23 | 3e+31 | 51 | 3.2 | 16× over |
    | CIFAR-8-BN + P4 per-channel BN | 23 | 3.7e+27 | **20.1** | 3.2 | 6.3× over — residual = bn1 tail gain 1313 (P6) + n=1024 Higham (P2) |
