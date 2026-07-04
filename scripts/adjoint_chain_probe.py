@@ -1778,6 +1778,302 @@ def convnext_probe():
     print("  are the LN-analogue of the SE finding to watch in the table.")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# (8) ViT-Tiny — the COMMITTED RENDER (verified_mlir/vit_fwd.mlir) as-is on
+#     gfx1100 (batch 32 @224², args from its parsed signature at the repo
+#     init: He denses, LN γ=ones/β=zeros, biases/CLS/pos = zeros). The
+#     architecturally FRIENDLY case for the adjoint chain: per-token LN
+#     (n=192 — no big-n Higham face), no BN/SE, gelu at the proven 3/2 gain,
+#     softmax fresh budgets via the smRho/smKappa pieces and input-shift via
+#     the e^{2δ}−1 modulus evaluated AT the small inherited δ (expm1 — the
+#     modulus needs no window inside the fold); the PROVEN suffix face uses
+#     lipOnWindow_softmax's window gain (e^{4A_s}−1)/(2A_s) at the measured
+#     score magnitude. Chain = patch / 12 blocks / final LN / head = 15.
+# ═══════════════════════════════════════════════════════════════════════════
+def vit_probe():
+    import jax
+    import jax.numpy as jnp
+    import re
+    import os
+
+    print("\n" + "═" * 78)
+    print("(8) ViT-Tiny — the COMMITTED render (vit_fwd), gfx1100")
+    print("═" * 78)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mlir = open(os.path.join(root, "verified_mlir/vit_fwd.mlir")).read()
+    header = mlir[:mlir.index("{", mlir.index("func.func"))]
+    sig = [(m.group(1), tuple(int(d) for d in m.group(2).split("x")[:-1]))
+           for m in re.finditer(r"%(\w+): tensor<([^>]+)>", header)]
+
+    dt = np.float64
+    mags = lambda a: float(np.abs(a).max())
+    D, NH, DH, NT = 192, 3, 64, 197
+    EPS_LN = 1e-5
+    EEXP = 2 * U32
+
+    # ── args at the repo init (He / ones / zeros per kind conventions) ─────
+    vals = {}
+    for name, shape in sig:
+        if name == "x":
+            vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
+        elif len(shape) == 4:                       # patch conv: He fan-in 768
+            fan = shape[1] * shape[2] * shape[3]
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / fan) ** 0.5).astype(np.float32)
+        elif len(shape) == 2 and name != "pos":     # dense W: He fan-in
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+        elif name.endswith("g1") or name.endswith("g2") or name == "gF":
+            vals[name] = np.ones(shape, np.float32)
+        else:                                       # biases / β / cls / pos
+            vals[name] = np.zeros(shape, np.float32)
+
+    def ln_tok(z, gname, btname):
+        """per-token LN over the 192 features + per-channel affine."""
+        mu = z.mean(axis=-1, keepdims=True)
+        var = ((z - mu) ** 2).mean(axis=-1, keepdims=True)
+        xh = (z - mu) / np.sqrt(var + EPS_LN)
+        return xh * vals[gname].astype(z.dtype) + vals[btname].astype(z.dtype)
+
+    def ln_budget_gain(z, gname, E):
+        """per-token-LN budgets (BnFloatBridge parts, n=192): PER-TOKEN
+        bookkeeping — each token's deviation D_t paired with ITS OWN variance
+        floor (the perRowFlat/bnPerChannel granularity the Lean LN lemmas
+        actually have). Max-over-tokens of the per-token budget/gain; a
+        zero-variance token (the zero-init CLS at block 0) then contributes
+        a large GAIN but a ~zero FRESH budget instead of poisoning both."""
+        mu = z.mean(axis=-1, keepdims=True)
+        dev = z - mu
+        var = (dev ** 2).mean(axis=-1)                    # (B, T)
+        D_t = np.abs(dev).max(axis=-1)                    # (B, T)
+        A_t = np.abs(z).max(axis=-1)
+        floor_t = var + EPS_LN
+        S_t = 1.0 / np.sqrt(floor_t)
+        G = mags(vals[gname])
+        emean_t = bn_mean_budget(U32, D, A_t)
+        evar_t = bn_var_budget(U32, D_t, emean_t, D)
+        eistd_t = bn_istd_budget(ERS, evar_t, floor_t)
+        fresh = float(bn_norm_budget(U32, D_t, S_t, G, 0.0,
+                                     emean_t, eistd_t).max())
+        gain = float((G * (2 * S_t + 2 * D_t * D_t / floor_t ** 1.5)).max())
+        return gain * E + fresh, gain
+
+    def dense_budget(h2d, Wname, bname, E):
+        """per-token dense: exact denseErr coefficients at the profile."""
+        W = np.abs(vals[Wname].astype(dt))
+        m = W.shape[0]
+        sumabs = float((np.abs(h2d) @ W).max())
+        rowsum = float(W.sum(axis=0).max())
+        return ((1 + U32) ** (m + 2) - 1) * (sumabs + mags(vals[bname])
+                                             + rowsum * E) + rowsum * E, rowsum
+
+    # softmax float rounding (smRho/smKappa/smErr pieces, n = 197 tokens)
+    rho = ((1 + U32) ** (NT + 1) - 1) * (1 + EEXP) + EEXP
+    kappa = (EEXP + rho) / (1 - rho)
+    SM_FRESH = U32 * (1 + kappa) + kappa
+
+    def softmax_np(s):
+        e = np.exp(s)
+        return e / e.sum(axis=-1, keepdims=True)
+
+    # ── oracle with inline budgets (mirrors the render op-for-op) ──────────
+    def oracle():
+        acts, names, bs_, gs = [], [], [], []
+        x4 = vals["x"].astype(dt).reshape(32, 3, 224, 224)
+        p = conv_np(x4, vals["wConv"], 16, 0, dt) \
+            + vals["bConv"].astype(dt)[None, :, None, None]
+        tok = p.transpose(0, 2, 3, 1).reshape(32, 196, D)
+        h = np.concatenate(
+            [np.broadcast_to(vals["cls"].astype(dt), (32, 1, D)), tok], axis=1)
+        h = h + vals["pos"].astype(dt)[None]
+        Wp = np.abs(vals["wConv"].astype(dt))
+        sumabs_p = float(conv_np(np.abs(x4), Wp, 16, 0, dt).max())
+        b_patch = ((1 + U32) ** (768 + 2) - 1) * (sumabs_p
+                                                  + mags(vals["bConv"])) \
+            + U32 * mags(h)                                # + pos-add rounding
+        acts.append(h)
+        names.append("patch+cls+pos")
+        bs_.append(b_patch)
+        gs.append(float(Wp.sum(axis=(1, 2, 3)).max()))
+        for bi in range(12):
+            p_ = f"b{bi}_"
+            inp = h
+            ln1 = ln_tok(h, p_ + "g1", p_ + "bt1")
+            E_ln1, g_ln1 = ln_budget_gain(h, p_ + "g1", 0.0)
+            ln1f = ln1.reshape(-1, D)
+            q = (ln1f @ vals[p_ + "Wq"].astype(dt)
+                 + vals[p_ + "bq"].astype(dt)).reshape(32, NT, D)
+            k = (ln1f @ vals[p_ + "Wk"].astype(dt)
+                 + vals[p_ + "bk"].astype(dt)).reshape(32, NT, D)
+            v = (ln1f @ vals[p_ + "Wv"].astype(dt)
+                 + vals[p_ + "bv"].astype(dt)).reshape(32, NT, D)
+            E_q, rs_q = dense_budget(ln1f, p_ + "Wq", p_ + "bq", E_ln1)
+            E_k, rs_k = dense_budget(ln1f, p_ + "Wk", p_ + "bk", E_ln1)
+            E_v, rs_v = dense_budget(ln1f, p_ + "Wv", p_ + "bv", E_ln1)
+            att = np.zeros_like(v)
+            E_cat, A_s_max, g_score_path = 0.0, 0.0, 0.0
+            for hd in range(NH):
+                sl = slice(hd * DH, (hd + 1) * DH)
+                qh, kh, vh = q[:, :, sl], k[:, :, sl], v[:, :, sl]
+                s = np.einsum('btd,bsd->bts', qh, kh) * 0.125
+                al = softmax_np(s)
+                att[:, :, sl] = np.einsum('bts,bsd->btd', al, vh)
+                A_q, A_k, A_v = mags(qh), mags(kh), mags(vh)
+                A_s = mags(s)
+                A_s_max = max(A_s_max, A_s)
+                Eqk = max(E_q, E_k)
+                sumabs_s = float(np.einsum('btd,bsd->bts', np.abs(qh),
+                                           np.abs(kh)).max()) * 0.125
+                E_s = ((1 + U32) ** (DH + 2) - 1) * sumabs_s \
+                    + 0.125 * DH * ((A_q + Eqk) * Eqk + A_k * Eqk) + U32 * A_s
+                E_al = float(np.expm1(2 * E_s)) + SM_FRESH
+                sumabs_av = float(np.einsum('bts,bsd->btd', al,
+                                            np.abs(vh)).max())
+                E_h = ((1 + U32) ** (NT + 2) - 1) * sumabs_av \
+                    + NT * E_al * (A_v + E_v) + E_v
+                E_cat = max(E_cat, E_h)
+                # proven linear face of the score path (per head, take max)
+                W_sm = float(np.expm1(4 * A_s)) / (2 * A_s)
+                g_s = 0.125 * DH * (A_q * rs_k + A_k * rs_q)
+                g_score_path = max(g_score_path,
+                                   NT * A_v * W_sm * g_s + rs_v)
+            attf = att.reshape(-1, D)
+            wo = (attf @ vals[p_ + "Wo"].astype(dt)
+                  + vals[p_ + "bo"].astype(dt)).reshape(32, NT, D)
+            E_wo, rs_o = dense_budget(attf, p_ + "Wo", p_ + "bo", E_cat)
+            h1 = inp + wo
+            E_attn = E_wo + U32 * mags(h1)
+            ln2 = ln_tok(h1, p_ + "g2", p_ + "bt2")
+            E_ln2, g_ln2 = ln_budget_gain(h1, p_ + "g2", E_attn)
+            ln2f = ln2.reshape(-1, D)
+            f1 = (ln2f @ vals[p_ + "Wfc1"].astype(dt)
+                  + vals[p_ + "bfc1"].astype(dt))
+            E_f1, rs_f1 = dense_budget(ln2f, p_ + "Wfc1", p_ + "bfc1", E_ln2)
+            g1v = gelu_tanh_np(f1)
+            E_g = 1.5 * E_f1 + EGELU
+            f2 = (g1v @ vals[p_ + "Wfc2"].astype(dt)
+                  + vals[p_ + "bfc2"].astype(dt)).reshape(32, NT, D)
+            E_f2, rs_f2 = dense_budget(g1v, p_ + "Wfc2", p_ + "bfc2", E_g)
+            h = h1 + f2
+            E_out = E_f2 + E_attn + U32 * mags(h)
+            # proven per-block gain: (1 + attn path)·(1 + mlp path); the LN
+            # gains multiply their own sublayer path
+            g_mlp_sub = 1.0 + g_ln2 * rs_f1 * 1.5 * rs_f2
+            g_blk = (1.0 + g_ln1 * g_score_path * rs_o) * g_mlp_sub
+            acts.append(h)
+            names.append(f"block{bi}  (A_s={A_s_max:.1f})")
+            bs_.append(E_out)
+            gs.append(g_blk)
+        lnF = ln_tok(h, "gF", "btF")
+        E_lnF, g_lnF = ln_budget_gain(h, "gF", 0.0)
+        acts.append(lnF)
+        names.append("final LN")
+        bs_.append(E_lnF)
+        gs.append(g_lnF)
+        clsv = lnF[:, 0, :]
+        out = clsv @ vals["Wc"].astype(dt) + vals["bc"].astype(dt)
+        E_hd, rs_hd = dense_budget(clsv, "Wc", "bc", 0.0)
+        acts.append(out)
+        names.append("cls+dense")
+        bs_.append(E_hd)
+        gs.append(rs_hd)
+        return acts, names, bs_, gs
+
+    acts, names, bs_, gs = oracle()
+    out = acts[-1]
+    # suffix products in log10 (the softmax window face overflows float64)
+    lg = [np.log10(max(g, 1e-300)) for g in gs]
+    H_prov_log = [float(np.sum(lg[i + 1:])) for i in range(len(lg))]
+    H_prov = [10.0 ** min(h, 300.0) for h in H_prov_log]
+
+    out_g = run_iree(mlir, [vals[n] for n, _ in sig],
+                     fn="vit_fwd", module_name="m").astype(np.float64)
+    true_err = float(np.abs(out_g - out).max())
+
+    # ── measured tail gains (f32; per-token LN + per-sample attn) ──────────
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def jln(z, gname, btname):
+        mu = z.mean(axis=-1, keepdims=True)
+        var = ((z - mu) ** 2).mean(axis=-1, keepdims=True)
+        return (z - mu) / jnp.sqrt(var + EPS_LN) * jx(vals[gname]) \
+            + jx(vals[btname])
+
+    def jgelu2(x):
+        inner = 0.7978845608028654 * (x + 0.044715 * x * x * x)
+        return 0.5 * x * (1.0 + jnp.tanh(inner))
+
+    def stage_fns():
+        fns = []
+        for bi in range(12):
+            p_ = f"b{bi}_"
+
+            def bf(a, p_=p_):
+                inp = a
+                ln1 = jln(a, p_ + "g1", p_ + "bt1")
+                q = ln1 @ jx(vals[p_ + "Wq"]) + jx(vals[p_ + "bq"])
+                k = ln1 @ jx(vals[p_ + "Wk"]) + jx(vals[p_ + "bk"])
+                v = ln1 @ jx(vals[p_ + "Wv"]) + jx(vals[p_ + "bv"])
+                outs = []
+                for hd in range(NH):
+                    sl = slice(hd * DH, (hd + 1) * DH)
+                    s = jnp.einsum('btd,bsd->bts', q[:, :, sl],
+                                   k[:, :, sl]) * 0.125
+                    e = jnp.exp(s)
+                    al = e / e.sum(axis=-1, keepdims=True)
+                    outs.append(jnp.einsum('bts,bsd->btd', al, v[:, :, sl]))
+                att = jnp.concatenate(outs, axis=-1)
+                wo = att @ jx(vals[p_ + "Wo"]) + jx(vals[p_ + "bo"])
+                h1 = inp + wo
+                ln2 = jln(h1, p_ + "g2", p_ + "bt2")
+                f1 = jgelu2(ln2 @ jx(vals[p_ + "Wfc1"])
+                            + jx(vals[p_ + "bfc1"]))
+                f2 = f1 @ jx(vals[p_ + "Wfc2"]) + jx(vals[p_ + "bfc2"])
+                return h1 + f2
+            fns.append(bf)
+        fns.append(lambda a: jln(a, "gF", "btF"))
+        fns.append(lambda a: a[:, 0, :] @ jx(vals["Wc"]) + jx(vals["bc"]))
+        return fns
+
+    fns = stage_fns()
+    H_meas = []
+    for i in range(len(acts) - 1):
+        aout = acts[i]
+        gain = 0.0
+        for smp in range(2):
+            a1 = jx(aout[smp:smp + 1])
+
+            def tail(aa, i=i):
+                for f in fns[i:]:
+                    aa = f(aa)
+                return aa[0]
+            J = jax.jacrev(tail)(a1)
+            gain = max(gain, float(jnp.abs(J.reshape(10, -1))
+                                   .sum(axis=1).max()))
+        H_meas.append(gain)
+    H_meas.append(1.0)
+
+    cb_meas = sum(H * b for H, b in zip(H_meas, bs_))
+    lt = [hl + np.log10(max(b, 1e-300)) for hl, b in zip(H_prov_log, bs_)]
+    cb_prov_log = max(lt) + np.log10(sum(10.0 ** (t - max(lt)) for t in lt))
+    print(f"\n{'stage':<22}{'fresh b_i':>12}{'H_i meas':>11}{'H_i·b_i':>11}"
+          f"{'H_i proven':>13}")
+    for name, b, Hm, Hpl in zip(names, bs_, H_meas, H_prov_log):
+        print(f"{name:<22}{b:>12.3e}{Hm:>11.3e}{Hm * b:>11.3e}"
+              f"{'1e%+d' % round(Hpl):>13}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget measured-H: {cb_meas:.3e}  "
+          f"({cb_meas / true_err:.1e}× true)")
+    print(f"  chainBudget proven-H  : ~1e{cb_prov_log:+.0f}  "
+          f"(~1e{cb_prov_log - np.log10(true_err):+.0f}× true)"
+          f"   [= the interval fold]")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+    print("\n  THE COMMITTED RENDER (verified_mlir/vit_fwd.mlir) run as-is on")
+    print("  gfx1100; per-token LN (n=192), 3 heads of 64, exact per-head")
+    print("  slice/pad structure and no-max-shift softmax mirrored in f64.")
+
+
 def main():
     print("═" * 78)
     print("adjoint-chain probe — chain_adjointClose budget vs real gfx1100 drift")
@@ -1858,3 +2154,4 @@ if __name__ == "__main__":
     r34_probe()
     enet_probe()
     convnext_probe()
+    vit_probe()

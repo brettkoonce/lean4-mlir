@@ -235,6 +235,36 @@ dense/relu/softmax.
       lemma); interval fold 3.2e139 → 2.8e113 (10²⁶×)**. The dominant residual is now
       purely the scalar-LN big-n Higham face (block budgets ~4e3–1e4, all LN).
 
+   **ViT-Tiny (probe §8, 2026-07-04): the committed render (`verified_mlir/vit_fwd.mlir`)
+   as-is on gfx1100, repo init (He denses, LN γ=1/β=0, biases/CLS/pos = ZEROS) — and the
+   prediction "friendliest deep net" was WRONG in an instructive way:**
+
+   | | true GPU logits drift | logits magnitude | chainBudget measured-H | chainBudget proven-H |
+   |---|---|---|---|---|
+   | ViT-Tiny (committed render) | 5.2e-06 | 4.3 | 1.6e+16 (3.0e21×) | **~1e+364** (~1e370×) |
+
+   Three findings, in order of discovery:
+   1. **The zero-init CLS token makes block-0's LN genuinely near-singular** (var = 0 ⇒
+      istd = 1/√ε ≈ 316): a REAL property of the committed init (kind-2 zeros for
+      CLS/pos), the extreme case of the BN min-channel issue. Fixed in the probe by
+      **per-token LN budget bookkeeping** (each token's deviation paired with its own
+      variance floor — the `perRowFlat` granularity the Lean LN lemmas already have);
+      the zero token then contributes a large gain but ~zero fresh budget.
+   2. **Cross-block composition is the cleanest of the whole ladder**: measured tail
+      gains 84 → 2.8, decaying smoothly through all 12 blocks.
+   3. **The within-block fold dies at the softmax exponent** — the attention analogue
+      of the SE finding, but sharper: scores at init sit at A_s ≈ 9–12, the score-path
+      linear coefficient (≈ 8·(A_q+A_k)·rowsum_W ≈ 100–200) amplifies the LN fresh
+      budget (~4e-3, itself the n=192 Higham face ~10³× above true) to E_s ≈ 0.4–6,
+      and the proven softmax modulus `e^{2δ}−1` is vacuous for δ ≳ 1 ⇒ block fresh
+      budgets ~1e11–1e14. The interval fold hits ~1e364 (softmax window gain
+      `(e^{4A_s}−1)/2A_s ≈ 1e17` PER BLOCK — reported in log-space now).
+      **The fix is the identified v2 combinator, now with a precise spec**: sub-block
+      chain granularity with the stage state carrying the residual stream (stage k
+      output = (h, scores) pair), so the softmax burden moves from the nonlinear
+      modulus to the MEASURED tail gain — where it is tiny (softmax Jacobian L∞ ≤ ½).
+      Same lemma shape needed for SE; attention and SE are the same obstruction.
+
    **Ladder summary (all on gfx1100, logits-scale certificates):**
 
    | net | stages | interval fold | adjoint chain | logit scale | verdict |
@@ -247,6 +277,7 @@ dense/relu/softmax.
    | ENet-B0 @224² (committed render) | 20 | 8e+106 | 6.8e+04 | 1.3 | 5e4× over (SE-in-block) |
    | ConvNeXt-T @224² (committed render) | 25 | 3e+139 | 9.4e+07 | 2.9 | 3e7× over (scalar-LN n=301k + gelu poly-gain) |
    | ConvNeXt-T + `gelu_lipschitz` (3/2 gain) | 25 | 2.8e+113 | 3.2e+06 | 2.9 | 1e6× over (scalar-LN only) |
+   | ViT-Tiny @224² (committed render) | 15 | ~1e+364 | 1.6e+16 | 4.3 | softmax-exponent-in-block (needs the residual-carrying sub-block combinator) |
 
    Composition is solved at every scale tried — the adjoint chain stays within 1–3
    orders of the logit scale where the interval fold loses 4–51 orders; what remains is
