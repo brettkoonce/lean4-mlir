@@ -265,6 +265,28 @@ dense/relu/softmax.
       modulus to the MEASURED tail gain — where it is tiny (softmax Jacobian L∞ ≤ ½).
       Same lemma shape needed for SE; attention and SE are the same obstruction.
 
+   **The residual combinator (2026-07-04, probe §8b + `AdjointChainResidual.lean`):
+   CLOSED the attention wall.** `chain2_adjointClose` — partitioned budgets over the
+   uniform chain (pair states embed by zero-padding, so no dependent-dim machinery):
+   stage outputs split by a coordinate predicate (computed branch vs carried stream),
+   per-part fresh budgets meet per-part tail gains (`LipOnWindow2`), and the carried
+   stream rides at `b = 0` definitionally (`LayerCert2.stream`). Same telescoping,
+   3-axiom clean, subsumes v1 (`LayerCert2.ofLayerCert`, `LipOnWindow.toTwoPart`).
+   ViT at 3-stages-per-block granularity (A: h↦(h, scores); B: apply attention —
+   softmax sees an EXACT chain input, fresh = smKappa ≈ 1e-5, never the amplified
+   inherited error; M: MLP sublayer):
+
+   | | true GPU drift | logits | chainBudget2 | vs §8 monolithic |
+   |---|---|---|---|---|
+   | ViT-Tiny, residual granularity | 5.2e-06 | 4.3 | **1.5e+03** | 1.6e+16 — **13 orders** |
+
+   Per-stage contributions all O(1–200), decaying with depth; block-0 dominates via
+   its early tail gains (~600). The residual ~350× over logit scale is now the same
+   stuff as r34's: per-sublayer (dense row-sum × LN n=192 Higham fresh ≈ 15×4e-3)
+   products — NO exponential faces left anywhere in the measured chain. The same
+   A/B split applies verbatim to ENet's SE gate (stage A = gate logits, stream
+   carry) — the mechanical follow-up expected to collapse §6's 5e4 similarly.
+
    **Ladder summary (all on gfx1100, logits-scale certificates):**
 
    | net | stages | interval fold | adjoint chain | logit scale | verdict |
@@ -278,6 +300,7 @@ dense/relu/softmax.
    | ConvNeXt-T @224² (committed render) | 25 | 3e+139 | 9.4e+07 | 2.9 | 3e7× over (scalar-LN n=301k + gelu poly-gain) |
    | ConvNeXt-T + `gelu_lipschitz` (3/2 gain) | 25 | 2.8e+113 | 3.2e+06 | 2.9 | 1e6× over (scalar-LN only) |
    | ViT-Tiny @224² (committed render) | 15 | ~1e+364 | 1.6e+16 | 4.3 | softmax-exponent-in-block (needs the residual-carrying sub-block combinator) |
+   | ViT-Tiny + residual combinator (chain2) | 39 | — | **1.5e+03** | 4.3 | 350× over — r34-class; exponential faces gone |
 
    Composition is solved at every scale tried — the adjoint chain stays within 1–3
    orders of the logit scale where the interval fold loses 4–51 orders; what remains is

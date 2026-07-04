@@ -77,6 +77,7 @@ import LeanMlir.Proofs.BnInputBridge
 import LeanMlir.Proofs.Resnet34BlockBridge
 import LeanMlir.Proofs.FloatComposeBridge
 import LeanMlir.Proofs.AdjointChainBridge
+import LeanMlir.Proofs.AdjointChainResidual
 import LeanMlir.Proofs.GeluLipschitz
 import LeanMlir.Proofs.BnEvalFloatBridge
 import LeanMlir.Proofs.EnetFloatBridge
@@ -1515,6 +1516,20 @@ open Proofs
 #print axioms Proofs.geluScalar_lipschitz
 #print axioms Proofs.lipOnWindow_gelu
 #print axioms Proofs.floatClose_gelu_sat
+-- The residual combinator (AdjointChainResidual.lean): partitioned budgets — the
+-- fix for the SE (probe §6) and attention (probe §8) within-block walls. Stage
+-- outputs split by a coordinate predicate P (computed branch vs carried residual
+-- stream); per-part fresh budgets meet per-part tail gains (LipOnWindow2, the
+-- block-row-sum refinement): |chainF x − chainR x| ≤ Σᵢ (H₁ᵢb₁ᵢ + H₂ᵢb₂ᵢ). The
+-- carried stream is an exact pass-through ⇒ b₂ = 0 definitionally
+-- (LayerCert2.stream); downstream softmax/σ meet inherited error through the
+-- MEASURED tail gain (softmax Jacobian L∞ ≤ ½), never their own exponential
+-- modulus. Same telescoping, proven once; subsumes the v1 chain
+-- (LayerCert2.ofLayerCert, LipOnWindow.toTwoPart).
+#print axioms Proofs.chain2_adjointClose
+#print axioms Proofs.LipOnWindow.toTwoPart
+#print axioms Proofs.LayerCert2.ofLayerCert
+#print axioms Proofs.LayerCert2.stream
 -- Eval-mode BN/LN as a fixed affine (BnEvalFloatBridge.lean, planning §4): the
 -- DEPLOYED-forward win. Running-stats BN at eval = a·x+b with a=γ/√(σ²+ε),
 -- b=β−γμ/√(σ²+ε) precomputed offline — no batch reduce, no runtime rsqrt (the

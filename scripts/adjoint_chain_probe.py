@@ -2074,6 +2074,285 @@ def vit_probe():
     print("  slice/pad structure and no-max-shift softmax mirrored in f64.")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# (8b) ViT-Tiny at RESIDUAL-COMBINATOR granularity (chain2_adjointClose,
+#     AdjointChainResidual.lean): each block = THREE chain stages —
+#       A: h ↦ (h, S)   carry the stream, compute per-head scaled scores
+#       B: (h, S) ↦ h + Wo(concat softmax(S)·V(LN1 h))   apply attention
+#       M: h ↦ h + fc2(gelu(fc1(LN2 h)))                 MLP sublayer
+#     Stage A's fresh budget lives ONLY on the S part (the stream is an exact
+#     pass-through, b=0 — LayerCert2.stream); stage B applies softmax to an
+#     EXACT chain input, so its fresh budget sees only the softmax ROUNDING
+#     (smKappa ≈ 1e-5), never the amplified inherited error — that error now
+#     meets the softmax through the MEASURED two-part tail gain (H_S), where
+#     the softmax Jacobian is L∞-bounded. chainBudget2 = Σ (H_h·b_h + H_S·b_S).
+# ═══════════════════════════════════════════════════════════════════════════
+def vit_probe_residual():
+    import jax
+    import jax.numpy as jnp
+    import re
+    import os
+
+    print("\n" + "═" * 78)
+    print("(8b) ViT-Tiny — residual-combinator granularity (chain2), gfx1100")
+    print("═" * 78)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mlir = open(os.path.join(root, "verified_mlir/vit_fwd.mlir")).read()
+    header = mlir[:mlir.index("{", mlir.index("func.func"))]
+    sig = [(m.group(1), tuple(int(d) for d in m.group(2).split("x")[:-1]))
+           for m in re.finditer(r"%(\w+): tensor<([^>]+)>", header)]
+
+    dt = np.float64
+    mags = lambda a: float(np.abs(a).max())
+    D, NH, DH, NT = 192, 3, 64, 197
+    EPS_LN = 1e-5
+    EEXP = 2 * U32
+    rng2 = np.random.default_rng(42)   # same seed pattern as §8 for parity
+
+    vals = {}
+    for name, shape in sig:
+        if name == "x":
+            vals[name] = rng2.standard_normal((32, 150528)).astype(np.float32)
+        elif len(shape) == 4:
+            fan = shape[1] * shape[2] * shape[3]
+            vals[name] = (rng2.standard_normal(shape)
+                          * (2.0 / fan) ** 0.5).astype(np.float32)
+        elif len(shape) == 2 and name != "pos":
+            vals[name] = (rng2.standard_normal(shape)
+                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+        elif name.endswith("g1") or name.endswith("g2") or name == "gF":
+            vals[name] = np.ones(shape, np.float32)
+        else:
+            vals[name] = np.zeros(shape, np.float32)
+
+    def ln_tok(z, gname, btname):
+        mu = z.mean(axis=-1, keepdims=True)
+        var = ((z - mu) ** 2).mean(axis=-1, keepdims=True)
+        xh = (z - mu) / np.sqrt(var + EPS_LN)
+        return xh * vals[gname].astype(z.dtype) + vals[btname].astype(z.dtype)
+
+    def ln_fresh(z, gname):
+        """per-token LN fresh budget (perRowFlat granularity, see §8)."""
+        mu = z.mean(axis=-1, keepdims=True)
+        dev = z - mu
+        var = (dev ** 2).mean(axis=-1)
+        D_t = np.abs(dev).max(axis=-1)
+        A_t = np.abs(z).max(axis=-1)
+        floor_t = var + EPS_LN
+        S_t = 1.0 / np.sqrt(floor_t)
+        G = mags(vals[gname])
+        emean_t = bn_mean_budget(U32, D, A_t)
+        evar_t = bn_var_budget(U32, D_t, emean_t, D)
+        eistd_t = bn_istd_budget(ERS, evar_t, floor_t)
+        return float(bn_norm_budget(U32, D_t, S_t, G, 0.0,
+                                    emean_t, eistd_t).max())
+
+    def dense_budget(h2d, Wname, bname, E):
+        W = np.abs(vals[Wname].astype(dt))
+        m = W.shape[0]
+        sumabs = float((np.abs(h2d) @ W).max())
+        rowsum = float(W.sum(axis=0).max())
+        return ((1 + U32) ** (m + 2) - 1) * (sumabs + mags(vals[bname])
+                                             + rowsum * E) + rowsum * E
+
+    rho = ((1 + U32) ** (NT + 1) - 1) * (1 + EEXP) + EEXP
+    kappa = (EEXP + rho) / (1 - rho)
+    SM_FRESH = U32 * (1 + kappa) + kappa
+
+    def softmax_np(s):
+        e = np.exp(s)
+        return e / e.sum(axis=-1, keepdims=True)
+
+    # ── oracle: boundary states + PER-PART fresh budgets per stage ─────────
+    # stage record: (name, state, parts) with parts = [(part_name, b_part)];
+    # for pair boundaries state = (h, S) and parts = [("h", 0), ("S", b_S)].
+    stages = []
+    x4 = vals["x"].astype(dt).reshape(32, 3, 224, 224)
+    p = conv_np(x4, vals["wConv"], 16, 0, dt) \
+        + vals["bConv"].astype(dt)[None, :, None, None]
+    tok = p.transpose(0, 2, 3, 1).reshape(32, 196, D)
+    h = np.concatenate(
+        [np.broadcast_to(vals["cls"].astype(dt), (32, 1, D)), tok], axis=1)
+    h = h + vals["pos"].astype(dt)[None]
+    Wp = np.abs(vals["wConv"].astype(dt))
+    sumabs_p = float(conv_np(np.abs(x4), Wp, 16, 0, dt).max())
+    stages.append(("patch+cls+pos", h,
+                   [("h", ((1 + U32) ** 770 - 1)
+                     * (sumabs_p + mags(vals["bConv"])) + U32 * mags(h))]))
+    for bi in range(12):
+        p_ = f"b{bi}_"
+        ln1 = ln_tok(h, p_ + "g1", p_ + "bt1")
+        E_ln1 = ln_fresh(h, p_ + "g1")
+        ln1f = ln1.reshape(-1, D)
+        q = (ln1f @ vals[p_ + "Wq"].astype(dt)
+             + vals[p_ + "bq"].astype(dt)).reshape(32, NT, D)
+        k = (ln1f @ vals[p_ + "Wk"].astype(dt)
+             + vals[p_ + "bk"].astype(dt)).reshape(32, NT, D)
+        v = (ln1f @ vals[p_ + "Wv"].astype(dt)
+             + vals[p_ + "bv"].astype(dt)).reshape(32, NT, D)
+        E_q = dense_budget(ln1f, p_ + "Wq", p_ + "bq", E_ln1)
+        E_k = dense_budget(ln1f, p_ + "Wk", p_ + "bk", E_ln1)
+        E_v = dense_budget(ln1f, p_ + "Wv", p_ + "bv", E_ln1)
+        S = np.stack([np.einsum('btd,bsd->bts',
+                                q[:, :, hd * DH:(hd + 1) * DH],
+                                k[:, :, hd * DH:(hd + 1) * DH]) * 0.125
+                      for hd in range(NH)], axis=1)      # (32, 3, 197, 197)
+        b_S = 0.0
+        for hd in range(NH):
+            qh = q[:, :, hd * DH:(hd + 1) * DH]
+            kh = k[:, :, hd * DH:(hd + 1) * DH]
+            A_q, A_k = mags(qh), mags(kh)
+            Eqk = max(E_q, E_k)
+            sumabs_s = float(np.einsum('btd,bsd->bts', np.abs(qh),
+                                       np.abs(kh)).max()) * 0.125
+            b_S = max(b_S, ((1 + U32) ** (DH + 2) - 1) * sumabs_s
+                      + 0.125 * DH * ((A_q + Eqk) * Eqk + A_k * Eqk)
+                      + U32 * mags(S))
+        stages.append((f"b{bi} A:scores", (h, S), [("h", 0.0), ("S", b_S)]))
+        # stage B: softmax at EXACT S ⇒ E_α = SM_FRESH only
+        att = np.zeros_like(v)
+        E_cat = 0.0
+        for hd in range(NH):
+            al = softmax_np(S[:, hd])
+            vh = v[:, :, hd * DH:(hd + 1) * DH]
+            att[:, :, hd * DH:(hd + 1) * DH] = \
+                np.einsum('bts,bsd->btd', al, vh)
+            A_v = mags(vh)
+            sumabs_av = float(np.einsum('bts,bsd->btd', al, np.abs(vh)).max())
+            E_cat = max(E_cat, ((1 + U32) ** (NT + 2) - 1) * sumabs_av
+                        + NT * SM_FRESH * (A_v + E_v) + E_v)
+        attf = att.reshape(-1, D)
+        wo = (attf @ vals[p_ + "Wo"].astype(dt)
+              + vals[p_ + "bo"].astype(dt)).reshape(32, NT, D)
+        E_wo = dense_budget(attf, p_ + "Wo", p_ + "bo", E_cat)
+        h1 = h + wo
+        stages.append((f"b{bi} B:apply", h1,
+                       [("h", E_wo + U32 * mags(h1))]))
+        # stage M: MLP sublayer
+        ln2 = ln_tok(h1, p_ + "g2", p_ + "bt2")
+        E_ln2 = ln_fresh(h1, p_ + "g2")
+        ln2f = ln2.reshape(-1, D)
+        f1 = ln2f @ vals[p_ + "Wfc1"].astype(dt) + vals[p_ + "bfc1"].astype(dt)
+        E_f1 = dense_budget(ln2f, p_ + "Wfc1", p_ + "bfc1", E_ln2)
+        g1v = gelu_tanh_np(f1)
+        E_g = 1.5 * E_f1 + EGELU
+        f2 = (g1v @ vals[p_ + "Wfc2"].astype(dt)
+              + vals[p_ + "bfc2"].astype(dt)).reshape(32, NT, D)
+        E_f2 = dense_budget(g1v, p_ + "Wfc2", p_ + "bfc2", E_g)
+        h = h1 + f2
+        stages.append((f"b{bi} M:mlp", h, [("h", E_f2 + U32 * mags(h))]))
+    lnF = ln_tok(h, "gF", "btF")
+    stages.append(("final LN", lnF, [("h", ln_fresh(h, "gF"))]))
+    clsv = lnF[:, 0, :]
+    out = clsv @ vals["Wc"].astype(dt) + vals["bc"].astype(dt)
+    stages.append(("cls+dense", out, [("h", dense_budget(clsv, "Wc",
+                                                         "bc", 0.0))]))
+
+    out_g = run_iree(mlir, [vals[n] for n, _ in sig],
+                     fn="vit_fwd", module_name="m").astype(np.float64)
+    true_err = float(np.abs(out_g - out).max())
+
+    # ── measured PER-PART tail gains (f32, per sample) ─────────────────────
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def jln(z, gname, btname):
+        mu = z.mean(axis=-1, keepdims=True)
+        var = ((z - mu) ** 2).mean(axis=-1, keepdims=True)
+        return (z - mu) / jnp.sqrt(var + EPS_LN) * jx(vals[gname]) \
+            + jx(vals[btname])
+
+    def jgelu2(x):
+        inner = 0.7978845608028654 * (x + 0.044715 * x * x * x)
+        return 0.5 * x * (1.0 + jnp.tanh(inner))
+
+    def stage_fns():
+        """fns[i] maps the state at boundary i-1 to boundary i (skipping the
+        patch stage, whose boundary is stage index 0)."""
+        fns = []
+        for bi in range(12):
+            p_ = f"b{bi}_"
+
+            def fA(hh, p_=p_):
+                ln1 = jln(hh, p_ + "g1", p_ + "bt1")
+                q = ln1 @ jx(vals[p_ + "Wq"]) + jx(vals[p_ + "bq"])
+                k = ln1 @ jx(vals[p_ + "Wk"]) + jx(vals[p_ + "bk"])
+                S = jnp.stack(
+                    [jnp.einsum('btd,bsd->bts',
+                                q[:, :, hd * DH:(hd + 1) * DH],
+                                k[:, :, hd * DH:(hd + 1) * DH]) * 0.125
+                     for hd in range(NH)], axis=1)
+                return (hh, S)
+            fns.append(fA)
+
+            def fB(state, p_=p_):
+                hh, S = state
+                ln1 = jln(hh, p_ + "g1", p_ + "bt1")
+                v = ln1 @ jx(vals[p_ + "Wv"]) + jx(vals[p_ + "bv"])
+                outs = []
+                for hd in range(NH):
+                    e = jnp.exp(S[:, hd])
+                    al = e / e.sum(axis=-1, keepdims=True)
+                    outs.append(jnp.einsum('bts,bsd->btd', al,
+                                           v[:, :, hd * DH:(hd + 1) * DH]))
+                att = jnp.concatenate(outs, axis=-1)
+                return hh + att @ jx(vals[p_ + "Wo"]) + jx(vals[p_ + "bo"])
+            fns.append(fB)
+
+            def fM(hh, p_=p_):
+                ln2 = jln(hh, p_ + "g2", p_ + "bt2")
+                f1 = jgelu2(ln2 @ jx(vals[p_ + "Wfc1"])
+                            + jx(vals[p_ + "bfc1"]))
+                return hh + f1 @ jx(vals[p_ + "Wfc2"]) + jx(vals[p_ + "bfc2"])
+            fns.append(fM)
+        fns.append(lambda a: jln(a, "gF", "btF"))
+        fns.append(lambda a: a[:, 0, :] @ jx(vals["Wc"]) + jx(vals["bc"]))
+        return fns
+
+    fns = stage_fns()
+
+    def to_j(state, smp):
+        if isinstance(state, tuple):
+            return tuple(jx(s[smp:smp + 1]) for s in state)
+        return jx(state[smp:smp + 1])
+
+    gains = []          # per stage: list of per-part gains, aligned to parts
+    for i, (name, state, parts) in enumerate(stages):
+        if i == len(stages) - 1:
+            gains.append([1.0] * len(parts))
+            break
+        gp = [0.0] * len(parts)
+        for smp in range(2):
+            a1 = to_j(state, smp)
+
+            def tail(aa, i=i):
+                for f in fns[i:]:
+                    aa = f(aa)
+                return aa[0]
+            J = jax.jacrev(tail)(a1)
+            if isinstance(J, tuple):
+                for pi, Jp in enumerate(J):
+                    gp[pi] = max(gp[pi], float(jnp.abs(
+                        Jp.reshape(10, -1)).sum(axis=1).max()))
+            else:
+                gp[0] = max(gp[0], float(jnp.abs(
+                    J.reshape(10, -1)).sum(axis=1).max()))
+        gains.append(gp)
+
+    cb = 0.0
+    print(f"\n{'stage':<18}{'parts (b_i · H_i)':<44}{'Σ H·b':>12}")
+    for (name, _state, parts), gp in zip(stages, gains):
+        contrib = sum(b * g for (_pn, b), g in zip(parts, gp))
+        cb += contrib
+        desc = "  ".join(f"{pn}: {b:.2e}·{g:.2e}"
+                         for (pn, b), g in zip(parts, gp))
+        print(f"{name:<18}{desc:<44}{contrib:>12.3e}")
+    print(f"\n  true GPU logits drift  : {true_err:.3e}")
+    print(f"  chainBudget2 (2-part)  : {cb:.3e}  ({cb / true_err:.1e}× true)")
+    print(f"  vs §8 monolithic blocks: 1.6e+16 — the combinator's win")
+    print(f"  logits magnitude       : {mags(out):.3e}")
+
+
 def main():
     print("═" * 78)
     print("adjoint-chain probe — chain_adjointClose budget vs real gfx1100 drift")
@@ -2155,3 +2434,4 @@ if __name__ == "__main__":
     enet_probe()
     convnext_probe()
     vit_probe()
+    vit_probe_residual()
