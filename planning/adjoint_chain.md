@@ -183,6 +183,28 @@ dense/relu/softmax.
    (.lake/build/resnet34_adam_ckpt.bin, 272MB, layout = ResNet34Layout.specs) is the
    natural follow-up).
 
+   **EfficientNet-B0 (probe §6, 2026-07-04): the COMMITTED AUDITED RENDER itself**
+   (`verified_mlir/efficientnet_fwd_eval.mlir` run as-is on gfx1100, batch 32 @224²,
+   args generated from its parsed signature — He convs, γ=1/β=0, batch-calibrated
+   running stats; f64 oracle mirrors it op-for-op; esig = 2u32 for the 65 logistics):
+
+   | | true GPU logits drift | logits magnitude | chainBudget measured-H | chainBudget proven-H |
+   |---|---|---|---|---|
+   | ENet-B0 (committed render) | 5.7e-06 | 1.3 | 6.8e+04 (1.2e10×) | **7.8e+106** (1.4e112×) |
+
+   The interval fold sets the vacuity record (~10¹⁰⁶ — MBConv's per-block gain product
+   is ~10⁴–10⁶: two swishes, three convs, and the SE path all multiply). The adjoint
+   chain compresses that by **102 orders of magnitude** but lands ~5e4× above the logit
+   scale — and the table pinpoints why: the late-block fresh budgets b_i ≈ 10³ are
+   inflated by the WITHIN-block worst-case treatment of squeeze-excite. SE's gate path
+   (pool → dense(1152→48) → swish → dense(48→1152) → σ) enters the block mini-fold as
+   an interval product of dense row-sums (rs1 ≈ 40, rs2 ≈ 8 at He-init ⇒ ~×100 on the
+   inherited error per block), while its measured sensitivity is tiny (σ saturated,
+   0.25 max slope, pooled input). Cross-block composition is fine (H_meas ≤ 425,
+   decaying to 6). **Identified v2 item: block-INTERNAL gain treatment — a residual/
+   gate combinator with measured (or per-path proven) sub-gains for parallel-path
+   blocks (SE, skip), instead of interval-folding inside the block.**
+
    **Ladder summary (all on gfx1100, logits-scale certificates):**
 
    | net | stages | interval fold | adjoint chain | logit scale | verdict |
@@ -192,6 +214,7 @@ dense/relu/softmax.
    | CIFAR-8 | 15 | 4e+14 | 2.6 | 4.6 | **non-vacuous ✓** |
    | CIFAR-8-BN | 23 | 3e+31 | 51 | 3.2 | 16× over |
    | r34 @224² | 20 | 7e+51 | 698 | 3.6 | 200× over |
+   | ENet-B0 @224² (committed render) | 20 | 8e+106 | 6.8e+04 | 1.3 | 5e4× over (SE-in-block) |
 
    Composition is solved at every scale tried — the adjoint chain stays within 1–3
    orders of the logit scale where the interval fold loses 4–51 orders; what remains is

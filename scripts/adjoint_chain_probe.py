@@ -46,7 +46,7 @@ rng = np.random.default_rng(42)
 
 
 # ── IREE on gfx1100 (rocm backend / hip runtime) ─────────────────────────────
-def run_iree(mlir: str, inputs, fn: str = "main"):
+def run_iree(mlir: str, inputs, fn: str = "main", module_name: str = "module"):
     from iree.compiler import compile_str
     from iree import runtime as ireert
     vmfb = compile_str(mlir, target_backends=["rocm"],
@@ -55,7 +55,7 @@ def run_iree(mlir: str, inputs, fn: str = "main"):
     cfg = ireert.Config("hip")
     ctx = ireert.SystemContext(config=cfg)
     ctx.add_vm_module(ireert.VmModule.copy_buffer(ctx.instance, vmfb))
-    out = ctx.modules.module[fn](*inputs)
+    out = getattr(ctx.modules, module_name)[fn](*inputs)
     if isinstance(out, (list, tuple)):
         return [np.asarray(o.to_host()) for o in out]
     return np.asarray(out.to_host())
@@ -1136,6 +1136,350 @@ def r34_probe():
     print("\n  eval-BN (running-stats affine, batch-calibrated) — the deployed")
     print("  forward; block = one chain layer, exactly the r34_floatBridges")
     print("  granularity. Gains measured in f32 on GPU (ample for O(1e3) gains).")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# (6) EfficientNet-B0 — the COMMITTED AUDITED RENDER, not a twin
+#     Runs verified_mlir/efficientnet_fwd_eval.mlir itself on gfx1100 (batch
+#     32 @224²), arg values generated from its own parsed signature (He convs,
+#     γ=1/β=0, running stats batch-calibrated). Chain = stem / 16 MBConv-SE
+#     blocks / head conv / GAP / dense = 20 stages; per-block fresh budget =
+#     the mini fold over expand→BN→swish→depthwise→BN→swish→SE→project→BN
+#     (+skip), exact-coefficient conv budgets, esig = 2u32 for logistic.
+# ═══════════════════════════════════════════════════════════════════════════
+ESIG = 2 * U32          # logistic accuracy on gfx1100 (transcendental_probe)
+
+
+def dwconv_np(x, W, stride, pad, dt):
+    """depthwise NCHW conv, W: (C,1,kh,kw)."""
+    x, W = x.astype(dt), W.astype(dt)
+    N, C, H, Wd = x.shape
+    kh, kw = W.shape[2], W.shape[3]
+    Ho = (H + 2 * pad - kh) // stride + 1
+    Wo = (Wd + 2 * pad - kw) // stride + 1
+    xp = np.zeros((N, C, H + 2 * pad, Wd + 2 * pad), dt)
+    xp[:, :, pad:pad + H, pad:pad + Wd] = x
+    out = np.zeros((N, C, Ho, Wo), dt)
+    for di in range(kh):
+        for dj in range(kw):
+            out += xp[:, :, di:di + stride * Ho:stride,
+                      dj:dj + stride * Wo:stride] * W[None, :, 0, di, dj,
+                                                      None, None]
+    return out
+
+
+def sigmoid_np(x):
+    return 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500)))
+
+
+def enet_probe():
+    import jax
+    import jax.numpy as jnp
+    import re
+    import os
+
+    print("\n" + "═" * 78)
+    print("(6) EfficientNet-B0 — the COMMITTED render (fwd_eval), gfx1100")
+    print("═" * 78)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mlir = open(os.path.join(root,
+                             "verified_mlir/efficientnet_fwd_eval.mlir")).read()
+    header = mlir[:mlir.index("{", mlir.index("func.func"))]
+    sig = [(m.group(1), tuple(int(d) for d in m.group(2).split("x")[:-1]))
+           for m in re.finditer(r"%(\w+): tensor<([^>]+)>", header)]
+
+    dt = np.float64
+    mags = lambda a: float(np.abs(a).max())
+    # blocks: (ic, mid, oc, r, k, stride) — strides at blocks 2/4/6/12
+    # (verified against the render's stride-2 convs: b2dc/b4dc/b6dc/b12dc)
+    cfg = [(32, 32, 16, 8, 3, 1), (16, 96, 24, 4, 3, 2), (24, 144, 24, 6, 3, 1),
+           (24, 144, 40, 6, 5, 2), (40, 240, 40, 10, 5, 1),
+           (40, 240, 80, 10, 3, 2), (80, 480, 80, 20, 3, 1),
+           (80, 480, 80, 20, 3, 1), (80, 480, 112, 20, 5, 1),
+           (112, 672, 112, 28, 5, 1), (112, 672, 112, 28, 5, 1),
+           (112, 672, 192, 28, 5, 2), (192, 1152, 192, 48, 5, 1),
+           (192, 1152, 192, 48, 5, 1), (192, 1152, 192, 48, 5, 1),
+           (192, 1152, 320, 48, 3, 1)]
+
+    # ── generate arg values by naming convention (stats calibrated below) ──
+    vals = {}
+    for name, shape in sig:
+        if name == "x":
+            vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
+        elif name.endswith("nmu") or name.endswith("nvar"):
+            vals[name] = None
+        elif len(shape) == 4:
+            fan = shape[1] * shape[2] * shape[3]
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / fan) ** 0.5).astype(np.float32)
+        elif len(shape) == 2:
+            vals[name] = (rng.standard_normal(shape)
+                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+        elif name.endswith("g"):
+            vals[name] = np.ones(shape, np.float32)
+        elif name.endswith("bt"):
+            vals[name] = np.zeros(shape, np.float32)
+        else:
+            vals[name] = (rng.standard_normal(shape) * 0.01).astype(np.float32)
+
+    # BN tag → (γ, β) arg names; stats live at tag+"nmu"/"nvar"
+    GAMMA = lambda t: {"st": "sg", "h": "hg"}.get(t, t + "g")
+    BETA = lambda t: {"st": "sbt", "h": "hbt"}.get(t, t + "bt")
+
+    def bn_eval(z, tag):
+        mu = vals[tag + "nmu"].astype(z.dtype)
+        var = vals[tag + "nvar"].astype(z.dtype)
+        g = vals[GAMMA(tag)].astype(z.dtype)
+        bt = vals[BETA(tag)].astype(z.dtype)
+        istd = 1.0 / np.sqrt(var + 1e-5)
+        return (z - mu[None, :, None, None]) * (istd * g)[None, :, None, None] \
+            + bt[None, :, None, None]
+
+    def calib(tag, z):
+        if vals[tag + "nmu"] is None:
+            vals[tag + "nmu"] = z.mean(axis=(0, 2, 3)).astype(np.float32)
+            vals[tag + "nvar"] = z.var(axis=(0, 2, 3)).astype(np.float32)
+        return bn_eval(z, tag)
+
+    def swish(x):
+        return x * sigmoid_np(x)
+
+    def bn_gain(tag):
+        g = vals[GAMMA(tag)].astype(dt)
+        istd = 1.0 / np.sqrt(vals[tag + "nvar"].astype(dt) + 1e-5)
+        return float(np.abs(g * istd).max())
+
+    def bn_fresh(a_eff, A, E):
+        """eval-BN (sub, mul istd, mul γ, add β = rounded elementwise chain)"""
+        return 5 * U32 * (a_eff * (A + E) + A) + a_eff * E
+
+    def swish_fold(A, E):
+        return 1.1 * E + (ESIG + 2 * U32) * A
+
+    def conv_budget(x_act, Wname, bname, stride, pad, E, depthwise=False):
+        W = vals[Wname]
+        Wd_ = np.abs(W.astype(dt))
+        if depthwise:
+            sumabs = float(dwconv_np(np.abs(x_act), Wd_, stride, pad,
+                                     dt).max())
+            m = W.shape[2] * W.shape[3]
+        else:
+            sumabs = float(conv_np(np.abs(x_act), Wd_, stride, pad, dt).max())
+            m = W.shape[1] * W.shape[2] * W.shape[3]
+        rowsum = float(Wd_.sum(axis=(1, 2, 3)).max())
+        b = ((1 + U32) ** (m + 2) - 1) * (sumabs + mags(vals[bname])
+                                          + rowsum * E) + rowsum * E
+        return b, rowsum
+
+    # ── the f64 oracle, run twice (pass 1 calibrates; pass 2 = reference +
+    #    inline per-stage budgets/gains at the frozen f32 stats) ────────────
+    def oracle(with_budgets):
+        acts, names, bs_, gs = [], [], [], []
+        x4 = vals["x"].astype(dt).reshape(32, 3, 224, 224)
+        z = conv_np(x4, vals["sW"], 2, 1, dt) \
+            + vals["sb"].astype(dt)[None, :, None, None]
+        zb = calib("st", z)
+        h = swish(zb)
+        acts.append(h)
+        names.append("stem")
+        if with_budgets:
+            Ec, rs = conv_budget(x4, "sW", "sb", 2, 1, 0.0)
+            a_eff = bn_gain("st")
+            bs_.append(swish_fold(mags(zb), bn_fresh(a_eff, mags(zb), Ec)))
+            gs.append(1.1 * a_eff * rs)
+        for i, (ic, mid, oc, r, k, s) in enumerate(cfg, start=1):
+            p = f"b{i}"
+            inp = h
+            E, g_blk = 0.0, 1.0
+            if mid != ic:
+                ze = conv_np(h, vals[p + "eW"], 1, 0, dt) \
+                    + vals[p + "eb"].astype(dt)[None, :, None, None]
+                zeb = calib(p + "e", ze)
+                if with_budgets:
+                    Ec, rs = conv_budget(h, p + "eW", p + "eb", 1, 0, E)
+                    a_eff = bn_gain(p + "e")
+                    E = swish_fold(mags(zeb), bn_fresh(a_eff, mags(zeb), Ec))
+                    g_blk *= 1.1 * a_eff * rs
+                h = swish(zeb)
+                del ze, zeb
+            zd = dwconv_np(h, vals[p + "dW"], s, (k - 1) // 2, dt) \
+                + vals[p + "db"].astype(dt)[None, :, None, None]
+            zdb = calib(p + "d", zd)
+            if with_budgets:
+                Ec, rs = conv_budget(h, p + "dW", p + "db", s, (k - 1) // 2,
+                                     E, depthwise=True)
+                a_eff = bn_gain(p + "d")
+                E = swish_fold(mags(zdb), bn_fresh(a_eff, mags(zdb), Ec))
+                g_blk *= 1.1 * a_eff * rs
+            ds = swish(zdb)
+            del zd, zdb, h
+            sq = ds.mean(axis=(2, 3))
+            d1 = sq @ vals[p + "zW1"].astype(dt) + vals[p + "zb1"].astype(dt)
+            a1 = swish(d1)
+            d2 = a1 @ vals[p + "zW2"].astype(dt) + vals[p + "zb2"].astype(dt)
+            gate = sigmoid_np(d2)
+            se = ds * gate[:, :, None, None]
+            if with_budgets:
+                A_ds = mags(ds)
+                rs1 = float(np.abs(vals[p + "zW1"].astype(dt))
+                            .sum(axis=0).max())
+                rs2 = float(np.abs(vals[p + "zW2"].astype(dt))
+                            .sum(axis=0).max())
+                hw = ds.shape[2] * ds.shape[3]
+                E_pool = E + ((1 + U32) ** (hw + 1) - 1) * A_ds
+                E_d1 = ((1 + U32) ** (mid + 2) - 1) * (
+                    float(np.abs(sq).max()) * rs1
+                    + mags(vals[p + "zb1"])) + rs1 * E_pool
+                E_sw = swish_fold(mags(d1), E_d1)
+                E_d2 = ((1 + U32) ** (r + 2) - 1) * (
+                    float(np.abs(a1).max()) * rs2
+                    + mags(vals[p + "zb2"])) + rs2 * E_sw
+                E_gate = 0.25 * E_d2 + ESIG
+                E = float(gate.max()) * E + A_ds * E_gate + 2 * U32 * A_ds
+                g_blk *= float(gate.max()) + A_ds * 0.25 * rs2 * 1.1 * rs1
+            zp = conv_np(se, vals[p + "pW"], 1, 0, dt) \
+                + vals[p + "pb"].astype(dt)[None, :, None, None]
+            h2 = calib(p + "p", zp)
+            if with_budgets:
+                Ec, rs = conv_budget(se, p + "pW", p + "pb", 1, 0, E)
+                a_eff = bn_gain(p + "p")
+                E = bn_fresh(a_eff, mags(h2), Ec)
+                g_blk *= a_eff * rs
+            del ds, se, zp
+            if ic == oc and s == 1:
+                h2 = h2 + inp
+                if with_budgets:
+                    E = E + U32 * mags(h2)
+                    g_blk += 1.0
+            h = h2
+            del inp
+            acts.append(h)
+            names.append(f"block{i}" + ("↓" if s == 2 else ""))
+            if with_budgets:
+                bs_.append(E)
+                gs.append(g_blk)
+        zh = conv_np(h, vals["hW"], 1, 0, dt) \
+            + vals["hb"].astype(dt)[None, :, None, None]
+        zhb = calib("h", zh)
+        if with_budgets:
+            Ec, rs = conv_budget(h, "hW", "hb", 1, 0, 0.0)
+            a_eff = bn_gain("h")
+            bs_.append(swish_fold(mags(zhb), bn_fresh(a_eff, mags(zhb), Ec)))
+            gs.append(1.1 * a_eff * rs)
+        h = swish(zhb)
+        acts.append(h)
+        names.append("head conv")
+        g = h.mean(axis=(2, 3))
+        acts.append(g)
+        names.append("gap")
+        if with_budgets:
+            A_h = mags(h)
+            bs_.append(U32 * (1 + U32) ** 50 * A_h
+                       + ((1 + U32) ** 50 - 1) * A_h)
+            gs.append(1.0)
+        out = g @ vals["Wd"].astype(dt) + vals["bd"].astype(dt)
+        acts.append(out)
+        names.append("dense (logits)")
+        if with_budgets:
+            sumabs_h = float((np.abs(g) @ np.abs(vals["Wd"].astype(dt))).max())
+            bs_.append(((1 + U32) ** (1280 + 2) - 1)
+                       * (sumabs_h + mags(vals["bd"])))
+            gs.append(float(np.abs(vals["Wd"].astype(dt)).sum(axis=0).max()))
+        return acts, names, bs_, gs
+
+    oracle(False)                               # pass 1: calibrate stats
+    acts, names, bs_, gs = oracle(True)         # pass 2: reference + budgets
+    out = acts[-1]
+    H_prov = [float(np.prod(gs[i + 1:])) for i in range(len(gs))]
+
+    # ── the committed render, as-is, on gfx1100 ────────────────────────────
+    out_g = run_iree(mlir, [vals[n] for n, _ in sig],
+                     fn="efficientnet_fwd_eval",
+                     module_name="m").astype(np.float64)
+    true_err = float(np.abs(out_g - out).max())
+
+    # ── measured tail gains (f32, per-sample — eval BN ⇒ no batch coupling)
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def jbn(z, tag):
+        istd = 1.0 / jnp.sqrt(jx(vals[tag + "nvar"]) + 1e-5)
+        return (z - jx(vals[tag + "nmu"])[None, :, None, None]) \
+            * (istd * jx(vals[GAMMA(tag)]))[None, :, None, None] \
+            + jx(vals[BETA(tag)])[None, :, None, None]
+
+    def jswish(x):
+        return x * jax.nn.sigmoid(x)
+
+    def jconv(a, W, s, p, groups=1):
+        return jax.lax.conv_general_dilated(
+            a, W, (s, s), ((p, p), (p, p)),
+            dimension_numbers=('NCHW', 'OIHW', 'NCHW'),
+            feature_group_count=groups)
+
+    def stage_fns():
+        fns = []
+        for i, (ic, mid, oc, r, k, s) in enumerate(cfg, start=1):
+            p = f"b{i}"
+
+            def bf(a, p=p, ic=ic, mid=mid, oc=oc, k=k, s=s):
+                inp = a
+                if mid != ic:
+                    a = jswish(jbn(jconv(a, jx(vals[p + "eW"]), 1, 0)
+                                   + jx(vals[p + "eb"])[None, :, None, None],
+                                   p + "e"))
+                a = jswish(jbn(jconv(a, jx(vals[p + "dW"]), s, (k - 1) // 2,
+                                     groups=mid)
+                               + jx(vals[p + "db"])[None, :, None, None],
+                               p + "d"))
+                sq = a.mean(axis=(2, 3))
+                a1 = jswish(sq @ jx(vals[p + "zW1"]) + jx(vals[p + "zb1"]))
+                gate = jax.nn.sigmoid(a1 @ jx(vals[p + "zW2"])
+                                      + jx(vals[p + "zb2"]))
+                a = a * gate[:, :, None, None]
+                a = jbn(jconv(a, jx(vals[p + "pW"]), 1, 0)
+                        + jx(vals[p + "pb"])[None, :, None, None], p + "p")
+                return a + inp if (ic == oc and s == 1) else a
+            fns.append(bf)
+        fns.append(lambda a: jswish(jbn(
+            jconv(a, jx(vals["hW"]), 1, 0)
+            + jx(vals["hb"])[None, :, None, None], "h")))
+        fns.append(lambda a: a.mean(axis=(2, 3)))
+        fns.append(lambda a: a @ jx(vals["Wd"]) + jx(vals["bd"]))
+        return fns
+
+    fns = stage_fns()       # fns[i] is the stage AFTER acts[i]'s output
+    H_meas = []
+    for i in range(len(acts) - 1):
+        aout = acts[i]
+        gain = 0.0
+        for smp in range(2):
+            a1 = jx(aout[smp:smp + 1])
+
+            def tail(aa, i=i):
+                for f in fns[i:]:
+                    aa = f(aa)
+                return aa[0]
+            J = jax.jacrev(tail)(a1)
+            gain = max(gain, float(jnp.abs(J.reshape(10, -1))
+                                   .sum(axis=1).max()))
+        H_meas.append(gain)
+    H_meas.append(1.0)
+
+    cb_meas = sum(H * b for H, b in zip(H_meas, bs_))
+    cb_prov = sum(H * b for H, b in zip(H_prov, bs_))
+    print(f"\n{'stage':<16}{'fresh b_i':>12}{'H_i meas':>11}{'H_i·b_i':>11}"
+          f"{'H_i proven':>13}")
+    for name, b, Hm, Hp in zip(names, bs_, H_meas, H_prov):
+        print(f"{name:<16}{b:>12.3e}{Hm:>11.3e}{Hm * b:>11.3e}{Hp:>13.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget measured-H: {cb_meas:.3e}  "
+          f"({cb_meas / true_err:.1e}× true)")
+    print(f"  chainBudget proven-H  : {cb_prov:.3e}  "
+          f"({cb_prov / true_err:.1e}× true)   [= the interval fold]")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+    print("\n  THE COMMITTED RENDER (verified_mlir/efficientnet_fwd_eval.mlir)")
+    print("  run as-is on gfx1100; oracle mirrors it op-for-op in f64.")
 
 
 def main():
