@@ -2714,7 +2714,7 @@ def mnv2_probe():
 #     two-part gain). Same machinery ports to r34/enet (add conv_d/bn_d ops on
 #     the stream part).
 # ═══════════════════════════════════════════════════════════════════════════
-def mnv2_probe_ops(tree_reduce=False):
+def mnv2_probe_ops(tree_reduce=False, weights=None):
     import jax
     import jax.numpy as jnp
     import re
@@ -2744,25 +2744,28 @@ def mnv2_probe_ops(tree_reduce=False):
            (96, 576, 160, 2), (160, 960, 160, 1), (160, 960, 160, 1),
            (160, 960, 320, 1)]
 
-    vals = {}
-    for name, shape in sig:
-        if name == "x":
-            vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
-        elif name.endswith("nmu") or name.endswith("nvar"):
-            vals[name] = None
-        elif len(shape) == 4:
-            fan = shape[1] * shape[2] * shape[3]
-            vals[name] = (rng.standard_normal(shape)
-                          * (2.0 / fan) ** 0.5).astype(np.float32)
-        elif len(shape) == 2:
-            vals[name] = (rng.standard_normal(shape)
-                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
-        elif name.endswith("g"):
-            vals[name] = np.ones(shape, np.float32)
-        elif name.endswith("bt"):
-            vals[name] = np.zeros(shape, np.float32)
-        else:
-            vals[name] = (rng.standard_normal(shape) * 0.01).astype(np.float32)
+    if weights is not None:                # P6: injected TRAINED weights + input
+        vals = weights                     # (running stats pre-populated, so
+    else:                                  #  calib() below no-ops on them)
+        vals = {}
+        for name, shape in sig:
+            if name == "x":
+                vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
+            elif name.endswith("nmu") or name.endswith("nvar"):
+                vals[name] = None
+            elif len(shape) == 4:
+                fan = shape[1] * shape[2] * shape[3]
+                vals[name] = (rng.standard_normal(shape)
+                              * (2.0 / fan) ** 0.5).astype(np.float32)
+            elif len(shape) == 2:
+                vals[name] = (rng.standard_normal(shape)
+                              * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+            elif name.endswith("g"):
+                vals[name] = np.ones(shape, np.float32)
+            elif name.endswith("bt"):
+                vals[name] = np.zeros(shape, np.float32)
+            else:
+                vals[name] = (rng.standard_normal(shape) * 0.01).astype(np.float32)
 
     GAMMA = lambda t: {"st": "sg", "h": "hg"}.get(t, t + "g")
     BETA = lambda t: {"st": "sbt", "h": "hbt"}.get(t, t + "bt")
@@ -3393,7 +3396,7 @@ def r34_probe_ops(tree_reduce=False):
 #     SIBLING branches (chain2 block-diagonal) + the residual source. Committed
 #     vit_fwd.mlir, gfx1100. 14 ops/block × 12 + patch/finalLN/head.
 # ═══════════════════════════════════════════════════════════════════════════
-def vit_probe_ops(nblocks=12, tree_reduce=False):
+def vit_probe_ops(nblocks=12, tree_reduce=False, weights=None):
     import jax
     import jax.numpy as jnp
     import re
@@ -3419,21 +3422,24 @@ def vit_probe_ops(nblocks=12, tree_reduce=False):
     EEXP = 2 * U32
     rng2 = np.random.default_rng(42)
 
-    vals = {}
-    for name, shape in sig:
-        if name == "x":
-            vals[name] = rng2.standard_normal((32, 150528)).astype(np.float32)
-        elif len(shape) == 4:
-            fan = shape[1] * shape[2] * shape[3]
-            vals[name] = (rng2.standard_normal(shape)
-                          * (2.0 / fan) ** 0.5).astype(np.float32)
-        elif len(shape) == 2 and name != "pos":
-            vals[name] = (rng2.standard_normal(shape)
-                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
-        elif name.endswith("g1") or name.endswith("g2") or name == "gF":
-            vals[name] = np.ones(shape, np.float32)
-        else:
-            vals[name] = np.zeros(shape, np.float32)
+    if weights is not None:                # P6: injected TRAINED weights + input
+        vals = weights
+    else:
+        vals = {}
+        for name, shape in sig:
+            if name == "x":
+                vals[name] = rng2.standard_normal((32, 150528)).astype(np.float32)
+            elif len(shape) == 4:
+                fan = shape[1] * shape[2] * shape[3]
+                vals[name] = (rng2.standard_normal(shape)
+                              * (2.0 / fan) ** 0.5).astype(np.float32)
+            elif len(shape) == 2 and name != "pos":
+                vals[name] = (rng2.standard_normal(shape)
+                              * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+            elif name.endswith("g1") or name.endswith("g2") or name == "gF":
+                vals[name] = np.ones(shape, np.float32)
+            else:
+                vals[name] = np.zeros(shape, np.float32)
 
     def ln_tok(z, gname, btname):
         mu = z.mean(axis=-1, keepdims=True)
@@ -3774,7 +3780,7 @@ def vit_probe_ops(nblocks=12, tree_reduce=False):
 #     tree_reduce turns its n·u face into ⌈log₂n⌉·u = 19·u. Downsamples
 #     (LN + stride-2 conv between stages) carry no residual.
 # ═══════════════════════════════════════════════════════════════════════════
-def convnext_probe_ops(tree_reduce=False):
+def convnext_probe_ops(tree_reduce=False, weights=None):
     import jax
     import jax.numpy as jnp
     import re
@@ -3797,21 +3803,24 @@ def convnext_probe_ops(tree_reduce=False):
     EPS_LN = 1e-6
     stages_cfg = [(96, 3), (192, 3), (384, 9), (768, 3)]
 
-    vals = {}
-    for name, shape in sig:
-        if name == "x":
-            vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
-        elif len(shape) == 4:
-            fan = shape[1] * shape[2] * shape[3]
-            vals[name] = (rng.standard_normal(shape)
-                          * (2.0 / fan) ** 0.5).astype(np.float32)
-        elif len(shape) == 2:
-            vals[name] = (rng.standard_normal(shape)
-                          * (2.0 / shape[0]) ** 0.5).astype(np.float32)
-        elif name.endswith("g"):
-            vals[name] = np.ones(shape if shape else (), np.float32)
-        else:
-            vals[name] = np.zeros(shape if shape else (), np.float32)
+    if weights is not None:                # P6: injected TRAINED weights + input
+        vals = weights
+    else:
+        vals = {}
+        for name, shape in sig:
+            if name == "x":
+                vals[name] = rng.standard_normal((32, 150528)).astype(np.float32)
+            elif len(shape) == 4:
+                fan = shape[1] * shape[2] * shape[3]
+                vals[name] = (rng.standard_normal(shape)
+                              * (2.0 / fan) ** 0.5).astype(np.float32)
+            elif len(shape) == 2:
+                vals[name] = (rng.standard_normal(shape)
+                              * (2.0 / shape[0]) ** 0.5).astype(np.float32)
+            elif name.endswith("g"):
+                vals[name] = np.ones(shape if shape else (), np.float32)
+            else:
+                vals[name] = np.zeros(shape if shape else (), np.float32)
 
     def ln_scalar(z, gname, btname):
         N = z.shape[0]

@@ -181,12 +181,38 @@ CONFIRMING they were pessimistic at init — but the fresh budgets RISE** (train
 are larger, real-image deep activations larger, so the per-op Higham dot terms grow), so
 the net budget is 0.41, not lower. The dominant residual SHIFTS from early tail gains
 (at init) to late-block fresh Higham (trained: b16/b15/b14 c1/c2, already P2-reduced).
-Both regimes certify comfortably (trained 0.41 < 3.8, i.e. 0.11×). **Bottom line: the
-whole-net float certificate is robust to init-vs-trained — it holds on the real deployed
-network.** Gotcha: `val.bin` has a 4-byte count header (3925) + class-SORTED records —
-skip 4 bytes and stride-sample or every image reads as class 0 / misaligned garbage
-(cost hours: the render gave 0% until the header was found). Follow-up: mnv2/vit/enet
-checkpoints are also on disk (`*_adam_ckpt.bin`) — same recipe.
+Both regimes certify comfortably (trained 0.41 < 3.8, i.e. 0.11×). Gotcha: `val.bin` has
+a 4-byte count header (3925) + class-SORTED records — skip 4 bytes and stride-sample or
+every image reads as class 0 / misaligned garbage (cost hours: the render gave 0% until
+the header was found).
+
+**P6 PASS across architectures (`scripts/p6_{vit,convnext}_trained.py` + the `weights=`
+injection into the op-gran probes, 2026-07-04): the certificate holds on the real trained
+net in EVERY architecture tried — CNN, transformer, and LN-CNN.** ViT/ConvNeXt use
+LayerNorm (computed per-input at eval), so — unlike r34 — they need NO frozen-stats
+reconstruction: just map the trained ckpt (`[params, adam_m, adam_v]`, params in render
+arg order — clean `3×nP` for both) into `vals` and feed real Imagenette. Both gate at
+their (under-trained, epoch-1 verified) accuracies (ViT 40.6% = log's 39.7%; ConvNeXt
+37.5% = 36%), confirming the operating point is faithful.
+
+| net | arch | at-init | **TRAINED** | logit scale | over | direction |
+|---|---|---|---|---|---|---|
+| ResNet-34 | BN-CNN | 0.17 | **0.41** | 3.4 | 0.11× | ↑ (He-init, fresh grows) |
+| ViT-Tiny | transformer | 0.57 | **0.22** | 4.5 | 0.05× | ↓ (zero-init patch removed) |
+| ConvNeXt-T | LN-CNN | 0.80 | **1.10** | 3.9 | 0.28× | ↑ (fresh grows) |
+
+**Bottom line: the whole-net float certificate is NOT an at-init artifact — it holds on
+the real trained net across CNN/transformer/LN-CNN.** The DIRECTION of change is
+net-dependent, and the mechanism is now clear: where the at-init net has a PATHOLOGICAL
+init component, training removes it and the certificate TIGHTENS (ViT's zero-init
+cls/pos/patch gave a tail gain 1.7e4 → 2724 trained, so 0.57 → 0.22); where init is clean
+He/normal, training's larger weights + real deep activations grow the per-op fresh Higham
+faster than the tail gains drop, so it loosens slightly (r34, ConvNeXt) — but always well
+within the logit scale. Two BN nets remain: **mnv2** (86.8%-trained, but its resume ckpt
+is `3×(nP+1120)` — an unexplained 1120-float offset from `MobileNetV2Layout.specs`; needs
+the exact resume-format layout) and **enet** (SE-DAG + BN — ckpt is clean `3×nP` but the
+frozen-stats gate needs the SE true-BN forward). Both are same-architecture-class as r34;
+documented follow-ups, not blockers.
 
 Fresh-session infra notes (hard-won):
 - Run everything from `scripts/` under `jax/.venv` (`HIP_VISIBLE_DEVICES=0`, python -u,
