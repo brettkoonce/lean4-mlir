@@ -76,6 +76,7 @@ import LeanMlir.Proofs.Resnet34FloatBridge
 import LeanMlir.Proofs.BnInputBridge
 import LeanMlir.Proofs.Resnet34BlockBridge
 import LeanMlir.Proofs.FloatComposeBridge
+import LeanMlir.Proofs.AdjointChainBridge
 import LeanMlir.Proofs.BnEvalFloatBridge
 import LeanMlir.Proofs.EnetFloatBridge
 import LeanMlir.Proofs.DepthwiseFloatBridge
@@ -1478,6 +1479,30 @@ open Proofs
 #print axioms floatClose_relu
 #print axioms floatClose_flatConv
 #print axioms floatClose_reluConv
+-- Depth-LINEAR composition (AdjointChainBridge.lean): the telescoping/hybrid
+-- alternative to the .comp interval fold, proven ONCE by induction on the layer
+-- list — |chainF x − chainR x| ≤ Σᵢ Hᵢ·bᵢ with bᵢ the per-layer FRESH budget
+-- (the FloatClose modulus at e=0) and Hᵢ a windowed Lipschitz gain of the REAL
+-- tail after layer i. Exact (no linearization); the Hᵢ are ordinary hypotheses,
+-- dischargeable by worst-case suffix products (tailGains_suffixProd — recovers
+-- the old interval bound, so this SUBSUMES the .comp fold) or supplied from the
+-- measured adjoint/VJP tail gains (the esig/egelu-style MEASURED tier; the
+-- interval fold is ~10⁴⁰× loose at depth 24 on gfx1100, the measured-gain chain
+-- budget is depth-linear). Gain instances: dense = fan-in row sum m·w', relu = 1,
+-- softmax = (e^{4A}−1)/(2A) — the nonlinear e^{2δ}−1 modulus IS linear on a window
+-- (convexity of exp through the origin), so the "softmax doesn't fit a local
+-- contract" objection dissolves; LayerCert.of_floatClose slots every existing
+-- FloatClose instance into the chain.
+#print axioms Proofs.chain_adjointClose
+#print axioms Proofs.tailGains_suffixProd
+#print axioms Proofs.lipOnWindow_chainR
+#print axioms Proofs.LipOnWindow.comp
+#print axioms Proofs.lipOnWindow_dense
+#print axioms Proofs.lipOnWindow_relu
+#print axioms Proofs.lipOnWindow_softmax
+#print axioms Proofs.lipOnWindow_reluDense
+#print axioms Proofs.LayerCert.of_floatClose
+#print axioms Proofs.layerCert_reluDense
 -- Eval-mode BN/LN as a fixed affine (BnEvalFloatBridge.lean, planning §4): the
 -- DEPLOYED-forward win. Running-stats BN at eval = a·x+b with a=γ/√(σ²+ε),
 -- b=β−γμ/√(σ²+ε) precomputed offline — no batch reduce, no runtime rsqrt (the
