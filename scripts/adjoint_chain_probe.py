@@ -37,12 +37,36 @@ would close most of that gap formally.
 Run under the IREE/JAX venv (see ROCM.md):
   /home/skoonce/lean/claude_max/lean4-jax/.venv/bin/python scripts/adjoint_chain_probe.py
 """
+import math
+
 import numpy as np
 
 U32 = 2.0 ** -24
 B, N = 32, 64
 NJAC = 8            # samples used for the measured tail-gain max
 rng = np.random.default_rng(42)
+
+# ── P2: tree-reduction Higham factor (TreeReduceBridge.lean's tree_close) ────
+# A length-n reduction pays the association-independent (1+u)^(n+1) sequentially
+# (dot_close/sum_close), but IREE lowers reduce/dot_general contraction as a
+# BALANCED tree ⇒ each summand sees only ⌈log₂n⌉ additions. Toggling _TREE_REDUCE
+# swaps the reduction-count part of every Higham exponent n → ⌈log₂n⌉, under the
+# quarantined "deployed reduce is order-balanced" hypothesis (tree_close_of_depth,
+# validated by kernel_faithfulness_probe). The +off constant (bias/seed terms)
+# is kept. This is the numeric face of the Lean lemma.
+_TREE_REDUCE = False
+
+
+def _rexp(n, off):
+    """Higham reduction exponent: sequential n+off, or balanced ⌈log₂n⌉+off."""
+    n = int(n)
+    base = math.ceil(math.log2(n)) if (_TREE_REDUCE and n >= 2) else n
+    return base + off
+
+
+def _rfac(n, off):
+    """(1+u)^(reduction exponent) − 1 — sequential or balanced per _TREE_REDUCE."""
+    return (1 + U32) ** _rexp(n, off) - 1
 
 
 # ── IREE on gfx1100 (rocm backend / hip runtime) ─────────────────────────────
@@ -475,7 +499,8 @@ ERS = 2 * U32          # rsqrt accuracy, pinned on gfx1100 (cifar_bn_margin_prob
 
 
 def bn_mean_budget(u, n, A):
-    return u * ((1 + u) ** (n + 1) * A) + ((1 + u) ** (n + 1) - 1) * A
+    p = (1 + u) ** _rexp(n, 1)          # reduction factor (tree-aware, P2)
+    return u * (p * A) + (p - 1) * A
 
 
 def mul_err(u, A, C, ea, ec):
@@ -483,7 +508,7 @@ def mul_err(u, A, C, ea, ec):
 
 
 def bn_var_budget(u, D, emean, n):
-    g = (1 + u) ** (n + 1) - 1
+    g = _rfac(n, 1)                     # reduction factor (tree-aware, P2)
     es1 = u * (D + emean) + emean
     esq = mul_err(u, D, D, es1, es1)
     return u * (D * D + g * (D * D + esq) + esq) + (g * (D * D + esq) + esq)
@@ -506,16 +531,19 @@ def bn_per_example(z):
     return (z - mu) / np.sqrt(var + EPS_BN)
 
 
-def cifar8bn_probe(per_channel_bn=False):
+def cifar8bn_probe(per_channel_bn=False, tree_reduce=False):
     import jax
     import jax.numpy as jnp
     jax.config.update("jax_enable_x64", True)
     jax.config.update("jax_platform_name", "cpu")
     from kernel_faithfulness_probe import layer_budget
 
+    global _TREE_REDUCE
+    _TREE_REDUCE = tree_reduce
     print("\n" + "═" * 78)
     print("(4) COMMITTED CIFAR-8-BN — adjoint chain vs interval fold, gfx1100"
-          + ("  [P4 per-channel BN]" if per_channel_bn else ""))
+          + ("  [P4 per-channel BN]" if per_channel_bn else "")
+          + ("  [P2 tree-reduce]" if tree_reduce else ""))
     print("═" * 78)
     chans = [(3, 16), (16, 16), (16, 16), (16, 16),
              (16, 32), (32, 32), (32, 32), (32, 32)]
@@ -796,6 +824,7 @@ def cifar8bn_probe(per_channel_bn=False):
     print(f"  logits magnitude      : {mags(out):.3e}")
     print("\n  BN budgets/gains at the A-POSTERIORI floor (σ²min+ε); the strict")
     print("  ε-floor Lean face multiplies each BN gain by ~(σ²+ε)^1.5/ε^1.5.")
+    _TREE_REDUCE = False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2675,14 +2704,17 @@ def mnv2_probe():
 #     two-part gain). Same machinery ports to r34/enet (add conv_d/bn_d ops on
 #     the stream part).
 # ═══════════════════════════════════════════════════════════════════════════
-def mnv2_probe_ops():
+def mnv2_probe_ops(tree_reduce=False):
     import jax
     import jax.numpy as jnp
     import re
     import os
 
+    global _TREE_REDUCE
+    _TREE_REDUCE = tree_reduce
     print("\n" + "═" * 78)
-    print("(10) MobileNetV2 — OP-GRANULARITY chain2 (P1), gfx1100")
+    print("(10) MobileNetV2 — OP-GRANULARITY chain2 (P1), gfx1100"
+          + ("  [+P2 tree-reduce]" if tree_reduce else ""))
     print("═" * 78)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     mlir = open(os.path.join(
@@ -2763,7 +2795,7 @@ def mnv2_probe_ops():
         else:
             sumabs = float(conv_np(np.abs(x_act), Wd_, stride, pad, dt).max())
             m = W.shape[1] * W.shape[2] * W.shape[3]
-        return ((1 + U32) ** (m + 2) - 1) * (sumabs + mags(vals[bname]))
+        return _rfac(m, 2) * (sumabs + mags(vals[bname]))
 
     # ── calibration pass: block-structured forward to populate nmu/nvar ─────
     x4 = vals["x"].astype(dt).reshape(32, 3, 224, 224)
@@ -2888,14 +2920,15 @@ def mnv2_probe_ops():
     h = relu6(zb)
     emit_exact("head-relu6", h, None)
     A_h = mags(h)
+    hw_head = h.shape[2] * h.shape[3]
     g = h.mean(axis=(2, 3))
-    emit_lin("gap", g, U32 * (1 + U32) ** 50 * A_h
-             + ((1 + U32) ** 50 - 1) * A_h,
+    emit_lin("gap", g, U32 * (1 + U32) ** _rexp(hw_head, 1) * A_h
+             + _rfac(hw_head, 1) * A_h,
              (lambda t: t.mean(axis=(2, 3))))
     sumabs_h = float((np.abs(g) @ np.abs(vals["Wd"].astype(dt))).max())
     out = g @ vals["Wd"].astype(dt) + vals["bd"].astype(dt)
     emit_lin("dense (logits)", out,
-             ((1 + U32) ** (1280 + 2) - 1) * (sumabs_h + mags(vals["bd"])),
+             _rfac(1280, 2) * (sumabs_h + mags(vals["bd"])),
              (lambda t: t @ jx(vals["Wd"]) + jx(vals["bd"])))
 
     # ── true GPU drift (committed render, one IREE run) ─────────────────────
@@ -2955,6 +2988,7 @@ def mnv2_probe_ops():
     print(f"  chainBudget2 (op-gran): {cb:.3e}  ({cb / true_err:.1e}× true)")
     print(f"  vs §9 block-granularity: 7.1e+01 — the P1 win")
     print(f"  logits magnitude      : {mags(out):.3e}")
+    _TREE_REDUCE = False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2968,12 +3002,15 @@ def mnv2_probe_ops():
 #     live. Eval-mode BN (batch-calibrated running-stats affine, γ=1/β=0), the
 #     deployed forward. Block granularity (§5) was 698; op granularity below.
 # ═══════════════════════════════════════════════════════════════════════════
-def r34_probe_ops():
+def r34_probe_ops(tree_reduce=False):
     import jax
     import jax.numpy as jnp
 
+    global _TREE_REDUCE
+    _TREE_REDUCE = tree_reduce
     print("\n" + "═" * 78)
-    print("(11) ResNet-34 @224² — OP-GRANULARITY chain2 (P1), gfx1100")
+    print("(11) ResNet-34 @224² — OP-GRANULARITY chain2 (P1), gfx1100"
+          + ("  [+P2 tree-reduce]" if tree_reduce else ""))
     print("═" * 78)
     B = 2
     EPS = 1e-5
@@ -3040,7 +3077,7 @@ def r34_probe_ops():
         m = W.shape[1] * W.shape[2] * W.shape[3]
         sumabs = float(conv_np(np.abs(x_act), np.abs(W.astype(dt)),
                                stride, pad, dt).max())
-        return ((1 + U32) ** (m + 2) - 1) * sumabs
+        return _rfac(m, 2) * sumabs
 
     def bn_fresh0(ab, A):
         amax, bmax = mags(ab[0]), mags(ab[1])
@@ -3177,13 +3214,13 @@ def r34_probe_ops():
     hw = h.shape[2] * h.shape[3]
     gap = h.mean(axis=(2, 3))
     ops.append(dict(name="gap", out=gap,
-                    fresh=U32 * (1 + U32) ** (hw + 1) * mags(h)
-                    + ((1 + U32) ** (hw + 1) - 1) * mags(h),
+                    fresh=U32 * (1 + U32) ** _rexp(hw, 1) * mags(h)
+                    + _rfac(hw, 1) * mags(h),
                     mk_tail=lambda smp: (lambda t: t @ jx(Whead) + jx(bhead))))
     out = gap @ Whead.astype(dt) + bhead.astype(dt)
     sumabs_h = float((np.abs(gap) @ np.abs(Whead.astype(dt))).max())
     ops.append(dict(name="dense (logits)", out=out,
-                    fresh=((1 + U32) ** (512 + 2) - 1)
+                    fresh=_rfac(512, 2)
                     * (sumabs_h + mags(bhead)), mk_tail=None))   # H=1
 
     # ── true GPU drift: reuse §5's emitted kernel via the same helpers ──────
@@ -3329,6 +3366,7 @@ def r34_probe_ops():
     print(f"  chainBudget2 (op-gran): {cb:.3e}  ({cb / true_err:.1e}× true)")
     print(f"  vs §5 block-granularity: 6.98e+02 — the P1 win")
     print(f"  logits magnitude      : {mags(out):.3e}")
+    _TREE_REDUCE = False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3345,15 +3383,18 @@ def r34_probe_ops():
 #     SIBLING branches (chain2 block-diagonal) + the residual source. Committed
 #     vit_fwd.mlir, gfx1100. 14 ops/block × 12 + patch/finalLN/head.
 # ═══════════════════════════════════════════════════════════════════════════
-def vit_probe_ops(nblocks=12):
+def vit_probe_ops(nblocks=12, tree_reduce=False):
     import jax
     import jax.numpy as jnp
     import re
     import os
 
+    global _TREE_REDUCE
+    _TREE_REDUCE = tree_reduce
     print("\n" + "═" * 78)
     print(f"(12) ViT-Tiny @224² — OP-GRANULARITY chain2 (P1), gfx1100"
-          + (f"  [SMOKE nblocks={nblocks}]" if nblocks != 12 else ""))
+          + (f"  [SMOKE nblocks={nblocks}]" if nblocks != 12 else "")
+          + ("  [+P2 tree-reduce]" if tree_reduce else ""))
     print("═" * 78)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     mlir = open(os.path.join(root, "verified_mlir/vit_fwd.mlir")).read()
@@ -3410,9 +3451,9 @@ def vit_probe_ops(nblocks=12):
         W = np.abs(vals[Wname].astype(dt))
         m = W.shape[0]
         sumabs = float((np.abs(h2d) @ W).max())
-        return ((1 + U32) ** (m + 2) - 1) * (sumabs + mags(vals[bname]))
+        return _rfac(m, 2) * (sumabs + mags(vals[bname]))
 
-    rho = ((1 + U32) ** (NT + 1) - 1) * (1 + EEXP) + EEXP
+    rho = _rfac(NT, 1) * (1 + EEXP) + EEXP
     kappa = (EEXP + rho) / (1 - rho)
     SM_FRESH = U32 * (1 + kappa) + kappa
 
@@ -3438,8 +3479,7 @@ def vit_probe_ops(nblocks=12):
             qh = np.abs(q[:, :, hd * DH:(hd + 1) * DH])
             kh = np.abs(k[:, :, hd * DH:(hd + 1) * DH])
             sumabs_s = float(np.einsum('btd,bsd->bts', qh, kh).max()) * 0.125
-            b = max(b, ((1 + U32) ** (DH + 2) - 1) * sumabs_s
-                    + U32 * mags(S))
+            b = max(b, _rfac(DH, 2) * sumabs_s + U32 * mags(S))
         return b
 
     def av_fresh0(al, v):
@@ -3447,7 +3487,7 @@ def vit_probe_ops(nblocks=12):
         for hd in range(NH):
             vh = np.abs(v[:, :, hd * DH:(hd + 1) * DH])
             sumabs_av = float(np.einsum('bts,bsd->btd', al[:, hd], vh).max())
-            b = max(b, ((1 + U32) ** (NT + 2) - 1) * sumabs_av)
+            b = max(b, _rfac(NT, 2) * sumabs_av)
         return b
 
     # ── jax primitives ──────────────────────────────────────────────────────
@@ -3584,7 +3624,7 @@ def vit_probe_ops(nblocks=12):
             axis=1)
         return hh + jx(vals["pos"])[None]
     ops.append(dict(name="patch+cls+pos", out=h, role="patch",
-                    fresh=((1 + U32) ** 770 - 1) * (sumabs_p
+                    fresh=_rfac(768, 2) * (sumabs_p
                           + mags(vals["bConv"])) + U32 * mags(h),
                     Ckeys=[], mk=lambda bi=None: (
                         lambda C, smp: (lambda t: blocks_after(-1, t)))))
@@ -3712,6 +3752,7 @@ def vit_probe_ops(nblocks=12):
     print(f"  chainBudget2 (op-gran): {cb:.3e}  ({cb / true_err:.1e}× true)")
     print(f"  vs §8b residual (3/blk): 1.5e+03 — the P1 win")
     print(f"  logits magnitude      : {mags(out):.3e}")
+    _TREE_REDUCE = False
 
 
 def main():

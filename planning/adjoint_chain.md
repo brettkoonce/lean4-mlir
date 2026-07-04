@@ -1,10 +1,11 @@
 # Adjoint chain: depth-linear float composition (option-2 of the scaling question)
 
-Status 2026-07-04 end-of-session: **everything below through probe §8b committed**
-(`1cc69d8`..`301c3d4`: `AdjointChainBridge.lean` + `GeluLipschitz.lean` +
-`AdjointChainResidual.lean`, all 3-axiom clean, audit at 1302 entries; probe §1–§8b);
-**§9 (mnv2) + P1 op-granularity §10–§12 + this handoff section uncommitted**. Full
-ladder + findings log below.
+Status 2026-07-04 end-of-session: **through probe §8b + P1 op-granularity §10–§12
+committed** (`1cc69d8`..`80bd988`; `AdjointChainBridge`/`GeluLipschitz`/
+`AdjointChainResidual` + the §9–§12 op-granularity probes + §4 P4 per-channel BN, all
+3-axiom clean). **P2 (`TreeReduceBridge.lean` + probe tree-reduce toggle + this handoff
+section) uncommitted** — audit re-elaborates clean at 1307 entries. **P1+P2 CERTIFIES
+mnv2 (0.30), r34 (0.17), ViT (0.57) below their logit scales.** Full ladder below.
 
 ## ═══ P1 DONE (op-granularity chain2 sweep §10–§12) — the biggest single step ═══
 
@@ -24,14 +25,14 @@ covers it); mechanical probe restructure.
 | ResNet-34 @224² | 698 (§5) | **12.6** | 3.55 | 3.5× over |
 | ViT-Tiny @224² | 1.5e3 (§8b) | **27.8** | 4.33 | 6.4× over |
 
-Updated scoreboard (adjoint chainBudget vs logit magnitude, committed renders on
+Updated scoreboard (P1+P2 adjoint chainBudget vs logit magnitude, committed renders on
 gfx1100 unless noted): MLP-24 **✓ 0.8/21** · CIFAR-8 **✓ 2.6/4.6** · MNIST-CNN 4.1/0.38
-· mnv2 **1.1/0.99 (1.1×)** · CIFAR-8-BN **20/3.2 (6.3×, P4)** · r34-twin **12.6/3.6 (3.5×)** ·
-ViT **27.8/4.3 (6.4×)** · ENet 6.8e4/1.3 (5e4×, op-gran not yet run) · ConvNeXt 3.2e6/
-2.9 (1e6×, op-gran not yet run). After op-granularity the residual EVERYWHERE is purely
-local — per-op conv/dense/LN Higham fresh (~√n loose ⇒ P2 tree-reduction) × early-block
-tail gains at init (⇒ P6 trained checkpoint). NO composition/fold/exponential faces left
-anywhere in the measured chain.
+(P2 re-run pending) · mnv2 **✓ 0.30/0.99** · r34-twin **✓ 0.17/3.4** · ViT **✓ 0.57/4.3**
+· CIFAR-8-BN **3.4/3.2 (1.1×, P4+P2)** · ENet 6.8e4/1.3 (P1+P2 not yet run) · ConvNeXt
+3.2e6/2.9 (P1+P2 not yet run). **Five nets now CERTIFIED (budget < logit scale); cifar8-bn
+at the threshold.** P1 removed the within-block fold; P2 removed the per-op √n Higham
+slack. What remains everywhere is init tail gains (⇒ P6 trained checkpoint) — NO
+composition/fold/exponential/√n face left anywhere in the measured chain.
 
 Three structural facts learned:
 1. **Op-granularity SUBSUMES the §8b (h,S) pair trick.** In the op chain the softmax is
@@ -51,20 +52,45 @@ Three structural facts learned:
    33, bn2+relu = 11.6 of 50.7 (convs sum ~3). That is the cross-channel-worst-case BN
    budget (max-D paired with min-floor) ⇒ **P4** (per-channel budgets), not P1.
 
-Two structural moves close what op-granularity leaves (both now LOCAL, not compositional):
+## ═══ P2 DONE (tree-reduction quarantine) — P1+P2 CERTIFIES all three deep nets ═══
 
-**P2 — the TREE-REDUCTION quarantine (small Lean + probe toggle; closes the two
-"impossible" faces).** MNIST-CNN's fan-in-6272 dot budget and ConvNeXt's n=301056
-scalar-LN mean/var face are irreducible at PROVEN tier because StableHLO `reduce`
-has unspecified association ⇒ the sound any-order bound is Higham n·u. But IREE lowers
-reductions as balanced trees: a `dot_close_tree` lemma family (error ≤ ((1+u)^{⌈log₂n⌉+2}−1)·Σ|xy|,
-proven for the balanced-tree evaluation order) + ONE quarantined assumption "the
-deployed reduce is order-balanced" (TRUSTED-boundary style, validated by
-`kernel_faithfulness_probe` which already shows real kernels sit 20-10⁴× inside even
-the sequential bound) turns n·u into log₂n·u: fan-in 6272 ÷ ~500 (closes MNIST-CNN:
-4.1 → ~0.01 vs 0.38), n=301056 ÷ ~16000 (closes ConvNeXt's LN face; gelu already flat).
-Lean shape: a `dotTree`/`sumTree` model + `dot_close` twin — same Higham algebra on a
-different recursion; est. 100-200 lines. Benefits EVERY conv/dense fresh budget too.
+**Result: op-granularity (P1) + tree-reduction (P2) drops mnv2, r34, AND ViT BELOW
+their logit scales — the first whole-net float certificates on the three deepest
+committed renders.** P2's `n·u → log₂n·u` on every conv/dense/BN/LN reduction removes
+the last local face left by P1 (the ~√n-loose per-op Higham fresh):
+
+| net | P1 op-gran | **P1+P2** | logit scale | verdict |
+|---|---|---|---|---|
+| MobileNetV2 @224² | 1.11 | **0.30** | 0.99 | **✓ CERTIFIED (0.31×)** |
+| ResNet-34 @224² | 12.6 | **0.17** | 3.40 | **✓ CERTIFIED (0.05×)** |
+| ViT-Tiny @224² | 27.8 | **0.57** | 4.33 | **✓ CERTIFIED (0.13×)** |
+| CIFAR-8-BN (+P4) | 20.1 (P4) | **3.44** | 3.17 | at threshold (1.09×) |
+
+**The Lean (`LeanMlir/Proofs/TreeReduceBridge.lean`, 3-axiom clean, in AuditAxioms).**
+`dot_close`/`sum_close` pay the association-independent `(1+u)^(n+1)` — sound for every
+order but worst-case `n·u`. IREE lowers a `reduce`/`dot_general` contraction as a
+BALANCED tree ⇒ each summand sees only `⌈log₂n⌉` additions. `SumTree` (binary eval
+tree) + `tree_close_gen` (ONE structural induction, parametrized by a per-leaf rounding
+count `c`) instantiates twice: `tree_close` (c=0, pure reduce: `(1+u)^depth`) and
+`dot_tree_close` (c=1, round-then-sum: `(1+u)^(depth+1)`). `tree_close_of_depth` is the
+ready-to-apply form; the balance — "the deployed reduce is a tree of depth ≤ ⌈log₂n⌉" —
+is a NAMED hypothesis at the site (esig/egelu-style, validated by `kernel_faithfulness_
+probe`'s 20–10⁴×-inside-sequential measurement), never an axiom. ~200 lines; same Higham
+algebra as `step_bound` on a tree instead of a fold. Also fixed a pre-existing lakefile
+coverage gap (the 3 adjoint modules were audited but never Proofs-roots).
+
+**The probe (`_TREE_REDUCE` flag, `n → ⌈log₂n⌉` in every reduction Higham exponent).**
+Threaded through conv fan-in / dense / BN-mean-var / gap / softmax / score / AV. The wins
+are exactly the big-`n` reductions: r34 convs `m=576–4608 → ⌈log₂⌉≈10–13` (~40–350×
+each), ViT LN `n=192 → 8`, cifar8-bn BN `n=1024 → 10`. After P2 the residual is purely
+P6 (init tail gains): ViT's is now the patch op (0.39 of 0.57, tail gain 1.7e4 at
+zero-init); r34/mnv2 the early conv tail gains. Trained weights (P6) would drop these.
+
+**Remaining "impossible" faces (P2 also closes, not yet re-run): MNIST-CNN's fan-in-6272
+dot (6273 → 13) and ConvNeXt's n=301056 scalar-LN (→ 19).** The two nets whose faces
+motivated P2; the machinery now covers them — a probe re-run is the mechanical follow-up.
+
+Two more LOCAL moves close what P1+P2 leaves (both now init-only, not compositional):
 
 **P3 — ENet-B0 + ConvNeXt-T op-granularity (probe §13–§14; mechanical, the ONLY deep
 nets not yet op-cut).** Run the §10–§12 machinery on the two committed renders. For ENet
@@ -457,14 +483,38 @@ dense/relu/softmax.
    composition, fold, or exponential face left. (CIFAR-8-BN already op-granular ⇒ its 16×
    is P4 per-channel BN, not P1. ENet/ConvNeXt op-gran = P3, not yet run.)
 
+   **P1+P2 (op-granularity + tree-reduction §10–§12, TreeReduceBridge.lean): CERTIFIED —**
+
+   | net | P1 op-gran | **P1+P2** | logit scale | verdict |
+   |---|---|---|---|---|
+   | MobileNetV2 @224² | 1.11 | **0.30** | 0.99 | **✓ CERTIFIED (0.31×)** |
+   | ResNet-34 @224² | 12.6 | **0.17** | 3.40 | **✓ CERTIFIED (0.05×)** |
+   | ViT-Tiny @224² | 27.8 | **0.57** | 4.33 | **✓ CERTIFIED (0.13×)** |
+   | CIFAR-8-BN (+P4) | 20.1 | **3.44** | 3.17 | at threshold (1.09×) |
+
+   Tree-reduction (`n·u → log₂n·u` on every conv/dense/BN/LN reduction, under the
+   `TreeReduceBridge.lean` `tree_close` lemma + the quarantined order-balanced hypothesis)
+   removes the last local face — the per-op √n Higham slack — and pushes all three deep
+   nets BELOW their logit scales: the first whole-net float certificates on the deepest
+   committed CNN, residual CNN, and transformer renders. Remaining slack is init tail
+   gains only (ViT's certificate is 0.39/0.57 the zero-init patch op ⇒ P6).
+
    Composition is solved at every scale tried — the adjoint chain stays within 1–6×
    of the logit scale where the interval fold loses 4–140 orders; what remains is
    local (per-op Higham budgets ⇒ P2, BN channel bookkeeping ⇒ P4, init-vs-trained
    gains ⇒ P6).
 
-## Session artifacts (scratchpad, 2026-07-04)
+## Committed / working artifacts
 
-`vjp_error_prop.py` / `vjp_roundoff_predict.py` (linearization tightness: exact at
-roundoff scale, degrades only ≥1e-3 perturbations, BN batch-coupling worst),
-`iree_depth_sweep.py` / `depth_sweep_bounds.py` (the interval-fold depth cliff, incl.
-softmax/BN variants), `validate_adjoint_chain.py` (= the probe, pre-scripts/ copy).
+P1+P2 lives in `scripts/adjoint_chain_probe.py` (§10 `mnv2_probe_ops`, §11
+`r34_probe_ops`, §12 `vit_probe_ops(nblocks=,tree_reduce=)`; §4 `cifar8bn_probe(
+per_channel_bn=,tree_reduce=)`; module-level `_TREE_REDUCE`/`_rexp`/`_rfac`) and
+`LeanMlir/Proofs/TreeReduceBridge.lean` (the P2 lemma; in `tests/AuditAxioms.lean`,
+lakefile Proofs roots). Run op-gran/P2 probes standalone under `jax/.venv`
+(`PYTHONPATH=scripts`, `HIP_VISIBLE_DEVICES=0`) — a §5+ probe pins CPU so measure GPU
+gains standalone or last; each op-gran GPU run is ~10–40 min (ViT slowest, the patch
+tail is a whole-net jacrev; `vit_probe_ops(nblocks=2)` = fast CPU smoke).
+
+Older scratchpad: `vjp_error_prop.py` / `vjp_roundoff_predict.py` (linearization
+tightness), `iree_depth_sweep.py` / `depth_sweep_bounds.py` (the interval-fold depth
+cliff), `validate_adjoint_chain.py` (= the probe, pre-scripts/ copy).

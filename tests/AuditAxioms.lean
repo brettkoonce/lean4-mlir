@@ -65,6 +65,7 @@ import LeanMlir.Proofs.ViTDepthK
 import LeanMlir.Proofs.MobileNetV2FullPaper
 import LeanMlir.Proofs.ConvNeXtFullT
 import LeanMlir.Proofs.FloatBridge
+import LeanMlir.Proofs.TreeReduceBridge
 import LeanMlir.Proofs.FloatSubnormalBridge
 import LeanMlir.Proofs.SgdDescent
 import LeanMlir.Proofs.SgdDescentLinear
@@ -1327,6 +1328,21 @@ open Proofs
 -- pass-through, and the linear/MLP forward-extraction capstones.
 #print axioms FloatModel.dot_close
 #print axioms FloatModel.dot_close_linear
+-- P2 (TreeReduceBridge.lean, planning/adjoint_chain.md): the balanced-tree
+-- reduction bound. dot_close/sum_close pay the association-independent Higham
+-- factor (1+u)^(n+1) — sound for every order but worst-case n·u. IREE lowers a
+-- reduce / dot_general contraction as a BALANCED tree, so each summand sees only
+-- ⌈log₂n⌉ additions. tree_close_gen (one induction over the eval tree, leaf-
+-- rounding count c) ⇒ tree_close (c=0, pure reduce: (1+u)^depth) and
+-- dot_tree_close (c=1, round-then-sum: (1+u)^(depth+1)). tree_close_of_depth is
+-- the quarantine form: the "deployed reduce is a tree of depth ≤ ⌈log₂n⌉" is a
+-- NAMED hypothesis at the site (esig/egelu-style, validated by
+-- kernel_faithfulness_probe), never an axiom — so these stay 3-axiom clean.
+#print axioms FloatModel.tree_close_gen
+#print axioms FloatModel.tree_close
+#print axioms FloatModel.dot_tree_close
+#print axioms FloatModel.tree_close_of_depth
+#print axioms FloatModel.depth_le_size
 -- §1c (planning/floatbridge_quantization.md): the two-roundoff generalization
 -- of the dot budget — a leaf precision u_leaf (FloatModel L, e.g. bf16 2⁻⁸ /
 -- fp8-E4M3 2⁻⁴ on the matmul inputs) and an accumulate precision u_acc (M.u,

@@ -712,7 +712,18 @@ lean_lib «Proofs» where
              -- net's exact magnitudes, input quantization included) ⇒ 33/34
              -- ℝ-certified images are certified for the FLOAT-EVALUATED net,
              -- ∀ rounding models at binary32 accuracy (M.u ≤ u32).
-             `LeanMlir.Proofs.LipschitzCertFloat]
+             `LeanMlir.Proofs.LipschitzCertFloat,
+             -- Depth-linear float composition (planning/adjoint_chain.md): the
+             -- telescoping chain bound (chain_adjointClose), the residual-carry
+             -- combinator (chain2_adjointClose), the saturation-aware GELU
+             -- Lipschitz gain (|gelu′| ≤ 3/2), and P2's balanced-tree reduction
+             -- bound (tree_close / dot_tree_close — n·u → log₂n·u under the
+             -- quarantined order-balanced hypothesis). Audit-leaf modules; roots
+             -- so `lake build Proofs` builds their oleans for the axiom gate.
+             `LeanMlir.Proofs.AdjointChainBridge,
+             `LeanMlir.Proofs.AdjointChainResidual,
+             `LeanMlir.Proofs.GeluLipschitz,
+             `LeanMlir.Proofs.TreeReduceBridge]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness
