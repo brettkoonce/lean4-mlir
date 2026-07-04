@@ -238,6 +238,906 @@ def cnn_probe():
     print(f"  logits magnitude      : {mags(out):.3e}")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# (3) COMMITTED CIFAR-8 (no BN) — the depth-dominated regime
+#     8 convs [16,16,32,32] + 4 pools (32→2) + 128→64→64→10 head = 15 stages,
+#     small fan-ins (≤288) — the mirror image of the MNIST-CNN finding: here
+#     the local Higham budgets are tame and COMPOSITION is the whole game.
+# ═══════════════════════════════════════════════════════════════════════════
+def cifar8_probe():
+    import jax
+    import jax.numpy as jnp
+    jax.config.update("jax_enable_x64", True)
+    jax.config.update("jax_platform_name", "cpu")
+    from kernel_faithfulness_probe import layer_budget
+
+    print("\n" + "═" * 78)
+    print("(3) COMMITTED CIFAR-8 (no BN) — adjoint chain vs interval fold, gfx1100")
+    print("═" * 78)
+    # cifar8Verified (VerifiedNets.lean): conv 3→16,16,16,16,32,32,32,32 (3×3
+    # SAME), pool after every 2 convs (32→16→8→4→2), flatten 128, dense
+    # 64/64/10.  He-init magnitude profile.
+    chans = [(3, 16), (16, 16), (16, 16), (16, 16),
+             (16, 32), (32, 32), (32, 32), (32, 32)]
+    convs = []
+    for (ic, oc) in chans:
+        std = (2.0 / (ic * 9)) ** 0.5
+        convs.append(((rng.standard_normal((oc, ic, 3, 3)) * std)
+                      .astype(np.float32),
+                      (rng.standard_normal(oc) * 0.01).astype(np.float32)))
+    dense_dims = [(128, 64), (64, 64), (64, 10)]
+    denses = []
+    for (di, do) in dense_dims:
+        std = (2.0 / di) ** 0.5
+        denses.append(((rng.standard_normal((di, do)) * std)
+                       .astype(np.float32),
+                       (rng.standard_normal(do) * 0.01).astype(np.float32)))
+    x = rng.standard_normal((4, 3, 32, 32)).astype(np.float32)
+
+    # ── emit the forward as StableHLO (conv/bias/relu ×2 → pool, ×4, head) ──
+    T = lambda *s: "tensor<" + "x".join(map(str, s)) + "xf32>"
+
+    def conv_op(o, xn, Wn, src_t, w_t, out_t):
+        return (f'    {o} = "stablehlo.convolution"({xn}, {Wn}) {{\n'
+                f'        batch_group_count = 1 : i64,\n'
+                f'        dimension_numbers = #stablehlo.conv<raw\n'
+                f'          input_batch_dimension = 0, input_feature_dimension = 1,\n'
+                f'          input_spatial_dimensions = [2, 3],\n'
+                f'          kernel_output_feature_dimension = 0,\n'
+                f'          kernel_input_feature_dimension = 1,\n'
+                f'          kernel_spatial_dimensions = [2, 3],\n'
+                f'          output_batch_dimension = 0, output_feature_dimension = 1,\n'
+                f'          output_spatial_dimensions = [2, 3]>,\n'
+                f'        feature_group_count = 1 : i64,\n'
+                f'        padding = dense<[[1, 1], [1, 1]]> : tensor<2x2xi64>,\n'
+                f'        rhs_dilation = array<i64: 1, 1>,\n'
+                f'        window_strides = array<i64: 1, 1>\n'
+                f'      }} : ({src_t}, {w_t}) -> {out_t}\n')
+
+    args = ["%x: " + T(4, 3, 32, 32)]
+    for i, ((ic, oc), _) in enumerate(zip(chans, convs)):
+        args += [f"%cw{i}: {T(oc, ic, 3, 3)}", f"%cb{i}: {T(oc)}"]
+    for i, (di, do) in enumerate(dense_dims):
+        args += [f"%dw{i}: {T(di, do)}", f"%db{i}: {T(do)}"]
+    body = []
+    cur, sp, ch = "%x", 32, 3
+    k = 0
+    for stage in range(4):
+        for _ in range(2):
+            ic, oc = chans[k]
+            src_t, out_t = T(4, ic, sp, sp), T(4, oc, sp, sp)
+            body.append(conv_op(f"%cv{k}", cur, f"%cw{k}", src_t,
+                                T(oc, ic, 3, 3), out_t))
+            body.append(f"    %cbb{k} = stablehlo.broadcast_in_dim %cb{k}, "
+                        f"dims = [1] : ({T(oc)}) -> {out_t}\n")
+            body.append(f"    %ca{k} = stablehlo.add %cv{k}, %cbb{k} : {out_t}\n")
+            body.append(f"    %cz{k} = stablehlo.constant dense<0.0> : {out_t}\n")
+            body.append(f"    %ch{k} = stablehlo.maximum %ca{k}, %cz{k} : {out_t}\n")
+            cur, ch = f"%ch{k}", oc
+            k += 1
+        in_t, out_t = T(4, ch, sp, sp), T(4, ch, sp // 2, sp // 2)
+        body.append(f"    %ninf{stage} = stablehlo.constant "
+                    f"dense<0xFF800000> : tensor<f32>\n")
+        body.append(f'    %pool{stage} = "stablehlo.reduce_window"({cur}, '
+                    f'%ninf{stage}) ({{\n'
+                    f"      ^bb0(%a: tensor<f32>, %bb: tensor<f32>):\n"
+                    f"        %m = stablehlo.maximum %a, %bb : tensor<f32>\n"
+                    f'        "stablehlo.return"(%m) : (tensor<f32>) -> ()\n'
+                    f"      }}) {{ window_dimensions = array<i64: 1, 1, 2, 2>,\n"
+                    f"           window_strides    = array<i64: 1, 1, 2, 2> }}\n"
+                    f"      : ({in_t}, tensor<f32>) -> {out_t}\n")
+        cur, sp = f"%pool{stage}", sp // 2
+    body.append(f"    %flat = stablehlo.reshape {cur} : "
+                f"({T(4, 32, 2, 2)}) -> {T(4, 128)}\n")
+    cur, d = "%flat", 128
+    for i, (di, do) in enumerate(dense_dims):
+        body.append(f"    %dd{i} = stablehlo.dot_general {cur}, %dw{i}, "
+                    f"contracting_dims = [1] x [0], precision = "
+                    f"[DEFAULT, DEFAULT] : ({T(4, di)}, {T(di, do)}) -> "
+                    f"{T(4, do)}\n")
+        body.append(f"    %dbb{i} = stablehlo.broadcast_in_dim %db{i}, "
+                    f"dims = [1] : ({T(do)}) -> {T(4, do)}\n")
+        body.append(f"    %da{i} = stablehlo.add %dd{i}, %dbb{i} : {T(4, do)}\n")
+        if i < 2:
+            body.append(f"    %dz{i} = stablehlo.constant dense<0.0> : "
+                        f"{T(4, do)}\n")
+            body.append(f"    %dh{i} = stablehlo.maximum %da{i}, %dz{i} : "
+                        f"{T(4, do)}\n")
+            cur = f"%dh{i}"
+        else:
+            cur = f"%da{i}"
+    mlir = ("module {\n  func.func @main(\n      "
+            + ",\n      ".join(args)
+            + f"\n    ) -> {T(4, 10)} {{\n"
+            + "".join(body)
+            + f"    return {cur} : {T(4, 10)}\n  }}\n}}\n")
+
+    flat_inputs = [x]
+    for w, b in convs:
+        flat_inputs += [w, b]
+    for w, b in denses:
+        flat_inputs += [w, b]
+    out_g = run_iree(mlir, flat_inputs).astype(np.float64)
+
+    # ── f64 oracle trajectory, stage list for budgets/gains ────────────────
+    dt = np.float64
+    acts = []          # (name, kind, W, b, input_act, output_act)
+    a = x.astype(dt)
+    k = 0
+    for stage in range(4):
+        for _ in range(2):
+            w, b = convs[k]
+            z = conv_same3(a, w, b, dt)
+            h = np.maximum(z, 0)
+            acts.append((f"conv{k+1}+relu", "conv", w, b, a, h))
+            a = h
+            k += 1
+        p = maxpool2(a)
+        acts.append((f"pool{stage+1}", "pool", None, None, a, p))
+        a = p
+    a = a.reshape(4, -1)
+    for i, (w, b) in enumerate(denses):
+        z = a @ w.astype(dt) + b.astype(dt)
+        h = np.maximum(z, 0) if i < 2 else z
+        acts.append((f"dense{i}" + ("+relu" if i < 2 else " (logits)"),
+                     "dense", w, b, a, h))
+        a = h
+    out = a
+    true_err = float(np.abs(out_g - out).max())
+
+    mags = lambda arr: float(np.abs(arr).max())
+    bs, gs = [], []
+    for (_name, kind, w, b, ain, _aout) in acts:
+        if kind == "pool":
+            bs.append(0.0)
+            gs.append(1.0)
+        else:
+            m = w.shape[1] * 9 if kind == "conv" else w.shape[0]
+            bs.append(layer_budget(U32, m, mags(w), mags(b),
+                                   mags(ain.reshape(4, -1)), 0.0))
+            gs.append(m * mags(w))
+    H_prov = [float(np.prod(gs[i + 1:])) for i in range(len(gs))]
+
+    # ── measured tail gains: jacrev per stage (10 logits ⇒ 10 VJPs) ────────
+    jconvs = [(jnp.asarray(w, dt), jnp.asarray(b, dt)) for w, b in convs]
+    jdenses = [(jnp.asarray(w, dt), jnp.asarray(b, dt)) for w, b in denses]
+
+    def stage_fns():
+        fns = []
+        k = 0
+        for stage in range(4):
+            for _ in range(2):
+                w, b = jconvs[k]
+
+                def f(aa, w=w, b=b):
+                    y = jax.lax.conv_general_dilated(
+                        aa, w, (1, 1), ((1, 1), (1, 1)),
+                        dimension_numbers=('NCHW', 'OIHW', 'NCHW'))
+                    return jnp.maximum(y + b[None, :, None, None], 0.0)
+                fns.append(f)
+                k += 1
+
+            def p(aa):
+                N, C, H, Wd = aa.shape
+                return aa.reshape(N, C, H // 2, 2, Wd // 2, 2).max(axis=(3, 5))
+            fns.append(p)
+        for i, (w, b) in enumerate(jdenses):
+            def d(aa, w=w, b=b, act=(i < 2)):
+                if aa.ndim > 2:
+                    aa = aa.reshape(aa.shape[0], -1)
+                z = aa @ w + b
+                return jnp.maximum(z, 0.0) if act else z
+            fns.append(d)
+        return fns
+
+    fns = stage_fns()
+
+    H_meas = []
+    for i in range(len(acts) - 1):
+        aout = acts[i][5]     # 4D conv/pool acts are fine: the first dense
+        gain = 0.0            # stage fn flattens its input itself
+        for s in range(4):
+            a1 = jnp.asarray(aout[s:s + 1], dt)
+
+            def tail(aa, i=i):
+                for f in fns[i + 1:]:
+                    aa = f(aa)
+                return aa[0]
+            J = jax.jacrev(tail)(a1)
+            gain = max(gain, float(jnp.abs(J.reshape(10, -1)).sum(axis=1).max()))
+        H_meas.append(gain)
+    H_meas.append(1.0)
+
+    cb_meas = sum(H * b for H, b in zip(H_meas, bs))
+    cb_prov = sum(H * b for H, b in zip(H_prov, bs))
+    print(f"\n{'stage':<18}{'fresh b_i':>12}{'H_i meas':>11}{'H_i·b_i':>11}"
+          f"{'H_i proven':>13}")
+    for (name, *_), b, Hm, Hp in zip(acts, bs, H_meas, H_prov):
+        print(f"{name:<18}{b:>12.3e}{Hm:>11.3e}{Hm * b:>11.3e}{Hp:>13.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget measured-H: {cb_meas:.3e}  "
+          f"({cb_meas / true_err:.1e}× true)")
+    print(f"  chainBudget proven-H  : {cb_prov:.3e}  "
+          f"({cb_prov / true_err:.1e}× true)   [= the interval fold]")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# (4) COMMITTED CIFAR-8-BN — the normalization case
+#     cifar8Verified + per-EXAMPLE per-channel BN (stats over h·w, γ=1/β=0 —
+#     "train=eval", no batch coupling, VerifiedNets.lean cifar8BnVerified).
+#     BN fresh budgets from the BnFloatBridge parts (cifar_bn_margin_probe's
+#     transcriptions), istd at the A-POSTERIORI floor σ²min+ε; interval-face
+#     BN gain likewise a-posteriori — the strict ε-floor face is far worse.
+# ═══════════════════════════════════════════════════════════════════════════
+EPS_BN = 1e-5
+ERS = 2 * U32          # rsqrt accuracy, pinned on gfx1100 (cifar_bn_margin_probe)
+
+
+def bn_mean_budget(u, n, A):
+    return u * ((1 + u) ** (n + 1) * A) + ((1 + u) ** (n + 1) - 1) * A
+
+
+def mul_err(u, A, C, ea, ec):
+    return u * ((A + ea) * (C + ec)) + (A * ec + ea * C + ea * ec)
+
+
+def bn_var_budget(u, D, emean, n):
+    g = (1 + u) ** (n + 1) - 1
+    es1 = u * (D + emean) + emean
+    esq = mul_err(u, D, D, es1, es1)
+    return u * (D * D + g * (D * D + esq) + esq) + (g * (D * D + esq) + esq)
+
+
+def bn_istd_budget(ers, evar, floor):
+    return ers / np.sqrt(floor) + evar / (2 * floor * np.sqrt(floor))
+
+
+def bn_norm_budget(u, D, S, G, Bb, emean, eistd):
+    es2 = mul_err(u, D, S, u * (D + emean) + emean, eistd)
+    es3 = mul_err(u, G, D * S, 0.0, es2)
+    return u * (G * (D * S) + es3 + Bb) + es3
+
+
+def bn_per_example(z):
+    """per-(sample,channel) BN over h·w, γ=1/β=0 (population var, EPS_BN)."""
+    mu = z.mean(axis=(2, 3), keepdims=True)
+    var = ((z - mu) ** 2).mean(axis=(2, 3), keepdims=True)
+    return (z - mu) / np.sqrt(var + EPS_BN)
+
+
+def cifar8bn_probe():
+    import jax
+    import jax.numpy as jnp
+    jax.config.update("jax_enable_x64", True)
+    jax.config.update("jax_platform_name", "cpu")
+    from kernel_faithfulness_probe import layer_budget
+
+    print("\n" + "═" * 78)
+    print("(4) COMMITTED CIFAR-8-BN — adjoint chain vs interval fold, gfx1100")
+    print("═" * 78)
+    chans = [(3, 16), (16, 16), (16, 16), (16, 16),
+             (16, 32), (32, 32), (32, 32), (32, 32)]
+    convs = []
+    for (ic, oc) in chans:
+        std = (2.0 / (ic * 9)) ** 0.5
+        convs.append(((rng.standard_normal((oc, ic, 3, 3)) * std)
+                      .astype(np.float32),
+                      (rng.standard_normal(oc) * 0.01).astype(np.float32)))
+    dense_dims = [(128, 64), (64, 64), (64, 10)]
+    denses = []
+    for (di, do) in dense_dims:
+        std = (2.0 / di) ** 0.5
+        denses.append(((rng.standard_normal((di, do)) * std)
+                       .astype(np.float32),
+                       (rng.standard_normal(do) * 0.01).astype(np.float32)))
+    x = rng.standard_normal((4, 3, 32, 32)).astype(np.float32)
+
+    # ── StableHLO emission: conv→BN(per-example)→relu ×8 + pools + head ────
+    T = lambda *s: "tensor<" + "x".join(map(str, s)) + "xf32>"
+
+    def conv_op(o, xn, Wn, src_t, w_t, out_t):
+        return (f'    {o} = "stablehlo.convolution"({xn}, {Wn}) {{\n'
+                f'        batch_group_count = 1 : i64,\n'
+                f'        dimension_numbers = #stablehlo.conv<raw\n'
+                f'          input_batch_dimension = 0, input_feature_dimension = 1,\n'
+                f'          input_spatial_dimensions = [2, 3],\n'
+                f'          kernel_output_feature_dimension = 0,\n'
+                f'          kernel_input_feature_dimension = 1,\n'
+                f'          kernel_spatial_dimensions = [2, 3],\n'
+                f'          output_batch_dimension = 0, output_feature_dimension = 1,\n'
+                f'          output_spatial_dimensions = [2, 3]>,\n'
+                f'        feature_group_count = 1 : i64,\n'
+                f'        padding = dense<[[1, 1], [1, 1]]> : tensor<2x2xi64>,\n'
+                f'        rhs_dilation = array<i64: 1, 1>,\n'
+                f'        window_strides = array<i64: 1, 1>\n'
+                f'      }} : ({src_t}, {w_t}) -> {out_t}\n')
+
+    def spatial_sum(o, xn, c, sp, tag):
+        """reduce_window(add) over the full h·w extent → (4,c,1,1)."""
+        in_t, out_t = T(4, c, sp, sp), T(4, c, 1, 1)
+        return (f"    %z{tag} = stablehlo.constant dense<0.0> : tensor<f32>\n"
+                f'    {o} = "stablehlo.reduce_window"({xn}, %z{tag}) ({{\n'
+                f"      ^bb0(%a: tensor<f32>, %bb: tensor<f32>):\n"
+                f"        %m = stablehlo.add %a, %bb : tensor<f32>\n"
+                f'        "stablehlo.return"(%m) : (tensor<f32>) -> ()\n'
+                f"      }}) {{ window_dimensions = array<i64: 1, 1, {sp}, {sp}>,\n"
+                f"           window_strides    = array<i64: 1, 1, {sp}, {sp}> }}\n"
+                f"      : ({in_t}, tensor<f32>) -> {out_t}\n")
+
+    def bn_ops(k, xn, c, sp):
+        """per-example per-channel BN of %xn: (4,c,sp,sp), γ=1/β=0."""
+        t4, t1 = T(4, c, sp, sp), T(4, c, 1, 1)
+        hw = float(sp * sp)
+        s = spatial_sum(f"%bs{k}", xn, c, sp, f"bn{k}a")
+        s += (
+            f"    %bhw{k} = stablehlo.constant dense<{hw:.1f}> : {t1}\n"
+            f"    %bmu{k} = stablehlo.divide %bs{k}, %bhw{k} : {t1}\n"
+            f"    %bmub{k} = stablehlo.broadcast_in_dim %bmu{k}, "
+            f"dims = [0, 1, 2, 3] : ({t1}) -> {t4}\n"
+            f"    %bd{k} = stablehlo.subtract {xn}, %bmub{k} : {t4}\n"
+            f"    %bd2{k} = stablehlo.multiply %bd{k}, %bd{k} : {t4}\n")
+        s += spatial_sum(f"%bs2{k}", f"%bd2{k}", c, sp, f"bn{k}b")
+        s += (
+            f"    %bvar{k} = stablehlo.divide %bs2{k}, %bhw{k} : {t1}\n"
+            f"    %beps{k} = stablehlo.constant dense<{EPS_BN:.1e}> : {t1}\n"
+            f"    %bve{k} = stablehlo.add %bvar{k}, %beps{k} : {t1}\n"
+            f"    %bistd{k} = stablehlo.rsqrt %bve{k} : {t1}\n"
+            f"    %bistdb{k} = stablehlo.broadcast_in_dim %bistd{k}, "
+            f"dims = [0, 1, 2, 3] : ({t1}) -> {t4}\n"
+            f"    %bn{k} = stablehlo.multiply %bd{k}, %bistdb{k} : {t4}\n")
+        return s, f"%bn{k}"
+
+    args = ["%x: " + T(4, 3, 32, 32)]
+    for i, ((ic, oc), _) in enumerate(zip(chans, convs)):
+        args += [f"%cw{i}: {T(oc, ic, 3, 3)}", f"%cb{i}: {T(oc)}"]
+    for i, (di, do) in enumerate(dense_dims):
+        args += [f"%dw{i}: {T(di, do)}", f"%db{i}: {T(do)}"]
+    body = []
+    cur, sp, ch = "%x", 32, 3
+    k = 0
+    for stage in range(4):
+        for _ in range(2):
+            ic, oc = chans[k]
+            src_t, out_t = T(4, ic, sp, sp), T(4, oc, sp, sp)
+            body.append(conv_op(f"%cv{k}", cur, f"%cw{k}", src_t,
+                                T(oc, ic, 3, 3), out_t))
+            body.append(f"    %cbb{k} = stablehlo.broadcast_in_dim %cb{k}, "
+                        f"dims = [1] : ({T(oc)}) -> {out_t}\n")
+            body.append(f"    %ca{k} = stablehlo.add %cv{k}, %cbb{k} : {out_t}\n")
+            bs, bn_out = bn_ops(k, f"%ca{k}", oc, sp)
+            body.append(bs)
+            body.append(f"    %cz{k} = stablehlo.constant dense<0.0> : {out_t}\n")
+            body.append(f"    %ch{k} = stablehlo.maximum {bn_out}, %cz{k} : "
+                        f"{out_t}\n")
+            cur, ch = f"%ch{k}", oc
+            k += 1
+        in_t, out_t = T(4, ch, sp, sp), T(4, ch, sp // 2, sp // 2)
+        body.append(f"    %ninf{stage} = stablehlo.constant "
+                    f"dense<0xFF800000> : tensor<f32>\n")
+        body.append(f'    %pool{stage} = "stablehlo.reduce_window"({cur}, '
+                    f'%ninf{stage}) ({{\n'
+                    f"      ^bb0(%a: tensor<f32>, %bb: tensor<f32>):\n"
+                    f"        %m = stablehlo.maximum %a, %bb : tensor<f32>\n"
+                    f'        "stablehlo.return"(%m) : (tensor<f32>) -> ()\n'
+                    f"      }}) {{ window_dimensions = array<i64: 1, 1, 2, 2>,\n"
+                    f"           window_strides    = array<i64: 1, 1, 2, 2> }}\n"
+                    f"      : ({in_t}, tensor<f32>) -> {out_t}\n")
+        cur, sp = f"%pool{stage}", sp // 2
+    body.append(f"    %flat = stablehlo.reshape {cur} : "
+                f"({T(4, 32, 2, 2)}) -> {T(4, 128)}\n")
+    cur = "%flat"
+    for i, (di, do) in enumerate(dense_dims):
+        body.append(f"    %dd{i} = stablehlo.dot_general {cur}, %dw{i}, "
+                    f"contracting_dims = [1] x [0], precision = "
+                    f"[DEFAULT, DEFAULT] : ({T(4, di)}, {T(di, do)}) -> "
+                    f"{T(4, do)}\n")
+        body.append(f"    %dbb{i} = stablehlo.broadcast_in_dim %db{i}, "
+                    f"dims = [1] : ({T(do)}) -> {T(4, do)}\n")
+        body.append(f"    %da{i} = stablehlo.add %dd{i}, %dbb{i} : {T(4, do)}\n")
+        if i < 2:
+            body.append(f"    %dz{i} = stablehlo.constant dense<0.0> : "
+                        f"{T(4, do)}\n")
+            body.append(f"    %dh{i} = stablehlo.maximum %da{i}, %dz{i} : "
+                        f"{T(4, do)}\n")
+            cur = f"%dh{i}"
+        else:
+            cur = f"%da{i}"
+    mlir = ("module {\n  func.func @main(\n      "
+            + ",\n      ".join(args)
+            + f"\n    ) -> {T(4, 10)} {{\n"
+            + "".join(body)
+            + f"    return {cur} : {T(4, 10)}\n  }}\n}}\n")
+
+    flat_inputs = [x]
+    for w, b in convs:
+        flat_inputs += [w, b]
+    for w, b in denses:
+        flat_inputs += [w, b]
+    out_g = run_iree(mlir, flat_inputs).astype(np.float64)
+
+    # ── f64 oracle + per-stage budgets/gains ───────────────────────────────
+    dt = np.float64
+    mags = lambda arr: float(np.abs(arr).max())
+    acts, bs, gs = [], [], []
+    a = x.astype(dt)
+    k = 0
+    for stage in range(4):
+        for _ in range(2):
+            w, b = convs[k]
+            z = conv_same3(a, w, b, dt)
+            m = w.shape[1] * 9
+            acts.append((f"conv{k+1}", "conv", a, z))
+            bs.append(layer_budget(U32, m, mags(w), mags(b),
+                                   mags(a.reshape(4, -1)), 0.0))
+            gs.append(m * mags(w))
+            # BN(+relu) stage: budgets from the BnFloatBridge parts at the
+            # a-posteriori operating profile (floor = σ²min + ε)
+            n_bn = z.shape[2] * z.shape[3]
+            mu = z.mean(axis=(2, 3), keepdims=True)
+            var = ((z - mu) ** 2).mean(axis=(2, 3), keepdims=True)
+            D = mags(z - mu)
+            S = float((1.0 / np.sqrt(var + EPS_BN)).max())
+            floor = float(var.min()) + EPS_BN
+            emean = bn_mean_budget(U32, n_bn, mags(z))
+            evar = bn_var_budget(U32, D, emean, n_bn)
+            eistd = bn_istd_budget(ERS, evar, floor)
+            h = np.maximum(bn_per_example(z), 0)
+            acts.append((f"bn{k+1}+relu", "bn", z, h))
+            bs.append(bn_norm_budget(U32, D, S, 1.0, 0.0, emean, eistd))
+            gs.append(1.0 * (2 * S + 2 * D * D / floor ** 1.5))
+            a = h
+            k += 1
+        p = maxpool2(a)
+        acts.append((f"pool{stage+1}", "pool", a, p))
+        bs.append(0.0)
+        gs.append(1.0)
+        a = p
+    a = a.reshape(4, -1)
+    for i, (w, b) in enumerate(denses):
+        z = a @ w.astype(dt) + b.astype(dt)
+        h = np.maximum(z, 0) if i < 2 else z
+        acts.append((f"dense{i}" + ("+relu" if i < 2 else " (logits)"),
+                     "dense", a, h))
+        bs.append(layer_budget(U32, w.shape[0], mags(w), mags(b),
+                               mags(a), 0.0))
+        gs.append(w.shape[0] * mags(w))
+        a = h
+    out = a
+    true_err = float(np.abs(out_g - out).max())
+    H_prov = [float(np.prod(gs[i + 1:])) for i in range(len(gs))]
+
+    # ── measured tail gains (per-sample: per-example BN ⇒ no batch coupling)
+    jconvs = [(jnp.asarray(w, dt), jnp.asarray(b, dt)) for w, b in convs]
+    jdenses = [(jnp.asarray(w, dt), jnp.asarray(b, dt)) for w, b in denses]
+
+    def stage_fns():
+        fns = []
+        k = 0
+        for stage in range(4):
+            for _ in range(2):
+                w, b = jconvs[k]
+
+                def cf(aa, w=w, b=b):
+                    y = jax.lax.conv_general_dilated(
+                        aa, w, (1, 1), ((1, 1), (1, 1)),
+                        dimension_numbers=('NCHW', 'OIHW', 'NCHW'))
+                    return y + b[None, :, None, None]
+                fns.append(cf)
+
+                def bf(zz):
+                    mu = zz.mean(axis=(2, 3), keepdims=True)
+                    var = ((zz - mu) ** 2).mean(axis=(2, 3), keepdims=True)
+                    return jnp.maximum((zz - mu) / jnp.sqrt(var + EPS_BN), 0.0)
+                fns.append(bf)
+                k += 1
+
+            def pf(aa):
+                N, C, H, Wd = aa.shape
+                return aa.reshape(N, C, H // 2, 2, Wd // 2, 2).max(axis=(3, 5))
+            fns.append(pf)
+        for i, (w, b) in enumerate(jdenses):
+            def df(aa, w=w, b=b, act=(i < 2)):
+                if aa.ndim > 2:
+                    aa = aa.reshape(aa.shape[0], -1)
+                z = aa @ w + b
+                return jnp.maximum(z, 0.0) if act else z
+            fns.append(df)
+        return fns
+
+    fns = stage_fns()
+    H_meas = []
+    for i in range(len(acts) - 1):
+        aout = acts[i][3]
+        gain = 0.0
+        for s in range(4):
+            a1 = jnp.asarray(aout[s:s + 1], dt)
+
+            def tail(aa, i=i):
+                for f in fns[i + 1:]:
+                    aa = f(aa)
+                return aa[0]
+            J = jax.jacrev(tail)(a1)
+            gain = max(gain, float(jnp.abs(J.reshape(10, -1)).sum(axis=1).max()))
+        H_meas.append(gain)
+    H_meas.append(1.0)
+
+    cb_meas = sum(H * b for H, b in zip(H_meas, bs))
+    cb_prov = sum(H * b for H, b in zip(H_prov, bs))
+    print(f"\n{'stage':<18}{'fresh b_i':>12}{'H_i meas':>11}{'H_i·b_i':>11}"
+          f"{'H_i proven':>13}")
+    for (name, *_), b, Hm, Hp in zip(acts, bs, H_meas, H_prov):
+        print(f"{name:<18}{b:>12.3e}{Hm:>11.3e}{Hm * b:>11.3e}{Hp:>13.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget measured-H: {cb_meas:.3e}  "
+          f"({cb_meas / true_err:.1e}× true)")
+    print(f"  chainBudget proven-H  : {cb_prov:.3e}  "
+          f"({cb_prov / true_err:.1e}× true)   [= interval fold, a-post floor]")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+    print("\n  BN budgets/gains at the A-POSTERIORI floor (σ²min+ε); the strict")
+    print("  ε-floor Lean face multiplies each BN gain by ~(σ²+ε)^1.5/ε^1.5.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# (5) ResNet-34 @224² (resnet34Verified twin) — residual blocks as chain layers
+#     Eval-mode BN (running-stats per-channel affine, calibrated from the
+#     probe batch — the DEPLOYED forward, BnEvalFloatBridge's case; γ=1/β=0).
+#     Chain granularity = the r34_floatBridges granularity: stem / maxpool /
+#     16 residual blocks / GAP / dense head = 20 stages. Block fresh budgets
+#     are the mini interval fold INSIDE the block (5-9 ops — harmless); the
+#     depth-wise composition across the 20 stages is the adjoint chain.
+#     Tail gains measured in f32 on the GPU (jax rocm) — gains are O(1..1e3)
+#     numbers, f32 precision is ample; oracle/budgets stay f64 CPU.
+# ═══════════════════════════════════════════════════════════════════════════
+def conv_np(x, W, stride, pad, dt):
+    """generic NCHW/OIHW conv, any kernel/stride/pad (f64 oracle)."""
+    x, W = x.astype(dt), W.astype(dt)
+    N, C, H, Wd = x.shape
+    Oc, _, kh, kw = W.shape
+    Ho = (H + 2 * pad - kh) // stride + 1
+    Wo = (Wd + 2 * pad - kw) // stride + 1
+    xp = np.zeros((N, C, H + 2 * pad, Wd + 2 * pad), dt)
+    xp[:, :, pad:pad + H, pad:pad + Wd] = x
+    out = np.zeros((N, Oc, Ho, Wo), dt)
+    for di in range(kh):
+        for dj in range(kw):
+            out += np.einsum('nchw,oc->nohw',
+                             xp[:, :, di:di + stride * Ho:stride,
+                                dj:dj + stride * Wo:stride],
+                             W[:, :, di, dj], optimize=True)
+    return out
+
+
+def affine_fresh(u, amax, bmax, A, E):
+    """fresh+inherited budget of the per-channel eval-BN affine fl(fl(a·x)⊕b)
+    (bnEvalErr shape: fan-in 1, no Higham γ, no rsqrt)."""
+    return (2 * u + u * u) * (amax * (A + E) + bmax) + amax * E
+
+
+def r34_probe():
+    import jax
+    import jax.numpy as jnp
+    from kernel_faithfulness_probe import layer_budget
+
+    print("\n" + "═" * 78)
+    print("(5) ResNet-34 @224² twin (resnet34Verified) — adjoint chain, gfx1100")
+    print("═" * 78)
+    B = 2
+    EPS = 1e-5
+    dt = np.float64
+    mags = lambda arr: float(np.abs(arr).max())
+
+    # ── build weights (He) and the block plan from the committed spec ──────
+    stage_cfg = [(64, 64, 3, 1), (64, 128, 4, 2),
+                 (128, 256, 6, 2), (256, 512, 3, 2)]
+
+    def he_conv(oc, ic, k):
+        std = (2.0 / (ic * k * k)) ** 0.5
+        return (rng.standard_normal((oc, ic, k, k)) * std).astype(np.float32)
+
+    Wstem = he_conv(64, 3, 7)
+    blocks = []          # dicts: W1, W2, [Wd], ic, oc, stride
+    for (ic, oc, n, s) in stage_cfg:
+        for j in range(n):
+            bic, bs = (ic, s) if j == 0 else (oc, 1)
+            blk = {"W1": he_conv(oc, bic, 3), "W2": he_conv(oc, oc, 3),
+                   "ic": bic, "oc": oc, "stride": bs,
+                   "down": (bs != 1 or bic != oc)}
+            if blk["down"]:
+                blk["Wd"] = he_conv(oc, bic, 1)
+            blocks.append(blk)
+    Whead = ((rng.standard_normal((512, 10)) * (2.0 / 512) ** 0.5)
+             .astype(np.float32))
+    bhead = (rng.standard_normal(10) * 0.01).astype(np.float32)
+    x = rng.standard_normal((B, 3, 224, 224)).astype(np.float32)
+
+    # ── pass 1: f64 forward on f32-cast weights, CALIBRATE eval-BN affines ─
+    def calib(z):
+        mu = z.mean(axis=(0, 2, 3))
+        var = z.var(axis=(0, 2, 3))
+        a = (1.0 / np.sqrt(var + EPS)).astype(np.float32)
+        b = (-mu * a).astype(np.float32)
+        return a, b
+
+    def bn_apply(z, ab):
+        a, b = ab
+        return z * a.astype(z.dtype)[None, :, None, None] \
+            + b.astype(z.dtype)[None, :, None, None]
+
+    xa = x.astype(dt)
+    z = conv_np(xa, Wstem, 2, 3, dt)
+    ab_stem = calib(z)
+    cal = {"stem": ab_stem}
+    h = np.maximum(bn_apply(z, ab_stem), 0)
+    h = maxpool2(h)
+    for i, blk in enumerate(blocks):
+        z1 = conv_np(h, blk["W1"], blk["stride"], 1, dt)
+        blk["ab1"] = calib(z1)
+        y1 = np.maximum(bn_apply(z1, blk["ab1"]), 0)
+        z2 = conv_np(y1, blk["W2"], 1, 1, dt)
+        blk["ab2"] = calib(z2)
+        y2 = bn_apply(z2, blk["ab2"])
+        if blk["down"]:
+            zd = conv_np(h, blk["Wd"], blk["stride"], 0, dt)
+            blk["abd"] = calib(zd)
+            sk = bn_apply(zd, blk["abd"])
+        else:
+            sk = h
+        h = np.maximum(y2 + sk, 0)
+
+    # ── pass 2: the reference trajectory with the f32-cast affines,
+    #    collecting per-stage activations + budgets + proven gains ──────────
+    # Budgets use the EXACT data-dependent dot_close/denseErr form
+    # (((1+u)^(m+2)−1)·(Σᵢ|Wᵢⱼ||xᵢ| + rowsum·E) + rowsum·E — the Lean lemma's
+    # actual coefficients, evaluated at the measured operating profile) rather
+    # than the uniform m·w·A layerBudget upper bound; likewise gains use the
+    # exact row sum Σ|W| (what m·w' upper-bounds in lipOnWindow_dense).
+    acts, bs_, gs = [], [], []
+
+    def conv_bn_budget(x_act, W, stride, pad, ab, z, E):
+        """conv (exact denseErr coefficients) then eval-BN affine, E threaded."""
+        m = W.shape[1] * W.shape[2] * W.shape[3]
+        sumabs = float(conv_np(np.abs(x_act), np.abs(W.astype(dt)),
+                               stride, pad, dt).max())
+        rowsum = float(np.abs(W.astype(dt)).sum(axis=(1, 2, 3)).max())
+        Ec = ((1 + U32) ** (m + 2) - 1) * (sumabs + rowsum * E) + rowsum * E
+        amax, bmax = mags(ab[0]), mags(ab[1])
+        return affine_fresh(U32, amax, bmax, mags(z), Ec), amax * rowsum
+
+    a = x.astype(dt)
+    z = conv_np(a, Wstem, 2, 3, dt)
+    zb = bn_apply(z, ab_stem)
+    b_stem, g_stem = conv_bn_budget(a, Wstem, 2, 3, ab_stem, z, 0.0)
+    h = np.maximum(zb, 0)
+    acts.append(("stem", h))
+    bs_.append(b_stem)
+    gs.append(g_stem)
+    h = maxpool2(h)
+    acts.append(("maxpool", h))
+    bs_.append(0.0)
+    gs.append(1.0)
+    for i, blk in enumerate(blocks):
+        z1 = conv_np(h, blk["W1"], blk["stride"], 1, dt)
+        y1 = np.maximum(bn_apply(z1, blk["ab1"]), 0)
+        z2 = conv_np(y1, blk["W2"], 1, 1, dt)
+        y2 = bn_apply(z2, blk["ab2"])
+        # branch budget: conv1→bn1 (E=0), relu, conv2→bn2 (E threaded)
+        E1, g1 = conv_bn_budget(h, blk["W1"], blk["stride"], 1,
+                                blk["ab1"], z1, 0.0)
+        E2, g2 = conv_bn_budget(y1, blk["W2"], 1, 1, blk["ab2"], z2, E1)
+        if blk["down"]:
+            zd = conv_np(h, blk["Wd"], blk["stride"], 0, dt)
+            sk = bn_apply(zd, blk["abd"])
+            Ed, gd = conv_bn_budget(h, blk["Wd"], blk["stride"], 0,
+                                    blk["abd"], zd, 0.0)
+        else:
+            sk, Ed, gd = h, 0.0, 1.0
+        out = y2 + sk
+        h = np.maximum(out, 0)
+        # skip-add rounding + relu exact
+        bs_.append(E2 + Ed + U32 * (mags(out) + E2 + Ed))
+        gs.append(g2 * g1 + gd)
+        acts.append((f"block{i+1}" + ("↓" if blk["down"] else ""), h))
+    hw = h.shape[2] * h.shape[3]
+    gap = h.mean(axis=(2, 3))
+    gb = U32 * (1 + U32) ** (hw + 1) * mags(h) \
+        + ((1 + U32) ** (hw + 1) - 1) * mags(h)
+    acts.append(("gap", gap))
+    bs_.append(gb)
+    gs.append(1.0)
+    out = gap @ Whead.astype(dt) + bhead.astype(dt)
+    acts.append(("dense (logits)", out))
+    sumabs_h = float((np.abs(gap) @ np.abs(Whead.astype(dt))).max())
+    bs_.append(((1 + U32) ** (512 + 2) - 1) * (sumabs_h + mags(bhead)))
+    gs.append(float(np.abs(Whead.astype(dt)).sum(axis=0).max()))
+    H_prov = [float(np.prod(gs[i + 1:])) for i in range(len(gs))]
+
+    # ── the real deployed kernel: emit StableHLO, run on gfx1100 ───────────
+    T = lambda *s: "tensor<" + "x".join(map(str, s)) + "xf32>"
+
+    def econv(o, xn, Wn, ic, oc, k, s, p, spi, spo):
+        src_t, w_t, out_t = T(B, ic, spi, spi), T(oc, ic, k, k), T(B, oc, spo, spo)
+        return (f'    {o} = "stablehlo.convolution"({xn}, {Wn}) {{\n'
+                f'        batch_group_count = 1 : i64,\n'
+                f'        dimension_numbers = #stablehlo.conv<raw\n'
+                f'          input_batch_dimension = 0, input_feature_dimension = 1,\n'
+                f'          input_spatial_dimensions = [2, 3],\n'
+                f'          kernel_output_feature_dimension = 0,\n'
+                f'          kernel_input_feature_dimension = 1,\n'
+                f'          kernel_spatial_dimensions = [2, 3],\n'
+                f'          output_batch_dimension = 0, output_feature_dimension = 1,\n'
+                f'          output_spatial_dimensions = [2, 3]>,\n'
+                f'        feature_group_count = 1 : i64,\n'
+                f'        padding = dense<[[{p}, {p}], [{p}, {p}]]> : tensor<2x2xi64>,\n'
+                f'        rhs_dilation = array<i64: 1, 1>,\n'
+                f'        window_strides = array<i64: {s}, {s}>\n'
+                f'      }} : ({src_t}, {w_t}) -> {out_t}\n')
+
+    def eaffine(tag, xn, an, bn_, c, sp):
+        t4 = T(B, c, sp, sp)
+        return (f"    %ab{tag} = stablehlo.broadcast_in_dim {an}, dims = [1] "
+                f": ({T(c)}) -> {t4}\n"
+                f"    %am{tag} = stablehlo.multiply {xn}, %ab{tag} : {t4}\n"
+                f"    %bb{tag} = stablehlo.broadcast_in_dim {bn_}, dims = [1] "
+                f": ({T(c)}) -> {t4}\n"
+                f"    %aa{tag} = stablehlo.add %am{tag}, %bb{tag} : {t4}\n")
+
+    def erelu(tag, xn, c, sp):
+        t4 = T(B, c, sp, sp)
+        return (f"    %rz{tag} = stablehlo.constant dense<0.0> : {t4}\n"
+                f"    %rl{tag} = stablehlo.maximum {xn}, %rz{tag} : {t4}\n")
+
+    def ewindow(o, xn, c, spi, wk, ws, red, init, tag):
+        spo = (spi - wk) // ws + 1
+        in_t, out_t = T(B, c, spi, spi), T(B, c, spo, spo)
+        return (f"    %wi{tag} = stablehlo.constant dense<{init}> : tensor<f32>\n"
+                f'    {o} = "stablehlo.reduce_window"({xn}, %wi{tag}) ({{\n'
+                f"      ^bb0(%a: tensor<f32>, %bb: tensor<f32>):\n"
+                f"        %m = stablehlo.{red} %a, %bb : tensor<f32>\n"
+                f'        "stablehlo.return"(%m) : (tensor<f32>) -> ()\n'
+                f"      }}) {{ window_dimensions = array<i64: 1, 1, {wk}, {wk}>,\n"
+                f"           window_strides    = array<i64: 1, 1, {ws}, {ws}> }}\n"
+                f"      : ({in_t}, tensor<f32>) -> {out_t}\n")
+
+    args = [f"%x: {T(B, 3, 224, 224)}",
+            f"%ws: {T(64, 3, 7, 7)}", f"%as: {T(64)}", f"%bs: {T(64)}"]
+    params = [x, Wstem, ab_stem[0], ab_stem[1]]
+    for i, blk in enumerate(blocks):
+        ic, oc = blk["ic"], blk["oc"]
+        args += [f"%w1_{i}: {T(oc, ic, 3, 3)}", f"%a1_{i}: {T(oc)}",
+                 f"%b1_{i}: {T(oc)}",
+                 f"%w2_{i}: {T(oc, oc, 3, 3)}", f"%a2_{i}: {T(oc)}",
+                 f"%b2_{i}: {T(oc)}"]
+        params += [blk["W1"], blk["ab1"][0], blk["ab1"][1],
+                   blk["W2"], blk["ab2"][0], blk["ab2"][1]]
+        if blk["down"]:
+            args += [f"%wd_{i}: {T(oc, ic, 1, 1)}", f"%ad_{i}: {T(oc)}",
+                     f"%bd_{i}: {T(oc)}"]
+            params += [blk["Wd"], blk["abd"][0], blk["abd"][1]]
+    args += [f"%wh: {T(512, 10)}", f"%bh: {T(10)}"]
+    params += [Whead, bhead]
+
+    body = [econv("%cs", "%x", "%ws", 3, 64, 7, 2, 3, 224, 112),
+            eaffine("s", "%cs", "%as", "%bs", 64, 112),
+            erelu("s", "%aas", 64, 112),
+            ewindow("%mp", "%rls", 64, 112, 2, 2, "maximum",
+                    "0xFF800000", "mp")]
+    cur, sp = "%mp", 56
+    for i, blk in enumerate(blocks):
+        ic, oc, s = blk["ic"], blk["oc"], blk["stride"]
+        spo = sp // s
+        body.append(econv(f"%c1_{i}", cur, f"%w1_{i}", ic, oc, 3, s, 1, sp, spo))
+        body.append(eaffine(f"x1_{i}", f"%c1_{i}", f"%a1_{i}", f"%b1_{i}",
+                            oc, spo))
+        body.append(erelu(f"x1_{i}", f"%aax1_{i}", oc, spo))
+        body.append(econv(f"%c2_{i}", f"%rlx1_{i}", f"%w2_{i}", oc, oc, 3, 1,
+                          1, spo, spo))
+        body.append(eaffine(f"x2_{i}", f"%c2_{i}", f"%a2_{i}", f"%b2_{i}",
+                            oc, spo))
+        if blk["down"]:
+            body.append(econv(f"%cd_{i}", cur, f"%wd_{i}", ic, oc, 1, s, 0,
+                              sp, spo))
+            body.append(eaffine(f"xd_{i}", f"%cd_{i}", f"%ad_{i}", f"%bd_{i}",
+                                oc, spo))
+            skip = f"%aaxd_{i}"
+        else:
+            skip = cur
+        t4 = T(B, oc, spo, spo)
+        body.append(f"    %sum{i} = stablehlo.add %aax2_{i}, {skip} : {t4}\n")
+        body.append(erelu(f"o{i}", f"%sum{i}", oc, spo))
+        cur, sp = f"%rlo{i}", spo
+    body.append(ewindow("%gs", cur, 512, 7, 7, 7, "add", "0.0", "gap"))
+    body.append(f"    %gc = stablehlo.constant dense<49.0> : {T(B, 512, 1, 1)}\n")
+    body.append(f"    %gd = stablehlo.divide %gs, %gc : {T(B, 512, 1, 1)}\n")
+    body.append(f"    %gf = stablehlo.reshape %gd : ({T(B, 512, 1, 1)}) -> "
+                f"{T(B, 512)}\n")
+    body.append(f"    %hd = stablehlo.dot_general %gf, %wh, "
+                f"contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT]"
+                f" : ({T(B, 512)}, {T(512, 10)}) -> {T(B, 10)}\n")
+    body.append(f"    %hbb = stablehlo.broadcast_in_dim %bh, dims = [1] : "
+                f"({T(10)}) -> {T(B, 10)}\n")
+    body.append(f"    %out = stablehlo.add %hd, %hbb : {T(B, 10)}\n")
+    mlir = ("module {\n  func.func @main(\n      "
+            + ",\n      ".join(args)
+            + f"\n    ) -> {T(B, 10)} {{\n"
+            + "".join(body)
+            + f"    return %out : {T(B, 10)}\n  }}\n}}\n")
+
+    out_g = run_iree(mlir, params).astype(np.float64)
+    true_err = float(np.abs(out_g - out).max())
+
+    # ── measured tail gains, f32 on the GPU (jax rocm) ─────────────────────
+    def jx(a):
+        return jnp.asarray(np.asarray(a, np.float32))
+
+    def stage_fns():
+        fns = []
+
+        def jconv(a, W, s, p):
+            return jax.lax.conv_general_dilated(
+                a, W, (s, s), ((p, p), (p, p)),
+                dimension_numbers=('NCHW', 'OIHW', 'NCHW'))
+
+        def jaff(a, ab):
+            return a * jx(ab[0])[None, :, None, None] \
+                + jx(ab[1])[None, :, None, None]
+
+        # stage 0 = stem (relu output), stage 1 = maxpool
+        fns.append(lambda a: jnp.maximum(
+            jaff(jconv(a, jx(Wstem), 2, 3), ab_stem), 0.0))
+        fns.append(lambda a: a.reshape(a.shape[0], a.shape[1],
+                                       a.shape[2] // 2, 2,
+                                       a.shape[3] // 2, 2).max(axis=(3, 5)))
+        for blk in blocks:
+            def bf(a, blk=blk):
+                y = jnp.maximum(jaff(jconv(a, jx(blk["W1"]), blk["stride"], 1),
+                                     blk["ab1"]), 0.0)
+                y = jaff(jconv(y, jx(blk["W2"]), 1, 1), blk["ab2"])
+                sk = jaff(jconv(a, jx(blk["Wd"]), blk["stride"], 0),
+                          blk["abd"]) if blk["down"] else a
+                return jnp.maximum(y + sk, 0.0)
+            fns.append(bf)
+        fns.append(lambda a: a.mean(axis=(2, 3)))
+        fns.append(lambda a: a @ jx(Whead) + jx(bhead))
+        return fns
+
+    gpu = jax.devices()[0]
+    with jax.default_device(gpu):
+        fns = stage_fns()
+        H_meas = []
+        for i in range(len(acts) - 1):
+            aout = acts[i][1]
+            gain = 0.0
+            for smp in range(B):
+                a1 = jx(aout[smp:smp + 1])
+
+                def tail(aa, i=i):
+                    for f in fns[i + 1:]:
+                        aa = f(aa)
+                    return aa[0]
+                J = jax.jacrev(tail)(a1)
+                gain = max(gain, float(jnp.abs(J.reshape(10, -1))
+                                       .sum(axis=1).max()))
+            H_meas.append(gain)
+        H_meas.append(1.0)
+
+    cb_meas = sum(H * b for H, b in zip(H_meas, bs_))
+    cb_prov = sum(H * b for H, b in zip(H_prov, bs_))
+    print(f"\n{'stage':<16}{'fresh b_i':>12}{'H_i meas':>11}{'H_i·b_i':>11}"
+          f"{'H_i proven':>13}")
+    for (name, _), b, Hm, Hp in zip(acts, bs_, H_meas, H_prov):
+        print(f"{name:<16}{b:>12.3e}{Hm:>11.3e}{Hm * b:>11.3e}{Hp:>13.3e}")
+    print(f"\n  true GPU logits drift : {true_err:.3e}")
+    print(f"  chainBudget measured-H: {cb_meas:.3e}  "
+          f"({cb_meas / true_err:.1e}× true)")
+    print(f"  chainBudget proven-H  : {cb_prov:.3e}  "
+          f"({cb_prov / true_err:.1e}× true)   [= the interval fold]")
+    print(f"  logits magnitude      : {mags(out):.3e}")
+    print("\n  eval-BN (running-stats affine, batch-calibrated) — the deployed")
+    print("  forward; block = one chain layer, exactly the r34_floatBridges")
+    print("  granularity. Gains measured in f32 on GPU (ample for O(1e3) gains).")
+
+
 def main():
     print("═" * 78)
     print("adjoint-chain probe — chain_adjointClose budget vs real gfx1100 drift")
@@ -311,3 +1211,7 @@ def main():
 if __name__ == "__main__":
     main()
     cnn_probe()
+    cifar8_probe()
+    cifar8bn_probe()
+    r34_probe()   # note: run last — earlier sections pin jax to CPU; when run
+                  # standalone this section measures its gains on the GPU

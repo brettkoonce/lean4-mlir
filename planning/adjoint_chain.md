@@ -115,6 +115,88 @@ dense/relu/softmax.
    local dot budgets dominate (a tighter proven dot bound — FMA-aware or probabilistic
    — would multiply straight through the chain).
 
+   **CIFAR-8 (no BN, the committed `cifar8Verified` net — probe §3, 2026-07-04): the
+   depth-dominated regime, and the headline.** 15 stages (8 convs [16,16,32,32] + 4
+   pools + 3-dense head), small fan-ins (≤288) ⇒ tame local budgets, composition is
+   the whole game:
+
+   | | true GPU logits drift | logits magnitude | chainBudget measured-H | chainBudget proven-H (= interval fold) |
+   |---|---|---|---|---|
+   | CIFAR-8 | 3.8e-06 | 4.6 | **2.6e+00 (6.8e5×) — BELOW the logit scale** | 4.1e+14 (1.1e20×) |
+
+   The adjoint chain gives the first NON-VACUOUS whole-net float certificate on the
+   deepest committed no-BN net (budget < logits magnitude; argmax-safe wherever the
+   margin exceeds 2·budget ≈ 5), while the interval fold overshoots the logit scale by
+   ~14 orders. Per-stage contributions H_i·b_i are flat (0.03–0.3 each — genuinely
+   depth-linear); the interval fold's suffix products reach 2e18 at conv1 vs measured
+   tail gain 210. (Standalone §3 run: budget 1.76 vs logits 5.0 — numbers vary with
+   the shared RNG stream position; conclusion identical.)
+
+   **CIFAR-8-BN (`cifar8BnVerified`, per-EXAMPLE per-channel BN — probe §4,
+   2026-07-04): BN is where the remaining work lives.** 23 stages; BN fresh budgets
+   from the BnFloatBridge parts (bn_mean/var/istd/norm budgets at the A-POSTERIORI
+   floor σ²min+ε; ers = 2u32 pinned); per-example stats ⇒ no batch coupling, the
+   per-sample tail Jacobians stay valid:
+
+   | | true GPU logits drift | logits magnitude | chainBudget measured-H | chainBudget proven-H (a-post floor) |
+   |---|---|---|---|---|
+   | CIFAR-8-BN | 6.6e-06 | 3.2 | 5.1e+01 (7.7e6×) — 16× ABOVE logit scale | 2.8e+31 (4.2e36×) |
+
+   The adjoint chain is ~10³⁰× tighter than the interval fold (which is vacuous by 31
+   orders even at the charitable a-posteriori floor — the strict ε-floor Lean face adds
+   another ~(σ²/ε)^1.5 ≈ 10⁷ PER BN, ~10⁶⁰ total), but the budget is not yet below the
+   logit scale. Two identified causes, both actionable:
+   1. **bn1/bn2 dominate (33 + 11.6 of the 50.7 total)**: the probe takes D, S, and the
+      istd floor as maxes/mins over ALL channels — one low-variance channel at init
+      poisons the whole stage budget. Per-channel budget bookkeeping (which the Lean
+      `bnPerChannel` machinery already supports structurally) would shrink b_bn by the
+      worst-to-typical channel ratio.
+   2. **BN genuinely amplifies tail gains** (H_meas ≈ 500–1300 early, vs 210/87 in the
+      no-BN twin): normalization divides by per-channel σ, so perturbation directions
+      that shrink variance get magnified. This part is real, not slack — BN helps
+      optimization but hurts float-error certificates.
+
+   **ResNet-34 @224² (`resnet34Verified` twin — probe §5, 2026-07-04): the composition
+   mechanism scales; the ladder's summary row.** Eval-mode BN (running-stats per-channel
+   affine, batch-calibrated — the DEPLOYED forward, `BnEvalFloatBridge`'s case), chain
+   granularity = the `r34_floatBridges` granularity (stem / maxpool / 16 residual blocks
+   / GAP / head = 20 stages; block fresh budget = the mini fold inside the block). Two
+   methodological upgrades that live in §5 and should back-propagate to §2–§4:
+   (a) budgets use the EXACT data-dependent `dot_close`/`denseErr` coefficients
+   (`Σᵢ|Wᵢⱼ||xᵢ|` via abs-conv at the measured profile — what the Lean lemmas actually
+   prove; `layerBudget`'s `m·w·A` is just their uniform upper bound and costs 257× at
+   this scale); (b) gains use the exact row sum `Σ|W|` (what `m·w'` upper-bounds).
+   Tail gains measured in f32 on the GPU (jax rocm) — ample for O(10³) numbers.
+
+   | | true GPU logits drift | logits magnitude | chainBudget measured-H | chainBudget proven-H |
+   |---|---|---|---|---|
+   | r34 @224² | 1.1e-05 | 3.6 | 7.0e+02 (6.5e7×) | 6.5e+51 (6.1e56×) |
+
+   Per-block H_i·b_i is FLAT (27–77 each across all 16 blocks — pristine depth-
+   linearity; the total is just 16 × ~44). The interval fold is vacuous by 51 orders
+   (was 10⁷⁸ before the exact-coefficient upgrade). The remaining ~200× to a logit-scale
+   certificate: (i) the Higham fresh budget per block (~u·m·Σ|x||w| at m=4608 — the
+   irreducible worst-case face; actual local drift is ~√m smaller, so the last order or
+   two needs probabilistic/FMA-aware local bounds); (ii) early-block tail gains ~10³ at
+   He-init + calibrated BN (stem perturbations amplify ~2200× through the residual
+   stream — real sensitivity, not slack; re-measuring on the TRAINED checkpoint
+   (.lake/build/resnet34_adam_ckpt.bin, 272MB, layout = ResNet34Layout.specs) is the
+   natural follow-up).
+
+   **Ladder summary (all on gfx1100, logits-scale certificates):**
+
+   | net | stages | interval fold | adjoint chain | logit scale | verdict |
+   |---|---|---|---|---|---|
+   | MLP d=24 | 24 | 7e+34 | 0.82 | ~21 | non-vacuous ✓ |
+   | MNIST-CNN | 6 | 2e+04 | 4.1 | 0.38 | fan-in-budget-bound |
+   | CIFAR-8 | 15 | 4e+14 | 2.6 | 4.6 | **non-vacuous ✓** |
+   | CIFAR-8-BN | 23 | 3e+31 | 51 | 3.2 | 16× over |
+   | r34 @224² | 20 | 7e+51 | 698 | 3.6 | 200× over |
+
+   Composition is solved at every scale tried — the adjoint chain stays within 1–3
+   orders of the logit scale where the interval fold loses 4–51 orders; what remains is
+   local (per-op budgets, BN channel bookkeeping, trained-vs-init gains).
+
 ## Session artifacts (scratchpad, 2026-07-04)
 
 `vjp_error_prop.py` / `vjp_roundoff_predict.py` (linearization tightness: exact at
