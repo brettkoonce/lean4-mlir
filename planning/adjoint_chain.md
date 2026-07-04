@@ -26,7 +26,7 @@ covers it); mechanical probe restructure.
 
 Updated scoreboard (adjoint chainBudget vs logit magnitude, committed renders on
 gfx1100 unless noted): MLP-24 **✓ 0.8/21** · CIFAR-8 **✓ 2.6/4.6** · MNIST-CNN 4.1/0.38
-· mnv2 **1.1/0.99 (1.1×)** · CIFAR-8-BN 51/3.2 (16×) · r34-twin **12.6/3.6 (3.5×)** ·
+· mnv2 **1.1/0.99 (1.1×)** · CIFAR-8-BN **20/3.2 (6.3×, P4)** · r34-twin **12.6/3.6 (3.5×)** ·
 ViT **27.8/4.3 (6.4×)** · ENet 6.8e4/1.3 (5e4×, op-gran not yet run) · ConvNeXt 3.2e6/
 2.9 (1e6×, op-gran not yet run). After op-granularity the residual EVERYWHERE is purely
 local — per-op conv/dense/LN Higham fresh (~√n loose ⇒ P2 tree-reduction) × early-block
@@ -76,16 +76,21 @@ block-fold artifact, gone by the same mechanism as ViT's softmax. Expected ENet
 (P2) then the only residual. Note ConvNeXt's scalar-LN n=301056 fresh is per-op already,
 so op-granularity mainly buys the cross-op fold removal; P2 is its real closer.
 
-**P4 — per-channel BN budgets for CIFAR-8-BN (the CONFIRMED lever; probe §4 measured
-2026-07-04).** CIFAR-8-BN is already op-granular — P1 does not apply. Its 51 is entirely
-BN: **bn1+relu = 33.0 (b=2.5e-2, H=1313), bn2+relu = 11.6 (b=2.9e-2, H=399) of the 50.7
-total; all 8 convs sum ~3.1.** The BN fresh budgets take D/S/istd-floor as maxes/mins
-over ALL channels — one low-variance channel at init poisons the whole stage (pairs the
-worst-D channel with the min-variance floor). Pair each channel's D with its own floor
-(verbatim the per-token LN fix from §8, which the Lean `bnPerChannel`/`perRowFlat`
-machinery already licenses); the worst-to-typical channel ratio is the ~16× to recover.
-Expected 51 → O(3-8) ⇒ likely ✓. (BN also genuinely amplifies tail gains — H≈500-1300
-early vs 210 no-BN — that part is real, not slack.)
+**P4 — per-channel BN budgets for CIFAR-8-BN (DONE, probe §4 `per_channel_bn=True`,
+2026-07-04): 51 → 20.1 (16× → 6.3× over logits 3.17), a real 2.5× but NOT certifying —
+the residual is now P6+P2, not P4.** CIFAR-8-BN is already op-granular (P1 does not
+apply); its 51 was entirely BN. Pairing each (sample,channel)'s D with ITS OWN variance
+floor (the `perRowFlat`/`bnPerChannel` granularity, verbatim the per-token LN fix from
+§8) instead of the global worst-D × min-floor cross-channel pairing shrank the BN FRESH
+budgets exactly as predicted: **bn1+relu 33.0 → 11.1 (b 2.5e-2 → 8.5e-3), bn2+relu 11.6
+→ 4.67 (b 2.9e-2 → 1.17e-2)**. But bn1 STILL dominates — and now because of its TAIL
+GAIN 1313, not its fresh budget: that is the genuine BN-amplifies-perturbation effect at
+init (normalization divides by per-channel σ; H≈1313 early vs 210 no-BN). So the last
+~6× is (i) **P6** — bn1's 1313 tail gain is an init artifact (calibrated/trained BN
+should drop it) — and (ii) **P2** — bn1's fresh 8.5e-3 is still the n_bn=1024 spatial
+mean/var Higham face (~√n/log₂n loose). Convs sum ~3.1 (loose `layer_budget`; exact
+coeff would trim but they are not the limiter). Per-channel is the right, sound fix
+(strictly tighter, Lean-licensed) — it just isn't the whole gap.
 
 **P5 — the PROVEN capstone: end-to-end Lean instantiation on CIFAR-8.** Numerically
 certified already (2.6 < 4.6); assemble it in Lean: `chain_adjointClose` instantiated
@@ -429,6 +434,7 @@ dense/relu/softmax.
    | MNIST-CNN | 6 | 2e+04 | 4.1 | 0.38 | fan-in-budget-bound |
    | CIFAR-8 | 15 | 4e+14 | 2.6 | 4.6 | **non-vacuous ✓** |
    | CIFAR-8-BN | 23 | 3e+31 | 51 | 3.2 | 16× over |
+   | CIFAR-8-BN + P4 per-channel BN | 23 | 3.7e+27 | **20.1** | 3.2 | 6.3× over — residual = bn1 tail gain 1313 (P6) + n=1024 Higham (P2) |
    | r34 @224² | 20 | 7e+51 | 698 | 3.6 | 200× over |
    | ENet-B0 @224² (committed render) | 20 | 8e+106 | 6.8e+04 | 1.3 | 5e4× over (SE-in-block) |
    | ConvNeXt-T @224² (committed render) | 25 | 3e+139 | 9.4e+07 | 2.9 | 3e7× over (scalar-LN n=301k + gelu poly-gain) |

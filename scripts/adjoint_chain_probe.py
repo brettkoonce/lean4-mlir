@@ -506,7 +506,7 @@ def bn_per_example(z):
     return (z - mu) / np.sqrt(var + EPS_BN)
 
 
-def cifar8bn_probe():
+def cifar8bn_probe(per_channel_bn=False):
     import jax
     import jax.numpy as jnp
     jax.config.update("jax_enable_x64", True)
@@ -514,7 +514,8 @@ def cifar8bn_probe():
     from kernel_faithfulness_probe import layer_budget
 
     print("\n" + "═" * 78)
-    print("(4) COMMITTED CIFAR-8-BN — adjoint chain vs interval fold, gfx1100")
+    print("(4) COMMITTED CIFAR-8-BN — adjoint chain vs interval fold, gfx1100"
+          + ("  [P4 per-channel BN]" if per_channel_bn else ""))
     print("═" * 78)
     chans = [(3, 16), (16, 16), (16, 16), (16, 16),
              (16, 32), (32, 32), (32, 32), (32, 32)]
@@ -676,16 +677,35 @@ def cifar8bn_probe():
             n_bn = z.shape[2] * z.shape[3]
             mu = z.mean(axis=(2, 3), keepdims=True)
             var = ((z - mu) ** 2).mean(axis=(2, 3), keepdims=True)
-            D = mags(z - mu)
-            S = float((1.0 / np.sqrt(var + EPS_BN)).max())
-            floor = float(var.min()) + EPS_BN
-            emean = bn_mean_budget(U32, n_bn, mags(z))
-            evar = bn_var_budget(U32, D, emean, n_bn)
-            eistd = bn_istd_budget(ERS, evar, floor)
+            if per_channel_bn:
+                # P4: pair each (sample,channel) D with ITS OWN variance floor
+                # (perRowFlat/bnPerChannel granularity) — never the global
+                # worst-D × min-floor cross-channel pairing of the §4 default.
+                dev = z - mu
+                D_c = np.abs(dev).max(axis=(2, 3))            # (4,C)
+                A_c = np.abs(z).max(axis=(2, 3))             # (4,C)
+                floor_c = var[:, :, 0, 0] + EPS_BN           # (4,C)
+                S_c = 1.0 / np.sqrt(floor_c)
+                emean_c = bn_mean_budget(U32, n_bn, A_c)
+                evar_c = bn_var_budget(U32, D_c, emean_c, n_bn)
+                eistd_c = bn_istd_budget(ERS, evar_c, floor_c)
+                b_bn = float(bn_norm_budget(U32, D_c, S_c, 1.0, 0.0,
+                                            emean_c, eistd_c).max())
+                g_bn = float((2 * S_c + 2 * D_c * D_c
+                              / floor_c ** 1.5).max())
+            else:
+                D = mags(z - mu)
+                S = float((1.0 / np.sqrt(var + EPS_BN)).max())
+                floor = float(var.min()) + EPS_BN
+                emean = bn_mean_budget(U32, n_bn, mags(z))
+                evar = bn_var_budget(U32, D, emean, n_bn)
+                eistd = bn_istd_budget(ERS, evar, floor)
+                b_bn = bn_norm_budget(U32, D, S, 1.0, 0.0, emean, eistd)
+                g_bn = 1.0 * (2 * S + 2 * D * D / floor ** 1.5)
             h = np.maximum(bn_per_example(z), 0)
             acts.append((f"bn{k+1}+relu", "bn", z, h))
-            bs.append(bn_norm_budget(U32, D, S, 1.0, 0.0, emean, eistd))
-            gs.append(1.0 * (2 * S + 2 * D * D / floor ** 1.5))
+            bs.append(b_bn)
+            gs.append(g_bn)
             a = h
             k += 1
         p = maxpool2(a)
