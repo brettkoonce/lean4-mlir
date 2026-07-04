@@ -1,0 +1,130 @@
+[pace] 2026-07-01 14:48:59 START  ViT DeiT 300ep · pause 1800s every 30 ep · ckpt=/home/skoonce/vit_tiny_imagenet_bf16 · jax=/home/skoonce/lean/proof_verify_demo/verify-v2/jax
+[pace] 2026-07-01 14:48:59 attempt 1: FRESH start → run to epoch 30
+[pace] 2026-07-01 14:48:59 attempt 1: launched PID=1616819
+[pace]   last epoch line: [Epoch 11] lr=0.000499 loss(train_avg)=5.5657  [680.0s train, val skipped]
+[pace] 2026-07-01 17:04:22 ⚠  segment ended before epoch 30 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-01 17:04:32 attempt 2: RESUME from epoch 11 → run to epoch 30
+[pace] 2026-07-01 17:04:32 attempt 2: launched PID=1624208
+[pace]   last epoch line: [Epoch 21] lr=0.000496 loss(train_avg)=4.9926  [667.5s train, val skipped]
+[pace] 2026-07-01 19:06:10 ⚠  segment ended before epoch 30 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-01 19:06:20 attempt 3: RESUME from epoch 21 → run to epoch 30
+[pace] 2026-07-01 19:06:20 attempt 3: launched PID=1631167
+[pace]   last epoch line: [Epoch 30] lr=0.000491 loss(train_avg)=4.7457 val_top1=19932/49664 (0.4013) val_top5=0.0 val_loss=2.9106  [592.1s train, 10.7s val]
+[pace] 2026-07-01 20:37:43 ⏸  hit epoch 30 — GPUs idle for 1800s (30 min)
+[pace] 2026-07-01 21:07:43 ▶  pause over — resuming
+[pace] 2026-07-01 21:07:43 attempt 4: RESUME from epoch 30 → run to epoch 60
+[pace] 2026-07-01 21:07:43 attempt 4: launched PID=1637970
+[pace]   last epoch line: [Epoch 41] lr=0.000482 loss(train_avg)=4.5799  [554.8s train, val skipped]
+[pace] 2026-07-01 23:00:06 ⚠  segment ended before epoch 60 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-01 23:00:16 attempt 5: RESUME from epoch 41 → run to epoch 60
+[pace] 2026-07-01 23:00:16 attempt 5: launched PID=1644425
+[pace]   last epoch line: [Epoch 51] lr=0.000471 loss(train_avg)=4.4764  [611.3s train, val skipped]
+[pace] 2026-07-02 00:53:39 ⚠  segment ended before epoch 60 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-02 00:53:49 attempt 6: RESUME from epoch 51 → run to epoch 60
+[pace] 2026-07-02 00:53:49 attempt 6: launched PID=1651044
+[pace]   last epoch line: [Epoch 60] lr=0.000458 loss(train_avg)=4.4171 val_top1=27444/49664 (0.5526) val_top5=0.0 val_loss=1.9624  [614.4s train, 10.4s val]
+[pace] 2026-07-02 02:27:56 ⏸  hit epoch 60 — GPUs idle for 1800s (30 min)
+[pace] 2026-07-02 02:57:56 ▶  pause over — resuming
+[pace] 2026-07-02 02:57:56 attempt 7: RESUME from epoch 60 → run to epoch 90
+[pace] 2026-07-02 02:57:56 attempt 7: launched PID=1657725
+[pace]   last epoch line: [Epoch 71] lr=0.000441 loss(train_avg)=4.3571  [550.9s train, val skipped]
+[pace] 2026-07-02 04:49:04 ⚠  segment ended before epoch 90 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-02 04:49:14 attempt 8: RESUME from epoch 71 → run to epoch 90
+[pace] 2026-07-02 04:49:14 attempt 8: launched PID=1664099
+[pace]   last epoch line: [Epoch 81] lr=0.000422 loss(train_avg)=4.2878  [548.4s train, val skipped]
+[pace] 2026-07-02 06:30:07 ⚠  segment ended before epoch 90 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-02 06:30:17 attempt 9: RESUME from epoch 81 → run to epoch 90
+[pace] 2026-07-02 06:30:17 attempt 9: launched PID=1670296
+[pace]   last epoch line: [Epoch 90] lr=0.000404 loss(train_avg)=4.2556 val_top1=29488/49664 (0.5938) val_top5=0.0 val_loss=1.7258  [608.9s train, 10.3s val]
+[pace] 2026-07-02 08:04:09 ⏸  hit epoch 90 — GPUs idle for 1800s (30 min)
+[pace] 2026-07-02 08:34:09 ▶  pause over — resuming
+[pace] 2026-07-02 08:34:09 attempt 10: RESUME from epoch 90 → run to epoch 120
+[pace] 2026-07-02 08:34:09 attempt 10: launched PID=1677004
+[pace]   last epoch line: [Epoch 101] lr=0.00038 loss(train_avg)=4.1769  [551.2s train, val skipped]
+[pace] 2026-07-02 10:26:47 ⚠  segment ended before epoch 120 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-02 10:26:58 attempt 11: RESUME from epoch 101 → run to epoch 120
+[pace] 2026-07-02 10:26:58 attempt 11: launched PID=1683460
+[pace]   last epoch line: [Epoch 111] lr=0.000357 loss(train_avg)=4.1296  [612.8s train, val skipped]
+[pace] 2026-07-02 12:20:36 ⚠  segment ended before epoch 120 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-02 12:20:46 attempt 12: RESUME from epoch 111 → run to epoch 120
+[pace] 2026-07-02 12:20:46 attempt 12: launched PID=1690703
+[pace]   last epoch line: [Epoch 120] lr=0.000335 loss(train_avg)=4.1067 val_top1=30804/49664 (0.6202) val_top5=0.0 val_loss=1.5811  [600.8s train, 10.4s val]
+[pace] 2026-07-02 13:53:23 ⏸  hit epoch 120 — GPUs idle for 1800s (30 min)
+[pace] 2026-07-02 14:23:23 ▶  pause over — resuming
+[pace] 2026-07-02 14:23:23 attempt 13: RESUME from epoch 120 → run to epoch 150
+[pace] 2026-07-02 14:23:23 attempt 13: launched PID=1697433
+[pace]   last epoch line: [Epoch 131] lr=0.000307 loss(train_avg)=4.0674  [608.4s train, val skipped]
+[pace] 2026-07-02 16:26:02 ⚠  segment ended before epoch 150 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-02 16:26:12 attempt 14: RESUME from epoch 131 → run to epoch 150
+[pace] 2026-07-02 16:26:12 attempt 14: launched PID=1704559
+[pace]   last epoch line: [Epoch 141] lr=0.000281 loss(train_avg)=3.9991  [661.9s train, val skipped]
+[pace] 2026-07-02 18:29:35 ⚠  segment ended before epoch 150 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-02 18:29:45 attempt 15: RESUME from epoch 141 → run to epoch 150
+[pace] 2026-07-02 18:29:45 attempt 15: launched PID=1711735
+[pace]   last epoch line: [Epoch 150] lr=0.000257 loss(train_avg)=3.9705 val_top1=31847/49664 (0.6412) val_top5=0.0 val_loss=1.4829  [663.6s train, 10.4s val]
+[pace] 2026-07-02 20:11:38 ⏸  hit epoch 150 — GPUs idle for 1800s (30 min)
+[pace] 2026-07-02 20:41:38 ▶  pause over — resuming
+[pace] 2026-07-02 20:41:38 attempt 16: RESUME from epoch 150 → run to epoch 180
+[pace] 2026-07-02 20:41:38 attempt 16: launched PID=1718805
+[pace]   last epoch line: [Epoch 161] lr=0.000227 loss(train_avg)=3.9178  [615.8s train, val skipped]
+[pace] 2026-07-02 22:46:01 ⚠  segment ended before epoch 180 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-02 22:46:11 attempt 17: RESUME from epoch 161 → run to epoch 180
+[pace] 2026-07-02 22:46:11 attempt 17: launched PID=1725965
+[pace]   last epoch line: [Epoch 171] lr=0.000201 loss(train_avg)=3.8671  [687.8s train, val skipped]
+[pace] 2026-07-03 00:51:50 ⚠  segment ended before epoch 180 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-03 00:52:00 attempt 18: RESUME from epoch 171 → run to epoch 180
+[pace] 2026-07-03 00:52:00 attempt 18: launched PID=1733133
+[pace]   last epoch line: [Epoch 180] lr=0.000178 loss(train_avg)=3.8082 val_top1=32807/49664 (0.6606) val_top5=0.0 val_loss=1.3985  [611.7s train, 10.4s val]
+[pace] 2026-07-03 02:26:23 ⏸  hit epoch 180 — GPUs idle for 1800s (30 min)
+[pace] 2026-07-03 02:56:23 ▶  pause over — resuming
+[pace] 2026-07-03 02:56:23 attempt 19: RESUME from epoch 180 → run to epoch 210
+[pace] 2026-07-03 02:56:23 attempt 19: launched PID=1739903
+[pace]   last epoch line: [Epoch 191] lr=0.00015 loss(train_avg)=3.7818  [556.7s train, val skipped]
+[pace] 2026-07-03 04:47:46 ⚠  segment ended before epoch 210 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-03 04:47:56 attempt 20: RESUME from epoch 191 → run to epoch 210
+[pace] 2026-07-03 04:47:56 attempt 20: launched PID=1746283
+[pace]   last epoch line: [Epoch 201] lr=0.000127 loss(train_avg)=3.7054  [557.9s train, val skipped]
+[pace] 2026-07-03 06:30:19 ⚠  segment ended before epoch 210 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-03 06:30:29 attempt 21: RESUME from epoch 201 → run to epoch 210
+[pace] 2026-07-03 06:30:29 attempt 21: launched PID=1761915
+[pace]   last epoch line: [Epoch 210] lr=0.000106 loss(train_avg)=3.6601 val_top1=33554/49664 (0.6756) val_top5=0.0 val_loss=1.3291  [628.6s train, 10.3s val]
+[pace] 2026-07-03 08:07:21 ⏸  hit epoch 210 — GPUs idle for 1800s (30 min)
+[pace] 2026-07-03 08:37:21 ▶  pause over — resuming
+[pace] 2026-07-03 08:37:21 attempt 22: RESUME from epoch 210 → run to epoch 240
+[pace] 2026-07-03 08:37:21 attempt 22: launched PID=1768789
+[pace]   last epoch line: [Epoch 221] lr=8.3e-05 loss(train_avg)=3.6269  [633.4s train, val skipped]
+[pace] 2026-07-03 10:45:15 ⚠  segment ended before epoch 240 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-03 10:45:25 attempt 23: RESUME from epoch 221 → run to epoch 240
+[pace] 2026-07-03 10:45:25 attempt 23: launched PID=1776697
+[pace]   last epoch line: [Epoch 231] lr=6.5e-05 loss(train_avg)=3.5448  [600.4s train, val skipped]
+[pace] 2026-07-03 12:35:18 ⚠  segment ended before epoch 240 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-03 12:35:28 attempt 24: RESUME from epoch 231 → run to epoch 240
+[pace] 2026-07-03 12:35:28 attempt 24: launched PID=1783014
+[pace]   last epoch line: [Epoch 240] lr=4.9e-05 loss(train_avg)=3.5362 val_top1=34275/49664 (0.6901) val_top5=0.0 val_loss=1.2672  [621.3s train, 10.2s val]
+[pace] 2026-07-03 14:10:36 ⏸  hit epoch 240 — GPUs idle for 1800s (30 min)
+[pace] 2026-07-03 14:40:36 ▶  pause over — resuming
+[pace] 2026-07-03 14:40:36 attempt 25: RESUME from epoch 240 → run to epoch 270
+[pace] 2026-07-03 14:40:36 attempt 25: launched PID=1789808
+[pace]   last epoch line: [Epoch 251] lr=3.3e-05 loss(train_avg)=3.4773  [637.3s train, val skipped]
+[pace] 2026-07-03 16:47:45 ⚠  segment ended before epoch 270 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-03 16:47:55 attempt 26: RESUME from epoch 251 → run to epoch 270
+[pace] 2026-07-03 16:47:55 attempt 26: launched PID=1797725
+[pace]   last epoch line: [Epoch 261] lr=2.1e-05 loss(train_avg)=3.4152  [559.3s train, val skipped]
+[pace] 2026-07-03 18:29:18 ⚠  segment ended before epoch 270 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-03 18:29:28 attempt 27: RESUME from epoch 261 → run to epoch 270
+[pace] 2026-07-03 18:29:28 attempt 27: launched PID=1808198
+[pace]   last epoch line: [Epoch 270] lr=1.3e-05 loss(train_avg)=3.376 val_top1=34714/49664 (0.699) val_top5=0.0 val_loss=1.2237  [591.9s train, 10.3s val]
+[pace] 2026-07-03 20:00:50 ⏸  hit epoch 270 — GPUs idle for 1800s (30 min)
+[pace] 2026-07-03 20:30:50 ▶  pause over — resuming
+[pace] 2026-07-03 20:30:50 attempt 28: RESUME from epoch 270 → run to epoch 300 (final, to Done.)
+[pace] 2026-07-03 20:30:50 attempt 28: launched PID=1814696
+[pace]   last epoch line: [Epoch 281] lr=5e-06 loss(train_avg)=3.36  [599.0s train, val skipped]
+[pace] 2026-07-03 22:31:58 ⚠  segment ended before epoch 300 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-03 22:32:08 attempt 29: RESUME from epoch 281 → run to epoch 300 (final, to Done.)
+[pace] 2026-07-03 22:32:08 attempt 29: launched PID=1821161
+[pace]   last epoch line: [Epoch 291] lr=1e-06 loss(train_avg)=3.3488  [608.6s train, val skipped]
+[pace] 2026-07-04 00:25:00 ⚠  segment ended before epoch 300 (crash/AER?) — resuming immediately (no pause)
+[pace] 2026-07-04 00:25:10 attempt 30: RESUME from epoch 291 → run to epoch 300 (final, to Done.)
+[pace] 2026-07-04 00:25:10 attempt 30: launched PID=1827316
+[pace]   last epoch line: [Epoch 300] lr=0.0 loss(train_avg)=3.3387 val_top1=34932/49664 (0.7034) val_top5=0.0 val_loss=1.2055  [612.0s train, 10.2s val]
+[pace] 2026-07-04 01:59:17 ✅ trainer printed Done. — run complete (final=/home/skoonce/vit_tiny_imagenet_bf16.bin)
