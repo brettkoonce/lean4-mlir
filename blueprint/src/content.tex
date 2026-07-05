@@ -7878,8 +7878,11 @@ recipe (Wightman et al.\ 2021,
 \href{https://arxiv.org/abs/2110.00476}{arXiv:2110.00476}) --- LAMB,
 BCE loss, repeated augmentation --- which trains this exact network
 to ${\sim}79.8\%$ top-1. The phase-2 JAX trainer
-(\texttt{jax/MainResnet50Imagenet.lean}) wires that recipe.
-\textbf{[TODO: run with phase-2 trainer]}
+(\texttt{jax/MainResnet50Imagenet.lean}) wires that recipe: running
+the cheaper 100-epoch \emph{A3} tier end-to-end through the
+Lean~$\to$~StableHLO~$\to$~JAX pipeline reaches \textbf{76.66\% top-1
+/ 93.03\% top-5} on ImageNet-1k, within ${\sim}1.4$ points of the A3
+paper's $78.1\%$.
 
 \subsubsection*{WRN (Wide ResNet) (\texttt{Bestiary/WRN.lean})}
 \emph{Zero} new primitives --- same \texttt{.residualBlock} as

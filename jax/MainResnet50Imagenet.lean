@@ -109,12 +109,32 @@ def resnet50ImagenetConfigAdamProbe : TrainConfig :=
       optimizer         := .adam   -- AdamW (== Muon's JAX fallback); bs512-appropriate
       wdExcludeNormBias := true }  -- skip BN γ/β + biases from weight decay
 
+/-- **RSB-faithful A3** — reproduces timm's LAMB @ **bs2048** on this 4×16 GB box via
+    gradient accumulation (512 micro × 4 = effective 2048), so LAMB finally gets the
+    large batch it was designed for. This is the fix for the bs512-starved 40.8%
+    result (memory `project_r50_a3_lowval_diagnostic`): LAMB is a large-batch
+    optimizer that was run at 1/4 its intended batch. BN stats are per-micro-batch
+    (**Ghost-BN**, Hoffer et al. 2017 — benign at micro=512). LR is restored to the
+    paper's **8e-3 @ bs2048** (NOT the 512-scaled 2e-3), and the timm no_weight_decay
+    skip-list (BN γ/β + biases) — the other faithful-reproduction lever — is on.
+    Grad-accum mechanics are GPU-validated (see `planning/grad_accum.md` §Status);
+    this config is the accuracy run. Selected with `LEAN_MLIR_RSB_FAITHFUL=1`;
+    writes a separate `_rsbfaithful.py`. -/
+def resnet50ImagenetConfigRSBFaithful : TrainConfig :=
+  { resnet50ImagenetConfigShort with
+      learningRate      := 0.008   -- RSB-A3 lr @ bs2048 (NOT the 512-scaled 0.002)
+      gradAccumSteps    := 4       -- 512 micro × 4 = effective bs2048 on 4×16GB
+      wdExcludeNormBias := true }  -- timm no_weight_decay: BN γ/β + biases skip wd
+
 def main (args : List String) : IO Unit := do
   let short := (← IO.getEnv "LEAN_MLIR_SHORT").isSome
   let adamProbe := (← IO.getEnv "LEAN_MLIR_ADAM_PROBE").isSome
-  let cfg := if adamProbe then resnet50ImagenetConfigAdamProbe
+  let rsbFaithful := (← IO.getEnv "LEAN_MLIR_RSB_FAITHFUL").isSome
+  let cfg := if rsbFaithful then resnet50ImagenetConfigRSBFaithful
+             else if adamProbe then resnet50ImagenetConfigAdamProbe
              else if short then resnet50ImagenetConfigShort else resnet50ImagenetConfig
-  let out := if adamProbe then "generated_resnet50_imagenet_adamprobe.py"
+  let out := if rsbFaithful then "generated_resnet50_imagenet_rsbfaithful.py"
+             else if adamProbe then "generated_resnet50_imagenet_adamprobe.py"
              else if short then "generated_resnet50_imagenet_short.py"
              else "generated_resnet50_imagenet.py"
   runJax resnet50Imagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out

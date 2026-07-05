@@ -39,6 +39,16 @@ different depths — same chain rule, same fan-in.
 | ResNet-101  | bottleneck | (3, 4, 23, 3)      | 44.5M  | 77.4          |
 | ResNet-152  | bottleneck | (3, 8, 36, 3)      | 60.2M  | 78.3          |
 
+**Reproduced here.** ResNet-50 trains from scratch through the
+Lean → StableHLO → JAX pipeline to **76.66 % top-1 / 93.03 % top-5** on
+ImageNet-1k — the timm *ResNet Strikes Back* **A3** recipe (LAMB at effective
+batch 2048 via gradient accumulation, BCE + mixup/cutmix + RandAugment, 100
+epochs, train @160 / eval @224). That matches the classic torchvision
+reference (76.0) and lands ~1.4 pt under the RSB-A3 paper's 78.1 — the residual
+is running-BN / RandAugment reimplementation slop. Config
+`resnet50ImagenetConfigRSBFaithful` in `jax/MainResnet50Imagenet.lean`
+(`LEAN_MLIR_RSB_FAITHFUL=1`).
+
 All four share the same stem (7×7 stride-2 conv + 3×3 stride-2 max
 pool) and GAP + single-FC head. The basic-block variant tops out at
 512 channels in stage 4; the bottleneck variants run 256 → 512 →

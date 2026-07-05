@@ -447,8 +447,24 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
           let b0 := if !(ic == oc && fs == 1) then [mid, mid, oc, oc] else [mid, mid, oc]
           b0 ++ (List.range (n-1)).flatMap (fun _ => [mid, mid, oc])
         | _ => [])).map toString
+      -- BN running-stat momentum. With gradient accumulation, `_bn` runs K× per
+      -- optimizer step (once per micro-batch inside the accum scan), so a naive
+      -- 0.99 would decay the running stats ~K× too fast (≈0.99^K/step) and bias
+      -- the eval-time stats. Compensate: per-micro momentum = 0.99^(1/K) so the K
+      -- chained updates compose to ≈ one 0.99/step update (matching a true
+      -- single-forward bsN). Normalization batch stats stay per-micro (Ghost-BN).
+      -- K≤1 keeps the exact "0.99" literal → byte-identical to prior codegen.
+      let bnMomStr := if cfg.gradAccumSteps > 1
+                      then toString (Float.exp ((1.0 / cfg.gradAccumSteps.toFloat) * Float.log 0.99))
+                      else "0.99"
+      let bnMomNote := if cfg.gradAccumSteps > 1
+        then "# BN momentum compensated for gradient accumulation (K=" ++ toString cfg.gradAccumSteps ++ "): _bn runs K× per\n" ++
+             "# optimizer step, so per-micro momentum = 0.99**(1/K) = " ++ bnMomStr ++ " → K updates\n" ++
+             "# compose to ~one 0.99/step update (true single-forward bs" ++ toString (cfg.batchSize * cfg.gradAccumSteps) ++ "). Norm stats stay per-micro.\n"
+        else ""
       code := code ++
-        "def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=0.99):\n" ++
+        bnMomNote ++
+        ("def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=" ++ bnMomStr ++ "):\n") ++
         "    rm, rv = prev\n" ++
         "    if training:\n" ++
         "        bm = jnp.mean(x, axis=(0, 2, 3)); bv = jnp.var(x, axis=(0, 2, 3))\n" ++
@@ -2150,13 +2166,19 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    v = jax.tree.map(lambda vi, g: BETA2 * vi + (1 - BETA2) * g * g, v, grads)\n" ++
     "    mc = jax.tree.map(lambda mi: mi / (1 - BETA1 ** t), m)\n" ++
     "    vc = jax.tree.map(lambda vi: vi / (1 - BETA2 ** t), v)\n" ++
-    "    def _lamb(p, mi, vi):\n" ++
-    (if hasWD then "        r = mi / (jnp.sqrt(vi) + EPS) + WD * p\n"
+    -- `wdExclude` (timm no_weight_decay) masks WD off BN γ/β + biases, exactly as
+    -- the Adam branch does — the mask multiplies the decoupled-WD term inside r,
+    -- BEFORE the trust ratio, so masked (1-D) leaves get a pure-Adam direction.
+    (if wdExclude then "    def _lamb(p, mi, vi, msk):\n"
+     else "    def _lamb(p, mi, vi):\n") ++
+    (if wdExclude then "        r = mi / (jnp.sqrt(vi) + EPS) + WD * msk * p\n"
+     else if hasWD then "        r = mi / (jnp.sqrt(vi) + EPS) + WD * p\n"
      else "        r = mi / (jnp.sqrt(vi) + EPS)\n") ++
     "        wn = jnp.sqrt(jnp.sum(p * p)); rn = jnp.sqrt(jnp.sum(r * r))\n" ++
     "        trust = jnp.where(wn > 0, jnp.where(rn > 0, wn / rn, 1.0), 1.0)\n" ++
     "        return p - lr * trust * r\n" ++
-    "    params = jax.tree.map(_lamb, params, mc, vc)\n" ++
+    (if wdExclude then "    params = jax.tree.map(_lamb, params, mc, vc, WD_MASK)\n"
+     else "    params = jax.tree.map(_lamb, params, mc, vc)\n") ++
     (if cfg.runningBN then "    return params, (m, v, t), _new_bn, loss\n\n" else "    return params, (m, v, t), loss\n\n")
    | .rmsprop =>
     -- RMSprop + momentum (MobileNet/EfficientNet native). opt_state = (sq, buf):
