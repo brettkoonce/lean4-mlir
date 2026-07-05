@@ -151,6 +151,9 @@ import LeanMlir.Proofs.TrainedMlpWitness
 import LeanMlir.Proofs.TrainedCnnWitness
 import LeanMlir.Proofs.TrainedCnnSeal
 import LeanMlir.Proofs.LipschitzCertScorecard
+import LeanMlir.Proofs.LipschitzCertPairSDP
+import LeanMlir.Proofs.LipschitzCertScorecardSDP
+import LeanMlir.Proofs.LipschitzCertScorecardSDPUncon
 import LeanMlir.Proofs.LipschitzCertFloat
 import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
@@ -3113,6 +3116,37 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.unconCerts_certified
 #print axioms Proofs.LipschitzCertDemo.scorecard
 #print axioms Proofs.LipschitzCertDemo.scorecard_counts
+
+-- Per-pair LipSDP tightening (LipschitzCertPairSDP.lean + the two generated
+-- instance files): LipSDP-Neuron for one hidden layer, PSD witnessed by exact
+-- rational LDLᵀ (quad_form_nonneg_of_ldl), slope restriction + complete-the-
+-- square (pair_sq_bound), per-pair fixed-ε certificate with rational Lp
+-- (certified_at_eps_pair — no √2, no global product L). Same nets, same
+-- images, same ε as the scorecard above: 34→69/100 capped, 1→63/100 uncon.
+-- Spot-check the core lemmas, one pair certificate per net (data identities +
+-- assembled squared bound + a reverse-order wrapper), first/middle/last
+-- per-image certs, and the mechanized aggregates.
+#print axioms Proofs.LipschitzCertDemo.relu_slope_restricted
+#print axioms Proofs.LipschitzCertDemo.quad_form_nonneg_of_ldl
+#print axioms Proofs.LipschitzCertDemo.lipsdp_slack_of_cert
+#print axioms Proofs.LipschitzCertDemo.pair_sq_bound
+#print axioms Proofs.LipschitzCertDemo.mlp_gap_eq
+#print axioms Proofs.LipschitzCertDemo.certified_at_eps_pair
+#print axioms Proofs.LipschitzCertDemo.sP01C_def
+#print axioms Proofs.LipschitzCertDemo.sP01C_ldl
+#print axioms Proofs.LipschitzCertDemo.pairSqC_0_1
+#print axioms Proofs.LipschitzCertDemo.pairSqC_7_0
+#print axioms Proofs.LipschitzCertDemo.pairSqU_0_1
+#print axioms Proofs.LipschitzCertDemo.certifiedSC0
+#print axioms Proofs.LipschitzCertDemo.certifiedSC52
+#print axioms Proofs.LipschitzCertDemo.certifiedSC99
+#print axioms Proofs.LipschitzCertDemo.certifiedSU0
+#print axioms Proofs.LipschitzCertDemo.certifiedSU82
+#print axioms Proofs.LipschitzCertDemo.certifiedSU99
+#print axioms Proofs.LipschitzCertDemo.sdpCappedCerts_certified
+#print axioms Proofs.LipschitzCertDemo.sdpUnconCerts_certified
+#print axioms Proofs.LipschitzCertDemo.scorecard_sdp
+#print axioms Proofs.LipschitzCertDemo.scorecard_sdp_uncon
 
 -- The certificate × float bridge (LipschitzCertFloat.lean, 2026-07 audit gap #1): the scorecard's
 -- Tsuzuku certificates composed with the 2-layer FloatBridge budget (mlp2_float_close_uniform,

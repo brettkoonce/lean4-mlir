@@ -676,6 +676,15 @@ lean_lib «Proofs» where
              -- unconstrained net; per-image in-kernel margins, honest lower-bound
              -- aggregate. Same theorem, same ε — training decides if the cert bites.
              `LeanMlir.Proofs.LipschitzCertScorecard,
+             -- Per-pair LipSDP certificates (the tighter-Lipschitz-constant pass):
+             -- LipSDP-Neuron (Fazlyab 2019) for one hidden layer, PSD witnessed by
+             -- exact rational LDLᵀ (kernel-checkable, no √, no eigensolver) — lifts
+             -- the SAME scorecard (same nets, same images, same ε) from 34→69/100
+             -- capped and 1→63/100 unconstrained; PGD bracket 72/69, sandwich
+             -- nearly closed. Core lemmas + the two generated instance files.
+             `LeanMlir.Proofs.LipschitzCertPairSDP,
+             `LeanMlir.Proofs.LipschitzCertScorecardSDP,
+             `LeanMlir.Proofs.LipschitzCertScorecardSDPUncon,
              -- The binary32/fp8-E4M3 hardware models, CONSTRUCTED (post_audit_roadmap §2):
              -- rndP p = round-to-nearest on the unbounded-exponent p-bit grid, standard
              -- model |rndP p x − x| ≤ 2⁻¹⁻ᵖ|x| PROVED (rndP_err) — the former
