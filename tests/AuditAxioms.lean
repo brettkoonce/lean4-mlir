@@ -3132,8 +3132,7 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.pair_sq_bound
 #print axioms Proofs.LipschitzCertDemo.mlp_gap_eq
 #print axioms Proofs.LipschitzCertDemo.certified_at_eps_pair
-#print axioms Proofs.LipschitzCertDemo.sP01C_def
-#print axioms Proofs.LipschitzCertDemo.sP01C_ldl
+#print axioms Proofs.LipschitzCertDemo.hS01C
 #print axioms Proofs.LipschitzCertDemo.pairSqC_0_1
 #print axioms Proofs.LipschitzCertDemo.pairSqC_7_0
 #print axioms Proofs.LipschitzCertDemo.pairSqU_0_1
