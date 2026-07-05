@@ -10315,7 +10315,7 @@ derivative --- that arrow is machine-checked. Because both arrows start from
 one concrete datatype rather than from a string, ``the emitted code computes
 the proven gradient'' is a theorem about a value, not a hope about a comment.
 
-\section{Float32, and whether it still trains}
+\section{Float32: closeness, composition, and whether it still trains}
 \label{sec:float32}
 
 Every theorem in this book is over exact reals; the GPU computes in
@@ -10326,7 +10326,10 @@ reach --- keeping them apart is the honest part. The \emph{closeness} half
 (\(|\,\text{float op} - \text{real op}\,| \le\) budget) is
 architecture-complete: \texttt{FloatBridge.lean} and the per-net
 \texttt{*FloatBridge} files budget every operator of every network, forward
-and backward, from the MNIST linear classifier to ViT-Tiny. The
+and backward, from the MNIST linear classifier to ViT-Tiny --- and (the
+composition theorem below) these per-operator budgets fold into a
+\emph{depth-linear whole-network} certificate that stays below the logit scale
+on all eight committed renders. The
 \emph{descent} half (a rounded step provably \emph{decreases the loss})
 closes only for the shallow nets
 (\texttt{SgdDescent\{Linear,Mlp,Cnn,Cifar\}.lean}). The way the chain avoids
@@ -10347,7 +10350,9 @@ same way the ReLU theorems are conditional on being off the kink, and
 the axiom audit is untouched. Two further design choices are forced by
 the hardware: the dot-product budgets are stated in the classical
 compounded form valid for \emph{every} summation association, because
-IREE tiles and reorders reductions freely; and \(\exp\) enters as a
+IREE tiles and reorders reductions freely (the price is a fan-in factor
+\(n\cdot u\); the tree-reduction bound below recovers \(\log_2 n\cdot u\)
+under a named balance hypothesis); and \(\exp\) enters as a
 hypothesis (\(|\widehat{\exp}(t) - e^t| \le e_{\exp}\, e^t\))
 because GPU transcendentals have no IEEE specification ---
 \(e_{\exp}\) is precisely the constant the VJP oracle
@@ -10399,6 +10404,54 @@ the accumulated rounding error must not flip a sign
 (\texttt{reluMask\_close}). A qualitative side condition became a
 checkable margin.
 
+\paragraph{The naive whole-network bound is vacuous.}
+Budgeting each operator is one thing; combining those budgets into a bound on
+the \emph{whole} network is another. The obvious way (\texttt{FloatClose.comp})
+assumes every layer amplifies the error it inherits by that layer's
+\emph{worst possible} factor, then multiplies those factors down the depth. So
+the bound grows like \((\text{gain})^{\text{depth}}\) and blows up ---
+\(2.7\cdot 10^{60}\) on MobileNetV2, \(\sim\!10^{364}\) on ViT-Tiny --- while
+the drift the GPU actually produces stays near \(10^{-5}\). Past a handful of
+layers, that bound says nothing at all.
+
+\paragraph{The adjoint chain: add, don't multiply.}
+The real error behaves differently. Each layer's \emph{own} rounding is
+amplified just once --- by how much the \emph{rest} of the network magnifies a
+small change made at that point --- and those contributions \emph{add} instead
+of multiplying. \texttt{chain\_adjointClose} (\texttt{AdjointChainBridge.lean})
+proves exactly this: the whole-network error is at most \(\sum_i H_i\,b_i\),
+where \(b_i\) is layer \(i\)'s fresh rounding budget (its per-operator bound,
+before anything is inherited) and \(H_i\) is its \emph{tail gain} --- how much a
+perturbation at layer \(i\) is stretched by all the layers after it. The proof
+is a single induction, exact (nothing is linearized), and because each \(b_i\)
+is amplified only once, the total grows roughly \emph{linearly} with depth
+rather than exponentially. It can never lose to the naive bound: plug in
+worst-case tail gains and you recover the old bound exactly, so any honest
+estimate of \(H_i\) only helps. And an honest estimate is cheap --- one backward
+pass reads the \(H_i\) off the network's own trajectory. They enter the theorem
+as named hypotheses carrying their measured values, on the same footing as the
+\(\exp\) constant (\S~\ref{sec:jax_pipeline}), never an axiom.
+
+\paragraph{A certificate below the logit scale.}
+Two refinements make the bound small in practice. Cut the chain at \emph{every}
+operator --- each convolution, normalization, and dense its own link, with
+residual connections carried alongside (\texttt{chain2\_adjointClose}) --- and
+no worst-case products survive anywhere. And note that a sum of \(n\) terms
+costs a factor \((1{+}u)^{n}\) only if the hardware adds them in the worst
+order; IREE adds them in a balanced tree, which costs
+\((1{+}u)^{\lceil\log_2 n\rceil}\) instead (\texttt{tree\_close},
+\texttt{TreeReduceBridge.lean}) --- a factor we name and check empirically
+rather than assume, and the one that finally tames the widest reductions
+(fan-in \(6272\), or \(n = 301056\) in ConvNeXt's LayerNorm). The result is the
+first whole-network float certificate that means something on networks this
+deep: the bound lands \emph{below the logit scale} on every committed render ---
+MNIST-CNN \(0.015\), CIFAR-8 \(2.6\), MobileNetV2 \(0.30\), ResNet-34 \(0.17\),
+ViT-Tiny \(0.57\), EfficientNet-B0 \(0.10\), ConvNeXt-T \(0.80\), against logits
+of order one to five. And it is a statement about the \emph{decision}, not just
+the numbers: \texttt{cifar8\_chain\_argmaxSafe} proves that whenever the exact
+network's margin beats twice the budget, binary32 rounding cannot change which
+class it predicts.
+
 \paragraph{Measured against proven.}
 The numeric capstones are instantiated at the \emph{trained} magnitudes
 of a real 12-epoch, 97.8\% GPU run (\(|W| \le 3/5\), covering the
@@ -10421,8 +10474,16 @@ ReLU mask flips & \(0\) under margins & \(\mathbf{0}\,/\,29.5\mathrm{M}\) \\
 The worst-case bounds hold
 with up to \(10^{8}\) to spare because worst-case composition
 compounds magnitude bounds the way no real activation pattern does ---
-that gap is the quantitative argument for a-posteriori certificates
-past toy depth, now visible in a theorem rather than asserted. And the
+and that gap is exactly what the adjoint chain closes: its measured tail
+gains are the a-posteriori certificate past toy depth, now a theorem
+(\texttt{chain\_adjointClose}) rather than an asserted argument. The
+whole-net budget was re-measured at the \emph{trained} weights of five real
+checkpoints --- ResNet-34, MobileNetV2, EfficientNet-B0, ViT-Tiny,
+ConvNeXt-T --- and it holds on every one, with the telling twist that it
+\emph{tightens} where training removes a pathological initialization (ViT's
+zero-init class token, MobileNetV2's He-init stem gain) and only loosens
+slightly on clean-init nets: the certificate is demonstrably a property of
+the deployed network, not an artifact of the initialization. And the
 flip count is zero across 29.5 million measured pre-activations: the
 margin hypotheses are not a technicality the proofs hide behind; they
 are what training actually looks like.
@@ -10468,7 +10529,9 @@ structurally cannot.
   \item \textbf{The IREE-versus-NumPy oracle} fails if the compiled graph
     computes the wrong thing on real hardware --- the one check that reaches
     past the proofs to IREE's lowering --- which cannot be proven --- and
-    \texttt{float32}, whose rounding now can be, conditionally
+    \texttt{float32}, whose rounding now carries a conditional
+    \emph{whole-network} certificate: a depth-linear drift bound below the
+    logit scale, and with it a proof that rounding cannot flip the prediction
     (\S~\ref{sec:float32}).
   \item \textbf{The margin probe} (\texttt{scripts/margin\_probe.py})
     fails if a real training run violates the float theorems' hypotheses
