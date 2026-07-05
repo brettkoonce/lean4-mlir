@@ -3104,6 +3104,14 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.certifiedC98
 #print axioms Proofs.LipschitzCertDemo.marginU82
 #print axioms Proofs.LipschitzCertDemo.certifiedU82
+-- the mechanized aggregate: the 34/100 + 1/100 counts tied to the per-image
+-- CertifiedAt proofs (proof term = the tuple of all 35 per-image theorems),
+-- not just literal-list lengths
+#print axioms Proofs.LipschitzCertDemo.cappedCerts_idx
+#print axioms Proofs.LipschitzCertDemo.unconCerts_idx
+#print axioms Proofs.LipschitzCertDemo.cappedCerts_certified
+#print axioms Proofs.LipschitzCertDemo.unconCerts_certified
+#print axioms Proofs.LipschitzCertDemo.scorecard
 #print axioms Proofs.LipschitzCertDemo.scorecard_counts
 
 -- The certificate × float bridge (LipschitzCertFloat.lean, 2026-07 audit gap #1): the scorecard's

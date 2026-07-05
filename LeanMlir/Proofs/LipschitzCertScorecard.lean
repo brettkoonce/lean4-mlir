@@ -1453,7 +1453,7 @@ theorem certifiedU82 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
     (by norm_num) δ hδ
 
 -- ════════════════════════════════════════════════════════════
--- § Aggregate
+-- § Aggregate — the mechanized scorecard
 -- ════════════════════════════════════════════════════════════
 
 /-- Indices (into the fixed first-100 MNIST test subset) certified at
@@ -1465,11 +1465,67 @@ def certifiedCappedIdx : List ℕ :=
 def certifiedUnconIdx : List ℕ :=
   [82]
 
-/-- **The scorecard**: at ε = 1/10 (pooled L2), the capped net certifies
-    34/100 of the fixed test subset, the unconstrained net 1/100 —
-    same theorem, same ε; training (σ-projection) decides whether the
-    certificate bites. Lower bounds only: an upper-bound L cannot prove
-    an image uncertifiable. -/
+/-- `f` is *certified at radius ε* on input `x` with class `i`: every
+    perturbation of L2 norm `< ε` leaves `i` the strict argmax. This is the
+    (undecidable — it quantifies over real `δ`) per-image certificate that
+    each `certifiedC<i>`/`certifiedU<i>` theorem proves. -/
+def CertifiedAt {n k : ℕ} (f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k))
+    (ε : ℝ) (x : EuclideanSpace ℝ (Fin n)) (i : Fin k) : Prop :=
+  ∀ δ : EuclideanSpace ℝ (Fin n), ‖δ‖ < ε →
+    ∀ j, j ≠ i → f (x + δ) j < f (x + δ) i
+
+/-- The capped-net certificate witnesses: `(subset index, image, class)`,
+    one triple per `certifiedC<i>` theorem, in index order. -/
+noncomputable def cappedCerts : List (ℕ × EuclideanSpace ℝ (Fin 49) × Fin 10) :=
+  [(0, img0, 7), (3, img3, 0), (5, img5, 1), (10, img10, 0), (13, img13, 0),
+   (14, img14, 1), (17, img17, 7), (25, img25, 0), (28, img28, 0), (29, img29, 1),
+   (34, img34, 7), (36, img36, 7), (37, img37, 1), (39, img39, 1), (41, img41, 7),
+   (52, img52, 5), (56, img56, 4), (60, img60, 7), (68, img68, 3), (69, img69, 0),
+   (70, img70, 7), (71, img71, 0), (74, img74, 1), (79, img79, 7), (81, img81, 6),
+   (82, img82, 2), (85, img85, 4), (86, img86, 7), (89, img89, 1), (90, img90, 3),
+   (93, img93, 3), (94, img94, 1), (95, img95, 4), (98, img98, 6)]
+
+/-- The unconstrained-net certificate witnesses (`certifiedU<i>`). -/
+noncomputable def unconCerts : List (ℕ × EuclideanSpace ℝ (Fin 49) × Fin 10) :=
+  [(82, img82, 2)]
+
+/-- The witness list carries exactly the advertised indices. -/
+theorem cappedCerts_idx : cappedCerts.map Prod.fst = certifiedCappedIdx := rfl
+
+theorem unconCerts_idx : unconCerts.map Prod.fst = certifiedUnconIdx := rfl
+
+/-- **Every capped-net witness is certified** — the aggregate is no longer
+    bookkeeping over a bare index list: the proof term is literally the
+    tuple of the 34 per-image theorems. -/
+theorem cappedCerts_certified :
+    ∀ p ∈ cappedCerts, CertifiedAt mlpS ((1 : ℝ)/10) p.2.1 p.2.2 :=
+  List.forall_iff_forall_mem.mp
+    ⟨certifiedC0, certifiedC3, certifiedC5, certifiedC10, certifiedC13,
+     certifiedC14, certifiedC17, certifiedC25, certifiedC28, certifiedC29,
+     certifiedC34, certifiedC36, certifiedC37, certifiedC39, certifiedC41,
+     certifiedC52, certifiedC56, certifiedC60, certifiedC68, certifiedC69,
+     certifiedC70, certifiedC71, certifiedC74, certifiedC79, certifiedC81,
+     certifiedC82, certifiedC85, certifiedC86, certifiedC89, certifiedC90,
+     certifiedC93, certifiedC94, certifiedC95, certifiedC98⟩
+
+theorem unconCerts_certified :
+    ∀ p ∈ unconCerts, CertifiedAt mlpT ((1 : ℝ)/10) p.2.1 p.2.2 :=
+  List.forall_iff_forall_mem.mp certifiedU82
+
+/-- **The scorecard, as a theorem**: at ε = 1/10 (pooled L2) the capped net
+    certifies 34 witnesses of the fixed test subset, the unconstrained net 1 —
+    same certificate, same ε; training (σ-projection) decides whether it
+    bites. Each count is now tied to its per-image `CertifiedAt` proofs via
+    `cappedCerts_certified`/`unconCerts_certified`, not just a list length.
+    Lower bounds only: an upper-bound L cannot prove an image uncertifiable. -/
+theorem scorecard :
+    (cappedCerts.length = 34 ∧
+      ∀ p ∈ cappedCerts, CertifiedAt mlpS ((1 : ℝ)/10) p.2.1 p.2.2) ∧
+    (unconCerts.length = 1 ∧
+      ∀ p ∈ unconCerts, CertifiedAt mlpT ((1 : ℝ)/10) p.2.1 p.2.2) :=
+  ⟨⟨rfl, cappedCerts_certified⟩, ⟨rfl, unconCerts_certified⟩⟩
+
+/-- Legacy count-only form, kept for reference; superseded by `scorecard`. -/
 theorem scorecard_counts :
     certifiedCappedIdx.length = 34 ∧ certifiedUnconIdx.length = 1 :=
   ⟨rfl, rfl⟩
