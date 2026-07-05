@@ -55,9 +55,44 @@ def resnet34ImagenetConfig : TrainConfig where
 def resnet34ImagenetConfigShort : TrainConfig :=
   { resnet34ImagenetConfig with epochs := 30 }
 
+/-- A named training recipe (config + generated-file name + description). Selected
+    by a positional CLI arg (`resnet34-imagenet <recipe> [data_dir]`), listed by
+    `--help`; the `LEAN_MLIR_SHORT` env flag is kept as a deprecated fallback so the
+    supervise scripts keep working. -/
+structure R34Recipe where
+  name : String
+  cfg  : TrainConfig
+  out  : String
+  desc : String
+
+def resnet34ImagenetRecipes : List R34Recipe := [
+  { name := "default", cfg := resnet34ImagenetConfig,
+    out := "generated_resnet34_imagenet.py",
+    desc := "full 90-epoch paper recipe, bs256, SGD+momentum, bf16 (-> 72.0% top-1)" },
+  { name := "short",   cfg := resnet34ImagenetConfigShort,
+    out := "generated_resnet34_imagenet_short.py",
+    desc := "quick 30-epoch validation subrun (same recipe)" }
+]
+
 def main (args : List String) : IO Unit := do
-  let short := (← IO.getEnv "LEAN_MLIR_SHORT").isSome
-  let cfg := if short then resnet34ImagenetConfigShort else resnet34ImagenetConfig
-  let out := if short then "generated_resnet34_imagenet_short.py"
-                      else "generated_resnet34_imagenet.py"
-  runJax resnet34Imagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out
+  if args.any (fun a => a == "--help" || a == "-h") then
+    IO.println "usage: resnet34-imagenet [recipe] [data_dir]\n"
+    IO.println "recipes (default if omitted: \"default\"):"
+    for r in resnet34ImagenetRecipes do
+      let pad := String.mk (List.replicate (10 - r.name.length) ' ')
+      IO.println s!"  {r.name}{pad}{r.desc}"
+    IO.println "\ndata_dir defaults to \"data/imagenet\"."
+    IO.println "(legacy LEAN_MLIR_SHORT env flag still honored)"
+    return
+  let cliName := args.find? (fun a => resnet34ImagenetRecipes.any (·.name == a))
+  let shortEnv ← IO.getEnv "LEAN_MLIR_SHORT"
+  let envName := if shortEnv.isSome then some "short" else none
+  let name := (cliName.orElse (fun _ => envName)).getD "default"
+  match resnet34ImagenetRecipes.find? (·.name == name) with
+  | none   => IO.eprintln s!"unknown recipe '{name}' — run with --help for the list"
+  | some r =>
+    let dataDir := (args.filter (fun a => a != r.name && !a.startsWith "-")).head?
+                     |>.getD "data/imagenet"
+    IO.println s!"[resnet34-imagenet] recipe '{r.name}': {r.desc}"
+    IO.println s!"[resnet34-imagenet]   -> {r.out}  (data: {dataDir})"
+    runJax resnet34Imagenet r.cfg .imagenet dataDir r.out

@@ -126,15 +126,59 @@ def resnet50ImagenetConfigRSBFaithful : TrainConfig :=
       gradAccumSteps    := 4       -- 512 micro × 4 = effective bs2048 on 4×16GB
       wdExcludeNormBias := true }  -- timm no_weight_decay: BN γ/β + biases skip wd
 
+/-- A named training recipe: a `TrainConfig`, its generated-file name, and a
+    one-line description. Recipe selection is a positional CLI arg
+    (`resnet50-imagenet <recipe> [data_dir]`), listed by `--help` — replacing the
+    old undiscoverable `LEAN_MLIR_*` env flags (still honored as a fallback). -/
+structure R50Recipe where
+  name : String
+  cfg  : TrainConfig
+  out  : String
+  desc : String
+
+def resnet50ImagenetRecipes : List R50Recipe := [
+  { name := "default",      cfg := resnet50ImagenetConfig,
+    out := "generated_resnet50_imagenet.py",
+    desc := "RSB-A2, 300 epochs, bs512 (the full recipe)" },
+  { name := "short",        cfg := resnet50ImagenetConfigShort,
+    out := "generated_resnet50_imagenet_short.py",
+    desc := "RSB-A3, 100 epochs, bs512, train@160/eval@224" },
+  { name := "rsb-faithful", cfg := resnet50ImagenetConfigRSBFaithful,
+    out := "generated_resnet50_imagenet_rsbfaithful.py",
+    desc := "RSB-A3 + gradient accumulation -> effective bs2048 (LAMB's design batch)" },
+  { name := "adam-probe",   cfg := resnet50ImagenetConfigAdamProbe,
+    out := "generated_resnet50_imagenet_adamprobe.py",
+    desc := "A3 optimizer probe: AdamW + no-weight-decay on norm/bias" }
+]
+
+/-- Deprecated env-flag fallback so the existing `supervise_*.sh` scripts keep
+    working. A CLI recipe arg takes precedence; this only fires when none is given. -/
+private def r50RecipeFromEnv : IO (Option String) := do
+  if (← IO.getEnv "LEAN_MLIR_RSB_FAITHFUL").isSome then return some "rsb-faithful"
+  if (← IO.getEnv "LEAN_MLIR_ADAM_PROBE").isSome   then return some "adam-probe"
+  if (← IO.getEnv "LEAN_MLIR_SHORT").isSome        then return some "short"
+  return none
+
 def main (args : List String) : IO Unit := do
-  let short := (← IO.getEnv "LEAN_MLIR_SHORT").isSome
-  let adamProbe := (← IO.getEnv "LEAN_MLIR_ADAM_PROBE").isSome
-  let rsbFaithful := (← IO.getEnv "LEAN_MLIR_RSB_FAITHFUL").isSome
-  let cfg := if rsbFaithful then resnet50ImagenetConfigRSBFaithful
-             else if adamProbe then resnet50ImagenetConfigAdamProbe
-             else if short then resnet50ImagenetConfigShort else resnet50ImagenetConfig
-  let out := if rsbFaithful then "generated_resnet50_imagenet_rsbfaithful.py"
-             else if adamProbe then "generated_resnet50_imagenet_adamprobe.py"
-             else if short then "generated_resnet50_imagenet_short.py"
-             else "generated_resnet50_imagenet.py"
-  runJax resnet50Imagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out
+  if args.any (fun a => a == "--help" || a == "-h") then
+    IO.println "usage: resnet50-imagenet [recipe] [data_dir]\n"
+    IO.println "recipes (default if omitted: \"default\"):"
+    for r in resnet50ImagenetRecipes do
+      let pad := String.mk (List.replicate (14 - r.name.length) ' ')
+      IO.println s!"  {r.name}{pad}{r.desc}"
+    IO.println "\ndata_dir defaults to \"data/imagenet\"."
+    IO.println "(legacy LEAN_MLIR_SHORT / _ADAM_PROBE / _RSB_FAITHFUL env flags still honored)"
+    return
+  -- Recipe: a positional arg matching a known recipe wins; else the deprecated
+  -- env flags; else "default". The first remaining non-flag arg is the data dir.
+  let cliName := args.find? (fun a => resnet50ImagenetRecipes.any (·.name == a))
+  let envName ← r50RecipeFromEnv
+  let name := (cliName.orElse (fun _ => envName)).getD "default"
+  match resnet50ImagenetRecipes.find? (·.name == name) with
+  | none   => IO.eprintln s!"unknown recipe '{name}' — run with --help for the list"
+  | some r =>
+    let dataDir := (args.filter (fun a => a != r.name && !a.startsWith "-")).head?
+                     |>.getD "data/imagenet"
+    IO.println s!"[resnet50-imagenet] recipe '{r.name}': {r.desc}"
+    IO.println s!"[resnet50-imagenet]   -> {r.out}  (data: {dataDir})"
+    runJax resnet50Imagenet r.cfg .imagenet dataDir r.out

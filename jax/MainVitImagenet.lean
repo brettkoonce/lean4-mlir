@@ -68,9 +68,44 @@ def vitTinyImagenetConfig : TrainConfig where
 def vitTinyImagenetConfigShort : TrainConfig :=
   { vitTinyImagenetConfig with epochs := 80 }
 
+/-- A named training recipe (config + generated-file name + description). Selected
+    by a positional CLI arg (`vit-tiny-imagenet <recipe> [data_dir]`), listed by
+    `--help`; the `LEAN_MLIR_SHORT` env flag is kept as a deprecated fallback so the
+    supervise scripts keep working. -/
+structure VitRecipe where
+  name : String
+  cfg  : TrainConfig
+  out  : String
+  desc : String
+
+def vitTinyImagenetRecipes : List VitRecipe := [
+  { name := "default", cfg := vitTinyImagenetConfig,
+    out := "generated_vit_tiny_imagenet.py",
+    desc := "full DeiT-Ti 300-epoch schedule, bs512, AdamW + full DeiT aug + EMA" },
+  { name := "short",   cfg := vitTinyImagenetConfigShort,
+    out := "generated_vit_tiny_imagenet_short.py",
+    desc := "80-epoch tier (the proven historical point, reached 65.6%)" }
+]
+
 def main (args : List String) : IO Unit := do
-  let short := (← IO.getEnv "LEAN_MLIR_SHORT").isSome
-  let cfg := if short then vitTinyImagenetConfigShort else vitTinyImagenetConfig
-  let out := if short then "generated_vit_tiny_imagenet_short.py"
-                      else "generated_vit_tiny_imagenet.py"
-  runJax vitTinyImagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out
+  if args.any (fun a => a == "--help" || a == "-h") then
+    IO.println "usage: vit-tiny-imagenet [recipe] [data_dir]\n"
+    IO.println "recipes (default if omitted: \"default\"):"
+    for r in vitTinyImagenetRecipes do
+      let pad := String.mk (List.replicate (10 - r.name.length) ' ')
+      IO.println s!"  {r.name}{pad}{r.desc}"
+    IO.println "\ndata_dir defaults to \"data/imagenet\"."
+    IO.println "(legacy LEAN_MLIR_SHORT env flag still honored)"
+    return
+  let cliName := args.find? (fun a => vitTinyImagenetRecipes.any (·.name == a))
+  let shortEnv ← IO.getEnv "LEAN_MLIR_SHORT"
+  let envName := if shortEnv.isSome then some "short" else none
+  let name := (cliName.orElse (fun _ => envName)).getD "default"
+  match vitTinyImagenetRecipes.find? (·.name == name) with
+  | none   => IO.eprintln s!"unknown recipe '{name}' — run with --help for the list"
+  | some r =>
+    let dataDir := (args.filter (fun a => a != r.name && !a.startsWith "-")).head?
+                     |>.getD "data/imagenet"
+    IO.println s!"[vit-tiny-imagenet] recipe '{r.name}': {r.desc}"
+    IO.println s!"[vit-tiny-imagenet]   -> {r.out}  (data: {dataDir})"
+    runJax vitTinyImagenet r.cfg .imagenet dataDir r.out
