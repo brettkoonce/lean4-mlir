@@ -1,11 +1,31 @@
 # Verified VJP Proofs
 
 Machine-checked proofs that the backward pass (VJP) of every layer
-matches its forward-pass Jacobian. Zero `sorry`s. If `lake build`
+matches its forward-pass Jacobian. Zero `sorry`s. If `lake build Certs`
 succeeds, every theorem is correct.
 
 > New here? Read the **Start here** section directly below before the rest of this
 > file — it's a reference, not an on-ramp.
+
+## Two populations, one directory
+
+The ~165 files here are not one homogeneous suite; they split along the seam
+the lakefile's libs encode (rationale: `planning/repo_shape_deletion_audit.md`):
+
+* **The engine slice — `lake build Proofs`** (~19 files, the default target):
+  the IR/render layer every demo exe's import cone actually reaches —
+  `StableHLO`/`IR`/`Tensor`, the per-net op+VJP modules the proven renderers
+  are built on (`Attention`, `CNN`, `MLP`, `BatchNorm`, `MobileNetV2`, …),
+  and the renderers CI's drift guard re-elaborates (`*Render`). If you're
+  here to understand how "verified trainer" works, this slice is the whole
+  story.
+* **The certificate corpus — `lake build Certs`** (~147 files, ~87k lines):
+  research results *about* the engine that no demo imports — FloatBridges,
+  the §1a tie certificates (`*PoC`/`*TiePoC`), trained-net seals, SGD-descent
+  capstones, the Lipschitz/LipSDP robustness scorecards, Muon geometry, the
+  binary32/E4M3 hardware models, the lexer/SSA syntactic line. Built and
+  three-axiom-audited by `.github/workflows/certs.yml` (proof-path pushes +
+  nightly cron), not by the per-push workflow.
 
 ## Start here — the minimum working set
 
@@ -335,10 +355,13 @@ axiom in the closure would fail the run. See
 ## Verify
 
 ```bash
-lake build LeanMlir          # the library root imports every proof module
+lake build Proofs        # the engine slice (default target) — minutes
+lake build Certs         # the full certificate corpus (subsumes Proofs)
+lake env lean tests/AuditAxioms.lean   # the three-axiom closure audit
 ```
 
-The `LeanMlir` root imports the whole proof suite (transitively), so this
-one build type-checks all of it — no module list to keep in sync.
+`Certs`'s roots subsume the `Proofs` slice, so `lake build Certs`
+type-checks the entire suite; CI runs it (plus the audit) in
+`.github/workflows/certs.yml` on proof-path pushes and nightly.
 
 If it builds, it's correct. That's the point.
