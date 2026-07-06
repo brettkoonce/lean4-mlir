@@ -43,12 +43,14 @@ jobs:
       - name: Install Python deps
         run: pip install scipy numpy
 
-      - name: Build proofs
+      - name: Build proofs (per-push slice)
         run: |
-          # Build the whole `Proofs` lib (all roots + transitive imports) so the
-          # axiom-closure check below can `lake env lean tests/AuditAxioms.lean`
-          # against every proof module — including opt-in roots like MnistCNN
-          # and MatBridge that AuditAxioms imports. Future roots are covered too.
+          # `Proofs` is the fast per-push slice since the Certs split
+          # (planning/repo_shape_deletion_audit.md §4): the IR/render layer the
+          # demo cone reaches + every renderer the drift guard re-elaborates.
+          # The certificate corpus + the three-axiom closure audit moved to
+          # .github/workflows/certs.yml (proof-path pushes, nightly cron,
+          # manual dispatch) — so demo/book/engine pushes skip the corpus tail.
           # Fetch the Mathlib olean cache (fast no-op when the .lake cache already
           # restored it) so a rolling-key cache miss never rebuilds Mathlib from source.
           lake exe cache get || true
@@ -98,67 +100,6 @@ jobs:
           lake env lean LeanMlir/Proofs/ViTRender.lean
           git diff --exit-code -- verified_mlir/vit_train_step.mlir verified_mlir/vit_fwd.mlir \
             || { echo "::error::committed verified_mlir/vit_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/ViTRender.lean)"; exit 1; }
-
-      - name: Three-axiom closure check
-        run: |
-          set -e
-          # The sed join collapses Lean's wrapped (multi-line) axiom lists back to one
-          # line first — long theorem names otherwise break the per-line grep.
-          out=$(lake env lean tests/AuditAxioms.lean 2>&1 | sed ':a;N;$!ba;s/,\n /, /g')
-          total=$(echo "$out" | grep -c "depends on axioms:" || true)
-          ok=$(echo "$out" | grep -cE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true)
-
-          echo "Total #print axioms lines:        $total"
-          echo "Lines matching {propext, Classical.choice, Quot.sound}: $ok"
-
-          if [ "$total" -eq 0 ]; then
-            echo "::error::tests/AuditAxioms.lean produced no #print axioms output"
-            echo "$out"
-            exit 1
-          fi
-
-          if [ "$total" -ne "$ok" ]; then
-            echo "::error::Some theorems depend on axioms outside [propext, Classical.choice, Quot.sound]:"
-            echo "$out" | grep "depends on axioms:" \
-              | grep -vE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true
-            exit 1
-          fi
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Three-Axiom Closure" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ **All ${total} headline theorems closed under [\`propext\`, \`Classical.choice\`, \`Quot.sound\`]**" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Verified by \`tests/AuditAxioms.lean\` (no \`sorryAx\`, no project axioms)." >> $GITHUB_STEP_SUMMARY
-
-          # ── Verified-faithful train-step scorecard ──────────────────────────
-          # Durable per-run log of which chapters' committed
-          # verified_mlir/<net>_train_step.mlir is render(provenGraph) with every
-          # output's den proven = the certified fderiv-derived SGD step. A ✅ is
-          # data-driven: it only prints if the net's PoC capstone is in the
-          # 3-axiom closure above (so this table can't drift from what's proven).
-          faithful() { echo "$out" | grep -qE "'Proofs.$1' depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" && printf '✅' || printf '⚠️'; }
-          {
-            echo ""
-            echo "## Verified-faithful train steps"
-            echo ""
-            echo "✅ = the committed \`verified_mlir/<net>_train_step.mlir\` is \`pretty(provenGraph)\`, every parameter output's \`den\` is proven equal to the certified \`fderiv\`-derived loss-descent SGD step, AND the **§1a whole-net tie** holds — every param op is fed the genuine loss-driven backward-chain cotangent threaded through the REAL forward (not a free ∀cotangent) — all within the 3-axiom closure above. **All 12 chapter nets are now ✅ §1a-tied.** Residual: per-op \`pretty\` lexing + ℝ→Float32 (+ convnext's 4 even-kernel weight-grad gaps; vit has ZERO param gaps)."
-            echo ""
-            echo "| Chapter / net | render(provenGraph) | den = certified | §1a tied (whole-net) | capstone |"
-            echo "|---|---|---|---|---|"
-            echo "| mnist-linear   | $(faithful LinPoC.poc_fwd_is_render) | $(faithful LinPoC.poc_train_step_tail_certified) | $(faithful LinPoC.poc_train_step_tail_certified) | \`poc_train_step_tail_certified\` |"
-            echo "| mnist-mlp (1d) | $(faithful MlpPoC.W0_den_certified) | $(faithful MlpPoC.b0_den_certified) | $(faithful MlpPoC.mlp_train_step_tied_certified) | \`mlp_train_step_tied_certified\` |"
-            echo "| mnist-cnn (2d) | $(faithful CnnPoC.cW1_den) | $(faithful CnnPoC.db5_den) | $(faithful CnnPoC.cnn_conv_tied_certified) | \`cnn_conv_tied_certified\` |"
-            echo "| cifar (ch5, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful CifarPoC.db7_den) | $(faithful CifarPoC.cifar_conv_tied_certified) | \`cifar_conv_tied_certified\` |"
-            echo "| cifar-bn (ch5) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful CifarBnPoC.bnBeta_den) | $(faithful CifarBnPoC.cifarBn_convbn_tied_certified) | \`cifarBn_convbn_tied_certified\` |"
-            echo "| cifar8 (8-conv, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful Cifar8PoC.denseB_den) | $(faithful Cifar8PoC.cifar8_convs_tied_certified) | \`cifar8_convs_tied_certified\` |"
-            echo "| cifar8-bn (8-conv) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful Cifar8PoC.denseB_den) | $(faithful Cifar8BnPoC.cifar8Bn_convbn_tied_certified) | \`cifar8Bn_convbn_tied_certified\` |"
-            echo "| r34 (ch6)          | $(faithful ResNet34PoC.convStridedW_den) | $(faithful ResNet34PoC.convStridedB_den) | $(faithful ResNet34PoC.r34_net_tied_certified) | \`r34_net_tied_certified\` (full [3,4,6,3], 146 params) |"
-            echo "| mobilenetv2 (ch7)  | $(faithful Mnv2PaperPoC.mnv2Stride1ParamsCertified) | $(faithful Mnv2PaperPoC.mnv2DenseParamsCertified) | $(faithful Mnv2TiePoC.mnv2_net_tied_certified) | \`mnv2_net_tied_certified\` (full 17-block paper, 210 params) |"
-            echo "| efficientnet (ch8) | $(faithful EnetPoC.convWB_den) | $(faithful EnetPoC.bnGammaB_den) | $(faithful EnetTiePoC.efficientnet_net_tied) | \`efficientnet_net_tied\` (full 16-MBConv B0, 262 params; batched true-BN + SE) |"
-            echo "| convnext (ch9)     | $(faithful CnxPoC.lnGammaSgd_den) | $(faithful CnxPoC.lnBetaSgd_den) | $(faithful CnxTiePoC.cnx_net_tied_certified) | \`cnx_net_tied_certified\` (full [3,3,9,3], 176/180 params; 4 even-kernel weight-grad gaps) |"
-            echo "| vit (ch10)         | $(faithful ViTPoC.rowDenseWeightSgd_den) | $(faithful ViTPoC.veclnGammaSgd_den) | $(faithful ViTTiePoC.vit_net_tied_certified) | \`vit_net_tied_certified\` (ViT-Tiny depth-12 multi-head, 200 params — ZERO param gaps) |"
-          } >> $GITHUB_STEP_SUMMARY
 
       - name: Zero-axiom-declaration guard
         # The former trusted-bridge footprint check is gone: Binary32Instance's

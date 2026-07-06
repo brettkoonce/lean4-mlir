@@ -1,0 +1,196 @@
+name: Certify Corpus
+
+# The certificate corpus (`lake build Certs`: FloatBridges, ties, seals,
+# descent, Lipschitz/LipSDP, Muon — 155 files / ~87k lines) + the three-axiom
+# closure audit, split out of the per-push proofs workflow
+# (planning/repo_shape_deletion_audit.md §4). Runs when a push actually
+# touches proof surface, plus nightly (catches toolchain/Mathlib drift and
+# anything the path filter misses) and on demand. Everything else — demo,
+# book, engine, docs pushes — no longer pays the corpus tail; they get the
+# fast `Verify Proofs` workflow (IR/render slice + drift guard) instead.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'LeanMlir/Proofs/**'
+      - 'tests/AuditAxioms.lean'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'lake-manifest.json'
+      - '.github/workflows/certs.yml'
+  pull_request:
+    paths:
+      - 'LeanMlir/Proofs/**'
+      - 'tests/AuditAxioms.lean'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'lake-manifest.json'
+      - '.github/workflows/certs.yml'
+  schedule:
+    - cron: '17 8 * * *'   # nightly, 08:17 UTC (off the top-of-hour rush)
+  workflow_dispatch:
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit coverage check (AuditAxioms imports ⊆ Proofs+Certs roots)
+        # Fail fast (no Lean needed) if the audit imports a module that
+        # `lake build Certs` won't build — see scripts/check_audit_coverage.py.
+        run: python3 scripts/check_audit_coverage.py
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache .lake
+        uses: actions/cache@v4
+        with:
+          path: .lake
+          # Same rolling-key family as proofs.yml so the two workflows share
+          # the olean cache (Mathlib + the IR slice are common; the corpus
+          # oleans persist run-to-run via the per-run suffix).
+          key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-
+
+      - name: Build certificate corpus
+        run: |
+          # `Certs` roots subsume the `Proofs` slice, so this builds everything
+          # the axiom-closure audit below elaborates against.
+          lake exe cache get || true
+          lake build Certs
+
+      - name: Three-axiom closure check
+        run: |
+          set -e
+          # The sed join collapses Lean's wrapped (multi-line) axiom lists back to one
+          # line first — long theorem names otherwise break the per-line grep.
+          out=$(lake env lean tests/AuditAxioms.lean 2>&1 | sed ':a;N;$!ba;s/,\n /, /g')
+          total=$(echo "$out" | grep -c "depends on axioms:" || true)
+          ok=$(echo "$out" | grep -cE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true)
+
+          echo "Total #print axioms lines:        $total"
+          echo "Lines matching {propext, Classical.choice, Quot.sound}: $ok"
+
+          if [ "$total" -eq 0 ]; then
+            echo "::error::tests/AuditAxioms.lean produced no #print axioms output"
+            echo "$out"
+            exit 1
+          fi
+
+          if [ "$total" -ne "$ok" ]; then
+            echo "::error::Some theorems depend on axioms outside [propext, Classical.choice, Quot.sound]:"
+            echo "$out" | grep "depends on axioms:" \
+              | grep -vE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true
+            exit 1
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Three-Axiom Closure" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **All ${total} headline theorems closed under [\`propext\`, \`Classical.choice\`, \`Quot.sound\`]**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Verified by \`tests/AuditAxioms.lean\` (no \`sorryAx\`, no project axioms)." >> $GITHUB_STEP_SUMMARY
+
+          # ── Verified-faithful train-step scorecard ──────────────────────────
+          # Durable per-run log of which chapters' committed
+          # verified_mlir/<net>_train_step.mlir is render(provenGraph) with every
+          # output's den proven = the certified fderiv-derived SGD step. A ✅ is
+          # data-driven: it only prints if the net's PoC capstone is in the
+          # 3-axiom closure above (so this table can't drift from what's proven).
+          faithful() { echo "$out" | grep -qE "'Proofs.$1' depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" && printf '✅' || printf '⚠️'; }
+          {
+            echo ""
+            echo "## Verified-faithful train steps"
+            echo ""
+            echo "✅ = the committed \`verified_mlir/<net>_train_step.mlir\` is \`pretty(provenGraph)\`, every parameter output's \`den\` is proven equal to the certified \`fderiv\`-derived loss-descent SGD step, AND the **§1a whole-net tie** holds — every param op is fed the genuine loss-driven backward-chain cotangent threaded through the REAL forward (not a free ∀cotangent) — all within the 3-axiom closure above. **All 12 chapter nets are now ✅ §1a-tied.** Residual: per-op \`pretty\` lexing + ℝ→Float32 (+ convnext's 4 even-kernel weight-grad gaps; vit has ZERO param gaps)."
+            echo ""
+            echo "| Chapter / net | render(provenGraph) | den = certified | §1a tied (whole-net) | capstone |"
+            echo "|---|---|---|---|---|"
+            echo "| mnist-linear   | $(faithful LinPoC.poc_fwd_is_render) | $(faithful LinPoC.poc_train_step_tail_certified) | $(faithful LinPoC.poc_train_step_tail_certified) | \`poc_train_step_tail_certified\` |"
+            echo "| mnist-mlp (1d) | $(faithful MlpPoC.W0_den_certified) | $(faithful MlpPoC.b0_den_certified) | $(faithful MlpPoC.mlp_train_step_tied_certified) | \`mlp_train_step_tied_certified\` |"
+            echo "| mnist-cnn (2d) | $(faithful CnnPoC.cW1_den) | $(faithful CnnPoC.db5_den) | $(faithful CnnPoC.cnn_conv_tied_certified) | \`cnn_conv_tied_certified\` |"
+            echo "| cifar (ch5, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful CifarPoC.db7_den) | $(faithful CifarPoC.cifar_conv_tied_certified) | \`cifar_conv_tied_certified\` |"
+            echo "| cifar-bn (ch5) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful CifarBnPoC.bnBeta_den) | $(faithful CifarBnPoC.cifarBn_convbn_tied_certified) | \`cifarBn_convbn_tied_certified\` |"
+            echo "| cifar8 (8-conv, no-BN) | $(faithful CifarPoC.convW_den) | $(faithful Cifar8PoC.denseB_den) | $(faithful Cifar8PoC.cifar8_convs_tied_certified) | \`cifar8_convs_tied_certified\` |"
+            echo "| cifar8-bn (8-conv) | $(faithful CifarBnPoC.bnGamma_den) | $(faithful Cifar8PoC.denseB_den) | $(faithful Cifar8BnPoC.cifar8Bn_convbn_tied_certified) | \`cifar8Bn_convbn_tied_certified\` |"
+            echo "| r34 (ch6)          | $(faithful ResNet34PoC.convStridedW_den) | $(faithful ResNet34PoC.convStridedB_den) | $(faithful ResNet34PoC.r34_net_tied_certified) | \`r34_net_tied_certified\` (full [3,4,6,3], 146 params) |"
+            echo "| mobilenetv2 (ch7)  | $(faithful Mnv2PaperPoC.mnv2Stride1ParamsCertified) | $(faithful Mnv2PaperPoC.mnv2DenseParamsCertified) | $(faithful Mnv2TiePoC.mnv2_net_tied_certified) | \`mnv2_net_tied_certified\` (full 17-block paper, 210 params) |"
+            echo "| efficientnet (ch8) | $(faithful EnetPoC.convWB_den) | $(faithful EnetPoC.bnGammaB_den) | $(faithful EnetTiePoC.efficientnet_net_tied) | \`efficientnet_net_tied\` (full 16-MBConv B0, 262 params; batched true-BN + SE) |"
+            echo "| convnext (ch9)     | $(faithful CnxPoC.lnGammaSgd_den) | $(faithful CnxPoC.lnBetaSgd_den) | $(faithful CnxTiePoC.cnx_net_tied_certified) | \`cnx_net_tied_certified\` (full [3,3,9,3], 176/180 params; 4 even-kernel weight-grad gaps) |"
+            echo "| vit (ch10)         | $(faithful ViTPoC.rowDenseWeightSgd_den) | $(faithful ViTPoC.veclnGammaSgd_den) | $(faithful ViTTiePoC.vit_net_tied_certified) | \`vit_net_tied_certified\` (ViT-Tiny depth-12 multi-head, 200 params — ZERO param gaps) |"
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Corpus sorry count
+        run: |
+          echo "## Certificate corpus" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          SORRIES=$(lake build Certs 2>&1 | grep -c "sorry" || true)
+          if [ "$SORRIES" -eq 0 ]; then
+            echo "✅ **Corpus fully built — zero sorry**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **${SORRIES} sorry(s) in the corpus:**" >> $GITHUB_STEP_SUMMARY
+            lake build Certs 2>&1 | grep "sorry" | head -20 >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: LoC / theorem counts
+        # Same tables as proofs.yml's Summary (pure grep/wc, no build) — the
+        # per-proof-file theorem/LoC table lives naturally with the corpus run.
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Theorems / Defs | Axioms | Lines |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-----------------|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          # Count all top-level theorems and (noncomputable) defs — broader
+          # than a VJP-keyword filter, catches structural lemmas too.
+          THM_PAT='^(theorem|noncomputable def|def) '
+          TOTAL_THMS=0
+          TOTAL_AXMS=0
+          for f in LeanMlir/Proofs/*.lean; do
+            name=$(basename "$f")
+            thms=$(grep -cE "$THM_PAT" "$f" || true)
+            axms=$(grep -c "^axiom " "$f" || true)
+            lines=$(wc -l < "$f")
+            echo "| \`${name}\` | ${thms} | ${axms} | ${lines} |" >> $GITHUB_STEP_SUMMARY
+            TOTAL_THMS=$((TOTAL_THMS + thms))
+            TOTAL_AXMS=$((TOTAL_AXMS + axms))
+          done
+          TOTAL_LINES=$(cat LeanMlir/Proofs/*.lean | wc -l)
+          echo "| **Total** | **${TOTAL_THMS}** | **${TOTAL_AXMS}** | **${TOTAL_LINES}** |" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Codebase Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Files | Lines |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          # Rows partition the Lean tree and sum to Total Lean. Each is a `find` that excludes
+          # any nested .lake build tree (e.g. tests/comparator/.lake/packages/mathlib — which a
+          # plain `*.lean` walk would otherwise add ~millions of Mathlib lines for).
+          lf() { find "$@" -name "*.lean" -not -path "*/.lake/*" 2>/dev/null | wc -l; }      # file count
+          ll() { find "$@" -name "*.lean" -not -path "*/.lake/*" -print0 2>/dev/null | xargs -0 cat 2>/dev/null | wc -l; }  # line count
+          # Core Library = LeanMlir/ minus the Proofs/ subtree, plus the root umbrella.
+          core() { find LeanMlir -name "*.lean" -not -path "LeanMlir/Proofs/*" -not -path "*/.lake/*"; ls LeanMlir.lean 2>/dev/null; }
+          echo "| Proofs | $(lf LeanMlir/Proofs) | $(ll LeanMlir/Proofs) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core Library | $(core | wc -l) | $(core | xargs cat 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bestiary | $(lf Bestiary) | $(ll Bestiary) |" >> $GITHUB_STEP_SUMMARY
+          # Trainers = apps/**/Main*.lean (all backends/optimizers) + the historical/ trainers.
+          echo "| Trainers | $(find apps historical -name 'Main*.lean' 2>/dev/null | wc -l) | $(find apps historical -name 'Main*.lean' -exec cat {} + 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Demos | $(ls demos/*.lean 2>/dev/null | wc -l) | $(cat demos/*.lean 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | $(lf tests) | $(ll tests) |" >> $GITHUB_STEP_SUMMARY
+          echo "| FFI (C) | $(ls ffi/*.c ffi/*.h 2>/dev/null | wc -l) | $(cat ffi/*.c ffi/*.h 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          # Total Lean: every *.lean except build files (lakefile.lean), any nested .lake tree,
+          # and the jax/ + phase-1 mnist-lean4/ subprojects.
+          total_lean=$(find . -name "*.lean" -not -name "lakefile.lean" -not -path "*/.lake/*" -not -path "./jax/*" -not -path "./mnist-lean4/*" -print0 | xargs -0 cat 2>/dev/null | wc -l)
+          total_c=$(cat ffi/*.c ffi/*.h 2>/dev/null | wc -l)
+          echo "| **Total Lean** | | **${total_lean}** |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total C** | | **${total_c}** |" >> $GITHUB_STEP_SUMMARY

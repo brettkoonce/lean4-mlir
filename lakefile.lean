@@ -33,12 +33,38 @@ lean_lib «LeanMlir» where
 -- seam the codebase already has (the proof suite imports only Mathlib —
 -- never the codegen — so `Proofs` skips Types/Spec/MlirCodegen/Train).
 
-/-- **`lake build Proofs`** — the VJP proof suite only. Roots are the apex
-    modules (same set `LeanMlir.lean` aggregates); their transitive imports
-    cover every proof file. Default target: a bare `lake build` now
-    type-checks the formalization instead of doing nothing. -/
+/-- **`lake build Proofs`** — the fast per-push slice: the IR/render layer
+    every demo's import cone actually reaches (StableHLO/IR + the per-net
+    op/VJP modules the proven renderers are built on) plus every renderer the
+    CI drift guard re-elaborates. ~20 roots, builds in minutes. The
+    certificate corpus lives in `Certs` below and is checked by its own
+    workflow (.github/workflows/certs.yml: proof-path pushes + nightly cron),
+    so demo/book/engine pushes stop paying the multi-hour corpus tail.
+    Split per planning/repo_shape_deletion_audit.md §4 (2026-07-06). -/
 @[default_target]
 lean_lib «Proofs» where
+  srcDir := "."
+  roots := #[-- the demo-cone IR/render layer
+             `LeanMlir.Proofs.Attention, `LeanMlir.Proofs.CNN,
+             `LeanMlir.Proofs.Depthwise, `LeanMlir.Proofs.MobileNetV2,
+             `LeanMlir.Proofs.ConvNeXt, `LeanMlir.Proofs.EfficientNet,
+             `LeanMlir.Proofs.MnistCNN, `LeanMlir.Proofs.StridedConv,
+             `LeanMlir.Proofs.PerChannelBN, `LeanMlir.Proofs.IR,
+             `LeanMlir.Proofs.StableHLO,
+             -- the renderers the verified-render drift guard re-elaborates
+             `LeanMlir.Proofs.MlpRender, `LeanMlir.Proofs.CnnRender,
+             `LeanMlir.Proofs.ResNet34Render, `LeanMlir.Proofs.AdamRender,
+             `LeanMlir.Proofs.MobileNetV2Render,
+             `LeanMlir.Proofs.EfficientNetRender,
+             `LeanMlir.Proofs.ConvNeXtRender, `LeanMlir.Proofs.ViTRender]
+
+/-- **`lake build Certs`** — the certificate corpus (155 files, ~87k lines:
+    FloatBridges, ties, seals, descent, Lipschitz/LipSDP, Muon, …): the VJP
+    proof suite's apex modules; their transitive imports cover every proof
+    file (they subsume the `Proofs` roots above, so building `Certs` builds
+    everything the axiom audit needs). Built + 3-axiom-audited by
+    .github/workflows/certs.yml, NOT by the per-push proofs workflow. -/
+lean_lib «Certs» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.Attention, `LeanMlir.Proofs.CNN,
              `LeanMlir.Proofs.Depthwise, `LeanMlir.Proofs.MobileNetV2,

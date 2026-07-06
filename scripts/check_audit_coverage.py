@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Assert every tests/AuditAxioms.lean import is reachable from the Proofs roots.
+"""Assert every tests/AuditAxioms.lean import is reachable from the proof-lib roots.
 
-CI's axiom gate runs `lake env lean tests/AuditAxioms.lean` against whatever
-`lake build Proofs` produced. If an audited module is not a Proofs root (or a
-transitive import of one), its .olean never gets built on a fresh runner and
+CI's axiom gate (certs.yml) runs `lake env lean tests/AuditAxioms.lean` against
+whatever `lake build Certs` produced (whose roots subsume the per-push `Proofs`
+slice). If an audited module is not a root of either lib (or a transitive
+import of one), its .olean never gets built on a fresh runner and
 the gate dies on a missing object file — silently, because the workflow step's
 `set -e` kills the script at the capture assignment. Locally the gap hides
 behind stale .oleans from dev builds, so this is exactly the failure that only
@@ -24,15 +25,19 @@ AUDIT = Path("tests/AuditAxioms.lean")
 
 
 def proofs_roots(text: str) -> list[str]:
-    """Extract the `Proofs` lib's roots, ignoring `--` comments (which contain
+    """Extract the union of the `Proofs` (per-push IR/render slice) and `Certs`
+    (certificate corpus) libs' roots, ignoring `--` comments (which contain
     brackets like [3,4,6,3] that defeat naive `roots := #[...]` matching)."""
-    try:
-        segment = text.split("lean_lib «Proofs» where", 1)[1]
-    except IndexError:
-        sys.exit("error: no `lean_lib «Proofs»` in lakefile.lean")
-    segment = segment.split("lean_lib", 1)[0]
-    code = "\n".join(line.split("--", 1)[0] for line in segment.splitlines())
-    return re.findall(r"`([A-Za-z0-9_.]+)", code)
+    roots: list[str] = []
+    for lib in ("«Proofs»", "«Certs»"):
+        try:
+            segment = text.split(f"lean_lib {lib} where", 1)[1]
+        except IndexError:
+            sys.exit(f"error: no `lean_lib {lib}` in lakefile.lean")
+        segment = segment.split("lean_lib", 1)[0]
+        code = "\n".join(line.split("--", 1)[0] for line in segment.splitlines())
+        roots += re.findall(r"`([A-Za-z0-9_.]+)", code)
+    return roots
 
 
 def imports_of(module: str) -> list[str]:
@@ -60,15 +65,15 @@ def main() -> None:
     missing = [m for m in audited if m.startswith("LeanMlir") and m not in covered]
     if missing:
         print(f"error: {AUDIT} imports module(s) not reachable from the "
-              f"`Proofs` lib roots in {LAKEFILE}:", file=sys.stderr)
+              f"`Proofs`/`Certs` lib roots in {LAKEFILE}:", file=sys.stderr)
         for m in missing:
             print(f"  {m}", file=sys.stderr)
-        print("\nfix: add the apex module(s) to `lean_lib «Proofs»`'s roots "
+        print("\nfix: add the apex module(s) to `lean_lib «Certs»`'s roots "
               "(an apex that transitively imports the rest suffices).",
               file=sys.stderr)
         sys.exit(1)
     print(f"audit coverage OK: all {len(audited)} AuditAxioms imports reachable "
-          f"from the Proofs roots ({len(covered)} modules covered)")
+          f"from the Proofs+Certs roots ({len(covered)} modules covered)")
 
 
 if __name__ == "__main__":
