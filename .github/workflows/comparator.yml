@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Free up disk space
-        # Mathlib is built/cached twice here (parent `lake build Proofs`, then
+        # Mathlib is built/cached twice here (parent `lake build Certs`, then
         # again when tests/comparator resolves its own Mathlib), which overflows
         # the runner's ~14 GB free. Reclaim the ~20+ GB of preinstalled SDKs we
         # don't use (Android, .NET, GHC, CodeQL) up front.
@@ -78,10 +78,13 @@ jobs:
             lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
             lake-
 
-      - name: Build proof suite (warms Mathlib + Proofs oleans for comparator)
+      - name: Build proof suite (warms Mathlib + corpus oleans for comparator)
         run: |
+          # `Certs` since the 2026-07-06 Proofs/Certs split: the comparator
+          # re-checks corpus theorems (whole-net VJPs, seals), and `Proofs` is
+          # now only the slim demo-cone slice. Certs' roots subsume it.
           lake exe cache get
-          lake build Proofs
+          lake build Certs
 
       - name: Install landrun
         run: |

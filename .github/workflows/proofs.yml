@@ -13,12 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Audit coverage check (AuditAxioms imports ⊆ Proofs roots)
+      - name: Audit coverage check (AuditAxioms imports ⊆ Proofs+Certs roots)
         # Fail fast (no Lean needed) if tests/AuditAxioms.lean imports a module
-        # that `lake build Proofs` won't build — on a fresh runner that olean
-        # is missing and the closure check below dies with no useful output.
-        # Locally the gap hides behind stale dev .oleans, so CI is the only
-        # place it surfaces (see 5f27766).
+        # that `lake build Certs` won't build — the closure check itself runs
+        # in certs.yml, but catching a root gap here surfaces it on every push
+        # instead of the next corpus run. Locally the gap hides behind stale
+        # dev .oleans, so CI is the only place it surfaces (see 5f27766).
         run: python3 scripts/check_audit_coverage.py
 
       - name: Install elan

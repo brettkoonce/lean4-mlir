@@ -94,14 +94,15 @@ jobs:
         run: |
           # `checkdecls` imports every module across the lake libraries, so all
           # their oleans must exist. Build the `LeanMlir` umbrella (codegen +
-          # Types/IreeRuntime/... via LeanMlir.lean) plus the whole `Proofs`
+          # Types/IreeRuntime/... via LeanMlir.lean) plus the whole `Certs`
           # lib, whose roots cover every proof module — including opt-in roots
           # the umbrella does not import (MatBridge, MnistCNN). Using the lib
-          # target keeps this future-proof: new Proofs roots are built here too.
-          # (The former separate `TrustedBridge` lib is gone: its ieeeRnd axioms
-          # were discharged and Binary32Instance.lean now lives inside the
-          # ordinary `Proofs` closure, so the two targets cover everything.)
-          lake build LeanMlir Proofs
+          # target keeps this future-proof: new Certs roots are built here too.
+          # (Since the 2026-07-06 Proofs/Certs split, `Proofs` is only the slim
+          # demo-cone slice; the blueprint cites corpus theorems — JacobianSeal,
+          # the seals, FloatBridges, … — so it needs `Certs`, whose roots
+          # subsume the slice. See planning/repo_shape_deletion_audit.md §4.)
+          lake build LeanMlir Certs
 
       - name: Install graphviz (libcgraph for leanblueprint's dep-graph plugin)
         # leanblueprint's `dep_graph` plugin imports pygraphviz, which dlopens
