@@ -223,8 +223,10 @@ def cifar8wBnVerified : VerifiedNetSpec where
 
 /-- ch6 **ResNet-34** on Imagenette 224²: 7×7-s2 stem → BN → relu → maxpool →
     [3,4,6,3] basic-block stages (per-channel BN, strided downsample at the first block of
-    stages 2–4) → GAP → dense. 146 params. VJP: the audited parametric skeleton
-    `Proofs.resnet34_has_vjp_at`. -/
+    stages 2–4) → GAP → dense. 146 params. Tied at the FULL spec in `Proofs/SpecVJP.lean`
+    (`resnet34Verified_denote_eq` → `resnet34Forward_full_pc`, + rung E
+    `resnet34Verified_fwd_faithful`); the honest pointwise VJP is the audited parametric
+    skeleton `Proofs.resnet34_has_vjp_at`. -/
 def resnet34Verified : VerifiedNetSpec where
   name     := "ResNet-34"
   slug     := "resnet34"
@@ -301,8 +303,10 @@ def mobilenetv2Verified : VerifiedNetSpec where
 /-- ch8 **EfficientNet-B0** on Imagenette 224²: 3×3-s2 stem → 16 MBConv blocks (`[t,c,n,s,k]`
     B0 config; expand 1×1 [skip when t=1] → depthwise k×k → squeeze-excite → project 1×1, all
     BN + swish) → 1×1 head (320→1280) → GAP → dense. 262 params. The 16 `mbConvSE ic mid oc r k`
-    args are the B0 generator unrolled (mid=t·ic, r=ic/4, ic threads stage→stage). VJP witness
-    `Proofs.efficientnet_has_vjp` (representative — full B/C deferred). -/
+    args are the B0 generator unrolled (mid=t·ic, r=ic/4, ic threads stage→stage). Tied at the
+    FULL spec in `Proofs/SpecVJP.lean` (`efficientnetVerified_denote_eq` →
+    `efficientnetForwardB_full`, batched ∀N, + rung E `efficientnetVerified_fwd_faithful`);
+    the honest pointwise VJP witness is the representative `Proofs.efficientnet_has_vjp`. -/
 def efficientnetVerified : VerifiedNetSpec where
   name     := "EfficientNet-B0"
   slug     := "efficientnet"
@@ -346,7 +350,10 @@ def efficientnetVerified : VerifiedNetSpec where
 /-- ch9 **ConvNeXt-T** on Imagenette 224²: 4×4-s4 patchify → [3,3,9,3] ConvNeXt blocks @
     [96,192,384,768] (depthwise 7×7 → scalar-LN → 1×1 expand → GELU → 1×1 project → layerScale)
     with 3 between-stage (LN + 2×2-s2) downsamples (56→28→14→7) → GAP → LN → dense. 180 params.
-    VJP witness `Proofs.convnext_has_vjp` (representative ~2-block; full B/C deferred). -/
+    Tied at the FULL spec in `Proofs/SpecVJP.lean` (`convnextVerified_denote_eq` →
+    `convNextForwardTC`, the committed 180-param config, + rung E
+    `convnextVerified_fwd_faithful`); the full-depth REAL VJP is
+    `Proofs.convNextForwardTC_has_vjp_correct` (ConvNeXtFullT.lean). -/
 def convnextVerified : VerifiedNetSpec where
   name     := "ConvNeXt-T"
   slug     := "convnext"
@@ -375,8 +382,10 @@ def convnextVerified : VerifiedNetSpec where
 /-- ch10 **ViT-Tiny** on Imagenette 224² (patch-16): 16×16-s16 conv patch embed (3→192,
     →196 patches), learned CLS token + positional embed (→197 tokens), 12 pre-norm transformer
     blocks (dim 192, 3 heads, MLP 768), final per-channel LayerNorm, CLS-slice dense head 192→10.
-    200 params. VJP witness `Proofs.vit_full_has_vjp_correct` (scalar-LN witness vs this
-    per-channel `[192]` render — granularity gap; full B/C deferred). -/
+    200 params. Tied at the FULL spec in `Proofs/SpecVJP.lean` (`vitVerified_denote_eq` →
+    `vitForwardKV` depth-12 distinct-param vector-LN, retiring the old weight-shared
+    scalar-LN caveats), with the REAL whole-net VJP `Proofs.vitVerified_has_vjp`
+    (all-smooth, `0 < ε` only). Rung E (whole-net graph) still 2-block representative. -/
 def vitVerified : VerifiedNetSpec where
   name     := "ViT-Tiny"
   slug     := "vit"

@@ -87,11 +87,15 @@ Ladder per net (A=shape `#guard` · B/C=spec→math+VJP · E=spec→generated-ML
 
 All B/C + E ties live in `Proofs/SpecVJP.lean` (since 2026-07-07 a `Certs` root + imported
 by `LeanMlir.lean` + audited in `tests/AuditAxioms.lean` — it was originally outside every
-build target and silently broke at the mnv2 6→17-block spec promotion; mnv2 now carries
-BOTH the representative 6-block rung (`mobilenetv2RepLayers`, the reduced strided render)
-AND the full-paper B/C/E tie at the committed 21-entry spec (`denoteMobilenetPaper` →
-`mobilenetv2ForwardPaper`, rung E via `mobilenetv2FwdGraphPaper_faithful`) — the first
-imagenette net with the full ladder at its committed spec); the forward graphs + faithfulness live in
+build target and silently broke at the mnv2 6→17-block spec promotion). **ALL FIVE
+imagenette nets are now tied in FULL at their committed specs** (unified weight bundles):
+mnv2 `denoteMobilenetPaper`→`mobilenetv2ForwardPaper` (B/C/E), r34
+`denoteR34Full`→`resnet34Forward_full_pc` via new `R34Weights` (B/C/E), enet
+`denoteEfficientnetB0`→`efficientnetForwardB_full` batched ∀N (B/C/E), convnext
+`denoteConvnextT`→`convNextForwardTC` committed 180-param config (B/C/E), vit
+`denoteVitTiny`→`vitForwardKV` depth-12 distinct-param vector-LN via new `ViTTinyWeights`
+(B/C with the REAL whole-net VJP; E deferred — whole-net graph still 2-block rep). The
+representative rungs remain alongside; the forward graphs + faithfulness live in
 `Proofs/StableHLO.lean`. Commits `8e9ae0b … 60d5ed6` on `main`, **NOT pushed** (~86 ahead).
 
 **Key lessons (the expensive map-making this session bought):**

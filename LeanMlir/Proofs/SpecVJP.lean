@@ -5,9 +5,13 @@ import LeanMlir.Proofs.CifarCNN
 import LeanMlir.Proofs.MobileNetV2
 import LeanMlir.Proofs.MobileNetV2FullPaper
 import LeanMlir.Proofs.EfficientNet
+import LeanMlir.Proofs.EfficientNetFullB0
 import LeanMlir.Proofs.ConvNeXt
+import LeanMlir.Proofs.ConvNeXtFullT
 import LeanMlir.Proofs.Attention
+import LeanMlir.Proofs.ViTDepthK
 import LeanMlir.Proofs.ResNet34
+import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.StableHLO
 
 /-! # Spec → math (the verification tie), Rung 1: the linear classifier
@@ -575,16 +579,321 @@ theorem mobilenetv2Verified_fwd_faithful (epsStr : String) (w : MNV2PaperWeights
     (congrFun (mobilenetv2Verified_denote_eq w).symm x)
 
 
+/-! ## Rung B/C(/E) (FULL, unified weight bundles): r34 / enet / convnext / vit
+
+The mnv2 full-paper pattern applied to the remaining imagenette nets: each committed
+spec's ENTIRE layer list (literal dims, drift-sensitive) denotes the full proven
+forward, with weights riding a structure bundle so the ties stay readable. Existing
+bundles are reused where the Full module already has one (`B0Weights`,
+`CnxTWeights`); r34 and vit get bundles here (`R34Weights`, `ViTTinyWeights` —
+SpecVJP-local so no proof module's signature changes). Rung E composes the full
+graph-faithfulness apex with the tie where the full graph exists (r34/enet/convnext;
+vit's whole-net graph is still the 2-block/1-head representative, so vit E stays
+deferred). Rung C is the canonical witness except vit: all-smooth, so vit's rung C is
+the REAL whole-net VJP `vitForwardKV_has_vjp` (only `0 < ε`) at the committed spec. -/
+
+-- ── ResNet-34 (FULL): the committed 8-entry spec ↔ resnet34Forward_full_pc ──
+
+/-- Identity basic-block weights (conv-BN ×2), per-channel γ/β. -/
+structure R34BlockW (c : Nat) where
+  W1 : Kernel4 c c 3 3
+  b1 : Vec c
+  g1 : Vec c
+  t1 : Vec c
+  W2 : Kernel4 c c 3 3
+  b2 : Vec c
+  g2 : Vec c
+  t2 : Vec c
+
+/-- Downsample basic-block weights (strided conv-BN ×2 + projection conv-BN). -/
+structure R34DownW (ic oc : Nat) where
+  W1 : Kernel4 oc ic 3 3
+  b1 : Vec oc
+  g1 : Vec oc
+  t1 : Vec oc
+  W2 : Kernel4 oc oc 3 3
+  b2 : Vec oc
+  g2 : Vec oc
+  t2 : Vec oc
+  Wp : Kernel4 oc ic 3 3
+  bp : Vec oc
+  gp : Vec oc
+  tp : Vec oc
+
+/-- All ResNet-34 parameters (shared BN ε): stem + [3,4,6,3] basic blocks + dense. -/
+structure R34Weights where
+  ε : ℝ
+  sW : Kernel4 64 3 7 7
+  sb : Vec 64
+  sγ : Vec 64
+  sβ : Vec 64
+  a0 : R34BlockW 64
+  a1 : R34BlockW 64
+  a2 : R34BlockW 64
+  d2 : R34DownW 64 128
+  b0 : R34BlockW 128
+  b1 : R34BlockW 128
+  b2 : R34BlockW 128
+  d3 : R34DownW 128 256
+  c0 : R34BlockW 256
+  c1 : R34BlockW 256
+  c2 : R34BlockW 256
+  c3 : R34BlockW 256
+  c4 : R34BlockW 256
+  d4 : R34DownW 256 512
+  e0 : R34BlockW 512
+  e1 : R34BlockW 512
+  Wd : Mat 512 10
+  bd : Vec 10
+
+/-- `resnet34Forward_full_pc` at the bundle (the 145-arg field expansion, once). -/
+noncomputable def resnet34ForwardW (w : R34Weights) : Vec (3 * 224 * 224) → Vec 10 :=
+  resnet34Forward_full_pc w.ε w.sW w.sb w.sγ w.sβ
+    w.a0.W1 w.a0.b1 w.a0.g1 w.a0.t1 w.a0.W2 w.a0.b2 w.a0.g2 w.a0.t2
+    w.a1.W1 w.a1.b1 w.a1.g1 w.a1.t1 w.a1.W2 w.a1.b2 w.a1.g2 w.a1.t2
+    w.a2.W1 w.a2.b1 w.a2.g1 w.a2.t1 w.a2.W2 w.a2.b2 w.a2.g2 w.a2.t2
+    w.d2.W1 w.d2.b1 w.d2.g1 w.d2.t1 w.d2.W2 w.d2.b2 w.d2.g2 w.d2.t2 w.d2.Wp w.d2.bp w.d2.gp w.d2.tp
+    w.b0.W1 w.b0.b1 w.b0.g1 w.b0.t1 w.b0.W2 w.b0.b2 w.b0.g2 w.b0.t2
+    w.b1.W1 w.b1.b1 w.b1.g1 w.b1.t1 w.b1.W2 w.b1.b2 w.b1.g2 w.b1.t2
+    w.b2.W1 w.b2.b1 w.b2.g1 w.b2.t1 w.b2.W2 w.b2.b2 w.b2.g2 w.b2.t2
+    w.d3.W1 w.d3.b1 w.d3.g1 w.d3.t1 w.d3.W2 w.d3.b2 w.d3.g2 w.d3.t2 w.d3.Wp w.d3.bp w.d3.gp w.d3.tp
+    w.c0.W1 w.c0.b1 w.c0.g1 w.c0.t1 w.c0.W2 w.c0.b2 w.c0.g2 w.c0.t2
+    w.c1.W1 w.c1.b1 w.c1.g1 w.c1.t1 w.c1.W2 w.c1.b2 w.c1.g2 w.c1.t2
+    w.c2.W1 w.c2.b1 w.c2.g1 w.c2.t1 w.c2.W2 w.c2.b2 w.c2.g2 w.c2.t2
+    w.c3.W1 w.c3.b1 w.c3.g1 w.c3.t1 w.c3.W2 w.c3.b2 w.c3.g2 w.c3.t2
+    w.c4.W1 w.c4.b1 w.c4.g1 w.c4.t1 w.c4.W2 w.c4.b2 w.c4.g2 w.c4.t2
+    w.d4.W1 w.d4.b1 w.d4.g1 w.d4.t1 w.d4.W2 w.d4.b2 w.d4.g2 w.d4.t2 w.d4.Wp w.d4.bp w.d4.gp w.d4.tp
+    w.e0.W1 w.e0.b1 w.e0.g1 w.e0.t1 w.e0.W2 w.e0.b2 w.e0.g2 w.e0.t2
+    w.e1.W1 w.e1.b1 w.e1.g1 w.e1.t1 w.e1.W2 w.e1.b2 w.e1.g2 w.e1.t2
+    w.Wd w.bd
+
+/-- Math denotation of the committed ResNet-34 spec: the 8-entry stage-level layer list
+    denotes to the full per-channel [3,4,6,3] render. Any other list is not the net (`0`). -/
+noncomputable def denoteR34Full (layers : List VLayer) (w : R34Weights) :
+    Vec (3 * 224 * 224) → Vec 10 :=
+  match layers with
+  | [.convBn 3 64 7 2, .maxPool 2 2,
+     .residualStage 64 64 3 1, .residualStage 64 128 4 2,
+     .residualStage 128 256 6 2, .residualStage 256 512 3 2,
+     .globalAvgPool, .dense 512 10] => resnet34ForwardW w
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the full proven render.** `resnet34Verified`'s denotation is exactly
+    `resnet34Forward_full_pc` (per-channel BN, [3,4,6,3] at 224²) — by `rfl`. -/
+theorem resnet34Verified_denote_eq (w : R34Weights) :
+    denoteR34Full resnet34Verified.layers w = resnet34ForwardW w := rfl
+
+/-- **The committed spec carries the math** — canonical `pdiv` witness (relu is kinked,
+    so the honest whole-net input-VJP stays pointwise; the live/seal theorems
+    (`ResNet34Live*`) discharge nontriviality at full depth and realistic dims). -/
+noncomputable def resnet34Verified_has_vjp (w : R34Weights) :
+    HasVJP (denoteR34Full resnet34Verified.layers w) where
+  backward x dy i :=
+    ∑ j : Fin 10, pdiv (denoteR34Full resnet34Verified.layers w) x i j * dy j
+  correct _ _ _ := rfl
+
+open Proofs.StableHLO in
+/-- **Rung E at the committed spec.** The full per-channel [3,4,6,3] graph denotes the
+    committed spec's function: `resnet34FwdGraphFullPC_faithful` composed with the tie. -/
+theorem resnet34Verified_fwd_faithful (epsStr : String) (w : R34Weights)
+    (x : Vec (3 * 224 * 224)) :
+    den (resnet34FwdGraphFullPC epsStr w.ε w.sW w.sb w.sγ w.sβ
+      w.a0.W1 w.a0.b1 w.a0.g1 w.a0.t1 w.a0.W2 w.a0.b2 w.a0.g2 w.a0.t2
+      w.a1.W1 w.a1.b1 w.a1.g1 w.a1.t1 w.a1.W2 w.a1.b2 w.a1.g2 w.a1.t2
+      w.a2.W1 w.a2.b1 w.a2.g1 w.a2.t1 w.a2.W2 w.a2.b2 w.a2.g2 w.a2.t2
+      w.d2.W1 w.d2.b1 w.d2.g1 w.d2.t1 w.d2.W2 w.d2.b2 w.d2.g2 w.d2.t2 w.d2.Wp w.d2.bp w.d2.gp w.d2.tp
+      w.b0.W1 w.b0.b1 w.b0.g1 w.b0.t1 w.b0.W2 w.b0.b2 w.b0.g2 w.b0.t2
+      w.b1.W1 w.b1.b1 w.b1.g1 w.b1.t1 w.b1.W2 w.b1.b2 w.b1.g2 w.b1.t2
+      w.b2.W1 w.b2.b1 w.b2.g1 w.b2.t1 w.b2.W2 w.b2.b2 w.b2.g2 w.b2.t2
+      w.d3.W1 w.d3.b1 w.d3.g1 w.d3.t1 w.d3.W2 w.d3.b2 w.d3.g2 w.d3.t2 w.d3.Wp w.d3.bp w.d3.gp w.d3.tp
+      w.c0.W1 w.c0.b1 w.c0.g1 w.c0.t1 w.c0.W2 w.c0.b2 w.c0.g2 w.c0.t2
+      w.c1.W1 w.c1.b1 w.c1.g1 w.c1.t1 w.c1.W2 w.c1.b2 w.c1.g2 w.c1.t2
+      w.c2.W1 w.c2.b1 w.c2.g1 w.c2.t1 w.c2.W2 w.c2.b2 w.c2.g2 w.c2.t2
+      w.c3.W1 w.c3.b1 w.c3.g1 w.c3.t1 w.c3.W2 w.c3.b2 w.c3.g2 w.c3.t2
+      w.c4.W1 w.c4.b1 w.c4.g1 w.c4.t1 w.c4.W2 w.c4.b2 w.c4.g2 w.c4.t2
+      w.d4.W1 w.d4.b1 w.d4.g1 w.d4.t1 w.d4.W2 w.d4.b2 w.d4.g2 w.d4.t2 w.d4.Wp w.d4.bp w.d4.gp w.d4.tp
+      w.e0.W1 w.e0.b1 w.e0.g1 w.e0.t1 w.e0.W2 w.e0.b2 w.e0.g2 w.e0.t2
+      w.e1.W1 w.e1.b1 w.e1.g1 w.e1.t1 w.e1.W2 w.e1.b2 w.e1.g2 w.e1.t2
+      w.Wd w.bd x)
+      = denoteR34Full resnet34Verified.layers w x :=
+  (resnet34FwdGraphFullPC_faithful epsStr w.ε w.sW w.sb w.sγ w.sβ
+      w.a0.W1 w.a0.b1 w.a0.g1 w.a0.t1 w.a0.W2 w.a0.b2 w.a0.g2 w.a0.t2
+      w.a1.W1 w.a1.b1 w.a1.g1 w.a1.t1 w.a1.W2 w.a1.b2 w.a1.g2 w.a1.t2
+      w.a2.W1 w.a2.b1 w.a2.g1 w.a2.t1 w.a2.W2 w.a2.b2 w.a2.g2 w.a2.t2
+      w.d2.W1 w.d2.b1 w.d2.g1 w.d2.t1 w.d2.W2 w.d2.b2 w.d2.g2 w.d2.t2 w.d2.Wp w.d2.bp w.d2.gp w.d2.tp
+      w.b0.W1 w.b0.b1 w.b0.g1 w.b0.t1 w.b0.W2 w.b0.b2 w.b0.g2 w.b0.t2
+      w.b1.W1 w.b1.b1 w.b1.g1 w.b1.t1 w.b1.W2 w.b1.b2 w.b1.g2 w.b1.t2
+      w.b2.W1 w.b2.b1 w.b2.g1 w.b2.t1 w.b2.W2 w.b2.b2 w.b2.g2 w.b2.t2
+      w.d3.W1 w.d3.b1 w.d3.g1 w.d3.t1 w.d3.W2 w.d3.b2 w.d3.g2 w.d3.t2 w.d3.Wp w.d3.bp w.d3.gp w.d3.tp
+      w.c0.W1 w.c0.b1 w.c0.g1 w.c0.t1 w.c0.W2 w.c0.b2 w.c0.g2 w.c0.t2
+      w.c1.W1 w.c1.b1 w.c1.g1 w.c1.t1 w.c1.W2 w.c1.b2 w.c1.g2 w.c1.t2
+      w.c2.W1 w.c2.b1 w.c2.g1 w.c2.t1 w.c2.W2 w.c2.b2 w.c2.g2 w.c2.t2
+      w.c3.W1 w.c3.b1 w.c3.g1 w.c3.t1 w.c3.W2 w.c3.b2 w.c3.g2 w.c3.t2
+      w.c4.W1 w.c4.b1 w.c4.g1 w.c4.t1 w.c4.W2 w.c4.b2 w.c4.g2 w.c4.t2
+      w.d4.W1 w.d4.b1 w.d4.g1 w.d4.t1 w.d4.W2 w.d4.b2 w.d4.g2 w.d4.t2 w.d4.Wp w.d4.bp w.d4.gp w.d4.tp
+      w.e0.W1 w.e0.b1 w.e0.g1 w.e0.t1 w.e0.W2 w.e0.b2 w.e0.g2 w.e0.t2
+      w.e1.W1 w.e1.b1 w.e1.g1 w.e1.t1 w.e1.W2 w.e1.b2 w.e1.g2 w.e1.t2
+      w.Wd w.bd x).trans
+    (congrFun (resnet34Verified_denote_eq w).symm x)
+
+-- ── EfficientNet-B0 (FULL, batched): the committed 21-entry spec ↔ efficientnetForwardB_full ──
+
+/-- Math denotation of the committed EfficientNet-B0 spec at batch `N`: the 21-entry
+    `[t,c,n,s,k]` layer list denotes to `efficientnetForwardB_full` (all 16 MBConv
+    blocks, true batch-norm + SE). The spec ties the batched net at EVERY batch size. -/
+noncomputable def denoteEfficientnetB0 (N : Nat) (layers : List VLayer) (w : B0Weights) :
+    Vec (N * (3 * 224 * 224)) → Vec (N * 10) :=
+  match layers with
+  | [.convBn 3 32 3 2,
+     .mbConvSE 32 32 16 8 3,
+     .mbConvSE 16 96 24 4 3, .mbConvSE 24 144 24 6 3,
+     .mbConvSE 24 144 40 6 5, .mbConvSE 40 240 40 10 5,
+     .mbConvSE 40 240 80 10 3, .mbConvSE 80 480 80 20 3, .mbConvSE 80 480 80 20 3,
+     .mbConvSE 80 480 112 20 5, .mbConvSE 112 672 112 28 5, .mbConvSE 112 672 112 28 5,
+     .mbConvSE 112 672 192 28 5, .mbConvSE 192 1152 192 48 5, .mbConvSE 192 1152 192 48 5,
+     .mbConvSE 192 1152 192 48 5,
+     .mbConvSE 192 1152 320 48 3,
+     .convBn 320 1280 1 1, .globalAvgPool, .dense 1280 10] =>
+      efficientnetForwardB_full N w
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the full proven net.** `efficientnetVerified`'s denotation is exactly
+    `efficientnetForwardB_full` (16 MBConv, batched, per-channel BN + SE) — by `rfl`. -/
+theorem efficientnetVerified_denote_eq (N : Nat) (w : B0Weights) :
+    denoteEfficientnetB0 N efficientnetVerified.layers w
+      = efficientnetForwardB_full N w := rfl
+
+/-- **The committed spec carries the math** — canonical `pdiv` witness (swish/SE are
+    smooth but relu6 clamps; the per-block differentiability lemmas live in
+    `EfficientNetFullB0.lean`). -/
+noncomputable def efficientnetVerified_has_vjp (N : Nat) (w : B0Weights) :
+    HasVJP (denoteEfficientnetB0 N efficientnetVerified.layers w) where
+  backward x dy i :=
+    ∑ j : Fin (N * 10),
+      pdiv (denoteEfficientnetB0 N efficientnetVerified.layers w) x i j * dy j
+  correct _ _ _ := rfl
+
+open Proofs.StableHLO in
+/-- **Rung E at the committed spec (batched).** The full 16-MBConv batched graph denotes
+    the committed spec's function: `efficientnetFwdGraphB_full_faithful` ∘ the tie. -/
+theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Weights)
+    (x : Vec (N * (3 * 224 * 224))) :
+    den (efficientnetFwdGraphB_full N epsStr w x)
+      = denoteEfficientnetB0 N efficientnetVerified.layers w x :=
+  (efficientnetFwdGraphB_full_faithful N epsStr w x).trans
+    (congrFun (efficientnetVerified_denote_eq N w).symm x)
+
+-- ── ConvNeXt-T (FULL): the committed 27-entry spec ↔ convNextForwardTC ──
+
+/-- Math denotation of the committed ConvNeXt-T spec: the 27-entry `[3,3,9,3]` layer
+    list denotes to `convNextForwardTC` (the committed-render config: no stem-LN,
+    180 params — `ConvNeXtFullT.lean`). -/
+noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeights) :
+    Vec (3 * 224 * 224) → Vec 10 :=
+  match layers with
+  | [.conv 3 96 4 4,
+     .convNextBlock 96, .convNextBlock 96, .convNextBlock 96,
+     .bn, .conv 96 192 2 2,
+     .convNextBlock 192, .convNextBlock 192, .convNextBlock 192,
+     .bn, .conv 192 384 2 2,
+     .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,
+     .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,
+     .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,
+     .bn, .conv 384 768 2 2,
+     .convNextBlock 768, .convNextBlock 768, .convNextBlock 768,
+     .globalAvgPool, .bn, .dense 768 10] => convNextForwardTC w
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the full proven net.** `convnextVerified`'s denotation is exactly
+    `convNextForwardTC` ([3,3,9,3] @ [96,192,384,768], committed 180-param config)
+    — by `rfl`. -/
+theorem convnextVerified_denote_eq (w : CnxTWeights) :
+    denoteConvnextT convnextVerified.layers w = convNextForwardTC w := rfl
+
+/-- **The committed spec carries the math** — canonical `pdiv` witness; the REAL
+    whole-net VJP exists at full depth (`convNextForwardTC_has_vjp_correct`,
+    all-smooth, LN positivities only) on the ∘-chain form. -/
+noncomputable def convnextVerified_has_vjp (w : CnxTWeights) :
+    HasVJP (denoteConvnextT convnextVerified.layers w) where
+  backward x dy i :=
+    ∑ j : Fin 10, pdiv (denoteConvnextT convnextVerified.layers w) x i j * dy j
+  correct _ _ _ := rfl
+
+open Proofs.StableHLO in
+/-- **Rung E at the committed spec.** The committed-config [3,3,9,3] graph denotes the
+    committed spec's function: `convNextFwdGraphTC_faithful` ∘ the tie. -/
+theorem convnextVerified_fwd_faithful (epsStr : String) (w : CnxTWeights)
+    (x : Vec (3 * 224 * 224)) :
+    den (convNextFwdGraphTC epsStr w x)
+      = denoteConvnextT convnextVerified.layers w x :=
+  (convNextFwdGraphTC_faithful epsStr w x).trans
+    (congrFun (convnextVerified_denote_eq w).symm x)
+
+-- ── ViT-Tiny (FULL): the committed 17-entry spec ↔ vitForwardKV @ depth 12 ──
+
+/-- All ViT-Tiny parameters at the committed config (D=192, 3 heads, d_head=64,
+    mlpDim=768, 12 untied blocks, vector-LN): patch embed + CLS/pos + 12 per-block
+    `BlockParamsV` bundles + final LN + CLS head. Shared LN ε rides along. -/
+structure ViTTinyWeights where
+  ε : ℝ
+  Wc : Kernel4 192 3 16 16
+  bc : Vec 192
+  cls : Vec 192
+  pos : Mat 197 192
+  blocks : Fin 12 → BlockParamsV 192 768
+  γF : Vec 192
+  βF : Vec 192
+  Wcls : Mat 192 10
+  bcls : Vec 10
+
+/-- `vitForwardKV` at the committed ViT-Tiny config (depth 12, 3 heads × 64). -/
+noncomputable def vitForwardTiny (w : ViTTinyWeights) : Vec (3 * 224 * 224) → Vec 10 :=
+  vitForwardKV 3 224 224 16 196 768 3 64 10 12
+    w.Wc w.bc w.cls w.pos w.ε w.blocks w.γF w.βF w.Wcls w.bcls
+
+/-- Math denotation of the committed ViT-Tiny spec: the 17-entry layer list (12 untied
+    `.transformerBlock`s, per-channel `[192]` LN, 1D CLS) denotes to `vitForwardTiny`. -/
+noncomputable def denoteVitTiny (layers : List VLayer) (w : ViTTinyWeights) :
+    Vec (3 * 224 * 224) → Vec 10 :=
+  match layers with
+  | [.conv 3 192 16 16,
+     .param #[192] 2, .param #[197, 192] 2,
+     .transformerBlock 192 768, .transformerBlock 192 768, .transformerBlock 192 768,
+     .transformerBlock 192 768, .transformerBlock 192 768, .transformerBlock 192 768,
+     .transformerBlock 192 768, .transformerBlock 192 768, .transformerBlock 192 768,
+     .transformerBlock 192 768, .transformerBlock 192 768, .transformerBlock 192 768,
+     .layerNorm 192, .dense 192 10] => vitForwardTiny w
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the full proven net.** `vitVerified`'s denotation is exactly
+    `vitForwardKV` at the committed config (depth-12 DISTINCT-param multi-head,
+    per-token vector-LN — `ViTDepthK.lean`) — by `rfl`. Retires the rep tie's
+    weight-shared scalar-LN caveats at the spec level. -/
+theorem vitVerified_denote_eq (w : ViTTinyWeights) :
+    denoteVitTiny vitVerified.layers w = vitForwardTiny w := rfl
+
+/-- **The committed spec carries the math — the REAL whole-net VJP.** ViT is all-smooth
+    (GELU/softmax/LN), so unlike the conv nets the honest chain-rule fold applies
+    globally: `vitForwardKV_has_vjp` at the committed config, hypothesis `0 < ε` only.
+    The strongest rung C in this file — no canonical-witness fallback needed. -/
+noncomputable def vitVerified_has_vjp (w : ViTTinyWeights) (hε : 0 < w.ε) :
+    HasVJP (denoteVitTiny vitVerified.layers w) :=
+  vitForwardKV_has_vjp 3 224 224 16 196 768 3 64 10 12
+    w.Wc w.bc w.cls w.pos w.ε hε w.blocks w.γF w.βF w.Wcls w.bcls
+
+-- (vit rung E stays deferred: the whole-net graph `vitFwdGraph` is still the
+-- 2-block/1-head representative — the committed render's per-op tie is ViTTiePoC.)
+
+
 /-! ## Rung B/C (representative): the imagenette nets' proof witnesses
 
-The trainer's full spec for each imagenette net is deeper than the audited proof witness —
-except mnv2, whose committed full-paper spec is tied above (`denoteMobilenetPaper`; its
-6-block rung is kept for the reduced strided render). For the rest we tie the
-**representative** witness — the smaller skeleton the proof actually
-proves (`<net>Forward` + the audited `<net>_has_vjp` apex) — to a readable representative
-`VLayer` list, exactly like ch2–5: `denote <rep layers> = <net>Forward := rfl` (rung B,
-drift-sensitive to the block sequence) + canonical `HasVJP` witness (rung C; the honest fold
-is the apex). The full faithful build for these is deferred (see planning doc). -/
+Every committed imagenette spec is now tied in FULL above (mnv2 `denoteMobilenetPaper`,
+r34 `denoteR34Full`, enet `denoteEfficientnetB0`, convnext `denoteConvnextT`, vit
+`denoteVitTiny`). The representative rungs below remain as the smaller readable
+skeletons the ORIGINAL per-net proof witnesses actually state (`<net>Forward` + the
+audited `<net>_has_vjp` apex), tied to generic-dim `VLayer` lists exactly like ch2–5:
+`denote <rep layers> = <net>Forward := rfl` (rung B) + canonical `HasVJP` witness
+(rung C; the honest fold is the apex). -/
 
 -- ── EfficientNet (representative: stem-swish → MBConv·SE skip → MBConv·SE no-skip → GAP → dense) ──
 /-- Math denotation of the representative EfficientNet layer list → `efficientnetForward`. -/

@@ -3341,3 +3341,18 @@ open Proofs
 #print axioms convnextRep_fwd_faithful
 #print axioms vitRep_denote_eq
 #print axioms r34Rep_denote_eq
+-- FULL committed-spec ties (unified weight bundles, 2026-07-07): every imagenette net's
+-- ENTIRE committed layer list (literal dims) now denotes its full proven forward —
+-- r34 (R34Weights → resnet34Forward_full_pc), enet (B0Weights → efficientnetForwardB_full,
+-- batched ∀N), convnext (CnxTWeights → convNextForwardTC, committed 180-param config),
+-- vit (ViTTinyWeights → vitForwardKV depth-12 distinct-param vector-LN). Rung E composed
+-- where the full graph exists (r34/enet/convnext; vit E deferred, graph still 2-block rep).
+-- vitVerified_has_vjp is the REAL whole-net VJP (all-smooth, 0<ε), not the canonical witness.
+#print axioms resnet34Verified_denote_eq
+#print axioms resnet34Verified_fwd_faithful
+#print axioms efficientnetVerified_denote_eq
+#print axioms efficientnetVerified_fwd_faithful
+#print axioms convnextVerified_denote_eq
+#print axioms convnextVerified_fwd_faithful
+#print axioms vitVerified_denote_eq
+#print axioms vitVerified_has_vjp
