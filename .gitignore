@@ -38,3 +38,4 @@ mlir_poc/inputs_trained/
 mlir_poc/cnn128/
 mlir_poc/cnn_inputs/
 mlir_poc/__pycache__/
+jax/.venv
