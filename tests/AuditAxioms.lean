@@ -3054,6 +3054,18 @@ open Proofs
 #print axioms Proofs.stdNormalCDF_quantile
 #print axioms Proofs.gaussian_np_shift
 
+-- G3, dimension reduction (smoothing_gaussian_lemma.md): the n-D Cohen bound. The 1-D
+-- Cameron–Martin identity ∫g(s+d)dN(0,1) = ∫exp(ds−d²/2)·g dN(0,1) lifts to the iid pi
+-- measure by Fubini at coordinate 0 (piFinSuccAbove), the G2 pointwise MLR trick reruns
+-- against the pi measure (pi_gaussian_np_shift), and an adapted orthonormal basis — a
+-- reflection carries e₀ to δ/‖δ‖; stdGaussian_eq_map_pi_orthonormalBasis makes the standard
+-- Gaussian basis-blind — rotates any shift onto coordinate 0: stdGaussian_np_shift is
+-- ∫f(·+δ)dγ ≥ Φ(t − ‖δ‖) whenever ∫f dγ ≥ Φ(t), f : E → [0,1] measurable.
+#print axioms Proofs.integral_gaussianReal_shift_eq
+#print axioms Proofs.pi_gaussian_shift_eq
+#print axioms Proofs.pi_gaussian_np_shift
+#print axioms Proofs.stdGaussian_np_shift
+
 -- ...and the Tsuzuku certificate INSTANTIATED (LipschitzCertInstance.lean): the Lipschitz constant
 -- is PROVED (denseE_lipschitzL2 — the Frobenius bound ‖W‖₂ ≤ ‖W‖_F via row-wise Cauchy-Schwarz, no
 -- power-iteration estimate in the trust path; reluE_lipschitzL2 = the activation's factor 1), the

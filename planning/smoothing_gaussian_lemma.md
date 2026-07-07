@@ -82,8 +82,21 @@ Landed exactly as scoped below, all 3-axiom-clean:
 - Wired: lakefile `Certs` roots + `LeanMlir.lean` + `tests/AuditAxioms.lean` (6 new
   `#print axioms` entries) in the same change.
 
-**NEXT = G2**: scout pi-Gaussian rotation invariance first (G3 note below), then decide
-the G2/G3 split vs the fused ⟨z,δ⟩-density-ratio route.
+## G2 + G3 DONE (2026-07-07, same day)
+
+**G2** (commit after G1): `stdNormalCDF_quantile` (Φ(Φ⁻¹p)=p — right-continuity + no-atoms
+left-limit) + `gaussian_np_shift` — the 1-D NP core came in at ~150 lines, NOT the planned
+1-2k: the pointwise MLR inequality `(f − 1_{z≤t})·(LR − LR(t)) ≥ 0` integrated against the
+BASE Gaussian needs no layer-cake/rearrangement machinery at all.
+
+**G3**: the rotation-invariance scout hit gold — Mathlib HAS it
+(`stdGaussian_map` for any LinearIsometryEquiv, `map_pi_eq_stdGaussian`,
+`stdGaussian_eq_map_pi_orthonormalBasis`), so the G2/G3 split stood. Chain:
+`integral_gaussianReal_shift_eq` (1-D Cameron–Martin) → `pi_gaussian_shift_eq` (Fubini at
+coordinate 0 via `measurePreserving_piFinSuccAbove`) → `pi_gaussian_np_shift` (G2's MLR
+trick against the pi measure, halfspace `{z₀ ≤ t}`) → `stdGaussian_np_shift` (adapted ONB:
+`Submodule.reflection_sub` carries `e₀` to `δ/‖δ‖`, `OrthonormalBasis.map`). Stated on
+`Fin (n+1)` (nonempty index). All 3-axiom clean.
 
 ## Session handoff (2026-07-07, pre-G1 analysis DONE)
 
