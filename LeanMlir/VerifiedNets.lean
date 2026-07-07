@@ -256,9 +256,11 @@ def resnet34Verified : VerifiedNetSpec where
 
 /-- ch7 **MobileNetV2** on Imagenette 224²: 3×3-s2 stem → BN → relu6 → 17 inverted-residual
     blocks (full-paper `[t,c,n,s]` config, strided depthwise downsamples, per-channel BN,
-    relu6, linear bottleneck) → 1×1 head conv (320→1280) → BN → relu6 → GAP → dense. (The
-    proof witness `Proofs.mobilenetv2_has_vjp_at` is a representative stem+2-block scalar-BN
-    net, not this full render — B/C tie is therefore representative, see planning doc.) -/
+    relu6, linear bottleneck) → 1×1 head conv (320→1280) → BN → relu6 → GAP → dense.
+    (Tied at the FULL paper spec in `Proofs/SpecVJP.lean`: `mobilenetv2Verified_denote_eq`
+    → `mobilenetv2ForwardPaper`, + rung E `mobilenetv2Verified_fwd_faithful`. The honest
+    pointwise VJP-fold witness `Proofs.mobilenetv2_has_vjp_at` remains the representative
+    stem+2-block net, see planning doc.) -/
 def mobilenetv2Verified : VerifiedNetSpec where
   name     := "MobileNetV2"
   slug     := "mobilenetv2"

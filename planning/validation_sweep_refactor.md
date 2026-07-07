@@ -87,8 +87,11 @@ Ladder per net (A=shape `#guard` · B/C=spec→math+VJP · E=spec→generated-ML
 
 All B/C + E ties live in `Proofs/SpecVJP.lean` (since 2026-07-07 a `Certs` root + imported
 by `LeanMlir.lean` + audited in `tests/AuditAxioms.lean` — it was originally outside every
-build target and silently broke at the mnv2 6→17-block spec promotion; its mnv2 rung is now
-the representative 6-block witness, `mobilenetv2RepLayers`); the forward graphs + faithfulness live in
+build target and silently broke at the mnv2 6→17-block spec promotion; mnv2 now carries
+BOTH the representative 6-block rung (`mobilenetv2RepLayers`, the reduced strided render)
+AND the full-paper B/C/E tie at the committed 21-entry spec (`denoteMobilenetPaper` →
+`mobilenetv2ForwardPaper`, rung E via `mobilenetv2FwdGraphPaper_faithful`) — the first
+imagenette net with the full ladder at its committed spec); the forward graphs + faithfulness live in
 `Proofs/StableHLO.lean`. Commits `8e9ae0b … 60d5ed6` on `main`, **NOT pushed** (~86 ahead).
 
 **Key lessons (the expensive map-making this session bought):**

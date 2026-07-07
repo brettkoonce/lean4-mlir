@@ -3,6 +3,7 @@ import LeanMlir.Proofs.MLP
 import LeanMlir.Proofs.MnistCNN
 import LeanMlir.Proofs.CifarCNN
 import LeanMlir.Proofs.MobileNetV2
+import LeanMlir.Proofs.MobileNetV2FullPaper
 import LeanMlir.Proofs.EfficientNet
 import LeanMlir.Proofs.ConvNeXt
 import LeanMlir.Proofs.Attention
@@ -358,8 +359,8 @@ infrastructure (`invresBodyStrided`, `flatConvStride2`, `depthwiseStride2Flat`).
 
 **History note**: this rung used to tie `mobilenetv2Verified.layers` itself — true while
 the committed spec WAS the 6-block net. The spec was promoted to the full-paper 17-block
-net (e9cd890), so the tie is now representative (matching the spec's own docstring in
-`VerifiedNets.lean`); the full-paper tie is the deferred upgrade (see planning doc).
+net (e9cd890), so this rung is now representative; the committed spec's full tie is the
+next section (`denoteMobilenetPaper` → `mobilenetv2ForwardPaper`).
 
 The honest chain-rule fold is carried by the new strided inverted-residual block witness
 `Proofs.invresBodyStrided_has_vjp_at` (expand-SAME → stride-2 depthwise → project-SAME,
@@ -376,7 +377,7 @@ placement are all faithful — only BN granularity differs. -/
 /-- The representative MobileNetV2 layer list: the strided 6-block net that
     `mobilenetv2Forward_full` actually renders and proves. A prefix-shaped slice of the
     committed full-paper `mobilenetv2Verified` spec (17 blocks, 210 tensors), whose full
-    tie is deferred. -/
+    tie is the next section (`denoteMobilenetPaper`). -/
 def mobilenetv2RepLayers : List VLayer :=
   [.convBn 3 16 3 2,
    .invertedResidual 16 64 24 2, .invertedResidual 24 96 24 1,
@@ -512,12 +513,74 @@ noncomputable def mobilenetv2Rep_has_vjp
   correct _ _ _ := rfl
 
 
+/-! ## Rung B/C/E (ch7 MobileNetV2, FULL): the committed spec ↔ the paper-spec net
+
+The real thing: `denoteMobilenetPaper` maps `mobilenetv2Verified.layers` — the committed
+21-entry full-paper `[t,c,n,s]` list the trainer runs (stem-s2 3→32 → 17 bottlenecks →
+1×1 head 320→1280 → GAP → dense 1280→10) — to `mobilenetv2ForwardPaper`
+(`MobileNetV2FullPaper.lean`: per-channel BN throughout, the t=1 no-expand first block,
+4 stride-2 depthwise downsamples 224→7). Weights ride in the `MNV2PaperWeights` bundle,
+so the tie stays readable. The `rfl` is drift-sensitive: any `[t,c,n,s]` edit to the spec
+stops the match reducing — exactly the tripwire the 6→17-block promotion fired while this
+file was orphaned; certs.yml now re-elaborates it on every spec push.
+
+This restores (and upgrades) the full mnv2 B/C lost in the promotion: the old full tie was
+the scalar-BN 6-block net; this one is the committed per-channel-BN 17-block net, with
+rung E on top (`mobilenetv2FwdGraphPaper_faithful` composed with the tie). -/
+
+/-- Math denotation of the committed MobileNetV2 spec: the 21-entry full-paper layer list
+    denotes to `mobilenetv2ForwardPaper`. Any other list is not the net (`0`), making the
+    tie below drift-sensitive. -/
+noncomputable def denoteMobilenetPaper (layers : List VLayer) (w : MNV2PaperWeights) :
+    Vec (3 * 224 * 224) → Vec 10 :=
+  match layers with
+  | [.convBn 3 32 3 2,
+     .invertedResidual 32 32 16 1,
+     .invertedResidual 16 96 24 2, .invertedResidual 24 144 24 1,
+     .invertedResidual 24 144 32 2, .invertedResidual 32 192 32 1, .invertedResidual 32 192 32 1,
+     .invertedResidual 32 192 64 2, .invertedResidual 64 384 64 1, .invertedResidual 64 384 64 1,
+     .invertedResidual 64 384 64 1,
+     .invertedResidual 64 384 96 1, .invertedResidual 96 576 96 1, .invertedResidual 96 576 96 1,
+     .invertedResidual 96 576 160 2, .invertedResidual 160 960 160 1, .invertedResidual 160 960 160 1,
+     .invertedResidual 160 960 320 1,
+     .convBn 320 1280 1 1, .globalAvgPool, .dense 1280 10] =>
+      mobilenetv2ForwardPaper w
+  | _ => fun _ => 0
+
+/-- **Spec ≡ the full paper-spec net.** The committed `mobilenetv2Verified`'s denotation
+    is exactly `mobilenetv2ForwardPaper` (all 17 bottlenecks, per-channel BN) — by `rfl`,
+    drift-sensitive. -/
+theorem mobilenetv2Verified_denote_eq (w : MNV2PaperWeights) :
+    denoteMobilenetPaper mobilenetv2Verified.layers w = mobilenetv2ForwardPaper w := rfl
+
+/-- **The committed spec carries the math.** The full-paper spec's denotation has a VJP —
+    the canonical `pdiv`-derived witness (relu6 is kinked, so the honest whole-net
+    input-VJP stays pointwise-only, the repo standard for relu-family nets; the
+    dim-polymorphic `MobileNetV2Close`/`ChainClose` param-grad bridges apply at the paper
+    shapes verbatim, per `MobileNetV2FullPaper.lean`'s header). -/
+noncomputable def mobilenetv2Verified_has_vjp (w : MNV2PaperWeights) :
+    HasVJP (denoteMobilenetPaper mobilenetv2Verified.layers w) where
+  backward x dy i :=
+    ∑ j : Fin 10, pdiv (denoteMobilenetPaper mobilenetv2Verified.layers w) x i j * dy j
+  correct _ _ _ := rfl
+
+open Proofs.StableHLO in
+/-- **Rung E at the committed spec.** The generated full-paper StableHLO graph denotes the
+    committed spec's function: `mobilenetv2FwdGraphPaper_faithful` composed with the tie. -/
+theorem mobilenetv2Verified_fwd_faithful (epsStr : String) (w : MNV2PaperWeights)
+    (x : Vec (3 * 224 * 224)) :
+    den (mobilenetv2FwdGraphPaper epsStr w x)
+      = denoteMobilenetPaper mobilenetv2Verified.layers w x :=
+  (mobilenetv2FwdGraphPaper_faithful epsStr w x).trans
+    (congrFun (mobilenetv2Verified_denote_eq w).symm x)
+
+
 /-! ## Rung B/C (representative): the imagenette nets' proof witnesses
 
 The trainer's full spec for each imagenette net is deeper than the audited proof witness —
-mnv2 included since its spec's promotion to the full-paper 17-block net (its rung, above,
-ties the strided 6-block witness). For each net we tie the **representative** witness — the
-smaller skeleton the proof actually
+except mnv2, whose committed full-paper spec is tied above (`denoteMobilenetPaper`; its
+6-block rung is kept for the reduced strided render). For the rest we tie the
+**representative** witness — the smaller skeleton the proof actually
 proves (`<net>Forward` + the audited `<net>_has_vjp` apex) — to a readable representative
 `VLayer` list, exactly like ch2–5: `denote <rep layers> = <net>Forward := rfl` (rung B,
 drift-sensitive to the block sequence) + canonical `HasVJP` witness (rung C; the honest fold
@@ -764,7 +827,8 @@ denotes the representative spec's forward: `den graph = mobilenetv2Forward_full`
 (`mobilenetv2FwdGraphFull_faithful`) composed with `mobilenetv2Rep_denote_eq` gives
 `den graph = denoteMobilenet mobilenetv2RepLayers`. So the generated StableHLO provably
 computes the representative spec's function — the A+B+C+E ladder at the 6-block witness
-(the committed 17-block spec's E is the deferred upgrade). E is `simp`-based, so it does NOT hit the
+(the committed 17-block spec's E rung is `mobilenetv2Verified_fwd_faithful`, above). E is
+`simp`-based, so it does NOT hit the
 VJP-fold's concrete-dim `isDefEq` wall. (Forward only; the backward graph + the `.mlir` re-route
 off the committed `tests/Test*` string emitter are the remaining E work — see planning doc.) -/
 open Proofs.StableHLO in

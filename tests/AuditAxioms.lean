@@ -3331,6 +3331,11 @@ open Proofs
 #print axioms cifarBnVerified_fwd_faithful
 #print axioms mobilenetv2Rep_denote_eq
 #print axioms mobilenetv2Rep_fwd_faithful
+-- mnv2 FULL-paper tie (the committed 21-entry spec ↔ mobilenetv2ForwardPaper, all 17
+-- bottlenecks per-channel-BN, + rung E via mobilenetv2FwdGraphPaper_faithful): the
+-- restored-and-upgraded successor of the tie the 6→17-block promotion broke.
+#print axioms mobilenetv2Verified_denote_eq
+#print axioms mobilenetv2Verified_fwd_faithful
 #print axioms efficientnetRep_denote_eq
 #print axioms convnextRep_denote_eq
 #print axioms convnextRep_fwd_faithful

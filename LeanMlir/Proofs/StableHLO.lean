@@ -1925,9 +1925,9 @@ def mobilenetv2FwdGraphFull
 
 /-- **Full MobileNetV2 forward faithfulness.** The full strided render graph denotes the
     proven `mobilenetv2Forward_full` (the representative 6-block net, tied by
-    `mobilenetv2Rep_denote_eq` in `SpecVJP.lean` — the committed 17-block spec's tie is the
-    deferred upgrade). `simp`-based — so unlike the VJP fold it does not hit the
-    concrete-dim `isDefEq` wall. -/
+    `mobilenetv2Rep_denote_eq` in `SpecVJP.lean` — the committed 17-block spec's tie is
+    `mobilenetv2Verified_denote_eq` there, against `mobilenetv2ForwardPaper`). `simp`-based
+    — so unlike the VJP fold it does not hit the concrete-dim `isDefEq` wall. -/
 theorem mobilenetv2FwdGraphFull_faithful
     (epsStr : String)
     (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
