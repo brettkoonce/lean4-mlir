@@ -4,6 +4,11 @@ import LeanMlir.Proofs.LipschitzCertInstance
 
 /-! # Trained-weight whole-network VJP witness (MLP rung)
 
+**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
+MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
+784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
+arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.
+
 The audit's "live witnesses use synthetic weights" gap, closed at the MLP rung:
 the SAME trained, /128-rationalized 49→8→10 pooled-MNIST network certified in
 `LipschitzCertInstance.lean` (test acc 89.8%) instantiates the conditional VJP

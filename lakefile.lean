@@ -768,7 +768,10 @@ lean_lib «Certs» where
              -- representative 6-block rung AND gains the full-paper 17-block
              -- B/C/E tie, denoteMobilenetPaper) — a root here so CI
              -- re-elaborates it.
-             `LeanMlir.Proofs.SpecVJP]
+             `LeanMlir.Proofs.SpecVJP,
+             -- The canonical-MLP surface (784→512→512→10): the generic MLP chain
+             -- instantiated at the ch2 reference dims (see MlpCanonical.lean).
+             `LeanMlir.Proofs.MlpCanonical]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

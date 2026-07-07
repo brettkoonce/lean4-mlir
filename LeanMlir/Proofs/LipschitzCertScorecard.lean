@@ -2,6 +2,11 @@ import LeanMlir.Proofs.LipschitzCertInstance
 
 /-! # Certified-accuracy scorecard (post_audit_roadmap §1)
 
+**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
+MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
+784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
+arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.
+
 The one-input certificate of `LipschitzCertInstance.lean`, scaled to a
 dataset-level claim over a FIXED subset — the first 100 MNIST test images
 (4×4-pooled, exact pixel-sum rationals) — at a FIXED radius ε = 1/10

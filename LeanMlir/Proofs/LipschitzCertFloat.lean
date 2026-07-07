@@ -3,6 +3,11 @@ import LeanMlir.Proofs.FloatBridge
 
 /-! # The robustness certificate composed with the float bridge
 
+**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
+MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
+784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
+arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.
+
 The 2026-07-02 audit's gap #1, closed: the scorecard's per-image Lipschitz-
 margin certificates (`LipschitzCertScorecard.lean`, exact-ℝ net) composed with
 the FloatBridge forward budgets, certifying the FLOAT-EVALUATED capped net.

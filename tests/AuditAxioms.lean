@@ -160,6 +160,7 @@ import LeanMlir.Proofs.TrainedLinearDescent
 import LeanMlir.Proofs.MuonGeometry
 import LeanMlir.Proofs.MuonNewtonSchulz
 import LeanMlir.Proofs.SpecVJP
+import LeanMlir.Proofs.MlpCanonical
 
 open Proofs
 
@@ -3358,3 +3359,16 @@ open Proofs
 #print axioms vitVerified_denote_eq
 #print axioms vitVerified_has_vjp
 #print axioms vitVerified_fwd_faithful
+
+-- The CANONICAL MNIST MLP surface (MlpCanonical.lean, 2026-07-07): the generic MLP
+-- chain (VJP / float-grad-close / float-SGD descent / input-VJP FloatBridges / emitted
+-- train-step tie) at the literal ch2 reference dims (784, 512, 512, 10) = mlpVerified.
+#print axioms Proofs.MlpCanonical.has_vjp_at
+#print axioms Proofs.MlpCanonical.has_vjp_correct
+#print axioms Proofs.MlpCanonical.output_float_sgd_descends
+#print axioms Proofs.MlpCanonical.hidden_float_sgd_descends
+#print axioms Proofs.MlpCanonical.input_float_sgd_descends
+#print axioms Proofs.MlpCanonical.w1_grad_close
+#print axioms Proofs.MlpCanonical.w0_grad_close
+#print axioms Proofs.MlpCanonical.inputGrad_floatBridges
+#print axioms Proofs.MlpCanonical.train_step_tied_certified

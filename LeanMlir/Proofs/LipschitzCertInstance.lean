@@ -2,6 +2,11 @@ import LeanMlir.Proofs.LipschitzCert
 
 /-! # A concrete instantiation of the Lipschitz-margin certified radius
 
+**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
+MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
+784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
+arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.
+
 Closes the "certificate machinery, never instantiated" gap: a fixed-weight
 network whose Lipschitz constant is PROVED in Lean (Frobenius bound — no
 power iteration, no hypothesis), whose margin at a concrete input is

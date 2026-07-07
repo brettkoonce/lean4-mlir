@@ -3,6 +3,11 @@ import LeanMlir.Proofs.LipschitzCertScorecard
 
 /-! # Per-pair LipSDP scorecard — unconstrained /128 net (`mlpT`)
 
+**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
+MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
+784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
+arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.
+
 The tighter-Lipschitz-constant pass over the SAME first-100 MNIST test
 subset and SAME ε = 1/10 as `LipschitzCertScorecard.lean`: replacing the
 global `√2·∏‖Wᵢ‖` criterion by per-pair LipSDP certificates lifts the
