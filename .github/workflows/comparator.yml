@@ -48,12 +48,11 @@ jobs:
 
       - name: Free up disk space
         # Mathlib is materialized twice here (parent `lake build Certs`, then
-        # again when tests/comparator resolves its own Mathlib). Both copies are
-        # now fetched from the olean cache — run.sh runs `lake exe cache get`, so
-        # the second is downloaded, not recompiled from source (~30-40 min saved)
-        # — but two ~2.3 GB olean trees still overflow the runner's ~14 GB free.
-        # Reclaim the ~20+ GB of preinstalled SDKs we don't use (Android, .NET,
-        # GHC, CodeQL) up front.
+        # again when tests/comparator resolves its own Mathlib) — both served
+        # from the olean cache (`lake exe cache get`), not compiled from source.
+        # Two ~2.3 GB olean trees still land on disk during the run, overflowing
+        # the runner's ~14 GB free, so reclaim the ~20+ GB of preinstalled SDKs
+        # we don't use (Android, .NET, GHC, CodeQL) up front.
         run: |
           df -h /
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
@@ -73,9 +72,12 @@ jobs:
       - name: Cache .lake (parent — Mathlib + proof oleans)
         uses: actions/cache@v4
         with:
-          path: .lake
-          # Rolling key (per-run suffix) so the cache refreshes each run instead of
-          # freezing at the last toolchain/lakefile/manifest change — see proofs.yml.
+          path: .lake/build
+          # Cache ONLY the parent project build (Certs oleans), NOT .lake/packages
+          # — Mathlib comes from `lake exe cache get` below. Rolling key kept for
+          # freshness, but the entry is now a few hundred MB instead of ~3 GB, so
+          # it no longer blows GitHub's ~10 GB budget → no eviction → no more of
+          # the ~30-min cold "Build proof suite". See proofs.yml.
           key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
           restore-keys: |
             lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-

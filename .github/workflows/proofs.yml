@@ -29,12 +29,16 @@ jobs:
       - name: Cache .lake
         uses: actions/cache@v4
         with:
-          path: .lake
-          # Rolling key (per-run suffix) so every run PERSISTS its freshly-built
-          # .lake. A static key is immutable once created, so source-only edits
-          # (which don't change toolchain/lakefile/manifest) never refresh the
-          # cache and every run rebuilds the heavy downstream cone (e.g. ViTBackB0)
-          # from a frozen snapshot. restore-keys still restores the latest match.
+          path: .lake/build
+          # Cache ONLY the project build (oleans/traces/ir), NOT .lake/packages.
+          # Mathlib (~2.3 GB) is restored separately by `lake exe cache get`
+          # below, so caching it here just duplicated it — and with the rolling
+          # key that wrote a fresh ~3 GB entry every run, blowing GitHub's ~10 GB
+          # cache budget across proofs/certs/comparator → LRU eviction → periodic
+          # ~30-min cold rebuilds. The rolling key still persists each run's
+          # project oleans (freshness, per the note that used to live here); the
+          # entries are now a few hundred MB so they no longer thrash. restore-keys
+          # still restores the latest match.
           key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
           restore-keys: |
             lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-

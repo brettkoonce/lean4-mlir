@@ -58,10 +58,12 @@ jobs:
       - name: Cache .lake
         uses: actions/cache@v4
         with:
-          path: .lake
-          # Same rolling-key family as proofs.yml so the two workflows share
-          # the olean cache (Mathlib + the IR slice are common; the corpus
-          # oleans persist run-to-run via the per-run suffix).
+          path: .lake/build
+          # Cache ONLY the project build (Certs oleans/traces), NOT .lake/packages
+          # — Mathlib comes from `lake exe cache get` below. Same rolling key as
+          # proofs.yml/comparator.yml, but the entry is now a few hundred MB
+          # instead of ~3 GB, so the three workflows stop blowing GitHub's ~10 GB
+          # cache budget (which was evicting everything → ~30-min cold rebuilds).
           key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
           restore-keys: |
             lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
