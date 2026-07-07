@@ -45,6 +45,27 @@ def mlpVerified : VerifiedNetSpec where
 #guard mlpVerified.toSpecs ==
   #[(#[784, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
 
+/-- **Width-parametric MNIST MLP** `dense 784→d₁ → relu → dense d₁→d₂ → relu → dense d₂→10`.
+    The canonical `mlpVerified` is `mlpG 512 512`. Every instance shares the exact same
+    architecture shape as the proven `mlpForward {d₀ d₁ d₂ d₃}` (VJP: `mlp_has_vjp`, which is
+    polymorphic in all four dims), so any `(d₁, d₂)` is covered by that one theorem — the
+    grid is a single proof instantiated, not a new proof per point. `mnist-mlp-grid` renders
+    `verified_mlir/mlp_{d₁}x{d₂}_{train_step,fwd}.mlir` from the faithful renderer at run time
+    and trains on it. Slug `mlp_{d₁}x{d₂}`. -/
+def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
+  name     := s!"MNIST-MLP-{d₁}x{d₂}"
+  slug     := s!"mlp_{d₁}x{d₂}"
+  inC      := 1
+  imageH   := 28
+  imageW   := 28
+  nClasses := 10
+  data     := .mnist
+  layers   := [.dense 784 d₁, .relu, .dense d₁ d₂, .relu, .dense d₂ 10]
+  blurb    := s!"MNIST-MLP-{d₁}x{d₂} via the VERIFIED renderer (784→{d₁}→{d₂}→10) → IREE FFI → GPU"
+
+-- `mlpG 512 512` is exactly the canonical `mlpVerified` architecture.
+#guard (mlpG 512 512).toSpecs == mlpVerified.toSpecs
+
 /-- The Chapter-3 MNIST CNN (no BN): conv 1→32 → relu → conv 32→32 → relu → maxpool
     28→14 → flatten(6272) → dense 6272→512 → relu → dense 512→512 → relu → dense 512→10.
     Trained by `MainMnistCnnVerified`; its math VJP is proven in `Proofs/SpecVJP.lean`

@@ -984,6 +984,12 @@ lean_exe «mnist-mlp-verified» where
   root := `apps.mnist.MainMnistMlpVerified
   moreLinkArgs := ireeLink
 
+-- Width-parametric MNIST MLP: `mnist-mlp-grid <d₁> <d₂> [epochs]` renders + trains
+-- the 784→d₁→d₂→10 MLP on the faithful verified StableHLO (the size-sweep demo).
+lean_exe «mnist-mlp-grid» where
+  root := `apps.mnist.MainMnistMlpGrid
+  moreLinkArgs := ireeLink
+
 -- Chapter 3 (low precision): fp8 (E4M3) MLP training on the SAME verified StableHLO.
 -- fp32 master, per-column weight quant + per-tensor input, fp32 accumulate.
 -- fp8 weights+input, fp32 intermediates. See MainMnistMlpE4M3Verified.lean.
