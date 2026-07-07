@@ -56,3 +56,7 @@ import LeanMlir.Proofs.LipschitzCert
 -- documents them. IRPrint.lean is deliberately left out: its file-writing
 -- #evals run at elaboration time (use `lake env lean …/IRPrint.lean`).
 import LeanMlir.Proofs.IR
+-- Spec→math ties (rungs B/C/E). Also a Certs root + audited in
+-- tests/AuditAxioms.lean since 2026-07-07: it rotted while orphaned
+-- from every target (the mnv2 6→17-block spec promotion broke its rfl tie).
+import LeanMlir.Proofs.SpecVJP

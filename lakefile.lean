@@ -759,7 +759,14 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.AdjointChainResidual,
              `LeanMlir.Proofs.GeluLipschitz,
              `LeanMlir.Proofs.TreeReduceBridge,
-             `LeanMlir.Proofs.Cifar8ChainCert]
+             `LeanMlir.Proofs.Cifar8ChainCert,
+             -- Spec→math ties (rungs B/C/E): the one proof file that imports the
+             -- trainer side (VerifiedNets), so the `denote spec.layers = <proven
+             -- forward> := rfl` ties break when a spec drifts. It sat OUTSIDE
+             -- every build target and silently rotted when mobilenetv2Verified
+             -- was promoted 6→17 blocks (fixed 2026-07-07, mnv2 rung demoted to
+             -- representative) — a root here so CI re-elaborates it.
+             `LeanMlir.Proofs.SpecVJP]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

@@ -19,6 +19,11 @@ on:
       - 'lean-toolchain'
       - 'lake-manifest.json'
       - '.github/workflows/certs.yml'
+      # SpecVJP's rfl ties break when a spec's layer list drifts — the exact
+      # failure the corpus must catch on the push that causes it, not nightly
+      # (mnv2 6→17-block promotion rotted the orphaned SpecVJP for weeks).
+      - 'LeanMlir/VerifiedNets.lean'
+      - 'LeanMlir/VerifiedSpec.lean'
   pull_request:
     paths:
       - 'LeanMlir/Proofs/**'
@@ -27,6 +32,8 @@ on:
       - 'lean-toolchain'
       - 'lake-manifest.json'
       - '.github/workflows/certs.yml'
+      - 'LeanMlir/VerifiedNets.lean'
+      - 'LeanMlir/VerifiedSpec.lean'
   schedule:
     - cron: '17 8 * * *'   # nightly, 08:17 UTC (off the top-of-hour rush)
   workflow_dispatch:

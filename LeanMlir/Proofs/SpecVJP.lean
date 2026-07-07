@@ -345,17 +345,21 @@ theorem cifarBnVerified_fwd_faithful (epsStr : String)
   exact cifarBnFwdGraph_faithful (h := 8) (w := 8) epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
           W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ W₆ b₆ W₇ b₇ x
 
-/-! ## Rung B/C (ch7 MobileNetV2): the spec ↔ the **full** strided render
+/-! ## Rung B/C (ch7 MobileNetV2, representative): the strided 6-block witness
 
-The first imagenette net to get the *full faithful* B/C (not the representative tie):
-`denoteMobilenet` maps `mobilenetv2Verified.layers` — the real 10-entry layer list the
-trainer runs (stem-s2 → 6 inverted-residual blocks `[16→64→24, 24→96→24, 24→96→32,
-32→128→32, 32→128→64, 64→256→64]` with 4 stride-2 depthwise downsamples 224→7 and 2
-stride-1 skips → 1×1 conv-bn-relu6 head → GAP → dense) — to `mobilenetv2Forward_full`, the
-faithful 6-block composition built in `Proofs/MobileNetV2.lean` from the strided
-inverted-residual VJP infrastructure (`invresBodyStrided`, `flatConvStride2`,
-`depthwiseStride2Flat`). The `rfl` tie is drift-sensitive: change any block's `[t,c,n,s]`
-and the match stops reducing.
+Representative tie, like the other imagenette nets below: `denoteMobilenet` maps
+`mobilenetv2RepLayers` — the 10-entry strided 6-block layer list (stem-s2 → 6
+inverted-residual blocks `[16→64→24, 24→96→24, 24→96→32, 32→128→32, 32→128→64,
+64→256→64]` with 4 stride-2 depthwise downsamples 224→7 and 2 stride-1 skips → 1×1
+conv-bn-relu6 head → GAP → dense) — to `mobilenetv2Forward_full`, the faithful 6-block
+composition built in `Proofs/MobileNetV2.lean` from the strided inverted-residual VJP
+infrastructure (`invresBodyStrided`, `flatConvStride2`, `depthwiseStride2Flat`). The
+`rfl` tie is drift-sensitive: change any block's `[t,c,n,s]` and the match stops reducing.
+
+**History note**: this rung used to tie `mobilenetv2Verified.layers` itself — true while
+the committed spec WAS the 6-block net. The spec was promoted to the full-paper 17-block
+net (e9cd890), so the tie is now representative (matching the spec's own docstring in
+`VerifiedNets.lean`); the full-paper tie is the deferred upgrade (see planning doc).
 
 The honest chain-rule fold is carried by the new strided inverted-residual block witness
 `Proofs.invresBodyStrided_has_vjp_at` (expand-SAME → stride-2 depthwise → project-SAME,
@@ -369,9 +373,20 @@ is SCALAR-global (one γ/β over the whole `c·h·w` map per example); the rende
 per-channel `[c]` BN. Topology, channel flow, stride schedule, relu6 sites and residual
 placement are all faithful — only BN granularity differs. -/
 
-/-- Math denotation of the MobileNetV2 spec: the real 10-entry layer list denotes to
-    `mobilenetv2Forward_full` (the full strided 6-block render). Any other list is not the
-    net (`0`), making the tie below drift-sensitive. -/
+/-- The representative MobileNetV2 layer list: the strided 6-block net that
+    `mobilenetv2Forward_full` actually renders and proves. A prefix-shaped slice of the
+    committed full-paper `mobilenetv2Verified` spec (17 blocks, 210 tensors), whose full
+    tie is deferred. -/
+def mobilenetv2RepLayers : List VLayer :=
+  [.convBn 3 16 3 2,
+   .invertedResidual 16 64 24 2, .invertedResidual 24 96 24 1,
+   .invertedResidual 24 96 32 2, .invertedResidual 32 128 32 1,
+   .invertedResidual 32 128 64 2, .invertedResidual 64 256 64 2,
+   .convBn 64 128 1 1, .globalAvgPool, .dense 128 10]
+
+/-- Math denotation of the representative MobileNetV2 spec: the 10-entry strided 6-block
+    layer list denotes to `mobilenetv2Forward_full`. Any other list is not the net (`0`),
+    making the tie below drift-sensitive. -/
 noncomputable def denoteMobilenet (layers : List VLayer)
     (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
     (We1 : Kernel4 64 16 1 1) (be1 : Vec 64) (εe1 γe1 βe1 : ℝ)
@@ -411,9 +426,9 @@ noncomputable def denoteMobilenet (layers : List VLayer)
         Wh bh εh γh βh Wfc bfc
   | _ => fun _ => 0
 
-/-- **Spec ≡ the full proven render.** `mobilenetv2Verified`'s denotation is exactly
-    `mobilenetv2Forward_full` (the strided 6-block net) — by `rfl`, drift-sensitive. -/
-theorem mobilenetv2Verified_denote_eq
+/-- **Spec ≡ the representative proven render.** `mobilenetv2RepLayers`'s denotation is
+    exactly `mobilenetv2Forward_full` (the strided 6-block net) — by `rfl`, drift-sensitive. -/
+theorem mobilenetv2Rep_denote_eq
     (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
     (We1 : Kernel4 64 16 1 1) (be1 : Vec 64) (εe1 γe1 βe1 : ℝ)
     (Wd1 : DepthwiseKernel 64 3 3) (bd1 : Vec 64) (εd1 γd1 βd1 : ℝ)
@@ -435,7 +450,7 @@ theorem mobilenetv2Verified_denote_eq
     (Wp6 : Kernel4 64 256 1 1) (bp6 : Vec 64) (εp6 γp6 βp6 : ℝ)
     (Wh : Kernel4 128 64 1 1) (bh : Vec 128) (εh γh βh : ℝ)
     (Wfc : Mat 128 10) (bfc : Vec 10) :
-    denoteMobilenet mobilenetv2Verified.layers Ws bs εs γs βs
+    denoteMobilenet mobilenetv2RepLayers Ws bs εs γs βs
         We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1
         We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2
         We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3
@@ -452,10 +467,10 @@ theorem mobilenetv2Verified_denote_eq
         We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6
         Wh bh εh γh βh Wfc bfc := rfl
 
-/-- **The spec carries the math.** The full MobileNetV2 spec's denotation has a VJP — the
-    canonical `pdiv`-derived witness (the honest strided chain-rule fold is
-    `Proofs.mobilenetv2_full_has_vjp_at`). -/
-noncomputable def mobilenetv2Verified_has_vjp
+/-- **The representative spec carries the math.** The strided 6-block MobileNetV2 spec's
+    denotation has a VJP — the canonical `pdiv`-derived witness (the honest strided
+    chain-rule fold is `Proofs.mobilenetv2_full_has_vjp_at`). -/
+noncomputable def mobilenetv2Rep_has_vjp
     (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
     (We1 : Kernel4 64 16 1 1) (be1 : Vec 64) (εe1 γe1 βe1 : ℝ)
     (Wd1 : DepthwiseKernel 64 3 3) (bd1 : Vec 64) (εd1 γd1 βd1 : ℝ)
@@ -477,7 +492,7 @@ noncomputable def mobilenetv2Verified_has_vjp
     (Wp6 : Kernel4 64 256 1 1) (bp6 : Vec 64) (εp6 γp6 βp6 : ℝ)
     (Wh : Kernel4 128 64 1 1) (bh : Vec 128) (εh γh βh : ℝ)
     (Wfc : Mat 128 10) (bfc : Vec 10) :
-    HasVJP (denoteMobilenet mobilenetv2Verified.layers Ws bs εs γs βs
+    HasVJP (denoteMobilenet mobilenetv2RepLayers Ws bs εs γs βs
         We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1
         We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2
         We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3
@@ -486,7 +501,7 @@ noncomputable def mobilenetv2Verified_has_vjp
         We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6
         Wh bh εh γh βh Wfc bfc) where
   backward x dy i :=
-    ∑ j : Fin 10, pdiv (denoteMobilenet mobilenetv2Verified.layers Ws bs εs γs βs
+    ∑ j : Fin 10, pdiv (denoteMobilenet mobilenetv2RepLayers Ws bs εs γs βs
         We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1
         We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2
         We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3
@@ -499,9 +514,10 @@ noncomputable def mobilenetv2Verified_has_vjp
 
 /-! ## Rung B/C (representative): the imagenette nets' proof witnesses
 
-The trainer's full spec for each imagenette net is deeper than the audited proof witness;
-the *full* B/C (spec ↔ the real rendered net) is mnv2 only (above — strided 6-block). For
-the rest we tie the **representative** witness — the smaller skeleton the proof actually
+The trainer's full spec for each imagenette net is deeper than the audited proof witness —
+mnv2 included since its spec's promotion to the full-paper 17-block net (its rung, above,
+ties the strided 6-block witness). For each net we tie the **representative** witness — the
+smaller skeleton the proof actually
 proves (`<net>Forward` + the audited `<net>_has_vjp` apex) — to a readable representative
 `VLayer` list, exactly like ch2–5: `denote <rep layers> = <net>Forward := rfl` (rung B,
 drift-sensitive to the block sequence) + canonical `HasVJP` witness (rung C; the honest fold
@@ -741,17 +757,18 @@ noncomputable def r34Rep_has_vjp {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
       stem mp ids1 down2 ids2 down3 ids3 down4 ids4 gap dense) x i j * dy j
   correct _ _ _ := rfl
 
-/-! ## Rung E (ch7 mnv2): the spec's math ↔ the **generated** MLIR (full strided render)
+/-! ## Rung E (ch7 mnv2, representative): the spec's math ↔ the **generated** MLIR
 
-The forward graph `mobilenetv2FwdGraphFull` (StableHLO) — the full strided 6-block render —
-denotes the spec's forward: `den graph = mobilenetv2Forward_full` (`mobilenetv2FwdGraphFull_faithful`)
-composed with `mobilenetv2Verified_denote_eq` gives `den graph = denoteMobilenet spec.layers`.
-So the generated StableHLO provably computes the spec's function — the full A+B+C+E ladder for
-mnv2 (the one imagenette net with the real-render tie). E is `simp`-based, so it does NOT hit the
+The forward graph `mobilenetv2FwdGraphFull` (StableHLO) — the strided 6-block render —
+denotes the representative spec's forward: `den graph = mobilenetv2Forward_full`
+(`mobilenetv2FwdGraphFull_faithful`) composed with `mobilenetv2Rep_denote_eq` gives
+`den graph = denoteMobilenet mobilenetv2RepLayers`. So the generated StableHLO provably
+computes the representative spec's function — the A+B+C+E ladder at the 6-block witness
+(the committed 17-block spec's E is the deferred upgrade). E is `simp`-based, so it does NOT hit the
 VJP-fold's concrete-dim `isDefEq` wall. (Forward only; the backward graph + the `.mlir` re-route
 off the committed `tests/Test*` string emitter are the remaining E work — see planning doc.) -/
 open Proofs.StableHLO in
-theorem mobilenetv2Verified_fwd_faithful
+theorem mobilenetv2Rep_fwd_faithful
     (epsStr : String)
     (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
     (We1 : Kernel4 64 16 1 1) (be1 : Vec 64) (εe1 γe1 βe1 : ℝ)
@@ -776,9 +793,9 @@ theorem mobilenetv2Verified_fwd_faithful
     (Wfc : Mat 128 10) (bfc : Vec 10)
     (x : Vec (3 * 224 * 224)) :
     den (mobilenetv2FwdGraphFull epsStr Ws bs εs γs βs We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3 We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4 We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5 We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6 Wh bh εh γh βh Wfc bfc x)
-      = denoteMobilenet mobilenetv2Verified.layers Ws bs εs γs βs We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3 We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4 We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5 We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6 Wh bh εh γh βh Wfc bfc x :=
+      = denoteMobilenet mobilenetv2RepLayers Ws bs εs γs βs We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3 We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4 We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5 We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6 Wh bh εh γh βh Wfc bfc x :=
   (mobilenetv2FwdGraphFull_faithful epsStr Ws bs εs γs βs We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3 We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4 We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5 We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6 Wh bh εh γh βh Wfc bfc x).trans
-    (congrFun (mobilenetv2Verified_denote_eq Ws bs εs γs βs We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3 We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4 We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5 We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6 Wh bh εh γh βh Wfc bfc).symm x)
+    (congrFun (mobilenetv2Rep_denote_eq Ws bs εs γs βs We1 be1 εe1 γe1 βe1 Wd1 bd1 εd1 γd1 βd1 Wp1 bp1 εp1 γp1 βp1 We2 be2 εe2 γe2 βe2 Wd2 bd2 εd2 γd2 βd2 Wp2 bp2 εp2 γp2 βp2 We3 be3 εe3 γe3 βe3 Wd3 bd3 εd3 γd3 βd3 Wp3 bp3 εp3 γp3 βp3 We4 be4 εe4 γe4 βe4 Wd4 bd4 εd4 γd4 βd4 Wp4 bp4 εp4 γp4 βp4 We5 be5 εe5 γe5 βe5 Wd5 bd5 εd5 γd5 βd5 Wp5 bp5 εp5 γp5 βp5 We6 be6 εe6 γe6 βe6 Wd6 bd6 εd6 γd6 βd6 Wp6 bp6 εp6 γp6 βp6 Wh bh εh γh βh Wfc bfc).symm x)
 
 /-! ## Rung E (ch9 convnext, representative): the spec's math ↔ the generated MLIR
 

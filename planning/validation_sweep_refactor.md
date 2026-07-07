@@ -85,8 +85,10 @@ Ladder per net (A=shape `#guard` · B/C=spec→math+VJP · E=spec→generated-ML
 | 9 | convnext | ✅ | rep | ✅ rep (built `layerScaleF` op) | scalar LN |
 | 10 | vit | ✅ | rep (scalar-LN) | 🧱 needs **attention ops** | the wall (only `softmaxRowF` exists) |
 
-All B/C + E ties live in `Proofs/SpecVJP.lean` (NOT in the build aggregator — check with
-`lake env lean LeanMlir/Proofs/SpecVJP.lean`); the forward graphs + faithfulness live in
+All B/C + E ties live in `Proofs/SpecVJP.lean` (since 2026-07-07 a `Certs` root + imported
+by `LeanMlir.lean` + audited in `tests/AuditAxioms.lean` — it was originally outside every
+build target and silently broke at the mnv2 6→17-block spec promotion; its mnv2 rung is now
+the representative 6-block witness, `mobilenetv2RepLayers`); the forward graphs + faithfulness live in
 `Proofs/StableHLO.lean`. Commits `8e9ae0b … 60d5ed6` on `main`, **NOT pushed** (~86 ahead).
 
 **Key lessons (the expensive map-making this session bought):**

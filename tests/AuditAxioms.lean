@@ -159,6 +159,7 @@ import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
 import LeanMlir.Proofs.MuonGeometry
 import LeanMlir.Proofs.MuonNewtonSchulz
+import LeanMlir.Proofs.SpecVJP
 
 open Proofs
 
@@ -3307,3 +3308,31 @@ open Proofs
 #print axioms Proofs.MuonNewtonSchulz.qScalar_half_gt_one
 #print axioms Proofs.MuonNewtonSchulz.qScalar_not_le_one
 #print axioms Proofs.MuonNewtonSchulz.qScalar_iterate_band_half
+
+-- Spec→math ties (SpecVJP.lean, rungs B/C/E): the readable VerifiedNetSpec each trainer
+-- runs denotes the proven forward (`denote spec.layers = <forward> := rfl`, drift-sensitive
+-- — a spec/layer-list drift breaks these at elaboration, which is the point: this file sat
+-- outside every build target and silently rotted at the mnv2 6→17-block spec promotion,
+-- fixed 2026-07-07 by demoting the mnv2 rung to the representative 6-block witness).
+-- ch1–5 nets tie the COMMITTED spec's layers; the imagenette nets tie representative lists.
+#print axioms linearVerified_denote_eq
+#print axioms linearVerified_has_vjp_correct
+#print axioms linearVerified_fwd_faithful
+#print axioms linearVerified_lossCot_isCEgrad
+#print axioms mlpVerified_denote_eq
+#print axioms mlpVerified_has_vjp_correct
+#print axioms mlpVerified_fwd_faithful
+#print axioms mlpVerified_back_faithful
+#print axioms cnnVerified_denote_eq
+#print axioms cnnVerified_fwd_faithful
+#print axioms cifarVerified_denote_eq
+#print axioms cifarVerified_fwd_faithful
+#print axioms cifarBnVerified_denote_eq
+#print axioms cifarBnVerified_fwd_faithful
+#print axioms mobilenetv2Rep_denote_eq
+#print axioms mobilenetv2Rep_fwd_faithful
+#print axioms efficientnetRep_denote_eq
+#print axioms convnextRep_denote_eq
+#print axioms convnextRep_fwd_faithful
+#print axioms vitRep_denote_eq
+#print axioms r34Rep_denote_eq
