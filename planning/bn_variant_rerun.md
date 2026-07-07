@@ -47,7 +47,7 @@ lake build resnet50-imagenet
 ./.lake/build/bin/resnet50-imagenet rsb-faithful      # writes generated_..._rsbfaithful.py
 #    NB: the binary then tries to auto-run training with the SYSTEM python
 #    (no jaxlib) and errors — that's harmless; we only want the generated .py.
-#    (The old `LEAN_MLIR_RSB_FAITHFUL=1 ./...` env form still works too.)
+#    (Recipe selection is the positional arg: `resnet50-imagenet rsb-faithful`.)
 
 # 2. Confirm the BN momentum is compensated (NOT 0.99):
 grep -n "def _bn" .lake/build/generated_resnet50_imagenet_rsbfaithful.py
@@ -99,5 +99,5 @@ min/epoch × 100 + 3 cooldowns). Logs: `/tmp/r50_a3_rsbfaithful_master.log`
 - Don't run the Lean binary directly for training — it uses the system anaconda
   python. Training runs the generated `.py` via the venv python, which the
   supervise script does (`$VENV_PY -u $PY`).
-- `LEAN_MLIR_RSB_FAITHFUL=1` (env) and `resnet50-imagenet rsb-faithful` (CLI)
-  select the same config; the supervise script still sets the env var.
+- `resnet50-imagenet rsb-faithful` (positional recipe arg) selects the config;
+  the legacy `LEAN_MLIR_*` env flags have been retired.

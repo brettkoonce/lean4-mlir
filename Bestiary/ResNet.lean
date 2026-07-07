@@ -47,7 +47,7 @@ epochs, train @160 / eval @224). That matches the classic torchvision
 reference (76.0) and lands ~1.4 pt under the RSB-A3 paper's 78.1 — the residual
 is running-BN / RandAugment reimplementation slop. Config
 `resnet50ImagenetConfigRSBFaithful` in `jax/MainResnet50Imagenet.lean`
-(`LEAN_MLIR_RSB_FAITHFUL=1`).
+(recipe: `resnet50-imagenet rsb-faithful`).
 
 All four share the same stem (7×7 stride-2 conv + 3×3 stride-2 max
 pool) and GAP + single-FC head. The basic-block variant tops out at

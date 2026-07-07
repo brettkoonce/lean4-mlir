@@ -86,7 +86,7 @@ def resnet50ImagenetConfig : TrainConfig where
     lr 8e-3@2048 → 0.002@512, RandAugment m7→m6, NO repeated-aug (n0), NO stochastic
     depth (sd0.0), NO model-EMA, 100 ep, 160/224 split. Mixup 0.1 / CutMix 1.0,
     wd 0.02, BCE, geo-RA mstd0.5-inc1 all carry over from A2.
-    Selected with `LEAN_MLIR_SHORT=1`; writes a separate `_short.py`. -/
+    The `short` recipe arg; writes a separate `_short.py`. -/
 def resnet50ImagenetConfigShort : TrainConfig :=
   { resnet50ImagenetConfig with
       learningRate  := 0.002    -- RSB-A3 lr 8e-3 @ batch 2048, linear-scaled to 512
@@ -118,25 +118,40 @@ def resnet50ImagenetConfigAdamProbe : TrainConfig :=
     paper's **8e-3 @ bs2048** (NOT the 512-scaled 2e-3), and the timm no_weight_decay
     skip-list (BN γ/β + biases) — the other faithful-reproduction lever — is on.
     Grad-accum mechanics are GPU-validated (see `planning/grad_accum.md` §Status);
-    this config is the accuracy run. Selected with `LEAN_MLIR_RSB_FAITHFUL=1`;
-    writes a separate `_rsbfaithful.py`. -/
+    this config is the accuracy run. The `rsb-faithful` recipe arg; writes a
+    separate `_rsbfaithful.py`. -/
 def resnet50ImagenetConfigRSBFaithful : TrainConfig :=
   { resnet50ImagenetConfigShort with
       learningRate      := 0.008   -- RSB-A3 lr @ bs2048 (NOT the 512-scaled 0.002)
       gradAccumSteps    := 4       -- 512 micro × 4 = effective bs2048 on 4×16GB
       wdExcludeNormBias := true }  -- timm no_weight_decay: BN γ/β + biases skip wd
 
+/-- **True bs2048** — the `rsb-faithful` recipe with the gradient-accumulation
+    crutch removed: one single-forward batch of 2048 (`gradAccumSteps := 1`), which
+    needs a big-memory card (**~80 GB**; a 48 GB card is borderline/OOM — see
+    `project_r50_a3_lowval_diagnostic`). This eliminates the Ghost-BN approximation
+    of the accum path (each accum micro-step normalized over its own 512 rather than
+    the full 2048), so LAMB and BN both see a genuine 2048-sample batch — the cleanest
+    reproduction of timm's bs2048.
+
+    BN CAVEAT: on a single device this normalizes over the full 2048 (one running-stat
+    update/step). That is a LARGER BN batch than timm's *per-GPU* BN (timm trained
+    multi-GPU, so its per-GPU BN batch was 2048/n_gpu). So this is "clean big-batch BN,"
+    not a literal match of timm's per-GPU BN — a deliberate, documented trade. Same lr
+    0.008@2048, wdExcludeNormBias, everything else identical to `rsb-faithful`.
+    Selected with recipe arg `true-2048`. -/
+def resnet50ImagenetConfigTrue2048 : TrainConfig :=
+  { resnet50ImagenetConfigShort with
+      learningRate      := 0.008   -- RSB-A3 lr @ bs2048 (native, no scaling)
+      batchSize         := 2048    -- true single-forward bs2048 (needs ~80 GB; no grad-accum)
+      wdExcludeNormBias := true }  -- timm no_weight_decay: BN γ/β + biases skip wd
+      -- gradAccumSteps stays at the default 1: no accumulation.
+
 /-- A named training recipe: a `TrainConfig`, its generated-file name, and a
     one-line description. Recipe selection is a positional CLI arg
     (`resnet50-imagenet <recipe> [data_dir]`), listed by `--help` — replacing the
     old undiscoverable `LEAN_MLIR_*` env flags (still honored as a fallback). -/
-structure R50Recipe where
-  name : String
-  cfg  : TrainConfig
-  out  : String
-  desc : String
-
-def resnet50ImagenetRecipes : List R50Recipe := [
+def resnet50ImagenetRecipes : List Recipe := [
   { name := "default",      cfg := resnet50ImagenetConfig,
     out := "generated_resnet50_imagenet.py",
     desc := "RSB-A2, 300 epochs, bs512 (the full recipe)" },
@@ -146,39 +161,13 @@ def resnet50ImagenetRecipes : List R50Recipe := [
   { name := "rsb-faithful", cfg := resnet50ImagenetConfigRSBFaithful,
     out := "generated_resnet50_imagenet_rsbfaithful.py",
     desc := "RSB-A3 + gradient accumulation -> effective bs2048 (LAMB's design batch)" },
+  { name := "true-2048",    cfg := resnet50ImagenetConfigTrue2048,
+    out := "generated_resnet50_imagenet_true2048.py",
+    desc := "RSB-A3 at a real single-forward bs2048 (no grad-accum; needs ~80GB)" },
   { name := "adam-probe",   cfg := resnet50ImagenetConfigAdamProbe,
     out := "generated_resnet50_imagenet_adamprobe.py",
     desc := "A3 optimizer probe: AdamW + no-weight-decay on norm/bias" }
 ]
 
-/-- Deprecated env-flag fallback so the existing `supervise_*.sh` scripts keep
-    working. A CLI recipe arg takes precedence; this only fires when none is given. -/
-private def r50RecipeFromEnv : IO (Option String) := do
-  if (← IO.getEnv "LEAN_MLIR_RSB_FAITHFUL").isSome then return some "rsb-faithful"
-  if (← IO.getEnv "LEAN_MLIR_ADAM_PROBE").isSome   then return some "adam-probe"
-  if (← IO.getEnv "LEAN_MLIR_SHORT").isSome        then return some "short"
-  return none
-
-def main (args : List String) : IO Unit := do
-  if args.any (fun a => a == "--help" || a == "-h") then
-    IO.println "usage: resnet50-imagenet [recipe] [data_dir]\n"
-    IO.println "recipes (default if omitted: \"default\"):"
-    for r in resnet50ImagenetRecipes do
-      let pad := String.mk (List.replicate (14 - r.name.length) ' ')
-      IO.println s!"  {r.name}{pad}{r.desc}"
-    IO.println "\ndata_dir defaults to \"data/imagenet\"."
-    IO.println "(legacy LEAN_MLIR_SHORT / _ADAM_PROBE / _RSB_FAITHFUL env flags still honored)"
-    return
-  -- Recipe: a positional arg matching a known recipe wins; else the deprecated
-  -- env flags; else "default". The first remaining non-flag arg is the data dir.
-  let cliName := args.find? (fun a => resnet50ImagenetRecipes.any (·.name == a))
-  let envName ← r50RecipeFromEnv
-  let name := (cliName.orElse (fun _ => envName)).getD "default"
-  match resnet50ImagenetRecipes.find? (·.name == name) with
-  | none   => IO.eprintln s!"unknown recipe '{name}' — run with --help for the list"
-  | some r =>
-    let dataDir := (args.filter (fun a => a != r.name && !a.startsWith "-")).head?
-                     |>.getD "data/imagenet"
-    IO.println s!"[resnet50-imagenet] recipe '{r.name}': {r.desc}"
-    IO.println s!"[resnet50-imagenet]   -> {r.out}  (data: {dataDir})"
-    runJax resnet50Imagenet r.cfg .imagenet dataDir r.out
+def main (args : List String) : IO Unit :=
+  runRecipeMain "resnet50-imagenet" resnet50Imagenet .imagenet resnet50ImagenetRecipes args

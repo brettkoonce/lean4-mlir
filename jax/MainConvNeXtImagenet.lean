@@ -11,12 +11,9 @@ import Jax
     1×1 expand/project are GEMM-like (big bf16 win) — see
     reference_bf16_depthwise_4060ti. Channel-LN / GELU stay fp32.
 
-    DEVIATIONS from canonical ConvNeXt (both deliberate, to reuse the existing
-    validated layer types):
-      * stem is `convBn` (BN + a ReLU) rather than conv+LN — param-equivalent,
-        mirrors the IREE spec; the extra stem ReLU is a minor variant.
-      * stem is convBn (above) — the only remaining gap; EMA + stochastic
-        depth are now wired (useEMA + dropPath below). -/
+    Architecture is canonical ConvNeXt-T with a faithful patchify stem (4×4 s4
+    conv → channel-LN, no BN/ReLU — see the NetSpec below); EMA + stochastic depth
+    wired. No remaining architectural deviation from the paper. -/
 
 def convNeXtTinyImagenet : NetSpec where
   name := "ConvNeXt-T (ImageNet, bf16)"
@@ -39,14 +36,14 @@ def convNeXtTinyImagenet : NetSpec where
     stack on (EMA + stochastic depth), still at the 80ep tier to validate those
     features train cleanly before the ~80-hour 300ep run (bump EPOCHS to 300 +
     re-emit for the real run). ConvNeXt needs AdamW, not SGD: decoupled weight
-    decay 0.05, peak LR 4e-4 at batch 256 (≈ the 4e-3@4096 official LR linearly
-    scaled), 20-epoch warmup + cosine, label smoothing 0.1, grad-clip 1.0 (cheap
-    insurance — unlocked the ViT run). bf16 + bf16 conv. EMA (decay 0.9999) +
-    stochastic depth (dropPath 0.1, the ConvNeXt-T paper value) now on. Geometric
-    RandAugment (N=2, M=9, the ConvNeXt recipe value) is now on too — the full
-    RandAugment(N,M) sampler over the color+geometric op set (shear/rotate via
-    ImageProjectiveTransformV3), not the old color-only "lite". Mixup/cutmix
-    still off (flip those flags when chasing the very full paper recipe).
+    decay 0.05 (excluding norm/bias/LayerScale — timm no_weight_decay), peak LR
+    2.5e-4 at batch 256 (= the 4e-3@4096 official LR linearly scaled, 4e-3×256/4096),
+    20-epoch warmup + cosine, label smoothing 0.1, grad-clip 1.0 (cheap insurance —
+    unlocked the ViT run). bf16 + bf16 conv. EMA (decay 0.9999) + stochastic depth
+    (dropPath 0.1, the ConvNeXt-T paper value) on. Geometric RandAugment (N=2, M=9,
+    the ConvNeXt recipe value) on — the full RandAugment(N,M) sampler over the
+    color+geometric op set (shear/rotate via ImageProjectiveTransformV3). Mixup α0.8
+    + CutMix α1.0 + Random Erasing p0.25 on — the full DeiT-style pack.
 
     TODO(geo-ra): recipe CHANGE — adds geometric RandAugment vs the prior
     no-RandAugment 80ep run that hit 75.93%. The blueprint named this as the
@@ -54,11 +51,12 @@ def convNeXtTinyImagenet : NetSpec where
     re-eval (eval_convnext_full50k.py, supervise script unchanged) for fresh
     numbers; RandAugment is CPU-side tf.data — watch input throughput. -/
 def convNeXtTinyImagenetConfig : TrainConfig where
-  learningRate   := 4e-4
+  learningRate   := 2.5e-4  -- 4e-3@bs4096 official LR linearly scaled to bs256
   batchSize      := 256
   epochs         := 80
   useAdam        := true
   weightDecay    := 0.05
+  wdExcludeNormBias := true  -- timm no_weight_decay: skip norm γ/β, biases, LayerScale γ (1-D params)
   cosineDecay    := true
   warmupEpochs   := 20      -- ConvNeXt paper warmup (was 5)
   augment        := true
@@ -82,14 +80,19 @@ def convNeXtTinyImagenetConfig : TrainConfig where
 #eval convNeXtTinyImagenet.validate!
 
 /-- Paper-faithful full run: identical recipe at the 300-epoch schedule (where
-    Mixup/CutMix actually pay off). Selected with `LEAN_MLIR_FULL=1`; writes a
-    separate `_full.py`. -/
+    Mixup/CutMix actually pay off). Selected with the `full` recipe arg. -/
 def convNeXtTinyImagenetConfigFull : TrainConfig :=
   { convNeXtTinyImagenetConfig with epochs := 300 }
 
-def main (args : List String) : IO Unit := do
-  let full := (← IO.getEnv "LEAN_MLIR_FULL").isSome
-  let cfg := if full then convNeXtTinyImagenetConfigFull else convNeXtTinyImagenetConfig
-  let out := if full then "generated_convnext_tiny_imagenet_full.py"
-                     else "generated_convnext_tiny_imagenet.py"
-  runJax convNeXtTinyImagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out
+def convNeXtTinyImagenetRecipes : List Recipe := [
+  { name := "default", cfg := convNeXtTinyImagenetConfig,
+    out := "generated_convnext_tiny_imagenet.py",
+    desc := "80-epoch validation tier (full aug pack + geometric RandAugment)" },
+  { name := "full",    cfg := convNeXtTinyImagenetConfigFull,
+    out := "generated_convnext_tiny_imagenet_full.py",
+    desc := "paper-faithful 300-epoch run (where Mixup/CutMix pay off)" }
+]
+
+def main (args : List String) : IO Unit :=
+  runRecipeMain "convnext-tiny-imagenet" convNeXtTinyImagenet .imagenet
+    convNeXtTinyImagenetRecipes args

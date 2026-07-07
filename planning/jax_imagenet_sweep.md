@@ -84,29 +84,31 @@ modern recipe** is the proposed first concrete step (basic-block vs bottleneck, 
 ## Validation vs full (subrun) selector
 
 Each short-schedule trainer (mnv2 / enet / convnext) now carries BOTH configs side by side:
-the committed default is the quick validation tier; `LEAN_MLIR_FULL=1` selects the paper-faithful
+the committed default is the quick validation tier; the `full` recipe arg selects the paper-faithful
 `…ConfigFull` (derived via record-update, so no recipe duplication) and emits a separate
 `generated_<net>_full.py`. So a quick subrun and the multi-day official run never clobber each
-other (separate .py + checkpoints), and default behaviour/filenames are unchanged.
+other (separate .py + checkpoints), and default behaviour/filenames are unchanged. (Recipe selection
+is a positional CLI arg via the shared `runRecipeMain` helper — the old `LEAN_MLIR_*` env flags are
+retired; run `<exe> --help` for the list.)
 
-| net | default (subrun) | `LEAN_MLIR_FULL=1` |
+| net | default (subrun) | `full` recipe arg |
 |---|---|---|
 | MobileNetV2 | 90ep | **350ep** |
-| EfficientNet-B0 | 80ep, lr 0.045 | **350ep, lr 0.01** (stable peak) |
+| EfficientNet-B0 | 80ep, lr 0.016 | **350ep, lr 0.01** (stable peak) |
 | ConvNeXt-T | 80ep | **300ep** |
 
 ```bash
-./efficientnet-b0-imagenet                 # 80ep validation subrun -> generated_..._imagenet.py
-LEAN_MLIR_FULL=1 ./efficientnet-b0-imagenet # 350ep official run    -> generated_..._imagenet_full.py
+efficientnet-b0-imagenet         # 80ep validation subrun -> generated_..._imagenet.py
+efficientnet-b0-imagenet full    # 350ep official run     -> generated_..._imagenet_full.py
 ```
-ViT and r34 default to their paper schedule and take the *inverse* toggle — `LEAN_MLIR_SHORT=1`
+ViT and r34 default to their paper schedule and take the *inverse* toggle — the `short` recipe arg
 selects a `…ConfigShort` quick subrun (→ `_short.py`): ViT 300→**80** (the proven 65.6% point),
 r34 90→**30**. So every net has a validation/official pair, just named for whichever is non-default.
 
 | net | default | toggle |
 |---|---|---|
-| mnv2 / enet / convnext | short validation | `LEAN_MLIR_FULL=1` → paper |
-| vit / r34 | paper schedule | `LEAN_MLIR_SHORT=1` → subrun |
+| mnv2 / enet / convnext | short validation | `<exe> full` → paper |
+| vit / r34 | paper schedule | `<exe> short` → subrun |
 
 ## The 3 runs to do (non-ViT)
 
@@ -203,6 +205,10 @@ So the paper-faithful ViT re-run is staged and ready. Skip distillation (plain D
 doesn't use it; only DeiT⚗ → 74.5%) and #3.
 
 ## Paper-faithfulness deltas — per net (2026-06-21)
+
+> **SUPERSEDED (2026-07-07):** the canonical, current fidelity ledger for all nets now lives in
+> `planning/paper_faithfulness.md` (fresh hostile audit, code as ground truth, incl. R50 + the
+> 2026-07-07 RandAugment fix + recommended fixes). The section below is kept for run history only.
 
 Audit of each committed imagenet trainer vs its paper recipe. ViT/ConvNeXt use the modern
 AdamW + aug-suite (LayerNorm, no BN); enet/mnv2/r34 use the classic BN-convnet recipes.

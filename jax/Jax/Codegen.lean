@@ -32,19 +32,20 @@ def _aa_blend(a, b, f):  # a,b float32 HWC; returns uint8
     return tf.cast(tf.clip_by_value(a + f * (b - a), 0.0, 255.0), tf.uint8)
 
 def _aa_transform(img, vec):
-    # img uint8 HWC. vec: 8-param projective transform (output->input). NEAREST.
+    # img uint8 HWC. vec: 8-param projective transform (output->input). BILINEAR
+    # (timm's default geometric interpolation; NEAREST was the earlier deviation).
     H = tf.shape(img)[0]; W = tf.shape(img)[1]
     images = tf.expand_dims(tf.cast(img, tf.float32), 0)
     transforms = tf.reshape(tf.cast(vec, tf.float32), [1, 8])
     out = tf.raw_ops.ImageProjectiveTransformV3(
         images=images, transforms=transforms, output_shape=tf.stack([H, W]),
-        fill_value=128.0, interpolation='NEAREST', fill_mode='CONSTANT')
+        fill_value=128.0, interpolation='BILINEAR', fill_mode='CONSTANT')
     return tf.cast(tf.clip_by_value(out[0], 0.0, 255.0), tf.uint8)
 
 def _aa_shear_x(img, lvl):    return _aa_transform(img, [1.0, lvl, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0])
 def _aa_shear_y(img, lvl):    return _aa_transform(img, [1.0, 0.0, 0.0, lvl, 1.0, 0.0, 0.0, 0.0])
-def _aa_translate_x(img, px): return _aa_transform(img, [1.0, 0.0, -px, 0.0, 1.0, 0.0, 0.0, 0.0])
-def _aa_translate_y(img, px): return _aa_transform(img, [1.0, 0.0, 0.0, 0.0, 1.0, -px, 0.0, 0.0])
+def _aa_translate_x(img, pct): return _aa_transform(img, [1.0, 0.0, -pct*tf.cast(tf.shape(img)[1],tf.float32), 0.0, 1.0, 0.0, 0.0, 0.0])  # timm -Rel: fraction of width
+def _aa_translate_y(img, pct): return _aa_transform(img, [1.0, 0.0, 0.0, 0.0, 1.0, -pct*tf.cast(tf.shape(img)[0],tf.float32), 0.0, 0.0])  # timm -Rel: fraction of height
 
 def _aa_rotate(img, deg):
     H = tf.cast(tf.shape(img)[0], tf.float32); W = tf.cast(tf.shape(img)[1], tf.float32)
@@ -56,6 +57,9 @@ def _aa_rotate(img, deg):
 
 def _aa_invert(img):       return 255 - img
 def _aa_solarize(img, thr):return tf.where(img < tf.cast(thr, img.dtype), img, 255 - img)
+def _aa_solarize_add(img, add):  # timm SolarizeAdd: +add to pixels below 128, clip
+    x = tf.cast(img, tf.int32)
+    return tf.cast(tf.where(x < 128, tf.clip_by_value(x + add, 0, 255), x), tf.uint8)
 def _aa_posterize(img, bits):
     shift = tf.cast(8 - bits, img.dtype)   # match img (uint8) — right_shift needs same dtype
     return tf.bitwise.left_shift(tf.bitwise.right_shift(img, shift), shift)
@@ -106,10 +110,11 @@ def _aa_sharpness(img, f):
 # False (standard RandAugment / AutoAugment mappings).
 def _aa_enh(m): return (1.0 + tf.where(tf.random.uniform([]) < 0.5, 1.0, -1.0) * (m/_AA_MAX)*0.9) if _RA_INC else ((m/_AA_MAX)*1.8 + 0.1)
 def _aa_she(m): return (m/_AA_MAX)*0.3
-def _aa_trn(m): return (m/_AA_MAX)*100.0
+def _aa_trn(m): return (m/_AA_MAX)*0.45   # timm translate_pct=0.45 (fraction of dim, applied in _aa_translate_*)
 def _aa_rot(m): return (m/_AA_MAX)*30.0
 def _aa_pos(m): return (int(4 - (m/_AA_MAX)*4) if _RA_INC else int((m/_AA_MAX)*4))
 def _aa_sol(m): return (int(256 - (m/_AA_MAX)*256) if _RA_INC else int((m/_AA_MAX)*256))
+def _aa_sad(m): return int((m/_AA_MAX)*110)   # timm SolarizeAdd: add in [0,110], unsigned, inc-invariant
 
 _AA_OPS = {
   'ShearX': (_aa_shear_x,_aa_she,True), 'ShearY': (_aa_shear_y,_aa_she,True),
@@ -118,6 +123,7 @@ _AA_OPS = {
   'Color': (_aa_color,_aa_enh,False), 'Contrast': (_aa_contrast,_aa_enh,False),
   'Brightness': (_aa_brightness,_aa_enh,False), 'Sharpness': (_aa_sharpness,_aa_enh,False),
   'Posterize': (_aa_posterize,_aa_pos,False), 'Solarize': (_aa_solarize,_aa_sol,False),
+  'SolarizeAdd': (_aa_solarize_add,_aa_sad,False),
   'AutoContrast': (_aa_autocontrast,None,False), 'Equalize': (_aa_equalize,None,False),
   'Invert': (_aa_invert,None,False),
 }
@@ -178,9 +184,12 @@ private def randAugmentPy : String :=
 #  RandAugment (Cubuk et al. 2019): n ops sampled uniformly at magnitude m.
 #  Reuses the _aa_* op set above (color + geometric); needs the AA op block.
 # ──────────────────────────────────────────────────────────────────
-_RA_OPS = ['Identity','AutoContrast','Equalize','Rotate','Solarize','Color',
-           'Posterize','Contrast','Brightness','Sharpness','ShearX','ShearY',
-           'TranslateX','TranslateY']
+#  Op set = timm's _RAND_INCREASING_TRANSFORMS (inc1): 15 ops, no Identity, with
+#  Invert + SolarizeAdd. Posterize/Solarize/enhancement use the increasing
+#  mappings via _RA_INC; Translate is -Rel (fraction of dim, per timm).
+_RA_OPS = ['AutoContrast','Equalize','Invert','Rotate','Posterize','Solarize',
+           'SolarizeAdd','Color','Contrast','Brightness','Sharpness','ShearX',
+           'ShearY','TranslateX','TranslateY']
 
 def _randaugment(img, n, m, mstd=0.0):
     img = tf.cast(tf.clip_by_value(img, 0.0, 255.0), tf.uint8)
@@ -188,7 +197,9 @@ def _randaugment(img, n, m, mstd=0.0):
         k = tf.random.uniform([], 0, len(_RA_OPS), dtype=tf.int32)
         mg = m if mstd <= 0.0 else tf.clip_by_value(tf.random.normal([], m, mstd), 0.0, _AA_MAX)
         branches = [(lambda nm=nm, x=img, mv=mg: _aa_apply_op(x, nm, mv)) for nm in _RA_OPS]
-        img = tf.switch_case(k, branches)
+        img = tf.cond(tf.random.uniform([]) < 0.5,   # timm AugmentOp applies each op with prob 0.5
+                      lambda k=k, br=branches: tf.switch_case(k, br),
+                      lambda x=img: x)
     return tf.cast(img, tf.float32)"
 
 private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=

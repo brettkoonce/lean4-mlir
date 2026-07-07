@@ -4203,7 +4203,11 @@ For the fastest path through this book, the route is roughly:
     claim is auditable if you ever want to spot-check it.
 \end{itemize}
 
-Reading through Ch 5 is enough to know the framework works.
+Reading through Ch 5 is enough to know the framework works. For a
+reinforcement-learning detour, read the AlphaGo Zero paper
+(\hyperref[bestiary:alphagozero]{bestiary entry}), which combines
+reinforcement learning with a large residual network of $3\times 3$
+convolutions.
 
 \paragraph{Or, for breadth.} If you want to cover most of modern
 deep learning instead of stopping short, the fuller path is to
@@ -4224,12 +4228,29 @@ just at different token alphabets. Image classification + detection
 + segmentation + diffusion + NLP, all on the same Lean$\to$MLIR$\to$IREE
 pipeline, covers most of what people mean by ``modern deep learning.''
 
-\paragraph{Going further.} For a reinforcement-learning detour, read
-the AlphaGo Zero paper (\hyperref[bestiary:alphagozero]{bestiary
-entry}), which combines reinforcement learning with a large residual
-network of $3\times 3$ convolutions. And if you have the compute, run
-the ResNet-50 ImageNet demo in the \texttt{jax/} folder
-(\texttt{jax/MainResnet50Imagenet.lean}).
+\section*{Side quest: ResNet-50, RSB-A3 (100 epochs)}
+
+The basic block ResNet-34 is built from generalizes to the
+\emph{bottleneck} block of ResNet-50, and the \texttt{jax/} folder
+ships it as a full ImageNet demo
+(\texttt{jax/MainResnet50Imagenet.lean}) trained on the modern
+``ResNet Strikes Back'' A3 recipe (Wightman et al.\ 2021): LAMB at
+effective batch 2048 (via gradient accumulation), BCE over
+Mixup/CutMix soft targets, RandAugment, train@160 / eval@224. On the
+same proven-backward bottleneck codegen it reached $\mathbf{76.66\%}$
+top-1 / $\mathbf{93.03\%}$ top-5 at 100 epochs --- within $1.4$ points
+of the paper's $78.1\%$.
+
+\textbf{[TODO --- run w/ config.]} \texttt{resnet50-imagenet
+rsb-faithful}, \textbf{100 epochs} (the run above), or
+\texttt{resnet50-imagenet true-2048} for a real single-forward batch
+2048 on an $\sim$80\,GB card (no gradient accumulation). \emph{Changed
+since the $76.66\%$ above:} RandAugment is now timm-literal
+(\texttt{rand-m6-mstd0.5-inc1}). \emph{Still open:} the residual
+$\sim$1.4 points is the gradient-accumulation Ghost-BN regime (each
+micro-step normalizes over 512, not the full 2048) plus LAMB
+implementation details and bf16 --- the \texttt{true-2048} recipe
+isolates the BN piece.
 
 \chapter{MobileNetV2}
 \label{chap:depthwise}
@@ -4807,10 +4828,14 @@ as the cosine schedule anneals to zero:
 \noindent MobileNetV2 / ImageNet-1k validation accuracy per epoch
 (bf16, 6$\times$ 4060 Ti, RMSProp).
 
-\textbf{[TODO: paper-length run.]} The remaining $\sim$3 points to the
+\textbf{[TODO --- run w/ config.]} \texttt{mobilenet-v2-imagenet} full
+tier (recipe arg \texttt{full}), \textbf{350 epochs}. \emph{Changed
+since the $68.77\%$ above:} label smoothing $0.1\to0.0$ (the MobileNetV2
+paper used none; the number above predates the fix), and the schedule
+goes $90\to350$. The remaining $\sim$3 points to the
 paper's $72.0\%$ are schedule, not recipe: MobileNetV2 was trained with
 RMSProp under an exponential LR decay ($\sim$0.98 per epoch) for several
-hundred epochs, where the 90-epoch cosine here is a deliberately short
+hundred epochs, where the 90-epoch tier here is a deliberately short
 validation tier. The same holds across the family --- EfficientNet-B0
 ($\sim$77\%) and ConvNeXt-T ($\sim$82\%) both assume $\sim$300--350-epoch
 schedules where their heavier augmentation (AutoAugment;
@@ -5404,13 +5429,16 @@ $\varepsilon=10^{-3}$: where MobileNet-V2's $\varepsilon=1.0$ damps the
 adaptive step (the contrast flagged in the MobileNet-V2 recipe), B0's
 tiny denominator lets the same nominal LR explode.
 
-\textbf{[TODO: paper-faithful B0.]} The faithful headline run is
-therefore RMSProp at peak $\sim$0.01 $+$ AutoAugment $+$ stochastic
-depth over $\sim$350 epochs --- AutoAugment, like the schedule,
-under-trains at 80 epochs and only pays off long. Until then the SGD
-80-epoch $72.31\%$ above stands as the sweep's B0 number; the
-RMSProp$+$AA$+$350-epoch pass ($\sim$40\,hr on the six-GPU box) is
-future work.
+\textbf{[TODO --- run w/ config.]} \texttt{efficientnet-b0-imagenet}
+full tier (recipe arg \texttt{full}), \textbf{350 epochs}, RMSProp
+peak $0.01$ $+$ AutoAugment $+$ stochastic depth. \emph{Changed:} the
+shipped \emph{default} LR is now the paper base $0.016$ (was an arbitrary
+divergent $0.045$); the full tier keeps the stable $0.01$ because our
+$\varepsilon{=}10^{-3}$ stack erodes at $0.016$ (above). AutoAugment,
+like the schedule, under-trains at 80 epochs and only pays off long.
+Until this pass runs ($\sim$40\,hr on the six-GPU box), the SGD 80-epoch
+$72.31\%$ above stands as the sweep's B0 number; the faithful headline is
+$\sim$77\%.
 
 \section{Side quests}
 \label{sec:enet_side_quests}
@@ -5995,15 +6023,13 @@ The two regularizers core to ConvNeXt's 300-epoch recipe ---
 \textbf{stochastic depth} (drop-path 0.1, the paper value) and
 \textbf{EMA} (weight averaging, decay 0.9999) --- are now wired and on
 (\texttt{dropPath} and \texttt{useEMA} above), and cost ${<}5\%$ per
-epoch. One canonical deviation remains, deliberate so the port reuses
-the validated layer types: the patchify stem is \texttt{.convBn}
-(BN $+$ a ReLU) rather than conv $+$ LayerNorm --- param-equivalent,
-the ReLU a minor variant. The augmentation pack above --- Mixup, CutMix,
-RandAugment, Random Erasing --- is wired into the phase-2 Lean$\to$JAX
-trainer (each knob gated on a config flag, RandAugment now a full
-color+geometric variant \textbf{[TODO: run w/ geo ra]}) but left off for
-this 80-epoch run, which lands under the paper's $82.1\%$; the 80 here is
-the validation tier of an 80$\to$300 ladder.
+epoch. The patchify stem is now faithful (\texttt{.convNextStem}: $4\times4$
+stride-4 conv $\to$ channel-LayerNorm, no BN/ReLU), so no architectural
+deviation from the paper remains. The augmentation pack --- Mixup, CutMix,
+Random Erasing, and a full color$+$geometric RandAugment --- is wired into
+the phase-2 Lean$\to$JAX trainer and now \emph{on} in the config; the
+$75.93\%$ run below predates it (base RandAugment only), and its 80 epochs
+are the validation tier of an 80$\to$300 ladder.
 
 \textbf{Compute budget.} ConvNeXt-T is the heaviest of the three
 ($28.6$M parameters --- the canonical count, verified by an
@@ -6035,9 +6061,9 @@ $\mathbf{92.27\%}$ top-5 on the full 50{,}000-image validation split
 --- the strongest result in this book's sweep, ahead of EfficientNet-B0
 ($72.3\%$) and ResNet-34 ($72.0\%$). The modern recipe earns it:
 AdamW, LayerScale, stochastic depth, and EMA are all in; the remaining
-gap to ConvNeXt-T's $\sim$82\% headline is geometric RandAugment
-\textbf{[TODO: run w/ geo ra]} (now wired) and
-the 300-epoch schedule. The validation curve --- note the slow start,
+gap to ConvNeXt-T's $\sim$82\% headline is the 300-epoch schedule plus
+the full augmentation pack (now wired, see below), not the architecture.
+The validation curve --- note the slow start,
 an artifact of the EMA shadow (decay $0.9999$) lagging the live
 weights for the first few epochs, then catching up:
 
@@ -6083,13 +6109,17 @@ the grad-clip makes the $4\mathrm{e}{-}4$ peak a non-event. (The smoke
 test was cut short at epoch 9 by a wall-power outage, not anything in
 the run itself.)
 
-\textbf{[TODO: paper-faithful ConvNeXt-T.]} Mixup and CutMix are
-long-schedule regularizers --- at 80 epochs they under-train, so the
-full pack lands at best flat against the $75.93\%$ RandAugment-only run
-above. The faithful headline run is the full pack over 300 epochs
-($\sim$63\,hr on the six-GPU box, the projected row in the table),
-where the heavier augmentation finally pays off toward the
-$\sim$82\,\% paper number. Future work.
+\textbf{[TODO --- run w/ config.]} \texttt{convnext-tiny-imagenet} full
+tier (recipe arg \texttt{full}), \textbf{300 epochs}. \emph{Changed
+since the $75.93\%$ above:} the full augmentation pack (Mixup
+$\alpha{=}0.8$, CutMix $\alpha{=}1.0$, Random Erasing $p{=}0.25$) $+$
+geometric RandAugment (timm-literal \texttt{rand-m9-mstd0.5-inc1}) now on;
+weight decay now excludes norm/bias/LayerScale (\texttt{wdExcludeNormBias});
+LR $4\mathrm{e}{-}4\to2.5\mathrm{e}{-}4$ (linear-scaled). Mixup and CutMix
+are long-schedule regularizers --- at 80 epochs they under-train, so the
+full pack only pays off over the 300-epoch run ($\sim$63\,hr on the
+six-GPU box, the projected row in the table), toward the $\sim$82\% paper
+number.
 
 \chapter{Vision Transformer}
 \label{chap:attention}
@@ -7173,16 +7203,27 @@ accounting is mundane. The largest single item is \emph{repeated
 augmentation} --- DeiT samples each image in a batch three times
 under different augmentations, which disproportionately helps the
 data-hungry tiny models; our pipeline does not, and it is the
-obvious next lever. The rest is augmentation-fidelity drift --- our
-RandAugment, RandomResizedCrop, and Random-Erasing are a
-from-scratch \texttt{tf.data} reimplementation rather than timm's
-exact code --- plus a few small knobs (batch $512$ vs.\ $1024$, the
+obvious next lever. The rest is augmentation-fidelity drift ---
+RandomResizedCrop and Random-Erasing are a from-scratch
+\texttt{tf.data} reimplementation rather than timm's exact code (our
+RandAugment now matches timm's \texttt{rand-m9-mstd0.5-inc1} op-set
+literally) --- plus a few small knobs (batch $512$ vs.\ $1024$, the
 gradient clipping we add for stability, Random-Erase to zero rather
 than to noise). None of it is a bug: the loss curve is textbook
 DeiT. The further $+2.3$ points to DeiT-Ti's $74.5\%$ headline are a
 different thing entirely --- the \emph{distillation} variant (a
 second ``distillation token'' trained against a strong CNN teacher),
 which we do not implement.
+
+\textbf{[TODO --- run w/ config.]} \texttt{vit-tiny-imagenet},
+\textbf{300 epochs} (a re-run of the $70.28\%$ above). \emph{Changed
+since that number:} RandAugment is now timm-literal
+(\texttt{rand-m9-mstd0.5-inc1}: SolarizeAdd$+$Invert op-set, per-op
+apply prob $0.5$, bilinear geometric interpolation, relative
+translate). \emph{Still open:} repeated augmentation ($3\times$, the
+largest remaining lever) stays deferred. Re-running with the
+timm-faithful RandAugment --- and, once built, repeated augmentation ---
+is the path to close the $\sim$2 points to DeiT-Ti's $72.2\%$.
 
 \subsection*{What Part 1 has established}
 

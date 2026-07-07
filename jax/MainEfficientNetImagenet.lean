@@ -53,7 +53,7 @@ def efficientNetB0Imagenet : NetSpec where
     tf.data op — watch input throughput isn't the bottleneck on the first run.
     Mixup/cutmix still off (flip those flags for the very full recipe). -/
 def efficientNetB0ImagenetConfig : TrainConfig where
-  learningRate   := 0.045   -- RMSProp peak (was 0.1 for SGD); see TODO re ~0.016 fallback
+  learningRate   := 0.016   -- EfficientNet reference base LR 0.016@bs256 (= 0.256@bs4096); NB our RMSProp ε1e-3 stack erodes here — _full uses the stable 0.01
   batchSize      := 256
   epochs         := 80
   optimizer      := .rmsprop  -- EfficientNet's original optimizer
@@ -78,14 +78,20 @@ def efficientNetB0ImagenetConfig : TrainConfig where
 #eval efficientNetB0Imagenet.validate!
 
 /-- Paper-faithful full run: identical recipe at the 350-epoch schedule and the
-    stable peak LR (0.045 diverges at 80ep — see config TODO; ~0.01 trains).
-    Selected with `LEAN_MLIR_FULL=1`; writes a separate `_full.py`. -/
+    stable peak LR (the paper-scaled 0.016 erodes in our RMSProp ε1e-3 stack; ~0.01
+    trains). Selected with the `full` recipe arg. -/
 def efficientNetB0ImagenetConfigFull : TrainConfig :=
   { efficientNetB0ImagenetConfig with epochs := 350, learningRate := 0.01 }
 
-def main (args : List String) : IO Unit := do
-  let full := (← IO.getEnv "LEAN_MLIR_FULL").isSome
-  let cfg := if full then efficientNetB0ImagenetConfigFull else efficientNetB0ImagenetConfig
-  let out := if full then "generated_efficientnet_b0_imagenet_full.py"
-                     else "generated_efficientnet_b0_imagenet.py"
-  runJax efficientNetB0Imagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out
+def efficientNetB0ImagenetRecipes : List Recipe := [
+  { name := "default", cfg := efficientNetB0ImagenetConfig,
+    out := "generated_efficientnet_b0_imagenet.py",
+    desc := "80-epoch validation tier (RMSProp + AutoAugment, default LR 0.016)" },
+  { name := "full",    cfg := efficientNetB0ImagenetConfigFull,
+    out := "generated_efficientnet_b0_imagenet_full.py",
+    desc := "paper-faithful 350-epoch run (stable peak LR 0.01)" }
+]
+
+def main (args : List String) : IO Unit :=
+  runRecipeMain "efficientnet-b0-imagenet" efficientNetB0Imagenet .imagenet
+    efficientNetB0ImagenetRecipes args

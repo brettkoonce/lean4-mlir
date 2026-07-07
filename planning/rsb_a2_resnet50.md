@@ -11,6 +11,53 @@ bestiary. The run is a bonus.
 
 ---
 
+## FIDELITY LEDGER — what's paper-faithful vs what deviates (latest: 2026-07-07)
+
+Single source of truth for how close the R50 trainer is to the published timm recipe. Keep this
+section current when faithfulness changes; the phased build history below is frozen at 2026-06-22.
+Config lives in `jax/MainResnet50Imagenet.lean`; RandAugment/aug codegen in `jax/Jax/Codegen.lean`.
+
+**Best measured result (RSB-A3 tier):** `rsb-faithful` recipe → **76.66% top-1 / 93.03% top-5**
+(ep100), vs paper RSB-A3 **78.1%** = **−1.4 pt**. The 40.8%→76.66% recovery was giving LAMB its
+design batch via grad-accum (eff bs2048); the saga is in memory `project_r50_a3_lowval_diagnostic`.
+
+**Recipes** (positional arg to `resnet50-imagenet <recipe>`; `--help` lists them):
+| recipe | tier | batch | notes |
+|---|---|---|---|
+| `default` | RSB-A2 300ep | 512 | full recipe, not yet run to completion |
+| `short` | RSB-A3 100ep | 512 | LAMB starved at bs512 (→40.8%); kept as the naive baseline |
+| `rsb-faithful` | RSB-A3 100ep | eff 2048 (512×4 grad-accum) | **the 76.66% run**; LAMB's design batch on 4×16GB |
+| `true-2048` | RSB-A3 100ep | real 2048 (no accum) | needs ~80GB; removes the Ghost-BN approximation. NOT yet run |
+| `adam-probe` | A3 diagnostic | 512 | AdamW+wd-skip; used to confirm LAMB was the culprit |
+
+**PAPER-FAITHFUL (matches timm):**
+- Optimizer LAMB at its design batch (eff/real bs2048), lr 0.008@2048, cosine + 5ep warmup.
+- BCE-with-logits over multi-hot mixup/cutmix targets; no label smoothing (RSB subsumes it).
+- Aug pack: Mixup 0.1 + CutMix 1.0, RRC(0.08–1.0)+hflip, train@160 / eval@224 crop 0.95.
+- `wdExcludeNormBias` (timm no_weight_decay skip-list: BN γ/β + biases). Was an A3-only-branch bug
+  in the LAMB path; fixed (see `project_grad_accum_lever`).
+- running-BN eval (train running mean/var, not eval-batch).
+- **RandAugment — now literal `rand-m6-mstd0.5-inc1`** (closed 2026-07-07, `Jax/Codegen.lean`):
+  op set = timm `_RAND_INCREASING_TRANSFORMS` (15 ops, no `Identity`, +`Invert` +`SolarizeAdd`);
+  per-op apply prob 0.5; geometric interp BILINEAR (was NEAREST); TranslateX/Y `-Rel`
+  (0.45×dim, was absolute 100px). `_RA_INC` handles the increasing magnitude mappings.
+
+**KNOWN DEVIATIONS (deliberate / open):**
+- **bf16 matmul+conv** — KEPT for perf (ares/cuDNN ~1.6× faster). Probed ≈ −0.1 pt vs fp32, so
+  near-free; the paper is fp32/amp.
+- **BN batch regime** — `rsb-faithful` uses Ghost-BN (each grad-accum micro-step normalizes over
+  its own 512, not the full 2048) + running stats updated K×/optimizer-step (BN momentum
+  compensated in codegen). `true-2048` on a single card instead normalizes over the full 2048 =
+  a *larger* BN batch than timm's per-GPU BN (timm was multi-GPU → per-GPU batch 2048/n_gpu).
+  Neither is a literal per-GPU-BN match; GhostBN kept for now (decision 2026-07-07).
+- **Repeated Augmentation** — correctly OFF for A3 (`n0`); the A2 `default` recipe has it at 3×.
+
+**Residual −1.4 pt attribution (best guess, post-RandAugment-fix):** BN regime (Ghost/K×-update or
+single-card big-batch) + LAMB impl micro-details + bf16. The RandAugment op-set/interp deltas that
+were on this list are now closed. Quantifying requires the `true-2048` run on an 80GB card.
+
+---
+
 ## BUILD STATUS — all phases landed + smoke-tested (updated 2026-06-22)
 
 Phases 1–5 are DONE on `main`, each smoke-tested on the ROCm box (2× 7900 XTX, gfx1100):
@@ -47,9 +94,9 @@ The phase-2 JAX codegen (`jax/Jax/Codegen.lean`) emits idiomatic JAX from a `Net
     (global stats confirmed). **`bottleneck_block` is the ONE un-threaded BN helper** → this plan.
   - **B. exp-decay LR** (`expLRDecayRate`/`expLRDecayEpochs`); **C. classifier dropout** (`dropout`);
     **D. RandAugment mstd0.5/inc1** (`randAugmentMstd`/`randAugmentInc`).
-- **Subrun selector**: each imagenet trainer's `main` picks validation vs full via env
-  (`LEAN_MLIR_FULL=1` for short-default nets, `LEAN_MLIR_SHORT=1` for paper-default nets), writing
-  distinct `generated_<net>[_full|_short].py`. Mirror this for R50.
+- **Subrun selector**: each imagenet trainer's `main` picks the tier via a positional recipe arg
+  (`<exe> full` for short-default nets, `<exe> short` for paper-default nets), writing distinct
+  `generated_<net>[_full|_short].py`. (Was the `LEAN_MLIR_FULL/SHORT` env flags, now retired.) Mirror this for R50.
 - **Lossless suspend/resume**: `save_train_state`/`load_train_state` (params+opt_state+ema+step into
   one atomic, keep-last-3 `.npz`); `LEAN_MLIR_RESUME` restores it. Supervisor `supervise_vit_80ep.sh`
   uses it (ROCm default + `BACKEND=cuda`).
@@ -120,7 +167,7 @@ finite loss on a multi-hot batch, grad flows.
 
 ### Phase 5 — assemble + run + bestiary
 RSB-A2 `resnet50ImagenetConfig` (LAMB, lr 5e-3 scaled, BCE, mixup0.1/cutmix1.0, RA m7/mstd0.5,
-repeatedAug 3, dropPath 0.05, WD 0.02, EMA, 300ep) + the `LEAN_MLIR_FULL`/`SHORT` selector (short =
+repeatedAug 3, dropPath 0.05, WD 0.02, EMA, 300ep) + the `full`/`short` recipe-arg selector (short =
 ~30–50ep validation). End-to-end smoke. Supervisor `scripts/supervise_r50_300ep*.sh` (mirror the
 6-GPU convnet ones / the lossless-resume ViT one). Eval `scripts/eval_r50_full50k.py`. Then add the
 spec to the **bestiary** (`tests/bestiary_timm_report.md` + the bestiary spec list — see how the

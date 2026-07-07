@@ -4,7 +4,7 @@
 #
 # RSB-A3 = timm "ResNet Strikes Back" A3 (100ep, LAMB + BCE + mixup/cutmix,
 # train@160 / test@224, no EMA, no stochastic depth) -> ~78.1% top-1. The
-# committed SHORT config (LEAN_MLIR_SHORT=1) lives in
+# committed short config (regenerate via: resnet50-imagenet short) lives in
 # generated_resnet50_imagenet_short.py.
 #
 # Resume is full-state: on restart it reloads the newest <CKPT>_e{N}.state.npz
@@ -75,7 +75,6 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
   START="$(date '+%Y-%m-%d %H:%M:%S')"
 
   env "${DEV_ENV[@]}" \
-      LEAN_MLIR_SHORT=1 \
       LEAN_MLIR_PARAMS_OUT="$CKPT_BASE" \
       LEAN_MLIR_CKPT_EVERY="$CKPT_EVERY" \
       "${RESUME_ENV[@]}" \

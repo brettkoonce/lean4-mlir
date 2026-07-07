@@ -67,7 +67,7 @@ def mobilenetV2ImagenetConfig : TrainConfig where
   warmupEpochs   := 5
   augment        := true    -- random-crop + horizontal flip (MNv2 paper aug)
   useAutoAugment := false   -- MNv2 paper used crop/flip only; AA is beyond the paper
-  labelSmoothing := 0.1
+  labelSmoothing := 0.0     -- MNv2 paper (Sandler 2018) used none
   bf16           := true
   bf16Conv       := true    -- now reaches the inverted-residual blocks
   runningBN      := true    -- paper-faithful eval (gap A): running BN stats, not eval-batch stats
@@ -75,14 +75,20 @@ def mobilenetV2ImagenetConfig : TrainConfig where
 #eval mobilenetV2Imagenet.validate!
 
 /-- Paper-faithful full run: identical recipe, the long (350-epoch) schedule.
-    Selected at launch with `LEAN_MLIR_FULL=1`; writes a separate `_full.py` so
-    a quick validation subrun and the multi-day run never clobber each other. -/
+    Selected with the `full` recipe arg; writes a separate `_full.py` so a quick
+    validation subrun and the multi-day run never clobber each other. -/
 def mobilenetV2ImagenetConfigFull : TrainConfig :=
   { mobilenetV2ImagenetConfig with epochs := 350 }
 
-def main (args : List String) : IO Unit := do
-  let full := (← IO.getEnv "LEAN_MLIR_FULL").isSome
-  let cfg := if full then mobilenetV2ImagenetConfigFull else mobilenetV2ImagenetConfig
-  let out := if full then "generated_mobilenet_v2_imagenet_full.py"
-                     else "generated_mobilenet_v2_imagenet.py"
-  runJax mobilenetV2Imagenet cfg .imagenet (args.head? |>.getD "data/imagenet") out
+def mobilenetV2ImagenetRecipes : List Recipe := [
+  { name := "default", cfg := mobilenetV2ImagenetConfig,
+    out := "generated_mobilenet_v2_imagenet.py",
+    desc := "90-epoch validation tier (RMSProp, crop/flip only)" },
+  { name := "full",    cfg := mobilenetV2ImagenetConfigFull,
+    out := "generated_mobilenet_v2_imagenet_full.py",
+    desc := "paper-faithful 350-epoch run" }
+]
+
+def main (args : List String) : IO Unit :=
+  runRecipeMain "mobilenet-v2-imagenet" mobilenetV2Imagenet .imagenet
+    mobilenetV2ImagenetRecipes args
