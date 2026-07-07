@@ -62,12 +62,15 @@ jobs:
           # Cache ONLY the project build (Certs oleans/traces), NOT .lake/packages
           # — Mathlib comes from `lake exe cache get` below. Same rolling key as
           # proofs.yml/comparator.yml, but the entry is now a few hundred MB
-          # instead of ~3 GB, so the three workflows stop blowing GitHub's ~10 GB
-          # cache budget (which was evicting everything → ~30-min cold rebuilds).
-          key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
+          # instead of ~3 GB, so the workflows stop blowing GitHub's ~10 GB cache
+          # budget (which was evicting everything → ~30-min cold rebuilds). The
+          # `lake-certs-` namespace is shared with comparator.yml (both run
+          # `lake build Certs`); proofs.yml uses a separate `lake-proofs-` so the
+          # two never restore each other's build and rebuild the wrong corpus cold.
+          key: lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
           restore-keys: |
-            lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
-            lake-
+            lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-certs-
 
       - name: Build certificate corpus
         run: |

@@ -37,12 +37,14 @@ jobs:
           # cache budget across proofs/certs/comparator → LRU eviction → periodic
           # ~30-min cold rebuilds. The rolling key still persists each run's
           # project oleans (freshness, per the note that used to live here); the
-          # entries are now a few hundred MB so they no longer thrash. restore-keys
-          # still restores the latest match.
-          key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
+          # entries are now a few hundred MB so they no longer thrash. Keyed under
+          # a `lake-proofs-` namespace (separate from certs/comparator's
+          # `lake-certs-`) so a Proofs job never restores a Certs cache and ends
+          # up rebuilding that huge corpus cold — no bare `lake-` fallback.
+          key: lake-proofs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
           restore-keys: |
-            lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
-            lake-
+            lake-proofs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-proofs-
 
       - name: Install Python deps
         run: pip install scipy numpy
