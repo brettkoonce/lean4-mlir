@@ -229,7 +229,7 @@ status:
 automation:
   methods:
     - method: "agent"
-      models: ["Qwen3+", "Opus 4.6+", "Claude Fable 5"]
+      models: ["Qwen3+", "Opus 4.6+"]
       framework: "OpenCode + Claude Code"
       tool_setup: >-
         Lean 4 + Lake + Mathlib for the proofs; an independent kernel re-check via
