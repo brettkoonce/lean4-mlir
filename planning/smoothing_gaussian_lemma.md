@@ -65,3 +65,36 @@ missing, G2+G3 can be fused by working directly with the n-D density ratio, whic
 depends on `⟨z, δ⟩` — arguably simpler than two lemmas). Keep everything in a new
 `Proofs/SmoothingGaussian.lean`; wire into `Certs` + `AuditAxioms` on first commit
 (the SpecVJP lesson: no orphan proof files).
+
+## Session handoff (2026-07-07, pre-G1 analysis DONE)
+
+**Design discovery (load-bearing):** `hmono : Monotone Phiinv` in
+`smoothing_certified_radius` (LipschitzCert.lean:208) is UNDISCHARGEABLE by any total
+real Φ⁻¹ — the true quantile is unbounded on (0,1), so no total ℝ-valued function can be
+globally (or even Icc-)monotone and agree with it. Traced the proof: hmono/hanti are used
+exactly 3× (hmono at `p j x` vs `1 − p i x`; hanti at `p i x`; hmono at `p {i,j} (x+δ)`)
+— all probability values. So G1 = a VARIANT theorem `smoothing_certified_radius_probit`:
+
+- add `(hp : ∀ c y, p c y ∈ Set.Ioo (0:ℝ) 1)` — realistic, Monte-Carlo/Clopper–Pearson
+  estimates are never exactly 0/1;
+- weaken to `hmono : MonotoneOn Phiinv (Set.Ioo 0 1)` and
+  `hanti : ∀ q ∈ Set.Ioo (0:ℝ) 1, Phiinv (1 - q) = -Phiinv q`;
+- copy the original ~25-line proof, threading Ioo memberships (`1 − p ∈ Ioo` ✓).
+  Keep the original theorem untouched.
+
+**Then instantiate with the real thing** (new file `Proofs/SmoothingGaussian.lean`):
+`stdNormalCDF := MeasureTheory.cdf (gaussianReal 0 1)`;
+`stdNormalQuantile p := sSup {t | stdNormalCDF t < p}`. Needed facts: strict mono of the
+cdf (gaussianPDF positivity ⇒ positive mass on intervals), symmetry `Φ(−t) = 1 − Φ(t)`
+(via neg-map invariance of `gaussianReal 0 1` — grep Mathlib for a `map neg` lemma first,
+else prove through the density's evenness), quantile MonotoneOn + hanti on Ioo.
+Mathlib pin inventory (checked): `Probability/Distributions/Gaussian/Real.lean` has
+`gaussianReal`/`gaussianPDF` + `IsProbabilityMeasure`; `Probability/CDF.lean` has the
+generic `cdf` (StieltjesFunction). NO prebuilt Gaussian-cdf mono/symmetry facts — G1
+builds them.
+
+**Process:** wire the new file into `Certs` roots + `tests/AuditAxioms.lean` in the SAME
+commit that creates it (the SpecVJP orphan lesson); iterate lemmas in a scratch file
+importing the cached LipschitzCert olean (~1s) before moving them in. G2 (1-D
+Neyman–Pearson) next; scout pi-Gaussian rotation invariance before choosing the G2/G3
+split (fusing via the ⟨z,δ⟩-only density ratio may be simpler).
