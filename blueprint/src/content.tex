@@ -2101,6 +2101,57 @@ comparison. Later chapters switch to the modern recipe (Adam + cosine + warmup
 + weight decay + label smoothing + data augmentation) once we can
 benchmark the deltas against this baseline.
 
+\section{Return on width}
+
+The $512{\to}512$ hidden size is a convention, not a measurement. Because
+the verified renderer is parametric in the layer dimensions --- the same
+\texttt{mlp\_has\_vjp} theorem covers every width, being polymorphic in
+$d_0,d_1,d_2,d_3$ --- we can sweep the hidden width and train each point on
+its own proof-rendered StableHLO. The \texttt{mnist-mlp-grid} driver does
+exactly this: it renders $784{\to}d{\to}d{\to}10$ from the faithful emitter
+and trains it end to end. Sweeping $d$ over the powers of two from 8 to 4096
+(each 12-epoch SGD, on the GPU) gives the accuracy-vs-width curve below.
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Hidden width $d$ (both hidden layers)},
+    ylabel={MNIST test accuracy (\%)},
+    xmode=log, log basis x=2,
+    xmin=6.5, xmax=5000, ymin=90.5, ymax=98.7,
+    xtick={8,16,32,64,128,256,512,1024,2048,4096},
+    xticklabels={8,16,32,64,128,256,512,1024,2048,4096},
+    ytick={91,92,93,94,95,96,97,98},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=1.5pt},
+]
+\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+(8,91.42) (16,94.47) (32,96.18) (64,97.19) (128,97.48) (256,97.72) (512,97.82) (1024,97.89) (2048,97.95) (4096,98.03)
+};
+\addplot[only marks, mark=o, mark size=4pt, red, line width=1pt, forget plot] coordinates {(64,97.19)};
+\node[anchor=west, font=\footnotesize, red!70!black] at (axis cs:74,95.5)
+  {knee $\approx 64$: 97.2\% at 55K params};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent Return on width for the verified MNIST MLP
+($784{\to}d{\to}d{\to}10$): test accuracy versus hidden width $d$ (log
+scale), 12-epoch SGD on the proof-rendered StableHLO
+(\texttt{runs/mlp\_grid\_results.tsv}). The curve flattens hard after
+$\sim$64 neurons: widening $8{\to}64$ buys $+5.8$ points, but $64{\to}4096$
+--- $64\times$ the width, $364\times$ the parameters --- buys only $+0.8$.
+A $32{\to}32$ MLP already reaches 96.2\% at 26K parameters, $760\times$
+smaller than the $4096{\to}4096$ net (98.0\%). The canonical
+$512{\to}512$ sits comfortably on the plateau; anything past it is paying
+for the third decimal place. Off the diagonal there is a cliff worth
+noting: a $784{\to}8{\to}4096{\to}10$ net collapses to chance (9.8\%) ---
+a narrow layer feeding a wide one starves the wide layer of signal and it
+never trains under fixed-learning-rate SGD.
+
 \section{MLIR: Dense}
 
 \noindent\textbf{What is already proven.} \texttt{mlpForward} is the
@@ -2636,6 +2687,62 @@ convolutions and maxPool roughly doubles the emitted compute, not
 3.5$\times$ the way our \emph{other} (BN-equipped) CNN does. Every
 \texttt{.convBn} adds batch-norm normalize and affine ops; the
 plain \texttt{.conv2d} used here keeps the StableHLO much tighter.
+
+\subsection*{The fat head is fat because it can be, not because it must be}
+
+If the dense head holds 99\% of the parameters, the obvious question is how
+many of them earn their keep. The parametric renderer answers it directly:
+\texttt{mnist-cnn-grid} holds the convolutional backbone fixed at 32
+channels and sweeps only the dense head ($\ldots{\to}d{\to}d{\to}10$),
+rendering each width from the faithful CNN emitter. Overlaying that sweep on
+the MLP's (both trained on their own verified StableHLO) shows how little
+the head needs once good convolutional features exist:
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.8cm,
+    xlabel={Hidden width $d$ (dense head / MLP hidden layers)},
+    ylabel={MNIST test accuracy (\%)},
+    xmode=log, log basis x=2,
+    xmin=6.5, xmax=5000, ymin=90.5, ymax=99.6,
+    xtick={8,16,32,64,128,256,512,1024,2048,4096},
+    xticklabels={8,16,32,64,128,256,512,1024,2048,4096},
+    ytick={91,92,93,94,95,96,97,98,99},
+    legend pos=south east, legend cell align={left},
+    legend style={font=\footnotesize, draw=none, fill=none},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=1.5pt},
+]
+\addplot[green!55!black, mark=*, mark options={fill=green!55!black}] coordinates {
+(8,96.16) (16,98.30) (32,98.42) (64,98.86) (128,98.60) (256,98.87) (512,98.95) (1024,99.04) (2048,99.04) (4096,98.96)
+};
+\addlegendentry{CNN (conv@32 fixed, head $d{\to}d$)}
+\addplot[blue, mark=square*, mark options={fill=blue}] coordinates {
+(8,91.42) (16,94.47) (32,96.18) (64,97.19) (128,97.48) (256,97.72) (512,97.82) (1024,97.89) (2048,97.95) (4096,98.03)
+};
+\addlegendentry{MLP ($784{\to}d{\to}d{\to}10$)}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent Classifier-head width sweep for the verified CNN (convolutional
+backbone held at 32 channels), overlaid on the MLP width sweep of
+Chapter~\ref{chap:mlp} (\texttt{runs/cnn\_grid\_results.tsv}). The whole CNN
+curve sits about a point above the MLP's, and its knee arrives roughly
+$4\times$ earlier: a 16-wide head already reaches 98.3\% at 110K
+parameters, beating the widest 4096-wide MLP. So the 3.2M-parameter
+$6272{\to}512$ layer is not buying accuracy --- shrinking the head to
+$\ldots{\to}16{\to}16{\to}10$ keeps essentially all of it. The head is fat
+because the flatten hands it a 6272-vector and nobody trimmed it, not
+because the task needs the width; the only real drop is at $d=8$ (96.2\%),
+where the $6272{\to}8$ bottleneck finally throws away features the
+convolutions found. (On this GPU the wall-clock is convolution-bound, so
+the shrink is a parameter win, not a speed win --- which is exactly why the
+post-2015 fix was \texttt{globalAvgPool}, replacing the flatten rather than
+narrowing it.)
 
 \section{MLIR: Convolution}
 
