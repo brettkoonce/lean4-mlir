@@ -87,6 +87,28 @@ def cnnVerified : VerifiedNetSpec where
   #[(#[32, 1, 3, 3], 0), (#[32], 2), (#[32, 32, 3, 3], 0), (#[32], 2),
     (#[6272, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
 
+/-- **FC-width-parametric MNIST CNN** — the Chapter-3 CNN with the two convs held at 32
+    channels (so the feature extractor is fixed) and the **dense classifier head** swept:
+    `…maxpool → flatten(6272) → dense 6272→d → relu → dense d→d → relu → dense d→10`. The
+    canonical `cnnVerified` is `cnnG 512`. The faithful CNN renderer (`cnnTrainStepFaithfulV`)
+    takes a single dense width `d` (both hidden FC layers share it), so this is the honest
+    den-certified path; `mnist-cnn-grid d` renders `verified_mlir/cnn_{d}_{train_step,fwd}.mlir`
+    and trains on it. Isolates the ROI of the classifier head with the conv stack fixed. -/
+def cnnG (d : Nat) : VerifiedNetSpec where
+  name     := s!"MNIST-CNN-fc{d}"
+  slug     := s!"cnn_{d}"
+  inC      := 1
+  imageH   := 28
+  imageW   := 28
+  nClasses := 10
+  data     := .mnist
+  layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
+               .dense 6272 d, .relu, .dense d d, .relu, .dense d 10]
+  blurb    := s!"MNIST-CNN-fc{d} via the VERIFIED renderer (conv32→conv32→pool→{d}→{d}→10) → IREE FFI → GPU"
+
+-- `cnnG 512` is exactly the canonical `cnnVerified` architecture.
+#guard (cnnG 512).toSpecs == cnnVerified.toSpecs
+
 /-- The Chapter-4 CIFAR-10 CNN (no BN): conv 3→32 → relu → conv 32→32 → relu → maxpool
     → conv 32→64 → relu → conv 64→64 → relu → maxpool → flatten(4096) → dense 4096→512
     → relu → dense 512→512 → relu → dense 512→10. VJP: `cifarCnn_has_vjp` (Proofs/SpecVJP). -/

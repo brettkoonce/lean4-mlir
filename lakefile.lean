@@ -990,6 +990,12 @@ lean_exe «mnist-mlp-grid» where
   root := `apps.mnist.MainMnistMlpGrid
   moreLinkArgs := ireeLink
 
+-- FC-width-parametric MNIST CNN: `mnist-cnn-grid <fc-width> [epochs]` holds the conv
+-- stack at 32 channels and sweeps the dense head (…→d→d→10) on the faithful StableHLO.
+lean_exe «mnist-cnn-grid» where
+  root := `apps.mnist.MainMnistCnnGrid
+  moreLinkArgs := ireeLink
+
 -- Chapter 3 (low precision): fp8 (E4M3) MLP training on the SAME verified StableHLO.
 -- fp32 master, per-column weight quant + per-tensor input, fp32 accumulate.
 -- fp8 weights+input, fp32 intermediates. See MainMnistMlpE4M3Verified.lean.
