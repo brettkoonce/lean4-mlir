@@ -258,7 +258,7 @@ fidelity:
     1. STRONGEST — layer VJP correctness. The per-layer backward formulas
        (dense, conv, batch-norm, layer-norm, softmax-CE, attention/MHSA, GELU,
        etc.) are derived from Mathlib's `fderiv` and machine-checked. These are
-       the core results and are the bulk of the 51 comparator-rechecked theorems.
+       the core results and are the bulk of the 52 comparator-rechecked theorems.
 
     2. CODEGEN TRUST BOUNDARY (disclosed gap). The canonical backward is the
        `fderiv`/`pdiv` expression, which at NON-smooth points (a ReLU input
