@@ -24,30 +24,77 @@ sources:
     license: "Apache-2.0"
     author_contacted: "n/a"
     prior_work: ""                         # foundation: fderiv / Differentiable API; see literature_dependencies
+  - title: "Lipschitz-Margin Training: Scalable Certification of Perturbation Invariance for Deep Neural Networks"
+    authors: ["Yusuke Tsuzuku", "Issei Sato", "Masashi Sugiyama"]
+    id: "arXiv:1802.04034"                 # NeurIPS 2018
+    type: "paper"
+    license: ""
+    author_contacted: "no"
+    prior_work: ""                         # certified-radius theorem formalized (LipschitzCert.lean)
+  - title: "Certified Adversarial Robustness via Randomized Smoothing"
+    authors: ["Jeremy Cohen", "Elan Rosenfeld", "J. Zico Kolter"]
+    id: "arXiv:1902.02918"                 # ICML 2019
+    type: "paper"
+    license: ""
+    author_contacted: "no"
+    prior_work: ""                         # radius + the Gaussian Neyman–Pearson core formalized end-to-end (SmoothingGaussian.lean)
+  - title: "Efficient and Accurate Estimation of Lipschitz Constants for Deep Neural Networks (LipSDP)"
+    authors: ["Mahyar Fazlyab", "Alexander Robey", "Hamed Hassani", "Manfred Morari", "George J. Pappas"]
+    id: "arXiv:1906.04893"                 # NeurIPS 2019
+    type: "paper"
+    license: ""
+    author_contacted: "no"
+    prior_work: ""                         # one-hidden-layer per-class-pair instance, exact-rational LDLᵀ PSD witnesses (LipschitzCertPairSDP.lean)
+  - title: "Old Optimizer, New Norm: An Anthology"
+    authors: ["Jeremy Bernstein", "Laker Newhouse"]
+    id: "arXiv:2409.20325"
+    type: "paper"
+    license: ""
+    author_contacted: "no"
+    prior_work: ""                         # optimizer-as-steepest-descent-under-a-norm ladder formalized (MuonGeometry.lean)
 
 status:
   scope: >-
     Machine-checked vector-Jacobian-product (backward-pass) correctness for the
-    layer primitives of six vision architectures and their full-network
-    compositions: MLP, 2D CNN, BatchNorm-CNN, ResNet-34, MobileNetV2,
-    EfficientNet-B0, ConvNeXt-T, and ViT-Tiny. Covers dense, ReLU/ReLU6,
-    softmax cross-entropy, 2D / strided / depthwise convolution, max-pool,
-    global-average-pool, batch-norm's three-term backward, residual + projection
-    blocks, squeeze-excitation, GELU/Swish/sigmoid, layer-norm, layer-scale, and
-    a multi-theorem treatment of scaled-dot-product / multi-head self-attention
-    through the full transformer tower. Each NetSpec also emits StableHLO MLIR
-    (compiled by IREE, cross-checked against a parallel JAX pipeline) — that
-    codegen/training path is engineered and empirically validated, NOT part of
-    the proved theorems (see fidelity.divergences).
+    layer primitives of eight architectures and their full-network compositions:
+    MLP, 2D CNN, BatchNorm-CNN, ResNet-34, MobileNetV2, EfficientNet-B0,
+    ConvNeXt-T, and ViT-Tiny. Covers dense, ReLU/ReLU6, softmax cross-entropy,
+    2D / strided / depthwise convolution, max-pool, global-average-pool,
+    batch-norm's three-term backward, residual + projection blocks,
+    squeeze-excitation, GELU/Swish/sigmoid, layer-norm, layer-scale, and a
+    multi-theorem treatment of scaled-dot-product / multi-head self-attention
+    through the full transformer tower. On top of the VJP layer, four further
+    proved programs: (1) TRAIN-STEP TIES — every committed train step of all 12
+    nets is tied to its real loss-driven backward cotangent (per-net *TiePoC
+    capstones, e.g. the all-200-params vit_net_tied_certified), plus
+    committed-spec ties for all 5 ImageNet-scale nets (SpecVJP); (2) FLOAT
+    ERROR — a binary32 rounding model constructed from scratch (rndP, standard
+    model PROVED, no hardware axioms), whole-net forward+backward float-error
+    bridges for all nets, depth-linear adjoint-chain composition bounds
+    certified for every net, an fp8-E4M3 argmax-preservation theorem, and an
+    end-to-end capstone (cifar8_chain_argmaxSafe: binary32 rounding cannot flip
+    the prediction) plus SGD-descent theorems at trained weights; (3) ROBUSTNESS
+    CERTIFICATES as theorems — the Tsuzuku Lipschitz-margin radius, per-class-
+    pair LipSDP with exact-rational LDL^T PSD witnesses (mechanized 100-image
+    scorecards at trained weights, 69/100 certified vs a 72/100 PGD bracket),
+    and the Cohen randomized-smoothing radius proved END-TO-END — the Gaussian
+    (1/sigma)-Lipschitz probit (Neyman-Pearson core, Cameron-Martin shift,
+    dimension reduction via rotation invariance) is a theorem, not a hypothesis;
+    (4) OPTIMIZER GEOMETRY — SGD/sign/Muon as steepest descent under a norm,
+    Muon's polar factor as the nuclear-norm argmax, Shampoo = single-step Muon,
+    and the Newton-Schulz spectral-step lemma. Each NetSpec also emits StableHLO
+    MLIR (compiled by IREE, cross-checked against a parallel JAX pipeline) —
+    that codegen/training path is engineered and empirically validated, NOT
+    part of the proved theorems (see fidelity.divergences).
   sorry_count: 0
   sorry_in_definitions: 0
   axioms: ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
   main_results:
     # Representative headline set. The full audit (tests/AuditAxioms.lean) runs
-    # `#print axioms` on 535 declarations; 51 are independently kernel-rechecked
+    # `#print axioms` on 1393 declarations; 52 are independently kernel-rechecked
     # by the comparator (tests/comparator/config.json). All close under exactly
     # the three core axioms above. comparator_config below points at that config
-    # for results included in the 51-theorem recheck.
+    # for results included in the 52-theorem recheck.
     - declaration: "Proofs.pdiv_comp"          # chain / additive / multiplicative fan-in + finset-sum
       file: "LeanMlir/Proofs/Tensor.lean"
       sorry_count: 0
@@ -72,7 +119,7 @@ status:
       file: "LeanMlir/Proofs/BatchNorm.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
-      comparator_config: ""    # audited; not in the 51-theorem comparator subset
+      comparator_config: ""    # audited; not in the 52-theorem comparator subset
       literature_dependencies: []
     - declaration: "Proofs.layerNorm_has_vjp_correct"
       file: "LeanMlir/Proofs/LayerNorm.lean"
@@ -116,17 +163,73 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
-    - declaration: "Proofs.Mnv2Live.mnv2Live_forward_nonconstant"   # non-degeneracy witness (see fidelity)
+    - declaration: "Mnv2Live.mnv2Live_forward_nonconstant"   # non-degeneracy witness (see fidelity)
       file: "LeanMlir/Proofs/MobileNetV2.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "Proofs.ViTTiePoC.vit_net_tied_certified"   # train-step tie: all 200 ViT params fed the REAL backward cotangent
+      file: "LeanMlir/Proofs/ViTTiePoC.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "cifar8_chain_argmaxSafe"   # float capstone: binary32 rounding cannot flip the prediction
+      file: "LeanMlir/Proofs/Cifar8ChainCert.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "FloatModel.linear_e4m3_argmax_preserved"   # fp8-E4M3 quantization argmax preservation
+      file: "LeanMlir/Proofs/FloatBridge.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends"   # binary32 SGD step provably decreases CE at TRAINED weights
+      file: "LeanMlir/Proofs/TrainedLinearDescent.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "Proofs.lipschitz_margin_certified_radius"   # Tsuzuku 2018 certified radius
+      file: "LeanMlir/Proofs/LipschitzCert.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies:
+        - statement: "Lipschitz-margin certified radius"
+          source: "Tsuzuku, Sato, Sugiyama 2018 (arXiv:1802.04034)"
+    - declaration: "Proofs.LipschitzCertDemo.scorecard_sdp"   # mechanized 100-image LipSDP scorecard at trained weights (69/100)
+      file: "LeanMlir/Proofs/LipschitzCertScorecardSDP.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies:
+        - statement: "LipSDP-Neuron one-hidden-layer SDP bound"
+          source: "Fazlyab et al. 2019 (arXiv:1906.04893)"
+    - declaration: "Proofs.smoothing_certified_radius_classifier"   # Cohen 2019 smoothing radius END-TO-END (Gaussian NP core proved)
+      file: "LeanMlir/Proofs/SmoothingGaussian.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies:
+        - statement: "randomized-smoothing certified radius incl. the (1/sigma)-Lipschitz Gaussian probit (Neyman-Pearson core)"
+          source: "Cohen, Rosenfeld, Kolter 2019 (arXiv:1902.02918); Salman et al. 2019 Lemma 2"
+    - declaration: "Proofs.MuonGeometry.shampoo_eq_muon"   # optimizer geometry: Shampoo's single-step preconditioner = Muon's polar factor
+      file: "LeanMlir/Proofs/MuonGeometry.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies:
+        - statement: "optimizer = steepest descent under a norm; Muon polar factor realizes the nuclear-norm dual"
+          source: "Bernstein, Newhouse 2024 (arXiv:2409.20325)"
 
 automation:
   methods:
     - method: "agent"
-      models: ["Qwen3+", "Opus 4.6+"]
+      models: ["Qwen3+", "Opus 4.6+", "Claude Fable 5"]
       framework: "OpenCode + Claude Code"
       tool_setup: >-
         Lean 4 + Lake + Mathlib for the proofs; an independent kernel re-check via
@@ -191,8 +294,26 @@ fidelity:
        backward is genuinely not the zero map there. All audited 3-axiom-clean.
        The ResNet witness is also carried to the real `[3,4,6,3]` (16-block)
        depth (`ResNet34LiveFull.liveFwd2Full_jacobian_nonzero` /
-       `liveFwd2Full_backward_nontrivial`, level 3). A BN-CNN live witness
-       remains the last follow-up.
+       `liveFwd2Full_backward_nontrivial`, level 3), and BOTH nets are sealed at
+       the realistic 224x224 input geometry (ResNet via weight-independent
+       beta-positivity, MobileNetV2 via gamma-scaling into the ReLU6 window).
+       Beyond synthetic witnesses, TRAINED-weight results exist: whole-net VJP
+       witnesses + level-3 Jacobian seals at real trained checkpoints and real
+       test inputs for the MLP and CNN rungs (TrainedMlpWitness,
+       TrainedCnnWitness/TrainedCnnSeal), and a provable strict CE-descent step
+       at trained weights (TrainedLinearDescent). A BN-CNN live witness remains
+       the last follow-up.
+
+    4b. CERTIFICATE-LAYER CONDITIONING (disclosed hypotheses, all in-statement):
+       the smoothing radius theorems require class probabilities in the OPEN
+       interval (0,1) (`hp` — the true quantile is undefined at the endpoints;
+       Monte-Carlo estimates always satisfy it), and the theorems speak about
+       TRUE smoothed probabilities while the reporting driver uses
+       Clopper-Pearson ESTIMATES — that estimation gap is not formalized. The
+       adjoint-chain float bounds use a per-op Higham model; the balanced-tree
+       reduction refinement carries an explicit (quarantined) order-balanced
+       hypothesis. The LipSDP scorecards certify a FIXED 100-image subset at a
+       FIXED epsilon — an honest lower bound, not a dataset-wide claim.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
@@ -206,7 +327,14 @@ fidelity:
     6. NOT PROVED — empirically validated only: that the nets train to good
        ImageNet accuracy, that StableHLO/IREE compilation is faithful, that the
        JAX pipeline agrees numerically, and that bf16 doesn't change results.
-       These are engineering claims backed by runs and cross-checks, not theorems.
+       These are engineering claims backed by runs and cross-checks, not
+       theorems. The fp8-E4M3 "trainers" are host-side quantization emulation on
+       fp32 kernels (the theorems are about the E4M3 value grid, the hardware
+       has no fp8 units). Note the hardware-model direction has since STRENGTHENED:
+       the binary32/E4M3 rounding models are now constructed (`rndP`, standard
+       model proved) rather than axiomatized — the earlier TrustedBridge
+       named-axiom quarantine was retired, keeping the project at zero
+       non-core axioms.
 
 review:
   status: "agent-reviewed"   # also self-assessed; NOT externally peer-reviewed
@@ -214,11 +342,16 @@ review:
   notes: >-
     Three independent checks beyond `lake build`: (1) an agent self-audit
     (tests/AUDIT_REPORT*.md) that found no axioms/sorries and surfaced the
-    fidelity caveats above; (2) mutation testing (corrupting a backward formula
-    breaks the build at every mutation tried); (3) leanprover/comparator +
-    nanoda re-running Lean's kernel typechecker on 51 theorems with a hard-coded
-    permitted-axiom allowlist of exactly {propext, Quot.sound, Classical.choice}.
-    No external human peer review.
+    fidelity caveats above, plus a full `#print axioms` sweep of 1393
+    declarations (tests/AuditAxioms.lean) run in CI; (2) mutation testing
+    (corrupting a backward formula breaks the build at every mutation tried);
+    (3) leanprover/comparator re-running Lean's kernel typechecker on 52
+    theorems with a hard-coded permitted-axiom allowlist of exactly
+    {propext, Quot.sound, Classical.choice} (the nanoda second-kernel pass is
+    currently disabled in config pending a lean4export rebuild after a
+    toolchain bump). External agent-driven review rounds (2026-07) drove the
+    scorecard mechanization and the LipSDP tightening; no external HUMAN peer
+    review.
 
 alignment:
   namespace: "Proofs"
@@ -253,6 +386,31 @@ alignment:
       module: "LeanMlir/Proofs/ResNet34LivePC.lean, LeanMlir/Proofs/ResNet34LiveSeal.lean, LeanMlir/Proofs/ResNet34LiveFull.lean"
       status: "proved"
       note: "2-channel live ResNet-34, real [3,4,6,3] depth; sealed at a channel-symmetric base Y (maxpool no-tie + carrier vanishes; identity blocks wash out through BN)"
+    - source: "Committed train step = real loss-driven backward (per-net ties, all 12 nets)"
+      lean: "<net>_net_tied_certified family (e.g. vit_net_tied_certified, all 200 ViT params)"
+      module: "LeanMlir/Proofs/*TiePoC.lean"
+      status: "proved"
+      note: "genuine backward cotangent, not a free ∀-cotangent; committed-spec ties for all 5 ImageNet nets in SpecVJP"
+    - source: "Binary32 rounding model + whole-net float-error composition"
+      lean: "rndP_err; <net>_floatBridges / <net>_grad_floatBridges; chain_adjointClose; cifar8_chain_argmaxSafe"
+      module: "LeanMlir/Proofs/Binary32Instance.lean, LeanMlir/Proofs/*FloatBridge*.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Cifar8ChainCert.lean"
+      status: "proved"
+      note: "rounding model CONSTRUCTED (former hardware axioms discharged); capstone: binary32 rounding cannot flip the cifar8 prediction"
+    - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"
+      lean: "lipschitz_margin_certified_radius; scorecard; scorecard_sdp / scorecard_sdp_uncon"
+      module: "LeanMlir/Proofs/LipschitzCert.lean, LeanMlir/Proofs/LipschitzCertScorecard*.lean"
+      status: "proved"
+      note: "fixed 100-image subset at fixed ε — honest lower bound (69/100 vs 72/100 PGD bracket)"
+    - source: "Cohen 2019 randomized-smoothing certified radius (incl. the Gaussian Neyman–Pearson core)"
+      lean: "smoothing_certified_radius_classifier via smoothing_probit_lipschitz / stdGaussian_np_shift"
+      module: "LeanMlir/Proofs/SmoothingGaussian.lean"
+      status: "proved"
+      note: "end-to-end: quantile inversion, Cameron–Martin shift, rotation-invariance dimension reduction all proved; requires class probabilities in (0,1); the driver's Monte-Carlo estimation gap is not formalized"
+    - source: "Optimizer-as-steepest-descent ladder (SGD / sign / Muon / Shampoo, Newton–Schulz)"
+      lean: "muon_polar_steepest, shampoo_eq_muon, muon_polar_nearest_orthogonal + spectral-step lemma"
+      module: "LeanMlir/Proofs/MuonGeometry.lean, LeanMlir/Proofs/MuonNewtonSchulz.lean"
+      status: "proved"
+      note: "14 theorems; singular-G SVD completion + Newton–Schulz convergence dynamics left open"
     - source: "StableHLO/IREE codegen faithfulness, JAX numeric agreement, training accuracy"
       lean: "(none — empirical)"
       module: ""
