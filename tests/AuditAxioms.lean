@@ -3045,6 +3045,15 @@ open Proofs
 #print axioms Proofs.stdNormalQuantile_anti
 #print axioms Proofs.smoothing_certified_radius_gaussian
 
+-- G2, the 1-D Neyman–Pearson core (smoothing_gaussian_lemma.md): stdNormalCDF_quantile makes the
+-- quantile a genuine inverse (Φ(Φ⁻¹p)=p on (0,1) — right-continuity for ≥, no-atoms left-limit
+-- for ≤); gaussian_np_shift is Cohen's Lemma-3 bound — measurable f : ℝ → [0,1] with
+-- ∫f dN(0,1) ≥ Φ(t) has ∫f dN(δ,1) ≥ Φ(t−δ) for δ ≥ 0, via the monotone-likelihood-ratio
+-- pointwise inequality (f − 1_{z≤t})·(LR − LR(t)) ≥ 0 integrated against the base Gaussian
+-- (halfspace = the NP-optimal mass mover; no layer-cake needed).
+#print axioms Proofs.stdNormalCDF_quantile
+#print axioms Proofs.gaussian_np_shift
+
 -- ...and the Tsuzuku certificate INSTANTIATED (LipschitzCertInstance.lean): the Lipschitz constant
 -- is PROVED (denseE_lipschitzL2 — the Frobenius bound ‖W‖₂ ≤ ‖W‖_F via row-wise Cauchy-Schwarz, no
 -- power-iteration estimate in the trust path; reluE_lipschitzL2 = the activation's factor 1), the

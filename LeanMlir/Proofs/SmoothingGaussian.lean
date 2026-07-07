@@ -20,6 +20,12 @@ This file proves the three facts Mathlib doesn't have:
   `Φ⁻¹(1−q) = −Φ⁻¹(q)`), via the no-flat-step lemma `stdNormalCDF_sSup_lt_eq_sInf_gt`
   (a flat step at level `q` would give two points with `Φ = q`, against strict mono).
 
+G2 (the 1-D Neyman–Pearson core) also lives here: `stdNormalCDF_quantile` upgrades the
+quantile to a genuine inverse (`Φ(Φ⁻¹ p) = p` on `(0,1)`, right-continuity + no-atoms), and
+`gaussian_np_shift` is the Cohen bound — a `[0,1]` function with `N(0,1)`-mean ≥ `Φ(t)` keeps
+mean ≥ `Φ(t−δ)` under a `δ ≥ 0` shift, by the monotone-likelihood-ratio pointwise inequality
+`(f − 1_{z≤t})·(LR − LR(t)) ≥ 0` (no layer-cake, no rearrangement machinery).
+
 Capstone: `smoothing_certified_radius_gaussian` — `smoothing_certified_radius_probit` with
 `Phiinv := stdNormalQuantile`, its `hmono`/`hanti` DISCHARGED. The quantile is total on ℝ
 (junk `sSup` outside `(0,1)`) but every use here is guarded by `hp : p c y ∈ Ioo 0 1` — the
@@ -163,6 +169,177 @@ lemma stdNormalQuantile_anti {q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1) :
     constructor <;> intro h <;> linarith
   rw [stdNormalQuantile, hset, Real.sSup_neg, stdNormalQuantile,
     stdNormalCDF_sSup_lt_eq_sInf_gt hq]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Quantile inversion: Φ(Φ⁻¹ p) = p on (0,1)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The quantile genuinely inverts Φ** on `(0,1)`: `Φ(Φ⁻¹ p) = p`. Right continuity of
+    the Stieltjes cdf gives `≥` (a value below `p` at the sup would push the sup further
+    right); no-atoms gives `≤` (the cdf equals its left limit, and everything left of the
+    sup is `< p`). The lemma that makes `stdNormalQuantile` an inverse, not just a
+    monotone-odd stand-in — G2's Neyman–Pearson bound enters through it. -/
+lemma stdNormalCDF_quantile {p : ℝ} (hp : p ∈ Set.Ioo (0:ℝ) 1) :
+    stdNormalCDF (stdNormalQuantile p) = p := by
+  haveI : NoAtoms (gaussianReal 0 1) := noAtoms_gaussianReal one_ne_zero
+  have hAne : Set.Nonempty {t | stdNormalCDF t < p} := stdNormalCDF_exists_lt hp.1
+  have hAbdd : BddAbove {t | stdNormalCDF t < p} := stdNormalCDF_sublevel_bddAbove hp.2
+  set q := stdNormalQuantile p with hq
+  -- (≥): right continuity — if Φ q < p, some u > q also has Φ u < p, beating the sSup
+  have hge : p ≤ stdNormalCDF q := by
+    by_contra hlt
+    rw [not_le] at hlt
+    have hrc : ContinuousWithinAt stdNormalCDF (Set.Ici q) q :=
+      (cdf (gaussianReal 0 1)).right_continuous q
+    have hev : ∀ᶠ u in 𝓝[>] q, stdNormalCDF u < p :=
+      nhdsWithin_mono q Set.Ioi_subset_Ici_self
+        (Filter.Tendsto.eventually_lt_const hlt hrc)
+    obtain ⟨u, huq, hu⟩ := (hev.and eventually_mem_nhdsWithin).exists
+    exact absurd (le_csSup hAbdd huq) (not_le.mpr hu)
+  -- (≤): no atoms — Φ q equals its left limit, and everything left of q is < p
+  have hle : stdNormalCDF q ≤ p := by
+    have hsing : (gaussianReal 0 1) {q} = 0 := measure_singleton q
+    rw [← measure_cdf (μ := gaussianReal 0 1), StieltjesFunction.measure_singleton] at hsing
+    have h1 : stdNormalCDF q - Function.leftLim (cdf (gaussianReal 0 1)) q ≤ 0 :=
+      ENNReal.ofReal_eq_zero.mp hsing
+    have h2 : Function.leftLim (cdf (gaussianReal 0 1)) q ≤ stdNormalCDF q :=
+      (cdf (gaussianReal 0 1)).mono.leftLim_le le_rfl
+    have hll : Function.leftLim (cdf (gaussianReal 0 1)) q = stdNormalCDF q := by linarith
+    rw [show stdNormalCDF q = Function.leftLim (cdf (gaussianReal 0 1)) q from hll.symm]
+    refine le_of_tendsto ((cdf (gaussianReal 0 1)).mono.tendsto_leftLim q) ?_
+    filter_upwards [self_mem_nhdsWithin] with u hu
+    obtain ⟨a, ha, hua⟩ := exists_lt_of_lt_csSup hAne hu
+    exact ((cdf (gaussianReal 0 1)).mono hua.le).trans (le_of_lt ha)
+  linarith
+
+-- ════════════════════════════════════════════════════════════════
+-- § G2: the 1-D Neyman–Pearson core (σ = 1, shift δ ≥ 0)
+-- ════════════════════════════════════════════════════════════════
+
+/-! The analytic heart of Cohen 2019, in its 1-D normalized form. The classic proof needs
+no layer-cake and no rearrangement machinery: with `h` the halfspace indicator at the
+threshold `t` and `LR` the (monotone) Gaussian likelihood ratio, the pointwise inequality
+`(f − h)·(LR − LR(t)) ≥ 0` — sign-checked on each side of `t` — integrates against the
+base Gaussian into exactly the Neyman–Pearson optimality of the halfspace. -/
+
+/-- The Gaussian likelihood ratio: `pdf_{N(δ,1)}(z) = exp(δz − δ²/2) · pdf_{N(0,1)}(z)` —
+    monotone in `z` (for `δ ≥ 0`), which is all Neyman–Pearson needs. -/
+lemma gaussianPDFReal_shift (δ z : ℝ) :
+    gaussianPDFReal δ 1 z = Real.exp (δ * z - δ ^ 2 / 2) * gaussianPDFReal 0 1 z := by
+  simp only [gaussianPDFReal, NNReal.coe_one]
+  have harg : -(z - δ) ^ 2 / (2 * 1)
+      = δ * z - δ ^ 2 / 2 + -(z - 0) ^ 2 / (2 * 1) := by ring
+  rw [mul_left_comm, ← Real.exp_add, harg]
+
+/-- The shifted Gaussian's cdf is a shifted `Φ`: `cdf_{N(δ,1)}(t) = Φ(t − δ)`. -/
+lemma cdf_gaussianReal_shift (δ t : ℝ) :
+    cdf (gaussianReal δ 1) t = stdNormalCDF (t - δ) := by
+  have hmap : gaussianReal δ 1 = (gaussianReal 0 1).map (· + δ) := by
+    rw [gaussianReal_map_add_const]; norm_num
+  have hpre : (· + δ) ⁻¹' Set.Iic t = Set.Iic (t - δ) := by
+    ext z; simp [le_sub_iff_add_le]
+  rw [stdNormalCDF, cdf_eq_real, cdf_eq_real, hmap, Measure.real,
+    Measure.map_apply (measurable_add_const δ) measurableSet_Iic, hpre, ← Measure.real]
+
+/-- The halfspace indicator's Gaussian mass is the cdf at the threshold. -/
+lemma integral_indicator_Iic_gaussianReal (μ t : ℝ) :
+    ∫ z, (Set.Iic t).indicator (1 : ℝ → ℝ) z ∂(gaussianReal μ 1)
+      = cdf (gaussianReal μ 1) t := by
+  rw [integral_indicator_one measurableSet_Iic, cdf_eq_real]
+
+/-- **G2 — the 1-D Neyman–Pearson core (Cohen 2019, Lemma 3 specialization).** For
+    measurable `f : ℝ → [0,1]` with standard-Gaussian mean at least `Φ(t)`, the mean under
+    the `δ`-shifted Gaussian (`δ ≥ 0`) is at least `Φ(t − δ)`: among all `[0,1]` functions
+    of given Gaussian mass, the halfspace indicator `1_{z ≤ t}` loses the most mass under a
+    shift — the likelihood ratio `exp(δz − δ²/2)` is monotone, so
+    `(f − 1_{z ≤ t})·(LR − LR(t)) ≥ 0` pointwise, and integrating it against `N(0,1)`
+    forces `∫f dN(δ,1) ≥ ∫1_{z ≤ t} dN(δ,1) = Φ(t − δ)`. -/
+theorem gaussian_np_shift {f : ℝ → ℝ} (hfm : Measurable f)
+    (hf0 : ∀ z, 0 ≤ f z) (hf1 : ∀ z, f z ≤ 1)
+    {δ t : ℝ} (hδ : 0 ≤ δ)
+    (hp : stdNormalCDF t ≤ ∫ z, f z ∂(gaussianReal 0 1)) :
+    stdNormalCDF (t - δ) ≤ ∫ z, f z ∂(gaussianReal δ 1) := by
+  classical
+  set h : ℝ → ℝ := (Set.Iic t).indicator (1 : ℝ → ℝ) with hh
+  have hhm : Measurable h := measurable_const.indicator measurableSet_Iic
+  have hh0 : ∀ z, 0 ≤ h z := fun z =>
+    Set.indicator_nonneg (fun _ _ => zero_le_one) z
+  have hh1 : ∀ z, h z ≤ 1 := by
+    intro z
+    by_cases hz : z ∈ Set.Iic t <;> simp [hh, hz]
+  -- bounded-by-1 measurable functions integrate against any Gaussian pdf
+  have hbdd : ∀ (μ' : ℝ) (g : ℝ → ℝ), Measurable g → (∀ z, |g z| ≤ 1) →
+      Integrable (fun z => gaussianPDFReal μ' 1 z * g z) volume := by
+    intro μ' g hgm hg1
+    refine (integrable_gaussianPDFReal μ' 1).mono
+      ((measurable_gaussianPDFReal μ' 1).mul hgm).aestronglyMeasurable
+      (ae_of_all _ fun z => ?_)
+    rw [Real.norm_eq_abs, Real.norm_eq_abs, abs_mul,
+      abs_of_nonneg (gaussianPDFReal_nonneg μ' 1 z)]
+    calc gaussianPDFReal μ' 1 z * |g z| ≤ gaussianPDFReal μ' 1 z * 1 :=
+          mul_le_mul_of_nonneg_left (hg1 z) (gaussianPDFReal_nonneg μ' 1 z)
+      _ = gaussianPDFReal μ' 1 z := mul_one _
+  have habs_f : ∀ z, |f z| ≤ 1 := fun z => abs_le.mpr ⟨by linarith [hf0 z], hf1 z⟩
+  have habs_h : ∀ z, |h z| ≤ 1 := fun z => abs_le.mpr ⟨by linarith [hh0 z], hh1 z⟩
+  have habs_fh : ∀ z, |f z - h z| ≤ 1 := fun z =>
+    abs_le.mpr ⟨by linarith [hf0 z, hh1 z], by linarith [hf1 z, hh0 z]⟩
+  -- the likelihood ratio at the threshold
+  set c : ℝ := Real.exp (δ * t - δ ^ 2 / 2) with hc
+  have hcpos : 0 < c := Real.exp_pos _
+  -- pointwise: (f − h)·pdf_δ ≥ c·(f − h)·pdf₀ — the NP rearrangement, case split at t
+  have hpoint : ∀ z, c * (gaussianPDFReal 0 1 z * (f z - h z))
+      ≤ gaussianPDFReal δ 1 z * (f z - h z) := by
+    intro z
+    rw [gaussianPDFReal_shift δ z]
+    rcases le_or_gt z t with hz | hz
+    · -- z ≤ t: f − h ≤ 0 and LR ≤ c
+      have hhz : h z = 1 := by simp [hh, hz]
+      have hfh : f z - h z ≤ 0 := by rw [hhz]; linarith [hf1 z]
+      have hlr : Real.exp (δ * z - δ ^ 2 / 2) ≤ c := by
+        apply Real.exp_le_exp.mpr
+        have : δ * z ≤ δ * t := mul_le_mul_of_nonneg_left hz hδ
+        linarith
+      nlinarith [mul_nonneg (mul_nonneg (sub_nonneg.mpr hlr) (neg_nonneg.mpr hfh))
+        (gaussianPDFReal_nonneg 0 1 z)]
+    · -- z > t: f − h ≥ 0 and LR ≥ c
+      have hhz : h z = 0 := by
+        simp [hh, not_le.mpr hz]
+      have hfh : 0 ≤ f z - h z := by rw [hhz]; linarith [hf0 z]
+      have hlr : c ≤ Real.exp (δ * z - δ ^ 2 / 2) := by
+        apply Real.exp_le_exp.mpr
+        have : δ * t ≤ δ * z := mul_le_mul_of_nonneg_left hz.le hδ
+        linarith
+      nlinarith [mul_nonneg (mul_nonneg (sub_nonneg.mpr hlr) hfh)
+        (gaussianPDFReal_nonneg 0 1 z)]
+  -- integrate the pointwise bound
+  have hint0 : Integrable (fun z => gaussianPDFReal 0 1 z * (f z - h z)) volume :=
+    hbdd 0 _ (hfm.sub hhm) habs_fh
+  have hintδ : Integrable (fun z => gaussianPDFReal δ 1 z * (f z - h z)) volume :=
+    hbdd δ _ (hfm.sub hhm) habs_fh
+  have hkey : c * ∫ z, gaussianPDFReal 0 1 z * (f z - h z)
+      ≤ ∫ z, gaussianPDFReal δ 1 z * (f z - h z) := by
+    rw [← integral_const_mul]
+    exact integral_mono (hint0.const_mul c) hintδ hpoint
+  -- split the products back into μ-integral differences
+  have hsplit : ∀ μ' : ℝ, (∫ z, gaussianPDFReal μ' 1 z * (f z - h z))
+      = (∫ z, f z ∂(gaussianReal μ' 1)) - ∫ z, h z ∂(gaussianReal μ' 1) := by
+    intro μ'
+    rw [integral_gaussianReal_eq_integral_smul one_ne_zero,
+      integral_gaussianReal_eq_integral_smul one_ne_zero, ← integral_sub
+        (by simpa [smul_eq_mul] using hbdd μ' f hfm habs_f)
+        (by simpa [smul_eq_mul] using hbdd μ' h hhm habs_h)]
+    congr 1
+    funext z
+    simp [smul_eq_mul, mul_sub]
+  rw [hsplit 0, hsplit δ] at hkey
+  -- endpoints: ∫ h = Φ at the (shifted) threshold
+  have hend0 : ∫ z, h z ∂(gaussianReal 0 1) = stdNormalCDF t :=
+    integral_indicator_Iic_gaussianReal 0 t
+  have hendδ : ∫ z, h z ∂(gaussianReal δ 1) = stdNormalCDF (t - δ) := by
+    rw [integral_indicator_Iic_gaussianReal δ t, cdf_gaussianReal_shift]
+  rw [hend0] at hkey
+  rw [← hendδ]
+  nlinarith [hkey, mul_nonneg hcpos.le (sub_nonneg.mpr hp)]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Capstone: the Cohen radius at the REAL Gaussian quantile
