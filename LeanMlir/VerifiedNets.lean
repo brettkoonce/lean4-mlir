@@ -385,7 +385,8 @@ def convnextVerified : VerifiedNetSpec where
     200 params. Tied at the FULL spec in `Proofs/SpecVJP.lean` (`vitVerified_denote_eq` →
     `vitForwardKV` depth-12 distinct-param vector-LN, retiring the old weight-shared
     scalar-LN caveats), with the REAL whole-net VJP `Proofs.vitVerified_has_vjp`
-    (all-smooth, `0 < ε` only). Rung E (whole-net graph) still 2-block representative. -/
+    (all-smooth, `0 < ε` only) and rung E `vitVerified_fwd_faithful` (the depth-12
+    multi-head vector-LN graph `vitFwdGraphKMHV`). -/
 def vitVerified : VerifiedNetSpec where
   name     := "ViT-Tiny"
   slug     := "vit"

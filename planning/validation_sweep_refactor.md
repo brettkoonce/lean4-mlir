@@ -94,7 +94,8 @@ mnv2 `denoteMobilenetPaper`→`mobilenetv2ForwardPaper` (B/C/E), r34
 `denoteEfficientnetB0`→`efficientnetForwardB_full` batched ∀N (B/C/E), convnext
 `denoteConvnextT`→`convNextForwardTC` committed 180-param config (B/C/E), vit
 `denoteVitTiny`→`vitForwardKV` depth-12 distinct-param vector-LN via new `ViTTinyWeights`
-(B/C with the REAL whole-net VJP; E deferred — whole-net graph still 2-block rep). The
+(B/C with the REAL whole-net VJP; E via `vitFwdGraphKMHV_faithful`, the depth-k
+multi-head vector-LN graph that already existed in ViTDepthK §3). The
 representative rungs remain alongside; the forward graphs + faithfulness live in
 `Proofs/StableHLO.lean`. Commits `8e9ae0b … 60d5ed6` on `main`, **NOT pushed** (~86 ahead).
 

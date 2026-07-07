@@ -579,18 +579,18 @@ theorem mobilenetv2Verified_fwd_faithful (epsStr : String) (w : MNV2PaperWeights
     (congrFun (mobilenetv2Verified_denote_eq w).symm x)
 
 
-/-! ## Rung B/C(/E) (FULL, unified weight bundles): r34 / enet / convnext / vit
+/-! ## Rung B/C/E (FULL, unified weight bundles): r34 / enet / convnext / vit
 
 The mnv2 full-paper pattern applied to the remaining imagenette nets: each committed
 spec's ENTIRE layer list (literal dims, drift-sensitive) denotes the full proven
 forward, with weights riding a structure bundle so the ties stay readable. Existing
 bundles are reused where the Full module already has one (`B0Weights`,
 `CnxTWeights`); r34 and vit get bundles here (`R34Weights`, `ViTTinyWeights` —
-SpecVJP-local so no proof module's signature changes). Rung E composes the full
-graph-faithfulness apex with the tie where the full graph exists (r34/enet/convnext;
-vit's whole-net graph is still the 2-block/1-head representative, so vit E stays
-deferred). Rung C is the canonical witness except vit: all-smooth, so vit's rung C is
-the REAL whole-net VJP `vitForwardKV_has_vjp` (only `0 < ε`) at the committed spec. -/
+SpecVJP-local so no proof module's signature changes). Rung E composes each net's
+full graph-faithfulness apex with the tie (vit's is `vitFwdGraphKMHV_faithful`,
+ViTDepthK §3 — the depth-`k` multi-head vector-LN graph). Rung C is the canonical
+witness except vit: all-smooth, so vit's rung C is the REAL whole-net VJP
+`vitForwardKV_has_vjp` (only `0 < ε`) at the committed spec. -/
 
 -- ── ResNet-34 (FULL): the committed 8-entry spec ↔ resnet34Forward_full_pc ──
 
@@ -881,8 +881,22 @@ noncomputable def vitVerified_has_vjp (w : ViTTinyWeights) (hε : 0 < w.ε) :
   vitForwardKV_has_vjp 3 224 224 16 196 768 3 64 10 12
     w.Wc w.bc w.cls w.pos w.ε hε w.blocks w.γF w.βF w.Wcls w.bcls
 
--- (vit rung E stays deferred: the whole-net graph `vitFwdGraph` is still the
--- 2-block/1-head representative — the committed render's per-op tie is ViTTiePoC.)
+open Proofs.StableHLO in
+/-- **Rung E at the committed spec.** The depth-12 3-head vector-LN forward graph
+    (`vitFwdGraphKMHV`, ViTDepthK §3 — patch embed → 12 spelled multi-head blocks →
+    final vector-LN → CLS → head) denotes the committed spec's function:
+    `vitFwdGraphKMHV_faithful` composed with the tie. Completes the B/C/E ladder for
+    all five imagenette nets. -/
+theorem vitVerified_fwd_faithful (epsStr sStr oneStr zeroStr : String)
+    (w : ViTTinyWeights) (x : Vec (3 * 224 * 224)) :
+    den (vitFwdGraphKMHV (ic := 3) (H := 224) (W := 224) (P := 16) (N := 196)
+          (hm1 := 2) (d := 64) (mlpDim := 768) (nClasses := 10)
+          epsStr sStr oneStr zeroStr w.ε (sdpa_scale 64)
+          w.Wc w.bc w.cls w.pos 12 w.blocks w.γF w.βF w.Wcls w.bcls x)
+      = denoteVitTiny vitVerified.layers w x :=
+  (vitFwdGraphKMHV_faithful 3 224 224 16 196 2 64 768 10 epsStr sStr oneStr zeroStr
+      w.Wc w.bc w.cls w.pos w.ε 12 w.blocks w.γF w.βF w.Wcls w.bcls x).trans
+    (congrFun (vitVerified_denote_eq w).symm x)
 
 
 /-! ## Rung B/C (representative): the imagenette nets' proof witnesses
@@ -1176,7 +1190,7 @@ The representative forward graph `convNextFwdGraph` (StableHLO; patchify → LN 
 GAP → head-LN → dense, via `geluF`/`layerScaleF`/`bnF`/`addV`) denotes the representative
 `convNextForward` (`convNextFwdGraph_faithful`), composed with `convnextRep_denote_eq` ⇒
 `den graph = denoteConvnextRep <rep layers>`. So convnext has the representative A+B+C+E(fwd)
-ladder. (Scalar LN; full-render E deferred.) -/
+ladder. (Scalar LN; the full-render E is `convnextVerified_fwd_faithful` above.) -/
 open Proofs.StableHLO in
 theorem convnextRep_fwd_faithful {ic c cExp h w kH kW nClasses : Nat}
     (epsStr : String)

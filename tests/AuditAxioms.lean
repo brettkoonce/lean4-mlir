@@ -3346,7 +3346,8 @@ open Proofs
 -- r34 (R34Weights → resnet34Forward_full_pc), enet (B0Weights → efficientnetForwardB_full,
 -- batched ∀N), convnext (CnxTWeights → convNextForwardTC, committed 180-param config),
 -- vit (ViTTinyWeights → vitForwardKV depth-12 distinct-param vector-LN). Rung E composed
--- where the full graph exists (r34/enet/convnext; vit E deferred, graph still 2-block rep).
+-- from each net's full graph-faithfulness apex — vit's via vitFwdGraphKMHV_faithful
+-- (ViTDepthK §3), so ALL FIVE have the complete B/C/E ladder at their committed specs.
 -- vitVerified_has_vjp is the REAL whole-net VJP (all-smooth, 0<ε), not the canonical witness.
 #print axioms resnet34Verified_denote_eq
 #print axioms resnet34Verified_fwd_faithful
@@ -3356,3 +3357,4 @@ open Proofs
 #print axioms convnextVerified_fwd_faithful
 #print axioms vitVerified_denote_eq
 #print axioms vitVerified_has_vjp
+#print axioms vitVerified_fwd_faithful
