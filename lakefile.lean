@@ -675,6 +675,12 @@ lean_lib «Certs» where
              -- and the margin is m, every ‖δ‖₂ < m/(√2·L) leaves the argmax fixed (proof, vs
              -- the PGD attack's one-attack upper bound). The cert side of cert ≤ TRUE ≤ PGD.
              `LeanMlir.Proofs.LipschitzCert,
+             -- The real Gaussian probit (planning/smoothing_gaussian_lemma.md, G1): the
+             -- smoothing radius instantiated at the TRUE standard-normal quantile —
+             -- stdNormalCDF strict-mono + symmetry, quantile MonotoneOn (0,1) + odd-about-½,
+             -- capstone smoothing_certified_radius_gaussian with only the Neyman–Pearson
+             -- (1/σ)-Lipschitz core (hg) left as a hypothesis.
+             `LeanMlir.Proofs.SmoothingGaussian,
              -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).

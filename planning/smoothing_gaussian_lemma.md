@@ -66,6 +66,25 @@ depends on `⟨z, δ⟩` — arguably simpler than two lemmas). Keep everything 
 `Proofs/SmoothingGaussian.lean`; wire into `Certs` + `AuditAxioms` on first commit
 (the SpecVJP lesson: no orphan proof files).
 
+## G1 DONE (2026-07-07)
+
+Landed exactly as scoped below, all 3-axiom-clean:
+
+- `smoothing_certified_radius_probit` (LipschitzCert.lean) — the Ioo variant
+  (`hp : p c y ∈ Ioo 0 1`, `MonotoneOn`/Ioo-`hanti`), original theorem untouched.
+- `Proofs/SmoothingGaussian.lean` — `stdNormalCDF := cdf (gaussianReal 0 1)`,
+  `stdNormalQuantile p := sSup {t | Φ t < p}`; strict mono (`stdGaussian_Ioo_pos` via
+  `setLIntegral_pos_iff` + `support_gaussianPDF`), symmetry `stdNormalCDF_neg` (Mathlib
+  HAD the map-neg lemma: `gaussianReal_map_neg`), quantile `MonotoneOn` + `hanti` via the
+  no-flat-step bridge `stdNormalCDF_sSup_lt_eq_sInf_gt` (a gap ⇒ two points with Φ = q ⇒
+  strict-mono contradiction; `Real.sSup_neg` turns the negated set into `−sInf`).
+- Capstone `smoothing_certified_radius_gaussian`: only `hg` (the NP core) remains.
+- Wired: lakefile `Certs` roots + `LeanMlir.lean` + `tests/AuditAxioms.lean` (6 new
+  `#print axioms` entries) in the same change.
+
+**NEXT = G2**: scout pi-Gaussian rotation invariance first (G3 note below), then decide
+the G2/G3 split vs the fused ⟨z,δ⟩-density-ratio route.
+
 ## Session handoff (2026-07-07, pre-G1 analysis DONE)
 
 **Design discovery (load-bearing):** `hmono : Monotone Phiinv` in

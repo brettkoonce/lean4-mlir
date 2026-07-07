@@ -22,6 +22,8 @@ The second half of the file formalizes the *other* certificate — **randomized 
 (Cohen–Rosenfeld–Kolter 2019, the `*-smooth` demos): `smoothing_certified_radius` gives the
 `σ·Φ⁻¹(p_A)` radius the driver reports, as the same Lipschitz-margin argument on the per-class
 probit score fields `Φ⁻¹∘P[f(x+η)=·]` — depth-independent, non-vacuous where the product collapses.
+`smoothing_certified_radius_probit` is the `Ioo (0,1)` variant that the REAL Gaussian quantile can
+instantiate (`SmoothingGaussian.lean` discharges its `hmono`/`hanti` at the true `Φ⁻¹`).
 
 All results are `propext / Classical.choice / Quot.sound`-clean (`tests/AuditAxioms.lean`). -/
 
@@ -231,5 +233,45 @@ theorem smoothing_certified_radius {σ : ℝ} (hσ : 0 < σ)
   intro j hj
   by_contra h
   exact absurd (hmono (not_lt.mp h)) (not_le.mpr (hscore j hj))
+
+/-- **The radius theorem at an honest probit (Ioo variant).** The TRUE quantile `Φ⁻¹` is
+    unbounded on `(0,1)`, so no total real-valued `Phiinv` can satisfy the global `hmono`
+    of `smoothing_certified_radius` while agreeing with it — the abstract theorem is fine,
+    but it can never be *instantiated* at the real inverse Gaussian CDF. This variant fixes
+    that: all class probabilities live in `(0,1)` (`hp` — Monte-Carlo/Clopper–Pearson
+    estimates are never exactly 0 or 1), and monotonicity/oddness are only required ON
+    `Ioo 0 1`, which the real `Φ⁻¹` satisfies (`SmoothingGaussian.lean` discharges both,
+    making the Cohen radius a theorem about the genuine Gaussian quantile with only the
+    Neyman–Pearson Lipschitz core `hg` left as a hypothesis). Same proof, with the Ioo
+    memberships threaded through. -/
+theorem smoothing_certified_radius_probit {σ : ℝ} (hσ : 0 < σ)
+    {Phiinv : ℝ → ℝ} (hmono : MonotoneOn Phiinv (Set.Ioo 0 1))
+    (hanti : ∀ q ∈ Set.Ioo (0:ℝ) 1, Phiinv (1 - q) = -Phiinv q)
+    {p : Fin k → E → ℝ}
+    (hp : ∀ c y, p c y ∈ Set.Ioo (0:ℝ) 1)
+    (hg : ∀ c, LipschitzL2 (1 / σ) (fun x => Phiinv (p c x)))
+    {x δ : E} {i : Fin k}
+    (hrunner : ∀ j, j ≠ i → p j x ≤ 1 - p i x)
+    (hδ : ‖δ‖ < σ * Phiinv (p i x)) :
+    ∀ j, j ≠ i → p j (x + δ) < p i (x + δ) := by
+  have h1mem : (1 - p i x) ∈ Set.Ioo (0:ℝ) 1 := by
+    have h := hp i x
+    exact ⟨by linarith [h.2], by linarith [h.1]⟩
+  have hscore : ∀ j, j ≠ i →
+      Phiinv (p j (x + δ)) < Phiinv (p i (x + δ)) := by
+    refine smoothed_margin_certified_radius (g := fun c x => Phiinv (p c x)) hσ hg
+      (m := 2 * Phiinv (p i x)) ?_ ?_
+    · intro j hj
+      have h1 : Phiinv (p j x) ≤ Phiinv (1 - p i x) :=
+        hmono (hp j x) h1mem (hrunner j hj)
+      have h2 : Phiinv (1 - p i x) = -Phiinv (p i x) := hanti _ (hp i x)
+      show 2 * Phiinv (p i x) ≤ Phiinv (p i x) - Phiinv (p j x)
+      linarith [h1, h2]
+    · have e : σ * (2 * Phiinv (p i x)) / 2 = σ * Phiinv (p i x) := by ring
+      rw [e]; exact hδ
+  intro j hj
+  by_contra h
+  exact absurd (hmono (hp i (x + δ)) (hp j (x + δ)) (not_lt.mp h))
+    (not_le.mpr (hscore j hj))
 
 end Proofs

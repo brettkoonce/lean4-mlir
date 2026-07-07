@@ -146,6 +146,7 @@ import LeanMlir.Proofs.Cifar8BnTiePoC
 import LeanMlir.Proofs.ViTFaithfulPoC
 import LeanMlir.Proofs.ViTTiePoC
 import LeanMlir.Proofs.LipschitzCert
+import LeanMlir.Proofs.SmoothingGaussian
 import LeanMlir.Proofs.LipschitzCertInstance
 import LeanMlir.Proofs.TrainedMlpWitness
 import LeanMlir.Proofs.TrainedCnnWitness
@@ -3027,6 +3028,22 @@ open Proofs
 -- driver reports). smoothed_margin_certified_radius = the core σ·m/2 margin step.
 #print axioms Proofs.smoothing_certified_radius
 #print axioms Proofs.smoothed_margin_certified_radius
+
+-- The smoothing radius at the REAL Gaussian quantile (SmoothingGaussian.lean, G1 of
+-- planning/smoothing_gaussian_lemma.md): the abstract theorem's global `Monotone Phiinv` can
+-- never be met by the true (unbounded-on-(0,1)) quantile, so the Ioo VARIANT
+-- smoothing_certified_radius_probit adds hp : p c y ∈ Ioo 0 1 (Monte-Carlo estimates are never
+-- exactly 0/1) and weakens hmono/hanti to Ioo — then SmoothingGaussian DISCHARGES both at
+-- stdNormalQuantile = sSup {t | cdf (gaussianReal 0 1) t < p}: strict mono of Φ (every interval
+-- has positive Gaussian mass), symmetry Φ(−t)=1−Φ(t) (gaussianReal_map_neg), quantile
+-- MonotoneOn + odd-about-½ (no-flat-step sSup=sInf bridge). The capstone's ONLY smoothing-side
+-- hypothesis left is hg — the (1/σ)-Lipschitz Neyman–Pearson core (G2–G4).
+#print axioms Proofs.smoothing_certified_radius_probit
+#print axioms Proofs.stdNormalCDF_strictMono
+#print axioms Proofs.stdNormalCDF_neg
+#print axioms Proofs.stdNormalQuantile_monotoneOn
+#print axioms Proofs.stdNormalQuantile_anti
+#print axioms Proofs.smoothing_certified_radius_gaussian
 
 -- ...and the Tsuzuku certificate INSTANTIATED (LipschitzCertInstance.lean): the Lipschitz constant
 -- is PROVED (denseE_lipschitzL2 — the Frobenius bound ‖W‖₂ ≤ ‖W‖_F via row-wise Cauchy-Schwarz, no
