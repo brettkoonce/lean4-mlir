@@ -3066,6 +3066,22 @@ open Proofs
 #print axioms Proofs.pi_gaussian_np_shift
 #print axioms Proofs.stdGaussian_np_shift
 
+-- G4, assembly — the Cohen radius with NOTHING left on the smoothing side.
+-- stdNormalQuantile_cdf (Φ⁻¹(Φs)=s, strict mono) + Φ ∈ (0,1) push the G3 bound through Φ⁻¹
+-- in both directions: smoothing_probit_lipschitz = the Cohen/Salman (1/σ)-Lipschitz probit
+-- score field, the exact hg hypothesis of smoothing_certified_radius_probit, now a THEOREM.
+-- smoothing_certified_radius_cohen instantiates it (soft [0,1] scores);
+-- smoothing_certified_radius_classifier is the driver-shaped endpoint: measurable hard
+-- classifier, N(0,σ²I) noise (∫f(x+σ•z)dγ), the [0,1] bounds AND the runner-up bound
+-- derived from decision-region disjointness — hypotheses are only measurability, the
+-- Ioo-probabilities guard hp, and the margin ‖δ‖ < σ·Φ⁻¹(p_A). Both sides of the
+-- cert ≤ TRUE ≤ PGD sandwich are now unconditional proofs.
+#print axioms Proofs.stdNormalQuantile_cdf
+#print axioms Proofs.stdNormalCDF_mem_Ioo
+#print axioms Proofs.smoothing_probit_lipschitz
+#print axioms Proofs.smoothing_certified_radius_cohen
+#print axioms Proofs.smoothing_certified_radius_classifier
+
 -- ...and the Tsuzuku certificate INSTANTIATED (LipschitzCertInstance.lean): the Lipschitz constant
 -- is PROVED (denseE_lipschitzL2 — the Frobenius bound ‖W‖₂ ≤ ‖W‖_F via row-wise Cauchy-Schwarz, no
 -- power-iteration estimate in the trust path; reluE_lipschitzL2 = the activation's factor 1), the

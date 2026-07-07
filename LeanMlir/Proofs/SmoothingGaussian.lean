@@ -4,11 +4,14 @@ import Mathlib.Probability.Distributions.Gaussian.Multivariate
 import Mathlib.Probability.CDF
 import Mathlib.Analysis.InnerProductSpace.Projection.Reflection
 
-/-! # The real Gaussian probit: Φ, Φ⁻¹, and the Cohen radius at the true quantile
+/-! # The real Gaussian probit: Φ, Φ⁻¹, and the Cohen radius as a THEOREM
 
-G1 of `planning/smoothing_gaussian_lemma.md`: instantiate the randomized-smoothing certified
-radius at the REAL standard-normal quantile, so the only smoothing-side hypothesis left is
-the Neyman–Pearson Lipschitz core (`hg` — G2–G4 of the plan).
+The complete G1–G4 ladder of `planning/smoothing_gaussian_lemma.md`. Endpoint:
+`smoothing_certified_radius_classifier` — for a measurable classifier under `N(0,σ²I)`
+smoothing, every `‖δ‖ < σ·Φ⁻¹(p_A(x))` provably cannot flip the smoothed argmax, with
+`Φ⁻¹` the genuine standard-normal quantile and NO smoothing-side hypotheses left: the
+Cohen–Rosenfeld–Kolter `(1/σ)`-Lipschitz probit (`hg` of the G1 radius theorem, the
+Neyman–Pearson hard half) is now `smoothing_probit_lipschitz`, a theorem.
 
 `stdNormalCDF` is Mathlib's `cdf (gaussianReal 0 1)` — the genuine `Φ`, no bespoke integral.
 This file proves the three facts Mathlib doesn't have:
@@ -685,5 +688,185 @@ theorem stdGaussian_np_shift {n : ℕ} {f : EuclideanSpace ℝ (Fin (n + 1)) →
         congr 1
         funext x
         rw [hshift]
+
+-- ════════════════════════════════════════════════════════════════
+-- § G4: the smoothed probit is (1/σ)-Lipschitz — hg becomes a theorem
+-- ════════════════════════════════════════════════════════════════
+
+/-! Assembly. `stdNormalQuantile_cdf` (the other inversion direction, `Φ⁻¹(Φ s) = s`, from
+strict monotonicity) plus `stdNormalCDF_mem_Ioo` let the G3 bound be pushed through `Φ⁻¹`:
+applying it in both directions gives `|Φ⁻¹(p(x)) − Φ⁻¹(p(y))| ≤ ‖x−y‖/σ` — the Cohen/Salman
+`(1/σ)`-Lipschitz probit, `smoothing_probit_lipschitz`. Instantiating the G1 radius theorem
+with it yields `smoothing_certified_radius_cohen` (soft scores) and
+`smoothing_certified_radius_classifier` (hard classifier — the `[0,1]` bounds AND the
+runner-up bound come free from decision-region disjointness). The `σ`-smoothed mean is
+written `∫ f(x + σ•z) dγ(z)` with `γ` the STANDARD Gaussian — i.e. noise `N(0, σ²I)`,
+exactly what the `*-smooth` drivers sample. -/
+
+/-- `Φ⁻¹(Φ s) = s` — the quantile inverts the cdf everywhere (strict monotonicity makes
+    the strict sub-level set of `Φ s` exactly `Iio s`). -/
+lemma stdNormalQuantile_cdf (s : ℝ) : stdNormalQuantile (stdNormalCDF s) = s := by
+  have hset : {r | stdNormalCDF r < stdNormalCDF s} = Set.Iio s := by
+    ext r
+    simp only [Set.mem_setOf_eq, Set.mem_Iio]
+    exact ⟨fun h => stdNormalCDF_strictMono.lt_iff_lt.mp h,
+      fun h => stdNormalCDF_strictMono h⟩
+  rw [stdNormalQuantile, hset, csSup_Iio]
+
+/-- `Φ` never reaches 0: there is Gaussian mass below every point. -/
+lemma stdNormalCDF_pos (s : ℝ) : 0 < stdNormalCDF s := by
+  have h := stdGaussian_Ioo_pos (show s - 1 < s by linarith)
+  have hle : gaussianReal 0 1 (Set.Ioo (s - 1) s) ≤ gaussianReal 0 1 (Set.Iic s) :=
+    measure_mono (fun x hx => le_of_lt hx.2)
+  have : 0 < (gaussianReal 0 1).real (Set.Iic s) :=
+    ENNReal.toReal_pos (lt_of_lt_of_le h hle).ne' (measure_ne_top _ _)
+  rw [stdNormalCDF, cdf_eq_real]
+  exact this
+
+/-- `Φ` never reaches 1 (symmetry + `stdNormalCDF_pos`). -/
+lemma stdNormalCDF_lt_one (s : ℝ) : stdNormalCDF s < 1 := by
+  have h := stdNormalCDF_pos (-s)
+  have hneg := stdNormalCDF_neg s
+  linarith
+
+/-- `Φ` maps into the open unit interval. -/
+lemma stdNormalCDF_mem_Ioo (s : ℝ) : stdNormalCDF s ∈ Set.Ioo (0:ℝ) 1 :=
+  ⟨stdNormalCDF_pos s, stdNormalCDF_lt_one s⟩
+
+/-- **G4 core — the smoothed probit is (1/σ)-Lipschitz** (Cohen 2019 / Salman 2019
+    Lemma 2, now a THEOREM). For measurable `f : E → [0,1]` whose σ-smoothed mean
+    `p(x) = ∫ f(x + σz) dγ(z)` stays inside `(0,1)`, the probit score
+    `x ↦ Φ⁻¹(p x)` is `(1/σ)`-Lipschitz in L2. -/
+theorem smoothing_probit_lipschitz {n : ℕ} {σ : ℝ} (hσ : 0 < σ)
+    {f : EuclideanSpace ℝ (Fin (n + 1)) → ℝ}
+    (hfm : Measurable f) (hf0 : ∀ z, 0 ≤ f z) (hf1 : ∀ z, f z ≤ 1)
+    (hp : ∀ x : EuclideanSpace ℝ (Fin (n + 1)),
+      (∫ z, f (x + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+        ∈ Set.Ioo (0:ℝ) 1) :
+    LipschitzL2 (1 / σ)
+      (fun x => stdNormalQuantile
+        (∫ z, f (x + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))) := by
+  -- one-sided bound, both directions
+  have hside : ∀ x y : EuclideanSpace ℝ (Fin (n + 1)),
+      stdNormalQuantile (∫ z, f (x + σ • z) ∂(stdGaussian _)) - (1 / σ) * ‖y - x‖
+        ≤ stdNormalQuantile (∫ z, f (y + σ • z) ∂(stdGaussian _)) := by
+    intro x y
+    set px := ∫ z, f (x + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))) with hpx
+    set py := ∫ z, f (y + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))) with hpy
+    -- the smoothed mean at y is a shifted smoothed mean at x
+    have hshift : py = ∫ z, (fun w => f (x + σ • w))
+        (z + σ⁻¹ • (y - x)) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))) := by
+      rw [hpy]
+      congr 1
+      funext z
+      congr 1
+      rw [smul_add, smul_smul, mul_inv_cancel₀ (ne_of_gt hσ), one_smul]
+      abel
+    -- NP bound with the true threshold t = Φ⁻¹(px)
+    have hnp := stdGaussian_np_shift (f := fun w => f (x + σ • w))
+      (hfm.comp (measurable_const.add (measurable_id.const_smul σ)))
+      (fun w => hf0 _) (fun w => hf1 _)
+      (δ := σ⁻¹ • (y - x)) (t := stdNormalQuantile px)
+      (by rw [stdNormalCDF_quantile (hp x)])
+    rw [← hshift] at hnp
+    -- Φ⁻¹ is monotone on (0,1): push it through the NP bound
+    have hmem : stdNormalCDF (stdNormalQuantile px - ‖σ⁻¹ • (y - x)‖) ∈ Set.Ioo (0:ℝ) 1 :=
+      stdNormalCDF_mem_Ioo _
+    have hmono := stdNormalQuantile_monotoneOn hmem (hp y) hnp
+    rw [stdNormalQuantile_cdf] at hmono
+    -- ‖σ⁻¹ • (y − x)‖ = (1/σ)‖y − x‖
+    have hnorm : ‖σ⁻¹ • (y - x)‖ = (1 / σ) * ‖y - x‖ := by
+      rw [norm_smul, Real.norm_eq_abs, abs_of_pos (inv_pos.mpr hσ), one_div]
+    rw [hnorm] at hmono
+    linarith [hmono]
+  -- combine the two one-sided bounds
+  intro u w
+  dsimp only
+  have h1 := hside w u
+  have h2 := hside u w
+  rw [norm_sub_rev w u] at h2
+  rw [Real.norm_eq_abs, abs_le]
+  constructor <;> linarith [h1, h2]
+
+/-- **The Cohen radius, Neyman–Pearson side DISCHARGED.** For a family of measurable
+    `[0,1]` class scores whose σ-smoothed means stay in `(0,1)`, the smoothed prediction
+    cannot flip within `‖δ‖ < σ·Φ⁻¹(p_i(x))`. No Lipschitz hypothesis: `hg` is now the
+    theorem `smoothing_probit_lipschitz`. -/
+theorem smoothing_certified_radius_cohen {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
+    {f : Fin k → EuclideanSpace ℝ (Fin (n + 1)) → ℝ}
+    (hfm : ∀ c, Measurable (f c)) (hf0 : ∀ c z, 0 ≤ f c z) (hf1 : ∀ c z, f c z ≤ 1)
+    (hp : ∀ c x, (∫ z, f c (x + σ • z)
+      ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1))))) ∈ Set.Ioo (0:ℝ) 1)
+    {x δ : EuclideanSpace ℝ (Fin (n + 1))} {i : Fin k}
+    (hrunner : ∀ j, j ≠ i →
+      (∫ z, f j (x + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+        ≤ 1 - ∫ z, f i (x + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+    (hδ : ‖δ‖ < σ * stdNormalQuantile
+      (∫ z, f i (x + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))) :
+    ∀ j, j ≠ i →
+      (∫ z, f j (x + δ + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+        < ∫ z, f i (x + δ + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))) :=
+  smoothing_certified_radius_gaussian hσ
+    (p := fun c y => ∫ z, f c (y + σ • z)
+      ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+    (fun c y => hp c y)
+    (fun c => smoothing_probit_lipschitz hσ (hfm c) (hf0 c) (hf1 c) (hp c))
+    hrunner hδ
+
+/-- **The classifier form.** For a measurable hard classifier `C`, class scores are the
+    decision-region indicators, so `[0,1]`-boundedness AND the runner-up bound are both
+    automatic (regions are disjoint: `p_j + p_i ≤ 1`). Hypotheses: measurability of `C`,
+    non-degenerate class probabilities (`hp` — Φ⁻¹ needs `(0,1)`; Monte-Carlo estimates
+    always satisfy this), and the margin `‖δ‖ < σ·Φ⁻¹(p_i(x))`. This is the certificate
+    the `*-smooth` drivers report, end to end. -/
+theorem smoothing_certified_radius_classifier {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
+    {C : EuclideanSpace ℝ (Fin (n + 1)) → Fin k} (hC : Measurable C)
+    (hp : ∀ c x, (∫ z, (if C (x + σ • z) = c then (1:ℝ) else 0)
+      ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1))))) ∈ Set.Ioo (0:ℝ) 1)
+    {x δ : EuclideanSpace ℝ (Fin (n + 1))} {i : Fin k}
+    (hδ : ‖δ‖ < σ * stdNormalQuantile
+      (∫ z, (if C (x + σ • z) = i then (1:ℝ) else 0)
+        ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))) :
+    ∀ j, j ≠ i →
+      (∫ z, (if C (x + δ + σ • z) = j then (1:ℝ) else 0)
+          ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+        < ∫ z, (if C (x + δ + σ • z) = i then (1:ℝ) else 0)
+            ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))) := by
+  set f : Fin k → EuclideanSpace ℝ (Fin (n + 1)) → ℝ :=
+    fun c y => if C y = c then (1:ℝ) else 0 with hf
+  have hfm : ∀ c, Measurable (f c) := fun c =>
+    measurable_const.ite (hC (measurableSet_singleton c)) measurable_const
+  have hf0 : ∀ c z, 0 ≤ f c z := fun c z => by
+    by_cases h : C z = c <;> simp [hf, h]
+  have hf1 : ∀ c z, f c z ≤ 1 := fun c z => by
+    by_cases h : C z = c <;> simp [hf, h]
+  -- disjoint decision regions: p_j(x) + p_i(x) ≤ 1
+  have hrunner : ∀ j, j ≠ i →
+      (∫ z, f j (x + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+        ≤ 1 - ∫ z, f i (x + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))) := by
+    intro j hj
+    have hint : ∀ c : Fin k, Integrable (fun z => f c (x + σ • z))
+        (stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))) := fun c =>
+      (integrable_const 1).mono'
+        ((hfm c).comp (measurable_const.add (measurable_id.const_smul σ))).aestronglyMeasurable
+        (ae_of_all _ fun z => by
+          rw [Real.norm_eq_abs]
+          exact abs_le.mpr ⟨by linarith [hf0 c (x + σ • z)], hf1 c (x + σ • z)⟩)
+    have hsum : (∫ z, f j (x + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+        + ∫ z, f i (x + σ • z) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1))))
+        ≤ 1 := by
+      rw [← integral_add (hint j) (hint i)]
+      calc ∫ z, (f j (x + σ • z) + f i (x + σ • z))
+            ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1))))
+          ≤ ∫ _z, (1:ℝ) ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))) := by
+            refine integral_mono ((hint j).add (hint i)) (integrable_const 1) fun z => ?_
+            by_cases hcj : C (x + σ • z) = j
+            · have hci : C (x + σ • z) ≠ i := by rw [hcj]; exact hj
+              simp [hf, hcj, hj]
+            · by_cases hci : C (x + σ • z) = i <;>
+                simp [hf, hcj, hci, hj.symm]
+        _ = 1 := by simp
+    linarith
+  exact smoothing_certified_radius_cohen hσ hfm hf0 hf1 hp hrunner hδ
 
 end Proofs

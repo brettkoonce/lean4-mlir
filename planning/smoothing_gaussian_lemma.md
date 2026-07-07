@@ -1,5 +1,16 @@
 # Closing the smoothing sandwich: the Gaussian (1/σ)-Lipschitz lemma
 
+> **STATUS: COMPLETE (2026-07-07).** G1–G4 all landed in
+> `LeanMlir/Proofs/SmoothingGaussian.lean`, 3-axiom clean, four commits (G1, G2, G3, G4).
+> Endpoint theorems: `smoothing_probit_lipschitz` (hg discharged),
+> `smoothing_certified_radius_cohen` (soft scores) and
+> `smoothing_certified_radius_classifier` (hard classifier; [0,1] bounds + runner-up bound
+> free from decision-region disjointness). Deviations from plan: G2 was ~150 lines, not
+> 1-2k (the pointwise MLR trick needs no layer-cake); G3's rotation invariance ships with
+> Mathlib (`stdGaussian_map` / `stdGaussian_eq_map_pi_orthonormalBasis`); the only
+> irreducible extra hypothesis is `hp : p ∈ Ioo 0 1` (Φ⁻¹ needs it; Monte-Carlo estimates
+> always satisfy it) — the plan's "unconditional" claim holds modulo exactly that.
+
 **Goal.** Discharge the `hg` hypothesis of `Proofs.smoothing_certified_radius`
 (`LipschitzCert.lean:209`) — the one quarantined assumption keeping the randomized-smoothing
 radius from being an unconditional theorem. Everything else (the margin algebra, the
