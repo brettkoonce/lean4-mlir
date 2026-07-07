@@ -47,10 +47,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Free up disk space
-        # Mathlib is built/cached twice here (parent `lake build Certs`, then
-        # again when tests/comparator resolves its own Mathlib), which overflows
-        # the runner's ~14 GB free. Reclaim the ~20+ GB of preinstalled SDKs we
-        # don't use (Android, .NET, GHC, CodeQL) up front.
+        # Mathlib is materialized twice here (parent `lake build Certs`, then
+        # again when tests/comparator resolves its own Mathlib). Both copies are
+        # now fetched from the olean cache — run.sh runs `lake exe cache get`, so
+        # the second is downloaded, not recompiled from source (~30-40 min saved)
+        # — but two ~2.3 GB olean trees still overflow the runner's ~14 GB free.
+        # Reclaim the ~20+ GB of preinstalled SDKs we don't use (Android, .NET,
+        # GHC, CodeQL) up front.
         run: |
           df -h /
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \

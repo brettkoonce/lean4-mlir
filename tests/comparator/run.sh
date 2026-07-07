@@ -49,8 +49,17 @@ ln -sf "$REAL_LANDRUN" "$WRAPPER_DIR/landrun-real"
 # Pre-resolve Mathlib via the parent project's manifest, then build
 # Solution outside the sandbox (so the sandbox doesn't try to write to
 # the parent's .lake/build/).
-echo "[1/3] lake update (resolving Mathlib)…"
+echo "[1/3] lake update + cache get (resolving + fetching Mathlib)…"
 lake update >/dev/null
+# Fetch Mathlib's prebuilt oleans into this sub-project's own .lake tree
+# rather than recompiling ~5k Mathlib files from source. The comparator
+# path-requires the parent (../..), so its Mathlib rev matches the parent's
+# exactly and the Azure olean cache always hits. Without this, the
+# `lake build Solution` below compiles Mathlib from scratch (~30-40 min) —
+# the "built/cached twice" cost flagged in comparator.yml.
+# `|| true`: a cache miss/network blip degrades to a source build (slow but
+# correct) instead of aborting the run under `set -e` — matches proofs.yml.
+lake exe cache get >/dev/null || true
 
 echo "[2/3] lake build Solution (outside sandbox)…"
 lake build Solution
