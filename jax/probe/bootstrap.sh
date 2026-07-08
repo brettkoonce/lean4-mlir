@@ -20,12 +20,17 @@ grep -v "^iree" "$LOCK" > /tmp/req-probe.txt
 python -m pip install -q -r /tmp/req-probe.txt Pillow
 
 echo "━━━ [2/4] device check"
+# Pod images set LD_LIBRARY_PATH to their system CUDA, which shadows the pip
+# nvidia wheels (symptom: "The cuSPARSE library was not found" -> cpu fallback).
+# The wheels self-resolve via RPATH; empty LD_LIBRARY_PATH is the correct state.
+unset LD_LIBRARY_PATH
 python - <<'EOF'
 import jax
 d = jax.devices()[0]
 assert d.platform == "gpu", f"not on a GPU: {d}"
 print(f"  {len(jax.devices())}x {d.device_kind}")
 EOF
+echo "  NB new shells need: source /root/venv/bin/activate && unset LD_LIBRARY_PATH"
 
 echo "━━━ [3/4] imagenette (local disk; ~1.5 GB first time)"
 ./download_imagenette.sh
