@@ -47,6 +47,8 @@ echo "━━━ [4/5] imagenette (local disk; ~1.5 GB first time)"
 ./download_imagenette.sh
 
 echo "━━━ [5/5] ready."
+echo "  ⚠ THIS shell first (bootstrap's venv dies with its subshell; new shells auto-set):"
+echo "      source /root/venv/bin/activate && unset LD_LIBRARY_PATH"
 echo "  Hardware anchors (fresh subprocess per bs, allocator env handled internally):"
 echo "    python jax/probe/step_timer.py jax/probe/probe_resnet50_imagenette_noaug.py --batches 192 512 1024"
 echo "    python jax/probe/step_timer.py jax/probe/probe_vit_tiny_imagenette.py --batches 192 512 1024"
