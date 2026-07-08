@@ -3485,6 +3485,54 @@ It is why the head can stay MNIST's, and why the next chapter spends its
 budget on \emph{more convolution} --- thirty-four layers of it --- not a
 bigger head.
 
+The two-point comparison above (64 vs 512) is worth drawing out in full,
+because the parametric renderer makes it cheap: \texttt{cifar8-bn-grid}
+holds the eight-convolution backbone fixed and renders the AdamW train step
+at any head width $d$ (the same $D_1$ that was hard-wired to 64 is now a
+parameter of the verified emitter), so we can sweep $d$ from 8 to 4096 and
+train each point on its own proof-rendered StableHLO. Split across the two
+gfx1100s, the whole curve is one short run:
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.2cm,
+    xlabel={Dense-head width $d$ (both head layers; backbone fixed)},
+    ylabel={CIFAR-10 test accuracy (\%)},
+    xmode=log, log basis x=2,
+    xmin=6.5, xmax=5000, ymin=65.5, ymax=73,
+    xtick={8,16,32,64,128,256,512,1024,2048,4096},
+    xticklabels={8,16,32,64,128,256,512,1024,2048,4096},
+    ytick={66,68,70,72},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    every axis plot/.append style={line width=1pt, mark size=1.5pt},
+]
+\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
+(8,66.78) (16,71.10) (32,71.70) (64,71.07) (128,71.43) (256,71.49) (512,71.55) (1024,72.17) (2048,71.60) (4096,71.73)
+};
+\addplot[only marks, mark=o, mark size=4pt, red, line width=1pt, forget plot] coordinates {(64,71.07)};
+\node[anchor=west, font=\footnotesize, red!70!black] at (axis cs:74,69.4)
+  {canonical head $d{=}64$};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent Dense-head width sweep for the 8-conv cifar8 net with per-channel
+BatchNorm, AdamW, 25 epochs, conv backbone held at $[16,16,32,32]$
+(\texttt{runs/cifar8bn\_grid\_results.tsv}). Past a 16-wide head the curve is
+essentially flat --- everything from $d{=}16$ to $d{=}4096$ lands inside a
+single point ($71.1$ to $72.2\%$), and the $256\times$ wider head buys
+nothing, while its $17$M-parameter classifier just overfits (train loss
+$0.03$, test unmoved). The only real drop is at $d{=}8$ ($66.8\%$), where the
+$128{\to}8$ first layer throttles the 128-dim feature map the convolutions
+produce. The canonical $d{=}64$ (circled) sits squarely on the plateau: the
+head width genuinely does not matter here, which is the whole reason the net
+could borrow MNIST's classifier untouched. (Absolute accuracy is a couple of
+points below the 40-epoch board above --- this is a 25-epoch single-optimizer
+sweep --- but the \emph{shape} is the point.)
+
 \subsection*{Why the levers work}
 
 Both levers do the same underlying thing --- they make each step's

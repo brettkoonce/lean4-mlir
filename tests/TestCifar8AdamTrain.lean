@@ -316,7 +316,8 @@ private def bnParamGrad (dgr dbe bn dyf : String) (C S : Nat) : String :=
 
 /-- BN forward+backward+grad body (conv→BN→relu)×2→pool ×4, mean cotangent + `%loss`. Conv
     biases `%cb1..%cb8` (collision-free); BN γ `%g*`, β `%bt*`; grads `%dW*/%db*/%dg*/%dbt*`. -/
-private def cifar8BnAdamBody : String :=
+private def cifar8BnAdamBody (d1 : Nat := D1) : String :=
+  let D1 := d1   -- shadow the module default so the dense head width is sweepable
   let H := IMH; let W := IMW
   let H2 := H / 2;  let W2 := W / 2
   let H3 := H2 / 2; let W3 := W2 / 2
@@ -425,7 +426,8 @@ private def cifar8BnAdamBody : String :=
 
 /-- The 38 cifar8-BN params `(name, grad, dims)` in func-arg order (= `cifar8BnVerified.toSpecs`):
     per conv layer i = `(Wi, cbi, gi, bti)`, then the 3 dense `(W,b)`. -/
-private def paramsBn : List (String × String × List Nat) :=
+private def paramsBn (d1 : Nat := D1) : List (String × String × List Nat) :=
+  let D1 := d1   -- shadow so the dense-head param dims track the swept width
   [("W1","%dW1",[C1,IC,KH,KW]), ("cb1","%db1",[C1]), ("g1","%dg1",[C1]), ("bt1","%dbt1",[C1]),
    ("W2","%dW2",[C1,C1,KH,KW]), ("cb2","%db2",[C1]), ("g2","%dg2",[C1]), ("bt2","%dbt2",[C1]),
    ("W3","%dW3",[C2,C1,KH,KW]), ("cb3","%db3",[C2]), ("g3","%dg3",[C2]), ("bt3","%dbt3",[C2]),
@@ -438,25 +440,28 @@ private def paramsBn : List (String × String × List Nat) :=
    ("Wa","%dWa",[D1,D1]), ("ba","%dba",[D1]),
    ("Wb","%dWb",[D1,NC]), ("bb","%dbb",[NC])]
 
-/-- `@cifar8_bn_adam_train_step` — the BN body + per-param `emitAdamV`, packed `[θ|m|v]`. -/
-private def cifar8BnAdamTrainStep : String :=
-  let updParts := paramsBn.map (fun (nm, gr, ds) =>
+/-- `@cifar8_bn_adam_train_step` — the BN body + per-param `emitAdamV`, packed `[θ|m|v]`.
+    `d1` sweeps the dense-head width (default = canonical 64, byte-identical committed render);
+    `fname` names the exported func so a grid driver can slug it (`cifar8_bn_{d}_adam_train_step`). -/
+private def cifar8BnAdamTrainStep (d1 : Nat := D1)
+    (fname : String := "cifar8_bn_adam_train_step") : String :=
+  let updParts := (paramsBn d1).map (fun (nm, gr, ds) =>
     ViTRender.emitAdamV ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
   let upd := String.join (updParts.map (·.1))
   let thetaN := updParts.map (·.2.1)
   let mN := updParts.map (·.2.2.1)
   let vN := updParts.map (·.2.2.2)
-  let psig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
-  let msig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
-  let vsig := String.intercalate ", " (paramsBn.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
-  let dims := paramsBn.map (fun (_, _, ds) => ds)
+  let psig := String.intercalate ", " ((paramsBn d1).map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
+  let msig := String.intercalate ", " ((paramsBn d1).map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
+  let vsig := String.intercalate ", " ((paramsBn d1).map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
+  let dims := (paramsBn d1).map (fun (_, _, ds) => ds)
   let allDims := dims ++ dims ++ dims
   let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
   let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"])
   let argSig := s!"%x: {ty [B,IC*IMH*IMW]}, " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
     s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,NC]}"
-  "module @m {\n" ++ s!"  func.func @cifar8_bn_adam_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
-    cifar8BnAdamBody ++ adamConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+  "module @m {\n" ++ s!"  func.func @{fname}({argSig}) -> ({retTy}) " ++ "{\n" ++
+    cifar8BnAdamBody d1 ++ adamConsts ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
 
 -- ════════════ Nesterov-momentum SGD variant (same body, momentum update) ════════════
 
@@ -506,6 +511,8 @@ private def cifar8MomTrainStep : String :=
 
 /-- `@cifar8_bn_mom_train_step` — the BN body + per-param `emitMomentum`. -/
 private def cifar8BnMomTrainStep : String :=
+  let paramsBn := paramsBn D1              -- pin to the canonical head width (64)
+  let cifar8BnAdamBody := cifar8BnAdamBody D1
   let updParts := paramsBn.map (fun (nm, gr, ds) =>
     emitMomentum ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
   let upd := String.join (updParts.map (·.1))
@@ -560,6 +567,8 @@ private def cifar8SgdTrainStep : String :=
 
 /-- `@cifar8_bn_sgd_train_step` — the BN body + per-param `emitSgd`. -/
 private def cifar8BnSgdTrainStep : String :=
+  let paramsBn := paramsBn D1              -- pin to the canonical head width (64)
+  let cifar8BnAdamBody := cifar8BnAdamBody D1
   let updParts := paramsBn.map (fun (nm, gr, ds) =>
     emitSgd ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
   let upd := String.join (updParts.map (·.1))
@@ -592,20 +601,20 @@ def main : IO Unit := do
   let mlir := cifar8AdamTrainStep
   IO.println s!"rendered cifar8 AdamW train step: {mlir.length} chars, {params.length} params"
   IO.FS.writeFile "verified_mlir/cifar8_adam_train_step.mlir" mlir
-  let bmlir := cifar8BnAdamTrainStep
-  IO.println s!"rendered cifar8_bn AdamW train step: {bmlir.length} chars, {paramsBn.length} params"
+  let bmlir := cifar8BnAdamTrainStep D1 "cifar8_bn_adam_train_step"
+  IO.println s!"rendered cifar8_bn AdamW train step: {bmlir.length} chars, {(paramsBn D1).length} params"
   IO.FS.writeFile "verified_mlir/cifar8_bn_adam_train_step.mlir" bmlir
   let mmlir := cifar8MomTrainStep
   IO.println s!"rendered cifar8 Nesterov-mom train step: {mmlir.length} chars, {params.length} params"
   IO.FS.writeFile "verified_mlir/cifar8_mom_train_step.mlir" mmlir
   let bmmlir := cifar8BnMomTrainStep
-  IO.println s!"rendered cifar8_bn Nesterov-mom train step: {bmmlir.length} chars, {paramsBn.length} params"
+  IO.println s!"rendered cifar8_bn Nesterov-mom train step: {bmmlir.length} chars, {(paramsBn D1).length} params"
   IO.FS.writeFile "verified_mlir/cifar8_bn_mom_train_step.mlir" bmmlir
   let smlir := cifar8SgdTrainStep
   IO.println s!"rendered cifar8 SGD-sched train step: {smlir.length} chars, {params.length} params"
   IO.FS.writeFile "verified_mlir/cifar8_sgd_train_step.mlir" smlir
   let bsmlir := cifar8BnSgdTrainStep
-  IO.println s!"rendered cifar8_bn SGD-sched train step: {bsmlir.length} chars, {paramsBn.length} params"
+  IO.println s!"rendered cifar8_bn SGD-sched train step: {bsmlir.length} chars, {(paramsBn D1).length} params"
   IO.FS.writeFile "verified_mlir/cifar8_bn_sgd_train_step.mlir" bsmlir
   tryCompile "verified_mlir/cifar8_adam_train_step.mlir" "/tmp/cifar8_adam_ts.vmfb" "cifar8 AdamW"
   tryCompile "verified_mlir/cifar8_bn_adam_train_step.mlir" "/tmp/cifar8_bn_adam_ts.vmfb" "cifar8_bn AdamW"
@@ -613,5 +622,26 @@ def main : IO Unit := do
   tryCompile "verified_mlir/cifar8_bn_mom_train_step.mlir" "/tmp/cifar8_bn_mom_ts.vmfb" "cifar8_bn Nesterov-mom"
   tryCompile "verified_mlir/cifar8_sgd_train_step.mlir" "/tmp/cifar8_sgd_ts.vmfb" "cifar8 SGD-sched"
   tryCompile "verified_mlir/cifar8_bn_sgd_train_step.mlir" "/tmp/cifar8_bn_sgd_ts.vmfb" "cifar8_bn SGD-sched"
+  -- ── FC-head width sweep (conv backbone @ [16,16,32,32] fixed) ──
+  -- Render adamw train-step + forward for each dense-head width d, func-slugged so the
+  -- `cifar8-bn-grid` driver trains each via `trainAdamSched "adam"` (eval through @<slug>_fwd,
+  -- per-channel BN ⇒ train=eval). Written to verified_mlir/cifar8_bn_<d>_{adam_train_step,fwd}.mlir.
+  for d in [8,16,32,64,128,256,512,1024,2048,4096] do
+    let slug := s!"cifar8_bn_{d}"
+    IO.FS.writeFile s!"verified_mlir/{slug}_adam_train_step.mlir"
+      (cifar8BnAdamTrainStep d s!"{slug}_adam_train_step")
+    let fwd := (Proofs.StableHLO.cifar8BnFwdModuleV 128 3 16 16 32 32 2 2 d 10 3 3 "1.0e-05"
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+      (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+      (fun _ => 0)).replace "@cifar8_bn_fwd" s!"@{slug}_fwd"
+    IO.FS.writeFile s!"verified_mlir/{slug}_fwd.mlir" fwd
+  IO.println "rendered cifar8_bn FC-head width-sweep MLIRs (d ∈ 8..4096)"
 
 #eval main

@@ -996,6 +996,13 @@ lean_exe «mnist-cnn-grid» where
   root := `apps.mnist.MainMnistCnnGrid
   moreLinkArgs := ireeLink
 
+-- FC-head-parametric cifar8-BN (AdamW): `cifar8-bn-grid <fc-width> [epochs]` holds the
+-- 8-conv [16,16,32,32] backbone and sweeps the dense head (128→d→d→10) on the verified
+-- renders (tests/TestCifar8AdamTrain.lean), trained via trainAdamSched "adam".
+lean_exe «cifar8-bn-grid» where
+  root := `apps.cifar.MainCifar8BnGrid
+  moreLinkArgs := ireeLink
+
 -- Chapter 3 (low precision): fp8 (E4M3) MLP training on the SAME verified StableHLO.
 -- fp32 master, per-column weight quant + per-tensor input, fp32 accumulate.
 -- fp8 weights+input, fp32 intermediates. See MainMnistMlpE4M3Verified.lean.

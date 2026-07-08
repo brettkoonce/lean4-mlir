@@ -211,6 +211,32 @@ def cifar8BnVerified : VerifiedNetSpec where
     (#[32, 32, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
     (#[128, 64], 0), (#[64], 2), (#[64, 64], 0), (#[64], 2), (#[64, 10], 0), (#[10], 2)]
 
+/-- **FC-head-parametric cifar8-BN** — the 8-conv per-channel-BN CIFAR net with the conv
+    backbone held at `[16,16,32,32]` and only the dense classifier head swept:
+    `…flatten(128) → dense 128→d → relu → dense d→d → relu → dense d→10`. The canonical
+    `cifar8BnVerified` is `cifar8BnG 64`. `cifar8-bn-grid` trains each width via
+    `trainAdamSched "adam"` on the width-slugged renders
+    `verified_mlir/cifar8_bn_{d}_{adam_train_step,fwd}.mlir` (emitted by
+    `tests/TestCifar8AdamTrain.lean`, D1 parametric). Per-channel BN ⇒ train=eval (no running
+    stats, `bnChannels` empty). Slug `cifar8_bn_{d}`. -/
+def cifar8BnG (d : Nat) : VerifiedNetSpec where
+  name     := s!"CIFAR-CNN8-BN-fc{d}"
+  slug     := s!"cifar8_bn_{d}"
+  inC      := 3
+  imageH   := 32
+  imageW   := 32
+  nClasses := 10
+  data     := .cifar
+  layers   := [.conv 3 16 3 1, .bnPerChannel 16, .relu, .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
+               .conv 16 16 3 1, .bnPerChannel 16, .relu, .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
+               .conv 16 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
+               .conv 32 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2, .flatten,
+               .dense 128 d, .relu, .dense d d, .relu, .dense d 10]
+  blurb    := s!"CIFAR-CNN8-BN-fc{d} via the VERIFIED renderer (8× conv→BN→relu [16,16,32,32] → 128→{d}→{d}→10, AdamW) → IREE FFI → GPU"
+
+-- `cifar8BnG 64` is exactly the canonical `cifar8BnVerified` architecture.
+#guard (cifar8BnG 64).toSpecs == cifar8BnVerified.toSpecs
+
 /-- `cifar8Verified` with the MNIST-style **wide 2×512 dense head** (`d1=512`): flatten 128 →
     512 → relu → 512 → relu → 10. Same 8-conv backbone; the head jumps from 13K to 334K floats
     (whole net 52,858 → 373,626). Same parametric VJP `Proofs.cifarCnn8_has_vjp_at` (the dense
