@@ -156,6 +156,38 @@ NB the imagenette bins are pre-decoded arrays — this probe measures GPU comput
 of the tfds/JPEG pipeline question. The tfds `pipeline_bench.py` needs the ImageNet
 volume and belongs to run-0/0b, NOT this pod.
 
+### ✅ Run-0a v0 FIELD REPORT — 2026-07-08, RunPod A100-SXM4-80GB ($1.39/h, ~2 h session)
+
+**step_timer anchors (fp32 — the teaching configs have no bf16 flag; program runs are
+bf16, expect conv ~1.6× and attn ~2× faster):**
+
+| probe | bs192 | bs512 | bs1024 | bs2048 | peak GiB (192/512/1024) |
+|---|---|---|---|---|---|
+| R50 @224  | 1,239 img/s | 1,277 | OOM | OOM | 16.7 / 43.4 / — |
+| ViT-Ti @224 | 3,275 | 3,312 | 3,406 | — | 9.0 / 24.0 / 47.9 |
+
+- **Flat curves = A100 saturated from bs192** in fp32; batch scaling buys memory
+  pressure, not throughput, at these model sizes.
+- **Memory ladder**: R50 bs512@224 = 43.4 GiB fp32 ⇒ bs2048@160 ≈ 89 GiB fp32 ≈
+  **~45 GiB bf16 ⇒ `true-2048` A3 FITS a single A100 in bf16** (the "~80 GB" doc
+  estimate was an fp32 number). A2 bs2048@224 bf16 ≈ ~87 GiB ⇒ still accum ×2 on A100.
+- **fp32-floor estimates** (estimate.py, anchors above): A3 true-2048 **14 h/$20**;
+  A2 **84 h/$116**; ViT-S **115 h/$159**; ViT-B **437 h/$607**. bf16 ≈ ÷1.6–2. NB the
+  earlier hand-waved ViT-B "$46" assumed a 4–6k img/s pipeline-bound rate ViT-B compute
+  can never reach — measurement wins; ViT-B is a **~$200–300 (bf16)** run on A100, and
+  is the one where H100's ~3× GEMMs at ~2× price beats A100 on $/run.
+- **Host-bound findings**: aug'd epoch loop = ~380 img/s with GPU at 0% util (np.pad
+  of full batch per step); even no-aug loop host-bound (5.7 GB epoch shuffle,
+  per-epoch eval). Teaching demos measure Python on datacenter GPUs — real probes MUST
+  do aug on-device / pre-applied.
+- **Pod lessons encoded in tools**: tar --no-same-owner; venv + `unset
+  LD_LIBRARY_PATH` (image CUDA shadows pip wheels); iree pins live off-PyPI; Ctrl-C
+  leaves CUDA zombies — kill by `nvidia-smi --query-compute-apps=pid` (one ghost held
+  61 GB across half the session); one fresh process per memory-heavy experiment;
+  cwd/venv/env don't survive new Jupyter shells (bashrc helper).
+- **Next**: coding session builds bf16 A3-shaped + ViT-S/B DeiT-shaped probes with
+  on-device aug ⇒ re-anchor; those numbers finalize the program budget.
+
 ## Run-0b — exploratory smoke session (~2–3 h, ~$5; can share the run-0 pod)
 
 Interactive session; goal is "does it work + what does it cost", not trained models.
