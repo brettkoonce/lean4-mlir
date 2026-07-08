@@ -276,6 +276,34 @@ checkpoint interval ~5 epochs for the long runs.
       one train-step `.vmfb` — catches "iree-compile rejects gfx942" locally; the
       artifact can't RUN on gfx1100, compile success is the whole test.
 
+## v1 architecture — custom image + API batch jobs (designed 2026-07-08, post run-0a)
+
+The bootstrap-on-a-generic-image loop (v0, proven) graduates to a personal SLURM over
+spot capacity. Three components:
+
+1. **Custom Docker image**: bake /root/venv from the LOCK files into a slim CUDA (and a
+   ROCm) base; LD_LIBRARY_PATH set right at build; helpers included. CODE STAYS OUT —
+   the entrypoint `git pull`s a branch, so the image changes when locks change (rare),
+   jobs change when code changes (often). Kills bootstrap + every env landmine class.
+2. **Job = entrypoint contract**: check /workspace for state → `LEAN_MLIR_RESUME` if
+   present → train K epochs (K ≈ 10) → save `.state.npz` to /workspace → SELF-TERMINATE
+   via the API (`$RUNPOD_POD_ID` is in the pod env) — billing stops when work stops.
+   This is the AER watchdog lifted to the cloud: segment, resume, repeat.
+3. **Scheduler = loop on klawd** (runpodctl / GraphQL / python SDK): request pod with
+   image + job env; no capacity → retry; pod dies mid-chunk → next request resumes from
+   the volume. Network volume (datacenter-pinned) = durable substrate: checkpoints +
+   memmapped dataset cache. Spot requests must target the volume's DC.
+
+**Payoffs**: (a) interruption-tolerance ⇒ SPOT pricing (A100 ~$0.55–0.70/h ⇒ A2 bf16
+≈ $25–35); (b) **opportunistic AMD** — RunPod MI300X exists but NOT on-demand; a
+standing scheduler request grabs capacity windows no human would catch ⇒ the clean-BN
+A2 headliner runs "whenever AMD blinks". Policy: pin each RUN to one vendor (resume is
+mechanically cross-vendor but a faithfulness run must not switch numerics midstream).
+
+Sequencing: bf16 probes first (budget still needs real anchors) → Dockerfile +
+entrypoint (an evening; shake down on on-demand before trusting spot) → first scheduled
+job = A3 true-2048 in 10-ep chunks (machinery shakedown + the Ghost-BN answer in one).
+
 ## Beyond the program — 192 GB exploration menu (rough order)
 
 1. **DDPM @128–256px with attention** (extends the active `ddpm_v2` arc; headliner #2).
