@@ -268,7 +268,13 @@ checkpoint interval ~5 epochs for the long runs.
 - Host pipeline fix (pre-decoded/pre-resized array cache + real prefetch): the single
   lever that converts every estimate above from pipeline-bound to compute-bound
   (v5e-8/MI300X would finish 300ep runs in ~½ the wall clock). Worth an evening; also
-  what a TRC-scale grant would want.
+  what a TRC-scale grant would want. **2026-07-08 upgrade — ImageNet-in-RAM:** RunPod
+  A100 hosts measured at 2× EPYC 7713 (255 threads) + **1 TB RAM**; full ImageNet as
+  pre-decoded uint8 is ~193 GB @224 (~98 GB @160) — the whole dataset fits in host RAM,
+  no JPEG/tf.data/network-FS in the hot path at all. Verify the pod's cgroup actually
+  allows the allocation before building on it. Related pod facts for the runbook:
+  `/workspace` = MooseFS network volume (slow small-file I/O — preprocess ground on it);
+  local container disk (`/`) for hot data; RA-flat-map decode caveat moot under this fix.
 - ~~Does the generated attention use a fused/flash path or naive O(L²)?~~ ANSWERED
   2026-07-07: naive (full L×L softmax, `Codegen.lean` ~920) — memory-bound as hoped;
   the long-context demo is honest. A flash-attention lowering would itself be a nice
