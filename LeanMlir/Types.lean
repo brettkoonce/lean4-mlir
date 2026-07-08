@@ -613,4 +613,9 @@ def ireeCompileArgs (mlirPath outPath : String) : IO (Array String) := do
   let extraArgs := if backend == "rocm" then
     #["--iree-codegen-llvmgpu-use-reduction-vector-distribution=false"]
   else #[]
-  return baseArgs ++ chipArgs ++ extraArgs ++ #["-o", outPath]
+  -- IREE_EXTRA_FLAGS: space-split extra iree-compile args from the env, appended
+  -- last (they win). Probe affordance for rebuild-free flag sweeps — see
+  -- planning/iree_trainstep_memory_scaling.md (2026-07-08 A100 session).
+  let userArgs ← (IO.getEnv "IREE_EXTRA_FLAGS").map fun s =>
+    ((s.getD "").splitOn " ").filter (· ≠ "") |>.toArray
+  return baseArgs ++ chipArgs ++ extraArgs ++ userArgs ++ #["-o", outPath]
