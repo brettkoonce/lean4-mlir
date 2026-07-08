@@ -14,11 +14,16 @@ edit by hand; regenerate via `cd jax && lake exe {resnet50,resnet34,vit-tiny}` a
 ## Pod runbook (run from the repo root)
 
 ```bash
-git clone -b runpod-probe --depth 1 git@github.com:brettkoonce/lean4-mlir.git lean4-jax
+git clone -b runpod-probe --depth 1 https://github.com/brettkoonce/lean4-mlir.git lean4-jax
 cd lean4-jax
-pip install -r jax/requirements-cuda-lock.txt   # NVIDIA pod; rocm lock on AMD
+python -m venv /root/venv && source /root/venv/bin/activate   # dodge the image's stack
+# the iree-*rc pins live on iree.dev, not PyPI, and the JAX probes don't need them:
+grep -v "^iree" jax/requirements-cuda-lock.txt > /tmp/req-jax.txt   # rocm lock on AMD
+python -m pip install -r /tmp/req-jax.txt Pillow
+# (only for `lake run benchmark` pods: python -m pip install "iree-base-compiler==<pin>" \
+#    "iree-base-runtime==<pin>" -f https://iree.dev/pip-release-links.html)
 python -c "import jax; print(jax.devices(), jax.devices()[0].device_kind)"
-./download_imagenette.sh                        # ~1.5 GB; needs `pip install Pillow`
+./download_imagenette.sh                        # ~1.5 GB; run on LOCAL disk, not /workspace
 nvidia-smi                                      # note the card + free VRAM
 
 python jax/probe/probe_resnet50_imagenette.py   # data_dir baked as data/imagenette
