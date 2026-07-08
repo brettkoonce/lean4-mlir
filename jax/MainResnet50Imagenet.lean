@@ -147,6 +147,24 @@ def resnet50ImagenetConfigTrue2048 : TrainConfig :=
       wdExcludeNormBias := true }  -- timm no_weight_decay: BN γ/β + biases skip wd
       -- gradAccumSteps stays at the default 1: no accumulation.
 
+/-- **A2 at true bs2048** — the literal RSB-A2 (300 epochs, 224px, the full aug pack,
+    EMA, → **79.8%** top-1) at timm's native batch: single-forward bs2048, lr restored
+    to the paper's **5e-3 @ bs2048** (NOT the 512-scaled 1.25e-3), plus the timm
+    no_weight_decay skip-list. The headliner run for a rented big-memory GPU: @224px
+    the single-forward batch needs ~(224/160)² × 80 GB ≈ **155–160 GB** of activations,
+    i.e. a 192 GB card (MI300X) with modest headroom — if MIOpen workspace pushes it
+    over, fall back to `gradAccumSteps := 2` (2×1024, Ghost-BN halved). Same clean-BN
+    caveat as `true-2048`: one device normalizes over the full 2048, a LARGER BN batch
+    than timm's per-GPU BN — deliberate, documented trade. Suspend/resume via
+    `LEAN_MLIR_RESUME` (per-N-epoch `.state.npz`) makes the ~24 h run spot-safe.
+    Selected with recipe arg `a2-true-2048`. -/
+def resnet50ImagenetConfigA2True2048 : TrainConfig :=
+  { resnet50ImagenetConfig with
+      learningRate      := 0.005   -- RSB-A2 lr @ bs2048 (native, no scaling)
+      batchSize         := 2048    -- true single-forward bs2048 @224px (~155-160 GB)
+      wdExcludeNormBias := true }  -- timm no_weight_decay: BN γ/β + biases skip wd
+      -- gradAccumSteps stays at the default 1: no accumulation.
+
 /-- A named training recipe: a `TrainConfig`, its generated-file name, and a
     one-line description. Recipe selection is a positional CLI arg
     (`resnet50-imagenet <recipe> [data_dir]`), listed by `--help` — replacing the
@@ -164,6 +182,9 @@ def resnet50ImagenetRecipes : List Recipe := [
   { name := "true-2048",    cfg := resnet50ImagenetConfigTrue2048,
     out := "generated_resnet50_imagenet_true2048.py",
     desc := "RSB-A3 at a real single-forward bs2048 (no grad-accum; needs ~80GB)" },
+  { name := "a2-true-2048", cfg := resnet50ImagenetConfigA2True2048,
+    out := "generated_resnet50_imagenet_a2true2048.py",
+    desc := "literal RSB-A2 (300ep, 224px, 79.8% target) at single-forward bs2048 (needs ~160GB)" },
   { name := "adam-probe",   cfg := resnet50ImagenetConfigAdamProbe,
     out := "generated_resnet50_imagenet_adamprobe.py",
     desc := "A3 optimizer probe: AdamW + no-weight-decay on norm/bias" }
