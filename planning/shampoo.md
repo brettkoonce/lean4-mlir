@@ -75,13 +75,46 @@ appends two *unequal* blocks (`Σm²`, `Σn²` over 2D weights) → careful offs
 
 ## 4. Demo-first plan (per `math_threads.md §0.5`)
 
-1. **Numerical jewel demo (cheap, do first).** A standalone Lean/Python script: (a) verify
-   single-step Shampoo = Muon = `UVᵀ` numerically; (b) run accumulated-Shampoo vs Muon vs Adam on a
-   toy quadratic / tiny MLP, plot trajectories. ~1 hr, zero plumbing. Validates the math AND the
-   ε/warmup behavior you'll need before the integration.
-2. **ViT A/B integration (the table in §2).** `vit-tiny-shampoo-train`, 3-way A/B
+1. **Numerical jewel demo (cheap, do first). — DONE 2026-07-09, `jax/demos/shampoo_jewel.py`.**
+   Standalone, CPU, ~2s. Three parts, all validated:
+   - **(a) the jewel.** `(GGᵀ)^{-1/4} G (GᵀG)^{-1/4}` vs the SVD polar factor `UVᵀ`:
+     rel-err `1.1e-11` at eps=0 (the exact theorem); eps-regularized deviation scales
+     as expected (`7.6e-10` @ 1e-8 → `7.6e-4` @ 1e-2) — quantifies what init-eps costs.
+   - **(b) the codegen kernel.** Matmul-only inverse-4th-root by two trace-scaled
+     coupled-Newton inverse-sqrt passes (`L^{-1/4} = L^{-1/2}·(L^{-1/2})^{-1/2}`, all
+     `dot_general`). At **30 iters** the factor matches the eigh oracle to `~1e-9`, and
+     — the number that matters — the **end-to-end preconditioned update** matches to
+     `~1e-12` even at 20 iters (the update is far less sensitive than the factor, since
+     the poorly-converged tiny eigenvalues contribute little to `L^{-1/4} G R^{-1/4}`).
+     ⇒ emit ~25–30 NS iters, trace-scale before each pass.
+   - **(c) toy A/B (quadratic + tiny MLP, jax.grad).** Honest memory-knob behavior:
+     on a *static* ill-conditioned quadratic, one-step Muon wins (2.9e-1 @ 300 steps)
+     because accumulated Shampoo's full history decays the effective LR (Adagrad limit);
+     on the MLP regression all matrix opts converge (shampoo → 0 by step 200). The
+     "jewel dynamically" check confirms fresh-L/R Shampoo == Muon at every trajectory
+     point (max rel dev `1.7e-7`). Pins: init `L,R=εI` (eps≈1e-8), NS needs trace-scaling.
+   **CODEGEN DONE 2026-07-09** (a simpler scope than §2's table). Instead of
+   threading non-param-shaped L/R state through the signature, Shampoo is
+   restricted to **square** 2D weights (`m==n`), where `L[n,n]`/`R[n,n]` fit
+   *exactly* into the existing m/v optimizer slots — the same trick Muon uses for
+   its momentum. So the module stays Adam-signature-identical, drives through the
+   existing Adam FFI, and needs **zero host/C/shape changes** (the §2 "real lift"
+   is deferred to a non-square follow-up). Landed:
+   `OptimizerKind.shampoo` + `TrainConfig.useShampoo` (Types.lean);
+   `emitInvSqrtNS`/`emitInvFourthRootNS`/`emitShampooUpdate` (MlirCodegen.lean,
+   the validated β=0.95 EMA + trace-relative εI + 15-iter coupled-Newton kernel);
+   dispatch routes square 2D weights (incl. square `.dense`) to Shampoo;
+   `MainMnistMlpShampooTrain` + `mnist-mlp-shampoo-train`.
+   **Smoke A/B (MNIST-MLP, square `dense 512×512` → Shampoo, 12 ep, gfx1100):**
+   AdamW 98.30% @ 18ms/step vs **Shampoo 98.20% @ 50ms/step** — neck-and-neck
+   (a tiny well-conditioned MLP is too easy for 2nd-order to pay off) at 2.7× the
+   step cost (the NS iterations). No NaN, stable throughout. ⇒ codegen validated;
+   the real signal is the ViT, where preconditioning attention should matter.
+2. **ViT A/B integration.** `vit-tiny-shampoo-train`, 3-way A/B
    (AdamW vs Muon vs Shampoo) on the 2×gfx1100 box — same harness as Muon
-   (`run_vit_muon_ab.sh` template). **Sweep the Shampoo LR** (don't reuse Adam's), per the §3 caveat.
+   (`run_vit_muon_ab.sh` template). Shampoo governs the 48 square `[192,192]`
+   Q/K/V/O attention projections; MLP (`192×768`) stays AdamW.
+   **Sweep the Shampoo LR** (don't reuse Adam's), per the §3 caveat.
 3. **Formalize later (the survivor).** Render-faithful `den=` tie reuses Muon's machinery; the
    NS-convergence deep cut for `λ^{−1/4}` is the same per-eigenvalue scalar lemma as Muon's `λ^{−1/2}`.
 

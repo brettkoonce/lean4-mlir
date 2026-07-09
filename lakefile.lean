@@ -870,6 +870,10 @@ lean_exe «vit-tiny-muon-train» where
   root := `apps.baselines.MainVitMuonTrain
   moreLinkArgs := ireeLink
 
+lean_exe «vit-tiny-shampoo-train» where
+  root := `apps.baselines.MainVitShampooTrain
+  moreLinkArgs := ireeLink
+
 lean_exe «ablation» where
   root := `apps.ablation.MainAblation
   moreLinkArgs := ireeLink
@@ -888,6 +892,10 @@ lean_exe «cifar-bn-train» where
 
 lean_exe «mnist-mlp-train» where
   root := `apps.baselines.MainMnistMlpTrain
+  moreLinkArgs := ireeLink
+
+lean_exe «mnist-mlp-shampoo-train» where
+  root := `apps.baselines.MainMnistMlpShampooTrain
   moreLinkArgs := ireeLink
 
 lean_exe «mnist-linear-train» where
