@@ -164,9 +164,33 @@ loss printout):
   check whether the timeCondAdd `%d_W` grads are non-trivial (they
   are emitted per site) and consider a small non-zero W init.
 
-Not yet run (the remaining Gate A work): launch the two commands
-above and record the verdict. Everything upstream (primitive,
-compile, param accounting, smoke train) is done and committed.
+### Gate A — VERDICT (2026-07-09): time-conditioning EXONERATED; Phase-0 sampler regressed
+
+Both legs ran to 50 ep on the 2×gfx1100 box (`runs/ddpm_v2_base80_gpu1.log`
++ `runs/ddpm_v2_base80/`, and the earlier tc run in `runs/ddpm_v2_tc/`).
+**Result: BOTH grids are pure confetti at every epoch — including base80 ep50**
+(fully-converged EMA, `0.9999^78k ≈ 1`; avg loss 0.062; the same base80 arch
+v1 produced recognizable cars/birds with at 70 ep). tc ep45 is identical.
+
+⇒ The Gate-A A/B is **inconclusive because BOTH variants fail identically**, and
+that IS the finding: **`.timeCondAdd` is not the differentiator** — the confetti
+is shared with the plain baseline, so it's a **v2 Phase-0 regression** (the
+EMA + fixed-seed DDIM + hflip changes that landed with this Phase-0 trainer),
+upstream of the time-conditioning. This CORRECTS the working assumption that tc
+was the suspect. Do NOT re-investigate tc or touch Workstream C (attention)
+until the Phase-0 sampler produces coherent base80 samples again.
+
+**Root-cause candidates (next session).** The sampler was structurally audited
+SOUND (emaP inits from params; DDIM `a = √ᾱ_prev/√ᾱ_t`, `b = √(1−ᾱ_prev) −
+a·√(1−ᾱ_t)` are correct). The live suspect is the **DDIM x₀-prediction blow-up at
+high t**: at the first step `k=0, t=999`, `ᾱ_t ≈ 0`, so `a = √ᾱ_prev/√ᾱ_t` is
+HUGE and amplifies any residual ε error into full-frame noise. Things to try, in
+order: (1) sample from the RAW params, not EMA, to isolate whether EMA is the
+regression (v1 may have used raw weights); (2) clamp the implied x₀ prediction to
+`[−1,1]` each DDIM step (standard guard the v2 sampler may have dropped); (3) a
+short 70-ep run (v1's quality threshold sat at ep 60–70) only AFTER (1)/(2). The
+codegen + timeCondAdd primitive are fine — this is purely `sampleGrid` in
+`demos/MainCifarDdpmTrain.lean`. See `[[ddpm-v2-gateA-verdict]]` (auto-memory).
 
 ## Workstream B — training recipe (cheap, do first)
 
