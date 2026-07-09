@@ -53,6 +53,10 @@ structure GptCfg where
   /-- Use the true gather/scatter embedding path (Part II Option 2)
       instead of the one-hot matmul. Requires `ids`. -/
   gather    : Bool := false
+  /-- Emit attention via FlashAttention (tiled online-softmax) instead of
+      dense [B,H,T,T]. Same math; long-context memory. See
+      planning/flash_attention.md. -/
+  flashAttn : Bool := false
 
 /-- The original 212K-param demo config (spec name unchanged so old
     checkpoints keep their build prefix). -/
@@ -79,11 +83,19 @@ def nanoIdsCfg : GptCfg :=
 def nanoGatherCfg : GptCfg :=
   { nanoCfg with key := "nano-gather", specName := "tinygpt-shakespeare-nanogather", ids := true, gather := true }
 
+/-- nano with FlashAttention on the transformer (Phase 3). Same math as
+    nano, so its loss curve must track nano's — validates the integrated
+    flash fwd+bwd end-to-end (the standalone emitters are already checked
+    in scripts/flash_probe_check.py). -/
+def nanoFlashCfg : GptCfg :=
+  { nanoCfg with key := "nano-flash", specName := "tinygpt-shakespeare-nanoflash", flashAttn := true }
+
 def pickCfg : String → Option GptCfg
   | "nano" => some nanoCfg
   | "tiny" => some tinyCfg
   | "nano-ids" => some nanoIdsCfg
   | "nano-gather" => some nanoGatherCfg
+  | "nano-flash" => some nanoFlashCfg
   | _ => none
 
 def mkSpec (g : GptCfg) : NetSpec :=
@@ -92,7 +104,8 @@ def mkSpec (g : GptCfg) : NetSpec :=
     imageW := 1
     layers := [
       .tokenPositionEmbed vocabSize g.seqLen g.dModel (idsInput := g.ids) (gather := g.gather),
-      .transformerEncoder g.dModel g.numHeads g.mlpDim g.numLayers (causalMask := true),
+      .transformerEncoder g.dModel g.numHeads g.mlpDim g.numLayers (causalMask := true)
+        (flashAttn := g.flashAttn),
       .lmHead g.dModel vocabSize g.seqLen
     ] }
 

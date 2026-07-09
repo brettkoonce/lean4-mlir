@@ -110,10 +110,16 @@ for kj … :                                #  same key loop
 - **Phase 2 — backward emitter — DONE 2026-07-09** (`emitFlashAttnBwd` + `flashBwdProbeModule`).
   Recompute loop with `dynamic_update_slice` for dK/dV (disjoint blocks, write-once) and an
   accumulated dQ; matches the dense VJP to ~1e-6. Validated first try.
-- **Phase 3 — integration — NEXT.** Wire fwd+bwd into `emitMHSAForward`'s sdpa seam + the block
-  backward (`:6253`) behind a `flashAttn` flag (threaded like `useShampoo`); the forward records must
-  carry Lse instead of the dense softmax `mh_sm`. Then GPU-validate (tinyGPT `nano-flash` vs `nano`
-  loss-equivalence) and MEASURE the peak-memory drop at T=2048/4096/8192 (rung 4 — the payoff).
+- **Phase 3 — integration — DONE 2026-07-09.** `flashAttn : Bool` field on `.transformerEncoder`
+  (threaded to the TRAIN fwd+bwd; eval @forward stays dense). `emitMHSAForward` branches the sdpa core
+  (dense scores→softmax→@V vs `emitFlashAttnSdpa`), returns O + (softmax|Lse); the block backward
+  branches on `r.tbMhFlash` to `emitFlashAttnBwd`. GPU-validated: `tinygpt-shakespeare nano-flash`
+  tracks `nano` to ~1e-6 over 200 steps of real training (step 101 2.658268 vs 2.658269; val identical
+  to 6 places — the fp32 reduction-order drift). Integrated train step confirmed emitting flash
+  while-loops with ZERO dense `mh_sm`.
+- **Phase 4 — memory measurement — REMAINING.** The payoff: compile a T=256/2048/8192 flash-vs-dense
+  train step and compare peak device allocation to confirm O(T²)→O(T·bk). (nano is T=64/1-block, no
+  win — need a long-T config.) Plus: the position-emb resize/retrain caveat for actual 8K runs.
 - Caveat carried from the 8K analysis: long context also needs the position embedding resized to
   `[T,D]` and retrained (or RoPE/ALiBi — separate codegen), independent of flash.
 

@@ -1303,13 +1303,18 @@ private def emitFlashAttnBwd (tag : String) (qSSA kSSA vSSA doSSA oSSA lseSSA : 
   s := s ++ "      }\n"
   return (s, s!"%fb_r{tag}#1", s!"%fb_r{tag}#2", s!"%fb_r{tag}#3")
 
+/-- Block size for FlashAttention: a divisor of `n` ≤ 128 (fewer blocks for
+    short sequences, real memory win for long ones). -/
+private def flashBlock (n : Nat) : Nat :=
+  if n % 128 == 0 then 128 else if n % 64 == 0 then 64 else n
+
 /-- Emit multi-head self-attention forward.
     Input x (B, N, D). Params: Wq, bq, Wk, bk, Wv, bv, Wo, bo.
-    Returns (code, outSSA, saved Q,K,V,softmax,preProj SSAs). -/
+    Returns (code, outSSA, Q, K, V, softmax-or-Lse, preProj, sdpaOut SSAs). -/
 private def emitMHSAForward (tag : String) (xSSA : String) (shape : List Nat)
     (heads : Nat) (wqSSA bqSSA wkSSA bkSSA wvSSA bvSSA woSSA boSSA : String)
-    (causalMask : Bool := false)
-    : String × String × String × String × String × String × String := Id.run do
+    (causalMask : Bool := false) (flashAttn : Bool := false)
+    : String × String × String × String × String × String × String × String := Id.run do
   match shape with
   | [b, n, d] =>
     let dh := d / heads
@@ -1332,59 +1337,64 @@ private def emitMHSAForward (tag : String) (xSSA : String) (shape : List Nat)
     s := s ++ s!"    %mh_k{tag} = stablehlo.transpose %mh_kr{tag}, dims = [0, 2, 1, 3] : ({heTy}) -> {hTy}\n"
     s := s ++ s!"    %mh_vr{tag} = stablehlo.reshape {vSSA} : ({ty}) -> {heTy}\n"
     s := s ++ s!"    %mh_v{tag} = stablehlo.transpose %mh_vr{tag}, dims = [0, 2, 1, 3] : ({heTy}) -> {hTy}\n"
-    -- Scores = Q @ K^T : (B, heads, N, dh) x (B, heads, N, dh) → (B, heads, N, N)
-    s := s ++ s!"    %mh_sc{tag} = stablehlo.dot_general %mh_q{tag}, %mh_k{tag},\n"
-    s := s ++ "              batching_dims = [0, 1] x [0, 1],\n"
-    s := s ++ "              contracting_dims = [3] x [3],\n"
-    s := s ++ "              precision = [DEFAULT, DEFAULT]\n"
-    s := s ++ s!"            : ({hTy}, {hTy}) -> {sTy}\n"
-    -- Scale by 1/sqrt(dh)
-    let invSqrtDh : Float := 1.0 / Float.sqrt dh.toFloat
-    s := s ++ s!"    %mh_scale{tag} = stablehlo.constant dense<{invSqrtDh}> : {sTy}\n"
-    s := s ++ s!"    %mh_ss_pre{tag} = stablehlo.multiply %mh_sc{tag}, %mh_scale{tag} : {sTy}\n"
-    -- Optional causal mask: add a `[N, N]` triangular mask (-inf above the
-    -- diagonal, 0 elsewhere) broadcast across (B, heads). Done before
-    -- softmax so the masked entries become exactly 0 after exp+normalize.
-    if causalMask then
-      let nnTy := tensorTy [n, n]
-      s := s ++ s!"    %mh_iotaR{tag} = stablehlo.iota dim = 0 : {nnTy}\n"
-      s := s ++ s!"    %mh_iotaC{tag} = stablehlo.iota dim = 1 : {nnTy}\n"
-      s := s ++ s!"    %mh_cmp{tag} = stablehlo.compare GE, %mh_iotaR{tag}, %mh_iotaC{tag}, FLOAT : ({nnTy}, {nnTy}) -> tensor<{n}x{n}xi1>\n"
-      s := s ++ s!"    %mh_zmask{tag} = stablehlo.constant dense<0.0> : {nnTy}\n"
-      s := s ++ s!"    %mh_ninfmask{tag} = stablehlo.constant dense<0xFF800000> : {nnTy}\n"
-      s := s ++ s!"    %mh_mask{tag} = stablehlo.select %mh_cmp{tag}, %mh_zmask{tag}, %mh_ninfmask{tag} : (tensor<{n}x{n}xi1>, {nnTy}, {nnTy}) -> {nnTy}\n"
-      s := s ++ s!"    %mh_mask_bc{tag} = stablehlo.broadcast_in_dim %mh_mask{tag}, dims = [2, 3] : ({nnTy}) -> {sTy}\n"
-      s := s ++ s!"    %mh_ss{tag} = stablehlo.add %mh_ss_pre{tag}, %mh_mask_bc{tag} : {sTy}\n"
-    else
-      s := s ++ s!"    %mh_ss_zc{tag} = stablehlo.constant dense<0.0> : {sTy}\n"
-      s := s ++ s!"    %mh_ss{tag} = stablehlo.add %mh_ss_pre{tag}, %mh_ss_zc{tag} : {sTy}\n"
-    -- Softmax: max, shift, exp, sum, divide
+    -- SDPA core. `avSSA` = attention output [b,heads,n,dh]; `smLseSSA` = the
+    -- saved backward state (dense softmax probs [b,h,n,n], or flash logsumexp
+    -- [b,h,n]). Flash never materializes the [b,h,n,n] matrix.
     let bhnTy := tensorTy [b, heads, n]
-    s := s ++ s!"    %mh_neginf{tag} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
-    s := s ++ s!"    %mh_max{tag} = stablehlo.reduce(%mh_ss{tag} init: %mh_neginf{tag}) applies stablehlo.maximum across dimensions = [3]\n"
-    s := s ++ s!"          : ({sTy}, tensor<f32>) -> {bhnTy}\n"
-    s := s ++ s!"    %mh_max_bc{tag} = stablehlo.broadcast_in_dim %mh_max{tag}, dims = [0, 1, 2] : ({bhnTy}) -> {sTy}\n"
-    s := s ++ s!"    %mh_shift{tag} = stablehlo.subtract %mh_ss{tag}, %mh_max_bc{tag} : {sTy}\n"
-    s := s ++ s!"    %mh_exp{tag} = stablehlo.exponential %mh_shift{tag} : {sTy}\n"
-    s := s ++ s!"    %mh_zf{tag} = stablehlo.constant dense<0.0> : tensor<f32>\n"
-    s := s ++ s!"    %mh_sumE{tag} = stablehlo.reduce(%mh_exp{tag} init: %mh_zf{tag}) applies stablehlo.add across dimensions = [3]\n"
-    s := s ++ s!"          : ({sTy}, tensor<f32>) -> {bhnTy}\n"
-    s := s ++ s!"    %mh_sumE_bc{tag} = stablehlo.broadcast_in_dim %mh_sumE{tag}, dims = [0, 1, 2] : ({bhnTy}) -> {sTy}\n"
-    s := s ++ s!"    %mh_sm{tag} = stablehlo.divide %mh_exp{tag}, %mh_sumE_bc{tag} : {sTy}\n"
-    -- out = softmax @ V : (B, heads, N, N) x (B, heads, N, dh) → (B, heads, N, dh)
-    s := s ++ s!"    %mh_av{tag} = stablehlo.dot_general %mh_sm{tag}, %mh_v{tag},\n"
-    s := s ++ "              batching_dims = [0, 1] x [0, 1],\n"
-    s := s ++ "              contracting_dims = [3] x [2],\n"
-    s := s ++ "              precision = [DEFAULT, DEFAULT]\n"
-    s := s ++ s!"            : ({sTy}, {hTy}) -> {hTy}\n"
+    let (sdpaCode, avSSA, smLseSSA) := Id.run do
+      let mut s2 := ""
+      if flashAttn then
+        let (fcode, foSSA, flseSSA) := emitFlashAttnSdpa s!"{tag}fa" s!"%mh_q{tag}" s!"%mh_k{tag}" s!"%mh_v{tag}" b heads n dh (flashBlock n) causalMask
+        s2 := s2 ++ fcode
+        return (s2, foSSA, flseSSA)
+      -- Scores = Q @ K^T
+      s2 := s2 ++ s!"    %mh_sc{tag} = stablehlo.dot_general %mh_q{tag}, %mh_k{tag},\n"
+      s2 := s2 ++ "              batching_dims = [0, 1] x [0, 1],\n"
+      s2 := s2 ++ "              contracting_dims = [3] x [3],\n"
+      s2 := s2 ++ "              precision = [DEFAULT, DEFAULT]\n"
+      s2 := s2 ++ s!"            : ({hTy}, {hTy}) -> {sTy}\n"
+      let invSqrtDh : Float := 1.0 / Float.sqrt dh.toFloat
+      s2 := s2 ++ s!"    %mh_scale{tag} = stablehlo.constant dense<{invSqrtDh}> : {sTy}\n"
+      s2 := s2 ++ s!"    %mh_ss_pre{tag} = stablehlo.multiply %mh_sc{tag}, %mh_scale{tag} : {sTy}\n"
+      if causalMask then
+        let nnTy := tensorTy [n, n]
+        s2 := s2 ++ s!"    %mh_iotaR{tag} = stablehlo.iota dim = 0 : {nnTy}\n"
+        s2 := s2 ++ s!"    %mh_iotaC{tag} = stablehlo.iota dim = 1 : {nnTy}\n"
+        s2 := s2 ++ s!"    %mh_cmp{tag} = stablehlo.compare GE, %mh_iotaR{tag}, %mh_iotaC{tag}, FLOAT : ({nnTy}, {nnTy}) -> tensor<{n}x{n}xi1>\n"
+        s2 := s2 ++ s!"    %mh_zmask{tag} = stablehlo.constant dense<0.0> : {nnTy}\n"
+        s2 := s2 ++ s!"    %mh_ninfmask{tag} = stablehlo.constant dense<0xFF800000> : {nnTy}\n"
+        s2 := s2 ++ s!"    %mh_mask{tag} = stablehlo.select %mh_cmp{tag}, %mh_zmask{tag}, %mh_ninfmask{tag} : (tensor<{n}x{n}xi1>, {nnTy}, {nnTy}) -> {nnTy}\n"
+        s2 := s2 ++ s!"    %mh_mask_bc{tag} = stablehlo.broadcast_in_dim %mh_mask{tag}, dims = [2, 3] : ({nnTy}) -> {sTy}\n"
+        s2 := s2 ++ s!"    %mh_ss{tag} = stablehlo.add %mh_ss_pre{tag}, %mh_mask_bc{tag} : {sTy}\n"
+      else
+        s2 := s2 ++ s!"    %mh_ss_zc{tag} = stablehlo.constant dense<0.0> : {sTy}\n"
+        s2 := s2 ++ s!"    %mh_ss{tag} = stablehlo.add %mh_ss_pre{tag}, %mh_ss_zc{tag} : {sTy}\n"
+      s2 := s2 ++ s!"    %mh_neginf{tag} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
+      s2 := s2 ++ s!"    %mh_max{tag} = stablehlo.reduce(%mh_ss{tag} init: %mh_neginf{tag}) applies stablehlo.maximum across dimensions = [3]\n"
+      s2 := s2 ++ s!"          : ({sTy}, tensor<f32>) -> {bhnTy}\n"
+      s2 := s2 ++ s!"    %mh_max_bc{tag} = stablehlo.broadcast_in_dim %mh_max{tag}, dims = [0, 1, 2] : ({bhnTy}) -> {sTy}\n"
+      s2 := s2 ++ s!"    %mh_shift{tag} = stablehlo.subtract %mh_ss{tag}, %mh_max_bc{tag} : {sTy}\n"
+      s2 := s2 ++ s!"    %mh_exp{tag} = stablehlo.exponential %mh_shift{tag} : {sTy}\n"
+      s2 := s2 ++ s!"    %mh_zf{tag} = stablehlo.constant dense<0.0> : tensor<f32>\n"
+      s2 := s2 ++ s!"    %mh_sumE{tag} = stablehlo.reduce(%mh_exp{tag} init: %mh_zf{tag}) applies stablehlo.add across dimensions = [3]\n"
+      s2 := s2 ++ s!"          : ({sTy}, tensor<f32>) -> {bhnTy}\n"
+      s2 := s2 ++ s!"    %mh_sumE_bc{tag} = stablehlo.broadcast_in_dim %mh_sumE{tag}, dims = [0, 1, 2] : ({bhnTy}) -> {sTy}\n"
+      s2 := s2 ++ s!"    %mh_sm{tag} = stablehlo.divide %mh_exp{tag}, %mh_sumE_bc{tag} : {sTy}\n"
+      s2 := s2 ++ s!"    %mh_av{tag} = stablehlo.dot_general %mh_sm{tag}, %mh_v{tag},\n"
+      s2 := s2 ++ "              batching_dims = [0, 1] x [0, 1],\n"
+      s2 := s2 ++ "              contracting_dims = [3] x [2],\n"
+      s2 := s2 ++ "              precision = [DEFAULT, DEFAULT]\n"
+      s2 := s2 ++ s!"            : ({sTy}, {hTy}) -> {hTy}\n"
+      return (s2, s!"%mh_av{tag}", s!"%mh_sm{tag}")
+    s := s ++ sdpaCode
     -- Transpose back (B, heads, N, dh) → (B, N, heads, dh), reshape → (B, N, D)
-    s := s ++ s!"    %mh_avT{tag} = stablehlo.transpose %mh_av{tag}, dims = [0, 2, 1, 3] : ({hTy}) -> {heTy}\n"
+    s := s ++ s!"    %mh_avT{tag} = stablehlo.transpose {avSSA}, dims = [0, 2, 1, 3] : ({hTy}) -> {heTy}\n"
     s := s ++ s!"    %mh_pp{tag} = stablehlo.reshape %mh_avT{tag} : ({heTy}) -> {ty}\n"
     -- Output projection
     let (oCode, oSSA, _) := emitDense3D s!"{tag}_o" s!"%mh_pp{tag}" shape woSSA boSSA d
     s := s ++ oCode
-    return (s, oSSA, s!"%mh_q{tag}", s!"%mh_k{tag}", s!"%mh_v{tag}", s!"%mh_sm{tag}", s!"%mh_pp{tag}")
-  | _ => return ("    // mhsa error\n", xSSA, "", "", "", "", "")
+    return (s, oSSA, s!"%mh_q{tag}", s!"%mh_k{tag}", s!"%mh_v{tag}", smLseSSA, s!"%mh_pp{tag}", avSSA)
+  | _ => return ("    // mhsa error\n", xSSA, "", "", "", "", "", "")
 
 /-- Emit a transformer encoder block forward pass.
     Layout: LN1 → MHSA → + → LN2 → fc1 → GELU → fc2 → +
@@ -1407,7 +1417,7 @@ private def emitTransformerBlockForward (tag : String) (startP : Nat) (xSSA : St
     let wk := s!"%W{p}"; let bk := s!"%b{p}"; p := p + 1
     let wv := s!"%W{p}"; let bv := s!"%b{p}"; p := p + 1
     let wo := s!"%W{p}"; let bo := s!"%b{p}"; p := p + 1
-    let (mhsaCode, mhsaOut, _, _, _, _, _) := emitMHSAForward s!"{tag}_mh" ln1Out shape heads wq bq wk bk wv bv wo bo causalMask
+    let (mhsaCode, mhsaOut, _, _, _, _, _, _) := emitMHSAForward s!"{tag}_mh" ln1Out shape heads wq bq wk bk wv bv wo bo causalMask
     s := s ++ mhsaCode
     -- Residual
     s := s ++ s!"    %tb_r1{tag} = stablehlo.add {xSSA}, {mhsaOut} : {ty}\n"
@@ -1852,7 +1862,7 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       code := code ++ snip
       curSSA := newSSA
       curShape := newShape
-    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence =>
+    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence _ =>
       let mut cs := curSSA
       let mut p := pidx
       for bi in [:nBlocks] do
@@ -2273,7 +2283,7 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
       outShape := curShape
-    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence =>
+    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence _ =>
       for _bi in [:nBlocks] do
         -- LN1
         params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
@@ -2485,7 +2495,7 @@ def collectBnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
     | .patchEmbed _ _ _ _ =>
       -- patchEmbed claims 3 pidx slots (W+b, cls, pos). No BN.
       pidx := pidx + 3
-    | .transformerEncoder _dim _heads _mlpDim nBlocks _causal _keepSeq =>
+    | .transformerEncoder _dim _heads _mlpDim nBlocks _causal _keepSeq _ =>
       -- 8 param pairs per block + 1 for the final LN. No BN.
       pidx := pidx + 8 * nBlocks + 1
     | .tokenPositionEmbed _ _ _ _ _ =>
@@ -2756,7 +2766,7 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
       outShape := curShape
-    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence =>
+    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence _ =>
       for _bi in [:nBlocks] do
         params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
         pidx := pidx + 1
@@ -3034,8 +3044,10 @@ private structure FwdRec where
   tbMhQSSA       : String := ""
   tbMhKSSA       : String := ""
   tbMhVSSA       : String := ""
-  tbMhSmSSA      : String := ""
+  tbMhSmSSA      : String := ""  -- dense softmax probs [b,h,n,n], OR (flash) logsumexp [b,h,n]
   tbMhPpSSA      : String := ""  -- pre-projection MHSA output (B, N, D)
+  tbMhFlash      : Bool   := false  -- attention emitted via FlashAttention (tbMhSmSSA is Lse, tbMhOSSA is O)
+  tbMhOSSA       : String := ""  -- (flash) the sdpa output O [b,h,n,dh]
   tbFc1OutSSA    : String := ""  -- pre-GELU (B, N, mlpDim)
   tbGeluTSSA     : String := ""  -- saved tanh value for GELU backward
   tbGeluOutSSA   : String := ""  -- post-GELU (B, N, mlpDim)
@@ -5151,7 +5163,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       curShape := newShape
       pidx := pidx + 3
 
-    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence =>
+    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence flashAttn =>
       for bi in [:nBlocks] do
         let blockIn := curSSA
         let blockShape := curShape
@@ -5168,7 +5180,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         let wk := s!"%W{pidx}"; let bk := s!"%b{pidx}"; pidx := pidx + 1
         let wv := s!"%W{pidx}"; let bv := s!"%b{pidx}"; pidx := pidx + 1
         let wo := s!"%W{pidx}"; let bo := s!"%b{pidx}"; pidx := pidx + 1
-        let (mhCode, mhOut, mhQ, mhK, mhV, mhSm, mhPp) := emitMHSAForward s!"{tag}_mh" ln1Out blockShape heads wq bq wk bk wv bv wo bo causalMask
+        let (mhCode, mhOut, mhQ, mhK, mhV, mhSmLse, mhPp, mhAvO) := emitMHSAForward s!"{tag}_mh" ln1Out blockShape heads wq bq wk bk wv bv wo bo causalMask flashAttn
         code := code ++ mhCode
         -- Residual
         code := code ++ s!"    %tb_r1{tag} = stablehlo.add {blockIn}, {mhOut} : {ty}\n"
@@ -5198,7 +5210,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         tbRec := { tbRec with tbLn1XSSA := blockIn, tbLn1OutSSA := ln1Out, tbLn1NormSSA := ln1Norm, tbLn1IstdSSA := ln1Istd }
         tbRec := { tbRec with tbMhsaOutSSA := mhOut, tbR1SSA := r1 }
         tbRec := { tbRec with tbLn2OutSSA := ln2Out, tbLn2NormSSA := ln2Norm, tbLn2IstdSSA := ln2Istd }
-        tbRec := { tbRec with tbMhQSSA := mhQ, tbMhKSSA := mhK, tbMhVSSA := mhV, tbMhSmSSA := mhSm, tbMhPpSSA := mhPp }
+        tbRec := { tbRec with tbMhQSSA := mhQ, tbMhKSSA := mhK, tbMhVSSA := mhV, tbMhSmSSA := mhSmLse, tbMhPpSSA := mhPp, tbMhFlash := flashAttn, tbMhOSSA := mhAvO }
         tbRec := { tbRec with tbFc1OutSSA := fc1Out, tbGeluTSSA := geT, tbGeluOutSSA := geOut }
         records := records.push tbRec
         curSSA := blockOut
@@ -6243,7 +6255,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           gradShape := r.inShape
         | _ => pure ()
       else pure ()
-    | .transformerEncoder _dim _heads _mlpDim _nBlocks _causal _keepSeq =>
+    | .transformerEncoder _dim _heads _mlpDim _nBlocks _causal _keepSeq _ =>
       -- For records emitted during forward of a transformerEncoder layer:
       -- CLS slice, final LN, or transformer block (each discriminated by flags).
       if r.isClsSlice then
@@ -6421,41 +6433,54 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           let sTy := tensorTy [b, heads, n, n]
           code := code ++ s!"    %{tag}_dppr = stablehlo.reshape %{tag}_dpp : ({ty}) -> {heTy}\n"
           code := code ++ s!"    %{tag}_dattn = stablehlo.transpose %{tag}_dppr, dims = [0, 2, 1, 3] : ({heTy}) -> {hTy}\n"
-          code := code ++ s!"    %{tag}_dsm = stablehlo.dot_general %{tag}_dattn, {r.tbMhVSSA},\n"
-          code := code ++ s!"              batching_dims = [0, 1] x [0, 1],\n"
-          code := code ++ s!"              contracting_dims = [3] x [3],\n"
-          code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
-          code := code ++ s!"            : ({hTy}, {hTy}) -> {sTy}\n"
-          code := code ++ s!"    %{tag}_dv = stablehlo.dot_general {r.tbMhSmSSA}, %{tag}_dattn,\n"
-          code := code ++ s!"              batching_dims = [0, 1] x [0, 1],\n"
-          code := code ++ s!"              contracting_dims = [2] x [2],\n"
-          code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
-          code := code ++ s!"            : ({sTy}, {hTy}) -> {hTy}\n"
-          code := code ++ s!"    %{tag}_smdsm = stablehlo.multiply {r.tbMhSmSSA}, %{tag}_dsm : {sTy}\n"
           let bhnTy := tensorTy [b, heads, n]
-          code := code ++ s!"    %{tag}_sumds = stablehlo.reduce(%{tag}_smdsm init: %zf) applies stablehlo.add across dimensions = [3]\n"
-          code := code ++ s!"          : ({sTy}, tensor<f32>) -> {bhnTy}\n"
-          code := code ++ s!"    %{tag}_sumds_bc = stablehlo.broadcast_in_dim %{tag}_sumds, dims = [0, 1, 2] : ({bhnTy}) -> {sTy}\n"
-          code := code ++ s!"    %{tag}_dsms = stablehlo.subtract %{tag}_dsm, %{tag}_sumds_bc : {sTy}\n"
-          code := code ++ s!"    %{tag}_dscaled = stablehlo.multiply {r.tbMhSmSSA}, %{tag}_dsms : {sTy}\n"
-          let invSqrtDh : Float := 1.0 / Float.sqrt dh.toFloat
-          code := code ++ s!"    %{tag}_scale = stablehlo.constant dense<{invSqrtDh}> : {sTy}\n"
-          code := code ++ s!"    %{tag}_dscores = stablehlo.multiply %{tag}_dscaled, %{tag}_scale : {sTy}\n"
-          code := code ++ s!"    %{tag}_dq = stablehlo.dot_general %{tag}_dscores, {r.tbMhKSSA},\n"
-          code := code ++ s!"              batching_dims = [0, 1] x [0, 1],\n"
-          code := code ++ s!"              contracting_dims = [3] x [2],\n"
-          code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
-          code := code ++ s!"            : ({sTy}, {hTy}) -> {hTy}\n"
-          code := code ++ s!"    %{tag}_dk = stablehlo.dot_general %{tag}_dscores, {r.tbMhQSSA},\n"
-          code := code ++ s!"              batching_dims = [0, 1] x [0, 1],\n"
-          code := code ++ s!"              contracting_dims = [2] x [2],\n"
-          code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
-          code := code ++ s!"            : ({sTy}, {hTy}) -> {hTy}\n"
-          code := code ++ s!"    %{tag}_dqt = stablehlo.transpose %{tag}_dq, dims = [0, 2, 1, 3] : ({hTy}) -> {heTy}\n"
+          -- SDPA backward → dq/dk/dv [b,h,n,dh]. Flash: recompute loop (no [b,h,n,n]);
+          -- dense: the stored-softmax VJP. Downstream transpose/reshape is shared.
+          let mut dqSSA := s!"%{tag}_dq"
+          let mut dkSSA := s!"%{tag}_dk"
+          let mut dvSSA := s!"%{tag}_dv"
+          if r.tbMhFlash then
+            let causal := match r.layer with
+              | .transformerEncoder _ _ _ _ cm _ _ => cm | _ => false
+            let (fbCode, fdq, fdk, fdv) := emitFlashAttnBwd s!"{tag}fb" r.tbMhQSSA r.tbMhKSSA r.tbMhVSSA
+              s!"%{tag}_dattn" r.tbMhOSSA r.tbMhSmSSA b heads n dh (flashBlock n) causal
+            code := code ++ fbCode
+            dqSSA := fdq; dkSSA := fdk; dvSSA := fdv
+          else
+            code := code ++ s!"    %{tag}_dsm = stablehlo.dot_general %{tag}_dattn, {r.tbMhVSSA},\n"
+            code := code ++ s!"              batching_dims = [0, 1] x [0, 1],\n"
+            code := code ++ s!"              contracting_dims = [3] x [3],\n"
+            code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+            code := code ++ s!"            : ({hTy}, {hTy}) -> {sTy}\n"
+            code := code ++ s!"    %{tag}_dv = stablehlo.dot_general {r.tbMhSmSSA}, %{tag}_dattn,\n"
+            code := code ++ s!"              batching_dims = [0, 1] x [0, 1],\n"
+            code := code ++ s!"              contracting_dims = [2] x [2],\n"
+            code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+            code := code ++ s!"            : ({sTy}, {hTy}) -> {hTy}\n"
+            code := code ++ s!"    %{tag}_smdsm = stablehlo.multiply {r.tbMhSmSSA}, %{tag}_dsm : {sTy}\n"
+            code := code ++ s!"    %{tag}_sumds = stablehlo.reduce(%{tag}_smdsm init: %zf) applies stablehlo.add across dimensions = [3]\n"
+            code := code ++ s!"          : ({sTy}, tensor<f32>) -> {bhnTy}\n"
+            code := code ++ s!"    %{tag}_sumds_bc = stablehlo.broadcast_in_dim %{tag}_sumds, dims = [0, 1, 2] : ({bhnTy}) -> {sTy}\n"
+            code := code ++ s!"    %{tag}_dsms = stablehlo.subtract %{tag}_dsm, %{tag}_sumds_bc : {sTy}\n"
+            code := code ++ s!"    %{tag}_dscaled = stablehlo.multiply {r.tbMhSmSSA}, %{tag}_dsms : {sTy}\n"
+            let invSqrtDh : Float := 1.0 / Float.sqrt dh.toFloat
+            code := code ++ s!"    %{tag}_scale = stablehlo.constant dense<{invSqrtDh}> : {sTy}\n"
+            code := code ++ s!"    %{tag}_dscores = stablehlo.multiply %{tag}_dscaled, %{tag}_scale : {sTy}\n"
+            code := code ++ s!"    %{tag}_dq = stablehlo.dot_general %{tag}_dscores, {r.tbMhKSSA},\n"
+            code := code ++ s!"              batching_dims = [0, 1] x [0, 1],\n"
+            code := code ++ s!"              contracting_dims = [3] x [2],\n"
+            code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+            code := code ++ s!"            : ({sTy}, {hTy}) -> {hTy}\n"
+            code := code ++ s!"    %{tag}_dk = stablehlo.dot_general %{tag}_dscores, {r.tbMhQSSA},\n"
+            code := code ++ s!"              batching_dims = [0, 1] x [0, 1],\n"
+            code := code ++ s!"              contracting_dims = [2] x [2],\n"
+            code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+            code := code ++ s!"            : ({sTy}, {hTy}) -> {hTy}\n"
+          code := code ++ s!"    %{tag}_dqt = stablehlo.transpose {dqSSA}, dims = [0, 2, 1, 3] : ({hTy}) -> {heTy}\n"
           code := code ++ s!"    %{tag}_dqr = stablehlo.reshape %{tag}_dqt : ({heTy}) -> {ty}\n"
-          code := code ++ s!"    %{tag}_dkt = stablehlo.transpose %{tag}_dk, dims = [0, 2, 1, 3] : ({hTy}) -> {heTy}\n"
+          code := code ++ s!"    %{tag}_dkt = stablehlo.transpose {dkSSA}, dims = [0, 2, 1, 3] : ({hTy}) -> {heTy}\n"
           code := code ++ s!"    %{tag}_dkr = stablehlo.reshape %{tag}_dkt : ({heTy}) -> {ty}\n"
-          code := code ++ s!"    %{tag}_dvt = stablehlo.transpose %{tag}_dv, dims = [0, 2, 1, 3] : ({hTy}) -> {heTy}\n"
+          code := code ++ s!"    %{tag}_dvt = stablehlo.transpose {dvSSA}, dims = [0, 2, 1, 3] : ({hTy}) -> {heTy}\n"
           code := code ++ s!"    %{tag}_dvr = stablehlo.reshape %{tag}_dvt : ({heTy}) -> {ty}\n"
           -- QKV projection backwards
           code := code ++ s!"    %{tag}_dwq = stablehlo.dot_general {r.tbLn1OutSSA}, %{tag}_dqr,\n"
@@ -7797,7 +7822,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       match curShape with
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]
@@ -8035,7 +8060,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       mpidx := mpidx + 1
       params := params ++ s!"      %m_W{mpidx}: {tensorTy [nP + 1, dim]},\n"
       mpidx := mpidx + 1
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]
@@ -8211,7 +8236,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       vpidx2 := vpidx2 + 1
       params := params ++ s!"      %v_W{vpidx2}: {tensorTy [nP + 1, dim]},\n"
       vpidx2 := vpidx2 + 1
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]

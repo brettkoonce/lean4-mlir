@@ -46,9 +46,15 @@ inductive Layer where
   -- at the end. tinyGPT sets it implicitly via causalMask; DDPM
   -- bottleneck attention sets it explicitly to keep the [B, N, D]
   -- token shape so it can flow into a `spatialUnflatten` back to NCHW.
+  -- `flashAttn` (default false) emits the attention SDPA as a tiled online-
+  -- softmax `stablehlo.while` (FlashAttention) instead of the dense
+  -- `[B,H,T,T]` scores — O(T·blk) not O(T²) memory, for long context. Same
+  -- math (validated ~1e-6 vs dense). Currently wired into the TRAIN fwd+bwd
+  -- (the eval @forward stays dense). See planning/flash_attention.md.
   | transformerEncoder (dim heads mlpDim nBlocks : Nat)
                        (causalMask : Bool := false)
                        (keepSequence : Bool := false)
+                       (flashAttn : Bool := false)
   -- Selective state-space block (Mamba / S6); dim = hidden, stateSize = N,
   -- expand = inner-dim multiplier. Not codegen-backed yet — used by the
   -- Bestiary as a shape-only primitive for language-model architectures.
