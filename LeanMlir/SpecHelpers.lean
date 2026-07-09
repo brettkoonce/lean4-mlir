@@ -119,7 +119,7 @@ def paramShapes (spec : NetSpec) : Array (Array Nat) := Id.run do
       shapes := shapes.push #[dim, ic, p, p] |>.push #[dim]    -- W, b
       shapes := shapes.push #[dim]                              -- cls token
       shapes := shapes.push #[nP + 1, dim]                      -- positional embedding
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
       for _bi in [:nBlocks] do
         -- LN1 (gamma, beta)
         shapes := shapes.push #[dim] |>.push #[dim]
@@ -432,7 +432,7 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
     let (Wcv, bcv, s') ← heConvB oc ic p seed
     let (gLN, bLN) ← heLN oc
     return (#[Wcv, bcv, gLN, bLN], s')
-  | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ =>
+  | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
     let mut parts : Array ByteArray := #[]
     let mut s := seed
     for _bi in [:nBlocks] do

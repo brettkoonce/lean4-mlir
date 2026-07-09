@@ -51,10 +51,16 @@ inductive Layer where
   -- `[B,H,T,T]` scores — O(T·blk) not O(T²) memory, for long context. Same
   -- math (validated ~1e-6 vs dense). Currently wired into the TRAIN fwd+bwd
   -- (the eval @forward stays dense). See planning/flash_attention.md.
+  -- `rope` (default false) applies Rotary Position Embedding to Q/K inside
+  -- attention (fwd rotation + VJP in bwd) — relative position, generalizes
+  -- past the trained length. Validated ~1e-6 vs numpy. See planning/flash_attention.md
+  -- / jax/demos/rope_ref.py. (Pair with dropping the absolute position table
+  -- for true length-generalization.)
   | transformerEncoder (dim heads mlpDim nBlocks : Nat)
                        (causalMask : Bool := false)
                        (keepSequence : Bool := false)
                        (flashAttn : Bool := false)
+                       (rope : Bool := false)
   -- Selective state-space block (Mamba / S6); dim = hidden, stateSize = N,
   -- expand = inner-dim multiplier. Not codegen-backed yet — used by the
   -- Bestiary as a shape-only primitive for language-model architectures.

@@ -57,6 +57,9 @@ structure GptCfg where
       dense [B,H,T,T]. Same math; long-context memory. See
       planning/flash_attention.md. -/
   flashAttn : Bool := false
+  /-- Rotary position embedding on Q/K (relative position; generalizes past
+      the trained length). See jax/demos/rope_ref.py. -/
+  rope      : Bool := false
 
 /-- The original 212K-param demo config (spec name unchanged so old
     checkpoints keep their build prefix). -/
@@ -90,12 +93,20 @@ def nanoGatherCfg : GptCfg :=
 def nanoFlashCfg : GptCfg :=
   { nanoCfg with key := "nano-flash", specName := "tinygpt-shakespeare-nanoflash", flashAttn := true }
 
+/-- nano with RoPE on Q/K (Phase: rope). A different position scheme (not an
+    equivalence twin), so it trains to a comparable — not identical — loss;
+    a broken backward un-rope would stall learning, so a sane curve validates
+    the integrated fwd+bwd rotation. -/
+def nanoRopeCfg : GptCfg :=
+  { nanoCfg with key := "nano-rope", specName := "tinygpt-shakespeare-nanorope", rope := true }
+
 def pickCfg : String → Option GptCfg
   | "nano" => some nanoCfg
   | "tiny" => some tinyCfg
   | "nano-ids" => some nanoIdsCfg
   | "nano-gather" => some nanoGatherCfg
   | "nano-flash" => some nanoFlashCfg
+  | "nano-rope" => some nanoRopeCfg
   | _ => none
 
 def mkSpec (g : GptCfg) : NetSpec :=
@@ -105,7 +116,7 @@ def mkSpec (g : GptCfg) : NetSpec :=
     layers := [
       .tokenPositionEmbed vocabSize g.seqLen g.dModel (idsInput := g.ids) (gather := g.gather),
       .transformerEncoder g.dModel g.numHeads g.mlpDim g.numLayers (causalMask := true)
-        (flashAttn := g.flashAttn),
+        (flashAttn := g.flashAttn) (rope := g.rope),
       .lmHead g.dModel vocabSize g.seqLen
     ] }
 

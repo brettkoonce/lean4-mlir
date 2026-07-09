@@ -1364,7 +1364,7 @@ private def emitRopeApply (tag : String) (xSSA cosSSA sinSSA : String)
     Returns (code, outSSA, Q, K, V, softmax-or-Lse, preProj, sdpaOut SSAs). -/
 private def emitMHSAForward (tag : String) (xSSA : String) (shape : List Nat)
     (heads : Nat) (wqSSA bqSSA wkSSA bkSSA wvSSA bvSSA woSSA boSSA : String)
-    (causalMask : Bool := false) (flashAttn : Bool := false)
+    (causalMask : Bool := false) (flashAttn : Bool := false) (rope : Bool := false)
     : String × String × String × String × String × String × String × String := Id.run do
   match shape with
   | [b, n, d] =>
@@ -1388,6 +1388,16 @@ private def emitMHSAForward (tag : String) (xSSA : String) (shape : List Nat)
     s := s ++ s!"    %mh_k{tag} = stablehlo.transpose %mh_kr{tag}, dims = [0, 2, 1, 3] : ({heTy}) -> {hTy}\n"
     s := s ++ s!"    %mh_vr{tag} = stablehlo.reshape {vSSA} : ({ty}) -> {heTy}\n"
     s := s ++ s!"    %mh_v{tag} = stablehlo.transpose %mh_vr{tag}, dims = [0, 2, 1, 3] : ({heTy}) -> {hTy}\n"
+    -- RoPE: rotate Q,K per position (relative-position attention). V is not
+    -- rotated. The roped Q,K become the "Q,K" the SDPA + its backward see, so
+    -- dq/dk come back w.r.t. the roped vectors and get un-roped in the block bwd.
+    let (ropeCode, qAttn, kAttn) := Id.run do
+      if !rope then return ("", s!"%mh_q{tag}", s!"%mh_k{tag}")
+      let (tcode, cosSSA, sinSSA) := emitRopeTables s!"{tag}q" n dh
+      let (qc, qr) := emitRopeApply s!"{tag}q" s!"%mh_q{tag}" cosSSA sinSSA b heads n dh false
+      let (kc, kr) := emitRopeApply s!"{tag}k" s!"%mh_k{tag}" cosSSA sinSSA b heads n dh false
+      return (tcode ++ qc ++ kc, qr, kr)
+    s := s ++ ropeCode
     -- SDPA core. `avSSA` = attention output [b,heads,n,dh]; `smLseSSA` = the
     -- saved backward state (dense softmax probs [b,h,n,n], or flash logsumexp
     -- [b,h,n]). Flash never materializes the [b,h,n,n] matrix.
@@ -1395,11 +1405,11 @@ private def emitMHSAForward (tag : String) (xSSA : String) (shape : List Nat)
     let (sdpaCode, avSSA, smLseSSA) := Id.run do
       let mut s2 := ""
       if flashAttn then
-        let (fcode, foSSA, flseSSA) := emitFlashAttnSdpa s!"{tag}fa" s!"%mh_q{tag}" s!"%mh_k{tag}" s!"%mh_v{tag}" b heads n dh (flashBlock n) causalMask
+        let (fcode, foSSA, flseSSA) := emitFlashAttnSdpa s!"{tag}fa" qAttn kAttn s!"%mh_v{tag}" b heads n dh (flashBlock n) causalMask
         s2 := s2 ++ fcode
         return (s2, foSSA, flseSSA)
       -- Scores = Q @ K^T
-      s2 := s2 ++ s!"    %mh_sc{tag} = stablehlo.dot_general %mh_q{tag}, %mh_k{tag},\n"
+      s2 := s2 ++ s!"    %mh_sc{tag} = stablehlo.dot_general {qAttn}, {kAttn},\n"
       s2 := s2 ++ "              batching_dims = [0, 1] x [0, 1],\n"
       s2 := s2 ++ "              contracting_dims = [3] x [3],\n"
       s2 := s2 ++ "              precision = [DEFAULT, DEFAULT]\n"
@@ -1444,7 +1454,9 @@ private def emitMHSAForward (tag : String) (xSSA : String) (shape : List Nat)
     -- Output projection
     let (oCode, oSSA, _) := emitDense3D s!"{tag}_o" s!"%mh_pp{tag}" shape woSSA boSSA d
     s := s ++ oCode
-    return (s, oSSA, s!"%mh_q{tag}", s!"%mh_k{tag}", s!"%mh_v{tag}", smLseSSA, s!"%mh_pp{tag}", avSSA)
+    -- Return the ROPED Q,K in the Q/K slots (what the SDPA saw) so the sdpa
+    -- backward differentiates w.r.t. them; the block backward then un-ropes.
+    return (s, oSSA, qAttn, kAttn, s!"%mh_v{tag}", smLseSSA, s!"%mh_pp{tag}", avSSA)
   | _ => return ("    // mhsa error\n", xSSA, "", "", "", "", "", "")
 
 /-- Emit a transformer encoder block forward pass.
@@ -1453,7 +1465,7 @@ private def emitMHSAForward (tag : String) (xSSA : String) (shape : List Nat)
     LN1(g,b), Wq,bq, Wk,bk, Wv,bv, Wo,bo, LN2(g,b), Wfc1,bfc1, Wfc2,bfc2.
     Returns (code, outSSA, newPidx). -/
 private def emitTransformerBlockForward (tag : String) (startP : Nat) (xSSA : String) (shape : List Nat)
-    (heads mlpDim : Nat) (causalMask : Bool := false) : String × String × Nat := Id.run do
+    (heads mlpDim : Nat) (causalMask : Bool := false) (rope : Bool := false) : String × String × Nat := Id.run do
   match shape with
   | [_b, _n, d] =>
     let ty := tensorTy shape
@@ -1468,7 +1480,7 @@ private def emitTransformerBlockForward (tag : String) (startP : Nat) (xSSA : St
     let wk := s!"%W{p}"; let bk := s!"%b{p}"; p := p + 1
     let wv := s!"%W{p}"; let bv := s!"%b{p}"; p := p + 1
     let wo := s!"%W{p}"; let bo := s!"%b{p}"; p := p + 1
-    let (mhsaCode, mhsaOut, _, _, _, _, _, _) := emitMHSAForward s!"{tag}_mh" ln1Out shape heads wq bq wk bk wv bv wo bo causalMask
+    let (mhsaCode, mhsaOut, _, _, _, _, _, _) := emitMHSAForward s!"{tag}_mh" ln1Out shape heads wq bq wk bk wv bv wo bo causalMask false rope
     s := s ++ mhsaCode
     -- Residual
     s := s ++ s!"    %tb_r1{tag} = stablehlo.add {xSSA}, {mhsaOut} : {ty}\n"
@@ -1913,11 +1925,11 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       code := code ++ snip
       curSSA := newSSA
       curShape := newShape
-    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence _ =>
+    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence _ rope =>
       let mut cs := curSSA
       let mut p := pidx
       for bi in [:nBlocks] do
-        let (snip, newSSA, newP) := emitTransformerBlockForward s!"{pos}_{bi}" p cs curShape heads mlpDim causalMask
+        let (snip, newSSA, newP) := emitTransformerBlockForward s!"{pos}_{bi}" p cs curShape heads mlpDim causalMask rope
         code := code ++ snip
         cs := newSSA
         p := newP
@@ -2334,7 +2346,7 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
       outShape := curShape
-    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence _ =>
+    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence _ _ =>
       for _bi in [:nBlocks] do
         -- LN1
         params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
@@ -2546,7 +2558,7 @@ def collectBnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
     | .patchEmbed _ _ _ _ =>
       -- patchEmbed claims 3 pidx slots (W+b, cls, pos). No BN.
       pidx := pidx + 3
-    | .transformerEncoder _dim _heads _mlpDim nBlocks _causal _keepSeq _ =>
+    | .transformerEncoder _dim _heads _mlpDim nBlocks _causal _keepSeq _ _ =>
       -- 8 param pairs per block + 1 for the final LN. No BN.
       pidx := pidx + 8 * nBlocks + 1
     | .tokenPositionEmbed _ _ _ _ _ =>
@@ -2817,7 +2829,7 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
       outShape := curShape
-    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence _ =>
+    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence _ _ =>
       for _bi in [:nBlocks] do
         params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
         pidx := pidx + 1
@@ -3099,6 +3111,7 @@ private structure FwdRec where
   tbMhPpSSA      : String := ""  -- pre-projection MHSA output (B, N, D)
   tbMhFlash      : Bool   := false  -- attention emitted via FlashAttention (tbMhSmSSA is Lse, tbMhOSSA is O)
   tbMhOSSA       : String := ""  -- (flash) the sdpa output O [b,h,n,dh]
+  tbMhRope       : Bool   := false  -- RoPE applied to Q/K (Q/K slots hold roped vecs; un-rope dq/dk in bwd)
   tbFc1OutSSA    : String := ""  -- pre-GELU (B, N, mlpDim)
   tbGeluTSSA     : String := ""  -- saved tanh value for GELU backward
   tbGeluOutSSA   : String := ""  -- post-GELU (B, N, mlpDim)
@@ -5214,7 +5227,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       curShape := newShape
       pidx := pidx + 3
 
-    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence flashAttn =>
+    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence flashAttn rope =>
       for bi in [:nBlocks] do
         let blockIn := curSSA
         let blockShape := curShape
@@ -5231,7 +5244,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         let wk := s!"%W{pidx}"; let bk := s!"%b{pidx}"; pidx := pidx + 1
         let wv := s!"%W{pidx}"; let bv := s!"%b{pidx}"; pidx := pidx + 1
         let wo := s!"%W{pidx}"; let bo := s!"%b{pidx}"; pidx := pidx + 1
-        let (mhCode, mhOut, mhQ, mhK, mhV, mhSmLse, mhPp, mhAvO) := emitMHSAForward s!"{tag}_mh" ln1Out blockShape heads wq bq wk bk wv bv wo bo causalMask flashAttn
+        let (mhCode, mhOut, mhQ, mhK, mhV, mhSmLse, mhPp, mhAvO) := emitMHSAForward s!"{tag}_mh" ln1Out blockShape heads wq bq wk bk wv bv wo bo causalMask flashAttn rope
         code := code ++ mhCode
         -- Residual
         code := code ++ s!"    %tb_r1{tag} = stablehlo.add {blockIn}, {mhOut} : {ty}\n"
@@ -5261,7 +5274,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         tbRec := { tbRec with tbLn1XSSA := blockIn, tbLn1OutSSA := ln1Out, tbLn1NormSSA := ln1Norm, tbLn1IstdSSA := ln1Istd }
         tbRec := { tbRec with tbMhsaOutSSA := mhOut, tbR1SSA := r1 }
         tbRec := { tbRec with tbLn2OutSSA := ln2Out, tbLn2NormSSA := ln2Norm, tbLn2IstdSSA := ln2Istd }
-        tbRec := { tbRec with tbMhQSSA := mhQ, tbMhKSSA := mhK, tbMhVSSA := mhV, tbMhSmSSA := mhSmLse, tbMhPpSSA := mhPp, tbMhFlash := flashAttn, tbMhOSSA := mhAvO }
+        tbRec := { tbRec with tbMhQSSA := mhQ, tbMhKSSA := mhK, tbMhVSSA := mhV, tbMhSmSSA := mhSmLse, tbMhPpSSA := mhPp, tbMhFlash := flashAttn, tbMhOSSA := mhAvO, tbMhRope := rope }
         tbRec := { tbRec with tbFc1OutSSA := fc1Out, tbGeluTSSA := geT, tbGeluOutSSA := geOut }
         records := records.push tbRec
         curSSA := blockOut
@@ -6306,7 +6319,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           gradShape := r.inShape
         | _ => pure ()
       else pure ()
-    | .transformerEncoder _dim _heads _mlpDim _nBlocks _causal _keepSeq _ =>
+    | .transformerEncoder _dim _heads _mlpDim _nBlocks _causal _keepSeq _ _ =>
       -- For records emitted during forward of a transformerEncoder layer:
       -- CLS slice, final LN, or transformer block (each discriminated by flags).
       if r.isClsSlice then
@@ -6492,7 +6505,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           let mut dvSSA := s!"%{tag}_dv"
           if r.tbMhFlash then
             let causal := match r.layer with
-              | .transformerEncoder _ _ _ _ cm _ _ => cm | _ => false
+              | .transformerEncoder _ _ _ _ cm _ _ _ => cm | _ => false
             let (fbCode, fdq, fdk, fdv) := emitFlashAttnBwd s!"{tag}fb" r.tbMhQSSA r.tbMhKSSA r.tbMhVSSA
               s!"%{tag}_dattn" r.tbMhOSSA r.tbMhSmSSA b heads n dh (flashBlock n) causal
             code := code ++ fbCode
@@ -6527,6 +6540,14 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
             code := code ++ s!"              contracting_dims = [2] x [2],\n"
             code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
             code := code ++ s!"            : ({sTy}, {hTy}) -> {hTy}\n"
+          -- RoPE backward: dq/dk are w.r.t. the ROPED Q/K; un-rope (rotation by −θ)
+          -- to get grads w.r.t. the projections. V (dv) is untouched.
+          if r.tbMhRope then
+            let (rtCode, cosSSA, sinSSA) := emitRopeTables s!"{tag}rb" n dh
+            let (rqCode, rq) := emitRopeApply s!"{tag}rbq" dqSSA cosSSA sinSSA b heads n dh true
+            let (rkCode, rk) := emitRopeApply s!"{tag}rbk" dkSSA cosSSA sinSSA b heads n dh true
+            code := code ++ rtCode ++ rqCode ++ rkCode
+            dqSSA := rq; dkSSA := rk
           code := code ++ s!"    %{tag}_dqt = stablehlo.transpose {dqSSA}, dims = [0, 2, 1, 3] : ({hTy}) -> {heTy}\n"
           code := code ++ s!"    %{tag}_dqr = stablehlo.reshape %{tag}_dqt : ({heTy}) -> {ty}\n"
           code := code ++ s!"    %{tag}_dkt = stablehlo.transpose {dkSSA}, dims = [0, 2, 1, 3] : ({hTy}) -> {heTy}\n"
@@ -7873,7 +7894,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       match curShape with
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]
@@ -8111,7 +8132,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       mpidx := mpidx + 1
       params := params ++ s!"      %m_W{mpidx}: {tensorTy [nP + 1, dim]},\n"
       mpidx := mpidx + 1
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]
@@ -8287,7 +8308,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       vpidx2 := vpidx2 + 1
       params := params ++ s!"      %v_W{vpidx2}: {tensorTy [nP + 1, dim]},\n"
       vpidx2 := vpidx2 + 1
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
       let dTy := tensorTy [dim]
       let ddTy := tensorTy [dim, dim]
       let fc1Ty := tensorTy [dim, mlpDim]
