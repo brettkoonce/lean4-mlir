@@ -117,9 +117,25 @@ for kj … :                                #  same key loop
   tracks `nano` to ~1e-6 over 200 steps of real training (step 101 2.658268 vs 2.658269; val identical
   to 6 places — the fp32 reduction-order drift). Integrated train step confirmed emitting flash
   while-loops with ZERO dense `mh_sm`.
-- **Phase 4 — memory measurement — REMAINING.** The payoff: compile a T=256/2048/8192 flash-vs-dense
-  train step and compare peak device allocation to confirm O(T²)→O(T·bk). (nano is T=64/1-block, no
-  win — need a long-T config.) Plus: the position-emb resize/retrain caveat for actual 8K runs.
+- **Phase 4 — memory measurement — DONE 2026-07-09.** `denseSdpaProbeModule` (flash-probe `dense`
+  mode) gives the O(T²) baseline; `iree-compile --iree-scheduling-dump-statistics` reports the static
+  transient allocation for the gfx1100 target. Measured (B=1, H=8, dh=64), the payoff is unambiguous:
+
+  | T | dense | flash | ratio |
+  |---|-------|-------|-------|
+  | 512 | 17 MiB | 4.2 MiB | 4.0× |
+  | 1024 | 66 MiB | 8.4 MiB | 7.9× |
+  | 2048 | 260 MiB | 16.8 MiB | 15.5× |
+  | 4096 | 1032 MiB | 33.6 MiB | 30.7× |
+
+  Dense quadruples per T-doubling (**O(T²)**); flash exactly doubles (**O(T·bk)**, linear); the ratio
+  doubles each step. IREE genuinely realizes the while-loop memory bound — the plan's one load-bearing
+  unknown is settled. T=8192 extrapolates to dense ~4 GB vs flash ~67 MB (~60×); the dense T=8192
+  compile TIMED OUT building the `[1,8,8192,8192]` dispatch — itself evidence dense is impractical at 8K.
+
+FlashAttention is now COMPLETE: correctness (validated) + the memory payoff (measured). Remaining for
+an actual 8K *run* is orthogonal: the position embedding must be resized to `[T,D]` and retrained (or
+RoPE/ALiBi) — independent of flash.
 - Caveat carried from the 8K analysis: long context also needs the position embedding resized to
   `[T,D]` and retrained (or RoPE/ALiBi — separate codegen), independent of flash.
 

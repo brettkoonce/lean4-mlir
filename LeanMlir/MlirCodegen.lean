@@ -8351,6 +8351,43 @@ def flashProbeModule (b heads n dh bk : Nat) (causal : Bool) : String := Id.run 
   s := s ++ "  }\n}\n"
   return s
 
+/-- Standalone DENSE SDPA forward module `@main(Q,K,V) -> O` (materializes the
+    full [b,h,n,n] scores) — the memory-comparison baseline for the flash probe.
+    Compile both with `--iree-scheduling-dump-statistics-file` at increasing n to
+    see dense peak allocation grow O(n²) while flash stays O(n·bk). -/
+def denseSdpaProbeModule (b heads n dh : Nat) (causal : Bool) : String := Id.run do
+  let hTy := tensorTy [b, heads, n, dh]
+  let sTy := tensorTy [b, heads, n, n]
+  let bhnTy := tensorTy [b, heads, n]
+  let invSqrtDh : Float := 1.0 / Float.sqrt dh.toFloat
+  let mut s := "module @flash_probe {\n"
+  s := s ++ s!"  func.func @main(%Q: {hTy}, %K: {hTy}, %V: {hTy}) -> {hTy} " ++ "{\n"
+  s := s ++ s!"    %sc = stablehlo.dot_general %Q, %K, batching_dims = [0, 1] x [0, 1], contracting_dims = [3] x [3], precision = [DEFAULT, DEFAULT] : ({hTy}, {hTy}) -> {sTy}\n"
+  s := s ++ s!"    %scale = stablehlo.constant dense<{invSqrtDh}> : {sTy}\n"
+  s := s ++ s!"    %ss0 = stablehlo.multiply %sc, %scale : {sTy}\n"
+  if causal then
+    let nnTy := tensorTy [n, n]
+    s := s ++ s!"    %ir = stablehlo.iota dim = 0 : {nnTy}\n    %ic = stablehlo.iota dim = 1 : {nnTy}\n"
+    s := s ++ s!"    %cmp = stablehlo.compare GE, %ir, %ic, FLOAT : ({nnTy}, {nnTy}) -> tensor<{n}x{n}xi1>\n"
+    s := s ++ s!"    %zm = stablehlo.constant dense<0.0> : {nnTy}\n    %nm = stablehlo.constant dense<0xFF800000> : {nnTy}\n"
+    s := s ++ s!"    %mask = stablehlo.select %cmp, %zm, %nm : (tensor<{n}x{n}xi1>, {nnTy}, {nnTy}) -> {nnTy}\n"
+    s := s ++ s!"    %mbc = stablehlo.broadcast_in_dim %mask, dims = [2, 3] : ({nnTy}) -> {sTy}\n"
+    s := s ++ s!"    %ss = stablehlo.add %ss0, %mbc : {sTy}\n"
+  else
+    s := s ++ s!"    %ss = stablehlo.add %ss0, %ss0 : {sTy}\n    %ssx = stablehlo.subtract %ss, %ss0 : {sTy}\n"
+  let ssName := if causal then "%ss" else "%ssx"
+  s := s ++ s!"    %ninf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
+  s := s ++ s!"    %mx = stablehlo.reduce({ssName} init: %ninf) applies stablehlo.maximum across dimensions = [3] : ({sTy}, tensor<f32>) -> {bhnTy}\n"
+  s := s ++ s!"    %mxb = stablehlo.broadcast_in_dim %mx, dims = [0, 1, 2] : ({bhnTy}) -> {sTy}\n"
+  s := s ++ s!"    %sh = stablehlo.subtract {ssName}, %mxb : {sTy}\n    %ex = stablehlo.exponential %sh : {sTy}\n"
+  s := s ++ s!"    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n"
+  s := s ++ s!"    %se = stablehlo.reduce(%ex init: %zf) applies stablehlo.add across dimensions = [3] : ({sTy}, tensor<f32>) -> {bhnTy}\n"
+  s := s ++ s!"    %seb = stablehlo.broadcast_in_dim %se, dims = [0, 1, 2] : ({bhnTy}) -> {sTy}\n"
+  s := s ++ s!"    %sm = stablehlo.divide %ex, %seb : {sTy}\n"
+  s := s ++ s!"    %o = stablehlo.dot_general %sm, %V, batching_dims = [0, 1] x [0, 1], contracting_dims = [3] x [2], precision = [DEFAULT, DEFAULT] : ({sTy}, {hTy}) -> {hTy}\n"
+  s := s ++ s!"    return %o : {hTy}\n  " ++ "}\n}\n"
+  return s
+
 /-- Standalone FlashAttention forward+backward module: `@main(Q,K,V,dO) ->
     (dQ,dK,dV)`. Runs the forward emit to get O/Lse, then the backward emit;
     validated against the dense-attention VJP. -/
