@@ -50,6 +50,9 @@ structure GptCfg where
       `[B, V·T]` one-hot. Mathematically identical; see
       planning/tinygpt_demo_v2.md Part II Option 1. -/
   ids       : Bool := false
+  /-- Use the true gather/scatter embedding path (Part II Option 2)
+      instead of the one-hot matmul. Requires `ids`. -/
+  gather    : Bool := false
 
 /-- The original 212K-param demo config (spec name unchanged so old
     checkpoints keep their build prefix). -/
@@ -68,10 +71,19 @@ def tinyCfg : GptCfg :=
 def nanoIdsCfg : GptCfg :=
   { nanoCfg with key := "nano-ids", specName := "tinygpt-shakespeare-nanoids", ids := true }
 
+/-- nano with the true gather/scatter embedding path (Part II Option 2).
+    Same params + math as nano/nano-ids — forward is a `stablehlo.gather`
+    of the [V, D] table, backward a `stablehlo.scatter`-add — so its loss
+    curve must track nano-ids to float tolerance. Validates the primitive
+    before it's used at BPE-vocab scale (where the one-hot is infeasible). -/
+def nanoGatherCfg : GptCfg :=
+  { nanoCfg with key := "nano-gather", specName := "tinygpt-shakespeare-nanogather", ids := true, gather := true }
+
 def pickCfg : String → Option GptCfg
   | "nano" => some nanoCfg
   | "tiny" => some tinyCfg
   | "nano-ids" => some nanoIdsCfg
+  | "nano-gather" => some nanoGatherCfg
   | _ => none
 
 def mkSpec (g : GptCfg) : NetSpec :=
@@ -79,7 +91,7 @@ def mkSpec (g : GptCfg) : NetSpec :=
     imageH := g.seqLen     -- so y_seg shape becomes [B, T, 1]
     imageW := 1
     layers := [
-      .tokenPositionEmbed vocabSize g.seqLen g.dModel (idsInput := g.ids),
+      .tokenPositionEmbed vocabSize g.seqLen g.dModel (idsInput := g.ids) (gather := g.gather),
       .transformerEncoder g.dModel g.numHeads g.mlpDim g.numLayers (causalMask := true),
       .lmHead g.dModel vocabSize g.seqLen
     ] }

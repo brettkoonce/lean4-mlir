@@ -133,8 +133,21 @@ Val fell 8.4 → 3.06 bits/tok by step 3000; the run was stopped at
 step ~3200/12000 (2026-07-03) — `_params.bin` is checkpointed every
 500 steps, so resume by re-running `tinystories train 12000 …` for a
 sharper final model (or just sample from the saved checkpoint).
-Option 2 (true gather/scatter) stays deferred — Option 1 carried the
-whole path with zero new VJP machinery, as predicted.
+Option 2 (true gather/scatter) — **DONE 2026-07-09** (was deferred; Option 1
+carried the original path, but Option 2 is the proper answer at V=16K+ / longer
+context and scatter-add is a gateway op). Landed: a `gather : Bool` field on
+`.tokenPositionEmbed`; forward `emitTokenGatherFwd` (`stablehlo.gather` of the
+[V,D] table by [B,T,1] i32 indices — f32 ids convert exactly, vocab « 2²⁴);
+backward `stablehlo.scatter`-add into a zeroed [V,D] (add combiner region). No
+[B,T,V] one-hot ever built (O(T·D) not O(T·V) memory). **Validated bit-identical**
+to the one-hot path: `tinygpt-shakespeare nano-gather` reproduces `nano-ids`'s
+loss sequence to every printed digit over 300 steps (step 1 = 5.141527 → step
+300 = 2.475183, val 3.502388 bits/char — exercises the scatter backward since the
+embedding table feeds each next forward). Emitted MLIR confirmed gather/scatter
+with zero one-hot ops. `MainTinyStories` flipped to `gather := true` (compiles at
+V=4096/8.5M params; params layout-identical so existing checkpoints resume). The
+cloud run is now the memory-cheaper path; bigger vocab/context (V=8192, T=512)
+becomes feasible where the one-hot [B,T,V] would not.
 
 ## Why TinyStories, in one paragraph
 
@@ -183,12 +196,15 @@ The host-side one-hot dies here: at V=4096, T=256, batch 32 it's a
   waste (V·D·T per sample) is ≈ the *same cost as the unavoidable
   lmHead matmul* (D·V·T), so at V≈4K this is merely 2× head-cost,
   not a bottleneck. No new VJP, no new proof surface.
-- **Option 2 — true gather/scatter (the primitive, ~1–2
-  sessions).** `stablehlo.gather` forward, `stablehlo.scatter`
-  (add) backward, Layer kind + FD test + the usual pidx audit.
-  The proper answer at V=16K+, and scatter-add is a gateway op
-  (embedding bags, MoE routing, sparse updates). But it's new VJP
-  machinery with a genuinely fiddly backward.
+- **Option 2 — true gather/scatter (the primitive) — DONE 2026-07-09.**
+  `stablehlo.gather` forward, `stablehlo.scatter` (add) backward, on a
+  `gather : Bool` field of `.tokenPositionEmbed` (no new Layer kind). The
+  "genuinely fiddly backward" turned out clean: scatter-add into a zeroed
+  [V,D] with an add-combiner region, indices reused from the forward. The
+  proper answer at V=16K+, and scatter-add is a gateway op (embedding bags,
+  MoE routing, sparse updates). Validated bit-identical to Option 1 (see the
+  Part II status block above), so no FD test was needed — the equivalence
+  run IS the test.
 
 **Recommendation: Option 1 first.** It de-risks the entire
 TinyStories path with zero new derivative machinery and keeps the

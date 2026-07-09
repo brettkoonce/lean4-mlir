@@ -9,10 +9,14 @@ import LeanMlir
         → lmHead (D=256, V=4096, T=256)
 
     Key difference from the char-level demo: the model input is [B, T]
-    f32 token ids and the one-hot is built *inside* the MLIR graph
-    (tokenPositionEmbed idsInput), so the host never uploads the
-    [B, V·T] = [32, 4096·256] ≈ 134MB/step one-hot. Same per-token CE
-    (`useSeg`) loss ride; vocab-agnostic.
+    f32 token ids. The embedding is the true gather/scatter path
+    (`tokenPositionEmbed gather`, Part II Option 2) — forward is a
+    `stablehlo.gather` of the [V, D] table, backward a `stablehlo.scatter`-
+    add — so neither the host upload NOR the in-graph [B, T, V] one-hot is
+    ever built (O(T·D) not O(T·V) memory). Validated bit-identical to the
+    one-hot path on nano (`tinygpt-shakespeare nano-ids` vs `nano-gather`),
+    and params are layout-identical so old checkpoints resume unchanged.
+    Same per-token CE (`useSeg`) loss ride; vocab-agnostic.
 
     Reuses the Shakespeare data path verbatim: F32.loadTokenStream +
     F32.sampleChunks read the int32 stream `preprocess_tinystories.py`
@@ -35,7 +39,7 @@ def storiesSpec : NetSpec :=
     imageH := seqLen
     imageW := 1
     layers := [
-      .tokenPositionEmbed vocabSize seqLen dModel (idsInput := true),
+      .tokenPositionEmbed vocabSize seqLen dModel (idsInput := true) (gather := true),
       .transformerEncoder dModel numHeads mlpDim numLayers (causalMask := true),
       .lmHead dModel vocabSize seqLen
     ] }

@@ -245,7 +245,13 @@ inductive Layer where
   -- select). Same params, same math, same backward — kills the
   -- O(V·T) host upload at BPE vocab sizes
   -- (planning/tinygpt_demo_v2.md Part II, Option 1).
+  -- `gather := true` (Part II Option 2): forward is a true `stablehlo.gather`
+  -- of the `[V, D]` table by the `[B, T]` ids, backward a `stablehlo.scatter`-add
+  -- — NO `[B, T, V]` one-hot ever materialized. Implies ids-shaped input.
+  -- Same params/math as the one-hot path but O(T·D) not O(T·V) memory, which is
+  -- what makes BPE-vocab TinyStories feasible.
   | tokenPositionEmbed (vocabSize seqLen dModel : Nat) (idsInput : Bool := false)
+      (gather : Bool := false)
   -- Language-modeling head: per-position logits. Input `[B, seqLen,
   -- dModel]`, output `[B, seqLen * vocabSize]` (flat) so existing
   -- per-pixel CE loss machinery handles `[B, V, T, 1]`-shaped logits

@@ -26,7 +26,7 @@ def inputFlatDim (spec : NetSpec) : Nat :=
   | some (.mbConv ic _ _ _ _ _ _) => ic * spec.imageH * spec.imageW
   | some (.patchEmbed ic _ _ _) => ic * spec.imageH * spec.imageW
   | some (.unetDown ic _) => ic * spec.imageH * spec.imageW
-  | some (.tokenPositionEmbed v t _ ids) => if ids then t else v * t
+  | some (.tokenPositionEmbed v t _ ids gather) => if ids || gather then t else v * t
   | _ => spec.imageH * spec.imageW
 
 /-- If the first layer is conv/convBn, returns the NCHW input channels. -/
@@ -1520,6 +1520,25 @@ private def emitTimeCondForward (tag : String) (xSSA : String) (B inDim tOff nFr
   s := s ++ s!"    %tc_out{tag} = stablehlo.add {featSSA}, %tc_bc{tag} : {tensorTy featShape}\n"
   return (s, s!"%tc_out{tag}", s!"%tc_emb{tag}")
 
+/-- Token-embedding forward via a true `stablehlo.gather` (Part II Option 2).
+    The `[B, T]` f32 ids index the `[V, D]` table directly: `emb[b,t,:] =
+    W[ids[b,t], :]`, producing `%tpe_emb{pos}` `[B, T, D]` — no `[B, T, V]`
+    one-hot. f32 ids convert to i32 exactly (vocab « 2²⁴). Literal attribute
+    braces are concatenated (Lean s-strings reserve `{`). -/
+private def emitTokenGatherFwd (pos : Nat) (idsSSA : String) (idsShape : List Nat)
+    (pW : String) (b t d v : Nat) : String := Id.run do
+  let btd := tensorTy [b, t, d]
+  let bti := s!"tensor<{b}x{t}xi32>"
+  let bt1i := s!"tensor<{b}x{t}x1xi32>"
+  let mut s := ""
+  s := s ++ s!"    %tpe_idsi{pos} = stablehlo.convert {idsSSA} : ({tensorTy idsShape}) -> {bti}\n"
+  s := s ++ s!"    %tpe_idx{pos} = stablehlo.reshape %tpe_idsi{pos} : ({bti}) -> {bt1i}\n"
+  s := s ++ s!"    %tpe_emb{pos} = \"stablehlo.gather\"({pW}, %tpe_idx{pos}) " ++ "{\n"
+  s := s ++ "      dimension_numbers = #stablehlo.gather<offset_dims = [2], collapsed_slice_dims = [0], start_index_map = [0], index_vector_dim = 2>,\n"
+  s := s ++ s!"      slice_sizes = array<i64: 1, {d}>, indices_are_sorted = false\n"
+  s := s ++ "    } : " ++ s!"({tensorTy [v, d]}, {bt1i}) -> {btd}\n"
+  return s
+
 /-- Emit the `@forward` function body walking layers in order. When
     `stopAtGAP` is true (GradCAM mode), the walk halts at the first
     `.globalAvgPool` it encounters: instead of emitting GAP+dense, we
@@ -1728,33 +1747,35 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
         curShape := sh4
       | [] =>
         code := code ++ "    // unetUp: skip stack empty (no matching unetDown above)\n"
-    | .tokenPositionEmbed v t d ids =>
+    | .tokenPositionEmbed v t d ids gather =>
       -- Input is flat [B, V*T] one-hot (reshape to [B, T, V]) or, with
       -- idsInput, [B, T] f32 token ids (one-hot built in-graph via
-      -- iota + compare + select — the per-pixel-CE label idiom). Either
-      -- way %tpe_r is the [B, T, V] one-hot; embed via dot with W [V, D]
-      -- → [B, T, D], then add learnable position [T, D] broadcast over
-      -- batch.
+      -- iota + compare + select). With `gather`, the [B, T] ids index the
+      -- [V, D] table directly via stablehlo.gather — no [B, T, V] tensor.
+      -- Either way: emb [B, T, D], then add learnable position [T, D].
       match curShape with
       | [b, _] =>
         let btv := [b, t, v]
         let btd := [b, t, d]
         let pW := s!"%W{pidx}"            -- [V, D] embedding matrix (no bias)
         let pPos := s!"%W{pidx + 1}"      -- [T, D] positional embedding
-        if ids then
-          let i1Ty := s!"tensor<{b}x{t}x{v}xi1>"
-          code := code ++ s!"    %tpe_idb{pos} = stablehlo.broadcast_in_dim {curSSA}, dims = [0, 1] : ({tensorTy curShape}) -> {tensorTy btv}\n"
-          code := code ++ s!"    %tpe_iota{pos} = stablehlo.iota dim = 2 : {tensorTy btv}\n"
-          code := code ++ s!"    %tpe_cmp{pos} = stablehlo.compare EQ, %tpe_idb{pos}, %tpe_iota{pos}, FLOAT : ({tensorTy btv}, {tensorTy btv}) -> {i1Ty}\n"
-          code := code ++ s!"    %tpe_onef{pos} = stablehlo.constant dense<1.0> : {tensorTy btv}\n"
-          code := code ++ s!"    %tpe_zerof{pos} = stablehlo.constant dense<0.0> : {tensorTy btv}\n"
-          code := code ++ s!"    %tpe_r{pos} = stablehlo.select %tpe_cmp{pos}, %tpe_onef{pos}, %tpe_zerof{pos} : {i1Ty}, {tensorTy btv}\n"
+        if gather then
+          code := code ++ emitTokenGatherFwd pos curSSA curShape pW b t d v
         else
-          code := code ++ s!"    %tpe_r{pos} = stablehlo.reshape {curSSA} : ({tensorTy curShape}) -> {tensorTy btv}\n"
-        code := code ++ s!"    %tpe_emb{pos} = stablehlo.dot_general %tpe_r{pos}, {pW},\n"
-        code := code ++ "              contracting_dims = [2] x [0],\n"
-        code := code ++ "              precision = [DEFAULT, DEFAULT]\n"
-        code := code ++ s!"            : ({tensorTy btv}, {tensorTy [v, d]}) -> {tensorTy btd}\n"
+          if ids then
+            let i1Ty := s!"tensor<{b}x{t}x{v}xi1>"
+            code := code ++ s!"    %tpe_idb{pos} = stablehlo.broadcast_in_dim {curSSA}, dims = [0, 1] : ({tensorTy curShape}) -> {tensorTy btv}\n"
+            code := code ++ s!"    %tpe_iota{pos} = stablehlo.iota dim = 2 : {tensorTy btv}\n"
+            code := code ++ s!"    %tpe_cmp{pos} = stablehlo.compare EQ, %tpe_idb{pos}, %tpe_iota{pos}, FLOAT : ({tensorTy btv}, {tensorTy btv}) -> {i1Ty}\n"
+            code := code ++ s!"    %tpe_onef{pos} = stablehlo.constant dense<1.0> : {tensorTy btv}\n"
+            code := code ++ s!"    %tpe_zerof{pos} = stablehlo.constant dense<0.0> : {tensorTy btv}\n"
+            code := code ++ s!"    %tpe_r{pos} = stablehlo.select %tpe_cmp{pos}, %tpe_onef{pos}, %tpe_zerof{pos} : {i1Ty}, {tensorTy btv}\n"
+          else
+            code := code ++ s!"    %tpe_r{pos} = stablehlo.reshape {curSSA} : ({tensorTy curShape}) -> {tensorTy btv}\n"
+          code := code ++ s!"    %tpe_emb{pos} = stablehlo.dot_general %tpe_r{pos}, {pW},\n"
+          code := code ++ "              contracting_dims = [2] x [0],\n"
+          code := code ++ "              precision = [DEFAULT, DEFAULT]\n"
+          code := code ++ s!"            : ({tensorTy btv}, {tensorTy [v, d]}) -> {tensorTy btd}\n"
         code := code ++ s!"    %tpe_pbc{pos} = stablehlo.broadcast_in_dim {pPos}, dims = [1, 2] : ({tensorTy [t, d]}) -> {tensorTy btd}\n"
         code := code ++ s!"    %tpe_out{pos} = stablehlo.add %tpe_emb{pos}, %tpe_pbc{pos} : {tensorTy btd}\n"
         curSSA := s!"%tpe_out{pos}"
@@ -2118,7 +2139,7 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
         | [b, _, _] => curShape := [b, dim]
         | _ => pure ()
       outShape := curShape
-    | .tokenPositionEmbed v t d _ =>
+    | .tokenPositionEmbed v t d _ _ =>
       -- Embedding W [V, D] (named %W{pidx}, no bias) + positional [T, D] (%W{pidx+1}).
       params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}, %W{pidx + 1}: {tensorTy [t, d]}"
       pidx := pidx + 2
@@ -2299,7 +2320,7 @@ def collectBnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
     | .transformerEncoder _dim _heads _mlpDim nBlocks _causal _keepSeq =>
       -- 8 param pairs per block + 1 for the final LN. No BN.
       pidx := pidx + 8 * nBlocks + 1
-    | .tokenPositionEmbed _ _ _ _ =>
+    | .tokenPositionEmbed _ _ _ _ _ =>
       -- 2 slots (W_emb, W_pos). No BN.
       pidx := pidx + 2
     | .lmHead _ _ _ =>
@@ -2592,7 +2613,7 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
         | [b, _, _] => curShape := [b, dim]
         | _ => pure ()
       outShape := curShape
-    | .tokenPositionEmbed v t d _ =>
+    | .tokenPositionEmbed v t d _ _ =>
       params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}, %W{pidx + 1}: {tensorTy [t, d]}"
       pidx := pidx + 2
       match curShape with
@@ -2920,7 +2941,10 @@ private structure FwdRec where
   tpeV            : Nat := 0
   tpeT            : Nat := 0
   tpeD            : Nat := 0
+  -- One-hot path: SSA of the [B, T, V] one-hot (for dW = onehotᵀ·d_out).
+  -- Gather path: SSA of the [B, T, 1] i32 index tensor (for scatter-add dW).
   tpeBtvSSA       : String := ""
+  tpeGather       : Bool := false
   -- lmHead (sets these on its forward record):
   --   lmhPidx = param index for W [D, V] + b [V]
   --   lmhBtv  = SSA name of the post-dense [B, T, V] tensor (pre-transpose)
@@ -5038,12 +5062,13 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           curShape := outShape
         | _ => pure ()
 
-    | .tokenPositionEmbed v t d ids =>
+    | .tokenPositionEmbed v t d ids gather =>
       -- Forward: flat [B, V*T] one-hot → reshape [B, T, V] (or, with
       -- idsInput, [B, T] f32 ids → in-graph one-hot) → matmul W [V, D]
       -- → [B, T, D] → add learnable position [T, D] (broadcast over batch).
-      -- The backward reads %tpe_r via tpeBtvSSA either way — dE is the
-      -- same onehotᵀ @ d_out contraction, so no backward change.
+      -- With `gather`, the [B, T] ids index W directly (stablehlo.gather); the
+      -- backward is then a scatter-add. Either way the backward reads the SSA
+      -- recorded in tpeBtvSSA (one-hot [B,T,V] or index [B,T,1]).
       match curShape with
       | [b, _] =>
         let btv := [b, t, v]
@@ -5051,26 +5076,30 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         let inSSA := curSSA
         let pW := s!"%W{pidx}"          -- [V, D] embed (no bias)
         let pPos := s!"%W{pidx + 1}"    -- [T, D] position
-        if ids then
-          let i1Ty := s!"tensor<{b}x{t}x{v}xi1>"
-          code := code ++ s!"    %tpe_idb{pos} = stablehlo.broadcast_in_dim {curSSA}, dims = [0, 1] : ({tensorTy curShape}) -> {tensorTy btv}\n"
-          code := code ++ s!"    %tpe_iota{pos} = stablehlo.iota dim = 2 : {tensorTy btv}\n"
-          code := code ++ s!"    %tpe_cmp{pos} = stablehlo.compare EQ, %tpe_idb{pos}, %tpe_iota{pos}, FLOAT : ({tensorTy btv}, {tensorTy btv}) -> {i1Ty}\n"
-          code := code ++ s!"    %tpe_onef{pos} = stablehlo.constant dense<1.0> : {tensorTy btv}\n"
-          code := code ++ s!"    %tpe_zerof{pos} = stablehlo.constant dense<0.0> : {tensorTy btv}\n"
-          code := code ++ s!"    %tpe_r{pos} = stablehlo.select %tpe_cmp{pos}, %tpe_onef{pos}, %tpe_zerof{pos} : {i1Ty}, {tensorTy btv}\n"
+        let bwdSSA := if gather then s!"%tpe_idx{pos}" else s!"%tpe_r{pos}"
+        if gather then
+          code := code ++ emitTokenGatherFwd pos curSSA curShape pW b t d v
         else
-          code := code ++ s!"    %tpe_r{pos} = stablehlo.reshape {curSSA} : ({tensorTy curShape}) -> {tensorTy btv}\n"
-        code := code ++ s!"    %tpe_emb{pos} = stablehlo.dot_general %tpe_r{pos}, {pW},\n"
-        code := code ++ "              contracting_dims = [2] x [0],\n"
-        code := code ++ "              precision = [DEFAULT, DEFAULT]\n"
-        code := code ++ s!"            : ({tensorTy btv}, {tensorTy [v, d]}) -> {tensorTy btd}\n"
+          if ids then
+            let i1Ty := s!"tensor<{b}x{t}x{v}xi1>"
+            code := code ++ s!"    %tpe_idb{pos} = stablehlo.broadcast_in_dim {curSSA}, dims = [0, 1] : ({tensorTy curShape}) -> {tensorTy btv}\n"
+            code := code ++ s!"    %tpe_iota{pos} = stablehlo.iota dim = 2 : {tensorTy btv}\n"
+            code := code ++ s!"    %tpe_cmp{pos} = stablehlo.compare EQ, %tpe_idb{pos}, %tpe_iota{pos}, FLOAT : ({tensorTy btv}, {tensorTy btv}) -> {i1Ty}\n"
+            code := code ++ s!"    %tpe_onef{pos} = stablehlo.constant dense<1.0> : {tensorTy btv}\n"
+            code := code ++ s!"    %tpe_zerof{pos} = stablehlo.constant dense<0.0> : {tensorTy btv}\n"
+            code := code ++ s!"    %tpe_r{pos} = stablehlo.select %tpe_cmp{pos}, %tpe_onef{pos}, %tpe_zerof{pos} : {i1Ty}, {tensorTy btv}\n"
+          else
+            code := code ++ s!"    %tpe_r{pos} = stablehlo.reshape {curSSA} : ({tensorTy curShape}) -> {tensorTy btv}\n"
+          code := code ++ s!"    %tpe_emb{pos} = stablehlo.dot_general %tpe_r{pos}, {pW},\n"
+          code := code ++ "              contracting_dims = [2] x [0],\n"
+          code := code ++ "              precision = [DEFAULT, DEFAULT]\n"
+          code := code ++ s!"            : ({tensorTy btv}, {tensorTy [v, d]}) -> {tensorTy btd}\n"
         code := code ++ s!"    %tpe_pbc{pos} = stablehlo.broadcast_in_dim {pPos}, dims = [1, 2] : ({tensorTy [t, d]}) -> {tensorTy btd}\n"
         code := code ++ s!"    %tpe_out{pos} = stablehlo.add %tpe_emb{pos}, %tpe_pbc{pos} : {tensorTy btd}\n"
         let outSSA := s!"%tpe_out{pos}"
         let mut tpeRec : FwdRec := default
         tpeRec := { tpeRec with layer := l, pidx := none, pos, inputSSA := inSSA, outputSSA := outSSA, inShape := curShape, outShape := btd }
-        tpeRec := { tpeRec with isTokenPosEmbed := true, tpePidx := pidx, tpeV := v, tpeT := t, tpeD := d, tpeBtvSSA := s!"%tpe_r{pos}" }
+        tpeRec := { tpeRec with isTokenPosEmbed := true, tpePidx := pidx, tpeV := v, tpeT := t, tpeD := d, tpeBtvSSA := bwdSSA, tpeGather := gather }
         records := records.push tpeRec
         curSSA := outSSA
         curShape := btd
@@ -6737,7 +6766,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         gradShape := r.inShape
       | _, _ => pure ()
 
-    | .tokenPositionEmbed v t d _ =>
+    | .tokenPositionEmbed v t d _ _ =>
       if r.isTokenPosEmbed then
         match r.inShape with
         | [b, _] =>
@@ -6747,16 +6776,31 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           let btdTy := tensorTy btd
           let btvTy := tensorTy btv
           let _tag := s!"tpe{r.pos}"
-          code := code ++ s!"    // ─── tokenPositionEmbed backward: position grad = sum batch; emb grad = btv^T @ d_out ───\n"
+          code := code ++ s!"    // ─── tokenPositionEmbed backward: position grad = sum batch; emb grad = {if r.tpeGather then "scatter-add over ids" else "btv^T @ d_out"} ───\n"
           -- d_position [T, D] = sum over batch of grad
           code := code ++ s!"    %d_W{pIdx + 1} = stablehlo.reduce({gradSSA} init: %zf) applies stablehlo.add across dimensions = [0]\n"
           code := code ++ s!"          : ({btdTy}, tensor<f32>) -> {tensorTy [t, d]}\n"
-          -- d_emb [V, D] = btv^T @ d_out (contract over batch+time): [V, D]
-          code := code ++ s!"    %d_W{pIdx} = stablehlo.dot_general {r.tpeBtvSSA}, {gradSSA},\n"
-          code := code ++ s!"              contracting_dims = [0, 1] x [0, 1],\n"
-          code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
-          code := code ++ s!"            : ({btvTy}, {btdTy}) -> {tensorTy [v, d]}\n"
-          -- No d_input needed: input is one-hot from Lean side, no gradient flows further.
+          if r.tpeGather then
+            -- d_emb [V, D] = scatter-add of d_out[b,t,:] into row ids[b,t].
+            -- tpeBtvSSA holds the [B, T, 1] i32 index tensor from the forward.
+            let vd := tensorTy [v, d]
+            let bt1i := s!"tensor<{b}x{t}x1xi32>"
+            code := code ++ s!"    %tpe_dwz{r.pos} = stablehlo.constant dense<0.0> : {vd}\n"
+            code := code ++ s!"    %d_W{pIdx} = \"stablehlo.scatter\"(%tpe_dwz{r.pos}, {r.tpeBtvSSA}, {gradSSA}) (" ++ "{\n"
+            code := code ++ s!"    ^bb0(%tpe_lhs{r.pos}: tensor<f32>, %tpe_rhs{r.pos}: tensor<f32>):\n"
+            code := code ++ s!"      %tpe_sum{r.pos} = stablehlo.add %tpe_lhs{r.pos}, %tpe_rhs{r.pos} : tensor<f32>\n"
+            code := code ++ s!"      stablehlo.return %tpe_sum{r.pos} : tensor<f32>\n"
+            code := code ++ "    }) {\n"
+            code := code ++ "      scatter_dimension_numbers = #stablehlo.scatter<update_window_dims = [2], inserted_window_dims = [0], scatter_dims_to_operand_dims = [0], index_vector_dim = 2>,\n"
+            code := code ++ "      indices_are_sorted = false, unique_indices = false\n"
+            code := code ++ "    } : " ++ s!"({vd}, {bt1i}, {btdTy}) -> {vd}\n"
+          else
+            -- d_emb [V, D] = btv^T @ d_out (contract over batch+time): [V, D]
+            code := code ++ s!"    %d_W{pIdx} = stablehlo.dot_general {r.tpeBtvSSA}, {gradSSA},\n"
+            code := code ++ s!"              contracting_dims = [0, 1] x [0, 1],\n"
+            code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+            code := code ++ s!"            : ({btvTy}, {btdTy}) -> {tensorTy [v, d]}\n"
+          -- No d_input needed: input is the token ids, no gradient flows further.
           gradSSA := s!"// no_grad_needed_after_tokenPositionEmbed"
           gradShape := r.inShape
         | _ => pure ()
@@ -7649,7 +7693,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       match curShape with
       | [b, _, _] => curShape := [b, dim]
       | _ => pure ()
-    | .tokenPositionEmbed v t d _ =>
+    | .tokenPositionEmbed v t d _ _ =>
       let wTy := tensorTy [v, d]
       let posTy := tensorTy [t, d]
       params := params ++ s!"      %W{pidx}: {wTy}, %W{pidx + 1}: {posTy},\n"
@@ -7848,7 +7892,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
         mpidx := mpidx + 1
       params := params ++ s!"      %m_W{mpidx}: {dTy}, %m_b{mpidx}: {dTy},\n"
       mpidx := mpidx + 1
-    | .tokenPositionEmbed v t d _ =>
+    | .tokenPositionEmbed v t d _ _ =>
       params := params ++ s!"      %m_W{mpidx}: {tensorTy [v, d]}, %m_W{mpidx + 1}: {tensorTy [t, d]},\n"
       mpidx := mpidx + 2
     | .lmHead d v _ =>
@@ -8024,7 +8068,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
         vpidx2 := vpidx2 + 1
       params := params ++ s!"      %v_W{vpidx2}: {dTy}, %v_b{vpidx2}: {dTy},\n"
       vpidx2 := vpidx2 + 1
-    | .tokenPositionEmbed v t d _ =>
+    | .tokenPositionEmbed v t d _ _ =>
       params := params ++ s!"      %v_W{vpidx2}: {tensorTy [v, d]}, %v_W{vpidx2 + 1}: {tensorTy [t, d]},\n"
       vpidx2 := vpidx2 + 2
     | .lmHead d v _ =>
