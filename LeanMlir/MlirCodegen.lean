@@ -1308,6 +1308,57 @@ private def emitFlashAttnBwd (tag : String) (qSSA kSSA vSSA doSSA oSSA lseSSA : 
 private def flashBlock (n : Nat) : Nat :=
   if n % 128 == 0 then 128 else if n % 64 == 0 then 64 else n
 
+/-- Emit the RoPE cos/sin tables `[n, dh]` in-graph (scale-independent — no
+    giant constant): `θ_i = base^(-2i/dh)`, `freqs[m,i] = m·θ_i`, tiled to dh.
+    Returns `(code, cosSSA, sinSSA)`. See jax/demos/rope_ref.py. -/
+private def emitRopeTables (tag : String) (n dh : Nat) (base : Float := 10000.0)
+    : String × String × String := Id.run do
+  let half := dh / 2
+  let thTy := tensorTy [half]
+  let thfTy := tensorTy [n, half]
+  let dtTy := tensorTy [n, dh]
+  -- θ_i = base^(-2i/dh) = exp( (-2i/dh)·ln base )
+  let lnBase := Float.log base
+  let thetas := (List.range half).map (fun i =>
+    toString (Float.exp (lnBase * (-2.0 * i.toFloat / dh.toFloat))))
+  let mut s := ""
+  s := s ++ s!"    %rope_th{tag} = stablehlo.constant dense<[{String.intercalate ", " thetas}]> : {thTy}\n"
+  s := s ++ s!"    %rope_ipos{tag} = stablehlo.iota dim = 0 : tensor<{n}xi32>\n"
+  s := s ++ s!"    %rope_pos{tag} = stablehlo.convert %rope_ipos{tag} : (tensor<{n}xi32>) -> {tensorTy [n]}\n"
+  s := s ++ s!"    %rope_posb{tag} = stablehlo.broadcast_in_dim %rope_pos{tag}, dims = [0] : ({tensorTy [n]}) -> {thfTy}\n"
+  s := s ++ s!"    %rope_thb{tag} = stablehlo.broadcast_in_dim %rope_th{tag}, dims = [1] : ({thTy}) -> {thfTy}\n"
+  s := s ++ s!"    %rope_fr{tag} = stablehlo.multiply %rope_posb{tag}, %rope_thb{tag} : {thfTy}\n"
+  s := s ++ s!"    %rope_ch{tag} = stablehlo.cosine %rope_fr{tag} : {thfTy}\n"
+  s := s ++ s!"    %rope_sh{tag} = stablehlo.sine %rope_fr{tag} : {thfTy}\n"
+  s := s ++ s!"    %rope_cos{tag} = stablehlo.concatenate %rope_ch{tag}, %rope_ch{tag}, dim = 1 : ({thfTy}, {thfTy}) -> {dtTy}\n"
+  s := s ++ s!"    %rope_sin{tag} = stablehlo.concatenate %rope_sh{tag}, %rope_sh{tag}, dim = 1 : ({thfTy}, {thfTy}) -> {dtTy}\n"
+  return (s, s!"%rope_cos{tag}", s!"%rope_sin{tag}")
+
+/-- Apply RoPE to `xSSA : [b,heads,n,dh]` given the `[n,dh]` cos/sin tables:
+    `x⊙cos + rotate_half(x)⊙sin`, `rotate_half([a,b])=[-b,a]`. With `negSin`
+    (the backward/VJP), sin is negated (rotation by −θ). Returns `(code, outSSA)`. -/
+private def emitRopeApply (tag : String) (xSSA cosSSA sinSSA : String)
+    (b heads n dh : Nat) (negSin : Bool) : String × String := Id.run do
+  let half := dh / 2
+  let hTy := tensorTy [b, heads, n, dh]
+  let halfTy := tensorTy [b, heads, n, half]
+  let mut s := ""
+  -- x1 = x[..,:half], x2 = x[..,half:]; rot = concat(-x2, x1)
+  s := s ++ s!"    %rope_x1{tag} = \"stablehlo.slice\"({xSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0, 0>, limit_indices = array<i64: {b}, {heads}, {n}, {half}>, strides = array<i64: 1, 1, 1, 1>" ++ "}" ++ s!" : ({hTy}) -> {halfTy}\n"
+  s := s ++ s!"    %rope_x2{tag} = \"stablehlo.slice\"({xSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0, {half}>, limit_indices = array<i64: {b}, {heads}, {n}, {dh}>, strides = array<i64: 1, 1, 1, 1>" ++ "}" ++ s!" : ({hTy}) -> {halfTy}\n"
+  s := s ++ s!"    %rope_nx2{tag} = stablehlo.negate %rope_x2{tag} : {halfTy}\n"
+  s := s ++ s!"    %rope_rot{tag} = stablehlo.concatenate %rope_nx2{tag}, %rope_x1{tag}, dim = 3 : ({halfTy}, {halfTy}) -> {hTy}\n"
+  s := s ++ s!"    %rope_cosb{tag} = stablehlo.broadcast_in_dim {cosSSA}, dims = [2, 3] : ({tensorTy [n, dh]}) -> {hTy}\n"
+  s := s ++ s!"    %rope_sinb0{tag} = stablehlo.broadcast_in_dim {sinSSA}, dims = [2, 3] : ({tensorTy [n, dh]}) -> {hTy}\n"
+  let sinbName ← if negSin then do
+    s := s ++ s!"    %rope_sinb{tag} = stablehlo.negate %rope_sinb0{tag} : {hTy}\n"
+    pure s!"%rope_sinb{tag}"
+  else pure s!"%rope_sinb0{tag}"
+  s := s ++ s!"    %rope_xc{tag} = stablehlo.multiply {xSSA}, %rope_cosb{tag} : {hTy}\n"
+  s := s ++ s!"    %rope_rs{tag} = stablehlo.multiply %rope_rot{tag}, {sinbName} : {hTy}\n"
+  s := s ++ s!"    %rope_out{tag} = stablehlo.add %rope_xc{tag}, %rope_rs{tag} : {hTy}\n"
+  return (s, s!"%rope_out{tag}")
+
 /-- Emit multi-head self-attention forward.
     Input x (B, N, D). Params: Wq, bq, Wk, bk, Wv, bv, Wo, bo.
     Returns (code, outSSA, Q, K, V, softmax-or-Lse, preProj, sdpaOut SSAs). -/
@@ -8386,6 +8437,19 @@ def denseSdpaProbeModule (b heads n dh : Nat) (causal : Bool) : String := Id.run
   s := s ++ s!"    %sm = stablehlo.divide %ex, %seb : {sTy}\n"
   s := s ++ s!"    %o = stablehlo.dot_general %sm, %V, batching_dims = [0, 1] x [0, 1], contracting_dims = [3] x [2], precision = [DEFAULT, DEFAULT] : ({sTy}, {hTy}) -> {hTy}\n"
   s := s ++ s!"    return %o : {hTy}\n  " ++ "}\n}\n"
+  return s
+
+/-- Standalone RoPE module `@main(x) -> rope(x)` (or the VJP with `backward`),
+    for op-level validation against jax/demos/rope_ref.py. -/
+def ropeProbeModule (b heads n dh : Nat) (backward : Bool) : String := Id.run do
+  let hTy := tensorTy [b, heads, n, dh]
+  let (tcode, cosSSA, sinSSA) := emitRopeTables "p" n dh
+  let (acode, oSSA) := emitRopeApply "p" "%x" cosSSA sinSSA b heads n dh backward
+  let mut s := "module @flash_probe {\n"
+  s := s ++ s!"  func.func @main(%x: {hTy}) -> {hTy} " ++ "{\n"
+  s := s ++ tcode ++ acode
+  s := s ++ s!"    return {oSSA} : {hTy}\n"
+  s := s ++ "  }\n}\n"
   return s
 
 /-- Standalone FlashAttention forward+backward module: `@main(Q,K,V,dO) ->

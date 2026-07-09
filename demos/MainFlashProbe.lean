@@ -14,8 +14,10 @@ def main (args : List String) : IO Unit := do
   let causal := args.any (· == "causal")
   let bwd := args.any (· == "bwd")   -- emit the fwd+bwd module instead of fwd-only
   let dense := args.any (· == "dense")  -- emit the dense-SDPA baseline (memory comparison)
+  let rope := args.any (· == "rope")    -- emit a standalone RoPE module
   let outPath := (args.filter (fun a => a.endsWith ".mlir")).head?.getD "flash_gen.mlir"
-  let mlir := if dense then MlirCodegen.denseSdpaProbeModule b heads seqN dh causal
+  let mlir := if rope then MlirCodegen.ropeProbeModule b heads seqN dh bwd
+              else if dense then MlirCodegen.denseSdpaProbeModule b heads seqN dh causal
               else if bwd then MlirCodegen.flashBwdProbeModule b heads seqN dh bk causal
               else MlirCodegen.flashProbeModule b heads seqN dh bk causal
   IO.FS.writeFile outPath mlir
