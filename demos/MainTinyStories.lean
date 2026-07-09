@@ -28,20 +28,47 @@ import LeanMlir
 -/
 
 def vocabSize : Nat := 4096
-def seqLen    : Nat := 256
-def dModel    : Nat := 256
-def numHeads  : Nat := 8
-def mlpDim    : Nat := 1024
-def numLayers : Nat := 8
 
-def storiesSpec : NetSpec :=
-  { name := "tinystories-8m"
-    imageH := seqLen
+/-- A TinyStories model config. The base 256-context model, or the long-context
+    8K variant (FlashAttention + RoPE + no absolute position → seqLen-free). -/
+structure StoriesCfg where
+  key       : String
+  seqLen    : Nat
+  dModel    : Nat
+  numHeads  : Nat
+  mlpDim    : Nat
+  numLayers : Nat
+  flashAttn : Bool := false
+  rope      : Bool := false
+  posEmb    : Bool := true
+
+/-- The original ~8.5M-param, 256-context model (spec name unchanged so old
+    checkpoints keep their build prefix). -/
+def baseCfg : StoriesCfg :=
+  { key := "8m", seqLen := 256, dModel := 256, numHeads := 8, mlpDim := 1024, numLayers := 8 }
+
+/-- 8K-context model for the A100 cloud box (~29M params). FlashAttention
+    bounds attention memory to O(T·blk) — at T=8192 the dense [B,H,T,T] scores
+    would be ~4 GB/leg; flash keeps it to tens of MB. RoPE + no-pos make every
+    weight seqLen-free (relative position), so it also runs at other lengths.
+    Fits an A100-40GB at a healthy batch; grad-accum for a larger effective one. -/
+def cfg8k : StoriesCfg :=
+  { key := "8k", seqLen := 8192, dModel := 512, numHeads := 8, mlpDim := 2048, numLayers := 8,
+    flashAttn := true, rope := true, posEmb := false }
+
+def pickCfg : String → StoriesCfg
+  | "8k" => cfg8k
+  | _    => baseCfg
+
+def mkStoriesSpec (c : StoriesCfg) : NetSpec :=
+  { name := s!"tinystories-{c.key}"
+    imageH := c.seqLen
     imageW := 1
     layers := [
-      .tokenPositionEmbed vocabSize seqLen dModel (idsInput := true) (gather := true),
-      .transformerEncoder dModel numHeads mlpDim numLayers (causalMask := true),
-      .lmHead dModel vocabSize seqLen
+      .tokenPositionEmbed vocabSize c.seqLen c.dModel (idsInput := true) (gather := true) (posEmb := c.posEmb),
+      .transformerEncoder c.dModel c.numHeads c.mlpDim c.numLayers (causalMask := true)
+        (flashAttn := c.flashAttn) (rope := c.rope),
+      .lmHead c.dModel vocabSize c.seqLen
     ] }
 
 def trainConfig : TrainConfig where
@@ -90,9 +117,9 @@ def evalValLoss (sess : IreeSession) (spec : NetSpec)
     tot := tot + F32.read outBA nT3.toUSize
   return tot / nBatches.toFloat
 
-def runTrain (steps batch : Nat) (lrMax : Float) : IO (ByteArray × Float) := do
-  let spec := storiesSpec
-  let T := seqLen
+def runTrain (c : StoriesCfg) (steps batch : Nat) (lrMax : Float) : IO (ByteArray × Float) := do
+  let spec := mkStoriesSpec c
+  let T := c.seqLen
   let cfg : TrainConfig := { trainConfig with batchSize := batch, learningRate := lrMax }
   IO.eprintln s!"compiling train step (B={batch}, T={T}, V={vocabSize}, params={spec.totalParams}) ..."
   let _ ← spec.compileVmfbs cfg (useSeg := true)
@@ -185,10 +212,10 @@ def sampleToken (logits : Array Float) (temperature : Float)
     back to a single eot-primed start. Decoding is done in Python
     afterward (BPE detokenization lives in the tokenizer), so this dumps
     generated ids to stdout as space-separated integers. -/
-def runSample (nToks : Nat) (temperature : Float) (topK : Nat)
+def runSample (c : StoriesCfg) (nToks : Nat) (temperature : Float) (topK : Nat)
     (topP : Float) (userSeed : Nat) (promptIds : Array Nat) : IO (Array Nat) := do
-  let spec := storiesSpec
-  let T := seqLen
+  let spec := mkStoriesSpec c
+  let T := c.seqLen
   let evalCfg : TrainConfig := { trainConfig with batchSize := 1 }
   let _ ← spec.compileVmfbs evalCfg (useSeg := true)
   let pfx := spec.buildPrefix
@@ -235,31 +262,39 @@ def loadPromptIds (path : String) : IO (Array Nat) := do
   let raw ← IO.FS.readFile path
   return (raw.split (fun c => c == ' ' || c == '\n')).toArray.filterMap (·.trim.toNat?)
 
+/-- Peel an optional leading model key (`8k` / `8m`) off the args; default base. -/
+def peelCfg (rest : List String) : StoriesCfg × List String :=
+  match rest with
+  | key :: tl => if key == "8k" || key == "8m" || key == "base" then (pickCfg key, tl) else (baseCfg, rest)
+  | [] => (baseCfg, [])
+
 def main (args : List String) : IO Unit := do
   match args with
-  | "train" :: rest =>
+  | "train" :: rest0 =>
+    let (c, rest) := peelCfg rest0
     let steps := (rest[0]?.bind String.toNat?).getD 12000
-    let batch := (rest[1]?.bind String.toNat?).getD 32
+    let batch := (rest[1]?.bind String.toNat?).getD (if c.key == "8k" then 4 else 32)
     let lrPct := (rest[2]?.bind String.toNat?).getD 30
     let lr : Float := lrPct.toFloat / 10000.0
-    let (params, loss) ← runTrain steps batch lr
-    let pfx := storiesSpec.buildPrefix
+    let (params, loss) ← runTrain c steps batch lr
+    let pfx := (mkStoriesSpec c).buildPrefix
     IO.FS.writeBinFile s!"{pfx}_params.bin" params
     IO.eprintln s!"saved params to {pfx}_params.bin (final loss {loss})"
-  | "sample" :: rest =>
+  | "sample" :: rest0 =>
+    let (c, rest) := peelCfg rest0
     let nToks   := (rest[0]?.bind String.toNat?).getD 200
     let tempPct := (rest[1]?.bind String.toNat?).getD 80
     let topK    := (rest[2]?.bind String.toNat?).getD 40
     let toppPct := (rest[3]?.bind String.toNat?).getD 95
     let seed    := (rest[4]?.bind String.toNat?).getD 1
-    let pfx := storiesSpec.buildPrefix
+    let pfx := (mkStoriesSpec c).buildPrefix
     if !(← System.FilePath.pathExists s!"{pfx}_params.bin") then
       IO.eprintln s!"missing {pfx}_params.bin; run `train` first"; IO.Process.exit 1
     let promptIds ← loadPromptIds "data/tinystories/prompt_ids.txt"
-    let gen ← runSample nToks (tempPct.toFloat / 100.0) topK (toppPct.toFloat / 100.0) seed promptIds
+    let gen ← runSample c nToks (tempPct.toFloat / 100.0) topK (toppPct.toFloat / 100.0) seed promptIds
     -- Emit ids for Python-side BPE decode.
     IO.println (String.intercalate " " (gen.toList.map toString))
   | _ =>
-    IO.eprintln "usage: tinystories train  [steps=12000] [batch=32] [lr_x10000=30]"
-    IO.eprintln "       tinystories sample [n_toks=200] [temp_x100=80] [topk=40] [topp_x100=95] [seed=1]"
+    IO.eprintln "usage: tinystories train  [8k|8m] [steps=12000] [batch] [lr_x10000=30]"
+    IO.eprintln "       tinystories sample [8k|8m] [n_toks=200] [temp_x100=80] [topk=40] [topp_x100=95] [seed=1]"
     IO.Process.exit 1

@@ -2384,10 +2384,14 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
         | [b, _, _] => curShape := [b, dim]
         | _ => pure ()
       outShape := curShape
-    | .tokenPositionEmbed v t d _ _ _ =>
-      -- Embedding W [V, D] (named %W{pidx}, no bias) + positional [T, D] (%W{pidx+1}).
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}, %W{pidx + 1}: {tensorTy [t, d]}"
-      pidx := pidx + 2
+    | .tokenPositionEmbed v t d _ _ posEmb =>
+      -- Embedding W [V, D] (named %W{pidx}, no bias) + positional [T, D] (%W{pidx+1}) unless posEmb off.
+      if posEmb then
+        params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}, %W{pidx + 1}: {tensorTy [t, d]}"
+        pidx := pidx + 2
+      else
+        params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}"
+        pidx := pidx + 1
       match curShape with
       | [b, _] => curShape := [b, t, d]
       | _ => pure ()
@@ -2565,9 +2569,9 @@ def collectBnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
     | .transformerEncoder _dim _heads _mlpDim nBlocks _causal _keepSeq _ _ =>
       -- 8 param pairs per block + 1 for the final LN. No BN.
       pidx := pidx + 8 * nBlocks + 1
-    | .tokenPositionEmbed _ _ _ _ _ _ =>
-      -- 2 slots (W_emb, W_pos). No BN.
-      pidx := pidx + 2
+    | .tokenPositionEmbed _ _ _ _ _ posEmb =>
+      -- W_emb (+ W_pos unless posEmb off). No BN.
+      pidx := pidx + (if posEmb then 2 else 1)
     | .lmHead _ _ _ =>
       pidx := pidx + 1
     | .timeCondAdd _ _ =>
@@ -2858,9 +2862,13 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
         | [b, _, _] => curShape := [b, dim]
         | _ => pure ()
       outShape := curShape
-    | .tokenPositionEmbed v t d _ _ _ =>
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}, %W{pidx + 1}: {tensorTy [t, d]}"
-      pidx := pidx + 2
+    | .tokenPositionEmbed v t d _ _ posEmb =>
+      if posEmb then
+        params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}, %W{pidx + 1}: {tensorTy [t, d]}"
+        pidx := pidx + 2
+      else
+        params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}"
+        pidx := pidx + 1
       match curShape with
       | [b, _] => curShape := [b, t, d]
       | _ => pure ()
