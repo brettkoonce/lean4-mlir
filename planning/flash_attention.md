@@ -133,11 +133,24 @@ for kj … :                                #  same key loop
   unknown is settled. T=8192 extrapolates to dense ~4 GB vs flash ~67 MB (~60×); the dense T=8192
   compile TIMED OUT building the `[1,8,8192,8192]` dispatch — itself evidence dense is impractical at 8K.
 
-FlashAttention is now COMPLETE: correctness (validated) + the memory payoff (measured). Remaining for
-an actual 8K *run* is orthogonal: the position embedding must be resized to `[T,D]` and retrained (or
-RoPE/ALiBi) — independent of flash.
-- Caveat carried from the 8K analysis: long context also needs the position embedding resized to
-  `[T,D]` and retrained (or RoPE/ALiBi — separate codegen), independent of flash.
+FlashAttention is now COMPLETE: correctness (validated) + the memory payoff (measured).
+
+## RoPE + length-generalization — DONE 2026-07-09 (the position-embedding piece)
+
+The "orthogonal" position-embedding blocker is now also solved. RoPE op (aa2992d) + attention
+integration (3cadaf0) + `posEmb`-off (this commit): a `rope : Bool` on `.transformerEncoder` rotates
+Q/K per position (relative attention), and a `posEmb : Bool` on `.tokenPositionEmbed` drops the learned
+`[T,D]` absolute table. With both, every weight is seqLen-independent. `nano-rope-nopos`:
+- trains BEST of the tinyGPT variants — 2.68 bits/char (nano 3.66, nano-rope 3.41), 4096 fewer params.
+- **extrapolates**: the SAME T=64 checkpoint, evaluated (`xeval` subcommand) at longer context, RUNS
+  and stays coherent — T=64 2.69 / T=128 2.99 / T=256 3.70 bits/char (graceful, not garbage). Vanilla
+  RoPE holds ~2-4×; NTK/YaRN scaling would extend further (future).
+- **contrast**: absolute-position `nano` (850180 B) CANNOT load at T=128 (needs 866564 B; the +16384 B
+  is exactly the `[64,64]→[128,64]` table). Absolute is length-locked; RoPE-no-pos is not.
+
+So the long-context story is COMPLETE: FlashAttention kills the O(T²) memory wall AND RoPE-no-pos kills
+the length lock. An 8K run = a config (`seqLen`, `flashAttn:=true`, `rope:=true`, `posEmb:=false`) + the
+cloud box.
 
 ## 5. References
 - Dao et al., *FlashAttention* (2022) + *FlashAttention-2* (2023) — the online-softmax + recompute.

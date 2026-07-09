@@ -60,6 +60,9 @@ structure GptCfg where
   /-- Rotary position embedding on Q/K (relative position; generalizes past
       the trained length). See jax/demos/rope_ref.py. -/
   rope      : Bool := false
+  /-- Learned absolute position table. Drop it (with rope on) so every weight
+      is seqLen-independent → train-short / eval-long extrapolation. -/
+  posEmb    : Bool := true
 
 /-- The original 212K-param demo config (spec name unchanged so old
     checkpoints keep their build prefix). -/
@@ -100,6 +103,12 @@ def nanoFlashCfg : GptCfg :=
 def nanoRopeCfg : GptCfg :=
   { nanoCfg with key := "nano-rope", specName := "tinygpt-shakespeare-nanorope", rope := true }
 
+/-- RoPE with NO absolute position table — every weight is seqLen-independent,
+    so this checkpoint runs at any context length (train-short / eval-long).
+    The last mile of the 8K story. -/
+def nanoRopeNoPosCfg : GptCfg :=
+  { nanoCfg with key := "nano-rope-nopos", specName := "tinygpt-shakespeare-nanoropenopos", rope := true, posEmb := false }
+
 def pickCfg : String → Option GptCfg
   | "nano" => some nanoCfg
   | "tiny" => some tinyCfg
@@ -107,6 +116,7 @@ def pickCfg : String → Option GptCfg
   | "nano-gather" => some nanoGatherCfg
   | "nano-flash" => some nanoFlashCfg
   | "nano-rope" => some nanoRopeCfg
+  | "nano-rope-nopos" => some nanoRopeNoPosCfg
   | _ => none
 
 def mkSpec (g : GptCfg) : NetSpec :=
@@ -114,7 +124,7 @@ def mkSpec (g : GptCfg) : NetSpec :=
     imageH := g.seqLen     -- so y_seg shape becomes [B, T, 1]
     imageW := 1
     layers := [
-      .tokenPositionEmbed vocabSize g.seqLen g.dModel (idsInput := g.ids) (gather := g.gather),
+      .tokenPositionEmbed vocabSize g.seqLen g.dModel (idsInput := g.ids) (gather := g.gather) (posEmb := g.posEmb),
       .transformerEncoder g.dModel g.numHeads g.mlpDim g.numLayers (causalMask := true)
         (flashAttn := g.flashAttn) (rope := g.rope),
       .lmHead g.dModel vocabSize g.seqLen
@@ -237,6 +247,32 @@ def evalValLoss (sess : IreeSession) (spec : NetSpec) (useIds : Bool)
                   bnShapes batch.toUSize T.toUSize 1
     tot := tot + F32.read outBA nT3.toUSize
   return tot / nBatches.toFloat
+
+/-- Extrapolation eval: load `g`'s checkpoint (trained at `g.seqLen`) into a
+    spec at `evalT`, and compute val bits/char at that length. Only sound when
+    every weight is seqLen-independent (posEmb off) — else the param shapes
+    (the [seqLen,D] position table) mismatch and the load fails, which is
+    exactly the point: an absolute-position model CANNOT run at a new length. -/
+def runXeval (g : GptCfg) (evalT : Nat) : IO Float := do
+  let spec := mkSpec { g with seqLen := evalT }
+  let cfg : TrainConfig := { trainConfig with batchSize := 32, learningRate := 0.0 }
+  IO.eprintln s!"compiling eval @ T={evalT} (model={g.key}, params={spec.totalParams}) ..."
+  let _ ← spec.compileVmfbs cfg (useSeg := true)
+  let sess ← IreeSession.create s!"{spec.buildPrefix}_train_step.vmfb"
+  let ckptPath := s!"{(mkSpec g).buildPrefix}_params.bin"
+  let params ← IO.FS.readBinFile ckptPath
+  let expected := spec.totalParams * 4
+  if params.size != expected then
+    IO.eprintln s!"  checkpoint {params.size}B ≠ expected {expected}B — the [seqLen,D] position table makes this model length-specific (posEmb-off is required to extrapolate)"
+    IO.Process.exit 1
+  let nP := F32.size params
+  let m0 ← F32.const nP.toUSize 0.0
+  let v0 ← F32.const nP.toUSize 0.0
+  let packed := F32.concat #[params, m0, v0]
+  let (valTokens, nValTokens) ← F32.loadTokenStream "data/shakespeare/val.bin"
+  let nats ← evalValLoss sess spec g.ids packed spec.shapesBA (spec.xShape 32) spec.bnShapesBA
+                valTokens nValTokens 32 evalT 20
+  return nats
 
 /-- Run training. Returns final params buffer and a loss history. -/
 def runTinyGptTrain (g : GptCfg) (steps : Nat) (batch : Nat) (lrMax : Float)
@@ -441,6 +477,11 @@ def main (args : List String) : IO Unit := do
     let outPath := s!"{pfx}_params.bin"
     IO.FS.writeBinFile outPath params
     IO.eprintln s!"saved params to {outPath}  (final loss: {hist.back!})"
+  | "xeval" :: rest =>
+    let (g, rest) := peelModel rest
+    let evalT := (rest.head?.bind String.toNat?).getD 128
+    let nats ← runXeval g evalT
+    IO.println s!"xeval {g.key} @ T={evalT}: {nats} nats/char = {nats / ln2} bits/char"
   | "sample" :: rest =>
     let (g, rest) := peelModel rest
     let nChars  := (rest[0]?.bind String.toNat?).getD 400

@@ -262,8 +262,13 @@ inductive Layer where
   -- — NO `[B, T, V]` one-hot ever materialized. Implies ids-shaped input.
   -- Same params/math as the one-hot path but O(T·D) not O(T·V) memory, which is
   -- what makes BPE-vocab TinyStories feasible.
+  -- `posEmb := false` DROPS the learned `[seqLen, dModel]` absolute position
+  -- table (one fewer param) — for RoPE models, whose relative positions make the
+  -- absolute table redundant AND length-fixed. With posEmb off, every weight is
+  -- seqLen-independent, so a model trained at one length runs at any length
+  -- (train-short / eval-long extrapolation). See planning/flash_attention.md.
   | tokenPositionEmbed (vocabSize seqLen dModel : Nat) (idsInput : Bool := false)
-      (gather : Bool := false)
+      (gather : Bool := false) (posEmb : Bool := true)
   -- Language-modeling head: per-position logits. Input `[B, seqLen,
   -- dModel]`, output `[B, seqLen * vocabSize]` (flat) so existing
   -- per-pixel CE loss machinery handles `[B, V, T, 1]`-shaped logits

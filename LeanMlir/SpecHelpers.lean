@@ -144,9 +144,9 @@ def paramShapes (spec : NetSpec) : Array (Array Nat) := Id.run do
       -- 2× convBn ((ic+oc)→oc, oc→oc). Bilinear/concat no params.
       shapes := shapes.push #[oc, ic + oc, 3, 3] |>.push #[oc] |>.push #[oc]
       shapes := shapes.push #[oc, oc, 3, 3] |>.push #[oc] |>.push #[oc]
-    | .tokenPositionEmbed v t d _ _ =>
-      -- Embedding W [V, D] then positional [T, D] — two slots, no biases.
-      shapes := shapes.push #[v, d] |>.push #[t, d]
+    | .tokenPositionEmbed v t d _ _ posEmb =>
+      -- Embedding W [V, D], then positional [T, D] unless posEmb off. No biases.
+      shapes := if posEmb then shapes.push #[v, d] |>.push #[t, d] else shapes.push #[v, d]
     | .lmHead d v _ =>
       -- Dense W [D, V] + bias [V].
       shapes := shapes.push #[d, v] |>.push #[v]
@@ -467,12 +467,15 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
     let (W1, g1, b1, s1) ← heConvBn oc (ic + oc) 3 seed
     let (W2, g2, b2, s2) ← heConvBn oc oc 3 s1
     return (#[W1, g1, b1, W2, g2, b2], s2)
-  | .tokenPositionEmbed v t d _ _ =>
+  | .tokenPositionEmbed v t d _ _ posEmb =>
     -- Token embedding ~ N(0, 0.02²) (GPT-2 / nano-GPT convention),
-    -- learned positional embedding initialized the same way.
+    -- learned positional embedding (if present) initialized the same way.
     let emb ← F32.heInit seed (v * d).toUSize 0.02
-    let pos ← F32.heInit (seed + 1) (t * d).toUSize 0.02
-    return (#[emb, pos], seed + 2)
+    if posEmb then
+      let pos ← F32.heInit (seed + 1) (t * d).toUSize 0.02
+      return (#[emb, pos], seed + 2)
+    else
+      return (#[emb], seed + 1)
   | .timeCondAdd c nFreq =>
     -- Init W and b to ZERO so time conditioning starts as a no-op (pure
     -- residual) and grows in — the layer-scale trick the DDPM v2 plan
