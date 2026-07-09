@@ -1222,6 +1222,10 @@ lean_exe «bigram-shakespeare» where
   root := `demos.MainBigramShakespeare
   moreLinkArgs := ireeLink
 
+lean_exe «flash-probe» where
+  root := `demos.MainFlashProbe
+  moreLinkArgs := ireeLink
+
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
   moreLinkArgs := ireeLink
