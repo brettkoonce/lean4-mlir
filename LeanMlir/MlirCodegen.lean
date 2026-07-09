@@ -1222,6 +1222,87 @@ private def emitFlashAttnSdpa (tag : String) (qSSA kSSA vSSA : String)
   s := s ++ s!"    %fa_lse{tag} = stablehlo.add %fa_r{tag}#2, %fa_logl{tag} : {rowTy}\n"
   return (s, s!"%fa_out{tag}", s!"%fa_lse{tag}")
 
+/-- Emit the FlashAttention backward: given `q/k/v [b,h,n,dh]`, the upstream
+    grad `dO [b,h,n,dh]`, the forward output `O`, and the per-row logsumexp
+    `lse [b,h,n]`, produce `(dQ, dK, dV)` — all `[b,h,n,dh]` — via a
+    recompute `stablehlo.while` over key blocks. No `[b,h,n,n]` matrix is stored:
+    each block recomputes `Pij = exp(Sij − lse)` and uses `D = rowsum(dO⊙O)` as
+    the softmax-Jacobian term. dQ accumulates across ALL blocks; dK/dV are written
+    once per (disjoint) key block via `dynamic_update_slice`. Matches
+    `flash_attention_ref.py:flash_backward` (validated ~1e-15). -/
+private def emitFlashAttnBwd (tag : String) (qSSA kSSA vSSA doSSA oSSA lseSSA : String)
+    (b heads n dh bk : Nat) (causal : Bool) : String × String × String × String := Id.run do
+  let hTy := tensorTy [b, heads, n, dh]
+  let blkTy := tensorTy [b, heads, bk, dh]
+  let scTy := tensorTy [b, heads, n, bk]
+  let rowTy := tensorTy [b, heads, n]
+  let i32 := "tensor<i32>"
+  let nkb := n / bk
+  let invSqrtDh : Float := 1.0 / Float.sqrt dh.toFloat
+  let mut s := ""
+  -- D = rowsum(dO ⊙ O)  [b,h,n]
+  s := s ++ s!"    %fb_zf{tag} = stablehlo.constant dense<0.0> : tensor<f32>\n"
+  s := s ++ s!"    %fb_doo{tag} = stablehlo.multiply {doSSA}, {oSSA} : {hTy}\n"
+  s := s ++ s!"    %fb_D{tag} = stablehlo.reduce(%fb_doo{tag} init: %fb_zf{tag}) applies stablehlo.add across dimensions = [3]\n"
+  s := s ++ s!"        : ({hTy}, tensor<f32>) -> {rowTy}\n"
+  -- constants + zero-init dQ/dK/dV
+  s := s ++ s!"    %fb_c0{tag} = stablehlo.constant dense<0> : {i32}\n"
+  s := s ++ s!"    %fb_c1{tag} = stablehlo.constant dense<1> : {i32}\n"
+  s := s ++ s!"    %fb_cbk{tag} = stablehlo.constant dense<{bk}> : {i32}\n"
+  s := s ++ s!"    %fb_nkb{tag} = stablehlo.constant dense<{nkb}> : {i32}\n"
+  s := s ++ s!"    %fb_z{tag} = stablehlo.constant dense<0.0> : {hTy}\n"
+  s := s ++ s!"    %fb_scale{tag} = stablehlo.constant dense<{invSqrtDh}> : {scTy}\n"
+  s := s ++ s!"    %fb_ninf{tag} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
+  s := s ++ s!"    %fb_lseb{tag} = stablehlo.broadcast_in_dim {lseSSA}, dims = [0, 1, 2] : ({rowTy}) -> {scTy}\n"
+  s := s ++ s!"    %fb_Db{tag} = stablehlo.broadcast_in_dim %fb_D{tag}, dims = [0, 1, 2] : ({rowTy}) -> {scTy}\n"
+  -- while(k, dQ, dK, dV)
+  s := s ++ s!"    %fb_r{tag}:4 = stablehlo.while(%fb_k{tag} = %fb_c0{tag}, %fb_dQ{tag} = %fb_z{tag}, %fb_dK{tag} = %fb_z{tag}, %fb_dV{tag} = %fb_z{tag})\n"
+  s := s ++ s!"        : {i32}, {hTy}, {hTy}, {hTy}\n"
+  s := s ++ s!"      cond " ++ "{\n"
+  s := s ++ s!"        %fb_lt{tag} = stablehlo.compare LT, %fb_k{tag}, %fb_nkb{tag} : ({i32}, {i32}) -> tensor<i1>\n"
+  s := s ++ s!"        stablehlo.return %fb_lt{tag} : tensor<i1>\n"
+  s := s ++ "      } do {\n"
+  s := s ++ s!"        %fb_off{tag} = stablehlo.multiply %fb_k{tag}, %fb_cbk{tag} : {i32}\n"
+  s := s ++ s!"        %fb_Kj{tag} = \"stablehlo.dynamic_slice\"({kSSA}, %fb_c0{tag}, %fb_c0{tag}, %fb_off{tag}, %fb_c0{tag}) " ++ "{" ++ s!" slice_sizes = array<i64: {b}, {heads}, {bk}, {dh}> " ++ "}" ++ s!" : ({hTy}, {i32}, {i32}, {i32}, {i32}) -> {blkTy}\n"
+  s := s ++ s!"        %fb_Vj{tag} = \"stablehlo.dynamic_slice\"({vSSA}, %fb_c0{tag}, %fb_c0{tag}, %fb_off{tag}, %fb_c0{tag}) " ++ "{" ++ s!" slice_sizes = array<i64: {b}, {heads}, {bk}, {dh}> " ++ "}" ++ s!" : ({hTy}, {i32}, {i32}, {i32}, {i32}) -> {blkTy}\n"
+  -- Sij = Q·Kjᵀ·scale
+  s := s ++ s!"        %fb_sc{tag} = stablehlo.dot_general {qSSA}, %fb_Kj{tag}, batching_dims = [0, 1] x [0, 1], contracting_dims = [3] x [3], precision = [DEFAULT, DEFAULT] : ({hTy}, {blkTy}) -> {scTy}\n"
+  s := s ++ s!"        %fb_Sij{tag} = stablehlo.multiply %fb_sc{tag}, %fb_scale{tag} : {scTy}\n"
+  let sijName ← if causal then do
+    let mut c := ""
+    c := c ++ s!"        %fb_qi{tag} = stablehlo.iota dim = 2 : tensor<{b}x{heads}x{n}x{bk}xi32>\n"
+    c := c ++ s!"        %fb_ki0{tag} = stablehlo.iota dim = 3 : tensor<{b}x{heads}x{n}x{bk}xi32>\n"
+    c := c ++ s!"        %fb_offb{tag} = stablehlo.broadcast_in_dim %fb_off{tag}, dims = [] : ({i32}) -> tensor<{b}x{heads}x{n}x{bk}xi32>\n"
+    c := c ++ s!"        %fb_ki{tag} = stablehlo.add %fb_ki0{tag}, %fb_offb{tag} : tensor<{b}x{heads}x{n}x{bk}xi32>\n"
+    c := c ++ s!"        %fb_cmp{tag} = stablehlo.compare GE, %fb_qi{tag}, %fb_ki{tag} : (tensor<{b}x{heads}x{n}x{bk}xi32>, tensor<{b}x{heads}x{n}x{bk}xi32>) -> tensor<{b}x{heads}x{n}x{bk}xi1>\n"
+    c := c ++ s!"        %fb_ninfm{tag} = stablehlo.constant dense<0xFF800000> : {scTy}\n"
+    c := c ++ s!"        %fb_Sm{tag} = stablehlo.select %fb_cmp{tag}, %fb_Sij{tag}, %fb_ninfm{tag} : (tensor<{b}x{heads}x{n}x{bk}xi1>, {scTy}, {scTy}) -> {scTy}\n"
+    s := s ++ c
+    pure s!"%fb_Sm{tag}"
+  else pure s!"%fb_Sij{tag}"
+  -- Pij = exp(Sij - lse)
+  s := s ++ s!"        %fb_shift{tag} = stablehlo.subtract {sijName}, %fb_lseb{tag} : {scTy}\n"
+  s := s ++ s!"        %fb_Pij{tag} = stablehlo.exponential %fb_shift{tag} : {scTy}\n"
+  -- dV_block = Pijᵀ·dO (contract query n) -> [b,h,bk,dh]; write into dV at off
+  s := s ++ s!"        %fb_dVblk{tag} = stablehlo.dot_general %fb_Pij{tag}, {doSSA}, batching_dims = [0, 1] x [0, 1], contracting_dims = [2] x [2], precision = [DEFAULT, DEFAULT] : ({scTy}, {hTy}) -> {blkTy}\n"
+  s := s ++ s!"        %fb_dVnew{tag} = \"stablehlo.dynamic_update_slice\"(%fb_dV{tag}, %fb_dVblk{tag}, %fb_c0{tag}, %fb_c0{tag}, %fb_off{tag}, %fb_c0{tag}) : ({hTy}, {blkTy}, {i32}, {i32}, {i32}, {i32}) -> {hTy}\n"
+  -- dPij = dO·Vjᵀ (contract dh) -> [b,h,n,bk]
+  s := s ++ s!"        %fb_dP{tag} = stablehlo.dot_general {doSSA}, %fb_Vj{tag}, batching_dims = [0, 1] x [0, 1], contracting_dims = [3] x [3], precision = [DEFAULT, DEFAULT] : ({hTy}, {blkTy}) -> {scTy}\n"
+  -- dSij = Pij ⊙ (dPij - D) · scale
+  s := s ++ s!"        %fb_dPmD{tag} = stablehlo.subtract %fb_dP{tag}, %fb_Db{tag} : {scTy}\n"
+  s := s ++ s!"        %fb_PdP{tag} = stablehlo.multiply %fb_Pij{tag}, %fb_dPmD{tag} : {scTy}\n"
+  s := s ++ s!"        %fb_dSij{tag} = stablehlo.multiply %fb_PdP{tag}, %fb_scale{tag} : {scTy}\n"
+  -- dQ += dSij·Kj (contract bk) -> [b,h,n,dh]
+  s := s ++ s!"        %fb_dQadd{tag} = stablehlo.dot_general %fb_dSij{tag}, %fb_Kj{tag}, batching_dims = [0, 1] x [0, 1], contracting_dims = [3] x [2], precision = [DEFAULT, DEFAULT] : ({scTy}, {blkTy}) -> {hTy}\n"
+  s := s ++ s!"        %fb_dQnew{tag} = stablehlo.add %fb_dQ{tag}, %fb_dQadd{tag} : {hTy}\n"
+  -- dK_block = dSijᵀ·Q (contract query n) -> [b,h,bk,dh]; write into dK at off
+  s := s ++ s!"        %fb_dKblk{tag} = stablehlo.dot_general %fb_dSij{tag}, {qSSA}, batching_dims = [0, 1] x [0, 1], contracting_dims = [2] x [2], precision = [DEFAULT, DEFAULT] : ({scTy}, {hTy}) -> {blkTy}\n"
+  s := s ++ s!"        %fb_dKnew{tag} = \"stablehlo.dynamic_update_slice\"(%fb_dK{tag}, %fb_dKblk{tag}, %fb_c0{tag}, %fb_c0{tag}, %fb_off{tag}, %fb_c0{tag}) : ({hTy}, {blkTy}, {i32}, {i32}, {i32}, {i32}) -> {hTy}\n"
+  s := s ++ s!"        %fb_knext{tag} = stablehlo.add %fb_k{tag}, %fb_c1{tag} : {i32}\n"
+  s := s ++ s!"        stablehlo.return %fb_knext{tag}, %fb_dQnew{tag}, %fb_dKnew{tag}, %fb_dVnew{tag} : {i32}, {hTy}, {hTy}, {hTy}\n"
+  s := s ++ "      }\n"
+  return (s, s!"%fb_r{tag}#1", s!"%fb_r{tag}#2", s!"%fb_r{tag}#3")
+
 /-- Emit multi-head self-attention forward.
     Input x (B, N, D). Params: Wq, bq, Wk, bk, Wv, bv, Wo, bo.
     Returns (code, outSSA, saved Q,K,V,softmax,preProj SSAs). -/
@@ -8242,6 +8323,20 @@ def flashProbeModule (b heads n dh bk : Nat) (causal : Bool) : String := Id.run 
   s := s ++ s!"  func.func @main(%Q: {hTy}, %K: {hTy}, %V: {hTy}) -> {hTy} " ++ "{\n"
   s := s ++ code
   s := s ++ s!"    return {oSSA} : {hTy}\n"
+  s := s ++ "  }\n}\n"
+  return s
+
+/-- Standalone FlashAttention forward+backward module: `@main(Q,K,V,dO) ->
+    (dQ,dK,dV)`. Runs the forward emit to get O/Lse, then the backward emit;
+    validated against the dense-attention VJP. -/
+def flashBwdProbeModule (b heads n dh bk : Nat) (causal : Bool) : String := Id.run do
+  let hTy := tensorTy [b, heads, n, dh]
+  let (fcode, oSSA, lseSSA) := emitFlashAttnSdpa "p" "%Q" "%K" "%V" b heads n dh bk causal
+  let (bcode, dqSSA, dkSSA, dvSSA) := emitFlashAttnBwd "p" "%Q" "%K" "%V" "%dO" oSSA lseSSA b heads n dh bk causal
+  let mut s := "module @flash_probe {\n"
+  s := s ++ s!"  func.func @main(%Q: {hTy}, %K: {hTy}, %V: {hTy}, %dO: {hTy}) -> ({hTy}, {hTy}, {hTy}) " ++ "{\n"
+  s := s ++ fcode ++ bcode
+  s := s ++ s!"    return {dqSSA}, {dkSSA}, {dvSSA} : {hTy}, {hTy}, {hTy}\n"
   s := s ++ "  }\n}\n"
   return s
 

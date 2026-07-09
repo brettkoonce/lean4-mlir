@@ -89,12 +89,13 @@ for kj … :                                #  same key loop
    ~1e-15 (causal/full, ragged blocks, Bq=T single-loop). The algorithm is pinned.
 2. **StableHLO compiles — DONE 2026-07-09**: the emitted `while`/`dynamic_slice`/`iota` pattern
    legalizes on BOTH llvm-cpu and rocm gfx1100 (iree 3.12).
-3. **Numerical match — DONE 2026-07-09 (forward, CPU)**: `emitFlashAttnSdpa` + `flashProbeModule` +
-   the `flash-probe` exe emit a standalone `@main(Q,K,V)->O`; `scripts/flash_probe_check.py` compiles
-   it (llvm-cpu) and runs it via `iree.runtime`, matching numpy dense attention to **~1e-6** (fp32)
-   for full + causal across n=16..128 / 4..16 blocks. So the FORWARD emitter is correct end-to-end
-   offline. STILL TODO: gfx1100 run (GPU busy at build time) + a tinyGPT `nano-flash` vs `nano`
-   loss-equivalence run once the backward lands.
+3. **Numerical match — DONE 2026-07-09 (forward AND backward, CPU)**: `emitFlashAttnSdpa` /
+   `emitFlashAttnBwd` + `flashProbeModule`/`flashBwdProbeModule` + the `flash-probe` exe emit
+   standalone `@main(Q,K,V)->O` and `@main(Q,K,V,dO)->(dQ,dK,dV)`; `scripts/flash_probe_check.py`
+   compiles (llvm-cpu) + runs via `iree.runtime`, matching numpy dense attention (fwd) and the dense
+   softmax VJP (bwd) to **~1e-6** (fp32) for full + causal across n=16..128 / 4..16 blocks. Both
+   emitters correct end-to-end offline. STILL TODO: gfx1100 run + a tinyGPT `nano-flash` vs `nano`
+   loss-equivalence run once integrated.
 4. **MEMORY measured** (the actual point): compile a T=2048/4096/8192 train step both ways, compare
    peak device allocation. Confirms O(T²)→O(T·Bk). If it doesn't drop, diagnose (§2 risk) before
    scaling.
@@ -106,10 +107,13 @@ for kj … :                                #  same key loop
   validated via `flashProbeModule`/`flash-probe`/`scripts/flash_probe_check.py`). Not yet wired into
   the transformer block (that needs the backward too, else training breaks) — it's the validated
   core, ready to drop into `emitMHSAForward`'s sdpa seam behind a flag.
-- **Phase 2 — backward** (`emitFlashAttnBwd` + rungs 3-bwd/4/5) — NEXT. The training unlock; the
-  recompute loop is fully specified by `flash_attention_ref.py`'s `flash_backward` (validated to
-  ~1e-15). Then integrate fwd+bwd into `emitMHSAForward`/the block backward behind a `flashAttn`
-  flag, GPU-validate, and MEASURE the memory drop (rung 4).
+- **Phase 2 — backward emitter — DONE 2026-07-09** (`emitFlashAttnBwd` + `flashBwdProbeModule`).
+  Recompute loop with `dynamic_update_slice` for dK/dV (disjoint blocks, write-once) and an
+  accumulated dQ; matches the dense VJP to ~1e-6. Validated first try.
+- **Phase 3 — integration — NEXT.** Wire fwd+bwd into `emitMHSAForward`'s sdpa seam + the block
+  backward (`:6253`) behind a `flashAttn` flag (threaded like `useShampoo`); the forward records must
+  carry Lse instead of the dense softmax `mh_sm`. Then GPU-validate (tinyGPT `nano-flash` vs `nano`
+  loss-equivalence) and MEASURE the peak-memory drop at T=2048/4096/8192 (rung 4 — the payoff).
 - Caveat carried from the 8K analysis: long context also needs the position embedding resized to
   `[T,D]` and retrained (or RoPE/ALiBi — separate codegen), independent of flash.
 
