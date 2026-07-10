@@ -1,0 +1,54 @@
+[sup] 2026-07-04 02:00:16 START R50-RSB-A3-FAITHFUL(accum4/eff2048) (cuda); ckpt=/home/skoonce/r50_rsb_a3_rsbfaithful; every=5; cooldown@[25 50 75] 1800s; jax_dir=/home/skoonce/lean/klawd_max_power/lean4-jax/jax
+[sup] 02:00:16 attempt 1: fresh start (no .state.npz yet)
+[sup] 02:00:16 launched PID=643143 (next cooldown @epoch 25)
+[sup] 02:58:52 !!! AER detected — killing PID=643143
+[sup]   last: [Epoch 6] lr=0.007998 loss(train_avg)=0.0067 val_top1=5549/49664 (0.1117) val_top5=0.2703 val_loss=4.9062  [536.3s train, 12.2s val]
+[sup] 02:58:54 attempt 1 ended (aer); cooling 15s then resuming
+[sup] 02:59:09 attempt 2: LOSSLESS RESUME from epoch 5 (/home/skoonce/r50_rsb_a3_rsbfaithful_e5.state.npz)
+[sup] 02:59:09 launched PID=652335 (next cooldown @epoch 25)
+[sup] 2026-07-04 03:02:29 START R50-RSB-A3-FAITHFUL(accum4/eff2048) (cuda); ckpt=/home/skoonce/r50_rsb_a3_rsbfaithful; every=5; cooldown@[25 50 75] 1800s; jax_dir=/home/skoonce/lean/klawd_max_power/lean4-jax/jax
+[sup] 03:02:29 attempt 1: LOSSLESS RESUME from epoch 5 (/home/skoonce/r50_rsb_a3_rsbfaithful_e5.state.npz)
+[sup] 03:02:29 launched PID=655711 (next cooldown @epoch 25)
+[sup] 06:05:25 ❄️  epoch 25 ckpt written — pausing for cooldown
+[sup]   last: [Epoch 25] lr=0.007157 loss(train_avg)=0.0052 val_top1=19875/49664 (0.4002) val_top5=0.6498 val_loss=3.0848  [537.9s train, 11.8s val]
+[sup] 06:05:28 ❄️  GPUs idle — cooling 1800s before resuming past epoch 25
+[sup] 06:35:28 cooldown done — resuming
+[sup] 06:35:28 attempt 2: LOSSLESS RESUME from epoch 25 (/home/skoonce/r50_rsb_a3_rsbfaithful_e25.state.npz)
+[sup] 06:35:28 launched PID=684131 (next cooldown @epoch 50)
+[sup] 10:23:58 ❄️  epoch 50 ckpt written — pausing for cooldown
+[sup]   last: [Epoch 50] lr=0.004331 loss(train_avg)=0.0045 val_top1=28109/49664 (0.566) val_top5=0.8025 val_loss=2.2844  [531.6s train, 11.9s val]
+[sup] 10:24:00 ❄️  GPUs idle — cooling 1800s before resuming past epoch 50
+[sup] 10:54:00 cooldown done — resuming
+[sup] 10:54:00 attempt 3: LOSSLESS RESUME from epoch 50 (/home/skoonce/r50_rsb_a3_rsbfaithful_e50.state.npz)
+[sup] 10:54:00 launched PID=719126 (next cooldown @epoch 75)
+[sup] 14:40:51 ❄️  epoch 75 ckpt written — pausing for cooldown
+[sup]   last: [Epoch 75] lr=0.001291 loss(train_avg)=0.0036 val_top1=35663/49664 (0.7181) val_top5=0.9039 val_loss=1.3663  [528.0s train, 11.8s val]
+[sup] 14:40:53 ❄️  GPUs idle — cooling 1800s before resuming past epoch 75
+[sup] 15:10:53 cooldown done — resuming
+[sup] 15:10:53 attempt 4: LOSSLESS RESUME from epoch 75 (/home/skoonce/r50_rsb_a3_rsbfaithful_e75.state.npz)
+[sup] 15:10:53 launched PID=753069 (next cooldown @epoch none)
+[sup]   last: [Epoch 100] lr=0.0 loss(train_avg)=0.0034 val_top1=38072/49664 (0.7666) val_top5=0.9303 val_loss=1.0901  [527.2s train, 12.1s val]
+[sup] 18:54:51 ✅ TRAINING COMPLETE. final=/home/skoonce/r50_rsb_a3_rsbfaithful.bin
+[sup] 2026-07-09 15:40:37 START R50-RSB-A3-FAITHFUL(accum4/eff2048) (cuda); ckpt=/home/skoonce/r50_a3_rerun/ckpt; every=5; cooldown@[25 50 75] 1800s; jax_dir=/home/skoonce/lean/klawd_max_power/lean4-jax/jax
+[sup] 15:40:37 attempt 1: fresh start (no .state.npz yet)
+[sup] 15:40:37 launched PID=1163843 (next cooldown @epoch 25)
+[sup] 19:32:55 ❄️  epoch 25 ckpt written — pausing for cooldown
+[sup]   last: [Epoch 25] lr=0.007157 loss(train_avg)=0.0049 val_top1=18864/49664 (0.3798) val_top5=0.6282 val_loss=3.1807  [546.7s train, 11.9s val]
+[sup] 19:32:57 ❄️  GPUs idle — cooling 1800s before resuming past epoch 25
+[sup] 20:02:57 cooldown done — resuming
+[sup] 20:02:57 attempt 2: LOSSLESS RESUME from epoch 25 (/home/skoonce/r50_a3_rerun/ckpt_e25.state.npz)
+[sup] 20:02:57 launched PID=1198022 (next cooldown @epoch 50)
+[sup] 23:50:13 ❄️  epoch 50 ckpt written — pausing for cooldown
+[sup]   last: [Epoch 50] lr=0.004331 loss(train_avg)=0.0042 val_top1=27717/49664 (0.5581) val_top5=0.7942 val_loss=2.0857  [532.4s train, 11.9s val]
+[sup] 23:50:15 ❄️  GPUs idle — cooling 1800s before resuming past epoch 50
+[sup] 00:20:15 cooldown done — resuming
+[sup] 00:20:15 attempt 3: LOSSLESS RESUME from epoch 50 (/home/skoonce/r50_a3_rerun/ckpt_e50.state.npz)
+[sup] 00:20:15 launched PID=1231339 (next cooldown @epoch 75)
+[sup] 04:12:31 ❄️  epoch 75 ckpt written — pausing for cooldown
+[sup]   last: [Epoch 75] lr=0.001291 loss(train_avg)=0.0033 val_top1=35567/49664 (0.7162) val_top5=0.9024 val_loss=1.2717  [542.3s train, 12.3s val]
+[sup] 04:12:33 ❄️  GPUs idle — cooling 1800s before resuming past epoch 75
+[sup] 04:42:33 cooldown done — resuming
+[sup] 04:42:33 attempt 4: LOSSLESS RESUME from epoch 75 (/home/skoonce/r50_a3_rerun/ckpt_e75.state.npz)
+[sup] 04:42:33 launched PID=1266526 (next cooldown @epoch none)
+[sup]   last: [Epoch 100] lr=0.0 loss(train_avg)=0.0031 val_top1=38352/49664 (0.7722) val_top5=0.9334 val_loss=1.009  [541.3s train, 12.2s val]
+[sup] 08:35:25 ✅ TRAINING COMPLETE. final=/home/skoonce/r50_a3_rerun/ckpt.bin

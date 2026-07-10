@@ -4392,20 +4392,99 @@ ships it as a full ImageNet demo
 ``ResNet Strikes Back'' A3 recipe (Wightman et al.\ 2021): LAMB at
 effective batch 2048 (via gradient accumulation), BCE over
 Mixup/CutMix soft targets, RandAugment, train@160 / eval@224. On the
-same proven-backward bottleneck codegen it reached $\mathbf{76.66\%}$
-top-1 / $\mathbf{93.03\%}$ top-5 at 100 epochs --- within $1.4$ points
-of the paper's $78.1\%$.
+same proven-backward bottleneck codegen it reached $\mathbf{77.22\%}$
+top-1 / $\mathbf{93.34\%}$ top-5 at 100 epochs --- within $0.9$ points
+of the paper's $78.1\%$, reproducing (and slightly beating) an earlier
+$76.66\%$ / $93.03\%$ run to within run-to-run noise.
 
-\textbf{[TODO --- run w/ config.]} \texttt{resnet50-imagenet
-rsb-faithful}, \textbf{100 epochs} (the run above), or
-\texttt{resnet50-imagenet true-2048} for a real single-forward batch
-2048 on an $\sim$80\,GB card (no gradient accumulation). \emph{Changed
-since the $76.66\%$ above:} RandAugment is now timm-literal
-(\texttt{rand-m6-mstd0.5-inc1}). \emph{Still open:} the residual
-$\sim$1.4 points is the gradient-accumulation Ghost-BN regime (each
-micro-step normalizes over 512, not the full 2048) plus LAMB
-implementation details and bf16 --- the \texttt{true-2048} recipe
-isolates the BN piece.
+\textbf{Compute + the BN-sharding axis.} The run trained on the same
+four usable NVIDIA RTX 4060 Ti (CUDA, bf16 matmul and convolution) as
+the ResNet-34 bf16 run, at effective batch 2048. Four 16\,GB cards
+cannot hold that batch on one device, so it is split $4\times512$ across
+the GPUs and accumulated $4\times$ to reach 2048 --- which means
+BatchNorm normalizes over each $512$-image micro-batch (``Ghost-BN''),
+not the full $2048$. A single $\sim$80\,GB A100 holds the whole batch,
+so the \texttt{true-2048} recipe (no gradient accumulation) normalizes
+BatchNorm over all $2048$ images at once. Same network, same effective
+batch --- the only difference is the BN statistic group, which is the
+axis this comparison isolates:
+
+\begin{center}
+\begin{tabular}{l l r r r r r}
+\hline
+GPU & BN regime & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
+\hline
+4$\times$ 4060 Ti (CUDA, bf16)   & Ghost-BN (512)   & $\sim$9.1 min & 100 & $\sim$17 hr & $\mathbf{77.22\%}$ & $\mathbf{93.34\%}$ \\
+1$\times$ A100 (bf16, true-2048) & full-batch (2048) & $\sim$5.4 min\textsuperscript{\dag} & 100 & $\sim$9 hr\textsuperscript{\dag} & TBD & TBD \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent ResNet-50 / RSB-A3, 100 epochs: the 4-GPU run splits the
+batch and normalizes BatchNorm per $512$-image shard; the A100
+\texttt{true-2048} row (to be run) normalizes over the full $2048$. The
+$\sim$17\,hr wall-clock includes three 30-minute thermal duty-cycle
+cooldowns (the 4060 Ti box is duty-cycled on long runs); the run itself
+logged zero PCIe/AER interruptions across all 100 epochs.
+\textsuperscript{\dag}\,A100 timing is an estimate ($\sim$9\,hr,
+single-device, no gradient accumulation); its accuracies are pending
+the run.
+
+\textbf{What the A100 row tests.} The residual $\sim$0.9 points to the
+paper's $78.1\%$ is expected to come mostly from the
+gradient-accumulation Ghost-BN regime (each micro-step normalizes over
+$512$, not the full $2048$) plus LAMB implementation details and bf16.
+The \texttt{true-2048} recipe (\texttt{resnet50-imagenet true-2048}, a
+real single-forward batch 2048 on an $\sim$80\,GB card) isolates the BN
+piece: a single-device run over the full batch removes the Ghost-BN
+approximation entirely, so the top-1 gap between the two rows is a
+direct read-out of what BatchNorm sharding costs. \emph{Changed since
+the $76.66\%$ first run:} RandAugment is now timm-literal
+(\texttt{rand-m6-mstd0.5-inc1}).
+
+\subsection*{What A3 changes from the 2018 recipe}
+
+The ResNet-34 trainer above is a \emph{2018-era} recipe: the original
+paper's SGD-with-momentum plus the ``bag of tricks'' polish (cosine
+schedule, warmup, label smoothing, random-resized-crop). RSB-A3 is the
+\emph{2021} ``ResNet Strikes Back'' recipe (Wightman et al.). The
+architecture aside (basic block vs.\ bottleneck), every training knob
+that A3 sets differently is one lever of the three-year jump in how
+these networks are trained. The backbone code and the \texttt{.train}
+entry point are identical; only the \texttt{TrainConfig} differs. Here
+is the full diff:
+
+\begin{center}
+\begin{tabular}{@{}l l l p{5.7cm}@{}}
+\hline
+Knob & ResNet-34 (2018) & RSB-A3 (2021) & What the A3 choice buys \\
+\hline
+Backbone      & basic block, 21.8\,M   & bottleneck, 25.6\,M          & deeper net at similar cost; $1\times1$--$3\times3$--$1\times1$ bottleneck \\
+Optimizer     & SGD + momentum $0.9$   & LAMB                          & layer-wise adaptive LR, designed for very large batches \\
+Effective batch & 256                  & 2048 ($512\times4$ accum)     & the large-batch regime LAMB targets; grad-accum fits it on 16\,GB \\
+Peak LR       & $0.1$                  & $0.008$ @ bs2048              & LAMB's trust-ratio scale --- not comparable to SGD's $0.1$ \\
+Epochs        & 90                     & 100                           & essentially the same budget (A3 is the cheap RSB tier) \\
+Loss          & softmax cross-entropy  & BCE-with-logits, multi-hot    & treats classes independently; matches mixed soft targets \\
+Label smoothing & $0.1$                & $0.0$                         & subsumed --- BCE over soft mixup labels already softens targets \\
+Mixup / CutMix & none                  & $\alpha\,0.1$ / $\alpha\,1.0$ & interpolate/paste samples $\to$ soft multi-hot targets, strong regularizer \\
+RandAugment   & none                   & \texttt{m6 N2 mstd0.5 inc1}   & automated heavy color+geometric augmentation policy \\
+Weight decay  & $10^{-4}$, all params  & $0.02$, skip BN $\gamma/\beta$ + bias & $200\times$ stronger, but never decays scale/shift/bias params \\
+Train / eval res & $224$ / $224$        & $160$ / $224$                 & FixRes: train at cheap low res ($\sim$2$\times$ faster/step), test at high res --- the train/test gap helps \\
+BN statistics & global over batch      & Ghost-BN over 512             & side-effect of grad-accum (each micro-step normalizes its own 512); the A100 \texttt{true-2048} row removes it \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent What carries over unchanged: cosine LR decay, the 5-epoch
+warmup, random-resized-crop + horizontal flip as the base augmentation,
+bf16 matmul and convolution, and running-BN evaluation. The through-line
+of the 2018$\to$2021 shift is \emph{regularize harder, train bigger}:
+heavier augmentation (RandAugment + Mixup + CutMix), a loss that accepts
+soft targets (BCE), an order-of-magnitude more weight decay applied
+selectively, and a large-batch optimizer (LAMB) to make the longer,
+noisier training converge --- with FixRes buying back the compute the
+extra epochs would cost. Every one of these is a one-line
+\texttt{TrainConfig} change on the same verified backbone.
 
 \chapter{MobileNetV2}
 \label{chap:depthwise}

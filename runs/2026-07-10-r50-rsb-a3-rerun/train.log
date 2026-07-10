@@ -1,0 +1,234 @@
+ResNet-50 (ImageNet) · Lean 4 → JAX
+  Conv(3→64,7x7/2)+BN → Pool(3x3) → BN3(64→256,s1) → BN4(256→512,s2) → BN6(512→1024,s2) → BN3(1024→2048,s2) → GAP → 2048→1000
+
+ImageNet (1000-class) — tfds streaming pipeline
+lr=0.008000  batch_size=2048 (4 devices x 512)  epochs=100  params=25557032
+steps_per_epoch=625  total_steps=62500
+grad-accum=4x  micro_batch=512 (4 devices x 128)  -> effective_batch=2048  (LR targets effective)
+backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+Starting training...
+Resumed full train state from /home/skoonce/r50_a3_rerun/ckpt_e75.state.npz: step=46875 (epoch 76/100)
+E0710 04:42:51.334240 1266751 cuda_timer.cc:87] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0710 04:42:51.609008 1266751 cuda_timer.cc:87] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0710 04:42:52.109377 1266751 cuda_timer.cc:87] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+  step 46900/62500  loss=0.0034  lr=0.00129  (1.0ms/step avg)
+  step 47000/62500  loss=0.0045  lr=0.00127  (3.0ms/step avg)
+  step 47100/62500  loss=0.0044  lr=0.00126  (5.0ms/step avg)
+  step 47200/62500  loss=0.0029  lr=0.00124  (7.0ms/step avg)
+  step 47300/62500  loss=0.0034  lr=0.00123  (9.0ms/step avg)
+  step 47400/62500  loss=0.0039  lr=0.00121  (10.0ms/step avg)
+  step 47500/62500  loss=0.0045  lr=0.0012  (12.0ms/step avg)
+  Running validation ...
+[Epoch 76] lr=0.001195 loss(train_avg)=0.0033 val_top1=36124/49664 (0.7274) val_top5=0.9099 val_loss=1.1927  [580.0s train, 16.9s val]
+  step 47600/62500  loss=0.0043  lr=0.00118  (14.0ms/step avg)
+  step 47700/62500  loss=0.0045  lr=0.00117  (16.0ms/step avg)
+  step 47800/62500  loss=0.0026  lr=0.00115  (18.0ms/step avg)
+  step 47900/62500  loss=0.0029  lr=0.00114  (20.0ms/step avg)
+  step 48000/62500  loss=0.0044  lr=0.00112  (22.0ms/step avg)
+  step 48100/62500  loss=0.0045  lr=0.00111  (23.0ms/step avg)
+  Running validation ...
+[Epoch 77] lr=0.001102 loss(train_avg)=0.0033 val_top1=36277/49664 (0.7304) val_top5=0.911 val_loss=1.2081  [545.2s train, 12.4s val]
+  step 48200/62500  loss=0.0036  lr=0.00109  (25.0ms/step avg)
+  step 48300/62500  loss=0.0046  lr=0.00108  (27.0ms/step avg)
+  step 48400/62500  loss=0.0044  lr=0.00106  (29.0ms/step avg)
+  step 48500/62500  loss=0.0043  lr=0.00105  (31.0ms/step avg)
+  step 48600/62500  loss=0.0028  lr=0.00103  (32.0ms/step avg)
+  step 48700/62500  loss=0.0042  lr=0.00102  (34.0ms/step avg)
+  Running validation ...
+[Epoch 78] lr=0.001013 loss(train_avg)=0.0033 val_top1=36436/49664 (0.7337) val_top5=0.912 val_loss=1.178  [546.0s train, 12.4s val]
+  step 48800/62500  loss=0.0037  lr=0.00101  (36.0ms/step avg)
+  step 48900/62500  loss=0.0046  lr=0.00099  (38.0ms/step avg)
+  step 49000/62500  loss=0.0043  lr=0.00098  (39.0ms/step avg)
+  step 49100/62500  loss=0.0044  lr=0.00096  (41.0ms/step avg)
+  step 49200/62500  loss=0.0043  lr=0.00095  (43.0ms/step avg)
+  step 49300/62500  loss=0.0044  lr=0.00094  (45.0ms/step avg)
+  Running validation ...
+[Epoch 79] lr=0.000927 loss(train_avg)=0.0032 val_top1=36760/49664 (0.7402) val_top5=0.9169 val_loss=1.1347  [546.3s train, 12.6s val]
+  step 49400/62500  loss=0.004  lr=0.00092  (46.0ms/step avg)
+  step 49500/62500  loss=0.0045  lr=0.00091  (48.0ms/step avg)
+  step 49600/62500  loss=0.0044  lr=0.0009  (50.0ms/step avg)
+  step 49700/62500  loss=0.0042  lr=0.00088  (51.0ms/step avg)
+  step 49800/62500  loss=0.0041  lr=0.00087  (53.0ms/step avg)
+  step 49900/62500  loss=0.0036  lr=0.00086  (55.0ms/step avg)
+  step 50000/62500  loss=0.0042  lr=0.00084  (56.0ms/step avg)
+  Running validation ...
+[Epoch 80] lr=0.000844 loss(train_avg)=0.0032 val_top1=36899/49664 (0.743) val_top5=0.9191 val_loss=1.1343  [546.2s train, 12.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_rerun/ckpt_e80.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_rerun/ckpt_e80.state.npz (590 arrays, step=50000)
+  step 50100/62500  loss=0.0041  lr=0.00083  (58.0ms/step avg)
+  step 50200/62500  loss=0.0043  lr=0.00082  (60.0ms/step avg)
+  step 50300/62500  loss=0.0033  lr=0.0008  (61.0ms/step avg)
+  step 50400/62500  loss=0.0025  lr=0.00079  (63.0ms/step avg)
+  step 50500/62500  loss=0.0032  lr=0.00078  (65.0ms/step avg)
+  step 50600/62500  loss=0.0027  lr=0.00077  (66.0ms/step avg)
+  Running validation ...
+[Epoch 81] lr=0.000764 loss(train_avg)=0.0032 val_top1=37068/49664 (0.7464) val_top5=0.9214 val_loss=1.1114  [544.9s train, 12.3s val]
+  step 50700/62500  loss=0.0042  lr=0.00075  (68.0ms/step avg)
+  step 50800/62500  loss=0.0035  lr=0.00074  (70.0ms/step avg)
+  step 50900/62500  loss=0.0026  lr=0.00073  (71.0ms/step avg)
+  step 51000/62500  loss=0.0044  lr=0.00072  (73.0ms/step avg)
+  step 51100/62500  loss=0.0043  lr=0.00071  (74.0ms/step avg)
+  step 51200/62500  loss=0.0042  lr=0.00069  (76.0ms/step avg)
+  Running validation ...
+[Epoch 82] lr=0.000688 loss(train_avg)=0.0031 val_top1=37180/49664 (0.7486) val_top5=0.9214 val_loss=1.0953  [545.3s train, 12.4s val]
+  step 51300/62500  loss=0.004  lr=0.00068  (78.0ms/step avg)
+  step 51400/62500  loss=0.0043  lr=0.00067  (79.0ms/step avg)
+  step 51500/62500  loss=0.0025  lr=0.00066  (81.0ms/step avg)
+  step 51600/62500  loss=0.0042  lr=0.00065  (82.0ms/step avg)
+  step 51700/62500  loss=0.0039  lr=0.00064  (84.0ms/step avg)
+  step 51800/62500  loss=0.0038  lr=0.00062  (85.0ms/step avg)
+  Running validation ...
+[Epoch 83] lr=0.000616 loss(train_avg)=0.0031 val_top1=37394/49664 (0.7529) val_top5=0.9234 val_loss=1.1119  [545.4s train, 12.4s val]
+  step 51900/62500  loss=0.0042  lr=0.00061  (87.0ms/step avg)
+  step 52000/62500  loss=0.004  lr=0.0006  (89.0ms/step avg)
+  step 52100/62500  loss=0.004  lr=0.00059  (90.0ms/step avg)
+  step 52200/62500  loss=0.0043  lr=0.00058  (92.0ms/step avg)
+  step 52300/62500  loss=0.0043  lr=0.00057  (93.0ms/step avg)
+  step 52400/62500  loss=0.0025  lr=0.00056  (95.0ms/step avg)
+  step 52500/62500  loss=0.0042  lr=0.00055  (96.0ms/step avg)
+  Running validation ...
+[Epoch 84] lr=0.000547 loss(train_avg)=0.0032 val_top1=37504/49664 (0.7552) val_top5=0.9248 val_loss=1.0926  [545.3s train, 12.3s val]
+  step 52600/62500  loss=0.0041  lr=0.00054  (98.0ms/step avg)
+  step 52700/62500  loss=0.0039  lr=0.00053  (99.0ms/step avg)
+  step 52800/62500  loss=0.0032  lr=0.00052  (101.0ms/step avg)
+  step 52900/62500  loss=0.0029  lr=0.00051  (102.0ms/step avg)
+  step 53000/62500  loss=0.0037  lr=0.00049  (104.0ms/step avg)
+  step 53100/62500  loss=0.0033  lr=0.00048  (105.0ms/step avg)
+  Running validation ...
+[Epoch 85] lr=0.000482 loss(train_avg)=0.0031 val_top1=37560/49664 (0.7563) val_top5=0.9262 val_loss=1.0693  [545.9s train, 12.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_rerun/ckpt_e85.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_rerun/ckpt_e85.state.npz (590 arrays, step=53125)
+  step 53200/62500  loss=0.0042  lr=0.00047  (107.0ms/step avg)
+  step 53300/62500  loss=0.0043  lr=0.00046  (108.0ms/step avg)
+  step 53400/62500  loss=0.0042  lr=0.00045  (110.0ms/step avg)
+  step 53500/62500  loss=0.0039  lr=0.00045  (111.0ms/step avg)
+  step 53600/62500  loss=0.0031  lr=0.00044  (113.0ms/step avg)
+  step 53700/62500  loss=0.003  lr=0.00043  (114.0ms/step avg)
+  Running validation ...
+[Epoch 86] lr=0.000421 loss(train_avg)=0.0031 val_top1=37678/49664 (0.7587) val_top5=0.9272 val_loss=1.0493  [543.9s train, 12.3s val]
+  step 53800/62500  loss=0.0042  lr=0.00042  (116.0ms/step avg)
+  step 53900/62500  loss=0.0042  lr=0.00041  (117.0ms/step avg)
+  step 54000/62500  loss=0.0043  lr=0.0004  (118.0ms/step avg)
+  step 54100/62500  loss=0.004  lr=0.00039  (120.0ms/step avg)
+  step 54200/62500  loss=0.0042  lr=0.00038  (121.0ms/step avg)
+  step 54300/62500  loss=0.004  lr=0.00037  (123.0ms/step avg)
+  Running validation ...
+[Epoch 87] lr=0.000364 loss(train_avg)=0.0031 val_top1=37693/49664 (0.759) val_top5=0.9284 val_loss=1.0503  [544.1s train, 12.4s val]
+  step 54400/62500  loss=0.0042  lr=0.00036  (124.0ms/step avg)
+  step 54500/62500  loss=0.0037  lr=0.00035  (126.0ms/step avg)
+  step 54600/62500  loss=0.0041  lr=0.00034  (127.0ms/step avg)
+  step 54700/62500  loss=0.0022  lr=0.00034  (128.0ms/step avg)
+  step 54800/62500  loss=0.0042  lr=0.00033  (130.0ms/step avg)
+  step 54900/62500  loss=0.0037  lr=0.00032  (131.0ms/step avg)
+  step 55000/62500  loss=0.0028  lr=0.00031  (132.0ms/step avg)
+  Running validation ...
+[Epoch 88] lr=0.000311 loss(train_avg)=0.003 val_top1=37831/49664 (0.7617) val_top5=0.9288 val_loss=1.0484  [544.1s train, 12.4s val]
+  step 55100/62500  loss=0.0037  lr=0.0003  (134.0ms/step avg)
+  step 55200/62500  loss=0.0021  lr=0.00029  (135.0ms/step avg)
+  step 55300/62500  loss=0.0042  lr=0.00029  (137.0ms/step avg)
+  step 55400/62500  loss=0.0038  lr=0.00028  (138.0ms/step avg)
+  step 55500/62500  loss=0.0036  lr=0.00027  (139.0ms/step avg)
+  step 55600/62500  loss=0.0039  lr=0.00026  (141.0ms/step avg)
+  Running validation ...
+[Epoch 89] lr=0.000262 loss(train_avg)=0.003 val_top1=38013/49664 (0.7654) val_top5=0.93 val_loss=1.0298  [544.2s train, 12.3s val]
+  step 55700/62500  loss=0.0029  lr=0.00026  (142.0ms/step avg)
+  step 55800/62500  loss=0.0039  lr=0.00025  (143.0ms/step avg)
+  step 55900/62500  loss=0.0034  lr=0.00024  (145.0ms/step avg)
+  step 56000/62500  loss=0.0041  lr=0.00023  (146.0ms/step avg)
+  step 56100/62500  loss=0.004  lr=0.00023  (147.0ms/step avg)
+  step 56200/62500  loss=0.0024  lr=0.00022  (149.0ms/step avg)
+  Running validation ...
+[Epoch 90] lr=0.000217 loss(train_avg)=0.003 val_top1=38081/49664 (0.7668) val_top5=0.9307 val_loss=1.0244  [544.5s train, 12.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_rerun/ckpt_e90.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_rerun/ckpt_e90.state.npz (590 arrays, step=56250)
+  step 56300/62500  loss=0.0042  lr=0.00021  (150.0ms/step avg)
+  step 56400/62500  loss=0.0038  lr=0.00021  (151.0ms/step avg)
+  step 56500/62500  loss=0.0034  lr=0.0002  (153.0ms/step avg)
+  step 56600/62500  loss=0.0041  lr=0.00019  (154.0ms/step avg)
+  step 56700/62500  loss=0.0029  lr=0.00019  (155.0ms/step avg)
+  step 56800/62500  loss=0.0033  lr=0.00018  (156.0ms/step avg)
+  Running validation ...
+[Epoch 91] lr=0.000176 loss(train_avg)=0.0031 val_top1=38168/49664 (0.7685) val_top5=0.9323 val_loss=1.0219  [543.6s train, 12.2s val]
+  step 56900/62500  loss=0.002  lr=0.00017  (158.0ms/step avg)
+  step 57000/62500  loss=0.0038  lr=0.00017  (159.0ms/step avg)
+  step 57100/62500  loss=0.0018  lr=0.00016  (160.0ms/step avg)
+  step 57200/62500  loss=0.0042  lr=0.00016  (162.0ms/step avg)
+  step 57300/62500  loss=0.0038  lr=0.00015  (163.0ms/step avg)
+  step 57400/62500  loss=0.0041  lr=0.00014  (164.0ms/step avg)
+  step 57500/62500  loss=0.0041  lr=0.00014  (165.0ms/step avg)
+  Running validation ...
+[Epoch 92] lr=0.000139 loss(train_avg)=0.0031 val_top1=38142/49664 (0.768) val_top5=0.9324 val_loss=1.0145  [543.7s train, 12.3s val]
+  step 57600/62500  loss=0.0042  lr=0.00013  (167.0ms/step avg)
+  step 57700/62500  loss=0.0031  lr=0.00013  (168.0ms/step avg)
+  step 57800/62500  loss=0.0022  lr=0.00012  (169.0ms/step avg)
+  step 57900/62500  loss=0.0035  lr=0.00012  (170.0ms/step avg)
+  step 58000/62500  loss=0.0022  lr=0.00011  (172.0ms/step avg)
+  step 58100/62500  loss=0.0035  lr=0.00011  (173.0ms/step avg)
+  Running validation ...
+[Epoch 93] lr=0.000107 loss(train_avg)=0.0031 val_top1=38178/49664 (0.7687) val_top5=0.9332 val_loss=1.0239  [543.8s train, 12.5s val]
+  step 58200/62500  loss=0.0043  lr=0.0001  (174.0ms/step avg)
+  step 58300/62500  loss=0.0041  lr=0.0001  (175.0ms/step avg)
+  step 58400/62500  loss=0.004  lr=9e-05  (177.0ms/step avg)
+  step 58500/62500  loss=0.0043  lr=9e-05  (178.0ms/step avg)
+  step 58600/62500  loss=0.0036  lr=8e-05  (179.0ms/step avg)
+  step 58700/62500  loss=0.0038  lr=8e-05  (180.0ms/step avg)
+  Running validation ...
+[Epoch 94] lr=7.9e-05 loss(train_avg)=0.003 val_top1=38290/49664 (0.771) val_top5=0.9334 val_loss=1.0225  [543.6s train, 12.3s val]
+  step 58800/62500  loss=0.0039  lr=8e-05  (181.0ms/step avg)
+  step 58900/62500  loss=0.0041  lr=7e-05  (183.0ms/step avg)
+  step 59000/62500  loss=0.0043  lr=7e-05  (184.0ms/step avg)
+  step 59100/62500  loss=0.0034  lr=6e-05  (185.0ms/step avg)
+  step 59200/62500  loss=0.0037  lr=6e-05  (186.0ms/step avg)
+  step 59300/62500  loss=0.0034  lr=6e-05  (187.0ms/step avg)
+  Running validation ...
+[Epoch 95] lr=5.5e-05 loss(train_avg)=0.003 val_top1=38316/49664 (0.7715) val_top5=0.9331 val_loss=0.9944  [543.0s train, 12.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_rerun/ckpt_e95.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_rerun/ckpt_e95.state.npz (590 arrays, step=59375)
+  step 59400/62500  loss=0.0034  lr=5e-05  (189.0ms/step avg)
+  step 59500/62500  loss=0.0042  lr=5e-05  (190.0ms/step avg)
+  step 59600/62500  loss=0.004  lr=5e-05  (191.0ms/step avg)
+  step 59700/62500  loss=0.0038  lr=4e-05  (192.0ms/step avg)
+  step 59800/62500  loss=0.0038  lr=4e-05  (193.0ms/step avg)
+  step 59900/62500  loss=0.004  lr=4e-05  (194.0ms/step avg)
+  step 60000/62500  loss=0.0037  lr=3e-05  (195.0ms/step avg)
+  Running validation ...
+[Epoch 96] lr=3.5e-05 loss(train_avg)=0.003 val_top1=38279/49664 (0.7708) val_top5=0.9331 val_loss=1.0077  [543.9s train, 12.2s val]
+  step 60100/62500  loss=0.0026  lr=3e-05  (197.0ms/step avg)
+  step 60200/62500  loss=0.0042  lr=3e-05  (198.0ms/step avg)
+  step 60300/62500  loss=0.003  lr=3e-05  (199.0ms/step avg)
+  step 60400/62500  loss=0.0041  lr=2e-05  (200.0ms/step avg)
+  step 60500/62500  loss=0.0028  lr=2e-05  (201.0ms/step avg)
+  step 60600/62500  loss=0.0042  lr=2e-05  (202.0ms/step avg)
+  Running validation ...
+[Epoch 97] lr=2e-05 loss(train_avg)=0.003 val_top1=38336/49664 (0.7719) val_top5=0.9335 val_loss=1.0135  [543.2s train, 12.2s val]
+  step 60700/62500  loss=0.004  lr=2e-05  (204.0ms/step avg)
+  step 60800/62500  loss=0.0037  lr=2e-05  (205.0ms/step avg)
+  step 60900/62500  loss=0.0039  lr=1e-05  (206.0ms/step avg)
+  step 61000/62500  loss=0.0033  lr=1e-05  (207.0ms/step avg)
+  step 61100/62500  loss=0.0037  lr=1e-05  (208.0ms/step avg)
+  step 61200/62500  loss=0.0042  lr=1e-05  (209.0ms/step avg)
+  Running validation ...
+[Epoch 98] lr=9e-06 loss(train_avg)=0.003 val_top1=38320/49664 (0.7716) val_top5=0.9332 val_loss=1.0104  [541.7s train, 12.3s val]
+  step 61300/62500  loss=0.0041  lr=1e-05  (210.0ms/step avg)
+  step 61400/62500  loss=0.0029  lr=1e-05  (211.0ms/step avg)
+  step 61500/62500  loss=0.0041  lr=1e-05  (212.0ms/step avg)
+  step 61600/62500  loss=0.004  lr=0.0  (214.0ms/step avg)
+  step 61700/62500  loss=0.0041  lr=0.0  (215.0ms/step avg)
+  step 61800/62500  loss=0.0029  lr=0.0  (216.0ms/step avg)
+  Running validation ...
+[Epoch 99] lr=2e-06 loss(train_avg)=0.003 val_top1=38347/49664 (0.7721) val_top5=0.9333 val_loss=1.0133  [541.4s train, 12.2s val]
+  step 61900/62500  loss=0.0036  lr=0.0  (217.0ms/step avg)
+  step 62000/62500  loss=0.0031  lr=0.0  (218.0ms/step avg)
+  step 62100/62500  loss=0.0042  lr=0.0  (219.0ms/step avg)
+  step 62200/62500  loss=0.004  lr=0.0  (220.0ms/step avg)
+  step 62300/62500  loss=0.0041  lr=0.0  (221.0ms/step avg)
+  step 62400/62500  loss=0.0038  lr=0.0  (222.0ms/step avg)
+  step 62500/62500  loss=0.0029  lr=0.0  (223.0ms/step avg)
+  Running validation ...
+[Epoch 100] lr=0.0 loss(train_avg)=0.0031 val_top1=38352/49664 (0.7722) val_top5=0.9334 val_loss=1.009  [541.3s train, 12.2s val]
+saved 54 param-groups to /home/skoonce/r50_a3_rerun/ckpt_e100.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_rerun/ckpt_e100.state.npz (590 arrays, step=62500)
+saved 54 param-groups to /home/skoonce/r50_a3_rerun/ckpt.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_rerun/ckpt.state.npz (590 arrays, step=62500)
+
+Done. Total time: 13957.9s
