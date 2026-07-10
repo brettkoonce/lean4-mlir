@@ -1993,12 +1993,48 @@ that the rest of the book leans on.
   \lean{Proofs.pdiv_dense}
   \leanok
   \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
-  \(\partial (Wx + b)_j / \partial x_i = W_{ij}\). Derived from foundation rules.
+  For the dense layer
+  \(\mathrm{dense}(W, b)\, x = \lambda j.\; \bigl(\sum_i x_i\, W_{ij}\bigr) + b_j\):
+  \[
+    \pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j = W_{ij}.
+  \]
+  No hypotheses: dense is affine, so the differentiability obligations
+  are discharged inside the proof rather than assumed.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_dense}.
+\emph{Sketch: factor the layer as (finite sum of bilinear summands) +
+constant, distribute \(\pdiv\), apply the product rule per summand,
+collapse the Kronecker \(\delta\). Every foundation rule from
+Chapter~1 except the chain rule fires exactly once.}
+\begin{enumerate}
+  \item \(\pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j
+          = \pdiv\bigl(\lambda y\, j'.\, \textstyle\sum_{i'} y_{i'} W_{i'j'}\bigr)\, x\, i\, j\).
+    \pf{Split the layer as \(\bigl(\sum_{i'} \cdots\bigr) + (\text{const } b)\)
+    and apply the sum rule (Theorem~\ref{ax:pdiv_add}) and the constant
+    rule (Theorem~\ref{ax:pdiv_const}). Their differentiability
+    hypotheses hold because each summand
+    \(y \mapsto y_{i'} \cdot W_{i'j'}\) is (reindex)\,\(\times\)\,(constant)
+    --- differentiable since reindexing is a continuous linear map ---
+    and the finite sum inherits differentiability
+    (\texttt{DifferentiableAt.fun\_sum}).}
+  \item \(\prev = \sum_{i'} \pdiv\bigl(\lambda y\, j'.\,
+          y_{i'} \cdot W_{i'j'}\bigr)\, x\, i\, j\).
+    \pf{Finite-sum rule (Theorem~\ref{thm:pdiv_finset_sum}), with the
+    same per-summand differentiability.}
+  \item For each \(i'\):
+    \(\pdiv\bigl(\lambda y\, j'.\, y_{i'} \cdot W_{i'j'}\bigr)\, x\, i\, j
+      = \delta_{i i'} \cdot W_{i'j}\).
+    \pf{Product rule (Theorem~\ref{ax:pdiv_mul}) on
+    (reindex)\,\(\times\)\,(constant); the reindex Jacobian
+    (Theorem~\ref{ax:pdiv_reindex}) with \(\sigma = \lambda\_.\, i'\)
+    contributes the \(\delta\), the constant factor's Jacobian
+    vanishes (Theorem~\ref{ax:pdiv_const}); case split on \(i = i'\).}
+  \item \Qed{}
+    \pf{Substitute 3 into 2: \(\sum_{i'} \delta_{i i'} W_{i'j} = W_{ij}\)
+    (\texttt{Finset.sum\_ite\_eq}); with 1 this is the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Dense Jacobian wrt weight]
@@ -2006,13 +2042,55 @@ Mechanical; see \leandocref{Proofs.pdiv\_dense}.
   \lean{Proofs.pdiv_dense_W}
   \leanok
   \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
-  \(\partial (Wx + b)_j / \partial W_{i'j'} = x_{i'} \delta_{jj'}\). Phase 7;
-  derived from foundation rules over the flatten bijection.
+  Phase 7; the symmetric counterpart of
+  Theorem~\ref{ax:pdiv_dense}, differentiating in \(W\) instead of
+  \(x\). Since \(\pdiv\) works on vectors, view the layer as a function
+  of the \emph{flattened} weights: for \(v \in \Vect{m \cdot n}\), let
+  \(F(v) := \mathrm{dense}(\mathrm{unflatten}\, v,\, b)\, x\), and write
+  \(\varphi\) for the index bijection
+  \((i, j) \leftrightarrow \varphi(i, j)\) (\texttt{finProdFinEquiv}).
+  \Prove{} for all \(i, j', j\):
+  \[
+    \pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j')\, j
+      = \delta_{jj'}\, x_i.
+  \]
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_dense\_W}.
+\emph{Sketch: same skeleton as Theorem~\ref{ax:pdiv_dense} --- split,
+distribute, product rule, collapse --- with the reindex step now going
+through the flatten bijection.}
+\begin{enumerate}
+  \item \(F(v)_{j_o} = \bigl(\sum_{i'} x_{i'} \cdot v_{\varphi(i', j_o)}\bigr) + b_{j_o}\).
+    \pf{Unfold \(\mathrm{dense}\) and \(\mathrm{unflatten}\).}
+  \item \(\pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j')\, j
+          = \pdiv\bigl(\lambda w\, j_o.\, \textstyle\sum_{i'}
+            x_{i'} \cdot w_{\varphi(i', j_o)}\bigr)\,
+            (\mathrm{flatten}\, W)\, \varphi(i, j')\, j\).
+    \pf{Drop the constant bias: sum rule (Theorem~\ref{ax:pdiv_add})
+    and constant rule (Theorem~\ref{ax:pdiv_const}); each summand is
+    (constant)\,\(\times\)\,(reindex), differentiable, and the finite
+    sum inherits differentiability (\texttt{DifferentiableAt.fun\_sum}).}
+  \item \(\prev = \sum_{i'} \pdiv\bigl(\lambda w\, j_o.\,
+          x_{i'} \cdot w_{\varphi(i', j_o)}\bigr)\,
+          (\mathrm{flatten}\, W)\, \varphi(i, j')\, j\).
+    \pf{Finite-sum rule (Theorem~\ref{thm:pdiv_finset_sum}).}
+  \item For each \(i'\): the summand equals
+    \(\text{if } i = i' \wedge j' = j \text{ then } x_i \text{ else } 0\).
+    \pf{Product rule (Theorem~\ref{ax:pdiv_mul}) on
+    (constant \(x_{i'}\))\,\(\times\)\,(reindex
+    \(\sigma = \lambda j_o.\, \varphi(i', j_o)\)); the constant
+    factor's Jacobian vanishes (Theorem~\ref{ax:pdiv_const}), and the
+    reindex Jacobian (Theorem~\ref{ax:pdiv_reindex}) is \(1\) exactly
+    when \(\varphi(i, j') = \varphi(i', j)\), which by injectivity of
+    \(\varphi\) is \(i = i' \wedge j' = j\).}
+  \item \Qed{}
+    \pf{Sum 4 over \(i'\): if \(j' = j\) the Kronecker condition picks
+    the single term \(x_i\) (\texttt{Finset.sum\_ite\_eq}); if
+    \(j' \neq j\) every term is \(0\). Both match
+    \(\delta_{jj'}\, x_i\); with 2 and 3 this is the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[ReLU Jacobian (guarded subgradient)]
@@ -2020,46 +2098,125 @@ Mechanical; see \leandocref{Proofs.pdiv\_dense\_W}.
   \lean{Proofs.pdiv_relu}
   \leanok
   \uses{ax:pdiv}
-  Pdiv of \(\mathrm{ReLU}\) at smooth points (\(\forall k,\ x_k \neq 0\)).
-  Proved via local-diagonal-CLM transport: at a smooth point ReLU
-  agrees with the diagonal indicator CLM
-  \(\Pi_k\, (\text{if } x_k > 0 \text{ then } \mathrm{proj}_k \text{ else } 0)\)
-  on \(\mathrm{Metric.ball}\, x\, (\min |x_k|)\) (every coordinate
-  keeps its sign), and \texttt{HasFDerivAt.congr\_of\_eventuallyEq}
-  transports the CLM's self-fderiv to ReLU.
+  \Assume{}
+  \begin{enumerate}
+    \item \(x\) is a smooth point of \(\mathrm{ReLU}\): every
+          coordinate \(x_k \neq 0\) \hfill[\texttt{h\_smooth}]
+  \end{enumerate}
+  \Prove{} for all \(i, j\):
+  \[
+    \pdiv(\mathrm{ReLU})\, x\, i\, j
+      = \delta_{ij} \cdot [x_i > 0],
+  \]
+  where \([P]\) is the Iverson bracket (\(1\) if \(P\) holds, else \(0\)).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_relu}.
+\emph{Sketch: near a smooth point, ReLU \emph{is} a fixed linear map
+(each coordinate is committed to its branch of the \(\max\)); compute
+that map's derivative and transport it.}
+\begin{enumerate}
+  \item Define \(\Lambda_x := \Pi_k\,
+    (\text{if } x_k > 0 \text{ then } \mathrm{proj}_k \text{ else } 0)\),
+    the diagonal indicator CLM (\texttt{reluLinearPart}).
+  \item Let \(r := \min_k |x_k|\). Then \(r > 0\), and \(\mathrm{ReLU}\)
+    agrees with \(\Lambda_x\) on the ball \(B(x, r)\).
+    \pf{\(r > 0\) by assumption 1. For \(y \in B(x, r)\) and every
+    \(k\): \(|y_k - x_k| \le \lVert y - x \rVert < r \le |x_k|\), so
+    \(y_k\) has the sign of \(x_k\); both functions then return
+    \(y_k\) where \(x_k > 0\) and \(0\) where \(x_k < 0\).}
+  \item \(\mathrm{ReLU}\) has Fréchet derivative \(\Lambda_x\) at \(x\).
+    \pf{A continuous linear map is its own derivative; by 2 the two
+    functions agree on a neighborhood of \(x\), and
+    \texttt{HasFDerivAt.congr\_of\_eventuallyEq} transports the
+    derivative across that agreement.}
+  \item \Qed{}
+    \pf{By Definition~\ref{ax:pdiv} and 3,
+    \(\pdiv(\mathrm{ReLU})\, x\, i\, j = \Lambda_x(\basisVec_i)_j
+      = [x_j > 0] \cdot (\basisVec_i)_j\); case split on \(i = j\)
+    (when they coincide, \([x_j > 0] = [x_i > 0]\)) gives the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Softmax cross-entropy gradient]
   \label{ax:softmaxCE_grad}
   \lean{Proofs.softmaxCE_grad}
   \leanok
-  \uses{ax:pdiv}
-  \(\partial L / \partial z = \mathrm{softmax}(z) - \mathrm{onehot}(y)\).
-  Proved by chain rule on \(-\log \circ \mathrm{softmax\_label}\) using
-  \texttt{HasFDerivAt.log} (with \(\mathrm{softmax}(z)[\,\ell\,] > 0\) from
-  exp positivity) composed with the proved \(\mathrm{softmax}\) Jacobian.
+  \uses{ax:pdiv, ax:pdiv_softmax}
+  Write \(p := \mathrm{softmax}(z)\) and
+  \(\mathrm{CE}(z, \ell) := -\log p_\ell\) (viewed as
+  \(\Vect{1}\)-valued so \(\pdiv\) applies; we read off the only
+  output coordinate).
+  \Prove{} for all \(j\):
+  \[
+    \pdiv\bigl(\mathrm{CE}(\cdot, \ell)\bigr)\, z\, j\, 0
+      = p_j - \mathrm{onehot}(\ell)_j.
+  \]
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.softmaxCE\_grad}.
+\emph{Sketch: chain rule on \(-\log \circ (z \mapsto p_\ell)\), with
+the softmax Jacobian (proved in Ch~\ref{chap:attention}) supplying the
+inner derivative; the \(1/p_\ell\) from \(\log\) cancels the
+\(p_\ell\) the Jacobian produces.}
+\begin{enumerate}
+  \item \(p_\ell > 0\), in particular \(p_\ell \neq 0\).
+    \pf{\(p_\ell\) is a positive exponential over a positive finite
+    sum of exponentials.}
+  \item \(\pdiv\bigl(\mathrm{CE}(\cdot, \ell)\bigr)\, z\, j\, 0
+          = \fderiv_{\R}\,\bigl(z' \mapsto \mathrm{CE}(z', \ell)\bigr)\, z\, (\basisVec_j)\).
+    \pf{Definition~\ref{ax:pdiv}; the \(\Vect{1}\) wrapper just
+    evaluates the single output coordinate (\texttt{fderiv\_apply}),
+    legitimate because the wrapper is differentiable ---
+    \(\mathrm{softmax}\) is differentiable and \(\log\) is
+    differentiable away from \(0\), which 1 grants.}
+  \item \(\fderiv_{\R}\,\bigl(z' \mapsto \mathrm{CE}(z', \ell)\bigr)\, z
+          = -\bigl(p_\ell^{-1} \cdot
+            \fderiv_{\R}\,(z' \mapsto \mathrm{softmax}(z')_\ell)\, z\bigr)\).
+    \pf{\(\mathrm{CE}(\cdot, \ell) = -\log \circ
+    (z' \mapsto \mathrm{softmax}(z')_\ell)\);
+    \texttt{HasFDerivAt.log} with 1 differentiates the \(\log\), then
+    negate.}
+  \item \(\fderiv_{\R}\,(z' \mapsto \mathrm{softmax}(z')_\ell)\, z\, (\basisVec_j)
+          = \pdiv(\mathrm{softmax})\, z\, j\, \ell
+          = p_\ell\,(\delta_{j\ell} - p_j)\).
+    \pf{Definition~\ref{ax:pdiv}, then the softmax Jacobian
+    (Theorem~\ref{ax:pdiv_softmax}).}
+  \item \Qed{}
+    \pf{Chain 2--4:
+    \(-p_\ell^{-1} \cdot p_\ell\,(\delta_{j\ell} - p_j)
+      = p_j - \delta_{j\ell}\), cancelling by 1; and
+    \(\mathrm{onehot}(\ell)_j = \delta_{j\ell}\) by definition.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Dense VJP]
   \label{thm:dense_has_vjp}
   \lean{Proofs.dense_has_vjp}
   \leanok
-  \uses{ax:pdiv_dense}
+  \uses{ax:pdiv_dense, def:hasvjp}
+  \(\HasVJP\, \bigl(\mathrm{dense}(W, b)\bigr)\): the input-gradient
+  backward of a dense layer is multiplication by \(W\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.dense\_has\_vjp}.
+\begin{enumerate}
+  \item Define \(B(x, dy) := W\, dy\), i.e.\
+    \(B(x, dy)_i = \sum_j W_{ij}\, dy_j\).
+  \item \Suffices{} for all \(x\), \(dy\), \(i\):
+    \(B(x, dy)_i = \sum_j
+      \pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j \cdot dy_j\).
+    \pf{Definition~\ref{def:hasvjp}, with \(B\) as the candidate
+    backward function.}
+  \item \Qed{}
+    \pf{The Dense Jacobian (Theorem~\ref{ax:pdiv_dense}) gives
+    \(\pdiv\bigl(\mathrm{dense}(W, b)\bigr)\, x\, i\, j = W_{ij}\);
+    substituting into 2 leaves exactly \(\sum_j W_{ij}\, dy_j
+    = B(x, dy)_i\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Dense weight gradient is the outer product]
@@ -2067,12 +2224,28 @@ Mechanical; see \leandocref{Proofs.dense\_has\_vjp}.
   \lean{Proofs.dense_weight_grad_correct}
   \leanok
   \uses{ax:pdiv_dense_W}
-  \(dW = x \otimes dy\). Phase 7 promoted from vacuous \texttt{rfl} to theorem.
+  \(dW = x \otimes dy\). Phase 7 promoted from vacuous \texttt{rfl} to
+  theorem: with \(F\) and \(\varphi\) as in
+  Theorem~\ref{ax:pdiv_dense_W},
+  \Prove{} for all \(i, j\):
+  \[
+    (x \otimes dy)_{ij}
+      = \sum_k \pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j)\, k \cdot dy_k.
+  \]
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.dense\_weight\_grad\_correct}.
+\begin{enumerate}
+  \item Each summand:
+    \(\pdiv F\, (\mathrm{flatten}\, W)\, \varphi(i, j)\, k \cdot dy_k
+      = (\text{if } k = j \text{ then } x_i \text{ else } 0) \cdot dy_k\).
+    \pf{Dense Jacobian wrt weight (Theorem~\ref{ax:pdiv_dense_W}).}
+  \item \Qed{}
+    \pf{The sum in 1 collapses at \(k = j\)
+    (\texttt{Finset.sum\_eq\_single}) to \(x_i \cdot dy_j\), which is
+    \((x \otimes dy)_{ij}\) by definition of the outer product.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Dense bias gradient is identity]
@@ -2081,11 +2254,27 @@ Mechanical; see \leandocref{Proofs.dense\_weight\_grad\_correct}.
   \leanok
   \uses{ax:pdiv_add, ax:pdiv_const, ax:pdiv_id}
   \(db = dy\). Phase 7: derived, no new axiom.
+  \Prove{} for all \(i\):
+  \[
+    dy_i = \sum_j \pdiv\bigl(b' \mapsto \mathrm{dense}(W, b')\, x\bigr)\, b\, i\, j \cdot dy_j.
+  \]
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.dense\_bias\_grad\_correct}.
+\begin{enumerate}
+  \item \(\pdiv\bigl(b' \mapsto \mathrm{dense}(W, b')\, x\bigr)\, b\, i\, j
+          = \delta_{ij}\).
+    \pf{As a function of \(b'\), the layer is
+    \((\text{constant in } b') + b'\): sum rule
+    (Theorem~\ref{ax:pdiv_add}), constant rule
+    (Theorem~\ref{ax:pdiv_const}), and identity Jacobian
+    (Theorem~\ref{ax:pdiv_id}). (This is the Lean lemma
+    \texttt{pdiv\_dense\_b}.)}
+  \item \Qed{}
+    \pf{Substitute 1: \(\sum_j \delta_{ij}\, dy_j = dy_i\)
+    (\texttt{Finset.sum\_eq\_single}).}
+\end{enumerate}
 \end{proof}
 
 \begin{definition}[ReLU VJP]
