@@ -2824,48 +2824,200 @@ respects the image's 2-D structure.
   via the explicit definition.
 \end{definition}
 
+\begin{definition}[3D VJP record]
+  \label{def:hasvjp3}
+  \lean{Proofs.HasVJP3}
+  \leanok
+  \uses{ax:pdiv, def:hasvjp}
+  The rank-3 analogue of Definition~\ref{def:hasvjp}. For
+  \(f : \mathrm{Tensor3} \to \mathrm{Tensor3}\), define
+  \(\pdiv_3 f\, x\, (c_i, h_i, w_i)\, (c_o, h_o, w_o)\) as \(\pdiv\)
+  of the flattened map
+  \(v \mapsto \mathrm{flatten}\bigl(f(\mathrm{unflatten}\, v)\bigr)\)
+  with both indices decoded through the
+  \((c, h, w) \leftrightarrow \text{flat}\) bijection. Then
+  \(\HasVJPthree\, f\) bundles a backward function \(B\) with: for all
+  \(x\), \(dy\), \((c_i, h_i, w_i)\),
+  \[
+    B(x, dy)_{c_i h_i w_i}
+      = \sum_{c_o, h_o, w_o}
+        \pdiv_3 f\, x\, (c_i, h_i, w_i)\, (c_o, h_o, w_o)
+        \cdot dy_{c_o h_o w_o}.
+  \]
+\end{definition}
+
 \begin{theorem}[Conv2d input VJP]
   \label{ax:conv2d_has_vjp3}
   \lean{Proofs.conv2d_has_vjp3}
   \leanok
-  \uses{ax:conv2d}
-  Reversed-kernel convolution formula. Phase 1 (Apr 2026) proof
-  via \texttt{pdiv\_finset\_sum} \(\times 3\) +
-  \texttt{pdiv\_const\_mul\_pi\_pad\_eval} per-summand +
-  \(\sum_{c,k_h,k_w}\) collapse.
+  \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp3}
+  \(\HasVJPthree\, \bigl(\mathrm{conv2d}(W, b)\bigr)\): the input
+  backward of a convolution is the reversed-kernel convolution.
+  Phase 1 (Apr 2026). No hypotheses: conv2d is affine in its input.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.conv2d\_has\_vjp3}.
+\emph{Sketch: same split--distribute--product-rule--collapse skeleton
+as the dense Jacobians (Theorems~\ref{ax:pdiv_dense},
+\ref{ax:pdiv_dense_W}), with two convolution-specific twists: the
+finite-sum rule fires three times (over \(c, k_h, k_w\)), and the
+product rule's variable factor is a \emph{pad-conditional} projection
+--- a case split on the SAME-padding condition decides between a
+coordinate projection and the zero function.}
+\begin{enumerate}
+  \item Define \(B(x, dy)_{c_i h_i w_i} :=
+    \sum_{c_o, h_o, w_o} [\text{pad-valid}]\;
+      W_{c_o, c_i, \hat{k}_h, \hat{k}_w} \cdot dy_{c_o h_o w_o}\),
+    where \(\hat{k}_h = h_i + p_H - h_o\),
+    \(\hat{k}_w = w_i + p_W - w_o\) are the reconstructed kernel
+    offsets and \([\text{pad-valid}]\) requires them to lie in
+    \([0, k_H) \times [0, k_W)\). Under the substitution
+    \(k_h \leftrightarrow k_H - 1 - k_h\) this is the reversed-kernel,
+    channel-swapped convolution of \(dy\) against \(W\) that the MLIR
+    backward emits (\texttt{transpose} + \texttt{reverse} +
+    \texttt{convolution}).
+  \item \Suffices{} for all \(x\), \(dy\), \((c_i, h_i, w_i)\):
+    \(B(x, dy)_{c_i h_i w_i}\) equals the \(\pdiv_3\) triple sum.
+    \pf{Definition~\ref{def:hasvjp3}, with \(B\) as the candidate
+    backward function.}
+  \item The flattened forward
+    \(v \mapsto \mathrm{flatten}\bigl(\mathrm{conv2d}(W, b)\,
+      (\mathrm{unflatten}\, v)\bigr)\)
+    is affine in \(v\): a constant bias term plus
+    \(\sum_{c, k_h, k_w} W_{o(\mathrm{idx}), c, k_h, k_w} \cdot
+      (\text{pad-conditional projection of } v)\).
+    \pf{Unfold \(\mathrm{conv2d}\) and \(\mathrm{flatten}\);
+    definitional (Definition~\ref{ax:conv2d}).}
+  \item Per-index Jacobian: for every flat \(\mathrm{idx_{in}}\),
+    \(\mathrm{idx_{out}}\),
+    \(\pdiv\)(flattened forward) \(=
+      \sum_{c, k_h, k_w} W_{o(\mathrm{idx_{out}}), c, k_h, k_w} \cdot
+      [\text{pad-valid} \wedge \mathrm{idx_{in}} =
+        \text{encoded input position}]\).
+    \pf{By 3: sum rule + constant rule
+    (Theorems~\ref{ax:pdiv_add}, \ref{ax:pdiv_const}) drop the bias;
+    the finite-sum rule (Theorem~\ref{thm:pdiv_finset_sum}) fires
+    three times over \((c, k_h, k_w)\); per summand the product rule
+    (Theorem~\ref{ax:pdiv_mul}) applies with the \(W\)-factor
+    constant, and a case split on the pad condition leaves either a
+    coordinate projection --- a reindex, whose Jacobian is the
+    Kronecker indicator (Theorem~\ref{ax:pdiv_reindex}) --- or the
+    zero function (Theorem~\ref{ax:pdiv_const}).}
+  \item Contract 4 with \(dy\) and collapse: re-index the sum over
+    flat \(\mathrm{idx_{out}}\) to \((c_o, h_o, w_o)\); for each
+    fixed output position the triple sum over \((c, k_h, k_w)\)
+    collapses by three \texttt{Finset.sum\_eq\_single} applications
+    at \(c = c_i\), \(k_h = \hat{k}_h\), \(k_w = \hat{k}_w\).
+    \pf{The indicator in 4 is nonzero for exactly that one summand.}
+  \item \Qed{}
+    \pf{What remains after 5 is exactly \(B(x, dy)_{c_i h_i w_i}\)
+    from 1; with 2 this is the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Conv2d weight VJP]
   \label{ax:conv2d_weight_grad_has_vjp}
   \lean{Proofs.conv2d_weight_grad_has_vjp}
   \leanok
-  \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex}
-  Phase 7: the transpose-trick formula via \texttt{Kernel4.flatten}.
-  Derived from foundation rules.
+  \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp}
+  Phase 7: the transpose-trick formula. As with the dense weight
+  Jacobian (Theorem~\ref{ax:pdiv_dense_W}), differentiate in the
+  \emph{flattened} kernel: let
+  \(F(v) := \mathrm{flatten}\bigl(\mathrm{conv2d}
+    (\mathrm{unflatten}\, v,\, b)\, x\bigr)\)
+  for \(v \in \Vect{o_c \cdot i_c \cdot k_H \cdot k_W}\).
+  \Prove{} \(\HasVJP\, F\), with backward
+  \(dW_{o, c, k_h, k_w} = \sum_{h_i, w_i}
+    [\text{pad-valid}]\; x_{c,\, h_i + k_h - p_H,\, w_i + k_w - p_W}
+    \cdot dy_{o, h_i, w_i}\)
+  --- a convolution of the saved input against the upstream gradient.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.conv2d\_weight\_grad\_has\_vjp}.
+\emph{Sketch: the dual of Theorem~\ref{ax:conv2d_has_vjp3} --- the
+same affine decomposition, but now \(v\) (the kernel) sits in the
+reindex factor and the saved input \(x\) is the constant.}
+\begin{enumerate}
+  \item Define \(B(v, dy)_{\mathrm{idx}}\), decoding
+    \(\mathrm{idx} \leftrightarrow (o', c', k_h', k_w')\), as
+    \(\sum_{h_i, w_i} (\text{pad-conditional } x \text{ value at }
+      (c', h_i + k_h' - p_H, w_i + k_w' - p_W))
+      \cdot dy_{\mathrm{flat}(o', h_i, w_i)}\).
+  \item \Suffices{} for all \(v\), \(dy\), \(\mathrm{idx}\):
+    \(B(v, dy)_{\mathrm{idx}} = \sum_{\mathrm{idx_{out}}}
+      \pdiv F\, v\, \mathrm{idx}\, \mathrm{idx_{out}} \cdot
+      dy_{\mathrm{idx_{out}}}\).
+    \pf{Definition~\ref{def:hasvjp}, with \(B\) as the candidate
+    backward function.}
+  \item \(F\) is affine in \(v\): constant bias plus
+    \(\sum_{c, k_h, k_w} v_{\varphi(o(\mathrm{idx_{out}}), c, k_h, k_w)}
+      \cdot (\text{pad-conditional } x \text{ term})\), where
+    \(\varphi\) is the kernel-index bijection
+    (\texttt{Kernel4.flatten}).
+    \pf{Unfold \(\mathrm{conv2d}\) and the flattens; definitional
+    (Definition~\ref{ax:conv2d}).}
+  \item Per-index Jacobian:
+    \(\pdiv F\, v\, \mathrm{idx}\, \mathrm{idx_{out}}
+      = \sum_{c, k_h, k_w}
+        [\mathrm{idx} = \varphi(o(\mathrm{idx_{out}}), c, k_h, k_w)]
+        \cdot (\text{pad-conditional } x \text{ term})\).
+    \pf{By 3: sum rule + constant rule (Theorems~\ref{ax:pdiv_add},
+    \ref{ax:pdiv_const}) drop the bias; finite-sum rule
+    (Theorem~\ref{thm:pdiv_finset_sum}) \(\times 3\); product rule
+    (Theorem~\ref{ax:pdiv_mul}) with the \(x\)-factor constant and
+    the \(v\)-factor a reindex through \(\varphi\), whose Jacobian is
+    the Kronecker indicator (Theorem~\ref{ax:pdiv_reindex}).}
+  \item Contract 4 with \(dy\) and collapse: the \((c, k_h, k_w)\)
+    sum collapses on \(\mathrm{idx}\)'s decode
+    \((c', k_h', k_w')\) by injectivity of \(\varphi\)
+    (\texttt{Finset.sum\_eq\_single} \(\times 3\)); re-index
+    \(\mathrm{idx_{out}}\) to \((o, h_i, w_i)\) and collapse the
+    channel sum at \(o = o'\).
+    \pf{The indicator forces \(o = o'\); the spatial sums survive.}
+  \item \Qed{}
+    \pf{What remains after 5 is exactly \(B(v, dy)_{\mathrm{idx}}\)
+    from 1; with 2 this is the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Conv2d bias VJP]
   \label{ax:conv2d_bias_grad_has_vjp}
   \lean{Proofs.conv2d_bias_grad_has_vjp}
   \leanok
-  \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_reindex}
-  Phase 9: sum cotangent over spatial dims per channel.
-  Derived from foundation rules.
+  \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_reindex, def:hasvjp}
+  Phase 9: sum the cotangent over spatial dims per channel.
+  \Prove{} \(\HasVJP\, \bigl(b \mapsto \mathrm{flatten}
+    (\mathrm{conv2d}(W, b)\, x)\bigr)\), with backward
+  \(db_o = \sum_{h_i, w_i} dy_{\mathrm{flat}(o, h_i, w_i)}\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.conv2d\_bias\_grad\_has\_vjp}.
+\begin{enumerate}
+  \item Define \(B(b, dy)_o := \sum_{h_i, w_i}
+    dy_{\mathrm{flat}(o, h_i, w_i)}\).
+  \item \Suffices{} for all \(b\), \(dy\), \(o\):
+    \(B(b, dy)_o = \sum_{\mathrm{idx}}
+      \pdiv\bigl(b' \mapsto \mathrm{flatten}(\mathrm{conv2d}(W, b')\, x)\bigr)\,
+      b\, o\, \mathrm{idx} \cdot dy_{\mathrm{idx}}\).
+    \pf{Definition~\ref{def:hasvjp}, with \(B\) as the candidate
+    backward function.}
+  \item As a function of \(b\), the flattened forward is
+    \((\text{channel reindex of } b) + (\text{$W\!,x$ term constant
+    in } b)\), so
+    \(\pdiv = \delta_{o,\, \mathrm{chan}(\mathrm{idx})}\).
+    \pf{Sum rule (Theorem~\ref{ax:pdiv_add}), reindex Jacobian
+    (Theorem~\ref{ax:pdiv_reindex}) with
+    \(\sigma = \mathrm{idx} \mapsto \mathrm{chan}(\mathrm{idx})\),
+    constant rule (Theorem~\ref{ax:pdiv_const}).}
+  \item \Qed{}
+    \pf{Contract 3 with \(dy\): re-index the flat sum to
+    \((c, h_i, w_i)\); the Kronecker keeps exactly channel \(o\)'s
+    spatial positions (\texttt{Finset.sum\_eq\_single}), leaving
+    \(B(b, dy)_o\); with 2 this is the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{definition}[MaxPool 2x2 stride 2 forward]
