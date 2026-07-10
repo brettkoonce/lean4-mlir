@@ -4511,12 +4511,31 @@ fan-in pattern, persist.
   \lean{Proofs.residual_has_vjp}
   \leanok
   \uses{thm:biPath_has_vjp, thm:identity_has_vjp}
-  Residual = \(f + \mathrm{id}\).
+  \Assume{}
+  \begin{enumerate}
+    \item \(B_f\) is a correct backward function for \(f\)
+          (\(\HasVJP\, f\)) \hfill[\texttt{hf}]
+    \item \(f\) is differentiable everywhere \hfill[\texttt{hf\_diff}]
+  \end{enumerate}
+  \Prove{} \(\HasVJP\, (\mathrm{residual}\, f)\), where
+  \(\mathrm{residual}\, f\, x = f(x) + x\), with backward
+  \(B(x, dy) = B_f(x, dy) + dy\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.residual\_has\_vjp}.
+\begin{enumerate}
+  \item \(\mathrm{residual}\, f = \mathrm{biPath}\, f\, \mathrm{id}\).
+    \pf{Definitional.}
+  \item \Qed{}
+    \pf{Instantiate the additive fan-in VJP
+    (Theorem~\ref{thm:biPath_has_vjp}) at \(g = \mathrm{id}\)
+    (differentiable; its VJP is Theorem~\ref{thm:identity_has_vjp}),
+    with assumptions 1 and 2 supplying the \(f\) side. The identity's
+    backward contributes \(dy\) itself, so the composed backward is
+    \(B_f(x, dy) + dy\) --- the gradient floor that makes ResNets
+    trainable.}
+\end{enumerate}
 \end{proof}
 
 \section{Example: ResNet-34 on Imagenette}
@@ -5388,42 +5407,121 @@ deployment that trade is the whole reason MobileNet exists.
   \label{ax:depthwise_has_vjp3}
   \lean{Proofs.depthwise_has_vjp3}
   \leanok
-  \uses{ax:depthwiseConv2d}
-  Phase 2 (Apr 2026) proof using the same recipe as
-  \texttt{conv2d\_has\_vjp3} with one fewer \(\Sigma\) level (no
-  cross-channel mixing in depthwise).
+  \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp3}
+  Phase 2 (Apr 2026).
+  \Prove{} \(\HasVJPthree\, \bigl(\mathrm{depthwiseConv2d}(W, b)\bigr)\),
+  with the per-channel reversed-kernel backward
+  \(dx_{c, h, w} = \sum_{k_h, k_w}
+    W_{c,\, k_H - 1 - k_h,\, k_W - 1 - k_w} \cdot
+    dy_{c,\, h + k_h - p,\, w + k_w - p}\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.depthwise\_has\_vjp3}.
+\emph{Sketch: the conv2d input VJP
+(Theorem~\ref{ax:conv2d_has_vjp3}) with one fewer \(\Sigma\) level ---
+depthwise has no cross-channel mixing, so the channel of every
+\(v\)-read is forced to equal the output channel.}
+\begin{enumerate}
+  \item Define \(B(x, dy)_{c, h_i, w_i} :=
+    \sum_{h_o, w_o} [\text{pad-valid}]\;
+      W_{c, \hat{k}_h, \hat{k}_w} \cdot dy_{c, h_o, w_o}\)
+    with reconstructed offsets
+    \(\hat{k}_h = h_i + p_H - h_o\), \(\hat{k}_w = w_i + p_W - w_o\)
+    --- same shape as the conv2d formula, minus the channel sum.
+  \item \Suffices{} \(B\) matches the \(\pdiv_3\) contraction at every
+    index. \pf{Definition~\ref{def:hasvjp3}.}
+  \item The flattened forward is affine in \(v\): constant bias plus
+    \(\sum_{k_h, k_w} W_{o(\mathrm{idx}), k_h, k_w} \cdot
+      (\text{pad-conditional projection of } v)\), where the
+    projection reads channel \(o(\mathrm{idx})\) itself.
+    \pf{Unfold (Definition~\ref{ax:depthwiseConv2d}); steps and rules
+    exactly as in Theorem~\ref{ax:conv2d_has_vjp3} step 4
+    (Theorems~\ref{ax:pdiv_add}, \ref{ax:pdiv_const},
+    \ref{thm:pdiv_finset_sum} \(\times 2\), \ref{ax:pdiv_mul},
+    \ref{ax:pdiv_reindex}), with a double instead of triple sum.}
+  \item Collapse: the channel component of the indicator forces
+    \(c_o = c_i\) (channel mismatch zeroes every other term); per
+    \((h_o, w_o)\) the remaining two-conjunct indicator
+    (\(k_h + h_o = h_i + p_H\), \(k_w + w_o = w_i + p_W\)) collapses
+    the \((k_h, k_w)\) sum.
+    \pf{\texttt{Finset.sum\_eq\_single} on the decoded components.}
+  \item \Qed{}
+    \pf{What remains is \(B(x, dy)_{c_i, h_i, w_i}\) (equivalent to
+    the reversed-kernel form under
+    \(k_h \leftrightarrow k_H - 1 - k_h\)); with 2, done.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Depthwise weight VJP]
   \label{ax:depthwise_weight_grad_has_vjp3}
   \lean{Proofs.depthwise_weight_grad_has_vjp3}
   \leanok
-  \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex}
-  Phase 7: reuses \(\HasVJPthree\) directly since \texttt{DepthwiseKernel}
-  is definitionally \(\mathsf{Tensor3}\). Derived from foundation rules.
+  \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp3}
+  Phase 7. \texttt{DepthwiseKernel} is definitionally
+  \(\mathsf{Tensor3}\), so \(\HasVJPthree\) applies to the kernel
+  directly --- no flatten bijection needed, unlike the conv2d weight
+  VJP (Theorem~\ref{ax:conv2d_weight_grad_has_vjp}).
+  \Prove{} \(\HasVJPthree\,
+    \bigl(W \mapsto \mathrm{depthwiseConv2d}(W, b)\, x\bigr)\),
+  with the per-channel transpose-trick backward
+  \(dW_{c, k_h, k_w} = \sum_{h_o, w_o} [\text{pad-valid}]\;
+    x_{c,\, k_h + h_o - p_H,\, k_w + w_o - p_W} \cdot dy_{c, h_o, w_o}\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.depthwise\_weight\_grad\_has\_vjp3}.
+\begin{enumerate}
+  \item Define \(B(W, dy)_{c, k_h, k_w}\) as the formula above.
+  \item \Suffices{} \(B\) matches the \(\pdiv_3\) contraction at every
+    kernel index. \pf{Definition~\ref{def:hasvjp3}, applicable since
+    the kernel is a \(\mathsf{Tensor3}\).}
+  \item Per-\((c_o, h_o, w_o)\) Jacobian:
+    \(\pdiv_3 = [c_o = c]\, \cdot (\text{pad-conditional } x
+    \text{ term})\) --- a single channel equality where the conv2d
+    weight VJP had a packed \(\varphi\)-comparison.
+    \pf{At output \((c_o, h_o, w_o)\) the forward is
+    \(b_{c_o} + \sum_{k_h, k_w} W_{c_o, k_h, k_w} \cdot
+      x\text{-pad-term}\): affine decomposition and the same
+    foundation-rule sequence as Theorem~\ref{ax:conv2d_weight_grad_has_vjp}
+    step 4 (sum + constant + finite-sum \(\times 2\) + product +
+    reindex rules).}
+  \item \Qed{}
+    \pf{Contract 3 with \(dy\): collapse the channel sum at
+    \(c_o = c\) (\texttt{Finset.sum\_eq\_single}); the spatial sums
+    survive, leaving exactly \(B\); with 2, done.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Depthwise bias VJP]
   \label{ax:depthwise_bias_grad_has_vjp}
   \lean{Proofs.depthwise_bias_grad_has_vjp}
   \leanok
-  \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_reindex}
-  Phase 9. Derived from foundation rules.
+  \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_reindex, def:hasvjp}
+  Phase 9.
+  \Prove{} \(\HasVJP\, \bigl(b \mapsto \mathrm{flatten}
+    (\mathrm{depthwiseConv2d}(W, b)\, x)\bigr)\), with backward
+  \(db_c = \sum_{h_i, w_i} dy_{\mathrm{flat}(c, h_i, w_i)}\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.depthwise\_bias\_grad\_has\_vjp}.
+Same three steps as the conv2d bias VJP
+(Theorem~\ref{ax:conv2d_bias_grad_has_vjp}), with input channel
+\(=\) output channel throughout:
+\begin{enumerate}
+  \item As a function of \(b\), the flattened forward is
+    \((\text{channel reindex of } b) + (\text{$W\!,x$ term constant in }
+    b)\), so \(\pdiv = \delta_{c,\, \mathrm{chan}(\mathrm{idx})}\).
+    \pf{Sum rule (Theorem~\ref{ax:pdiv_add}), reindex Jacobian
+    (Theorem~\ref{ax:pdiv_reindex}), constant rule
+    (Theorem~\ref{ax:pdiv_const}).}
+  \item \Suffices{} \(db_c = \sum_{\mathrm{idx}} \pdiv \cdot
+    dy_{\mathrm{idx}}\). \pf{Definition~\ref{def:hasvjp}.}
+  \item \Qed{}
+    \pf{Contract 1 with \(dy\); the Kronecker keeps channel \(c\)'s
+    spatial positions (\texttt{Finset.sum\_eq\_single}).}
+\end{enumerate}
 \end{proof}
 
 \section{Example: MobileNet V2 on Imagenette}
@@ -5967,12 +6065,41 @@ return-on-scaling to show up.
   \lean{Proofs.seBlock_has_vjp}
   \leanok
   \uses{thm:elemwiseProduct_has_vjp, thm:dense_has_vjp, thm:identity_has_vjp}
+  \Assume{}
+  \begin{enumerate}
+    \item \(B_g\) is a correct backward function for the gate
+          (\(\HasVJP\, \mathrm{gate}\)) \hfill[\texttt{hg}]
+    \item \(\mathrm{gate}\) is differentiable everywhere
+          \hfill[\texttt{hg\_diff}]
+  \end{enumerate}
+  \Prove{} \(\HasVJP\, (\mathrm{seBlock}\, \mathrm{gate})\), where
+  \(\mathrm{seBlock}\, \mathrm{gate}\, x = x \odot \mathrm{gate}(x)\),
+  with backward
+  \[
+    B(x, dy) = \mathrm{gate}(x) \odot dy
+      + B_g\bigl(x,\; x \odot dy\bigr).
+  \]
   SE multiplies input by a sigmoid-gated channel mask.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.seBlock\_has\_vjp}.
+\begin{enumerate}
+  \item \(\mathrm{seBlock}\, \mathrm{gate} =
+    \mathrm{elemwiseProduct}\, \mathrm{id}\, \mathrm{gate}\).
+    \pf{Definitional.}
+  \item \Qed{}
+    \pf{Instantiate the multiplicative fan-in VJP
+    (Theorem~\ref{thm:elemwiseProduct_has_vjp}) at
+    \(f = \mathrm{id}\) (differentiable; its VJP is
+    Theorem~\ref{thm:identity_has_vjp}), with assumptions 1 and 2
+    supplying the gate side. The general backward
+    \(B_f(x, g(x) \odot dy) + B_g(x, f(x) \odot dy)\) specializes:
+    the identity's backward passes \(\mathrm{gate}(x) \odot dy\)
+    through unchanged (main path, each channel scaled by its gate),
+    and the gate sub-network sees \(x \odot dy\) as its cotangent
+    --- not bare \(dy\).}
+\end{enumerate}
 \end{proof}
 
 \section{Example: EfficientNet-B0 on Imagenette}
@@ -6588,14 +6715,24 @@ a single weight.
   \label{ax:geluScalar}
   \lean{Proofs.geluScalar}
   \leanok
-  Concrete \(0.5x(1 + \mathrm{erf}(x/\sqrt 2))\).
+  The tanh approximation the codegen actually emits (not the exact
+  \(x \cdot \Phi(x)\) erf form):
+  \(\mathrm{geluScalar}(x) = 0.5\, x\, \bigl(1 + \tanh(\sqrt{2/\pi}\,
+  (x + 0.044715\, x^3))\bigr)\).
 \end{definition}
 
 \begin{definition}[GELU scalar derivative]
   \label{ax:geluScalarDeriv}
   \lean{Proofs.geluScalarDeriv}
   \leanok
-  Closed form for \(\mathrm{geluScalar}'\).
+  \uses{ax:geluScalar}
+  Defined as Mathlib's \(\mathrm{deriv}\, \mathrm{geluScalar}\) --- so
+  the connection to the forward is automatic, not asserted. The
+  closed form (what the verified \texttt{geluBack} emitter renders) is
+  the separate theorem \texttt{geluScalarDeriv\_eq}, proved by
+  assembling \texttt{HasDerivAt} for the inner polynomial, \(\tanh\)
+  (via \(\tanh = \sinh/\cosh\) and the quotient rule), and the outer
+  product.
 \end{definition}
 
 \begin{theorem}[GELU Jacobian]
@@ -6603,15 +6740,41 @@ a single weight.
   \lean{Proofs.pdiv_gelu}
   \leanok
   \uses{ax:pdiv, ax:geluScalarDeriv}
-  Diagonal activation Jacobian. Proved via \texttt{fderiv\_apply} +
-  chain rule with \(\mathrm{geluScalar} \circ \mathrm{ContinuousLinearMap.proj}\,
-  j\), then \texttt{fderiv\_eq\_smul\_deriv} to convert scalar
-  \(\fderiv\) to \(\mathrm{deriv}\).
+  \Prove{} \(\pdiv(\mathrm{gelu})\, x\, i\, j
+    = \delta_{ij} \cdot \mathrm{geluScalar}'(x_i)\) --- the diagonal
+  activation Jacobian.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_gelu}.
+\emph{Sketch: the template for every elementwise activation with a
+smooth scalar function --- extract one output coordinate, factor it
+through a projection, convert back to the scalar derivative.}
+\begin{enumerate}
+  \item \(\pdiv(\mathrm{gelu})\, x\, i\, j
+          = \fderiv_{\R}\,(y \mapsto \mathrm{gelu}(y)_j)\, x\, (\basisVec_i)\).
+    \pf{Definition~\ref{ax:pdiv} and \texttt{fderiv\_apply};
+    \(\mathrm{gelu}\) is differentiable because
+    \(\mathrm{geluScalar}\) is (tanh is differentiable everywhere,
+    via \(\tanh = \sinh/\cosh\) with \(\cosh > 0\)).}
+  \item \(y \mapsto \mathrm{gelu}(y)_j
+          = \mathrm{geluScalar} \circ \mathrm{proj}_j\), so its
+    derivative is
+    \(\fderiv\,\mathrm{geluScalar}\,(x_j) \circ \mathrm{proj}_j\).
+    \pf{Chain rule (Mathlib's \texttt{fderiv\_comp});
+    \(\mathrm{proj}_j\) is a continuous linear map, its own
+    derivative.}
+  \item Evaluate at \(\basisVec_i\):
+    \(\mathrm{proj}_j(\basisVec_i) = \delta_{ji}\), and the scalar
+    \(\fderiv\) converts to \(\mathrm{deriv}\)
+    (\texttt{fderiv\_eq\_smul\_deriv}), giving
+    \(\delta_{ji} \cdot \mathrm{deriv}\,\mathrm{geluScalar}\,(x_j)\).
+  \item \Qed{}
+    \pf{Case split on \(i = j\); when they coincide,
+    \(\mathrm{deriv}\,\mathrm{geluScalar}\,(x_i)\) \emph{is}
+    \(\mathrm{geluScalar}'(x_i)\) by
+    Definition~\ref{ax:geluScalarDeriv}.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[LayerNorm VJP]
@@ -6619,24 +6782,47 @@ Mechanical; see \leandocref{Proofs.pdiv\_gelu}.
   \lean{Proofs.layerNorm_has_vjp}
   \leanok
   \uses{thm:bn_has_vjp}
-  LayerNorm = BatchNorm on a different axis; same primitive.
+  \Assume{}
+  \begin{enumerate}
+    \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
+  \end{enumerate}
+  \Prove{} \(\HasVJP\, (\mathrm{layerNormForward})\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.layerNorm\_has\_vjp}.
+\begin{enumerate}
+  \item \(\mathrm{layerNormForward} = \mathrm{bnForward}\),
+    definitionally: on a single feature vector, LayerNorm \emph{is}
+    the 1D normalization primitive --- the BN/LN distinction (which
+    axis, running statistics) is an engineering concern that
+    dissolves at the per-vector math level.
+  \item \Qed{}
+    \pf{Theorem~\ref{thm:bn_has_vjp} applies verbatim, with
+    assumption 1 as its \(\varepsilon > 0\) hypothesis.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[GELU VJP]
   \label{thm:gelu_has_vjp}
   \lean{Proofs.gelu_has_vjp}
   \leanok
-  \uses{ax:pdiv_gelu}
+  \uses{ax:pdiv_gelu, def:hasvjp}
+  \(\HasVJP\, (\mathrm{gelu})\), with backward
+  \(B(x, dy)_i = dy_i \cdot \mathrm{geluScalar}'(x_i)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.gelu\_has\_vjp}.
+\begin{enumerate}
+  \item \Suffices{} \(B(x, dy)_i = \sum_j \pdiv(\mathrm{gelu})\,
+    x\, i\, j \cdot dy_j\). \pf{Definition~\ref{def:hasvjp}.}
+  \item \Qed{}
+    \pf{By the GELU Jacobian (Theorem~\ref{ax:pdiv_gelu}) the sum is
+    diagonal and collapses at \(j = i\) to
+    \(\mathrm{geluScalar}'(x_i) \cdot dy_i\). Same template as ReLU,
+    Swish, h-swish: diagonal Jacobian \(\Rightarrow\) one-step VJP.}
+\end{enumerate}
 \end{proof}
 
 \section{Example: ConvNeXt-T on Imagenette}
