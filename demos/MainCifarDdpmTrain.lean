@@ -58,13 +58,31 @@ def tinyCifarDdpmTC : NetSpec where
     .conv2d 80 3 1 .same .identity
   ]
 
+/-- Phase-2 capacity leg (B4): same plain UNet at base96 (~4.2M params). -/
+def tinyCifarDdpm96 : NetSpec where
+  name := "DDPM UNet T-cond base96 centered (CIFAR 32x32x3)"
+  imageH := 32
+  imageW := 32
+  layers := [
+    .unetDown 4 96,
+    .unetDown 96 192,
+    .convBn 192 384 3 1 .same,
+    .convBn 384 384 3 1 .same,
+    .unetUp 384 192,
+    .unetUp 192 96,
+    .conv2d 96 3 1 .same .identity
+  ]
+
 def cifarDdpmConfig : TrainConfig where
   learningRate := 0.0005
   batchSize    := 32
   epochs       := 3
   useAdam      := true
   weightDecay  := 0.0
-  cosineDecay  := false
+  -- Constant LR wanders late in training: the 100-ep base80 run cycled
+  -- through global color modes ep75→100 (magenta collapse at ep100, best
+  -- grid ep90) at dead-flat MSE. Cosine decay pins the endpoint.
+  cosineDecay  := true
   warmupEpochs := 0
   augment      := false
 
@@ -135,9 +153,12 @@ def main (args : List String) : IO Unit := do
   let dataDir := args.head?.getD "data"
   let epochsOverride : Option Nat := (args[1]?).bind String.toNat?
   let maxSteps : Nat := ((args[2]?).bind String.toNat?).getD 0
-  -- 4th arg "tc" selects the per-block timeCondAdd variant (v2 Workstream A).
-  let useTC := (args[3]?).getD "" == "tc"
-  let spec := if useTC then tinyCifarDdpmTC else tinyCifarDdpm
+  -- 4th arg: "tc" = per-block timeCondAdd variant (v2 Workstream A);
+  -- "b96" = base96 capacity leg (Phase 2 / B4); default = plain base80.
+  let variant := (args[3]?).getD ""
+  let spec := if variant == "tc" then tinyCifarDdpmTC
+              else if variant == "b96" then tinyCifarDdpm96
+              else tinyCifarDdpm
   let cfg := { cifarDdpmConfig with epochs := epochsOverride.getD cifarDdpmConfig.epochs }
   IO.eprintln s!"{spec.name}: {spec.totalParams} params (epochs={cfg.epochs})"
 
@@ -199,7 +220,9 @@ def main (args : List String) : IO Unit := do
   let imgC : USize := 3
   let outH : USize := spec.imageH.toUSize
   let outW : USize := spec.imageW.toUSize
-  let runDir := if useTC then "runs/ddpm_v2_tc" else "runs/ddpm_v2_base80"
+  let runDir := if variant == "tc" then "runs/ddpm_v2_tc"
+                else if variant == "b96" then "runs/ddpm_v2_base96"
+                else "runs/ddpm_v2_base80"
   IO.FS.createDirAll runDir
 
   let mut p := params
@@ -210,12 +233,17 @@ def main (args : List String) : IO Unit := do
   let mut runningBnStats ← F32.const spec.nBnStats.toUSize 0.0
   let sampleEvery : Nat := 5
 
-  IO.eprintln s!"training: {bpE} batches/epoch, batch={cfg.batchSize}, lr={cfg.learningRate}, EMA 0.9999 + hflip"
+  IO.eprintln s!"training: {bpE} batches/epoch, batch={cfg.batchSize}, lr={cfg.learningRate} (cosine={cfg.cosineDecay}), EMA 0.9999 + hflip"
   for epoch in [:cfg.epochs] do
     let t0 ← IO.monoMsNow
     let mut epochLoss : Float := 0.0
     for bi in [:bpE] do
       globalStep := globalStep + 1
+      -- Per-step cosine LR schedule (same idiom as Train.lean:560).
+      let lr := if cfg.cosineDecay then
+                  let prog := globalStep.toFloat / (cfg.epochs * bpE).toFloat
+                  cfg.learningRate * 0.5 * (1.0 + Float.cos (3.14159265358979 * prog))
+                else cfg.learningRate
       let x0raw := F32.sliceImages trainImg (bi * cfg.batchSize) cfg.batchSize nPix
       -- hflip augment (per-image p=0.5).
       let x0 ← F32.hflipNCHW x0raw batch imgC outH outW (globalStep * 2654435761).toUSize
@@ -226,7 +254,7 @@ def main (args : List String) : IO Unit := do
       let packed := (p.append m).append v
       let out ← IreeSession.trainStepAdamF32Ddpm sess spec.trainFnName
                   packed allShapes xtCond xSh eps
-                  cfg.learningRate globalStep.toFloat
+                  lr globalStep.toFloat
                   bnShapes batch imgC outH outW
       let loss := F32.extractLoss out nT
       epochLoss := epochLoss + loss

@@ -57,12 +57,19 @@ private def floatToU8 (v : Float) : UInt8 :=
 
 def main (args : List String) : IO Unit := do
   let outPath := args.head?.getD "runs/2026-05-07-cifar-ddpm/samples.ppm"
-  -- 2nd arg "tc" selects the timeCondAdd variant; "ema" (either arg) samples
-  -- from `_params_ema.bin` instead of raw `_params.bin` (diagnostic — EMA
-  -- weights with raw-weight BN running stats are known-mismatched, see
-  -- planning/ddpm_demo_v2.md Gate-A verdict).
+  -- Flag args (any position after outPath):
+  --   "tc"   → timeCondAdd spec variant
+  --   "ema"  → sample from `_params_ema.bin` (diagnostic — EMA weights with
+  --            raw-weight BN running stats are known-mismatched, see
+  --            planning/ddpm_demo_v2.md Gate-A verdict)
+  --   "ddpm" → η=1 ancestral (stochastic) sampling, default 1000 steps
+  --   <nat>  → number of sampler steps (default: 50 DDIM / 1000 ddpm)
+  --   "ckpt=<path>" → read <path>_params.bin / <path>_bn_stats.bin instead
+  --            of the live .lake/build checkpoint (e.g. an archived run)
   let useTC  := args.any (· == "tc")
   let useEma := args.any (· == "ema")
+  let useDdpmSampler := args.any (· == "ddpm")
+  let nStepsArg : Option Nat := (args.drop 1).findSome? (·.toNat?)
   IO.FS.createDirAll (System.FilePath.mk outPath).parent.get!.toString
   let spec := if useTC then tinyCifarDdpmTC else tinyCifarDdpm
   IO.FS.createDirAll ".lake/build"
@@ -80,8 +87,9 @@ def main (args : List String) : IO Unit := do
     unless (← runIree evalMlirPath evalVmfb) do IO.Process.exit 1
     IO.eprintln "  eval forward compiled"
 
-  let paramsPath := if useEma then s!"{pfx}_params_ema.bin" else s!"{pfx}_params.bin"
-  let bnPath := s!"{pfx}_bn_stats.bin"
+  let ckptPfx := ((args.find? (·.startsWith "ckpt=")).map (fun a => (a.drop 5).toString)).getD pfx
+  let paramsPath := if useEma then s!"{ckptPfx}_params_ema.bin" else s!"{ckptPfx}_params.bin"
+  let bnPath := s!"{ckptPfx}_bn_stats.bin"
   for p in [paramsPath, bnPath] do
     if !(← System.FilePath.pathExists p) then
       IO.eprintln s!"missing checkpoint: {p}"
@@ -95,7 +103,8 @@ def main (args : List String) : IO Unit := do
 
   let T : Nat := 1000
   let alphaBar ← Ddpm.cosineSchedule T.toUSize
-  let nSteps : Nat := 50
+  let nSteps : Nat := nStepsArg.getD (if useDdpmSampler then 1000 else 50)
+  let eta : Float := if useDdpmSampler then 1.0 else 0.0
   let stride : Nat := T / nSteps
   let stepTs : Array Nat := Id.run do
     let mut s : Array Nat := #[]
@@ -108,7 +117,7 @@ def main (args : List String) : IO Unit := do
   let nTotal : USize := (B * nPix).toUSize
 
   let sess ← IreeSession.create evalVmfb
-  IO.eprintln s!"  sampling: {nSteps} DDIM steps, batch {B}"
+  IO.eprintln s!"  sampling: {nSteps} steps, η={eta}, batch {B}"
   for k in [:nSteps] do
     let t := stepTs[k]!
     let tPrev : Nat := if k + 1 < nSteps then stepTs[k + 1]! else 0
@@ -119,14 +128,25 @@ def main (args : List String) : IO Unit := do
     let aBarT := alphaBarF t
     let aBarP := if k + 1 < nSteps then alphaBarF tPrev else 0.9999
     let sqAT := Float.sqrt aBarT
-    let sqAP := Float.sqrt aBarP
     let sqOmAT := Float.sqrt (1.0 - aBarT)
-    let sqOmAP := Float.sqrt (1.0 - aBarP)
-    let a := sqAP / sqAT
-    let b := sqOmAP - a * sqOmAT
+    let a := Float.sqrt aBarP / sqAT
+    -- η-generalized DDIM (Song et al. 2020, eq. 12): σ = 0 recovers the
+    -- deterministic sampler; η = 1 the ancestral DDPM chain. No noise on
+    -- the final step.
+    let sigma : Float :=
+      if k + 1 < nSteps && eta > 0.0 then
+        eta * Float.sqrt ((1.0 - aBarP) / (1.0 - aBarT))
+            * Float.sqrt (1.0 - aBarT / aBarP)
+      else 0.0
+    let b := Float.sqrt (1.0 - aBarP - sigma * sigma) - a * sqOmAT
     x ← Ddpm.ddimStep x eps a b nTotal
-    if k % 10 == 0 || k == nSteps - 1 then
-      IO.eprintln s!"  step {k}/{nSteps} t={t}->{tPrev}  a={a} b={b}"
+    if sigma > 0.0 then
+      -- Knuth-scramble the per-step seed: consecutive ints share xorshift
+      -- prefixes for the first few draws.
+      let z ← Ddpm.sampleNoise nTotal ((0xabcde + k) * 2654435761).toUSize
+      x ← Ddpm.ddimStep x z 1.0 sigma nTotal
+    if k % (max 1 (nSteps / 5)) == 0 || k == nSteps - 1 then
+      IO.eprintln s!"  step {k}/{nSteps} t={t}->{tPrev}  a={a} b={b} σ={sigma}"
 
   -- ── Render 4×4 RGB grid ──
   let H := spec.imageH; let W := spec.imageW

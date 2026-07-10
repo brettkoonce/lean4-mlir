@@ -221,8 +221,59 @@ eval/train t-cond emit verified identical, so that's the model, not a bug) —
 but the epochs are mismatched (50 vs 45) and it's one seed. A matched
 50-ep A/B with the fixed trainer relaunched 2026-07-09 on both gfx1100s
 (`runs/ddpm_v2_base80_rawgrids_gpu0.log`, `runs/ddpm_v2_tc_rawgrids_gpu1.log`,
-~6.5 min/ep ≈ 5.5 h; raw-weight grids every 5 ep). Judge per the criteria
-above when it lands.
+~6.5 min/ep ≈ 5.5 h; raw-weight grids every 5 ep).
+
+### Gate A — matched-budget verdict (2026-07-10): tc LOSES
+
+Both legs completed 50 ep with the fixed (raw-weight-grid) trainer; final
+avg loss 0.0622 (base80) vs 0.0619 (tc) — MSE tied, as always. Grids
+(`runs/ddpm_v2_{base80,tc}/samples_ep{25,50}.ppm`, same fixed seed):
+
+- **ep25**: near-identical — same compositions emerging from the shared
+  noise seed, tc marginally cleaner shapes. No separation.
+- **ep50**: **base80 clearly better** — distinct animals (an unmistakable
+  cat face), textured scenes, varied palette. tc collapses into saturated
+  red/magenta blobs with less object structure. This REPLICATES the
+  interrupted first tc run's failure signature (there: green-cast blobs at
+  ep45) — two independent runs where tc shows stronger color-mode collapse
+  than plain at matched budget.
+
+**Phase 2 launched on the winner (2026-07-10 overnight):** base80 100 ep
+(GPU0, `runs/ddpm_v2_base80_100ep_gpu0.log`) + new `tinyCifarDdpm96`
+capacity leg (`b96` trainer arg, ~4.2M params) 100 ep (GPU1,
+`runs/ddpm_v2_base96_100ep_gpu1.log`); grids every 5 ep in
+`runs/ddpm_v2_{base80,base96}/`. Matched-Gate-A grids + ep-50 checkpoints
+archived in `runs/ddpm_v2_gateA_matched/` (with `ep50_*` symlinks for the
+sampler's `ckpt=` arg).
+
+**Phase-2 base80 100-ep result (constant LR): late-training color-phase
+wander.** Loss dead flat ep70→100 (0.0606–0.0615) while the fixed-seed
+grid cycles global color modes every ~5 ep: warm(75) → purple(80) →
+warm(85) → **ep90 BEST of the project so far** (natural palette, blue
+truck, varied backgrounds) → washed-out(95) → magenta collapse(100).
+The MSE-≠-quality lesson at its sharpest — and exactly the instability
+weight-EMA + LR decay exist to damp (EMA sampling being blocked by the
+BN-stats mismatch makes LR decay the available lever). Artifacts in
+`runs/ddpm_v2_base80_100ep_constlr/` (all grids + ep100 checkpoint).
+**Action:** trainer grew per-step cosine LR (Train.lean:560 idiom,
+`cosineDecay := true` now the DDPM default) and base80 100 ep relaunched
+2026-07-10 morning (GPU0, `runs/ddpm_v2_base80_100ep_cosine_gpu0.log`).
+Expectation: the cosine endpoint freezes the phase wander and ep100 ≈
+ep90-quality; if not, the wander is not LR-driven and the next lever is
+EMA + BN-recalibration. (The base96 leg still running on GPU1 is
+constant-LR — launched before this change; read its grids accordingly.)
+
+Per the gate's own rule: **stop, do not proceed to Workstream C on top of
+tc; re-plan.** Plausible mechanism for the re-plan: `.timeCondAdd` adds a
+*spatially-uniform per-channel* offset, so the cheapest way for the net to
+exploit it is a global per-timestep color shift — which is exactly the
+failure we see (hyper-saturated single-color grids). Real DDPM UNets inject
+the time embedding *inside* residual blocks (before norm+conv) where it
+modulates features rather than output color; a between-stages add may be
+too weak/too color-coupled. Options: (a) ship v2 conv-only (base80 raw
+sampling already beats the v1 reference — the demo bar is arguably cleared),
+(b) move the injection inside `unetDown`/`unetUp` blocks pre-BN,
+(c) shared time-MLP trunk. Caveats: one seed, 16 samples/grid.
 
 ## Workstream B — training recipe (cheap, do first)
 
@@ -330,10 +381,53 @@ session. Report it alongside grids in RESULTS.md; never let it
 replace the fixed-seed grids (the MSE lesson generalizes: trust no
 scalar alone).
 
+**Implementation recipe (recon 2026-07-10; a full session, do NOT
+rush it):**
+- **Classifier**: best on-disk = `cifar8_bn_1024` (`cifar8BnG 1024`,
+  `VerifiedNets.lean:222`, 72.17% test acc, ckpt
+  `.lake/build/cifar8_bn_1024_adam_ckpt.bin` = packed θ|m|v, slice θ =
+  first nParams·4 bytes per `VerifiedTrain.lean:466`; per-example BN ⇒
+  no running-stats file). Penultimate feature = last hidden dense
+  (1024-dim). **Gotcha: the cifar8 family has NO globalAvgPool**, so
+  the existing GradCAM `stopAtGAP` path (`generateForwardCam`,
+  `MlirCodegen.lean:3038`; branch at `:1846`) does not apply — either
+  (a) add a `stopBeforeLastDense` twin (emitForwardBody `:1789`, dense
+  arm `:1812`; `preFinalDenseShape` twin of `preGAPShape` `:2921`), or
+  (b) retrain the GAP-ending `convNextMiniGeluSpec`
+  (`MainAblation.lean:685`, ~76-78%, 64-dim post-GAP — reuses the CAM
+  path unmodified; checkpoint not currently on disk).
+- **Math**: NO host matmul/cov/sqrtm helpers exist (F32Array has
+  read/subtract/ema only). 1024-dim cov is too big for Lean loops —
+  project features to ~64 dims (fixed random projection) and either a
+  new `lean_f32_*` FFI helper (CAUTION: libiree_ffi.so relink, the
+  fragile path) or a tiny IREE-compiled matmul vmfb (cleaner).
+- **Two sessions coexist fine** (DDPM eval vmfb + classifier vmfb):
+  `iree_ffi.c` has no global session state, only an idempotent
+  driver-registration guard.
+- CIFAR test set: `loadCifarSplit` is private in `VerifiedTrain.lean`
+  — re-implement the ~10-line reader (`test_batch.bin`, 3073-byte
+  records → `F32.cifarBatch`).
+
 Also: **DDPM stochastic sampler** (η>0) as a sampler flag — one
 extra `sampleNoise` + affine per step, ~1 hr — so the demo can show
 the classic 1000-step ancestral chain and the 50-step DDIM shortcut
 side by side.
+
+**Status 2026-07-10: stochastic sampler DONE (uncommitted).**
+`cifar-ddpm-sample` grew flags: `ddpm` (η=1 ancestral, default 1000
+steps, σ per Song et al. eq. 12, no noise on the final step), `<nat>`
+(step count), `ckpt=<pfx>` (sample an archived checkpoint instead of
+the live `.lake/build` one — needed while a trainer is running, since
+the trainer overwrites the live checkpoint every 5 ep), plus the
+earlier `tc`/`ema`. η=0 path regression-checked bit-identical.
+Validated on the archived Gate-A base80 ep-50 checkpoint: DDPM
+100/250/1000 all coherent; the 1000-step chain is the most textured/
+diverse of the four (figure-ready vs DDIM-50).
+**Gotcha (real bug, fixed):** per-step noise seeds must be scrambled
+(`(base+k)·2654435761`) — consecutive integer seeds share xorshift
+prefixes, and the correlated streams accumulate at fixed pixels into
+saturated color speckles over a 1000-step chain. First render showed
+exactly that artifact; Knuth-scrambling the seed eliminated it.
 
 ## Workstream F — verified-gradient tie-in (stretch, on-brand)
 
