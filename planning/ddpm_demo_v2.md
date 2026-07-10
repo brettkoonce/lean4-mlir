@@ -180,17 +180,49 @@ upstream of the time-conditioning. This CORRECTS the working assumption that tc
 was the suspect. Do NOT re-investigate tc or touch Workstream C (attention)
 until the Phase-0 sampler produces coherent base80 samples again.
 
-**Root-cause candidates (next session).** The sampler was structurally audited
-SOUND (emaP inits from params; DDIM `a = √ᾱ_prev/√ᾱ_t`, `b = √(1−ᾱ_prev) −
-a·√(1−ᾱ_t)` are correct). The live suspect is the **DDIM x₀-prediction blow-up at
-high t**: at the first step `k=0, t=999`, `ᾱ_t ≈ 0`, so `a = √ᾱ_prev/√ᾱ_t` is
-HUGE and amplifies any residual ε error into full-frame noise. Things to try, in
-order: (1) sample from the RAW params, not EMA, to isolate whether EMA is the
-regression (v1 may have used raw weights); (2) clamp the implied x₀ prediction to
-`[−1,1]` each DDIM step (standard guard the v2 sampler may have dropped); (3) a
-short 70-ep run (v1's quality threshold sat at ep 60–70) only AFTER (1)/(2). The
-codegen + timeCondAdd primitive are fine — this is purely `sampleGrid` in
-`demos/MainCifarDdpmTrain.lean`. See `[[ddpm-v2-gateA-verdict]]` (auto-memory).
+**Root-cause candidates (superseded — see RESOLVED below).** The sampler was
+structurally audited SOUND (emaP inits from params; DDIM `a = √ᾱ_prev/√ᾱ_t`,
+`b = √(1−ᾱ_prev) − a·√(1−ᾱ_t)` are correct). The live suspect was the DDIM
+x₀-prediction blow-up at high t; things to try, in order: (1) sample from the
+RAW params, not EMA; (2) clamp the implied x₀ to `[−1,1]` per DDIM step;
+(3) a 70-ep run only after (1)/(2).
+
+### Gate A — RESOLVED (2026-07-09, same day): EMA weights × raw-weight BN stats
+
+Suspect (1) was it, first try. Sampling the SAME base80 ep-50 checkpoint from
+**raw** `_params.bin` via the v1 standalone sampler produces a grid with clear
+object structure (cars/animals — subjectively better than v1's 70-ep grid);
+the EMA grid is confetti. Cross-check: the standalone sampler fed the EMA file
+(different code path, different noise seed) reproduces the confetti exactly →
+the in-trainer `sampleGrid` is NOT buggy; **the EMA weights themselves sample
+terribly**. No x₀ clamp needed (raw samples fine without it); hflip and
+`F32.ema` audited correct in C.
+
+**Mechanism:** the eval net pairs EMA params (horizon ~10k steps, `0.9999`)
+with BN **running stats accumulated under the raw weights at momentum 0.1**
+(horizon ~10 batches). The EMA buffer is numerically sane (no NaNs, corr 0.99
+with raw, ~15% mean relative deviation) but every BN layer then normalizes
+with mismatched statistics, and the DDIM chain (first step ×3.27) amplifies
+that into full-frame confetti. Exactly the BN-under-mixed-conditions weakness
+the GroupNorm note (B5) anticipated. v1 never saw it because v1 sampled raw.
+
+**Fixes landed (uncommitted):** trainer `sampleGrid` now renders from RAW
+weights + matching BN stats (EMA still checkpointed for a future BN-recalib
+pass); `MainCifarDdpmSample` gained `tc` (timeCondAdd spec) and `ema`
+(diagnostic) args. Evidence archived in `runs/ddpm_v2_{base80,tc}_emabug/`
+(confetti grids + raw/EMA ep-50/ep-45 checkpoints + corrected grids).
+**Using EMA properly later** = recompute BN stats under the EMA weights
+(forward-stats pass) or run a second runningBnStats EMAed at the same
+0.9999 horizon; until then raw-weight grids are the honest default.
+
+**Gate A re-run:** first-look from the rescued checkpoints — base80 ep50 raw
+clearly beats tc ep45 raw (tc is coherent but blobby with a green/cyan cast;
+eval/train t-cond emit verified identical, so that's the model, not a bug) —
+but the epochs are mismatched (50 vs 45) and it's one seed. A matched
+50-ep A/B with the fixed trainer relaunched 2026-07-09 on both gfx1100s
+(`runs/ddpm_v2_base80_rawgrids_gpu0.log`, `runs/ddpm_v2_tc_rawgrids_gpu1.log`,
+~6.5 min/ep ≈ 5.5 h; raw-weight grids every 5 ep). Judge per the criteria
+above when it lands.
 
 ## Workstream B — training recipe (cheap, do first)
 

@@ -17,6 +17,27 @@ def tinyCifarDdpm : NetSpec where
     .conv2d 80 3 1 .same .identity
   ]
 
+/-- v2 Workstream A variant (must match `MainCifarDdpmTrain.tinyCifarDdpmTC`). -/
+def tinyCifarDdpmTC : NetSpec where
+  name := "DDPM UNet timeCondAdd base80 (CIFAR 32x32x3)"
+  imageH := 32
+  imageW := 32
+  layers := [
+    .unetDown 4 80,
+    .timeCondAdd 80 8,
+    .unetDown 80 160,
+    .timeCondAdd 160 8,
+    .convBn 160 320 3 1 .same,
+    .timeCondAdd 320 8,
+    .convBn 320 320 3 1 .same,
+    .timeCondAdd 320 8,
+    .unetUp 320 160,
+    .timeCondAdd 160 8,
+    .unetUp 160 80,
+    .timeCondAdd 80 8,
+    .conv2d 80 3 1 .same .identity
+  ]
+
 private def runIree (mlirPath outPath : String) : IO Bool := do
   let args ← ireeCompileArgs mlirPath outPath
   let compiler ← if (← System.FilePath.pathExists ".venv/bin/iree-compile")
@@ -36,8 +57,14 @@ private def floatToU8 (v : Float) : UInt8 :=
 
 def main (args : List String) : IO Unit := do
   let outPath := args.head?.getD "runs/2026-05-07-cifar-ddpm/samples.ppm"
+  -- 2nd arg "tc" selects the timeCondAdd variant; "ema" (either arg) samples
+  -- from `_params_ema.bin` instead of raw `_params.bin` (diagnostic — EMA
+  -- weights with raw-weight BN running stats are known-mismatched, see
+  -- planning/ddpm_demo_v2.md Gate-A verdict).
+  let useTC  := args.any (· == "tc")
+  let useEma := args.any (· == "ema")
   IO.FS.createDirAll (System.FilePath.mk outPath).parent.get!.toString
-  let spec := tinyCifarDdpm
+  let spec := if useTC then tinyCifarDdpmTC else tinyCifarDdpm
   IO.FS.createDirAll ".lake/build"
   let pfx := spec.buildPrefix
   let evalMlirPath := s!"{pfx}_fwd_eval.mlir"
@@ -53,7 +80,7 @@ def main (args : List String) : IO Unit := do
     unless (← runIree evalMlirPath evalVmfb) do IO.Process.exit 1
     IO.eprintln "  eval forward compiled"
 
-  let paramsPath := s!"{pfx}_params.bin"
+  let paramsPath := if useEma then s!"{pfx}_params_ema.bin" else s!"{pfx}_params.bin"
   let bnPath := s!"{pfx}_bn_stats.bin"
   for p in [paramsPath, bnPath] do
     if !(← System.FilePath.pathExists p) then

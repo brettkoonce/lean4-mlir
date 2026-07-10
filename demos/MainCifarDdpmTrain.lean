@@ -11,8 +11,10 @@ import LeanMlir
         `ema = 0.9999·ema + 0.0001·p` every step; saved as
         `_params_ema.bin` beside `_params.bin`.
       * Fixed-seed DDIM sample grid every `sampleEvery` epochs (fixed
-        noise seed) → `runs/.../samples_ep{N}.ppm` from the EMA
-        weights. Makes every DDPM A/B honest (MSE ≠ sample quality).
+        noise seed) → `runs/.../samples_ep{N}.ppm` from the RAW
+        weights (EMA weights mismatch the raw-weight BN running stats
+        — Gate-A verdict). Makes every DDPM A/B honest (MSE ≠ sample
+        quality).
       * Per-image horizontal-flip augment (`F32.hflipNCHW`).
 
     Usage: lake exe cifar-ddpm-train [data] [epochs] [maxSteps]
@@ -83,9 +85,9 @@ private def floatToU8 (v : Float) : UInt8 :=
   let p := if scaled < 0.0 then 0.0 else if scaled > 1.0 then 1.0 else scaled
   (p * 255.0).toUInt8
 
-/-- Render a fixed-seed 4×4 DDIM sample grid from `evalParams` (EMA
-    weights) to `outPath`. 50 DDIM steps, seed fixed so grids are
-    comparable across epochs. -/
+/-- Render a fixed-seed 4×4 DDIM sample grid from `evalParams` (raw
+    weights + matching BN running stats) to `outPath`. 50 DDIM steps,
+    seed fixed so grids are comparable across epochs. -/
 private def sampleGrid (spec : NetSpec) (evalSess : IreeSession)
     (evalParams evalShapes : ByteArray) (alphaBar : ByteArray)
     (outPath : String) : IO Unit := do
@@ -240,9 +242,14 @@ def main (args : List String) : IO Unit := do
         IO.eprintln s!"  step {bi}/{bpE}: loss={loss}"
     let t1 ← IO.monoMsNow
     IO.eprintln s!"Epoch {epoch+1}/{cfg.epochs}: avg loss={epochLoss / bpE.toFloat} ({t1-t0}ms)"
-    -- Periodic fixed-seed sample grid from EMA weights.
+    -- Periodic fixed-seed sample grid from RAW weights. NOT the EMA:
+    -- the BN running stats are accumulated under the raw weights, and
+    -- EMA-weights + raw-weight BN stats is a normalization mismatch that
+    -- the DDIM chain amplifies into confetti (Gate-A verdict,
+    -- planning/ddpm_demo_v2.md). EMA weights are still checkpointed; using
+    -- them needs a BN-stat recalibration pass first.
     if (epoch + 1) % sampleEvery == 0 || epoch + 1 == cfg.epochs then
-      let evalParams := emaP.append runningBnStats
+      let evalParams := p.append runningBnStats
       sampleGrid spec evalSess evalParams evalShapes alphaBar
         s!"{runDir}/samples_ep{epoch+1}.ppm"
       -- Periodic checkpoint (long runs survive interruption).
