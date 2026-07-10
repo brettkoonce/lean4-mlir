@@ -7425,57 +7425,155 @@ live in \texttt{Proofs/Tensor.lean} alongside their vector
 counterparts; we collect them here because Ch~\ref{chap:attention}
 is the first and only chapter to use them.
 
+\begin{definition}[Matrix VJP record]
+  \label{def:hasvjpmat}
+  \lean{Proofs.HasVJPMat}
+  \leanok
+  \uses{ax:pdiv, def:hasvjp}
+  The rank-2 analogue of Definition~\ref{def:hasvjp}. Define
+  \(\pdivMat f\, A\, (i,j)\, (k,l)\) as \(\pdiv\) of the row-major
+  flattened map
+  \(v \mapsto \mathrm{flatten}\bigl(f(\mathrm{unflatten}\, v)\bigr)\)
+  with both index pairs encoded through the
+  \((i, j) \leftrightarrow \text{flat}\) bijection. Then
+  \(\HasVJPMat\, f\) bundles a backward function \(B\) with: for all
+  \(A\), \(dY\), \((i, j)\),
+  \[
+    B(A, dY)_{ij}
+      = \sum_{k, l} \pdivMat f\, A\, (i,j)\, (k,l) \cdot dY_{kl}.
+  \]
+\end{definition}
+
 \begin{theorem}[Row-independence for matrices]
   \label{ax:pdivMat_rowIndep}
   \lean{Proofs.pdivMat_rowIndep}
   \leanok
-  \uses{ax:pdiv}
-  Applying a vector function per-row to a matrix has block-diagonal Jacobian.
-  Proved from \(\fderiv\) via the row-projection \(\mathrm{ContinuousLinearMap}\)
-  and the chain rule, given a \(\Differentiable\) hypothesis on the
-  per-row function.
+  \uses{ax:pdiv, def:hasvjpmat}
+  \Assume{}
+  \begin{enumerate}
+    \item \(g : \Vect{n} \to \Vect{p}\) is differentiable everywhere
+          \hfill[\texttt{h\_g\_diff}]
+  \end{enumerate}
+  \Prove{} applying \(g\) to each row of a matrix has block-diagonal
+  Jacobian:
+  \(\pdivMat(\text{rowwise } g)\, A\, (i,j)\, (k,l)
+    = [i = k] \cdot \pdiv g\, (A_i)\, j\, l\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdivMat\_rowIndep}.
+\begin{enumerate}
+  \item Coordinate factoring: the \((k, l)\) output coordinate of the
+    flattened rowwise map is
+    \((y \mapsto g(y)_l) \circ \mathrm{rowProj}_k\), where
+    \(\mathrm{rowProj}_k\) is the CLM extracting row \(k\) of the
+    flat vector.
+    \pf{Unfold flatten/unflatten; \(\mathrm{rowProj}_k\) is a
+    reindex, hence a CLM.}
+  \item Every output coordinate --- hence the whole flat map --- is
+    differentiable, so \(\fderiv\) does not fall back to its junk
+    default.
+    \pf{Assumption 1 composed with the CLM of step 1
+    (\texttt{differentiableAt\_pi}).}
+  \item \Qed{}
+    \pf{Chain rule through the CLM: the derivative of
+    \((y \mapsto g(y)_l) \circ \mathrm{rowProj}_k\) at
+    \(\basisVec_{(i,j)}\) sees
+    \(\mathrm{rowProj}_k(\basisVec_{(i,j)}) = [i = k]\, \basisVec_j\),
+    so by Definition~\ref{ax:pdiv} the entry is
+    \([i = k] \cdot \pdiv g\,(A_i)\, j\, l\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Matrix-level chain rule]
   \label{thm:vjpMat_comp}
   \lean{Proofs.vjpMat_comp}
   \leanok
-  \uses{thm:vjp_comp}
-  Lifts \texttt{vjp\_comp} via the \(\mathsf{Mat.flatten}\) bijection.
+  \uses{thm:vjp_comp, ax:pdiv_comp, def:hasvjpmat}
+  \Assume{}
+  \begin{enumerate}
+    \item \(B_F\), \(B_G\) are correct backward functions
+          (\(\HasVJPMat\, F\), \(\HasVJPMat\, G\))
+          \hfill[\texttt{hF}, \texttt{hG}]
+    \item the flattened forms of \(F\) and \(G\) are differentiable
+          everywhere \hfill[\texttt{hF\_diff}, \texttt{hG\_diff}]
+  \end{enumerate}
+  \Prove{} \(\HasVJPMat\, (G \circ F)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.vjpMat\_comp}.
+\emph{Sketch: the VJP chain rule (Theorem~\ref{thm:vjp_comp})
+transcribed to rank-2 indices; every step is the same, with double
+sums where the rank-1 proof had single sums.}
+\begin{enumerate}
+  \item Define \(B(A, dY) := B_F\bigl(A,\; B_G(F(A),\, dY)\bigr)\).
+  \item \Suffices{} \(B\) matches the \(\pdivMat\) contraction.
+    \pf{Definition~\ref{def:hasvjpmat}.}
+  \item Chain rule for \(\pdivMat\):
+    \(\pdivMat(G \circ F)\, A\, (i,j)\, (k,l)
+      = \sum_{p,q} \pdivMat F\, A\, (i,j)\, (p,q) \cdot
+        \pdivMat G\, (F A)\, (p,q)\, (k,l)\).
+    \pf{The flattened composite is the composite of the flattened
+    maps (unflatten \(\circ\) flatten cancels), so the rank-1 chain
+    rule (Theorem~\ref{ax:pdiv_comp}) applies at the flat level,
+    applicable by assumption 2; re-index the flat middle sum to
+    \((p, q)\) pairs.}
+  \item \Qed{}
+    \pf{Expand the two \texttt{correct} fields in 1, substitute 3,
+    and swap the two double sums (pack indices into pairs,
+    \texttt{Finset.sum\_comm}, unpack); with 2 this is the goal ---
+    step for step the proof of Theorem~\ref{thm:vjp_comp}.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Matrix-level additive fan-in]
   \label{thm:biPathMat_has_vjp}
   \lean{Proofs.biPathMat_has_vjp}
   \leanok
-  \uses{thm:biPath_has_vjp}
+  \uses{thm:biPath_has_vjp, ax:pdiv_add, def:hasvjpmat}
+  Rank-2 transcription of Theorem~\ref{thm:biPath_has_vjp}: given
+  \(\HasVJPMat\) for \(F\) and \(G\) (with flat differentiability),
+  \(\HasVJPMat\, (F + G)\) with backward
+  \(B_F(A, dY) + B_G(A, dY)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.biPathMat\_has\_vjp}.
+\begin{enumerate}
+  \item \Suffices{} the summed backward matches the \(\pdivMat\)
+    contraction. \pf{Definition~\ref{def:hasvjpmat}.}
+  \item \Qed{}
+    \pf{Expand both \texttt{correct} fields, merge the double sums
+    (\texttt{Finset.sum\_add\_distrib} twice); the sum rule for
+    \(\pdivMat\) --- Theorem~\ref{ax:pdiv_add} through the flatten
+    bijection --- rewrites
+    \(\pdivMat F + \pdivMat G = \pdivMat(F + G)\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Matrix-level identity]
   \label{thm:identityMat_has_vjp}
   \lean{Proofs.identityMat_has_vjp}
   \leanok
-  \uses{thm:identity_has_vjp}
+  \uses{thm:identity_has_vjp, ax:pdiv_id, def:hasvjpmat}
+  \(\HasVJPMat\, (\mathrm{id})\), backward \(B(A, dY) = dY\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.identityMat\_has\_vjp}.
+\begin{enumerate}
+  \item \(\pdivMat(\mathrm{id})\, A\, (i,j)\, (k,l)
+          = [i = k \wedge j = l]\).
+    \pf{Flatten \(\circ\) unflatten is the identity on the flat
+    vector, so the identity Jacobian (Theorem~\ref{ax:pdiv_id})
+    applies; the flat-index equality decodes to
+    \(i = k \wedge j = l\) by injectivity of the pairing.}
+  \item \Qed{}
+    \pf{Contract 1 with \(dY\): the two-dimensional Kronecker sum
+    collapses (\texttt{Finset.sum\_eq\_single} twice) to
+    \(dY_{ij}\); Definition~\ref{def:hasvjpmat} closes.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Scalar-scale Jacobian]
@@ -7484,11 +7582,26 @@ Mechanical; see \leandocref{Proofs.identityMat\_has\_vjp}.
   \leanok
   \uses{ax:pdiv_mul, ax:pdiv_const, ax:pdiv_id}
   Phase 6 derivation.
+  \Prove{} \(\pdivMat(M \mapsto s \cdot M)\, A\, (i,j)\, (k,l)
+    = [i = k \wedge j = l] \cdot s\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdivMat\_scalarScale}.
+\begin{enumerate}
+  \item The flattened scalar-scale map reduces to
+    \(v \mapsto s \cdot v\).
+    \pf{Flatten/unflatten round-trip, pointwise.}
+  \item \(\pdiv(v \mapsto s \cdot v) = s \cdot \delta\) at the flat
+    indices.
+    \pf{Factor as \((\text{const } s) \cdot (\text{identity})\):
+    product rule (Theorem~\ref{ax:pdiv_mul}), constant rule
+    (Theorem~\ref{ax:pdiv_const}), identity Jacobian
+    (Theorem~\ref{ax:pdiv_id}).}
+  \item \Qed{}
+    \pf{The flat-index equality decodes to
+    \(i = k \wedge j = l\) by injectivity of the pairing.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Transpose Jacobian]
@@ -7496,134 +7609,258 @@ Mechanical; see \leandocref{Proofs.pdivMat\_scalarScale}.
   \lean{Proofs.pdivMat_transpose}
   \leanok
   \uses{ax:pdiv_reindex}
+  \Prove{} \(\pdivMat(\mathrm{transpose})\, A\, (i,j)\, (k,l)
+    = [j = k \wedge i = l]\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdivMat\_transpose}.
+\begin{enumerate}
+  \item The flattened transpose is a pure gather: at output index
+    \(\mathrm{idx}\), it reads \(v\) at the index with components
+    swapped.
+    \pf{Unfold transpose/flatten/unflatten.}
+  \item \Qed{}
+    \pf{Reindex Jacobian (Theorem~\ref{ax:pdiv_reindex}) with the
+    swap map \(\sigma\): the indicator condition
+    \(\mathrm{flat}(i,j) = \mathrm{flat}(l,k)\) decodes to
+    \(j = k \wedge i = l\) by injectivity of the pairing.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Matmul Jacobian, left factor fixed]
   \label{thm:pdivMat_matmul_left_const}
   \lean{Proofs.pdivMat_matmul_left_const}
   \leanok
-  \uses{ax:pdiv_const, ax:pdiv_reindex, thm:pdiv_finset_sum}
+  \uses{ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, thm:pdiv_finset_sum}
   Phase 6: derived, not axiomatized.
+  \Prove{} \(\pdivMat(B' \mapsto C \cdot B')\, B\, (i,j)\, (k,l)
+    = [l = j] \cdot C_{ki}\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdivMat\_matmul\_left\_const}.
+\begin{enumerate}
+  \item The flattened map at output index \(\mathrm{idx}\) is
+    \(v \mapsto \sum_s C_{k(\mathrm{idx}), s} \cdot
+      v_{\mathrm{flat}(s,\, l(\mathrm{idx}))}\) --- a finite sum of
+    (constant)\,\(\times\)\,(reindex) terms.
+    \pf{Unfold \(\mathrm{Mat.mul}\)/flatten/unflatten.}
+  \item Per-index Jacobian: finite-sum rule
+    (Theorem~\ref{thm:pdiv_finset_sum}) distributes over \(s\);
+    product rule with the \(C\)-factor constant
+    (Theorems~\ref{ax:pdiv_mul}, \ref{ax:pdiv_const}) and reindex
+    Jacobian (Theorem~\ref{ax:pdiv_reindex}) leave
+    \(\sum_s C_{k, s} \cdot [\mathrm{flat}(i,j) = \mathrm{flat}(s, l)]\).
+  \item \Qed{}
+    \pf{The indicator forces \(s = i\) and \(l = j\) (injectivity of
+    the pairing), collapsing the sum to \([l = j] \cdot C_{ki}\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Matmul Jacobian, right factor fixed]
   \label{thm:pdivMat_matmul_right_const}
   \lean{Proofs.pdivMat_matmul_right_const}
   \leanok
-  \uses{ax:pdiv_const, ax:pdiv_reindex, thm:pdiv_finset_sum}
+  \uses{ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, thm:pdiv_finset_sum}
+  \Prove{} \(\pdivMat(A' \mapsto A' \cdot D)\, A\, (i,j)\, (k,l)
+    = [i = k] \cdot D_{jl}\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdivMat\_matmul\_right\_const}.
+Mirror image of Theorem~\ref{thm:pdivMat_matmul_left_const}: the
+flattened map at output \(\mathrm{idx}\) is
+\(v \mapsto \sum_s v_{\mathrm{flat}(k(\mathrm{idx}),\, s)} \cdot
+  D_{s,\, l(\mathrm{idx})}\), the same finite-sum-of-reindex-times-constant
+shape with the variable factor on the left; the same three steps
+(finite-sum, product + constant + reindex rules, indicator collapse
+at \(s = j\), \(k = i\)) give \([i = k] \cdot D_{jl}\).
 \end{proof}
 
 \begin{theorem}[Matmul VJP, left factor fixed]
   \label{thm:matmul_left_const_has_vjp}
   \lean{Proofs.matmul_left_const_has_vjp}
   \leanok
-  \uses{thm:pdivMat_matmul_left_const}
+  \uses{thm:pdivMat_matmul_left_const, def:hasvjpmat}
+  \(\HasVJPMat\, (B' \mapsto C \cdot B')\), backward
+  \(dB = C^{T} \cdot dY\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.matmul\_left\_const\_has\_vjp}.
+\begin{enumerate}
+  \item Define \(B(B', dY)_{ij} := \sum_k C_{ki}\, dY_{kj}\)
+    (that is, \(C^T \cdot dY\)).
+  \item \Suffices{} \(B\) matches the \(\pdivMat\) contraction.
+    \pf{Definition~\ref{def:hasvjpmat}.}
+  \item \Qed{}
+    \pf{Substitute the Jacobian
+    (Theorem~\ref{thm:pdivMat_matmul_left_const}):
+    \(\sum_{k,l} [l = j]\, C_{ki} \cdot dY_{kl}\) collapses at
+    \(l = j\) (\texttt{Finset.sum\_ite\_eq'}) to
+    \(\sum_k C_{ki}\, dY_{kj} = B\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Matmul VJP, right factor fixed]
   \label{thm:matmul_right_const_has_vjp}
   \lean{Proofs.matmul_right_const_has_vjp}
   \leanok
-  \uses{thm:pdivMat_matmul_right_const}
+  \uses{thm:pdivMat_matmul_right_const, def:hasvjpmat}
+  \(\HasVJPMat\, (A' \mapsto A' \cdot D)\), backward
+  \(dA = dY \cdot D^{T}\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.matmul\_right\_const\_has\_vjp}.
+\begin{enumerate}
+  \item Define \(B(A', dY)_{ij} := \sum_l dY_{il}\, D_{jl}\)
+    (that is, \(dY \cdot D^T\)).
+  \item \Suffices{} \(B\) matches the \(\pdivMat\) contraction.
+    \pf{Definition~\ref{def:hasvjpmat}.}
+  \item \Qed{}
+    \pf{Substitute the Jacobian
+    (Theorem~\ref{thm:pdivMat_matmul_right_const}):
+    \(\sum_{k,l} [i = k]\, D_{jl} \cdot dY_{kl}\) collapses at
+    \(k = i\) (\texttt{Finset.sum\_ite\_eq}) to
+    \(\sum_l D_{jl}\, dY_{il} = B\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Scalar-scale VJP]
   \label{thm:scalarScale_has_vjp}
   \lean{Proofs.scalarScale_has_vjp}
   \leanok
-  \uses{thm:pdivMat_scalarScale}
+  \uses{thm:pdivMat_scalarScale, def:hasvjpmat}
+  \(\HasVJPMat\, (M \mapsto s \cdot M)\), backward
+  \(dA = s \cdot dY\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.scalarScale\_has\_vjp}.
+By Definition~\ref{def:hasvjpmat} it suffices to contract the
+Jacobian (Theorem~\ref{thm:pdivMat_scalarScale}) with \(dY\):
+\(\sum_{k,l} [i = k \wedge j = l]\, s \cdot dY_{kl}\) collapses at
+\((k, l) = (i, j)\) to \(s \cdot dY_{ij}\). \Qed{}
 \end{proof}
 
 \begin{theorem}[Transpose VJP]
   \label{thm:transpose_has_vjp}
   \lean{Proofs.transpose_has_vjp}
   \leanok
-  \uses{thm:pdivMat_transpose}
+  \uses{thm:pdivMat_transpose, def:hasvjpmat}
+  \(\HasVJPMat\, (\mathrm{transpose})\), backward
+  \(dA = dY^{T}\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.transpose\_has\_vjp}.
+By Definition~\ref{def:hasvjpmat} it suffices to contract the
+Jacobian (Theorem~\ref{thm:pdivMat_transpose}) with \(dY\):
+\(\sum_{k,l} [j = k \wedge i = l] \cdot dY_{kl}\) collapses at
+\((k, l) = (j, i)\) to \(dY_{ji}\). \Qed{}
 \end{proof}
 
 \begin{theorem}[Row-wise lifting of any \(\HasVJP\)]
   \label{thm:rowwise_has_vjp_mat}
   \lean{Proofs.rowwise_has_vjp_mat}
   \leanok
-  \uses{ax:pdivMat_rowIndep}
-  Phase 8 generic helper: lifts any \(\HasVJP\, (g : \Vect{n} \to \Vect{p})\)
-  to a \(\HasVJPMat\) on \(\Mat{m}{n} \to \Mat{m}{p}\).
+  \uses{ax:pdivMat_rowIndep, def:hasvjp, def:hasvjpmat}
+  Phase 8 generic helper.
+  \Assume{}
+  \begin{enumerate}
+    \item \(B_g\) is a correct backward for
+          \(g : \Vect{n} \to \Vect{p}\) (\(\HasVJP\, g\))
+          \hfill[\texttt{hg}]
+    \item \(g\) is differentiable everywhere \hfill[\texttt{hg\_diff}]
+  \end{enumerate}
+  \Prove{} \(\HasVJPMat\) of the rowwise map on
+  \(\Mat{m}{n} \to \Mat{m}{p}\), with backward applying \(B_g\) to
+  each row: \(B(A, dY)_r = B_g(A_r, dY_r)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.rowwise\_has\_vjp\_mat}.
+\begin{enumerate}
+  \item \Suffices{} \(B\) matches the \(\pdivMat\) contraction.
+    \pf{Definition~\ref{def:hasvjpmat}.}
+  \item The Jacobian is block-diagonal:
+    \(\pdivMat = [i = k] \cdot \pdiv g\, (A_i)\, j\, l\).
+    \pf{Row-independence (Theorem~\ref{ax:pdivMat_rowIndep}),
+    applicable by assumption 2.}
+  \item \Qed{}
+    \pf{Contract 2 with \(dY\): the row sum collapses at \(k = i\)
+    (\texttt{Finset.sum\_ite\_eq}); what remains is precisely
+    \(g\)'s own correctness equation at row \(i\)
+    (assumption 1).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[3D chain rule]
   \label{thm:pdiv3_comp}
   \lean{Proofs.pdiv3_comp}
   \leanok
-  \uses{ax:pdiv_comp}
+  \uses{ax:pdiv_comp, def:hasvjp3}
+  \Prove{} for flattened-differentiable \(f\), \(g\):
+  \(\pdiv_3(g \circ f)\) is the middle-index contraction
+  \(\sum_{c_j, h_j, w_j} \pdiv_3 f \cdot \pdiv_3 g\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv3\_comp}.
+\begin{enumerate}
+  \item \(\pdiv_3\) is \(\pdiv\) of the flattened map
+    (Definition~\ref{def:hasvjp3}), and the flattened composite is
+    the composite of the flattened maps.
+    \pf{Unflatten \(\circ\) flatten cancels between the stages.}
+  \item \Qed{}
+    \pf{The rank-1 chain rule (Theorem~\ref{ax:pdiv_comp}) at the
+    flat level, then re-index the flat middle sum to
+    \((c_j, h_j, w_j)\) triples through the index bijection.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[3D VJP chain rule]
   \label{thm:vjp3_comp}
   \lean{Proofs.vjp3_comp}
   \leanok
-  \uses{thm:pdiv3_comp}
+  \uses{thm:pdiv3_comp, thm:vjp_comp, def:hasvjp3}
+  Rank-3 transcription of Theorem~\ref{thm:vjp_comp}: composite
+  backward \(B(x, dy) = B_f\bigl(x,\, B_g(f\,x,\, dy)\bigr)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.vjp3\_comp}.
+\begin{enumerate}
+  \item \Suffices{} the composite backward matches the \(\pdiv_3\)
+    triple-sum contraction. \pf{Definition~\ref{def:hasvjp3}.}
+  \item \Qed{}
+    \pf{Expand both \texttt{correct} fields, substitute the 3D chain
+    rule (Theorem~\ref{thm:pdiv3_comp}), then swap the two triple
+    sums by packing each into a product index
+    (\texttt{Finset.sum\_product}, \texttt{Finset.sum\_comm}) ---
+    the rank-3 rendition of Theorem~\ref{thm:vjp_comp} steps 3--6.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[3D additive fan-in]
   \label{thm:biPath3_has_vjp}
   \lean{Proofs.biPath3_has_vjp}
   \leanok
-  \uses{ax:pdiv_add}
+  \uses{ax:pdiv_add, thm:biPath_has_vjp, def:hasvjp3}
+  Rank-3 transcription of Theorem~\ref{thm:biPath_has_vjp}: backward
+  is the sum of the two backwards.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.biPath3\_has\_vjp}.
+By Definition~\ref{def:hasvjp3} it suffices to match the triple-sum
+contraction: expand both \texttt{correct} fields, merge the three
+nested sums (\texttt{Finset.sum\_add\_distrib} three times), and
+apply the sum rule (Theorem~\ref{ax:pdiv_add}, through the flatten
+bijection) to rewrite \(\pdiv_3 f + \pdiv_3 g = \pdiv_3(f + g)\).
+\Qed{}
 \end{proof}
 
 \section{Attention proofs}
@@ -7634,66 +7871,159 @@ Mechanical; see \leandocref{Proofs.biPath3\_has\_vjp}.
   \lean{Proofs.pdiv_softmax}
   \leanok
   \uses{ax:pdiv}
-  \(\partial \mathrm{softmax}(z)_j / \partial z_i = p_j (\delta_{ij} - p_i)\).
-  Proved by extracting the j-th coordinate function
-  \(z' \mapsto e^{z'_j} \cdot (\sum_k e^{z'_k})^{-1}\) and chaining
-  \texttt{HasFDerivAt.exp} with \texttt{(hasDerivAt\_inv).comp\_hasFDerivAt}.
-  At \(\basisVec_i\) the sum collapses via \(\sum_k e^{z_k} \cdot \delta_{ki} = e^{z_i}\).
+  Writing \(p := \mathrm{softmax}(z)\):
+  \Prove{}
+  \(\pdiv(\mathrm{softmax})\, z\, i\, j = p_j\, (\delta_{ij} - p_i)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_softmax}.
+\begin{enumerate}
+  \item \(\pdiv(\mathrm{softmax})\, z\, i\, j
+    = \fderiv_{\R}\,\bigl(z' \mapsto e^{z'_j} \cdot
+      (\textstyle\sum_k e^{z'_k})^{-1}\bigr)\, z\, (\basisVec_i)\).
+    \pf{Definition~\ref{ax:pdiv}; extract the \(j\)-th coordinate
+    (\texttt{fderiv\_apply}), differentiable because the denominator
+    \(S := \sum_k e^{z_k}\) is a sum of positive exponentials, hence
+    nonzero.}
+  \item Differentiate the product: numerator via
+    \texttt{HasFDerivAt.exp}, denominator via
+    \texttt{(hasDerivAt\_inv).comp\_hasFDerivAt} (licensed by
+    \(S > 0\)).
+  \item Evaluate at \(\basisVec_i\): the numerator's derivative
+    contributes \(e^{z_j}\, \delta_{ji}\), and the denominator's
+    contributes \(-e^{z_j}\, S^{-2} \cdot e^{z_i}\), the inner sum
+    collapsing by \(\sum_k e^{z_k}\, \delta_{ki} = e^{z_i}\).
+  \item \Qed{}
+    \pf{Combine 2--3 and rewrite in terms of \(p = e^{z}/S\):
+    \(S^{-1} e^{z_j} \delta_{ij} - e^{z_j} S^{-2} e^{z_i}
+      = p_j(\delta_{ij} - p_i)\)
+    (\texttt{field\_simp}, \texttt{ring}).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Standalone softmax VJP]
   \label{thm:softmax_has_vjp}
   \lean{Proofs.softmax_has_vjp}
   \leanok
-  \uses{ax:pdiv_softmax}
-  Closed-form collapse: \(dz_i = p_i (dy_i - \langle p, dy \rangle)\).
+  \uses{ax:pdiv_softmax, def:hasvjp}
+  \(\HasVJP\, (\mathrm{softmax})\), with the closed-form
+  \(O(c)\) backward
+  \[
+    B(z, dy)_i = p_i\, \bigl(dy_i - \langle p, dy \rangle\bigr),
+  \]
+  where \(\langle p, dy \rangle = \sum_j p_j\, dy_j\) is one
+  precomputed scalar --- the rank-1 structure of the Jacobian is what
+  turns the naive \(O(c^2)\) contraction into a reduction plus a
+  broadcast, the same optimization pattern as BN and max-pool.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.softmax\_has\_vjp}.
+\begin{enumerate}
+  \item \Suffices{} \(B(z, dy)_i = \sum_j \pdiv(\mathrm{softmax})\,
+    z\, i\, j \cdot dy_j\). \pf{Definition~\ref{def:hasvjp}.}
+  \item \(\sum_j p_j (\delta_{ij} - p_i)\, dy_j
+      = p_i\, dy_i - p_i \sum_j p_j\, dy_j\).
+    \pf{Substitute the softmax Jacobian
+    (Theorem~\ref{ax:pdiv_softmax}); split the sum, collapse the
+    \(\delta\)-term (\texttt{Finset.sum\_ite}), factor \(p_i\) out
+    of the second (\texttt{Finset.mul\_sum}).}
+  \item \Qed{}
+    \pf{The right side of 2 is \(p_i(dy_i - \langle p, dy\rangle)
+      = B(z, dy)_i\); with 1, done.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Row-wise softmax VJP on a matrix]
   \label{thm:rowSoftmax_has_vjp_mat}
   \lean{Proofs.rowSoftmax_has_vjp_mat}
   \leanok
-  \uses{ax:pdivMat_rowIndep, thm:softmax_has_vjp}
+  \uses{ax:pdivMat_rowIndep, thm:softmax_has_vjp, def:hasvjpmat}
+  \(\HasVJPMat\, (\mathrm{rowSoftmax})\): rows are independent, so the
+  backward applies the softmax backward per row.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.rowSoftmax\_has\_vjp\_mat}.
+The rowwise-lifting argument (Theorem~\ref{thm:rowwise_has_vjp_mat})
+instantiated at \(g = \mathrm{softmax}\):
+\begin{enumerate}
+  \item The Jacobian is block-diagonal with the standalone softmax
+    Jacobian in each block.
+    \pf{Row-independence (Theorem~\ref{ax:pdivMat_rowIndep});
+    softmax is differentiable (positive denominator).}
+  \item \Qed{}
+    \pf{Contract with \(dY\), collapse the row sum at \(k = i\);
+    what remains is Theorem~\ref{thm:softmax_has_vjp}'s correctness
+    equation at row \(i\); Definition~\ref{def:hasvjpmat} closes.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[SDPA backward wrt Q]
   \label{thm:sdpa_back_Q_correct}
   \lean{Proofs.sdpa_back_Q_correct}
   \leanok
-  \uses{thm:matmul_right_const_has_vjp, thm:scalarScale_has_vjp, thm:rowSoftmax_has_vjp_mat, thm:vjpMat_comp}
-  Composed from four proved \(\HasVJPMat\) building blocks.
+  \uses{thm:matmul_right_const_has_vjp, thm:scalarScale_has_vjp, thm:rowSoftmax_has_vjp_mat, thm:vjpMat_comp, ax:rowSoftmax_flat_diff}
+  \Prove{} for fixed \(K, V\): \(\mathrm{sdpa\_back\_Q}\) matches the
+  \(\pdivMat\) contraction of \(Q' \mapsto \mathrm{sdpa}(Q', K, V)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.sdpa\_back\_Q\_correct}.
+\begin{enumerate}
+  \item The forward is a four-link chain:
+    \[
+      Q' \;\mapsto\; Q' K^T \;\mapsto\; \tfrac{1}{\sqrt{d}} \cdot {\prev}
+      \;\mapsto\; \mathrm{rowSoftmax}\, {\prev} \;\mapsto\; {\prev} \cdot V.
+    \]
+    \pf{Definitional (\texttt{sdpa\_Q\_chain\_eq}).}
+  \item Each link has a proved \(\HasVJPMat\): matmul-right-const at
+    \(K^T\) (Theorem~\ref{thm:matmul_right_const_has_vjp}),
+    scalar-scale (Theorem~\ref{thm:scalarScale_has_vjp}), row-wise
+    softmax (Theorem~\ref{thm:rowSoftmax_has_vjp_mat}), matmul-right-const
+    at \(V\); glue with the matrix chain rule
+    (Theorem~\ref{thm:vjpMat_comp}) three times.
+    \pf{The flat-differentiability side conditions: the first two
+    links are linear (\texttt{fun\_prop}) and rowSoftmax is smooth
+    (Theorem~\ref{ax:rowSoftmax_flat_diff}); compositions inherit.}
+  \item \Qed{}
+    \pf{The chain's composed backward literally computes
+    \(\mathrm{sdpa\_back\_Q}\)'s nested formula (pure unfolding), so
+    the chain's \texttt{correct} field is the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[SDPA backward wrt K]
   \label{thm:sdpa_back_K_correct}
   \lean{Proofs.sdpa_back_K_correct}
   \leanok
-  \uses{thm:matmul_right_const_has_vjp, thm:matmul_left_const_has_vjp, thm:scalarScale_has_vjp, thm:rowSoftmax_has_vjp_mat, thm:transpose_has_vjp, thm:vjpMat_comp}
+  \uses{thm:matmul_right_const_has_vjp, thm:matmul_left_const_has_vjp, thm:scalarScale_has_vjp, thm:rowSoftmax_has_vjp_mat, thm:transpose_has_vjp, thm:vjpMat_comp, ax:rowSoftmax_flat_diff}
+  \Prove{} for fixed \(Q, V\): \(\mathrm{sdpa\_back\_K}\) matches the
+  \(\pdivMat\) contraction of \(K' \mapsto \mathrm{sdpa}(Q, K', V)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.sdpa\_back\_K\_correct}.
+Same shape as Theorem~\ref{thm:sdpa_back_Q_correct}, with a leading
+transpose link:
+\begin{enumerate}
+  \item The forward chain is
+    \(K' \mapsto K'^T \mapsto Q \cdot {\prev} \mapsto
+      \tfrac{1}{\sqrt{d}} \cdot {\prev} \mapsto
+      \mathrm{rowSoftmax}\, {\prev} \mapsto {\prev} \cdot V\),
+    the second link now matmul-\emph{left}-const
+    (Theorems~\ref{thm:transpose_has_vjp},
+    \ref{thm:matmul_left_const_has_vjp}).
+  \item Glue the five links with Theorem~\ref{thm:vjpMat_comp}
+    (four applications), differentiabilities as before.
+  \item \Qed{}
+    \pf{The chain's backward computes
+    \(\sum_k Q_{kj}\, d\mathrm{Scores}_{ki}\) while
+    \(\mathrm{sdpa\_back\_K} = (d\mathrm{Scores})^T Q\) expands to
+    \(\sum_k d\mathrm{Scores}_{ki}\, Q_{kj}\) --- equal by
+    \texttt{mul\_comm} at the summand.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[SDPA backward wrt V]
@@ -7701,54 +8031,127 @@ Mechanical; see \leandocref{Proofs.sdpa\_back\_K\_correct}.
   \lean{Proofs.sdpa_back_V_correct}
   \leanok
   \uses{thm:matmul_left_const_has_vjp}
+  \Prove{} for fixed \(Q, K\): \(\mathrm{sdpa\_back\_V}\) matches the
+  \(\pdivMat\) contraction of \(V' \mapsto \mathrm{sdpa}(Q, K, V')\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.sdpa\_back\_V\_correct}.
+\begin{enumerate}
+  \item \(V'\) enters only through the final matmul:
+    \(\mathrm{sdpa}(Q, K, V') = W \cdot V'\) with
+    \(W := \mathrm{sdpa\_weights}(Q, K)\) fixed.
+    \pf{Definitional (\texttt{sdpa\_eq\_mul\_weights}).}
+  \item \Qed{}
+    \pf{Theorem~\ref{thm:matmul_left_const_has_vjp}'s backward is
+    \(W^T \cdot d\mathrm{Out}\), which unfolds to exactly
+    \(\mathrm{sdpa\_back\_V}\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Multi-head SDPA VJP]
   \label{ax:mhsa_has_vjp_mat}
   \lean{Proofs.mhsa_has_vjp_mat}
   \leanok
-  Phase 3 (Apr 2026): proved via column-stacking, lifting the
-  proved single-head SDPA backward (\texttt{sdpa\_back\_*}) over
-  the head axis using the new \texttt{pdivMat\_colIndep} +
-  \texttt{colSlabwise\_has\_vjp\_mat} framework.
+  \uses{thm:sdpa_back_Q_correct, thm:sdpa_back_K_correct, thm:sdpa_back_V_correct, thm:dense_per_token_has_vjp_mat, thm:vjpMat_comp, ax:pdivMat_rowIndep, def:hasvjpmat}
+  Phase 3 (Apr 2026), de-axiomatized Phase 8.
+  \Prove{} \(\HasVJPMat\, (\mathrm{mhsa\_layer})\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.mhsa\_has\_vjp\_mat}.
+\emph{Sketch: column-stacking --- each head touches only its own
+column slab, so the single-head SDPA backward lifts across the head
+axis the same way row-independence lifts vector VJPs across rows.}
+\begin{enumerate}
+  \item \(\mathrm{mhsa\_layer}\) factors as
+    \((\text{per-token dense } W_o) \circ
+      \mathrm{colSlabApply}(\text{single-head SDPA}) \circ
+      (\text{per-token fused QKV dense})\).
+    \pf{Definitional (\texttt{mhsa\_layer\_eq\_compose}).}
+  \item The middle factor's Jacobian is block-diagonal across heads:
+    \texttt{pdivMat\_colIndep}, the column-axis analogue of
+    row-independence (Theorem~\ref{ax:pdivMat_rowIndep}), lifts the
+    proved single-head backward
+    (Theorems~\ref{thm:sdpa_back_Q_correct}--\ref{thm:sdpa_back_V_correct})
+    over the head axis (\texttt{colSlabwise\_has\_vjp\_mat}).
+  \item Glue the three factors with the matrix chain rule
+    (Theorem~\ref{thm:vjpMat_comp}) twice; the dense factors are
+    per-token lifts (Theorem~\ref{thm:dense_per_token_has_vjp_mat}).
+  \item \Qed{}
+    \pf{The backward field is taken from the composed witness
+    directly (kernel-cheap projection); the composition-equality
+    transport of step 1 lives only in the \texttt{correct} field ---
+    a \texttt{Prop} the kernel never reduces.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[MHSA layer smoothness]
   \label{ax:mhsa_layer_flat_diff}
   \lean{Proofs.mhsa_layer_flat_diff}
   \leanok
-  \(\Differentiable\) sibling of \texttt{mhsa\_has\_vjp\_mat},
-  proved alongside the VJP via the same column-stacking framework.
+  \(\Differentiable\) sibling of Theorem~\ref{ax:mhsa_has_vjp_mat}.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.mhsa\_layer\_flat\_diff}.
+Factor as in Theorem~\ref{ax:mhsa_has_vjp_mat} step 1; each factor's
+flattened form is differentiable (two per-token dense lifts, and
+\(\mathrm{colSlabApply}\) of the single-head function, whose
+smoothness comes from the same chain of exp/inv positivity as
+Theorem~\ref{ax:rowSoftmax_flat_diff}); compositions inherit
+differentiability. \Qed{}
 \end{proof}
 
 \begin{theorem}[Patch-embedding VJP]
   \label{ax:patchEmbed_flat_has_vjp}
   \lean{Proofs.patchEmbed_flat_has_vjp}
   \leanok
-  Phase 6b (Apr 2026): de-opaqued in 6a (concrete \texttt{def}
-  unfolding to conv-with-stride + CLS prepend + positional embed),
-  then proved as input VJP via spatial-rearrangement bridge to the
-  proved \texttt{conv2d\_has\_vjp3}.
+  \uses{def:hasvjp, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex}
+  Phase 6b (Apr 2026): de-opaqued in 6a --- the concrete \texttt{def}
+  unfolds to conv-with-stride + CLS prepend + positional embed.
+  \Prove{} \(\HasVJP\, (\mathrm{patchEmbed\_flat})\), with backward
+  the deconvolution formula: a sum over patches with reconstructed
+  kernel offsets, the CLS row contributing nothing to the image
+  gradient.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.patchEmbed\_flat\_has\_vjp}.
+\emph{Sketch: the conv2d input-VJP recipe
+(Theorem~\ref{ax:conv2d_has_vjp3}) reapplied to the strided patch
+convolution, with one new wrinkle at the collapse: the CLS row.}
+\begin{enumerate}
+  \item Define \(B(\mathrm{img}, dy)\) at input position
+    \((c, h, w)\) as
+    \(\sum_{p, k_h, k_w} [\text{offset match}]
+      \sum_d W^{\mathrm{conv}}_{d, c, k_h, k_w} \cdot
+        dy_{\mathrm{flat}(p + 1,\, d)}\),
+    where patch \(p\) decodes to grid position
+    \((\lfloor p / W' \rfloor, p \bmod W')\).
+  \item \Suffices{} \(B\) matches the \(\pdiv\) contraction.
+    \pf{Definition~\ref{def:hasvjp}.}
+  \item The forward decomposes as
+    \((\text{constant: bias} + \text{CLS} + \text{pos-embed}) +
+      (\text{img-linear part})\), where the pad guard absorbs the
+    \(n = 0\) (CLS-row) test so the linear part is uniform in
+    \(\mathrm{img}\).
+    \pf{Unfold; definitional.}
+  \item Per-index Jacobian by the conv2d recipe: sum + constant
+    rules drop the constants (Theorems~\ref{ax:pdiv_add},
+    \ref{ax:pdiv_const}); finite-sum rule
+    (Theorem~\ref{thm:pdiv_finset_sum}) \(\times 3\); product rule
+    (Theorem~\ref{ax:pdiv_mul}) with constant \(W^{\mathrm{conv}}\)
+    factor; guarded projection = reindex-or-zero
+    (Theorems~\ref{ax:pdiv_reindex}, \ref{ax:pdiv_const}).
+  \item Contract with \(dy\) and collapse as in
+    Theorem~\ref{ax:conv2d_has_vjp3} step 5, with the new wrinkle:
+    split the output-row sum over \(\mathrm{Fin}(N{+}1)\) into the
+    CLS row (contributes \(0\)) plus \(\sum_{p : \mathrm{Fin}\, N}\)
+    at rows \(n = p + 1\) (\texttt{Fin.sum\_univ\_succ}).
+  \item \Qed{}
+    \pf{What remains is \(B\); with 2, done.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Patch-embedding smoothness]
@@ -7756,13 +8159,15 @@ Mechanical; see \leandocref{Proofs.patchEmbed\_flat\_has\_vjp}.
   \lean{Proofs.patchEmbed_flat_diff}
   \leanok
   \(\Differentiable\) sibling of
-  \texttt{patchEmbed\_flat\_has\_vjp}, proved via the same
-  rearrangement bridge.
+  Theorem~\ref{ax:patchEmbed_flat_has_vjp}.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.patchEmbed\_flat\_diff}.
+The decomposition of Theorem~\ref{ax:patchEmbed_flat_has_vjp}
+step 3 exhibits the flattened forward as constant + linear-in-img
+(each summand a constant times a guarded projection); both pieces
+are differentiable and the sum inherits it. \Qed{}
 \end{proof}
 
 \begin{theorem}[Per-token LayerNorm lifted to a matrix]
@@ -7774,7 +8179,12 @@ Mechanical; see \leandocref{Proofs.patchEmbed\_flat\_diff}.
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.layerNorm\_per\_token\_has\_vjp\_mat}.
+Instantiate the rowwise lift (Theorem~\ref{thm:rowwise_has_vjp_mat})
+at \(g = \mathrm{layerNormForward}\), with
+Theorem~\ref{thm:layerNorm_has_vjp} as the \(\HasVJP\) witness and
+its differentiability sibling (\(\varepsilon > 0\)) as the smoothness
+witness. The backward is block-diagonal: each token's gradient is
+computed independently by the 1D three-term formula. \Qed{}
 \end{proof}
 
 \begin{theorem}[Per-token dense lifted to a matrix]
@@ -7786,7 +8196,11 @@ Mechanical; see \leandocref{Proofs.layerNorm\_per\_token\_has\_vjp\_mat}.
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.dense\_per\_token\_has\_vjp\_mat}.
+Instantiate the rowwise lift (Theorem~\ref{thm:rowwise_has_vjp_mat})
+at \(g = \mathrm{dense}(W, b)\), with
+Theorem~\ref{thm:dense_has_vjp} as the \(\HasVJP\) witness; dense is
+affine, hence everywhere differentiable. This is \(Q = XW + b\)
+row-by-row with shared weights. \Qed{}
 \end{proof}
 
 \begin{theorem}[Per-token GELU lifted to a matrix]
@@ -7798,107 +8212,182 @@ Mechanical; see \leandocref{Proofs.dense\_per\_token\_has\_vjp\_mat}.
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.gelu\_per\_token\_has\_vjp\_mat}.
+Instantiate the rowwise lift (Theorem~\ref{thm:rowwise_has_vjp_mat})
+at \(g = \mathrm{gelu}\), with Theorem~\ref{thm:gelu_has_vjp} as the
+\(\HasVJP\) witness and the tanh-chain smoothness as the
+differentiability witness. Elementwise activation: the Jacobian is
+diagonal both across rows and within a row. \Qed{}
 \end{proof}
 
 \begin{theorem}[Row-wise softmax smoothness]
   \label{ax:rowSoftmax_flat_diff}
   \lean{Proofs.rowSoftmax_flat_diff}
   \leanok
-  \(\mathrm{rowSoftmax}\) (the flattened form) is \(\Differentiable\).
-  Proved via Mathlib's \(\mathrm{Real.exp}\) calculus: the denominator
-  \(\sum_j \exp(M_{rj})\) is positive (by \texttt{Finset.sum\_pos}),
-  giving a \texttt{Differentiable.inv} application that finishes the
-  chain.
+  \Prove{} the flattened \(\mathrm{rowSoftmax}\) is
+  \(\Differentiable\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.rowSoftmax\_flat\_diff}.
+\begin{enumerate}
+  \item \Case{} \(n = 0\): the codomain is \(0\)-dimensional; the map
+    is constant. \pf{Trivial.}
+  \item \Case{} \(n \ge 1\): each output coordinate is
+    \(v \mapsto e^{v_{(r, c)}} \cdot
+      \bigl(\sum_j e^{v_{(r, j)}}\bigr)^{-1}\).
+    The denominator is a positive finite sum
+    (\texttt{Real.exp\_pos}, \texttt{Finset.sum\_pos} over the
+    nonempty index set), so \texttt{Differentiable.inv} applies and
+    the product of exponential chains closes.
+  \item \Qed{}
+    \pf{Differentiability per coordinate gives differentiability of
+    the Pi-valued map (\texttt{differentiable\_pi}).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Transformer MLP sublayer VJP]
   \label{thm:transformerMlp_has_vjp_mat}
   \lean{Proofs.transformerMlp_has_vjp_mat}
   \leanok
-  \uses{thm:dense_per_token_has_vjp_mat, thm:gelu_per_token_has_vjp_mat}
-  A \texttt{vjpMat\_comp} chain of three per-token liftings.
-  \(\Differentiable\) hypotheses are now threaded through the chain;
-  proved.
+  \uses{thm:dense_per_token_has_vjp_mat, thm:gelu_per_token_has_vjp_mat, thm:vjpMat_comp}
+  \(\HasVJPMat\) of
+  \(\mathrm{dense}_2 \circ \mathrm{gelu} \circ \mathrm{dense}_1\),
+  all per-token.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.transformerMlp\_has\_vjp\_mat}.
+\begin{enumerate}
+  \item Inner composition \(\mathrm{gelu} \circ \mathrm{dense}_1\):
+    matrix chain rule (Theorem~\ref{thm:vjpMat_comp}) on the two
+    per-token lifts (Theorems~\ref{thm:dense_per_token_has_vjp_mat},
+    \ref{thm:gelu_per_token_has_vjp_mat}); both flat forms are
+    differentiable (dense affine, GELU via the tanh chain), and the
+    composition inherits it.
+  \item \Qed{}
+    \pf{One more chain-rule application against the outer
+    \(\mathrm{dense}_2\) lift.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Transformer attention sublayer with residual VJP]
   \label{thm:transformerAttnSublayer_has_vjp_mat}
   \lean{Proofs.transformerAttnSublayer_has_vjp_mat}
   \leanok
-  \uses{thm:layerNorm_per_token_has_vjp_mat, ax:mhsa_has_vjp_mat}
-  \(\biPathMat\) of identity and \(\mathrm{mhsa} \circ \mathrm{LN_1}\).
-  Diff hypotheses threaded; proved.
+  \uses{thm:layerNorm_per_token_has_vjp_mat, ax:mhsa_has_vjp_mat, ax:mhsa_layer_flat_diff, thm:biPathMat_has_vjp, thm:identityMat_has_vjp, thm:vjpMat_comp}
+  \Assume{} \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]\\
+  \Prove{} \(\HasVJPMat\) of
+  \(X \mapsto X + \mathrm{MHSA}(\mathrm{LN}_1(X))\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.transformerAttnSublayer\_has\_vjp\_mat}.
+\begin{enumerate}
+  \item Inner arm \(\mathrm{MHSA} \circ \mathrm{LN}_1\): matrix chain
+    rule (Theorem~\ref{thm:vjpMat_comp}) on
+    Theorems~\ref{thm:layerNorm_per_token_has_vjp_mat} and
+    \ref{ax:mhsa_has_vjp_mat}, differentiabilities from the
+    \(\varepsilon > 0\) LN smoothness and
+    Theorem~\ref{ax:mhsa_layer_flat_diff}.
+  \item \Qed{}
+    \pf{Matrix additive fan-in
+    (Theorem~\ref{thm:biPathMat_has_vjp}) of the identity arm
+    (Theorem~\ref{thm:identityMat_has_vjp}) and the inner arm ---
+    the same residual pattern as
+    Theorem~\ref{thm:residual_has_vjp}, one rank up.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Transformer MLP sublayer with residual VJP]
   \label{thm:transformerMlpSublayer_has_vjp_mat}
   \lean{Proofs.transformerMlpSublayer_has_vjp_mat}
   \leanok
-  \uses{thm:layerNorm_per_token_has_vjp_mat, thm:transformerMlp_has_vjp_mat}
-  Diff hypotheses threaded; proved.
+  \uses{thm:layerNorm_per_token_has_vjp_mat, thm:transformerMlp_has_vjp_mat, thm:biPathMat_has_vjp, thm:identityMat_has_vjp, thm:vjpMat_comp}
+  \Assume{} \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]\\
+  \Prove{} \(\HasVJPMat\) of
+  \(h \mapsto h + \mathrm{MLP}(\mathrm{LN}_2(h))\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.transformerMlpSublayer\_has\_vjp\_mat}.
+Identical structure to
+Theorem~\ref{thm:transformerAttnSublayer_has_vjp_mat}: chain
+\(\mathrm{MLP} \circ \mathrm{LN}_2\)
+(Theorems~\ref{thm:transformerMlp_has_vjp_mat},
+\ref{thm:layerNorm_per_token_has_vjp_mat} via
+Theorem~\ref{thm:vjpMat_comp}), then \(\biPathMat\) with the
+identity arm (Theorems~\ref{thm:biPathMat_has_vjp},
+\ref{thm:identityMat_has_vjp}). \Qed{}
 \end{proof}
 
 \begin{theorem}[Transformer block VJP]
   \label{thm:transformerBlock_has_vjp_mat}
   \lean{Proofs.transformerBlock_has_vjp_mat}
   \leanok
-  \uses{thm:transformerAttnSublayer_has_vjp_mat, thm:transformerMlpSublayer_has_vjp_mat}
-  One \texttt{vjpMat\_comp} glueing the two sublayers. Proved.
+  \uses{thm:transformerAttnSublayer_has_vjp_mat, thm:transformerMlpSublayer_has_vjp_mat, thm:vjpMat_comp}
+  \Prove{} \(\HasVJPMat\) of one pre-norm encoder block
+  \(z = x + \mathrm{MHSA}(\mathrm{LN}_1 x)\),
+  \(y = z + \mathrm{MLP}(\mathrm{LN}_2 z)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.transformerBlock\_has\_vjp\_mat}.
+One matrix chain rule (Theorem~\ref{thm:vjpMat_comp}) glueing the
+attention sublayer
+(Theorem~\ref{thm:transformerAttnSublayer_has_vjp_mat}) to the MLP
+sublayer (Theorem~\ref{thm:transformerMlpSublayer_has_vjp_mat}),
+with each sublayer's flat differentiability discharged from its
+arms (both are \(\mathrm{id} + \text{smooth}\)). \Qed{}
 \end{proof}
 
 \begin{theorem}[Transformer tower, any depth]
   \label{thm:transformerTower_has_vjp_mat}
   \lean{Proofs.transformerTower_has_vjp_mat}
   \leanok
-  \uses{thm:transformerBlock_has_vjp_mat}
-  \(k\)-fold induction via \texttt{vjpMat\_comp}; covers ViT-Tiny /
-  Base / Large.
+  \uses{thm:transformerBlock_has_vjp_mat, thm:identityMat_has_vjp, thm:vjpMat_comp}
+  \Prove{} \(\HasVJPMat\) of the \(k\)-block tower, for every
+  \(k\) --- ViT-Tiny/Base (\(k = 12\)) and Large (\(k = 24\)) are
+  instances.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.transformerTower\_has\_vjp\_mat}.
+Induction on \(k\):
+\begin{enumerate}
+  \item \Case{} \(k = 0\): the tower is the identity.
+    \pf{Theorem~\ref{thm:identityMat_has_vjp}.}
+  \item \Case{} \(k + 1\): the tower is
+    \(\mathrm{block} \circ \mathrm{tower}_k\).
+    \pf{Matrix chain rule (Theorem~\ref{thm:vjpMat_comp}) on the
+    induction hypothesis and one block
+    (Theorem~\ref{thm:transformerBlock_has_vjp_mat}), with the
+    tower's flat differentiability carried through the same
+    induction.}
+  \item \Qed{}
+    \pf{By induction, 1 and 2 cover every depth.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[ViT body: the grand finale]
   \label{thm:vit_body_has_vjp_mat}
   \lean{Proofs.vit_body_has_vjp_mat}
   \leanok
-  \uses{thm:transformerTower_has_vjp_mat, thm:layerNorm_per_token_has_vjp_mat}
-  The full ViT transformer backbone as one \(\HasVJPMat\):
-  \(\mathrm{finalLN} \circ \mathrm{transformerTower}\) glued by
-  \texttt{vjpMat\_comp}.
+  \uses{thm:transformerTower_has_vjp_mat, thm:layerNorm_per_token_has_vjp_mat, thm:vjpMat_comp}
+  \Prove{} the full ViT transformer backbone
+  \(\mathrm{finalLN} \circ \mathrm{transformerTower}\) is one
+  \(\HasVJPMat\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.vit\_body\_has\_vjp\_mat}.
+One final matrix chain rule (Theorem~\ref{thm:vjpMat_comp}) glueing
+the \(k\)-block tower
+(Theorem~\ref{thm:transformerTower_has_vjp_mat}) to the final
+per-token LayerNorm
+(Theorem~\ref{thm:layerNorm_per_token_has_vjp_mat}). Every step of
+the chain that began with \texttt{vjp\_comp} in
+Chapter~\ref{chap:tensor} is a proved theorem; this is its last
+link. \Qed{}
 \end{proof}
 
 \section{Example: ViT-Tiny on Imagenette}
