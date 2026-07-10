@@ -3599,13 +3599,30 @@ chain rule we already had.
   \lean{Proofs.pdiv_bnAffine}
   \leanok
   \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, ax:pdiv_id}
-  \(\partial (\gamma v + \beta) / \partial v_i = \gamma \delta_{ij}\).
-  Derived from foundation rules.
+  For \(\mathrm{bnAffine}(\gamma, \beta)\, v = \lambda i.\;
+  \gamma v_i + \beta\):
+  \Prove{} \(\pdiv\bigl(\mathrm{bnAffine}(\gamma, \beta)\bigr)\, v\, i\, j
+    = \gamma\, \delta_{ij}\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_bnAffine}.
+\begin{enumerate}
+  \item \(\pdiv\bigl(\mathrm{bnAffine}(\gamma, \beta)\bigr)\, v\, i\, j
+          = \pdiv(y \mapsto \gamma \cdot y)\, v\, i\, j\).
+    \pf{Split \(\gamma v_i + \beta\) as
+    \((\gamma \cdot v) + (\text{const } \beta)\): sum rule
+    (Theorem~\ref{ax:pdiv_add}) and constant rule
+    (Theorem~\ref{ax:pdiv_const}).}
+  \item \(\pdiv(y \mapsto \gamma \cdot y)\, v\, i\, j
+          = \gamma\, \delta_{ij}\).
+    \pf{Factor as \((\text{const } \gamma) \cdot (\text{identity})\):
+    product rule (Theorem~\ref{ax:pdiv_mul}); the constant factor's
+    Jacobian vanishes (Theorem~\ref{ax:pdiv_const}) and the identity
+    Jacobian is \(\delta_{ij}\) (Theorem~\ref{ax:pdiv_id}).}
+  \item \Qed{}
+    \pf{Chain 1 and 2.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[BN centering Jacobian]
@@ -3613,85 +3630,242 @@ Mechanical; see \leandocref{Proofs.pdiv\_bnAffine}.
   \lean{Proofs.pdiv_bnCentered}
   \leanok
   \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, ax:pdiv_id, thm:pdiv_finset_sum, ax:pdiv_reindex}
-  \(\partial (x_j - \mu) / \partial x_i = \delta_{ij} - 1/n\).
-  Derived from foundation rules.
+  For \(\mathrm{bnCentered}\, x = \lambda j.\; x_j - \mu(x)\), where
+  \(\mu(x) = \frac{1}{n}\sum_s x_s\):
+  \Prove{} \(\pdiv(\mathrm{bnCentered})\, x\, i\, j
+    = \delta_{ij} - 1/n\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_bnCentered}.
-\end{proof}
-
-\begin{theorem}[BN inverse-stddev broadcast Jacobian]
-  \label{ax:pdiv_bnIstdBroadcast}
-  \lean{Proofs.pdiv_bnIstdBroadcast}
-  \leanok
-  \uses{ax:pdiv}
-  \(\partial \mathrm{istd}/\partial x_i = -\mathrm{istd}^3 \cdot
-  (x_i - \mu)/n\). Proved via the centering \(\mathrm{ContinuousLinearMap}\),
-  \texttt{HasFDerivAt.sqrt} (under \(\mathrm{bnVar} + \varepsilon > 0\)),
-  and \texttt{(hasDerivAt\_inv).comp\_hasFDerivAt}; centered sum
-  collapses by \(\sum_k (x_k - \mu) = 0\).
-\end{theorem}
-
-\begin{proof}
-\leanok
-Mechanical; see \leandocref{Proofs.pdiv\_bnIstdBroadcast}.
+\begin{enumerate}
+  \item \(\pdiv(\mathrm{bnCentered})\, x\, i\, j
+          = \delta_{ij}
+            + \pdiv\bigl(y \mapsto -\tfrac{1}{n}\textstyle\sum_s y_s\bigr)\, x\, i\, j\).
+    \pf{\(\mathrm{bnCentered} = \mathrm{id} + \bigl(y \mapsto
+    -(\sum_s y_s)/n\bigr)\): sum rule (Theorem~\ref{ax:pdiv_add}),
+    identity Jacobian (Theorem~\ref{ax:pdiv_id}).}
+  \item \(\pdiv\bigl(y \mapsto -\tfrac{1}{n}\textstyle\sum_s y_s\bigr)\, x\, i\, j
+          = -\tfrac{1}{n} \cdot
+            \pdiv\bigl(y \mapsto \textstyle\sum_s y_s\bigr)\, x\, i\, j\).
+    \pf{Factor as \((\text{const } -\tfrac{1}{n}) \cdot (\text{sum})\):
+    product rule (Theorem~\ref{ax:pdiv_mul}); the constant factor's
+    Jacobian vanishes (Theorem~\ref{ax:pdiv_const}).}
+  \item \(\pdiv\bigl(y \mapsto \textstyle\sum_s y_s\bigr)\, x\, i\, j
+          = \sum_s \delta_{is} = 1\).
+    \pf{Finite-sum rule (Theorem~\ref{thm:pdiv_finset_sum}) over the
+    coordinate projections; each projection is a reindex with
+    Jacobian \(\delta_{is}\) (Theorem~\ref{ax:pdiv_reindex});
+    the Kronecker sum collapses (\texttt{Finset.sum\_ite\_eq}).}
+  \item \Qed{}
+    \pf{Chain 1--3: \(\delta_{ij} + (-\tfrac{1}{n}) \cdot 1
+      = \delta_{ij} - 1/n\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[BN inverse-stddev broadcast smoothness]
   \label{ax:bnIstdBroadcast_diff}
   \lean{Proofs.bnIstdBroadcast_diff}
   \leanok
-  \(\bnIstdBroadcast\) is \(\Differentiable\) when \(\varepsilon > 0\).
-  Proved via \texttt{Differentiable.sqrt} and \texttt{Differentiable.inv}
-  over \(\mathrm{bnVar} + \varepsilon > 0\); captures the sqrt/recip
-  smoothness of \(1/\sqrt{\sigma^2 + \varepsilon}\) required by
-  \texttt{pdiv\_mul} inside \texttt{pdiv\_bnNormalize}.
+  \Assume{}
+  \begin{enumerate}
+    \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
+  \end{enumerate}
+  \Prove{} \(\bnIstdBroadcast = x \mapsto 1/\sqrt{\sigma^2(x) + \varepsilon}\)
+  is \(\Differentiable\). This is the sqrt/recip smoothness that the
+  product rule needs inside the normalize Jacobian.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.bnIstdBroadcast\_diff}.
+\begin{enumerate}
+  \item \(\sigma^2(x) + \varepsilon > 0\) for every \(x\), in
+    particular \(\neq 0\).
+    \pf{\(\sigma^2(x) \ge 0\) (a sum of squares over \(n\));
+    assumption 1 pushes it strictly positive.}
+  \item \(x \mapsto \sigma^2(x) + \varepsilon\) is differentiable.
+    \pf{Polynomial in the coordinates of \(x\) (\texttt{fun\_prop}).}
+  \item \(x \mapsto \sqrt{\sigma^2(x) + \varepsilon}\) is
+    differentiable, and nowhere zero.
+    \pf{\texttt{Differentiable.sqrt} applies away from \(0\), which 1
+    grants; \(\sqrt{\cdot}\) of a positive is positive.}
+  \item \Qed{}
+    \pf{\(\mathrm{istd} = (\sqrt{\sigma^2 + \varepsilon})^{-1}\);
+    \texttt{Differentiable.inv} with the nonvanishing denominator
+    from 3.}
+\end{enumerate}
+\end{proof}
+
+\begin{theorem}[BN inverse-stddev broadcast Jacobian]
+  \label{ax:pdiv_bnIstdBroadcast}
+  \lean{Proofs.pdiv_bnIstdBroadcast}
+  \leanok
+  \uses{ax:pdiv, ax:bnIstdBroadcast_diff}
+  \Assume{}
+  \begin{enumerate}
+    \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
+  \end{enumerate}
+  \Prove{} writing \(s := \mathrm{istd}(x, \varepsilon)
+    = 1/\sqrt{\sigma^2(x) + \varepsilon}\):
+  \[
+    \pdiv(\bnIstdBroadcast)\, x\, i\, j
+      = -s^3 \cdot (x_i - \mu)/n.
+  \]
+\end{theorem}
+
+\begin{proof}
+\leanok
+\emph{Sketch: the one genuinely analytic Jacobian of the chapter ---
+a Fréchet-derivative chain through variance, \(\sqrt{\cdot}\), and
+\(({\cdot})^{-1}\), closed by the \(\sum_k (x_k - \mu) = 0\)
+identity.}
+\begin{enumerate}
+  \item \(\sigma^2(x) + \varepsilon > 0\), so
+    \(\sqrt{\sigma^2(x) + \varepsilon} > 0\).
+    \pf{Sum of squares \(\ge 0\) plus assumption 1.}
+  \item \(\pdiv(\bnIstdBroadcast)\, x\, i\, j
+          = \fderiv_{\R}\,\bigl(x' \mapsto \mathrm{istd}(x', \varepsilon)\bigr)\, x\, (\basisVec_i)\)
+    --- the output is constant in \(j\), so \(\pdiv\) reduces to the
+    scalar derivative.
+    \pf{Definition~\ref{ax:pdiv} and \texttt{fderiv\_apply},
+    legitimate by Theorem~\ref{ax:bnIstdBroadcast_diff}.}
+  \item Derivative chain. Let \(C_k := \mathrm{proj}_k -
+    \tfrac{1}{n}\sum_{i'} \mathrm{proj}_{i'}\) be the centering CLM
+    (so \(C_k\, y = y_k - \mu(y)\)). Then
+    \(\sigma^2 = \tfrac{1}{n}\sum_k C_k^2\) has Fréchet derivative
+    \(\tfrac{1}{n}\sum_k 2\, C_k(x) \cdot C_k\), and composing
+    through \(\sqrt{\cdot}\) (\texttt{HasFDerivAt.sqrt}, licensed by
+    1) and \(({\cdot})^{-1}\) (\texttt{hasDerivAt\_inv}) gives
+    \(\partial\, \mathrm{istd} / \partial \sigma^2
+      = -\tfrac{1}{2}\, s^3\).
+    \pf{Product rule per square, summed; the two Mathlib
+    compositions.}
+  \item Evaluate at \(\basisVec_i\):
+    \(\partial \sigma^2 / \partial x_i = \tfrac{2}{n}(x_i - \mu)\).
+    \pf{\(C_k(\basisVec_i) = \delta_{ki} - \tfrac{1}{n}\), so the sum
+    in 3 is \(\tfrac{2}{n} \sum_k (x_k - \mu)(\delta_{ki} - \tfrac{1}{n})\),
+    which collapses to \(\tfrac{2}{n}(x_i - \mu)\) because
+    \(\sum_k (x_k - \mu) = 0\).}
+  \item \Qed{}
+    \pf{Chain 3 and 4:
+    \(-\tfrac{1}{2}\, s^3 \cdot \tfrac{2}{n}(x_i - \mu)
+      = -s^3 (x_i - \mu)/n\); with 2 this is the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[BN normalize 3-term VJP]
   \label{thm:bnNormalize_has_vjp}
   \lean{Proofs.bnNormalize_has_vjp}
   \leanok
-  \uses{ax:pdiv_bnCentered, ax:pdiv_bnIstdBroadcast, ax:pdiv_mul}
-  The consolidated 3-term backward: factor \(\mathrm{bnXhat}\) as
-  \((x - \mu) \cdot \mathrm{istd}\), apply product rule, collapse.
+  \uses{ax:pdiv_bnCentered, ax:pdiv_bnIstdBroadcast, ax:bnIstdBroadcast_diff, ax:pdiv_mul, def:hasvjp}
+  \Assume{}
+  \begin{enumerate}
+    \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
+  \end{enumerate}
+  \Prove{} \(\HasVJP\, (\mathrm{bnNormalize})\), with the consolidated
+  three-term backward (writing \(s := \mathrm{istd}\),
+  \(\hat{x} := \mathrm{bnXhat}\)):
+  \[
+    B(x, d\hat{x})_i = \tfrac{1}{n}\, s \Bigl(
+      n\, d\hat{x}_i - \sum_j d\hat{x}_j
+      - \hat{x}_i \sum_j \hat{x}_j\, d\hat{x}_j \Bigr).
+  \]
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.bnNormalize\_has\_vjp}.
+\emph{Sketch: product rule on \(\hat{x} = (x - \mu) \cdot s\) merges
+the two elementary Jacobians into one formula; contracting with
+\(d\hat{x}\) splits it into the three terms.}
+\begin{enumerate}
+  \item Consolidated Jacobian:
+    \(\pdiv(\mathrm{bnNormalize})\, x\, i\, j
+      = \tfrac{s}{n}\bigl(n\, \delta_{ij} - 1 - \hat{x}_i \hat{x}_j\bigr)\).
+    \pf{Factor \(\hat{x}\) as the elementwise product
+    \(\mathrm{bnCentered} \cdot \bnIstdBroadcast\)
+    (\texttt{bnXhat\_eq\_product}); product rule
+    (Theorem~\ref{ax:pdiv_mul}) --- differentiable because
+    \(\mathrm{bnCentered}\) is affine and \(\bnIstdBroadcast\) is
+    smooth (Theorem~\ref{ax:bnIstdBroadcast_diff}, assumption 1);
+    substitute the centering Jacobian
+    (Theorem~\ref{ax:pdiv_bnCentered}) and the istd Jacobian
+    (Theorem~\ref{ax:pdiv_bnIstdBroadcast}); the
+    \(\hat{x} = (x - \mu) \cdot s\) identity plus
+    \texttt{field\_simp}/\texttt{ring} collapse the algebra
+    (\(n \neq 0\) since \(\mathrm{Fin}\, n\) is inhabited by \(i\)).
+    This step is the Lean lemma \texttt{pdiv\_bnNormalize}.}
+  \item \Suffices{} for all \(x\), \(d\hat{x}\), \(i\):
+    \(B(x, d\hat{x})_i = \sum_j \pdiv(\mathrm{bnNormalize})\, x\, i\, j
+      \cdot d\hat{x}_j\).
+    \pf{Definition~\ref{def:hasvjp}, with \(B\) as the candidate
+    backward function.}
+  \item \Qed{}
+    \pf{Substitute 1 into 2 and split the sum into its three pieces:
+    the \(\delta\)-term collapses to \(n\, d\hat{x}_i\)
+    (\texttt{Finset.sum\_ite\_eq}), the \(-1\) term gives
+    \(-\sum_j d\hat{x}_j\), and factoring \(\hat{x}_i\) out of the
+    third gives \(-\hat{x}_i \sum_j \hat{x}_j d\hat{x}_j\); scale by
+    \(s/n\) and this is \(B\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[BN affine VJP]
   \label{thm:bnAffine_has_vjp}
   \lean{Proofs.bnAffine_has_vjp}
   \leanok
-  \uses{ax:pdiv_bnAffine}
+  \uses{ax:pdiv_bnAffine, def:hasvjp}
+  \(\HasVJP\, \bigl(\mathrm{bnAffine}(\gamma, \beta)\bigr)\): each
+  input feeds one output scaled by \(\gamma\), so the gradient comes
+  back scaled by \(\gamma\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.bnAffine\_has\_vjp}.
+\begin{enumerate}
+  \item Define \(B(v, dy)_i := \gamma \cdot dy_i\).
+  \item \Suffices{} for all \(v\), \(dy\), \(i\):
+    \(B(v, dy)_i = \sum_j
+      \pdiv\bigl(\mathrm{bnAffine}(\gamma, \beta)\bigr)\, v\, i\, j \cdot dy_j\).
+    \pf{Definition~\ref{def:hasvjp}, with \(B\) as the candidate
+    backward function.}
+  \item \Qed{}
+    \pf{By the affine Jacobian (Theorem~\ref{ax:pdiv_bnAffine}) the
+    sum is \(\sum_j \gamma\, \delta_{ij}\, dy_j = \gamma\, dy_i\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Full BN VJP]
   \label{thm:bn_has_vjp}
   \lean{Proofs.bn_has_vjp}
   \leanok
-  \uses{thm:bnNormalize_has_vjp, thm:bnAffine_has_vjp, thm:vjp_comp}
-  \(\mathrm{bn} = \mathrm{affine} \circ \mathrm{normalize}\).
+  \uses{thm:bnNormalize_has_vjp, thm:bnAffine_has_vjp, thm:vjp_comp, ax:bnIstdBroadcast_diff}
+  \Assume{}
+  \begin{enumerate}
+    \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
+  \end{enumerate}
+  \Prove{} \(\HasVJP\, \bigl(\mathrm{bnForward}(\varepsilon, \gamma,
+  \beta)\bigr)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.bn\_has\_vjp}.
+\begin{enumerate}
+  \item \(\mathrm{bnForward} = \mathrm{bnAffine} \circ
+    \mathrm{bnNormalize}\).
+    \pf{Definitional (\texttt{bnForward\_eq\_compose}).}
+  \item \(\mathrm{bnNormalize}\) is differentiable everywhere.
+    \pf{It is the elementwise product of \(\mathrm{bnCentered}\)
+    (affine, hence smooth) and \(\bnIstdBroadcast\) (smooth by
+    Theorem~\ref{ax:bnIstdBroadcast_diff}, assumption 1).}
+  \item \(\mathrm{bnAffine}\) is differentiable everywhere.
+    \pf{Affine (\texttt{fun\_prop}).}
+  \item \Qed{}
+    \pf{VJP chain rule (Theorem~\ref{thm:vjp_comp}) with 2, 3 and the
+    two halves (Theorems~\ref{thm:bnNormalize_has_vjp},
+    \ref{thm:bnAffine_has_vjp}). The composed backward is exactly the
+    two-step MLIR backward: \(d\hat{x} = \gamma \cdot dy\), then the
+    three-term formula.}
+\end{enumerate}
 \end{proof}
 
 \section{Example: training dynamics on CIFAR}
