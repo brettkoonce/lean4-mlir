@@ -39,6 +39,21 @@
 \newcommand{\biPathMat}{\operatorname{biPathMat}}
 \newcommand{\bnIstdBroadcast}{\operatorname{bnIstdBroadcast}}
 
+% Lamport-style structured proofs ("How to Write a 21st Century Proof").
+% \Assume/\Prove head a theorem statement; inside a proof, each enumerated
+% step carries its own justification via \pf{...}. \Suffices restates the
+% goal, \Case opens a case of an exhaustive split, \Qed is the mandatory
+% final step (named \Qed because unicode-math claims \QED for U+220E at
+% \begin{document}). \prev is Lamport's "@": the expression established
+% by the preceding step.
+\newcommand{\Assume}{\textsc{assume:}}
+\newcommand{\Prove}{\textsc{prove:}}
+\newcommand{\pf}[1]{\\ \textsc{proof:} #1}
+\newcommand{\Suffices}{\textsc{suffices:}}
+\newcommand{\Case}{\textsc{case}}
+\newcommand{\Qed}{\textsc{q.e.d.}}
+\newcommand{\prev}{\mathord{@}}
+
 % Base URL for doc-gen4 output. Change this one line to repoint all
 % \leandocref{...} hyperlinks (e.g. file:// for local preview, staging URL).
 \newcommand{\docbase}{https://brettkoonce.github.io/lean4-mlir/docs}

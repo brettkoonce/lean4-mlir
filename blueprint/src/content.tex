@@ -947,6 +947,21 @@ matrix-level machinery on top; see
 \S\ref{sec:matrix_machinery}.) The full clickable dependency
 graph is in the blueprint web view.
 
+\paragraph{How the proofs are written.}
+The proofs in this book follow Lamport's structured style
+(\emph{How to Write a 21\textsuperscript{st} Century Proof}).
+Hypotheses are named up front in an \Assume{}/\Prove{} header, with the
+matching Lean hypothesis name in brackets. The proof is a numbered
+sequence of steps; each step carries its own \textsc{proof} naming
+exactly the facts it follows from; the final step is always \Qed{} ---
+the explanation of why the steps prove the goal. In equational chains,
+\(\prev\) stands for the expression established by the previous step.
+Each step mirrors one tactic block of the corresponding Lean proof, so
+the informal argument can be audited against the formal one step by
+step. One-line lemmas (\texttt{pdiv\_id}, \texttt{pdiv\_const},
+\texttt{pdiv\_reindex}, the identity VJP) stay unstructured:
+structuring a one-\texttt{simp} proof would be ceremony.
+
 \begin{definition}[Partial derivative]
   \label{ax:pdiv}
   \lean{Proofs.pdiv}
@@ -963,13 +978,48 @@ graph is in the blueprint web view.
   \lean{Proofs.pdiv_comp}
   \leanok
   \uses{ax:pdiv}
-  \(\pdiv(g \circ f)\, x\, i\, k = \sum_j \pdiv f\, x\, i\, j \cdot \pdiv g\, (f\, x)\, j\, k\),
-  conditional on \(f\) differentiable at \(x\) and \(g\) differentiable at \(f(x)\).
+  \Assume{}
+  \begin{enumerate}
+    \item \(f : \Vect{m} \to \Vect{n}\) is differentiable at \(x\)
+          \hfill[\texttt{hf}]
+    \item \(g : \Vect{n} \to \Vect{p}\) is differentiable at \(f(x)\)
+          \hfill[\texttt{hg}]
+  \end{enumerate}
+  \Prove{} for all \(i, k\):
+  \[
+    \pdiv(g \circ f)\, x\, i\, k
+      = \sum_j \pdiv f\, x\, i\, j \cdot \pdiv g\, (f\, x)\, j\, k.
+  \]
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_comp}.
+\emph{Sketch: reduce to Mathlib's chain rule for \(\fderiv\), then
+decompose over the standard basis to turn a composite of linear maps
+into the sum over the middle index.}
+\begin{enumerate}
+  \item \(\pdiv(g \circ f)\, x\, i\, k
+          = \fderiv_{\R}\,(g \circ f)\, x\, (\basisVec_i)\, k\).
+    \pf{Definition~\ref{ax:pdiv}.}
+  \item \(\fderiv_{\R}\,(g \circ f)\, x
+          = \fderiv_{\R}\, g\, (f\,x) \circ \fderiv_{\R}\, f\, x\).
+    \pf{Mathlib's \texttt{fderiv\_comp}, applicable by assumptions 1
+    and 2.}
+  \item Let \(v := \fderiv_{\R}\, f\, x\, (\basisVec_i) \in \Vect{n}\).
+    Then \(v = \sum_j v_j \cdot \basisVec_j\).
+    \pf{Pointwise: at coordinate \(j'\) the sum collapses to
+    \(v_{j'}\), because \((\basisVec_j)_{j'}\) is the Kronecker
+    delta.}
+  \item \(\fderiv_{\R}\, g\, (f\,x)\, v\, k
+          = \sum_j v_j \cdot \fderiv_{\R}\, g\, (f\,x)\, (\basisVec_j)\, k\).
+    \pf{By 3 and linearity of \(\fderiv_{\R}\, g\, (f\,x)\)
+    (\texttt{map\_sum}, \texttt{map\_smul}).}
+  \item \Qed{}
+    \pf{By Definition~\ref{ax:pdiv}, \(v_j = \pdiv f\, x\, i\, j\) and
+    \(\fderiv_{\R}\, g\, (f\,x)\, (\basisVec_j)\, k
+      = \pdiv g\, (f\,x)\, j\, k\); chaining 1, 2, and 4 gives the
+    goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Sum rule]
@@ -977,12 +1027,33 @@ Mechanical; see \leandocref{Proofs.pdiv\_comp}.
   \lean{Proofs.pdiv_add}
   \leanok
   \uses{ax:pdiv}
-  Linearity of the derivative; conditional on both summands differentiable at \(x\).
+  \Assume{}
+  \begin{enumerate}
+    \item \(f, g : \Vect{m} \to \Vect{n}\) are both differentiable at
+          \(x\) \hfill[\texttt{hf}, \texttt{hg}]
+  \end{enumerate}
+  \Prove{} for all \(i, j\):
+  \[
+    \pdiv(f + g)\, x\, i\, j = \pdiv f\, x\, i\, j + \pdiv g\, x\, i\, j.
+  \]
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_add}.
+\begin{enumerate}
+  \item \(\pdiv(f + g)\, x\, i\, j
+          = \fderiv_{\R}\,(f + g)\, x\, (\basisVec_i)\, j\).
+    \pf{Definition~\ref{ax:pdiv}; the pointwise sum
+    \(\lambda y\, k.\; f\,y\,k + g\,y\,k\) is definitionally the
+    function \(f + g\).}
+  \item \(\fderiv_{\R}\,(f + g)\, x
+          = \fderiv_{\R}\, f\, x + \fderiv_{\R}\, g\, x\).
+    \pf{Mathlib's \texttt{fderiv\_add}, applicable by the assumption.}
+  \item \Qed{}
+    \pf{Evaluate 2 at \((\basisVec_i, j)\); by
+    Definition~\ref{ax:pdiv} the two terms are
+    \(\pdiv f\, x\, i\, j\) and \(\pdiv g\, x\, i\, j\).}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Product rule]
@@ -990,13 +1061,42 @@ Mechanical; see \leandocref{Proofs.pdiv\_add}.
   \lean{Proofs.pdiv_mul}
   \leanok
   \uses{ax:pdiv}
-  Pointwise Leibniz rule for elementwise products; conditional on both factors
-  differentiable at \(x\).
+  \Assume{}
+  \begin{enumerate}
+    \item \(f, g : \Vect{m} \to \Vect{n}\) are both differentiable at
+          \(x\) \hfill[\texttt{hf}, \texttt{hg}]
+  \end{enumerate}
+  \Prove{} for all \(i, j\):
+  \[
+    \pdiv(f \odot g)\, x\, i\, j
+      = \pdiv f\, x\, i\, j \cdot g\, x\, j
+      + f\, x\, j \cdot \pdiv g\, x\, i\, j,
+  \]
+  where \((f \odot g)\, y\, k = f\,y\,k \cdot g\,y\,k\) is the
+  elementwise product.
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_mul}.
+\begin{enumerate}
+  \item \(\pdiv(f \odot g)\, x\, i\, j
+          = \fderiv_{\R}\,(f \cdot g)\, x\, (\basisVec_i)\, j\).
+    \pf{Definition~\ref{ax:pdiv}; the elementwise product is
+    definitionally the algebra product \(f \cdot g\) in \(\Vect{n}\)
+    (\texttt{Pi.normedAlgebra}), so Mathlib's calculus of
+    algebra-valued maps applies.}
+  \item \(\fderiv_{\R}\,(f \cdot g)\, x
+          = f\,x \cdot \fderiv_{\R}\, g\, x
+          + g\,x \cdot \fderiv_{\R}\, f\, x\)
+    (scalar action taken pointwise).
+    \pf{Mathlib's \texttt{fderiv\_mul}, applicable by the assumption.}
+  \item \Qed{}
+    \pf{Evaluate 2 at \((\basisVec_i, j)\): the pointwise scalar
+    action gives
+    \(f\,x\,j \cdot \pdiv g\, x\, i\, j + g\,x\,j \cdot \pdiv f\, x\, i\, j\)
+    by Definition~\ref{ax:pdiv}; commute the second summand
+    (\texttt{ring}) to match the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Identity Jacobian]
@@ -1042,58 +1142,194 @@ Mechanical; see \leandocref{Proofs.pdiv\_reindex}.
   \lean{Proofs.pdiv_finset_sum}
   \leanok
   \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_const}
-  Linearity extended to arbitrary finite sums by induction.
+  \Assume{}
+  \begin{enumerate}
+    \item \(S\) is a finite index set with a function
+          \(f_s : \Vect{m} \to \Vect{n}\) for each \(s \in S\)
+    \item every \(f_s\) is differentiable at \(x\)
+          \hfill[\texttt{hdiff}]
+  \end{enumerate}
+  \Prove{} for all \(i, j\):
+  \[
+    \pdiv\Bigl(\sum_{s \in S} f_s\Bigr)\, x\, i\, j
+      = \sum_{s \in S} \pdiv f_s\, x\, i\, j.
+  \]
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.pdiv\_finset\_sum}.
+\emph{Sketch: induction on \(S\); the two-summand sum rule does each
+inductive step.}
+\begin{enumerate}
+  \item \Case{} \(S = \emptyset\): both sides are \(0\).
+    \pf{The empty sum is the constant zero function, whose Jacobian
+    vanishes by Theorem~\ref{ax:pdiv_const}; the right side is an
+    empty sum.}
+  \item \Case{} \(S = \{a\} \cup T\) with \(a \notin T\), assuming the
+    claim holds for \(T\) (induction hypothesis):
+    \(\pdiv\bigl(\sum_{s \in S} f_s\bigr)\, x\, i\, j
+      = \pdiv f_a\, x\, i\, j + \sum_{s \in T} \pdiv f_s\, x\, i\, j\).
+    \pf{Split the sum as \(f_a + \sum_{s \in T} f_s\)
+    (\texttt{Finset.sum\_insert}, using \(a \notin T\)). The tail
+    \(\sum_{s \in T} f_s\) is differentiable at \(x\) as a finite sum
+    of functions differentiable by assumption 2
+    (\texttt{DifferentiableAt.fun\_sum}), so the sum rule
+    (Theorem~\ref{ax:pdiv_add}) splits the Jacobian; the induction
+    hypothesis rewrites the tail.}
+  \item \Qed{}
+    \pf{By induction on the finite set \(S\)
+    (\texttt{Finset.induction\_on}): 1 is the base case, and
+    re-merging the sum in 2 gives the inductive step.}
+\end{enumerate}
 \end{proof}
+
+\begin{definition}[VJP record]
+  \label{def:hasvjp}
+  \lean{Proofs.HasVJP}
+  \leanok
+  \uses{ax:pdiv}
+  For \(f : \Vect{m} \to \Vect{n}\), \(\HasVJP\, f\) bundles a backward
+  function \(B : \Vect{m} \to \Vect{n} \to \Vect{m}\) with its
+  correctness claim: for all \(x\), \(dy\), \(i\),
+  \[
+    B(x, dy)_i = \sum_j \pdiv f\, x\, i\, j \cdot dy_j.
+  \]
+  Exhibiting a \(\HasVJP\, f\) is exactly the statement ``this backward
+  function computes the vector--Jacobian product of \(f\).''
+\end{definition}
 
 \begin{theorem}[VJP chain rule]
   \label{thm:vjp_comp}
   \lean{Proofs.vjp_comp}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_comp}
-  Given \(\HasVJP\, f\) and \(\HasVJP\, g\), get \(\HasVJP\, (g \circ f)\).
+  \uses{ax:pdiv, ax:pdiv_comp, def:hasvjp}
+  \Assume{}
+  \begin{enumerate}
+    \item \(B_f\) is a correct backward function for \(f\)
+          (\(\HasVJP\, f\)) \hfill[\texttt{hf}]
+    \item \(B_g\) is a correct backward function for \(g\)
+          (\(\HasVJP\, g\)) \hfill[\texttt{hg}]
+    \item \(f\) is differentiable everywhere \hfill[\texttt{hf\_diff}]
+    \item \(g\) is differentiable everywhere \hfill[\texttt{hg\_diff}]
+  \end{enumerate}
+  \Prove{} \(\HasVJP\, (g \circ f)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.vjp\_comp}.
+\emph{Sketch: the composite backward is ``run \(B_g\), feed the result
+to \(B_f\)''; correctness is the two \texttt{correct} fields glued by
+the chain rule for \(\pdiv\).}
+\begin{enumerate}
+  \item Define \(B(x, dy) := B_f\bigl(x,\; B_g(f\,x,\; dy)\bigr)\).
+  \item \Suffices{} for all \(x\), \(dy\), \(i\):
+    \(B(x, dy)_i = \sum_k \pdiv(g \circ f)\, x\, i\, k \cdot dy_k\).
+    \pf{Definition~\ref{def:hasvjp}, with \(B\) as the candidate
+    backward function.}
+  \item \(B(x, dy)_i
+          = \sum_j \pdiv f\, x\, i\, j \cdot B_g(f\,x, dy)_j\).
+    \pf{Correctness of \(B_f\) (assumption 1).}
+  \item \(\prev = \sum_j \pdiv f\, x\, i\, j
+          \sum_k \pdiv g\, (f\,x)\, j\, k \cdot dy_k\).
+    \pf{Correctness of \(B_g\) (assumption 2).}
+  \item \(\prev = \sum_k \Bigl(\sum_j \pdiv f\, x\, i\, j
+          \cdot \pdiv g\, (f\,x)\, j\, k\Bigr)\, dy_k\).
+    \pf{Distribute and swap the two sums (\texttt{Finset.mul\_sum},
+    \texttt{Finset.sum\_comm}); both are finite, so no convergence
+    question arises.}
+  \item \Qed{}
+    \pf{By the chain rule (Theorem~\ref{ax:pdiv_comp}), applicable at
+    every \(x\) by assumptions 3 and 4, the inner sum in 5 is
+    \(\pdiv(g \circ f)\, x\, i\, k\); with 2 this is the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Additive fan-in VJP]
   \label{thm:biPath_has_vjp}
   \lean{Proofs.biPath_has_vjp}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_add}
-  VJP of \(f + g\). Used for residual connections.
+  \uses{ax:pdiv, ax:pdiv_add, def:hasvjp}
+  Used for residual connections.
+  \Assume{}
+  \begin{enumerate}
+    \item \(B_f\) is a correct backward function for \(f\)
+          (\(\HasVJP\, f\)) \hfill[\texttt{hf}]
+    \item \(B_g\) is a correct backward function for \(g\)
+          (\(\HasVJP\, g\)) \hfill[\texttt{hg}]
+    \item \(f\) is differentiable everywhere \hfill[\texttt{hf\_diff}]
+    \item \(g\) is differentiable everywhere \hfill[\texttt{hg\_diff}]
+  \end{enumerate}
+  \Prove{} \(\HasVJP\, (f + g)\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.biPath\_has\_vjp}.
+\begin{enumerate}
+  \item Define \(B(x, dy)_i := B_f(x, dy)_i + B_g(x, dy)_i\).
+  \item \Suffices{} for all \(x\), \(dy\), \(i\):
+    \(B(x, dy)_i = \sum_j \pdiv(f + g)\, x\, i\, j \cdot dy_j\).
+    \pf{Definition~\ref{def:hasvjp}, with \(B\) as the candidate
+    backward function.}
+  \item \(B(x, dy)_i = \sum_j \bigl(\pdiv f\, x\, i\, j
+          + \pdiv g\, x\, i\, j\bigr) \cdot dy_j\).
+    \pf{Correctness of \(B_f\) and \(B_g\) (assumptions 1, 2); merge
+    the two finite sums (\texttt{Finset.sum\_add\_distrib}) and factor
+    out \(dy_j\) (\texttt{ring}).}
+  \item \Qed{}
+    \pf{The sum rule (Theorem~\ref{ax:pdiv_add}), applicable at every
+    \(x\) by assumptions 3 and 4, rewrites the bracket in 3 to
+    \(\pdiv(f + g)\, x\, i\, j\); with 2 this is the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Multiplicative fan-in VJP]
   \label{thm:elemwiseProduct_has_vjp}
   \lean{Proofs.elemwiseProduct_has_vjp}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_mul}
-  VJP of elementwise product. Used for Squeeze-and-Excitation.
+  \uses{ax:pdiv, ax:pdiv_mul, def:hasvjp}
+  Used for Squeeze-and-Excitation.
+  \Assume{}
+  \begin{enumerate}
+    \item \(B_f\) is a correct backward function for \(f\)
+          (\(\HasVJP\, f\)) \hfill[\texttt{hf}]
+    \item \(B_g\) is a correct backward function for \(g\)
+          (\(\HasVJP\, g\)) \hfill[\texttt{hg}]
+    \item \(f\) is differentiable everywhere \hfill[\texttt{hf\_diff}]
+    \item \(g\) is differentiable everywhere \hfill[\texttt{hg\_diff}]
+  \end{enumerate}
+  \Prove{} \(\HasVJP\, (f \odot g)\), where
+  \((f \odot g)\, x\, i = f\,x\,i \cdot g\,x\,i\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-Mechanical; see \leandocref{Proofs.elemwiseProduct\_has\_vjp}.
+\begin{enumerate}
+  \item Define \(B(x, dy)_i
+          := B_f\bigl(x,\; g(x) \odot dy\bigr)_i
+          + B_g\bigl(x,\; f(x) \odot dy\bigr)_i\),
+    where \(\bigl(g(x) \odot dy\bigr)_j = g\,x\,j \cdot dy_j\).
+  \item \Suffices{} for all \(x\), \(dy\), \(i\):
+    \(B(x, dy)_i = \sum_j \pdiv(f \odot g)\, x\, i\, j \cdot dy_j\).
+    \pf{Definition~\ref{def:hasvjp}, with \(B\) as the candidate
+    backward function.}
+  \item \(B(x, dy)_i = \sum_j \bigl(\pdiv f\, x\, i\, j \cdot g\,x\,j
+          + f\,x\,j \cdot \pdiv g\, x\, i\, j\bigr) \cdot dy_j\).
+    \pf{Correctness of \(B_f\) at upstream gradient \(g(x) \odot dy\)
+    and of \(B_g\) at \(f(x) \odot dy\) (assumptions 1, 2); merge the
+    two finite sums and factor out \(dy_j\)
+    (\texttt{Finset.sum\_add\_distrib}, \texttt{ring}).}
+  \item \Qed{}
+    \pf{The product rule (Theorem~\ref{ax:pdiv_mul}), applicable at
+    every \(x\) by assumptions 3 and 4, identifies the bracket in 3
+    with \(\pdiv(f \odot g)\, x\, i\, j\); with 2 this is the goal.}
+\end{enumerate}
 \end{proof}
 
 \begin{theorem}[Identity VJP]
   \label{thm:identity_has_vjp}
   \lean{Proofs.identity_has_vjp}
   \leanok
-  \uses{ax:pdiv, ax:pdiv_id}
+  \uses{ax:pdiv, ax:pdiv_id, def:hasvjp}
 \end{theorem}
 
 \begin{proof}
