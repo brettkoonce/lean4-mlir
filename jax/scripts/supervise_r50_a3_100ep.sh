@@ -28,6 +28,12 @@ CKPT_BASE="${CKPT_BASE:-/home/skoonce/r50_rsb_a3_imagenet}"   # -> _e{N}.bin + _
 PY=.lake/build/generated_resnet50_imagenet_short.py
 RUNLOG=/tmp/r50_a3_imagenet.log              # full training stdout (current attempt)
 MASTER=/tmp/r50_a3_imagenet_master.log       # supervisor narration (persists across attempts)
+# Cumulative trainer stdout for the WHOLE run --- appended live (never truncated),
+# kept next to the checkpoints so it survives /tmp clears and host resets, not just
+# resumes. RUNLOG stays per-attempt so the detection greps below do not match stale
+# lines from an earlier attempt.
+FULLLOG="${FULLLOG:-${CKPT_BASE}_full.log}"
+mkdir -p "$(dirname "$CKPT_BASE")"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-120}"
 CKPT_EVERY="${CKPT_EVERY:-5}"
 COOLDOWN_AT="${COOLDOWN_AT:-25 50 75}"       # epochs after which to pause
@@ -72,13 +78,14 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
   done
 
   : > "$RUNLOG"
+  echo "===== $(date '+%F %T') full-run log =====" >> "$FULLLOG"
   START="$(date '+%Y-%m-%d %H:%M:%S')"
 
   env "${DEV_ENV[@]}" \
       LEAN_MLIR_PARAMS_OUT="$CKPT_BASE" \
       LEAN_MLIR_CKPT_EVERY="$CKPT_EVERY" \
       "${RESUME_ENV[@]}" \
-      "$VENV_PY" -u "$PY" > "$RUNLOG" 2>&1 &
+      "$VENV_PY" -u "$PY" > >(tee -a "$FULLLOG" > "$RUNLOG") 2>&1 &
   PYPID=$!
   echo "[sup] $(date '+%T') launched PID=$PYPID (next cooldown @epoch ${NEXT_COOL:-none})" | tee -a "$MASTER"
 

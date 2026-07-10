@@ -26,8 +26,14 @@ JAX_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENV_PY="${VENV_PY:-/home/skoonce/lean/klawd_max_power/lean4-jax/.venv/bin/python}"
 CKPT_BASE="${CKPT_BASE:-/home/skoonce/r50_rsb_a3_rsbfaithful}"   # -> _e{N}.bin + _e{N}.state.npz
 PY=.lake/build/generated_resnet50_imagenet_rsbfaithful.py
-RUNLOG=/tmp/r50_a3_rsbfaithful.log              # full training stdout (current attempt)
+RUNLOG=/tmp/r50_a3_rsbfaithful.log              # current attempt's stdout (truncated each resume; supervisor greps this for detection)
 MASTER=/tmp/r50_a3_rsbfaithful_master.log       # supervisor narration (persists across attempts)
+# Cumulative trainer stdout for the WHOLE run — appended live (never truncated),
+# and kept next to the checkpoints so it survives /tmp clears and host resets, not
+# just resumes. RUNLOG stays per-attempt so the cooldown/Done detection greps below
+# don't match stale lines from an earlier attempt.
+FULLLOG="${FULLLOG:-${CKPT_BASE}_full.log}"
+mkdir -p "$(dirname "$CKPT_BASE")"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-120}"
 CKPT_EVERY="${CKPT_EVERY:-5}"
 COOLDOWN_AT="${COOLDOWN_AT:-25 50 75}"       # epochs after which to pause
@@ -43,7 +49,7 @@ else
   DEV_ENV=(CUDA_VISIBLE_DEVICES=0,2,3,4)
 fi
 
-echo "[sup] $(date '+%F %T') START R50-RSB-A3-FAITHFUL(accum4/eff2048) ($BACKEND); ckpt=$CKPT_BASE; every=$CKPT_EVERY; cooldown@[$COOLDOWN_AT] ${COOLDOWN_SECS}s; jax_dir=$JAX_DIR" | tee -a "$MASTER"
+echo "[sup] $(date '+%F %T') START R50-RSB-A3-FAITHFUL(accum4/eff2048) ($BACKEND); ckpt=$CKPT_BASE; every=$CKPT_EVERY; cooldown@[$COOLDOWN_AT] ${COOLDOWN_SECS}s; fulllog=$FULLLOG; jax_dir=$JAX_DIR" | tee -a "$MASTER"
 
 attempt=0
 while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
@@ -73,12 +79,16 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
 
   : > "$RUNLOG"
   START="$(date '+%Y-%m-%d %H:%M:%S')"
+  echo "===== attempt $attempt @ $START (resume from ep $LAST_EP) =====" >> "$FULLLOG"
 
+  # tee the trainer's stdout into BOTH the persistent cumulative log (append) and
+  # the per-attempt RUNLOG (overwrite). Process substitution keeps $! = the trainer
+  # PID (not tee's), so the kill logic below is unchanged.
   env "${DEV_ENV[@]}" \
       LEAN_MLIR_PARAMS_OUT="$CKPT_BASE" \
       LEAN_MLIR_CKPT_EVERY="$CKPT_EVERY" \
       "${RESUME_ENV[@]}" \
-      "$VENV_PY" -u "$PY" > "$RUNLOG" 2>&1 &
+      "$VENV_PY" -u "$PY" > >(tee -a "$FULLLOG" > "$RUNLOG") 2>&1 &
   PYPID=$!
   echo "[sup] $(date '+%T') launched PID=$PYPID (next cooldown @epoch ${NEXT_COOL:-none})" | tee -a "$MASTER"
 

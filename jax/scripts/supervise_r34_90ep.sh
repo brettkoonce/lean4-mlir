@@ -16,6 +16,12 @@ CKPT_BASE=/home/skoonce/r34_imagenet_bf16          # -> _e{N}.bin per epoch, .bi
 SPE=5004                                            # steps per epoch (batch 252... actually 256=4x64 -> 5004)
 RUNLOG=/tmp/r34_90ep.log                            # full training stdout (current attempt)
 MASTER=/tmp/r34_90ep_master.log                     # supervisor narration (persists across attempts)
+# Cumulative trainer stdout for the WHOLE run --- appended live (never truncated),
+# kept next to the checkpoints so it survives /tmp clears and host resets, not just
+# resumes. RUNLOG stays per-attempt so the detection greps below do not match stale
+# lines from an earlier attempt.
+FULLLOG="${FULLLOG:-${CKPT_BASE}_full.log}"
+mkdir -p "$(dirname "$CKPT_BASE")"
 MAX_ATTEMPTS=60
 
 echo "[sup] $(date '+%F %T') START 90-epoch bf16 on GPUs $DEVS" | tee -a "$MASTER"
@@ -42,6 +48,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
   fi
 
   : > "$RUNLOG"
+  echo "===== $(date '+%F %T') full-run log =====" >> "$FULLLOG"
   START="$(date '+%Y-%m-%d %H:%M:%S')"
 
   # NOTE: use `env` so env-var words from the array expansion are applied as
@@ -50,7 +57,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
       LEAN_MLIR_PARAMS_OUT="$CKPT_BASE" \
       LEAN_MLIR_CKPT_EVERY=1 \
       "${RESUME_ENV[@]}" \
-      ../.venv/bin/python -u "$PY" > "$RUNLOG" 2>&1 &
+      ../.venv/bin/python -u "$PY" > >(tee -a "$FULLLOG" > "$RUNLOG") 2>&1 &
   PYPID=$!
   echo "[sup] $(date '+%T') launched PID=$PYPID" | tee -a "$MASTER"
 

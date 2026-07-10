@@ -23,6 +23,12 @@ CKPT_BASE="${CKPT_BASE:-/home/skoonce/vit_tiny_imagenet_bf16}"  # -> _e{N}.bin +
 PY=.lake/build/generated_vit_tiny_imagenet.py
 RUNLOG=/tmp/vit_imagenet.log                 # full training stdout (current attempt)
 MASTER=/tmp/vit_imagenet_master.log          # supervisor narration (persists across attempts)
+# Cumulative trainer stdout for the WHOLE run --- appended live (never truncated),
+# kept next to the checkpoints so it survives /tmp clears and host resets, not just
+# resumes. RUNLOG stays per-attempt so the detection greps below do not match stale
+# lines from an earlier attempt.
+FULLLOG="${FULLLOG:-${CKPT_BASE}_full.log}"
+mkdir -p "$(dirname "$CKPT_BASE")"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-120}"
 
 cd "$JAX_DIR" || { echo "no jax dir: $JAX_DIR"; exit 1; }
@@ -59,6 +65,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
   fi
 
   : > "$RUNLOG"
+  echo "===== $(date '+%F %T') full-run log =====" >> "$FULLLOG"
   START="$(date '+%Y-%m-%d %H:%M:%S')"
 
   # `env` so the array env-words apply as assignments to the python process.
@@ -66,7 +73,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
       LEAN_MLIR_PARAMS_OUT="$CKPT_BASE" \
       LEAN_MLIR_CKPT_EVERY=1 \
       "${RESUME_ENV[@]}" \
-      "$VENV_PY" -u "$PY" > "$RUNLOG" 2>&1 &
+      "$VENV_PY" -u "$PY" > >(tee -a "$FULLLOG" > "$RUNLOG") 2>&1 &
   PYPID=$!
   echo "[sup] $(date '+%T') launched PID=$PYPID" | tee -a "$MASTER"
 
