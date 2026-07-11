@@ -717,6 +717,17 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.LipschitzCertPairSDP,
              `LeanMlir.Proofs.LipschitzCertScorecardSDP,
              `LeanMlir.Proofs.LipschitzCertScorecardSDPUncon,
+             -- FULL-INPUT scorecard (2026-07 audit gap #3: off the 4×4-pooled 49-dim
+             -- reduction): first-100 MNIST test images at the full 784-dim input
+             -- (exact k/255 pixels), per-image certificates at pixel-L2 ε = 1/10 AND
+             -- 3/10 on two 784→16→10 nets — capped σ≤2: 92/100 @0.1 (PGD 93 — within
+             -- one image of the attack bound) and 72/100 @0.3; unconstrained: 76/100
+             -- @0.1 collapsing to 2/100 @0.3. Every 784-term dot is ONE kernel
+             -- evaluation (ListDot.lean `dotZ` + `decide +kernel`, propext-only)
+             -- bridged to the `Fin 784` sums by `sum_getD_div` — the pooled recipe's
+             -- simp/norm_num sum walk is quadratic in input dim and priced out.
+             `LeanMlir.Proofs.ListDot,
+             `LeanMlir.Proofs.LipschitzCertScorecardFull,
              -- The binary32/fp8-E4M3 hardware models, CONSTRUCTED (post_audit_roadmap §2):
              -- rndP p = round-to-nearest on the unbounded-exponent p-bit grid, standard
              -- model |rndP p x − x| ≤ 2⁻¹⁻ᵖ|x| PROVED (rndP_err) — the former
