@@ -17,7 +17,7 @@ private def emitImports : String :=
   "from jax import random, jit, value_and_grad\n" ++
   "from jax.sharding import Mesh, NamedSharding, PartitionSpec as P\n" ++
   "import numpy as np\n" ++
-  "import struct, os, time, json\n\n"
+  "import struct, os, time, json, collections\n\n"
 
 private def autoAugmentPy : String :=
 "# ════════════════════════════════════════════════════════════════
@@ -411,7 +411,19 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    ds = ds.map(_pp, num_parallel_calls=tf.data.AUTOTUNE)\n" ++
     "    ds = ds.batch(batch_size, drop_remainder=True)\n" ++
     "    ds = ds.prefetch(tf.data.AUTOTUNE)\n" ++
-    "    return tfds.as_numpy(ds)\n\n"
+    "    return tfds.as_numpy(ds)\n" ++
+    "\n" ++
+    "def prefetch_to_device(it, sharding, depth=2):\n" ++
+    "    # Overlap host->device copies with compute: device_put is async, so\n" ++
+    "    # keeping `depth` batches in flight hides the H2D transfer behind the\n" ++
+    "    # previous train_step instead of serializing after it.\n" ++
+    "    q = collections.deque()\n" ++
+    "    for x, y in it:\n" ++
+    "        q.append((jax.device_put(x, sharding), jax.device_put(y, sharding)))\n" ++
+    "        if len(q) >= depth:\n" ++
+    "            yield q.popleft()\n" ++
+    "    while q:\n" ++
+    "        yield q.popleft()\n\n"
 
 private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run do
   let mut code := ""
@@ -1965,6 +1977,8 @@ private def effOpt (cfg : TrainConfig) : OptimizerKind :=
   | .sgd => if cfg.useAdam then .adam else .sgd
   | .muon => .adam  -- JAX backend has no Newton–Schulz kernel; Muon degrades to its
                     -- AdamW fallback here. Muon proper is the IREE/MLIR path (planning/muon.md).
+  | .shampoo => .adam  -- Same story: no preconditioner kernels in the JAX backend;
+                       -- Shampoo proper is the IREE/MLIR path (planning/shampoo.md).
   | k    => k
 
 private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
@@ -2035,7 +2049,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   else "") ++
   let opt := effOpt cfg
   let optName := match opt with
-    | .adam | .muon => "Adam"
+    | .adam | .muon | .shampoo => "Adam"
     | .rmsprop => "RMSprop"
     | .lamb => "LAMB"
     | .sgd => "SGD" ++ (if hasMomentum then " + momentum" else "")
@@ -2123,7 +2137,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
      "EPS = " ++ toString cfg.rmspropEps ++ "\n"
    | .sgd => if hasMomentum then "MOMENTUM = " ++ toString cfg.momentum ++ "\n" else ""
    | .lamb => "BETA1 = 0.9\nBETA2 = 0.999\nEPS = 1e-6\n"
-   | .adam | .muon => "") ++
+   | .adam | .muon | .shampoo => "") ++
   (if hasWD then "WD = " ++ wd ++ "\n" else "") ++
   (if wdExclude then
     (match posShape with
@@ -2140,7 +2154,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
    else "") ++
   "\n" ++
   (match opt with
-   | .adam | .muon =>
+   | .adam | .muon | .shampoo =>
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
     gradPrelude ++
@@ -2356,7 +2370,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   -- training trajectory (weights + optimizer moments + EMA shadow). Saved/
   -- restored together so a segmented run continues bit-for-bit.
   let optStateVar : Option String := match opt with
-    | .adam | .rmsprop | .lamb | .muon => some "opt_state"
+    | .adam | .rmsprop | .lamb | .muon | .shampoo => some "opt_state"
     | .sgd => if hasMomentum then some "velocity" else none
   let stateVars : List String := ["params"] ++ optStateVar.toList ++
     (if cfg.useEMA then ["ema_params"] else []) ++
@@ -2440,7 +2454,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "    WD_MASK = _wd_mask(params)  # timm no_weight_decay mask (built once; shape-only, resume-safe)\n"
    else "") ++
   (match opt with
-   | .adam | .lamb | .muon =>
+   | .adam | .lamb | .muon | .shampoo =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
@@ -2473,9 +2487,11 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "            'emitter_version': '1',\n" ++
   "        }\n" ++
   "        _trace_f.write(json.dumps(_hdr) + '\\n')\n\n" ++
-  "    train_iter = iter(build_imagenet_iter('train', BATCH_SIZE,\n" ++
-  "                                          training=True,\n" ++
-  "                                          augment=" ++ (if cfg.augment then "True" else "False") ++ "))\n" ++
+  "    train_iter = prefetch_to_device(\n" ++
+  "        iter(build_imagenet_iter('train', BATCH_SIZE,\n" ++
+  "                                 training=True,\n" ++
+  "                                 augment=" ++ (if cfg.augment then "True" else "False") ++ ")),\n" ++
+  "        data_sharding)\n" ++
   "    # LEAN_MLIR_START_STEP lets a resumed run continue the cosine LR schedule\n" ++
   "    # from where it left off (instead of restarting from warmup which would\n" ++
   "    # destabilize a partly-trained model). Set to the global_step the prior\n" ++
@@ -2536,8 +2552,6 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
       "            else:\n" ++ decayWarmup
      else decayNoWarmup)
    else "") ++
-  "            x = jax.device_put(x, data_sharding)\n" ++
-  "            y = jax.device_put(y, data_sharding)\n" ++
   (let mk := "jax.random.fold_in(jax.random.PRNGKey(" ++ toString cfg.seed ++ "), _global_step)"
    if cfg.useMixup && cfg.useCutmix then
      "            if _global_step % 2 == 0:\n" ++
@@ -2553,14 +2567,14 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    let bnIn := if cfg.runningBN then ", bn_state" else ""
    let bnOut := if cfg.runningBN then ", bn_state" else ""
    match opt with
-   | .adam | .rmsprop | .lamb | .muon =>
+   | .adam | .rmsprop | .lamb | .muon | .shampoo =>
     "            params, opt_state" ++ bnOut ++ ", loss = train_step(params, opt_state" ++ bnIn ++ ", x, y, lr" ++ dk ++ ")\n"
    | .sgd =>
     if hasMomentum then
     "            params, velocity" ++ bnOut ++ ", loss = train_step(params, velocity" ++ bnIn ++ ", x, y, lr" ++ dk ++ ")\n"
     else
     "            params" ++ bnOut ++ ", loss = train_step(params" ++ bnIn ++ ", x, y, lr" ++ dk ++ ")\n") ++
-  "            epoch_loss += float(loss)\n" ++
+  "            epoch_loss += loss  # jax scalar: defer the device sync to epoch end\n" ++
   "            n_batches += 1\n" ++
   (if cfg.useEMA then "            ema_params = ema_update(ema_params, params)\n" else "") ++
   "            _global_step += 1\n" ++
@@ -2587,10 +2601,10 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "        ev_t0 = time.time()\n" ++
     "        if _do_val:\n" ++
     "            print(\"  Running validation ...\")\n" ++
-    "            v_iter = build_imagenet_iter('validation', " ++ valBatch ++ ", training=False, augment=False)\n" ++
+    "            v_iter = prefetch_to_device(\n" ++
+    "                iter(build_imagenet_iter('validation', " ++ valBatch ++ ", training=False, augment=False)),\n" ++
+    "                data_sharding)\n" ++
     "            for x, y in v_iter:\n" ++
-    "                x = jax.device_put(x, data_sharding)\n" ++
-    "                y = jax.device_put(y, data_sharding)\n" ++
     "                c1, c5, l = eval_batch(" ++ evalArgs ++ ", x, y)\n" ++
     "                correct1 += int(c1)\n" ++
     "                correct5 += int(c5)\n" ++
@@ -2602,7 +2616,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "        val_secs = time.time() - ev_t0\n" ++
     "        if _do_val:\n" ++
     "            print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
-    "                  \" loss(train_avg)=\" + str(round(epoch_loss / max(n_batches,1), 4)) +\n" ++
+    "                  \" loss(train_avg)=\" + str(round(float(epoch_loss) / max(n_batches,1), 4)) +\n" ++
     "                  \" val_top1=\" + str(correct1) + \"/\" + str(total) +\n" ++
     "                  \" (\" + str(round(acc1, 4)) + \")\" +\n" ++
     "                  \" val_top5=\" + str(round(acc5, 4)) +\n" ++
@@ -2611,21 +2625,21 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "                  str(round(val_secs, 1)) + \"s val]\")\n" ++
     "        else:\n" ++
     "            print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
-    "                  \" loss(train_avg)=\" + str(round(epoch_loss / max(n_batches,1), 4)) +\n" ++
+    "                  \" loss(train_avg)=\" + str(round(float(epoch_loss) / max(n_batches,1), 4)) +\n" ++
     "                  \"  [\" + str(round(train_secs, 1)) + \"s train, val skipped]\")\n"
    else
     "        # Validation pass: rebuild iterator each epoch (non-repeating).\n" ++
     "        print(\"  Running validation ...\")\n" ++
     "        ev_t0 = time.time()\n" ++
-    "        v_iter = build_imagenet_iter('validation', " ++ valBatch ++ ", training=False, augment=False)\n" ++
+    "        v_iter = prefetch_to_device(\n" ++
+    "            iter(build_imagenet_iter('validation', " ++ valBatch ++ ", training=False, augment=False)),\n" ++
+    "            data_sharding)\n" ++
     "        correct1 = 0\n" ++
     "        correct5 = 0\n" ++
     "        total = 0\n" ++
     "        total_eval_loss = 0.0\n" ++
     "        v_batches = 0\n" ++
     "        for x, y in v_iter:\n" ++
-    "            x = jax.device_put(x, data_sharding)\n" ++
-    "            y = jax.device_put(y, data_sharding)\n" ++
     "            c1, c5, l = eval_batch(" ++ evalArgs ++ ", x, y)\n" ++
     "            correct1 += int(c1)\n" ++
     "            correct5 += int(c5)\n" ++
@@ -2635,7 +2649,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "        acc1 = correct1 / max(total, 1)\n" ++
     "        acc5 = correct5 / max(total, 1)\n" ++
     "        print(\"[Epoch \" + str(epoch+1) + \"] lr=\" + str(round(float(lr), 6)) +\n" ++
-    "              \" loss(train_avg)=\" + str(round(epoch_loss / max(n_batches,1), 4)) +\n" ++
+    "              \" loss(train_avg)=\" + str(round(float(epoch_loss) / max(n_batches,1), 4)) +\n" ++
     "              \" val_top1=\" + str(correct1) + \"/\" + str(total) +\n" ++
     "              \" (\" + str(round(acc1, 4)) + \")\" +\n" ++
     "              \" val_top5=\" + str(round(acc5, 4)) +\n" ++
@@ -2700,7 +2714,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "    rng = np.random.RandomState(42)\n" ++
   let opt := effOpt cfg
   (match opt with
-   | .adam | .lamb | .muon =>
+   | .adam | .lamb | .muon | .shampoo =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
@@ -2795,7 +2809,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "            x = jax.device_put(shuf_images[i:i+BATCH_SIZE], data_sharding)\n") ++
   "            y = jax.device_put(shuf_labels[i:i+BATCH_SIZE], data_sharding)\n" ++
   (match opt with
-   | .adam | .rmsprop | .lamb | .muon =>
+   | .adam | .rmsprop | .lamb | .muon | .shampoo =>
      "            params, opt_state, loss = train_step(params, opt_state, x, y, lr)\n"
    | .sgd =>
      if hasMomentum then
