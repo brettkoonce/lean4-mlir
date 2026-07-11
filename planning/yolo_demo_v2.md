@@ -70,6 +70,48 @@ number.
 
 ## Workstream A — mAP harness + flexible eval (do first, no codegen)
 
+**Status 2026-07-10: DONE — Gate A MET.** All four items shipped and
+the e20 checkpoint scored on both val sets (RESULTS.md §Pets detection):
+
+| Val set | mAP@0.5 | mAP@0.3 |
+|---|---|---|
+| mosaic (trained) | 0.041 | 0.227 |
+| single-frame (transfer) | 0.0002 | 0.005 |
+
+- **Item 1** `scripts/yolo_map.py`: per-class AP@0.5 (all-point VOC
+  integration), reads `logits.bin` + GT boxes straight from the
+  157,728-byte `val.bin` records (Python-side, no Lean loader change);
+  AP integrator unit-tested (perfect→1, random→0, TP-then-FP→0.5).
+- **Item 2** flexible-N in `MainYolov1PetsInfer.lean`: `n=0` scores the
+  whole set by looping ⌈N/16⌉ batches and padding the final partial
+  batch (both val sets are ×16, but padding is there); the old
+  `batch:=16, n:=batch` lock is gone. Images dump skipped for n>64.
+- **Item 3** both standing val sets scored (mosaic + single-frame det).
+- **Item 4** decode ranks by sigmoid(conf), class = argmax(class slots);
+  obj×class product dropped.
+
+**Gate A verdict — met, with a sharper finding than the doc expected.**
+Qualitatively as predicted: mosaic ≫ single-frame, single-frame ≈ 0
+(quantifies the "2/16 doesn't transfer" caveat — Workstream B's target).
+But the *absolute* mosaic mAP@0.5 is only 0.04, not "high": v1's "64/64"
+was **peak-in-right-cell** localization, not IoU@0.5. The localization
+ceiling (best IoU over all 49 cells per GT) averages 0.497 (50% ≥0.5,
+91% ≥0.3) — the detector finds the region but its boxes run ~20% large
+and sit on the IoU=0.5 edge, so mAP@0.3 (0.23) ≫ mAP@0.5 (0.04). The
+focal head is confidence-saturated (~4 cells/img >0.5), weakening
+top-rank ordering — known, not a bug. **This baseline is the honest
+before-number for Workstreams B/C/D.**
+
+Operational note for the next session: the e20 checkpoint was recovered
+from the pre-rename `lean4-mlir-blueprint` checkout
+(`resnet_34___yolov1_deep_head__person_voc__{params,bn_stats}_e20.bin`,
+architecture-identical, copied to the `..._pets_` slug); the eval vmfb
+was regenerated under the new slug by launching the trainer to its
+compile step and killing before bootstrap. `data/pets_mosaic_bal` and
+`data/pets_det` are symlinked from that checkout. The R34 bootstrap file
+`.lake/build/jax_r34_imagenet.bin` is absent here — needed only to
+*retrain* (Workstream B), not to score.
+
 Nothing else in this doc is measurable without it.
 
 1. **mAP@0.5 scorer** (~1 session, Python). Extend
@@ -98,6 +140,41 @@ Gate A: harness reproduces v1's e20 checkpoint qualitatively
 before/after numbers for everything below.
 
 ## Workstream B — single-frame transfer (data only, the main event)
+
+**Status 2026-07-10: 50/50 blend run DONE — Gate B PARTIAL.** Shipped
+items 1+2 (`--single-frac` + box-aware single crop in
+`preprocess_pets_mosaic.py`), R34 bootstrap recovered, full 80-ep run
+on `data/pets_mixed` (50/50, class-balanced) via `run_yolo_mixed.sh`
+(clean, zero crashes). Scored vs both standing val sets (RESULTS.md
+§Workstream B):
+
+| ckpt | mos@0.5 | mos@0.3 | sng@0.5 | sng@0.3 |
+|---|---|---|---|---|
+| v1 (mosaic-only e20) | 0.041 | 0.227 | 0.0002 | 0.005 |
+| mixed e80 | 0.034 | 0.217 | 0.011 | 0.049 |
+
+- **Single-frame rose ~50× @0.5 / 10× @0.3** (the doc's literal Gate B
+  criterion — "rises substantially" — is MET), and **mosaic recovered to
+  within noise of v1** by e80 (mild tradeoff). So the *mechanism* works.
+- **BUT single-frame plateaus at ~0.01 @0.5 from e20→e80** (more epochs
+  don't help), and it's NOT a usable single-frame detector yet.
+  **Root cause (diagnosed from e80 preds):** box regression is per-cell,
+  so 50/50-by-record is ~4:1-by-box toward small quadrant boxes (mosaic
+  = 4 small-box cells/record, single = 1 large-box cell). The width head
+  collapses to a near-constant **w=0.23±0.01** while single heads need
+  w≈0.40 → **0% of top single boxes reach IoU≥0.5**. Class head is fine
+  (68% top-box class match); the failure is box *scale*, not class.
+- **Next lever = box-distribution balance, not epochs.** Higher single
+  fraction (≈0.8 balances box counts) or larger/uncropped singles. This
+  is exactly the doc's "report the frontier — 25/50/75% blend sweep"
+  fallback below; **a --single-frac 0.75 run is launched to test it**
+  (checkpoints of the 50/50 run backed up as `..._params_mix50_e80.bin`).
+
+Recipe/data notes for the next session: mixed data at `data/pets_mixed`
+(regen via `preprocess_pets_mosaic.py data/pets <out> --single-frac F`);
+score any checkpoint by copying `..._params_eN.bin`/`..._bn_stats_eN.bin`
+→ base names then `yolov1-pets-infer 0 <valdir> <out>` +
+`scripts/yolo_map.py <out>/logits.bin <valdir>/val.bin`.
 
 v1 proved the failure is distributional; the fix is too.
 

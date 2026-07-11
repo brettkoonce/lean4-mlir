@@ -64,6 +64,37 @@ def mosaic(pets_dir, names4, rng):
     return chw, boxes
 
 
+def single(pets_dir, name, rng, jitter=True):
+    """Build a SINGLE full-frame record (1 head box) + optional box-aware
+    crop/zoom. The crop (scale 0.6–1.0 of the frame, positioned to fully
+    contain the head) decenters the head *without* leaving the natural-image
+    distribution — so singles teach "one big object" as a real mode while the
+    crop keeps the positional marginal from re-collapsing to always-center.
+    Returns (chw, boxes) in canvas-224 px, matching mosaic()."""
+    pets_dir = Path(pets_dir)
+    p = parse_head(pets_dir / "annotations" / "xmls" / f"{name}.xml")
+    if p is None:
+        return None, []
+    iw, ih, cid, (x0, y0, x1, y1) = p
+    img = Image.open(pets_dir / "images" / f"{name}.jpg").convert("RGB")
+    cx0, cy0, src_w, src_h = 0.0, 0.0, float(iw), float(ih)
+    if jitter:
+        s = float(rng.uniform(0.6, 1.0))
+        cw, ch = s * iw, s * ih
+        lo_x, hi_x = max(0.0, x1 - cw), min(x0, iw - cw)
+        lo_y, hi_y = max(0.0, y1 - ch), min(y0, ih - ch)
+        if hi_x >= lo_x and hi_y >= lo_y:          # crop can contain the head
+            cx0 = float(rng.uniform(lo_x, hi_x)); cy0 = float(rng.uniform(lo_y, hi_y))
+            src_w, src_h = cw, ch
+        # else: head bigger than the crop window → keep full frame
+    crop = img.crop((int(cx0), int(cy0), int(cx0 + src_w), int(cy0 + src_h)))
+    canvas = crop.resize((IMG, IMG), Image.BILINEAR)
+    sx, sy = IMG / src_w, IMG / src_h
+    boxes = [(cid, (x0 - cx0) * sx, (y0 - cy0) * sy, (x1 - cx0) * sx, (y1 - cy0) * sy)]
+    chw = np.asarray(canvas, dtype=np.uint8).transpose(2, 0, 1).copy()
+    return chw, boxes
+
+
 def encode(boxes):
     target = np.zeros((PER_CELL, GH, GW), dtype=np.float32)
     mask = np.zeros((GH, GW), dtype=np.float32)
@@ -89,19 +120,30 @@ def raw_boxes(boxes):
     return len(boxes[:MAX_BBOXES]), bytes(out)
 
 
-def build(pets_dir, cat_pool, dog_pool, n, out_path, seed0):
-    written = 0; cat = dog = 0
+def build(pets_dir, cat_pool, dog_pool, n, out_path, seed0, single_frac=0.0, jitter=True):
+    """Emit n records: each is a single full-frame pet with prob single_frac,
+    else a 2×2 mosaic. Class-balanced 50/50 in both modes."""
+    written = 0; cat = dog = 0; n_single = n_mosaic = 0
     with open(out_path, "wb") as f:
         f.write(struct.pack("<I", 0))
         for k in range(n):
             rng = np.random.default_rng(seed0 + k)
-            # Balanced: each of the 4 quadrant pets is cat-or-dog 50/50, so the
-            # box distribution is ~1:1 (kills the dog-majority class collapse).
-            names4 = []
-            for _ in range(4):
+            if float(rng.random()) < single_frac:
+                # Single full-frame: one cat-or-dog 50/50 pet, box-aware crop.
                 pool = cat_pool if int(rng.integers(0, 2)) == 0 else dog_pool
-                names4.append(pool[int(rng.integers(0, len(pool)))])
-            chw, boxes = mosaic(pets_dir, names4, rng)
+                name = pool[int(rng.integers(0, len(pool)))]
+                chw, boxes = single(pets_dir, name, rng, jitter=jitter)
+                n_single += 1
+            else:
+                # Balanced mosaic: each of the 4 quadrant pets is cat-or-dog
+                # 50/50, so the box distribution is ~1:1 (kills the dog-majority
+                # class collapse).
+                names4 = []
+                for _ in range(4):
+                    pool = cat_pool if int(rng.integers(0, 2)) == 0 else dog_pool
+                    names4.append(pool[int(rng.integers(0, len(pool)))])
+                chw, boxes = mosaic(pets_dir, names4, rng)
+                n_mosaic += 1
             if not boxes:
                 continue
             for b in boxes:
@@ -112,14 +154,30 @@ def build(pets_dir, cat_pool, dog_pool, n, out_path, seed0):
             written += 1
         f.seek(0); f.write(struct.pack("<I", written))
     mb = os.path.getsize(out_path)/1024/1024
-    print(f"  wrote {out_path}: {written} mosaics ({mb:.0f} MB) | boxes: {cat} cat, {dog} dog")
+    print(f"  wrote {out_path}: {written} records ({n_single} single / {n_mosaic} mosaic, "
+          f"{mb:.0f} MB) | boxes: {cat} cat, {dog} dog")
 
 
 def main():
-    pets_dir, out_dir = sys.argv[1], sys.argv[2]
-    n_train = int(sys.argv[3]) if len(sys.argv) > 3 else 3500
-    n_val   = int(sys.argv[4]) if len(sys.argv) > 4 else 384
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("pets_dir")
+    ap.add_argument("out_dir")
+    ap.add_argument("--n-train", type=int, default=3500)
+    ap.add_argument("--n-val", type=int, default=384)
+    ap.add_argument("--single-frac", type=float, default=0.0,
+                    help="fraction of records that are single full-frame pets "
+                         "(rest are 2×2 mosaics); 0.0 = pure mosaic (v1 default)")
+    ap.add_argument("--no-jitter", action="store_true",
+                    help="disable the box-aware crop/zoom on singles (centered full-frame)")
+    ap.add_argument("--val-single-frac", type=float, default=None,
+                    help="single fraction for the emitted val.bin (default: = --single-frac)")
+    args = ap.parse_args()
+    pets_dir, out_dir = args.pets_dir, args.out_dir
     Path(out_dir).mkdir(parents=True, exist_ok=True)
+    jitter = not args.no_jitter
+    val_sf = args.single_frac if args.val_single_frac is None else args.val_single_frac
     xmls = Path(pets_dir) / "annotations" / "xmls"
     names = sorted(n.split()[0] for n in
                    (Path(pets_dir)/"annotations"/"trainval.txt").read_text().splitlines()
@@ -131,9 +189,12 @@ def main():
                              [x for x in pool if not x[0].isupper()])
     tcat, tdog = split(train_pool); vcat, vdog = split(val_pool)
     print(f"head-box pets: {len(names)} | train cat {len(tcat)}/dog {len(tdog)} | "
-          f"val cat {len(vcat)}/dog {len(vdog)}; building {n_train} train / {n_val} val mosaics (balanced)")
-    build(pets_dir, tcat, tdog, n_train, os.path.join(out_dir, "train.bin"), seed0=2000)
-    build(pets_dir, vcat, vdog, n_val,   os.path.join(out_dir, "val.bin"),   seed0=8_000_000)
+          f"val cat {len(vcat)}/dog {len(vdog)}; building {args.n_train} train / {args.n_val} val "
+          f"(single_frac={args.single_frac}, jitter={jitter})")
+    build(pets_dir, tcat, tdog, args.n_train, os.path.join(out_dir, "train.bin"),
+          seed0=2000, single_frac=args.single_frac, jitter=jitter)
+    build(pets_dir, vcat, vdog, args.n_val, os.path.join(out_dir, "val.bin"),
+          seed0=8_000_000, single_frac=val_sf, jitter=jitter)
     print("Done.")
 
 

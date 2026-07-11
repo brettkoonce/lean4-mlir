@@ -103,6 +103,71 @@ Two honest reads at this 3-epoch budget:
    epochs arg now enables: `unet-pets-train data/pets 70`. See
    `planning/unet_demo_v2.md`.
 
+## Oxford-IIIT Pets detection (cat/dog head boxes, YOLOv1, mAP@0.5)
+
+R34-ImageNet backbone (21.28M-float bootstrap) + deep conv head →
+7×7×30 YOLOv1 grid, focal-BCE objectness, trained on class-balanced
+2×2 head-box mosaics (e20 checkpoint). Scored by `scripts/yolo_map.py`
+over the whole val set: per-class AP@0.5 (all-point VOC integration),
+detections ranked by sigmoid(conf), class from argmax of the class
+slots, per-class NMS at IoU 0.5. This is the **first real detection
+metric** in the repo — v1's "64/64" was hand-counted peak
+localization, not IoU-based.
+
+| Val set | cat AP | dog AP | **mAP@0.5** | mAP@0.3 |
+|---|---|---|---|---|
+| mosaic (trained regime) | 0.028 | 0.053 | **0.041** | 0.227 |
+| single-frame (transfer) | 0.000 | 0.000 | **0.0002** | 0.005 |
+
+Three honest reads (Gate A baseline, `planning/yolo_demo_v2.md`):
+1. **Single-frame ≈ 0** quantifies v1's "trained on mosaics → 2/16 on
+   full frames" caveat: the model does not transfer to centered
+   single pets (mosaic mAP@0.5 is ~200× higher). Moving this is
+   Workstream B's whole job (mixed single+mosaic training).
+2. **v1's "64/64" was peak-in-right-cell localization, not IoU@0.5.**
+   The localization *ceiling* (best IoU over all 49 cells per GT box)
+   averages 0.497 — 50% of GT heads reach IoU≥0.5, 91% reach IoU≥0.3
+   — so the detector finds the right region but its boxes sit on the
+   IoU=0.5 knife-edge (predicted heads run ~20% larger than GT). Hence
+   mAP@0.3 (0.227) ≫ mAP@0.5 (0.041) on the mosaic set.
+3. **The focal head is confidence-saturated** (~4 cells/image exceed
+   sigmoid(conf)=0.5, the α-balance equilibrium ~0.55), so ranking is
+   weak among the top detections — a known property (see the v2 doc),
+   not a harness artifact. The AP integrator is unit-tested on
+   perfect/random/mixed inputs.
+
+### Workstream B — mixed single+mosaic training (transfer)
+
+Retrained the same R34 spec from the R34-ImageNet bootstrap on a
+50/50 blend of single full-frame pets (box-aware crop, scale 0.6–1.0,
+`preprocess_pets_mosaic.py --single-frac 0.5`) and 2×2 mosaics, 80 ep,
+scored on both standing val sets:
+
+| checkpoint | mosaic@0.5 | mosaic@0.3 | single@0.5 | single@0.3 |
+|---|---|---|---|---|
+| v1 mosaic-only (e20) | 0.041 | 0.227 | 0.0002 | 0.005 |
+| mixed e20 | 0.028 | 0.198 | 0.0098 | 0.045 |
+| mixed e40 | 0.035 | 0.208 | 0.011 | 0.047 |
+| mixed e80 | 0.034 | 0.217 | **0.011** | **0.049** |
+
+Gate B verdict — **partial**: the mechanism works but plateaus.
+1. **Single-frame transfer rose ~50× @0.5 (10× @0.3)** over v1 — mixing
+   singles teaches the model to detect full-frame pets *at all*, where
+   before it was ~zero. Mosaic held up: it dipped at e20 (less mosaic
+   exposure) then recovered to within noise of v1 by e80 (0.217 vs
+   0.227 @0.3). So the tradeoff is mild.
+2. **But single-frame plateaus at ~0.01 @0.5 and never climbs past e20**
+   — more epochs don't help. Root cause (diagnosed from the e80 preds):
+   the box regressor is per-cell, and a 50/50-by-*record* blend is
+   ~4:1-by-*box* toward small quadrant boxes (mosaic = 4 small-box cells
+   per record, single = 1 large-box cell). The width head collapses to a
+   near-constant **w=0.23±0.01** while single-frame heads need w≈0.40 —
+   so **0% of top single-frame boxes reach IoU≥0.5** (the ~0.01 mAP is
+   partial overlaps). Class head is fine (68% top-box class match).
+3. **The lever is box-distribution balance, not epochs**: a higher single
+   fraction (≈0.8 balances box counts) or larger/uncropped singles is
+   the frontier direction, per the v2 doc's blend-sweep fallback.
+
 ## Certified robustness scorecard (proved in Lean)
 
 The Lipschitz-margin certificate (`lipschitz_margin_certified_radius`, Tsuzuku

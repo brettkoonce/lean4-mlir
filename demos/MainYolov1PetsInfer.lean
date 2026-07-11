@@ -37,6 +37,9 @@ def r34Yolov1 : NetSpec where
   ]
 
 def main (args : List String) : IO Unit := do
+  -- n = 0 means "all val records" (Gate-A whole-set scoring); any other value
+  -- caps to the first n. The eval vmfb is compiled at batch 16, so we always
+  -- feed multiples of 16 and pad the final partial batch (see loop below).
   let n        : Nat    := (args[0]?.bind String.toNat?).getD 16
   let dataDir  : String := args[1]?.getD "data/pets_mosaic_bal"
   let outDir   : String := args[2]?.getD "figures/yolo_pets"
@@ -75,18 +78,22 @@ def main (args : List String) : IO Unit := do
 
   -- Load val images.
   let (valImg, valLbl, nVal) ← F32.loadDetBin (dataDir ++ "/val.bin")
-  let n := min n nVal
-  IO.println s!"  loaded {nVal} val records; using first {n}"
+  let n := if n == 0 then nVal else min n nVal
+  IO.println s!"  loaded {nVal} val records; scoring first {n}"
   let _ := valLbl
 
-  -- The eval vmfb is compiled at the training batch size (16), so we must
-  -- feed exactly that many images in one forward pass (batch=1 → shape error).
+  -- The eval vmfb is compiled at the training batch size (16), so every
+  -- forward pass must feed exactly 16 images. We loop ⌈n/16⌉ batches and pad
+  -- the final partial batch by repeating the last real image, then keep only
+  -- the first `n` logit rows — so an arbitrary-N val set can be scored, not
+  -- just the first 16 (removes the old `batch := 16, n := batch` lock).
   let batch : Nat := 16
-  let n := batch
   let xShape := spec.xShape batch
   let pixelsPerImage := 3 * 224 * 224
+  let bytesPerImage := pixelsPerImage * 4
   let evalShapesBA := spec.evalShapesBA
   let nClasses : USize := 1470  -- flat YOLOv1 output, treated as [B, 1470] "logits"
+  let rowBytes : Nat := 1470 * 4
 
   let logitsPath := s!"{outDir}/logits.bin"
   let imagesPath := s!"{outDir}/images.bin"
@@ -101,11 +108,26 @@ def main (args : List String) : IO Unit := do
       pure ((s.trim.splitOn "\n").map String.trim |>.filter (· != ""))
     else pure []
 
-  -- Single batched forward over the first `n` (=batch) val images.
-  let imagesOut := F32.sliceImages valImg 0 n pixelsPerImage
-  let logitsOut ← IreeSession.forwardF32 sess spec.evalFnName
-                    evalParams evalShapesBA imagesOut xShape batch.toUSize nClasses
-  IO.println s!"  inferred batch of {n}"
+  let nBatches := (n + batch - 1) / batch
+  let mut logitsAll : ByteArray := ByteArray.empty
+  for b in [:nBatches] do
+    let start := b * batch
+    let real  := min batch (n - start)     -- real (non-pad) rows in this batch
+    -- Build a 16-image input: `real` real images then pad to 16 with the last one.
+    let mut imgs := F32.sliceImages valImg start real pixelsPerImage
+    if real < batch then
+      let lastImg := F32.sliceImages valImg (start + real - 1) 1 pixelsPerImage
+      for _ in [:batch - real] do
+        imgs := imgs ++ lastImg
+    let logitsB ← IreeSession.forwardF32 sess spec.evalFnName
+                    evalParams evalShapesBA imgs xShape batch.toUSize nClasses
+    -- Keep only the `real` rows (drop padding).
+    logitsAll := logitsAll ++ logitsB.extract 0 (real * rowBytes)
+    let _ := bytesPerImage
+  IO.println s!"  inferred {n} records in {nBatches} batches of {batch}"
+
+  -- Images dump: for renders (score a small n); skip for whole-set scoring to
+  -- avoid a needless ~200 MB write (the mAP harness reads GT from val.bin).
   let mut idsOut : String := ""
   for i in [:n] do
     if h : i < testIds.length then
@@ -113,12 +135,18 @@ def main (args : List String) : IO Unit := do
     else
       idsOut := idsOut ++ s!"unknown_{i}\n"
 
-  IO.FS.writeBinFile logitsPath logitsOut
-  IO.FS.writeBinFile imagesPath imagesOut
+  IO.FS.writeBinFile logitsPath logitsAll
   IO.FS.writeFile    indicesPath idsOut
+  let wroteImages ← if n ≤ 64 then do
+      let imagesOut := F32.sliceImages valImg 0 n pixelsPerImage
+      IO.FS.writeBinFile imagesPath imagesOut
+      pure (some imagesOut.size)
+    else pure none
 
   IO.println s!"wrote:"
-  IO.println s!"  {logitsPath}  ({logitsOut.size} bytes — {n}×1470 float32)"
-  IO.println s!"  {imagesPath}  ({imagesOut.size} bytes — {n}×3×224×224 float32)"
+  IO.println s!"  {logitsPath}  ({logitsAll.size} bytes — {n}×1470 float32)"
+  match wroteImages with
+  | some sz => IO.println s!"  {imagesPath}  ({sz} bytes — {n}×3×224×224 float32)"
+  | none    => IO.println s!"  (images.bin skipped: n>64; mAP harness reads GT from val.bin)"
   IO.println s!"  {indicesPath} ({idsOut.length} chars — {n} image IDs)"
-  IO.println s!"next: python3 scripts/yolo_render.py {outDir}"
+  IO.println s!"next: python3 scripts/yolo_map.py {outDir}/logits.bin {dataDir}/val.bin"
