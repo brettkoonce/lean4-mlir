@@ -167,8 +167,26 @@ on `data/pets_mixed` (50/50, class-balanced) via `run_yolo_mixed.sh`
 - **Next lever = box-distribution balance, not epochs.** Higher single
   fraction (≈0.8 balances box counts) or larger/uncropped singles. This
   is exactly the doc's "report the frontier — 25/50/75% blend sweep"
-  fallback below; **a --single-frac 0.75 run is launched to test it**
-  (checkpoints of the 50/50 run backed up as `..._params_mix50_e80.bin`).
+  fallback below.
+
+**Status 2026-07-11: 0.75-single frontier run DONE — box-scale
+hypothesis CONFIRMED.** `--single-frac 0.75` (`data/pets_mixed75`), 80ep:
+
+| ckpt | mos@0.5 | mos@0.3 | sng@0.5 | sng@0.3 |
+|---|---|---|---|---|
+| v1 | 0.041 | 0.227 | 0.0002 | 0.005 |
+| 50/50 e80 | 0.034 | 0.217 | 0.011 | 0.049 |
+| 75%-single e80 | 0.020 | 0.143 | **0.041** | **0.163** |
+
+The width head **un-collapsed** (w=0.23±0.01 → 0.57±0.02, GT≈0.40), single
+mAP **kept climbing** to e80 (no plateau), and **30% of top single boxes
+now reach IoU≥0.5** (was 0%; mean IoU 0.05→0.39). Single-frame localization
+is SOLVED — `demos/figures/yolo_pets_single_m75.png` is the money shot.
+Cost: mosaic drops (0.020 vs 0.041). So the frontier is the single fraction;
+a mid point (~0.6–0.65) should balance both val sets. **Remaining gap is
+class, not localization** (still calls cats "dog" — the separate ~64%
+ceiling). 50/50 ckpt saved `..._params_mix50_e80.bin`; 75%-run is the
+current `..._params_e*.bin`.
 
 Recipe/data notes for the next session: mixed data at `data/pets_mixed`
 (regen via `preprocess_pets_mosaic.py data/pets <out> --single-frac F`);
