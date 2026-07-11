@@ -19,10 +19,10 @@ h5py==3.14.0
 idna==3.16
 immutabledict==4.3.1
 iree-base-compiler==3.12.0rc20260428
-jax==0.10.0
-jax-cuda12-pjrt==0.10.0
-jax-cuda12-plugin==0.10.0
-jaxlib==0.10.0
+jax==0.10.2
+jax-cuda12-pjrt==0.10.2
+jax-cuda12-plugin==0.10.2
+jaxlib==0.10.2
 keras==3.14.1
 libclang==18.1.1
 markdown-it-py==4.2.0
