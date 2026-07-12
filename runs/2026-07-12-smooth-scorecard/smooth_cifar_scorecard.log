@@ -1,0 +1,31 @@
+Randomized-smoothing certificate on CIFAR-CNN (verified codegen → IREE → GPU, forward-only)
+  iree-compile verified_mlir/cifar_train_step.mlir
+  iree-compile verified_mlir/cifar_fwd.mlir
+  n0=128 (select)  n=10112 (estimate)  α=0.001000  certifying 100 test imgs (every 1th)
+  p_A ceiling = 0.999317 (= α^(1/n))  →  max certifiable radius = σ · 3.201786
+
+── σ = 0.500000  (radius ceiling at this n = 1.600893) ──
+    epoch 1/12: clean acc = 21.043670%
+    epoch 2/12: clean acc = 39.443109%
+    epoch 3/12: clean acc = 40.715144%
+    epoch 4/12: clean acc = 47.856571%
+    epoch 5/12: clean acc = 51.292067%
+    epoch 6/12: clean acc = 51.352163%
+    epoch 7/12: clean acc = 53.415465%
+    epoch 8/12: clean acc = 53.505609%
+    epoch 9/12: clean acc = 53.846154%
+    epoch 10/12: clean acc = 54.537260%
+    epoch 11/12: clean acc = 54.106571%
+    epoch 12/12: clean acc = 54.056490%
+  noise-trained clean acc = 54.537260%
+    certified 100/100 ...
+  smoothed natural acc = 69.000000%   abstain = 20.000000%   ACR = 0.389630
+  certified-robust acc (L2): 0.250000→51.000000% / 0.500000→31.000000% / 0.750000→21.000000% / 1.000000→14.000000% / 1.250000→6.000000% / 1.500000→3.000000%
+
+══ randomized smoothing (CIFAR-CNN): depth-independent certified L2 radius ══
+  σ	clean%	nat%	abst%	cert@.5	cert@1.0	cert@1.5	ACR
+  0.500000	54.537260	69.000000	20.000000	31.000000	14.000000	3.000000	0.389630
+
+per-image certified radii → runs/smooth_cifar_radii.csv (100 rows, all σ) — fine frontier curves + ACR
+done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —
+      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless).

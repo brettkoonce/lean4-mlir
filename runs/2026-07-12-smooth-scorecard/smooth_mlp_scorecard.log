@@ -1,0 +1,29 @@
+Randomized-smoothing certificate on MNIST-MLP (verified codegen → IREE → GPU, forward-only)
+  iree-compile verified_mlir/mlp_train_step.mlir
+  iree-compile verified_mlir/mlp_fwd.mlir
+  n0=128 (select)  n=10112 (estimate)  α=0.001000  certifying 100 test imgs (every 1th)
+  p_A ceiling = 0.999317 (= α^(1/n))  →  max certifiable radius = σ · 3.201786
+
+── σ = 0.500000  (radius ceiling at this n = 1.600893) ──
+    epoch 1/10: clean acc = 91.195913%
+    epoch 2/10: clean acc = 93.780048%
+    epoch 3/10: clean acc = 95.132212%
+    epoch 4/10: clean acc = 95.933494%
+    epoch 5/10: clean acc = 96.284054%
+    epoch 6/10: clean acc = 96.654647%
+    epoch 7/10: clean acc = 96.945112%
+    epoch 8/10: clean acc = 96.915064%
+    epoch 9/10: clean acc = 97.165465%
+    epoch 10/10: clean acc = 97.345753%
+  noise-trained clean acc = 97.345753%
+    certified 100/100 ...
+  smoothed natural acc = 100.000000%   abstain = 1.000000%   ACR = 1.153707
+  certified-robust acc (L2): 0.250000→96.000000% / 0.500000→93.000000% / 0.750000→86.000000% / 1.000000→68.000000% / 1.250000→45.000000% / 1.500000→25.000000%
+
+══ randomized smoothing (MNIST-MLP): depth-independent certified L2 radius ══
+  σ	clean%	nat%	abst%	cert@.5	cert@1.0	cert@1.5	ACR
+  0.500000	97.345753	100.000000	1.000000	93.000000	68.000000	25.000000	1.153707
+
+per-image certified radii → runs/smooth_mlp_radii.csv (100 rows, all σ) — fine frontier curves + ACR
+done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —
+      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless).

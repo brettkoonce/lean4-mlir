@@ -2065,13 +2065,22 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   let n0      := ((← IO.getEnv "SMOOTH_N0").bind (·.toNat?)).getD 100
   let nSamp   := ((← IO.getEnv "SMOOTH_N").bind (·.toNat?)).getD 10000
   let maxCert := ((← IO.getEnv "SMOOTH_MAXCERT").bind (·.toNat?)).getD 200
+  -- single-σ override (millis, same knob as the ConvNeXt exe) — e.g. the
+  -- fixed-protocol scorecard runs σ=0.5 only via SMOOTH_SIGMA_MILLI=500
+  let sigmas := match (← IO.getEnv "SMOOTH_SIGMA_MILLI") with
+    | some s => match s.toNat? with
+      | some m => [m.toFloat / 1000.0]
+      | none => sigmas
+    | none => sigmas
   -- per-epoch best-θ eval is a clean-acc proxy; cap it to a subsample on heavy 224² nets
   -- (`SMOOTH_EVAL_BATCHES`, default = full val set).
   let evalBatches := min nbt (((← IO.getEnv "SMOOTH_EVAL_BATCHES").bind (·.toNat?)).getD nbt)
   let alpha   := 0.001
   let radii : Array Float := #[0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
   let nCert   := min maxCert nEval
-  let stride  := max 1 (nEval / nCert)
+  -- SMOOTH_STRIDE=1 + SMOOTH_MAXCERT=100 = the fixed-first-100 scorecard
+  -- protocol (mirrors the Lipschitz scorecard subset); default unchanged.
+  let stride  := max 1 (((← IO.getEnv "SMOOTH_STRIDE").bind (·.toNat?)).getD (nEval / nCert))
   -- the rendered fwd has a STATIC batch = bs, so SampleUnderNoise feeds whole `bs`-batches;
   -- round the requested sample counts up to a multiple of bs (the effective n the CP bound uses).
   let n0Batches := max 1 ((n0 + bs - 1) / bs)
@@ -2088,7 +2097,9 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   let mut rows : Array String := #[]
   -- per-image certified radius, dumped to CSV for arbitrarily-fine frontier curves (cert-acc at
   -- radius r = fraction with correct ∧ radius ≥ r) + ACR + any threshold, all from one run.
-  let mut dumpRows : Array String := #["sigma,img_idx,label,pred,abstain,radius"]
+  -- count,n = the raw CP inputs (k successes of n samples) — what the Lean
+  -- kernel tail checks (SmoothingCP.binomTail_le_of_kernel_check) consume.
+  let mut dumpRows : Array String := #["sigma,img_idx,label,pred,abstain,radius,count,n"]
   -- Lipschitz-hypothesis probe (SMOOTH_LIP_PROBE): measures |Φ⁻¹(p_ĉ(x+δ))−Φ⁻¹(p_ĉ(x))| vs the
   -- proven bound ‖δ‖/σ — the empirical grounding of `smoothing_certified_radius`'s (1/σ)-Lipschitz hyp.
   let lipProbe := (← IO.getEnv "SMOOTH_LIP_PROBE").isSome
@@ -2167,7 +2178,8 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
             if radius ≥ radii[ri]! then certCnt := certCnt.set! ri (certCnt[ri]! + 1)
       else
         abstain := abstain + 1
-      dumpRows := dumpRows.push s!"{sigma},{imgIdx},{label},{cHatA},{if certified then 0 else 1},{radius}"
+      dumpRows := dumpRows.push
+        s!"{sigma},{imgIdx},{label},{cHatA},{if certified then 0 else 1},{radius},{counts[cHatA]!},{nEff}"
       if (t+1) % 100 == 0 then
         IO.println s!"    certified {t+1}/{nCert} ..."; (← IO.getStdout).flush
     -- (4) Lipschitz-hypothesis probe: shift x by r·(unit vector) and compare the probit-score change

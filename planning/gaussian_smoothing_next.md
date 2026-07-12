@@ -113,16 +113,25 @@ compiles: `git show origin/mathlib-upstream-pr1-pr2:LeanMlir/Proofs/UpstreamDraf
    Nat.pow/mul are GMP-accelerated — VALIDATED at the deployed N=10112:
    213-term tail AND 4613-term deep tail each ~0.1 s, whole file 4 s).
    The choose-ladder/power-sharing generator tricks are OBSOLETE.
-   **REMAINING = 3c-data**: run the `*-smooth` drivers on fixed first-100
-   test images (GPU, ~35min for the MNIST/CIFAR trio via
-   run_smooth_2gpu.sh, keep per-image (k₀, N, σ) not just radii), generator
-   emits per-image `binomTail_le_of_kernel_check` instances + a `1−α`
-   column + aggregate; land in `CertsHeavy` + `AuditAxiomsHeavy` (though at
-   ~0.1 s/image the corpus may even be Certs-light).
+   **3c-data DONE 2026-07-12**: driver patched (per-image `count,n` CSV
+   columns + `SMOOTH_SIGMA_MILLI`/`SMOOTH_STRIDE` knobs on the generic
+   `smoothCertify`), fixed-protocol runs via `run_smooth_scorecard.sh`
+   (first-100 test images, σ=0.5, n=10112, α=0.001, 2 GPUs, ~25 min;
+   noise-trained clean accs 97.3/98.0/54.5, ACR 1.15/1.32/0.39) →
+   `scripts/smooth_scorecard_gen.py` (binary-searches the LARGEST 4-decimal
+   `q₀ = a/10000` per certified image, verifies each in exact integer
+   arithmetic — incremental-term tail, ~50 s for all 279) →
+   `LeanMlir/Proofs/SmoothingCPScorecard.lean`: **MNIST-MLP 99/100,
+   MNIST-CNN 100/100, CIFAR-CNN 80/100 certified**, one
+   `binomTail_le_of_kernel_check` + `decide +kernel` lemma per image +
+   per-net `∀ e ∈ entries` aggregates (Lipschitz-scorecard idiom). Landed
+   in `Certs` (light: pure kernel bignum, no norm_num megaterms).
    Also note: the driver currently reports Φ⁻¹ via float Acklam — the Lean
    side keeps Φ⁻¹ symbolic; a certified DECIMAL radius would additionally
    need rational Φ-bounds (Gaussian tail inequality + `Real.exp` bounds) —
-   separate, optional rung.
+   separate, optional rung. The OTHER remaining informality: the
+   net-semantics hypothesis (C = the rendered fwd's argmax + `hp`
+   interiority) — noted in the scorecard header.
 
 4. **σ over ℝ≥0 / nonstandard-σ variants, and the `t`-per-class refinement**
    (Cohen uses one-sided bounds on `p_A` only; the classifier theorem's

@@ -698,6 +698,13 @@ lean_lib «Certs» where
              -- lower bound covers with prob >= 1-alpha (sInf trick: no tail
              -- monotonicity needed), composed => smoothing_cp_certified.
              `LeanMlir.Proofs.SmoothingCP,
+             -- The smoothing CP SCORECARD (generated: scripts/smooth_scorecard_gen.py
+             -- from the fixed-protocol driver runs, run_smooth_scorecard.sh):
+             -- first-100 test images x {MNIST-MLP, MNIST-CNN, CIFAR-CNN},
+             -- sigma=0.5, n=10112, alpha=1/1000 -- 279 per-image kernel tail
+             -- checks (decide +kernel) + per-net aggregates. Light enough for
+             -- Certs (no norm_num megaterms, pure kernel bignum arithmetic).
+             `LeanMlir.Proofs.SmoothingCPScorecard,
              -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).
