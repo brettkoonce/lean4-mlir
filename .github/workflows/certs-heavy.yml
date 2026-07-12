@@ -30,17 +30,27 @@ on:
 jobs:
   certify-heavy:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 350
     env:
       # bound per-module elaboration parallelism: the heavy linarith goals
       # peak at several GB each (17.08 GB measured for ONE SDP module at
-      # 4 threads); 2 threads per module + one module at a time (see the
-      # sequential build loop below — the first run died with lake's default
-      # scheduler running ~4 modules at once, runner killed mid-build at
-      # ~75 min, the classic OOM signature).
-      LEAN_NUM_THREADS: 2
+      # 4 threads; a single module at 2 threads still OOM-killed its lean
+      # process on the 16 GB runner). ONE goal resident at a time + the
+      # swapfile below is the last free-tier configuration; if this still
+      # fails, the options are a self-hosted runner or shrinking the
+      # certificates' coefficient sizes (grid-rounded LDLᵀ + diagonally
+      # dominant remainder).
+      LEAN_NUM_THREADS: 1
     steps:
       - uses: actions/checkout@v4
+
+      - name: Add swap (survive elaboration memory spikes)
+        run: |
+          sudo fallocate -l 10G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
 
       - name: Audit coverage check (both audits ⊆ their lib roots)
         run: python3 scripts/check_audit_coverage.py
