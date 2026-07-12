@@ -158,6 +158,7 @@ import LeanMlir.Proofs.LipschitzCertScorecardSDPUncon
 import LeanMlir.Proofs.LipschitzCertFloat
 import LeanMlir.Proofs.ListDot
 import LeanMlir.Proofs.IntervalBound
+import LeanMlir.Proofs.SmoothingMC
 import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
 import LeanMlir.Proofs.MuonGeometry
@@ -3083,6 +3084,18 @@ open Proofs
 #print axioms Proofs.smoothing_probit_lipschitz
 #print axioms Proofs.smoothing_certified_radius_cohen
 #print axioms Proofs.smoothing_certified_radius_classifier
+-- ...and the MONTE-CARLO tie (SmoothingMC.lean, the chain's last honest gap,
+-- closed 2026-07-12): one-sided Hoeffding for [0,1]-valued MC means over the
+-- product measure (mc_mean_lower_bound, via Mathlib's HasSubgaussianMGF) ⇒
+-- smoothing_mc_certified: with probability ≥ 1−exp(−2Nt²) over the N Gaussian
+-- samples, the radius σ·Φ⁻¹(p̂−t) reported from the EMPIRICAL class frequency
+-- is genuinely certified (quantile junk-value below 0 = vacuous case). The
+-- sampling confidence, the Neyman–Pearson probit-Lipschitz side, and the
+-- radius algebra are now ALL theorems — Cohen's CERTIFY procedure end to end.
+#print axioms Proofs.iIndepFun_eval_pi
+#print axioms Proofs.mc_mean_lower_bound
+#print axioms Proofs.stdNormalQuantile_of_nonpos
+#print axioms Proofs.smoothing_mc_certified
 
 -- ...and the Tsuzuku certificate INSTANTIATED (LipschitzCertInstance.lean): the Lipschitz constant
 -- is PROVED (denseE_lipschitzL2 — the Frobenius bound ‖W‖₂ ≤ ‖W‖_F via row-wise Cauchy-Schwarz, no

@@ -681,6 +681,11 @@ lean_lib «Certs» where
              -- capstone smoothing_certified_radius_gaussian with only the Neyman–Pearson
              -- (1/σ)-Lipschitz core (hg) left as a hypothesis.
              `LeanMlir.Proofs.SmoothingGaussian,
+             -- The Monte-Carlo tie (the smoothing chain's LAST honest gap):
+             -- Hoeffding over the sample product measure (Mathlib subgaussian
+             -- machinery) ⇒ with prob ≥ 1−exp(−2Nt²) the reported radius
+             -- σ·Φ⁻¹(p̂−t) is genuinely certified — Cohen's CERTIFY end to end.
+             `LeanMlir.Proofs.SmoothingMC,
              -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).
