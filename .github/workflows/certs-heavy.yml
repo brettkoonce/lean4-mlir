@@ -32,25 +32,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
-      # bound per-module elaboration parallelism: the heavy linarith goals
-      # peak at several GB each (17.08 GB measured for ONE SDP module at
-      # 4 threads; a single module at 2 threads still OOM-killed its lean
-      # process on the 16 GB runner). ONE goal resident at a time + the
-      # swapfile below is the last free-tier configuration; if this still
-      # fails, the options are a self-hosted runner or shrinking the
-      # certificates' coefficient sizes (grid-rounded LDLᵀ + diagonally
-      # dominant remainder).
-      LEAN_NUM_THREADS: 1
+      # bound per-module elaboration parallelism (with the LipSDP modules
+      # CI-disabled the remaining scorecard/IBP tiers are memory-moderate;
+      # 2 threads × one module at a time fits comfortably). The swapfile
+      # experiment from the SDP era is gone: 10G fallocate doesn't fit the
+      # runner's root partition (failed in 7 s) — use /mnt if ever needed.
+      LEAN_NUM_THREADS: 2
     steps:
       - uses: actions/checkout@v4
-
-      - name: Add swap (survive elaboration memory spikes)
-        run: |
-          sudo fallocate -l 10G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          free -h
 
       - name: Audit coverage check (both audits ⊆ their lib roots)
         run: python3 scripts/check_audit_coverage.py
