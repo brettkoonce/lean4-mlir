@@ -189,18 +189,44 @@ zero sorrys, standard 3-axiom closure. Counts are honest lower bounds (an
 upper-bound L cannot prove an image *un*certifiable); the PGD column is the
 empirical upper bracket (L2-PGD, 100 steps, 4 restarts): cert ≤ TRUE ≤ PGD.
 
-| Net (49→8→10 ReLU MLP, pooled MNIST) | Quantized test acc | Proved L (Schatten-8) | Certified @ ε=0.1 | PGD-robust @ ε=0.1 |
-|---|---|---|---|---|
-| unconstrained SGD, /128 rationals | 89.8% | 63.79 | **1/100** | 69/100 |
-| σ ≤ 4 projected SGD, /256 rationals | 87.0% | 19.76 | **34/100** | 72/100 |
+| Net (49→8→10 ReLU MLP, pooled MNIST) | Quantized test acc | Proved L (Schatten-8) | Certified @ ε=0.1 | LipSDP certified @ ε=0.1 | PGD-robust @ ε=0.1 |
+|---|---|---|---|---|---|
+| unconstrained SGD, /128 rationals | 89.8% | 63.79 | **1/100** | **63/100** | 69/100 |
+| σ ≤ 4 projected SGD, /256 rationals | 87.0% | 19.76 | **34/100** | **69/100** | 72/100 |
 
 Same theorem, same ε — the spectral projection during training decides whether
 the certificate bites: 2.8 points of clean accuracy buy 34× the certified
 count. (Caps ≤ 2 cost too much at this scale: σ ≤ 2 drops clean accuracy to
-66%.) Single-image radius ladder on the unconstrained net: Frobenius 0.046 →
+66%.) The LipSDP column replaces the global `√2·∏‖Wᵢ‖` criterion by a per-pair
+LipSDP-Neuron constant (Fazlyab 2019), PSD-witnessed by exact rational LDLᵀ
+(`LipschitzCertScorecardSDP{,Uncon}.lean`) — same nets, same images, same ε.
+Single-image radius ladder on the unconstrained net: Frobenius 0.046 →
 Schatten-4 0.111 → Schatten-8 0.154 (`trained_demo_certified*` in
 `LipschitzCertInstance.lean`, with the power-iteration lower bounds
 sandwiching each layer's true σ₁).
+
+### Full 784-dim input (no pooling) — the sandwich closes
+
+The same certificates at genuine full-input resolution (exact `k/255` pixels,
+pixel-space L2 ε — directly comparable to the literature), two 784→16→10 nets,
+both radii (`LipschitzCertScorecardFull*.lean` + `...SDPFull*.lean`; the
+784-term dot products are kernel `dotZ` evaluations, see `ListDot.lean`):
+
+| Net (784→16→10) | Quantized test acc | Proved L (Schatten-8) | ε | Certified (global L) | LipSDP certified | PGD-robust |
+|---|---|---|---|---|---|---|
+| σ ≤ 2 projected SGD | 92.4% | 4.95 | 0.1 | 92/100 | **93/100** | **93/100** |
+| σ ≤ 2 projected SGD | 92.4% | 4.95 | 0.3 | 72/100 | **91/100** | 92/100 |
+| unconstrained SGD | 95.1% | 29.85 | 0.1 | 76/100 | **91/100** | 94/100 |
+| unconstrained SGD | 95.1% | 29.85 | 0.3 | 2/100 | **77/100** | 86/100 |
+
+At ε = 0.1 on the capped net the per-pair LipSDP certificate **equals the
+L2-PGD attack bound — cert ≤ TRUE ≤ PGD closes to an equality**, machine-
+checked over the trained rational weights. The unconstrained ε = 0.3 row
+(2 → 77) is the cleanest evidence that the global product constant, not the
+network, was the bottleneck. At full input even σ ≤ 2 keeps 92.4% clean
+accuracy — the pooled experiment's "caps ≤ 2 cost too much" was an artifact
+of the 49-dim reduction. Counts are lower bounds; all 3-axiom-clean
+(`tests/AuditAxioms.lean`).
 
 ## Per-epoch eval history (running BN stats)
 

@@ -311,7 +311,7 @@ rewrite — up to where the model's assumptions break.
   `|rnd x−x| ≤ u|x|` model gives way to block-scaled quantization). All the
   above is 3-axiom-clean and audited; see `planning/floatbridge_quantization.md`.
 
-#### Certified robustness (Tsuzuku, instantiated at trained weights)
+#### Certified robustness (Tsuzuku + LipSDP, instantiated at trained weights)
 
 `lipschitz_margin_certified_radius` (`LipschitzCert.lean`) is instantiated on a
 trained, rationalized 49→8→10 pooled-MNIST MLP with everything in the trust
@@ -322,9 +322,25 @@ looseness is itself certified. Scaled to a dataset-level **scorecard**
 (`LipschitzCertScorecard.lean`): over the fixed first 100 MNIST test images at
 fixed ε = 0.1 (pooled L2), a spectrally-capped (σ ≤ 4 projected-SGD) sibling
 net certifies **34/100** predictions vs **1/100** unconstrained — same theorem,
-same ε; training decides whether the certificate bites. Empirical L2-PGD
-brackets it from above (69–72/100): cert ≤ TRUE ≤ PGD. See the table in
-[`RESULTS.md`](RESULTS.md); all 3-axiom-clean.
+same ε; training decides whether the certificate bites. Per-pair **LipSDP**
+certificates (Fazlyab 2019, `LipschitzCertPairSDP.lean` — PSD witnessed by
+exact rational LDLᵀ, kernel-checkable, no eigensolver in the trust path) lift
+the same nets to **69/100** and **63/100** (PGD bracket 72/69).
+
+The scorecard now also exists at **full 784-dim input** — exact `k/255`
+pixels, no pooling (`LipschitzCertScorecardFull*.lean`, engine:
+`ListDot.lean`, where every 784-term dot product is a single kernel
+evaluation — `dotZ` data + `decide +kernel`, GMP integer arithmetic,
+`propext`-only, *not* `native_decide` — bridged once to the `Fin 784` sums
+by `sum_getD_div`; the pooled files' `simp`/`norm_num` sum walk is quadratic
+in input width and priced out at 784). Two 784→16→10 nets at pixel-L2
+ε = 0.1 *and* 0.3, global-L and per-pair LipSDP criteria
+(`LipschitzCertScorecardSDPFull*.lean`): on the σ ≤ 2-capped net the LipSDP
+certificate reaches **93/100 at ε = 0.1 — equal to the L2-PGD attack bound:
+the cert ≤ TRUE ≤ PGD sandwich closes** — and 91/100 at ε = 0.3 (PGD 92);
+the unconstrained net goes 76→91/100 at ε = 0.1 and **2→77/100** at ε = 0.3,
+where the global product constant (not the network) was the bottleneck. See
+the tables in [`RESULTS.md`](RESULTS.md); all 3-axiom-clean.
 
 **Not yet verified anywhere:** the ~7500-line `MlirCodegen.lean` (zero
 theorems — the path behind the headline accuracy numbers); the printed `.mlir`
