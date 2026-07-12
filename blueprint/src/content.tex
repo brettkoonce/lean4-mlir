@@ -403,8 +403,7 @@ plus its unconditional global sibling --- the all-smooth architecture,
 discharged with no kink hypotheses, only \(\varepsilon > 0\)
 positivity --- and, at full architecture,
 \(\texttt{convNextForwardT}\) (all 18 blocks, 4\(\times\)4/s4 patchify
-stem) with its committed-config variant. (Swish/SiLU lives in
-Chapter~7, where EfficientNet uses it; ConvNeXt's activation is GELU.)
+stem) with its committed-config variant.
 
 \textbf{Chapter 9 (ViT)} contributes 6 VJP contracts (MHSA, the
 transformer block, the depth-2 whole-network in scalar- and vector-LN
@@ -1983,7 +1982,7 @@ formalizations of these identities, plus the proof that VJPs of
 composed layers are themselves VJPs obtained by composing the
 building blocks in reverse order. That last claim is what makes a
 3-layer MLP's backward pass exactly three transposed matrix
-multiplies---no more, no fewer---and it is the structural fact
+multiplies, and it is the structural fact
 that the rest of the book leans on.
 
 \section*{The theorems}
@@ -2588,7 +2587,7 @@ pinned by \texttt{dense\_weight\_grad\_correct} and
 \texttt{softmaxCE\_grad}. So \emph{what} the gradient is, is not in
 question.
 
-\medskip\noindent\textbf{The gap, and how we close it.} The emitted
+\medskip\noindent\textbf{The gap and how we close it.} The emitted
 backward is a value of a Lean datatype, \texttt{Back}, with a denotation
 $[\![\cdot]\!]$ into the proofs' own vector type. For the MLP the graph is
 \[
@@ -2750,8 +2749,7 @@ is a list of kernel weights plus a rule for where each one lives.
 
 \section*{The backward of a convolution is another convolution}
 
-This is the part that surprises a first reader, and it is the
-single most important fact in the chapter. We want \(dx\)---how a
+We want \(dx\)---how a
 small jiggle in each input pixel changes the loss---given an upstream
 \(dy\). Plugging into the Jacobian above and grinding through the
 algebra, the answer is:
@@ -3340,7 +3338,7 @@ parameter gradients are pinned by \texttt{conv2d\_weight\_grad\_has\_vjp}
 the loss gradient by \texttt{softmaxCE\_grad} (\S~\ref{ax:softmaxCE_grad}).
 So \emph{what} the convolution's gradient is, is not in question.
 
-\medskip\noindent\textbf{The gap, and how we close it.} The emitted
+\medskip\noindent\textbf{The gap and how we close it.} The emitted
 backward convolution is given a denotation $[\![\cdot]\!]$ valued in the
 proofs' own tensor type,
 \[
@@ -3568,7 +3566,7 @@ the formal proof is not that we discovered the formula---it has
 been known since 2015---but that the Lean kernel mechanically
 verifies we are computing the right thing at every training step.
 
-\section*{The affine step is just dense-with-broadcasting}
+\section*{The affine step is dense-with-broadcasting}
 
 The third step, \(\gamma \hat{x} + \beta\), is structurally a
 dense layer applied per-channel. Its Jacobian
@@ -4327,7 +4325,7 @@ that the inverse-stddev term carries an $\mathrm{istd}^3$ that needs
 $\varepsilon > 0$ to stay differentiable --- the single place in the book
 where the math reaches past chain-sum-product into real analysis.
 
-\medskip\noindent\textbf{The gap, and how we close it.} The three-term
+\medskip\noindent\textbf{The gap and how we close it.} The three-term
 backward is not elementwise --- the two $\sum_k$ reductions couple every
 coordinate to every other. The emitted backward graph is given a denotation
 in the proofs' own vector type, and
@@ -4458,14 +4456,14 @@ fan-in lemma, with \(\mathrm{id}\) plugged into one slot.
 That is Theorem~\ref{thm:residual_has_vjp} below, and its proof
 is one line. This chapter has \emph{exactly one theorem}, and
 that theorem is mechanical. The engineering revolution was not
-in the math---it was in the realization that this trivially
-provable operation was the missing piece for training deep
+in the math---it was in the realization that this
+operation was the missing piece for training deep
 networks. The fact that the framework absorbs the new
 architecture without any new math is the value proposition: once
 the foundation rules are in place, the next decade of image
 recognition follows from composing them.
 
-\section*{ResNet-34 is sixteen of these blocks, stacked}
+\section*{ResNet-34 is sixteen of these blocks}
 
 ResNet-34 (the smallest ``deep'' variant in the original paper)
 is built from 16 residual blocks arranged in four stages of
@@ -4551,7 +4549,7 @@ compute $y = f(x) + x$. That's the additive-fan-in pattern of
 \S~\ref{thm:biPath_has_vjp} with $\mathrm{id}$ on one branch, which
 is the composition \S~\ref{thm:residual_has_vjp} proves. Stacking 34
 layers worth of these blocks just composes the fan-in rule 34 times
-(well, 16 residual blocks deep and 34 convs across all of them).
+(16 residual blocks deep and 34 convs across all of them).
 
 \subsection*{The architecture}
 
@@ -4765,7 +4763,7 @@ backward already proven in Chapters~\ref{chap:cnn} and~\ref{chap:bn}. The
 whole block --- and a tower of sixteen of them --- composes by the chain
 rule \texttt{vjp\_comp\_at} (\S~\ref{thm:vjp_comp}).
 
-\medskip\noindent\textbf{The gap, and how we close it.} The residual
+\medskip\noindent\textbf{The gap and how we close it.} The residual
 fan-in is the structural heart of a deep ResNet. The emitted backward is
 given a denotation valued in the proofs' own tensor type, shown equal to
 \texttt{residual\_has\_vjp\_at}'s backward, and the structural move is
@@ -5739,7 +5737,7 @@ channel axis to swap. The inverted-residual block composes this with the
 pointwise convs, BatchNorm, and relu6; \texttt{mobilenetv2\_has\_vjp\_at}
 chains the whole network through \texttt{vjp\_comp\_at}.
 
-\medskip\noindent\textbf{The gap, and how we close it.} The emitted graph
+\medskip\noindent\textbf{The gap and how we close it.} The emitted graph
 is denoted and shown equal to \texttt{depthwise\_has\_vjp3}'s backward. Here
 is what the printer emits for the depthwise input gradient (two channels,
 $3\times3$):
@@ -6340,7 +6338,7 @@ the co-input $x\odot dy$. \texttt{seBlockFull\_has\_vjp} supplies the
 concrete gate (the GAP--dense--swish--dense--sigmoid chain) and
 \texttt{mbconvBody\_has\_vjp} composes the whole MBConv.
 
-\medskip\noindent\textbf{The gap, and how we close it.} The emitted graph
+\medskip\noindent\textbf{The gap and how we close it.} The emitted graph
 realizes \texttt{seBlock\_has\_vjp}'s product-rule backward in full --- both
 terms --- each piece of the gate carrying the swish, sigmoid, and dense
 bridges of the previous chapters. Here is the fan-in, with the excite
@@ -8600,7 +8598,7 @@ fan-in, $da = dQ\,W_q^{\!\top} + dK\,W_k^{\!\top} + dV\,W_v^{\!\top}$;
 (LayerNorm, the QKV projections, attention, the output projection, the
 residual) through \texttt{vjp\_comp\_at}.
 
-\medskip\noindent\textbf{The gap, and how we close it.} The softmax backward
+\medskip\noindent\textbf{The gap and how we close it.} The softmax backward
 is non-elementwise and the three projections are coupled. The emitted graph
 denotes \texttt{transformerAttnSublayer\_has\_vjp\_mat}'s backward. Here is
 the three-way fan-in at the input (two tokens, model dimension four, single
