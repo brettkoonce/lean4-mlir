@@ -161,6 +161,7 @@ import LeanMlir.Proofs.IntervalBound
 import LeanMlir.Proofs.SmoothingMC
 import LeanMlir.Proofs.SmoothingCP
 import LeanMlir.Proofs.SmoothingCPScorecard
+import LeanMlir.Proofs.SmoothingPhiBounds
 import LeanMlir.Proofs.UpstreamDraft
 import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
@@ -3155,6 +3156,21 @@ open Proofs
 #print axioms Proofs.smoothCpMlp_certified
 #print axioms Proofs.smoothCpCnn_certified
 #print axioms Proofs.smoothCpCifar_certified
+
+-- ...and certified DECIMAL quantile bounds (SmoothingPhiBounds.lean): the
+-- float-Phi^-1 informality closed — upper-Riemann panels of the Gaussian
+-- density (stdNormalCDF_panel via gaussianReal_apply + setLIntegral, no FTC)
+-- with a kernel-computable rational pdf bound (32-term Taylor exp lower bound,
+-- sqrt(2*pi) >= 2.5066282 from pi_gt_d20, ceiling-rounded folds), so ONE
+-- decide +kernel check certifies m*h <= Phi^-1(q0). Demos: Phi^-1(0.9) >= 1.27
+-- (true 1.2816), Phi^-1(0.9952) >= 2.54 (true 2.590), and the scorecard
+-- MLP-img1 radius >= 1.27 in DECIMALS (driver printout: 1.295).
+#print axioms Proofs.stdNormalCDF_panel
+#print axioms Proofs.stdNormalCDF_le_phiGridUB
+#print axioms Proofs.le_stdNormalQuantile_of_grid
+#print axioms Proofs.stdNormalQuantile_ge_of_09
+#print axioms Proofs.stdNormalQuantile_ge_of_9952
+#print axioms Proofs.smooth_cp_mlp_i1_radius_dec
 
 -- ...and the two-sided quantile packaging (SmoothingGaussian.lean, 2026-07-12):
 -- Φ⁻¹ STRICTLY monotone on (0,1) (strictness reflected through Φ via the two-sided

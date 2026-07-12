@@ -705,6 +705,13 @@ lean_lib «Certs» where
              -- checks (decide +kernel) + per-net aggregates. Light enough for
              -- Certs (no norm_num megaterms, pure kernel bignum arithmetic).
              `LeanMlir.Proofs.SmoothingCPScorecard,
+             -- Certified DECIMAL quantile bounds (the float-Phi^-1 gap):
+             -- upper-Riemann panels of the Gaussian density with a kernel-
+             -- computable rational pdf bound (32-term Taylor exp + pi_gt_d20
+             -- + ceiling-rounding) => one decide-check certifies
+             -- m*h <= Phi^-1(q0); demos Phi^-1(0.9) >= 1.27, and the
+             -- scorecard MLP-img1 radius >= 1.27 in decimals.
+             `LeanMlir.Proofs.SmoothingPhiBounds,
              -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).

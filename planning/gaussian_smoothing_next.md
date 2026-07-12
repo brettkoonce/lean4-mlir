@@ -126,12 +126,33 @@ compiles: `git show origin/mathlib-upstream-pr1-pr2:LeanMlir/Proofs/UpstreamDraf
    `binomTail_le_of_kernel_check` + `decide +kernel` lemma per image +
    per-net `∀ e ∈ entries` aggregates (Lipschitz-scorecard idiom). Landed
    in `Certs` (light: pure kernel bignum, no norm_num megaterms).
-   Also note: the driver currently reports Φ⁻¹ via float Acklam — the Lean
-   side keeps Φ⁻¹ symbolic; a certified DECIMAL radius would additionally
-   need rational Φ-bounds (Gaussian tail inequality + `Real.exp` bounds) —
-   separate, optional rung. The OTHER remaining informality: the
-   net-semantics hypothesis (C = the rendered fwd's argmax + `hp`
-   interiority) — noted in the scorecard header.
+   **CERTIFIED DECIMAL RADII — CORE DONE 2026-07-12
+   (`LeanMlir/Proofs/SmoothingPhiBounds.lean`)**: the float-Φ⁻¹ informality
+   is closed at the machinery level. `stdNormalCDF_panel` (one upper-Riemann
+   panel via `gaussianReal_apply` + `setLIntegral` — no FTC/improper
+   integrals), kernel-computable rational pdf upper bound (`ratExpLB` 32-term
+   Taylor + `√2π ≥ 2.5066282` from `pi_gt_d20` + `ratCeil9` rounding so grid
+   denominators stay bounded — WITHOUT the rounding the exact-ℚ fold's
+   denominators explode astronomically), grid fold `phiGridUB` +
+   `le_stdNormalQuantile_of_grid`: ONE `decide +kernel` check certifies
+   `m·h ≤ Φ⁻¹(q₀)`. Demos: `Φ⁻¹(0.9) ≥ 1.27` (true 1.2816, m=635 ~13s),
+   `Φ⁻¹(0.9952) ≥ 2.54` (true 2.590, m=1270 ~29s), MLP-img1 radius ≥ 1.27
+   in decimals (driver printout 1.295). Slack ≈ h·(φ(0)−φ(t)): ~0.001 in Φ
+   at h=1/500. GOTCHAS: a `decide` that reports "stuck at ...blt" can just
+   mean the inequality is FALSE (misleading error); equation-compiler
+   recursion on ℕ kernel-reduces fine to m≥1270 (no brecOn blowup).
+   **REMAINING for per-image corpus decimals**: per-image checks cost
+   O(m)·22ms each (no sharing across decide calls) — need the
+   PREFIX-SCAN trick: `phiScan h n : List ℚ` (scanl), generic
+   `phiScan_getElem : (phiScan h n)[m]! = phiGridUB h m`, ONE kernel
+   evaluation `phiScan (1/1000) 3300 = <literal list>` (~60-90s, generated
+   file), then all 279 per-image decimal radii are literal-vs-literal
+   norm_num. Top-end (q₀=0.9993 unanimous images) intrinsically loses
+   ~0.08σ at h=1/1000 (upper-sum slack); a Mills-ratio barrier bound
+   (`B(s)=s·φ(s)/(1+s²)`, FTC) would rescue the deep tail if wanted.
+   The LAST remaining informality after that: the net-semantics hypothesis
+   (C = the rendered fwd's argmax + `hp` interiority) — noted in the
+   scorecard header.
 
 4. **σ over ℝ≥0 / nonstandard-σ variants, and the `t`-per-class refinement**
    (Cohen uses one-sided bounds on `p_A` only; the classifier theorem's
