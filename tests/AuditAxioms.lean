@@ -159,6 +159,7 @@ import LeanMlir.Proofs.LipschitzCertFloat
 import LeanMlir.Proofs.ListDot
 import LeanMlir.Proofs.IntervalBound
 import LeanMlir.Proofs.SmoothingMC
+import LeanMlir.Proofs.UpstreamDraft
 import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
 import LeanMlir.Proofs.MuonGeometry
@@ -3096,6 +3097,27 @@ open Proofs
 #print axioms Proofs.mc_mean_lower_bound
 #print axioms Proofs.stdNormalQuantile_of_nonpos
 #print axioms Proofs.smoothing_mc_certified
+
+-- ...and the two-sided quantile packaging (SmoothingGaussian.lean, 2026-07-12):
+-- Φ⁻¹ STRICTLY monotone on (0,1) (strictness reflected through Φ via the two-sided
+-- inverse), Φ⁻¹ maps (0,1) ONTO ℝ (every s is Φ⁻¹(Φ s)), and Φ⁻¹ continuous at every
+-- p ∈ (0,1) (strict mono + full image ⇒ no extra measure theory). The interface the
+-- Clopper–Pearson upgrade (planning/gaussian_smoothing_next.md §2) will consume.
+#print axioms Proofs.stdNormalQuantile_strictMonoOn
+#print axioms Proofs.stdNormalQuantile_surjOn
+#print axioms Proofs.stdNormalQuantile_continuousAt
+#print axioms Proofs.stdNormalQuantile_continuousOn
+
+-- The Mathlib upstreaming drafts (UpstreamDraft.lean, a Certs root so the in-flight
+-- PR copies can't rot on the pin): PR1 = generic cdf lemmas (strict monotonicity ⟺
+-- IsOpenPosMeasure, continuity ⟺ NoAtoms, cdf ∈ (0,1)); PR2 = the gaussianReal
+-- instantiations + symmetry Φ_v(−x) = 1 − Φ_v(x) + the mean-shift identity.
+#print axioms MathlibUpstream.strictMono_cdf_iff
+#print axioms MathlibUpstream.continuous_cdf_iff
+#print axioms MathlibUpstream.cdf_mem_Ioo
+#print axioms MathlibUpstream.cdf_gaussianReal_mem_Ioo
+#print axioms MathlibUpstream.cdf_gaussianReal_neg
+#print axioms MathlibUpstream.cdf_gaussianReal_sub_const
 
 -- ...and the Tsuzuku certificate INSTANTIATED (LipschitzCertInstance.lean): the Lipschitz constant
 -- is PROVED (denseE_lipschitzL2 — the Frobenius bound ‖W‖₂ ≤ ‖W‖_F via row-wise Cauchy-Schwarz, no

@@ -675,6 +675,12 @@ lean_lib «Certs» where
              -- and the margin is m, every ‖δ‖₂ < m/(√2·L) leaves the argmax fixed (proof, vs
              -- the PGD attack's one-attack upper bound). The cert side of cert ≤ TRUE ≤ PGD.
              `LeanMlir.Proofs.LipschitzCert,
+             -- Mathlib upstreaming drafts (planning/mathlib_upstream_drafts/): the
+             -- PR1 generic-cdf lemmas (strictMono_cdf_iff ⟺ IsOpenPosMeasure,
+             -- continuous_cdf_iff ⟺ NoAtoms, cdf_pos/lt_one/mem_Ioo) + PR2
+             -- gaussianReal instantiations (+ symmetry, mean-shift), kept
+             -- compiling on the pin while the Mathlib PRs are in flight.
+             `LeanMlir.Proofs.UpstreamDraft,
              -- The real Gaussian probit (planning/smoothing_gaussian_lemma.md, G1): the
              -- smoothing radius instantiated at the TRUE standard-normal quantile —
              -- stdNormalCDF strict-mono + symmetry, quantile MonotoneOn (0,1) + odd-about-½,

@@ -49,18 +49,19 @@ compiles: `git show origin/mathlib-upstream-pr1-pr2:LeanMlir/Proofs/UpstreamDraf
 
 ## Next moves, in rough value order
 
-1. **Two-sided quantile inverse via continuity (uses the branch!).**
-   `stdNormalQuantile_inv` (`Φ(Φ⁻¹ p) = p` on `(0,1)`) exists
-   (`SmoothingGaussian.lean:188`), and `stdNormalQuantile_cdf` (`Φ⁻¹(Φ s) = s`,
-   line 708). What's missing is the clean packaging: `Φ⁻¹` STRICTLY monotone
-   on `(0,1)` (currently only `MonotoneOn`), continuity of `Φ⁻¹`, and
-   `Φ⁻¹ ∘ Φ = id` globally — all falling out of `continuous_cdf` +
-   `strictMono_cdf` (PR1/PR2) via `StrictMono.orderIsoOfSurjective`-style
-   arguments or `Continuous.strictMonoOn_inv`. This is where the branch gets
-   used in anger; merge it first (it adds 3 files, no conflicts), lift
-   `UpstreamDraft` into the build (Certs root + audit), then swap
-   `SmoothingGaussian`'s bespoke positivity/mono proofs to cite it (optional,
-   cosmetic).
+1. **Two-sided quantile inverse — DONE 2026-07-12 (uncommitted).**
+   `SmoothingGaussian.lean` now packages the whole inverse:
+   `stdNormalQuantile_strictMonoOn` (STRICT on `(0,1)`, strictness reflected
+   through `Φ` via `stdNormalCDF_quantile`), `stdNormalQuantile_surjOn`
+   (`Φ⁻¹` maps `(0,1)` ONTO ℝ — every `s` is `Φ⁻¹(Φ s)`),
+   `stdNormalQuantile_continuousAt`/`_continuousOn`. Continuity fell to
+   `StrictMonoOn.continuousAt_of_image_mem_nhds` + the full-image trick — the
+   branch was NOT needed for it (no `continuous_cdf`, no OrderIso). The branch
+   files are still lifted into the build (`UpstreamDraft` = `Certs` root +
+   audited, 6 apex `#print axioms` lines) so the PR drafts can't rot; the
+   bespoke-proof swap (cosmetic) was skipped. Landed as a single commit on
+   main (Brett's call: fold it in, the branch never reached PR stage);
+   `origin/mathlib-upstream-pr1-pr2` deleted, content fully subsumed.
 
 2. **Exact Clopper–Pearson instead of Hoeffding.** `mc_mean_lower_bound`'s
    `exp(−2Nt²)` is the crude bound; Cohen's actual CERTIFY uses the exact

@@ -25,6 +25,13 @@ This file proves the three facts Mathlib doesn't have:
   `Φ⁻¹(1−q) = −Φ⁻¹(q)`), via the no-flat-step lemma `stdNormalCDF_sSup_lt_eq_sInf_gt`
   (a flat step at level `q` would give two points with `Φ = q`, against strict mono).
 
+The two-sided inverse is fully packaged: `Φ(Φ⁻¹ p) = p` on `(0,1)`
+(`stdNormalCDF_quantile`), `Φ⁻¹(Φ s) = s` globally (`stdNormalQuantile_cdf`), and from
+those `Φ⁻¹` is **strictly** monotone on `(0,1)` (`stdNormalQuantile_strictMonoOn`), maps
+`(0,1)` onto ℝ (`stdNormalQuantile_surjOn`), and is continuous there
+(`stdNormalQuantile_continuousAt`/`_continuousOn` — strict mono + full image, no extra
+measure theory).
+
 G2 (the 1-D Neyman–Pearson core) also lives here: `stdNormalCDF_quantile` upgrades the
 quantile to a genuine inverse (`Φ(Φ⁻¹ p) = p` on `(0,1)`, right-continuity + no-atoms), and
 `gaussian_np_shift` is the Cohen bound — a `[0,1]` function with `N(0,1)`-mean ≥ `Φ(t)` keeps
@@ -732,6 +739,37 @@ lemma stdNormalCDF_lt_one (s : ℝ) : stdNormalCDF s < 1 := by
 /-- `Φ` maps into the open unit interval. -/
 lemma stdNormalCDF_mem_Ioo (s : ℝ) : stdNormalCDF s ∈ Set.Ioo (0:ℝ) 1 :=
   ⟨stdNormalCDF_pos s, stdNormalCDF_lt_one s⟩
+
+/-- `Φ⁻¹` is STRICTLY monotone on `(0,1)` (upgrade of `stdNormalQuantile_monotoneOn`):
+    reflect strictness through `Φ` via the two-sided inverse `stdNormalCDF_quantile`. -/
+lemma stdNormalQuantile_strictMonoOn :
+    StrictMonoOn stdNormalQuantile (Set.Ioo (0:ℝ) 1) := by
+  intro p hp q hq hpq
+  have h := stdNormalCDF_strictMono.lt_iff_lt
+    (a := stdNormalQuantile p) (b := stdNormalQuantile q)
+  rw [stdNormalCDF_quantile hp, stdNormalCDF_quantile hq] at h
+  exact h.mp hpq
+
+/-- `Φ⁻¹` maps `(0,1)` ONTO ℝ: every real `s` is `Φ⁻¹(Φ s)`. -/
+lemma stdNormalQuantile_surjOn :
+    Set.SurjOn stdNormalQuantile (Set.Ioo (0:ℝ) 1) Set.univ := fun s _ =>
+  ⟨stdNormalCDF s, stdNormalCDF_mem_Ioo s, stdNormalQuantile_cdf s⟩
+
+/-- `Φ⁻¹` is continuous at every `p ∈ (0,1)`: strictly monotone on the open interval
+    with image all of ℝ (a neighborhood of anything). -/
+lemma stdNormalQuantile_continuousAt {p : ℝ} (hp : p ∈ Set.Ioo (0:ℝ) 1) :
+    ContinuousAt stdNormalQuantile p := by
+  apply stdNormalQuantile_strictMonoOn.continuousAt_of_image_mem_nhds
+    (isOpen_Ioo.mem_nhds hp)
+  have himg : stdNormalQuantile '' Set.Ioo (0:ℝ) 1 = Set.univ :=
+    Set.eq_univ_of_univ_subset stdNormalQuantile_surjOn
+  rw [himg]
+  exact Filter.univ_mem
+
+/-- `Φ⁻¹` is continuous on `(0,1)`. -/
+lemma stdNormalQuantile_continuousOn :
+    ContinuousOn stdNormalQuantile (Set.Ioo (0:ℝ) 1) := fun _ hp =>
+  (stdNormalQuantile_continuousAt hp).continuousWithinAt
 
 /-- **G4 core — the smoothed probit is (1/σ)-Lipschitz** (Cohen 2019 / Salman 2019
     Lemma 2, now a THEOREM). For measurable `f : E → [0,1]` whose σ-smoothed mean
