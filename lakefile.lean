@@ -717,26 +717,15 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.LipschitzCertPairSDP,
              `LeanMlir.Proofs.LipschitzCertScorecardSDP,
              `LeanMlir.Proofs.LipschitzCertScorecardSDPUncon,
-             -- FULL-INPUT scorecard (2026-07 audit gap #3: off the 4×4-pooled 49-dim
-             -- reduction): first-100 MNIST test images at the full 784-dim input
-             -- (exact k/255 pixels), per-image certificates at pixel-L2 ε = 1/10 AND
-             -- 3/10 on two 784→16→10 nets — capped σ≤2: 92/100 @0.1 (PGD 93 — within
-             -- one image of the attack bound) and 72/100 @0.3; unconstrained: 76/100
-             -- @0.1 collapsing to 2/100 @0.3. Every 784-term dot is ONE kernel
-             -- evaluation (ListDot.lean `dotZ` + `decide +kernel`, propext-only)
-             -- bridged to the `Fin 784` sums by `sum_getD_div` — the pooled recipe's
-             -- simp/norm_num sum walk is quadratic in input dim and priced out.
+             -- The kernel-dotZ list engine + IBP interval-soundness cores: the
+             -- small, reusable halves of the full-input scorecard work. The
+             -- GENERATED full-input instance files (30k+ lines of weight/image
+             -- data each) live in the separate `CertsHeavy` lib below — they
+             -- OOM'd/priced out the shared 4-core runners, and heavy corpus
+             -- tails must not break the core workflows (certs.yml + blueprint
+             -- both build `Certs`).
              `LeanMlir.Proofs.ListDot,
-             `LeanMlir.Proofs.LipschitzCertScorecardFull,
-             -- Per-pair LipSDP pass on the FULL-INPUT nets (peer of the pooled
-             -- SDP files above, same linarith-from-LDLᵀ-column-squares recipe —
-             -- measured faster than the entrywise lipsdp_slack_of_cert route at
-             -- both widths): capped 92→93/100 @ ε=0.1 = the PGD bound EXACTLY
-             -- (sandwich closed) + 72→91 @0.3 (PGD 92); uncon 76→91 @0.1
-             -- (PGD 94), 2→77 @0.3 (PGD 86). Pair certificates are 16×16
-             -- (Schur) — the 784-dim work is reused from the dotZ files.
-             `LeanMlir.Proofs.LipschitzCertScorecardSDPFull,
-             `LeanMlir.Proofs.LipschitzCertScorecardSDPFullUncon,
+             `LeanMlir.Proofs.IntervalBound,
              -- The binary32/fp8-E4M3 hardware models, CONSTRUCTED (post_audit_roadmap §2):
              -- rndP p = round-to-nearest on the unbounded-exponent p-bit grid, standard
              -- model |rndP p x − x| ≤ 2⁻¹⁻ᵖ|x| PROVED (rndP_err) — the former
@@ -798,6 +787,25 @@ lean_lib «Certs» where
              -- The canonical-MLP surface (784→512→512→10): the generic MLP chain
              -- instantiated at the ch2 reference dims (see MlpCanonical.lean).
              `LeanMlir.Proofs.MlpCanonical]
+
+/-- **`lake build CertsHeavy`** — the GENERATED full-input certificate
+    instances (784-dim scorecard + per-pair LipSDP + IBP L∞: ~90k lines of
+    weight/image data and per-image theorems across 8 files). Split out of
+    `Certs` 2026-07-12: these are data-heavy tails (the linarith PSD goals
+    carry ~230-digit LDLᵀ fractions) that OOM'd the shared 4-core runners and
+    took certs.yml + blueprint.yml down with them — long-running corpus work
+    gets its OWN workflow (.github/workflows/certs-heavy.yml: weekly cron +
+    on-demand + pushes touching these files) so it can never break the core.
+    Results (all 3-axiom, audited by tests/AuditAxiomsHeavy.lean): L2 capped
+    σ≤2 92/100 @ ε=0.1 → LipSDP 93/100 = the PGD bound (sandwich closed);
+    IBP pixel-L∞ 92/88/69/24 per 100 at ε = 1/2/4/8 /255 (PGD 93/93/92/88). -/
+lean_lib «CertsHeavy» where
+  srcDir := "."
+  roots := #[`LeanMlir.Proofs.LipschitzCertScorecardFull,
+             `LeanMlir.Proofs.LipschitzCertScorecardSDPFull,
+             `LeanMlir.Proofs.LipschitzCertScorecardSDPFullUncon,
+             `LeanMlir.Proofs.LipschitzCertScorecardIBP,
+             `LeanMlir.Proofs.LipschitzCertScorecardIBPUncon]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

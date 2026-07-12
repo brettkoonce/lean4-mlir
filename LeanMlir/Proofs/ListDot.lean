@@ -65,4 +65,35 @@ theorem sum_getD_div {xs ys : List ℤ} {n : ℕ} (hx : xs.length = n) (hy : ys.
     exact Finset.sum_congr rfl fun j _ => by ring
   rw [hsplit, sum_getD_mul n xs ys hx hy, h]
 
+/-- Integer absolute row sum — the `ℓ1` weight of a row, kernel-evaluable
+    (`decide +kernel`). Feeds the IBP uniform-radius layer bound
+    `denseLo/Hi (x ∓ ε) = ⟨w,x⟩ ∓ ε·Σ|w|` (`IntervalBound.lean`). -/
+def absSumZ (xs : List ℤ) : ℤ := (xs.map (fun x => |x|)).sum
+
+/-- getD abs-sum over `Fin n` = list abs-sum (the `sum_getD_mul` sibling). -/
+theorem sum_getD_abs : ∀ (n : ℕ) (xs : List ℤ), xs.length = n →
+    (∑ j : Fin n, |(xs.getD j 0 : ℝ)|) = ((absSumZ xs : ℤ) : ℝ)
+  | 0, xs, hx => by
+      rw [List.length_eq_zero_iff.mp hx]
+      simp [absSumZ]
+  | n + 1, [], hx => by simp at hx
+  | n + 1, a :: xs, hx => by
+      rw [Fin.sum_univ_succ]
+      simp only [List.getD_cons_zero, List.getD_cons_succ, Fin.val_succ, Fin.val_zero]
+      rw [sum_getD_abs n xs (by simpa using hx)]
+      simp only [absSumZ, List.map_cons, List.sum_cons]
+      push_cast [Int.cast_abs]
+      ring
+
+/-- Scaled form: a `k/c`-grid row's `ℓ1` norm from one kernel fact. -/
+theorem sum_getD_abs_div {xs : List ℤ} {n : ℕ} (hx : xs.length = n)
+    {v : ℤ} (h : absSumZ xs = v) {c : ℝ} (hc : 0 ≤ c) :
+    (∑ j : Fin n, |(xs.getD j 0 : ℝ)/c|) = (v : ℝ)/c := by
+  have hsplit : (∑ j : Fin n, |(xs.getD j 0 : ℝ)/c|)
+      = (∑ j : Fin n, |(xs.getD j 0 : ℝ)|)/c := by
+    rw [Finset.sum_div]
+    exact Finset.sum_congr rfl fun j _ => by
+      rw [abs_div, abs_of_nonneg hc]
+  rw [hsplit, sum_getD_abs n xs hx, h]
+
 end Proofs

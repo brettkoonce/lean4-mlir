@@ -1,0 +1,94 @@
+name: Certify Heavy Corpus
+
+# The GENERATED full-input certificate instances (`lake build CertsHeavy`:
+# 784-dim scorecard + per-pair LipSDP + IBP L∞ — ~90k lines of weight/image
+# data across 8 files) + their three-axiom audit (tests/AuditAxiomsHeavy.lean).
+#
+# Split out of certs.yml 2026-07-12: these are long-running, data-heavy tails
+# (the linarith PSD goals carry ~230-digit LDLᵀ fractions; peak elaboration
+# memory took down the shared 4-core/16GB runners, and blueprint.yml builds
+# `Certs` too, so ONE heavy module broke three workflows). Long-running corpus
+# work gets its own workflow so it can never break the core: this runs on
+# pushes that actually touch the heavy files, weekly (drift), and on demand.
+# LEAN_NUM_THREADS is capped to bound per-module peak memory on 16GB runners.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'LeanMlir/Proofs/LipschitzCertScorecardFull*.lean'
+      - 'LeanMlir/Proofs/LipschitzCertScorecardSDPFull*.lean'
+      - 'LeanMlir/Proofs/LipschitzCertScorecardIBP*.lean'
+      - 'LeanMlir/Proofs/ListDot.lean'
+      - 'LeanMlir/Proofs/IntervalBound.lean'
+      - 'tests/AuditAxiomsHeavy.lean'
+      - '.github/workflows/certs-heavy.yml'
+  schedule:
+    - cron: '47 9 * * 0'   # weekly, Sunday 09:47 UTC
+  workflow_dispatch:
+
+jobs:
+  certify-heavy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      # bound per-module elaboration parallelism: the heavy linarith goals
+      # peak at several GB each; 2 concurrent goals fit the 16GB runner.
+      LEAN_NUM_THREADS: 2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit coverage check (both audits ⊆ their lib roots)
+        run: python3 scripts/check_audit_coverage.py
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache .lake
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          # shares the `lake-certs-` namespace with certs.yml/comparator.yml —
+          # CertsHeavy's imports subsume the Certs roots, so restoring their
+          # build products is exactly the warm start this job wants.
+          key: lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-heavy-${{ github.run_id }}
+          restore-keys: |
+            lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-certs-
+
+      - name: Build heavy certificate corpus
+        run: |
+          lake exe cache get || true
+          lake build CertsHeavy
+
+      - name: Three-axiom closure check (heavy corpus)
+        run: |
+          set -e
+          out=$(lake env lean tests/AuditAxiomsHeavy.lean 2>&1 | sed ':a;N;$!ba;s/,\n /, /g')
+          total=$(echo "$out" | grep -c "depends on axioms:" || true)
+          ok=$(echo "$out" | grep -cE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true)
+
+          echo "Total #print axioms lines:        $total"
+          echo "Lines matching {propext, Classical.choice, Quot.sound}: $ok"
+
+          if [ "$total" -eq 0 ]; then
+            echo "::error::tests/AuditAxiomsHeavy.lean produced no #print axioms output"
+            echo "$out"
+            exit 1
+          fi
+
+          if [ "$total" -ne "$ok" ]; then
+            echo "::error::Some heavy-corpus theorems depend on axioms outside [propext, Classical.choice, Quot.sound]:"
+            echo "$out" | grep "depends on axioms:" \
+              | grep -vE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true
+            exit 1
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Three-Axiom Closure — heavy corpus" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **All ${total} heavy-corpus theorems closed under [\`propext\`, \`Classical.choice\`, \`Quot.sound\`]**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Full-input scorecard (L2 Tsuzuku / per-pair LipSDP / IBP L∞): capped σ≤2 92→93/100 @ L2 ε=0.1 (= PGD, sandwich closed); IBP 92/88/69/24 per 100 @ L∞ ε=1/2/4/8 per 255." >> $GITHUB_STEP_SUMMARY

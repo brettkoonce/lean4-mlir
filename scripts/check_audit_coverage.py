@@ -59,21 +59,42 @@ def reachable(roots: list[str]) -> set[str]:
     return seen
 
 
-def main() -> None:
-    covered = reachable(proofs_roots(LAKEFILE.read_text()))
-    audited = re.findall(r"^import\s+([A-Za-z0-9_.]+)", AUDIT.read_text(), re.M)
+def lib_roots(text: str, lib: str) -> list[str]:
+    """Roots of one lib (comment-stripped), e.g. «CertsHeavy»."""
+    segment = text.split(f"lean_lib {lib} where", 1)[1].split("lean_lib", 1)[0]
+    code = "\n".join(line.split("--", 1)[0] for line in segment.splitlines())
+    return re.findall(r"`([A-Za-z0-9_.]+)", code)
+
+
+def check(audit: Path, covered: set[str], libs_desc: str, fix: str) -> int:
+    audited = re.findall(r"^import\s+([A-Za-z0-9_.]+)", audit.read_text(), re.M)
     missing = [m for m in audited if m.startswith("LeanMlir") and m not in covered]
     if missing:
-        print(f"error: {AUDIT} imports module(s) not reachable from the "
-              f"`Proofs`/`Certs` lib roots in {LAKEFILE}:", file=sys.stderr)
+        print(f"error: {audit} imports module(s) not reachable from the "
+              f"{libs_desc} lib roots in {LAKEFILE}:", file=sys.stderr)
         for m in missing:
             print(f"  {m}", file=sys.stderr)
-        print("\nfix: add the apex module(s) to `lean_lib «Certs»`'s roots "
-              "(an apex that transitively imports the rest suffices).",
-              file=sys.stderr)
+        print(f"\nfix: {fix}", file=sys.stderr)
         sys.exit(1)
-    print(f"audit coverage OK: all {len(audited)} AuditAxioms imports reachable "
+    return len(audited)
+
+
+def main() -> None:
+    text = LAKEFILE.read_text()
+    covered = reachable(proofs_roots(text))
+    n = check(AUDIT, covered, "`Proofs`/`Certs`",
+              "add the apex module(s) to `lean_lib «Certs»`'s roots "
+              "(an apex that transitively imports the rest suffices) — or, for "
+              "data-heavy generated instances, to `CertsHeavy` + AuditAxiomsHeavy.")
+    print(f"audit coverage OK: all {n} AuditAxioms imports reachable "
           f"from the Proofs+Certs roots ({len(covered)} modules covered)")
+    heavy_audit = Path("tests/AuditAxiomsHeavy.lean")
+    if heavy_audit.exists():
+        covered_heavy = reachable(proofs_roots(text) + lib_roots(text, "«CertsHeavy»"))
+        nh = check(heavy_audit, covered_heavy, "`Proofs`/`Certs`/`CertsHeavy`",
+                   "add the apex module(s) to `lean_lib «CertsHeavy»`'s roots.")
+        print(f"heavy audit coverage OK: all {nh} AuditAxiomsHeavy imports reachable "
+              f"from the Proofs+Certs+CertsHeavy roots ({len(covered_heavy)} modules covered)")
 
 
 if __name__ == "__main__":
