@@ -3268,13 +3268,13 @@ open Proofs
 -- the tighter-constant pass at 784-dim input, both radii. Capped σ≤2:
 -- 92→93/100 @ ε=0.1 — EQUAL to the L2-PGD attack bound, the cert ≤ TRUE ≤ PGD
 -- sandwich CLOSED — and 72→91/100 @ ε=0.3 (PGD 92); unconstrained: 76→91 @0.1
--- (PGD 94), 2→77 @0.3 (PGD 86). PSD witnesses discharged DETERMINISTICALLY via
--- lipsdp_slack_of_cert (exact rational LDLᵀ, norm_num per entry — no linarith
--- search; that was the pooled files' recipe and doesn't scale to width 16).
--- Spot-check: one pair chain (slack + squared bound), a reverse-order wrapper,
--- first/middle/last per-image certs at both radii, and the aggregates.
-#print axioms Proofs.LipschitzCertDemo.h1P01SF
-#print axioms Proofs.LipschitzCertDemo.h2P01SF
+-- (PGD 94), 2→77 @0.3 (PGD 86). PSD witnesses: exact rational LDLᵀ column
+-- squares, one linarith goal per pair (the pooled files' recipe — MEASURED
+-- faster than the entrywise lipsdp_slack_of_cert route at both widths; the
+-- exact-LDL fractions hurt 512 separate norm_num goals far more than one
+-- linarith call). Spot-check: one pair chain (slack + squared bound), a
+-- reverse-order wrapper, first/middle/last per-image certs at both radii,
+-- and the aggregates.
 #print axioms Proofs.LipschitzCertDemo.hS01SF
 #print axioms Proofs.LipschitzCertDemo.pairSqSF_0_1
 #print axioms Proofs.LipschitzCertDemo.pairSqSF_1_0
