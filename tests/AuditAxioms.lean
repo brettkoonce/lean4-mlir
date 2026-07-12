@@ -3129,6 +3129,21 @@ open Proofs
 #print axioms Proofs.binomTail_check_99of100
 #print axioms Proofs.binomTail_check_999of1000
 
+-- ...and the KERNEL ENGINE for driver-scale tail checks (the ListDot recipe):
+-- binomTailNum = kernel-computable ℕ numerator (descFactorial/factorial
+-- binomials on the small side of the tail — no exponential Pascal recursion),
+-- bridged once to the real binomTail (range-reflect + choose_symm + cast), so
+-- each per-image scorecard hypothesis is ONE decide +kernel bignum inequality.
+-- Driver-scale tests at the deployed N = 10112: the 213-term confident tail
+-- (9900 hits, q₀=0.972) and the 4613-term barely-confident tail (5500 hits,
+-- q₀=0.52), each ~0.1 s in the kernel. NOT native_decide — the axiom triple
+-- stays exact.
+#print axioms Proofs.binomTailNum_eq
+#print axioms Proofs.binomTail_eq_kernel
+#print axioms Proofs.binomTail_le_of_kernel_check
+#print axioms Proofs.binomTail_check_9900of10112
+#print axioms Proofs.binomTail_check_5500of10112
+
 -- ...and the two-sided quantile packaging (SmoothingGaussian.lean, 2026-07-12):
 -- Φ⁻¹ STRICTLY monotone on (0,1) (strictness reflected through Φ via the two-sided
 -- inverse), Φ⁻¹ maps (0,1) ONTO ℝ (every s is Φ⁻¹(Φ s)), and Φ⁻¹ continuous at every

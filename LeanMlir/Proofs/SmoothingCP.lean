@@ -31,7 +31,13 @@ actually deploys the EXACT binomial lower confidence limit (Clopper–Pearson,
   `binomTail N k₀ q₀ ≤ α` certifies the driver's reported `q₀`, and
   `smoothing_cp_certified_solved` turns it into "if the count comes out `k₀`,
   the radius `σ·Φ⁻¹(q₀)` is certified" (w.p. `≥ 1 − α`). Demo checks at
-  99/100 and 999/1000 close the file (`exponentiation.threshold` gotcha).
+  99/100 and 999/1000 (`exponentiation.threshold` gotcha);
+* the KERNEL ENGINE (the ListDot recipe): `binomTailNum` — a kernel-
+  computable ℕ tail numerator (`descFactorial/factorial` binomials on the
+  small side) — with the once-proven bridge `binomTail_eq_kernel`, so each
+  per-image hypothesis is ONE `decide +kernel` bignum inequality
+  (`binomTail_le_of_kernel_check`). Driver-scale tests at `N = 10112`
+  (213-term and 4613-term tails) check in ~0.1 s each.
 
 All results are `propext / Classical.choice / Quot.sound`-clean. -/
 
@@ -533,9 +539,7 @@ set_option maxRecDepth 8000 in
 set_option exponentiation.threshold 4000 in
 /-- Mid-scale demo: 999 hits in 1000 draws certify `q₀ = 0.985` at
     `α = 1/1000` (radius `σ·Φ⁻¹(0.985) ≈ 2.17σ`). Driver-scale `N = 10112`
-    instances are generator territory (CertsHeavy): raise
-    `exponentiation.threshold`, ladder the `Nat.choose` literals via
-    `Nat.choose_symm`/`choose_succ_right_eq` instead of `decide`. -/
+    instances go through the kernel engine below instead. -/
 lemma binomTail_check_999of1000 : binomTail 1000 999 (985/1000) ≤ 1/1000 := by
   have hset : Finset.Icc 999 1000 = {999, 1000} := by decide
   have h999 : Nat.choose 1000 999 = 1000 := by
@@ -544,5 +548,91 @@ lemma binomTail_check_999of1000 : binomTail 1000 999 (985/1000) ≤ 1/1000 := by
   rw [binomTail, hset, Finset.sum_insert (by decide), Finset.sum_singleton,
     h999, Nat.choose_self]
   norm_num
+
+-- ════════════════════════════════════════════════════════════════
+-- § The kernel engine: driver-scale tail checks as ONE ℕ-inequality
+-- ════════════════════════════════════════════════════════════════
+
+/-! The `norm_num` route above prices out at driver scale (`N = 10112`,
+hundreds of terms, `Nat.choose` far from the diagonal). The ListDot recipe
+applies instead: a kernel-computable ℕ numerator + a once-proven bridge, so
+each per-image scorecard hypothesis is ONE `decide +kernel` bignum
+inequality (~0.1 s even for thousands of terms — kernel `Nat.pow`/`mul`
+are GMP-accelerated). -/
+
+/-- Kernel-computable tail numerator: `Σ_{i=0}^{N-k} C(N,i)·a^(N-i)·(d-a)^i`
+    (`i = N - j`, so the binomial coefficient rides the SMALL side, and
+    `descFactorial/factorial` computes it free of the exponential Pascal
+    recursion — `Nat.choose_eq_descFactorial_div_factorial` makes the
+    truncated division exact). -/
+def binomTailNum (N k a d : ℕ) : ℕ :=
+  ∑ i ∈ Finset.range (N - k + 1),
+    N.descFactorial i / i.factorial * a ^ (N - i) * (d - a) ^ i
+
+/-- The kernel numerator is the tail's numerator over `Icc k N`
+    (reflect the range, `Nat.choose_symm`). -/
+lemma binomTailNum_eq {N k : ℕ} (hk : k ≤ N) (a d : ℕ) :
+    binomTailNum N k a d
+      = ∑ j ∈ Finset.Icc k N, N.choose j * a ^ j * (d - a) ^ (N - j) := by
+  rw [binomTailNum, ← Finset.sum_range_reflect, ← Finset.Ico_add_one_right_eq_Icc,
+    Finset.sum_Ico_eq_sum_range, show N + 1 - k = N - k + 1 by omega]
+  refine Finset.sum_congr rfl fun i hi => ?_
+  rw [Finset.mem_range] at hi
+  have e0 : N - k + 1 - 1 - i = N - k - i := by omega
+  have e1 : N - (N - k - i) = k + i := by omega
+  have e2 : N - k - i = N - (k + i) := by omega
+  rw [e0, ← Nat.choose_eq_descFactorial_div_factorial, e1, e2,
+    Nat.choose_symm (by omega)]
+
+/-- The real tail at a rational `a/d` equals the kernel numerator over `d^N`. -/
+lemma binomTail_eq_kernel {N k : ℕ} (hk : k ≤ N) {a d : ℕ} (ha : a ≤ d)
+    (hd : 0 < d) :
+    binomTail N k ((a : ℝ) / d) = (binomTailNum N k a d : ℝ) / (d : ℝ) ^ N := by
+  have hd' : (0:ℝ) < d := by exact_mod_cast hd
+  rw [binomTailNum_eq hk a d, binomTail, Nat.cast_sum, Finset.sum_div]
+  refine Finset.sum_congr rfl fun j hj => ?_
+  rw [Finset.mem_Icc] at hj
+  have hsub : ((d - a : ℕ) : ℝ) = (d : ℝ) - a := Nat.cast_sub ha
+  have h1 : (1 : ℝ) - (a:ℝ)/d = ((d:ℝ) - a)/d := by
+    field_simp
+  have hdn : (d:ℝ) ^ j * (d:ℝ) ^ (N - j) = (d:ℝ) ^ N := by
+    rw [← pow_add]
+    congr 1
+    omega
+  push_cast [hsub]
+  rw [h1, div_pow, div_pow]
+  field_simp
+  rw [← hdn]
+  ring
+
+/-- **One kernel bignum inequality certifies a tail bound**: the per-image
+    scorecard hypothesis at `q₀ = a/d`, `α = 1/A`, discharged by
+    `decide +kernel`. -/
+lemma binomTail_le_of_kernel_check {N k a d A : ℕ} (hk : k ≤ N) (ha : a ≤ d)
+    (hd : 0 < d) (hA : 0 < A)
+    (hcheck : A * binomTailNum N k a d ≤ d ^ N) :
+    binomTail N k ((a : ℝ) / d) ≤ 1 / (A : ℝ) := by
+  have hdN : (0:ℝ) < (d:ℝ) ^ N := by positivity
+  have hA' : (0:ℝ) < (A:ℝ) := by exact_mod_cast hA
+  rw [binomTail_eq_kernel hk ha hd, div_le_div_iff₀ hdN hA']
+  calc (binomTailNum N k a d : ℝ) * A
+      = ((A * binomTailNum N k a d : ℕ) : ℝ) := by push_cast; ring
+    _ ≤ ((d ^ N : ℕ) : ℝ) := by exact_mod_cast hcheck
+    _ = 1 * (d:ℝ) ^ N := by push_cast; ring
+
+/-- DRIVER-SCALE kernel test: `N = 10112` (the deployed `SMOOTH_N`),
+    9900 hits, `α = 1/1000` certify `q₀ = 0.972` — one kernel bignum check
+    over the 213-term tail. -/
+lemma binomTail_check_9900of10112 :
+    binomTail 10112 9900 ((972:ℝ)/1000) ≤ 1/(1000:ℝ) :=
+  binomTail_le_of_kernel_check (by norm_num) (by norm_num) (by norm_num)
+    (by norm_num) (by decide +kernel)
+
+/-- Deep-tail kernel test (4613 terms — the barely-confident regime,
+    `k₀/N ≈ 0.544`): certifies `q₀ = 0.52`. Same one-line check. -/
+lemma binomTail_check_5500of10112 :
+    binomTail 10112 5500 ((52:ℝ)/100) ≤ 1/(1000:ℝ) :=
+  binomTail_le_of_kernel_check (by norm_num) (by norm_num) (by norm_num)
+    (by norm_num) (by decide +kernel)
 
 end Proofs

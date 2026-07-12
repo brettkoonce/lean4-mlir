@@ -101,13 +101,24 @@ compiles: `git show origin/mathlib-upstream-pr1-pr2:LeanMlir/Proofs/UpstreamDraf
    `maxRecDepth`); `decide` on `Nat.choose N (N-1)` is fine (linear
    recursion) but `Nat.choose N j` for middling `j` blows up — use
    `Nat.choose_symm` / ladder `Nat.choose_succ_right_eq` literals.
-   **REMAINING = 3c, the actual scorecard (CertsHeavy)**: run the
-   `*-smooth` drivers on fixed first-100 test images (GPU, ~35min for the
-   MNIST/CIFAR trio via run_smooth_2gpu.sh), have a generator script emit
-   per-image `binomTail N k₀ q₀ ≤ α` instances (N=10112: raise threshold
-   ~11000, ladder the ~200 choose-literals down from `choose N N = 1`,
-   share the `q₀^j` powers multiplicatively) + a `1−α` column + aggregate
-   count; land in `CertsHeavy` + `AuditAxiomsHeavy` (NOT `Certs`).
+   **3c-ENGINE DONE 2026-07-12 (SmoothingCP.lean §kernel)**: the norm_num
+   route priced out at driver scale, so the ListDot recipe instead —
+   `binomTailNum` (kernel-computable ℕ numerator; binomials via
+   `descFactorial/factorial` on the SMALL side of the tail, exact by
+   `Nat.choose_eq_descFactorial_div_factorial`, no Pascal blowup) + the
+   once-proven bridge (`binomTailNum_eq` via `sum_range_reflect` +
+   `choose_symm`; `binomTail_eq_kernel` cast/div) ⇒
+   `binomTail_le_of_kernel_check`: per-image hypothesis = ONE
+   `A * binomTailNum N k a d ≤ d ^ N` by `decide +kernel` (kernel
+   Nat.pow/mul are GMP-accelerated — VALIDATED at the deployed N=10112:
+   213-term tail AND 4613-term deep tail each ~0.1 s, whole file 4 s).
+   The choose-ladder/power-sharing generator tricks are OBSOLETE.
+   **REMAINING = 3c-data**: run the `*-smooth` drivers on fixed first-100
+   test images (GPU, ~35min for the MNIST/CIFAR trio via
+   run_smooth_2gpu.sh, keep per-image (k₀, N, σ) not just radii), generator
+   emits per-image `binomTail_le_of_kernel_check` instances + a `1−α`
+   column + aggregate; land in `CertsHeavy` + `AuditAxiomsHeavy` (though at
+   ~0.1 s/image the corpus may even be Certs-light).
    Also note: the driver currently reports Φ⁻¹ via float Acklam — the Lean
    side keeps Φ⁻¹ symbolic; a certified DECIMAL radius would additionally
    need rational Φ-bounds (Gaussian tail inequality + `Real.exp` bounds) —
