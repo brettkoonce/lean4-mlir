@@ -23,9 +23,14 @@ LOWER bounds on `Φ⁻¹`:
 
 Demo instances: `Φ⁻¹(0.9) ≥ 1.27` (true 1.2816) and `Φ⁻¹(0.9952) ≥ 2.54`
 (true 2.590) at `h = 1/500` (~0.001 slack in Φ), plus the radius form for
-the scorecard's MNIST-MLP image 1. Per-image decimal radii for the whole
-corpus need the shared-prefix-scan trick (one kernel pass, all images) —
-see planning/gaussian_smoothing_next.md.
+the scorecard's MNIST-MLP image 1.
+
+For the whole corpus, the §prefix-scan section makes per-image checks cheap:
+`phiScanRev` computes ALL grid values in one kernel pass (the head's two uses
+stay shared through the kernel's whnf cache), `phiScanRev_getD` indexes it,
+and `le_stdNormalQuantile_of_scan`/`smooth_radius_dec` turn one O(index)
+lookup against the one-shot literal into a certified decimal radius — see
+the generated `SmoothingDecScorecard.lean` (279 images).
 
 All results are `propext / Classical.choice / Quot.sound`-clean. -/
 
@@ -243,5 +248,109 @@ lemma stdNormalQuantile_ge_of_9952 :
 lemma smooth_cp_mlp_i1_radius_dec :
     (1.27 : ℝ) ≤ (1/2 : ℝ) * stdNormalQuantile ((9952:ℝ)/10000) := by
   linarith [stdNormalQuantile_ge_of_9952]
+
+-- ════════ § the prefix scan — one kernel pass prices the whole grid ════════
+
+/-- Descending prefix scan of the grid fold: `phiScanRev h n =
+    [phiGridUB h n, …, phiGridUB h 0]`. Each step reuses the previous head, so
+    ONE kernel evaluation prices the whole grid at O(n) pdf bounds (a per-image
+    `phiGridUB` decide re-folds its whole prefix instead; the kernel's whnf
+    cache keeps the head's two uses shared — measured 81 s for the full
+    `h = 1/1000`, 3300-panel scan). -/
+def phiScanRev (h : ℚ) : ℕ → List ℚ
+  | 0 => [1/2]
+  | m+1 =>
+    match phiScanRev h m with
+    | [] => []
+    | x :: xs => (x + h * ratCeil9 (ratPdfUB ((m:ℚ) * h))) :: x :: xs
+
+lemma phiScanRev_ne_nil (h : ℚ) (n : ℕ) : phiScanRev h n ≠ [] := by
+  induction n with
+  | zero => simp [phiScanRev]
+  | succ m ih =>
+    cases hm : phiScanRev h m with
+    | nil => exact absurd hm ih
+    | cons x xs => simp [phiScanRev, hm]
+
+lemma phiScanRev_headI (h : ℚ) (n : ℕ) :
+    (phiScanRev h n).headI = phiGridUB h n := by
+  induction n with
+  | zero => simp [phiScanRev, phiGridUB]
+  | succ m ih =>
+    cases hm : phiScanRev h m with
+    | nil => exact absurd hm (phiScanRev_ne_nil h m)
+    | cons x xs =>
+      rw [hm] at ih
+      simp only [List.headI] at ih
+      simp [phiScanRev, hm, phiGridUB, ih]
+
+lemma phiScanRev_succ (h : ℚ) (m : ℕ) :
+    phiScanRev h (m+1) = phiGridUB h (m+1) :: phiScanRev h m := by
+  cases hm : phiScanRev h m with
+  | nil => exact absurd hm (phiScanRev_ne_nil h m)
+  | cons x xs =>
+    have hx : x = phiGridUB h m := by
+      have := phiScanRev_headI h m
+      rw [hm] at this
+      simpa using this
+    simp [phiScanRev, hm, phiGridUB, hx]
+
+/-- Index the scan: entry `n − m` (descending order) is `phiGridUB h m`. -/
+lemma phiScanRev_getD (h : ℚ) : ∀ {n m : ℕ}, m ≤ n →
+    (phiScanRev h n).getD (n - m) 1 = phiGridUB h m := by
+  intro n
+  induction n with
+  | zero =>
+    intro m hm
+    rw [Nat.le_zero.mp hm]
+    simp [phiScanRev, phiGridUB]
+  | succ k ih =>
+    intro m hm
+    rw [phiScanRev_succ]
+    rcases Nat.eq_or_lt_of_le hm with h1 | h2
+    · rw [h1]
+      simp
+    · have hm' : m ≤ k := Nat.lt_succ_iff.mp h2
+      have hidx : k + 1 - m = (k - m) + 1 := by omega
+      rw [hidx, List.getD_cons_succ]
+      exact ih hm'
+
+/-- **The scan workhorse**: against a ONE-shot kernel-evaluated literal
+    `phiScanRev h n = L`, a single O(index) lookup `L.getD (n−m) 1 ≤ q₀`
+    certifies `m·h ≤ Φ⁻¹(q₀)` — per-image checks stop re-folding the grid. -/
+lemma le_stdNormalQuantile_of_scan {h : ℚ} (hh : 0 ≤ h) {n : ℕ} {L : List ℚ}
+    (hL : phiScanRev h n = L) {m : ℕ} (hm : m ≤ n) {qr : ℚ}
+    (hq : (qr:ℝ) ∈ Set.Ioo (0:ℝ) 1) (hcheck : L.getD (n - m) 1 ≤ qr) :
+    (((m:ℚ) * h : ℚ) : ℝ) ≤ stdNormalQuantile (qr:ℝ) := by
+  have hg : phiGridUB h m ≤ qr := by
+    rw [← phiScanRev_getD h hm, hL]
+    exact hcheck
+  exact le_stdNormalQuantile_of_grid hh m hq ((Rat.cast_le (K := ℝ)).mpr hg)
+
+/-- The scorecard-protocol decimal-radius form (σ = 1/2, grid `h = 1/1000`,
+    4-decimal `q₀ = a/10000`): one scan lookup certifies
+    `m/2000 ≤ σ·Φ⁻¹(q₀)` — the certified decimal counterpart of the driver's
+    float radius printout. -/
+lemma smooth_radius_dec {n : ℕ} {L : List ℚ}
+    (hL : phiScanRev (1/1000) n = L) (m a : ℕ) (hm : m ≤ n)
+    (ha0 : 5000 ≤ a) (ha1 : a < 10000)
+    (hcheck : L.getD (n - m) 1 ≤ (a:ℚ)/10000) :
+    (m:ℝ)/2000 ≤ (1/2:ℝ) * stdNormalQuantile ((a:ℝ)/10000) := by
+  have hq : (((a:ℚ)/10000 : ℚ) : ℝ) ∈ Set.Ioo (0:ℝ) 1 := by
+    have h0 : (0:ℝ) < (a:ℝ) := by
+      have : (0:ℕ) < a := lt_of_lt_of_le (by norm_num) ha0
+      exact_mod_cast this
+    have h1 : (a:ℝ) < 10000 := by exact_mod_cast ha1
+    constructor
+    · push_cast
+      exact div_pos h0 (by norm_num)
+    · push_cast
+      rw [div_lt_one (by norm_num : (0:ℝ) < 10000)]
+      exact h1
+  have h := le_stdNormalQuantile_of_scan (by norm_num) hL hm hq hcheck
+  have hcast : (((a:ℚ)/10000 : ℚ) : ℝ) = (a:ℝ)/10000 := by push_cast; ring
+  have hlhs : (((m:ℚ) * (1/1000) : ℚ) : ℝ) = (m:ℝ)/1000 := by push_cast; ring
+  rw [hcast, hlhs] at h
+  linarith
 
 end Proofs

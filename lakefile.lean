@@ -712,6 +712,13 @@ lean_lib «Certs» where
              -- m*h <= Phi^-1(q0); demos Phi^-1(0.9) >= 1.27, and the
              -- scorecard MLP-img1 radius >= 1.27 in decimals.
              `LeanMlir.Proofs.SmoothingPhiBounds,
+             -- The DECIMAL-radius scorecard (generated:
+             -- scripts/smooth_dec_scorecard_gen.py, same fixed-protocol runs
+             -- and per-image q0 as SmoothingCPScorecard): the prefix scan
+             -- phiScanRev kernel-evaluated ONCE over the whole h=1/1000 grid
+             -- (3300 panels, ~2 min), then all 279 per-image decimal radii
+             -- m/2000 <= sigma*Phi^-1(q0) are O(index) list lookups.
+             `LeanMlir.Proofs.SmoothingDecScorecard,
              -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).

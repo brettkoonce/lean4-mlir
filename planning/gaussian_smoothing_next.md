@@ -141,16 +141,31 @@ compiles: `git show origin/mathlib-upstream-pr1-pr2:LeanMlir/Proofs/UpstreamDraf
    at h=1/500. GOTCHAS: a `decide` that reports "stuck at ...blt" can just
    mean the inequality is FALSE (misleading error); equation-compiler
    recursion on ℕ kernel-reduces fine to m≥1270 (no brecOn blowup).
-   **REMAINING for per-image corpus decimals**: per-image checks cost
-   O(m)·22ms each (no sharing across decide calls) — need the
-   PREFIX-SCAN trick: `phiScan h n : List ℚ` (scanl), generic
-   `phiScan_getElem : (phiScan h n)[m]! = phiGridUB h m`, ONE kernel
-   evaluation `phiScan (1/1000) 3300 = <literal list>` (~60-90s, generated
-   file), then all 279 per-image decimal radii are literal-vs-literal
-   norm_num. Top-end (q₀=0.9993 unanimous images) intrinsically loses
-   ~0.08σ at h=1/1000 (upper-sum slack); a Mills-ratio barrier bound
-   (`B(s)=s·φ(s)/(1+s²)`, FTC) would rescue the deep tail if wanted.
-   The LAST remaining informality after that: the net-semantics hypothesis
+   **PREFIX-SCAN CORPUS DECIMALS DONE 2026-07-12**: `phiScanRev h n`
+   (SmoothingPhiBounds.lean §prefix-scan) = the DESCENDING scan
+   `[phiGridUB h n, …, phiGridUB h 0]`, built by reusing the previous head
+   through a `match` (the two uses of the head stay pointer-shared, so the
+   kernel's whnf cache makes ONE evaluation O(n) — measured 81 s for the
+   full h=1/1000, 3300-panel scan; a `let` would NOT share: zeta-substitution
+   duplicates the thunk). `phiScanRev_getD` (entry `n−m` is `phiGridUB h m`)
+   + `le_stdNormalQuantile_of_scan` + protocol form `smooth_radius_dec`
+   (σ=1/2, h=1/1000: `m/2000 ≤ σ·Φ⁻¹(a/10000)` from one `L.getD` lookup).
+   Generated `LeanMlir/Proofs/SmoothingDecScorecard.lean`
+   (scripts/smooth_dec_scorecard_gen.py: exact-ℚ Python mirror of the
+   ratExpLB/ratPdfUB/ratCeil9 fold — untrusted, the emitted
+   `phiScanLit_eq : phiScanRev (1/1000) 3300 = <literal>` re-verifies it in
+   ONE `decide +kernel`): ALL 279 CP-scorecard images get proved decimal
+   radii at grid-optimal m. Measured slack vs driver float: avg 0.012/0.019/
+   0.003, max 0.036 (the q₀=0.9993 images: 1.561 proved vs 1.597 float) —
+   better than the ~0.08σ feared; the Mills-ratio barrier is NOT needed.
+   Certified ACR: MLP 1.151, CNN 1.297, CIFAR 0.591 (certified images).
+   Gotchas: `set_option … in` must precede the docstring; a flat 3301-element
+   `List ℚ` DIVISION literal never finishes elaborating (>10 min even at 400M
+   heartbeats — per-numeral `OfNat ℚ` pending-mvar synthesis) — emit the
+   literal as `List ℕ` NUMERATORS over the common denominator `10¹²` (every
+   grid value is `1/2 + Σ (1/1000)·(k/10⁹)`) plus one `map (·/10¹²)`: ℕ
+   literals are kernel-primitive and elaborate in ~1 s.
+   The LAST remaining informality: the net-semantics hypothesis
    (C = the rendered fwd's argmax + `hp` interiority) — noted in the
    scorecard header.
 
