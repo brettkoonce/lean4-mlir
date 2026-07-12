@@ -728,6 +728,15 @@ lean_lib «Certs» where
              -- simp/norm_num sum walk is quadratic in input dim and priced out.
              `LeanMlir.Proofs.ListDot,
              `LeanMlir.Proofs.LipschitzCertScorecardFull,
+             -- Per-pair LipSDP pass on the FULL-INPUT nets (peer of the pooled
+             -- SDP files above; deterministic lipsdp_slack_of_cert route — the
+             -- linarith-with-hints PSD discharge doesn't scale to width 16):
+             -- capped 92→93/100 @ ε=0.1 = the PGD bound EXACTLY (sandwich
+             -- closed) + 72→91 @0.3 (PGD 92); uncon 76→91 @0.1 (PGD 94),
+             -- 2→77 @0.3 (PGD 86). Pair certificates are 16×16 (Schur) — the
+             -- 784-dim work is reused from the dotZ scorecard files.
+             `LeanMlir.Proofs.LipschitzCertScorecardSDPFull,
+             `LeanMlir.Proofs.LipschitzCertScorecardSDPFullUncon,
              -- The binary32/fp8-E4M3 hardware models, CONSTRUCTED (post_audit_roadmap §2):
              -- rndP p = round-to-nearest on the unbounded-exponent p-bit grid, standard
              -- model |rndP p x − x| ≤ 2⁻¹⁻ᵖ|x| PROVED (rndP_err) — the former

@@ -158,6 +158,8 @@ import LeanMlir.Proofs.LipschitzCertScorecardSDPUncon
 import LeanMlir.Proofs.LipschitzCertFloat
 import LeanMlir.Proofs.ListDot
 import LeanMlir.Proofs.LipschitzCertScorecardFull
+import LeanMlir.Proofs.LipschitzCertScorecardSDPFull
+import LeanMlir.Proofs.LipschitzCertScorecardSDPFullUncon
 import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
 import LeanMlir.Proofs.MuonGeometry
@@ -3261,6 +3263,32 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.unconFullCerts10_certified
 #print axioms Proofs.LipschitzCertDemo.unconFullCerts30_certified
 #print axioms Proofs.LipschitzCertDemo.scorecardFull
+
+-- Per-pair LipSDP on the FULL-INPUT nets (LipschitzCertScorecardSDPFull{,Uncon}.lean):
+-- the tighter-constant pass at 784-dim input, both radii. Capped σ≤2:
+-- 92→93/100 @ ε=0.1 — EQUAL to the L2-PGD attack bound, the cert ≤ TRUE ≤ PGD
+-- sandwich CLOSED — and 72→91/100 @ ε=0.3 (PGD 92); unconstrained: 76→91 @0.1
+-- (PGD 94), 2→77 @0.3 (PGD 86). PSD witnesses discharged DETERMINISTICALLY via
+-- lipsdp_slack_of_cert (exact rational LDLᵀ, norm_num per entry — no linarith
+-- search; that was the pooled files' recipe and doesn't scale to width 16).
+-- Spot-check: one pair chain (slack + squared bound), a reverse-order wrapper,
+-- first/middle/last per-image certs at both radii, and the aggregates.
+#print axioms Proofs.LipschitzCertDemo.h1P01SF
+#print axioms Proofs.LipschitzCertDemo.h2P01SF
+#print axioms Proofs.LipschitzCertDemo.hS01SF
+#print axioms Proofs.LipschitzCertDemo.pairSqSF_0_1
+#print axioms Proofs.LipschitzCertDemo.pairSqSF_1_0
+#print axioms Proofs.LipschitzCertDemo.certifiedSSF10_0
+#print axioms Proofs.LipschitzCertDemo.certifiedSSF30_41
+#print axioms Proofs.LipschitzCertDemo.certifiedSSF10_86
+#print axioms Proofs.LipschitzCertDemo.certifiedSTF10_31
+#print axioms Proofs.LipschitzCertDemo.certifiedSTF10_81
+#print axioms Proofs.LipschitzCertDemo.sdpCappedFullCerts10_certified
+#print axioms Proofs.LipschitzCertDemo.sdpCappedFullCerts30_certified
+#print axioms Proofs.LipschitzCertDemo.sdpUnconFullCerts10_certified
+#print axioms Proofs.LipschitzCertDemo.sdpUnconFullCerts30_certified
+#print axioms Proofs.LipschitzCertDemo.scorecard_sdp_full
+#print axioms Proofs.LipschitzCertDemo.scorecard_sdp_full_uncon
 
 -- THE IEEE AXIOMS, DISCHARGED (Binary32Instance.lean, post_audit_roadmap §2): the repo's only two
 -- axioms (ieeeRnd/ieeeRnd_err — "a rounding operator satisfying the standard model exists") are
