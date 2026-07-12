@@ -33,7 +33,10 @@ jobs:
     timeout-minutes: 300
     env:
       # bound per-module elaboration parallelism: the heavy linarith goals
-      # peak at several GB each; 2 concurrent goals fit the 16GB runner.
+      # peak at several GB each (17.08 GB measured for ONE SDP module at
+      # 4 threads); 2 threads per module fits — but only one module at a
+      # time (see -j1 below: the first run died at -j4×2-threads, runner
+      # killed mid-build at ~75 min, the classic OOM signature).
       LEAN_NUM_THREADS: 2
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +64,12 @@ jobs:
       - name: Build heavy certificate corpus
         run: |
           lake exe cache get || true
-          lake build CertsHeavy
+          free -h
+          # -j1: elaborate ONE heavy module at a time. lake's default -j
+          # (=nproc) runs several 30k-line modules concurrently and the
+          # runner OOMs even with LEAN_NUM_THREADS=2. If this ever exceeds
+          # the 300-min budget, split the build across per-net jobs instead.
+          lake build CertsHeavy -j1
 
       - name: Three-axiom closure check (heavy corpus)
         run: |
