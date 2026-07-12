@@ -63,6 +63,22 @@ trades OOM for a guaranteed timeout on 4 cores. Neither fits.
    weekly. Honest, zero cost — the audit tables in RESULTS.md remain true,
    they're just not cron-re-derived.
 
+## POST-SCRIPT (same day): it was never just the SDP files
+
+Run 5 (SDP-disabled, sequential, 2 threads, no swap) ALSO killed the runner
+at ~63 min. Local measurements at `LEAN_NUM_THREADS=2` (`/usr/bin/time -v`):
+**ImgsA 39.5 GB**, **IBP 20.2 GB** peak RSS — the ENTIRE generated tier is
+over the free-runner ceiling, and `LEAN_NUM_THREADS` demonstrably does not
+bound Lean 4.31's parallel-elaboration memory (the snapshots/env retention
+across thousands of decls dominates). The 188 GB dev box masked all of this.
+
+Consequence: `certs-heavy.yml` is now **workflow_dispatch-only** (never
+auto-runs, never red). The generated corpus is kernel-verified locally on
+every regeneration — that remains a real check; what's lost is only the
+cron re-derivation. Re-enable = self-hosted runner on mars (now clearly the
+front-runner — the DD-split fix alone would NOT save the Imgs/IBP files,
+whose cost is decide/env-driven, not fraction-driven).
+
 ## Also relevant
 
 - The pooled (h=8) SDP files are FINE in `Certs`/CI — small fractions.

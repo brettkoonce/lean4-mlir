@@ -12,19 +12,13 @@ name: Certify Heavy Corpus
 # pushes that actually touch the heavy files, weekly (drift), and on demand.
 # LEAN_NUM_THREADS is capped to bound per-module peak memory on 16GB runners.
 
+# MANUAL-ONLY for now: measured peaks at LEAN_NUM_THREADS=2 — ImgsA 39.5 GB,
+# IBP 20.2 GB, SDP 17.1 GB — NOTHING in the generated tier fits a free 16 GB
+# runner in any configuration (5 failed attempts, all documented in
+# planning/certs_heavy_psd_memory.md). The corpus is kernel-verified locally
+# on every regeneration; this workflow stays for a future self-hosted runner
+# (mars idles at 188 GB) — flip the trigger back then.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'LeanMlir/Proofs/LipschitzCertScorecardFull*.lean'
-      - 'LeanMlir/Proofs/LipschitzCertScorecardSDPFull*.lean'
-      - 'LeanMlir/Proofs/LipschitzCertScorecardIBP*.lean'
-      - 'LeanMlir/Proofs/ListDot.lean'
-      - 'LeanMlir/Proofs/IntervalBound.lean'
-      - 'tests/AuditAxiomsHeavy.lean'
-      - '.github/workflows/certs-heavy.yml'
-  schedule:
-    - cron: '47 9 * * 0'   # weekly, Sunday 09:47 UTC
   workflow_dispatch:
 
 jobs:
