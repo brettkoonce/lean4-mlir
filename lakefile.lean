@@ -907,6 +907,13 @@ lean_exe «vit-tiny-shampoo-train» where
   root := `apps.baselines.MainVitShampooTrain
   moreLinkArgs := ireeLink
 
+/-- `lake exe blueprint-checkdecls blueprint/lean_decls` — the split-aware
+    blueprint declaration check (checkdecls minus the `CertsHeavy` lib, whose
+    oleans the blueprint workflow deliberately does not build). -/
+lean_exe «blueprint-checkdecls» where
+  root := `tests.BlueprintCheckDecls
+  supportInterpreter := true
+
 lean_exe «ablation» where
   root := `apps.ablation.MainAblation
   moreLinkArgs := ireeLink

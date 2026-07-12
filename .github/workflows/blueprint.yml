@@ -218,8 +218,13 @@ jobs:
           leanblueprint web
 
       - name: Check Lean declarations referenced in blueprint
+        # NOT `leanblueprint checkdecls`: that shells to the upstream
+        # `lake exe checkdecls`, which imports EVERY lib of the workspace —
+        # including `CertsHeavy`, whose oleans this workflow deliberately does
+        # not build (the heavy corpus has its own workflow; see certs-heavy.yml).
+        # The repo-owned variant imports every lib EXCEPT CertsHeavy.
         run: |
-          leanblueprint checkdecls
+          lake exe blueprint-checkdecls blueprint/lean_decls
 
       - name: Build blueprint PDF
         # Don't block the web deploy if PDF fails, but surface detailed
