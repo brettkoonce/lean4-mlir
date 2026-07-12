@@ -86,13 +86,32 @@ compiles: `git show origin/mathlib-upstream-pr1-pr2:LeanMlir/Proofs/UpstreamDraf
      they wait for move 3's solved-form tie.)
 
 3. **Tie the `smoothCertify` DRIVER'S reported radii** (`f30f857`,
-   `mnist-{mlp,cnn}-smooth`, `cifar-smooth` exes). The driver samples on GPU
-   and reports `σ·Φ⁻¹(p̂ − t)`-style radii; with (2) its exact arithmetic
-   becomes an instance of the theorem. A smoothing SCORECARD mirroring the
-   Lipschitz one (fixed 100 images, radius per image, `1−α` column) would be
-   the demo artifact — but note the scorecard data lives in `CertsHeavy`
-   territory (generated files got their own lib + workflow 2026-07-12;
-   keep new generated instances OUT of `Certs`).
+   `mnist-{mlp,cnn}-smooth`, `cifar-smooth` exes).
+   **3a SOLVED-FORM MACHINERY DONE 2026-07-12 (SmoothingCP.lean §solved):**
+   `binomTail_monotoneOn` — by COUPLING (tail law at uniform-[0,1] with
+   nested `[0,q] ⊆ [0,p]`), no calculus, no PR1/PR2 needed after all;
+   `le_cpLower_of_tail_le` — ONE kernel check `binomTail N k₀ q₀ ≤ α`
+   certifies the driver's reported `q₀` (needs `binomTail_one` + set
+   nonempty via q=1); `smoothing_cp_certified_solved` — the per-image
+   scorecard theorem: "if the count comes out k₀, radius σ·Φ⁻¹(q₀) is
+   certified" w.p. ≥ 1−α, numeric hypothesis = pure kernel arithmetic.
+   **3b demo checks DONE**: 99/100 @ q₀=0.9 (decide + norm_num) and
+   999/1000 @ q₀=0.985. GOTCHAS: `norm_num` pow silently no-ops above
+   `exponentiation.threshold` (default 256 — raise via set_option; also
+   `maxRecDepth`); `decide` on `Nat.choose N (N-1)` is fine (linear
+   recursion) but `Nat.choose N j` for middling `j` blows up — use
+   `Nat.choose_symm` / ladder `Nat.choose_succ_right_eq` literals.
+   **REMAINING = 3c, the actual scorecard (CertsHeavy)**: run the
+   `*-smooth` drivers on fixed first-100 test images (GPU, ~35min for the
+   MNIST/CIFAR trio via run_smooth_2gpu.sh), have a generator script emit
+   per-image `binomTail N k₀ q₀ ≤ α` instances (N=10112: raise threshold
+   ~11000, ladder the ~200 choose-literals down from `choose N N = 1`,
+   share the `q₀^j` powers multiplicatively) + a `1−α` column + aggregate
+   count; land in `CertsHeavy` + `AuditAxiomsHeavy` (NOT `Certs`).
+   Also note: the driver currently reports Φ⁻¹ via float Acklam — the Lean
+   side keeps Φ⁻¹ symbolic; a certified DECIMAL radius would additionally
+   need rational Φ-bounds (Gaussian tail inequality + `Real.exp` bounds) —
+   separate, optional rung.
 
 4. **σ over ℝ≥0 / nonstandard-σ variants, and the `t`-per-class refinement**
    (Cohen uses one-sided bounds on `p_A` only; the classifier theorem's

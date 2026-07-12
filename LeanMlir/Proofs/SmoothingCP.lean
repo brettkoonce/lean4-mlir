@@ -23,7 +23,15 @@ actually deploys the EXACT binomial lower confidence limit (Clopper–Pearson,
   `smoothing_certified_radius_classifier`: with probability `≥ 1 − α` over the
   `N` Gaussian samples, the radius `σ·Φ⁻¹(cpLower α N k)` reported from the
   observed class count `k` is genuinely certified. Guarantee AND arithmetic
-  now match the deployed CERTIFY.
+  now match the deployed CERTIFY;
+* the SOLVED form (the per-image scorecard shape): `binomTail_monotoneOn` —
+  monotone in the success probability by COUPLING (uniform measure on `[0,1]`,
+  nested `[0,q] ⊆ [0,p]`, tail events nest — the tail law again, no calculus)
+  — gives `le_cpLower_of_tail_le`: ONE kernel tail check
+  `binomTail N k₀ q₀ ≤ α` certifies the driver's reported `q₀`, and
+  `smoothing_cp_certified_solved` turns it into "if the count comes out `k₀`,
+  the radius `σ·Φ⁻¹(q₀)` is certified" (w.p. `≥ 1 − α`). Demo checks at
+  99/100 and 999/1000 close the file (`exponentiation.threshold` gotcha).
 
 All results are `propext / Classical.choice / Quot.sound`-clean. -/
 
@@ -68,6 +76,17 @@ variable {E : Type*} [MeasurableSpace E]
     (`Set.indicator`: no decidability needed). -/
 noncomputable def hitCount (A : Set E) (N : ℕ) (ω : Fin N → E) : ℕ :=
   ∑ i, A.indicator 1 (ω i)
+
+omit [MeasurableSpace E] in
+/-- The count is monotone in the target set. -/
+lemma hitCount_mono {A B : Set E} (hAB : A ⊆ B) (N : ℕ) (ω : Fin N → E) :
+    hitCount A N ω ≤ hitCount B N ω := by
+  simp only [hitCount]
+  refine Finset.sum_le_sum fun i _ => ?_
+  by_cases h : ω i ∈ A
+  · rw [Set.indicator_of_mem h, Set.indicator_of_mem (hAB h)]
+  · rw [Set.indicator_of_notMem h]
+    omega
 
 omit [MeasurableSpace E] in
 lemma hitCount_le (A : Set E) (N : ℕ) (ω : Fin N → E) : hitCount A N ω ≤ N := by
@@ -281,6 +300,65 @@ theorem cp_coverage (ν : Measure E) [IsProbabilityMeasure ν] {A : Set E}
 end BinomialCount
 
 -- ════════════════════════════════════════════════════════════════
+-- § The solved form: one tail check certifies the reported bound
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The binomial tail is monotone in the success probability** — by
+    COUPLING, not calculus: instantiate the tail law at the uniform measure
+    on `[0,1]` with the nested sets `[0,q] ⊆ [0,p]`, and the tail events
+    nest pointwise. -/
+lemma binomTail_monotoneOn (N k : ℕ) :
+    MonotoneOn (binomTail N k) (Set.Icc (0:ℝ) 1) := by
+  intro q hq p hp hqp
+  show binomTail N k q ≤ binomTail N k p
+  set ν : Measure ℝ := volume.restrict (Set.Icc (0:ℝ) 1) with hν
+  haveI : IsProbabilityMeasure ν := by
+    constructor
+    rw [hν, Measure.restrict_apply_univ, Real.volume_Icc]
+    norm_num
+  have hreal : ∀ r : ℝ, r ∈ Set.Icc (0:ℝ) 1 → ν.real (Set.Icc 0 r) = r := by
+    intro r hr
+    rw [hν, measureReal_def, Measure.restrict_apply measurableSet_Icc,
+      Set.inter_eq_left.mpr (Set.Icc_subset_Icc le_rfl hr.2), Real.volume_Icc,
+      ENNReal.toReal_ofReal (by linarith [hr.1])]
+    ring
+  have htailq := pi_hitCount_tail_real ν
+    (measurableSet_Icc : MeasurableSet (Set.Icc (0:ℝ) q)) N k
+  have htailp := pi_hitCount_tail_real ν
+    (measurableSet_Icc : MeasurableSet (Set.Icc (0:ℝ) p)) N k
+  rw [hreal q hq] at htailq
+  rw [hreal p hp] at htailp
+  rw [← htailq, ← htailp]
+  refine measureReal_mono (fun ω hω => ?_)
+  simp only [Set.mem_setOf_eq] at hω ⊢
+  exact hω.trans (hitCount_mono (Set.Icc_subset_Icc le_rfl hqp) N ω)
+
+/-- At `q = 1` the tail is exactly 1 (only the `j = N` term survives). -/
+lemma binomTail_one {N k : ℕ} (hk : k ≤ N) : binomTail N k 1 = 1 := by
+  rw [binomTail, Finset.sum_eq_single N]
+  · simp
+  · intro j hj hjN
+    have hNj : N - j ≠ 0 := by
+      rw [Finset.mem_Icc] at hj
+      omega
+    simp [zero_pow hNj]
+  · intro h
+    exact absurd (Finset.mem_Icc.mpr ⟨hk, le_rfl⟩) h
+
+/-- **The solved-form CP bound**: one in-kernel tail check
+    `binomTail N k q₀ ≤ α` certifies `q₀` as a lower bound for `cpLower` —
+    the form the driver's reported `q₀` can be verified in. -/
+lemma le_cpLower_of_tail_le {α q₀ : ℝ} (hα : α < 1) {N k : ℕ} (hk : k ≤ N)
+    (hq₀ : q₀ ∈ Set.Icc (0:ℝ) 1) (h : binomTail N k q₀ ≤ α) :
+    q₀ ≤ cpLower α N k := by
+  have hone : (1:ℝ) ∈ {q | q ∈ Set.Icc (0:ℝ) 1 ∧ α < binomTail N k q} :=
+    ⟨Set.right_mem_Icc.mpr zero_le_one, by rwa [binomTail_one hk]⟩
+  refine le_csInf ⟨1, hone⟩ fun q hq => ?_
+  by_contra hlt
+  have hmono := binomTail_monotoneOn N k hq.1 hq₀ (not_le.mp hlt).le
+  linarith [hq.2]
+
+-- ════════════════════════════════════════════════════════════════
 -- § The composed guarantee: CERTIFY's exact arithmetic, end to end
 -- ════════════════════════════════════════════════════════════════
 
@@ -362,5 +440,109 @@ theorem smoothing_cp_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
           {ω | cpLower α N (hitCount A N ω) ≤ γ.real A} :=
         cp_coverage γ hA N hα
     _ ≤ _ := measureReal_mono hsub
+
+/-- **The driver tie, solved form.** For the OBSERVED count `k₀` and the
+    driver's reported CP lower bound `q₀` (rationalized down), ONE in-kernel
+    tail check `binomTail N k₀ q₀ ≤ α` certifies: with probability `≥ 1 − α`
+    over the samples, IF the count comes out `k₀` THEN the radius
+    `σ·Φ⁻¹(q₀)` is genuinely certified. This is the per-image scorecard
+    theorem shape: instantiate at the driver's `(N, k₀, α, q₀)` and the
+    hypothesis is pure kernel rational arithmetic. -/
+theorem smoothing_cp_certified_solved {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
+    {C : EuclideanSpace ℝ (Fin (n + 1)) → Fin k} (hC : Measurable C)
+    (hp : ∀ c x, (∫ z, (if C (x + σ • z) = c then (1:ℝ) else 0)
+      ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1))))) ∈ Set.Ioo (0:ℝ) 1)
+    (x : EuclideanSpace ℝ (Fin (n + 1))) (y : Fin k)
+    {N k₀ : ℕ} (hk₀ : k₀ ≤ N) {α q₀ : ℝ} (hα : 0 ≤ α) (hα1 : α < 1)
+    (hq₀ : q₀ ∈ Set.Ioo (0:ℝ) 1) (htail : binomTail N k₀ q₀ ≤ α) :
+    1 - α
+      ≤ (Measure.pi fun _ : Fin N => stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))).real
+          {ω | (∑ i, if C (x + σ • ω i) = y then 1 else 0) = k₀ →
+            ∀ δ : EuclideanSpace ℝ (Fin (n + 1)),
+            ‖δ‖ < σ * stdNormalQuantile q₀ →
+            ∀ j, j ≠ y →
+              (∫ z, (if C (x + δ + σ • z) = j then (1:ℝ) else 0)
+                  ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+                < ∫ z, (if C (x + δ + σ • z) = y then (1:ℝ) else 0)
+                    ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1))))} := by
+  classical
+  set γ := stdGaussian (EuclideanSpace ℝ (Fin (n + 1))) with hγ
+  set A : Set (EuclideanSpace ℝ (Fin (n + 1))) := {v | C (x + σ • v) = y} with hA_def
+  have hA : MeasurableSet A :=
+    (hC.comp (measurable_const.add (measurable_id.const_smul σ)))
+      (measurableSet_singleton y)
+  have hpA : γ.real A = ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ := by
+    rw [← integral_indicator_one hA]
+    refine integral_congr_ae (ae_of_all _ fun z => ?_)
+    by_cases h : C (x + σ • z) = y
+    · rw [Set.indicator_of_mem (show z ∈ A from h), Pi.one_apply]
+      simp [h]
+    · rw [Set.indicator_of_notMem (show z ∉ A from h)]
+      simp [h]
+  have hcount : ∀ ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)),
+      (∑ i, if C (x + σ • ω i) = y then 1 else 0) = hitCount A N ω := by
+    intro ω
+    refine Finset.sum_congr rfl fun i _ => ?_
+    by_cases h : C (x + σ • ω i) = y
+    · rw [if_pos h, Set.indicator_of_mem (show ω i ∈ A from h), Pi.one_apply]
+    · rw [if_neg h, Set.indicator_of_notMem (show ω i ∉ A from h)]
+  have hsub : {ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)) |
+        cpLower α N (hitCount A N ω) ≤ γ.real A}
+      ⊆ {ω | (∑ i, if C (x + σ • ω i) = y then 1 else 0) = k₀ →
+            ∀ δ : EuclideanSpace ℝ (Fin (n + 1)),
+            ‖δ‖ < σ * stdNormalQuantile q₀ →
+            ∀ j, j ≠ y →
+              (∫ z, (if C (x + δ + σ • z) = j then (1:ℝ) else 0) ∂γ)
+                < ∫ z, (if C (x + δ + σ • z) = y then (1:ℝ) else 0) ∂γ} := by
+    intro ω hω
+    simp only [Set.mem_setOf_eq] at hω ⊢
+    intro hcnt δ hδ j hj
+    rw [hcount ω] at hcnt
+    have hqcp : q₀ ≤ cpLower α N (hitCount A N ω) := by
+      rw [hcnt]
+      exact le_cpLower_of_tail_le hα1 hk₀ (Set.Ioo_subset_Icc_self hq₀) htail
+    have hpy := hp y x
+    have hple : q₀ ≤ ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ := by
+      rw [← hpA]
+      exact hqcp.trans hω
+    have hmono := stdNormalQuantile_monotoneOn hq₀ hpy hple
+    have hδ' : ‖δ‖ < σ * stdNormalQuantile
+        (∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ) :=
+      lt_of_lt_of_le hδ (mul_le_mul_of_nonneg_left hmono hσ.le)
+    exact smoothing_certified_radius_classifier hσ hC hp hδ' j hj
+  calc 1 - α
+      ≤ (Measure.pi fun _ : Fin N => γ).real
+          {ω | cpLower α N (hitCount A N ω) ≤ γ.real A} :=
+        cp_coverage γ hA N hα
+    _ ≤ _ := measureReal_mono hsub
+
+-- ════════════════════════════════════════════════════════════════
+-- § Demo tail checks: the hypothesis is kernel rational arithmetic
+-- ════════════════════════════════════════════════════════════════
+
+/-- Demo tail check, kernel-arithmetic only: 99 hits in 100 draws certify
+    `q₀ = 0.9` at `α = 1/1000` (radius `σ·Φ⁻¹(0.9) ≈ 1.28σ`). -/
+lemma binomTail_check_99of100 : binomTail 100 99 (9/10) ≤ 1/1000 := by
+  have hset : Finset.Icc 99 100 = {99, 100} := by decide
+  have h99 : Nat.choose 100 99 = 100 := by decide
+  rw [binomTail, hset, Finset.sum_insert (by decide), Finset.sum_singleton,
+    h99, Nat.choose_self]
+  norm_num
+
+set_option maxRecDepth 8000 in
+set_option exponentiation.threshold 4000 in
+/-- Mid-scale demo: 999 hits in 1000 draws certify `q₀ = 0.985` at
+    `α = 1/1000` (radius `σ·Φ⁻¹(0.985) ≈ 2.17σ`). Driver-scale `N = 10112`
+    instances are generator territory (CertsHeavy): raise
+    `exponentiation.threshold`, ladder the `Nat.choose` literals via
+    `Nat.choose_symm`/`choose_succ_right_eq` instead of `decide`. -/
+lemma binomTail_check_999of1000 : binomTail 1000 999 (985/1000) ≤ 1/1000 := by
+  have hset : Finset.Icc 999 1000 = {999, 1000} := by decide
+  have h999 : Nat.choose 1000 999 = 1000 := by
+    rw [← Nat.choose_symm (by norm_num : 999 ≤ 1000)]
+    norm_num
+  rw [binomTail, hset, Finset.sum_insert (by decide), Finset.sum_singleton,
+    h999, Nat.choose_self]
+  norm_num
 
 end Proofs

@@ -3115,6 +3115,20 @@ open Proofs
 #print axioms Proofs.cp_coverage
 #print axioms Proofs.smoothing_cp_certified
 
+-- ...and the SOLVED form (the per-image scorecard shape, 2026-07-12):
+-- binomTail is monotone in the success probability by COUPLING — the tail law
+-- instantiated at the uniform measure on [0,1] with nested [0,q] ⊆ [0,p], NO
+-- calculus — so one kernel tail check binomTail N k₀ q₀ ≤ α certifies the
+-- driver's reported q₀ (le_cpLower_of_tail_le), and
+-- smoothing_cp_certified_solved makes the per-observed-count radius σ·Φ⁻¹(q₀)
+-- a theorem whose only numeric hypothesis is kernel rational arithmetic
+-- (demo checks: 99/100 @ q₀=0.9, 999/1000 @ q₀=0.985, both α=1/1000).
+#print axioms Proofs.binomTail_monotoneOn
+#print axioms Proofs.le_cpLower_of_tail_le
+#print axioms Proofs.smoothing_cp_certified_solved
+#print axioms Proofs.binomTail_check_99of100
+#print axioms Proofs.binomTail_check_999of1000
+
 -- ...and the two-sided quantile packaging (SmoothingGaussian.lean, 2026-07-12):
 -- Φ⁻¹ STRICTLY monotone on (0,1) (strictness reflected through Φ via the two-sided
 -- inverse), Φ⁻¹ maps (0,1) ONTO ℝ (every s is Φ⁻¹(Φ s)), and Φ⁻¹ continuous at every
