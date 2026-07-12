@@ -34,9 +34,10 @@ jobs:
     env:
       # bound per-module elaboration parallelism: the heavy linarith goals
       # peak at several GB each (17.08 GB measured for ONE SDP module at
-      # 4 threads); 2 threads per module fits — but only one module at a
-      # time (see -j1 below: the first run died at -j4×2-threads, runner
-      # killed mid-build at ~75 min, the classic OOM signature).
+      # 4 threads); 2 threads per module + one module at a time (see the
+      # sequential build loop below — the first run died with lake's default
+      # scheduler running ~4 modules at once, runner killed mid-build at
+      # ~75 min, the classic OOM signature).
       LEAN_NUM_THREADS: 2
     steps:
       - uses: actions/checkout@v4
@@ -65,11 +66,27 @@ jobs:
         run: |
           lake exe cache get || true
           free -h
-          # -j1: elaborate ONE heavy module at a time. lake's default -j
-          # (=nproc) runs several 30k-line modules concurrently and the
-          # runner OOMs even with LEAN_NUM_THREADS=2. If this ever exceeds
-          # the 300-min budget, split the build across per-net jobs instead.
-          lake build CertsHeavy -j1
+          # ONE heavy module at a time: Lake 5.0 has no --jobs flag, and its
+          # default scheduler elaborates several 30k-line modules concurrently
+          # — the runner OOMs even with LEAN_NUM_THREADS=2 (one SDP module
+          # peaks at 17.08 GB at 4 threads). Sequential per-module invocations
+          # serialize the heavy elaborations (each call's heavy deps are
+          # already built by the previous ones); the final CertsHeavy call is
+          # a no-op verification. If this ever threatens the 300-min budget,
+          # split across per-net jobs instead.
+          for m in LipschitzCertScorecardFullNets \
+                   LipschitzCertScorecardFullImgsA \
+                   LipschitzCertScorecardFullImgsB \
+                   LipschitzCertScorecardFull \
+                   LipschitzCertScorecardSDPFull \
+                   LipschitzCertScorecardSDPFullUncon \
+                   LipschitzCertScorecardIBP \
+                   LipschitzCertScorecardIBPUncon; do
+            echo "=== building $m ==="
+            free -m | head -2
+            lake build LeanMlir.Proofs.$m
+          done
+          lake build CertsHeavy
 
       - name: Three-axiom closure check (heavy corpus)
         run: |
