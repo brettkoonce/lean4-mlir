@@ -819,8 +819,13 @@ lean_lib «Certs» where
 lean_lib «CertsHeavy» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.LipschitzCertScorecardFull,
-             `LeanMlir.Proofs.LipschitzCertScorecardSDPFull,
-             `LeanMlir.Proofs.LipschitzCertScorecardSDPFullUncon,
+             -- The per-pair LipSDP files (LipschitzCertScorecardSDPFull{,Uncon})
+             -- are DISABLED here for now: their linarith PSD witnesses carry
+             -- ~230-digit LDLᵀ fractions and OOM every free-tier runner config
+             -- (4 attempts, incl. 1-thread + 10G swap). They remain in the repo,
+             -- kernel-verified locally (93/100 @ ε=0.1 = PGD, sandwich closed);
+             -- re-enable path: planning/certs_heavy_psd_memory.md (small-
+             -- coefficient DD-split witnesses, or a self-hosted runner).
              `LeanMlir.Proofs.LipschitzCertScorecardIBP,
              `LeanMlir.Proofs.LipschitzCertScorecardIBPUncon]
 

@@ -84,12 +84,14 @@ jobs:
           # already built by the previous ones); the final CertsHeavy call is
           # a no-op verification. If this ever threatens the 300-min budget,
           # split across per-net jobs instead.
+          # NB the per-pair LipSDP modules are currently DISABLED (removed
+          # from CertsHeavy): their PSD witnesses OOM every free-tier runner
+          # config — see planning/certs_heavy_psd_memory.md for the re-enable
+          # plan. They stay kernel-verified locally.
           for m in LipschitzCertScorecardFullNets \
                    LipschitzCertScorecardFullImgsA \
                    LipschitzCertScorecardFullImgsB \
                    LipschitzCertScorecardFull \
-                   LipschitzCertScorecardSDPFull \
-                   LipschitzCertScorecardSDPFullUncon \
                    LipschitzCertScorecardIBP \
                    LipschitzCertScorecardIBPUncon; do
             echo "=== building $m ==="
@@ -126,4 +128,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ **All ${total} heavy-corpus theorems closed under [\`propext\`, \`Classical.choice\`, \`Quot.sound\`]**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Full-input scorecard (L2 Tsuzuku / per-pair LipSDP / IBP L∞): capped σ≤2 92→93/100 @ L2 ε=0.1 (= PGD, sandwich closed); IBP 92/88/69/24 per 100 @ L∞ ε=1/2/4/8 per 255." >> $GITHUB_STEP_SUMMARY
+          echo "Full-input scorecard (L2 Tsuzuku + IBP L∞): capped σ≤2 92/100 @ L2 ε=0.1; IBP 92/88/69/24 per 100 @ L∞ ε=1/2/4/8 per 255. (Per-pair LipSDP instances kernel-verified locally but CI-disabled — memory; see planning/certs_heavy_psd_memory.md.)" >> $GITHUB_STEP_SUMMARY

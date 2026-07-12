@@ -1,6 +1,8 @@
 import LeanMlir.Proofs.LipschitzCertScorecardFull
-import LeanMlir.Proofs.LipschitzCertScorecardSDPFull
-import LeanMlir.Proofs.LipschitzCertScorecardSDPFullUncon
+-- (LipschitzCertScorecardSDPFull{,Uncon} imports DISABLED with their lib
+-- membership — the linarith PSD witnesses OOM the free-tier runners; see
+-- planning/certs_heavy_psd_memory.md. Their prints below are commented out
+-- with them; re-enable both together.)
 import LeanMlir.Proofs.LipschitzCertScorecardIBP
 import LeanMlir.Proofs.LipschitzCertScorecardIBPUncon
 
@@ -70,20 +72,20 @@ the MAIN audit. -/
 -- linarith call). Spot-check: one pair chain (slack + squared bound), a
 -- reverse-order wrapper, first/middle/last per-image certs at both radii,
 -- and the aggregates.
-#print axioms Proofs.LipschitzCertDemo.hS01SF
-#print axioms Proofs.LipschitzCertDemo.pairSqSF_0_1
-#print axioms Proofs.LipschitzCertDemo.pairSqSF_1_0
-#print axioms Proofs.LipschitzCertDemo.certifiedSSF10_0
-#print axioms Proofs.LipschitzCertDemo.certifiedSSF30_41
-#print axioms Proofs.LipschitzCertDemo.certifiedSSF10_86
-#print axioms Proofs.LipschitzCertDemo.certifiedSTF10_31
-#print axioms Proofs.LipschitzCertDemo.certifiedSTF10_81
-#print axioms Proofs.LipschitzCertDemo.sdpCappedFullCerts10_certified
-#print axioms Proofs.LipschitzCertDemo.sdpCappedFullCerts30_certified
-#print axioms Proofs.LipschitzCertDemo.sdpUnconFullCerts10_certified
-#print axioms Proofs.LipschitzCertDemo.sdpUnconFullCerts30_certified
-#print axioms Proofs.LipschitzCertDemo.scorecard_sdp_full
-#print axioms Proofs.LipschitzCertDemo.scorecard_sdp_full_uncon
+-- #print axioms Proofs.LipschitzCertDemo.hS01SF  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.pairSqSF_0_1  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.pairSqSF_1_0  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.certifiedSSF10_0  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.certifiedSSF30_41  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.certifiedSSF10_86  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.certifiedSTF10_31  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.certifiedSTF10_81  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.sdpCappedFullCerts10_certified  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.sdpCappedFullCerts30_certified  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.sdpUnconFullCerts10_certified  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.sdpUnconFullCerts30_certified  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.scorecard_sdp_full  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.scorecard_sdp_full_uncon  -- CI-disabled with the SDP lib membership
 
 -- IBP L∞ scorecard (IntervalBound.lean + LipschitzCertScorecardIBP{,Uncon}.lean):
 -- the third certificate axis — exact interval bound propagation, pixel-L∞
