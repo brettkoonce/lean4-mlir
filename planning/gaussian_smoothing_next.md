@@ -63,16 +63,27 @@ compiles: `git show origin/mathlib-upstream-pr1-pr2:LeanMlir/Proofs/UpstreamDraf
    main (Brett's call: fold it in, the branch never reached PR stage);
    `origin/mathlib-upstream-pr1-pr2` deleted, content fully subsumed.
 
-2. **Exact Clopper–Pearson instead of Hoeffding.** `mc_mean_lower_bound`'s
-   `exp(−2Nt²)` is the crude bound; Cohen's actual CERTIFY uses the exact
-   binomial lower confidence limit. The empirical count `k = Σᵢ 1[C(x+σωᵢ)=y]`
-   is `Binomial(N, p)` — Mathlib has `PMF.binomial`; the missing piece is
-   "the count of successes over `Measure.pi` is binomial" (map of the sum =
-   binomial PMF — provable by induction, or via `iIndepFun` + Bernoulli
-   convolution if Mathlib has it). Then the CP bound is a monotonicity
-   statement about the binomial CDF in `p` — continuity/monotonicity
-   arguments where PR1-style lemmas again help. Payoff: the theorem
-   matches the deployed driver's arithmetic exactly.
+2. **Exact Clopper–Pearson instead of Hoeffding — DONE 2026-07-12
+   (`LeanMlir/Proofs/SmoothingCP.lean`, Certs root, 5 audited, 3-axiom clean).**
+   - `pi_hitCount_eq_binomial`: the count of successes over `Measure.pi` IS
+     binomial — the lemma Mathlib genuinely lacks (surveyed: `Bin(n,p)` exists
+     as `setBer(Iio n,p).map ncard`, no iid-indicator-count law, binomial
+     mean/variance still `proof_wanted`). Induction on `N` via
+     `measurePreserving_piFinSuccAbove` at coordinate 0 + `Measure.prod_apply`
+     Fubini + `lintegral_add_compl` split + Pascal. `hitCount` uses
+     `Set.indicator` (NOT ite — no `Decidable` instance exists for `∈ A` on
+     this pin, `open scoped Classical` no longer provides it).
+   - `cpLower α N k = sInf {q ∈ [0,1] | α < binomTail N k q}`; coverage
+     (`cp_coverage`, ≥ 1−α) needs NO tail-monotonicity-in-q and NO
+     binomial-sums-to-1: minimal counterexample count `k₀` (`Nat.find`) has
+     `binomTail N k₀ p ≤ α` by contrapositive of `csInf_le`, counts below `k₀`
+     certify by minimality. (The predicted "CP bound is a monotonicity
+     statement" turned out unnecessary — monotonicity only matters for tying
+     to a SOLVED-equation form of the bound, i.e. move 3.)
+   - `smoothing_cp_certified`: radius `σ·Φ⁻¹(cpLower α N k)` from the observed
+     count, certified with prob ≥ 1−α. Guarantee AND arithmetic now match
+     CERTIFY. (Neither PR1/PR2 nor the quantile continuity was needed here;
+     they wait for move 3's solved-form tie.)
 
 3. **Tie the `smoothCertify` DRIVER'S reported radii** (`f30f857`,
    `mnist-{mlp,cnn}-smooth`, `cifar-smooth` exes). The driver samples on GPU

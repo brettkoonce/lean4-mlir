@@ -159,6 +159,7 @@ import LeanMlir.Proofs.LipschitzCertFloat
 import LeanMlir.Proofs.ListDot
 import LeanMlir.Proofs.IntervalBound
 import LeanMlir.Proofs.SmoothingMC
+import LeanMlir.Proofs.SmoothingCP
 import LeanMlir.Proofs.UpstreamDraft
 import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
@@ -3097,6 +3098,22 @@ open Proofs
 #print axioms Proofs.mc_mean_lower_bound
 #print axioms Proofs.stdNormalQuantile_of_nonpos
 #print axioms Proofs.smoothing_mc_certified
+
+-- ...and the EXACT Clopper-Pearson tie (SmoothingCP.lean, 2026-07-12), replacing
+-- Hoeffding's crude exp(-2Nt^2) with the binomial lower confidence limit CERTIFY
+-- actually deploys: the count of successes over Measure.pi IS binomial
+-- (pi_hitCount_eq_binomial, the lemma Mathlib lacks — piFinSuccAbove induction,
+-- Fubini on the first sample, Pascal's rule), the tail law equals the binomTail
+-- polynomial the driver evaluates, cpLower covers with probability ≥ 1−α (the
+-- sInf definition needs NO tail-monotonicity: minimal-counterexample count +
+-- contrapositive of csInf_le), and the composed smoothing_cp_certified radius
+-- σ·Φ⁻¹(cpLower α N k) is genuinely certified — guarantee AND arithmetic now
+-- match Cohen's CERTIFY.
+#print axioms Proofs.pi_hitCount_eq_binomial
+#print axioms Proofs.pi_hitCount_tail_real
+#print axioms Proofs.binomTail_le_of_lt_cpLower
+#print axioms Proofs.cp_coverage
+#print axioms Proofs.smoothing_cp_certified
 
 -- ...and the two-sided quantile packaging (SmoothingGaussian.lean, 2026-07-12):
 -- Φ⁻¹ STRICTLY monotone on (0,1) (strictness reflected through Φ via the two-sided

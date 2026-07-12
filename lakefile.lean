@@ -692,6 +692,12 @@ lean_lib «Certs» where
              -- machinery) ⇒ with prob ≥ 1−exp(−2Nt²) the reported radius
              -- σ·Φ⁻¹(p̂−t) is genuinely certified — Cohen's CERTIFY end to end.
              `LeanMlir.Proofs.SmoothingMC,
+             -- The exact Clopper-Pearson tie (the arithmetic CERTIFY deploys):
+             -- the count of successes over Measure.pi IS binomial (the lemma
+             -- Mathlib lacks; piFinSuccAbove induction + Pascal), the CP
+             -- lower bound covers with prob >= 1-alpha (sInf trick: no tail
+             -- monotonicity needed), composed => smoothing_cp_certified.
+             `LeanMlir.Proofs.SmoothingCP,
              -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).
