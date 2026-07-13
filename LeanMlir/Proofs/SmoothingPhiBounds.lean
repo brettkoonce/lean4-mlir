@@ -30,7 +30,10 @@ For the whole corpus, the §prefix-scan section makes per-image checks cheap:
 stay shared through the kernel's whnf cache), `phiScanRev_getD` indexes it,
 and `le_stdNormalQuantile_of_scan`/`smooth_radius_dec` turn one O(index)
 lookup against the one-shot literal into a certified decimal radius — see
-the generated `SmoothingDecScorecard.lean` (279 images).
+the generated `SmoothingDecScorecard.lean` (279 images). The literal is
+verified in CHUNKS (`phiScanRevFrom` + `phiScanRevFrom_append`): one
+whole-grid evaluation peaks at 15 GB of retained kernel-cache bignums (an
+OOM on 16 GB CI runners); per-declaration chunks are freed in between.
 
 All results are `propext / Classical.choice / Quot.sound`-clean. -/
 
@@ -326,6 +329,59 @@ lemma le_stdNormalQuantile_of_scan {h : ℚ} (hh : 0 ≤ h) {n : ℕ} {L : List 
     rw [← phiScanRev_getD h hm, hL]
     exact hcheck
   exact le_stdNormalQuantile_of_grid hh m hq ((Rat.cast_le (K := ℝ)).mpr hg)
+
+/-- The scan CONTINUED from a checkpoint: given `v = phiGridUB h k`,
+    `phiScanRevFrom h k v j = [phiGridUB h (k+j), …, phiGridUB h k]`
+    (established by `phiScanRevFrom_append`). Lets the whole-grid kernel
+    evaluation — 15 GB peak at 3300 panels, an OOM on 16 GB CI runners — be
+    split into per-declaration chunks: the kernel's whnf cache (which retains
+    every intermediate bignum) is freed between declarations. -/
+def phiScanRevFrom (h : ℚ) (k : ℕ) (v : ℚ) : ℕ → List ℚ
+  | 0 => [v]
+  | j+1 =>
+    match phiScanRevFrom h k v j with
+    | [] => []
+    | x :: xs => (x + h * ratCeil9 (ratPdfUB (((k + j : ℕ):ℚ) * h))) :: x :: xs
+
+lemma phiScanRevFrom_ne_nil (h : ℚ) (k : ℕ) (v : ℚ) (j : ℕ) :
+    phiScanRevFrom h k v j ≠ [] := by
+  induction j with
+  | zero => simp [phiScanRevFrom]
+  | succ m ih =>
+    cases hm : phiScanRevFrom h k v m with
+    | nil => exact absurd hm ih
+    | cons x xs => simp [phiScanRevFrom, hm]
+
+/-- **The chunk glue**: a scan continued from the checkpoint `phiGridUB h k`
+    extends the full scan from `k` to `k + j`. -/
+lemma phiScanRevFrom_append (h : ℚ) (k : ℕ) : ∀ j : ℕ,
+    phiScanRevFrom h k (phiGridUB h k) j ++ (phiScanRev h k).tail
+      = phiScanRev h (k + j) := by
+  intro j
+  induction j with
+  | zero =>
+    cases hk : phiScanRev h k with
+    | nil => exact absurd hk (phiScanRev_ne_nil h k)
+    | cons x xs =>
+      have hx : x = phiGridUB h k := by
+        have := phiScanRev_headI h k
+        rw [hk] at this
+        simpa using this
+      simp [phiScanRevFrom, hx]
+  | succ m ih =>
+    cases hm : phiScanRevFrom h k (phiGridUB h k) m with
+    | nil => exact absurd hm (phiScanRevFrom_ne_nil h k _ m)
+    | cons x xs =>
+      have hx : x = phiGridUB h (k + m) := by
+        have h1 := ih
+        rw [hm] at h1
+        have h2 := phiScanRev_headI h (k + m)
+        rw [← h1] at h2
+        simpa using h2
+      have hidx : k + (m + 1) = (k + m) + 1 := by omega
+      rw [hidx, phiScanRev_succ, ← ih, hm]
+      simp only [phiScanRevFrom, hm, List.cons_append]
+      rw [phiGridUB, hx]
 
 /-- The scorecard-protocol decimal-radius form (σ = 1/2, grid `h = 1/1000`,
     4-decimal `q₀ = a/10000`): one scan lookup certifies

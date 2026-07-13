@@ -165,6 +165,22 @@ compiles: `git show origin/mathlib-upstream-pr1-pr2:LeanMlir/Proofs/UpstreamDraf
    literal as `List ℕ` NUMERATORS over the common denominator `10¹²` (every
    grid value is `1/2 + Σ (1/1000)·(k/10⁹)`) plus one `map (·/10¹²)`: ℕ
    literals are kernel-primitive and elaborate in ~1 s.
+   **CI-MEMORY RETROFIT 2026-07-13** (the one whole-grid decide peaked
+   15.1 GB RSS → OOM'd the blueprint runner's `lake build LeanMlir Certs`,
+   16 GB; Certify Corpus survived the same build by luck): the scan is now
+   verified in SIX 550-panel chunks — `phiScanRevFrom h k v j` (scan
+   continued from a checkpoint value) + glue `phiScanRevFrom_append` in
+   SmoothingPhiBounds, then per chunk: checkpoint literal read off the
+   verified prefix via `phiScanRev_headI`, one `decide +kernel` from that
+   literal, one `rw`-chain glue lemma. TWO more memory facts discovered:
+   (a) kernel memory is NOT reclaimed between declarations inside one lean
+   process (6 chunks in one file still peaked 12.9 GB) → each chunk lives in
+   its OWN MODULE (`SmoothingDecChunk1–6`, import-chained, ~5.2 GB / ~18 s
+   each); (b) 279 per-image `getD` decides against the FULL literal
+   accumulated 11.3 GB in the scorecard module → each per-image check now
+   targets the SMALLEST verified prefix covering its m (`phiScanEq{550,…}`;
+   `getD` at index < 551 never forces the appended tail) → main module
+   8.5 GB / 29 s. Worst module 8.5 GB, under the ViTBackB0 14 GB precedent.
    The LAST remaining informality: the net-semantics hypothesis
    (C = the rendered fwd's argmax + `hp` interiority) — noted in the
    scorecard header.
