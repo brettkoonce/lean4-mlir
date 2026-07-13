@@ -24,8 +24,10 @@ processes cap the worst chunk at ~5 GB. Per image, m is the LARGEST grid index w
 upper-sum slack costs ~0.003–0.036 vs the driver's float printout (largest at
 the q₀ = 0.9993 unanimous-count images).
 
-Honest scope: the only remaining informality in the smoothing chain is now the
-net-semantics hypothesis (C = the rendered forward's argmax + `hp` interiority). -/
+Honest scope: the net-semantics hypotheses (C = a net's argmax + `hp`
+interiority) are discharged for a concrete trained net in
+SmoothingNetWitness.lean; the scorecard's own 784-dim driver checkpoints
+remain untied (the same witness-generator pass at full width). -/
 
 namespace Proofs
 

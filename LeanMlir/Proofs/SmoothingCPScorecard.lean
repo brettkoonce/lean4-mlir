@@ -11,8 +11,11 @@ integer arithmetic at generation AND re-proved here by `decide +kernel`
 entry certifies the radius σ·Φ⁻¹(q₀) for its observed count, w.p. ≥ 1−α.
 
 Honest scope: this ties the driver's REPORTED (k, n, α) arithmetic to the
-theorem. Still informal: the float Φ⁻¹ printout (Lean keeps Φ⁻¹ symbolic) and
-the net-semantics hypothesis (C = the rendered fwd's argmax, `hp` interiority). -/
+theorem. The float Φ⁻¹ printout is closed corpus-wide by the decimal-radius
+scorecard (SmoothingDecScorecard.lean); the net-semantics hypotheses (C = a
+net's argmax + `hp` interiority) are discharged for a concrete trained net in
+SmoothingNetWitness.lean — this scorecard's own 784-dim driver checkpoints
+remain untied (the same witness-generator pass at full width). -/
 
 namespace Proofs
 

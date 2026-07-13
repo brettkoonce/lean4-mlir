@@ -719,6 +719,18 @@ lean_lib «Certs» where
              -- (3300 panels, ~2 min), then all 279 per-image decimal radii
              -- m/2000 <= sigma*Phi^-1(q0) are O(index) list lookups.
              `LeanMlir.Proofs.SmoothingDecScorecard,
+             -- The NET-SEMANTICS closure (the chain's last informality):
+             -- argmaxNet classifier + measurability from logits, strict
+             -- decision regions open, stdGaussian IsOpenPosMeasure, and the
+             -- hp-interiority discharge from per-class strict-argmax
+             -- witnesses => smoothing_cp_certified_net (CERTIFY for a
+             -- concrete net's argmax, no abstract-classifier hypotheses).
+             `LeanMlir.Proofs.SmoothingNetSemantics,
+             -- ...INSTANTIATED (generated: scripts/smoothing_net_witness_gen.py)
+             -- for mlpT, the trained /128 pooled-MNIST MLP: ten in-kernel
+             -- strict-argmax witnesses discharge hp; capstone
+             -- smoothing_cp_certified_mlpT + deployed-scale demo.
+             `LeanMlir.Proofs.SmoothingNetWitness,
              -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).

@@ -163,6 +163,8 @@ import LeanMlir.Proofs.SmoothingCP
 import LeanMlir.Proofs.SmoothingCPScorecard
 import LeanMlir.Proofs.SmoothingPhiBounds
 import LeanMlir.Proofs.SmoothingDecScorecard
+import LeanMlir.Proofs.SmoothingNetSemantics
+import LeanMlir.Proofs.SmoothingNetWitness
 import LeanMlir.Proofs.UpstreamDraft
 import LeanMlir.Proofs.Binary32Instance
 import LeanMlir.Proofs.TrainedLinearDescent
@@ -3194,6 +3196,27 @@ open Proofs
 #print axioms Proofs.smoothDecMlp_certified
 #print axioms Proofs.smoothDecCnn_certified
 #print axioms Proofs.smoothDecCifar_certified
+
+-- ...and the NET-SEMANTICS closure (SmoothingNetSemantics.lean + the generated
+-- SmoothingNetWitness.lean): the chain's LAST informality — the abstract
+-- measurable classifier C and its hp-interiority hypothesis — discharged.
+-- argmaxNet (lowest-index tie-break) is measurable from logit measurability
+-- alone; strict decision regions of continuous logits are open; stdGaussian
+-- charges every nonempty open set (IsOpenPosMeasure through the pi-Gaussian
+-- pushforward); ONE strict-argmax witness per class makes every smoothed
+-- class probability interior (argmaxNet_smoothProb_mem_Ioo) — so
+-- smoothing_cp_certified_net is CERTIFY for a NET's argmax with no
+-- abstract-classifier hypotheses. Instantiated at the trained /128
+-- pooled-MNIST MLP: ten in-kernel strict-argmax witnesses (netW_strict),
+-- capstone smoothing_cp_certified_mlpT, and the deployed-scale demo
+-- (N = 10112, alpha = 1/1000, one kernel tail check).
+#print axioms Proofs.measurable_argmaxNet
+#print axioms Proofs.argmaxNet_smoothProb_mem_Ioo
+#print axioms Proofs.smoothing_cp_certified_net
+#print axioms Proofs.LipschitzCertDemo.mlpT_logit_continuous
+#print axioms Proofs.LipschitzCertDemo.netW_strict
+#print axioms Proofs.LipschitzCertDemo.smoothing_cp_certified_mlpT
+#print axioms Proofs.LipschitzCertDemo.smooth_cp_mlpT_demo
 
 -- ...and the two-sided quantile packaging (SmoothingGaussian.lean, 2026-07-12):
 -- Φ⁻¹ STRICTLY monotone on (0,1) (strictness reflected through Φ via the two-sided

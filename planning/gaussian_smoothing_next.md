@@ -181,9 +181,35 @@ compiles: `git show origin/mathlib-upstream-pr1-pr2:LeanMlir/Proofs/UpstreamDraf
    targets the SMALLEST verified prefix covering its m (`phiScanEq{550,…}`;
    `getD` at index < 551 never forces the appended tail) → main module
    8.5 GB / 29 s. Worst module 8.5 GB, under the ViTBackB0 14 GB precedent.
-   The LAST remaining informality: the net-semantics hypothesis
-   (C = the rendered fwd's argmax + `hp` interiority) — noted in the
-   scorecard header.
+   **NET-SEMANTICS CLOSURE DONE 2026-07-13**
+   (`SmoothingNetSemantics.lean` hand-written + generated
+   `SmoothingNetWitness.lean` via scripts/smoothing_net_witness_gen.py):
+   the abstract-classifier hypotheses (measurable `C`, `hp` interiority)
+   are DISCHARGED. Machinery: `argmaxNet` (lowest-index tie-break via
+   `Finset.min'` of the maximizer set; `measurable_argmaxNet` — fibers are
+   finite boolean combinations of `{f·j ≤ f·c}`), `isOpen_strictRegion`,
+   `IsOpenPosMeasure` instances for `gaussianReal 0 1` (from
+   `stdGaussian_Ioo_pos`) and multivariate `stdGaussian E` (pushforward of
+   the pi-Gaussian; Mathlib's `pi.isOpenPosMeasure` does the product), and
+   the jewel `argmaxNet_smoothProb_mem_Ioo`: ONE strict-argmax witness per
+   class ⇒ EVERY smoothed class probability at EVERY point is in (0,1)
+   (witness's open region has positive Gaussian mass everywhere; any other
+   class's region caps it below 1 — needs ≥ 2 classes, `Fin (k+2)`).
+   Capstone `smoothing_cp_certified_net` = CERTIFY for a NET's argmax, no
+   abstract hypotheses. INSTANTIATED at `mlpT` (the trained /128 pooled
+   49→8→10 MLP): `mlpT_logit_continuous` (the coordinate formula is rfl —
+   `EuclideanSpace.proj` for coordinates), ten max-margin per-class
+   witnesses from the pooled test set (exact-integer verified at
+   generation, re-proved in-kernel via the xt_margin hpre-table pattern;
+   margins 7.1–13.9 logits), `netW_strict`, capstone
+   `smoothing_cp_certified_mlpT` + `smooth_cp_mlpT_demo` at the deployed
+   protocol (N=10112, α=1/1000, count 10084 → radius σ·Φ⁻¹(0.9952), one
+   kernel tail check). Witness file builds in ~21 s.
+   REMAINING (honest scope, noted in headers): the smoothing scorecard's
+   own 784-dim driver checkpoints are not the tied net (same
+   witness-generator pass at full width — needs the ckpt rationalized),
+   and the driver's FLOAT forward vs this real-semantics net is the
+   FloatBridge tier's story.
 
 4. **σ over ℝ≥0 / nonstandard-σ variants, and the `t`-per-class refinement**
    (Cohen uses one-sided bounds on `p_A` only; the classifier theorem's
