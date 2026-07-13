@@ -5046,13 +5046,16 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 2$\times$ 7900 XTX (ROCm) & fp32 & $\sim$24.2 min & 30 & $\sim$15 hr & $\mathbf{69.26\%}$ & --- \\
 4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$16.8 min & 90 & $\sim$25 hr & --- & --- \\
 4$\times$ 4060 Ti (CUDA)  & bf16 & $\sim$10.5 min & 90 & $\sim$16 hr & $\mathbf{72.02\%}$ & $\mathbf{90.62\%}$ \\
+1$\times$ A100 (CUDA)     & bf16 & --- & 90 & $\sim$9 hr & --- & --- \\
+1$\times$ MI300X (ROCm)   & bf16 & --- & 90 & $\sim$6 hr & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent ResNet-34 / ImageNet-1k: per-epoch throughput and final
-validation across the two GPU sets (ROCm at 30 epochs, CUDA at the
-full 90).
+validation for the completed runs (ROCm at 30 epochs, CUDA at the full
+90); the A100 and MI300X rows are wall-clock estimates, with per-epoch
+and accuracies pending.
 
 The bf16 run finished all 90 epochs in about 16 wall-clock hours
 and reached $\mathbf{72.02\%}$ top-1 / $\mathbf{90.62\%}$ top-5 on
@@ -5183,32 +5186,51 @@ axis this comparison isolates:
 GPU & BN regime & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
 4$\times$ 4060 Ti (CUDA, bf16)   & Ghost-BN (512)   & $\sim$9.1 min & 100 & $\sim$17 hr & $\mathbf{77.22\%}$ & $\mathbf{93.34\%}$ \\
-1$\times$ A100 (bf16, true-2048) & full-batch (2048) & $\sim$5.4 min\textsuperscript{\dag} & 100 & $\sim$9 hr\textsuperscript{\dag} & TBD & TBD \\
+1$\times$ A100 (bf16, true-2048) & full-batch (2048) & $\sim$6.3 min & 100 & $\sim$10.5 hr & $\mathbf{77.00\%}$ & $\mathbf{93.15\%}$ \\
+1$\times$ MI300X (bf16, true-2048) & full-batch (2048) & --- & 100 & $\sim$7.2 hr\textsuperscript{\dag} & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent ResNet-50 / RSB-A3, 100 epochs: the 4-GPU run splits the
 batch and normalizes BatchNorm per $512$-image shard; the A100
-\texttt{true-2048} row (to be run) normalizes over the full $2048$. The
+\texttt{true-2048} row normalizes over the full $2048$. The
 $\sim$17\,hr wall-clock includes three 30-minute thermal duty-cycle
 cooldowns (the 4060 Ti box is duty-cycled on long runs); the run itself
 logged zero PCIe/AER interruptions across all 100 epochs.
-\textsuperscript{\dag}\,A100 timing is an estimate ($\sim$9\,hr,
-single-device, no gradient accumulation); its accuracies are pending
-the run.
+\textsuperscript{\dag}\,MI300X row is a projected single-device rerun
+($\sim$7.2\,hr, no gradient accumulation); its per-epoch time and
+accuracies are pending the run.
 
-\textbf{What the A100 row tests.} The residual $\sim$0.9 points to the
-paper's $78.1\%$ is expected to come mostly from the
-gradient-accumulation Ghost-BN regime (each micro-step normalizes over
-$512$, not the full $2048$) plus LAMB implementation details and bf16.
-The \texttt{true-2048} recipe (\texttt{resnet50-imagenet true-2048}, a
-real single-forward batch 2048 on an $\sim$80\,GB card) isolates the BN
-piece: a single-device run over the full batch removes the Ghost-BN
-approximation entirely, so the top-1 gap between the two rows is a
-direct read-out of what BatchNorm sharding costs. \emph{Changed since
-the $76.66\%$ first run:} RandAugment is now timm-literal
-(\texttt{rand-m6-mstd0.5-inc1}).
+\textbf{What the A100 row tests.} Removing the Ghost-BN approximation
+barely moves the needle: \texttt{true-2048} lands at $77.00\%$ against
+Ghost-BN's $77.22\%$ --- a $\sim$0.2-point difference, and slightly
+\emph{lower}, well inside run-to-run noise. Normalizing BatchNorm over
+the full $2048$ neither helps nor hurts, so the BN-sharding regime is
+\emph{not} where the residual $\sim$1 point to the paper's $78.1\%$
+hides.
+
+\textbf{Where it does hide: the resize.} That gap turns out to be an
+evaluation artifact, not a training one. Both rows here are scored
+through this repo's \texttt{tf.image.resize} preprocessing, whereas the
+timm reference reports $78.1\%$ through PIL's bicubic resize --- and the
+two resamplers are not interchangeable. Port these weights into a
+standard PIL-resize eval and they fall to $\sim$74.4\%; port the
+reference \texttt{a3\_in1k} weights \emph{into this pipeline} and
+\emph{they} fall to $\sim$74\%. The ranking flips with the resize
+library: each network scores best on the resampler it trained with,
+because it partly fits that resampler's specific aliasing. So the honest
+reading is that the two recipes sit within a couple of points, and which
+one ``wins'' is decided by the eval pipeline --- not that this run is a
+point short.
+
+\textbf{[TODO --- resize/eval reconciliation.]} Put \texttt{true-2048}
+and the timm reference on one ruler --- a single fixed resampler, or a
+bit-exact \texttt{tf.image.resize} match in the reference eval --- before
+reading anything into the $77.00\%$ vs $78.1\%$ gap.
+
+\emph{Changed since the $76.66\%$ first run:} RandAugment is now
+timm-literal (\texttt{rand-m6-mstd0.5-inc1}).
 
 \subsection*{What A3 changes from the 2018 recipe}
 
