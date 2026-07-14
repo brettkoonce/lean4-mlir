@@ -11329,6 +11329,47 @@ it via the JAX dataset handlers that drive the bridge's ImageNet runs
 (\texttt{jax/runs/*\_imagenet\_*}).
 \normalsize
 
+\medskip\noindent\textbf{Building the ImageNet-1k TFDS dataset.} The
+\nolinkurl{image-net.org} download is account-gated and slow; in practice
+the two LSVRC-2012 tarballs are most easily fetched from Academic
+Torrents
+(\href{https://academictorrents.com/collection/imagenet}{academictorrents.com/collection/imagenet}):
+the
+\href{https://academictorrents.com/details/a306397ccf9c2ead27155983c254227c0fd938e2}{training-set
+torrent} ($\sim$138\,GB) and the
+\href{https://academictorrents.com/details/5d6d0df7ed81efd49ca99ea4737e0ae5e3a5f2e5}{validation-set
+torrent} ($\sim$6.3\,GB), both Russakovsky et al.\ (2015). Each torrent is
+a single \texttt{.tar}: \texttt{ILSVRC2012\_img\_train.tar} is itself a
+tar of 1000 per-class tars (\texttt{n01440764.tar}, \ldots) and
+\texttt{ILSVRC2012\_img\_val.tar} holds the 50{,}000 validation JPEGs.
+\emph{You never unpack them} --- TFDS reads the nested tars directly.
+Drop both files, as-is, into TFDS's manual-download directory and let the
+standard builder do the rest:
+
+\begin{verbatim}
+# place the two tarballs (no extraction):
+#   ~/tensorflow_datasets/downloads/manual/ILSVRC2012_img_train.tar
+#   ~/tensorflow_datasets/downloads/manual/ILSVRC2012_img_val.tar
+python -c "import tensorflow_datasets as tfds; \
+           tfds.builder('imagenet2012').download_and_prepare()"
+\end{verbatim}
+
+\noindent That validates, shuffles, and reshards into version
+\textbf{5.1.0} under
+\texttt{\textasciitilde/tensorflow\_datasets/imagenet2012/5.1.0/}:
+1{,}281{,}167 training images across 1024 tfrecord shards (147.90\,GB)
+and 50{,}000 validation images across 64 shards (6.74\,GB) --- the exact
+layout every ImageNet trainer in this book consumes. Budget disk
+accordingly: the raw tarballs ($\sim$144\,GB) plus the 5.1.0 output
+($\sim$155\,GB) plus TFDS's intermediate extraction mean you want roughly
+\textbf{500\,GB of free space} to prepare it in one pass. From there the
+JAX bridge does no image-loading of its own: it calls
+\texttt{tfds.load('imagenet2012', split=\ldots, data\_dir=\ldots)} and
+streams through \texttt{tfds.as\_numpy}, so TFDS's \texttt{tf.data}
+pipeline --- parallel shard reads, JPEG decode, prefetch, all engineered
+to scale --- carries the loading, and we inherit that performance work
+for free.
+
 \medskip\noindent\textbf{Demo datasets.} The \texttt{demos/} trainers step past image classification into the
 three other task families in the book --- detection, segmentation, and
 language --- and each pulls a dataset of its own. \textbf{Oxford-IIIT
