@@ -5047,15 +5047,20 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$16.8 min & 90 & $\sim$25 hr & --- & --- \\
 4$\times$ 4060 Ti (CUDA)  & bf16 & $\sim$10.5 min & 90 & $\sim$16 hr & $\mathbf{72.02\%}$ & $\mathbf{90.62\%}$ \\
 1$\times$ A100 (CUDA)     & bf16 & --- & 90 & $\sim$9 hr & --- & --- \\
-1$\times$ MI300X (ROCm)   & bf16 & --- & 90 & $\sim$6 hr & --- & --- \\
+1$\times$ MI300X (ROCm)   & bf16 & $\sim$3.5 min & 90 & $\sim$5.4 hr & $\mathbf{73.95\%}$\textsuperscript{\dag} & $\mathbf{91.76\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent ResNet-34 / ImageNet-1k: per-epoch throughput and final
 validation for the completed runs (ROCm at 30 epochs, CUDA at the full
-90); the A100 and MI300X rows are wall-clock estimates, with per-epoch
-and accuracies pending.
+90; the MI300X row is a single-GPU batch-1024 run on gfx942). The A100
+row is a wall-clock estimate, accuracies pending.
+\textsuperscript{\dag}\,MI300X used batch 1024 / lr 0.4 (linear
+large-batch scaling) vs batch 256 / lr 0.1 for the other rows, so its
+$+1.9$-point top-1 over the 4060\,Ti bf16 row is the large-batch scaling,
+not the hardware; a matched batch-256 run for an apples-to-apples
+hardware comparison is still to do.
 
 The bf16 run finished all 90 epochs in about 16 wall-clock hours
 and reached $\mathbf{72.02\%}$ top-1 / $\mathbf{90.62\%}$ top-5 on
