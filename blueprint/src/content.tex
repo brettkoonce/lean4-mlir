@@ -304,129 +304,24 @@ each decomposed into the framework's primitives. Organized by the
 question you're asking: ``how do I do detection?'', ``how do I do
 generation?'', etc.
 
-\textbf{Appendices.} Toolchain setup (A) and the complete proof framework
-as a reference (B).
+\textbf{Appendices.} Data availability (A), toolchain setup (B), and
+the complete proof framework as a reference (C).
 
 \subsection*{Theorem and definition budget per chapter}
 
-If you're planning how much of the book to read, here's what each
-chapter \emph{proves about gradients}: its VJP correctness theorems
---- the \(\texttt{*\_has\_vjp*\_correct}\) results, each asserting
-\(\texttt{backward}\,x\,dy\,i = \sum_j \pdiv f\,x\,i\,j \cdot dy_j\)
-(a layer's backward equals the \(\pdiv\)-Jacobian contracted against
-the cotangent). Across Chapters 1--9 there are \textbf{40 contracts}
---- one citable per layer, operator, and whole-network architecture,
-through the full-architecture closes of all five Part~I networks ---
-plus \textbf{8 witnesses}: concrete end-to-end instances (a specific
-net at specific weights), \(\texttt{\_correct}\) theorems too but
-sanity checks rather than citable contracts, so the table below keeps
-them in their own column. The foundation calculus rules,
-differentiability lemmas, and concrete forward definitions
-that support them are additional machinery, not counted here. Even
-Chapter~1's toolkit is used straight away by a proven model --- the
-MNIST linear classifier --- so no chapter is pure scaffolding.
-
-\textbf{Chapter 1 (MNIST: linear classifier)} does the structural heavy lifting:
-11 theorems that compose Mathlib's \(\fderiv\) into the VJP
-toolkit every later chapter will reuse --- the chain rule,
-additive and multiplicative fan-in, identity, reindexing, finite-sum.
-Plus \(\pdiv\) itself as a definition over \(\fderiv\). The
-matrix-level extensions (matmul, transpose, scalar-scale, row-wise
-lifting, 3D chain rule) live at the start of Chapter~\ref{chap:attention},
-where attention first uses them. The chapter then puts the kit to work
-in its first proven model: \textbf{1 VJP contract},
-\(\texttt{mnistLinear\_has\_vjp\_correct}\) --- the whole model, a
-single dense layer --- with the dense weight- and bias-gradient
-theorems and the softmax cross-entropy gradient certified alongside
-(parameter-gradient contracts, counted with the supporting machinery).
-It is the degenerate-simplest whole-model VJP, and the ops it needs are
-introduced right here, where the demo lives.
-
-\textbf{Chapter 2 (MNIST: 1D)} adds depth and nonlinearity on top of
-Chapter~1's dense layer --- \textbf{2 VJP contracts} plus the chapter's
-concrete end-to-end witness. The guarded ReLU
-Jacobian \(\pdiv\_\texttt{relu}\) is proved via local-diagonal-CLM
-transport; \(\texttt{relu\_has\_vjp}\) and \(\texttt{mlp\_has\_vjp}\)
-are \texttt{noncomputable def}s over the canonical pdiv-derived witness
-(\texttt{HasVJP.correct} by \texttt{rfl}), with the smooth-point
-\(\texttt{\_at}\) variants carrying the real chain-rule proof.
-
-\textbf{Chapter 3 (MNIST: 2D)} contributes 3 VJP contracts (plus four
-concrete witnesses at increasing structure).
-\(\texttt{conv2d}\) and \(\texttt{maxPool2}\) are concrete forward
-defs; the conv2d input-side VJP, maxPool2's VJP --- plus its
-smooth-point \(\texttt{\_at}\) variant, whose \texttt{correct} field is
-a real proof rather than \texttt{rfl} --- and the whole-net MNIST-CNN
-contract are proved from foundation, with the conv weight- and
-bias-gradient theorems alongside.
-
-\textbf{Chapter 4 (CIFAR: BN)} contributes 4 VJP contracts (plus a concrete witness): the
-per-channel BatchNorm VJP in both layouts (flat and NCHW tensor) and
-the CIFAR whole-nets with and without BN --- all assembled from the
-\(\texttt{bn\_input\_grad}\) chain of supporting Jacobians (the
-inverse-stddev broadcast Jacobian and its smoothness lemma under
-\(\varepsilon > 0\), plus the BN affine and centering Jacobians, all
-proved from foundation).
-
-\textbf{Chapter 5 (ResNet-34)} contributes 9 VJP contracts (plus a concrete witness) and
-no new calculus: the residual additive-fan-in VJP (plus its
-projected variant), the global-average-pool VJP, the stride-2
-convolution's input- and weight-VJPs (= decimation \(\circ\) the
-stride-1 conv, the downsample op), the strided block and stage folds,
-and \(\texttt{cnn\_has\_vjp\_at}\), the \emph{whole-network} fold
-composing stem, residual blocks, pool, and dense head end to end.
-The scaling claim in miniature: an entire architecture's backward,
-built from Chapter~1's kit.
-
-\textbf{Chapter 6 (MobileNetV2)} contributes 3 VJP contracts (plus a concrete witness): the
-depthwise input VJP at stride 1 (same recipe as Ch~3 with one fewer
-summation level --- no cross-channel mixing) and stride 2, and the
-whole-network \(\texttt{mobilenetv2\_has\_vjp\_at}\) over
-inverted-residual blocks, which introduces the two-sided-kink
-\texttt{relu6} as a new smooth-point activation.
-
-\textbf{Chapter 7 (EfficientNet)} contributes 5 VJP contracts:
-\texttt{swish}/SiLU (the MBConv activation), the squeeze-and-excitation
-block (\(\texttt{seBlock\_has\_vjp}\) --- global-avg-pool plus two
-1\(\times\)1 convs plus the elementwise product, every piece already
-proved elsewhere), the whole-network
-\(\texttt{efficientnet\_has\_vjp\_at}\) over MBConv blocks with a
-full-spatial SE gate plus its unconditional global sibling, and ---
-at full architecture --- \(\texttt{efficientnetForwardB\_full}\): all
-16 MBConv blocks, batched, under true batch-norm.
-
-\textbf{Chapter 8 (ConvNeXt)} contributes 7 VJP contracts: GELU
-(Jacobian via \(\fderiv\) and \texttt{Real.differentiable\_tanh}),
-LayerNorm (reusing the BN proof template), the elementwise
-layer-scale, the whole-network \(\texttt{convnext\_has\_vjp\_at}\)
-plus its unconditional global sibling --- the all-smooth architecture,
-discharged with no kink hypotheses, only \(\varepsilon > 0\)
-positivity --- and, at full architecture,
-\(\texttt{convNextForwardT}\) (all 18 blocks, 4\(\times\)4/s4 patchify
-stem) with its committed-config variant.
-
-\textbf{Chapter 9 (ViT)} contributes 6 VJP contracts (MHSA, the
-transformer block, the depth-2 whole-network in scalar- and vector-LN
-forms, the general-depth \(\texttt{vitForwardKV}\) --- every depth
-\(k\) at once --- and the
-whole-network \(\texttt{vit\_full\_has\_vjp\_correct}\) wrapper;
-the softmax cross-entropy gradient now lives in Chapter~1 with the
-linear classifier), resting on the
-largest \emph{supporting}-theorem budget in the book and the only
-chapter that needs the matrix-level extensions of Chapter~1's
-foundation rules. The chapter opens with
-\textbf{16 matrix-machinery theorems} (matmul Jacobians and VJPs in
-both factor positions, transpose, scalar-scale, row-wise lifting,
-matrix and 3D chain rules) before any attention proof appears.
-Then the 20 attention theorems: Phase 3 proved multi-head SDPA via
-column-stacking (lifting the single-head SDPA backward over the
-head axis using \(\pdivMat\_\texttt{colIndep}\) +
-\(\texttt{colSlabwise\_has\_vjp\_mat}\)). Phase 6 closed patch
-embedding by de-opaquing the forward (Phase 6a) and proving the
-input VJP via spatial rearrangement (Phase 6b). Softmax Jacobian,
-row-wise softmax smoothness, and seven transformer-level chains
-(sublayers, block, tower, ViT body) all factor through the matrix
-machinery this chapter just assembled.
+If you're planning how much of the book to read, here's the size of what
+each chapter \emph{proves about gradients}. Each proves a handful of
+\emph{VJP contracts} --- machine-checked theorems that a layer's backward
+function computes the right gradient (formally
+\(\texttt{backward}\,x\,dy\,i = \sum_j \pdiv f\,x\,i\,j \cdot dy_j\): the
+backward equals that layer's \(\pdiv\)-Jacobian contracted against the
+incoming cotangent, which the Foundations chapter builds up from scratch).
+Across Chapters~1--9 there are \textbf{40 contracts} --- one per layer,
+operator, and whole-network architecture --- plus \textbf{8 witnesses}:
+concrete end-to-end instances (a specific net at specific weights), kept
+in their own column as sanity checks rather than citable contracts. Even
+Chapter~1's toolkit is used straight away by a proven model, so no chapter
+is pure scaffolding.
 
 \begin{center}
 \small
@@ -449,186 +344,13 @@ Chapter & Contracts & Witnesses & New primitive / result \\
 \end{tabular}
 \end{center}
 
-The shift from earlier drafts: every architecture ends in a
-\emph{whole-network} VJP contract, and for the smooth half the contract
-now holds at \emph{full architecture} ---
-\(\texttt{efficientnetForwardB\_full\_has\_vjp\_correct}\) (all 16 MBConv
-blocks, true batch-norm),
-\(\texttt{convNextForwardT\_has\_vjp\_correct}\) (all 18 blocks; plus the
-committed-config variant), and
-\(\texttt{vitForwardKV\_has\_vjp\_correct}\) (every depth \(k\)). The
-kinked nets keep their whole-network contracts at representative depth
---- \(\texttt{cnn\_has\_vjp\_at\_correct}\),
-\(\texttt{mobilenetv2\_has\_vjp\_at\_correct}\); the ReLU/ReLU6 kinks
-force at-a-point statements --- while their \emph{full} architectures are
-closed on the forward side (graph faithfulness at all 34 layers, all 17
-bottlenecks) with parameter gradients certified family-by-family through
-the chain closes. Those per-family certificates are in turn composed end to
-end: every committed training step is \emph{tied} --- each parameter update
-proved to consume the cotangent its own backward pass delivers, threaded
-through the real forward --- in one whole-network theorem per net
-(\(\texttt{<net>\_net\_tied\_certified}\), \S~\ref{sec:verified_codegen}), across
-all twelve verified trainers. (The underlying forward and witness \texttt{def}s, the
-foundation \(\pdiv\) rules, and the differentiability lemmas are the
-supporting machinery these 48 contracts rest on; they are not counted in
-the table.)
-
-One observation worth pulling out: \textbf{every chapter is pure
-composition.} Every primitive in every chapter either inherits
-from Mathlib's \(\fderiv\) or composes over previously-proved
-theorems. The two non-smooth shortcuts that earlier drafts axiomatized
-(\(\texttt{relu\_has\_vjp}\) and \(\texttt{maxPool2\_has\_vjp3}\))
-are now \texttt{noncomputable def}s over the canonical
-pdiv-derived witness; the codegen substitutes the standard
-subgradient/argmax convention at non-smooth points. The trust
-kernel for the entire backward pass is just Lean core, Mathlib,
-and the codegen contract.
-
-\begin{figure}[ht]
-\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-  >={Stealth[length=2.5mm]},
-  every node/.style={font=\sffamily\footnotesize},
-  group/.style={
-    draw, rounded corners=2pt, fill=blue!6,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=1cm
-  },
-  primitive/.style={
-    draw=orange!60!black, rounded corners=2pt, fill=orange!10,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.95cm
-  },
-  composed/.style={
-    draw=purple!60!black, rounded corners=2pt, fill=purple!8,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm
-  },
-  final/.style={
-    draw=green!50!black, rounded corners=2pt, fill=green!12,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm,
-    very thick
-  },
-  arr/.style={->, thick, gray!65, shorten >=1pt},
-  shared/.style={->, thick, gray!50, dashed, shorten >=1pt}
-]
-
-% Top row: Ch 1
-\node[group] (found) at (-1.5, 0) {
-  \textbf{Ch~1: foundation calculus}\\
-  \texttt{pdiv\_comp/add/mul/id} \\
-  \texttt{pdiv\_finset\_sum}
-};
-\node[group] (matkit) at (8.0, 0) {
-  \textbf{Ch~9: matrix kit} \\
-  \texttt{pdivMat\_comp} \\
-  \texttt{matmul\_left\_const} \\
-  \texttt{rowwise\_has\_vjp\_mat}
-};
-
-% Left pillar: ResNet-34
-\node[primitive] (mlp) at (-9.0, -2.3) {
-  \textbf{Ch~2: MLP} \\
-  \texttt{dense\_weight\_grad\_correct} \\
-  \texttt{relu\_has\_vjp\_correct}
-};
-\node[primitive] (cnn) at (-9.0, -3.7) {
-  \textbf{Ch~3: CNN} \\
-  \texttt{conv2d\_has\_vjp3} \\
-  \texttt{maxPool2\_has\_vjp3\_correct}
-};
-\node[primitive] (bn)  at (-9.0, -5.1) {
-  \textbf{Ch~4: BatchNorm} \\
-  \texttt{pdiv\_bnNormalize} \\
-  \texttt{pdiv\_bnAffine}
-};
-\node[primitive] (res) at (-9.0, -6.5) {
-  \textbf{Ch~5: residual skip} \\
-  \texttt{residual\_has\_vjp\_correct}
-};
-\node[final] (r34) at (-9.0, -8.0) {
-  \textbf{Full ResNet-34} \\
-  (NetSpec composition)
-};
-
-% Middle pillar: EfficientNet (shifted south to clear shared-arrow lines)
-\node[primitive] (dw) at (-2.5, -4.8) {
-  \textbf{Ch~6: depthwise conv} \\
-  \texttt{depthwise\_has\_vjp3\_correct}
-};
-\node[primitive] (se) at (-2.5, -6.5) {
-  \textbf{Ch~7: SE block} \\
-  \texttt{seBlock\_has\_vjp\_correct}
-};
-\node[final] (enet) at (-2.5, -9.4) {
-  \textbf{Full EfficientNet-B0} \\
-  (NetSpec composition)
-};
-
-% Right pillar: ViT
-\node[primitive] (lngelu) at (3.5, -2.3) {
-  \textbf{Ch~8: LayerNorm \& GELU} \\
-  \texttt{layerNorm\_has\_vjp\_correct} \\
-  \texttt{gelu\_has\_vjp\_correct}
-};
-\node[primitive] (attn) at (8.0, -2.3) {
-  \textbf{Ch~9: attention primitives} \\
-  \texttt{pdiv\_softmax} \\
-  \texttt{sdpa\_back\_\{Q,K,V\}\_correct}
-};
-\node[composed] (mhsa) at (8.0, -4.5) {
-  \textbf{Ch~9: multi-head attention} \\
-  \texttt{mhsa\_has\_vjp\_mat\_correct}
-};
-\node[composed] (block) at (5.75, -6.4) {
-  \textbf{Ch~9: transformer block} \\
-  \texttt{transformerBlock\_has\_vjp\_mat\_correct}
-};
-\node[final] (body) at (5.75, -8.0) {
-  \textbf{Ch~9: ViT body} \\
-  \texttt{vit\_body\_has\_vjp\_mat}
-};
-\node[final] (vit) at (5.75, -9.4) {
-  \textbf{Full ViT} \\
-  \texttt{vit\_full\_has\_vjp}
-};
-
-% Foundation -> R34 primitives. Arrow to Ch 3 routes via cnn.east so it
-% sweeps below Ch 2 instead of through it.
-\draw[arr] (found.south west) to[out=-170, in=85] (mlp.north east);
-\draw[arr] (found.south west) to[out=-150, in=20] (cnn.east);
-\draw[arr] (found.south west) to[out=-130, in=20] (bn.east);
-\draw[arr] (found.south west) to[out=-115, in=20] (res.east);
-% Foundation -> ENet primitives
-\draw[arr] (found.south) to[out=-100, in=70] (dw.north east);
-\draw[arr] (found.south) to[out=-80, in=60] (se.north east);
-% Foundation -> ViT primitives
-\draw[arr] (found.south east) to[out=-30, in=180] (lngelu.west);
-\draw[arr] (found.south east) to[out=-20, in=170] (attn.north west);
-% Matrix kit -> ViT side
-\draw[arr] (matkit.south) to[out=-100, in=40] (attn.north);
-\draw[arr] (matkit.south east) to[out=-60, in=20] (mhsa.east);
-
-% R34 down-flow
-\draw[arr] (mlp) -- (cnn);
-\draw[arr] (cnn) -- (bn);
-\draw[arr] (bn)  -- (res);
-\draw[arr] (res) -- (r34);
-
-% ENet path
-\draw[arr] (dw) -- (se);
-\draw[arr] (se) -- (enet);
-\draw[shared] (cnn.east) to[out=-10, in=130] (enet.north west);
-\draw[shared] (bn.east)  to[out=-10, in=140] (enet.west);
-
-% ViT down-flow
-\draw[arr] (attn) -- (mhsa);
-\draw[arr] (mhsa.south) to[out=-100, in=20] (block.north east);
-\draw[arr] (lngelu.south) to[out=-90, in=160] (block.north west);
-\draw[arr] (block) -- (body);
-\draw[arr] (body)  -- (vit);
-\end{tikzpicture}}
-\caption{Three architecture spines, all the way down to Ch~1 foundation. ResNet-34 (left) needs only the foundation calculus and Chs~2--5 primitives. EfficientNet-B0 (middle) adds Ch~6's depthwise conv and Ch~7's SE block; dashed arrows mark Chs~3 (CNN) and 4 (BN), shared with R34. ViT (right) is the only path that needs the matrix kit; its longer chain runs through MHSA and the transformer block before bundling into the full ViT VJP. Every node is a Lean theorem.}
-\label{fig:spines}
-\end{figure}
+That's the ladder at a glance. The per-chapter detail --- what each
+contract actually is, how the smooth nets close at \emph{full}
+architecture, and a dependency-spine figure tracing every network back to
+the Chapter~1 calculus --- is rear-loaded into
+Appendix~\ref{app:verification} (\S\ref{sec:chapter_census}). It reads
+most naturally once you've been through the Foundations chapter, so it's
+safe to skip on a first pass.
 
 \subsection*{Roadmap: skip to your target architecture}
 
@@ -745,10 +467,6 @@ Practical reading style: work through Chapter~\ref{chap:tensor}
 slowly, then skim the rest at the pace of ``forward pass I know
 \(\to\) new \texttt{*\_has\_vjp} theorem \(\to\) see what theorems it
 cites \(\to\) move on.'' The dependency DAG is your friend.
-
-\bigskip
-\noindent I have endeavored to read as many of your papers as
-possible. Part 2 is deliberately patterned on your practice.
 
 \chapter*{Foundations}
 \addcontentsline{toc}{chapter}{Foundations}
@@ -12352,6 +12070,297 @@ guarantee. Verified code generation straddles two of these: its bridge is
 structural, its oracle empirical. The \texttt{float32} bridge straddles
 the other pair: its budgets are deductive, its interface constants
 (\(u\), \(e_{\exp}\), \(\delta\)) empirical.
+
+\section{What each chapter proves}
+\label{sec:chapter_census}
+
+This expands the contract count from ``How this book is organized'' into
+the per-chapter detail. Chapter by chapter, here is what each network
+contributes --- the \textbf{40 contracts} and \textbf{8 witnesses}
+summarized in that chapter's table, now spelled out.
+
+\textbf{Chapter 1 (MNIST: linear classifier)} does the structural heavy lifting:
+11 theorems that compose Mathlib's \(\fderiv\) into the VJP
+toolkit every later chapter will reuse --- the chain rule,
+additive and multiplicative fan-in, identity, reindexing, finite-sum.
+Plus \(\pdiv\) itself as a definition over \(\fderiv\). The
+matrix-level extensions (matmul, transpose, scalar-scale, row-wise
+lifting, 3D chain rule) live at the start of Chapter~\ref{chap:attention},
+where attention first uses them. The chapter then puts the kit to work
+in its first proven model: \textbf{1 VJP contract},
+\(\texttt{mnistLinear\_has\_vjp\_correct}\) --- the whole model, a
+single dense layer --- with the dense weight- and bias-gradient
+theorems and the softmax cross-entropy gradient certified alongside
+(parameter-gradient contracts, counted with the supporting machinery).
+It is the degenerate-simplest whole-model VJP, and the ops it needs are
+introduced right here, where the demo lives.
+
+\textbf{Chapter 2 (MNIST: 1D)} adds depth and nonlinearity on top of
+Chapter~1's dense layer --- \textbf{2 VJP contracts} plus the chapter's
+concrete end-to-end witness. The guarded ReLU
+Jacobian \(\pdiv\_\texttt{relu}\) is proved via local-diagonal-CLM
+transport; \(\texttt{relu\_has\_vjp}\) and \(\texttt{mlp\_has\_vjp}\)
+are \texttt{noncomputable def}s over the canonical pdiv-derived witness
+(\texttt{HasVJP.correct} by \texttt{rfl}), with the smooth-point
+\(\texttt{\_at}\) variants carrying the real chain-rule proof.
+
+\textbf{Chapter 3 (MNIST: 2D)} contributes 3 VJP contracts (plus four
+concrete witnesses at increasing structure).
+\(\texttt{conv2d}\) and \(\texttt{maxPool2}\) are concrete forward
+defs; the conv2d input-side VJP, maxPool2's VJP --- plus its
+smooth-point \(\texttt{\_at}\) variant, whose \texttt{correct} field is
+a real proof rather than \texttt{rfl} --- and the whole-net MNIST-CNN
+contract are proved from foundation, with the conv weight- and
+bias-gradient theorems alongside.
+
+\textbf{Chapter 4 (CIFAR: BN)} contributes 4 VJP contracts (plus a concrete witness): the
+per-channel BatchNorm VJP in both layouts (flat and NCHW tensor) and
+the CIFAR whole-nets with and without BN --- all assembled from the
+\(\texttt{bn\_input\_grad}\) chain of supporting Jacobians (the
+inverse-stddev broadcast Jacobian and its smoothness lemma under
+\(\varepsilon > 0\), plus the BN affine and centering Jacobians, all
+proved from foundation).
+
+\textbf{Chapter 5 (ResNet-34)} contributes 9 VJP contracts (plus a concrete witness) and
+no new calculus: the residual additive-fan-in VJP (plus its
+projected variant), the global-average-pool VJP, the stride-2
+convolution's input- and weight-VJPs (= decimation \(\circ\) the
+stride-1 conv, the downsample op), the strided block and stage folds,
+and \(\texttt{cnn\_has\_vjp\_at}\), the \emph{whole-network} fold
+composing stem, residual blocks, pool, and dense head end to end.
+The scaling claim in miniature: an entire architecture's backward,
+built from Chapter~1's kit.
+
+\textbf{Chapter 6 (MobileNetV2)} contributes 3 VJP contracts (plus a concrete witness): the
+depthwise input VJP at stride 1 (same recipe as Ch~3 with one fewer
+summation level --- no cross-channel mixing) and stride 2, and the
+whole-network \(\texttt{mobilenetv2\_has\_vjp\_at}\) over
+inverted-residual blocks, which introduces the two-sided-kink
+\texttt{relu6} as a new smooth-point activation.
+
+\textbf{Chapter 7 (EfficientNet)} contributes 5 VJP contracts:
+\texttt{swish}/SiLU (the MBConv activation), the squeeze-and-excitation
+block (\(\texttt{seBlock\_has\_vjp}\) --- global-avg-pool plus two
+1\(\times\)1 convs plus the elementwise product, every piece already
+proved elsewhere), the whole-network
+\(\texttt{efficientnet\_has\_vjp\_at}\) over MBConv blocks with a
+full-spatial SE gate plus its unconditional global sibling, and ---
+at full architecture --- \(\texttt{efficientnetForwardB\_full}\): all
+16 MBConv blocks, batched, under true batch-norm.
+
+\textbf{Chapter 8 (ConvNeXt)} contributes 7 VJP contracts: GELU
+(Jacobian via \(\fderiv\) and \texttt{Real.differentiable\_tanh}),
+LayerNorm (reusing the BN proof template), the elementwise
+layer-scale, the whole-network \(\texttt{convnext\_has\_vjp\_at}\)
+plus its unconditional global sibling --- the all-smooth architecture,
+discharged with no kink hypotheses, only \(\varepsilon > 0\)
+positivity --- and, at full architecture,
+\(\texttt{convNextForwardT}\) (all 18 blocks, 4\(\times\)4/s4 patchify
+stem) with its committed-config variant.
+
+\textbf{Chapter 9 (ViT)} contributes 6 VJP contracts (MHSA, the
+transformer block, the depth-2 whole-network in scalar- and vector-LN
+forms, the general-depth \(\texttt{vitForwardKV}\) --- every depth
+\(k\) at once --- and the
+whole-network \(\texttt{vit\_full\_has\_vjp\_correct}\) wrapper;
+the softmax cross-entropy gradient now lives in Chapter~1 with the
+linear classifier), resting on the
+largest \emph{supporting}-theorem budget in the book and the only
+chapter that needs the matrix-level extensions of Chapter~1's
+foundation rules. The chapter opens with
+\textbf{16 matrix-machinery theorems} (matmul Jacobians and VJPs in
+both factor positions, transpose, scalar-scale, row-wise lifting,
+matrix and 3D chain rules) before any attention proof appears.
+Then the 20 attention theorems: Phase 3 proved multi-head SDPA via
+column-stacking (lifting the single-head SDPA backward over the
+head axis using \(\pdivMat\_\texttt{colIndep}\) +
+\(\texttt{colSlabwise\_has\_vjp\_mat}\)). Phase 6 closed patch
+embedding by de-opaquing the forward (Phase 6a) and proving the
+input VJP via spatial rearrangement (Phase 6b). Softmax Jacobian,
+row-wise softmax smoothness, and seven transformer-level chains
+(sublayers, block, tower, ViT body) all factor through the matrix
+machinery this chapter just assembled.
+
+The shift from earlier drafts: every architecture ends in a
+\emph{whole-network} VJP contract, and for the smooth half the contract
+now holds at \emph{full architecture} ---
+\(\texttt{efficientnetForwardB\_full\_has\_vjp\_correct}\) (all 16 MBConv
+blocks, true batch-norm),
+\(\texttt{convNextForwardT\_has\_vjp\_correct}\) (all 18 blocks; plus the
+committed-config variant), and
+\(\texttt{vitForwardKV\_has\_vjp\_correct}\) (every depth \(k\)). The
+kinked nets keep their whole-network contracts at representative depth
+--- \(\texttt{cnn\_has\_vjp\_at\_correct}\),
+\(\texttt{mobilenetv2\_has\_vjp\_at\_correct}\); the ReLU/ReLU6 kinks
+force at-a-point statements --- while their \emph{full} architectures are
+closed on the forward side (graph faithfulness at all 34 layers, all 17
+bottlenecks) with parameter gradients certified family-by-family through
+the chain closes. Those per-family certificates are in turn composed end to
+end: every committed training step is \emph{tied} --- each parameter update
+proved to consume the cotangent its own backward pass delivers, threaded
+through the real forward --- in one whole-network theorem per net
+(\(\texttt{<net>\_net\_tied\_certified}\), \S~\ref{sec:verified_codegen}), across
+all twelve verified trainers. (The underlying forward and witness \texttt{def}s, the
+foundation \(\pdiv\) rules, and the differentiability lemmas are the
+supporting machinery these 48 contracts rest on; they are not counted in
+the table.)
+
+One observation worth pulling out: \textbf{every chapter is pure
+composition.} Every primitive in every chapter either inherits
+from Mathlib's \(\fderiv\) or composes over previously-proved
+theorems. The two non-smooth shortcuts that earlier drafts axiomatized
+(\(\texttt{relu\_has\_vjp}\) and \(\texttt{maxPool2\_has\_vjp3}\))
+are now \texttt{noncomputable def}s over the canonical
+pdiv-derived witness; the codegen substitutes the standard
+subgradient/argmax convention at non-smooth points. The trust
+kernel for the entire backward pass is just Lean core, Mathlib,
+and the codegen contract.
+
+\begin{figure}[ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  >={Stealth[length=2.5mm]},
+  every node/.style={font=\sffamily\footnotesize},
+  group/.style={
+    draw, rounded corners=2pt, fill=blue!6,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=1cm
+  },
+  primitive/.style={
+    draw=orange!60!black, rounded corners=2pt, fill=orange!10,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.95cm
+  },
+  composed/.style={
+    draw=purple!60!black, rounded corners=2pt, fill=purple!8,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm
+  },
+  final/.style={
+    draw=green!50!black, rounded corners=2pt, fill=green!12,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm,
+    very thick
+  },
+  arr/.style={->, thick, gray!65, shorten >=1pt},
+  shared/.style={->, thick, gray!50, dashed, shorten >=1pt}
+]
+
+% Top row: Ch 1
+\node[group] (found) at (-1.5, 0) {
+  \textbf{Ch~1: foundation calculus}\\
+  \texttt{pdiv\_comp/add/mul/id} \\
+  \texttt{pdiv\_finset\_sum}
+};
+\node[group] (matkit) at (8.0, 0) {
+  \textbf{Ch~9: matrix kit} \\
+  \texttt{pdivMat\_comp} \\
+  \texttt{matmul\_left\_const} \\
+  \texttt{rowwise\_has\_vjp\_mat}
+};
+
+% Left pillar: ResNet-34
+\node[primitive] (mlp) at (-9.0, -2.3) {
+  \textbf{Ch~2: MLP} \\
+  \texttt{dense\_weight\_grad\_correct} \\
+  \texttt{relu\_has\_vjp\_correct}
+};
+\node[primitive] (cnn) at (-9.0, -3.7) {
+  \textbf{Ch~3: CNN} \\
+  \texttt{conv2d\_has\_vjp3} \\
+  \texttt{maxPool2\_has\_vjp3\_correct}
+};
+\node[primitive] (bn)  at (-9.0, -5.1) {
+  \textbf{Ch~4: BatchNorm} \\
+  \texttt{pdiv\_bnNormalize} \\
+  \texttt{pdiv\_bnAffine}
+};
+\node[primitive] (res) at (-9.0, -6.5) {
+  \textbf{Ch~5: residual skip} \\
+  \texttt{residual\_has\_vjp\_correct}
+};
+\node[final] (r34) at (-9.0, -8.0) {
+  \textbf{Full ResNet-34} \\
+  (NetSpec composition)
+};
+
+% Middle pillar: EfficientNet (shifted south to clear shared-arrow lines)
+\node[primitive] (dw) at (-2.5, -4.8) {
+  \textbf{Ch~6: depthwise conv} \\
+  \texttt{depthwise\_has\_vjp3\_correct}
+};
+\node[primitive] (se) at (-2.5, -6.5) {
+  \textbf{Ch~7: SE block} \\
+  \texttt{seBlock\_has\_vjp\_correct}
+};
+\node[final] (enet) at (-2.5, -9.4) {
+  \textbf{Full EfficientNet-B0} \\
+  (NetSpec composition)
+};
+
+% Right pillar: ViT
+\node[primitive] (lngelu) at (3.5, -2.3) {
+  \textbf{Ch~8: LayerNorm \& GELU} \\
+  \texttt{layerNorm\_has\_vjp\_correct} \\
+  \texttt{gelu\_has\_vjp\_correct}
+};
+\node[primitive] (attn) at (8.0, -2.3) {
+  \textbf{Ch~9: attention primitives} \\
+  \texttt{pdiv\_softmax} \\
+  \texttt{sdpa\_back\_\{Q,K,V\}\_correct}
+};
+\node[composed] (mhsa) at (8.0, -4.5) {
+  \textbf{Ch~9: multi-head attention} \\
+  \texttt{mhsa\_has\_vjp\_mat\_correct}
+};
+\node[composed] (block) at (5.75, -6.4) {
+  \textbf{Ch~9: transformer block} \\
+  \texttt{transformerBlock\_has\_vjp\_mat\_correct}
+};
+\node[final] (body) at (5.75, -8.0) {
+  \textbf{Ch~9: ViT body} \\
+  \texttt{vit\_body\_has\_vjp\_mat}
+};
+\node[final] (vit) at (5.75, -9.4) {
+  \textbf{Full ViT} \\
+  \texttt{vit\_full\_has\_vjp}
+};
+
+% Foundation -> R34 primitives. Arrow to Ch 3 routes via cnn.east so it
+% sweeps below Ch 2 instead of through it.
+\draw[arr] (found.south west) to[out=-170, in=85] (mlp.north east);
+\draw[arr] (found.south west) to[out=-150, in=20] (cnn.east);
+\draw[arr] (found.south west) to[out=-130, in=20] (bn.east);
+\draw[arr] (found.south west) to[out=-115, in=20] (res.east);
+% Foundation -> ENet primitives
+\draw[arr] (found.south) to[out=-100, in=70] (dw.north east);
+\draw[arr] (found.south) to[out=-80, in=60] (se.north east);
+% Foundation -> ViT primitives
+\draw[arr] (found.south east) to[out=-30, in=180] (lngelu.west);
+\draw[arr] (found.south east) to[out=-20, in=170] (attn.north west);
+% Matrix kit -> ViT side
+\draw[arr] (matkit.south) to[out=-100, in=40] (attn.north);
+\draw[arr] (matkit.south east) to[out=-60, in=20] (mhsa.east);
+
+% R34 down-flow
+\draw[arr] (mlp) -- (cnn);
+\draw[arr] (cnn) -- (bn);
+\draw[arr] (bn)  -- (res);
+\draw[arr] (res) -- (r34);
+
+% ENet path
+\draw[arr] (dw) -- (se);
+\draw[arr] (se) -- (enet);
+\draw[shared] (cnn.east) to[out=-10, in=130] (enet.north west);
+\draw[shared] (bn.east)  to[out=-10, in=140] (enet.west);
+
+% ViT down-flow
+\draw[arr] (attn) -- (mhsa);
+\draw[arr] (mhsa.south) to[out=-100, in=20] (block.north east);
+\draw[arr] (lngelu.south) to[out=-90, in=160] (block.north west);
+\draw[arr] (block) -- (body);
+\draw[arr] (body)  -- (vit);
+\end{tikzpicture}}
+\caption{Three architecture spines, all the way down to Ch~1 foundation. ResNet-34 (left) needs only the foundation calculus and Chs~2--5 primitives. EfficientNet-B0 (middle) adds Ch~6's depthwise conv and Ch~7's SE block; dashed arrows mark Chs~3 (CNN) and 4 (BN), shared with R34. ViT (right) is the only path that needs the matrix kit; its longer chain runs through MHSA and the transformer block before bundling into the full ViT VJP. Every node is a Lean theorem.}
+\label{fig:spines}
+\end{figure}
 
 \chapter*{Acknowledgments}
 \addcontentsline{toc}{chapter}{Acknowledgments}
