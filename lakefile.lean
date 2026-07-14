@@ -20,7 +20,7 @@ require «doc-gen4» from git
   "https://github.com/leanprover/doc-gen4" @ "main"
 
 require mathlib from git
-  "https://github.com/leanprover-community/mathlib4" @ "v4.31.0"
+  "https://github.com/leanprover-community/mathlib4" @ "v4.32.0"
 
 -- The everything-root: codegen + IREE FFI + trainers' shared modules +
 -- the proof suite, all pulled in transitively via `LeanMlir.lean`.

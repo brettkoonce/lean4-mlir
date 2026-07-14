@@ -41,7 +41,7 @@ lemma strictMono_cdf_gaussianReal (μ : ℝ) {v : ℝ≥0} (hv : v ≠ 0) :
 /-- The cdf of a real Gaussian measure with nonzero variance is continuous. -/
 lemma continuous_cdf_gaussianReal (μ : ℝ) {v : ℝ≥0} (hv : v ≠ 0) :
     Continuous (cdf (gaussianReal μ v)) :=
-  haveI := noAtoms_gaussianReal (μ := μ) hv
+  haveI := nullSingletonClass_gaussianReal (μ := μ) hv
   continuous_cdf _
 
 /-- The cdf of a real Gaussian measure with nonzero variance is everywhere positive. -/
@@ -67,7 +67,7 @@ invariant under negation, so the mass of `Iic (-x)` is the mass of `Ici x`, whic
 is the mass of the complement of `Iic x`. -/
 lemma cdf_gaussianReal_neg {v : ℝ≥0} (hv : v ≠ 0) (x : ℝ) :
     cdf (gaussianReal 0 v) (-x) = 1 - cdf (gaussianReal 0 v) x := by
-  haveI : NoAtoms (gaussianReal 0 v) := noAtoms_gaussianReal hv
+  haveI : NullSingletonClass (gaussianReal 0 v) := nullSingletonClass_gaussianReal hv
   have hmap : (gaussianReal 0 v).map (fun y => -y) = gaussianReal 0 v := by
     simpa using gaussianReal_map_neg (μ := 0) (v := v)
   have hpre : (fun y : ℝ => -y) ⁻¹' Iic (-x) = Ici x := by ext y; simp

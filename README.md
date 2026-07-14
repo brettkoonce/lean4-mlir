@@ -18,7 +18,7 @@ Companion code for the upcoming book *Verified Deep Learning with Lean 4*
 
 **Current version: `v0.6.1`** — verified training reaches low precision
 (fp8/E4M3 + bf16-mixed), Chapter 4 recast as the MNIST→ResNet bridge,
-toolchain on Lean 4.31.0. Full release history in [CHANGELOG.md](CHANGELOG.md).
+toolchain on Lean 4.32.0. Full release history in [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
 
@@ -640,7 +640,7 @@ VJPs and (for BN) running statistics for eval.
 
 ## Lean version
 
-Tested with Lean 4.31.0 / Lake 5.0.0, IREE built from source against
+Tested with Lean 4.32.0 / Lake 5.0.0, IREE built from source against
 ROCm 7.2.0 / gfx1100.
 
 ## Citing this work

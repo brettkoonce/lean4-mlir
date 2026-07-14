@@ -29,6 +29,11 @@ the canonical net, exists). Those files carry a reduced-model banner pointing he
 namespace Proofs
 namespace MlpCanonical
 
+-- These canonical-dims instantiations are Props stated as `def`s on purpose: their
+-- types are the generic theorems' statements specialized at (784, 512, 512, 10),
+-- inferred rather than restated (`theorem` would force spelling each one out).
+set_option linter.defProp false
+
 /-- Canonical whole-net pointwise VJP: `mlp_has_vjp_at` at (784, 512, 512, 10) —
     the honest conditional witness (both hidden layers off-kink at `x`). -/
 noncomputable def has_vjp_at :=

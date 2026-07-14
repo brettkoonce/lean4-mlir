@@ -91,7 +91,7 @@ lemma stdNormalCDF_strictMono : StrictMono stdNormalCDF := by
 /-- Gaussian symmetry `Φ(−t) = 1 − Φ(t)`: the standard Gaussian is invariant under
     negation, so `P(Iic (−t)) = P(Ici t)`, and (no atoms) the complement gives the rest. -/
 lemma stdNormalCDF_neg (t : ℝ) : stdNormalCDF (-t) = 1 - stdNormalCDF t := by
-  haveI : NoAtoms (gaussianReal 0 1) := noAtoms_gaussianReal one_ne_zero
+  haveI : NullSingletonClass (gaussianReal 0 1) := nullSingletonClass_gaussianReal one_ne_zero
   have hmap : (gaussianReal 0 1).map (fun x => -x) = gaussianReal 0 1 := by
     simpa using gaussianReal_map_neg (μ := 0) (v := 1)
   have hpre : (fun x : ℝ => -x) ⁻¹' Set.Iic (-t) = Set.Ici t := by
@@ -193,7 +193,7 @@ lemma stdNormalQuantile_anti {q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1) :
     monotone-odd stand-in — G2's Neyman–Pearson bound enters through it. -/
 lemma stdNormalCDF_quantile {p : ℝ} (hp : p ∈ Set.Ioo (0:ℝ) 1) :
     stdNormalCDF (stdNormalQuantile p) = p := by
-  haveI : NoAtoms (gaussianReal 0 1) := noAtoms_gaussianReal one_ne_zero
+  haveI : NullSingletonClass (gaussianReal 0 1) := nullSingletonClass_gaussianReal one_ne_zero
   have hAne : Set.Nonempty {t | stdNormalCDF t < p} := stdNormalCDF_exists_lt hp.1
   have hAbdd : BddAbove {t | stdNormalCDF t < p} := stdNormalCDF_sublevel_bddAbove hp.2
   set q := stdNormalQuantile p with hq

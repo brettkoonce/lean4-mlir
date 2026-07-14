@@ -16,12 +16,11 @@ name: Comparator (independent kernel re-check)
 # makes the kernel legible if the sandbox ever fails.
 #
 # Tool pinning: lean4export reads the project's `.olean`s, so its build
-# must stay olean-compatible with the project's Lean (v4.31.0 — bumped from
-# v4.30.0; the pinned LEAN4EXPORT_REF below still builds cleanly at v4.31.0,
-# verified locally). The refs below are upstream HEAD at authoring time; if a
-# future bump breaks the build, pin LEAN4EXPORT_REF/COMPARATOR_REF to the first
-# commit that went green here (or to a commit whose lean-toolchain matches the
-# project's).
+# must stay olean-compatible with the project's Lean (v4.32.0 — bumped from
+# v4.31.0; LEAN4EXPORT_REF below is upstream's `v4.32.0` release tag, which
+# matches the project's lean-toolchain exactly). If a future bump breaks the
+# build, pin LEAN4EXPORT_REF/COMPARATOR_REF to the first commit that went
+# green here (or to a commit whose lean-toolchain matches the project's).
 
 on:
   push:
@@ -43,7 +42,7 @@ jobs:
     # already uses 180 here, which is why it survived the same cold build.
     timeout-minutes: 90
     env:
-      LEAN4EXPORT_REF: cd502a76e05515e7d3e09eaefee1dfd8349ca592
+      LEAN4EXPORT_REF: 4e7915201d3f9f04470d9eae002fa695f7cdc589  # tag v4.32.0
       COMPARATOR_REF:  3afea238d63125383110f8b59acaf11d7788c3e1
       # v0.1.14 is the first release whose CLI accepts comparator's
       # single-dash `-ldd` / `-add-exec` (v0.1.13's urfave/cli rejects them).
@@ -128,7 +127,7 @@ jobs:
           git clone https://github.com/leanprover/lean4export ~/lean4export
           git -C ~/lean4export checkout "$LEAN4EXPORT_REF"
           # lean4export reads the project's .oleans, so it must be built with
-          # the project's exact Lean (v4.31.0) — the `cp lean-toolchain` below
+          # the project's exact Lean (v4.32.0) — the `cp lean-toolchain` below
           # forces that; a mismatched build rejects our headers ("incompatible
           # header").
           cp lean-toolchain ~/lean4export/lean-toolchain

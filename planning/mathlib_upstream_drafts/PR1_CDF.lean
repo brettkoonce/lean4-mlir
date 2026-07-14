@@ -87,7 +87,7 @@ variable (μ : Measure ℝ) [IsProbabilityMeasure μ]
 
 /-- The cdf of a probability measure on `ℝ` without atoms has no jumps: its left limit at every
 point equals its value there. -/
-theorem leftLim_cdf [NoAtoms μ] (x : ℝ) : Function.leftLim (cdf μ) x = cdf μ x := by
+theorem leftLim_cdf [NullSingletonClass μ] (x : ℝ) : Function.leftLim (cdf μ) x = cdf μ x := by
   have hsing : μ {x} = 0 := measure_singleton x
   rw [← measure_cdf μ, StieltjesFunction.measure_singleton] at hsing
   have h1 : cdf μ x - Function.leftLim (cdf μ) x ≤ 0 := ENNReal.ofReal_eq_zero.mp hsing
@@ -96,7 +96,7 @@ theorem leftLim_cdf [NoAtoms μ] (x : ℝ) : Function.leftLim (cdf μ) x = cdf �
 
 /-- The cdf of a probability measure on `ℝ` without atoms is continuous: it is monotone and
 right-continuous, and by `leftLim_cdf` it has no jumps. -/
-theorem continuous_cdf [NoAtoms μ] : Continuous (cdf μ) := by
+theorem continuous_cdf [NullSingletonClass μ] : Continuous (cdf μ) := by
   rw [continuous_iff_continuousAt]
   intro x
   rw [(cdf μ).mono.continuousAt_iff_leftLim_eq_rightLim, leftLim_cdf μ x]
@@ -105,14 +105,14 @@ theorem continuous_cdf [NoAtoms μ] : Continuous (cdf μ) := by
 
 /-- If the cdf of a probability measure on `ℝ` is continuous, the measure has no atoms.
 Converse of `continuous_cdf`. -/
-theorem noAtoms_of_continuous_cdf (h : Continuous (cdf μ)) : NoAtoms μ := by
+theorem nullSingletonClass_of_continuous_cdf (h : Continuous (cdf μ)) : NullSingletonClass μ := by
   refine ⟨fun x => ?_⟩
   have hll : Function.leftLim (cdf μ) x = cdf μ x :=
     (cdf μ).mono.continuousWithinAt_Iio_iff_leftLim_eq.mp h.continuousAt.continuousWithinAt
   rw [← measure_cdf μ, StieltjesFunction.measure_singleton, hll, sub_self, ENNReal.ofReal_zero]
 
 /-- The cdf of a probability measure on `ℝ` is continuous iff the measure has no atoms. -/
-theorem continuous_cdf_iff : Continuous (cdf μ) ↔ NoAtoms μ :=
-  ⟨noAtoms_of_continuous_cdf μ, fun h => haveI := h; continuous_cdf μ⟩
+theorem continuous_cdf_iff : Continuous (cdf μ) ↔ NullSingletonClass μ :=
+  ⟨nullSingletonClass_of_continuous_cdf μ, fun h => haveI := h; continuous_cdf μ⟩
 
 end Continuous
