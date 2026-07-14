@@ -5129,15 +5129,19 @@ For the fastest path through this book, the route is roughly:
   \item The intro chapters \& Ch 1: framework setup (mandatory context).
   \item Ch 2--3: MLP and CNN worked examples --- the simplest cases
     of the framework reaching real architectures.
-  \item Skip Ch~\ref{chap:bn} (BatchNorm). It's structurally the
+  \item Skim Ch~\ref{chap:bn} (BatchNorm). It's structurally the
     hardest chapter and the prose says so up front. The math is
     right (\texttt{pdiv\_bnNormalize}'s three-term cancellation is
     formalized and matches the codegen), but it's not the place to
-    spend time if you're not specifically interested in BN.
+    spend time if you're not specifically interested in BN. Spend
+    some of the time you're saving on running as many MNIST and
+    CIFAR demos as possible.
   \item Read this chapter (Ch~\ref{chap:residual}, ResNet-34).
     Residual blocks are where the chain rule shows it can carry
     composition through arbitrarily deep architectures; the proof
-    reduces to one additive-fan-in lemma you've already seen.
+    reduces to one additive-fan-in lemma you've already seen. Run
+    the ResNet-50 RSB-A3 ImageNet training demo locally and/or in
+    the cloud ($\sim$6--9\,hrs, $\sim$\$15 in compute).
   \item Stop here. Assume Chapters \ref{chap:depthwise}--\ref{chap:attention}
     (MobileNet, EfficientNet, ConvNeXt, ViT) and the Bestiary
     (Ch~\ref{chap:bestiary}) are correct --- they all reuse the
