@@ -755,30 +755,42 @@ possible. Part 2 is deliberately patterned on your practice.
 
 \section*{Mathlib's \texttt{fderiv}}
 
-Earlier drafts of this book axiomatized the entire calculus
-foundation --- chain rule, sum rule, product rule --- as eight
-opaque facts. The current foundation \emph{flips} that: \(\pdiv\)
-is \emph{defined} in terms of Mathlib's Fréchet derivative
-\(\fderiv\), and those structural rules are theorems proved
-from Mathlib's API. Each carries a \(\Differentiable\) hypothesis,
-threaded through every downstream chapter.
+Backprop has exactly one job: compute the gradient of the loss with
+respect to every parameter. That gradient is the del operator
+\(\nabla\mathcal{L}\) --- the vector of partials
+\(\partial\mathcal{L}/\partial\theta\) --- so before a single layer, we
+need a rigorous, machine-checkable notion of ``the derivative of this
+function at this point.''
 
-Every later-chapter axiom has been pruned the same way. Where
-earlier drafts axiomatized \(\texttt{conv2d}\) as an opaque
-function with a stated Jacobian, the current version defines it
-concretely and proves the weight, bias, and input gradient lemmas
-from the foundation. The same is true for multi-head SDPA, patch
-embedding, the BN inverse-stddev broadcast, GELU, the softmax
-Jacobian, and every transformer-level composition chain. \(\texttt{\#print axioms vit\_full\_has\_vjp}\) returns only Lean
-core (\texttt{propext}, \texttt{Classical.choice},
-\texttt{Quot.sound}); every other dependency is a Mathlib theorem
-or a derivation in this project. See Appendix~\ref{app:verification} for
-the full elimination history.
+Mathlib supplies it as the Fréchet derivative, \(\fderiv\): the
+\emph{best linear approximation} --- the continuous linear map \(D\)
+with \(f(x+h) \approx f(x) + D\,h\) --- defined over any normed space,
+not just \(\R^n\). For a layer \(f : \Vect{n} \to \Vect{m}\),
+\(\fderiv\,\R\,f\,x\) is the linear map whose matrix is the Jacobian.
 
-The cost is mild: \(\Differentiable\) hypotheses propagate. The
-benefit is that every claim downstream of this chapter is either
-a definition Lean unfolds or a theorem typechecked against
-Mathlib --- no thumb on the scale.
+We read individual partials off it. A single \((i,j)\) Jacobian entry is
+\(\pdiv\,f\,x\,i\,j = \big(\fderiv\,\R\,f\,x\,(e_i)\big)_j\) --- apply
+\(\fderiv\,\R\,f\,x\) to the \(i\)-th basis vector \(e_i\) and take
+component \(j\). So the Jacobian and the gradient \(\nabla\mathcal{L}\)
+you already picture are assembled entry-by-entry from \(\pdiv\), and
+\(\pdiv\) is \(\fderiv\) underneath. Every layer in this book is built on
+this one accessor.
+
+Because \(\pdiv\) is \emph{defined} from \(\fderiv\) rather than
+assumed, the structural rules --- chain, sum, product --- are theorems
+proved from Mathlib's API, not axioms we ask you to trust. Earlier
+drafts of this book took the other route and axiomatized those eight
+rules as opaque facts; the current foundation flips it, and every
+later-chapter axiom has been pruned the same way: \(\texttt{conv2d}\),
+multi-head SDPA, patch embedding, the BN inverse-stddev broadcast,
+GELU, the softmax Jacobian, and every transformer-level composition
+chain are defined concretely and proved from the foundation. The cost
+is mild --- a \(\Differentiable\) hypothesis propagates through each
+chapter. The benefit is that
+\(\texttt{\#print axioms vit\_full\_has\_vjp}\) bottoms out at Lean core
+(\texttt{propext}, \texttt{Classical.choice}, \texttt{Quot.sound}) and
+nothing else --- no thumb on the scale. See
+Appendix~\ref{app:verification} for the full elimination history.
 
 \subsection*{What about non-smooth points?}
 
