@@ -33,19 +33,22 @@ import LeanMlir
       near-empty tumour edges. Rendering those would show nothing either way.
 
     Usage:
-        lake exe brats-predict [out.ppm] [params.bin] [bn_stats.bin]
+        lake exe brats-predict [arm=<name>] [out.ppm] [params.bin] [bn_stats.bin]
 
-    The params override is what makes the CE-vs-Dice figure possible: every
-    run writes the *same* `<prefix>_params.bin`, so a second training run
-    clobbers the first. To compare two losses, copy the checkpoint aside
-    between runs:
+    `arm=` selects which ablation arm's checkpoint to render, matching the tag
+    `unet-brats-train` stamps on its artifacts (`NetSpec.buildTag`) — `arm=ce`,
+    `arm=wce`, `arm=focal_pb`, and so on. Omit it for an untagged run.
 
-        lake exe unet-brats-train data/brats 30 ce
-        cp .lake/build/unet_brats_*_params.bin   /tmp/ce_params.bin
-        cp .lake/build/unet_brats_*_bn_stats.bin /tmp/ce_bn.bin
-        lake exe unet-brats-train data/brats 30 dicece
-        lake exe brats-predict demos/figures/brats_ce.ppm /tmp/ce_params.bin /tmp/ce_bn.bin
-        lake exe brats-predict demos/figures/brats_dicece.ppm
+    That is what makes the money figure a two-command job: the arms no longer
+    overwrite each other's checkpoints, so both survive to be rendered.
+
+        lake exe unet-brats-train data/brats 10 ce      # -> ..._ce_params.bin
+        lake exe unet-brats-train data/brats 10 wce     # -> ..._wce_params.bin
+        lake exe brats-predict arm=ce  demos/figures/brats_ce.ppm
+        lake exe brats-predict arm=wce demos/figures/brats_wce.ppm
+
+    The explicit params/bn paths still override, for checkpoints that live
+    outside `.lake/build` (a copy saved aside, a file from another box).
 -/
 
 /-- MUST match `demos/MainUnetBratsTrain.lean` exactly, name string included:
@@ -151,12 +154,20 @@ private structure SliceScore where
   deriving Inhabited
 
 def main (args : List String) : IO Unit := do
-  let spec := unetBrats
+  -- `arm=<name>` must reproduce the tag `unet-brats-train` stamped on its
+  -- artifacts, or every path below points at a file that was never written.
+  let arm : String :=
+    match (args.filter (·.startsWith "arm=")).head? with
+    | some a => (a.drop 4).toString
+    | none => ""
+  let spec := unetBrats.withBuildTag arm
   let pfx := spec.buildPrefix
-  let outPath     := args[0]?.getD "demos/figures/brats_pred.ppm"
-  let paramsPath  := args[1]?.getD s!"{pfx}_params.bin"
-  let bnPath      := args[2]?.getD s!"{pfx}_bn_stats.bin"
+  let positional := args.filter (fun a => !a.startsWith "arm=")
+  let outPath     := positional[0]?.getD "demos/figures/brats_pred.ppm"
+  let paramsPath  := positional[1]?.getD s!"{pfx}_params.bin"
+  let bnPath      := positional[2]?.getD s!"{pfx}_bn_stats.bin"
   let evalVmfb    := s!"{pfx}_fwd_eval.vmfb"
+  if !arm.isEmpty then IO.eprintln s!"  arm: {arm}  (prefix {pfx})"
   IO.FS.createDirAll (System.FilePath.mk outPath).parent.get!.toString
   for p in [paramsPath, bnPath, evalVmfb] do
     if !(← System.FilePath.pathExists p) then
