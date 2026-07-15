@@ -453,6 +453,38 @@ frequency times a constant, and the constant cancels. Under a `/N` reduction the
 two schemes differ; under this one they are the same scheme, and
 `brats_class_weights.py` asserts it rather than offering a phantom choice.
 
+**The loss landscape flips, and it is the gradient story's other half.**
+`scripts/brats_class_weights.py` now prints what each reference predictor
+scores under each loss (measured class balance, exact):
+
+| predictor | plain CE | weighted CE |
+|---|---|---|
+| predict the class **prior** everywhere | **0.1417** ← best constant | 3.7206 |
+| predict **uniform** everywhere | 1.3863 | **1.3863** ← best constant |
+| predict **background** everywhere | 17.5549 | **inf** |
+| knows tumour location, uniform there | 0.0352 | 1.0397 |
+
+**Under plain CE the cheapest constant predictor is "predict the prior" —
+i.e. mostly background — and it is 10× cheaper than uniform. The doorway to
+the collapse is the most attractive thing in the landscape, and descent walks
+straight in.** Under weighted CE that inverts: the cheapest constant is
+*uniform*, predicting the prior is 2.7× **worse**, and predicting background
+everywhere is unbounded. The trivial answer stops being a trap and becomes the
+worst place in the space.
+
+This is the scorecard's claim restated as geometry rather than gradients — the
+scorecard says *what the gradient does*, this says *where the minima are* — and
+the two agree. Worth having both: the gradient argument explains why Dice can't
+escape once collapsed; this explains why CE goes there in the first place.
+
+It also makes the wce curve readable, which matters because the CE row was
+misread once already (0.1328 < the 0.1417 floor looks like learning and wasn't).
+On the weighted curve the number to beat is **1.3863** (any constant), and
+**1.0397** is roughly "found the tumour, hasn't typed it yet". Same caveat as
+ever, and it is the doc's own hard-won lesson: **these make the curve readable,
+not conclusive.** No scalar in a training log can tell you a thin class
+survived — only per-class IoU / region Dice at eval can.
+
 **FD verification** (`scripts/seg_loss_probe_check.py`, CPU, no GPU) — 10/10:
 
 | check | result |

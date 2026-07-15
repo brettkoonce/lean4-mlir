@@ -65,6 +65,64 @@ def report(name, w, f, note=""):
     return w
 
 
+def loss_floors(f):
+    """What each loss scores for a few reference predictors.
+
+    Reading a segmentation loss curve without these is how the CE row got
+    misread once already: CE's epoch-1 loss of 0.1328 sits BELOW the 0.1417 of
+    the best constant predictor, which looks like evidence of learning and is
+    not -- the net got under the floor purely by being confident on
+    trivially-separable background while its argmax never fired a tumour class
+    (planning/brats_demo.md Workstream A). The floors are what make a loss
+    number mean something.
+    """
+    NC = len(f)
+
+    def wce_of(qfun, w):
+        num = sum(f[c] * w[c] * (-np.log(max(qfun(c)[c], 1e-300))) for c in range(NC))
+        den = sum(f[c] * w[c] for c in range(NC))
+        return num / den
+
+    ones = np.ones(NC)
+    inv = 1.0 / f
+    const = lambda q: (lambda c: q)
+    uniform_q = np.ones(NC) / NC
+    allbg = np.zeros(NC); allbg[0] = 1.0
+    # Knows WHERE the tumour is but not which type: exact on background,
+    # uniform over all NC at tumour pixels.
+    loc = lambda c: (allbg if c == 0 else uniform_q)
+
+    print("\nloss floors — what a given predictor scores under each loss:")
+    print(f"\n  {'predictor':<38}{'plain CE':>12}{'weighted CE':>14}")
+    print("  " + "-" * 64)
+    for name, qf in (("predict the class PRIOR everywhere", const(f)),
+                     ("predict UNIFORM everywhere", const(uniform_q)),
+                     ("predict BACKGROUND everywhere", const(allbg)),
+                     ("knows tumour location, uniform there", loc)):
+        a = wce_of(qf, ones)
+        b = wce_of(qf, inv)
+        fmt = lambda v: (f"{v:>12.4f}" if v < 100 else f"{'inf':>12}")
+        print(f"  {name:<38}{fmt(a)}{fmt(b):>14}")
+
+    print(f"""
+  The best CONSTANT predictor flips, and that is the whole mechanism:
+
+    under plain CE     it is "predict the prior"  ({wce_of(const(f), ones):.4f}), i.e. mostly
+                       background -- the doorway to the collapse, and cheaper
+                       than uniform ({wce_of(const(uniform_q), ones):.4f}) by 10x. Descent walks straight in.
+    under weighted CE  it is "predict UNIFORM"    ({wce_of(const(uniform_q), inv):.4f}), and predicting the
+                       prior is now {wce_of(const(f), inv)/wce_of(const(uniform_q), inv):.1f}x WORSE ({wce_of(const(f), inv):.4f}). Predicting background
+                       everywhere is unbounded. The trivial answer is not merely
+                       discouraged, it is the worst place in the space.
+
+  So on the weighted-CE curve the number to beat is {wce_of(const(uniform_q), inv):.4f} (any constant),
+  and {wce_of(loc, inv):.4f} is roughly "found the tumour, hasn't typed it yet".
+
+  Caveat, in the same spirit as the one above: these make the curve READABLE,
+  not conclusive. No scalar in a training log can tell you a thin class
+  survived -- only the per-class IoU / region Dice at eval can.""")
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else "data/brats/train.bin"
     print(f"reading masks from {path} ...")
@@ -111,6 +169,8 @@ def main():
     print("  MEAN, on the same scale as unweighted CE, and self-normalizes per batch.")
     lean = ", ".join(f"{v:.4f}" for v in inv)
     print(f"\n  Paste into demos/MainUnetBratsTrain.lean:\n    [{lean}]")
+
+    loss_floors(f)
     return 0
 
 
