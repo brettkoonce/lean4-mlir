@@ -126,6 +126,17 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
       throw <| IO.userError "perPixelCE + focal not yet supported (Phase 0: plain per-pixel CE only)"
     if cfg.labelSmoothing != 0.0 then
       throw <| IO.userError "perPixelCE + label smoothing not yet supported (Phase 0: plain per-pixel CE only)"
+  | .perPixelDice | .perPixelDiceCE =>
+    if useSoftLabels then
+      throw <| IO.userError "perPixelDice/DiceCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
+    if cfg.useFocal then
+      throw <| IO.userError "perPixelDice/DiceCE + focal not yet supported"
+    -- Label smoothing IS accepted here, unlike .perPixelCE: `.diceCE` applies
+    -- it to its CE half only (the Dice half one-hots raw — smoothing a
+    -- set-overlap ratio is meaningless). `.perPixelDice` alone ignores it,
+    -- so reject that combination rather than silently dropping it.
+    if lossKind == .perPixelDice && cfg.labelSmoothing != 0.0 then
+      throw <| IO.userError "perPixelDice + label smoothing is meaningless (Dice is a set-overlap ratio, not a log-likelihood target) — use .perPixelDiceCE if you want smoothing on the CE half"
   | .floatTargetMse =>
     -- DDPM bypasses compileVmfbs entirely (see demos/MainCifarDdpm*Train.lean);
     -- reaching this branch via compileVmfbs is currently unused but reserved.
@@ -158,6 +169,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     (useYolov1 := useYolov1Codegen)
     (gradClipNorm := cfg.gradClipNorm)
     (headLrMult := cfg.headLrMult)
+    (segLoss := lossKind.segLoss)
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"
 
@@ -306,6 +318,25 @@ private def petsIO : DatasetIO where
   loadVal   := fun dir => F32.loadPets (dir ++ "/val.bin")
   augmentBatch := fun raw _ _ => return raw
 
+/-- BraTS brain-tumour segmentation (MSD Task01_BrainTumour), 2D axial
+    slices. 240×240 images with 4 MRI modalities as channels (FLAIR / T1w /
+    T1gd / T2w) and 240×240 per-pixel masks (4-class: 0=background, 1=edema,
+    2=non-enhancing tumour, 3=enhancing tumour). Like `petsIO`, the "labels"
+    buffer is the mask buffer (240*240 bytes per record), which is what puts
+    `runTraining` on the `.perPixelCE` segmentation path.
+
+    240 is the native BraTS in-plane size and 240 = 16*15, so a depth-4 UNet's
+    four halvings divide evenly — no resize is needed anywhere in the pipeline.
+    Augmentation is identity for now (same starting point as the pets demo). -/
+private def bratsIO : DatasetIO where
+  trainPixels := 4 * 240 * 240
+  valPixels   := 4 * 240 * 240
+  channels    := 4
+  labelBytesPerRecord := 240 * 240
+  loadTrain := fun dir => F32.loadBrats (dir ++ "/train.bin") 240
+  loadVal   := fun dir => F32.loadBrats (dir ++ "/val.bin") 240
+  augmentBatch := fun raw _ _ => return raw
+
 /-- YOLOv1 detection (Oxford-IIIT Pets). 224×224 RGB images; the "labels"
     buffer carries the 30×7×7 float32 target tensor concatenated with the
     7×7 float32 per-cell objectness mask (6076 bytes per record). The
@@ -329,6 +360,7 @@ private def datasetIO : DatasetKind → DatasetIO
   | .cifar10    => cifar10IO
   | .pets       => petsIO
   | .petsDet  => petsDetIO
+  | .brats      => bratsIO
   | .imagenet   =>
     -- Phase 3 doesn't yet support full 1000-class ImageNet — the 1.28M
     -- training set needs a C-side streaming reader, not the current
@@ -363,7 +395,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     else if dio.labelBytesPerRecord != 4 then .perPixelCE
     else if useSoftLabelsTop then .softLabelCE
     else .classCE
-  let useSeg := lossKind == .perPixelCE
+  let useSeg := lossKind.isSeg
   let useYolov1Run := lossKind == .yolov1Masked
 
   let (trainImg, trainLbl, nTrain) ← dio.loadTrain dataDir
@@ -438,6 +470,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           | .pets       => "pets"
           | .imagenet   => "imagenet"
           | .petsDet  => "pets_det"
+          | .brats      => "brats"
         let hdr :=
           "{\"kind\":\"header\",\"phase\":\"phase3\"" ++
           s!",\"netspec_name\":\"{spec.name}\"" ++
@@ -920,9 +953,9 @@ def train (spec : NetSpec) (cfg : TrainConfig) (dataDir : String)
     (ds : DatasetKind := .imagenette) : IO Unit := do
   IO.eprintln s!"{spec.name}: {spec.totalParams} params"
   -- Match runTraining's lossKind derivation so the codegen flag aligns
-  -- with the dispatch path. Only `.perPixelCE` (segmentation: pets) sets
-  -- `useSeg`. YOLOv1 has a non-4-byte label record too but routes
-  -- through the yolov1 codegen path, not the seg one.
+  -- with the dispatch path. The per-pixel kinds (CE / Dice / DiceCE) all set
+  -- `useSeg` — see `LossKind.isSeg`. YOLOv1 has a non-4-byte label record too
+  -- but routes through the yolov1 codegen path, not the seg one.
   let useSoftLabelsTop := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
   let lossKind : LossKind :=
     if cfg.lossKind != .classCE then cfg.lossKind
@@ -930,7 +963,7 @@ def train (spec : NetSpec) (cfg : TrainConfig) (dataDir : String)
     else if (datasetIO ds).labelBytesPerRecord != 4 then .perPixelCE
     else if useSoftLabelsTop then .softLabelCE
     else .classCE
-  let useSeg := lossKind == .perPixelCE
+  let useSeg := lossKind.isSeg
   match (← IO.getEnv "LEAN_MLIR_EVAL_ONLY") with
   | some _ =>
     -- compileVmfbs is cheap when cached and produces the eval vmfb we need.

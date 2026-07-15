@@ -4299,9 +4299,15 @@ private def emitConvBnMomentum (p ic oc kSize : Nat) (applyWeightDecay : Bool :=
 
     Returns the MLIR text. The caller is responsible for setting
     `gradSSA := "%d_logits_seg"` and `gradShape := [B, NC, H, W]`
-    after appending this block. -/
+    after appending this block.
+
+    `lossOut`/`gradOut` name the two results. They default to the plain
+    `%loss` / `%d_logits_seg` the seg path consumes, and are overridden only
+    by `.diceCE`, which emits this block and the Dice block side by side under
+    private names and sums them. -/
 private def emitPerPixelCEBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
-    (labelSmoothing : Float) : String := Id.run do
+    (labelSmoothing : Float)
+    (lossOut : String := "%loss") (gradOut : String := "%d_logits_seg") : String := Id.run do
   let bnhwTy := s!"tensor<{B}x{H}x{W}xi32>"
   let bnhwI1 := s!"tensor<{B}x{NC}x{H}x{W}xi1>"
   let bnhwfTy := tensorTy [B, NC, H, W]
@@ -4335,14 +4341,131 @@ private def emitPerPixelCEBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
   s := s ++ s!"           : ({bnhwfTy}, tensor<f32>) -> tensor<f32>\n"
   s := s ++ s!"    %seg_denom = stablehlo.constant dense<{denom}> : tensor<f32>\n"
   s := s ++ s!"    %seg_mean = stablehlo.divide %seg_total, %seg_denom : tensor<f32>\n"
-  s := s ++ s!"    %loss = stablehlo.negate %seg_mean : tensor<f32>\n"
+  s := s ++ s!"    {lossOut} = stablehlo.negate %seg_mean : tensor<f32>\n"
   -- 4. Backward seed: (softmax - onehot) / (B · H · W).
   s := s ++ s!"    %seg_sum_b = stablehlo.broadcast_in_dim %seg_sum, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
   s := s ++ s!"    %seg_softmax = stablehlo.divide %seg_exp, %seg_sum_b : {bnhwfTy}\n"
   s := s ++ s!"    %seg_smmoh = stablehlo.subtract %seg_softmax, %seg_onehot : {bnhwfTy}\n"
   s := s ++ s!"    %seg_denom_b = stablehlo.broadcast_in_dim %seg_denom, dims = [] : (tensor<f32>) -> {bnhwfTy}\n"
-  s := s ++ s!"    %d_logits_seg = stablehlo.divide %seg_smmoh, %seg_denom_b : {bnhwfTy}\n"
+  s := s ++ s!"    {gradOut} = stablehlo.divide %seg_smmoh, %seg_denom_b : {bnhwfTy}\n"
   return s
+
+/-- Soft-Dice loss + `d_logits` for the segmentation path.
+
+    Forward, per class `c`, reducing over the whole batch (dims 0,2,3):
+
+      I_c = Σ p_c·y_c    P_c = Σ p_c    Y_c = Σ y_c
+      D_c = (2·I_c + ε) / (P_c + Y_c + ε)
+      loss = 1 - (1/NC)·Σ_c D_c
+
+    ε (`smooth`) both regularizes the ratio and makes an absent-and-correctly-
+    -unpredicted class score D_c = ε/ε = 1 (zero loss) rather than 0/0.
+
+    Backward. `D_c` depends only on channel `c`, so dL/dp is elementwise with
+    two per-class broadcast scalars:
+
+      ∂D_c/∂p_{c,k} = [2·y_{c,k}·den_c - num_c] / den_c²  =  A_c·y_{c,k} - B_c
+        where A_c = 2/den_c,  B_c = num_c/den_c²
+      g_{c,k} := ∂L/∂p_{c,k} = (1/NC)·(B_c - A_c·y_{c,k})
+
+    Then chain through the channel softmax. Unlike CE — whose `p - y` seed is
+    what's left *after* the softmax Jacobian cancels the log — Dice gets no
+    such cancellation, so the Jacobian-vector product is explicit:
+
+      dz_i = p_i·(g_i - Σ_j g_j·p_j)
+
+    which is elementwise ops plus one channel reduce. No new primitive.
+
+    Labels are one-hot'd raw here: label smoothing is a CE notion (it softens
+    a log-likelihood target) and has no meaning for a set-overlap ratio, so
+    `.diceCE` applies smoothing to its CE half only. -/
+private def emitSegDiceBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
+    (lossOut : String := "%loss") (gradOut : String := "%d_logits_seg")
+    (smooth : Float := 1.0) : String := Id.run do
+  let bhwI32  := s!"tensor<{B}x{H}x{W}xi32>"
+  let bnhwI32 := s!"tensor<{B}x{NC}x{H}x{W}xi32>"
+  let bnhwI1  := s!"tensor<{B}x{NC}x{H}x{W}xi1>"
+  let bnhwfTy := tensorTy [B, NC, H, W]
+  let bhwfTy  := tensorTy [B, H, W]
+  let ncTy    := tensorTy [NC]
+  let mut s := ""
+  s := s ++ "\n    // ════════════ SOFT DICE (batch, per-class) ════════════\n"
+  -- 1. softmax along the channel axis (max-shifted for stability).
+  s := s ++ s!"    %dc_max = stablehlo.reduce({logitsSSA} init: %neginf) applies stablehlo.maximum across dimensions = [1]\n"
+  s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
+  s := s ++ s!"    %dc_max_b = stablehlo.broadcast_in_dim %dc_max, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %dc_shifted = stablehlo.subtract {logitsSSA}, %dc_max_b : {bnhwfTy}\n"
+  s := s ++ s!"    %dc_exp = stablehlo.exponential %dc_shifted : {bnhwfTy}\n"
+  s := s ++ s!"    %dc_esum = stablehlo.reduce(%dc_exp init: %zf) applies stablehlo.add across dimensions = [1]\n"
+  s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
+  s := s ++ s!"    %dc_esum_b = stablehlo.broadcast_in_dim %dc_esum, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %dc_p = stablehlo.divide %dc_exp, %dc_esum_b : {bnhwfTy}\n"
+  -- 2. raw one-hot (no label smoothing — see the docstring).
+  s := s ++ s!"    %dc_iota = stablehlo.iota dim = 1 : {bnhwI32}\n"
+  s := s ++ s!"    %dc_y_b = stablehlo.broadcast_in_dim {labelSSA}, dims = [0, 2, 3] : ({bhwI32}) -> {bnhwI32}\n"
+  s := s ++ s!"    %dc_mask = stablehlo.compare EQ, %dc_iota, %dc_y_b : ({bnhwI32}, {bnhwI32}) -> {bnhwI1}\n"
+  s := s ++ s!"    %dc_ones = stablehlo.constant dense<1.0> : {bnhwfTy}\n"
+  s := s ++ s!"    %dc_zeros = stablehlo.constant dense<0.0> : {bnhwfTy}\n"
+  s := s ++ s!"    %dc_y = stablehlo.select %dc_mask, %dc_ones, %dc_zeros : {bnhwI1}, {bnhwfTy}\n"
+  -- 3. per-class batch sums I_c, P_c, Y_c.
+  s := s ++ s!"    %dc_py = stablehlo.multiply %dc_p, %dc_y : {bnhwfTy}\n"
+  s := s ++ s!"    %dc_I = stablehlo.reduce(%dc_py init: %zf) applies stablehlo.add across dimensions = [0, 2, 3]\n"
+  s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {ncTy}\n"
+  s := s ++ s!"    %dc_P = stablehlo.reduce(%dc_p init: %zf) applies stablehlo.add across dimensions = [0, 2, 3]\n"
+  s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {ncTy}\n"
+  s := s ++ s!"    %dc_Y = stablehlo.reduce(%dc_y init: %zf) applies stablehlo.add across dimensions = [0, 2, 3]\n"
+  s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {ncTy}\n"
+  -- 4. D_c = (2 I_c + ε) / (P_c + Y_c + ε);  loss = 1 - mean_c D_c.
+  s := s ++ s!"    %dc_eps = stablehlo.constant dense<{smooth}> : {ncTy}\n"
+  s := s ++ s!"    %dc_twov = stablehlo.constant dense<2.0> : {ncTy}\n"
+  s := s ++ s!"    %dc_2I = stablehlo.multiply %dc_I, %dc_twov : {ncTy}\n"
+  s := s ++ s!"    %dc_num = stablehlo.add %dc_2I, %dc_eps : {ncTy}\n"
+  s := s ++ s!"    %dc_PY = stablehlo.add %dc_P, %dc_Y : {ncTy}\n"
+  s := s ++ s!"    %dc_den = stablehlo.add %dc_PY, %dc_eps : {ncTy}\n"
+  s := s ++ s!"    %dc_D = stablehlo.divide %dc_num, %dc_den : {ncTy}\n"
+  s := s ++ s!"    %dc_Dsum = stablehlo.reduce(%dc_D init: %zf) applies stablehlo.add across dimensions = [0]\n"
+  s := s ++ s!"          : ({ncTy}, tensor<f32>) -> tensor<f32>\n"
+  s := s ++ s!"    %dc_ncf = stablehlo.constant dense<{NC.toFloat}> : tensor<f32>\n"
+  s := s ++ s!"    %dc_Dmean = stablehlo.divide %dc_Dsum, %dc_ncf : tensor<f32>\n"
+  s := s ++ s!"    %dc_one_s = stablehlo.constant dense<1.0> : tensor<f32>\n"
+  s := s ++ s!"    {lossOut} = stablehlo.subtract %dc_one_s, %dc_Dmean : tensor<f32>\n"
+  -- 5. g = ∂L/∂p = (1/NC)·(B_c - A_c·y),  A_c = 2/den,  B_c = num/den².
+  s := s ++ s!"    %dc_den2 = stablehlo.multiply %dc_den, %dc_den : {ncTy}\n"
+  s := s ++ s!"    %dc_A = stablehlo.divide %dc_twov, %dc_den : {ncTy}\n"
+  s := s ++ s!"    %dc_Bc = stablehlo.divide %dc_num, %dc_den2 : {ncTy}\n"
+  s := s ++ s!"    %dc_A_b = stablehlo.broadcast_in_dim %dc_A, dims = [1] : ({ncTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %dc_B_b = stablehlo.broadcast_in_dim %dc_Bc, dims = [1] : ({ncTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %dc_Ay = stablehlo.multiply %dc_A_b, %dc_y : {bnhwfTy}\n"
+  s := s ++ s!"    %dc_BmAy = stablehlo.subtract %dc_B_b, %dc_Ay : {bnhwfTy}\n"
+  s := s ++ s!"    %dc_ncf_b = stablehlo.constant dense<{NC.toFloat}> : {bnhwfTy}\n"
+  s := s ++ s!"    %dc_g = stablehlo.divide %dc_BmAy, %dc_ncf_b : {bnhwfTy}\n"
+  -- 6. softmax Jacobian-vector product: dz_i = p_i·(g_i - Σ_j g_j p_j).
+  s := s ++ s!"    %dc_gp = stablehlo.multiply %dc_g, %dc_p : {bnhwfTy}\n"
+  s := s ++ s!"    %dc_dot = stablehlo.reduce(%dc_gp init: %zf) applies stablehlo.add across dimensions = [1]\n"
+  s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
+  s := s ++ s!"    %dc_dot_b = stablehlo.broadcast_in_dim %dc_dot, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %dc_gmd = stablehlo.subtract %dc_g, %dc_dot_b : {bnhwfTy}\n"
+  s := s ++ s!"    {gradOut} = stablehlo.multiply %dc_p, %dc_gmd : {bnhwfTy}\n"
+  return s
+
+/-- Emit the seg loss block selected by `segLoss`, leaving `%loss` and
+    `%d_logits_seg` defined either way. `.diceCE` emits both blocks under
+    private names and sums them; the duplicated softmax prologue is identical
+    SSA on identical inputs, so CSE folds it. -/
+private def emitSegLossBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
+    (labelSmoothing : Float) (segLoss : SegLoss) : String := Id.run do
+  let bnhwfTy := tensorTy [B, NC, H, W]
+  match segLoss with
+  | .ce   => emitPerPixelCEBlock B NC H W logitsSSA labelSSA labelSmoothing
+  | .dice => emitSegDiceBlock B NC H W logitsSSA labelSSA
+  | .diceCE =>
+    let mut s := ""
+    s := s ++ emitPerPixelCEBlock B NC H W logitsSSA labelSSA labelSmoothing "%loss_ce" "%dlog_ce"
+    s := s ++ emitSegDiceBlock B NC H W logitsSSA labelSSA "%loss_dc" "%dlog_dc"
+    s := s ++ "\n    // ──────── Dice + CE ────────\n"
+    s := s ++ s!"    %loss = stablehlo.add %loss_ce, %loss_dc : tensor<f32>\n"
+    s := s ++ s!"    %d_logits_seg = stablehlo.add %dlog_ce, %dlog_dc : {bnhwfTy}\n"
+    s
 
 /-- Emit the full train step (forward + loss + backward + SGD). -/
 private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : String)
@@ -4357,6 +4480,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
     (gradClipNorm : Float := 0.0) (headLrMult : Float := 1.0)
     (useMuon : Bool := false)
     (useShampoo : Bool := false)
+    (segLoss : SegLoss := .ce)
     : String := Id.run do
   let B := batchSize
   let nClasses := spec.numClasses
@@ -5862,7 +5986,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   else if useSeg then
     match curShape with
     | [_, segNC, segH, segW] =>
-      code := code ++ emitPerPixelCEBlock B segNC segH segW logitsSSA "%y_seg" labelSmoothing
+      code := code ++ emitSegLossBlock B segNC segH segW logitsSSA "%y_seg" labelSmoothing segLoss
       gradSSA := "%d_logits_seg"
       gradShape := [B, segNC, segH, segW]
     | _ =>
@@ -8433,19 +8557,46 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
     (gradClipNorm : Float := 0.0) (headLrMult : Float := 1.0)
     (useMuon : Bool := false)
     (useShampoo : Bool := false)
+    (segLoss : SegLoss := .ce)
     : String :=
   s!"// {spec.name} train_step — Generated by Lean 4 → MLIR (StableHLO + VJPs)\n" ++
   s!"// Batch size: {batchSize}, optimizer: {if useShampoo then "Shampoo (square 2D) + AdamW (rest)" else if useMuon then "Muon (2D) + AdamW (rest)" else if useAdam then "Adam" else "SGD+momentum"}\n" ++
-  s!"// label_smoothing: {labelSmoothing}, weight_decay: {weightDecay}, soft_labels: {useSoftLabels}, focal: {useFocal} (γ={focalGamma}), seg: {useSeg}, ddpm: {useDdpm}, yolov1: {useYolov1}" ++
+  s!"// label_smoothing: {labelSmoothing}, weight_decay: {weightDecay}, soft_labels: {useSoftLabels}, focal: {useFocal} (γ={focalGamma}), seg: {useSeg}" ++
+  (if useSeg then s!" ({repr segLoss})" else "") ++
+  s!", ddpm: {useDdpm}, yolov1: {useYolov1}" ++
   (if useYolov1 then s!" (grid={yoloGridH}x{yoloGridW}, B={yoloNumBoxes}, C={yoloNumClasses})" else "") ++
   "\n\n" ++
   s!"module @{moduleName} " ++ "{\n" ++
   emitTrainStepSig spec batchSize useSoftLabels useSeg useDdpm ddpmOutShape
     useYolov1 yoloGridH yoloGridW (yoloNumBoxes * 5 + yoloNumClasses) ++ " {\n" ++
   emitTrainStepBody spec batchSize moduleName labelSmoothing weightDecay useAdam useSoftLabels useFocal focalGamma useSeg useDdpm
-    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult useMuon useShampoo ++
+    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult useMuon useShampoo segLoss ++
   "  }\n" ++
   "}\n"
+
+/-- Standalone segmentation-loss module — exercises `emitSegLossBlock` in
+    isolation so the loss and its gradient can be checked against finite
+    differences: `@main(logits : [B,NC,H,W], y : [B,H,W] i32) -> (loss, d_logits)`.
+
+    This is the FD harness for `.dice` / `.diceCE`, whose gradient (unlike CE's
+    `p - y`) is a real softmax Jacobian-vector product and therefore worth
+    checking numerically rather than by inspection. Driven by
+    `scripts/seg_loss_probe_check.py`; CPU is fine, no GPU needed. -/
+def segLossProbeModule (B NC H W : Nat) (segLoss : SegLoss)
+    (labelSmoothing : Float := 0.0) : String := Id.run do
+  let logitsTy := tensorTy [B, NC, H, W]
+  let yTy := s!"tensor<{B}x{H}x{W}xi32>"
+  let mut s := s!"// seg-loss probe: {repr segLoss}, B={B} NC={NC} H={H} W={W}, ls={labelSmoothing}\n"
+  s := s ++ "module @seg_loss_probe {\n"
+  s := s ++ s!"  func.func @main(%logits: {logitsTy}, %y_seg: {yTy}) -> (tensor<f32>, {logitsTy}) " ++ "{\n"
+  -- The loss blocks assume these two constants are already in scope (they are,
+  -- inside emitTrainStepBody).
+  s := s ++ "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n"
+  s := s ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
+  s := s ++ emitSegLossBlock B NC H W "%logits" "%y_seg" labelSmoothing segLoss
+  s := s ++ s!"    return %loss, %d_logits_seg : tensor<f32>, {logitsTy}\n"
+  s := s ++ "  }\n}\n"
+  return s
 
 /-- Standalone FlashAttention forward module — exercises `emitFlashAttnSdpa` in
     isolation for validation against dense attention: `@main(Q,K,V : [b,h,n,dh])

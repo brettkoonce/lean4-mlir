@@ -264,6 +264,69 @@ LEAN_EXPORT lean_obj_res lean_f32_load_pets(b_lean_obj_arg path_obj, lean_obj_ar
     return lean_io_result_mk_ok(outer);
 }
 
+// ---- BraTS (MSD Task01_BrainTumour) loader ----
+// Binary format per record (written by preprocess_brats.py):
+//   image: 4 * S * S bytes (channel-first [modality][y][x], uint8)
+//   mask:  S * S     bytes (per-pixel class 0..3)
+// At the default S=240: 288,000 bytes/record.
+//
+// Returns (image_f32_dequantized, mask_uint8, count) as a 3-tuple — the same
+// shape as lean_f32_load_pets, so the segmentation train path is unchanged.
+//
+// Unlike the pets loader, this does NOT apply ImageNet mean/std. MRI is not
+// RGB and has no such statistics. preprocess_brats.py z-scores each modality
+// over that volume's brain (nonzero) voxels and quantizes the result to uint8
+// over a +/-BRATS_CLIP_SIGMA window; here we invert exactly that, so the model
+// sees per-volume z-scored intensities. The inverse must stay in lockstep with
+// quantize_u8() in preprocess_brats.py.
+#define BRATS_CLIP_SIGMA 5.0f
+#define BRATS_CHANNELS 4
+
+LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img_size, lean_obj_arg w) {
+    (void)w;
+    const char* path = lean_string_cstr(path_obj);
+    FILE* f = fopen(path, "rb");
+    if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open brats file")));
+    uint32_t file_count;
+    if (fread(&file_count, 4, 1, f) != 1) { fclose(f);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("bad header"))); }
+    uint32_t count = file_count;
+    const size_t hw = img_size * img_size;
+    const size_t pix = BRATS_CHANNELS * hw;
+    const size_t mask_pix = hw;
+    size_t img_bytes  = (size_t)count * pix * 4;         // f32 image buffer
+    size_t mask_bytes = (size_t)count * mask_pix;        // uint8 mask buffer
+    lean_object* img_ba  = lean_alloc_sarray(1, img_bytes,  img_bytes);
+    lean_object* mask_ba = lean_alloc_sarray(1, mask_bytes, mask_bytes);
+    float*   img  = (float*)lean_sarray_cptr(img_ba);
+    uint8_t* mask = lean_sarray_cptr(mask_ba);
+    // Inverse of preprocess_brats.quantize_u8: z = (b - 128) * (CLIP/127).
+    // Zero is anchored at 128 there, so background (exact zero in a
+    // skull-stripped volume) round-trips to exact zero here.
+    const float dequant = BRATS_CLIP_SIGMA / 127.0f;
+    uint8_t* buf = (uint8_t*)malloc(pix + mask_pix);
+    if (!buf) { fclose(f);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("brats: malloc failed"))); }
+    for (uint32_t i = 0; i < count; i++) {
+        if (fread(buf, 1, pix + mask_pix, f) != pix + mask_pix) { free(buf); fclose(f);
+            return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("short read"))); }
+        float* dst = img + (size_t)i * pix;
+        for (size_t j = 0; j < pix; j++)
+            dst[j] = ((float)buf[j] - 128.0f) * dequant;
+        // Mask is already uint8 0..3; copy directly.
+        memcpy(mask + (size_t)i * mask_pix, buf + pix, mask_pix);
+    }
+    free(buf); fclose(f);
+
+    lean_object* inner_pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(inner_pair, 0, mask_ba);
+    lean_ctor_set(inner_pair, 1, lean_usize_to_nat((size_t)count));
+    lean_object* outer = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(outer, 0, img_ba);
+    lean_ctor_set(outer, 1, inner_pair);
+    return lean_io_result_mk_ok(outer);
+}
+
 // ---- VOC 2007 YOLOv1 binary loader ----
 // Binary format (written by preprocess_voc.py — Phase 3b layout, 157,728
 // bytes/record):

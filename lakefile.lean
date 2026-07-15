@@ -1300,6 +1300,10 @@ lean_exe «unet-pets-train» where
   root := `demos.MainUnetPetsTrain
   moreLinkArgs := ireeLink
 
+lean_exe «unet-brats-train» where
+  root := `demos.MainUnetBratsTrain
+  moreLinkArgs := ireeLink
+
 lean_exe «pets-predict» where
   root := `demos.MainPetsPredict
   moreLinkArgs := ireeLink
@@ -1314,6 +1318,10 @@ lean_exe «bigram-shakespeare» where
 
 lean_exe «flash-probe» where
   root := `demos.MainFlashProbe
+  moreLinkArgs := ireeLink
+
+lean_exe «seg-loss-probe» where
+  root := `demos.MainSegLossProbe
   moreLinkArgs := ireeLink
 
 lean_exe «tinygpt-shakespeare» where

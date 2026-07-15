@@ -314,6 +314,27 @@ inductive LossKind where
   /-- Int32 `[B, H, W]` per-pixel label tensor (segmentation). Phase 0
       of the UNet demo — see `planning/unet_demo.md`. -/
   | perPixelCE
+  /-- Soft Dice over the softmax probabilities, int32 `[B, H, W]` labels —
+      same ABI as `perPixelCE`, different loss block. Dice is computed
+      per-class over the whole batch and meaned:
+      `1 - mean_c (2·Σ p_c·y_c + ε) / (Σ p_c + Σ y_c + ε)`.
+
+      The point of it: per-pixel CE is a *mean over pixels*, so a class
+      occupying 0.5% of pixels contributes 0.5% of the loss and the cheapest
+      descent direction is to predict it away. Dice is a *ratio per class*,
+      so every class carries equal weight no matter how few pixels it owns.
+      See `planning/brats_demo.md` — on BraTS, CE collapses all three tumour
+      classes to IoU 0 (mIoU 0.243 ≈ the trivial background-only predictor).
+
+      Batch-Dice (reducing over B as well as H,W) rather than per-sample:
+      with rare classes and small batches a sample may contain none of a
+      class at all, which makes per-sample Dice for it degenerate. -/
+  | perPixelDice
+  /-- `perPixelDice + perPixelCE`, summed (loss and gradient both). The
+      standard medical-segmentation default: Dice supplies the class-balanced
+      signal, CE regularizes it (pure Dice has a noisy gradient early, when
+      the softmax is near-uniform and every denominator is large). -/
+  | perPixelDiceCE
   /-- Float `[B, C, H, W]` target tensor with per-pixel MSE (DDPM,
       autoencoder regression). Caller passes `ddpmOutShape`. -/
   | floatTargetMse
@@ -329,6 +350,36 @@ inductive LossKind where
       timm's `mean` over B×C. See `planning/rsb_a2_resnet50.md`. -/
   | bce
 deriving Repr, BEq
+
+/-- Which loss block the segmentation path emits. All three share one ABI
+    (int32 `[B,H,W]` labels, the `trainStepAdamF32Seg` dispatch, the mIoU
+    eval harness) — only the emitted loss + gradient differ, so this rides
+    alongside `useSeg` rather than replacing it. -/
+inductive SegLoss where
+  /-- Per-pixel softmax cross-entropy (the original UNet-demo path). -/
+  | ce
+  /-- Soft Dice only. -/
+  | dice
+  /-- Dice + CE, summed. -/
+  | diceCE
+deriving Repr, BEq, Inhabited
+
+/-- Does this loss run on the segmentation path? Every per-pixel kind shares
+    the int32 `[B,H,W]` label ABI and the seg train-step dispatch.
+
+    Single source of truth: `compileVmfbs`, `NetSpec.train`, and `runTraining`
+    each need this answer, and deriving it three times independently is how
+    they drift apart. -/
+def LossKind.isSeg : LossKind → Bool
+  | .perPixelCE | .perPixelDice | .perPixelDiceCE => true
+  | _ => false
+
+/-- Which seg loss block to emit. Non-seg kinds answer `.ce` and are never
+    asked (the codegen only consults this under `useSeg`). -/
+def LossKind.segLoss : LossKind → SegLoss
+  | .perPixelDice   => .dice
+  | .perPixelDiceCE => .diceCE
+  | _               => .ce
 
 /-- Optimizer selector for the training loop. Added additively over the legacy
     `TrainConfig.useAdam` bool (à la `LossKind` over the older loss booleans):
@@ -634,6 +685,15 @@ inductive DatasetKind where
       `planning/yolo_final.md` and `preprocess_pets_mosaic.py` for the on-disk
       format. Only valid with `lossKind := .yolov1Masked` (or `useYolov1 := true`). -/
   | petsDet
+  /-- Brain-tumour segmentation on the Medical Segmentation Decathlon
+      Task01_BrainTumour volumes (BraTS-derived). 2D axial slices: images are
+      240×240×4 (FLAIR / T1w / T1gd / T2w modalities as channels, z-scored per
+      volume over brain voxels — no ImageNet normalization), labels are 240×240
+      uint8 per-pixel classes (0=background, 1=edema, 2=non-enhancing tumour,
+      3=enhancing tumour). Segmentation kind: `labelBytesPerRecord = 240*240`
+      selects `.perPixelCE` automatically. See `preprocess_brats.py` for the
+      on-disk format and `planning/brats_demo.md` for the demo plan. -/
+  | brats
 deriving Repr, BEq
 
 /-- IREE compile flags from environment. Defaults to CUDA (sm_86).

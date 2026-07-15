@@ -105,6 +105,17 @@ opaque loadImagenetteSized (path : @& String) (imgSize : USize) : IO (ByteArray 
 @[extern "lean_f32_load_pets"]
 opaque loadPets (path : @& String) : IO (ByteArray × ByteArray × Nat)
 
+/-- Load a BraTS (MSD Task01_BrainTumour) binary file at the given in-plane
+    size. Returns (images f32 ByteArray, masks uint8 ByteArray, count).
+    Images are `imgSize`×`imgSize`×4 (FLAIR / T1w / T1gd / T2w), channel-first.
+    Unlike the RGB datasets these carry no ImageNet normalization: the loader
+    inverts the uint8 quantization `preprocess_brats.py` applied, yielding the
+    per-volume, per-modality z-scored intensities the preprocessor computed over
+    brain voxels. Masks are `imgSize`×`imgSize` uint8 per-pixel class labels
+    (0=background, 1=edema, 2=non-enhancing tumour, 3=enhancing tumour). -/
+@[extern "lean_f32_load_brats"]
+opaque loadBrats (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArray × Nat)
+
 /-- YOLOv1 detection-bin loader (target+mask format; used by Pets). Returns `(images_f32_normalized,
     yLabels_concat, count)` where `yLabels_concat` carries 6076 bytes
     per image: 30×7×7 float32 target (5880 bytes), then 7×7 float32
