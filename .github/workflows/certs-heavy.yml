@@ -87,8 +87,11 @@ jobs:
         run: |
           set -e
           out=$(lake env lean tests/AuditAxiomsHeavy.lean 2>&1 | sed ':a;N;$!ba;s/,\n /, /g')
+          # Subset of the three, any order — see certs.yml (Lean 4.32 shrank some lists).
+          AX3='(propext|Classical\.choice|Quot\.sound)'
+          OK_RE="depends on axioms: \[$AX3(, $AX3)*\]\$"
           total=$(echo "$out" | grep -c "depends on axioms:" || true)
-          ok=$(echo "$out" | grep -cE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true)
+          ok=$(echo "$out" | grep -cE "$OK_RE" || true)
 
           echo "Total #print axioms lines:        $total"
           echo "Lines matching {propext, Classical.choice, Quot.sound}: $ok"
@@ -102,7 +105,7 @@ jobs:
           if [ "$total" -ne "$ok" ]; then
             echo "::error::Some heavy-corpus theorems depend on axioms outside [propext, Classical.choice, Quot.sound]:"
             echo "$out" | grep "depends on axioms:" \
-              | grep -vE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true
+              | grep -vE "$OK_RE" || true
             exit 1
           fi
 

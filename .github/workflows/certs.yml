@@ -85,8 +85,13 @@ jobs:
           # The sed join collapses Lean's wrapped (multi-line) axiom lists back to one
           # line first — long theorem names otherwise break the per-line grep.
           out=$(lake env lean tests/AuditAxioms.lean 2>&1 | sed ':a;N;$!ba;s/,\n /, /g')
+          # SUBSET of the three, any order — not the exact string: a toolchain bump
+          # can constructivize a dependency and shrink a decl's list (Lean 4.32
+          # dropped Classical.choice from dotZ_comm), which is cleaner, not a leak.
+          AX3='(propext|Classical\.choice|Quot\.sound)'
+          OK_RE="depends on axioms: \[$AX3(, $AX3)*\]\$"
           total=$(echo "$out" | grep -c "depends on axioms:" || true)
-          ok=$(echo "$out" | grep -cE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true)
+          ok=$(echo "$out" | grep -cE "$OK_RE" || true)
 
           echo "Total #print axioms lines:        $total"
           echo "Lines matching {propext, Classical.choice, Quot.sound}: $ok"
@@ -100,7 +105,7 @@ jobs:
           if [ "$total" -ne "$ok" ]; then
             echo "::error::Some theorems depend on axioms outside [propext, Classical.choice, Quot.sound]:"
             echo "$out" | grep "depends on axioms:" \
-              | grep -vE "depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" || true
+              | grep -vE "$OK_RE" || true
             exit 1
           fi
 
@@ -117,7 +122,7 @@ jobs:
           # output's den proven = the certified fderiv-derived SGD step. A ✅ is
           # data-driven: it only prints if the net's PoC capstone is in the
           # 3-axiom closure above (so this table can't drift from what's proven).
-          faithful() { echo "$out" | grep -qE "'Proofs.$1' depends on axioms: \[propext, Classical\.choice, Quot\.sound\]$" && printf '✅' || printf '⚠️'; }
+          faithful() { echo "$out" | grep -qE "'Proofs.$1' depends on axioms: \[$AX3(, $AX3)*\]\$" && printf '✅' || printf '⚠️'; }
           {
             echo ""
             echo "## Verified-faithful train steps"
