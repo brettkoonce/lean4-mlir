@@ -3,6 +3,35 @@
 Release history for *Lean 4 → MLIR → GPU*. The README keeps only the current
 version; older entries live here.
 
+## v0.6.2 — Certified robustness
+
+The robustness ladder becomes the release. PGD attacks run against every
+verified net (linear → MLP → CNN → CIFAR-10+BN) through the same IREE
+pipeline that trains them, and two certificate families answer back.
+Lipschitz-margin certificates (Tsuzuku 2018) are formalized and pushed to
+the full 784-dim input via an in-kernel rational dot-product engine, with
+per-pair LipSDP closing the certificate↔PGD sandwich (93/100 at ε=0.1
+matches PGD, kernel-verified). Randomized smoothing (Cohen 2019) is carried
+end to end into a theorem: the Monte-Carlo tie, exact Clopper–Pearson
+arithmetic, kernel-checked decimal quantile bounds, and the Gaussian ladder
+(Neyman–Pearson in 1-D and n-D, quantile inversion, the Cohen radius with
+every hypothesis discharged) — 279 driver-reported radii certified across
+three scorecards, spinning off the first two Mathlib upstream drafts (cdf
+continuity, `gaussianReal` facts). A dispatch-only certs-heavy CI tier
+carries the generated certificate corpora.
+
+Elsewhere the A3 FloatBridge matrix completes — all five Imagenette nets ×
+{forward, backward}, ViT's MHSA backward included — and the committed-spec
+SpecVJP ties now cover all five nets. Muon's Newton–Schulz iteration gets a
+convergence story (the tuned quintic is band-landing, not convergent; a
+principled convergent quintic joins it). FlashAttention forward/backward
+emitters land with the O(T²)→O(T·b) memory payoff measured, RoPE brings
+length extrapolation, and TinyStories runs at 8K context. Chapter 9's
+ViT/attention proofs are rewritten in Lamport's structured style (33
+theorems). On the JAX bridge, ConvNeXt-T reaches 78.13% ImageNet top-1
+(80 epochs, 4-GPU). The toolchain moves to Lean 4.32.0 / mathlib v4.32.0,
+and the three-axiom CI gate now accepts axiom-closure subsets.
+
 ## v0.6.1 — Verified training reaches low precision
 
 A FloatBridge proof layer carries the MNIST chain into fp8 (E4M3) and
