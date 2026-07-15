@@ -87,9 +87,40 @@ guessed (`scripts/seg_dice_vanishing_grad_probe.py`): Dice's gradient
 carries a factor of `p_i` from the softmax Jacobian, so it is weakest
 exactly where the class has collapsed. At p₃ = 2e-5 it is 0.02% of
 CE's, which is indifferent to the collapse. Dice cannot rescue a class
-it has already zeroed; the fix has to *prevent* the collapse instead
-(class-weighted CE, prior-bias init). That negative result, and the
-picture above, are the demo.
+it has already zeroed.
+
+That negative result is what the demo is organized around, and chasing
+it down produced the question the whole thing now turns on:
+
+> **What does your loss's gradient do about the easy 97%?**
+
+A loss does not save a rare class by having a big gradient *on* it — CE's
+is the biggest of any arm here, and CE collapses anyway. What decides the
+outcome is the rare class's gradient *relative to the majority drowning it
+out*, and there are exactly two ways to win that: amplify the minority, or
+defund the majority. `scripts/seg_grad_scorecard.py` measures every arm
+against the emitted MLIR, in ~2 minutes of CPU with no GPU — reported as
+`Σ|dz|` over tumour pixels / `Σ|dz|` over background pixels, from
+initialization to a fully collapsed net:
+
+| loss | at init | collapsed | mechanism |
+|---|---|---|---|
+| `ce` | 5.09e-03 | 2.87e+01 | out-voted from the start |
+| `dice` | 2.84e-02 | **8.57e-02** | flat — and *declining* |
+| `wce` | 9.96e-01 | 5.61e+03 | amplify the minority: a constant 196× |
+| `focal` | 5.15e-03 | 1.20e+08 | defund the majority: nil at init, ~4e6× once confident |
+
+Dice starts ~5× better balanced than CE and ends ~335× worse: its
+correction *weakens* as the collapse deepens, which is positive feedback
+into the very state it was meant to prevent. Focal, despite its
+reputation, never amplifies the rare class at all — its gradient there
+sits on CE's to three digits, and its entire mechanism is the majority
+column. And focal is a **no-op at initialization**, because a uniform
+softmax has no confidence to suppress, which puts its protection on the
+far side of the ~100 steps in which the collapse is decided.
+
+Every row is measurable before spending a GPU-week finding out. That —
+plus the picture above — is the demo.
 
 ---
 
