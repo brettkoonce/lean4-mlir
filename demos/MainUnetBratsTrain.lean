@@ -135,5 +135,17 @@ def main (args : List String) : IO Unit := do
   -- mechanistic argument behind it: focal is a no-op at a uniform softmax, and
   -- this is what gives it confidence to suppress at step 0.
   let priorBias := if args.any (· == "pb") then unetBratsClassPriors else []
-  unetBrats.train { unetBratsConfig with epochs, lossKind, headPriorBias := priorBias }
+  -- Tag the build artifacts with the arm. Without this every arm writes the
+  -- same `_params.bin` and the same `_train_step.vmfb`, so a sequential
+  -- ablation silently overwrites itself and a parallel one (which is the point
+  -- of having two GPUs) races mid-compile. With it, `ce` and `wce` can run
+  -- concurrently and each keeps its own checkpoint for `brats-predict`.
+  let armName := (if args.any (· == "ce") then "ce"
+                  else if args.any (· == "dicece") then "dicece"
+                  else if args.any (· == "dice") then "dice"
+                  else if args.any (· == "focal") then "focal"
+                  else "wce") ++ (if args.any (· == "pb") then "_pb" else "")
+  IO.eprintln s!"  arm: {armName}  (artifacts: {(unetBrats.withBuildTag armName).buildPrefix}_*)"
+  (unetBrats.withBuildTag armName).train
+    { unetBratsConfig with epochs, lossKind, headPriorBias := priorBias }
     (args.head?.getD "data/brats") .brats

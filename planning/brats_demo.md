@@ -141,6 +141,8 @@ The data path and the demo shell, mirroring the pets stack one-for-one:
 | Weighted CE | `LossKind.perPixelWeightedCE` (`Types.lean`), `weights` param on `emitPerPixelCEBlock` | `unet-brats-train … wce`, now the default. FD-verified 9.41e-08 + `wce1 ≡ ce` exactly; weights from `scripts/brats_class_weights.py` |
 | Focal CE | `LossKind.perPixelFocalCE`, `emitSegFocalBlock` (`MlirCodegen.lean`) | `unet-brats-train … focal`. True (non-detached) gradient; FD 1.64e-07 + `focal0 ≡ ce` exactly |
 | Gradient scorecard | `scripts/seg_grad_scorecard.py` | All 5 arms vs the emitted MLIR; the (C) ratio predicts which loss can work, for ~2 min of CPU instead of 40 h of GPU |
+| Prior-bias init | `TrainConfig.headPriorBias`, `NetSpec.applyHeadPriorBias` | `unet-brats-train … pb`; head bias = log π_c, verified `softmax(bias) == π` to 1.9e-09 |
+| Per-arm artifacts | `NetSpec.buildTag` / `withBuildTag` (`Types.lean`, `Train.lean`) | Each arm gets its own `_params.bin` / `_train_step.vmfb`, so the ablation runs **concurrently, one arm per GPU** instead of clobbering itself |
 
 Everything else — `unetDown`/`unetUp` skip codegen, bilinear upsample
 (fwd+bwd, FD ~1e-11), channel concat, per-pixel softmax-CE, the seg train
@@ -633,9 +635,45 @@ whole run by construction, while focal's tracks wherever the net actually goes.
 Which is exactly the question the matched-budget run exists to settle, and the
 disagreement is worth having on record before it does.
 
-**Still owed:** B'3 foreground oversampling, B'4 pure `.dice` for the record,
-and the matched-budget run — now 5 arms worth running (`ce`, `dicece`, `wce`,
-`focal`, `focal pb`), not 2.
+### B'3 foreground oversampling — Status 2026-07-15: MEASURED, then NOT built
+
+Measured before building (`scripts/brats_oversample_probe.py`, CPU, ~2 min),
+which is what the scorecard habit is for. **The result retires it as a headline
+arm, and the reason is structural.**
+
+nnU-Net forces ~33% of patches to contain foreground, and that lever is
+enormous when most patches are pure background. On this dataset it is a **no-op
+by construction**: `preprocess_brats.py` keeps only slices with ≥1 tumour voxel,
+so **zero of the 14,415 training slices lack foreground** (measured). The win
+nnU-Net gets was already banked at preprocessing time.
+
+What remains is reweighting *within* an already-filtered set — biasing toward
+tumour-rich slices, since a polar cross-section holds a few voxels and an
+equatorial one holds thousands. The ceiling on that:
+
+| scheme | enhancing voxels | vs uniform |
+|---|---|---|
+| uniform (status quo) | 0.498% | 1.00× |
+| top-25%, f=0.5 | 0.852% | 1.71× |
+| top-10%, f=0.67 (best practical) | 1.194% | **2.40×** |
+| train on ONLY the richest decile (a bound, not a config) | 1.537% | 3.08× |
+
+**~2.4×, against levers already built and FD-verified at 196× (wce), ~4e6×
+(focal at a collapsed net), and ~19,000× (prior-bias, for focal at step 0).**
+
+Not an argument that it is worthless — it is orthogonal, it composes with every
+arm, and 2.4× is 2.4×. It *is* an argument against spending the next block of
+GPU on it, and against it being an arm of the ablation. It also has a cost the
+loss-side levers don't: implemented by duplication it doubles epoch time for
+that 2.4×, and implemented by resampling it needs a new weighted sampler in the
+shared train loop. wce gets 196× for a constant vector.
+
+**Deferred, deliberately, with the measurement on record** — so this is a
+decision rather than an oversight, and so nobody re-derives it from the nnU-Net
+paper and assumes the 33% rule transfers. It does not; the filter already ate it.
+
+**Still owed:** B'4 pure `.dice` for the record, and the matched-budget run —
+now 5 arms worth running (`ce`, `dicece`, `wce`, `focal`, `focal pb`), not 2.
 
 ## Workstream C — mask-aware augmentation
 

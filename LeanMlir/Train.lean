@@ -28,7 +28,14 @@ namespace NetSpec
     a new spec automatically gets a unique non-colliding prefix without
     the trainer author having to pick one. -/
 def buildPrefix (spec : NetSpec) : String :=
-  ".lake/build/" ++ spec.sanitizedName
+  ".lake/build/" ++ spec.sanitizedName ++
+    (if spec.buildTag.isEmpty then "" else "_" ++ MlirCodegen.sanitize spec.buildTag)
+
+/-- Set `buildTag`, so an ablation arm owns its own artifacts. Reads as
+    `(net.withBuildTag "ce").train …` at the call site. (Not `buildTag` — that
+    name belongs to the field itself.) -/
+def withBuildTag (spec : NetSpec) (tag : String) : NetSpec :=
+  { spec with buildTag := tag }
 
 /-- The fully qualified `<module>.<func>` name the train step's main
     function lives at — what `trainStepAdamF32` wants as its `fnName`.

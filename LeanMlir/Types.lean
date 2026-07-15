@@ -289,6 +289,22 @@ structure NetSpec where
   layers : List Layer
   imageH : Nat := 28
   imageW : Nat := 28
+  /-- Optional suffix on `buildPrefix`, so two runs of the **same
+      architecture** under different training configs get their own params,
+      MLIR, and vmfb instead of overwriting each other.
+
+      `buildPrefix` is derived from `name` alone, which is right — the name
+      describes the architecture, and the loss is not part of the architecture.
+      But it means a loss ablation is a set of runs that all claim the same
+      `.lake/build/<net>_params.bin` and the same `<net>_train_step.vmfb`. Run
+      them sequentially and each silently clobbers the last (which is why
+      `brats-predict` grew an explicit params override); run them concurrently,
+      one per GPU, and they race on the vmfb mid-compile.
+
+      Set this to the arm's name and the ablation parallelizes cleanly. Empty
+      (the default) reproduces the old paths exactly, so no existing trainer
+      moves. -/
+  buildTag : String := ""
 deriving Repr
 
 /-- The "kind" of supervised loss the train step computes. Picks the
