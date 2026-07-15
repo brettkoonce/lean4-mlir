@@ -1,0 +1,27 @@
+  loss: LossKind.perPixelDiceCE
+UNet (BraTS, 240×240 4-modality MRI → 4-class tumour): 7849988 params
+Generating train step MLIR...
+  1675834 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+  session loaded
+  train: 14415 images (230400 floats/image)
+  7849988 params + m + v (89 MB)
+training: 900 batches/epoch, batch=16, Adam, lr=0.001000, cosine warmup=0, label_smooth=0.000000, wd=0.000100
+  BN layers: 18, BN stat floats: 5888
+  step 0/900: loss=1.973712 (2716ms)
+  step 1/900: loss=1.747957 (2701ms)
+  step 2/900: loss=1.609057 (2713ms)
+  step 100/900: loss=0.863428 (2674ms)
+  step 200/900: loss=0.859704 (2678ms)
+  step 300/900: loss=0.832742 (2715ms)
+  step 400/900: loss=0.863798 (2699ms)
+  step 500/900: loss=0.859146 (2703ms)
+  step 600/900: loss=0.782574 (2714ms)
+  step 700/900: loss=0.848984 (2726ms)
+  step 800/900: loss=0.906136 (2658ms)
+Epoch 1/1: loss=0.871783 lr=0.001000 (2434714ms)
+  val mIoU: 0.243402  (per-class: c0=0.973609 c1=0.000000 c2=0.000000 c3=0.000000)
+Saved params + BN stats.

@@ -14,7 +14,20 @@ precisely why medical segmentation invented Dice. That is the through-line
 of this demo: **the thin-class collapse, taken seriously.**
 
 Prerequisite reading: `planning/unet_demo_v2.md` (what the seg stack is and
-what's still open on the pets side).
+what's still open on the pets side). Volumetric follow-on:
+`planning/unet3d.md`.
+
+**Audience, decided 2026-07-15: a working demo a medical student can pick up
+and run.** Not a proofs chapter. This is a real constraint with teeth, and it
+already explains several choices below — MSD Task01 over the Synapse-gated
+BraTS 2021, a dependency-free NIfTI reader instead of a `pip install nibabel`
+that PEP 668 blocks, a downloader that parallelizes 3 h down to 12 min. The
+correctness story is FD validation (`scripts/seg_loss_probe_check.py`:
+gradient vs central finite differences, 1.3e-07), which is a claim a reader
+can check by running one script. Priorities follow from this: **reproducibility
+and legibility outrank verification depth.** The two things a newcomer needs
+that don't exist yet are a per-class **Dice** score (mIoU is not the metric
+this field reports) and a **visualizer** — see Workstreams F and G.
 
 ## Two decisions, made up front
 
@@ -311,6 +324,82 @@ we go looking — most likely at the class-weighted CE variant
 (`unet_demo_v2.md` Workstream E scopes it at ~half a session) as the cheaper
 counterfactual.
 
+### GATE B RESULT 2026-07-15: FAILED at 1 epoch — and the mechanism is measured
+
+Matched 1-epoch runs, identical in every respect but the loss:
+
+| loss | val mIoU | c0 bg | c1 edema | c2 non-enh | c3 enhancing |
+|---|---|---|---|---|---|
+| `ce`     | 0.243445 | 0.9735 | 0.000000 | 0.000250 | 0.000000 |
+| `dicece` | 0.243402 | 0.9736 | 0.000000 | 0.000000 | 0.000000 |
+
+**Dice rescued nothing** — identical to four decimals, both the trivial
+background-only predictor. diceCE's epoch loss (0.871783) is the
+all-background value (Dice 0.75 + CE ~0.12 ≈ 0.87) to three decimals.
+
+**Why — measured, not guessed** (`scripts/seg_dice_vanishing_grad_probe.py`,
+run against the emitted MLIR). Dice's gradient carries a `p_i` factor from the
+softmax Jacobian; CE's does not:
+
+```
+dice: dz_i = p_i·(g_i - Σ_j g_j·p_j)      ← ∝ p_i
+ce:   dz_i = (p_i - y_i)/N                ← = -1/N at p_i = 0
+```
+
+Sweeping class 3's logit down and watching the gradient that is supposed to
+rescue it (mean |dz₃| at true-class-3 pixels):
+
+| logit₃ | p₃ | dice \|dz₃\| | ce \|dz₃\| | dice/ce |
+|---|---|---|---|---|
+| 0 | 1.78e-01 | 1.929e-03 | 6.423e-03 | 0.300 |
+| -4 | 5.84e-03 | 4.535e-04 | 7.767e-03 | 0.058 |
+| -8 | 1.03e-04 | 9.306e-06 | 7.812e-03 | 0.0012 |
+| -10 | 2.09e-05 | 1.886e-06 | 7.812e-03 | 0.00024 |
+
+From -8 to -10, p₃ falls 4.9× and the Dice gradient falls 4.9× — **exactly
+linear**, confirming the `p_i` factor. CE's gradient is **flat at 7.8e-03
+throughout**, wholly indifferent to the collapse.
+
+**Two conclusions, and they reframe this workstream:**
+
+1. **Dice is not a rescue mechanism.** Its signal is weakest exactly where
+   it is needed — at p₃ = 2e-5 it is 0.02% of CE's. It cannot un-collapse a
+   class. It can only help if the collapse never happens.
+2. **In `.diceCE`, Dice is the junior partner from step 0.** Even at init
+   (p₃ ≈ 0.25, logit 0) its gradient is only 0.30× CE's, and it decays from
+   there. `.diceCE` therefore *is* CE with a rounding error attached — which
+   is precisely what the matched run showed.
+
+So the header framing of this workstream ("the lever this demo exists to
+pull") was **wrong**. The collapse happens in the first ~100 steps
+(`runs/brats_unet_ce_smoke_gpu0.log`: loss reaches ~0.12 by step 100 and
+never descends again), long before Dice has any say. The lever has to act
+*there*.
+
+**Revised plan — prevent the collapse, don't try to reverse it:**
+
+- **Class-weighted CE** (`unet_demo_v2.md` WS-E, ~half a session): a weight
+  vector on the per-pixel loss and gradient seed. The mechanism above says
+  this is the *right* tool — CE's gradient provably does not vanish at
+  p→0, so up-weighting rare classes there keeps a live signal all the way
+  down. Cheapest and most likely to work; do it first.
+- **Prior-bias init on the head** (RetinaNet's trick): initialize the final
+  conv's bias to `log(π_c)` so class c starts at its prior rather than at
+  uniform. Directly targets the first-100-steps window where this is decided.
+  Nearly free.
+- **Foreground oversampling** in the sampler (nnU-Net forces ~33% of patches
+  to contain tumour). Raises Y_c per batch; complements the above.
+- **Then** re-test Dice on top. Dice may well be a good *polish* on a model
+  that already predicts the class at all — that is a different claim from
+  "Dice fixes imbalance", and it is the one the evidence supports.
+- Also still worth running once for the record: **pure `.dice`** (no CE to
+  drive the collapse). The mechanism predicts it collapses too, just slower.
+  A cheap falsification of the story above.
+
+**None of this impugns the codegen** — the Dice emitter is FD-verified to
+1.3e-07 and does exactly what soft Dice is defined to do. The loss is
+correct; the *expectation* of what it would buy was wrong.
+
 **Free win to fold in:** label smoothing on `perPixelCE` is already
 implemented in the emitter (`MlirCodegen.lean:4312-4314`) but gated off
 host-side (`Train.lean:127-128` throws). The codegen is there; only the
@@ -338,24 +427,96 @@ Gate D: 2.5D beats 2D at matched budget. The delta is the honest estimate of
 what full 3D could buy — and if it's small, that's a *finding*, and it
 retires the conv3d question rather than leaving it as vague ambition.
 
-## Workstream E — verified-gradient tie-in (stretch, on-brand)
+## Workstream E — verified-gradient tie-in — STRUCK 2026-07-15
 
-Same as `unet_demo_v2.md` Workstream F, and the argument is stronger here:
-if Dice lands, its VJP is a quotient of two linear reductions over the
-softmax — well inside what the existing proof library composes. "Verified
-Dice gradient over a verified UNet, on brain MRI" is the segmentation peer
-of the classifier chapters' claim.
+Was: "Dice's VJP is a quotient of two linear reductions over the softmax —
+well inside what the existing proof library composes. 'Verified Dice gradient
+over a verified UNet, on brain MRI' is the segmentation peer of the classifier
+chapters' claim."
+
+**Struck per the audience decision.** This demo's claim is codegen + FD, not
+proofs (see the header). The FD probe already gives a correctness story a
+newcomer can *run* — `scripts/seg_loss_probe_check.py`, gradient vs central
+finite differences to 1.3e-07 — and that is the right rigor for someone whose
+question is "does this segment a tumour", not "is the adjoint certified".
+
+Not deleted, because it is still a *true* observation and a future chapter
+may want it. But it is not on this demo's path, and leaving it listed as a
+"stretch" invites it to be treated as owed. It isn't.
+
+## Workstream F — report Dice on the BraTS regions (the field's metric)
+
+**The gap a medical student would notice first.** We report mIoU over the raw
+label classes. Nobody in this field does. BraTS reports **Dice** — and on
+*nested regions*, not raw classes:
+
+| region | MSD Task01 labels | meaning |
+|---|---|---|
+| WT (whole tumour) | 1 ∪ 2 ∪ 3 | everything abnormal |
+| TC (tumour core)  | 2 ∪ 3 | the resectable core (excludes edema) |
+| ET (enhancing tumour) | 3 | contrast-enhancing, the surgical target |
+
+(MSD pre-remapped the native BraTS 1/2/4 → 2/1/3, so the region definitions
+have to be read off *MSD's* labels, not the BraTS paper's. Easy to get
+backwards: MSD 1 = edema = BraTS 2; MSD 2 = non-enhancing/necrotic = BraTS 1.)
+
+Until this lands, our numbers are not comparable to a single published BraTS
+result — which for this audience is most of the point. Worse, the regions are
+*nested*, so per-class IoU can't be converted to them by inspection.
+
+**It is cheap.** `F32.segConfusion` already returns the `[NC*NC]` confusion
+matrix, and region Dice falls straight out of it — for a region R ⊆ classes,
+from `C[gt][pred]`:
+
+```
+inter_R = Σ_{g∈R} Σ_{p∈R} C[g][p]
+|gt_R|  = Σ_{g∈R} Σ_p C[g][p]
+|pr_R|  = Σ_{p∈R} Σ_g C[g][p]
+Dice_R  = 2·inter_R / (|gt_R| + |pr_R|)
+```
+
+No new C helper, no new kernel — pure host arithmetic on the matrix we already
+accumulate in exact `Nat`. Print WT/TC/ET Dice alongside the existing per-class
+IoU (keep both: IoU stays the cross-demo comparable to pets).
+
+Gate F: WT/TC/ET Dice printed at eval. Rough orientation for whether the demo
+is in the right postcode — a competent 2D BraTS baseline lands around
+WT ≈ 0.85+, TC ≈ 0.7-0.8, ET ≈ 0.6-0.7. We will be under that (484 volumes, no
+aug, 2D, short budget) and that is fine; being able to *say* by how much is the
+deliverable.
+
+## Workstream G — see the segmentation (`brats-predict`)
+
+`MainPetsPredict` renders image | GT | pred PPM strips. There is no BraTS
+equivalent, and for this audience the picture *is* the demo — a medical student
+evaluates a segmentation by looking at it, not by reading a scalar.
+
+Wants a little more than the pets version: pick a modality to render as the
+grayscale backdrop (T1gd is the one clinicians read for enhancing tumour), then
+overlay GT and prediction as colour masks with the standard region colours.
+Choose slices with a real tumour cross-section, not the near-empty edge slices
+`min_tumor_px = 1` lets through.
+
+Gate G: a figure in `demos/figures/` that makes the CE-vs-Dice difference
+*visible* — CE's collapse should be a picture of an empty brain next to a
+labelled one. That figure is the demo's money slide, more than any table.
 
 ## Sequencing
 
 ```
-Phase 0  DONE   data path + spec + exe (this session)
-Phase 1  A      baseline run, per-class IoU            (Gate A)
-Phase 2  B      Dice / Dice+CE + the loss ablation     (Gate B)
-Phase 3  C      mask-aware aug                         (Gate C)
-Phase 4  D      2.5D                                   (Gate D)
-Phase 5  E      Dice VJP proofs                        (optional)
+Phase 0  DONE   data path + spec + exe                  (this session)
+Phase 1  A      baseline run, per-class IoU             (Gate A — DONE, collapsed)
+Phase 2  B      Dice / Dice+CE + the loss ablation      (Gate B)
+Phase 3  F      WT/TC/ET Dice — the field's metric      (Gate F)
+Phase 4  G      brats-predict visualizer                (Gate G)
+Phase 5  C      mask-aware aug                          (Gate C)
+Phase 6  D      2.5D                                    (Gate D) → gates planning/unet3d.md
+        (E struck — codegen + FD is the claim)
 ```
+
+F and G moved ahead of aug/2.5D deliberately: they are what turn this from
+"a training run that prints numbers" into something a newcomer can pick up,
+and they are both cheap. Quality levers come after the demo is legible.
 
 ## On replacing the pets demo
 
@@ -387,7 +548,8 @@ as the published number).
 Full 3D conv **for this demo's first result** — but not out of scope for the
 repo, and the scoping above deliberately de-risked it (IREE rank-5 verified,
 codegen surface measured at ~675 lines, proofs optional by the decoder's own
-precedent). It is its own workstream with its own doc, gated on Gate D
+precedent). It is its own workstream with its own doc — `planning/unet3d.md`
+— gated on Gate D
 telling us through-plane context is actually where the ceiling is. Also out:
 BraTS 2021 leaderboard comparison (different data,
 see the data decision), instance-level tumour counting, survival prediction
