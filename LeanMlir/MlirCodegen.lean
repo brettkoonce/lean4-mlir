@@ -4499,6 +4499,117 @@ private def emitSegDiceBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
   s := s ++ s!"    {gradOut} = stablehlo.multiply %dc_p, %dc_gmd : {bnhwfTy}\n"
   return s
 
+/-- Per-pixel focal CE (Lin et al.) + `d_logits` for the segmentation path.
+
+    Forward, per pixel `k`, with `p_t` the softmax probability of the true class:
+
+      FL_k = -(1 - p_t)^γ · log p_t          loss = (1/N)·Σ_k FL_k
+
+    Backward. Write `omp := 1 - p_t`. Differentiating through `p_t` and then the
+    channel softmax (`∂p_t/∂z_c = p_t·(δ_tc - p_c)`) collapses to one per-pixel
+    scalar times the familiar CE shape:
+
+      A_k := γ·p_t·omp^(γ-1)·log p_t - omp^γ
+      ∂FL_k/∂z_c = A_k · (y_c - p_c)
+
+    Two readings of `A` that are the whole reason this loss is in the demo:
+
+      * `γ = 0` ⇒ `A = -1` ⇒ `dz = (p - y)/N`, i.e. **exactly** `perPixelCE`.
+        That is a free structural test, and `seg_loss_probe_check.py` runs it.
+      * `p_t → 0` (the collapsed class) ⇒ `p_t·log p_t → 0` and `omp^γ → 1`, so
+        `A → -1` and the gradient tends to **CE's**, not to zero. Focal does not
+        rescue a collapsed class by amplifying it — contrast Dice, whose `p_i`
+        factor sends the gradient to zero exactly there. It works, when it works,
+        by driving `A → 0` at `p_t → 1` and defunding the easy majority.
+
+    `omp^γ` is emitted as `exp(γ·log(max(omp, ε)))` rather than
+    `stablehlo.power`, matching the YOLOv1 objectness path's idiom. The ε clamp
+    only engages at `p_t > 1 - ε` (a saturated softmax), where `omp^γ` is ~0 and
+    the pixel contributes nothing anyway.
+
+    Unlike that YOLO path, the weight here is **not detached**: `A` carries the
+    derivative of the `(1-p_t)^γ` factor itself. Detaching is a defensible
+    approximation but yields a `d_logits` that is not the gradient of the loss
+    being reported, which FD would (correctly) reject. -/
+private def emitSegFocalBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
+    (gamma : Float)
+    (lossOut : String := "%loss") (gradOut : String := "%d_logits_seg")
+    : String := Id.run do
+  let bhwI32  := s!"tensor<{B}x{H}x{W}xi32>"
+  let bnhwI32 := s!"tensor<{B}x{NC}x{H}x{W}xi32>"
+  let bnhwI1  := s!"tensor<{B}x{NC}x{H}x{W}xi1>"
+  let bnhwfTy := tensorTy [B, NC, H, W]
+  let bhwfTy  := tensorTy [B, H, W]
+  let denom : Float := (B * H * W).toFloat
+  let mut s := ""
+  s := s ++ s!"\n    // ════════════ PER-PIXEL FOCAL CE (γ={gamma}) ════════════\n"
+  -- 1. log_softmax + softmax along the channel axis (max-shifted).
+  s := s ++ s!"    %fl_max = stablehlo.reduce({logitsSSA} init: %neginf) applies stablehlo.maximum across dimensions = [1]\n"
+  s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
+  s := s ++ s!"    %fl_max_b = stablehlo.broadcast_in_dim %fl_max, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %fl_shifted = stablehlo.subtract {logitsSSA}, %fl_max_b : {bnhwfTy}\n"
+  s := s ++ s!"    %fl_exp = stablehlo.exponential %fl_shifted : {bnhwfTy}\n"
+  s := s ++ s!"    %fl_esum = stablehlo.reduce(%fl_exp init: %zf) applies stablehlo.add across dimensions = [1]\n"
+  s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
+  s := s ++ s!"    %fl_logsum = stablehlo.log %fl_esum : {bhwfTy}\n"
+  s := s ++ s!"    %fl_logsum_b = stablehlo.broadcast_in_dim %fl_logsum, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %fl_logp = stablehlo.subtract %fl_shifted, %fl_logsum_b : {bnhwfTy}\n"
+  s := s ++ s!"    %fl_esum_b = stablehlo.broadcast_in_dim %fl_esum, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %fl_p = stablehlo.divide %fl_exp, %fl_esum_b : {bnhwfTy}\n"
+  -- 2. Raw one-hot. Label smoothing is rejected host-side for this kind: p_t is
+  -- the probability of *the* true class, which a softened target does not name.
+  s := s ++ s!"    %fl_iota = stablehlo.iota dim = 1 : {bnhwI32}\n"
+  s := s ++ s!"    %fl_y_b = stablehlo.broadcast_in_dim {labelSSA}, dims = [0, 2, 3] : ({bhwI32}) -> {bnhwI32}\n"
+  s := s ++ s!"    %fl_mask = stablehlo.compare EQ, %fl_iota, %fl_y_b : ({bnhwI32}, {bnhwI32}) -> {bnhwI1}\n"
+  s := s ++ s!"    %fl_ones = stablehlo.constant dense<1.0> : {bnhwfTy}\n"
+  s := s ++ s!"    %fl_zeros = stablehlo.constant dense<0.0> : {bnhwfTy}\n"
+  s := s ++ s!"    %fl_y = stablehlo.select %fl_mask, %fl_ones, %fl_zeros : {bnhwI1}, {bnhwfTy}\n"
+  -- 3. Gather p_t and log p_t to [B,H,W] (the one-hot kills every other channel).
+  s := s ++ s!"    %fl_py = stablehlo.multiply %fl_p, %fl_y : {bnhwfTy}\n"
+  s := s ++ s!"    %fl_pt = stablehlo.reduce(%fl_py init: %zf) applies stablehlo.add across dimensions = [1]\n"
+  s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
+  s := s ++ s!"    %fl_lpy = stablehlo.multiply %fl_logp, %fl_y : {bnhwfTy}\n"
+  s := s ++ s!"    %fl_lpt = stablehlo.reduce(%fl_lpy init: %zf) applies stablehlo.add across dimensions = [1]\n"
+  s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
+  -- 4. omp = max(1 - p_t, ε);  omp^γ = exp(γ·log omp).
+  s := s ++ s!"    %fl_oneh = stablehlo.constant dense<1.0> : {bhwfTy}\n"
+  s := s ++ s!"    %fl_epsh = stablehlo.constant dense<1.0e-12> : {bhwfTy}\n"
+  s := s ++ s!"    %fl_omp0 = stablehlo.subtract %fl_oneh, %fl_pt : {bhwfTy}\n"
+  s := s ++ s!"    %fl_omp = stablehlo.maximum %fl_omp0, %fl_epsh : {bhwfTy}\n"
+  s := s ++ s!"    %fl_logomp = stablehlo.log %fl_omp : {bhwfTy}\n"
+  s := s ++ s!"    %fl_gam = stablehlo.constant dense<{gamma}> : {bhwfTy}\n"
+  s := s ++ s!"    %fl_glog = stablehlo.multiply %fl_gam, %fl_logomp : {bhwfTy}\n"
+  s := s ++ s!"    %fl_ompg = stablehlo.exponential %fl_glog : {bhwfTy}\n"
+  -- 5. loss = -(1/N)·Σ_k omp^γ · log p_t.
+  s := s ++ s!"    %fl_flk = stablehlo.multiply %fl_ompg, %fl_lpt : {bhwfTy}\n"
+  s := s ++ s!"    %fl_tot = stablehlo.reduce(%fl_flk init: %zf) applies stablehlo.add across dimensions = [0, 1, 2]\n"
+  s := s ++ s!"           : ({bhwfTy}, tensor<f32>) -> tensor<f32>\n"
+  s := s ++ s!"    %fl_den = stablehlo.constant dense<{denom}> : tensor<f32>\n"
+  s := s ++ s!"    %fl_mean = stablehlo.divide %fl_tot, %fl_den : tensor<f32>\n"
+  s := s ++ s!"    {lossOut} = stablehlo.negate %fl_mean : tensor<f32>\n"
+  -- 6. A = γ·p_t·omp^(γ-1)·log p_t - omp^γ.
+  if gamma == 0.0 then
+    -- The γ factor kills the first term analytically, but emitting it would
+    -- compute 0·(omp^-1)·log p_t — and at a saturated pixel omp^-1 is inf, so
+    -- IEEE hands back 0·inf = NaN. Drop the term instead. This is what makes
+    -- `focal0 ≡ ce` an exact, runnable check rather than a NaN.
+    s := s ++ s!"    %fl_A = stablehlo.negate %fl_ompg : {bhwfTy}\n"
+  else
+    s := s ++ s!"    %fl_gm1 = stablehlo.constant dense<{gamma - 1.0}> : {bhwfTy}\n"
+    s := s ++ s!"    %fl_gm1log = stablehlo.multiply %fl_gm1, %fl_logomp : {bhwfTy}\n"
+    s := s ++ s!"    %fl_ompgm1 = stablehlo.exponential %fl_gm1log : {bhwfTy}\n"
+    s := s ++ s!"    %fl_t1 = stablehlo.multiply %fl_gam, %fl_pt : {bhwfTy}\n"
+    s := s ++ s!"    %fl_t2 = stablehlo.multiply %fl_t1, %fl_ompgm1 : {bhwfTy}\n"
+    s := s ++ s!"    %fl_t3 = stablehlo.multiply %fl_t2, %fl_lpt : {bhwfTy}\n"
+    s := s ++ s!"    %fl_A = stablehlo.subtract %fl_t3, %fl_ompg : {bhwfTy}\n"
+  -- 7. dz = (A/N)·(y - p).
+  s := s ++ s!"    %fl_denh = stablehlo.constant dense<{denom}> : {bhwfTy}\n"
+  s := s ++ s!"    %fl_AoN = stablehlo.divide %fl_A, %fl_denh : {bhwfTy}\n"
+  s := s ++ s!"    %fl_AoN_b = stablehlo.broadcast_in_dim %fl_AoN, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %fl_ymp = stablehlo.subtract %fl_y, %fl_p : {bnhwfTy}\n"
+  s := s ++ s!"    {gradOut} = stablehlo.multiply %fl_AoN_b, %fl_ymp : {bnhwfTy}\n"
+  return s
+
 /-- Emit the seg loss block selected by `segLoss`, leaving `%loss` and
     `%d_logits_seg` defined either way. `.diceCE` emits both blocks under
     private names and sums them; the duplicated softmax prologue is identical
@@ -4510,6 +4621,7 @@ private def emitSegLossBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
   | .ce   => emitPerPixelCEBlock B NC H W logitsSSA labelSSA labelSmoothing
   | .weightedCE w =>
     emitPerPixelCEBlock B NC H W logitsSSA labelSSA labelSmoothing (weights := w)
+  | .focalCE g => emitSegFocalBlock B NC H W logitsSSA labelSSA g
   | .dice => emitSegDiceBlock B NC H W logitsSSA labelSSA
   | .diceCE =>
     let mut s := ""

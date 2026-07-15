@@ -32,11 +32,16 @@ import LeanMlir
 
     Usage:
       ./download_brats.sh
-      lake exe unet-brats-train [data/brats] [epochs] [ce|dice|dicece|wce]
+      lake exe unet-brats-train [data/brats] [epochs] [ce|dice|dicece|wce|focal]
 
     The loss arg is the demo's ablation axis (planning/brats_demo.md
-    Workstream B). `ce` and `dicece` both reproduce the collapse — that is
-    the finding, not a misconfiguration. `wce` is the arm that should not.
+    Workstream B/B'). `ce` and `dicece` both reproduce the collapse — that is
+    the finding, not a misconfiguration. `wce` and `focal` are the two arms
+    that should not, and they fail differently if they fail:
+    `scripts/seg_grad_scorecard.py` measures wce's advantage as a constant
+    ~196× from step 0, and focal's as nil at init rising to ~4e6× once the net
+    is confident — so focal's open question is whether it engages before the
+    collapse is decided (~100 steps).
 -/
 
 /-- Inverse-frequency class weights, measured over `data/brats/train.bin` by
@@ -101,14 +106,17 @@ def main (args : List String) : IO Unit := do
   --          background-only predictor, planning/brats_demo.md Workstream A)
   --   dicece collapses too, identically to four decimals — the Gate B result,
   --          and the reason `dicece` is no longer the default
-  --   wce    the arm the measured gradient mechanism says should work
+  --   wce    amplify the rare class. Constant ~196× edge, live from step 0.
+  --   focal  defund the easy majority. No edge at init, ~4e6× once confident.
   --
-  -- `wce` is the default because it is the one that is supposed to segment a
-  -- tumour. The other two are the pedagogy: run them to watch the collapse.
+  -- `wce` is the default because it is the arm with no timing risk. The others
+  -- are the pedagogy: run them to watch the collapse, or to find out whether
+  -- focal's feedback is quick enough to prevent it.
   let lossKind : LossKind :=
     if args.any (· == "ce") then .perPixelCE
     else if args.any (· == "dicece") then .perPixelDiceCE
     else if args.any (· == "dice") then .perPixelDice
+    else if args.any (· == "focal") then .perPixelFocalCE 2.0
     else .perPixelWeightedCE unetBratsClassWeights
   IO.eprintln s!"  loss: {repr lossKind}"
   unetBrats.train { unetBratsConfig with epochs, lossKind }

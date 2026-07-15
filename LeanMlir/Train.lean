@@ -142,6 +142,15 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
       throw <| IO.userError s!"perPixelWeightedCE: got {weights.length} weights for a {nc}-class head — they must match 1:1"
     if weights.any (· <= 0.0) then
       throw <| IO.userError "perPixelWeightedCE: weights must be strictly positive (a zero weight silently deletes a class from the loss; a negative one ascends it)"
+  | .perPixelFocalCE gamma =>
+    if useSoftLabels then
+      throw <| IO.userError "perPixelFocalCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
+    if cfg.useFocal then
+      throw <| IO.userError "perPixelFocalCE already IS the focal path — cfg.useFocal selects the classCE/YOLOv1 focal modifier and would double-apply; set useFocal := false and put γ in the LossKind"
+    if cfg.labelSmoothing != 0.0 then
+      throw <| IO.userError "perPixelFocalCE + label smoothing not yet supported — focal is defined on p_t, the probability of *the* true class, which a smoothed target does not name"
+    if gamma < 0.0 then
+      throw <| IO.userError "perPixelFocalCE: γ must be ≥ 0 (γ=0 is plain perPixelCE; γ<0 up-weights the examples already correct)"
   | .perPixelDice | .perPixelDiceCE =>
     if useSoftLabels then
       throw <| IO.userError "perPixelDice/DiceCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"

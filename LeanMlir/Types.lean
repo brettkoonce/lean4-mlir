@@ -359,6 +359,36 @@ inductive LossKind where
       vector differently. `Σ_k w_{y_k}` depends only on the labels, so it is a
       constant w.r.t. the logits and contributes no gradient term. -/
   | perPixelWeightedCE (weights : List Float)
+  /-- Per-pixel focal CE (Lin et al., RetinaNet): `-(1-p_t)^γ · log p_t`, meaned
+      over pixels. Same ABI as `perPixelCE`. `γ = 0` is exactly `perPixelCE`.
+
+      The third distinct answer to the imbalance, and mechanically the opposite
+      of `perPixelWeightedCE` — worth stating, because "focal and class weights
+      both reweight the loss" hides the whole point:
+
+      * **weighted CE amplifies the rare class.** A static, per-*class* factor
+        from the label frequencies.
+      * **focal suppresses the easy class.** A dynamic, per-*pixel* factor from
+        the current prediction. At `p_t → 1` (confident background — 97% of
+        BraTS) the `(1-p_t)^γ` factor crushes the gradient toward 0. At
+        `p_t → 0` it tends to 1 and the gradient tends to CE's: focal does
+        **not** amplify the collapsed class, it defunds the majority drowning
+        it out.
+
+      So focal needs no frequency statistics and cannot be mis-tuned by a bad
+      weight vector, but it also cannot help a class that is rare *and* easy.
+
+      α is deliberately omitted. The paper's α_t is a per-class weight, i.e.
+      exactly `perPixelWeightedCE`'s mechanism — folding it in here would
+      confound the two arms of the very ablation this exists for. Compose them
+      later, once each is understood alone.
+
+      NB the gradient here is the **true** one, including the derivative of the
+      `(1-p_t)^γ` factor. Contrast the YOLOv1 objectness path, which detaches
+      that weight (`MlirCodegen.lean`, `%y1f_w0`) — a defensible approximation,
+      but one whose `d_logits` is not the derivative of any loss it states, and
+      so could not be FD-verified the way this is. -/
+  | perPixelFocalCE (gamma : Float)
   /-- Float `[B, C, H, W]` target tensor with per-pixel MSE (DDPM,
       autoencoder regression). Caller passes `ddpmOutShape`. -/
   | floatTargetMse
@@ -389,6 +419,8 @@ inductive SegLoss where
   /-- Per-pixel CE with a per-class weight on the true class. See
       `LossKind.perPixelWeightedCE` for the semantics and the argument. -/
   | weightedCE (weights : List Float)
+  /-- Per-pixel focal CE, `-(1-p_t)^γ·log p_t`. See `LossKind.perPixelFocalCE`. -/
+  | focalCE (gamma : Float)
 deriving Repr, BEq, Inhabited
 
 /-- Does this loss run on the segmentation path? Every per-pixel kind shares
@@ -398,7 +430,8 @@ deriving Repr, BEq, Inhabited
     each need this answer, and deriving it three times independently is how
     they drift apart. -/
 def LossKind.isSeg : LossKind → Bool
-  | .perPixelCE | .perPixelDice | .perPixelDiceCE | .perPixelWeightedCE _ => true
+  | .perPixelCE | .perPixelDice | .perPixelDiceCE
+  | .perPixelWeightedCE _ | .perPixelFocalCE _ => true
   | _ => false
 
 /-- Which seg loss block to emit. Non-seg kinds answer `.ce` and are never
@@ -407,6 +440,7 @@ def LossKind.segLoss : LossKind → SegLoss
   | .perPixelDice          => .dice
   | .perPixelDiceCE        => .diceCE
   | .perPixelWeightedCE w  => .weightedCE w
+  | .perPixelFocalCE g     => .focalCE g
   | _                      => .ce
 
 /-- Optimizer selector for the training loop. Added additively over the legacy

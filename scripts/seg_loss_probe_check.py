@@ -86,6 +86,23 @@ def wce_loss(z, y, NC, w, ls=0.0):
     return (wmap * ce_k).sum() / wmap.sum()
 
 
+FOCAL_GAMMA = 2.0  # must match MainSegLossProbe.lean's `focal` kind
+FOCAL_EPS = 1e-12  # must match emitSegFocalBlock's %fl_epsh
+
+
+def focal_loss(z, y, NC, gamma=FOCAL_GAMMA):
+    """Per-pixel focal CE, mean over B*H*W. Mirrors emitSegFocalBlock:
+    -(1-p_t)^gamma * log p_t, with the same eps clamp on (1-p_t)."""
+    zs = z - z.max(axis=1, keepdims=True)
+    logp = zs - np.log(np.exp(zs).sum(axis=1, keepdims=True))
+    p = softmax(z, axis=1)
+    yh = onehot(y, NC)
+    pt = (p * yh).sum(axis=1)        # [B,H,W]
+    lpt = (logp * yh).sum(axis=1)    # [B,H,W]
+    omp = np.maximum(1.0 - pt, FOCAL_EPS)
+    return -(np.exp(gamma * np.log(omp)) * lpt).mean()
+
+
 def dice_loss(z, y, NC, smooth=SMOOTH):
     """Batch soft Dice, meaned over classes. Mirrors emitSegDiceBlock."""
     p = softmax(z, axis=1)
@@ -104,6 +121,10 @@ def total_loss(kind, z, y, NC, ls=0.0):
         return dice_loss(z, y, NC)
     if kind in ("wce", "wce1"):
         return wce_loss(z, y, NC, probe_weights(kind, NC), ls)
+    if kind == "focal":
+        return focal_loss(z, y, NC, FOCAL_GAMMA)
+    if kind == "focal0":
+        return focal_loss(z, y, NC, 0.0)
     return ce_loss(z, y, NC, ls) + dice_loss(z, y, NC)
 
 
@@ -178,7 +199,7 @@ def main():
         sys.exit(f"{PROBE} missing — run: lake build seg-loss-probe")
     print("seg-loss probe: emitted loss + d_logits vs numpy + central finite differences")
     results = []
-    for kind in ("ce", "dice", "dicece", "wce", "wce1"):
+    for kind in ("ce", "dice", "dicece", "wce", "wce1", "focal", "focal0"):
         results.append(check(kind))
 
     # `wce1` is weighted CE with an all-ones weight vector. It must reproduce
@@ -221,6 +242,23 @@ def main():
     results.append(ok)
     print(f"  [{'PASS' if ok else 'FAIL'}] wce scale-invariance: "
           f"w={l_a:+.10f}  1000·w={l_b:+.10f}  |Δ|={abs(l_a-l_b):.2e}")
+
+    # focal at gamma=0 is -(1-p)^0 log p = -log p: plain CE, exactly. Same
+    # species of check as wce1 -- it pins the /N normalizer and the sign of A,
+    # neither of which FD can distinguish from a consistently-wrong pair.
+    print("  -- focal0 ≡ ce reduction (γ=0 must rebuild plain CE) --")
+    l_f0, dz_f0 = build_and_run("focal0", B, NC, H, W, z, y)
+    lerr = abs(l_ce - l_f0)
+    gerr = np.abs(dz_ce - dz_f0).max()
+    ok = lerr < 1e-7 and gerr < 1e-7
+    results.append(ok)
+    print(f"  [{'PASS' if ok else 'FAIL'}] focal0 vs ce: |Δloss|={lerr:.2e}  max|Δgrad|={gerr:.2e}")
+
+    l_f, _ = build_and_run("focal", B, NC, H, W, z, y)
+    differs = abs(l_f - l_ce) > 1e-4
+    results.append(differs)
+    print(f"  [{'PASS' if differs else 'FAIL'}] focal ≠ ce: "
+          f"ce={l_ce:+.8f} focal={l_f:+.8f} (γ=2 must move the loss)")
     # A shape where some class is entirely absent from the batch — the case the
     # Dice smoothing term exists for (0/0 without it), and the case that
     # actually occurs on BraTS, where enhancing tumour is missing from many

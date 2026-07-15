@@ -139,6 +139,8 @@ The data path and the demo shell, mirroring the pets stack one-for-one:
 | Region Dice | `DatasetIO.segRegions` + eval block (`Train.lean`) | WT/TC/ET from the existing confusion matrix; host-only, `eval forward (cached)` proves zero codegen impact. Checked by `scripts/seg_region_dice_check.py` |
 | Visualizer | `demos/MainBratsPredict.lean` | `lake exe brats-predict [out.ppm] [params.bin] [bn_stats.bin]`; T1gd backdrop + GT/pred overlays, tumour-burden slice picking |
 | Weighted CE | `LossKind.perPixelWeightedCE` (`Types.lean`), `weights` param on `emitPerPixelCEBlock` | `unet-brats-train … wce`, now the default. FD-verified 9.41e-08 + `wce1 ≡ ce` exactly; weights from `scripts/brats_class_weights.py` |
+| Focal CE | `LossKind.perPixelFocalCE`, `emitSegFocalBlock` (`MlirCodegen.lean`) | `unet-brats-train … focal`. True (non-detached) gradient; FD 1.64e-07 + `focal0 ≡ ce` exactly |
+| Gradient scorecard | `scripts/seg_grad_scorecard.py` | All 5 arms vs the emitted MLIR; the (C) ratio predicts which loss can work, for ~2 min of CPU instead of 40 h of GPU |
 
 Everything else — `unetDown`/`unetUp` skip codegen, bilinear upsample
 (fwd+bwd, FD ~1e-11), channel concat, per-pixel softmax-CE, the seg train
@@ -494,8 +496,94 @@ If that over-prediction survives to real budget, inverse-sqrt frequency
 `brats_class_weights.py` already prints it. Being able to trade *along* that
 axis is the point; CE and Dice offered no axis at all.
 
-**Still owed:** B'2 prior-bias init, B'3 foreground oversampling, B'4 pure
-`.dice` for the record, and the matched-budget three-arm run.
+### B'5 focal CE — Status 2026-07-15: BUILT + FD-VERIFIED
+
+`LossKind.perPixelFocalCE (gamma : Float)` — `-(1-p_t)^γ·log p_t`, meaned.
+`unet-brats-train … focal` (γ=2). The **third** answer to the imbalance, and
+mechanically the opposite of B'1, which is the reason to have both:
+
+- **wce amplifies the rare class.** Static, per-*class*, from label frequencies.
+- **focal defunds the easy class.** Dynamic, per-*pixel*, from the current
+  prediction. It does **not** amplify the rare class at all — measured, below.
+
+α is deliberately omitted: the paper's α_t *is* wce's mechanism, and folding it
+in would confound the two arms of the ablation it exists for.
+
+The gradient is the **true** one — `A = γ·p_t·omp^(γ-1)·log p_t - omp^γ`, with
+`dz_c = A·(y_c - p_c)` — not the detached-weight approximation the YOLOv1
+objectness path uses (`%y1f_w0`). Detaching is defensible but yields a
+`d_logits` that is not the derivative of the loss being reported, and FD would
+correctly reject it. FD 14/14: `focal` at **1.64e-07**, and **`focal0` (γ=0)
+≡ `ce` exactly** (Δloss 0.00e+00, Δgrad 3.73e-09) — the same species of
+structural check as `wce1`, pinning the `/N` normalizer and `A`'s sign.
+
+Probe gained a decimal parser (`w=1.0:60.9033:…`, `g=2.0`) so weight vectors
+live in one place instead of being duplicated into the Lean probe and drifting.
+Lean core has no `String.toFloat?`; `.drop` returns a `String.Slice` in this
+toolchain, so `.toString` before reaching for the String API.
+
+### The gradient scorecard — the framework, and it earns its keep immediately
+
+`scripts/seg_grad_scorecard.py` (CPU, ~2 min, against the **emitted MLIR**)
+generalizes the Dice vanishing-gradient probe to every arm. The reframing it
+forces: **a loss does not save a rare class by having a large gradient on it.**
+CE's gradient on a collapsed class is already the largest here and CE collapses
+anyway. What matters is the rare class's gradient *relative to the easy 97% it
+competes with* — table (C), `Σ|dz|` over class-3 px / `Σ|dz|` over background px.
+
+Measured, from init (`z0=0`) to deep collapse (`z0=10`, `p₀@bg = 0.9998`):
+
+| loss | (C) at init | (C) collapsed | mechanism |
+|---|---|---|---|
+| `ce` | 5.09e-03 | 2.87e+01 | — the rare class is out-voted from the start |
+| `dice` | 2.84e-02 | **8.57e-02** | flat, and *declining* past z0=6 |
+| `dicece` | 6.83e-03 | 1.00e+01 | ≈ ce, as Gate B showed |
+| `wce` | **9.96e-01** | 5.61e+03 | constant **196×** ce = exactly `w₃/w₀` |
+| `focal` | **5.15e-03** | **1.20e+08** | nil at init → ~4e6× ce once confident |
+
+Three findings worth keeping:
+
+1. **Dice's (C) starts ~5× better balanced than CE and ends ~335× worse.** Its
+   correction *weakens* as the collapse deepens — positive feedback into the
+   very state it was meant to prevent. That is "Dice can only help if the
+   collapse never happens", quantified.
+2. **focal never amplifies the rare class** — its (A) column sits on CE's to
+   three digits. Its whole mechanism is (B): as background confidence goes
+   0.25 → 0.9998, CE's majority gradient decays 4300× and focal's decays
+   **2e10×**. It silences the crowd rather than handing the rare class a
+   megaphone. This is invisible in (A) and was worth building the table to see.
+3. **focal is a no-op at initialization** (1.01× CE) and only engages as the net
+   grows confident — which *is* the collapse. Since the collapse is decided in
+   the first ~100 steps, focal's open question is whether its feedback arrives
+   in time, or shows up, like Dice, to a decision already made. wce has no such
+   timing risk: it is a blunt state-independent constant.
+
+**The probe was wrong first, and the wrongness is the lesson.** v1 pushed class
+3's logit down and left the background at random logits. That measures (A)
+correctly and (B) as a *flat line* — under which focal is indistinguishable from
+CE, and we would have shipped that as a finding. With random logits `p₀ ≈ 0.25`:
+the background is not **confident**, so `(1-p_t)^γ` has nothing to bite on. The
+fix is to sweep `z₀` **up**, which is what the collapse actually is (it is how CE
+gets below the class-prior floor) and moves both halves — `p₀@bg → 1` and
+`p₃@tum → 0` — with one knob.
+
+**First evidence the timing risk is real.** On the 64-slice overfit probe
+(val = train, 10 ep — a plumbing test, not a result), `focal` collapsed where
+`wce` did not:
+
+| arm | c1 edema | c2 non-enh | c3 enhancing |
+|---|---|---|---|
+| `wce` | 0.035623 | 0.022263 | **0.080366** |
+| `focal` | 0.000013 | 0.000108 | **0.000000** |
+
+Two independent lines — the scorecard's (C)-at-init and this run — point the
+same way. Not a verdict at 64 images, but it is the predicted failure showing up
+where predicted, and it is worth knowing *before* buying 40 h of GPU.
+
+**Still owed:** B'2 prior-bias init (which directly targets focal's weakness —
+start the net at the prior instead of uniform and focal has confidence to work
+with from step 0; the two may be complements rather than rivals), B'3 foreground
+oversampling, B'4 pure `.dice` for the record, and the matched-budget run.
 
 ## Workstream C — mask-aware augmentation
 
@@ -703,15 +791,18 @@ Phase 2  B      Dice / Dice+CE + the loss ablation      (Gate B — DONE: FAILED
                                                          Dice ∝ p_i vanishes)
 Phase 3  F      WT/TC/ET Dice — the field's metric      (Gate F — DONE)
 Phase 4  G      brats-predict visualizer                (Gate G — DONE)
-Phase 5  B'     PREVENT the collapse — the real lever   (Gate B' — NEXT)
-                  B'1 class-weighted CE      (~half a session; the mechanism
-                                              says this is the right tool)
+Phase 5  B'     PREVENT the collapse — the real lever   (Gate B' — IN FLIGHT)
+                  B'1 class-weighted CE               DONE + FD 9.41e-08
+                  B'5 focal CE                        DONE + FD 1.64e-07
+                  ——  gradient scorecard              DONE — the framework:
+                      measures which arm CAN work for 2 min of CPU
                   B'2 prior-bias head init   (nearly free; targets the
-                                              first-100-steps window)
+                      first-100-steps window — and is focal's natural
+                      complement, since focal is a no-op at a uniform softmax)
                   B'3 foreground oversampling
                   B'4 pure `.dice` for the record — the mechanism predicts it
                       collapses too, just slower. Cheap falsification.
-                  B'5 re-test Dice on top, as *polish* not rescue
+                  B'6 re-test Dice on top, as *polish* not rescue
 Phase 6  C      mask-aware aug                          (Gate C)
 Phase 7  D      2.5D                                    (Gate D) → gates planning/unet3d.md
         (E struck — codegen + FD is the claim)
