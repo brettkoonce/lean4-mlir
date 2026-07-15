@@ -455,6 +455,14 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         IO.eprintln s!"  bootstrap: loading first {prefixFloats} floats from {path}"
         let init ← spec.heInitParams
         NetSpec.patchInitWithPretrainedPrefix init path (prefixFloats * 4)
+  -- RetinaNet prior-bias init. Applied AFTER the bootstrap patch (which only
+  -- ever rewrites a prefix — the backbone — and never reaches the head) and
+  -- BEFORE the checkpoint resume below, which is a full restore and must win.
+  let params ← if cfg.headPriorBias.isEmpty then pure params else do
+    let p ← NetSpec.applyHeadPriorBias spec params cfg.headPriorBias
+    let z := cfg.headPriorBias.map Float.log
+    IO.eprintln s!"  head prior-bias init: bias = log π = {z}"
+    pure p
   -- LEAN_MLIR_INIT_LOAD: resume from a full checkpoint (overrides any bootstrap
   -- init above). Pairs with LEAN_MLIR_START_STEP below for crash auto-resume on
   -- the IREE/Lean path (e.g. the YOLO segfault wrapper). Adam moments are not

@@ -67,6 +67,17 @@ import LeanMlir
 def unetBratsClassWeights : List Float :=
   [1.0, 60.9033, 220.0868, 195.5835]
 
+/-- The measured class prior over `data/brats/train.bin` — background / edema /
+    non-enhancing / enhancing, as fractions of all voxels
+    (`scripts/brats_class_weights.py`). `unetBratsClassWeights` is literally the
+    reciprocal of this; both come from the same histogram.
+
+    Fed to `TrainConfig.headPriorBias` (the `pb` flag) to start the head at
+    `log π_c` instead of a uniform softmax. Needs no normalization — a constant
+    added to every logit is a no-op under softmax. -/
+def unetBratsClassPriors : List Float :=
+  [0.9746, 0.0160, 0.0044, 0.0050]
+
 def unetBrats : NetSpec where
   name := "UNet (BraTS, 240×240 4-modality MRI → 4-class tumour)"
   imageH := 240
@@ -119,5 +130,10 @@ def main (args : List String) : IO Unit := do
     else if args.any (· == "focal") then .perPixelFocalCE 2.0
     else .perPixelWeightedCE unetBratsClassWeights
   IO.eprintln s!"  loss: {repr lossKind}"
-  unetBrats.train { unetBratsConfig with epochs, lossKind }
+  -- `pb` adds RetinaNet prior-bias init. Orthogonal to the loss on purpose —
+  -- it composes with any arm, and `focal pb` is the pairing with an actual
+  -- mechanistic argument behind it: focal is a no-op at a uniform softmax, and
+  -- this is what gives it confidence to suppress at step 0.
+  let priorBias := if args.any (· == "pb") then unetBratsClassPriors else []
+  unetBrats.train { unetBratsConfig with epochs, lossKind, headPriorBias := priorBias }
     (args.head?.getD "data/brats") .brats

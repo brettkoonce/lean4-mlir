@@ -41,6 +41,13 @@ IREE_COMPILE = ".venv/bin/iree-compile"
 # into the Lean probe.
 BRATS_W = "w=1.0:60.9033:220.0868:195.5835"
 
+# Where RetinaNet prior-bias init (TrainConfig.headPriorBias) puts the net at
+# step 0: bias_c = log(pi_c), so z0 - z3 = log(0.9746/0.0050) = 5.27. Verified
+# against the emitted checkpoint -- softmax(head bias) == prior to 2e-09. This
+# row is the whole argument for pairing prior-bias init with focal, so the sweep
+# lands on it exactly rather than straddling it.
+PRIOR_BIAS_Z0 = float(np.log(0.9746 / 0.0050))
+
 # (label, probe argv tail). `ce` is the yardstick every ratio is taken against.
 LOSSES = [
     ("ce",     ["ce"]),
@@ -122,7 +129,7 @@ tumour pixels. One knob, both halves of the collapse.
     print(hdr)
     print("  " + "-" * (len(hdr) - 2))
     rows = []
-    for bias in (0.0, 2.0, 4.0, 6.0, 8.0, 10.0):
+    for bias in (0.0, 2.0, 4.0, PRIOR_BIAS_Z0, 6.0, 8.0, 10.0):
         z = rng.randn(B, NC, H, W) * 0.5
         z[:, 0, :, :] += bias
         e = np.exp(z - z.max(axis=1, keepdims=True))
@@ -139,25 +146,28 @@ tumour pixels. One knob, both halves of the collapse.
                 "major_tot": np.abs(dz[:, 0, :, :][bg]).sum(),
             }
         rows.append((bias, p3, p0, vals))
+        tag = "   <- prior-bias init starts the net HERE" if bias == PRIOR_BIAS_Z0 else ""
         print(f"  {bias:5.1f} {p3:9.2e} {p0:8.4f} |" +
-              "".join(f"{vals[nm]['rescue']:11.3e}" for nm, _ in LOSSES))
+              "".join(f"{vals[nm]['rescue']:11.3e}" for nm, _ in LOSSES) + tag)
 
     print("\n(B) MAJORITY SIGNAL   mean |dz| on ch0 at true-background px")
     print("    (the easy 97% the rescue signal has to out-shout)")
     print(hdr)
     print("  " + "-" * (len(hdr) - 2))
     for bias, p3, p0, vals in rows:
+        tag = "   <- prior-bias init starts the net HERE" if bias == PRIOR_BIAS_Z0 else ""
         print(f"  {bias:5.1f} {p3:9.2e} {p0:8.4f} |" +
-              "".join(f"{vals[nm]['major']:11.3e}" for nm, _ in LOSSES))
+              "".join(f"{vals[nm]['major']:11.3e}" for nm, _ in LOSSES) + tag)
 
     print("\n(C) THE RATIO THAT DECIDES IT   sum|dz| over class-3 px / sum|dz| over bg px")
     print("    (totals, not means -- 0.5% of pixels vs 97% is the whole fight)")
     print(hdr)
     print("  " + "-" * (len(hdr) - 2))
     for bias, p3, p0, vals in rows:
+        tag = "   <- prior-bias init starts the net HERE" if bias == PRIOR_BIAS_Z0 else ""
         print(f"  {bias:5.1f} {p3:9.2e} {p0:8.4f} |" +
               "".join(f"{vals[nm]['rescue_tot']/max(vals[nm]['major_tot'],1e-30):11.3e}"
-                      for nm, _ in LOSSES))
+                      for nm, _ in LOSSES) + tag)
 
     print("""
 Reading the three tables (measured values as of 2026-07-15):

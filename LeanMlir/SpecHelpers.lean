@@ -502,6 +502,68 @@ def heInitParams (spec : NetSpec) : IO ByteArray := do
     seed := s'
   return F32.concat paramParts
 
+/-- Overwrite the head's bias with `log priors[c]` — RetinaNet's prior-bias
+    init (Lin et al. §3.3, "prior"), for segmentation heads.
+
+    `heInitParams` lays layers out in order and emits each conv's bias directly
+    after its weights, so the head's bias is the **final `NC` floats** of the
+    buffer. That is what this patches; it is a no-op on everything else.
+
+    **What it buys, and why it is focal's other half.** A zero-bias head starts
+    at a uniform softmax: every class at `1/NC`, background included. The net's
+    first job is therefore to discover the class prior, and on BraTS it does
+    that by walking straight into the trivial predictor — the collapse is
+    decided in the first ~100 steps (`planning/brats_demo.md` Workstream A). A
+    `log π_c` bias hands it the prior at step 0 instead, so the first gradient
+    step is spent on the actual task.
+
+    The quantitative version is in `scripts/seg_grad_scorecard.py`, whose sweep
+    lands on this exact row. Prior-bias init starts the net at
+    `z₀ - z₃ = log(π₀/π₃) = log(0.9746/0.0050) = 5.27` (verified against the
+    emitted checkpoint: `softmax(head bias) == π` to 2e-09). Its measured
+    balance ratio — rare-class gradient over majority gradient — reads:
+
+    | (C) at | ce | dice | wce | focal |
+    |---|---|---|---|---|
+    | `z0 = 0` (uniform) | 5.09e-03 | 2.84e-02 | 9.96e-01 | **5.15e-03** |
+    | `z0 = 5.27` (this) | 2.60e-01 | 1.12e-01 | 5.08e+01 | **9.90e+01** |
+
+    **One bias vector is worth ~19,000× to focal, at step 0** — and flips it
+    from the worst arm (tied with CE, a literal no-op) to the best (~2× wce).
+    That is the whole content of "focal needs confidence to suppress": this
+    manufactures the confidence up front instead of waiting for training to
+    produce it too late. It is why Lin et al. ship the two together; they are
+    one idea, and reading them as separate tricks is how the pairing gets lost.
+
+    It helps every arm — wce's ratio rises 51× too — because starting at the
+    prior is simply a better starting point than uniform. focal is the one that
+    goes from *inert* to *leading*.
+
+    `priors` need not be normalized: adding a constant to every logit is a
+    no-op under softmax, so an overall scale on `priors` shifts every bias by
+    `log k` and changes nothing. Only the ratios matter — the same
+    scale-invariance that `perPixelWeightedCE`'s reduction enjoys, for the same
+    reason.
+
+    Returns a NEW ByteArray. -/
+def applyHeadPriorBias (spec : NetSpec) (params : ByteArray)
+    (priors : List Float) : IO ByteArray := do
+  let nc := (spec.layers.getLast?.map (·.outChannels)).getD 0
+  if priors.length != nc then
+    throw <| IO.userError s!"headPriorBias: got {priors.length} priors for a {nc}-class head — they must match 1:1"
+  if priors.any (· <= 0.0) then
+    throw <| IO.userError "headPriorBias: priors must be strictly positive (log 0 = -inf would hard-zero the class, which is the collapse we are trying to prevent, installed by hand)"
+  let total := params.size / 4
+  if total < nc then
+    throw <| IO.userError s!"headPriorBias: {total} params is smaller than the {nc}-float head bias"
+  -- No scalar-store primitive on the F32 side, and none is worth adding for
+  -- one vector written once per run: build the bias block and splice it onto
+  -- the truncated buffer.
+  let mut biasParts : Array ByteArray := #[]
+  for pi in priors do
+    biasParts := biasParts.push (← F32.const (1 : USize) (Float.log pi))
+  return (params.extract 0 ((total - nc) * 4)).append (F32.concat biasParts)
+
 /-- Patch the first `prefixBytes` of `initParams` with bytes read from
     `pretrainedPath`. Used to bootstrap a fresh init from a pretrained
     backbone — e.g. load R34-Imagenette weights into a YOLOv1 init,

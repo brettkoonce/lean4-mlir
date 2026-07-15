@@ -531,6 +531,17 @@ structure TrainConfig where
       both. γ=2.0 is the paper default. -/
   useFocal     : Bool  := false
   focalGamma   : Float := 2.0
+  /-- RetinaNet prior-bias init: initialize the **head's bias** to `log π_c`
+      instead of zero, so the net starts predicting the class prior rather than
+      a uniform distribution. Empty (the default) leaves the head at zero bias
+      and changes nothing.
+
+      Orthogonal to `lossKind` — it is an init, not a loss — and deliberately
+      so: it is the natural partner of `.perPixelFocalCE`, whose `(1-p_t)^γ`
+      factor is a **no-op at a uniform softmax** because there is no confidence
+      to suppress. Prior-bias init manufactures that confidence at step 0.
+      See `NetSpec.applyHeadPriorBias` for the measured size of the effect. -/
+  headPriorBias : List Float := []
   /-- DeiT-style data augmentation knobs. Setting `useMixup` or
       `useCutmix` switches the train-step to the soft-label codegen
       path; the dataloader produces a `[B, NC]` smoothed soft-label

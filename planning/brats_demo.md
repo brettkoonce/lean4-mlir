@@ -580,10 +580,62 @@ Two independent lines — the scorecard's (C)-at-init and this run — point the
 same way. Not a verdict at 64 images, but it is the predicted failure showing up
 where predicted, and it is worth knowing *before* buying 40 h of GPU.
 
-**Still owed:** B'2 prior-bias init (which directly targets focal's weakness —
-start the net at the prior instead of uniform and focal has confidence to work
-with from step 0; the two may be complements rather than rivals), B'3 foreground
-oversampling, B'4 pure `.dice` for the record, and the matched-budget run.
+### B'2 prior-bias init — Status 2026-07-15: BUILT + VERIFIED
+
+`TrainConfig.headPriorBias : List Float := []` + `NetSpec.applyHeadPriorBias`.
+Sets the head's bias to `log π_c` instead of zero, so the net starts predicting
+the class prior rather than a uniform softmax. `unet-brats-train … pb`,
+orthogonal to the loss arm because it is an init, not a loss.
+
+Implementation is a splice, not a new primitive: `heInitParams` emits each
+conv's bias right after its weights in layer order, so the head bias is the
+**final NC floats** of the buffer. Applied after the bootstrap patch (which only
+rewrites a backbone prefix) and before checkpoint resume (a full restore, which
+must win). Priors need no normalization — a constant added to every logit is a
+no-op under softmax, the same scale-invariance `perPixelWeightedCE` enjoys.
+
+**Verified exactly**: `softmax(head bias) == π` to **1.9e-09** off the emitted
+checkpoint, giving `z₀ - z₃ = 5.2726`.
+
+**And that number is the point.** 5.2726 is `log(π₀/π₃)` — it lands the net
+exactly on the scorecard's `z0 ≈ 5.3` row, which was already measured before
+this was built:
+
+| (C) at | ce | dice | wce | focal |
+|---|---|---|---|---|
+| `z0 = 0` (uniform init) | 5.09e-03 | 2.84e-02 | 9.96e-01 | **5.15e-03** |
+| `z0 = 5.27` (prior-bias) | 2.60e-01 | 1.12e-01 | 5.08e+01 | **9.90e+01** |
+
+**One bias vector is worth ~19,000× to focal, at step 0, and flips it from the
+worst arm — tied with CE, a literal no-op — to the best, ~2× wce.** This is the
+scorecard paying rent: the prediction was sitting in the table before the code
+existed, and the code landed on the predicted row. It also explains why Lin et
+al. ship prior-bias init *with* focal rather than as a separate trick — focal's
+mechanism needs confidence to suppress, and at a uniform softmax there is none.
+They are one idea. (It helps every arm — wce rises 51× too, since starting at
+the prior beats starting uniform. focal is the one that goes inert → leading.)
+
+**Preliminary, and it does not fully agree.** On the 64-slice overfit probe
+(10 ep, val = train — a plumbing test):
+
+| arm | c1 edema | c3 enhancing | WT Dice |
+|---|---|---|---|
+| `focal` | 0.000013 | 0.000000 | 0.000659 |
+| `focal pb` | 0.001999 | 0.000000 | **0.021299** (32×) |
+| `wce` | 0.035623 | **0.080366** | — |
+
+`pb` helps focal by 32× on WT Dice and 154× on edema IoU, directionally as
+predicted. But `wce` alone still beats `focal pb`, where the (C) table says
+`focal pb` (98.98) should beat `wce` alone (0.996). Two honest readings: 64
+images at val = train is too weak to rank arms, **and** (C) describes the
+gradient regime at *init*, not the trajectory — wce holds its ratio for the
+whole run by construction, while focal's tracks wherever the net actually goes.
+Which is exactly the question the matched-budget run exists to settle, and the
+disagreement is worth having on record before it does.
+
+**Still owed:** B'3 foreground oversampling, B'4 pure `.dice` for the record,
+and the matched-budget run — now 5 arms worth running (`ce`, `dicece`, `wce`,
+`focal`, `focal pb`), not 2.
 
 ## Workstream C — mask-aware augmentation
 
