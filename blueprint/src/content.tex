@@ -691,6 +691,8 @@ step. One-line lemmas (\texttt{pdiv\_id}, \texttt{pdiv\_const},
 \texttt{pdiv\_reindex}, the identity VJP) stay unstructured:
 structuring a one-\texttt{simp} proof would be ceremony.
 
+\section{The theorems}
+
 \begin{definition}[Partial derivative]
   \label{ax:pdiv}
   \lean{Proofs.pdiv}
@@ -1588,7 +1590,7 @@ trained end-to-end under one machine-checked scheme}.
 \chapter{MNIST: 1D MLP}
 \label{chap:mlp}
 
-\section*{The pdiv we built last chapter, now applied}
+\prosesection{The pdiv we built last chapter, now applied}
 
 In Chapter \ref{chap:tensor} we defined a function \(\pdiv\) that
 captures the partial derivative of any sufficiently smooth function.
@@ -1607,7 +1609,7 @@ the same question, asked about a different building block:
 \emph{if I jiggle this input by} \(\varepsilon\), \emph{how does the
 output jiggle?}
 
-\section*{The Jacobian as multidimensional ``how does it jiggle?''}
+\prosesection{The Jacobian as multidimensional ``how does it jiggle?''}
 
 For a scalar function \(f : \mathbb{R} \to \mathbb{R}\) the answer
 is a single number: the derivative. For our networks, no function
@@ -1627,7 +1629,7 @@ table at a chosen \((i, j)\). The Jacobian is \(\pdiv\) applied
 across both indices at once, organized so it can be multiplied
 into other matrices later.
 
-\section*{The dense layer's Jacobian is the weight matrix}
+\prosesection{The dense layer's Jacobian is the weight matrix}
 
 Our smallest building block is a dense (or ``fully connected'')
 layer: \(y = Wx + b\), where \(W\) is an \(m \times n\) weight
@@ -1653,7 +1655,7 @@ we need for a dense layer. Theorems \ref{ax:pdiv_dense} and
 \ref{ax:pdiv_dense_W} below formalize them; we have already done
 the substantive work.
 
-\section*{ReLU: the piecewise case}
+\prosesection{ReLU: the piecewise case}
 
 ReLU is the function \(\mathrm{relu}(x) = \max(x, 0)\) applied
 coordinatewise. Its Jacobian is a diagonal matrix: each output
@@ -1667,7 +1669,7 @@ codegen substitutes the standard subgradient convention at the
 kink and we move on. The kink is the only place in the chapter
 where ``differentiable'' becomes slightly subtle.
 
-\section*{Softmax cross-entropy: where vectors collapse to a scalar}
+\prosesection{Softmax cross-entropy: where vectors collapse to a scalar}
 
 The last building block is the loss: softmax cross-entropy between
 the model's output \(z \in \mathbb{R}^{10}\) and the true class
@@ -1690,7 +1692,7 @@ The gradient of the loss is the difference between the model's
 predicted distribution and the truth. Theorem
 \ref{ax:softmaxCE_grad} makes this formal.
 
-\section*{From Jacobians to VJPs}
+\prosesection{From Jacobians to VJPs}
 
 Training does not multiply Jacobians together directly. The loss
 is a scalar, and the quantity we actually want is ``how does
@@ -1715,7 +1717,7 @@ building blocks in reverse order. That last claim is what makes a
 multiplies, and it is the structural fact
 that the rest of the book leans on.
 
-\section*{The theorems}
+\section{The theorems}
 
 \begin{theorem}[Dense Jacobian wrt input]
   \label{ax:pdiv_dense}
@@ -2392,7 +2394,7 @@ theorem is precisely the claim that this text computes
 \chapter{MNIST: 2D CNN}
 \label{chap:cnn}
 
-\section*{The MLP wastes information; we can do better}
+\prosesection{The MLP wastes information; we can do better}
 
 Chapter \ref{chap:mlp}'s MLP recognized digits by flattening every
 28$\times$28 image into a 784-dim vector and feeding it through
@@ -2416,7 +2418,7 @@ Convolutional networks fix this by building three priors directly
 into the architecture---priors that the data has but the MLP
 threw away.
 
-\section*{Three properties baked into a convolution}
+\prosesection{Three properties baked into a convolution}
 
 \begin{enumerate}
 \item \textbf{Locality.} Each output value depends on only a small
@@ -2459,7 +2461,7 @@ and a window of the input. The sum is over a tiny \(3 \times 3\)
 spatial region and over input channels---usually a handful of
 terms, not the 784 a dense layer touches.
 
-\section*{The Jacobian is sparse and structured}
+\prosesection{The Jacobian is sparse and structured}
 
 The Jacobian of a convolution looks like a giant matrix, but it
 isn't a generic giant matrix---it's mostly zeros. Specifically,
@@ -2477,7 +2479,7 @@ linear map is the linear map'' still holds. The Jacobian is just
 written in a different basis: instead of one big dense matrix it
 is a list of kernel weights plus a rule for where each one lives.
 
-\section*{The backward of a convolution is another convolution}
+\prosesection{The backward of a convolution is another convolution}
 
 We want \(dx\)---how a
 small jiggle in each input pixel changes the loss---given an upstream
@@ -2507,7 +2509,7 @@ this time of the saved input \(x\) against the upstream gradient
 \ref{ax:conv2d_has_vjp3}, \ref{ax:conv2d_weight_grad_has_vjp}, and
 \ref{ax:conv2d_bias_grad_has_vjp} formalize each of these.
 
-\section*{Max pooling: the winner gets the gradient}
+\prosesection{Max pooling: the winner gets the gradient}
 
 The other new primitive in this chapter is max pooling. A
 \(2 \times 2\) max pool collapses each \(2 \times 2\) block of the
@@ -2525,7 +2527,7 @@ window, and zeros out the rest. At ties the codegen breaks
 deterministically (same convention as ReLU's kink). Definition
 \ref{ax:maxPool2_has_vjp3} states this formally.
 
-\section*{The rest of the network is Chapter 2}
+\prosesection{The rest of the network is Chapter 2}
 
 After two convolutions and a max pool, the feature map is
 \(14 \times 14 \times 32\). At that point we \texttt{flatten} the
@@ -2541,7 +2543,7 @@ max-pool backward, conv2d backward $\times 2$. Each piece is its
 own theorem; together they form a working trainer for MNIST that
 respects the image's 2-D structure.
 
-\section*{The theorems}
+\section{The theorems}
 
 \begin{definition}[Conv2d forward]
   \label{ax:conv2d}
@@ -3186,7 +3188,7 @@ rest of the book. \textbf{Ch~\ref{chap:residual} (ResNet-34) is
 the easiest chapter in the book and follows immediately --- this
 is a localized difficulty spike, not the new normal.}
 
-\section*{What BN actually is}
+\prosesection{What BN actually is}
 
 BatchNorm (Ioffe \& Szegedy, 2015) takes a batch of activations,
 \(x\), and does three things in sequence. Each is one line of code;
@@ -3212,7 +3214,7 @@ Chapter~\ref{chap:tensor} gives us three Jacobians to multiply,
 and the ``BN three-term backward'' is exactly that
 product written out.
 
-\section*{The centering term has an indirect path}
+\prosesection{The centering term has an indirect path}
 
 Here is the first place a careful reader can trip. When you
 jiggle a single input \(x_i\), you do not only jiggle \(x_i\)---you
@@ -3231,7 +3233,7 @@ states this formally. Forgetting the \(-1/n\) is the most common
 hand-derivation mistake on BN, and is exactly what the formal
 proof prevents.
 
-\section*{The inverse-stddev term}
+\prosesection{The inverse-stddev term}
 
 The normalize step divides by \(\sqrt{\sigma^2 + \varepsilon}\),
 where \(\sigma^2 = \frac{1}{n} \sum_k (x_k - \mu)^2\) is itself a
@@ -3262,7 +3264,7 @@ the book} where the math actually requires real-analysis machinery
 beyond chain-sum-product; everything else in the framework reduces
 to those three rules.
 
-\section*{The three-term backward}
+\prosesection{The three-term backward}
 
 Compose the three forward steps and apply the product rule on
 \(\hat{x} = (x - \mu) \cdot \mathrm{istd}\). The cross-terms collapse
@@ -3296,7 +3298,7 @@ the formal proof is not that we discovered the formula---it has
 been known since 2015---but that the Lean kernel mechanically
 verifies we are computing the right thing at every training step.
 
-\section*{The affine step is dense-with-broadcasting}
+\prosesection{The affine step is dense-with-broadcasting}
 
 The third step, \(\gamma \hat{x} + \beta\), is structurally a
 dense layer applied per-channel. Its Jacobian
@@ -3308,7 +3310,7 @@ broadcast across spatial dimensions. Theorem
 are essentially corollaries of the dense theorems; the new content
 here is zero.
 
-\section*{Putting it together}
+\prosesection{Putting it together}
 
 Theorem \ref{thm:bn_has_vjp} is the composition:
 \(\mathrm{bn} = \mathrm{affine} \circ \mathrm{normalize}\), with VJPs
@@ -3320,7 +3322,7 @@ Mathlib-level analytic dependency (sqrt and recip
 differentiability), one formula, and the rest is the same
 chain rule we already had.
 
-\section*{The theorems}
+\section{The theorems}
 
 \begin{theorem}[BN affine step Jacobian]
   \label{ax:pdiv_bnAffine}
@@ -4125,7 +4127,7 @@ math.
 \chapter{ResNet-34}
 \label{chap:residual}
 
-\section*{Deeper networks used to stop training}
+\prosesection{Deeper networks used to stop training}
 
 Before 2015, the dominant assumption in image classification was
 ``deeper is better, up to a point.'' The ``up to a point'' part was
@@ -4149,7 +4151,7 @@ what a shallow one represents?''---it provably could. The question
 was: why is optimizing 12 free-form layers to recover identity
 so much harder than just leaving identity there?
 
-\section*{The residual block: ask for the difference, not the function}
+\prosesection{The residual block: ask for the difference, not the function}
 
 Their fix was a one-line architectural change. Instead of asking
 each block to learn a function \(y = f(x)\), ask it to learn a
@@ -4170,7 +4172,7 @@ to the training dynamics is the difference between ``18 layers is
 about as deep as we can go'' and ``152 layers trains stably; let
 us also add another zero on the ImageNet leaderboard.''
 
-\section*{Why the proof is a one-liner}
+\prosesection{Why the proof is a one-liner}
 
 From the framework's perspective, what is a residual block?
 \(\mathrm{residual}(x) = f(x) + \mathrm{id}(x)\)---a sum of two
@@ -4193,7 +4195,7 @@ architecture without any new math is the value proposition: once
 the foundation rules are in place, the next decade of image
 recognition follows from composing them.
 
-\section*{ResNet-34 is sixteen of these blocks}
+\prosesection{ResNet-34 is sixteen of these blocks}
 
 ResNet-34 (the smallest ``deep'' variant in the original paper)
 is built from 16 residual blocks arranged in four stages of
@@ -4232,7 +4234,7 @@ ViT replaces the whole convolutional spine with patches and
 attention. The stem-stages-head template, and the residual
 fan-in pattern, persist.
 
-\section*{The theorem}
+\section{The theorem}
 
 \begin{theorem}[Residual block VJP]
   \label{thm:residual_has_vjp}
@@ -4839,7 +4841,7 @@ to zero.
 (bf16, 4$\times$ 4060 Ti). The kink near epoch~5 is the end of
 warmup; the steady late climb is the cosine anneal.
 
-\section*{A reasonable stopping point}
+\prosesection{A reasonable stopping point}
 
 For the fastest path through this book, the route is roughly:
 
@@ -4893,7 +4895,7 @@ just at different token alphabets. Image classification + detection
 + segmentation + diffusion + NLP, all on the same Lean$\to$MLIR$\to$IREE
 pipeline, covers most of what people mean by ``modern deep learning.''
 
-\section*{Side quest: ResNet-50, RSB-A3 (100 epochs)}
+\prosesection{Side quest: ResNet-50, RSB-A3 (100 epochs)}
 
 The basic block ResNet-34 is built from generalizes to the
 \emph{bottleneck} block of ResNet-50, and the \texttt{jax/} folder
@@ -5018,7 +5020,7 @@ extra epochs would cost. Every one of these is a one-line
 \chapter{MobileNetV2}
 \label{chap:depthwise}
 
-\section*{A standard conv does two jobs at once}
+\prosesection{A standard conv does two jobs at once}
 
 A standard 3$\times$3 convolution from \(C_\text{in}\) channels to
 \(C_\text{out}\) channels computes, for every output cell:
@@ -5048,7 +5050,7 @@ neighborhood. The channel mixing can be approximated by a much
 cheaper operation. If we separate them, we get parameter
 efficiency without losing much expressive power.
 
-\section*{Depthwise: one kernel per channel, no cross-channel sum}
+\prosesection{Depthwise: one kernel per channel, no cross-channel sum}
 
 A \emph{depthwise} convolution does the spatial half on its own,
 per channel. Each output channel comes from one input channel, with
@@ -5083,7 +5085,7 @@ transpose-trick, and the bias VJP is the same per-channel sum.
 Theorems \ref{ax:depthwise_has_vjp3} through
 \ref{ax:depthwise_bias_grad_has_vjp} prove the depthwise VJPs.
 
-\section*{The depthwise-separable sandwich}
+\prosesection{The depthwise-separable sandwich}
 
 A depthwise conv alone never lets channels see each other. That's
 a problem---the whole point of stacking convolutions is to build
@@ -5106,7 +5108,7 @@ everywhere downstream. A standard \(3 \times 3\) over 64$\to$64
 costs 36{,}864 weights; the separable version costs 576 (depthwise)
 + 4{,}096 (pointwise) = 4{,}672. Eight times fewer.
 
-\section*{Inverted residual: depthwise at the wide point}
+\prosesection{Inverted residual: depthwise at the wide point}
 
 MobileNetV2 wraps the separable block in one more idea. ResNet's
 bottleneck block is wide $\to$ narrow $\to$ wide (project down for
@@ -5142,7 +5144,7 @@ from Chapter~\ref{chap:residual}. Once again, no new math beyond
 the foundation rules---just the depthwise primitive plus
 composition.
 
-\section*{Stacking the blocks}
+\prosesection{Stacking the blocks}
 
 MobileNetV2 stacks 17 inverted-residual blocks across seven stages
 (at depths 1, 2, 3, 4, 3, 3, 1) with widths progressing from 16 to
@@ -5153,7 +5155,7 @@ than ResNet-34, at a modest accuracy cost (87\% vs 90\% on
 Imagenette in the example below). For mobile and embedded
 deployment that trade is the whole reason MobileNet exists.
 
-\section*{The theorems}
+\section{The theorems}
 
 \begin{definition}[Depthwise conv forward]
   \label{ax:depthwiseConv2d}
@@ -5696,7 +5698,7 @@ chapter formalized.
 \chapter{EfficientNet}
 \label{chap:se}
 
-\section*{A convolution treats every channel equally}
+\prosesection{A convolution treats every channel equally}
 
 By the time a feature map reaches a deep stage of a CNN, each
 channel is a learned ``feature detector'' for something specific---a
@@ -5723,7 +5725,7 @@ its core it is a learned per-channel attention mechanism that
 predates the transformer-era ``attention'' by four years and
 informs every post-2018 vision architecture.
 
-\section*{Three steps, one tensor product}
+\prosesection{Three steps, one tensor product}
 
 An SE block on a feature map \(x \in \mathbb{R}^{B \times C \times H \times W}\)
 runs three operations in sequence:
@@ -5752,7 +5754,7 @@ That's it. The MLP operates on a \([B, C]\) tensor, not
 \([B, C, H, W]\), so it's tiny---\(C^2 / r + C/r + C\) parameters
 per block, vs millions for a standard conv at the same width.
 
-\section*{From the framework: it's an elementwise product}
+\prosesection{From the framework: it's an elementwise product}
 
 What is the SE block, as a function? Up to a learned scalar
 factor per channel, it's just an \emph{elementwise product} of
@@ -5771,7 +5773,7 @@ the same product-rule structure as elementwise. Theorem
 \ref{thm:seBlock_has_vjp} is one line of composition; it
 introduces no new analytic dependencies.
 
-\section*{Attention in Disguise}
+\prosesection{Attention in Disguise}
 
 The mechanism is worth naming clearly: SE \emph{looks at the entire
 feature map}, produces \emph{a content-dependent re-weighting}, and
@@ -5792,7 +5794,7 @@ post-2018 vision architecture has SE or one of its descendants
 cost is low and the operation composes cleanly with anything
 else.
 
-\section*{EfficientNet-B0: MobileNet-V2 with SE everywhere}
+\prosesection{EfficientNet-B0: MobileNet-V2 with SE everywhere}
 
 EfficientNet-B0 (Tan \& Le 2019,
 \href{https://arxiv.org/abs/1905.11946}{arXiv:1905.11946}) is, at
@@ -5817,7 +5819,7 @@ scaling story lives in the B0$\to$B7 progression that we don't
 fit on Imagenette because the dataset is too small for the
 return-on-scaling to show up.
 
-\section*{The theorem}
+\section{The theorem}
 
 \begin{theorem}[SE block VJP]
   \label{thm:seBlock_has_vjp}
@@ -6339,7 +6341,7 @@ coordinates, applied at every BiFPN output level.
 \chapter{ConvNeXt}
 \label{chap:layernorm}
 
-\section*{ConvNets strike back}
+\prosesection{ConvNets strike back}
 
 By 2022 the conventional read on image recognition had flipped.
 ResNet had been the default backbone for six years. Then in late
@@ -6389,7 +6391,7 @@ the receptive field.'' Most of what looked like transformer
 superiority was modernization that hadn't been back-ported to the
 convnet baseline.
 
-\section*{Two new primitives}
+\prosesection{Two new primitives}
 
 ConvNeXt requires two activations / normalizations that the
 chapters so far haven't needed:
@@ -6423,7 +6425,7 @@ Both primitives are used by the upcoming Vision Transformer chapter
 (Chapter~\ref{chap:attention}) without modification. ConvNeXt
 introduces them here so they're available before ViT needs them.
 
-\section*{The ConvNeXt block}
+\prosesection{The ConvNeXt block}
 
 Each ConvNeXt block stacks the modernization items into a single
 residual unit:
@@ -6447,7 +6449,7 @@ emits \(N\) of these blocks at fixed channel width; the
 \texttt{.convNextDownsample} primitive emits the LN + $2 \times 2$
 stride-2 conv that transitions between stages.
 
-\section*{ConvNeXt-T is four stages, ResNet-style}
+\prosesection{ConvNeXt-T is four stages, ResNet-style}
 
 The full ConvNeXt-T spec is the same stem--stages--head template
 as ResNet-34: a $4 \times 4$ stride-4 ``patchify'' stem replaces
@@ -6468,7 +6470,7 @@ finishes with a CutMix-vs-bare-vs-RandAugment ablation that lifts
 ConvNeXt-T's Imagenette accuracy by 2.9 points without touching
 a single weight.
 
-\section*{The theorems}
+\section{The theorems}
 
 \begin{definition}[GELU scalar function]
   \label{ax:geluScalar}
@@ -7073,7 +7075,7 @@ $\sim$66\,hr on six if the AER-prone cards are brought back in.
 \chapter{Vision Transformer}
 \label{chap:attention}
 
-\section*{Where Part 1 has been heading}
+\prosesection{Where Part 1 has been heading}
 
 Every previous chapter has introduced a new architectural primitive
 and proved its backward pass. Convolution, BatchNorm, residual,
@@ -7096,7 +7098,7 @@ multiply, plus the eight or ten matrix-machinery lemmas this
 chapter sets up. None of them is new in its own right; what's new
 is how high the composition rule can be pushed.
 
-\section*{Attention in one equation}
+\prosesection{Attention in one equation}
 
 A transformer encoder block does two things to its input sequence
 \(X \in \mathbb{R}^{N \times d}\) (think of \(N\) image patches,
@@ -7139,7 +7141,7 @@ other token. That's the qualitative break from CNNs:
 convolutions look only at a local neighborhood, attention looks
 everywhere. The receptive field is global from the first layer.
 
-\section*{Why this chapter has thirty theorems}
+\prosesection{Why this chapter has thirty theorems}
 
 The math of attention is matrix algebra. Chapter~\ref{chap:tensor}'s
 foundation rules---chain, sum, product, identity---were stated and
@@ -7170,7 +7172,7 @@ step is one or two compositions of the previous step. The chain
 that started at \texttt{vjp\_comp} in Chapter~\ref{chap:tensor}
 reaches all the way to a 5.5M-parameter image classifier here.
 
-\section*{What's actually proved}
+\prosesection{What's actually proved}
 
 That's the framework-side payoff of this chapter: \textbf{every
 architectural piece used by any Part-1 network has a machine-checked

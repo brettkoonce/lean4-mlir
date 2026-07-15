@@ -32,3 +32,9 @@
 % typewriter --- the URL would clutter the page. Web version provides a
 % live link via macros/web.tex.
 \newcommand{\leandocref}[1]{\texttt{#1}}
+
+% \prosesection: a chapter-body prose sub-heading. In the printed version
+% it is a normal unnumbered section, exactly as before. The web version
+% (macros/web.tex) demotes it below the web TOC depth so the ch1-9 web
+% sidebars match the PDF table of contents (numbered sections only).
+\newcommand{\prosesection}[1]{\section*{#1}}

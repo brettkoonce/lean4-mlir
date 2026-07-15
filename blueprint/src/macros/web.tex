@@ -8,3 +8,10 @@
 % \leandocref{Proofs.pdiv\_comp} as a clickable typewriter link to the
 % corresponding declaration's API doc page.
 \newcommand{\leandocref}[1]{\href{\docbase/find/\#doc/#1}{\texttt{#1}}}
+
+% \prosesection: chapter-body prose sub-heading. Rendered as a styled bold
+% heading that is NOT a sectioning command, so it never produces a web
+% sidebar entry -- the ch1-9 web index then shows only numbered sections,
+% matching the PDF TOC. The printed version (macros/print.tex) keeps it as
+% a normal \section*.
+\newcommand{\prosesection}[1]{\par\bigskip\noindent{\large\bfseries #1}\par\nopagebreak\smallskip}
