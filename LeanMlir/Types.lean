@@ -335,6 +335,30 @@ inductive LossKind where
       signal, CE regularizes it (pure Dice has a noisy gradient early, when
       the softmax is near-uniform and every denominator is large). -/
   | perPixelDiceCE
+  /-- Class-weighted per-pixel softmax CE: `weights[c]` scales the loss and the
+      gradient of every pixel whose *true* class is `c`. Same ABI as
+      `perPixelCE`; `weights.length` must equal the class count.
+
+      This is the lever `perPixelDice` was supposed to be and isn't. Dice's
+      gradient carries a factor of `p_i` from the softmax Jacobian, so it
+      vanishes exactly where a collapsed class needs rescuing — measured on
+      BraTS at 0.02% of CE's gradient once p₃ ≈ 2e-5
+      (`scripts/seg_dice_vanishing_grad_probe.py`). CE's seed is `(p - y)/N`,
+      which is `-1/N` at `p = 0`: **flat, and wholly indifferent to the
+      collapse.** Scaling that by `w_c` therefore keeps a live signal all the
+      way down, which is precisely what Dice cannot do. See
+      `planning/brats_demo.md` Workstream B'.
+
+      Reduction is the weighted mean `Σ_k w_{y_k}·CE_k / Σ_k w_{y_k}` (torch's
+      `CrossEntropyLoss(weight=…, reduction='mean')` semantics), not `/N`. Two
+      reasons, both practical: the loss stays on the same scale as unweighted
+      CE so the arms of an ablation are readable against each other, and — since
+      both sums are linear in `w` — the loss is **invariant to the overall
+      scale of `weights`**. Only the ratios matter, so a caller cannot
+      accidentally change the effective learning rate by normalizing its weight
+      vector differently. `Σ_k w_{y_k}` depends only on the labels, so it is a
+      constant w.r.t. the logits and contributes no gradient term. -/
+  | perPixelWeightedCE (weights : List Float)
   /-- Float `[B, C, H, W]` target tensor with per-pixel MSE (DDPM,
       autoencoder regression). Caller passes `ddpmOutShape`. -/
   | floatTargetMse
@@ -362,6 +386,9 @@ inductive SegLoss where
   | dice
   /-- Dice + CE, summed. -/
   | diceCE
+  /-- Per-pixel CE with a per-class weight on the true class. See
+      `LossKind.perPixelWeightedCE` for the semantics and the argument. -/
+  | weightedCE (weights : List Float)
 deriving Repr, BEq, Inhabited
 
 /-- Does this loss run on the segmentation path? Every per-pixel kind shares
@@ -371,15 +398,16 @@ deriving Repr, BEq, Inhabited
     each need this answer, and deriving it three times independently is how
     they drift apart. -/
 def LossKind.isSeg : LossKind → Bool
-  | .perPixelCE | .perPixelDice | .perPixelDiceCE => true
+  | .perPixelCE | .perPixelDice | .perPixelDiceCE | .perPixelWeightedCE _ => true
   | _ => false
 
 /-- Which seg loss block to emit. Non-seg kinds answer `.ce` and are never
     asked (the codegen only consults this under `useSeg`). -/
 def LossKind.segLoss : LossKind → SegLoss
-  | .perPixelDice   => .dice
-  | .perPixelDiceCE => .diceCE
-  | _               => .ce
+  | .perPixelDice          => .dice
+  | .perPixelDiceCE        => .diceCE
+  | .perPixelWeightedCE w  => .weightedCE w
+  | _                      => .ce
 
 /-- Optimizer selector for the training loop. Added additively over the legacy
     `TrainConfig.useAdam` bool (à la `LossKind` over the older loss booleans):

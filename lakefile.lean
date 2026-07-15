@@ -1308,6 +1308,10 @@ lean_exe «pets-predict» where
   root := `demos.MainPetsPredict
   moreLinkArgs := ireeLink
 
+lean_exe «brats-predict» where
+  root := `demos.MainBratsPredict
+  moreLinkArgs := ireeLink
+
 lean_exe «gradcam» where
   root := `demos.MainGradCAM
   moreLinkArgs := ireeLink

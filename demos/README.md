@@ -38,6 +38,61 @@ predicted mask matches the ground truth pretty closely after
 
 ---
 
+## UNet — brain-tumour segmentation (BraTS)
+
+The same UNet, same skip codegen, on real medical data: MSD
+Task01_BrainTumour (built from the BraTS 2016/2017 cases), 240×240
+axial slices, 4 co-registered MRI modalities (FLAIR / T1w / T1gd /
+T2w) → 4 tumour classes. The architectural diff from the pets demo
+is one integer — `.unetDown 3 32` → `.unetDown 4 32` — and the
+entire seg stack generalized to a new modality count, class count,
+and resolution with **zero codegen changes**.
+
+`MainUnetBratsTrain.lean`, `MainBratsPredict.lean`. See
+`planning/brats_demo.md`.
+
+```bash
+./download_brats.sh
+lake exe unet-brats-train data/brats 30 [ce|dice|dicece]
+lake exe brats-predict                  # uses the trained checkpoint
+```
+
+Eval prints per-class IoU **and** Dice on the three nested BraTS
+regions the literature actually reports — WT (whole tumour), TC
+(tumour core), ET (enhancing tumour). Both come out of one confusion
+matrix accumulated in exact `Nat`; `scripts/seg_region_dice_check.py`
+checks the region arithmetic against a direct per-pixel computation
+(exact agreement) with no GPU needed.
+
+Sample output (T1gd | + ground truth | + prediction, 4 val slices
+from 4 different patients):
+
+![BraTS tumour segmentation](figures/brats_pred_dicece.png)
+
+Edema green, non-enhancing/necrotic core red, enhancing tumour
+yellow — the yellow rim around a red core is a textbook
+ring-enhancing glioblastoma.
+
+**The right-hand column is why this demo exists.** It is empty. That
+model was trained with Dice+CE for 1 epoch and predicts background on
+every pixel of every slice — 0 tumour pixels against ~5,000 in the
+ground truth — while scoring a mIoU of 0.243, which is the score of a
+model that has learned nothing at all (predict-background-everywhere
+scores 0.243418 on this split). Enhancing tumour is 0.52% of voxels,
+and per-pixel cross-entropy finds the trivial minimum inside the first
+ninth of one epoch and stays there.
+
+Dice was the intended fix and **it does not work** — measured, not
+guessed (`scripts/seg_dice_vanishing_grad_probe.py`): Dice's gradient
+carries a factor of `p_i` from the softmax Jacobian, so it is weakest
+exactly where the class has collapsed. At p₃ = 2e-5 it is 0.02% of
+CE's, which is indifferent to the collapse. Dice cannot rescue a class
+it has already zeroed; the fix has to *prevent* the collapse instead
+(class-weighted CE, prior-bias init). That negative result, and the
+picture above, are the demo.
+
+---
+
 ## YOLOv1 — object detection
 
 Cat-vs-dog head detector on Oxford-IIIT Pets. A ResNet-34 backbone

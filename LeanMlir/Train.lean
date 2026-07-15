@@ -126,6 +126,22 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
       throw <| IO.userError "perPixelCE + focal not yet supported (Phase 0: plain per-pixel CE only)"
     if cfg.labelSmoothing != 0.0 then
       throw <| IO.userError "perPixelCE + label smoothing not yet supported (Phase 0: plain per-pixel CE only)"
+  | .perPixelWeightedCE weights =>
+    if useSoftLabels then
+      throw <| IO.userError "perPixelWeightedCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
+    if cfg.useFocal then
+      throw <| IO.userError "perPixelWeightedCE + focal not yet supported (both reweight the loss; composing them wants its own scoping)"
+    if cfg.labelSmoothing != 0.0 then
+      throw <| IO.userError "perPixelWeightedCE + label smoothing not yet supported (same gate as perPixelCE)"
+    -- Caught here rather than in the emitter: a wrong-length list becomes a
+    -- `dense<[...]> : tensor<NCxf32>` shape mismatch thousands of lines into
+    -- the generated MLIR, which is a miserable way to learn you typed one
+    -- weight too few.
+    let nc := (spec.layers.getLast?.map (·.outChannels)).getD 0
+    if weights.length != nc then
+      throw <| IO.userError s!"perPixelWeightedCE: got {weights.length} weights for a {nc}-class head — they must match 1:1"
+    if weights.any (· <= 0.0) then
+      throw <| IO.userError "perPixelWeightedCE: weights must be strictly positive (a zero weight silently deletes a class from the loss; a negative one ascends it)"
   | .perPixelDice | .perPixelDiceCE =>
     if useSoftLabels then
       throw <| IO.userError "perPixelDice/DiceCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
@@ -207,6 +223,16 @@ private structure DatasetIO where
   /-- Bytes per label record. 4 for int32-class classification (default),
       H*W for per-pixel segmentation masks (Pets: 224*224 = 50176). -/
   labelBytesPerRecord : Nat := 4
+  /-- Named unions of raw classes to additionally report **Dice** for at
+      eval. Empty (the default) for datasets whose raw classes are already
+      the entity the field reports — pets' trimap, where per-class IoU is
+      the whole story.
+
+      BraTS is the exception this exists for: the literature scores nested
+      unions (WT/TC/ET), not the raw labels, and because the unions are
+      nested they cannot be recovered from per-class IoU after the fact.
+      See planning/brats_demo.md Workstream F. -/
+  segRegions : List (String × List Nat) := []
   loadTrain : String → IO (ByteArray × ByteArray × Nat)
   loadVal   : String → IO (ByteArray × ByteArray × Nat)
   /-- Apply augmentation to a slice of training data. Receives the raw
@@ -336,6 +362,15 @@ private def bratsIO : DatasetIO where
   loadTrain := fun dir => F32.loadBrats (dir ++ "/train.bin") 240
   loadVal   := fun dir => F32.loadBrats (dir ++ "/val.bin") 240
   augmentBatch := fun raw _ _ => return raw
+  -- The three BraTS regions, in MSD's label numbering. Read them off *MSD's*
+  -- remap, not the BraTS paper's — MSD permuted the native 1/2/4 to 2/1/3, so
+  -- MSD 1 = edema (= BraTS 2) and MSD 2 = non-enhancing/necrotic (= BraTS 1).
+  -- Getting this backwards silently swaps TC's contents and is invisible in
+  -- the output.
+  --   WT (whole tumour)     = everything abnormal
+  --   TC (tumour core)      = the resectable core; excludes edema
+  --   ET (enhancing tumour) = the surgical target, and the class that collapses
+  segRegions := [("WT", [1, 2, 3]), ("TC", [2, 3]), ("ET", [3])]
 
 /-- YOLOv1 detection (Oxford-IIIT Pets). 224×224 RGB images; the "labels"
     buffer carries the 30×7×7 float32 target tensor concatenated with the
@@ -771,6 +806,37 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
          let miou := (ious.foldl (· + ·) 0.0) / NC.toFloat
          let iouStr := String.intercalate " " (ious.toList.mapIdx fun i v => s!"c{i}={v}")
          IO.eprintln s!"  val mIoU: {miou}  (per-class: {iouStr})"
+         -- Dice on named class-unions (planning/brats_demo.md Workstream F).
+         -- Falls straight out of the confusion matrix already accumulated
+         -- above — no new kernel, no second pass over val. For a region
+         -- R ⊆ classes, reading C[gt][pred]:
+         --   inter_R = Σ_{g∈R} Σ_{p∈R} C[g][p]
+         --   |gt_R|  = Σ_{g∈R} Σ_p C[g][p]
+         --   |pr_R|  = Σ_{p∈R} Σ_g C[g][p]
+         --   Dice_R  = 2·inter_R / (|gt_R| + |pr_R|)
+         -- Counts stay exact `Nat` until the final divide. IoU is kept
+         -- alongside rather than replaced: it is what makes this demo
+         -- comparable to the pets one, while Dice is what makes it
+         -- comparable to the BraTS literature.
+         for (name, cls) in dio.segRegions do
+           let inR : Nat → Bool := fun c => cls.contains c
+           let mut inter : Nat := 0
+           let mut gtR : Nat := 0
+           let mut prR : Nat := 0
+           for g in [:NC] do
+             for pd in [:NC] do
+               let cij := conf[g * NC + pd]!
+               if inR g && inR pd then inter := inter + cij
+               if inR g then gtR := gtR + cij
+               if inR pd then prR := prR + cij
+           let den := gtR + prR
+           -- den = 0 ⇒ the region is absent from ground truth *and* from the
+           -- prediction across the whole val set: vacuously perfect, which is
+           -- the field's convention. It does not arise on real BraTS val —
+           -- a collapsed model still has |gt_R| > 0 and so scores 0, which is
+           -- the reading we want.
+           let dice := if den == 0 then 1.0 else (2 * inter).toFloat / den.toFloat
+           IO.eprintln s!"  val Dice {name}: {dice}  (inter={inter} gt={gtR} pred={prR})"
      else if useYolov1Run then
        -- mAP@0.5 eval for YOLOv1 is Phase 5 work (planning/yolo_final.md).
        -- the train step runs + loss drops on real detection data; the

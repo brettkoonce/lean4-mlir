@@ -32,11 +32,35 @@ import LeanMlir
 
     Usage:
       ./download_brats.sh
-      lake exe unet-brats-train [data/brats] [epochs] [ce|dice|dicece]
+      lake exe unet-brats-train [data/brats] [epochs] [ce|dice|dicece|wce]
 
     The loss arg is the demo's ablation axis (planning/brats_demo.md
-    Workstream B). Default is `dicece`; pass `ce` to reproduce the collapse.
+    Workstream B). `ce` and `dicece` both reproduce the collapse — that is
+    the finding, not a misconfiguration. `wce` is the arm that should not.
 -/
+
+/-- Inverse-frequency class weights, measured over `data/brats/train.bin` by
+    `scripts/brats_class_weights.py` (14,415 slices; background 97.46% / edema
+    1.60% / non-enhancing 0.44% / enhancing 0.50% of voxels).
+
+    Why inverse frequency, stated plainly, because it is the demo's argument:
+    it makes every class contribute **exactly 25%** of the loss. That is the
+    goal soft Dice was reaching for — "a ratio per class, so every class carries
+    equal weight no matter how few pixels it owns" — and Dice fails to deliver
+    it, because its gradient carries a `p_i` factor and vanishes on precisely
+    the class that has collapsed. CE's gradient is flat at `p → 0`. So this is
+    Dice's own objective, pursued with a gradient that still exists where it
+    matters. Under plain CE the corresponding shares are 97.46 / 1.60 / 0.44 /
+    0.50 — background owns the loss, and predicting background is the cheapest
+    descent direction available. Which is exactly what the net does.
+
+    The stock objection to inverse frequency is that a ~200× dynamic range
+    destabilizes training. That objection is about a `/N` reduction, where the
+    weights inflate the gradient scale outright. `perPixelWeightedCE` divides by
+    `Σ_k w_{y_k}` over the batch, so the loss stays a weighted *mean* — same
+    scale as unweighted CE, self-normalizing per batch. -/
+def unetBratsClassWeights : List Float :=
+  [1.0, 60.9033, 220.0868, 195.5835]
 
 def unetBrats : NetSpec where
   name := "UNet (BraTS, 240×240 4-modality MRI → 4-class tumour)"
@@ -71,14 +95,21 @@ def main (args : List String) : IO Unit := do
   -- convention as unet-pets-train. mIoU + per-class IoU print every 10
   -- epochs and at the end.
   let epochs := (args[1]?.bind String.toNat?).getD unetBratsConfig.epochs
-  -- 3rd arg picks the loss — the demo's ablation axis. Default `dicece`:
-  -- per-pixel CE alone collapses every tumour class on this data (mIoU 0.243
-  -- ≈ the trivial background-only predictor, see planning/brats_demo.md), so
-  -- it is the pedagogical baseline rather than the recommended setting.
+  -- 3rd arg picks the loss — the demo's ablation axis.
+  --
+  --   ce     collapses every tumour class (mIoU 0.243 ≈ the trivial
+  --          background-only predictor, planning/brats_demo.md Workstream A)
+  --   dicece collapses too, identically to four decimals — the Gate B result,
+  --          and the reason `dicece` is no longer the default
+  --   wce    the arm the measured gradient mechanism says should work
+  --
+  -- `wce` is the default because it is the one that is supposed to segment a
+  -- tumour. The other two are the pedagogy: run them to watch the collapse.
   let lossKind : LossKind :=
     if args.any (· == "ce") then .perPixelCE
+    else if args.any (· == "dicece") then .perPixelDiceCE
     else if args.any (· == "dice") then .perPixelDice
-    else .perPixelDiceCE
+    else .perPixelWeightedCE unetBratsClassWeights
   IO.eprintln s!"  loss: {repr lossKind}"
   unetBrats.train { unetBratsConfig with epochs, lossKind }
     (args.head?.getD "data/brats") .brats

@@ -11,21 +11,36 @@ import LeanMlir
     it is verifiable by inspection. Dice gets no such cancellation and carries
     an explicit Jacobian-vector product, so it wants a numeric check.
 
-    Usage: lake exe seg-loss-probe [ce|dice|dicece] [B NC H W] [ls=F] [outPath]
+    Usage: lake exe seg-loss-probe [ce|dice|dicece|wce|wce1] [B NC H W] [ls=F] [outPath]
     Defaults: dice 2 4 3 3 ls=0 seg_loss_gen.mlir -/
+
+/-- Deterministic weight vector for the `wce` probe: `w_c = 1 + c`.
+
+    Non-uniform (so the weighting actually does something), small integers (so
+    they are exact in f32 and any FD discrepancy is the emitter's fault, not the
+    constant's), and a function of `NC` alone — which is what lets
+    `seg_loss_probe_check.py` mirror it without teaching the CLI to parse
+    floats. -/
+def probeWeights (NC : Nat) : List Float :=
+  (List.range NC).map (fun c => 1.0 + c.toFloat)
 
 def main (args : List String) : IO Unit := do
   let nums := (args.filterMap String.toNat?)
   let n (i : Nat) (d : Nat) : Nat := (nums[i]?).getD d
-  let segLoss : SegLoss :=
-    if args.any (· == "ce") then .ce
-    else if args.any (· == "dicece") then .diceCE
-    else .dice
   let ls : Float :=
     match (args.filter (·.startsWith "ls=")).head? with
     | some a => ((a.drop 3).toNat?.map Nat.toFloat).getD 0.0 / 100.0
     | none => 0.0
   let B := n 0 2; let NC := n 1 4; let H := n 2 3; let W := n 3 3
+  -- `wce1` is the reduction check: weighted CE with an all-ones weight vector
+  -- must reproduce plain CE, normalizer and all. It is the cheapest test that
+  -- the Σw denominator is right, since Σ_k 1 = N by construction.
+  let segLoss : SegLoss :=
+    if args.any (· == "ce") then .ce
+    else if args.any (· == "dicece") then .diceCE
+    else if args.any (· == "wce1") then .weightedCE (List.replicate NC 1.0)
+    else if args.any (· == "wce") then .weightedCE (probeWeights NC)
+    else .dice
   let outPath := (args.filter (fun a => a.endsWith ".mlir")).head?.getD "seg_loss_gen.mlir"
   let mlir := MlirCodegen.segLossProbeModule B NC H W segLoss ls
   IO.FS.writeFile outPath mlir

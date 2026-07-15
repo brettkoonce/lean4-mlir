@@ -4307,11 +4307,17 @@ private def emitConvBnMomentum (p ic oc kSize : Nat) (applyWeightDecay : Bool :=
     private names and sums them. -/
 private def emitPerPixelCEBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
     (labelSmoothing : Float)
-    (lossOut : String := "%loss") (gradOut : String := "%d_logits_seg") : String := Id.run do
+    (lossOut : String := "%loss") (gradOut : String := "%d_logits_seg")
+    (weights : List Float := []) : String := Id.run do
   let bnhwTy := s!"tensor<{B}x{H}x{W}xi32>"
   let bnhwI1 := s!"tensor<{B}x{NC}x{H}x{W}xi1>"
   let bnhwfTy := tensorTy [B, NC, H, W]
   let bhwfTy := tensorTy [B, H, W]
+  let ncTy := tensorTy [NC]
+  -- `weights = []` is the unweighted path and emits byte-identical MLIR to
+  -- before this parameter existed: the normalizer is the constant N and the
+  -- per-pixel weight factor never appears.
+  let wOn := !weights.isEmpty
   let denom : Float := (B * H * W).toFloat
   let smoothOn  : Float := if labelSmoothing > 0.0 then 1.0 - labelSmoothing + labelSmoothing / NC.toFloat else 1.0
   let smoothOff : Float := if labelSmoothing > 0.0 then labelSmoothing / NC.toFloat else 0.0
@@ -4335,19 +4341,64 @@ private def emitPerPixelCEBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
   s := s ++ s!"    %seg_onef = stablehlo.constant dense<{smoothOn}> : {bnhwfTy}\n"
   s := s ++ s!"    %seg_zerof = stablehlo.constant dense<{smoothOff}> : {bnhwfTy}\n"
   s := s ++ s!"    %seg_onehot = stablehlo.select %seg_mask, %seg_onef, %seg_zerof : {bnhwI1}, {bnhwfTy}\n"
-  -- 3. Forward loss: -mean over (B, H, W) of softmax-CE per pixel.
-  s := s ++ s!"    %seg_weighted = stablehlo.multiply %seg_logp, %seg_onehot : {bnhwfTy}\n"
-  s := s ++ s!"    %seg_total = stablehlo.reduce(%seg_weighted init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
-  s := s ++ s!"           : ({bnhwfTy}, tensor<f32>) -> tensor<f32>\n"
-  s := s ++ s!"    %seg_denom = stablehlo.constant dense<{denom}> : tensor<f32>\n"
+  -- 2b. (weighted only) per-pixel weight map w_k = weights[y_k], built by
+  -- selecting the weight vector through the same one-hot mask and collapsing
+  -- the channel axis. Reusing `%seg_mask` — the raw EQ comparison, which label
+  -- smoothing does not touch — is what keeps this a weight on the *true* class
+  -- rather than on the smoothed target.
+  if wOn then
+    let wlit := String.intercalate ", " (weights.map toString)
+    s := s ++ s!"    %seg_wvec = stablehlo.constant dense<[{wlit}]> : {ncTy}\n"
+    s := s ++ s!"    %seg_wvec_b = stablehlo.broadcast_in_dim %seg_wvec, dims = [1] : ({ncTy}) -> {bnhwfTy}\n"
+    s := s ++ s!"    %seg_wz = stablehlo.constant dense<0.0> : {bnhwfTy}\n"
+    s := s ++ s!"    %seg_wsel = stablehlo.select %seg_mask, %seg_wvec_b, %seg_wz : {bnhwI1}, {bnhwfTy}\n"
+    s := s ++ s!"    %seg_wmap = stablehlo.reduce(%seg_wsel init: %zf) applies stablehlo.add across dimensions = [1]\n"
+    s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
+    s := s ++ s!"    %seg_wmap_b = stablehlo.broadcast_in_dim %seg_wmap, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  -- 3. Forward loss: -mean over (B, H, W) of softmax-CE per pixel, or the
+  -- weighted mean Σ w_k·CE_k / Σ w_k when weights are given.
+  --
+  -- The weighted path collapses the channel axis FIRST (giving per-pixel CE at
+  -- [B,H,W]) and only then applies the weight, rather than broadcasting the
+  -- weight up to [B,NC,H,W] and reducing all four dims at once. The two are
+  -- equal by distributivity — w_k doesn't depend on c — but the second form
+  -- **miscompiles**: IREE fuses `reduce(multiply(x, broadcast(w)))` into a
+  -- `vector.contract` and derives an invalid accumulator shape, failing in the
+  -- llvm-cpu backend with "invalid accumulator/result vector shape". Same
+  -- family as the `select_and_scatter` gap routed around at the maxPool
+  -- backward. Reducing to [B,H,W] before the multiply keeps the weight out of
+  -- any reduce's operand tree and compiles clean on both CPU and rocm — and is
+  -- the more honest spelling of the math anyway, since the weight is a
+  -- per-pixel quantity, not a per-channel one.
+  if wOn then
+    s := s ++ s!"    %seg_ce0 = stablehlo.multiply %seg_logp, %seg_onehot : {bnhwfTy}\n"
+    s := s ++ s!"    %seg_cek = stablehlo.reduce(%seg_ce0 init: %zf) applies stablehlo.add across dimensions = [1]\n"
+    s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
+    s := s ++ s!"    %seg_wce = stablehlo.multiply %seg_cek, %seg_wmap : {bhwfTy}\n"
+    s := s ++ s!"    %seg_total = stablehlo.reduce(%seg_wce init: %zf) applies stablehlo.add across dimensions = [0, 1, 2]\n"
+    s := s ++ s!"           : ({bhwfTy}, tensor<f32>) -> tensor<f32>\n"
+    -- Σ_k w_{y_k}. Labels-only, so it is a constant w.r.t. the logits and
+    -- contributes no gradient term — which is the whole reason this
+    -- normalization is affordable.
+    s := s ++ s!"    %seg_denom = stablehlo.reduce(%seg_wmap init: %zf) applies stablehlo.add across dimensions = [0, 1, 2]\n"
+    s := s ++ s!"           : ({bhwfTy}, tensor<f32>) -> tensor<f32>\n"
+  else
+    s := s ++ s!"    %seg_weighted = stablehlo.multiply %seg_logp, %seg_onehot : {bnhwfTy}\n"
+    s := s ++ s!"    %seg_total = stablehlo.reduce(%seg_weighted init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+    s := s ++ s!"           : ({bnhwfTy}, tensor<f32>) -> tensor<f32>\n"
+    s := s ++ s!"    %seg_denom = stablehlo.constant dense<{denom}> : tensor<f32>\n"
   s := s ++ s!"    %seg_mean = stablehlo.divide %seg_total, %seg_denom : tensor<f32>\n"
   s := s ++ s!"    {lossOut} = stablehlo.negate %seg_mean : tensor<f32>\n"
-  -- 4. Backward seed: (softmax - onehot) / (B · H · W).
+  -- 4. Backward seed: (softmax - onehot) / N, or (w_k/Σw)·(softmax - onehot).
   s := s ++ s!"    %seg_sum_b = stablehlo.broadcast_in_dim %seg_sum, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
   s := s ++ s!"    %seg_softmax = stablehlo.divide %seg_exp, %seg_sum_b : {bnhwfTy}\n"
   s := s ++ s!"    %seg_smmoh = stablehlo.subtract %seg_softmax, %seg_onehot : {bnhwfTy}\n"
   s := s ++ s!"    %seg_denom_b = stablehlo.broadcast_in_dim %seg_denom, dims = [] : (tensor<f32>) -> {bnhwfTy}\n"
-  s := s ++ s!"    {gradOut} = stablehlo.divide %seg_smmoh, %seg_denom_b : {bnhwfTy}\n"
+  if wOn then
+    s := s ++ s!"    %seg_scale = stablehlo.divide %seg_wmap_b, %seg_denom_b : {bnhwfTy}\n"
+    s := s ++ s!"    {gradOut} = stablehlo.multiply %seg_smmoh, %seg_scale : {bnhwfTy}\n"
+  else
+    s := s ++ s!"    {gradOut} = stablehlo.divide %seg_smmoh, %seg_denom_b : {bnhwfTy}\n"
   return s
 
 /-- Soft-Dice loss + `d_logits` for the segmentation path.
@@ -4457,6 +4508,8 @@ private def emitSegLossBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
   let bnhwfTy := tensorTy [B, NC, H, W]
   match segLoss with
   | .ce   => emitPerPixelCEBlock B NC H W logitsSSA labelSSA labelSmoothing
+  | .weightedCE w =>
+    emitPerPixelCEBlock B NC H W logitsSSA labelSSA labelSmoothing (weights := w)
   | .dice => emitSegDiceBlock B NC H W logitsSSA labelSSA
   | .diceCE =>
     let mut s := ""

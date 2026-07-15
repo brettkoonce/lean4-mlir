@@ -39,3 +39,7 @@ mlir_poc/cnn128/
 mlir_poc/cnn_inputs/
 mlir_poc/__pycache__/
 jax/.venv
+
+# brats-predict writes PPM here by default; only the converted PNG is tracked
+# (demos/figures has always been PNG-only — see demos/README.md).
+demos/figures/*.ppm

@@ -61,6 +61,31 @@ def ce_loss(z, y, NC, ls=0.0):
     return -(logp * yh).sum() / (B * H * W)
 
 
+def probe_weights(kind, NC):
+    """Mirror of `probeWeights` / the `wce1` vector in MainSegLossProbe.lean.
+    Must stay in lockstep with it — that file is the source of truth."""
+    if kind == "wce":
+        return np.array([1.0 + c for c in range(NC)], dtype=np.float64)
+    if kind == "wce1":
+        return np.ones(NC, dtype=np.float64)
+    return None
+
+
+def wce_loss(z, y, NC, w, ls=0.0):
+    """Class-weighted per-pixel CE, weighted-mean reduction. Mirrors
+    emitPerPixelCEBlock's `wOn` path: Σ_k w_{y_k}·CE_k / Σ_k w_{y_k}."""
+    zs = z - z.max(axis=1, keepdims=True)
+    logp = zs - np.log(np.exp(zs).sum(axis=1, keepdims=True))
+    yh = onehot(y, NC)
+    if ls > 0.0:
+        on = 1.0 - ls + ls / NC
+        off = ls / NC
+        yh = yh * on + (1.0 - yh) * off
+    ce_k = -(logp * yh).sum(axis=1)   # [B,H,W] per-pixel CE
+    wmap = w[y]                       # [B,H,W] weight of the TRUE class
+    return (wmap * ce_k).sum() / wmap.sum()
+
+
 def dice_loss(z, y, NC, smooth=SMOOTH):
     """Batch soft Dice, meaned over classes. Mirrors emitSegDiceBlock."""
     p = softmax(z, axis=1)
@@ -77,6 +102,8 @@ def total_loss(kind, z, y, NC, ls=0.0):
         return ce_loss(z, y, NC, ls)
     if kind == "dice":
         return dice_loss(z, y, NC)
+    if kind in ("wce", "wce1"):
+        return wce_loss(z, y, NC, probe_weights(kind, NC), ls)
     return ce_loss(z, y, NC, ls) + dice_loss(z, y, NC)
 
 
@@ -151,8 +178,49 @@ def main():
         sys.exit(f"{PROBE} missing — run: lake build seg-loss-probe")
     print("seg-loss probe: emitted loss + d_logits vs numpy + central finite differences")
     results = []
-    for kind in ("ce", "dice", "dicece"):
+    for kind in ("ce", "dice", "dicece", "wce", "wce1"):
         results.append(check(kind))
+
+    # `wce1` is weighted CE with an all-ones weight vector. It must reproduce
+    # plain CE *exactly* — same loss, same gradient — because Σ_k 1 = N makes
+    # the weighted-mean normalizer collapse to the constant N. This is the
+    # cheapest check that the Σw denominator is right, and it is a check FD
+    # alone cannot make: FD confirms the gradient matches whatever loss was
+    # emitted, not that the loss is the one we meant.
+    print("  -- wce1 ≡ ce reduction (all-ones weights must rebuild plain CE) --")
+    rng = np.random.RandomState(3)
+    B, NC, H, W = 2, 4, 3, 3
+    z = rng.randn(B, NC, H, W)
+    y = rng.randint(0, NC, size=(B, H, W))
+    l_ce, dz_ce = build_and_run("ce", B, NC, H, W, z, y)
+    l_w1, dz_w1 = build_and_run("wce1", B, NC, H, W, z, y)
+    lerr = abs(l_ce - l_w1)
+    gerr = np.abs(dz_ce - dz_w1).max()
+    ok = lerr < 1e-7 and gerr < 1e-7
+    results.append(ok)
+    print(f"  [{'PASS' if ok else 'FAIL'}] wce1 vs ce: |Δloss|={lerr:.2e}  max|Δgrad|={gerr:.2e}")
+
+    # The weighting must actually *do* something — a no-op emitter would sail
+    # through every FD check above, since FD only asks that the gradient match
+    # the emitted loss.
+    l_w, _ = build_and_run("wce", B, NC, H, W, z, y)
+    differs = abs(l_w - l_ce) > 1e-4
+    results.append(differs)
+    print(f"  [{'PASS' if differs else 'FAIL'}] wce ≠ ce: "
+          f"ce={l_ce:+.8f} wce={l_w:+.8f} (non-uniform weights must move the loss)")
+
+    # Scale-invariance: the weighted-mean reduction divides by Σw, so scaling
+    # every weight by a constant must leave loss and gradient untouched. This is
+    # the property that stops a caller changing the effective learning rate by
+    # normalizing its weight vector differently — worth pinning, since it is the
+    # stated reason for choosing this reduction over `/N`.
+    w = probe_weights("wce", NC)
+    l_a = wce_loss(z, y, NC, w)
+    l_b = wce_loss(z, y, NC, w * 1000.0)
+    ok = abs(l_a - l_b) < 1e-12
+    results.append(ok)
+    print(f"  [{'PASS' if ok else 'FAIL'}] wce scale-invariance: "
+          f"w={l_a:+.10f}  1000·w={l_b:+.10f}  |Δ|={abs(l_a-l_b):.2e}")
     # A shape where some class is entirely absent from the batch — the case the
     # Dice smoothing term exists for (0/0 without it), and the case that
     # actually occurs on BraTS, where enhancing tumour is missing from many

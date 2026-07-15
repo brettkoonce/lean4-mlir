@@ -136,6 +136,9 @@ The data path and the demo shell, mirroring the pets stack one-for-one:
 | Lean decl | `F32.loadBrats` (`LeanMlir/F32Array.lean`) | |
 | Dataset | `DatasetKind.brats` + `bratsIO` (`Types.lean`, `Train.lean`) | `labelBytesPerRecord := 240*240` auto-selects `.perPixelCE` |
 | Spec + exe | `demos/MainUnetBratsTrain.lean`, `lakefile.lean` | `unetBrats`, `lake exe unet-brats-train` |
+| Region Dice | `DatasetIO.segRegions` + eval block (`Train.lean`) | WT/TC/ET from the existing confusion matrix; host-only, `eval forward (cached)` proves zero codegen impact. Checked by `scripts/seg_region_dice_check.py` |
+| Visualizer | `demos/MainBratsPredict.lean` | `lake exe brats-predict [out.ppm] [params.bin] [bn_stats.bin]`; T1gd backdrop + GT/pred overlays, tumour-burden slice picking |
+| Weighted CE | `LossKind.perPixelWeightedCE` (`Types.lean`), `weights` param on `emitPerPixelCEBlock` | `unet-brats-train … wce`, now the default. FD-verified 9.41e-08 + `wce1 ≡ ce` exactly; weights from `scripts/brats_class_weights.py` |
 
 Everything else — `unetDown`/`unetUp` skip codegen, bilinear upsample
 (fwd+bwd, FD ~1e-11), channel concat, per-pixel softmax-CE, the seg train
@@ -253,7 +256,7 @@ gradient has produced no pressure whatsoever toward the thin classes.
 **Next**: run CE and Dice at matched budget (30-60 ep), one per GPU, and let
 the ablation decide. Do not publish the 1-epoch row as the CE verdict.
 
-## Workstream B — Dice loss (the lever this demo exists to pull)
+## Workstream B — Dice loss (~~the lever this demo exists to pull~~ — it isn't; see the Gate B result)
 
 `unet_demo_v2.md` scoped Dice out as "medical-imaging-grade complexity, and
 that judgment stands." **That judgment inverts here** — this *is* medical
@@ -405,6 +408,95 @@ implemented in the emitter (`MlirCodegen.lean:4312-4314`) but gated off
 host-side (`Train.lean:127-128` throws). The codegen is there; only the
 guard needs lifting.
 
+## Workstream B' — prevent the collapse (the real lever)
+
+### B'1 class-weighted CE — Status 2026-07-15: BUILT + FD-VERIFIED
+
+`LossKind.perPixelWeightedCE (weights : List Float)` / `SegLoss.weightedCE`,
+emitted by a `weights` parameter on `emitPerPixelCEBlock` (`[]` = the old
+unweighted path, byte-identical). Selectable: `unet-brats-train data/brats
+<epochs> wce`, and it is now the **default** — `dicece` lost that job when it
+turned out to be CE with a rounding error.
+
+**The weights, and why.** Measured over `train.bin` by
+`scripts/brats_class_weights.py` (14,415 slices): background 97.46% / edema
+1.60% / non-enhancing 0.44% / enhancing 0.50% of voxels. Inverse frequency
+gives `[1.0, 60.9033, 220.0868, 195.5835]`, which makes every class contribute
+**exactly 25%** of the loss, against 97.46 / 1.60 / 0.44 / 0.50 under plain CE.
+
+That equal-contribution property is the argument for this workstream, because
+it is *Dice's own stated goal* — "a ratio per class, so every class carries
+equal weight no matter how few pixels it owns" (`Types.lean`, `perPixelDice`).
+Dice reaches for it and cannot deliver, because its gradient carries a `p_i`
+factor and vanishes on the collapsed class. CE's gradient is flat at `p → 0`.
+**So B'1 is Dice's objective pursued with a gradient that still exists where it
+is needed** — which is a sharper framing of the demo than "Dice vs CE" ever was.
+
+**Reduction: `Σ_k w_{y_k}·CE_k / Σ_k w_{y_k}`, not `/N`.** Both sums are linear
+in `w`, so the loss is **invariant to the overall scale of the weight vector** —
+verified exactly (`|Δ| = 0.00e+00` for `w` vs `1000·w`). Two consequences worth
+having: a caller cannot change the effective LR by normalizing its weights
+differently, and the stock objection to inverse frequency ("a 200× dynamic range
+destabilizes training") does not apply, since that objection is about `/N`, where
+the weights inflate the gradient scale outright. Here the loss stays a weighted
+*mean*, on CE's scale, self-normalizing per batch. `Σ_k w_{y_k}` is labels-only,
+hence constant w.r.t. the logits and contributing no gradient term — which is
+what makes the normalization affordable at all.
+
+A pleasing side effect of scale-invariance: **median-frequency balancing
+(SegNet) is not a separate option here.** It is `median(f)/f_c` = inverse
+frequency times a constant, and the constant cancels. Under a `/N` reduction the
+two schemes differ; under this one they are the same scheme, and
+`brats_class_weights.py` asserts it rather than offering a phantom choice.
+
+**FD verification** (`scripts/seg_loss_probe_check.py`, CPU, no GPU) — 10/10:
+
+| check | result |
+|---|---|
+| `wce` grad vs central FD | **9.41e-08** |
+| `wce1` (all-ones weights) ≡ `ce` | `|Δloss| = 0.00e+00`, `max|Δgrad| = 3.73e-09` |
+| `wce` ≠ `ce` (the weighting must actually do something) | 1.4205 vs 1.4747 |
+| scale-invariance, `w` vs `1000·w` | `|Δ| = 0.00e+00` |
+
+The last three exist because **FD alone cannot catch the bugs that matter here.**
+FD only asks that the gradient match whatever loss was emitted — a no-op emitter
+that silently ignored `weights` would sail through every FD check. `wce1 ≡ ce`
+pins the `Σw` denominator (since `Σ_k 1 = N` by construction), and `wce ≠ ce`
+pins that the weights are wired at all.
+
+**An IREE bug, found and routed around.** The obvious spelling — broadcast the
+weight to `[B,NC,H,W]` and reduce all four dims at once — **miscompiles**: IREE
+fuses `reduce(multiply(x, broadcast(w)))` into a `vector.contract` and derives an
+invalid accumulator shape (`llvm-cpu`: "invalid accumulator/result vector
+shape"), on the *same* reduce op that compiles fine unweighted. Same family as
+the `select_and_scatter` gap routed around at the maxPool backward
+(`MlirCodegen.lean:6182`). The fix is to collapse the channel axis first, giving
+per-pixel CE at `[B,H,W]`, and only then apply the weight — equal by
+distributivity (`w_k` doesn't depend on `c`), keeps the weight out of any
+reduce's operand tree, and is the more honest spelling anyway since the weight is
+a per-pixel quantity. Recorded because the next person to touch this block will
+otherwise re-derive it the obvious way and hit the same wall.
+
+**Live on GPU, and it moves the model off the trivial predictor.** A 64-slice
+overfit probe (val = train, 20 epochs) — a *plumbing* test, not a result:
+
+| | c0 bg | c1 edema | c2 non-enh | c3 enhancing |
+|---|---|---|---|---|
+| `ce`/`dicece`, real val, 1 ep | 0.9735 | **0.000000** | 0.000250 | **0.000000** |
+| `wce`, 64-slice overfit, 10 ep | 0.7052 | **0.035623** | 0.022263 | **0.080366** |
+
+Every tumour class is off the floor. Two honest caveats: this is 64 images with
+val = train, so it says nothing about generalization; and `wce` **over-predicts
+tumour ~9×** (WT pred 1,176,442 vs gt 127,394), which is the expected failure
+mode of aggressive inverse-frequency weighting and the opposite of collapse.
+If that over-prediction survives to real budget, inverse-sqrt frequency
+(`[1.0, 7.80, 14.84, 13.99]`, tumour ~21% of the loss) is the fallback and
+`brats_class_weights.py` already prints it. Being able to trade *along* that
+axis is the point; CE and Dice offered no axis at all.
+
+**Still owed:** B'2 prior-bias init, B'3 foreground oversampling, B'4 pure
+`.dice` for the record, and the matched-budget three-arm run.
+
 ## Workstream C — mask-aware augmentation
 
 `bratsIO.augmentBatch` is identity, same starting point pets had. Paired
@@ -485,6 +577,42 @@ WT ≈ 0.85+, TC ≈ 0.7-0.8, ET ≈ 0.6-0.7. We will be under that (484 volumes
 aug, 2D, short budget) and that is fine; being able to *say* by how much is the
 deliverable.
 
+### Status 2026-07-15: DONE — Gate F met
+
+Landed as predicted: **pure host arithmetic on the confusion matrix, no new
+kernel and no second pass over val.** `iree-compile` reports `eval forward
+(cached)` on the first run after the change, which is the mechanical proof that
+the codegen surface was untouched.
+
+- `DatasetIO.segRegions : List (String × List Nat) := []` (`Train.lean`), set to
+  `[("WT",[1,2,3]), ("TC",[2,3]), ("ET",[3])]` in `bratsIO`. Empty default, so
+  pets is byte-for-byte unaffected — it has no regions to report and prints
+  none. Any future dataset with nested regions is now a one-line change.
+- The eval block prints `val Dice <R>: <d>  (inter= gt= pred=)` per region,
+  right after the existing per-class IoU line. IoU is **kept**, not replaced:
+  it is what keeps this comparable to pets, while Dice is what makes it
+  comparable to the literature.
+- Counts stay in exact `Nat` until the final divide, same as the IoU path.
+
+**Verified** (`scripts/seg_region_dice_check.py`, CPU, no GPU, ~15 s):
+
+| check | result |
+|---|---|
+| confusion-matrix identity vs direct per-pixel Dice, 300 region-trials across class priors from uniform to Dirichlet α=0.02 | max abs error **0.000e+00** (exact) |
+| all-background predictor scores 0, not the vacuous 1 | PASS all three regions |
+| ground-truth region counts over the real `val.bin` | WT 3,896,201 / TC 1,455,581 / ET 768,187 voxels |
+
+The last row is the one worth keeping: those counts depend only on the data, so
+they pin the harness's `gt=` output against an independent number and catch a
+transposed `conf[g][p]` — the one bug in this formula that produces a plausible
+result instead of a crash. (Dice itself is *insensitive* to that transposition,
+since `gt` and `pred` only ever appear as their sum. The `gt=`/`pred=`
+diagnostics are what expose it, which is why they are printed.)
+
+Measured on the real val split: ET is **0.52%** of all voxels and the whole
+tumour is 2.6% — so the doc's "~1% of pixels" framing was, if anything,
+generous about how thin the target class is.
+
 ## Workstream G — see the segmentation (`brats-predict`)
 
 `MainPetsPredict` renders image | GT | pred PPM strips. There is no BraTS
@@ -501,22 +629,113 @@ Gate G: a figure in `demos/figures/` that makes the CE-vs-Dice difference
 *visible* — CE's collapse should be a picture of an empty brain next to a
 labelled one. That figure is the demo's money slide, more than any table.
 
+### Status 2026-07-15: DONE — Gate G met, and the picture is the argument
+
+`demos/MainBratsPredict.lean` + `lake exe brats-predict`. Run against the Gate-B
+checkpoint, it renders `demos/figures/brats_pred_dicece.ppm`: four val slices ×
+three panels (T1gd | +ground truth | +prediction).
+
+**The right-hand column is an empty brain.** Per-slice, against ~5,000
+ground-truth tumour pixels:
+
+```
+slice 932:  gt tumour px=5350   predicted tumour px=0
+slice 127:  gt tumour px=5330   predicted tumour px=0
+slice 1185: gt tumour px=5046   predicted tumour px=0
+slice 2490: gt tumour px=4939   predicted tumour px=0
+```
+
+That is the same fact as `mIoU 0.243402`, and it is not remotely the same
+*claim*. The table's version is a number that looks mediocre; the figure's
+version is a model that has never once fired a tumour class. This is the demo's
+money slide.
+
+Three decisions the pets renderer didn't have to make:
+
+- **Backdrop = one modality (T1gd, channel 2).** Four co-registered modalities
+  have no honest rendering as one image, and T1gd is what a clinician reads for
+  enhancing tumour. This turned out to be self-checking: in the rendered figure
+  the yellow enhancing label lands exactly on the bright rim of the backdrop,
+  which is only true if the channel index is right. A wrong index would have
+  put the label on unremarkable tissue.
+- **Overlay, not a side-by-side mask.** A trimap beside a photo is legible; a
+  tumour mask on black is not — a tumour is only interpretable against the
+  anatomy it sits in. Alpha 0.55, standard BraTS colours (edema green,
+  non-enhancing/necrotic red, enhancing yellow). The rendered result reads as
+  a textbook ring-enhancing glioblastoma: yellow rim, red necrotic core, green
+  edema halo.
+- **Slices chosen, not taken in order.** `min_tumor_px = 1` means the head of
+  val is near-empty tumour edges that would show nothing either way. Slices are
+  ranked by tumour burden (on a stride-2 mask subsample — it is a ranking, not
+  a measurement), preferring slices with ≥25 enhancing voxels since a slice
+  without ET cannot show whether ET collapsed, then picked greedily with a
+  60-index minimum gap. **The gap is what stops the figure being one tumour
+  rendered four times** — slices are written volume-by-volume, so index
+  distance proxies for "different patient". Confirmed by eye: the four
+  rendered brains are visibly four different people.
+
+**A gotcha worth knowing before the CE-vs-Dice figure:** every run writes the
+*same* `<prefix>_params.bin`, so training a second loss clobbers the first.
+`brats-predict` therefore takes optional params/bn-stats paths:
+
+```
+lake exe unet-brats-train data/brats 30 ce
+cp .lake/build/unet_brats_*_params.bin   /tmp/ce_params.bin
+cp .lake/build/unet_brats_*_bn_stats.bin /tmp/ce_bn.bin
+lake exe unet-brats-train data/brats 30 dicece
+lake exe brats-predict demos/figures/brats_ce.ppm /tmp/ce_params.bin /tmp/ce_bn.bin
+lake exe brats-predict demos/figures/brats_dicece.ppm
+```
+
+Given the Gate B result — `ce` and `dicece` are the same trivial predictor to
+four decimals — the honest CE-vs-Dice figure today is **two identical empty
+brains**, which is a finding rather than a fizzle. The figure gets interesting
+when Workstream B's revised plan (class-weighted CE) produces a model that
+predicts the class at all.
+
 ## Sequencing
 
 ```
-Phase 0  DONE   data path + spec + exe                  (this session)
-Phase 1  A      baseline run, per-class IoU             (Gate A — DONE, collapsed)
-Phase 2  B      Dice / Dice+CE + the loss ablation      (Gate B)
-Phase 3  F      WT/TC/ET Dice — the field's metric      (Gate F)
-Phase 4  G      brats-predict visualizer                (Gate G)
-Phase 5  C      mask-aware aug                          (Gate C)
-Phase 6  D      2.5D                                    (Gate D) → gates planning/unet3d.md
+Phase 0  DONE   data path + spec + exe
+Phase 1  A      baseline run, per-class IoU             (Gate A — DONE: collapsed)
+Phase 2  B      Dice / Dice+CE + the loss ablation      (Gate B — DONE: FAILED,
+                                                         mechanism measured;
+                                                         Dice ∝ p_i vanishes)
+Phase 3  F      WT/TC/ET Dice — the field's metric      (Gate F — DONE)
+Phase 4  G      brats-predict visualizer                (Gate G — DONE)
+Phase 5  B'     PREVENT the collapse — the real lever   (Gate B' — NEXT)
+                  B'1 class-weighted CE      (~half a session; the mechanism
+                                              says this is the right tool)
+                  B'2 prior-bias head init   (nearly free; targets the
+                                              first-100-steps window)
+                  B'3 foreground oversampling
+                  B'4 pure `.dice` for the record — the mechanism predicts it
+                      collapses too, just slower. Cheap falsification.
+                  B'5 re-test Dice on top, as *polish* not rescue
+Phase 6  C      mask-aware aug                          (Gate C)
+Phase 7  D      2.5D                                    (Gate D) → gates planning/unet3d.md
         (E struck — codegen + FD is the claim)
 ```
 
 F and G moved ahead of aug/2.5D deliberately: they are what turn this from
 "a training run that prints numbers" into something a newcomer can pick up,
-and they are both cheap. Quality levers come after the demo is legible.
+and they are both cheap. Quality levers come after the demo is legible. That
+ordering paid off exactly as argued — Gate G's figure is what makes the Gate B
+failure legible at a glance, and neither the mIoU table nor the loss curve
+could do that.
+
+**Phase 5 is Workstream B re-scoped, not repeated.** The original Gate B asked
+whether Dice *rescues* a collapsed class; the answer is measured and it is no,
+because Dice's gradient carries a `p_i` factor that vanishes precisely where
+the rescue would have to happen. Do not re-run the Dice ablation expecting a
+different number. The remaining lever acts in the first ~100 steps, before the
+collapse — see the Gate B result for the mechanism.
+
+**Still owed regardless: the matched-budget run.** Every number in this doc is
+1 epoch. That is enough to establish the collapse and its mechanism (the net
+sits on the trivial minimum from step 100 onward and the gradient analysis is
+budget-independent), and it is *not* enough to publish a CE row. Gate B' should
+be scored at 30-60 epochs, one loss per GPU.
 
 ## On replacing the pets demo
 
