@@ -407,10 +407,31 @@ never descends again), long before Dice has any say. The lever has to act
 1.3e-07 and does exactly what soft Dice is defined to do. The loss is
 correct; the *expectation* of what it would buy was wrong.
 
-**Free win to fold in:** label smoothing on `perPixelCE` is already
-implemented in the emitter (`MlirCodegen.lean:4312-4314`) but gated off
-host-side (`Train.lean:127-128` throws). The codegen is there; only the
-guard needs lifting.
+**~~Free win to fold in~~ — DONE 2026-07-15, and it was not free.** This doc
+said label smoothing on `perPixelCE` was already in the emitter
+(`emitPerPixelCEBlock`'s smoothOn/smoothOff) and that "only the guard needs
+lifting". The emitter part was true. The conclusion was wrong: **nothing in
+`seg_loss_probe_check.py` ever ran at `ls > 0`** — the numpy side modelled
+smoothing, but `build_and_run` never passed `ls=` to the probe, so no FD check
+ever touched the path. Lifting the guard on that basis would have shipped
+unverified codegen on the strength of the code *existing*.
+
+Verified first, then lifted. FD at ls=0.1: `ce` **1.07e-07**, `wce`
+**1.31e-07**, `dicece` **1.25e-07** — the emitter was right all along, which is
+the good outcome and not one we were entitled to assume. Probe check count
+14 → 17. Guards lifted for `.perPixelCE` and `.perPixelWeightedCE`; still
+rejected for `.perPixelDice` (smoothing a set-overlap ratio is meaningless) and
+`.perPixelFocalCE` (`p_t` is the probability of *the* true class, which a
+softened target does not name).
+
+For `wce` the composition is the one you want and it is not an accident: the
+weight rides on `%seg_mask`, the raw EQ comparison, so it stays a weight on the
+**true** class while the *target* softens.
+
+**The general lesson, worth more than the feature:** "the codegen is already
+there" is not the same as "the codegen is verified". This repo's whole claim on
+the seg path is FD, and an emitted-but-unexercised branch has exactly the status
+of code nobody has run.
 
 ## Workstream B' — prevent the collapse (the real lever)
 

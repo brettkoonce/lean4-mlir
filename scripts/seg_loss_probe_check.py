@@ -129,11 +129,16 @@ def total_loss(kind, z, y, NC, ls=0.0):
 
 
 # ------------------------------------------------------------------- harness
-def build_and_run(kind, B, NC, H, W, z, y):
+def build_and_run(kind, B, NC, H, W, z, y, ls=0.0):
     with tempfile.TemporaryDirectory() as td:
         mlir = os.path.join(td, "seg_loss_gen.mlir")
-        r = subprocess.run([PROBE, kind, str(B), str(NC), str(H), str(W), mlir],
-                           capture_output=True, text=True)
+        # The probe takes label smoothing as an integer percent (`ls=10` -> 0.10);
+        # see MainSegLossProbe.lean, which divides by 100.
+        argv = [PROBE, kind, str(B), str(NC), str(H), str(W)]
+        if ls:
+            argv.append(f"ls={round(ls * 100)}")
+        argv.append(mlir)
+        r = subprocess.run(argv, capture_output=True, text=True)
         if r.returncode != 0:
             print(r.stdout, r.stderr)
             sys.exit(f"probe emit failed for {kind}")
@@ -156,15 +161,15 @@ def build_and_run(kind, B, NC, H, W, z, y):
         return loss, dz
 
 
-def check(kind, B=2, NC=4, H=3, W=3, seed=0):
+def check(kind, B=2, NC=4, H=3, W=3, seed=0, ls=0.0):
     rng = np.random.RandomState(seed)
     # Logit scale ~1 keeps the softmax off its saturated tails, where f32 FD
     # would be dominated by cancellation rather than by any real error.
     z = rng.randn(B, NC, H, W).astype(np.float64)
     y = rng.randint(0, NC, size=(B, H, W))
 
-    loss_mlir, dz_mlir = build_and_run(kind, B, NC, H, W, z, y)
-    loss_np = total_loss(kind, z, y, NC)
+    loss_mlir, dz_mlir = build_and_run(kind, B, NC, H, W, z, y, ls=ls)
+    loss_np = total_loss(kind, z, y, NC, ls)
 
     # (a) forward agreement
     ferr = abs(loss_mlir - loss_np)
@@ -178,14 +183,15 @@ def check(kind, B=2, NC=4, H=3, W=3, seed=0):
         i = it.multi_index
         zp = z.copy(); zp[i] += h
         zm = z.copy(); zm[i] -= h
-        dz_fd[i] = (total_loss(kind, zp, y, NC) - total_loss(kind, zm, y, NC)) / (2 * h)
+        dz_fd[i] = (total_loss(kind, zp, y, NC, ls) - total_loss(kind, zm, y, NC, ls)) / (2 * h)
         it.iternext()
 
     denom = np.maximum(np.abs(dz_fd).max(), 1e-12)
     gerr = np.abs(dz_mlir - dz_fd).max() / denom
 
     ok = ferr < 1e-6 and gerr < 1e-4
-    print(f"  [{'PASS' if ok else 'FAIL'}] {kind:6s} "
+    tag = f"{kind} ls={ls}" if ls else kind
+    print(f"  [{'PASS' if ok else 'FAIL'}] {tag:12s} "
           f"loss mlir={loss_mlir:+.8f} numpy={loss_np:+.8f} |Δ|={ferr:.2e} | "
           f"grad vs FD rel={gerr:.2e}")
     if not ok:
@@ -201,6 +207,16 @@ def main():
     results = []
     for kind in ("ce", "dice", "dicece", "wce", "wce1", "focal", "focal0"):
         results.append(check(kind))
+
+    # Label smoothing. The emitter has had it since Phase 0
+    # (emitPerPixelCEBlock's smoothOn/smoothOff) but Train.lean throws on the
+    # combination, and planning/brats_demo.md has been calling that a "free win
+    # — only the guard needs lifting". It wasn't free: NOTHING here ever ran at
+    # ls > 0, so lifting the guard would have shipped an unverified path. Verify
+    # first, then lift.
+    print("  -- label smoothing (emitted since Phase 0, never checked until now) --")
+    for kind in ("ce", "wce", "dicece"):
+        results.append(check(kind, ls=0.1))
 
     # `wce1` is weighted CE with an all-ones weight vector. It must reproduce
     # plain CE *exactly* — same loss, same gradient — because Σ_k 1 = N makes

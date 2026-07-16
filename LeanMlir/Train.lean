@@ -130,16 +130,22 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     if useSoftLabels then
       throw <| IO.userError "perPixelCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
     if cfg.useFocal then
-      throw <| IO.userError "perPixelCE + focal not yet supported (Phase 0: plain per-pixel CE only)"
-    if cfg.labelSmoothing != 0.0 then
-      throw <| IO.userError "perPixelCE + label smoothing not yet supported (Phase 0: plain per-pixel CE only)"
+      throw <| IO.userError "perPixelCE + focal not yet supported on this path — use lossKind := .perPixelFocalCE γ, which is the segmentation focal emitter"
+    -- Label smoothing IS accepted, as of the FD check at ls=0.1
+    -- (`seg_loss_probe_check.py`, grad vs central differences 1.07e-07). The
+    -- emitter has had it since Phase 0 (`emitPerPixelCEBlock`'s
+    -- smoothOn/smoothOff) and this guard was the only thing gating it — but it
+    -- was gating an UNVERIFIED path, because nothing in the probe ran at ls > 0
+    -- until then. Verified, then lifted; not lifted because it looked free.
   | .perPixelWeightedCE weights =>
     if useSoftLabels then
       throw <| IO.userError "perPixelWeightedCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
     if cfg.useFocal then
       throw <| IO.userError "perPixelWeightedCE + focal not yet supported (both reweight the loss; composing them wants its own scoping)"
-    if cfg.labelSmoothing != 0.0 then
-      throw <| IO.userError "perPixelWeightedCE + label smoothing not yet supported (same gate as perPixelCE)"
+    -- Label smoothing IS accepted (FD 1.31e-07 at ls=0.1). The weight rides on
+    -- `%seg_mask`, the raw EQ comparison, so it stays a weight on the TRUE
+    -- class while the *target* softens — which is the composition you want, and
+    -- is what the numpy model FD checks against.
     -- Caught here rather than in the emitter: a wrong-length list becomes a
     -- `dense<[...]> : tensor<NCxf32>` shape mismatch thousands of lines into
     -- the generated MLIR, which is a miserable way to learn you typed one
