@@ -53,13 +53,14 @@ def efficientNetB0Imagenet : NetSpec where
     tf.data op — watch input throughput isn't the bottleneck on the first run.
     Mixup/cutmix still off (flip those flags for the very full recipe). -/
 def efficientNetB0ImagenetConfig : TrainConfig where
-  learningRate   := 0.016   -- EfficientNet reference base LR 0.016@bs256 (= 0.256@bs4096); NB our RMSProp ε1e-3 stack erodes here — _full uses the stable 0.01
+  learningRate   := 0.016   -- EfficientNet reference base LR 0.016@bs256 (= 0.256@bs4096); paper-faithful now that RMSProp matches TF (ε-inside-sqrt + mean-square init 1.0)
   batchSize      := 256
   epochs         := 80
   optimizer      := .rmsprop  -- EfficientNet's original optimizer
   momentum       := 0.9       -- μ for the RMSprop momentum buffer
   rmspropDecay   := 0.9       -- ρ, the running mean-square decay
   rmspropEps     := 1e-3      -- EfficientNet uses ε=1e-3
+  gradClipNorm   := 0.0       -- OFF (paper uses none): the TF-RMSProp fix (ε-inside-sqrt + ms-init-1.0) removes the blow-up this was compensating for
   weightDecay    := 1e-5
   cosineDecay      := false   -- replaced by the paper exp-decay schedule (gap B)
   expLRDecayRate   := 0.97    -- EfficientNet: ×0.97 every 2.4 epochs (after warmup)
@@ -71,17 +72,17 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true    -- now reaches the MBConv expand/depthwise/project
-  useEMA         := true     -- weight averaging (decay 0.9999) — eval + ckpt use it
+  useEMA         := true     -- weight averaging (decay 0.9999) — paper-faithful; the emitter now EMA-shadows the BN buffers too (eval uses ema_bn), fixing the earlier EMA-weights×live-BN-stats eval blow-up
   dropPath       := 0.2      -- stochastic depth, EfficientNet-B0 drop-connect rate
   runningBN      := true     -- paper-faithful eval (gap A): running BN stats, not eval-batch stats
 
 #eval efficientNetB0Imagenet.validate!
 
-/-- Paper-faithful full run: identical recipe at the 350-epoch schedule and the
-    stable peak LR (the paper-scaled 0.016 erodes in our RMSProp ε1e-3 stack; ~0.01
-    trains). Selected with the `full` recipe arg. -/
+/-- Paper-faithful full run: identical recipe at the 350-epoch schedule, at the
+    paper's real LR 0.016 (now that the TF-RMSProp fix makes it train stably —
+    no lowered LR, no grad clip). Selected with the `full` recipe arg. -/
 def efficientNetB0ImagenetConfigFull : TrainConfig :=
-  { efficientNetB0ImagenetConfig with epochs := 350, learningRate := 0.01 }
+  { efficientNetB0ImagenetConfig with epochs := 350 }
 
 def efficientNetB0ImagenetRecipes : List Recipe := [
   { name := "default", cfg := efficientNetB0ImagenetConfig,

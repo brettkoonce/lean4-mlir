@@ -2210,13 +2210,18 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     -- sq is the running mean-square of the gradient, buf the momentum buffer on
     -- the normalized gradient. WD stays coupled into the gradient (so it flows
     -- through the accumulator), matching those papers' L2 form — NOT decoupled.
+    -- FIDELITY: match TensorFlow's RMSProp (what EfficientNet trained with), NOT
+    -- vanilla RMSProp — ε goes INSIDE the sqrt (sqrt(sq + ε), not sqrt(sq) + ε)
+    -- and sq initializes to 1.0 (see the init below). With ε=1e-3 the placement
+    -- is ~30× on the effective step when sq is small; vanilla diverges/erodes at
+    -- the paper LR, the TF form trains stably. (timm ships RMSpropTF for exactly this.)
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
     gradPrelude ++
     (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    sq, buf = opt_state\n" ++
     "    sq = jax.tree.map(lambda s, g: RHO * s + (1.0 - RHO) * g * g, sq, grads)\n" ++
-    "    buf = jax.tree.map(lambda b, g, s: MOMENTUM * b + g / (jnp.sqrt(s) + EPS), buf, grads, sq)\n" ++
+    "    buf = jax.tree.map(lambda b, g, s: MOMENTUM * b + g / jnp.sqrt(s + EPS), buf, grads, sq)\n" ++
     "    params = jax.tree.map(lambda p, b: p - lr * b, params, buf)\n" ++
     (if cfg.runningBN then "    return params, (sq, buf), _new_bn, loss\n\n" else "    return params, (sq, buf), loss\n\n")
    | .sgd =>
@@ -2374,6 +2379,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     | .sgd => if hasMomentum then some "velocity" else none
   let stateVars : List String := ["params"] ++ optStateVar.toList ++
     (if cfg.useEMA then ["ema_params"] else []) ++
+    (if cfg.useEMA && cfg.runningBN then ["ema_bn"] else []) ++
     (if cfg.runningBN then ["bn_state"] else [])
   let stateTuple : String := "(" ++ String.intercalate ", " stateVars ++
     (if stateVars.length == 1 then "," else "") ++ ")"
@@ -2459,7 +2465,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
    | .rmsprop =>
-    "    opt_sq = jax.tree.map(jnp.zeros_like, params)\n" ++
+    "    opt_sq = jax.tree.map(jnp.ones_like, params)  # TF-RMSProp: mean-square inits to 1.0, not 0 (gentle first steps)\n" ++
     "    opt_buf = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_sq, opt_buf)\n"
    | .sgd => if hasMomentum then "    velocity = jax.tree.map(jnp.zeros_like, params)\n" else "") ++
@@ -2504,6 +2510,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "        print(f'Resuming at global_step={_global_step} (= epoch {_start_epoch + 1}/{EPOCHS}); LR schedule continues from there')\n" ++
   "    t0 = time.time()\n" ++
   (if cfg.useEMA then "    ema_params = params  # EMA shadow starts at the (fresh or resumed) weights\n" else "") ++
+  (if cfg.useEMA && cfg.runningBN then "    ema_bn = bn_state  # EMA shadow of the BN running buffers — eval pairs EMA weights with EMA-lagged BN stats, avoiding the weights/stats mismatch that blows up early eval\n" else "") ++
   (if cfg.dropPath > 0.0 || cfg.dropout > 0.0 then "    _drop_base = random.PRNGKey(" ++ seed ++ " + 1)  # stochastic-depth + dropout RNG stream\n" else "") ++
   -- Lossless full-state resume. LEAN_MLIR_RESUME points at a .npz written by
   -- save_train_state; it overrides params + optimizer moments + EMA shadow +
@@ -2577,6 +2584,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "            epoch_loss += loss  # jax scalar: defer the device sync to epoch end\n" ++
   "            n_batches += 1\n" ++
   (if cfg.useEMA then "            ema_params = ema_update(ema_params, params)\n" else "") ++
+  (if cfg.useEMA && cfg.runningBN then "            ema_bn = ema_update(ema_bn, bn_state)\n" else "") ++
   "            _global_step += 1\n" ++
   "            if _trace_f:\n" ++
   "                _trace_f.write(json.dumps({\n" ++
@@ -2591,7 +2599,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "\n" ++
   "        train_secs = time.time() - ep_t0  # train-only wall time (measured before validation)\n" ++
   (let valEvery := cfg.valEveryEpochs
-   let evalArgs := (if cfg.useEMA then "ema_params" else "params") ++ (if cfg.runningBN then ", bn_state" else "")
+   let evalArgs := (if cfg.useEMA then "ema_params" else "params") ++ (if cfg.runningBN then (if cfg.useEMA then ", ema_bn" else ", bn_state") else "")
    if valEvery > 1 then
     -- Validate every `valEvery` epochs (+ always the final epoch). Counters are
     -- pre-zeroed so the epoch print branches cleanly on skipped epochs.
@@ -2719,7 +2727,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
    | .rmsprop =>
-    "    opt_sq = jax.tree.map(jnp.zeros_like, params)\n" ++
+    "    opt_sq = jax.tree.map(jnp.ones_like, params)  # TF-RMSProp: mean-square inits to 1.0, not 0 (gentle first steps)\n" ++
     "    opt_buf = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_sq, opt_buf)\n"
    | .sgd => if hasMomentum then "    velocity = jax.tree.map(jnp.zeros_like, params)\n" else "") ++
