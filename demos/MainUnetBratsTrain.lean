@@ -100,6 +100,25 @@ def unetBratsClassWeightsSqrt : List Float :=
 def unetBratsClassPriors : List Float :=
   [0.9746, 0.0160, 0.0044, 0.0050]
 
+/-- Class weights as `π_c^(-β)`, normalized to `w₀ = 1`. **The knob that
+    unifies every weighted-CE arm into one axis**, which is what the ablation
+    turned the discrete arms into:
+
+      β = 0    → all ones = plain CE            (collapse)
+      β = 0.5  → `unetBratsClassWeightsSqrt`    (finds the tumour)
+      β = 1    → `unetBratsClassWeights`        (over-predicts, 29% of brain)
+
+    The measured story after wave 2: the arms that did anything both *amplify
+    the rare class's gradient in absolute terms*, and β sets how hard. Focal
+    collapsed at γ=2 **and** γ=8 — suppressing the majority does nothing when
+    the rare-class gradient, the thing that must move the weights, is left at
+    CE's magnitude, which is exactly the magnitude that already collapses. So
+    the live axis is this β, not focal's γ, and the open question is where
+    between 0.5 and 1 the transition from "finds it" to "over-predicts" sits. -/
+def unetBratsClassWeightsBeta (beta : Float) : List Float :=
+  let w0 := Float.exp (-beta * Float.log unetBratsClassPriors.head!)
+  unetBratsClassPriors.map (fun p => Float.exp (-beta * Float.log p) / w0)
+
 def unetBrats : NetSpec where
   name := "UNet (BraTS, 240×240 4-modality MRI → 4-class tumour)"
   imageH := 240
@@ -176,6 +195,13 @@ def main (args : List String) : IO Unit := do
   let focalGamma : Float :=
     ((args.filter (·.startsWith "g=")).head?.bind
       (fun a => (a.drop 2).toNat?)).map Nat.toFloat |>.getD 2.0
+  -- `b=<n>` sets the weighted-CE exponent β as a PERCENT (b=70 → β=0.70), so
+  -- the `wceb` arm sweeps the one axis wave 2 established: β=0 collapse, 0.5
+  -- finds the tumour, 1.0 over-predicts. Percent because the arg parser has
+  -- only `toNat?` (Lean core has no `String.toFloat?`).
+  let wceBeta : Float :=
+    (((args.filter (·.startsWith "b=")).head?.bind
+      (fun a => (a.drop 2).toNat?)).map Nat.toFloat |>.getD 70.0) / 100.0
   -- 3rd arg picks the loss — the demo's ablation axis.
   --
   --   ce     collapses every tumour class (mIoU 0.243 ≈ the trivial
@@ -194,6 +220,7 @@ def main (args : List String) : IO Unit := do
     else if args.any (· == "dice") then .perPixelDice
     else if args.any (· == "focal") then .perPixelFocalCE focalGamma
     else if args.any (· == "wcesqrt") then .perPixelWeightedCE unetBratsClassWeightsSqrt
+    else if args.any (· == "wceb") then .perPixelWeightedCE (unetBratsClassWeightsBeta wceBeta)
     else .perPixelWeightedCE unetBratsClassWeights
   IO.eprintln s!"  loss: {repr lossKind}"
   -- `pb` adds RetinaNet prior-bias init. Orthogonal to the loss on purpose —
@@ -211,6 +238,7 @@ def main (args : List String) : IO Unit := do
                   else if args.any (· == "dice") then "dice"
                   else if args.any (· == "focal") then s!"focal_g{focalGamma.toUInt64}"
                   else if args.any (· == "wcesqrt") then "wcesqrt"
+                  else if args.any (· == "wceb") then s!"wceb{(wceBeta * 100.0).toUInt64}"
                   else "wce") ++ (if args.any (· == "pb") then "_pb" else "")
   IO.eprintln s!"  arm: {armName}  (artifacts: {(unetBrats.withBuildTag armName).buildPrefix}_*)"
   (unetBrats.withBuildTag armName).train

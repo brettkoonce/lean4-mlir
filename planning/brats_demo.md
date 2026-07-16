@@ -433,6 +433,82 @@ there" is not the same as "the codegen is verified". This repo's whole claim on
 the seg path is FD, and an emitted-but-unexercised branch has exactly the status
 of code nobody has run.
 
+## WAVE 2 RESULT 2026-07-16: wcesqrt works; focal collapses at every γ; the loss-floor axis is REFUTED
+
+Five arms now run, and they force a correction to this doc's own theory. The
+first-epoch per-class result (`evalEveryNEpochs := 1`, so this is visible in 40
+min, not 7 h):
+
+| arm | weights / γ | c3 enh IoU | WT Dice | % of brain | outcome |
+|---|---|---|---|---|---|
+| `ce` | uniform | 0.000000 | 0.0000 | 0.00% | collapse |
+| `focal g=2` | γ=2 | 0.000000 | 0.0000 | 0.00% | collapse |
+| `focal g=8` | γ=8 | 0.000000 | 0.0000 | 0.00% | collapse |
+| `wcesqrt` | π^-0.5 | **0.143432** | **0.3983** | 0.94% | **finds the tumour** |
+| `wce` | π^-1 | 0.017823 (@10ep) | 0.1650 | 28.95% | over-predicts |
+
+### The loss-floor ratio does NOT predict the outcome — I committed that it did, and it's wrong
+
+Last commit (`44a6eb3`) claimed the "cost of the prior vs uniform" ratio called
+every arm, target ≈ 1. Then `focal g=8` ran. Its ratio is **1.30×**; `wcesqrt`
+is **1.35×** — all but identical — and they land on opposite outcomes (total
+collapse vs finds-the-tumour). **The floor ratio is refuted.** It was a
+post-hoc fit to four points and the fifth broke it. Recorded here rather than
+quietly dropped, because it is the third time this session a tidy theory got
+ahead of the measurement (the others: the gradient scorecard ranking focal_pb
+best, and a script comment asserting focal's γ moved the wrong way).
+
+### What actually survives all five
+
+The clean split is **absolute amplification of the rare class**:
+
+| | leaves rare-class gradient at CE's magnitude? | outcome |
+|---|---|---|
+| `ce`, `focal g=2`, `focal g=8` | **yes** — focal only scales the *majority* | collapse, every one |
+| `wcesqrt`, `wce` | **no** — the weight multiplies the rare class directly | escapes |
+
+Focal collapses at *every* γ because its whole mechanism is suppressing the
+easy majority, and that leaves the rare-class gradient — the quantity that must
+actually move the head's weights — exactly where CE has it. CE collapses with
+that gradient. Suppressing its rival does not change it. The gradient
+scorecard's (C) ratio missed this because a *ratio* has no magnitude: focal
+sends (C) sky-high by shrinking the denominator while the numerator, the part
+that matters, never moves. **(C) is a diagnostic of one mechanism, not a
+ranking, and it should never have been read as one.**
+
+### wcesqrt: the honest claim is narrower than "segments"
+
+It finds the tumour *region* and cannot type the *sub-regions*. Per-epoch:
+
+| ep | mIoU | c1 edema | c2 non-enh | c3 enh | WT Dice | % brain (truth 2.63%) |
+|---|---|---|---|---|---|---|
+| 1 | 0.2808 | 0.001608 | 0.000000 | 0.143432 | 0.3983 | 0.94% |
+| 2 | 0.2750 | 0.000004 | 0.000020 | 0.123750 | 0.5071 | 2.16% |
+
+c3 IoU *fell* while WT Dice *rose* — not a regression: it is learning to cover
+the whole lesion and calling all of it enhancing, so its class-3 precision drops
+as its region coverage improves. c1 and c2 stay ≈ 0. **This is exactly the
+loss-floor ladder's `1.0397` reference predictor — "knows tumour location,
+uniform over the classes there" — now observed rather than hypothesized.** So
+`wcesqrt` is a binary tumour/background segmenter wearing a 4-class head. That
+is still the best result in the demo by a mile (CE: nothing; wce: 29% of brain),
+but "it segments the tumour" over-claims and the record says region-not-type.
+
+Whether the sub-regions ever separate is a harder problem — likely capacity/data
+bound, not loss-bound (note c2 has the *highest* weight of any tumour class yet
+the lowest IoU, so more weight is not the lever). The doc always flagged WT easy
+/ TC-ET hard; this is that, quantified.
+
+### The axis, unified: `wceb b=<n>` sweeps β
+
+The discrete arms are one knob — weights `π_c^(-β)`, β as a percent on the CLI:
+
+- β=0 → CE (collapse), β=0.5 → wcesqrt (finds tumour), β=1 → wce (over-predicts).
+- **Monotone, and the live experiment is the transition.** `wceb b=70` (β=0.7,
+  exchange rate 40:1, between sqrt's 14:1 and inverse's 196:1) is running now.
+  The question it answers: is there a plateau of good behaviour, or does
+  over-prediction switch on sharply somewhere in (0.5, 1)?
+
 ## GATE B' RESULT 2026-07-16: matched 10-epoch run — wce did not fix the collapse, it INVERTED it
 
 `runs/brats_ablation_{ce,wce}_10ep_gpu{0,1}.log`. 10 epochs, 9,000 steps, one arm
