@@ -67,6 +67,28 @@ import LeanMlir
 def unetBratsClassWeights : List Float :=
   [1.0, 60.9033, 220.0868, 195.5835]
 
+/-- Inverse-**sqrt**-frequency weights, same histogram (`brats_class_weights.py`).
+    The fallback this doc named before the run, and the run made necessary.
+
+    `unetBratsClassWeights` (inverse frequency) equalizes the per-class loss
+    share at 25% each, and at matched 10 epochs that **inverted the collapse**:
+    99.39% enhancing recall at 1.78% precision, painting 28.95% of every brain
+    as tumour against a 0.52% truth — a 56× over-prediction (Gate B' result).
+
+    The cause is an exchange rate, not a bug. `w₃/w₀ = 195.6` prices one false
+    negative on enhancing tumour at 196 false positives on background, so a
+    capacity-limited net rationally over-predicts. These weights drop that rate
+    to **13.99 : 1** and tumour's share of the loss from 75% to ~21% — still an
+    enormous thumb on the scale versus CE's 0.50%, without instructing the net
+    that a miss costs two hundred false alarms.
+
+    The falsifiable prediction: precision comes off 1.78% without recall
+    returning to CE's 0.00%. If it lands in between, the knob is real and the
+    demo has an axis. If it snaps back to the collapse, the whole
+    amplify-the-minority family is a false lead and focal is the story. -/
+def unetBratsClassWeightsSqrt : List Float :=
+  [1.0, 7.8041, 14.8353, 13.9851]
+
 /-- The measured class prior over `data/brats/train.bin` — background / edema /
     non-enhancing / enhancing, as fractions of all voxels
     (`scripts/brats_class_weights.py`). `unetBratsClassWeights` is literally the
@@ -136,6 +158,7 @@ def main (args : List String) : IO Unit := do
     else if args.any (· == "dicece") then .perPixelDiceCE
     else if args.any (· == "dice") then .perPixelDice
     else if args.any (· == "focal") then .perPixelFocalCE 2.0
+    else if args.any (· == "wcesqrt") then .perPixelWeightedCE unetBratsClassWeightsSqrt
     else .perPixelWeightedCE unetBratsClassWeights
   IO.eprintln s!"  loss: {repr lossKind}"
   -- `pb` adds RetinaNet prior-bias init. Orthogonal to the loss on purpose —
@@ -152,6 +175,7 @@ def main (args : List String) : IO Unit := do
                   else if args.any (· == "dicece") then "dicece"
                   else if args.any (· == "dice") then "dice"
                   else if args.any (· == "focal") then "focal"
+                  else if args.any (· == "wcesqrt") then "wcesqrt"
                   else "wce") ++ (if args.any (· == "pb") then "_pb" else "")
   IO.eprintln s!"  arm: {armName}  (artifacts: {(unetBrats.withBuildTag armName).buildPrefix}_*)"
   (unetBrats.withBuildTag armName).train
