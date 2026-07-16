@@ -167,7 +167,7 @@ def main (args : List String) : IO Unit := do
     match (args.filter (·.startsWith "arm=")).head? with
     | some a => ((a.drop 4).toString).splitOn ","
     | none => [""]
-  let positional := args.filter (fun a => !a.startsWith "arm=")
+  let positional := args.filter (fun a => !a.startsWith "arm=" && a != "best")
   let outPath := positional[0]?.getD "demos/figures/brats_pred.ppm"
   -- The explicit params/bn override is single-arm only: with several arms
   -- there is no one checkpoint to point at, and silently applying one arm's
@@ -175,13 +175,18 @@ def main (args : List String) : IO Unit := do
   if arms.length > 1 && positional.length > 1 then
     IO.eprintln "explicit params/bn paths are single-arm only — drop them, or pass one arm"
     IO.Process.exit 1
+  -- `best` renders the best-by-val checkpoint (`_best_*`) rather than the final
+  -- epoch. On an oscillating run the endpoint is not the best model the run
+  -- produced (unet-brats-train saves both), and the best-by-val WT Dice is the
+  -- number worth showing.
+  let suffix := if args.any (· == "best") then "_best" else ""
   let prefixes := arms.map (fun a => (unetBrats.withBuildTag a).buildPrefix)
   let paramPaths := match positional[1]? with
     | some p => [p]
-    | none => prefixes.map (fun p => s!"{p}_params.bin")
+    | none => prefixes.map (fun p => s!"{p}{suffix}_params.bin")
   let bnPaths := match positional[2]? with
     | some p => [p]
-    | none => prefixes.map (fun p => s!"{p}_bn_stats.bin")
+    | none => prefixes.map (fun p => s!"{p}{suffix}_bn_stats.bin")
   let vmfbs := prefixes.map (fun p => s!"{p}_fwd_eval.vmfb")
   IO.FS.createDirAll (System.FilePath.mk outPath).parent.get!.toString
   for p in paramPaths ++ bnPaths ++ vmfbs do

@@ -621,6 +621,14 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let mut swaSqParams   : ByteArray := if cfg.useSWAG then params else .empty
   let mut swagDeviations : Array ByteArray := #[]
 
+  -- Best-by-val checkpoint for the segmentation path. The BraTS runs
+  -- *oscillate* — wcesqrt cos pb peaked at WT Dice 0.329 (epoch 3) then drifted
+  -- to 0.226 by epoch 10 — and the plain per-N-epoch checkpoint keeps only the
+  -- last epoch, so the endpoint is not the best model the run ever produced.
+  -- This tracks the best val score seen and saves `{pfx}_best_{params,bn_stats}`
+  -- whenever a new best lands. `-1` so the first eval always wins.
+  let mut bestSegScore : Float := -1.0
+
   -- LEAN_MLIR_NO_SHUFFLE=1 disables per-epoch shuffling — used for
   -- phase-2/phase-3 cross-verification where both sides need to see
   -- batches in the same order.
@@ -853,6 +861,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
          -- alongside rather than replaced: it is what makes this demo
          -- comparable to the pets one, while Dice is what makes it
          -- comparable to the BraTS literature.
+         let mut regionDices : Array Float := #[]
          for (name, cls) in dio.segRegions do
            let inR : Nat → Bool := fun c => cls.contains c
            let mut inter : Nat := 0
@@ -871,7 +880,26 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
            -- a collapsed model still has |gt_R| > 0 and so scores 0, which is
            -- the reading we want.
            let dice := if den == 0 then 1.0 else (2 * inter).toFloat / den.toFloat
+           regionDices := regionDices.push dice
            IO.eprintln s!"  val Dice {name}: {dice}  (inter={inter} gt={gtR} pred={prR})"
+         -- Best-by-val checkpoint. Selection metric: mean region Dice when the
+         -- dataset defines regions (BraTS — this is its headline number and
+         -- captures "found the tumour"), else mean of the non-background class
+         -- IoUs (a general seg proxy that is ~0 for the trivial predictor).
+         -- Saving the whole-tumour region overlap rather than mean-tumour-IoU
+         -- is deliberate: on the oscillating BraTS run the two disagree, and WT
+         -- Dice is the one the field reports.
+         let segScore : Float :=
+           if regionDices.isEmpty then
+             (((List.range NC).drop 1).foldl (fun a c => a + ious[c]!) 0.0)
+               / (max 1 (NC - 1)).toFloat
+           else
+             (regionDices.foldl (· + ·) 0.0) / regionDices.size.toFloat
+         if segScore > bestSegScore then
+           bestSegScore := segScore
+           IO.FS.writeBinFile s!"{pfx}_best_params.bin" p
+           IO.FS.writeBinFile s!"{pfx}_best_bn_stats.bin" runningBnStats
+           IO.eprintln s!"  ✓ new best (score {segScore}) — saved {pfx}_best_*"
      else if useYolov1Run then
        -- mAP@0.5 eval for YOLOv1 is Phase 5 work (planning/yolo_final.md).
        -- the train step runs + loss drops on real detection data; the
