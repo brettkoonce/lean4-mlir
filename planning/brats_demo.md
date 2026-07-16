@@ -17,6 +17,51 @@ Prerequisite reading: `planning/unet_demo_v2.md` (what the seg stack is and
 what's still open on the pets side). Volumetric follow-on:
 `planning/unet3d.md`.
 
+## State of play (2026-07-16) — read this first
+
+The sections below are chronological and long; this is where the loss ablation
+actually landed. **The thin-class thesis reproduced in full, and the fix turned
+out to be a knife-edge, not a switch.**
+
+Eight arms, matched 10-epoch (or killed early where the outcome was an absorbing
+state). Each loss changes exactly one thing about how imbalance is handled:
+
+| arm | mechanism | result |
+|---|---|---|
+| `ce` | none | **collapse** — 0 tumour voxels of 148M; *worse* at 10ep than 1ep |
+| `dicece` | Dice term | collapse, identical to `ce` (Dice's grad ∝ p_i vanishes) |
+| `focal g=2`, `g=8` | suppress the majority | **collapse at every γ** — never amplifies the rare class |
+| `wce` (β=1) | amplify rare class 196× | **inverts** — 99% recall, 2% precision, paints 29% of brain |
+| `wceb70` (β=0.7) | amplify 40× | over-predicts, slowly self-correcting (23%→16% of brain) |
+| `wcesqrt` (β=0.5) | amplify 14× | **finds the tumour** (WT Dice 0.51) — but *oscillates* at constant LR |
+| `wcesqrt cos` | β=0.5 + cosine LR | **running — the pivotal arm** |
+
+Four things this settled, in order of how much they'd surprise a newcomer:
+
+1. **The collapse is an absorbing state, not underfitting.** `ce` at 10 epochs
+   is worse than at 1. Budget deepens it; it does not resolve it.
+2. **mIoU ranks the collapsed model above the working one** (0.243 vs 0.187) —
+   ship mIoU alone and you ship the model that predicts nothing. This is why
+   Gate F (region Dice) exists.
+3. **The lever is an exchange rate, and it is a cliff.** Weights `π^(-β)` sweep
+   it: β=0 collapses, β=0.5 finds the tumour, β=0.7 already over-predicts,
+   β=1 paints the brain. The usable band is narrow and near 0.5.
+4. **The good basin is unstable; the bad one is wide.** The β that segments
+   (0.5) oscillates at constant LR — the model rotates which class it predicts
+   epoch to epoch — while the over-prediction basin sits still. So the open
+   question became a *training-dynamics* one, not a loss one: can cosine LR pin
+   the model onto the knife-edge? That is `wcesqrt cos`, in flight.
+
+Honest caveats carried below and not buried: `wcesqrt` finds the tumour *region*
+but cannot type the sub-regions (c1/c2 ≈ 0 — likely capacity-bound, not
+loss-bound); every number here is ≤10 epochs on 484 volumes; and the loss-floor
+"axis" committed earlier this session was **refuted** by `focal g=8` and is
+retained only as a worked example of a theory front-running its data.
+
+Codegen status is unaffected by any of this and solid: every loss is
+FD-verified (`ce`/`dice`/`dicece`/`wce`/`focal`/label-smoothing, 17 checks), and
+the whole seg stack still runs with zero changes to the pets codegen.
+
 **Audience, decided 2026-07-15: a working demo a medical student can pick up
 and run.** Not a proofs chapter. This is a real constraint with teeth, and it
 already explains several choices below — MSD Task01 over the Synapse-gated
