@@ -34,7 +34,8 @@ state). Each loss changes exactly one thing about how imbalance is handled:
 | `wce` (β=1) | amplify rare class 196× | **inverts** — 99% recall, 2% precision, paints 29% of brain |
 | `wceb70` (β=0.7) | amplify 40× | over-predicts, slowly self-correcting (23%→16% of brain) |
 | `wcesqrt` (β=0.5) | amplify 14× | **finds the tumour** (WT Dice 0.51) — but *oscillates* at constant LR |
-| `wcesqrt cos` | β=0.5 + cosine LR | **running — the pivotal arm** |
+| `wcesqrt cos` | β=0.5 + cosine LR | **collapsed** — monotone decay into the trivial predictor by ep3, locked |
+| `wcesqrt cos pb` | + prior-bias init | **running** — start on the tumour side so cosine commits there |
 
 Four things this settled, in order of how much they'd surprise a newcomer:
 
@@ -49,8 +50,19 @@ Four things this settled, in order of how much they'd surprise a newcomer:
 4. **The good basin is unstable; the bad one is wide.** The β that segments
    (0.5) oscillates at constant LR — the model rotates which class it predicts
    epoch to epoch — while the over-prediction basin sits still. So the open
-   question became a *training-dynamics* one, not a loss one: can cosine LR pin
-   the model onto the knife-edge? That is `wcesqrt cos`, in flight.
+   question became a *training-dynamics* one, not a loss one.
+5. **Cosine LR alone made it worse, and the reason is mechanistic.** `wcesqrt
+   cos` decayed *monotonically* into the trivial predictor (WT Dice
+   0.217→0.054→0.014, at trivial by ep3) and, with LR still falling, locked
+   there. Diagnosis: cosine decays *within* every epoch, so epoch 1 took
+   smaller average steps than constant LR (WT Dice 0.22 vs 0.40, same weights
+   and seed) and finished on the cautious, background-ward side of the
+   knife-edge. Falling LR then commits to whichever wide basin you are nearest,
+   and from an under-predicting start that is background. **Cosine LR does not
+   *find* the good basin; it commits to the side you are already on.** The fix
+   this implies: start on the tumour side. `wcesqrt cos pb` (prior-bias init +
+   cosine) is in flight testing exactly that — it is the composition of all
+   three levers this session built.
 
 Honest caveats carried below and not buried: `wcesqrt` finds the tumour *region*
 but cannot type the sub-regions (c1/c2 ≈ 0 — likely capacity-bound, not
