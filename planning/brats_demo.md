@@ -17,6 +17,51 @@ Prerequisite reading: `planning/unet_demo_v2.md` (what the seg stack is and
 what's still open on the pets side). Volumetric follow-on:
 `planning/unet3d.md`.
 
+## FINAL VERDICT (2026-07-16) — partial success, stated honestly
+
+The 10-epoch `wcesqrt cos pb` finished. It is the **best arm** and it is
+**modest**, and both halves matter:
+
+| arm | WT Dice | TC | ET | what it actually does |
+|---|---|---|---|---|
+| `ce` | 0.000 | 0.000 | 0.000 | predicts nothing — collapse |
+| `wce` (β=1) | 0.165 | 0.065 | 0.035 | paints 29% of brain — inversion |
+| `wceb70` (β=0.7) | 0.210 | 0.099 | 0.057 | over-predicts ~16-22% of brain |
+| **`wcesqrt cos pb`** | **0.226** | **0.000** | **0.000** | **stable, co-located, edema-only** |
+
+**What worked, unambiguously.** The three-lever recipe (sqrt-freq weights +
+prior-bias init + cosine LR) is the only arm that is both non-trivial *and*
+stable. It does not collapse (unlike CE and constant-LR wcesqrt) and it does not
+paint the brain (unlike wce). Its WT Dice 0.226 is the highest of any arm, and
+the figure (`demos/figures/brats_final_ablation.png`) shows it: ce empty, wceb70
+flooding the brain, the fix putting tumour roughly where the tumour is.
+
+**What did not, stated plainly.** 0.226 is a *modest* whole-tumour Dice — a
+competent 2D BraTS baseline is ~0.85. And the final checkpoint scores **TC = ET
+= 0.000**: it segments the tumour *region* but labels essentially all of it
+edema, and never fires the enhancing-tumour class the demo cares most about. It
+is a binary tumour-vs-background segmenter wearing a 4-class head. The thesis —
+watch the thin-class collapse, watch loss+init+schedule move the needle — is
+demonstrated in full; a *good* segmentation is not.
+
+**Two honest mechanics behind the modest number:**
+
+1. **It settled below its own peak.** Mid-run it hit WT Dice 0.329 at epoch 3
+   (and was favoring *enhancing* then), but drifted to 0.226/edema by epoch 10.
+   Cosine LR settled it into a broader, easier basin than the one it briefly
+   found. The peak weights were **not saved** — `checkpointEveryNEpochs := 10`
+   only keeps the last epoch — which is a real lesson: on an oscillating run,
+   save every epoch and keep the best by val, don't trust the endpoint.
+2. **Sub-region typing is likely capacity/data-bound, not loss-bound.** Every
+   weighted arm fails it (c2 has the *highest* weight and near-zero IoU), 484
+   volumes / 2D / 10 epochs / no augmentation is a thin budget for a problem
+   nnU-Net solves with patch sampling, deep supervision, and long schedules.
+
+**Still in flight:** the 30-epoch `wcesqrt cos pb` (slower cosine → longer
+refinement) is the open shot at a stronger number; if it too lands near 0.23,
+the ceiling is confirmed to be budget/architecture, and that is the honest
+close.
+
 ## State of play (2026-07-16) — read this first
 
 The sections below are chronological and long; this is where the loss ablation
