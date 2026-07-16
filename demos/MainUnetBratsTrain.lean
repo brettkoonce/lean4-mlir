@@ -235,6 +235,14 @@ def main (args : List String) : IO Unit := do
   -- slingshots through it. Cosine decay is the standard damping — high LR early
   -- to find the basin, low LR late to settle in it.
   let cosine := args.any (· == "cos")
+  -- `tag=<s>` appends an extra suffix to the artifact tag, so two runs of the
+  -- SAME arm at different budgets/schedules (e.g. a 10-epoch and a 30-epoch
+  -- `wcesqrt cos pb`) don't clobber each other's checkpoints or race on the
+  -- vmfb. Without it both resolve to the same `wcesqrt_pb_cos` prefix.
+  let extraTag : String :=
+    match (args.filter (·.startsWith "tag=")).head? with
+    | some a => "_" ++ (a.drop 4).toString
+    | none => ""
   -- Tag the build artifacts with the arm. Without this every arm writes the
   -- same `_params.bin` and the same `_train_step.vmfb`, so a sequential
   -- ablation silently overwrites itself and a parallel one (which is the point
@@ -247,7 +255,7 @@ def main (args : List String) : IO Unit := do
                   else if args.any (· == "wcesqrt") then "wcesqrt"
                   else if args.any (· == "wceb") then s!"wceb{(wceBeta * 100.0).toUInt64}"
                   else "wce") ++ (if args.any (· == "pb") then "_pb" else "")
-  let fullTag := armName ++ (if cosine then "_cos" else "")
+  let fullTag := armName ++ (if cosine then "_cos" else "") ++ extraTag
   IO.eprintln s!"  arm: {fullTag}  (artifacts: {(unetBrats.withBuildTag fullTag).buildPrefix}_*)"
   (unetBrats.withBuildTag fullTag).train
     { unetBratsConfig with epochs, lossKind, headPriorBias := priorBias, cosineDecay := cosine }
