@@ -228,6 +228,13 @@ def main (args : List String) : IO Unit := do
   -- mechanistic argument behind it: focal is a no-op at a uniform softmax, and
   -- this is what gives it confidence to suppress at step 0.
   let priorBias := if args.any (· == "pb") then unetBratsClassPriors else []
+  -- `cos` turns on cosine LR decay (to ~0 over the run). The weighted arms
+  -- OSCILLATE at the constant 0.001 default — wcesqrt rotated which class it
+  -- predicted every epoch (enhancing @1-2, edema @3-4) with WT Dice bouncing
+  -- 0.40/0.51/0.045: heavy weights carve a narrow basin and a flat LR
+  -- slingshots through it. Cosine decay is the standard damping — high LR early
+  -- to find the basin, low LR late to settle in it.
+  let cosine := args.any (· == "cos")
   -- Tag the build artifacts with the arm. Without this every arm writes the
   -- same `_params.bin` and the same `_train_step.vmfb`, so a sequential
   -- ablation silently overwrites itself and a parallel one (which is the point
@@ -240,7 +247,8 @@ def main (args : List String) : IO Unit := do
                   else if args.any (· == "wcesqrt") then "wcesqrt"
                   else if args.any (· == "wceb") then s!"wceb{(wceBeta * 100.0).toUInt64}"
                   else "wce") ++ (if args.any (· == "pb") then "_pb" else "")
-  IO.eprintln s!"  arm: {armName}  (artifacts: {(unetBrats.withBuildTag armName).buildPrefix}_*)"
-  (unetBrats.withBuildTag armName).train
-    { unetBratsConfig with epochs, lossKind, headPriorBias := priorBias }
+  let fullTag := armName ++ (if cosine then "_cos" else "")
+  IO.eprintln s!"  arm: {fullTag}  (artifacts: {(unetBrats.withBuildTag fullTag).buildPrefix}_*)"
+  (unetBrats.withBuildTag fullTag).train
+    { unetBratsConfig with epochs, lossKind, headPriorBias := priorBias, cosineDecay := cosine }
     (args.head?.getD "data/brats") .brats
