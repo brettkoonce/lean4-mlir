@@ -145,6 +145,10 @@ private def argmaxChannel (logits : ByteArray) (b h w H W : Nat) : UInt8 := Id.r
       best := c
   return best.toUInt8
 
+/-- Display name for an arm; the empty tag is an untagged single run. -/
+private def armLabel (a : String) : String :=
+  if a.isEmpty then "prediction" else a
+
 private structure SliceScore where
   idx : Nat
   /-- Pixels of any tumour class (1/2/3). -/
@@ -154,30 +158,44 @@ private structure SliceScore where
   deriving Inhabited
 
 def main (args : List String) : IO Unit := do
-  -- `arm=<name>` must reproduce the tag `unet-brats-train` stamped on its
-  -- artifacts, or every path below points at a file that was never written.
-  let arm : String :=
+  -- `arm=<a>,<b>,…` — each name must reproduce the tag `unet-brats-train`
+  -- stamped on its artifacts, or every path below points at a file nobody
+  -- wrote. Several arms render as extra columns of ONE figure, on identical
+  -- slices, which is the only honest way to show a loss ablation: two separate
+  -- images invite the reader to wonder whether they even saw the same brain.
+  let arms : List String :=
     match (args.filter (·.startsWith "arm=")).head? with
-    | some a => (a.drop 4).toString
-    | none => ""
-  let spec := unetBrats.withBuildTag arm
-  let pfx := spec.buildPrefix
+    | some a => ((a.drop 4).toString).splitOn ","
+    | none => [""]
   let positional := args.filter (fun a => !a.startsWith "arm=")
-  let outPath     := positional[0]?.getD "demos/figures/brats_pred.ppm"
-  let paramsPath  := positional[1]?.getD s!"{pfx}_params.bin"
-  let bnPath      := positional[2]?.getD s!"{pfx}_bn_stats.bin"
-  let evalVmfb    := s!"{pfx}_fwd_eval.vmfb"
-  if !arm.isEmpty then IO.eprintln s!"  arm: {arm}  (prefix {pfx})"
+  let outPath := positional[0]?.getD "demos/figures/brats_pred.ppm"
+  -- The explicit params/bn override is single-arm only: with several arms
+  -- there is no one checkpoint to point at, and silently applying one arm's
+  -- weights to another's column would produce a plausible, wrong figure.
+  if arms.length > 1 && positional.length > 1 then
+    IO.eprintln "explicit params/bn paths are single-arm only — drop them, or pass one arm"
+    IO.Process.exit 1
+  let prefixes := arms.map (fun a => (unetBrats.withBuildTag a).buildPrefix)
+  let paramPaths := match positional[1]? with
+    | some p => [p]
+    | none => prefixes.map (fun p => s!"{p}_params.bin")
+  let bnPaths := match positional[2]? with
+    | some p => [p]
+    | none => prefixes.map (fun p => s!"{p}_bn_stats.bin")
+  let vmfbs := prefixes.map (fun p => s!"{p}_fwd_eval.vmfb")
   IO.FS.createDirAll (System.FilePath.mk outPath).parent.get!.toString
-  for p in [paramsPath, bnPath, evalVmfb] do
+  for p in paramPaths ++ bnPaths ++ vmfbs do
     if !(← System.FilePath.pathExists p) then
       IO.eprintln s!"missing artifact: {p}"
       IO.eprintln "  (run lake exe unet-brats-train first to produce checkpoint + vmfb)"
       IO.Process.exit 1
-  IO.eprintln s!"  loading {paramsPath} ..."
-  let params ← IO.FS.readBinFile paramsPath
-  let bnStats ← IO.FS.readBinFile bnPath
-  let evalParams := params.append bnStats
+  let mut evalParamsList : List ByteArray := []
+  for (pp, bp) in paramPaths.zip bnPaths do
+    IO.eprintln s!"  loading {pp} ..."
+    let params ← IO.FS.readBinFile pp
+    let bnStats ← IO.FS.readBinFile bp
+    evalParamsList := evalParamsList ++ [params.append bnStats]
+  let spec := unetBrats
   IO.eprintln s!"  loading data/brats/val.bin ..."
   let (valImg, valMask, nVal) ← F32.loadBrats "data/brats/val.bin" 240
   -- The eval vmfb is compiled at the training batch size; we fill a full
@@ -244,22 +262,28 @@ def main (args : List String) : IO Unit := do
     xba := xba.append (F32.sliceImages valImg i 1 imgPixels)
   let xShape := spec.xShape evalBatch
   let evalShapes := spec.evalShapesBA
-  IO.eprintln s!"  running eval forward (batch={evalBatch}, rendering {nRender}) ..."
-  let sess ← IreeSession.create evalVmfb
+  IO.eprintln s!"  running {arms.length} eval forward(s) (batch={evalBatch}, rendering {nRender}) ..."
   let outElems : USize := (numClasses * H * W).toUSize
-  let logits ← IreeSession.forwardF32 sess spec.evalFnName
-                  evalParams evalShapes xba xShape evalBatch.toUSize outElems
-  IO.eprintln s!"  logits {logits.size} bytes; rendering PPM ..."
+  -- One forward per arm, on the SAME batch — that identity is the point of
+  -- rendering them together.
+  let mut logitsList : List ByteArray := []
+  for (vmfb, ep) in vmfbs.zip evalParamsList do
+    let sess ← IreeSession.create vmfb
+    let lg ← IreeSession.forwardF32 sess spec.evalFnName
+                ep evalShapes xba xShape evalBatch.toUSize outElems
+    logitsList := logitsList ++ [lg]
+  IO.eprintln s!"  rendering PPM ..."
 
-  -- 3 panels per slice (T1gd | +GT | +pred), slices stacked vertically.
-  let stripW := 3 * W
+  -- (2 + one per arm) panels per slice: T1gd | +GT | +pred_a | +pred_b | …
+  let nPanels := 2 + arms.length
+  let stripW := nPanels * W
   let stripH := nRender * H
   let mut ppm : ByteArray := ByteArray.empty
   ppm := ppm.append s!"P6\n{stripW} {stripH}\n255\n".toUTF8
   for k in [:nRender] do
     let idx := chosen[k]!
     let mut gtPx : Nat := 0
-    let mut predPx : Nat := 0
+    let mut predPx : Array Nat := Array.replicate arms.length 0
     for h in [:H] do
       -- panel 1: T1gd backdrop, no overlay
       for w in [:W] do
@@ -272,19 +296,23 @@ def main (args : List String) : IO Unit := do
         if cls != 0 then gtPx := gtPx + 1
         let (r, gg, b) := overlayPx g cls
         ppm := ppm.push r |>.push gg |>.push b
-      -- panel 3: prediction over T1gd
-      for w in [:W] do
-        let g := backdropGray xba k h w H W
-        let cls := argmaxChannel logits k h w H W
-        if cls != 0 then predPx := predPx + 1
-        let (r, gg, b) := overlayPx g cls
-        ppm := ppm.push r |>.push gg |>.push b
+      -- panels 3..: one prediction per arm, same slice, same backdrop
+      for (logits, ai) in logitsList.zipIdx do
+        for w in [:W] do
+          let g := backdropGray xba k h w H W
+          let cls := argmaxChannel logits k h w H W
+          if cls != 0 then predPx := predPx.set! ai (predPx[ai]! + 1)
+          let (r, gg, b) := overlayPx g cls
+          ppm := ppm.push r |>.push gg |>.push b
     -- The scalar that captions the figure: a collapsed model prints 0 here
     -- against a four-digit ground truth.
-    IO.eprintln s!"    slice {idx}: gt tumour px={gtPx}  predicted tumour px={predPx}"
+    let per := String.intercalate "  " (arms.zipIdx.map (fun (a, i) =>
+      armLabel a ++ "=" ++ toString predPx[i]!))
+    IO.eprintln s!"    slice {idx}: gt tumour px={gtPx}  predicted: {per}"
   IO.FS.writeBinFile outPath ppm
   IO.eprintln s!"  wrote {outPath} ({ppm.size} bytes)"
-  IO.eprintln s!"  panels: T1gd | +ground truth | +prediction"
+  let panelNames := String.intercalate " | " (arms.map (fun a => "+" ++ armLabel a))
+  IO.eprintln s!"  panels: T1gd | +ground truth | {panelNames}"
   IO.eprintln s!"  colours: edema green, non-enhancing red, enhancing yellow"
   IO.eprintln s!"  view with e.g. `display {outPath}` or convert:"
   IO.eprintln s!"    convert {outPath} {outPath.dropEnd 4}.png"
