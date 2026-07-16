@@ -433,6 +433,104 @@ there" is not the same as "the codegen is verified". This repo's whole claim on
 the seg path is FD, and an emitted-but-unexercised branch has exactly the status
 of code nobody has run.
 
+## GATE B' RESULT 2026-07-16: matched 10-epoch run — wce did not fix the collapse, it INVERTED it
+
+`runs/brats_ablation_{ce,wce}_10ep_gpu{0,1}.log`. 10 epochs, 9,000 steps, one arm
+per GPU, identical in every respect but the loss. **The CE row this doc has owed
+since Workstream A now exists.**
+
+| arm | val mIoU | c0 bg | c1 edema | c2 non-enh | c3 enh | WT Dice | TC Dice | ET Dice |
+|---|---|---|---|---|---|---|---|---|
+| `ce` | 0.243402 | 0.9736 | 0.000000 | 0.000000 | 0.000000 | 0.000000 | 0.000000 | 0.000000 |
+| `wce` | 0.186536 | 0.7283 | 0.000000 | 0.000000 | **0.017823** | **0.165003** | **0.065377** | **0.035021** |
+
+### 1. CE: the collapse is an absorbing state, not a budget artifact — settled
+
+**`ce` predicted ZERO tumour pixels across all 2,569 val slices** (`pred=0` on
+every region). Not one voxel of any tumour class, out of 148 million.
+
+And it is **worse than the 1-epoch run**, which at least had `c2 = 0.000250`. Ten
+times the budget moved it *further* into the trivial predictor. That kills the
+"1 epoch is not a budget" caveat this doc has been carrying since Gate A — the
+collapse is not underfitting waiting to resolve, it is an absorbing state that
+training deepens. The loss-floor ladder said exactly this and now the run agrees:
+under CE the cheapest constant predictor *is* the collapse.
+
+### 2. wce: 99.4% recall, 1.8% precision — the opposite degenerate predictor
+
+The numbers that matter are not in the IoU column, they are in the counts:
+
+```
+wce  ET:  inter=763457   gt=768149   pred=42831676
+```
+
+- **Recall 99.39%** — it finds essentially every enhancing-tumour voxel there is.
+- **Precision 1.78%** — it paints **28.95% of every brain** as enhancing tumour,
+  against a truth of 0.52%. A **55.8× over-prediction**.
+- `pred_WT == pred_TC == pred_ET == 42831676`, exactly. That identity proves it
+  **only ever predicts class 0 or class 3** — it never once says edema or
+  non-enhancing, which is why c1 and c2 are still 0.000000.
+
+So `wce` did not un-collapse the net. **It replaced "everything is background"
+with "everything is enhancing tumour."** The figure
+(`demos/figures/brats_ce_vs_wce.png`) is the cleanest thing this demo has
+produced: column 3 is an empty brain, column 4 is a brain painted entirely
+yellow, and only the loss differs.
+
+**The mechanism, and it is our own arithmetic.** `w₃/w₀ = 195.6` means a false
+*negative* on enhancing tumour costs 196× a false *positive* on background. Under
+that exchange rate, a capacity-limited net's best move is to over-predict the
+rare class enormously — 56× is not a bug in the weighting, it is the weighting
+working exactly as specified. We asked for every class to own 25% of the loss;
+we got a net that acts like every class owns 25% of the *brain*.
+
+### 3. mIoU and Dice disagree about which arm is better — Gate F earns its keep
+
+| metric | says | ce | wce |
+|---|---|---|---|
+| mean IoU | **ce is better** | 0.2434 | 0.1865 |
+| WT Dice | **wce is better** | 0.0000 | 0.1650 |
+
+mIoU ranks the arm that predicts *nothing* above the arm that at least finds the
+tumour, because 3 of its 4 classes are 0 either way and background IoU dominates.
+This is not a curiosity — it is the argument for Workstream F, arriving
+unprompted. Had we shipped mIoU alone we would have concluded `ce` was the better
+model.
+
+### 4. What called it, and what didn't — honest scoreboard
+
+- **The 64-slice overfit probe was the best predictor.** It showed exactly this
+  failure at 9× over-prediction and this doc wrote down the fallback
+  (inverse-sqrt) in case it survived to budget. It survived, at 56×. The cheap
+  plumbing test earned its keep.
+- **The gradient scorecard was right but insufficient.** It said `wce` escapes
+  the trivial predictor (constant 196× balance advantage). It did escape. But
+  **(C) measures whether the rare class's gradient can compete, not whether the
+  answer is useful** — it is necessary, not sufficient, and *higher is not
+  better*. A 196× pull is enough to overshoot past the target into the mirror
+  failure. The scorecard has no term for overshoot, and should not be read as
+  ranking arms.
+- **The loss floors were right and also insufficient.** They said the trivial
+  predictor is unbounded-bad under wce. True, and it fled. Neither tool models
+  the *opposite* degenerate state, because both were built to explain a collapse.
+- **My prediction was half right**: I called "all three tumour classes off the
+  floor + over-prediction". Only c3 came off the floor, and the over-prediction
+  was 6× worse than the probe suggested.
+
+### 5. Next, and it is cheap
+
+**Inverse-sqrt frequency weights `[1.0, 7.80, 14.84, 13.99]`** — already printed
+by `scripts/brats_class_weights.py`, already flagged in this doc as the fallback.
+They drop the FN:FP exchange rate from **196:1 to 14:1** and tumour's share of
+the loss from 75% to ~21%. The prediction to falsify: precision rises off 1.8%
+without recall returning to 0.
+
+Also newly interesting: **`focal`**, which never amplifies the rare class and so
+has no FN:FP asymmetry to overshoot on — it defunds the majority instead. Its
+open question was always timing, and `focal pb` is the arm with a mechanism for
+that. The 5-arm run is now clearly worth it, with per-epoch evals
+(`evalEveryNEpochs := 1`) so the next one is not blind for seven hours.
+
 ## Workstream B' — prevent the collapse (the real lever)
 
 ### B'1 class-weighted CE — Status 2026-07-15: BUILT + FD-VERIFIED

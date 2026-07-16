@@ -119,8 +119,36 @@ column. And focal is a **no-op at initialization**, because a uniform
 softmax has no confidence to suppress, which puts its protection on the
 far side of the ~100 steps in which the collapse is decided.
 
-Every row is measurable before spending a GPU-week finding out. That —
-plus the picture above — is the demo.
+Every row is measurable before spending a GPU-week finding out.
+
+And then you run it anyway, because the table answers *which loss can
+compete*, not *what you get*. Matched 10-epoch arms, identical but for
+the loss:
+
+![CE vs weighted CE](figures/brats_ce_vs_wce.png)
+
+`T1gd | ground truth | ce | wce`. **Column 3 predicts no tumour anywhere.
+Column 4 predicts the entire brain is tumour.**
+
+| arm | mIoU | c3 enhancing IoU | WT Dice | ET recall | ET precision |
+|---|---|---|---|---|---|
+| `ce` | 0.2434 | 0.000000 | 0.0000 | 0.00% | — |
+| `wce` | 0.1865 | 0.017823 | 0.1650 | **99.39%** | **1.78%** |
+
+`ce` predicted zero tumour voxels out of 148 million, and is *worse* than
+it was at 1 epoch — the collapse is an absorbing state that training
+deepens, not underfitting that budget would fix. `wce` escaped it and
+overshot into the mirror image: it finds essentially every tumour voxel
+and paints 29% of every brain to do it, a 56× over-prediction. That is our
+own arithmetic doing what we asked — `w₃/w₀ = 196` prices a false negative
+at 196 false positives, so a capacity-limited net over-predicts enormously.
+We asked for every class to own 25% of the loss; we got a net that acts as
+if every class owns 25% of the brain.
+
+**Note which metric ranks these.** mean IoU says `ce` is better (0.2434 vs
+0.1865) — it ranks the model that predicts *nothing* above the one that
+finds the tumour. Dice says the opposite. Report mIoU alone on a task like
+this and you will ship the collapsed model.
 
 ---
 
