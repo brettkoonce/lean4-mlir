@@ -136,11 +136,46 @@ def unetBratsConfig : TrainConfig where
   -- a collapse is indistinguishable from progress for seven hours.
   evalEveryNEpochs := 1
 
+/-- Cost of the class prior relative to uniform, as a constant predictor, under
+    a given loss. **The single number that has predicted every arm we have run**,
+    and it is computable from the class balance alone before any training:
+
+    | arm | uniform/prior | measured outcome |
+    |---|---|---|
+    | `ce` (w=1) | 9.79× | total collapse |
+    | `focal` γ=2 | 6.84× | total collapse |
+    | `wcesqrt` | **1.35×** | **segments** — c3 IoU 0.143 @1ep, 0.9% of brain |
+    | `wce` (1/f) | 0.37× | inverted — c3 0.018, 29% of brain |
+
+    `> 1` means the collapse doorway — predict the prior, i.e. mostly
+    background — is the *cheaper* constant, so descent walks into it. `< 1`
+    means the loss has inverted the landscape and pushes the net out the other
+    side, into over-prediction. **The target is ≈ 1**, and the ordering is
+    monotone across all four arms.
+
+    This is not the gradient scorecard's story and it beat it. `(C)` ranked
+    `focal_pb` best of any arm (98.98); `focal_pb` then collapsed identically to
+    CE. A gradient *ratio* has no notion of magnitude — focal leaves the rare
+    class's gradient exactly at CE's and only crushes the majority's, so the
+    ratio explodes while the numerator, the one that has to actually move the
+    weights, never changes. CE collapses with precisely that numerator. -/
 def main (args : List String) : IO Unit := do
   -- Optional 2nd arg overrides epochs; the default 3 is a smoke test, same
   -- convention as unet-pets-train. mIoU + per-class IoU print every 10
   -- epochs and at the end.
   let epochs := (args[1]?.bind String.toNat?).getD unetBratsConfig.epochs
+  -- `g=<n>` sets focal's γ. Default 2 is the RetinaNet paper's, and on this
+  -- data that is a **collapse setting**: γ=2 puts the prior/uniform ratio at
+  -- 6.84×, barely off CE's 9.79×, and it collapsed exactly like CE. γ is the
+  -- only knob focal has (α is deliberately omitted — that is wce's mechanism),
+  -- and raising it walks the ratio down: γ=4 → 3.94×, γ=8 → 1.30×, γ=9 → 0.99×.
+  -- So γ≈8 is where the framework says focal should land on wcesqrt's 1.35×,
+  -- reaching the same place by defunding the majority instead of amplifying the
+  -- minority. Running γ=2 and concluding "focal doesn't work" would have been
+  -- testing the default, not the loss.
+  let focalGamma : Float :=
+    ((args.filter (·.startsWith "g=")).head?.bind
+      (fun a => (a.drop 2).toNat?)).map Nat.toFloat |>.getD 2.0
   -- 3rd arg picks the loss — the demo's ablation axis.
   --
   --   ce     collapses every tumour class (mIoU 0.243 ≈ the trivial
@@ -157,7 +192,7 @@ def main (args : List String) : IO Unit := do
     if args.any (· == "ce") then .perPixelCE
     else if args.any (· == "dicece") then .perPixelDiceCE
     else if args.any (· == "dice") then .perPixelDice
-    else if args.any (· == "focal") then .perPixelFocalCE 2.0
+    else if args.any (· == "focal") then .perPixelFocalCE focalGamma
     else if args.any (· == "wcesqrt") then .perPixelWeightedCE unetBratsClassWeightsSqrt
     else .perPixelWeightedCE unetBratsClassWeights
   IO.eprintln s!"  loss: {repr lossKind}"
@@ -174,7 +209,7 @@ def main (args : List String) : IO Unit := do
   let armName := (if args.any (· == "ce") then "ce"
                   else if args.any (· == "dicece") then "dicece"
                   else if args.any (· == "dice") then "dice"
-                  else if args.any (· == "focal") then "focal"
+                  else if args.any (· == "focal") then s!"focal_g{focalGamma.toUInt64}"
                   else if args.any (· == "wcesqrt") then "wcesqrt"
                   else "wce") ++ (if args.any (· == "pb") then "_pb" else "")
   IO.eprintln s!"  arm: {armName}  (artifacts: {(unetBrats.withBuildTag armName).buildPrefix}_*)"
