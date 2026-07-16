@@ -499,15 +499,39 @@ bound, not loss-bound (note c2 has the *highest* weight of any tumour class yet
 the lowest IoU, so more weight is not the lever). The doc always flagged WT easy
 / TC-ET hard; this is that, quantified.
 
-### The axis, unified: `wceb b=<n>` sweeps β
+### The axis, unified: `wceb b=<n>` sweeps β — and it is a CLIFF, not a plateau
 
-The discrete arms are one knob — weights `π_c^(-β)`, β as a percent on the CLI:
+The discrete arms are one knob — weights `π_c^(-β)`, β as a percent on the CLI
+(β=0 → CE, β=0.5 → wcesqrt exactly, β=1 → wce exactly). `wceb b=70` mapped the
+middle, and the transition is sharp (confirmed, 2 stable epochs):
 
-- β=0 → CE (collapse), β=0.5 → wcesqrt (finds tumour), β=1 → wce (over-predicts).
-- **Monotone, and the live experiment is the transition.** `wceb b=70` (β=0.7,
-  exchange rate 40:1, between sqrt's 14:1 and inverse's 196:1) is running now.
-  The question it answers: is there a plateau of good behaviour, or does
-  over-prediction switch on sharply somewhere in (0.5, 1)?
+| β | WT recall | WT precision | % of brain (truth 2.63%) | behaviour | stability |
+|---|---|---|---|---|---|
+| 0.5 `wcesqrt` | 27–46% | 56–76% | 0.9–2.2% | finds tumour | **oscillates** |
+| 0.7 `wceb70` | 94–99% | ~11% | 21–23% | over-predicts | stable |
+| 1.0 `wce` | 99% | 1.8% | 29% | paints brain | stable |
+
+The jump from "finds it" to "over-predicts" happens between β=0.5 and 0.7 — by
+0.7 the model already covers 72% of the way to β=1's full over-prediction. The
+usable band is narrow and near β=0.5.
+
+**The stability column is the real finding, and it reframes the whole
+workstream.** The over-prediction basin (β≥0.7) is *wide and stable* — both
+epochs sit at ~22% of brain. The find-the-tumour basin (β=0.5) is *narrow and
+unstable* — `wcesqrt` rotated its predicted class every epoch (enhancing @1-2,
+edema @3-4), WT Dice 0.40/0.51/0.045. So the exponent that gives the right
+coverage is also the one the optimizer cannot sit still in at a constant 0.001
+LR. The good solution is a knife-edge; the bad one is a broad valley. That is
+why this is hard, and it is a *training-dynamics* statement, not a loss one.
+
+**Pivotal open experiment: `wcesqrt cos`** (running). Same β=0.5 weights,
+cosine LR 0.001→0 — high early to find the knife-edge, low late to stay on it.
+If it converges stably to the epoch-2 quality (WT Dice ~0.5), the demo has a
+clean winner and the story is "right loss + right schedule". If it still
+oscillates or collapses, the honest conclusion is that a loss choice alone does
+not solve severe imbalance on this architecture/budget — you need the nnU-Net
+machinery (patch sampling, deep supervision, long schedule), and *that* is the
+real cost of the thin-class problem the demo set out to show.
 
 ## GATE B' RESULT 2026-07-16: matched 10-epoch run — wce did not fix the collapse, it INVERTED it
 
