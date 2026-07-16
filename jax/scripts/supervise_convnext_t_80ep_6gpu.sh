@@ -69,7 +69,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
   # Monitor loop: AER -> kill; "Done." -> success; process-exit -> inspect.
   result="unknown"
   while kill -0 "$PYPID" 2>/dev/null; do
-    if journalctl -k --since "$START" 2>/dev/null | grep -qiE "BadTLP|Hardware Error|AER:"; then
+    if journalctl -k --since "$START" 2>/dev/null | grep -iE "BadTLP|AER:|Uncorrected|Fatal" | grep -qivE "no action required"; then
       echo "[sup] $(date '+%T') !!! AER detected — killing PID=$PYPID" | tee -a "$MASTER"
       kill -9 "$PYPID" 2>/dev/null; sleep 2
       result="aer"; break

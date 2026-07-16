@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Supervised 80-epoch ConvNeXt-T-ImageNet run on the 4 clean GPUs (0,2,3,4)
-# with a thermal duty cycle: 30-minute rest after epochs 30 and 60.
-# Derived from supervise_convnext_t_80ep_6gpu.sh; differences:
+# Supervised 350-epoch EfficientNet-B0-ImageNet run on the 4 clean GPUs (0,2,3,4)
+# with a thermal duty cycle: 30-minute rest every 30 epochs (9 rests).
+# 300ep canonical/paper-faithful tier of the 80->300 ladder; the 80ep
+# validation run hit 78.13%/94.05% and its curve was still climbing.
+# Derived from supervise_convnext_t_80ep_4gpu_duty.sh; differences:
 # - DEVS=0,2,3,4 (batch 256 = 4x64, SPE 5004)
 # - Planned rests: when the epoch-30/-60 full-state checkpoint lands, the
 #   trainer is killed, the box cools REST_SECS, then training resumes
@@ -12,16 +14,16 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 DEVS="0,2,3,4"
-PY=.lake/build/generated_convnext_tiny_imagenet.py
-CKPT_BASE=/home/skoonce/convnext_t80_4gpu/convnext_tiny_imagenet
+PY=.lake/build/generated_efficientnet_b0_imagenet_full.py
+CKPT_BASE=/home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet
 SPE=5004                                   # 4-GPU: 1281167 // 256
-REST_EPOCHS="30 60"
+REST_EPOCHS="30 60 90 120 150 180 210 240 270 300 330"
 REST_SECS=1800
-RUNLOG=/tmp/convnext_t_80ep_4gpu.log       # per-attempt trainer stdout
-MASTER=/tmp/convnext_t_80ep_4gpu_master.log
+RUNLOG=/tmp/enet_b0_350ep_4gpu.log       # per-attempt trainer stdout
+MASTER=/tmp/enet_b0_350ep_4gpu_master.log
 FULLLOG="${FULLLOG:-${CKPT_BASE}_full.log}"
 mkdir -p "$(dirname "$CKPT_BASE")"
-MAX_ATTEMPTS=60
+MAX_ATTEMPTS=150
 
 # Next rest epoch strictly ahead of the last completed epoch (999 = none left).
 next_rest() {
@@ -31,7 +33,7 @@ next_rest() {
   echo 999
 }
 
-echo "[sup] $(date '+%F %T') START 80-epoch ConvNeXt-T on GPUs $DEVS (duty cycle: ${REST_SECS}s rest after epochs $REST_EPOCHS)" | tee -a "$MASTER"
+echo "[sup] $(date '+%F %T') START 350-epoch EfficientNet-B0 on GPUs $DEVS (350ep full; duty cycle ${REST_SECS}s rest every 30 epochs)" | tee -a "$MASTER"
 
 attempt=0
 while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
@@ -94,11 +96,11 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
   grep -E "^\[Epoch " "$RUNLOG" 2>/dev/null | tail -1 | sed "s/^/[sup]   last: /" | tee -a "$MASTER" >/dev/null
 
   if [ "$result" = "done" ]; then
-    echo "[sup] $(date '+%T') ✅ TRAINING COMPLETE (80 epochs). final=${CKPT_BASE}.bin" | tee -a "$MASTER"
+    echo "[sup] $(date '+%T') ✅ TRAINING COMPLETE (350 epochs). final=${CKPT_BASE}.bin" | tee -a "$MASTER"
     exit 0
   fi
 
-  pkill -9 -f "generated_convnext_tiny_imagenet.py" 2>/dev/null
+  pkill -9 -f "generated_efficientnet_b0_imagenet_full.py" 2>/dev/null
   if [ "$result" = "rest" ]; then
     sleep "$REST_SECS"
     echo "[sup] $(date '+%T') cooldown over — resuming" | tee -a "$MASTER"
