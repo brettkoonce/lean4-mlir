@@ -710,6 +710,18 @@ structure TrainConfig where
       checkpoint (or borrowed for downstream tasks like YOLOv1
       bootstrap — see `bootstrapBackbone`). -/
   checkpointEveryNEpochs : Nat := 10
+  /-- Run the validation eval every N epochs (plus always on the final epoch).
+      0 means final-epoch only.
+
+      Default 10 matches the historical hardcoded cadence, which is fine for a
+      100-epoch classifier and actively bad for a short ablation: a 10-epoch run
+      gets exactly ONE eval, at the very end, so a 7-hour run yields no signal
+      until it is over. On the seg path the eval is the *only* instrument that
+      can see a collapsed class — no scalar in the training log can
+      (`planning/brats_demo.md` Workstream A) — so flying blind is worse here
+      than anywhere else. Set it to 1-2 for ablation arms; the eval is a
+      forward pass over val and costs minutes against 40 min/epoch. -/
+  evalEveryNEpochs : Nat := 10
   /-- bf16 mixed precision: cast matmul operands (dense, attention QKV /
       scores / output, MLP, patch embed) to bfloat16, keeping master
       weights, LayerNorm, softmax, and conv in fp32. Measured ~2.7-3.6×

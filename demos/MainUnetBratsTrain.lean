@@ -105,6 +105,14 @@ def unetBratsConfig : TrainConfig where
   cosineDecay  := false
   warmupEpochs := 0
   augment      := false
+  -- Eval EVERY epoch, against the framework default of 10. An epoch here is
+  -- ~40 min and the eval is a forward pass over 2,569 val slices — a couple of
+  -- minutes, call it 5% overhead. That is cheap insurance for the thing this
+  -- demo exists to measure: the per-class IoU is the ONLY instrument that can
+  -- see a collapsed class (the loss curve provably cannot — Workstream A), so
+  -- at the default cadence a 10-epoch arm reports nothing until it is over and
+  -- a collapse is indistinguishable from progress for seven hours.
+  evalEveryNEpochs := 1
 
 def main (args : List String) : IO Unit := do
   -- Optional 2nd arg overrides epochs; the default 3 is a smoke test, same

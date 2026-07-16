@@ -787,7 +787,12 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
       IO.FS.writeBinFile s!"{pfx}_bn_stats_e{epoch + 1}.bin" runningBnStats
       IO.eprintln s!"  checkpoint: wrote {pfx}_params_e{epoch + 1}.bin + bn_stats_e{epoch + 1}.bin"
 
-    if (epoch + 1) % 10 == 0 || epoch + 1 == epochs then
+    -- Guard the modulus: `evalEveryNEpochs := 0` means "final epoch only", not
+    -- a division by zero.
+    let evalNow :=
+      (cfg.evalEveryNEpochs > 0 && (epoch + 1) % cfg.evalEveryNEpochs == 0)
+        || epoch + 1 == epochs
+    if evalNow then
      if useSeg then
        -- Per-class IoU + mIoU over the val set (planning/unet_demo_v2.md
        -- Workstream A). Eval-forward → argmax over the NC channels →
