@@ -5006,6 +5006,136 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
   s := s ++ s!"    {gradOut} = stablehlo.reshape {gacc} : ({apT}) -> {apT}\n"
   return s
 
+/-! ### FPN neck (top-down multi-scale merge) — detection-infra brick #3
+
+    Composes 1×1 lateral convs + the already-verified `bilinearUpsample` + adds
+    into the RetinaNet top-down pyramid. No new primitives: the merge is a DAG of
+    existing ops. Forward/backward FD-verified in numpy first
+    (`scripts/fpn_neck_check.py`), then these emitters are checked against that
+    oracle by `scripts/fpn_neck_probe_check.py` (the `fpn-neck-probe` exe). -/
+
+/-- 1×1 conv (channel mix) forward: `einsum('oi,bihw->bohw', W, x)`.
+    x `[b,ic,h,w]`, W `[oc,ic]` → `[b,oc,h,w]`. dot_general contracting the input
+    channel dim, then transpose the trailing out-channel back to NCHW. -/
+private def emitConv1x1Fwd (pfx xSSA wSSA : String) (b ic oc h w : Nat)
+    : String × String := Id.run do
+  let xTy := tensorTy [b, ic, h, w]
+  let wTy := s!"tensor<{oc}x{ic}xf32>"
+  let dgTy := tensorTy [b, h, w, oc]
+  let outTy := tensorTy [b, oc, h, w]
+  let mut s := ""
+  s := s ++ s!"    %{pfx}_dg = stablehlo.dot_general {xSSA}, {wSSA}, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({xTy}, {wTy}) -> {dgTy}\n"
+  s := s ++ s!"    %{pfx}_o = stablehlo.transpose %{pfx}_dg, dims = [0, 3, 1, 2] : ({dgTy}) -> {outTy}\n"
+  return (s, s!"%{pfx}_o")
+
+/-- 1×1 conv input-VJP: `einsum('oi,bohw->bihw', W, dP)` → `dX [b,ic,h,w]`.
+    Contract the out-channel dim of `dP` against W's out dim. -/
+private def emitConv1x1BwdDC (pfx wSSA dpSSA : String) (b ic oc h w : Nat)
+    : String × String := Id.run do
+  let wTy := s!"tensor<{oc}x{ic}xf32>"
+  let dpTy := tensorTy [b, oc, h, w]
+  let dgTy := tensorTy [b, h, w, ic]
+  let outTy := tensorTy [b, ic, h, w]
+  let mut s := ""
+  s := s ++ s!"    %{pfx}_dcg = stablehlo.dot_general {dpSSA}, {wSSA}, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({dpTy}, {wTy}) -> {dgTy}\n"
+  s := s ++ s!"    %{pfx}_dc = stablehlo.transpose %{pfx}_dcg, dims = [0, 3, 1, 2] : ({dgTy}) -> {outTy}\n"
+  return (s, s!"%{pfx}_dc")
+
+/-- 1×1 conv weight-VJP: `einsum('bohw,bihw->oi', dP, x)` → `dW [oc,ic]`.
+    Contract the batch + spatial dims jointly. -/
+private def emitConv1x1BwdDW (pfx dpSSA xSSA : String) (b ic oc h w : Nat)
+    : String × String := Id.run do
+  let dpTy := tensorTy [b, oc, h, w]
+  let xTy := tensorTy [b, ic, h, w]
+  let outTy := s!"tensor<{oc}x{ic}xf32>"
+  let s := s!"    %{pfx}_dw = stablehlo.dot_general {dpSSA}, {xSSA}, contracting_dims = [0, 2, 3] x [0, 2, 3], precision = [DEFAULT, DEFAULT] : ({dpTy}, {xTy}) -> {outTy}\n"
+  return (s, s!"%{pfx}_dw")
+
+/-- Standalone VJP of `emitBilinearUpsample` (`[b,c,h,w]` → `[b,c,h·s,w·s]`):
+    the transpose matmul-pair. Mirrors the reverse-record `.bilinearUpsample`
+    backward exactly, but as a reusable emitter so the FPN DAG can route an
+    upsample cotangent up the pyramid. `inShape` is the (small) pre-upsample
+    shape; `gradSSA` carries the (large) post-upsample cotangent. -/
+private def emitBilinearUpsampleBwd (pos : Nat) (gradSSA : String)
+    (inShape : List Nat) (scale : Nat) : String × String := Id.run do
+  match inShape with
+  | [b, c, h, w] =>
+    let oH := h * scale
+    let oW := w * scale
+    let outShape := [b, c, oH, oW]
+    let wyStr := floatMatrixToMlirDense (bilinearWeights1D h scale)
+    let wxStr := floatMatrixToMlirDense (bilinearWeights1D w scale)
+    let wyTy := s!"tensor<{oH}x{h}xf32>"
+    let wxTy := s!"tensor<{oW}x{w}xf32>"
+    let dmShape := [b, c, oH, w]
+    let dxtShape := [b, c, w, h]
+    let mut s := ""
+    s := s ++ s!"    %buT_wy{pos} = stablehlo.constant dense<{wyStr}> : {wyTy}\n"
+    s := s ++ s!"    %buT_wx{pos} = stablehlo.constant dense<{wxStr}> : {wxTy}\n"
+    s := s ++ s!"    %buT_dm{pos} = stablehlo.dot_general {gradSSA}, %buT_wx{pos}, contracting_dims = [3] x [0], precision = [DEFAULT, DEFAULT] : ({tensorTy outShape}, {wxTy}) -> {tensorTy dmShape}\n"
+    s := s ++ s!"    %buT_dt{pos} = stablehlo.dot_general %buT_dm{pos}, %buT_wy{pos}, contracting_dims = [2] x [0], precision = [DEFAULT, DEFAULT] : ({tensorTy dmShape}, {wyTy}) -> {tensorTy dxtShape}\n"
+    s := s ++ s!"    %buT_dx{pos} = stablehlo.transpose %buT_dt{pos}, dims = [0, 1, 3, 2] : ({tensorTy dxtShape}) -> {tensorTy inShape}\n"
+    return (s, s!"%buT_dx{pos}")
+  | _ => return ("    // emitBilinearUpsampleBwd error: expected rank-4 NCHW\n", gradSSA)
+
+/-- FPN top-down neck forward. Backbone taps `C3/C4/C5` at strides 8/16/32 (grids
+    `4·g5 / 2·g5 / g5`), lateral 1×1 convs `W3/W4/W5 : [oc,c_n]`:
+
+        P5 = conv1x1(C5,W5)                  [b,oc,g5,g5]
+        P4 = conv1x1(C4,W4) + upsample2(P5)  [b,oc,2·g5,2·g5]
+        P3 = conv1x1(C3,W3) + upsample2(P4)  [b,oc,4·g5,4·g5]
+
+    Returns the code and the three pyramid SSAs `(P3,P4,P5)`. -/
+private def emitFpnNeckForward (c3SSA c4SSA c5SSA w3SSA w4SSA w5SSA : String)
+    (b oc c3 c4 c5 g5 : Nat) : String × (String × String × String) := Id.run do
+  let g4 := 2 * g5
+  let g3 := 4 * g5
+  let mut s := ""
+  let (s5, p5) := emitConv1x1Fwd "fpn_p5" c5SSA w5SSA b c5 oc g5 g5
+  s := s ++ s5
+  let (su5, up5, _) := emitBilinearUpsample 801 p5 [b, oc, g5, g5] 2
+  s := s ++ su5
+  let (s4, lat4) := emitConv1x1Fwd "fpn_l4" c4SSA w4SSA b c4 oc g4 g4
+  s := s ++ s4
+  s := s ++ s!"    %fpn_p4 = stablehlo.add {lat4}, {up5} : {tensorTy [b, oc, g4, g4]}\n"
+  let (su4, up4, _) := emitBilinearUpsample 802 "%fpn_p4" [b, oc, g4, g4] 2
+  s := s ++ su4
+  let (s3, lat3) := emitConv1x1Fwd "fpn_l3" c3SSA w3SSA b c3 oc g3 g3
+  s := s ++ s3
+  s := s ++ s!"    %fpn_p3 = stablehlo.add {lat3}, {up4} : {tensorTy [b, oc, g3, g3]}\n"
+  return (s, ("%fpn_p3", "%fpn_p4", p5))
+
+/-- FPN neck VJP. Each `Pn` cotangent routes to its lateral conv AND up the
+    pyramid (accumulating: `dP4_tot = dP4 + up^T(dP3)`, then
+    `dP5_tot = dP5 + up^T(dP4_tot)`). Returns the code, the backbone-tap
+    cotangents `(dC3,dC4,dC5)`, and the lateral-weight gradients `(dW3,dW4,dW5)`.
+    Mirrors `fpn_grad` in `scripts/fpn_neck_check.py`. -/
+private def emitFpnNeckBackward (dP3SSA dP4SSA dP5SSA : String)
+    (c3SSA c4SSA c5SSA w3SSA w4SSA w5SSA : String) (b oc c3 c4 c5 g5 : Nat)
+    : String × (String × String × String) × (String × String × String) := Id.run do
+  let g4 := 2 * g5
+  let g3 := 4 * g5
+  let mut s := ""
+  -- dP4_tot = dP4 + up^T(dP3)   (up^T maps the g3 cotangent down to g4)
+  let (sbu3, upT3) := emitBilinearUpsampleBwd 811 dP3SSA [b, oc, g4, g4] 2
+  s := s ++ sbu3
+  s := s ++ s!"    %fpn_dp4t = stablehlo.add {dP4SSA}, {upT3} : {tensorTy [b, oc, g4, g4]}\n"
+  -- dP5_tot = dP5 + up^T(dP4_tot)   (g4 → g5)
+  let (sbu4, upT4) := emitBilinearUpsampleBwd 812 "%fpn_dp4t" [b, oc, g5, g5] 2
+  s := s ++ sbu4
+  s := s ++ s!"    %fpn_dp5t = stablehlo.add {dP5SSA}, {upT4} : {tensorTy [b, oc, g5, g5]}\n"
+  -- lateral input grads
+  let (sc3, dc3) := emitConv1x1BwdDC "fpn_dc3" w3SSA dP3SSA b c3 oc g3 g3
+  let (sc4, dc4) := emitConv1x1BwdDC "fpn_dc4" w4SSA "%fpn_dp4t" b c4 oc g4 g4
+  let (sc5, dc5) := emitConv1x1BwdDC "fpn_dc5" w5SSA "%fpn_dp5t" b c5 oc g5 g5
+  s := s ++ sc3 ++ sc4 ++ sc5
+  -- lateral weight grads
+  let (sw3, dw3) := emitConv1x1BwdDW "fpn_dw3" dP3SSA c3SSA b c3 oc g3 g3
+  let (sw4, dw4) := emitConv1x1BwdDW "fpn_dw4" "%fpn_dp4t" c4SSA b c4 oc g4 g4
+  let (sw5, dw5) := emitConv1x1BwdDW "fpn_dw5" "%fpn_dp5t" c5SSA b c5 oc g5 g5
+  s := s ++ sw3 ++ sw4 ++ sw5
+  return (s, (dc3, dc4, dc5), (dw3, dw4, dw5))
+
 /-- Emit the full train step (forward + loss + backward + SGD). -/
 private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : String)
     (labelSmoothing : Float := 0.1) (weightDecay : Float := 0.0001) (useAdam : Bool := true)
@@ -9212,6 +9342,38 @@ def anchorLossProbeModule (B gH gW A : Nat) : String := Id.run do
   s := s ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
   s := s ++ emitAnchorYoloLoss B gH gW anchors "%pred" "%tgt" 2.0 5.0 "%ay_loss" "%ay_grad"
   s := s ++ s!"    return %ay_loss, %ay_grad : tensor<f32>, {apT}\n"
+  s := s ++ "  }\n}\n"
+  return s
+
+/-- Standalone FPN-neck probe: `@main(C3,C4,C5, W3,W4,W5, dP3,dP4,dP5) ->
+    (P3,P4,P5, dC3,dC4,dC5, dW3,dW4,dW5)`. Compiled + run on CPU by
+    `scripts/fpn_neck_probe_check.py`, which checks the emitted forward against
+    the numpy `fpn_forward` and the emitted backward against the f64-FD-verified
+    `fpn_grad` oracle (brick #3). Cotangents are explicit inputs — no scalar-loss
+    reduce — so the probe mirrors the real train-step wiring (head backwards feed
+    dPn tensors straight into the neck VJP). -/
+def fpnNeckProbeModule (B oc c3 c4 c5 g5 : Nat) : String := Id.run do
+  let g4 := 2 * g5
+  let g3 := 4 * g5
+  let c3Ty := tensorTy [B, c3, g3, g3]
+  let c4Ty := tensorTy [B, c4, g4, g4]
+  let c5Ty := tensorTy [B, c5, g5, g5]
+  let w3Ty := s!"tensor<{oc}x{c3}xf32>"
+  let w4Ty := s!"tensor<{oc}x{c4}xf32>"
+  let w5Ty := s!"tensor<{oc}x{c5}xf32>"
+  let p3Ty := tensorTy [B, oc, g3, g3]
+  let p4Ty := tensorTy [B, oc, g4, g4]
+  let p5Ty := tensorTy [B, oc, g5, g5]
+  let (fwd, (p3, p4, p5)) :=
+    emitFpnNeckForward "%C3" "%C4" "%C5" "%W3" "%W4" "%W5" B oc c3 c4 c5 g5
+  let (bwd, (dc3, dc4, dc5), (dw3, dw4, dw5)) :=
+    emitFpnNeckBackward "%dP3" "%dP4" "%dP5" "%C3" "%C4" "%C5" "%W3" "%W4" "%W5" B oc c3 c4 c5 g5
+  let mut s := s!"// fpn-neck probe (fwd+bwd): B={B} oc={oc} c3={c3} c4={c4} c5={c5} g5={g5}\n"
+  s := s ++ "module @fpn_neck_probe {\n"
+  s := s ++ s!"  func.func @main(%C3: {c3Ty}, %C4: {c4Ty}, %C5: {c5Ty}, %W3: {w3Ty}, %W4: {w4Ty}, %W5: {w5Ty}, %dP3: {p3Ty}, %dP4: {p4Ty}, %dP5: {p5Ty}) -> ({p3Ty}, {p4Ty}, {p5Ty}, {c3Ty}, {c4Ty}, {c5Ty}, {w3Ty}, {w4Ty}, {w5Ty}) " ++ "{\n"
+  s := s ++ fwd
+  s := s ++ bwd
+  s := s ++ s!"    return {p3}, {p4}, {p5}, {dc3}, {dc4}, {dc5}, {dw3}, {dw4}, {dw5} : {p3Ty}, {p4Ty}, {p5Ty}, {c3Ty}, {c4Ty}, {c5Ty}, {w3Ty}, {w4Ty}, {w5Ty}\n"
   s := s ++ "  }\n}\n"
   return s
 

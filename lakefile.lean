@@ -1340,6 +1340,12 @@ lean_exe «anchor-loss-probe» where
   root := `demos.MainAnchorLossProbe
   moreLinkArgs := ireeLink
 
+-- FPN-neck (top-down multi-scale merge) probe (brick #3); FD-checked by
+-- scripts/fpn_neck_probe_check.py against scripts/fpn_neck_check.py's oracle.
+lean_exe «fpn-neck-probe» where
+  root := `demos.MainFpnNeckProbe
+  moreLinkArgs := ireeLink
+
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
   moreLinkArgs := ireeLink
