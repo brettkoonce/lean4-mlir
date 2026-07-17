@@ -1328,6 +1328,12 @@ lean_exe «seg-loss-probe» where
   root := `demos.MainSegLossProbe
   moreLinkArgs := ireeLink
 
+-- DIoU box-loss forward probe (detection infra brick #1); FD-checked by
+-- scripts/diou_probe_check.py against scripts/diou_grad_check.py.
+lean_exe «diou-loss-probe» where
+  root := `demos.MainDiouLossProbe
+  moreLinkArgs := ireeLink
+
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
   moreLinkArgs := ireeLink
@@ -1377,6 +1383,17 @@ lean_exe «yolov1-pets-train-bootstrap» where
 -- Inference dump (logits + images + IDs) for scripts/yolo_render.py.
 lean_exe «yolov1-pets-infer» where
   root := `demos.MainYolov1PetsInfer
+  moreLinkArgs := ireeLink
+
+-- VisDrone single-scale detector at 448 input / 14×14 grid (train + infer).
+-- The resolution rung above the 224/7×7 WS-A baseline; planning/yolo_drone.md.
+lean_exe «yolov1-visdrone448» where
+  root := `demos.MainYolov1VisDrone448
+  moreLinkArgs := ireeLink
+
+-- Stride-16 "finer grid" variant: 448 input / 28×28 grid (the different-head hedge).
+lean_exe «yolov1-visdrone448s16» where
+  root := `demos.MainYolov1VisDrone448S16
   moreLinkArgs := ireeLink
 
 -- ═══════════════════════════════════════════════════════════════════

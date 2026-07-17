@@ -401,6 +401,68 @@ LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj, lean_obj_arg
     return lean_io_result_mk_ok(outer);
 }
 
+// Dimension-parameterized YOLOv1 detection-bin loader. Identical to
+// lean_f32_load_voc but takes (imgSize, gridH, gridW) so the same record
+// format can be used at higher resolution / finer grid (e.g. VisDrone at
+// 448 input / 14x14 grid) without a separate hardcoded copy. perCell (30 =
+// 2 boxes*5 + 20 classes) and MAX_BBOXES (56) are fixed by the layout.
+// On-disk record: image 3*imgSize*imgSize uint8, target 30*gridH*gridW f32,
+// mask gridH*gridW f32, numBoxes i32, raw_boxes 56*20. Returns
+// (image_f32_normalized, target++mask++numBoxes++raw_boxes concat, count).
+LEAN_EXPORT lean_obj_res lean_f32_load_voc_dims(
+        b_lean_obj_arg path_obj, size_t imgSize, size_t gridH, size_t gridW,
+        lean_obj_arg w) {
+    (void)w;
+    const char* path = lean_string_cstr(path_obj);
+    FILE* f = fopen(path, "rb");
+    if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open voc file")));
+    uint32_t file_count;
+    if (fread(&file_count, 4, 1, f) != 1) { fclose(f);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("bad voc header"))); }
+    uint32_t count = file_count;
+    const size_t pix = 3 * imgSize * imgSize;
+    const size_t target_bytes_per = 30 * gridH * gridW * 4;
+    const size_t mask_bytes_per   = gridH * gridW * 4;
+    const size_t nbox_bytes_per   = 4;
+    const size_t boxes_bytes_per  = 56 * 20;
+    const size_t aux_bytes_per    = target_bytes_per + mask_bytes_per
+                                    + nbox_bytes_per + boxes_bytes_per;
+    size_t img_bytes  = (size_t)count * pix * 4;
+    size_t aux_bytes  = (size_t)count * aux_bytes_per;
+    lean_object* img_ba = lean_alloc_sarray(1, img_bytes, img_bytes);
+    lean_object* aux_ba = lean_alloc_sarray(1, aux_bytes, aux_bytes);
+    float*   img = (float*)lean_sarray_cptr(img_ba);
+    uint8_t* aux = lean_sarray_cptr(aux_ba);
+    const float mean[3] = {0.485f, 0.456f, 0.406f};
+    const float istd[3] = {1.0f/0.229f, 1.0f/0.224f, 1.0f/0.225f};
+    uint8_t* buf = (uint8_t*)malloc(pix + aux_bytes_per);
+    if (!buf) { fclose(f);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("voc loader: malloc failed"))); }
+    for (uint32_t i = 0; i < count; i++) {
+        if (fread(buf, 1, pix + aux_bytes_per, f) != pix + aux_bytes_per) {
+            free(buf); fclose(f);
+            return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("voc loader: short read")));
+        }
+        float* dst = img + (size_t)i * pix;
+        size_t hw = imgSize * imgSize;
+        for (int ch = 0; ch < 3; ch++) {
+            float m = mean[ch], s = istd[ch];
+            for (size_t j = 0; j < hw; j++)
+                dst[ch*hw+j] = (buf[ch*hw+j]/255.0f - m) * s;
+        }
+        memcpy(aux + (size_t)i * aux_bytes_per, buf + pix, aux_bytes_per);
+    }
+    free(buf); fclose(f);
+
+    lean_object* inner = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(inner, 0, aux_ba);
+    lean_ctor_set(inner, 1, lean_usize_to_nat((size_t)count));
+    lean_object* outer = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(outer, 0, img_ba);
+    lean_ctor_set(outer, 1, inner);
+    return lean_io_result_mk_ok(outer);
+}
+
 // Re-encode YOLOv1 target+mask tensors from a list of bboxes. Matches
 // the encode_targets() in preprocess_voc.py — used by lean_f32_yolo_augment
 // after geometric transforms (hflip, random crop) shift the boxes around.

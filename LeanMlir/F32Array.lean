@@ -125,6 +125,14 @@ opaque loadBrats (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArr
 @[extern "lean_f32_load_voc"]
 opaque loadDetBin (path : @& String) : IO (ByteArray × ByteArray × Nat)
 
+/-- Dimension-parameterized detection-bin loader (same record format as
+    `loadDetBin`, but for an arbitrary square input `imgSize` and grid
+    `gridH`×`gridW`). Used for the higher-resolution VisDrone path (448 input /
+    14×14 grid); `loadDetBin` is the fixed 224/7×7 Pets path. -/
+@[extern "lean_f32_load_voc_dims"]
+opaque loadDetBinDims (path : @& String) (imgSize gridH gridW : USize)
+    : IO (ByteArray × ByteArray × Nat)
+
 /-- Split an interleaved YOLOv1 batch slice (per-record `[target||mask]`,
     6076 bytes/record) into separately-contiguous target + mask tensors
     suitable for the `trainStepAdamF32Yolov1` FFI. Returns

@@ -289,6 +289,12 @@ structure NetSpec where
   layers : List Layer
   imageH : Nat := 28
   imageW : Nat := 28
+  /-- Total downsampling stride from input to the detection feature map, for
+      YOLO-style specs: the grid is `imageH / detStride`. 32 for the standard
+      ResNet stride-32 backbone (grid = 224/32 = 7, 448/32 = 14); set to 16 for a
+      stride-16 tap (last block stride 1) to double the grid (448/16 = 28). Only
+      consulted on the detection path; irrelevant to classifiers/seg. -/
+  detStride : Nat := 32
   /-- Optional suffix on `buildPrefix`, so two runs of the **same
       architecture** under different training configs get their own params,
       MLIR, and vmfb instead of overwriting each other.
@@ -547,6 +553,12 @@ structure TrainConfig where
       both. γ=2.0 is the paper default. -/
   useFocal     : Bool  := false
   focalGamma   : Float := 2.0
+  /-- YOLOv1 box loss: `false` = the published √-MSE coord terms; `true` = a
+      DIoU box loss on box0 with a positive box parameterization (cx=(j+σ(tx))/gW,
+      w=exp(tw)), the detection-infra brick #1 (planning/yolo_drone.md WS-D). Only
+      consulted on the `.yolov1Masked` path. NB: a DIoU-trained model must be
+      decoded with the same σ/exp (scripts/yolo_map_visdrone.py --box-param diou). -/
+  useDiouBox   : Bool  := false
   /-- RetinaNet prior-bias init: initialize the **head's bias** to `log π_c`
       instead of zero, so the net starts predicting the class prior rather than
       a uniform distribution. Empty (the default) leaves the head at zero bias

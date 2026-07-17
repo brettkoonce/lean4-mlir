@@ -4632,6 +4632,242 @@ private def emitSegLossBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
     s := s ++ s!"    %d_logits_seg = stablehlo.add %dlog_ce, %dlog_dc : {bnhwfTy}\n"
     s
 
+/-- DIoU box-loss FORWARD block (brick #1, planning/yolo_drone.md WS-D — the
+    IoU-family replacement for the fragile √-MSE box regression). `pred`/`tgt`
+    are `[B,4,gH,gW]`: pred channels are the raw head outputs (tx,ty,tw,th), tgt
+    channels are the YOLOv1 target layout (cell-offset x,y then w_rel,h_rel).
+    `mask` is `[B,gH,gW]` (1 on object cells). Positive box parameterization by
+    construction — `cx=(j+σ(tx))/gW`, `cy=(i+σ(ty))/gH`, `w=exp(tw)`, `h=exp(th)`
+    — so boxes are always valid (fixes the negative-w/h gradient death). Emits
+    `loss = Σ_cells mask·(1 - DIoU)` with `DIoU = IoU − ρ²(centers)/c²(enclosing)`.
+    Requires `%zf` in scope. Numeric spec: scripts/diou_grad_check.py; the emitted
+    forward is checked against numpy in scripts/diou_probe_check.py. -/
+private def emitDiouForward (B gH gW : Nat) (predSSA tgtSSA maskSSA : String)
+    (lossOut : String := "%dio_loss") (anchorW : Float := 1.0) (anchorH : Float := 1.0)
+    (pfx : String := "dio") : String := Id.run do
+  let c1 := tensorTy [B, 1, gH, gW]
+  let p4 := tensorTy [B, 4, gH, gW]
+  let maskTy := tensorTy [B, gH, gW]
+  let invW := 1.0 / gW.toFloat
+  let invH := 1.0 / gH.toFloat
+  let slice := fun (dst src : String) (c : Nat) =>
+    s!"    {dst} = \"stablehlo.slice\"({src}) " ++ "{" ++
+      s!" start_indices = array<i64: 0, {c}, 0, 0>, limit_indices = array<i64: {B}, {c+1}, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++
+      "} : " ++ s!"({p4}) -> {c1}\n"
+  let mut s := "\n    // ════════════ DIoU box loss (forward) ════════════\n"
+  -- constants
+  s := s ++ s!"    %{pfx}_half = stablehlo.constant dense<0.5> : {c1}\n"
+  s := s ++ s!"    %{pfx}_one = stablehlo.constant dense<1.0> : {c1}\n"
+  s := s ++ s!"    %{pfx}_zero = stablehlo.constant dense<0.0> : {c1}\n"
+  s := s ++ s!"    %{pfx}_eps = stablehlo.constant dense<1.0e-9> : {c1}\n"
+  s := s ++ s!"    %{pfx}_invW = stablehlo.constant dense<{invW}> : {c1}\n"
+  s := s ++ s!"    %{pfx}_invH = stablehlo.constant dense<{invH}> : {c1}\n"
+  -- slice raw pred + target channels
+  s := s ++ slice s!"%{pfx}_tx" predSSA 0
+  s := s ++ slice s!"%{pfx}_ty" predSSA 1
+  s := s ++ slice s!"%{pfx}_tw" predSSA 2
+  s := s ++ slice s!"%{pfx}_th" predSSA 3
+  s := s ++ slice s!"%{pfx}_gx" tgtSSA 0
+  s := s ++ slice s!"%{pfx}_gy" tgtSSA 1
+  s := s ++ slice s!"%{pfx}_gw" tgtSSA 2
+  s := s ++ slice s!"%{pfx}_gh" tgtSSA 3
+  -- cell indices
+  s := s ++ s!"    %{pfx}_cj = stablehlo.iota dim = 3 : {c1}\n"
+  s := s ++ s!"    %{pfx}_ci = stablehlo.iota dim = 2 : {c1}\n"
+  -- pred box (center-size, normalized): cx=(j+σ(tx))/gW, w=exp(tw)
+  s := s ++ s!"    %{pfx}_sx = stablehlo.logistic %{pfx}_tx : {c1}\n"
+  s := s ++ s!"    %{pfx}_sy = stablehlo.logistic %{pfx}_ty : {c1}\n"
+  s := s ++ s!"    %{pfx}_cjsx = stablehlo.add %{pfx}_cj, %{pfx}_sx : {c1}\n"
+  s := s ++ s!"    %{pfx}_cx = stablehlo.multiply %{pfx}_cjsx, %{pfx}_invW : {c1}\n"
+  s := s ++ s!"    %{pfx}_cisy = stablehlo.add %{pfx}_ci, %{pfx}_sy : {c1}\n"
+  s := s ++ s!"    %{pfx}_cy = stablehlo.multiply %{pfx}_cisy, %{pfx}_invH : {c1}\n"
+  -- w = anchorW · exp(tw): anchor-relative width prior (brick #2). anchorW=1
+  -- reproduces the anchor-free path exactly. Backward is unchanged — it uses
+  -- %{pfx}_w, and dw/dtw = anchorW·exp(tw) = w regardless of the prior.
+  s := s ++ s!"    %{pfx}_expw = stablehlo.exponential %{pfx}_tw : {c1}\n"
+  s := s ++ s!"    %{pfx}_aw = stablehlo.constant dense<{anchorW}> : {c1}\n"
+  s := s ++ s!"    %{pfx}_w = stablehlo.multiply %{pfx}_expw, %{pfx}_aw : {c1}\n"
+  s := s ++ s!"    %{pfx}_exph = stablehlo.exponential %{pfx}_th : {c1}\n"
+  s := s ++ s!"    %{pfx}_ah = stablehlo.constant dense<{anchorH}> : {c1}\n"
+  s := s ++ s!"    %{pfx}_h = stablehlo.multiply %{pfx}_exph, %{pfx}_ah : {c1}\n"
+  s := s ++ s!"    %{pfx}_hw = stablehlo.multiply %{pfx}_w, %{pfx}_half : {c1}\n"
+  s := s ++ s!"    %{pfx}_hh = stablehlo.multiply %{pfx}_h, %{pfx}_half : {c1}\n"
+  s := s ++ s!"    %{pfx}_x0 = stablehlo.subtract %{pfx}_cx, %{pfx}_hw : {c1}\n"
+  s := s ++ s!"    %{pfx}_x1 = stablehlo.add %{pfx}_cx, %{pfx}_hw : {c1}\n"
+  s := s ++ s!"    %{pfx}_y0 = stablehlo.subtract %{pfx}_cy, %{pfx}_hh : {c1}\n"
+  s := s ++ s!"    %{pfx}_y1 = stablehlo.add %{pfx}_cy, %{pfx}_hh : {c1}\n"
+  -- target box
+  s := s ++ s!"    %{pfx}_cjgx = stablehlo.add %{pfx}_cj, %{pfx}_gx : {c1}\n"
+  s := s ++ s!"    %{pfx}_tcx = stablehlo.multiply %{pfx}_cjgx, %{pfx}_invW : {c1}\n"
+  s := s ++ s!"    %{pfx}_cigy = stablehlo.add %{pfx}_ci, %{pfx}_gy : {c1}\n"
+  s := s ++ s!"    %{pfx}_tcy = stablehlo.multiply %{pfx}_cigy, %{pfx}_invH : {c1}\n"
+  s := s ++ s!"    %{pfx}_ghw = stablehlo.multiply %{pfx}_gw, %{pfx}_half : {c1}\n"
+  s := s ++ s!"    %{pfx}_ghh = stablehlo.multiply %{pfx}_gh, %{pfx}_half : {c1}\n"
+  s := s ++ s!"    %{pfx}_X0 = stablehlo.subtract %{pfx}_tcx, %{pfx}_ghw : {c1}\n"
+  s := s ++ s!"    %{pfx}_X1 = stablehlo.add %{pfx}_tcx, %{pfx}_ghw : {c1}\n"
+  s := s ++ s!"    %{pfx}_Y0 = stablehlo.subtract %{pfx}_tcy, %{pfx}_ghh : {c1}\n"
+  s := s ++ s!"    %{pfx}_Y1 = stablehlo.add %{pfx}_tcy, %{pfx}_ghh : {c1}\n"
+  -- intersection
+  s := s ++ s!"    %{pfx}_ix1 = stablehlo.minimum %{pfx}_x1, %{pfx}_X1 : {c1}\n"
+  s := s ++ s!"    %{pfx}_ix0 = stablehlo.maximum %{pfx}_x0, %{pfx}_X0 : {c1}\n"
+  s := s ++ s!"    %{pfx}_iwd = stablehlo.subtract %{pfx}_ix1, %{pfx}_ix0 : {c1}\n"
+  s := s ++ s!"    %{pfx}_iw = stablehlo.maximum %{pfx}_iwd, %{pfx}_zero : {c1}\n"
+  s := s ++ s!"    %{pfx}_iy1 = stablehlo.minimum %{pfx}_y1, %{pfx}_Y1 : {c1}\n"
+  s := s ++ s!"    %{pfx}_iy0 = stablehlo.maximum %{pfx}_y0, %{pfx}_Y0 : {c1}\n"
+  s := s ++ s!"    %{pfx}_ihd = stablehlo.subtract %{pfx}_iy1, %{pfx}_iy0 : {c1}\n"
+  s := s ++ s!"    %{pfx}_ih = stablehlo.maximum %{pfx}_ihd, %{pfx}_zero : {c1}\n"
+  s := s ++ s!"    %{pfx}_inter = stablehlo.multiply %{pfx}_iw, %{pfx}_ih : {c1}\n"
+  -- union + IoU
+  s := s ++ s!"    %{pfx}_ap = stablehlo.multiply %{pfx}_w, %{pfx}_h : {c1}\n"
+  s := s ++ s!"    %{pfx}_ag = stablehlo.multiply %{pfx}_gw, %{pfx}_gh : {c1}\n"
+  s := s ++ s!"    %{pfx}_apag = stablehlo.add %{pfx}_ap, %{pfx}_ag : {c1}\n"
+  s := s ++ s!"    %{pfx}_union = stablehlo.subtract %{pfx}_apag, %{pfx}_inter : {c1}\n"
+  s := s ++ s!"    %{pfx}_unionc = stablehlo.maximum %{pfx}_union, %{pfx}_eps : {c1}\n"
+  s := s ++ s!"    %{pfx}_iou = stablehlo.divide %{pfx}_inter, %{pfx}_unionc : {c1}\n"
+  -- center distance ρ²
+  s := s ++ s!"    %{pfx}_dcx = stablehlo.subtract %{pfx}_cx, %{pfx}_tcx : {c1}\n"
+  s := s ++ s!"    %{pfx}_dcy = stablehlo.subtract %{pfx}_cy, %{pfx}_tcy : {c1}\n"
+  s := s ++ s!"    %{pfx}_dcx2 = stablehlo.multiply %{pfx}_dcx, %{pfx}_dcx : {c1}\n"
+  s := s ++ s!"    %{pfx}_dcy2 = stablehlo.multiply %{pfx}_dcy, %{pfx}_dcy : {c1}\n"
+  s := s ++ s!"    %{pfx}_rho2 = stablehlo.add %{pfx}_dcx2, %{pfx}_dcy2 : {c1}\n"
+  -- enclosing box diagonal² c²
+  s := s ++ s!"    %{pfx}_ex1 = stablehlo.maximum %{pfx}_x1, %{pfx}_X1 : {c1}\n"
+  s := s ++ s!"    %{pfx}_ex0 = stablehlo.minimum %{pfx}_x0, %{pfx}_X0 : {c1}\n"
+  s := s ++ s!"    %{pfx}_cw = stablehlo.subtract %{pfx}_ex1, %{pfx}_ex0 : {c1}\n"
+  s := s ++ s!"    %{pfx}_ey1 = stablehlo.maximum %{pfx}_y1, %{pfx}_Y1 : {c1}\n"
+  s := s ++ s!"    %{pfx}_ey0 = stablehlo.minimum %{pfx}_y0, %{pfx}_Y0 : {c1}\n"
+  s := s ++ s!"    %{pfx}_ch = stablehlo.subtract %{pfx}_ey1, %{pfx}_ey0 : {c1}\n"
+  s := s ++ s!"    %{pfx}_cw2 = stablehlo.multiply %{pfx}_cw, %{pfx}_cw : {c1}\n"
+  s := s ++ s!"    %{pfx}_ch2 = stablehlo.multiply %{pfx}_ch, %{pfx}_ch : {c1}\n"
+  s := s ++ s!"    %{pfx}_c2 = stablehlo.add %{pfx}_cw2, %{pfx}_ch2 : {c1}\n"
+  s := s ++ s!"    %{pfx}_c2c = stablehlo.maximum %{pfx}_c2, %{pfx}_eps : {c1}\n"
+  s := s ++ s!"    %{pfx}_pen = stablehlo.divide %{pfx}_rho2, %{pfx}_c2c : {c1}\n"
+  -- DIoU + masked loss
+  s := s ++ s!"    %{pfx}_diou = stablehlo.subtract %{pfx}_iou, %{pfx}_pen : {c1}\n"
+  s := s ++ s!"    %{pfx}_1md = stablehlo.subtract %{pfx}_one, %{pfx}_diou : {c1}\n"
+  s := s ++ s!"    %{pfx}_mask = stablehlo.broadcast_in_dim {maskSSA}, dims = [0, 2, 3] : ({maskTy}) -> {c1}\n"
+  s := s ++ s!"    %{pfx}_cell = stablehlo.multiply %{pfx}_1md, %{pfx}_mask : {c1}\n"
+  s := s ++ s!"    {lossOut} = stablehlo.reduce(%{pfx}_cell init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+  s := s ++ s!"           : ({c1}, tensor<f32>) -> tensor<f32>\n"
+  return s
+
+/-- DIoU box-loss BACKWARD block. Assumes `emitDiouForward` ran just before (reuses
+    its `%{pfx}_*` SSA values). Emits `{gradOut}` = `∂loss/∂pred` `[B,4,gH,gW]`
+    (channels d/dtx, d/dty, d/dtw, d/dth), the hand-derived VJP of
+    `Σ mask·(1 - DIoU)`. Analytic spec: `diou_loss_grad` in scripts/
+    diou_grad_check.py; FD-verified against the emitted forward in
+    scripts/diou_probe_check.py. Every piecewise min/max sub-gradient is an
+    indicator (compare→select). -/
+private def emitDiouBackward (B gH gW : Nat) (gradOut : String := "%dio_dpred") (pfx : String := "dio") : String := Id.run do
+  let c1 := tensorTy [B, 1, gH, gW]
+  let i1 := s!"tensor<{B}x1x{gH}x{gW}xi1>"
+  let p4 := tensorTy [B, 4, gH, gW]
+  let mut s := "\n    // ════════════ DIoU box loss (backward) ════════════\n"
+  s := s ++ s!"    %{pfx}b_two = stablehlo.constant dense<2.0> : {c1}\n"
+  s := s ++ s!"    %{pfx}b_nhalf = stablehlo.constant dense<-0.5> : {c1}\n"
+  -- indicator helper: ind = 1.0 where (a REL b) else 0.0
+  let ind := fun (dst rel a b : String) =>
+    s!"    {dst}_i1 = stablehlo.compare {rel}, {a}, {b} : ({c1}, {c1}) -> {i1}\n" ++
+    s!"    {dst} = stablehlo.select {dst}_i1, %{pfx}_one, %{pfx}_zero : {i1}, {c1}\n"
+  -- intersection existence + which corner is active
+  s := s ++ ind s!"%{pfx}b_iwp" "GT" s!"%{pfx}_iw" s!"%{pfx}_zero"
+  s := s ++ ind s!"%{pfx}b_ihp" "GT" s!"%{pfx}_ih" s!"%{pfx}_zero"
+  s := s ++ ind s!"%{pfx}b_a0" "GT" s!"%{pfx}_x0" s!"%{pfx}_X0"      -- max(x0,X0) picks x0
+  s := s ++ ind s!"%{pfx}b_a1" "LT" s!"%{pfx}_x1" s!"%{pfx}_X1"      -- min(x1,X1) picks x1
+  s := s ++ ind s!"%{pfx}b_b0" "GT" s!"%{pfx}_y0" s!"%{pfx}_Y0"
+  s := s ++ ind s!"%{pfx}b_b1" "LT" s!"%{pfx}_y1" s!"%{pfx}_Y1"
+  -- d inter / d corner   (diw_dx0 = -a0·iwp ; diw_dx1 = a1·iwp ; dI = ih·diw / iw·dih)
+  s := s ++ s!"    %{pfx}b_a0p = stablehlo.multiply %{pfx}b_a0, %{pfx}b_iwp : {c1}\n"
+  s := s ++ s!"    %{pfx}b_a1p = stablehlo.multiply %{pfx}b_a1, %{pfx}b_iwp : {c1}\n"
+  s := s ++ s!"    %{pfx}b_b0p = stablehlo.multiply %{pfx}b_b0, %{pfx}b_ihp : {c1}\n"
+  s := s ++ s!"    %{pfx}b_b1p = stablehlo.multiply %{pfx}b_b1, %{pfx}b_ihp : {c1}\n"
+  -- dI_dx0 = ih·(-a0p) ; dI_dx1 = ih·a1p ; dI_dy0 = iw·(-b0p) ; dI_dy1 = iw·b1p
+  s := s ++ s!"    %{pfx}b_dIdx1 = stablehlo.multiply %{pfx}_ih, %{pfx}b_a1p : {c1}\n"
+  s := s ++ s!"    %{pfx}b_ih_a0 = stablehlo.multiply %{pfx}_ih, %{pfx}b_a0p : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dIdx0 = stablehlo.negate %{pfx}b_ih_a0 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dIdy1 = stablehlo.multiply %{pfx}_iw, %{pfx}b_b1p : {c1}\n"
+  s := s ++ s!"    %{pfx}b_iw_b0 = stablehlo.multiply %{pfx}_iw, %{pfx}b_b0p : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dIdy0 = stablehlo.negate %{pfx}b_iw_b0 : {c1}\n"
+  -- corner→center: dI_dcx = dIdx0+dIdx1 ; dI_dw = -0.5·dIdx0 + 0.5·dIdx1
+  s := s ++ s!"    %{pfx}b_dIdcx = stablehlo.add %{pfx}b_dIdx0, %{pfx}b_dIdx1 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dIdcy = stablehlo.add %{pfx}b_dIdy0, %{pfx}b_dIdy1 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_x1mx0 = stablehlo.subtract %{pfx}b_dIdx1, %{pfx}b_dIdx0 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dIdw = stablehlo.multiply %{pfx}b_x1mx0, %{pfx}_half : {c1}\n"
+  s := s ++ s!"    %{pfx}b_y1my0 = stablehlo.subtract %{pfx}b_dIdy1, %{pfx}b_dIdy0 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dIdh = stablehlo.multiply %{pfx}b_y1my0, %{pfx}_half : {c1}\n"
+  -- dIoU = (dI·U - inter·(dAp - dI)) / U²   with U = %{pfx}_unionc
+  s := s ++ s!"    %{pfx}b_U2 = stablehlo.multiply %{pfx}_unionc, %{pfx}_unionc : {c1}\n"
+  -- helper: diou(dI, dAp) written inline per channel
+  --   cx,cy: dAp = 0  ;  w: dAp = h  ;  h: dAp = w
+  let diou := fun (dst dI dAp : String) =>
+    s!"    {dst}_dUp = stablehlo.subtract {dAp}, {dI} : {c1}\n" ++
+    s!"    {dst}_iU = stablehlo.multiply {dI}, %{pfx}_unionc : {c1}\n" ++
+    s!"    {dst}_ip = stablehlo.multiply %{pfx}_inter, {dst}_dUp : {c1}\n" ++
+    s!"    {dst}_num = stablehlo.subtract {dst}_iU, {dst}_ip : {c1}\n" ++
+    s!"    {dst} = stablehlo.divide {dst}_num, %{pfx}b_U2 : {c1}\n"
+  s := s ++ diou s!"%{pfx}b_diou_cx" s!"%{pfx}b_dIdcx" s!"%{pfx}_zero"
+  s := s ++ diou s!"%{pfx}b_diou_cy" s!"%{pfx}b_dIdcy" s!"%{pfx}_zero"
+  s := s ++ diou s!"%{pfx}b_diou_w" s!"%{pfx}b_dIdw" s!"%{pfx}_h"
+  s := s ++ diou s!"%{pfx}b_diou_h" s!"%{pfx}b_dIdh" s!"%{pfx}_w"
+  -- center penalty ρ²/c². drho2_dcx = 2·dcx (dio_dcx = cx-tcx). c2 = %{pfx}_c2c.
+  s := s ++ s!"    %{pfx}b_drho_cx = stablehlo.multiply %{pfx}b_two, %{pfx}_dcx : {c1}\n"
+  s := s ++ s!"    %{pfx}b_drho_cy = stablehlo.multiply %{pfx}b_two, %{pfx}_dcy : {c1}\n"
+  -- enclosing indicators: e1=(x1>X1) picks x1 for max; e0=(x0<X0) picks x0 for min
+  s := s ++ ind s!"%{pfx}b_e1" "GT" s!"%{pfx}_x1" s!"%{pfx}_X1"
+  s := s ++ ind s!"%{pfx}b_e0" "LT" s!"%{pfx}_x0" s!"%{pfx}_X0"
+  s := s ++ ind s!"%{pfx}b_f1" "GT" s!"%{pfx}_y1" s!"%{pfx}_Y1"
+  s := s ++ ind s!"%{pfx}b_f0" "LT" s!"%{pfx}_y0" s!"%{pfx}_Y0"
+  -- dcw_dx1 = e1 ; dcw_dx0 = -e0 ; dcw_dcx = dcw_dx0+dcw_dx1 ; dcw_dw = 0.5(dcw_dx1 - dcw_dx0)
+  s := s ++ s!"    %{pfx}b_ncw0 = stablehlo.negate %{pfx}b_e0 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dcw_cx = stablehlo.add %{pfx}b_ncw0, %{pfx}b_e1 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_cw_diff = stablehlo.subtract %{pfx}b_e1, %{pfx}b_ncw0 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dcw_w = stablehlo.multiply %{pfx}b_cw_diff, %{pfx}_half : {c1}\n"
+  s := s ++ s!"    %{pfx}b_nch0 = stablehlo.negate %{pfx}b_f0 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dch_cy = stablehlo.add %{pfx}b_nch0, %{pfx}b_f1 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_ch_diff = stablehlo.subtract %{pfx}b_f1, %{pfx}b_nch0 : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dch_h = stablehlo.multiply %{pfx}b_ch_diff, %{pfx}_half : {c1}\n"
+  -- dc2 = 2·cw·dcw (+ 2·ch·dch for the y-affecting params). cw=%{pfx}_cw ch=%{pfx}_ch
+  s := s ++ s!"    %{pfx}b_2cw = stablehlo.multiply %{pfx}b_two, %{pfx}_cw : {c1}\n"
+  s := s ++ s!"    %{pfx}b_2ch = stablehlo.multiply %{pfx}b_two, %{pfx}_ch : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dc2_cx = stablehlo.multiply %{pfx}b_2cw, %{pfx}b_dcw_cx : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dc2_cy = stablehlo.multiply %{pfx}b_2ch, %{pfx}b_dch_cy : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dc2_w = stablehlo.multiply %{pfx}b_2cw, %{pfx}b_dcw_w : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dc2_h = stablehlo.multiply %{pfx}b_2ch, %{pfx}b_dch_h : {c1}\n"
+  s := s ++ s!"    %{pfx}b_c2sq = stablehlo.multiply %{pfx}_c2c, %{pfx}_c2c : {c1}\n"
+  -- dpen(drho2, dc2) = (drho2·c2 - rho2·dc2)/c2²  ; cx,cy have drho2≠0; w,h have drho2=0
+  let dpen := fun (dst drho2 dc2 : String) =>
+    s!"    {dst}_a = stablehlo.multiply {drho2}, %{pfx}_c2c : {c1}\n" ++
+    s!"    {dst}_b = stablehlo.multiply %{pfx}_rho2, {dc2} : {c1}\n" ++
+    s!"    {dst}_num = stablehlo.subtract {dst}_a, {dst}_b : {c1}\n" ++
+    s!"    {dst} = stablehlo.divide {dst}_num, %{pfx}b_c2sq : {c1}\n"
+  s := s ++ dpen s!"%{pfx}b_pen_cx" s!"%{pfx}b_drho_cx" s!"%{pfx}b_dc2_cx"
+  s := s ++ dpen s!"%{pfx}b_pen_cy" s!"%{pfx}b_drho_cy" s!"%{pfx}b_dc2_cy"
+  s := s ++ dpen s!"%{pfx}b_pen_w" s!"%{pfx}_zero" s!"%{pfx}b_dc2_w"
+  s := s ++ dpen s!"%{pfx}b_pen_h" s!"%{pfx}_zero" s!"%{pfx}b_dc2_h"
+  -- dL/dθ = -dIoU + dpen  (θ = cx,cy,w,h)
+  s := s ++ s!"    %{pfx}b_dLcx = stablehlo.subtract %{pfx}b_pen_cx, %{pfx}b_diou_cx : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dLcy = stablehlo.subtract %{pfx}b_pen_cy, %{pfx}b_diou_cy : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dLw = stablehlo.subtract %{pfx}b_pen_w, %{pfx}b_diou_w : {c1}\n"
+  s := s ++ s!"    %{pfx}b_dLh = stablehlo.subtract %{pfx}b_pen_h, %{pfx}b_diou_h : {c1}\n"
+  -- chain to raw params: dcx/dtx = σ(1-σ)/gW ; dw/dtw = w ; then mask
+  s := s ++ s!"    %{pfx}b_1msx = stablehlo.subtract %{pfx}_one, %{pfx}_sx : {c1}\n"
+  s := s ++ s!"    %{pfx}b_sxg = stablehlo.multiply %{pfx}_sx, %{pfx}b_1msx : {c1}\n"
+  s := s ++ s!"    %{pfx}b_sxgw = stablehlo.multiply %{pfx}b_sxg, %{pfx}_invW : {c1}\n"
+  s := s ++ s!"    %{pfx}b_1msy = stablehlo.subtract %{pfx}_one, %{pfx}_sy : {c1}\n"
+  s := s ++ s!"    %{pfx}b_syg = stablehlo.multiply %{pfx}_sy, %{pfx}b_1msy : {c1}\n"
+  s := s ++ s!"    %{pfx}b_sygh = stablehlo.multiply %{pfx}b_syg, %{pfx}_invH : {c1}\n"
+  s := s ++ s!"    %{pfx}b_gtx = stablehlo.multiply %{pfx}b_dLcx, %{pfx}b_sxgw : {c1}\n"
+  s := s ++ s!"    %{pfx}b_gty = stablehlo.multiply %{pfx}b_dLcy, %{pfx}b_sygh : {c1}\n"
+  s := s ++ s!"    %{pfx}b_gtw = stablehlo.multiply %{pfx}b_dLw, %{pfx}_w : {c1}\n"
+  s := s ++ s!"    %{pfx}b_gth = stablehlo.multiply %{pfx}b_dLh, %{pfx}_h : {c1}\n"
+  -- mask (loss sums only object cells) and assemble [B,4,gH,gW]
+  s := s ++ s!"    %{pfx}b_mtx = stablehlo.multiply %{pfx}b_gtx, %{pfx}_mask : {c1}\n"
+  s := s ++ s!"    %{pfx}b_mty = stablehlo.multiply %{pfx}b_gty, %{pfx}_mask : {c1}\n"
+  s := s ++ s!"    %{pfx}b_mtw = stablehlo.multiply %{pfx}b_gtw, %{pfx}_mask : {c1}\n"
+  s := s ++ s!"    %{pfx}b_mth = stablehlo.multiply %{pfx}b_gth, %{pfx}_mask : {c1}\n"
+  s := s ++ s!"    {gradOut} = stablehlo.concatenate %{pfx}b_mtx, %{pfx}b_mty, %{pfx}b_mtw, %{pfx}b_mth, dim = 1 : ({c1}, {c1}, {c1}, {c1}) -> {p4}\n"
+  return s
+
 /-- Emit the full train step (forward + loss + backward + SGD). -/
 private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : String)
     (labelSmoothing : Float := 0.1) (weightDecay : Float := 0.0001) (useAdam : Bool := true)
@@ -4646,6 +4882,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
     (useMuon : Bool := false)
     (useShampoo : Bool := false)
     (segLoss : SegLoss := .ce)
+    (useDiouBox : Bool := false)
     : String := Id.run do
   let B := batchSize
   let nClasses := spec.numClasses
@@ -6047,8 +6284,25 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         code := code ++ s!"    %y1_cls_ce_sum = stablehlo.reduce(%y1_cls_nll_m init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
         code := code ++ s!"           : ({shapeClassTy}, tensor<f32>) -> tensor<f32>\n"
         code := code ++ s!"    %y1_t6 = stablehlo.negate %y1_cls_ce_sum : tensor<f32>\n"
-        -- Aggregate
-        code := code ++ s!"    %y1_s12 = stablehlo.add %y1_t1, %y1_t2 : tensor<f32>\n"
+        -- DIoU box loss (brick #1, planning/yolo_drone.md WS-D): when enabled,
+        -- replaces the √-MSE coord terms T1+T2 with an IoU-family loss on box0,
+        -- using a positive box parameterization (cx=(j+σ(tx))/gW, w=exp(tw)).
+        -- Emits %dio_loss (Σ mask·(1-DIoU)) and %dio_dpred [B,4,gH,gW]; both
+        -- FD-verified in scripts/diou_probe_check.py. Scaled by λ_coord to keep
+        -- the box-vs-objectness balance. NB: the decoder must apply the same σ/exp.
+        let lambdaBox : Float := 5.0
+        if useDiouBox then
+          code := code ++ s!"    %y1_box_pred = \"stablehlo.slice\"(%y1_pred) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0, 0>, limit_indices = array<i64: {B}, 4, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {tensorTy [B, 4, gH, gW]}\n"
+          code := code ++ s!"    %y1_box_tgt = \"stablehlo.slice\"(%y_yolo) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0, 0>, limit_indices = array<i64: {B}, 4, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {tensorTy [B, 4, gH, gW]}\n"
+          code := code ++ emitDiouForward B gH gW "%y1_box_pred" "%y1_box_tgt" "%m_yolo" "%dio_loss"
+          code := code ++ emitDiouBackward B gH gW "%dio_dpred"
+          code := code ++ s!"    %dio_gscale = stablehlo.constant dense<{lambdaBox / B.toFloat}> : {tensorTy [B, 4, gH, gW]}\n"
+          code := code ++ s!"    %dio_box_grad = stablehlo.multiply %dio_dpred, %dio_gscale : {tensorTy [B, 4, gH, gW]}\n"
+        -- Aggregate (box term = DIoU when enabled, else √-MSE T1+T2)
+        if useDiouBox then
+          code := code ++ s!"    %y1_s12 = stablehlo.multiply %dio_loss, %y1_lcoord : tensor<f32>\n"
+        else
+          code := code ++ s!"    %y1_s12 = stablehlo.add %y1_t1, %y1_t2 : tensor<f32>\n"
         code := code ++ s!"    %y1_s34 = stablehlo.add %y1_t3, %y1_t4 : tensor<f32>\n"
         code := code ++ s!"    %y1_s56 = stablehlo.add %y1_t5, %y1_t6 : tensor<f32>\n"
         code := code ++ s!"    %y1_s1234 = stablehlo.add %y1_s12, %y1_s34 : tensor<f32>\n"
@@ -6113,8 +6367,11 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         -- Box 1 xywh: zero (never optimized under Option A)
         code := code ++ s!"    %y1_g_box1 = stablehlo.constant dense<0.0> : {shapeBox1XYWHTy}\n"
         -- Concat slabs along channel dim 1: xy(2) + wh(2) + c0(1) + box1(4) + c1(1) + cls(numC)
-        code := code ++ s!"    %y1_cc1 = stablehlo.concatenate %y1_g_xy, %y1_g_wh, dim = 1 : ({shapeXYTy}, {tensorTy shapeWH}) -> {tensorTy [B, 4, gH, gW]}\n"
-        code := code ++ s!"    %y1_cc2 = stablehlo.concatenate %y1_cc1, %y1_g_c0, dim = 1 : ({tensorTy [B, 4, gH, gW]}, {shapeC1Ty}) -> {tensorTy [B, 5, gH, gW]}\n"
+        -- Box0-xywh gradient slab: DIoU (%dio_box_grad) or √-MSE (concat g_xy,g_wh).
+        let boxGradSSA := if useDiouBox then "%dio_box_grad" else "%y1_cc1"
+        if !useDiouBox then
+          code := code ++ s!"    %y1_cc1 = stablehlo.concatenate %y1_g_xy, %y1_g_wh, dim = 1 : ({shapeXYTy}, {tensorTy shapeWH}) -> {tensorTy [B, 4, gH, gW]}\n"
+        code := code ++ s!"    %y1_cc2 = stablehlo.concatenate {boxGradSSA}, %y1_g_c0, dim = 1 : ({tensorTy [B, 4, gH, gW]}, {shapeC1Ty}) -> {tensorTy [B, 5, gH, gW]}\n"
         code := code ++ s!"    %y1_cc3 = stablehlo.concatenate %y1_cc2, %y1_g_box1, dim = 1 : ({tensorTy [B, 5, gH, gW]}, {shapeBox1XYWHTy}) -> {tensorTy [B, 9, gH, gW]}\n"
         code := code ++ s!"    %y1_cc4 = stablehlo.concatenate %y1_cc3, %y1_g_c1, dim = 1 : ({tensorTy [B, 9, gH, gW]}, {shapeC1Ty}) -> {tensorTy [B, 10, gH, gW]}\n"
         code := code ++ s!"    %y1_grad_4d = stablehlo.concatenate %y1_cc4, %y1_g_cls, dim = 1 : ({tensorTy [B, 10, gH, gW]}, {shapeClassTy}) -> {shape4Ty}\n"
@@ -8723,6 +8980,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
     (useMuon : Bool := false)
     (useShampoo : Bool := false)
     (segLoss : SegLoss := .ce)
+    (useDiouBox : Bool := false)
     : String :=
   s!"// {spec.name} train_step — Generated by Lean 4 → MLIR (StableHLO + VJPs)\n" ++
   s!"// Batch size: {batchSize}, optimizer: {if useShampoo then "Shampoo (square 2D) + AdamW (rest)" else if useMuon then "Muon (2D) + AdamW (rest)" else if useAdam then "Adam" else "SGD+momentum"}\n" ++
@@ -8735,7 +8993,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
   emitTrainStepSig spec batchSize useSoftLabels useSeg useDdpm ddpmOutShape
     useYolov1 yoloGridH yoloGridW (yoloNumBoxes * 5 + yoloNumClasses) ++ " {\n" ++
   emitTrainStepBody spec batchSize moduleName labelSmoothing weightDecay useAdam useSoftLabels useFocal focalGamma useSeg useDdpm
-    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult useMuon useShampoo segLoss ++
+    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult useMuon useShampoo segLoss useDiouBox ++
   "  }\n" ++
   "}\n"
 
@@ -8760,6 +9018,24 @@ def segLossProbeModule (B NC H W : Nat) (segLoss : SegLoss)
   s := s ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
   s := s ++ emitSegLossBlock B NC H W "%logits" "%y_seg" labelSmoothing segLoss
   s := s ++ s!"    return %loss, %d_logits_seg : tensor<f32>, {logitsTy}\n"
+  s := s ++ "  }\n}\n"
+  return s
+
+
+/-- Standalone DIoU box-loss probe: `@main(pred,tgt : [B,4,gH,gW], mask : [B,gH,gW])
+    -> (loss, d_pred)`. Compiled + run on CPU by scripts/diou_probe_check.py — the
+    emitted forward is checked against numpy and the emitted backward against
+    central finite differences, before wiring into the YOLOv1 train step. -/
+def diouProbeModule (B gH gW : Nat) (anchorW : Float := 1.0) (anchorH : Float := 1.0) : String := Id.run do
+  let p4 := tensorTy [B, 4, gH, gW]
+  let maskTy := tensorTy [B, gH, gW]
+  let mut s := s!"// diou-loss probe (fwd+bwd): B={B} gH={gH} gW={gW} anchorW={anchorW} anchorH={anchorH}\n"
+  s := s ++ "module @diou_probe {\n"
+  s := s ++ s!"  func.func @main(%pred: {p4}, %tgt: {p4}, %mask: {maskTy}) -> (tensor<f32>, {p4}) " ++ "{\n"
+  s := s ++ "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n"
+  s := s ++ emitDiouForward B gH gW "%pred" "%tgt" "%mask" "%dio_loss" anchorW anchorH
+  s := s ++ emitDiouBackward B gH gW "%dio_dpred"
+  s := s ++ s!"    return %dio_loss, %dio_dpred : tensor<f32>, {p4}\n"
   s := s ++ "  }\n}\n"
   return s
 

@@ -205,9 +205,14 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     (focalGamma := cfg.focalGamma)
     (useSeg := useSeg)
     (useYolov1 := useYolov1Codegen)
+    -- YOLOv1 grid follows the input resolution (stride-32 backbone): 224→7,
+    -- 448→14. Derived so the higher-res VisDrone path emits its loss at the
+    -- right grid without a separate codegen entry point.
+    (yoloGridH := spec.imageH / spec.detStride) (yoloGridW := spec.imageW / spec.detStride)
     (gradClipNorm := cfg.gradClipNorm)
     (headLrMult := cfg.headLrMult)
     (segLoss := lossKind.segLoss)
+    (useDiouBox := cfg.useDiouBox)
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"
 
@@ -437,7 +442,25 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let pfx := spec.buildPrefix
   let batchN : Nat := cfg.batchSize
   let batch  : USize := cfg.batchSize.toUSize
-  let dio := datasetIO ds
+  let dio0 := datasetIO ds
+  -- Higher-resolution detection (VisDrone 448/14×14): the det DatasetIO is
+  -- hardcoded to 224/7×7 (Pets). When the spec runs at a larger input, override
+  -- the record geometry + loader to the dims-parameterized path so the same
+  -- .bin format works at any resolution. Pets (imageH=224) is left untouched.
+  let dio :=
+    if ds == .petsDet && spec.imageH != 224 then
+      let gH := spec.imageH / spec.detStride
+      let gW := spec.imageW / spec.detStride
+      let imgSz := spec.imageH.toUSize
+      let gHu := gH.toUSize
+      let gWu := gW.toUSize
+      { dio0 with
+        trainPixels := 3 * spec.imageH * spec.imageW
+        valPixels   := 3 * spec.imageH * spec.imageW
+        labelBytesPerRecord := 30 * gH * gW * 4 + gH * gW * 4 + 4 + 56 * 20
+        loadTrain := fun d => F32.loadDetBinDims (d ++ "/train.bin") imgSz gHu gWu
+        loadVal   := fun d => F32.loadDetBinDims (d ++ "/val.bin") imgSz gHu gWu }
+    else dio0
   -- Derive effective LossKind (planning/yolo_final.md R1). Existing
   -- callers leave cfg.lossKind at the default .classCE and we infer from
   -- the older booleans + the dataset kind:
@@ -729,14 +752,14 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                   let (xAug, yTgtAug, yMskAug) ← if cfg.augment then
                         F32.yoloAugment xba yArg batch augC.toUSize
                           augH.toUSize augW.toUSize
-                          (7 : USize) (7 : USize) (30 : USize) (20 : USize)
+                          (spec.imageH / spec.detStride).toUSize (spec.imageW / spec.detStride).toUSize (30 : USize) (20 : USize)
                           0.5 0.5 0.8 (stepSeed ^^^ (11 : USize))
                       else do
                         let (yTgt, yMsk) ← F32.detSplitBatch yArg batch
                         pure (xba, yTgt, yMsk)
                   IreeSession.trainStepAdamF32Yolov1 sess spec.trainFnName
                     packed allShapes xAug xSh yTgtAug yMskAug lr globalStep.toFloat bnShapes batch
-                    (7 : USize) (7 : USize) (30 : USize)
+                    (spec.imageH / spec.detStride).toUSize (spec.imageW / spec.detStride).toUSize (30 : USize)
                 else if useSeg then do
                   -- Pets `loadPets` returns uint8 masks; the seg train step
                   -- expects int32 LE [B, H, W]. yArg here is the raw uint8

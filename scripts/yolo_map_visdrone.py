@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+"""mAP@0.5 scorer for the VisDrone single-grid YOLOv1 baseline (WS-A, planning/yolo_drone.md).
+
+Reads a whole-val-set logits dump (from `yolov1-pets-infer 0 data/visdrone <out>`)
+plus the matching VisDrone detection-record `val.bin` (produced by
+preprocess_visdrone.py — the SAME 157,728-byte record layout as the Pets path,
+so the Lean loader/codegen are unchanged) and reports:
+
+  * a CLASS-AGNOSTIC localization AP@0.5 — "did the detector box *anything* in
+    the right place, regardless of label", the honest floor for the collapse story;
+  * per-class AP@0.5 + mAP over the 10 VisDrone classes.
+
+This is a copy of scripts/yolo_map.py with two changes: the 10-class VisDrone
+name map (ids 0..9, matching preprocess_visdrone.py) and the extra class-agnostic
+row. The decode is identical: rank by sigmoid(conf logit), class from argmax of
+the class slots, per-class greedy NMS.
+
+The single 7x7 grid emits at most ONE box per cell (<=49 detections/image after
+NMS) against VisDrone's ~70 GT boxes/image — recall is structurally capped well
+below 1.0. That cap is the WS-A point, quantified here.
+
+Usage:
+    python3 scripts/yolo_map_visdrone.py <logits.bin> data/visdrone/val.bin [--iou 0.5]
+"""
+import argparse
+import sys
+from pathlib import Path
+
+try:
+    import numpy as np
+except ImportError:
+    print("ERROR: numpy required (.venv/bin/pip install numpy)", file=sys.stderr)
+    sys.exit(1)
+
+PER_CELL   = 30          # 2 boxes * 5 + 20 class slots
+MAX_BBOXES = 56
+BOX_STRIDE = 20
+
+# Geometry defaults = 224/7×7 (WS-A). set_geometry() overrides for the 448/14 rung.
+GRID = 7
+FLAT = TARGET_BYTES = MASK_BYTES = NB_OFFSET = BOXES_OFFSET = RECORD_SIZE = IMG_BYTES = 0
+
+
+def set_geometry(size, grid):
+    global GRID, FLAT, IMG_BYTES, TARGET_BYTES, MASK_BYTES, NB_OFFSET, BOXES_OFFSET, RECORD_SIZE
+    GRID = grid
+    FLAT = PER_CELL * GRID * GRID
+    IMG_BYTES = 3 * size * size
+    TARGET_BYTES = PER_CELL * GRID * GRID * 4
+    MASK_BYTES = GRID * GRID * 4
+    NB_OFFSET = IMG_BYTES + TARGET_BYTES + MASK_BYTES
+    BOXES_OFFSET = NB_OFFSET + 4
+    RECORD_SIZE = BOXES_OFFSET + MAX_BBOXES * BOX_STRIDE
+
+
+set_geometry(224, 7)
+
+# VisDrone kept classes, ids 0..9 (preprocess_visdrone.py remaps file 1..10 -> 0..9).
+CLASS_NAMES = {0: "pedestrian", 1: "people", 2: "bicycle", 3: "car", 4: "van",
+               5: "truck", 6: "tricycle", 7: "awning-tri", 8: "bus", 9: "motor"}
+
+
+def sigmoid(x):
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def iou(a, b):
+    ix0 = max(a[0], b[0]); iy0 = max(a[1], b[1])
+    ix1 = min(a[2], b[2]); iy1 = min(a[3], b[3])
+    if ix1 <= ix0 or iy1 <= iy0:
+        return 0.0
+    inter = (ix1 - ix0) * (iy1 - iy0)
+    ua = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / ua if ua > 0 else 0.0
+
+
+def decode(pred_flat, conf_thresh, nms_iou, box_param="raw"):
+    """box_param: 'raw' = the √-MSE head (cx=(j+x)/G, w=w directly);
+    'diou' = the positive DIoU parameterization (cx=(j+σ(x))/G, w=exp(w))."""
+    pred = pred_flat.reshape(PER_CELL, GRID, GRID)
+    dets = []
+    for i in range(GRID):
+        for j in range(GRID):
+            conf = float(sigmoid(pred[4, i, j]))
+            if conf < conf_thresh:
+                continue
+            cid = int(pred[10:30, i, j].argmax())
+            x_cell = pred[0, i, j]; y_cell = pred[1, i, j]
+            if box_param == "diou":
+                cx = (j + float(sigmoid(x_cell))) / GRID
+                cy = (i + float(sigmoid(y_cell))) / GRID
+                w_rel = float(np.exp(pred[2, i, j]))
+                h_rel = float(np.exp(pred[3, i, j]))
+            else:
+                w_rel = max(float(pred[2, i, j]), 0.0)
+                h_rel = max(float(pred[3, i, j]), 0.0)
+                cx = (j + x_cell) / GRID
+                cy = (i + y_cell) / GRID
+            dets.append((cid, conf,
+                         [float(cx - w_rel / 2), float(cy - h_rel / 2),
+                          float(cx + w_rel / 2), float(cy + h_rel / 2)]))
+    kept = []
+    for c in set(d[0] for d in dets):
+        cd = sorted((d for d in dets if d[0] == c), key=lambda d: -d[1])
+        while cd:
+            top = cd.pop(0)
+            kept.append(top)
+            cd = [d for d in cd if iou(top[2], d[2]) < nms_iou]
+    return kept
+
+
+def read_gt(val_path):
+    raw = np.fromfile(val_path, dtype=np.uint8)
+    n = int(np.frombuffer(raw[:4], dtype="<u4")[0])
+    gts = []
+    for r in range(n):
+        base = 4 + r * RECORD_SIZE
+        nb = int(np.frombuffer(raw[base + NB_OFFSET: base + NB_OFFSET + 4], dtype="<i4")[0])
+        boxes = []
+        blk = base + BOXES_OFFSET
+        for k in range(min(nb, MAX_BBOXES)):
+            off = blk + k * BOX_STRIDE
+            cid = int(np.frombuffer(raw[off: off + 4], dtype="<i4")[0])
+            xyxy = np.frombuffer(raw[off + 4: off + 20], dtype="<f4").astype(float).tolist()
+            boxes.append((cid, xyxy))
+        gts.append(boxes)
+    return n, gts
+
+
+def average_precision(confs, tps, n_gt):
+    if n_gt == 0:
+        return float("nan")
+    if not confs:
+        return 0.0
+    order = np.argsort(-np.asarray(confs))
+    tp = np.asarray(tps, dtype=np.float64)[order]
+    fp = 1.0 - tp
+    tp_cum = np.cumsum(tp)
+    fp_cum = np.cumsum(fp)
+    recall = tp_cum / n_gt
+    precision = tp_cum / np.maximum(tp_cum + fp_cum, 1e-12)
+    mrec = np.concatenate([[0.0], recall, [recall[-1]]])
+    mpre = np.concatenate([[0.0], precision, [0.0]])
+    for i in range(len(mpre) - 2, -1, -1):
+        mpre[i] = max(mpre[i], mpre[i + 1])
+    idx = np.where(mrec[1:] != mrec[:-1])[0]
+    return float(np.sum((mrec[idx + 1] - mrec[idx]) * mpre[idx + 1]))
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("logits", help="logits.bin dump ([N,1470] f32) from yolov1-pets-infer")
+    ap.add_argument("val_bin", help="data/visdrone/val.bin")
+    ap.add_argument("--iou", type=float, default=0.5, help="TP IoU threshold (default 0.5)")
+    ap.add_argument("--nms-iou", type=float, default=0.5)
+    ap.add_argument("--conf-thresh", type=float, default=0.001)
+    ap.add_argument("--grid", type=int, default=7, help="detection grid side (7 for 224, 14 for 448)")
+    ap.add_argument("--size", type=int, default=None, help="input px (default grid*32)")
+    ap.add_argument("--box-param", choices=["raw", "diou"], default="raw",
+                    help="'raw' for √-MSE head, 'diou' for the exp/sigmoid DIoU head")
+    args = ap.parse_args()
+    set_geometry(args.size if args.size else args.grid * 32, args.grid)
+
+    logits = np.fromfile(args.logits, dtype=np.float32)
+    n_pred = logits.size // FLAT
+    logits = logits[: n_pred * FLAT].reshape(n_pred, FLAT)
+
+    n_gt_rec, gts = read_gt(args.val_bin)
+    n = min(n_pred, n_gt_rec)
+    if n_pred != n_gt_rec:
+        print(f"WARN: {n_pred} logit rows vs {n_gt_rec} GT records; scoring first {n}",
+              file=sys.stderr)
+
+    classes = sorted(CLASS_NAMES)
+    confs = {c: [] for c in classes}
+    tps   = {c: [] for c in classes}
+    n_gt  = {c: 0 for c in classes}
+    # Class-agnostic accumulators (label ignored; localization only).
+    ca_confs, ca_tps, ca_ngt = [], [], 0
+
+    for r in range(n):
+        gt_boxes = gts[r]
+        for c in classes:
+            n_gt[c] += sum(1 for (cid, _) in gt_boxes if cid == c)
+        ca_ngt += len(gt_boxes)
+
+        dets = decode(logits[r], args.conf_thresh, args.nms_iou, args.box_param)
+        dets.sort(key=lambda d: -d[1])
+
+        # Per-class matching.
+        matched = [False] * len(gt_boxes)
+        for (cid, conf, box) in dets:
+            if cid not in confs:
+                continue
+            best_iou, best_k = 0.0, -1
+            for k, (gcid, gbox) in enumerate(gt_boxes):
+                if gcid != cid or matched[k]:
+                    continue
+                iv = iou(box, gbox)
+                if iv > best_iou:
+                    best_iou, best_k = iv, k
+            is_tp = best_iou >= args.iou and best_k >= 0
+            if is_tp:
+                matched[best_k] = True
+            confs[cid].append(conf)
+            tps[cid].append(1.0 if is_tp else 0.0)
+
+        # Class-agnostic matching (any label counts, greedy by conf).
+        ca_matched = [False] * len(gt_boxes)
+        for (cid, conf, box) in dets:
+            best_iou, best_k = 0.0, -1
+            for k, (gcid, gbox) in enumerate(gt_boxes):
+                if ca_matched[k]:
+                    continue
+                iv = iou(box, gbox)
+                if iv > best_iou:
+                    best_iou, best_k = iv, k
+            is_tp = best_iou >= args.iou and best_k >= 0
+            if is_tp:
+                ca_matched[best_k] = True
+            ca_confs.append(conf)
+            ca_tps.append(1.0 if is_tp else 0.0)
+
+    print(f"scored {n} records from {Path(args.val_bin).name}  (IoU={args.iou})")
+    ca_ap = average_precision(ca_confs, ca_tps, ca_ngt)
+    ca_recall = (sum(ca_tps) / ca_ngt) if ca_ngt else float("nan")
+    print(f"  class-agnostic localization AP@{args.iou:.2f} = {ca_ap:.4f}   "
+          f"(GT boxes={ca_ngt}, dets={len(ca_confs)}, TP={int(sum(ca_tps))}, "
+          f"recall={ca_recall:.4f})")
+    aps = []
+    for c in classes:
+        apc = average_precision(confs[c], tps[c], n_gt[c])
+        aps.append(apc)
+        print(f"  {CLASS_NAMES[c]:>11}: AP@{args.iou:.2f} = {apc:.4f}   "
+              f"(GT={n_gt[c]}, dets={len(confs[c])})")
+    valid = [a for a in aps if a == a]
+    mean = sum(valid) / len(valid) if valid else float("nan")
+    print(f"  mAP@{args.iou:.2f} = {mean:.4f}   (mean over {len(valid)} classes)")
+
+
+if __name__ == "__main__":
+    main()
