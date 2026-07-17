@@ -179,6 +179,15 @@ opaque yoloAugment (images : @& ByteArray) (boxes : @& ByteArray)
 @[extern "lean_f32_mask_u8_to_i32"]
 opaque maskU8ToI32 (mask : @& ByteArray) : IO ByteArray
 
+/-- Paired horizontal flip for segmentation: flips the f32 image `[B,C,H,W]`
+    and the uint8 per-pixel mask `[B,H,W]` together, one coin per image, so the
+    pixel correspondence survives. A flip is a pure column permutation, so the
+    mask stays exact (no label interpolation). Returns `(image', mask')`.
+    See `lean_f32_seg_hflip_pair`. -/
+@[extern "lean_f32_seg_hflip_pair"]
+opaque segHflipPair (img mask : @& ByteArray)
+    (batch channels height width seed : USize) : IO (ByteArray × ByteArray)
+
 /-- Per-batch segmentation confusion matrix. `logits` is f32 `[B,NC,H,W]`,
     `masks` is u8 `[B,H,W]` (per-pixel class). Returns int64 LE `[NC*NC]`
     counts `conf[true*NC + pred]` (argmax over channels), for mIoU

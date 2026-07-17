@@ -679,6 +679,16 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
       let yb := F32.sliceLabels curLbl (bi * batchN) batchN dio.labelBytesPerRecord
       let stepSeed : USize := (epoch * 100000 + bi).toUSize
       let mut yArg : ByteArray := yb
+      -- Segmentation aug: paired hflip of image+mask (one coin per image), so
+      -- the per-pixel correspondence is preserved. The classification aug
+      -- pack below (RandAugment / mixup / cutmix) does not apply to per-pixel
+      -- masks and stays gated by its own flags; this is the seg path's only
+      -- geometric aug. Guarded by useSeg so no non-seg trainer is touched.
+      if useSeg && cfg.augment then
+        let (xf, mf) ← F32.segHflipPair xba yb batchN.toUSize augC.toUSize
+                          augH.toUSize augW.toUSize (stepSeed ^^^ (11 : USize))
+        xba := xf
+        yArg := mf
       -- DeiT-style aug. RandAugment first (color-only subset), then RE.
       if cfg.useRandAugment then
         let raSeed : USize := stepSeed ^^^ (5 : USize)

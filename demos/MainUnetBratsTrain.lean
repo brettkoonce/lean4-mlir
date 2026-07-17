@@ -235,6 +235,20 @@ def main (args : List String) : IO Unit := do
   -- slingshots through it. Cosine decay is the standard damping — high LR early
   -- to find the basin, low LR late to settle in it.
   let cosine := args.any (· == "cos")
+  -- `aug` turns on mask-aware augmentation: paired horizontal flip of image and
+  -- mask (F32.segHflipPair, one coin per image). Brains are near-symmetric so
+  -- hflip is label-safe, and it is the cheapest real-data-variety lever on a
+  -- 14k-slice set. This is the ceiling-raiser the best-checkpoint peak (WT
+  -- 0.329, capacity-bound) motivated — not another re-roll of the same recipe.
+  let aug := args.any (· == "aug")
+  -- `lr=<n>` overrides the base learning rate as n×1e-4 (default 0.001 = lr=10).
+  -- The aug run peaks high (WT 0.66) but oscillates violently (0.66→0.43→0.06→
+  -- 0.26) — heavy weights + cosine + aug noise slingshot the narrow basin. A
+  -- gentler LR (lr=5 → 5e-4) is the direct test of whether it can HOLD a high
+  -- number instead of spiking to it.
+  let baseLr : Float :=
+    (((args.filter (·.startsWith "lr=")).head?.bind
+      (fun a => (a.drop 3).toNat?)).map Nat.toFloat |>.getD 10.0) * 0.0001
   -- `tag=<s>` appends an extra suffix to the artifact tag, so two runs of the
   -- SAME arm at different budgets/schedules (e.g. a 10-epoch and a 30-epoch
   -- `wcesqrt cos pb`) don't clobber each other's checkpoints or race on the
@@ -255,8 +269,9 @@ def main (args : List String) : IO Unit := do
                   else if args.any (· == "wcesqrt") then "wcesqrt"
                   else if args.any (· == "wceb") then s!"wceb{(wceBeta * 100.0).toUInt64}"
                   else "wce") ++ (if args.any (· == "pb") then "_pb" else "")
-  let fullTag := armName ++ (if cosine then "_cos" else "") ++ extraTag
+  let lrTag := if baseLr == 0.001 then "" else s!"_lr{(baseLr * 10000.0).toUInt64}"
+  let fullTag := armName ++ (if cosine then "_cos" else "") ++ (if aug then "_aug" else "") ++ lrTag ++ extraTag
   IO.eprintln s!"  arm: {fullTag}  (artifacts: {(unetBrats.withBuildTag fullTag).buildPrefix}_*)"
   (unetBrats.withBuildTag fullTag).train
-    { unetBratsConfig with epochs, lossKind, headPriorBias := priorBias, cosineDecay := cosine }
+    { unetBratsConfig with epochs, lossKind, headPriorBias := priorBias, cosineDecay := cosine, augment := aug, learningRate := baseLr }
     (args.head?.getD "data/brats") .brats

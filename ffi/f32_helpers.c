@@ -1371,6 +1371,59 @@ LEAN_EXPORT lean_obj_res lean_f32_random_hflip(
     return lean_io_result_mk_ok(out);
 }
 
+// Paired horizontal flip for segmentation: flips the f32 image and the uint8
+// per-pixel mask TOGETHER with one coin per image, so pixel correspondence is
+// preserved exactly. A hflip is a pure permutation of columns, so the mask
+// needs no interpolation and no label can be invented — the reason segmentation
+// aug must flip labels nearest-neighbour is exactly satisfied by a flip.
+// Brains are near-symmetric, so hflip is label-safe here (it would not be for
+// an organ with strong laterality). Returns (new_image, new_mask).
+LEAN_EXPORT lean_obj_res lean_f32_seg_hflip_pair(
+    b_lean_obj_arg img_ba, b_lean_obj_arg mask_ba,
+    size_t batch, size_t channels, size_t height, size_t width,
+    size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t img_ppi = channels * height * width;   // floats per image
+    size_t mask_ppi = height * width;             // bytes per mask
+    size_t img_bytes = batch * img_ppi * 4;
+    size_t mask_bytes = batch * mask_ppi;
+    lean_object* img_out = lean_alloc_sarray(1, img_bytes, img_bytes);
+    lean_object* mask_out = lean_alloc_sarray(1, mask_bytes, mask_bytes);
+    memcpy(lean_sarray_cptr(img_out), lean_sarray_cptr(img_ba), img_bytes);
+    memcpy(lean_sarray_cptr(mask_out), lean_sarray_cptr(mask_ba), mask_bytes);
+    float* idata = (float*)lean_sarray_cptr(img_out);
+    uint8_t* mdata = lean_sarray_cptr(mask_out);
+
+    uint64_t s = seed + 1;
+    for (size_t i = 0; i < batch; i++) {
+        // Same xorshift64 stream as lean_f32_random_hflip, so the decision is
+        // reproducible; one coin drives BOTH image and mask for this image.
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        if (s & 1) {
+            float* img = idata + i * img_ppi;
+            for (size_t c = 0; c < channels; c++) {
+                for (size_t h = 0; h < height; h++) {
+                    float* row = img + c * height * width + h * width;
+                    for (size_t l = 0, r = width - 1; l < r; l++, r--) {
+                        float tmp = row[l]; row[l] = row[r]; row[r] = tmp;
+                    }
+                }
+            }
+            uint8_t* msk = mdata + i * mask_ppi;
+            for (size_t h = 0; h < height; h++) {
+                uint8_t* row = msk + h * width;
+                for (size_t l = 0, r = width - 1; l < r; l++, r--) {
+                    uint8_t tmp = row[l]; row[l] = row[r]; row[r] = tmp;
+                }
+            }
+        }
+    }
+    lean_object* pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, img_out);
+    lean_ctor_set(pair, 1, mask_out);
+    return lean_io_result_mk_ok(pair);
+}
+
 // ============================================================
 // Mixup / CutMix / Random Erasing — DeiT-style augmentation pack
 // ============================================================
