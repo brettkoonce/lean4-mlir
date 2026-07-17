@@ -25,7 +25,15 @@ anchor detector, one FD-verified brick at a time. Four commits on `main`:
 - bite 5 (partial) — `scripts/visdrone_fpn_coverage.py` (thesis gate: coverage **60.9% →
   88.2%**), `encode_targets_fpn` in `preprocess_visdrone.py` (smoke-verified),
   `data/visdrone/anchors_fpn_{p3,p4,p5}.txt`.
-Awaiting commit sign-off.
+
+**Bites 2/4/6 committed** (`40ce38e`, `6cb7be5`, + multi-scale loss). All the composable
+pieces for the 3/4/6/7 detector are now VERIFIED: neck fwd+bwd (bite 2), multi-scale loss +
+concat plumbing (bites 4+6), heads = verified `convBn`, taps = verified `addSkipGrad` pattern.
+**Left = bite 7 wiring** (assemble them in `emitTrainStepBody` on `TrainConfig.fpnScales`:
+backbone taps → neck → `emitFpnHead`×3 → concat → `emitMultiScaleYoloLoss` → DAG backward →
+tap injection → SGD on neck+head params) + bite 5 disk write + bite 8 train/eval. Bite 7 is
+conv-heavy ⇒ its ONLY validation gate is a ROCm training run (no CPU FD), so it lands with
+bite 8 as one train-and-see step.
 
 Everything with a gradient is finite-difference scaffolded. The FD probes:
 `scripts/{diou_grad_check,diou_probe_check,anchor_loss_probe_check,fpn_neck_check}.py`
@@ -107,6 +115,10 @@ for v1.) The numpy `upsample2`/`upsample2_T` match `bilinearWeights1D` exactly.
 
 4. **3 heads → flatten → concat.** Each head = `conv2d 256→256 3×3 relu → 256→A·15 1×1`
    on Pn → flatten `[B, A·15·gn²]` → concatenate the three → single `[B, Ntot]` output.
+   — **Concat/split plumbing FD-verified** (with bite 6, see below). The head convs are
+   plain verified `convBn` emitters — to be composed into an `emitFpnHead` (fwd = 2×
+   `emitConvBnTrain`; bwd = 2× `emitConvBnBackward`) during the bite-7 wiring; no new
+   math, so nothing left to FD-check for the heads (conv is ROCm-only anyway).
 
 5. **Multi-scale target encoding** — **THESIS VALIDATED + encoder+anchors DONE; 4 GB disk
    write deferred.** Coverage measured by `scripts/visdrone_fpn_coverage.py`: single-scale
@@ -122,10 +134,14 @@ for v1.) The numpy `upsample2`/`upsample2_T` match `bilinearWeights1D` exactly.
    write — hold until the on-disk record layout is co-designed with the FPN loader (bite 7);
    writing 4 GB before the consumer exists risks a format redo.
 
-6. **Multi-scale loss.** In `emitTrainStepBody`: after the concat output, split into the 3
-   scales and call `emitAnchorYoloLoss` 3× (each with its grid + that scale's anchors +
-   its target block), sum the losses, concat the 3 grads. Route on a new config field
-   (e.g. `TrainConfig.fpnScales : List (Nat × List (Float×Float))` = per-scale (grid, anchors)).
+6. **Multi-scale loss** — **DONE, FD-verified.** `emitMultiScaleYoloLoss` (MlirCodegen ~5009)
+   splits the `[B,Ntot]` concat per scale, runs `emitAnchorYoloLoss` 3× (now takes a `tag`
+   param — `s{i}` per scale — so its loss-level SSAs don't collide; `tag=""` keeps the two
+   single-scale callers byte-identical), sums the losses, re-concats the grads. Probe
+   `fpnLossProbeModule` + exe `fpn-loss-probe` + `scripts/fpn_loss_probe_check.py` (conv-free
+   ⇒ CPU-compiles for FD). All configs PASS: fwd vs numpy Σ-loss ~1e-9, grad vs concat-grad
+   ~1e-6, grad vs f64 FD through the concat ~1e-6. Still to wire: route on the new
+   `TrainConfig.fpnScales : List (Nat × List (Float×Float))` field inside `emitTrainStepBody`.
 
 7. **DAG backward wiring.** concat grad → un-concat to 3 head grads → each head's conv
    backward → 3 Pn grads → `emitFpnNeck` backward → C3/C4/C5 grads → seed the backbone

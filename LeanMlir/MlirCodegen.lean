@@ -4879,7 +4879,11 @@ private def emitDiouBackward (B gH gW : Nat) (gradOut : String := "%dio_dpred") 
     scripts/anchor_loss_probe_check.py. -/
 private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
     (predSSA tgtSSA : String) (focalGamma : Float) (lambdaBox : Float)
-    (lossOut gradOut : String) : String := Id.run do
+    (lossOut gradOut : String) (tag : String := "") : String := Id.run do
+  -- `tag` disambiguates the loss-level SSAs (%ay{tag}_*) and the per-anchor
+  -- prefix so this block can be emitted multiple times in one module (the FPN
+  -- multi-scale loss calls it once per scale). tag="" keeps single-scale callers
+  -- byte-identical.
   let A := anchors.length
   let NC := 10
   let P := 5 + NC                          -- 15
@@ -4892,13 +4896,13 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
   let slabTy := tensorTy [B, P, gH, gW]
   let ln := "0.5"                          -- λ_noobj
   let mut s := "\n    // ════════════ Anchor YOLO loss (A anchors) ════════════\n"
-  s := s ++ s!"    %ay_Bf = stablehlo.constant dense<{B}.0> : tensor<f32>\n"
-  s := s ++ s!"    %ay_lbox = stablehlo.constant dense<{lambdaBox}> : tensor<f32>\n"
-  s := s ++ s!"    %ay_lboxg = stablehlo.constant dense<{lambdaBox / B.toFloat}> : {box4}\n"
+  s := s ++ s!"    %ay{tag}_Bf = stablehlo.constant dense<{B}.0> : tensor<f32>\n"
+  s := s ++ s!"    %ay{tag}_lbox = stablehlo.constant dense<{lambdaBox}> : tensor<f32>\n"
+  s := s ++ s!"    %ay{tag}_lboxg = stablehlo.constant dense<{lambdaBox / B.toFloat}> : {box4}\n"
   let mut lossParts : List String := []
   let mut gradParts : List String := []
   for a in [0:A] do
-    let pa := s!"a{a}"
+    let pa := s!"{tag}a{a}"
     let (aw, ah) := anchors.getD a (1.0, 1.0)
     let base := a * P
     let sl := fun (dst src : String) (c0 cn : Nat) (outTy : String) =>
@@ -4916,8 +4920,8 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
     -- ── DIoU box loss (reuse the FD-verified block at pfx=a{a}, prior anchors[a]) ──
     s := s ++ emitDiouForward B gH gW s!"%{pa}_bp" s!"%{pa}_bt" s!"%{pa}_m" s!"%{pa}_dloss" aw ah pa
     s := s ++ emitDiouBackward B gH gW s!"%{pa}_ddp" pa
-    s := s ++ s!"    %{pa}_boxloss = stablehlo.multiply %{pa}_dloss, %ay_lbox : tensor<f32>\n"
-    s := s ++ s!"    %{pa}_bg = stablehlo.multiply %{pa}_ddp, %ay_lboxg : {box4}\n"
+    s := s ++ s!"    %{pa}_boxloss = stablehlo.multiply %{pa}_dloss, %ay{tag}_lbox : tensor<f32>\n"
+    s := s ++ s!"    %{pa}_bg = stablehlo.multiply %{pa}_ddp, %ay{tag}_lboxg : {box4}\n"
     -- ── Objectness focal-BCE (target t = mask channel a) ──
     s := s ++ s!"    %{pa}_one1 = stablehlo.constant dense<1.0> : {c1}\n"
     s := s ++ s!"    %{pa}_zero1 = stablehlo.constant dense<0.0> : {c1}\n"
@@ -4952,7 +4956,7 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
     s := s ++ s!"           : ({c1}, tensor<f32>) -> tensor<f32>\n"
     s := s ++ s!"    %{pa}_obj_pmt = stablehlo.subtract %{pa}_obj_p, %{pa}_m4 : {c1}\n"
     s := s ++ s!"    %{pa}_obj_gr0 = stablehlo.multiply %{pa}_obj_aw, %{pa}_obj_pmt : {c1}\n"
-    s := s ++ s!"    %{pa}_Bf1 = stablehlo.broadcast_in_dim %ay_Bf, dims = [] : (tensor<f32>) -> {c1}\n"
+    s := s ++ s!"    %{pa}_Bf1 = stablehlo.broadcast_in_dim %ay{tag}_Bf, dims = [] : (tensor<f32>) -> {c1}\n"
     s := s ++ s!"    %{pa}_og = stablehlo.divide %{pa}_obj_gr0, %{pa}_Bf1 : {c1}\n"
     -- ── Class softmax-CE (masked by anchor a's assignment) ──
     s := s ++ s!"    %{pa}_cls_mx = stablehlo.reduce(%{pa}_cp init: %neginf) applies stablehlo.maximum across dimensions = [1]\n"
@@ -4980,7 +4984,7 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
     s := s ++ s!"    %{pa}_cls_sm = stablehlo.divide %{pa}_cls_ex, %{pa}_cls_seb : {clsT}\n"
     s := s ++ s!"    %{pa}_cls_d = stablehlo.subtract %{pa}_cls_sm, %{pa}_ct : {clsT}\n"
     s := s ++ s!"    %{pa}_cls_dm = stablehlo.multiply %{pa}_cls_d, %{pa}_cls_maskb : {clsT}\n"
-    s := s ++ s!"    %{pa}_BfC = stablehlo.broadcast_in_dim %ay_Bf, dims = [] : (tensor<f32>) -> {clsT}\n"
+    s := s ++ s!"    %{pa}_BfC = stablehlo.broadcast_in_dim %ay{tag}_Bf, dims = [] : (tensor<f32>) -> {clsT}\n"
     s := s ++ s!"    %{pa}_cg = stablehlo.divide %{pa}_cls_dm, %{pa}_BfC : {clsT}\n"
     -- ── assemble anchor a's [B,15,gH,gW] gradient slab: box(4) ++ obj(1) ++ cls(10) ──
     s := s ++ s!"    %{pa}_g5 = stablehlo.concatenate %{pa}_bg, %{pa}_og, dim = 1 : ({box4}, {c1}) -> {tensorTy [B, 5, gH, gW]}\n"
@@ -4992,18 +4996,71 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
   -- total loss = Σ_a anchor_a / B
   let mut acc := lossParts.headD "%zf"
   for (lp, i) in (lossParts.drop 1).zipIdx do
-    s := s ++ s!"    %ay_ls{i} = stablehlo.add {acc}, {lp} : tensor<f32>\n"
-    acc := s!"%ay_ls{i}"
-  s := s ++ s!"    {lossOut} = stablehlo.divide {acc}, %ay_Bf : tensor<f32>\n"
+    s := s ++ s!"    %ay{tag}_ls{i} = stablehlo.add {acc}, {lp} : tensor<f32>\n"
+    acc := s!"%ay{tag}_ls{i}"
+  s := s ++ s!"    {lossOut} = stablehlo.divide {acc}, %ay{tag}_Bf : tensor<f32>\n"
   -- total grad = concat anchor slabs along channel dim → [B, A·15, gH, gW]
   let mut gacc := gradParts.headD "%zf"
   let mut accCh := P
   for (gp, i) in (gradParts.drop 1).zipIdx do
     let nextCh := accCh + P
-    s := s ++ s!"    %ay_gc{i} = stablehlo.concatenate {gacc}, {gp}, dim = 1 : ({tensorTy [B, accCh, gH, gW]}, {slabTy}) -> {tensorTy [B, nextCh, gH, gW]}\n"
-    gacc := s!"%ay_gc{i}"
+    s := s ++ s!"    %ay{tag}_gc{i} = stablehlo.concatenate {gacc}, {gp}, dim = 1 : ({tensorTy [B, accCh, gH, gW]}, {slabTy}) -> {tensorTy [B, nextCh, gH, gW]}\n"
+    gacc := s!"%ay{tag}_gc{i}"
     accCh := nextCh
   s := s ++ s!"    {gradOut} = stablehlo.reshape {gacc} : ({apT}) -> {apT}\n"
+  return s
+
+/-- FPN multi-scale YOLO loss over the CONCATENATED head output (bites 4+6). The
+    3 detection heads each flatten `[B, A·15, gn, gn] → [B, A·15·gn²]` and concat
+    into `logitsSSA` `[B, Ntot]`. This splits it back per scale, runs the
+    FD-verified `emitAnchorYoloLoss` on each (a distinct `s{i}` tag per scale so
+    the loss-level SSAs don't collide), sums the per-scale losses, and re-concats
+    the per-scale grads back to `[B, Ntot]` — the single-output adapter that keeps
+    `emitTrainStepBody` single-output. Scales are independent (no cross-scale
+    terms), so `d(loss)/d(logits) = concat(flat gradₛ)`. Requires `%zf` in scope.
+    `scales` = per-scale (grid, anchors); `tgtSSAs` the matching target blocks. -/
+private def emitMultiScaleYoloLoss (B : Nat)
+    (scales : List (Nat × List (Float × Float))) (tgtSSAs : List String)
+    (logitsSSA : String) (focalGamma lambdaBox : Float)
+    (lossOut gradOut : String) : String := Id.run do
+  let P := 15
+  let lens := scales.map (fun sc => sc.2.length * P * sc.1 * sc.1)
+  let Ntot := lens.foldl (·+·) 0
+  let concatTy := tensorTy [B, Ntot]
+  let mut s := "\n    // ════════════ FPN multi-scale YOLO loss ════════════\n"
+  let mut off := 0
+  let mut lossParts : List String := []
+  let mut gradFlatParts : List String := []
+  for i in [:scales.length] do
+    let (g, anchors) := scales[i]!
+    let tgt := tgtSSAs[i]!
+    let len := lens[i]!
+    let A := anchors.length
+    let slabTy := tensorTy [B, len]
+    let predTy := tensorTy [B, A * P, g, g]
+    -- split the concat back to this scale's [B, A·15, g, g] head output
+    s := s ++ s!"    %ms_slab{i} = \"stablehlo.slice\"({logitsSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, {off}>, limit_indices = array<i64: {B}, {off + len}>, strides = array<i64: 1, 1>" ++ "} : " ++ s!"({concatTy}) -> {slabTy}\n"
+    s := s ++ s!"    %ms_pred{i} = stablehlo.reshape %ms_slab{i} : ({slabTy}) -> {predTy}\n"
+    s := s ++ emitAnchorYoloLoss B g g anchors s!"%ms_pred{i}" tgt focalGamma lambdaBox s!"%ms_loss{i}" s!"%ms_grad{i}" s!"s{i}"
+    s := s ++ s!"    %ms_gflat{i} = stablehlo.reshape %ms_grad{i} : ({predTy}) -> {slabTy}\n"
+    lossParts := lossParts ++ [s!"%ms_loss{i}"]
+    gradFlatParts := gradFlatParts ++ [s!"%ms_gflat{i}"]
+    off := off + len
+  -- Σ per-scale losses
+  let mut lacc := lossParts.headD "%zf"
+  for (lp, j) in (lossParts.drop 1).zipIdx do
+    s := s ++ s!"    %ms_lsum{j} = stablehlo.add {lacc}, {lp} : tensor<f32>\n"
+    lacc := s!"%ms_lsum{j}"
+  s := s ++ s!"    {lossOut} = stablehlo.add {lacc}, %zf : tensor<f32>\n"
+  -- concat per-scale flat grads → [B, Ntot]
+  let mut gacc := gradFlatParts.headD "%zf"
+  let mut accLen := lens.headD 0
+  for (gp, j) in (gradFlatParts.drop 1).zipIdx do
+    let nextLen := accLen + lens[j + 1]!
+    s := s ++ s!"    %ms_gc{j} = stablehlo.concatenate {gacc}, {gp}, dim = 1 : ({tensorTy [B, accLen]}, {tensorTy [B, lens[j + 1]!]}) -> {tensorTy [B, nextLen]}\n"
+    gacc := s!"%ms_gc{j}"
+    accLen := nextLen
+  s := s ++ s!"    {gradOut} = stablehlo.reshape {gacc} : ({concatTy}) -> {concatTy}\n"
   return s
 
 /-! ### FPN neck (top-down multi-scale merge) — detection-infra brick #3
@@ -9374,6 +9431,34 @@ def fpnNeckProbeModule (B oc c3 c4 c5 g5 : Nat) : String := Id.run do
   s := s ++ fwd
   s := s ++ bwd
   s := s ++ s!"    return {p3}, {p4}, {p5}, {dc3}, {dc4}, {dc5}, {dw3}, {dw4}, {dw5} : {p3Ty}, {p4Ty}, {p5Ty}, {c3Ty}, {c4Ty}, {c5Ty}, {w3Ty}, {w4Ty}, {w5Ty}\n"
+  s := s ++ "  }\n}\n"
+  return s
+
+/-- Standalone FPN multi-scale-loss probe: `@main(logits [B,Ntot], T0,T1,...) ->
+    (loss, grad [B,Ntot])`, one target block per scale. Exercises the concat split
+    + per-scale anchor loss + grad re-concat (bites 4+6) in isolation — conv-free,
+    so it CPU-compiles for FD checking (the conv heads feeding this are verified
+    convBn, validated separately on ROCm). Deterministic per-scale anchors
+    (w=0.02+0.03·i, h=0.03+0.04·i), matching scripts/fpn_loss_probe_check.py. -/
+def fpnLossProbeModule (B : Nat) (scaleGrids : List Nat) (A : Nat) : String := Id.run do
+  let P := 15
+  let anchors : List (Float × Float) := (List.range A).map (fun i =>
+    (0.02 + 0.03 * i.toFloat, 0.03 + 0.04 * i.toFloat))
+  let scales := scaleGrids.map (fun g => (g, anchors))
+  let lens := scales.map (fun sc => sc.2.length * P * sc.1 * sc.1)
+  let Ntot := lens.foldl (·+·) 0
+  let concatTy := tensorTy [B, Ntot]
+  let tgtTys := scales.map (fun sc => tensorTy [B, A * P, sc.1, sc.1])
+  let tgtSSAs := (List.range scales.length).map (fun i => s!"%T{i}")
+  let argParts := (tgtSSAs.zip tgtTys).map (fun st => s!", {st.1}: {st.2}")
+  let argList := s!"%logits: {concatTy}" ++ ("".intercalate argParts)
+  let mut s := s!"// fpn-loss probe (fwd+bwd): B={B} scales={scaleGrids} A={A} Ntot={Ntot}\n"
+  s := s ++ "module @fpn_loss_probe {\n"
+  s := s ++ s!"  func.func @main({argList}) -> (tensor<f32>, {concatTy}) " ++ "{\n"
+  s := s ++ "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n"
+  s := s ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
+  s := s ++ emitMultiScaleYoloLoss B scales tgtSSAs "%logits" 2.0 5.0 "%fl_loss" "%fl_grad"
+  s := s ++ s!"    return %fl_loss, %fl_grad : tensor<f32>, {concatTy}\n"
   s := s ++ "  }\n}\n"
   return s
 

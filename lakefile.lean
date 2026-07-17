@@ -1346,6 +1346,12 @@ lean_exe «fpn-neck-probe» where
   root := `demos.MainFpnNeckProbe
   moreLinkArgs := ireeLink
 
+-- FPN multi-scale-loss probe (brick #3, bites 4+6); FD-checked by
+-- scripts/fpn_loss_probe_check.py against a numpy Σ-of-per-scale-anchor-loss ref.
+lean_exe «fpn-loss-probe» where
+  root := `demos.MainFpnLossProbe
+  moreLinkArgs := ireeLink
+
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
   moreLinkArgs := ireeLink
