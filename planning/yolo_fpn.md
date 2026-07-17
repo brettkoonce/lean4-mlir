@@ -18,6 +18,15 @@ anchor detector, one FD-verified brick at a time. Four commits on `main`:
 - `26ed613` — **FPN neck topology + DAG backward FD-verified** in numpy
   (`scripts/fpn_neck_check.py`). Bite 1 of this doc.
 
+**Uncommitted (this session):**
+- bite 2 — `emitFpnNeck` StableHLO forward+backward emitters, `fpn-neck-probe` exe,
+  `scripts/fpn_neck_probe_check.py`. IREE-CPU-compiled + FD-verified vs the numpy oracle
+  (all 5 configs PASS).
+- bite 5 (partial) — `scripts/visdrone_fpn_coverage.py` (thesis gate: coverage **60.9% →
+  88.2%**), `encode_targets_fpn` in `preprocess_visdrone.py` (smoke-verified),
+  `data/visdrone/anchors_fpn_{p3,p4,p5}.txt`.
+Awaiting commit sign-off.
+
 Everything with a gradient is finite-difference scaffolded. The FD probes:
 `scripts/{diou_grad_check,diou_probe_check,anchor_loss_probe_check,fpn_neck_check}.py`
 and exes `diou-loss-probe`, `anchor-loss-probe`.
@@ -79,11 +88,16 @@ for v1.) The numpy `upsample2`/`upsample2_T` match `bilinearWeights1D` exactly.
 
 ## Remaining bites (large but bounded, mostly mechanical hand-emission)
 
-2. **Emit `emitFpnNeck` (StableHLO) + `fpn-neck-probe`.** Translate the verified numpy:
-   1×1 conv = `stablehlo.dot_general` (contract channel dim 1) + transpose to NCHW; reuse
-   `emitBilinearUpsample`; add. Backward mirrors `fpn_neck_check.py`'s `fpn_grad`. Probe:
-   `@main(C3,C4,C5,W3,W4,W5) -> (P3,P4,P5)` + backward; check fwd vs numpy, dC vs FD (CPU;
-   watch the `[B,NC,H,W]→scalar` reduce → use two-step reduce like the anchor cls loss).
+2. **Emit `emitFpnNeck` (StableHLO) + `fpn-neck-probe`.** — **DONE, FD-verified.**
+   `emitFpnNeckForward`/`emitFpnNeckBackward` + helpers (`emitConv1x1Fwd`/`BwdDC`/`BwdDW`,
+   `emitBilinearUpsampleBwd`) at `MlirCodegen.lean` ~5009 (defined BEFORE `emitTrainStepBody`
+   so bite 6/7 can reuse them). 1×1 conv = `dot_general` (contract channel dim) + transpose to
+   NCHW; reuse `emitBilinearUpsample`; add. Probe `fpnNeckProbeModule` (~9218):
+   `@main(C3,C4,C5,W3,W4,W5,dP3,dP4,dP5) -> (P3,P4,P5, dC3,dC4,dC5, dW3,dW4,dW5)` — **cotangents
+   are explicit inputs, NOT a scalar-loss reduce** (dodges the `[B,NC,H,W]→scalar` reduce gotcha
+   AND mirrors the real train-step wiring where head backwards feed dPn straight in). Exe
+   `fpn-neck-probe`, checker `scripts/fpn_neck_probe_check.py`. All 5 shape configs PASS: fwd vs
+   numpy ~1e-7, dC vs oracle ~1e-6, dW vs oracle ~1e-5 (oracle self-gated by f64 FD ~1e-8).
 
 3. **Multi-tap R34 backbone.** The R34 residualBlocks at strides 8/16/32 (after the
    `64→128`, `128→256`, `256→512` stages) must expose their outputs C3/C4/C5. Use the
@@ -94,12 +108,19 @@ for v1.) The numpy `upsample2`/`upsample2_T` match `bilinearWeights1D` exactly.
 4. **3 heads → flatten → concat.** Each head = `conv2d 256→256 3×3 relu → 256→A·15 1×1`
    on Pn → flatten `[B, A·15·gn²]` → concatenate the three → single `[B, Ntot]` output.
 
-5. **Multi-scale target encoding** (`preprocess_visdrone.py`): emit targets at all 3 grids
-   (56/28/14). Assign each GT to the scale whose stride best fits its size (e.g. by
-   `max(w,h)·448`: <~24 px → P3, ~24–64 → P4, >~64 → P5), then to the best anchor within
-   that scale. New data dir `data/visdrone_fpn` (image + 3 target blocks + boxes). Recompute
-   coverage — should be far above 61% (56×56 = 3136 cells cuts collisions hugely). Recompute
-   per-scale k-means anchors (`visdrone_anchors.py`, 3 anchors/scale is standard).
+5. **Multi-scale target encoding** — **THESIS VALIDATED + encoder+anchors DONE; 4 GB disk
+   write deferred.** Coverage measured by `scripts/visdrone_fpn_coverage.py`: single-scale
+   14×14 A=6 reproduces the wall at **60.9%**; FPN 3-scale (56/28/14, 3 anchors/scale, size
+   thresholds max(w,h)px 24/64) lifts it to **88.2%** — and the joint-best-anchor upper bound
+   is also 88.2%, so the size-threshold assignment is near-optimal and 3 anchors/scale is
+   enough (coverage is now cell-collision-bound on the 56² grid, not anchor-bound). 77% of GT
+   are tiny (<24px) → the new P3 scale, exactly the objects the 14×14 grid collapsed. Per-scale
+   k-means anchors saved: `data/visdrone/anchors_fpn_{p3,p4,p5}.txt`. Encoder
+   `encode_targets_fpn` (in `preprocess_visdrone.py`) written + smoke-verified (`--smoke`:
+   slot count == coverage recompute, shapes, **mask == obj-channel** so the loader derives
+   masks, no FFI mask). **Left:** `process_split_fpn` + CLI + the `data/visdrone_fpn` 4 GB
+   write — hold until the on-disk record layout is co-designed with the FPN loader (bite 7);
+   writing 4 GB before the consumer exists risks a format redo.
 
 6. **Multi-scale loss.** In `emitTrainStepBody`: after the concat output, split into the 3
    scales and call `emitAnchorYoloLoss` 3× (each with its grid + that scale's anchors +

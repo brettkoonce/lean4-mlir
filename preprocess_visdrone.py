@@ -147,6 +147,55 @@ def encode_targets_anchor(img_w, img_h, boxes, anchors):
     return target, mask, len(filled)
 
 
+# ── FPN multi-scale target encoding (planning/yolo_fpn.md bite 5) ─────────────
+# Each GT is routed to ONE scale by size (max(w,h)·input px), then to that scale's
+# best-shape anchor. Three target blocks (P3 56×56, P4 28×28, P5 14×14 at 448px,
+# strides 8/16/32), each A_s·(5+C) channels + a per-anchor mask. Coverage — the
+# fraction of GT landing a unique (scale,cell,anchor) slot — jumps 60.9% → 88.2%
+# vs the single 14×14 grid (scripts/visdrone_fpn_coverage.py). The mask equals the
+# obj channel (target[base+4]) exactly, so the loader can derive it (no FFI mask).
+# Consumed by the FPN loader + multi-scale codegen (bites 6/7).
+FPN_GRIDS = (56, 28, 14)          # P3 / P4 / P5 at 448px input
+FPN_T_LO, FPN_T_HI = 24.0, 64.0   # max(w,h)px scale thresholds
+
+
+def fpn_scale_of(w_rel, h_rel, input_px):
+    m = max(w_rel, h_rel) * input_px
+    return 0 if m < FPN_T_LO else (1 if m < FPN_T_HI else 2)
+
+
+def encode_targets_fpn(img_w, img_h, boxes, anchors_per_scale, input_px):
+    """Return (targets[3], masks[3], n_slots). targets[s]=[A_s·15,g_s,g_s],
+    masks[s]=[A_s,g_s,g_s]. Later GT overwrites earlier on a (scale,cell,anchor)
+    collision — the residual loss vs the FPN coverage ceiling. Mirrors the
+    validated scripts/visdrone_fpn_coverage.py assignment exactly."""
+    tgts, msks = [], []
+    for s, g in enumerate(FPN_GRIDS):
+        A = len(anchors_per_scale[s])
+        tgts.append(np.zeros((A * PER_ANCHOR, g, g), dtype=np.float32))
+        msks.append(np.zeros((A, g, g), dtype=np.float32))
+    filled = set()
+    for (cid, xmin, ymin, xmax, ymax) in boxes:
+        cx = (xmin + xmax) / 2.0 / img_w; cy = (ymin + ymax) / 2.0 / img_h
+        w_rel = (xmax - xmin) / img_w;    h_rel = (ymax - ymin) / img_h
+        s = fpn_scale_of(w_rel, h_rel, input_px)
+        g = FPN_GRIDS[s]
+        cj = min(int(cx * g), g - 1); ci = min(int(cy * g), g - 1)
+        a = best_anchor(w_rel, h_rel, anchors_per_scale[s])
+        base = a * PER_ANCHOR
+        t = tgts[s]
+        t[base + 0, ci, cj] = cx * g - cj
+        t[base + 1, ci, cj] = cy * g - ci
+        t[base + 2, ci, cj] = w_rel
+        t[base + 3, ci, cj] = h_rel
+        t[base + 4, ci, cj] = 1.0
+        t[base + 5: base + 5 + NUM_CLASSES_A, ci, cj] = 0.0
+        t[base + 5 + cid, ci, cj] = 1.0
+        msks[s][a, ci, cj] = 1.0
+        filled.add((s, ci, cj, a))
+    return tgts, msks, len(filled)
+
+
 def process_split_anchor(split_dir, out_path, anchors):
     A = len(anchors)
     imgs_dir = Path(split_dir) / "images"
