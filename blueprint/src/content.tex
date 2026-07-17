@@ -11134,12 +11134,20 @@ three other task families in the book --- detection, segmentation, and
 language --- and each pulls a dataset of its own. \textbf{Oxford-IIIT
 Pets} backs both the UNet segmenter (\texttt{unet-pets-train}, via
 trimaps) and the YOLO detector (\texttt{yolov1-pets-train-bootstrap}, via
-head boxes tiled into $2 \times 2$ mosaics); and \textbf{tiny
+head boxes tiled into $2 \times 2$ mosaics); \textbf{MSD Task01
+(BraTS)} carries the same UNet to real medical imaging
+(\texttt{unet-brats-train}) --- four-modality brain-tumour MRI, where the
+thin-class collapse a Pets trimap merely tolerates becomes the entire
+problem (enhancing tumour is $\sim$0.5\,\% of voxels); \textbf{tiny
 Shakespeare} --- a single 1\,MB character stream --- is what the TinyGPT
-char-level transformer (\texttt{tinygpt-shakespeare}) trains on. Same
-fetch-and-unpack story as the table above, with one extra step: each is
-tokenized or tiled into the trainer's input format by the matching
-\texttt{preprocess\_*.py} script before the first \texttt{lake exe} run.
+char-level transformer (\texttt{tinygpt-shakespeare}) trains on; and
+\textbf{TinyStories} --- Eldan \& Li's synthetic short-story corpus,
+$\sim$2\,GB --- is its scaled-up sibling, byte-level-BPE tokenized to a
+deliberately small 4096-token vocabulary for the $\sim$8.5\,M-parameter
+decoder-only GPT (\texttt{tinystories}). Same fetch-and-unpack story as
+the table above, with one extra step: each is tokenized or tiled into the
+trainer's input format by the matching \texttt{preprocess\_*.py} script
+before the first \texttt{lake exe} run.
 
 \begin{center}
 \small
@@ -11150,9 +11158,15 @@ Dataset & Abbrev. & Reference & Homepage & Path in repo \\
 Oxford-IIIT Pets & Pets & Parkhi et al., 2012 &
   \href{https://www.robots.ox.ac.uk/~vgg/data/pets/}{\nolinkurl{robots.ox.ac.uk/~vgg/data/pets}} &
   \texttt{download\_pets.sh} $\to$ \texttt{data/pets/} \\[2pt]
+MSD Task01 (BraTS) & BraTS & Antonelli et al., 2022 &
+  \href{http://medicaldecathlon.com/}{\nolinkurl{medicaldecathlon.com}} &
+  \texttt{download\_brats.sh} $\to$ \texttt{data/brats/} \\[2pt]
 tiny Shakespeare & TShk & Karpathy, 2015 &
   \href{https://github.com/karpathy/char-rnn}{\nolinkurl{github.com/karpathy/char-rnn}} &
-  \texttt{download\_shakespeare.sh} $\to$ \texttt{data/shakespeare/} \\
+  \texttt{download\_shakespeare.sh} $\to$ \texttt{data/shakespeare/} \\[2pt]
+TinyStories & TS & Eldan \& Li, 2023 &
+  \href{https://huggingface.co/datasets/roneneldan/TinyStories}{\nolinkurl{huggingface.co/datasets/roneneldan/TinyStories}} &
+  \texttt{download\_tinystories.sh} $\to$ \texttt{data/tinystories/} \\
 \hline
 \end{tabular}
 \end{center}
@@ -11164,8 +11178,52 @@ also has a \texttt{preprocess\_*.py} step (e.g.\
 and training. For detection, \texttt{preprocess\_pets\_mosaic.py} tiles
 the Pets head boxes into class-balanced $2 \times 2$ mosaics
 (\texttt{data/pets\_mosaic\_bal/}); the same \texttt{download\_pets.sh}
-download feeds both the segmenter and the detector.
+download feeds both the segmenter and the detector. For TinyStories,
+\texttt{preprocess\_tinystories.py} trains a byte-level BPE tokenizer on a
+slice of the corpus and emits it in HuggingFace format
+(\texttt{vocab.json}/\texttt{merges.txt}) alongside the flat int32-LE
+token streams (\texttt{train.bin}/\texttt{val.bin}); the small vocabulary
+keeps the in-graph one-hot embedding and head matmuls cheap and the
+tokenizer auditable.
 \normalsize
+
+\medskip\noindent\textbf{Building the BraTS dataset.} Brain-tumour
+segmentation has two public faces, and the choice between them is a
+reproducibility decision. \emph{BraTS~2021 proper} (1{,}251 cases) is
+gated behind a free Synapse account \emph{and} a signed research-use
+agreement, so no script can fetch it --- a demo whose first step is ``go
+register on Synapse'' is a demo readers do not run. The \textbf{Medical
+Segmentation Decathlon}'s \textbf{Task01\_BrainTumour} is the same task
+from open storage: 484 labelled 4D volumes built from the BraTS
+2016/2017 cases, the same four co-registered MRI modalities
+(FLAIR / T1w / T1gd / T2w) and the same glioma sub-regions, as a single
+7.6\,GB tarball over unauthenticated S3. That is what
+\texttt{download\_brats.sh} fetches --- and it splits the file into
+parallel ranged \texttt{curl}s, since S3 throttles per connection, taking
+the download from $\sim$3\,h single-stream to $\sim$12\,min. The cost of
+the choice, stated plainly: 484 volumes rather than 1{,}251, and numbers
+that are \emph{not} comparable to a BraTS~2021 leaderboard --- this is a
+real segmentation result on real medical data that any reader can
+reproduce, not a challenge entry.
+
+\smallskip\noindent Two preprocessing details are load-bearing.
+\texttt{preprocess\_brats.py} ships a \textbf{dependency-free NIfTI-1
+reader} (numpy only): a \texttt{pip install nibabel} is a reader-hostile
+first step under PEP~668's externally-managed-environment lock, so the
+$\sim$40-line header parser is cross-validated against nibabel~5.4.2 on
+nine cases (column-major, big-endian, \texttt{scl\_slope}/\texttt{scl\_inter})
+instead. And the two decisions that would silently ruin the numbers if
+done the obvious way: intensities are z-scored over \emph{brain voxels
+only} (BraTS volumes are skull-stripped, so $\sim$83\,\% of each is exact
+zero and whole-volume statistics would crush the tissue contrast), and
+the train/val split is \emph{by patient, not by slice} (adjacent axial
+slices of one brain are near-duplicates, so a slice-level split leaks
+memorized neighbours across the boundary). Volumes are quantized to
+uint8 over a $\pm5\sigma$ window and the C loader inverts it, matching
+the on-disk convention of every other dataset here.
+\emph{Reference:} Antonelli et al., \emph{The Medical Segmentation
+Decathlon}, Nature Communications~13, 4128 (2022), atop the underlying
+BraTS work (Menze et al.\ 2015, Bakas et al.\ 2017).
 
 \chapter{Getting started}
 \label{app:getting_started}
