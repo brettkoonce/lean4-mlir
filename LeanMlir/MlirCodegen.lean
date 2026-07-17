@@ -4868,6 +4868,143 @@ private def emitDiouBackward (B gH gW : Nat) (gradOut : String := "%dio_dpred") 
   s := s ++ s!"    {gradOut} = stablehlo.concatenate %{pfx}b_mtx, %{pfx}b_mty, %{pfx}b_mtw, %{pfx}b_mth, dim = 1 : ({c1}, {c1}, {c1}, {c1}) -> {p4}\n"
   return s
 
+/-- Anchor YOLOv3-style loss (brick #2, WS-C). A anchors/cell, each slot is
+    `[tx,ty,tw,th, obj, cls(NC=10)]`; `pred`/`tgt` are `[B, A·15, gH, gW]`, `mask`
+    is `[B, A, gH, gW]` (per-anchor objectness assignment). Per anchor a: the
+    FD-verified DIoU box loss at `pfx=a{a}` with prior `anchors[a]` (box_a =
+    anchor_a·exp(pred)), focal-BCE objectness, and mask-weighted softmax-CE class.
+    Loss = (1/B)·Σ_a [λ_box·Σmask_a(1-DIoU_a) + Σ focalBCE_a + Σ mask_a·CE_a]; the
+    gradient is assembled per anchor to `[B,15,gH,gW]` and concatenated to
+    `[B, A·15, gH, gW]`. Requires `%zf`,`%neginf` in scope. FD-verified in
+    scripts/anchor_loss_probe_check.py. -/
+private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
+    (predSSA tgtSSA maskSSA : String) (focalGamma : Float) (lambdaBox : Float)
+    (lossOut gradOut : String) : String := Id.run do
+  let A := anchors.length
+  let NC := 10
+  let P := 5 + NC                          -- 15
+  let c1 := tensorTy [B, 1, gH, gW]
+  let box4 := tensorTy [B, 4, gH, gW]
+  let clsT := tensorTy [B, NC, gH, gW]
+  let clsRed := tensorTy [B, gH, gW]
+  let apT := tensorTy [B, A * P, gH, gW]
+  let maskA := tensorTy [B, A, gH, gW]
+  let bhw := tensorTy [B, gH, gW]
+  let slabTy := tensorTy [B, P, gH, gW]
+  let ln := "0.5"                          -- λ_noobj
+  let mut s := "\n    // ════════════ Anchor YOLO loss (A anchors) ════════════\n"
+  s := s ++ s!"    %ay_Bf = stablehlo.constant dense<{B}.0> : tensor<f32>\n"
+  s := s ++ s!"    %ay_lbox = stablehlo.constant dense<{lambdaBox}> : tensor<f32>\n"
+  s := s ++ s!"    %ay_lboxg = stablehlo.constant dense<{lambdaBox / B.toFloat}> : {box4}\n"
+  let mut lossParts : List String := []
+  let mut gradParts : List String := []
+  for a in [0:A] do
+    let pa := s!"a{a}"
+    let (aw, ah) := anchors.getD a (1.0, 1.0)
+    let base := a * P
+    let sl := fun (dst src : String) (c0 cn : Nat) (outTy : String) =>
+      s!"    {dst} = \"stablehlo.slice\"({src}) " ++ "{" ++ s!" start_indices = array<i64: 0, {c0}, 0, 0>, limit_indices = array<i64: {B}, {cn}, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({apT}) -> {outTy}\n"
+    s := s ++ sl s!"%{pa}_bp" predSSA base (base + 4) box4
+    s := s ++ sl s!"%{pa}_op" predSSA (base + 4) (base + 5) c1
+    s := s ++ sl s!"%{pa}_cp" predSSA (base + 5) (base + P) clsT
+    s := s ++ sl s!"%{pa}_bt" tgtSSA base (base + 4) box4
+    s := s ++ sl s!"%{pa}_ct" tgtSSA (base + 5) (base + P) clsT
+    -- mask channel a: [B,A,gH,gW] → [B,1,gH,gW] → [B,gH,gW]
+    s := s ++ s!"    %{pa}_m4 = \"stablehlo.slice\"({maskSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, {a}, 0, 0>, limit_indices = array<i64: {B}, {a + 1}, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({maskA}) -> {c1}\n"
+    s := s ++ s!"    %{pa}_m = stablehlo.reshape %{pa}_m4 : ({c1}) -> {bhw}\n"
+    -- ── DIoU box loss (reuse the FD-verified block at pfx=a{a}, prior anchors[a]) ──
+    s := s ++ emitDiouForward B gH gW s!"%{pa}_bp" s!"%{pa}_bt" s!"%{pa}_m" s!"%{pa}_dloss" aw ah pa
+    s := s ++ emitDiouBackward B gH gW s!"%{pa}_ddp" pa
+    s := s ++ s!"    %{pa}_boxloss = stablehlo.multiply %{pa}_dloss, %ay_lbox : tensor<f32>\n"
+    s := s ++ s!"    %{pa}_bg = stablehlo.multiply %{pa}_ddp, %ay_lboxg : {box4}\n"
+    -- ── Objectness focal-BCE (target t = mask channel a) ──
+    s := s ++ s!"    %{pa}_one1 = stablehlo.constant dense<1.0> : {c1}\n"
+    s := s ++ s!"    %{pa}_zero1 = stablehlo.constant dense<0.0> : {c1}\n"
+    s := s ++ s!"    %{pa}_eps1 = stablehlo.constant dense<1.0e-12> : {c1}\n"
+    s := s ++ s!"    %{pa}_gam1 = stablehlo.constant dense<{focalGamma}> : {c1}\n"
+    s := s ++ s!"    %{pa}_ln1 = stablehlo.constant dense<{ln}> : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_p = stablehlo.logistic %{pa}_op : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_1mt = stablehlo.subtract %{pa}_one1, %{pa}_m4 : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_1mp = stablehlo.subtract %{pa}_one1, %{pa}_obj_p : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_tp = stablehlo.multiply %{pa}_m4, %{pa}_obj_p : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_btm = stablehlo.multiply %{pa}_obj_1mt, %{pa}_obj_1mp : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_pt = stablehlo.add %{pa}_obj_tp, %{pa}_obj_btm : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_1mpt = stablehlo.subtract %{pa}_one1, %{pa}_obj_pt : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_1mptc = stablehlo.maximum %{pa}_obj_1mpt, %{pa}_eps1 : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_log = stablehlo.log %{pa}_obj_1mptc : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_glog = stablehlo.multiply %{pa}_gam1, %{pa}_obj_log : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_w = stablehlo.exponential %{pa}_obj_glog : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_abg = stablehlo.multiply %{pa}_obj_1mt, %{pa}_ln1 : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_al = stablehlo.add %{pa}_m4, %{pa}_obj_abg : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_relu = stablehlo.maximum %{pa}_op, %{pa}_zero1 : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_zt = stablehlo.multiply %{pa}_op, %{pa}_m4 : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_abz = stablehlo.abs %{pa}_op : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_nabz = stablehlo.negate %{pa}_obj_abz : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_en = stablehlo.exponential %{pa}_obj_nabz : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_1pen = stablehlo.add %{pa}_one1, %{pa}_obj_en : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_sp = stablehlo.log %{pa}_obj_1pen : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_bce0 = stablehlo.subtract %{pa}_obj_relu, %{pa}_obj_zt : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_bce = stablehlo.add %{pa}_obj_bce0, %{pa}_obj_sp : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_aw = stablehlo.multiply %{pa}_obj_al, %{pa}_obj_w : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_cell = stablehlo.multiply %{pa}_obj_aw, %{pa}_obj_bce : {c1}\n"
+    s := s ++ s!"    %{pa}_objloss = stablehlo.reduce(%{pa}_obj_cell init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+    s := s ++ s!"           : ({c1}, tensor<f32>) -> tensor<f32>\n"
+    s := s ++ s!"    %{pa}_obj_pmt = stablehlo.subtract %{pa}_obj_p, %{pa}_m4 : {c1}\n"
+    s := s ++ s!"    %{pa}_obj_gr0 = stablehlo.multiply %{pa}_obj_aw, %{pa}_obj_pmt : {c1}\n"
+    s := s ++ s!"    %{pa}_Bf1 = stablehlo.broadcast_in_dim %ay_Bf, dims = [] : (tensor<f32>) -> {c1}\n"
+    s := s ++ s!"    %{pa}_og = stablehlo.divide %{pa}_obj_gr0, %{pa}_Bf1 : {c1}\n"
+    -- ── Class softmax-CE (masked by anchor a's assignment) ──
+    s := s ++ s!"    %{pa}_cls_mx = stablehlo.reduce(%{pa}_cp init: %neginf) applies stablehlo.maximum across dimensions = [1]\n"
+    s := s ++ s!"           : ({clsT}, tensor<f32>) -> {clsRed}\n"
+    s := s ++ s!"    %{pa}_cls_mxb = stablehlo.broadcast_in_dim %{pa}_cls_mx, dims = [0, 2, 3] : ({clsRed}) -> {clsT}\n"
+    s := s ++ s!"    %{pa}_cls_sh = stablehlo.subtract %{pa}_cp, %{pa}_cls_mxb : {clsT}\n"
+    s := s ++ s!"    %{pa}_cls_ex = stablehlo.exponential %{pa}_cls_sh : {clsT}\n"
+    s := s ++ s!"    %{pa}_cls_se = stablehlo.reduce(%{pa}_cls_ex init: %zf) applies stablehlo.add across dimensions = [1]\n"
+    s := s ++ s!"           : ({clsT}, tensor<f32>) -> {clsRed}\n"
+    s := s ++ s!"    %{pa}_cls_lse = stablehlo.log %{pa}_cls_se : {clsRed}\n"
+    s := s ++ s!"    %{pa}_cls_lseb = stablehlo.broadcast_in_dim %{pa}_cls_lse, dims = [0, 2, 3] : ({clsRed}) -> {clsT}\n"
+    s := s ++ s!"    %{pa}_cls_lsm = stablehlo.subtract %{pa}_cls_sh, %{pa}_cls_lseb : {clsT}\n"
+    s := s ++ s!"    %{pa}_cls_maskb = stablehlo.broadcast_in_dim %{pa}_m4, dims = [0, 1, 2, 3] : ({c1}) -> {clsT}\n"
+    s := s ++ s!"    %{pa}_cls_nll = stablehlo.multiply %{pa}_ct, %{pa}_cls_lsm : {clsT}\n"
+    s := s ++ s!"    %{pa}_cls_nllm = stablehlo.multiply %{pa}_cls_nll, %{pa}_cls_maskb : {clsT}\n"
+    -- two-step reduce (channel then spatial): the llvm-cpu backend can't lower a
+    -- [B,NC,gH,gW]→scalar reduce (vector.contract), but ROCm can; this is
+    -- equivalent and CPU-compilable so the FD probe runs on CPU.
+    s := s ++ s!"    %{pa}_cls_ch = stablehlo.reduce(%{pa}_cls_nllm init: %zf) applies stablehlo.add across dimensions = [1]\n"
+    s := s ++ s!"           : ({clsT}, tensor<f32>) -> {clsRed}\n"
+    s := s ++ s!"    %{pa}_cls_ce = stablehlo.reduce(%{pa}_cls_ch init: %zf) applies stablehlo.add across dimensions = [0, 1, 2]\n"
+    s := s ++ s!"           : ({clsRed}, tensor<f32>) -> tensor<f32>\n"
+    s := s ++ s!"    %{pa}_clsloss = stablehlo.negate %{pa}_cls_ce : tensor<f32>\n"
+    s := s ++ s!"    %{pa}_cls_seb = stablehlo.broadcast_in_dim %{pa}_cls_se, dims = [0, 2, 3] : ({clsRed}) -> {clsT}\n"
+    s := s ++ s!"    %{pa}_cls_sm = stablehlo.divide %{pa}_cls_ex, %{pa}_cls_seb : {clsT}\n"
+    s := s ++ s!"    %{pa}_cls_d = stablehlo.subtract %{pa}_cls_sm, %{pa}_ct : {clsT}\n"
+    s := s ++ s!"    %{pa}_cls_dm = stablehlo.multiply %{pa}_cls_d, %{pa}_cls_maskb : {clsT}\n"
+    s := s ++ s!"    %{pa}_BfC = stablehlo.broadcast_in_dim %ay_Bf, dims = [] : (tensor<f32>) -> {clsT}\n"
+    s := s ++ s!"    %{pa}_cg = stablehlo.divide %{pa}_cls_dm, %{pa}_BfC : {clsT}\n"
+    -- ── assemble anchor a's [B,15,gH,gW] gradient slab: box(4) ++ obj(1) ++ cls(10) ──
+    s := s ++ s!"    %{pa}_g5 = stablehlo.concatenate %{pa}_bg, %{pa}_og, dim = 1 : ({box4}, {c1}) -> {tensorTy [B, 5, gH, gW]}\n"
+    s := s ++ s!"    %{pa}_grad = stablehlo.concatenate %{pa}_g5, %{pa}_cg, dim = 1 : ({tensorTy [B, 5, gH, gW]}, {clsT}) -> {slabTy}\n"
+    s := s ++ s!"    %{pa}_bo = stablehlo.add %{pa}_boxloss, %{pa}_objloss : tensor<f32>\n"
+    s := s ++ s!"    %{pa}_anch = stablehlo.add %{pa}_bo, %{pa}_clsloss : tensor<f32>\n"
+    lossParts := lossParts ++ [s!"%{pa}_anch"]
+    gradParts := gradParts ++ [s!"%{pa}_grad"]
+  -- total loss = Σ_a anchor_a / B
+  let mut acc := lossParts.headD "%zf"
+  for (lp, i) in (lossParts.drop 1).zipIdx do
+    s := s ++ s!"    %ay_ls{i} = stablehlo.add {acc}, {lp} : tensor<f32>\n"
+    acc := s!"%ay_ls{i}"
+  s := s ++ s!"    {lossOut} = stablehlo.divide {acc}, %ay_Bf : tensor<f32>\n"
+  -- total grad = concat anchor slabs along channel dim → [B, A·15, gH, gW]
+  let mut gacc := gradParts.headD "%zf"
+  let mut accCh := P
+  for (gp, i) in (gradParts.drop 1).zipIdx do
+    let nextCh := accCh + P
+    s := s ++ s!"    %ay_gc{i} = stablehlo.concatenate {gacc}, {gp}, dim = 1 : ({tensorTy [B, accCh, gH, gW]}, {slabTy}) -> {tensorTy [B, nextCh, gH, gW]}\n"
+    gacc := s!"%ay_gc{i}"
+    accCh := nextCh
+  s := s ++ s!"    {gradOut} = stablehlo.reshape {gacc} : ({apT}) -> {apT}\n"
+  return s
+
 /-- Emit the full train step (forward + loss + backward + SGD). -/
 private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : String)
     (labelSmoothing : Float := 0.1) (weightDecay : Float := 0.0001) (useAdam : Bool := true)
@@ -9036,6 +9173,27 @@ def diouProbeModule (B gH gW : Nat) (anchorW : Float := 1.0) (anchorH : Float :=
   s := s ++ emitDiouForward B gH gW "%pred" "%tgt" "%mask" "%dio_loss" anchorW anchorH
   s := s ++ emitDiouBackward B gH gW "%dio_dpred"
   s := s ++ s!"    return %dio_loss, %dio_dpred : tensor<f32>, {p4}\n"
+  s := s ++ "  }\n}\n"
+  return s
+
+/-- Standalone anchor-YOLO-loss probe: `@main(pred,tgt : [B,A·15,gH,gW],
+    mask : [B,A,gH,gW]) -> (loss, d_pred)`. Deterministic test anchors
+    (w=0.02+0.03·i, h=0.03+0.04·i), γ=2, λ_box=5 — mirrored in
+    scripts/anchor_loss_probe_check.py, which checks the emitted forward against
+    numpy and the emitted backward against finite differences. -/
+def anchorLossProbeModule (B gH gW A : Nat) : String := Id.run do
+  let P := 15
+  let apT := tensorTy [B, A * P, gH, gW]
+  let maskA := tensorTy [B, A, gH, gW]
+  let anchors : List (Float × Float) := (List.range A).map (fun i =>
+    (0.02 + 0.03 * i.toFloat, 0.03 + 0.04 * i.toFloat))
+  let mut s := s!"// anchor-loss probe: B={B} gH={gH} gW={gW} A={A}\n"
+  s := s ++ "module @anchor_loss_probe {\n"
+  s := s ++ s!"  func.func @main(%pred: {apT}, %tgt: {apT}, %mask: {maskA}) -> (tensor<f32>, {apT}) " ++ "{\n"
+  s := s ++ "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n"
+  s := s ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
+  s := s ++ emitAnchorYoloLoss B gH gW anchors "%pred" "%tgt" "%mask" 2.0 5.0 "%ay_loss" "%ay_grad"
+  s := s ++ s!"    return %ay_loss, %ay_grad : tensor<f32>, {apT}\n"
   s := s ++ "  }\n}\n"
   return s
 

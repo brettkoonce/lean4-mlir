@@ -1334,6 +1334,12 @@ lean_exe «diou-loss-probe» where
   root := `demos.MainDiouLossProbe
   moreLinkArgs := ireeLink
 
+-- Anchor-YOLO-loss probe (brick #2, A anchors); FD-checked by
+-- scripts/anchor_loss_probe_check.py.
+lean_exe «anchor-loss-probe» where
+  root := `demos.MainAnchorLossProbe
+  moreLinkArgs := ireeLink
+
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
   moreLinkArgs := ireeLink
