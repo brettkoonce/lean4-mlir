@@ -103,8 +103,8 @@ def make_runner(B, gH, gW, A):
         ctx.add_vm_module(rt.VmModule.copy_buffer(ctx.instance, f.read()))
     fn = ctx.modules.anchor_loss_probe["main"]
 
-    def run(pred, tgt, mask):
-        out = fn(pred.astype(np.float32), tgt.astype(np.float32), mask.astype(np.float32))
+    def run(pred, tgt):
+        out = fn(pred.astype(np.float32), tgt.astype(np.float32))
         return np.asarray(out[0]).item(), np.asarray(out[1]).astype(np.float64)
     return run
 
@@ -120,6 +120,7 @@ def make_data(B, gH, gW, A, seed):
         tgt[:, base + 1] = rng.rand(B, gH, gW)
         tgt[:, base + 2] = rng.uniform(0.01, 0.08, (B, gH, gW))
         tgt[:, base + 3] = rng.uniform(0.02, 0.10, (B, gH, gW))
+        tgt[:, base + 4] = mask[:, a]          # obj target = per-anchor mask
         ci = rng.randint(0, NC, (B, gH, gW))
         for c in range(NC):
             tgt[:, base + 5 + c] = (ci == c).astype(float)
@@ -130,7 +131,7 @@ def check(B=2, gH=5, gW=5, A=3, seed=0):
     anchors = anchors_for(A)
     pred, tgt, mask = make_data(B, gH, gW, A, seed)
     run = make_runner(B, gH, gW, A)
-    loss, dpred = run(pred, tgt, mask)
+    loss, dpred = run(pred, tgt)
 
     ref = np_forward(pred, tgt, mask, gH, gW, anchors)
     frel = abs(loss - ref) / max(abs(ref), 1e-9)

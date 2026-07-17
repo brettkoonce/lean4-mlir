@@ -559,6 +559,11 @@ structure TrainConfig where
       consulted on the `.yolov1Masked` path. NB: a DIoU-trained model must be
       decoded with the same σ/exp (scripts/yolo_map_visdrone.py --box-param diou). -/
   useDiouBox   : Bool  := false
+  /-- YOLO anchor priors (w_rel, h_rel) for the anchor-based detector (brick #2).
+      Empty = single-box YOLOv1. When non-empty, the yolo loss routes to the
+      A-anchor path (perCell = A·15, box_a = anchor_a·exp(pred)); the target/head
+      must use the matching `A·15`-channel layout (preprocess_visdrone --anchors). -/
+  anchors      : List (Float × Float) := []
   /-- RetinaNet prior-bias init: initialize the **head's bias** to `log π_c`
       instead of zero, so the net starts predicting the class prior rather than
       a uniform distribution. Empty (the default) leaves the head at zero bias

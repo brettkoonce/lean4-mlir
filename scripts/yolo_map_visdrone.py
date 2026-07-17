@@ -109,6 +109,47 @@ def decode(pred_flat, conf_thresh, nms_iou, box_param="raw"):
     return kept
 
 
+def load_anchors_file(path):
+    rows = []
+    for ln in open(path):
+        ln = ln.strip()
+        if ln and not ln.startswith("#"):
+            w, h = ln.split()
+            rows.append((float(w), float(h)))
+    return rows
+
+
+def decode_anchor(pred_flat, anchors, grid, conf_thresh, nms_iou):
+    """Decode the A-anchor head [A*15, grid, grid]: per anchor a, box_a =
+    anchor_a·exp(tw/th), cx=(j+σ(tx))/grid, obj=σ, class=argmax(softmax)."""
+    A = len(anchors); Pn = 15
+    pred = pred_flat.reshape(A * Pn, grid, grid)
+    dets = []
+    for a, (aw, ah) in enumerate(anchors):
+        base = a * Pn
+        for i in range(grid):
+            for j in range(grid):
+                obj = float(sigmoid(pred[base + 4, i, j]))
+                if obj < conf_thresh:
+                    continue
+                cl = pred[base + 5:base + 15, i, j]
+                cid = int(cl.argmax())
+                e = np.exp(cl - cl.max()); clsp = float(e[cid] / e.sum())
+                cx = (j + float(sigmoid(pred[base + 0, i, j]))) / grid
+                cy = (i + float(sigmoid(pred[base + 1, i, j]))) / grid
+                w = aw * float(np.exp(pred[base + 2, i, j]))
+                h = ah * float(np.exp(pred[base + 3, i, j]))
+                dets.append((cid, obj * clsp,
+                             [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2]))
+    kept = []
+    for c in set(d[0] for d in dets):
+        cd = sorted((d for d in dets if d[0] == c), key=lambda d: -d[1])
+        while cd:
+            top = cd.pop(0); kept.append(top)
+            cd = [d for d in cd if iou(top[2], d[2]) < nms_iou]
+    return kept
+
+
 def read_gt(val_path):
     raw = np.fromfile(val_path, dtype=np.uint8)
     n = int(np.frombuffer(raw[:4], dtype="<u4")[0])
@@ -159,12 +200,23 @@ def main():
     ap.add_argument("--size", type=int, default=None, help="input px (default grid*32)")
     ap.add_argument("--box-param", choices=["raw", "diou"], default="raw",
                     help="'raw' for √-MSE head, 'diou' for the exp/sigmoid DIoU head")
+    ap.add_argument("--anchors", default=None,
+                    help="anchor priors file → decode the A*15 anchor head (brick #2). "
+                         "GT is still read from val_bin with the single-box geometry.")
     args = ap.parse_args()
     set_geometry(args.size if args.size else args.grid * 32, args.grid)
 
-    logits = np.fromfile(args.logits, dtype=np.float32)
-    n_pred = logits.size // FLAT
-    logits = logits[: n_pred * FLAT].reshape(n_pred, FLAT)
+    logits_raw = np.fromfile(args.logits, dtype=np.float32)
+    if args.anchors:
+        anchor_list = load_anchors_file(args.anchors)
+        pred_w = len(anchor_list) * 15 * GRID * GRID
+        n_pred = logits_raw.size // pred_w
+        logits = logits_raw[: n_pred * pred_w].reshape(n_pred, pred_w)
+        decode_fn = lambda row: decode_anchor(row, anchor_list, GRID, args.conf_thresh, args.nms_iou)
+    else:
+        n_pred = logits_raw.size // FLAT
+        logits = logits_raw[: n_pred * FLAT].reshape(n_pred, FLAT)
+        decode_fn = lambda row: decode(row, args.conf_thresh, args.nms_iou, args.box_param)
 
     n_gt_rec, gts = read_gt(args.val_bin)
     n = min(n_pred, n_gt_rec)
@@ -185,7 +237,7 @@ def main():
             n_gt[c] += sum(1 for (cid, _) in gt_boxes if cid == c)
         ca_ngt += len(gt_boxes)
 
-        dets = decode(logits[r], args.conf_thresh, args.nms_iou, args.box_param)
+        dets = decode_fn(logits[r])
         dets.sort(key=lambda d: -d[1])
 
         # Per-class matching.

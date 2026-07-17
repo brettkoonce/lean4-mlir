@@ -133,6 +133,14 @@ opaque loadDetBin (path : @& String) : IO (ByteArray × ByteArray × Nat)
 opaque loadDetBinDims (path : @& String) (imgSize gridH gridW : USize)
     : IO (ByteArray × ByteArray × Nat)
 
+/-- Anchor-format detection loader (brick #2). Returns `(images_f32_normalized,
+    target_only_concat, count)` with `numAnchors·15·gridH·gridW` f32 target per
+    image — the anchor loss derives its per-anchor mask from the target's
+    objectness channels, so the on-disk mask/numBoxes/raw_boxes are skipped. -/
+@[extern "lean_f32_load_voc_anchor"]
+opaque loadDetBinAnchor (path : @& String) (imgSize gridH gridW numAnchors : USize)
+    : IO (ByteArray × ByteArray × Nat)
+
 /-- Split an interleaved YOLOv1 batch slice (per-record `[target||mask]`,
     6076 bytes/record) into separately-contiguous target + mask tensors
     suitable for the `trainStepAdamF32Yolov1` FFI. Returns

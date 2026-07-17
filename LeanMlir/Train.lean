@@ -213,6 +213,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     (headLrMult := cfg.headLrMult)
     (segLoss := lossKind.segLoss)
     (useDiouBox := cfg.useDiouBox)
+    (yoloAnchors := cfg.anchors)
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"
 
@@ -448,7 +449,19 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   -- the record geometry + loader to the dims-parameterized path so the same
   -- .bin format works at any resolution. Pets (imageH=224) is left untouched.
   let dio :=
-    if ds == .petsDet && spec.imageH != 224 then
+    if ds == .petsDet && !cfg.anchors.isEmpty then
+      -- Anchor mode (brick #2): the loader returns TARGET-ONLY labels
+      -- [A·15,gH,gW] (mask derived from target obj channels in the loss).
+      let gH := spec.imageH / spec.detStride
+      let gW := spec.imageW / spec.detStride
+      let A := cfg.anchors.length
+      { dio0 with
+        trainPixels := 3 * spec.imageH * spec.imageW
+        valPixels   := 3 * spec.imageH * spec.imageW
+        labelBytesPerRecord := A * 15 * gH * gW * 4
+        loadTrain := fun d => F32.loadDetBinAnchor (d ++ "/train.bin") spec.imageH.toUSize gH.toUSize gW.toUSize A.toUSize
+        loadVal   := fun d => F32.loadDetBinAnchor (d ++ "/val.bin") spec.imageH.toUSize gH.toUSize gW.toUSize A.toUSize }
+    else if ds == .petsDet && spec.imageH != 224 then
       let gH := spec.imageH / spec.detStride
       let gW := spec.imageW / spec.detStride
       let imgSz := spec.imageH.toUSize
@@ -741,25 +754,34 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
       let out ← if useYolov1Run then do
-                  -- yArg per record is target (5880) + mask (196) + numBoxes (4) +
-                  -- raw_boxes (56×20 = 1120) = 7200 bytes (Phase 3b format).
-                  --   * cfg.augment := false  → split into target+mask, no transform.
-                  --   * cfg.augment := true   → call yoloAugment which applies bbox-aware
-                  --     hflip (p=0.5) + random crop (p=0.5, scale [0.8, 1.0]) and
-                  --     re-encodes target+mask from the surviving bboxes.
-                  -- Hard-coded 7×7 grid, 30-channel, 20-class detection layout. See
-                  -- planning/yolo_final.md Phase 3.
+                  let gHu := (spec.imageH / spec.detStride).toUSize
+                  let gWu := (spec.imageW / spec.detStride).toUSize
+                  if !cfg.anchors.isEmpty then do
+                    -- Anchor path (brick #2): yArg IS the target [B, A·15, gH, gW]
+                    -- (target-only loader); the mask is derived from the target's
+                    -- obj channels in the loss, so pass a zero dummy mask. No augment
+                    -- (yoloAugment is single-box-format only).
+                    let A := cfg.anchors.length
+                    let yMsk ← F32.const (batch * gHu * gWu) 0.0
+                    IreeSession.trainStepAdamF32Yolov1 sess spec.trainFnName
+                      packed allShapes xba xSh yArg yMsk lr globalStep.toFloat bnShapes batch
+                      gHu gWu (A * 15).toUSize
+                  else do
+                  -- Single-box: yArg per record is target (5880) + mask (196) +
+                  -- numBoxes (4) + raw_boxes (56×20) = 7200 bytes (Phase 3b format).
+                  --   * cfg.augment := false → split into target+mask.
+                  --   * cfg.augment := true  → yoloAugment (bbox-aware hflip+crop).
                   let (xAug, yTgtAug, yMskAug) ← if cfg.augment then
                         F32.yoloAugment xba yArg batch augC.toUSize
                           augH.toUSize augW.toUSize
-                          (spec.imageH / spec.detStride).toUSize (spec.imageW / spec.detStride).toUSize (30 : USize) (20 : USize)
+                          gHu gWu (30 : USize) (20 : USize)
                           0.5 0.5 0.8 (stepSeed ^^^ (11 : USize))
                       else do
                         let (yTgt, yMsk) ← F32.detSplitBatch yArg batch
                         pure (xba, yTgt, yMsk)
                   IreeSession.trainStepAdamF32Yolov1 sess spec.trainFnName
                     packed allShapes xAug xSh yTgtAug yMskAug lr globalStep.toFloat bnShapes batch
-                    (spec.imageH / spec.detStride).toUSize (spec.imageW / spec.detStride).toUSize (30 : USize)
+                    gHu gWu (30 : USize)
                 else if useSeg then do
                   -- Pets `loadPets` returns uint8 masks; the seg train step
                   -- expects int32 LE [B, H, W]. yArg here is the raw uint8

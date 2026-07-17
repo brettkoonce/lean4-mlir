@@ -1402,6 +1402,11 @@ lean_exe «yolov1-visdrone448s16» where
   root := `demos.MainYolov1VisDrone448S16
   moreLinkArgs := ireeLink
 
+-- Anchor-based detector: 448 / 14×14 grid, A=6 anchors (brick #2, emitAnchorYoloLoss).
+lean_exe «yolov1-visdrone-anchor» where
+  root := `demos.MainYolov1VisDroneAnchor
+  moreLinkArgs := ireeLink
+
 -- ═══════════════════════════════════════════════════════════════════
 -- VJP oracle — one binary per axiom under test.
 -- Trainers live in tests/vjp_oracle/phase3/ so the root isn't crowded
