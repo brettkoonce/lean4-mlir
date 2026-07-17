@@ -150,6 +150,29 @@ if every class owns 25% of the brain.
 finds the tumour. Dice says the opposite. Report mIoU alone on a task like
 this and you will ship the collapsed model.
 
+**And then you fix it, and the fix is cheap.** The recipe that works is
+class weighting that neither collapses nor floods (inverse-*sqrt* frequency),
+plus two training-side levers — start the head at the class prior
+(`pb`), decay the LR (`cos`) — and, the largest single jump, **mask-aware
+augmentation** (`aug`, a paired image+mask horizontal flip):
+
+```bash
+lake exe unet-brats-train data/brats 10 wcesqrt cos pb aug
+lake exe brats-predict arm=ce,wceb70,wcesqrt_pb_cos_aug best
+```
+
+![with augmentation](figures/brats_aug_result.png)
+
+`T1gd | ground truth | ce | wceb70 | the fix`. WT Dice climbs **0.24 → 0.33
+(best-checkpointing) → 0.66 (augmentation)**, at **92.6% precision** — the
+rightmost column traces the tumour tightly instead of guessing. The lesson
+in the jump: the model was **data-starved** on a 14k-slice set, and one
+horizontal flip doubling the effective corpus did more than any architectural
+change would. It is still a *localizer*, not a sub-region *typer* (it paints
+the whole tumour one class), and it *oscillates* — which is why
+best-by-val checkpointing (`best`) is load-bearing, not optional. Full arc,
+including why a gentler LR makes it *worse*, in `planning/brats_demo.md`.
+
 ---
 
 ## YOLOv1 — object detection

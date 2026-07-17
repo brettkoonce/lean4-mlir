@@ -17,50 +17,71 @@ Prerequisite reading: `planning/unet_demo_v2.md` (what the seg stack is and
 what's still open on the pets side). Volumetric follow-on:
 `planning/unet3d.md`.
 
-## FINAL VERDICT (2026-07-16) — partial success, stated honestly
+## FINAL VERDICT (2026-07-17) — the ceiling was data variety, and one flip found it
 
-The 10-epoch `wcesqrt cos pb` finished. It is the **best arm** and it is
-**modest**, and both halves matter:
+The verdict inverted twice as the levers landed. The honest end state is a
+**WT Dice of 0.66** — double what looked like the ceiling a day earlier — and
+the thing that got there was the cheapest lever in the box.
 
-| arm | WT Dice | TC | ET | what it actually does |
+| recipe | WT | TC | ET | what happened |
 |---|---|---|---|---|
-| `ce` | 0.000 | 0.000 | 0.000 | predicts nothing — collapse |
-| `wce` (β=1) | 0.165 | 0.065 | 0.035 | paints 29% of brain — inversion |
-| `wceb70` (β=0.7) | 0.210 | 0.099 | 0.057 | over-predicts ~16-22% of brain |
-| **`wcesqrt cos pb`** | **0.226** | **0.000** | **0.000** | **stable, co-located, edema-only** |
+| `ce` | 0.000 | 0.000 | 0.000 | collapse — predicts nothing |
+| `wce` (β=1) | 0.165 | 0.065 | 0.035 | inversion — paints 29% of brain |
+| `wcesqrt cos pb`, endpoint | 0.226 | 0.000 | 0.000 | modest, edema-only, drifted off its peak |
+| `wcesqrt cos pb`, **best-by-val** | 0.329 | 0.000 | 0.000 | +best-checkpointing catches the peak |
+| **`wcesqrt cos pb aug`, best-by-val** | **0.661** | **0.489** | **0.322** | **+ hflip: localizes the tumour, TC/ET off zero** |
 
-**What worked, unambiguously.** The three-lever recipe (sqrt-freq weights +
-prior-bias init + cosine LR) is the only arm that is both non-trivial *and*
-stable. It does not collapse (unlike CE and constant-LR wcesqrt) and it does not
-paint the brain (unlike wce). Its WT Dice 0.226 is the highest of any arm, and
-the figure (`demos/figures/brats_final_ablation.png`) shows it: ce empty, wceb70
-flooding the brain, the fix putting tumour roughly where the tumour is.
+### Two levers, in the order they mattered
 
-**What did not, stated plainly.** 0.226 is a *modest* whole-tumour Dice — a
-competent 2D BraTS baseline is ~0.85. And the final checkpoint scores **TC = ET
-= 0.000**: it segments the tumour *region* but labels essentially all of it
-edema, and never fires the enhancing-tumour class the demo cares most about. It
-is a binary tumour-vs-background segmenter wearing a 4-class head. The thesis —
-watch the thin-class collapse, watch loss+init+schedule move the needle — is
-demonstrated in full; a *good* segmentation is not.
+1. **Best-by-val checkpointing (0.226 → 0.329).** The run *oscillates* — it hit
+   WT 0.329 at epoch 3 then drifted to 0.226 by epoch 10, and
+   `checkpointEveryNEpochs := 10` had been throwing the good weights away. The
+   fix (`bestSegScore` in the eval, `_best` checkpoint, `brats-predict … best`)
+   keeps the best model the run ever produced. Real lesson, now permanent for
+   every seg run: on an oscillating trajectory, keep best-by-val, never trust
+   the endpoint.
 
-**Two honest mechanics behind the modest number:**
+2. **Horizontal-flip augmentation (0.329 → 0.661).** The single largest jump of
+   the whole effort, from the single dumbest aug — a paired image+mask hflip
+   (`F32.segHflipPair`, one coin per image, exact column reversal so the mask
+   needs no interpolation). WT precision jumped to **92.6%**: where it says
+   "tumour," it is almost always right, and the figure
+   (`demos/figures/brats_aug_result.png`) shows a tight outline hugging the
+   lesion, not the earlier round blob. **This overturns the previous verdict.**
+   The earlier "the ceiling is capacity/architecture — you'd need 3D/nnU-Net"
+   was *wrong*: the model was starved of data variety on a 14k-slice set, and
+   one flip doubling the effective corpus was the fix. The corrected lesson is
+   stronger and more useful — *the ceiling was data, not architecture*.
 
-1. **It settled below its own peak.** Mid-run it hit WT Dice 0.329 at epoch 3
-   (and was favoring *enhancing* then), but drifted to 0.226/edema by epoch 10.
-   Cosine LR settled it into a broader, easier basin than the one it briefly
-   found. The peak weights were **not saved** — `checkpointEveryNEpochs := 10`
-   only keeps the last epoch — which is a real lesson: on an oscillating run,
-   save every epoch and keep the best by val, don't trust the endpoint.
-2. **Sub-region typing is likely capacity/data-bound, not loss-bound.** Every
-   weighted arm fails it (c2 has the *highest* weight and near-zero IoU), 484
-   volumes / 2D / 10 epochs / no augmentation is a thin budget for a problem
-   nnU-Net solves with patch sampling, deep supervision, and long schedules.
+### What is still true, stated plainly
 
-**Still in flight:** the 30-epoch `wcesqrt cos pb` (slower cosine → longer
-refinement) is the open shot at a stronger number; if it too lands near 0.23,
-the ceiling is confirmed to be budget/architecture, and that is the honest
-close.
+- **Still functionally mono-class.** Per-class IoU is c1=0, c2=0, c3=0.19: it
+  paints the whole tumour *enhancing*. WT/TC/ET all lit up because the regions
+  are **nested** and a well-placed enhancing blob overlaps all three (the
+  identical `pred` counts across WT/TC/ET confirm it emits only class 3). The
+  0.66 is a leap in **localization**, not in **sub-region typing** — that
+  remains the frontier, and is the genuinely hard part (2D, intensity-subtle
+  sub-regions).
+- **Aug's peak comes with instability — and that is not tunable away.** The aug
+  run thrashes: WT 0.66 → 0.43 → 0.06 → 0.26. The obvious fix — halve the LR —
+  made it **worse**: `lr=5e-4` *collapsed* (0.144 → 0 → 0.008) into the trivial
+  basin. That is a clean, load-bearing negative result: **the aggressive LR is
+  necessary**, it is what escapes the trivial predictor to reach the high peak
+  at all, and the oscillation is the price. The recipe is therefore *aggressive
+  LR to reach the peak + best-checkpointing to harvest it* — stability via a
+  gentler LR is the wrong direction, proven, not assumed.
+
+### The honest close
+
+The thin-class thesis is demonstrated in full — collapse, inversion, and a fix
+that localizes the tumour at WT 0.66 — and the demo's *conclusion improved*: the
+limit was data variety, reachable with a one-line aug, not an architecture
+rewrite. A competent 2D baseline (~0.85 WT) and correct sub-region typing are
+still beyond this budget, and that is the honest ceiling of what's shown.
+Remaining levers, in likely-payoff order: more paired geometric aug
+(crop/scale, cribbing the kernels from `randomCrop`), then longer budget, then —
+only if typing is the goal — the nnU-Net machinery. 3D is *not* implied by these
+numbers anymore; that is the retired hypothesis.
 
 ## State of play (2026-07-16) — read this first
 
