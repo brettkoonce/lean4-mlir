@@ -6447,9 +6447,12 @@ The bigger pedagogical point---and the one the example section
 below makes concrete---is that with a modernized convnet
 backbone, the dominant axis of variation between runs becomes the
 \emph{training recipe}, not the architecture. The chapter
-finishes with a CutMix-vs-bare-vs-RandAugment ablation that lifts
-ConvNeXt-T's Imagenette accuracy by 2.9 points without touching
-a single weight.
+measures that claim directly --- a CutMix-vs-bare-vs-RandAugment
+ablation lifts ConvNeXt-T's Imagenette accuracy by 2.9 points
+without touching a single weight --- and finishes by putting the
+full recipe side-by-side with the 2018 ResNet-34 recipe of
+Chapter~\ref{chap:residual}, knob by knob: the four-year jump in
+how convnets are trained, on one page.
 
 \section{The theorems}
 
@@ -6775,9 +6778,9 @@ ConvNeXt-T       & 27.83M  & 790 KB   & 2030 ms   & 13.3 h   & 84.94\% \\
     training images don't have the data scale to fill that
     capacity without aug; (b) the ConvNeXt paper trains with the
     full DeiT recipe (Mixup, CutMix, RandAugment, Random Erasing)
-    where the modernization actually lives. The next section
-    layers those in --- with proper aug, ConvNeXt-T's accuracy at
-    this scale catches up to or passes EnetB0.
+    where the modernization actually lives. The Data Augmentation
+    section below layers those in one at a time --- with the right
+    knob, ConvNeXt-T's accuracy at this scale passes EnetB0.
   \item \textbf{The architecture is fine, the recipe is the lever.}
     The 84.94\% number we land here vs the paper's 82.1\% top-1
     on ImageNet-1K is the same model getting different scores on
@@ -6814,6 +6817,7 @@ $\mathrm{residual}(\mathrm{layerScale} \circ \mathrm{project} \circ
 \mathrm{depthwise})$, composed by \texttt{convNextBlock\_has\_vjp}.
 
 \section{Data Augmentation}
+\label{sec:convnext_aug_ablation}
 
 ConvNeXt's headline accuracy depends on a heavy augmentation pack
 inherited from DeiT: Mixup (Zhang et al.\ 2017,
@@ -7090,6 +7094,58 @@ $81.10\%$ and top-5 to $95.37\%$ with no late-schedule plateau or
 overfitting dip; the nine 30-minute thermal rests are invisible, each
 resuming bit-for-bit. Against the 80-epoch curve above, the extra 220
 epochs of cosine decay are pure gain.
+
+\subsection*{What the ConvNeXt recipe changes from the 2018 recipe}
+
+The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
+\emph{2018-era} recipe: the original paper's SGD-with-momentum plus
+the ``bag of tricks'' polish (cosine schedule, warmup, label
+smoothing, random-resized-crop). The config above is the \emph{2022}
+ConvNeXt recipe --- DeiT's transformer-training playbook applied to a
+convnet. Where Chapter~\ref{chap:residual}'s RSB-A3 side quest showed
+the 2018$\to$2021 jump on a \emph{fixed} ResNet, this table shows the
+2018$\to$2022 jump with the block modernized in step --- and since
+``the recipe is the thesis'' is this architecture's whole argument,
+the diff below is the chapter in table form. The \texttt{.train}
+entry point is identical; every row is a one-line \texttt{NetSpec} or
+\texttt{TrainConfig} change:
+
+\begin{center}
+\begin{tabular}{@{}l l l p{5.0cm}@{}}
+\hline
+Knob & ResNet-34 (2018) & ConvNeXt-T (2022) & What the ConvNeXt choice buys \\
+\hline
+Backbone      & basic block, 21.8\,M   & ConvNeXt block, 28.6\,M       & BN+ReLU $\to$ LN+GELU; dw-$7\times7$ + inverted bottleneck + LayerScale --- the modernized block this chapter built \\
+Optimizer     & SGD + momentum $0.9$   & AdamW                         & decoupled decay + per-parameter step scale; LR-robust where B0's RMSProp proved fragile \\
+Peak LR       & $0.1$                  & $2.5\mathrm{e}{-4}$           & linearly scaled from the official $4\mathrm{e}{-3}$@4096 --- AdamW's scale, not comparable to SGD's $0.1$ \\
+Warmup        & 5 epochs               & 20 epochs                     & heavy augmentation + adaptive optimizer want a long, gentle ramp \\
+Epochs        & 90                     & 300 (80 = validation tier)    & heavy regularization converts the extra schedule straight into accuracy ($+2.97$ top-1 from 80$\to$300) \\
+Loss          & softmax cross-entropy  & CE over soft targets          & unlike A3's BCE switch, ConvNeXt keeps CE --- the softening comes from the Mixup/CutMix labels \\
+Weight decay  & $10^{-4}$, all params  & $0.05$, skip 1-D params       & $500\times$ stronger, never on norm/bias/LayerScale (timm's \texttt{no\_weight\_decay}) \\
+Augmentation  & RRC + hflip            & full DeiT pack                & RandAugment + Mixup + CutMix + Random Erasing --- where the modernization actually lives (Section~\ref{sec:convnext_aug_ablation}) \\
+Stochastic depth & none                & drop-path $0.1$               & randomly drops whole residual branches per step --- the depth regularizer \\
+EMA           & none                   & decay $0.9999$                & evaluates a smoothed shadow of the weights; with drop-path, together ${<}5\%$ per epoch \\
+Grad clip     & none                   & global-norm $1.0$             & cheap insurance that made the peak LR a non-event \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent What carries over unchanged: cosine LR decay, the
+warmup-then-anneal structure, random-resized-crop + horizontal flip
+as the base augmentation, label smoothing $0.1$, batch 256, train
+and eval both at $224$ (no FixRes), and bf16 matmul and convolution.
+
+The augmentation row is the full DeiT pack that
+Section~\ref{sec:convnext_aug_ablation} measured knob by knob at
+Imagenette scale. A small-data practitioner cloning this recipe
+should reach for CutMix first and treat the rest as optional.
+
+The through-line is the same \emph{regularize harder, train bigger}
+as RSB-A3, arrived at from the transformer side: keep cross-entropy
+and soften the targets instead of switching losses, AdamW instead of
+LAMB (the batch stays moderate), stochastic depth and EMA from the
+ViT toolkit, and a $3\times$ longer schedule to let the
+regularization pay.
 
 \chapter{Vision Transformer}
 \label{chap:attention}
