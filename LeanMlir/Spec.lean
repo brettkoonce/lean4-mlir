@@ -191,6 +191,10 @@ def Layer.nParams : Layer → Nat
       let smoothing := 4 * (9 * target * target + target)
       -- Top-down upsample + elementwise add at each level: parameter-free.
       lateral + smoothing
+  | .fpnDetect oc c3 c4 c5 _ A =>
+      -- 6 weight-only params: neck laterals Wn3/4/5 [oc,c_s] + head convs
+      -- Wh3/4/5 [A·15,oc]. No biases (minimal head).
+      oc * c3 + oc * c4 + oc * c5 + 3 * (A * 15 * oc)
   | .evoformerBlock msaChannels pairChannels nBlocks =>
       -- Per-block breakdown (approx, matching AlphaFold 2 supplementary):
       --   MSA row-attn w/ pair bias:   ~ 4·cm²          (Q/K/V/O on MSA channels)
@@ -413,6 +417,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .shuffleV2Block ic oc n    => s!"ShuffleV2{n}({ic}→{oc})"
     | .asppModule ic oc          => s!"ASPP({ic}→{oc})"
     | .fpnModule c2 c3 c4 c5 t   => s!"FPN({c2}/{c3}/{c4}/{c5}→{t})"
+    | .fpnDetect oc c3 c4 c5 g5 A => s!"FPNDet(oc={oc},C=[{c3},{c4},{c5}],g5={g5},A={A})"
     | .evoformerBlock cm cz n    => s!"Evoformer{n}(msa={cm},pair={cz})"
     | .structureModule cs cz n   => s!"StructMod{n}(s={cs},z={cz})"
     | .mobileVitBlock ic d h m n => s!"MobileViT(ic={ic},d={d},h={h},mlp={m},L={n})"
@@ -465,6 +470,7 @@ def Layer.outChannels : Layer → Nat
   | .shuffleV2Block _ oc _          => oc
   | .asppModule _ oc                => oc
   | .fpnModule _ _ _ _ target       => target
+  | .fpnDetect _ _ _ _ g5 A         => 315 * A * g5 * g5  -- flat Ntot = A·15·(g3²+g4²+g5²)
   | .evoformerBlock msaCh _ _       => msaCh  -- MSA channels as the "main" dim
   | .structureModule sCh _ _        => sCh    -- single-repr channels
   | .mobileVitBlock ic _ _ _ _      => ic     -- block is ic → ic
@@ -513,6 +519,7 @@ def Layer.inChannels : Layer → Nat
   | .shuffleV2Block ic _ _          => ic
   | .asppModule ic _                => ic
   | .fpnModule _ _ _ c5 _            => c5     -- "input" is the deepest stage
+  | .fpnDetect _ _ _ c5 _ _          => c5     -- deepest tapped stage (C5)
   | .evoformerBlock msaCh _ _       => msaCh
   | .structureModule sCh _ _        => sCh
   | .mobileVitBlock ic _ _ _ _      => ic

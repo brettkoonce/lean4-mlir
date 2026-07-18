@@ -220,6 +220,15 @@ inductive Layer where
   -- segmentation feature backbone in Mask R-CNN, RetinaNet, and most
   -- 2-stage detection families.
   | fpnModule (c2 c3 c4 c5 target : Nat)
+  -- FPN multi-scale detector head (planning/yolo_fpn.md). Taps the 3 preceding
+  -- backbone stage outputs C3/C4/C5 (channels `c3`/`c4`/`c5`, strides 8/16/32),
+  -- runs a top-down neck (all → `oc` channels) + a per-scale 1×1 conv head
+  -- (`oc` → `A·15`), and flattens+concatenates the 3 heads into a single
+  -- `[B, Ntot]` output (Ntot = A·15·(g3²+g4²+g5²)). Owns 6 weight-only params
+  -- (neck laterals Wn3/4/5 [oc,c_s], head convs Wh3/4/5 [A·15,oc]); the loss is
+  -- the FPN multi-scale YOLO loss (routed by TrainConfig.fpnScales). `g5` is the
+  -- coarsest grid (imageH/32). FD-verified fwd+bwd: emitFpnDetectForward/Backward.
+  | fpnDetect (oc c3 c4 c5 g5 A : Nat)
   -- DenseNet dense block (Huang et al.\ 2017). `nLayers` BN-ReLU-1×1-
   -- BN-ReLU-3×3 sub-layers, each adding `growthRate` channels to the
   -- running concatenation. Input has `ic` channels; output has
@@ -564,6 +573,13 @@ structure TrainConfig where
       A-anchor path (perCell = A·15, box_a = anchor_a·exp(pred)); the target/head
       must use the matching `A·15`-channel layout (preprocess_visdrone --anchors). -/
   anchors      : List (Float × Float) := []
+  /-- FPN multi-scale detector (planning/yolo_fpn.md bite 7). Per-scale
+      `(grid, anchors)` for P3/P4/P5 (e.g. `[(56, a3), (28, a4), (14, a5)]`).
+      Empty = not an FPN detector. When non-empty AND the spec ends in a
+      `.fpnDetect` layer, the loss routes to `emitMultiScaleYoloLoss` over the
+      `[B, Ntot]` head concat, and the single target input is a flat
+      `[B, Σ A·15·g_s²]` block (sliced per scale in the loss). -/
+  fpnScales    : List (Nat × List (Float × Float)) := []
   /-- RetinaNet prior-bias init: initialize the **head's bias** to `log π_c`
       instead of zero, so the net starts predicting the class prior rather than
       a uniform distribution. Empty (the default) leaves the head at zero bias

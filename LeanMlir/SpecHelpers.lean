@@ -30,6 +30,12 @@ def paramShapes (spec : NetSpec) : Array (Array Nat) := Id.run do
       shapes := shapes.push #[oc, ic, k, k] |>.push #[oc] |>.push #[oc]
     | .dense fi fo _ =>
       shapes := shapes.push #[fi, fo] |>.push #[fo]
+    | .fpnDetect oc c3 c4 c5 _ A =>
+      -- 6 weight-only 2D params: neck laterals Wn3/4/5 [oc,c_s], head convs
+      -- Wh3/4/5 [A·15,oc]. Order MUST match emitTrainStepSig / heInit / optimizer.
+      let ap := A * 15
+      shapes := shapes.push #[oc, c3] |>.push #[oc, c4] |>.push #[oc, c5]
+                       |>.push #[ap, oc] |>.push #[ap, oc] |>.push #[ap, oc]
     | .residualBlock ic oc nBlocks firstStride =>
       let needsProj := !(ic == oc && firstStride == 1)
       for bi in [:nBlocks] do
@@ -255,6 +261,17 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
   | .conv2d ic oc k _ _ =>
     let (W, b, s') ← heConvB oc ic k seed
     return (#[W, b], s')
+  | .fpnDetect oc c3 c4 c5 _ A =>
+    -- 6 weight-only params (He-init; heConvB's [o,i,1,1] W bytes == the [o,i] 2D
+    -- weight). Order MUST match paramShapes / emitTrainStepSig / optimizer.
+    let ap := A * 15
+    let mut parts : Array ByteArray := #[]
+    let mut s := seed
+    for (o, i) in [(oc, c3), (oc, c4), (oc, c5), (ap, oc), (ap, oc), (ap, oc)] do
+      let (W, _b, s') ← heConvB o i 1 s
+      parts := parts.push W
+      s := s'
+    return (parts, s)
   | .convBn ic oc k _ _ =>
     let (W, g, b, s') ← heConvBn oc ic k seed
     return (#[W, g, b], s')
