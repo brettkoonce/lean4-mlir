@@ -4855,8 +4855,7 @@ For the fastest path through this book, the route is roughly:
     right (\texttt{pdiv\_bnNormalize}'s three-term cancellation is
     formalized and matches the codegen), but it's not the place to
     spend time if you're not specifically interested in BN. Spend
-    some of the time you're saving on running as many MNIST and
-    CIFAR demos as possible.
+    time running as many MNIST and CIFAR demos as possible.
   \item Read this chapter (Ch~\ref{chap:residual}, ResNet-34).
     Residual blocks are where the chain rule shows it can carry
     composition through arbitrarily deep architectures; the proof
@@ -4876,25 +4875,6 @@ reinforcement-learning detour, read the AlphaGo Zero paper
 (\hyperref[bestiary:alphagozero]{bestiary entry}), which combines
 reinforcement learning with a large residual network of $3\times 3$
 convolutions.
-
-\paragraph{Or, for breadth.} If you want to cover most of modern
-deep learning instead of stopping short, the fuller path is to
-keep reading through Ch~\ref{chap:attention} (ViT) for the full
-image-classification arc and then run the trainers in
-\texttt{demos/}:
-\begin{verbatim}
-lake exe yolov1-pets-train-bootstrap # detection (YOLO on Pets, cat/dog)
-lake exe unet-pets-train         # segmentation (UNet on Pets)
-lake exe cifar-ddpm-train        # diffusion generative models
-lake exe gradcam                 # explainability
-lake exe tinygpt-shakespeare train   # NLP (char-level transformer)
-\end{verbatim}
-The arc from ViT to TinyGPT in particular reuses the attention
-proofs from Ch~\ref{chap:attention} verbatim --- image-token
-attention and character-token attention are the same operator,
-just at different token alphabets. Image classification + detection
-+ segmentation + diffusion + NLP, all on the same Lean$\to$MLIR$\to$IREE
-pipeline, covers most of what people mean by ``modern deep learning.''
 
 \prosesection{Side quest: ResNet-50, RSB-A3 (100 epochs)}
 
