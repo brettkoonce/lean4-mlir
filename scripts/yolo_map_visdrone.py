@@ -165,39 +165,49 @@ def _nms_per_class(dets, nms_iou):
 
 def decode_anchor_raw(pred_block, anchors, grid, conf_thresh):
     """One scale's anchor decode → raw (cid, conf, xyxy) dets, NO NMS (so the FPN
-    caller can merge across scales before a single NMS)."""
+    caller can merge across scales before a single NMS). Vectorized over all
+    A·grid² cells (the scalar per-cell loop is O(millions) at diffuse early-model
+    density). `tw,th` are capped at 8 to match the training-time exp cap."""
     A = len(anchors); Pn = 15
-    pred = pred_block.reshape(A * Pn, grid, grid)
-    dets = []
-    for a, (aw, ah) in enumerate(anchors):
-        base = a * Pn
-        for i in range(grid):
-            for j in range(grid):
-                obj = float(sigmoid(pred[base + 4, i, j]))
-                if obj < conf_thresh:
-                    continue
-                cl = pred[base + 5:base + 15, i, j]
-                cid = int(cl.argmax())
-                e = np.exp(cl - cl.max()); clsp = float(e[cid] / e.sum())
-                cx = (j + float(sigmoid(pred[base + 0, i, j]))) / grid
-                cy = (i + float(sigmoid(pred[base + 1, i, j]))) / grid
-                w = aw * float(np.exp(pred[base + 2, i, j]))
-                h = ah * float(np.exp(pred[base + 3, i, j]))
-                dets.append((cid, obj * clsp,
-                             [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2]))
-    return dets
+    pred = pred_block.reshape(A, Pn, grid, grid).astype(np.float64)
+    anch = np.asarray(anchors, dtype=np.float64)                 # [A,2]
+    obj = 1.0 / (1.0 + np.exp(-np.clip(pred[:, 4], -60, 60)))     # [A,g,g]
+    keep = obj >= conf_thresh
+    if not keep.any():
+        return []
+    cls = pred[:, 5:15]                                           # [A,10,g,g]
+    cid = cls.argmax(axis=1)                                      # [A,g,g]
+    e = np.exp(cls - cls.max(axis=1, keepdims=True))
+    clsp = e.max(axis=1) / e.sum(axis=1)                          # prob of argmax
+    conf = obj * clsp
+    jj = np.arange(grid).reshape(1, 1, grid)                      # col (W) index
+    ii = np.arange(grid).reshape(1, grid, 1)                      # row (H) index
+    sx = 1.0 / (1.0 + np.exp(-np.clip(pred[:, 0], -60, 60)))
+    sy = 1.0 / (1.0 + np.exp(-np.clip(pred[:, 1], -60, 60)))
+    cx = (jj + sx) / grid
+    cy = (ii + sy) / grid
+    w = anch[:, 0].reshape(A, 1, 1) * np.exp(np.minimum(pred[:, 2], 8.0))
+    h = anch[:, 1].reshape(A, 1, 1) * np.exp(np.minimum(pred[:, 3], 8.0))
+    x0 = (cx - w / 2)[keep]; y0 = (cy - h / 2)[keep]
+    x1 = (cx + w / 2)[keep]; y1 = (cy + h / 2)[keep]
+    boxes = np.stack([x0, y0, x1, y1], axis=1).tolist()
+    return list(zip(cid[keep].tolist(), conf[keep].tolist(), boxes))
 
 
-def decode_fpn(pred_flat, scales, conf_thresh, nms_iou):
+def decode_fpn(pred_flat, scales, conf_thresh, nms_iou, topk=1000):
     """Decode the flat FPN head [Ntot] = [P3|P4|P5]: per-scale anchor decode, then
     MERGE all scales' dets and run one class-wise NMS (planning/yolo_fpn.md bite 8).
-    `scales` = [(grid, anchors), ...] in P3,P4,P5 order."""
+    `scales` = [(grid, anchors), ...] in P3,P4,P5 order. Keeps only the top-`topk`
+    dets by confidence before NMS — bounds the O(n²) NMS at diffuse early-model
+    density (VisDrone has ~70 GT/img, so 1000 is ample headroom)."""
     dets = []
     off = 0
     for (grid, anchors) in scales:
         length = len(anchors) * 15 * grid * grid
         dets += decode_anchor_raw(pred_flat[off:off + length], anchors, grid, conf_thresh)
         off += length
+    if len(dets) > topk:
+        dets = sorted(dets, key=lambda d: -d[1])[:topk]
     return _nms_per_class(dets, nms_iou)
 
 
