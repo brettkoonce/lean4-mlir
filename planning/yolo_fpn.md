@@ -1,8 +1,10 @@
 # yolo_fpn.md — the multi-scale FPN neck (detection-infra brick #3)
 
-Handoff doc for continuing the VisDrone detection build. Prereqs: `yolo_drone.md`
-(the overall plan), `visdrone-fetch-and-wsa` memory (session log). Written
-2026-07-17 after the anchor detector landed; the FPN neck is the last big brick.
+Handoff doc for the VisDrone detection build. Prereqs: `yolo_drone.md` (the overall
+plan), `yolo-fpn-thread` + `visdrone-fetch-and-wsa` memories (session logs). Written
+2026-07-17 after the anchor detector landed; **updated 2026-07-18: the FPN detector is
+now fully wired, trained, and evaluated — it beats the anchor baseline 2.44× on recall.
+The forward-looking content is now the improvements roadmap (§ below); bites 1–8 are DONE.**
 
 ## Where we are (what's built + committed)
 
@@ -30,64 +32,108 @@ anchor detector, one FD-verified brick at a time. Anchor-detector commits on `ma
 - `ca310e8` bite-7 plumbing (types) — `Layer.fpnDetect (oc c3 c4 c5 g5 A)` + `TrainConfig.fpnScales`
   + Spec/paramShapes/heInit cases. Build-green, additive, unused-until-wired.
 
-**Status: every FD-checkable piece of the detector is verified. What's left is
-non-FD-validatable plumbing (conv train step is ROCm-only) — do it + compile + train as
-ONE build-loop session. START HERE ↓ (also mirrored in the `yolo-fpn-thread` memory):**
+**BITE 7/8 DONE — the detector is wired, trained, and evaluated. Commits on `main`
+(pushed, HEAD `d31fa49`):**
+- `c9aca30` bite-7 wiring — `.fpnDetect` in the train-step codegen (FwdRec fields, forward
+  walk tap, loss branch, backward tap-injection, optimizer, sig, `fpnScales` threading).
+- `1eb45f1` bite-8 host/data/spec/eval — `lean_f32_load_voc_fpn` + `F32.loadDetBinFpn`,
+  DatasetIO/dispatch (`useFpnRun`, via the single-target DDPM FFI with `%y_fpn:[B,Ntot,1,1]`),
+  `process_split_fpn`+`--fpn` → `data/visdrone_fpn`, `yolov1-visdrone-fpn` exe, forward/eval
+  generator `.fpnDetect`, `yolo_map_visdrone.py --fpn` (3-scale decode + merge + 1 NMS).
+- `3c3b809` NaN fix — cap `tw,th ≤ 8` before `exp` in `emitDiouForward` (see roadmap gotcha).
+- `d31fa49` eval speed — vectorized `decode_fpn` + top-1000/img cap (was O(hours)).
 
-### Next-session ordered checklist (bite 7 wiring → bite 8 train)
+**RESULT (12-epoch run, R34-ImageNet bootstrap, lr 4e-4, GPU-0 train / GPU-1 eval):
+FPN e12 recall@0.5 = 12.38% (3123 TP) vs anchor A=6 5.08% (1281 TP) = 2.44×** (climbing
+e2 9.82% → e6 9.34% → e12 12.38%). Multi-scale thesis CONFIRMED — P3 56² localizes the
+<24px objects (77% of GT) the 14×14 grid couldn't. See the A/B table below.
 
-1. **MlirCodegen** — the codegen half. Get it build-green, then `lake exe` the FPN train
-   spec to emit + eyeball the MLIR *before* the ~15-min ROCm compile. Sites (all lockstep):
-   - `FwdRec`: add `isFpnDetect : Bool`, `fpnTapGrad : String` (on residualBlock stage
-     markers), `fpnC3SSA/fpnC4SSA/fpnC5SSA : String`, `fpnOc/fpnC3ch/fpnC4ch/fpnC5ch/fpnG5/fpnA : Nat`.
-   - `emitTrainStepSig` (the 3 param walks + the m_/v_ walks, ~8476/~8925): add a `.fpnDetect`
-     case emitting **6 weight-only args** `%W{p+i}` (order Wn3,Wn4,Wn5,Wh3,Wh4,Wh5), pidx += 6.
-     Target arg: emit ONE flat `%y_fpn : [B, ΣA·15·g_s²]` (not the anchor's `%y_yolo`+`%m_yolo`)
-     when `fpnScales` set.
-   - Forward walk (emitTrainStepBody ~5348+): after each `.residualBlock` push
-     `(curSSA, curShape, records.size-1)` to a `fpnStages` accumulator. Add a `.fpnDetect` case:
-     take last-3 stages = C3/C4/C5, `let base := pidx`, read the 6 weights `%W{base+i}`, call
-     `emitFpnDetectForward`, set curSSA=`%fpn_out` curShape=`[B,Ntot]`, push an `isFpnDetect`
-     record (store C3/C4/C5 SSAs + dims + `pidx := base`), and set `fpnTapGrad` on the C3-stage
-     marker = `"%fpn_dc3_dc"` and C4-stage = `"%fpn_dc4_dc"` (the deterministic dc names). pidx += 6.
-   - Loss branch (~6382, alongside the yolo/anchor branch): if `fpnScales` non-empty, slice
-     `%y_fpn` into 3 `[B,A·15,g_s,g_s]` targets, `emitMultiScaleYoloLoss B fpnScales tgts
-     "%fpn_out" γ 5.0 "%loss" "%fpn_grad"`, seed gradSSA=`%fpn_grad` gradShape=`[B,Ntot]`.
-   - Backward reverse-walk: `.fpnDetect` record → `emitFpnDetectBackward "%fpn_grad" …`
-     (produces dc3/dc4/dc5 named `%fpn_dc{3,4,5}_dc` + 6 param grads `%d_W{base+i}`); set
-     gradSSA=`%fpn_dc5_dc`, gradShape=`[B,c5,g5,g5]`. At the residualBlock **marker** backward
-     (~6968) add, at the very start: `if r.fpnTapGrad != "" then gradSSA = add(gradSSA, r.fpnTapGrad)`.
-   - Optimizer (~8128): `.fpnDetect` case → 6× `emitUpdate %W{base+i} %d_W{base+i} …` (weight-only,
-     wdActive), push to paramRet/mRet/vRet. Gradient-clip list (~8062): add the 6 `%d_W{base+i}` if used.
-   - Thread `fpnScales` through `generateTrainStep` (~9312) + `compileVmfbs` (Train.lean ~197)
-     → `emitTrainStepBody` + `emitTrainStepSig`. Route loss on `!fpnScales.isEmpty`.
-2. **Host / loader / FFI** (Train.lean + f32_helpers.c): DatasetIO override (~451) loads image +
-   flat target (Σ·4 bytes); reuse `trainStepAdamF32Yolov1` with the flat target + a dummy mask
-   (byte-count matches → no new train-step FFI); add a small `lean_f32_load_voc_fpn` loader (mirror
-   `lean_f32_load_voc_anchor` f32_helpers.c:472, one flat target block) + `F32.loadDetBinFpn` decl.
-3. **Data**: `process_split_fpn` in preprocess_visdrone.py (mirror `process_split_anchor`; write
-   image u8 + the flat 3-block target [P3|P4|P5 order] + raw boxes) → write `data/visdrone_fpn`.
-4. **Spec + exe**: `r34FpnDet` NetSpec (R34 backbone tapped, then `.fpnDetect 256 128 256 512 14 3`;
-   **distinct `name`** so the checkpoint doesn't clobber the anchor arm; bootstrap prefix 21284672)
-   + `MainYolov1VisdroneFpn` + lakefile exe. `fpnScales := [(56,a3),(28,a4),(14,a5)]` from
-   `data/visdrone/anchors_fpn_*.txt`.
-5. **Train + eval**: compile (~15 min, budget for the big graph) → train on the 2 GPUs → decode
-   all 3 scales + merge before NMS in `yolo_map_visdrone.py` → recall/mAP vs anchor A=6 (1281 TP / 5.08%).
+## The improvements roadmap — from "beats anchor on recall" to "a good detector"
 
-Everything with a gradient is finite-difference scaffolded. FD probes/exes:
+The gap now is detector QUALITY, not wiring/encoding: recall 12.38% against an 88.2%
+encodability ceiling, and per-class mAP@0.5 pinned at 0.0001. Two diagnosed failure modes
+(both visible in the flat loss 315→304→301→300.9 converging by ~e6):
+
+1. **Objectness pos/neg imbalance (the loss flatlines here).** The objectness focal-BCE
+   sums over ALL ~12,348 anchors/img with only ~60 positive (~200:1), then `/B` (batch),
+   NOT `/num_pos`. Even with focal γ=2 the real objects are swamped → "predict low
+   objectness everywhere" → diffuse detections. RetinaNet is focal PLUS this balance.
+2. **Class collapse (pins per-class mAP at ~0).** The softmax class head collapsed to
+   "car" (9943 GT vs bus's 139) — at e12 ~every detection is labeled car (`car dets=539824`,
+   most classes 0). Class-agnostic localization is 2× anchor; per-class mAP is dead.
+
+### Tier 1 — loss rebalancing (loss-only, cheapest, DO FIRST)
+
+Edits to `emitAnchorYoloLoss` (`MlirCodegen.lean:5146`), which `emitMultiScaleYoloLoss`
+(`:5288`) calls 3×. Validate each on the eval's recall/mAP — one lever at a time.
+- **[T1a] Normalize objectness by positive count / hard-negative mining.** Objectness loss
+  is `Σ focal_bce / B` (`%ay{tag}_Bf`, ~`:5165`/`:5225`). Switch to `/num_pos` (count of
+  obj==1 from the target mask `%{pa}_m4` already in scope), OR a fixed pos-weight, OR
+  keep only the top-K≈3·num_pos hardest negatives (SSD-style). **Highest-leverage change.**
+- **[T1b] Class-balanced classification.** The class term (softmax CE, `:5253`) has no
+  reweighting. Add inverse-frequency class weights (VisDrone counts known) or class focal.
+  FIRST check the class loss is masked to POSITIVE cells only — background leakage alone
+  would drive the collapse. This lifts per-class mAP off 0.0001.
+
+### Tier 2 — head capacity (codegen, medium effort, the big jump)
+
+- **[T2a] A real head tower.** Head is minimal: one 1×1 conv (256→A·15), no hidden layers
+  (`emitFpnDetectForward`, `:1920`). The flat-by-e6 loss smells capacity-limited, not
+  undertrained. Add a 3–4 conv 3×3 tower per branch (RetinaNet); new `emitFpnHead` emitter,
+  FD-checkable in isolation like the other bricks. **Lets recall climb toward 88.2%.**
+- **[T2b] Decouple cls/box subnets** — separate towers so each specializes (do with T2a).
+
+### Tier 3 — refinements (only after T1/T2 move the numbers)
+
+- 3×3 smoothing convs on P3/P4/P5 (deferred as "skip for v1"; reduce upsample-add aliasing).
+- A P2 scale at 112² for the tiniest objects (coverage now cell-collision-bound on 56²).
+- Multi-anchor-per-GT (IoU) or anchor-free center sampling (FCOS).
+- conf-thresh / NMS-IoU / per-class score calibration — tune only AFTER classification works.
+
+### The train → eval loop (exact recipe)
+
+```
+lake build yolov1-visdrone-fpn
+IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 ./.lake/build/bin/yolov1-visdrone-fpn data/visdrone_fpn
+# eval a checkpoint on the OTHER gpu while training runs:
+B=.lake/build/resnet_34___fpn_detector_448__visdrone_
+cp ${B}_params_e12.bin ${B}_params.bin; cp ${B}_bn_stats_e12.bin ${B}_bn_stats.bin
+IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=1 ./.lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn figures/yolo_fpn_e12
+<jax-venv>/bin/python3 scripts/yolo_map_visdrone.py figures/yolo_fpn_e12/logits.bin \
+  data/visdrone448/val.bin --grid 14 --fpn data/visdrone
+```
+`<jax-venv>` = `/home/skoonce/lean/claude_max/lean4-jax/.venv` (has iree.runtime). ~22
+min/epoch on gfx1100 + ~15 min one-time compile; ckpts every 2 ep. GT for mAP is the
+single-box `data/visdrone448/val.bin` (the FPN val.bin has no boxes on disk).
+
+### Gotchas from the build + first run
+- **Any unbounded op (exp) + global-norm grad-clip = latent `inf·0 = NaN`.** DIoU
+  `w=anchor·exp(tw)` overflowed under the 3-scale sum's ~10× grads → `dw/dtw=inf` → clip
+  `inf·(clip/inf)=NaN` → NaN at step 300. Capped `tw,th≤8` before `exp`. **When adding
+  T1/T2 watch for new unbounded ops — cap at source.**
+- Scorer was O(hours) at diffuse objectness (sigmoid(~0)≈0.5 > 0.001 conf floor ⇒ all
+  12,348 cells pass ⇒ O(n²) NMS) → vectorized + top-1000 cap. (T1a sharpening obj fixes this.)
+- FPN reuses the single-target **DDPM** train-step FFI (`%y_fpn` rank-4); do NOT add a
+  mask arg. Checkpoint prefix = sanitized `name` (DISTINCT so no anchor-arm clobber).
+- `{ x with … }` update rejects the `pos` field-abbrev + multi-line field lists →
+  single-line `r := { r with … }`.
+
+Everything with a gradient was finite-difference scaffolded during the build. FD probes:
 `scripts/{diou_probe_check,anchor_loss_probe_check,fpn_neck_probe_check,fpn_loss_probe_check,fpn_detect_probe_check}.py`
 and exes `diou-loss-probe`, `anchor-loss-probe`, `fpn-neck-probe`, `fpn-loss-probe`, `fpn-detect-probe`.
 
 ## The result that motivates the neck (A/B, VisDrone val, class-agnostic localization AP@0.5)
 
-| arm (448 input, 14×14 grid) | epoch | true positives | recall@0.5 |
+| arm (448 input) | epoch | true positives | recall@0.5 |
 |---|---|---|---|
-| single-grid √-MSE | e12 (converged) | 0 | 0% |
-| DIoU box loss | e12 (converged) | 805 | 3.2% |
-| anchor A=6 detector | e12 (converged) | 1281 | **5.08%** (mAP@0.5 0.0001) |
+| single-grid √-MSE (14×14) | e12 (converged) | 0 | 0% |
+| DIoU box loss (14×14) | e12 (converged) | 805 | 3.2% |
+| anchor A=6 detector (14×14) | e12 (converged) | 1281 | **5.08%** (mAP@0.5 0.0001) |
+| **FPN 3-scale (56/28/14)** | **e12** | **3123** | **12.38%** (class-agn AP 0.0009, mAP@0.5 0.0001) |
 
-The ladder is clean and monotonic — every FD-verified brick moves the number. But the
-anchor detector **plateaus at ~5% recall**: only ~61% of GT boxes are encodable at a
+The ladder is clean and monotonic — every FD-verified brick moves the number, and the
+**FPN breaks the single-scale wall (5.08% → 12.38%, 2.44×)**. The anchor detector
+**plateaued at ~5% recall**: only ~61% of GT boxes are encodable at a
 single 14×14 scale (cell collisions), and IoU 0.5 on 2–5 px objects is unforgiving.
 √-MSE box widths stay 100% negative (ε-floor gradient death) even converged; the DIoU
 exp param fixes that but plain-DIoU's `exp` explodes (~1e13) on some cells — which the
@@ -133,7 +179,7 @@ Backward (each Pn cotangent routes to its lateral AND up the pyramid):
 (Optionally a 3×3 smoothing conv on each Pn before the head — RetinaNet has it; can skip
 for v1.) The numpy `upsample2`/`upsample2_T` match `bilinearWeights1D` exactly.
 
-## Remaining bites (large but bounded, mostly mechanical hand-emission)
+## Build record (bites 1–8, ALL DONE — kept for reference)
 
 2. **Emit `emitFpnNeck` (StableHLO) + `fpn-neck-probe`.** — **DONE, FD-verified.**
    `emitFpnNeckForward`/`emitFpnNeckBackward` + helpers (`emitConv1x1Fwd`/`BwdDC`/`BwdDW`,
@@ -169,9 +215,9 @@ for v1.) The numpy `upsample2`/`upsample2_T` match `bilinearWeights1D` exactly.
    k-means anchors saved: `data/visdrone/anchors_fpn_{p3,p4,p5}.txt`. Encoder
    `encode_targets_fpn` (in `preprocess_visdrone.py`) written + smoke-verified (`--smoke`:
    slot count == coverage recompute, shapes, **mask == obj-channel** so the loader derives
-   masks, no FFI mask). **Left:** `process_split_fpn` + CLI + the `data/visdrone_fpn` 4 GB
-   write — hold until the on-disk record layout is co-designed with the FPN loader (bite 7);
-   writing 4 GB before the consumer exists risks a format redo.
+   masks, no FFI mask). **DONE (`1eb45f1`):** `process_split_fpn` + `--fpn` CLI wrote
+   `data/visdrone_fpn` (6471 train 8.3 GB / 548 val) at 88.2% encoded (byte-exact 1342992/rec,
+   image u8 + flat [P3|P4|P5] target only — no mask/boxes on disk).
 
 6. **Multi-scale loss** — **DONE, FD-verified.** `emitMultiScaleYoloLoss` (MlirCodegen ~5009)
    splits the `[B,Ntot]` concat per scale, runs `emitAnchorYoloLoss` 3× (now takes a `tag`
@@ -192,13 +238,15 @@ for v1.) The numpy `upsample2`/`upsample2_T` match `bilinearWeights1D` exactly.
    `fpnDetectProbeModule` + exe `fpn-detect-probe` + `scripts/fpn_detect_probe_check.py`,
    run at **focal γ=0** (objectness weight becomes a true constant ⇒ whole loss exactly
    FD-able, no channel-skipping). All configs PASS: fwd ~1e-7, all 9 grads vs f64 FD ~1e-4.
-   **Left = the emitTrainStepBody plumbing** (param alloc/init/SGD for the 6 weights, backbone
-   tap-injection at the residualBlock markers, 3-target sig) — assembly of this verified block,
-   validated only by a ROCm train run.
+   **DONE (`c9aca30`):** the `emitTrainStepBody` plumbing (forward tap, loss branch, backward
+   tap-injection at the residualBlock markers, optimizer, 3-target sig) — assembled and
+   iree-input-verified, then GPU-trained.
 
-8. **Decode + train.** `yolo_map_visdrone.py`: decode all 3 scales (per scale: anchor
-   decode as now, at that grid) and merge before NMS. New spec `r34FpnDet` + demo/exe +
-   `data/visdrone_fpn`. Train on freed GPU; eval vs the anchor A=6 baseline (1281 TP / 5%).
+8. **Decode + train — DONE (`1eb45f1`+`d31fa49`, trained e12).** `yolo_map_visdrone.py --fpn`
+   decodes all 3 scales + merges before NMS (vectorized + top-1000 cap). Spec `r34FpnDet` +
+   exe `yolov1-visdrone-fpn` + `data/visdrone_fpn`. Trained 12 ep on GPU 0 / eval'd on GPU 1:
+   **recall@0.5 12.38% (3123 TP) vs anchor A=6 5.08% (1281 TP) = 2.44×.** See the roadmap
+   at the top for the mAP gap (objectness imbalance + class collapse) and how to close it.
 
 ## Reference (files / functions / how-to)
 
