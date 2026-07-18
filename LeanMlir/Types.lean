@@ -580,6 +580,23 @@ structure TrainConfig where
       `[B, Ntot]` head concat, and the single target input is a flat
       `[B, Σ A·15·g_s²]` block (sliced per scale in the loss). -/
   fpnScales    : List (Nat × List (Float × Float)) := []
+  /-- Per-class weights for the detector's classification term (planning/
+      yolo_fpn.md T1b). `weights.length` must equal the detector class count
+      (10 for VisDrone). Empty (the default) is the unweighted path and emits
+      byte-identical MLIR.
+
+      Motivated by measurement, not folklore: on the unweighted e12 checkpoint
+      the class argmax collapsed onto the two most frequent classes (car 44% +
+      pedestrian 21% of encoded positives), leaving 5/10 classes never predicted
+      and per-class mAP pinned at ~0.0001 — see `scripts/fpn_obj_separation.py`
+      and `scripts/fpn_class_freq.py`. Weights depend only on the target, so
+      they are exactly constant w.r.t. the logits and the weighted gradient
+      stays finite-difference checkable.
+
+      Normalize so `Σ_c f_c·w_c = 1` (expected weight 1 under the GT class
+      distribution) to keep this a pure redistribution — otherwise it silently
+      rescales the class term against the box and objectness terms too. -/
+  yoloClsWeights : List Float := []
   /-- RetinaNet prior-bias init: initialize the **head's bias** to `log π_c`
       instead of zero, so the net starts predicting the class prior rather than
       a uniform distribution. Empty (the default) leaves the head at zero bias

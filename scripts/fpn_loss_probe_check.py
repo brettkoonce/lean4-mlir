@@ -30,15 +30,21 @@ import iree.runtime as rt  # noqa: E402
 sys.path.insert(0, os.path.dirname(__file__))
 from anchor_loss_probe_check import np_forward, np_grad, make_data, anchors_for, P  # noqa: E402
 
+
+# T1b probe weights: deterministic, must match demos/MainFpnLossProbe.lean --clsw
+CLSW = [0.5 + 0.25 * c for c in range(10)]
+
 PROBE = ".lake/build/bin/fpn-loss-probe"
 IREE_COMPILE = ".venv/bin/iree-compile"
 
 
-def make_runner(B, A, grids):
+def make_runner(B, A, grids, clsw=False):
     td = tempfile.mkdtemp()
     mlir = os.path.join(td, "fpn_loss_gen.mlir")
-    r = subprocess.run([PROBE, str(B), str(A), *[str(g) for g in grids], mlir],
-                       capture_output=True, text=True)
+    cmd = [PROBE, str(B), str(A), *[str(g) for g in grids], mlir]
+    if clsw:
+        cmd.append("--clsw")
+    r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print(r.stdout, r.stderr); sys.exit("probe emit failed")
     vmfb = os.path.join(td, "fl.vmfb")
@@ -57,7 +63,7 @@ def make_runner(B, A, grids):
     return run
 
 
-def ms_forward_from_logits(logits, tgts, masks, grids, anchors, B):
+def ms_forward_from_logits(logits, tgts, masks, grids, anchors, B, clsw=None):
     """Split [B,Ntot] back per scale and sum the anchor losses — the exact numpy
     mirror of emitMultiScaleYoloLoss's forward."""
     A = len(anchors)
@@ -66,19 +72,19 @@ def ms_forward_from_logits(logits, tgts, masks, grids, anchors, B):
     for s, g in enumerate(grids):
         ln = A * P * g * g
         pred = logits[:, off:off + ln].reshape(B, A * P, g, g)
-        total += np_forward(pred, tgts[s], masks[s], g, g, anchors)
+        total += np_forward(pred, tgts[s], masks[s], g, g, anchors, clsw)
         off += ln
     return total
 
 
-def ms_grad_concat(preds, tgts, masks, grids, anchors, B):
+def ms_grad_concat(preds, tgts, masks, grids, anchors, B, clsw=None):
     parts = []
     for s, g in enumerate(grids):
-        parts.append(np_grad(preds[s], tgts[s], masks[s], g, g, anchors).reshape(B, -1))
+        parts.append(np_grad(preds[s], tgts[s], masks[s], g, g, anchors, clsw).reshape(B, -1))
     return np.concatenate(parts, axis=1)
 
 
-def check(B=2, A=3, grids=(8, 4, 2), seed=0, fd_samples=400):
+def check(B=2, A=3, grids=(8, 4, 2), seed=0, fd_samples=400, clsw=None):
     anchors = anchors_for(A)
     preds, tgts, masks = [], [], []
     for s, g in enumerate(grids):
@@ -87,12 +93,12 @@ def check(B=2, A=3, grids=(8, 4, 2), seed=0, fd_samples=400):
     logits = np.concatenate([preds[s].reshape(B, -1) for s in range(len(grids))], axis=1)
     Ntot = logits.shape[1]
 
-    run = make_runner(B, A, list(grids))
+    run = make_runner(B, A, list(grids), clsw=clsw is not None)
     loss, grad = run(logits, tgts)
 
-    ref = ms_forward_from_logits(logits, tgts, masks, grids, anchors, B)
+    ref = ms_forward_from_logits(logits, tgts, masks, grids, anchors, B, clsw)
     frel = abs(loss - ref) / max(abs(ref), 1e-9)
-    npg = ms_grad_concat(preds, tgts, masks, grids, anchors, B)
+    npg = ms_grad_concat(preds, tgts, masks, grids, anchors, B, clsw)
     gmax = np.abs(grad - npg).max()
 
     # (c) FD through the concat on box+cls positions (skip obj channel base+4).
@@ -116,12 +122,13 @@ def check(B=2, A=3, grids=(8, 4, 2), seed=0, fd_samples=400):
     for (b, p) in sample:
         lp = logits.copy(); lp[b, p] += hf
         lm = logits.copy(); lm[b, p] -= hf
-        fdv = (ms_forward_from_logits(lp, tgts, masks, grids, anchors, B)
-               - ms_forward_from_logits(lm, tgts, masks, grids, anchors, B)) / (2 * hf)
+        fdv = (ms_forward_from_logits(lp, tgts, masks, grids, anchors, B, clsw)
+               - ms_forward_from_logits(lm, tgts, masks, grids, anchors, B, clsw)) / (2 * hf)
         fd_err = max(fd_err, abs(grad[b, p] - fdv))
 
     ok = frel < 1e-4 and gmax < 1e-3 and fd_err < 1e-3
-    print(f"fpn-loss probe  B={B} A={A} grids={tuple(grids)} Ntot={Ntot} seed={seed}")
+    tagw = " clsw=ON" if clsw is not None else ""
+    print(f"fpn-loss probe  B={B} A={A} grids={tuple(grids)} Ntot={Ntot} seed={seed}{tagw}")
     print(f"  emitted forward  vs numpy Σ-loss     : rel={frel:.2e}  {'PASS' if frel<1e-4 else 'FAIL'}")
     print(f"  emitted grad     vs numpy concat-grad: max={gmax:.2e}  {'PASS' if gmax<1e-3 else 'FAIL'}")
     print(f"  emitted grad     vs f64 FD (box+cls) : max={fd_err:.2e}  ({len(sample)} samples) "
@@ -134,6 +141,10 @@ def main():
     for seed in (0, 1):
         ok &= check(B=2, A=3, grids=(8, 4, 2), seed=seed)
     ok &= check(B=1, A=6, grids=(6, 4, 2), seed=2)   # A=6, the near-real config
+    # T1b: the class-weighted path (weights are target-only ⇒ still exactly FD-able)
+    for seed in (0, 3):
+        ok &= check(B=2, A=3, grids=(8, 4, 2), seed=seed, clsw=CLSW)
+    ok &= check(B=1, A=6, grids=(6, 4, 2), seed=4, clsw=CLSW)
     print("ALL PASS" if ok else "SOME FAILED")
     sys.exit(0 if ok else 1)
 

@@ -37,8 +37,21 @@ def fpnDetScales : List (Nat × List (Float × Float)) :=
 def fpnNtot : Nat :=
   (fpnDetScales.map (fun sc => sc.2.length * 15 * sc.1 * sc.1)).foldl (·+·) 0
 
+/-- T1b class weights (planning/yolo_fpn.md): sqrt-inverse encoded-target class
+    frequency, normalized so `Σ_c f_c·w_c = 1` — a pure redistribution that leaves
+    the class term's total magnitude (and so its balance against box/objectness)
+    unchanged. Counts from `scripts/fpn_class_freq.py` over data/visdrone_fpn:
+    car 44.1% and pedestrian 21.2% of positives, and the unweighted e12 head
+    predicted ONLY those two (5/10 classes never emitted). Full inverse frequency
+    spans 45× and is needlessly violent; sqrt spans 6.7×. -/
+def fpnClsWeights : List Float :=
+  [0.8058, 1.4377, 2.1196, 0.5579, 1.3407, 1.7916, 2.9778, 3.7281, 2.6187, 1.2694]
+
 def r34FpnDet : NetSpec where
-  name := "ResNet-34 + FPN detector 448 (VisDrone)"   -- DISTINCT from the anchor arm
+  -- name is the on-disk checkpoint prefix: keep it DISTINCT from the anchor arm
+  -- AND from the unweighted FPN baseline, whose e2..e12 checkpoints are the A/B
+  -- reference and must not be clobbered.
+  name := "ResNet-34 + FPN detector 448 wcls (VisDrone)"
   imageH := 448
   imageW := 448
   detStride := 32
@@ -66,6 +79,7 @@ def r34FpnDetConfig : TrainConfig where
   augment      := false                 -- yoloAugment is single-box-format only
   focalGamma   := 2.0                   -- objectness focal γ (used by the FPN loss)
   fpnScales    := fpnDetScales          -- routes the loss to emitMultiScaleYoloLoss
+  yoloClsWeights := fpnClsWeights       -- T1b: the ONLY change vs the e12 baseline
   bootstrapBackbone := some (".lake/build/jax_r34_imagenet.bin", 21284672)
 
 /-- Infer: dump [N, Ntot] val logits for scripts/yolo_map_visdrone.py --fpn. -/

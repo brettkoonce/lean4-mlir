@@ -215,6 +215,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     (useDiouBox := cfg.useDiouBox)
     (yoloAnchors := cfg.anchors)
     (fpnScales := cfg.fpnScales)
+    (yoloClsWeights := cfg.yoloClsWeights)
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"
 

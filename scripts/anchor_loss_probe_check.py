@@ -40,7 +40,18 @@ def anchors_for(A):
     return [(0.02 + 0.03 * i, 0.03 + 0.04 * i) for i in range(A)]
 
 
-def np_forward(pred, tgt, mask, gH, gW, anchors):
+def cls_weight_map(ct, clsw):
+    """Per-cell class weight w_{c(cell)} from the one-hot target (T1b).
+
+    Depends only on the target, so it is exactly constant w.r.t. the logits --
+    which is why the weighted gradient below is still FD-checkable."""
+    if clsw is None:
+        return 1.0
+    w = np.asarray(clsw, dtype=np.float64).reshape(1, -1, *([1] * (ct.ndim - 2)))
+    return ((ct > 0.5) * w).sum(1, keepdims=True)
+
+
+def np_forward(pred, tgt, mask, gH, gW, anchors, clsw=None):
     B = pred.shape[0]
     total = 0.0
     for a, (aw, ah) in enumerate(anchors):
@@ -59,12 +70,12 @@ def np_forward(pred, tgt, mask, gH, gW, anchors):
         objloss = float(np.sum(alpha * w * bce))
         cshift = cp - cp.max(1, keepdims=True)
         lsm = cshift - np.log(np.exp(cshift).sum(1, keepdims=True))
-        clsloss = float(np.sum(-(ct * lsm) * m4))
+        clsloss = float(np.sum(-(ct * lsm) * m4 * cls_weight_map(ct, clsw)))
         total += boxloss + objloss + clsloss
     return total / B
 
 
-def np_grad(pred, tgt, mask, gH, gW, anchors):
+def np_grad(pred, tgt, mask, gH, gW, anchors, clsw=None):
     B = pred.shape[0]
     grad = np.zeros_like(pred)
     for a, (aw, ah) in enumerate(anchors):
@@ -82,7 +93,7 @@ def np_grad(pred, tgt, mask, gH, gW, anchors):
         grad[:, base + 4:base + 5] = alpha * w * (p - t) / B
         cshift = cp - cp.max(1, keepdims=True)
         ex = np.exp(cshift); sm = ex / ex.sum(1, keepdims=True)
-        grad[:, base + 5:base + 15] = (sm - ct) * m4 / B
+        grad[:, base + 5:base + 15] = (sm - ct) * m4 * cls_weight_map(ct, clsw) / B
     return grad
 
 
