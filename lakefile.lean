@@ -1358,6 +1358,12 @@ lean_exe «fpn-detect-probe» where
   root := `demos.MainFpnDetectProbe
   moreLinkArgs := ireeLink
 
+-- Emit-only: dump the r34FpnDet train-step MLIR for eyeball / iree-compile
+-- --compile-to=input parse check (planning/yolo_fpn.md bite 7 wiring).
+lean_exe «fpn-train-emit» where
+  root := `demos.MainFpnTrainEmit
+  moreLinkArgs := ireeLink
+
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
   moreLinkArgs := ireeLink

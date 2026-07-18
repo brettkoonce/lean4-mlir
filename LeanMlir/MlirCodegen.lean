@@ -3211,6 +3211,22 @@ private structure FwdRec where
   lmhV            : Nat := 0
   lmhT            : Nat := 0
   lmhBtvSSA       : String := ""
+  -- ═════════ FPN multi-scale detector (planning/yolo_fpn.md bite 7) ═════════
+  -- One record per `.fpnDetect` layer (isFpnDetect := true, pidx := base of its
+  -- 6 weight-only params). Stores the 3 backbone taps C3/C4/C5 and the 3 neck
+  -- outputs P3/P4/P5 (the pyramid feature SSAs) so the backward can call
+  -- `emitFpnDetectBackward` (neck dW needs C_n, head dW needs P_n). The neck's
+  -- backbone-tap cotangents dc3/dc4 are injected at the C3/C4 residualBlock
+  -- stage markers via `fpnTapGrad` (set on those marker records at forward emit);
+  -- C5's cotangent flows through the normal gradSSA seed.
+  isFpnDetect     : Bool := false
+  fpnTapGrad      : String := ""   -- on a residualBlock marker: add this dc_n before its skip-add backward
+  fpnC3SSA        : String := ""
+  fpnC4SSA        : String := ""
+  fpnC5SSA        : String := ""
+  fpnP3SSA        : String := ""
+  fpnP4SSA        : String := ""
+  fpnP5SSA        : String := ""
 instance : Inhabited FwdRec where
   default := { layer := .flatten, pidx := none, pos := 0,
                inputSSA := "", preActSSA := "", outputSSA := "",
@@ -5279,6 +5295,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
     (segLoss : SegLoss := .ce)
     (useDiouBox : Bool := false)
     (yoloAnchors : List (Float × Float) := [])
+    (fpnScales : List (Nat × List (Float × Float)) := [])
     : String := Id.run do
   let B := batchSize
   let nClasses := spec.numClasses
@@ -5346,6 +5363,10 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   -- backward pass uses to thread the skip gradient: `%unet_skip_g{e}`.
   let mut unetEncStack : List Nat := []
   let mut nextUnetEncIdx : Nat := 0
+  -- FPN detector taps. Every `.residualBlock` stage pushes (stageOutSSA,
+  -- stageOutShape, lastMarkerRecordIdx); the trailing `.fpnDetect` layer reads
+  -- the last 3 as C3/C4/C5 and marks the C3/C4 markers with the neck cotangents.
+  let mut fpnStages : Array (String × List Nat × Nat) := #[]
 
   for l in spec.layers do
     let inSSA := curSSA
@@ -5519,6 +5540,9 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           -- Store projection info in addSkipGrad field: "proj:{projPidx}" or "identity"
           addSkipGrad := if bi == 0 && needsProj then s!"proj:{pidx - 1}" else "identity"
         }
+      -- FPN tap: expose this stage's output (curSSA/curShape) and the index of
+      -- its last skip-add marker (records.size - 1) for a trailing `.fpnDetect`.
+      fpnStages := fpnStages.push (curSSA, curShape, records.size - 1)
 
     | .bottleneckBlock ic oc nBlocks firstStride =>
       let mid := oc / 4
@@ -6464,6 +6488,41 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       | [] =>
         code := code ++ "    // unetUp: encoder stack empty (no matching unetDown)\n"
 
+    | .fpnDetect oc c3 c4 c5 g5 A =>
+      -- Top-down neck + per-scale 1×1 heads → flat [B, Ntot] concat. Taps the
+      -- last 3 residualBlock stages as C3/C4/C5. 6 weight-only params at `base`.
+      if fpnStages.size < 3 then
+        code := code ++ s!"    // fpnDetect: need ≥3 residualBlock stages, have {fpnStages.size}\n"
+      else
+        let (c3SSA, _, c3Idx) := fpnStages[fpnStages.size - 3]!
+        let (c4SSA, _, c4Idx) := fpnStages[fpnStages.size - 2]!
+        let (c5SSA, _, _c5Idx) := fpnStages[fpnStages.size - 1]!
+        let base := pidx
+        let (fwd, concat, (p3, p4, p5)) :=
+          emitFpnDetectForward c3SSA c4SSA c5SSA
+            s!"%W{base}" s!"%W{base + 1}" s!"%W{base + 2}"
+            s!"%W{base + 3}" s!"%W{base + 4}" s!"%W{base + 5}" B oc c3 c4 c5 g5 A
+        code := code ++ fwd
+        -- Route the neck's C3/C4 cotangents (emitted by emitFpnDetectBackward as
+        -- %fpn_dc3_dc / %fpn_dc4_dc) into those stages' markers; C5 flows via the
+        -- gradSSA seed set in the .fpnDetect backward case.
+        records := records.set! c3Idx { records[c3Idx]! with fpnTapGrad := "%fpn_dc3_dc" }
+        records := records.set! c4Idx { records[c4Idx]! with fpnTapGrad := "%fpn_dc4_dc" }
+        let P := 15
+        let g4 := 2 * g5; let g3 := 4 * g5
+        let Ntot := A * P * (g3 * g3 + g4 * g4 + g5 * g5)
+        let mut fdRec : FwdRec := default
+        fdRec := { fdRec with layer := l, pidx := some base, pos := pos }
+        fdRec := { fdRec with inputSSA := c5SSA, outputSSA := concat }
+        fdRec := { fdRec with inShape := [B, c5, g5, g5], outShape := [B, Ntot] }
+        fdRec := { fdRec with isFpnDetect := true }
+        fdRec := { fdRec with fpnC3SSA := c3SSA, fpnC4SSA := c4SSA, fpnC5SSA := c5SSA }
+        fdRec := { fdRec with fpnP3SSA := p3, fpnP4SSA := p4, fpnP5SSA := p5 }
+        records := records.push fdRec
+        curSSA := concat
+        curShape := [B, Ntot]
+        pidx := base + 6
+
     | _ => code := code ++ "    // UNSUPPORTED\n"
     pos := pos + 1
 
@@ -6475,7 +6534,39 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   -- also tells the dispatcher to use a 4-D gradShape (vs [B, NC]).
   let mut gradSSA : String := "%d_logits"
   let mut gradShape : List Nat := [B, NC]
-  if useYolov1 then
+  if !fpnScales.isEmpty then
+    -- ═══════════════ FPN multi-scale YOLO loss ═══════════════
+    -- The `.fpnDetect` head emits a flat [B, Ntot] concat (P3|P4|P5). The flat
+    -- target %y_fpn is the same [P3|P4|P5] layout; slice it per scale into the
+    -- [B, A·15, g, g] blocks emitMultiScaleYoloLoss's inner emitAnchorYoloLoss
+    -- expects, then run the (FD-verified) multi-scale loss. The summed-loss
+    -- gradient is the per-scale head-grads re-concatenated → seeds the DAG
+    -- backward at the .fpnDetect record.
+    match curShape with
+    | [_, totalCh] =>
+      let P := 15
+      let lens := fpnScales.map (fun sc => sc.2.length * P * sc.1 * sc.1)
+      let Ntot := lens.foldl (·+·) 0
+      if totalCh != Ntot then
+        code := code ++ s!"    // fpnDetect loss: flat {totalCh} != Ntot {Ntot}\n"
+      else
+        let concatTy := tensorTy [B, Ntot]
+        let mut tgts : List String := []
+        let mut off := 0
+        for i in [:fpnScales.length] do
+          let (g, anchors) := fpnScales[i]!
+          let A := anchors.length
+          let len := lens[i]!
+          code := code ++ s!"    %fpn_tgs{i} = \"stablehlo.slice\"(%y_fpn) " ++ "{" ++ s!" start_indices = array<i64: 0, {off}>, limit_indices = array<i64: {B}, {off + len}>, strides = array<i64: 1, 1>" ++ "} : " ++ s!"({concatTy}) -> {tensorTy [B, len]}\n"
+          code := code ++ s!"    %fpn_tg{i} = stablehlo.reshape %fpn_tgs{i} : ({tensorTy [B, len]}) -> {tensorTy [B, A * P, g, g]}\n"
+          tgts := tgts ++ [s!"%fpn_tg{i}"]
+          off := off + len
+        code := code ++ emitMultiScaleYoloLoss B fpnScales tgts logitsSSA focalGamma 5.0 "%loss" "%fpn_grad"
+        gradSSA := "%fpn_grad"
+        gradShape := curShape
+    | _ =>
+      code := code ++ s!"    // fpnDetect loss: curShape not [B, N] flat: {curShape}\n"
+  else if useYolov1 then
     -- ═══════════════ YOLOv1: 5-term masked MSE ═══════════════
     -- See planning/yolo_demo_v2.md Phase 1 decisions D1-D11. Predictions
     -- arrive as flat [B, totalCh]; we reshape to [B, perCell, gH, gW]
@@ -7098,6 +7189,13 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         -- Residual skip-add backward
         let oTy := tensorTy r.outShape
         let addId := r.preActSSA.replace "%rb_add" ""
+        -- FPN tap: this stage output feeds a C3/C4 lateral. dc_n is w.r.t. the
+        -- post-relu stage output — same point as the incoming gradSSA — so add it
+        -- before the skip-add (relu) backward. Emitted earlier by the .fpnDetect
+        -- record backward, so the name is already in scope.
+        if r.fpnTapGrad != "" then
+          code := code ++ s!"    %rb_tap{addId} = stablehlo.add {gradSSA}, {r.fpnTapGrad} : {oTy}\n"
+          gradSSA := s!"%rb_tap{addId}"
         if r.hasRelu then
           -- ReLU backward (ResNet-style)
           let i1Ty := oTy.replace "xf32>" "xi1>"
@@ -8044,6 +8142,29 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         | _ => pure ()
       else pure ()
 
+    | .fpnDetect oc c3 c4 c5 g5 A =>
+      -- FPN detector DAG backward (planning/yolo_fpn.md bite 7). gradSSA is the
+      -- loss grad w.r.t. the [B, Ntot] concat (%fpn_grad). emitFpnDetectBackward
+      -- un-concats → head VJP → neck VJP, returning (dc3,dc4,dc5) + 6 param grads.
+      -- dc5 seeds the backbone backward here; dc3/dc4 are injected at the C3/C4
+      -- stage markers (already tagged with fpnTapGrad at forward emit).
+      let base := r.pidx.getD 0
+      let (bwd, (_dc3, _dc4, dc5), pgrads) :=
+        emitFpnDetectBackward gradSSA r.fpnC3SSA r.fpnC4SSA r.fpnC5SSA
+          s!"%W{base}" s!"%W{base + 1}" s!"%W{base + 2}"
+          r.fpnP3SSA r.fpnP4SSA r.fpnP5SSA
+          s!"%W{base + 3}" s!"%W{base + 4}" s!"%W{base + 5}" B oc c3 c4 c5 g5 A
+      code := code ++ bwd
+      -- Bind the 6 returned param grads to the %d_W{base+i} names the optimizer
+      -- reads (order: Wn3,Wn4,Wn5,Wh3,Wh4,Wh5 — matches paramShapes / sig).
+      let ap := A * 15
+      let wtys := [tensorTy [oc, c3], tensorTy [oc, c4], tensorTy [oc, c5],
+                   tensorTy [ap, oc], tensorTy [ap, oc], tensorTy [ap, oc]]
+      for (pg, i) in pgrads.zipIdx do
+        code := code ++ s!"    %d_W{base + i} = stablehlo.reshape {pg} : ({wtys[i]!}) -> {wtys[i]!}\n"
+      gradSSA := dc5
+      gradShape := [B, c5, g5, g5]
+
     | _ => pure ()
 
   -- ═══════════════ OPTIMIZER UPDATES ═══════════════
@@ -8071,6 +8192,11 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           let effIc := if r.isDepthwise then 1 else ic
           gradList := gradList.push (s!"%d_W{p}", [oc, effIc, kSize, kSize])
                               |>.push (s!"%d_g{p}", [oc]) |>.push (s!"%d_bt{p}", [oc])
+        | .fpnDetect oc c3 c4 c5 _ A =>
+          let ap := A * 15
+          gradList := gradList.push (s!"%d_W{p}", [oc, c3]) |>.push (s!"%d_W{p + 1}", [oc, c4])
+                              |>.push (s!"%d_W{p + 2}", [oc, c5]) |>.push (s!"%d_W{p + 3}", [ap, oc])
+                              |>.push (s!"%d_W{p + 4}", [ap, oc]) |>.push (s!"%d_W{p + 5}", [ap, oc])
         | _ => pure ()
       | none => pure ()
     if gradList.size > 0 then
@@ -8196,6 +8322,21 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
           vRetNames := vRetNames.push vwN |>.push vbN
           vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
+        | .fpnDetect oc c3 c4 c5 _ A =>
+          -- 6 weight-only params (base = p). Order Wn3,Wn4,Wn5,Wh3,Wh4,Wh5 — must
+          -- match paramShapes / emitTrainStepSig / heInit and the .fpnDetect backward.
+          let ap := A * 15
+          let wshapes := [[oc, c3], [oc, c4], [oc, c5], [ap, oc], [ap, oc], [ap, oc]]
+          for (wsh, i) in wshapes.zipIdx do
+            let pi := p + i
+            let (su, wN, mwN, vwN) := emitUpdate s!"%W{pi}" s!"%d_W{pi}" s!"%m_W{pi}" s!"%v_W{pi}" wsh s!"fpn{pi}" wdActive
+            code := code ++ su
+            paramRetNames := paramRetNames.push wN
+            paramRetTypes := paramRetTypes.push (tensorTy wsh)
+            mRetNames := mRetNames.push mwN
+            mRetTypes := mRetTypes.push (tensorTy wsh)
+            vRetNames := vRetNames.push vwN
+            vRetTypes := vRetTypes.push (tensorTy wsh)
         | _ => pure ()
     | none =>
       -- SE records (marker layer = globalAvgPool, isSE := true) carry 2 conv2d-style param
@@ -8443,6 +8584,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     (useDdpm : Bool := false) (ddpmOutShape : List Nat := [])
     (useYolov1 : Bool := false)
     (yoloGridH : Nat := 7) (yoloGridW : Nat := 7) (yoloPerCell : Nat := 30)
+    (fpnScales : List (Nat × List (Float × Float)) := [])
     : String := Id.run do
   let B := batchSize
   let NC := spec.numClasses
@@ -8977,6 +9119,17 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       vRetTypes := vRetTypes.push wTy |>.push bTy
       pidx := pidx + 1
       -- curShape unchanged (added onto the feature map)
+    | .fpnDetect oc c3 c4 c5 _ A =>
+      -- 6 weight-only 2D params (Wn3,Wn4,Wn5,Wh3,Wh4,Wh5). No bias/BN.
+      let ap := A * 15
+      let wtys := [tensorTy [oc, c3], tensorTy [oc, c4], tensorTy [oc, c5],
+                   tensorTy [ap, oc], tensorTy [ap, oc], tensorTy [ap, oc]]
+      for (wt, i) in wtys.zipIdx do
+        params := params ++ s!"      %W{pidx + i}: {wt},\n"
+        paramRetTypes := paramRetTypes.push wt
+        mRetTypes := mRetTypes.push wt
+        vRetTypes := vRetTypes.push wt
+      pidx := pidx + 6
     | _ => pure ()
   -- m_ params (1st moment, same shapes)
   let mut mpidx : Nat := 0
@@ -9158,6 +9311,13 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     | .timeCondAdd c nFreq =>
       params := params ++ s!"      %m_W{mpidx}: {tensorTy [2 * nFreq, c]}, %m_b{mpidx}: {tensorTy [c]},\n"
       mpidx := mpidx + 1
+    | .fpnDetect oc c3 c4 c5 _ A =>
+      let ap := A * 15
+      let wtys := [tensorTy [oc, c3], tensorTy [oc, c4], tensorTy [oc, c5],
+                   tensorTy [ap, oc], tensorTy [ap, oc], tensorTy [ap, oc]]
+      for (wt, i) in wtys.zipIdx do
+        params := params ++ s!"      %m_W{mpidx + i}: {wt},\n"
+      mpidx := mpidx + 6
     | _ => pure ()
   -- v_ params (2nd moment, same shapes)
   let mut vpidx2 : Nat := 0
@@ -9338,8 +9498,22 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     | .timeCondAdd c nFreq =>
       params := params ++ s!"      %v_W{vpidx2}: {tensorTy [2 * nFreq, c]}, %v_b{vpidx2}: {tensorTy [c]},\n"
       vpidx2 := vpidx2 + 1
+    | .fpnDetect oc c3 c4 c5 _ A =>
+      let ap := A * 15
+      let wtys := [tensorTy [oc, c3], tensorTy [oc, c4], tensorTy [oc, c5],
+                   tensorTy [ap, oc], tensorTy [ap, oc], tensorTy [ap, oc]]
+      for (wt, i) in wtys.zipIdx do
+        params := params ++ s!"      %v_W{vpidx2 + i}: {wt},\n"
+      vpidx2 := vpidx2 + 6
     | _ => pure ()
-  if useDdpm then
+  if !fpnScales.isEmpty then
+    -- FPN detector: one flat target [B, Ntot] laid out [P3|P4|P5]; the loss
+    -- slices it per scale. Masks are derived from each block's obj channel (no
+    -- FFI mask), so a single target arg suffices — same trick as the anchor path.
+    let P := 15
+    let Ntot := (fpnScales.map (fun sc => sc.2.length * P * sc.1 * sc.1)).foldl (·+·) 0
+    params := params ++ s!"      %x_flat: {tensorTy [B, inDim]}, %y_fpn: {tensorTy [B, Ntot]},\n"
+  else if useDdpm then
     -- DDPM: y_target is the noise ε the model learns to predict, same
     -- 4-D shape as the network output. Caller passes `ddpmOutShape`
     -- explicitly because we don't track the post-network shape here.
@@ -9394,6 +9568,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
     (segLoss : SegLoss := .ce)
     (useDiouBox : Bool := false)
     (yoloAnchors : List (Float × Float) := [])
+    (fpnScales : List (Nat × List (Float × Float)) := [])
     : String :=
   s!"// {spec.name} train_step — Generated by Lean 4 → MLIR (StableHLO + VJPs)\n" ++
   s!"// Batch size: {batchSize}, optimizer: {if useShampoo then "Shampoo (square 2D) + AdamW (rest)" else if useMuon then "Muon (2D) + AdamW (rest)" else if useAdam then "Adam" else "SGD+momentum"}\n" ++
@@ -9404,9 +9579,9 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
   "\n\n" ++
   s!"module @{moduleName} " ++ "{\n" ++
   emitTrainStepSig spec batchSize useSoftLabels useSeg useDdpm ddpmOutShape
-    useYolov1 yoloGridH yoloGridW (if yoloAnchors.isEmpty then yoloNumBoxes * 5 + yoloNumClasses else yoloAnchors.length * 15) ++ " {\n" ++
+    useYolov1 yoloGridH yoloGridW (if yoloAnchors.isEmpty then yoloNumBoxes * 5 + yoloNumClasses else yoloAnchors.length * 15) fpnScales ++ " {\n" ++
   emitTrainStepBody spec batchSize moduleName labelSmoothing weightDecay useAdam useSoftLabels useFocal focalGamma useSeg useDdpm
-    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult useMuon useShampoo segLoss useDiouBox yoloAnchors ++
+    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult useMuon useShampoo segLoss useDiouBox yoloAnchors fpnScales ++
   "  }\n" ++
   "}\n"
 
