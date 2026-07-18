@@ -51,29 +51,109 @@ e2 9.82% → e6 9.34% → e12 12.38%). Multi-scale thesis CONFIRMED — P3 56² 
 ## The improvements roadmap — from "beats anchor on recall" to "a good detector"
 
 The gap now is detector QUALITY, not wiring/encoding: recall 12.38% against an 88.2%
-encodability ceiling, and per-class mAP@0.5 pinned at 0.0001. Two diagnosed failure modes
-(both visible in the flat loss 315→304→301→300.9 converging by ~e6):
+encodability ceiling, and per-class mAP@0.5 pinned at 0.0001.
 
-1. **Objectness pos/neg imbalance (the loss flatlines here).** The objectness focal-BCE
-   sums over ALL ~12,348 anchors/img with only ~60 positive (~200:1), then `/B` (batch),
-   NOT `/num_pos`. Even with focal γ=2 the real objects are swamped → "predict low
-   objectness everywhere" → diffuse detections. RetinaNet is focal PLUS this balance.
-2. **Class collapse (pins per-class mAP at ~0).** The softmax class head collapsed to
-   "car" (9943 GT vs bus's 139) — at e12 ~every detection is labeled car (`car dets=539824`,
-   most classes 0). Class-agnostic localization is 2× anchor; per-class mAP is dead.
+### ⚠️ MEASURED 2026-07-18 — T1a as originally written is WRONG. Do not do it.
 
-### Tier 1 — loss rebalancing (loss-only, cheapest, DO FIRST)
+The roadmap below originally led with "objectness is swamped by ~200:1 negatives,
+normalize by `num_pos`." That was inferred from the flat loss curve, never measured.
+Measuring it on the e12 val logits (`scripts/fpn_loss_breakdown.py`,
+`scripts/fpn_obj_separation.py`) **refutes it**:
 
-Edits to `emitAnchorYoloLoss` (`MlirCodegen.lean:5146`), which `emitMultiScaleYoloLoss`
-(`:5288`) calls 3×. Validate each on the eval's recall/mAP — one lever at a time.
-- **[T1a] Normalize objectness by positive count / hard-negative mining.** Objectness loss
-  is `Σ focal_bce / B` (`%ay{tag}_Bf`, ~`:5165`/`:5225`). Switch to `/num_pos` (count of
-  obj==1 from the target mask `%{pa}_m4` already in scope), OR a fixed pos-weight, OR
-  keep only the top-K≈3·num_pos hardest negatives (SSD-style). **Highest-leverage change.**
-- **[T1b] Class-balanced classification.** The class term (softmax CE, `:5253`) has no
-  reweighting. Add inverse-frequency class weights (VisDrone counts known) or class focal.
-  FIRST check the class loss is masked to POSITIVE cells only — background leakage alone
-  would drive the collapse. This lifts per-class mAP off 0.0001.
+| term | loss/img | share |    | objectness | share of obj loss |
+|---|---|---|---|---|---|
+| box  | 193.2 | 49.3% |  | **positives** | **75.2%** |
+| obj  |  99.5 | 25.4% |  | negatives     | 24.8% |
+| cls  |  98.9 | 25.3% |  | | |
+
+Background is only 24.8% of the objectness loss — i.e. **6% of total loss**. Focal γ=2
+plus α=0.5 on negatives has already done its job; the count ratio is 1:197 but the *loss*
+ratio is 3:1 the other way. Per-cell gradient magnitudes confirm an equilibrium rather
+than a collapse (pos ≈ −0.64/cell × 63 cells vs neg ≈ +0.0014/cell × 12,285 cells), which
+is exactly why objectness settled at p≈0.14 instead of running to zero. Dividing the
+objectness term by `num_pos` would scale it by **1/63**, deleting the one term that is
+already working; hard-negative mining targets that same 6%. **Both are contraindicated.**
+
+The real objectness problem is **dynamic range, not balance**: every objectness logit in
+the val set lies in ≈[−2.7, −1.2] (p5..p95), with pos/neg means −1.549 / −1.803 and
+std 0.24 / 0.31. Overall AUC is **0.742** — real signal, but the head is barely modulating,
+and the top-100 highest-objectness cells per image are only 0.2–2.6% true positives. A
+single 1×1 conv **with no bias** has to manufacture the constant background offset out of
+its weights, which is precisely what it is spending them on. That is a capacity/init
+problem → **Tier 2 (head tower) + a prior-initialized bias**, not a loss-normalization one.
+Note `TrainConfig.headPriorBias` already exists for the RetinaNet log-π trick.
+
+### Tier 1 — loss rebalancing (loss-only, cheapest)
+
+Edits to `emitAnchorYoloLoss` (`MlirCodegen.lean:~5146`), which `emitMultiScaleYoloLoss`
+calls 3×. Validate each on the eval's recall/mAP — one lever at a time.
+- **[T1a] ~~Normalize objectness by positive count / hard-negative mining~~ — REFUTED
+  by measurement, see above. Skipped deliberately, not forgotten.**
+- **[T1b] Class-balanced classification — DONE (uncommitted).** The collapse is real and
+  worse than "everything is car": on positive cells the argmax emits only **5 of 10**
+  classes, and class 3 (car) takes **75.9%** of predictions while being 38.4% of GT. The
+  class term was already correctly masked to positive cells (`%{pa}_cls_maskb`), so this
+  is genuine frequency imbalance, not background leakage. Encoded-target frequencies
+  (`scripts/fpn_class_freq.py`): car 44.1%, pedestrian 21.2%, awning-tricycle 1.0%.
+  Implemented as `TrainConfig.yoloClsWeights` → a per-cell weight `w_{c(cell)}` on both
+  the loss and the gradient. Weights are **target-only**, hence exactly constant w.r.t.
+  the logits, so the weighted gradient stays finite-difference checkable — `fpn-loss-probe
+  --clsw` PASSES all 3 configs (fwd ~1e-8, grad vs numpy ~1e-6, grad vs f64 FD ~1e-6).
+  The unweighted path is guarded by `wOn` and its SSA names are unchanged, so it emits
+  the same MLIR as before: the unweighted emission contains zero `clsw` SSAs and its FD
+  numbers still match the bite-6 values. (Not diffed against a HEAD-built binary —
+  rebuilding mid-run would have swapped the exe out from under the eval watcher.)
+  Using sqrt-inverse frequency (6.7× spread) normalized to `Σ_c f_c·w_c = 1` so the class
+  term's magnitude — and its balance against box/obj — is unchanged. Full inverse is 45×.
+
+#### T1b RESULT (12 ep, A/B vs the unweighted baseline, everything else identical)
+
+`runs/fpn_wcls_t1b_gpu0.log`, checkpoints `…_448_wcls__visdrone__*`, evals
+`figures/yolo_fpn_wcls_e{2..12}`. **T1b fixed the mechanism it targeted and did NOT move
+the end metric.**
+
+| | baseline e12 | T1b e12 |
+|---|---|---|
+| recall@0.5 | 12.38% (3123 TP) | 12.51% (3155 TP) |
+| class-agnostic AP@0.5 | 0.0009 | 0.0009 |
+| car AP@0.5 | 0.0014 | 0.0014 |
+| **mAP@0.5** | **0.0001** | **0.0001** |
+| classes predicted, positive cells | 5/10 | **7/10** |
+| top-class share, positive cells | 75.9% | **60.3%** (GT 38.4%) |
+
+Recall +0.13pp is noise. Class concentration on positive cells genuinely halved its excess
+over GT (+37.5pp → +21.9pp), so the weights work — but mAP did not move at all. Per-epoch
+recall: 4.67 → 8.39 → 9.83 → 9.99 → 10.77 → 12.51; T1b starts *worse* (baseline e2 was
+9.82%) and only catches up by e6, i.e. the weighting costs early localization and repays
+it later.
+
+**Why mAP could not move — the measurement that matters for what to do next.** The class
+term is masked to POSITIVE cells, so the class head is never trained on background. But
+the detection list is background: 6,732,361 background cells vs 34,343 positives
+(**196:1**), ~539k detections survive the 0.001 conf floor, and **537,886 of them (99.8%)
+are labeled car**. Class predictions on those untrained background cells are what per-class
+AP actually scores. T1b did improve background spread as a shared-weight side effect
+(7/10 → 10/10 classes, top share 62.1% → 48.4%), and it still didn't matter.
+
+So **per-class mAP is bounded by objectness ranking, not by class balance.** With
+objectness AUC 0.742 and only 0.2–2.6% of each image's top-100 objectness cells being real,
+the detection list is flooded with background no matter how well the class head is
+calibrated on positives. This is the same conclusion the T1a refutation reached from the
+other direction, and it makes Tier 2 the only lever left that can move mAP.
+
+**Recommendation: stop working Tier 1. Both of its items are now measured out** — T1a
+attacks a 6%-of-loss non-problem, T1b works but is downstream of a binding constraint.
+Go to Tier 2, and specifically:
+1. **Give the head a bias** (it currently has none — 6 params, all conv weights) and
+   initialize it to the RetinaNet prior −log((1−π)/π), π≈0.01. `TrainConfig.headPriorBias`
+   already exists for the classifier; the detector head needs the analogous hook. Without
+   a bias the 1×1 conv must manufacture the constant background offset out of its weights,
+   which is exactly why every objectness logit is squeezed into [−2.7, −1.2].
+2. **Then the 3–4 conv 3×3 tower (T2a).** Do (1) first — it is a handful of params and
+   directly targets the measured dynamic-range failure, so it isolates cleanly from the
+   capacity question.
+Keep T1b on (it is free, FD-verified, and strictly better on class spread) but do not
+expect it to show up in mAP until objectness ranks.
 
 ### Tier 2 — head capacity (codegen, medium effort, the big jump)
 
