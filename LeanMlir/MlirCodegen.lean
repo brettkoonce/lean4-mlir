@@ -5193,6 +5193,76 @@ private def emitFpnNeckBackward (dP3SSA dP4SSA dP5SSA : String)
   s := s ++ sw3 ++ sw4 ++ sw5
   return (s, (dc3, dc4, dc5), (dw3, dw4, dw5))
 
+/-- FPN detector head+neck forward: neck (top-down merge) → per-scale 1×1-conv
+    heads → flatten + concat into a single `[B, Ntot]` output. Heads are a single
+    1×1 conv `Pn[oc] → [A·15]` (no hidden tower / no bias — the minimal detection
+    head; coverage, not head capacity, is the bottleneck). Params: neck laterals
+    `wn3/wn4/wn5 : [oc,c_s]`, head convs `wh3/wh4/wh5 : [A·15, oc]`. Concat order
+    P3,P4,P5 matches `emitMultiScaleYoloLoss`'s split. Returns the code, the
+    concat SSA, and the pyramid SSAs (P3,P4,P5 — needed for the head weight VJP). -/
+private def emitFpnDetectForward
+    (c3SSA c4SSA c5SSA wn3 wn4 wn5 wh3 wh4 wh5 : String)
+    (B oc c3 c4 c5 g5 A : Nat) : String × String × (String × String × String) := Id.run do
+  let P := 15
+  let g4 := 2 * g5
+  let g3 := 4 * g5
+  let ap := A * P
+  let (nfwd, (p3, p4, p5)) := emitFpnNeckForward c3SSA c4SSA c5SSA wn3 wn4 wn5 B oc c3 c4 c5 g5
+  let mut s := nfwd
+  let (sh3, h3) := emitConv1x1Fwd "fpn_h3" p3 wh3 B oc ap g3 g3
+  let (sh4, h4) := emitConv1x1Fwd "fpn_h4" p4 wh4 B oc ap g4 g4
+  let (sh5, h5) := emitConv1x1Fwd "fpn_h5" p5 wh5 B oc ap g5 g5
+  s := s ++ sh3 ++ sh4 ++ sh5
+  let len3 := ap * g3 * g3
+  let len4 := ap * g4 * g4
+  let len5 := ap * g5 * g5
+  s := s ++ s!"    %fpn_hf3 = stablehlo.reshape {h3} : ({tensorTy [B, ap, g3, g3]}) -> {tensorTy [B, len3]}\n"
+  s := s ++ s!"    %fpn_hf4 = stablehlo.reshape {h4} : ({tensorTy [B, ap, g4, g4]}) -> {tensorTy [B, len4]}\n"
+  s := s ++ s!"    %fpn_hf5 = stablehlo.reshape {h5} : ({tensorTy [B, ap, g5, g5]}) -> {tensorTy [B, len5]}\n"
+  s := s ++ s!"    %fpn_hc34 = stablehlo.concatenate %fpn_hf3, %fpn_hf4, dim = 1 : ({tensorTy [B, len3]}, {tensorTy [B, len4]}) -> {tensorTy [B, len3 + len4]}\n"
+  s := s ++ s!"    %fpn_out = stablehlo.concatenate %fpn_hc34, %fpn_hf5, dim = 1 : ({tensorTy [B, len3 + len4]}, {tensorTy [B, len5]}) -> {tensorTy [B, len3 + len4 + len5]}\n"
+  return (s, "%fpn_out", (p3, p4, p5))
+
+/-- FPN detector backward: un-concat the `[B, Ntot]` loss grad into the 3 head
+    grads → 1×1-conv head VJP (dPₙ + dWhₙ) → neck VJP (dC3/dC4/dC5 + dWnₙ).
+    Returns the code, the backbone-tap cotangents `(dC3,dC4,dC5)`, and the 6
+    param grads `[dWn3,dWn4,dWn5, dWh3,dWh4,dWh5]` (order matches the forward's
+    param args). All from FD-verified conv1x1 / neck emitters. -/
+private def emitFpnDetectBackward (gradConcatSSA : String)
+    (c3SSA c4SSA c5SSA wn3 wn4 wn5 : String) (p3SSA p4SSA p5SSA : String)
+    (wh3 wh4 wh5 : String) (B oc c3 c4 c5 g5 A : Nat)
+    : String × (String × String × String) × List String := Id.run do
+  let P := 15
+  let g4 := 2 * g5
+  let g3 := 4 * g5
+  let ap := A * P
+  let len3 := ap * g3 * g3
+  let len4 := ap * g4 * g4
+  let len5 := ap * g5 * g5
+  let Ntot := len3 + len4 + len5
+  let concatTy := tensorTy [B, Ntot]
+  let mut s := ""
+  -- un-concat + reshape to the 3 head-grad tensors
+  let unc := fun (i off len g : Nat) =>
+    s!"    %fpn_gs{i} = \"stablehlo.slice\"({gradConcatSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, {off}>, limit_indices = array<i64: {B}, {off + len}>, strides = array<i64: 1, 1>" ++ "} : " ++ s!"({concatTy}) -> {tensorTy [B, len]}\n" ++
+    s!"    %fpn_dh{i} = stablehlo.reshape %fpn_gs{i} : ({tensorTy [B, len]}) -> {tensorTy [B, ap, g, g]}\n"
+  s := s ++ unc 3 0 len3 g3
+  s := s ++ unc 4 len3 len4 g4
+  s := s ++ unc 5 (len3 + len4) len5 g5
+  -- head VJP: dPₙ (into neck) + dWhₙ (param grad)
+  let (sdp3, dp3) := emitConv1x1BwdDC "fpn_bh3" wh3 "%fpn_dh3" B oc ap g3 g3
+  let (sdp4, dp4) := emitConv1x1BwdDC "fpn_bh4" wh4 "%fpn_dh4" B oc ap g4 g4
+  let (sdp5, dp5) := emitConv1x1BwdDC "fpn_bh5" wh5 "%fpn_dh5" B oc ap g5 g5
+  let (sdw3, dwh3) := emitConv1x1BwdDW "fpn_bhw3" "%fpn_dh3" p3SSA B oc ap g3 g3
+  let (sdw4, dwh4) := emitConv1x1BwdDW "fpn_bhw4" "%fpn_dh4" p4SSA B oc ap g4 g4
+  let (sdw5, dwh5) := emitConv1x1BwdDW "fpn_bhw5" "%fpn_dh5" p5SSA B oc ap g5 g5
+  s := s ++ sdp3 ++ sdp4 ++ sdp5 ++ sdw3 ++ sdw4 ++ sdw5
+  -- neck VJP
+  let (nbwd, (dc3, dc4, dc5), (dwn3, dwn4, dwn5)) :=
+    emitFpnNeckBackward dp3 dp4 dp5 c3SSA c4SSA c5SSA wn3 wn4 wn5 B oc c3 c4 c5 g5
+  s := s ++ nbwd
+  return (s, (dc3, dc4, dc5), [dwn3, dwn4, dwn5, dwh3, dwh4, dwh5])
+
 /-- Emit the full train step (forward + loss + backward + SGD). -/
 private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : String)
     (labelSmoothing : Float := 0.1) (weightDecay : Float := 0.0001) (useAdam : Bool := true)
@@ -9459,6 +9529,48 @@ def fpnLossProbeModule (B : Nat) (scaleGrids : List Nat) (A : Nat) : String := I
   s := s ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
   s := s ++ emitMultiScaleYoloLoss B scales tgtSSAs "%logits" 2.0 5.0 "%fl_loss" "%fl_grad"
   s := s ++ s!"    return %fl_loss, %fl_grad : tensor<f32>, {concatTy}\n"
+  s := s ++ "  }\n}\n"
+  return s
+
+/-- Standalone whole-FPN-detector probe: neck + 1×1-conv heads + concat +
+    multi-scale loss + full DAG backward, conv1x1-only ⇒ CPU-compiles for FD. Run
+    at focal **γ=0** so the objectness weight is a genuine constant (not just
+    detached) and EVERY input/param grad is exactly finite-differenceable — this
+    validates the DAG backward (incl. all 6 param grads: neck laterals + heads)
+    before the `emitTrainStepBody` wiring. `@main(C3,C4,C5, Wn3,Wn4,Wn5,
+    Wh3,Wh4,Wh5, T3,T4,T5) -> (loss, dC3,dC4,dC5, dWn3,dWn4,dWn5, dWh3,dWh4,dWh5)`.
+    Deterministic per-scale anchors (w=0.02+0.03·i, h=0.03+0.04·i). -/
+def fpnDetectProbeModule (B oc c3 c4 c5 g5 A : Nat) : String := Id.run do
+  let P := 15
+  let g4 := 2 * g5
+  let g3 := 4 * g5
+  let ap := A * P
+  let anchors : List (Float × Float) := (List.range A).map (fun i =>
+    (0.02 + 0.03 * i.toFloat, 0.03 + 0.04 * i.toFloat))
+  let scales := [(g3, anchors), (g4, anchors), (g5, anchors)]
+  let c3Ty := tensorTy [B, c3, g3, g3]
+  let c4Ty := tensorTy [B, c4, g4, g4]
+  let c5Ty := tensorTy [B, c5, g5, g5]
+  let wn3Ty := s!"tensor<{oc}x{c3}xf32>"
+  let wn4Ty := s!"tensor<{oc}x{c4}xf32>"
+  let wn5Ty := s!"tensor<{oc}x{c5}xf32>"
+  let whTy := s!"tensor<{ap}x{oc}xf32>"
+  let t3Ty := tensorTy [B, ap, g3, g3]
+  let t4Ty := tensorTy [B, ap, g4, g4]
+  let t5Ty := tensorTy [B, ap, g5, g5]
+  let (fwd, concat, (p3, p4, p5)) :=
+    emitFpnDetectForward "%C3" "%C4" "%C5" "%Wn3" "%Wn4" "%Wn5" "%Wh3" "%Wh4" "%Wh5" B oc c3 c4 c5 g5 A
+  let (bwd, (dc3, dc4, dc5), dws) :=
+    emitFpnDetectBackward "%fpn_grad" "%C3" "%C4" "%C5" "%Wn3" "%Wn4" "%Wn5" p3 p4 p5 "%Wh3" "%Wh4" "%Wh5" B oc c3 c4 c5 g5 A
+  let mut s := s!"// fpn-detect probe (fwd+loss+bwd, γ=0): B={B} oc={oc} c=({c3},{c4},{c5}) g5={g5} A={A}\n"
+  s := s ++ "module @fpn_detect_probe {\n"
+  s := s ++ s!"  func.func @main(%C3: {c3Ty}, %C4: {c4Ty}, %C5: {c5Ty}, %Wn3: {wn3Ty}, %Wn4: {wn4Ty}, %Wn5: {wn5Ty}, %Wh3: {whTy}, %Wh4: {whTy}, %Wh5: {whTy}, %T3: {t3Ty}, %T4: {t4Ty}, %T5: {t5Ty}) -> (tensor<f32>, {c3Ty}, {c4Ty}, {c5Ty}, {wn3Ty}, {wn4Ty}, {wn5Ty}, {whTy}, {whTy}, {whTy}) " ++ "{\n"
+  s := s ++ "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n"
+  s := s ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
+  s := s ++ fwd
+  s := s ++ emitMultiScaleYoloLoss B scales ["%T3", "%T4", "%T5"] concat 0.0 5.0 "%fpn_loss" "%fpn_grad"
+  s := s ++ bwd
+  s := s ++ s!"    return %fpn_loss, {dc3}, {dc4}, {dc5}, {dws[0]!}, {dws[1]!}, {dws[2]!}, {dws[3]!}, {dws[4]!}, {dws[5]!} : tensor<f32>, {c3Ty}, {c4Ty}, {c5Ty}, {wn3Ty}, {wn4Ty}, {wn5Ty}, {whTy}, {whTy}, {whTy}\n"
   s := s ++ "  }\n}\n"
   return s
 

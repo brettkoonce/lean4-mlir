@@ -146,6 +146,16 @@ for v1.) The numpy `upsample2`/`upsample2_T` match `bilinearWeights1D` exactly.
 7. **DAG backward wiring.** concat grad → un-concat to 3 head grads → each head's conv
    backward → 3 Pn grads → `emitFpnNeck` backward → C3/C4/C5 grads → seed the backbone
    backward at the tap points (accumulate via the unet skip-grad named-SSA mechanism).
+   — **DAG math DONE + FD-verified.** `emitFpnDetectForward`/`emitFpnDetectBackward`
+   (MlirCodegen ~5196): neck + per-scale 1×1-conv heads (minimal head, no tower/bias — 6
+   params: neck laterals Wn3/4/5 + head convs Wh3/4/5) + flatten/concat; backward un-concats
+   → head VJP → neck VJP, returning (dC3,dC4,dC5) + all 6 param grads. Probe
+   `fpnDetectProbeModule` + exe `fpn-detect-probe` + `scripts/fpn_detect_probe_check.py`,
+   run at **focal γ=0** (objectness weight becomes a true constant ⇒ whole loss exactly
+   FD-able, no channel-skipping). All configs PASS: fwd ~1e-7, all 9 grads vs f64 FD ~1e-4.
+   **Left = the emitTrainStepBody plumbing** (param alloc/init/SGD for the 6 weights, backbone
+   tap-injection at the residualBlock markers, 3-target sig) — assembly of this verified block,
+   validated only by a ROCm train run.
 
 8. **Decode + train.** `yolo_map_visdrone.py`: decode all 3 scales (per scale: anchor
    decode as now, at that grid) and merge before NMS. New spec `r34FpnDet` + demo/exe +

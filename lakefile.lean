@@ -1352,6 +1352,12 @@ lean_exe «fpn-loss-probe» where
   root := `demos.MainFpnLossProbe
   moreLinkArgs := ireeLink
 
+-- Whole-FPN-detector probe (bite 7 de-risk): neck+heads+concat+loss+DAG backward,
+-- γ=0 so every grad is FD-checkable; validated by scripts/fpn_detect_probe_check.py.
+lean_exe «fpn-detect-probe» where
+  root := `demos.MainFpnDetectProbe
+  moreLinkArgs := ireeLink
+
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
   moreLinkArgs := ireeLink
