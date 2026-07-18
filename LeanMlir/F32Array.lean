@@ -141,6 +141,16 @@ opaque loadDetBinDims (path : @& String) (imgSize gridH gridW : USize)
 opaque loadDetBinAnchor (path : @& String) (imgSize gridH gridW numAnchors : USize)
     : IO (ByteArray × ByteArray × Nat)
 
+/-- FPN multi-scale detection loader (brick #3). Returns `(images_f32_normalized,
+    target_only_concat, count)` with `ntot` f32 target per image — the flat
+    `[P3|P4|P5]` block (`ntot = Σ_s numAnchorsₛ·15·g_s²`). Like the anchor loader,
+    the loss derives per-anchor masks from the target's objectness channels, so
+    the on-disk record is just image + flat target (no mask/boxes). Eval GT comes
+    from the single-box val.bin geometry, as in the anchor path. -/
+@[extern "lean_f32_load_voc_fpn"]
+opaque loadDetBinFpn (path : @& String) (imgSize ntot : USize)
+    : IO (ByteArray × ByteArray × Nat)
+
 /-- Split an interleaved YOLOv1 batch slice (per-record `[target||mask]`,
     6076 bytes/record) into separately-contiguous target + mask tensors
     suitable for the `trainStepAdamF32Yolov1` FFI. Returns

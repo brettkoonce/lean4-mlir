@@ -1364,6 +1364,12 @@ lean_exe «fpn-train-emit» where
   root := `demos.MainFpnTrainEmit
   moreLinkArgs := ireeLink
 
+-- FPN multi-scale detector training + inference (brick #3, bite 8). VisDrone 448,
+-- 3-scale (56/28/14) neck, trained via the single-target DDPM FFI path.
+lean_exe «yolov1-visdrone-fpn» where
+  root := `demos.MainYolov1VisdroneFpn
+  moreLinkArgs := ireeLink
+
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
   moreLinkArgs := ireeLink

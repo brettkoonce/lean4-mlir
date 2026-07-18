@@ -33,11 +33,15 @@ def r34FpnDet : NetSpec where
   ]
 
 def main (args : List String) : IO Unit := do
-  let outPath := args.head?.getD "/tmp/fpn_train_step.mlir"
+  let outDir := args.head?.getD "/tmp"
   let batch := 8
-  let mlir := MlirCodegen.generateTrainStep r34FpnDet batch "jit_fpn_train_step"
+  let train := MlirCodegen.generateTrainStep r34FpnDet batch "jit_fpn_train_step"
     (useAdam := true) (weightDecay := 0.0005) (gradClipNorm := 4.0)
     (focalGamma := 2.0) (fpnScales := fpnDetScales)
-  IO.FS.writeFile outPath mlir
+  let fwd  := MlirCodegen.generate r34FpnDet batch
+  let eval := MlirCodegen.generateEval r34FpnDet batch
+  IO.FS.writeFile s!"{outDir}/fpn_train_step.mlir" train
+  IO.FS.writeFile s!"{outDir}/fpn_fwd.mlir" fwd
+  IO.FS.writeFile s!"{outDir}/fpn_fwd_eval.mlir" eval
   let ntot := (fpnDetScales.map (fun sc => sc.2.length * 15 * sc.1 * sc.1)).foldl (·+·) 0
-  IO.println s!"wrote {mlir.length} chars to {outPath}  (Ntot = {ntot})"
+  IO.println s!"train={train.length}  fwd={fwd.length}  eval={eval.length} chars -> {outDir}  (Ntot = {ntot})"

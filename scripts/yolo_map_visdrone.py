@@ -150,6 +150,57 @@ def decode_anchor(pred_flat, anchors, grid, conf_thresh, nms_iou):
     return kept
 
 
+FPN_GRIDS = (56, 28, 14)   # P3 / P4 / P5 at 448px input (matches process_split_fpn)
+
+
+def _nms_per_class(dets, nms_iou):
+    kept = []
+    for c in set(d[0] for d in dets):
+        cd = sorted((d for d in dets if d[0] == c), key=lambda d: -d[1])
+        while cd:
+            top = cd.pop(0); kept.append(top)
+            cd = [d for d in cd if iou(top[2], d[2]) < nms_iou]
+    return kept
+
+
+def decode_anchor_raw(pred_block, anchors, grid, conf_thresh):
+    """One scale's anchor decode → raw (cid, conf, xyxy) dets, NO NMS (so the FPN
+    caller can merge across scales before a single NMS)."""
+    A = len(anchors); Pn = 15
+    pred = pred_block.reshape(A * Pn, grid, grid)
+    dets = []
+    for a, (aw, ah) in enumerate(anchors):
+        base = a * Pn
+        for i in range(grid):
+            for j in range(grid):
+                obj = float(sigmoid(pred[base + 4, i, j]))
+                if obj < conf_thresh:
+                    continue
+                cl = pred[base + 5:base + 15, i, j]
+                cid = int(cl.argmax())
+                e = np.exp(cl - cl.max()); clsp = float(e[cid] / e.sum())
+                cx = (j + float(sigmoid(pred[base + 0, i, j]))) / grid
+                cy = (i + float(sigmoid(pred[base + 1, i, j]))) / grid
+                w = aw * float(np.exp(pred[base + 2, i, j]))
+                h = ah * float(np.exp(pred[base + 3, i, j]))
+                dets.append((cid, obj * clsp,
+                             [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2]))
+    return dets
+
+
+def decode_fpn(pred_flat, scales, conf_thresh, nms_iou):
+    """Decode the flat FPN head [Ntot] = [P3|P4|P5]: per-scale anchor decode, then
+    MERGE all scales' dets and run one class-wise NMS (planning/yolo_fpn.md bite 8).
+    `scales` = [(grid, anchors), ...] in P3,P4,P5 order."""
+    dets = []
+    off = 0
+    for (grid, anchors) in scales:
+        length = len(anchors) * 15 * grid * grid
+        dets += decode_anchor_raw(pred_flat[off:off + length], anchors, grid, conf_thresh)
+        off += length
+    return _nms_per_class(dets, nms_iou)
+
+
 def read_gt(val_path):
     raw = np.fromfile(val_path, dtype=np.uint8)
     n = int(np.frombuffer(raw[:4], dtype="<u4")[0])
@@ -203,11 +254,22 @@ def main():
     ap.add_argument("--anchors", default=None,
                     help="anchor priors file → decode the A*15 anchor head (brick #2). "
                          "GT is still read from val_bin with the single-box geometry.")
+    ap.add_argument("--fpn", default=None,
+                    help="dir with anchors_fpn_{p3,p4,p5}.txt → decode the 3-scale FPN "
+                         "head (brick #3): per-scale decode, merge, one NMS. Use --grid 14. "
+                         "GT is still read from val_bin with the single-box geometry.")
     args = ap.parse_args()
     set_geometry(args.size if args.size else args.grid * 32, args.grid)
 
     logits_raw = np.fromfile(args.logits, dtype=np.float32)
-    if args.anchors:
+    if args.fpn:
+        scales = [(g, load_anchors_file(str(Path(args.fpn) / f"anchors_fpn_{p}.txt")))
+                  for g, p in zip(FPN_GRIDS, ("p3", "p4", "p5"))]
+        pred_w = sum(len(a) * 15 * g * g for (g, a) in scales)
+        n_pred = logits_raw.size // pred_w
+        logits = logits_raw[: n_pred * pred_w].reshape(n_pred, pred_w)
+        decode_fn = lambda row: decode_fpn(row, scales, args.conf_thresh, args.nms_iou)
+    elif args.anchors:
         anchor_list = load_anchors_file(args.anchors)
         pred_w = len(anchor_list) * 15 * GRID * GRID
         n_pred = logits_raw.size // pred_w

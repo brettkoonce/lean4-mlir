@@ -449,8 +449,19 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   -- hardcoded to 224/7×7 (Pets). When the spec runs at a larger input, override
   -- the record geometry + loader to the dims-parameterized path so the same
   -- .bin format works at any resolution. Pets (imageH=224) is left untouched.
+  -- FPN multi-scale total target width Σ_s Aₛ·15·g_s² (0 when not an FPN run).
+  let fpnNtot : Nat := (cfg.fpnScales.map (fun sc => sc.2.length * 15 * sc.1 * sc.1)).foldl (·+·) 0
   let dio :=
-    if ds == .petsDet && !cfg.anchors.isEmpty then
+    if ds == .petsDet && !cfg.fpnScales.isEmpty then
+      -- FPN mode (brick #3): the loader returns the flat [P3|P4|P5] target
+      -- (ntot f32/record); mask derived from obj channels in the loss.
+      { dio0 with
+        trainPixels := 3 * spec.imageH * spec.imageW
+        valPixels   := 3 * spec.imageH * spec.imageW
+        labelBytesPerRecord := fpnNtot * 4
+        loadTrain := fun d => F32.loadDetBinFpn (d ++ "/train.bin") spec.imageH.toUSize fpnNtot.toUSize
+        loadVal   := fun d => F32.loadDetBinFpn (d ++ "/val.bin") spec.imageH.toUSize fpnNtot.toUSize }
+    else if ds == .petsDet && !cfg.anchors.isEmpty then
       -- Anchor mode (brick #2): the loader returns TARGET-ONLY labels
       -- [A·15,gH,gW] (mask derived from target obj channels in the loss).
       let gH := spec.imageH / spec.detStride
@@ -490,7 +501,8 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     else if useSoftLabelsTop then .softLabelCE
     else .classCE
   let useSeg := lossKind.isSeg
-  let useYolov1Run := lossKind == .yolov1Masked
+  let useFpnRun := !cfg.fpnScales.isEmpty
+  let useYolov1Run := lossKind == .yolov1Masked && !useFpnRun
 
   let (trainImg, trainLbl, nTrain) ← dio.loadTrain dataDir
   IO.eprintln s!"  train: {nTrain} images ({dio.trainPixels} floats/image)"
@@ -754,7 +766,15 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         yArg ← F32.cutmixSoftLabels yb batch nClassesNat.toUSize augH.toUSize augW.toUSize cfg.cutmixAlpha cfg.labelSmoothing mixSeed
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
-      let out ← if useYolov1Run then do
+      let out ← if useFpnRun then do
+                  -- FPN (brick #3): one flat target [B, Ntot] (loader gives it
+                  -- target-only). The FPN codegen sig is x + %y_fpn:[B,Ntot,1,1] +
+                  -- lr + t — identical to the single-target DDPM protocol — so
+                  -- reuse that FFI verbatim (outC=Ntot, outH=outW=1), no mask.
+                  IreeSession.trainStepAdamF32Ddpm sess spec.trainFnName
+                    packed allShapes xba xSh yArg lr globalStep.toFloat bnShapes batch
+                    fpnNtot.toUSize 1 1
+                else if useYolov1Run then do
                   let gHu := (spec.imageH / spec.detStride).toUSize
                   let gWu := (spec.imageW / spec.detStride).toUSize
                   if !cfg.anchors.isEmpty then do
@@ -956,12 +976,12 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
            IO.FS.writeBinFile s!"{pfx}_best_params.bin" p
            IO.FS.writeBinFile s!"{pfx}_best_bn_stats.bin" runningBnStats
            IO.eprintln s!"  ✓ new best (score {segScore}) — saved {pfx}_best_*"
-     else if useYolov1Run then
-       -- mAP@0.5 eval for YOLOv1 is Phase 5 work (planning/yolo_final.md).
-       -- the train step runs + loss drops on real detection data; the
-       -- classification eval block below would interpret the 1470-flat
-       -- output as class logits, which is nonsensical for detection.
-       IO.eprintln s!"  (yolov1 eval skipped — Phase 2; train loss above is the signal)"
+     else if useYolov1Run || useFpnRun then
+       -- mAP@0.5 eval for detection is a separate offline pass (inferDump →
+       -- scripts/yolo_map_visdrone.py). The train step runs + loss drops on real
+       -- detection data; the classification eval block below would interpret the
+       -- flat detection output as class logits, which is nonsensical.
+       IO.eprintln s!"  ({if useFpnRun then "fpn" else "yolov1"} eval skipped — offline mAP pass; train loss above is the signal)"
      else
       let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
       if ← System.FilePath.pathExists evalVmfb then

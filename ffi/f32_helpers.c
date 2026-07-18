@@ -520,6 +520,60 @@ LEAN_EXPORT lean_obj_res lean_f32_load_voc_anchor(
     return lean_io_result_mk_ok(outer);
 }
 
+// FPN multi-scale detection loader (brick #3). On-disk record:
+//   image 3*imgSize^2 uint8, target ntot f32 (flat [P3|P4|P5] block,
+//   ntot = sum_s numAnchors_s*15*g_s^2, as preprocess_visdrone.py --fpn writes).
+// Returns (image_f32_normalized, target_only_concat, count) — image + flat target
+// only (no mask/boxes on disk; the loss derives masks from the target's obj
+// channels, and eval GT comes from the single-box val.bin geometry).
+LEAN_EXPORT lean_obj_res lean_f32_load_voc_fpn(
+        b_lean_obj_arg path_obj, size_t imgSize, size_t ntot, lean_obj_arg w) {
+    (void)w;
+    const char* path = lean_string_cstr(path_obj);
+    FILE* f = fopen(path, "rb");
+    if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open fpn file")));
+    uint32_t count;
+    if (fread(&count, 4, 1, f) != 1) { fclose(f);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("bad fpn header"))); }
+    const size_t pix = 3 * imgSize * imgSize;
+    const size_t tgt_bytes = ntot * 4;
+    const size_t rec_bytes = pix + tgt_bytes;
+    size_t img_bytes = (size_t)count * pix * 4;
+    size_t tgt_total = (size_t)count * tgt_bytes;
+    lean_object* img_ba = lean_alloc_sarray(1, img_bytes, img_bytes);
+    lean_object* tgt_ba = lean_alloc_sarray(1, tgt_total, tgt_total);
+    float* img = (float*)lean_sarray_cptr(img_ba);
+    uint8_t* tgt = lean_sarray_cptr(tgt_ba);
+    const float mean[3] = {0.485f, 0.456f, 0.406f};
+    const float istd[3] = {1.0f/0.229f, 1.0f/0.224f, 1.0f/0.225f};
+    uint8_t* buf = (uint8_t*)malloc(rec_bytes);
+    if (!buf) { fclose(f);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("fpn loader: malloc failed"))); }
+    for (uint32_t i = 0; i < count; i++) {
+        if (fread(buf, 1, rec_bytes, f) != rec_bytes) {
+            free(buf); fclose(f);
+            return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("fpn loader: short read")));
+        }
+        float* dst = img + (size_t)i * pix;
+        size_t hw = imgSize * imgSize;
+        for (int ch = 0; ch < 3; ch++) {
+            float m = mean[ch], s = istd[ch];
+            for (size_t j = 0; j < hw; j++)
+                dst[ch*hw+j] = (buf[ch*hw+j]/255.0f - m) * s;
+        }
+        memcpy(tgt + (size_t)i * tgt_bytes, buf + pix, tgt_bytes);   // flat target
+    }
+    free(buf); fclose(f);
+
+    lean_object* inner = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(inner, 0, tgt_ba);
+    lean_ctor_set(inner, 1, lean_usize_to_nat((size_t)count));
+    lean_object* outer = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(outer, 0, img_ba);
+    lean_ctor_set(outer, 1, inner);
+    return lean_io_result_mk_ok(outer);
+}
+
 // Re-encode YOLOv1 target+mask tensors from a list of bboxes. Matches
 // the encode_targets() in preprocess_voc.py — used by lean_f32_yolo_augment
 // after geometric transforms (hflip, random crop) shift the boxes around.

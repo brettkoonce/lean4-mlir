@@ -233,6 +233,50 @@ def process_split_anchor(split_dir, out_path, anchors):
           f"({cover:.1f}% encoded; rest lost to (cell,anchor) collisions)")
 
 
+def process_split_fpn(split_dir, out_path, anchors_per_scale, input_px):
+    """FPN multi-scale (brick #3): image u8 + the flat [P3|P4|P5] target only.
+    Each scale's target [A_s·15, g_s, g_s] is C-order flattened and concatenated
+    (Ntot = Σ_s A_s·15·g_s²) — exactly the layout lean_f32_load_voc_fpn reads and
+    emitMultiScaleYoloLoss slices. No mask/boxes on disk: the loss derives masks
+    from the obj channels, and eval GT comes from the single-box val.bin."""
+    imgs_dir = Path(split_dir) / "images"
+    anns_dir = Path(split_dir) / "annotations"
+    img_paths = sorted(glob.glob(str(imgs_dir / "*.jpg")))
+    written = skipped = 0
+    total_boxes = total_slots = 0
+    ntot = sum(len(anchors_per_scale[s]) * PER_ANCHOR * g * g
+               for s, g in enumerate(FPN_GRIDS))
+    with open(out_path, "wb") as f:
+        f.write(struct.pack("<I", 0))
+        for img_path in img_paths:
+            stem = Path(img_path).stem
+            txt = anns_dir / f"{stem}.txt"
+            if not txt.exists():
+                skipped += 1; continue
+            try:
+                boxes = parse_visdrone_txt(txt)
+                if not boxes:
+                    skipped += 1; continue
+                iw, ih = Image.open(img_path).size
+                tgts, _msks, nslots = encode_targets_fpn(
+                    iw, ih, boxes, anchors_per_scale, input_px)
+                flat = np.concatenate([t.reshape(-1) for t in tgts]).astype(np.float32)
+                assert flat.size == ntot, f"flat {flat.size} != Ntot {ntot}"
+                img = Image.open(img_path).convert("RGB").resize(
+                    (IMG_SIZE, IMG_SIZE), Image.BILINEAR)
+                chw = np.asarray(img, dtype=np.uint8).transpose(2, 0, 1).copy()
+                f.write(chw.tobytes()); f.write(flat.tobytes())
+                written += 1; total_boxes += len(boxes); total_slots += nslots
+            except Exception as e:
+                print(f"  skip {stem}: {e}", file=sys.stderr); skipped += 1
+        f.seek(0); f.write(struct.pack("<I", written))
+    mb = os.path.getsize(out_path) / 1024 / 1024
+    cover = 100.0 * total_slots / max(total_boxes, 1)
+    print(f"  wrote {out_path}: {written} records ({skipped} skipped), {mb:.0f} MB | "
+          f"Ntot={ntot}, {total_boxes} GT boxes → {total_slots} multi-scale slots "
+          f"({cover:.1f}% encoded)")
+
+
 def pack_raw_boxes(img_w, img_h, boxes):
     out = bytearray(MAX_BBOXES * 20)
     n = min(len(boxes), MAX_BBOXES)
@@ -283,7 +327,7 @@ def process_split(split_dir, out_path):
 def main():
     global IMG_SIZE, GRID_H, GRID_W
     argv = [a for a in sys.argv[1:]]
-    size = 224; grid = 7; anchors_path = None
+    size = 224; grid = 7; anchors_path = None; fpn_dir = None
     pos = []
     i = 0
     while i < len(argv):
@@ -293,6 +337,9 @@ def main():
             grid = int(argv[i+1]); i += 2
         elif argv[i] == "--anchors":
             anchors_path = argv[i+1]; i += 2
+        elif argv[i] == "--fpn":
+            # dir holding anchors_fpn_{p3,p4,p5}.txt (per-scale k-means priors)
+            fpn_dir = argv[i+1]; i += 2
         else:
             pos.append(argv[i]); i += 1
     if len(pos) != 2:
@@ -309,7 +356,19 @@ def main():
     val_dir = Path(visdrone_dir) / "VisDrone2019-DET-val"
     if not train_dir.exists() or not val_dir.exists():
         print(f"ERROR: expected {train_dir} and {val_dir}", file=sys.stderr); sys.exit(1)
-    if anchors_path:
+    if fpn_dir:
+        aps = [load_anchors(os.path.join(fpn_dir, f"anchors_fpn_{p}.txt"))
+               for p in ("p3", "p4", "p5")]
+        if IMG_SIZE != 448:
+            print(f"WARN: FPN grids {FPN_GRIDS} assume 448px input, got {IMG_SIZE}",
+                  file=sys.stderr)
+        ntot = sum(len(aps[s]) * PER_ANCHOR * g * g for s, g in enumerate(FPN_GRIDS))
+        rec = 3*IMG_SIZE*IMG_SIZE + ntot*4
+        print(f"FPN encoding: A/scale={[len(a) for a in aps]}, grids={FPN_GRIDS}, "
+              f"Ntot={ntot}, {rec} bytes/record")
+        process_split_fpn(train_dir, os.path.join(out_dir, "train.bin"), aps, IMG_SIZE)
+        process_split_fpn(val_dir,   os.path.join(out_dir, "val.bin"), aps, IMG_SIZE)
+    elif anchors_path:
         anchors = load_anchors(anchors_path)
         A = len(anchors)
         rec = 3*IMG_SIZE*IMG_SIZE + A*PER_ANCHOR*GRID_H*GRID_W*4 + A*GRID_H*GRID_W*4 + 4 + MAX_BBOXES*20
