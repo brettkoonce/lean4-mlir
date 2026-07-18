@@ -4941,10 +4941,19 @@ private def emitDiouForward (B gH gW : Nat) (predSSA tgtSSA maskSSA : String)
   -- w = anchorW · exp(tw): anchor-relative width prior (brick #2). anchorW=1
   -- reproduces the anchor-free path exactly. Backward is unchanged — it uses
   -- %{pfx}_w, and dw/dtw = anchorW·exp(tw) = w regardless of the prior.
-  s := s ++ s!"    %{pfx}_expw = stablehlo.exponential %{pfx}_tw : {c1}\n"
+  -- Cap tw/th at 8 before exp: exp(88)=inf in f32, and an inf `w` makes the
+  -- backward's dw/dtw=w inf, which the global-norm grad-clip turns into NaN
+  -- (inf·(clip/inf)=inf·0). The cap only fires far outside any trained/FD regime
+  -- (exp(8)=2981; FD probe tw~N(-3,1)), so it changes nothing except the
+  -- pathological overflow tail. Multi-scale sums ~10× the anchor arm's cells ⇒
+  -- larger gradients reach the danger zone, so this is load-bearing for FPN.
+  s := s ++ s!"    %{pfx}_expcap = stablehlo.constant dense<8.0> : {c1}\n"
+  s := s ++ s!"    %{pfx}_twc = stablehlo.minimum %{pfx}_tw, %{pfx}_expcap : {c1}\n"
+  s := s ++ s!"    %{pfx}_expw = stablehlo.exponential %{pfx}_twc : {c1}\n"
   s := s ++ s!"    %{pfx}_aw = stablehlo.constant dense<{anchorW}> : {c1}\n"
   s := s ++ s!"    %{pfx}_w = stablehlo.multiply %{pfx}_expw, %{pfx}_aw : {c1}\n"
-  s := s ++ s!"    %{pfx}_exph = stablehlo.exponential %{pfx}_th : {c1}\n"
+  s := s ++ s!"    %{pfx}_thc = stablehlo.minimum %{pfx}_th, %{pfx}_expcap : {c1}\n"
+  s := s ++ s!"    %{pfx}_exph = stablehlo.exponential %{pfx}_thc : {c1}\n"
   s := s ++ s!"    %{pfx}_ah = stablehlo.constant dense<{anchorH}> : {c1}\n"
   s := s ++ s!"    %{pfx}_h = stablehlo.multiply %{pfx}_exph, %{pfx}_ah : {c1}\n"
   s := s ++ s!"    %{pfx}_hw = stablehlo.multiply %{pfx}_w, %{pfx}_half : {c1}\n"

@@ -53,7 +53,8 @@ def r34FpnDet : NetSpec where
   ]
 
 def r34FpnDetConfig : TrainConfig where
-  learningRate := 7.0e-4
+  learningRate := 4.0e-4                -- below the anchor arm's 7e-4: the 3-scale
+                                        -- loss sums ~10× the cells ⇒ larger grads
   batchSize    := 8                     -- larger graph than the anchor arm
   epochs       := 12
   useAdam      := true
