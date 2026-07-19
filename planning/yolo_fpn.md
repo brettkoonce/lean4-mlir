@@ -89,7 +89,7 @@ Edits to `emitAnchorYoloLoss` (`MlirCodegen.lean:~5146`), which `emitMultiScaleY
 calls 3×. Validate each on the eval's recall/mAP — one lever at a time.
 - **[T1a] ~~Normalize objectness by positive count / hard-negative mining~~ — REFUTED
   by measurement, see above. Skipped deliberately, not forgotten.**
-- **[T1b] Class-balanced classification — DONE (uncommitted).** The collapse is real and
+- **[T1b] Class-balanced classification — DONE, committed `9916c7a`.** The collapse is real and
   worse than "everything is car": on positive cells the argmax emits only **5 of 10**
   classes, and class 3 (car) takes **75.9%** of predictions while being 38.4% of GT. The
   class term was already correctly masked to positive cells (`%{pa}_cls_maskb`), so this
@@ -157,10 +157,236 @@ expect it to show up in mAP until objectness ranks.
 
 ### Tier 2 — head capacity (codegen, medium effort, the big jump)
 
-- **[T2a] A real head tower.** Head is minimal: one 1×1 conv (256→A·15), no hidden layers
-  (`emitFpnDetectForward`, `:1920`). The flat-by-e6 loss smells capacity-limited, not
-  undertrained. Add a 3–4 conv 3×3 tower per branch (RetinaNet); new `emitFpnHead` emitter,
-  FD-checkable in isolation like the other bricks. **Lets recall climb toward 88.2%.**
+#### [T2-bias] Head bias + RetinaNet prior init — BUILT + FD-VERIFIED (uncommitted)
+
+Lever 1 of the recommendation above, done first because it is ~135 params and isolates
+cleanly from the capacity question. The head went from 6 weight-only params to **9**:
+neck laterals `Wn3/4/5` + head convs `Wh3/4/5` + **head biases `bh3/4/5 : [A·15]`**.
+
+- Forward (`emitFpnDetectForward`): `broadcast_in_dim` the `[ap]` bias over `[B,ap,g,g]`
+  (dims=[1]) and add after each 1×1 head conv.
+- Backward (`emitFpnDetectBackward`): `dbh = reduce(dh) over dims [0,2,3]` — a bias added
+  to every cell receives every cell's gradient. Returns 9 param grads now, not 6.
+- Plumbed through every site that knew "6": `Spec.totalParams`, `paramShapes`, `heInit`,
+  the 2 param-signature blocks, the grad-clip list, the optimizer, the 3 train-step sig
+  blocks (`%W`/`%m_W`/`%v_W`), both forward call sites, and the backward bind.
+- **Biases take NO weight decay** (`wdActive && i < 6` in the optimizer loop). Decaying
+  them would drag the prior back toward 0, which is the exact offset they exist to hold.
+- **`heInit` zeroes the biases**, so the codegen change is a mathematical **no-op at init**.
+  That is deliberate: it makes "add a bias" and "start it at the prior" separable levers,
+  and it means **the T1b run is already the control** — no bias-off arm needed.
+- Prior install: `NetSpec.applyDetPriorBias` (SpecHelpers) ← `TrainConfig.detPriorPi`
+  (0.0 = off, set to **0.01**), applied in `Train.lean` after the backbone bootstrap and
+  before a checkpoint resume — same placement rationale as `applyHeadPriorBias`. Sets the
+  objectness bias to `−log((1−π)/π) ≈ −4.595`; box/class biases stay 0.
+- **FD-verified**: `scripts/fpn_detect_probe_check.py` now feeds 3 nonzero biases and
+  checks 12 grads. All 3 configs PASS — fwd vs numpy ~1e-7, all grads vs f64 FD ~1e-6
+  (`dbh` specifically 1e-7..9e-5). Biases are deliberately **nonzero** in the probe; a
+  zero bias would make the emitted add a no-op and the check vacuous.
+- Layout check: `scripts/fpn_prior_bias_check.py` verifies the prior landed on the
+  **objectness** channels (`a·15+4`) and nowhere else. An off-by-one here is silent —
+  training still runs, the lever just does something else — hence its own script.
+- Arm: spec renamed `…wcls pb`, so it does not clobber the baseline or T1b checkpoints.
+  Old e12 checkpoints are 135 floats short of the new spec, so the resume path's
+  size check rejects them and keeps the init (safe, and expected).
+
+**Interim signal (step 0, vs the T1b control — everything else identical):**
+
+| | T1b (biasless) | T2-bias (prior init) |
+|---|---|---|
+| step 0 loss | 3818.80 | **862.29** |
+| step 1 / 2 | 3748.77 / 3990.47 | 688.26 / 1264.80 |
+| step 100 / 200 / 300 | 647.54 / 841.29 / 342.20 | 524.27 / 867.63 / 359.99 |
+
+**4.4× lower loss at step 0** — the init does exactly what it claims: the head starts
+predicting p≈0.01 on background instead of p≈0.5, so objectness starts near its floor
+rather than paying a large penalty on all 12,285 background cells/img. By step ~100 the
+two arms are the same magnitude (the biasless head learns the offset quickly), which is
+the expected shape. **This confirms the mechanism, NOT the outcome** — the open question
+is whether starting there buys better final objectness *ranking* (AUC / logit spread),
+which is the thing per-class mAP is actually bounded by. Watch `fpn_obj_separation.py`,
+not just recall.
+
+Run COMPLETE: `runs/fpn_pb_t2_gpu0.log` (GPU 0, 22.3 min/epoch), eval watcher
+`run_fpn_pb_eval_watch.sh` → `runs/fpn_pb_eval_watch.log`, per-epoch dumps
+`figures/yolo_fpn_pb_e{2..12}`.
+
+#### ⚠️ T2-bias RESULT (12 ep, complete) — THE PRIOR INIT IS WASHED OUT BY TRAINING
+
+**The lever is refuted, and refuted more cleanly than T1a was.** The objectness logit
+distribution converges to the SAME place regardless of where it starts.
+
+| | baseline (no bias) e12 | T2-bias e12 |
+|---|---|---|
+| objectness mean pos / neg | −1.549 / −1.803 | **−1.574 / −1.828** |
+| pos−neg gap | +0.254 | **+0.254** |
+| logit std pos / neg | 0.24 / 0.31 | **0.239 / 0.356** |
+| recall@0.5 | 12.38% (3123 TP) | 12.62% (3183 TP) |
+| mAP@0.5 | 0.0001 | **0.0001** |
+
+Means match to 0.025, the gap matches to three decimals, std matches to 0.05. Recall
+12.38 / 12.51 / 12.62 across baseline / T1b / T2-bias is one noise band.
+
+**The dynamic range trajectory is the whole story** (std pos/neg per epoch):
+
+| e2 | e4 | e6 | e8 | e10 | e12 |
+|---|---|---|---|---|---|
+| 0.644 / 1.205 | 0.823 / 1.524 | 0.472 / 0.717 | 0.324 / 0.568 | 0.260 / 0.378 | 0.239 / 0.356 |
+
+The bias DID open the range — 3–5× wider than baseline at e4 — and then training
+monotonically **collapsed it back onto the baseline value**. The biases are excluded from
+weight decay, so nothing was pulling them to zero; the head simply prefers this
+distribution. It could express a wide range and chose not to.
+
+**So the premise behind T2-bias was wrong.** The narrow objectness range is NOT an
+init/parameterization artifact — not "a bias-free 1×1 conv must manufacture the constant
+background offset out of its weights." Giving it that bias for free changed nothing at
+convergence. The narrow band is a **converged equilibrium of the loss**, and an
+equilibrium is a fixed point: re-initializing cannot move it.
+
+This closes the loop with the T1a refutation, which measured that same equilibrium from
+the gradient side (pos ≈ −0.64/cell × 63 cells vs neg ≈ +0.0014/cell × 12,285). Note
+sigmoid(−1.574) = 0.17 and sigmoid(−1.828) = 0.14 — exactly the p ≈ 0.14 the T1a analysis
+predicted objectness would settle at. Two independent measurements, one fixed point.
+
+**What this leaves.** The equilibrium is set by the loss and the features. T1a already
+measured that the loss-balance knob is a non-problem (background is 6% of total loss). So
+the remaining lever is the **features the objectness head sees** — which is exactly T2a,
+and T2a is now the only surviving hypothesis rather than merely the next item on a list.
+The caveat is honest: T2a changes features, but if the equilibrium is a property of the
+loss geometry rather than feature quality, it will wash out the same way. Measure it.
+
+**Keep the bias.** It is free, FD-verified, costs 135 params, and gives a 4.4× lower
+step-0 loss. It just doesn't survive to e12.
+
+**Gotcha (cost a full 12-epoch eval sweep) — `FPN_TOWER` selects the SPEC, so it must be
+set on `infer` too, not just on training.** The eval watcher copied the right checkpoint
+into `<tower4-prefix>_params.bin` but ran `infer` without `FPN_TOWER=4`; `main` therefore
+built the tower=0 spec, whose `buildPrefix` is the **pb arm's**, and happily evaluated the
+pb arm's `_params.bin` against the pb arm's eval vmfb. Nothing errored: every
+prefix/size/vmfb is self-consistent for the wrong spec, so **no size check can catch this
+class of bug.** The only tell was that all six epochs reported byte-identical metrics —
+and identical to the previous arm's e12 row. **If an epoch sweep shows zero variation
+between checkpoints, suspect the harness before believing the result.**
+`inferDump` now prints spec name / prefix / expected float count up front so the arm being
+evaluated is visible on line 2; the broken sweep is kept as
+`runs/fpn_t2a_eval_watch_BROKEN_wrong_arm.log`.
+
+**Gotcha (cost me a compile):** the train step MUST be built with `IREE_BACKEND=rocm`.
+Without it `ireeCompileArgs` defaults to **CUDA/sm_86** and drops
+`--iree-codegen-llvmgpu-use-reduction-vector-distribution=false`, so the loss reduce dies
+with `'func.func' op failed to distribute` on a `matvec_like` dispatch. That flag already
+exists in `Types.lean` for exactly this failure — the error is the missing env var, not
+the codegen.
+
+#### ⚠️ [T2a] RetinaNet head tower — RUN + **REFUTED**. ALL OF TIER 2 IS NOW MEASURED OUT.
+
+`runs/fpn_t2a_tower4_gpu0.log`, `FPN_TOWER=4`, 28,629,703 params (+7.08M), 34 min/epoch
+(vs 22), evals `figures/yolo_fpn_t2a_e{2..12}`. Control = the T2-bias arm (tower=0, same
+bias + prior) — a clean one-lever A/B.
+
+**The equilibrium is invariant to head capacity, exactly as it was to initialization.**
+
+| arm | params | recall@0.5 | mAP@0.5 | obj gap | obj std pos/neg | train loss e12 |
+|---|---|---|---|---|---|---|
+| baseline | 21.5M | 12.38% | 0.0001 | +0.254 | 0.240 / 0.310 | — |
+| T1b (wcls) | 21.5M | 12.51% | 0.0001 | — | — | — |
+| T2-bias | 21.5M | **12.62%** | 0.0001 | +0.254 | 0.239 / 0.356 | 319.24 |
+| **T2a (tower 4)** | **28.6M** | 11.80% | 0.0001 | +0.264 | 0.242 / 0.330 | **320.37** |
+
+Same fixed point on every axis. Recall is if anything slightly *worse*, and — the detail
+that kills the capacity hypothesis outright — **the tower did not even lower the TRAIN
+loss** (320.37 vs 319.24). This is not underfitting. Seven million extra parameters bought
+nothing to fit with.
+
+So: not initialization (T2-bias), not head capacity (T2a), not loss balance (T1a, 6% of
+loss), not class weighting (T1b). Four levers, four refutations, mAP 0.0001 in all of them.
+
+#### ✅ THE ACTUAL CONSTRAINT — measured: it is the TARGET ASSIGNMENT
+
+`scripts/fpn_neighbor_separation.py` splits background into cells **8-adjacent to a
+positive** ("ring") vs everything else, on the T2a e12 logits:
+
+| population | n | mean objectness logit | std |
+|---|---|---|---|
+| positive | 34,341 | **−1.5818** | 0.249 |
+| ring (adjacent) | 192,747 | **−1.6035** | 0.261 |
+| far background | 6,539,616 | −1.8509 | 0.329 |
+
+- `pos − far  = +0.269` — the separation ranking needs.
+- `ring − far = +0.247` — **the head knows perfectly well where the objects are.**
+- `pos − ring = +0.022` — **it cannot tell the assigned cell from its neighbour.**
+
+**The ring sits 92% of the way from far background to positive.** The head has solved
+localization at neighbourhood resolution and is being asked, on top of that, to pick which
+one of ~6 cells in that neighbourhood is "the" assigned cell. For a 2–5px VisDrone object
+on the 56² P3 grid those cells see essentially the same receptive field, so they are
+**near-identical inputs — no function of them can rank them apart.** That is why capacity,
+initialization and loss weighting all washed out: none of them changes the fact that the
+task as posed is unlearnable.
+
+It also explains the mAP directly: there are **5.6 ring cells per positive**, all scoring
+within 0.02 of the positives, so the top of the score-ranked detection list is flooded with
+near-miss duplicates. That is a false-positive avalanche no confidence threshold can fix.
+
+#### Next lever — Tier 3 assignment, and it is the LAST untested hypothesis
+
+Go to **multi-anchor-per-GT / FCOS-style center sampling**: make the ring cells positive
+too. This stops demanding an impossible discrimination, multiplies the positive count
+~6×, and turns those near-duplicate detections into NMS-mergeable clusters instead of
+false positives. It is also the one change that attacks the measured constraint rather
+than a hypothesised one.
+
+**Pre-measure before building** — that discipline has now paid off four times in this
+thread. `visdrone_fpn_coverage.py` already computes assignment; extend it to report
+recall@0.5 achievable under a center-sampling assignment (an oracle upper bound) BEFORE
+writing any codegen. If the oracle does not move, do not build it.
+
+
+`Layer.fpnDetect` gained a 7th arg, `tower` = number of 3×3 convs per level.
+**`tower = 0` emits zero tower ops and is a verified byte-exact no-op** (diffed the
+emitted train step; `fpn_tw` appears 0 times, params are exactly the same 9), so the
+in-flight T2-bias arm stays reproducible from HEAD.
+
+- Per-level, **NOT shared** across P3/P4/P5 — what bite 4 specified, and it avoids the
+  shared-weight grad accumulation (and, if norm is ever added, the per-level-statistics
+  problem) that sharing introduces. Plain conv + bias + ReLU, **no normalization**, as in
+  the original RetinaNet head — keeps the tower out of the BN running-stats plumbing.
+- New emitters `emitTowerConvFwd`/`emitTowerConvBwd` + `emitFpnTowerFwd`/`Bwd`, lifted
+  from the FD-verified `.conv2d` path and made prefix-parameterized, exactly how
+  `emitConv1x1Fwd`/`BwdDC`/`BwdDW` were factored out for the neck.
+- **Ordering is now defined ONCE**: `fpnDetectParamShapes` (Spec.lean) is the single
+  source of truth consumed by `totalParams`, `paramShapes`, `heInitLayer`, the train-step
+  sig, the grad-clip list, the optimizer, and the backward's grad binding. A mismatch
+  between any two of those is a silent parameter-aliasing bug, not a compile error —
+  hence one definition rather than seven parallel literals. Head biases stay LAST because
+  `applyDetPriorBias` splices the tail.
+- Weight decay is now keyed on **rank** (`wsh.length > 1`), so every bias — tower and
+  head — is excluded, which is both conventional and required for the prior.
+- **FD-verified**: `fpn-detect-probe` takes a `tower` arg; the checker runs depths
+  0,0,0,1,2,3 — all 6 PASS, fwd ~1e-7, every grad (incl. each tower `dW`/`db`) vs f64 FD
+  ~1e-6. Tower weights are init He-scaled in the probe so ReLU keeps a live fraction; an
+  all-dead tower would make its gradients trivially 0 and the check vacuous (same trap as
+  a zero bias).
+- **The tower probe CPU-compiles** (exit 0) even with real 3×3 `stablehlo.convolution`,
+  so T2a did NOT cost us the CPU FD path — better than this doc previously assumed.
+- Selected at run time by **`FPN_TOWER`** (both `yolov1-visdrone-fpn` and
+  `fpn-train-emit`), folded into the spec `name` so arms can't collide.
+  `FPN_TOWER=4` → **28,629,703 params** (+7,080,960 = 3 levels × 4 × (256²·9 + 256)),
+  `Ntot` unchanged at 185220 (the tower is channel-preserving).
+- **Compile de-risked**: the `FPN_TOWER=4` train step compiles clean for gfx1100 in
+  **6m40s**, vs 6m32s for tower=0 — the 12 extra convs and their backwards cost
+  essentially nothing at compile time. So launching T2a is push-button:
+
+  ```
+  lake build yolov1-visdrone-fpn
+  IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 FPN_TOWER=4 \
+    ./.lake/build/bin/yolov1-visdrone-fpn data/visdrone_fpn
+  # eval watcher: same script with PFX/OUT switched to the tower arm's name
+  ```
+  Note the bootstrap prefix (21,284,672) is untouched by the tower, since tower params sit
+  inside the `.fpnDetect` block, after the whole backbone.
+
 - **[T2b] Decouple cls/box subnets** — separate towers so each specializes (do with T2a).
 
 ### Tier 3 — refinements (only after T1/T2 move the numbers)
