@@ -58,7 +58,125 @@ Make the ring cells positive too — **multi-anchor-per-GT / FCOS-style center s
    see Risk 1).
 3. Near-duplicate detections become **NMS-mergeable clusters** instead of false positives.
 
-## ⚠️ BITE 0 — PRE-MEASURE. Do NOT write codegen first.
+## ❌ BITE 0 RESULTS — measured 2026-07-19. THE HYPOTHESIS IS REFUTED. DO NOT BUILD IT.
+
+All three sub-measurements were run on existing artifacts (no training, no GPU, no Lean).
+Every one of them says no, and 0c says the doc is asking the wrong question entirely.
+**Measure-before-build pays off a fifth time — this saved the 8.3 GB re-encode and a
+~4.5 h training run.**
+
+### 0a — the oracle does not move (`visdrone_fpn_coverage.py --center-sampling`)
+
+Two ceilings, and the second is the one that matters. `encodable` = the GT keeps ≥1 slot
+after collisions (today's 88.2% metric). `reachable` = it keeps ≥1 slot that can actually
+**decode** an IoU≥0.5 box — because `cx=(j+σ(tx))/g` confines a cell's predicted centre
+strictly inside itself, so a ring cell whose neighbour owns the GT centre cannot emit a box
+on that GT at all. Making a cell positive that cannot represent its target does not add a
+detection; it trains a guaranteed false positive.
+
+Full train split, 343,204 GT boxes:
+
+| assignment | slots/GT | encodable | reachable (naive) | encodable | reachable (priority) |
+|---|---|---|---|---|---|
+| baseline (1 cell/GT) | 0.88 | 88.2% | **88.2%** | 88.2% | **88.2%** |
+| FCOS: centre inside GT box | 1.90 | 88.3% | 88.3% | 89.5% | **89.5%** |
+| radius 1 → 3×3 | 5.80 | 86.3% | **68.9%** | 88.2% | **88.2%** |
+| radius 2 → 5×5 | 12.64 | 84.5% | **51.4%** | 88.2% | **88.2%** |
+
+*naive* = today's last-write-wins encoder; *priority* = own-centre beats any other GT's ring
+(the best case, tested so the hypothesis is not judged on an incidental encoder detail).
+
+- **Radius center sampling buys exactly 0.0 points** in the best case — the centre cell was
+  already the only reachable one, so protecting it reproduces the baseline exactly.
+- With the encoder **as actually written** it is *destructive*: −19 to −37 points of
+  reachable recall, because ring cells steal neighbouring GTs' centre cells in
+  53-objects/image scenes.
+- FCOS "centre inside box" is near-degenerate here (2–5px objects vs 8px P3 cells) and buys
+  at most **+1.3 points**.
+
+Per this doc's own stopping rule — *"if the oracle does not move, stop"* — **stop.**
+
+### 0b — ring boxes do not merge, and mostly cannot even be right
+
+Measured on the T2a e12 logits, 270,838 ring cells:
+
+| quantity | mean | median | p90 | frac ≥ NMS 0.5 |
+|---|---|---|---|---|
+| IoU(ring box, centre box) | 0.125 | 0.063 | 0.338 | **0.41%** |
+| IoU(ring box, GT) | 0.104 | 0.054 | 0.296 | **0.71%** |
+
+Risk 2 was the right thing to worry about and it is fatal: **99.6% of ring boxes would
+survive NMS as separate detections.** Claim 3 of the hypothesis is false — the duplicates
+do not become mergeable clusters, they become more false positives.
+
+Geometry bound (best box a ring cell could *ever* emit, centre-in-cell, w/h free):
+
+    span 0.0  (today,  cx=(j+σ)/g)          only 30.6% of ring cells can reach IoU≥0.5
+    span 0.5  (YOLOv5, cx=(j+2σ−0.5)/g)          80.8%
+
+So center sampling is **not a standalone change**: without also widening the centre range to
+YOLOv5's `2σ−0.5`, ~69% of the new positives are trained toward boxes they cannot represent.
+
+### 0c — duplicates are not what costs the mAP, and the real constraint is elsewhere
+
+`fpn_duplicate_oracle.py`, T2a e12, IoU@0.5. ORACLE = keep only the single best correct
+detection per GT and drop everything else — perfect duplicate suppression *and* perfect FP
+rejection, unreachable by any real detector:
+
+| variant | dets/img | recall | ca-AP | mAP |
+|---|---|---|---|---|
+| baseline IoU-NMS@0.5 | 942.7 | 0.1180 | 0.0009 | 0.0001 |
+| centre-NMS r=1 | 582.2 | 0.0812 | 0.0006 | 0.0001 |
+| centre-NMS r=2 | 235.3 | 0.0325 | 0.0003 | 0.0000 |
+| **ORACLE 1-det-per-GT** | 4.2 | 0.0914 | 0.0914 | **0.0232** |
+
+Duplicate suppression *lowers* recall at IoU 0.5 — the higher-scoring detection in a
+neighbourhood is usually not the one matching the GT, so clustering deletes true positives.
+And perfect duplicate handling plus perfect FP rejection still caps mAP at **0.0232**.
+
+**The binding constraint: the detector emits a correct-class IoU≥0.5 box for only 9.1% of GT
+(11.8% class-agnostic) — against an 88.2% encodability ceiling.** Ranking, assignment and
+duplicates are all downstream of the fact that the right box is simply not in the output.
+
+### The reframing — it is box PRECISION, not assignment
+
+Rescoring the same logits at looser IoU:
+
+| TP IoU threshold | 0.50 | 0.25 | 0.10 |
+|---|---|---|---|
+| class-agnostic recall | 0.1180 | 0.3998 | **0.6804** |
+| ORACLE mAP ceiling | 0.0232 | 0.0620 | 0.0768 |
+
+**The detector already finds 68% of the objects.** It puts a box in the right place and
+cannot make it precise enough to clear IoU 0.5 on a 2–5px target, where a one-pixel error
+is fatal. That is consistent with — and a better explanation of — the `ring−far = +0.247`
+separation: the head localizes to *neighbourhood* resolution because that is all the
+448px-downsampled input retains.
+
+Note this also inverts Risk 4: **P2/resolution is not a deferred Tier 3 nicety, it is the
+constraint.** VisDrone at 448px destroys the pixels the box regressor needs; a pedestrian
+~20px in the source image is ~6px after the resize.
+
+### Suggested next levers (measure first, as always)
+
+1. **Input resolution / P2 scale.** The only lever the 0c curve supports. Cheapest probe:
+   re-encode + eval at 768px or add a stride-4 P2 level, and watch recall@0.5, not mAP.
+2. **Report mAP@0.25 alongside mAP@0.5** so the demo has a metric with signal in it while
+   resolution work lands. At 0.5 every arm reads 0.0001 and the thread is flying blind —
+   four levers were judged against a metric that was saturated at zero.
+3. Center sampling stays dead **unless** resolution first lifts recall@0.5, at which point
+   re-run 0b: bigger objects make ring boxes genuinely mergeable and the calculus changes.
+
+### Incidental: a real bug in `fpn_neighbor_separation.py` (fixed, verdict unchanged)
+
+It read `val.bin` from byte 0, never skipping the 4-byte `<I` record-count header that
+`process_split_fpn` writes — shifting every target by one float32 = one cell along `j`, so
+each positive's right-hand neighbour was labelled the positive. **This did not change its
+verdict** (`pos−ring` +0.0217 → +0.0250 corrected; see `fpn_neighbor_align_check.py`), and
+the C loader `lean_f32_load_voc_fpn` reads the header correctly, so **training was never
+affected**. Fixed anyway.
+
+## ⚠️ BITE 0 — PRE-MEASURE. Do NOT write codegen first.  ✅ DONE — see results above.
 
 Measure-before-build has now paid off four times in this thread (T1a refuted on paper,
 T1b's ceiling predicted, T2-bias and T2a both explained by one measurement). Do the same
@@ -85,7 +203,11 @@ what perfect duplicate handling alone would buy, independent of assignment.
 
 Write results into this doc before touching `preprocess_visdrone.py`.
 
-## The build, if bite 0 says go
+## The build, if bite 0 says go  — ⛔ BITE 0 SAID STOP. Retained for reference only.
+
+*(0a moved the oracle by 0.0 points, 0b showed 99.6% of ring boxes never merge, and 0c
+showed duplicates are not the cost. Do not execute the bites below. The encoder analysis
+in bite 1 remains accurate and would be reusable if resolution work ever revives this.)*
 
 **The good news: this is very likely a ZERO-CODEGEN change.** The multi-scale loss masks
 positives by the **target's own objectness channel** (`%{pa}_m4`, sliced from the target at
@@ -172,5 +294,8 @@ mAP comes from the single-box `data/visdrone448/val.bin`.
 | `fpn_loss_breakdown.py` | where does the loss actually go? (box/obj/cls, pos vs neg) |
 | `fpn_obj_separation.py` | objectness AUC + logit spread + class-head collapse |
 | `fpn_class_freq.py` | encoded-target class frequencies + weight literals |
-| `visdrone_fpn_coverage.py` | encodability ceiling per assignment scheme (extend for 0a) |
+| `visdrone_fpn_coverage.py` | encodability ceiling per assignment scheme (`--center-sampling` = 0a) |
 | `fpn_prior_bias_check.py` | did a prior-bias init land on the right channels? |
+| `fpn_ring_boxes.py` | 0b: do ring boxes merge under NMS? + the centre-reachability bound |
+| `fpn_duplicate_oracle.py` | 0c: mAP under centre-NMS and a 1-det-per-GT oracle; `--iou` sweeps |
+| `fpn_neighbor_align_check.py` | header-alignment control for `fpn_neighbor_separation.py` |

@@ -64,12 +64,17 @@ def main():
     n = logits.size // ntot
     logits = logits[:n * ntot].reshape(n, ntot)
 
-    # val.bin records are image (u8) + flat target (f32), byte-exact per record.
+    # val.bin = a 4-byte <I record-count header, then records of image (u8) +
+    # flat target (f32). The header MUST be skipped: starting at byte 0 shifts
+    # every target by one float32 = one cell along j (the fastest-varying axis),
+    # which silently mislabels each positive's right-hand neighbour as the
+    # positive. (Measured: it moves pos-ring from +0.0250 to +0.0217 -- it did
+    # not change this script's verdict, but it is still the wrong read.)
     rec_img = 3 * args.imgsz * args.imgsz
     rec = rec_img + ntot * 4
     raw = np.fromfile(args.valbin, dtype=np.uint8)
-    nrec = raw.size // rec
-    raw = raw[:nrec * rec].reshape(nrec, rec)
+    nrec = (raw.size - 4) // rec
+    raw = raw[4:4 + nrec * rec].reshape(nrec, rec)
     tgt = raw[:, rec_img:].copy().view(np.float32).reshape(nrec, ntot)
     n = min(n, nrec)
     print(f"records: logits {logits.shape[0]}, targets {nrec} -> using {n}; Ntot={ntot}")

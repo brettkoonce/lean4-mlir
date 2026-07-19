@@ -139,6 +139,146 @@ def singlescale_coverage(per_image, anchors, grid):
     return total, slots
 
 
+# ── center-sampling oracle (planning/yolo_assignment.md bite 0a) ──────────────
+#
+# Two DIFFERENT ceilings, and the gap between them is the whole point:
+#
+#   encodable : the GT retains >=1 (scale,cell,anchor) slot after collisions.
+#               This is what the existing 88.2% number measures, generalized to
+#               many cells per GT. Center sampling can only raise it.
+#   reachable : the GT retains >=1 slot from which a box of IoU>=0.5 with the GT
+#               is actually DECODABLE. The decode is cx=(j+sigma(tx))/g, and
+#               sigma in (0,1) confines a cell's predicted centre STRICTLY INSIDE
+#               ITSELF. A ring cell whose neighbour owns the GT centre therefore
+#               cannot emit a box on that GT at all -- unless the centre range is
+#               widened (YOLOv5 uses 2*sigma-0.5, i.e. span=0.5 cells).
+#
+# Making a cell positive that cannot represent the target trains it toward an
+# unreachable box: a guaranteed false positive with high objectness. So the
+# hypothesis needs `reachable` to move, not `encodable`.
+
+
+def _iou_cwh(cx1, cy1, w1, h1, cx2, cy2, w2, h2):
+    ix = min(cx1 + w1 / 2, cx2 + w2 / 2) - max(cx1 - w1 / 2, cx2 - w2 / 2)
+    iy = min(cy1 + h1 / 2, cy2 + h2 / 2) - max(cy1 - h1 / 2, cy2 - h2 / 2)
+    if ix <= 0 or iy <= 0:
+        return 0.0
+    inter = ix * iy
+    ua = w1 * h1 + w2 * h2 - inter
+    return inter / ua if ua > 0 else 0.0
+
+
+def candidate_cells(cx, cy, wr, hr, g, criterion, radius):
+    """Cells assigned to one GT. 'center' = today's single cell; 'inside' = FCOS
+    (cell CENTRE falls inside the GT box); 'radius' = a (2r+1)^2 square of cells
+    around the centre cell. The centre cell is always included."""
+    cj0 = min(int(cx * g), g - 1)
+    ci0 = min(int(cy * g), g - 1)
+    if criterion == "center":
+        return [(ci0, cj0)]
+    out = set()
+    if criterion == "inside":
+        # cell j's centre sits at (j+0.5)/g, so require (j+0.5)/g in [cx-w/2, cx+w/2]
+        jlo = int(np.ceil((cx - wr / 2) * g - 0.5)); jhi = int(np.floor((cx + wr / 2) * g - 0.5))
+        ilo = int(np.ceil((cy - hr / 2) * g - 0.5)); ihi = int(np.floor((cy + hr / 2) * g - 0.5))
+        for ci in range(max(0, ilo), min(g - 1, ihi) + 1):
+            for cj in range(max(0, jlo), min(g - 1, jhi) + 1):
+                out.add((ci, cj))
+    elif criterion == "radius":
+        R = int(np.floor(radius))
+        for di in range(-R, R + 1):
+            for dj in range(-R, R + 1):
+                ci, cj = ci0 + di, cj0 + dj
+                if 0 <= ci < g and 0 <= cj < g:
+                    out.add((ci, cj))
+    out.add((ci0, cj0))
+    return sorted(out)
+
+
+def reachable_iou(cx, cy, wr, hr, ci, cj, g, span):
+    """Best IoU with the GT obtainable from cell (ci,cj): centre clamped to the
+    cell (widened by `span` cells each side), w/h free (exp() spans any size)."""
+    px = min(max(cx, (cj - span) / g), (cj + 1 + span) / g)
+    py = min(max(cy, (ci - span) / g), (ci + 1 + span) / g)
+    best = 0.0
+    for m in (1.0, 1.25, 1.5, 2.0, 3.0):        # free w/h: search a few scales
+        v = _iou_cwh(px, py, wr * m, hr * m, cx, cy, wr, hr)
+        if v > best:
+            best = v
+    return best
+
+
+def center_sampling_coverage(per_image, anchors, criterion, radius, span,
+                             iou_thr=0.5, limit=None, priority=False):
+    """-> (total_gt, encodable, reachable, slots_kept). Collisions resolved the
+    way encode_targets_fpn does it: later GT overwrites earlier on a shared slot.
+
+    priority=True instead gives every GT's OWN CENTRE cell precedence over any
+    other GT's ring cell (ring pass first, centre pass second). Without this the
+    naive rule lets a ring cell wipe out a neighbour's centre cell, which would
+    make center sampling look bad for a reason that is an encoder detail rather
+    than a property of the hypothesis."""
+    imgs = per_image if limit is None else per_image[:limit]
+    total = enc = reach = slots = 0
+    for iw, ih, boxes in imgs:
+        owner, cand, gts, ctr = {}, [], [], []
+        for gi, (_c, x0, y0, x1, y1) in enumerate(boxes):
+            wr, hr = (x1 - x0) / iw, (y1 - y0) / ih
+            cx, cy = (x0 + x1) / 2 / iw, (y0 + y1) / 2 / ih
+            s = scale_of(wr, hr); g = GRIDS[SCALE_NAMES[s]]
+            a = best_a(wr, hr, anchors[s])
+            cells = candidate_cells(cx, cy, wr, hr, g, criterion, radius)
+            gts.append((cx, cy, wr, hr, s, g, a)); cand.append(cells)
+            ctr.append((min(int(cy * g), g - 1), min(int(cx * g), g - 1)))
+            if not priority:
+                for (ci, cj) in cells:
+                    owner[(s, ci, cj, a)] = gi      # last write wins
+        if priority:
+            for gi, (cx, cy, wr, hr, s, g, a) in enumerate(gts):
+                for (ci, cj) in cand[gi]:           # pass 1: ring cells
+                    if (ci, cj) != ctr[gi]:
+                        owner[(s, ci, cj, a)] = gi
+            for gi, (cx, cy, wr, hr, s, g, a) in enumerate(gts):
+                owner[(s, ctr[gi][0], ctr[gi][1], a)] = gi   # pass 2: centres win
+        total += len(boxes)
+        for gi, (cx, cy, wr, hr, s, g, a) in enumerate(gts):
+            kept = [c for c in cand[gi] if owner[(s, c[0], c[1], a)] == gi]
+            slots += len(kept)
+            if kept:
+                enc += 1
+                if any(reachable_iou(cx, cy, wr, hr, ci, cj, g, span) >= iou_thr
+                       for (ci, cj) in kept):
+                    reach += 1
+    return total, enc, reach, slots
+
+
+def report_center_sampling(per_image, anchors, limit=None):
+    print("\n" + "=" * 78)
+    print("CENTER-SAMPLING ORACLE (yolo_assignment.md bite 0a)")
+    print("=" * 78)
+    print("  encodable = GT keeps >=1 slot after collisions (today's 88.2% metric)")
+    print("  reachable = GT keeps >=1 slot that can DECODE a box of IoU>=0.5")
+    print("  span 0.0 = today's cx=(j+sigma)/g (centre locked inside its own cell)")
+    print("  span 0.5 = YOLOv5 cx=(j+2*sigma-0.5)/g (centre may reach 1/2 cell out)\n")
+    variants = [("center", 0, "baseline (1 cell/GT)"),
+                ("inside", 0, "FCOS: cell centre inside GT box"),
+                ("radius", 1, "radius 1 -> 3x3 cells"),
+                ("radius", 2, "radius 2 -> 5x5 cells")]
+    for priority in (False, True):
+        rule = ("collision: naive last-write-wins (today's encoder)" if not priority
+                else "collision: own-centre beats any other GT's ring (best case)")
+        print(f"  --- {rule} ---")
+        print(f"  {'assignment':<34} {'span':>5} {'slots/GT':>9} {'encodable':>11} {'reachable':>11}")
+        print("  " + "-" * 74)
+        for (crit, rad, label) in variants:
+            for span in (0.0, 0.5):
+                tot, enc, reach, slots = center_sampling_coverage(
+                    per_image, anchors, crit, rad, span, limit=limit, priority=priority)
+                print(f"  {label:<34} {span:>5.1f} {slots/max(tot,1):>9.2f} "
+                      f"{100.0*enc/max(tot,1):>10.1f}% {100.0*reach/max(tot,1):>10.1f}%")
+        print()
+
+
 def save_anchors(anchors, out_dir):
     """Write per-scale k-means anchors as data/visdrone/anchors_fpn_{p3,p4,p5}.txt
     (one 'w_rel h_rel' per line) for the preprocessor + codegen to consume."""
@@ -192,6 +332,12 @@ def main():
         i = args.index("--save-anchors"); save_dir = args[i + 1]; del args[i:i + 2]
     if "--smoke" in args:
         smoke = True; args.remove("--smoke")
+    cs = False
+    limit = None
+    if "--center-sampling" in args:
+        cs = True; args.remove("--center-sampling")
+    if "--limit" in args:
+        i = args.index("--limit"); limit = int(args[i + 1]); del args[i:i + 2]
     visdrone_dir = args[0] if args else "data/visdrone"
     print(f"collecting per-image GT from {visdrone_dir} ...")
     per_image = collect_per_image(visdrone_dir)
@@ -227,6 +373,9 @@ def main():
     tot, sl = joint_coverage(per_image, anchors)
     print(f"  (joint-best-anchor upper bound)      : "
           f"{sl}/{tot} = {100.0*sl/tot:.1f}% encoded")
+
+    if cs:
+        report_center_sampling(per_image, anchors, limit=limit)
 
     if smoke:
         print()
