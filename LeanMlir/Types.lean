@@ -222,13 +222,20 @@ inductive Layer where
   | fpnModule (c2 c3 c4 c5 target : Nat)
   -- FPN multi-scale detector head (planning/yolo_fpn.md). Taps the 3 preceding
   -- backbone stage outputs C3/C4/C5 (channels `c3`/`c4`/`c5`, strides 8/16/32),
-  -- runs a top-down neck (all → `oc` channels) + a per-scale 1×1 conv head
-  -- (`oc` → `A·15`), and flattens+concatenates the 3 heads into a single
-  -- `[B, Ntot]` output (Ntot = A·15·(g3²+g4²+g5²)). Owns 6 weight-only params
-  -- (neck laterals Wn3/4/5 [oc,c_s], head convs Wh3/4/5 [A·15,oc]); the loss is
-  -- the FPN multi-scale YOLO loss (routed by TrainConfig.fpnScales). `g5` is the
-  -- coarsest grid (imageH/32). FD-verified fwd+bwd: emitFpnDetectForward/Backward.
-  | fpnDetect (oc c3 c4 c5 g5 A : Nat)
+  -- runs a top-down neck (all → `oc` channels), an optional RetinaNet tower of
+  -- `tower` 3×3 convs (+bias, ReLU, channel-preserving, PER-LEVEL not shared),
+  -- then a per-scale 1×1 conv head (`oc` → `A·15`), and flattens+concatenates
+  -- the 3 heads into a single `[B, Ntot]` output (Ntot = A·15·(g3²+g4²+g5²)).
+  -- Params, in this exact order:
+  --   neck laterals Wn3/4/5 [oc,c_s]
+  --   tower (W [oc,oc,3,3], b [oc]) × `tower`, per level, P3 → P4 → P5
+  --   head convs Wh3/4/5 [A·15,oc]
+  --   head biases bh3/4/5 [A·15]   ← MUST stay last (applyDetPriorBias splices the tail)
+  -- `tower = 0` emits no tower ops at all and is byte-identical to the minimal
+  -- head. The loss is the FPN multi-scale YOLO loss (routed by
+  -- TrainConfig.fpnScales). `g5` is the coarsest grid (imageH/32).
+  -- FD-verified fwd+bwd: emitFpnDetectForward/Backward.
+  | fpnDetect (oc c3 c4 c5 g5 A tower : Nat)
   -- DenseNet dense block (Huang et al.\ 2017). `nLayers` BN-ReLU-1×1-
   -- BN-ReLU-3×3 sub-layers, each adding `growthRate` channels to the
   -- running concatenation. Input has `ic` channels; output has
@@ -608,6 +615,17 @@ structure TrainConfig where
       to suppress. Prior-bias init manufactures that confidence at step 0.
       See `NetSpec.applyHeadPriorBias` for the measured size of the effect. -/
   headPriorBias : List Float := []
+  /-- RetinaNet prior-bias init for the FPN **detector** head: initialize every
+      objectness bias to `−log((1−π)/π)` so the head starts at `sigmoid = π`.
+      `0.0` (the default) leaves the head biases at zero, which reproduces the
+      biasless head exactly. Typical value 0.01.
+
+      The sigmoid-head twin of `headPriorBias` above, and the Tier-2 lever the
+      loss-breakdown measurements pointed at: objectness had signal but no
+      dynamic range, because a bias-free 1×1 conv spends its weights
+      manufacturing the constant background offset. See
+      `NetSpec.applyDetPriorBias`. -/
+  detPriorPi : Float := 0.0
   /-- DeiT-style data augmentation knobs. Setting `useMixup` or
       `useCutmix` switches the train-step to the soft-label codegen
       path; the dataloader produces a `[B, NC]` smoothed soft-label

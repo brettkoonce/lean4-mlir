@@ -30,12 +30,11 @@ def paramShapes (spec : NetSpec) : Array (Array Nat) := Id.run do
       shapes := shapes.push #[oc, ic, k, k] |>.push #[oc] |>.push #[oc]
     | .dense fi fo _ =>
       shapes := shapes.push #[fi, fo] |>.push #[fo]
-    | .fpnDetect oc c3 c4 c5 _ A =>
-      -- 6 weight-only 2D params: neck laterals Wn3/4/5 [oc,c_s], head convs
-      -- Wh3/4/5 [A·15,oc]. Order MUST match emitTrainStepSig / heInit / optimizer.
-      let ap := A * 15
-      shapes := shapes.push #[oc, c3] |>.push #[oc, c4] |>.push #[oc, c5]
-                       |>.push #[ap, oc] |>.push #[ap, oc] |>.push #[ap, oc]
+    | .fpnDetect oc c3 c4 c5 _ A tower =>
+      -- Single source of truth for the ordering (Spec.lean) — shared with the
+      -- codegen so a mismatch is impossible rather than merely unlikely.
+      for sh in fpnDetectParamShapes oc c3 c4 c5 A tower do
+        shapes := shapes.push (sh.toArray)
     | .residualBlock ic oc nBlocks firstStride =>
       let needsProj := !(ic == oc && firstStride == 1)
       for bi in [:nBlocks] do
@@ -261,16 +260,29 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
   | .conv2d ic oc k _ _ =>
     let (W, b, s') ← heConvB oc ic k seed
     return (#[W, b], s')
-  | .fpnDetect oc c3 c4 c5 _ A =>
-    -- 6 weight-only params (He-init; heConvB's [o,i,1,1] W bytes == the [o,i] 2D
-    -- weight). Order MUST match paramShapes / emitTrainStepSig / optimizer.
-    let ap := A * 15
+  | .fpnDetect oc c3 c4 c5 _ A tower =>
+    -- Walk the canonical shape list (Spec.lean) so init can never disagree with
+    -- the signature. Rank-2 [o,i] and rank-4 [o,i,k,k] are WEIGHTS → He-init
+    -- (heConvB's W bytes are the [o,i] 2D weight when k = 1); rank-1 are BIASES
+    -- → zero.
+    --
+    -- Zero head biases reproduce the biasless head exactly, so the bias codegen
+    -- is a no-op until `applyDetPriorBias` installs the prior — that is what
+    -- keeps "add a bias" and "start it at the RetinaNet prior" separable levers.
     let mut parts : Array ByteArray := #[]
     let mut s := seed
-    for (o, i) in [(oc, c3), (oc, c4), (oc, c5), (ap, oc), (ap, oc), (ap, oc)] do
-      let (W, _b, s') ← heConvB o i 1 s
-      parts := parts.push W
-      s := s'
+    for sh in fpnDetectParamShapes oc c3 c4 c5 A tower do
+      match sh with
+      | [n] => parts := parts.push (← F32.const (n.toUSize) 0.0)
+      | [o, i] =>
+        let (W, _b, s') ← heConvB o i 1 s
+        parts := parts.push W
+        s := s'
+      | [o, i, k, _] =>
+        let (W, _b, s') ← heConvB o i k s
+        parts := parts.push W
+        s := s'
+      | _ => pure ()
     return (parts, s)
   | .convBn ic oc k _ _ =>
     let (W, g, b, s') ← heConvBn oc ic k seed
@@ -580,6 +592,46 @@ def applyHeadPriorBias (spec : NetSpec) (params : ByteArray)
   for pi in priors do
     biasParts := biasParts.push (← F32.const (1 : USize) (Float.log pi))
   return (params.extract 0 ((total - nc) * 4)).append (F32.concat biasParts)
+
+/-- RetinaNet prior-bias init for the **FPN detector head** (planning/yolo_fpn.md
+    Tier 2). Sets every objectness logit's bias to `−log((1−π)/π)` so the head
+    starts predicting `sigmoid = π` (π ≈ 0.01) on every cell; box and class biases
+    stay at zero.
+
+    This is the classifier trick of `applyHeadPriorBias` transposed to a
+    sigmoid/one-vs-all head, and it is aimed at a measured failure rather than a
+    guess. On the e12 run every objectness logit sat in ≈[−2.7, −1.2] (p5..p95)
+    with pos/neg means −1.549/−1.803: the head had real signal (AUC 0.742) but
+    almost no dynamic range, because a bias-free 1×1 conv has to synthesize the
+    constant background offset out of weights that also have to discriminate. The
+    bias hands it that constant for free, which is the whole point — and per-class
+    mAP is bounded by objectness *ranking*, so this is the lever that can move it
+    (both Tier-1 levers were measured out; see the T1a/T1b write-ups).
+
+    Assumes the `.fpnDetect` layer is last, so its 3 `[A·15]` biases are the final
+    `3·A·15` floats of the buffer — the same tail-splice `applyHeadPriorBias` does.
+    Within each `[A·15]` block, anchor `a`'s objectness is channel `a·15 + 4`
+    (`emitAnchorYoloLoss` slices box at `base..base+4`, obj at `base+4`, class at
+    `base+5..base+15`).
+
+    Returns a NEW ByteArray. -/
+def applyDetPriorBias (spec : NetSpec) (params : ByteArray) (pi : Float) : IO ByteArray := do
+  if pi <= 0.0 || pi >= 1.0 then
+    throw <| IO.userError s!"detPriorBias: π must be in (0,1), got {pi}"
+  let A ← match spec.layers.getLast? with
+    | some (.fpnDetect _ _ _ _ _ A _) => pure A
+    | _ => throw <| IO.userError "detPriorBias: last layer is not .fpnDetect (the head this init targets)"
+  let ap := A * 15
+  let total := params.size / 4
+  if total < 3 * ap then
+    throw <| IO.userError s!"detPriorBias: {total} params is smaller than the {3 * ap}-float head-bias tail"
+  let b0 := -(Float.log ((1.0 - pi) / pi))
+  -- One [A·15] block: b0 on each anchor's objectness channel, 0 elsewhere.
+  let mut blockParts : Array ByteArray := #[]
+  for c in [0:ap] do
+    blockParts := blockParts.push (← F32.const (1 : USize) (if c % 15 == 4 then b0 else 0.0))
+  let block := F32.concat blockParts
+  return (params.extract 0 ((total - 3 * ap) * 4)).append (F32.concat #[block, block, block])
 
 /-- Patch the first `prefixBytes` of `initParams` with bytes read from
     `pretrainedPath`. Used to bootstrap a fresh init from a pretrained

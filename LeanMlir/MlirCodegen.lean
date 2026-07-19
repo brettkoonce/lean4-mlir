@@ -1910,44 +1910,220 @@ private def emitFpnNeckBackward (dP3SSA dP4SSA dP5SSA : String)
   s := s ++ sw3 ++ sw4 ++ sw5
   return (s, (dc3, dc4, dc5), (dw3, dw4, dw5))
 
+/-- One `k×k` stride-1 same-pad conv + per-channel bias + ReLU, as a standalone
+    prefix-parameterized emitter. Channel-preserving (`c → c`), which is all the
+    RetinaNet head tower needs. The math is lifted verbatim from the FD-verified
+    `.conv2d` forward/backward in the reverse-record walk; this just makes it
+    callable from inside a single layer's emitter, the same way
+    `emitConv1x1Fwd`/`BwdDC`/`BwdDW` were factored out for the neck.
+
+    Returns the code, the post-ReLU output SSA, and the PRE-activation SSA (the
+    backward needs it for the ReLU mask). -/
+private def emitTowerConvFwd (pfx xSSA wSSA bSSA : String) (b c h w k : Nat)
+    : String × String × String := Id.run do
+  let ty := tensorTy [b, c, h, w]
+  let kTy := tensorTy [c, c, k, k]
+  let pad := (k - 1) / 2
+  let mut s := ""
+  s := s ++ s!"    %{pfx}_cv = \"stablehlo.convolution\"({xSSA}, {wSSA}) " ++ "{\n"
+  s := s ++ convAttrBlock pad
+  s := s ++ s!"      " ++ "}" ++ s!" : ({ty}, {kTy}) -> {ty}\n"
+  s := s ++ s!"    %{pfx}_bb = stablehlo.broadcast_in_dim {bSSA}, dims = [1] : ({tensorTy [c]}) -> {ty}\n"
+  s := s ++ s!"    %{pfx}_z = stablehlo.add %{pfx}_cv, %{pfx}_bb : {ty}\n"
+  s := s ++ s!"    %{pfx}_zero = stablehlo.constant dense<0.0> : {ty}\n"
+  s := s ++ s!"    %{pfx}_a = stablehlo.maximum %{pfx}_z, %{pfx}_zero : {ty}\n"
+  return (s, s!"%{pfx}_a", s!"%{pfx}_z")
+
+/-- VJP of `emitTowerConvFwd`: ReLU mask → `dW`, `db`, `dX`. `preActSSA` is the
+    pre-ReLU SSA the forward returned; `xSSA` is that layer's input. Returns the
+    code, `dX`, `dW`, `db`. Same three-step structure as the `.conv2d` backward
+    (dW by the transpose trick, dX by the reversed+transposed kernel). -/
+private def emitTowerConvBwd (pfx dOutSSA xSSA preActSSA wSSA : String)
+    (b c h w k : Nat) : String × String × String × String := Id.run do
+  let ty := tensorTy [b, c, h, w]
+  let i1 := s!"tensor<{b}x{c}x{h}x{w}xi1>"
+  let kTy := tensorTy [c, c, k, k]
+  let tTy := tensorTy [c, b, h, w]
+  let pad := (k - 1) / 2
+  let mut s := ""
+  -- ReLU backward: pass the cotangent only where the pre-activation was > 0.
+  s := s ++ s!"    %{pfx}_bz = stablehlo.constant dense<0.0> : {ty}\n"
+  s := s ++ s!"    %{pfx}_msk = stablehlo.compare GT, {preActSSA}, %{pfx}_bz : ({ty}, {ty}) -> {i1}\n"
+  s := s ++ s!"    %{pfx}_g = stablehlo.select %{pfx}_msk, {dOutSSA}, %{pfx}_bz : {i1}, {ty}\n"
+  -- dW: conv(xᵀ, gᵀ) → [c_in, c_out, k, k], then transpose to [c_out, c_in, k, k]
+  s := s ++ s!"    %{pfx}_xt = stablehlo.transpose {xSSA}, dims = [1, 0, 2, 3] : ({ty}) -> {tTy}\n"
+  s := s ++ s!"    %{pfx}_gt = stablehlo.transpose %{pfx}_g, dims = [1, 0, 2, 3] : ({ty}) -> {tTy}\n"
+  s := s ++ s!"    %{pfx}_dwr = \"stablehlo.convolution\"(%{pfx}_xt, %{pfx}_gt) " ++ "{\n"
+  s := s ++ convAttrBlock pad
+  s := s ++ s!"      " ++ "}" ++ s!" : ({tTy}, {tTy}) -> {kTy}\n"
+  s := s ++ s!"    %{pfx}_dw = stablehlo.transpose %{pfx}_dwr, dims = [1, 0, 2, 3] : ({kTy}) -> {kTy}\n"
+  -- db: sum the (masked) cotangent over batch + spatial
+  s := s ++ s!"    %{pfx}_db = stablehlo.reduce(%{pfx}_g init: %zf) applies stablehlo.add across dimensions = [0, 2, 3]\n"
+  s := s ++ s!"           : ({ty}, tensor<f32>) -> {tensorTy [c]}\n"
+  -- dX: convolve the cotangent with the reversed, channel-transposed kernel
+  s := s ++ s!"    %{pfx}_wt = stablehlo.transpose {wSSA}, dims = [1, 0, 2, 3] : ({kTy}) -> {kTy}\n"
+  s := s ++ s!"    %{pfx}_wrev = stablehlo.reverse %{pfx}_wt, dims = [2, 3] : {kTy}\n"
+  s := s ++ s!"    %{pfx}_dx = \"stablehlo.convolution\"(%{pfx}_g, %{pfx}_wrev) " ++ "{\n"
+  s := s ++ convAttrBlock pad
+  s := s ++ s!"      " ++ "}" ++ s!" : ({ty}, {kTy}) -> {ty}\n"
+  return (s, s!"%{pfx}_dx", s!"%{pfx}_dw", s!"%{pfx}_db")
+
+/-- RetinaNet head tower for ONE pyramid level: `depth` × (3×3 conv → +bias →
+    ReLU), channel-preserving. Towers are **per-scale, not shared** across
+    P3/P4/P5 — that is what `planning/yolo_fpn.md` bite 4 specified, and it
+    sidesteps the shared-weight gradient accumulation (and, if norm is ever
+    added, the per-level-statistics problem) that sharing would introduce.
+
+    No normalization: plain conv + bias + ReLU, as in the original RetinaNet
+    head. That keeps the tower out of the BN running-stats plumbing entirely.
+
+    Returns the code, the output SSA, and the per-layer `(input, preAct)` SSA
+    pairs the backward needs, in forward order. -/
+private def emitFpnTowerFwd (pfx xSSA : String) (wSSAs bSSAs : List String)
+    (b c h w k depth : Nat) : String × String × List (String × String) := Id.run do
+  let mut s := ""
+  let mut cur := xSSA
+  let mut taps : List (String × String) := []
+  for i in [0:depth] do
+    let (sc, a, z) := emitTowerConvFwd s!"{pfx}t{i}" cur (wSSAs.getD i "%MISSING") (bSSAs.getD i "%MISSING") b c h w k
+    s := s ++ sc
+    taps := taps ++ [(cur, z)]
+    cur := a
+  return (s, cur, taps)
+
+/-- VJP of `emitFpnTowerFwd`: walk the layers in REVERSE, threading the input
+    cotangent back to the tower's input. Returns the code, `dX`, and the per-layer
+    `(dW, db)` pairs in FORWARD order (so they bind to `%W{base+i}` directly). -/
+private def emitFpnTowerBwd (pfx dOutSSA : String) (taps : List (String × String))
+    (wSSAs : List String) (b c h w k depth : Nat)
+    : String × String × List (String × String) := Id.run do
+  let mut s := ""
+  let mut cur := dOutSSA
+  let mut grads : List (String × String) := []
+  for j in [0:depth] do
+    let i := depth - 1 - j                    -- reverse order
+    let (xIn, preAct) := taps.getD i ("%MISSING", "%MISSING")
+    let (sc, dx, dw, db) := emitTowerConvBwd s!"{pfx}bt{i}" cur xIn preAct (wSSAs.getD i "%MISSING") b c h w k
+    s := s ++ sc
+    grads := [(dw, db)] ++ grads              -- rebuild in forward order
+    cur := dx
+  return (s, cur, grads)
+
+/-- Param-index layout for a `.fpnDetect` layer based at `base`, as SSA names
+    with prefix `pfx` (`"%W"`, `"%m_W"`, `"%v_W"`, `"%d_W"`, …). ONE definition
+    of the ordering, so the forward, backward, signature, optimizer and
+    `paramShapes` cannot drift apart:
+
+        base + 0 .. base + 2                  Wn3, Wn4, Wn5           (neck laterals)
+        base + 3 .. base + 3 + 6·depth − 1    tower (W, b) × depth, P3 → P4 → P5
+        headBase + 0 .. headBase + 2          Wh3, Wh4, Wh5           (head convs)
+        headBase + 3 .. headBase + 5          bh3, bh4, bh5           (head biases, LAST)
+
+    where `headBase = base + 3 + 6·depth`. Returns the per-level tower weight and
+    bias name lists; `depth = 0` gives three empty lists. -/
+private def fpnTowerParamSSAs (pfx : String) (base depth : Nat)
+    : List (List String) × List (List String) := Id.run do
+  let mut ws : List (List String) := []
+  let mut bs : List (List String) := []
+  for i in [0:3] do
+    let mut wi : List String := []
+    let mut bi : List String := []
+    for j in [0:depth] do
+      let p := base + 3 + i * (2 * depth) + 2 * j
+      wi := wi ++ [s!"{pfx}{p}"]
+      bi := bi ++ [s!"{pfx}{p + 1}"]
+    ws := ws ++ [wi]
+    bs := bs ++ [bi]
+  return (ws, bs)
+
+/-- Index of the first head param (`Wh3`) for a `.fpnDetect` based at `base`. -/
+private def fpnHeadBase (base depth : Nat) : Nat := base + 3 + 6 * depth
+
+/-- Total param count owned by a `.fpnDetect` layer: 9 + 6·depth. -/
+private def fpnNumParams (depth : Nat) : Nat := 9 + 6 * depth
+
 /-- FPN detector head+neck forward: neck (top-down merge) → per-scale 1×1-conv
     heads → flatten + concat into a single `[B, Ntot]` output. Heads are a single
-    1×1 conv `Pn[oc] → [A·15]` (no hidden tower / no bias — the minimal detection
-    head; coverage, not head capacity, is the bottleneck). Params: neck laterals
-    `wn3/wn4/wn5 : [oc,c_s]`, head convs `wh3/wh4/wh5 : [A·15, oc]`. Concat order
+    1×1 conv `Pn[oc] → [A·15]` plus a per-channel bias (no hidden tower — the
+    minimal detection head). Params: neck laterals
+    `wn3/wn4/wn5 : [oc,c_s]`, head convs `wh3/wh4/wh5 : [A·15, oc]`, head biases
+    `bh3/bh4/bh5 : [A·15]`. Concat order
     P3,P4,P5 matches `emitMultiScaleYoloLoss`'s split. Returns the code, the
-    concat SSA, and the pyramid SSAs (P3,P4,P5 — needed for the head weight VJP). -/
+    concat SSA, and the pyramid SSAs (P3,P4,P5 — needed for the head weight VJP).
+
+    The bias is what carries the RetinaNet prior init (`applyDetPriorBias`). A
+    biasless 1×1 conv has to manufacture the constant background offset out of
+    its weights, which is measurably what it spends them on: every objectness
+    logit in the e12 val set sits in [−2.7, −1.2] (planning/yolo_fpn.md, the T1a
+    refutation). Zero-init biases reproduce the biasless net exactly. -/
 private def emitFpnDetectForward
-    (c3SSA c4SSA c5SSA wn3 wn4 wn5 wh3 wh4 wh5 : String)
-    (B oc c3 c4 c5 g5 A : Nat) : String × String × (String × String × String) := Id.run do
+    (c3SSA c4SSA c5SSA wn3 wn4 wn5 wh3 wh4 wh5 bh3 bh4 bh5 : String)
+    (towerW towerB : List (List String)) (depth : Nat)
+    (B oc c3 c4 c5 g5 A : Nat)
+    : String × String × (String × String × String) × List (List (String × String)) := Id.run do
   let P := 15
   let g4 := 2 * g5
   let g3 := 4 * g5
   let ap := A * P
   let (nfwd, (p3, p4, p5)) := emitFpnNeckForward c3SSA c4SSA c5SSA wn3 wn4 wn5 B oc c3 c4 c5 g5
   let mut s := nfwd
-  let (sh3, h3) := emitConv1x1Fwd "fpn_h3" p3 wh3 B oc ap g3 g3
-  let (sh4, h4) := emitConv1x1Fwd "fpn_h4" p4 wh4 B oc ap g4 g4
-  let (sh5, h5) := emitConv1x1Fwd "fpn_h5" p5 wh5 B oc ap g5 g5
+  -- Optional RetinaNet tower per level. depth = 0 emits NOTHING and leaves the
+  -- head reading Pₙ directly, so the towerless net is byte-identical to before.
+  let mut heads := [p3, p4, p5]
+  let mut taps : List (List (String × String)) := [[], [], []]
+  if depth > 0 then
+    let mut newHeads : List String := []
+    let mut newTaps : List (List (String × String)) := []
+    for (pn, i) in [p3, p4, p5].zipIdx do
+      let g := [g3, g4, g5].getD i g5
+      let (tc, tOut, tTaps) :=
+        emitFpnTowerFwd s!"fpn_tw{i}" pn (towerW.getD i []) (towerB.getD i []) B oc g g 3 depth
+      s := s ++ tc
+      newHeads := newHeads ++ [tOut]
+      newTaps := newTaps ++ [tTaps]
+    heads := newHeads
+    taps := newTaps
+  let hIn3 := heads.getD 0 p3
+  let hIn4 := heads.getD 1 p4
+  let hIn5 := heads.getD 2 p5
+  let (sh3, h3) := emitConv1x1Fwd "fpn_h3" hIn3 wh3 B oc ap g3 g3
+  let (sh4, h4) := emitConv1x1Fwd "fpn_h4" hIn4 wh4 B oc ap g4 g4
+  let (sh5, h5) := emitConv1x1Fwd "fpn_h5" hIn5 wh5 B oc ap g5 g5
   s := s ++ sh3 ++ sh4 ++ sh5
+  -- per-channel head bias, broadcast over batch + spatial (dims = [1])
+  let bTy := tensorTy [ap]
+  let addBias := fun (i : Nat) (hSSA bSSA : String) (g : Nat) =>
+    let oTy := tensorTy [B, ap, g, g]
+    (s!"    %fpn_hb{i} = stablehlo.broadcast_in_dim {bSSA}, dims = [1] : ({bTy}) -> {oTy}\n" ++
+     s!"    %fpn_hz{i} = stablehlo.add {hSSA}, %fpn_hb{i} : {oTy}\n", s!"%fpn_hz{i}")
+  let (sb3, z3) := addBias 3 h3 bh3 g3
+  let (sb4, z4) := addBias 4 h4 bh4 g4
+  let (sb5, z5) := addBias 5 h5 bh5 g5
+  s := s ++ sb3 ++ sb4 ++ sb5
   let len3 := ap * g3 * g3
   let len4 := ap * g4 * g4
   let len5 := ap * g5 * g5
-  s := s ++ s!"    %fpn_hf3 = stablehlo.reshape {h3} : ({tensorTy [B, ap, g3, g3]}) -> {tensorTy [B, len3]}\n"
-  s := s ++ s!"    %fpn_hf4 = stablehlo.reshape {h4} : ({tensorTy [B, ap, g4, g4]}) -> {tensorTy [B, len4]}\n"
-  s := s ++ s!"    %fpn_hf5 = stablehlo.reshape {h5} : ({tensorTy [B, ap, g5, g5]}) -> {tensorTy [B, len5]}\n"
+  s := s ++ s!"    %fpn_hf3 = stablehlo.reshape {z3} : ({tensorTy [B, ap, g3, g3]}) -> {tensorTy [B, len3]}\n"
+  s := s ++ s!"    %fpn_hf4 = stablehlo.reshape {z4} : ({tensorTy [B, ap, g4, g4]}) -> {tensorTy [B, len4]}\n"
+  s := s ++ s!"    %fpn_hf5 = stablehlo.reshape {z5} : ({tensorTy [B, ap, g5, g5]}) -> {tensorTy [B, len5]}\n"
   s := s ++ s!"    %fpn_hc34 = stablehlo.concatenate %fpn_hf3, %fpn_hf4, dim = 1 : ({tensorTy [B, len3]}, {tensorTy [B, len4]}) -> {tensorTy [B, len3 + len4]}\n"
   s := s ++ s!"    %fpn_out = stablehlo.concatenate %fpn_hc34, %fpn_hf5, dim = 1 : ({tensorTy [B, len3 + len4]}, {tensorTy [B, len5]}) -> {tensorTy [B, len3 + len4 + len5]}\n"
-  return (s, "%fpn_out", (p3, p4, p5))
+  -- The 3rd component is the HEAD's input (tower output, or Pₙ when depth = 0) —
+  -- that is what the head weight VJP contracts against, not Pₙ.
+  return (s, "%fpn_out", (hIn3, hIn4, hIn5), taps)
 
 /-- FPN detector backward: un-concat the `[B, Ntot]` loss grad into the 3 head
-    grads → 1×1-conv head VJP (dPₙ + dWhₙ) → neck VJP (dC3/dC4/dC5 + dWnₙ).
-    Returns the code, the backbone-tap cotangents `(dC3,dC4,dC5)`, and the 6
-    param grads `[dWn3,dWn4,dWn5, dWh3,dWh4,dWh5]` (order matches the forward's
-    param args). All from FD-verified conv1x1 / neck emitters. -/
+    grads → 1×1-conv head VJP (dPₙ + dWhₙ + dbhₙ) → neck VJP (dC3/dC4/dC5 + dWnₙ).
+    Returns the code, the backbone-tap cotangents `(dC3,dC4,dC5)`, and the 9
+    param grads `[dWn3,dWn4,dWn5, dWh3,dWh4,dWh5, dbh3,dbh4,dbh5]` (order matches
+    the forward's param args). The bias VJP is the plain sum of the head cotangent
+    over batch + spatial (a bias added to every cell receives every cell's grad).
+    All from FD-verified conv1x1 / neck emitters. -/
 private def emitFpnDetectBackward (gradConcatSSA : String)
     (c3SSA c4SSA c5SSA wn3 wn4 wn5 : String) (p3SSA p4SSA p5SSA : String)
-    (wh3 wh4 wh5 : String) (B oc c3 c4 c5 g5 A : Nat)
+    (wh3 wh4 wh5 : String)
+    (towerW : List (List String)) (taps : List (List (String × String))) (depth : Nat)
+    (B oc c3 c4 c5 g5 A : Nat)
     : String × (String × String × String) × List String := Id.run do
   let P := 15
   let g4 := 2 * g5
@@ -1974,11 +2150,41 @@ private def emitFpnDetectBackward (gradConcatSSA : String)
   let (sdw4, dwh4) := emitConv1x1BwdDW "fpn_bhw4" "%fpn_dh4" p4SSA B oc ap g4 g4
   let (sdw5, dwh5) := emitConv1x1BwdDW "fpn_bhw5" "%fpn_dh5" p5SSA B oc ap g5 g5
   s := s ++ sdp3 ++ sdp4 ++ sdp5 ++ sdw3 ++ sdw4 ++ sdw5
+  -- head bias VJP: sum the head cotangent over batch + spatial → [ap]
+  let dBias := fun (i g : Nat) =>
+    (s!"    %fpn_dbh{i} = stablehlo.reduce(%fpn_dh{i} init: %zf) applies stablehlo.add across dimensions = [0, 2, 3]\n" ++
+     s!"           : ({tensorTy [B, ap, g, g]}, tensor<f32>) -> {tensorTy [ap]}\n", s!"%fpn_dbh{i}")
+  let (sdb3, dbh3) := dBias 3 g3
+  let (sdb4, dbh4) := dBias 4 g4
+  let (sdb5, dbh5) := dBias 5 g5
+  s := s ++ sdb3 ++ sdb4 ++ sdb5
+  -- Tower VJP (per level). dpₙ currently holds the cotangent w.r.t. the HEAD's
+  -- input; with a tower that is the tower output, so route it back through the
+  -- tower to recover the true dPₙ the neck expects. depth = 0 is a no-op.
+  let mut dps := [dp3, dp4, dp5]
+  let mut towerGrads : List String := []
+  if depth > 0 then
+    let mut newDps : List String := []
+    for (dpn, i) in [dp3, dp4, dp5].zipIdx do
+      let g := [g3, g4, g5].getD i g5
+      let (tb, dPn, tg) :=
+        emitFpnTowerBwd s!"fpn_tw{i}" dpn (taps.getD i []) (towerW.getD i []) B oc g g 3 depth
+      s := s ++ tb
+      newDps := newDps ++ [dPn]
+      -- flatten (dW, db) pairs in forward order → matches the param layout
+      towerGrads := towerGrads ++ tg.flatMap (fun (dw, db) => [dw, db])
+    dps := newDps
+  let dpn3 := dps.getD 0 dp3
+  let dpn4 := dps.getD 1 dp4
+  let dpn5 := dps.getD 2 dp5
   -- neck VJP
   let (nbwd, (dc3, dc4, dc5), (dwn3, dwn4, dwn5)) :=
-    emitFpnNeckBackward dp3 dp4 dp5 c3SSA c4SSA c5SSA wn3 wn4 wn5 B oc c3 c4 c5 g5
+    emitFpnNeckBackward dpn3 dpn4 dpn5 c3SSA c4SSA c5SSA wn3 wn4 wn5 B oc c3 c4 c5 g5
   s := s ++ nbwd
-  return (s, (dc3, dc4, dc5), [dwn3, dwn4, dwn5, dwh3, dwh4, dwh5])
+  -- Param-grad order MUST match paramShapes / sig / optimizer:
+  --   Wn3,Wn4,Wn5, [tower (W,b) × depth per level, P3→P4→P5], Wh3,Wh4,Wh5, bh3,bh4,bh5
+  return (s, (dc3, dc4, dc5),
+          [dwn3, dwn4, dwn5] ++ towerGrads ++ [dwh3, dwh4, dwh5, dbh3, dbh4, dbh5])
 
 /-- Emit the `@forward` function body walking layers in order. When
     `stopAtGAP` is true (GradCAM mode), the walk halts at the first
@@ -2070,7 +2276,7 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       curShape := newShape
       pidx := newPidx
       fpnStages := fpnStages.push (curSSA, curShape)
-    | .fpnDetect oc c3 c4 c5 g5 A =>
+    | .fpnDetect oc c3 c4 c5 g5 A tower =>
       -- Forward-only FPN detector: neck + per-scale heads → flat [B, Ntot].
       if fpnStages.size < 3 then
         code := code ++ s!"    // fpnDetect: need ≥3 residualBlock stages, have {fpnStages.size}\n"
@@ -2079,16 +2285,20 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
         let (c4SSA, _) := fpnStages[fpnStages.size - 2]!
         let (c5SSA, _) := fpnStages[fpnStages.size - 1]!
         let base := pidx
-        let (fwd, concat, _) :=
+        let hb := fpnHeadBase base tower
+        let (towerW, towerB) := fpnTowerParamSSAs "%W" base tower
+        let (fwd, concat, _, _) :=
           emitFpnDetectForward c3SSA c4SSA c5SSA
             s!"%W{base}" s!"%W{base + 1}" s!"%W{base + 2}"
-            s!"%W{base + 3}" s!"%W{base + 4}" s!"%W{base + 5}" batchSize oc c3 c4 c5 g5 A
+            s!"%W{hb}" s!"%W{hb + 1}" s!"%W{hb + 2}"
+            s!"%W{hb + 3}" s!"%W{hb + 4}" s!"%W{hb + 5}"
+            towerW towerB tower batchSize oc c3 c4 c5 g5 A
         code := code ++ fwd
         let P := 15
         let g4 := 2 * g5; let g3 := 4 * g5
         curSSA := concat
         curShape := [batchSize, A * P * (g3 * g3 + g4 * g4 + g5 * g5)]
-        pidx := base + 6
+        pidx := base + fpnNumParams tower
     | .bottleneckBlock ic oc nBlocks firstStride =>
       let (snip, newSSA, newShape, newPidx) := emitBottleneckBlock pidx curSSA curShape ic oc nBlocks firstStride (fixedBN := fixedBN)
       code := code ++ snip
@@ -2376,15 +2586,21 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
         curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
       | _ => pure ()
       outShape := curShape
-    | .fpnDetect oc c3 c4 c5 g5 A =>
-      -- 6 weight-only params (Wn3,Wn4,Wn5,Wh3,Wh4,Wh5); output is the flat concat.
+    | .fpnDetect oc c3 c4 c5 g5 A tower =>
+      -- 9 + 6·tower params; see `fpnTowerParamSSAs` for the canonical ordering.
       let ap := A * 15
+      let hb := fpnHeadBase pidx tower
       params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, c3]}, %W{pidx + 1}: {tensorTy [oc, c4]}, %W{pidx + 2}: {tensorTy [oc, c5]}"
-      params := params ++ s!",\n    %W{pidx + 3}: {tensorTy [ap, oc]}, %W{pidx + 4}: {tensorTy [ap, oc]}, %W{pidx + 5}: {tensorTy [ap, oc]}"
+      for i in [0:3] do
+        for j in [0:tower] do
+          let p := pidx + 3 + i * (2 * tower) + 2 * j
+          params := params ++ s!",\n    %W{p}: {tensorTy [oc, oc, 3, 3]}, %W{p + 1}: {tensorTy [oc]}"
+      params := params ++ s!",\n    %W{hb}: {tensorTy [ap, oc]}, %W{hb + 1}: {tensorTy [ap, oc]}, %W{hb + 2}: {tensorTy [ap, oc]}"
+      params := params ++ s!",\n    %W{hb + 3}: {tensorTy [ap]}, %W{hb + 4}: {tensorTy [ap]}, %W{hb + 5}: {tensorTy [ap]}"
       let g4 := 2 * g5; let g3 := 4 * g5
       curShape := [batchSize, ap * (g3 * g3 + g4 * g4 + g5 * g5)]
       outShape := curShape
-      pidx := pidx + 6
+      pidx := pidx + fpnNumParams tower
     | .bottleneckBlock ic oc nBlocks firstStride =>
       let mid := oc / 4
       let needsProj := !(ic == oc && firstStride == 1)
@@ -2884,15 +3100,21 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
         curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
       | _ => pure ()
       outShape := curShape
-    | .fpnDetect oc c3 c4 c5 g5 A =>
-      -- 6 weight-only params (Wn3,Wn4,Wn5,Wh3,Wh4,Wh5); output is the flat concat.
+    | .fpnDetect oc c3 c4 c5 g5 A tower =>
+      -- 9 + 6·tower params; see `fpnTowerParamSSAs` for the canonical ordering.
       let ap := A * 15
+      let hb := fpnHeadBase pidx tower
       params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, c3]}, %W{pidx + 1}: {tensorTy [oc, c4]}, %W{pidx + 2}: {tensorTy [oc, c5]}"
-      params := params ++ s!",\n    %W{pidx + 3}: {tensorTy [ap, oc]}, %W{pidx + 4}: {tensorTy [ap, oc]}, %W{pidx + 5}: {tensorTy [ap, oc]}"
+      for i in [0:3] do
+        for j in [0:tower] do
+          let p := pidx + 3 + i * (2 * tower) + 2 * j
+          params := params ++ s!",\n    %W{p}: {tensorTy [oc, oc, 3, 3]}, %W{p + 1}: {tensorTy [oc]}"
+      params := params ++ s!",\n    %W{hb}: {tensorTy [ap, oc]}, %W{hb + 1}: {tensorTy [ap, oc]}, %W{hb + 2}: {tensorTy [ap, oc]}"
+      params := params ++ s!",\n    %W{hb + 3}: {tensorTy [ap]}, %W{hb + 4}: {tensorTy [ap]}, %W{hb + 5}: {tensorTy [ap]}"
       let g4 := 2 * g5; let g3 := 4 * g5
       curShape := [batchSize, ap * (g3 * g3 + g4 * g4 + g5 * g5)]
       outShape := curShape
-      pidx := pidx + 6
+      pidx := pidx + fpnNumParams tower
     | .bottleneckBlock ic oc nBlocks firstStride =>
       let mid := oc / 4
       let needsProj := !(ic == oc && firstStride == 1)
@@ -3454,7 +3676,7 @@ private structure FwdRec where
   lmhBtvSSA       : String := ""
   -- ═════════ FPN multi-scale detector (planning/yolo_fpn.md bite 7) ═════════
   -- One record per `.fpnDetect` layer (isFpnDetect := true, pidx := base of its
-  -- 6 weight-only params). Stores the 3 backbone taps C3/C4/C5 and the 3 neck
+  -- 9 params — 6 weights + 3 head biases). Stores the 3 backbone taps C3/C4/C5 and the 3 neck
   -- outputs P3/P4/P5 (the pyramid feature SSAs) so the backward can call
   -- `emitFpnDetectBackward` (neck dW needs C_n, head dW needs P_n). The neck's
   -- backbone-tap cotangents dc3/dc4 are injected at the C3/C4 residualBlock
@@ -3465,9 +3687,15 @@ private structure FwdRec where
   fpnC3SSA        : String := ""
   fpnC4SSA        : String := ""
   fpnC5SSA        : String := ""
+  -- P3/P4/P5 hold the HEAD's input per level — the tower output when tower > 0,
+  -- the raw pyramid feature when tower = 0. That is what the head weight VJP
+  -- contracts against.
   fpnP3SSA        : String := ""
   fpnP4SSA        : String := ""
   fpnP5SSA        : String := ""
+  -- Per-level tower (layerInput, preActivation) SSA pairs, forward order — the
+  -- tower VJP needs the input for dW and the pre-activation for the ReLU mask.
+  fpnTowerTaps    : List (List (String × String)) := []
 instance : Inhabited FwdRec where
   default := { layer := .flatten, pidx := none, pos := 0,
                inputSSA := "", preActSSA := "", outputSSA := "",
@@ -6577,7 +6805,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       | [] =>
         code := code ++ "    // unetUp: encoder stack empty (no matching unetDown)\n"
 
-    | .fpnDetect oc c3 c4 c5 g5 A =>
+    | .fpnDetect oc c3 c4 c5 g5 A tower =>
       -- Top-down neck + per-scale 1×1 heads → flat [B, Ntot] concat. Taps the
       -- last 3 residualBlock stages as C3/C4/C5. 6 weight-only params at `base`.
       if fpnStages.size < 3 then
@@ -6587,10 +6815,14 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         let (c4SSA, _, c4Idx) := fpnStages[fpnStages.size - 2]!
         let (c5SSA, _, _c5Idx) := fpnStages[fpnStages.size - 1]!
         let base := pidx
-        let (fwd, concat, (p3, p4, p5)) :=
+        let hb := fpnHeadBase base tower
+        let (towerW, towerB) := fpnTowerParamSSAs "%W" base tower
+        let (fwd, concat, (p3, p4, p5), towerTaps) :=
           emitFpnDetectForward c3SSA c4SSA c5SSA
             s!"%W{base}" s!"%W{base + 1}" s!"%W{base + 2}"
-            s!"%W{base + 3}" s!"%W{base + 4}" s!"%W{base + 5}" B oc c3 c4 c5 g5 A
+            s!"%W{hb}" s!"%W{hb + 1}" s!"%W{hb + 2}"
+            s!"%W{hb + 3}" s!"%W{hb + 4}" s!"%W{hb + 5}"
+            towerW towerB tower B oc c3 c4 c5 g5 A
         code := code ++ fwd
         -- Route the neck's C3/C4 cotangents (emitted by emitFpnDetectBackward as
         -- %fpn_dc3_dc / %fpn_dc4_dc) into those stages' markers; C5 flows via the
@@ -6607,10 +6839,11 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         fdRec := { fdRec with isFpnDetect := true }
         fdRec := { fdRec with fpnC3SSA := c3SSA, fpnC4SSA := c4SSA, fpnC5SSA := c5SSA }
         fdRec := { fdRec with fpnP3SSA := p3, fpnP4SSA := p4, fpnP5SSA := p5 }
+        fdRec := { fdRec with fpnTowerTaps := towerTaps }
         records := records.push fdRec
         curSSA := concat
         curShape := [B, Ntot]
-        pidx := base + 6
+        pidx := base + fpnNumParams tower
 
     | _ => code := code ++ "    // UNSUPPORTED\n"
     pos := pos + 1
@@ -8233,24 +8466,26 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         | _ => pure ()
       else pure ()
 
-    | .fpnDetect oc c3 c4 c5 g5 A =>
+    | .fpnDetect oc c3 c4 c5 g5 A tower =>
       -- FPN detector DAG backward (planning/yolo_fpn.md bite 7). gradSSA is the
       -- loss grad w.r.t. the [B, Ntot] concat (%fpn_grad). emitFpnDetectBackward
-      -- un-concats → head VJP → neck VJP, returning (dc3,dc4,dc5) + 6 param grads.
-      -- dc5 seeds the backbone backward here; dc3/dc4 are injected at the C3/C4
-      -- stage markers (already tagged with fpnTapGrad at forward emit).
+      -- un-concats → head VJP → tower VJP → neck VJP, returning (dc3,dc4,dc5) +
+      -- the 9 + 6·tower param grads. dc5 seeds the backbone backward here;
+      -- dc3/dc4 are injected at the C3/C4 stage markers (already tagged with
+      -- fpnTapGrad at forward emit).
       let base := r.pidx.getD 0
+      let hb := fpnHeadBase base tower
+      let (towerW, _) := fpnTowerParamSSAs "%W" base tower
       let (bwd, (_dc3, _dc4, dc5), pgrads) :=
         emitFpnDetectBackward gradSSA r.fpnC3SSA r.fpnC4SSA r.fpnC5SSA
           s!"%W{base}" s!"%W{base + 1}" s!"%W{base + 2}"
           r.fpnP3SSA r.fpnP4SSA r.fpnP5SSA
-          s!"%W{base + 3}" s!"%W{base + 4}" s!"%W{base + 5}" B oc c3 c4 c5 g5 A
+          s!"%W{hb}" s!"%W{hb + 1}" s!"%W{hb + 2}"
+          towerW r.fpnTowerTaps tower B oc c3 c4 c5 g5 A
       code := code ++ bwd
-      -- Bind the 6 returned param grads to the %d_W{base+i} names the optimizer
-      -- reads (order: Wn3,Wn4,Wn5,Wh3,Wh4,Wh5 — matches paramShapes / sig).
-      let ap := A * 15
-      let wtys := [tensorTy [oc, c3], tensorTy [oc, c4], tensorTy [oc, c5],
-                   tensorTy [ap, oc], tensorTy [ap, oc], tensorTy [ap, oc]]
+      -- Bind the returned param grads to the %d_W{base+i} names the optimizer
+      -- reads, in the canonical fpnDetectParamShapes order.
+      let wtys := (fpnDetectParamShapes oc c3 c4 c5 A tower).map tensorTy
       for (pg, i) in pgrads.zipIdx do
         code := code ++ s!"    %d_W{base + i} = stablehlo.reshape {pg} : ({wtys[i]!}) -> {wtys[i]!}\n"
       gradSSA := dc5
@@ -8283,11 +8518,9 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           let effIc := if r.isDepthwise then 1 else ic
           gradList := gradList.push (s!"%d_W{p}", [oc, effIc, kSize, kSize])
                               |>.push (s!"%d_g{p}", [oc]) |>.push (s!"%d_bt{p}", [oc])
-        | .fpnDetect oc c3 c4 c5 _ A =>
-          let ap := A * 15
-          gradList := gradList.push (s!"%d_W{p}", [oc, c3]) |>.push (s!"%d_W{p + 1}", [oc, c4])
-                              |>.push (s!"%d_W{p + 2}", [oc, c5]) |>.push (s!"%d_W{p + 3}", [ap, oc])
-                              |>.push (s!"%d_W{p + 4}", [ap, oc]) |>.push (s!"%d_W{p + 5}", [ap, oc])
+        | .fpnDetect oc c3 c4 c5 _ A tower =>
+          for (sh, i) in (fpnDetectParamShapes oc c3 c4 c5 A tower).zipIdx do
+            gradList := gradList.push (s!"%d_W{p + i}", sh)
         | _ => pure ()
       | none => pure ()
     if gradList.size > 0 then
@@ -8413,14 +8646,17 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
           vRetNames := vRetNames.push vwN |>.push vbN
           vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-        | .fpnDetect oc c3 c4 c5 _ A =>
-          -- 6 weight-only params (base = p). Order Wn3,Wn4,Wn5,Wh3,Wh4,Wh5 — must
-          -- match paramShapes / emitTrainStepSig / heInit and the .fpnDetect backward.
-          let ap := A * 15
-          let wshapes := [[oc, c3], [oc, c4], [oc, c5], [ap, oc], [ap, oc], [ap, oc]]
+        | .fpnDetect oc c3 c4 c5 _ A tower =>
+          -- Canonical order via fpnDetectParamShapes (base = p). All params ride
+          -- the %W names — a [ap] bias is just a rank-1 tensor to the
+          -- shape-generic emitUpdate. RANK-1 params (the tower biases [oc] and
+          -- head biases [ap]) take NO weight decay: decaying the head bias would
+          -- drag the RetinaNet prior back toward 0, which is the exact offset we
+          -- install it to hold, and biases are conventionally excluded anyway.
+          let wshapes := fpnDetectParamShapes oc c3 c4 c5 A tower
           for (wsh, i) in wshapes.zipIdx do
             let pi := p + i
-            let (su, wN, mwN, vwN) := emitUpdate s!"%W{pi}" s!"%d_W{pi}" s!"%m_W{pi}" s!"%v_W{pi}" wsh s!"fpn{pi}" wdActive
+            let (su, wN, mwN, vwN) := emitUpdate s!"%W{pi}" s!"%d_W{pi}" s!"%m_W{pi}" s!"%v_W{pi}" wsh s!"fpn{pi}" (wdActive && wsh.length > 1)
             code := code ++ su
             paramRetNames := paramRetNames.push wN
             paramRetTypes := paramRetTypes.push (tensorTy wsh)
@@ -9210,17 +9446,15 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       vRetTypes := vRetTypes.push wTy |>.push bTy
       pidx := pidx + 1
       -- curShape unchanged (added onto the feature map)
-    | .fpnDetect oc c3 c4 c5 _ A =>
-      -- 6 weight-only 2D params (Wn3,Wn4,Wn5,Wh3,Wh4,Wh5). No bias/BN.
-      let ap := A * 15
-      let wtys := [tensorTy [oc, c3], tensorTy [oc, c4], tensorTy [oc, c5],
-                   tensorTy [ap, oc], tensorTy [ap, oc], tensorTy [ap, oc]]
+    | .fpnDetect oc c3 c4 c5 _ A tower =>
+      -- Neck laterals + optional tower + head convs + head biases. No BN.
+      let wtys := (fpnDetectParamShapes oc c3 c4 c5 A tower).map tensorTy
       for (wt, i) in wtys.zipIdx do
         params := params ++ s!"      %W{pidx + i}: {wt},\n"
         paramRetTypes := paramRetTypes.push wt
         mRetTypes := mRetTypes.push wt
         vRetTypes := vRetTypes.push wt
-      pidx := pidx + 6
+      pidx := pidx + fpnNumParams tower
     | _ => pure ()
   -- m_ params (1st moment, same shapes)
   let mut mpidx : Nat := 0
@@ -9402,13 +9636,11 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     | .timeCondAdd c nFreq =>
       params := params ++ s!"      %m_W{mpidx}: {tensorTy [2 * nFreq, c]}, %m_b{mpidx}: {tensorTy [c]},\n"
       mpidx := mpidx + 1
-    | .fpnDetect oc c3 c4 c5 _ A =>
-      let ap := A * 15
-      let wtys := [tensorTy [oc, c3], tensorTy [oc, c4], tensorTy [oc, c5],
-                   tensorTy [ap, oc], tensorTy [ap, oc], tensorTy [ap, oc]]
+    | .fpnDetect oc c3 c4 c5 _ A tower =>
+      let wtys := (fpnDetectParamShapes oc c3 c4 c5 A tower).map tensorTy
       for (wt, i) in wtys.zipIdx do
         params := params ++ s!"      %m_W{mpidx + i}: {wt},\n"
-      mpidx := mpidx + 6
+      mpidx := mpidx + fpnNumParams tower
     | _ => pure ()
   -- v_ params (2nd moment, same shapes)
   let mut vpidx2 : Nat := 0
@@ -9589,13 +9821,11 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     | .timeCondAdd c nFreq =>
       params := params ++ s!"      %v_W{vpidx2}: {tensorTy [2 * nFreq, c]}, %v_b{vpidx2}: {tensorTy [c]},\n"
       vpidx2 := vpidx2 + 1
-    | .fpnDetect oc c3 c4 c5 _ A =>
-      let ap := A * 15
-      let wtys := [tensorTy [oc, c3], tensorTy [oc, c4], tensorTy [oc, c5],
-                   tensorTy [ap, oc], tensorTy [ap, oc], tensorTy [ap, oc]]
+    | .fpnDetect oc c3 c4 c5 _ A tower =>
+      let wtys := (fpnDetectParamShapes oc c3 c4 c5 A tower).map tensorTy
       for (wt, i) in wtys.zipIdx do
         params := params ++ s!"      %v_W{vpidx2 + i}: {wt},\n"
-      vpidx2 := vpidx2 + 6
+      vpidx2 := vpidx2 + fpnNumParams tower
     | _ => pure ()
   if !fpnScales.isEmpty then
     -- FPN detector: one flat target [P3|P4|P5]; the loss slices it per scale.
@@ -9802,15 +10032,24 @@ def fpnLossProbeModule (B : Nat) (scaleGrids : List Nat) (A : Nat)
   s := s ++ "  }\n}\n"
   return s
 
-/-- Standalone whole-FPN-detector probe: neck + 1×1-conv heads + concat +
-    multi-scale loss + full DAG backward, conv1x1-only ⇒ CPU-compiles for FD. Run
-    at focal **γ=0** so the objectness weight is a genuine constant (not just
-    detached) and EVERY input/param grad is exactly finite-differenceable — this
-    validates the DAG backward (incl. all 6 param grads: neck laterals + heads)
-    before the `emitTrainStepBody` wiring. `@main(C3,C4,C5, Wn3,Wn4,Wn5,
-    Wh3,Wh4,Wh5, T3,T4,T5) -> (loss, dC3,dC4,dC5, dWn3,dWn4,dWn5, dWh3,dWh4,dWh5)`.
+/-- Standalone whole-FPN-detector probe: neck + optional RetinaNet tower +
+    1×1-conv heads + concat + multi-scale loss + full DAG backward. Run at focal
+    **γ=0** so the objectness weight is a genuine constant (not just detached) and
+    EVERY input/param grad is exactly finite-differenceable — this validates the
+    DAG backward (all 9 + 6·tower param grads) before the `emitTrainStepBody`
+    wiring.
+
+    `@main(C3,C4,C5, Wn3,Wn4,Wn5, [Wt_i,bt_i × 3 levels × tower],
+           Wh3,Wh4,Wh5, bh3,bh4,bh5, T3,T4,T5)
+     -> (loss, dC3,dC4,dC5, <the same param grads in the same order>)`
+
+    Param args after the neck follow `fpnDetectParamShapes` exactly, so the probe
+    is also a check that that ordering is what the emitters actually consume.
+    `tower = 0` keeps the module conv1×1-only (pure `dot_general`), which is what
+    lets it CPU-compile; `tower > 0` introduces real 3×3 `stablehlo.convolution`
+    ops, so CPU-compilability there is not guaranteed (see the probe checker).
     Deterministic per-scale anchors (w=0.02+0.03·i, h=0.03+0.04·i). -/
-def fpnDetectProbeModule (B oc c3 c4 c5 g5 A : Nat) : String := Id.run do
+def fpnDetectProbeModule (B oc c3 c4 c5 g5 A : Nat) (tower : Nat := 0) : String := Id.run do
   let P := 15
   let g4 := 2 * g5
   let g3 := 4 * g5
@@ -9825,22 +10064,39 @@ def fpnDetectProbeModule (B oc c3 c4 c5 g5 A : Nat) : String := Id.run do
   let wn4Ty := s!"tensor<{oc}x{c4}xf32>"
   let wn5Ty := s!"tensor<{oc}x{c5}xf32>"
   let whTy := s!"tensor<{ap}x{oc}xf32>"
+  let bhTy := s!"tensor<{ap}xf32>"
+  let twTy := tensorTy [oc, oc, 3, 3]
+  let tbTy := tensorTy [oc]
   let t3Ty := tensorTy [B, ap, g3, g3]
   let t4Ty := tensorTy [B, ap, g4, g4]
   let t5Ty := tensorTy [B, ap, g5, g5]
-  let (fwd, concat, (p3, p4, p5)) :=
-    emitFpnDetectForward "%C3" "%C4" "%C5" "%Wn3" "%Wn4" "%Wn5" "%Wh3" "%Wh4" "%Wh5" B oc c3 c4 c5 g5 A
+  -- Tower param SSA names, level-major to match fpnDetectParamShapes.
+  let towerW := (List.range 3).map (fun i => (List.range tower).map (fun j => s!"%Wt{i}_{j}"))
+  let towerB := (List.range 3).map (fun i => (List.range tower).map (fun j => s!"%bt{i}_{j}"))
+  let (fwd, concat, (h3, h4, h5), taps) :=
+    emitFpnDetectForward "%C3" "%C4" "%C5" "%Wn3" "%Wn4" "%Wn5" "%Wh3" "%Wh4" "%Wh5"
+      "%bh3" "%bh4" "%bh5" towerW towerB tower B oc c3 c4 c5 g5 A
   let (bwd, (dc3, dc4, dc5), dws) :=
-    emitFpnDetectBackward "%fpn_grad" "%C3" "%C4" "%C5" "%Wn3" "%Wn4" "%Wn5" p3 p4 p5 "%Wh3" "%Wh4" "%Wh5" B oc c3 c4 c5 g5 A
-  let mut s := s!"// fpn-detect probe (fwd+loss+bwd, γ=0): B={B} oc={oc} c=({c3},{c4},{c5}) g5={g5} A={A}\n"
+    emitFpnDetectBackward "%fpn_grad" "%C3" "%C4" "%C5" "%Wn3" "%Wn4" "%Wn5" h3 h4 h5
+      "%Wh3" "%Wh4" "%Wh5" towerW taps tower B oc c3 c4 c5 g5 A
+  -- arg list + return types, both in fpnDetectParamShapes order
+  let mut towerArgs := ""
+  let mut towerRets := ""
+  for i in [0:3] do
+    for j in [0:tower] do
+      towerArgs := towerArgs ++ s!", %Wt{i}_{j}: {twTy}, %bt{i}_{j}: {tbTy}"
+      towerRets := towerRets ++ s!", {twTy}, {tbTy}"
+  let mut s := s!"// fpn-detect probe (fwd+loss+bwd, γ=0): B={B} oc={oc} c=({c3},{c4},{c5}) g5={g5} A={A} tower={tower}\n"
   s := s ++ "module @fpn_detect_probe {\n"
-  s := s ++ s!"  func.func @main(%C3: {c3Ty}, %C4: {c4Ty}, %C5: {c5Ty}, %Wn3: {wn3Ty}, %Wn4: {wn4Ty}, %Wn5: {wn5Ty}, %Wh3: {whTy}, %Wh4: {whTy}, %Wh5: {whTy}, %T3: {t3Ty}, %T4: {t4Ty}, %T5: {t5Ty}) -> (tensor<f32>, {c3Ty}, {c4Ty}, {c5Ty}, {wn3Ty}, {wn4Ty}, {wn5Ty}, {whTy}, {whTy}, {whTy}) " ++ "{\n"
+  s := s ++ s!"  func.func @main(%C3: {c3Ty}, %C4: {c4Ty}, %C5: {c5Ty}, %Wn3: {wn3Ty}, %Wn4: {wn4Ty}, %Wn5: {wn5Ty}{towerArgs}, %Wh3: {whTy}, %Wh4: {whTy}, %Wh5: {whTy}, %bh3: {bhTy}, %bh4: {bhTy}, %bh5: {bhTy}, %T3: {t3Ty}, %T4: {t4Ty}, %T5: {t5Ty}) -> (tensor<f32>, {c3Ty}, {c4Ty}, {c5Ty}, {wn3Ty}, {wn4Ty}, {wn5Ty}{towerRets}, {whTy}, {whTy}, {whTy}, {bhTy}, {bhTy}, {bhTy}) " ++ "{\n"
   s := s ++ "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n"
   s := s ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
   s := s ++ fwd
   s := s ++ emitMultiScaleYoloLoss B scales ["%T3", "%T4", "%T5"] concat 0.0 5.0 "%fpn_loss" "%fpn_grad"
   s := s ++ bwd
-  s := s ++ s!"    return %fpn_loss, {dc3}, {dc4}, {dc5}, {dws[0]!}, {dws[1]!}, {dws[2]!}, {dws[3]!}, {dws[4]!}, {dws[5]!} : tensor<f32>, {c3Ty}, {c4Ty}, {c5Ty}, {wn3Ty}, {wn4Ty}, {wn5Ty}, {whTy}, {whTy}, {whTy}\n"
+  let gradList := String.intercalate ", " (dws.map id)
+  let tyList := String.intercalate ", " ((fpnDetectParamShapes oc c3 c4 c5 A tower).map tensorTy)
+  s := s ++ s!"    return %fpn_loss, {dc3}, {dc4}, {dc5}, {gradList} : tensor<f32>, {c3Ty}, {c4Ty}, {c5Ty}, {tyList}\n"
   s := s ++ "  }\n}\n"
   return s
 

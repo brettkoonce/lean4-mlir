@@ -6,7 +6,7 @@ import LeanMlir
     and dumps the generated train-step MLIR so it can be eyeballed / parse-checked
     with `iree-compile --compile-to=input` BEFORE the ~15-min ROCm compile.
 
-    Usage: lake exe fpn-train-emit [out.mlir]
+    Usage: lake exe fpn-train-emit [outDir]     (head tower depth via FPN_TOWER)
 -/
 
 -- Per-scale k-means anchor placeholders (real priors in data/visdrone/anchors_fpn_*.txt).
@@ -17,7 +17,7 @@ def fpnAnchorsP5 : List (Float × Float) := [(0.124, 0.151), (0.200, 0.220), (0.
 def fpnDetScales : List (Nat × List (Float × Float)) :=
   [(56, fpnAnchorsP3), (28, fpnAnchorsP4), (14, fpnAnchorsP5)]
 
-def r34FpnDet : NetSpec where
+def r34FpnDetT (tower : Nat) : NetSpec where
   name := "ResNet-34 + FPN detector 448 (VisDrone)"
   imageH := 448
   imageW := 448
@@ -29,11 +29,13 @@ def r34FpnDet : NetSpec where
     .residualBlock  64 128 4 2,   -- C3: 128ch, 56×56 (stride 8)
     .residualBlock 128 256 6 2,   -- C4: 256ch, 28×28 (stride 16)
     .residualBlock 256 512 3 2,   -- C5: 512ch, 14×14 (stride 32)
-    .fpnDetect 256 128 256 512 14 3
+    .fpnDetect 256 128 256 512 14 3 tower
   ]
 
 def main (args : List String) : IO Unit := do
   let outDir := args.head?.getD "/tmp"
+  let tower := ((← IO.getEnv "FPN_TOWER").bind (·.trim.toNat?)).getD 0
+  let r34FpnDet := r34FpnDetT tower
   let batch := 8
   let train := MlirCodegen.generateTrainStep r34FpnDet batch "jit_fpn_train_step"
     (useAdam := true) (weightDecay := 0.0005) (gradClipNorm := 4.0)
@@ -44,4 +46,4 @@ def main (args : List String) : IO Unit := do
   IO.FS.writeFile s!"{outDir}/fpn_fwd.mlir" fwd
   IO.FS.writeFile s!"{outDir}/fpn_fwd_eval.mlir" eval
   let ntot := (fpnDetScales.map (fun sc => sc.2.length * 15 * sc.1 * sc.1)).foldl (·+·) 0
-  IO.println s!"train={train.length}  fwd={fwd.length}  eval={eval.length} chars -> {outDir}  (Ntot = {ntot})"
+  IO.println s!"train={train.length}  fwd={fwd.length}  eval={eval.length} chars -> {outDir}  (Ntot = {ntot}, tower = {tower}, params = {r34FpnDet.totalParams})"

@@ -526,6 +526,14 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     let z := cfg.headPriorBias.map Float.log
     IO.eprintln s!"  head prior-bias init: bias = log π = {z}"
     pure p
+  -- Same idea for the FPN detector's sigmoid objectness head. Same placement
+  -- rationale: after the backbone-prefix bootstrap, before a full-checkpoint
+  -- resume.
+  let params ← if cfg.detPriorPi <= 0.0 then pure params else do
+    let p ← NetSpec.applyDetPriorBias spec params cfg.detPriorPi
+    let b0 := -(Float.log ((1.0 - cfg.detPriorPi) / cfg.detPriorPi))
+    IO.eprintln s!"  detector prior-bias init: π = {cfg.detPriorPi} → obj bias = {b0}"
+    pure p
   -- LEAN_MLIR_INIT_LOAD: resume from a full checkpoint (overrides any bootstrap
   -- init above). Pairs with LEAN_MLIR_START_STEP below for crash auto-resume on
   -- the IREE/Lean path (e.g. the YOLO segfault wrapper). Adam moments are not

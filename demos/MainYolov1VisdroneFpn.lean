@@ -47,11 +47,17 @@ def fpnNtot : Nat :=
 def fpnClsWeights : List Float :=
   [0.8058, 1.4377, 2.1196, 0.5579, 1.3407, 1.7916, 2.9778, 3.7281, 2.6187, 1.2694]
 
-def r34FpnDet : NetSpec where
-  -- name is the on-disk checkpoint prefix: keep it DISTINCT from the anchor arm
-  -- AND from the unweighted FPN baseline, whose e2..e12 checkpoints are the A/B
-  -- reference and must not be clobbered.
-  name := "ResNet-34 + FPN detector 448 wcls (VisDrone)"
+/-- `tower` = number of 3×3 convs in the RetinaNet head tower per pyramid level
+    (T2a). **0 = the minimal 1×1 head**, which is the T2-bias arm currently on the
+    board; 4 is the RetinaNet default. Selected at run time by `FPN_TOWER` so the
+    two arms are one binary, and folded into `name` so their checkpoints and vmfbs
+    can never collide. -/
+def r34FpnDetT (tower : Nat) : NetSpec where
+  -- name is the on-disk checkpoint prefix: keep it DISTINCT from the anchor arm,
+  -- from the unweighted FPN baseline, AND from the T1b (wcls) arm — all of their
+  -- e2..e12 checkpoints are live A/B references and must not be clobbered.
+  name := if tower == 0 then "ResNet-34 + FPN detector 448 wcls pb (VisDrone)"
+          else s!"ResNet-34 + FPN detector 448 wcls pb tower{tower} (VisDrone)"
   imageH := 448
   imageW := 448
   detStride := 32
@@ -62,8 +68,12 @@ def r34FpnDet : NetSpec where
     .residualBlock  64 128 4 2,   -- C3: 128ch, 56×56
     .residualBlock 128 256 6 2,   -- C4: 256ch, 28×28
     .residualBlock 256 512 3 2,   -- C5: 512ch, 14×14
-    .fpnDetect 256 128 256 512 14 3
+    .fpnDetect 256 128 256 512 14 3 tower
   ]
+
+/-- The towerless (T2-bias) arm. `tower = 0` emits ZERO tower ops, so this spec is
+    byte-identical to the pre-T2a codegen and the in-flight run stays reproducible. -/
+def r34FpnDet : NetSpec := r34FpnDetT 0
 
 def r34FpnDetConfig : TrainConfig where
   learningRate := 4.0e-4                -- below the anchor arm's 7e-4: the 3-scale
@@ -79,17 +89,37 @@ def r34FpnDetConfig : TrainConfig where
   augment      := false                 -- yoloAugment is single-box-format only
   focalGamma   := 2.0                   -- objectness focal γ (used by the FPN loss)
   fpnScales    := fpnDetScales          -- routes the loss to emitMultiScaleYoloLoss
-  yoloClsWeights := fpnClsWeights       -- T1b: the ONLY change vs the e12 baseline
+  yoloClsWeights := fpnClsWeights       -- T1b: kept on (free, and better class spread)
+  -- Tier 2, lever 1: the detector head now HAS a bias, initialized to the
+  -- RetinaNet prior. This is the only change vs the T1b arm — a zero-init bias
+  -- reproduces the biasless head exactly, so the T1b run is the control and no
+  -- separate bias-off arm is needed. Targets the measured failure: objectness
+  -- had AUC 0.742 but every logit squeezed into [−2.7, −1.2], because a
+  -- bias-free 1×1 conv must synthesize the background offset from its weights.
+  detPriorPi   := 0.01
   bootstrapBackbone := some (".lake/build/jax_r34_imagenet.bin", 21284672)
 
+/-- Read the head-tower depth (T2a) from `FPN_TOWER`; 0 = the minimal 1×1 head. -/
+def towerDepthFromEnv : IO Nat := do
+  match (← IO.getEnv "FPN_TOWER") with
+  | none => return 0
+  | some v => return (v.trim.toNat?).getD 0
+
 /-- Infer: dump [N, Ntot] val logits for scripts/yolo_map_visdrone.py --fpn. -/
-def inferDump (dataDir outDir : String) : IO Unit := do
+def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
   IO.FS.createDirAll outDir
-  let spec := r34FpnDet
   let flat : Nat := fpnNtot
   let evalVmfb := s!"{spec.buildPrefix}_fwd_eval.vmfb"
   let paramsPath := s!"{spec.buildPrefix}_params.bin"
   let bnPath := s!"{spec.buildPrefix}_bn_stats.bin"
+  -- Announce WHICH ARM is being evaluated. The arm is selected by FPN_TOWER, and
+  -- forgetting it silently evaluates a DIFFERENT arm's checkpoint rather than
+  -- failing: every prefix/size/vmfb is self-consistent for the wrong spec, so no
+  -- size check can catch it. (Cost one full 12-epoch eval sweep that reproduced
+  -- the previous arm's numbers exactly — six identical rows was the only tell.)
+  IO.println s!"  spec   : {spec.name}"
+  IO.println s!"  prefix : {spec.buildPrefix}"
+  IO.println s!"  params : {paramsPath} ({spec.totalParams} floats expected)"
   if !(← System.FilePath.pathExists evalVmfb) then
     IO.eprintln s!"ERROR: no eval vmfb at {evalVmfb}; train first"; IO.Process.exit 1
   let params ← IO.FS.readBinFile paramsPath
@@ -123,13 +153,15 @@ def inferDump (dataDir outDir : String) : IO Unit := do
   IO.println s!"  wrote {outDir}/logits.bin ({logitsAll.size} bytes — {nVal}×{flat} f32)"
 
 def main (args : List String) : IO Unit := do
+  let tower ← towerDepthFromEnv
+  let spec := r34FpnDetT tower
   match args with
   | "infer" :: rest =>
     let dataDir := rest[0]?.getD "data/visdrone_fpn"
     let outDir  := rest[1]?.getD "figures/yolo_fpn"
-    IO.println s!"FPN VisDrone inference dump — {dataDir} → {outDir}"
-    inferDump dataDir outDir
+    IO.println s!"FPN VisDrone inference dump (tower={tower}) — {dataDir} → {outDir}"
+    inferDump spec dataDir outDir
   | _ =>
     let dataDir := args.head?.getD "data/visdrone_fpn"
-    IO.println s!"FPN multi-scale VisDrone (56/28/14, 3 anchors/scale, Ntot={fpnNtot}) — data dir: {dataDir}"
-    r34FpnDet.train r34FpnDetConfig dataDir DatasetKind.petsDet
+    IO.println s!"FPN multi-scale VisDrone (56/28/14, 3 anchors/scale, Ntot={fpnNtot}, head tower={tower}) — data dir: {dataDir}"
+    spec.train r34FpnDetConfig dataDir DatasetKind.petsDet

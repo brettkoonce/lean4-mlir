@@ -1,6 +1,29 @@
 import LeanMlir.Types
 /-! Spec helpers: param counting, feature queries, arch display, validation. -/
 
+/-- Param shapes owned by a `.fpnDetect` layer, in the ONE canonical order that
+    `emitTrainStepSig`, the optimizer, the grad-clip list, the backward's
+    grad-binding, `NetSpec.paramShapes` and `heInitLayer` must all agree on:
+
+        Wn3 [oc,c3], Wn4 [oc,c4], Wn5 [oc,c5]           -- neck laterals
+        (W [oc,oc,3,3], b [oc]) × tower, per level P3 → P4 → P5
+        Wh3, Wh4, Wh5 [A·15, oc]                        -- head convs
+        bh3, bh4, bh5 [A·15]                            -- head biases, LAST
+
+    The biases MUST stay last: `NetSpec.applyDetPriorBias` installs the RetinaNet
+    prior by splicing the final `3·A·15` floats of the buffer.
+
+    Defined here (rather than in the codegen) because SpecHelpers and MlirCodegen
+    both need it and neither should own it — a mismatch between any two of these
+    consumers is a silent parameter-aliasing bug, not a compile error. -/
+def fpnDetectParamShapes (oc c3 c4 c5 A tower : Nat) : List (List Nat) := Id.run do
+  let ap := A * 15
+  let mut s : List (List Nat) := [[oc, c3], [oc, c4], [oc, c5]]
+  for _ in [0:3] do
+    for _ in [0:tower] do
+      s := s ++ [[oc, oc, 3, 3], [oc]]
+  return s ++ [[ap, oc], [ap, oc], [ap, oc], [ap], [ap], [ap]]
+
 def Layer.nParams : Layer → Nat
   | .conv2d ic oc k _ _     => oc * ic * k * k + oc
   | .convBn ic oc k _ _     => oc * ic * k * k + 2 * oc
@@ -191,10 +214,11 @@ def Layer.nParams : Layer → Nat
       let smoothing := 4 * (9 * target * target + target)
       -- Top-down upsample + elementwise add at each level: parameter-free.
       lateral + smoothing
-  | .fpnDetect oc c3 c4 c5 _ A =>
-      -- 6 weight-only params: neck laterals Wn3/4/5 [oc,c_s] + head convs
-      -- Wh3/4/5 [A·15,oc]. No biases (minimal head).
-      oc * c3 + oc * c4 + oc * c5 + 3 * (A * 15 * oc)
+  | .fpnDetect oc c3 c4 c5 _ A tower =>
+      -- Derived from the single canonical shape list, so the count can never
+      -- disagree with what the codegen and heInit actually lay down.
+      (fpnDetectParamShapes oc c3 c4 c5 A tower).foldl
+        (fun acc sh => acc + sh.foldl (· * ·) 1) 0
   | .evoformerBlock msaChannels pairChannels nBlocks =>
       -- Per-block breakdown (approx, matching AlphaFold 2 supplementary):
       --   MSA row-attn w/ pair bias:   ~ 4·cm²          (Q/K/V/O on MSA channels)
@@ -417,7 +441,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .shuffleV2Block ic oc n    => s!"ShuffleV2{n}({ic}→{oc})"
     | .asppModule ic oc          => s!"ASPP({ic}→{oc})"
     | .fpnModule c2 c3 c4 c5 t   => s!"FPN({c2}/{c3}/{c4}/{c5}→{t})"
-    | .fpnDetect oc c3 c4 c5 g5 A => s!"FPNDet(oc={oc},C=[{c3},{c4},{c5}],g5={g5},A={A})"
+    | .fpnDetect oc c3 c4 c5 g5 A tower => s!"FPNDet(oc={oc},C=[{c3},{c4},{c5}],g5={g5},A={A},tower={tower})"
     | .evoformerBlock cm cz n    => s!"Evoformer{n}(msa={cm},pair={cz})"
     | .structureModule cs cz n   => s!"StructMod{n}(s={cs},z={cz})"
     | .mobileVitBlock ic d h m n => s!"MobileViT(ic={ic},d={d},h={h},mlp={m},L={n})"
@@ -470,7 +494,7 @@ def Layer.outChannels : Layer → Nat
   | .shuffleV2Block _ oc _          => oc
   | .asppModule _ oc                => oc
   | .fpnModule _ _ _ _ target       => target
-  | .fpnDetect _ _ _ _ g5 A         => 315 * A * g5 * g5  -- flat Ntot = A·15·(g3²+g4²+g5²)
+  | .fpnDetect _ _ _ _ g5 A _       => 315 * A * g5 * g5  -- flat Ntot = A·15·(g3²+g4²+g5²)
   | .evoformerBlock msaCh _ _       => msaCh  -- MSA channels as the "main" dim
   | .structureModule sCh _ _        => sCh    -- single-repr channels
   | .mobileVitBlock ic _ _ _ _      => ic     -- block is ic → ic
@@ -519,7 +543,7 @@ def Layer.inChannels : Layer → Nat
   | .shuffleV2Block ic _ _          => ic
   | .asppModule ic _                => ic
   | .fpnModule _ _ _ c5 _            => c5     -- "input" is the deepest stage
-  | .fpnDetect _ _ _ c5 _ _          => c5     -- deepest tapped stage (C5)
+  | .fpnDetect _ _ _ c5 _ _ _        => c5     -- deepest tapped stage (C5)
   | .evoformerBlock msaCh _ _       => msaCh
   | .structureModule sCh _ _        => sCh
   | .mobileVitBlock ic _ _ _ _      => ic
