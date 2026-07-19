@@ -204,6 +204,7 @@ def _randaugment(img, n, m, mstd=0.0):
 
 private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
   match ds with
+  | .brats => panic! "JAX backend does not support the brats segmentation dataset (MLIR backend only)"
   | .mnist =>
     "# ═══════════════════════════════════════════════════════════════════════\n" ++
     "#  MNIST data loading (raw IDX format)\n" ++
@@ -455,6 +456,17 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         | .mbConv ic oc expand _ _ n _ =>
           -- expand/depthwise/project BN (SE has none); same shape as invres
           let blk (inc : Nat) := if expand != 1 then [inc*expand, inc*expand, oc] else [inc, oc]
+          (blk ic) ++ (List.range (n-1)).flatMap (fun _ => blk oc)
+        | .uib ic oc expand _ preDWk postDWk =>
+          -- pre-DW(ic)? → expand 1×1(ic·e) → post-DW(ic·e)? → project(oc), matching
+          -- the uib_block _bn call order. SE-free; k=0 legs contribute no BN.
+          let mid := ic * expand
+          (if preDWk > 0 then [ic] else []) ++ [mid] ++ (if postDWk > 0 then [mid] else []) ++ [oc]
+        | .fusedMbConv ic oc expand _ _ n useSE =>
+          -- fused kxk(mid) → [SE: no BN] → project(oc, only when expand≠1), per block.
+          let _ := useSE
+          let mid (bic : Nat) := if expand == 1 then oc else bic * expand
+          let blk (bic : Nat) := [mid bic] ++ (if expand != 1 then [oc] else [])
           (blk ic) ++ (List.range (n-1)).flatMap (fun _ => blk oc)
         | .residualBlock ic oc n fs =>
           -- basic_block_down (conv1, conv2, shortcut) on the first block when channels
@@ -862,6 +874,35 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "        x = x + residual\n" ++
       "    return x\n\n"
   if spec.layers.any fun | .uib .. => true | _ => false then
+    if cfg.runningBN then
+      -- Running-BN variant: threads bn[bn_start..] through each inline BN via _bn
+      -- (pre-DW? / expand / post-DW? / project), returns (x, new_bn_entries). The
+      -- depthwise convs stay fp32 (no convdt) exactly as the non-running form; the
+      -- 1×1 expand/project go through conv_bn (convdt-aware), matching invres/mbconv.
+      code := code ++
+        "def uib_block(params, x, idx, stride, pre_dw_k, post_dw_k, bn, bn_start, training):\n" ++
+        "    residual = x\n" ++
+        "    i = idx; bi = bn_start; out = []\n" ++
+        "    if pre_dw_k > 0:\n" ++
+        "        pad = ((pre_dw_k - 1) // 2, (pre_dw_k - 1) // 2)\n" ++
+        "        x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
+        "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'), feature_group_count=x.shape[1])\n" ++
+        "        x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
+        "        x = jax.nn.relu(x); i += 1\n" ++
+        "        stride = 1  # stride consumed by pre-DW\n" ++
+        "    x, ns = conv_bn(x, params[i][0], params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
+        "    x = jax.nn.relu(x); i += 1\n" ++
+        "    if post_dw_k > 0:\n" ++
+        "        pad = ((post_dw_k - 1) // 2, (post_dw_k - 1) // 2)\n" ++
+        "        x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
+        "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'), feature_group_count=x.shape[1])\n" ++
+        "        x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
+        "        x = jax.nn.relu(x); i += 1\n" ++
+        "    x, ns = conv_bn(x, params[i][0], params[i][1], params[i][2], bn[bi], training); out.append(ns)\n" ++
+        "    if residual.shape == x.shape:\n" ++
+        "        x = x + residual\n" ++
+        "    return x, out\n\n"
+    else
     code := code ++
       "def uib_block(params, x, idx, stride, pre_dw_k, post_dw_k):\n" ++
       "    \"\"\"Universal Inverted Bottleneck: optional DW → expand 1x1 → optional DW → project 1x1.\"\"\"\n" ++
@@ -901,6 +942,36 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    if residual.shape == x.shape:\n" ++
       "        x = x + residual\n" ++
       "    return x\n\n"
+  -- Running-BN fused_mbconv_block: the non-running def is emitted inside the
+  -- `else if spec.hasMbConv` branch above, which is SKIPPED when runningBN is on
+  -- (that branch guards on `hasMbConv && !runningBN`). So emit the running variant
+  -- here for any spec that actually uses fusedMbConv. Fused expand + project stay
+  -- fp32 (no convdt), matching the non-running form; SE has no BN.
+  if (spec.layers.any fun | .fusedMbConv .. => true | _ => false) && cfg.runningBN then
+    code := code ++
+      "def fused_mbconv_block(params, x, idx, stride, expand, ksize, use_se, bn, bn_start, training):\n" ++
+      "    residual = x\n" ++
+      "    i = idx; bi = bn_start; out = []\n" ++
+      "    pad = ((ksize - 1) // 2, (ksize - 1) // 2)\n" ++
+      "    x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
+      "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
+      "    x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
+      "    x = swish(x); i += 1\n" ++
+      "    if use_se:\n" ++
+      "        se = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
+      "        se = jax.lax.conv_general_dilated(se, params[i][0], (1,1), 'SAME',\n" ++
+      "              dimension_numbers=('NCHW', 'OIHW', 'NCHW')) + params[i][1].reshape(1, -1, 1, 1)\n" ++
+      "        se = swish(se); i += 1\n" ++
+      "        se = jax.lax.conv_general_dilated(se, params[i][0], (1,1), 'SAME',\n" ++
+      "              dimension_numbers=('NCHW', 'OIHW', 'NCHW')) + params[i][1].reshape(1, -1, 1, 1)\n" ++
+      "        x = x * jax.nn.sigmoid(se); i += 1\n" ++
+      "    if expand > 1:\n" ++
+      "        x = jax.lax.conv_general_dilated(x, params[i][0], (1,1), 'SAME',\n" ++
+      "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
+      "        x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns)\n" ++
+      "    if residual.shape == x.shape and stride == 1:\n" ++
+      "        x = x + residual\n" ++
+      "    return x, out\n\n"
   if spec.layers.any fun | .fireModule .. => true | _ => false then
     code := code ++
       "def fire_module(params, x, idx):\n" ++
@@ -1904,20 +1975,34 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       pidx := pidx + nP
     | .uib _ic _oc _expand stride preDWk postDWk =>
       let nP := (if preDWk > 0 then 1 else 0) + 1 + (if postDWk > 0 then 1 else 0) + 1
-      code := code ++ "    x = uib_block(params, x, " ++ toString pidx ++ ", " ++
-        toString stride ++ ", " ++ toString preDWk ++ ", " ++ toString postDWk ++ ")\n"
+      if cfg.runningBN then
+        code := code ++ "    x, _ne = uib_block(params, x, " ++ toString pidx ++ ", " ++
+          toString stride ++ ", " ++ toString preDWk ++ ", " ++ toString postDWk ++
+          ", bn, bn_i, training)\n    bn_out.extend(_ne); bn_i += len(_ne)\n"
+      else
+        code := code ++ "    x = uib_block(params, x, " ++ toString pidx ++ ", " ++
+          toString stride ++ ", " ++ toString preDWk ++ ", " ++ toString postDWk ++ ")\n"
       pidx := pidx + nP
     | .fusedMbConv _ic _oc expand kSize stride n useSE =>
       let nPerBlock (blockExpand : Nat) (se : Bool) :=
         1 + (if se then 2 else 0) + (if blockExpand != 1 then 1 else 0)
-      code := code ++ "    x = fused_mbconv_block(params, x, " ++ toString pidx ++ ", " ++
-        toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++
-        (if useSE then "True" else "False") ++ ")\n"
+      let seStr := if useSE then "True" else "False"
+      if cfg.runningBN then
+        code := code ++ "    x, _ne = fused_mbconv_block(params, x, " ++ toString pidx ++ ", " ++
+          toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++ seStr ++
+          ", bn, bn_i, training)\n    bn_out.extend(_ne); bn_i += len(_ne)\n"
+      else
+        code := code ++ "    x = fused_mbconv_block(params, x, " ++ toString pidx ++ ", " ++
+          toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++ seStr ++ ")\n"
       pidx := pidx + nPerBlock expand useSE
       for _ in List.range (n - 1) do
-        code := code ++ "    x = fused_mbconv_block(params, x, " ++ toString pidx ++ ", 1, " ++
-          toString expand ++ ", " ++ toString kSize ++ ", " ++
-          (if useSE then "True" else "False") ++ ")\n"
+        if cfg.runningBN then
+          code := code ++ "    x, _ne = fused_mbconv_block(params, x, " ++ toString pidx ++ ", 1, " ++
+            toString expand ++ ", " ++ toString kSize ++ ", " ++ seStr ++
+            ", bn, bn_i, training)\n    bn_out.extend(_ne); bn_i += len(_ne)\n"
+        else
+          code := code ++ "    x = fused_mbconv_block(params, x, " ++ toString pidx ++ ", 1, " ++
+            toString expand ++ ", " ++ toString kSize ++ ", " ++ seStr ++ ")\n"
         pidx := pidx + nPerBlock expand useSE
     | .fireModule _ _ _ _ =>
       code := code ++ "    x = fire_module(params, x, " ++ toString pidx ++ ")\n"
@@ -2318,6 +2403,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
 private def emitDataLoadCalls (ds : DatasetKind) (dataDir : String) (spec : NetSpec) : String :=
   let imgDesc := toString spec.imageH ++ "x" ++ toString spec.imageW
   match ds with
+  | .brats => panic! "JAX backend does not support the brats segmentation dataset (MLIR backend only)"
   | .mnist =>
     "    data_dir = \"" ++ dataDir ++ "\"\n" ++
     "    print(\"Loading training set …\")\n" ++
@@ -2769,7 +2855,8 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
                                 | .imagenette => "'imagenette'"
                                 | .pets => "'pets'"
                                 | .petsDet => "'pets_det'"
-                                | .imagenet => "'imagenet'") ++ ",\n" ++
+                                | .imagenet => "'imagenet'"
+                                | .brats => "'brats'") ++ ",\n" ++
   "            'emitter_version': '1',\n" ++
   "        }\n" ++
   "        _trace_f.write(json.dumps(_hdr) + '\\n')\n" ++

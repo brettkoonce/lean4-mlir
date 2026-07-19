@@ -73,6 +73,11 @@ lean_exe «vit-tiny-imagenet» where
 lean_exe «mobilenet-v2-imagenet» where
   root := `MainMobilenetV2Imagenet
 
+-- MobileNetV4-Conv-M on 1000-class ImageNet. Faithful Conv-M block table
+-- (~9.7M params) vs the Conv-S-sized Imagenette demo. See planning/mnv4_imagenet.md.
+lean_exe «mobilenet-v4-imagenet» where
+  root := `MainMobilenetV4Imagenet
+
 -- EfficientNet-B0 on 1000-class ImageNet, bf16 incl. bf16 conv (the MBConv
 -- expand/depthwise/project route through convdt; SE stays fp32).
 lean_exe «efficientnet-b0-imagenet» where
