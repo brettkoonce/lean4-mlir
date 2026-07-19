@@ -1,5 +1,7 @@
 import LeanMlir.Types
 import LeanMlir.Spec
+-- lean-atlas graph metadata (post-hoc attributes only; see the file header).
+import LeanMlir.AtlasMeta
 import LeanMlir.F32Array
 import LeanMlir.IreeRuntime
 import LeanMlir.MlirCodegen

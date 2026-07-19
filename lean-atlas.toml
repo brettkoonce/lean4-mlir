@@ -1,0 +1,6 @@
+# lean-atlas configuration (https://github.com/NyxFoundation/lean-atlas)
+# `namespace` scopes the dependency graph to this project's own modules
+# (module-name prefix filter), keeping Mathlib's constants out of the graph.
+[project]
+name = "lean4-mlir"
+namespace = "LeanMlir"

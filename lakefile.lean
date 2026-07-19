@@ -19,6 +19,11 @@ meta if get_config? env = some "dev" then
 require «doc-gen4» from git
   "https://github.com/leanprover/doc-gen4" @ "main"
 
+-- Dependency-graph visualizer (`lake exe atlas`); dependency-free, so it
+-- doesn't constrain Mathlib. Pinned to a commit for reproducibility.
+require «lean-atlas» from git
+  "https://github.com/NyxFoundation/lean-atlas" @ "main"
+
 require mathlib from git
   "https://github.com/leanprover-community/mathlib4" @ "v4.32.0"
 
