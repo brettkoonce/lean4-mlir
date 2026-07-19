@@ -39,8 +39,8 @@ Everything else — recipe, ImageNet main, supervisor, eval — is copy-from-MNv
 | Batch size | 4096 | `batchSize`×`gradAccumSteps` | e.g. 512×8 on 4×16GB |
 | Label smoothing | 0.1 | `labelSmoothing` | |
 | Dropout (classifier) | 0.2 | `dropout` | |
-| Stochastic depth | 0.075 | `dropPath` | ⚠️ wired for ConvNeXt only, NOT UIB |
-| RandAugment | 2 layers, mag 15, p0.7 | `useRandAugment`+`randAugmentGeometric`+`randAugmentN`/`M` | ⚠️ codegen clamps M to 0–10; mag-15 scale needs a check |
+| Stochastic depth | 0.075 | `dropPath` | ✅ wired into UIB (2026-07-19), linear ramp over 21 UIB blocks |
+| RandAugment | 2 layers, mag 15, p0.7 | `useRandAugment`+`randAugmentGeometric`+`randAugmentN`/`M` | ✅ faithful — m>10 EXTRAPOLATES (`m/_AA_MAX·scale`), matches timm `level/_MAX_LEVEL`, no clamp |
 | Mixup/Cutmix | **none** for Conv-M | — | leave off (simpler than ViT/ConvNeXt) |
 | EMA | 0.9999 (Table 9 lists for Conv-S; timm uses it) | `useEMA`/`emaDecay` | |
 | Resolution | 256 (also official r224 variant) | spec `imageH/W` | **use 224** — pipeline hardcodes `_IMG_SIZE=224`; `e500_r224_in1k` is a real published variant |
@@ -157,9 +157,16 @@ babysitting) remains the low-effort path.
    EMA-shadowed BN stats (`ema_bn`, the ENet lesson — already generic in codegen); checkpoints
    save `bn_state`+`ema_bn` so supervisor resume is bit-for-bit incl. BN. No regression
    (ENetV2 = runningBN-off, emits/compiles unchanged).
-2. **Stochastic-depth into UIB** for dropPath 0.075 (currently ConvNeXt-only). Low-medium;
-   Tier-3 only. Can ship Tiers 0–2 without it.
-3. **RandAugment mag-15 scale** — confirm/extend the 0–10 magnitude clamp vs timm's scale.
+2. **Stochastic-depth into UIB — ✅ DONE 2026-07-19.** `dropPath` now threads a per-block
+   keep-prob ramp (1.0→0.925 linear over 21 UIB blocks) + per-block RNG into both uib_block
+   variants; drop applies to the residual branch (batch-wise, matching mbconv). UIB added to
+   `totalDrop`. Verified: two SD train forwards differ (genuinely stochastic), eval is
+   drop-free, loss finite. Off (byte-identical) when `dropPath=0` — so only the `full` tier
+   exercises it.
+3. **RandAugment mag-15 — ✅ faithful (no work needed).** The sampler does NOT clamp M: the
+   op-arg functions scale by `m/_AA_MAX` (=`m/10`) and extrapolate for m>10 (m15 → 1.5×,
+   e.g. 45° rotate), exactly timm's `level/_MAX_LEVEL`. (Earlier "clamps to 0–10" note was
+   wrong — the clamp only exists on the `mstd>0` jitter path, which the recipe doesn't use.)
 4. **256px path (optional)** — make `_IMG_SIZE` derive from `spec.imageH` (or use
    `trainRes:=256`) for the `e500_r256` variant. 224 is faithful to `e500_r224` so not
    required.
@@ -192,6 +199,8 @@ babysitting) remains the low-effort path.
 
 ## Files
 
+- `jax/scripts/supervise_mnv4_convm_100ep_4gpu_duty.sh` — Tier-2 100ep supervisor (rest @33/66).
+- `jax/scripts/supervise_mnv4_convm_500ep_4gpu_duty.sh` — Tier-3 paper 500ep supervisor (rest every 30ep, ~3.5 days).
 - `jax/MainMobilenetV4Imagenet.lean` — NEW: faithful Conv-M 1000-class spec + recipes + `.imagenet` main.
 - `jax/MainMobilenetV4.lean` — pre-existing Imagenette (Conv-S-sized) demo; keep as Tier-0 smoke.
 - `apps/baselines/MainMobilenetV4Train.lean` — pre-existing Imagenette train variant.

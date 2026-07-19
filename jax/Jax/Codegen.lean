@@ -880,7 +880,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       -- depthwise convs stay fp32 (no convdt) exactly as the non-running form; the
       -- 1×1 expand/project go through conv_bn (convdt-aware), matching invres/mbconv.
       code := code ++
-        "def uib_block(params, x, idx, stride, pre_dw_k, post_dw_k, bn, bn_start, training):\n" ++
+        "def uib_block(params, x, idx, stride, pre_dw_k, post_dw_k, bn, bn_start, training, drop_key=None, keep_prob=1.0):\n" ++
         "    residual = x\n" ++
         "    i = idx; bi = bn_start; out = []\n" ++
         "    if pre_dw_k > 0:\n" ++
@@ -900,11 +900,14 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         "        x = jax.nn.relu(x); i += 1\n" ++
         "    x, ns = conv_bn(x, params[i][0], params[i][1], params[i][2], bn[bi], training); out.append(ns)\n" ++
         "    if residual.shape == x.shape:\n" ++
+        "        if drop_key is not None and keep_prob < 1.0:\n" ++
+        "            keep = jax.random.bernoulli(drop_key, keep_prob).astype(x.dtype)\n" ++
+        "            x = x * keep / keep_prob\n" ++
         "        x = x + residual\n" ++
         "    return x, out\n\n"
     else
     code := code ++
-      "def uib_block(params, x, idx, stride, pre_dw_k, post_dw_k):\n" ++
+      "def uib_block(params, x, idx, stride, pre_dw_k, post_dw_k, drop_key=None, keep_prob=1.0):\n" ++
       "    \"\"\"Universal Inverted Bottleneck: optional DW → expand 1x1 → optional DW → project 1x1.\"\"\"\n" ++
       "    residual = x\n" ++
       "    i = idx\n" ++
@@ -940,6 +943,9 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    # Project 1x1 (linear)\n" ++
       "    x = conv_bn(x, params[i][0], params[i][1], params[i][2])\n" ++
       "    if residual.shape == x.shape:\n" ++
+      "        if drop_key is not None and keep_prob < 1.0:\n" ++
+      "            keep = jax.random.bernoulli(drop_key, keep_prob).astype(x.dtype)\n" ++
+      "            x = x * keep / keep_prob\n" ++
       "        x = x + residual\n" ++
       "    return x\n\n"
   -- Running-BN fused_mbconv_block: the non-running def is emitted inside the
@@ -1789,6 +1795,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     | .mbConv _ _ _ _ _ n _  => some n
     | .bottleneckBlock _ _ n _ => some n
     | .transformerEncoder _ _ _ n => some n
+    | .uib _ _ _ _ _ _ => some 1  -- each UIB is one stochastic-depth unit (drop applies only when it skips)
     | _ => none)).foldl (· + ·) 0
   let mut code := if cfg.runningBN
     then "def forward(params, x, bn, training, drop_key=None):\n    bn_out = []\n    bn_i = 0\n"
@@ -1975,13 +1982,18 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       pidx := pidx + nP
     | .uib _ic _oc _expand stride preDWk postDWk =>
       let nP := (if preDWk > 0 then 1 else 0) + 1 + (if postDWk > 0 then 1 else 0) + 1
+      let denom := Float.ofNat (Nat.max 1 (totalDrop - 1))
+      let dropArgs := if cfg.dropPath > 0 then
+          ", dpkeys[" ++ toString dbi ++ "], " ++ toString (1.0 - cfg.dropPath * Float.ofNat dbi / denom)
+        else ""
       if cfg.runningBN then
         code := code ++ "    x, _ne = uib_block(params, x, " ++ toString pidx ++ ", " ++
           toString stride ++ ", " ++ toString preDWk ++ ", " ++ toString postDWk ++
-          ", bn, bn_i, training)\n    bn_out.extend(_ne); bn_i += len(_ne)\n"
+          ", bn, bn_i, training" ++ dropArgs ++ ")\n    bn_out.extend(_ne); bn_i += len(_ne)\n"
       else
         code := code ++ "    x = uib_block(params, x, " ++ toString pidx ++ ", " ++
-          toString stride ++ ", " ++ toString preDWk ++ ", " ++ toString postDWk ++ ")\n"
+          toString stride ++ ", " ++ toString preDWk ++ ", " ++ toString postDWk ++ dropArgs ++ ")\n"
+      if cfg.dropPath > 0 then dbi := dbi + 1
       pidx := pidx + nP
     | .fusedMbConv _ic _oc expand kSize stride n useSE =>
       let nPerBlock (blockExpand : Nat) (se : Bool) :=
