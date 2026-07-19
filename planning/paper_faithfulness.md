@@ -19,16 +19,16 @@ faithfulness. Last full audit: **2026-07-07** (fresh per-net audit, code as grou
 |-----|----------------------|-------|-----|------------|----------------------------|
 | **ResNet-50** (RSB-A3) | 76.66 / 93.03 | 78.1 | −1.44 | ✅ done (`rsb-faithful`) | BN regime (Ghost-BN + K×/step) + bf16; `true-2048` unrun |
 | **ResNet-34** | 72.1 / 90.7 | 73.3 | −1.2 | ✅ done (90ep) | bf16-conv + no PCA/color aug; otherwise clean |
-| **ConvNeXt-T** | 75.93 (80ep, old) | 82.1 | −6.2 | ⚠ stale; full unrun | default 80ep≠300; full aug+wd-mask+LR now faithful, un-re-measured |
+| **ConvNeXt-T** | 81.10 / 95.37 (300ep) | 82.1 | −1.0 | ✅ done (300ep) | full DeiT aug + wd-mask + faithful LR; 80ep tier re-measured 78.13; −1.0 = EMA-eval/test-crop territory |
 | **ViT-Ti / DeiT-Ti** | 70.28 / 90.05 (300ep) | 72.2 | −1.9 | ✅ done (300ep) | RepeatedAug 3×→1× deferred (largest remaining lever) |
-| **EfficientNet-B0** | none stable | 77.1 | — | ❌ no stable run | default LR now paper 0.016 (erodes in ε1e-3 stack); 80ep≠350; no run |
+| **EfficientNet-B0** | 76.80 / 93.26 (350ep) | 77.1 | −0.3 | ✅ done (350ep) | TF-RMSProp fix (ε-in-sqrt + ms-init-1.0) + EMA-shadow-BN eval fix → faithful at paper LR 0.016, no hacks |
 | **MobileNetV2** | 68.77 / 88.53 | 72.0 | −3.23 | ✅ done (90ep)† | 90ep≠~350; unscaled LR (LS→0 landed; number pre-dates it) |
 
 Only measured top-1s are stated as fact; "unrun" = the faithful config exists but has not
-produced a verified number. **No net currently reaches its paper number**, but four of six are
-within ~2pt (R34 −1.2, R50 −1.44, ViT −1.9, and MNv2 −3.23 pre-fixes). The two real outliers are
-ConvNeXt (−6.2, but that number predates the full aug pack + today's fixes — un-re-measured) and
-ENet-B0 (no stable run). Every gap is schedule-tier or config, not a model bug.
+produced a verified number. **EfficientNet-B0 now essentially reaches its paper number** (−0.3,
+faithful 350ep), and **ConvNeXt-T lands at −1.0** (300ep, 81.10). The rest are within ~2pt (R34 −1.2,
+R50 −1.44, ViT −1.9, MNv2 −3.23 pre-fixes). Every gap is schedule-tier, eval-protocol, or aug-detail
+--- not a model bug.
 
 † Measured numbers pre-date the 2026-07-07 config fixes (ConvNeXt wd-mask/LR, ENet LR, MNv2 LS→0);
 no number here has been re-measured under the new configs yet — a re-run is needed to reflect them.
@@ -92,9 +92,9 @@ classic ResNet, not the literal 2015 step-decay recipe.
   hurt); no arch/optimizer/LR bug found.
 
 ### ConvNeXt-T
-**Result:** last measured 75.93 (old 80ep, RandAugment-off) vs paper 82.1. Arch faithful; full
-aug/regularizer pack now present but the paper 300ep tier is only the `full` recipe arg, and
-neither 300ep nor the full-aug 80ep has been re-measured.
+**Result:** **81.10 / 95.37 (300ep, 2026-07-16)** vs paper 82.1: **−1.0 top-1.** The full-aug 80ep
+tier also re-measured at **78.13 / 94.05** (+2.2 over the old RandAugment-off 75.93). Arch + full
+aug/regularizer pack faithful; the residual −1.0 is EMA-eval / test-crop / aug-detail territory.
 - **Faithful:** patchify 4×4/s4 → channel-LN stem (no BN/ReLU — code correct, docstring stale);
   DW7→chLN(1e-6)→1×1 expand4→GELU→1×1→**LayerScale 1e-6**→residual; depths (3,3,9,3) widths
   (96,192,384,768); AdamW β(0.9,0.999) eps1e-8 decoupled; WD 0.05; **20-epoch warmup** (exact);
@@ -104,8 +104,9 @@ neither 300ep nor the full-aug 80ep has been re-measured.
 - **Deviations:** **default = 80ep, not 300** (biggest lever, only the `full` recipe arg); grad-clip 1.0
   (paper uses none); mixup/cutmix alternate-per-step vs switch-prob; cosine floor 0 vs 1e-6 (negligible).
   FIXED 2026-07-07: `wdExcludeNormBias` now on (was decaying LN/bias/LayerScale); LR 4e-4→2.5e-4 (linear).
-- **Residual −6.2pt:** now schedule tier (80 vs 300) + un-re-measured full aug/wd-mask/LR pack;
-  the two config deviations (wd-mask, LR) are closed but not yet reflected in a measured number.
+- **Residual −1.0pt (300ep, measured 2026-07-16):** schedule + config now faithful and run; the
+  remaining ~1pt is EMA-eval / test-crop (eval crop 0.875 vs the paper's resize protocol) /
+  aug-detail, not architecture. 80ep full-aug tier = 78.13 (was 75.93 RandAugment-off).
 
 ### ViT-Ti / DeiT-Ti
 **Result:** **300ep DeiT-Ti run completed → 70.28 / 90.05** (ROCm 2×7900 XTX), vs paper 72.2
@@ -125,19 +126,24 @@ stale — blueprint §ViT records the finished run.)
   1024, grad-clip, Random-Erase-to-zero). Every recipe axis is code-faithful.
 
 ### EfficientNet-B0
-**Result:** paper 77.1; **no stable completed run**. Recipe is the most paper-complete in the
-repo (all four ENet signature pieces faithful) but the *default* tier ships the divergent LR.
+**Result:** **76.80 / 93.26 (350ep, 2026-07-18)** vs paper 77.1 / 93.3 — **−0.3 top-1, ~exact
+top-5; a faithful match.** Recipe is the most paper-complete in the repo (all four ENet signature
+pieces faithful), and after the RMSProp-implementation fix it trains at the paper LR with no hacks.
 - **Faithful:** exact B0 MBConv stage table (t/c/n/s/k), SE on every block, Swish/SiLU, 1280 head,
   mult 1.0; RMSProp ρ0.9/μ0.9/**ε1e-3** (matches timm, not 1e-8); exp-decay ×0.97/2.4ep, 5ep
   warmup; WD 1e-5; LS 0.1; classifier dropout 0.2; drop-connect 0.2; EMA 0.9999; running-BN;
   res 224; **AutoAugment** (`_AA_POLICY` spot-checked = canonical ImageNet AA, all 25 sub-policies).
   Today's RandAugment change N/A (AA net).
-- **Deviations:** default LR now **0.016** (EfficientNet base LR @bs256, FIXED 2026-07-07 from the
-  arbitrary divergent 0.045) — but our RMSProp ε1e-3 stack *erodes* at 0.016 (memory
-  `project_enet_lr_instability`), so `_full` keeps a stable 0.01; **default 80ep vs paper 350** (AA
-  under-trains at 80); bs256 vs paper 4096; bf16+conv vs fp32; 5ep warmup (timm addition); eval
-  resizes straight to 224 (no 256→center-crop-224, crop_padding=32 — minor top-1 leak).
-- **Blocker:** not recipe-completeness — schedule length + LR fragility; no stable 350ep@≤0.01 run
+- **Deviations:** LR is now the paper **0.016** on both tiers. The earlier "erodes at 0.016" was
+  NOT an LR problem but a RMSProp-implementation bug — ε added outside the sqrt (`sqrt(sq)+ε`) and
+  the mean-square accumulator init'd to 0, i.e. not TensorFlow's RMSProp — which inflated the step
+  ~30× when sq is small. Fixed to the TF/`RMSpropTF` form (ε-in-sqrt + ms-init-1.0, commit e8f109b);
+  0.016 then trains stably with no grad-clip. Also fixed: EMA now shadows the BN running buffers
+  (`ema_bn`), else EMA-weights × live-BN-stats blew up eval to 1e8. Remaining deviations are minor:
+  default 80ep vs paper 350 (default tier only; `_full` = 350); bs256 vs paper 4096; bf16+conv vs
+  fp32; 5ep warmup (timm addition); eval resizes straight to 224 (no 256→center-crop-224 — minor
+  top-1 leak, plausibly the residual 0.3%).
+- **Blocker:** RESOLVED — the `_full` 350ep run completed at 76.80/93.26, matching paper within 0.3%.
   has confirmed 77.1.
 
 ### MobileNetV2

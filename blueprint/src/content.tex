@@ -6217,25 +6217,24 @@ all-reduce is a couple milliseconds of a $\sim$90\,ms step.
 \hline
 GPU & Epochs & Per epoch & Wall-clock & Val top-1 & Val top-5 \\
 \hline
-6$\times$ 4060 Ti & 80 & $\sim$8.0 min & $\sim$10.5 hr & $\mathbf{72.31\%}$ & $\mathbf{90.31\%}$ \\
-6$\times$ 4060 Ti & 300 & $\sim$8.0 min & $\sim$40 hr & --- & --- \\
+6$\times$ 4060 Ti & 80 (SGD) & $\sim$8.0 min & $\sim$10.5 hr & $72.31\%$ & $90.31\%$ \\
+4$\times$ 4060 Ti & 350 (RMSProp) & $\sim$8.6 min & $\sim$55.5 hr & $\mathbf{76.80\%}$ & $\mathbf{93.26\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent (CUDA, bf16. The 300-epoch row is the projected wall-clock
-for the full-recipe run; accuracy pending.) The 80-epoch run reached
+\noindent (CUDA, bf16. Two recipes: the 80-epoch SGD validation tier,
+and the faithful 350-epoch RMSProp full run --- the paper recipe end to
+end, discussed below.) The 80-epoch run reached
 $\mathbf{72.31\%}$ top-1 / $\mathbf{90.31\%}$ top-5 on the full
-50{,}000-image validation split --- the strongest result in this
-book's sweep, edging ResNet-34's $72.0\%$ at roughly a quarter of the
-parameters ($5.3$M vs $21.8$M). It still sits under EfficientNet's
-headline ${\sim}77\%$, which comes from a far longer schedule with
-RMSProp, AutoAugment, stochastic depth, and EMA. Of those, EMA (decay
-0.9999) and stochastic depth (drop-connect 0.2) are on here, costing
-${<}5\%$ per epoch; RMSProp, AutoAugment (both now wired), and the
-300-epoch length remain the gap to the paper number --- though the
-RMSProp attempt proved unexpectedly delicate, discussed below. The
-validation curve:
+50{,}000-image validation split --- a strong result for this tier,
+edging ResNet-34's $72.0\%$ at roughly a quarter of the parameters
+($5.3$M vs $21.8$M). It sits under EfficientNet's headline ${\sim}77\%$
+because it is a stripped validation tier: SGD, crop/flip only, 80 epochs.
+The faithful recipe --- RMSProp, AutoAugment, stochastic depth, EMA,
+350 epochs --- closes that gap (the 350-epoch row above, curve and story
+below), but getting RMSProp to train at all took two bug fixes. The
+80-epoch validation curve:
 
 \begin{center}
 \begin{tikzpicture}
@@ -6264,35 +6263,78 @@ validation curve:
 \noindent EfficientNet-B0 / ImageNet-1k validation accuracy per epoch
 (bf16, 6$\times$ 4060 Ti).
 
-\textbf{RMSProp re-run --- a cautionary result.} EfficientNet's native
-optimizer is RMSProp ($\rho=0.9$, $\mu=0.9$, $\varepsilon=10^{-3}$),
-and re-running B0 with it (crop/flip held fixed, to isolate the
-optimizer) exposed a learning-rate sensitivity absent from
-MobileNet-V2's RMSProp. At the MobileNet-style peak
-$\mathrm{lr}=0.045$ the run \emph{diverged}: once warmup reached the
-peak near epoch 5, the loss climbed and top-1 collapsed to
-$\sim$0.5\% (random) by epoch 6. Dropping to $\mathrm{lr}=0.016$ ---
-the paper's linear-scaled value ($0.256$ at batch $4096 \to 0.016$ at
-batch $256$) --- did not diverge but \emph{eroded}: top-1 peaked at
-$\sim$31\% near epoch 4 (where $\mathrm{lr}\approx0.013$) then decayed
-to $\sim$19\% and stalled, the slow cosine holding the rate near its
-$0.016$ peak for $\sim$10 epochs while the model could not recover.
-Training stayed clean only up to $\mathrm{lr}\approx0.013$, so the
-usable peak is $\sim$0.01 or below. The culprit is the small
-$\varepsilon=10^{-3}$: where MobileNet-V2's $\varepsilon=1.0$ damps the
-adaptive step (the contrast flagged in the MobileNet-V2 recipe), B0's
-tiny denominator lets the same nominal LR explode.
+\textbf{RMSProp --- a cautionary result that was really a bug.}
+EfficientNet's native optimizer is RMSProp ($\rho=0.9$, $\mu=0.9$,
+$\varepsilon=10^{-3}$), and re-running B0 with it exposed what looked
+like a learning-rate sensitivity absent from MobileNet-V2's RMSProp: at
+the MobileNet-style peak $\mathrm{lr}=0.045$ the loss diverged by epoch
+6, and even at the paper's linear-scaled $\mathrm{lr}=0.016$ ($0.256$ at
+batch $4096 \to 0.016$ at batch $256$) top-1 \emph{eroded} --- peaking
+$\sim$31\% near epoch 4, then decaying to $\sim$19\% and stalling. The
+obvious workaround was to lower the peak to $\sim$0.01, and for a while
+we did. But the learning rate was not the culprit: our RMSProp was not
+\emph{TensorFlow's} RMSProp, the variant EfficientNet actually trained
+with. Two differences --- $\varepsilon$ added \emph{outside} the square
+root ($\sqrt{\mathrm{sq}}+\varepsilon$) rather than inside
+($\sqrt{\mathrm{sq}+\varepsilon}$), and the mean-square accumulator
+initialized to $0$ rather than $1$ --- inflate the effective step by up
+to $\sim$30$\times$ when the running mean-square is small, which is
+exactly the erosion observed. This also explains the MobileNet-V2
+contrast: its $\varepsilon=1.0$ is large enough to swamp the
+misplacement, so the same bug left it unscathed --- MNv2 trained fine on
+the buggy optimizer while B0 did not. Correcting both to the TensorFlow
+form (\texttt{timm}'s \texttt{RMSpropTF}) let B0 train stably at the
+paper's real $0.016$ with no gradient clipping and no lowered LR.
 
-\textbf{[TODO --- run w/ config.]} \texttt{efficientnet-b0-imagenet}
-full tier (recipe arg \texttt{full}), \textbf{350 epochs}, RMSProp
-peak $0.01$ $+$ AutoAugment $+$ stochastic depth. \emph{Changed:} the
-shipped \emph{default} LR is now the paper base $0.016$ (was an arbitrary
-divergent $0.045$); the full tier keeps the stable $0.01$ because our
-$\varepsilon{=}10^{-3}$ stack erodes at $0.016$ (above). AutoAugment,
-like the schedule, under-trains at 80 epochs and only pays off long.
-Until this pass runs ($\sim$40\,hr on the six-GPU box), the SGD 80-epoch
-$72.31\%$ above stands as the sweep's B0 number; the faithful headline is
-$\sim$77\%.
+A second bug surfaced once the optimizer was fixed: with the paper's
+weight EMA (decay $0.9999$) on, evaluation blew up --- validation loss to
+$10^{8}$ --- because the EMA shadowed only the weights, and eval then
+paired those averaged weights with the \emph{live} BatchNorm running
+statistics. Shadowing the BN buffers with the same EMA (\texttt{ema\_bn})
+fixed it. ConvNeXt uses the identical EMA and never hit this: LayerNorm
+has no running buffers to desynchronize, so the bug is specific to
+BatchNorm nets trained with weight averaging.
+
+\textbf{The faithful 350-epoch run.} With both fixed, the full tier ---
+the paper recipe end to end: RMSProp at $0.016$, AutoAugment, stochastic
+depth, EMA, exponential LR decay --- reached $\mathbf{76.80\%}$ top-1 /
+$\mathbf{93.26\%}$ top-5, against EfficientNet-B0's paper
+$77.1\%\,/\,93.3\%$: within $0.3\%$ top-1 and essentially exact on top-5.
+A faithful, from-scratch reproduction with no hacks --- real RMSProp,
+real LR, real EMA. It ran $\sim$55.5\,hr on four 4060 Ti (350 epochs plus
+eleven 30-minute thermal rests, zero AER). The validation curve --- note
+the deliberate slow start, the weight EMA at $0.9999$ lagging near-init
+weights until $\sim$epoch 8 before catching up sharply:
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=6.5cm,
+    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
+    xmin=0, xmax=355, ymin=0, ymax=100,
+    xtick={0,50,100,150,200,250,300,350}, ytick={20,40,60,80,100},
+    legend pos=south east, legend cell align={left},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small}, label style={font=\small},
+    every axis plot/.append style={line width=0.8pt, mark=none},
+]
+\addplot[blue] coordinates {
+(1,0.10) (2,0.10) (3,0.10) (4,0.13) (5,0.16) (6,0.33) (7,1.33) (8,8.15) (9,24.81) (10,38.25) (15,60.96) (20,64.91) (25,66.53) (30,67.61) (35,68.57) (40,69.30) (45,69.93) (50,70.12) (55,70.48) (60,71.06) (65,71.38) (70,71.65) (75,72.03) (80,71.96) (85,72.24) (90,72.40) (95,72.79) (100,73.11) (105,73.22) (110,73.48) (115,73.57) (120,73.85) (125,73.81) (130,74.09) (135,74.43) (140,74.42) (145,74.59) (150,74.73) (155,74.77) (160,74.91) (165,75.07) (170,75.10) (175,75.20) (180,75.27) (185,75.42) (190,75.48) (195,75.61) (200,75.69) (205,75.71) (210,75.91) (215,75.92) (220,76.03) (225,76.09) (230,76.03) (235,76.15) (240,76.22) (245,76.21) (250,76.33) (255,76.38) (260,76.27) (265,76.43) (270,76.55) (275,76.52) (280,76.53) (285,76.56) (290,76.53) (295,76.65) (300,76.69) (305,76.73) (310,76.68) (315,76.85) (320,76.78) (325,76.84) (330,76.79) (335,76.82) (340,76.91) (345,76.86) (350,76.80)
+};
+\addlegendentry{top-1}
+\addplot[orange] coordinates {
+(1,0.50) (2,0.49) (3,0.52) (4,0.69) (5,0.82) (6,1.24) (7,5.19) (8,21.69) (9,48.97) (10,64.73) (15,83.54) (20,86.34) (25,87.30) (30,88.09) (35,88.61) (40,89.01) (45,89.42) (50,89.55) (55,89.79) (60,90.04) (65,90.12) (70,90.46) (75,90.55) (80,90.68) (85,90.75) (90,90.79) (95,91.08) (100,91.14) (105,91.29) (110,91.34) (115,91.45) (120,91.59) (125,91.58) (130,91.76) (135,91.82) (140,91.93) (145,92.03) (150,92.17) (155,92.15) (160,92.16) (165,92.17) (170,92.27) (175,92.38) (180,92.37) (185,92.42) (190,92.57) (195,92.59) (200,92.56) (205,92.60) (210,92.72) (215,92.64) (220,92.72) (225,92.76) (230,92.81) (235,92.90) (240,92.83) (245,92.90) (250,92.95) (255,92.86) (260,92.96) (265,93.03) (270,93.02) (275,93.08) (280,93.04) (285,93.02) (290,93.13) (295,93.21) (300,93.10) (305,93.13) (310,93.20) (315,93.19) (320,93.19) (325,93.28) (330,93.27) (335,93.27) (340,93.28) (345,93.34) (350,93.26)
+};
+\addlegendentry{top-5}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent EfficientNet-B0 / ImageNet-1k validation accuracy per epoch,
+faithful 350-epoch RMSProp run (bf16, 4$\times$ 4060 Ti). The EMA slow
+start (near-zero through $\sim$epoch 7) is the weight average lagging the
+live weights, not a training failure; final $76.80\%\,/\,93.26\%$ matches
+the paper's $77.1\%\,/\,93.3\%$.
 
 \section{Side quests}
 \label{sec:enet_side_quests}
