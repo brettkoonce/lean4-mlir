@@ -5599,16 +5599,19 @@ saving does not translate into a proportional wall-clock advantage on
 this hardware.
 
 \begin{center}
-\begin{tabular}{l l r r r r}
+\begin{tabular}{l l r r r r r}
 \hline
-GPU & Precision & Per epoch & 90 epochs & Val top-1 & Val top-5 \\
+GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-6$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.5 min & $\sim$11 hr & $\mathbf{68.77\%}$ & $\mathbf{88.53\%}$ \\
+6$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.5 min & 90 & $\sim$11 hr & $\mathbf{68.77\%}$ & $\mathbf{88.53\%}$ \\
+4$\times$ 4060 Ti (CUDA) & bf16 & --- & 350 & $\sim$46 hr & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent The full 90-epoch run --- now on MobileNetV2's native
+\noindent (The 350-epoch row is the paper-faithful full tier ---
+the [TODO] below --- wall-clock projected, accuracies pending.)
+The full 90-epoch run --- now on MobileNetV2's native
 RMSProp ($\rho=0.9$, $\mu=0.9$, $\varepsilon=1.0$) with crop/flip
 augmentation, the paper recipe --- completed at $\mathbf{68.77\%}$
 top-1 / $\mathbf{88.53\%}$ top-5 on the full 50{,}000-image
@@ -5668,6 +5671,57 @@ Mixup/CutMix/RandErase) finally pays off rather than under-training. A
 dedicated paper-faithful pass --- each net at its full schedule on the
 six-GPU box ($\sim$35\,hr apiece) --- is left as future work to close
 these gaps.
+
+\subsection*{What the MobileNetV2 recipe changes from the 2018 recipe}
+
+The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
+\emph{2018-era} recipe of the SGD lineage: momentum, cosine polish,
+label smoothing. MobileNetV2 is a 2018 paper too, but from the other
+side of a fork: Google's TensorFlow/Inception training tradition ---
+RMSProp with a huge $\varepsilon$, an exponential LR staircase, a
+tiny weight decay, and nothing beyond crop and flip on the data
+side. So this diff is not a time jump but two contemporary recipes
+side by side --- and the base that the next chapter's 2019
+EfficientNet recipe is built on. The \texttt{.train} entry point is
+identical; every row is a one-line \texttt{NetSpec} or
+\texttt{TrainConfig} change:
+
+\begin{center}
+\begin{tabular}{@{}l l l p{5.0cm}@{}}
+\hline
+Knob & ResNet-34 (2018) & MobileNetV2 (2018) & What the MNv2 choice buys \\
+\hline
+Backbone      & basic block, 21.8\,M   & inverted residual, 3.5\,M     & depthwise $3\times3$ at the wide point between $1\times1$s --- $1/6$ the parameters \\
+Optimizer     & SGD + momentum $0.9$   & RMSProp                       & $\rho{=}0.9$, $\mu{=}0.9$, $\varepsilon{=}1.0$ --- the huge $\varepsilon$ keeps the adaptive step damped (B0 shrinks it to $10^{-3}$ and pays for it) \\
+Peak LR       & $0.1$                  & $0.045$                       & RMSProp's scale --- not comparable to SGD's $0.1$ \\
+LR schedule   & cosine to zero         & exponential, $\times0.98$ per epoch & the TF-lineage staircase the whole family inherits \\
+Epochs        & 90                     & $\sim$300--400                & the long-haul schedule; most of the $-3.2$-point gap above is this \\
+Weight decay  & $10^{-4}$, all params  & $4\times10^{-5}$              & depthwise filters are 9 weights per channel --- $10^{-4}$ over-regularizes them \\
+Label smoothing & $0.1$                & none                          & Sandler et al.\ used no smoothing at all \\
+Augmentation  & RRC + hflip            & RRC + hflip                   & unchanged --- no learned policy, no mixing; the leanest recipe in this book \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent What carries over unchanged: batch 256, train and eval both
+at $224$, running-BN evaluation, bf16 matmul and convolution, and our
+5-epoch warmup (an addition to both papers).
+
+One honesty note: the $68.77\%$ run above is the 90-epoch validation
+tier and predates two of these rows --- it ran the cosine schedule
+with label smoothing $0.1$. The paper-faithful full tier (exponential
+decay, no smoothing, 350 epochs) is the [TODO] above; the expectation
+is that the remaining $\sim$3 points are training budget, not model
+or optimizer.
+
+The through-line of this fork: nothing here regularizes harder ---
+MobileNetV2's recipe is the SGD recipe's contemporary, tuned for a
+network $1/6$ the size, and its distinctive knobs (adaptive
+optimizer, staircase decay, tiny selective-in-spirit weight decay)
+are the ones EfficientNet inherits and ConvNeXt eventually replaces
+wholesale. The 2019--2022 tables that follow all diff against the
+same 2018 SGD column; this one shows where their other half came
+from.
 
 The general pattern ---  deeper + narrower + per-channel conv +
 surrounding $1 \times 1$ expansion --- carries forward to MobileNet
@@ -6335,6 +6389,61 @@ faithful 350-epoch RMSProp run (bf16, 4$\times$ 4060 Ti). The EMA slow
 start (near-zero through $\sim$epoch 7) is the weight average lagging the
 live weights, not a training failure; final $76.80\%\,/\,93.26\%$ matches
 the paper's $77.1\%\,/\,93.3\%$.
+
+\subsection*{What the EfficientNet recipe changes from the 2018 recipe}
+
+The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
+\emph{2018-era} recipe: SGD with momentum plus the ``bag of tricks''
+polish (cosine schedule, warmup, label smoothing,
+random-resized-crop). The 350-epoch run above is the \emph{2019}
+EfficientNet recipe (Tan \& Le), reproduced end to end.
+Chapter~\ref{chap:residual}'s RSB-A3 side quest shows what 2021 does
+to the 2018 baseline, and Chapter~\ref{chap:layernorm} closes with
+2022's version; this table is the 2019 rung of the same ladder. The
+\texttt{.train} entry point is identical; every row is a one-line
+\texttt{NetSpec} or \texttt{TrainConfig} change:
+
+\begin{center}
+\begin{tabular}{@{}l l l p{5.0cm}@{}}
+\hline
+Knob & ResNet-34 (2018) & EfficientNet-B0 (2019) & What the B0 choice buys \\
+\hline
+Backbone      & basic block, 21.8\,M   & MBConv + SE + Swish, 5.3\,M  & depthwise sandwich + SE gating --- ResNet-34-class accuracy at a quarter of the parameters \\
+Optimizer     & SGD + momentum $0.9$   & RMSProp (TF form)             & $\rho{=}0.9$, $\mu{=}0.9$, $\varepsilon{=}10^{-3}$ --- and the exact variant is load-bearing (below) \\
+Peak LR       & $0.1$                  & $0.016$                       & linearly scaled from the official $0.256$@4096 --- RMSProp's scale, not comparable to SGD's $0.1$ \\
+LR schedule   & cosine to zero         & exponential, $\times0.97$ every 2.4 epochs & the paper's staircase anneal, after the same 5-epoch warmup \\
+Epochs        & 90                     & 350                           & the long-schedule regime the regularizers need --- $+4.5$ top-1 over the 80-epoch validation tier \\
+Weight decay  & $10^{-4}$, all params  & $10^{-5}$                     & $10\times$ \emph{weaker} --- depthwise and SE parameters are decay-sensitive \\
+Augmentation  & RRC + hflip            & + AutoAugment                 & the learned ImageNet policy --- 2019's forerunner of ConvNeXt's DeiT pack \\
+Stochastic depth & none                & drop-path $0.2$               & randomly drops whole residual branches per step, at B0's drop-connect rate \\
+EMA           & none                   & decay $0.9999$                & evaluates a smoothed shadow of the weights \emph{and} the BN buffers (below) \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent What carries over unchanged: softmax cross-entropy with
+label smoothing $0.1$, the 5-epoch warmup, random-resized-crop +
+horizontal flip as the base augmentation, batch 256, train and eval
+both at $224$, bf16 matmul and convolution (the SE $1\times1$s in
+fp32) --- and, unlike every later recipe in this ladder, no gradient
+clipping.
+
+The two quietest rows carry the chapter's two debugging lessons.
+``RMSProp (TF form)'' is doing real work: as recounted above,
+TensorFlow's $\varepsilon$-outside-the-square-root and mean-square
+init of $1$ are the difference between training stably at the
+paper's $0.016$ and eroding to $\sim$19\%. And the EMA row only
+evaluates correctly because the BN running statistics are shadowed
+alongside the weights (\texttt{ema\_bn}) --- averaged weights
+against live BN statistics is an eval blow-up, a failure mode
+specific to BatchNorm nets trained with weight averaging.
+
+The through-line of the 2018$\to$2019 shift is \emph{smaller,
+longer, more automated}: a quarter of the parameters trained for
+$4\times$ the epochs, with a learned augmentation policy, stochastic
+depth, and averaged weights supplying the regularization --- and a
+reminder that ``the paper recipe'' includes the optimizer's exact
+semantics, not just its hyperparameters.
 
 \section{Side quests}
 \label{sec:enet_side_quests}
