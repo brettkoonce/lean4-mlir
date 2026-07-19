@@ -28,6 +28,11 @@
   \ignorespaces}
 \ExplSyntaxOff
 
+% Cross-reference into the Bestiary chapter: in print this is a plain
+% hyperref to the label. The web version (macros/web.tex) emits a direct
+% chap-bestiary.html anchor link instead, since plasTeX's \hyperref is broken.
+\newcommand{\bestiaryref}[2]{\hyperref[#1]{#2}}
+
 % In the printed version we just render the declaration name in
 % typewriter --- the URL would clutter the page. Web version provides a
 % live link via macros/web.tex.

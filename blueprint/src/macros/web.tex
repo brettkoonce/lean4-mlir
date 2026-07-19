@@ -9,6 +9,12 @@
 % corresponding declaration's API doc page.
 \newcommand{\leandocref}[1]{\href{\docbase/find/\#doc/#1}{\texttt{#1}}}
 
+% Cross-reference into the Bestiary chapter. plasTeX renders
+% \hyperref[label]{text} as a dead href="#." link, so the web version
+% links straight to the anchor on the bestiary chapter page (plasTeX
+% names it after the chap:bestiary label; ids keep their colons).
+\newcommand{\bestiaryref}[2]{\href{chap-bestiary.html\##1}{#2}}
+
 % \prosesection: chapter-body prose sub-heading. Rendered as a styled bold
 % heading that is NOT a sectioning command, so it never produces a web
 % sidebar entry -- the ch1-9 web index then shows only numbered sections,
