@@ -129,14 +129,28 @@ const CHAPTER_TITLE = {
 {%- endfor %}
 };
 
+// Chapters whose entries are catalog listings rather than proof nodes —
+// dropped from the graph entirely so it reads as the proof tree alone.
+// (The Bestiary's entries declare no \uses edges; if that ever changes,
+// remove it from this list and its cluster reappears.)
+const EXCLUDED_CHAPTERS = ["Bestiary of Architectures"];
+
 function clusterizeDot(dot) {
+  const excludedIds = new Set(
+    Object.keys(CHAPTER_OF).filter(
+      id => EXCLUDED_CHAPTERS.includes(CHAPTER_TITLE[CHAPTER_OF[id]])));
   const body = dot.slice(dot.indexOf('{') + 1, dot.lastIndexOf('}'));
   const stmts = body.split(';').map(s => s.trim()).filter(Boolean);
   const header = [], clusters = {}, loose = [], edges = [];
   for (const s of stmts) {
-    if (s.includes('->')) { edges.push(s); continue; }
+    if (s.includes('->')) {
+      const ids = [...s.matchAll(/"([^"]+)"/g)].map(m => m[1]);
+      if (!ids.some(id => excludedIds.has(id))) edges.push(s);
+      continue;
+    }
     if (s.startsWith('"')) {
       const id = s.slice(1, s.indexOf('"', 1));
+      if (excludedIds.has(id)) continue;
       const ci = CHAPTER_OF[id];
       if (ci !== undefined) (clusters[ci] = clusters[ci] || []).push(s);
       else loose.push(s);
