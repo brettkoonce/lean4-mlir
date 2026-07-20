@@ -4876,7 +4876,7 @@ the AlphaGo Zero paper
 reinforcement learning with a large residual network of
 convolutions.
 
-\prosesection{Side quest: ResNet-50, RSB-A3 (100 epochs)}
+\section{Side quest: ResNet-50, RSB-A3 (100 epochs)}
 
 The basic block ResNet-34 is built from generalizes to the
 \emph{bottleneck} block of ResNet-50, and the \texttt{jax/} folder
@@ -4967,7 +4967,7 @@ entry point are identical; only the \texttt{TrainConfig} differs. Here
 is the full diff:
 
 \begin{center}
-\begin{tabular}{@{}l l l p{5.7cm}@{}}
+\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
 \hline
 Knob & ResNet-34 (2018) & RSB-A3 (2021) & What the A3 choice buys \\
 \hline
@@ -5687,7 +5687,7 @@ identical; every row is a one-line \texttt{NetSpec} or
 \texttt{TrainConfig} change:
 
 \begin{center}
-\begin{tabular}{@{}l l l p{5.0cm}@{}}
+\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
 \hline
 Knob & ResNet-34 (2018) & MobileNetV2 (2018) & What the MNv2 choice buys \\
 \hline
@@ -5729,6 +5729,82 @@ V3 and the EfficientNet family. All of those add their own small
 modifications on top (SE blocks, Swish activations, compound scaling)
 but the core depthwise-separable scaffolding is exactly what this
 chapter formalized.
+
+\section{Side quest: MobileNet V4}
+
+Six years on, MobileNetV4 (Qin et al.\ 2024,
+\href{https://arxiv.org/abs/2404.10518}{arXiv:2404.10518}) revisits
+this chapter's block. Its central move is the \emph{universal
+inverted bottleneck} (UIB): take the inverted residual and make two
+depthwise positions optional --- one before the expansion, one after
+it. Four instantiations fall out of that one template: both
+depthwise convs on (\emph{ExtraDW}), only the leading one
+(\emph{ConvNeXt} --- this chapter's sandwich rearranged into
+Chapter~\ref{chap:layernorm}'s block shape), neither (a plain
+\emph{FFN} --- two $1\times1$s), or only the inner one (exactly
+MobileNetV2's block). The \texttt{jax/} folder ships the faithful
+Conv-Medium as a full ImageNet trainer
+(\texttt{jax/MainMobilenetV4Imagenet.lean}), transcribed block for
+block from timm's \texttt{mobilenetv4\_conv\_medium}: $\sim$9.7M
+parameters, a fused-IB stage at high resolution, then 21 UIB blocks
+whose per-block instantiation is visible right in the
+\texttt{NetSpec} --- and the same \texttt{.train} entry point as
+every other net in this book. What changed from 2018 to 2024 is at
+least as much recipe as architecture:
+
+\begin{center}
+\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
+\hline
+Knob & MobileNetV2 (2018) & MNv4-Conv-M (2024) & What the v4 choice buys \\
+\hline
+Block         & inverted residual      & UIB (+ fused IB stage)        & the two optional depthwise slots subsume MNv2's block, ConvNeXt's, and an FFN in one template \\
+Parameters    & 3.5\,M                 & 9.7\,M                        & ``mobile'' now means fits-the-phone, not smallest-possible \\
+Paper top-1   & $72.0\%$               & $79.9\%$                      & non-distilled; distillation pushes the family higher still \\
+Optimizer     & RMSProp ($\varepsilon{=}1.0$) & AdamW $\beta(0.9, 0.999)$ & the TF-lineage staircase gives way to the transformer-era default \\
+Peak LR       & $0.045$ @ 256          & $0.004$ @ 4096                & effective batch 4096 (run here as $512 \times 8$ grad-accum) \\
+LR schedule   & exponential, $\times0.98$ per epoch & cosine, 5-epoch warmup & the anneal every post-2020 recipe in this book uses \\
+Epochs        & $\sim$300--400         & 500                           & the family's long-haul habit, taken further \\
+Weight decay  & $4\times10^{-5}$       & $0.1$, skip norm/bias         & $2500\times$ stronger, applied selectively --- AdamW makes heavy decay usable \\
+Augmentation  & RRC + hflip            & + RandAugment (N2, m15, p0.7) & heavy learned augmentation; still no Mixup/CutMix for Conv-M \\
+Label smoothing & none                 & $0.1$                         & standard by 2024 \\
+Stochastic depth & none                & drop-path $0.075$             & linear ramp over the 21 UIB blocks \\
+EMA           & none                   & decay $0.9999$                & weight averaging (with the BN buffers shadowed, per Ch~\ref{chap:se}'s lesson) \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The direction of travel matches the recipe tables closing
+Chapters~\ref{chap:se} and~\ref{chap:layernorm}: by 2024 the mobile
+lineage has converged on the same transformer-era training
+recipe as everything else --- AdamW at large effective batch,
+cosine, heavy selective decay, RandAugment, EMA --- while the block
+template generalized enough to absorb its rivals.
+
+\textbf{[TODO --- run w/ config.]} \texttt{mobilenet-v4-imagenet},
+two tiers: \textbf{100 epochs} (recipe \texttt{default} --- a
+reduced-regularization confidence tier: wd $0.05$, dropout $0.1$,
+RandAugment m9, since the paper's full pack underfits short
+schedules) and \textbf{500 epochs} (recipe \texttt{full} --- the
+paper recipe end to end). Expect low-to-mid 70s from the 100-epoch
+tier; the $79.9\%$ headline is a 500-epoch number. A throughput
+bench puts Conv-M at $\sim$9 minutes per epoch on the four-GPU box:
+
+\begin{center}
+\begin{tabular}{l l r r r r r}
+\hline
+GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
+\hline
+4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$9 min & 100 & $\sim$15 hr & --- & --- \\
+4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$9 min & 500 & $\sim$75 hr & --- & --- \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent (Wall-clock projected from the measured per-epoch
+throughput; accuracies pending the runs. The 500-epoch tier is the
+longest single run this book has queued --- roughly the ConvNeXt-T
+300-epoch run's $\sim$75 hours, at a third the per-epoch cost over
+$1.7\times$ the epochs.)
 
 \chapter{EfficientNet}
 \label{chap:se}
@@ -6404,7 +6480,7 @@ to the 2018 baseline, and Chapter~\ref{chap:layernorm} closes with
 \texttt{NetSpec} or \texttt{TrainConfig} change:
 
 \begin{center}
-\begin{tabular}{@{}l l l p{5.0cm}@{}}
+\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
 \hline
 Knob & ResNet-34 (2018) & EfficientNet-B0 (2019) & What the B0 choice buys \\
 \hline
@@ -7262,7 +7338,7 @@ entry point is identical; every row is a one-line \texttt{NetSpec} or
 \texttt{TrainConfig} change:
 
 \begin{center}
-\begin{tabular}{@{}l l l p{5.0cm}@{}}
+\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
 \hline
 Knob & ResNet-34 (2018) & ConvNeXt-T (2022) & What the ConvNeXt choice buys \\
 \hline
