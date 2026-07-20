@@ -14,7 +14,11 @@
 \usetikzlibrary{positioning, arrows.meta, calc, fit}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.16}
-\usepackage[showmore, dep_graph]{blueprint}
+% tpl: repo-local copy of plastexdepgraph's dep_graph.html that injects
+% rankdir=LR (+ tighter ranksep/nodesep, concentrate) into the dot source —
+% the default top-down layout of this graph is a 7588x908 ribbon; left-right
+% is ~1.5:1 and reads foundations -> capstones.
+\usepackage[showmore, dep_graph, tpl=templates/dep_graph.html]{blueprint}
 
 
 \input{macros/common}

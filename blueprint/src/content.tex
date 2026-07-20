@@ -12429,6 +12429,26 @@ structural, its oracle empirical. The \texttt{float32} bridge straddles
 the other pair: its budgets are deductive, its interface constants
 (\(u\), \(e_{\exp}\), \(\delta\)) empirical.
 
+\paragraph{How much lives below the named layer.} The dependency
+graph accompanying this blueprint currently shows 106 nodes --- one
+per named theorem or definition, hand-linked by
+\texttt{\textbackslash uses} annotations. The compiled environment is
+bigger: just over 5{,}000 project constants once compiler-generated
+names are filtered out. That gap is not padding; it is the substrate
+the named layer stands on. Measured mechanically (with a
+constant-level dependency explorer; see the repo's
+\texttt{atlas-integration} branch), the ViT capstone
+\texttt{vit\_body\_has\_vjp\_mat} alone transitively depends on 101
+project constants --- and only 25 of those are named theorems in this
+book. The other 76 are the working parts a reader never needs by
+name: \texttt{Mat} and its flatten/unflatten round-trip lemmas, the
+\texttt{HasVJP}/\texttt{HasVJPMat} structures themselves, forward
+functions, reindexing glue. Every one of the 101 type-checks
+sorry-free on the same three-axiom trust kernel as the named layer
+--- the audits above make no distinction between spine and substrate,
+which is the point: the blueprint's curation is pedagogical, not
+epistemic.
+
 \section{What each chapter proves}
 \label{sec:chapter_census}
 
