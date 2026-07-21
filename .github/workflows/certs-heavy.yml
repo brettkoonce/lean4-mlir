@@ -79,7 +79,7 @@ jobs:
                    LipschitzCertScorecardIBPUncon; do
             echo "=== building $m ==="
             free -m | head -2
-            lake build LeanMlir.Proofs.$m
+            lake build LeanMlir.Proofs.Certificates.$m
           done
           lake build CertsHeavy
 
