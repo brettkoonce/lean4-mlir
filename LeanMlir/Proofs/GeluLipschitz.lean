@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ViTFloatBridge
+import LeanMlir.Proofs.Float.ViTFloatBridge
 import LeanMlir.Proofs.AdjointChainBridge
 
 /-! # GELU is globally 3/2-Lipschitz — the saturation-aware gain

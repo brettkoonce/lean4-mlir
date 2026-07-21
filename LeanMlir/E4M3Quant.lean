@@ -8,7 +8,7 @@ round-to-nearest grid as the numpy oracle (`scripts/mnist_e4m3_demo.py:to_e4m3`)
 subnormals on the `e = −6` grid (step `2⁻⁹`), saturating at ±448.
 
 This is the host-side "operand byte preparation" half of the §3b render-tie
-(`LeanMlir/Proofs/E4M3FaithfulPoC.lean`): fp8 = fp32 arithmetic on operands
+(`LeanMlir/Proofs/Float/E4M3FaithfulPoC.lean`): fp8 = fp32 arithmetic on operands
 projected onto the E4M3 grid, with fp32 accumulate inside the kernel. No fp8
 hardware or fp8 StableHLO type is needed — `q` runs here, in Lean, before the
 verified matmul sees the bytes.

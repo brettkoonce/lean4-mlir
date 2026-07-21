@@ -116,7 +116,7 @@ GRAD = "gradAt (fun w => crossEntropy 10 (dense (Mat.unflatten w) bd xd) lblD)\n
 
 L = []
 A_ = L.append
-A_("import LeanMlir.Proofs.Binary32Instance")
+A_("import LeanMlir.Proofs.Float.Binary32Instance")
 A_("")
 A_("/-! # Descent at TRAINED weights (post_audit_roadmap §3)")
 A_("")

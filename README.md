@@ -214,7 +214,7 @@ ImageNet scale is open.
 
 ### The ℝ→Float32 bridge (Tier 1)
 
-All tier proofs are over exact reals; `LeanMlir/Proofs/FloatBridge.lean` +
+All tier proofs are over exact reals; `LeanMlir/Proofs/Float/FloatBridge.lean` +
 `SgdDescent.lean`/`SgdDescentLinear.lean`/`SgdDescentMlp.lean`/`SgdDescentCnn.lean`
 close the rounding gap for the
 Tier-1 nets, hypothesis-style (zero project axioms — a `FloatModel` is any

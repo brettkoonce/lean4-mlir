@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.FloatComposeBridge
+import LeanMlir.Proofs.Float.FloatComposeBridge
 import Mathlib.Analysis.Convex.SpecificFunctions.Basic
 
 /-! # ℝ→Float32 bridge: depth-linear composition via tail gains (the adjoint chain)

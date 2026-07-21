@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.MhsaBackFloatBridge
+import LeanMlir.Proofs.Float.MhsaBackFloatBridge
 import LeanMlir.Proofs.Architectures.ViTBackB0
 
 /-! # §B: the ViT MHSA backward float bridge targets the CERTIFIED VJP (the sdpa adjoint)

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Binary32Instance
+import LeanMlir.Proofs.Float.Binary32Instance
 
 /-! # Descent at TRAINED weights (post_audit_roadmap §3)
 

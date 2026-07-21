@@ -182,7 +182,7 @@ status:
       comparator_config: ""
       literature_dependencies: []
     - declaration: "FloatModel.linear_e4m3_argmax_preserved"   # fp8-E4M3 quantization argmax preservation
-      file: "LeanMlir/Proofs/FloatBridge.lean"
+      file: "LeanMlir/Proofs/Float/FloatBridge.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -393,7 +393,7 @@ alignment:
       note: "genuine backward cotangent, not a free ∀-cotangent; committed-spec ties for all 5 ImageNet nets in SpecVJP"
     - source: "Binary32 rounding model + whole-net float-error composition"
       lean: "rndP_err; <net>_floatBridges / <net>_grad_floatBridges; chain_adjointClose; cifar8_chain_argmaxSafe"
-      module: "LeanMlir/Proofs/Binary32Instance.lean, LeanMlir/Proofs/*FloatBridge*.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
+      module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/*FloatBridge*.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       status: "proved"
       note: "rounding model CONSTRUCTED (former hardware axioms discharged); capstone: binary32 rounding cannot flip the cifar8 prediction"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"

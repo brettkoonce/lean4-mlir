@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.EfficientNetBackFloatBridge
+import LeanMlir.Proofs.Float.EfficientNetBackFloatBridge
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 

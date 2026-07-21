@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.BnFloatBridge
+import LeanMlir.Proofs.Float.BnFloatBridge
 
 /-!
 # Real-BN input-sensitivity (the per-block composition enabler)

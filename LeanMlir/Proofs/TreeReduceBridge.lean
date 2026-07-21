@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.FloatBridge
+import LeanMlir.Proofs.Float.FloatBridge
 
 /-!
 # Balanced-tree reduction bound (P2 — the tree-reduction quarantine)

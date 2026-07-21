@@ -119,7 +119,7 @@ theorem certifiedC{k}_float (M : FloatModel) (hMu : M.u ≤ u32)
 agg_list = ", ".join(str(k) for k in passing)
 
 body = f'''import LeanMlir.Proofs.LipschitzCertScorecard
-import LeanMlir.Proofs.FloatBridge
+import LeanMlir.Proofs.Float.FloatBridge
 
 /-! # The robustness certificate composed with the float bridge
 

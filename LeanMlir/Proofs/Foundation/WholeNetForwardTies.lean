@@ -1,6 +1,6 @@
-import LeanMlir.Proofs.Resnet34WholeFloatBridge
-import LeanMlir.Proofs.MobileNetV2WholeFloatBridge
-import LeanMlir.Proofs.ConvNeXtWholeFloatBridge
+import LeanMlir.Proofs.Float.Resnet34WholeFloatBridge
+import LeanMlir.Proofs.Float.MobileNetV2WholeFloatBridge
+import LeanMlir.Proofs.Float.ConvNeXtWholeFloatBridge
 
 /-! # The skeleton ↔ real-net forward ties (item #5 — cosmetic polish)
 

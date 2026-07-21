@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ConvNeXtBackFloatBridge
+import LeanMlir.Proofs.Float.ConvNeXtBackFloatBridge
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 

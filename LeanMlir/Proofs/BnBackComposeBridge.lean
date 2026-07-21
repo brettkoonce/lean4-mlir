@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.BnBackFloatBridge
-import LeanMlir.Proofs.FloatComposeBridge
+import LeanMlir.Proofs.Float.BnBackFloatBridge
+import LeanMlir.Proofs.Float.FloatComposeBridge
 
 /-! # BN backward as a composable `FloatClose` MAP (A3 1c)
 

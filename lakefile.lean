@@ -206,14 +206,14 @@ lean_lib «Certs» where
              -- ℝ→Float32 bridge, Tier 1: standard-model rounding (hypothesis-style,
              -- no axioms) + forward error bounds for the linear/MLP nets
              -- (dot/dense budgets, ReLU exact-in-float Lipschitz pass-through).
-             `LeanMlir.Proofs.FloatBridge,
+             `LeanMlir.Proofs.Float.FloatBridge,
              -- Subnormal-floor closure (planning §2): the honest FaithfulFloatModel
              -- (relative bound on normals + the gradual-underflow absolute floor),
              -- FloatModel = its η→0 face, the BN/LN denominator stays-normal
              -- invariant (rsqrt keystone never underflows), and the residual floor
              -- proved globally negligible. Converts FloatBridge's subnormal caveat
              -- into lemmas.
-             `LeanMlir.Proofs.FloatSubnormalBridge,
+             `LeanMlir.Proofs.Float.FloatSubnormalBridge,
              -- Inexact-gradient descent over ℝ (MVT form): an η-accurate gradient
              -- oracle + segment smoothness ⇒ the SGD step still decreases the loss,
              -- with an explicit decrease. The keystone the FloatBridge budgets
@@ -241,13 +241,13 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.SgdDescentCifar,
              -- ℝ→Float32 forward rounding budget for the no-BN CIFAR CNN
              -- (cnn_float_close scaled to 4 conv + 2 maxpool + 3 dense).
-             `LeanMlir.Proofs.CifarFloatBridge,
+             `LeanMlir.Proofs.Float.CifarFloatBridge,
              -- BN float keystone: 1/√ Lipschitz on [ε,∞) + the inverse-stddev
              -- rounding budget (rsqrt accuracy + variance error, ε-floor).
-             `LeanMlir.Proofs.BnFloatBridge,
+             `LeanMlir.Proofs.Float.BnFloatBridge,
              -- residual additive fan-in float closeness (add_close / reluAdd_close)
              -- — the new structural op toward the ResNet-34 float bridge.
-             `LeanMlir.Proofs.Resnet34FloatBridge,
+             `LeanMlir.Proofs.Float.Resnet34FloatBridge,
              -- real-BN input-sensitivity (mean/var/istd/forward Lipschitz) — the
              -- per-block composition enabler (the float BN's input is perturbed).
              `LeanMlir.Proofs.BnInputBridge,
@@ -256,51 +256,51 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Resnet34BlockBridge,
              -- whole-net certificate backbone: FloatClose composes (moduli ∘, magnitudes
              -- thread) — the whole net is the fold of per-op budgets.
-             `LeanMlir.Proofs.FloatComposeBridge,
+             `LeanMlir.Proofs.Float.FloatComposeBridge,
              -- Eval-mode BN/LN as a fixed affine (planning §4): running-stats at
              -- eval = a·x+b with a=γ/√(σ²+ε), b=β−γμ/√(σ²+ε) precomputed offline
              -- (no batch reduce, no runtime rsqrt). bnEvalAffine_fold proves the
              -- eval-BN formula IS that affine; floatClose_bnEval bridges it (one
              -- mul + one add, no fan-in γ) — the deployed-forward win.
-             `LeanMlir.Proofs.BnEvalFloatBridge,
+             `LeanMlir.Proofs.Float.BnEvalFloatBridge,
              -- EfficientNet float bridge step 1: Swish/sigmoid (bounded, rounding
              -- closeness, σ is ¼-Lipschitz) — the shared smooth-activation transcendental.
-             `LeanMlir.Proofs.EnetFloatBridge,
+             `LeanMlir.Proofs.Float.EnetFloatBridge,
              -- ViT float bridge apex: transitively imports ViTFloatBridge (LN/GELU/MLP) and
              -- ViTAttentionFloatBridge (sdpa_close + input-sensitivity); adds the transformer
              -- block fold + projections + single/multi-head (block-diagonal & full-d MHA).
-             `LeanMlir.Proofs.ViTBlockFloatBridge,
+             `LeanMlir.Proofs.Float.ViTBlockFloatBridge,
              -- A1 forward float-bridge capstones (planning/tier23…): the deeper 8-conv
              -- no-BN CIFAR via the FloatBridges.comp existential path (cifar8_floatBridges).
-             `LeanMlir.Proofs.Cifar8FloatBridge,
+             `LeanMlir.Proofs.Float.Cifar8FloatBridge,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network
              -- Tensor3-layout conjugation by the reassoc permutations
              -- (floatBridges_bnPerChannelTensor3). The "do-it-once" BN infra A1/A3 share.
-             `LeanMlir.Proofs.BnPerChannelFloatBridge,
+             `LeanMlir.Proofs.Float.BnPerChannelFloatBridge,
              -- A1 BatchNorm CIFAR forward capstone: cifarCnnBnForward float-bridges, the
              -- four per-channel BNs supplied as FloatBridges (each discharged by
              -- floatBridges_bnPerChannelTensor3). The BN-net peer of cifar8_floatBridges.
-             `LeanMlir.Proofs.CifarBnFloatBridge,
+             `LeanMlir.Proofs.Float.CifarBnFloatBridge,
              -- A3 "other side" keystone (planning/tier23… A3): the BatchNorm BACKWARD
              -- float closeness — param grads (bnBetaGrad_close / bnGammaGrad_close) + the
              -- genuinely-new three-term input gradient (bnGradInput_close) + the reusable
              -- reduction_close / sub_close' helpers. The shared backward op every deep
              -- net's gradient folds (r34/mnv2/enet/convnext LN/vit LN).
-             `LeanMlir.Proofs.BnBackFloatBridge,
+             `LeanMlir.Proofs.Float.BnBackFloatBridge,
              -- A3 backward fold: the linear input-VJP (dx = Wᵀ·dy = bias-free dense over the
              -- transpose, reuses floatBridges_dense) + the exact ReLU-back selectPos mask
              -- (floatBridges_reluMaskBack) compose via FloatBridges.comp into a whole-net
              -- backward gradient bridge (mlpInputGrad_floatBridges) — the backward peer of
              -- cifar8_floatBridges.
-             `LeanMlir.Proofs.LinBackFloatBridge,
+             `LeanMlir.Proofs.Float.LinBackFloatBridge,
              -- A3 CNN backward (planning/a3_backward_deepnet_assembly.md 1a/1b + cifar8 witness):
              -- the maxpool-back select_and_scatter (floatBridges_maxPoolBack, exact masked gather,
              -- modulus id) + the conv input-VJP as a reversed-kernel flatConv (floatBridges_convBack,
              -- reuses floatBridges_flatConv) compose into the whole 8-conv CIFAR input-gradient VJP
              -- (cifar8_grad_floatBridges) — the backward peer of cifar8_floatBridges.
-             `LeanMlir.Proofs.CnnBackFloatBridge,
+             `LeanMlir.Proofs.Float.CnnBackFloatBridge,
              -- A3 1c: BatchNorm BACKWARD as a composable FloatClose MAP over the cotangent
              -- (floatClose_bnBack / floatBridges_bnBack) — wraps the bnGradInput_close keystone
              -- with the real map's magnitude (bn_grad_input_abs_le) + Lipschitz-in-dy modulus
@@ -311,34 +311,34 @@ lean_lib «Certs» where
              -- the block-diagonal FloatClose.perRowIdx lift of floatClose_bnBack conjugated by the
              -- reassoc layout gathers, bridging the certified bnPerChannelTensor3_grad_input. The
              -- backward peer of floatBridges_bnPerChannelTensor3; discharges cifarBn_grad's BN hyps.
-             `LeanMlir.Proofs.BnPerChannelBackFloatBridge,
+             `LeanMlir.Proofs.Float.BnPerChannelBackFloatBridge,
              -- A3 r34 backward: the residual identity-block input-VJP (floatBridges_r34IdBlockBack) —
              -- relu(F(x)+x) backward = residual bF ∘ reluMaskBack, the residual-skip backward reusing
              -- FloatBridges.residual (NO new combinator; the rounded skip-add is the backward's too),
              -- bF = convFlatBack∘bnBack∘reluMaskBack∘convFlatBack∘bnBack. The dominant r34 block.
-             `LeanMlir.Proofs.Resnet34BackFloatBridge,
+             `LeanMlir.Proofs.Float.Resnet34BackFloatBridge,
              -- A3 strided-conv backward (r34 down-blocks + stem): flatConvStride2 = decimateFlat ∘
              -- flatConv, so its input-VJP = convFlatBack ∘ decimateBack (zero-upsample scatter then
              -- reversed-kernel conv). floatBridges_flatConvStride2Back via floatBridges_decimateBack
              -- (the scatter, exact in float / magnitude-nonincreasing by decimateIdx_injective —
              -- decimateBack IS the certified decimateFlat VJP, decimateBack_eq_vjp) .comp convBack.
-             `LeanMlir.Proofs.StridedConvBackFloatBridge,
+             `LeanMlir.Proofs.Float.StridedConvBackFloatBridge,
              -- A3 r34 downsample-block backward: relu(proj+body) reversed — the two-branch fan-in
              -- (FloatBridges.biPathSum, the general f(x)+g(x) rounded sum, of which the identity
              -- block's f(x)+x is the g=id case) of the projection backward and the strided body
              -- backward, both using flatConvStride2Back. Completes the r34 block set.
-             `LeanMlir.Proofs.Resnet34DownBackFloatBridge,
+             `LeanMlir.Proofs.Float.Resnet34DownBackFloatBridge,
              -- A3 r34 WHOLE-NET backward (the first Imagenette whole-net backward): gapBack (GAP
              -- VJP = broadcast÷(h·w)) + the [3,4,6,3] .comp fold (r34_grad_floatBridges) — concrete
              -- stem/GAP/maxpool/dense endpoints, the 16 blocks supplied as FloatBridges (discharged
              -- by floatBridges_r34IdBlockBack/DownBlockBack). The exact reverse of resnet34Forward.
-             `LeanMlir.Proofs.Resnet34WholeBackFloatBridge,
+             `LeanMlir.Proofs.Float.Resnet34WholeBackFloatBridge,
              -- A3 r34 WHOLE-NET FORWARD (the forward peer of r34_grad_floatBridges): the missing
              -- forward op-bridges floatBridges_flatConvStride2 (stem, = flatConv read at decimateIdx)
              -- + floatBridges_gap (wraps floatClose_gap) + the [3,4,6,3] .comp fold (r34_floatBridges)
              -- — concrete stem/maxpool/GAP/dense endpoints, stem BN + 16 blocks supplied as
              -- FloatBridges. Closes the forward/backward whole-net asymmetry.
-             `LeanMlir.Proofs.Resnet34WholeFloatBridge,
+             `LeanMlir.Proofs.Float.Resnet34WholeFloatBridge,
              -- §B integrity tie: the r34 IDENTITY-BLOCK backward float bridge targets the CERTIFIED
              -- VJP. Same-vocabulary (per-channel BN, non-batched) target rblkPC_has_vjp_at — built
              -- here, mirrors resblock_has_vjp_at — + the conv-leaf tie (convFlatBack_eq_vjp_backward,
@@ -349,48 +349,48 @@ lean_lib «Certs» where
              -- forward depthwise conv at the spatially-reversed kernel (dwReverse, FREE reuse of
              -- floatBridges_depthwise — the depthwise twin of convBack); strided variant =
              -- depthwiseFlatBack ∘ decimateBack. floatBridges_depthwiseBack/depthwiseStride2Back.
-             `LeanMlir.Proofs.DepthwiseBackFloatBridge,
+             `LeanMlir.Proofs.Float.DepthwiseBackFloatBridge,
              -- A3 §1e Squeeze-Excite backward (the architecturally-distinctive product-rule op):
              -- seBack(dy) = (g⊙dy) + gateBack(x⊙dy), the two-branch multiplicative fan-in
              -- (FloatBridges.biPathSum of two diagBacks) with the gate sub-net backward gateBack
              -- supplied/assembled. floatBridges_seBack + floatBridges_seGateBack (gapBack∘linBack∘
              -- swishBack∘linBack∘sigmoidBack∘broadcastBack) + floatBridges_broadcastBack (the new
              -- spatial-reduce op, via the BN-back reduction_close machinery).
-             `LeanMlir.Proofs.SEBackFloatBridge,
+             `LeanMlir.Proofs.Float.SEBackFloatBridge,
              -- A3 Part 2 per-net backward assembly (consumes §1e). MobileNetV2: the inverted-residual
              -- body backward (expandBack∘depthwiseBack∘projectBack, depthwiseFlatBack concrete — mnv2
              -- has NO SE) + strided variant; mnv2_grad_floatBridges = whole-net fold (reverse of
              -- mobilenetv2Forward_full_pc), concrete stem/head/GAP/dense, 6 blocks supplied.
-             `LeanMlir.Proofs.MobileNetV2BackFloatBridge,
+             `LeanMlir.Proofs.Float.MobileNetV2BackFloatBridge,
              -- MobileNetV2 WHOLE-NET FORWARD (forward peer of mnv2_grad_floatBridges): the ch7 6-block
              -- per-channel render mobilenetv2Forward_full_pc. New op-bridge floatBridges_relu6 (relu6 =
              -- min(max(·,0),6) exact in float + 1-Lipschitz, mirror of floatClose_relu via the mathlib
              -- clamp lemmas); strided depthwise reuses floatBridges_depthwiseStride2Flat. mnv2Forward =
              -- the ∘ skeleton (concrete stem/head/GAP/dense, stem/head BNs + 6 invres blocks supplied);
              -- named block bridges floatBridges_invresBody{,Strided}PC discharge them (no SE).
-             `LeanMlir.Proofs.MobileNetV2WholeFloatBridge,
+             `LeanMlir.Proofs.Float.MobileNetV2WholeFloatBridge,
              -- EfficientNet MBConv body backward (whole-net is batched → per-example body, peer of
              -- floatBridges_mbconvBody): expandBack∘depthwiseBack∘seBack∘projectBack — BOTH §1e ops
              -- (depthwiseFlatBack concrete + seBack supplied) land here. + the additive-skip variant.
-             `LeanMlir.Proofs.EfficientNetBackFloatBridge,
+             `LeanMlir.Proofs.Float.EfficientNetBackFloatBridge,
              -- EfficientNet WHOLE-NET FORWARD (forward peer of efficientnetForwardB_has_vjp): stated
              -- on the ACTUAL batched efficientnetForwardB (stem→MBConv1→MBConv6-strided→MBConv6-resid
              -- →head). Each batch-separable op is FloatBridges.batchMap of its op-bridge, swish is
              -- block-diagonal at the batched index, and the 10 true-batch-norms (bnBatchLA, batch-
              -- coupled) are supplied as FloatBridges facts. New op-bridge: floatBridges_depthwiseStride2Flat
              -- (mbStrided downsample, = depthwise read at decimateIdx, peer of floatBridges_flatConvStride2).
-             `LeanMlir.Proofs.EfficientNetWholeFloatBridge,
+             `LeanMlir.Proofs.Float.EfficientNetWholeFloatBridge,
              -- EfficientNet WHOLE-NET BACKWARD (backward peer of efficientnetForwardB_floatBridges, the
              -- last entry in the 5-net × {fwd,bwd} matrix): efficientnet_grad_floatBridges = the batched
              -- .comp fold (reverse of head∘mbResid∘mbStrided∘mbNoExp∘stem) with concrete batchMap-lifted
              -- conv/GAP/dense endpoints and supplied BN/swish/block backs; + the no-exp/strided block-back
              -- bridges (mbNoExpBodyBack/mbStridedBodyBack) so every supplied block back is dischargeable.
-             `LeanMlir.Proofs.EfficientNetWholeBackFloatBridge,
+             `LeanMlir.Proofs.Float.EfficientNetWholeBackFloatBridge,
              -- ConvNeXt-T backward (per-example): block body backward (depthwiseBack∘lnBack∘convBack∘
              -- geluBack∘convBack∘layerScaleBack) + residual block + downsample (lnBack∘stride2Back);
              -- convnext_grad_floatBridges = whole-net [3,3,9,3] fold, concrete GAP/dense, stem/stages/
              -- downsamples supplied.
-             `LeanMlir.Proofs.ConvNeXtBackFloatBridge,
+             `LeanMlir.Proofs.Float.ConvNeXtBackFloatBridge,
              -- ConvNeXt-T WHOLE-NET FORWARD (forward peer of convnext_grad_floatBridges): the [3,3,9,3]
              -- fold of convNextForwardT. Two new op-bridges: floatBridges_layerScale (γ⊙x = diagBack γ
              -- definitionally, γ exact ⇒ es=0) + floatBridges_flatConvStride4 (the 4×4/s4 patchify stem
@@ -398,7 +398,7 @@ lean_lib «Certs» where
              -- bridges floatBridges_convNextBlock (residual body) + floatBridges_convNextStageK (the
              -- depth-k stage fold, induction) + floatBridges_cnxDownW; convnextForward ∘-skeleton with
              -- stem-conv/GAP/dense concrete, stem/head LN + 4 stages + 3 downsamples supplied.
-             `LeanMlir.Proofs.ConvNeXtWholeFloatBridge,
+             `LeanMlir.Proofs.Float.ConvNeXtWholeFloatBridge,
              -- The skeleton↔real-net forward ties (item #5, cosmetic polish): each whole-net forward
              -- bridge is stated on a fresh skeleton (r34Forward/mnv2Forward/convnextForward) with abstract
              -- blocks; these rfl lemmas plug the concrete blocks (idFwd/downFwd, invresBody*PC,
@@ -432,40 +432,40 @@ lean_lib «Certs» where
              -- A3 §1g loss-head cotangent seed: lift softmax_ce_cot_close to a FloatBridges seed
              -- (z ↦ softmax(z)−onehot, the CE input-gradient; bounded by 1+cotErr(0) since softmax∈[0,1])
              -- so any <net>_grad .comp it = the whole "logits → input-gradient" backward "from the loss".
-             `LeanMlir.Proofs.LossHeadCotFloatBridge,
+             `LeanMlir.Proofs.Float.LossHeadCotFloatBridge,
              -- A3 §1f softmax-Jacobian backward (the vit/attention crux): the row-coupled VJP
              -- diag(p)−p·pᵀ, softmaxBack p dy i = pᵢ(dyᵢ−⟨p,dy⟩). Linear in dy (modulus = magnitude at
              -- Cdy:=e, like bnGradInput); float threads mul_close/reduction_close/sub_close' with the
              -- softmax weights supplied within smErr. floatClose_softmaxBack / floatBridges_softmaxBack.
-             `LeanMlir.Proofs.SoftmaxBackFloatBridge,
+             `LeanMlir.Proofs.Float.SoftmaxBackFloatBridge,
              -- A3 §1f Mat-space SDPA BACKWARD assembly (the vit-crux capstone): the backward peer of
              -- sdpa_close. Certified sdpa_back_{Q,K,V} = three matmuls + softmaxBack + a 1/√d scale;
              -- floats reuse attnScore_close (dw), attnDot_close (dQ/dK/dV at perturbed weights),
              -- softmaxBack_close/sub_abs_le (the row VJP), mul_close (scale). sdpaBack{V,Q,K}_close.
-             `LeanMlir.Proofs.SdpaBackFloatBridge,
+             `LeanMlir.Proofs.Float.SdpaBackFloatBridge,
              -- A3 §1f FULL multi-head self-attention backward assembly: the backward peer of
              -- floatBridges_mhProjAttnFull. dY ↦ dX = WoBack → 3 sdpa cores → Q/K/V projBacks + fan-in.
              -- The projBacks are FREE (per-token linBack); the cores (floatBridges_core{V,Q,K}) lift the
              -- flattened mhsaSdpaBack* to FloatClose (linear-in-cotangent). floatBridges_mhsaBack.
-             `LeanMlir.Proofs.MhsaBackFloatBridge,
+             `LeanMlir.Proofs.Float.MhsaBackFloatBridge,
              -- A3 §1f the ViT PATCH-EMBED backward (the last whole-net endpoint): the certified
              -- patchEmbed_input_grad_formula (a transposed-conv / guarded patch-scatter triple-sum, linear
              -- in the cotangent) float-bridges via dot_close (fan-in D) + nested reduction_close (the
              -- kw/kh/p sums). floatBridges_patchEmbedBack discharges vit_grad_floatBridges's hPatch.
-             `LeanMlir.Proofs.PatchEmbedBackFloatBridge,
+             `LeanMlir.Proofs.Float.PatchEmbedBackFloatBridge,
              -- ViT WHOLE-NET FORWARD (forward peer of vit_grad_floatBridges): vit_full reversed =
              -- classifier ∘ perRowFlat finalLN ∘ tower blocks ∘ patchEmbed. The encoder tower REUSES
              -- towerBack (its head-first fold IS the forward order) + floatBridges_towerBack; the LN
              -- rides FloatBridges.perRow; the head (dense ∘ cls-slice) is concrete with the one new
              -- op-bridge floatBridges_clsSlice (the cls-slice gather, peer of clsScatter, exact). The
              -- per-row LN / blocks / patch-embed supplied as FloatBridges (blocks via floatBridges_vitBlock).
-             `LeanMlir.Proofs.ViTWholeFloatBridge,
+             `LeanMlir.Proofs.Float.ViTWholeFloatBridge,
              -- ViT PATCH-EMBED FORWARD (the last vit forward endpoint, peer of floatBridges_patchEmbedBack):
              -- patchEmbed_flat = pos_embed + (cls_token | b_conv + ∑c∑kh∑kw W·guarded-img), affine in the
              -- image (constants cancel in the diff). M.patchEmbedF rounds the leaf mul (mul_close), the 3
              -- c/kh/kw sums (nested reduction_close) and the 2 constant adds (add_close). floatBridges_
              -- patchEmbed discharges vit_floatBridges's hPatch ⇒ vit_floatBridges_concrete (fully concrete).
-             `LeanMlir.Proofs.PatchEmbedFloatBridge,
+             `LeanMlir.Proofs.Float.PatchEmbedFloatBridge,
              -- The optimizer rung beyond SGD: the ℝ Adam/AdamW step mirroring
              -- the emitted update (Phase 3a of vit_train_to_vit_verified.md).
              -- Faithfulness target + denominator well-definedness; NO descent
@@ -561,12 +561,12 @@ lean_lib «Certs» where
              -- int-matmul graph denotes the intended dequant-first algorithm
              -- (the per-output dequant scale factors out of the fp32 accumulate),
              -- via existing den-faithful ops only — E4M3FaithfulPoC.lean.
-             `LeanMlir.Proofs.E4M3FaithfulPoC,
+             `LeanMlir.Proofs.Float.E4M3FaithfulPoC,
              -- bf16-mixed render-tie (planning §5, the symmetric gap): the emitted
              -- bf16-leaf/fp32-accumulate linear graph denotes the rounded-operand
              -- linear (no scale to factor — simpler than the E4M3 twin). Unlike fp8,
              -- this graph lowers on CUDA. Bf16FaithfulPoC.lean.
-             `LeanMlir.Proofs.Bf16FaithfulPoC,
+             `LeanMlir.Proofs.Float.Bf16FaithfulPoC,
              -- mnist-MLP peer: the whole 3-layer MLP train step folded into the
              -- verified AST (forward + backward chain + 6 weightSgd/biasSgd), each
              -- output's den proven = certified via mlp_render_*_certified.
@@ -782,7 +782,7 @@ lean_lib «Certs» where
              -- ieeeRnd/ieeeRnd_err axioms discharged, so the concrete argmax-preservation
              -- and binary32-SGD-descent capstones now live in the ordinary zero-axiom
              -- closure (this was the quarantined TrustedBridge lib, no longer needed).
-             `LeanMlir.Proofs.Binary32Instance,
+             `LeanMlir.Proofs.Float.Binary32Instance,
              -- Descent at TRAINED weights (post_audit_roadmap §3): one binary32 SGD
              -- step on the trained /128 pooled-MNIST linear classifier provably
              -- decreases the real CE loss — the misclassified-witness trick makes the
