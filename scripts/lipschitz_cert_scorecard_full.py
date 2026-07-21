@@ -1,7 +1,7 @@
 """FULL-INPUT certified-accuracy scorecard generator (post-audit gap #3:
 lift the Lipschitz scorecard off the 4x4-pooled 49-dim reduction).
 
-Produces LeanMlir/Proofs/LipschitzCertScorecardFull{Nets,ImgsA,ImgsB,}.lean:
+Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecardFull{Nets,ImgsA,ImgsB,}.lean:
 over the first 100 MNIST test images at FULL 784-dim input (exact k/255
 pixels), per-image Tsuzuku certificates at pixel-L2 eps = 1/10 AND 3/10, on
 two 784->16->10 nets:
@@ -14,7 +14,7 @@ The 49-dim pooled scorecard (lipschitz_cert_scorecard.py) evaluated its dot
 products by simp/norm_num -- quadratic in sum length, unusable at 784. Here
 every 784-term dot is ONE kernel evaluation (`dotZ ... = v := by decide
 +kernel` on List-int data, GMP-fast, propext-only) bridged to the real-level
-`Fin 784` sums by Proofs/ListDot.lean's `sum_getD_div` (proved once).
+`Fin 784` sums by Proofs/Foundation/ListDot.lean's `sum_getD_div` (proved once).
 Negative list literals are emitted as `Int.negSucc` to dodge a ~15ms/element
 Neg-elaboration tax.
 

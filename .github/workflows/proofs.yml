@@ -164,8 +164,8 @@ jobs:
           THM_PAT='^(theorem|noncomputable def|def) '
           TOTAL_THMS=0
           TOTAL_AXMS=0
-          for f in LeanMlir/Proofs/*.lean; do
-            name=$(basename "$f")
+          for f in LeanMlir/Proofs/*/*.lean; do
+            name=${f#LeanMlir/Proofs/}
             thms=$(grep -cE "$THM_PAT" "$f" || true)
             axms=$(grep -c "^axiom " "$f" || true)
             lines=$(wc -l < "$f")
@@ -173,7 +173,7 @@ jobs:
             TOTAL_THMS=$((TOTAL_THMS + thms))
             TOTAL_AXMS=$((TOTAL_AXMS + axms))
           done
-          TOTAL_LINES=$(cat LeanMlir/Proofs/*.lean | wc -l)
+          TOTAL_LINES=$(cat LeanMlir/Proofs/*/*.lean | wc -l)
           echo "| **Total** | **${TOTAL_THMS}** | **${TOTAL_AXMS}** | **${TOTAL_LINES}** |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY

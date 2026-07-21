@@ -7,9 +7,24 @@ succeeds, every theorem is correct.
 > New here? Read the **Start here** section directly below before the rest of this
 > file — it's a reference, not an on-ramp.
 
-## Two populations, one directory
+## Directory layout
 
-The ~165 files here are not one homogeneous suite; they split along the seam
+The 199 proof files are filed into six buckets
+(split rationale: `planning/proofs_directory_refactor.md`). The Lean
+namespace is `Proofs.*` throughout — only module paths carry the bucket:
+
+| directory | what lives there |
+|---|---|
+| [`Foundation/`](Foundation/) | pdiv/HasVJP kit, `Tensor`, `MLP`, `IR`, ResNet34 chain machinery + live canonical instantiations |
+| [`Architectures/`](Architectures/) | `Attention`, `CNN`, `BatchNorm`, `MobileNetV2`, `ConvNeXt`, `EfficientNet`, ViT — per-net op/VJP + tie files |
+| [`Float/`](Float/) | `FloatBridge`, `Binary32Instance`, bf16/E4M3, per-net float bridges |
+| [`Codegen/`](Codegen/) | proof↔IR bridges, `*Render`, `IRPrint`, `StableHLO` |
+| [`Certificates/`](Certificates/) | Lipschitz + smoothing scorecards — **machine-emitted**, see its README |
+| [`Training/`](Training/) | `SgdDescent*`, Jacobian seals, trained witnesses |
+
+## Two populations, two build targets
+
+The files here are not one homogeneous suite; they split along the seam
 the lakefile's libs encode (rationale: `planning/repo_shape_deletion_audit.md`):
 
 * **The engine slice — `lake build Proofs`** (~19 files, the default target):
@@ -38,9 +53,9 @@ proved for each net, and the **Linear classifier** shows both in ~650 lines tota
 
 Read these three, in order:
 
-1. [`LinearTrainStep.lean`](LinearTrainStep.lean) (~250 L) — the linear train-step spec + ops.
-2. [`LinearFaithfulPoC.lean`](LinearFaithfulPoC.lean) (~145 L) — **capstone**: emitted step = certified math.
-3. [`SgdDescentLinear.lean`](SgdDescentLinear.lean) (~255 L) — **capstone**: that step decreases the loss.
+1. [`LinearTrainStep.lean`](Foundation/LinearTrainStep.lean) (~250 L) — the linear train-step spec + ops.
+2. [`LinearFaithfulPoC.lean`](Foundation/LinearFaithfulPoC.lean) (~145 L) — **capstone**: emitted step = certified math.
+3. [`SgdDescentLinear.lean`](Training/SgdDescentLinear.lean) (~255 L) — **capstone**: that step decreases the loss.
 
 Build *just* this slice (Linear + the shared foundation it needs, nothing else):
 
