@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.LipschitzCert
+import LeanMlir.Proofs.Certificates.LipschitzCert
 
 /-! # A concrete instantiation of the Lipschitz-margin certified radius
 

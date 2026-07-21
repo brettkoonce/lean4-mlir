@@ -194,7 +194,7 @@ status:
       comparator_config: ""
       literature_dependencies: []
     - declaration: "Proofs.lipschitz_margin_certified_radius"   # Tsuzuku 2018 certified radius
-      file: "LeanMlir/Proofs/LipschitzCert.lean"
+      file: "LeanMlir/Proofs/Certificates/LipschitzCert.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -202,7 +202,7 @@ status:
         - statement: "Lipschitz-margin certified radius"
           source: "Tsuzuku, Sato, Sugiyama 2018 (arXiv:1802.04034)"
     - declaration: "Proofs.LipschitzCertDemo.scorecard_sdp"   # mechanized 100-image LipSDP scorecard at trained weights (69/100)
-      file: "LeanMlir/Proofs/LipschitzCertScorecardSDP.lean"
+      file: "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -210,7 +210,7 @@ status:
         - statement: "LipSDP-Neuron one-hidden-layer SDP bound"
           source: "Fazlyab et al. 2019 (arXiv:1906.04893)"
     - declaration: "Proofs.smoothing_certified_radius_classifier"   # Cohen 2019 smoothing radius END-TO-END (Gaussian NP core proved)
-      file: "LeanMlir/Proofs/SmoothingGaussian.lean"
+      file: "LeanMlir/Proofs/Certificates/SmoothingGaussian.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -398,12 +398,12 @@ alignment:
       note: "rounding model CONSTRUCTED (former hardware axioms discharged); capstone: binary32 rounding cannot flip the cifar8 prediction"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"
       lean: "lipschitz_margin_certified_radius; scorecard; scorecard_sdp / scorecard_sdp_uncon"
-      module: "LeanMlir/Proofs/LipschitzCert.lean, LeanMlir/Proofs/LipschitzCertScorecard*.lean"
+      module: "LeanMlir/Proofs/Certificates/LipschitzCert.lean, LeanMlir/Proofs/LipschitzCertScorecard*.lean"
       status: "proved"
       note: "fixed 100-image subset at fixed ε — honest lower bound (69/100 vs 72/100 PGD bracket)"
     - source: "Cohen 2019 randomized-smoothing certified radius (incl. the Gaussian Neyman–Pearson core)"
       lean: "smoothing_certified_radius_classifier via smoothing_probit_lipschitz / stdGaussian_np_shift"
-      module: "LeanMlir/Proofs/SmoothingGaussian.lean"
+      module: "LeanMlir/Proofs/Certificates/SmoothingGaussian.lean"
       status: "proved"
       note: "end-to-end: quantile inversion, Cameron–Martin shift, rotation-invariance dimension reduction all proved; requires class probabilities in (0,1); the driver's Monte-Carlo estimation gap is not formalized"
     - source: "Optimizer-as-steepest-descent ladder (SGD / sign / Muon / Shampoo, Newton–Schulz)"

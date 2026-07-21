@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.LipschitzCertScorecardFullImgsA
-import LeanMlir.Proofs.LipschitzCertScorecardFullImgsB
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB
 
 /-! # Full-input certified-accuracy scorecard (4/4): the certificates
 

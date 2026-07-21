@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.SmoothingDecChunk3
+import LeanMlir.Proofs.Certificates.SmoothingDecChunk3
 
 /-! # Decimal-radius scorecard, scan chunk 4/6 (panels 1650…2200)
 

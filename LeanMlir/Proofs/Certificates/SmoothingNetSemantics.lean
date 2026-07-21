@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.SmoothingCP
-import LeanMlir.Proofs.LipschitzCertInstance
+import LeanMlir.Proofs.Certificates.SmoothingCP
+import LeanMlir.Proofs.Certificates.LipschitzCertInstance
 
 /-! # Net semantics for the smoothing chain — the classifier becomes a NET
 

@@ -1,6 +1,6 @@
 """Per-pair LipSDP scorecard generator (the tighter-Lipschitz-constant pass).
 
-Produces LeanMlir/Proofs/LipschitzCertScorecardSDP.lean (capped net) and
+Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean (capped net) and
 LipschitzCertScorecardSDPUncon.lean (unconstrained net): for each ordered
 class pair (i,j) needed by a certified image, a LipSDP-Neuron certificate
 (Fazlyab et al. 2019, one hidden layer)
@@ -9,7 +9,7 @@ class pair (i,j) needed by a certified image, a LipSDP-Neuron certificate
 
 witnessed in Lean by an exact rational LDL^T factorization of
 S = 2 diag(T) - vv^T - (1/rho) T G1 T  (PSD <=> the bound, via
-LeanMlir/Proofs/LipschitzCertPairSDP.lean). The SDP over diagonal T is
+LeanMlir/Proofs/Certificates/LipschitzCertPairSDP.lean). The SDP over diagonal T is
 solved numerically here; only the rationalized (rho, T, L, d) enters Lean.
 
 Certification criterion per image (exact rationals, what Lean checks):
@@ -27,8 +27,8 @@ from scipy.optimize import minimize
 import os
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 D = os.path.join(ROOT, "data") + os.sep
-OUT_C = os.path.join(ROOT, "LeanMlir/Proofs/LipschitzCertScorecardSDP.lean")
-OUT_U = os.path.join(ROOT, "LeanMlir/Proofs/LipschitzCertScorecardSDPUncon.lean")
+OUT_C = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean")
+OUT_U = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDPUncon.lean")
 N_IMG = 100
 EPS = Fraction(1, 10)
 CAP, EPOCHS, LR, BS = 4.0, 36, 0.15, 64
@@ -219,8 +219,8 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
 
     L = []
     A = L.append
-    A("import LeanMlir.Proofs.LipschitzCertPairSDP")
-    A("import LeanMlir.Proofs.LipschitzCertScorecard")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCertPairSDP")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecard")
     A("")
     netdesc = ("spectrally-capped /256 net (`mlpS`)" if tag == "C"
                else "unconstrained /128 net (`mlpT`)")

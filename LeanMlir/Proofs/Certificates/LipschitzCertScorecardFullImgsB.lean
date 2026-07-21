@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.LipschitzCertScorecardFullNets
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullNets
 
 /-! # Full-input scorecard, part 3/4: images 50–99
 

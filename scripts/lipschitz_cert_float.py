@@ -1,6 +1,6 @@
 """Robustness certificate x float bridge (the 2026-07-02 audit's gap #1).
 
-Emits LeanMlir/Proofs/LipschitzCertFloat.lean: the scorecard's Lipschitz-margin
+Emits LeanMlir/Proofs/Certificates/LipschitzCertFloat.lean: the scorecard's Lipschitz-margin
 certificates composed with the FloatBridge forward budgets, so the certified
 images are provably robust for the FLOAT-EVALUATED net, not just its exact-R
 idealization:
@@ -20,8 +20,8 @@ LipschitzCertScorecard.lean (the source of truth) — no retraining.
 import re
 from fractions import Fraction
 
-SRC = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/LipschitzCertScorecard.lean"
-OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/LipschitzCertFloat.lean"
+SRC = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean"
+OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Certificates/LipschitzCertFloat.lean"
 src = open(SRC).read()
 
 FRAC_RE = re.compile(r"\(\((-?\d+) : ℝ\)/(\d+)\)|\((-?\d+) : ℝ\)")
@@ -118,7 +118,7 @@ theorem certifiedC{k}_float (M : FloatModel) (hMu : M.u ≤ u32)
 
 agg_list = ", ".join(str(k) for k in passing)
 
-body = f'''import LeanMlir.Proofs.LipschitzCertScorecard
+body = f'''import LeanMlir.Proofs.Certificates.LipschitzCertScorecard
 import LeanMlir.Proofs.Float.FloatBridge
 
 /-! # The robustness certificate composed with the float bridge

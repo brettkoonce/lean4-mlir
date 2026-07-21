@@ -1,6 +1,6 @@
 """Per-pair LipSDP pass for the FULL-INPUT (784-dim) scorecard.
 
-Produces LeanMlir/Proofs/LipschitzCertScorecardSDPFull.lean (capped sigma<=2
+Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDPFull.lean (capped sigma<=2
 net) and LipschitzCertScorecardSDPFullUncon.lean: for each ordered class pair
 needed by a certified image, a LipSDP-Neuron certificate (Fazlyab 2019, one
 hidden layer)
@@ -165,9 +165,9 @@ def emit_net(tag, W1q, W2q, out_path):
 
     L = []
     A = L.append
-    A("import LeanMlir.Proofs.LipschitzCertPairSDP")
-    A("import LeanMlir.Proofs.LipschitzCertScorecardFullImgsA")
-    A("import LeanMlir.Proofs.LipschitzCertScorecardFullImgsB")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCertPairSDP")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB")
     A("")
     netdesc = ("spectrally-capped σ≤2 net (`mlpSF`)" if tag == "SF"
                else "unconstrained net (`mlpTF`)")

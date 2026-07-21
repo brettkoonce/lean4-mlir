@@ -1,10 +1,10 @@
-import LeanMlir.Proofs.LipschitzCertScorecardFull
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFull
 -- (LipschitzCertScorecardSDPFull{,Uncon} imports DISABLED with their lib
 -- membership — the linarith PSD witnesses OOM the free-tier runners; see
 -- planning/certs_heavy_psd_memory.md. Their prints below are commented out
 -- with them; re-enable both together.)
-import LeanMlir.Proofs.LipschitzCertScorecardIBP
-import LeanMlir.Proofs.LipschitzCertScorecardIBPUncon
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBP
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPUncon
 
 /-! # Axiom audit — the HEAVY generated certificate corpus (`CertsHeavy`)
 

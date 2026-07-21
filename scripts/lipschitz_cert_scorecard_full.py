@@ -357,7 +357,7 @@ def emit_image(A, i, tags_for_i):
 # ═══ file 1: nets ═══
 L1 = []
 A = L1.append
-A("import LeanMlir.Proofs.LipschitzCertScorecard")
+A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecard")
 A("import LeanMlir.Proofs.Foundation.ListDot")
 A("")
 A("/-! # Full-input scorecard, part 1/4: the two 784→16→10 nets")
@@ -388,7 +388,7 @@ for i in range(N_IMG):
 for part, rng_ in (("A", range(0, 50)), ("B", range(50, 100))):
     L2 = []
     A = L2.append
-    A("import LeanMlir.Proofs.LipschitzCertScorecardFullNets")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullNets")
     A("")
     A(f"/-! # Full-input scorecard, part {'2' if part == 'A' else '3'}/4: images {rng_.start}–{rng_.stop - 1}")
     A("")
@@ -407,8 +407,8 @@ for part, rng_ in (("A", range(0, 50)), ("B", range(50, 100))):
 # ═══ file 4: certificates + aggregate ═══
 L4 = []
 A = L4.append
-A("import LeanMlir.Proofs.LipschitzCertScorecardFullImgsA")
-A("import LeanMlir.Proofs.LipschitzCertScorecardFullImgsB")
+A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA")
+A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB")
 A("")
 A("/-! # Full-input certified-accuracy scorecard (4/4): the certificates")
 A("")

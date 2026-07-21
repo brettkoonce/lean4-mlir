@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Foundation.IntervalBound
-import LeanMlir.Proofs.LipschitzCertScorecardFullImgsA
-import LeanMlir.Proofs.LipschitzCertScorecardFullImgsB
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB
 
 /-! # IBP L∞ scorecard, full 784-dim input — spectrally-capped σ≤2 net (`mlpSF`)
 

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.LipschitzCert
+import LeanMlir.Proofs.Certificates.LipschitzCert
 import Mathlib.Probability.Distributions.Gaussian.Real
 import Mathlib.Probability.Distributions.Gaussian.Multivariate
 import Mathlib.Probability.CDF

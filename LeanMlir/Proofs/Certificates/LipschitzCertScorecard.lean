@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.LipschitzCertInstance
+import LeanMlir.Proofs.Certificates.LipschitzCertInstance
 
 /-! # Certified-accuracy scorecard (post_audit_roadmap §1)
 

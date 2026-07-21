@@ -1512,7 +1512,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
     few caps `c` (plus an unconstrained baseline) so the table shows the trade: shrinking `c` pulls
     the global `L = ∏‖Wᵢ‖₂` down (`L ≤ c³`), turning the **vacuous** product certificate
     **non-vacuous** — at the cost of clean accuracy. The empirical face of
-    `lipschitz_margin_certified_radius` (`LeanMlir/Proofs/LipschitzCert.lean`): smaller `L` ⇒ larger
+    `lipschitz_margin_certified_radius` (`LeanMlir/Proofs/Certificates/LipschitzCert.lean`): smaller `L` ⇒ larger
     certified radius `m/(√2·L)`. The verified CE gradient stays in the proven kernel; the projection
     is host-side weight rescaling only. -/
 def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)

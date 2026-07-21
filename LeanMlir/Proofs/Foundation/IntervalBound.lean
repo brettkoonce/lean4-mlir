@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.LipschitzCertInstance
+import LeanMlir.Proofs.Certificates.LipschitzCertInstance
 
 /-! # Interval bound propagation (IBP), sound and kernel-checkable
 

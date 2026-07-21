@@ -1,6 +1,6 @@
-import LeanMlir.Proofs.LipschitzCertPairSDP
-import LeanMlir.Proofs.LipschitzCertScorecardFullImgsA
-import LeanMlir.Proofs.LipschitzCertScorecardFullImgsB
+import LeanMlir.Proofs.Certificates.LipschitzCertPairSDP
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB
 
 /-! # Per-pair LipSDP scorecard, FULL 784-dim input — unconstrained net (`mlpTF`)
 

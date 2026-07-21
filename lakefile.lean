@@ -674,7 +674,7 @@ lean_lib «Certs» where
              -- certified radius (Tsuzuku et al. 2018) — if the logit map is L-Lipschitz in L2
              -- and the margin is m, every ‖δ‖₂ < m/(√2·L) leaves the argmax fixed (proof, vs
              -- the PGD attack's one-attack upper bound). The cert side of cert ≤ TRUE ≤ PGD.
-             `LeanMlir.Proofs.LipschitzCert,
+             `LeanMlir.Proofs.Certificates.LipschitzCert,
              -- Mathlib upstreaming drafts (planning/mathlib_upstream_drafts/): the
              -- PR1 generic-cdf lemmas (strictMono_cdf_iff ⟺ IsOpenPosMeasure,
              -- continuous_cdf_iff ⟺ NoAtoms, cdf_pos/lt_one/mem_Ioo) + PR2
@@ -686,51 +686,51 @@ lean_lib «Certs» where
              -- stdNormalCDF strict-mono + symmetry, quantile MonotoneOn (0,1) + odd-about-½,
              -- capstone smoothing_certified_radius_gaussian with only the Neyman–Pearson
              -- (1/σ)-Lipschitz core (hg) left as a hypothesis.
-             `LeanMlir.Proofs.SmoothingGaussian,
+             `LeanMlir.Proofs.Certificates.SmoothingGaussian,
              -- The Monte-Carlo tie (the smoothing chain's LAST honest gap):
              -- Hoeffding over the sample product measure (Mathlib subgaussian
              -- machinery) ⇒ with prob ≥ 1−exp(−2Nt²) the reported radius
              -- σ·Φ⁻¹(p̂−t) is genuinely certified — Cohen's CERTIFY end to end.
-             `LeanMlir.Proofs.SmoothingMC,
+             `LeanMlir.Proofs.Certificates.SmoothingMC,
              -- The exact Clopper-Pearson tie (the arithmetic CERTIFY deploys):
              -- the count of successes over Measure.pi IS binomial (the lemma
              -- Mathlib lacks; piFinSuccAbove induction + Pascal), the CP
              -- lower bound covers with prob >= 1-alpha (sInf trick: no tail
              -- monotonicity needed), composed => smoothing_cp_certified.
-             `LeanMlir.Proofs.SmoothingCP,
+             `LeanMlir.Proofs.Certificates.SmoothingCP,
              -- The smoothing CP SCORECARD (generated: scripts/smooth_scorecard_gen.py
              -- from the fixed-protocol driver runs, run_smooth_scorecard.sh):
              -- first-100 test images x {MNIST-MLP, MNIST-CNN, CIFAR-CNN},
              -- sigma=0.5, n=10112, alpha=1/1000 -- 279 per-image kernel tail
              -- checks (decide +kernel) + per-net aggregates. Light enough for
              -- Certs (no norm_num megaterms, pure kernel bignum arithmetic).
-             `LeanMlir.Proofs.SmoothingCPScorecard,
+             `LeanMlir.Proofs.Certificates.SmoothingCPScorecard,
              -- Certified DECIMAL quantile bounds (the float-Phi^-1 gap):
              -- upper-Riemann panels of the Gaussian density with a kernel-
              -- computable rational pdf bound (32-term Taylor exp + pi_gt_d20
              -- + ceiling-rounding) => one decide-check certifies
              -- m*h <= Phi^-1(q0); demos Phi^-1(0.9) >= 1.27, and the
              -- scorecard MLP-img1 radius >= 1.27 in decimals.
-             `LeanMlir.Proofs.SmoothingPhiBounds,
+             `LeanMlir.Proofs.Certificates.SmoothingPhiBounds,
              -- The DECIMAL-radius scorecard (generated:
              -- scripts/smooth_dec_scorecard_gen.py, same fixed-protocol runs
              -- and per-image q0 as SmoothingCPScorecard): the prefix scan
              -- phiScanRev kernel-evaluated ONCE over the whole h=1/1000 grid
              -- (3300 panels, ~2 min), then all 279 per-image decimal radii
              -- m/2000 <= sigma*Phi^-1(q0) are O(index) list lookups.
-             `LeanMlir.Proofs.SmoothingDecScorecard,
+             `LeanMlir.Proofs.Certificates.SmoothingDecScorecard,
              -- The NET-SEMANTICS closure (the chain's last informality):
              -- argmaxNet classifier + measurability from logits, strict
              -- decision regions open, stdGaussian IsOpenPosMeasure, and the
              -- hp-interiority discharge from per-class strict-argmax
              -- witnesses => smoothing_cp_certified_net (CERTIFY for a
              -- concrete net's argmax, no abstract-classifier hypotheses).
-             `LeanMlir.Proofs.SmoothingNetSemantics,
+             `LeanMlir.Proofs.Certificates.SmoothingNetSemantics,
              -- ...INSTANTIATED (generated: scripts/smoothing_net_witness_gen.py)
              -- for mlpT, the trained /128 pooled-MNIST MLP: ten in-kernel
              -- strict-argmax witnesses discharge hp; capstone
              -- smoothing_cp_certified_mlpT + deployed-scale demo.
-             `LeanMlir.Proofs.SmoothingNetWitness,
+             `LeanMlir.Proofs.Certificates.SmoothingNetWitness,
              -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).
@@ -745,7 +745,7 @@ lean_lib «Certs» where
              -- no power-iteration estimate in the trust path), the hand-picked linear +
              -- dense→ReLU→dense demos, and the TRAINED tier: a /128-rationalized 49→8→10
              -- pooled-MNIST MLP with in-kernel margin and provably positive certified radius.
-             `LeanMlir.Proofs.LipschitzCertInstance,
+             `LeanMlir.Proofs.Certificates.LipschitzCertInstance,
              -- The trained-weight whole-net VJP witness (MLP rung): the same trained
              -- /128-rationalized net instantiates HasVJPAt at a REAL input — ReLU
              -- smoothness inherited from training (exact nonzero pre-activations),
@@ -757,16 +757,16 @@ lean_lib «Certs» where
              -- spectrally-capped (σ≤4 projected-SGD) /256 net vs 1/100 on the
              -- unconstrained net; per-image in-kernel margins, honest lower-bound
              -- aggregate. Same theorem, same ε — training decides if the cert bites.
-             `LeanMlir.Proofs.LipschitzCertScorecard,
+             `LeanMlir.Proofs.Certificates.LipschitzCertScorecard,
              -- Per-pair LipSDP certificates (the tighter-Lipschitz-constant pass):
              -- LipSDP-Neuron (Fazlyab 2019) for one hidden layer, PSD witnessed by
              -- exact rational LDLᵀ (kernel-checkable, no √, no eigensolver) — lifts
              -- the SAME scorecard (same nets, same images, same ε) from 34→69/100
              -- capped and 1→63/100 unconstrained; PGD bracket 72/69, sandwich
              -- nearly closed. Core lemmas + the two generated instance files.
-             `LeanMlir.Proofs.LipschitzCertPairSDP,
-             `LeanMlir.Proofs.LipschitzCertScorecardSDP,
-             `LeanMlir.Proofs.LipschitzCertScorecardSDPUncon,
+             `LeanMlir.Proofs.Certificates.LipschitzCertPairSDP,
+             `LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDP,
+             `LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDPUncon,
              -- The kernel-dotZ list engine + IBP interval-soundness cores: the
              -- small, reusable halves of the full-input scorecard work. The
              -- GENERATED full-input instance files (30k+ lines of weight/image
@@ -812,7 +812,7 @@ lean_lib «Certs» where
              -- net's exact magnitudes, input quantization included) ⇒ 33/34
              -- ℝ-certified images are certified for the FLOAT-EVALUATED net,
              -- ∀ rounding models at binary32 accuracy (M.u ≤ u32).
-             `LeanMlir.Proofs.LipschitzCertFloat,
+             `LeanMlir.Proofs.Certificates.LipschitzCertFloat,
              -- Depth-linear float composition (planning/adjoint_chain.md): the
              -- telescoping chain bound (chain_adjointClose), the residual-carry
              -- combinator (chain2_adjointClose), the saturation-aware GELU
@@ -822,7 +822,7 @@ lean_lib «Certs» where
              -- so `lake build Proofs` builds their oleans for the axiom gate.
              `LeanMlir.Proofs.Codegen.AdjointChainBridge,
              `LeanMlir.Proofs.Architectures.AdjointChainResidual,
-             `LeanMlir.Proofs.GeluLipschitz,
+             `LeanMlir.Proofs.Certificates.GeluLipschitz,
              `LeanMlir.Proofs.Codegen.TreeReduceBridge,
              `LeanMlir.Proofs.Architectures.Cifar8ChainCert,
              -- Spec→math ties (rungs B/C/E): the one proof file that imports the
@@ -851,7 +851,7 @@ lean_lib «Certs» where
     IBP pixel-L∞ 92/88/69/24 per 100 at ε = 1/2/4/8 /255 (PGD 93/93/92/88). -/
 lean_lib «CertsHeavy» where
   srcDir := "."
-  roots := #[`LeanMlir.Proofs.LipschitzCertScorecardFull,
+  roots := #[`LeanMlir.Proofs.Certificates.LipschitzCertScorecardFull,
              -- The per-pair LipSDP files (LipschitzCertScorecardSDPFull{,Uncon})
              -- are DISABLED here for now: their linarith PSD witnesses carry
              -- ~230-digit LDLᵀ fractions and OOM every free-tier runner config
@@ -859,8 +859,8 @@ lean_lib «CertsHeavy» where
              -- kernel-verified locally (93/100 @ ε=0.1 = PGD, sandwich closed);
              -- re-enable path: planning/certs_heavy_psd_memory.md (small-
              -- coefficient DD-split witnesses, or a self-hosted runner).
-             `LeanMlir.Proofs.LipschitzCertScorecardIBP,
-             `LeanMlir.Proofs.LipschitzCertScorecardIBPUncon]
+             `LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBP,
+             `LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPUncon]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness

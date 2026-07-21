@@ -22,7 +22,7 @@ whole corpus via the ONE-kernel-evaluation prefix scan:
 Image set and a-values are identical to the CP scorecard (same CSVs, same
 largest_a search — imported from smooth_scorecard_gen.py).
 
-Output: LeanMlir/Proofs/SmoothingDecScorecard.lean
+Output: LeanMlir/Proofs/Certificates/SmoothingDecScorecard.lean
 """
 
 import csv
@@ -45,7 +45,7 @@ D12 = 10**12              # common denominator of every grid value
 # chunk gets its OWN MODULE/process (heaviest: chunk 6 at ~5.2 GB).
 CHUNKS = [550, 1100, 1650, 2200, 2750, 3300]
 CHUNK_OUT = "LeanMlir/Proofs/SmoothingDecChunk{c}.lean"
-OUT = Path("LeanMlir/Proofs/SmoothingDecScorecard.lean")
+OUT = Path("LeanMlir/Proofs/Certificates/SmoothingDecScorecard.lean")
 
 
 # ── exact mirror of the SmoothingPhiBounds.lean kernel functions ──
@@ -170,7 +170,7 @@ def main() -> None:
         seg = [num_of(scan[i]) for i in range(kc, k - 1, -1)]
         C = []
         if c == 1:
-            C.append("import LeanMlir.Proofs.SmoothingPhiBounds\n")
+            C.append("import LeanMlir.Proofs.Certificates.SmoothingPhiBounds\n")
         else:
             C.append(f"import LeanMlir.Proofs.SmoothingDecChunk{c-1}\n")
         C.append(f"/-! # Decimal-radius scorecard, scan chunk {c}/{len(CHUNKS)} "

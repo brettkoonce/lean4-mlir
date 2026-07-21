@@ -1,6 +1,6 @@
 """Certified-accuracy scorecard generator (planning/post_audit_roadmap.md §1).
 
-Produces LeanMlir/Proofs/LipschitzCertScorecard.lean: over the first 100 MNIST
+Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean: over the first 100 MNIST
 test images (4x4-pooled, exact pixel-sum rationals), the images whose prediction
 is certified robust at eps = 1/10 (pooled-feature L2) by the Lipschitz-margin
 certificate, on two nets:
@@ -25,7 +25,7 @@ from fractions import Fraction
 from math import ceil
 
 D = "/home/skoonce/lean/klawd_max_power/lean4-jax/data/"
-OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/LipschitzCertScorecard.lean"
+OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean"
 N_IMG = 100
 EPS = Fraction(1, 10)
 SQRT2_UB = Fraction(14143, 10000)   # >= sqrt 2; the factor the Lean proof uses
@@ -173,7 +173,7 @@ need_imgs = sorted(set(cert_u) | set(cert_c))
 DEN_HC = DEN_C * 4080
 L = []
 A = L.append
-A("import LeanMlir.Proofs.LipschitzCertInstance")
+A("import LeanMlir.Proofs.Certificates.LipschitzCertInstance")
 A("")
 A("/-! # Certified-accuracy scorecard (post_audit_roadmap §1)")
 A("")

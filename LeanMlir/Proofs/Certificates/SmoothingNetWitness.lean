@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.SmoothingNetSemantics
+import LeanMlir.Proofs.Certificates.SmoothingNetSemantics
 
 /-! # The net-semantics tie, INSTANTIATED — CERTIFY for a concrete trained net
 

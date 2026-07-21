@@ -1,6 +1,6 @@
 """IBP (interval bound propagation) L-infinity scorecard for the full-input nets.
 
-Produces LeanMlir/Proofs/LipschitzCertScorecardIBP.lean (capped sigma<=2 net)
+Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecardIBP.lean (capped sigma<=2 net)
 and LipschitzCertScorecardIBPUncon.lean: per-image certificates in the
 literature-standard PIXEL L-INFINITY model, eps in {1,2,4,8}/255 —
 `forall delta, (forall i, |delta_i| <= eps) -> argmax fixed` — via exact
@@ -109,8 +109,8 @@ def emit_net(tag, W1q, W2q, out_path):
     Lb = []
     A = Lb.append
     A("import LeanMlir.Proofs.Foundation.IntervalBound")
-    A("import LeanMlir.Proofs.LipschitzCertScorecardFullImgsA")
-    A("import LeanMlir.Proofs.LipschitzCertScorecardFullImgsB")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB")
     A("")
     netdesc = ("spectrally-capped σ≤2 net (`mlpSF`)" if tag == "SF"
                else "unconstrained net (`mlpTF`)")

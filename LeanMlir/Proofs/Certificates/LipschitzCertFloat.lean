@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.LipschitzCertScorecard
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecard
 import LeanMlir.Proofs.Float.FloatBridge
 
 /-! # The robustness certificate composed with the float bridge

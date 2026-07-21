@@ -146,7 +146,7 @@ W = []
 A = W.append
 A("import LeanMlir.Proofs.Foundation.MLP")
 A("import LeanMlir.Proofs.JacobianSeal")
-A("import LeanMlir.Proofs.LipschitzCertInstance")
+A("import LeanMlir.Proofs.Certificates.LipschitzCertInstance")
 A("")
 A("/-! # Trained-weight whole-network VJP witness (MLP rung)")
 A("")
