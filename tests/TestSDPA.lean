@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
 
 /-! # ch10 V2 — single-head scaled-dot-product-attention renderer (fwd + 3-path back)

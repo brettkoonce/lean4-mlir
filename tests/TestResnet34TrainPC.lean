@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ResNet34RenderPC
+import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Types
 
 /-! # r34 Item B — structured ResNet-34 train-step render (per-channel BN, proof-rendered)

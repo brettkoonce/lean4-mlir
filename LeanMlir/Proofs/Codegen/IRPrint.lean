@@ -1805,7 +1805,7 @@ def convnextBackModule (c cExp H W kH kW : Nat) (eps : String) : String :=
      s!"    return %dx : {tt [1,c,H,W]}\n")
 
 -- Dump (human view) + write compilable modules for the IREE loop
--- (run: `lake env lean LeanMlir/Proofs/IRPrint.lean`).
+-- (run: `lake env lean LeanMlir/Proofs/Codegen/IRPrint.lean`).
 #eval IO.println (renderBlock "linear d₀=4 → d₁=3 (B=2)" 2 (linearHlo 4 3))
 #eval IO.println (renderBlock "mlp 4→3→3→2 (B=2)" 2 (mlpHlo 4 3 3 2))
 #eval IO.FS.writeFile "/tmp/linear_back.mlir" (linearModule 2 4 3)

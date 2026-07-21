@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
 
 /-! # ch9 N3 — patchify (4×4/s4) + downsample (2×2/s2) strided convs, render + iree

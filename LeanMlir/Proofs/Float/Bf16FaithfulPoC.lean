@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # PoC: the bf16-mixed MNIST-linear render-tie (planning §5, the symmetric gap)
 

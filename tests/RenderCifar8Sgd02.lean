@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.CnnRender
+import LeanMlir.Proofs.Codegen.CnnRender
 
 /-! Temporary: re-render `verified_mlir/cifar8_train_step.mlir` with the no-BN SGD lr set to
     0.02 (baked as 0.02/128 = 0.00015625, since the render multiplies the SUM gradient). Same

@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Float.EnetFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeFloatBridge
-import LeanMlir.Proofs.EfficientNetRenderPC
+import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 import LeanMlir.Proofs.Float.EfficientNetBackFloatBridge
 
 /-! # ℝ→Float32 bridge: the WHOLE batched EfficientNet-B0 FORWARD

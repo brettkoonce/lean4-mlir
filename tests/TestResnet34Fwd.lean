@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
 
 /-! # B9a — full ResNet-34 forward renderer + `iree-compile` validation

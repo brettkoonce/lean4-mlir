@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.EfficientNetRenderPC
+import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 
 /-! # EfficientNet Item D — the batched backward (cotangent) math, step by step
 

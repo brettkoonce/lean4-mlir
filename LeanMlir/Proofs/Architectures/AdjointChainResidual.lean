@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.AdjointChainBridge
+import LeanMlir.Proofs.Codegen.AdjointChainBridge
 
 /-! # The residual combinator: partitioned budgets for parallel-path blocks
 

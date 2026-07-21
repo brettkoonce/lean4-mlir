@@ -1,10 +1,10 @@
-import LeanMlir.Proofs.StableHLO
-import LeanMlir.Proofs.AdamStep
+import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.AdamStep
 
 /-! # AdamW render-close for the linear net — Phase 3b den-level faithfulness
 
 The Adam analogue of `StableHLO.sgdW_descends_certified_grad`
-(`LeanMlir/Proofs/StableHLO.lean`). The SGD close defines the emitted update as a
+(`LeanMlir/Proofs/Codegen/StableHLO.lean`). The SGD close defines the emitted update as a
 *math function of the certified gradient* — `sgdW = W − lr·wGrad x (den cotGraph)`
 — and proves it equals `θ − lr·(certified ∂/∂θ Jacobian · denoted softmax-CE
 cotangent)`. This file does the same with the optimizer map swapped for AdamW

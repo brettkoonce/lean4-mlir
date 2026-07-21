@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
 
 /-! # ConvNeXt-T train step rendered ENTIRELY from the verified AST (the §1 render)

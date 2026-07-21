@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ViTRender
+import LeanMlir.Proofs.Codegen.ViTRender
 import LeanMlir.ViTRender
 import LeanMlir.Types
 

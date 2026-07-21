@@ -318,7 +318,7 @@ fidelity:
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
        `mulVec/transpose/outer/mul`. This IS bridged to Mathlib's `Matrix`
-       namespace by `LeanMlir/Proofs/MatBridge.lean` (`Mat.mulVec_eq`,
+       namespace by `LeanMlir/Proofs/Codegen/MatBridge.lean` (`Mat.mulVec_eq`,
        `Mat.transpose_eq`, `Mat.outer_eq`, `Mat.mul_eq`), so a downstream
        consumer can apply Mathlib's matrix algebra to the suite's outputs. The
        bridge is opt-in by design — the core suite does not import it, keeping

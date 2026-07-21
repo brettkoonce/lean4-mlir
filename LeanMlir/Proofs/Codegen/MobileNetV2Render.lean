@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # MobileNetV2 train step rendered ENTIRELY from the verified AST
 

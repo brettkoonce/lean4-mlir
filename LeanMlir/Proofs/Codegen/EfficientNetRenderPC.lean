@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # Item A — the BATCHED EfficientNet-B0 forward graph (true batch-norm, matches the render)
 

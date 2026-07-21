@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
 
 /-! # E6 — EfficientNet-B0 forward renderer (faithful [t,c,n,s,k] config) + iree

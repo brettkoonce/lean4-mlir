@@ -1,6 +1,6 @@
 import LeanMlir.VerifiedNets
-import LeanMlir.Proofs.CnnRender
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.CnnRender
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # `mnist-cnn-grid` — FC-width-parametric MNIST CNN demo (the 2D peer of `mnist-mlp-grid`)
 

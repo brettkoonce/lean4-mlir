@@ -343,7 +343,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
 end Proofs.StableHLO
 
 -- Regenerate the committed verified_mlir/vit_{fwd,train_step}.mlir from the certified renderer
--- (pure Lean, no iree) — the drift-guard source: `lake env lean LeanMlir/Proofs/ViTRender.lean`
+-- (pure Lean, no iree) — the drift-guard source: `lake env lean LeanMlir/Proofs/Codegen/ViTRender.lean`
 -- rewrites both, and proofs.yml git-diffs them. The bytes `MainViTVerified` trains on ARE these.
 -- (tests/TestViT{Train,Fwd}.lean write the SAME render + additionally iree-compile on the rocm box.)
 #eval IO.FS.writeFile "verified_mlir/vit_fwd.mlir" (Proofs.StableHLO.vitFwdRenderV "vit_fwd")

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Architectures.ConvNeXtClose
 
 /-! # ConvNeXt-T §1 fold — the per-channel layer-scale γ gradient cert (the one new proof)

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.AdjointChainBridge
+import LeanMlir.Proofs.Codegen.AdjointChainBridge
 
 /-!
 # P5 — the whole-net float certificate as a Lean theorem (CIFAR-8 capstone)

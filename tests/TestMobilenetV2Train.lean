@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
 
 /-! # C4b/D3 — MobileNetV2 train-step renderer (real downsampling [t,c,n,s]) + iree

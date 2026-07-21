@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Architectures.Residual
 import LeanMlir.Proofs.Architectures.SE
 import LeanMlir.Proofs.Architectures.EfficientNet
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Architectures.EfficientNetChainClose
 
 /-! # Spike: fan-in backward-graph faithfulness (EfficientNet-B0 assembly brick)

@@ -5375,7 +5375,7 @@ end Proofs
 
 -- Committed verified-rendered artifacts (the exact `pretty (emit g)` text the
 -- `mnist-linear-verified` trainer compiles + runs through the real Lean/IREE
--- FFI on GPU). Regenerate with `lake env lean LeanMlir/Proofs/StableHLO.lean`.
+-- FFI on GPU). Regenerate with `lake env lean LeanMlir/Proofs/Codegen/StableHLO.lean`.
 #eval (do
   IO.FS.createDirAll "verified_mlir"
   IO.FS.writeFile "verified_mlir/linear_fwd.mlir"

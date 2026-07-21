@@ -74,38 +74,38 @@ jobs:
         run: |
           set -e
           # StableHLO.lean writes all 8 proof-rendered forwards + the linear train step.
-          lake env lean LeanMlir/Proofs/StableHLO.lean
+          lake env lean LeanMlir/Proofs/Codegen/StableHLO.lean
           git diff --exit-code -- \
               verified_mlir/linear_fwd.mlir verified_mlir/linear_train_step.mlir \
               verified_mlir/mlp_fwd.mlir verified_mlir/cnn_fwd.mlir \
               verified_mlir/cifar_fwd.mlir verified_mlir/cifar_bn_fwd.mlir \
               verified_mlir/cifar8_fwd.mlir verified_mlir/cifar8_bn_fwd.mlir \
-            || { echo "::error::committed verified_mlir/{linear,mlp,cnn,cifar,cifar_bn,cifar8,cifar8_bn}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/StableHLO.lean)"; exit 1; }
+            || { echo "::error::committed verified_mlir/{linear,mlp,cnn,cifar,cifar_bn,cifar8,cifar8_bn}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/StableHLO.lean)"; exit 1; }
           # Per-net train-step renderers.
-          lake env lean LeanMlir/Proofs/MlpRender.lean
+          lake env lean LeanMlir/Proofs/Codegen/MlpRender.lean
           git diff --exit-code -- verified_mlir/mlp_train_step.mlir \
-            || { echo "::error::committed verified_mlir/mlp_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/MlpRender.lean)"; exit 1; }
-          lake env lean LeanMlir/Proofs/CnnRender.lean
+            || { echo "::error::committed verified_mlir/mlp_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MlpRender.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/Codegen/CnnRender.lean
           git diff --exit-code -- \
               verified_mlir/cnn_train_step.mlir \
               verified_mlir/cifar_train_step.mlir verified_mlir/cifar_bn_train_step.mlir \
               verified_mlir/cifar8_train_step.mlir verified_mlir/cifar8_bn_train_step.mlir \
-            || { echo "::error::committed verified_mlir/{cnn,cifar,cifar_bn,cifar8,cifar8_bn}_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/CnnRender.lean)"; exit 1; }
-          lake env lean LeanMlir/Proofs/ResNet34Render.lean
+            || { echo "::error::committed verified_mlir/{cnn,cifar,cifar_bn,cifar8,cifar8_bn}_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/CnnRender.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/Codegen/ResNet34Render.lean
           git diff --exit-code -- verified_mlir/resnet34_train_step.mlir \
-            || { echo "::error::committed verified_mlir/resnet34_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/ResNet34Render.lean)"; exit 1; }
-          lake env lean LeanMlir/Proofs/MobileNetV2Render.lean
+            || { echo "::error::committed verified_mlir/resnet34_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ResNet34Render.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/Codegen/MobileNetV2Render.lean
           git diff --exit-code -- verified_mlir/mobilenetv2_train_step.mlir verified_mlir/mobilenetv2_reduced_train_step.mlir \
-            || { echo "::error::committed verified_mlir/mobilenetv2_*train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/MobileNetV2Render.lean)"; exit 1; }
-          lake env lean LeanMlir/Proofs/ConvNeXtRender.lean
+            || { echo "::error::committed verified_mlir/mobilenetv2_*train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV2Render.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean
           git diff --exit-code -- verified_mlir/convnext_train_step.mlir \
-            || { echo "::error::committed verified_mlir/convnext_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/ConvNeXtRender.lean)"; exit 1; }
-          lake env lean LeanMlir/Proofs/EfficientNetRender.lean
+            || { echo "::error::committed verified_mlir/convnext_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender.lean
           git diff --exit-code -- verified_mlir/efficientnet_train_step.mlir \
-            || { echo "::error::committed verified_mlir/efficientnet_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/EfficientNetRender.lean)"; exit 1; }
-          lake env lean LeanMlir/Proofs/ViTRender.lean
+            || { echo "::error::committed verified_mlir/efficientnet_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender.lean)"; exit 1; }
+          lake env lean LeanMlir/Proofs/Codegen/ViTRender.lean
           git diff --exit-code -- verified_mlir/vit_train_step.mlir verified_mlir/vit_fwd.mlir \
-            || { echo "::error::committed verified_mlir/vit_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/ViTRender.lean)"; exit 1; }
+            || { echo "::error::committed verified_mlir/vit_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRender.lean)"; exit 1; }
 
       - name: Zero-axiom-declaration guard
         # The former trusted-bridge footprint check is gone: Binary32Instance's

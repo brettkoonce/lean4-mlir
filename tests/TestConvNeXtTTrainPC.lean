@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
 
 /-! # ConvNeXt-T render CAPSTONE — proof-rendered full [3,3,9,3] train step at the

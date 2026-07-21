@@ -14,7 +14,7 @@ outputs without re-deriving the correspondence by hand.
 
 Opt-in by design: the core suite does **not** import this file, so
 `Tensor.lean`'s import surface — and every build that doesn't need Mathlib's
-`Matrix` — stays exactly as it was. Import `LeanMlir.Proofs.MatBridge` only
+`Matrix` — stays exactly as it was. Import `LeanMlir.Proofs.Codegen.MatBridge` only
 when you want the interop.
 -/
 

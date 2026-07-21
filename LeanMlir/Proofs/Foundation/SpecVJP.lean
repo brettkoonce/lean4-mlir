@@ -11,8 +11,8 @@ import LeanMlir.Proofs.Architectures.ConvNeXtFullT
 import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Proofs.Architectures.ViTDepthK
 import LeanMlir.Proofs.Foundation.ResNet34
-import LeanMlir.Proofs.ResNet34RenderPC
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.ResNet34RenderPC
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # Spec → math (the verification tie), Rung 1: the linear classifier
 

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # r34 Item A — the PER-CHANNEL-BN ResNet-34 forward graph (matches the render)
 

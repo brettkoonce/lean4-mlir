@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Foundation.CnnTrainStep
 import LeanMlir.Proofs.Architectures.EfficientNetClose
 

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.MobileNetV2RenderPC
+import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 
 /-! # The PAPER-SPEC MobileNetV2 — all 17 bottleneck blocks, forward graph + faithfulness
 

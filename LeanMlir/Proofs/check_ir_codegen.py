@@ -55,7 +55,7 @@ import iree.compiler as ic
 import iree.runtime as rt
 
 # Regenerate the modules from IRPrint (the single source of truth).
-subprocess.run(["lake", "env", "lean", "LeanMlir/Proofs/IRPrint.lean"],
+subprocess.run(["lake", "env", "lean", "LeanMlir/Proofs/Codegen/IRPrint.lean"],
                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def _np(r):  # IREE result → numpy (single result or one element of a tuple)

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # Item A — the PER-CHANNEL-BN MobileNetV2 forward graph (matches the render)
 

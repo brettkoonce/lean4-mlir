@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Float.FloatComposeBridge
 import LeanMlir.Proofs.Float.Resnet34FloatBridge
-import LeanMlir.Proofs.ResNet34RenderPC
+import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Float.Resnet34DownBackFloatBridge
 
 /-! # ℝ→Float32 bridge: the WHOLE ResNet-34 FORWARD — the [3,4,6,3] fold

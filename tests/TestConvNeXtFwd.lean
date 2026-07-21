@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
 
 /-! # ch9 N5 — ConvNeXt-T forward renderer (faithful [3,3,9,3] config) + iree

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.BnBackComposeBridge
+import LeanMlir.Proofs.Codegen.BnBackComposeBridge
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 
 /-! # Per-channel BatchNorm BACKWARD float-bridge (the cifarBn/r34/LN backward discharge)

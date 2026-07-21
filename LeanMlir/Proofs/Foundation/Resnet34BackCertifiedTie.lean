@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ResNet34RenderPC
+import LeanMlir.Proofs.Codegen.ResNet34RenderPC
 import LeanMlir.Proofs.Architectures.CifarCNN
 import LeanMlir.Proofs.Float.Resnet34BackFloatBridge
 import LeanMlir.Proofs.Architectures.EfficientNetChainClose

@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Architectures.ConvNeXt
 import LeanMlir.Proofs.Architectures.ConvNeXtFullT
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Architectures.EfficientNetBackB0
 
 /-! # ConvNeXt whole-block backward-graph faithfulness (per-example / batch-1)

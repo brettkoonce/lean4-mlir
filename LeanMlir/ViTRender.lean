@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # ch10 ViT — verified-faithful StableHLO render fragments (shared library)
 
@@ -513,7 +513,7 @@ def vitTinyConfig (b _depth : Nat) : ViTConfig :=
 -- ════════════════════════════════════════════════════════════════
 -- § AdamW optimizer render (Phase 3b of vit_train_to_vit_verified.md)
 -- The proven-fragment-side analogue of `MlirCodegen.emitAdamUpdate`; its ℝ
--- spec is `Proofs.adamWParam` (LeanMlir/Proofs/AdamStep.lean). Scalar
+-- spec is `Proofs.adamWParam` (LeanMlir/Proofs/Codegen/AdamStep.lean). Scalar
 -- hyperparameters arrive as `tensor<f32>` function args.
 -- ════════════════════════════════════════════════════════════════
 

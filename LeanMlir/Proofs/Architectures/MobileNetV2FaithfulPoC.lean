@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Architectures.MobileNetV2ChainClose
-import LeanMlir.Proofs.MobileNetV2RenderPC
+import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 
 /-! # PoC: the MobileNetV2 depthwise param updates, proof-tied to the certified SGD step
 

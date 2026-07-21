@@ -19,10 +19,10 @@ BACKEND="${IREE_BACKEND:-rocm}"
 CHIP="${IREE_CHIP:-gfx1100}"
 
 echo "== (a) drift: committed verified_mlir/linear_* == proven renderer =="
-lake env lean LeanMlir/Proofs/StableHLO.lean >/dev/null
+lake env lean LeanMlir/Proofs/Codegen/StableHLO.lean >/dev/null
 git diff --exit-code -- verified_mlir/linear_train_step.mlir verified_mlir/linear_fwd.mlir \
   && echo "   OK: committed == renderer" \
-  || { echo "   DRIFT: regenerate with 'lake env lean LeanMlir/Proofs/StableHLO.lean'"; exit 1; }
+  || { echo "   DRIFT: regenerate with 'lake env lean LeanMlir/Proofs/Codegen/StableHLO.lean'"; exit 1; }
 
 echo "== (b) validity: iree-compile the committed bytes ($BACKEND/$CHIP) =="
 for f in linear_fwd linear_train_step; do

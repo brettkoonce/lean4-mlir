@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # PoC: the E4M3 (fp8) quantized MNIST-linear render-tie (planning §3b)
 

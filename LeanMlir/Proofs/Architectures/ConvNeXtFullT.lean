@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Architectures.ConvNeXtChainClose
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The FULL ConvNeXt-T — `[3,3,9,3]`, forward + whole-net VJP + graph + faithfulness
 

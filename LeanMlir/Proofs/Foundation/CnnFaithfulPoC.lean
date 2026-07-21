@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Foundation.CnnChainClose
-import LeanMlir.Proofs.CnnRender
+import LeanMlir.Proofs.Codegen.CnnRender
 
 /-! # PoC: the MNIST-CNN train step, proof-tied to the certified SGD step
 

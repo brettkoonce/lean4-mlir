@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # EfficientNet-B0 train step rendered ENTIRELY from the verified AST (batched)
 

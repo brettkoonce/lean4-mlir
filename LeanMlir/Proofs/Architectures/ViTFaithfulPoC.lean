@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Architectures.ViTClose
 import LeanMlir.Proofs.Architectures.ViTVecLN
 import LeanMlir.Proofs.Architectures.Cifar8FaithfulPoC

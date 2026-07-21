@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.ViTFwdGraph
 import LeanMlir.Proofs.Architectures.ViTChainClose
 import LeanMlir.Proofs.Architectures.ViTMultiHead
 import LeanMlir.Proofs.Architectures.ViTDepthK
-import LeanMlir.Proofs.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # ViT whole-block backward-graph faithfulness (heads = 1, per-token Mat VJP)
 

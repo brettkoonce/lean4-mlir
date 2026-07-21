@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Float.EnetFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeFloatBridge
 import LeanMlir.Proofs.Float.EfficientNetWholeFloatBridge
-import LeanMlir.Proofs.MobileNetV2RenderPC
+import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 
 /-! # ℝ→Float32 bridge: the WHOLE MobileNetV2 FORWARD — the 6-block fold
 

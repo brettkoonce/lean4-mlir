@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.BnInputBridge
+import LeanMlir.Proofs.Codegen.BnInputBridge
 import LeanMlir.Proofs.Float.Resnet34FloatBridge
 
 /-!

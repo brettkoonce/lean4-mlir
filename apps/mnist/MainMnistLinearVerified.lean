@@ -6,7 +6,7 @@ Trains the Chapter-2 linear classifier on the StableHLO that the **verified
 renderer** emits — `verified_mlir/linear_train_step.mlir`, which is
 `Proofs.StableHLO.linearTrainStepModuleV` = `pretty (emit g)`, the text whose
 denotation is machine-proven equal to the Mathlib `fderiv` math
-(`LeanMlir/Proofs/StableHLO.lean`, audited 3-axiom-clean). The forward, softmax-
+(`LeanMlir/Proofs/Codegen/StableHLO.lean`, audited 3-axiom-clean). The forward, softmax-
 CE cotangent, parameter gradients, and SGD update are all the proof-backed ops.
 
 This is the *real* path: the Lean loop → `IreeRuntime` FFI (`libiree_ffi.so`) →
@@ -22,7 +22,7 @@ keeps a bespoke `main`: its train step uses the 2-argument `linearTrainStepV` FF
 shared `VerifiedNet.train` driver expects. Every dimension is read from the spec.
 
 Regenerate the `verified_mlir/*.mlir` with
-`lake env lean LeanMlir/Proofs/StableHLO.lean`.
+`lake env lean LeanMlir/Proofs/Codegen/StableHLO.lean`.
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mnist-linear-verified data`
 -/

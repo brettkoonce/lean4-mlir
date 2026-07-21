@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Resnet34BlockBridge
+import LeanMlir.Proofs.Codegen.Resnet34BlockBridge
 
 /-!
 # ℝ→Float32 bridge: the composition backbone (whole-net certificate)

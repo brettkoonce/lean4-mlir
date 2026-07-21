@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Foundation.CnnChainClose
-import LeanMlir.Proofs.CnnRender
+import LeanMlir.Proofs.Codegen.CnnRender
 import LeanMlir.Proofs.Architectures.CifarCNN
 
 /-! # PoC: the CIFAR-CNN (Chapter 4, no-BN) train step, proof-tied to the certified SGD step

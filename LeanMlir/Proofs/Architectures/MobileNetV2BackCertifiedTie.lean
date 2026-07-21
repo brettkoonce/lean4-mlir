@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Float.MobileNetV2BackFloatBridge
-import LeanMlir.Proofs.MobileNetV2RenderPC
+import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 
