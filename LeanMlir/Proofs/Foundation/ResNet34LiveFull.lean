@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ResNet34LiveSeal
+import LeanMlir.Proofs.Training.ResNet34LiveSeal
 
 /-!
 # Full-depth live ResNet-34 witness + level-3 seal (`[3,4,6,3]`)

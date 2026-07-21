@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.SgdDescentMlp
+import LeanMlir.Proofs.Training.SgdDescentMlp
 import LeanMlir.Proofs.Foundation.ConvLossFold
 import LeanMlir.Proofs.Architectures.MnistCNN
 

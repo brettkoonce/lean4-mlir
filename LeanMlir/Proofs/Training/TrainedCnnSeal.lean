@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.TrainedCnnWitness
-import LeanMlir.Proofs.JacobianSeal
+import LeanMlir.Proofs.Training.TrainedCnnWitness
+import LeanMlir.Proofs.Training.JacobianSeal
 
 /-! # Level-3 seal for the trained-CNN witness
 

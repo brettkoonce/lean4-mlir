@@ -74,10 +74,10 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Architectures.MnistCNN,
              -- Nonzero-Jacobian seal (planning/whole_network_backward.md Item B): the
              -- generic "one nonzero Jacobian entry ⇒ non-trivial backward" bridge.
-             `LeanMlir.Proofs.JacobianSeal,
+             `LeanMlir.Proofs.Training.JacobianSeal,
              -- Item B2: the seal discharged at the live MobileNetV2 witness —
              -- `fderiv ℝ forward 0 ≠ 0` ⇒ non-trivial whole-net backward (level 3).
-             `LeanMlir.Proofs.MobileNetV2JacobianSeal,
+             `LeanMlir.Proofs.Training.MobileNetV2JacobianSeal,
              -- Chapter-6 ResNet Milestone B: stride-2 SAME convolution (the hard
              -- new downsampling op) = decimate ∘ stride-1 conv, with its input-VJP.
              `LeanMlir.Proofs.Foundation.StridedConv,
@@ -218,27 +218,27 @@ lean_lib «Certs» where
              -- oracle + segment smoothness ⇒ the SGD step still decreases the loss,
              -- with an explicit decrease. The keystone the FloatBridge budgets
              -- plug into ("close" ⇒ "still trains").
-             `LeanMlir.Proofs.SgdDescent,
+             `LeanMlir.Proofs.Training.SgdDescent,
              -- The smoothness hypothesis DISCHARGED for the Chapter-2 linear
              -- softmax-CE loss: explicit segment-Lipschitz constant 2a²/(1−2aD)
              -- via the softmax ratio sandwich (no Hessian), and the capstone —
              -- one inexact SGD step provably decreases the cross-entropy loss.
-             `LeanMlir.Proofs.SgdDescentLinear,
+             `LeanMlir.Proofs.Training.SgdDescentLinear,
              -- The smoothness hypothesis discharged through the Chapter-3
              -- MLP: under quantitative ReLU margins (the step cannot flip a
              -- mask sign) the loss-of-one-layer maps get explicit
              -- segment-Lipschitz constants, and one inexact SGD step on each
              -- weight layer provably decreases the cross-entropy loss.
-             `LeanMlir.Proofs.SgdDescentMlp,
+             `LeanMlir.Proofs.Training.SgdDescentMlp,
              -- The descent program reaches the Chapter-4 CNN: quantitative
              -- max-pool selection margins (the argmax freezes along the step
              -- segment), pool 1-Lipschitz/ℓ1-contraction, conv kernel drift.
-             `LeanMlir.Proofs.SgdDescentCnn,
+             `LeanMlir.Proofs.Training.SgdDescentCnn,
              -- CIFAR-8 last-conv SGD descent: the first non-MNIST provable descent. CIFAR-8's tail
              -- (conv W₈ → relu → maxpool → 3 denses) IS cnn_conv2's architecture, so descent at the
              -- last conv (earlier 7 layers frozen) is an instance — non-vacuous lr. Full-depth descent
              -- stays open (the per-layer operator-norm product in hsmall compounds to vacuity).
-             `LeanMlir.Proofs.SgdDescentCifar,
+             `LeanMlir.Proofs.Training.SgdDescentCifar,
              -- ℝ→Float32 forward rounding budget for the no-BN CIFAR CNN
              -- (cnn_float_close scaled to 4 conv + 2 maxpool + 3 dense).
              `LeanMlir.Proofs.Float.CifarFloatBridge,
@@ -490,7 +490,7 @@ lean_lib «Certs» where
              -- at a channel-symmetric base Y via the BN channel-difference identity
              -- (carrier vanishes ⇒ no BN-variance derivative needed). The ResNet peer
              -- of MobileNetV2JacobianSeal. In the AuditAxioms headline set.
-             `LeanMlir.Proofs.ResNet34LiveSeal,
+             `LeanMlir.Proofs.Training.ResNet34LiveSeal,
              -- Item A FULL DEPTH: the real [3,4,6,3] (16-block) live ResNet-34, level-3
              -- sealed. The 13 identity blocks (zeroed body ⇒ relu(x+1)=x+1) wash out
              -- through the downsamples' BN (bn(z+c)=bn(z)), so the full net = the
@@ -501,7 +501,7 @@ lean_lib «Certs» where
              -- linear bottleneck) shift by +45; GAP + identity head pass it, so the
              -- full net = the 2-block witness + 45 and the seal reduces to
              -- MobileNetV2JacobianSeal's Qq / g_hasDerivAt. VJP composed through all 17.
-             `LeanMlir.Proofs.MobileNetV2JacobianSealFull,
+             `LeanMlir.Proofs.Training.MobileNetV2JacobianSealFull,
              -- Item D (realistic dims): the live ResNet-34 whole-net backward at real
              -- ImageNet 224×224 spatial resolution (the genuine 5-halving pyramid
              -- 224→112→56→28→14→7). β-parametric downsample (β=64>√1568) + stem
@@ -513,14 +513,14 @@ lean_lib «Certs» where
              -- uniform diff = δ and maxpool(ch0)=maxpool(ch1)+δ for ALL t (max(a+δ,b+δ)=
              -- max(a,b)+δ) — no eventual-selection topology. UDiff invariant threaded like
              -- Dom2; output diff = t·Rr (4 positive istds), g'(0)=Rr 0 ≠ 0.
-             `LeanMlir.Proofs.ResNet34LiveRealisticSeal,
+             `LeanMlir.Proofs.Training.ResNet34LiveRealisticSeal,
              -- Item D level 3 for MobileNetV2: the nonzero-Jacobian SEAL at 224×224. ReLU6
              -- is a BOUNDED window (0,6), so unlike ResNet's β-grows route, γ is SCALED DOWN
              -- (γ=1/128 ⇒ |γ|√n < 3 keeps bn∈(0,6) at n=2·112·112). The 1×1 weights are
              -- dimension-independent and reused. Uniform-perturbation UDiff seal: the
              -- asymmetric stem turns input t into channel-diff −t, each BN ×γ·istd, so the
              -- output diff is −t·Rr (4 positive γ·istds), g'(0)=−Rr 0 ≠ 0.
-             `LeanMlir.Proofs.MobileNetV2SealRealistic,
+             `LeanMlir.Proofs.Training.MobileNetV2SealRealistic,
              -- Backward-graph faithfulness (den-level): fan-in bricks
              -- (residual/SE), per-op backward ops (gap/broadcast/true-batch-norm/
              -- batched conv+depthwise), the whole per-example MBConv block, and
@@ -750,7 +750,7 @@ lean_lib «Certs» where
              -- /128-rationalized net instantiates HasVJPAt at a REAL input — ReLU
              -- smoothness inherited from training (exact nonzero pre-activations),
              -- not engineered; level-3 sealed via an explicit Jacobian entry.
-             `LeanMlir.Proofs.TrainedMlpWitness,
+             `LeanMlir.Proofs.Training.TrainedMlpWitness,
              -- Certified-accuracy scorecard (post_audit_roadmap §1): the one-input
              -- certificate scaled to a dataset-level claim — over the FIXED first-100
              -- MNIST test subset at FIXED ε = 1/10 (pooled L2), 34/100 certified on a
@@ -789,7 +789,7 @@ lean_lib «Certs» where
              -- descent window rational-checkable with zero exp evaluations (z_lbl ≤
              -- z_pred exact ⇒ softmax_lbl ≤ 1/2 ⇒ Σ|∇| ≤ 2Σx, Σ∇² ≥ Σx²/4). Retires
              -- the W=0 degeneracy caveat of binary32_linear_sgd_descends_concrete.
-             `LeanMlir.Proofs.TrainedLinearDescent,
+             `LeanMlir.Proofs.Training.TrainedLinearDescent,
              -- Trained-weight whole-net VJP witness, CNN rung (post_audit gap #3):
              -- the Chapter-3 mnistCnnNoBn conditional whole-net VJP instantiated at
              -- TRAINED /128-rationalized weights + a REAL test digit — all five
@@ -797,7 +797,7 @@ lean_lib «Certs» where
              -- dense3/dense4 kinks) discharged by exact in-kernel rationals. The
              -- no-tie condition is trained in (pool-tie margin regularizer), the
              -- h_mp analogue of the scorecard's spectral cap.
-             `LeanMlir.Proofs.TrainedCnnWitness,
+             `LeanMlir.Proofs.Training.TrainedCnnWitness,
              -- Level-3 seal for the trained CNN witness: one whole-net Jacobian
              -- entry (∂logit₇/∂pixel(0,2) = −326103939411/2³⁵ ≈ −9.49) computed in
              -- closed form — pdiv_comp peeling with exact backward-cotangent
@@ -805,7 +805,7 @@ lean_lib «Certs» where
              -- input-VJPs via conv2d_input_grad_formula through HasVJPAt.correct.
              -- Yields backward_nontrivial / jacobian_nonzero / not_constant, the
              -- full TrainedMlpWitness theorem set at the conv rung.
-             `LeanMlir.Proofs.TrainedCnnSeal,
+             `LeanMlir.Proofs.Training.TrainedCnnSeal,
              -- The robustness certificate composed with the float bridge (2026-07
              -- audit gap #1): the scorecard's per-image Tsuzuku certificates ×
              -- the 2-layer FloatBridge budget (γ-form, B ≤ 5.96e-3 at the capped
@@ -872,7 +872,7 @@ lean_lib «CertsHeavy» where
     `planning/proofs_minimal_set.md`. -/
 lean_lib «ProofsMinimal» where
   srcDir := "."
-  roots := #[`LeanMlir.Proofs.Foundation.LinearFaithfulPoC, `LeanMlir.Proofs.SgdDescentLinear]
+  roots := #[`LeanMlir.Proofs.Foundation.LinearFaithfulPoC, `LeanMlir.Proofs.Training.SgdDescentLinear]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

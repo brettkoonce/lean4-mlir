@@ -1,6 +1,6 @@
 """Trained-weight whole-net VJP witness, CNN rung (post-audit gap #3).
 
-Emits LeanMlir/Proofs/TrainedCnnWitness.lean: the Chapter-3 mnistCnnNoBn
+Emits LeanMlir/Proofs/Training/TrainedCnnWitness.lean: the Chapter-3 mnistCnnNoBn
 conditional whole-network VJP (`mnistCnnNoBn_has_vjp_at`) instantiated at
 TRAINED, /128-rationalized weights and a REAL test input, with every
 smoothness hypothesis discharged from exact rational arithmetic:
@@ -26,7 +26,7 @@ import numpy as np, struct, sys
 from fractions import Fraction
 
 D = "/home/skoonce/lean/klawd_max_power/lean4-jax/data/"
-OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/TrainedCnnWitness.lean"
+OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Training/TrainedCnnWitness.lean"
 DEN_W = 128          # weight rationalization grid
 DEN_X = 4080         # 16 * 255 exact pooled-pixel denominator
 C = 2                # conv channels

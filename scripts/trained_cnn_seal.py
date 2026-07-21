@@ -1,6 +1,6 @@
 """Level-3 seal for the trained-CNN witness (the MLP rung's pdiv_fwd, CNN edition).
 
-Emits LeanMlir/Proofs/TrainedCnnSeal.lean: one whole-net Jacobian entry
+Emits LeanMlir/Proofs/Training/TrainedCnnSeal.lean: one whole-net Jacobian entry
 pdiv fwd X ic jc computed in CLOSED FORM at the trained weights, by peeling
 the network with pdiv_comp from the output side and carrying exact
 backward-cotangent tables:
@@ -28,7 +28,7 @@ from fractions import Fraction
 # ---- rewrites TrainedCnnWitness.lean with identical content)
 exec(open("/home/skoonce/lean/klawd_max_power/lean4-jax/scripts/trained_cnn_witness.py").read())
 
-SEAL_OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/TrainedCnnSeal.lean"
+SEAL_OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Training/TrainedCnnSeal.lean"
 JC = 7  # sealed output class = the witness's (correct) prediction
 
 # ---------------------------------------------------------------- seal tables (exact)
@@ -202,8 +202,8 @@ def mask_fold_bullets(preV, maskT, inV, n72='2*(2*3)*(2*3)'):
 s2r_bullets = mask_fold_bullets("c2V", "M2T", "t2V")
 s0r_bullets = mask_fold_bullets("c1V", "M1T", "t1V")
 
-body = f'''import LeanMlir.Proofs.TrainedCnnWitness
-import LeanMlir.Proofs.JacobianSeal
+body = f'''import LeanMlir.Proofs.Training.TrainedCnnWitness
+import LeanMlir.Proofs.Training.JacobianSeal
 
 /-! # Level-3 seal for the trained-CNN witness
 

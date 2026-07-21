@@ -46,10 +46,10 @@ import LeanMlir.Proofs.Architectures.ConvNeXtFullT
 -- ℝ→Float32 bridge, Tier 1: standard-model rounding bounds for the toy nets.
 import LeanMlir.Proofs.Float.FloatBridge
 -- Inexact-gradient descent over ℝ: the keystone the float budgets plug into.
-import LeanMlir.Proofs.SgdDescent
-import LeanMlir.Proofs.SgdDescentLinear
-import LeanMlir.Proofs.SgdDescentMlp
-import LeanMlir.Proofs.SgdDescentCnn
+import LeanMlir.Proofs.Training.SgdDescent
+import LeanMlir.Proofs.Training.SgdDescentLinear
+import LeanMlir.Proofs.Training.SgdDescentMlp
+import LeanMlir.Proofs.Training.SgdDescentCnn
 -- Robustness certificate: the Lipschitz-margin certified radius (cert ≤ TRUE ≤ PGD).
 import LeanMlir.Proofs.Certificates.LipschitzCert
 -- The real Gaussian probit: Φ/Φ⁻¹ facts + the smoothing radius at the true quantile.

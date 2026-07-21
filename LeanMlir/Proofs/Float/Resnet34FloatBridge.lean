@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.SgdDescentCnn
+import LeanMlir.Proofs.Training.SgdDescentCnn
 import LeanMlir.Proofs.Foundation.StridedConv
 import LeanMlir.Proofs.Float.BnFloatBridge
 import LeanMlir.Proofs.Foundation.PerChannelBN

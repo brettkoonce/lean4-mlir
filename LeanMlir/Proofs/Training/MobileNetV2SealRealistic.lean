@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.MobileNetV2JacobianSeal
-import LeanMlir.Proofs.ResNet34LiveRealisticSeal
+import LeanMlir.Proofs.Training.MobileNetV2JacobianSeal
+import LeanMlir.Proofs.Training.ResNet34LiveRealisticSeal
 import Mathlib.Analysis.Calculus.Deriv.Prod
 
 /-!

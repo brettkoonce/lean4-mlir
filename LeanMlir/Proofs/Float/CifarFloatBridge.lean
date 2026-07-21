@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.SgdDescentCnn
+import LeanMlir.Proofs.Training.SgdDescentCnn
 import LeanMlir.Proofs.Architectures.CifarCNN
 
 /-!

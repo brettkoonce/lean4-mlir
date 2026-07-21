@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Foundation.ResNet34
-import LeanMlir.Proofs.JacobianSeal
+import LeanMlir.Proofs.Training.JacobianSeal
 
 /-!
 # Toward a live ResNet-34 witness — Stage 2: the channel-order invariant kit

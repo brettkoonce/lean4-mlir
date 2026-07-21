@@ -1,6 +1,6 @@
 """Descent at TRAINED weights (planning/post_audit_roadmap.md §3).
 
-Emits LeanMlir/Proofs/TrainedLinearDescent.lean: one binary32 SGD step on a
+Emits LeanMlir/Proofs/Training/TrainedLinearDescent.lean: one binary32 SGD step on a
 TRAINED, /128-rationalized bias-free 49->10 pooled-MNIST linear classifier
 provably decreases the real cross-entropy loss -- retiring the "the only
 concrete descent instance is the degenerate W=0 net" caveat
@@ -25,7 +25,7 @@ import numpy as np, struct
 from fractions import Fraction
 
 D = "/home/skoonce/lean/klawd_max_power/lean4-jax/data/"
-OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/TrainedLinearDescent.lean"
+OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Training/TrainedLinearDescent.lean"
 K, DIM = 10, 49
 LR = Fraction(1, 8192)
 
