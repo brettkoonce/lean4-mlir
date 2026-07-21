@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Foundation.ResNet34Close
-import LeanMlir.Proofs.Cifar8FaithfulPoC
-import LeanMlir.Proofs.CifarBnFaithfulPoC
+import LeanMlir.Proofs.Architectures.Cifar8FaithfulPoC
+import LeanMlir.Proofs.Architectures.CifarBnFaithfulPoC
 
 /-! # PoC: the ResNet-34 (Chapter 5) train step, proof-tied to the certified SGD step
 

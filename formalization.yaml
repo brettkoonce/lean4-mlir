@@ -110,73 +110,73 @@ status:
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
     - declaration: "Proofs.conv2d_has_vjp3_correct"
-      file: "LeanMlir/Proofs/CNN.lean"
+      file: "LeanMlir/Proofs/Architectures/CNN.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
     - declaration: "Proofs.bn_input_grad_correct"   # batch-norm three-term backward
-      file: "LeanMlir/Proofs/BatchNorm.lean"
+      file: "LeanMlir/Proofs/Architectures/BatchNorm.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""    # audited; not in the 52-theorem comparator subset
       literature_dependencies: []
     - declaration: "Proofs.layerNorm_has_vjp_correct"
-      file: "LeanMlir/Proofs/LayerNorm.lean"
+      file: "LeanMlir/Proofs/Architectures/LayerNorm.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
     - declaration: "Proofs.softmaxCE_grad"
-      file: "LeanMlir/Proofs/Attention.lean"
+      file: "LeanMlir/Proofs/Architectures/Attention.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
     - declaration: "Proofs.mhsa_has_vjp_mat_correct"   # multi-head self-attention
-      file: "LeanMlir/Proofs/Attention.lean"
+      file: "LeanMlir/Proofs/Architectures/Attention.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
     - declaration: "Proofs.vit_full_has_vjp_correct"   # full ViT-Tiny body composes + has a VJP
-      file: "LeanMlir/Proofs/Attention.lean"
+      file: "LeanMlir/Proofs/Architectures/Attention.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
     - declaration: "Proofs.mobilenetv2_has_vjp_at_correct"
-      file: "LeanMlir/Proofs/MobileNetV2.lean"
+      file: "LeanMlir/Proofs/Architectures/MobileNetV2.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
     - declaration: "Proofs.convnext_has_vjp_correct"
-      file: "LeanMlir/Proofs/ConvNeXt.lean"
+      file: "LeanMlir/Proofs/Architectures/ConvNeXt.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
     - declaration: "Proofs.efficientnet_has_vjp_correct"
-      file: "LeanMlir/Proofs/EfficientNet.lean"
+      file: "LeanMlir/Proofs/Architectures/EfficientNet.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
       literature_dependencies: []
     - declaration: "Mnv2Live.mnv2Live_forward_nonconstant"   # non-degeneracy witness (see fidelity)
-      file: "LeanMlir/Proofs/MobileNetV2.lean"
+      file: "LeanMlir/Proofs/Architectures/MobileNetV2.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
     - declaration: "Proofs.ViTTiePoC.vit_net_tied_certified"   # train-step tie: all 200 ViT params fed the REAL backward cotangent
-      file: "LeanMlir/Proofs/ViTTiePoC.lean"
+      file: "LeanMlir/Proofs/Architectures/ViTTiePoC.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
     - declaration: "cifar8_chain_argmaxSafe"   # float capstone: binary32 rounding cannot flip the prediction
-      file: "LeanMlir/Proofs/Cifar8ChainCert.lean"
+      file: "LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -363,22 +363,22 @@ alignment:
       note: ""
     - source: "2D convolution backward"
       lean: "conv2d_has_vjp3_correct"
-      module: "LeanMlir/Proofs/CNN.lean"
+      module: "LeanMlir/Proofs/Architectures/CNN.lean"
       status: "proved"
       note: ""
     - source: "Batch normalization three-term backward"
       lean: "bn_input_grad_correct"
-      module: "LeanMlir/Proofs/BatchNorm.lean"
+      module: "LeanMlir/Proofs/Architectures/BatchNorm.lean"
       status: "proved"
       note: ""
     - source: "Multi-head self-attention backward (Q/K/V) + full ViT body"
       lean: "mhsa_has_vjp_mat_correct / vit_full_has_vjp_correct"
-      module: "LeanMlir/Proofs/Attention.lean"
+      module: "LeanMlir/Proofs/Architectures/Attention.lean"
       status: "proved"
       note: ""
     - source: "ReLU / max-pool backward at non-smooth points"
       lean: "relu_codegen_matches_canonical / maxPool2_codegen_matches_canonical"
-      module: "LeanMlir/Proofs/Foundation/MLP.lean, LeanMlir/Proofs/CNN.lean"
+      module: "LeanMlir/Proofs/Foundation/MLP.lean, LeanMlir/Proofs/Architectures/CNN.lean"
       status: "proved"
       note: "smooth-point bridge only; non-smooth points are a disclosed trust boundary"
     - source: "Live-network non-degeneracy + nonzero-Jacobian seal (ResNet-34, incl. full [3,4,6,3] depth)"
@@ -393,7 +393,7 @@ alignment:
       note: "genuine backward cotangent, not a free ∀-cotangent; committed-spec ties for all 5 ImageNet nets in SpecVJP"
     - source: "Binary32 rounding model + whole-net float-error composition"
       lean: "rndP_err; <net>_floatBridges / <net>_grad_floatBridges; chain_adjointClose; cifar8_chain_argmaxSafe"
-      module: "LeanMlir/Proofs/Binary32Instance.lean, LeanMlir/Proofs/*FloatBridge*.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Cifar8ChainCert.lean"
+      module: "LeanMlir/Proofs/Binary32Instance.lean, LeanMlir/Proofs/*FloatBridge*.lean, LeanMlir/Proofs/AdjointChain*.lean, LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       status: "proved"
       note: "rounding model CONSTRUCTED (former hardware axioms discharged); capstone: binary32 rounding cannot flip the cifar8 prediction"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"

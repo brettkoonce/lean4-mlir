@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Depthwise
+import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.FloatComposeBridge
 
 /-!

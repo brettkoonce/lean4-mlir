@@ -1,15 +1,15 @@
 import LeanMlir.Proofs.Foundation.Tensor
 import LeanMlir.Proofs.Foundation.MLP
-import LeanMlir.Proofs.CNN
-import LeanMlir.Proofs.BatchNorm
-import LeanMlir.Proofs.Residual
-import LeanMlir.Proofs.Depthwise
-import LeanMlir.Proofs.SE
-import LeanMlir.Proofs.LayerNorm
-import LeanMlir.Proofs.Attention
-import LeanMlir.Proofs.MobileNetV2
-import LeanMlir.Proofs.ConvNeXt
-import LeanMlir.Proofs.EfficientNet
+import LeanMlir.Proofs.Architectures.CNN
+import LeanMlir.Proofs.Architectures.BatchNorm
+import LeanMlir.Proofs.Architectures.Residual
+import LeanMlir.Proofs.Architectures.Depthwise
+import LeanMlir.Proofs.Architectures.SE
+import LeanMlir.Proofs.Architectures.LayerNorm
+import LeanMlir.Proofs.Architectures.Attention
+import LeanMlir.Proofs.Architectures.MobileNetV2
+import LeanMlir.Proofs.Architectures.ConvNeXt
+import LeanMlir.Proofs.Architectures.EfficientNet
 
 open Proofs
 open scoped Real

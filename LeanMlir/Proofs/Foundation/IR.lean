@@ -1,9 +1,9 @@
 import LeanMlir.Proofs.Foundation.MLP
-import LeanMlir.Proofs.CNN
-import LeanMlir.Proofs.LayerNorm
-import LeanMlir.Proofs.EfficientNet
-import LeanMlir.Proofs.Attention
-import LeanMlir.Proofs.SE
+import LeanMlir.Proofs.Architectures.CNN
+import LeanMlir.Proofs.Architectures.LayerNorm
+import LeanMlir.Proofs.Architectures.EfficientNet
+import LeanMlir.Proofs.Architectures.Attention
+import LeanMlir.Proofs.Architectures.SE
 
 /-! # A denoted StableHLO-subset IR — Phase 0a/0b spike
 

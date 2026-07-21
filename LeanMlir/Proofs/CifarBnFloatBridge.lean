@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.BnPerChannelFloatBridge
-import LeanMlir.Proofs.CifarCNN
+import LeanMlir.Proofs.Architectures.CifarCNN
 
 /-! # Whole-net forward float-bridge for the BatchNorm CIFAR CNN
 

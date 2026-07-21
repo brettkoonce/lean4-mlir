@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.StableHLO
-import LeanMlir.Proofs.Attention
+import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Types
 
 /-! Standalone render + `iree-compile` validation for the Chapter-10 V1 ROW-softmax

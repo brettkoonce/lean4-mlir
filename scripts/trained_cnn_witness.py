@@ -17,7 +17,7 @@ pixel-sum rationals s/4080), conv1 1->2 3x3 SAME, relu, conv2 2->2 3x3 SAME,
 relu, maxpool 2x2 -> 2x3x3, flatten (C-order = Tensor3.flatten), dense 18->8,
 relu, dense 8->8, relu, dense 8->10.
 
-conv2d semantics mirrored from LeanMlir/Proofs/CNN.lean:130 (cross-correlation,
+conv2d semantics mirrored from LeanMlir/Proofs/Architectures/CNN.lean:130 (cross-correlation,
 SAME zero padding pH=pW=1). The witness search enforces the h_mp condition
 (relu zeros collide, so each window may contain at most one negative conv2
 pre-activation, and the positive values must be pairwise distinct exactly).
@@ -420,7 +420,7 @@ pool_bullets = "\n".join(
     try norm_num"""
     for k in range(18))
 
-hdr = f'''import LeanMlir.Proofs.MnistCNN
+hdr = f'''import LeanMlir.Proofs.Architectures.MnistCNN
 
 /-! # Trained-weight whole-network VJP witness — CNN rung
 

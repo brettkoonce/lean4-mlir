@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ConvNeXtFullT
+import LeanMlir.Proofs.Architectures.ConvNeXtFullT
 import LeanMlir.Proofs.EnetFloatBridge
 import LeanMlir.Proofs.Resnet34WholeFloatBridge
 import LeanMlir.Proofs.ViTFloatBridge

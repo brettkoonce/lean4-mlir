@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.BatchNorm
+import LeanMlir.Proofs.Architectures.BatchNorm
 
 /-! # Per-channel BatchNorm (Chapter 5 Milestone B8) — the block-diagonal VJP
 

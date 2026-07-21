@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.FloatComposeBridge
-import LeanMlir.Proofs.CifarCNN
+import LeanMlir.Proofs.Architectures.CifarCNN
 
 /-! # Whole-net forward float-bridge for the deeper (8-conv, no-BN) CIFAR CNN
 

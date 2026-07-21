@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.LayerNorm
+import LeanMlir.Proofs.Architectures.LayerNorm
 import LeanMlir.Proofs.FloatComposeBridge
 
 /-!

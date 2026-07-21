@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.EfficientNet
-import LeanMlir.Proofs.LayerNorm
+import LeanMlir.Proofs.Architectures.EfficientNet
+import LeanMlir.Proofs.Architectures.LayerNorm
 import LeanMlir.Proofs.FloatBridge
 import LeanMlir.Proofs.FloatComposeBridge
 import LeanMlir.Proofs.DepthwiseFloatBridge

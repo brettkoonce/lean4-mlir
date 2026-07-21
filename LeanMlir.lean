@@ -14,35 +14,35 @@ import LeanMlir.Ddpm
 import LeanMlir.Cam
 -- VJP proofs (Attention pulls in Tensor/MLP/Residual/SE/LayerNorm/BatchNorm
 -- transitively; CNN + Depthwise need explicit imports).
-import LeanMlir.Proofs.Attention
-import LeanMlir.Proofs.CNN
-import LeanMlir.Proofs.Depthwise
+import LeanMlir.Proofs.Architectures.Attention
+import LeanMlir.Proofs.Architectures.CNN
+import LeanMlir.Proofs.Architectures.Depthwise
 -- End-to-end whole-network VJP compositions (each builds on the CNN/Depthwise
 -- machinery; their own file imports pull in everything transitively).
-import LeanMlir.Proofs.MobileNetV2
-import LeanMlir.Proofs.ConvNeXt
-import LeanMlir.Proofs.EfficientNet
-import LeanMlir.Proofs.MobileNetV2Close
+import LeanMlir.Proofs.Architectures.MobileNetV2
+import LeanMlir.Proofs.Architectures.ConvNeXt
+import LeanMlir.Proofs.Architectures.EfficientNet
+import LeanMlir.Proofs.Architectures.MobileNetV2Close
 import LeanMlir.Proofs.MobileNetV2RenderPC
-import LeanMlir.Proofs.MobileNetV2ChainClose
+import LeanMlir.Proofs.Architectures.MobileNetV2ChainClose
 import LeanMlir.Proofs.Foundation.ConvLossFold
-import LeanMlir.Proofs.EfficientNetClose
+import LeanMlir.Proofs.Architectures.EfficientNetClose
 import LeanMlir.Proofs.EfficientNetRenderPC
-import LeanMlir.Proofs.EfficientNetChainClose
-import LeanMlir.Proofs.EfficientNetFullB0
+import LeanMlir.Proofs.Architectures.EfficientNetChainClose
+import LeanMlir.Proofs.Architectures.EfficientNetFullB0
 import LeanMlir.Proofs.Foundation.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.Foundation.ResNet34ChainClose
-import LeanMlir.Proofs.ConvNeXtClose
-import LeanMlir.Proofs.ConvNeXtChainClose
-import LeanMlir.Proofs.ViTFwdGraph
-import LeanMlir.Proofs.ViTClose
-import LeanMlir.Proofs.ViTChainClose
-import LeanMlir.Proofs.ViTVecLN
-import LeanMlir.Proofs.ViTMultiHead
-import LeanMlir.Proofs.ViTDepthK
-import LeanMlir.Proofs.MobileNetV2FullPaper
-import LeanMlir.Proofs.ConvNeXtFullT
+import LeanMlir.Proofs.Architectures.ConvNeXtClose
+import LeanMlir.Proofs.Architectures.ConvNeXtChainClose
+import LeanMlir.Proofs.Architectures.ViTFwdGraph
+import LeanMlir.Proofs.Architectures.ViTClose
+import LeanMlir.Proofs.Architectures.ViTChainClose
+import LeanMlir.Proofs.Architectures.ViTVecLN
+import LeanMlir.Proofs.Architectures.ViTMultiHead
+import LeanMlir.Proofs.Architectures.ViTDepthK
+import LeanMlir.Proofs.Architectures.MobileNetV2FullPaper
+import LeanMlir.Proofs.Architectures.ConvNeXtFullT
 -- ℝ→Float32 bridge, Tier 1: standard-model rounding bounds for the toy nets.
 import LeanMlir.Proofs.FloatBridge
 -- Inexact-gradient descent over ℝ: the keystone the float budgets plug into.

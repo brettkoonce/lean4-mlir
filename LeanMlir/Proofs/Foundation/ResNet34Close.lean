@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.MobileNetV2Close
+import LeanMlir.Proofs.Architectures.MobileNetV2Close
 
 /-! # Closing the ResNet-34 render — the parameter-gradient close (a FREE close)
 

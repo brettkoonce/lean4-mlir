@@ -1,12 +1,12 @@
 import LeanMlir.Proofs.Foundation.IR
-import LeanMlir.Proofs.CifarCNN
+import LeanMlir.Proofs.Architectures.CifarCNN
 import LeanMlir.Proofs.Foundation.StridedConv
 import LeanMlir.Proofs.Foundation.PerChannelBN
-import LeanMlir.Proofs.Depthwise
-import LeanMlir.Proofs.MobileNetV2
-import LeanMlir.Proofs.LayerNorm
-import LeanMlir.Proofs.EfficientNet
-import LeanMlir.Proofs.ConvNeXt
+import LeanMlir.Proofs.Architectures.Depthwise
+import LeanMlir.Proofs.Architectures.MobileNetV2
+import LeanMlir.Proofs.Architectures.LayerNorm
+import LeanMlir.Proofs.Architectures.EfficientNet
+import LeanMlir.Proofs.Architectures.ConvNeXt
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 1: the linear classifier)
 

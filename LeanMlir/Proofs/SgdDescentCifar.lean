@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.SgdDescentCnn
-import LeanMlir.Proofs.CifarCNN
+import LeanMlir.Proofs.Architectures.CifarCNN
 
 /-! # CIFAR-8 last-conv SGD descent — the first non-MNIST provable descent (A2 probe)
 

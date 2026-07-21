@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.MobileNetV2BackB0
+import LeanMlir.Proofs.Architectures.MobileNetV2BackB0
 
 /-! # Backward-graph faithfulness for the VERIFIED ResNet-34 basic block
 

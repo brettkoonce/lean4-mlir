@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Attention
+import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Proofs.FloatBridge
 
 /-!

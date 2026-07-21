@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.SgdDescentCnn
-import LeanMlir.Proofs.CifarCNN
+import LeanMlir.Proofs.Architectures.CifarCNN
 
 /-!
 # ℝ→Float32 forward rounding budget for the Chapter-4 CIFAR CNN (no BN)

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.BatchNorm
+import LeanMlir.Proofs.Architectures.BatchNorm
 import LeanMlir.Proofs.FloatBridge
 
 /-!

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.CNN
+import LeanMlir.Proofs.Architectures.CNN
 
 /-! # M3 — the CNN train step: convolution parameter-gradient bridges
 

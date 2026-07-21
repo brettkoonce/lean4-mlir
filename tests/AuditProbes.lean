@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Foundation.Tensor
 import LeanMlir.Proofs.Foundation.MLP
-import LeanMlir.Proofs.CNN
+import LeanMlir.Proofs.Architectures.CNN
 
 /-!
 # Independent audit probes
