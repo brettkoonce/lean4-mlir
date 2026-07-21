@@ -5,7 +5,9 @@
 Two findings: our body-duplication number is entirely the generated
 certificate corpus, and our cross-directory reuse is ~0 **because we only have
 two directories**. This doc records the measurement, the proposed split, and
-what it would cost. Status: **proposed, not started.***
+what it would cost. Status: **executed 2026-07-21** on branch
+`proofs-refactor` — see §5 for the execution record and one honest surprise
+about the metric.*
 
 ---
 
@@ -131,6 +133,35 @@ with the metric as a bonus — and do it *between* chapters of book work, when
 no long-lived branch is outstanding. Not urgent.
 
 ---
+
+## 5. Execution record (2026-07-21, branch `proofs-refactor`)
+
+Done as sketched in §3: six `git mv` commits (one per bucket, map recovered
+from the measurement session's `buckets.json`) + a fixups commit. Blast-radius
+surfaces §2 missed, all mechanical: `apps/*/Main*Verified.lean` imports,
+`formalization.yaml`, `tests/Audit{Bridge,Mutation,Probes,Sanity}.lean` and
+`tests/comparator/*.lean`, the blueprint getting-started page, f-string
+import/path templates in `smooth_dec_scorecard_gen.py` +
+`lipschitz_cert_scorecard_full.py` (invisible to a literal rewrite — grep for
+`Proofs.` inside f-strings when adding generators), flat `LeanMlir/Proofs/*.lean`
+shell globs in both workflows, and the relative links in `Proofs/README.md`.
+`planning/`, `runs/`, `CHANGELOG.md` and the dated audit reports were left
+as historical records. `Proofs/Certificates/README.md` now carries the
+emitted-not-hand-written note; `Proofs/README.md` got a layout table.
+
+**The metric surprise:** re-running the harness on the new tree leaves
+`pct_edges_cross_dir` at **0.05%, n_dirs=2 — unchanged**. lean-code-reuse's
+`_dir_of` truncates every path to its first **two** components
+(`cross_file.py`), so `LeanMlir/Proofs/<Bucket>/X.lean` still counts as
+directory `LeanMlir/Proofs`: the tool assumes Mathlib-style `Pkg/Topic/…`
+layout, and our buckets sit one level too deep for it. With `_dir_of`
+patched to the full dirname, the new tree measures **19.28%** across 7
+directories — exactly the §0 simulation — so the organization is real; the
+tool just can't see it at this depth. §4's ordering of reasons (navigability
+first, metric as bonus) turned out to be the right call. If the headline
+number ever matters, the options are upstreaming a depth fix to
+lean-code-reuse or flattening buckets to `LeanMlir/<Bucket>/` — neither
+worth doing for its own sake.
 
 ## Appendix: reproducing the measurement
 
