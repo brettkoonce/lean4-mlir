@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.MobileNetV2ChainClose
 import LeanMlir.Proofs.MobileNetV2FaithfulPoC
-import LeanMlir.Proofs.ResNet34FaithfulPoC
+import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoC
 import LeanMlir.Proofs.MobileNetV2FullPaper
 
 /-! # PoC: the FULL 17-block paper MobileNetV2 §1a TIE — the whole net tied through the real forward

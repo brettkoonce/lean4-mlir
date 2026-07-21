@@ -96,7 +96,7 @@ status:
     # the three core axioms above. comparator_config below points at that config
     # for results included in the 52-theorem recheck.
     - declaration: "Proofs.pdiv_comp"          # chain / additive / multiplicative fan-in + finset-sum
-      file: "LeanMlir/Proofs/Tensor.lean"
+      file: "LeanMlir/Proofs/Foundation/Tensor.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
@@ -104,7 +104,7 @@ status:
         - statement: "fderiv chain rule, fderiv of sum, Differentiable composition"
           source: "Mathlib.Analysis.Calculus.FDeriv"
     - declaration: "Proofs.dense_weight_grad_correct"
-      file: "LeanMlir/Proofs/MLP.lean"
+      file: "LeanMlir/Proofs/Foundation/MLP.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: "tests/comparator/config.json"
@@ -218,7 +218,7 @@ status:
         - statement: "randomized-smoothing certified radius incl. the (1/sigma)-Lipschitz Gaussian probit (Neyman-Pearson core)"
           source: "Cohen, Rosenfeld, Kolter 2019 (arXiv:1902.02918); Salman et al. 2019 Lemma 2"
     - declaration: "Proofs.MuonGeometry.shampoo_eq_muon"   # optimizer geometry: Shampoo's single-step preconditioner = Muon's polar factor
-      file: "LeanMlir/Proofs/MuonGeometry.lean"
+      file: "LeanMlir/Proofs/Foundation/MuonGeometry.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -358,7 +358,7 @@ alignment:
   statements:
     - source: "Dense layer backward (weight + bias gradients)"
       lean: "dense_weight_grad_correct / dense_bias_grad_correct"
-      module: "LeanMlir/Proofs/MLP.lean"
+      module: "LeanMlir/Proofs/Foundation/MLP.lean"
       status: "proved"
       note: ""
     - source: "2D convolution backward"
@@ -378,12 +378,12 @@ alignment:
       note: ""
     - source: "ReLU / max-pool backward at non-smooth points"
       lean: "relu_codegen_matches_canonical / maxPool2_codegen_matches_canonical"
-      module: "LeanMlir/Proofs/MLP.lean, LeanMlir/Proofs/CNN.lean"
+      module: "LeanMlir/Proofs/Foundation/MLP.lean, LeanMlir/Proofs/CNN.lean"
       status: "proved"
       note: "smooth-point bridge only; non-smooth points are a disclosed trust boundary"
     - source: "Live-network non-degeneracy + nonzero-Jacobian seal (ResNet-34, incl. full [3,4,6,3] depth)"
       lean: "liveFwd2_nonconstant / liveFwd2_jacobian_nonzero (empty chains); liveFwd2Full_nonconstant / liveFwd2Full_jacobian_nonzero + liveFwd2Full_backward_nontrivial (full 16-block depth)"
-      module: "LeanMlir/Proofs/ResNet34LivePC.lean, LeanMlir/Proofs/ResNet34LiveSeal.lean, LeanMlir/Proofs/ResNet34LiveFull.lean"
+      module: "LeanMlir/Proofs/Foundation/ResNet34LivePC.lean, LeanMlir/Proofs/ResNet34LiveSeal.lean, LeanMlir/Proofs/Foundation/ResNet34LiveFull.lean"
       status: "proved"
       note: "2-channel live ResNet-34, real [3,4,6,3] depth; sealed at a channel-symmetric base Y (maxpool no-tie + carrier vanishes; identity blocks wash out through BN)"
     - source: "Committed train step = real loss-driven backward (per-net ties, all 12 nets)"
@@ -408,7 +408,7 @@ alignment:
       note: "end-to-end: quantile inversion, Cameron–Martin shift, rotation-invariance dimension reduction all proved; requires class probabilities in (0,1); the driver's Monte-Carlo estimation gap is not formalized"
     - source: "Optimizer-as-steepest-descent ladder (SGD / sign / Muon / Shampoo, Newton–Schulz)"
       lean: "muon_polar_steepest, shampoo_eq_muon, muon_polar_nearest_orthogonal + spectral-step lemma"
-      module: "LeanMlir/Proofs/MuonGeometry.lean, LeanMlir/Proofs/MuonNewtonSchulz.lean"
+      module: "LeanMlir/Proofs/Foundation/MuonGeometry.lean, LeanMlir/Proofs/Foundation/MuonNewtonSchulz.lean"
       status: "proved"
       note: "14 theorems; singular-G SVD completion + Newton–Schulz convergence dynamics left open"
     - source: "StableHLO/IREE codegen faithfulness, JAX numeric agreement, training accuracy"

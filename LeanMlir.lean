@@ -25,14 +25,14 @@ import LeanMlir.Proofs.EfficientNet
 import LeanMlir.Proofs.MobileNetV2Close
 import LeanMlir.Proofs.MobileNetV2RenderPC
 import LeanMlir.Proofs.MobileNetV2ChainClose
-import LeanMlir.Proofs.ConvLossFold
+import LeanMlir.Proofs.Foundation.ConvLossFold
 import LeanMlir.Proofs.EfficientNetClose
 import LeanMlir.Proofs.EfficientNetRenderPC
 import LeanMlir.Proofs.EfficientNetChainClose
 import LeanMlir.Proofs.EfficientNetFullB0
-import LeanMlir.Proofs.ResNet34Close
+import LeanMlir.Proofs.Foundation.ResNet34Close
 import LeanMlir.Proofs.ResNet34RenderPC
-import LeanMlir.Proofs.ResNet34ChainClose
+import LeanMlir.Proofs.Foundation.ResNet34ChainClose
 import LeanMlir.Proofs.ConvNeXtClose
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ViTFwdGraph
@@ -57,8 +57,8 @@ import LeanMlir.Proofs.SmoothingGaussian
 -- Verified-codegen bridges (denoted IR + per-op bridge theorems) so doc-gen4
 -- documents them. IRPrint.lean is deliberately left out: its file-writing
 -- #evals run at elaboration time (use `lake env lean …/IRPrint.lean`).
-import LeanMlir.Proofs.IR
+import LeanMlir.Proofs.Foundation.IR
 -- Spec→math ties (rungs B/C/E). Also a Certs root + audited in
 -- tests/AuditAxioms.lean since 2026-07-07: it rotted while orphaned
 -- from every target (the mnv2 6→17-block spec promotion broke its rfl tie).
-import LeanMlir.Proofs.SpecVJP
+import LeanMlir.Proofs.Foundation.SpecVJP

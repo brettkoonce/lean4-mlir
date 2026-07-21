@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.MnistCNN
-import LeanMlir.Proofs.PerChannelBN
+import LeanMlir.Proofs.Foundation.PerChannelBN
 
 /-! # Chapter 4: CIFAR-10 2D CNN (no BatchNorm) — whole-network VJP
 

@@ -1,6 +1,6 @@
-import LeanMlir.Proofs.Tensor
+import LeanMlir.Proofs.Foundation.Tensor
 import LeanMlir.Proofs.CNN
-import LeanMlir.Proofs.StridedConv
+import LeanMlir.Proofs.Foundation.StridedConv
 
 /-!
 # Depthwise Convolution

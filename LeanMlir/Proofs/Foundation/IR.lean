@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.Foundation.MLP
 import LeanMlir.Proofs.CNN
 import LeanMlir.Proofs.LayerNorm
 import LeanMlir.Proofs.EfficientNet

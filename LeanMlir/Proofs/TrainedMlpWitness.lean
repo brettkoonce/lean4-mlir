@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.Foundation.MLP
 import LeanMlir.Proofs.JacobianSeal
 import LeanMlir.Proofs.LipschitzCertInstance
 

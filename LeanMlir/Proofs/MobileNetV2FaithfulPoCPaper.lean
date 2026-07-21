@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.MobileNetV2FaithfulPoC
-import LeanMlir.Proofs.ResNet34FaithfulPoC
+import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoC
 import LeanMlir.Proofs.Cifar8FaithfulPoC
 import LeanMlir.Proofs.CifarBnFaithfulPoC
 

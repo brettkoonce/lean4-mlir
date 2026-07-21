@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.CifarBnClose
-import LeanMlir.Proofs.CnnChainClose
+import LeanMlir.Proofs.Foundation.CnnChainClose
 
 /-! # cifar8 render CLOSE — pinning the deeper (8-conv) CIFAR-CNN cotangent chain
 

@@ -1,7 +1,7 @@
-import LeanMlir.Proofs.IR
+import LeanMlir.Proofs.Foundation.IR
 import LeanMlir.Proofs.CifarCNN
-import LeanMlir.Proofs.StridedConv
-import LeanMlir.Proofs.PerChannelBN
+import LeanMlir.Proofs.Foundation.StridedConv
+import LeanMlir.Proofs.Foundation.PerChannelBN
 import LeanMlir.Proofs.Depthwise
 import LeanMlir.Proofs.MobileNetV2
 import LeanMlir.Proofs.LayerNorm

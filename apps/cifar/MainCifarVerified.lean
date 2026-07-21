@@ -10,7 +10,7 @@ are each proven faithful to the Mathlib `fderiv` math; the whole-network VJP is
 `cifarCnn_has_vjp_at` — audited 3-axiom-clean.
 
 The model is the `cifarVerified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNets`), the same
-layer list whose math VJP is tied in `LeanMlir/Proofs/SpecVJP.lean`. Trains through the
+layer list whose math VJP is tied in `LeanMlir/Proofs/Foundation/SpecVJP.lean`. Trains through the
 packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, He-init, CIFAR `.bin` loader).
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar-verified data`

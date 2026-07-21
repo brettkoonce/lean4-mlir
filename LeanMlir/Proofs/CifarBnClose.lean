@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.PerChannelBN
+import LeanMlir.Proofs.Foundation.PerChannelBN
 
 /-! # Closing the CIFAR-BN render — the BN parameter-gradient bridges (dγ, dβ certified)
 

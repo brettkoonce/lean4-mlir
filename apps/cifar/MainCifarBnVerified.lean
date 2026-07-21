@@ -16,7 +16,7 @@ The BN here is PER-CHANNEL (per-example/instance, `γ/β : [c]`), the form that 
 (~71% vs ~67% @ lr=0.1) — NOT the earlier scalar-global `bnForward` that underperformed
 (~58%). It is per-example ⇒ train=eval (no running stats). The model is the
 `cifarBnVerified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNets`); its math VJP is tied in
-`LeanMlir/Proofs/SpecVJP.lean`. Trains through `VerifiedNet.train` (`mlpTrainStepV`,
+`LeanMlir/Proofs/Foundation/SpecVJP.lean`. Trains through `VerifiedNet.train` (`mlpTrainStepV`,
 He-init for conv/dense, γ=1/β=0 `[c]` for BN).
 
 Companion to `cifar-verified` (no-BN). Run both to compare.

@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.SgdDescentCnn
-import LeanMlir.Proofs.StridedConv
+import LeanMlir.Proofs.Foundation.StridedConv
 import LeanMlir.Proofs.BnFloatBridge
-import LeanMlir.Proofs.PerChannelBN
+import LeanMlir.Proofs.Foundation.PerChannelBN
 
 /-!
 # ℝ→Float32 bridge: the ResNet-34 structural ops

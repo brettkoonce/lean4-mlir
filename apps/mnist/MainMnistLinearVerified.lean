@@ -15,7 +15,7 @@ in-process IREE → GPU — not the Python/CLI stand-in. The training step runs 
 verified `@linear_fwd` via `IreeSession.forwardF32`.
 
 The model is expressed as a `VerifiedNetSpec` (a single dense layer) — the same
-readable layer list whose **math VJP is proven** in `LeanMlir/Proofs/SpecVJP.lean`
+readable layer list whose **math VJP is proven** in `LeanMlir/Proofs/Foundation/SpecVJP.lean`
 (`linearVerified_has_vjp`). Unlike the other verified trainers, the linear model
 keeps a bespoke `main`: its train step uses the 2-argument `linearTrainStepV` FFI
 (separate `W0`/`b0`, zero-init) rather than the packed-params `mlpTrainStepV` the

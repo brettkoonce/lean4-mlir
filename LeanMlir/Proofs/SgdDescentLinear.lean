@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.SgdDescent
-import LeanMlir.Proofs.LinearTrainStep
+import LeanMlir.Proofs.Foundation.LinearTrainStep
 import LeanMlir.Proofs.FloatBridge
 
 /-! # Lipschitz constants for the linear softmax-CE loss

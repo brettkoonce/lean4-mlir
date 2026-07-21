@@ -1,6 +1,6 @@
-import LeanMlir.Proofs.MlpTrainStep
+import LeanMlir.Proofs.Foundation.MlpTrainStep
 import LeanMlir.Proofs.MlpRender
-import LeanMlir.Proofs.LinearFaithfulPoC
+import LeanMlir.Proofs.Foundation.LinearFaithfulPoC
 
 /-! # PoC: the MNIST-MLP train step, proof-tied to the certified SGD step
 

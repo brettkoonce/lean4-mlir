@@ -1,8 +1,8 @@
 import LeanMlir.Proofs.ConvNeXtChainClose
 import LeanMlir.Proofs.ConvNeXtFaithfulPoC
 import LeanMlir.Proofs.MobileNetV2FaithfulPoC
-import LeanMlir.Proofs.ResNet34FaithfulPoC
-import LeanMlir.Proofs.MlpTrainStep
+import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoC
+import LeanMlir.Proofs.Foundation.MlpTrainStep
 
 /-! # PoC: the FULL [3,3,9,3] ConvNeXt-T §1a TIE — the whole net tied through the real forward
 

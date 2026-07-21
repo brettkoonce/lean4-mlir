@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.LinBackFloatBridge
-import LeanMlir.Proofs.CnnChainClose
+import LeanMlir.Proofs.Foundation.CnnChainClose
 
 /-! # ℝ→Float32 bridge for the CNN BACKWARD: maxpool-back + conv-back → whole 8-conv fold
 

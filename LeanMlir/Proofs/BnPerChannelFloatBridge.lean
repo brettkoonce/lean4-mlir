@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.ViTBlockFloatBridge
-import LeanMlir.Proofs.PerChannelBN
+import LeanMlir.Proofs.Foundation.PerChannelBN
 
 /-! # ℝ→Float32 bridge: BatchNorm in `FloatBridges` form (the per-channel keystone)
 

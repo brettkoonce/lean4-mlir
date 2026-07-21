@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.LinearTrainStep
+import LeanMlir.Proofs.Foundation.LinearTrainStep
 
 /-! # PoC: the MNIST-linear train step, proof-tied to the certified SGD step
 

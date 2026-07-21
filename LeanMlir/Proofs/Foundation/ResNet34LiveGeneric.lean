@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ResNet34LiveRealistic
+import LeanMlir.Proofs.Foundation.ResNet34LiveRealistic
 
 /-! # Limit-D strengthening: a whole-net ResNet-34 VJP with *arbitrary* downsample convs
 

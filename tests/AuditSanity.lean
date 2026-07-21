@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.Tensor
-import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.Foundation.Tensor
+import LeanMlir.Proofs.Foundation.MLP
 
 /-!
 # Audit sanity examples

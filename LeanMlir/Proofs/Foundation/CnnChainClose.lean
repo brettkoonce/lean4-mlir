@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.CnnTrainStep
-import LeanMlir.Proofs.MlpTrainStep
+import LeanMlir.Proofs.Foundation.CnnTrainStep
+import LeanMlir.Proofs.Foundation.MlpTrainStep
 
 /-! # Upgrading the CNN conv close from a generic cotangent to the actual backward chain
 

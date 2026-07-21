@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.MobileNetV2JacobianSeal
-import LeanMlir.Proofs.ResNet34
+import LeanMlir.Proofs.Foundation.ResNet34
 
 /-!
 # Full-depth `Mnv2Live` witness + level-3 seal (17 inverted-residual blocks)

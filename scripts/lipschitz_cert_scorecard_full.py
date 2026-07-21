@@ -358,7 +358,7 @@ def emit_image(A, i, tags_for_i):
 L1 = []
 A = L1.append
 A("import LeanMlir.Proofs.LipschitzCertScorecard")
-A("import LeanMlir.Proofs.ListDot")
+A("import LeanMlir.Proofs.Foundation.ListDot")
 A("")
 A("/-! # Full-input scorecard, part 1/4: the two 784→16→10 nets")
 A("")

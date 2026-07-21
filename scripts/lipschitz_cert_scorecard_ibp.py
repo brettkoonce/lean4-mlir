@@ -108,7 +108,7 @@ def emit_net(tag, W1q, W2q, out_path):
 
     Lb = []
     A = Lb.append
-    A("import LeanMlir.Proofs.IntervalBound")
+    A("import LeanMlir.Proofs.Foundation.IntervalBound")
     A("import LeanMlir.Proofs.LipschitzCertScorecardFullImgsA")
     A("import LeanMlir.Proofs.LipschitzCertScorecardFullImgsB")
     A("")

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.Foundation.MLP
 
 /-! # ℝ → Float32 bridge, Tier 1: standard-model rounding bounds
 

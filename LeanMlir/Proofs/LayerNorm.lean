@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Tensor
+import LeanMlir.Proofs.Foundation.Tensor
 import LeanMlir.Proofs.BatchNorm
 import Mathlib.Analysis.SpecialFunctions.ExpDeriv
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.Basic

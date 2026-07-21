@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.StableHLO
-import LeanMlir.Proofs.CnnTrainStep
+import LeanMlir.Proofs.Foundation.CnnTrainStep
 import LeanMlir.Proofs.EfficientNetClose
 
 /-! # PoC: the full-16 (262-param) EfficientNet-B0 train step, proof-tied (the §1 fold, den)

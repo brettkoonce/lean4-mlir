@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ResNet34Live2
+import LeanMlir.Proofs.Foundation.ResNet34Live2
 
 /-!
 # A live ResNet-34 witness — the 2-channel non-degenerate witness (A1 complete, level 2)

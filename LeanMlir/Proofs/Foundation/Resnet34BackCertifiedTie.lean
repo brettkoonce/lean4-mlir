@@ -5,7 +5,7 @@ import LeanMlir.Proofs.EfficientNetChainClose
 import LeanMlir.Proofs.StridedConvBackFloatBridge
 import LeanMlir.Proofs.Resnet34DownBackFloatBridge
 import LeanMlir.Proofs.Resnet34WholeBackFloatBridge
-import LeanMlir.Proofs.IR
+import LeanMlir.Proofs.Foundation.IR
 
 /-! # §B: the r34 identity-block backward float bridge targets the CERTIFIED VJP
 

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.CnnChainClose
+import LeanMlir.Proofs.Foundation.CnnChainClose
 import LeanMlir.Proofs.CnnRender
 import LeanMlir.Proofs.CifarCNN
 

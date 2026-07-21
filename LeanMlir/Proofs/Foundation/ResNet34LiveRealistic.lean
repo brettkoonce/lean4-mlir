@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ResNet34LivePC
+import LeanMlir.Proofs.Foundation.ResNet34LivePC
 
 /-!
 # Realistic-dimension live ResNet-34 witness (`planning/whole_network_backward.md` Item D)

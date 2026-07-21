@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.Foundation.MLP
 
 /-!
 # Mutation probe — confirms `correct := rfl` pins backward to the canonical sum

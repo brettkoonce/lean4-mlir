@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.ConvNeXtBackFloatBridge
 import LeanMlir.Proofs.DepthwiseBackCertifiedTie
-import LeanMlir.Proofs.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 
 /-! # §B: the ConvNeXt block-body backward float bridge targets the CERTIFIED VJP
 

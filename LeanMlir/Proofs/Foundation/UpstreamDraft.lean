@@ -14,7 +14,7 @@ A `Certs` root (audited in `tests/AuditAxioms.lean`) so the drafts can't rot bet
 Mathlib pin bumps while the PRs are in flight. Once a PR merges and the pin catches up,
 delete the corresponding section here and cite Mathlib directly.
 
-Fast check: `lake env lean LeanMlir/Proofs/UpstreamDraft.lean` -/
+Fast check: `lake env lean LeanMlir/Proofs/Foundation/UpstreamDraft.lean` -/
 
 namespace MathlibUpstream
 

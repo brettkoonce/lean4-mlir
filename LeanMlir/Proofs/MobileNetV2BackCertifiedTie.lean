@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.MobileNetV2BackFloatBridge
 import LeanMlir.Proofs.MobileNetV2RenderPC
 import LeanMlir.Proofs.DepthwiseBackCertifiedTie
-import LeanMlir.Proofs.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 
 /-! # §B: the MobileNetV2 inverted-residual body backward targets the CERTIFIED VJP
 

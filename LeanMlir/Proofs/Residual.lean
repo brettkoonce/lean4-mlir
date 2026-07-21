@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Tensor
+import LeanMlir.Proofs.Foundation.Tensor
 
 /-!
 # Residual Connections — Gradient Accumulation

@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.ResNet34FaithfulPoC
-import LeanMlir.Proofs.ResNet34ChainClose
+import LeanMlir.Proofs.Foundation.ResNet34FaithfulPoC
+import LeanMlir.Proofs.Foundation.ResNet34ChainClose
 import LeanMlir.Proofs.ResNet34RenderPC
 
 /-! # PoC: the ResNet-34 §1a TIE — the whole net tied through the real forward

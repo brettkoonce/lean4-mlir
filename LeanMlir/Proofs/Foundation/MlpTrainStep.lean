@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.IR
-import LeanMlir.Proofs.LinearTrainStep
+import LeanMlir.Proofs.Foundation.IR
+import LeanMlir.Proofs.Foundation.LinearTrainStep
 
 /-! # M2 — the MLP train step: per-layer parameter-gradient assembly
 

@@ -48,8 +48,8 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Attention, `LeanMlir.Proofs.CNN,
              `LeanMlir.Proofs.Depthwise, `LeanMlir.Proofs.MobileNetV2,
              `LeanMlir.Proofs.ConvNeXt, `LeanMlir.Proofs.EfficientNet,
-             `LeanMlir.Proofs.MnistCNN, `LeanMlir.Proofs.StridedConv,
-             `LeanMlir.Proofs.PerChannelBN, `LeanMlir.Proofs.IR,
+             `LeanMlir.Proofs.MnistCNN, `LeanMlir.Proofs.Foundation.StridedConv,
+             `LeanMlir.Proofs.Foundation.PerChannelBN, `LeanMlir.Proofs.Foundation.IR,
              `LeanMlir.Proofs.StableHLO,
              -- the renderers the verified-render drift guard re-elaborates
              `LeanMlir.Proofs.MlpRender, `LeanMlir.Proofs.CnnRender,
@@ -80,23 +80,23 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.MobileNetV2JacobianSeal,
              -- Chapter-6 ResNet Milestone B: stride-2 SAME convolution (the hard
              -- new downsampling op) = decimate ∘ stride-1 conv, with its input-VJP.
-             `LeanMlir.Proofs.StridedConv,
+             `LeanMlir.Proofs.Foundation.StridedConv,
              -- Chapter-6 ResNet Milestone B: the deep-block chain (a list of
              -- same-type residual blocks composes to one VJP) — 16-block depth.
-             `LeanMlir.Proofs.ResNet34,
+             `LeanMlir.Proofs.Foundation.ResNet34,
              -- Chapter-6 ResNet Milestone B8: per-channel BatchNorm (block-diagonal
              -- VJP via a per-row generalization of `rowwise_has_vjp_mat`).
-             `LeanMlir.Proofs.PerChannelBN,
+             `LeanMlir.Proofs.Foundation.PerChannelBN,
              -- Limit-D strengthening: the 224×224 live ResNet-34 whole-net VJP with
              -- the three downsample projection convs generalized to ARBITRARY kernels
              -- (the β-positivity discharge is weight-independent). 3-axiom clean.
-             `LeanMlir.Proofs.ResNet34LiveGeneric,
+             `LeanMlir.Proofs.Foundation.ResNet34LiveGeneric,
              -- opt-in Mathlib.Matrix interop; not imported by the suite,
              -- listed here so CI keeps it green.
              `LeanMlir.Proofs.MatBridge,
              -- denoted StableHLO-subset IR (Phase 0a/0b spike); bridges the
              -- emitted backward graph to the proven HasVJP.backward.
-             `LeanMlir.Proofs.IR,
+             `LeanMlir.Proofs.Foundation.IR,
              -- R4 printer-faithfulness Stage A (ch 2): StableHLO-subset AST +
              -- denotation `den` proven to match the linear train-step math.
              `LeanMlir.Proofs.StableHLO,
@@ -109,11 +109,11 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.StableHLOLex,
              -- M1 (planning/verified_train_step.md): the linear train step bundled
              -- into one SGD-on-certified-softmax-CE-gradient theorem.
-             `LeanMlir.Proofs.LinearTrainStep,
+             `LeanMlir.Proofs.Foundation.LinearTrainStep,
              -- M2: the MLP per-layer parameter-gradient assembly (Crux A).
-             `LeanMlir.Proofs.MlpTrainStep,
+             `LeanMlir.Proofs.Foundation.MlpTrainStep,
              -- M3: the CNN convolution parameter-gradient bridges.
-             `LeanMlir.Proofs.CnnTrainStep,
+             `LeanMlir.Proofs.Foundation.CnnTrainStep,
              -- MLP render half: the train-step text as a name-threaded render of the
              -- proven forward graphs (multi-intermediate generalization).
              `LeanMlir.Proofs.MlpRender,
@@ -129,7 +129,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.CifarBnClose,
              -- CNN conv-close upgrade: the conv param closes pinned to the actual
              -- backward-chain cotangent (Back3 maxpool/conv via flatDenote + relu masks).
-             `LeanMlir.Proofs.CnnChainClose,
+             `LeanMlir.Proofs.Foundation.CnnChainClose,
              -- Deeper (8-conv) CIFAR-CNN close: cifar8{,Bn}FwdGraph_faithful's backward
              -- peer — each conv W/b, BN γ/β, dense W/b output pinned to the actual 4-stage
              -- backward-chain cotangent (the CnnChainClose recipe + BN, two more pool stages).
@@ -148,7 +148,7 @@ lean_lib «Certs» where
              -- The cotangent pass / = ∂loss/∂θ fold: the certified per-layer conv/depthwise
              -- Jacobian contracted with ∂loss/∂(layer output) IS the total loss gradient (pdiv_comp
              -- at a smooth point). The conv analogue of mlp_hidden_total_loss_grad; program-wide.
-             `LeanMlir.Proofs.ConvLossFold,
+             `LeanMlir.Proofs.Foundation.ConvLossFold,
              -- EfficientNet-B0 close (Item C): a FREE close — every param family reuses an
              -- existing bridge (5×5 depthwise pinned; batch-norm γ/β = per-channel BN at m=N·h·w;
              -- SE squeeze/excite are dense → M2). No new VJP.
@@ -156,13 +156,13 @@ lean_lib «Certs» where
              -- ResNet-34 close (Item C): a FREE close — every r34 param family certified
              -- by an existing bridge (the 7×7 stem + 3×3 strided projection pinned to the
              -- generic strided conv W/b bridges; no new VJP).
-             `LeanMlir.Proofs.ResNet34Close,
+             `LeanMlir.Proofs.Foundation.ResNet34Close,
              -- ResNet-34 render (Item A): the PER-CHANNEL-BN typed SHlo forward graph (full
              -- 16-block [3,4,6,3] net, 7×7 stem, maxpool) + per-block + whole-net faithfulness.
              `LeanMlir.Proofs.ResNet34RenderPC,
              -- ResNet-34 cotangent-chain close (Item D): the Item C conv bridges pinned to the
              -- cotangent the backward chain delivers (id/downsample block + maxpool-back stem).
-             `LeanMlir.Proofs.ResNet34ChainClose,
+             `LeanMlir.Proofs.Foundation.ResNet34ChainClose,
              -- ConvNeXt close (Item C): mostly reuse (7×7 depthwise pinned to the generic
              -- bridges) + the two genuinely-new families — layer-scale γ (dγ = x⊙dy) and
              -- scalar-LN γ/β (the Vec-1 embedding bridging bn_grad_gamma/beta).
@@ -344,7 +344,7 @@ lean_lib «Certs» where
              -- here, mirrors resblock_has_vjp_at — + the conv-leaf tie (convFlatBack_eq_vjp_backward,
              -- via IR.convBackDenote_eq_input_grad_formula) ⇒ r34IdBlockBack(pinned) = its .backward.
              -- b1-free (no batched↔non-batched reconciliation).
-             `LeanMlir.Proofs.Resnet34BackCertifiedTie,
+             `LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie,
              -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a
              -- forward depthwise conv at the spatially-reversed kernel (dwReverse, FREE reuse of
              -- floatBridges_depthwise — the depthwise twin of convBack); strided variant =
@@ -403,7 +403,7 @@ lean_lib «Certs» where
              -- bridge is stated on a fresh skeleton (r34Forward/mnv2Forward/convnextForward) with abstract
              -- blocks; these rfl lemmas plug the concrete blocks (idFwd/downFwd, invresBody*PC,
              -- convNextStageK/cnxDownW) into the slots ⇒ each skeleton = THE committed real ℝ-forward def.
-             `LeanMlir.Proofs.WholeNetForwardTies,
+             `LeanMlir.Proofs.Foundation.WholeNetForwardTies,
              -- §B shared prerequisite: the DEPTHWISE adjoint gate (the depthwise twin of
              -- IR.convBackDenote_eq_input_grad_formula) — depthwiseConv2d (dwReverse W) 0 =
              -- depthwiseConv2d_input_grad_formula W, all dims/odd kernels, via Finset.sum_bij' on the
@@ -479,12 +479,12 @@ lean_lib «Certs» where
              -- kit (maxpool/BN/ReLU preserve strict pointwise channel domination —
              -- the non-vacuity carrier). Build-checked; not yet a live witness, so
              -- also NOT in the AuditAxioms headline set.
-             `LeanMlir.Proofs.ResNet34Live2,
+             `LeanMlir.Proofs.Foundation.ResNet34Live2,
              -- Item A: the first NON-DEGENERATE ResNet-34 whole-net backward witness
              -- (level 2) — 2-channel stem + maxpool + 3 strided downsamples + GAP +
              -- dense, every smoothness hypothesis discharged, forward X ≠ forward 0
              -- via the channel-order invariant. In the AuditAxioms headline set.
-             `LeanMlir.Proofs.ResNet34LivePC,
+             `LeanMlir.Proofs.Foundation.ResNet34LivePC,
              -- Item A level 3: the nonzero-Jacobian SEAL for the live ResNet-34
              -- witness (fderiv ℝ liveFwd2 Y ≠ 0 ⇒ backward not the zero map). Sealed
              -- at a channel-symmetric base Y via the BN channel-difference identity
@@ -495,7 +495,7 @@ lean_lib «Certs» where
              -- sealed. The 13 identity blocks (zeroed body ⇒ relu(x+1)=x+1) wash out
              -- through the downsamples' BN (bn(z+c)=bn(z)), so the full net = the
              -- empty-chain witness + 2 and the seal reduces to ResNet34LiveSeal's.
-             `LeanMlir.Proofs.ResNet34LiveFull,
+             `LeanMlir.Proofs.Foundation.ResNet34LiveFull,
              -- MobileNetV2 FULL DEPTH: the real 17-block live MobileNetV2, level-3
              -- sealed. 15 identity skip blocks (zeroed body ⇒ ivId a = a+3, no relu —
              -- linear bottleneck) shift by +45; GAP + identity head pass it, so the
@@ -507,7 +507,7 @@ lean_lib «Certs» where
              -- 224→112→56→28→14→7). β-parametric downsample (β=64>√1568) + stem
              -- (β=160>√25088); every smoothness/no-tie hyp discharged at n up to 25088,
              -- forward X≠0 (level 2). Confirms no discharge secretly used a small n.
-             `LeanMlir.Proofs.ResNet34LiveRealistic,
+             `LeanMlir.Proofs.Foundation.ResNet34LiveRealistic,
              -- Item D level 3: the nonzero-Jacobian SEAL at 224×224. A uniform channel-0
              -- perturbation makes channel0 = channel1 + δ everywhere, so 7×7 GAP of a
              -- uniform diff = δ and maxpool(ch0)=maxpool(ch1)+δ for ALL t (max(a+δ,b+δ)=
@@ -536,7 +536,7 @@ lean_lib «Certs» where
              -- body (conv-bn ∘ conv-bn-relu), and the identity-block capstone —
              -- relu (_at) with an OUTER post-residual relu (the extra factor
              -- vs the MBConv/inverted-residual blocks).
-             `LeanMlir.Proofs.ResNet34BackB0,
+             `LeanMlir.Proofs.Foundation.ResNet34BackB0,
              -- ConvNeXt backward-graph faithfulness (den-level): the per-example
              -- (batch-1) peer of EfficientNetBackB0. LayerNorm is per-example
              -- separable, so no batched machinery — the block-body backward graph
@@ -556,7 +556,7 @@ lean_lib «Certs» where
              -- trains on), incl. the param-grad/SGD "tail fold". Template for
              -- making each chapter's verified trainer faithful — see
              -- planning/verified_faithful_sweep.md.
-             `LeanMlir.Proofs.LinearFaithfulPoC,
+             `LeanMlir.Proofs.Foundation.LinearFaithfulPoC,
              -- E4M3 (fp8) render-tie (planning §3b): the emitted block-scaled
              -- int-matmul graph denotes the intended dequant-first algorithm
              -- (the per-output dequant scale factors out of the fp32 accumulate),
@@ -570,12 +570,12 @@ lean_lib «Certs» where
              -- mnist-MLP peer: the whole 3-layer MLP train step folded into the
              -- verified AST (forward + backward chain + 6 weightSgd/biasSgd), each
              -- output's den proven = certified via mlp_render_*_certified.
-             `LeanMlir.Proofs.MlpFaithfulPoC,
+             `LeanMlir.Proofs.Foundation.MlpFaithfulPoC,
              -- mnist-CNN peer: the conv train step folded into the verified AST via
              -- the new convWeightSgd/convBiasSgd ops (conv layers) + weightSgd/biasSgd
              -- (dense head); each of the 10 outputs' den proven = certified via the
              -- conv chain bridges + the M2 dense bridges (CnnFaithfulPoC.lean).
-             `LeanMlir.Proofs.CnnFaithfulPoC,
+             `LeanMlir.Proofs.Foundation.CnnFaithfulPoC,
              -- ch5-CIFAR peer (no-BN, deeper 2-scale net): reuses the cnn conv ops +
              -- dense bridges (NO new core ops) — generic convW/convB_den cover all 4
              -- conv layers, the 3-dense head via the M2 bridges (CifarFaithfulPoC.lean).
@@ -601,11 +601,11 @@ lean_lib «Certs» where
              -- (convStrided{Weight,Bias}Sgd) for the 7×7 stem + 3×3 downsample/projection
              -- convs den-certified via mnv2_render_stem_conv{W,b}_certified; the 142 other
              -- params reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics (ResNet34FaithfulPoC.lean).
-             `LeanMlir.Proofs.ResNet34FaithfulPoC,
+             `LeanMlir.Proofs.Foundation.ResNet34FaithfulPoC,
              -- ch6-ResNet-34 §1a TIE: per-block-type tie lemmas (identity/downsample/stem) at the
              -- real forward + ResNet34ChainClose cotangents, the residual fan-in SUM constructors
              -- (idBlockCotIn/downBlockCotIn), loss-cot + dense fold (ResNet34TiePoC.lean).
-             `LeanMlir.Proofs.ResNet34TiePoC,
+             `LeanMlir.Proofs.Foundation.ResNet34TiePoC,
              -- ch7-MobileNetV2 §1 fold (depthwise half): the 4 new depthwise SGD ops
              -- (depthwise{,Strided}{Weight,Bias}Sgd) den-certified via the mnv2_render_depthwise*
              -- bridges; expand/project/BN/dense reuse the CifarPoC/CifarBnPoC/Cifar8PoC generics
@@ -680,7 +680,7 @@ lean_lib «Certs» where
              -- continuous_cdf_iff ⟺ NoAtoms, cdf_pos/lt_one/mem_Ioo) + PR2
              -- gaussianReal instantiations (+ symmetry, mean-shift), kept
              -- compiling on the pin while the Mathlib PRs are in flight.
-             `LeanMlir.Proofs.UpstreamDraft,
+             `LeanMlir.Proofs.Foundation.UpstreamDraft,
              -- The real Gaussian probit (planning/smoothing_gaussian_lemma.md, G1): the
              -- smoothing radius instantiated at the TRUE standard-normal quantile —
              -- stdNormalCDF strict-mono + symmetry, quantile MonotoneOn (0,1) + odd-about-½,
@@ -734,12 +734,12 @@ lean_lib «Certs» where
              -- Muon geometry (planning/muon_geometry.md): the optimizer as steepest descent under
              -- a norm. SGD = Euclidean (Cauchy-Schwarz), sign/Adam = L∞→L¹, Muon = operator→nuclear
              -- with the polar factor UVᵀ realizing the nuclear norm (achievability, given an SVD).
-             `LeanMlir.Proofs.MuonGeometry,
+             `LeanMlir.Proofs.Foundation.MuonGeometry,
              -- Newton–Schulz convergence (planning/muon_ns_convergence.md): the Muon matmul iteration
              -- aX + b(XXᵀ)X + c(XXᵀ)²X actually COMPUTES the polar factor UVᵀ. P1 = the spectral-step
              -- lemma: a step is the scalar map φ(t)=at+bt³+ct⁵ applied per singular value (U,V carried
              -- through), so matrix convergence to UVᵀ reduces to scalar convergence φ^[k](σᵢ)→1.
-             `LeanMlir.Proofs.MuonNewtonSchulz,
+             `LeanMlir.Proofs.Foundation.MuonNewtonSchulz,
              -- The robustness certificate INSTANTIATED (the 2026-07 audit's #1 gap):
              -- certified Frobenius Lipschitz constants (denseE_lipschitzL2 — ‖W‖₂ ≤ ‖W‖_F,
              -- no power-iteration estimate in the trust path), the hand-picked linear +
@@ -774,8 +774,8 @@ lean_lib «Certs» where
              -- OOM'd/priced out the shared 4-core runners, and heavy corpus
              -- tails must not break the core workflows (certs.yml + blueprint
              -- both build `Certs`).
-             `LeanMlir.Proofs.ListDot,
-             `LeanMlir.Proofs.IntervalBound,
+             `LeanMlir.Proofs.Foundation.ListDot,
+             `LeanMlir.Proofs.Foundation.IntervalBound,
              -- The binary32/fp8-E4M3 hardware models, CONSTRUCTED (post_audit_roadmap §2):
              -- rndP p = round-to-nearest on the unbounded-exponent p-bit grid, standard
              -- model |rndP p x − x| ≤ 2⁻¹⁻ᵖ|x| PROVED (rndP_err) — the former
@@ -833,10 +833,10 @@ lean_lib «Certs» where
              -- representative 6-block rung AND gains the full-paper 17-block
              -- B/C/E tie, denoteMobilenetPaper) — a root here so CI
              -- re-elaborates it.
-             `LeanMlir.Proofs.SpecVJP,
+             `LeanMlir.Proofs.Foundation.SpecVJP,
              -- The canonical-MLP surface (784→512→512→10): the generic MLP chain
              -- instantiated at the ch2 reference dims (see MlpCanonical.lean).
-             `LeanMlir.Proofs.MlpCanonical]
+             `LeanMlir.Proofs.Foundation.MlpCanonical]
 
 /-- **`lake build CertsHeavy`** — the GENERATED full-input certificate
     instances (784-dim scorecard + per-pair LipSDP + IBP L∞: ~90k lines of
@@ -872,7 +872,7 @@ lean_lib «CertsHeavy» where
     `planning/proofs_minimal_set.md`. -/
 lean_lib «ProofsMinimal» where
   srcDir := "."
-  roots := #[`LeanMlir.Proofs.LinearFaithfulPoC, `LeanMlir.Proofs.SgdDescentLinear]
+  roots := #[`LeanMlir.Proofs.Foundation.LinearFaithfulPoC, `LeanMlir.Proofs.SgdDescentLinear]
 
 /-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
     The half that actually emits StableHLO and runs on device. -/

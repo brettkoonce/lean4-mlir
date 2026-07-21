@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ResNet34Close
+import LeanMlir.Proofs.Foundation.ResNet34Close
 import LeanMlir.Proofs.StableHLO
 
 /-! # r34 Item D — pinning the ResNet-34 cotangent chain (the `CnnChainClose` analogue)

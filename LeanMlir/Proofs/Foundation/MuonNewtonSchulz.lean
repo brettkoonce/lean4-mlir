@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.MuonGeometry
+import LeanMlir.Proofs.Foundation.MuonGeometry
 import Mathlib.Logic.Function.Iterate
 import Mathlib.Topology.Order.MonotoneConvergence
 import Mathlib.Dynamics.FixedPoints.Topology
@@ -6,7 +6,7 @@ import Mathlib.Dynamics.FixedPoints.Topology
 /-! # Newton–Schulz convergence, P1: the iteration is a *scalar* map in disguise
 
 The capstone of the Muon-geometry ladder (`planning/muon_ns_convergence.md`,
-`planning/muon_geometry.md`, `LeanMlir/Proofs/MuonGeometry.lean`). L1–L6 proved that the polar factor
+`planning/muon_geometry.md`, `LeanMlir/Proofs/Foundation/MuonGeometry.lean`). L1–L6 proved that the polar factor
 `UVᵀ` is the *right object* — operator-norm steepest descent (L3, von Neumann), the nuclear norm's
 argmax, Shampoo's single step (L5), the nearest orthogonal matrix to `G` (L6). **What remains is that
 the implementation actually computes it:** Muon's matmul iteration

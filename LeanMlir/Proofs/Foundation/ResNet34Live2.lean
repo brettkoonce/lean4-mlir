@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ResNet34
+import LeanMlir.Proofs.Foundation.ResNet34
 import LeanMlir.Proofs.JacobianSeal
 
 /-!

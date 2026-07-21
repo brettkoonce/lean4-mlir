@@ -1,5 +1,5 @@
 import LeanMlir.VerifiedNets
-import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.Foundation.MLP
 import LeanMlir.Proofs.MnistCNN
 import LeanMlir.Proofs.CifarCNN
 import LeanMlir.Proofs.MobileNetV2
@@ -10,7 +10,7 @@ import LeanMlir.Proofs.ConvNeXt
 import LeanMlir.Proofs.ConvNeXtFullT
 import LeanMlir.Proofs.Attention
 import LeanMlir.Proofs.ViTDepthK
-import LeanMlir.Proofs.ResNet34
+import LeanMlir.Proofs.Foundation.ResNet34
 import LeanMlir.Proofs.ResNet34RenderPC
 import LeanMlir.Proofs.StableHLO
 

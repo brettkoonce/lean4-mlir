@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.ResNet34Close
+import LeanMlir.Proofs.Foundation.ResNet34Close
 import LeanMlir.Proofs.Cifar8FaithfulPoC
 import LeanMlir.Proofs.CifarBnFaithfulPoC
 

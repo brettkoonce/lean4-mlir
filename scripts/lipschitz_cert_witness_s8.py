@@ -144,7 +144,7 @@ open("/tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax/8f48005c-0a6
 # ═══ emit trained-weight VJP witness file ═══
 W = []
 A = W.append
-A("import LeanMlir.Proofs.MLP")
+A("import LeanMlir.Proofs.Foundation.MLP")
 A("import LeanMlir.Proofs.JacobianSeal")
 A("import LeanMlir.Proofs.LipschitzCertInstance")
 A("")

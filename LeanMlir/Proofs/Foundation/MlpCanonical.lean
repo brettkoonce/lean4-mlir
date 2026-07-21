@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.SgdDescentMlp
 import LeanMlir.Proofs.LinBackFloatBridge
-import LeanMlir.Proofs.MlpFaithfulPoC
+import LeanMlir.Proofs.Foundation.MlpFaithfulPoC
 
 /-! # The CANONICAL MNIST MLP — 784→512→512→10 (ReLU, biased)
 

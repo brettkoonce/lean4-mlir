@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.CnnBackFloatBridge
-import LeanMlir.Proofs.ResNet34
+import LeanMlir.Proofs.Foundation.ResNet34
 
 /-! # ℝ→Float32 bridge for the STRIDED-conv backward (r34 down-blocks + stem)
 

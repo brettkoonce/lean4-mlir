@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.DepthwiseBackFloatBridge
 import LeanMlir.Proofs.StridedConvBackFloatBridge
-import LeanMlir.Proofs.IR
+import LeanMlir.Proofs.Foundation.IR
 
 /-! # §B shared prerequisite: the DEPTHWISE adjoint gate + leaf ties
 

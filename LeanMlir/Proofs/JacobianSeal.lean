@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.MLP
+import LeanMlir.Proofs.Foundation.MLP
 
 /-!
 # Nonzero-Jacobian seal — the generic "the backward is non-trivial here" bridge

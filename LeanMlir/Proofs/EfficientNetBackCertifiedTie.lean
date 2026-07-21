@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.EfficientNetBackFloatBridge
 import LeanMlir.Proofs.DepthwiseBackCertifiedTie
-import LeanMlir.Proofs.Resnet34BackCertifiedTie
+import LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie
 
 /-! # §B: the EfficientNet MBConv body backward targets the CERTIFIED VJP
 
