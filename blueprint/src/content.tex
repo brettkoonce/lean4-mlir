@@ -11450,40 +11450,31 @@ keeps the in-graph one-hot embedding and head matmuls cheap and the
 tokenizer auditable.
 \normalsize
 
-\medskip\noindent\textbf{Building the BraTS dataset.} Brain-tumour
-segmentation has two public faces, and the choice between them is a
-reproducibility decision. \emph{BraTS~2021 proper} (1{,}251 cases) is
+\medskip\noindent\textbf{Building the BraTS dataset.}
+\emph{BraTS~2021 proper} (1{,}251 cases) is
 gated behind a free Synapse account \emph{and} a signed research-use
-agreement, so no script can fetch it --- a demo whose first step is ``go
-register on Synapse'' is a demo readers do not run. The \textbf{Medical
+agreement, so no script can fetch it. The \textbf{Medical
 Segmentation Decathlon}'s \textbf{Task01\_BrainTumour} is the same task
 from open storage: 484 labelled 4D volumes built from the BraTS
 2016/2017 cases, the same four co-registered MRI modalities
 (FLAIR / T1w / T1gd / T2w) and the same glioma sub-regions, as a single
-7.6\,GB tarball over unauthenticated S3. That is what
-\texttt{download\_brats.sh} fetches --- and it splits the file into
-parallel ranged \texttt{curl}s, since S3 throttles per connection, taking
-the download from $\sim$3\,h single-stream to $\sim$12\,min. The cost of
-the choice, stated plainly: 484 volumes rather than 1{,}251, and numbers
-that are \emph{not} comparable to a BraTS~2021 leaderboard --- this is a
-real segmentation result on real medical data that any reader can
-reproduce, not a challenge entry.
+7.6\,GB tarball over S3. Thus we have fewer volumes and numbers that are
+\emph{not} comparable to a BraTS~2021 leaderboard --- but this is also a
+real segmentation result on real medical data that a reader can
+reproduce.
 
-\smallskip\noindent Two preprocessing details are load-bearing.
+\smallskip\noindent Preprocessing details:
 \texttt{preprocess\_brats.py} ships a \textbf{dependency-free NIfTI-1
-reader} (numpy only): a \texttt{pip install nibabel} is a reader-hostile
-first step under PEP~668's externally-managed-environment lock, so the
-$\sim$40-line header parser is cross-validated against nibabel~5.4.2 on
-nine cases (column-major, big-endian, \texttt{scl\_slope}/\texttt{scl\_inter})
-instead. And the two decisions that would silently ruin the numbers if
-done the obvious way: intensities are z-scored over \emph{brain voxels
-only} (BraTS volumes are skull-stripped, so $\sim$83\,\% of each is exact
-zero and whole-volume statistics would crush the tissue contrast), and
-the train/val split is \emph{by patient, not by slice} (adjacent axial
-slices of one brain are near-duplicates, so a slice-level split leaks
-memorized neighbours across the boundary). Volumes are quantized to
-uint8 over a $\pm5\sigma$ window and the C loader inverts it, matching
-the on-disk convention of every other dataset here.
+reader} (numpy only) and two decisions that would silently ruin the
+numbers if done the obvious way: intensities are z-scored over
+\emph{brain voxels only} (BraTS volumes are skull-stripped, so
+$\sim$83\,\% of each is exact zero and whole-volume statistics would
+crush the tissue contrast), and the train/val split is \emph{by patient,
+not by slice} (adjacent axial slices of one brain are near-duplicates, so
+a slice-level split leaks memorized neighbours across the boundary).
+Volumes are quantized to uint8 over a $\pm5\sigma$ window and the C
+loader inverts it, matching the on-disk convention of every other dataset
+here.
 \emph{Reference:} Antonelli et al., \emph{The Medical Segmentation
 Decathlon}, Nature Communications~13, 4128 (2022), atop the underlying
 BraTS work (Menze et al.\ 2015, Bakas et al.\ 2017).
