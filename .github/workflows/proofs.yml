@@ -226,6 +226,10 @@ jobs:
           # Core Library = LeanMlir/ minus the Proofs/ subtree, plus the root umbrella.
           core() { find LeanMlir -name "*.lean" -not -path "LeanMlir/Proofs/*" -not -path "*/.lake/*"; ls LeanMlir.lean 2>/dev/null; }
           echo "| Proofs | $(lf LeanMlir/Proofs) | $(ll LeanMlir/Proofs) |" >> $GITHUB_STEP_SUMMARY
+          # Per-bucket breakdown of the Proofs row (the six subdirectories).
+          for d in Foundation Architectures Float Codegen Certificates Training; do
+            echo "| — $d | $(lf LeanMlir/Proofs/$d) | $(ll LeanMlir/Proofs/$d) |" >> $GITHUB_STEP_SUMMARY
+          done
           echo "| Core Library | $(core | wc -l) | $(core | xargs cat 2>/dev/null | wc -l) |" >> $GITHUB_STEP_SUMMARY
           echo "| Bestiary | $(lf Bestiary) | $(ll Bestiary) |" >> $GITHUB_STEP_SUMMARY
           # Trainers = apps/**/Main*.lean (all backends/optimizers) + the historical/ trainers.
