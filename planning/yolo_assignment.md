@@ -1,5 +1,18 @@
 # yolo_assignment.md — target assignment (detection-infra brick #4)
 
+> # ⛔ RESOLVED 2026-07-22 — EVERY REFUTATION IN THIS DOC WAS MEASURED ON SCRAMBLED DATA
+>
+> `lean_f32_shuffle` permuted images by a full record but swapped only a hardcoded 4 bytes of
+> each label, so the detector trained on mismatched image/target pairs on every epoch and
+> could only ever learn the marginal target distribution. **That is why mAP was 0.0001 for
+> every lever: no lever could have worked.** Fixed ⇒ mAP 0.0001 → **0.1167**, recall 0.118 →
+> **0.7353**. See `planning/yolo_scoring.md`'s banner and `planning/jax_gradient_oracle.md` §0.
+>
+> The four refutations are **void as statements about the levers** — they measured a broken
+> data path, not T1a/T1b/T2-bias/T2a. The "target assignment is the constraint" thesis and
+> the ring/neighbour analysis are likewise void. Re-measure before re-adopting or re-refuting
+> any of it. The numpy probes themselves are still sound instruments.
+
 Handoff for the VisDrone detector's **last untested hypothesis**. Prereqs: `yolo_fpn.md`
 (the FPN build + the Tier 1/2 refutations), `yolo_drone.md` (overall plan), memories
 `yolo-fpn-thread` + `visdrone-fetch-and-wsa`. Written 2026-07-19, after Tier 2 was
@@ -157,7 +170,10 @@ Note this also inverts Risk 4: **P2/resolution is not a deferred Tier 3 nicety, 
 constraint.** VisDrone at 448px destroys the pixels the box regressor needs; a pedestrian
 ~20px in the source image is ~6px after the resize.
 
-### Suggested next levers (measure first, as always)
+### ⚠️ SUPERSEDED — suggested next levers (measure first, as always)
+
+*(The resolution probe below refuted lever 1 and overturned the reframing this list rests
+on. Lever 2 — reporting mAP@0.25 — still stands. Kept for the record.)*
 
 1. **Input resolution / P2 scale.** The only lever the 0c curve supports. Cheapest probe:
    re-encode + eval at 768px or add a stride-4 P2 level, and watch recall@0.5, not mAP.
@@ -166,6 +182,261 @@ constraint.** VisDrone at 448px destroys the pixels the box regressor needs; a p
    four levers were judged against a metric that was saturated at zero.
 3. Center sampling stays dead **unless** resolution first lifts recall@0.5, at which point
    re-run 0b: bigger objects make ring boxes genuinely mergeable and the calculus changes.
+
+## ❌ RESOLUTION PROBE RESULTS — measured 2026-07-19. RESOLUTION IS REFUTED TOO.
+
+`scripts/fpn_resolution_probe.py`, numpy on the existing T2a e12 logits — no training,
+no GPU, no Lean. **Measure-before-build pays off a sixth time: this cancels the 768px
+re-encode + ~4.5 h train.** It also **overturns bite 0c's reframing above**: the
+constraint is not box precision, and the "unlearnable neighbour" story is not what is
+costing the recall.
+
+### The headline — resolution's entire headroom is 5 points; ranking's is 24
+
+Recall of encoded positives with BOTH gates applied (box must clear IoU 0.5, conf must
+clear the scorer's top-1000 cut):
+
+| scenario | box ok | in top-k | **BOTH** |
+|---|---|---|---|
+| today (measured) | 33.06% | 14.10% | **9.19%** |
+| resolution 768, optimistic | 51.18% | 14.10% | **12.97%** |
+| PERFECT boxes (∞ resolution), ranking as measured | 100% | 14.10% | **14.10%** |
+| PERFECT ranking, boxes as measured | 33.06% | 100% | **33.06%** |
+
+**Resolution taken to perfection buys +4.9 points. Fixing the ranking buys +23.9.**
+Resolution multiplies a term that is gated downstream, so it cannot pay.
+
+### The probe reproduces the measured pipeline — this is why the numbers can be trusted
+
+The FPN encoder sees 62.7 positives/img; the scorer's GT sees 46.0/img, so encoded
+positives = 1.362 × scorer GT. Converting: 9.19% of encoded positives = **12.51% of
+scorer GT, against a measured end-to-end class-agnostic recall of 11.80%.** The probe
+predicts the real pipeline to within 0.7 points, which is what licenses the
+counterfactual rows above.
+
+### Why 0c's reframing was wrong
+
+**The right box IS in the output.** At its own assigned cell the detector emits an
+IoU≥0.5 box for **33.06%** of encoded positives (45.0% of scorer GT). Bite 0c concluded
+"the right box is simply not in the output" — but it read that off an oracle applied to
+an already **top-1000-truncated** detection list, so its 0.0232 "unreachable" ceiling is
+a truncation artifact, not a property of the detector. The correct box exists and is
+discarded for its *rank*: median rank **2256 of 12348** candidate slots. All 12348 slots
+clear the scorer's `conf>=0.001` filter, so top-k is the sole binding cut.
+
+| top-k | IoU≥0.5 kept | + right class |
+|---|---|---|
+| 500 | 5.05% | 3.91% |
+| **1000 (today)** | **9.19%** | **7.07%** |
+| 4000 | 20.85% | 14.96% |
+| 12348 (all) | 33.06% | 19.19% |
+
+*This is not a licence to raise top-k* — VisDrone protocol caps detections per image, so
+the cap is legitimate. It is a measurement that the **confidence ordering is the failure**.
+
+The truncation-artifact claim rests on the table above, which is exact: 0c's oracle chose
+from a list that had already discarded three quarters of the correct boxes, so it could
+not have exceeded what the cut left behind. A direct re-scoring of 0c's oracle at
+`--topk 12348` was attempted and **abandoned, not completed** — `_nms_per_class` is
+O(n²) in pure Python and does not finish at 12k dets/img within 90 min. If a confirming
+mAP number is wanted, vectorize the NMS first.
+
+### Why the "unlearnable neighbour discrimination" story was wrong
+
+For the 11,354 positives that do emit an IoU≥0.5 box, the slots outranking them split:
+
+| category | mean count outranking | share | census share |
+|---|---|---|---|
+| **far background** | **3230** | **84.5%** | 91.3% |
+| ring (adjacent to a positive) | 555 | 14.5% | 8.2% |
+| other positives | 36 | 0.9% | 0.5% |
+
+Ring cells *are* over-represented relative to census (14.5% vs 8.2%) — the `ring−far =
++0.247` separation is real. But they are only 555 of the 3821 slots in the way. **Perfect
+ring suppression would still leave a correct box at rank ≈3266, nowhere near the top
+1000.** The binding failure is ordinary object-vs-background discrimination: overall
+objectness **AUC = 0.741** across 12,348 candidates with ~63 positives.
+
+That also re-opens the four refuted levers. They were aimed at objectness and judged
+against an mAP saturated at zero; the doc then explained their failure with a
+pos-vs-ring argument that this measurement says was never the operative constraint.
+
+### Incidental findings worth acting on
+
+- **Width regression is twice as bad as height.** `|log w_pred/w_gt|` mean **0.478** vs
+  `|log h|` **0.241** — width is off by a factor of e^0.478 ≈ 1.61 on average. Substituting
+  the GT centre (leaving predicted w,h) reaches only 59.5% at IoU≥0.5, so size is the
+  *harder* of the two box terms, not the centre. Suspect the P3 width anchors.
+- **The eval GT is silently truncated.** `pack_raw_boxes` caps at `MAX_BBOXES = 56`, but
+  VisDrone val averages **70.7** boxes/img (median 65, max 317). **59.1% of val images
+  exceed the cap and 34.9% of all val GT boxes are dropped** — every recall/mAP number in
+  this thread is computed against 65% of the GT, biased toward the first 56 boxes in
+  annotation order and likely *inflating* recall (dense images are the hardest). Relative
+  comparisons between arms are unaffected (same truncated GT), so the refutations stand,
+  but the absolute numbers are not VisDrone protocol.
+
+### Suggested next levers, revised
+
+1. **Objectness discrimination is the only lever with real headroom** (+23.9 pts vs
+   resolution's +4.9). AUC 0.741 → the target is separating positives from *far
+   background*, not from neighbours.
+
+   **Measured across all four arms (`fpn_obj_separation.py`, e12) — nothing moved it:**
+
+   | arm | baseline | T1b wcls | T2-bias | T2a tower |
+   |---|---|---|---|---|
+   | objectness AUC | 0.7417 | 0.7400 | 0.7393 | 0.7410 |
+
+   A spread of 0.0024 across a class-weighting change, a prior-bias init and +7M
+   parameters of head capacity. This is the same "every arm converges to one
+   equilibrium" finding as the objectness-logit table above, now measured on the
+   quantity that actually gates recall — and it means the lever is genuinely
+   **unexplored**, not already-tried. Nothing built so far targets it.
+2. **Fix the `MAX_BBOXES = 56` eval cap** before trusting any further absolute number.
+3. Resolution / P2 stays dead as a *primary* lever. It remains the right *second* move
+   once ranking is fixed — at perfect ranking, box precision becomes the binding gate
+   (33.06% ceiling), and that is exactly where section C's 768px → 51.18% would pay.
+
+## ✅ OBJECTNESS-DISCRIMINATION PROBE — measured 2026-07-19. RESCORING REFUTED; THE LEVER IS NAMED.
+
+`scripts/fpn_objectness_readout_probe.py` + an end-to-end A/B through the real scorer.
+The resolution probe said ranking was the lever with the headroom; this probe asks
+whether that ranking can be fixed by **rescoring** (cheap, no retrain) or only by
+**retraining** (expensive) — and it answers the question by identifying the specific
+defect.
+
+### Objectness is ANTI-correlated with box quality
+
+There are two distinct ranking jobs, and no single existing channel does both:
+
+| score | object vs background | box quality (IoU≥0.5 among positives) |
+|---|---|---|
+| `sigmoid(obj)` alone | **0.7504** | **0.3497** ← worse than chance |
+| `max softmax(cls)` alone | 0.4172 | **0.7447** |
+| production `obj × clsprob` | 0.6373 | 0.6713 |
+
+**The head is systematically more confident about positives whose boxes are wrong.**
+And the class head — which has nothing to do with localization — is accidentally the
+best box-quality predictor the score has. The production `obj × clsprob` is a
+compromise that wins neither job outright but is the best available on the one that
+matters.
+
+### Rescoring is exhausted — the readout ceiling is +0.4 points
+
+Fitting rankers on the head's own 16 output channels, trained on one set of images and
+scored on a disjoint set. `USABLE` = positive AND IoU≥0.5 AND inside the top-1000; it is
+the column that predicts recall.
+
+| ranker | positives in top-1000 | **USABLE** |
+|---|---|---|
+| production `obj × clsprob` | 15.29% | **9.71%** |
+| `sigmoid(obj)` alone | 28.74% | 5.14% |
+| logistic regression, USABLE objective | 16.53% | 9.44% |
+| MLP (16-32-1), USABLE objective | 15.62% | **10.08%** |
+
+**Best readout 10.08% vs production 9.71%.** No function of the head's output channels
+meaningfully beats what is already deployed. This is a **feature failure, not a readout
+failure** — the fix has to be a training change.
+
+### The trap this probe fell into, recorded because it nearly shipped
+
+Ranking by `sigmoid(obj)` alone nearly **doubles** the positives reaching the top-1000
+(15.29% → 28.74%) and looks like a free win. It is not: those extra positives carry
+unusable boxes, so USABLE *halves* (9.71% → 5.14%). Measured end-to-end through the real
+scorer, `--score obj` takes **recall@0.5 from 0.1180 down to 0.0699** and ca-AP from
+0.0009 to 0.0002.
+
+This is the doc's own gotcha — *"an interim measurement confirming the MECHANISM is not
+evidence the LEVER works"* — and the intermediate metric ("positives in top-k") was the
+thing that lied. The end-to-end A/B is what caught it. `--score obj` is retained in
+`yolo_map_visdrone.py` as a **diagnostic, defaulting off**; the control run reproduces
+mAP 0.0001 / recall 0.1180 exactly.
+
+### The named lever: IoU-aware objectness
+
+AUC 0.3497 is not a small miss, it is a **sign error in what objectness is being asked to
+predict**. Positives are all trained toward a constant target of 1.0 regardless of whether
+the box that slot emits is good, so nothing ever teaches objectness to rank a good box
+above a bad one — and the measurement says it has settled on the opposite.
+
+The standard fix is to make the objectness target the **achieved IoU** of the predicted
+box rather than a constant 1.0 (YOLOv5-style IoU-aware objectness, or quality focal loss /
+GFL). That attacks the 0.3497 directly, and it is the first lever in this thread aimed at
+a defect that was measured rather than guessed.
+
+Two reasons to think it is tractable here:
+
+- It is a **target** change, not an architecture change. The multi-scale loss already
+  masks positives by the target's own objectness channel (`%{pa}_m4`), so the value in
+  that channel is what would change.
+- The four refuted arms all left objectness AUC at 0.7393–0.7417 because none of them
+  changed *what objectness is trained to mean*. This one does.
+
+**Measure first, as always:** before building, check on existing logits what the objectness
+AUC-vs-quality would be under an IoU target — i.e. how much of the 0.3497→0.75 gap is
+recoverable from the boxes the detector already emits. That is another pure-numpy probe.
+
+## ⚠️ IoU-TARGET PROBE — measured 2026-07-19. THE RUN IS NOT WORTH SPENDING AS FRAMED.
+
+`scripts/fpn_iou_target_probe.py`. Gates the IoU-aware-objectness run above.
+
+### The achieved IoU IS predictable — that part of the theory holds
+
+Fit on positives in train images, scored on positives in disjoint test images, with the
+objectness channel excluded (it is the thing being retrained, so feeding it in is circular):
+
+| predictor of IoU≥0.5 among positives | AUC |
+|---|---|
+| `sigmoid(obj)` — today's signal | 0.3497 |
+| `max softmax(cls)` — best single channel | 0.7447 |
+| **MLP on all non-objectness channels** | **0.8602** |
+
+### But production already captures the benefit accidentally
+
+The controlled test: same features, same network, same capacity, **only the target differs.**
+
+| ranker | positives in top-1000 | **USABLE** |
+|---|---|---|
+| production `obj × max softmax(cls)` | 15.29% | **9.71%** |
+| MLP, BINARY target (today's objectness semantics) | 26.57% | 3.12% |
+| MLP, **IoU target** (the proposed change) | 14.46% | **9.39%** |
+| ORACLE object/background | 100% | **33.65%** |
+
+**Like for like, the target change is worth +6.27 points** (3.12% → 9.39%) — the theory is
+right. But production's class multiplier is *already* a crude quality signal (AUC 0.7447),
+so measured against what is deployed the change is worth **−0.32 points**. The run would be
+buying something the scorer already gets for free.
+
+### Why it cannot break past ~10%, and what that means
+
+Look at the `positives` column against `USABLE`. Every score faces the same trade: admit
+many positives and they are quality-blind (binary target: 26.57% in, 3.12% usable), or
+admit few and good (IoU target: 14.46% in, 9.39% usable). Both land near 9–10% USABLE.
+**Breaking past that needs admitting MORE positives while keeping them good — which is
+object/background discrimination (AUC 0.7504), not quality ranking.** IoU targeting does
+not touch that axis, and in fact *hurts* it: it downweights hard positives, so raw
+positives-in-top-k falls from 26.57% to 14.46%.
+
+The 23.94-point headroom to the oracle is a **feature** problem. Four arms already failed
+to move it.
+
+### ⚠️ Correction to the resolution verdict above — one axis was never tested
+
+The resolution probe's lever table held `in top-k` FIXED at 14.10% for the 768px row, i.e.
+it assumed resolution changes box precision only and **not** objectness AUC. That was
+conservative on the ranking axis, and this probe shows the ranking axis is the one that
+matters. **Whether resolution improves object/background AUC is untested and cannot be
+tested from 448px logits** — bigger objects are plausibly easier to *detect*, not just to
+box. So "resolution refuted" stands only for its box-precision mechanism; resolution
+remains the one untested lever that plausibly touches the binding feature constraint.
+
+### The trap this probe fell into first (recorded — it is subtle)
+
+Ranking by `obj × TRUE IoU` looks like a clean "oracle quality" ceiling and reported a
+tidy 33.65%. It is **label leakage**: `iouv` is 0 on every background slot, so that score
+is an oracle object/background detector wearing a quality costume — it reproduced the
+oracle row to the decimal. True IoU is not a usable stand-in for a quality signal. The
+controlled same-features/different-target design above is the fix.
 
 ### Incidental: a real bug in `fpn_neighbor_separation.py` (fixed, verdict unchanged)
 
@@ -299,3 +570,7 @@ mAP comes from the single-box `data/visdrone448/val.bin`.
 | `fpn_ring_boxes.py` | 0b: do ring boxes merge under NMS? + the centre-reachability bound |
 | `fpn_duplicate_oracle.py` | 0c: mAP under centre-NMS and a 1-det-per-GT oracle; `--iou` sweeps |
 | `fpn_neighbor_align_check.py` | header-alignment control for `fpn_neighbor_separation.py` |
+| `fpn_resolution_probe.py` | the resolution probe: box-error decomposition, resolution transfer, rank survival, and the lever comparison |
+| `fpn_objectness_readout_probe.py` | can rescoring fix the ranking? readout ceiling, obj-vs-quality AUC split, USABLE metric |
+| `fpn_iou_target_probe.py` | gates the IoU-aware-objectness run: IoU predictability + same-features/different-target comparison |
+| `yolo_map_visdrone.py --score obj` | diagnostic only — objectness-only ranking, measured WORSE end-to-end (recall 0.1180→0.0699) |

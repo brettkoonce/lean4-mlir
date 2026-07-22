@@ -163,6 +163,26 @@ def _nms_per_class(dets, nms_iou):
     return kept
 
 
+# Ranking score for a detection. "objcls" = sigmoid(obj)*max softmax(cls), the
+# original behaviour and the default, so every previously-reported number
+# reproduces unchanged. "obj" = sigmoid(obj) alone.
+#
+# Why the switch exists -- and why "obj" is a DIAGNOSTIC, NOT AN IMPROVEMENT.
+# scripts/fpn_objectness_readout_probe.py measured that the two channels do two
+# DIFFERENT ranking jobs on this detector:
+#   object-vs-background : sigmoid(obj) AUC 0.7504, obj*clsprob only 0.6373
+#   box quality (IoU>=0.5 among positives)
+#                        : sigmoid(obj) AUC 0.3497  <-- WORSE THAN CHANCE
+#                          max softmax(cls) AUC 0.7447, obj*clsprob 0.6713
+# So the class multiplier is not noise: it is the only box-quality signal the
+# score has, and objectness is actively ANTI-correlated with box quality.
+# Dropping it wins the first job and loses the second, which is what matters:
+# measured end-to-end, --score obj takes recall@0.5 from 0.1180 DOWN to 0.0699
+# and ca-AP from 0.0009 to 0.0002. Keep the default. The flag exists so that
+# result stays reproducible.
+SCORE_MODE = "objcls"
+
+
 def decode_anchor_raw(pred_block, anchors, grid, conf_thresh):
     """One scale's anchor decode → raw (cid, conf, xyxy) dets, NO NMS (so the FPN
     caller can merge across scales before a single NMS). Vectorized over all
@@ -179,7 +199,7 @@ def decode_anchor_raw(pred_block, anchors, grid, conf_thresh):
     cid = cls.argmax(axis=1)                                      # [A,g,g]
     e = np.exp(cls - cls.max(axis=1, keepdims=True))
     clsp = e.max(axis=1) / e.sum(axis=1)                          # prob of argmax
-    conf = obj * clsp
+    conf = obj * clsp if SCORE_MODE == "objcls" else obj
     jj = np.arange(grid).reshape(1, 1, grid)                      # col (W) index
     ii = np.arange(grid).reshape(1, grid, 1)                      # row (H) index
     sx = 1.0 / (1.0 + np.exp(-np.clip(pred[:, 0], -60, 60)))
@@ -257,6 +277,10 @@ def main():
     ap.add_argument("--iou", type=float, default=0.5, help="TP IoU threshold (default 0.5)")
     ap.add_argument("--nms-iou", type=float, default=0.5)
     ap.add_argument("--conf-thresh", type=float, default=0.001)
+    ap.add_argument("--score", choices=["objcls", "obj"], default="objcls",
+                    help="detection ranking score: objcls = sigmoid(obj)*max "
+                         "softmax(cls) (default, original); obj = objectness "
+                         "alone (see fpn_objectness_readout_probe.py)")
     ap.add_argument("--grid", type=int, default=7, help="detection grid side (7 for 224, 14 for 448)")
     ap.add_argument("--size", type=int, default=None, help="input px (default grid*32)")
     ap.add_argument("--box-param", choices=["raw", "diou"], default="raw",
@@ -269,7 +293,11 @@ def main():
                          "head (brick #3): per-scale decode, merge, one NMS. Use --grid 14. "
                          "GT is still read from val_bin with the single-box geometry.")
     args = ap.parse_args()
+    global SCORE_MODE
+    SCORE_MODE = args.score
     set_geometry(args.size if args.size else args.grid * 32, args.grid)
+    if SCORE_MODE != "objcls":
+        print(f"ranking score: {SCORE_MODE} (non-default)")
 
     logits_raw = np.fromfile(args.logits, dtype=np.float32)
     if args.fpn:

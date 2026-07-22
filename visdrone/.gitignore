@@ -1,0 +1,5 @@
+# training output: checkpoints are ~22 MB each and results.csv is regenerable
+runs/
+# pretrained weights pulled from the ultralytics release
+*.pt
+__pycache__/

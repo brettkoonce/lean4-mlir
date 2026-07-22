@@ -229,10 +229,19 @@ opaque segConfusion (logits masks : @& ByteArray)
 @[extern "lean_f32_ids_to_floats"]
 opaque idsToFloats (ids : @& ByteArray) : IO ByteArray
 
-/-- Shuffle images and labels in-place (Fisher-Yates). Returns (shuffled images, shuffled labels). -/
+/-- Shuffle images and labels in-place (Fisher-Yates), applying the SAME
+    permutation to both. Returns (shuffled images, shuffled labels).
+
+    `labelBytes` is the label's bytes per record — 4 for a classification
+    scalar, but a whole tensor for detection/segmentation (the FPN detector's
+    is 185220 floats = 740880 bytes). It used to be hardcoded to 4 in the FFI,
+    which permuted the images while leaving multi-float targets in place and so
+    destroyed the image/target pairing every epoch on every detector and
+    segmentation trainer. Pass `dio.labelBytesPerRecord`; never a literal. -/
 @[extern "lean_f32_shuffle"]
 opaque shuffle (images : ByteArray) (labels : ByteArray)
-    (n : USize) (pixelsPerImage : USize) (seed : USize) : IO (ByteArray × ByteArray)
+    (n : USize) (pixelsPerImage : USize) (labelBytes : USize) (seed : USize)
+    : IO (ByteArray × ByteArray)
 
 /-- Affine map of every element: `out[i] = scale * in[i] + shift`.
     Used to center [0,1] data to [-1,1] (scale=2, shift=-1) for DDPM

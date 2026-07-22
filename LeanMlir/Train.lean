@@ -694,7 +694,8 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
 
   for epoch in [startEpoch:epochs] do
     if !skipShuffle then
-      let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPixels.toUSize (epoch + 42).toUSize
+      let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPixels.toUSize
+                           dio.labelBytesPerRecord.toUSize (epoch + 42).toUSize
       curImg := sImg; curLbl := sLbl
 
     -- LR is computed PER STEP (see inside the bi loop) so warmup ramps smoothly

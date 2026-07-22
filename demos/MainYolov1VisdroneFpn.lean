@@ -105,6 +105,56 @@ def towerDepthFromEnv : IO Nat := do
   | none => return 0
   | some v => return (v.trim.toNat?).getD 0
 
+/-- Epoch-count override (`FPN_EPOCHS`), for the overfit probe: point the trainer
+    at a 32-image subset and give it enough epochs to fit it. Defaults to the
+    arm's configured 12 so every existing runbook is unchanged. -/
+def epochsFromEnv (dflt : Nat) : IO Nat := do
+  match (← IO.getEnv "FPN_EPOCHS") with
+  | none => return dflt
+  | some v => return (v.trim.toNat?).getD dflt
+
+/-- Checkpoint interval override (`FPN_CKPT_EVERY`). The overfit probe runs
+    hundreds of epochs and wants the loss trajectory, not 100 × 86 MB of
+    snapshots. Defaults to the arm's configured 2. -/
+def ckptEveryFromEnv (dflt : Nat) : IO Nat := do
+  match (← IO.getEnv "FPN_CKPT_EVERY") with
+  | none => return dflt
+  | some v => return (v.trim.toNat?).getD dflt
+
+/-- Learning-rate multiplier (`FPN_LR_MULT`). The overfit probe needs to separate
+    "the trainer is THROTTLED" from "the trainer is BROKEN": if 10× the LR fits
+    32 images, the update path works and the schedule is wrong; if it still
+    cannot, the defect is in the gradient or update path itself. LR is a runtime
+    scalar (the cosine schedule is computed host-side), so this needs no
+    recompile. An integer multiplier rather than an absolute value because this
+    toolchain has no `String.toFloat?`. Defaults to 1. -/
+def lrMultFromEnv : IO Float := do
+  match (← IO.getEnv "FPN_LR_MULT") with
+  | none => return 1.0
+  | some v => return ((v.trim.toNat?).getD 1).toFloat
+
+/-- Global-norm gradient-clip override (`FPN_CLIP`), as a Nat; 0 disables the
+    clip entirely. Measuring `%gcnorm` would only say whether the clip is ACTIVE;
+    turning it off says whether it is CAUSAL, which is the actual question, and
+    it needs no change to the train step's return arity. Note the clip threshold
+    is baked into the emitted IR, so changing this forces a vmfb recompile.
+    Defaults to the arm's configured 4.0. -/
+def clipFromEnv (dflt : Float) : IO Float := do
+  match (← IO.getEnv "FPN_CLIP") with
+  | none => return dflt
+  | some v => match v.trim.toNat? with
+              | none => return dflt
+              | some n => return n.toFloat
+
+/-- Name suffix (`FPN_TAG`). The name IS the on-disk checkpoint prefix, so a probe
+    run without a distinct tag silently overwrites the live arm's e2..e12
+    checkpoints — which are the artifacts every measurement in
+    planning/yolo_assignment.md is computed from. Empty by default. -/
+def tagFromEnv : IO String := do
+  match (← IO.getEnv "FPN_TAG") with
+  | none => return ""
+  | some v => return if v.trim.isEmpty then "" else s!" {v.trim}"
+
 /-- Infer: dump [N, Ntot] val logits for scripts/yolo_map_visdrone.py --fpn. -/
 def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
   IO.FS.createDirAll outDir
@@ -154,7 +204,8 @@ def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
 
 def main (args : List String) : IO Unit := do
   let tower ← towerDepthFromEnv
-  let spec := r34FpnDetT tower
+  let tag ← tagFromEnv
+  let spec := { r34FpnDetT tower with name := (r34FpnDetT tower).name ++ tag }
   match args with
   | "infer" :: rest =>
     let dataDir := rest[0]?.getD "data/visdrone_fpn"
@@ -163,5 +214,17 @@ def main (args : List String) : IO Unit := do
     inferDump spec dataDir outDir
   | _ =>
     let dataDir := args.head?.getD "data/visdrone_fpn"
+    let epochs ← epochsFromEnv r34FpnDetConfig.epochs
+    let ckptEvery ← ckptEveryFromEnv r34FpnDetConfig.checkpointEveryNEpochs
+    let lrMult ← lrMultFromEnv
+    let lr := r34FpnDetConfig.learningRate * lrMult
+    let clip ← clipFromEnv r34FpnDetConfig.gradClipNorm
+    let cfg := { r34FpnDetConfig with epochs := epochs,
+                                      checkpointEveryNEpochs := ckptEvery,
+                                      learningRate := lr,
+                                      gradClipNorm := clip }
     IO.println s!"FPN multi-scale VisDrone (56/28/14, 3 anchors/scale, Ntot={fpnNtot}, head tower={tower}) — data dir: {dataDir}"
-    spec.train r34FpnDetConfig dataDir DatasetKind.petsDet
+    IO.println s!"  spec   : {spec.name}"
+    IO.println s!"  epochs : {epochs}"
+    IO.println s!"  lr     : {lr}  clip: {clip}"
+    spec.train cfg dataDir DatasetKind.petsDet

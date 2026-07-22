@@ -1388,8 +1388,17 @@ LEAN_EXPORT lean_obj_res lean_f32_mask_u8_to_i32(
 
 // ---- Shuffle images + labels in-place (Fisher-Yates) ----
 // images: n * pixels_per * 4 bytes; labels: n * 4 bytes
+// `label_stride` is the label's BYTES PER RECORD, which is 4 only for a
+// classification scalar. Detection and segmentation labels are whole tensors
+// (the FPN detector's is 185220 floats = 740880 bytes), and swapping a fixed 4
+// bytes of those permutes the images while leaving the targets in place --
+// silently destroying the image/target pairing on every epoch. Nothing
+// downstream can detect that: shapes, parameter counts, the loss and its VJP
+// are all still self-consistent, and an FD probe checks the emitted gradient
+// against the same mispaired batch, so it passes too.
 LEAN_EXPORT lean_obj_res lean_f32_shuffle(lean_obj_arg img_obj, lean_obj_arg lbl_obj,
-                                          size_t n, size_t pixels_per, size_t seed,
+                                          size_t n, size_t pixels_per,
+                                          size_t label_stride, size_t seed,
                                           lean_obj_arg w) {
     (void)w;
     // Ensure exclusive ownership (rc == 1) for in-place mutation
@@ -1398,8 +1407,18 @@ LEAN_EXPORT lean_obj_res lean_f32_shuffle(lean_obj_arg img_obj, lean_obj_arg lbl
     uint8_t* img = lean_sarray_cptr(img_obj);
     uint8_t* lbl = lean_sarray_cptr(lbl_obj);
     size_t img_stride = pixels_per * 4;
-    // Temp buffer for one image
-    uint8_t* tmp = (uint8_t*)malloc(img_stride > 4 ? img_stride : 4);
+    // A caller that under-reports the stride would corrupt pairing exactly as
+    // the old hardcoded 4 did, so refuse rather than shuffle a partial label.
+    if (label_stride == 0 || lean_sarray_size(lbl_obj) < n * label_stride) {
+        lean_object* pair = lean_alloc_ctor(0, 2, 0);
+        lean_ctor_set(pair, 0, img_obj);
+        lean_ctor_set(pair, 1, lbl_obj);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+            "lean_f32_shuffle: label_stride inconsistent with the label buffer")));
+    }
+    // Temp buffer must hold whichever record is larger.
+    size_t tmp_size = img_stride > label_stride ? img_stride : label_stride;
+    uint8_t* tmp = (uint8_t*)malloc(tmp_size);
     uint64_t rng = seed ^ 0x5DEECE66DUL;
     for (size_t i = n - 1; i > 0; i--) {
         rng = rng * 6364136223846793005UL + 1442695040888963407UL;
@@ -1409,10 +1428,10 @@ LEAN_EXPORT lean_obj_res lean_f32_shuffle(lean_obj_arg img_obj, lean_obj_arg lbl
             memcpy(tmp, img + i * img_stride, img_stride);
             memcpy(img + i * img_stride, img + j * img_stride, img_stride);
             memcpy(img + j * img_stride, tmp, img_stride);
-            // Swap labels
-            memcpy(tmp, lbl + i * 4, 4);
-            memcpy(lbl + i * 4, lbl + j * 4, 4);
-            memcpy(lbl + j * 4, tmp, 4);
+            // Swap labels -- the SAME permutation, over the whole record
+            memcpy(tmp, lbl + i * label_stride, label_stride);
+            memcpy(lbl + i * label_stride, lbl + j * label_stride, label_stride);
+            memcpy(lbl + j * label_stride, tmp, label_stride);
         }
     }
     free(tmp);

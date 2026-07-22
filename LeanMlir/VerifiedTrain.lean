@@ -409,7 +409,9 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     -- Per-epoch Fisher-Yates shuffle (the reference does this; the data is
     -- class-sorted, so without it every batch is a single class — degenerate).
     if !synth then
-      let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize (ep + 42).toUSize
+      let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize
+                           4 -- classification: one f32 class id per record
+                           (ep + 42).toUSize
       curImg := sImg; curLbl := sLbl
     for bi in [0:nb] do
       let gstep := (ep * nb + bi + 1).toFloat
@@ -2564,7 +2566,9 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
   for ep in [startEpoch:nEpochs] do
     let mut epochLossSum := 0.0
     let mut lastLr := 0.0
-    let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize (ep + 42).toUSize
+    let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize
+                           4 -- classification: one f32 class id per record
+                           (ep + 42).toUSize
     curImg := sImg; curLbl := sLbl
     for bi in [0:nb] do
       let gstep := (ep * nb + bi + 1).toFloat
