@@ -945,18 +945,36 @@ LEAN_EXPORT lean_obj_res lean_f32_yolo_hflip(
 }
 
 // Split a YOLOv1 batch slice into separately-contiguous target and mask
-// tensors. Per-record layout (7200 bytes, Phase 3b format): target (5880)
-// then mask (196) then numBoxes (4) then raw_boxes (1120). This helper
-// only extracts target + mask (the first 6076 bytes of each record) and
-// discards the bbox tail. Use yoloAugment when you need the bbox tail.
+// tensors. Per-record layout (Phase 3b format): target (per_cell*gH*gW*4)
+// then mask (gH*gW*4) then numBoxes (4) then raw_boxes (MAX_BBOXES*20).
+// This helper extracts target + mask and discards the bbox tail. Use
+// yoloAugment when you need the bbox tail.
 //
-// Output: target_concat (batch*5880 bytes), mask_concat (batch*196 bytes).
+// The geometry is PARAMETERIZED and must not go back to literals. It used to
+// hardcode the Pets 7x7 record (7200 bytes) while its caller sliced records at
+// `dio.labelBytesPerRecord`, which is 25428 at VisDrone-448/14x14 and 98340 at
+// 28x28. Reading record i at a 7200 stride out of a 25428-stride buffer pairs
+// image i with a target taken from the middle of a different image's record --
+// the same failure as the hardcoded label stride in lean_f32_shuffle, and just
+// as invisible, since batch*target_bytes still has the shape the train step
+// expects. Every sibling here (load_voc_dims, yolo_augment) derives its strides
+// from gridH/gridW; this one now does too.
+//
+// Output: target_concat (batch*target_bytes), mask_concat (batch*mask_bytes).
 LEAN_EXPORT lean_obj_res lean_voc_split_batch(
-    b_lean_obj_arg interleaved_ba, size_t batch, lean_obj_arg w) {
+    b_lean_obj_arg interleaved_ba, size_t batch,
+    size_t grid_h, size_t grid_w, size_t per_cell, lean_obj_arg w) {
     (void)w;
-    const size_t target_bytes = 30 * 7 * 7 * 4;          // 5880
-    const size_t mask_bytes   = 7 * 7 * 4;               // 196
-    const size_t rec_bytes    = target_bytes + mask_bytes + 4 + 56 * 20;  // 7200
+    const size_t target_bytes = per_cell * grid_h * grid_w * 4;
+    const size_t mask_bytes   = grid_h * grid_w * 4;
+    const size_t rec_bytes    = target_bytes + mask_bytes + 4 + 56 * 20;
+    // A stride that disagrees with the buffer is the bug above; refuse it.
+    if (batch == 0 || grid_h == 0 || grid_w == 0 || per_cell == 0 ||
+        lean_sarray_size(interleaved_ba) != batch * rec_bytes) {
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+            "lean_voc_split_batch: gridH/gridW/perCell disagree with the label "
+            "buffer (expected exactly batch whole records)")));
+    }
     size_t total_t = batch * target_bytes;
     size_t total_m = batch * mask_bytes;
     lean_object* target_ba = lean_alloc_sarray(1, total_t, total_t);
@@ -1407,14 +1425,24 @@ LEAN_EXPORT lean_obj_res lean_f32_shuffle(lean_obj_arg img_obj, lean_obj_arg lbl
     uint8_t* img = lean_sarray_cptr(img_obj);
     uint8_t* lbl = lean_sarray_cptr(lbl_obj);
     size_t img_stride = pixels_per * 4;
-    // A caller that under-reports the stride would corrupt pairing exactly as
-    // the old hardcoded 4 did, so refuse rather than shuffle a partial label.
-    if (label_stride == 0 || lean_sarray_size(lbl_obj) < n * label_stride) {
-        lean_object* pair = lean_alloc_ctor(0, 2, 0);
-        lean_ctor_set(pair, 0, img_obj);
-        lean_ctor_set(pair, 1, lbl_obj);
+    // Both strides must agree EXACTLY with their buffer, in both directions.
+    // Over-reporting reads past the end. UNDER-reporting is the original bug
+    // stated as a call: it moves a prefix of each record and leaves the rest
+    // behind, which is precisely what a hardcoded 4 did to a 740880-byte label.
+    // A `<` test catches only the first of those, so it would have accepted the
+    // very call it was written to reject. A buffer that is not exactly n whole
+    // records means the caller's record size disagrees with the loader's, and
+    // there is no safe way to guess which of the two is right.
+    // Pinned by tests/TestShufflePairing.lean.
+    if (n == 0 || label_stride == 0 || img_stride == 0 ||
+        lean_sarray_size(img_obj) != n * img_stride ||
+        lean_sarray_size(lbl_obj) != n * label_stride) {
+        // We own both arguments; the error path must release them or they leak.
+        lean_dec(img_obj);
+        lean_dec(lbl_obj);
         return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
-            "lean_f32_shuffle: label_stride inconsistent with the label buffer")));
+            "lean_f32_shuffle: n, pixelsPerImage and labelBytes must describe the "
+            "buffers exactly (each buffer = n whole records, n > 0)")));
     }
     // Temp buffer must hold whichever record is larger.
     size_t tmp_size = img_stride > label_stride ? img_stride : label_stride;

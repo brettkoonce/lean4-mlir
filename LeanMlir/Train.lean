@@ -284,6 +284,25 @@ private structure DatasetIO where
       a future dataset stores val data at a different size from the
       input. -/
   valPreprocessBatch : (raw : ByteArray) → (batch : USize) → IO ByteArray := fun raw _ => return raw
+  /-- Stochastic augmentation for **test-time augmentation**, i.e. the eval
+      loop's `cfg.useTTA` path.
+
+      This exists because `augmentBatch` cannot be reused there. `augmentBatch`
+      receives records at the dataset's *stored training* size, and TTA hands it
+      records at the *validation* size. For Imagenette those differ — 256 train,
+      224 val — so calling `augmentBatch` on a val batch strides a 256-pixel
+      crop across a 224-pixel buffer: every record after the first is read at a
+      46,080-float drift, and the tail of the batch reads clean off the end of
+      the allocation. The image at slot `i` then no longer belongs to the label
+      at slot `i`, which is invisible to everything downstream — it just lowers
+      the reported accuracy. The comment on `imagenetteIO.augmentBatch` warned
+      about precisely this; the TTA path did it anyway.
+
+      Defaults to `valPreprocessBatch`, which makes TTA a no-op (M identical
+      passes) rather than a corruption. Override per dataset with transforms
+      defined at the *validation* size. -/
+  valAugmentBatch : (raw : ByteArray) → (batch : USize) → (seed : Nat) → IO ByteArray :=
+    fun raw batch _ => valPreprocessBatch raw batch
   deriving Inhabited
 
 /-- Imagenette: 256×256 train, 224×224 val, random-crop-to-224 + hflip.
@@ -307,6 +326,12 @@ private def imagenetteIO : DatasetIO where
   -- Eval uses the input directly; see runTraining's eval loop.
   preprocessBatch := fun raw batch =>
     F32.centerCrop raw batch 3 256 256 224 224
+  -- TTA operates on val records, which are stored at 224 — so this is a plain
+  -- hflip at 224, NOT `augmentBatch`'s 256→224 crop. Reusing `augmentBatch`
+  -- here is the bug the comment above warns about. Note that hflip has only two
+  -- outcomes, so `ttaSamples` beyond 2 buys nothing but repeated forwards.
+  valAugmentBatch := fun raw batch seed =>
+    F32.randomHFlip raw batch 3 224 224 seed.toUSize
 
 /-- MNIST: 28×28 IDX format, no augmentation. -/
 private def mnistIO : DatasetIO where
@@ -808,7 +833,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                           gHu gWu (30 : USize) (20 : USize)
                           0.5 0.5 0.8 (stepSeed ^^^ (11 : USize))
                       else do
-                        let (yTgt, yMsk) ← F32.detSplitBatch yArg batch
+                        let (yTgt, yMsk) ← F32.detSplitBatch yArg batch gHu gWu (30 : USize)
                         pure (xba, yTgt, yMsk)
                   IreeSession.trainStepAdamF32Yolov1 sess spec.trainFnName
                     packed allShapes xAug xSh yTgtAug yMskAug lr globalStep.toFloat bnShapes batch
@@ -1027,7 +1052,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           let mut logitsAcc ← F32.const (evalBatch * spec.numClasses).toUSize 0.0
           for k in [:ttaM] do
             let xba ← if cfg.useTTA then
-                        dio.augmentBatch xbaRaw evalBatch.toUSize (epoch * 100000 + bi * 31 + k)
+                        dio.valAugmentBatch xbaRaw evalBatch.toUSize (epoch * 100000 + bi * 31 + k)
                       else
                         dio.valPreprocessBatch xbaRaw evalBatch.toUSize
             let logits ← IreeSession.forwardF32 evalSess spec.evalFnName

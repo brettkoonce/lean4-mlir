@@ -127,11 +127,15 @@ opaque loadPets (path : @& String) : IO (ByteArray × ByteArray × Nat)
 opaque loadBrats (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArray × Nat)
 
 /-- YOLOv1 detection-bin loader (target+mask format; used by Pets). Returns `(images_f32_normalized,
-    yLabels_concat, count)` where `yLabels_concat` carries 6076 bytes
-    per image: 30×7×7 float32 target (5880 bytes), then 7×7 float32
-    mask (196 bytes). The Lean dispatcher (`runTraining`) splits this
-    into target + mask before calling `trainStepAdamF32Yolov1`. See
-    `preprocess_pets_mosaic.py` for the on-disk format. -/
+    yLabels_concat, count)` where `yLabels_concat` carries **7200** bytes
+    per image: 30×7×7 float32 target (5880), then 7×7 float32 mask (196),
+    then numBoxes (4), then raw_boxes 56×20 (1120) — the Phase 3b format,
+    matching `petsDetIO.labelBytesPerRecord`. (This docstring said 6076,
+    the pre-Phase-3b target+mask size, long after the record grew the bbox
+    tail; a stale stride in the docs is what this whole bug class feeds on.)
+    The Lean dispatcher (`runTraining`) splits this into target + mask before
+    calling `trainStepAdamF32Yolov1`. See `preprocess_pets_mosaic.py` for the
+    on-disk format. -/
 @[extern "lean_f32_load_voc"]
 opaque loadDetBin (path : @& String) : IO (ByteArray × ByteArray × Nat)
 
@@ -161,13 +165,23 @@ opaque loadDetBinAnchor (path : @& String) (imgSize gridH gridW numAnchors : USi
 opaque loadDetBinFpn (path : @& String) (imgSize ntot : USize)
     : IO (ByteArray × ByteArray × Nat)
 
-/-- Split an interleaved YOLOv1 batch slice (per-record `[target||mask]`,
-    6076 bytes/record) into separately-contiguous target + mask tensors
-    suitable for the `trainStepAdamF32Yolov1` FFI. Returns
-    `(target_concat, mask_concat)` with sizes `batch * 5880` and
-    `batch * 196` bytes respectively. -/
+/-- Split an interleaved YOLOv1 batch slice into separately-contiguous target
+    and mask tensors suitable for the `trainStepAdamF32Yolov1` FFI.
+
+    The per-record layout is `target (perCell*gH*gW*4) || mask (gH*gW*4) ||
+    numBoxes (4) || raw_boxes (56*20)`; only the target and mask are extracted.
+    Returns `(target_concat, mask_concat)` sized `batch * perCell*gH*gW*4` and
+    `batch * gH*gW*4`.
+
+    **Pass the caller's real grid.** This used to hardcode the Pets 7×7 record
+    (7200 bytes/record) while the caller sliced at `dio.labelBytesPerRecord` —
+    25428 at VisDrone-448/14×14. Reading at the wrong stride pairs each image
+    with a target lifted out of a different record, which nothing downstream can
+    see because the output shape is still correct. The FFI now rejects a stride
+    that disagrees with the buffer. -/
 @[extern "lean_voc_split_batch"]
 opaque detSplitBatch (interleaved : @& ByteArray) (batch : USize)
+    (gridH gridW perCell : USize)
     : IO (ByteArray × ByteArray)
 
 /-- Bbox-aware horizontal flip for a YOLOv1 batch. Per-image p=0.5

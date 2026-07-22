@@ -1524,6 +1524,23 @@ lean_exe «test-f32» where
   root := `tests.TestF32
   moreLinkArgs := ireeLink
 
+-- Pins the image/label pairing invariant of `F32.shuffle` on a synthetic
+-- dataset where label k is derivable from image k. The FFI used to swap a
+-- hardcoded 4 bytes of label per record, which silently mispaired every
+-- detection and segmentation batch (mAP@0.5 0.0001 vs 0.1167 after the fix).
+-- Hermetic — no data files, no GPU. See planning/post_shuffle_fix.md §3.
+lean_exe «test-shuffle-pairing» where
+  root := `tests.TestShufflePairing
+  moreLinkArgs := ireeLink
+
+-- Checks every DatasetIO's declared `trainPixels` / `labelBytesPerRecord`
+-- against what its C loader actually allocates. Skips absent datasets, so it
+-- is a pre-flight check rather than a CI job — run it whenever a dataset or
+-- its preprocessing script changes.
+lean_exe «test-dataset-record-sizes» where
+  root := `tests.TestDatasetRecordSizes
+  moreLinkArgs := ireeLink
+
 lean_exe «bench-resnet» where
   root := `tests.BenchResnet
   moreLinkArgs := ireeLink

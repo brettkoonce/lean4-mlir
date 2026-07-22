@@ -90,13 +90,24 @@ Now that it trains, these are ordinary engineering rather than bug hunts.
    0.7353 vs 0.738). Two known divergences, both cheap to test: Lean's **Adam + coupled wd**
    vs the twin's **decoupled AdamW**, and the **jax-ImageNet bootstrap** vs torchvision init.
    Recall matching while mAP lags points at ranking, i.e. the optimizer/regularization side.
-3. **Augmentation is entirely OFF for detection and segmentation, structurally.**
+3. **Augmentation via `augmentBatch` is off for detection and segmentation — but that is
+   not the same as "no augmentation", and the original wording here was wrong.**
    `DatasetIO.augmentBatch : raw → batch → seed → IO ByteArray` receives **only the images**,
-   so it cannot transform a mask or a box set. Every seg/det dataset consequently sets
-   `augmentBatch := fun raw _ _ => return raw`. That was a correct guard, but it means the
-   ~1.7× that augmentation + resolution + schedule were measured to be worth is entirely
-   unclaimed. `lean_f32_seg_hflip_pair` already exists in the FFI, so the pair-aware
-   primitive is partly built — the missing piece is a signature that can see labels.
+   so it cannot transform a mask or a box set, and every seg/det dataset correctly sets
+   `augmentBatch := fun raw _ _ => return raw`. But both paths have a *pair-aware* augmenter
+   wired in the batch loop instead, bypassing the hook entirely:
+   - **Segmentation** — `F32.segHflipPair` (Train.lean ~747, gated on `useSeg && cfg.augment`)
+     flips the f32 image and the u8 mask under one coin per image. Verified correct.
+   - **Single-box detection** — `F32.yoloAugment` (gated on `cfg.augment`) does a bbox-aware
+     hflip + crop and re-encodes target/mask from the transformed raw boxes. Verified correct,
+     and it derives its strides from `gridH/gridW` rather than hardcoding them.
+
+   What is genuinely unaugmented is the **FPN and anchor** detection path: both set
+   `augment := false`, and no pair-aware augmenter exists for the multi-scale flat target.
+   That is where the unclaimed ~1.7× lives. Note also that on the single-box path
+   `yoloAugment` re-encodes from the **capped** box list (`n_boxes > 56 → 56`), so on
+   VisDrone an augmented epoch trains on 73.1% of the GT boxes — the `MAX_BBOXES` cap in
+   item 1 is not only an eval-side problem.
 4. **Re-test the four levers** (§1c) now that a lever can actually move the metric.
 5. **Longer schedule.** The 12-epoch loss was **still descending** at e12 (112.62, no plateau).
    The old arm flattened at ~300 by e4, which is why 12 epochs was ever considered enough.
@@ -113,16 +124,36 @@ mispaired batch, so it would not have caught this either.
 
 Worth building, cheapest first:
 
-1. **A shuffle regression test.** Build a tiny synthetic dataset where label *k* is derivable
-   from image *k* (e.g. constant-valued image, label = that constant), shuffle, assert the
-   invariant holds for a multi-float label stride. ~30 lines, catches this whole class.
+1. ✅ **DONE — and it immediately caught that the 430ba2c guard did not work.**
+   `tests/TestShufflePairing.lean` (`lake exe test-shuffle-pairing`, hermetic, no data, no
+   GPU) builds records where image *k* is `pixels` copies of *k* and label *k* is
+   `labelFloats` copies of *k*, shuffles, and checks per element that label slot *k* still
+   describes image slot *k* — plus that the result is a real permutation and not the
+   identity, so it cannot pass vacuously.
+
+   **What it found.** The guard 430ba2c added was
+   `lean_sarray_size(lbl_obj) < n * label_stride`, which fires only when the stride is too
+   *large*. Under-reporting — a caller claiming 4 bytes for a 740,880-byte record, i.e. the
+   original bug stated as a call — sails straight through, and the test reproduced the
+   corruption verbatim through the "fixed" API. The C comment directly above it claimed it
+   refused exactly that case. Now an exact-equality check on **both** buffers, so a stride
+   that disagrees with its buffer in either direction is an error; `n == 0` is rejected too
+   (it underflowed `n - 1` into a `SIZE_MAX` loop), and the error path no longer leaks its
+   two arguments.
+
+   Companion: `tests/TestDatasetRecordSizes.lean` (`lake exe test-dataset-record-sizes`)
+   loads each dataset present on disk and asserts `images = n × trainPixels × 4` and
+   `labels = n × labelBytesPerRecord` — the same invariant, against real loaders. All 10
+   dataset configurations pass, which is what licenses the stricter guard. Run it whenever a
+   dataset or its preprocessing changes; it skips what is absent, so it is a pre-flight
+   check rather than a CI job.
 2. **Adopt the frozen-parameter probe as a standard gate.** Set LR to 0, run N steps, demand a
    bit-stable loss. Two minutes, no instrument, and it would have ended this thread in July.
    Memory: `frozen-param-determinism-probe`.
-3. **Audit the rest of `ffi/f32_helpers.c` for the same shape of assumption.** `lean_f32_shuffle`
-   was not the only helper written when every label was one float. Grep for literal `4`s used
-   as a label stride. (`F32.sliceLabels` already takes `labelBytesPerRecord` correctly — that
-   is the pattern to match.)
+3. ✅ **DONE — the full host data path swept.** All 56 `LEAN_EXPORT`s in `f32_helpers.c`, every
+   batch-slicing loop in `Train.lean` / `VerifiedTrain.lean` / the demo mains, and every
+   `preprocess_*.py` writer against its C reader. Two defects found beyond the guard above;
+   both are fixed, and the rest of the sweep is recorded in §6.
 4. **Never accept summary statistics as a tie.** The twin's "forward exonerated" check compared
    mean/std/min — all permutation-invariant — and reported ~2% on a forward whose per-element
    disagreement was rel 0.327. Compare **per element**, and compare **sorted** values as well:
@@ -201,3 +232,83 @@ larger means the input is changing.
 3. **How much of the refuted analysis to re-run?** §1c is five arms × 4.4 h. The honest
    minimum is T1b (it is currently ON and was never validly A/B'd) and one control with all
    levers off. The rest can wait for a reason.
+
+---
+
+## 6. The audit — what else was wrong (2026-07-22, uncommitted)
+
+Swept for one bug class only: **anything that can make the image at slot *k* and the label at
+slot *k* stop referring to the same example.** Three things were fixed; the rest of this
+section is the negative result, which is the part worth keeping.
+
+### 6a. Fixed
+
+1. **The 430ba2c guard did not guard.** `<` instead of `==`, so it accepted the exact call it
+   was written to reject. See §3.1. `ffi/f32_helpers.c`.
+2. **TTA eval ran the *training* augmentation on *validation* data.** `Train.lean` called
+   `dio.augmentBatch` on the val batch under `cfg.useTTA`. Imagenette stores train at 256 and
+   val at 224, so `randomCrop 256→224` strode a 196,608-float record across a 150,528-float
+   buffer: slot *i* drifted by 46,080 floats, and at `evalBatch = 32` the last 8 slots read
+   ~5.9 MB past the end of the allocation, while `lblSlice.data[i*4]` still supplied slot
+   *i*'s original label. **This is a live bug, not a latent one** — it fired on the
+   `vit-tiny-tta` and `vit-tiny-kitchensink` ablation arms, whose reported TTA accuracy was
+   measured on mispaired data plus out-of-bounds heap reads. The comment on
+   `imagenetteIO.augmentBatch` warned about precisely this ("The eval pipeline must NOT call
+   this on val data"); the TTA path, added later, did it anyway.
+   Fixed by adding `DatasetIO.valAugmentBatch`, which receives **val-sized** records and
+   defaults to `valPreprocessBatch` (so TTA degrades to a no-op rather than a corruption).
+   Imagenette overrides it with a 224-native hflip. Those two arms need re-running.
+3. **`lean_voc_split_batch` hardcoded the Pets 7×7 record** (7200 B) while its caller sliced
+   at `dio.labelBytesPerRecord` — 25,428 at VisDrone-448/14×14, 98,340 at 28×28. Reading
+   record *i* at a 7200 stride out of a 25,428-stride buffer pairs an image with a target
+   lifted from the middle of some other record, and the output shape is still exactly what
+   the train step expects, so nothing downstream could see it. Not currently reachable: all
+   three single-box det configs set `augment := true` and take the `yoloAugment` arm instead.
+   It was one boolean away. Now parameterized by `gridH/gridW/perCell` and it rejects a
+   stride that disagrees with the buffer.
+
+### 6b. Cleared — the parts that turned out to be right
+
+- **Every `.bin` writer.** All 14 dataset/format combinations pair image and label by
+  construction (keyed by stem, or written as one concatenated record), and every writer's
+  bytes-per-record matches its C reader and its `labelBytesPerRecord`, confirmed by on-disk
+  arithmetic on all 24 files. Independently verified that `visdrone_fpn/val.bin` record *k*
+  and `visdrone448/val.bin` record *k* hold byte-identical images (the scorer relies on this
+  cross-file assumption) and that record *k* is `sorted(glob(...))[k]` against the source JPEGs.
+- **Mixup / CutMix / KNN-mixup.** These are the one place pairing is established by *two*
+  independent derivations from a shared seed rather than in a single call — the fragile
+  shape. Traced instruction-by-instruction: each pair uses the same seed constant, the same
+  `f32_beta_symmetric → f32_permutation` call order and the same λ-flip, so the permutation
+  is bit-identical, and `Train.lean` passes matching seeds and alphas. They do hardcode a
+  4-byte label read, which is unreachable with a non-4 stride only because `compileVmfbs`
+  throws on seg/yolov1 × mixup. Correct today, unguarded in C.
+- **All 13 `VerifiedTrain.lean` loops** — classification-only by construction, 4-byte labels,
+  drop-last on both sides of every batch slice.
+- **Train and eval batch slicing** — image and label always sliced over the same record range
+  with their own correct per-record size; `bpE := nTrain / batchN` is drop-last everywhere, so
+  no tail batch can pad the two sides differently.
+- **`segHflipPair`, `yoloAugment`, the DDPM `stepInputs` path, and every detection inference
+  dump** (which pads the tail by repeating the last real image and then truncates, so
+  `logits.bin` row *k* is val record *k*).
+
+### 6c. Latent — correct today, unguarded, worth knowing
+
+- **No loader checks its file size against `4 + count × rec_bytes`.** Over-specifying a stride
+  short-reads and errors; **under**-specifying slides every record silently. This is the
+  general form of the whole class. `visdrone/bespoke/data.py` asserts exactly this and is the
+  pattern to copy.
+- **Geometry hardcoded away from its source of truth**: `loadPets` fixes 224, `loadBrats`
+  fixes 4 channels while `preprocess_brats.py` exposes `--size`, `preprocess_visdrone.py`'s
+  `FPN_GRIDS` is 448-only and a mismatch only warns. A regenerated `.bin` at another size
+  would be read at the wrong stride with no error.
+- **`sliceLabels`' `bytesPerLabel : Nat := 4` default** is the same "a label is one float"
+  assumption that caused this. Every `Train.lean` site passes it explicitly.
+- **`segHflipPair` takes `augH/augW` from the spec, not from `dio`**, and validates neither
+  buffer — a seg spec whose input size differed from the stored mask size would read out of
+  bounds. The Imagenette 256/224 split is exactly that shape, so this is not hypothetical.
+- **SWAG eval is not gated by `useSeg`/`useYolov1Run`** the way the regular eval loops are; it
+  would `argmax10` over a detection output and read a label at `i*4` out of a 50,176-byte mask
+  record. No config currently pairs `useSWAG` with a non-classification dataset.
+- **`MAX_BBOXES = 56` truncation is worse than §2.1 says.** Val: 34.9% of GT dropped, 59.1% of
+  images over the cap. **Train: 26.9% dropped, and `yoloAugment` re-encodes from the capped
+  list**, so an augmented single-box epoch never sees those boxes at all.
