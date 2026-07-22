@@ -81,15 +81,29 @@ them.
 
 Now that it trains, these are ordinary engineering rather than bug hunts.
 
-1. **Fix the eval-GT truncation before quoting any absolute number.** `pack_raw_boxes` caps at
-   `MAX_BBOXES = 56`; VisDrone val averages 70.7 boxes/image, so **34.9% of val GT is silently
-   dropped** and 59.1% of val images are over the cap. Arm-vs-arm comparisons are unaffected
-   (same truncated GT both sides), but **0.1167 is not VisDrone protocol** and must not be
-   published as such. This gates every external claim.
-2. **Close the 84% gap to the twin** (Lean 0.1167 vs twin 0.1391; recall already matches at
-   0.7353 vs 0.738). Two known divergences, both cheap to test: Lean's **Adam + coupled wd**
-   vs the twin's **decoupled AdamW**, and the **jax-ImageNet bootstrap** vs torchvision init.
-   Recall matching while mAP lags points at ranking, i.e. the optimizer/regularization side.
+1. ✅ **DONE — eval-GT truncation fixed, and the corrected number is HIGHER, not lower.**
+   `pack_raw_boxes` capped GT at `MAX_BBOXES = 56`; VisDrone val averages 70.7 boxes/image, so
+   34.9% of val GT (13,538 of 38,759 boxes) was silently dropped and 59.1% of images were over
+   the cap. Fixed by writing an **uncapped, variable-length GT sidecar** (`val.full_gt.bin`)
+   in the same loop as `val.bin` — so record order is aligned by construction, closing the
+   audit's cross-file-coupling note at the same time — and teaching `yolo_map_visdrone.py` to
+   prefer it (`--gt-capped` reproduces the old behavior; a missing sidecar warns loudly). The
+   training `val.bin` is byte-identical (verified by md5), so no logits dump is invalidated.
+
+   **On the fixed FPN run (`figures/yolo_fpn_shuffix`), the correct-protocol score is
+   mAP@0.5 = 0.1386 / class-agnostic AP 0.3763 / recall 0.6756**, versus the capped
+   0.1167 / 0.3162 / 0.7353. mAP *rose* because a detection that matched a GT box the cap had
+   dropped was being counted as a false positive; recall *fell* because the denominator grew
+   from 25,221 to 38,759 true boxes. **0.1386 is the number to quote**, and it is within
+   VisDrone's RetinaNet-baseline expectation (§5.2).
+2. **Re-check the gap to the twin — it may already be closed.** On capped GT the doc read an
+   84% gap (Lean 0.1167 vs twin 0.1391). The corrected Lean number is **0.1386**, essentially
+   on top of the twin's 0.1391 — BUT the twin's 0.1391 was also scored on capped GT, so this
+   is not yet apples-to-apples. **Re-score the twin's logits dump (`figures/twin_r34_12ep`,
+   if the layout matches the FPN scorer) with the full-GT sidecar before concluding anything.**
+   If the twin also rises, the gap stands and the Adam+coupled-wd vs decoupled-AdamW /
+   bootstrap-vs-torchvision-init divergences are still the levers; if it doesn't, the gap was
+   an artifact of the truncation's easy-image bias and this item closes.
 3. **Augmentation via `augmentBatch` is off for detection and segmentation — but that is
    not the same as "no augmentation", and the original wording here was wrong.**
    `DatasetIO.augmentBatch : raw → batch → seed → IO ByteArray` receives **only the images**,
@@ -178,12 +192,19 @@ IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 FPN_TAG=<distinct> \
 ```
 Reference: fixed arm reaches **3.145** total / **0.526** objectness at e2000.
 
-**Score:**
+**Score** (uses the full-GT sidecar automatically; `--gt-capped` for A/B with pre-fix runs):
 ```
 FPN_TAG=<tag> FPN_TOWER=0 IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
   .lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn figures/<out>
 visdrone/.venv/bin/python3 scripts/yolo_map_visdrone.py \
   figures/<out>/logits.bin data/visdrone448/val.bin --fpn data/visdrone --grid 14
+```
+
+**Regenerate the uncapped GT sidecar** (`data/visdrone448/val.full_gt.bin`, ~1 s, val only —
+does NOT touch the 8 GB train.bin; val.bin comes out byte-identical):
+```
+visdrone/.venv/bin/python3 preprocess_visdrone.py --size 448 --grid 14 \
+  --val-only data/visdrone data/visdrone448
 ```
 
 **The frozen-parameter determinism probe** — run this FIRST on any "cannot descend" report:

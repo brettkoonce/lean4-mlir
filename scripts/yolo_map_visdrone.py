@@ -232,6 +232,10 @@ def decode_fpn(pred_flat, scales, conf_thresh, nms_iou, topk=1000):
 
 
 def read_gt(val_path):
+    """GT from the training record's raw_boxes tail — CAPPED at MAX_BBOXES=56.
+    VisDrone val averages 70.7 boxes/image, so this silently drops 34.9% of GT
+    and is NOT VisDrone protocol. Kept only as a fallback; prefer read_gt_full.
+    """
     raw = np.fromfile(val_path, dtype=np.uint8)
     n = int(np.frombuffer(raw[:4], dtype="<u4")[0])
     gts = []
@@ -245,6 +249,33 @@ def read_gt(val_path):
             cid = int(np.frombuffer(raw[off: off + 4], dtype="<i4")[0])
             xyxy = np.frombuffer(raw[off + 4: off + 20], dtype="<f4").astype(float).tolist()
             boxes.append((cid, xyxy))
+        gts.append(boxes)
+    return n, gts
+
+
+def full_gt_sidecar(val_path):
+    """data/x/val.bin -> data/x/val.full_gt.bin (written by preprocess_visdrone.py)."""
+    return str(Path(val_path).with_suffix(".full_gt.bin"))
+
+
+def read_gt_full(gt_path):
+    """UNCAPPED GT from the variable-length sidecar. Same normalized-xyxy box
+    representation as read_gt, so nothing downstream changes; there is just no
+    56-box cap. Record order matches val.bin by construction (written in the
+    same loop). Layout: <I count, then per record <i nb, nb×(<i cid, <ffff xyxy).
+    """
+    raw = np.fromfile(gt_path, dtype=np.uint8)
+    n = int(np.frombuffer(raw[:4], dtype="<u4")[0])
+    gts = []
+    off = 4
+    for _ in range(n):
+        nb = int(np.frombuffer(raw[off: off + 4], dtype="<i4")[0]); off += 4
+        boxes = []
+        for _k in range(nb):
+            cid = int(np.frombuffer(raw[off: off + 4], dtype="<i4")[0])
+            xyxy = np.frombuffer(raw[off + 4: off + 20], dtype="<f4").astype(float).tolist()
+            boxes.append((cid, xyxy))
+            off += BOX_STRIDE
         gts.append(boxes)
     return n, gts
 
@@ -292,6 +323,13 @@ def main():
                     help="dir with anchors_fpn_{p3,p4,p5}.txt → decode the 3-scale FPN "
                          "head (brick #3): per-scale decode, merge, one NMS. Use --grid 14. "
                          "GT is still read from val_bin with the single-box geometry.")
+    ap.add_argument("--gt-full", default=None,
+                    help="explicit path to the uncapped GT sidecar. Default: auto-use "
+                         "val_bin's .full_gt.bin if present. --gt-capped forces the old "
+                         "56-box-truncated GT (NOT VisDrone protocol).")
+    ap.add_argument("--gt-capped", action="store_true",
+                    help="score against the 56-box-capped raw_boxes tail instead of the "
+                         "full-GT sidecar (drops ~34.9%% of val GT; for A/B with old runs only)")
     args = ap.parse_args()
     global SCORE_MODE
     SCORE_MODE = args.score
@@ -318,7 +356,25 @@ def main():
         logits = logits_raw[: n_pred * FLAT].reshape(n_pred, FLAT)
         decode_fn = lambda row: decode(row, args.conf_thresh, args.nms_iou, args.box_param)
 
-    n_gt_rec, gts = read_gt(args.val_bin)
+    # GT source: the uncapped sidecar is correct VisDrone protocol; the capped
+    # tail drops 34.9% of val boxes. Prefer the sidecar, and be LOUD about any
+    # fall back to the truncated GT so a capped number can't be quoted by accident.
+    sidecar = args.gt_full or full_gt_sidecar(args.val_bin)
+    if args.gt_capped:
+        n_gt_rec, gts = read_gt(args.val_bin)
+        print("⚠️  GT source: 56-box-CAPPED raw_boxes tail (--gt-capped). This drops "
+              "~34.9% of val GT and is NOT VisDrone protocol — A/B only.", file=sys.stderr)
+    elif Path(sidecar).exists():
+        n_gt_rec, gts = read_gt_full(sidecar)
+        tot = sum(len(g) for g in gts)
+        print(f"GT source: {Path(sidecar).name} (full, uncapped): "
+              f"{tot} boxes over {n_gt_rec} records ({tot/max(n_gt_rec,1):.1f}/img)")
+    else:
+        n_gt_rec, gts = read_gt(args.val_bin)
+        print(f"⚠️  GT source: 56-box-CAPPED raw_boxes tail — no sidecar at {sidecar}. "
+              f"This drops ~34.9% of val GT and is NOT VisDrone protocol. Regenerate GT "
+              f"with: preprocess_visdrone.py --size {args.size or args.grid*32} "
+              f"--grid {args.grid} --val-only data/visdrone data/visdrone448", file=sys.stderr)
     n = min(n_pred, n_gt_rec)
     if n_pred != n_gt_rec:
         print(f"WARN: {n_pred} logit rows vs {n_gt_rec} GT records; scoring first {n}",

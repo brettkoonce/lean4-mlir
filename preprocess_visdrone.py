@@ -288,14 +288,47 @@ def pack_raw_boxes(img_w, img_h, boxes):
     return n, bytes(out)
 
 
+# Full ground-truth sidecar, UNCAPPED. `pack_raw_boxes` truncates at
+# MAX_BBOXES=56, which is fine for the training record (a 14×14 grid can encode
+# far fewer than 56 anyway) but silently drops 34.9% of VisDrone val GT — the
+# average val image has 70.7 eval-relevant boxes. Scoring mAP against a
+# truncated GT is not VisDrone protocol, so the scorer reads GT from this
+# variable-length sidecar instead. Boxes are normalized to [0,1] exactly like
+# `pack_raw_boxes`, so a decode is stride-agnostic. This is written in the SAME
+# loop as the training record (see process_split), so its record set and order
+# cannot drift from val.bin's.
+#
+# Per-record layout: <i nb, then nb × (<i cid, <ffff xmin ymin xmax ymax).
+def pack_full_gt(img_w, img_h, boxes):
+    out = bytearray()
+    out += struct.pack("<i", len(boxes))
+    for cid, xmin, ymin, xmax, ymax in boxes:
+        out += struct.pack("<i", int(cid))
+        out += struct.pack("<ffff",
+                           xmin / img_w, ymin / img_h, xmax / img_w, ymax / img_h)
+    return bytes(out)
+
+
+def full_gt_path(out_path):
+    """Sidecar path next to a val.bin: data/x/val.bin -> data/x/val.full_gt.bin."""
+    p = Path(out_path)
+    return str(p.with_suffix(".full_gt.bin"))
+
+
 def process_split(split_dir, out_path):
     imgs_dir = Path(split_dir) / "images"
     anns_dir = Path(split_dir) / "annotations"
     img_paths = sorted(glob.glob(str(imgs_dir / "*.jpg")))
+    gt_path = full_gt_path(out_path)
     written = skipped = 0
-    total_boxes = 0
-    with open(out_path, "wb") as f:
+    total_boxes = capped_boxes = 0
+    # The GT sidecar is written record-for-record INSIDE this loop, so any image
+    # this loop skips (missing txt, no boxes, decode error) is skipped in both
+    # files. That is the only way to guarantee logits row k, val.bin record k,
+    # and sidecar record k are the same image.
+    with open(out_path, "wb") as f, open(gt_path, "wb") as g:
         f.write(struct.pack("<I", 0))
+        g.write(struct.pack("<I", 0))
         for img_path in img_paths:
             stem = Path(img_path).stem
             txt = anns_dir / f"{stem}.txt"
@@ -313,21 +346,28 @@ def process_split(split_dir, out_path):
                 chw = np.asarray(img, dtype=np.uint8).transpose(2, 0, 1).copy()
                 f.write(chw.tobytes()); f.write(target.tobytes()); f.write(mask.tobytes())
                 f.write(struct.pack("<i", nb)); f.write(blk)
-                written += 1; total_boxes += len(boxes)
+                g.write(pack_full_gt(iw, ih, boxes))   # UNCAPPED GT
+                written += 1
+                total_boxes += len(boxes); capped_boxes += nb
             except Exception as e:
                 print(f"  skip {stem}: {e}", file=sys.stderr); skipped += 1
         f.seek(0); f.write(struct.pack("<I", written))
+        g.seek(0); g.write(struct.pack("<I", written))
     mb = os.path.getsize(out_path) / 1024 / 1024
+    dropped = total_boxes - capped_boxes
     print(f"  wrote {out_path}: {written} records ({skipped} skipped), "
-          f"{mb:.0f} MB | {total_boxes} boxes kept "
-          f"({total_boxes / max(written,1):.1f}/img, of which "
-          f"<={GRID_H * GRID_W} survive the {GRID_H}x{GRID_W} target per image)")
+          f"{mb:.0f} MB | {total_boxes} boxes ({total_boxes / max(written,1):.1f}/img)")
+    print(f"  wrote {gt_path}: full uncapped GT ({total_boxes} boxes); "
+          f"training record keeps {capped_boxes} ({dropped} dropped by "
+          f"MAX_BBOXES={MAX_BBOXES}, {100.0*dropped/max(total_boxes,1):.1f}%); "
+          f"<={GRID_H * GRID_W} survive the {GRID_H}x{GRID_W} target per image")
 
 
 def main():
     global IMG_SIZE, GRID_H, GRID_W
     argv = [a for a in sys.argv[1:]]
     size = 224; grid = 7; anchors_path = None; fpn_dir = None
+    splits = ("train", "val")   # --val-only / --train-only restrict this
     pos = []
     i = 0
     while i < len(argv):
@@ -340,6 +380,10 @@ def main():
         elif argv[i] == "--fpn":
             # dir holding anchors_fpn_{p3,p4,p5}.txt (per-scale k-means priors)
             fpn_dir = argv[i+1]; i += 2
+        elif argv[i] == "--val-only":
+            splits = ("val",); i += 1     # regenerate just val.bin + the GT sidecar
+        elif argv[i] == "--train-only":
+            splits = ("train",); i += 1
         else:
             pos.append(argv[i]); i += 1
     if len(pos) != 2:
@@ -356,6 +400,8 @@ def main():
     val_dir = Path(visdrone_dir) / "VisDrone2019-DET-val"
     if not train_dir.exists() or not val_dir.exists():
         print(f"ERROR: expected {train_dir} and {val_dir}", file=sys.stderr); sys.exit(1)
+    dirs = {"train": train_dir, "val": val_dir}
+    todo = [(s, dirs[s]) for s in splits]
     if fpn_dir:
         aps = [load_anchors(os.path.join(fpn_dir, f"anchors_fpn_{p}.txt"))
                for p in ("p3", "p4", "p5")]
@@ -366,18 +412,18 @@ def main():
         rec = 3*IMG_SIZE*IMG_SIZE + ntot*4
         print(f"FPN encoding: A/scale={[len(a) for a in aps]}, grids={FPN_GRIDS}, "
               f"Ntot={ntot}, {rec} bytes/record")
-        process_split_fpn(train_dir, os.path.join(out_dir, "train.bin"), aps, IMG_SIZE)
-        process_split_fpn(val_dir,   os.path.join(out_dir, "val.bin"), aps, IMG_SIZE)
+        for s, d in todo:
+            process_split_fpn(d, os.path.join(out_dir, f"{s}.bin"), aps, IMG_SIZE)
     elif anchors_path:
         anchors = load_anchors(anchors_path)
         A = len(anchors)
         rec = 3*IMG_SIZE*IMG_SIZE + A*PER_ANCHOR*GRID_H*GRID_W*4 + A*GRID_H*GRID_W*4 + 4 + MAX_BBOXES*20
         print(f"anchor encoding: {A} anchors, perCell={A*PER_ANCHOR}, {rec} bytes/record")
-        process_split_anchor(train_dir, os.path.join(out_dir, "train.bin"), anchors)
-        process_split_anchor(val_dir,   os.path.join(out_dir, "val.bin"), anchors)
+        for s, d in todo:
+            process_split_anchor(d, os.path.join(out_dir, f"{s}.bin"), anchors)
     else:
-        process_split(train_dir, os.path.join(out_dir, "train.bin"))
-        process_split(val_dir,   os.path.join(out_dir, "val.bin"))
+        for s, d in todo:
+            process_split(d, os.path.join(out_dir, f"{s}.bin"))
     print("Done.")
 
 
