@@ -344,13 +344,15 @@ Chapter & Contracts & Witnesses & New primitive / result \\
 \end{tabular}
 \end{center}
 
-That's the ladder at a glance. The per-chapter detail --- what each
-contract actually is, how the smooth nets close at \emph{full}
-architecture, and a dependency-spine figure tracing every network back to
-the Chapter~1 calculus --- is rear-loaded into
-Appendix~\ref{app:verification} (\S\ref{sec:chapter_census}). It reads
-most naturally once you've been through the Foundations chapter, so it's
-safe to skip on a first pass.
+That's the ladder at a glance; Figure~\ref{fig:spines} in
+Appendix~\ref{app:verification} draws it as three architecture spines,
+every node a Lean theorem, each tracing back to the Chapter~1 calculus.
+The per-chapter detail lives where the work does --- each chapter names
+its contracts as it proves them --- and how the claims are
+\emph{checked} (the audits, the bridge theorems, the hardware oracles)
+is Appendix~\ref{app:verification}'s subject. It reads most naturally
+once you've been through the Foundations chapter, so it's safe to skip
+on a first pass.
 
 \subsection*{Roadmap: skip to your target architecture}
 
@@ -507,8 +509,8 @@ is mild --- a \(\Differentiable\) hypothesis propagates through each
 chapter. The benefit is that
 \(\texttt{\#print axioms vit\_full\_has\_vjp}\) bottoms out at Lean core
 (\texttt{propext}, \texttt{Classical.choice}, \texttt{Quot.sound}) and
-nothing else --- no thumb on the scale. See
-Appendix~\ref{app:verification} for the full elimination history.
+nothing else --- no thumb on the scale. Appendix~\ref{app:verification}
+shows how that claim is independently audited.
 
 \subsection*{What about non-smooth points?}
 
@@ -11774,177 +11776,206 @@ normalization, residual connections, depthwise convolution,
 squeeze-and-excitation, layer normalization, and self-attention ---
 is machine-checked by Lean's type system. If it builds, it's correct.
 
-But ``it builds'' is only the first of \emph{three kinds of certainty}
-this appendix relies on, and they are not the same kind. \textbf{Proven}
-(deductive): in Lean, against three axioms, each operator's gradient is its
-exact reverse-mode derivative --- and an independent re-checker confirms no
-project axiom slipped into a proof, so ``proven'' means proven-clean.
-\textbf{By construction} (structural): the StableHLO the GPU runs is not
-written but \emph{printed} from the same datatype the proofs reason about,
-with a bridge theorem pinning it to the proven formula, so the code cannot
-drift from the math --- and this now covers whole training steps (forward,
-backward, parameter update) for all twelve verified networks at the production
-trainers' exact signatures, each emitted step tied operator-by-operator to the
-network's own forward and backward pass. \textbf{Cross-checked} (empirical): because IREE cannot itself be
-proven, and \texttt{float32} only conditionally --- its rounding now
-carries a theorem layer whose interface constants are empirically anchored
-(\S~\ref{sec:float32}) --- three independent oracles ---
-a finite-difference probe, a parallel JAX pipeline, and a CPU/GPU/NumPy
-comparator --- must agree on the gradient before the hardware is believed.
-Each kind catches what the others structurally cannot; the five mechanisms
-this appendix walks through are these three kinds of certainty, with the
-empirical one split among its witnesses.
+But ``it builds'' is only the first of \emph{three kinds of certainty},
+and they are not the same kind. \textbf{Proven} (deductive): in Lean,
+against three core axioms, each operator's gradient is its exact
+reverse-mode derivative. \textbf{By construction} (structural): the
+StableHLO the GPU runs is not written but \emph{printed} from the same
+datatype the proofs reason about, with a bridge theorem pinning it to the
+proven formula, so the code cannot drift from the math.
+\textbf{Cross-checked} (empirical): what cannot be proven --- IREE's
+lowering, GPU transcendentals, \texttt{float32} rounding beyond its
+theorem layer (Appendix~\ref{sec:float32}) --- is watched by independent
+oracles that must agree before the hardware is believed. Each kind
+catches what the others structurally cannot; this appendix walks the
+mechanisms, grouped by kind.
 
-\section{Trust kernel}
+One property makes the whole edifice auditable: \textbf{every chapter is
+pure composition}. Every primitive either inherits from Mathlib's
+\(\fderiv\) or composes previously-proved theorems, so each
+architecture's whole-network VJP traces back to the Chapter~1 calculus.
+Figure~\ref{fig:spines} draws those spines for the three longest chains
+in the book.
+
+\begin{figure}[ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  >={Stealth[length=2.5mm]},
+  every node/.style={font=\sffamily\footnotesize},
+  group/.style={
+    draw, rounded corners=2pt, fill=blue!6,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=1cm
+  },
+  primitive/.style={
+    draw=orange!60!black, rounded corners=2pt, fill=orange!10,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.95cm
+  },
+  composed/.style={
+    draw=purple!60!black, rounded corners=2pt, fill=purple!8,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm
+  },
+  final/.style={
+    draw=green!50!black, rounded corners=2pt, fill=green!12,
+    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm,
+    very thick
+  },
+  arr/.style={->, thick, gray!65, shorten >=1pt},
+  shared/.style={->, thick, gray!50, dashed, shorten >=1pt}
+]
+
+% Top row: Ch 1
+\node[group] (found) at (-1.5, 0) {
+  \textbf{Ch~1: foundation calculus}\\
+  \texttt{pdiv\_comp/add/mul/id} \\
+  \texttt{pdiv\_finset\_sum}
+};
+\node[group] (matkit) at (8.0, 0) {
+  \textbf{Ch~9: matrix kit} \\
+  \texttt{pdivMat\_comp} \\
+  \texttt{matmul\_left\_const} \\
+  \texttt{rowwise\_has\_vjp\_mat}
+};
+
+% Left pillar: ResNet-34
+\node[primitive] (mlp) at (-9.0, -2.3) {
+  \textbf{Ch~2: MLP} \\
+  \texttt{dense\_weight\_grad\_correct} \\
+  \texttt{relu\_has\_vjp\_correct}
+};
+\node[primitive] (cnn) at (-9.0, -3.7) {
+  \textbf{Ch~3: CNN} \\
+  \texttt{conv2d\_has\_vjp3} \\
+  \texttt{maxPool2\_has\_vjp3\_correct}
+};
+\node[primitive] (bn)  at (-9.0, -5.1) {
+  \textbf{Ch~4: BatchNorm} \\
+  \texttt{pdiv\_bnNormalize} \\
+  \texttt{pdiv\_bnAffine}
+};
+\node[primitive] (res) at (-9.0, -6.5) {
+  \textbf{Ch~5: residual skip} \\
+  \texttt{residual\_has\_vjp\_correct}
+};
+\node[final] (r34) at (-9.0, -8.0) {
+  \textbf{Full ResNet-34} \\
+  (NetSpec composition)
+};
+
+% Middle pillar: EfficientNet (shifted south to clear shared-arrow lines)
+\node[primitive] (dw) at (-2.5, -4.8) {
+  \textbf{Ch~6: depthwise conv} \\
+  \texttt{depthwise\_has\_vjp3\_correct}
+};
+\node[primitive] (se) at (-2.5, -6.5) {
+  \textbf{Ch~7: SE block} \\
+  \texttt{seBlock\_has\_vjp\_correct}
+};
+\node[final] (enet) at (-2.5, -9.4) {
+  \textbf{Full EfficientNet-B0} \\
+  (NetSpec composition)
+};
+
+% Right pillar: ViT
+\node[primitive] (lngelu) at (3.5, -2.3) {
+  \textbf{Ch~8: LayerNorm \& GELU} \\
+  \texttt{layerNorm\_has\_vjp\_correct} \\
+  \texttt{gelu\_has\_vjp\_correct}
+};
+\node[primitive] (attn) at (8.0, -2.3) {
+  \textbf{Ch~9: attention primitives} \\
+  \texttt{pdiv\_softmax} \\
+  \texttt{sdpa\_back\_\{Q,K,V\}\_correct}
+};
+\node[composed] (mhsa) at (8.0, -4.5) {
+  \textbf{Ch~9: multi-head attention} \\
+  \texttt{mhsa\_has\_vjp\_mat\_correct}
+};
+\node[composed] (block) at (5.75, -6.4) {
+  \textbf{Ch~9: transformer block} \\
+  \texttt{transformerBlock\_has\_vjp\_mat\_correct}
+};
+\node[final] (body) at (5.75, -8.0) {
+  \textbf{Ch~9: ViT body} \\
+  \texttt{vit\_body\_has\_vjp\_mat}
+};
+\node[final] (vit) at (5.75, -9.4) {
+  \textbf{Full ViT} \\
+  \texttt{vit\_full\_has\_vjp}
+};
+
+% Foundation -> R34 primitives. Arrow to Ch 3 routes via cnn.east so it
+% sweeps below Ch 2 instead of through it.
+\draw[arr] (found.south west) to[out=-170, in=85] (mlp.north east);
+\draw[arr] (found.south west) to[out=-150, in=20] (cnn.east);
+\draw[arr] (found.south west) to[out=-130, in=20] (bn.east);
+\draw[arr] (found.south west) to[out=-115, in=20] (res.east);
+% Foundation -> ENet primitives
+\draw[arr] (found.south) to[out=-100, in=70] (dw.north east);
+\draw[arr] (found.south) to[out=-80, in=60] (se.north east);
+% Foundation -> ViT primitives
+\draw[arr] (found.south east) to[out=-30, in=180] (lngelu.west);
+\draw[arr] (found.south east) to[out=-20, in=170] (attn.north west);
+% Matrix kit -> ViT side
+\draw[arr] (matkit.south) to[out=-100, in=40] (attn.north);
+\draw[arr] (matkit.south east) to[out=-60, in=20] (mhsa.east);
+
+% R34 down-flow
+\draw[arr] (mlp) -- (cnn);
+\draw[arr] (cnn) -- (bn);
+\draw[arr] (bn)  -- (res);
+\draw[arr] (res) -- (r34);
+
+% ENet path
+\draw[arr] (dw) -- (se);
+\draw[arr] (se) -- (enet);
+\draw[shared] (cnn.east) to[out=-10, in=130] (enet.north west);
+\draw[shared] (bn.east)  to[out=-10, in=140] (enet.west);
+
+% ViT down-flow
+\draw[arr] (attn) -- (mhsa);
+\draw[arr] (mhsa.south) to[out=-100, in=20] (block.north east);
+\draw[arr] (lngelu.south) to[out=-90, in=160] (block.north west);
+\draw[arr] (block) -- (body);
+\draw[arr] (body)  -- (vit);
+\end{tikzpicture}}
+\caption{Three architecture spines, all the way down to Ch~1 foundation. ResNet-34 (left) needs only the foundation calculus and Chs~2--5 primitives. EfficientNet-B0 (middle) adds Ch~6's depthwise conv and Ch~7's SE block; dashed arrows mark Chs~3 (CNN) and 4 (BN), shared with R34. ViT (right) is the only path that needs the matrix kit; its longer chain runs through MHSA and the transformer block before bundling into the full ViT VJP. Every node is a Lean theorem.}
+\label{fig:spines}
+\end{figure}
+
+\section{Proven: the math is right}
+
+Two mechanisms make the deductive layer trustworthy: the proofs
+themselves, and an independent re-check that the \emph{kernel} --- not
+just the elaborator --- accepts them with no project axioms.
+
+\subsection{Trust kernel}
 
 The Verified VJP Proofs suite proves \textbf{70 VJP correctness
 theorems} --- one per layer, operator, and whole-network architecture,
-each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\), now
-including the full-architecture closes of all five Part~I networks --- on
+each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\) --- on
 top of the foundation \(\pdiv\) calculus and the
 differentiability/forward/witness machinery they rest on, plus 41
-architecture definitions in the bestiary, across 156 Lean proof files,
+architecture definitions in the bestiary, across 199 Lean proof files,
 with zero project axioms. The axiom audit
-(\texttt{tests/AuditAxioms.lean}) re-checks \textbf{1{,}153 theorems} in all
---- the VJP contracts plus the forward-graph faithfulness, render,
-cotangent-chain, and backward certified-VJP tie results --- every one
-closing under the same three core axioms. The most recent additions are
-the \(\mathbb{R}\to\texttt{float32}\) bridge and the descent results
-(\S~\ref{sec:float32}): roughly 600 theorems --- the rounding budgets,
-now architecture-complete across every operator of all the convolutional
-and transformer nets; the per-layer float-fused descent guarantees for the
-shallow nets; and the subnormal and eval-mode-BN lemmas --- all
-\emph{hypothesis-style}, so the audit still closes under the same three
-axioms with zero project axioms.
+(\texttt{tests/AuditAxioms.lean}) re-checks \textbf{1{,}457 theorems} in
+all --- the VJP contracts plus the forward-graph faithfulness, render,
+cotangent-chain, backward-tie, and \texttt{float32} results
+(Appendix~\ref{sec:float32}) --- every one closing under the same three
+core axioms: \(\texttt{\#print axioms vit\_full\_has\_vjp}\) shows only
+Lean core (\texttt{propext}, \texttt{Classical.choice},
+\texttt{Quot.sound}), nothing project-level beneath those. (Earlier
+drafts axiomatized shortcuts for the kinked operators; every one has
+since been proved or become a \texttt{noncomputable def} over the
+canonical \(\fderiv\)-derived witness --- the smooth-point caveats in
+the chapters are all that remains of them.)
 
-What landed in the final rounds to retire the last of the project axioms
-earlier drafts had shipped:
+What type-checking alone cannot catch: prose narrating a different
+formula than the theorem states (Lean only verifies its own statement),
+and anything past the elaborator --- which is what the next mechanism
+and the empirical layer are for.
 
-\begin{itemize}
-  \item \textbf{Phase 1--2 (input-side conv VJPs).} The
-    \(\texttt{conv2d}\) and \(\texttt{depthwiseConv2d}\) input
-    VJPs are now theorems proved via
-    \texttt{pdiv\_finset\_sum} \(\times\) 3 +
-    \texttt{pdiv\_const\_mul\_pi\_pad\_eval} per summand +
-    \(\sum_{c, k_h, k_w}\) collapse.
-  \item \textbf{Phase 3 (multi-head SDPA).} A new
-    \(\pdivMat\_\texttt{colIndep}\) theorem and
-    \(\texttt{colSlabwise\_has\_vjp\_mat}\) framework lift the
-    proved single-head SDPA backward over the head axis. Both
-    \(\texttt{mhsa\_has\_vjp\_mat}\) and its
-    \(\Differentiable\) sibling are now theorems.
-  \item \textbf{Phase 6a/6b (patch embedding).} De-opaqued the
-    \(\texttt{patchEmbed\_flat}\) forward into a concrete
-    \texttt{def} (conv-with-stride + CLS prepend + positional
-    embed), then proved its input VJP via spatial-rearrangement
-    bridge to \(\texttt{conv2d\_has\_vjp3}\).
-  \item \textbf{Phase 7 (the final four).}
-    \(\pdiv\_\texttt{relu}\) proved via local-diagonal-CLM
-    transport: at a smooth point ReLU agrees with the diagonal
-    indicator CLM on a neighborhood (every coordinate keeps its
-    sign), and \texttt{HasFDerivAt.congr\_of\_eventuallyEq}
-    transports the CLM's self-fderiv to ReLU. The remaining
-    three (\(\texttt{relu\_has\_vjp}\),
-    \(\texttt{mlp\_has\_vjp}\), and
-    \(\texttt{maxPool2\_has\_vjp3}\)) became
-    \texttt{noncomputable def}s over the canonical pdiv-derived
-    witness; \texttt{HasVJP.correct} holds by \texttt{rfl} since
-    \(\pdiv\) is a \texttt{def} over \(\fderiv\). At non-smooth
-    points the canonical backward is \(\fderiv\)'s junk default
-    of \(0\); the codegen substitutes the standard subgradient
-    /argmax convention --- see ``Codegen trust boundary'' in
-    \texttt{LeanMlir/Proofs/README.md}.
-\end{itemize}
-
-Pure-Mathlib closure on every theorem.
-\(\texttt{\#print axioms vit\_full\_has\_vjp}\) shows only Lean
-core (\texttt{propext}, \texttt{Classical.choice},
-\texttt{Quot.sound}); nothing project-level beneath those.
-
-\section{Finite-difference gradient checks}
-
-The script \texttt{LeanMlir/Proofs/check\_jacobians.py} runs 30
-finite-difference gradient checks. For each, it perturbs the input by
-\(\varepsilon\), compares the claimed VJP against the centered
-difference
-\((f(x + \varepsilon) - f(x - \varepsilon)) / 2\varepsilon\), and
-asserts agreement within tolerance (typical max-error
-\(\sim 10^{-11}\) at \(\varepsilon = 10^{-5}\) in float64).
-
-Every FD check is a belt-and-suspenders pass over a
-\emph{proved} Jacobian theorem.
-The proofs already establish that each formula equals
-\(\fderiv\) at the relevant points; the FD checks confirm
-the formulas-as-written agree numerically with what the function
-actually does. Coverage spans every closed-form Jacobian we use
-downstream: \(\pdiv\_\texttt{dense}\) and its weight/bias
-companions, \(\pdiv\_\texttt{relu}\) (at smooth points),
-softmax cross-entropy, all four BN pieces
-(\texttt{bnNormalize}, \texttt{bnCentered},
-\texttt{bnIstdBroadcast}, \texttt{bnAffine}), the conv2d and
-depthwise input/weight/bias VJPs, the maxPool2 input VJP, the
-softmax Jacobian, the three single-head SDPA Q/K/V backwards,
-GELU, the bundled multi-head SDPA reduction (per-head
-\texttt{sdpa\_back} stacked over the head axis), the patch-embed
-input VJP, the full-network MLP composition, and bestiary
-spot-checks (bilinear upsample, channel concat, per-pixel
-softmax cross-entropy, U-Net skip plumbing).
-
-What the FD pass catches that the symbolic proof can't: typos
-between the proof and the prose that uses the same Jacobian.
-If a chapter narrates one formula but the Lean theorem states
-another, the proof still type-checks (Lean only verifies its
-own statement), but the FD test runs against the formula the
-prose published and would diverge.
-
-FD is cheap, easy to reason about, and tight enough for
-spot-checking formulas, but it can't probe what the
-\emph{compiled} code actually computes on the GPU --- only
-what the formula says in Python --- and it struggles at
-non-smooth points where the limit definition breaks down. For
-those gaps and for end-to-end pipeline verification, the third
-layer takes over.
-
-\section{The JAX parallel pipeline}
-\label{sec:jax_pipeline}
-
-A separate Lean \(\to\) JAX \(\to\) XLA pipeline
-(\texttt{jax/Jax/Codegen.lean}, \(\sim 1100\) lines) produces an
-idiomatic JAX training script from the same \texttt{NetSpec} the
-primary Lean \(\to\) StableHLO MLIR \(\to\) IREE pipeline consumes.
-XLA is the compiler JAX uses to produce GPU code (the same backend
-that powers TensorFlow and other frameworks); IREE is its Lean-side
-counterpart. The two stacks are independent end to end ---
-different codegen, different runtime, different kernels --- which
-is why agreement between them is a meaningful cross-check. Running
-both from identical initial parameters on identical batches gives
-us a pair of trace files, one per stack, that should agree modulo
-float32 rounding if both pipelines compute the same math.
-
-The agreement is very tight. For the MNIST MLP, step-1 losses agree
-to \(\sim 2 \times 10^{-7}\) --- float32 ULP --- across the
-JAX-CPU-vs-IREE-ROCm comparison, and phase-3 IREE output is
-\textbf{bit-identical across AMD and NVIDIA hardware} at step 1.
-For the MNIST CNN with batch norm, step-1 agrees to
-\(\sim 10^{-4}\), looser because variance reductions over
-\(\sim 100\)k-element tensors amplify cross-compiler reduction-tree
-differences --- both pipelines do correct math; they just sum it
-in different orders. Full results are committed to the repo as
-reproducible JSON-Lines traces; see
-\texttt{traces/CROSS\_BACKEND\_RESULTS.md}.
-
-Layered on top of the end-to-end trace diff is a per-axiom
-differential test in \texttt{tests/vjp\_oracle/}, which compares
-each Lean-proved backward pass against JAX's
-\texttt{value\_and\_grad} autodiff on a minimal one-step training
-run. Nine cases --- dense, dense+ReLU, conv, conv+BN, conv+maxPool,
-residual, depthwise, SE, attention --- each agree with JAX autodiff
-at 1--2 ULP of step-2 loss. Any future hand-derived VJP added to
-the Lean proof base can be validated by a one-step comparison
-against JAX, catching algebraic errors that FD would miss (sign
-flips, wrong contraction axis, swapped indices).
-
-\section{Independent kernel re-check (comparator)}
+\subsection{Independent kernel re-check (comparator)}
 
 \texttt{tests/comparator/} wires the project up to
 \href{https://github.com/leanprover/comparator}{leanprover/comparator},
@@ -11970,10 +12001,32 @@ the same recipe scales to any subset of the proof suite, and the
 same allowlist applies because every theorem in the project closes
 the same way.
 
-\section{Verified code generation}
+\paragraph{How much lives below the named layer.} The dependency
+graph accompanying this blueprint currently shows roughly a hundred nodes --- one
+per named theorem or definition, hand-linked by
+\texttt{\textbackslash uses} annotations. The compiled environment is
+bigger: just over 5{,}000 project constants once compiler-generated
+names are filtered out. That gap is not padding; it is the substrate
+the named layer stands on. Measured mechanically (with a
+constant-level dependency explorer; see the repo's
+\texttt{atlas-integration} branch), the ViT capstone
+\texttt{vit\_body\_has\_vjp\_mat} alone transitively depends on 101
+project constants --- and only 25 of those are named theorems in this
+book. The other 76 are the working parts a reader never needs by
+name: \texttt{Mat} and its flatten/unflatten round-trip lemmas, the
+\texttt{HasVJP}/\texttt{HasVJPMat} structures themselves, forward
+functions, reindexing glue. Every one of the 101 type-checks
+sorry-free on the same three-axiom trust kernel as the named layer
+--- the audits above make no distinction between spine and substrate,
+which is the point: the blueprint's curation is pedagogical, not
+epistemic.
+
+\section{By construction: the code is the math}
+
+\subsection{Verified code generation}
 \label{sec:verified_codegen}
 
-The four layers above answer whether the \emph{mathematics} is right --- the
+The proofs above answer whether the \emph{mathematics} is right --- the
 hand-derived VJPs, their proofs, and the elaborator that accepted them. They
 say nothing about a different gap. The GPU never runs the Lean functions; it
 runs a block of emitted \texttt{stablehlo} that IREE compiles once per
@@ -12028,7 +12081,7 @@ and bounded:
     \emph{semantics}, which does not yet exist; that IREE lowers the text
     correctly; and that \texttt{float32} approximates $\mathbb{R}$, the last
     now a conditional theorem validated on real silicon
-    (\S~\ref{sec:float32}) rather than a bare assumption.
+    (Appendix~\ref{sec:float32}) rather than a bare assumption.
 \end{itemize}
 So the gradient the GPU computes is, by a machine-checked theorem, the
 network's exact reverse-mode derivative over $\mathbb{R}$ --- up to one
@@ -12050,34 +12103,24 @@ per-operator and generic, and the code generation becomes mechanical.
 \medskip\noindent\textbf{From operators to whole training steps.} The
 per-operator bridge is the demonstration; the verified trainers run the full
 construction. Each reads a single committed \texttt{.mlir} --- its entire
-training step, forward through backward through the parameter update --- and that
-file is the printout of one graph (\texttt{SHlo}, the StableHLO syntax tree in
-\texttt{LeanMlir/Proofs/}) whose denotation $[\![\cdot]\!]$ a faithfulness
-theorem proves equal to the certified loss-descent step, output by output. A
-second theorem then closes the gap a per-output bridge leaves open: that the
-cotangent each parameter update consumes is the one the network's \emph{own}
-backward pass delivers at that site, not an arbitrary one fed in by name. These
-\emph{tie} theorems --- one per network, \texttt{<net>\_net\_tied\_certified} ---
-thread the real forward activations and the loss-driven backward chain through
-every parameter, with the fan-in sum at each residual skip, the per-head
-attention backward, and the layer-norm input-VJP rendered explicitly, so each
-output becomes one composed equation rooted at the proven forward rather than a
-quantifier over a free cotangent. All twelve chapter networks are tied this way,
-from the MNIST linear classifier to depth-12 ViT-Tiny (200 parameters, the first
-network with no rendered-gradient gaps); the axiom audit re-derives every tie
-under the same three axioms, and the project's CI prints a green cell for a
-network only when its tie capstone is in that closure --- so the scorecard cannot
-claim more than the kernel checked. The backward direction is now tied the same
-way: each deep net's rendered block-backward is pinned to that block's certified
-VJP (\texttt{vitBlockBackPR\_eq\_transformerBlock\_vjp} and its peers for
-ResNet-34, MobileNetV2, ConvNeXt, and EfficientNet), so the emitted backward
-denotes the certified reverse-mode derivative graph-for-graph at block
-granularity --- the whole-net backward fold assembled for ResNet-34 and
-EfficientNet, and elsewhere gated only by a realistic-dimension whole-net VJP
-that stays an honest stop, not remaining work. What stays trusted is exactly what the
-per-operator story already trusted, now carried across the whole step: the one
-printer, and that each emitted operation's text denotes what $[\![\cdot]\!]$ says
-it does.
+training step, forward through backward through the parameter update --- and
+that file is the printout of one graph whose denotation a faithfulness theorem
+proves equal to the certified loss-descent step, output by output. A companion
+\emph{tie} theorem per network (\texttt{<net>\_net\_tied\_certified}) then
+closes the gap a per-output bridge leaves open: the cotangent each parameter
+update consumes is the one the network's \emph{own} backward pass delivers at
+that site, threaded through the real forward activations --- each update one
+composed equation rooted at the proven forward, not a quantifier over a free
+cotangent. All twelve chapter networks are tied this way, from the MNIST
+linear classifier to depth-12 ViT-Tiny, and each deep net's rendered
+block-backward is pinned to that block's certified VJP
+(\texttt{vitBlockBackPR\_eq\_transformerBlock\_vjp} and its peers). The axiom
+audit re-derives every tie under the same three axioms, and CI prints a green
+cell for a network only when its tie capstone is in that closure --- so the
+scorecard cannot claim more than the kernel checked. What stays trusted is
+exactly what the per-operator story already trusted, now carried across the
+whole step: the one printer, and that each emitted operation's text denotes
+what $[\![\cdot]\!]$ says it does.
 
 \medskip\noindent\textbf{The one conditional.} For the smooth operators ---
 BatchNorm and LayerNorm (given $\varepsilon > 0$), GELU, swish, sigmoid,
@@ -12089,7 +12132,7 @@ equality is permitted to fail precisely on that measure-zero set, and nowhere
 else. That set is the one irreducible boundary the smooth-point caveats in
 the chapter sections refer to.
 
-\section{Inside a bridge theorem}
+\subsection{Inside a bridge theorem}
 \label{sec:inside_bridge}
 
 The ``denoted IR and a bridge theorem'' above is worth seeing concretely,
@@ -12187,7 +12230,121 @@ derivative --- that arrow is machine-checked. Because both arrows start from
 one concrete datatype rather than from a string, ``the emitted code computes
 the proven gradient'' is a theorem about a value, not a hope about a comment.
 
-\section{Float32: closeness, composition, and whether it still trains}
+\section{Cross-checked: the hardware agrees}
+
+Because IREE cannot itself be proven, and GPU transcendentals have no
+IEEE specification, the last stretch --- from proven math to executed
+kernel --- is covered by independent oracles that must agree before the
+hardware is believed. Each watches a different failure mode.
+
+\subsection{Finite-difference gradient checks}
+
+The script \texttt{LeanMlir/Proofs/check\_jacobians.py} runs 30
+finite-difference gradient checks. For each, it perturbs the input by
+\(\varepsilon\), compares the claimed VJP against the centered
+difference
+\((f(x + \varepsilon) - f(x - \varepsilon)) / 2\varepsilon\), and
+asserts agreement within tolerance (typical max-error
+\(\sim 10^{-11}\) at \(\varepsilon = 10^{-5}\) in float64).
+
+Every FD check is a belt-and-suspenders pass over a
+\emph{proved} Jacobian theorem.
+The proofs already establish that each formula equals
+\(\fderiv\) at the relevant points; the FD checks confirm
+the formulas-as-written agree numerically with what the function
+actually does. Coverage spans every closed-form Jacobian we use
+downstream: \(\pdiv\_\texttt{dense}\) and its weight/bias
+companions, \(\pdiv\_\texttt{relu}\) (at smooth points),
+softmax cross-entropy, all four BN pieces
+(\texttt{bnNormalize}, \texttt{bnCentered},
+\texttt{bnIstdBroadcast}, \texttt{bnAffine}), the conv2d and
+depthwise input/weight/bias VJPs, the maxPool2 input VJP, the
+softmax Jacobian, the three single-head SDPA Q/K/V backwards,
+GELU, the bundled multi-head SDPA reduction (per-head
+\texttt{sdpa\_back} stacked over the head axis), the patch-embed
+input VJP, the full-network MLP composition, and bestiary
+spot-checks (bilinear upsample, channel concat, per-pixel
+softmax cross-entropy, U-Net skip plumbing).
+
+What the FD pass catches that the symbolic proof can't: typos
+between the proof and the prose that uses the same Jacobian.
+If a chapter narrates one formula but the Lean theorem states
+another, the proof still type-checks (Lean only verifies its
+own statement), but the FD test runs against the formula the
+prose published and would diverge.
+
+FD is cheap, easy to reason about, and tight enough for
+spot-checking formulas, but it can't probe what the
+\emph{compiled} code actually computes on the GPU --- only
+what the formula says in Python --- and it struggles at
+non-smooth points where the limit definition breaks down. For
+those gaps and for end-to-end pipeline verification, the next oracle takes over.
+
+\subsection{The JAX parallel pipeline}
+\label{sec:jax_pipeline}
+
+A separate Lean \(\to\) JAX \(\to\) XLA pipeline
+(\texttt{jax/Jax/Codegen.lean}, \(\sim 1100\) lines) produces an
+idiomatic JAX training script from the same \texttt{NetSpec} the
+primary Lean \(\to\) StableHLO MLIR \(\to\) IREE pipeline consumes.
+XLA is the compiler JAX uses to produce GPU code (the same backend
+that powers TensorFlow and other frameworks); IREE is its Lean-side
+counterpart. The two stacks are independent end to end ---
+different codegen, different runtime, different kernels --- which
+is why agreement between them is a meaningful cross-check. Running
+both from identical initial parameters on identical batches gives
+us a pair of trace files, one per stack, that should agree modulo
+float32 rounding if both pipelines compute the same math.
+
+The agreement is very tight. For the MNIST MLP, step-1 losses agree
+to \(\sim 2 \times 10^{-7}\) --- float32 ULP --- across the
+JAX-CPU-vs-IREE-ROCm comparison, and phase-3 IREE output is
+\textbf{bit-identical across AMD and NVIDIA hardware} at step 1.
+For the MNIST CNN with batch norm, step-1 agrees to
+\(\sim 10^{-4}\), looser because variance reductions over
+\(\sim 100\)k-element tensors amplify cross-compiler reduction-tree
+differences --- both pipelines do correct math; they just sum it
+in different orders. Full results are committed to the repo as
+reproducible JSON-Lines traces; see
+\texttt{traces/CROSS\_BACKEND\_RESULTS.md}.
+
+Layered on top of the end-to-end trace diff is a per-axiom
+differential test in \texttt{tests/vjp\_oracle/}, which compares
+each Lean-proved backward pass against JAX's
+\texttt{value\_and\_grad} autodiff on a minimal one-step training
+run. Nine cases --- dense, dense+ReLU, conv, conv+BN, conv+maxPool,
+residual, depthwise, SE, attention --- each agree with JAX autodiff
+at 1--2 ULP of step-2 loss. Any future hand-derived VJP added to
+the Lean proof base can be validated by a one-step comparison
+against JAX, catching algebraic errors that FD would miss (sign
+flips, wrong contraction axis, swapped indices).
+
+\subsection{The execution oracle and the margin probe}
+
+Two further watchers close the loop. The \textbf{IREE-versus-NumPy
+oracle} (\S~\ref{sec:verified_codegen}) regenerates every committed
+\texttt{.mlir} from the printer, compiles it for CPU and GPU, and diffs
+the result against an independent NumPy reference --- the one check that
+reaches past the proofs to IREE's lowering itself. And the
+\textbf{margin probe} (\texttt{scripts/margin\_probe.py}) re-runs a real
+training trajectory in coupled \texttt{f32}/\texttt{f64} and checks that
+the run stays inside the float theorems' hypotheses --- no flipped ReLU
+mask, no logit drift past \(\delta\) (Appendix~\ref{sec:float32}). It is
+what keeps the conditional theorems honest about actual training rather
+than hypothetical nets.
+
+\bigskip
+
+Each kind fails differently --- a deductive proof is blind to a
+miscompile, an empirical diff is blind to a measure-zero kink, a
+faithful bridge is blind to a wrong formula it renders perfectly --- and
+overlaying them is the guarantee. Verified code generation straddles two
+of the kinds: its bridge is structural, its oracle empirical. The
+\texttt{float32} theorem layer, next, straddles the other pair: its
+budgets are deductive, its interface constants (\(u\), \(e_{\exp}\),
+\(\delta\)) empirical.
+
+\chapter{Float32: closeness, composition, and whether it still trains}
 \label{sec:float32}
 
 Every theorem in this book is over exact reals; the GPU computes in
@@ -12360,376 +12517,6 @@ flip count is zero across 29.5 million measured pre-activations: the
 margin hypotheses are not a technicality the proofs hide behind; they
 are what training actually looks like.
 
-\section{The five layers, as three kinds of certainty}
-
-The five mechanisms are three kinds of certainty about a single claim ---
-that the GPU computed the network's exact gradient --- with the empirical
-kind split among its witnesses. Each kind catches what the others
-structurally cannot.
-
-\paragraph{Proven (deductive): the math is right.}
-\begin{itemize}
-  \item \textbf{Formal proofs} fail if the math is wrong. Every theorem
-    reduces to Mathlib's \(\fderiv\) and Lean core; the trust kernel is
-    exactly \texttt{propext}, \texttt{Classical.choice}, \texttt{Quot.sound},
-    plus what Mathlib proves about \(\fderiv\). Type-checking can't catch the
-    prose narrating a different formula than the theorem states, though.
-  \item \textbf{The comparator} fails if the elaborator accepted a term the
-    kernel wouldn't, or if any project axiom snuck into a proof's transitive
-    closure --- the independent re-check that makes ``proven'' mean
-    proven-clean, since \(\#\)\texttt{print axioms} and \(\texttt{lake
-    build}\) share an elaborator and cannot audit themselves.
-\end{itemize}
-
-\paragraph{By construction (structural): the code is the math.}
-\begin{itemize}
-  \item \textbf{The bridge theorems} (\S~\ref{sec:verified_codegen}) fail if
-    the emitted StableHLO denotes anything other than the proven derivative.
-    The graph is printed from the same datatype the bridge reasons about, so
-    it cannot drift: ``the code computes the proven gradient'' is a theorem
-    about a value, not a hope about a comment.
-\end{itemize}
-
-\paragraph{Cross-checked (empirical): the hardware agrees.}
-\begin{itemize}
-  \item \textbf{FD gradient checks} catch prose-vs-theorem drift and any
-    algebraic typo in a closed-form Jacobian. FD can't spot compiler bugs or
-    non-smooth-point tiebreak disagreements.
-  \item \textbf{The JAX-parallel pipeline} fails if either compiler has a
-    codegen bug, if the runtime drifts, or if a hand-derived VJP disagrees
-    with JAX autodiff.
-  \item \textbf{The IREE-versus-NumPy oracle} fails if the compiled graph
-    computes the wrong thing on real hardware --- the one check that reaches
-    past the proofs to IREE's lowering --- which cannot be proven --- and
-    \texttt{float32}, whose rounding now carries a conditional
-    \emph{whole-network} certificate: a depth-linear drift bound below the
-    logit scale, and with it a proof that rounding cannot flip the prediction
-    (\S~\ref{sec:float32}).
-  \item \textbf{The margin probe} (\texttt{scripts/margin\_probe.py})
-    fails if a real training run violates the float theorems' hypotheses
-    --- a flipped ReLU mask, a logit drift past \(\delta\) --- the
-    check that keeps the conditional theorems honest about actual
-    training rather than hypothetical nets.
-\end{itemize}
-
-Each kind fails differently --- a deductive proof is blind to a miscompile,
-an empirical diff is blind to a measure-zero kink, a faithful bridge is blind
-to a wrong formula it renders perfectly --- and overlaying them is the
-guarantee. Verified code generation straddles two of these: its bridge is
-structural, its oracle empirical. The \texttt{float32} bridge straddles
-the other pair: its budgets are deductive, its interface constants
-(\(u\), \(e_{\exp}\), \(\delta\)) empirical.
-
-\paragraph{How much lives below the named layer.} The dependency
-graph accompanying this blueprint currently shows 106 nodes --- one
-per named theorem or definition, hand-linked by
-\texttt{\textbackslash uses} annotations. The compiled environment is
-bigger: just over 5{,}000 project constants once compiler-generated
-names are filtered out. That gap is not padding; it is the substrate
-the named layer stands on. Measured mechanically (with a
-constant-level dependency explorer; see the repo's
-\texttt{atlas-integration} branch), the ViT capstone
-\texttt{vit\_body\_has\_vjp\_mat} alone transitively depends on 101
-project constants --- and only 25 of those are named theorems in this
-book. The other 76 are the working parts a reader never needs by
-name: \texttt{Mat} and its flatten/unflatten round-trip lemmas, the
-\texttt{HasVJP}/\texttt{HasVJPMat} structures themselves, forward
-functions, reindexing glue. Every one of the 101 type-checks
-sorry-free on the same three-axiom trust kernel as the named layer
---- the audits above make no distinction between spine and substrate,
-which is the point: the blueprint's curation is pedagogical, not
-epistemic.
-
-\section{What each chapter proves}
-\label{sec:chapter_census}
-
-This expands the contract count from ``How this book is organized'' into
-the per-chapter detail. Chapter by chapter, here is what each network
-contributes --- the \textbf{40 contracts} and \textbf{8 witnesses}
-summarized in that chapter's table, now spelled out.
-
-\textbf{Chapter 1 (MNIST: linear classifier)} does the structural heavy lifting:
-11 theorems that compose Mathlib's \(\fderiv\) into the VJP
-toolkit every later chapter will reuse --- the chain rule,
-additive and multiplicative fan-in, identity, reindexing, finite-sum.
-Plus \(\pdiv\) itself as a definition over \(\fderiv\). The
-matrix-level extensions (matmul, transpose, scalar-scale, row-wise
-lifting, 3D chain rule) live at the start of Chapter~\ref{chap:attention},
-where attention first uses them. The chapter then puts the kit to work
-in its first proven model: \textbf{1 VJP contract},
-\(\texttt{mnistLinear\_has\_vjp\_correct}\) --- the whole model, a
-single dense layer --- with the dense weight- and bias-gradient
-theorems and the softmax cross-entropy gradient certified alongside
-(parameter-gradient contracts, counted with the supporting machinery).
-It is the degenerate-simplest whole-model VJP, and the ops it needs are
-introduced right here, where the demo lives.
-
-\textbf{Chapter 2 (MNIST: 1D)} adds depth and nonlinearity on top of
-Chapter~1's dense layer --- \textbf{2 VJP contracts} plus the chapter's
-concrete end-to-end witness. The guarded ReLU
-Jacobian \(\pdiv\_\texttt{relu}\) is proved via local-diagonal-CLM
-transport; \(\texttt{relu\_has\_vjp}\) and \(\texttt{mlp\_has\_vjp}\)
-are \texttt{noncomputable def}s over the canonical pdiv-derived witness
-(\texttt{HasVJP.correct} by \texttt{rfl}), with the smooth-point
-\(\texttt{\_at}\) variants carrying the real chain-rule proof.
-
-\textbf{Chapter 3 (MNIST: 2D)} contributes 3 VJP contracts (plus four
-concrete witnesses at increasing structure).
-\(\texttt{conv2d}\) and \(\texttt{maxPool2}\) are concrete forward
-defs; the conv2d input-side VJP, maxPool2's VJP --- plus its
-smooth-point \(\texttt{\_at}\) variant, whose \texttt{correct} field is
-a real proof rather than \texttt{rfl} --- and the whole-net MNIST-CNN
-contract are proved from foundation, with the conv weight- and
-bias-gradient theorems alongside.
-
-\textbf{Chapter 4 (CIFAR: BN)} contributes 4 VJP contracts (plus a concrete witness): the
-per-channel BatchNorm VJP in both layouts (flat and NCHW tensor) and
-the CIFAR whole-nets with and without BN --- all assembled from the
-\(\texttt{bn\_input\_grad}\) chain of supporting Jacobians (the
-inverse-stddev broadcast Jacobian and its smoothness lemma under
-\(\varepsilon > 0\), plus the BN affine and centering Jacobians, all
-proved from foundation).
-
-\textbf{Chapter 5 (ResNet-34)} contributes 9 VJP contracts (plus a concrete witness) and
-no new calculus: the residual additive-fan-in VJP (plus its
-projected variant), the global-average-pool VJP, the stride-2
-convolution's input- and weight-VJPs (= decimation \(\circ\) the
-stride-1 conv, the downsample op), the strided block and stage folds,
-and \(\texttt{cnn\_has\_vjp\_at}\), the \emph{whole-network} fold
-composing stem, residual blocks, pool, and dense head end to end.
-The scaling claim in miniature: an entire architecture's backward,
-built from Chapter~1's kit.
-
-\textbf{Chapter 6 (MobileNetV2)} contributes 3 VJP contracts (plus a concrete witness): the
-depthwise input VJP at stride 1 (same recipe as Ch~3 with one fewer
-summation level --- no cross-channel mixing) and stride 2, and the
-whole-network \(\texttt{mobilenetv2\_has\_vjp\_at}\) over
-inverted-residual blocks, which introduces the two-sided-kink
-\texttt{relu6} as a new smooth-point activation.
-
-\textbf{Chapter 7 (EfficientNet)} contributes 5 VJP contracts:
-\texttt{swish}/SiLU (the MBConv activation), the squeeze-and-excitation
-block (\(\texttt{seBlock\_has\_vjp}\) --- global-avg-pool plus two
-1\(\times\)1 convs plus the elementwise product, every piece already
-proved elsewhere), the whole-network
-\(\texttt{efficientnet\_has\_vjp\_at}\) over MBConv blocks with a
-full-spatial SE gate plus its unconditional global sibling, and ---
-at full architecture --- \(\texttt{efficientnetForwardB\_full}\): all
-16 MBConv blocks, batched, under true batch-norm.
-
-\textbf{Chapter 8 (ConvNeXt)} contributes 7 VJP contracts: GELU
-(Jacobian via \(\fderiv\) and \texttt{Real.differentiable\_tanh}),
-LayerNorm (reusing the BN proof template), the elementwise
-layer-scale, the whole-network \(\texttt{convnext\_has\_vjp\_at}\)
-plus its unconditional global sibling --- the all-smooth architecture,
-discharged with no kink hypotheses, only \(\varepsilon > 0\)
-positivity --- and, at full architecture,
-\(\texttt{convNextForwardT}\) (all 18 blocks, 4\(\times\)4/s4 patchify
-stem) with its committed-config variant.
-
-\textbf{Chapter 9 (ViT)} contributes 6 VJP contracts (MHSA, the
-transformer block, the depth-2 whole-network in scalar- and vector-LN
-forms, the general-depth \(\texttt{vitForwardKV}\) --- every depth
-\(k\) at once --- and the
-whole-network \(\texttt{vit\_full\_has\_vjp\_correct}\) wrapper;
-the softmax cross-entropy gradient now lives in Chapter~1 with the
-linear classifier), resting on the
-largest \emph{supporting}-theorem budget in the book and the only
-chapter that needs the matrix-level extensions of Chapter~1's
-foundation rules. The chapter opens with
-\textbf{16 matrix-machinery theorems} (matmul Jacobians and VJPs in
-both factor positions, transpose, scalar-scale, row-wise lifting,
-matrix and 3D chain rules) before any attention proof appears.
-Then the 20 attention theorems: Phase 3 proved multi-head SDPA via
-column-stacking (lifting the single-head SDPA backward over the
-head axis using \(\pdivMat\_\texttt{colIndep}\) +
-\(\texttt{colSlabwise\_has\_vjp\_mat}\)). Phase 6 closed patch
-embedding by de-opaquing the forward (Phase 6a) and proving the
-input VJP via spatial rearrangement (Phase 6b). Softmax Jacobian,
-row-wise softmax smoothness, and seven transformer-level chains
-(sublayers, block, tower, ViT body) all factor through the matrix
-machinery this chapter just assembled.
-
-The shift from earlier drafts: every architecture ends in a
-\emph{whole-network} VJP contract, and for the smooth half the contract
-now holds at \emph{full architecture} ---
-\(\texttt{efficientnetForwardB\_full\_has\_vjp\_correct}\) (all 16 MBConv
-blocks, true batch-norm),
-\(\texttt{convNextForwardT\_has\_vjp\_correct}\) (all 18 blocks; plus the
-committed-config variant), and
-\(\texttt{vitForwardKV\_has\_vjp\_correct}\) (every depth \(k\)). The
-kinked nets keep their whole-network contracts at representative depth
---- \(\texttt{cnn\_has\_vjp\_at\_correct}\),
-\(\texttt{mobilenetv2\_has\_vjp\_at\_correct}\); the ReLU/ReLU6 kinks
-force at-a-point statements --- while their \emph{full} architectures are
-closed on the forward side (graph faithfulness at all 34 layers, all 17
-bottlenecks) with parameter gradients certified family-by-family through
-the chain closes. Those per-family certificates are in turn composed end to
-end: every committed training step is \emph{tied} --- each parameter update
-proved to consume the cotangent its own backward pass delivers, threaded
-through the real forward --- in one whole-network theorem per net
-(\(\texttt{<net>\_net\_tied\_certified}\), \S~\ref{sec:verified_codegen}), across
-all twelve verified trainers. (The underlying forward and witness \texttt{def}s, the
-foundation \(\pdiv\) rules, and the differentiability lemmas are the
-supporting machinery these 48 contracts rest on; they are not counted in
-the table.)
-
-One observation worth pulling out: \textbf{every chapter is pure
-composition.} Every primitive in every chapter either inherits
-from Mathlib's \(\fderiv\) or composes over previously-proved
-theorems. The two non-smooth shortcuts that earlier drafts axiomatized
-(\(\texttt{relu\_has\_vjp}\) and \(\texttt{maxPool2\_has\_vjp3}\))
-are now \texttt{noncomputable def}s over the canonical
-pdiv-derived witness; the codegen substitutes the standard
-subgradient/argmax convention at non-smooth points. The trust
-kernel for the entire backward pass is just Lean core, Mathlib,
-and the codegen contract.
-
-\begin{figure}[ht]
-\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-  >={Stealth[length=2.5mm]},
-  every node/.style={font=\sffamily\footnotesize},
-  group/.style={
-    draw, rounded corners=2pt, fill=blue!6,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=1cm
-  },
-  primitive/.style={
-    draw=orange!60!black, rounded corners=2pt, fill=orange!10,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.95cm
-  },
-  composed/.style={
-    draw=purple!60!black, rounded corners=2pt, fill=purple!8,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm
-  },
-  final/.style={
-    draw=green!50!black, rounded corners=2pt, fill=green!12,
-    align=center, inner sep=4pt, minimum width=4.0cm, minimum height=0.85cm,
-    very thick
-  },
-  arr/.style={->, thick, gray!65, shorten >=1pt},
-  shared/.style={->, thick, gray!50, dashed, shorten >=1pt}
-]
-
-% Top row: Ch 1
-\node[group] (found) at (-1.5, 0) {
-  \textbf{Ch~1: foundation calculus}\\
-  \texttt{pdiv\_comp/add/mul/id} \\
-  \texttt{pdiv\_finset\_sum}
-};
-\node[group] (matkit) at (8.0, 0) {
-  \textbf{Ch~9: matrix kit} \\
-  \texttt{pdivMat\_comp} \\
-  \texttt{matmul\_left\_const} \\
-  \texttt{rowwise\_has\_vjp\_mat}
-};
-
-% Left pillar: ResNet-34
-\node[primitive] (mlp) at (-9.0, -2.3) {
-  \textbf{Ch~2: MLP} \\
-  \texttt{dense\_weight\_grad\_correct} \\
-  \texttt{relu\_has\_vjp\_correct}
-};
-\node[primitive] (cnn) at (-9.0, -3.7) {
-  \textbf{Ch~3: CNN} \\
-  \texttt{conv2d\_has\_vjp3} \\
-  \texttt{maxPool2\_has\_vjp3\_correct}
-};
-\node[primitive] (bn)  at (-9.0, -5.1) {
-  \textbf{Ch~4: BatchNorm} \\
-  \texttt{pdiv\_bnNormalize} \\
-  \texttt{pdiv\_bnAffine}
-};
-\node[primitive] (res) at (-9.0, -6.5) {
-  \textbf{Ch~5: residual skip} \\
-  \texttt{residual\_has\_vjp\_correct}
-};
-\node[final] (r34) at (-9.0, -8.0) {
-  \textbf{Full ResNet-34} \\
-  (NetSpec composition)
-};
-
-% Middle pillar: EfficientNet (shifted south to clear shared-arrow lines)
-\node[primitive] (dw) at (-2.5, -4.8) {
-  \textbf{Ch~6: depthwise conv} \\
-  \texttt{depthwise\_has\_vjp3\_correct}
-};
-\node[primitive] (se) at (-2.5, -6.5) {
-  \textbf{Ch~7: SE block} \\
-  \texttt{seBlock\_has\_vjp\_correct}
-};
-\node[final] (enet) at (-2.5, -9.4) {
-  \textbf{Full EfficientNet-B0} \\
-  (NetSpec composition)
-};
-
-% Right pillar: ViT
-\node[primitive] (lngelu) at (3.5, -2.3) {
-  \textbf{Ch~8: LayerNorm \& GELU} \\
-  \texttt{layerNorm\_has\_vjp\_correct} \\
-  \texttt{gelu\_has\_vjp\_correct}
-};
-\node[primitive] (attn) at (8.0, -2.3) {
-  \textbf{Ch~9: attention primitives} \\
-  \texttt{pdiv\_softmax} \\
-  \texttt{sdpa\_back\_\{Q,K,V\}\_correct}
-};
-\node[composed] (mhsa) at (8.0, -4.5) {
-  \textbf{Ch~9: multi-head attention} \\
-  \texttt{mhsa\_has\_vjp\_mat\_correct}
-};
-\node[composed] (block) at (5.75, -6.4) {
-  \textbf{Ch~9: transformer block} \\
-  \texttt{transformerBlock\_has\_vjp\_mat\_correct}
-};
-\node[final] (body) at (5.75, -8.0) {
-  \textbf{Ch~9: ViT body} \\
-  \texttt{vit\_body\_has\_vjp\_mat}
-};
-\node[final] (vit) at (5.75, -9.4) {
-  \textbf{Full ViT} \\
-  \texttt{vit\_full\_has\_vjp}
-};
-
-% Foundation -> R34 primitives. Arrow to Ch 3 routes via cnn.east so it
-% sweeps below Ch 2 instead of through it.
-\draw[arr] (found.south west) to[out=-170, in=85] (mlp.north east);
-\draw[arr] (found.south west) to[out=-150, in=20] (cnn.east);
-\draw[arr] (found.south west) to[out=-130, in=20] (bn.east);
-\draw[arr] (found.south west) to[out=-115, in=20] (res.east);
-% Foundation -> ENet primitives
-\draw[arr] (found.south) to[out=-100, in=70] (dw.north east);
-\draw[arr] (found.south) to[out=-80, in=60] (se.north east);
-% Foundation -> ViT primitives
-\draw[arr] (found.south east) to[out=-30, in=180] (lngelu.west);
-\draw[arr] (found.south east) to[out=-20, in=170] (attn.north west);
-% Matrix kit -> ViT side
-\draw[arr] (matkit.south) to[out=-100, in=40] (attn.north);
-\draw[arr] (matkit.south east) to[out=-60, in=20] (mhsa.east);
-
-% R34 down-flow
-\draw[arr] (mlp) -- (cnn);
-\draw[arr] (cnn) -- (bn);
-\draw[arr] (bn)  -- (res);
-\draw[arr] (res) -- (r34);
-
-% ENet path
-\draw[arr] (dw) -- (se);
-\draw[arr] (se) -- (enet);
-\draw[shared] (cnn.east) to[out=-10, in=130] (enet.north west);
-\draw[shared] (bn.east)  to[out=-10, in=140] (enet.west);
-
-% ViT down-flow
-\draw[arr] (attn) -- (mhsa);
-\draw[arr] (mhsa.south) to[out=-100, in=20] (block.north east);
-\draw[arr] (lngelu.south) to[out=-90, in=160] (block.north west);
-\draw[arr] (block) -- (body);
-\draw[arr] (body)  -- (vit);
-\end{tikzpicture}}
-\caption{Three architecture spines, all the way down to Ch~1 foundation. ResNet-34 (left) needs only the foundation calculus and Chs~2--5 primitives. EfficientNet-B0 (middle) adds Ch~6's depthwise conv and Ch~7's SE block; dashed arrows mark Chs~3 (CNN) and 4 (BN), shared with R34. ViT (right) is the only path that needs the matrix kit; its longer chain runs through MHSA and the transformer block before bundling into the full ViT VJP. Every node is a Lean theorem.}
-\label{fig:spines}
-\end{figure}
 
 \chapter*{Acknowledgments}
 \addcontentsline{toc}{chapter}{Acknowledgments}
