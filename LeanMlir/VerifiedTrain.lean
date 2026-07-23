@@ -202,7 +202,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} ({net.specs.size} params, {net.nParams} floats), mean-loss SGD lr={cfg.lr}, He init{if synth then " [SYNTH]" else ""}"
   (← IO.getStdout).flush
   let nb  := nTrain / bs
-  let nbt := nEval / bs
+  let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
   let shapes := net.shapesBA
   let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
@@ -233,16 +233,16 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     let mut correct := 0
     if !synth then          -- synth probe: skip eval (no eval split on disk)
       for bi in [0:nbt] do
-        let xb := F32.sliceImages evalImg (bi * bs) bs d0
+        let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
         let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
                         xb xShape bs.toUSize nc.toUSize
-        for j in [0:bs] do
+        for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
           let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
           let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
           if pred == lbl then correct := correct + 1
-    let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
+    let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}% ({epMs}ms)"
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}% ({epMs}ms)"
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."
 
@@ -270,7 +270,7 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} AdamW (packed θ|m|v), He init"
   (← IO.getStdout).flush
   let nb  := nTrain / bs
-  let nbt := nEval / bs
+  let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
   -- θ|m|v packed: θ = He-init (one seed per slot, as `train`), m = v = 0. The
   -- shapes descriptor lists every tensor three times (θ, then m, then v).
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes)
@@ -297,15 +297,15 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
     let thetaCur := params.extract 0 pBytes
     let mut correct := 0
     for bi in [0:nbt] do
-      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
       let logits ← IreeSession.forwardF32 fwdSess fwdFn thetaCur fwdShapes
                       xb xShape bs.toUSize nc.toUSize
-      for j in [0:bs] do
+      for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
         let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
         if pred == lbl then correct := correct + 1
-    let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}%"
+    let acc := correct.toFloat / nEval.toFloat * 100.0
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%"
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} with AdamW via packed θ|m|v threading)."
 
@@ -349,7 +349,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     if synth then mkSynthData net.data d0 bs else loadData net.data d0 dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   let nb  := nTrain / bs
-  let nbt := nEval / bs
+  let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
   if hasBn then IO.println s!"  running-stats BN: {net.bnChannels.size} layers, {nBnStats} stat floats → eval via @{net.slug}_fwd_eval"
   (← IO.getStdout).flush
@@ -473,15 +473,15 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     let evalShapes := if hasBn then fwdEvalShapes else fwdShapes
     let mut correct := 0
     for bi in [0:nbt] do
-      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
       let logits ← IreeSession.forwardF32 evalSess evalFn evalParams evalShapes
                       xb xShape bs.toUSize nc.toUSize
-      for j in [0:bs] do
+      for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
         let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
         if pred == lbl then correct := correct + 1
-    let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}%"
+    let acc := correct.toFloat / nEval.toFloat * 100.0
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%"
     (← IO.getStdout).flush
     IO.FS.writeBinFile ckptPath thetamv
     IO.FS.writeFile epPath (toString (ep + 1))
@@ -509,7 +509,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   IO.println s!"  train {nTrain}, {evalName} {nEval}; dense {d0}->{d1}, bs {bs}, SGD"
   (← IO.getStdout).flush
   let nb  := nTrain / bs
-  let nbt := nEval / bs
+  let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
   let shapes := net.shapesBA          -- packed [W0|b0] layout for the verified forward
   let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
@@ -533,16 +533,16 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
     let params := W0 ++ b0
     let mut correct := 0
     for bi in [0:nbt] do
-      let xb := F32.sliceImages evalImg (bi * bs) bs d0
+      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
       let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
                       xb xShape bs.toUSize d1.toUSize
-      for j in [0:bs] do
+      for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
         let pred := (F32.argmax10 logits (j * d1).toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
         if pred == lbl then correct := correct + 1
-    let acc := correct.toFloat / (nbt * bs).toFloat * 100.0
+    let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nbt * bs} = {acc}% ({epMs}ms)"
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}% ({epMs}ms)"
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."
 

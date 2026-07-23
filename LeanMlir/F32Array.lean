@@ -76,6 +76,16 @@ opaque loadIdxLabels (path : @& String) : IO (ByteArray × Nat)
 def sliceImages (images : ByteArray) (start count pixelsPerImage : Nat) : ByteArray :=
   images.extract (start * pixelsPerImage * 4) ((start + count) * pixelsPerImage * 4)
 
+/-- `sliceImages`, zero-padding past the end of the dataset (`total` images).
+    The batch dimension is baked into the compiled `.vmfb`, so a final partial
+    eval batch must still be a full `count` images; the caller scores only the
+    first `total - start` rows of the result. -/
+def sliceImagesPad (images : ByteArray) (start count pixelsPerImage total : Nat) : ByteArray :=
+  let avail := min count (total - start)
+  if avail == count then sliceImages images start count pixelsPerImage
+  else sliceImages images start avail pixelsPerImage
+       ++ ByteArray.mk (Array.replicate ((count - avail) * pixelsPerImage * 4) 0)
+
 /-- Slice a batch of labels: `count` records of `bytesPerLabel` bytes
     each. Defaults to 4 (int32 LE) for classification. Per-pixel
     segmentation masks pass `bytesPerLabel := H * W` (e.g. 224*224 = 50176

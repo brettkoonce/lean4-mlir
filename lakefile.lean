@@ -997,6 +997,7 @@ lean_exe «mnist-linear-train» where
 -- real Lean/IREE FFI. See MainMnistLinearVerified.lean.
 lean_exe «mnist-linear-verified» where
   root := `apps.mnist.MainMnistLinearVerified
+  moreLinkArgs := ireeLink
 
 -- Phase-3 PGD adversarial attack on the verified linear net (planning/robustness.md):
 -- the attack's input gradient is the proven dx=(softmax-onehot)·Wᵀ VJP, run via IREE.
