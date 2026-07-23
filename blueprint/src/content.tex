@@ -11785,7 +11785,7 @@ datatype the proofs reason about, with a bridge theorem pinning it to the
 proven formula, so the code cannot drift from the math.
 \textbf{Cross-checked} (empirical): what cannot be proven --- IREE's
 lowering, GPU transcendentals, \texttt{float32} rounding beyond its
-theorem layer (Appendix~\ref{sec:float32}) --- is watched by independent
+theorem layer (\S~\ref{sec:float32}) --- is watched by independent
 oracles that must agree before the hardware is believed. Each kind
 catches what the others structurally cannot; this appendix walks the
 mechanisms, grouped by kind.
@@ -11961,7 +11961,7 @@ with zero project axioms. The axiom audit
 (\texttt{tests/AuditAxioms.lean}) re-checks \textbf{1{,}457 theorems} in
 all --- the VJP contracts plus the forward-graph faithfulness, render,
 cotangent-chain, backward-tie, and \texttt{float32} results
-(Appendix~\ref{sec:float32}) --- every one closing under the same three
+(\S~\ref{sec:float32}) --- every one closing under the same three
 core axioms: \(\texttt{\#print axioms vit\_full\_has\_vjp}\) shows only
 Lean core (\texttt{propext}, \texttt{Classical.choice},
 \texttt{Quot.sound}), nothing project-level beneath those. (Earlier
@@ -12081,7 +12081,7 @@ and bounded:
     \emph{semantics}, which does not yet exist; that IREE lowers the text
     correctly; and that \texttt{float32} approximates $\mathbb{R}$, the last
     now a conditional theorem validated on real silicon
-    (Appendix~\ref{sec:float32}) rather than a bare assumption.
+    (\S~\ref{sec:float32}) rather than a bare assumption.
 \end{itemize}
 So the gradient the GPU computes is, by a machine-checked theorem, the
 network's exact reverse-mode derivative over $\mathbb{R}$ --- up to one
@@ -12329,7 +12329,7 @@ reaches past the proofs to IREE's lowering itself. And the
 \textbf{margin probe} (\texttt{scripts/margin\_probe.py}) re-runs a real
 training trajectory in coupled \texttt{f32}/\texttt{f64} and checks that
 the run stays inside the float theorems' hypotheses --- no flipped ReLU
-mask, no logit drift past \(\delta\) (Appendix~\ref{sec:float32}). It is
+mask, no logit drift past \(\delta\) (\S~\ref{sec:float32}). It is
 what keeps the conditional theorems honest about actual training rather
 than hypothetical nets.
 
@@ -12344,7 +12344,7 @@ of the kinds: its bridge is structural, its oracle empirical. The
 budgets are deductive, its interface constants (\(u\), \(e_{\exp}\),
 \(\delta\)) empirical.
 
-\chapter{Float32: closeness, composition, and whether it still trains}
+\section{Float32: closeness, composition, and whether it still trains}
 \label{sec:float32}
 
 Every theorem in this book is over exact reals; the GPU computes in
