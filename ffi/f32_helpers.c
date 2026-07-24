@@ -2516,3 +2516,150 @@ LEAN_EXPORT lean_obj_res lean_f32_rand_augment(
     }
     return lean_io_result_mk_ok(out);
 }
+
+// ---- Photometric HSV jitter (YOLO-style) ----------------------------------
+// Ultralytics `augment_hsv`: three MULTIPLICATIVE gains r = 1 + U(-1,1)*gain
+// applied to hue (mod 360), saturation, and value, one draw per image (not per
+// pixel — the whole image shares the same colour shift, which is the point).
+// Operates in [0,1] sRGB; the imagenet_norm round-trip mirrors rand_augment.
+// Image-only, so it composes with any detector target unchanged.
+static inline void apply_hsv(float* img, size_t channels, size_t plane,
+                             double rh, double rs, double rv) {
+    if (channels != 3) return;
+    float* R = img; float* G = img + plane; float* B = img + 2 * plane;
+    float grh = (float)rh, grs = (float)rs, grv = (float)rv;
+    for (size_t k = 0; k < plane; k++) {
+        float r = R[k], g = G[k], b = B[k];
+        float mx = fmaxf(r, fmaxf(g, b));
+        float mn = fminf(r, fminf(g, b));
+        float d = mx - mn;
+        float v = mx;
+        float s = (mx <= 0.0f) ? 0.0f : d / mx;
+        float h;
+        if (d <= 0.0f)       h = 0.0f;
+        else if (mx == r)    h = 60.0f * fmodf((g - b) / d, 6.0f);
+        else if (mx == g)    h = 60.0f * (((b - r) / d) + 2.0f);
+        else                 h = 60.0f * (((r - g) / d) + 4.0f);
+        if (h < 0.0f) h += 360.0f;
+        // apply gains
+        h = fmodf(h * grh, 360.0f); if (h < 0.0f) h += 360.0f;
+        s *= grs; if (s < 0.0f) s = 0.0f; else if (s > 1.0f) s = 1.0f;
+        v *= grv; if (v < 0.0f) v = 0.0f; else if (v > 1.0f) v = 1.0f;
+        // HSV -> RGB
+        float c = v * s;
+        float hp = h / 60.0f;
+        float x = c * (1.0f - fabsf(fmodf(hp, 2.0f) - 1.0f));
+        float r1, g1, b1;
+        if      (hp < 1.0f) { r1 = c; g1 = x; b1 = 0.0f; }
+        else if (hp < 2.0f) { r1 = x; g1 = c; b1 = 0.0f; }
+        else if (hp < 3.0f) { r1 = 0.0f; g1 = c; b1 = x; }
+        else if (hp < 4.0f) { r1 = 0.0f; g1 = x; b1 = c; }
+        else if (hp < 5.0f) { r1 = x; g1 = 0.0f; b1 = c; }
+        else                { r1 = c; g1 = 0.0f; b1 = x; }
+        float m = v - c;
+        R[k] = r1 + m; G[k] = g1 + m; B[k] = b1 + m;
+    }
+}
+
+LEAN_EXPORT lean_obj_res lean_f32_hsv_jitter(
+    b_lean_obj_arg images, size_t batch, size_t channels,
+    size_t height, size_t width, double hgain, double sgain, double vgain,
+    size_t imagenet_norm, size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t plane = height * width;
+    size_t pixels = channels * plane;
+    size_t nbytes = batch * pixels * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    float* o = (float*)lean_sarray_cptr(out);
+    memcpy(o, lean_sarray_cptr(images), nbytes);
+    uint64_t s = seed ^ 0x9e3779b97f4a7c15ULL; if (s == 0) s = 1;
+    for (size_t i = 0; i < batch; i++) {
+        float* img = o + i * pixels;
+        double rh = 1.0 + (2.0 * f32_unif01(&s) - 1.0) * hgain;
+        double rs = 1.0 + (2.0 * f32_unif01(&s) - 1.0) * sgain;
+        double rv = 1.0 + (2.0 * f32_unif01(&s) - 1.0) * vgain;
+        if (imagenet_norm) denormalize_imagenet(img, channels, plane);
+        apply_hsv(img, channels, plane, rh, rs, rv);
+        if (imagenet_norm) { clamp01(img, pixels); renormalize_imagenet(img, channels, plane); }
+    }
+    return lean_io_result_mk_ok(out);
+}
+
+// ---- Horizontal flip of an FPN image + its flat [P3|P4|P5] target ----------
+// A flip mirrors columns and is SHAPE-INVARIANT: max(w,h) and (w,h) are
+// unchanged, so every GT stays in the same scale AND the same best-shape anchor.
+// The transform is therefore exact and needs no re-encode from boxes (the FPN
+// record stores none): mirror the image columns, mirror each scale's grid
+// columns for every channel, and replace the in-cell x-offset tx with 1-tx on
+// assigned cells (obj==1). ty/tw/th/obj/cls and the anchor index are untouched.
+// This matches encode_targets_fpn's assignment exactly (see preprocess_visdrone.py):
+// after a column mirror cell cj -> g-1-cj and tx = cx*g-cj -> 1-tx.
+// `scales_flat` is int32-LE pairs [g_s, A_s] per scale; perAnchor = 15 fixed.
+// One p=`prob` coin per image. Returns (image', target') as fresh ByteArrays.
+LEAN_EXPORT lean_obj_res lean_f32_fpn_hflip(
+    b_lean_obj_arg images, b_lean_obj_arg target,
+    size_t batch, size_t channels, size_t height, size_t width,
+    b_lean_obj_arg scales_flat, size_t n_scales, double prob,
+    size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t plane = height * width;
+    size_t img_px = channels * plane;
+    size_t img_bytes = batch * img_px * 4;
+    const int32_t* geo = (const int32_t*)lean_sarray_cptr(scales_flat);
+    size_t ntot = 0;
+    for (size_t si = 0; si < n_scales; si++) {
+        size_t g = (size_t)geo[2 * si], A = (size_t)geo[2 * si + 1];
+        ntot += A * 15 * g * g;
+    }
+    size_t tgt_bytes = batch * ntot * 4;
+    lean_object* out_img = lean_alloc_sarray(1, img_bytes, img_bytes);
+    lean_object* out_tgt = lean_alloc_sarray(1, tgt_bytes, tgt_bytes);
+    float* oi = (float*)lean_sarray_cptr(out_img);
+    float* ot = (float*)lean_sarray_cptr(out_tgt);
+    memcpy(oi, lean_sarray_cptr(images), img_bytes);
+    memcpy(ot, lean_sarray_cptr(target), tgt_bytes);
+    uint64_t s = seed ^ 0x2545f4914f6cdd1dULL; if (s == 0) s = 1;
+    for (size_t i = 0; i < batch; i++) {
+        if (!(f32_unif01(&s) < prob)) continue;
+        // mirror image columns
+        float* img = oi + i * img_px;
+        for (size_t c = 0; c < channels; c++) {
+            float* pl = img + c * plane;
+            for (size_t r = 0; r < height; r++) {
+                float* row = pl + r * width;
+                for (size_t j = 0; j < width / 2; j++) {
+                    float t = row[j]; row[j] = row[width - 1 - j]; row[width - 1 - j] = t;
+                }
+            }
+        }
+        // mirror each scale's target grid columns, then fix tx on assigned cells
+        float* tgt = ot + i * ntot;
+        size_t off = 0;
+        for (size_t si = 0; si < n_scales; si++) {
+            size_t g = (size_t)geo[2 * si], A = (size_t)geo[2 * si + 1];
+            size_t C = A * 15, gg = g * g;
+            float* blk = tgt + off;                 // [C, g, g] C-order
+            for (size_t c = 0; c < C; c++) {
+                float* ch = blk + c * gg;
+                for (size_t r = 0; r < g; r++) {
+                    float* row = ch + r * g;
+                    for (size_t j = 0; j < g / 2; j++) {
+                        float t = row[j]; row[j] = row[g - 1 - j]; row[g - 1 - j] = t;
+                    }
+                }
+            }
+            for (size_t a = 0; a < A; a++) {
+                float* tx  = blk + (a * 15 + 0) * gg;
+                float* obj = blk + (a * 15 + 4) * gg;
+                for (size_t p = 0; p < gg; p++) {
+                    if (obj[p] > 0.5f) tx[p] = 1.0f - tx[p];
+                }
+            }
+            off += C * gg;
+        }
+    }
+    lean_object* tup = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(tup, 0, out_img);
+    lean_ctor_set(tup, 1, out_tgt);
+    return lean_io_result_mk_ok(tup);
+}

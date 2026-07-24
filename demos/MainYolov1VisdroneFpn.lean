@@ -155,6 +155,16 @@ def tagFromEnv : IO String := do
   | none => return ""
   | some v => return if v.trim.isEmpty then "" else s!" {v.trim}"
 
+/-- Augmentation toggle (`FPN_AUG=1`). Turns on the FPN-path augmentation pack —
+    YOLO-style HSV jitter (photometric, image-only) + horizontal flip (geometric,
+    re-encoded on the flat [P3|P4|P5] target). OFF by default so the in-flight
+    baseline arm stays byte-reproducible; this is an explicit A/B arm and MUST run
+    under its own `FPN_TAG` so its checkpoints don't clobber the no-aug control. -/
+def augFromEnv : IO Bool := do
+  match (← IO.getEnv "FPN_AUG") with
+  | none => return false
+  | some v => return (v.trim == "1" || v.trim.toLower == "true")
+
 /-- Infer: dump [N, Ntot] val logits for scripts/yolo_map_visdrone.py --fpn. -/
 def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
   IO.FS.createDirAll outDir
@@ -219,12 +229,15 @@ def main (args : List String) : IO Unit := do
     let lrMult ← lrMultFromEnv
     let lr := r34FpnDetConfig.learningRate * lrMult
     let clip ← clipFromEnv r34FpnDetConfig.gradClipNorm
+    let aug ← augFromEnv
     let cfg := { r34FpnDetConfig with epochs := epochs,
                                       checkpointEveryNEpochs := ckptEvery,
                                       learningRate := lr,
-                                      gradClipNorm := clip }
+                                      gradClipNorm := clip,
+                                      augment := aug }
     IO.println s!"FPN multi-scale VisDrone (56/28/14, 3 anchors/scale, Ntot={fpnNtot}, head tower={tower}) — data dir: {dataDir}"
     IO.println s!"  spec   : {spec.name}"
     IO.println s!"  epochs : {epochs}"
     IO.println s!"  lr     : {lr}  clip: {clip}"
+    IO.println s!"  augment: {aug} (HSV jitter + hflip on the FPN path)"
     spec.train cfg dataDir DatasetKind.petsDet

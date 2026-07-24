@@ -486,7 +486,15 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         valPixels   := 3 * spec.imageH * spec.imageW
         labelBytesPerRecord := fpnNtot * 4
         loadTrain := fun d => F32.loadDetBinFpn (d ++ "/train.bin") spec.imageH.toUSize fpnNtot.toUSize
-        loadVal   := fun d => F32.loadDetBinFpn (d ++ "/val.bin") spec.imageH.toUSize fpnNtot.toUSize }
+        loadVal   := fun d => F32.loadDetBinFpn (d ++ "/val.bin") spec.imageH.toUSize fpnNtot.toUSize
+        -- Photometric aug for the FPN path: YOLO-style HSV jitter (image-only,
+        -- so the flat target is untouched). The geometric hflip is a paired
+        -- image+target step in the batch loop (`augmentBatch` cannot see labels).
+        -- Only fires when cfg.augment is on (FPN_AUG=1). Images are ImageNet-
+        -- normalized on disk ⇒ imagenetNorm=1 for the de-norm/re-norm round-trip.
+        augmentBatch := fun raw b seed =>
+          F32.hsvJitter raw b 3 spec.imageH.toUSize spec.imageW.toUSize
+            0.015 0.7 0.4 1 seed.toUSize }
     else if ds == .petsDet && !cfg.anchors.isEmpty then
       -- Anchor mode (brick #2): the loader returns TARGET-ONLY labels
       -- [A·15,gH,gW] (mask derived from target obj channels in the loss).
@@ -529,6 +537,18 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let useSeg := lossKind.isSeg
   let useFpnRun := !cfg.fpnScales.isEmpty
   let useYolov1Run := lossKind == .yolov1Masked && !useFpnRun
+  -- Per-scale (grid, numAnchors) geometry packed int32-LE for the FPN hflip FFI:
+  -- pairs [g_0, A_0, g_1, A_1, ...]. Computed once; identical for every batch.
+  let fpnScalesFlat : ByteArray := Id.run do
+    let mut ba : ByteArray := .empty
+    for (g, anchors) in cfg.fpnScales do
+      for v in [g, anchors.length] do
+        ba := ba.push (v % 256).toUInt8
+        ba := ba.push (v / 256 % 256).toUInt8
+        ba := ba.push (v / 65536 % 256).toUInt8
+        ba := ba.push (v / 16777216 % 256).toUInt8
+    return ba
+  let nScalesU : USize := cfg.fpnScales.length.toUSize
 
   let (trainImg, trainLbl, nTrain) ← dio.loadTrain dataDir
   IO.eprintln s!"  train: {nTrain} images ({dio.trainPixels} floats/image)"
@@ -773,6 +793,17 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                           augH.toUSize augW.toUSize (stepSeed ^^^ (11 : USize))
         xba := xf
         yArg := mf
+      -- FPN geometric aug: paired horizontal flip of image + flat [P3|P4|P5]
+      -- target (one coin per image). Runs AFTER the photometric HSV in
+      -- augmentBatch, and only touches xba/yArg, so the FPN train-step call
+      -- below sees a consistently-flipped image/target pair. Exact — a flip is
+      -- shape-invariant, so no re-encode is needed (see F32.fpnHflip).
+      if useFpnRun && cfg.augment then
+        let (xf, yf) ← F32.fpnHflip xba yArg batch augC.toUSize
+                          augH.toUSize augW.toUSize fpnScalesFlat nScalesU
+                          0.5 (stepSeed ^^^ (13 : USize))
+        xba := xf
+        yArg := yf
       -- DeiT-style aug. RandAugment first (color-only subset), then RE.
       if cfg.useRandAugment then
         let raSeed : USize := stepSeed ^^^ (5 : USize)

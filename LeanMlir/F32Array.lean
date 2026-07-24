@@ -223,6 +223,29 @@ opaque yoloAugment (images : @& ByteArray) (boxes : @& ByteArray)
     (seed : USize)
     : IO (ByteArray × ByteArray × ByteArray)
 
+/-- Photometric HSV jitter (YOLO-style) for a normalized image batch `[B,C,H,W]`.
+    Three multiplicative gains `1 + U(-1,1)·gain` on hue (mod 360°), saturation,
+    and value, one draw per image. Image-only — touches no labels, so it composes
+    with any detector target. `imagenetNorm=1` de-norms to [0,1] sRGB, applies the
+    gains in HSV space, clamps, and re-norms (the FPN loader stores images
+    ImageNet-normalized). Returns a fresh image batch; the input is not modified. -/
+@[extern "lean_f32_hsv_jitter"]
+opaque hsvJitter (images : @& ByteArray) (batch channels height width : USize)
+    (hGain sGain vGain : Float) (imagenetNorm : USize) (seed : USize) : IO ByteArray
+
+/-- Horizontal flip of an FPN image `[B,C,H,W]` + its flat `[P3|P4|P5]`
+    multi-scale target, one p=`prob` coin per image. A flip is shape-invariant, so
+    every GT keeps its scale AND best-shape anchor: the image and each scale's grid
+    mirror columns, and the in-cell x-offset `tx` becomes `1-tx` on assigned cells
+    (obj=1). This matches `encode_targets_fpn` exactly — no re-encode from boxes is
+    needed (the FPN record stores none). `scalesFlat` is int32-LE pairs `[g_s, A_s]`
+    per scale; perAnchor=15 fixed. Returns `(image', target')` as fresh ByteArrays. -/
+@[extern "lean_f32_fpn_hflip"]
+opaque fpnHflip (images target : @& ByteArray)
+    (batch channels height width : USize)
+    (scalesFlat : @& ByteArray) (nScales : USize) (prob : Float) (seed : USize)
+    : IO (ByteArray × ByteArray)
+
 /-- Convert a uint8 mask ByteArray (one byte per pixel) into a little-endian
     int32 ByteArray of 4× the size. Pets `loadPets` returns masks as packed
     uint8; `trainStepAdamF32Seg` expects int32 per-pixel class labels. -/
