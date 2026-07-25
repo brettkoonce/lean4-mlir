@@ -158,6 +158,7 @@ import LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDPUncon
 import LeanMlir.Proofs.Certificates.LipschitzCertFloat
 import LeanMlir.Proofs.Foundation.ListDot
 import LeanMlir.Proofs.Foundation.IntervalBound
+import LeanMlir.Proofs.Foundation.IntervalBoundConv
 import LeanMlir.Proofs.Certificates.SmoothingMC
 import LeanMlir.Proofs.Certificates.SmoothingCP
 import LeanMlir.Proofs.Certificates.SmoothingCPScorecard
@@ -3389,6 +3390,40 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.denseLo2_eval
 #print axioms Proofs.LipschitzCertDemo.denseHi2_eval
 #print axioms Proofs.LipschitzCertDemo.ibp2_certified_at_eps
+
+-- IBP PAST THE TWO-LAYER DENSE WALL (Foundation/IntervalBoundConv.lean).
+-- `ibp2_certified_at_eps` above is hard-wired to `dense ∘ relu ∘ dense`, which is
+-- why no certificate in the repo reached a convolution. This engine replaces the
+-- fixed shape by a HYPOTHESIS — any sound interval transformer — and proves the
+-- per-layer transformers that build one: conv2d (sign-split over the SAME-padded
+-- taps), maxPool2 (monotone: pool the endpoints), dense, relu. `.comp`/`.comp3`/
+-- `.comp3V` give DEPTH by composition, so an n-layer net needs n per-layer facts
+-- and no new argument. Unstable ReLUs and tied pool windows are handled soundly
+-- (the box contains both branches), not excluded.
+#print axioms Proofs.IBP.BoxSound.comp
+#print axioms Proofs.IBP.BoxSound3.comp
+#print axioms Proofs.IBP.BoxSound3V.comp3
+#print axioms Proofs.IBP.denseV_boxSound
+#print axioms Proofs.IBP.denseT_boxSound3V
+#print axioms Proofs.IBP.reluV_boxSound
+#print axioms Proofs.IBP.reluT_boxSound3
+#print axioms Proofs.IBP.flatten_reluT
+#print axioms Proofs.IBP.conv2d_boxSound3
+#print axioms Proofs.IBP.flatConv_boxSound
+#print axioms Proofs.IBP.maxPool2_boxSound3
+#print axioms Proofs.IBP.maxPoolFlat_boxSound
+-- the conv peer of denseLo_uniform: the first layer's box is `conv x ∓ ε·(|W| ⊛ 𝟙)`,
+-- one extra convolution per NET rather than a sign-split sum per image.
+#print axioms Proofs.IBP.convLo_uniform
+#print axioms Proofs.IBP.convHi_uniform
+-- DEPTH, concretely: a six-layer stack (conv → relu → conv → relu → pool → dense),
+-- its transformer five `.comp`s of the per-layer facts — no induction, no new lemma.
+#print axioms Proofs.IBP.deepNet_boxSound
+-- capstones (flat and tensor shape) + radius monotonicity
+#print axioms Proofs.IBP.ibp_certified_of_boxSound
+#print axioms Proofs.IBP.ibp3_certified_of_boxSound
+#print axioms Proofs.IBP.CertifiedAtLinf3.mono
+#print axioms Proofs.IBP.CertifiedAtLinfV.mono
 
 
 

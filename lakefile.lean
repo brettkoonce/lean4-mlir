@@ -776,6 +776,14 @@ lean_lib «Certs» where
              -- both build `Certs`).
              `LeanMlir.Proofs.Foundation.ListDot,
              `LeanMlir.Proofs.Foundation.IntervalBound,
+             -- IBP past the two-layer dense wall: a COMPOSITIONAL interval engine
+             -- (`BoxSound`/`BoxSound3`/`BoxSound3V` + `.comp`, so depth is just `∘`)
+             -- with conv2d / maxPool2 / dense / relu transformers proved sound, the
+             -- conv uniform-box collapse, and tensor- and flat-space capstones.
+             -- `ibp2_certified_at_eps` only ever covered `dense ∘ relu ∘ dense`;
+             -- this is what lets a certificate reach a convolution at all. Engine
+             -- only (no generated data) — the instance lives in `CertsHeavy`.
+             `LeanMlir.Proofs.Foundation.IntervalBoundConv,
              -- The binary32/fp8-E4M3 hardware models, CONSTRUCTED (post_audit_roadmap §2):
              -- rndP p = round-to-nearest on the unbounded-exponent p-bit grid, standard
              -- model |rndP p x − x| ≤ 2⁻¹⁻ᵖ|x| PROVED (rndP_err) — the former
