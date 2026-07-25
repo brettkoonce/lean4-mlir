@@ -1,6 +1,6 @@
 # Trimming the generated scorecards: recipe, gotchas, remaining work
 
-*(2026-07-25. Status: **5 of 6 tiers trimmed**, generated corpus 106k → ~31k lines,
+*(2026-07-25. Status: **6 of 7 tiers trimmed**, generated corpus 106k → ~30k lines,
 every reported number unchanged. Commits `6bb0313` (conv), `89b98d8` (Lipschitz
 full-input + IBP L∞), plus the two LipSDP passes below. The stranding that §4
 used to warn about is fixed, and the pooled tier cut **~19 minutes off every
@@ -116,12 +116,33 @@ N_EMIT      # how many of those carry a per-image THEOREM
 | IBP L∞ (SF + TF) | `lipschitz_cert_scorecard_ibp.py` | 11,683 | **3,485** |
 | LipSDP full-input (SF + TF) | `lipschitz_cert_pair_sdp_full.py` | 30,884 | **7,241** |
 | LipSDP pooled (C + U) | `lipschitz_cert_pair_sdp.py` | 15,933 | **5,251** |
+| Float composition | `lipschitz_cert_float.py` | 830 | **440** |
 
 Build: 3903 jobs clean. `AuditAxioms` 1474/1474, `AuditAxiomsHeavy` 46/46, all
 three-axiom. Conv tier alone went 4,241 s → 488 s and ~38 GB → 14.2 GB peak.
 The pooled LipSDP tier — the only one of these in the **per-push** `Certs` build
 — went **583 s + 671 s → 48.5 s + 49.7 s** (45 → 35 class pairs), i.e. ~19 min
 off every proof push, at 6.0 GB peak.
+
+**The float tier is the exception: trimming it is nearly free of benefit.** The
+old note here claimed "538 s for 34 float-composed images"; a clean A/B at
+`LEAN_NUM_THREADS=1` (2.5 s of that is lake replay) says otherwise:
+
+| `LipschitzCertFloat` | wall | peak |
+|---|---|---|
+| uncapped (33 images) | 97.9 s | 4.58 GB |
+| capped (8 images) | **90.7 s** | 3.79 GB |
+
+7 s, ~7%. `-Dprofiler` explains it: **92 s of the ~95 s is `simp`**, and it is
+almost all `W1sV_abs_le` / `W2sV_abs_le` — 49×8 + 8×10 = 472 `fin_cases` goals
+each re-unfolding the weight matrices at ~190 ms apiece. The per-image blocks
+are ~0.29 s each (49 cheap coordinate goals). So this file's cost is
+**weight-side, not exhibit-side**, and no per-image cap can touch it. The cap
+was kept anyway — it is 390 fewer lines, it makes the theorem/measurement split
+say the same thing as every other tier, and it is what let the §2.7 disclaimer
+bug surface — but do not expect time back. The real win here would be replacing
+those 472 simp goals with one kernel bound over the ℤ-list weights, the same
+trick `ListDot.lean` plays for the 784-term dots.
 
 Regenerating uncapped is `SCORECARD_N_EMIT=100 python3 scripts/<gen>.py`. The
 knob is defined twice, because the tiers do not share a base: in
@@ -155,17 +176,17 @@ pins are three-axiom. They stay out of the lib roots — see §6 for why.
 
 | # | target | lines | lib | generator | notes |
 |---|---|---|---|---|---|
-| 1 | `LipschitzCertFloat` | 830 | `Certs` | `lipschitz_cert_float.py` | 538 s for 34 float-composed images; 8 would do. Cheap, per-push win. **Missing the §2.7 disclaimer — add it before regenerating.** |
-| 2 | `LipschitzCertScorecard` (pooled) | 1,539 | `CertsHeavy` | `lipschitz_cert_scorecard.py` | Small, but it is the base several others reuse — cap it *last* or you re-strand its dependents. Its `img<i>`/`hpreC<i>` set is **hardcoded** into `lipschitz_cert_pair_sdp.py` as `EXISTING_IMGS`/`EXISTING_HPRE_C` (not imported), so capping it silently desynchronizes that generator — update both together. **Also missing the §2.7 disclaimer.** |
-| 3 | Smoothing CP + Dec | 3,598 | `Certs` | `smooth_{,dec_}scorecard_gen.py` | **Lowest value.** These are one `decide +kernel` bignum check per image (~0.1 s), so the marginal image is already nearly free. Trim only for consistency. |
+| 1 | `LipschitzCertScorecard` (pooled) | 1,539 | `CertsHeavy` | `lipschitz_cert_scorecard.py` | Small, but it is the base several others reuse — cap it *last* or you re-strand its dependents. Its `img<i>`/`hpreC<i>` set is **hardcoded** into `lipschitz_cert_pair_sdp.py` as `EXISTING_IMGS`/`EXISTING_HPRE_C` (not imported), so capping it silently desynchronizes that generator — update both together. **Missing the §2.7 disclaimer.** |
+| 2 | Smoothing CP + Dec | 3,598 | `Certs` | `smooth_{,dec_}scorecard_gen.py` | **Lowest value.** These are one `decide +kernel` bignum check per image (~0.1 s), so the marginal image is already nearly free. Trim only for consistency. |
 
 **Do not trim** `LipschitzCertScorecardFullNets.lean` (3,799): that is net weights
 plus the Schatten-8 chains, i.e. the proved Lipschitz constant. It is engine-side
 content, not a per-image exhibit.
 
-What is left is small and cheap — the two big levers (the stranded full-input
-tier and the per-push pooled tier) are both spent. Item 2 is the one with a real
-trap in it (the hardcoded cross-generator image set); items 1 and 3 are routine.
+What is left is small and cheap — the big levers are spent, and the float tier
+showed that line count and elaboration cost are only loosely related, so do not
+assume the remaining two buy time. Item 1 is the one with a real trap in it (the
+hardcoded cross-generator image set); item 2 is routine.
 
 ## 6. The real prize: does this get `certs-heavy` back under CI?
 

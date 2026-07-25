@@ -17,8 +17,15 @@ most B; so any margin clearing (14143/10000)*L*eps + 2*B keeps the float argmax
 (strict). Images and margins are parsed from the committed
 LipschitzCertScorecard.lean (the source of truth) — no retraining.
 """
+import os
 import re
 from fractions import Fraction
+
+# How many of the float-certified images carry a per-image THEOREM. Soundness is
+# in the engine below (certified_at_eps_close + certifiedFloat_of_margin), proved
+# once; the count stays MEASURED over all 34 R-certified images. See
+# planning/scorecard_trim.md. SCORECARD_N_EMIT=100 regenerates uncapped.
+N_EMIT = int(os.environ.get("SCORECARD_N_EMIT", 8))
 
 SRC = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean"
 OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Certificates/LipschitzCertFloat.lean"
@@ -81,9 +88,16 @@ B = ceil_to(q1 * (8 * w1 * (A1 + E0)) + 8 * w1 * E0, 10 ** 7)
 
 thr = Fraction(14143, 10000) * L * EPS + 2 * B
 passing = [k for k in certified if thr < margins[k]]
+# cap: the first N_EMIT surviving images in test-set order. `measured` is the
+# full exact-rational count for the header; `emitted` is the theorem-carrying
+# subset. Each per-image block costs a `fin_cases` over 49 coordinates, which is
+# where this file's ~538 s in the per-push tier goes.
+measured = len(passing)
+emitted = passing[:N_EMIT]
 print(f"w0={w0} w1={w1}  A1={float(A1):.3f}  E0={float(E0):.3e}  B={float(B):.3e}")
 print(f"float threshold {float(thr):.6f} vs pure-R threshold {float(Fraction(14143,10000)*L*EPS):.6f}")
-print(f"float-certified: {len(passing)}/{len(certified)} capped images", flush=True)
+print(f"float-certified (measured): {measured}/{len(certified)} capped images; "
+      f"emitting {len(emitted)} theorems: {emitted}", flush=True)
 dropped = [k for k in certified if k not in passing]
 if dropped:
     print("dropped:", dropped, "margins:", {k: float(margins[k]) for k in dropped})
@@ -96,7 +110,7 @@ def lit(fr):
 
 # ---------------------------------------------------------------- per-image blocks
 img_blocks = []
-for k in passing:
+for k in emitted:
     lab = labels[k]
     img_blocks.append(f"""set_option maxRecDepth 16384 in
 set_option maxHeartbeats 8000000 in
@@ -116,12 +130,17 @@ theorem certifiedC{k}_float (M : FloatModel) (hMu : M.u ≤ u32)
     (by norm_num) δ hδ y hy
 """)
 
-agg_list = ", ".join(str(k) for k in passing)
+agg_list = ", ".join(str(k) for k in emitted)
 
 body = f'''import LeanMlir.Proofs.Certificates.LipschitzCertScorecard
 import LeanMlir.Proofs.Float.FloatBridge
 
 /-! # The robustness certificate composed with the float bridge
+
+**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
+MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
+784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
+arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.
 
 The 2026-07-02 audit's gap #1, closed: the scorecard's per-image Lipschitz-
 margin certificates (`LipschitzCertScorecard.lean`, exact-ℝ net) composed with
@@ -140,8 +159,17 @@ magnitude bounds `|W1s| ≤ {lit(w0)}`, `|W2s| ≤ {lit(w1)}`, inputs `≤ 11/10
 perturbs each logit by at most `B`, so any margin clearing
 `(14143/10000)·L·ε + 2·B ≈ {float(thr):.4f}` (vs the ℝ-only threshold
 `≈ {float(Fraction(14143,10000)*L*EPS):.4f}`) keeps the float argmax:
-**{len(passing)}/34** of the ℝ-certified images survive the float widening
+**{measured}/34** of the ℝ-certified images survive the float widening
 {"(all of them)" if not dropped else f"(dropped: {dropped})"}.
+
+**Theorem vs. measurement — read this before quoting a number.** Soundness lives
+in the ENGINE below (`certified_at_eps_close` + `certifiedFloat_of_margin`,
+proved once) — kernel-checking the 57th image buys nothing the 56th didn't. The
+{measured}/34 above is an exact-rational MEASUREMENT; the first {len(emitted)} surviving images
+(test-set order — an unbiased, reproducible rule) each carry a
+`certifiedC<i>_float` THEOREM, and `float_scorecard_count` states only that.
+Each such block re-checks all 49 coordinates by `fin_cases`, which is what this
+file costs on every proof push.
 
 What this does NOT close (unchanged trust boundary, `Binary32Instance.lean`):
 the kernel↔model gap — FMA contraction, reduction reassociation, "the GPU
@@ -404,14 +432,15 @@ theorem certifiedFloat_of_margin (M : FloatModel) (hMu : M.u ≤ u32)
 -- ════════════════════════════════════════════════════════════════
 
 {"".join(img_blocks)}
-/-- Indices float-certified at ε = 1/10 on the capped net — one
-    `certifiedC<i>_float` theorem each. -/
+/-- Indices carrying a `certifiedC<i>_float` theorem — the first {len(emitted)} of the
+    {measured} float-certified images, one theorem each. -/
 def certifiedFloatIdx : List ℕ := [{agg_list}]
 
-/-- **The float scorecard**: {len(passing)} of the 34 ℝ-certified images
-    survive the `2·B` float widening (binary32 forward + input
-    quantization) — lower bound only, as before. -/
-theorem float_scorecard_count : certifiedFloatIdx.length = {len(passing)} := rfl
+/-- **The float scorecard** — MEASURED {measured} of the 34 ℝ-certified images survive
+    the `2·B` float widening (binary32 forward + input quantization); the {len(emitted)}
+    below are the emitted witnesses carrying theorems, not that measurement.
+    Lower bound only, as before. -/
+theorem float_scorecard_count : certifiedFloatIdx.length = {len(emitted)} := rfl
 
 end LipschitzCertDemo
 end Proofs
