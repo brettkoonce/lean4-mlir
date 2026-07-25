@@ -11,6 +11,14 @@ first-100 MNIST test subset as the L2 scorecard: at ε = 1/255, 2/255,
 For comparison, pushing the L2 Lipschitz certificate through
 `‖δ‖₂ ≤ √784·ε∞` certifies only 92, 85, 49, 2 — at small L∞ radii the box beats the ball.
 
+
+**Theorem vs. measurement.** Soundness is in the ENGINE
+(`Foundation/IntervalBound.lean`), proved once — kernel-checking the 57th
+image buys nothing the 56th didn't. The counts above are exact-rational
+MEASUREMENTS over the first 100 images; the first 8 certifying images at
+each radius carry a `CertifiedAtLinf` THEOREM, and the aggregate below states
+only those. The images witness non-vacuity; they are not what makes it sound.
+
 Engine: `IntervalBound.lean`. The first layer is a uniform box, so its
 interval image is `⟨w,x⟩ ∓ ε·‖w‖₁` — `⟨w,x⟩` reuses the committed `dotZ`
 pre-activation facts (`hpre*`), `‖w‖₁` is ONE new kernel fact per row
@@ -718,99 +726,159 @@ theorem certIBPSFe2_7 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 9 → mlpSF (imgF7 + δ) j < mlpSF (imgF7 + δ) 9 :=
   ibp2_certified_at_eps W1SF W2SF hbSFe2_7 δ hδ
 
-theorem hpreSF9_sum : ∀ t, (∑ j, W1SF t j * imgF9 j) = hpreSF9 t := by
+/-- MNIST test image #10 (digit 0), exact pixels k/255. -/
+def imgz10 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 61, 3, 42, 118, 193, 118, 118, 61, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14, 179, 245, 236, 242, 254, 254, 254, 254, 245, 235, 84, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 151, 254, 254, 254, 213, 192, 178, 178, 180, 254, 254, 241, 46, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 43, 235, 254, 226, 64, 28, 12, 0, 0, 2, 128, 252, 255, 173, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 56, 254, 253, 107, 0, 0, 0, 0, 0, 0, 0, 134, 250, 254, 75, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 63, 254, 158, 0, 0, 0, 0, 0, 0, 0, 0, 0, 221, 254, 157, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 194, 254, 103, 0, 0, 0, 0, 0, 0, 0, 0, 0, 150, 254, 213, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 34, 220, 239, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84, 254, 213, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 126, 254, 171, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84, 254, 213, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 214, 239, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84, 254, 213, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 214, 199, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84, 254, 213, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 219, 199, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84, 254, 213, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 98, 254, 199, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 162, 254, 209, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 98, 254, 199, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 51, 238, 254, 75, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 98, 254, 199, 0, 0, 0, 0, 0, 0, 0, 0, 0, 51, 165, 254, 195, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 66, 241, 199, 0, 0, 0, 0, 0, 0, 0, 0, 3, 167, 254, 227, 55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 214, 213, 20, 0, 0, 0, 0, 0, 46, 152, 202, 254, 254, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 214, 254, 204, 180, 180, 180, 180, 180, 235, 254, 254, 234, 156, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 81, 205, 254, 254, 254, 254, 254, 254, 254, 252, 234, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 210, 254, 254, 254, 254, 254, 153, 104, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+theorem imgz10_len : (imgz10).length = 784 := by decide +kernel
+
+noncomputable def imgv10 : Fin 784 → ℝ := fun j => ((imgz10).getD j 0 : ℝ)/255
+
+noncomputable def imgF10 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv10
+
+theorem imgF10_apply : ∀ j, imgF10 j = ((imgz10).getD j 0 : ℝ)/255 := fun _ => rfl
+
+-- net SF pre-activations for #10 (not in the base L2-certified set)
+theorem pzISF_10_0 : dotZ w1zSF0 imgz10 = 393809 := by decide +kernel
+theorem pzISF_10_1 : dotZ w1zSF1 imgz10 = -160739 := by decide +kernel
+theorem pzISF_10_2 : dotZ w1zSF2 imgz10 = -231825 := by decide +kernel
+theorem pzISF_10_3 : dotZ w1zSF3 imgz10 = 122824 := by decide +kernel
+theorem pzISF_10_4 : dotZ w1zSF4 imgz10 = 234215 := by decide +kernel
+theorem pzISF_10_5 : dotZ w1zSF5 imgz10 = -84110 := by decide +kernel
+theorem pzISF_10_6 : dotZ w1zSF6 imgz10 = 38636 := by decide +kernel
+theorem pzISF_10_7 : dotZ w1zSF7 imgz10 = -109016 := by decide +kernel
+theorem pzISF_10_8 : dotZ w1zSF8 imgz10 = 83075 := by decide +kernel
+theorem pzISF_10_9 : dotZ w1zSF9 imgz10 = -38162 := by decide +kernel
+theorem pzISF_10_10 : dotZ w1zSF10 imgz10 = 168195 := by decide +kernel
+theorem pzISF_10_11 : dotZ w1zSF11 imgz10 = 120224 := by decide +kernel
+theorem pzISF_10_12 : dotZ w1zSF12 imgz10 = -66754 := by decide +kernel
+theorem pzISF_10_13 : dotZ w1zSF13 imgz10 = 14617 := by decide +kernel
+theorem pzISF_10_14 : dotZ w1zSF14 imgz10 = 106428 := by decide +kernel
+theorem pzISF_10_15 : dotZ w1zSF15 imgz10 = 36400 := by decide +kernel
+
+noncomputable def hpreISF10 : Fin 16 → ℝ :=
+  ![((393809 : ℝ)/65280), ((-160739 : ℝ)/65280), ((-231825 : ℝ)/65280), ((122824 : ℝ)/65280), ((234215 : ℝ)/65280), ((-84110 : ℝ)/65280), ((38636 : ℝ)/65280), ((-109016 : ℝ)/65280), ((83075 : ℝ)/65280), ((-38162 : ℝ)/65280), ((168195 : ℝ)/65280), ((120224 : ℝ)/65280), ((-66754 : ℝ)/65280), ((14617 : ℝ)/65280), ((106428 : ℝ)/65280), ((36400 : ℝ)/65280)]
+
+theorem hpreISF10_eval_0 : denseE W1SF imgF10 0 = hpreISF10 0 := by
+  rw [show hpreISF10 0 = ((393809 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr0]
+  simp only [w1rSF0, imgF10_apply]
+  rw [sum_getD_div w1zSF0_len imgz10_len pzISF_10_0 256 255]
+  norm_num
+
+theorem hpreISF10_eval_1 : denseE W1SF imgF10 1 = hpreISF10 1 := by
+  rw [show hpreISF10 1 = ((-160739 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr1]
+  simp only [w1rSF1, imgF10_apply]
+  rw [sum_getD_div w1zSF1_len imgz10_len pzISF_10_1 256 255]
+  norm_num
+
+theorem hpreISF10_eval_2 : denseE W1SF imgF10 2 = hpreISF10 2 := by
+  rw [show hpreISF10 2 = ((-231825 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr2]
+  simp only [w1rSF2, imgF10_apply]
+  rw [sum_getD_div w1zSF2_len imgz10_len pzISF_10_2 256 255]
+  norm_num
+
+theorem hpreISF10_eval_3 : denseE W1SF imgF10 3 = hpreISF10 3 := by
+  rw [show hpreISF10 3 = ((122824 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr3]
+  simp only [w1rSF3, imgF10_apply]
+  rw [sum_getD_div w1zSF3_len imgz10_len pzISF_10_3 256 255]
+  norm_num
+
+theorem hpreISF10_eval_4 : denseE W1SF imgF10 4 = hpreISF10 4 := by
+  rw [show hpreISF10 4 = ((234215 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr4]
+  simp only [w1rSF4, imgF10_apply]
+  rw [sum_getD_div w1zSF4_len imgz10_len pzISF_10_4 256 255]
+  norm_num
+
+theorem hpreISF10_eval_5 : denseE W1SF imgF10 5 = hpreISF10 5 := by
+  rw [show hpreISF10 5 = ((-84110 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr5]
+  simp only [w1rSF5, imgF10_apply]
+  rw [sum_getD_div w1zSF5_len imgz10_len pzISF_10_5 256 255]
+  norm_num
+
+theorem hpreISF10_eval_6 : denseE W1SF imgF10 6 = hpreISF10 6 := by
+  rw [show hpreISF10 6 = ((38636 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr6]
+  simp only [w1rSF6, imgF10_apply]
+  rw [sum_getD_div w1zSF6_len imgz10_len pzISF_10_6 256 255]
+  norm_num
+
+theorem hpreISF10_eval_7 : denseE W1SF imgF10 7 = hpreISF10 7 := by
+  rw [show hpreISF10 7 = ((-109016 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr7]
+  simp only [w1rSF7, imgF10_apply]
+  rw [sum_getD_div w1zSF7_len imgz10_len pzISF_10_7 256 255]
+  norm_num
+
+theorem hpreISF10_eval_8 : denseE W1SF imgF10 8 = hpreISF10 8 := by
+  rw [show hpreISF10 8 = ((83075 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr8]
+  simp only [w1rSF8, imgF10_apply]
+  rw [sum_getD_div w1zSF8_len imgz10_len pzISF_10_8 256 255]
+  norm_num
+
+theorem hpreISF10_eval_9 : denseE W1SF imgF10 9 = hpreISF10 9 := by
+  rw [show hpreISF10 9 = ((-38162 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr9]
+  simp only [w1rSF9, imgF10_apply]
+  rw [sum_getD_div w1zSF9_len imgz10_len pzISF_10_9 256 255]
+  norm_num
+
+theorem hpreISF10_eval_10 : denseE W1SF imgF10 10 = hpreISF10 10 := by
+  rw [show hpreISF10 10 = ((168195 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr10]
+  simp only [w1rSF10, imgF10_apply]
+  rw [sum_getD_div w1zSF10_len imgz10_len pzISF_10_10 256 255]
+  norm_num
+
+theorem hpreISF10_eval_11 : denseE W1SF imgF10 11 = hpreISF10 11 := by
+  rw [show hpreISF10 11 = ((120224 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr11]
+  simp only [w1rSF11, imgF10_apply]
+  rw [sum_getD_div w1zSF11_len imgz10_len pzISF_10_11 256 255]
+  norm_num
+
+theorem hpreISF10_eval_12 : denseE W1SF imgF10 12 = hpreISF10 12 := by
+  rw [show hpreISF10 12 = ((-66754 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr12]
+  simp only [w1rSF12, imgF10_apply]
+  rw [sum_getD_div w1zSF12_len imgz10_len pzISF_10_12 256 255]
+  norm_num
+
+theorem hpreISF10_eval_13 : denseE W1SF imgF10 13 = hpreISF10 13 := by
+  rw [show hpreISF10 13 = ((14617 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr13]
+  simp only [w1rSF13, imgF10_apply]
+  rw [sum_getD_div w1zSF13_len imgz10_len pzISF_10_13 256 255]
+  norm_num
+
+theorem hpreISF10_eval_14 : denseE W1SF imgF10 14 = hpreISF10 14 := by
+  rw [show hpreISF10 14 = ((106428 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr14]
+  simp only [w1rSF14, imgF10_apply]
+  rw [sum_getD_div w1zSF14_len imgz10_len pzISF_10_14 256 255]
+  norm_num
+
+theorem hpreISF10_eval_15 : denseE W1SF imgF10 15 = hpreISF10 15 := by
+  rw [show hpreISF10 15 = ((36400 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr15]
+  simp only [w1rSF15, imgF10_apply]
+  rw [sum_getD_div w1zSF15_len imgz10_len pzISF_10_15 256 255]
+  norm_num
+
+theorem hpreISF10_eval : ∀ k : Fin 16, denseE W1SF imgF10 k = hpreISF10 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreISF10_eval_0; exact hpreISF10_eval_1; exact hpreISF10_eval_2; exact hpreISF10_eval_3; exact hpreISF10_eval_4; exact hpreISF10_eval_5; exact hpreISF10_eval_6; exact hpreISF10_eval_7; exact hpreISF10_eval_8; exact hpreISF10_eval_9; exact hpreISF10_eval_10; exact hpreISF10_eval_11; exact hpreISF10_eval_12; exact hpreISF10_eval_13; exact hpreISF10_eval_14; exact hpreISF10_eval_15 ]
+
+theorem hpreISF10_sum : ∀ t, (∑ j, W1SF t j * imgF10 j) = hpreISF10 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreSF9_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_9 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF9 q - ((1 : ℝ)/255)) (fun q => imgF9 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF9 q - ((1 : ℝ)/255)) (fun q => imgF9 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF9 q - ((1 : ℝ)/255)) (fun q => imgF9 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF9 q - ((1 : ℝ)/255)) (fun q => imgF9 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF9_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF9, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #9 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_9 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF9 + δ) j < mlpSF (imgF9 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_9 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_9 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF9 q - ((2 : ℝ)/255)) (fun q => imgF9 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF9 q - ((2 : ℝ)/255)) (fun q => imgF9 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF9 q - ((2 : ℝ)/255)) (fun q => imgF9 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF9 q - ((2 : ℝ)/255)) (fun q => imgF9 q + ((2 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF9_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF9, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #9 (digit 9): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_9 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF9 + δ) j < mlpSF (imgF9 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_9 δ hδ
-
-theorem hpreSF10_sum : ∀ t, (∑ j, W1SF t j * imgF10 j) = hpreSF10 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF10_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_10 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF10 q - ((1 : ℝ)/255)) (fun q => imgF10 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF10 q - ((1 : ℝ)/255)) (fun q => imgF10 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF10 q - ((1 : ℝ)/255)) (fun q => imgF10 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF10 q - ((1 : ℝ)/255)) (fun q => imgF10 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF10_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF10, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #10 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_10 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF10 + δ) j < mlpSF (imgF10 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_10 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_10 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF10 q - ((2 : ℝ)/255)) (fun q => imgF10 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF10 q - ((2 : ℝ)/255)) (fun q => imgF10 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF10 q - ((2 : ℝ)/255)) (fun q => imgF10 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF10 q - ((2 : ℝ)/255)) (fun q => imgF10 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF10_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF10, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #10 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_10 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF10 + δ) j < mlpSF (imgF10 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_10 δ hδ
+  exact hpreISF10_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbSFe4_10 : ∀ j : Fin 10, j ≠ 0 →
@@ -820,11 +888,11 @@ theorem hbSFe4_10 : ∀ j : Fin 10, j ≠ 0 →
                     (reluHi (denseHi W1SF (fun q => imgF10 q - ((4 : ℝ)/255)) (fun q => imgF10 q + ((4 : ℝ)/255)))) 0 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF10_sum, absrowSF]
+  simp only [hpreISF10_sum, absrowSF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF10, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, hpreISF10, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #10 (digit 0): IBP-certified at pixel-L∞ ε = 4/255. -/
@@ -833,188 +901,159 @@ theorem certIBPSFe4_10 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 0 → mlpSF (imgF10 + δ) j < mlpSF (imgF10 + δ) 0 :=
   ibp2_certified_at_eps W1SF W2SF hbSFe4_10 δ hδ
 
-theorem hpreSF11_sum : ∀ t, (∑ j, W1SF t j * imgF11 j) = hpreSF11 t := by
+/-- MNIST test image #13 (digit 0), exact pixels k/255. -/
+def imgz13 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 66, 138, 255, 253, 169, 138, 23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 120, 228, 252, 252, 253, 252, 252, 252, 158, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 108, 252, 252, 252, 252, 190, 252, 252, 252, 252, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 43, 233, 252, 252, 252, 116, 5, 135, 252, 252, 252, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 43, 178, 253, 252, 221, 43, 2, 0, 5, 54, 232, 252, 210, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 93, 253, 255, 249, 115, 0, 0, 0, 0, 0, 136, 251, 255, 154, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 166, 252, 253, 185, 0, 0, 0, 0, 0, 0, 0, 209, 253, 206, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 220, 252, 253, 92, 0, 0, 0, 0, 0, 0, 0, 116, 253, 206, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 70, 252, 252, 192, 17, 0, 0, 0, 0, 0, 0, 0, 116, 253, 223, 25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 122, 252, 252, 63, 0, 0, 0, 0, 0, 0, 0, 0, 116, 253, 252, 69, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 132, 253, 253, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 255, 253, 69, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 184, 252, 252, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 253, 252, 69, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 184, 252, 252, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 253, 240, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 184, 252, 252, 0, 0, 0, 0, 0, 0, 0, 0, 0, 210, 253, 112, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48, 232, 252, 158, 0, 0, 0, 0, 0, 0, 0, 0, 230, 232, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 93, 253, 244, 50, 0, 0, 0, 0, 0, 0, 155, 253, 168, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 34, 164, 253, 113, 0, 0, 0, 0, 0, 66, 236, 231, 42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 222, 240, 134, 0, 0, 38, 91, 234, 252, 137, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 25, 177, 240, 207, 103, 233, 252, 252, 176, 35, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 54, 179, 252, 137, 137, 54, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+theorem imgz13_len : (imgz13).length = 784 := by decide +kernel
+
+noncomputable def imgv13 : Fin 784 → ℝ := fun j => ((imgz13).getD j 0 : ℝ)/255
+
+noncomputable def imgF13 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv13
+
+theorem imgF13_apply : ∀ j, imgF13 j = ((imgz13).getD j 0 : ℝ)/255 := fun _ => rfl
+
+-- net SF pre-activations for #13 (not in the base L2-certified set)
+theorem pzISF_13_0 : dotZ w1zSF0 imgz13 = 359424 := by decide +kernel
+theorem pzISF_13_1 : dotZ w1zSF1 imgz13 = -21290 := by decide +kernel
+theorem pzISF_13_2 : dotZ w1zSF2 imgz13 = -181736 := by decide +kernel
+theorem pzISF_13_3 : dotZ w1zSF3 imgz13 = 61868 := by decide +kernel
+theorem pzISF_13_4 : dotZ w1zSF4 imgz13 = 162620 := by decide +kernel
+theorem pzISF_13_5 : dotZ w1zSF5 imgz13 = -38257 := by decide +kernel
+theorem pzISF_13_6 : dotZ w1zSF6 imgz13 = -29688 := by decide +kernel
+theorem pzISF_13_7 : dotZ w1zSF7 imgz13 = -42963 := by decide +kernel
+theorem pzISF_13_8 : dotZ w1zSF8 imgz13 = -28045 := by decide +kernel
+theorem pzISF_13_9 : dotZ w1zSF9 imgz13 = 126369 := by decide +kernel
+theorem pzISF_13_10 : dotZ w1zSF10 imgz13 = 334721 := by decide +kernel
+theorem pzISF_13_11 : dotZ w1zSF11 imgz13 = 130709 := by decide +kernel
+theorem pzISF_13_12 : dotZ w1zSF12 imgz13 = -78189 := by decide +kernel
+theorem pzISF_13_13 : dotZ w1zSF13 imgz13 = -18065 := by decide +kernel
+theorem pzISF_13_14 : dotZ w1zSF14 imgz13 = 60637 := by decide +kernel
+theorem pzISF_13_15 : dotZ w1zSF15 imgz13 = -26668 := by decide +kernel
+
+noncomputable def hpreISF13 : Fin 16 → ℝ :=
+  ![((359424 : ℝ)/65280), ((-21290 : ℝ)/65280), ((-181736 : ℝ)/65280), ((61868 : ℝ)/65280), ((162620 : ℝ)/65280), ((-38257 : ℝ)/65280), ((-29688 : ℝ)/65280), ((-42963 : ℝ)/65280), ((-28045 : ℝ)/65280), ((126369 : ℝ)/65280), ((334721 : ℝ)/65280), ((130709 : ℝ)/65280), ((-78189 : ℝ)/65280), ((-18065 : ℝ)/65280), ((60637 : ℝ)/65280), ((-26668 : ℝ)/65280)]
+
+theorem hpreISF13_eval_0 : denseE W1SF imgF13 0 = hpreISF13 0 := by
+  rw [show hpreISF13 0 = ((359424 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr0]
+  simp only [w1rSF0, imgF13_apply]
+  rw [sum_getD_div w1zSF0_len imgz13_len pzISF_13_0 256 255]
+  norm_num
+
+theorem hpreISF13_eval_1 : denseE W1SF imgF13 1 = hpreISF13 1 := by
+  rw [show hpreISF13 1 = ((-21290 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr1]
+  simp only [w1rSF1, imgF13_apply]
+  rw [sum_getD_div w1zSF1_len imgz13_len pzISF_13_1 256 255]
+  norm_num
+
+theorem hpreISF13_eval_2 : denseE W1SF imgF13 2 = hpreISF13 2 := by
+  rw [show hpreISF13 2 = ((-181736 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr2]
+  simp only [w1rSF2, imgF13_apply]
+  rw [sum_getD_div w1zSF2_len imgz13_len pzISF_13_2 256 255]
+  norm_num
+
+theorem hpreISF13_eval_3 : denseE W1SF imgF13 3 = hpreISF13 3 := by
+  rw [show hpreISF13 3 = ((61868 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr3]
+  simp only [w1rSF3, imgF13_apply]
+  rw [sum_getD_div w1zSF3_len imgz13_len pzISF_13_3 256 255]
+  norm_num
+
+theorem hpreISF13_eval_4 : denseE W1SF imgF13 4 = hpreISF13 4 := by
+  rw [show hpreISF13 4 = ((162620 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr4]
+  simp only [w1rSF4, imgF13_apply]
+  rw [sum_getD_div w1zSF4_len imgz13_len pzISF_13_4 256 255]
+  norm_num
+
+theorem hpreISF13_eval_5 : denseE W1SF imgF13 5 = hpreISF13 5 := by
+  rw [show hpreISF13 5 = ((-38257 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr5]
+  simp only [w1rSF5, imgF13_apply]
+  rw [sum_getD_div w1zSF5_len imgz13_len pzISF_13_5 256 255]
+  norm_num
+
+theorem hpreISF13_eval_6 : denseE W1SF imgF13 6 = hpreISF13 6 := by
+  rw [show hpreISF13 6 = ((-29688 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr6]
+  simp only [w1rSF6, imgF13_apply]
+  rw [sum_getD_div w1zSF6_len imgz13_len pzISF_13_6 256 255]
+  norm_num
+
+theorem hpreISF13_eval_7 : denseE W1SF imgF13 7 = hpreISF13 7 := by
+  rw [show hpreISF13 7 = ((-42963 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr7]
+  simp only [w1rSF7, imgF13_apply]
+  rw [sum_getD_div w1zSF7_len imgz13_len pzISF_13_7 256 255]
+  norm_num
+
+theorem hpreISF13_eval_8 : denseE W1SF imgF13 8 = hpreISF13 8 := by
+  rw [show hpreISF13 8 = ((-28045 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr8]
+  simp only [w1rSF8, imgF13_apply]
+  rw [sum_getD_div w1zSF8_len imgz13_len pzISF_13_8 256 255]
+  norm_num
+
+theorem hpreISF13_eval_9 : denseE W1SF imgF13 9 = hpreISF13 9 := by
+  rw [show hpreISF13 9 = ((126369 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr9]
+  simp only [w1rSF9, imgF13_apply]
+  rw [sum_getD_div w1zSF9_len imgz13_len pzISF_13_9 256 255]
+  norm_num
+
+theorem hpreISF13_eval_10 : denseE W1SF imgF13 10 = hpreISF13 10 := by
+  rw [show hpreISF13 10 = ((334721 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr10]
+  simp only [w1rSF10, imgF13_apply]
+  rw [sum_getD_div w1zSF10_len imgz13_len pzISF_13_10 256 255]
+  norm_num
+
+theorem hpreISF13_eval_11 : denseE W1SF imgF13 11 = hpreISF13 11 := by
+  rw [show hpreISF13 11 = ((130709 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr11]
+  simp only [w1rSF11, imgF13_apply]
+  rw [sum_getD_div w1zSF11_len imgz13_len pzISF_13_11 256 255]
+  norm_num
+
+theorem hpreISF13_eval_12 : denseE W1SF imgF13 12 = hpreISF13 12 := by
+  rw [show hpreISF13 12 = ((-78189 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr12]
+  simp only [w1rSF12, imgF13_apply]
+  rw [sum_getD_div w1zSF12_len imgz13_len pzISF_13_12 256 255]
+  norm_num
+
+theorem hpreISF13_eval_13 : denseE W1SF imgF13 13 = hpreISF13 13 := by
+  rw [show hpreISF13 13 = ((-18065 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr13]
+  simp only [w1rSF13, imgF13_apply]
+  rw [sum_getD_div w1zSF13_len imgz13_len pzISF_13_13 256 255]
+  norm_num
+
+theorem hpreISF13_eval_14 : denseE W1SF imgF13 14 = hpreISF13 14 := by
+  rw [show hpreISF13 14 = ((60637 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr14]
+  simp only [w1rSF14, imgF13_apply]
+  rw [sum_getD_div w1zSF14_len imgz13_len pzISF_13_14 256 255]
+  norm_num
+
+theorem hpreISF13_eval_15 : denseE W1SF imgF13 15 = hpreISF13 15 := by
+  rw [show hpreISF13 15 = ((-26668 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr15]
+  simp only [w1rSF15, imgF13_apply]
+  rw [sum_getD_div w1zSF15_len imgz13_len pzISF_13_15 256 255]
+  norm_num
+
+theorem hpreISF13_eval : ∀ k : Fin 16, denseE W1SF imgF13 k = hpreISF13 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreISF13_eval_0; exact hpreISF13_eval_1; exact hpreISF13_eval_2; exact hpreISF13_eval_3; exact hpreISF13_eval_4; exact hpreISF13_eval_5; exact hpreISF13_eval_6; exact hpreISF13_eval_7; exact hpreISF13_eval_8; exact hpreISF13_eval_9; exact hpreISF13_eval_10; exact hpreISF13_eval_11; exact hpreISF13_eval_12; exact hpreISF13_eval_13; exact hpreISF13_eval_14; exact hpreISF13_eval_15 ]
+
+theorem hpreISF13_sum : ∀ t, (∑ j, W1SF t j * imgF13 j) = hpreISF13 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreSF11_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_11 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF11 q - ((1 : ℝ)/255)) (fun q => imgF11 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF11 q - ((1 : ℝ)/255)) (fun q => imgF11 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF11 q - ((1 : ℝ)/255)) (fun q => imgF11 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF11 q - ((1 : ℝ)/255)) (fun q => imgF11 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF11_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF11, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #11 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_11 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF11 + δ) j < mlpSF (imgF11 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_11 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_11 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF11 q - ((2 : ℝ)/255)) (fun q => imgF11 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF11 q - ((2 : ℝ)/255)) (fun q => imgF11 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF11 q - ((2 : ℝ)/255)) (fun q => imgF11 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF11 q - ((2 : ℝ)/255)) (fun q => imgF11 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF11_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF11, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #11 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_11 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF11 + δ) j < mlpSF (imgF11 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_11 δ hδ
-
-theorem hpreSF12_sum : ∀ t, (∑ j, W1SF t j * imgF12 j) = hpreSF12 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF12_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_12 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF12 q - ((1 : ℝ)/255)) (fun q => imgF12 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF12 q - ((1 : ℝ)/255)) (fun q => imgF12 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF12 q - ((1 : ℝ)/255)) (fun q => imgF12 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF12 q - ((1 : ℝ)/255)) (fun q => imgF12 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF12_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF12, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #12 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_12 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF12 + δ) j < mlpSF (imgF12 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_12 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_12 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF12 q - ((2 : ℝ)/255)) (fun q => imgF12 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF12 q - ((2 : ℝ)/255)) (fun q => imgF12 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF12 q - ((2 : ℝ)/255)) (fun q => imgF12 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF12 q - ((2 : ℝ)/255)) (fun q => imgF12 q + ((2 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF12_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF12, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #12 (digit 9): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_12 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF12 + δ) j < mlpSF (imgF12 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_12 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_12 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF12 q - ((4 : ℝ)/255)) (fun q => imgF12 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF12 q - ((4 : ℝ)/255)) (fun q => imgF12 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF12 q - ((4 : ℝ)/255)) (fun q => imgF12 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF12 q - ((4 : ℝ)/255)) (fun q => imgF12 q + ((4 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF12_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF12, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #12 (digit 9): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_12 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF12 + δ) j < mlpSF (imgF12 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_12 δ hδ
-
-theorem hpreSF13_sum : ∀ t, (∑ j, W1SF t j * imgF13 j) = hpreSF13 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF13_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_13 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF13 q - ((1 : ℝ)/255)) (fun q => imgF13 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF13 q - ((1 : ℝ)/255)) (fun q => imgF13 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF13 q - ((1 : ℝ)/255)) (fun q => imgF13 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF13 q - ((1 : ℝ)/255)) (fun q => imgF13 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF13_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF13, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #13 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_13 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF13 + δ) j < mlpSF (imgF13 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_13 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_13 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF13 q - ((2 : ℝ)/255)) (fun q => imgF13 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF13 q - ((2 : ℝ)/255)) (fun q => imgF13 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF13 q - ((2 : ℝ)/255)) (fun q => imgF13 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF13 q - ((2 : ℝ)/255)) (fun q => imgF13 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF13_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF13, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #13 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_13 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF13 + δ) j < mlpSF (imgF13 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_13 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_13 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF13 q - ((4 : ℝ)/255)) (fun q => imgF13 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF13 q - ((4 : ℝ)/255)) (fun q => imgF13 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF13 q - ((4 : ℝ)/255)) (fun q => imgF13 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF13 q - ((4 : ℝ)/255)) (fun q => imgF13 q + ((4 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF13_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF13, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #13 (digit 0): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_13 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF13 + δ) j < mlpSF (imgF13 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_13 δ hδ
+  exact hpreISF13_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbSFe8_13 : ∀ j : Fin 10, j ≠ 0 →
@@ -1024,11 +1063,11 @@ theorem hbSFe8_13 : ∀ j : Fin 10, j ≠ 0 →
                     (reluHi (denseHi W1SF (fun q => imgF13 q - ((8 : ℝ)/255)) (fun q => imgF13 q + ((8 : ℝ)/255)))) 0 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF13_sum, absrowSF]
+  simp only [hpreISF13_sum, absrowSF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF13, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, hpreISF13, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #13 (digit 0): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -1037,73 +1076,159 @@ theorem certIBPSFe8_13 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 0 → mlpSF (imgF13 + δ) j < mlpSF (imgF13 + δ) 0 :=
   ibp2_certified_at_eps W1SF W2SF hbSFe8_13 δ hδ
 
-theorem hpreSF14_sum : ∀ t, (∑ j, W1SF t j * imgF14 j) = hpreSF14 t := by
+/-- MNIST test image #14 (digit 1), exact pixels k/255. -/
+def imgz14 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 255, 191, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 191, 255, 255, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 191, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 191, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 191, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 255, 255, 255, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+theorem imgz14_len : (imgz14).length = 784 := by decide +kernel
+
+noncomputable def imgv14 : Fin 784 → ℝ := fun j => ((imgz14).getD j 0 : ℝ)/255
+
+noncomputable def imgF14 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv14
+
+theorem imgF14_apply : ∀ j, imgF14 j = ((imgz14).getD j 0 : ℝ)/255 := fun _ => rfl
+
+-- net SF pre-activations for #14 (not in the base L2-certified set)
+theorem pzISF_14_0 : dotZ w1zSF0 imgz14 = 9045 := by decide +kernel
+theorem pzISF_14_1 : dotZ w1zSF1 imgz14 = -18895 := by decide +kernel
+theorem pzISF_14_2 : dotZ w1zSF2 imgz14 = 280117 := by decide +kernel
+theorem pzISF_14_3 : dotZ w1zSF3 imgz14 = 30666 := by decide +kernel
+theorem pzISF_14_4 : dotZ w1zSF4 imgz14 = 71182 := by decide +kernel
+theorem pzISF_14_5 : dotZ w1zSF5 imgz14 = 221291 := by decide +kernel
+theorem pzISF_14_6 : dotZ w1zSF6 imgz14 = -125689 := by decide +kernel
+theorem pzISF_14_7 : dotZ w1zSF7 imgz14 = -22186 := by decide +kernel
+theorem pzISF_14_8 : dotZ w1zSF8 imgz14 = 367224 := by decide +kernel
+theorem pzISF_14_9 : dotZ w1zSF9 imgz14 = 21779 := by decide +kernel
+theorem pzISF_14_10 : dotZ w1zSF10 imgz14 = 4993 := by decide +kernel
+theorem pzISF_14_11 : dotZ w1zSF11 imgz14 = 30719 := by decide +kernel
+theorem pzISF_14_12 : dotZ w1zSF12 imgz14 = -9958 := by decide +kernel
+theorem pzISF_14_13 : dotZ w1zSF13 imgz14 = 27709 := by decide +kernel
+theorem pzISF_14_14 : dotZ w1zSF14 imgz14 = 33761 := by decide +kernel
+theorem pzISF_14_15 : dotZ w1zSF15 imgz14 = 58474 := by decide +kernel
+
+noncomputable def hpreISF14 : Fin 16 → ℝ :=
+  ![((9045 : ℝ)/65280), ((-18895 : ℝ)/65280), ((280117 : ℝ)/65280), ((30666 : ℝ)/65280), ((71182 : ℝ)/65280), ((221291 : ℝ)/65280), ((-125689 : ℝ)/65280), ((-22186 : ℝ)/65280), ((367224 : ℝ)/65280), ((21779 : ℝ)/65280), ((4993 : ℝ)/65280), ((30719 : ℝ)/65280), ((-9958 : ℝ)/65280), ((27709 : ℝ)/65280), ((33761 : ℝ)/65280), ((58474 : ℝ)/65280)]
+
+theorem hpreISF14_eval_0 : denseE W1SF imgF14 0 = hpreISF14 0 := by
+  rw [show hpreISF14 0 = ((9045 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr0]
+  simp only [w1rSF0, imgF14_apply]
+  rw [sum_getD_div w1zSF0_len imgz14_len pzISF_14_0 256 255]
+  norm_num
+
+theorem hpreISF14_eval_1 : denseE W1SF imgF14 1 = hpreISF14 1 := by
+  rw [show hpreISF14 1 = ((-18895 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr1]
+  simp only [w1rSF1, imgF14_apply]
+  rw [sum_getD_div w1zSF1_len imgz14_len pzISF_14_1 256 255]
+  norm_num
+
+theorem hpreISF14_eval_2 : denseE W1SF imgF14 2 = hpreISF14 2 := by
+  rw [show hpreISF14 2 = ((280117 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr2]
+  simp only [w1rSF2, imgF14_apply]
+  rw [sum_getD_div w1zSF2_len imgz14_len pzISF_14_2 256 255]
+  norm_num
+
+theorem hpreISF14_eval_3 : denseE W1SF imgF14 3 = hpreISF14 3 := by
+  rw [show hpreISF14 3 = ((30666 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr3]
+  simp only [w1rSF3, imgF14_apply]
+  rw [sum_getD_div w1zSF3_len imgz14_len pzISF_14_3 256 255]
+  norm_num
+
+theorem hpreISF14_eval_4 : denseE W1SF imgF14 4 = hpreISF14 4 := by
+  rw [show hpreISF14 4 = ((71182 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr4]
+  simp only [w1rSF4, imgF14_apply]
+  rw [sum_getD_div w1zSF4_len imgz14_len pzISF_14_4 256 255]
+  norm_num
+
+theorem hpreISF14_eval_5 : denseE W1SF imgF14 5 = hpreISF14 5 := by
+  rw [show hpreISF14 5 = ((221291 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr5]
+  simp only [w1rSF5, imgF14_apply]
+  rw [sum_getD_div w1zSF5_len imgz14_len pzISF_14_5 256 255]
+  norm_num
+
+theorem hpreISF14_eval_6 : denseE W1SF imgF14 6 = hpreISF14 6 := by
+  rw [show hpreISF14 6 = ((-125689 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr6]
+  simp only [w1rSF6, imgF14_apply]
+  rw [sum_getD_div w1zSF6_len imgz14_len pzISF_14_6 256 255]
+  norm_num
+
+theorem hpreISF14_eval_7 : denseE W1SF imgF14 7 = hpreISF14 7 := by
+  rw [show hpreISF14 7 = ((-22186 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr7]
+  simp only [w1rSF7, imgF14_apply]
+  rw [sum_getD_div w1zSF7_len imgz14_len pzISF_14_7 256 255]
+  norm_num
+
+theorem hpreISF14_eval_8 : denseE W1SF imgF14 8 = hpreISF14 8 := by
+  rw [show hpreISF14 8 = ((367224 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr8]
+  simp only [w1rSF8, imgF14_apply]
+  rw [sum_getD_div w1zSF8_len imgz14_len pzISF_14_8 256 255]
+  norm_num
+
+theorem hpreISF14_eval_9 : denseE W1SF imgF14 9 = hpreISF14 9 := by
+  rw [show hpreISF14 9 = ((21779 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr9]
+  simp only [w1rSF9, imgF14_apply]
+  rw [sum_getD_div w1zSF9_len imgz14_len pzISF_14_9 256 255]
+  norm_num
+
+theorem hpreISF14_eval_10 : denseE W1SF imgF14 10 = hpreISF14 10 := by
+  rw [show hpreISF14 10 = ((4993 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr10]
+  simp only [w1rSF10, imgF14_apply]
+  rw [sum_getD_div w1zSF10_len imgz14_len pzISF_14_10 256 255]
+  norm_num
+
+theorem hpreISF14_eval_11 : denseE W1SF imgF14 11 = hpreISF14 11 := by
+  rw [show hpreISF14 11 = ((30719 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr11]
+  simp only [w1rSF11, imgF14_apply]
+  rw [sum_getD_div w1zSF11_len imgz14_len pzISF_14_11 256 255]
+  norm_num
+
+theorem hpreISF14_eval_12 : denseE W1SF imgF14 12 = hpreISF14 12 := by
+  rw [show hpreISF14 12 = ((-9958 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr12]
+  simp only [w1rSF12, imgF14_apply]
+  rw [sum_getD_div w1zSF12_len imgz14_len pzISF_14_12 256 255]
+  norm_num
+
+theorem hpreISF14_eval_13 : denseE W1SF imgF14 13 = hpreISF14 13 := by
+  rw [show hpreISF14 13 = ((27709 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr13]
+  simp only [w1rSF13, imgF14_apply]
+  rw [sum_getD_div w1zSF13_len imgz14_len pzISF_14_13 256 255]
+  norm_num
+
+theorem hpreISF14_eval_14 : denseE W1SF imgF14 14 = hpreISF14 14 := by
+  rw [show hpreISF14 14 = ((33761 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr14]
+  simp only [w1rSF14, imgF14_apply]
+  rw [sum_getD_div w1zSF14_len imgz14_len pzISF_14_14 256 255]
+  norm_num
+
+theorem hpreISF14_eval_15 : denseE W1SF imgF14 15 = hpreISF14 15 := by
+  rw [show hpreISF14 15 = ((58474 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr15]
+  simp only [w1rSF15, imgF14_apply]
+  rw [sum_getD_div w1zSF15_len imgz14_len pzISF_14_15 256 255]
+  norm_num
+
+theorem hpreISF14_eval : ∀ k : Fin 16, denseE W1SF imgF14 k = hpreISF14 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreISF14_eval_0; exact hpreISF14_eval_1; exact hpreISF14_eval_2; exact hpreISF14_eval_3; exact hpreISF14_eval_4; exact hpreISF14_eval_5; exact hpreISF14_eval_6; exact hpreISF14_eval_7; exact hpreISF14_eval_8; exact hpreISF14_eval_9; exact hpreISF14_eval_10; exact hpreISF14_eval_11; exact hpreISF14_eval_12; exact hpreISF14_eval_13; exact hpreISF14_eval_14; exact hpreISF14_eval_15 ]
+
+theorem hpreISF14_sum : ∀ t, (∑ j, W1SF t j * imgF14 j) = hpreISF14 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreSF14_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_14 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF14 q - ((1 : ℝ)/255)) (fun q => imgF14 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF14 q - ((1 : ℝ)/255)) (fun q => imgF14 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF14 q - ((1 : ℝ)/255)) (fun q => imgF14 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF14 q - ((1 : ℝ)/255)) (fun q => imgF14 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF14_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF14, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #14 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_14 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF14 + δ) j < mlpSF (imgF14 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_14 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_14 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF14 q - ((2 : ℝ)/255)) (fun q => imgF14 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF14 q - ((2 : ℝ)/255)) (fun q => imgF14 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF14 q - ((2 : ℝ)/255)) (fun q => imgF14 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF14 q - ((2 : ℝ)/255)) (fun q => imgF14 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF14_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF14, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #14 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_14 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF14 + δ) j < mlpSF (imgF14 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_14 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_14 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF14 q - ((4 : ℝ)/255)) (fun q => imgF14 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF14 q - ((4 : ℝ)/255)) (fun q => imgF14 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF14 q - ((4 : ℝ)/255)) (fun q => imgF14 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF14 q - ((4 : ℝ)/255)) (fun q => imgF14 q + ((4 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF14_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF14, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #14 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_14 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF14 + δ) j < mlpSF (imgF14 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_14 δ hδ
+  exact hpreISF14_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbSFe8_14 : ∀ j : Fin 10, j ≠ 1 →
@@ -1113,11 +1238,11 @@ theorem hbSFe8_14 : ∀ j : Fin 10, j ≠ 1 →
                     (reluHi (denseHi W1SF (fun q => imgF14 q - ((8 : ℝ)/255)) (fun q => imgF14 q + ((8 : ℝ)/255)))) 1 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF14_sum, absrowSF]
+  simp only [hpreISF14_sum, absrowSF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF14, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, hpreISF14, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #14 (digit 1): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -1126,188 +1251,159 @@ theorem certIBPSFe8_14 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 1 → mlpSF (imgF14 + δ) j < mlpSF (imgF14 + δ) 1 :=
   ibp2_certified_at_eps W1SF W2SF hbSFe8_14 δ hδ
 
-theorem hpreSF15_sum : ∀ t, (∑ j, W1SF t j * imgF15 j) = hpreSF15 t := by
+/-- MNIST test image #17 (digit 7), exact pixels k/255. -/
+def imgz17 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 74, 249, 254, 254, 254, 245, 167, 167, 136, 25, 80, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 104, 254, 254, 254, 254, 254, 254, 254, 254, 249, 254, 252, 197, 113, 71, 39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 99, 135, 105, 105, 114, 192, 192, 192, 233, 254, 254, 254, 254, 254, 246, 129, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 45, 114, 114, 203, 254, 254, 254, 240, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 35, 155, 254, 254, 130, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 254, 241, 34, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 115, 254, 254, 118, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 34, 243, 254, 240, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 111, 254, 254, 139, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 37, 243, 254, 244, 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 176, 254, 254, 113, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 140, 254, 254, 220, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 88, 253, 254, 243, 45, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 63, 241, 254, 254, 83, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 243, 254, 254, 147, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 111, 254, 254, 203, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 58, 254, 254, 254, 84, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14, 237, 254, 255, 194, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 82, 254, 254, 194, 27, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 39, 230, 193, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+theorem imgz17_len : (imgz17).length = 784 := by decide +kernel
+
+noncomputable def imgv17 : Fin 784 → ℝ := fun j => ((imgz17).getD j 0 : ℝ)/255
+
+noncomputable def imgF17 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv17
+
+theorem imgF17_apply : ∀ j, imgF17 j = ((imgz17).getD j 0 : ℝ)/255 := fun _ => rfl
+
+-- net SF pre-activations for #17 (not in the base L2-certified set)
+theorem pzISF_17_0 : dotZ w1zSF0 imgz17 = 146708 := by decide +kernel
+theorem pzISF_17_1 : dotZ w1zSF1 imgz17 = -67126 := by decide +kernel
+theorem pzISF_17_2 : dotZ w1zSF2 imgz17 = -119876 := by decide +kernel
+theorem pzISF_17_3 : dotZ w1zSF3 imgz17 = 19269 := by decide +kernel
+theorem pzISF_17_4 : dotZ w1zSF4 imgz17 = -6881 := by decide +kernel
+theorem pzISF_17_5 : dotZ w1zSF5 imgz17 = 250577 := by decide +kernel
+theorem pzISF_17_6 : dotZ w1zSF6 imgz17 = -29045 := by decide +kernel
+theorem pzISF_17_7 : dotZ w1zSF7 imgz17 = 115707 := by decide +kernel
+theorem pzISF_17_8 : dotZ w1zSF8 imgz17 = 13958 := by decide +kernel
+theorem pzISF_17_9 : dotZ w1zSF9 imgz17 = 158750 := by decide +kernel
+theorem pzISF_17_10 : dotZ w1zSF10 imgz17 = 227203 := by decide +kernel
+theorem pzISF_17_11 : dotZ w1zSF11 imgz17 = -88198 := by decide +kernel
+theorem pzISF_17_12 : dotZ w1zSF12 imgz17 = -141436 := by decide +kernel
+theorem pzISF_17_13 : dotZ w1zSF13 imgz17 = 263455 := by decide +kernel
+theorem pzISF_17_14 : dotZ w1zSF14 imgz17 = 138859 := by decide +kernel
+theorem pzISF_17_15 : dotZ w1zSF15 imgz17 = 3748 := by decide +kernel
+
+noncomputable def hpreISF17 : Fin 16 → ℝ :=
+  ![((146708 : ℝ)/65280), ((-67126 : ℝ)/65280), ((-119876 : ℝ)/65280), ((19269 : ℝ)/65280), ((-6881 : ℝ)/65280), ((250577 : ℝ)/65280), ((-29045 : ℝ)/65280), ((115707 : ℝ)/65280), ((13958 : ℝ)/65280), ((158750 : ℝ)/65280), ((227203 : ℝ)/65280), ((-88198 : ℝ)/65280), ((-141436 : ℝ)/65280), ((263455 : ℝ)/65280), ((138859 : ℝ)/65280), ((3748 : ℝ)/65280)]
+
+theorem hpreISF17_eval_0 : denseE W1SF imgF17 0 = hpreISF17 0 := by
+  rw [show hpreISF17 0 = ((146708 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr0]
+  simp only [w1rSF0, imgF17_apply]
+  rw [sum_getD_div w1zSF0_len imgz17_len pzISF_17_0 256 255]
+  norm_num
+
+theorem hpreISF17_eval_1 : denseE W1SF imgF17 1 = hpreISF17 1 := by
+  rw [show hpreISF17 1 = ((-67126 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr1]
+  simp only [w1rSF1, imgF17_apply]
+  rw [sum_getD_div w1zSF1_len imgz17_len pzISF_17_1 256 255]
+  norm_num
+
+theorem hpreISF17_eval_2 : denseE W1SF imgF17 2 = hpreISF17 2 := by
+  rw [show hpreISF17 2 = ((-119876 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr2]
+  simp only [w1rSF2, imgF17_apply]
+  rw [sum_getD_div w1zSF2_len imgz17_len pzISF_17_2 256 255]
+  norm_num
+
+theorem hpreISF17_eval_3 : denseE W1SF imgF17 3 = hpreISF17 3 := by
+  rw [show hpreISF17 3 = ((19269 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr3]
+  simp only [w1rSF3, imgF17_apply]
+  rw [sum_getD_div w1zSF3_len imgz17_len pzISF_17_3 256 255]
+  norm_num
+
+theorem hpreISF17_eval_4 : denseE W1SF imgF17 4 = hpreISF17 4 := by
+  rw [show hpreISF17 4 = ((-6881 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr4]
+  simp only [w1rSF4, imgF17_apply]
+  rw [sum_getD_div w1zSF4_len imgz17_len pzISF_17_4 256 255]
+  norm_num
+
+theorem hpreISF17_eval_5 : denseE W1SF imgF17 5 = hpreISF17 5 := by
+  rw [show hpreISF17 5 = ((250577 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr5]
+  simp only [w1rSF5, imgF17_apply]
+  rw [sum_getD_div w1zSF5_len imgz17_len pzISF_17_5 256 255]
+  norm_num
+
+theorem hpreISF17_eval_6 : denseE W1SF imgF17 6 = hpreISF17 6 := by
+  rw [show hpreISF17 6 = ((-29045 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr6]
+  simp only [w1rSF6, imgF17_apply]
+  rw [sum_getD_div w1zSF6_len imgz17_len pzISF_17_6 256 255]
+  norm_num
+
+theorem hpreISF17_eval_7 : denseE W1SF imgF17 7 = hpreISF17 7 := by
+  rw [show hpreISF17 7 = ((115707 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr7]
+  simp only [w1rSF7, imgF17_apply]
+  rw [sum_getD_div w1zSF7_len imgz17_len pzISF_17_7 256 255]
+  norm_num
+
+theorem hpreISF17_eval_8 : denseE W1SF imgF17 8 = hpreISF17 8 := by
+  rw [show hpreISF17 8 = ((13958 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr8]
+  simp only [w1rSF8, imgF17_apply]
+  rw [sum_getD_div w1zSF8_len imgz17_len pzISF_17_8 256 255]
+  norm_num
+
+theorem hpreISF17_eval_9 : denseE W1SF imgF17 9 = hpreISF17 9 := by
+  rw [show hpreISF17 9 = ((158750 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr9]
+  simp only [w1rSF9, imgF17_apply]
+  rw [sum_getD_div w1zSF9_len imgz17_len pzISF_17_9 256 255]
+  norm_num
+
+theorem hpreISF17_eval_10 : denseE W1SF imgF17 10 = hpreISF17 10 := by
+  rw [show hpreISF17 10 = ((227203 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr10]
+  simp only [w1rSF10, imgF17_apply]
+  rw [sum_getD_div w1zSF10_len imgz17_len pzISF_17_10 256 255]
+  norm_num
+
+theorem hpreISF17_eval_11 : denseE W1SF imgF17 11 = hpreISF17 11 := by
+  rw [show hpreISF17 11 = ((-88198 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr11]
+  simp only [w1rSF11, imgF17_apply]
+  rw [sum_getD_div w1zSF11_len imgz17_len pzISF_17_11 256 255]
+  norm_num
+
+theorem hpreISF17_eval_12 : denseE W1SF imgF17 12 = hpreISF17 12 := by
+  rw [show hpreISF17 12 = ((-141436 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr12]
+  simp only [w1rSF12, imgF17_apply]
+  rw [sum_getD_div w1zSF12_len imgz17_len pzISF_17_12 256 255]
+  norm_num
+
+theorem hpreISF17_eval_13 : denseE W1SF imgF17 13 = hpreISF17 13 := by
+  rw [show hpreISF17 13 = ((263455 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr13]
+  simp only [w1rSF13, imgF17_apply]
+  rw [sum_getD_div w1zSF13_len imgz17_len pzISF_17_13 256 255]
+  norm_num
+
+theorem hpreISF17_eval_14 : denseE W1SF imgF17 14 = hpreISF17 14 := by
+  rw [show hpreISF17 14 = ((138859 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr14]
+  simp only [w1rSF14, imgF17_apply]
+  rw [sum_getD_div w1zSF14_len imgz17_len pzISF_17_14 256 255]
+  norm_num
+
+theorem hpreISF17_eval_15 : denseE W1SF imgF17 15 = hpreISF17 15 := by
+  rw [show hpreISF17 15 = ((3748 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr15]
+  simp only [w1rSF15, imgF17_apply]
+  rw [sum_getD_div w1zSF15_len imgz17_len pzISF_17_15 256 255]
+  norm_num
+
+theorem hpreISF17_eval : ∀ k : Fin 16, denseE W1SF imgF17 k = hpreISF17 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreISF17_eval_0; exact hpreISF17_eval_1; exact hpreISF17_eval_2; exact hpreISF17_eval_3; exact hpreISF17_eval_4; exact hpreISF17_eval_5; exact hpreISF17_eval_6; exact hpreISF17_eval_7; exact hpreISF17_eval_8; exact hpreISF17_eval_9; exact hpreISF17_eval_10; exact hpreISF17_eval_11; exact hpreISF17_eval_12; exact hpreISF17_eval_13; exact hpreISF17_eval_14; exact hpreISF17_eval_15 ]
+
+theorem hpreISF17_sum : ∀ t, (∑ j, W1SF t j * imgF17 j) = hpreISF17 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreSF15_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_15 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF15 q - ((1 : ℝ)/255)) (fun q => imgF15 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF15 q - ((1 : ℝ)/255)) (fun q => imgF15 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF15 q - ((1 : ℝ)/255)) (fun q => imgF15 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF15 q - ((1 : ℝ)/255)) (fun q => imgF15 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF15_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF15, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #15 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_15 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF15 + δ) j < mlpSF (imgF15 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_15 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_15 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF15 q - ((2 : ℝ)/255)) (fun q => imgF15 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF15 q - ((2 : ℝ)/255)) (fun q => imgF15 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF15 q - ((2 : ℝ)/255)) (fun q => imgF15 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF15 q - ((2 : ℝ)/255)) (fun q => imgF15 q + ((2 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF15_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF15, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #15 (digit 5): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_15 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF15 + δ) j < mlpSF (imgF15 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_15 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_15 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF15 q - ((4 : ℝ)/255)) (fun q => imgF15 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF15 q - ((4 : ℝ)/255)) (fun q => imgF15 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF15 q - ((4 : ℝ)/255)) (fun q => imgF15 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF15 q - ((4 : ℝ)/255)) (fun q => imgF15 q + ((4 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF15_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF15, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #15 (digit 5): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_15 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF15 + δ) j < mlpSF (imgF15 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_15 δ hδ
-
-theorem hpreSF16_sum : ∀ t, (∑ j, W1SF t j * imgF16 j) = hpreSF16 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF16_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_16 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF16 q - ((1 : ℝ)/255)) (fun q => imgF16 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF16 q - ((1 : ℝ)/255)) (fun q => imgF16 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF16 q - ((1 : ℝ)/255)) (fun q => imgF16 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF16 q - ((1 : ℝ)/255)) (fun q => imgF16 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF16_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF16, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #16 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_16 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF16 + δ) j < mlpSF (imgF16 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_16 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_16 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF16 q - ((2 : ℝ)/255)) (fun q => imgF16 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF16 q - ((2 : ℝ)/255)) (fun q => imgF16 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF16 q - ((2 : ℝ)/255)) (fun q => imgF16 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF16 q - ((2 : ℝ)/255)) (fun q => imgF16 q + ((2 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF16_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF16, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #16 (digit 9): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_16 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF16 + δ) j < mlpSF (imgF16 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_16 δ hδ
-
-theorem hpreSF17_sum : ∀ t, (∑ j, W1SF t j * imgF17 j) = hpreSF17 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF17_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_17 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF17 q - ((1 : ℝ)/255)) (fun q => imgF17 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF17 q - ((1 : ℝ)/255)) (fun q => imgF17 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF17 q - ((1 : ℝ)/255)) (fun q => imgF17 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF17 q - ((1 : ℝ)/255)) (fun q => imgF17 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF17_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF17, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #17 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_17 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF17 + δ) j < mlpSF (imgF17 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_17 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_17 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF17 q - ((2 : ℝ)/255)) (fun q => imgF17 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF17 q - ((2 : ℝ)/255)) (fun q => imgF17 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF17 q - ((2 : ℝ)/255)) (fun q => imgF17 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF17 q - ((2 : ℝ)/255)) (fun q => imgF17 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF17_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF17, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #17 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_17 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF17 + δ) j < mlpSF (imgF17 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_17 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_17 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF17 q - ((4 : ℝ)/255)) (fun q => imgF17 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF17 q - ((4 : ℝ)/255)) (fun q => imgF17 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF17 q - ((4 : ℝ)/255)) (fun q => imgF17 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF17 q - ((4 : ℝ)/255)) (fun q => imgF17 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF17_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF17, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #17 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_17 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF17 + δ) j < mlpSF (imgF17 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_17 δ hδ
+  exact hpreISF17_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbSFe8_17 : ∀ j : Fin 10, j ≠ 7 →
@@ -1317,11 +1413,11 @@ theorem hbSFe8_17 : ∀ j : Fin 10, j ≠ 7 →
                     (reluHi (denseHi W1SF (fun q => imgF17 q - ((8 : ℝ)/255)) (fun q => imgF17 q + ((8 : ℝ)/255)))) 7 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF17_sum, absrowSF]
+  simp only [hpreISF17_sum, absrowSF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF17, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, hpreISF17, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #17 (digit 7): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -1330,235 +1426,159 @@ theorem certIBPSFe8_17 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 7 → mlpSF (imgF17 + δ) j < mlpSF (imgF17 + δ) 7 :=
   ibp2_certified_at_eps W1SF W2SF hbSFe8_17 δ hδ
 
-theorem hpreSF18_sum : ∀ t, (∑ j, W1SF t j * imgF18 j) = hpreSF18 t := by
+/-- MNIST test image #21 (digit 6), exact pixels k/255. -/
+def imgz21 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 49, 180, 253, 244, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 184, 252, 252, 232, 164, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 66, 234, 252, 136, 38, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 236, 252, 176, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 76, 252, 252, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 139, 253, 173, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 22, 212, 252, 69, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 253, 240, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 157, 253, 206, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 230, 253, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 231, 255, 180, 138, 180, 253, 255, 253, 222, 97, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 230, 253, 252, 252, 252, 252, 211, 252, 252, 252, 117, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 230, 253, 240, 183, 89, 69, 7, 69, 171, 252, 252, 85, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 135, 253, 153, 0, 0, 0, 0, 0, 13, 215, 252, 116, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 253, 206, 0, 0, 0, 0, 0, 0, 155, 252, 116, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 106, 255, 211, 7, 0, 0, 0, 0, 49, 233, 253, 116, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 159, 252, 154, 9, 0, 0, 30, 197, 252, 252, 95, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 227, 252, 154, 70, 81, 228, 252, 227, 130, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 227, 252, 252, 253, 252, 185, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48, 179, 252, 190, 117, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+theorem imgz21_len : (imgz21).length = 784 := by decide +kernel
+
+noncomputable def imgv21 : Fin 784 → ℝ := fun j => ((imgz21).getD j 0 : ℝ)/255
+
+noncomputable def imgF21 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv21
+
+theorem imgF21_apply : ∀ j, imgF21 j = ((imgz21).getD j 0 : ℝ)/255 := fun _ => rfl
+
+-- net SF pre-activations for #21 (not in the base L2-certified set)
+theorem pzISF_21_0 : dotZ w1zSF0 imgz21 = 71625 := by decide +kernel
+theorem pzISF_21_1 : dotZ w1zSF1 imgz21 = 82319 := by decide +kernel
+theorem pzISF_21_2 : dotZ w1zSF2 imgz21 = -56466 := by decide +kernel
+theorem pzISF_21_3 : dotZ w1zSF3 imgz21 = 108708 := by decide +kernel
+theorem pzISF_21_4 : dotZ w1zSF4 imgz21 = 131668 := by decide +kernel
+theorem pzISF_21_5 : dotZ w1zSF5 imgz21 = 17020 := by decide +kernel
+theorem pzISF_21_6 : dotZ w1zSF6 imgz21 = 19229 := by decide +kernel
+theorem pzISF_21_7 : dotZ w1zSF7 imgz21 = -86816 := by decide +kernel
+theorem pzISF_21_8 : dotZ w1zSF8 imgz21 = 95207 := by decide +kernel
+theorem pzISF_21_9 : dotZ w1zSF9 imgz21 = 9858 := by decide +kernel
+theorem pzISF_21_10 : dotZ w1zSF10 imgz21 = 35758 := by decide +kernel
+theorem pzISF_21_11 : dotZ w1zSF11 imgz21 = 302563 := by decide +kernel
+theorem pzISF_21_12 : dotZ w1zSF12 imgz21 = -71540 := by decide +kernel
+theorem pzISF_21_13 : dotZ w1zSF13 imgz21 = -84279 := by decide +kernel
+theorem pzISF_21_14 : dotZ w1zSF14 imgz21 = -5737 := by decide +kernel
+theorem pzISF_21_15 : dotZ w1zSF15 imgz21 = 284611 := by decide +kernel
+
+noncomputable def hpreISF21 : Fin 16 → ℝ :=
+  ![((71625 : ℝ)/65280), ((82319 : ℝ)/65280), ((-56466 : ℝ)/65280), ((108708 : ℝ)/65280), ((131668 : ℝ)/65280), ((17020 : ℝ)/65280), ((19229 : ℝ)/65280), ((-86816 : ℝ)/65280), ((95207 : ℝ)/65280), ((9858 : ℝ)/65280), ((35758 : ℝ)/65280), ((302563 : ℝ)/65280), ((-71540 : ℝ)/65280), ((-84279 : ℝ)/65280), ((-5737 : ℝ)/65280), ((284611 : ℝ)/65280)]
+
+theorem hpreISF21_eval_0 : denseE W1SF imgF21 0 = hpreISF21 0 := by
+  rw [show hpreISF21 0 = ((71625 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr0]
+  simp only [w1rSF0, imgF21_apply]
+  rw [sum_getD_div w1zSF0_len imgz21_len pzISF_21_0 256 255]
+  norm_num
+
+theorem hpreISF21_eval_1 : denseE W1SF imgF21 1 = hpreISF21 1 := by
+  rw [show hpreISF21 1 = ((82319 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr1]
+  simp only [w1rSF1, imgF21_apply]
+  rw [sum_getD_div w1zSF1_len imgz21_len pzISF_21_1 256 255]
+  norm_num
+
+theorem hpreISF21_eval_2 : denseE W1SF imgF21 2 = hpreISF21 2 := by
+  rw [show hpreISF21 2 = ((-56466 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr2]
+  simp only [w1rSF2, imgF21_apply]
+  rw [sum_getD_div w1zSF2_len imgz21_len pzISF_21_2 256 255]
+  norm_num
+
+theorem hpreISF21_eval_3 : denseE W1SF imgF21 3 = hpreISF21 3 := by
+  rw [show hpreISF21 3 = ((108708 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr3]
+  simp only [w1rSF3, imgF21_apply]
+  rw [sum_getD_div w1zSF3_len imgz21_len pzISF_21_3 256 255]
+  norm_num
+
+theorem hpreISF21_eval_4 : denseE W1SF imgF21 4 = hpreISF21 4 := by
+  rw [show hpreISF21 4 = ((131668 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr4]
+  simp only [w1rSF4, imgF21_apply]
+  rw [sum_getD_div w1zSF4_len imgz21_len pzISF_21_4 256 255]
+  norm_num
+
+theorem hpreISF21_eval_5 : denseE W1SF imgF21 5 = hpreISF21 5 := by
+  rw [show hpreISF21 5 = ((17020 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr5]
+  simp only [w1rSF5, imgF21_apply]
+  rw [sum_getD_div w1zSF5_len imgz21_len pzISF_21_5 256 255]
+  norm_num
+
+theorem hpreISF21_eval_6 : denseE W1SF imgF21 6 = hpreISF21 6 := by
+  rw [show hpreISF21 6 = ((19229 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr6]
+  simp only [w1rSF6, imgF21_apply]
+  rw [sum_getD_div w1zSF6_len imgz21_len pzISF_21_6 256 255]
+  norm_num
+
+theorem hpreISF21_eval_7 : denseE W1SF imgF21 7 = hpreISF21 7 := by
+  rw [show hpreISF21 7 = ((-86816 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr7]
+  simp only [w1rSF7, imgF21_apply]
+  rw [sum_getD_div w1zSF7_len imgz21_len pzISF_21_7 256 255]
+  norm_num
+
+theorem hpreISF21_eval_8 : denseE W1SF imgF21 8 = hpreISF21 8 := by
+  rw [show hpreISF21 8 = ((95207 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr8]
+  simp only [w1rSF8, imgF21_apply]
+  rw [sum_getD_div w1zSF8_len imgz21_len pzISF_21_8 256 255]
+  norm_num
+
+theorem hpreISF21_eval_9 : denseE W1SF imgF21 9 = hpreISF21 9 := by
+  rw [show hpreISF21 9 = ((9858 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr9]
+  simp only [w1rSF9, imgF21_apply]
+  rw [sum_getD_div w1zSF9_len imgz21_len pzISF_21_9 256 255]
+  norm_num
+
+theorem hpreISF21_eval_10 : denseE W1SF imgF21 10 = hpreISF21 10 := by
+  rw [show hpreISF21 10 = ((35758 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr10]
+  simp only [w1rSF10, imgF21_apply]
+  rw [sum_getD_div w1zSF10_len imgz21_len pzISF_21_10 256 255]
+  norm_num
+
+theorem hpreISF21_eval_11 : denseE W1SF imgF21 11 = hpreISF21 11 := by
+  rw [show hpreISF21 11 = ((302563 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr11]
+  simp only [w1rSF11, imgF21_apply]
+  rw [sum_getD_div w1zSF11_len imgz21_len pzISF_21_11 256 255]
+  norm_num
+
+theorem hpreISF21_eval_12 : denseE W1SF imgF21 12 = hpreISF21 12 := by
+  rw [show hpreISF21 12 = ((-71540 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr12]
+  simp only [w1rSF12, imgF21_apply]
+  rw [sum_getD_div w1zSF12_len imgz21_len pzISF_21_12 256 255]
+  norm_num
+
+theorem hpreISF21_eval_13 : denseE W1SF imgF21 13 = hpreISF21 13 := by
+  rw [show hpreISF21 13 = ((-84279 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr13]
+  simp only [w1rSF13, imgF21_apply]
+  rw [sum_getD_div w1zSF13_len imgz21_len pzISF_21_13 256 255]
+  norm_num
+
+theorem hpreISF21_eval_14 : denseE W1SF imgF21 14 = hpreISF21 14 := by
+  rw [show hpreISF21 14 = ((-5737 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr14]
+  simp only [w1rSF14, imgF21_apply]
+  rw [sum_getD_div w1zSF14_len imgz21_len pzISF_21_14 256 255]
+  norm_num
+
+theorem hpreISF21_eval_15 : denseE W1SF imgF21 15 = hpreISF21 15 := by
+  rw [show hpreISF21 15 = ((284611 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr15]
+  simp only [w1rSF15, imgF21_apply]
+  rw [sum_getD_div w1zSF15_len imgz21_len pzISF_21_15 256 255]
+  norm_num
+
+theorem hpreISF21_eval : ∀ k : Fin 16, denseE W1SF imgF21 k = hpreISF21 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreISF21_eval_0; exact hpreISF21_eval_1; exact hpreISF21_eval_2; exact hpreISF21_eval_3; exact hpreISF21_eval_4; exact hpreISF21_eval_5; exact hpreISF21_eval_6; exact hpreISF21_eval_7; exact hpreISF21_eval_8; exact hpreISF21_eval_9; exact hpreISF21_eval_10; exact hpreISF21_eval_11; exact hpreISF21_eval_12; exact hpreISF21_eval_13; exact hpreISF21_eval_14; exact hpreISF21_eval_15 ]
+
+theorem hpreISF21_sum : ∀ t, (∑ j, W1SF t j * imgF21 j) = hpreISF21 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreSF18_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_18 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF18 q - ((1 : ℝ)/255)) (fun q => imgF18 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF18 q - ((1 : ℝ)/255)) (fun q => imgF18 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF18 q - ((1 : ℝ)/255)) (fun q => imgF18 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF18 q - ((1 : ℝ)/255)) (fun q => imgF18 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF18_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF18, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #18 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_18 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF18 + δ) j < mlpSF (imgF18 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_18 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_18 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF18 q - ((2 : ℝ)/255)) (fun q => imgF18 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF18 q - ((2 : ℝ)/255)) (fun q => imgF18 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF18 q - ((2 : ℝ)/255)) (fun q => imgF18 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF18 q - ((2 : ℝ)/255)) (fun q => imgF18 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF18_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF18, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #18 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_18 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF18 + δ) j < mlpSF (imgF18 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_18 δ hδ
-
-theorem hpreSF19_sum : ∀ t, (∑ j, W1SF t j * imgF19 j) = hpreSF19 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF19_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_19 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF19 q - ((1 : ℝ)/255)) (fun q => imgF19 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF19 q - ((1 : ℝ)/255)) (fun q => imgF19 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF19 q - ((1 : ℝ)/255)) (fun q => imgF19 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF19 q - ((1 : ℝ)/255)) (fun q => imgF19 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF19_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF19, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #19 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_19 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF19 + δ) j < mlpSF (imgF19 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_19 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_19 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF19 q - ((2 : ℝ)/255)) (fun q => imgF19 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF19 q - ((2 : ℝ)/255)) (fun q => imgF19 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF19 q - ((2 : ℝ)/255)) (fun q => imgF19 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF19 q - ((2 : ℝ)/255)) (fun q => imgF19 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF19_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF19, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #19 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_19 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF19 + δ) j < mlpSF (imgF19 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_19 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_19 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF19 q - ((4 : ℝ)/255)) (fun q => imgF19 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF19 q - ((4 : ℝ)/255)) (fun q => imgF19 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF19 q - ((4 : ℝ)/255)) (fun q => imgF19 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF19 q - ((4 : ℝ)/255)) (fun q => imgF19 q + ((4 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF19_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF19, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #19 (digit 4): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_19 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF19 + δ) j < mlpSF (imgF19 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_19 δ hδ
-
-theorem hpreSF20_sum : ∀ t, (∑ j, W1SF t j * imgF20 j) = hpreSF20 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF20_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_20 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF20 q - ((1 : ℝ)/255)) (fun q => imgF20 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF20 q - ((1 : ℝ)/255)) (fun q => imgF20 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF20 q - ((1 : ℝ)/255)) (fun q => imgF20 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF20 q - ((1 : ℝ)/255)) (fun q => imgF20 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF20_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF20, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #20 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_20 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF20 + δ) j < mlpSF (imgF20 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_20 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_20 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF20 q - ((2 : ℝ)/255)) (fun q => imgF20 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF20 q - ((2 : ℝ)/255)) (fun q => imgF20 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF20 q - ((2 : ℝ)/255)) (fun q => imgF20 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF20 q - ((2 : ℝ)/255)) (fun q => imgF20 q + ((2 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF20_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF20, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #20 (digit 9): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_20 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF20 + δ) j < mlpSF (imgF20 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_20 δ hδ
-
-theorem hpreSF21_sum : ∀ t, (∑ j, W1SF t j * imgF21 j) = hpreSF21 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF21_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_21 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF21 q - ((1 : ℝ)/255)) (fun q => imgF21 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF21 q - ((1 : ℝ)/255)) (fun q => imgF21 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF21 q - ((1 : ℝ)/255)) (fun q => imgF21 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF21 q - ((1 : ℝ)/255)) (fun q => imgF21 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF21_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF21, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #21 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_21 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF21 + δ) j < mlpSF (imgF21 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_21 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_21 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF21 q - ((2 : ℝ)/255)) (fun q => imgF21 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF21 q - ((2 : ℝ)/255)) (fun q => imgF21 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF21 q - ((2 : ℝ)/255)) (fun q => imgF21 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF21 q - ((2 : ℝ)/255)) (fun q => imgF21 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF21_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF21, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #21 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_21 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF21 + δ) j < mlpSF (imgF21 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_21 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_21 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF21 q - ((4 : ℝ)/255)) (fun q => imgF21 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF21 q - ((4 : ℝ)/255)) (fun q => imgF21 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF21 q - ((4 : ℝ)/255)) (fun q => imgF21 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF21 q - ((4 : ℝ)/255)) (fun q => imgF21 q + ((4 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF21_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF21, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #21 (digit 6): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_21 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF21 + δ) j < mlpSF (imgF21 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_21 δ hδ
+  exact hpreISF21_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbSFe8_21 : ∀ j : Fin 10, j ≠ 6 →
@@ -1568,11 +1588,11 @@ theorem hbSFe8_21 : ∀ j : Fin 10, j ≠ 6 →
                     (reluHi (denseHi W1SF (fun q => imgF21 q - ((8 : ℝ)/255)) (fun q => imgF21 q + ((8 : ℝ)/255)))) 6 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF21_sum, absrowSF]
+  simp only [hpreISF21_sum, absrowSF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF21, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, hpreISF21, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #21 (digit 6): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -1581,256 +1601,10 @@ theorem certIBPSFe8_21 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 6 → mlpSF (imgF21 + δ) j < mlpSF (imgF21 + δ) 6 :=
   ibp2_certified_at_eps W1SF W2SF hbSFe8_21 δ hδ
 
-theorem hpreSF22_sum : ∀ t, (∑ j, W1SF t j * imgF22 j) = hpreSF22 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF22_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_22 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF22 q - ((1 : ℝ)/255)) (fun q => imgF22 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF22 q - ((1 : ℝ)/255)) (fun q => imgF22 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF22 q - ((1 : ℝ)/255)) (fun q => imgF22 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF22 q - ((1 : ℝ)/255)) (fun q => imgF22 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF22_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF22, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #22 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_22 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF22 + δ) j < mlpSF (imgF22 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_22 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_22 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF22 q - ((2 : ℝ)/255)) (fun q => imgF22 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF22 q - ((2 : ℝ)/255)) (fun q => imgF22 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF22 q - ((2 : ℝ)/255)) (fun q => imgF22 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF22 q - ((2 : ℝ)/255)) (fun q => imgF22 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF22_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF22, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #22 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_22 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF22 + δ) j < mlpSF (imgF22 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_22 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_22 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF22 q - ((4 : ℝ)/255)) (fun q => imgF22 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF22 q - ((4 : ℝ)/255)) (fun q => imgF22 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF22 q - ((4 : ℝ)/255)) (fun q => imgF22 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF22 q - ((4 : ℝ)/255)) (fun q => imgF22 q + ((4 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF22_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF22, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #22 (digit 6): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_22 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF22 + δ) j < mlpSF (imgF22 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_22 δ hδ
-
-theorem hpreSF23_sum : ∀ t, (∑ j, W1SF t j * imgF23 j) = hpreSF23 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF23_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_23 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF23 q - ((1 : ℝ)/255)) (fun q => imgF23 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF23 q - ((1 : ℝ)/255)) (fun q => imgF23 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF23 q - ((1 : ℝ)/255)) (fun q => imgF23 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF23 q - ((1 : ℝ)/255)) (fun q => imgF23 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF23_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF23, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #23 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_23 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF23 + δ) j < mlpSF (imgF23 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_23 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_23 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF23 q - ((2 : ℝ)/255)) (fun q => imgF23 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF23 q - ((2 : ℝ)/255)) (fun q => imgF23 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF23 q - ((2 : ℝ)/255)) (fun q => imgF23 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF23 q - ((2 : ℝ)/255)) (fun q => imgF23 q + ((2 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF23_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF23, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #23 (digit 5): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_23 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF23 + δ) j < mlpSF (imgF23 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_23 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_23 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF23 q - ((4 : ℝ)/255)) (fun q => imgF23 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF23 q - ((4 : ℝ)/255)) (fun q => imgF23 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF23 q - ((4 : ℝ)/255)) (fun q => imgF23 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF23 q - ((4 : ℝ)/255)) (fun q => imgF23 q + ((4 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF23_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF23, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #23 (digit 5): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_23 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF23 + δ) j < mlpSF (imgF23 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_23 δ hδ
-
-theorem hpreSF24_sum : ∀ t, (∑ j, W1SF t j * imgF24 j) = hpreSF24 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF24_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_24 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF24 q - ((1 : ℝ)/255)) (fun q => imgF24 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF24 q - ((1 : ℝ)/255)) (fun q => imgF24 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF24 q - ((1 : ℝ)/255)) (fun q => imgF24 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF24 q - ((1 : ℝ)/255)) (fun q => imgF24 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF24_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF24, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #24 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_24 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF24 + δ) j < mlpSF (imgF24 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_24 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_24 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF24 q - ((2 : ℝ)/255)) (fun q => imgF24 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF24 q - ((2 : ℝ)/255)) (fun q => imgF24 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF24 q - ((2 : ℝ)/255)) (fun q => imgF24 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF24 q - ((2 : ℝ)/255)) (fun q => imgF24 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF24_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF24, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #24 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_24 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF24 + δ) j < mlpSF (imgF24 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_24 δ hδ
-
 theorem hpreSF25_sum : ∀ t, (∑ j, W1SF t j * imgF25 j) = hpreSF25 t := by
   intro t
   rw [← denseE_apply]
   exact hpreSF25_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_25 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF25 q - ((1 : ℝ)/255)) (fun q => imgF25 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF25 q - ((1 : ℝ)/255)) (fun q => imgF25 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF25 q - ((1 : ℝ)/255)) (fun q => imgF25 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF25 q - ((1 : ℝ)/255)) (fun q => imgF25 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF25_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF25, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #25 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_25 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF25 + δ) j < mlpSF (imgF25 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_25 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_25 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF25 q - ((2 : ℝ)/255)) (fun q => imgF25 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF25 q - ((2 : ℝ)/255)) (fun q => imgF25 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF25 q - ((2 : ℝ)/255)) (fun q => imgF25 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF25 q - ((2 : ℝ)/255)) (fun q => imgF25 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF25_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF25, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #25 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_25 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF25 + δ) j < mlpSF (imgF25 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_25 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_25 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF25 q - ((4 : ℝ)/255)) (fun q => imgF25 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF25 q - ((4 : ℝ)/255)) (fun q => imgF25 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF25 q - ((4 : ℝ)/255)) (fun q => imgF25 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF25 q - ((4 : ℝ)/255)) (fun q => imgF25 q + ((4 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF25_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF25, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #25 (digit 0): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_25 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF25 + δ) j < mlpSF (imgF25 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_25 δ hδ
 
 set_option maxHeartbeats 6400000 in
 theorem hbSFe8_25 : ∀ j : Fin 10, j ≠ 0 →
@@ -1853,209 +1627,159 @@ theorem certIBPSFe8_25 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 0 → mlpSF (imgF25 + δ) j < mlpSF (imgF25 + δ) 0 :=
   ibp2_certified_at_eps W1SF W2SF hbSFe8_25 δ hδ
 
-theorem hpreSF26_sum : ∀ t, (∑ j, W1SF t j * imgF26 j) = hpreSF26 t := by
+/-- MNIST test image #28 (digit 0), exact pixels k/255. -/
+def imgz28 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 255, 254, 255, 254, 254, 254, 157, 130, 88, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 253, 253, 253, 253, 253, 253, 253, 253, 253, 108, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14, 129, 238, 253, 253, 253, 253, 253, 253, 253, 253, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 56, 253, 248, 167, 235, 253, 253, 253, 253, 104, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 178, 253, 182, 0, 27, 134, 247, 253, 253, 215, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 130, 253, 222, 27, 0, 0, 0, 186, 253, 253, 253, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 253, 253, 122, 0, 0, 0, 0, 67, 246, 253, 253, 106, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 117, 253, 199, 25, 0, 0, 0, 0, 0, 187, 253, 253, 148, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 46, 225, 245, 67, 0, 0, 0, 0, 0, 0, 88, 253, 253, 148, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 149, 253, 185, 0, 0, 0, 0, 0, 0, 0, 88, 253, 253, 148, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 228, 253, 93, 0, 0, 0, 0, 0, 0, 0, 88, 253, 253, 148, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 253, 253, 93, 0, 0, 0, 0, 0, 0, 0, 88, 253, 253, 148, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 253, 253, 93, 0, 0, 0, 0, 0, 0, 0, 88, 253, 253, 109, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 253, 253, 134, 0, 0, 0, 0, 0, 0, 0, 88, 253, 219, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 253, 253, 230, 32, 0, 0, 0, 0, 0, 0, 132, 253, 154, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 253, 253, 253, 233, 120, 0, 74, 100, 100, 200, 248, 217, 33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 159, 253, 253, 253, 249, 230, 247, 253, 253, 253, 253, 109, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 95, 253, 253, 253, 253, 253, 253, 253, 253, 253, 118, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 41, 253, 253, 253, 253, 253, 253, 253, 119, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 51, 88, 214, 165, 99, 5, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+theorem imgz28_len : (imgz28).length = 784 := by decide +kernel
+
+noncomputable def imgv28 : Fin 784 → ℝ := fun j => ((imgz28).getD j 0 : ℝ)/255
+
+noncomputable def imgF28 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv28
+
+theorem imgF28_apply : ∀ j, imgF28 j = ((imgz28).getD j 0 : ℝ)/255 := fun _ => rfl
+
+-- net SF pre-activations for #28 (not in the base L2-certified set)
+theorem pzISF_28_0 : dotZ w1zSF0 imgz28 = 467894 := by decide +kernel
+theorem pzISF_28_1 : dotZ w1zSF1 imgz28 = -111006 := by decide +kernel
+theorem pzISF_28_2 : dotZ w1zSF2 imgz28 = -138096 := by decide +kernel
+theorem pzISF_28_3 : dotZ w1zSF3 imgz28 = 103565 := by decide +kernel
+theorem pzISF_28_4 : dotZ w1zSF4 imgz28 = 200977 := by decide +kernel
+theorem pzISF_28_5 : dotZ w1zSF5 imgz28 = 53316 := by decide +kernel
+theorem pzISF_28_6 : dotZ w1zSF6 imgz28 = -70495 := by decide +kernel
+theorem pzISF_28_7 : dotZ w1zSF7 imgz28 = -43727 := by decide +kernel
+theorem pzISF_28_8 : dotZ w1zSF8 imgz28 = 40550 := by decide +kernel
+theorem pzISF_28_9 : dotZ w1zSF9 imgz28 = 68474 := by decide +kernel
+theorem pzISF_28_10 : dotZ w1zSF10 imgz28 = 331201 := by decide +kernel
+theorem pzISF_28_11 : dotZ w1zSF11 imgz28 = 102813 := by decide +kernel
+theorem pzISF_28_12 : dotZ w1zSF12 imgz28 = -96285 := by decide +kernel
+theorem pzISF_28_13 : dotZ w1zSF13 imgz28 = 23474 := by decide +kernel
+theorem pzISF_28_14 : dotZ w1zSF14 imgz28 = 208559 := by decide +kernel
+theorem pzISF_28_15 : dotZ w1zSF15 imgz28 = 67847 := by decide +kernel
+
+noncomputable def hpreISF28 : Fin 16 → ℝ :=
+  ![((467894 : ℝ)/65280), ((-111006 : ℝ)/65280), ((-138096 : ℝ)/65280), ((103565 : ℝ)/65280), ((200977 : ℝ)/65280), ((53316 : ℝ)/65280), ((-70495 : ℝ)/65280), ((-43727 : ℝ)/65280), ((40550 : ℝ)/65280), ((68474 : ℝ)/65280), ((331201 : ℝ)/65280), ((102813 : ℝ)/65280), ((-96285 : ℝ)/65280), ((23474 : ℝ)/65280), ((208559 : ℝ)/65280), ((67847 : ℝ)/65280)]
+
+theorem hpreISF28_eval_0 : denseE W1SF imgF28 0 = hpreISF28 0 := by
+  rw [show hpreISF28 0 = ((467894 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr0]
+  simp only [w1rSF0, imgF28_apply]
+  rw [sum_getD_div w1zSF0_len imgz28_len pzISF_28_0 256 255]
+  norm_num
+
+theorem hpreISF28_eval_1 : denseE W1SF imgF28 1 = hpreISF28 1 := by
+  rw [show hpreISF28 1 = ((-111006 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr1]
+  simp only [w1rSF1, imgF28_apply]
+  rw [sum_getD_div w1zSF1_len imgz28_len pzISF_28_1 256 255]
+  norm_num
+
+theorem hpreISF28_eval_2 : denseE W1SF imgF28 2 = hpreISF28 2 := by
+  rw [show hpreISF28 2 = ((-138096 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr2]
+  simp only [w1rSF2, imgF28_apply]
+  rw [sum_getD_div w1zSF2_len imgz28_len pzISF_28_2 256 255]
+  norm_num
+
+theorem hpreISF28_eval_3 : denseE W1SF imgF28 3 = hpreISF28 3 := by
+  rw [show hpreISF28 3 = ((103565 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr3]
+  simp only [w1rSF3, imgF28_apply]
+  rw [sum_getD_div w1zSF3_len imgz28_len pzISF_28_3 256 255]
+  norm_num
+
+theorem hpreISF28_eval_4 : denseE W1SF imgF28 4 = hpreISF28 4 := by
+  rw [show hpreISF28 4 = ((200977 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr4]
+  simp only [w1rSF4, imgF28_apply]
+  rw [sum_getD_div w1zSF4_len imgz28_len pzISF_28_4 256 255]
+  norm_num
+
+theorem hpreISF28_eval_5 : denseE W1SF imgF28 5 = hpreISF28 5 := by
+  rw [show hpreISF28 5 = ((53316 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr5]
+  simp only [w1rSF5, imgF28_apply]
+  rw [sum_getD_div w1zSF5_len imgz28_len pzISF_28_5 256 255]
+  norm_num
+
+theorem hpreISF28_eval_6 : denseE W1SF imgF28 6 = hpreISF28 6 := by
+  rw [show hpreISF28 6 = ((-70495 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr6]
+  simp only [w1rSF6, imgF28_apply]
+  rw [sum_getD_div w1zSF6_len imgz28_len pzISF_28_6 256 255]
+  norm_num
+
+theorem hpreISF28_eval_7 : denseE W1SF imgF28 7 = hpreISF28 7 := by
+  rw [show hpreISF28 7 = ((-43727 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr7]
+  simp only [w1rSF7, imgF28_apply]
+  rw [sum_getD_div w1zSF7_len imgz28_len pzISF_28_7 256 255]
+  norm_num
+
+theorem hpreISF28_eval_8 : denseE W1SF imgF28 8 = hpreISF28 8 := by
+  rw [show hpreISF28 8 = ((40550 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr8]
+  simp only [w1rSF8, imgF28_apply]
+  rw [sum_getD_div w1zSF8_len imgz28_len pzISF_28_8 256 255]
+  norm_num
+
+theorem hpreISF28_eval_9 : denseE W1SF imgF28 9 = hpreISF28 9 := by
+  rw [show hpreISF28 9 = ((68474 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr9]
+  simp only [w1rSF9, imgF28_apply]
+  rw [sum_getD_div w1zSF9_len imgz28_len pzISF_28_9 256 255]
+  norm_num
+
+theorem hpreISF28_eval_10 : denseE W1SF imgF28 10 = hpreISF28 10 := by
+  rw [show hpreISF28 10 = ((331201 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr10]
+  simp only [w1rSF10, imgF28_apply]
+  rw [sum_getD_div w1zSF10_len imgz28_len pzISF_28_10 256 255]
+  norm_num
+
+theorem hpreISF28_eval_11 : denseE W1SF imgF28 11 = hpreISF28 11 := by
+  rw [show hpreISF28 11 = ((102813 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr11]
+  simp only [w1rSF11, imgF28_apply]
+  rw [sum_getD_div w1zSF11_len imgz28_len pzISF_28_11 256 255]
+  norm_num
+
+theorem hpreISF28_eval_12 : denseE W1SF imgF28 12 = hpreISF28 12 := by
+  rw [show hpreISF28 12 = ((-96285 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr12]
+  simp only [w1rSF12, imgF28_apply]
+  rw [sum_getD_div w1zSF12_len imgz28_len pzISF_28_12 256 255]
+  norm_num
+
+theorem hpreISF28_eval_13 : denseE W1SF imgF28 13 = hpreISF28 13 := by
+  rw [show hpreISF28 13 = ((23474 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr13]
+  simp only [w1rSF13, imgF28_apply]
+  rw [sum_getD_div w1zSF13_len imgz28_len pzISF_28_13 256 255]
+  norm_num
+
+theorem hpreISF28_eval_14 : denseE W1SF imgF28 14 = hpreISF28 14 := by
+  rw [show hpreISF28 14 = ((208559 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr14]
+  simp only [w1rSF14, imgF28_apply]
+  rw [sum_getD_div w1zSF14_len imgz28_len pzISF_28_14 256 255]
+  norm_num
+
+theorem hpreISF28_eval_15 : denseE W1SF imgF28 15 = hpreISF28 15 := by
+  rw [show hpreISF28 15 = ((67847 : ℝ)/65280) from rfl,
+      denseE_apply, W1SFr15]
+  simp only [w1rSF15, imgF28_apply]
+  rw [sum_getD_div w1zSF15_len imgz28_len pzISF_28_15 256 255]
+  norm_num
+
+theorem hpreISF28_eval : ∀ k : Fin 16, denseE W1SF imgF28 k = hpreISF28 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreISF28_eval_0; exact hpreISF28_eval_1; exact hpreISF28_eval_2; exact hpreISF28_eval_3; exact hpreISF28_eval_4; exact hpreISF28_eval_5; exact hpreISF28_eval_6; exact hpreISF28_eval_7; exact hpreISF28_eval_8; exact hpreISF28_eval_9; exact hpreISF28_eval_10; exact hpreISF28_eval_11; exact hpreISF28_eval_12; exact hpreISF28_eval_13; exact hpreISF28_eval_14; exact hpreISF28_eval_15 ]
+
+theorem hpreISF28_sum : ∀ t, (∑ j, W1SF t j * imgF28 j) = hpreISF28 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreSF26_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_26 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF26 q - ((1 : ℝ)/255)) (fun q => imgF26 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF26 q - ((1 : ℝ)/255)) (fun q => imgF26 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF26 q - ((1 : ℝ)/255)) (fun q => imgF26 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF26 q - ((1 : ℝ)/255)) (fun q => imgF26 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF26_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF26, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #26 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_26 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF26 + δ) j < mlpSF (imgF26 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_26 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_26 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF26 q - ((2 : ℝ)/255)) (fun q => imgF26 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF26 q - ((2 : ℝ)/255)) (fun q => imgF26 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF26 q - ((2 : ℝ)/255)) (fun q => imgF26 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF26 q - ((2 : ℝ)/255)) (fun q => imgF26 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF26_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF26, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #26 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_26 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF26 + δ) j < mlpSF (imgF26 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_26 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_26 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF26 q - ((4 : ℝ)/255)) (fun q => imgF26 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF26 q - ((4 : ℝ)/255)) (fun q => imgF26 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF26 q - ((4 : ℝ)/255)) (fun q => imgF26 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF26 q - ((4 : ℝ)/255)) (fun q => imgF26 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF26_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF26, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #26 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_26 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF26 + δ) j < mlpSF (imgF26 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_26 δ hδ
-
-theorem hpreSF27_sum : ∀ t, (∑ j, W1SF t j * imgF27 j) = hpreSF27 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF27_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_27 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF27 q - ((1 : ℝ)/255)) (fun q => imgF27 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF27 q - ((1 : ℝ)/255)) (fun q => imgF27 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF27 q - ((1 : ℝ)/255)) (fun q => imgF27 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF27 q - ((1 : ℝ)/255)) (fun q => imgF27 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF27_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF27, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #27 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_27 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF27 + δ) j < mlpSF (imgF27 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_27 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_27 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF27 q - ((2 : ℝ)/255)) (fun q => imgF27 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF27 q - ((2 : ℝ)/255)) (fun q => imgF27 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF27 q - ((2 : ℝ)/255)) (fun q => imgF27 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF27 q - ((2 : ℝ)/255)) (fun q => imgF27 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF27_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF27, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #27 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_27 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF27 + δ) j < mlpSF (imgF27 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_27 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_27 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF27 q - ((4 : ℝ)/255)) (fun q => imgF27 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF27 q - ((4 : ℝ)/255)) (fun q => imgF27 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF27 q - ((4 : ℝ)/255)) (fun q => imgF27 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF27 q - ((4 : ℝ)/255)) (fun q => imgF27 q + ((4 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF27_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF27, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #27 (digit 4): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_27 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF27 + δ) j < mlpSF (imgF27 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_27 δ hδ
-
-theorem hpreSF28_sum : ∀ t, (∑ j, W1SF t j * imgF28 j) = hpreSF28 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF28_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_28 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF28 q - ((1 : ℝ)/255)) (fun q => imgF28 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF28 q - ((1 : ℝ)/255)) (fun q => imgF28 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF28 q - ((1 : ℝ)/255)) (fun q => imgF28 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF28 q - ((1 : ℝ)/255)) (fun q => imgF28 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF28_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF28, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #28 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_28 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF28 + δ) j < mlpSF (imgF28 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_28 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_28 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF28 q - ((2 : ℝ)/255)) (fun q => imgF28 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF28 q - ((2 : ℝ)/255)) (fun q => imgF28 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF28 q - ((2 : ℝ)/255)) (fun q => imgF28 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF28 q - ((2 : ℝ)/255)) (fun q => imgF28 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF28_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF28, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #28 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_28 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF28 + δ) j < mlpSF (imgF28 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_28 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_28 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF28 q - ((4 : ℝ)/255)) (fun q => imgF28 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF28 q - ((4 : ℝ)/255)) (fun q => imgF28 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF28 q - ((4 : ℝ)/255)) (fun q => imgF28 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF28 q - ((4 : ℝ)/255)) (fun q => imgF28 q + ((4 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF28_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF28, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #28 (digit 0): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_28 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF28 + δ) j < mlpSF (imgF28 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_28 δ hδ
+  exact hpreISF28_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbSFe8_28 : ∀ j : Fin 10, j ≠ 0 →
@@ -2065,11 +1789,11 @@ theorem hbSFe8_28 : ∀ j : Fin 10, j ≠ 0 →
                     (reluHi (denseHi W1SF (fun q => imgF28 q - ((8 : ℝ)/255)) (fun q => imgF28 q + ((8 : ℝ)/255)))) 0 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF28_sum, absrowSF]
+  simp only [hpreISF28_sum, absrowSF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF28, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, hpreISF28, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #28 (digit 0): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -2077,4274 +1801,6 @@ theorem certIBPSFe8_28 (δ : EuclideanSpace ℝ (Fin 784))
     (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
     ∀ j, j ≠ 0 → mlpSF (imgF28 + δ) j < mlpSF (imgF28 + δ) 0 :=
   ibp2_certified_at_eps W1SF W2SF hbSFe8_28 δ hδ
-
-theorem hpreSF29_sum : ∀ t, (∑ j, W1SF t j * imgF29 j) = hpreSF29 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF29_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_29 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF29 q - ((1 : ℝ)/255)) (fun q => imgF29 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF29 q - ((1 : ℝ)/255)) (fun q => imgF29 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF29 q - ((1 : ℝ)/255)) (fun q => imgF29 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF29 q - ((1 : ℝ)/255)) (fun q => imgF29 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF29_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF29, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #29 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_29 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF29 + δ) j < mlpSF (imgF29 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_29 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_29 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF29 q - ((2 : ℝ)/255)) (fun q => imgF29 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF29 q - ((2 : ℝ)/255)) (fun q => imgF29 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF29 q - ((2 : ℝ)/255)) (fun q => imgF29 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF29 q - ((2 : ℝ)/255)) (fun q => imgF29 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF29_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF29, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #29 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_29 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF29 + δ) j < mlpSF (imgF29 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_29 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_29 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF29 q - ((4 : ℝ)/255)) (fun q => imgF29 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF29 q - ((4 : ℝ)/255)) (fun q => imgF29 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF29 q - ((4 : ℝ)/255)) (fun q => imgF29 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF29 q - ((4 : ℝ)/255)) (fun q => imgF29 q + ((4 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF29_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF29, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #29 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_29 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF29 + δ) j < mlpSF (imgF29 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_29 δ hδ
-
-theorem hpreSF30_sum : ∀ t, (∑ j, W1SF t j * imgF30 j) = hpreSF30 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF30_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_30 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF30 q - ((1 : ℝ)/255)) (fun q => imgF30 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF30 q - ((1 : ℝ)/255)) (fun q => imgF30 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF30 q - ((1 : ℝ)/255)) (fun q => imgF30 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF30 q - ((1 : ℝ)/255)) (fun q => imgF30 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF30_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF30, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #30 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_30 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF30 + δ) j < mlpSF (imgF30 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_30 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_30 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF30 q - ((2 : ℝ)/255)) (fun q => imgF30 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF30 q - ((2 : ℝ)/255)) (fun q => imgF30 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF30 q - ((2 : ℝ)/255)) (fun q => imgF30 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF30 q - ((2 : ℝ)/255)) (fun q => imgF30 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF30_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF30, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #30 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_30 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF30 + δ) j < mlpSF (imgF30 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_30 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_30 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF30 q - ((4 : ℝ)/255)) (fun q => imgF30 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF30 q - ((4 : ℝ)/255)) (fun q => imgF30 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF30 q - ((4 : ℝ)/255)) (fun q => imgF30 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF30 q - ((4 : ℝ)/255)) (fun q => imgF30 q + ((4 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF30_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF30, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #30 (digit 3): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_30 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF30 + δ) j < mlpSF (imgF30 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_30 δ hδ
-
-theorem hpreSF31_sum : ∀ t, (∑ j, W1SF t j * imgF31 j) = hpreSF31 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF31_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_31 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF31 q - ((1 : ℝ)/255)) (fun q => imgF31 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF31 q - ((1 : ℝ)/255)) (fun q => imgF31 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF31 q - ((1 : ℝ)/255)) (fun q => imgF31 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF31 q - ((1 : ℝ)/255)) (fun q => imgF31 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF31_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF31, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #31 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_31 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF31 + δ) j < mlpSF (imgF31 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_31 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_31 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF31 q - ((2 : ℝ)/255)) (fun q => imgF31 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF31 q - ((2 : ℝ)/255)) (fun q => imgF31 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF31 q - ((2 : ℝ)/255)) (fun q => imgF31 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF31 q - ((2 : ℝ)/255)) (fun q => imgF31 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF31_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF31, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #31 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_31 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF31 + δ) j < mlpSF (imgF31 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_31 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_31 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF31 q - ((4 : ℝ)/255)) (fun q => imgF31 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF31 q - ((4 : ℝ)/255)) (fun q => imgF31 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF31 q - ((4 : ℝ)/255)) (fun q => imgF31 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF31 q - ((4 : ℝ)/255)) (fun q => imgF31 q + ((4 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF31_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF31, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #31 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_31 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF31 + δ) j < mlpSF (imgF31 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_31 δ hδ
-
-theorem hpreSF32_sum : ∀ t, (∑ j, W1SF t j * imgF32 j) = hpreSF32 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF32_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_32 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF32 q - ((1 : ℝ)/255)) (fun q => imgF32 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF32 q - ((1 : ℝ)/255)) (fun q => imgF32 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF32 q - ((1 : ℝ)/255)) (fun q => imgF32 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF32 q - ((1 : ℝ)/255)) (fun q => imgF32 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF32_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF32, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #32 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_32 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF32 + δ) j < mlpSF (imgF32 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_32 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_32 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF32 q - ((2 : ℝ)/255)) (fun q => imgF32 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF32 q - ((2 : ℝ)/255)) (fun q => imgF32 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF32 q - ((2 : ℝ)/255)) (fun q => imgF32 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF32 q - ((2 : ℝ)/255)) (fun q => imgF32 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF32_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF32, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #32 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_32 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF32 + δ) j < mlpSF (imgF32 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_32 δ hδ
-
-theorem hpreSF34_sum : ∀ t, (∑ j, W1SF t j * imgF34 j) = hpreSF34 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF34_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_34 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF34 q - ((1 : ℝ)/255)) (fun q => imgF34 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF34 q - ((1 : ℝ)/255)) (fun q => imgF34 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF34 q - ((1 : ℝ)/255)) (fun q => imgF34 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF34 q - ((1 : ℝ)/255)) (fun q => imgF34 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF34_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF34, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #34 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_34 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF34 + δ) j < mlpSF (imgF34 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_34 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_34 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF34 q - ((2 : ℝ)/255)) (fun q => imgF34 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF34 q - ((2 : ℝ)/255)) (fun q => imgF34 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF34 q - ((2 : ℝ)/255)) (fun q => imgF34 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF34 q - ((2 : ℝ)/255)) (fun q => imgF34 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF34_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF34, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #34 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_34 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF34 + δ) j < mlpSF (imgF34 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_34 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_34 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF34 q - ((4 : ℝ)/255)) (fun q => imgF34 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF34 q - ((4 : ℝ)/255)) (fun q => imgF34 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF34 q - ((4 : ℝ)/255)) (fun q => imgF34 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF34 q - ((4 : ℝ)/255)) (fun q => imgF34 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF34_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF34, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #34 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_34 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF34 + δ) j < mlpSF (imgF34 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_34 δ hδ
-
-theorem hpreSF35_sum : ∀ t, (∑ j, W1SF t j * imgF35 j) = hpreSF35 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF35_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_35 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF35 q - ((1 : ℝ)/255)) (fun q => imgF35 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF35 q - ((1 : ℝ)/255)) (fun q => imgF35 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF35 q - ((1 : ℝ)/255)) (fun q => imgF35 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF35 q - ((1 : ℝ)/255)) (fun q => imgF35 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF35_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF35, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #35 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_35 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF35 + δ) j < mlpSF (imgF35 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_35 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_35 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF35 q - ((2 : ℝ)/255)) (fun q => imgF35 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF35 q - ((2 : ℝ)/255)) (fun q => imgF35 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF35 q - ((2 : ℝ)/255)) (fun q => imgF35 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF35 q - ((2 : ℝ)/255)) (fun q => imgF35 q + ((2 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF35_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF35, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #35 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_35 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF35 + δ) j < mlpSF (imgF35 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_35 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_35 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF35 q - ((4 : ℝ)/255)) (fun q => imgF35 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF35 q - ((4 : ℝ)/255)) (fun q => imgF35 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF35 q - ((4 : ℝ)/255)) (fun q => imgF35 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF35 q - ((4 : ℝ)/255)) (fun q => imgF35 q + ((4 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF35_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF35, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #35 (digit 2): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_35 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF35 + δ) j < mlpSF (imgF35 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_35 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_35 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF35 q - ((8 : ℝ)/255)) (fun q => imgF35 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF35 q - ((8 : ℝ)/255)) (fun q => imgF35 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF35 q - ((8 : ℝ)/255)) (fun q => imgF35 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF35 q - ((8 : ℝ)/255)) (fun q => imgF35 q + ((8 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF35_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF35, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #35 (digit 2): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_35 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF35 + δ) j < mlpSF (imgF35 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_35 δ hδ
-
-theorem hpreSF36_sum : ∀ t, (∑ j, W1SF t j * imgF36 j) = hpreSF36 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF36_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_36 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF36 q - ((1 : ℝ)/255)) (fun q => imgF36 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF36 q - ((1 : ℝ)/255)) (fun q => imgF36 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF36 q - ((1 : ℝ)/255)) (fun q => imgF36 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF36 q - ((1 : ℝ)/255)) (fun q => imgF36 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF36_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF36, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #36 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_36 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF36 + δ) j < mlpSF (imgF36 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_36 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_36 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF36 q - ((2 : ℝ)/255)) (fun q => imgF36 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF36 q - ((2 : ℝ)/255)) (fun q => imgF36 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF36 q - ((2 : ℝ)/255)) (fun q => imgF36 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF36 q - ((2 : ℝ)/255)) (fun q => imgF36 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF36_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF36, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #36 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_36 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF36 + δ) j < mlpSF (imgF36 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_36 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_36 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF36 q - ((4 : ℝ)/255)) (fun q => imgF36 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF36 q - ((4 : ℝ)/255)) (fun q => imgF36 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF36 q - ((4 : ℝ)/255)) (fun q => imgF36 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF36 q - ((4 : ℝ)/255)) (fun q => imgF36 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF36_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF36, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #36 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_36 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF36 + δ) j < mlpSF (imgF36 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_36 δ hδ
-
-theorem hpreSF37_sum : ∀ t, (∑ j, W1SF t j * imgF37 j) = hpreSF37 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF37_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_37 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF37 q - ((1 : ℝ)/255)) (fun q => imgF37 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF37 q - ((1 : ℝ)/255)) (fun q => imgF37 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF37 q - ((1 : ℝ)/255)) (fun q => imgF37 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF37 q - ((1 : ℝ)/255)) (fun q => imgF37 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF37_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF37, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #37 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_37 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF37 + δ) j < mlpSF (imgF37 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_37 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_37 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF37 q - ((2 : ℝ)/255)) (fun q => imgF37 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF37 q - ((2 : ℝ)/255)) (fun q => imgF37 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF37 q - ((2 : ℝ)/255)) (fun q => imgF37 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF37 q - ((2 : ℝ)/255)) (fun q => imgF37 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF37_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF37, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #37 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_37 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF37 + δ) j < mlpSF (imgF37 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_37 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_37 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF37 q - ((4 : ℝ)/255)) (fun q => imgF37 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF37 q - ((4 : ℝ)/255)) (fun q => imgF37 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF37 q - ((4 : ℝ)/255)) (fun q => imgF37 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF37 q - ((4 : ℝ)/255)) (fun q => imgF37 q + ((4 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF37_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF37, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #37 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_37 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF37 + δ) j < mlpSF (imgF37 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_37 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_37 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF37 q - ((8 : ℝ)/255)) (fun q => imgF37 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF37 q - ((8 : ℝ)/255)) (fun q => imgF37 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF37 q - ((8 : ℝ)/255)) (fun q => imgF37 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF37 q - ((8 : ℝ)/255)) (fun q => imgF37 q + ((8 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF37_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF37, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #37 (digit 1): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_37 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF37 + δ) j < mlpSF (imgF37 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_37 δ hδ
-
-theorem hpreSF38_sum : ∀ t, (∑ j, W1SF t j * imgF38 j) = hpreSF38 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF38_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_38 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF38 q - ((1 : ℝ)/255)) (fun q => imgF38 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF38 q - ((1 : ℝ)/255)) (fun q => imgF38 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF38 q - ((1 : ℝ)/255)) (fun q => imgF38 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF38 q - ((1 : ℝ)/255)) (fun q => imgF38 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF38_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF38, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #38 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_38 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF38 + δ) j < mlpSF (imgF38 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_38 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_38 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF38 q - ((2 : ℝ)/255)) (fun q => imgF38 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF38 q - ((2 : ℝ)/255)) (fun q => imgF38 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF38 q - ((2 : ℝ)/255)) (fun q => imgF38 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF38 q - ((2 : ℝ)/255)) (fun q => imgF38 q + ((2 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF38_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF38, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #38 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_38 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF38 + δ) j < mlpSF (imgF38 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_38 δ hδ
-
-theorem hpreSF39_sum : ∀ t, (∑ j, W1SF t j * imgF39 j) = hpreSF39 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF39_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_39 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF39 q - ((1 : ℝ)/255)) (fun q => imgF39 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF39 q - ((1 : ℝ)/255)) (fun q => imgF39 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF39 q - ((1 : ℝ)/255)) (fun q => imgF39 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF39 q - ((1 : ℝ)/255)) (fun q => imgF39 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF39_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF39, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #39 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_39 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF39 + δ) j < mlpSF (imgF39 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_39 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_39 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF39 q - ((2 : ℝ)/255)) (fun q => imgF39 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF39 q - ((2 : ℝ)/255)) (fun q => imgF39 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF39 q - ((2 : ℝ)/255)) (fun q => imgF39 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF39 q - ((2 : ℝ)/255)) (fun q => imgF39 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF39_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF39, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #39 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_39 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF39 + δ) j < mlpSF (imgF39 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_39 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_39 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF39 q - ((4 : ℝ)/255)) (fun q => imgF39 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF39 q - ((4 : ℝ)/255)) (fun q => imgF39 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF39 q - ((4 : ℝ)/255)) (fun q => imgF39 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF39 q - ((4 : ℝ)/255)) (fun q => imgF39 q + ((4 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF39_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF39, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #39 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_39 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF39 + δ) j < mlpSF (imgF39 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_39 δ hδ
-
-theorem hpreSF40_sum : ∀ t, (∑ j, W1SF t j * imgF40 j) = hpreSF40 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF40_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_40 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF40 q - ((1 : ℝ)/255)) (fun q => imgF40 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF40 q - ((1 : ℝ)/255)) (fun q => imgF40 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF40 q - ((1 : ℝ)/255)) (fun q => imgF40 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF40 q - ((1 : ℝ)/255)) (fun q => imgF40 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF40_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF40, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #40 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_40 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF40 + δ) j < mlpSF (imgF40 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_40 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_40 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF40 q - ((2 : ℝ)/255)) (fun q => imgF40 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF40 q - ((2 : ℝ)/255)) (fun q => imgF40 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF40 q - ((2 : ℝ)/255)) (fun q => imgF40 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF40 q - ((2 : ℝ)/255)) (fun q => imgF40 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF40_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF40, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #40 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_40 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF40 + δ) j < mlpSF (imgF40 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_40 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_40 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF40 q - ((4 : ℝ)/255)) (fun q => imgF40 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF40 q - ((4 : ℝ)/255)) (fun q => imgF40 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF40 q - ((4 : ℝ)/255)) (fun q => imgF40 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF40 q - ((4 : ℝ)/255)) (fun q => imgF40 q + ((4 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF40_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF40, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #40 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_40 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF40 + δ) j < mlpSF (imgF40 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_40 δ hδ
-
-theorem hpreSF41_sum : ∀ t, (∑ j, W1SF t j * imgF41 j) = hpreSF41 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF41_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_41 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF41 q - ((1 : ℝ)/255)) (fun q => imgF41 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF41 q - ((1 : ℝ)/255)) (fun q => imgF41 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF41 q - ((1 : ℝ)/255)) (fun q => imgF41 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF41 q - ((1 : ℝ)/255)) (fun q => imgF41 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF41_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF41, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #41 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_41 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF41 + δ) j < mlpSF (imgF41 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_41 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_41 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF41 q - ((2 : ℝ)/255)) (fun q => imgF41 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF41 q - ((2 : ℝ)/255)) (fun q => imgF41 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF41 q - ((2 : ℝ)/255)) (fun q => imgF41 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF41 q - ((2 : ℝ)/255)) (fun q => imgF41 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF41_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF41, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #41 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_41 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF41 + δ) j < mlpSF (imgF41 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_41 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_41 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF41 q - ((4 : ℝ)/255)) (fun q => imgF41 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF41 q - ((4 : ℝ)/255)) (fun q => imgF41 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF41 q - ((4 : ℝ)/255)) (fun q => imgF41 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF41 q - ((4 : ℝ)/255)) (fun q => imgF41 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF41_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF41, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #41 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_41 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF41 + δ) j < mlpSF (imgF41 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_41 δ hδ
-
-theorem hpreSF42_sum : ∀ t, (∑ j, W1SF t j * imgF42 j) = hpreSF42 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF42_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_42 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF42 q - ((1 : ℝ)/255)) (fun q => imgF42 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF42 q - ((1 : ℝ)/255)) (fun q => imgF42 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF42 q - ((1 : ℝ)/255)) (fun q => imgF42 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF42 q - ((1 : ℝ)/255)) (fun q => imgF42 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF42_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF42, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #42 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_42 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF42 + δ) j < mlpSF (imgF42 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_42 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_42 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF42 q - ((2 : ℝ)/255)) (fun q => imgF42 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF42 q - ((2 : ℝ)/255)) (fun q => imgF42 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF42 q - ((2 : ℝ)/255)) (fun q => imgF42 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF42 q - ((2 : ℝ)/255)) (fun q => imgF42 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF42_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF42, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #42 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_42 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF42 + δ) j < mlpSF (imgF42 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_42 δ hδ
-
-theorem hpreSF43_sum : ∀ t, (∑ j, W1SF t j * imgF43 j) = hpreSF43 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF43_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_43 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF43 q - ((1 : ℝ)/255)) (fun q => imgF43 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF43 q - ((1 : ℝ)/255)) (fun q => imgF43 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF43 q - ((1 : ℝ)/255)) (fun q => imgF43 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF43 q - ((1 : ℝ)/255)) (fun q => imgF43 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF43_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF43, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #43 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_43 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF43 + δ) j < mlpSF (imgF43 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_43 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_43 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF43 q - ((2 : ℝ)/255)) (fun q => imgF43 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF43 q - ((2 : ℝ)/255)) (fun q => imgF43 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF43 q - ((2 : ℝ)/255)) (fun q => imgF43 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF43 q - ((2 : ℝ)/255)) (fun q => imgF43 q + ((2 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF43_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF43, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #43 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_43 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF43 + δ) j < mlpSF (imgF43 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_43 δ hδ
-
-theorem hpreSF44_sum : ∀ t, (∑ j, W1SF t j * imgF44 j) = hpreSF44 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF44_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_44 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF44 q - ((1 : ℝ)/255)) (fun q => imgF44 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF44 q - ((1 : ℝ)/255)) (fun q => imgF44 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF44 q - ((1 : ℝ)/255)) (fun q => imgF44 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF44 q - ((1 : ℝ)/255)) (fun q => imgF44 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF44_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF44, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #44 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_44 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF44 + δ) j < mlpSF (imgF44 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_44 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_44 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF44 q - ((2 : ℝ)/255)) (fun q => imgF44 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF44 q - ((2 : ℝ)/255)) (fun q => imgF44 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF44 q - ((2 : ℝ)/255)) (fun q => imgF44 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF44 q - ((2 : ℝ)/255)) (fun q => imgF44 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF44_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF44, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #44 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_44 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF44 + δ) j < mlpSF (imgF44 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_44 δ hδ
-
-theorem hpreSF45_sum : ∀ t, (∑ j, W1SF t j * imgF45 j) = hpreSF45 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF45_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_45 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF45 q - ((1 : ℝ)/255)) (fun q => imgF45 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF45 q - ((1 : ℝ)/255)) (fun q => imgF45 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF45 q - ((1 : ℝ)/255)) (fun q => imgF45 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF45 q - ((1 : ℝ)/255)) (fun q => imgF45 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF45_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF45, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #45 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_45 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF45 + δ) j < mlpSF (imgF45 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_45 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_45 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF45 q - ((2 : ℝ)/255)) (fun q => imgF45 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF45 q - ((2 : ℝ)/255)) (fun q => imgF45 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF45 q - ((2 : ℝ)/255)) (fun q => imgF45 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF45 q - ((2 : ℝ)/255)) (fun q => imgF45 q + ((2 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF45_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF45, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #45 (digit 5): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_45 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF45 + δ) j < mlpSF (imgF45 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_45 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_45 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF45 q - ((4 : ℝ)/255)) (fun q => imgF45 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF45 q - ((4 : ℝ)/255)) (fun q => imgF45 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF45 q - ((4 : ℝ)/255)) (fun q => imgF45 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF45 q - ((4 : ℝ)/255)) (fun q => imgF45 q + ((4 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF45_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF45, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #45 (digit 5): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_45 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF45 + δ) j < mlpSF (imgF45 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_45 δ hδ
-
-theorem hpreSF46_sum : ∀ t, (∑ j, W1SF t j * imgF46 j) = hpreSF46 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF46_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_46 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF46 q - ((1 : ℝ)/255)) (fun q => imgF46 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF46 q - ((1 : ℝ)/255)) (fun q => imgF46 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF46 q - ((1 : ℝ)/255)) (fun q => imgF46 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF46 q - ((1 : ℝ)/255)) (fun q => imgF46 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF46_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF46, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #46 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_46 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF46 + δ) j < mlpSF (imgF46 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_46 δ hδ
-
-theorem hpreSF47_sum : ∀ t, (∑ j, W1SF t j * imgF47 j) = hpreSF47 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF47_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_47 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF47 q - ((1 : ℝ)/255)) (fun q => imgF47 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF47 q - ((1 : ℝ)/255)) (fun q => imgF47 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF47 q - ((1 : ℝ)/255)) (fun q => imgF47 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF47 q - ((1 : ℝ)/255)) (fun q => imgF47 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF47_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF47, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #47 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_47 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF47 + δ) j < mlpSF (imgF47 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_47 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_47 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF47 q - ((2 : ℝ)/255)) (fun q => imgF47 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF47 q - ((2 : ℝ)/255)) (fun q => imgF47 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF47 q - ((2 : ℝ)/255)) (fun q => imgF47 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF47 q - ((2 : ℝ)/255)) (fun q => imgF47 q + ((2 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF47_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF47, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #47 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_47 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF47 + δ) j < mlpSF (imgF47 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_47 δ hδ
-
-theorem hpreSF48_sum : ∀ t, (∑ j, W1SF t j * imgF48 j) = hpreSF48 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF48_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_48 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF48 q - ((1 : ℝ)/255)) (fun q => imgF48 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF48 q - ((1 : ℝ)/255)) (fun q => imgF48 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF48 q - ((1 : ℝ)/255)) (fun q => imgF48 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF48 q - ((1 : ℝ)/255)) (fun q => imgF48 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF48_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF48, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #48 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_48 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF48 + δ) j < mlpSF (imgF48 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_48 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_48 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF48 q - ((2 : ℝ)/255)) (fun q => imgF48 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF48 q - ((2 : ℝ)/255)) (fun q => imgF48 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF48 q - ((2 : ℝ)/255)) (fun q => imgF48 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF48 q - ((2 : ℝ)/255)) (fun q => imgF48 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF48_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF48, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #48 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_48 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF48 + δ) j < mlpSF (imgF48 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_48 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_48 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF48 q - ((4 : ℝ)/255)) (fun q => imgF48 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF48 q - ((4 : ℝ)/255)) (fun q => imgF48 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF48 q - ((4 : ℝ)/255)) (fun q => imgF48 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF48 q - ((4 : ℝ)/255)) (fun q => imgF48 q + ((4 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF48_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF48, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #48 (digit 4): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_48 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF48 + δ) j < mlpSF (imgF48 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_48 δ hδ
-
-theorem hpreSF49_sum : ∀ t, (∑ j, W1SF t j * imgF49 j) = hpreSF49 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF49_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_49 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF49 q - ((1 : ℝ)/255)) (fun q => imgF49 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF49 q - ((1 : ℝ)/255)) (fun q => imgF49 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF49 q - ((1 : ℝ)/255)) (fun q => imgF49 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF49 q - ((1 : ℝ)/255)) (fun q => imgF49 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF49_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF49, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #49 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_49 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF49 + δ) j < mlpSF (imgF49 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_49 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_49 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF49 q - ((2 : ℝ)/255)) (fun q => imgF49 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF49 q - ((2 : ℝ)/255)) (fun q => imgF49 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF49 q - ((2 : ℝ)/255)) (fun q => imgF49 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF49 q - ((2 : ℝ)/255)) (fun q => imgF49 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF49_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF49, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #49 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_49 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF49 + δ) j < mlpSF (imgF49 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_49 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_49 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF49 q - ((4 : ℝ)/255)) (fun q => imgF49 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF49 q - ((4 : ℝ)/255)) (fun q => imgF49 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF49 q - ((4 : ℝ)/255)) (fun q => imgF49 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF49 q - ((4 : ℝ)/255)) (fun q => imgF49 q + ((4 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF49_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF49, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #49 (digit 4): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_49 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF49 + δ) j < mlpSF (imgF49 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_49 δ hδ
-
-theorem hpreSF50_sum : ∀ t, (∑ j, W1SF t j * imgF50 j) = hpreSF50 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF50_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_50 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF50 q - ((1 : ℝ)/255)) (fun q => imgF50 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF50 q - ((1 : ℝ)/255)) (fun q => imgF50 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF50 q - ((1 : ℝ)/255)) (fun q => imgF50 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF50 q - ((1 : ℝ)/255)) (fun q => imgF50 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF50_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF50, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #50 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_50 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF50 + δ) j < mlpSF (imgF50 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_50 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_50 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF50 q - ((2 : ℝ)/255)) (fun q => imgF50 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF50 q - ((2 : ℝ)/255)) (fun q => imgF50 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF50 q - ((2 : ℝ)/255)) (fun q => imgF50 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF50 q - ((2 : ℝ)/255)) (fun q => imgF50 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF50_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF50, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #50 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_50 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF50 + δ) j < mlpSF (imgF50 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_50 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_50 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF50 q - ((4 : ℝ)/255)) (fun q => imgF50 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF50 q - ((4 : ℝ)/255)) (fun q => imgF50 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF50 q - ((4 : ℝ)/255)) (fun q => imgF50 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF50 q - ((4 : ℝ)/255)) (fun q => imgF50 q + ((4 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF50_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF50, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #50 (digit 6): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_50 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF50 + δ) j < mlpSF (imgF50 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_50 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_50 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF50 q - ((8 : ℝ)/255)) (fun q => imgF50 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF50 q - ((8 : ℝ)/255)) (fun q => imgF50 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF50 q - ((8 : ℝ)/255)) (fun q => imgF50 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF50 q - ((8 : ℝ)/255)) (fun q => imgF50 q + ((8 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF50_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF50, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #50 (digit 6): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_50 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF50 + δ) j < mlpSF (imgF50 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_50 δ hδ
-
-theorem hpreSF51_sum : ∀ t, (∑ j, W1SF t j * imgF51 j) = hpreSF51 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF51_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_51 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF51 q - ((1 : ℝ)/255)) (fun q => imgF51 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF51 q - ((1 : ℝ)/255)) (fun q => imgF51 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF51 q - ((1 : ℝ)/255)) (fun q => imgF51 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF51 q - ((1 : ℝ)/255)) (fun q => imgF51 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF51_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF51, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #51 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_51 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF51 + δ) j < mlpSF (imgF51 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_51 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_51 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF51 q - ((2 : ℝ)/255)) (fun q => imgF51 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF51 q - ((2 : ℝ)/255)) (fun q => imgF51 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF51 q - ((2 : ℝ)/255)) (fun q => imgF51 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF51 q - ((2 : ℝ)/255)) (fun q => imgF51 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF51_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF51, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #51 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_51 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF51 + δ) j < mlpSF (imgF51 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_51 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_51 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF51 q - ((4 : ℝ)/255)) (fun q => imgF51 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF51 q - ((4 : ℝ)/255)) (fun q => imgF51 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF51 q - ((4 : ℝ)/255)) (fun q => imgF51 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF51 q - ((4 : ℝ)/255)) (fun q => imgF51 q + ((4 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF51_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF51, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #51 (digit 3): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_51 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF51 + δ) j < mlpSF (imgF51 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_51 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_51 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF51 q - ((8 : ℝ)/255)) (fun q => imgF51 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF51 q - ((8 : ℝ)/255)) (fun q => imgF51 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF51 q - ((8 : ℝ)/255)) (fun q => imgF51 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF51 q - ((8 : ℝ)/255)) (fun q => imgF51 q + ((8 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF51_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF51, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #51 (digit 3): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_51 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF51 + δ) j < mlpSF (imgF51 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_51 δ hδ
-
-theorem hpreSF52_sum : ∀ t, (∑ j, W1SF t j * imgF52 j) = hpreSF52 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF52_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_52 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF52 q - ((1 : ℝ)/255)) (fun q => imgF52 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF52 q - ((1 : ℝ)/255)) (fun q => imgF52 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF52 q - ((1 : ℝ)/255)) (fun q => imgF52 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF52 q - ((1 : ℝ)/255)) (fun q => imgF52 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF52_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF52, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #52 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_52 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF52 + δ) j < mlpSF (imgF52 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_52 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_52 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF52 q - ((2 : ℝ)/255)) (fun q => imgF52 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF52 q - ((2 : ℝ)/255)) (fun q => imgF52 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF52 q - ((2 : ℝ)/255)) (fun q => imgF52 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF52 q - ((2 : ℝ)/255)) (fun q => imgF52 q + ((2 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF52_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF52, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #52 (digit 5): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_52 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF52 + δ) j < mlpSF (imgF52 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_52 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_52 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF52 q - ((4 : ℝ)/255)) (fun q => imgF52 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF52 q - ((4 : ℝ)/255)) (fun q => imgF52 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF52 q - ((4 : ℝ)/255)) (fun q => imgF52 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF52 q - ((4 : ℝ)/255)) (fun q => imgF52 q + ((4 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF52_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF52, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #52 (digit 5): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_52 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF52 + δ) j < mlpSF (imgF52 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_52 δ hδ
-
-theorem hpreSF53_sum : ∀ t, (∑ j, W1SF t j * imgF53 j) = hpreSF53 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF53_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_53 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF53 q - ((1 : ℝ)/255)) (fun q => imgF53 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF53 q - ((1 : ℝ)/255)) (fun q => imgF53 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF53 q - ((1 : ℝ)/255)) (fun q => imgF53 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF53 q - ((1 : ℝ)/255)) (fun q => imgF53 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF53_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF53, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #53 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_53 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF53 + δ) j < mlpSF (imgF53 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_53 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_53 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF53 q - ((2 : ℝ)/255)) (fun q => imgF53 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF53 q - ((2 : ℝ)/255)) (fun q => imgF53 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF53 q - ((2 : ℝ)/255)) (fun q => imgF53 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF53 q - ((2 : ℝ)/255)) (fun q => imgF53 q + ((2 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF53_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF53, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #53 (digit 5): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_53 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF53 + δ) j < mlpSF (imgF53 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_53 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_53 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF53 q - ((4 : ℝ)/255)) (fun q => imgF53 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF53 q - ((4 : ℝ)/255)) (fun q => imgF53 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF53 q - ((4 : ℝ)/255)) (fun q => imgF53 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF53 q - ((4 : ℝ)/255)) (fun q => imgF53 q + ((4 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF53_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF53, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #53 (digit 5): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_53 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF53 + δ) j < mlpSF (imgF53 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_53 δ hδ
-
-theorem hpreSF54_sum : ∀ t, (∑ j, W1SF t j * imgF54 j) = hpreSF54 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF54_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_54 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF54 q - ((1 : ℝ)/255)) (fun q => imgF54 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF54 q - ((1 : ℝ)/255)) (fun q => imgF54 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF54 q - ((1 : ℝ)/255)) (fun q => imgF54 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF54 q - ((1 : ℝ)/255)) (fun q => imgF54 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF54_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF54, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #54 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_54 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF54 + δ) j < mlpSF (imgF54 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_54 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_54 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF54 q - ((2 : ℝ)/255)) (fun q => imgF54 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF54 q - ((2 : ℝ)/255)) (fun q => imgF54 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF54 q - ((2 : ℝ)/255)) (fun q => imgF54 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF54 q - ((2 : ℝ)/255)) (fun q => imgF54 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF54_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF54, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #54 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_54 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF54 + δ) j < mlpSF (imgF54 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_54 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_54 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF54 q - ((4 : ℝ)/255)) (fun q => imgF54 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF54 q - ((4 : ℝ)/255)) (fun q => imgF54 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF54 q - ((4 : ℝ)/255)) (fun q => imgF54 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF54 q - ((4 : ℝ)/255)) (fun q => imgF54 q + ((4 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF54_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF54, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #54 (digit 6): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_54 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF54 + δ) j < mlpSF (imgF54 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_54 δ hδ
-
-theorem hpreSF55_sum : ∀ t, (∑ j, W1SF t j * imgF55 j) = hpreSF55 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF55_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_55 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF55 q - ((1 : ℝ)/255)) (fun q => imgF55 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF55 q - ((1 : ℝ)/255)) (fun q => imgF55 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF55 q - ((1 : ℝ)/255)) (fun q => imgF55 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF55 q - ((1 : ℝ)/255)) (fun q => imgF55 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF55_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF55, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #55 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_55 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF55 + δ) j < mlpSF (imgF55 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_55 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_55 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF55 q - ((2 : ℝ)/255)) (fun q => imgF55 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF55 q - ((2 : ℝ)/255)) (fun q => imgF55 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF55 q - ((2 : ℝ)/255)) (fun q => imgF55 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF55 q - ((2 : ℝ)/255)) (fun q => imgF55 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF55_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF55, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #55 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_55 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF55 + δ) j < mlpSF (imgF55 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_55 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_55 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF55 q - ((4 : ℝ)/255)) (fun q => imgF55 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF55 q - ((4 : ℝ)/255)) (fun q => imgF55 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF55 q - ((4 : ℝ)/255)) (fun q => imgF55 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF55 q - ((4 : ℝ)/255)) (fun q => imgF55 q + ((4 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF55_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF55, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #55 (digit 0): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_55 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF55 + δ) j < mlpSF (imgF55 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_55 δ hδ
-
-theorem hpreSF56_sum : ∀ t, (∑ j, W1SF t j * imgF56 j) = hpreSF56 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF56_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_56 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF56 q - ((1 : ℝ)/255)) (fun q => imgF56 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF56 q - ((1 : ℝ)/255)) (fun q => imgF56 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF56 q - ((1 : ℝ)/255)) (fun q => imgF56 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF56 q - ((1 : ℝ)/255)) (fun q => imgF56 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF56_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF56, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #56 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_56 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF56 + δ) j < mlpSF (imgF56 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_56 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_56 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF56 q - ((2 : ℝ)/255)) (fun q => imgF56 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF56 q - ((2 : ℝ)/255)) (fun q => imgF56 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF56 q - ((2 : ℝ)/255)) (fun q => imgF56 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF56 q - ((2 : ℝ)/255)) (fun q => imgF56 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF56_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF56, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #56 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_56 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF56 + δ) j < mlpSF (imgF56 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_56 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_56 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF56 q - ((4 : ℝ)/255)) (fun q => imgF56 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF56 q - ((4 : ℝ)/255)) (fun q => imgF56 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF56 q - ((4 : ℝ)/255)) (fun q => imgF56 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF56 q - ((4 : ℝ)/255)) (fun q => imgF56 q + ((4 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF56_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF56, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #56 (digit 4): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_56 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF56 + δ) j < mlpSF (imgF56 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_56 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_56 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF56 q - ((8 : ℝ)/255)) (fun q => imgF56 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF56 q - ((8 : ℝ)/255)) (fun q => imgF56 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF56 q - ((8 : ℝ)/255)) (fun q => imgF56 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF56 q - ((8 : ℝ)/255)) (fun q => imgF56 q + ((8 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF56_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF56, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #56 (digit 4): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_56 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF56 + δ) j < mlpSF (imgF56 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_56 δ hδ
-
-theorem hpreSF57_sum : ∀ t, (∑ j, W1SF t j * imgF57 j) = hpreSF57 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF57_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_57 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF57 q - ((1 : ℝ)/255)) (fun q => imgF57 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF57 q - ((1 : ℝ)/255)) (fun q => imgF57 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF57 q - ((1 : ℝ)/255)) (fun q => imgF57 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF57 q - ((1 : ℝ)/255)) (fun q => imgF57 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF57_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF57, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #57 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_57 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF57 + δ) j < mlpSF (imgF57 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_57 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_57 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF57 q - ((2 : ℝ)/255)) (fun q => imgF57 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF57 q - ((2 : ℝ)/255)) (fun q => imgF57 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF57 q - ((2 : ℝ)/255)) (fun q => imgF57 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF57 q - ((2 : ℝ)/255)) (fun q => imgF57 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF57_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF57, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #57 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_57 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF57 + δ) j < mlpSF (imgF57 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_57 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_57 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF57 q - ((4 : ℝ)/255)) (fun q => imgF57 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF57 q - ((4 : ℝ)/255)) (fun q => imgF57 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF57 q - ((4 : ℝ)/255)) (fun q => imgF57 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF57 q - ((4 : ℝ)/255)) (fun q => imgF57 q + ((4 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF57_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF57, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #57 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_57 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF57 + δ) j < mlpSF (imgF57 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_57 δ hδ
-
-theorem hpreSF58_sum : ∀ t, (∑ j, W1SF t j * imgF58 j) = hpreSF58 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF58_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_58 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF58 q - ((1 : ℝ)/255)) (fun q => imgF58 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF58 q - ((1 : ℝ)/255)) (fun q => imgF58 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF58 q - ((1 : ℝ)/255)) (fun q => imgF58 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF58 q - ((1 : ℝ)/255)) (fun q => imgF58 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF58_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF58, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #58 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_58 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF58 + δ) j < mlpSF (imgF58 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_58 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_58 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF58 q - ((2 : ℝ)/255)) (fun q => imgF58 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF58 q - ((2 : ℝ)/255)) (fun q => imgF58 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF58 q - ((2 : ℝ)/255)) (fun q => imgF58 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF58 q - ((2 : ℝ)/255)) (fun q => imgF58 q + ((2 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF58_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF58, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #58 (digit 9): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_58 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF58 + δ) j < mlpSF (imgF58 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_58 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_58 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF58 q - ((4 : ℝ)/255)) (fun q => imgF58 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF58 q - ((4 : ℝ)/255)) (fun q => imgF58 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF58 q - ((4 : ℝ)/255)) (fun q => imgF58 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF58 q - ((4 : ℝ)/255)) (fun q => imgF58 q + ((4 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF58_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF58, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #58 (digit 9): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_58 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF58 + δ) j < mlpSF (imgF58 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_58 δ hδ
-
-theorem hpreSF59_sum : ∀ t, (∑ j, W1SF t j * imgF59 j) = hpreSF59 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF59_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_59 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF59 q - ((1 : ℝ)/255)) (fun q => imgF59 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF59 q - ((1 : ℝ)/255)) (fun q => imgF59 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF59 q - ((1 : ℝ)/255)) (fun q => imgF59 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF59 q - ((1 : ℝ)/255)) (fun q => imgF59 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF59_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF59, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #59 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_59 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF59 + δ) j < mlpSF (imgF59 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_59 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_59 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF59 q - ((2 : ℝ)/255)) (fun q => imgF59 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF59 q - ((2 : ℝ)/255)) (fun q => imgF59 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF59 q - ((2 : ℝ)/255)) (fun q => imgF59 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF59 q - ((2 : ℝ)/255)) (fun q => imgF59 q + ((2 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF59_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF59, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #59 (digit 5): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_59 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpSF (imgF59 + δ) j < mlpSF (imgF59 + δ) 5 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_59 δ hδ
-
-theorem hpreSF60_sum : ∀ t, (∑ j, W1SF t j * imgF60 j) = hpreSF60 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF60_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_60 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF60 q - ((1 : ℝ)/255)) (fun q => imgF60 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF60 q - ((1 : ℝ)/255)) (fun q => imgF60 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF60 q - ((1 : ℝ)/255)) (fun q => imgF60 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF60 q - ((1 : ℝ)/255)) (fun q => imgF60 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF60_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF60, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #60 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_60 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF60 + δ) j < mlpSF (imgF60 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_60 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_60 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF60 q - ((2 : ℝ)/255)) (fun q => imgF60 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF60 q - ((2 : ℝ)/255)) (fun q => imgF60 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF60 q - ((2 : ℝ)/255)) (fun q => imgF60 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF60 q - ((2 : ℝ)/255)) (fun q => imgF60 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF60_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF60, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #60 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_60 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF60 + δ) j < mlpSF (imgF60 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_60 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_60 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF60 q - ((4 : ℝ)/255)) (fun q => imgF60 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF60 q - ((4 : ℝ)/255)) (fun q => imgF60 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF60 q - ((4 : ℝ)/255)) (fun q => imgF60 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF60 q - ((4 : ℝ)/255)) (fun q => imgF60 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF60_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF60, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #60 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_60 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF60 + δ) j < mlpSF (imgF60 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_60 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_60 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF60 q - ((8 : ℝ)/255)) (fun q => imgF60 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF60 q - ((8 : ℝ)/255)) (fun q => imgF60 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF60 q - ((8 : ℝ)/255)) (fun q => imgF60 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF60 q - ((8 : ℝ)/255)) (fun q => imgF60 q + ((8 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF60_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF60, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #60 (digit 7): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_60 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF60 + δ) j < mlpSF (imgF60 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_60 δ hδ
-
-theorem hpreSF61_sum : ∀ t, (∑ j, W1SF t j * imgF61 j) = hpreSF61 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF61_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_61 : ∀ j : Fin 10, j ≠ 8 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF61 q - ((1 : ℝ)/255)) (fun q => imgF61 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF61 q - ((1 : ℝ)/255)) (fun q => imgF61 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF61 q - ((1 : ℝ)/255)) (fun q => imgF61 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF61 q - ((1 : ℝ)/255)) (fun q => imgF61 q + ((1 : ℝ)/255)))) 8 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF61_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF61, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #61 (digit 8): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_61 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 8 → mlpSF (imgF61 + δ) j < mlpSF (imgF61 + δ) 8 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_61 δ hδ
-
-theorem hpreSF62_sum : ∀ t, (∑ j, W1SF t j * imgF62 j) = hpreSF62 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF62_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_62 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF62 q - ((1 : ℝ)/255)) (fun q => imgF62 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF62 q - ((1 : ℝ)/255)) (fun q => imgF62 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF62 q - ((1 : ℝ)/255)) (fun q => imgF62 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF62 q - ((1 : ℝ)/255)) (fun q => imgF62 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF62_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF62, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #62 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_62 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF62 + δ) j < mlpSF (imgF62 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_62 δ hδ
-
-theorem hpreSF64_sum : ∀ t, (∑ j, W1SF t j * imgF64 j) = hpreSF64 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF64_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_64 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF64 q - ((1 : ℝ)/255)) (fun q => imgF64 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF64 q - ((1 : ℝ)/255)) (fun q => imgF64 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF64 q - ((1 : ℝ)/255)) (fun q => imgF64 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF64 q - ((1 : ℝ)/255)) (fun q => imgF64 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF64_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF64, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #64 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_64 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF64 + δ) j < mlpSF (imgF64 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_64 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_64 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF64 q - ((2 : ℝ)/255)) (fun q => imgF64 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF64 q - ((2 : ℝ)/255)) (fun q => imgF64 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF64 q - ((2 : ℝ)/255)) (fun q => imgF64 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF64 q - ((2 : ℝ)/255)) (fun q => imgF64 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF64_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF64, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #64 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_64 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF64 + δ) j < mlpSF (imgF64 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_64 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_64 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF64 q - ((4 : ℝ)/255)) (fun q => imgF64 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF64 q - ((4 : ℝ)/255)) (fun q => imgF64 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF64 q - ((4 : ℝ)/255)) (fun q => imgF64 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF64 q - ((4 : ℝ)/255)) (fun q => imgF64 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF64_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF64, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #64 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_64 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF64 + δ) j < mlpSF (imgF64 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_64 δ hδ
-
-theorem hpreSF65_sum : ∀ t, (∑ j, W1SF t j * imgF65 j) = hpreSF65 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF65_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_65 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF65 q - ((1 : ℝ)/255)) (fun q => imgF65 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF65 q - ((1 : ℝ)/255)) (fun q => imgF65 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF65 q - ((1 : ℝ)/255)) (fun q => imgF65 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF65 q - ((1 : ℝ)/255)) (fun q => imgF65 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF65_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF65, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #65 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_65 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF65 + δ) j < mlpSF (imgF65 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_65 δ hδ
-
-theorem hpreSF67_sum : ∀ t, (∑ j, W1SF t j * imgF67 j) = hpreSF67 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF67_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_67 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF67 q - ((1 : ℝ)/255)) (fun q => imgF67 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF67 q - ((1 : ℝ)/255)) (fun q => imgF67 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF67 q - ((1 : ℝ)/255)) (fun q => imgF67 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF67 q - ((1 : ℝ)/255)) (fun q => imgF67 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF67_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF67, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #67 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_67 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF67 + δ) j < mlpSF (imgF67 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_67 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_67 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF67 q - ((2 : ℝ)/255)) (fun q => imgF67 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF67 q - ((2 : ℝ)/255)) (fun q => imgF67 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF67 q - ((2 : ℝ)/255)) (fun q => imgF67 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF67 q - ((2 : ℝ)/255)) (fun q => imgF67 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF67_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF67, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #67 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_67 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF67 + δ) j < mlpSF (imgF67 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_67 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_67 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF67 q - ((4 : ℝ)/255)) (fun q => imgF67 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF67 q - ((4 : ℝ)/255)) (fun q => imgF67 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF67 q - ((4 : ℝ)/255)) (fun q => imgF67 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF67 q - ((4 : ℝ)/255)) (fun q => imgF67 q + ((4 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF67_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF67, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #67 (digit 4): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_67 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF67 + δ) j < mlpSF (imgF67 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_67 δ hδ
-
-theorem hpreSF68_sum : ∀ t, (∑ j, W1SF t j * imgF68 j) = hpreSF68 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF68_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_68 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF68 q - ((1 : ℝ)/255)) (fun q => imgF68 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF68 q - ((1 : ℝ)/255)) (fun q => imgF68 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF68 q - ((1 : ℝ)/255)) (fun q => imgF68 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF68 q - ((1 : ℝ)/255)) (fun q => imgF68 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF68_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF68, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #68 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_68 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF68 + δ) j < mlpSF (imgF68 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_68 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_68 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF68 q - ((2 : ℝ)/255)) (fun q => imgF68 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF68 q - ((2 : ℝ)/255)) (fun q => imgF68 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF68 q - ((2 : ℝ)/255)) (fun q => imgF68 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF68 q - ((2 : ℝ)/255)) (fun q => imgF68 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF68_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF68, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #68 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_68 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF68 + δ) j < mlpSF (imgF68 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_68 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_68 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF68 q - ((4 : ℝ)/255)) (fun q => imgF68 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF68 q - ((4 : ℝ)/255)) (fun q => imgF68 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF68 q - ((4 : ℝ)/255)) (fun q => imgF68 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF68 q - ((4 : ℝ)/255)) (fun q => imgF68 q + ((4 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF68_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF68, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #68 (digit 3): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_68 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF68 + δ) j < mlpSF (imgF68 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_68 δ hδ
-
-theorem hpreSF69_sum : ∀ t, (∑ j, W1SF t j * imgF69 j) = hpreSF69 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF69_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_69 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF69 q - ((1 : ℝ)/255)) (fun q => imgF69 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF69 q - ((1 : ℝ)/255)) (fun q => imgF69 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF69 q - ((1 : ℝ)/255)) (fun q => imgF69 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF69 q - ((1 : ℝ)/255)) (fun q => imgF69 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF69_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF69, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #69 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_69 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF69 + δ) j < mlpSF (imgF69 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_69 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_69 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF69 q - ((2 : ℝ)/255)) (fun q => imgF69 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF69 q - ((2 : ℝ)/255)) (fun q => imgF69 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF69 q - ((2 : ℝ)/255)) (fun q => imgF69 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF69 q - ((2 : ℝ)/255)) (fun q => imgF69 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF69_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF69, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #69 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_69 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF69 + δ) j < mlpSF (imgF69 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_69 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_69 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF69 q - ((4 : ℝ)/255)) (fun q => imgF69 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF69 q - ((4 : ℝ)/255)) (fun q => imgF69 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF69 q - ((4 : ℝ)/255)) (fun q => imgF69 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF69 q - ((4 : ℝ)/255)) (fun q => imgF69 q + ((4 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF69_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF69, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #69 (digit 0): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_69 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF69 + δ) j < mlpSF (imgF69 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_69 δ hδ
-
-theorem hpreSF70_sum : ∀ t, (∑ j, W1SF t j * imgF70 j) = hpreSF70 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF70_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_70 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF70 q - ((1 : ℝ)/255)) (fun q => imgF70 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF70 q - ((1 : ℝ)/255)) (fun q => imgF70 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF70 q - ((1 : ℝ)/255)) (fun q => imgF70 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF70 q - ((1 : ℝ)/255)) (fun q => imgF70 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF70_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF70, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #70 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_70 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF70 + δ) j < mlpSF (imgF70 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_70 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_70 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF70 q - ((2 : ℝ)/255)) (fun q => imgF70 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF70 q - ((2 : ℝ)/255)) (fun q => imgF70 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF70 q - ((2 : ℝ)/255)) (fun q => imgF70 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF70 q - ((2 : ℝ)/255)) (fun q => imgF70 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF70_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF70, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #70 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_70 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF70 + δ) j < mlpSF (imgF70 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_70 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_70 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF70 q - ((4 : ℝ)/255)) (fun q => imgF70 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF70 q - ((4 : ℝ)/255)) (fun q => imgF70 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF70 q - ((4 : ℝ)/255)) (fun q => imgF70 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF70 q - ((4 : ℝ)/255)) (fun q => imgF70 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF70_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF70, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #70 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_70 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF70 + δ) j < mlpSF (imgF70 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_70 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_70 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF70 q - ((8 : ℝ)/255)) (fun q => imgF70 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF70 q - ((8 : ℝ)/255)) (fun q => imgF70 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF70 q - ((8 : ℝ)/255)) (fun q => imgF70 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF70 q - ((8 : ℝ)/255)) (fun q => imgF70 q + ((8 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF70_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF70, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #70 (digit 7): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_70 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF70 + δ) j < mlpSF (imgF70 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_70 δ hδ
-
-theorem hpreSF71_sum : ∀ t, (∑ j, W1SF t j * imgF71 j) = hpreSF71 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF71_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_71 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF71 q - ((1 : ℝ)/255)) (fun q => imgF71 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF71 q - ((1 : ℝ)/255)) (fun q => imgF71 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF71 q - ((1 : ℝ)/255)) (fun q => imgF71 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF71 q - ((1 : ℝ)/255)) (fun q => imgF71 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF71_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF71, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #71 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_71 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF71 + δ) j < mlpSF (imgF71 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_71 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_71 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF71 q - ((2 : ℝ)/255)) (fun q => imgF71 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF71 q - ((2 : ℝ)/255)) (fun q => imgF71 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF71 q - ((2 : ℝ)/255)) (fun q => imgF71 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF71 q - ((2 : ℝ)/255)) (fun q => imgF71 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF71_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF71, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #71 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_71 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF71 + δ) j < mlpSF (imgF71 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_71 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_71 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF71 q - ((4 : ℝ)/255)) (fun q => imgF71 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF71 q - ((4 : ℝ)/255)) (fun q => imgF71 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF71 q - ((4 : ℝ)/255)) (fun q => imgF71 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF71 q - ((4 : ℝ)/255)) (fun q => imgF71 q + ((4 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF71_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF71, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #71 (digit 0): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_71 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF71 + δ) j < mlpSF (imgF71 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_71 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_71 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF71 q - ((8 : ℝ)/255)) (fun q => imgF71 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF71 q - ((8 : ℝ)/255)) (fun q => imgF71 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF71 q - ((8 : ℝ)/255)) (fun q => imgF71 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF71 q - ((8 : ℝ)/255)) (fun q => imgF71 q + ((8 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF71_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF71, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #71 (digit 0): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_71 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpSF (imgF71 + δ) j < mlpSF (imgF71 + δ) 0 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_71 δ hδ
-
-theorem hpreSF72_sum : ∀ t, (∑ j, W1SF t j * imgF72 j) = hpreSF72 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF72_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_72 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF72 q - ((1 : ℝ)/255)) (fun q => imgF72 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF72 q - ((1 : ℝ)/255)) (fun q => imgF72 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF72 q - ((1 : ℝ)/255)) (fun q => imgF72 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF72 q - ((1 : ℝ)/255)) (fun q => imgF72 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF72_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF72, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #72 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_72 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF72 + δ) j < mlpSF (imgF72 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_72 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_72 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF72 q - ((2 : ℝ)/255)) (fun q => imgF72 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF72 q - ((2 : ℝ)/255)) (fun q => imgF72 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF72 q - ((2 : ℝ)/255)) (fun q => imgF72 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF72 q - ((2 : ℝ)/255)) (fun q => imgF72 q + ((2 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF72_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF72, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #72 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_72 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF72 + δ) j < mlpSF (imgF72 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_72 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_72 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF72 q - ((4 : ℝ)/255)) (fun q => imgF72 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF72 q - ((4 : ℝ)/255)) (fun q => imgF72 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF72 q - ((4 : ℝ)/255)) (fun q => imgF72 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF72 q - ((4 : ℝ)/255)) (fun q => imgF72 q + ((4 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF72_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF72, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #72 (digit 2): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_72 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF72 + δ) j < mlpSF (imgF72 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_72 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_72 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF72 q - ((8 : ℝ)/255)) (fun q => imgF72 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF72 q - ((8 : ℝ)/255)) (fun q => imgF72 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF72 q - ((8 : ℝ)/255)) (fun q => imgF72 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF72 q - ((8 : ℝ)/255)) (fun q => imgF72 q + ((8 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF72_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF72, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #72 (digit 2): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_72 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF72 + δ) j < mlpSF (imgF72 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_72 δ hδ
-
-theorem hpreSF74_sum : ∀ t, (∑ j, W1SF t j * imgF74 j) = hpreSF74 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF74_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_74 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF74 q - ((1 : ℝ)/255)) (fun q => imgF74 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF74 q - ((1 : ℝ)/255)) (fun q => imgF74 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF74 q - ((1 : ℝ)/255)) (fun q => imgF74 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF74 q - ((1 : ℝ)/255)) (fun q => imgF74 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF74_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF74, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #74 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_74 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF74 + δ) j < mlpSF (imgF74 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_74 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_74 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF74 q - ((2 : ℝ)/255)) (fun q => imgF74 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF74 q - ((2 : ℝ)/255)) (fun q => imgF74 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF74 q - ((2 : ℝ)/255)) (fun q => imgF74 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF74 q - ((2 : ℝ)/255)) (fun q => imgF74 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF74_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF74, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #74 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_74 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF74 + δ) j < mlpSF (imgF74 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_74 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_74 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF74 q - ((4 : ℝ)/255)) (fun q => imgF74 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF74 q - ((4 : ℝ)/255)) (fun q => imgF74 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF74 q - ((4 : ℝ)/255)) (fun q => imgF74 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF74 q - ((4 : ℝ)/255)) (fun q => imgF74 q + ((4 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF74_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF74, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #74 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_74 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF74 + δ) j < mlpSF (imgF74 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_74 δ hδ
-
-theorem hpreSF75_sum : ∀ t, (∑ j, W1SF t j * imgF75 j) = hpreSF75 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF75_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_75 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF75 q - ((1 : ℝ)/255)) (fun q => imgF75 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF75 q - ((1 : ℝ)/255)) (fun q => imgF75 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF75 q - ((1 : ℝ)/255)) (fun q => imgF75 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF75 q - ((1 : ℝ)/255)) (fun q => imgF75 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF75_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF75, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #75 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_75 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF75 + δ) j < mlpSF (imgF75 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_75 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_75 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF75 q - ((2 : ℝ)/255)) (fun q => imgF75 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF75 q - ((2 : ℝ)/255)) (fun q => imgF75 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF75 q - ((2 : ℝ)/255)) (fun q => imgF75 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF75 q - ((2 : ℝ)/255)) (fun q => imgF75 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF75_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF75, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #75 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_75 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF75 + δ) j < mlpSF (imgF75 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_75 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_75 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF75 q - ((4 : ℝ)/255)) (fun q => imgF75 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF75 q - ((4 : ℝ)/255)) (fun q => imgF75 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF75 q - ((4 : ℝ)/255)) (fun q => imgF75 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF75 q - ((4 : ℝ)/255)) (fun q => imgF75 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF75_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF75, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #75 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_75 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF75 + δ) j < mlpSF (imgF75 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_75 δ hδ
-
-theorem hpreSF76_sum : ∀ t, (∑ j, W1SF t j * imgF76 j) = hpreSF76 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF76_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_76 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF76 q - ((1 : ℝ)/255)) (fun q => imgF76 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF76 q - ((1 : ℝ)/255)) (fun q => imgF76 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF76 q - ((1 : ℝ)/255)) (fun q => imgF76 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF76 q - ((1 : ℝ)/255)) (fun q => imgF76 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF76_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF76, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #76 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_76 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF76 + δ) j < mlpSF (imgF76 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_76 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_76 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF76 q - ((2 : ℝ)/255)) (fun q => imgF76 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF76 q - ((2 : ℝ)/255)) (fun q => imgF76 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF76 q - ((2 : ℝ)/255)) (fun q => imgF76 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF76 q - ((2 : ℝ)/255)) (fun q => imgF76 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF76_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF76, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #76 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_76 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF76 + δ) j < mlpSF (imgF76 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_76 δ hδ
-
-theorem hpreSF78_sum : ∀ t, (∑ j, W1SF t j * imgF78 j) = hpreSF78 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF78_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_78 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF78 q - ((1 : ℝ)/255)) (fun q => imgF78 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF78 q - ((1 : ℝ)/255)) (fun q => imgF78 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF78 q - ((1 : ℝ)/255)) (fun q => imgF78 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF78 q - ((1 : ℝ)/255)) (fun q => imgF78 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF78_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF78, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #78 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_78 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF78 + δ) j < mlpSF (imgF78 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_78 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_78 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF78 q - ((2 : ℝ)/255)) (fun q => imgF78 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF78 q - ((2 : ℝ)/255)) (fun q => imgF78 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF78 q - ((2 : ℝ)/255)) (fun q => imgF78 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF78 q - ((2 : ℝ)/255)) (fun q => imgF78 q + ((2 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF78_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF78, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #78 (digit 9): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_78 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF78 + δ) j < mlpSF (imgF78 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_78 δ hδ
-
-theorem hpreSF79_sum : ∀ t, (∑ j, W1SF t j * imgF79 j) = hpreSF79 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF79_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_79 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF79 q - ((1 : ℝ)/255)) (fun q => imgF79 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF79 q - ((1 : ℝ)/255)) (fun q => imgF79 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF79 q - ((1 : ℝ)/255)) (fun q => imgF79 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF79 q - ((1 : ℝ)/255)) (fun q => imgF79 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF79_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF79, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #79 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_79 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF79 + δ) j < mlpSF (imgF79 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_79 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_79 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF79 q - ((2 : ℝ)/255)) (fun q => imgF79 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF79 q - ((2 : ℝ)/255)) (fun q => imgF79 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF79 q - ((2 : ℝ)/255)) (fun q => imgF79 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF79 q - ((2 : ℝ)/255)) (fun q => imgF79 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF79_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF79, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #79 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_79 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF79 + δ) j < mlpSF (imgF79 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_79 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_79 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF79 q - ((4 : ℝ)/255)) (fun q => imgF79 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF79 q - ((4 : ℝ)/255)) (fun q => imgF79 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF79 q - ((4 : ℝ)/255)) (fun q => imgF79 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF79 q - ((4 : ℝ)/255)) (fun q => imgF79 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF79_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF79, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #79 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_79 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF79 + δ) j < mlpSF (imgF79 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_79 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_79 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF79 q - ((8 : ℝ)/255)) (fun q => imgF79 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF79 q - ((8 : ℝ)/255)) (fun q => imgF79 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF79 q - ((8 : ℝ)/255)) (fun q => imgF79 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF79 q - ((8 : ℝ)/255)) (fun q => imgF79 q + ((8 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF79_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF79, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #79 (digit 7): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_79 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF79 + δ) j < mlpSF (imgF79 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_79 δ hδ
-
-theorem hpreSF80_sum : ∀ t, (∑ j, W1SF t j * imgF80 j) = hpreSF80 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF80_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_80 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF80 q - ((1 : ℝ)/255)) (fun q => imgF80 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF80 q - ((1 : ℝ)/255)) (fun q => imgF80 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF80 q - ((1 : ℝ)/255)) (fun q => imgF80 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF80 q - ((1 : ℝ)/255)) (fun q => imgF80 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF80_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF80, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #80 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_80 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF80 + δ) j < mlpSF (imgF80 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_80 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_80 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF80 q - ((2 : ℝ)/255)) (fun q => imgF80 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF80 q - ((2 : ℝ)/255)) (fun q => imgF80 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF80 q - ((2 : ℝ)/255)) (fun q => imgF80 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF80 q - ((2 : ℝ)/255)) (fun q => imgF80 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF80_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF80, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #80 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_80 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF80 + δ) j < mlpSF (imgF80 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_80 δ hδ
-
-theorem hpreSF81_sum : ∀ t, (∑ j, W1SF t j * imgF81 j) = hpreSF81 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF81_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_81 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF81 q - ((1 : ℝ)/255)) (fun q => imgF81 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF81 q - ((1 : ℝ)/255)) (fun q => imgF81 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF81 q - ((1 : ℝ)/255)) (fun q => imgF81 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF81 q - ((1 : ℝ)/255)) (fun q => imgF81 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF81_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF81, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #81 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_81 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF81 + δ) j < mlpSF (imgF81 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_81 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_81 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF81 q - ((2 : ℝ)/255)) (fun q => imgF81 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF81 q - ((2 : ℝ)/255)) (fun q => imgF81 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF81 q - ((2 : ℝ)/255)) (fun q => imgF81 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF81 q - ((2 : ℝ)/255)) (fun q => imgF81 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF81_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF81, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #81 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_81 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF81 + δ) j < mlpSF (imgF81 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_81 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_81 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF81 q - ((4 : ℝ)/255)) (fun q => imgF81 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF81 q - ((4 : ℝ)/255)) (fun q => imgF81 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF81 q - ((4 : ℝ)/255)) (fun q => imgF81 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF81 q - ((4 : ℝ)/255)) (fun q => imgF81 q + ((4 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF81_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF81, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #81 (digit 6): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_81 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF81 + δ) j < mlpSF (imgF81 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_81 δ hδ
-
-theorem hpreSF82_sum : ∀ t, (∑ j, W1SF t j * imgF82 j) = hpreSF82 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF82_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_82 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF82 q - ((1 : ℝ)/255)) (fun q => imgF82 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF82 q - ((1 : ℝ)/255)) (fun q => imgF82 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF82 q - ((1 : ℝ)/255)) (fun q => imgF82 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF82 q - ((1 : ℝ)/255)) (fun q => imgF82 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF82_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF82, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #82 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_82 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF82 + δ) j < mlpSF (imgF82 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_82 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_82 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF82 q - ((2 : ℝ)/255)) (fun q => imgF82 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF82 q - ((2 : ℝ)/255)) (fun q => imgF82 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF82 q - ((2 : ℝ)/255)) (fun q => imgF82 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF82 q - ((2 : ℝ)/255)) (fun q => imgF82 q + ((2 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF82_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF82, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #82 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_82 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF82 + δ) j < mlpSF (imgF82 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_82 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_82 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF82 q - ((4 : ℝ)/255)) (fun q => imgF82 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF82 q - ((4 : ℝ)/255)) (fun q => imgF82 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF82 q - ((4 : ℝ)/255)) (fun q => imgF82 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF82 q - ((4 : ℝ)/255)) (fun q => imgF82 q + ((4 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF82_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF82, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #82 (digit 2): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_82 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF82 + δ) j < mlpSF (imgF82 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_82 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_82 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF82 q - ((8 : ℝ)/255)) (fun q => imgF82 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF82 q - ((8 : ℝ)/255)) (fun q => imgF82 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF82 q - ((8 : ℝ)/255)) (fun q => imgF82 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF82 q - ((8 : ℝ)/255)) (fun q => imgF82 q + ((8 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF82_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF82, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #82 (digit 2): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_82 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpSF (imgF82 + δ) j < mlpSF (imgF82 + δ) 2 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_82 δ hδ
-
-theorem hpreSF83_sum : ∀ t, (∑ j, W1SF t j * imgF83 j) = hpreSF83 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF83_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_83 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF83 q - ((1 : ℝ)/255)) (fun q => imgF83 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF83 q - ((1 : ℝ)/255)) (fun q => imgF83 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF83 q - ((1 : ℝ)/255)) (fun q => imgF83 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF83 q - ((1 : ℝ)/255)) (fun q => imgF83 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF83_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF83, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #83 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_83 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF83 + δ) j < mlpSF (imgF83 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_83 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_83 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF83 q - ((2 : ℝ)/255)) (fun q => imgF83 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF83 q - ((2 : ℝ)/255)) (fun q => imgF83 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF83 q - ((2 : ℝ)/255)) (fun q => imgF83 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF83 q - ((2 : ℝ)/255)) (fun q => imgF83 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF83_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF83, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #83 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_83 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF83 + δ) j < mlpSF (imgF83 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_83 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_83 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF83 q - ((4 : ℝ)/255)) (fun q => imgF83 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF83 q - ((4 : ℝ)/255)) (fun q => imgF83 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF83 q - ((4 : ℝ)/255)) (fun q => imgF83 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF83 q - ((4 : ℝ)/255)) (fun q => imgF83 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF83_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF83, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #83 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_83 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF83 + δ) j < mlpSF (imgF83 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_83 δ hδ
-
-theorem hpreSF84_sum : ∀ t, (∑ j, W1SF t j * imgF84 j) = hpreSF84 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF84_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_84 : ∀ j : Fin 10, j ≠ 8 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF84 q - ((1 : ℝ)/255)) (fun q => imgF84 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF84 q - ((1 : ℝ)/255)) (fun q => imgF84 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF84 q - ((1 : ℝ)/255)) (fun q => imgF84 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF84 q - ((1 : ℝ)/255)) (fun q => imgF84 q + ((1 : ℝ)/255)))) 8 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF84_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF84, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #84 (digit 8): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_84 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 8 → mlpSF (imgF84 + δ) j < mlpSF (imgF84 + δ) 8 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_84 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_84 : ∀ j : Fin 10, j ≠ 8 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF84 q - ((2 : ℝ)/255)) (fun q => imgF84 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF84 q - ((2 : ℝ)/255)) (fun q => imgF84 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF84 q - ((2 : ℝ)/255)) (fun q => imgF84 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF84 q - ((2 : ℝ)/255)) (fun q => imgF84 q + ((2 : ℝ)/255)))) 8 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF84_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF84, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #84 (digit 8): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_84 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 8 → mlpSF (imgF84 + δ) j < mlpSF (imgF84 + δ) 8 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_84 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_84 : ∀ j : Fin 10, j ≠ 8 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF84 q - ((4 : ℝ)/255)) (fun q => imgF84 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF84 q - ((4 : ℝ)/255)) (fun q => imgF84 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF84 q - ((4 : ℝ)/255)) (fun q => imgF84 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF84 q - ((4 : ℝ)/255)) (fun q => imgF84 q + ((4 : ℝ)/255)))) 8 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF84_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF84, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #84 (digit 8): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_84 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 8 → mlpSF (imgF84 + δ) j < mlpSF (imgF84 + δ) 8 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_84 δ hδ
-
-theorem hpreSF85_sum : ∀ t, (∑ j, W1SF t j * imgF85 j) = hpreSF85 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF85_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_85 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF85 q - ((1 : ℝ)/255)) (fun q => imgF85 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF85 q - ((1 : ℝ)/255)) (fun q => imgF85 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF85 q - ((1 : ℝ)/255)) (fun q => imgF85 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF85 q - ((1 : ℝ)/255)) (fun q => imgF85 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF85_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF85, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #85 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_85 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF85 + δ) j < mlpSF (imgF85 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_85 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_85 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF85 q - ((2 : ℝ)/255)) (fun q => imgF85 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF85 q - ((2 : ℝ)/255)) (fun q => imgF85 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF85 q - ((2 : ℝ)/255)) (fun q => imgF85 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF85 q - ((2 : ℝ)/255)) (fun q => imgF85 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF85_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF85, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #85 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_85 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF85 + δ) j < mlpSF (imgF85 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_85 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_85 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF85 q - ((4 : ℝ)/255)) (fun q => imgF85 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF85 q - ((4 : ℝ)/255)) (fun q => imgF85 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF85 q - ((4 : ℝ)/255)) (fun q => imgF85 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF85 q - ((4 : ℝ)/255)) (fun q => imgF85 q + ((4 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF85_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF85, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #85 (digit 4): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_85 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF85 + δ) j < mlpSF (imgF85 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_85 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_85 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF85 q - ((8 : ℝ)/255)) (fun q => imgF85 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF85 q - ((8 : ℝ)/255)) (fun q => imgF85 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF85 q - ((8 : ℝ)/255)) (fun q => imgF85 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF85 q - ((8 : ℝ)/255)) (fun q => imgF85 q + ((8 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF85_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF85, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #85 (digit 4): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_85 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF85 + δ) j < mlpSF (imgF85 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_85 δ hδ
-
-theorem hpreSF86_sum : ∀ t, (∑ j, W1SF t j * imgF86 j) = hpreSF86 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF86_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_86 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF86 q - ((1 : ℝ)/255)) (fun q => imgF86 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF86 q - ((1 : ℝ)/255)) (fun q => imgF86 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF86 q - ((1 : ℝ)/255)) (fun q => imgF86 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF86 q - ((1 : ℝ)/255)) (fun q => imgF86 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF86_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF86, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #86 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_86 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF86 + δ) j < mlpSF (imgF86 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_86 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_86 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF86 q - ((2 : ℝ)/255)) (fun q => imgF86 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF86 q - ((2 : ℝ)/255)) (fun q => imgF86 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF86 q - ((2 : ℝ)/255)) (fun q => imgF86 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF86 q - ((2 : ℝ)/255)) (fun q => imgF86 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF86_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF86, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #86 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_86 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF86 + δ) j < mlpSF (imgF86 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_86 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_86 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF86 q - ((4 : ℝ)/255)) (fun q => imgF86 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF86 q - ((4 : ℝ)/255)) (fun q => imgF86 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF86 q - ((4 : ℝ)/255)) (fun q => imgF86 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF86 q - ((4 : ℝ)/255)) (fun q => imgF86 q + ((4 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF86_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF86, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #86 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_86 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF86 + δ) j < mlpSF (imgF86 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_86 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_86 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF86 q - ((8 : ℝ)/255)) (fun q => imgF86 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF86 q - ((8 : ℝ)/255)) (fun q => imgF86 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF86 q - ((8 : ℝ)/255)) (fun q => imgF86 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF86 q - ((8 : ℝ)/255)) (fun q => imgF86 q + ((8 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF86_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF86, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #86 (digit 7): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_86 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF86 + δ) j < mlpSF (imgF86 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_86 δ hδ
-
-theorem hpreSF88_sum : ∀ t, (∑ j, W1SF t j * imgF88 j) = hpreSF88 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF88_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_88 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF88 q - ((1 : ℝ)/255)) (fun q => imgF88 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF88 q - ((1 : ℝ)/255)) (fun q => imgF88 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF88 q - ((1 : ℝ)/255)) (fun q => imgF88 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF88 q - ((1 : ℝ)/255)) (fun q => imgF88 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF88_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF88, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #88 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_88 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF88 + δ) j < mlpSF (imgF88 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_88 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_88 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF88 q - ((2 : ℝ)/255)) (fun q => imgF88 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF88 q - ((2 : ℝ)/255)) (fun q => imgF88 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF88 q - ((2 : ℝ)/255)) (fun q => imgF88 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF88 q - ((2 : ℝ)/255)) (fun q => imgF88 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF88_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF88, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #88 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_88 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF88 + δ) j < mlpSF (imgF88 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_88 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_88 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF88 q - ((4 : ℝ)/255)) (fun q => imgF88 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF88 q - ((4 : ℝ)/255)) (fun q => imgF88 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF88 q - ((4 : ℝ)/255)) (fun q => imgF88 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF88 q - ((4 : ℝ)/255)) (fun q => imgF88 q + ((4 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF88_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF88, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #88 (digit 6): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_88 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF88 + δ) j < mlpSF (imgF88 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_88 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_88 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF88 q - ((8 : ℝ)/255)) (fun q => imgF88 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF88 q - ((8 : ℝ)/255)) (fun q => imgF88 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF88 q - ((8 : ℝ)/255)) (fun q => imgF88 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF88 q - ((8 : ℝ)/255)) (fun q => imgF88 q + ((8 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF88_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF88, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #88 (digit 6): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_88 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF88 + δ) j < mlpSF (imgF88 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_88 δ hδ
-
-theorem hpreSF89_sum : ∀ t, (∑ j, W1SF t j * imgF89 j) = hpreSF89 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF89_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_89 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF89 q - ((1 : ℝ)/255)) (fun q => imgF89 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF89 q - ((1 : ℝ)/255)) (fun q => imgF89 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF89 q - ((1 : ℝ)/255)) (fun q => imgF89 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF89 q - ((1 : ℝ)/255)) (fun q => imgF89 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF89_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF89, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #89 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_89 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF89 + δ) j < mlpSF (imgF89 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_89 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_89 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF89 q - ((2 : ℝ)/255)) (fun q => imgF89 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF89 q - ((2 : ℝ)/255)) (fun q => imgF89 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF89 q - ((2 : ℝ)/255)) (fun q => imgF89 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF89 q - ((2 : ℝ)/255)) (fun q => imgF89 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF89_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF89, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #89 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_89 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF89 + δ) j < mlpSF (imgF89 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_89 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_89 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF89 q - ((4 : ℝ)/255)) (fun q => imgF89 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF89 q - ((4 : ℝ)/255)) (fun q => imgF89 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF89 q - ((4 : ℝ)/255)) (fun q => imgF89 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF89 q - ((4 : ℝ)/255)) (fun q => imgF89 q + ((4 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF89_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF89, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #89 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_89 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF89 + δ) j < mlpSF (imgF89 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_89 δ hδ
-
-theorem hpreSF90_sum : ∀ t, (∑ j, W1SF t j * imgF90 j) = hpreSF90 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF90_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_90 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF90 q - ((1 : ℝ)/255)) (fun q => imgF90 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF90 q - ((1 : ℝ)/255)) (fun q => imgF90 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF90 q - ((1 : ℝ)/255)) (fun q => imgF90 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF90 q - ((1 : ℝ)/255)) (fun q => imgF90 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF90_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF90, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #90 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_90 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF90 + δ) j < mlpSF (imgF90 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_90 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_90 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF90 q - ((2 : ℝ)/255)) (fun q => imgF90 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF90 q - ((2 : ℝ)/255)) (fun q => imgF90 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF90 q - ((2 : ℝ)/255)) (fun q => imgF90 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF90 q - ((2 : ℝ)/255)) (fun q => imgF90 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF90_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF90, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #90 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_90 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF90 + δ) j < mlpSF (imgF90 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_90 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_90 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF90 q - ((4 : ℝ)/255)) (fun q => imgF90 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF90 q - ((4 : ℝ)/255)) (fun q => imgF90 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF90 q - ((4 : ℝ)/255)) (fun q => imgF90 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF90 q - ((4 : ℝ)/255)) (fun q => imgF90 q + ((4 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF90_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF90, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #90 (digit 3): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_90 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF90 + δ) j < mlpSF (imgF90 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_90 δ hδ
-
-theorem hpreSF91_sum : ∀ t, (∑ j, W1SF t j * imgF91 j) = hpreSF91 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF91_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_91 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF91 q - ((1 : ℝ)/255)) (fun q => imgF91 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF91 q - ((1 : ℝ)/255)) (fun q => imgF91 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF91 q - ((1 : ℝ)/255)) (fun q => imgF91 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF91 q - ((1 : ℝ)/255)) (fun q => imgF91 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF91_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF91, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #91 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_91 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF91 + δ) j < mlpSF (imgF91 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_91 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_91 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF91 q - ((2 : ℝ)/255)) (fun q => imgF91 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF91 q - ((2 : ℝ)/255)) (fun q => imgF91 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF91 q - ((2 : ℝ)/255)) (fun q => imgF91 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF91 q - ((2 : ℝ)/255)) (fun q => imgF91 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF91_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF91, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #91 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_91 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF91 + δ) j < mlpSF (imgF91 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_91 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_91 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF91 q - ((4 : ℝ)/255)) (fun q => imgF91 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF91 q - ((4 : ℝ)/255)) (fun q => imgF91 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF91 q - ((4 : ℝ)/255)) (fun q => imgF91 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF91 q - ((4 : ℝ)/255)) (fun q => imgF91 q + ((4 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF91_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF91, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #91 (digit 6): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_91 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF91 + δ) j < mlpSF (imgF91 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_91 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_91 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF91 q - ((8 : ℝ)/255)) (fun q => imgF91 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF91 q - ((8 : ℝ)/255)) (fun q => imgF91 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF91 q - ((8 : ℝ)/255)) (fun q => imgF91 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF91 q - ((8 : ℝ)/255)) (fun q => imgF91 q + ((8 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF91_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF91, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #91 (digit 6): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_91 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF91 + δ) j < mlpSF (imgF91 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_91 δ hδ
-
-theorem hpreSF93_sum : ∀ t, (∑ j, W1SF t j * imgF93 j) = hpreSF93 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF93_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_93 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF93 q - ((1 : ℝ)/255)) (fun q => imgF93 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF93 q - ((1 : ℝ)/255)) (fun q => imgF93 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF93 q - ((1 : ℝ)/255)) (fun q => imgF93 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF93 q - ((1 : ℝ)/255)) (fun q => imgF93 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF93_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF93, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #93 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_93 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF93 + δ) j < mlpSF (imgF93 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_93 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_93 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF93 q - ((2 : ℝ)/255)) (fun q => imgF93 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF93 q - ((2 : ℝ)/255)) (fun q => imgF93 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF93 q - ((2 : ℝ)/255)) (fun q => imgF93 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF93 q - ((2 : ℝ)/255)) (fun q => imgF93 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF93_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF93, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #93 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_93 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF93 + δ) j < mlpSF (imgF93 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_93 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_93 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF93 q - ((4 : ℝ)/255)) (fun q => imgF93 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF93 q - ((4 : ℝ)/255)) (fun q => imgF93 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF93 q - ((4 : ℝ)/255)) (fun q => imgF93 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF93 q - ((4 : ℝ)/255)) (fun q => imgF93 q + ((4 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF93_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF93, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #93 (digit 3): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_93 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpSF (imgF93 + δ) j < mlpSF (imgF93 + δ) 3 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_93 δ hδ
-
-theorem hpreSF94_sum : ∀ t, (∑ j, W1SF t j * imgF94 j) = hpreSF94 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF94_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_94 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF94 q - ((1 : ℝ)/255)) (fun q => imgF94 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF94 q - ((1 : ℝ)/255)) (fun q => imgF94 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF94 q - ((1 : ℝ)/255)) (fun q => imgF94 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF94 q - ((1 : ℝ)/255)) (fun q => imgF94 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF94_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF94, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #94 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_94 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF94 + δ) j < mlpSF (imgF94 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_94 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_94 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF94 q - ((2 : ℝ)/255)) (fun q => imgF94 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF94 q - ((2 : ℝ)/255)) (fun q => imgF94 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF94 q - ((2 : ℝ)/255)) (fun q => imgF94 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF94 q - ((2 : ℝ)/255)) (fun q => imgF94 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF94_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF94, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #94 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_94 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF94 + δ) j < mlpSF (imgF94 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_94 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_94 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF94 q - ((4 : ℝ)/255)) (fun q => imgF94 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF94 q - ((4 : ℝ)/255)) (fun q => imgF94 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF94 q - ((4 : ℝ)/255)) (fun q => imgF94 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF94 q - ((4 : ℝ)/255)) (fun q => imgF94 q + ((4 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF94_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF94, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #94 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_94 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF94 + δ) j < mlpSF (imgF94 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_94 δ hδ
-
-theorem hpreSF95_sum : ∀ t, (∑ j, W1SF t j * imgF95 j) = hpreSF95 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF95_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_95 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF95 q - ((1 : ℝ)/255)) (fun q => imgF95 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF95 q - ((1 : ℝ)/255)) (fun q => imgF95 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF95 q - ((1 : ℝ)/255)) (fun q => imgF95 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF95 q - ((1 : ℝ)/255)) (fun q => imgF95 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF95_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF95, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #95 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_95 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF95 + δ) j < mlpSF (imgF95 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_95 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_95 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF95 q - ((2 : ℝ)/255)) (fun q => imgF95 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF95 q - ((2 : ℝ)/255)) (fun q => imgF95 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF95 q - ((2 : ℝ)/255)) (fun q => imgF95 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF95 q - ((2 : ℝ)/255)) (fun q => imgF95 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF95_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF95, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #95 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_95 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF95 + δ) j < mlpSF (imgF95 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_95 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_95 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF95 q - ((4 : ℝ)/255)) (fun q => imgF95 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF95 q - ((4 : ℝ)/255)) (fun q => imgF95 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF95 q - ((4 : ℝ)/255)) (fun q => imgF95 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF95 q - ((4 : ℝ)/255)) (fun q => imgF95 q + ((4 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF95_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF95, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #95 (digit 4): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_95 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpSF (imgF95 + δ) j < mlpSF (imgF95 + δ) 4 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_95 δ hδ
-
-theorem hpreSF96_sum : ∀ t, (∑ j, W1SF t j * imgF96 j) = hpreSF96 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF96_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_96 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF96 q - ((1 : ℝ)/255)) (fun q => imgF96 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF96 q - ((1 : ℝ)/255)) (fun q => imgF96 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF96 q - ((1 : ℝ)/255)) (fun q => imgF96 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF96 q - ((1 : ℝ)/255)) (fun q => imgF96 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF96_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF96, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #96 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_96 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF96 + δ) j < mlpSF (imgF96 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_96 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_96 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF96 q - ((2 : ℝ)/255)) (fun q => imgF96 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF96 q - ((2 : ℝ)/255)) (fun q => imgF96 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF96 q - ((2 : ℝ)/255)) (fun q => imgF96 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF96 q - ((2 : ℝ)/255)) (fun q => imgF96 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF96_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF96, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #96 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_96 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpSF (imgF96 + δ) j < mlpSF (imgF96 + δ) 1 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_96 δ hδ
-
-theorem hpreSF97_sum : ∀ t, (∑ j, W1SF t j * imgF97 j) = hpreSF97 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF97_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_97 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF97 q - ((1 : ℝ)/255)) (fun q => imgF97 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF97 q - ((1 : ℝ)/255)) (fun q => imgF97 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF97 q - ((1 : ℝ)/255)) (fun q => imgF97 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF97 q - ((1 : ℝ)/255)) (fun q => imgF97 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF97_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF97, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #97 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_97 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF97 + δ) j < mlpSF (imgF97 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_97 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_97 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF97 q - ((2 : ℝ)/255)) (fun q => imgF97 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF97 q - ((2 : ℝ)/255)) (fun q => imgF97 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF97 q - ((2 : ℝ)/255)) (fun q => imgF97 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF97 q - ((2 : ℝ)/255)) (fun q => imgF97 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF97_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF97, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #97 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_97 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpSF (imgF97 + δ) j < mlpSF (imgF97 + δ) 7 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_97 δ hδ
-
-theorem hpreSF98_sum : ∀ t, (∑ j, W1SF t j * imgF98 j) = hpreSF98 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF98_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_98 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF98 q - ((1 : ℝ)/255)) (fun q => imgF98 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF98 q - ((1 : ℝ)/255)) (fun q => imgF98 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF98 q - ((1 : ℝ)/255)) (fun q => imgF98 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF98 q - ((1 : ℝ)/255)) (fun q => imgF98 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF98_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF98, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #98 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_98 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF98 + δ) j < mlpSF (imgF98 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_98 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_98 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF98 q - ((2 : ℝ)/255)) (fun q => imgF98 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF98 q - ((2 : ℝ)/255)) (fun q => imgF98 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF98 q - ((2 : ℝ)/255)) (fun q => imgF98 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF98 q - ((2 : ℝ)/255)) (fun q => imgF98 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF98_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF98, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #98 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_98 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF98 + δ) j < mlpSF (imgF98 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_98 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_98 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF98 q - ((4 : ℝ)/255)) (fun q => imgF98 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF98 q - ((4 : ℝ)/255)) (fun q => imgF98 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF98 q - ((4 : ℝ)/255)) (fun q => imgF98 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF98 q - ((4 : ℝ)/255)) (fun q => imgF98 q + ((4 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF98_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF98, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #98 (digit 6): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_98 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF98 + δ) j < mlpSF (imgF98 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_98 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe8_98 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF98 q - ((8 : ℝ)/255)) (fun q => imgF98 q + ((8 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF98 q - ((8 : ℝ)/255)) (fun q => imgF98 q + ((8 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF98 q - ((8 : ℝ)/255)) (fun q => imgF98 q + ((8 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF98 q - ((8 : ℝ)/255)) (fun q => imgF98 q + ((8 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF98_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF98, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #98 (digit 6): IBP-certified at pixel-L∞ ε = 8/255. -/
-theorem certIBPSFe8_98 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((8 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpSF (imgF98 + δ) j < mlpSF (imgF98 + δ) 6 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe8_98 δ hδ
-
-theorem hpreSF99_sum : ∀ t, (∑ j, W1SF t j * imgF99 j) = hpreSF99 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreSF99_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe1_99 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF99 q - ((1 : ℝ)/255)) (fun q => imgF99 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF99 q - ((1 : ℝ)/255)) (fun q => imgF99 q + ((1 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF99 q - ((1 : ℝ)/255)) (fun q => imgF99 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF99 q - ((1 : ℝ)/255)) (fun q => imgF99 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF99_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF99, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #99 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPSFe1_99 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF99 + δ) j < mlpSF (imgF99 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe1_99 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe2_99 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF99 q - ((2 : ℝ)/255)) (fun q => imgF99 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF99 q - ((2 : ℝ)/255)) (fun q => imgF99 q + ((2 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF99 q - ((2 : ℝ)/255)) (fun q => imgF99 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF99 q - ((2 : ℝ)/255)) (fun q => imgF99 q + ((2 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF99_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF99, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #99 (digit 9): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPSFe2_99 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF99 + δ) j < mlpSF (imgF99 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe2_99 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbSFe4_99 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2SF (reluLo (denseLo W1SF (fun q => imgF99 q - ((4 : ℝ)/255)) (fun q => imgF99 q + ((4 : ℝ)/255))))
-                (reluHi (denseHi W1SF (fun q => imgF99 q - ((4 : ℝ)/255)) (fun q => imgF99 q + ((4 : ℝ)/255)))) j
-      < denseLo W2SF (reluLo (denseLo W1SF (fun q => imgF99 q - ((4 : ℝ)/255)) (fun q => imgF99 q + ((4 : ℝ)/255))))
-                    (reluHi (denseHi W1SF (fun q => imgF99 q - ((4 : ℝ)/255)) (fun q => imgF99 q + ((4 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreSF99_sum, absrowSF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2SF, hpreSF99, absrSF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #99 (digit 9): IBP-certified at pixel-L∞ ε = 4/255. -/
-theorem certIBPSFe4_99 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((4 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpSF (imgF99 + δ) j < mlpSF (imgF99 + δ) 9 :=
-  ibp2_certified_at_eps W1SF W2SF hbSFe4_99 δ hδ
 
 -- ════════ aggregates (peers of `scorecardFull`) ════════
 
@@ -6356,96 +1812,12 @@ noncomputable def ibpCappedCertse1 : List (ℕ × EuclideanSpace ℝ (Fin 784) �
    (4, imgF4, 4),
    (5, imgF5, 1),
    (6, imgF6, 4),
-   (7, imgF7, 9),
-   (9, imgF9, 9),
-   (10, imgF10, 0),
-   (11, imgF11, 6),
-   (12, imgF12, 9),
-   (13, imgF13, 0),
-   (14, imgF14, 1),
-   (15, imgF15, 5),
-   (16, imgF16, 9),
-   (17, imgF17, 7),
-   (18, imgF18, 3),
-   (19, imgF19, 4),
-   (20, imgF20, 9),
-   (21, imgF21, 6),
-   (22, imgF22, 6),
-   (23, imgF23, 5),
-   (24, imgF24, 4),
-   (25, imgF25, 0),
-   (26, imgF26, 7),
-   (27, imgF27, 4),
-   (28, imgF28, 0),
-   (29, imgF29, 1),
-   (30, imgF30, 3),
-   (31, imgF31, 1),
-   (32, imgF32, 3),
-   (34, imgF34, 7),
-   (35, imgF35, 2),
-   (36, imgF36, 7),
-   (37, imgF37, 1),
-   (38, imgF38, 2),
-   (39, imgF39, 1),
-   (40, imgF40, 1),
-   (41, imgF41, 7),
-   (42, imgF42, 4),
-   (43, imgF43, 2),
-   (44, imgF44, 3),
-   (45, imgF45, 5),
-   (46, imgF46, 1),
-   (47, imgF47, 2),
-   (48, imgF48, 4),
-   (49, imgF49, 4),
-   (50, imgF50, 6),
-   (51, imgF51, 3),
-   (52, imgF52, 5),
-   (53, imgF53, 5),
-   (54, imgF54, 6),
-   (55, imgF55, 0),
-   (56, imgF56, 4),
-   (57, imgF57, 1),
-   (58, imgF58, 9),
-   (59, imgF59, 5),
-   (60, imgF60, 7),
-   (61, imgF61, 8),
-   (62, imgF62, 9),
-   (64, imgF64, 7),
-   (65, imgF65, 4),
-   (67, imgF67, 4),
-   (68, imgF68, 3),
-   (69, imgF69, 0),
-   (70, imgF70, 7),
-   (71, imgF71, 0),
-   (72, imgF72, 2),
-   (74, imgF74, 1),
-   (75, imgF75, 7),
-   (76, imgF76, 3),
-   (78, imgF78, 9),
-   (79, imgF79, 7),
-   (80, imgF80, 7),
-   (81, imgF81, 6),
-   (82, imgF82, 2),
-   (83, imgF83, 7),
-   (84, imgF84, 8),
-   (85, imgF85, 4),
-   (86, imgF86, 7),
-   (88, imgF88, 6),
-   (89, imgF89, 1),
-   (90, imgF90, 3),
-   (91, imgF91, 6),
-   (93, imgF93, 3),
-   (94, imgF94, 1),
-   (95, imgF95, 4),
-   (96, imgF96, 1),
-   (97, imgF97, 7),
-   (98, imgF98, 6),
-   (99, imgF99, 9)]
+   (7, imgF7, 9)]
 
 theorem ibpCappedCertse1_certified :
     ∀ p ∈ ibpCappedCertse1, CertifiedAtLinf mlpSF ((1 : ℝ)/255) p.2.1 p.2.2 :=
   List.forall_iff_forall_mem.mp
-    ⟨certIBPSFe1_0, certIBPSFe1_1, certIBPSFe1_2, certIBPSFe1_3, certIBPSFe1_4, certIBPSFe1_5, certIBPSFe1_6, certIBPSFe1_7, certIBPSFe1_9, certIBPSFe1_10, certIBPSFe1_11, certIBPSFe1_12, certIBPSFe1_13, certIBPSFe1_14, certIBPSFe1_15, certIBPSFe1_16, certIBPSFe1_17, certIBPSFe1_18, certIBPSFe1_19, certIBPSFe1_20, certIBPSFe1_21, certIBPSFe1_22, certIBPSFe1_23, certIBPSFe1_24, certIBPSFe1_25, certIBPSFe1_26, certIBPSFe1_27, certIBPSFe1_28, certIBPSFe1_29, certIBPSFe1_30, certIBPSFe1_31, certIBPSFe1_32, certIBPSFe1_34, certIBPSFe1_35, certIBPSFe1_36, certIBPSFe1_37, certIBPSFe1_38, certIBPSFe1_39, certIBPSFe1_40, certIBPSFe1_41, certIBPSFe1_42, certIBPSFe1_43, certIBPSFe1_44, certIBPSFe1_45, certIBPSFe1_46, certIBPSFe1_47, certIBPSFe1_48, certIBPSFe1_49, certIBPSFe1_50, certIBPSFe1_51, certIBPSFe1_52, certIBPSFe1_53, certIBPSFe1_54, certIBPSFe1_55, certIBPSFe1_56, certIBPSFe1_57, certIBPSFe1_58, certIBPSFe1_59, certIBPSFe1_60, certIBPSFe1_61, certIBPSFe1_62, certIBPSFe1_64, certIBPSFe1_65, certIBPSFe1_67, certIBPSFe1_68, certIBPSFe1_69, certIBPSFe1_70, certIBPSFe1_71, certIBPSFe1_72, certIBPSFe1_74, certIBPSFe1_75, certIBPSFe1_76, certIBPSFe1_78, certIBPSFe1_79, certIBPSFe1_80, certIBPSFe1_81, certIBPSFe1_82, certIBPSFe1_83, certIBPSFe1_84, certIBPSFe1_85, certIBPSFe1_86, certIBPSFe1_88, certIBPSFe1_89, certIBPSFe1_90, certIBPSFe1_91, certIBPSFe1_93, certIBPSFe1_94, certIBPSFe1_95, certIBPSFe1_96, certIBPSFe1_97, certIBPSFe1_98, certIBPSFe1_99⟩
+    ⟨certIBPSFe1_0, certIBPSFe1_1, certIBPSFe1_2, certIBPSFe1_3, certIBPSFe1_4, certIBPSFe1_5, certIBPSFe1_6, certIBPSFe1_7⟩
 
 noncomputable def ibpCappedCertse2 : List (ℕ × EuclideanSpace ℝ (Fin 784) × Fin 10) :=
   [(0, imgF0, 7),
@@ -6455,92 +1827,12 @@ noncomputable def ibpCappedCertse2 : List (ℕ × EuclideanSpace ℝ (Fin 784) �
    (4, imgF4, 4),
    (5, imgF5, 1),
    (6, imgF6, 4),
-   (7, imgF7, 9),
-   (9, imgF9, 9),
-   (10, imgF10, 0),
-   (11, imgF11, 6),
-   (12, imgF12, 9),
-   (13, imgF13, 0),
-   (14, imgF14, 1),
-   (15, imgF15, 5),
-   (16, imgF16, 9),
-   (17, imgF17, 7),
-   (18, imgF18, 3),
-   (19, imgF19, 4),
-   (20, imgF20, 9),
-   (21, imgF21, 6),
-   (22, imgF22, 6),
-   (23, imgF23, 5),
-   (24, imgF24, 4),
-   (25, imgF25, 0),
-   (26, imgF26, 7),
-   (27, imgF27, 4),
-   (28, imgF28, 0),
-   (29, imgF29, 1),
-   (30, imgF30, 3),
-   (31, imgF31, 1),
-   (32, imgF32, 3),
-   (34, imgF34, 7),
-   (35, imgF35, 2),
-   (36, imgF36, 7),
-   (37, imgF37, 1),
-   (38, imgF38, 2),
-   (39, imgF39, 1),
-   (40, imgF40, 1),
-   (41, imgF41, 7),
-   (42, imgF42, 4),
-   (43, imgF43, 2),
-   (44, imgF44, 3),
-   (45, imgF45, 5),
-   (47, imgF47, 2),
-   (48, imgF48, 4),
-   (49, imgF49, 4),
-   (50, imgF50, 6),
-   (51, imgF51, 3),
-   (52, imgF52, 5),
-   (53, imgF53, 5),
-   (54, imgF54, 6),
-   (55, imgF55, 0),
-   (56, imgF56, 4),
-   (57, imgF57, 1),
-   (58, imgF58, 9),
-   (59, imgF59, 5),
-   (60, imgF60, 7),
-   (64, imgF64, 7),
-   (67, imgF67, 4),
-   (68, imgF68, 3),
-   (69, imgF69, 0),
-   (70, imgF70, 7),
-   (71, imgF71, 0),
-   (72, imgF72, 2),
-   (74, imgF74, 1),
-   (75, imgF75, 7),
-   (76, imgF76, 3),
-   (78, imgF78, 9),
-   (79, imgF79, 7),
-   (80, imgF80, 7),
-   (81, imgF81, 6),
-   (82, imgF82, 2),
-   (83, imgF83, 7),
-   (84, imgF84, 8),
-   (85, imgF85, 4),
-   (86, imgF86, 7),
-   (88, imgF88, 6),
-   (89, imgF89, 1),
-   (90, imgF90, 3),
-   (91, imgF91, 6),
-   (93, imgF93, 3),
-   (94, imgF94, 1),
-   (95, imgF95, 4),
-   (96, imgF96, 1),
-   (97, imgF97, 7),
-   (98, imgF98, 6),
-   (99, imgF99, 9)]
+   (7, imgF7, 9)]
 
 theorem ibpCappedCertse2_certified :
     ∀ p ∈ ibpCappedCertse2, CertifiedAtLinf mlpSF ((2 : ℝ)/255) p.2.1 p.2.2 :=
   List.forall_iff_forall_mem.mp
-    ⟨certIBPSFe2_0, certIBPSFe2_1, certIBPSFe2_2, certIBPSFe2_3, certIBPSFe2_4, certIBPSFe2_5, certIBPSFe2_6, certIBPSFe2_7, certIBPSFe2_9, certIBPSFe2_10, certIBPSFe2_11, certIBPSFe2_12, certIBPSFe2_13, certIBPSFe2_14, certIBPSFe2_15, certIBPSFe2_16, certIBPSFe2_17, certIBPSFe2_18, certIBPSFe2_19, certIBPSFe2_20, certIBPSFe2_21, certIBPSFe2_22, certIBPSFe2_23, certIBPSFe2_24, certIBPSFe2_25, certIBPSFe2_26, certIBPSFe2_27, certIBPSFe2_28, certIBPSFe2_29, certIBPSFe2_30, certIBPSFe2_31, certIBPSFe2_32, certIBPSFe2_34, certIBPSFe2_35, certIBPSFe2_36, certIBPSFe2_37, certIBPSFe2_38, certIBPSFe2_39, certIBPSFe2_40, certIBPSFe2_41, certIBPSFe2_42, certIBPSFe2_43, certIBPSFe2_44, certIBPSFe2_45, certIBPSFe2_47, certIBPSFe2_48, certIBPSFe2_49, certIBPSFe2_50, certIBPSFe2_51, certIBPSFe2_52, certIBPSFe2_53, certIBPSFe2_54, certIBPSFe2_55, certIBPSFe2_56, certIBPSFe2_57, certIBPSFe2_58, certIBPSFe2_59, certIBPSFe2_60, certIBPSFe2_64, certIBPSFe2_67, certIBPSFe2_68, certIBPSFe2_69, certIBPSFe2_70, certIBPSFe2_71, certIBPSFe2_72, certIBPSFe2_74, certIBPSFe2_75, certIBPSFe2_76, certIBPSFe2_78, certIBPSFe2_79, certIBPSFe2_80, certIBPSFe2_81, certIBPSFe2_82, certIBPSFe2_83, certIBPSFe2_84, certIBPSFe2_85, certIBPSFe2_86, certIBPSFe2_88, certIBPSFe2_89, certIBPSFe2_90, certIBPSFe2_91, certIBPSFe2_93, certIBPSFe2_94, certIBPSFe2_95, certIBPSFe2_96, certIBPSFe2_97, certIBPSFe2_98, certIBPSFe2_99⟩
+    ⟨certIBPSFe2_0, certIBPSFe2_1, certIBPSFe2_2, certIBPSFe2_3, certIBPSFe2_4, certIBPSFe2_5, certIBPSFe2_6, certIBPSFe2_7⟩
 
 noncomputable def ibpCappedCertse4 : List (ℕ × EuclideanSpace ℝ (Fin 784) × Fin 10) :=
   [(0, imgF0, 7),
@@ -6550,73 +1842,12 @@ noncomputable def ibpCappedCertse4 : List (ℕ × EuclideanSpace ℝ (Fin 784) �
    (4, imgF4, 4),
    (5, imgF5, 1),
    (6, imgF6, 4),
-   (10, imgF10, 0),
-   (12, imgF12, 9),
-   (13, imgF13, 0),
-   (14, imgF14, 1),
-   (15, imgF15, 5),
-   (17, imgF17, 7),
-   (19, imgF19, 4),
-   (21, imgF21, 6),
-   (22, imgF22, 6),
-   (23, imgF23, 5),
-   (25, imgF25, 0),
-   (26, imgF26, 7),
-   (27, imgF27, 4),
-   (28, imgF28, 0),
-   (29, imgF29, 1),
-   (30, imgF30, 3),
-   (31, imgF31, 1),
-   (34, imgF34, 7),
-   (35, imgF35, 2),
-   (36, imgF36, 7),
-   (37, imgF37, 1),
-   (39, imgF39, 1),
-   (40, imgF40, 1),
-   (41, imgF41, 7),
-   (45, imgF45, 5),
-   (48, imgF48, 4),
-   (49, imgF49, 4),
-   (50, imgF50, 6),
-   (51, imgF51, 3),
-   (52, imgF52, 5),
-   (53, imgF53, 5),
-   (54, imgF54, 6),
-   (55, imgF55, 0),
-   (56, imgF56, 4),
-   (57, imgF57, 1),
-   (58, imgF58, 9),
-   (60, imgF60, 7),
-   (64, imgF64, 7),
-   (67, imgF67, 4),
-   (68, imgF68, 3),
-   (69, imgF69, 0),
-   (70, imgF70, 7),
-   (71, imgF71, 0),
-   (72, imgF72, 2),
-   (74, imgF74, 1),
-   (75, imgF75, 7),
-   (79, imgF79, 7),
-   (81, imgF81, 6),
-   (82, imgF82, 2),
-   (83, imgF83, 7),
-   (84, imgF84, 8),
-   (85, imgF85, 4),
-   (86, imgF86, 7),
-   (88, imgF88, 6),
-   (89, imgF89, 1),
-   (90, imgF90, 3),
-   (91, imgF91, 6),
-   (93, imgF93, 3),
-   (94, imgF94, 1),
-   (95, imgF95, 4),
-   (98, imgF98, 6),
-   (99, imgF99, 9)]
+   (10, imgF10, 0)]
 
 theorem ibpCappedCertse4_certified :
     ∀ p ∈ ibpCappedCertse4, CertifiedAtLinf mlpSF ((4 : ℝ)/255) p.2.1 p.2.2 :=
   List.forall_iff_forall_mem.mp
-    ⟨certIBPSFe4_0, certIBPSFe4_1, certIBPSFe4_2, certIBPSFe4_3, certIBPSFe4_4, certIBPSFe4_5, certIBPSFe4_6, certIBPSFe4_10, certIBPSFe4_12, certIBPSFe4_13, certIBPSFe4_14, certIBPSFe4_15, certIBPSFe4_17, certIBPSFe4_19, certIBPSFe4_21, certIBPSFe4_22, certIBPSFe4_23, certIBPSFe4_25, certIBPSFe4_26, certIBPSFe4_27, certIBPSFe4_28, certIBPSFe4_29, certIBPSFe4_30, certIBPSFe4_31, certIBPSFe4_34, certIBPSFe4_35, certIBPSFe4_36, certIBPSFe4_37, certIBPSFe4_39, certIBPSFe4_40, certIBPSFe4_41, certIBPSFe4_45, certIBPSFe4_48, certIBPSFe4_49, certIBPSFe4_50, certIBPSFe4_51, certIBPSFe4_52, certIBPSFe4_53, certIBPSFe4_54, certIBPSFe4_55, certIBPSFe4_56, certIBPSFe4_57, certIBPSFe4_58, certIBPSFe4_60, certIBPSFe4_64, certIBPSFe4_67, certIBPSFe4_68, certIBPSFe4_69, certIBPSFe4_70, certIBPSFe4_71, certIBPSFe4_72, certIBPSFe4_74, certIBPSFe4_75, certIBPSFe4_79, certIBPSFe4_81, certIBPSFe4_82, certIBPSFe4_83, certIBPSFe4_84, certIBPSFe4_85, certIBPSFe4_86, certIBPSFe4_88, certIBPSFe4_89, certIBPSFe4_90, certIBPSFe4_91, certIBPSFe4_93, certIBPSFe4_94, certIBPSFe4_95, certIBPSFe4_98, certIBPSFe4_99⟩
+    ⟨certIBPSFe4_0, certIBPSFe4_1, certIBPSFe4_2, certIBPSFe4_3, certIBPSFe4_4, certIBPSFe4_5, certIBPSFe4_6, certIBPSFe4_10⟩
 
 noncomputable def ibpCappedCertse8 : List (ℕ × EuclideanSpace ℝ (Fin 784) × Fin 10) :=
   [(0, imgF0, 7),
@@ -6626,35 +1857,19 @@ noncomputable def ibpCappedCertse8 : List (ℕ × EuclideanSpace ℝ (Fin 784) �
    (17, imgF17, 7),
    (21, imgF21, 6),
    (25, imgF25, 0),
-   (28, imgF28, 0),
-   (35, imgF35, 2),
-   (37, imgF37, 1),
-   (50, imgF50, 6),
-   (51, imgF51, 3),
-   (56, imgF56, 4),
-   (60, imgF60, 7),
-   (70, imgF70, 7),
-   (71, imgF71, 0),
-   (72, imgF72, 2),
-   (79, imgF79, 7),
-   (82, imgF82, 2),
-   (85, imgF85, 4),
-   (86, imgF86, 7),
-   (88, imgF88, 6),
-   (91, imgF91, 6),
-   (98, imgF98, 6)]
+   (28, imgF28, 0)]
 
 theorem ibpCappedCertse8_certified :
     ∀ p ∈ ibpCappedCertse8, CertifiedAtLinf mlpSF ((8 : ℝ)/255) p.2.1 p.2.2 :=
   List.forall_iff_forall_mem.mp
-    ⟨certIBPSFe8_0, certIBPSFe8_3, certIBPSFe8_13, certIBPSFe8_14, certIBPSFe8_17, certIBPSFe8_21, certIBPSFe8_25, certIBPSFe8_28, certIBPSFe8_35, certIBPSFe8_37, certIBPSFe8_50, certIBPSFe8_51, certIBPSFe8_56, certIBPSFe8_60, certIBPSFe8_70, certIBPSFe8_71, certIBPSFe8_72, certIBPSFe8_79, certIBPSFe8_82, certIBPSFe8_85, certIBPSFe8_86, certIBPSFe8_88, certIBPSFe8_91, certIBPSFe8_98⟩
+    ⟨certIBPSFe8_0, certIBPSFe8_3, certIBPSFe8_13, certIBPSFe8_14, certIBPSFe8_17, certIBPSFe8_21, certIBPSFe8_25, certIBPSFe8_28⟩
 
-/-- **The IBP L∞ scorecard, spectrally-capped σ≤2 net (`mlpSF`)**: 92/100 @ 1/255, 88/100 @ 2/255, 69/100 @ 4/255, 24/100 @ 8/255 (PGD-L∞ bracket 93/93/92/88). -/
+/-- **The IBP L∞ scorecard, spectrally-capped σ≤2 net (`mlpSF`)** — MEASURED 92/100 @ 1/255, 88/100 @ 2/255, 69/100 @ 4/255, 24/100 @ 8/255 (PGD-L∞ bracket 93/93/92/88). -/
 theorem scorecard_ibp :
-    (ibpCappedCertse1.length = 92 ∧ ∀ p ∈ ibpCappedCertse1, CertifiedAtLinf mlpSF ((1 : ℝ)/255) p.2.1 p.2.2) ∧
-    (ibpCappedCertse2.length = 88 ∧ ∀ p ∈ ibpCappedCertse2, CertifiedAtLinf mlpSF ((2 : ℝ)/255) p.2.1 p.2.2) ∧
-    (ibpCappedCertse4.length = 69 ∧ ∀ p ∈ ibpCappedCertse4, CertifiedAtLinf mlpSF ((4 : ℝ)/255) p.2.1 p.2.2) ∧
-    (ibpCappedCertse8.length = 24 ∧ ∀ p ∈ ibpCappedCertse8, CertifiedAtLinf mlpSF ((8 : ℝ)/255) p.2.1 p.2.2) :=
+    (ibpCappedCertse1.length = 8 ∧ ∀ p ∈ ibpCappedCertse1, CertifiedAtLinf mlpSF ((1 : ℝ)/255) p.2.1 p.2.2) ∧
+    (ibpCappedCertse2.length = 8 ∧ ∀ p ∈ ibpCappedCertse2, CertifiedAtLinf mlpSF ((2 : ℝ)/255) p.2.1 p.2.2) ∧
+    (ibpCappedCertse4.length = 8 ∧ ∀ p ∈ ibpCappedCertse4, CertifiedAtLinf mlpSF ((4 : ℝ)/255) p.2.1 p.2.2) ∧
+    (ibpCappedCertse8.length = 8 ∧ ∀ p ∈ ibpCappedCertse8, CertifiedAtLinf mlpSF ((8 : ℝ)/255) p.2.1 p.2.2) :=
   ⟨⟨rfl, ibpCappedCertse1_certified⟩, ⟨rfl, ibpCappedCertse2_certified⟩, ⟨rfl, ibpCappedCertse4_certified⟩, ⟨rfl, ibpCappedCertse8_certified⟩⟩
 
 end LipschitzCertDemo

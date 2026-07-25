@@ -263,13 +263,15 @@ the propagated box is carried only at the largest certifying radius — every
 smaller one is a `CertifiedAtLinf3.mono` corollary, not a second box.
 
 **Theorem vs. measurement.** Soundness lives in the ENGINE, proved once — so
-kernel-checking the 57th image buys nothing the 56th didn't. The conv row's counts
-above are exact-rational **measurements**; the first 8 certifying images each
-additionally carry a `CertifiedAtLinf3 net ε x y` **theorem**
-(`∀ δ, (∀ a b d, |δ a b d| ≤ ε) → ∀ j ≠ y, net (x+δ) j < net (x+δ) y`), which is
-what `scorecard_ibp_conv` states — enough to witness that the engine bites on real
-trained weights, without carrying 100 propagated boxes to say it 100 times.
-Unstable
+kernel-checking the 57th image buys nothing the 56th didn't. Every count in this
+section (and in the L2 tables above) is an exact-rational **measurement** over the
+stated subset; on top of that, the first 8 certifying images at each radius carry a
+per-image **theorem** (`CertifiedAtLinf`/`CertifiedAtLinf3`, i.e.
+`∀ δ, (∀ i, |δ i| ≤ ε) → ∀ j ≠ y, f (x+δ) j < f (x+δ) y`), and the `scorecard*`
+aggregates state only those proved counts. That is enough to witness the engine
+bites at real trained weights, without carrying 100 propagated boxes to say the
+same thing 100 times — which is what cut the generated corpus from 106k lines to
+67k. Unstable
 (sign-crossing) ReLUs and tied pool windows are handled *soundly* — the box
 contains both branches — not assumed away, so the counts are lower bounds. Engine
 audited in `tests/AuditAxioms.lean`, generated instance in

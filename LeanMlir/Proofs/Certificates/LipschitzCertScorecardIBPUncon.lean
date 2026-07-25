@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Foundation.IntervalBound
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBP
 
 /-! # IBP L∞ scorecard, full 784-dim input — unconstrained net (`mlpTF`)
 
@@ -10,6 +11,14 @@ first-100 MNIST test subset as the L2 scorecard: at ε = 1/255, 2/255,
 **87/100**, **42/100**, **2/100**, **0/100** predictions robust (PGD-L∞ bracket: 95, 92, 85, 36).
 For comparison, pushing the L2 Lipschitz certificate through
 `‖δ‖₂ ≤ √784·ε∞` certifies only 71, 14, 0, 0 — at small L∞ radii the box beats the ball.
+
+
+**Theorem vs. measurement.** Soundness is in the ENGINE
+(`Foundation/IntervalBound.lean`), proved once — kernel-checking the 57th
+image buys nothing the 56th didn't. The counts above are exact-rational
+MEASUREMENTS over the first 100 images; the first 8 certifying images at
+each radius carry a `CertifiedAtLinf` THEOREM, and the aggregate below states
+only those. The images witness non-vacuity; they are not what makes it sound.
 
 Engine: `IntervalBound.lean`. The first layer is a uniform box, so its
 interval image is `⟨w,x⟩ ∓ ε·‖w‖₁` — `⟨w,x⟩` reuses the committed `dotZ`
@@ -541,57 +550,148 @@ theorem certIBPTFe1_7 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 9 → mlpTF (imgF7 + δ) j < mlpTF (imgF7 + δ) 9 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe1_7 δ hδ
 
-theorem hpreTF9_sum : ∀ t, (∑ j, W1TF t j * imgF9 j) = hpreTF9 t := by
+-- net TF pre-activations for #10 (not in the base L2-certified set)
+theorem pzITF_10_0 : dotZ w1zTF0 imgz10 = 432447 := by decide +kernel
+theorem pzITF_10_1 : dotZ w1zTF1 imgz10 = -898104 := by decide +kernel
+theorem pzITF_10_2 : dotZ w1zTF2 imgz10 = -465484 := by decide +kernel
+theorem pzITF_10_3 : dotZ w1zTF3 imgz10 = 158099 := by decide +kernel
+theorem pzITF_10_4 : dotZ w1zTF4 imgz10 = 29888 := by decide +kernel
+theorem pzITF_10_5 : dotZ w1zTF5 imgz10 = -226803 := by decide +kernel
+theorem pzITF_10_6 : dotZ w1zTF6 imgz10 = -16175 := by decide +kernel
+theorem pzITF_10_7 : dotZ w1zTF7 imgz10 = -263951 := by decide +kernel
+theorem pzITF_10_8 : dotZ w1zTF8 imgz10 = 207353 := by decide +kernel
+theorem pzITF_10_9 : dotZ w1zTF9 imgz10 = 226658 := by decide +kernel
+theorem pzITF_10_10 : dotZ w1zTF10 imgz10 = 396221 := by decide +kernel
+theorem pzITF_10_11 : dotZ w1zTF11 imgz10 = 292254 := by decide +kernel
+theorem pzITF_10_12 : dotZ w1zTF12 imgz10 = -157396 := by decide +kernel
+theorem pzITF_10_13 : dotZ w1zTF13 imgz10 = -51584 := by decide +kernel
+theorem pzITF_10_14 : dotZ w1zTF14 imgz10 = -236442 := by decide +kernel
+theorem pzITF_10_15 : dotZ w1zTF15 imgz10 = 438616 := by decide +kernel
+
+noncomputable def hpreITF10 : Fin 16 → ℝ :=
+  ![((432447 : ℝ)/65280), ((-898104 : ℝ)/65280), ((-465484 : ℝ)/65280), ((158099 : ℝ)/65280), ((29888 : ℝ)/65280), ((-226803 : ℝ)/65280), ((-16175 : ℝ)/65280), ((-263951 : ℝ)/65280), ((207353 : ℝ)/65280), ((226658 : ℝ)/65280), ((396221 : ℝ)/65280), ((292254 : ℝ)/65280), ((-157396 : ℝ)/65280), ((-51584 : ℝ)/65280), ((-236442 : ℝ)/65280), ((438616 : ℝ)/65280)]
+
+theorem hpreITF10_eval_0 : denseE W1TF imgF10 0 = hpreITF10 0 := by
+  rw [show hpreITF10 0 = ((432447 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr0]
+  simp only [w1rTF0, imgF10_apply]
+  rw [sum_getD_div w1zTF0_len imgz10_len pzITF_10_0 256 255]
+  norm_num
+
+theorem hpreITF10_eval_1 : denseE W1TF imgF10 1 = hpreITF10 1 := by
+  rw [show hpreITF10 1 = ((-898104 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr1]
+  simp only [w1rTF1, imgF10_apply]
+  rw [sum_getD_div w1zTF1_len imgz10_len pzITF_10_1 256 255]
+  norm_num
+
+theorem hpreITF10_eval_2 : denseE W1TF imgF10 2 = hpreITF10 2 := by
+  rw [show hpreITF10 2 = ((-465484 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr2]
+  simp only [w1rTF2, imgF10_apply]
+  rw [sum_getD_div w1zTF2_len imgz10_len pzITF_10_2 256 255]
+  norm_num
+
+theorem hpreITF10_eval_3 : denseE W1TF imgF10 3 = hpreITF10 3 := by
+  rw [show hpreITF10 3 = ((158099 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr3]
+  simp only [w1rTF3, imgF10_apply]
+  rw [sum_getD_div w1zTF3_len imgz10_len pzITF_10_3 256 255]
+  norm_num
+
+theorem hpreITF10_eval_4 : denseE W1TF imgF10 4 = hpreITF10 4 := by
+  rw [show hpreITF10 4 = ((29888 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr4]
+  simp only [w1rTF4, imgF10_apply]
+  rw [sum_getD_div w1zTF4_len imgz10_len pzITF_10_4 256 255]
+  norm_num
+
+theorem hpreITF10_eval_5 : denseE W1TF imgF10 5 = hpreITF10 5 := by
+  rw [show hpreITF10 5 = ((-226803 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr5]
+  simp only [w1rTF5, imgF10_apply]
+  rw [sum_getD_div w1zTF5_len imgz10_len pzITF_10_5 256 255]
+  norm_num
+
+theorem hpreITF10_eval_6 : denseE W1TF imgF10 6 = hpreITF10 6 := by
+  rw [show hpreITF10 6 = ((-16175 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr6]
+  simp only [w1rTF6, imgF10_apply]
+  rw [sum_getD_div w1zTF6_len imgz10_len pzITF_10_6 256 255]
+  norm_num
+
+theorem hpreITF10_eval_7 : denseE W1TF imgF10 7 = hpreITF10 7 := by
+  rw [show hpreITF10 7 = ((-263951 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr7]
+  simp only [w1rTF7, imgF10_apply]
+  rw [sum_getD_div w1zTF7_len imgz10_len pzITF_10_7 256 255]
+  norm_num
+
+theorem hpreITF10_eval_8 : denseE W1TF imgF10 8 = hpreITF10 8 := by
+  rw [show hpreITF10 8 = ((207353 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr8]
+  simp only [w1rTF8, imgF10_apply]
+  rw [sum_getD_div w1zTF8_len imgz10_len pzITF_10_8 256 255]
+  norm_num
+
+theorem hpreITF10_eval_9 : denseE W1TF imgF10 9 = hpreITF10 9 := by
+  rw [show hpreITF10 9 = ((226658 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr9]
+  simp only [w1rTF9, imgF10_apply]
+  rw [sum_getD_div w1zTF9_len imgz10_len pzITF_10_9 256 255]
+  norm_num
+
+theorem hpreITF10_eval_10 : denseE W1TF imgF10 10 = hpreITF10 10 := by
+  rw [show hpreITF10 10 = ((396221 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr10]
+  simp only [w1rTF10, imgF10_apply]
+  rw [sum_getD_div w1zTF10_len imgz10_len pzITF_10_10 256 255]
+  norm_num
+
+theorem hpreITF10_eval_11 : denseE W1TF imgF10 11 = hpreITF10 11 := by
+  rw [show hpreITF10 11 = ((292254 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr11]
+  simp only [w1rTF11, imgF10_apply]
+  rw [sum_getD_div w1zTF11_len imgz10_len pzITF_10_11 256 255]
+  norm_num
+
+theorem hpreITF10_eval_12 : denseE W1TF imgF10 12 = hpreITF10 12 := by
+  rw [show hpreITF10 12 = ((-157396 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr12]
+  simp only [w1rTF12, imgF10_apply]
+  rw [sum_getD_div w1zTF12_len imgz10_len pzITF_10_12 256 255]
+  norm_num
+
+theorem hpreITF10_eval_13 : denseE W1TF imgF10 13 = hpreITF10 13 := by
+  rw [show hpreITF10 13 = ((-51584 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr13]
+  simp only [w1rTF13, imgF10_apply]
+  rw [sum_getD_div w1zTF13_len imgz10_len pzITF_10_13 256 255]
+  norm_num
+
+theorem hpreITF10_eval_14 : denseE W1TF imgF10 14 = hpreITF10 14 := by
+  rw [show hpreITF10 14 = ((-236442 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr14]
+  simp only [w1rTF14, imgF10_apply]
+  rw [sum_getD_div w1zTF14_len imgz10_len pzITF_10_14 256 255]
+  norm_num
+
+theorem hpreITF10_eval_15 : denseE W1TF imgF10 15 = hpreITF10 15 := by
+  rw [show hpreITF10 15 = ((438616 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr15]
+  simp only [w1rTF15, imgF10_apply]
+  rw [sum_getD_div w1zTF15_len imgz10_len pzITF_10_15 256 255]
+  norm_num
+
+theorem hpreITF10_eval : ∀ k : Fin 16, denseE W1TF imgF10 k = hpreITF10 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreITF10_eval_0; exact hpreITF10_eval_1; exact hpreITF10_eval_2; exact hpreITF10_eval_3; exact hpreITF10_eval_4; exact hpreITF10_eval_5; exact hpreITF10_eval_6; exact hpreITF10_eval_7; exact hpreITF10_eval_8; exact hpreITF10_eval_9; exact hpreITF10_eval_10; exact hpreITF10_eval_11; exact hpreITF10_eval_12; exact hpreITF10_eval_13; exact hpreITF10_eval_14; exact hpreITF10_eval_15 ]
+
+theorem hpreITF10_sum : ∀ t, (∑ j, W1TF t j * imgF10 j) = hpreITF10 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreTF9_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_9 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF9 q - ((1 : ℝ)/255)) (fun q => imgF9 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF9 q - ((1 : ℝ)/255)) (fun q => imgF9 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF9 q - ((1 : ℝ)/255)) (fun q => imgF9 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF9 q - ((1 : ℝ)/255)) (fun q => imgF9 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF9_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF9, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #9 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_9 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpTF (imgF9 + δ) j < mlpTF (imgF9 + δ) 9 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_9 δ hδ
-
-theorem hpreTF10_sum : ∀ t, (∑ j, W1TF t j * imgF10 j) = hpreTF10 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF10_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_10 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF10 q - ((1 : ℝ)/255)) (fun q => imgF10 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF10 q - ((1 : ℝ)/255)) (fun q => imgF10 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF10 q - ((1 : ℝ)/255)) (fun q => imgF10 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF10 q - ((1 : ℝ)/255)) (fun q => imgF10 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF10_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF10, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #10 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_10 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF10 + δ) j < mlpTF (imgF10 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_10 δ hδ
+  exact hpreITF10_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbTFe2_10 : ∀ j : Fin 10, j ≠ 0 →
@@ -601,11 +701,11 @@ theorem hbTFe2_10 : ∀ j : Fin 10, j ≠ 0 →
                     (reluHi (denseHi W1TF (fun q => imgF10 q - ((2 : ℝ)/255)) (fun q => imgF10 q + ((2 : ℝ)/255)))) 0 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF10_sum, absrowTF]
+  simp only [hpreITF10_sum, absrowTF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2TF, hpreTF10, absrTF, Fin.sum_univ_succ, max_def]
+    | · simp [W2TF, hpreITF10, absrTF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #10 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -614,31 +714,159 @@ theorem certIBPTFe2_10 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 0 → mlpTF (imgF10 + δ) j < mlpTF (imgF10 + δ) 0 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe2_10 δ hδ
 
-theorem hpreTF11_sum : ∀ t, (∑ j, W1TF t j * imgF11 j) = hpreTF11 t := by
+/-- MNIST test image #11 (digit 6), exact pixels k/255. -/
+def imgz11 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 204, 253, 176, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 150, 252, 252, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 117, 252, 186, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 141, 252, 118, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 154, 247, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 253, 196, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 150, 253, 196, 0, 0, 0, 0, 0, 0, 0, 57, 85, 85, 38, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 225, 253, 96, 0, 0, 0, 0, 0, 151, 226, 243, 252, 252, 238, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 229, 226, 0, 0, 0, 4, 54, 229, 253, 255, 234, 175, 225, 255, 228, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 110, 252, 150, 0, 0, 26, 128, 252, 252, 227, 134, 28, 0, 0, 178, 252, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 159, 252, 113, 0, 0, 150, 253, 252, 186, 43, 0, 0, 0, 0, 141, 252, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 185, 252, 113, 0, 38, 237, 253, 151, 6, 0, 0, 0, 0, 0, 141, 202, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 198, 253, 114, 0, 147, 253, 163, 0, 0, 0, 0, 0, 0, 0, 154, 197, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 197, 252, 113, 0, 172, 252, 188, 0, 0, 0, 0, 0, 0, 26, 253, 171, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 197, 252, 113, 0, 19, 231, 247, 122, 19, 0, 0, 0, 0, 200, 244, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 222, 252, 113, 0, 0, 25, 203, 252, 193, 13, 0, 76, 200, 249, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 185, 253, 179, 10, 0, 0, 0, 76, 35, 29, 154, 253, 244, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28, 209, 253, 196, 82, 57, 57, 131, 197, 252, 253, 214, 81, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 25, 216, 252, 252, 252, 253, 252, 252, 252, 156, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 103, 139, 240, 140, 139, 139, 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+theorem imgz11_len : (imgz11).length = 784 := by decide +kernel
+
+noncomputable def imgv11 : Fin 784 → ℝ := fun j => ((imgz11).getD j 0 : ℝ)/255
+
+noncomputable def imgF11 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv11
+
+theorem imgF11_apply : ∀ j, imgF11 j = ((imgz11).getD j 0 : ℝ)/255 := fun _ => rfl
+
+-- net TF pre-activations for #11 (not in the base L2-certified set)
+theorem pzITF_11_0 : dotZ w1zTF0 imgz11 = 14040 := by decide +kernel
+theorem pzITF_11_1 : dotZ w1zTF1 imgz11 = -530694 := by decide +kernel
+theorem pzITF_11_2 : dotZ w1zTF2 imgz11 = -308846 := by decide +kernel
+theorem pzITF_11_3 : dotZ w1zTF3 imgz11 = 12303 := by decide +kernel
+theorem pzITF_11_4 : dotZ w1zTF4 imgz11 = -9645 := by decide +kernel
+theorem pzITF_11_5 : dotZ w1zTF5 imgz11 = 119769 := by decide +kernel
+theorem pzITF_11_6 : dotZ w1zTF6 imgz11 = -66378 := by decide +kernel
+theorem pzITF_11_7 : dotZ w1zTF7 imgz11 = -63039 := by decide +kernel
+theorem pzITF_11_8 : dotZ w1zTF8 imgz11 = 326139 := by decide +kernel
+theorem pzITF_11_9 : dotZ w1zTF9 imgz11 = 493750 := by decide +kernel
+theorem pzITF_11_10 : dotZ w1zTF10 imgz11 = 92772 := by decide +kernel
+theorem pzITF_11_11 : dotZ w1zTF11 imgz11 = 449337 := by decide +kernel
+theorem pzITF_11_12 : dotZ w1zTF12 imgz11 = 276212 := by decide +kernel
+theorem pzITF_11_13 : dotZ w1zTF13 imgz11 = -55898 := by decide +kernel
+theorem pzITF_11_14 : dotZ w1zTF14 imgz11 = 185753 := by decide +kernel
+theorem pzITF_11_15 : dotZ w1zTF15 imgz11 = 7461 := by decide +kernel
+
+noncomputable def hpreITF11 : Fin 16 → ℝ :=
+  ![((14040 : ℝ)/65280), ((-530694 : ℝ)/65280), ((-308846 : ℝ)/65280), ((12303 : ℝ)/65280), ((-9645 : ℝ)/65280), ((119769 : ℝ)/65280), ((-66378 : ℝ)/65280), ((-63039 : ℝ)/65280), ((326139 : ℝ)/65280), ((493750 : ℝ)/65280), ((92772 : ℝ)/65280), ((449337 : ℝ)/65280), ((276212 : ℝ)/65280), ((-55898 : ℝ)/65280), ((185753 : ℝ)/65280), ((7461 : ℝ)/65280)]
+
+theorem hpreITF11_eval_0 : denseE W1TF imgF11 0 = hpreITF11 0 := by
+  rw [show hpreITF11 0 = ((14040 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr0]
+  simp only [w1rTF0, imgF11_apply]
+  rw [sum_getD_div w1zTF0_len imgz11_len pzITF_11_0 256 255]
+  norm_num
+
+theorem hpreITF11_eval_1 : denseE W1TF imgF11 1 = hpreITF11 1 := by
+  rw [show hpreITF11 1 = ((-530694 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr1]
+  simp only [w1rTF1, imgF11_apply]
+  rw [sum_getD_div w1zTF1_len imgz11_len pzITF_11_1 256 255]
+  norm_num
+
+theorem hpreITF11_eval_2 : denseE W1TF imgF11 2 = hpreITF11 2 := by
+  rw [show hpreITF11 2 = ((-308846 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr2]
+  simp only [w1rTF2, imgF11_apply]
+  rw [sum_getD_div w1zTF2_len imgz11_len pzITF_11_2 256 255]
+  norm_num
+
+theorem hpreITF11_eval_3 : denseE W1TF imgF11 3 = hpreITF11 3 := by
+  rw [show hpreITF11 3 = ((12303 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr3]
+  simp only [w1rTF3, imgF11_apply]
+  rw [sum_getD_div w1zTF3_len imgz11_len pzITF_11_3 256 255]
+  norm_num
+
+theorem hpreITF11_eval_4 : denseE W1TF imgF11 4 = hpreITF11 4 := by
+  rw [show hpreITF11 4 = ((-9645 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr4]
+  simp only [w1rTF4, imgF11_apply]
+  rw [sum_getD_div w1zTF4_len imgz11_len pzITF_11_4 256 255]
+  norm_num
+
+theorem hpreITF11_eval_5 : denseE W1TF imgF11 5 = hpreITF11 5 := by
+  rw [show hpreITF11 5 = ((119769 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr5]
+  simp only [w1rTF5, imgF11_apply]
+  rw [sum_getD_div w1zTF5_len imgz11_len pzITF_11_5 256 255]
+  norm_num
+
+theorem hpreITF11_eval_6 : denseE W1TF imgF11 6 = hpreITF11 6 := by
+  rw [show hpreITF11 6 = ((-66378 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr6]
+  simp only [w1rTF6, imgF11_apply]
+  rw [sum_getD_div w1zTF6_len imgz11_len pzITF_11_6 256 255]
+  norm_num
+
+theorem hpreITF11_eval_7 : denseE W1TF imgF11 7 = hpreITF11 7 := by
+  rw [show hpreITF11 7 = ((-63039 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr7]
+  simp only [w1rTF7, imgF11_apply]
+  rw [sum_getD_div w1zTF7_len imgz11_len pzITF_11_7 256 255]
+  norm_num
+
+theorem hpreITF11_eval_8 : denseE W1TF imgF11 8 = hpreITF11 8 := by
+  rw [show hpreITF11 8 = ((326139 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr8]
+  simp only [w1rTF8, imgF11_apply]
+  rw [sum_getD_div w1zTF8_len imgz11_len pzITF_11_8 256 255]
+  norm_num
+
+theorem hpreITF11_eval_9 : denseE W1TF imgF11 9 = hpreITF11 9 := by
+  rw [show hpreITF11 9 = ((493750 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr9]
+  simp only [w1rTF9, imgF11_apply]
+  rw [sum_getD_div w1zTF9_len imgz11_len pzITF_11_9 256 255]
+  norm_num
+
+theorem hpreITF11_eval_10 : denseE W1TF imgF11 10 = hpreITF11 10 := by
+  rw [show hpreITF11 10 = ((92772 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr10]
+  simp only [w1rTF10, imgF11_apply]
+  rw [sum_getD_div w1zTF10_len imgz11_len pzITF_11_10 256 255]
+  norm_num
+
+theorem hpreITF11_eval_11 : denseE W1TF imgF11 11 = hpreITF11 11 := by
+  rw [show hpreITF11 11 = ((449337 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr11]
+  simp only [w1rTF11, imgF11_apply]
+  rw [sum_getD_div w1zTF11_len imgz11_len pzITF_11_11 256 255]
+  norm_num
+
+theorem hpreITF11_eval_12 : denseE W1TF imgF11 12 = hpreITF11 12 := by
+  rw [show hpreITF11 12 = ((276212 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr12]
+  simp only [w1rTF12, imgF11_apply]
+  rw [sum_getD_div w1zTF12_len imgz11_len pzITF_11_12 256 255]
+  norm_num
+
+theorem hpreITF11_eval_13 : denseE W1TF imgF11 13 = hpreITF11 13 := by
+  rw [show hpreITF11 13 = ((-55898 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr13]
+  simp only [w1rTF13, imgF11_apply]
+  rw [sum_getD_div w1zTF13_len imgz11_len pzITF_11_13 256 255]
+  norm_num
+
+theorem hpreITF11_eval_14 : denseE W1TF imgF11 14 = hpreITF11 14 := by
+  rw [show hpreITF11 14 = ((185753 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr14]
+  simp only [w1rTF14, imgF11_apply]
+  rw [sum_getD_div w1zTF14_len imgz11_len pzITF_11_14 256 255]
+  norm_num
+
+theorem hpreITF11_eval_15 : denseE W1TF imgF11 15 = hpreITF11 15 := by
+  rw [show hpreITF11 15 = ((7461 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr15]
+  simp only [w1rTF15, imgF11_apply]
+  rw [sum_getD_div w1zTF15_len imgz11_len pzITF_11_15 256 255]
+  norm_num
+
+theorem hpreITF11_eval : ∀ k : Fin 16, denseE W1TF imgF11 k = hpreITF11 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreITF11_eval_0; exact hpreITF11_eval_1; exact hpreITF11_eval_2; exact hpreITF11_eval_3; exact hpreITF11_eval_4; exact hpreITF11_eval_5; exact hpreITF11_eval_6; exact hpreITF11_eval_7; exact hpreITF11_eval_8; exact hpreITF11_eval_9; exact hpreITF11_eval_10; exact hpreITF11_eval_11; exact hpreITF11_eval_12; exact hpreITF11_eval_13; exact hpreITF11_eval_14; exact hpreITF11_eval_15 ]
+
+theorem hpreITF11_sum : ∀ t, (∑ j, W1TF t j * imgF11 j) = hpreITF11 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreTF11_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_11 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF11 q - ((1 : ℝ)/255)) (fun q => imgF11 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF11 q - ((1 : ℝ)/255)) (fun q => imgF11 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF11 q - ((1 : ℝ)/255)) (fun q => imgF11 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF11 q - ((1 : ℝ)/255)) (fun q => imgF11 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF11_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF11, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #11 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_11 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF11 + δ) j < mlpTF (imgF11 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_11 δ hδ
+  exact hpreITF11_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbTFe2_11 : ∀ j : Fin 10, j ≠ 6 →
@@ -648,11 +876,11 @@ theorem hbTFe2_11 : ∀ j : Fin 10, j ≠ 6 →
                     (reluHi (denseHi W1TF (fun q => imgF11 q - ((2 : ℝ)/255)) (fun q => imgF11 q + ((2 : ℝ)/255)))) 6 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF11_sum, absrowTF]
+  simp only [hpreITF11_sum, absrowTF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2TF, hpreTF11, absrTF, Fin.sum_univ_succ, max_def]
+    | · simp [W2TF, hpreITF11, absrTF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #11 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -661,57 +889,148 @@ theorem certIBPTFe2_11 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 6 → mlpTF (imgF11 + δ) j < mlpTF (imgF11 + δ) 6 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe2_11 δ hδ
 
-theorem hpreTF12_sum : ∀ t, (∑ j, W1TF t j * imgF12 j) = hpreTF12 t := by
+-- net TF pre-activations for #13 (not in the base L2-certified set)
+theorem pzITF_13_0 : dotZ w1zTF0 imgz13 = 315274 := by decide +kernel
+theorem pzITF_13_1 : dotZ w1zTF1 imgz13 = -631046 := by decide +kernel
+theorem pzITF_13_2 : dotZ w1zTF2 imgz13 = -526036 := by decide +kernel
+theorem pzITF_13_3 : dotZ w1zTF3 imgz13 = -15390 := by decide +kernel
+theorem pzITF_13_4 : dotZ w1zTF4 imgz13 = -111197 := by decide +kernel
+theorem pzITF_13_5 : dotZ w1zTF5 imgz13 = -164638 := by decide +kernel
+theorem pzITF_13_6 : dotZ w1zTF6 imgz13 = -627 := by decide +kernel
+theorem pzITF_13_7 : dotZ w1zTF7 imgz13 = -307823 := by decide +kernel
+theorem pzITF_13_8 : dotZ w1zTF8 imgz13 = 66700 := by decide +kernel
+theorem pzITF_13_9 : dotZ w1zTF9 imgz13 = 272263 := by decide +kernel
+theorem pzITF_13_10 : dotZ w1zTF10 imgz13 = 479498 := by decide +kernel
+theorem pzITF_13_11 : dotZ w1zTF11 imgz13 = 228046 := by decide +kernel
+theorem pzITF_13_12 : dotZ w1zTF12 imgz13 = 43606 := by decide +kernel
+theorem pzITF_13_13 : dotZ w1zTF13 imgz13 = -172816 := by decide +kernel
+theorem pzITF_13_14 : dotZ w1zTF14 imgz13 = -349191 := by decide +kernel
+theorem pzITF_13_15 : dotZ w1zTF15 imgz13 = 184087 := by decide +kernel
+
+noncomputable def hpreITF13 : Fin 16 → ℝ :=
+  ![((315274 : ℝ)/65280), ((-631046 : ℝ)/65280), ((-526036 : ℝ)/65280), ((-15390 : ℝ)/65280), ((-111197 : ℝ)/65280), ((-164638 : ℝ)/65280), ((-627 : ℝ)/65280), ((-307823 : ℝ)/65280), ((66700 : ℝ)/65280), ((272263 : ℝ)/65280), ((479498 : ℝ)/65280), ((228046 : ℝ)/65280), ((43606 : ℝ)/65280), ((-172816 : ℝ)/65280), ((-349191 : ℝ)/65280), ((184087 : ℝ)/65280)]
+
+theorem hpreITF13_eval_0 : denseE W1TF imgF13 0 = hpreITF13 0 := by
+  rw [show hpreITF13 0 = ((315274 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr0]
+  simp only [w1rTF0, imgF13_apply]
+  rw [sum_getD_div w1zTF0_len imgz13_len pzITF_13_0 256 255]
+  norm_num
+
+theorem hpreITF13_eval_1 : denseE W1TF imgF13 1 = hpreITF13 1 := by
+  rw [show hpreITF13 1 = ((-631046 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr1]
+  simp only [w1rTF1, imgF13_apply]
+  rw [sum_getD_div w1zTF1_len imgz13_len pzITF_13_1 256 255]
+  norm_num
+
+theorem hpreITF13_eval_2 : denseE W1TF imgF13 2 = hpreITF13 2 := by
+  rw [show hpreITF13 2 = ((-526036 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr2]
+  simp only [w1rTF2, imgF13_apply]
+  rw [sum_getD_div w1zTF2_len imgz13_len pzITF_13_2 256 255]
+  norm_num
+
+theorem hpreITF13_eval_3 : denseE W1TF imgF13 3 = hpreITF13 3 := by
+  rw [show hpreITF13 3 = ((-15390 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr3]
+  simp only [w1rTF3, imgF13_apply]
+  rw [sum_getD_div w1zTF3_len imgz13_len pzITF_13_3 256 255]
+  norm_num
+
+theorem hpreITF13_eval_4 : denseE W1TF imgF13 4 = hpreITF13 4 := by
+  rw [show hpreITF13 4 = ((-111197 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr4]
+  simp only [w1rTF4, imgF13_apply]
+  rw [sum_getD_div w1zTF4_len imgz13_len pzITF_13_4 256 255]
+  norm_num
+
+theorem hpreITF13_eval_5 : denseE W1TF imgF13 5 = hpreITF13 5 := by
+  rw [show hpreITF13 5 = ((-164638 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr5]
+  simp only [w1rTF5, imgF13_apply]
+  rw [sum_getD_div w1zTF5_len imgz13_len pzITF_13_5 256 255]
+  norm_num
+
+theorem hpreITF13_eval_6 : denseE W1TF imgF13 6 = hpreITF13 6 := by
+  rw [show hpreITF13 6 = ((-627 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr6]
+  simp only [w1rTF6, imgF13_apply]
+  rw [sum_getD_div w1zTF6_len imgz13_len pzITF_13_6 256 255]
+  norm_num
+
+theorem hpreITF13_eval_7 : denseE W1TF imgF13 7 = hpreITF13 7 := by
+  rw [show hpreITF13 7 = ((-307823 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr7]
+  simp only [w1rTF7, imgF13_apply]
+  rw [sum_getD_div w1zTF7_len imgz13_len pzITF_13_7 256 255]
+  norm_num
+
+theorem hpreITF13_eval_8 : denseE W1TF imgF13 8 = hpreITF13 8 := by
+  rw [show hpreITF13 8 = ((66700 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr8]
+  simp only [w1rTF8, imgF13_apply]
+  rw [sum_getD_div w1zTF8_len imgz13_len pzITF_13_8 256 255]
+  norm_num
+
+theorem hpreITF13_eval_9 : denseE W1TF imgF13 9 = hpreITF13 9 := by
+  rw [show hpreITF13 9 = ((272263 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr9]
+  simp only [w1rTF9, imgF13_apply]
+  rw [sum_getD_div w1zTF9_len imgz13_len pzITF_13_9 256 255]
+  norm_num
+
+theorem hpreITF13_eval_10 : denseE W1TF imgF13 10 = hpreITF13 10 := by
+  rw [show hpreITF13 10 = ((479498 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr10]
+  simp only [w1rTF10, imgF13_apply]
+  rw [sum_getD_div w1zTF10_len imgz13_len pzITF_13_10 256 255]
+  norm_num
+
+theorem hpreITF13_eval_11 : denseE W1TF imgF13 11 = hpreITF13 11 := by
+  rw [show hpreITF13 11 = ((228046 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr11]
+  simp only [w1rTF11, imgF13_apply]
+  rw [sum_getD_div w1zTF11_len imgz13_len pzITF_13_11 256 255]
+  norm_num
+
+theorem hpreITF13_eval_12 : denseE W1TF imgF13 12 = hpreITF13 12 := by
+  rw [show hpreITF13 12 = ((43606 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr12]
+  simp only [w1rTF12, imgF13_apply]
+  rw [sum_getD_div w1zTF12_len imgz13_len pzITF_13_12 256 255]
+  norm_num
+
+theorem hpreITF13_eval_13 : denseE W1TF imgF13 13 = hpreITF13 13 := by
+  rw [show hpreITF13 13 = ((-172816 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr13]
+  simp only [w1rTF13, imgF13_apply]
+  rw [sum_getD_div w1zTF13_len imgz13_len pzITF_13_13 256 255]
+  norm_num
+
+theorem hpreITF13_eval_14 : denseE W1TF imgF13 14 = hpreITF13 14 := by
+  rw [show hpreITF13 14 = ((-349191 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr14]
+  simp only [w1rTF14, imgF13_apply]
+  rw [sum_getD_div w1zTF14_len imgz13_len pzITF_13_14 256 255]
+  norm_num
+
+theorem hpreITF13_eval_15 : denseE W1TF imgF13 15 = hpreITF13 15 := by
+  rw [show hpreITF13 15 = ((184087 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr15]
+  simp only [w1rTF15, imgF13_apply]
+  rw [sum_getD_div w1zTF15_len imgz13_len pzITF_13_15 256 255]
+  norm_num
+
+theorem hpreITF13_eval : ∀ k : Fin 16, denseE W1TF imgF13 k = hpreITF13 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreITF13_eval_0; exact hpreITF13_eval_1; exact hpreITF13_eval_2; exact hpreITF13_eval_3; exact hpreITF13_eval_4; exact hpreITF13_eval_5; exact hpreITF13_eval_6; exact hpreITF13_eval_7; exact hpreITF13_eval_8; exact hpreITF13_eval_9; exact hpreITF13_eval_10; exact hpreITF13_eval_11; exact hpreITF13_eval_12; exact hpreITF13_eval_13; exact hpreITF13_eval_14; exact hpreITF13_eval_15 ]
+
+theorem hpreITF13_sum : ∀ t, (∑ j, W1TF t j * imgF13 j) = hpreITF13 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreTF12_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_12 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF12 q - ((1 : ℝ)/255)) (fun q => imgF12 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF12 q - ((1 : ℝ)/255)) (fun q => imgF12 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF12 q - ((1 : ℝ)/255)) (fun q => imgF12 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF12 q - ((1 : ℝ)/255)) (fun q => imgF12 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF12_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF12, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #12 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_12 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpTF (imgF12 + δ) j < mlpTF (imgF12 + δ) 9 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_12 δ hδ
-
-theorem hpreTF13_sum : ∀ t, (∑ j, W1TF t j * imgF13 j) = hpreTF13 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF13_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_13 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF13 q - ((1 : ℝ)/255)) (fun q => imgF13 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF13 q - ((1 : ℝ)/255)) (fun q => imgF13 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF13 q - ((1 : ℝ)/255)) (fun q => imgF13 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF13 q - ((1 : ℝ)/255)) (fun q => imgF13 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF13_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF13, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #13 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_13 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF13 + δ) j < mlpTF (imgF13 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_13 δ hδ
+  exact hpreITF13_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbTFe2_13 : ∀ j : Fin 10, j ≠ 0 →
@@ -721,11 +1040,11 @@ theorem hbTFe2_13 : ∀ j : Fin 10, j ≠ 0 →
                     (reluHi (denseHi W1TF (fun q => imgF13 q - ((2 : ℝ)/255)) (fun q => imgF13 q + ((2 : ℝ)/255)))) 0 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF13_sum, absrowTF]
+  simp only [hpreITF13_sum, absrowTF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2TF, hpreTF13, absrTF, Fin.sum_univ_succ, max_def]
+    | · simp [W2TF, hpreITF13, absrTF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #13 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -734,299 +1053,159 @@ theorem certIBPTFe2_13 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 0 → mlpTF (imgF13 + δ) j < mlpTF (imgF13 + δ) 0 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe2_13 δ hδ
 
-theorem hpreTF14_sum : ∀ t, (∑ j, W1TF t j * imgF14 j) = hpreTF14 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF14_eval t
+/-- MNIST test image #19 (digit 4), exact pixels k/255. -/
+def imgz19 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 168, 91, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 234, 126, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 51, 254, 126, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 38, 178, 31, 0, 0, 0, 0, 0, 51, 254, 81, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 94, 254, 83, 0, 0, 0, 0, 0, 87, 254, 54, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 160, 254, 56, 0, 0, 0, 0, 0, 189, 238, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 227, 168, 2, 0, 0, 0, 0, 0, 194, 236, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 55, 254, 114, 0, 0, 0, 0, 0, 16, 235, 167, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 115, 254, 50, 0, 0, 0, 0, 0, 103, 254, 105, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 221, 236, 75, 156, 180, 190, 252, 252, 253, 254, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 254, 254, 254, 252, 211, 179, 179, 179, 246, 254, 247, 94, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 217, 239, 117, 22, 0, 0, 0, 0, 226, 254, 242, 197, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14, 18, 0, 0, 0, 0, 0, 27, 243, 207, 46, 37, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99, 254, 132, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 254, 67, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 254, 61, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 254, 61, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 174, 255, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 187, 254, 83, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 115, 176, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_14 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF14 q - ((1 : ℝ)/255)) (fun q => imgF14 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF14 q - ((1 : ℝ)/255)) (fun q => imgF14 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF14 q - ((1 : ℝ)/255)) (fun q => imgF14 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF14 q - ((1 : ℝ)/255)) (fun q => imgF14 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF14_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF14, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
+theorem imgz19_len : (imgz19).length = 784 := by decide +kernel
 
-/-- Test #14 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_14 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF14 + δ) j < mlpTF (imgF14 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_14 δ hδ
+noncomputable def imgv19 : Fin 784 → ℝ := fun j => ((imgz19).getD j 0 : ℝ)/255
 
-theorem hpreTF15_sum : ∀ t, (∑ j, W1TF t j * imgF15 j) = hpreTF15 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF15_eval t
+noncomputable def imgF19 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv19
 
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_15 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF15 q - ((1 : ℝ)/255)) (fun q => imgF15 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF15 q - ((1 : ℝ)/255)) (fun q => imgF15 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF15 q - ((1 : ℝ)/255)) (fun q => imgF15 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF15 q - ((1 : ℝ)/255)) (fun q => imgF15 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF15_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF15, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
+theorem imgF19_apply : ∀ j, imgF19 j = ((imgz19).getD j 0 : ℝ)/255 := fun _ => rfl
 
-/-- Test #15 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_15 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpTF (imgF15 + δ) j < mlpTF (imgF15 + δ) 5 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_15 δ hδ
+-- net TF pre-activations for #19 (not in the base L2-certified set)
+theorem pzITF_19_0 : dotZ w1zTF0 imgz19 = -35247 := by decide +kernel
+theorem pzITF_19_1 : dotZ w1zTF1 imgz19 = 69574 := by decide +kernel
+theorem pzITF_19_2 : dotZ w1zTF2 imgz19 = -83787 := by decide +kernel
+theorem pzITF_19_3 : dotZ w1zTF3 imgz19 = 35049 := by decide +kernel
+theorem pzITF_19_4 : dotZ w1zTF4 imgz19 = 133501 := by decide +kernel
+theorem pzITF_19_5 : dotZ w1zTF5 imgz19 = 168897 := by decide +kernel
+theorem pzITF_19_6 : dotZ w1zTF6 imgz19 = 305868 := by decide +kernel
+theorem pzITF_19_7 : dotZ w1zTF7 imgz19 = -43372 := by decide +kernel
+theorem pzITF_19_8 : dotZ w1zTF8 imgz19 = 92064 := by decide +kernel
+theorem pzITF_19_9 : dotZ w1zTF9 imgz19 = 192500 := by decide +kernel
+theorem pzITF_19_10 : dotZ w1zTF10 imgz19 = 253712 := by decide +kernel
+theorem pzITF_19_11 : dotZ w1zTF11 imgz19 = 189799 := by decide +kernel
+theorem pzITF_19_12 : dotZ w1zTF12 imgz19 = -27954 := by decide +kernel
+theorem pzITF_19_13 : dotZ w1zTF13 imgz19 = -182271 := by decide +kernel
+theorem pzITF_19_14 : dotZ w1zTF14 imgz19 = 81866 := by decide +kernel
+theorem pzITF_19_15 : dotZ w1zTF15 imgz19 = -90723 := by decide +kernel
 
-theorem hpreTF16_sum : ∀ t, (∑ j, W1TF t j * imgF16 j) = hpreTF16 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF16_eval t
+noncomputable def hpreITF19 : Fin 16 → ℝ :=
+  ![((-35247 : ℝ)/65280), ((69574 : ℝ)/65280), ((-83787 : ℝ)/65280), ((35049 : ℝ)/65280), ((133501 : ℝ)/65280), ((168897 : ℝ)/65280), ((305868 : ℝ)/65280), ((-43372 : ℝ)/65280), ((92064 : ℝ)/65280), ((192500 : ℝ)/65280), ((253712 : ℝ)/65280), ((189799 : ℝ)/65280), ((-27954 : ℝ)/65280), ((-182271 : ℝ)/65280), ((81866 : ℝ)/65280), ((-90723 : ℝ)/65280)]
 
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_16 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF16 q - ((1 : ℝ)/255)) (fun q => imgF16 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF16 q - ((1 : ℝ)/255)) (fun q => imgF16 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF16 q - ((1 : ℝ)/255)) (fun q => imgF16 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF16 q - ((1 : ℝ)/255)) (fun q => imgF16 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF16_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF16, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #16 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_16 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpTF (imgF16 + δ) j < mlpTF (imgF16 + δ) 9 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_16 δ hδ
-
-theorem hpreTF17_sum : ∀ t, (∑ j, W1TF t j * imgF17 j) = hpreTF17 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF17_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_17 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF17 q - ((1 : ℝ)/255)) (fun q => imgF17 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF17 q - ((1 : ℝ)/255)) (fun q => imgF17 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF17 q - ((1 : ℝ)/255)) (fun q => imgF17 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF17 q - ((1 : ℝ)/255)) (fun q => imgF17 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF17_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF17, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #17 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_17 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF17 + δ) j < mlpTF (imgF17 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_17 δ hδ
-
--- net TF pre-activations for #18 (not in the base L2-certified set)
-theorem pzITF_18_0 : dotZ w1zTF0 imgz18 = 223040 := by decide +kernel
-theorem pzITF_18_1 : dotZ w1zTF1 imgz18 = -261572 := by decide +kernel
-theorem pzITF_18_2 : dotZ w1zTF2 imgz18 = -527174 := by decide +kernel
-theorem pzITF_18_3 : dotZ w1zTF3 imgz18 = 346656 := by decide +kernel
-theorem pzITF_18_4 : dotZ w1zTF4 imgz18 = 116181 := by decide +kernel
-theorem pzITF_18_5 : dotZ w1zTF5 imgz18 = 234770 := by decide +kernel
-theorem pzITF_18_6 : dotZ w1zTF6 imgz18 = -64638 := by decide +kernel
-theorem pzITF_18_7 : dotZ w1zTF7 imgz18 = -433324 := by decide +kernel
-theorem pzITF_18_8 : dotZ w1zTF8 imgz18 = 266935 := by decide +kernel
-theorem pzITF_18_9 : dotZ w1zTF9 imgz18 = 128855 := by decide +kernel
-theorem pzITF_18_10 : dotZ w1zTF10 imgz18 = -130127 := by decide +kernel
-theorem pzITF_18_11 : dotZ w1zTF11 imgz18 = 183582 := by decide +kernel
-theorem pzITF_18_12 : dotZ w1zTF12 imgz18 = -3716 := by decide +kernel
-theorem pzITF_18_13 : dotZ w1zTF13 imgz18 = 82885 := by decide +kernel
-theorem pzITF_18_14 : dotZ w1zTF14 imgz18 = -251319 := by decide +kernel
-theorem pzITF_18_15 : dotZ w1zTF15 imgz18 = -26935 := by decide +kernel
-
-noncomputable def hpreITF18 : Fin 16 → ℝ :=
-  ![((223040 : ℝ)/65280), ((-261572 : ℝ)/65280), ((-527174 : ℝ)/65280), ((346656 : ℝ)/65280), ((116181 : ℝ)/65280), ((234770 : ℝ)/65280), ((-64638 : ℝ)/65280), ((-433324 : ℝ)/65280), ((266935 : ℝ)/65280), ((128855 : ℝ)/65280), ((-130127 : ℝ)/65280), ((183582 : ℝ)/65280), ((-3716 : ℝ)/65280), ((82885 : ℝ)/65280), ((-251319 : ℝ)/65280), ((-26935 : ℝ)/65280)]
-
-theorem hpreITF18_eval_0 : denseE W1TF imgF18 0 = hpreITF18 0 := by
-  rw [show hpreITF18 0 = ((223040 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_0 : denseE W1TF imgF19 0 = hpreITF19 0 := by
+  rw [show hpreITF19 0 = ((-35247 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr0]
-  simp only [w1rTF0, imgF18_apply]
-  rw [sum_getD_div w1zTF0_len imgz18_len pzITF_18_0 256 255]
+  simp only [w1rTF0, imgF19_apply]
+  rw [sum_getD_div w1zTF0_len imgz19_len pzITF_19_0 256 255]
   norm_num
 
-theorem hpreITF18_eval_1 : denseE W1TF imgF18 1 = hpreITF18 1 := by
-  rw [show hpreITF18 1 = ((-261572 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_1 : denseE W1TF imgF19 1 = hpreITF19 1 := by
+  rw [show hpreITF19 1 = ((69574 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr1]
-  simp only [w1rTF1, imgF18_apply]
-  rw [sum_getD_div w1zTF1_len imgz18_len pzITF_18_1 256 255]
+  simp only [w1rTF1, imgF19_apply]
+  rw [sum_getD_div w1zTF1_len imgz19_len pzITF_19_1 256 255]
   norm_num
 
-theorem hpreITF18_eval_2 : denseE W1TF imgF18 2 = hpreITF18 2 := by
-  rw [show hpreITF18 2 = ((-527174 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_2 : denseE W1TF imgF19 2 = hpreITF19 2 := by
+  rw [show hpreITF19 2 = ((-83787 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr2]
-  simp only [w1rTF2, imgF18_apply]
-  rw [sum_getD_div w1zTF2_len imgz18_len pzITF_18_2 256 255]
+  simp only [w1rTF2, imgF19_apply]
+  rw [sum_getD_div w1zTF2_len imgz19_len pzITF_19_2 256 255]
   norm_num
 
-theorem hpreITF18_eval_3 : denseE W1TF imgF18 3 = hpreITF18 3 := by
-  rw [show hpreITF18 3 = ((346656 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_3 : denseE W1TF imgF19 3 = hpreITF19 3 := by
+  rw [show hpreITF19 3 = ((35049 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr3]
-  simp only [w1rTF3, imgF18_apply]
-  rw [sum_getD_div w1zTF3_len imgz18_len pzITF_18_3 256 255]
+  simp only [w1rTF3, imgF19_apply]
+  rw [sum_getD_div w1zTF3_len imgz19_len pzITF_19_3 256 255]
   norm_num
 
-theorem hpreITF18_eval_4 : denseE W1TF imgF18 4 = hpreITF18 4 := by
-  rw [show hpreITF18 4 = ((116181 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_4 : denseE W1TF imgF19 4 = hpreITF19 4 := by
+  rw [show hpreITF19 4 = ((133501 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr4]
-  simp only [w1rTF4, imgF18_apply]
-  rw [sum_getD_div w1zTF4_len imgz18_len pzITF_18_4 256 255]
+  simp only [w1rTF4, imgF19_apply]
+  rw [sum_getD_div w1zTF4_len imgz19_len pzITF_19_4 256 255]
   norm_num
 
-theorem hpreITF18_eval_5 : denseE W1TF imgF18 5 = hpreITF18 5 := by
-  rw [show hpreITF18 5 = ((234770 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_5 : denseE W1TF imgF19 5 = hpreITF19 5 := by
+  rw [show hpreITF19 5 = ((168897 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr5]
-  simp only [w1rTF5, imgF18_apply]
-  rw [sum_getD_div w1zTF5_len imgz18_len pzITF_18_5 256 255]
+  simp only [w1rTF5, imgF19_apply]
+  rw [sum_getD_div w1zTF5_len imgz19_len pzITF_19_5 256 255]
   norm_num
 
-theorem hpreITF18_eval_6 : denseE W1TF imgF18 6 = hpreITF18 6 := by
-  rw [show hpreITF18 6 = ((-64638 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_6 : denseE W1TF imgF19 6 = hpreITF19 6 := by
+  rw [show hpreITF19 6 = ((305868 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr6]
-  simp only [w1rTF6, imgF18_apply]
-  rw [sum_getD_div w1zTF6_len imgz18_len pzITF_18_6 256 255]
+  simp only [w1rTF6, imgF19_apply]
+  rw [sum_getD_div w1zTF6_len imgz19_len pzITF_19_6 256 255]
   norm_num
 
-theorem hpreITF18_eval_7 : denseE W1TF imgF18 7 = hpreITF18 7 := by
-  rw [show hpreITF18 7 = ((-433324 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_7 : denseE W1TF imgF19 7 = hpreITF19 7 := by
+  rw [show hpreITF19 7 = ((-43372 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr7]
-  simp only [w1rTF7, imgF18_apply]
-  rw [sum_getD_div w1zTF7_len imgz18_len pzITF_18_7 256 255]
+  simp only [w1rTF7, imgF19_apply]
+  rw [sum_getD_div w1zTF7_len imgz19_len pzITF_19_7 256 255]
   norm_num
 
-theorem hpreITF18_eval_8 : denseE W1TF imgF18 8 = hpreITF18 8 := by
-  rw [show hpreITF18 8 = ((266935 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_8 : denseE W1TF imgF19 8 = hpreITF19 8 := by
+  rw [show hpreITF19 8 = ((92064 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr8]
-  simp only [w1rTF8, imgF18_apply]
-  rw [sum_getD_div w1zTF8_len imgz18_len pzITF_18_8 256 255]
+  simp only [w1rTF8, imgF19_apply]
+  rw [sum_getD_div w1zTF8_len imgz19_len pzITF_19_8 256 255]
   norm_num
 
-theorem hpreITF18_eval_9 : denseE W1TF imgF18 9 = hpreITF18 9 := by
-  rw [show hpreITF18 9 = ((128855 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_9 : denseE W1TF imgF19 9 = hpreITF19 9 := by
+  rw [show hpreITF19 9 = ((192500 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr9]
-  simp only [w1rTF9, imgF18_apply]
-  rw [sum_getD_div w1zTF9_len imgz18_len pzITF_18_9 256 255]
+  simp only [w1rTF9, imgF19_apply]
+  rw [sum_getD_div w1zTF9_len imgz19_len pzITF_19_9 256 255]
   norm_num
 
-theorem hpreITF18_eval_10 : denseE W1TF imgF18 10 = hpreITF18 10 := by
-  rw [show hpreITF18 10 = ((-130127 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_10 : denseE W1TF imgF19 10 = hpreITF19 10 := by
+  rw [show hpreITF19 10 = ((253712 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr10]
-  simp only [w1rTF10, imgF18_apply]
-  rw [sum_getD_div w1zTF10_len imgz18_len pzITF_18_10 256 255]
+  simp only [w1rTF10, imgF19_apply]
+  rw [sum_getD_div w1zTF10_len imgz19_len pzITF_19_10 256 255]
   norm_num
 
-theorem hpreITF18_eval_11 : denseE W1TF imgF18 11 = hpreITF18 11 := by
-  rw [show hpreITF18 11 = ((183582 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_11 : denseE W1TF imgF19 11 = hpreITF19 11 := by
+  rw [show hpreITF19 11 = ((189799 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr11]
-  simp only [w1rTF11, imgF18_apply]
-  rw [sum_getD_div w1zTF11_len imgz18_len pzITF_18_11 256 255]
+  simp only [w1rTF11, imgF19_apply]
+  rw [sum_getD_div w1zTF11_len imgz19_len pzITF_19_11 256 255]
   norm_num
 
-theorem hpreITF18_eval_12 : denseE W1TF imgF18 12 = hpreITF18 12 := by
-  rw [show hpreITF18 12 = ((-3716 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_12 : denseE W1TF imgF19 12 = hpreITF19 12 := by
+  rw [show hpreITF19 12 = ((-27954 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr12]
-  simp only [w1rTF12, imgF18_apply]
-  rw [sum_getD_div w1zTF12_len imgz18_len pzITF_18_12 256 255]
+  simp only [w1rTF12, imgF19_apply]
+  rw [sum_getD_div w1zTF12_len imgz19_len pzITF_19_12 256 255]
   norm_num
 
-theorem hpreITF18_eval_13 : denseE W1TF imgF18 13 = hpreITF18 13 := by
-  rw [show hpreITF18 13 = ((82885 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_13 : denseE W1TF imgF19 13 = hpreITF19 13 := by
+  rw [show hpreITF19 13 = ((-182271 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr13]
-  simp only [w1rTF13, imgF18_apply]
-  rw [sum_getD_div w1zTF13_len imgz18_len pzITF_18_13 256 255]
+  simp only [w1rTF13, imgF19_apply]
+  rw [sum_getD_div w1zTF13_len imgz19_len pzITF_19_13 256 255]
   norm_num
 
-theorem hpreITF18_eval_14 : denseE W1TF imgF18 14 = hpreITF18 14 := by
-  rw [show hpreITF18 14 = ((-251319 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_14 : denseE W1TF imgF19 14 = hpreITF19 14 := by
+  rw [show hpreITF19 14 = ((81866 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr14]
-  simp only [w1rTF14, imgF18_apply]
-  rw [sum_getD_div w1zTF14_len imgz18_len pzITF_18_14 256 255]
+  simp only [w1rTF14, imgF19_apply]
+  rw [sum_getD_div w1zTF14_len imgz19_len pzITF_19_14 256 255]
   norm_num
 
-theorem hpreITF18_eval_15 : denseE W1TF imgF18 15 = hpreITF18 15 := by
-  rw [show hpreITF18 15 = ((-26935 : ℝ)/65280) from rfl,
+theorem hpreITF19_eval_15 : denseE W1TF imgF19 15 = hpreITF19 15 := by
+  rw [show hpreITF19 15 = ((-90723 : ℝ)/65280) from rfl,
       denseE_apply, W1TFr15]
-  simp only [w1rTF15, imgF18_apply]
-  rw [sum_getD_div w1zTF15_len imgz18_len pzITF_18_15 256 255]
+  simp only [w1rTF15, imgF19_apply]
+  rw [sum_getD_div w1zTF15_len imgz19_len pzITF_19_15 256 255]
   norm_num
 
-theorem hpreITF18_eval : ∀ k : Fin 16, denseE W1TF imgF18 k = hpreITF18 k := by
+theorem hpreITF19_eval : ∀ k : Fin 16, denseE W1TF imgF19 k = hpreITF19 k := by
   intro k
   fin_cases k <;>
-    [ exact hpreITF18_eval_0; exact hpreITF18_eval_1; exact hpreITF18_eval_2; exact hpreITF18_eval_3; exact hpreITF18_eval_4; exact hpreITF18_eval_5; exact hpreITF18_eval_6; exact hpreITF18_eval_7; exact hpreITF18_eval_8; exact hpreITF18_eval_9; exact hpreITF18_eval_10; exact hpreITF18_eval_11; exact hpreITF18_eval_12; exact hpreITF18_eval_13; exact hpreITF18_eval_14; exact hpreITF18_eval_15 ]
+    [ exact hpreITF19_eval_0; exact hpreITF19_eval_1; exact hpreITF19_eval_2; exact hpreITF19_eval_3; exact hpreITF19_eval_4; exact hpreITF19_eval_5; exact hpreITF19_eval_6; exact hpreITF19_eval_7; exact hpreITF19_eval_8; exact hpreITF19_eval_9; exact hpreITF19_eval_10; exact hpreITF19_eval_11; exact hpreITF19_eval_12; exact hpreITF19_eval_13; exact hpreITF19_eval_14; exact hpreITF19_eval_15 ]
 
-theorem hpreITF18_sum : ∀ t, (∑ j, W1TF t j * imgF18 j) = hpreITF18 t := by
+theorem hpreITF19_sum : ∀ t, (∑ j, W1TF t j * imgF19 j) = hpreITF19 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreITF18_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_18 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF18 q - ((1 : ℝ)/255)) (fun q => imgF18 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF18 q - ((1 : ℝ)/255)) (fun q => imgF18 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF18 q - ((1 : ℝ)/255)) (fun q => imgF18 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF18 q - ((1 : ℝ)/255)) (fun q => imgF18 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreITF18_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreITF18, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #18 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_18 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF18 + δ) j < mlpTF (imgF18 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_18 δ hδ
-
-theorem hpreTF19_sum : ∀ t, (∑ j, W1TF t j * imgF19 j) = hpreTF19 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF19_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_19 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF19 q - ((1 : ℝ)/255)) (fun q => imgF19 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF19 q - ((1 : ℝ)/255)) (fun q => imgF19 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF19 q - ((1 : ℝ)/255)) (fun q => imgF19 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF19 q - ((1 : ℝ)/255)) (fun q => imgF19 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF19_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF19, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #19 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_19 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF19 + δ) j < mlpTF (imgF19 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_19 δ hδ
+  exact hpreITF19_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbTFe2_19 : ∀ j : Fin 10, j ≠ 4 →
@@ -1036,11 +1215,11 @@ theorem hbTFe2_19 : ∀ j : Fin 10, j ≠ 4 →
                     (reluHi (denseHi W1TF (fun q => imgF19 q - ((2 : ℝ)/255)) (fun q => imgF19 q + ((2 : ℝ)/255)))) 4 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF19_sum, absrowTF]
+  simp only [hpreITF19_sum, absrowTF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2TF, hpreTF19, absrTF, Fin.sum_univ_succ, max_def]
+    | · simp [W2TF, hpreITF19, absrTF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #19 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -1049,31 +1228,148 @@ theorem certIBPTFe2_19 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 4 → mlpTF (imgF19 + δ) j < mlpTF (imgF19 + δ) 4 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe2_19 δ hδ
 
-theorem hpreTF21_sum : ∀ t, (∑ j, W1TF t j * imgF21 j) = hpreTF21 t := by
+-- net TF pre-activations for #21 (not in the base L2-certified set)
+theorem pzITF_21_0 : dotZ w1zTF0 imgz21 = -7703 := by decide +kernel
+theorem pzITF_21_1 : dotZ w1zTF1 imgz21 = -221813 := by decide +kernel
+theorem pzITF_21_2 : dotZ w1zTF2 imgz21 = -217124 := by decide +kernel
+theorem pzITF_21_3 : dotZ w1zTF3 imgz21 = 69789 := by decide +kernel
+theorem pzITF_21_4 : dotZ w1zTF4 imgz21 = -307669 := by decide +kernel
+theorem pzITF_21_5 : dotZ w1zTF5 imgz21 = -47833 := by decide +kernel
+theorem pzITF_21_6 : dotZ w1zTF6 imgz21 = 167170 := by decide +kernel
+theorem pzITF_21_7 : dotZ w1zTF7 imgz21 = -86419 := by decide +kernel
+theorem pzITF_21_8 : dotZ w1zTF8 imgz21 = 265064 := by decide +kernel
+theorem pzITF_21_9 : dotZ w1zTF9 imgz21 = 35174 := by decide +kernel
+theorem pzITF_21_10 : dotZ w1zTF10 imgz21 = 70787 := by decide +kernel
+theorem pzITF_21_11 : dotZ w1zTF11 imgz21 = 451751 := by decide +kernel
+theorem pzITF_21_12 : dotZ w1zTF12 imgz21 = -296497 := by decide +kernel
+theorem pzITF_21_13 : dotZ w1zTF13 imgz21 = -63723 := by decide +kernel
+theorem pzITF_21_14 : dotZ w1zTF14 imgz21 = 105714 := by decide +kernel
+theorem pzITF_21_15 : dotZ w1zTF15 imgz21 = 173863 := by decide +kernel
+
+noncomputable def hpreITF21 : Fin 16 → ℝ :=
+  ![((-7703 : ℝ)/65280), ((-221813 : ℝ)/65280), ((-217124 : ℝ)/65280), ((69789 : ℝ)/65280), ((-307669 : ℝ)/65280), ((-47833 : ℝ)/65280), ((167170 : ℝ)/65280), ((-86419 : ℝ)/65280), ((265064 : ℝ)/65280), ((35174 : ℝ)/65280), ((70787 : ℝ)/65280), ((451751 : ℝ)/65280), ((-296497 : ℝ)/65280), ((-63723 : ℝ)/65280), ((105714 : ℝ)/65280), ((173863 : ℝ)/65280)]
+
+theorem hpreITF21_eval_0 : denseE W1TF imgF21 0 = hpreITF21 0 := by
+  rw [show hpreITF21 0 = ((-7703 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr0]
+  simp only [w1rTF0, imgF21_apply]
+  rw [sum_getD_div w1zTF0_len imgz21_len pzITF_21_0 256 255]
+  norm_num
+
+theorem hpreITF21_eval_1 : denseE W1TF imgF21 1 = hpreITF21 1 := by
+  rw [show hpreITF21 1 = ((-221813 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr1]
+  simp only [w1rTF1, imgF21_apply]
+  rw [sum_getD_div w1zTF1_len imgz21_len pzITF_21_1 256 255]
+  norm_num
+
+theorem hpreITF21_eval_2 : denseE W1TF imgF21 2 = hpreITF21 2 := by
+  rw [show hpreITF21 2 = ((-217124 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr2]
+  simp only [w1rTF2, imgF21_apply]
+  rw [sum_getD_div w1zTF2_len imgz21_len pzITF_21_2 256 255]
+  norm_num
+
+theorem hpreITF21_eval_3 : denseE W1TF imgF21 3 = hpreITF21 3 := by
+  rw [show hpreITF21 3 = ((69789 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr3]
+  simp only [w1rTF3, imgF21_apply]
+  rw [sum_getD_div w1zTF3_len imgz21_len pzITF_21_3 256 255]
+  norm_num
+
+theorem hpreITF21_eval_4 : denseE W1TF imgF21 4 = hpreITF21 4 := by
+  rw [show hpreITF21 4 = ((-307669 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr4]
+  simp only [w1rTF4, imgF21_apply]
+  rw [sum_getD_div w1zTF4_len imgz21_len pzITF_21_4 256 255]
+  norm_num
+
+theorem hpreITF21_eval_5 : denseE W1TF imgF21 5 = hpreITF21 5 := by
+  rw [show hpreITF21 5 = ((-47833 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr5]
+  simp only [w1rTF5, imgF21_apply]
+  rw [sum_getD_div w1zTF5_len imgz21_len pzITF_21_5 256 255]
+  norm_num
+
+theorem hpreITF21_eval_6 : denseE W1TF imgF21 6 = hpreITF21 6 := by
+  rw [show hpreITF21 6 = ((167170 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr6]
+  simp only [w1rTF6, imgF21_apply]
+  rw [sum_getD_div w1zTF6_len imgz21_len pzITF_21_6 256 255]
+  norm_num
+
+theorem hpreITF21_eval_7 : denseE W1TF imgF21 7 = hpreITF21 7 := by
+  rw [show hpreITF21 7 = ((-86419 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr7]
+  simp only [w1rTF7, imgF21_apply]
+  rw [sum_getD_div w1zTF7_len imgz21_len pzITF_21_7 256 255]
+  norm_num
+
+theorem hpreITF21_eval_8 : denseE W1TF imgF21 8 = hpreITF21 8 := by
+  rw [show hpreITF21 8 = ((265064 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr8]
+  simp only [w1rTF8, imgF21_apply]
+  rw [sum_getD_div w1zTF8_len imgz21_len pzITF_21_8 256 255]
+  norm_num
+
+theorem hpreITF21_eval_9 : denseE W1TF imgF21 9 = hpreITF21 9 := by
+  rw [show hpreITF21 9 = ((35174 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr9]
+  simp only [w1rTF9, imgF21_apply]
+  rw [sum_getD_div w1zTF9_len imgz21_len pzITF_21_9 256 255]
+  norm_num
+
+theorem hpreITF21_eval_10 : denseE W1TF imgF21 10 = hpreITF21 10 := by
+  rw [show hpreITF21 10 = ((70787 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr10]
+  simp only [w1rTF10, imgF21_apply]
+  rw [sum_getD_div w1zTF10_len imgz21_len pzITF_21_10 256 255]
+  norm_num
+
+theorem hpreITF21_eval_11 : denseE W1TF imgF21 11 = hpreITF21 11 := by
+  rw [show hpreITF21 11 = ((451751 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr11]
+  simp only [w1rTF11, imgF21_apply]
+  rw [sum_getD_div w1zTF11_len imgz21_len pzITF_21_11 256 255]
+  norm_num
+
+theorem hpreITF21_eval_12 : denseE W1TF imgF21 12 = hpreITF21 12 := by
+  rw [show hpreITF21 12 = ((-296497 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr12]
+  simp only [w1rTF12, imgF21_apply]
+  rw [sum_getD_div w1zTF12_len imgz21_len pzITF_21_12 256 255]
+  norm_num
+
+theorem hpreITF21_eval_13 : denseE W1TF imgF21 13 = hpreITF21 13 := by
+  rw [show hpreITF21 13 = ((-63723 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr13]
+  simp only [w1rTF13, imgF21_apply]
+  rw [sum_getD_div w1zTF13_len imgz21_len pzITF_21_13 256 255]
+  norm_num
+
+theorem hpreITF21_eval_14 : denseE W1TF imgF21 14 = hpreITF21 14 := by
+  rw [show hpreITF21 14 = ((105714 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr14]
+  simp only [w1rTF14, imgF21_apply]
+  rw [sum_getD_div w1zTF14_len imgz21_len pzITF_21_14 256 255]
+  norm_num
+
+theorem hpreITF21_eval_15 : denseE W1TF imgF21 15 = hpreITF21 15 := by
+  rw [show hpreITF21 15 = ((173863 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr15]
+  simp only [w1rTF15, imgF21_apply]
+  rw [sum_getD_div w1zTF15_len imgz21_len pzITF_21_15 256 255]
+  norm_num
+
+theorem hpreITF21_eval : ∀ k : Fin 16, denseE W1TF imgF21 k = hpreITF21 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreITF21_eval_0; exact hpreITF21_eval_1; exact hpreITF21_eval_2; exact hpreITF21_eval_3; exact hpreITF21_eval_4; exact hpreITF21_eval_5; exact hpreITF21_eval_6; exact hpreITF21_eval_7; exact hpreITF21_eval_8; exact hpreITF21_eval_9; exact hpreITF21_eval_10; exact hpreITF21_eval_11; exact hpreITF21_eval_12; exact hpreITF21_eval_13; exact hpreITF21_eval_14; exact hpreITF21_eval_15 ]
+
+theorem hpreITF21_sum : ∀ t, (∑ j, W1TF t j * imgF21 j) = hpreITF21 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreTF21_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_21 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF21 q - ((1 : ℝ)/255)) (fun q => imgF21 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF21 q - ((1 : ℝ)/255)) (fun q => imgF21 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF21 q - ((1 : ℝ)/255)) (fun q => imgF21 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF21 q - ((1 : ℝ)/255)) (fun q => imgF21 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF21_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF21, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #21 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_21 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF21 + δ) j < mlpTF (imgF21 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_21 δ hδ
+  exact hpreITF21_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbTFe2_21 : ∀ j : Fin 10, j ≠ 6 →
@@ -1083,11 +1379,11 @@ theorem hbTFe2_21 : ∀ j : Fin 10, j ≠ 6 →
                     (reluHi (denseHi W1TF (fun q => imgF21 q - ((2 : ℝ)/255)) (fun q => imgF21 q + ((2 : ℝ)/255)))) 6 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF21_sum, absrowTF]
+  simp only [hpreITF21_sum, absrowTF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2TF, hpreTF21, absrTF, Fin.sum_univ_succ, max_def]
+    | · simp [W2TF, hpreITF21, absrTF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #21 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -1096,31 +1392,159 @@ theorem certIBPTFe2_21 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 6 → mlpTF (imgF21 + δ) j < mlpTF (imgF21 + δ) 6 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe2_21 δ hδ
 
-theorem hpreTF23_sum : ∀ t, (∑ j, W1TF t j * imgF23 j) = hpreTF23 t := by
+/-- MNIST test image #23 (digit 5), exact pixels k/255. -/
+def imgz23 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 69, 152, 237, 254, 254, 255, 254, 252, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 87, 164, 237, 253, 254, 218, 138, 83, 39, 154, 254, 135, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 138, 246, 253, 254, 216, 167, 54, 5, 0, 0, 0, 100, 191, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 233, 254, 169, 53, 6, 0, 0, 0, 0, 0, 0, 35, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 174, 254, 94, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 38, 245, 221, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 142, 254, 149, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 151, 254, 112, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 226, 242, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 240, 203, 44, 44, 44, 44, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 70, 254, 254, 254, 254, 254, 254, 205, 85, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 37, 184, 169, 133, 133, 162, 212, 254, 254, 166, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 51, 177, 254, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 209, 254, 104, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 63, 209, 254, 194, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 10, 137, 244, 254, 198, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 87, 122, 147, 223, 254, 247, 127, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 118, 250, 210, 248, 254, 252, 199, 49, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 138, 254, 254, 254, 250, 201, 72, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 79, 167, 197, 87, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+theorem imgz23_len : (imgz23).length = 784 := by decide +kernel
+
+noncomputable def imgv23 : Fin 784 → ℝ := fun j => ((imgz23).getD j 0 : ℝ)/255
+
+noncomputable def imgF23 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv23
+
+theorem imgF23_apply : ∀ j, imgF23 j = ((imgz23).getD j 0 : ℝ)/255 := fun _ => rfl
+
+-- net TF pre-activations for #23 (not in the base L2-certified set)
+theorem pzITF_23_0 : dotZ w1zTF0 imgz23 = 117335 := by decide +kernel
+theorem pzITF_23_1 : dotZ w1zTF1 imgz23 = -130545 := by decide +kernel
+theorem pzITF_23_2 : dotZ w1zTF2 imgz23 = 97073 := by decide +kernel
+theorem pzITF_23_3 : dotZ w1zTF3 imgz23 = 153164 := by decide +kernel
+theorem pzITF_23_4 : dotZ w1zTF4 imgz23 = -212979 := by decide +kernel
+theorem pzITF_23_5 : dotZ w1zTF5 imgz23 = -57834 := by decide +kernel
+theorem pzITF_23_6 : dotZ w1zTF6 imgz23 = 363713 := by decide +kernel
+theorem pzITF_23_7 : dotZ w1zTF7 imgz23 = -198186 := by decide +kernel
+theorem pzITF_23_8 : dotZ w1zTF8 imgz23 = 219760 := by decide +kernel
+theorem pzITF_23_9 : dotZ w1zTF9 imgz23 = 109401 := by decide +kernel
+theorem pzITF_23_10 : dotZ w1zTF10 imgz23 = 140692 := by decide +kernel
+theorem pzITF_23_11 : dotZ w1zTF11 imgz23 = 157006 := by decide +kernel
+theorem pzITF_23_12 : dotZ w1zTF12 imgz23 = -226290 := by decide +kernel
+theorem pzITF_23_13 : dotZ w1zTF13 imgz23 = 80500 := by decide +kernel
+theorem pzITF_23_14 : dotZ w1zTF14 imgz23 = -20269 := by decide +kernel
+theorem pzITF_23_15 : dotZ w1zTF15 imgz23 = 441720 := by decide +kernel
+
+noncomputable def hpreITF23 : Fin 16 → ℝ :=
+  ![((117335 : ℝ)/65280), ((-130545 : ℝ)/65280), ((97073 : ℝ)/65280), ((153164 : ℝ)/65280), ((-212979 : ℝ)/65280), ((-57834 : ℝ)/65280), ((363713 : ℝ)/65280), ((-198186 : ℝ)/65280), ((219760 : ℝ)/65280), ((109401 : ℝ)/65280), ((140692 : ℝ)/65280), ((157006 : ℝ)/65280), ((-226290 : ℝ)/65280), ((80500 : ℝ)/65280), ((-20269 : ℝ)/65280), ((441720 : ℝ)/65280)]
+
+theorem hpreITF23_eval_0 : denseE W1TF imgF23 0 = hpreITF23 0 := by
+  rw [show hpreITF23 0 = ((117335 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr0]
+  simp only [w1rTF0, imgF23_apply]
+  rw [sum_getD_div w1zTF0_len imgz23_len pzITF_23_0 256 255]
+  norm_num
+
+theorem hpreITF23_eval_1 : denseE W1TF imgF23 1 = hpreITF23 1 := by
+  rw [show hpreITF23 1 = ((-130545 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr1]
+  simp only [w1rTF1, imgF23_apply]
+  rw [sum_getD_div w1zTF1_len imgz23_len pzITF_23_1 256 255]
+  norm_num
+
+theorem hpreITF23_eval_2 : denseE W1TF imgF23 2 = hpreITF23 2 := by
+  rw [show hpreITF23 2 = ((97073 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr2]
+  simp only [w1rTF2, imgF23_apply]
+  rw [sum_getD_div w1zTF2_len imgz23_len pzITF_23_2 256 255]
+  norm_num
+
+theorem hpreITF23_eval_3 : denseE W1TF imgF23 3 = hpreITF23 3 := by
+  rw [show hpreITF23 3 = ((153164 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr3]
+  simp only [w1rTF3, imgF23_apply]
+  rw [sum_getD_div w1zTF3_len imgz23_len pzITF_23_3 256 255]
+  norm_num
+
+theorem hpreITF23_eval_4 : denseE W1TF imgF23 4 = hpreITF23 4 := by
+  rw [show hpreITF23 4 = ((-212979 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr4]
+  simp only [w1rTF4, imgF23_apply]
+  rw [sum_getD_div w1zTF4_len imgz23_len pzITF_23_4 256 255]
+  norm_num
+
+theorem hpreITF23_eval_5 : denseE W1TF imgF23 5 = hpreITF23 5 := by
+  rw [show hpreITF23 5 = ((-57834 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr5]
+  simp only [w1rTF5, imgF23_apply]
+  rw [sum_getD_div w1zTF5_len imgz23_len pzITF_23_5 256 255]
+  norm_num
+
+theorem hpreITF23_eval_6 : denseE W1TF imgF23 6 = hpreITF23 6 := by
+  rw [show hpreITF23 6 = ((363713 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr6]
+  simp only [w1rTF6, imgF23_apply]
+  rw [sum_getD_div w1zTF6_len imgz23_len pzITF_23_6 256 255]
+  norm_num
+
+theorem hpreITF23_eval_7 : denseE W1TF imgF23 7 = hpreITF23 7 := by
+  rw [show hpreITF23 7 = ((-198186 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr7]
+  simp only [w1rTF7, imgF23_apply]
+  rw [sum_getD_div w1zTF7_len imgz23_len pzITF_23_7 256 255]
+  norm_num
+
+theorem hpreITF23_eval_8 : denseE W1TF imgF23 8 = hpreITF23 8 := by
+  rw [show hpreITF23 8 = ((219760 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr8]
+  simp only [w1rTF8, imgF23_apply]
+  rw [sum_getD_div w1zTF8_len imgz23_len pzITF_23_8 256 255]
+  norm_num
+
+theorem hpreITF23_eval_9 : denseE W1TF imgF23 9 = hpreITF23 9 := by
+  rw [show hpreITF23 9 = ((109401 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr9]
+  simp only [w1rTF9, imgF23_apply]
+  rw [sum_getD_div w1zTF9_len imgz23_len pzITF_23_9 256 255]
+  norm_num
+
+theorem hpreITF23_eval_10 : denseE W1TF imgF23 10 = hpreITF23 10 := by
+  rw [show hpreITF23 10 = ((140692 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr10]
+  simp only [w1rTF10, imgF23_apply]
+  rw [sum_getD_div w1zTF10_len imgz23_len pzITF_23_10 256 255]
+  norm_num
+
+theorem hpreITF23_eval_11 : denseE W1TF imgF23 11 = hpreITF23 11 := by
+  rw [show hpreITF23 11 = ((157006 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr11]
+  simp only [w1rTF11, imgF23_apply]
+  rw [sum_getD_div w1zTF11_len imgz23_len pzITF_23_11 256 255]
+  norm_num
+
+theorem hpreITF23_eval_12 : denseE W1TF imgF23 12 = hpreITF23 12 := by
+  rw [show hpreITF23 12 = ((-226290 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr12]
+  simp only [w1rTF12, imgF23_apply]
+  rw [sum_getD_div w1zTF12_len imgz23_len pzITF_23_12 256 255]
+  norm_num
+
+theorem hpreITF23_eval_13 : denseE W1TF imgF23 13 = hpreITF23 13 := by
+  rw [show hpreITF23 13 = ((80500 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr13]
+  simp only [w1rTF13, imgF23_apply]
+  rw [sum_getD_div w1zTF13_len imgz23_len pzITF_23_13 256 255]
+  norm_num
+
+theorem hpreITF23_eval_14 : denseE W1TF imgF23 14 = hpreITF23 14 := by
+  rw [show hpreITF23 14 = ((-20269 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr14]
+  simp only [w1rTF14, imgF23_apply]
+  rw [sum_getD_div w1zTF14_len imgz23_len pzITF_23_14 256 255]
+  norm_num
+
+theorem hpreITF23_eval_15 : denseE W1TF imgF23 15 = hpreITF23 15 := by
+  rw [show hpreITF23 15 = ((441720 : ℝ)/65280) from rfl,
+      denseE_apply, W1TFr15]
+  simp only [w1rTF15, imgF23_apply]
+  rw [sum_getD_div w1zTF15_len imgz23_len pzITF_23_15 256 255]
+  norm_num
+
+theorem hpreITF23_eval : ∀ k : Fin 16, denseE W1TF imgF23 k = hpreITF23 k := by
+  intro k
+  fin_cases k <;>
+    [ exact hpreITF23_eval_0; exact hpreITF23_eval_1; exact hpreITF23_eval_2; exact hpreITF23_eval_3; exact hpreITF23_eval_4; exact hpreITF23_eval_5; exact hpreITF23_eval_6; exact hpreITF23_eval_7; exact hpreITF23_eval_8; exact hpreITF23_eval_9; exact hpreITF23_eval_10; exact hpreITF23_eval_11; exact hpreITF23_eval_12; exact hpreITF23_eval_13; exact hpreITF23_eval_14; exact hpreITF23_eval_15 ]
+
+theorem hpreITF23_sum : ∀ t, (∑ j, W1TF t j * imgF23 j) = hpreITF23 t := by
   intro t
   rw [← denseE_apply]
-  exact hpreTF23_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_23 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF23 q - ((1 : ℝ)/255)) (fun q => imgF23 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF23 q - ((1 : ℝ)/255)) (fun q => imgF23 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF23 q - ((1 : ℝ)/255)) (fun q => imgF23 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF23 q - ((1 : ℝ)/255)) (fun q => imgF23 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF23_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF23, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #23 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_23 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpTF (imgF23 + δ) j < mlpTF (imgF23 + δ) 5 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_23 δ hδ
+  exact hpreITF23_eval t
 
 set_option maxHeartbeats 6400000 in
 theorem hbTFe2_23 : ∀ j : Fin 10, j ≠ 5 →
@@ -1130,11 +1554,11 @@ theorem hbTFe2_23 : ∀ j : Fin 10, j ≠ 5 →
                     (reluHi (denseHi W1TF (fun q => imgF23 q - ((2 : ℝ)/255)) (fun q => imgF23 q + ((2 : ℝ)/255)))) 5 := by
   intro j hj
   rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF23_sum, absrowTF]
+  simp only [hpreITF23_sum, absrowTF]
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2TF, hpreTF23, absrTF, Fin.sum_univ_succ, max_def]
+    | · simp [W2TF, hpreITF23, absrTF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #23 (digit 5): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -1143,78 +1567,10 @@ theorem certIBPTFe2_23 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 5 → mlpTF (imgF23 + δ) j < mlpTF (imgF23 + δ) 5 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe2_23 δ hδ
 
-theorem hpreTF24_sum : ∀ t, (∑ j, W1TF t j * imgF24 j) = hpreTF24 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF24_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_24 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF24 q - ((1 : ℝ)/255)) (fun q => imgF24 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF24 q - ((1 : ℝ)/255)) (fun q => imgF24 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF24 q - ((1 : ℝ)/255)) (fun q => imgF24 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF24 q - ((1 : ℝ)/255)) (fun q => imgF24 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF24_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF24, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #24 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_24 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF24 + δ) j < mlpTF (imgF24 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_24 δ hδ
-
 theorem hpreTF25_sum : ∀ t, (∑ j, W1TF t j * imgF25 j) = hpreTF25 t := by
   intro t
   rw [← denseE_apply]
   exact hpreTF25_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_25 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF25 q - ((1 : ℝ)/255)) (fun q => imgF25 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF25 q - ((1 : ℝ)/255)) (fun q => imgF25 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF25 q - ((1 : ℝ)/255)) (fun q => imgF25 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF25 q - ((1 : ℝ)/255)) (fun q => imgF25 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF25_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF25, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #25 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_25 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF25 + δ) j < mlpTF (imgF25 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_25 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_25 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF25 q - ((2 : ℝ)/255)) (fun q => imgF25 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF25 q - ((2 : ℝ)/255)) (fun q => imgF25 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF25 q - ((2 : ℝ)/255)) (fun q => imgF25 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF25 q - ((2 : ℝ)/255)) (fun q => imgF25 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF25_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF25, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #25 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_25 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF25 + δ) j < mlpTF (imgF25 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_25 δ hδ
 
 set_option maxHeartbeats 6400000 in
 theorem hbTFe4_25 : ∀ j : Fin 10, j ≠ 0 →
@@ -1237,2220 +1593,10 @@ theorem certIBPTFe4_25 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 0 → mlpTF (imgF25 + δ) j < mlpTF (imgF25 + δ) 0 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe4_25 δ hδ
 
-theorem hpreTF26_sum : ∀ t, (∑ j, W1TF t j * imgF26 j) = hpreTF26 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF26_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_26 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF26 q - ((1 : ℝ)/255)) (fun q => imgF26 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF26 q - ((1 : ℝ)/255)) (fun q => imgF26 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF26 q - ((1 : ℝ)/255)) (fun q => imgF26 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF26 q - ((1 : ℝ)/255)) (fun q => imgF26 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF26_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF26, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #26 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_26 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF26 + δ) j < mlpTF (imgF26 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_26 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_26 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF26 q - ((2 : ℝ)/255)) (fun q => imgF26 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF26 q - ((2 : ℝ)/255)) (fun q => imgF26 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF26 q - ((2 : ℝ)/255)) (fun q => imgF26 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF26 q - ((2 : ℝ)/255)) (fun q => imgF26 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF26_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF26, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #26 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_26 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF26 + δ) j < mlpTF (imgF26 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_26 δ hδ
-
-theorem hpreTF27_sum : ∀ t, (∑ j, W1TF t j * imgF27 j) = hpreTF27 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF27_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_27 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF27 q - ((1 : ℝ)/255)) (fun q => imgF27 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF27 q - ((1 : ℝ)/255)) (fun q => imgF27 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF27 q - ((1 : ℝ)/255)) (fun q => imgF27 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF27 q - ((1 : ℝ)/255)) (fun q => imgF27 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF27_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF27, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #27 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_27 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF27 + δ) j < mlpTF (imgF27 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_27 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_27 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF27 q - ((2 : ℝ)/255)) (fun q => imgF27 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF27 q - ((2 : ℝ)/255)) (fun q => imgF27 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF27 q - ((2 : ℝ)/255)) (fun q => imgF27 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF27 q - ((2 : ℝ)/255)) (fun q => imgF27 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF27_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF27, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #27 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_27 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF27 + δ) j < mlpTF (imgF27 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_27 δ hδ
-
-theorem hpreTF28_sum : ∀ t, (∑ j, W1TF t j * imgF28 j) = hpreTF28 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF28_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_28 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF28 q - ((1 : ℝ)/255)) (fun q => imgF28 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF28 q - ((1 : ℝ)/255)) (fun q => imgF28 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF28 q - ((1 : ℝ)/255)) (fun q => imgF28 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF28 q - ((1 : ℝ)/255)) (fun q => imgF28 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF28_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF28, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #28 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_28 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF28 + δ) j < mlpTF (imgF28 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_28 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_28 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF28 q - ((2 : ℝ)/255)) (fun q => imgF28 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF28 q - ((2 : ℝ)/255)) (fun q => imgF28 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF28 q - ((2 : ℝ)/255)) (fun q => imgF28 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF28 q - ((2 : ℝ)/255)) (fun q => imgF28 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF28_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF28, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #28 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_28 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF28 + δ) j < mlpTF (imgF28 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_28 δ hδ
-
-theorem hpreTF29_sum : ∀ t, (∑ j, W1TF t j * imgF29 j) = hpreTF29 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF29_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_29 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF29 q - ((1 : ℝ)/255)) (fun q => imgF29 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF29 q - ((1 : ℝ)/255)) (fun q => imgF29 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF29 q - ((1 : ℝ)/255)) (fun q => imgF29 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF29 q - ((1 : ℝ)/255)) (fun q => imgF29 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF29_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF29, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #29 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_29 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF29 + δ) j < mlpTF (imgF29 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_29 δ hδ
-
-theorem hpreTF30_sum : ∀ t, (∑ j, W1TF t j * imgF30 j) = hpreTF30 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF30_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_30 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF30 q - ((1 : ℝ)/255)) (fun q => imgF30 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF30 q - ((1 : ℝ)/255)) (fun q => imgF30 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF30 q - ((1 : ℝ)/255)) (fun q => imgF30 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF30 q - ((1 : ℝ)/255)) (fun q => imgF30 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF30_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF30, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #30 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_30 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF30 + δ) j < mlpTF (imgF30 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_30 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_30 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF30 q - ((2 : ℝ)/255)) (fun q => imgF30 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF30 q - ((2 : ℝ)/255)) (fun q => imgF30 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF30 q - ((2 : ℝ)/255)) (fun q => imgF30 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF30 q - ((2 : ℝ)/255)) (fun q => imgF30 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF30_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF30, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #30 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_30 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF30 + δ) j < mlpTF (imgF30 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_30 δ hδ
-
--- net TF pre-activations for #31 (not in the base L2-certified set)
-theorem pzITF_31_0 : dotZ w1zTF0 imgz31 = 70726 := by decide +kernel
-theorem pzITF_31_1 : dotZ w1zTF1 imgz31 = 106632 := by decide +kernel
-theorem pzITF_31_2 : dotZ w1zTF2 imgz31 = 246004 := by decide +kernel
-theorem pzITF_31_3 : dotZ w1zTF3 imgz31 = 94492 := by decide +kernel
-theorem pzITF_31_4 : dotZ w1zTF4 imgz31 = -237869 := by decide +kernel
-theorem pzITF_31_5 : dotZ w1zTF5 imgz31 = 264685 := by decide +kernel
-theorem pzITF_31_6 : dotZ w1zTF6 imgz31 = 178048 := by decide +kernel
-theorem pzITF_31_7 : dotZ w1zTF7 imgz31 = -121973 := by decide +kernel
-theorem pzITF_31_8 : dotZ w1zTF8 imgz31 = 280243 := by decide +kernel
-theorem pzITF_31_9 : dotZ w1zTF9 imgz31 = 7257 := by decide +kernel
-theorem pzITF_31_10 : dotZ w1zTF10 imgz31 = -15726 := by decide +kernel
-theorem pzITF_31_11 : dotZ w1zTF11 imgz31 = -136760 := by decide +kernel
-theorem pzITF_31_12 : dotZ w1zTF12 imgz31 = -188361 := by decide +kernel
-theorem pzITF_31_13 : dotZ w1zTF13 imgz31 = 55988 := by decide +kernel
-theorem pzITF_31_14 : dotZ w1zTF14 imgz31 = -46301 := by decide +kernel
-theorem pzITF_31_15 : dotZ w1zTF15 imgz31 = 8644 := by decide +kernel
-
-noncomputable def hpreITF31 : Fin 16 → ℝ :=
-  ![((70726 : ℝ)/65280), ((106632 : ℝ)/65280), ((246004 : ℝ)/65280), ((94492 : ℝ)/65280), ((-237869 : ℝ)/65280), ((264685 : ℝ)/65280), ((178048 : ℝ)/65280), ((-121973 : ℝ)/65280), ((280243 : ℝ)/65280), ((7257 : ℝ)/65280), ((-15726 : ℝ)/65280), ((-136760 : ℝ)/65280), ((-188361 : ℝ)/65280), ((55988 : ℝ)/65280), ((-46301 : ℝ)/65280), ((8644 : ℝ)/65280)]
-
-theorem hpreITF31_eval_0 : denseE W1TF imgF31 0 = hpreITF31 0 := by
-  rw [show hpreITF31 0 = ((70726 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr0]
-  simp only [w1rTF0, imgF31_apply]
-  rw [sum_getD_div w1zTF0_len imgz31_len pzITF_31_0 256 255]
-  norm_num
-
-theorem hpreITF31_eval_1 : denseE W1TF imgF31 1 = hpreITF31 1 := by
-  rw [show hpreITF31 1 = ((106632 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr1]
-  simp only [w1rTF1, imgF31_apply]
-  rw [sum_getD_div w1zTF1_len imgz31_len pzITF_31_1 256 255]
-  norm_num
-
-theorem hpreITF31_eval_2 : denseE W1TF imgF31 2 = hpreITF31 2 := by
-  rw [show hpreITF31 2 = ((246004 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr2]
-  simp only [w1rTF2, imgF31_apply]
-  rw [sum_getD_div w1zTF2_len imgz31_len pzITF_31_2 256 255]
-  norm_num
-
-theorem hpreITF31_eval_3 : denseE W1TF imgF31 3 = hpreITF31 3 := by
-  rw [show hpreITF31 3 = ((94492 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr3]
-  simp only [w1rTF3, imgF31_apply]
-  rw [sum_getD_div w1zTF3_len imgz31_len pzITF_31_3 256 255]
-  norm_num
-
-theorem hpreITF31_eval_4 : denseE W1TF imgF31 4 = hpreITF31 4 := by
-  rw [show hpreITF31 4 = ((-237869 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr4]
-  simp only [w1rTF4, imgF31_apply]
-  rw [sum_getD_div w1zTF4_len imgz31_len pzITF_31_4 256 255]
-  norm_num
-
-theorem hpreITF31_eval_5 : denseE W1TF imgF31 5 = hpreITF31 5 := by
-  rw [show hpreITF31 5 = ((264685 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr5]
-  simp only [w1rTF5, imgF31_apply]
-  rw [sum_getD_div w1zTF5_len imgz31_len pzITF_31_5 256 255]
-  norm_num
-
-theorem hpreITF31_eval_6 : denseE W1TF imgF31 6 = hpreITF31 6 := by
-  rw [show hpreITF31 6 = ((178048 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr6]
-  simp only [w1rTF6, imgF31_apply]
-  rw [sum_getD_div w1zTF6_len imgz31_len pzITF_31_6 256 255]
-  norm_num
-
-theorem hpreITF31_eval_7 : denseE W1TF imgF31 7 = hpreITF31 7 := by
-  rw [show hpreITF31 7 = ((-121973 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr7]
-  simp only [w1rTF7, imgF31_apply]
-  rw [sum_getD_div w1zTF7_len imgz31_len pzITF_31_7 256 255]
-  norm_num
-
-theorem hpreITF31_eval_8 : denseE W1TF imgF31 8 = hpreITF31 8 := by
-  rw [show hpreITF31 8 = ((280243 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr8]
-  simp only [w1rTF8, imgF31_apply]
-  rw [sum_getD_div w1zTF8_len imgz31_len pzITF_31_8 256 255]
-  norm_num
-
-theorem hpreITF31_eval_9 : denseE W1TF imgF31 9 = hpreITF31 9 := by
-  rw [show hpreITF31 9 = ((7257 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr9]
-  simp only [w1rTF9, imgF31_apply]
-  rw [sum_getD_div w1zTF9_len imgz31_len pzITF_31_9 256 255]
-  norm_num
-
-theorem hpreITF31_eval_10 : denseE W1TF imgF31 10 = hpreITF31 10 := by
-  rw [show hpreITF31 10 = ((-15726 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr10]
-  simp only [w1rTF10, imgF31_apply]
-  rw [sum_getD_div w1zTF10_len imgz31_len pzITF_31_10 256 255]
-  norm_num
-
-theorem hpreITF31_eval_11 : denseE W1TF imgF31 11 = hpreITF31 11 := by
-  rw [show hpreITF31 11 = ((-136760 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr11]
-  simp only [w1rTF11, imgF31_apply]
-  rw [sum_getD_div w1zTF11_len imgz31_len pzITF_31_11 256 255]
-  norm_num
-
-theorem hpreITF31_eval_12 : denseE W1TF imgF31 12 = hpreITF31 12 := by
-  rw [show hpreITF31 12 = ((-188361 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr12]
-  simp only [w1rTF12, imgF31_apply]
-  rw [sum_getD_div w1zTF12_len imgz31_len pzITF_31_12 256 255]
-  norm_num
-
-theorem hpreITF31_eval_13 : denseE W1TF imgF31 13 = hpreITF31 13 := by
-  rw [show hpreITF31 13 = ((55988 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr13]
-  simp only [w1rTF13, imgF31_apply]
-  rw [sum_getD_div w1zTF13_len imgz31_len pzITF_31_13 256 255]
-  norm_num
-
-theorem hpreITF31_eval_14 : denseE W1TF imgF31 14 = hpreITF31 14 := by
-  rw [show hpreITF31 14 = ((-46301 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr14]
-  simp only [w1rTF14, imgF31_apply]
-  rw [sum_getD_div w1zTF14_len imgz31_len pzITF_31_14 256 255]
-  norm_num
-
-theorem hpreITF31_eval_15 : denseE W1TF imgF31 15 = hpreITF31 15 := by
-  rw [show hpreITF31 15 = ((8644 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr15]
-  simp only [w1rTF15, imgF31_apply]
-  rw [sum_getD_div w1zTF15_len imgz31_len pzITF_31_15 256 255]
-  norm_num
-
-theorem hpreITF31_eval : ∀ k : Fin 16, denseE W1TF imgF31 k = hpreITF31 k := by
-  intro k
-  fin_cases k <;>
-    [ exact hpreITF31_eval_0; exact hpreITF31_eval_1; exact hpreITF31_eval_2; exact hpreITF31_eval_3; exact hpreITF31_eval_4; exact hpreITF31_eval_5; exact hpreITF31_eval_6; exact hpreITF31_eval_7; exact hpreITF31_eval_8; exact hpreITF31_eval_9; exact hpreITF31_eval_10; exact hpreITF31_eval_11; exact hpreITF31_eval_12; exact hpreITF31_eval_13; exact hpreITF31_eval_14; exact hpreITF31_eval_15 ]
-
-theorem hpreITF31_sum : ∀ t, (∑ j, W1TF t j * imgF31 j) = hpreITF31 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreITF31_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_31 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF31 q - ((1 : ℝ)/255)) (fun q => imgF31 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF31 q - ((1 : ℝ)/255)) (fun q => imgF31 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF31 q - ((1 : ℝ)/255)) (fun q => imgF31 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF31 q - ((1 : ℝ)/255)) (fun q => imgF31 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreITF31_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreITF31, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #31 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_31 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF31 + δ) j < mlpTF (imgF31 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_31 δ hδ
-
-theorem hpreTF32_sum : ∀ t, (∑ j, W1TF t j * imgF32 j) = hpreTF32 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF32_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_32 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF32 q - ((1 : ℝ)/255)) (fun q => imgF32 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF32 q - ((1 : ℝ)/255)) (fun q => imgF32 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF32 q - ((1 : ℝ)/255)) (fun q => imgF32 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF32 q - ((1 : ℝ)/255)) (fun q => imgF32 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF32_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF32, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #32 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_32 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF32 + δ) j < mlpTF (imgF32 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_32 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_32 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF32 q - ((2 : ℝ)/255)) (fun q => imgF32 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF32 q - ((2 : ℝ)/255)) (fun q => imgF32 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF32 q - ((2 : ℝ)/255)) (fun q => imgF32 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF32 q - ((2 : ℝ)/255)) (fun q => imgF32 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF32_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF32, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #32 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_32 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF32 + δ) j < mlpTF (imgF32 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_32 δ hδ
-
-theorem hpreTF34_sum : ∀ t, (∑ j, W1TF t j * imgF34 j) = hpreTF34 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF34_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_34 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF34 q - ((1 : ℝ)/255)) (fun q => imgF34 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF34 q - ((1 : ℝ)/255)) (fun q => imgF34 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF34 q - ((1 : ℝ)/255)) (fun q => imgF34 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF34 q - ((1 : ℝ)/255)) (fun q => imgF34 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF34_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF34, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #34 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_34 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF34 + δ) j < mlpTF (imgF34 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_34 δ hδ
-
-theorem hpreTF35_sum : ∀ t, (∑ j, W1TF t j * imgF35 j) = hpreTF35 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF35_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_35 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF35 q - ((1 : ℝ)/255)) (fun q => imgF35 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF35 q - ((1 : ℝ)/255)) (fun q => imgF35 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF35 q - ((1 : ℝ)/255)) (fun q => imgF35 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF35 q - ((1 : ℝ)/255)) (fun q => imgF35 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF35_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF35, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #35 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_35 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpTF (imgF35 + δ) j < mlpTF (imgF35 + δ) 2 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_35 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_35 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF35 q - ((2 : ℝ)/255)) (fun q => imgF35 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF35 q - ((2 : ℝ)/255)) (fun q => imgF35 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF35 q - ((2 : ℝ)/255)) (fun q => imgF35 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF35 q - ((2 : ℝ)/255)) (fun q => imgF35 q + ((2 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF35_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF35, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #35 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_35 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpTF (imgF35 + δ) j < mlpTF (imgF35 + δ) 2 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_35 δ hδ
-
-theorem hpreTF36_sum : ∀ t, (∑ j, W1TF t j * imgF36 j) = hpreTF36 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF36_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_36 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF36 q - ((1 : ℝ)/255)) (fun q => imgF36 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF36 q - ((1 : ℝ)/255)) (fun q => imgF36 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF36 q - ((1 : ℝ)/255)) (fun q => imgF36 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF36 q - ((1 : ℝ)/255)) (fun q => imgF36 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF36_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF36, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #36 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_36 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF36 + δ) j < mlpTF (imgF36 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_36 δ hδ
-
-theorem hpreTF37_sum : ∀ t, (∑ j, W1TF t j * imgF37 j) = hpreTF37 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF37_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_37 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF37 q - ((1 : ℝ)/255)) (fun q => imgF37 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF37 q - ((1 : ℝ)/255)) (fun q => imgF37 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF37 q - ((1 : ℝ)/255)) (fun q => imgF37 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF37 q - ((1 : ℝ)/255)) (fun q => imgF37 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF37_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF37, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #37 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_37 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF37 + δ) j < mlpTF (imgF37 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_37 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_37 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF37 q - ((2 : ℝ)/255)) (fun q => imgF37 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF37 q - ((2 : ℝ)/255)) (fun q => imgF37 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF37 q - ((2 : ℝ)/255)) (fun q => imgF37 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF37 q - ((2 : ℝ)/255)) (fun q => imgF37 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF37_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF37, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #37 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_37 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF37 + δ) j < mlpTF (imgF37 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_37 δ hδ
-
-theorem hpreTF39_sum : ∀ t, (∑ j, W1TF t j * imgF39 j) = hpreTF39 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF39_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_39 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF39 q - ((1 : ℝ)/255)) (fun q => imgF39 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF39 q - ((1 : ℝ)/255)) (fun q => imgF39 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF39 q - ((1 : ℝ)/255)) (fun q => imgF39 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF39 q - ((1 : ℝ)/255)) (fun q => imgF39 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF39_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF39, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #39 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_39 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF39 + δ) j < mlpTF (imgF39 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_39 δ hδ
-
-theorem hpreTF40_sum : ∀ t, (∑ j, W1TF t j * imgF40 j) = hpreTF40 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF40_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_40 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF40 q - ((1 : ℝ)/255)) (fun q => imgF40 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF40 q - ((1 : ℝ)/255)) (fun q => imgF40 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF40 q - ((1 : ℝ)/255)) (fun q => imgF40 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF40 q - ((1 : ℝ)/255)) (fun q => imgF40 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF40_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF40, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #40 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_40 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF40 + δ) j < mlpTF (imgF40 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_40 δ hδ
-
-theorem hpreTF41_sum : ∀ t, (∑ j, W1TF t j * imgF41 j) = hpreTF41 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF41_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_41 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF41 q - ((1 : ℝ)/255)) (fun q => imgF41 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF41 q - ((1 : ℝ)/255)) (fun q => imgF41 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF41 q - ((1 : ℝ)/255)) (fun q => imgF41 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF41 q - ((1 : ℝ)/255)) (fun q => imgF41 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF41_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF41, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #41 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_41 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF41 + δ) j < mlpTF (imgF41 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_41 δ hδ
-
-theorem hpreTF42_sum : ∀ t, (∑ j, W1TF t j * imgF42 j) = hpreTF42 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF42_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_42 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF42 q - ((1 : ℝ)/255)) (fun q => imgF42 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF42 q - ((1 : ℝ)/255)) (fun q => imgF42 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF42 q - ((1 : ℝ)/255)) (fun q => imgF42 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF42 q - ((1 : ℝ)/255)) (fun q => imgF42 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF42_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF42, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #42 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_42 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF42 + δ) j < mlpTF (imgF42 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_42 δ hδ
-
-theorem hpreTF43_sum : ∀ t, (∑ j, W1TF t j * imgF43 j) = hpreTF43 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF43_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_43 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF43 q - ((1 : ℝ)/255)) (fun q => imgF43 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF43 q - ((1 : ℝ)/255)) (fun q => imgF43 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF43 q - ((1 : ℝ)/255)) (fun q => imgF43 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF43 q - ((1 : ℝ)/255)) (fun q => imgF43 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF43_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF43, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #43 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_43 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpTF (imgF43 + δ) j < mlpTF (imgF43 + δ) 2 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_43 δ hδ
-
-theorem hpreTF44_sum : ∀ t, (∑ j, W1TF t j * imgF44 j) = hpreTF44 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF44_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_44 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF44 q - ((1 : ℝ)/255)) (fun q => imgF44 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF44 q - ((1 : ℝ)/255)) (fun q => imgF44 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF44 q - ((1 : ℝ)/255)) (fun q => imgF44 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF44 q - ((1 : ℝ)/255)) (fun q => imgF44 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF44_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF44, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #44 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_44 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF44 + δ) j < mlpTF (imgF44 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_44 δ hδ
-
-theorem hpreTF45_sum : ∀ t, (∑ j, W1TF t j * imgF45 j) = hpreTF45 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF45_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_45 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF45 q - ((1 : ℝ)/255)) (fun q => imgF45 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF45 q - ((1 : ℝ)/255)) (fun q => imgF45 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF45 q - ((1 : ℝ)/255)) (fun q => imgF45 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF45 q - ((1 : ℝ)/255)) (fun q => imgF45 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF45_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF45, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #45 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_45 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpTF (imgF45 + δ) j < mlpTF (imgF45 + δ) 5 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_45 δ hδ
-
-theorem hpreTF47_sum : ∀ t, (∑ j, W1TF t j * imgF47 j) = hpreTF47 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF47_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_47 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF47 q - ((1 : ℝ)/255)) (fun q => imgF47 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF47 q - ((1 : ℝ)/255)) (fun q => imgF47 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF47 q - ((1 : ℝ)/255)) (fun q => imgF47 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF47 q - ((1 : ℝ)/255)) (fun q => imgF47 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF47_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF47, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #47 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_47 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpTF (imgF47 + δ) j < mlpTF (imgF47 + δ) 2 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_47 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_47 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF47 q - ((2 : ℝ)/255)) (fun q => imgF47 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF47 q - ((2 : ℝ)/255)) (fun q => imgF47 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF47 q - ((2 : ℝ)/255)) (fun q => imgF47 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF47 q - ((2 : ℝ)/255)) (fun q => imgF47 q + ((2 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF47_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF47, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #47 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_47 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpTF (imgF47 + δ) j < mlpTF (imgF47 + δ) 2 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_47 δ hδ
-
-theorem hpreTF48_sum : ∀ t, (∑ j, W1TF t j * imgF48 j) = hpreTF48 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF48_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_48 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF48 q - ((1 : ℝ)/255)) (fun q => imgF48 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF48 q - ((1 : ℝ)/255)) (fun q => imgF48 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF48 q - ((1 : ℝ)/255)) (fun q => imgF48 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF48 q - ((1 : ℝ)/255)) (fun q => imgF48 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF48_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF48, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #48 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_48 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF48 + δ) j < mlpTF (imgF48 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_48 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_48 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF48 q - ((2 : ℝ)/255)) (fun q => imgF48 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF48 q - ((2 : ℝ)/255)) (fun q => imgF48 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF48 q - ((2 : ℝ)/255)) (fun q => imgF48 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF48 q - ((2 : ℝ)/255)) (fun q => imgF48 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF48_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF48, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #48 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_48 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF48 + δ) j < mlpTF (imgF48 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_48 δ hδ
-
-theorem hpreTF49_sum : ∀ t, (∑ j, W1TF t j * imgF49 j) = hpreTF49 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF49_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_49 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF49 q - ((1 : ℝ)/255)) (fun q => imgF49 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF49 q - ((1 : ℝ)/255)) (fun q => imgF49 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF49 q - ((1 : ℝ)/255)) (fun q => imgF49 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF49 q - ((1 : ℝ)/255)) (fun q => imgF49 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF49_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF49, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #49 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_49 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF49 + δ) j < mlpTF (imgF49 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_49 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_49 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF49 q - ((2 : ℝ)/255)) (fun q => imgF49 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF49 q - ((2 : ℝ)/255)) (fun q => imgF49 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF49 q - ((2 : ℝ)/255)) (fun q => imgF49 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF49 q - ((2 : ℝ)/255)) (fun q => imgF49 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF49_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF49, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #49 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_49 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF49 + δ) j < mlpTF (imgF49 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_49 δ hδ
-
--- net TF pre-activations for #50 (not in the base L2-certified set)
-theorem pzITF_50_0 : dotZ w1zTF0 imgz50 = 115282 := by decide +kernel
-theorem pzITF_50_1 : dotZ w1zTF1 imgz50 = -156955 := by decide +kernel
-theorem pzITF_50_2 : dotZ w1zTF2 imgz50 = 76569 := by decide +kernel
-theorem pzITF_50_3 : dotZ w1zTF3 imgz50 = 48631 := by decide +kernel
-theorem pzITF_50_4 : dotZ w1zTF4 imgz50 = -25533 := by decide +kernel
-theorem pzITF_50_5 : dotZ w1zTF5 imgz50 = -85262 := by decide +kernel
-theorem pzITF_50_6 : dotZ w1zTF6 imgz50 = -77892 := by decide +kernel
-theorem pzITF_50_7 : dotZ w1zTF7 imgz50 = -143352 := by decide +kernel
-theorem pzITF_50_8 : dotZ w1zTF8 imgz50 = 199387 := by decide +kernel
-theorem pzITF_50_9 : dotZ w1zTF9 imgz50 = 145045 := by decide +kernel
-theorem pzITF_50_10 : dotZ w1zTF10 imgz50 = -29631 := by decide +kernel
-theorem pzITF_50_11 : dotZ w1zTF11 imgz50 = 246992 := by decide +kernel
-theorem pzITF_50_12 : dotZ w1zTF12 imgz50 = -157025 := by decide +kernel
-theorem pzITF_50_13 : dotZ w1zTF13 imgz50 = -88213 := by decide +kernel
-theorem pzITF_50_14 : dotZ w1zTF14 imgz50 = 121423 := by decide +kernel
-theorem pzITF_50_15 : dotZ w1zTF15 imgz50 = 305159 := by decide +kernel
-
-noncomputable def hpreITF50 : Fin 16 → ℝ :=
-  ![((115282 : ℝ)/65280), ((-156955 : ℝ)/65280), ((76569 : ℝ)/65280), ((48631 : ℝ)/65280), ((-25533 : ℝ)/65280), ((-85262 : ℝ)/65280), ((-77892 : ℝ)/65280), ((-143352 : ℝ)/65280), ((199387 : ℝ)/65280), ((145045 : ℝ)/65280), ((-29631 : ℝ)/65280), ((246992 : ℝ)/65280), ((-157025 : ℝ)/65280), ((-88213 : ℝ)/65280), ((121423 : ℝ)/65280), ((305159 : ℝ)/65280)]
-
-theorem hpreITF50_eval_0 : denseE W1TF imgF50 0 = hpreITF50 0 := by
-  rw [show hpreITF50 0 = ((115282 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr0]
-  simp only [w1rTF0, imgF50_apply]
-  rw [sum_getD_div w1zTF0_len imgz50_len pzITF_50_0 256 255]
-  norm_num
-
-theorem hpreITF50_eval_1 : denseE W1TF imgF50 1 = hpreITF50 1 := by
-  rw [show hpreITF50 1 = ((-156955 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr1]
-  simp only [w1rTF1, imgF50_apply]
-  rw [sum_getD_div w1zTF1_len imgz50_len pzITF_50_1 256 255]
-  norm_num
-
-theorem hpreITF50_eval_2 : denseE W1TF imgF50 2 = hpreITF50 2 := by
-  rw [show hpreITF50 2 = ((76569 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr2]
-  simp only [w1rTF2, imgF50_apply]
-  rw [sum_getD_div w1zTF2_len imgz50_len pzITF_50_2 256 255]
-  norm_num
-
-theorem hpreITF50_eval_3 : denseE W1TF imgF50 3 = hpreITF50 3 := by
-  rw [show hpreITF50 3 = ((48631 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr3]
-  simp only [w1rTF3, imgF50_apply]
-  rw [sum_getD_div w1zTF3_len imgz50_len pzITF_50_3 256 255]
-  norm_num
-
-theorem hpreITF50_eval_4 : denseE W1TF imgF50 4 = hpreITF50 4 := by
-  rw [show hpreITF50 4 = ((-25533 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr4]
-  simp only [w1rTF4, imgF50_apply]
-  rw [sum_getD_div w1zTF4_len imgz50_len pzITF_50_4 256 255]
-  norm_num
-
-theorem hpreITF50_eval_5 : denseE W1TF imgF50 5 = hpreITF50 5 := by
-  rw [show hpreITF50 5 = ((-85262 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr5]
-  simp only [w1rTF5, imgF50_apply]
-  rw [sum_getD_div w1zTF5_len imgz50_len pzITF_50_5 256 255]
-  norm_num
-
-theorem hpreITF50_eval_6 : denseE W1TF imgF50 6 = hpreITF50 6 := by
-  rw [show hpreITF50 6 = ((-77892 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr6]
-  simp only [w1rTF6, imgF50_apply]
-  rw [sum_getD_div w1zTF6_len imgz50_len pzITF_50_6 256 255]
-  norm_num
-
-theorem hpreITF50_eval_7 : denseE W1TF imgF50 7 = hpreITF50 7 := by
-  rw [show hpreITF50 7 = ((-143352 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr7]
-  simp only [w1rTF7, imgF50_apply]
-  rw [sum_getD_div w1zTF7_len imgz50_len pzITF_50_7 256 255]
-  norm_num
-
-theorem hpreITF50_eval_8 : denseE W1TF imgF50 8 = hpreITF50 8 := by
-  rw [show hpreITF50 8 = ((199387 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr8]
-  simp only [w1rTF8, imgF50_apply]
-  rw [sum_getD_div w1zTF8_len imgz50_len pzITF_50_8 256 255]
-  norm_num
-
-theorem hpreITF50_eval_9 : denseE W1TF imgF50 9 = hpreITF50 9 := by
-  rw [show hpreITF50 9 = ((145045 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr9]
-  simp only [w1rTF9, imgF50_apply]
-  rw [sum_getD_div w1zTF9_len imgz50_len pzITF_50_9 256 255]
-  norm_num
-
-theorem hpreITF50_eval_10 : denseE W1TF imgF50 10 = hpreITF50 10 := by
-  rw [show hpreITF50 10 = ((-29631 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr10]
-  simp only [w1rTF10, imgF50_apply]
-  rw [sum_getD_div w1zTF10_len imgz50_len pzITF_50_10 256 255]
-  norm_num
-
-theorem hpreITF50_eval_11 : denseE W1TF imgF50 11 = hpreITF50 11 := by
-  rw [show hpreITF50 11 = ((246992 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr11]
-  simp only [w1rTF11, imgF50_apply]
-  rw [sum_getD_div w1zTF11_len imgz50_len pzITF_50_11 256 255]
-  norm_num
-
-theorem hpreITF50_eval_12 : denseE W1TF imgF50 12 = hpreITF50 12 := by
-  rw [show hpreITF50 12 = ((-157025 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr12]
-  simp only [w1rTF12, imgF50_apply]
-  rw [sum_getD_div w1zTF12_len imgz50_len pzITF_50_12 256 255]
-  norm_num
-
-theorem hpreITF50_eval_13 : denseE W1TF imgF50 13 = hpreITF50 13 := by
-  rw [show hpreITF50 13 = ((-88213 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr13]
-  simp only [w1rTF13, imgF50_apply]
-  rw [sum_getD_div w1zTF13_len imgz50_len pzITF_50_13 256 255]
-  norm_num
-
-theorem hpreITF50_eval_14 : denseE W1TF imgF50 14 = hpreITF50 14 := by
-  rw [show hpreITF50 14 = ((121423 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr14]
-  simp only [w1rTF14, imgF50_apply]
-  rw [sum_getD_div w1zTF14_len imgz50_len pzITF_50_14 256 255]
-  norm_num
-
-theorem hpreITF50_eval_15 : denseE W1TF imgF50 15 = hpreITF50 15 := by
-  rw [show hpreITF50 15 = ((305159 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr15]
-  simp only [w1rTF15, imgF50_apply]
-  rw [sum_getD_div w1zTF15_len imgz50_len pzITF_50_15 256 255]
-  norm_num
-
-theorem hpreITF50_eval : ∀ k : Fin 16, denseE W1TF imgF50 k = hpreITF50 k := by
-  intro k
-  fin_cases k <;>
-    [ exact hpreITF50_eval_0; exact hpreITF50_eval_1; exact hpreITF50_eval_2; exact hpreITF50_eval_3; exact hpreITF50_eval_4; exact hpreITF50_eval_5; exact hpreITF50_eval_6; exact hpreITF50_eval_7; exact hpreITF50_eval_8; exact hpreITF50_eval_9; exact hpreITF50_eval_10; exact hpreITF50_eval_11; exact hpreITF50_eval_12; exact hpreITF50_eval_13; exact hpreITF50_eval_14; exact hpreITF50_eval_15 ]
-
-theorem hpreITF50_sum : ∀ t, (∑ j, W1TF t j * imgF50 j) = hpreITF50 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreITF50_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_50 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF50 q - ((1 : ℝ)/255)) (fun q => imgF50 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF50 q - ((1 : ℝ)/255)) (fun q => imgF50 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF50 q - ((1 : ℝ)/255)) (fun q => imgF50 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF50 q - ((1 : ℝ)/255)) (fun q => imgF50 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreITF50_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreITF50, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #50 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_50 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF50 + δ) j < mlpTF (imgF50 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_50 δ hδ
-
-theorem hpreTF51_sum : ∀ t, (∑ j, W1TF t j * imgF51 j) = hpreTF51 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF51_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_51 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF51 q - ((1 : ℝ)/255)) (fun q => imgF51 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF51 q - ((1 : ℝ)/255)) (fun q => imgF51 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF51 q - ((1 : ℝ)/255)) (fun q => imgF51 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF51 q - ((1 : ℝ)/255)) (fun q => imgF51 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF51_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF51, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #51 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_51 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF51 + δ) j < mlpTF (imgF51 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_51 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_51 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF51 q - ((2 : ℝ)/255)) (fun q => imgF51 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF51 q - ((2 : ℝ)/255)) (fun q => imgF51 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF51 q - ((2 : ℝ)/255)) (fun q => imgF51 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF51 q - ((2 : ℝ)/255)) (fun q => imgF51 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF51_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF51, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #51 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_51 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF51 + δ) j < mlpTF (imgF51 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_51 δ hδ
-
--- net TF pre-activations for #52 (not in the base L2-certified set)
-theorem pzITF_52_0 : dotZ w1zTF0 imgz52 = 317320 := by decide +kernel
-theorem pzITF_52_1 : dotZ w1zTF1 imgz52 = -47036 := by decide +kernel
-theorem pzITF_52_2 : dotZ w1zTF2 imgz52 = 69770 := by decide +kernel
-theorem pzITF_52_3 : dotZ w1zTF3 imgz52 = 1015 := by decide +kernel
-theorem pzITF_52_4 : dotZ w1zTF4 imgz52 = -54281 := by decide +kernel
-theorem pzITF_52_5 : dotZ w1zTF5 imgz52 = 44664 := by decide +kernel
-theorem pzITF_52_6 : dotZ w1zTF6 imgz52 = 474724 := by decide +kernel
-theorem pzITF_52_7 : dotZ w1zTF7 imgz52 = -346794 := by decide +kernel
-theorem pzITF_52_8 : dotZ w1zTF8 imgz52 = 118921 := by decide +kernel
-theorem pzITF_52_9 : dotZ w1zTF9 imgz52 = 122715 := by decide +kernel
-theorem pzITF_52_10 : dotZ w1zTF10 imgz52 = 295941 := by decide +kernel
-theorem pzITF_52_11 : dotZ w1zTF11 imgz52 = 121037 := by decide +kernel
-theorem pzITF_52_12 : dotZ w1zTF12 imgz52 = -85382 := by decide +kernel
-theorem pzITF_52_13 : dotZ w1zTF13 imgz52 = -99105 := by decide +kernel
-theorem pzITF_52_14 : dotZ w1zTF14 imgz52 = -120161 := by decide +kernel
-theorem pzITF_52_15 : dotZ w1zTF15 imgz52 = 280891 := by decide +kernel
-
-noncomputable def hpreITF52 : Fin 16 → ℝ :=
-  ![((317320 : ℝ)/65280), ((-47036 : ℝ)/65280), ((69770 : ℝ)/65280), ((1015 : ℝ)/65280), ((-54281 : ℝ)/65280), ((44664 : ℝ)/65280), ((474724 : ℝ)/65280), ((-346794 : ℝ)/65280), ((118921 : ℝ)/65280), ((122715 : ℝ)/65280), ((295941 : ℝ)/65280), ((121037 : ℝ)/65280), ((-85382 : ℝ)/65280), ((-99105 : ℝ)/65280), ((-120161 : ℝ)/65280), ((280891 : ℝ)/65280)]
-
-theorem hpreITF52_eval_0 : denseE W1TF imgF52 0 = hpreITF52 0 := by
-  rw [show hpreITF52 0 = ((317320 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr0]
-  simp only [w1rTF0, imgF52_apply]
-  rw [sum_getD_div w1zTF0_len imgz52_len pzITF_52_0 256 255]
-  norm_num
-
-theorem hpreITF52_eval_1 : denseE W1TF imgF52 1 = hpreITF52 1 := by
-  rw [show hpreITF52 1 = ((-47036 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr1]
-  simp only [w1rTF1, imgF52_apply]
-  rw [sum_getD_div w1zTF1_len imgz52_len pzITF_52_1 256 255]
-  norm_num
-
-theorem hpreITF52_eval_2 : denseE W1TF imgF52 2 = hpreITF52 2 := by
-  rw [show hpreITF52 2 = ((69770 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr2]
-  simp only [w1rTF2, imgF52_apply]
-  rw [sum_getD_div w1zTF2_len imgz52_len pzITF_52_2 256 255]
-  norm_num
-
-theorem hpreITF52_eval_3 : denseE W1TF imgF52 3 = hpreITF52 3 := by
-  rw [show hpreITF52 3 = ((1015 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr3]
-  simp only [w1rTF3, imgF52_apply]
-  rw [sum_getD_div w1zTF3_len imgz52_len pzITF_52_3 256 255]
-  norm_num
-
-theorem hpreITF52_eval_4 : denseE W1TF imgF52 4 = hpreITF52 4 := by
-  rw [show hpreITF52 4 = ((-54281 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr4]
-  simp only [w1rTF4, imgF52_apply]
-  rw [sum_getD_div w1zTF4_len imgz52_len pzITF_52_4 256 255]
-  norm_num
-
-theorem hpreITF52_eval_5 : denseE W1TF imgF52 5 = hpreITF52 5 := by
-  rw [show hpreITF52 5 = ((44664 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr5]
-  simp only [w1rTF5, imgF52_apply]
-  rw [sum_getD_div w1zTF5_len imgz52_len pzITF_52_5 256 255]
-  norm_num
-
-theorem hpreITF52_eval_6 : denseE W1TF imgF52 6 = hpreITF52 6 := by
-  rw [show hpreITF52 6 = ((474724 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr6]
-  simp only [w1rTF6, imgF52_apply]
-  rw [sum_getD_div w1zTF6_len imgz52_len pzITF_52_6 256 255]
-  norm_num
-
-theorem hpreITF52_eval_7 : denseE W1TF imgF52 7 = hpreITF52 7 := by
-  rw [show hpreITF52 7 = ((-346794 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr7]
-  simp only [w1rTF7, imgF52_apply]
-  rw [sum_getD_div w1zTF7_len imgz52_len pzITF_52_7 256 255]
-  norm_num
-
-theorem hpreITF52_eval_8 : denseE W1TF imgF52 8 = hpreITF52 8 := by
-  rw [show hpreITF52 8 = ((118921 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr8]
-  simp only [w1rTF8, imgF52_apply]
-  rw [sum_getD_div w1zTF8_len imgz52_len pzITF_52_8 256 255]
-  norm_num
-
-theorem hpreITF52_eval_9 : denseE W1TF imgF52 9 = hpreITF52 9 := by
-  rw [show hpreITF52 9 = ((122715 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr9]
-  simp only [w1rTF9, imgF52_apply]
-  rw [sum_getD_div w1zTF9_len imgz52_len pzITF_52_9 256 255]
-  norm_num
-
-theorem hpreITF52_eval_10 : denseE W1TF imgF52 10 = hpreITF52 10 := by
-  rw [show hpreITF52 10 = ((295941 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr10]
-  simp only [w1rTF10, imgF52_apply]
-  rw [sum_getD_div w1zTF10_len imgz52_len pzITF_52_10 256 255]
-  norm_num
-
-theorem hpreITF52_eval_11 : denseE W1TF imgF52 11 = hpreITF52 11 := by
-  rw [show hpreITF52 11 = ((121037 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr11]
-  simp only [w1rTF11, imgF52_apply]
-  rw [sum_getD_div w1zTF11_len imgz52_len pzITF_52_11 256 255]
-  norm_num
-
-theorem hpreITF52_eval_12 : denseE W1TF imgF52 12 = hpreITF52 12 := by
-  rw [show hpreITF52 12 = ((-85382 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr12]
-  simp only [w1rTF12, imgF52_apply]
-  rw [sum_getD_div w1zTF12_len imgz52_len pzITF_52_12 256 255]
-  norm_num
-
-theorem hpreITF52_eval_13 : denseE W1TF imgF52 13 = hpreITF52 13 := by
-  rw [show hpreITF52 13 = ((-99105 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr13]
-  simp only [w1rTF13, imgF52_apply]
-  rw [sum_getD_div w1zTF13_len imgz52_len pzITF_52_13 256 255]
-  norm_num
-
-theorem hpreITF52_eval_14 : denseE W1TF imgF52 14 = hpreITF52 14 := by
-  rw [show hpreITF52 14 = ((-120161 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr14]
-  simp only [w1rTF14, imgF52_apply]
-  rw [sum_getD_div w1zTF14_len imgz52_len pzITF_52_14 256 255]
-  norm_num
-
-theorem hpreITF52_eval_15 : denseE W1TF imgF52 15 = hpreITF52 15 := by
-  rw [show hpreITF52 15 = ((280891 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr15]
-  simp only [w1rTF15, imgF52_apply]
-  rw [sum_getD_div w1zTF15_len imgz52_len pzITF_52_15 256 255]
-  norm_num
-
-theorem hpreITF52_eval : ∀ k : Fin 16, denseE W1TF imgF52 k = hpreITF52 k := by
-  intro k
-  fin_cases k <;>
-    [ exact hpreITF52_eval_0; exact hpreITF52_eval_1; exact hpreITF52_eval_2; exact hpreITF52_eval_3; exact hpreITF52_eval_4; exact hpreITF52_eval_5; exact hpreITF52_eval_6; exact hpreITF52_eval_7; exact hpreITF52_eval_8; exact hpreITF52_eval_9; exact hpreITF52_eval_10; exact hpreITF52_eval_11; exact hpreITF52_eval_12; exact hpreITF52_eval_13; exact hpreITF52_eval_14; exact hpreITF52_eval_15 ]
-
-theorem hpreITF52_sum : ∀ t, (∑ j, W1TF t j * imgF52 j) = hpreITF52 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreITF52_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_52 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF52 q - ((1 : ℝ)/255)) (fun q => imgF52 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF52 q - ((1 : ℝ)/255)) (fun q => imgF52 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF52 q - ((1 : ℝ)/255)) (fun q => imgF52 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF52 q - ((1 : ℝ)/255)) (fun q => imgF52 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreITF52_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreITF52, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #52 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_52 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpTF (imgF52 + δ) j < mlpTF (imgF52 + δ) 5 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_52 δ hδ
-
--- net TF pre-activations for #53 (not in the base L2-certified set)
-theorem pzITF_53_0 : dotZ w1zTF0 imgz53 = 62897 := by decide +kernel
-theorem pzITF_53_1 : dotZ w1zTF1 imgz53 = -144001 := by decide +kernel
-theorem pzITF_53_2 : dotZ w1zTF2 imgz53 = -357422 := by decide +kernel
-theorem pzITF_53_3 : dotZ w1zTF3 imgz53 = 290565 := by decide +kernel
-theorem pzITF_53_4 : dotZ w1zTF4 imgz53 = -9262 := by decide +kernel
-theorem pzITF_53_5 : dotZ w1zTF5 imgz53 = -33093 := by decide +kernel
-theorem pzITF_53_6 : dotZ w1zTF6 imgz53 = 105381 := by decide +kernel
-theorem pzITF_53_7 : dotZ w1zTF7 imgz53 = -226336 := by decide +kernel
-theorem pzITF_53_8 : dotZ w1zTF8 imgz53 = 84104 := by decide +kernel
-theorem pzITF_53_9 : dotZ w1zTF9 imgz53 = 2698 := by decide +kernel
-theorem pzITF_53_10 : dotZ w1zTF10 imgz53 = 40390 := by decide +kernel
-theorem pzITF_53_11 : dotZ w1zTF11 imgz53 = 184077 := by decide +kernel
-theorem pzITF_53_12 : dotZ w1zTF12 imgz53 = -94662 := by decide +kernel
-theorem pzITF_53_13 : dotZ w1zTF13 imgz53 = -131539 := by decide +kernel
-theorem pzITF_53_14 : dotZ w1zTF14 imgz53 = -278520 := by decide +kernel
-theorem pzITF_53_15 : dotZ w1zTF15 imgz53 = 122697 := by decide +kernel
-
-noncomputable def hpreITF53 : Fin 16 → ℝ :=
-  ![((62897 : ℝ)/65280), ((-144001 : ℝ)/65280), ((-357422 : ℝ)/65280), ((290565 : ℝ)/65280), ((-9262 : ℝ)/65280), ((-33093 : ℝ)/65280), ((105381 : ℝ)/65280), ((-226336 : ℝ)/65280), ((84104 : ℝ)/65280), ((2698 : ℝ)/65280), ((40390 : ℝ)/65280), ((184077 : ℝ)/65280), ((-94662 : ℝ)/65280), ((-131539 : ℝ)/65280), ((-278520 : ℝ)/65280), ((122697 : ℝ)/65280)]
-
-theorem hpreITF53_eval_0 : denseE W1TF imgF53 0 = hpreITF53 0 := by
-  rw [show hpreITF53 0 = ((62897 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr0]
-  simp only [w1rTF0, imgF53_apply]
-  rw [sum_getD_div w1zTF0_len imgz53_len pzITF_53_0 256 255]
-  norm_num
-
-theorem hpreITF53_eval_1 : denseE W1TF imgF53 1 = hpreITF53 1 := by
-  rw [show hpreITF53 1 = ((-144001 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr1]
-  simp only [w1rTF1, imgF53_apply]
-  rw [sum_getD_div w1zTF1_len imgz53_len pzITF_53_1 256 255]
-  norm_num
-
-theorem hpreITF53_eval_2 : denseE W1TF imgF53 2 = hpreITF53 2 := by
-  rw [show hpreITF53 2 = ((-357422 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr2]
-  simp only [w1rTF2, imgF53_apply]
-  rw [sum_getD_div w1zTF2_len imgz53_len pzITF_53_2 256 255]
-  norm_num
-
-theorem hpreITF53_eval_3 : denseE W1TF imgF53 3 = hpreITF53 3 := by
-  rw [show hpreITF53 3 = ((290565 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr3]
-  simp only [w1rTF3, imgF53_apply]
-  rw [sum_getD_div w1zTF3_len imgz53_len pzITF_53_3 256 255]
-  norm_num
-
-theorem hpreITF53_eval_4 : denseE W1TF imgF53 4 = hpreITF53 4 := by
-  rw [show hpreITF53 4 = ((-9262 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr4]
-  simp only [w1rTF4, imgF53_apply]
-  rw [sum_getD_div w1zTF4_len imgz53_len pzITF_53_4 256 255]
-  norm_num
-
-theorem hpreITF53_eval_5 : denseE W1TF imgF53 5 = hpreITF53 5 := by
-  rw [show hpreITF53 5 = ((-33093 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr5]
-  simp only [w1rTF5, imgF53_apply]
-  rw [sum_getD_div w1zTF5_len imgz53_len pzITF_53_5 256 255]
-  norm_num
-
-theorem hpreITF53_eval_6 : denseE W1TF imgF53 6 = hpreITF53 6 := by
-  rw [show hpreITF53 6 = ((105381 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr6]
-  simp only [w1rTF6, imgF53_apply]
-  rw [sum_getD_div w1zTF6_len imgz53_len pzITF_53_6 256 255]
-  norm_num
-
-theorem hpreITF53_eval_7 : denseE W1TF imgF53 7 = hpreITF53 7 := by
-  rw [show hpreITF53 7 = ((-226336 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr7]
-  simp only [w1rTF7, imgF53_apply]
-  rw [sum_getD_div w1zTF7_len imgz53_len pzITF_53_7 256 255]
-  norm_num
-
-theorem hpreITF53_eval_8 : denseE W1TF imgF53 8 = hpreITF53 8 := by
-  rw [show hpreITF53 8 = ((84104 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr8]
-  simp only [w1rTF8, imgF53_apply]
-  rw [sum_getD_div w1zTF8_len imgz53_len pzITF_53_8 256 255]
-  norm_num
-
-theorem hpreITF53_eval_9 : denseE W1TF imgF53 9 = hpreITF53 9 := by
-  rw [show hpreITF53 9 = ((2698 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr9]
-  simp only [w1rTF9, imgF53_apply]
-  rw [sum_getD_div w1zTF9_len imgz53_len pzITF_53_9 256 255]
-  norm_num
-
-theorem hpreITF53_eval_10 : denseE W1TF imgF53 10 = hpreITF53 10 := by
-  rw [show hpreITF53 10 = ((40390 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr10]
-  simp only [w1rTF10, imgF53_apply]
-  rw [sum_getD_div w1zTF10_len imgz53_len pzITF_53_10 256 255]
-  norm_num
-
-theorem hpreITF53_eval_11 : denseE W1TF imgF53 11 = hpreITF53 11 := by
-  rw [show hpreITF53 11 = ((184077 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr11]
-  simp only [w1rTF11, imgF53_apply]
-  rw [sum_getD_div w1zTF11_len imgz53_len pzITF_53_11 256 255]
-  norm_num
-
-theorem hpreITF53_eval_12 : denseE W1TF imgF53 12 = hpreITF53 12 := by
-  rw [show hpreITF53 12 = ((-94662 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr12]
-  simp only [w1rTF12, imgF53_apply]
-  rw [sum_getD_div w1zTF12_len imgz53_len pzITF_53_12 256 255]
-  norm_num
-
-theorem hpreITF53_eval_13 : denseE W1TF imgF53 13 = hpreITF53 13 := by
-  rw [show hpreITF53 13 = ((-131539 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr13]
-  simp only [w1rTF13, imgF53_apply]
-  rw [sum_getD_div w1zTF13_len imgz53_len pzITF_53_13 256 255]
-  norm_num
-
-theorem hpreITF53_eval_14 : denseE W1TF imgF53 14 = hpreITF53 14 := by
-  rw [show hpreITF53 14 = ((-278520 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr14]
-  simp only [w1rTF14, imgF53_apply]
-  rw [sum_getD_div w1zTF14_len imgz53_len pzITF_53_14 256 255]
-  norm_num
-
-theorem hpreITF53_eval_15 : denseE W1TF imgF53 15 = hpreITF53 15 := by
-  rw [show hpreITF53 15 = ((122697 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr15]
-  simp only [w1rTF15, imgF53_apply]
-  rw [sum_getD_div w1zTF15_len imgz53_len pzITF_53_15 256 255]
-  norm_num
-
-theorem hpreITF53_eval : ∀ k : Fin 16, denseE W1TF imgF53 k = hpreITF53 k := by
-  intro k
-  fin_cases k <;>
-    [ exact hpreITF53_eval_0; exact hpreITF53_eval_1; exact hpreITF53_eval_2; exact hpreITF53_eval_3; exact hpreITF53_eval_4; exact hpreITF53_eval_5; exact hpreITF53_eval_6; exact hpreITF53_eval_7; exact hpreITF53_eval_8; exact hpreITF53_eval_9; exact hpreITF53_eval_10; exact hpreITF53_eval_11; exact hpreITF53_eval_12; exact hpreITF53_eval_13; exact hpreITF53_eval_14; exact hpreITF53_eval_15 ]
-
-theorem hpreITF53_sum : ∀ t, (∑ j, W1TF t j * imgF53 j) = hpreITF53 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreITF53_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_53 : ∀ j : Fin 10, j ≠ 5 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF53 q - ((1 : ℝ)/255)) (fun q => imgF53 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF53 q - ((1 : ℝ)/255)) (fun q => imgF53 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF53 q - ((1 : ℝ)/255)) (fun q => imgF53 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF53 q - ((1 : ℝ)/255)) (fun q => imgF53 q + ((1 : ℝ)/255)))) 5 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreITF53_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreITF53, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #53 (digit 5): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_53 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 5 → mlpTF (imgF53 + δ) j < mlpTF (imgF53 + δ) 5 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_53 δ hδ
-
-theorem hpreTF54_sum : ∀ t, (∑ j, W1TF t j * imgF54 j) = hpreTF54 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF54_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_54 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF54 q - ((1 : ℝ)/255)) (fun q => imgF54 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF54 q - ((1 : ℝ)/255)) (fun q => imgF54 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF54 q - ((1 : ℝ)/255)) (fun q => imgF54 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF54 q - ((1 : ℝ)/255)) (fun q => imgF54 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF54_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF54, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #54 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_54 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF54 + δ) j < mlpTF (imgF54 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_54 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_54 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF54 q - ((2 : ℝ)/255)) (fun q => imgF54 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF54 q - ((2 : ℝ)/255)) (fun q => imgF54 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF54 q - ((2 : ℝ)/255)) (fun q => imgF54 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF54 q - ((2 : ℝ)/255)) (fun q => imgF54 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF54_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF54, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #54 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_54 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF54 + δ) j < mlpTF (imgF54 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_54 δ hδ
-
-theorem hpreTF55_sum : ∀ t, (∑ j, W1TF t j * imgF55 j) = hpreTF55 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF55_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_55 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF55 q - ((1 : ℝ)/255)) (fun q => imgF55 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF55 q - ((1 : ℝ)/255)) (fun q => imgF55 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF55 q - ((1 : ℝ)/255)) (fun q => imgF55 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF55 q - ((1 : ℝ)/255)) (fun q => imgF55 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF55_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF55, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #55 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_55 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF55 + δ) j < mlpTF (imgF55 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_55 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_55 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF55 q - ((2 : ℝ)/255)) (fun q => imgF55 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF55 q - ((2 : ℝ)/255)) (fun q => imgF55 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF55 q - ((2 : ℝ)/255)) (fun q => imgF55 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF55 q - ((2 : ℝ)/255)) (fun q => imgF55 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF55_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF55, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #55 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_55 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF55 + δ) j < mlpTF (imgF55 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_55 δ hδ
-
-theorem hpreTF56_sum : ∀ t, (∑ j, W1TF t j * imgF56 j) = hpreTF56 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF56_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_56 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF56 q - ((1 : ℝ)/255)) (fun q => imgF56 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF56 q - ((1 : ℝ)/255)) (fun q => imgF56 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF56 q - ((1 : ℝ)/255)) (fun q => imgF56 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF56 q - ((1 : ℝ)/255)) (fun q => imgF56 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF56_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF56, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #56 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_56 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF56 + δ) j < mlpTF (imgF56 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_56 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_56 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF56 q - ((2 : ℝ)/255)) (fun q => imgF56 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF56 q - ((2 : ℝ)/255)) (fun q => imgF56 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF56 q - ((2 : ℝ)/255)) (fun q => imgF56 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF56 q - ((2 : ℝ)/255)) (fun q => imgF56 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF56_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF56, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #56 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_56 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF56 + δ) j < mlpTF (imgF56 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_56 δ hδ
-
-theorem hpreTF57_sum : ∀ t, (∑ j, W1TF t j * imgF57 j) = hpreTF57 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF57_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_57 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF57 q - ((1 : ℝ)/255)) (fun q => imgF57 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF57 q - ((1 : ℝ)/255)) (fun q => imgF57 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF57 q - ((1 : ℝ)/255)) (fun q => imgF57 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF57 q - ((1 : ℝ)/255)) (fun q => imgF57 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF57_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF57, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #57 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_57 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF57 + δ) j < mlpTF (imgF57 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_57 δ hδ
-
-theorem hpreTF58_sum : ∀ t, (∑ j, W1TF t j * imgF58 j) = hpreTF58 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF58_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_58 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF58 q - ((1 : ℝ)/255)) (fun q => imgF58 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF58 q - ((1 : ℝ)/255)) (fun q => imgF58 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF58 q - ((1 : ℝ)/255)) (fun q => imgF58 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF58 q - ((1 : ℝ)/255)) (fun q => imgF58 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF58_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF58, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #58 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_58 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpTF (imgF58 + δ) j < mlpTF (imgF58 + δ) 9 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_58 δ hδ
-
--- net TF pre-activations for #60 (not in the base L2-certified set)
-theorem pzITF_60_0 : dotZ w1zTF0 imgz60 = -56673 := by decide +kernel
-theorem pzITF_60_1 : dotZ w1zTF1 imgz60 = -454909 := by decide +kernel
-theorem pzITF_60_2 : dotZ w1zTF2 imgz60 = -346896 := by decide +kernel
-theorem pzITF_60_3 : dotZ w1zTF3 imgz60 = 532295 := by decide +kernel
-theorem pzITF_60_4 : dotZ w1zTF4 imgz60 = 46171 := by decide +kernel
-theorem pzITF_60_5 : dotZ w1zTF5 imgz60 = 525073 := by decide +kernel
-theorem pzITF_60_6 : dotZ w1zTF6 imgz60 = -296544 := by decide +kernel
-theorem pzITF_60_7 : dotZ w1zTF7 imgz60 = -317337 := by decide +kernel
-theorem pzITF_60_8 : dotZ w1zTF8 imgz60 = -108967 := by decide +kernel
-theorem pzITF_60_9 : dotZ w1zTF9 imgz60 = -189811 := by decide +kernel
-theorem pzITF_60_10 : dotZ w1zTF10 imgz60 = 37609 := by decide +kernel
-theorem pzITF_60_11 : dotZ w1zTF11 imgz60 = -141294 := by decide +kernel
-theorem pzITF_60_12 : dotZ w1zTF12 imgz60 = 101272 := by decide +kernel
-theorem pzITF_60_13 : dotZ w1zTF13 imgz60 = 177077 := by decide +kernel
-theorem pzITF_60_14 : dotZ w1zTF14 imgz60 = -519698 := by decide +kernel
-theorem pzITF_60_15 : dotZ w1zTF15 imgz60 = -105481 := by decide +kernel
-
-noncomputable def hpreITF60 : Fin 16 → ℝ :=
-  ![((-56673 : ℝ)/65280), ((-454909 : ℝ)/65280), ((-346896 : ℝ)/65280), ((532295 : ℝ)/65280), ((46171 : ℝ)/65280), ((525073 : ℝ)/65280), ((-296544 : ℝ)/65280), ((-317337 : ℝ)/65280), ((-108967 : ℝ)/65280), ((-189811 : ℝ)/65280), ((37609 : ℝ)/65280), ((-141294 : ℝ)/65280), ((101272 : ℝ)/65280), ((177077 : ℝ)/65280), ((-519698 : ℝ)/65280), ((-105481 : ℝ)/65280)]
-
-theorem hpreITF60_eval_0 : denseE W1TF imgF60 0 = hpreITF60 0 := by
-  rw [show hpreITF60 0 = ((-56673 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr0]
-  simp only [w1rTF0, imgF60_apply]
-  rw [sum_getD_div w1zTF0_len imgz60_len pzITF_60_0 256 255]
-  norm_num
-
-theorem hpreITF60_eval_1 : denseE W1TF imgF60 1 = hpreITF60 1 := by
-  rw [show hpreITF60 1 = ((-454909 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr1]
-  simp only [w1rTF1, imgF60_apply]
-  rw [sum_getD_div w1zTF1_len imgz60_len pzITF_60_1 256 255]
-  norm_num
-
-theorem hpreITF60_eval_2 : denseE W1TF imgF60 2 = hpreITF60 2 := by
-  rw [show hpreITF60 2 = ((-346896 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr2]
-  simp only [w1rTF2, imgF60_apply]
-  rw [sum_getD_div w1zTF2_len imgz60_len pzITF_60_2 256 255]
-  norm_num
-
-theorem hpreITF60_eval_3 : denseE W1TF imgF60 3 = hpreITF60 3 := by
-  rw [show hpreITF60 3 = ((532295 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr3]
-  simp only [w1rTF3, imgF60_apply]
-  rw [sum_getD_div w1zTF3_len imgz60_len pzITF_60_3 256 255]
-  norm_num
-
-theorem hpreITF60_eval_4 : denseE W1TF imgF60 4 = hpreITF60 4 := by
-  rw [show hpreITF60 4 = ((46171 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr4]
-  simp only [w1rTF4, imgF60_apply]
-  rw [sum_getD_div w1zTF4_len imgz60_len pzITF_60_4 256 255]
-  norm_num
-
-theorem hpreITF60_eval_5 : denseE W1TF imgF60 5 = hpreITF60 5 := by
-  rw [show hpreITF60 5 = ((525073 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr5]
-  simp only [w1rTF5, imgF60_apply]
-  rw [sum_getD_div w1zTF5_len imgz60_len pzITF_60_5 256 255]
-  norm_num
-
-theorem hpreITF60_eval_6 : denseE W1TF imgF60 6 = hpreITF60 6 := by
-  rw [show hpreITF60 6 = ((-296544 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr6]
-  simp only [w1rTF6, imgF60_apply]
-  rw [sum_getD_div w1zTF6_len imgz60_len pzITF_60_6 256 255]
-  norm_num
-
-theorem hpreITF60_eval_7 : denseE W1TF imgF60 7 = hpreITF60 7 := by
-  rw [show hpreITF60 7 = ((-317337 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr7]
-  simp only [w1rTF7, imgF60_apply]
-  rw [sum_getD_div w1zTF7_len imgz60_len pzITF_60_7 256 255]
-  norm_num
-
-theorem hpreITF60_eval_8 : denseE W1TF imgF60 8 = hpreITF60 8 := by
-  rw [show hpreITF60 8 = ((-108967 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr8]
-  simp only [w1rTF8, imgF60_apply]
-  rw [sum_getD_div w1zTF8_len imgz60_len pzITF_60_8 256 255]
-  norm_num
-
-theorem hpreITF60_eval_9 : denseE W1TF imgF60 9 = hpreITF60 9 := by
-  rw [show hpreITF60 9 = ((-189811 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr9]
-  simp only [w1rTF9, imgF60_apply]
-  rw [sum_getD_div w1zTF9_len imgz60_len pzITF_60_9 256 255]
-  norm_num
-
-theorem hpreITF60_eval_10 : denseE W1TF imgF60 10 = hpreITF60 10 := by
-  rw [show hpreITF60 10 = ((37609 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr10]
-  simp only [w1rTF10, imgF60_apply]
-  rw [sum_getD_div w1zTF10_len imgz60_len pzITF_60_10 256 255]
-  norm_num
-
-theorem hpreITF60_eval_11 : denseE W1TF imgF60 11 = hpreITF60 11 := by
-  rw [show hpreITF60 11 = ((-141294 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr11]
-  simp only [w1rTF11, imgF60_apply]
-  rw [sum_getD_div w1zTF11_len imgz60_len pzITF_60_11 256 255]
-  norm_num
-
-theorem hpreITF60_eval_12 : denseE W1TF imgF60 12 = hpreITF60 12 := by
-  rw [show hpreITF60 12 = ((101272 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr12]
-  simp only [w1rTF12, imgF60_apply]
-  rw [sum_getD_div w1zTF12_len imgz60_len pzITF_60_12 256 255]
-  norm_num
-
-theorem hpreITF60_eval_13 : denseE W1TF imgF60 13 = hpreITF60 13 := by
-  rw [show hpreITF60 13 = ((177077 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr13]
-  simp only [w1rTF13, imgF60_apply]
-  rw [sum_getD_div w1zTF13_len imgz60_len pzITF_60_13 256 255]
-  norm_num
-
-theorem hpreITF60_eval_14 : denseE W1TF imgF60 14 = hpreITF60 14 := by
-  rw [show hpreITF60 14 = ((-519698 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr14]
-  simp only [w1rTF14, imgF60_apply]
-  rw [sum_getD_div w1zTF14_len imgz60_len pzITF_60_14 256 255]
-  norm_num
-
-theorem hpreITF60_eval_15 : denseE W1TF imgF60 15 = hpreITF60 15 := by
-  rw [show hpreITF60 15 = ((-105481 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr15]
-  simp only [w1rTF15, imgF60_apply]
-  rw [sum_getD_div w1zTF15_len imgz60_len pzITF_60_15 256 255]
-  norm_num
-
-theorem hpreITF60_eval : ∀ k : Fin 16, denseE W1TF imgF60 k = hpreITF60 k := by
-  intro k
-  fin_cases k <;>
-    [ exact hpreITF60_eval_0; exact hpreITF60_eval_1; exact hpreITF60_eval_2; exact hpreITF60_eval_3; exact hpreITF60_eval_4; exact hpreITF60_eval_5; exact hpreITF60_eval_6; exact hpreITF60_eval_7; exact hpreITF60_eval_8; exact hpreITF60_eval_9; exact hpreITF60_eval_10; exact hpreITF60_eval_11; exact hpreITF60_eval_12; exact hpreITF60_eval_13; exact hpreITF60_eval_14; exact hpreITF60_eval_15 ]
-
-theorem hpreITF60_sum : ∀ t, (∑ j, W1TF t j * imgF60 j) = hpreITF60 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreITF60_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_60 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF60 q - ((1 : ℝ)/255)) (fun q => imgF60 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF60 q - ((1 : ℝ)/255)) (fun q => imgF60 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF60 q - ((1 : ℝ)/255)) (fun q => imgF60 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF60 q - ((1 : ℝ)/255)) (fun q => imgF60 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreITF60_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreITF60, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #60 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_60 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF60 + δ) j < mlpTF (imgF60 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_60 δ hδ
-
-theorem hpreTF63_sum : ∀ t, (∑ j, W1TF t j * imgF63 j) = hpreTF63 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF63_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_63 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF63 q - ((1 : ℝ)/255)) (fun q => imgF63 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF63 q - ((1 : ℝ)/255)) (fun q => imgF63 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF63 q - ((1 : ℝ)/255)) (fun q => imgF63 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF63 q - ((1 : ℝ)/255)) (fun q => imgF63 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF63_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF63, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #63 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_63 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF63 + δ) j < mlpTF (imgF63 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_63 δ hδ
-
--- net TF pre-activations for #65 (not in the base L2-certified set)
-theorem pzITF_65_0 : dotZ w1zTF0 imgz65 = -30309 := by decide +kernel
-theorem pzITF_65_1 : dotZ w1zTF1 imgz65 = 132743 := by decide +kernel
-theorem pzITF_65_2 : dotZ w1zTF2 imgz65 = 149470 := by decide +kernel
-theorem pzITF_65_3 : dotZ w1zTF3 imgz65 = 103654 := by decide +kernel
-theorem pzITF_65_4 : dotZ w1zTF4 imgz65 = -108941 := by decide +kernel
-theorem pzITF_65_5 : dotZ w1zTF5 imgz65 = 195048 := by decide +kernel
-theorem pzITF_65_6 : dotZ w1zTF6 imgz65 = 206504 := by decide +kernel
-theorem pzITF_65_7 : dotZ w1zTF7 imgz65 = -60920 := by decide +kernel
-theorem pzITF_65_8 : dotZ w1zTF8 imgz65 = 158897 := by decide +kernel
-theorem pzITF_65_9 : dotZ w1zTF9 imgz65 = 219774 := by decide +kernel
-theorem pzITF_65_10 : dotZ w1zTF10 imgz65 = 95017 := by decide +kernel
-theorem pzITF_65_11 : dotZ w1zTF11 imgz65 = 74044 := by decide +kernel
-theorem pzITF_65_12 : dotZ w1zTF12 imgz65 = -56892 := by decide +kernel
-theorem pzITF_65_13 : dotZ w1zTF13 imgz65 = -116457 := by decide +kernel
-theorem pzITF_65_14 : dotZ w1zTF14 imgz65 = 89566 := by decide +kernel
-theorem pzITF_65_15 : dotZ w1zTF15 imgz65 = -28212 := by decide +kernel
-
-noncomputable def hpreITF65 : Fin 16 → ℝ :=
-  ![((-30309 : ℝ)/65280), ((132743 : ℝ)/65280), ((149470 : ℝ)/65280), ((103654 : ℝ)/65280), ((-108941 : ℝ)/65280), ((195048 : ℝ)/65280), ((206504 : ℝ)/65280), ((-60920 : ℝ)/65280), ((158897 : ℝ)/65280), ((219774 : ℝ)/65280), ((95017 : ℝ)/65280), ((74044 : ℝ)/65280), ((-56892 : ℝ)/65280), ((-116457 : ℝ)/65280), ((89566 : ℝ)/65280), ((-28212 : ℝ)/65280)]
-
-theorem hpreITF65_eval_0 : denseE W1TF imgF65 0 = hpreITF65 0 := by
-  rw [show hpreITF65 0 = ((-30309 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr0]
-  simp only [w1rTF0, imgF65_apply]
-  rw [sum_getD_div w1zTF0_len imgz65_len pzITF_65_0 256 255]
-  norm_num
-
-theorem hpreITF65_eval_1 : denseE W1TF imgF65 1 = hpreITF65 1 := by
-  rw [show hpreITF65 1 = ((132743 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr1]
-  simp only [w1rTF1, imgF65_apply]
-  rw [sum_getD_div w1zTF1_len imgz65_len pzITF_65_1 256 255]
-  norm_num
-
-theorem hpreITF65_eval_2 : denseE W1TF imgF65 2 = hpreITF65 2 := by
-  rw [show hpreITF65 2 = ((149470 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr2]
-  simp only [w1rTF2, imgF65_apply]
-  rw [sum_getD_div w1zTF2_len imgz65_len pzITF_65_2 256 255]
-  norm_num
-
-theorem hpreITF65_eval_3 : denseE W1TF imgF65 3 = hpreITF65 3 := by
-  rw [show hpreITF65 3 = ((103654 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr3]
-  simp only [w1rTF3, imgF65_apply]
-  rw [sum_getD_div w1zTF3_len imgz65_len pzITF_65_3 256 255]
-  norm_num
-
-theorem hpreITF65_eval_4 : denseE W1TF imgF65 4 = hpreITF65 4 := by
-  rw [show hpreITF65 4 = ((-108941 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr4]
-  simp only [w1rTF4, imgF65_apply]
-  rw [sum_getD_div w1zTF4_len imgz65_len pzITF_65_4 256 255]
-  norm_num
-
-theorem hpreITF65_eval_5 : denseE W1TF imgF65 5 = hpreITF65 5 := by
-  rw [show hpreITF65 5 = ((195048 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr5]
-  simp only [w1rTF5, imgF65_apply]
-  rw [sum_getD_div w1zTF5_len imgz65_len pzITF_65_5 256 255]
-  norm_num
-
-theorem hpreITF65_eval_6 : denseE W1TF imgF65 6 = hpreITF65 6 := by
-  rw [show hpreITF65 6 = ((206504 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr6]
-  simp only [w1rTF6, imgF65_apply]
-  rw [sum_getD_div w1zTF6_len imgz65_len pzITF_65_6 256 255]
-  norm_num
-
-theorem hpreITF65_eval_7 : denseE W1TF imgF65 7 = hpreITF65 7 := by
-  rw [show hpreITF65 7 = ((-60920 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr7]
-  simp only [w1rTF7, imgF65_apply]
-  rw [sum_getD_div w1zTF7_len imgz65_len pzITF_65_7 256 255]
-  norm_num
-
-theorem hpreITF65_eval_8 : denseE W1TF imgF65 8 = hpreITF65 8 := by
-  rw [show hpreITF65 8 = ((158897 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr8]
-  simp only [w1rTF8, imgF65_apply]
-  rw [sum_getD_div w1zTF8_len imgz65_len pzITF_65_8 256 255]
-  norm_num
-
-theorem hpreITF65_eval_9 : denseE W1TF imgF65 9 = hpreITF65 9 := by
-  rw [show hpreITF65 9 = ((219774 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr9]
-  simp only [w1rTF9, imgF65_apply]
-  rw [sum_getD_div w1zTF9_len imgz65_len pzITF_65_9 256 255]
-  norm_num
-
-theorem hpreITF65_eval_10 : denseE W1TF imgF65 10 = hpreITF65 10 := by
-  rw [show hpreITF65 10 = ((95017 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr10]
-  simp only [w1rTF10, imgF65_apply]
-  rw [sum_getD_div w1zTF10_len imgz65_len pzITF_65_10 256 255]
-  norm_num
-
-theorem hpreITF65_eval_11 : denseE W1TF imgF65 11 = hpreITF65 11 := by
-  rw [show hpreITF65 11 = ((74044 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr11]
-  simp only [w1rTF11, imgF65_apply]
-  rw [sum_getD_div w1zTF11_len imgz65_len pzITF_65_11 256 255]
-  norm_num
-
-theorem hpreITF65_eval_12 : denseE W1TF imgF65 12 = hpreITF65 12 := by
-  rw [show hpreITF65 12 = ((-56892 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr12]
-  simp only [w1rTF12, imgF65_apply]
-  rw [sum_getD_div w1zTF12_len imgz65_len pzITF_65_12 256 255]
-  norm_num
-
-theorem hpreITF65_eval_13 : denseE W1TF imgF65 13 = hpreITF65 13 := by
-  rw [show hpreITF65 13 = ((-116457 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr13]
-  simp only [w1rTF13, imgF65_apply]
-  rw [sum_getD_div w1zTF13_len imgz65_len pzITF_65_13 256 255]
-  norm_num
-
-theorem hpreITF65_eval_14 : denseE W1TF imgF65 14 = hpreITF65 14 := by
-  rw [show hpreITF65 14 = ((89566 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr14]
-  simp only [w1rTF14, imgF65_apply]
-  rw [sum_getD_div w1zTF14_len imgz65_len pzITF_65_14 256 255]
-  norm_num
-
-theorem hpreITF65_eval_15 : denseE W1TF imgF65 15 = hpreITF65 15 := by
-  rw [show hpreITF65 15 = ((-28212 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr15]
-  simp only [w1rTF15, imgF65_apply]
-  rw [sum_getD_div w1zTF15_len imgz65_len pzITF_65_15 256 255]
-  norm_num
-
-theorem hpreITF65_eval : ∀ k : Fin 16, denseE W1TF imgF65 k = hpreITF65 k := by
-  intro k
-  fin_cases k <;>
-    [ exact hpreITF65_eval_0; exact hpreITF65_eval_1; exact hpreITF65_eval_2; exact hpreITF65_eval_3; exact hpreITF65_eval_4; exact hpreITF65_eval_5; exact hpreITF65_eval_6; exact hpreITF65_eval_7; exact hpreITF65_eval_8; exact hpreITF65_eval_9; exact hpreITF65_eval_10; exact hpreITF65_eval_11; exact hpreITF65_eval_12; exact hpreITF65_eval_13; exact hpreITF65_eval_14; exact hpreITF65_eval_15 ]
-
-theorem hpreITF65_sum : ∀ t, (∑ j, W1TF t j * imgF65 j) = hpreITF65 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreITF65_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_65 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF65 q - ((1 : ℝ)/255)) (fun q => imgF65 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF65 q - ((1 : ℝ)/255)) (fun q => imgF65 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF65 q - ((1 : ℝ)/255)) (fun q => imgF65 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF65 q - ((1 : ℝ)/255)) (fun q => imgF65 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreITF65_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreITF65, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #65 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_65 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF65 + δ) j < mlpTF (imgF65 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_65 δ hδ
-
-theorem hpreTF67_sum : ∀ t, (∑ j, W1TF t j * imgF67 j) = hpreTF67 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF67_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_67 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF67 q - ((1 : ℝ)/255)) (fun q => imgF67 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF67 q - ((1 : ℝ)/255)) (fun q => imgF67 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF67 q - ((1 : ℝ)/255)) (fun q => imgF67 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF67 q - ((1 : ℝ)/255)) (fun q => imgF67 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF67_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF67, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #67 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_67 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF67 + δ) j < mlpTF (imgF67 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_67 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_67 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF67 q - ((2 : ℝ)/255)) (fun q => imgF67 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF67 q - ((2 : ℝ)/255)) (fun q => imgF67 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF67 q - ((2 : ℝ)/255)) (fun q => imgF67 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF67 q - ((2 : ℝ)/255)) (fun q => imgF67 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF67_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF67, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #67 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_67 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF67 + δ) j < mlpTF (imgF67 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_67 δ hδ
-
-theorem hpreTF68_sum : ∀ t, (∑ j, W1TF t j * imgF68 j) = hpreTF68 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF68_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_68 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF68 q - ((1 : ℝ)/255)) (fun q => imgF68 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF68 q - ((1 : ℝ)/255)) (fun q => imgF68 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF68 q - ((1 : ℝ)/255)) (fun q => imgF68 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF68 q - ((1 : ℝ)/255)) (fun q => imgF68 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF68_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF68, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #68 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_68 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF68 + δ) j < mlpTF (imgF68 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_68 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_68 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF68 q - ((2 : ℝ)/255)) (fun q => imgF68 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF68 q - ((2 : ℝ)/255)) (fun q => imgF68 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF68 q - ((2 : ℝ)/255)) (fun q => imgF68 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF68 q - ((2 : ℝ)/255)) (fun q => imgF68 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF68_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF68, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #68 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_68 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF68 + δ) j < mlpTF (imgF68 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_68 δ hδ
-
-theorem hpreTF69_sum : ∀ t, (∑ j, W1TF t j * imgF69 j) = hpreTF69 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF69_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_69 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF69 q - ((1 : ℝ)/255)) (fun q => imgF69 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF69 q - ((1 : ℝ)/255)) (fun q => imgF69 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF69 q - ((1 : ℝ)/255)) (fun q => imgF69 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF69 q - ((1 : ℝ)/255)) (fun q => imgF69 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF69_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF69, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #69 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_69 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF69 + δ) j < mlpTF (imgF69 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_69 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_69 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF69 q - ((2 : ℝ)/255)) (fun q => imgF69 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF69 q - ((2 : ℝ)/255)) (fun q => imgF69 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF69 q - ((2 : ℝ)/255)) (fun q => imgF69 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF69 q - ((2 : ℝ)/255)) (fun q => imgF69 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF69_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF69, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #69 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_69 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF69 + δ) j < mlpTF (imgF69 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_69 δ hδ
-
-theorem hpreTF70_sum : ∀ t, (∑ j, W1TF t j * imgF70 j) = hpreTF70 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF70_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_70 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF70 q - ((1 : ℝ)/255)) (fun q => imgF70 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF70 q - ((1 : ℝ)/255)) (fun q => imgF70 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF70 q - ((1 : ℝ)/255)) (fun q => imgF70 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF70 q - ((1 : ℝ)/255)) (fun q => imgF70 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF70_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF70, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #70 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_70 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF70 + δ) j < mlpTF (imgF70 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_70 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_70 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF70 q - ((2 : ℝ)/255)) (fun q => imgF70 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF70 q - ((2 : ℝ)/255)) (fun q => imgF70 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF70 q - ((2 : ℝ)/255)) (fun q => imgF70 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF70 q - ((2 : ℝ)/255)) (fun q => imgF70 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF70_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF70, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #70 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_70 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF70 + δ) j < mlpTF (imgF70 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_70 δ hδ
-
 theorem hpreTF71_sum : ∀ t, (∑ j, W1TF t j * imgF71 j) = hpreTF71 t := by
   intro t
   rw [← denseE_apply]
   exact hpreTF71_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_71 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF71 q - ((1 : ℝ)/255)) (fun q => imgF71 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF71 q - ((1 : ℝ)/255)) (fun q => imgF71 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF71 q - ((1 : ℝ)/255)) (fun q => imgF71 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF71 q - ((1 : ℝ)/255)) (fun q => imgF71 q + ((1 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF71_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF71, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #71 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_71 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF71 + δ) j < mlpTF (imgF71 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_71 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_71 : ∀ j : Fin 10, j ≠ 0 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF71 q - ((2 : ℝ)/255)) (fun q => imgF71 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF71 q - ((2 : ℝ)/255)) (fun q => imgF71 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF71 q - ((2 : ℝ)/255)) (fun q => imgF71 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF71 q - ((2 : ℝ)/255)) (fun q => imgF71 q + ((2 : ℝ)/255)))) 0 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF71_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF71, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #71 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_71 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 0 → mlpTF (imgF71 + δ) j < mlpTF (imgF71 + δ) 0 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_71 δ hδ
 
 set_option maxHeartbeats 6400000 in
 theorem hbTFe4_71 : ∀ j : Fin 10, j ≠ 0 →
@@ -3473,1390 +1619,6 @@ theorem certIBPTFe4_71 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 0 → mlpTF (imgF71 + δ) j < mlpTF (imgF71 + δ) 0 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe4_71 δ hδ
 
-theorem hpreTF72_sum : ∀ t, (∑ j, W1TF t j * imgF72 j) = hpreTF72 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF72_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_72 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF72 q - ((1 : ℝ)/255)) (fun q => imgF72 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF72 q - ((1 : ℝ)/255)) (fun q => imgF72 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF72 q - ((1 : ℝ)/255)) (fun q => imgF72 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF72 q - ((1 : ℝ)/255)) (fun q => imgF72 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF72_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF72, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #72 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_72 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpTF (imgF72 + δ) j < mlpTF (imgF72 + δ) 2 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_72 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_72 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF72 q - ((2 : ℝ)/255)) (fun q => imgF72 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF72 q - ((2 : ℝ)/255)) (fun q => imgF72 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF72 q - ((2 : ℝ)/255)) (fun q => imgF72 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF72 q - ((2 : ℝ)/255)) (fun q => imgF72 q + ((2 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF72_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF72, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #72 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_72 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpTF (imgF72 + δ) j < mlpTF (imgF72 + δ) 2 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_72 δ hδ
-
-theorem hpreTF74_sum : ∀ t, (∑ j, W1TF t j * imgF74 j) = hpreTF74 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF74_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_74 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF74 q - ((1 : ℝ)/255)) (fun q => imgF74 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF74 q - ((1 : ℝ)/255)) (fun q => imgF74 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF74 q - ((1 : ℝ)/255)) (fun q => imgF74 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF74 q - ((1 : ℝ)/255)) (fun q => imgF74 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF74_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF74, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #74 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_74 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF74 + δ) j < mlpTF (imgF74 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_74 δ hδ
-
-theorem hpreTF75_sum : ∀ t, (∑ j, W1TF t j * imgF75 j) = hpreTF75 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF75_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_75 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF75 q - ((1 : ℝ)/255)) (fun q => imgF75 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF75 q - ((1 : ℝ)/255)) (fun q => imgF75 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF75 q - ((1 : ℝ)/255)) (fun q => imgF75 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF75 q - ((1 : ℝ)/255)) (fun q => imgF75 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF75_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF75, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #75 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_75 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF75 + δ) j < mlpTF (imgF75 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_75 δ hδ
-
-theorem hpreTF76_sum : ∀ t, (∑ j, W1TF t j * imgF76 j) = hpreTF76 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF76_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_76 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF76 q - ((1 : ℝ)/255)) (fun q => imgF76 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF76 q - ((1 : ℝ)/255)) (fun q => imgF76 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF76 q - ((1 : ℝ)/255)) (fun q => imgF76 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF76 q - ((1 : ℝ)/255)) (fun q => imgF76 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF76_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF76, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #76 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_76 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF76 + δ) j < mlpTF (imgF76 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_76 δ hδ
-
-theorem hpreTF77_sum : ∀ t, (∑ j, W1TF t j * imgF77 j) = hpreTF77 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF77_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_77 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF77 q - ((1 : ℝ)/255)) (fun q => imgF77 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF77 q - ((1 : ℝ)/255)) (fun q => imgF77 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF77 q - ((1 : ℝ)/255)) (fun q => imgF77 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF77 q - ((1 : ℝ)/255)) (fun q => imgF77 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF77_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF77, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #77 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_77 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpTF (imgF77 + δ) j < mlpTF (imgF77 + δ) 2 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_77 δ hδ
-
-theorem hpreTF78_sum : ∀ t, (∑ j, W1TF t j * imgF78 j) = hpreTF78 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF78_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_78 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF78 q - ((1 : ℝ)/255)) (fun q => imgF78 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF78 q - ((1 : ℝ)/255)) (fun q => imgF78 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF78 q - ((1 : ℝ)/255)) (fun q => imgF78 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF78 q - ((1 : ℝ)/255)) (fun q => imgF78 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF78_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF78, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #78 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_78 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpTF (imgF78 + δ) j < mlpTF (imgF78 + δ) 9 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_78 δ hδ
-
-theorem hpreTF79_sum : ∀ t, (∑ j, W1TF t j * imgF79 j) = hpreTF79 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF79_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_79 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF79 q - ((1 : ℝ)/255)) (fun q => imgF79 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF79 q - ((1 : ℝ)/255)) (fun q => imgF79 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF79 q - ((1 : ℝ)/255)) (fun q => imgF79 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF79 q - ((1 : ℝ)/255)) (fun q => imgF79 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF79_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF79, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #79 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_79 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF79 + δ) j < mlpTF (imgF79 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_79 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_79 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF79 q - ((2 : ℝ)/255)) (fun q => imgF79 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF79 q - ((2 : ℝ)/255)) (fun q => imgF79 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF79 q - ((2 : ℝ)/255)) (fun q => imgF79 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF79 q - ((2 : ℝ)/255)) (fun q => imgF79 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF79_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF79, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #79 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_79 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF79 + δ) j < mlpTF (imgF79 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_79 δ hδ
-
--- net TF pre-activations for #80 (not in the base L2-certified set)
-theorem pzITF_80_0 : dotZ w1zTF0 imgz80 = 106501 := by decide +kernel
-theorem pzITF_80_1 : dotZ w1zTF1 imgz80 = 93643 := by decide +kernel
-theorem pzITF_80_2 : dotZ w1zTF2 imgz80 = -122597 := by decide +kernel
-theorem pzITF_80_3 : dotZ w1zTF3 imgz80 = 206090 := by decide +kernel
-theorem pzITF_80_4 : dotZ w1zTF4 imgz80 = 137529 := by decide +kernel
-theorem pzITF_80_5 : dotZ w1zTF5 imgz80 = 300142 := by decide +kernel
-theorem pzITF_80_6 : dotZ w1zTF6 imgz80 = 80867 := by decide +kernel
-theorem pzITF_80_7 : dotZ w1zTF7 imgz80 = -372915 := by decide +kernel
-theorem pzITF_80_8 : dotZ w1zTF8 imgz80 = 24076 := by decide +kernel
-theorem pzITF_80_9 : dotZ w1zTF9 imgz80 = 3517 := by decide +kernel
-theorem pzITF_80_10 : dotZ w1zTF10 imgz80 = 320767 := by decide +kernel
-theorem pzITF_80_11 : dotZ w1zTF11 imgz80 = -27040 := by decide +kernel
-theorem pzITF_80_12 : dotZ w1zTF12 imgz80 = 11515 := by decide +kernel
-theorem pzITF_80_13 : dotZ w1zTF13 imgz80 = -80972 := by decide +kernel
-theorem pzITF_80_14 : dotZ w1zTF14 imgz80 = -214318 := by decide +kernel
-theorem pzITF_80_15 : dotZ w1zTF15 imgz80 = -20972 := by decide +kernel
-
-noncomputable def hpreITF80 : Fin 16 → ℝ :=
-  ![((106501 : ℝ)/65280), ((93643 : ℝ)/65280), ((-122597 : ℝ)/65280), ((206090 : ℝ)/65280), ((137529 : ℝ)/65280), ((300142 : ℝ)/65280), ((80867 : ℝ)/65280), ((-372915 : ℝ)/65280), ((24076 : ℝ)/65280), ((3517 : ℝ)/65280), ((320767 : ℝ)/65280), ((-27040 : ℝ)/65280), ((11515 : ℝ)/65280), ((-80972 : ℝ)/65280), ((-214318 : ℝ)/65280), ((-20972 : ℝ)/65280)]
-
-theorem hpreITF80_eval_0 : denseE W1TF imgF80 0 = hpreITF80 0 := by
-  rw [show hpreITF80 0 = ((106501 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr0]
-  simp only [w1rTF0, imgF80_apply]
-  rw [sum_getD_div w1zTF0_len imgz80_len pzITF_80_0 256 255]
-  norm_num
-
-theorem hpreITF80_eval_1 : denseE W1TF imgF80 1 = hpreITF80 1 := by
-  rw [show hpreITF80 1 = ((93643 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr1]
-  simp only [w1rTF1, imgF80_apply]
-  rw [sum_getD_div w1zTF1_len imgz80_len pzITF_80_1 256 255]
-  norm_num
-
-theorem hpreITF80_eval_2 : denseE W1TF imgF80 2 = hpreITF80 2 := by
-  rw [show hpreITF80 2 = ((-122597 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr2]
-  simp only [w1rTF2, imgF80_apply]
-  rw [sum_getD_div w1zTF2_len imgz80_len pzITF_80_2 256 255]
-  norm_num
-
-theorem hpreITF80_eval_3 : denseE W1TF imgF80 3 = hpreITF80 3 := by
-  rw [show hpreITF80 3 = ((206090 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr3]
-  simp only [w1rTF3, imgF80_apply]
-  rw [sum_getD_div w1zTF3_len imgz80_len pzITF_80_3 256 255]
-  norm_num
-
-theorem hpreITF80_eval_4 : denseE W1TF imgF80 4 = hpreITF80 4 := by
-  rw [show hpreITF80 4 = ((137529 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr4]
-  simp only [w1rTF4, imgF80_apply]
-  rw [sum_getD_div w1zTF4_len imgz80_len pzITF_80_4 256 255]
-  norm_num
-
-theorem hpreITF80_eval_5 : denseE W1TF imgF80 5 = hpreITF80 5 := by
-  rw [show hpreITF80 5 = ((300142 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr5]
-  simp only [w1rTF5, imgF80_apply]
-  rw [sum_getD_div w1zTF5_len imgz80_len pzITF_80_5 256 255]
-  norm_num
-
-theorem hpreITF80_eval_6 : denseE W1TF imgF80 6 = hpreITF80 6 := by
-  rw [show hpreITF80 6 = ((80867 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr6]
-  simp only [w1rTF6, imgF80_apply]
-  rw [sum_getD_div w1zTF6_len imgz80_len pzITF_80_6 256 255]
-  norm_num
-
-theorem hpreITF80_eval_7 : denseE W1TF imgF80 7 = hpreITF80 7 := by
-  rw [show hpreITF80 7 = ((-372915 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr7]
-  simp only [w1rTF7, imgF80_apply]
-  rw [sum_getD_div w1zTF7_len imgz80_len pzITF_80_7 256 255]
-  norm_num
-
-theorem hpreITF80_eval_8 : denseE W1TF imgF80 8 = hpreITF80 8 := by
-  rw [show hpreITF80 8 = ((24076 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr8]
-  simp only [w1rTF8, imgF80_apply]
-  rw [sum_getD_div w1zTF8_len imgz80_len pzITF_80_8 256 255]
-  norm_num
-
-theorem hpreITF80_eval_9 : denseE W1TF imgF80 9 = hpreITF80 9 := by
-  rw [show hpreITF80 9 = ((3517 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr9]
-  simp only [w1rTF9, imgF80_apply]
-  rw [sum_getD_div w1zTF9_len imgz80_len pzITF_80_9 256 255]
-  norm_num
-
-theorem hpreITF80_eval_10 : denseE W1TF imgF80 10 = hpreITF80 10 := by
-  rw [show hpreITF80 10 = ((320767 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr10]
-  simp only [w1rTF10, imgF80_apply]
-  rw [sum_getD_div w1zTF10_len imgz80_len pzITF_80_10 256 255]
-  norm_num
-
-theorem hpreITF80_eval_11 : denseE W1TF imgF80 11 = hpreITF80 11 := by
-  rw [show hpreITF80 11 = ((-27040 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr11]
-  simp only [w1rTF11, imgF80_apply]
-  rw [sum_getD_div w1zTF11_len imgz80_len pzITF_80_11 256 255]
-  norm_num
-
-theorem hpreITF80_eval_12 : denseE W1TF imgF80 12 = hpreITF80 12 := by
-  rw [show hpreITF80 12 = ((11515 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr12]
-  simp only [w1rTF12, imgF80_apply]
-  rw [sum_getD_div w1zTF12_len imgz80_len pzITF_80_12 256 255]
-  norm_num
-
-theorem hpreITF80_eval_13 : denseE W1TF imgF80 13 = hpreITF80 13 := by
-  rw [show hpreITF80 13 = ((-80972 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr13]
-  simp only [w1rTF13, imgF80_apply]
-  rw [sum_getD_div w1zTF13_len imgz80_len pzITF_80_13 256 255]
-  norm_num
-
-theorem hpreITF80_eval_14 : denseE W1TF imgF80 14 = hpreITF80 14 := by
-  rw [show hpreITF80 14 = ((-214318 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr14]
-  simp only [w1rTF14, imgF80_apply]
-  rw [sum_getD_div w1zTF14_len imgz80_len pzITF_80_14 256 255]
-  norm_num
-
-theorem hpreITF80_eval_15 : denseE W1TF imgF80 15 = hpreITF80 15 := by
-  rw [show hpreITF80 15 = ((-20972 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr15]
-  simp only [w1rTF15, imgF80_apply]
-  rw [sum_getD_div w1zTF15_len imgz80_len pzITF_80_15 256 255]
-  norm_num
-
-theorem hpreITF80_eval : ∀ k : Fin 16, denseE W1TF imgF80 k = hpreITF80 k := by
-  intro k
-  fin_cases k <;>
-    [ exact hpreITF80_eval_0; exact hpreITF80_eval_1; exact hpreITF80_eval_2; exact hpreITF80_eval_3; exact hpreITF80_eval_4; exact hpreITF80_eval_5; exact hpreITF80_eval_6; exact hpreITF80_eval_7; exact hpreITF80_eval_8; exact hpreITF80_eval_9; exact hpreITF80_eval_10; exact hpreITF80_eval_11; exact hpreITF80_eval_12; exact hpreITF80_eval_13; exact hpreITF80_eval_14; exact hpreITF80_eval_15 ]
-
-theorem hpreITF80_sum : ∀ t, (∑ j, W1TF t j * imgF80 j) = hpreITF80 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreITF80_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_80 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF80 q - ((1 : ℝ)/255)) (fun q => imgF80 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF80 q - ((1 : ℝ)/255)) (fun q => imgF80 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF80 q - ((1 : ℝ)/255)) (fun q => imgF80 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF80 q - ((1 : ℝ)/255)) (fun q => imgF80 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreITF80_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreITF80, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #80 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_80 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF80 + δ) j < mlpTF (imgF80 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_80 δ hδ
-
-theorem hpreTF81_sum : ∀ t, (∑ j, W1TF t j * imgF81 j) = hpreTF81 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF81_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_81 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF81 q - ((1 : ℝ)/255)) (fun q => imgF81 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF81 q - ((1 : ℝ)/255)) (fun q => imgF81 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF81 q - ((1 : ℝ)/255)) (fun q => imgF81 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF81 q - ((1 : ℝ)/255)) (fun q => imgF81 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF81_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF81, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #81 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_81 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF81 + δ) j < mlpTF (imgF81 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_81 δ hδ
-
-theorem hpreTF82_sum : ∀ t, (∑ j, W1TF t j * imgF82 j) = hpreTF82 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF82_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_82 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF82 q - ((1 : ℝ)/255)) (fun q => imgF82 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF82 q - ((1 : ℝ)/255)) (fun q => imgF82 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF82 q - ((1 : ℝ)/255)) (fun q => imgF82 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF82 q - ((1 : ℝ)/255)) (fun q => imgF82 q + ((1 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF82_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF82, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #82 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_82 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpTF (imgF82 + δ) j < mlpTF (imgF82 + δ) 2 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_82 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_82 : ∀ j : Fin 10, j ≠ 2 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF82 q - ((2 : ℝ)/255)) (fun q => imgF82 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF82 q - ((2 : ℝ)/255)) (fun q => imgF82 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF82 q - ((2 : ℝ)/255)) (fun q => imgF82 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF82 q - ((2 : ℝ)/255)) (fun q => imgF82 q + ((2 : ℝ)/255)))) 2 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF82_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF82, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #82 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_82 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 2 → mlpTF (imgF82 + δ) j < mlpTF (imgF82 + δ) 2 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_82 δ hδ
-
-theorem hpreTF83_sum : ∀ t, (∑ j, W1TF t j * imgF83 j) = hpreTF83 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF83_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_83 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF83 q - ((1 : ℝ)/255)) (fun q => imgF83 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF83 q - ((1 : ℝ)/255)) (fun q => imgF83 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF83 q - ((1 : ℝ)/255)) (fun q => imgF83 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF83 q - ((1 : ℝ)/255)) (fun q => imgF83 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF83_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF83, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #83 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_83 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF83 + δ) j < mlpTF (imgF83 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_83 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_83 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF83 q - ((2 : ℝ)/255)) (fun q => imgF83 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF83 q - ((2 : ℝ)/255)) (fun q => imgF83 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF83 q - ((2 : ℝ)/255)) (fun q => imgF83 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF83 q - ((2 : ℝ)/255)) (fun q => imgF83 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF83_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF83, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #83 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_83 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF83 + δ) j < mlpTF (imgF83 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_83 δ hδ
-
--- net TF pre-activations for #84 (not in the base L2-certified set)
-theorem pzITF_84_0 : dotZ w1zTF0 imgz84 = 20266 := by decide +kernel
-theorem pzITF_84_1 : dotZ w1zTF1 imgz84 = -137178 := by decide +kernel
-theorem pzITF_84_2 : dotZ w1zTF2 imgz84 = -198616 := by decide +kernel
-theorem pzITF_84_3 : dotZ w1zTF3 imgz84 = 42586 := by decide +kernel
-theorem pzITF_84_4 : dotZ w1zTF4 imgz84 = -126416 := by decide +kernel
-theorem pzITF_84_5 : dotZ w1zTF5 imgz84 = -40703 := by decide +kernel
-theorem pzITF_84_6 : dotZ w1zTF6 imgz84 = 331337 := by decide +kernel
-theorem pzITF_84_7 : dotZ w1zTF7 imgz84 = -1049 := by decide +kernel
-theorem pzITF_84_8 : dotZ w1zTF8 imgz84 = 352628 := by decide +kernel
-theorem pzITF_84_9 : dotZ w1zTF9 imgz84 = 340525 := by decide +kernel
-theorem pzITF_84_10 : dotZ w1zTF10 imgz84 = 455969 := by decide +kernel
-theorem pzITF_84_11 : dotZ w1zTF11 imgz84 = 321004 := by decide +kernel
-theorem pzITF_84_12 : dotZ w1zTF12 imgz84 = 199704 := by decide +kernel
-theorem pzITF_84_13 : dotZ w1zTF13 imgz84 = 204312 := by decide +kernel
-theorem pzITF_84_14 : dotZ w1zTF14 imgz84 = -113600 := by decide +kernel
-theorem pzITF_84_15 : dotZ w1zTF15 imgz84 = 84879 := by decide +kernel
-
-noncomputable def hpreITF84 : Fin 16 → ℝ :=
-  ![((20266 : ℝ)/65280), ((-137178 : ℝ)/65280), ((-198616 : ℝ)/65280), ((42586 : ℝ)/65280), ((-126416 : ℝ)/65280), ((-40703 : ℝ)/65280), ((331337 : ℝ)/65280), ((-1049 : ℝ)/65280), ((352628 : ℝ)/65280), ((340525 : ℝ)/65280), ((455969 : ℝ)/65280), ((321004 : ℝ)/65280), ((199704 : ℝ)/65280), ((204312 : ℝ)/65280), ((-113600 : ℝ)/65280), ((84879 : ℝ)/65280)]
-
-theorem hpreITF84_eval_0 : denseE W1TF imgF84 0 = hpreITF84 0 := by
-  rw [show hpreITF84 0 = ((20266 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr0]
-  simp only [w1rTF0, imgF84_apply]
-  rw [sum_getD_div w1zTF0_len imgz84_len pzITF_84_0 256 255]
-  norm_num
-
-theorem hpreITF84_eval_1 : denseE W1TF imgF84 1 = hpreITF84 1 := by
-  rw [show hpreITF84 1 = ((-137178 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr1]
-  simp only [w1rTF1, imgF84_apply]
-  rw [sum_getD_div w1zTF1_len imgz84_len pzITF_84_1 256 255]
-  norm_num
-
-theorem hpreITF84_eval_2 : denseE W1TF imgF84 2 = hpreITF84 2 := by
-  rw [show hpreITF84 2 = ((-198616 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr2]
-  simp only [w1rTF2, imgF84_apply]
-  rw [sum_getD_div w1zTF2_len imgz84_len pzITF_84_2 256 255]
-  norm_num
-
-theorem hpreITF84_eval_3 : denseE W1TF imgF84 3 = hpreITF84 3 := by
-  rw [show hpreITF84 3 = ((42586 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr3]
-  simp only [w1rTF3, imgF84_apply]
-  rw [sum_getD_div w1zTF3_len imgz84_len pzITF_84_3 256 255]
-  norm_num
-
-theorem hpreITF84_eval_4 : denseE W1TF imgF84 4 = hpreITF84 4 := by
-  rw [show hpreITF84 4 = ((-126416 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr4]
-  simp only [w1rTF4, imgF84_apply]
-  rw [sum_getD_div w1zTF4_len imgz84_len pzITF_84_4 256 255]
-  norm_num
-
-theorem hpreITF84_eval_5 : denseE W1TF imgF84 5 = hpreITF84 5 := by
-  rw [show hpreITF84 5 = ((-40703 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr5]
-  simp only [w1rTF5, imgF84_apply]
-  rw [sum_getD_div w1zTF5_len imgz84_len pzITF_84_5 256 255]
-  norm_num
-
-theorem hpreITF84_eval_6 : denseE W1TF imgF84 6 = hpreITF84 6 := by
-  rw [show hpreITF84 6 = ((331337 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr6]
-  simp only [w1rTF6, imgF84_apply]
-  rw [sum_getD_div w1zTF6_len imgz84_len pzITF_84_6 256 255]
-  norm_num
-
-theorem hpreITF84_eval_7 : denseE W1TF imgF84 7 = hpreITF84 7 := by
-  rw [show hpreITF84 7 = ((-1049 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr7]
-  simp only [w1rTF7, imgF84_apply]
-  rw [sum_getD_div w1zTF7_len imgz84_len pzITF_84_7 256 255]
-  norm_num
-
-theorem hpreITF84_eval_8 : denseE W1TF imgF84 8 = hpreITF84 8 := by
-  rw [show hpreITF84 8 = ((352628 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr8]
-  simp only [w1rTF8, imgF84_apply]
-  rw [sum_getD_div w1zTF8_len imgz84_len pzITF_84_8 256 255]
-  norm_num
-
-theorem hpreITF84_eval_9 : denseE W1TF imgF84 9 = hpreITF84 9 := by
-  rw [show hpreITF84 9 = ((340525 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr9]
-  simp only [w1rTF9, imgF84_apply]
-  rw [sum_getD_div w1zTF9_len imgz84_len pzITF_84_9 256 255]
-  norm_num
-
-theorem hpreITF84_eval_10 : denseE W1TF imgF84 10 = hpreITF84 10 := by
-  rw [show hpreITF84 10 = ((455969 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr10]
-  simp only [w1rTF10, imgF84_apply]
-  rw [sum_getD_div w1zTF10_len imgz84_len pzITF_84_10 256 255]
-  norm_num
-
-theorem hpreITF84_eval_11 : denseE W1TF imgF84 11 = hpreITF84 11 := by
-  rw [show hpreITF84 11 = ((321004 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr11]
-  simp only [w1rTF11, imgF84_apply]
-  rw [sum_getD_div w1zTF11_len imgz84_len pzITF_84_11 256 255]
-  norm_num
-
-theorem hpreITF84_eval_12 : denseE W1TF imgF84 12 = hpreITF84 12 := by
-  rw [show hpreITF84 12 = ((199704 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr12]
-  simp only [w1rTF12, imgF84_apply]
-  rw [sum_getD_div w1zTF12_len imgz84_len pzITF_84_12 256 255]
-  norm_num
-
-theorem hpreITF84_eval_13 : denseE W1TF imgF84 13 = hpreITF84 13 := by
-  rw [show hpreITF84 13 = ((204312 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr13]
-  simp only [w1rTF13, imgF84_apply]
-  rw [sum_getD_div w1zTF13_len imgz84_len pzITF_84_13 256 255]
-  norm_num
-
-theorem hpreITF84_eval_14 : denseE W1TF imgF84 14 = hpreITF84 14 := by
-  rw [show hpreITF84 14 = ((-113600 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr14]
-  simp only [w1rTF14, imgF84_apply]
-  rw [sum_getD_div w1zTF14_len imgz84_len pzITF_84_14 256 255]
-  norm_num
-
-theorem hpreITF84_eval_15 : denseE W1TF imgF84 15 = hpreITF84 15 := by
-  rw [show hpreITF84 15 = ((84879 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr15]
-  simp only [w1rTF15, imgF84_apply]
-  rw [sum_getD_div w1zTF15_len imgz84_len pzITF_84_15 256 255]
-  norm_num
-
-theorem hpreITF84_eval : ∀ k : Fin 16, denseE W1TF imgF84 k = hpreITF84 k := by
-  intro k
-  fin_cases k <;>
-    [ exact hpreITF84_eval_0; exact hpreITF84_eval_1; exact hpreITF84_eval_2; exact hpreITF84_eval_3; exact hpreITF84_eval_4; exact hpreITF84_eval_5; exact hpreITF84_eval_6; exact hpreITF84_eval_7; exact hpreITF84_eval_8; exact hpreITF84_eval_9; exact hpreITF84_eval_10; exact hpreITF84_eval_11; exact hpreITF84_eval_12; exact hpreITF84_eval_13; exact hpreITF84_eval_14; exact hpreITF84_eval_15 ]
-
-theorem hpreITF84_sum : ∀ t, (∑ j, W1TF t j * imgF84 j) = hpreITF84 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreITF84_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_84 : ∀ j : Fin 10, j ≠ 8 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF84 q - ((1 : ℝ)/255)) (fun q => imgF84 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF84 q - ((1 : ℝ)/255)) (fun q => imgF84 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF84 q - ((1 : ℝ)/255)) (fun q => imgF84 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF84 q - ((1 : ℝ)/255)) (fun q => imgF84 q + ((1 : ℝ)/255)))) 8 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreITF84_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreITF84, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #84 (digit 8): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_84 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 8 → mlpTF (imgF84 + δ) j < mlpTF (imgF84 + δ) 8 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_84 δ hδ
-
-theorem hpreTF85_sum : ∀ t, (∑ j, W1TF t j * imgF85 j) = hpreTF85 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF85_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_85 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF85 q - ((1 : ℝ)/255)) (fun q => imgF85 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF85 q - ((1 : ℝ)/255)) (fun q => imgF85 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF85 q - ((1 : ℝ)/255)) (fun q => imgF85 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF85 q - ((1 : ℝ)/255)) (fun q => imgF85 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF85_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF85, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #85 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_85 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF85 + δ) j < mlpTF (imgF85 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_85 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_85 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF85 q - ((2 : ℝ)/255)) (fun q => imgF85 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF85 q - ((2 : ℝ)/255)) (fun q => imgF85 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF85 q - ((2 : ℝ)/255)) (fun q => imgF85 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF85 q - ((2 : ℝ)/255)) (fun q => imgF85 q + ((2 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF85_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF85, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #85 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_85 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF85 + δ) j < mlpTF (imgF85 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_85 δ hδ
-
-theorem hpreTF86_sum : ∀ t, (∑ j, W1TF t j * imgF86 j) = hpreTF86 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF86_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_86 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF86 q - ((1 : ℝ)/255)) (fun q => imgF86 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF86 q - ((1 : ℝ)/255)) (fun q => imgF86 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF86 q - ((1 : ℝ)/255)) (fun q => imgF86 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF86 q - ((1 : ℝ)/255)) (fun q => imgF86 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF86_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF86, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #86 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_86 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF86 + δ) j < mlpTF (imgF86 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_86 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_86 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF86 q - ((2 : ℝ)/255)) (fun q => imgF86 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF86 q - ((2 : ℝ)/255)) (fun q => imgF86 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF86 q - ((2 : ℝ)/255)) (fun q => imgF86 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF86 q - ((2 : ℝ)/255)) (fun q => imgF86 q + ((2 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF86_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF86, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #86 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_86 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF86 + δ) j < mlpTF (imgF86 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_86 δ hδ
-
-theorem hpreTF87_sum : ∀ t, (∑ j, W1TF t j * imgF87 j) = hpreTF87 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF87_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_87 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF87 q - ((1 : ℝ)/255)) (fun q => imgF87 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF87 q - ((1 : ℝ)/255)) (fun q => imgF87 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF87 q - ((1 : ℝ)/255)) (fun q => imgF87 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF87 q - ((1 : ℝ)/255)) (fun q => imgF87 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF87_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF87, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #87 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_87 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF87 + δ) j < mlpTF (imgF87 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_87 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_87 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF87 q - ((2 : ℝ)/255)) (fun q => imgF87 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF87 q - ((2 : ℝ)/255)) (fun q => imgF87 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF87 q - ((2 : ℝ)/255)) (fun q => imgF87 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF87 q - ((2 : ℝ)/255)) (fun q => imgF87 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF87_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF87, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #87 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_87 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF87 + δ) j < mlpTF (imgF87 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_87 δ hδ
-
-theorem hpreTF88_sum : ∀ t, (∑ j, W1TF t j * imgF88 j) = hpreTF88 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF88_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_88 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF88 q - ((1 : ℝ)/255)) (fun q => imgF88 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF88 q - ((1 : ℝ)/255)) (fun q => imgF88 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF88 q - ((1 : ℝ)/255)) (fun q => imgF88 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF88 q - ((1 : ℝ)/255)) (fun q => imgF88 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF88_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF88, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #88 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_88 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF88 + δ) j < mlpTF (imgF88 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_88 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_88 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF88 q - ((2 : ℝ)/255)) (fun q => imgF88 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF88 q - ((2 : ℝ)/255)) (fun q => imgF88 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF88 q - ((2 : ℝ)/255)) (fun q => imgF88 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF88 q - ((2 : ℝ)/255)) (fun q => imgF88 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF88_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF88, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #88 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_88 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF88 + δ) j < mlpTF (imgF88 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_88 δ hδ
-
-theorem hpreTF89_sum : ∀ t, (∑ j, W1TF t j * imgF89 j) = hpreTF89 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF89_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_89 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF89 q - ((1 : ℝ)/255)) (fun q => imgF89 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF89 q - ((1 : ℝ)/255)) (fun q => imgF89 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF89 q - ((1 : ℝ)/255)) (fun q => imgF89 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF89 q - ((1 : ℝ)/255)) (fun q => imgF89 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF89_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF89, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #89 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_89 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF89 + δ) j < mlpTF (imgF89 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_89 δ hδ
-
-theorem hpreTF90_sum : ∀ t, (∑ j, W1TF t j * imgF90 j) = hpreTF90 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF90_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_90 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF90 q - ((1 : ℝ)/255)) (fun q => imgF90 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF90 q - ((1 : ℝ)/255)) (fun q => imgF90 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF90 q - ((1 : ℝ)/255)) (fun q => imgF90 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF90 q - ((1 : ℝ)/255)) (fun q => imgF90 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF90_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF90, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #90 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_90 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF90 + δ) j < mlpTF (imgF90 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_90 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_90 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF90 q - ((2 : ℝ)/255)) (fun q => imgF90 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF90 q - ((2 : ℝ)/255)) (fun q => imgF90 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF90 q - ((2 : ℝ)/255)) (fun q => imgF90 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF90 q - ((2 : ℝ)/255)) (fun q => imgF90 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF90_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF90, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #90 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_90 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF90 + δ) j < mlpTF (imgF90 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_90 δ hδ
-
-theorem hpreTF91_sum : ∀ t, (∑ j, W1TF t j * imgF91 j) = hpreTF91 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF91_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_91 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF91 q - ((1 : ℝ)/255)) (fun q => imgF91 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF91 q - ((1 : ℝ)/255)) (fun q => imgF91 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF91 q - ((1 : ℝ)/255)) (fun q => imgF91 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF91 q - ((1 : ℝ)/255)) (fun q => imgF91 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF91_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF91, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #91 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_91 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF91 + δ) j < mlpTF (imgF91 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_91 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_91 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF91 q - ((2 : ℝ)/255)) (fun q => imgF91 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF91 q - ((2 : ℝ)/255)) (fun q => imgF91 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF91 q - ((2 : ℝ)/255)) (fun q => imgF91 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF91 q - ((2 : ℝ)/255)) (fun q => imgF91 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF91_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF91, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #91 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_91 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF91 + δ) j < mlpTF (imgF91 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_91 δ hδ
-
-theorem hpreTF93_sum : ∀ t, (∑ j, W1TF t j * imgF93 j) = hpreTF93 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF93_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_93 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF93 q - ((1 : ℝ)/255)) (fun q => imgF93 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF93 q - ((1 : ℝ)/255)) (fun q => imgF93 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF93 q - ((1 : ℝ)/255)) (fun q => imgF93 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF93 q - ((1 : ℝ)/255)) (fun q => imgF93 q + ((1 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF93_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF93, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #93 (digit 3): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_93 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF93 + δ) j < mlpTF (imgF93 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_93 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_93 : ∀ j : Fin 10, j ≠ 3 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF93 q - ((2 : ℝ)/255)) (fun q => imgF93 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF93 q - ((2 : ℝ)/255)) (fun q => imgF93 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF93 q - ((2 : ℝ)/255)) (fun q => imgF93 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF93 q - ((2 : ℝ)/255)) (fun q => imgF93 q + ((2 : ℝ)/255)))) 3 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF93_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF93, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #93 (digit 3): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_93 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 3 → mlpTF (imgF93 + δ) j < mlpTF (imgF93 + δ) 3 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_93 δ hδ
-
-theorem hpreTF94_sum : ∀ t, (∑ j, W1TF t j * imgF94 j) = hpreTF94 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF94_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_94 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF94 q - ((1 : ℝ)/255)) (fun q => imgF94 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF94 q - ((1 : ℝ)/255)) (fun q => imgF94 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF94 q - ((1 : ℝ)/255)) (fun q => imgF94 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF94 q - ((1 : ℝ)/255)) (fun q => imgF94 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF94_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF94, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #94 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_94 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF94 + δ) j < mlpTF (imgF94 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_94 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_94 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF94 q - ((2 : ℝ)/255)) (fun q => imgF94 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF94 q - ((2 : ℝ)/255)) (fun q => imgF94 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF94 q - ((2 : ℝ)/255)) (fun q => imgF94 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF94 q - ((2 : ℝ)/255)) (fun q => imgF94 q + ((2 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF94_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF94, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #94 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_94 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF94 + δ) j < mlpTF (imgF94 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_94 δ hδ
-
-theorem hpreTF95_sum : ∀ t, (∑ j, W1TF t j * imgF95 j) = hpreTF95 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF95_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_95 : ∀ j : Fin 10, j ≠ 4 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF95 q - ((1 : ℝ)/255)) (fun q => imgF95 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF95 q - ((1 : ℝ)/255)) (fun q => imgF95 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF95 q - ((1 : ℝ)/255)) (fun q => imgF95 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF95 q - ((1 : ℝ)/255)) (fun q => imgF95 q + ((1 : ℝ)/255)))) 4 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF95_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF95, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #95 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_95 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 4 → mlpTF (imgF95 + δ) j < mlpTF (imgF95 + δ) 4 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_95 δ hδ
-
--- net TF pre-activations for #96 (not in the base L2-certified set)
-theorem pzITF_96_0 : dotZ w1zTF0 imgz96 = -19093 := by decide +kernel
-theorem pzITF_96_1 : dotZ w1zTF1 imgz96 = 76054 := by decide +kernel
-theorem pzITF_96_2 : dotZ w1zTF2 imgz96 = 204613 := by decide +kernel
-theorem pzITF_96_3 : dotZ w1zTF3 imgz96 = 105289 := by decide +kernel
-theorem pzITF_96_4 : dotZ w1zTF4 imgz96 = -320582 := by decide +kernel
-theorem pzITF_96_5 : dotZ w1zTF5 imgz96 = 260962 := by decide +kernel
-theorem pzITF_96_6 : dotZ w1zTF6 imgz96 = 180271 := by decide +kernel
-theorem pzITF_96_7 : dotZ w1zTF7 imgz96 = -182477 := by decide +kernel
-theorem pzITF_96_8 : dotZ w1zTF8 imgz96 = 208319 := by decide +kernel
-theorem pzITF_96_9 : dotZ w1zTF9 imgz96 = -41707 := by decide +kernel
-theorem pzITF_96_10 : dotZ w1zTF10 imgz96 = -11440 := by decide +kernel
-theorem pzITF_96_11 : dotZ w1zTF11 imgz96 = -104643 := by decide +kernel
-theorem pzITF_96_12 : dotZ w1zTF12 imgz96 = -182223 := by decide +kernel
-theorem pzITF_96_13 : dotZ w1zTF13 imgz96 = 40288 := by decide +kernel
-theorem pzITF_96_14 : dotZ w1zTF14 imgz96 = -66123 := by decide +kernel
-theorem pzITF_96_15 : dotZ w1zTF15 imgz96 = -71741 := by decide +kernel
-
-noncomputable def hpreITF96 : Fin 16 → ℝ :=
-  ![((-19093 : ℝ)/65280), ((76054 : ℝ)/65280), ((204613 : ℝ)/65280), ((105289 : ℝ)/65280), ((-320582 : ℝ)/65280), ((260962 : ℝ)/65280), ((180271 : ℝ)/65280), ((-182477 : ℝ)/65280), ((208319 : ℝ)/65280), ((-41707 : ℝ)/65280), ((-11440 : ℝ)/65280), ((-104643 : ℝ)/65280), ((-182223 : ℝ)/65280), ((40288 : ℝ)/65280), ((-66123 : ℝ)/65280), ((-71741 : ℝ)/65280)]
-
-theorem hpreITF96_eval_0 : denseE W1TF imgF96 0 = hpreITF96 0 := by
-  rw [show hpreITF96 0 = ((-19093 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr0]
-  simp only [w1rTF0, imgF96_apply]
-  rw [sum_getD_div w1zTF0_len imgz96_len pzITF_96_0 256 255]
-  norm_num
-
-theorem hpreITF96_eval_1 : denseE W1TF imgF96 1 = hpreITF96 1 := by
-  rw [show hpreITF96 1 = ((76054 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr1]
-  simp only [w1rTF1, imgF96_apply]
-  rw [sum_getD_div w1zTF1_len imgz96_len pzITF_96_1 256 255]
-  norm_num
-
-theorem hpreITF96_eval_2 : denseE W1TF imgF96 2 = hpreITF96 2 := by
-  rw [show hpreITF96 2 = ((204613 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr2]
-  simp only [w1rTF2, imgF96_apply]
-  rw [sum_getD_div w1zTF2_len imgz96_len pzITF_96_2 256 255]
-  norm_num
-
-theorem hpreITF96_eval_3 : denseE W1TF imgF96 3 = hpreITF96 3 := by
-  rw [show hpreITF96 3 = ((105289 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr3]
-  simp only [w1rTF3, imgF96_apply]
-  rw [sum_getD_div w1zTF3_len imgz96_len pzITF_96_3 256 255]
-  norm_num
-
-theorem hpreITF96_eval_4 : denseE W1TF imgF96 4 = hpreITF96 4 := by
-  rw [show hpreITF96 4 = ((-320582 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr4]
-  simp only [w1rTF4, imgF96_apply]
-  rw [sum_getD_div w1zTF4_len imgz96_len pzITF_96_4 256 255]
-  norm_num
-
-theorem hpreITF96_eval_5 : denseE W1TF imgF96 5 = hpreITF96 5 := by
-  rw [show hpreITF96 5 = ((260962 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr5]
-  simp only [w1rTF5, imgF96_apply]
-  rw [sum_getD_div w1zTF5_len imgz96_len pzITF_96_5 256 255]
-  norm_num
-
-theorem hpreITF96_eval_6 : denseE W1TF imgF96 6 = hpreITF96 6 := by
-  rw [show hpreITF96 6 = ((180271 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr6]
-  simp only [w1rTF6, imgF96_apply]
-  rw [sum_getD_div w1zTF6_len imgz96_len pzITF_96_6 256 255]
-  norm_num
-
-theorem hpreITF96_eval_7 : denseE W1TF imgF96 7 = hpreITF96 7 := by
-  rw [show hpreITF96 7 = ((-182477 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr7]
-  simp only [w1rTF7, imgF96_apply]
-  rw [sum_getD_div w1zTF7_len imgz96_len pzITF_96_7 256 255]
-  norm_num
-
-theorem hpreITF96_eval_8 : denseE W1TF imgF96 8 = hpreITF96 8 := by
-  rw [show hpreITF96 8 = ((208319 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr8]
-  simp only [w1rTF8, imgF96_apply]
-  rw [sum_getD_div w1zTF8_len imgz96_len pzITF_96_8 256 255]
-  norm_num
-
-theorem hpreITF96_eval_9 : denseE W1TF imgF96 9 = hpreITF96 9 := by
-  rw [show hpreITF96 9 = ((-41707 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr9]
-  simp only [w1rTF9, imgF96_apply]
-  rw [sum_getD_div w1zTF9_len imgz96_len pzITF_96_9 256 255]
-  norm_num
-
-theorem hpreITF96_eval_10 : denseE W1TF imgF96 10 = hpreITF96 10 := by
-  rw [show hpreITF96 10 = ((-11440 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr10]
-  simp only [w1rTF10, imgF96_apply]
-  rw [sum_getD_div w1zTF10_len imgz96_len pzITF_96_10 256 255]
-  norm_num
-
-theorem hpreITF96_eval_11 : denseE W1TF imgF96 11 = hpreITF96 11 := by
-  rw [show hpreITF96 11 = ((-104643 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr11]
-  simp only [w1rTF11, imgF96_apply]
-  rw [sum_getD_div w1zTF11_len imgz96_len pzITF_96_11 256 255]
-  norm_num
-
-theorem hpreITF96_eval_12 : denseE W1TF imgF96 12 = hpreITF96 12 := by
-  rw [show hpreITF96 12 = ((-182223 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr12]
-  simp only [w1rTF12, imgF96_apply]
-  rw [sum_getD_div w1zTF12_len imgz96_len pzITF_96_12 256 255]
-  norm_num
-
-theorem hpreITF96_eval_13 : denseE W1TF imgF96 13 = hpreITF96 13 := by
-  rw [show hpreITF96 13 = ((40288 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr13]
-  simp only [w1rTF13, imgF96_apply]
-  rw [sum_getD_div w1zTF13_len imgz96_len pzITF_96_13 256 255]
-  norm_num
-
-theorem hpreITF96_eval_14 : denseE W1TF imgF96 14 = hpreITF96 14 := by
-  rw [show hpreITF96 14 = ((-66123 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr14]
-  simp only [w1rTF14, imgF96_apply]
-  rw [sum_getD_div w1zTF14_len imgz96_len pzITF_96_14 256 255]
-  norm_num
-
-theorem hpreITF96_eval_15 : denseE W1TF imgF96 15 = hpreITF96 15 := by
-  rw [show hpreITF96 15 = ((-71741 : ℝ)/65280) from rfl,
-      denseE_apply, W1TFr15]
-  simp only [w1rTF15, imgF96_apply]
-  rw [sum_getD_div w1zTF15_len imgz96_len pzITF_96_15 256 255]
-  norm_num
-
-theorem hpreITF96_eval : ∀ k : Fin 16, denseE W1TF imgF96 k = hpreITF96 k := by
-  intro k
-  fin_cases k <;>
-    [ exact hpreITF96_eval_0; exact hpreITF96_eval_1; exact hpreITF96_eval_2; exact hpreITF96_eval_3; exact hpreITF96_eval_4; exact hpreITF96_eval_5; exact hpreITF96_eval_6; exact hpreITF96_eval_7; exact hpreITF96_eval_8; exact hpreITF96_eval_9; exact hpreITF96_eval_10; exact hpreITF96_eval_11; exact hpreITF96_eval_12; exact hpreITF96_eval_13; exact hpreITF96_eval_14; exact hpreITF96_eval_15 ]
-
-theorem hpreITF96_sum : ∀ t, (∑ j, W1TF t j * imgF96 j) = hpreITF96 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreITF96_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_96 : ∀ j : Fin 10, j ≠ 1 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF96 q - ((1 : ℝ)/255)) (fun q => imgF96 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF96 q - ((1 : ℝ)/255)) (fun q => imgF96 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF96 q - ((1 : ℝ)/255)) (fun q => imgF96 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF96 q - ((1 : ℝ)/255)) (fun q => imgF96 q + ((1 : ℝ)/255)))) 1 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreITF96_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreITF96, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #96 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_96 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 1 → mlpTF (imgF96 + δ) j < mlpTF (imgF96 + δ) 1 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_96 δ hδ
-
-theorem hpreTF97_sum : ∀ t, (∑ j, W1TF t j * imgF97 j) = hpreTF97 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF97_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_97 : ∀ j : Fin 10, j ≠ 7 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF97 q - ((1 : ℝ)/255)) (fun q => imgF97 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF97 q - ((1 : ℝ)/255)) (fun q => imgF97 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF97 q - ((1 : ℝ)/255)) (fun q => imgF97 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF97 q - ((1 : ℝ)/255)) (fun q => imgF97 q + ((1 : ℝ)/255)))) 7 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF97_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF97, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #97 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_97 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 7 → mlpTF (imgF97 + δ) j < mlpTF (imgF97 + δ) 7 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_97 δ hδ
-
-theorem hpreTF98_sum : ∀ t, (∑ j, W1TF t j * imgF98 j) = hpreTF98 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF98_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_98 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF98 q - ((1 : ℝ)/255)) (fun q => imgF98 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF98 q - ((1 : ℝ)/255)) (fun q => imgF98 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF98 q - ((1 : ℝ)/255)) (fun q => imgF98 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF98 q - ((1 : ℝ)/255)) (fun q => imgF98 q + ((1 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF98_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF98, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #98 (digit 6): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_98 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF98 + δ) j < mlpTF (imgF98 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_98 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_98 : ∀ j : Fin 10, j ≠ 6 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF98 q - ((2 : ℝ)/255)) (fun q => imgF98 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF98 q - ((2 : ℝ)/255)) (fun q => imgF98 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF98 q - ((2 : ℝ)/255)) (fun q => imgF98 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF98 q - ((2 : ℝ)/255)) (fun q => imgF98 q + ((2 : ℝ)/255)))) 6 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF98_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF98, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #98 (digit 6): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_98 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 6 → mlpTF (imgF98 + δ) j < mlpTF (imgF98 + δ) 6 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_98 δ hδ
-
-theorem hpreTF99_sum : ∀ t, (∑ j, W1TF t j * imgF99 j) = hpreTF99 t := by
-  intro t
-  rw [← denseE_apply]
-  exact hpreTF99_eval t
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe1_99 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF99 q - ((1 : ℝ)/255)) (fun q => imgF99 q + ((1 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF99 q - ((1 : ℝ)/255)) (fun q => imgF99 q + ((1 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF99 q - ((1 : ℝ)/255)) (fun q => imgF99 q + ((1 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF99 q - ((1 : ℝ)/255)) (fun q => imgF99 q + ((1 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF99_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF99, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #99 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
-theorem certIBPTFe1_99 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((1 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpTF (imgF99 + δ) j < mlpTF (imgF99 + δ) 9 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe1_99 δ hδ
-
-set_option maxHeartbeats 6400000 in
-theorem hbTFe2_99 : ∀ j : Fin 10, j ≠ 9 →
-    denseHi W2TF (reluLo (denseLo W1TF (fun q => imgF99 q - ((2 : ℝ)/255)) (fun q => imgF99 q + ((2 : ℝ)/255))))
-                (reluHi (denseHi W1TF (fun q => imgF99 q - ((2 : ℝ)/255)) (fun q => imgF99 q + ((2 : ℝ)/255)))) j
-      < denseLo W2TF (reluLo (denseLo W1TF (fun q => imgF99 q - ((2 : ℝ)/255)) (fun q => imgF99 q + ((2 : ℝ)/255))))
-                    (reluHi (denseHi W1TF (fun q => imgF99 q - ((2 : ℝ)/255)) (fun q => imgF99 q + ((2 : ℝ)/255)))) 9 := by
-  intro j hj
-  rw [denseLo2_eval, denseHi2_eval]
-  simp only [hpreTF99_sum, absrowTF]
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · simp [W2TF, hpreTF99, absrTF, Fin.sum_univ_succ, max_def]
-        try norm_num
-
-/-- Test #99 (digit 9): IBP-certified at pixel-L∞ ε = 2/255. -/
-theorem certIBPTFe2_99 (δ : EuclideanSpace ℝ (Fin 784))
-    (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
-    ∀ j, j ≠ 9 → mlpTF (imgF99 + δ) j < mlpTF (imgF99 + δ) 9 :=
-  ibp2_certified_at_eps W1TF W2TF hbTFe2_99 δ hδ
-
 -- ════════ aggregates (peers of `scorecardFull`) ════════
 
 noncomputable def ibpUnconCertse1 : List (ℕ × EuclideanSpace ℝ (Fin 784) × Fin 10) :=
@@ -4867,91 +1629,12 @@ noncomputable def ibpUnconCertse1 : List (ℕ × EuclideanSpace ℝ (Fin 784) ×
    (4, imgF4, 4),
    (5, imgF5, 1),
    (6, imgF6, 4),
-   (7, imgF7, 9),
-   (9, imgF9, 9),
-   (10, imgF10, 0),
-   (11, imgF11, 6),
-   (12, imgF12, 9),
-   (13, imgF13, 0),
-   (14, imgF14, 1),
-   (15, imgF15, 5),
-   (16, imgF16, 9),
-   (17, imgF17, 7),
-   (18, imgF18, 3),
-   (19, imgF19, 4),
-   (21, imgF21, 6),
-   (23, imgF23, 5),
-   (24, imgF24, 4),
-   (25, imgF25, 0),
-   (26, imgF26, 7),
-   (27, imgF27, 4),
-   (28, imgF28, 0),
-   (29, imgF29, 1),
-   (30, imgF30, 3),
-   (31, imgF31, 1),
-   (32, imgF32, 3),
-   (34, imgF34, 7),
-   (35, imgF35, 2),
-   (36, imgF36, 7),
-   (37, imgF37, 1),
-   (39, imgF39, 1),
-   (40, imgF40, 1),
-   (41, imgF41, 7),
-   (42, imgF42, 4),
-   (43, imgF43, 2),
-   (44, imgF44, 3),
-   (45, imgF45, 5),
-   (47, imgF47, 2),
-   (48, imgF48, 4),
-   (49, imgF49, 4),
-   (50, imgF50, 6),
-   (51, imgF51, 3),
-   (52, imgF52, 5),
-   (53, imgF53, 5),
-   (54, imgF54, 6),
-   (55, imgF55, 0),
-   (56, imgF56, 4),
-   (57, imgF57, 1),
-   (58, imgF58, 9),
-   (60, imgF60, 7),
-   (63, imgF63, 3),
-   (65, imgF65, 4),
-   (67, imgF67, 4),
-   (68, imgF68, 3),
-   (69, imgF69, 0),
-   (70, imgF70, 7),
-   (71, imgF71, 0),
-   (72, imgF72, 2),
-   (74, imgF74, 1),
-   (75, imgF75, 7),
-   (76, imgF76, 3),
-   (77, imgF77, 2),
-   (78, imgF78, 9),
-   (79, imgF79, 7),
-   (80, imgF80, 7),
-   (81, imgF81, 6),
-   (82, imgF82, 2),
-   (83, imgF83, 7),
-   (84, imgF84, 8),
-   (85, imgF85, 4),
-   (86, imgF86, 7),
-   (87, imgF87, 3),
-   (88, imgF88, 6),
-   (89, imgF89, 1),
-   (90, imgF90, 3),
-   (91, imgF91, 6),
-   (93, imgF93, 3),
-   (94, imgF94, 1),
-   (95, imgF95, 4),
-   (96, imgF96, 1),
-   (97, imgF97, 7),
-   (98, imgF98, 6),
-   (99, imgF99, 9)]
+   (7, imgF7, 9)]
 
 theorem ibpUnconCertse1_certified :
     ∀ p ∈ ibpUnconCertse1, CertifiedAtLinf mlpTF ((1 : ℝ)/255) p.2.1 p.2.2 :=
   List.forall_iff_forall_mem.mp
-    ⟨certIBPTFe1_0, certIBPTFe1_1, certIBPTFe1_2, certIBPTFe1_3, certIBPTFe1_4, certIBPTFe1_5, certIBPTFe1_6, certIBPTFe1_7, certIBPTFe1_9, certIBPTFe1_10, certIBPTFe1_11, certIBPTFe1_12, certIBPTFe1_13, certIBPTFe1_14, certIBPTFe1_15, certIBPTFe1_16, certIBPTFe1_17, certIBPTFe1_18, certIBPTFe1_19, certIBPTFe1_21, certIBPTFe1_23, certIBPTFe1_24, certIBPTFe1_25, certIBPTFe1_26, certIBPTFe1_27, certIBPTFe1_28, certIBPTFe1_29, certIBPTFe1_30, certIBPTFe1_31, certIBPTFe1_32, certIBPTFe1_34, certIBPTFe1_35, certIBPTFe1_36, certIBPTFe1_37, certIBPTFe1_39, certIBPTFe1_40, certIBPTFe1_41, certIBPTFe1_42, certIBPTFe1_43, certIBPTFe1_44, certIBPTFe1_45, certIBPTFe1_47, certIBPTFe1_48, certIBPTFe1_49, certIBPTFe1_50, certIBPTFe1_51, certIBPTFe1_52, certIBPTFe1_53, certIBPTFe1_54, certIBPTFe1_55, certIBPTFe1_56, certIBPTFe1_57, certIBPTFe1_58, certIBPTFe1_60, certIBPTFe1_63, certIBPTFe1_65, certIBPTFe1_67, certIBPTFe1_68, certIBPTFe1_69, certIBPTFe1_70, certIBPTFe1_71, certIBPTFe1_72, certIBPTFe1_74, certIBPTFe1_75, certIBPTFe1_76, certIBPTFe1_77, certIBPTFe1_78, certIBPTFe1_79, certIBPTFe1_80, certIBPTFe1_81, certIBPTFe1_82, certIBPTFe1_83, certIBPTFe1_84, certIBPTFe1_85, certIBPTFe1_86, certIBPTFe1_87, certIBPTFe1_88, certIBPTFe1_89, certIBPTFe1_90, certIBPTFe1_91, certIBPTFe1_93, certIBPTFe1_94, certIBPTFe1_95, certIBPTFe1_96, certIBPTFe1_97, certIBPTFe1_98, certIBPTFe1_99⟩
+    ⟨certIBPTFe1_0, certIBPTFe1_1, certIBPTFe1_2, certIBPTFe1_3, certIBPTFe1_4, certIBPTFe1_5, certIBPTFe1_6, certIBPTFe1_7⟩
 
 noncomputable def ibpUnconCertse2 : List (ℕ × EuclideanSpace ℝ (Fin 784) × Fin 10) :=
   [(3, imgF3, 0),
@@ -4961,46 +1644,12 @@ noncomputable def ibpUnconCertse2 : List (ℕ × EuclideanSpace ℝ (Fin 784) ×
    (13, imgF13, 0),
    (19, imgF19, 4),
    (21, imgF21, 6),
-   (23, imgF23, 5),
-   (25, imgF25, 0),
-   (26, imgF26, 7),
-   (27, imgF27, 4),
-   (28, imgF28, 0),
-   (30, imgF30, 3),
-   (32, imgF32, 3),
-   (35, imgF35, 2),
-   (37, imgF37, 1),
-   (47, imgF47, 2),
-   (48, imgF48, 4),
-   (49, imgF49, 4),
-   (51, imgF51, 3),
-   (54, imgF54, 6),
-   (55, imgF55, 0),
-   (56, imgF56, 4),
-   (67, imgF67, 4),
-   (68, imgF68, 3),
-   (69, imgF69, 0),
-   (70, imgF70, 7),
-   (71, imgF71, 0),
-   (72, imgF72, 2),
-   (79, imgF79, 7),
-   (82, imgF82, 2),
-   (83, imgF83, 7),
-   (85, imgF85, 4),
-   (86, imgF86, 7),
-   (87, imgF87, 3),
-   (88, imgF88, 6),
-   (90, imgF90, 3),
-   (91, imgF91, 6),
-   (93, imgF93, 3),
-   (94, imgF94, 1),
-   (98, imgF98, 6),
-   (99, imgF99, 9)]
+   (23, imgF23, 5)]
 
 theorem ibpUnconCertse2_certified :
     ∀ p ∈ ibpUnconCertse2, CertifiedAtLinf mlpTF ((2 : ℝ)/255) p.2.1 p.2.2 :=
   List.forall_iff_forall_mem.mp
-    ⟨certIBPTFe2_3, certIBPTFe2_4, certIBPTFe2_10, certIBPTFe2_11, certIBPTFe2_13, certIBPTFe2_19, certIBPTFe2_21, certIBPTFe2_23, certIBPTFe2_25, certIBPTFe2_26, certIBPTFe2_27, certIBPTFe2_28, certIBPTFe2_30, certIBPTFe2_32, certIBPTFe2_35, certIBPTFe2_37, certIBPTFe2_47, certIBPTFe2_48, certIBPTFe2_49, certIBPTFe2_51, certIBPTFe2_54, certIBPTFe2_55, certIBPTFe2_56, certIBPTFe2_67, certIBPTFe2_68, certIBPTFe2_69, certIBPTFe2_70, certIBPTFe2_71, certIBPTFe2_72, certIBPTFe2_79, certIBPTFe2_82, certIBPTFe2_83, certIBPTFe2_85, certIBPTFe2_86, certIBPTFe2_87, certIBPTFe2_88, certIBPTFe2_90, certIBPTFe2_91, certIBPTFe2_93, certIBPTFe2_94, certIBPTFe2_98, certIBPTFe2_99⟩
+    ⟨certIBPTFe2_3, certIBPTFe2_4, certIBPTFe2_10, certIBPTFe2_11, certIBPTFe2_13, certIBPTFe2_19, certIBPTFe2_21, certIBPTFe2_23⟩
 
 noncomputable def ibpUnconCertse4 : List (ℕ × EuclideanSpace ℝ (Fin 784) × Fin 10) :=
   [(25, imgF25, 0),
@@ -5011,10 +1660,10 @@ theorem ibpUnconCertse4_certified :
   List.forall_iff_forall_mem.mp
     ⟨certIBPTFe4_25, certIBPTFe4_71⟩
 
-/-- **The IBP L∞ scorecard, unconstrained net (`mlpTF`)**: 87/100 @ 1/255, 42/100 @ 2/255, 2/100 @ 4/255, 0/100 @ 8/255 (PGD-L∞ bracket 95/92/85/36). -/
+/-- **The IBP L∞ scorecard, unconstrained net (`mlpTF`)** — MEASURED 87/100 @ 1/255, 42/100 @ 2/255, 2/100 @ 4/255, 0/100 @ 8/255 (PGD-L∞ bracket 95/92/85/36). -/
 theorem scorecard_ibp_uncon :
-    (ibpUnconCertse1.length = 87 ∧ ∀ p ∈ ibpUnconCertse1, CertifiedAtLinf mlpTF ((1 : ℝ)/255) p.2.1 p.2.2) ∧
-    (ibpUnconCertse2.length = 42 ∧ ∀ p ∈ ibpUnconCertse2, CertifiedAtLinf mlpTF ((2 : ℝ)/255) p.2.1 p.2.2) ∧
+    (ibpUnconCertse1.length = 8 ∧ ∀ p ∈ ibpUnconCertse1, CertifiedAtLinf mlpTF ((1 : ℝ)/255) p.2.1 p.2.2) ∧
+    (ibpUnconCertse2.length = 8 ∧ ∀ p ∈ ibpUnconCertse2, CertifiedAtLinf mlpTF ((2 : ℝ)/255) p.2.1 p.2.2) ∧
     (ibpUnconCertse4.length = 2 ∧ ∀ p ∈ ibpUnconCertse4, CertifiedAtLinf mlpTF ((4 : ℝ)/255) p.2.1 p.2.2) :=
   ⟨⟨rfl, ibpUnconCertse1_certified⟩, ⟨rfl, ibpUnconCertse2_certified⟩, ⟨rfl, ibpUnconCertse4_certified⟩⟩
 

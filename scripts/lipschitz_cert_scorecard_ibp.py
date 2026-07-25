@@ -22,9 +22,12 @@ from pathlib import Path
 
 import lipschitz_cert_scorecard_full as base
 
+EMITTED_IMGS: set = set()   # fallback images already declared by an earlier tag
+
 ROOT, OUTDIR = base.ROOT, base.OUTDIR
 H, K, DIM, DEN, PIX = base.H, base.K, base.DIM, base.DEN, base.PIX
 N_IMG = base.N_IMG
+N_EMIT = base.N_EMIT      # per-(net, ε) cap on how many images carry THEOREMS
 yte = base.yte
 frac, zlist, rrow = base.frac, base.zlist, base.rrow
 EPS_GRID = [(1, "e1"), (2, "e2"), (4, "e4"), (8, "e8")]   # eps = num/255
@@ -104,6 +107,12 @@ def emit_net(tag, W1q, W2q, out_path):
 
     base_hpre = {i for i, tags in base.need.items() if tag in tags}
     base_imgs = set(base.need.keys())
+    # cap: the first N_EMIT certifying images PER radius (so every column with a
+    # nonzero MEASURED count still has proved witnesses). `certs` keeps the full
+    # measured lists for the header; `emit` is what gets theorems.
+    measured = {en: len(certs[en]) for _, en in EPS_GRID}
+    emit = {en: sorted(certs[en])[:N_EMIT] for _, en in EPS_GRID}
+    certs = emit
     all_certified = sorted({i for _, en in EPS_GRID for i in certs[en]})
 
     Lb = []
@@ -111,6 +120,12 @@ def emit_net(tag, W1q, W2q, out_path):
     A("import LeanMlir.Proofs.Foundation.IntervalBound")
     A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA")
     A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB")
+    if tag != "SF":
+        # the capped base no longer carries every image, so each net emits its own
+        # fallback data; chain the second file onto the first so a shared image is
+        # DEFINED once (otherwise both files declare e.g. `imgF10` and importing
+        # both into one environment is a name clash).
+        A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBP")
     A("")
     netdesc = ("spectrally-capped σ≤2 net (`mlpSF`)" if tag == "SF"
                else "unconstrained net (`mlpTF`)")
@@ -119,13 +134,21 @@ def emit_net(tag, W1q, W2q, out_path):
     A(f"Pixel-L∞ certificates by exact interval bound propagation over the SAME")
     A(f"first-{N_IMG} MNIST test subset as the L2 scorecard: at ε = 1/255, 2/255,")
     A(f"4/255, 8/255 the box certificate proves")
-    cline = ", ".join(f"**{len(certs[en])}/{N_IMG}**" for _, en in EPS_GRID)
+    cline = ", ".join(f"**{measured[en]}/{N_IMG}**" for _, en in EPS_GRID)
     A(f"{cline} predictions robust (PGD-L∞ bracket: "
       + ", ".join(str(pgd[en]) for _, en in EPS_GRID) + ").")
     A("For comparison, pushing the L2 Lipschitz certificate through")
     A(f"`‖δ‖₂ ≤ √784·ε∞` certifies only "
       + ", ".join(str(l2impl[en]) for _, en in EPS_GRID)
       + " — at small L∞ radii the box beats the ball.")
+    A("")
+    A("")
+    A("**Theorem vs. measurement.** Soundness is in the ENGINE")
+    A("(`Foundation/IntervalBound.lean`), proved once — kernel-checking the 57th")
+    A("image buys nothing the 56th didn\'t. The counts above are exact-rational")
+    A(f"MEASUREMENTS over the first {N_IMG} images; the first {N_EMIT} certifying images at")
+    A("each radius carry a `CertifiedAtLinf` THEOREM, and the aggregate below states")
+    A("only those. The images witness non-vacuity; they are not what makes it sound.")
     A("")
     A("Engine: `IntervalBound.lean`. The first layer is a uniform box, so its")
     A("interval image is `⟨w,x⟩ ∓ ε·‖w‖₁` — `⟨w,x⟩` reuses the committed `dotZ`")
@@ -163,8 +186,9 @@ def emit_net(tag, W1q, W2q, out_path):
     for i in all_certified:
         y = int(yte[i])
         # image + hpre fallback for images the base scorecard didn't certify
-        if i not in base_imgs:
+        if i not in base_imgs and i not in EMITTED_IMGS:
             base.emit_image(A, i, [])
+            EMITTED_IMGS.add(i)
         if i in base_hpre:
             hpre = f"hpre{tag}{i}"
         else:
@@ -240,8 +264,8 @@ def emit_net(tag, W1q, W2q, out_path):
         A("    ⟨" + ", ".join(f"certIBP{tag}{en}_{i}" for i in certs[en]) + "⟩")
         A("")
         parts.append((lname, en, eps, len(certs[en])))
-    A(f"/-- **The IBP L∞ scorecard, {netdesc}**: "
-      + ", ".join(f"{len(certs[en])}/{N_IMG} @ {num}/255" for num, en in EPS_GRID)
+    A(f"/-- **The IBP L∞ scorecard, {netdesc}** — MEASURED "
+      + ", ".join(f"{measured[en]}/{N_IMG} @ {num}/255" for num, en in EPS_GRID)
       + f" (PGD-L∞ bracket " + "/".join(str(pgd[en]) for _, en in EPS_GRID) + "). -/")
     A(f"theorem scorecard_ibp{'' if tag == 'SF' else '_uncon'} :")
     A("    " + " ∧\n    ".join(
