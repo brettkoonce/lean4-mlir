@@ -40,7 +40,14 @@ S = 8                      # spatial size after pooling
 P = S // 2                 # after max-pool
 DEN_W = 256                # weight denominator
 DEN_X = 4080               # pooled-pixel denominator (16 * 255)
-N_IMG = int(sys.argv[1]) if len(sys.argv) > 1 else 25
+# The scorecard's two sizes, deliberately separated (see the module docstring):
+#   N_MEASURE — the fixed test subset the COUNTS are measured over (exact rational
+#               interval propagation, no Lean; this is a measurement, not a theorem);
+#   N_EMIT    — how many of those carry a per-image `CertifiedAtLinf3` THEOREM.
+# Soundness lives in the engine, so kernel-checking the 57th image buys nothing the
+# 56th didn't; the emitted set only has to show the engine bites on real weights.
+N_MEASURE = int(sys.argv[1]) if len(sys.argv) > 1 else 100
+N_EMIT = int(sys.argv[2]) if len(sys.argv) > 2 else 8
 EPSN = [1, 2, 4, 8]        # eps = n/255
 SEED = 0
 
@@ -331,11 +338,11 @@ def main():
     WdF = [[[[WdF_flat[(c * P + i) * P + j][cls] for cls in range(10)]
              for j in range(P)] for i in range(P)] for c in range(C)]
 
-    xteF = np.vectorize(lambda v: Fraction(int(v), DEN_X))(pool_int(xte_raw[:N_IMG]))
+    xteF = np.vectorize(lambda v: Fraction(int(v), DEN_X))(pool_int(xte_raw[:N_MEASURE]))
 
     certified = {n: [] for n in EPSN}
     chosen = []
-    for k in range(N_IMG):                 # the FIXED first-N test subset
+    for k in range(N_MEASURE):             # the FIXED first-N measurement subset
         xF = xteF[k]
         pred = int(lg[k].argmax())
         if pred != int(yte[k]):
@@ -355,13 +362,21 @@ def main():
             rec["nmax"] = best[0]
             rec["eps"][best[0]] = best[1:]
             chosen.append(rec)
+    measured = {n: len(certified[n]) for n in EPSN}
     for n in EPSN:
-        print(f"[cert] eps={n}/255: {len(certified[n])} of the first {N_IMG} test images")
+        print(f"[measure] eps={n}/255: {measured[n]} of the first {N_MEASURE} test images")
+    # emit theorems for the FIRST N_EMIT certifying images (test-set order — an
+    # unbiased, reproducible rule, not a cherry-pick of the easy ones)
+    chosen = chosen[:N_EMIT]
+    for n in EPSN:
+        print(f"[emit]    eps={n}/255: {len([r for r in chosen if n in r['ok']])} "
+              f"of the {len(chosen)} images carrying Lean certificates")
 
     # ───── Lean ─────
     L = []
     A = L.append
     A("import LeanMlir.Proofs.Foundation.IntervalBoundConv\n")
+    n_emit = len(chosen)
     A(f'''/-! # IBP `L∞` scorecard for a CONVOLUTIONAL net — generated instance
 
 The first certificate in this repo that covers a convolution, a max-pool, and
@@ -383,10 +398,20 @@ the two tiers are directly comparable. A pooled coordinate is an AVERAGE of 16
 raw pixels, so a radius-ε `L∞` ball on the raw image maps into the radius-ε ball
 on the pooled image: these radii keep their literature meaning.
 
-Per image the certificate is a real theorem — `CertifiedAtLinf3 net ε x y`, i.e.
-`∀ δ, (∀ a b d, |δ| ≤ ε) → ∀ j ≠ y, net (x+δ) j < net (x+δ) y` — not a numeric
-report. Counts are LOWER bounds: a loose box cannot prove an image
-UNcertifiable. All `propext / Classical.choice / Quot.sound`. -/\n''')
+**Theorem vs. measurement — read this before quoting a number.** Soundness lives
+in the ENGINE, which is proved once; kernel-checking the 57th image buys nothing
+the 56th didn't. So this file separates the two:
+
+* **measured** (exact rational interval propagation, no Lean in the loop) over
+  the fixed first {N_MEASURE} test images: {measured[1]}/{N_MEASURE}, {measured[2]}/{N_MEASURE},
+  {measured[4]}/{N_MEASURE}, {measured[8]}/{N_MEASURE} at ε = 1, 2, 4, 8/255;
+* **proved** — the first {n_emit} of those certifying images (test-set order, an
+  unbiased rule) each carry a `CertifiedAtLinf3 net ε x y` THEOREM, i.e.
+  `∀ δ, (∀ a b d, |δ| ≤ ε) → ∀ j ≠ y, net (x+δ) j < net (x+δ) y`.
+
+`scorecard_ibp_conv` below states ONLY the proved counts; the measured row is a
+measurement and is labelled as one. Both are LOWER bounds — a loose box cannot
+prove an image UNcertifiable. All `propext / Classical.choice / Quot.sound`. -/\n''')
     A("namespace Proofs\nnamespace IBP\nnamespace ConvNet\n")
     A("set_option maxRecDepth 100000")
     A("set_option maxHeartbeats 3200000\n")
@@ -510,9 +535,12 @@ UNcertifiable. All `propext / Classical.choice / Quot.sound`. -/\n''')
         else:
             A(f"  by intro p hp; simp [certsE{n}] at hp\n")
 
-    A("""/-- **The convolutional IBP scorecard, as a theorem.** Each count is tied to
-    its per-image `CertifiedAtLinf3` proofs, not just a list length. Lower bounds
-    only: a loose box cannot prove an image UNcertifiable. -/""")
+    A(f"""/-- **The proved core of the scorecard.** Each count is tied to its per-image
+    `CertifiedAtLinf3` proofs, not to a list length. These are the {n_emit} images
+    that carry Lean certificates — NOT the measured dataset counts (see the header:
+    {measured[1]}/{N_MEASURE}, {measured[2]}/{N_MEASURE}, {measured[4]}/{N_MEASURE}, {measured[8]}/{N_MEASURE} at
+    ε = 1, 2, 4, 8/255), which are exact-rational measurements rather than theorems.
+    The engine is what makes them sound; the images only witness non-vacuity. -/""")
     A("theorem scorecard_ibp_conv :")
     A("\n  ∧ ".join(
         f"(certsE{n}.length = {len([r for r in chosen if n in r['ok']])} ∧\n"

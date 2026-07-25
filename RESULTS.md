@@ -251,21 +251,25 @@ one extra convolution per **net** instead of a sign-split sum per image.
 | Net | Input | Quantized acc | ε=1/255 | 2/255 | 4/255 | 8/255 |
 |---|---|---|---|---|---|---|
 | 784→16→10 dense, σ ≤ 2 projected SGD | 784 | 92.4% | 92/100 | 88/100 | 69/100 | 24/100 |
-| **conv(1→4, 3×3) → relu → maxpool → dense**, IBP-trained | 8×8 | 82.6% | **35/40** | **33/40** | **23/40** | **5/40** |
+| **conv(1→4, 3×3) → relu → maxpool → dense**, IBP-trained | 8×8 | 82.6% | **79/100** | **73/100** | **47/100** | **13/100** |
 
-(`Certificates/LipschitzCertScorecardIBP.lean` and `Certificates/IbpConvScorecard.lean`.) Different
-denominators — the first 100 vs the first 40 MNIST test images — and different
-training recipes (spectral projection vs. a ramped IBP loss), so these are two
-curves, not a head-to-head. The conv net's input is MNIST zero-padded to 32×32
+(`Certificates/LipschitzCertScorecardIBP.lean` and `Certificates/IbpConvScorecard.lean`,
+both over the first 100 MNIST test images.) Different training recipes — spectral
+projection vs. a ramped IBP loss — so read these as two curves, not a head-to-head. The conv net's input is MNIST zero-padded to 32×32
 and 4×4 average-pooled to 8×8; since a pooled coordinate is an average of 16 raw
 pixels, a radius-ε pixel `L∞` ball on the raw image maps *into* the radius-ε ball
 the certificate quantifies over, so the radii keep their usual meaning. Per image
 the propagated box is carried only at the largest certifying radius — every
 smaller one is a `CertifiedAtLinf3.mono` corollary, not a second box.
 
-Each per-image result is a theorem (`CertifiedAtLinf3 net ε x y`, i.e.
-`∀ δ, (∀ a b d, |δ a b d| ≤ ε) → ∀ j ≠ y, net (x+δ) j < net (x+δ) y`), and the
-counts are tied to those proofs rather than to a list length. Unstable
+**Theorem vs. measurement.** Soundness lives in the ENGINE, proved once — so
+kernel-checking the 57th image buys nothing the 56th didn't. The conv row's counts
+above are exact-rational **measurements**; the first 8 certifying images each
+additionally carry a `CertifiedAtLinf3 net ε x y` **theorem**
+(`∀ δ, (∀ a b d, |δ a b d| ≤ ε) → ∀ j ≠ y, net (x+δ) j < net (x+δ) y`), which is
+what `scorecard_ibp_conv` states — enough to witness that the engine bites on real
+trained weights, without carrying 100 propagated boxes to say it 100 times.
+Unstable
 (sign-crossing) ReLUs and tied pool windows are handled *soundly* — the box
 contains both branches — not assumed away, so the counts are lower bounds. Engine
 audited in `tests/AuditAxioms.lean`, generated instance in

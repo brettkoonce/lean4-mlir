@@ -356,11 +356,15 @@ six-layer conv → relu → conv → relu → pool → dense stack in one line, 
 proof obligation). Instantiated in
 [`IbpConvScorecard.lean`](LeanMlir/Proofs/Certificates/IbpConvScorecard.lean) on a trained
 `conv(1→4,3×3) → relu → maxpool → dense` net at `k/256` weights (8×8 pooled
-MNIST, 82.6% quantized accuracy): **35/33/23/5 of the first 40 test images**
+MNIST, 82.6% quantized accuracy): **79/73/47/13 of the first 100 test images**
 certified at pixel `L∞` ε = 1, 2, 4, 8/255 — the first certificate in the repo
-covering a convolution, a max-pool, or more than two layers. Unstable ReLUs and
-tied pool windows are handled soundly (the box contains both branches), so the
-counts are lower bounds. Generator: `scripts/ibp_conv_scorecard.py`.
+covering a convolution, a max-pool, or more than two layers. Those counts are
+exact-rational *measurements*; the first 8 certifying images additionally carry
+per-image `CertifiedAtLinf3` *theorems* (soundness is in the engine, so the
+images only need to witness non-vacuity — kernel-checking all 100 would say the
+same thing 100 times). Unstable ReLUs and tied pool windows are handled soundly
+(the box contains both branches), so the counts are lower bounds. Generator:
+`scripts/ibp_conv_scorecard.py`.
 
 **Not yet verified anywhere:** the ~7500-line `MlirCodegen.lean` (zero
 theorems — the path behind the headline accuracy numbers); the printed `.mlir`
