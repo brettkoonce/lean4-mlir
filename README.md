@@ -343,6 +343,25 @@ the unconstrained net goes 76→91/100 at ε = 0.1 and **2→77/100** at ε = 0.
 where the global product constant (not the network) was the bottleneck. See
 the tables in [`RESULTS.md`](RESULTS.md); all 3-axiom-clean.
 
+#### IBP: the certificate reaches a convolution
+
+Every certified net above is a one-hidden-layer MLP, because the `L∞` interval
+certificate `ibp2_certified_at_eps` (`Foundation/IntervalBound.lean`) is hard-wired to
+`dense ∘ relu ∘ dense`. [`IntervalBoundConv.lean`](LeanMlir/Proofs/Foundation/IntervalBoundConv.lean)
+lifts that: IBP soundness is *compositional*, so the engine is a `BoxSound`
+predicate plus per-layer transformers — **`conv2d`** (sign-split over the
+SAME-padded taps), **`maxPool2`** (monotone: pool the endpoints), dense, ReLU —
+and one `.comp` lemma that makes **depth** free (`deepNet_boxSound` builds a
+six-layer conv → relu → conv → relu → pool → dense stack in one line, no new
+proof obligation). Instantiated in
+[`IbpConvScorecard.lean`](LeanMlir/Proofs/Certificates/IbpConvScorecard.lean) on a trained
+`conv(1→4,3×3) → relu → maxpool → dense` net at `k/256` weights (8×8 pooled
+MNIST, 82.6% quantized accuracy): **35/33/23/5 of the first 40 test images**
+certified at pixel `L∞` ε = 1, 2, 4, 8/255 — the first certificate in the repo
+covering a convolution, a max-pool, or more than two layers. Unstable ReLUs and
+tied pool windows are handled soundly (the box contains both branches), so the
+counts are lower bounds. Generator: `scripts/ibp_conv_scorecard.py`.
+
 **Not yet verified anywhere:** the ~7500-line `MlirCodegen.lean` (zero
 theorems — the path behind the headline accuracy numbers); the printed `.mlir`
 text that `iree-compile` actually consumes (the per-op `pretty` lexing step — the

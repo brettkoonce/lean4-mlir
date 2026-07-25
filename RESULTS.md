@@ -228,6 +228,49 @@ accuracy — the pooled experiment's "caps ≤ 2 cost too much" was an artifact
 of the 49-dim reduction. Counts are lower bounds; all 3-axiom-clean
 (`tests/AuditAxioms.lean`).
 
+### Pixel L∞ (IBP) — and the first certificate that reaches a convolution
+
+Interval bound propagation is the certificate that scales with *width* — two
+interval dots per neuron, where the Gram/Schatten and LipSDP criteria are
+quadratic-to-cubic — and its perturbation model is the literature-standard pixel
+`L∞` ball, stated coordinatewise (`∀ i, |δ i| ≤ ε`, no norm-instance games).
+
+Until now the IBP tier could state exactly one shape: `ibp2_certified_at_eps`
+(`Foundation/IntervalBound.lean`) is hard-wired to `dense ∘ relu ∘ dense`, which is why
+every certified net above is a one-hidden-layer MLP. `Foundation/IntervalBoundConv.lean`
+removes that. IBP soundness is *compositional* — "the box propagates" is a
+per-layer property and depth is just `∘` — so the engine is a `BoxSound`
+predicate, per-layer transformers proved sound (**`conv2d`**, sign-split over the
+SAME-padded taps; **`maxPool2`**, monotone, so pool the endpoints; dense; ReLU),
+and a `.comp` lemma. `deepNet_boxSound` assembles a six-layer stack
+(conv → relu → conv → relu → pool → dense) in one line with no new proof
+obligation, and `convLo_uniform`/`convHi_uniform` give the conv peer of the
+`⟨w,x⟩ ∓ ε‖w‖₁` collapse: the first layer's box is `conv2d W b x ∓ ε·(|W| ⊛ 𝟙)`,
+one extra convolution per **net** instead of a sign-split sum per image.
+
+| Net | Input | Quantized acc | ε=1/255 | 2/255 | 4/255 | 8/255 |
+|---|---|---|---|---|---|---|
+| 784→16→10 dense, σ ≤ 2 projected SGD | 784 | 92.4% | 92/100 | 88/100 | 69/100 | 24/100 |
+| **conv(1→4, 3×3) → relu → maxpool → dense**, IBP-trained | 8×8 | 82.6% | **35/40** | **33/40** | **23/40** | **5/40** |
+
+(`Certificates/LipschitzCertScorecardIBP.lean` and `Certificates/IbpConvScorecard.lean`.) Different
+denominators — the first 100 vs the first 40 MNIST test images — and different
+training recipes (spectral projection vs. a ramped IBP loss), so these are two
+curves, not a head-to-head. The conv net's input is MNIST zero-padded to 32×32
+and 4×4 average-pooled to 8×8; since a pooled coordinate is an average of 16 raw
+pixels, a radius-ε pixel `L∞` ball on the raw image maps *into* the radius-ε ball
+the certificate quantifies over, so the radii keep their usual meaning. Per image
+the propagated box is carried only at the largest certifying radius — every
+smaller one is a `CertifiedAtLinf3.mono` corollary, not a second box.
+
+Each per-image result is a theorem (`CertifiedAtLinf3 net ε x y`, i.e.
+`∀ δ, (∀ a b d, |δ a b d| ≤ ε) → ∀ j ≠ y, net (x+δ) j < net (x+δ) y`), and the
+counts are tied to those proofs rather than to a list length. Unstable
+(sign-crossing) ReLUs and tied pool windows are handled *soundly* — the box
+contains both branches — not assumed away, so the counts are lower bounds. Engine
+audited in `tests/AuditAxioms.lean`, generated instance in
+`tests/AuditAxiomsHeavy.lean`; both 3-axiom-clean.
+
 ## Per-epoch eval history (running BN stats)
 
 ### ResNet-34
