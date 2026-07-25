@@ -21,7 +21,7 @@ Neg-elaboration tax.
 Also runs L2-PGD (empirical, not proof) on both nets at both eps for the
 cert <= TRUE <= PGD sandwich.
 """
-import numpy as np, struct
+import numpy as np, os, struct
 from fractions import Fraction
 from math import ceil
 from pathlib import Path
@@ -35,7 +35,15 @@ N_IMG = 100                 # images the COUNTS are measured over (exact rationa
 # the 57th image buys nothing the 56th didn't; the emitted set only witnesses
 # that the certificate is non-vacuous at real trained weights. The dataset-level
 # counts stay MEASURED over all N_IMG and are reported as measurements.
-N_EMIT = 8
+#
+# Shared by every downstream tier (SDP, IBP) via `base.N_EMIT`. Override with
+# SCORECARD_N_EMIT=100 to regenerate the corpus UNCAPPED — the pre-cap output,
+# for the diff that proves a generator edit introduced no other drift
+# (planning/scorecard_trim.md §2.2). Byte-identical for the kernel-dotZ tiers;
+# the LipSDP tier only matches structurally, since its rationals come from an
+# off-line float solve that moves with the numeric stack (§2.6). Committed
+# output is always the default.
+N_EMIT = int(os.environ.get("SCORECARD_N_EMIT", 8))
 H, K, DIM = 16, 10, 784
 DEN = 256
 PIX = 255

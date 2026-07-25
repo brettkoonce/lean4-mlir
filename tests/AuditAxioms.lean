@@ -3337,9 +3337,11 @@ open Proofs
 -- square (pair_sq_bound), per-pair fixed-ε certificate with rational Lp
 -- (certified_at_eps_pair — no √2, no global product L). Same nets, same
 -- images, same ε as the scorecard above: 34→69/100 capped, 1→63/100 uncon.
--- Spot-check the core lemmas, one pair certificate per net (data identities +
--- assembled squared bound + a reverse-order wrapper), first/middle/last
--- per-image certs, and the mechanized aggregates.
+-- Those are exact-rational MEASUREMENTS; the first 8 certifying images per net
+-- carry the `CertifiedAt` theorems and `scorecard_sdp*` states only those
+-- (planning/scorecard_trim.md). Spot-check the core lemmas, one pair certificate
+-- per net (data identities + assembled squared bound + a reverse-order wrapper),
+-- first/middle/last of the emitted per-image certs, and the mechanized aggregates.
 #print axioms Proofs.LipschitzCertDemo.relu_slope_restricted
 #print axioms Proofs.LipschitzCertDemo.quad_form_nonneg_of_ldl
 #print axioms Proofs.LipschitzCertDemo.lipsdp_slack_of_cert
@@ -3351,11 +3353,11 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.pairSqC_7_0
 #print axioms Proofs.LipschitzCertDemo.pairSqU_0_1
 #print axioms Proofs.LipschitzCertDemo.certifiedSC0
-#print axioms Proofs.LipschitzCertDemo.certifiedSC52
-#print axioms Proofs.LipschitzCertDemo.certifiedSC99
+#print axioms Proofs.LipschitzCertDemo.certifiedSC4
+#print axioms Proofs.LipschitzCertDemo.certifiedSC9
 #print axioms Proofs.LipschitzCertDemo.certifiedSU0
-#print axioms Proofs.LipschitzCertDemo.certifiedSU82
-#print axioms Proofs.LipschitzCertDemo.certifiedSU99
+#print axioms Proofs.LipschitzCertDemo.certifiedSU4
+#print axioms Proofs.LipschitzCertDemo.certifiedSU11
 #print axioms Proofs.LipschitzCertDemo.sdpCappedCerts_certified
 #print axioms Proofs.LipschitzCertDemo.sdpUnconCerts_certified
 #print axioms Proofs.LipschitzCertDemo.scorecard_sdp

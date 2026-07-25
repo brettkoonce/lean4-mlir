@@ -867,6 +867,9 @@ lean_lib «CertsHeavy» where
              -- kernel-verified locally (93/100 @ ε=0.1 = PGD, sandwich closed);
              -- re-enable path: planning/certs_heavy_psd_memory.md (small-
              -- coefficient DD-split witnesses, or a self-hosted runner).
+             -- 2026-07-25: capping the per-image exhibits (30,884 → 7,241 lines)
+             -- did NOT change this — re-measured 16.0/16.6 GB at 1 thread, i.e.
+             -- the peak is ONE `hS*` goal, not the file size. Still out.
              `LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBP,
              `LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPUncon,
              -- The CONVOLUTIONAL IBP instance (engine:

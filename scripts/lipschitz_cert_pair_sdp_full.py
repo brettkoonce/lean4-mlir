@@ -21,6 +21,12 @@ scorecard (LipschitzCertScorecardFull*.lean, kernel dotZ engine).
 Certification per image at eps in {1/10, 3/10}: for every j != y,
 Lp_{y,j} * eps <= logit_y - logit_j (exact rationals).
 
+The counts are MEASURED over all N_IMG images in exact rationals; only the
+first base.N_EMIT certifying images per radius carry a Lean theorem (soundness
+is the engine's, proved once -- see planning/scorecard_trim.md). That cap also
+decides which class pairs need an LDL^T PSD witness, i.e. it is what makes this
+tier affordable at all (planning/certs_heavy_psd_memory.md).
+
 Reuses the base generator's trained nets/caches by importing it (module
 import re-emits the base files byte-identically; harmless).
 """
@@ -33,10 +39,13 @@ from scipy.optimize import minimize
 
 import lipschitz_cert_scorecard_full as base
 
+EMITTED_IMGS: set = set()   # fallback images already declared by an earlier tag
+
 ROOT = base.ROOT
 OUTDIR = base.OUTDIR
 H, K, DIM, DEN, PIX = base.H, base.K, base.DIM, base.DEN, base.PIX
 N_IMG = base.N_IMG
+N_EMIT = base.N_EMIT      # per-(net, ε) cap on how many images carry THEOREMS
 EPS10, EPS30 = base.EPS10, base.EPS30
 yte = base.yte
 frac, zlist, rrow = base.frac, base.zlist, base.rrow
@@ -153,11 +162,19 @@ def emit_net(tag, W1q, W2q, out_path):
             cert10.append(i)
         if all(cert_of(y, j)["Lp"] * EPS30 <= ms[j] for j in ms):
             cert30.append(i)
+    # cap: the first N_EMIT certifying images PER radius (per-column, so a column
+    # with a nonzero MEASURED count always keeps proved witnesses). `measured`
+    # holds the full exact-rational counts for the header; `cert10`/`cert30`
+    # below are the theorem-carrying subset — and therefore also decide which
+    # class pairs need an LDLᵀ PSD witness, which is where the tier's cost is.
+    measured10, measured30 = len(cert10), len(cert30)
+    cert10, cert30 = sorted(cert10)[:N_EMIT], sorted(cert30)[:N_EMIT]
     ordered = sorted({(facts[i][0], j) for i in cert10 + cert30
                       for j in range(K) if j != facts[i][0]})
     unordered = sorted({(min(a, b), max(a, b)) for a, b in ordered})
-    print(f"[{tag}] SDP certified @0.1: {len(cert10)}/{N_IMG}, @0.3: {len(cert30)}/{N_IMG}; "
-          f"{len(unordered)} unordered pairs", flush=True)
+    print(f"[{tag}] SDP certified (measured) @0.1: {measured10}/{N_IMG}, "
+          f"@0.3: {measured30}/{N_IMG}; emitting {len(cert10)}/{len(cert30)} "
+          f"theorems over {len(unordered)} unordered pairs", flush=True)
 
     # base-file coverage: which images already have imgF/hpre (union of base cert10 sets)
     base_imgs = set(base.need.keys())            # imgF<i> exists
@@ -168,6 +185,12 @@ def emit_net(tag, W1q, W2q, out_path):
     A("import LeanMlir.Proofs.Certificates.LipschitzCertPairSDP")
     A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA")
     A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB")
+    if tag != "SF":
+        # the capped base no longer carries every image, so each net emits its
+        # own fallback data; chain the second file onto the first so a shared
+        # image is DEFINED once (otherwise both files declare e.g. `imgF10` and
+        # importing both into one environment is a name clash).
+        A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDPFull")
     A("")
     netdesc = ("spectrally-capped σ≤2 net (`mlpSF`)" if tag == "SF"
                else "unconstrained net (`mlpTF`)")
@@ -177,8 +200,8 @@ def emit_net(tag, W1q, W2q, out_path):
     A("")
     A(f"The tighter-Lipschitz-constant pass over the SAME first-{N_IMG} MNIST test")
     A(f"subset as `LipschitzCertScorecardFull.lean`, at BOTH ε = 1/10 and 3/10:")
-    A(f"per-pair LipSDP constants lift the counts from **{b10}→{len(cert10)}/{N_IMG} @ ε=0.1**")
-    A(f"(PGD bracket {p10}) and **{b30}→{len(cert30)}/{N_IMG} @ ε=0.3** (PGD {p30}) — no")
+    A(f"per-pair LipSDP constants lift the counts from **{b10}→{measured10}/{N_IMG} @ ε=0.1**")
+    A(f"(PGD bracket {p10}) and **{b30}→{measured30}/{N_IMG} @ ε=0.3** (PGD {p30}) — no")
     A("retraining, no new data, a less lossy constant per pairwise logit gap.")
     A("")
     A("Everything pair-level is hidden-width-sized (16×16, Schur — the 784-dim")
@@ -187,6 +210,18 @@ def emit_net(tag, W1q, W2q, out_path):
     A("faster than the entrywise `lipsdp_slack_of_cert` route at both widths).")
     A("The 784-term work — Gram wrappers `G1*_eq`, the per-image `hpre*_eval` —")
     A("is reused from the kernel-dotZ scorecard files.")
+    A("")
+    sname = "scorecard_sdp_full" + ("" if tag == "SF" else "_uncon")
+    A("**Theorem vs. measurement — read this before quoting a number.** The")
+    A("soundness of a LipSDP certificate lives in the ENGINE (`LipschitzCertPairSDP`:")
+    A("`pair_sq_bound`, `certified_at_eps_pair`), proved once — kernel-checking the")
+    A("57th image buys nothing the 56th didn\'t. So the counts above are exact-")
+    A(f"rational MEASUREMENTS over the first {N_IMG} images, while the first {N_EMIT}")
+    A("certifying images at each radius (test-set order — an unbiased, reproducible")
+    A(f"rule) each carry a `CertifiedAt` THEOREM, and `{sname}` below states ONLY")
+    A("those proved counts. Capping the images also caps the class pairs needing an")
+    A("LDLᵀ PSD witness — which is where this tier's elaboration cost lives (see")
+    A("`planning/certs_heavy_psd_memory.md`).")
     A("")
     A("Generated by `scripts/lipschitz_cert_pair_sdp_full.py`; weights/images/")
     A("certificates are DATA (SDP solved off-line, verified exactly here). -/")
@@ -271,15 +306,15 @@ def emit_net(tag, W1q, W2q, out_path):
         A(f"  exact pairSq{tag}_{lo}_{hi} u u'")
         A("")
     A("-- ════════════════════════════════════════════════════════════")
-    A(f"-- § Per-image certificates ({len(cert10)} @ ε=1/10, {len(cert30)} @ ε=3/10)")
+    A(f"-- § Per-image certificates: the first {N_EMIT} certifying images per radius")
+    A(f"-- § ({len(cert10)} @ ε=1/10, {len(cert30)} @ ε=3/10; measured {measured10}/{measured30})")
     A("-- ════════════════════════════════════════════════════════════")
     A("")
-    imgs_emitted = set()
     for i in sorted(set(cert10) | set(cert30)):
         y, ms, pre, logit = facts[i]
         # image data + hpre if the base files don't have them for this net
-        if i not in base_imgs and i not in imgs_emitted:
-            imgs_emitted.add(i)
+        if i not in base_imgs and i not in EMITTED_IMGS:
+            EMITTED_IMGS.add(i)
             base.emit_image(A, i, [])          # imgz/imgv/imgF only (no tags)
         if i not in base_hpre:
             A(f"-- net {tag} pre-activations for #{i} (not in the base scorecard set)")
@@ -358,9 +393,11 @@ def emit_net(tag, W1q, W2q, out_path):
         A("  List.forall_iff_forall_mem.mp")
         A("    ⟨" + ", ".join(f"certifiedS{tag}{epsname}_{i}" for i in certs) + "⟩")
         A("")
-    A(f"/-- **The LipSDP full-input scorecard, {netdesc}**: {b10}→{len(cert10)}/{N_IMG} @ ε=0.1")
-    A(f"    (PGD {p10}) and {b30}→{len(cert30)}/{N_IMG} @ ε=0.3 (PGD {p30}) — same net, same images;")
-    A("    the constant was the bottleneck, not the network. Lower bounds only. -/")
+    A(f"/-- **The LipSDP full-input scorecard, {netdesc}** — MEASURED")
+    A(f"    {b10}→{measured10}/{N_IMG} @ ε=0.1 (PGD {p10}) and {b30}→{measured30}/{N_IMG} @ ε=0.3")
+    A(f"    (PGD {p30}): same net, same images, the constant was the bottleneck rather")
+    A(f"    than the network. The counts BELOW are the {N_EMIT}-per-radius emitted witnesses")
+    A("    that carry `CertifiedAt` proofs, not those measurements. Lower bounds only. -/")
     A(f"theorem scorecard_sdp_full{'' if tag == 'SF' else '_uncon'} :")
     A(f"    ({stem}Certs10.length = {len(cert10)} ∧")
     A(f"      ∀ p ∈ {stem}Certs10, CertifiedAt mlp{tag} {frac(EPS10)} p.2.1 p.2.2) ∧")

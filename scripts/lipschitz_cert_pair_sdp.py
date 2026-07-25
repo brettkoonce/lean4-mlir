@@ -16,7 +16,9 @@ Certification criterion per image (exact rationals, what Lean checks):
 for every j != y:  Lp_{y,j} * eps <= logit_y - logit_j, with rho <= Lp^2.
 No sqrt2, no global product constant. Result (eps = 1/10, first 100 test
 images): capped 34 -> 69/100, unconstrained 1 -> 63/100 (PGD bracket:
-72 / 69). Run from repo root: python3 scripts/lipschitz_cert_pair_sdp.py
+72 / 69). Those counts are MEASURED in exact rationals over all 100 images;
+only the first N_EMIT certifying images carry a Lean theorem (planning/
+scorecard_trim.md). Run from repo root: python3 scripts/lipschitz_cert_pair_sdp.py
 """
 import numpy as np, struct
 from fractions import Fraction
@@ -30,6 +32,13 @@ D = os.path.join(ROOT, "data") + os.sep
 OUT_C = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean")
 OUT_U = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDPUncon.lean")
 N_IMG = 100
+# How many of the certifying images carry a per-image `CertifiedAt` THEOREM.
+# Soundness is in the engine (LipschitzCertPairSDP.lean), proved once — the
+# counts stay MEASURED over all N_IMG by exact rational arithmetic; the emitted
+# set only witnesses non-vacuity at real trained weights. Matches the other
+# tiers' default (see planning/scorecard_trim.md); SCORECARD_N_EMIT=100
+# regenerates the pre-cap corpus for a structural diff.
+N_EMIT = int(os.environ.get("SCORECARD_N_EMIT", 8))
 EPS = Fraction(1, 10)
 CAP, EPOCHS, LR, BS = 4.0, 36, 0.15, 64
 DEN_U, DEN_C = 128, 256
@@ -209,11 +218,18 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
             continue
         if all(cert_of(y, j)["Lp"] * EPS <= ms[j] for j in ms):
             certified.append(i)
+    # cap: the first N_EMIT certifying images in test-set order (one radius here,
+    # so no per-column split is needed). `measured` is the full exact-rational
+    # count for the header; `certified` is the theorem-carrying subset, which
+    # also decides which class pairs need an LDLᵀ PSD witness.
+    measured = len(certified)
+    certified = certified[:N_EMIT]
     classes = sorted({facts[i][0] for i in certified})
     ordered_pairs = sorted({(facts[i][0], j) for i in certified
                             for j in range(K) if j != facts[i][0]})
     unordered = sorted({(min(a, b), max(a, b)) for a, b in ordered_pairs})
-    print(f"[{tag}] certified {len(certified)}/{N_IMG}: {certified}")
+    print(f"[{tag}] certified (measured) {measured}/{N_IMG}; "
+          f"emitting {len(certified)} theorems: {certified}")
     print(f"[{tag}] classes {classes}, {len(unordered)} unordered pairs, "
           f"{len(ordered_pairs)} ordered")
 
@@ -227,10 +243,19 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
     base = 34 if tag == "C" else 1
     A(f"/-! # Per-pair LipSDP scorecard — {netdesc}")
     A("")
+    # Scope disclaimer. This was hand-added to the committed files and was NOT in
+    # this generator, so regenerating silently deleted it — emit it here so it
+    # survives. The sibling pooled generators (lipschitz_cert_scorecard.py,
+    # lipschitz_cert_float.py) still have the same gap; fix on regeneration.
+    A("**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim")
+    A("MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical")
+    A("784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational")
+    A("arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.")
+    A("")
     A(f"The tighter-Lipschitz-constant pass over the SAME first-{N_IMG} MNIST test")
     A(f"subset and SAME ε = {EPS} as `LipschitzCertScorecard.lean`: replacing the")
     A("global `√2·∏‖Wᵢ‖` criterion by per-pair LipSDP certificates lifts the")
-    A(f"count from **{base}/{N_IMG} to {len(certified)}/{N_IMG}** — no retraining, no new data, just a")
+    A(f"count from **{base}/{N_IMG} to {measured}/{N_IMG}** — no retraining, no new data, just a")
     A("less lossy constant on each pairwise logit gap. Each class pair carries")
     A("a PSD witness checked by `linarith` from the 8 LDLᵀ column squares")
     A("(`hS*` — the exact sum-of-squares certificate, `d ≥ 0` weights found by")
@@ -238,6 +263,15 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
     A("each image evaluates its logits once (`logit*_eval`) and then needs only")
     A(f"9 rational margin checks against `Lp·ε` (`certifiedS{tag}<i>`). PGD bracket:")
     A(f"{'72' if tag == 'C' else '69'}/{N_IMG} — the cert ≤ TRUE ≤ PGD sandwich is nearly closed.")
+    A("")
+    A("**Theorem vs. measurement — read this before quoting a number.** Soundness")
+    A("lives in the ENGINE (`LipschitzCertPairSDP.lean`), proved once — kernel-")
+    A("checking the 57th image buys nothing the 56th didn\'t. The count above is an")
+    A(f"exact-rational MEASUREMENT over the first {N_IMG} images; the first {N_EMIT} certifying")
+    A("images (test-set order — an unbiased, reproducible rule) each carry a")
+    A(f"`CertifiedAt` THEOREM, and `scorecard_sdp{'' if tag == 'C' else '_uncon'}` below states only those.")
+    A("Capping the images also caps the class pairs that need an LDLᵀ witness,")
+    A("which is what this tier costs on every proof push.")
     A("")
     A("Generated by `scripts/lipschitz_cert_pair_sdp.py`; weights/images/")
     A("certificates are DATA (SDP solved off-line, verified exactly here). -/")
@@ -405,9 +439,10 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
     A("  List.forall_iff_forall_mem.mp")
     A("    ⟨" + ", ".join(f"certifiedS{tag}{i}" for i in certified) + "⟩")
     A("")
-    A(f"/-- **The LipSDP scorecard**: {len(certified)}/{N_IMG} — vs {base}/{N_IMG} under the")
-    A("    global √2·∏-norm criterion, same net, same ε, same images; the")
-    A("    constant was the bottleneck, not the network. -/")
+    A(f"/-- **The LipSDP scorecard** — MEASURED {measured}/{N_IMG}, vs {base}/{N_IMG} under the")
+    A("    global √2·∏-norm criterion, same net, same ε, same images; the constant")
+    A(f"    was the bottleneck, not the network. The {len(certified)} below are the emitted")
+    A("    witnesses carrying `CertifiedAt` proofs, not that measurement. -/")
     A(f"theorem scorecard_sdp{'' if tag == 'C' else '_uncon'} :")
     A(f"    {lname}.length = {len(certified)} ∧")
     A(f"      ∀ p ∈ {lname}, CertifiedAt {mlpname} ((1 : ℝ)/10) p.2.1 p.2.2 :=")

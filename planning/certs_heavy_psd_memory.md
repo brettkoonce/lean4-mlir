@@ -8,6 +8,15 @@ kernel-verified locally: capped σ≤2 **93/100 @ L2 ε=0.1 = the PGD bound —
 sandwich closed** — 91/100 @0.3; uncon 91/77. Nothing about the RESULTS
 changed; only who re-checks them on a schedule.)*
 
+*(**Update 2026-07-25.** Both modules were regenerated with the per-image cap of
+`planning/scorecard_trim.md` — 30,884 → 7,241 lines, 45 → 39 PSD witnesses,
+measured counts identical. Re-measured at `LEAN_NUM_THREADS=1`, one module at a
+time: **16.0 GB / 16.6 GB**, versus 17.08 GB at 4 threads before. So the trim did
+NOT fix this: at one thread only one goal is in flight, which means ~16 GB is the
+footprint of a **single** `hS*` goal, and no per-image cap can reduce a per-goal
+peak. Option 1 below is still the fix, and this measurement is the cleanest
+evidence for it — it isolates the cost to exactly the object option 1 replaces.)*
+
 ## What happened (4 CI attempts, all forensics real)
 
 The per-pair LipSDP certificates discharge PSD-ness of

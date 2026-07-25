@@ -72,17 +72,19 @@ the MAIN audit. -/
 -- squares, one linarith goal per pair (the pooled files' recipe — MEASURED
 -- faster than the entrywise lipsdp_slack_of_cert route at both widths; the
 -- exact-LDL fractions hurt 512 separate norm_num goals far more than one
--- linarith call). Spot-check: one pair chain (slack + squared bound), a
--- reverse-order wrapper, first/middle/last per-image certs at both radii,
--- and the aggregates.
+-- linarith call). Those counts are exact-rational MEASUREMENTS; the first 8
+-- certifying images per radius carry the `CertifiedAt` theorems, and the
+-- `scorecard_sdp_full*` aggregates state only those (planning/scorecard_trim.md).
+-- Spot-check: one pair chain (slack + squared bound), a reverse-order wrapper,
+-- first/middle/last per-image certs at both radii, and the aggregates.
 -- #print axioms Proofs.LipschitzCertDemo.hS01SF  -- CI-disabled with the SDP lib membership
 -- #print axioms Proofs.LipschitzCertDemo.pairSqSF_0_1  -- CI-disabled with the SDP lib membership
 -- #print axioms Proofs.LipschitzCertDemo.pairSqSF_1_0  -- CI-disabled with the SDP lib membership
 -- #print axioms Proofs.LipschitzCertDemo.certifiedSSF10_0  -- CI-disabled with the SDP lib membership
--- #print axioms Proofs.LipschitzCertDemo.certifiedSSF30_41  -- CI-disabled with the SDP lib membership
--- #print axioms Proofs.LipschitzCertDemo.certifiedSSF10_86  -- CI-disabled with the SDP lib membership
--- #print axioms Proofs.LipschitzCertDemo.certifiedSTF10_31  -- CI-disabled with the SDP lib membership
--- #print axioms Proofs.LipschitzCertDemo.certifiedSTF10_81  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.certifiedSSF30_3  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.certifiedSSF10_7  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.certifiedSTF10_3  -- CI-disabled with the SDP lib membership
+-- #print axioms Proofs.LipschitzCertDemo.certifiedSTF30_7  -- CI-disabled with the SDP lib membership
 -- #print axioms Proofs.LipschitzCertDemo.sdpCappedFullCerts10_certified  -- CI-disabled with the SDP lib membership
 -- #print axioms Proofs.LipschitzCertDemo.sdpCappedFullCerts30_certified  -- CI-disabled with the SDP lib membership
 -- #print axioms Proofs.LipschitzCertDemo.sdpUnconFullCerts10_certified  -- CI-disabled with the SDP lib membership
