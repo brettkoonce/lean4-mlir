@@ -1305,6 +1305,14 @@ lean_exe «unet-brats-train» where
   root := `demos.MainUnetBratsTrain
   moreLinkArgs := ireeLink
 
+lean_exe «unet-brats-r34» where
+  root := `demos.MainUnetBratsR34
+  moreLinkArgs := ireeLink
+
+lean_exe «grad-fd-probe» where
+  root := `demos.MainGradFdProbe
+  moreLinkArgs := ireeLink
+
 lean_exe «pets-predict» where
   root := `demos.MainPetsPredict
   moreLinkArgs := ireeLink

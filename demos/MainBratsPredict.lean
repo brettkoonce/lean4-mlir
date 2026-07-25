@@ -72,6 +72,43 @@ def unetBrats : NetSpec where
     .conv2d 32 4 1 .same .identity
   ]
 
+/-- MUST match `demos/MainUnetBratsR34.lean` exactly, name string included —
+    same rule and same reason as `unetBrats` above.
+
+    Selected with `net=r34`. It renders through the rest of this file
+    unchanged: it keeps all four modalities, so the brain mask and the T1gd
+    backdrop are still computed the same way, and every panel dimension below
+    already reads H/W off the spec. Only the input size and the checkpoint
+    prefix differ, and both follow from the spec. -/
+def r34UnetBratsOf (skips : Bool) : NetSpec where
+  name := if skips
+          then "ResNet-34 UNet skip (BraTS, 224×224 4-modality MRI → 4-class tumour)"
+          else "ResNet-34 → UNet (BraTS, 224×224 4-modality MRI → 4-class tumour)"
+  imageH := 224
+  imageW := 224
+  layers :=
+    [ .convBn 4 64 7 2 .same,
+      .maxPool 2 2,
+      .residualBlock  64  64 3 1,
+      .residualBlock  64 128 4 2,
+      .residualBlock 128 256 6 2,
+      .residualBlock 256 512 3 2
+    ] ++
+    (if skips then
+      [ .unetUp 512 256, .unetUp 256 128, .unetUp 128 64, .unetUp 64 64,
+        .bilinearUpsample 2, .convBn 64 32 3 1 .same,
+        .conv2d 32 4 1 .same .identity ]
+     else
+      [ .bilinearUpsample 2, .convBn 512 256 3 1 .same,
+        .bilinearUpsample 2, .convBn 256 128 3 1 .same,
+        .bilinearUpsample 2, .convBn 128 64 3 1 .same,
+        .bilinearUpsample 2, .convBn 64 32 3 1 .same,
+        .bilinearUpsample 2, .convBn 32 32 3 1 .same,
+        .conv2d 32 4 1 .same .identity ])
+
+/-- Default to the skip-equipped net; `net=r34noskip` renders the v0. -/
+def r34UnetBrats : NetSpec := r34UnetBratsOf true
+
 /-- Channel index of the modality used as the grayscale backdrop.
     0 = FLAIR, 1 = T1w, 2 = T1gd, 3 = T2w (order fixed by
     `preprocess_brats.py`, which reads it from MSD's dataset.json). -/
@@ -167,7 +204,15 @@ def main (args : List String) : IO Unit := do
     match (args.filter (·.startsWith "arm=")).head? with
     | some a => ((a.drop 4).toString).splitOn ","
     | none => [""]
-  let positional := args.filter (fun a => !a.startsWith "arm=" && a != "best")
+  -- `net=r34` renders the ResNet-34-transfer net instead of the from-scratch
+  -- UNet. It changes which NetSpec (and so which `buildPrefix`, params, and
+  -- vmfb) every path below resolves to — nothing else, because both nets take
+  -- the same 4×240×240 input and emit the same 4×240×240 logits.
+  let noSkip := args.any (· == "net=r34noskip")
+  let useR34 := noSkip || args.any (· == "net=r34")
+  let spec := if useR34 then r34UnetBratsOf (!noSkip) else unetBrats
+  let positional := args.filter (fun a =>
+    !a.startsWith "arm=" && !a.startsWith "net=" && a != "best")
   let outPath := positional[0]?.getD "demos/figures/brats_pred.ppm"
   -- The explicit params/bn override is single-arm only: with several arms
   -- there is no one checkpoint to point at, and silently applying one arm's
@@ -180,7 +225,7 @@ def main (args : List String) : IO Unit := do
   -- produced (unet-brats-train saves both), and the best-by-val WT Dice is the
   -- number worth showing.
   let suffix := if args.any (· == "best") then "_best" else ""
-  let prefixes := arms.map (fun a => (unetBrats.withBuildTag a).buildPrefix)
+  let prefixes := arms.map (fun a => (spec.withBuildTag a).buildPrefix)
   let paramPaths := match positional[1]? with
     | some p => [p]
     | none => prefixes.map (fun p => s!"{p}{suffix}_params.bin")
@@ -200,9 +245,15 @@ def main (args : List String) : IO Unit := do
     let params ← IO.FS.readBinFile pp
     let bnStats ← IO.FS.readBinFile bp
     evalParamsList := evalParamsList ++ [params.append bnStats]
-  let spec := unetBrats
-  IO.eprintln s!"  loading data/brats/val.bin ..."
-  let (valImg, valMask, nVal) ← F32.loadBrats "data/brats/val.bin" 240
+  IO.eprintln s!"  net: {spec.name}"
+  -- The val set must be the one this net was trained against: the r34 arm uses
+  -- the 224 center-cropped build, the from-scratch UNet the native 240 one.
+  -- Reading the wrong one would misparse the record stride and render
+  -- convincing garbage rather than fail, so it is derived from the spec.
+  let dataDir := if useR34 then "data/brats224" else "data/brats"
+  IO.eprintln s!"  loading {dataDir}/val.bin at {spec.imageH}² ..."
+  let (valImg, valMask, nVal) ←
+    F32.loadBrats s!"{dataDir}/val.bin" spec.imageH.toUSize
   -- The eval vmfb is compiled at the training batch size; we fill a full
   -- batch and render only the first `nVis` of it.
   let evalBatch : Nat := 16
