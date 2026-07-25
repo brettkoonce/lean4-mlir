@@ -12,166 +12,89 @@ chapter trainer has produced its checkpoint.
 
 ---
 
-## UNet — image segmentation
+## ResNet-34 UNet — brain-tumour segmentation (BraTS)
 
-Encoder-decoder UNet on Oxford-IIIT Pets, 224×224 RGB → 3-class
-trimap (foreground / background / boundary). 7.76M params; the
-new primitives are bilinear upsample (forward + VJP + codegen)
-and channel concat.
+The segmentation demo. A ResNet-34 encoder (the Ch-5 architecture, reused
+verbatim as the contracting path) + a UNet decoder, on MSD Task01_BrainTumour:
+224×224 axial slices, 4 co-registered MRI modalities (FLAIR / T1w / T1gd / T2w)
+→ 4 tumour classes. 24.5M params, plain per-pixel CE, 10 epochs.
 
-`MainUnetPetsTrain.lean`, `MainAutoencoderPetsTrain.lean`,
-`MainPetsPredict.lean`. See `planning/unet_demo.md`.
-
-```bash
-lake exe unet-pets-train
-lake exe pets-predict           # uses the trained checkpoint
-```
-
-Sample output (input | ground-truth mask | predicted mask, 4 val
-images stacked):
-
-![UNet pets segmentation](figures/unet_pets.png)
-
-Foreground (animal) green, background blue, boundary red. The
-predicted mask matches the ground truth pretty closely after
-~50 epochs of training.
-
----
-
-## UNet — brain-tumour segmentation (BraTS)
-
-The same UNet, same skip codegen, on real medical data: MSD
-Task01_BrainTumour (built from the BraTS 2016/2017 cases), 240×240
-axial slices, 4 co-registered MRI modalities (FLAIR / T1w / T1gd /
-T2w) → 4 tumour classes. The architectural diff from the pets demo
-is one integer — `.unetDown 3 32` → `.unetDown 4 32` — and the
-entire seg stack generalized to a new modality count, class count,
-and resolution with **zero codegen changes**.
-
-`MainUnetBratsTrain.lean`, `MainBratsPredict.lean`. See
-`planning/brats_demo.md`.
+`MainUnetBratsR34.lean`, `MainBratsPredict.lean`. See
+`planning/r34_brats_retrain.md`.
 
 ```bash
 ./download_brats.sh
-lake exe unet-brats-train data/brats 30 [ce|dice|dicece]
-lake exe brats-predict                  # uses the trained checkpoint
+python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
+        --size 224 --seed 0            # same patient split as data/brats
+./run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU
+lake exe brats-predict net=r34 arm=scratch,r34 out.ppm
 ```
 
-Eval prints per-class IoU **and** Dice on the three nested BraTS
-regions the literature actually reports — WT (whole tumour), TC
-(tumour core), ET (enhancing tumour). Both come out of one confusion
-matrix accumulated in exact `Nat`; `scripts/seg_region_dice_check.py`
-checks the region arithmetic against a direct per-pixel computation
-(exact agreement) with no GPU needed.
+| arm | mIoU | WT | TC | ET |
+|---|---|---|---|---|
+| `r34` (ImageNet bootstrap) | 0.742 | 0.911 | 0.870 | 0.858 |
+| `scratch` (He-init) | 0.740 | 0.910 | 0.869 | 0.856 |
 
-Sample output (T1gd | + ground truth | + prediction, 4 val slices
-from 4 different patients):
+![R34 UNet transfer on BraTS](figures/brats_r34_skip_transfer.png)
 
-![BraTS tumour segmentation](figures/brats_pred_dicece.png)
+`T1gd | ground truth | +scratch | +r34`. Edema green, non-enhancing/necrotic
+core red, enhancing tumour yellow — the yellow rim around a red core is a
+textbook ring-enhancing glioblastoma.
 
-Edema green, non-enhancing/necrotic core red, enhancing tumour
-yellow — the yellow rim around a red core is a textbook
-ring-enhancing glioblastoma.
+**Two things this demo measures, and they are not the same size.**
 
-**The right-hand column is why this demo exists.** It is empty. That
-model was trained with Dice+CE for 1 epoch and predicts background on
-every pixel of every slice — 0 tumour pixels against ~5,000 in the
-ground truth — while scoring a mIoU of 0.243, which is the score of a
-model that has learned nothing at all (predict-background-everywhere
-scores 0.243418 on this split). Enhancing tumour is 0.52% of voxels,
-and per-pixel cross-entropy finds the trivial minimum inside the first
-ninth of one epoch and stays there.
+*Skips are worth ~10 points.* Same backbone and schedule, decoder with and
+without the encoder concat: **0.635 → 0.740 mIoU**, the largest gain on ET
+(+0.12), the thinnest structure — a skipless decoder has to rebuild every
+boundary from a 7×7 bottleneck. Run the ablation with `noskip`.
 
-Dice was the intended fix and **it does not work** — measured, not
-guessed (`scripts/seg_dice_vanishing_grad_probe.py`): Dice's gradient
-carries a factor of `p_i` from the softmax Jacobian, so it is weakest
-exactly where the class has collapsed. At p₃ = 2e-5 it is 0.02% of
-CE's, which is indifferent to the collapse. Dice cannot rescue a class
-it has already zeroed.
+*Transfer buys one epoch, not a better model.* The two arms differ in exactly
+one field (`bootstrapBackboneRange`), so 86.8% of params start pretrained vs
+random and everything else is identical. At **epoch 1** the bootstrapped arm is
+already at ET Dice 0.818 while the control sits at 0.184, still collapsed on
+the hard classes. By epoch 2 the control has caught up, and the peaks above are
+a tie (+0.002, noise at n=1). The honest claim is sample-efficiency: same
+quality, one epoch sooner. Transfer's payoff scales inversely with dataset
+size, and 14,415 slices is a lot — a data-fraction sweep is the experiment that
+would show it properly.
 
-That negative result is what the demo is organized around, and chasing
-it down produced the question the whole thing now turns on:
+The backbone is `.lake/build/jax_r34_imagenet.bin`, trained by this stack on
+ImageNet to 72% top-1. Nothing is downloaded. Its stem is 3-channel RGB and
+BraTS needs 4, so the transferable weights are not a prefix — hence
+`bootstrapBackboneRange`, which patches a byte *range* and leaves the fresh
+stem He-init. It self-checks on every run: the patched window must be
+byte-equal to the checkpoint and the stem must be untouched, or it throws.
 
-> **What does your loss's gradient do about the easy 97%?**
+---
 
-A loss does not save a rare class by having a big gradient *on* it — CE's
-is the biggest of any arm here, and CE collapses anyway. What decides the
-outcome is the rare class's gradient *relative to the majority drowning it
-out*, and there are exactly two ways to win that: amplify the minority, or
-defund the majority. `scripts/seg_grad_scorecard.py` measures every arm
-against the emitted MLIR, in ~2 minutes of CPU with no GPU — reported as
-`Σ|dz|` over tumour pixels / `Σ|dz|` over background pixels, from
-initialization to a fully collapsed net:
+## UNet — earlier segmentation demos
 
-| loss | at init | collapsed | mechanism |
-|---|---|---|---|
-| `ce` | 5.09e-03 | 2.87e+01 | out-voted from the start |
-| `dice` | 2.84e-02 | **8.57e-02** | flat — and *declining* |
-| `wce` | 9.96e-01 | 5.61e+03 | amplify the minority: a constant 196× |
-| `focal` | 5.15e-03 | 1.20e+08 | defund the majority: nil at init, ~4e6× once confident |
+`MainUnetPetsTrain.lean` / `MainPetsPredict.lean` — encoder-decoder UNet on
+Oxford-IIIT Pets, 224×224 RGB → 3-class trimap, 7.76M params. This is where
+the two seg primitives came from: bilinear upsample (forward + VJP) and channel
+concat, exposed as `.unetDown` / `.unetUp`.
 
-Dice starts ~5× better balanced than CE and ends ~335× worse: its
-correction *weakens* as the collapse deepens, which is positive feedback
-into the very state it was meant to prevent. Focal, despite its
-reputation, never amplifies the rare class at all — its gradient there
-sits on CE's to three digits, and its entire mechanism is the majority
-column. And focal is a **no-op at initialization**, because a uniform
-softmax has no confidence to suppress, which puts its protection on the
-far side of the ~100 steps in which the collapse is decided.
-
-Every row is measurable before spending a GPU-week finding out.
-
-And then you run it anyway, because the table answers *which loss can
-compete*, not *what you get*. Matched 10-epoch arms, identical but for
-the loss:
-
-![CE vs weighted CE](figures/brats_ce_vs_wce.png)
-
-`T1gd | ground truth | ce | wce`. **Column 3 predicts no tumour anywhere.
-Column 4 predicts the entire brain is tumour.**
-
-| arm | mIoU | c3 enhancing IoU | WT Dice | ET recall | ET precision |
-|---|---|---|---|---|---|
-| `ce` | 0.2434 | 0.000000 | 0.0000 | 0.00% | — |
-| `wce` | 0.1865 | 0.017823 | 0.1650 | **99.39%** | **1.78%** |
-
-`ce` predicted zero tumour voxels out of 148 million, and is *worse* than
-it was at 1 epoch — the collapse is an absorbing state that training
-deepens, not underfitting that budget would fix. `wce` escaped it and
-overshot into the mirror image: it finds essentially every tumour voxel
-and paints 29% of every brain to do it, a 56× over-prediction. That is our
-own arithmetic doing what we asked — `w₃/w₀ = 196` prices a false negative
-at 196 false positives, so a capacity-limited net over-predicts enormously.
-We asked for every class to own 25% of the loss; we got a net that acts as
-if every class owns 25% of the brain.
-
-**Note which metric ranks these.** mean IoU says `ce` is better (0.2434 vs
-0.1865) — it ranks the model that predicts *nothing* above the one that
-finds the tumour. Dice says the opposite. Report mIoU alone on a task like
-this and you will ship the collapsed model.
-
-**And then you fix it, and the fix is cheap.** The recipe that works is
-class weighting that neither collapses nor floods (inverse-*sqrt* frequency),
-plus two training-side levers — start the head at the class prior
-(`pb`), decay the LR (`cos`) — and, the largest single jump, **mask-aware
-augmentation** (`aug`, a paired image+mask horizontal flip):
+`MainUnetBratsTrain.lean` — a from-scratch UNet on BraTS at native 240×240.
 
 ```bash
-lake exe unet-brats-train data/brats 10 wcesqrt cos pb aug
-lake exe brats-predict arm=ce,wceb70,wcesqrt_pb_cos_aug best
+lake exe unet-pets-train && lake exe pets-predict
+lake exe unet-brats-train data/brats 10 ce
 ```
 
-![with augmentation](figures/brats_aug_result.png)
+![UNet pets segmentation](figures/unet_pets.png)
 
-`T1gd | ground truth | ce | wceb70 | the fix`. WT Dice climbs **0.24 → 0.33
-(best-checkpointing) → 0.66 (augmentation)**, at **92.6% precision** — the
-rightmost column traces the tumour tightly instead of guessing. The lesson
-in the jump: the model was **data-starved** on a 14k-slice set, and one
-horizontal flip doubling the effective corpus did more than any architectural
-change would. It is still a *localizer*, not a sub-region *typer* (it paints
-the whole tumour one class), and it *oscillates* — which is why
-best-by-val checkpointing (`best`) is load-bearing, not optional. Full arc,
-including why a gentler LR makes it *worse*, in `planning/brats_demo.md`.
+> **Correction.** This section used to carry a long loss-design ablation —
+> CE collapsing onto background, Dice failing to rescue it, weighted-CE
+> over-predicting, and a wcesqrt+cos+pb+aug "fix". **That analysis was void.**
+> The collapse it was built on was a *data* bug, not a property of the loss:
+> the shuffle permuted images by record and labels by 4 bytes, so image *k* was
+> trained against another slice's mask (fixed in `ca83835`). Post-fix, plain
+> per-pixel CE segments at epoch 1 — mIoU ~0.69, WT/TC/ET 0.875/0.813/0.837,
+> every tumour class off the floor. The figures `brats_ce_vs_wce.png` and
+> `brats_aug_result.png` are kept only as a record of the wrong turn. The
+> lesson worth keeping is the one that generalizes: a silent data-pairing bug
+> is indistinguishable from a hard learning problem, and we spent a chapter
+> theorizing about the latter.
 
 ---
 

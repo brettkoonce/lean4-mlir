@@ -10256,22 +10256,52 @@ def detrR50 : NetSpec where
 \end{verbatim}
 
 \subsection{Semantic segmentation}
+\label{sec:bestiary_segmentation}
 
 Pixel-level labeling. Symmetric encoder/decoder with skip connections
 is the recurring pattern; UNet is the canonical instance, and the same
 shape later became the diffusion-model backbone.
 
-\paragraph{UNet on Pets, in passing.} The
-\texttt{demos/MainUnetPetsTrain.lean} trainer in this repo is a working
-encoder-decoder UNet at 7.85M params on Oxford-IIIT Pets
-($224 \times 224$ RGB $\to$ 3-class trimap: animal, background,
-boundary). After $\sim$50 epochs the predicted masks track ground-truth
-shapes closely on held-out validation images (see
-\texttt{demos/README.md} for the rendered grid). The two codegen
-primitives that make it work --- bilinear upsample (forward + VJP) and
+\paragraph{A ResNet-34 UNet on BraTS.} The
+\texttt{demos/MainUnetBratsR34.lean} trainer (\texttt{unet-brats-r34}) is a
+working encoder--decoder segmentation network at 24.5M params on MSD Task01
+brain-tumour MRI: four co-registered modalities (FLAIR / T1w / T1gd / T2w) at
+$224 \times 224$ in, four per-pixel classes out (background, edema,
+non-enhancing/necrotic core, enhancing tumour), 14{,}415 training slices from
+411 patients with the 2{,}569 validation slices held out \emph{by patient}. The
+tumour sub-regions are defined by which modality lights up --- edema is bright
+on FLAIR, enhancing tumour on T1gd --- so the input is genuinely multi-modal
+rather than three correlated views of one scene, and the classes are brutally
+imbalanced: enhancing tumour is $\sim$0.5\% of voxels.
+
+Scored the way the clinical literature scores it --- Dice over the nested
+regions WT (whole tumour), TC (tumour core) and ET (enhancing tumour) --- ten
+epochs of plain per-pixel cross-entropy gives:
+
+\begin{center}
+\begin{tabular}{lcccc}
+\hline
+ & mIoU & WT & TC & ET \\
+\hline
+ResNet-34 UNet (\texttt{unet-brats-r34}) & 0.740 & 0.910 & 0.869 & 0.856 \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Rendered predictions are in
+\texttt{demos/figures/brats\_r34\_unet.png} --- T1gd backdrop, ground truth,
+prediction, on four held-out patients. This matters more than the table
+for a segmentation demo: a model that has collapsed onto the majority class and
+one that works report similar pixel accuracy, because 97\% of voxels are
+background. They do not produce similar pictures.
+
+The encoder is the ResNet-34 of Ch~\ref{chap:residual}, reused verbatim as the
+contracting path rather than a stack of \texttt{.unetDown}s; the decoder is
+four \texttt{.unetUp} stages, and the skips come off the backbone. The two
+codegen primitives this rests on --- bilinear upsample (forward + VJP) and
 channel concat --- are exposed at the \texttt{Layer} level as
-\texttt{.unetDown} and \texttt{.unetUp}, which the canonical bestiary
-UNet below also uses. Three things change relative to the image
+\texttt{.unetDown} and \texttt{.unetUp}, which the canonical bestiary UNet
+below also uses. Three things change relative to the image
 \emph{classifiers} of Part~2:
 
 \begin{itemize}
@@ -10306,6 +10336,40 @@ UNet below also uses. Three things change relative to the image
     example of that path --- same vmfb the trainer produced, plus a
     small C colormap routine.
 \end{itemize}
+
+\paragraph{What the skips are worth, measured.} The second bullet above is the
+one claim in this subsection that is cheap to test rather than assert. Running
+the same backbone, data and schedule with the decoder's skip connections
+removed --- upsample and convolve, but never concatenate the encoder feature ---
+isolates exactly what they contribute:
+
+\begin{center}
+\begin{tabular}{lcccc}
+\hline
+decoder & mIoU & WT & TC & ET \\
+\hline
+upsample only (no skips) & 0.635 & 0.872 & 0.817 & 0.733 \\
+\texttt{.unetUp} (skips)  & \textbf{0.740} & \textbf{0.910} & \textbf{0.869} & \textbf{0.856} \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Roughly ten points of mIoU, and the largest single gain is on ET
+($+0.12$), the smallest and thinnest structure --- which is what the bullet
+predicts, since a decoder without skips must reconstruct every boundary from a
+$7 \times 7$ bottleneck. It is visible in the renders as well: the thin
+enhancing rim around the necrotic core is resolved with skips and smeared into
+the core without them.
+
+\paragraph{Pairing a decoder to a backbone that has no \texttt{unetDown}.} The
+canonical UNet below pairs skips implicitly --- $i$-th \texttt{unetUp} from the
+bottom with $i$-th \texttt{unetDown} from the top --- which a ResNet encoder
+cannot satisfy. So \texttt{unetUp} also pairs \textbf{by shape}, with a
+preceding residual stage or a bare \texttt{.maxPool}'s input; that
+automatically passes over the bottleneck, which nothing upsamples into. Any
+ResNet here can therefore be a UNet contracting path. The backward join is
+\texttt{.fpnDetect}'s C3/C4/C5 tap reused, and routing one network both ways
+gives bit-identical parameters.
 
 The encoder-decoder-with-skips shape is not specific to segmentation
 either: it later became the diffusion-model backbone (DDPM, Stable
@@ -11400,10 +11464,13 @@ language --- and each pulls a dataset of its own. \textbf{Oxford-IIIT
 Pets} backs both the UNet segmenter (\texttt{unet-pets-train}, via
 trimaps) and the YOLO detector (\texttt{yolov1-pets-train-bootstrap}, via
 head boxes tiled into $2 \times 2$ mosaics); \textbf{MSD Task01
-(BraTS)} carries the same UNet to real medical imaging
-(\texttt{unet-brats-train}) --- four-modality brain-tumour MRI, where the
-thin-class collapse a Pets trimap merely tolerates becomes the entire
-problem (enhancing tumour is $\sim$0.5\,\% of voxels); \textbf{tiny
+(BraTS)} carries segmentation to real medical imaging --- four-modality
+brain-tumour MRI, where the thin-class collapse a Pets trimap merely tolerates
+becomes the entire problem (enhancing tumour is $\sim$0.5\,\% of voxels). Two
+trainers read it: \texttt{unet-brats-train} (a from-scratch UNet at native
+$240 \times 240$) and \texttt{unet-brats-r34} (the ResNet-34 encoder of
+\S\ref{sec:bestiary_segmentation}, which needs the $224$ centre-cropped build
+since its stride-32 backbone does not divide 240); \textbf{tiny
 Shakespeare} --- a single 1\,MB character stream --- is what the TinyGPT
 char-level transformer (\texttt{tinygpt-shakespeare}) trains on; and
 \textbf{TinyStories} --- Eldan \& Li's synthetic short-story corpus,
@@ -11477,6 +11544,17 @@ a slice-level split leaks memorized neighbours across the boundary).
 Volumes are quantized to uint8 over a $\pm5\sigma$ window and the C
 loader inverts it, matching the on-disk convention of every other dataset
 here.
+
+\smallskip\noindent The default build is $240 \times 240$, BraTS's native
+in-plane size, which suits a depth-4 UNet ($240 = 16 \cdot 15$). A stride-32
+backbone needs a size divisible by 32, so \texttt{unet-brats-r34} reads a
+second build made by \texttt{preprocess\_brats.py \dots{} --size 224 --seed 0}
+into \texttt{data/brats224/}. The same seed reproduces the same patient split
+and the same 14{,}415 / 2{,}569 slices. Note that \texttt{--size} \emph{crops}
+rather than resizes: interpolating a label mask would invent classes that were
+never annotated, whereas a centre crop leaves intensities exact and the mask
+values untouched. It is also lossless here --- the 8-pixel border it removes
+contains no brain voxels, these volumes being skull-stripped and centred.
 \emph{Reference:} Antonelli et al., \emph{The Medical Segmentation
 Decathlon}, Nature Communications~13, 4128 (2022), atop the underlying
 BraTS work (Menze et al.\ 2015, Bakas et al.\ 2017).
