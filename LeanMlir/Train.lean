@@ -444,6 +444,20 @@ private def petsDetIO : DatasetIO where
   loadVal   := fun dir => F32.loadDetBin (dir ++ "/val.bin")
   augmentBatch := fun raw _ _ => return raw
 
+/-- BraTS at 224×224 — `bratsIO` with one number changed. Everything that
+    makes BraTS BraTS (4 modalities, the mask-as-labels buffer that selects the
+    `.perPixelCE` path, MSD's label numbering for the regions) is identical, so
+    the region table is shared rather than restated: getting WT/TC/ET out of
+    sync between two copies of the same dataset is exactly the silent bug
+    `bratsIO`'s own comment warns about. -/
+private def brats224IO : DatasetIO :=
+  { bratsIO with
+      trainPixels := 4 * 224 * 224
+      valPixels   := 4 * 224 * 224
+      labelBytesPerRecord := 224 * 224
+      loadTrain := fun dir => F32.loadBrats (dir ++ "/train.bin") 224
+      loadVal   := fun dir => F32.loadBrats (dir ++ "/val.bin") 224 }
+
 private def datasetIO : DatasetKind → DatasetIO
   | .imagenette => imagenetteIO
   | .mnist      => mnistIO
@@ -451,6 +465,7 @@ private def datasetIO : DatasetKind → DatasetIO
   | .pets       => petsIO
   | .petsDet  => petsDetIO
   | .brats      => bratsIO
+  | .brats224   => brats224IO
   | .imagenet   =>
     -- Phase 3 doesn't yet support full 1000-class ImageNet — the 1.28M
     -- training set needs a C-side streaming reader, not the current
@@ -557,9 +572,34 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   -- of the He-init with bytes read from a saved checkpoint (e.g. R34
   -- Imagenette weights loaded into a YOLOv1 init). Auto-loads BN stats
   -- from the companion file if the path is `*_params.bin`.
-  let params ← match cfg.bootstrapBackbone with
-    | none => spec.heInitParams
-    | some (path, prefixFloats) => do
+  let params ← match cfg.bootstrapBackboneRange, cfg.bootstrapBackbone with
+    | some (path, dstOff, srcOff, count), _ => do
+        IO.eprintln s!"  bootstrap(range): {count} floats from {path}[{srcOff}..] → init[{dstOff}..]"
+        IO.eprintln s!"  bootstrap(range): init[0..{dstOff}) stays He-init (fresh stem)"
+        let init ← spec.heInitParams
+        let patched ← NetSpec.patchInitWithPretrainedRange init path
+                        (dstOff * 4) (srcOff * 4) (count * 4)
+        -- GUARD (planning/r34_brats_retrain.md §5, "backbone actually loaded?").
+        -- The whole demo is a lie if the bootstrap silently no-ops, and a
+        -- no-op is invisible downstream: a He-init net trains fine and just
+        -- scores worse, which reads as "transfer didn't help" rather than
+        -- "transfer never happened". So verify the bytes landed, and verify
+        -- the stem did NOT (a range that swallowed the stem is the other
+        -- failure). Cheap: two window compares, host-side, once per run.
+        let pre ← IO.FS.readBinFile path
+        let src := pre.extract (srcOff * 4) (srcOff * 4 + count * 4)
+        let dst := patched.extract (dstOff * 4) (dstOff * 4 + count * 4)
+        if src != dst then
+          throw <| IO.userError "bootstrap(range) GUARD FAILED: patched window ≠ checkpoint window"
+        if dstOff > 0 then
+          let initStem := init.extract 0 (dstOff * 4)
+          let patStem  := patched.extract 0 (dstOff * 4)
+          if initStem != patStem then
+            throw <| IO.userError "bootstrap(range) GUARD FAILED: fresh stem was overwritten"
+        IO.eprintln s!"  bootstrap(range): GUARD OK — {count} floats byte-equal checkpoint, stem untouched"
+        pure patched
+    | none, none => spec.heInitParams
+    | none, some (path, prefixFloats) => do
         IO.eprintln s!"  bootstrap: loading first {prefixFloats} floats from {path}"
         let init ← spec.heInitParams
         NetSpec.patchInitWithPretrainedPrefix init path (prefixFloats * 4)
@@ -639,6 +679,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           | .imagenet   => "imagenet"
           | .petsDet  => "pets_det"
           | .brats      => "brats"
+          | .brats224   => "brats224"
         let hdr :=
           "{\"kind\":\"header\",\"phase\":\"phase3\"" ++
           s!",\"netspec_name\":\"{spec.name}\"" ++
@@ -668,9 +709,15 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   -- the pretrained backbone has BN layers matching the spec's. Size
   -- must match exactly (any mismatch == architecture drift between R34
   -- backbone and YOLOv1 backbone, which would be a bug).
-  let bnInit : ByteArray ← match cfg.bootstrapBackbone with
+  -- The range bootstrap reuses this path unchanged: BN running stats are
+  -- per-channel, so a 3-ch vs 4-ch stem difference does not reach them, and
+  -- an exact-size match is still the only safe acceptance test.
+  let bnBootstrapPath : Option String :=
+    (cfg.bootstrapBackboneRange.map (fun (p, _, _, _) => p)).orElse fun _ =>
+      cfg.bootstrapBackbone.map (fun (p, _) => p)
+  let bnInit : ByteArray ← match bnBootstrapPath with
     | none => F32.const nBnStats.toUSize 0.0
-    | some (path, _) => do
+    | some path => do
         let bnPath := path.replace "_params.bin" "_bn_stats.bin"
         if ← System.FilePath.pathExists bnPath then
           let bn ← IO.FS.readBinFile bnPath

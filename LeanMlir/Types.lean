@@ -771,6 +771,21 @@ structure TrainConfig where
       Phase 4 of `planning/yolo_final.md`. Example for YOLOv1+R34:
       `bootstrapBackbone := some (".lake/build/resnet_34_params.bin", 21284672)`. -/
   bootstrapBackbone : Option (String × Nat) := none
+  /-- Offset-aware bootstrap, as `some (paramsPath, dstOffFloats, srcOffFloats,
+      countFloats)`. Same job as `bootstrapBackbone` but for a spec whose FIRST
+      layer differs from the checkpoint's, so the transferable weights are no
+      longer a prefix — see `NetSpec.patchInitWithPretrainedRange`.
+
+      The motivating case is `r34UnetBrats`: a 4-modality MRI stem (`[64,4,7,7]`,
+      12,544 floats) in front of an R34 body pretrained on 3-channel RGB
+      (`[64,3,7,7]`, 9,408 floats). The stem keeps its He-init — MRI is not RGB,
+      so re-learning it is the correct behaviour, not a concession — and the
+      remaining 21,275,264 floats of the backbone transfer intact.
+
+      Takes precedence over `bootstrapBackbone` when both are set. BN running
+      stats follow the same rule as the prefix path: loaded only on an exact
+      size match, zeros otherwise. -/
+  bootstrapBackboneRange : Option (String × Nat × Nat × Nat) := none
   /-- Save intermediate `{pfx}_params_e{N}.bin` and
       `{pfx}_bn_stats_e{N}.bin` snapshots every `checkpointEveryNEpochs`
       epochs. 0 disables. Default 10 = align with the eval cadence so
@@ -863,6 +878,18 @@ inductive DatasetKind where
       selects `.perPixelCE` automatically. See `preprocess_brats.py` for the
       on-disk format and `planning/brats_demo.md` for the demo plan. -/
   | brats
+  /-- The same BraTS data at 224×224, produced by
+      `preprocess_brats.py --size 224` (a **center crop**, not a resize — see
+      `fit_plane`). Identical in every other respect: same 4 modalities, same
+      patient split at seed 0, same slice selection, same 14,415/2,569 counts.
+
+      224 exists for backbones with a /32 total stride, which 240 cannot serve
+      (240/32 = 7.5). It is also ResNet-34's native ImageNet resolution. The
+      crop is lossless for this dataset: across 4,000 sampled slices, the
+      8-pixel border it removes contains zero tumour voxels and zero brain
+      voxels — MSD's volumes are skull-stripped and centered, so the margin is
+      pure background. Used by `demos/MainUnetBratsR34.lean`. -/
+  | brats224
 deriving Repr, BEq
 
 /-- IREE compile flags from environment. Defaults to CUDA (sm_86).

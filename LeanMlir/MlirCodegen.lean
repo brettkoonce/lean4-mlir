@@ -2216,6 +2216,17 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
   -- FPN detector taps: each residualBlock stage output (SSA, shape); a trailing
   -- `.fpnDetect` reads the last 3 as C3/C4/C5 (forward-only — no backward/taps).
   let mut fpnStages : Array (String × List Nat) := #[]
+  -- UNet skip taps from a NON-`unetDown` encoder: every residualBlock stage
+  -- output, plus every standalone `maxPool`'s pre-pool input. A `unetUp` with
+  -- no `unetDown` to pop falls back to these, which is what lets an off-the-shelf
+  -- ResNet act as a UNet contracting path (`demos/MainUnetBratsR34.lean`).
+  --
+  -- Matched by **exact shape**, not by stack order. That is deliberate: a
+  -- ResNet's last stage is the bottleneck feeding the decoder, not a skip, and
+  -- shape-matching excludes it automatically (nothing upsamples INTO 7×7).
+  -- LIFO order would have grabbed it first and silently built the wrong net.
+  -- A consumed tap is blanked so two `unetUp`s cannot claim the same one.
+  let mut unetTaps : Array (String × List Nat) := #[]
   for l in spec.layers do
     match l with
     | .dense fanIn fanOut act =>
@@ -2231,6 +2242,10 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       curShape := newShape
       pidx := pidx + 1
     | .maxPool size stride =>
+      -- Pre-pool feature is a skip candidate — this is the same feature a
+      -- `unetDown` would have saved, just reached via a bare `maxPool` (an
+      -- R34 stem is `convBn` + `maxPool`, so its skip lives right here).
+      unetTaps := unetTaps.push (curSSA, curShape)
       let (snip, newSSA, newShape) := emitMaxPool pos curSSA curShape size stride
       code := code ++ snip
       curSSA := newSSA
@@ -2276,6 +2291,7 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       curShape := newShape
       pidx := newPidx
       fpnStages := fpnStages.push (curSSA, curShape)
+      unetTaps := unetTaps.push (curSSA, curShape)
     | .fpnDetect oc c3 c4 c5 g5 A tower =>
       -- Forward-only FPN detector: neck + per-scale heads → flat [B, Ntot].
       if fpnStages.size < 3 then
@@ -2420,7 +2436,28 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
         curSSA := ssa4
         curShape := sh4
       | [] =>
-        code := code ++ "    // unetUp: skip stack empty (no matching unetDown above)\n"
+        -- No `unetDown` above — try the ResNet-encoder taps by exact shape.
+        -- The skip must be [b, oc, h, w] with (h, w) of the just-upsampled
+        -- feature; `oc` is what the following convBn was declared to expect.
+        let want : List Nat := match sh1 with
+          | [b, _, h, w] => [b, oc, h, w]
+          | other => other
+        match unetTaps.findIdx? (fun (s, sh) => s != "" && sh == want) with
+        | some ti =>
+          let (skipSSA, skipShape) := unetTaps[ti]!
+          unetTaps := unetTaps.set! ti ("", skipShape)   -- consume it
+          let (s2, ssa2, sh2) := emitChannelConcat s!"{pos}_uu" ssa1 skipSSA sh1 skipShape
+          code := code ++ s2
+          let (s3, ssa3, sh3) := emitConvBn pidx ssa2 sh2 (ic + oc) oc 3 1 (fixedBN := fixedBN)
+          code := code ++ s3
+          pidx := pidx + 1
+          let (s4, ssa4, sh4) := emitConvBn pidx ssa3 sh3 oc oc 3 1 (fixedBN := fixedBN)
+          code := code ++ s4
+          pidx := pidx + 1
+          curSSA := ssa4
+          curShape := sh4
+        | none =>
+          code := code ++ s!"    // unetUp: no unetDown and no encoder tap of shape {want}\n"
     | .tokenPositionEmbed v t d ids gather posEmb =>
       -- Input is flat [B, V*T] one-hot (reshape to [B, T, V]) or, with
       -- idsInput, [B, T] f32 token ids (one-hot built in-graph via
@@ -5684,6 +5721,24 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   -- stageOutShape, lastMarkerRecordIdx); the trailing `.fpnDetect` layer reads
   -- the last 3 as C3/C4/C5 and marks the C3/C4 markers with the neck cotangents.
   let mut fpnStages : Array (String × List Nat × Nat) := #[]
+  -- UNet skip taps from a non-`unetDown` encoder (see the matching comment in
+  -- `emitForwardBody`). Tuple: (skip SSA, skip shape, index of the PRODUCER
+  -- record, isResidualMarker).
+  --
+  -- The producer index is what makes the backward work. A `unetUp` that
+  -- consumes a tap must tell the producer where to pick the skip-half gradient
+  -- back up, and the two producer kinds take it by different routes:
+  --   * residual stage marker → `fpnTapGrad` (added to the stage-output
+  --     gradient before the skip-add/ReLU backward) — the same channel
+  --     `.fpnDetect` uses.
+  --   * bare `maxPool`        → `addSkipGrad` (added to the pre-pool input
+  --     gradient) — the same channel `.unetDown` uses.
+  --
+  -- Tagging happens at CONSUMPTION, never at push. An untagged producer emits
+  -- exactly the code it always did, so every existing spec (R34 classifiers,
+  -- the FPN detector) is byte-identical — and no tag can ever reference a
+  -- `%unet_skip_g{e}` that no `unetUp` defines.
+  let mut unetTaps : Array (String × List Nat × Nat × Bool) := #[]
 
   for l in spec.layers do
     let inSSA := curSSA
@@ -5766,6 +5821,12 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         poolRec := { poolRec with outputSSA := curSSA }
         poolRec := { poolRec with inShape := inShape, outShape := outShape }
         records := records.push poolRec
+        -- Offer the pre-pool feature as a UNet skip. Only when unpadded: with
+        -- SAME-padding the saved input is the PADDED tensor while `inShape` is
+        -- not, and a skip must hand the decoder the true unpadded feature.
+        -- (size == stride == 2 on an even input — the R34 stem case — never pads.)
+        if !hasPad then
+          unetTaps := unetTaps.push (inSSA, inShape, records.size - 1, false)
         curShape := outShape
       | _ => pure ()
 
@@ -5860,6 +5921,9 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       -- FPN tap: expose this stage's output (curSSA/curShape) and the index of
       -- its last skip-add marker (records.size - 1) for a trailing `.fpnDetect`.
       fpnStages := fpnStages.push (curSSA, curShape, records.size - 1)
+      -- Same tap, offered to a later `unetUp` as a skip. `records.size - 1` is
+      -- this stage's last skip-add marker, which is where a tap gradient joins.
+      unetTaps := unetTaps.push (curSSA, curShape, records.size - 1, true)
 
     | .bottleneckBlock ic oc nBlocks firstStride =>
       let mid := oc / 4
@@ -6803,7 +6867,47 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         | none =>
           code := code ++ "    // unetUp: matching unetDown maxPool record not found\n"
       | [] =>
-        code := code ++ "    // unetUp: encoder stack empty (no matching unetDown)\n"
+        -- No `unetDown` above — fall back to the ResNet-encoder taps, matched
+        -- by exact shape (see `unetTaps`). This is the path that turns a
+        -- pretrained ResNet into a UNet contracting path.
+        let want : List Nat := match sh1 with
+          | [b, _, h, w] => [b, oc, h, w]
+          | other => other
+        match unetTaps.findIdx? (fun (s, sh, _, _) => s != "" && sh == want) with
+        | some ti =>
+          let (skipSSA, skipShape, prodIdx, isResidual) := unetTaps[ti]!
+          unetTaps := unetTaps.set! ti ("", skipShape, prodIdx, isResidual)
+          let encIdx := nextUnetEncIdx
+          nextUnetEncIdx := nextUnetEncIdx + 1
+          -- Tell the producer where to collect the skip-half gradient. The
+          -- UnetUpConcat backward below defines `%unet_skip_g{encIdx}`; the
+          -- producer's own backward adds it in. Two different fields because
+          -- the two producers join the gradient at different points.
+          if isResidual then
+            records := records.set! prodIdx
+              { records[prodIdx]! with fpnTapGrad := s!"%unet_skip_g{encIdx}" }
+          else
+            records := records.set! prodIdx
+              { records[prodIdx]! with addSkipGrad := s!"%unet_skip_g{encIdx}" }
+          let (s2, ssa2, sh2) := emitChannelConcat s!"{pos}_uut" ssa1 skipSSA sh1 skipShape
+          code := code ++ s2
+          curSSA := ssa2; curShape := sh2
+          records := records.push {
+            layer := .unetUp ic oc, pidx := none, pos
+            inputSSA := ssa1, preActSSA := "", outputSSA := ssa2
+            inShape := sh1, outShape := sh2
+            isUnetUpConcat := true
+            unetSkipShape := skipShape
+            unetEncoderIdx := encIdx
+          }
+          let (s3, rec3) := emitConvBnTrain pidx pos curSSA curShape (ic + oc) oc 3 1 true
+          code := code ++ s3; curSSA := rec3.outputSSA; curShape := rec3.outShape
+          records := records.push rec3; pidx := pidx + 1
+          let (s4, rec4) := emitConvBnTrain pidx pos curSSA curShape oc oc 3 1 true
+          code := code ++ s4; curSSA := rec4.outputSSA; curShape := rec4.outShape
+          records := records.push rec4; pidx := pidx + 1
+        | none =>
+          code := code ++ s!"    // unetUp: encoder stack empty and no tap of shape {want}\n"
 
     | .fpnDetect oc c3 c4 c5 g5 A tower =>
       -- Top-down neck + per-scale 1×1 heads → flat [B, Ntot] concat. Taps the

@@ -654,4 +654,35 @@ def patchInitWithPretrainedPrefix (initParams : ByteArray) (pretrainedPath : Str
   let tail := initParams.extract prefixBytes initParams.size
   return head ++ tail
 
+/-- Offset-aware sibling of `patchInitWithPretrainedPrefix`: copy `countBytes`
+    from `pretrainedPath` starting at `srcOffBytes` into `initParams` starting
+    at `dstOffBytes`, leaving everything outside that window at its He-init.
+
+    The prefix version can only bootstrap weights that are contiguous at the
+    FRONT of the layout, which forces the first layer to match the checkpoint's
+    first layer exactly. That is the wrong constraint the moment the input
+    channel count differs: an R34 trained on 3-channel RGB has a `[64,3,7,7]`
+    stem, and a 4-modality MRI net needs `[64,4,7,7]`. The shapes disagree by
+    3,136 floats, so a prefix patch would land every subsequent weight at the
+    wrong offset — silently, since the sizes still "fit".
+
+    With a range, the fresh stem keeps its He-init and the rest of the backbone
+    lands where it belongs:
+      dstOff = stem floats in THIS spec, srcOff = stem floats in the CHECKPOINT,
+      count  = backbone floats − srcOff.
+
+    Both windows are bounds-checked, because the failure mode this exists to
+    prevent is a silent misalignment rather than a crash. -/
+def patchInitWithPretrainedRange (initParams : ByteArray) (pretrainedPath : String)
+    (dstOffBytes srcOffBytes countBytes : Nat) : IO ByteArray := do
+  let pre ← IO.FS.readBinFile pretrainedPath
+  if pre.size < srcOffBytes + countBytes then
+    throw <| IO.userError s!"pretrained checkpoint {pretrainedPath} has {pre.size} bytes; need at least {srcOffBytes + countBytes} (srcOff {srcOffBytes} + count {countBytes})"
+  if initParams.size < dstOffBytes + countBytes then
+    throw <| IO.userError s!"init params has {initParams.size} bytes; can't patch {countBytes} at offset {dstOffBytes}"
+  let head := initParams.extract 0 dstOffBytes
+  let mid  := pre.extract srcOffBytes (srcOffBytes + countBytes)
+  let tail := initParams.extract (dstOffBytes + countBytes) initParams.size
+  return head ++ mid ++ tail
+
 end NetSpec
