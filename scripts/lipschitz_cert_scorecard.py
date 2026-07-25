@@ -177,6 +177,13 @@ A("import LeanMlir.Proofs.Certificates.LipschitzCertInstance")
 A("")
 A("/-! # Certified-accuracy scorecard (post_audit_roadmap §1)")
 A("")
+# Scope disclaimer — hand-added to the committed file and formerly NOT emitted
+# here, so any regeneration silently deleted it (planning/scorecard_trim.md §2.7).
+A("**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim")
+A("MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical")
+A("784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational")
+A("arithmetic in-kernel. Canonical surface: `Proofs/MlpCanonical.lean`.")
+A("")
 A("The one-input certificate of `LipschitzCertInstance.lean`, scaled to a")
 A(f"dataset-level claim over a FIXED subset — the first {N_IMG} MNIST test images")
 A(f"(4×4-pooled, exact pixel-sum rationals) — at a FIXED radius ε = {EPS}")
@@ -374,7 +381,7 @@ for i in cert_u:
     emit_image(i, "U", W1q, "W1t", "mlpT", "mlpT_lip_gram2", Lu,
                facts_u[i][1], facts_u[i][2], DEN_U * 4080)
 A("-- ════════════════════════════════════════════════════════════")
-A("-- § Aggregate")
+A("-- § Aggregate — the mechanized scorecard")
 A("-- ════════════════════════════════════════════════════════════")
 A("")
 A(f"/-- Indices (into the fixed first-{N_IMG} MNIST test subset) certified at")
@@ -386,11 +393,85 @@ A(f"/-- Indices certified on the UNCONSTRAINED net (`certifiedU<i>`). -/")
 A("def certifiedUnconIdx : List ℕ :=")
 A("  [" + ", ".join(str(i) for i in cert_u) + "]")
 A("")
-A(f"/-- **The scorecard**: at ε = {EPS} (pooled L2), the capped net certifies")
-A(f"    {len(cert_c)}/{N_IMG} of the fixed test subset, the unconstrained net {len(cert_u)}/{N_IMG} —")
-A("    same theorem, same ε; training (σ-projection) decides whether the")
-A("    certificate bites. Lower bounds only: an upper-bound L cannot prove")
-A("    an image uncertifiable. -/")
+
+
+def wrap(items, per_line, first, rest):
+    """Emit `items` `per_line` to a line, `first` opening the first line."""
+    out = []
+    for s in range(0, len(items), per_line):
+        chunk = ", ".join(items[s:s + per_line])
+        out.append((first if s == 0 else rest) + chunk +
+                   ("," if s + per_line < len(items) else ""))
+    return out
+
+
+# The mechanized aggregate. `CertifiedAt` is DEFINED here — it is the predicate
+# every certificate tier in the repo states its scorecard in — so this block is
+# engine, not exhibit, and must survive regeneration untouched.
+A("/-- `f` is *certified at radius ε* on input `x` with class `i`: every")
+A("    perturbation of L2 norm `< ε` leaves `i` the strict argmax. This is the")
+A("    (undecidable — it quantifies over real `δ`) per-image certificate that")
+A("    each `certifiedC<i>`/`certifiedU<i>` theorem proves. -/")
+A("def CertifiedAt {n k : ℕ} (f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k))")
+A("    (ε : ℝ) (x : EuclideanSpace ℝ (Fin n)) (i : Fin k) : Prop :=")
+A("  ∀ δ : EuclideanSpace ℝ (Fin n), ‖δ‖ < ε →")
+A("    ∀ j, j ≠ i → f (x + δ) j < f (x + δ) i")
+A("")
+A("/-- The capped-net certificate witnesses: `(subset index, image, class)`,")
+A("    one triple per `certifiedC<i>` theorem, in index order. -/")
+A("noncomputable def cappedCerts : List (ℕ × EuclideanSpace ℝ (Fin 49) × Fin 10) :=")
+for ln in wrap([f"({i}, img{i}, {int(yte[i])})" for i in cert_c], 5, "  [", "   "):
+    A(ln)
+A(L.pop() + "]")
+A("")
+A("/-- The unconstrained-net certificate witnesses (`certifiedU<i>`). -/")
+A("noncomputable def unconCerts : List (ℕ × EuclideanSpace ℝ (Fin 49) × Fin 10) :=")
+for ln in wrap([f"({i}, img{i}, {int(yte[i])})" for i in cert_u], 5, "  [", "   "):
+    A(ln)
+A(L.pop() + "]")
+A("")
+A("/-- The witness list carries exactly the advertised indices. -/")
+A("theorem cappedCerts_idx : cappedCerts.map Prod.fst = certifiedCappedIdx := rfl")
+A("")
+A("theorem unconCerts_idx : unconCerts.map Prod.fst = certifiedUnconIdx := rfl")
+A("")
+A("/-- **Every capped-net witness is certified** — the aggregate is no longer")
+A("    bookkeeping over a bare index list: the proof term is literally the")
+A(f"    tuple of the {len(cert_c)} per-image theorems. -/")
+A("theorem cappedCerts_certified :")
+A(f"    ∀ p ∈ cappedCerts, CertifiedAt mlpS {frac(EPS)} p.2.1 p.2.2 :=")
+A("  List.forall_iff_forall_mem.mp")
+if len(cert_c) == 1:
+    A(L.pop() + f" certifiedC{cert_c[0]}")
+else:
+    for ln in wrap([f"certifiedC{i}" for i in cert_c], 5, "    ⟨", "     "):
+        A(ln)
+    A(L.pop() + "⟩")
+A("")
+A("theorem unconCerts_certified :")
+A(f"    ∀ p ∈ unconCerts, CertifiedAt mlpT {frac(EPS)} p.2.1 p.2.2 :=")
+A("  List.forall_iff_forall_mem.mp")
+if len(cert_u) == 1:
+    A(L.pop() + f" certifiedU{cert_u[0]}")
+else:
+    for ln in wrap([f"certifiedU{i}" for i in cert_u], 5, "    ⟨", "     "):
+        A(ln)
+    A(L.pop() + "⟩")
+A("")
+A(f"/-- **The scorecard, as a theorem**: at ε = {EPS} (pooled L2) the capped net")
+A(f"    certifies {len(cert_c)} witnesses of the fixed test subset, the unconstrained net {len(cert_u)} —")
+A("    same certificate, same ε; training (σ-projection) decides whether it")
+A("    bites. Each count is now tied to its per-image `CertifiedAt` proofs via")
+A("    `cappedCerts_certified`/`unconCerts_certified`, not just a list length.")
+A("    Lower bounds only: an upper-bound L cannot prove an image uncertifiable. -/")
+A("theorem scorecard :")
+A(f"    (cappedCerts.length = {len(cert_c)} ∧")
+A(f"      ∀ p ∈ cappedCerts, CertifiedAt mlpS {frac(EPS)} p.2.1 p.2.2) ∧")
+A(f"    (unconCerts.length = {len(cert_u)} ∧")
+A(f"      ∀ p ∈ unconCerts, CertifiedAt mlpT {frac(EPS)} p.2.1 p.2.2) :=")
+A("  ⟨⟨rfl, cappedCerts_certified⟩, ⟨rfl, unconCerts_certified⟩⟩")
+A("")
+A("/-- Legacy count-only form, kept for reference; superseded by `scorecard`. -/")
 A(f"theorem scorecard_counts :")
 A(f"    certifiedCappedIdx.length = {len(cert_c)} ∧ certifiedUnconIdx.length = {len(cert_u)} :=")
 A("  ⟨rfl, rfl⟩")
