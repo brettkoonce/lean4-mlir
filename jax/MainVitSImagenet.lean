@@ -56,13 +56,19 @@ def vitSImagenetConfig : TrainConfig where
   useEMA         := true
   emaDecay       := 0.99996
   bf16           := true
+  repeatedAug    := 3               -- DeiT Repeated Augmentation 3× (Hoffer et al. 2020 /
+                                    -- timm RASampler). Closes the last DeiT faithfulness gap;
+                                    -- steps_per_epoch is unchanged, so an epoch sees ~1/3 the
+                                    -- unique images ×3 views — same aug cost, not 3×.
 
 #eval vitSImagenet.validate!
 
 /-- 80-epoch validation tier — the schedule ViT-Ti was actually run at (65.6%),
     so it is the apples-to-apples comparison point before committing to 300ep. -/
 def vitSImagenetConfigShort : TrainConfig :=
-  { vitSImagenetConfig with epochs := 80 }
+  { vitSImagenetConfig with epochs := 80, repeatedAug := 1 }
+  -- repeatedAug off at the 80ep tier so it stays comparable with the ViT-Ti
+  -- 80-epoch baseline; the 300ep `default` is the paper-faithful one.
 
 /-- Memory-safe variant for 16 GB cards: same effective batch 512, but split
     into 2 micro-batches of 256 so peak activation is halved. Numerically the

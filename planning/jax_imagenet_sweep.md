@@ -185,10 +185,17 @@ committed/launched.** The completed ViT-80 (65.6%) ran without these.
    - Inference-safe (drop_key=None → identity); convnet SD rng/scaling/schedule infra reused.
    Same config also flipped `useEMA := true` (decay 0.99996) and `epochs := 300` (was 80).
 
-3. **Repeated augmentation — STILL DEFERRED (low ROI).** DeiT uses 3× repeated-aug; data-pipeline
-   change (~15-20 lines in build_imagenet_iter, flat_map each example to 3 aug copies, new
-   `repeatedAug` config field). Benefit <0.5% for Ti and only at 300ep, and it adds CPU aug load.
-   Skip unless doing a definitive DeiT-300 run.
+3. **Repeated augmentation — DONE (2026-07-26).** No new code was ever needed after RSB-A2: the
+   `repeatedAug` field and the `flat_map` in `build_imagenet_iter` landed with that work, and
+   `build_imagenet_iter` is shared by every `.imagenet` net. Enabling it for ViT was a one-field
+   change (`repeatedAug := 3`) on the three 300-epoch recipes (Ti / S / B). The 80-epoch tiers
+   pin it back to 1 so they stay comparable with the 65.6% ViT-Ti baseline.
+
+   **The "adds CPU aug load" rationale was wrong** and is retracted. `flat_map` sits *before*
+   `.map(_pp)` and `steps_per_epoch` is unchanged, so an epoch pulls the same number of images
+   through decode+augment — just from 1/3 as many unique records. Measured (jax/scripts/
+   input_probe.py, batch 256, warm cache, order-controlled): **4823 / 4819 img/s without vs
+   5322 / 4856 img/s with**. No cost; if anything a small win from the reduced record reads.
 
 **GPU smoke test (ROCm, gfx1100):** `jax/scripts/smoke_vit_droppath_gpu.py` — imports the
 generated trainer (training loop behind `__main__`), runs forward+train_step on a synthetic
@@ -233,7 +240,7 @@ AdamW + aug-suite (LayerNorm, no BN); enet/mnv2/r34 use the classic BN-convnet r
 
 | Net | Already faithful | Real gaps | ~faithful |
 |---|---|---|---|
-| **ViT-Ti** | arch, AdamW, cosine+warmup, full DeiT aug, SD 0.1, EMA | RepeatedAug (deferred only) | **~97%** |
+| **ViT-Ti** | arch, AdamW, cosine+warmup, full DeiT aug, SD 0.1, EMA, **RepeatedAug 3× ✓** | **weight init: Xavier-uniform vs timm trunc_normal(0.02) — 3.6× too wide at Ti** | **~97%** |
 | **ConvNeXt-T** | arch (DW7+chLN+invbtl+GELU+**LayerScale 1e-6 ✓**), AdamW WD0.05, LR4e-4@256, SD0.1, EMA, Mixup/CutMix/RErase, **no BN** | warmup 5→**20** (paper), stem convBn vs conv+LN (documented) | **~93%** |
 | **EfficientNet-B0** | arch+SE+**Swish✓**, RMSprop(ρ.9/μ.9/ε1e-3), WD1e-5, AutoAugment, SD0.2, EMA, LS0.1, **running-BN✓ (A)** | ~~B~~ ~~C~~ both done; epochs 80→350 only | **~95%** |
 | **MobileNetV2** | arch+**ReLU6✓**, RMSprop(ρ.9/μ.9/ε1.0), LR0.045, WD4e-5, **crop/flip-only + no mixup/SD/EMA (correct)**, **running-BN✓ (A)** | ~~B~~ ~~C~~ both done; LS0.1-vs-0 (minor), epochs 90→300 | **~95%** |

@@ -49,11 +49,48 @@ LEAN_MLIR_PARAMS_OUT=ckpt/vit LEAN_MLIR_CKPT_EVERY=30 <run>     # lossless resum
 ```
 
 **Remaining DeiT-Ti faithfulness gaps (spiked, both ~½ day, both <0.5% at Ti):**
-1. **Repeated Augmentation (3-repeat)** — insert `flat_map(repeat 3)` before `_pp` in
-   `build_imagenet_iter` (+ a shuffle so copies spread) + a `repeatedAug` config field. ~15-25
-   lines. Risk = **throughput**: 3× CPU decode+RandAug, and ViT-Ti is near input-bound; could
-   flip compute-bound→input-bound (needs a measured check + pipeline tuning). tfds streaming
-   can't do timm's true index-level RASampler — it's a close approximation.
+
+0. **Weight init — OPEN, and the largest remaining gap (found 2026-07-26).** The transformer
+   Linear layers (QKV, attn-out, MLP fc1/fc2, head) go through the generic `emitDenseInit`,
+   i.e. Xavier-uniform `sqrt(6/(fi+fo))`. timm/DeiT use `trunc_normal_(std=0.02)`. Because
+   Xavier scales as 1/sqrt(dim) against a *fixed* 0.02, the gap is worst at the smallest model:
+
+   | model | dim | emitted std | DeiT std | ratio |
+   |---|---|---|---|---|
+   | ViT-Ti | 192 | 0.0722 | 0.02 | 3.6x |
+   | ViT-S | 384 | 0.0510 | 0.02 | 2.6x |
+   | ViT-B | 768 | 0.0361 | 0.02 | 1.8x |
+
+   The CLS token and pos-embed already use `normal x 0.02` (correct), so this is an
+   inconsistency in one file rather than a considered choice.
+
+   **Hypothesis worth one A/B:** this is what `gradClipNorm := 1.0` is compensating for. The
+   documented collapse (LR 5e-4 pinning train loss at ln(1000) without clipping) is the classic
+   symptom of an over-wide init. The config comment calls grad-clip the "DeiT default" — verify
+   that; if DeiT clips by default the two are independent, if not, the clip is a second
+   deviation masking the first.
+
+   Fixing it is real code, not a flag: `emitDenseInit` is shared by every net with a dense
+   layer, so ViT needs its own init path. Do it behind a separate recipe so the current
+   config stays comparable with the 65.6% run.
+1. **Repeated Augmentation (3-repeat)** — ~~to build~~ **shipped 2026-07-26**, and it cost
+   nothing to build: RSB-A2 had already added the `repeatedAug` field and the `flat_map` in
+   the *shared* `build_imagenet_iter`, so ViT only needed `repeatedAug := 3`.
+
+   The **throughput risk above did not materialise, and the reasoning behind it was wrong**:
+   `flat_map` runs *before* `.map(_pp)` and `steps_per_epoch` is unchanged, so decode+augment
+   sees the same image count per epoch — 1/3 the unique records, ×3 views — not 3× the work.
+   Measured at batch 256 (warm cache, order-controlled, `jax/scripts/input_probe.py`):
+   4823/4819 img/s off vs 5322/4856 img/s on.
+
+   The **input-bound observation was right, though, and is independent of repeated-aug**: the
+   pipeline tops out near ~4.8-5.3k img/s, while ViT-Ti at 510/110ms needs ~4.6k img/s — i.e.
+   Ti sits at the ceiling. ViT-S needs ~2.1k and ViT-B ~0.86k, so both have ample headroom.
+   (Probe measures the pipeline alone on an idle box; during training the CPU also serves
+   host-side GPU work, so treat ~4.8k as an optimistic ceiling.)
+
+   Still an approximation: tfds streaming can't do timm's index-level RASampler, so copies are
+   spread by an 8192-element reshuffle rather than deterministically.
 2. **RandAugment variant `mstd0.5`+`inc1`** — `mstd` (per-op magnitude ~N(m,0.5), clip [0,10])
    is ~½ hr trivial; `inc1` is a ~2-3 hr audit of the 6 magnitude→arg fns vs timm's
    `_RAND_INCREASING_TRANSFORMS` (flip `_aa_sol`/`_aa_pos` direction, center `_aa_enh` at 1.0±;
@@ -137,7 +174,9 @@ So the remaining delta to a paper-faithful DeiT-Ti run is:
    config currently runs color-only. Add `randAugmentGeometric := true`. DeiT uses full
    (color + geometric) RA.
 3. **300 epochs** — bump `epochs := 300` + re-emit (currently 80).
-4. **Repeated augmentation (3×) — DEFER** (low ROI for Ti; data-pipeline change).
+4. **Repeated augmentation (3×) — DONE** (2026-07-26, `repeatedAug := 3`). Needed no
+   data-pipeline work: RSB-A2 had already landed the field and the `flat_map`, and
+   `build_imagenet_iter` is shared. Measured free on throughput (see below).
 5. **Distillation — SKIP** (plain DeiT-Ti ~72.2% doesn't use it; only DeiT⚗ does).
 
 With #1–#3 (+ the existing grad-clip/aug), DeiT-Ti should approach its ~72% headline.

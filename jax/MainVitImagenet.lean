@@ -58,6 +58,10 @@ def vitTinyImagenetConfig : TrainConfig where
   useEMA         := true            -- DeiT model EMA; eval + checkpoints use the shadow weights
   emaDecay       := 0.99996         -- DeiT default
   bf16           := true            -- bf16 exonerated (fp32 collapsed identically); back on for speed
+  repeatedAug    := 3               -- DeiT Repeated Augmentation 3× (Hoffer et al. 2020 /
+                                    -- timm RASampler). Closes the last DeiT faithfulness gap;
+                                    -- steps_per_epoch is unchanged, so an epoch sees ~1/3 the
+                                    -- unique images ×3 views — same aug cost, not 3×.
 
 #eval vitTinyImagenet.validate!
 
@@ -66,7 +70,10 @@ def vitTinyImagenetConfig : TrainConfig where
     writes a separate `_short.py` so it never clobbers the 300-epoch official
     run. -/
 def vitTinyImagenetConfigShort : TrainConfig :=
-  { vitTinyImagenetConfig with epochs := 80 }
+  { vitTinyImagenetConfig with epochs := 80, repeatedAug := 1 }
+  -- repeatedAug pinned back to 1: this tier's job is comparability with the
+  -- 65.6% 80-epoch run, which had no repeated-aug. The `default` 300ep recipe
+  -- is the paper-faithful one.
 
 /-- Named training recipes, selected by a positional CLI arg
     (`vit-tiny-imagenet <recipe> [data_dir]`, listed by `--help`). -/
