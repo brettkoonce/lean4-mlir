@@ -172,6 +172,11 @@ sincos-time-embedding variant (`cifar-ddpm-sincos-train`) ship
 the codegen primitives but did not improve sample quality at
 this training budget — see "Phase 3 partial" in
 `planning/ddpm_demo.md` for the full negative-result writeup.
+Each has a matching sampler — `cifar-ddpm-attn-sample` and
+`cifar-ddpm-sincos-sample` — taking the same optional output-path
+argument as `cifar-ddpm-sample` (default
+`runs/2026-05-07-cifar-ddpm/samples.ppm`), if you want to see the
+negative result rather than read about it.
 
 ---
 

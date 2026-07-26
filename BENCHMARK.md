@@ -36,6 +36,19 @@ time IREE_BACKEND=rocm .lake/build/bin/cifar-cnn-train
 
 Report: epoch time (ms), final loss after 25 epochs.
 
+The BatchNorm sibling is `cifar-bn-train` (CIFAR-10-BN, ~3.7M params —
+four `convBn` blocks, Adam + cosine decay + augmentation, 30 epochs).
+Same pipeline, so the pair isolates what BN costs per epoch:
+
+```bash
+time IREE_BACKEND=rocm .lake/build/bin/cifar-bn-train
+```
+
+Not to be confused with `lake run cifar`, which is the *verified* ch.5
+tier — the six `cifar8{,-bn}-verified` SGD / `-momentum` / `-adam`
+variants. Those train the proven graph; these two are unverified
+baselines for timing.
+
 ### 3. ResNet-34 on Imagenette (21.3M params, batch 16)
 
 ```bash
