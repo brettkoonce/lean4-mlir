@@ -7098,7 +7098,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           --   Non-focal (default): raw-MSE on raw conf — YOLOv1 as published.
           --   Focal (useFocal):    sigmoid + focal-BCE on the conf *logit*, with a
           --     DETACHED focal weight (1-p_t)^γ. This is the fix for the fg/bg
-          --     objectness collapse (planning/yolo_v5.md §3): ~1-2 object cells vs
+          --     objectness collapse (planning/yolo_final.md): ~1-2 object cells vs
           --     ~47 background cells make "predict 0 everywhere" an MSE minimum, so
           --     the conv head localizes early then decays to a center-prior. Focal
           --     down-weights easy (well-classified) cells so the rare foreground keeps

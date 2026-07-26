@@ -65,7 +65,7 @@ def main : IO Unit := do
   | none => IO.println "OK [C3]: useYolov1 + useKnnMixup → throws"
 
   -- C4: useYolov1 + useFocal → COMPILES. Focal now selects the sigmoid
-  -- focal-BCE objectness path (planning/yolo_v5.md §3), so this combo is
+  -- focal-BCE objectness path (planning/yolo_final.md), so this combo is
   -- valid and the train step should compile cleanly (was: forbidden → throw).
   let c4 := { baseConfig with useFocal := true, focalGamma := 2.0 }
   let c4_ok ← try
@@ -86,7 +86,7 @@ def main : IO Unit := do
   | none => IO.println "OK [C5]: useYolov1 + labelSmoothing → throws"
 
   -- C6: useYolov1 alone (no other forbidden combo) — after R1
-  -- (planning/yolo_demo_v3.md), compileVmfbs DOES integrate YOLOv1 and
+  -- (the YOLOv1 integration pass), compileVmfbs DOES integrate YOLOv1 and
   -- should return a vmfb path without throwing. Pre-R1 this was a
   -- catch-all throw (the "smoke-test-only" sentinel); post-R1 the
   -- catch-all is gone and the train step compiles cleanly.

@@ -77,7 +77,7 @@ lake build ProofsMinimal
 `ViTBackB0.lean` (~2.1k), or the `StableHLO.lean` denotation internals. You do not need any
 of them to understand the approach — `StableHLO.lean` is one big file by design (its `den`
 embeds the whole layer library), so read the small per-net `*Render` files, which specialize
-it, rather than the monolith. (Rationale: `planning/proofs_minimal_set.md`.)
+it, rather than the monolith.
 
 ## Foundation: Mathlib's `fderiv`
 

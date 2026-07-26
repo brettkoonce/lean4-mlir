@@ -6,7 +6,7 @@ import LeanMlir.Types
 The highest-risk hand-wiring of the ViT chapter: SDPA's backward threads three
 paths (dQ/dK/dV) through a per-row softmax VJP. De-risked here STANDALONE on
 `[n,d]` (no batch — the proof's `Mat n d`), `iree-compile`d, AND numerically
-gradchecked (see `tests/gradcheck_sdpa.py`, the adjoint dot-product test) BEFORE
+gradchecked (see `LeanMlir/Proofs/check_jacobians.py`, sdpa_back_Q/K/V) BEFORE
 wiring into multi-head (TestMHSA) — compile-clean ≠ correct for a transpose/axis bug.
 
 Fragments mirror IRPrint's GPU-validated `sdpaFwdModule`/`sdpaBackModule`, each line

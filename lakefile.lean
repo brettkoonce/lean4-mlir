@@ -910,8 +910,7 @@ lean_lib «CertsHeavy» where
     (`SgdDescentLinear`: that step decreases the loss). Their transitive closure is
     exactly the minimum working set (LinearTrainStep + the shared StableHLO/Tensor/
     FloatBridge/IR foundation), nothing per-net beyond Linear. Point a newcomer here
-    before the full `Proofs` target. See `LeanMlir/Proofs/README.md` (Start here) and
-    `planning/proofs_minimal_set.md`. -/
+    before the full `Proofs` target. See `LeanMlir/Proofs/README.md` (Start here). -/
 lean_lib «ProofsMinimal» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.Foundation.LinearFaithfulPoC, `LeanMlir.Proofs.Training.SgdDescentLinear]
