@@ -6,7 +6,7 @@ def mbConvV3Net : NetSpec where
   imageW := 28
   layers := [
     .convBn 1 4 3 1 .same,
-    .mbConvV3 4 4 8 3 1 true true,
+    .mbConvV3 4 4 8 3 1 true .hSwish,
     .flatten,
     .dense 3136 10 .identity
   ]

@@ -2,10 +2,13 @@
 # book, but had no CI of its own: the only workflow that looked at it was
 # proofs.yml's zero-axiom grep, and the LoC tables explicitly excluded it.
 #
-# This is the CHEAP tier — no Lean build, no Mathlib, no GPU, under a minute.
-# It answers "is the jax side green(ish)" without paying for a second Mathlib
-# cache. Building jax/ for real needs the toolchain question settled first
-# (see the drift check below), and would belong in a separate job.
+# Two jobs:
+#   lint  — no Lean, no Mathlib, no GPU, under a minute. Syntax + stats.
+#   build — the real `lake build`. Cheap because jax/ imports only
+#           LeanMlir.Types + LeanMlir.Spec from the parent (8 jobs for the
+#           lib, 133 for every exe), and because jax/ now shares the root
+#           toolchain and Mathlib pin, so `lake exe cache get` is a hit
+#           rather than a second multi-GB cache.
 name: JAX subproject
 
 on:
@@ -20,7 +23,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  jax:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,11 +44,13 @@ jobs:
           [ "$fail" -eq 0 ]
 
       - name: Toolchain drift vs parent
-        # jax/ `require`s the parent project from "..", so a version split
-        # means jax/ compiles the parent's source under a different Lean AND
-        # against its own Mathlib pin. This is a warning, not a failure —
-        # the split is the current state of the world (4.30 vs 4.32 as of
-        # 2026-07-26), and this step exists so it stops being invisible.
+        # jax/ `require`s the parent from "..", so a version split means jax/
+        # compiles the parent's source under a different Lean AND against its
+        # own Mathlib pin — which also costs a second multi-GB cache the 10 GB
+        # budget cannot absorb. jax/ sat on 4.30 while root moved to 4.32; that
+        # is closed now (both v4.32.0, same mathlib rev), and this step keeps it
+        # closed. A warning rather than a failure: drift is worth seeing
+        # immediately, but is not itself a broken build.
         run: |
           JAX_TC=$(cat jax/lean-toolchain)
           ROOT_TC=$(cat lean-toolchain)
@@ -82,4 +87,50 @@ jobs:
             echo "| **Total Python** | **$(lf 'jax/**/*.py' 'jax/*.py')** | **$(ll 'jax/**/*.py' 'jax/*.py')** |"
             echo ""
             echo "\`lean_exe\` targets: $(grep -c '^lean_exe' jax/lakefile.lean)"
+          } >> $GITHUB_STEP_SUMMARY
+
+  build:
+    # The real thing: does jax/ compile? It never had this, and the answer
+    # turned out to be "no" — MainVjpOracleMbConvV3 had been calling a
+    # signature the parent changed in 574b1f9 (2026-04-27), broken for three
+    # months with nothing to notice. That is what this job is for.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache .lake
+        uses: actions/cache@v4
+        with:
+          # Only the project build, never .lake/packages — Mathlib comes from
+          # `lake exe cache get`, same discipline as proofs/certs/comparator.
+          # Own `lake-jax-` namespace so it never restores another workflow's
+          # build. Keyed on BOTH toolchains: jax/ requires the parent from "..",
+          # so a root bump invalidates this cache too.
+          path: |
+            .lake/build
+            jax/.lake/build
+          key: lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-
+            lake-jax-
+
+      - name: Build jax/ (emitter + all exes)
+        working-directory: jax
+        run: |
+          set -e
+          lake exe cache get || true
+          lake build Jax
+          EXES=$(grep -oP '^lean_exe\s+«?\K[^»\s]+' lakefile.lean | sed 's/»$//' | tr '\n' ' ')
+          echo "building $(echo $EXES | wc -w) exes"
+          lake build $EXES
+          {
+            echo ""
+            echo "## JAX build"
+            echo ""
+            echo "✅ emitter + $(echo $EXES | wc -w) exes built on \`$(cat lean-toolchain)\`"
           } >> $GITHUB_STEP_SUMMARY
