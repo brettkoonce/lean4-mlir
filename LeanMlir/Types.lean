@@ -830,6 +830,26 @@ structure TrainConfig where
       extend the BN-threading to mbconv/basic/bottleneck blocks for the other
       convnets. See planning/jax_imagenet_sweep.md "Gap A". -/
   runningBN : Bool := false
+  /-- timm/DeiT ViT weight init, replacing the generic Xavier-uniform for
+      transformer-shaped nets. Off by default so every existing run is
+      byte-identical; turn it on per-recipe.
+
+      timm's `init_weights_vit_timm` gives every `nn.Linear` (QKV, attn-out,
+      MLP fc1/fc2, and the classifier head) `trunc_normal_(std=0.02)` with
+      zero bias, and leaves the patch-embed `nn.Conv2d` on PyTorch's default
+      `kaiming_uniform_(a=sqrt(5))`, i.e. `U(±1/sqrt(fan_in))`.
+
+      NB `trunc_normal_`'s default bounds a=-2, b=2 are ABSOLUTE, so at
+      std=0.02 they sit at ±100σ and the truncation never fires — it is
+      plain `normal(0, 0.02)`. Emitted as such, matching the CLS-token and
+      positional-embedding init already in the emitter.
+
+      Why it matters: Xavier scales as 1/sqrt(dim) against a fixed 0.02, so
+      the generic path is 1.8× too wide at ViT-B, 2.6× at ViT-S and 3.6× at
+      ViT-Ti, while the patch embed is ~6× too NARROW (it divides by the
+      output fan `dim·p·p` rather than the input fan `ic·p·p`).
+      See planning/vit_imagenet.md item 0. -/
+  vitInit : Bool := false
   /-- Exponential LR decay (gap B), the EfficientNet/MobileNet schedule: after
       warmup, `lr = LR · rate^((epoch − warmup) / decayEpochs)`. 0 = off (use
       cosine). EfficientNet: rate 0.97, decayEpochs 2.4; MobileNetV2: rate 0.98,

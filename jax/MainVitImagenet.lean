@@ -75,6 +75,27 @@ def vitTinyImagenetConfigShort : TrainConfig :=
   -- 65.6% 80-epoch run, which had no repeated-aug. The `default` 300ep recipe
   -- is the paper-faithful one.
 
+/-- **ViT-Ti with timm/DeiT weight init** — the `default` recipe plus
+    `vitInit := true`. The generic emitter path gives every transformer Linear
+    Xavier-uniform, which at ViT-Ti is **3.6x wider** than timm's
+    `trunc_normal(std=0.02)`, while the patch-embed conv comes out ~6x too narrow
+    (it divides by the output fan `dim*p*p` instead of the input fan `ic*p*p`).
+    The CLS token and positional embedding were already correct at 0.02, so this
+    closes an inconsistency inside one file rather than changing a design.
+
+    Kept as a SEPARATE recipe rather than folded into `default`: the A/B is the
+    point, and `default` stays comparable with the runs already in `runs/`.
+
+    Measured at init (ViT-B, batch 32, pre-clip global grad norm): Xavier 44.09
+    at loss 7.4637, timm 14.28 at loss 7.1597 — 3.1x better conditioned, and a
+    starting loss much nearer ln(1000)=6.908. That supports over-wide init as a
+    real contributor to the documented LR-5e-4 collapse, but does NOT show
+    `gradClipNorm := 1.0` becomes unnecessary: both norms still exceed the
+    threshold by 10x+. Settling that needs a clip-off training arm.
+    See planning/vit_imagenet.md item 0. -/
+def vitTinyImagenetConfigDeitInit : TrainConfig :=
+  { vitTinyImagenetConfig with vitInit := true }
+
 /-- Named training recipes, selected by a positional CLI arg
     (`vit-tiny-imagenet <recipe> [data_dir]`, listed by `--help`). -/
 def vitTinyImagenetRecipes : List Recipe := [
@@ -83,7 +104,10 @@ def vitTinyImagenetRecipes : List Recipe := [
     desc := "full DeiT-Ti 300-epoch schedule, bs512, AdamW + full DeiT aug + EMA" },
   { name := "short",   cfg := vitTinyImagenetConfigShort,
     out := "generated_vit_tiny_imagenet_short.py",
-    desc := "80-epoch tier (the proven historical point, reached 65.6%)" }
+    desc := "80-epoch tier (the proven historical point, reached 65.6%)" },
+  { name := "deit-init", cfg := vitTinyImagenetConfigDeitInit,
+    out := "generated_vit_tiny_imagenet_deitinit.py",
+    desc := "300ep + timm trunc_normal(0.02) init — the A/B against Xavier-uniform" }
 ]
 
 def main (args : List String) : IO Unit :=

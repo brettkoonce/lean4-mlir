@@ -64,15 +64,23 @@ LEAN_MLIR_PARAMS_OUT=ckpt/vit LEAN_MLIR_CKPT_EVERY=30 <run>     # lossless resum
    The CLS token and pos-embed already use `normal x 0.02` (correct), so this is an
    inconsistency in one file rather than a considered choice.
 
-   **Hypothesis worth one A/B:** this is what `gradClipNorm := 1.0` is compensating for. The
-   documented collapse (LR 5e-4 pinning train loss at ln(1000) without clipping) is the classic
-   symptom of an over-wide init. The config comment calls grad-clip the "DeiT default" — verify
-   that; if DeiT clips by default the two are independent, if not, the clip is a second
-   deviation masking the first.
+   **SHIPPED as the `deit-init` recipe** (`TrainConfig.vitInit`, 2026-07-26) on all three ViT
+   trainers. Off by default, so every existing run stays byte-identical. Verified numerically
+   on ViT-B — every parameter group now lands on its timm target:
 
-   Fixing it is real code, not a flag: `emitDenseInit` is shared by every net with a dense
-   layer, so ViT needs its own init path. Do it behind a separate recipe so the current
-   config stays comparable with the 65.6% run.
+   | | patch | cls | pos | QKV | head |
+   |---|---|---|---|---|---|
+   | default (Xavier) | 0.0032 | 0.0193 | 0.0199 | 0.0361 | 0.0336 |
+   | `deit-init` | **0.0208** | 0.0193 | 0.0199 | **0.0200** | **0.0200** |
+   | timm target | 0.0208 | 0.0200 | 0.0200 | 0.0200 | 0.0200 |
+
+   **Grad-clip hypothesis — partially supported, NOT settled.** Pre-clip global grad norm at
+   init (ViT-B, batch 32): Xavier **44.09** at loss 7.4637, timm **14.28** at loss 7.1597. So
+   the timm init is 3.1x better conditioned and starts far nearer ln(1000)=6.908 — consistent
+   with an over-wide init driving the documented LR-5e-4 collapse. But **both still exceed the
+   clip threshold by 10x+**, so this does not show `gradClipNorm := 1.0` is removable. That
+   needs a clip-off training arm. The config comment's claim that grad-clip is the "DeiT
+   default" is still unverified and worth checking against DeiT's `main.py`.
 1. **Repeated Augmentation (3-repeat)** — ~~to build~~ **shipped 2026-07-26**, and it cost
    nothing to build: RSB-A2 had already added the `repeatedAug` field and the `flat_map` in
    the *shared* `build_imagenet_iter`, so ViT only needed `repeatedAug := 3`.

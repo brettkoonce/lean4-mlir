@@ -77,6 +77,27 @@ def vitBImagenetConfigShort : TrainConfig :=
 def vitBImagenetConfigAccum : TrainConfig :=
   { vitBImagenetConfig with batchSize := 128, gradAccumSteps := 4 }
 
+/-- **ViT-B with timm/DeiT weight init** — the `default` recipe plus
+    `vitInit := true`. The generic emitter path gives every transformer Linear
+    Xavier-uniform, which at ViT-B is **1.8x wider** than timm's
+    `trunc_normal(std=0.02)`, while the patch-embed conv comes out ~6x too narrow
+    (it divides by the output fan `dim*p*p` instead of the input fan `ic*p*p`).
+    The CLS token and positional embedding were already correct at 0.02, so this
+    closes an inconsistency inside one file rather than changing a design.
+
+    Kept as a SEPARATE recipe rather than folded into `default`: the A/B is the
+    point, and `default` stays comparable with the runs already in `runs/`.
+
+    Measured at init (ViT-B, batch 32, pre-clip global grad norm): Xavier 44.09
+    at loss 7.4637, timm 14.28 at loss 7.1597 — 3.1x better conditioned, and a
+    starting loss much nearer ln(1000)=6.908. That supports over-wide init as a
+    real contributor to the documented LR-5e-4 collapse, but does NOT show
+    `gradClipNorm := 1.0` becomes unnecessary: both norms still exceed the
+    threshold by 10x+. Settling that needs a clip-off training arm.
+    See planning/vit_imagenet.md item 0. -/
+def vitBImagenetConfigDeitInit : TrainConfig :=
+  { vitBImagenetConfig with vitInit := true }
+
 def vitBImagenetRecipes : List Recipe := [
   { name := "default", cfg := vitBImagenetConfig,
     out := "generated_vit_b_imagenet.py",
@@ -86,7 +107,10 @@ def vitBImagenetRecipes : List Recipe := [
     desc := "80-epoch tier (comparison point with the Ti/S runs)" },
   { name := "accum",   cfg := vitBImagenetConfigAccum,
     out := "generated_vit_b_imagenet_accum.py",
-    desc := "300ep, effective bs512 as 4×128 grad-accum (fits 16 GB)" }
+    desc := "300ep, effective bs512 as 4×128 grad-accum (fits 16 GB)" },
+  { name := "deit-init", cfg := vitBImagenetConfigDeitInit,
+    out := "generated_vit_b_imagenet_deitinit.py",
+    desc := "300ep + timm trunc_normal(0.02) init — the A/B against Xavier-uniform" }
 ]
 
 def main (args : List String) : IO Unit :=

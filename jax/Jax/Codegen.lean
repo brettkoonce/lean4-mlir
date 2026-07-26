@@ -1171,6 +1171,16 @@ private def emitLNToBuf (comment : String) : String :=
   s!"    f.write(np.asarray(beta).astype(np.float32).flatten().tobytes())\n"
 
 -- Helper: emit init code for dense layer (weight, bias) with Xavier uniform
+-- timm `init_weights_vit_timm`: every nn.Linear gets trunc_normal_(std=0.02),
+-- bias zeroed. The default bounds a=-2/b=2 are absolute (±100σ at this std), so
+-- the truncation is a no-op and this is plain normal(0, 0.02) — the same form
+-- the CLS token and positional embedding already use below.
+private def emitDenseInitTimm (comment : String) (fanIn fanOut : Nat) : String :=
+  "    # " ++ comment ++ "  (timm trunc_normal std=0.02)\n" ++
+  "    key, k_ = random.split(key)\n" ++
+  "    params.append((random.normal(k_, (" ++ toString fanOut ++ ", " ++ toString fanIn ++
+    ")) * 0.02, jnp.zeros(" ++ toString fanOut ++ ")))\n"
+
 private def emitDenseInit (comment : String) (fanIn fanOut : Nat) : String :=
   "    # " ++ comment ++ "\n" ++
   "    key, k_ = random.split(key)\n" ++
@@ -1220,7 +1230,7 @@ private def emitLayerScaleToBuf (comment : String) : String :=
   "    (g,) = params[idx]; idx += 1\n" ++
   "    f.write(np.asarray(g).astype(np.float32).flatten().tobytes())\n"
 
-private def emitInitParams (spec : NetSpec) : String := Id.run do
+private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.run do
   let mut code :=
     "# ═══════════════════════════════════════════════════════════════════════\n" ++
     "#  Model (from Lean spec)\n" ++
@@ -1255,6 +1265,12 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
       code := code ++ emitConvBiasInit s!"CNXStem conv {p}x{p} {ic}→{oc}" oc ic p p
       code := code ++ emitLNInit s!"CNXStem LN {oc}" oc
     | .dense fi fo _ =>
+      -- Under cfg.vitInit the classifier head is an nn.Linear like any other,
+      -- so timm gives it trunc_normal(0.02) too. Only ViT recipes set the flag,
+      -- so every convnet head keeps the Xavier form.
+      if cfg.vitInit then
+        code := code ++ emitDenseInitTimm s!"Dense {fi}→{fo} (head)" fi fo
+      else
       code := code ++
         "    # Dense " ++ toString fi ++ "→" ++ toString fo ++ "\n" ++
         "    key, k_ = random.split(key)\n" ++
@@ -1454,12 +1470,19 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
       code := code ++ emitConvBnInit s!"Fire expand1x1 {sq}→{e1}" sq e1 1
       code := code ++ emitConvBnInit s!"Fire expand3x3 {sq}→{e3}" sq e3 3
     | .patchEmbed ic dim p _nP =>
-      -- Patch embedding conv
+      -- Patch embedding conv. timm leaves this on PyTorch's nn.Conv2d default,
+      -- kaiming_uniform_(a=sqrt(5)) == U(±1/sqrt(fan_in)) over fan_in = ic·p·p.
+      -- The generic path below instead divides by the OUTPUT fan (dim·p·p),
+      -- which is ~6× too narrow at ViT-B. cfg.vitInit selects the timm form.
       let fanOut := dim * p * p
+      let fanIn  := ic * p * p
       code := code ++
-        "    # Patch embedding conv " ++ toString ic ++ "→" ++ toString dim ++ ", " ++ toString p ++ "x" ++ toString p ++ "\n" ++
+        "    # Patch embedding conv " ++ toString ic ++ "→" ++ toString dim ++ ", " ++ toString p ++ "x" ++ toString p ++
+          (if cfg.vitInit then "  (PyTorch Conv2d default: U(±1/sqrt(fan_in)))" else "") ++ "\n" ++
         "    key, k_ = random.split(key)\n" ++
-        "    scale = jnp.sqrt(6.0 / " ++ toString fanOut ++ ")\n" ++
+        (if cfg.vitInit
+         then "    scale = 1.0 / jnp.sqrt(" ++ toString fanIn ++ ".0)\n"
+         else "    scale = jnp.sqrt(6.0 / " ++ toString fanOut ++ ")\n") ++
         "    params.append((random.uniform(k_, (" ++ toString dim ++ ", " ++ toString ic ++ ", " ++
           toString p ++ ", " ++ toString p ++ "), minval=-scale, maxval=scale),\n" ++
         "                   jnp.zeros(" ++ toString dim ++ ")))\n"
@@ -1477,13 +1500,19 @@ private def emitInitParams (spec : NetSpec) : String := Id.run do
     | .transformerEncoder dim _heads mlpDim nBlocks =>
       for i in List.range nBlocks do
         code := code ++ emitLNInit s!"Transformer block {i} LN1" dim
-        code := code ++ emitDenseInit s!"Transformer block {i} Q {dim}→{dim}" dim dim
-        code := code ++ emitDenseInit s!"Transformer block {i} K {dim}→{dim}" dim dim
-        code := code ++ emitDenseInit s!"Transformer block {i} V {dim}→{dim}" dim dim
-        code := code ++ emitDenseInit s!"Transformer block {i} Out {dim}→{dim}" dim dim
+        code := code ++ (if cfg.vitInit then emitDenseInitTimm else emitDenseInit)
+                          s!"Transformer block {i} Q {dim}→{dim}" dim dim
+        code := code ++ (if cfg.vitInit then emitDenseInitTimm else emitDenseInit)
+                          s!"Transformer block {i} K {dim}→{dim}" dim dim
+        code := code ++ (if cfg.vitInit then emitDenseInitTimm else emitDenseInit)
+                          s!"Transformer block {i} V {dim}→{dim}" dim dim
+        code := code ++ (if cfg.vitInit then emitDenseInitTimm else emitDenseInit)
+                          s!"Transformer block {i} Out {dim}→{dim}" dim dim
         code := code ++ emitLNInit s!"Transformer block {i} LN2" dim
-        code := code ++ emitDenseInit s!"Transformer block {i} MLP fc1 {dim}→{mlpDim}" dim mlpDim
-        code := code ++ emitDenseInit s!"Transformer block {i} MLP fc2 {mlpDim}→{dim}" mlpDim dim
+        code := code ++ (if cfg.vitInit then emitDenseInitTimm else emitDenseInit)
+                          s!"Transformer block {i} MLP fc1 {dim}→{mlpDim}" dim mlpDim
+        code := code ++ (if cfg.vitInit then emitDenseInitTimm else emitDenseInit)
+                          s!"Transformer block {i} MLP fc2 {mlpDim}→{dim}" mlpDim dim
       code := code ++ emitLNInit "Final LN" dim
     | _ => pure ()
   code := code ++ "    return params\n\n"
@@ -3009,7 +3038,7 @@ def generate (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : 
   emitDtype cfg ++
   emitHelpers spec cfg ++
   emitShardingSetup ++
-  emitInitParams spec ++
+  emitInitParams spec cfg ++
   emitParamsToFile spec ++
   emitForward spec cfg ++
   emitLossAndTraining spec cfg ++
