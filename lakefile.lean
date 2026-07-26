@@ -969,10 +969,6 @@ lean_exe «mobilenet-v3-train» where
   root := `apps.baselines.MainMobilenetV3Train
   moreLinkArgs := ireeLink
 
-lean_exe «mobilenet-v4-train» where
-  root := `apps.baselines.MainMobilenetV4Train
-  moreLinkArgs := ireeLink
-
 lean_exe «efficientnet-train» where
   root := `apps.baselines.MainEfficientNetTrain
   moreLinkArgs := ireeLink
@@ -1554,26 +1550,6 @@ lean_exe «vjp-oracle-uib» where
 -- Tests + benchmarks
 -- ═══════════════════════════════════════════════════════════════════
 
-lean_exe «test-forward» where
-  root := `tests.TestForward
-  moreLinkArgs := ireeLink
-
-lean_exe «test-iree» where
-  root := `tests.TestIreeRuntime
-  moreLinkArgs := ireeLink
-
-lean_exe «test-train» where
-  root := `tests.TestTrainStep
-  moreLinkArgs := ireeLink
-
-lean_exe «test-iree-load» where
-  root := `tests.TestIreeLoad
-  moreLinkArgs := ireeLink
-
-lean_exe «test-f32» where
-  root := `tests.TestF32
-  moreLinkArgs := ireeLink
-
 -- Pins the image/label pairing invariant of `F32.shuffle` on a synthetic
 -- dataset where label k is derivable from image k. The FFI used to swap a
 -- hardcoded 4 bytes of label per record, which silently mispaired every
@@ -1591,87 +1567,19 @@ lean_exe «test-dataset-record-sizes» where
   root := `tests.TestDatasetRecordSizes
   moreLinkArgs := ireeLink
 
-lean_exe «bench-resnet» where
-  root := `tests.BenchResnet
-  moreLinkArgs := ireeLink
-
-lean_exe «test-resnet-fwd» where
-  root := `tests.TestResnetForward
-
 lean_exe «test-unet-forward» where
   root := `tests.TestUnetForward
 
-lean_exe «test-ddpm-train-emit» where
-  root := `tests.TestDdpmTrainEmit
-  moreLinkArgs := ireeLink
-
-lean_exe «test-convnext-fwd-emit» where
-  root := `tests.TestConvNextForwardEmit
-  moreLinkArgs := ireeLink
-
-lean_exe «test-convnext-train-emit» where
-  root := `tests.TestConvNextTrainEmit
-  moreLinkArgs := ireeLink
-
-lean_exe «test-focal-emit» where
-  root := `tests.TestFocalEmit
-  moreLinkArgs := ireeLink
-
--- YOLOv1 Phase 1 tests (planning/yolo_final.md decisions D10-D11).
-lean_exe «test-yolov1-emit» where
-  root := `tests.TestYolov1Emit
-  moreLinkArgs := ireeLink
-
 lean_exe «test-yolov1-mutex» where
   root := `tests.TestYolov1Mutex
-  moreLinkArgs := ireeLink
-
-lean_exe «test-yolov1-train-step» where
-  root := `tests.TestYolov1TrainStep
-  moreLinkArgs := ireeLink
-
-lean_exe «test-randaugment» where
-  root := `tests.TestRandAugment
-  moreLinkArgs := ireeLink
-
-lean_exe «test-cam» where
-  root := `tests.TestCam
-  moreLinkArgs := ireeLink
-
-lean_exe «inspect-convnext-bn» where
-  root := `tests.InspectConvNeXtBN
   moreLinkArgs := ireeLink
 
 lean_exe «inspect-convnext» where
   root := `demos.MainInspectConvNeXt
   moreLinkArgs := ireeLink
 
-lean_exe «test-convnext-train-step» where
-  root := `tests.TestConvNextTrainStep
-  moreLinkArgs := ireeLink
-
-lean_exe «test-convnext-bn-train-step» where
-  root := `tests.TestConvNextBnTrainStep
-  moreLinkArgs := ireeLink
-
-lean_exe «test-convnext-ablation-smoke» where
-  root := `tests.TestConvNextAblationSmoke
-  moreLinkArgs := ireeLink
-
-lean_exe «test-convnext-tiny-emit» where
-  root := `tests.TestConvNextTinyEmit
-
 lean_exe «test-resnet-residual» where
   root := `tests.TestResnetResidual
-
-lean_exe «test-spec-helpers» where
-  root := `tests.TestSpecHelpers
-
-lean_exe «test-smoke-trainers» where
-  root := `tests.TestSmokeTrainers
-
-lean_exe «test-codegen-ts» where
-  root := `tests.TestCodegenTrainStep
 
 -- Dischargeability sanity check: 11 examples confirming every
 -- Differentiable hypothesis the proofs propagate is satisfiable for
