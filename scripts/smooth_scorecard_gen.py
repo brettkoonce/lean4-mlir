@@ -24,7 +24,26 @@ ALPHA_INV = 1000          # alpha = 1/1000
 D = 10000                 # q0 denominator (4 decimals)
 NETS = [("mlp", "MNIST-MLP"), ("cnn", "MNIST-CNN"), ("cifar", "CIFAR-CNN")]
 RUNS = Path("runs")
+# The launcher writes runs/smooth_<slug>_scorecard.csv, but only the CURATED
+# copies under the dated run directory are committed — so on a clean checkout
+# `RUNS` alone is empty and this corpus looks unreproducible (the old error
+# message sent you off to re-run a ~25 min 2-GPU job for data that is already
+# in the repo). Prefer a fresh run if one is present, else the archive.
+RUNS_ARCHIVE = Path("runs/2026-07-12-smooth-scorecard")
 OUT = Path("LeanMlir/Proofs/Certificates/SmoothingCPScorecard.lean")
+
+
+def csv_path(slug: str) -> Path:
+    """The fixed-protocol CSV for `slug`: fresh run first, then the archive."""
+    fresh = RUNS / f"smooth_{slug}_scorecard.csv"
+    if fresh.exists():
+        return fresh
+    archived = RUNS_ARCHIVE / f"smooth_{slug}_scorecard.csv"
+    if archived.exists():
+        return archived
+    sys.exit(f"missing smooth_{slug}_scorecard.csv in {RUNS} or {RUNS_ARCHIVE} — "
+             f"the committed copies live in the archive; re-run "
+             f"./run_smooth_scorecard.sh only if you want a fresh protocol run")
 
 
 def tail_check(n: int, k: int, a: int) -> bool:
@@ -88,9 +107,7 @@ def phi_inv(p: float) -> float:
 def main() -> None:
     per_net = {}
     for slug, _name in NETS:
-        path = RUNS / f"smooth_{slug}_scorecard.csv"
-        if not path.exists():
-            sys.exit(f"missing {path} — run ./run_smooth_scorecard.sh first")
+        path = csv_path(slug)
         rows = []
         with open(path) as f:
             for r in csv.DictReader(f):

@@ -62,12 +62,21 @@ N_EMIT      # how many of those carry a per-image THEOREM
 
 ## 2. Gotchas (each of these cost real time — read before starting a tier)
 
-1. **`OUTDIR` was stale (pre-existing bug, now fixed).** The Proofs/ bucket
-   refactor updated the `import` lines the generators *emit* but not the path
-   they *write to*. `lipschitz_cert_scorecard_full.py` — and
-   `lipschitz_cert_pair_sdp_full.py` / `lipschitz_cert_scorecard_ibp.py`, which
-   do `OUTDIR = base.OUTDIR` — silently wrote to the dead flat path. Nothing
-   catches this: the committed files still build, they just can't be reproduced.
+1. **Paths rot in both directions — check the ones a generator READS too.**
+   *Output:* the Proofs/ bucket refactor updated the `import` lines the
+   generators *emit* but not the path they *write to*.
+   `lipschitz_cert_scorecard_full.py` — and `lipschitz_cert_pair_sdp_full.py` /
+   `lipschitz_cert_scorecard_ibp.py`, which do `OUTDIR = base.OUTDIR` — silently
+   wrote to the dead flat path. Nothing catches this: the committed files still
+   build, they just can't be reproduced.
+   *Input (found later, same class):* `smooth_scorecard_gen.py` read
+   `runs/smooth_<slug>_scorecard.csv`, but only the **curated** copies under
+   `runs/2026-07-12-smooth-scorecard/` are committed — so on a clean checkout it
+   died with "run ./run_smooth_scorecard.sh first", sending you off to re-run a
+   ~25 min 2-GPU Monte-Carlo job for data already in the repo. Both smoothing
+   generators now resolve via a shared `csv_path()`: fresh run if present, else
+   the archive. A generator that can't find its input is *louder* than one that
+   writes to the wrong place, but it is the same rot.
 2. **Always regenerate UNCAPPED first and diff.** Matching output against the
    committed corpus is what proves (a) your path fix is right, (b) the generator
    is deterministic, (c) your cap edit introduced no other drift. Do this even
@@ -196,7 +205,7 @@ pins are three-axiom. They stay out of the lib roots — see §6 for why.
 
 | # | target | lines | lib | generator | notes |
 |---|---|---|---|---|---|
-| 1 | Smoothing CP + Dec | 3,598 | `Certs` | `smooth_{,dec_}scorecard_gen.py` | **Lowest value, and the only one left.** These are one `decide +kernel` bignum check per image (~0.1 s), so the marginal image is already nearly free. Trim only for consistency — and run the §2.7 check first, since no generator here has been verified against its output.
+| 1 | Smoothing CP + Dec | 3,598 | `Certs` | `smooth_{,dec_}scorecard_gen.py` | **Lowest value, and the only one left.** One `decide +kernel` bignum check per image (~0.1 s), so the marginal image is already nearly free. Trim only for consistency. **§2.7 check: PASSED** — all 9 outputs (CP, Dec, 6 Dec chunks, NetWitness) regenerate byte-identically, no hand edits, no drift. Only the stale input path of gotcha #1 had to be fixed to get there.
 
 **Do not trim** `LipschitzCertScorecardFullNets.lean` (3,799): that is net weights
 plus the Schatten-8 chains, i.e. the proved Lipschitz constant. It is engine-side

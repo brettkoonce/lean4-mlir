@@ -32,7 +32,7 @@ from fractions import Fraction
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from smooth_scorecard_gen import NETS, RUNS, largest_a, phi_inv  # noqa: E402
+from smooth_scorecard_gen import NETS, csv_path, largest_a, phi_inv  # noqa: E402
 
 D = 10000                 # q0 denominator (4 decimals)
 H = Fraction(1, 1000)     # grid step
@@ -99,9 +99,7 @@ def main() -> None:
 
     per_net = {}
     for slug, _name in NETS:
-        path = RUNS / f"smooth_{slug}_scorecard.csv"
-        if not path.exists():
-            sys.exit(f"missing {path} — run ./run_smooth_scorecard.sh first")
+        path = csv_path(slug)
         entries = []   # (img_idx, label, pred, a, m, driver_radius, correct)
         with open(path) as f:
             for r in csv.DictReader(f):
