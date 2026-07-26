@@ -45,7 +45,7 @@ line as ch6 (ResNet-34), ch7 (MobileNetV2), ch8 (EfficientNet-B0), and ch9 (Conv
 > (NetSpec/IRPrint path, `MainVitTrain.lean`, `vitTiny`) — the ch10 deliverable is the
 > *verified* peer, `vit-verified` (mirrors how ch8/ch9 have both `*-train` and `*-verified`).
 
-Written 2026-06-07 (just after ch9 ConvNeXt finished — see `planning/verified_convnext.md`).
+Written 2026-06-07 (just after ch9 ConvNeXt finished — see `planning/archive/verified_convnext.md`).
 Read §§0–5 first; §§6–9 are reference. Commit-to-`main` is the workflow (no branches/PRs);
 **never push without explicit per-push permission.**
 

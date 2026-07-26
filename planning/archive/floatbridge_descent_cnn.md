@@ -1,6 +1,6 @@
 # Float bridge §3 — the CNN descent rung (cold-start handoff)
 
-The last open rung of the descent program (`planning/floatbridge_descent_pass.md`
+The last open rung of the descent program (`planning/archive/floatbridge_descent_pass.md`
 Step 3). The **linear net and the whole MLP are float-fused descent**
 (`linear_float_sgd_descends`, `mlp_{output,hidden,input}_float_sgd_descends`, committed
 `39f05f9`); this doc is the cold-start plan to do the same for the **Chapter-4 MNIST
@@ -317,8 +317,8 @@ step, and the whole §3 descent program is closed except the honest stop line be
 5. ~~**Increment 5** (biases)~~ ✅ DONE (uncommitted as of this writing) — both conv biases CLOSED;
    the one new core `sum_perturbed_close` landed, everything else reused. **The whole §3 CNN
    descent program is now closed** (every conv weight AND bias is a float-faithful descent step).
-6. **NEXT:** Re-run the §5 honesty pass (`planning/floatbridge_honesty_pass.md`) and update
-   `planning/floatbridge_descent_pass.md` / `floatbridge_certificate_gaps.md` (the §3 descent rung
+6. **NEXT:** Re-run the §5 honesty pass (`planning/archive/floatbridge_honesty_pass.md`) and update
+   `planning/archive/floatbridge_descent_pass.md` / `floatbridge_certificate_gaps.md` (the §3 descent rung
    is now the CNN's full conv weight+bias set, not just the MLP — those docs still say "only §3
    descent remains" / "cnn (Step 3)" as OPEN). The honest-stop line (joint step, deep nets) is the
    only thing left.

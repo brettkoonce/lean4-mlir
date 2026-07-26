@@ -120,7 +120,7 @@ runs back through **two** ReLU masks + the `W₁`,`W₂` cotangent fan-in, so it
 margin), final exact-operand multiply (`mul_close`, `ea = 0`). Then wire as Step 1.
 Effort: **medium** (two margins, deeper cotangent chain; no new machinery).
 
-## Step 3 — CNN float fusion (stretch)  → full cold-start plan: `planning/floatbridge_descent_cnn.md`
+## Step 3 — CNN float fusion (stretch)  → full cold-start plan: `planning/archive/floatbridge_descent_cnn.md`
 
 `cnn_conv2_grad_close` (then `cnn_conv1_grad_close`) reusing the conv weight-grad
 bridges, wired into the existing abstract-η `cnn_conv{1,2}_sgd_descends`. The float
@@ -128,7 +128,7 @@ backward runs through the dense head **and** the max-pool selection (frozen by t
 existing `MaxPool2MarginQ.isArgmax_iff` under a rounding margin) **and** a ReLU mask
 before the conv-weight correlation. The single **largest** rung; scoped into
 independently-audited increments (pool-back primitive + bridge → grad-close → wiring
-→ conv1 → biases) in **`planning/floatbridge_descent_cnn.md`** — the abstract-η
+→ conv1 → biases) in **`planning/archive/floatbridge_descent_cnn.md`** — the abstract-η
 descent side is already done (`planning/sgd_descent_cnn.md`). Effort: **high**; its
 own focused session, after Steps 1–2 (done).
 
@@ -171,7 +171,7 @@ own focused session, after Steps 1–2 (done).
    provably decreases the loss" is now a clean closed statement for all three layers.
 3. ~~**Step 3** (CNN)~~ ✅ DONE — `cnn_conv{1,2}_float_sgd_descends` (weights, Increments 1–4)
    + `cnn_conv{1,2}_bias_float_sgd_descends` (biases, Increment 5). The CNN deployed-descent
-   headline is closed; see `planning/floatbridge_descent_cnn.md` for the full increment log.
-4. **NEXT:** Re-run the §5 honesty pass (`planning/floatbridge_honesty_pass.md`) —
+   headline is closed; see `planning/archive/floatbridge_descent_cnn.md` for the full increment log.
+4. **NEXT:** Re-run the §5 honesty pass (`planning/archive/floatbridge_honesty_pass.md`) —
    keep the per-layer vs net-wide / step vs decreases lines exactly honest. The new CNN bias
    rungs do **not** make "descent" read net-wide (the per-param rung is still the honest unit).

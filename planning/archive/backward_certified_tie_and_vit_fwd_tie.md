@@ -2,7 +2,7 @@
 
 **Goal:** finish tying every whole-net float bridge to *the certified object*, in both directions, so
 the closeness claims are "≈ the certified gradient / the real net" — not "≈ a hand-assembled skeleton."
-The forward sweep is done (`planning/forward_wholenet_handoff.md`): all 5 forward bridges exist, vit is
+The forward sweep is done (`planning/archive/forward_wholenet_handoff.md`): all 5 forward bridges exist, vit is
 concrete, and r34/mnv2/convnext forward skeletons are tied to their real net defs
 (`WholeNetForwardTies.lean`). This doc is the **two remaining un-tied directions**:
 
