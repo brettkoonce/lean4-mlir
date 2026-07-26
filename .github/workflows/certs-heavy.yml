@@ -12,13 +12,35 @@ name: Certify Heavy Corpus
 # pushes that actually touch the heavy files, weekly (drift), and on demand.
 # LEAN_NUM_THREADS is capped to bound per-module peak memory on 16GB runners.
 
-# MANUAL-ONLY for now: measured peaks at LEAN_NUM_THREADS=2 — ImgsA 39.5 GB,
-# IBP 20.2 GB, SDP 17.1 GB — NOTHING in the generated tier fits a free 16 GB
-# runner in any configuration (5 failed attempts, all documented in
-# planning/certs_heavy_psd_memory.md). The corpus is kernel-verified locally
-# on every regeneration; this workflow stays for a future self-hosted runner
-# (mars idles at 188 GB) — flip the trigger back then.
+# RE-ENABLED 2026-07-26, after the scorecard trim + the conv-module split.
+# It was manual-only from 2026-07-12 because measured peaks (ImgsA 39.5 GB,
+# IBP 20.2 GB, conv ~38 GB) fit no free 16 GB runner in any configuration —
+# 5 failed attempts, documented in planning/certs_heavy_psd_memory.md.
+# Every module in CertsHeavy now fits. Verified by running THIS loop cold at
+# LEAN_NUM_THREADS=1 on mars: 1260 s wall, max peak 10.91 GB, and the closing
+# `lake build CertsHeavy` a 2.9 s no-op — per-module numbers in the build step
+# below. The two per-pair LipSDP modules remain OUT of the lib roots (~16 GB
+# for a single hS* goal, which no per-image cap reduces) — they were never
+# what blocked this workflow.
+#
+# `paths` is written against the CURRENT layout. The pre-2026-07 filters
+# (LeanMlir/Proofs/LipschitzCertScorecard*.lean, Proofs/ListDot.lean, …)
+# were left behind by the Proofs/ bucket refactor and matched NOTHING, so a
+# push trigger restored verbatim would silently never fire.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'LeanMlir/Proofs/Certificates/LipschitzCertScorecard*.lean'
+      - 'LeanMlir/Proofs/Certificates/IbpConvScorecard*.lean'
+      - 'LeanMlir/Proofs/Foundation/ListDot.lean'
+      - 'LeanMlir/Proofs/Foundation/IntervalBound.lean'
+      - 'LeanMlir/Proofs/Foundation/IntervalBoundConv.lean'
+      - 'tests/AuditAxiomsHeavy.lean'
+      - 'lakefile.lean'
+      - '.github/workflows/certs-heavy.yml'
+  schedule:
+    - cron: '47 9 * * 0'   # weekly, Sunday 09:47 UTC — drift guard
   workflow_dispatch:
 
 jobs:
@@ -26,12 +48,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
-      # bound per-module elaboration parallelism (with the LipSDP modules
-      # CI-disabled the remaining scorecard/IBP tiers are memory-moderate;
-      # 2 threads × one module at a time fits comfortably). The swapfile
-      # experiment from the SDP era is gone: 10G fallocate doesn't fit the
-      # runner's root partition (failed in 7 s) — use /mnt if ever needed.
-      LEAN_NUM_THREADS: 2
+      # ONE elaboration thread. The per-module peaks that justify re-enabling
+      # this workflow were all measured at LEAN_NUM_THREADS=1 (max 11.42 GB);
+      # at 2 threads two goals are in flight and the peak is an UNMEASURED
+      # multiple of that — which is how the 39.5 GB ImgsA measurement that
+      # took the runners down was produced in the first place. ~21 min at 1
+      # thread on mars against a 350-min budget, so there is no reason to
+      # spend the headroom. Re-measure before raising it.
+      # The swapfile experiment from the SDP era is gone: 10G fallocate
+      # doesn't fit the runner's root partition (failed in 7 s) — use /mnt.
+      LEAN_NUM_THREADS: 1
     steps:
       - uses: actions/checkout@v4
 

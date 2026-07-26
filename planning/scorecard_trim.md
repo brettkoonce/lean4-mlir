@@ -270,11 +270,24 @@ diagonally-dominant witnesses) — that remains the only route to a green
 
 So the answer splits cleanly. The two LipSDP full-input modules cannot go under
 CI without the `certs_heavy_psd_memory.md` fix — but they are already outside the
-lib roots, so they were never what blocked the workflow. **Everything that is
-actually in `CertsHeavy` now fits a 16 GB runner**, and the remaining step is a
-one-line trigger change: drop `on: workflow_dispatch:` back to the push/weekly
-triggers the file was written for. That would make the generated corpus
-CI-verified for the first time.
+lib roots, so they were never what blocked the workflow. Everything actually in
+`CertsHeavy` fits a 16 GB runner.
+
+**`certs-heavy.yml` is re-enabled (2026-07-26)** — push on the heavy paths,
+weekly cron, and on demand — so the generated corpus is CI-verified for the
+first time since it was split out. Verified by running the workflow's own loop
+cold at `LEAN_NUM_THREADS=1`: **1260 s wall, max peak 10.91 GB**, closing
+`lake build CertsHeavy` a 2.9 s no-op. Two things worth knowing about that flip:
+
+* `LEAN_NUM_THREADS` went 2 → **1**. Every peak justifying the re-enable was
+  measured at 1 thread; at 2 the peak is an unmeasured multiple, which is how
+  the 39.5 GB ImgsA figure that took the runners down was produced. 21 min
+  against a 350-min budget means there is no reason to spend the headroom.
+* The `paths:` filters had to be rewritten. The originals
+  (`LeanMlir/Proofs/LipschitzCertScorecard*.lean`, `Proofs/ListDot.lean`, …)
+  were left behind by the `Proofs/` bucket refactor and match **nothing** —
+  restoring the old trigger verbatim would have re-enabled a workflow that
+  never fires. Gotcha #1 a third time; check every path in a revived config.
 
 Whatever stays out, the repo should keep saying so plainly — a file carried as
 if CI checked it, when only a local run ever did, is the failure mode this whole
