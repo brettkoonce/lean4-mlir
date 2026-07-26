@@ -37,7 +37,7 @@ them was chasing a sub-point improvement in a regime where the detector was ~390
 below an ordinary result. Read `yolo_assignment.md` for the six refutations (they
 stand, as relative comparisons) and this doc for what to do.
 
-Prereqs: `visdrone/README.md` (the reference numbers), `yolo_assignment.md`,
+Prereqs: `demos/visdrone/README.md` (the reference numbers), `yolo_assignment.md`,
 `yolo_fpn.md`, memories `yolo-fpn-thread` + `visdrone-fetch-and-wsa`.
 
 ## Why this doc exists
@@ -66,7 +66,7 @@ weights vs a pretrained ImageNet backbone). It still lands **1400× higher**.
 
 ## The measured constraint — the score is nearly a constant function
 
-`visdrone/compare_scoring.py`, both detectors on one architecture-neutral metric (a slot
+`demos/visdrone/compare_scoring.py`, both detectors on one architecture-neutral metric (a slot
 is POSITIVE iff its cell centre falls inside a GT box), 60 val images, full annotations:
 
 | detector | score | AUC | pos mean | bg mean | separation | in top-1000/img |
@@ -125,7 +125,7 @@ a from-scratch detector.
 
 ### ❌ BITE 0 RESULTS — measured 2026-07-21. THE HYPOTHESIS IN THIS DOC IS REFUTED.
 
-`visdrone/train_cripple.py`, all arms 12 ep on the squash dataset, random init, no aug,
+`demos/visdrone/train_cripple.py`, all arms 12 ep on the squash dataset, random init, no aug,
 448. Predictions were written down first; they were wrong.
 
 | rung | change | predicted | **measured** | cost |
@@ -190,7 +190,7 @@ This is the standard first check for "model won't fit" and it takes minutes, not
 
 ### ✅ OVERFIT PROBE RESULTS — measured 2026-07-21. THE TRAINER CANNOT FIT 32 IMAGES.
 
-`visdrone/make_overfit_subset.py` slices 32 records VERBATIM out of
+`demos/visdrone/make_overfit_subset.py` slices 32 records VERBATIM out of
 `data/visdrone_fpn/train.bin` (same encoder, same images, same targets — the only
 variable is dataset size) into `data/visdrone_fpn_overfit`, train.bin == val.bin.
 Run with the arm's own hyperparameters, only `epochs` changed:
@@ -244,7 +244,7 @@ two very different investigations to run.
 
 ### ✅ FLOOR MEASURED 2026-07-21 — THE FLOOR IS ZERO. THE TRAINER CANNOT DESCEND.
 
-`visdrone/make_perfect_logits.py` inverts the encoder to synthesize a perfect
+`demos/visdrone/make_perfect_logits.py` inverts the encoder to synthesize a perfect
 prediction — `logit()` on the in-cell centre fraction, `log(w_rel/anchor)` on the size
 (clipped at the emitter's own `tw ≤ 8` cap), ±12 logits for objectness and the one-hot
 class — and feeds it to the already-validated `scripts/fpn_loss_breakdown.py`
@@ -277,7 +277,7 @@ Everything below is simultaneously true and measured:
 2. The gradient matches the loss — FD-verified to ~1e-6 across neck, multi-scale loss,
    whole-detector backward, head bias and tower *(`yolo_fpn.md`)*.
 3. The data the trainer is fed is correct — 38,421 targets round-trip at 2.1e-09
-   *(`visdrone/check_bin_alignment.py`)*.
+   *(`demos/visdrone/check_bin_alignment.py`)*.
 4. The update path is live and influential — 10× LR diverges *(overfit probe)*.
 5. **And 800 Adam steps over 32 images leave the loss at 215.**
 
@@ -512,7 +512,7 @@ this thread's track record on plausible-but-unmeasured stories is 0 for 8.
 probe in this thread conflated "our architecture is bad" with "our implementation is bad."
 Nobody had built a PyTorch twin of **our** detector. That was the missing rung.
 
-New `visdrone/bespoke/`: `model.py` (R34+FPN transcribed from `emitFpnNeckForward` /
+New `demos/visdrone/bespoke/`: `model.py` (R34+FPN transcribed from `emitFpnNeckForward` /
 `emitFpnDetectForward`), `loss.py` (from `emitMultiScaleYoloLoss` / `emitAnchorYoloLoss` /
 `emitDiouForward`), `data.py` (reads the SAME `data/visdrone_fpn/*.bin` bytes),
 `train.py`, `lean_ckpt.py` (loads Lean flat checkpoints), `infer.py` (dumps logits in Lean's
@@ -641,7 +641,7 @@ a named control arm at e12, then judge on mAP — never on an interim metric.
    exceed the cap and **34.9% of all val GT is dropped**, biased toward the dense (hard)
    images. Relative comparisons between arms survive (same truncated GT), so no
    refutation is at risk, but no absolute number in this thread is VisDrone protocol.
-   `visdrone/prepare_yolo.py` independently reproduces the full GT (343,204 train boxes,
+   `demos/visdrone/prepare_yolo.py` independently reproduces the full GT (343,204 train boxes,
    70.7 val/img) and is the cross-check.
 2. **Report mAP@0.25 alongside mAP@0.5** until the detector clears zero. Four levers were
    judged against a metric saturated at 0.0001.
@@ -674,7 +674,7 @@ a named control arm at e12, then judge on mAP — never on an interim metric.
    only refuted resolution's *box-precision* mechanism; whether it lifts object/background
    AUC was never testable from 448px logits. The reference now makes it a cheap A/B, but
    it is a second-order move — fix scoring first.
-4. **Reference drift.** `visdrone/prepare_yolo.py` must keep the identical class filter as
+4. **Reference drift.** `demos/visdrone/prepare_yolo.py` must keep the identical class filter as
    `parse_visdrone_txt`. If it drifts, the two arms stop being comparable and this whole
    doc loses its footing.
 
@@ -732,10 +732,10 @@ IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 ./.lake/build/bin/yolov1-visdrone-fpn da
 
 | script | answers |
 |---|---|
-| `visdrone/compare_scoring.py` | **both detectors on one metric**: obj-vs-bg AUC, score dynamic range, top-k survival |
-| `visdrone/check_bin_alignment.py` | does the Lean encoder round-trip? (it does: 2.1e-09, 0 mismatches over 38,421 boxes) |
-| `visdrone/inspect_lean_bin.py` | renders a `train.bin` record with encoded targets + raw annotations overlaid |
-| `visdrone/prepare_yolo.py` | independent GT cross-check (343,204 train boxes, 70.7 val/img) |
+| `demos/visdrone/compare_scoring.py` | **both detectors on one metric**: obj-vs-bg AUC, score dynamic range, top-k survival |
+| `demos/visdrone/check_bin_alignment.py` | does the Lean encoder round-trip? (it does: 2.1e-09, 0 mismatches over 38,421 boxes) |
+| `demos/visdrone/inspect_lean_bin.py` | renders a `train.bin` record with encoded targets + raw annotations overlaid |
+| `demos/visdrone/prepare_yolo.py` | independent GT cross-check (343,204 train boxes, 70.7 val/img) |
 | `scripts/fpn_obj_separation.py` | objectness AUC + logit spread + class-head collapse |
 | `scripts/fpn_loss_breakdown.py` | where does the loss go? (box/obj/cls, pos vs neg) |
 | `scripts/visdrone_fpn_coverage.py` | encodability ceiling per assignment scheme |

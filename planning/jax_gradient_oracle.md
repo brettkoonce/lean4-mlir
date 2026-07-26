@@ -131,7 +131,7 @@ pre-hook so `named_parameters()` ordering stays intact for the flat-checkpoint l
 sorted values too — matching sorted values with mismatched positions is the tell that
 distinguishes a layout/alignment bug from a numerical one.
 
-### New tooling (all under `visdrone/bespoke/`)
+### New tooling (all under `demos/visdrone/bespoke/`)
 
 | path | what |
 |---|---|
@@ -263,7 +263,7 @@ P3 = conv1x1(C3, Wn3) + upsample2(P4)
 ## 5. The loss to emit
 
 Transcribed from `emitMultiScaleYoloLoss` / `emitAnchorYoloLoss` / `emitDiouForward`.
-**A working, digit-exact PyTorch reference already exists at `visdrone/bespoke/loss.py`** —
+**A working, digit-exact PyTorch reference already exists at `demos/visdrone/bespoke/loss.py`** —
 it is pure array ops and ports to JAX nearly line-for-line. Start from it, not from the Lean.
 
 Slot layout per anchor (`base = a*15`): `+0..3` box (tx,ty,tw,th), `+4` objectness,
@@ -317,13 +317,13 @@ validated the torch twin — every reference number below is already on disk:
    `figures/yolo_of8long/logits.bin`. Expect agreement to ~2% in train mode (BN batch stats
    vs the dump's running stats), or tight if you load `bn_stats` and run eval mode.
 
-Cross-check against `visdrone/bespoke/` at every step — it is verified and fast.
+Cross-check against `demos/visdrone/bespoke/` at every step — it is verified and fast.
 
 ---
 
 ## 7. Loading Lean checkpoints
 
-`visdrone/bespoke/lean_ckpt.py` already does this for PyTorch (117 tensors, 21,548,743
+`demos/visdrone/bespoke/lean_ckpt.py` already does this for PyTorch (117 tensors, 21,548,743
 floats, 0 shape mismatches) and documents the layout. Reuse its `r34_fpn_param_shapes()`.
 
 Order is `NetSpec.paramShapes` (`LeanMlir/SpecHelpers.lean:23`): per conv
@@ -437,12 +437,12 @@ this single bug, which a cheaper probe may well close first.
 
 | path | what |
 |---|---|
-| `visdrone/bespoke/model.py` | verified torch twin (`pool="lean"` for byte-exact) |
-| `visdrone/bespoke/loss.py` | **digit-exact loss — port this to JAX** |
-| `visdrone/bespoke/lean_ckpt.py` | Lean flat checkpoint → torch; has the layout |
-| `visdrone/bespoke/data.py` | reads `data/visdrone_fpn/*.bin` |
-| `visdrone/bespoke/infer.py` | dumps logits in Lean's `inferDump` format |
-| `visdrone/bespoke/diff_lean.py` | forward-diff harness |
+| `demos/visdrone/bespoke/model.py` | verified torch twin (`pool="lean"` for byte-exact) |
+| `demos/visdrone/bespoke/loss.py` | **digit-exact loss — port this to JAX** |
+| `demos/visdrone/bespoke/lean_ckpt.py` | Lean flat checkpoint → torch; has the layout |
+| `demos/visdrone/bespoke/data.py` | reads `data/visdrone_fpn/*.bin` |
+| `demos/visdrone/bespoke/infer.py` | dumps logits in Lean's `inferDump` format |
+| `demos/visdrone/bespoke/diff_lean.py` | forward-diff harness |
 | `scripts/fpn_loss_breakdown.py` | golden numpy loss mirror |
 | `scripts/anchor_loss_probe_check.py` | reference gradient incl. the detached focal weight |
 | `figures/yolo_of8long/logits.bin` | Lean logits, 8 overfit images |

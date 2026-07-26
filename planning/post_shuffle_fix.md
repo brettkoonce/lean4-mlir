@@ -316,7 +316,7 @@ section is the negative result, which is the part worth keeping.
 
 - **No loader checks its file size against `4 + count × rec_bytes`.** Over-specifying a stride
   short-reads and errors; **under**-specifying slides every record silently. This is the
-  general form of the whole class. `visdrone/bespoke/data.py` asserts exactly this and is the
+  general form of the whole class. `demos/visdrone/bespoke/data.py` asserts exactly this and is the
   pattern to copy.
 - **Geometry hardcoded away from its source of truth**: `loadPets` fixes 224, `loadBrats`
   fixes 4 channels while `preprocess_brats.py` exposes `--size`, `preprocess_visdrone.py`'s
