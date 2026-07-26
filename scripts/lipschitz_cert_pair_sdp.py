@@ -27,6 +27,7 @@ from scipy.linalg import sqrtm
 from scipy.optimize import minimize
 
 import os
+import re
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 D = os.path.join(ROOT, "data") + os.sep
 OUT_C = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean")
@@ -44,15 +45,22 @@ CAP, EPOCHS, LR, BS = 4.0, 36, 0.15, 64
 DEN_U, DEN_C = 128, 256
 H, K, DIM = 8, 10, 49
 
-# images already defined in LipschitzCertScorecard.lean (img<i>)
-EXISTING_IMGS = {0, 3, 5, 10, 13, 14, 17, 25, 28, 29, 34, 36, 37, 39, 41, 52,
-                 56, 60, 68, 69, 70, 71, 74, 79, 81, 82, 85, 86, 89, 90, 93,
-                 94, 95, 98}
-# hpre defs already there: hpreC<i> for the 34 capped, hpreU82 for uncon #82
-EXISTING_HPRE_C = set(EXISTING_IMGS)  # hpreC<i> exists for all 34 capped ones
-EXISTING_HPRE_C.discard(82)           # 82 has BOTH hpreC82 and hpreU82
-EXISTING_HPRE_C.add(82)
-EXISTING_HPRE_U = {82}
+# What LipschitzCertScorecard.lean actually defines, READ FROM THE FILE rather
+# than hardcoded: that file caps how many images carry hpre/margin theorems
+# (SCORECARD_N_EMIT) while keeping every `img<i>` def, so a hardcoded copy of
+# these sets silently desynchronizes the moment it is regenerated — exactly the
+# trap flagged in planning/scorecard_trim.md.
+_BASE_SRC = open(os.path.join(
+    ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean")).read()
+EXISTING_IMGS = {int(m.group(1))
+                 for m in re.finditer(r"^noncomputable def img(\d+) :", _BASE_SRC, re.M)}
+EXISTING_HPRE_C = {int(m.group(1))
+                   for m in re.finditer(r"^noncomputable def hpreC(\d+) :", _BASE_SRC, re.M)}
+EXISTING_HPRE_U = {int(m.group(1))
+                   for m in re.finditer(r"^noncomputable def hpreU(\d+) :", _BASE_SRC, re.M)}
+assert EXISTING_IMGS, "could not read img<i> defs from the base scorecard"
+print(f"base scorecard provides {len(EXISTING_IMGS)} img defs, "
+      f"{len(EXISTING_HPRE_C)} hpreC, {len(EXISTING_HPRE_U)} hpreU", flush=True)
 
 def load_images(fn):
     with open(fn, "rb") as f:

@@ -50,20 +50,25 @@ W1s = parse_fracs(grab_block("def W1s :"))
 W2s = parse_fracs(grab_block("def W2s :"))
 assert len(W1s) == 8 * 49 and len(W2s) == 10 * 8
 
-idx_block = grab_block("def certifiedCappedIdx")
-certified = [int(t) for t in re.search(r"\[([\d,\s]+)\]", idx_block).group(1).split(",")]
-assert len(certified) == 34
-
-margins, labels, imgs = {}, {}, {}
+# The MEASURED population comes from the base scorecard's `certMarginC` data
+# table, NOT from its marginC<k> theorems: the base caps how many images carry
+# theorems, and this tier's headline ("N of 34 survive the float widening") is a
+# measurement that must not shrink with it. See planning/scorecard_trim.md.
+certified, margins, labels, imgs = [], {}, {}, {}
+for mm in re.finditer(r"^-- certMarginC (\d+) (\d+) (-?\d+)/(\d+)$", src, re.M):
+    k = int(mm.group(1))
+    certified.append(k)
+    labels[k] = int(mm.group(2))
+    margins[k] = Fraction(int(mm.group(3)), int(mm.group(4)))
+assert len(certified) == 34, f"expected 34 measured margins, got {len(certified)}"
 for k in certified:
-    mm = re.search(
-        rf"theorem marginC{k} : ∀ j : Fin 10, j ≠ (\d+) →\n\s*\(\((\d+) : ℝ\)/(\d+)\) ≤",
-        src)
-    assert mm, f"marginC{k} not found"
-    labels[k] = int(mm.group(1))
-    margins[k] = Fraction(int(mm.group(2)), int(mm.group(3)))
     imgs[k] = parse_fracs(grab_block(f"def img{k} :"))
     assert len(imgs[k]) == 49 and all(0 <= v <= 1 for v in imgs[k])
+
+# Only images whose `marginC<k>` THEOREM survived the base's cap can carry a
+# float theorem here — the composed proof cites it directly.
+have_margin_thm = {int(mm.group(1))
+                   for mm in re.finditer(r"^theorem marginC(\d+) :", src, re.M)}
 
 # ---------------------------------------------------------------- budget chain
 L = Fraction(19760433, 1000000)          # mlpS_lip_gram2 (Schatten-8, committed)
@@ -93,7 +98,7 @@ passing = [k for k in certified if thr < margins[k]]
 # subset. Each per-image block costs a `fin_cases` over 49 coordinates, which is
 # where this file's ~538 s in the per-push tier goes.
 measured = len(passing)
-emitted = passing[:N_EMIT]
+emitted = [k for k in passing if k in have_margin_thm][:N_EMIT]
 print(f"w0={w0} w1={w1}  A1={float(A1):.3f}  E0={float(E0):.3e}  B={float(B):.3e}")
 print(f"float threshold {float(thr):.6f} vs pure-R threshold {float(Fraction(14143,10000)*L*EPS):.6f}")
 print(f"float-certified (measured): {measured}/{len(certified)} capped images; "

@@ -3299,9 +3299,11 @@ open Proofs
 -- certificate scaled to the FIXED first-100 MNIST test subset at FIXED ε = 1/10 (pooled L2).
 -- certified_at_eps = the fixed-ε specialization (rational radius check via √2 ≤ 14143/10000, no
 -- irrationals in-kernel); the capped net's Schatten-8 chain (G/H eq + product L = 19.76); then
--- 34/100 capped vs 1/100 unconstrained per-image certificates. Spot-check ~10 of the 35 per-image
--- theorems (first/middle/last of the capped set + the sole unconstrained survivor #82 on BOTH nets)
--- + the aggregate — not all 35, to keep this file sane; all 35 build in the Proofs closure.
+-- 34/100 capped vs 1/100 unconstrained per-image certificates. Those counts are exact-rational
+-- MEASUREMENTS (the `certMargin*` data table in that file); the first 8 certified images per net
+-- carry the per-image theorems and `scorecard` states only those (planning/scorecard_trim.md).
+-- Spot-check first/middle/last of the emitted capped set + the unconstrained survivor #82
+-- + the aggregate.
 #print axioms Proofs.LipschitzCertDemo.sqrt_two_le_rat
 #print axioms Proofs.LipschitzCertDemo.certified_at_eps
 #print axioms Proofs.LipschitzCertDemo.G1s_eq
@@ -3314,16 +3316,16 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.marginC0
 #print axioms Proofs.LipschitzCertDemo.certifiedC0
 #print axioms Proofs.LipschitzCertDemo.certifiedC3
-#print axioms Proofs.LipschitzCertDemo.certifiedC36
-#print axioms Proofs.LipschitzCertDemo.certifiedC52
-#print axioms Proofs.LipschitzCertDemo.certifiedC70
-#print axioms Proofs.LipschitzCertDemo.certifiedC82
-#print axioms Proofs.LipschitzCertDemo.certifiedC98
+#print axioms Proofs.LipschitzCertDemo.certifiedC10
+#print axioms Proofs.LipschitzCertDemo.certifiedC13
+#print axioms Proofs.LipschitzCertDemo.certifiedC14
+#print axioms Proofs.LipschitzCertDemo.certifiedC17
+#print axioms Proofs.LipschitzCertDemo.certifiedC25
 #print axioms Proofs.LipschitzCertDemo.marginU82
 #print axioms Proofs.LipschitzCertDemo.certifiedU82
--- the mechanized aggregate: the 34/100 + 1/100 counts tied to the per-image
--- CertifiedAt proofs (proof term = the tuple of all 35 per-image theorems),
--- not just literal-list lengths
+-- the mechanized aggregate: the emitted witness counts tied to the per-image
+-- CertifiedAt proofs (proof term = the tuple of those theorems), not just
+-- literal-list lengths
 #print axioms Proofs.LipschitzCertDemo.cappedCerts_idx
 #print axioms Proofs.LipschitzCertDemo.unconCerts_idx
 #print axioms Proofs.LipschitzCertDemo.cappedCerts_certified

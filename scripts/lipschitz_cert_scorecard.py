@@ -20,13 +20,21 @@ L can never prove an image UNcertifiable.
 Also runs an L2-PGD attack (empirical, not proof) on both quantized nets for
 the cert <= TRUE <= PGD sandwich table.
 """
-import numpy as np, struct
+import numpy as np, os, struct
 from fractions import Fraction
 from math import ceil
 
 D = "/home/skoonce/lean/klawd_max_power/lean4-jax/data/"
 OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean"
 N_IMG = 100
+# How many of the certified images carry per-image THEOREMS (hpre/margin/
+# certified blocks). The counts stay MEASURED over all N_IMG in exact rationals
+# and are emitted below as the `certMargins` data table, which is what
+# downstream measurement passes (scripts/lipschitz_cert_float.py) read — so
+# capping here cannot silently shrink a reported number. All `img<i>` defs are
+# kept regardless: they are cheap and `lipschitz_cert_pair_sdp.py` hardcodes
+# that set as EXISTING_IMGS. See planning/scorecard_trim.md.
+N_EMIT = int(os.environ.get("SCORECARD_N_EMIT", 8))
 EPS = Fraction(1, 10)
 SQRT2_UB = Fraction(14143, 10000)   # >= sqrt 2; the factor the Lean proof uses
 CAP, EPOCHS, LR, BS = 4.0, 36, 0.15, 64
@@ -124,8 +132,13 @@ facts_u = image_facts(W1q, W2q, DEN_U)
 facts_c = image_facts(W1cq, W2cq, DEN_C)
 cert_u = [i for i, (ok, m, _) in enumerate(facts_u) if ok and SQRT2_UB * Lu * EPS <= m]
 cert_c = [i for i, (ok, m, _) in enumerate(facts_c) if ok and SQRT2_UB * Lc * EPS <= m]
-print(f"certified at eps={EPS}: uncon {len(cert_u)}/{N_IMG} {cert_u}")
-print(f"                        capped {len(cert_c)}/{N_IMG} {cert_c}")
+# The MEASURED counts — these are what the header reports and what the data
+# table below carries. `cert_c`/`cert_u` are narrowed to the theorem-carrying
+# subset later (see N_EMIT), after `need_imgs` has taken the full union.
+measured_c, measured_u = len(cert_c), len(cert_u)
+cert_c_all, cert_u_all = list(cert_c), list(cert_u)
+print(f"certified at eps={EPS}: uncon {measured_u}/{N_IMG} {cert_u}")
+print(f"                        capped {measured_c}/{N_IMG} {cert_c}")
 
 # ── PGD (empirical upper bracket), L2 ball radius EPS, on the float nets ──
 def pgd_robust(W1f, W2f, eps, steps=100, restarts=4):
@@ -169,7 +182,15 @@ def row(vals, den):
 def mat(M, den):
     return "![" + ",\n    ".join(row(r, den) for r in M) + "]"
 
-need_imgs = sorted(set(cert_u) | set(cert_c))
+need_imgs = sorted(set(cert_u) | set(cert_c))    # ALL measured images keep a def
+# cap: from here on `cert_c`/`cert_u` are the theorem-carrying subsets. Applied
+# after `need_imgs` so every measured image still gets its `img<i>` definition
+# (cheap, and `lipschitz_cert_pair_sdp.py` hardcodes that set as EXISTING_IMGS).
+cert_c = cert_c[:N_EMIT]
+cert_u = cert_u[:N_EMIT]
+print(f"emitting theorems for {len(cert_c)}/{measured_c} capped, "
+      f"{len(cert_u)}/{measured_u} uncon images; {len(need_imgs)} img defs kept",
+      flush=True)
 DEN_HC = DEN_C * 4080
 L = []
 A = L.append
@@ -193,17 +214,27 @@ A("concentrated on one block, or spread L2-wise across blocks). Two nets:")
 A("")
 A(f"* **unconstrained** — the committed /128 net (`W1t`/`W2t`, q-acc {acc_u:.3f}),")
 A(f"  Schatten-8 product L = {float(Lu):.2f} (`mlpT_lip_gram2`):")
-A(f"  **{len(cert_u)}/{N_IMG} certified** at ε;")
+A(f"  **{measured_u}/{N_IMG} certified** at ε;")
 A(f"* **spectrally capped** — same recipe + projected SGD onto ‖Wᵢ‖₂ ≤ {CAP:g}")
 A(f"  (host-side rescaling after every step, as `mnist-mlp-spectral`), {EPOCHS} epochs,")
 A(f"  /{DEN_C}-rationalized (`W1s`/`W2s`, q-acc {acc_c:.3f}), Schatten-8 product")
-A(f"  L = {float(Lc):.2f}: **{len(cert_c)}/{N_IMG} certified** at the same ε.")
+A(f"  L = {float(Lc):.2f}: **{measured_c}/{N_IMG} certified** at the same ε.")
 A("")
 A("Same theorem, same ε — the training method decides whether the certificate")
 A(f"bites (the roadmap's caps 1.5–2 cost too much clean accuracy at this scale:")
 A(f"σ ≤ 2 → 66% test acc; σ ≤ 4 keeps {acc_c:.1%} vs {acc_u:.1%} unconstrained).")
 A("")
-A("Each certified image gets a margin lemma (exact rational, in-kernel) and a")
+A("**Theorem vs. measurement — read this before quoting a number.** Soundness")
+A("lives in the ENGINE (`certified_at_eps` + `LipschitzCert.lean`), proved once —")
+A("kernel-checking the 57th image buys nothing the 56th didn't. The counts above")
+A(f"are exact-rational MEASUREMENTS over the first {N_IMG} images, carried in full by")
+A("the `certMargin*` data table at the aggregate below (which is what downstream")
+A(f"measurement passes read); the first {N_EMIT} certified images per net additionally")
+A("carry `hpre*`/`margin*`/`certified*` THEOREMS, and `scorecard` states only")
+A(f"those. Every `img<i>` of the measured set is kept regardless — the {len(need_imgs)} image")
+A("definitions are cheap and other tiers reference them.")
+A("")
+A("Each emitted image gets a margin lemma (exact rational, in-kernel) and a")
 A("`∀ δ, ‖δ‖ < ε → argmax fixed` theorem via `certified_at_eps`; the aggregate")
 A("count is the honest direction only (\"at least K of 100\") — an upper-bound L")
 A("cannot prove an image UNcertifiable. Empirical bracket (not proof): L2-PGD")
@@ -370,6 +401,8 @@ def emit_image(i, net, W, Wname, mlpname, lipname, Lnet, m, pre, den_h):
 
 
 net_W2 = {"C": "W2s", "U": "W2t"}
+# cap: the first N_EMIT certified images per net carry theorems. `measured_*`
+# keep the full exact-rational counts for the header and the data table.
 for i in cert_c:
     emit_image(i, "C", W1cq, "W1s", "mlpS", "mlpS_lip_gram2", Lc,
                facts_c[i][1], facts_c[i][2], DEN_HC)
@@ -383,6 +416,25 @@ for i in cert_u:
 A("-- ════════════════════════════════════════════════════════════")
 A("-- § Aggregate — the mechanized scorecard")
 A("-- ════════════════════════════════════════════════════════════")
+A("")
+# The MEASURED population, as data. This is deliberately a comment and not a
+# Lean declaration: a count over a fixed subset is exact rational arithmetic,
+# not a theorem, and emitting it costs zero elaboration. It is also the contract
+# with downstream measurement passes — scripts/lipschitz_cert_float.py parses
+# these lines, so capping N_EMIT above can never shrink the population a
+# downstream tier measures over. Format: `-- certMargin<net> <i> <class> <n>/<d>`.
+A(f"-- ════════ MEASURED margins (data, not theorems) ════════")
+A(f"-- Every image certified at ε = {EPS}: {measured_c} capped, {measured_u} unconstrained, over the")
+A(f"-- first {N_IMG} test images. Exact rationals, computed off-line — the population")
+A(f"-- the header's counts are measured over, and what downstream measurement")
+A(f"-- passes read (scripts/lipschitz_cert_float.py). The first {N_EMIT} per net also")
+A("-- carry theorems above; these lines are arithmetic, and prove nothing.")
+for i in cert_c_all:
+    m = facts_c[i][1]
+    A(f"-- certMarginC {i} {int(yte[i])} {m.numerator}/{m.denominator}")
+for i in cert_u_all:
+    m = facts_u[i][1]
+    A(f"-- certMarginU {i} {int(yte[i])} {m.numerator}/{m.denominator}")
 A("")
 A(f"/-- Indices (into the fixed first-{N_IMG} MNIST test subset) certified at")
 A(f"    ε = {EPS} on the CAPPED net — one `certifiedC<i>` theorem each. -/")
@@ -459,11 +511,13 @@ else:
     A(L.pop() + "⟩")
 A("")
 A(f"/-- **The scorecard, as a theorem**: at ε = {EPS} (pooled L2) the capped net")
-A(f"    certifies {len(cert_c)} witnesses of the fixed test subset, the unconstrained net {len(cert_u)} —")
-A("    same certificate, same ε; training (σ-projection) decides whether it")
-A("    bites. Each count is now tied to its per-image `CertifiedAt` proofs via")
-A("    `cappedCerts_certified`/`unconCerts_certified`, not just a list length.")
-A("    Lower bounds only: an upper-bound L cannot prove an image uncertifiable. -/")
+A(f"    certifies {measured_c}/{N_IMG} of the fixed test subset and the unconstrained net")
+A(f"    {measured_u}/{N_IMG} — same certificate, same ε; training (σ-projection) decides")
+A("    whether it bites. Those are MEASUREMENTS (the `certMargin*` table above);")
+A(f"    the {len(cert_c)} and {len(cert_u)} witnesses BELOW are the ones carrying per-image")
+A("    `CertifiedAt` proofs, tied to them via `cappedCerts_certified`/")
+A("    `unconCerts_certified` rather than a bare list length. Lower bounds only:")
+A("    an upper-bound L cannot prove an image uncertifiable. -/")
 A("theorem scorecard :")
 A(f"    (cappedCerts.length = {len(cert_c)} ∧")
 A(f"      ∀ p ∈ cappedCerts, CertifiedAt mlpS {frac(EPS)} p.2.1 p.2.2) ∧")

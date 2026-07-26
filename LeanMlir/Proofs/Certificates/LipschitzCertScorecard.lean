@@ -26,7 +26,17 @@ Same theorem, same ε — the training method decides whether the certificate
 bites (the roadmap's caps 1.5–2 cost too much clean accuracy at this scale:
 σ ≤ 2 → 66% test acc; σ ≤ 4 keeps 87.0% vs 89.8% unconstrained).
 
-Each certified image gets a margin lemma (exact rational, in-kernel) and a
+**Theorem vs. measurement — read this before quoting a number.** Soundness
+lives in the ENGINE (`certified_at_eps` + `LipschitzCert.lean`), proved once —
+kernel-checking the 57th image buys nothing the 56th didn't. The counts above
+are exact-rational MEASUREMENTS over the first 100 images, carried in full by
+the `certMargin*` data table at the aggregate below (which is what downstream
+measurement passes read); the first 8 certified images per net additionally
+carry `hpre*`/`margin*`/`certified*` THEOREMS, and `scorecard` states only
+those. Every `img<i>` of the measured set is kept regardless — the 34 image
+definitions are cheap and other tiers reference them.
+
+Each emitted image gets a margin lemma (exact rational, in-kernel) and a
 `∀ δ, ‖δ‖ < ε → argmax fixed` theorem via `certified_at_eps`; the aggregate
 count is the honest direction only ("at least K of 100") — an upper-bound L
 cannot prove an image UNcertifiable. Empirical bracket (not proof): L2-PGD
@@ -330,7 +340,7 @@ noncomputable def img98 : EuclideanSpace ℝ (Fin 49) :=
   WithLp.toLp 2 ![((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((21 : ℝ)/4080), ((775 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((72 : ℝ)/4080), ((2164 : ℝ)/4080), ((1201 : ℝ)/4080), ((874 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((1929 : ℝ)/4080), ((477 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((2136 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((54 : ℝ)/4080), ((2728 : ℝ)/4080), ((1919 : ℝ)/4080), ((2401 : ℝ)/4080), ((545 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((1281 : ℝ)/4080), ((2214 : ℝ)/4080), ((1967 : ℝ)/4080), ((169 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080), ((0 : ℝ)/4080)]
 
 -- ════════════════════════════════════════════════════════════
--- § Per-image certificates, capped net (34/100 at ε = 1/10)
+-- § Per-image certificates, capped net (8/100 at ε = 1/10)
 -- ════════════════════════════════════════════════════════════
 
 noncomputable def hpreC0 : Fin 8 → ℝ :=
@@ -589,838 +599,6 @@ theorem certifiedC25 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
   certified_at_eps mlpS_lip_gram2 (by norm_num) marginC25 (by norm_num)
     (by norm_num) δ hδ
 
-noncomputable def hpreC28 : Fin 8 → ℝ :=
-  ![((1464220 : ℝ)/1044480), ((838711 : ℝ)/1044480), ((2861010 : ℝ)/1044480), ((-160632 : ℝ)/1044480), ((2643136 : ℝ)/1044480), ((252685 : ℝ)/1044480), ((557662 : ℝ)/1044480), ((3590456 : ℝ)/1044480)]
-
-theorem hpreC28_eval : ∀ k : Fin 8, denseE W1s img28 k = hpreC28 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img28, hpreC28, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC28 : ∀ j : Fin 10, j ≠ 0 →
-    ((1064624767 : ℝ)/267386880) ≤ mlpS img28 0 - mlpS img28 j := by
-  have hout : ∀ jj : Fin 10, mlpS img28 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC28 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img28)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC28_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC28, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #28 (digit 0): certified at ε = 1/10 — margin 3.982 ≥ √2·L·ε. -/
-theorem certifiedC28 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 0 → mlpS (img28 + δ) j < mlpS (img28 + δ) 0 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC28 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC29 : Fin 8 → ℝ :=
-  ![((339137 : ℝ)/1044480), ((2314009 : ℝ)/1044480), ((-26266 : ℝ)/1044480), ((1602785 : ℝ)/1044480), ((125587 : ℝ)/1044480), ((750756 : ℝ)/1044480), ((150360 : ℝ)/1044480), ((582344 : ℝ)/1044480)]
-
-theorem hpreC29_eval : ∀ k : Fin 8, denseE W1s img29 k = hpreC29 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img29, hpreC29, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC29 : ∀ j : Fin 10, j ≠ 1 →
-    ((7686861 : ℝ)/2228224) ≤ mlpS img29 1 - mlpS img29 j := by
-  have hout : ∀ jj : Fin 10, mlpS img29 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC29 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img29)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC29_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC29, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #29 (digit 1): certified at ε = 1/10 — margin 3.450 ≥ √2·L·ε. -/
-theorem certifiedC29 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 1 → mlpS (img29 + δ) j < mlpS (img29 + δ) 1 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC29 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC34 : Fin 8 → ℝ :=
-  ![((2615798 : ℝ)/1044480), ((2058224 : ℝ)/1044480), ((1355218 : ℝ)/1044480), ((669911 : ℝ)/1044480), ((615593 : ℝ)/1044480), ((-877051 : ℝ)/1044480), ((491542 : ℝ)/1044480), ((547071 : ℝ)/1044480)]
-
-theorem hpreC34_eval : ∀ k : Fin 8, denseE W1s img34 k = hpreC34 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img34, hpreC34, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC34 : ∀ j : Fin 10, j ≠ 7 →
-    ((302505063 : ℝ)/89128960) ≤ mlpS img34 7 - mlpS img34 j := by
-  have hout : ∀ jj : Fin 10, mlpS img34 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC34 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img34)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC34_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC34, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #34 (digit 7): certified at ε = 1/10 — margin 3.394 ≥ √2·L·ε. -/
-theorem certifiedC34 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 7 → mlpS (img34 + δ) j < mlpS (img34 + δ) 7 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC34 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC36 : Fin 8 → ℝ :=
-  ![((3033260 : ℝ)/1044480), ((745929 : ℝ)/1044480), ((1615172 : ℝ)/1044480), ((-132739 : ℝ)/1044480), ((683242 : ℝ)/1044480), ((7547 : ℝ)/1044480), ((664915 : ℝ)/1044480), ((512326 : ℝ)/1044480)]
-
-theorem hpreC36_eval : ∀ k : Fin 8, denseE W1s img36 k = hpreC36 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img36, hpreC36, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC36 : ∀ j : Fin 10, j ≠ 7 →
-    ((1709471 : ℝ)/522240) ≤ mlpS img36 7 - mlpS img36 j := by
-  have hout : ∀ jj : Fin 10, mlpS img36 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC36 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img36)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC36_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC36, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #36 (digit 7): certified at ε = 1/10 — margin 3.273 ≥ √2·L·ε. -/
-theorem certifiedC36 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 7 → mlpS (img36 + δ) j < mlpS (img36 + δ) 7 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC36 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC37 : Fin 8 → ℝ :=
-  ![((619991 : ℝ)/1044480), ((2340406 : ℝ)/1044480), ((-70382 : ℝ)/1044480), ((1728433 : ℝ)/1044480), ((23765 : ℝ)/1044480), ((872787 : ℝ)/1044480), ((-10310 : ℝ)/1044480), ((534569 : ℝ)/1044480)]
-
-theorem hpreC37_eval : ∀ k : Fin 8, denseE W1s img37 k = hpreC37 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img37, hpreC37, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC37 : ∀ j : Fin 10, j ≠ 1 →
-    ((319303829 : ℝ)/89128960) ≤ mlpS img37 1 - mlpS img37 j := by
-  have hout : ∀ jj : Fin 10, mlpS img37 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC37 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img37)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC37_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC37, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #37 (digit 1): certified at ε = 1/10 — margin 3.582 ≥ √2·L·ε. -/
-theorem certifiedC37 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 1 → mlpS (img37 + δ) j < mlpS (img37 + δ) 1 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC37 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC39 : Fin 8 → ℝ :=
-  ![((821047 : ℝ)/1044480), ((2997595 : ℝ)/1044480), ((-129571 : ℝ)/1044480), ((2173770 : ℝ)/1044480), ((71375 : ℝ)/1044480), ((695841 : ℝ)/1044480), ((191908 : ℝ)/1044480), ((842745 : ℝ)/1044480)]
-
-theorem hpreC39_eval : ∀ k : Fin 8, denseE W1s img39 k = hpreC39 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img39, hpreC39, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC39 : ∀ j : Fin 10, j ≠ 1 →
-    ((193310173 : ℝ)/53477376) ≤ mlpS img39 1 - mlpS img39 j := by
-  have hout : ∀ jj : Fin 10, mlpS img39 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC39 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img39)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC39_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC39, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #39 (digit 1): certified at ε = 1/10 — margin 3.615 ≥ √2·L·ε. -/
-theorem certifiedC39 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 1 → mlpS (img39 + δ) j < mlpS (img39 + δ) 1 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC39 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC41 : Fin 8 → ℝ :=
-  ![((2614402 : ℝ)/1044480), ((653113 : ℝ)/1044480), ((1183705 : ℝ)/1044480), ((-7557 : ℝ)/1044480), ((674968 : ℝ)/1044480), ((95143 : ℝ)/1044480), ((474260 : ℝ)/1044480), ((126536 : ℝ)/1044480)]
-
-theorem hpreC41_eval : ∀ k : Fin 8, denseE W1s img41 k = hpreC41 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img41, hpreC41, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC41 : ∀ j : Fin 10, j ≠ 7 →
-    ((14695567 : ℝ)/5242880) ≤ mlpS img41 7 - mlpS img41 j := by
-  have hout : ∀ jj : Fin 10, mlpS img41 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC41 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img41)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC41_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC41, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #41 (digit 7): certified at ε = 1/10 — margin 2.803 ≥ √2·L·ε. -/
-theorem certifiedC41 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 7 → mlpS (img41 + δ) j < mlpS (img41 + δ) 7 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC41 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC52 : Fin 8 → ℝ :=
-  ![((901110 : ℝ)/1044480), ((-457188 : ℝ)/1044480), ((1776914 : ℝ)/1044480), ((1606994 : ℝ)/1044480), ((1518214 : ℝ)/1044480), ((850771 : ℝ)/1044480), ((1338269 : ℝ)/1044480), ((1511082 : ℝ)/1044480)]
-
-theorem hpreC52_eval : ∀ k : Fin 8, denseE W1s img52 k = hpreC52 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img52, hpreC52, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC52 : ∀ j : Fin 10, j ≠ 5 →
-    ((207495293 : ℝ)/66846720) ≤ mlpS img52 5 - mlpS img52 j := by
-  have hout : ∀ jj : Fin 10, mlpS img52 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC52 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img52)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC52_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC52, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #52 (digit 5): certified at ε = 1/10 — margin 3.104 ≥ √2·L·ε. -/
-theorem certifiedC52 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 5 → mlpS (img52 + δ) j < mlpS (img52 + δ) 5 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC52 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC56 : Fin 8 → ℝ :=
-  ![((2061565 : ℝ)/1044480), ((-391732 : ℝ)/1044480), ((472902 : ℝ)/1044480), ((1525148 : ℝ)/1044480), ((2845589 : ℝ)/1044480), ((-100694 : ℝ)/1044480), ((2244574 : ℝ)/1044480), ((1114264 : ℝ)/1044480)]
-
-theorem hpreC56_eval : ∀ k : Fin 8, denseE W1s img56 k = hpreC56 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img56, hpreC56, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC56 : ∀ j : Fin 10, j ≠ 4 →
-    ((37689619 : ℝ)/11141120) ≤ mlpS img56 4 - mlpS img56 j := by
-  have hout : ∀ jj : Fin 10, mlpS img56 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC56 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img56)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC56_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC56, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #56 (digit 4): certified at ε = 1/10 — margin 3.383 ≥ √2·L·ε. -/
-theorem certifiedC56 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 4 → mlpS (img56 + δ) j < mlpS (img56 + δ) 4 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC56 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC60 : Fin 8 → ℝ :=
-  ![((3562028 : ℝ)/1044480), ((66875 : ℝ)/1044480), ((1848552 : ℝ)/1044480), ((-184780 : ℝ)/1044480), ((100531 : ℝ)/1044480), ((422505 : ℝ)/1044480), ((722989 : ℝ)/1044480), ((860793 : ℝ)/1044480)]
-
-theorem hpreC60_eval : ∀ k : Fin 8, denseE W1s img60 k = hpreC60 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img60, hpreC60, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC60 : ∀ j : Fin 10, j ≠ 7 →
-    ((65616631 : ℝ)/22282240) ≤ mlpS img60 7 - mlpS img60 j := by
-  have hout : ∀ jj : Fin 10, mlpS img60 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC60 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img60)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC60_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC60, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #60 (digit 7): certified at ε = 1/10 — margin 2.945 ≥ √2·L·ε. -/
-theorem certifiedC60 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 7 → mlpS (img60 + δ) j < mlpS (img60 + δ) 7 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC60 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC68 : Fin 8 → ℝ :=
-  ![((1967767 : ℝ)/1044480), ((2277447 : ℝ)/1044480), ((1917683 : ℝ)/1044480), ((1503700 : ℝ)/1044480), ((988848 : ℝ)/1044480), ((606911 : ℝ)/1044480), ((2657127 : ℝ)/1044480), ((3207458 : ℝ)/1044480)]
-
-theorem hpreC68_eval : ∀ k : Fin 8, denseE W1s img68 k = hpreC68 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img68, hpreC68, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC68 : ∀ j : Fin 10, j ≠ 3 →
-    ((149732349 : ℝ)/44564480) ≤ mlpS img68 3 - mlpS img68 j := by
-  have hout : ∀ jj : Fin 10, mlpS img68 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC68 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img68)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC68_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC68, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #68 (digit 3): certified at ε = 1/10 — margin 3.360 ≥ √2·L·ε. -/
-theorem certifiedC68 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 3 → mlpS (img68 + δ) j < mlpS (img68 + δ) 3 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC68 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC69 : Fin 8 → ℝ :=
-  ![((867327 : ℝ)/1044480), ((125213 : ℝ)/1044480), ((2634165 : ℝ)/1044480), ((24690 : ℝ)/1044480), ((1963094 : ℝ)/1044480), ((-2324 : ℝ)/1044480), ((-218645 : ℝ)/1044480), ((2162536 : ℝ)/1044480)]
-
-theorem hpreC69_eval : ∀ k : Fin 8, denseE W1s img69 k = hpreC69 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img69, hpreC69, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC69 : ∀ j : Fin 10, j ≠ 0 →
-    ((7997263 : ℝ)/2228224) ≤ mlpS img69 0 - mlpS img69 j := by
-  have hout : ∀ jj : Fin 10, mlpS img69 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC69 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img69)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC69_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC69, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #69 (digit 0): certified at ε = 1/10 — margin 3.589 ≥ √2·L·ε. -/
-theorem certifiedC69 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 0 → mlpS (img69 + δ) j < mlpS (img69 + δ) 0 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC69 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC70 : Fin 8 → ℝ :=
-  ![((3076974 : ℝ)/1044480), ((-179240 : ℝ)/1044480), ((2259639 : ℝ)/1044480), ((-251014 : ℝ)/1044480), ((353695 : ℝ)/1044480), ((-120915 : ℝ)/1044480), ((140248 : ℝ)/1044480), ((512322 : ℝ)/1044480)]
-
-theorem hpreC70_eval : ∀ k : Fin 8, denseE W1s img70 k = hpreC70 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img70, hpreC70, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC70 : ∀ j : Fin 10, j ≠ 7 →
-    ((35316589 : ℝ)/7864320) ≤ mlpS img70 7 - mlpS img70 j := by
-  have hout : ∀ jj : Fin 10, mlpS img70 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC70 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img70)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC70_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC70, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #70 (digit 7): certified at ε = 1/10 — margin 4.491 ≥ √2·L·ε. -/
-theorem certifiedC70 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 7 → mlpS (img70 + δ) j < mlpS (img70 + δ) 7 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC70 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC71 : Fin 8 → ℝ :=
-  ![((688421 : ℝ)/1044480), ((422707 : ℝ)/1044480), ((3646690 : ℝ)/1044480), ((321017 : ℝ)/1044480), ((3762347 : ℝ)/1044480), ((393576 : ℝ)/1044480), ((-145317 : ℝ)/1044480), ((4432245 : ℝ)/1044480)]
-
-theorem hpreC71_eval : ∀ k : Fin 8, denseE W1s img71 k = hpreC71 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img71, hpreC71, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC71 : ∀ j : Fin 10, j ≠ 0 →
-    ((21998539 : ℝ)/3932160) ≤ mlpS img71 0 - mlpS img71 j := by
-  have hout : ∀ jj : Fin 10, mlpS img71 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC71 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img71)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC71_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC71, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #71 (digit 0): certified at ε = 1/10 — margin 5.595 ≥ √2·L·ε. -/
-theorem certifiedC71 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 0 → mlpS (img71 + δ) j < mlpS (img71 + δ) 0 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC71 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC74 : Fin 8 → ℝ :=
-  ![((684936 : ℝ)/1044480), ((2579092 : ℝ)/1044480), ((-85324 : ℝ)/1044480), ((1887176 : ℝ)/1044480), ((-3324 : ℝ)/1044480), ((954575 : ℝ)/1044480), ((-38309 : ℝ)/1044480), ((627168 : ℝ)/1044480)]
-
-theorem hpreC74_eval : ∀ k : Fin 8, denseE W1s img74 k = hpreC74 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img74, hpreC74, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC74 : ∀ j : Fin 10, j ≠ 1 →
-    ((1042557817 : ℝ)/267386880) ≤ mlpS img74 1 - mlpS img74 j := by
-  have hout : ∀ jj : Fin 10, mlpS img74 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC74 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img74)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC74_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC74, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #74 (digit 1): certified at ε = 1/10 — margin 3.899 ≥ √2·L·ε. -/
-theorem certifiedC74 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 1 → mlpS (img74 + δ) j < mlpS (img74 + δ) 1 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC74 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC79 : Fin 8 → ℝ :=
-  ![((4869476 : ℝ)/1044480), ((1150175 : ℝ)/1044480), ((2599960 : ℝ)/1044480), ((1203078 : ℝ)/1044480), ((797334 : ℝ)/1044480), ((-835512 : ℝ)/1044480), ((-71094 : ℝ)/1044480), ((679871 : ℝ)/1044480)]
-
-theorem hpreC79_eval : ∀ k : Fin 8, denseE W1s img79 k = hpreC79 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img79, hpreC79, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC79 : ∀ j : Fin 10, j ≠ 7 →
-    ((22544969 : ℝ)/4456448) ≤ mlpS img79 7 - mlpS img79 j := by
-  have hout : ∀ jj : Fin 10, mlpS img79 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC79 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img79)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC79_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC79, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #79 (digit 7): certified at ε = 1/10 — margin 5.059 ≥ √2·L·ε. -/
-theorem certifiedC79 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 7 → mlpS (img79 + δ) j < mlpS (img79 + δ) 7 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC79 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC81 : Fin 8 → ℝ :=
-  ![((1791966 : ℝ)/1044480), ((984478 : ℝ)/1044480), ((477746 : ℝ)/1044480), ((600862 : ℝ)/1044480), ((3543938 : ℝ)/1044480), ((1708438 : ℝ)/1044480), ((976514 : ℝ)/1044480), ((1919401 : ℝ)/1044480)]
-
-theorem hpreC81_eval : ∀ k : Fin 8, denseE W1s img81 k = hpreC81 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img81, hpreC81, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC81 : ∀ j : Fin 10, j ≠ 6 →
-    ((17728793 : ℝ)/4456448) ≤ mlpS img81 6 - mlpS img81 j := by
-  have hout : ∀ jj : Fin 10, mlpS img81 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC81 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img81)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC81_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC81, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #81 (digit 6): certified at ε = 1/10 — margin 3.978 ≥ √2·L·ε. -/
-theorem certifiedC81 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 6 → mlpS (img81 + δ) j < mlpS (img81 + δ) 6 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC81 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC82 : Fin 8 → ℝ :=
-  ![((1196851 : ℝ)/1044480), ((3772472 : ℝ)/1044480), ((596046 : ℝ)/1044480), ((-931623 : ℝ)/1044480), ((3489988 : ℝ)/1044480), ((-374744 : ℝ)/1044480), ((805702 : ℝ)/1044480), ((1592636 : ℝ)/1044480)]
-
-theorem hpreC82_eval : ∀ k : Fin 8, denseE W1s img82 k = hpreC82 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img82, hpreC82, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC82 : ∀ j : Fin 10, j ≠ 2 →
-    ((141156265 : ℝ)/26738688) ≤ mlpS img82 2 - mlpS img82 j := by
-  have hout : ∀ jj : Fin 10, mlpS img82 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC82 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img82)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC82_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC82, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #82 (digit 2): certified at ε = 1/10 — margin 5.279 ≥ √2·L·ε. -/
-theorem certifiedC82 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 2 → mlpS (img82 + δ) j < mlpS (img82 + δ) 2 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC82 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC85 : Fin 8 → ℝ :=
-  ![((3071037 : ℝ)/1044480), ((-267657 : ℝ)/1044480), ((-92099 : ℝ)/1044480), ((2450823 : ℝ)/1044480), ((2510098 : ℝ)/1044480), ((-101600 : ℝ)/1044480), ((3314848 : ℝ)/1044480), ((1384154 : ℝ)/1044480)]
-
-theorem hpreC85_eval : ∀ k : Fin 8, denseE W1s img85 k = hpreC85 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img85, hpreC85, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC85 : ∀ j : Fin 10, j ≠ 4 →
-    ((277131031 : ℝ)/89128960) ≤ mlpS img85 4 - mlpS img85 j := by
-  have hout : ∀ jj : Fin 10, mlpS img85 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC85 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img85)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC85_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC85, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #85 (digit 4): certified at ε = 1/10 — margin 3.109 ≥ √2·L·ε. -/
-theorem certifiedC85 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 4 → mlpS (img85 + δ) j < mlpS (img85 + δ) 4 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC85 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC86 : Fin 8 → ℝ :=
-  ![((3880698 : ℝ)/1044480), ((1727924 : ℝ)/1044480), ((1345171 : ℝ)/1044480), ((1060100 : ℝ)/1044480), ((107653 : ℝ)/1044480), ((-482605 : ℝ)/1044480), ((168790 : ℝ)/1044480), ((-24173 : ℝ)/1044480)]
-
-theorem hpreC86_eval : ∀ k : Fin 8, denseE W1s img86 k = hpreC86 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img86, hpreC86, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC86 : ∀ j : Fin 10, j ≠ 7 →
-    ((531726539 : ℝ)/133693440) ≤ mlpS img86 7 - mlpS img86 j := by
-  have hout : ∀ jj : Fin 10, mlpS img86 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC86 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img86)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC86_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC86, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #86 (digit 7): certified at ε = 1/10 — margin 3.977 ≥ √2·L·ε. -/
-theorem certifiedC86 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 7 → mlpS (img86 + δ) j < mlpS (img86 + δ) 7 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC86 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC89 : Fin 8 → ℝ :=
-  ![((466895 : ℝ)/1044480), ((2819188 : ℝ)/1044480), ((-263211 : ℝ)/1044480), ((2090329 : ℝ)/1044480), ((253244 : ℝ)/1044480), ((-226136 : ℝ)/1044480), ((349145 : ℝ)/1044480), ((195071 : ℝ)/1044480)]
-
-theorem hpreC89_eval : ∀ k : Fin 8, denseE W1s img89 k = hpreC89 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img89, hpreC89, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC89 : ∀ j : Fin 10, j ≠ 1 →
-    ((11653171 : ℝ)/3145728) ≤ mlpS img89 1 - mlpS img89 j := by
-  have hout : ∀ jj : Fin 10, mlpS img89 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC89 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img89)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC89_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC89, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #89 (digit 1): certified at ε = 1/10 — margin 3.704 ≥ √2·L·ε. -/
-theorem certifiedC89 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 1 → mlpS (img89 + δ) j < mlpS (img89 + δ) 1 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC89 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC90 : Fin 8 → ℝ :=
-  ![((1831783 : ℝ)/1044480), ((1783992 : ℝ)/1044480), ((1449120 : ℝ)/1044480), ((229282 : ℝ)/1044480), ((350324 : ℝ)/1044480), ((324385 : ℝ)/1044480), ((1357700 : ℝ)/1044480), ((2552340 : ℝ)/1044480)]
-
-theorem hpreC90_eval : ∀ k : Fin 8, denseE W1s img90 k = hpreC90 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img90, hpreC90, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC90 : ∀ j : Fin 10, j ≠ 3 →
-    ((948486923 : ℝ)/267386880) ≤ mlpS img90 3 - mlpS img90 j := by
-  have hout : ∀ jj : Fin 10, mlpS img90 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC90 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img90)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC90_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC90, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #90 (digit 3): certified at ε = 1/10 — margin 3.547 ≥ √2·L·ε. -/
-theorem certifiedC90 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 3 → mlpS (img90 + δ) j < mlpS (img90 + δ) 3 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC90 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC93 : Fin 8 → ℝ :=
-  ![((2527349 : ℝ)/1044480), ((2456861 : ℝ)/1044480), ((2754149 : ℝ)/1044480), ((1147070 : ℝ)/1044480), ((451835 : ℝ)/1044480), ((986374 : ℝ)/1044480), ((1689585 : ℝ)/1044480), ((2973262 : ℝ)/1044480)]
-
-theorem hpreC93_eval : ∀ k : Fin 8, denseE W1s img93 k = hpreC93 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img93, hpreC93, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC93 : ∀ j : Fin 10, j ≠ 3 →
-    ((769503137 : ℝ)/267386880) ≤ mlpS img93 3 - mlpS img93 j := by
-  have hout : ∀ jj : Fin 10, mlpS img93 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC93 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img93)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC93_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC93, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #93 (digit 3): certified at ε = 1/10 — margin 2.878 ≥ √2·L·ε. -/
-theorem certifiedC93 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 3 → mlpS (img93 + δ) j < mlpS (img93 + δ) 3 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC93 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC94 : Fin 8 → ℝ :=
-  ![((1222174 : ℝ)/1044480), ((3588611 : ℝ)/1044480), ((-111673 : ℝ)/1044480), ((2304862 : ℝ)/1044480), ((535883 : ℝ)/1044480), ((1124686 : ℝ)/1044480), ((604646 : ℝ)/1044480), ((1141455 : ℝ)/1044480)]
-
-theorem hpreC94_eval : ∀ k : Fin 8, denseE W1s img94 k = hpreC94 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img94, hpreC94, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC94 : ∀ j : Fin 10, j ≠ 1 →
-    ((961576603 : ℝ)/267386880) ≤ mlpS img94 1 - mlpS img94 j := by
-  have hout : ∀ jj : Fin 10, mlpS img94 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC94 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img94)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC94_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC94, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #94 (digit 1): certified at ε = 1/10 — margin 3.596 ≥ √2·L·ε. -/
-theorem certifiedC94 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 1 → mlpS (img94 + δ) j < mlpS (img94 + δ) 1 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC94 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC95 : Fin 8 → ℝ :=
-  ![((2905624 : ℝ)/1044480), ((1033655 : ℝ)/1044480), ((-274709 : ℝ)/1044480), ((2207159 : ℝ)/1044480), ((3974891 : ℝ)/1044480), ((431560 : ℝ)/1044480), ((2030741 : ℝ)/1044480), ((486194 : ℝ)/1044480)]
-
-theorem hpreC95_eval : ∀ k : Fin 8, denseE W1s img95 k = hpreC95 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img95, hpreC95, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC95 : ∀ j : Fin 10, j ≠ 4 →
-    ((5676121 : ℝ)/1671168) ≤ mlpS img95 4 - mlpS img95 j := by
-  have hout : ∀ jj : Fin 10, mlpS img95 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC95 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img95)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC95_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC95, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #95 (digit 4): certified at ε = 1/10 — margin 3.396 ≥ √2·L·ε. -/
-theorem certifiedC95 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 4 → mlpS (img95 + δ) j < mlpS (img95 + δ) 4 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC95 (by norm_num)
-    (by norm_num) δ hδ
-
-noncomputable def hpreC98 : Fin 8 → ℝ :=
-  ![((144095 : ℝ)/1044480), ((739428 : ℝ)/1044480), ((974324 : ℝ)/1044480), ((986497 : ℝ)/1044480), ((3647956 : ℝ)/1044480), ((1194871 : ℝ)/1044480), ((341765 : ℝ)/1044480), ((1736637 : ℝ)/1044480)]
-
-theorem hpreC98_eval : ∀ k : Fin 8, denseE W1s img98 k = hpreC98 k := by
-  intro k
-  fin_cases k <;>
-    · simp [denseE_apply, W1s, img98, hpreC98, Fin.sum_univ_succ]
-      norm_num
-
-theorem marginC98 : ∀ j : Fin 10, j ≠ 6 →
-    ((885545287 : ℝ)/267386880) ≤ mlpS img98 6 - mlpS img98 j := by
-  have hout : ∀ jj : Fin 10, mlpS img98 jj =
-      ∑ k : Fin 8, W2s jj k * max (hpreC98 k) 0 := by
-    intro jj
-    show denseE W2s (reluE (denseE W1s img98)) jj = _
-    rw [denseE_apply]
-    refine Finset.sum_congr rfl fun k _ => ?_
-    rw [reluE_apply, hpreC98_eval k]
-  intro j hj
-  fin_cases j <;>
-    first
-    | exact absurd rfl hj
-    | · rw [hout, hout]
-        simp [W2s, hpreC98, Fin.sum_univ_succ, max_def]
-        norm_num
-
-/-- Test #98 (digit 6): certified at ε = 1/10 — margin 3.312 ≥ √2·L·ε. -/
-theorem certifiedC98 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
-    ∀ j, j ≠ 6 → mlpS (img98 + δ) j < mlpS (img98 + δ) 6 :=
-  certified_at_eps mlpS_lip_gram2 (by norm_num) marginC98 (by norm_num)
-    (by norm_num) δ hδ
-
 -- ════════════════════════════════════════════════════════════
 -- § Per-image certificates, unconstrained net (1/100 at the same ε)
 -- ════════════════════════════════════════════════════════════
@@ -1461,10 +639,52 @@ theorem certifiedU82 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
 -- § Aggregate — the mechanized scorecard
 -- ════════════════════════════════════════════════════════════
 
+-- ════════ MEASURED margins (data, not theorems) ════════
+-- Every image certified at ε = 1/10: 34 capped, 1 unconstrained, over the
+-- first 100 test images. Exact rationals, computed off-line — the population
+-- the header's counts are measured over, and what downstream measurement
+-- passes read (scripts/lipschitz_cert_float.py). The first 8 per net also
+-- carry theorems above; these lines are arithmetic, and prove nothing.
+-- certMarginC 0 7 907357987/267386880
+-- certMarginC 3 0 53187503/13369344
+-- certMarginC 5 1 64216467/22282240
+-- certMarginC 10 0 287439677/89128960
+-- certMarginC 13 0 279315957/89128960
+-- certMarginC 14 1 34094067/11141120
+-- certMarginC 17 7 73973561/17825792
+-- certMarginC 25 0 1618574687/267386880
+-- certMarginC 28 0 1064624767/267386880
+-- certMarginC 29 1 7686861/2228224
+-- certMarginC 34 7 302505063/89128960
+-- certMarginC 36 7 1709471/522240
+-- certMarginC 37 1 319303829/89128960
+-- certMarginC 39 1 193310173/53477376
+-- certMarginC 41 7 14695567/5242880
+-- certMarginC 52 5 207495293/66846720
+-- certMarginC 56 4 37689619/11141120
+-- certMarginC 60 7 65616631/22282240
+-- certMarginC 68 3 149732349/44564480
+-- certMarginC 69 0 7997263/2228224
+-- certMarginC 70 7 35316589/7864320
+-- certMarginC 71 0 21998539/3932160
+-- certMarginC 74 1 1042557817/267386880
+-- certMarginC 79 7 22544969/4456448
+-- certMarginC 81 6 17728793/4456448
+-- certMarginC 82 2 141156265/26738688
+-- certMarginC 85 4 277131031/89128960
+-- certMarginC 86 7 531726539/133693440
+-- certMarginC 89 1 11653171/3145728
+-- certMarginC 90 3 948486923/267386880
+-- certMarginC 93 3 769503137/267386880
+-- certMarginC 94 1 961576603/267386880
+-- certMarginC 95 4 5676121/1671168
+-- certMarginC 98 6 885545287/267386880
+-- certMarginU 82 2 726202319/66846720
+
 /-- Indices (into the fixed first-100 MNIST test subset) certified at
     ε = 1/10 on the CAPPED net — one `certifiedC<i>` theorem each. -/
 def certifiedCappedIdx : List ℕ :=
-  [0, 3, 5, 10, 13, 14, 17, 25, 28, 29, 34, 36, 37, 39, 41, 52, 56, 60, 68, 69, 70, 71, 74, 79, 81, 82, 85, 86, 89, 90, 93, 94, 95, 98]
+  [0, 3, 5, 10, 13, 14, 17, 25]
 
 /-- Indices certified on the UNCONSTRAINED net (`certifiedU<i>`). -/
 def certifiedUnconIdx : List ℕ :=
@@ -1483,12 +703,7 @@ def CertifiedAt {n k : ℕ} (f : EuclideanSpace ℝ (Fin n) → EuclideanSpace �
     one triple per `certifiedC<i>` theorem, in index order. -/
 noncomputable def cappedCerts : List (ℕ × EuclideanSpace ℝ (Fin 49) × Fin 10) :=
   [(0, img0, 7), (3, img3, 0), (5, img5, 1), (10, img10, 0), (13, img13, 0),
-   (14, img14, 1), (17, img17, 7), (25, img25, 0), (28, img28, 0), (29, img29, 1),
-   (34, img34, 7), (36, img36, 7), (37, img37, 1), (39, img39, 1), (41, img41, 7),
-   (52, img52, 5), (56, img56, 4), (60, img60, 7), (68, img68, 3), (69, img69, 0),
-   (70, img70, 7), (71, img71, 0), (74, img74, 1), (79, img79, 7), (81, img81, 6),
-   (82, img82, 2), (85, img85, 4), (86, img86, 7), (89, img89, 1), (90, img90, 3),
-   (93, img93, 3), (94, img94, 1), (95, img95, 4), (98, img98, 6)]
+   (14, img14, 1), (17, img17, 7), (25, img25, 0)]
 
 /-- The unconstrained-net certificate witnesses (`certifiedU<i>`). -/
 noncomputable def unconCerts : List (ℕ × EuclideanSpace ℝ (Fin 49) × Fin 10) :=
@@ -1501,30 +716,27 @@ theorem unconCerts_idx : unconCerts.map Prod.fst = certifiedUnconIdx := rfl
 
 /-- **Every capped-net witness is certified** — the aggregate is no longer
     bookkeeping over a bare index list: the proof term is literally the
-    tuple of the 34 per-image theorems. -/
+    tuple of the 8 per-image theorems. -/
 theorem cappedCerts_certified :
     ∀ p ∈ cappedCerts, CertifiedAt mlpS ((1 : ℝ)/10) p.2.1 p.2.2 :=
   List.forall_iff_forall_mem.mp
     ⟨certifiedC0, certifiedC3, certifiedC5, certifiedC10, certifiedC13,
-     certifiedC14, certifiedC17, certifiedC25, certifiedC28, certifiedC29,
-     certifiedC34, certifiedC36, certifiedC37, certifiedC39, certifiedC41,
-     certifiedC52, certifiedC56, certifiedC60, certifiedC68, certifiedC69,
-     certifiedC70, certifiedC71, certifiedC74, certifiedC79, certifiedC81,
-     certifiedC82, certifiedC85, certifiedC86, certifiedC89, certifiedC90,
-     certifiedC93, certifiedC94, certifiedC95, certifiedC98⟩
+     certifiedC14, certifiedC17, certifiedC25⟩
 
 theorem unconCerts_certified :
     ∀ p ∈ unconCerts, CertifiedAt mlpT ((1 : ℝ)/10) p.2.1 p.2.2 :=
   List.forall_iff_forall_mem.mp certifiedU82
 
 /-- **The scorecard, as a theorem**: at ε = 1/10 (pooled L2) the capped net
-    certifies 34 witnesses of the fixed test subset, the unconstrained net 1 —
-    same certificate, same ε; training (σ-projection) decides whether it
-    bites. Each count is now tied to its per-image `CertifiedAt` proofs via
-    `cappedCerts_certified`/`unconCerts_certified`, not just a list length.
-    Lower bounds only: an upper-bound L cannot prove an image uncertifiable. -/
+    certifies 34/100 of the fixed test subset and the unconstrained net
+    1/100 — same certificate, same ε; training (σ-projection) decides
+    whether it bites. Those are MEASUREMENTS (the `certMargin*` table above);
+    the 8 and 1 witnesses BELOW are the ones carrying per-image
+    `CertifiedAt` proofs, tied to them via `cappedCerts_certified`/
+    `unconCerts_certified` rather than a bare list length. Lower bounds only:
+    an upper-bound L cannot prove an image uncertifiable. -/
 theorem scorecard :
-    (cappedCerts.length = 34 ∧
+    (cappedCerts.length = 8 ∧
       ∀ p ∈ cappedCerts, CertifiedAt mlpS ((1 : ℝ)/10) p.2.1 p.2.2) ∧
     (unconCerts.length = 1 ∧
       ∀ p ∈ unconCerts, CertifiedAt mlpT ((1 : ℝ)/10) p.2.1 p.2.2) :=
@@ -1532,7 +744,7 @@ theorem scorecard :
 
 /-- Legacy count-only form, kept for reference; superseded by `scorecard`. -/
 theorem scorecard_counts :
-    certifiedCappedIdx.length = 34 ∧ certifiedUnconIdx.length = 1 :=
+    certifiedCappedIdx.length = 8 ∧ certifiedUnconIdx.length = 1 :=
   ⟨rfl, rfl⟩
 
 end LipschitzCertDemo

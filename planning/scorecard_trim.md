@@ -1,13 +1,16 @@
 # Trimming the generated scorecards: recipe, gotchas, remaining work
 
-*(2026-07-25. Status: **6 of 7 tiers trimmed**, generated corpus 106k → ~30k lines,
-every reported number unchanged. Commits `6bb0313` (conv), `89b98d8` (Lipschitz
-full-input + IBP L∞), plus the two LipSDP passes below. The stranding that §4
-used to warn about is fixed, and the pooled tier cut **~19 minutes off every
-proof push**. Three findings worth reading before the next one: the LipSDP tiers
-are **not byte-reproducible** (§2.6), the committed files contain **hand edits no
-generator knows about** (§2.7 — this one is still live for the last two targets),
-and trimming **does not lower the full-input tier's peak memory** (§6).)*
+*(2026-07-26. Status: **7 of 8 tiers trimmed** — only the low-value smoothing tier
+is left — generated corpus 106k → ~29k lines, every reported number unchanged.
+Commits `6bb0313` (conv), `89b98d8` (Lipschitz full-input + IBP L∞), `fba43bb`
+(both LipSDP tiers), `6a3b604` (float), `672d518` + this one (pooled base). The
+stranding §4 warned about is fixed and the pooled LipSDP tier cut **~19 minutes
+off every proof push**. Three findings worth more than the line count: the LipSDP
+tiers are **not byte-reproducible** (§2.6); the generators had **drifted from
+their own committed output**, one of them by 66 lines including `CertifiedAt`
+itself (§2.7 — the single most dangerous thing found here); and trimming
+**barely moves elaboration cost** on the tiers whose work is weight-side rather
+than exhibit-side (§5, §6).)*
 
 ## 0. Why
 
@@ -48,6 +51,14 @@ N_EMIT      # how many of those carry a per-image THEOREM
 * The `scorecard*` theorem states **only** the proved counts.
 * The file header carries a "Theorem vs. measurement" paragraph naming both, so
   nobody quotes the measured number as if the kernel checked it.
+* **When another tier measures over this one's images, emit the measurement as
+  data.** `LipschitzCertScorecard.lean` now carries a `-- certMargin<net> <i>
+  <class> <n>/<d>` comment table covering *all* certified images, which is what
+  `lipschitz_cert_float.py` reads. A count over a fixed subset is exact rational
+  arithmetic, not a theorem, so a comment is the honest home for it — it costs
+  zero elaboration and it means capping the theorems upstream can never silently
+  shrink the population a downstream tier reports. Downstream generators should
+  read the *table* for counts and the *theorem names* only for what they cite.
 
 ## 2. Gotchas (each of these cost real time — read before starting a tier)
 
@@ -90,22 +101,24 @@ N_EMIT      # how many of those carry a per-image THEOREM
 
    i.e. `diff <(grep -oE '^(theorem|noncomputable def|def) [A-Za-z0-9_]+' old) <(… new)`
    is empty. The kernel-dotZ tiers have no such float step and stay byte-exact.
-7. **Generated files can contain hand edits the generator doesn't know about —
-   regenerating deletes them silently.** The pooled files carry a
-   `**REDUCED CERTIFICATE MODEL**` scope disclaimer (this is the 4×4-pooled
-   49-dim net, *not* the canonical 784→512→512→10 `mlpVerified`) that was added
-   by hand and was in **none** of the three pooled generators. The uncapped diff
-   is what caught it; `lipschitz_cert_pair_sdp.py` now emits it. **Still missing
-   from `lipschitz_cert_scorecard.py` and `lipschitz_cert_float.py`** — add it
-   there before regenerating either, or you will quietly drop the one paragraph
-   that stops a reader taking these counts for the canonical net. Check with
+7. **Generated files contain hand edits the generator doesn't know about —
+   regenerating deletes them silently. This was the worst thing found here.**
+   All three pooled generators were missing the `**REDUCED CERTIFICATE MODEL**`
+   scope disclaimer (this is the 4×4-pooled 49-dim net, *not* the canonical
+   784→512→512→10 `mlpVerified`). Far worse, `lipschitz_cert_scorecard.py` was
+   missing **66 lines** of its own output — including `CertifiedAt`, *the
+   predicate every certificate tier in the repo states its scorecard in*, plus
+   `cappedCerts`, `cappedCerts_certified` and `scorecard`. Running that
+   generator would have detonated the corpus. All three now emit everything, and
+   each was verified byte-identical uncapped before being capped. Check with
 
    ```
    git show HEAD:<file> | diff - <(regenerated) | grep '^[<>]' | grep -v <numeric>
    ```
 
-   and read every prose line it reports, rather than assuming prose diffs are
-   your own edits.
+   and **read every prose line it reports** rather than assuming prose diffs are
+   your own edits. A generator being older than the file it generates is the
+   default state, not the exception.
 
 ## 3. Done
 
@@ -117,6 +130,7 @@ N_EMIT      # how many of those carry a per-image THEOREM
 | LipSDP full-input (SF + TF) | `lipschitz_cert_pair_sdp_full.py` | 30,884 | **7,241** |
 | LipSDP pooled (C + U) | `lipschitz_cert_pair_sdp.py` | 15,933 | **5,251** |
 | Float composition | `lipschitz_cert_float.py` | 830 | **440** |
+| Pooled base scorecard | `lipschitz_cert_scorecard.py` | 1,539 | **751** |
 
 Build: 3903 jobs clean. `AuditAxioms` 1474/1474, `AuditAxiomsHeavy` 46/46, all
 three-axiom. Conv tier alone went 4,241 s → 488 s and ~38 GB → 14.2 GB peak.
@@ -133,7 +147,13 @@ old note here claimed "538 s for 34 float-composed images"; a clean A/B at
 | uncapped (33 images) | 97.9 s | 4.58 GB |
 | capped (8 images) | **90.7 s** | 3.79 GB |
 
-7 s, ~7%. `-Dprofiler` explains it: **92 s of the ~95 s is `simp`**, and it is
+The pooled base scorecard behaves the same way: 1,539 → 751 lines (34 → 8
+theorem-carrying images, all 34 `img<i>` defs kept) bought **142 s → 103 s** and
+5.44 → 4.22 GB. Its remaining cost is `G1s_eq`/`G2s_eq`/`H1s_eq`/`H2s_eq` —
+328 `fin_cases` goals over the Gram matrices, engine-side.
+
+For the float tier it is 7 s, ~7%. `-Dprofiler` explains it: **92 s of the ~95 s
+is `simp`**, and it is
 almost all `W1sV_abs_le` / `W2sV_abs_le` — 49×8 + 8×10 = 472 `fin_cases` goals
 each re-unfolding the weight matrices at ~190 ms apiece. The per-image blocks
 are ~0.29 s each (49 cheap coordinate goals). So this file's cost is
@@ -176,17 +196,19 @@ pins are three-axiom. They stay out of the lib roots — see §6 for why.
 
 | # | target | lines | lib | generator | notes |
 |---|---|---|---|---|---|
-| 1 | `LipschitzCertScorecard` (pooled) | 1,539 | `CertsHeavy` | `lipschitz_cert_scorecard.py` | Small, but it is the base several others reuse — cap it *last* or you re-strand its dependents. Its `img<i>`/`hpreC<i>` set is **hardcoded** into `lipschitz_cert_pair_sdp.py` as `EXISTING_IMGS`/`EXISTING_HPRE_C` (not imported), so capping it silently desynchronizes that generator — update both together. **Missing the §2.7 disclaimer.** |
-| 2 | Smoothing CP + Dec | 3,598 | `Certs` | `smooth_{,dec_}scorecard_gen.py` | **Lowest value.** These are one `decide +kernel` bignum check per image (~0.1 s), so the marginal image is already nearly free. Trim only for consistency. |
+| 1 | Smoothing CP + Dec | 3,598 | `Certs` | `smooth_{,dec_}scorecard_gen.py` | **Lowest value, and the only one left.** These are one `decide +kernel` bignum check per image (~0.1 s), so the marginal image is already nearly free. Trim only for consistency — and run the §2.7 check first, since no generator here has been verified against its output.
 
 **Do not trim** `LipschitzCertScorecardFullNets.lean` (3,799): that is net weights
 plus the Schatten-8 chains, i.e. the proved Lipschitz constant. It is engine-side
 content, not a per-image exhibit.
 
-What is left is small and cheap — the big levers are spent, and the float tier
-showed that line count and elaboration cost are only loosely related, so do not
-assume the remaining two buy time. Item 1 is the one with a real trap in it (the
-hardcoded cross-generator image set); item 2 is routine.
+The big levers are spent. The recurring lesson across the last three tiers is
+that **line count and elaboration cost are only loosely related**: the float tier
+gave back 7 s for a 47% cut, the pooled base 39 s for a 51% cut, because in both
+the dominant cost is weight-side `simp` (`W*_abs_le`, `G*_eq`/`H*_eq`) that no
+per-image cap touches. If the goal is per-push time rather than repo hygiene, the
+next move is not another cap — it is replacing those `fin_cases`-over-the-weights
+proofs with kernel bounds over the ℤ-list data, the `ListDot.lean` trick.
 
 ## 6. The real prize: does this get `certs-heavy` back under CI?
 
