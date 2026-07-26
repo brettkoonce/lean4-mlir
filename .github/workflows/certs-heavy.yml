@@ -36,6 +36,7 @@ on:
       - 'LeanMlir/Proofs/Foundation/ListDot.lean'
       - 'LeanMlir/Proofs/Foundation/IntervalBound.lean'
       - 'LeanMlir/Proofs/Foundation/IntervalBoundConv.lean'
+      - 'LeanMlir/Proofs/Foundation/CrownBound.lean'
       - 'tests/AuditAxiomsHeavy.lean'
       - 'lakefile.lean'
       - '.github/workflows/certs-heavy.yml'

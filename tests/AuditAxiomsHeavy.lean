@@ -5,6 +5,8 @@ import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFull
 -- with them; re-enable both together.)
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBP
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPUncon
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardCrown
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardCrownUncon
 import LeanMlir.Proofs.Certificates.IbpConvScorecard
 
 /-! # Axiom audit — the HEAVY generated certificate corpus (`CertsHeavy`)
@@ -123,6 +125,31 @@ the MAIN audit. -/
 #print axioms Proofs.LipschitzCertDemo.ibpCappedCertse1_certified
 #print axioms Proofs.LipschitzCertDemo.ibpCappedCertse8_certified
 #print axioms Proofs.LipschitzCertDemo.ibpUnconCertse1_certified
+
+-- CROWN, the SAME nets/subset/ε grid as the IBP tier above — a new COLUMN in
+-- that table: 93/93/92/81 (capped) and 94/92/76/15 (unconstrained) per 100,
+-- against IBP's 92/88/69/24 and 87/42/2/0. Each emitted image is proved at the
+-- LARGEST radius it is emitted at and carried down the grid by
+-- `CertifiedAtLinf.mono`, so the spot-checks below cover both a directly-proved
+-- certificate (e8/e4) and a mono-derived one (e1). The `nrm*` raw
+-- `absSumZ (combZ …)` kernel facts are propext-ONLY (stricter than the triple,
+-- but they would trip the exact-triple grep); they are audited transitively via
+-- the `hl1*` wrappers and the certificates below.
+#print axioms Proofs.LipschitzCertDemo.hWSF
+#print axioms Proofs.LipschitzCertDemo.hWTF
+#print axioms Proofs.LipschitzCertDemo.hl1SFe8_0_0
+#print axioms Proofs.LipschitzCertDemo.hrelSFe8_0
+#print axioms Proofs.LipschitzCertDemo.hcertSFe8_0
+#print axioms Proofs.LipschitzCertDemo.certCRSFe8_0
+#print axioms Proofs.LipschitzCertDemo.certCRSFe1_0
+#print axioms Proofs.LipschitzCertDemo.certCRSFe8_7
+#print axioms Proofs.LipschitzCertDemo.certCRTFe8_3
+#print axioms Proofs.LipschitzCertDemo.certCRTFe4_0
+#print axioms Proofs.LipschitzCertDemo.crownCappedCertse1_certified
+#print axioms Proofs.LipschitzCertDemo.crownCappedCertse8_certified
+#print axioms Proofs.LipschitzCertDemo.crownUnconCertse1_certified
+#print axioms Proofs.LipschitzCertDemo.scorecard_crown
+#print axioms Proofs.LipschitzCertDemo.scorecard_crown_uncon
 #print axioms Proofs.LipschitzCertDemo.scorecard_ibp
 #print axioms Proofs.LipschitzCertDemo.scorecard_ibp_uncon
 

@@ -159,6 +159,7 @@ import LeanMlir.Proofs.Certificates.LipschitzCertFloat
 import LeanMlir.Proofs.Foundation.ListDot
 import LeanMlir.Proofs.Foundation.IntervalBound
 import LeanMlir.Proofs.Foundation.IntervalBoundConv
+import LeanMlir.Proofs.Foundation.CrownBound
 import LeanMlir.Proofs.Certificates.SmoothingMC
 import LeanMlir.Proofs.Certificates.SmoothingCP
 import LeanMlir.Proofs.Certificates.SmoothingCPScorecard
@@ -3393,7 +3394,36 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.denseLo_uniform
 #print axioms Proofs.LipschitzCertDemo.denseLo2_eval
 #print axioms Proofs.LipschitzCertDemo.denseHi2_eval
+-- The dense tier's certificate is stated on a BRACKET, not on interval
+-- arithmetic: `certified_of_boxSound` consumes any `BoxSoundE f Flo Fhi` and
+-- `ibp2_certified_at_eps` is its corollary at the interval bracket
+-- `mlp2_boxSound`. A tighter bracket plugs in here (planning/crown_ibp.md).
+#print axioms Proofs.LipschitzCertDemo.BoxSoundE.comp
+#print axioms Proofs.LipschitzCertDemo.denseE_boxSound
+#print axioms Proofs.LipschitzCertDemo.reluE_boxSound
+#print axioms Proofs.LipschitzCertDemo.certified_of_boxSound
+#print axioms Proofs.LipschitzCertDemo.mlp2_boxSound
 #print axioms Proofs.LipschitzCertDemo.ibp2_certified_at_eps
+
+-- CROWN (Foundation/CrownBound.lean): the tighter bracket on the phase-0 seam.
+-- IBP concretizes after every layer and loses the correlations between neurons;
+-- CROWN relaxes each unstable ReLU by a linear envelope, back-substitutes to ONE
+-- composite row `A = Σₜ aₜ·W1ₜ`, and takes `ε‖A‖₁` once. Certified on the MARGIN
+-- (certified_of_marginPos), since separating two independently-bounded logits
+-- throws away the correlation between them. The upper envelope is stated as
+-- `u ≤ s*(u-l)` rather than `s = u/(u-l)` so the slope can be rounded to a /2^k
+-- grid -- the lever that keeps the emitted rationals at weight scale.
+#print axioms Proofs.LipschitzCertDemo.certified_of_marginPos
+#print axioms Proofs.LipschitzCertDemo.relu_lower_envelope
+#print axioms Proofs.LipschitzCertDemo.relu_upper_envelope
+#print axioms Proofs.LipschitzCertDemo.reluLB_dead
+#print axioms Proofs.LipschitzCertDemo.reluLB_active
+#print axioms Proofs.LipschitzCertDemo.reluLB_unstable_pos
+#print axioms Proofs.LipschitzCertDemo.reluLB_unstable_neg
+#print axioms Proofs.LipschitzCertDemo.crownRow_dot
+#print axioms Proofs.LipschitzCertDemo.linf_lower_bound
+#print axioms Proofs.LipschitzCertDemo.crown_margin_ge
+#print axioms Proofs.LipschitzCertDemo.crown2_certified_at_eps
 
 -- IBP PAST THE TWO-LAYER DENSE WALL (Foundation/IntervalBoundConv.lean).
 -- `ibp2_certified_at_eps` above is hard-wired to `dense ∘ relu ∘ dense`, which is
