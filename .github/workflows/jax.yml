@@ -1,0 +1,85 @@
+# The jax/ subproject (Lean -> JAX Python) has become load-bearing for the
+# book, but had no CI of its own: the only workflow that looked at it was
+# proofs.yml's zero-axiom grep, and the LoC tables explicitly excluded it.
+#
+# This is the CHEAP tier — no Lean build, no Mathlib, no GPU, under a minute.
+# It answers "is the jax side green(ish)" without paying for a second Mathlib
+# cache. Building jax/ for real needs the toolchain question settled first
+# (see the drift check below), and would belong in a separate job.
+name: JAX subproject
+
+on:
+  push:
+    paths:
+      - 'jax/**'
+      - '.github/workflows/jax.yml'
+  pull_request:
+    paths:
+      - 'jax/**'
+      - '.github/workflows/jax.yml'
+  workflow_dispatch:
+
+jobs:
+  jax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python syntax gate
+        # Every committed .py under jax/ must at least parse. Catches the
+        # rot that accumulates in hand-written probe/ trainers nobody has
+        # run in months — cheap, and strictly better than the nothing we
+        # had. It does NOT import, so a missing jax/torch dep is not a
+        # failure here; that is deliberate, this tier installs nothing.
+        run: |
+          set -e
+          fail=0
+          for f in $(git ls-files 'jax/**/*.py' 'jax/*.py'); do
+            python3 -m py_compile "$f" || { echo "::error file=$f::syntax error"; fail=$((fail+1)); }
+          done
+          echo "checked $(git ls-files 'jax/**/*.py' 'jax/*.py' | wc -l) files, $fail failures"
+          [ "$fail" -eq 0 ]
+
+      - name: Toolchain drift vs parent
+        # jax/ `require`s the parent project from "..", so a version split
+        # means jax/ compiles the parent's source under a different Lean AND
+        # against its own Mathlib pin. This is a warning, not a failure —
+        # the split is the current state of the world (4.30 vs 4.32 as of
+        # 2026-07-26), and this step exists so it stops being invisible.
+        run: |
+          JAX_TC=$(cat jax/lean-toolchain)
+          ROOT_TC=$(cat lean-toolchain)
+          echo "| | toolchain |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| jax/ | \`${JAX_TC}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| root | \`${ROOT_TC}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ "$JAX_TC" = "$ROOT_TC" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ toolchains match — jax/ can share the root Mathlib cache" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **toolchain split** — jax/ pins its own Mathlib, so a real \`lake build\` here needs a second multi-GB cache. Unify before adding a build job." >> $GITHUB_STEP_SUMMARY
+            echo "::warning::jax/ is on ${JAX_TC}, root is on ${ROOT_TC}"
+          fi
+
+      - name: Stats
+        run: |
+          lf() { git ls-files "$@" | wc -l; }
+          ll() { git ls-files "$@" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}'; }
+          {
+            echo ""
+            echo "## JAX subproject"
+            echo ""
+            echo "| Area | Files | Lines |"
+            echo "|------|-------|-------|"
+            echo "| Emitter (\`Jax/\`) | $(lf 'jax/Jax/*.lean' 'jax/Jax.lean') | $(ll 'jax/Jax/*.lean' 'jax/Jax.lean') |"
+            echo "| Net definitions (\`Main*.lean\`) | $(lf 'jax/Main*.lean') | $(ll 'jax/Main*.lean') |"
+            echo "| VJP oracle (Lean) | $(lf 'jax/tests/vjp_oracle/**/*.lean' 'jax/tests/vjp_oracle/*.lean') | $(ll 'jax/tests/vjp_oracle/**/*.lean' 'jax/tests/vjp_oracle/*.lean') |"
+            echo "| Probe trainers (Python) | $(lf 'jax/probe/*.py') | $(ll 'jax/probe/*.py') |"
+            echo "| Scripts (Python) | $(lf 'jax/scripts/*.py') | $(ll 'jax/scripts/*.py') |"
+            echo "| Demos (Python) | $(lf 'jax/demos/*.py') | $(ll 'jax/demos/*.py') |"
+            echo "| **Total Lean** | **$(lf 'jax/**/*.lean' 'jax/*.lean')** | **$(ll 'jax/**/*.lean' 'jax/*.lean')** |"
+            echo "| **Total Python** | **$(lf 'jax/**/*.py' 'jax/*.py')** | **$(ll 'jax/**/*.py' 'jax/*.py')** |"
+            echo ""
+            echo "\`lean_exe\` targets: $(grep -c '^lean_exe' jax/lakefile.lean)"
+          } >> $GITHUB_STEP_SUMMARY
