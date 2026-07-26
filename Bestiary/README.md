@@ -24,13 +24,17 @@ Part 1 at scale.
 |------|--------------|----------|-------|
 | `LeNet.lean`     | LeNet                     | LeNet-5 / LeNet-300-100 | The 1998 original; 60K params, still the template |
 | `AlexNet.lean`   | AlexNet                   | canonical / tiny | 2012 ImageNet winner; restarted modern deep learning |
+| `VGG.lean`       | VGG                       | VGG-11 / 13 / 16 / 19 / tiny | 3×3 convs stacked deep, then three FC layers; the "small kernel, deep stack" recipe that stuck |
+| `Highway.lean`   | Highway networks          | Highway-50 / 100 / tiny, each as main path H(x) + transform gate T(x) | LSTM-style gating carried to depth; the residual connection's immediate precursor |
+| `ResNet.lean`    | ResNet                    | ResNet-18 / 50 / 101 / 152 / tiny | Identity skip connections made 100+ layers trainable; ResNet-34 has its own verified track in Part 1 |
+| `WRN.lean`       | Wide ResNet               | WRN-28-10 / 40-2 / 22-8 / tiny | Widen the residual block instead of deepening it — same accuracy, far fewer layers |
+| `DenseNet.lean`  | DenseNet                  | DenseNet-121 / 169 / 201 / tiny | Concatenate every earlier feature map; maximal reuse at minimal parameter cost |
 | `SqueezeNet.lean`| SqueezeNet                | 1.0 / 1.1 / tiny | Fire modules: squeeze-then-parallel-expand, AlexNet @ 1.25M params |
 | `Inception.lean` | Inception family          | GoogLeNet (v1) / v3 / v4 | Multi-scale parallel convs; 1×1 dimension-reducer invented here |
 | `Xception.lean`  | Xception                  | canonical / tiny | Extreme Inception — every conv is depthwise-separable |
 | `ShuffleNet.lean`| ShuffleNet v1             | 0.5× / 1× / 2× / tiny | Mobile CNN: grouped 1×1 convs + channel shuffle |
 | `ShuffleNetV2.lean` | ShuffleNet v2          | 0.5× / 1× / 1.5× / 2× / tiny | FLOPs-vs-MAC practical guidelines; channel split, no groups |
 | `MobileViT.lean` | MobileViT                 | S / XS / XXS / tiny | Hybrid CNN + transformer-across-patches for mobile |
-| `ConvNeXt.lean`  | ConvNeXt                  | T / S / B / L / tiny | Modernized CNN; the "can pure convs still compete" answer |
 | `SwinT.lean`     | Swin Transformer          | Swin-T / Swin-S / Swin-B / tiny | Hierarchical ViT, windowed + shifted attention |
 
 ## Object detection
@@ -148,7 +152,7 @@ might obscure how simple AlphaZero really is.
 
 `tests/test_bestiary_params.py` runs every `bestiary-*` binary and
 compares its reported `NetSpec.totalParams` against the golden table
-in `tests/bestiary_params.yml` — 37 binaries, 167 variants. Intended
+in `tests/bestiary_params.yml` — 41 binaries, 189 variants. Intended
 as a regression guard: if anyone tweaks a layer def and a param count
 shifts (even by one), the test flags it with `CHANGED old → new` so
 you can decide whether the change was intentional.
@@ -156,7 +160,7 @@ you can decide whether the change was intentional.
 ```bash
 # Run the suite
 tests/test_bestiary_params.py
-# → PASS  37 binaries, 167 variants, all counts match
+# → PASS  41 binaries, 189 variants, all counts match
 
 # Regenerate golden after a deliberate architectural change
 tests/test_bestiary_params.py --update-golden

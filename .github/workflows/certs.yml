@@ -145,6 +145,27 @@ jobs:
             echo "| vit (ch10)         | $(faithful ViTPoC.rowDenseWeightSgd_den) | $(faithful ViTPoC.veclnGammaSgd_den) | $(faithful ViTTiePoC.vit_net_tied_certified) | \`vit_net_tied_certified\` (ViT-Tiny depth-12 multi-head, 200 params — ZERO param gaps) |"
           } >> $GITHUB_STEP_SUMMARY
 
+      - name: Bestiary param-count drift guard
+        # tests/test_bestiary_params.py pins NetSpec.totalParams for every
+        # bestiary variant against tests/bestiary_params.yml. It enumerates
+        # BUILT binaries in .lake/build/bin, so it only guards what CI builds
+        # — hence the explicit `lake build` of every bestiary-* exe first.
+        # Lives here rather than proofs.yml because the counts move when the
+        # shared layer kit (LeanMlir/Spec.lean) changes, which no proof-path
+        # filter sees; the nightly cron is what catches that. Ran nowhere for
+        # the three months to 2026-07-26, in which time 41 counts drifted.
+        run: |
+          set -e
+          BESTIARY=$(grep -oP '^lean_exe\s+«?\K[^»\s]+' lakefile.lean | sed 's/»$//' | grep '^bestiary-' | tr '\n' ' ')
+          echo "building ${BESTIARY}"
+          lake build $BESTIARY
+          if python3 tests/test_bestiary_params.py; then
+            echo "✅ **Bestiary param counts match the golden table**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Bestiary param-count drift** — see log. Intentional? regenerate with \`tests/test_bestiary_params.py --update-golden\` and review the diff." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
       - name: Corpus sorry count
         run: |
           echo "## Certificate corpus" >> $GITHUB_STEP_SUMMARY

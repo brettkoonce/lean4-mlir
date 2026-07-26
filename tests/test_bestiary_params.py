@@ -9,7 +9,7 @@ out of the output, and compares against the golden table in
   * missing variant (a previously-pinned variant has disappeared)
   * new variant   (a variant appeared that isn't in the golden table)
 
-Why this shape (vs `.totalParams` in Lean): 168 variants across 37
+Why this shape (vs `.totalParams` in Lean): 189 variants across 41
 bestiary files; a YAML golden table next to a 50-line harness is a lot
 easier to maintain and review than a comparable Lean test file.
 
