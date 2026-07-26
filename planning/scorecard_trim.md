@@ -225,14 +225,38 @@ Partly — and the LipSDP tier is now a measured **no**, for a reason worth
 stating precisely.
 
 Measured on mars at `LEAN_NUM_THREADS=1`, one module at a time (`/usr/bin/time -v`,
-olean deleted first so the number is the fresh elaboration):
+olean deleted first so the number is the fresh elaboration). **Every module in
+`CertsHeavy` now fits**, max 11.42 GB against the ~12 GB working threshold:
 
-| module | before | after the cap |
-|---|---|---|
-| `LipschitzCertScorecardIBP` | 20.2 GB | **9.19 GB** (1:52) |
-| `IbpConvScorecard` | ~38 GB | **14.2 GB** |
-| `LipschitzCertScorecardSDPFull` | 17.08 GB @ 4 threads | **16.0 GB** (3:16) |
-| `LipschitzCertScorecardSDPFullUncon` | — | **16.6 GB** (3:25) |
+| module | before | now | wall |
+|---|---|---|---|
+| `LipschitzCertScorecardFullImgsA` | 39.5 GB | **11.42 GB** | 67 s |
+| `LipschitzCertScorecardFullNets` | — | 10.14 GB | 257 s |
+| `LipschitzCertScorecardIBP` | 20.2 GB | 9.19 GB | 112 s |
+| `IbpConvScorecardImgsB` | — | 8.63 GB | 326 s |
+| `IbpConvScorecardImgsA` | — | 8.43 GB | 314 s |
+| `LipschitzCertScorecardIBPUncon` | — | 8.28 GB | 78 s |
+| `LipschitzCertScorecardFullImgsB` | — | 4.39 GB | 20 s |
+| `LipschitzCertScorecardFull` | — | 3.47 GB | 5 s |
+| `IbpConvScorecardNet` | — | 3.10 GB | 72 s |
+| `IbpConvScorecard` (aggregate) | — | 2.65 GB | 4 s |
+| *(out of the lib roots)* `SDPFull` | 17.08 GB @ 4 thr | **16.0 GB** | 196 s |
+| *(out of the lib roots)* `SDPFullUncon` | — | **16.6 GB** | 205 s |
+
+~21 min total, sequential, against a 350-min budget.
+
+**The conv tier needed a split, not a cap.** Capping it (`6bb0313`, 7,322 →
+1,846 lines) still left one module at **14.68 GB** — over what a 16 GB runner
+carries once the OS is on it. Peak tracks the images *in a module*, because Lean
+does not reclaim between declarations in a process, so the fix is more modules:
+`IbpConvScorecard` is now `Net` + `ImgsA` + `ImgsB` + aggregate, and the worst
+chunk is 8.63 GB. Same reasoning as `SmoothingDecChunk1..6`. Cost: ~716 s vs
+489 s wall, since each chunk re-imports the net context — a good trade for
+fitting.
+
+`certs-heavy.yml`'s sequential loop now lists **every** `CertsHeavy` module; it
+was silently missing `IbpConvScorecard`, which meant the final
+`lake build CertsHeavy` elaborated it unserialized.
 
 **Trimming does not lower the LipSDP tier's peak, and cannot.** At one thread
 only one goal is in flight, so 16 GB *is the cost of a single `hS*` goal* — one
@@ -244,11 +268,13 @@ it. So the cap is not a substitute for the fix in
 diagonally-dominant witnesses) — that remains the only route to a green
 `certs-heavy` for these two modules, and it attacks exactly the right thing.
 
-The IBP tier is a different story: 9.19 GB fits a 16 GB runner with room. If the
-conv tier's 14.2 GB holds up under a fresh per-module measurement, everything in
-`CertsHeavy` *except* the two LipSDP modules can come off `workflow_dispatch:`
-today — which is most of the corpus, and they are already the two modules that
-are out of the lib roots. That is the next thing to try.
+So the answer splits cleanly. The two LipSDP full-input modules cannot go under
+CI without the `certs_heavy_psd_memory.md` fix — but they are already outside the
+lib roots, so they were never what blocked the workflow. **Everything that is
+actually in `CertsHeavy` now fits a 16 GB runner**, and the remaining step is a
+one-line trigger change: drop `on: workflow_dispatch:` back to the push/weekly
+triggers the file was written for. That would make the generated corpus
+CI-verified for the first time.
 
 Whatever stays out, the repo should keep saying so plainly — a file carried as
 if CI checked it, when only a local run ever did, is the failure mode this whole

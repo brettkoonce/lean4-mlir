@@ -60,23 +60,38 @@ jobs:
           lake exe cache get || true
           free -h
           # ONE heavy module at a time: Lake 5.0 has no --jobs flag, and its
-          # default scheduler elaborates several 30k-line modules concurrently
-          # — the runner OOMs even with LEAN_NUM_THREADS=2 (one SDP module
-          # peaks at 17.08 GB at 4 threads). Sequential per-module invocations
-          # serialize the heavy elaborations (each call's heavy deps are
-          # already built by the previous ones); the final CertsHeavy call is
-          # a no-op verification. If this ever threatens the 300-min budget,
-          # split across per-net jobs instead.
-          # NB the per-pair LipSDP modules are currently DISABLED (removed
-          # from CertsHeavy): their PSD witnesses OOM every free-tier runner
-          # config — see planning/certs_heavy_psd_memory.md for the re-enable
-          # plan. They stay kernel-verified locally.
+          # default scheduler elaborates several big modules concurrently, so
+          # the runner sees the SUM of their peaks. Sequential per-module
+          # invocations serialize them (each call's heavy deps are already
+          # built by the previous ones); the final CertsHeavy call is a no-op
+          # verification. This loop must list EVERY CertsHeavy module, or the
+          # unlisted ones get elaborated together by that final call.
+          #
+          # Measured per-module peaks after the 2026-07 scorecard trim
+          # (LEAN_NUM_THREADS=1, olean deleted, /usr/bin/time -v on mars):
+          #   FullImgsA 11.42 GB   FullNets 10.14 GB   IBP 9.19 GB
+          #   ConvImgsB  8.63 GB   ConvImgsA 8.43 GB   IBPUncon 8.28 GB
+          #   FullImgsB  4.39 GB   Full 3.47 GB  ConvNet 3.10 GB  Conv 2.65 GB
+          # — max 11.42 GB, ~21 min total, versus ImgsA 39.5 / IBP 20.2 / conv
+          # ~38 GB before the trim. IbpConvScorecard was split into
+          # Net/ImgsA/ImgsB/aggregate precisely to get it from 14.68 GB (over
+          # what a 16 GB runner carries) to 8.6 — peak tracks images per
+          # MODULE, since Lean does not reclaim between declarations.
+          #
+          # NB the per-pair LipSDP modules are still DISABLED (removed from
+          # CertsHeavy): their PSD witnesses are ~16 GB for a SINGLE `hS*`
+          # goal, which no per-image cap can reduce — see
+          # planning/certs_heavy_psd_memory.md. They stay kernel-verified locally.
           for m in LipschitzCertScorecardFullNets \
                    LipschitzCertScorecardFullImgsA \
                    LipschitzCertScorecardFullImgsB \
                    LipschitzCertScorecardFull \
                    LipschitzCertScorecardIBP \
-                   LipschitzCertScorecardIBPUncon; do
+                   LipschitzCertScorecardIBPUncon \
+                   IbpConvScorecardNet \
+                   IbpConvScorecardImgsA \
+                   IbpConvScorecardImgsB \
+                   IbpConvScorecard; do
             echo "=== building $m ==="
             free -m | head -2
             lake build LeanMlir.Proofs.Certificates.$m
