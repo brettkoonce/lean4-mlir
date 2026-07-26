@@ -547,11 +547,11 @@ IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 ./.lake/build/bin/yolov1-visdrone-fpn da
 B=.lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone_
 cp ${B}_params_e12.bin ${B}_params.bin; cp ${B}_bn_stats_e12.bin ${B}_bn_stats.bin
 IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=1 ./.lake/build/bin/yolov1-visdrone-fpn infer \
-  data/visdrone_fpn figures/yolo_fpn_pb_e12
-<jax-venv>/bin/python3 scripts/yolo_map_visdrone.py figures/yolo_fpn_pb_e12/logits.bin \
+  data/visdrone_fpn runs/yolo_fpn_pb_e12
+<jax-venv>/bin/python3 scripts/yolo_map_visdrone.py runs/yolo_fpn_pb_e12/logits.bin \
   data/visdrone448/val.bin --grid 14 --fpn data/visdrone
 <jax-venv>/bin/python3 scripts/fpn_neighbor_separation.py \
-  figures/yolo_fpn_pb_e12/logits.bin data/visdrone_fpn/val.bin
+  runs/yolo_fpn_pb_e12/logits.bin data/visdrone_fpn/val.bin
 ```
 `<jax-venv>` = `/home/skoonce/lean/claude_max/lean4-jax/.venv`. ~22 min/epoch at tower=0
 (34 at tower=4) on gfx1100, + ~7 min one-time compile; checkpoints every 2 epochs. GT for

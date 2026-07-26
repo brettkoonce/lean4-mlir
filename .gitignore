@@ -43,3 +43,7 @@ jax/.venv
 # brats-predict writes PPM here by default; only the converted PNG is tracked
 # (demos/figures has always been PNG-only — see demos/README.md).
 demos/figures/*.ppm
+
+# Demo inference dumps moved from figures/ to runs/ (2026-07-26). The logit
+# dumps are large and regenerable; curated .ppm/.png/.log/.tsv stay tracked.
+runs/**/*.bin

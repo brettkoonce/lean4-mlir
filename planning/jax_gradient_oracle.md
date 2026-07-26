@@ -306,7 +306,7 @@ An unverified oracle is just another opinion. Reproduce the same three-level che
 validated the torch twin — every reference number below is already on disk:
 
 1. **Loss.** Run the JAX loss on Lean's own logits dump
-   `figures/yolo_of8long/logits.bin` (8 × 185220 f32) with targets from
+   `runs/yolo_of8long/logits.bin` (8 × 185220 f32) with targets from
    `data/visdrone_fpn_of8/train.bin`. **Must produce total 35.422, box 6.155,
    obj 27.550 (pos 14.761 / neg 12.789), cls 1.717** — i.e. match
    `scripts/fpn_loss_breakdown.py` exactly. *(That mirror applies no class weights; run the
@@ -314,7 +314,7 @@ validated the torch twin — every reference number below is already on disk:
 2. **Logit gradient.** `jax.grad` w.r.t. the logits must match `α·w_foc·(p−t)/B` to ~1e-16.
    This is the check that catches a missing `stop_gradient`.
 3. **Forward.** Load a Lean checkpoint (§7) and compare emitted logits against
-   `figures/yolo_of8long/logits.bin`. Expect agreement to ~2% in train mode (BN batch stats
+   `runs/yolo_of8long/logits.bin`. Expect agreement to ~2% in train mode (BN batch stats
    vs the dump's running stats), or tight if you load `bn_stats` and run eval mode.
 
 Cross-check against `demos/visdrone/bespoke/` at every step — it is verified and fast.
@@ -445,7 +445,7 @@ this single bug, which a cheaper probe may well close first.
 | `demos/visdrone/bespoke/diff_lean.py` | forward-diff harness |
 | `scripts/fpn_loss_breakdown.py` | golden numpy loss mirror |
 | `scripts/anchor_loss_probe_check.py` | reference gradient incl. the detached focal weight |
-| `figures/yolo_of8long/logits.bin` | Lean logits, 8 overfit images |
+| `runs/yolo_of8long/logits.bin` | Lean logits, 8 overfit images |
 | `data/visdrone_fpn_of8/train.bin` | the 8 records (= first 8 of the main train.bin, verified) |
 | `scripts/yolo_map_visdrone.py --fpn` | the one scorer both arms use |
 

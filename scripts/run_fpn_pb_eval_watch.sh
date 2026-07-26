@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Watch for T2-bias (head bias + RetinaNet prior init) checkpoints and eval each
 # on GPU 1 while training continues on GPU 0. planning/yolo_fpn.md train->eval
-# recipe. The A/B reference is the T1b arm (figures/yolo_fpn_wcls_e*), which is
+# recipe. The A/B reference is the T1b arm (runs/yolo_fpn_wcls_e*), which is
 # the correct control: a zero-init bias reproduces the biasless head exactly, so
 # the ONLY difference here is that objectness starts at logit(0.01).
 #
@@ -22,7 +22,7 @@ for EP in 2 4 6 8 10 12; do
     sleep 60
   done
   sleep 20                      # let the writer finish flushing
-  OUT=figures/yolo_fpn_pb_e${EP}
+  OUT=runs/yolo_fpn_pb_e${EP}
   echo "=================== e${EP} $(date -Is) ==================="
   cp "${PFX}_params_e${EP}.bin"   "${PFX}_params.bin"
   cp "${PFX}_bn_stats_e${EP}.bin" "${PFX}_bn_stats.bin"

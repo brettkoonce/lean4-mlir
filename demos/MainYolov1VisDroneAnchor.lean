@@ -11,7 +11,7 @@ import LeanMlir
       lake build yolov1-visdrone-anchor
       IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=1 \
         .lake/build/bin/yolov1-visdrone-anchor data/visdrone448_a6
-      .lake/build/bin/yolov1-visdrone-anchor infer data/visdrone448_a6 figures/yolo_anchor
+      .lake/build/bin/yolov1-visdrone-anchor infer data/visdrone448_a6 runs/yolo_anchor
 -/
 
 -- k-means priors, A=6 (data/visdrone/anchors_a6.txt).
@@ -100,7 +100,7 @@ def main (args : List String) : IO Unit := do
   match args with
   | "infer" :: rest =>
     let dataDir := rest[0]?.getD "data/visdrone448_a6"
-    let outDir  := rest[1]?.getD "figures/yolo_anchor"
+    let outDir  := rest[1]?.getD "runs/yolo_anchor"
     IO.println s!"YOLO anchor VisDrone inference dump — {dataDir} → {outDir}"
     inferDump dataDir outDir
   | _ =>

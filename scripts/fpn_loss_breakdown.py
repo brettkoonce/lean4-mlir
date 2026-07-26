@@ -5,7 +5,7 @@ Replicates `emitMultiScaleYoloLoss` -> `emitAnchorYoloLoss` (MlirCodegen.lean)
 exactly, in numpy, so we can see WHICH term the flat training loss is made of
 before spending GPU-hours on a loss-rebalancing experiment.
 
-  python3 scripts/fpn_loss_breakdown.py figures/yolo_fpn_e12/logits.bin \
+  python3 scripts/fpn_loss_breakdown.py runs/yolo_fpn_e12/logits.bin \
       data/visdrone_fpn/val.bin data/visdrone
 
 Prints, per scale and per anchor: num_pos, box / obj / cls loss contributions

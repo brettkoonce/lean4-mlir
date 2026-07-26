@@ -9,7 +9,7 @@ import LeanMlir
       lake build yolov1-pets-infer
       .lake/build/bin/yolov1-pets-infer [n] [data_dir] [out_dir]
 
-    n defaults to 16, data_dir to data/pets_mosaic_bal, out_dir to figures/yolo_pets.
+    n defaults to 16, data_dir to data/pets_mosaic_bal, out_dir to runs/yolo_pets.
 
     Outputs (in out_dir):
       logits.bin       : [N, 1470] float32 — raw YOLOv1 outputs
@@ -42,7 +42,7 @@ def main (args : List String) : IO Unit := do
   -- feed multiples of 16 and pad the final partial batch (see loop below).
   let n        : Nat    := (args[0]?.bind String.toNat?).getD 16
   let dataDir  : String := args[1]?.getD "data/pets_mosaic_bal"
-  let outDir   : String := args[2]?.getD "figures/yolo_pets"
+  let outDir   : String := args[2]?.getD "runs/yolo_pets"
   IO.FS.createDirAll outDir
   let spec := r34Yolov1
   IO.println s!"YOLOv1 Pets inference dump"

@@ -8,8 +8,8 @@ chosen metric so the inline \\addplot in content.tex can be refreshed from the
 committed logs/ with one command (parse → paste).
 
 Usage:
-  python3 figures/log_to_pgfplots.py logs/ablation_cifar-bn-sgd.log loss
-  python3 figures/log_to_pgfplots.py logs/ablation_r34-full.log val
+  python3 scripts/log_to_pgfplots.py logs/ablation_cifar-bn-sgd.log loss
+  python3 scripts/log_to_pgfplots.py logs/ablation_r34-full.log val
 
 Metrics:
   loss  -> per-epoch training loss   (from "Epoch N/M: loss=X")

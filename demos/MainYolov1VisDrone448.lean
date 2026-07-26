@@ -17,7 +17,7 @@ import LeanMlir
       IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
         .lake/build/bin/yolov1-visdrone448 data/visdrone448
       # infer: dump [N,5880] logits.bin for scripts/yolo_map_visdrone.py
-      .lake/build/bin/yolov1-visdrone448 infer data/visdrone448 figures/yolo_visdrone448
+      .lake/build/bin/yolov1-visdrone448 infer data/visdrone448 runs/yolo_visdrone448
 -/
 
 def r34Yolov1_448 : NetSpec where
@@ -112,7 +112,7 @@ def main (args : List String) : IO Unit := do
   match args with
   | "infer" :: rest =>
     let dataDir := rest[0]?.getD "data/visdrone448"
-    let outDir  := rest[1]?.getD "figures/yolo_visdrone448"
+    let outDir  := rest[1]?.getD "runs/yolo_visdrone448"
     IO.println s!"YOLOv1 VisDrone-448 inference dump — data {dataDir} → {outDir}"
     inferDump dataDir outDir
   | _ =>

@@ -109,7 +109,7 @@ calls 3×. Validate each on the eval's recall/mAP — one lever at a time.
 #### T1b RESULT (12 ep, A/B vs the unweighted baseline, everything else identical)
 
 `runs/fpn_wcls_t1b_gpu0.log`, checkpoints `…_448_wcls__visdrone__*`, evals
-`figures/yolo_fpn_wcls_e{2..12}`. **T1b fixed the mechanism it targeted and did NOT move
+`runs/yolo_fpn_wcls_e{2..12}`. **T1b fixed the mechanism it targeted and did NOT move
 the end metric.**
 
 | | baseline e12 | T1b e12 |
@@ -209,7 +209,7 @@ not just recall.
 
 Run COMPLETE: `runs/fpn_pb_t2_gpu0.log` (GPU 0, 22.3 min/epoch), eval watcher
 `run_fpn_pb_eval_watch.sh` → `runs/fpn_pb_eval_watch.log`, per-epoch dumps
-`figures/yolo_fpn_pb_e{2..12}`.
+`runs/yolo_fpn_pb_e{2..12}`.
 
 #### ⚠️ T2-bias RESULT (12 ep, complete) — THE PRIOR INIT IS WASHED OUT BY TRAINING
 
@@ -282,7 +282,7 @@ the codegen.
 #### ⚠️ [T2a] RetinaNet head tower — RUN + **REFUTED**. ALL OF TIER 2 IS NOW MEASURED OUT.
 
 `runs/fpn_t2a_tower4_gpu0.log`, `FPN_TOWER=4`, 28,629,703 params (+7.08M), 34 min/epoch
-(vs 22), evals `figures/yolo_fpn_t2a_e{2..12}`. Control = the T2-bias arm (tower=0, same
+(vs 22), evals `runs/yolo_fpn_t2a_e{2..12}`. Control = the T2-bias arm (tower=0, same
 bias + prior) — a clean one-lever A/B.
 
 **The equilibrium is invariant to head capacity, exactly as it was to initialization.**
@@ -404,8 +404,8 @@ IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 ./.lake/build/bin/yolov1-visdrone-fpn da
 # eval a checkpoint on the OTHER gpu while training runs:
 B=.lake/build/resnet_34___fpn_detector_448__visdrone_
 cp ${B}_params_e12.bin ${B}_params.bin; cp ${B}_bn_stats_e12.bin ${B}_bn_stats.bin
-IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=1 ./.lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn figures/yolo_fpn_e12
-<jax-venv>/bin/python3 scripts/yolo_map_visdrone.py figures/yolo_fpn_e12/logits.bin \
+IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=1 ./.lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn runs/yolo_fpn_e12
+<jax-venv>/bin/python3 scripts/yolo_map_visdrone.py runs/yolo_fpn_e12/logits.bin \
   data/visdrone448/val.bin --grid 14 --fpn data/visdrone
 ```
 `<jax-venv>` = `/home/skoonce/lean/claude_max/lean4-jax/.venv` (has iree.runtime). ~22

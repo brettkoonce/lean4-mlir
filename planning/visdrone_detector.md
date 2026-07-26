@@ -141,9 +141,9 @@ step or the loss reduce fails to distribute.
 
 ## 5. Current results & the twin gap
 
-12-epoch arm (`figures/yolo_fpn_shuffix`), full GT unless noted:
+12-epoch arm (`runs/yolo_fpn_shuffix`), full GT unless noted:
 
-| metric | Lean FPN | twin (`figures/twin_r34_12ep`) | Lean/twin |
+| metric | Lean FPN | twin (`runs/twin_r34_12ep`) | Lean/twin |
 |---|---|---|---|
 | mAP@0.5 (full GT) | **0.1386** | 0.1532 | 90.5% |
 | recall (full GT) | 0.6756 | 0.6772 | ~tied |
@@ -284,9 +284,9 @@ prefix changed. The honest A/B is this vs the same-schedule `FPN_AUG=0` control.
 **Score (full-GT sidecar used automatically; `--gt-capped` for A/B vs pre-fix):**
 ```
 FPN_TAG=<tag> FPN_TOWER=0 IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
-  .lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn figures/<out>
+  .lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn runs/<out>
 visdrone/.venv/bin/python3 scripts/yolo_map_visdrone.py \
-  figures/<out>/logits.bin data/visdrone448/val.bin --fpn data/visdrone --grid 14
+  runs/<out>/logits.bin data/visdrone448/val.bin --fpn data/visdrone --grid 14
 ```
 
 **Regenerate the full-GT sidecar** (~1s, val only, val.bin byte-identical):
@@ -363,9 +363,9 @@ Parked to pivot to the R34→BraTS retraining demo. When YOLO resumes, in order:
    the script bug is fixed. Confirm whether 30 epochs helped or regressed:
    ```
    FPN_TAG=long30 FPN_TOWER=0 IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=1 \
-     .lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn figures/long30_rescore_e30
+     .lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn runs/long30_rescore_e30
    visdrone/.venv/bin/python3 scripts/yolo_map_visdrone.py \
-     figures/long30_rescore_e30/logits.bin data/visdrone448/val.bin --fpn data/visdrone --grid 14
+     runs/long30_rescore_e30/logits.bin data/visdrone448/val.bin --fpn data/visdrone --grid 14
    ```
    (The infer log must show `params : …__long30_params.bin`; if it says
    `…__visdrone__params.bin`, the tag didn't take — the whole point of this fix.)

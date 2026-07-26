@@ -5,7 +5,7 @@
 what the fix invalidated and what is worth doing next.
 
 **State:** commit `e164958` on `main`, **ahead 1, NOT pushed**. Working tree otherwise carries
-only long-standing untracked `runs/`, `figures/`, `verified_mlir/` noise — leave it alone.
+only long-standing untracked `runs/`, `runs/`, `verified_mlir/` noise — leave it alone.
 
 ---
 
@@ -90,7 +90,7 @@ Now that it trains, these are ordinary engineering rather than bug hunts.
    prefer it (`--gt-capped` reproduces the old behavior; a missing sidecar warns loudly). The
    training `val.bin` is byte-identical (verified by md5), so no logits dump is invalidated.
 
-   **On the fixed FPN run (`figures/yolo_fpn_shuffix`), the correct-protocol score is
+   **On the fixed FPN run (`runs/yolo_fpn_shuffix`), the correct-protocol score is
    mAP@0.5 = 0.1386 / class-agnostic AP 0.3763 / recall 0.6756**, versus the capped
    0.1167 / 0.3162 / 0.7353. mAP *rose* because a detection that matched a GT box the cap had
    dropped was being counted as a false positive; recall *fell* because the denominator grew
@@ -99,7 +99,7 @@ Now that it trains, these are ordinary engineering rather than bug hunts.
 2. **Re-check the gap to the twin — it may already be closed.** On capped GT the doc read an
    84% gap (Lean 0.1167 vs twin 0.1391). The corrected Lean number is **0.1386**, essentially
    on top of the twin's 0.1391 — BUT the twin's 0.1391 was also scored on capped GT, so this
-   is not yet apples-to-apples. **Re-score the twin's logits dump (`figures/twin_r34_12ep`,
+   is not yet apples-to-apples. **Re-score the twin's logits dump (`runs/twin_r34_12ep`,
    if the layout matches the FPN scorer) with the full-GT sidecar before concluding anything.**
    If the twin also rises, the gap stands and the Adam+coupled-wd vs decoupled-AdamW /
    bootstrap-vs-torchvision-init divergences are still the levers; if it doesn't, the gap was
@@ -195,9 +195,9 @@ Reference: fixed arm reaches **3.145** total / **0.526** objectness at e2000.
 **Score** (uses the full-GT sidecar automatically; `--gt-capped` for A/B with pre-fix runs):
 ```
 FPN_TAG=<tag> FPN_TOWER=0 IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
-  .lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn figures/<out>
+  .lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn runs/<out>
 visdrone/.venv/bin/python3 scripts/yolo_map_visdrone.py \
-  figures/<out>/logits.bin data/visdrone448/val.bin --fpn data/visdrone --grid 14
+  runs/<out>/logits.bin data/visdrone448/val.bin --fpn data/visdrone --grid 14
 ```
 
 **Regenerate the uncapped GT sidecar** (`data/visdrone448/val.full_gt.bin`, ~1 s, val only —

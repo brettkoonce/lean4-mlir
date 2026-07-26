@@ -173,7 +173,7 @@ def draw_dets(img_rgb, dets, voc_id=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("dump_dir", help="output dir of yolov1-pets-infer (default figures/yolo_pets)")
+    ap.add_argument("dump_dir", help="output dir of yolov1-pets-infer (default runs/yolo_pets)")
     ap.add_argument("--score-thresh", type=float, default=0.1)
     ap.add_argument("--nms-iou", type=float, default=0.5)
     ap.add_argument("--sigmoid-conf", action="store_true",

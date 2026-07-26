@@ -18,7 +18,7 @@ import LeanMlir
       lake build yolov1-visdrone-fpn
       IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=1 \
         .lake/build/bin/yolov1-visdrone-fpn data/visdrone_fpn
-      .lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn figures/yolo_fpn
+      .lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn runs/yolo_fpn
 -/
 
 -- Per-scale k-means priors (data/visdrone/anchors_fpn_{p3,p4,p5}.txt).
@@ -219,7 +219,7 @@ def main (args : List String) : IO Unit := do
   match args with
   | "infer" :: rest =>
     let dataDir := rest[0]?.getD "data/visdrone_fpn"
-    let outDir  := rest[1]?.getD "figures/yolo_fpn"
+    let outDir  := rest[1]?.getD "runs/yolo_fpn"
     IO.println s!"FPN VisDrone inference dump (tower={tower}) — {dataDir} → {outDir}"
     inferDump spec dataDir outDir
   | _ =>

@@ -259,7 +259,7 @@ those run the actual paper recipe, not "paper minus the two things that matter."
 - [ ] **Sweep chart**: once the three pending results land, build a
       combined chart from this doc's numbers — e.g. params-vs-top1 scatter
       and/or min-per-epoch bar, native pgfplots (see the R34 §6.4 / ViT
-      §10.5 curves for the style; `figures/log_to_pgfplots.py` may help).
+      §10.5 curves for the style; `scripts/log_to_pgfplots.py` may help).
 - [ ] Verify MNv2/ENet/ConvNeXt LR stability past warmup (above caveat);
       record the working peak LR per net.
 - [ ] fp32 ms/step for MNv2/ENet/ConvNeXt if a full bf16-vs-fp32 speedup
