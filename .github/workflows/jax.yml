@@ -2,13 +2,16 @@
 # book, but had no CI of its own: the only workflow that looked at it was
 # proofs.yml's zero-axiom grep, and the LoC tables explicitly excluded it.
 #
-# Two jobs:
-#   lint  — no Lean, no Mathlib, no GPU, under a minute. Syntax + stats.
-#   build — the real `lake build`. Cheap because jax/ imports only
-#           LeanMlir.Types + LeanMlir.Spec from the parent (8 jobs for the
-#           lib, 133 for every exe), and because jax/ now shares the root
-#           toolchain and Mathlib pin, so `lake exe cache get` is a hit
-#           rather than a second multi-GB cache.
+# Three jobs:
+#   lint   — no Lean, no Mathlib, no GPU, under a minute. Syntax + stats.
+#   build  — the real `lake build`. Cheap because jax/ imports only
+#            LeanMlir.Types + LeanMlir.Spec from the parent (8 jobs for the
+#            lib, 133 for every exe), and because jax/ now shares the root
+#            toolchain and Mathlib pin, so `lake exe cache get` is a hit
+#            rather than a second multi-GB cache.
+#   oracle — emit + run the 14 layer-family oracle nets on CPU jax against a
+#            synthetic MNIST. ~33s locally. Emitter-level only; see the job
+#            comment for what it deliberately does not claim.
 name: JAX subproject
 
 on:
@@ -133,4 +136,64 @@ jobs:
             echo "## JAX build"
             echo ""
             echo "✅ emitter + $(echo $EXES | wc -w) exes built on \`$(cat lean-toolchain)\`"
+          } >> $GITHUB_STEP_SUMMARY
+
+  oracle:
+    # The CI-runnable slice of the VJP oracle: emit each of the 14 layer-family
+    # oracle nets as JAX Python, then RUN each against a tiny synthetic MNIST.
+    #
+    # What this does NOT do: validate the hand-derived VJPs. The real oracle
+    # diffs phase 3 (Lean -> MLIR -> IREE, hand-derived gradients) against
+    # phase 2 (Lean -> JAX autodiff); phase 3 needs IREE and a GPU, so it
+    # cannot run here. Phase 2 alone has no Lean-derived gradient in the loop
+    # — it exercises the EMITTER. Green here means the emitted graph builds,
+    # runs and produces a finite loss for every layer family, not that the
+    # VJPs agree. That claim still needs tests/vjp_oracle/run.sh on a GPU box.
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache .lake
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lake/build
+            jax/.lake/build
+          key: lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-
+            lake-jax-
+
+      - name: Install jax (CPU)
+        # CPU wheel only — no cuda/rocm extras. The oracle nets are tiny
+        # (3.5k-31k params, 16 steps on 64 synthetic images).
+        run: python3 -m pip install --quiet "jax[cpu]"
+
+      - name: Build the oracle exes
+        working-directory: jax
+        run: |
+          set -e
+          lake exe cache get || true
+          ORACLES=$(grep -oP '^lean_exe\s+«?\K[^»\s]+' lakefile.lean | sed 's/»$//' | grep '^vjp-oracle-' | tr '\n' ' ')
+          lake build $ORACLES
+
+      - name: VJP oracle smoke (emit + run, 14 layer families)
+        run: |
+          set -o pipefail
+          ./jax/tests/vjp_oracle/ci_smoke.sh 2>&1 | tee /tmp/oracle.log
+          {
+            echo ""
+            echo "## VJP oracle smoke"
+            echo ""
+            echo "Emitter-level only — phase 2 (JAX autodiff), no phase 3/IREE, so this does **not** check the hand-derived VJPs."
+            echo ""
+            echo '```'
+            grep -E '^(RUN|EMIT|FAIL)' /tmp/oracle.log || true
+            echo '```'
           } >> $GITHUB_STEP_SUMMARY
