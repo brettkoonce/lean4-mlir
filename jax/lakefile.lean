@@ -68,6 +68,14 @@ lean_exe «resnet50-imagenet» where
 lean_exe «vit-tiny-imagenet» where
   root := `MainVitImagenet
 
+-- ViT-S/16 (DeiT-S) and ViT-B/16 (DeiT-B) on 1000-class ImageNet. Same spec
+-- shape as ViT-Ti, widths only: 384/6heads/1536 and 768/12heads/3072.
+lean_exe «vit-s-imagenet» where
+  root := `MainVitSImagenet
+
+lean_exe «vit-b-imagenet» where
+  root := `MainVitBImagenet
+
 -- MobileNetV2 on 1000-class ImageNet, bf16 incl. bf16 conv (the
 -- inverted-residual blocks now route through convdt — see Codegen.lean).
 lean_exe «mobilenet-v2-imagenet» where
@@ -87,6 +95,14 @@ lean_exe «efficientnet-b0-imagenet» where
 -- port of ConvNeXt (depthwise-7×7 + channel-LN + LayerScale blocks).
 lean_exe «convnext-tiny-imagenet» where
   root := `MainConvNeXtImagenet
+
+-- ConvNeXt-S / ConvNeXt-B on 1000-class ImageNet. Same block table as -T with
+-- the stage-3 depth at 27 (S and B) and the channel widths at 128× (B).
+lean_exe «convnext-s-imagenet» where
+  root := `MainConvNeXtSImagenet
+
+lean_exe «convnext-b-imagenet» where
+  root := `MainConvNeXtBImagenet
 
 -- VJP oracle — one binary per axiom under test. Trainers live in
 -- tests/vjp_oracle/phase2/ so jax/ isn't crowded with test-only files.
