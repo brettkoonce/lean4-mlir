@@ -165,6 +165,45 @@ def resnet50ImagenetConfigA2True2048 : TrainConfig :=
       wdExcludeNormBias := true }  -- timm no_weight_decay: BN γ/β + biases skip wd
       -- gradAccumSteps stays at the default 1: no accumulation.
 
+/-- **RSB-A2 at effective bs2048 via grad-accum** — A2's counterpart to
+    `rsb-faithful`, and the recipe to actually run A2 on a 4-GPU box. The `default`
+    A2 above is bs512 with a linearly-scaled LR, which is precisely the regime that
+    gave A3 **40.8%** instead of 78.1%: LAMB is a large-batch optimizer and bs512
+    starves it. Giving A3 its design batch through accumulation recovered
+    **76.66%** (see `planning/rsb_a2_resnet50.md`), so A2 should be run the same way.
+
+    Deltas vs `default`: 512 micro × 4 = effective 2048, LR restored to the paper's
+    **5e-3 @ bs2048** (not the 512-scaled 1.25e-3), and the timm no_weight_decay
+    skip-list on. BN is per-micro-batch (Ghost-BN, benign at micro=512). Unlike
+    `a2-true-2048` this needs no 160 GB card — peak is the same as bs512
+    (measured 7.41 GiB on 4× 16 GB @224). -/
+def resnet50ImagenetConfigA2Accum : TrainConfig :=
+  { resnet50ImagenetConfig with
+      learningRate      := 0.005   -- RSB-A2 lr @ bs2048 (native, not 512-scaled)
+      gradAccumSteps    := 4       -- 512 micro × 4 = effective bs2048 (LAMB's design batch)
+      wdExcludeNormBias := true }  -- timm no_weight_decay: BN γ/β + biases skip wd
+
+/-- **RSB-A1** (timm "ResNet Strikes Back" A1) → **80.4%** top-1, the strongest of
+    the three RSB tiers and the most expensive: 600 epochs, twice A2's schedule.
+
+    A1 differs from A2 in exactly three fields per the RSB paper's hyperparameter
+    table — everything else (LAMB, BCE, RandAugment m7-mstd0.5-inc1, CutMix 1.0,
+    repeated-aug 3×, stochastic depth 0.05, 224px) is shared:
+
+      epochs  300 → 600
+      wd      0.02 → 0.01
+      mixup α 0.1 → 0.2
+
+    Built on `a2-accum`, so it inherits the effective-bs2048 fix rather than the
+    starved bs512 default. At 600 epochs this is the single longest run in the
+    repo — budget accordingly, and note the per-epoch cost is identical to A2's,
+    so it is exactly 2× the A2 wall clock. -/
+def resnet50ImagenetConfigA1 : TrainConfig :=
+  { resnet50ImagenetConfigA2Accum with
+      epochs      := 600     -- A1: 600ep (A2 is 300)
+      weightDecay := 0.01    -- A1: wd 0.01 (A2 is 0.02)
+      mixupAlpha  := 0.2 }   -- A1: Mixup α0.2 (A2 is 0.1)
+
 /-- A named training recipe: a `TrainConfig`, its generated-file name, and a
     one-line description. Recipe selection is a positional CLI arg
     (`resnet50-imagenet <recipe> [data_dir]`), listed by `--help` — replacing the
@@ -185,6 +224,12 @@ def resnet50ImagenetRecipes : List Recipe := [
   { name := "a2-true-2048", cfg := resnet50ImagenetConfigA2True2048,
     out := "generated_resnet50_imagenet_a2true2048.py",
     desc := "literal RSB-A2 (300ep, 224px, 79.8% target) at single-forward bs2048 (needs ~160GB)" },
+  { name := "a2-accum",     cfg := resnet50ImagenetConfigA2Accum,
+    out := "generated_resnet50_imagenet_a2accum.py",
+    desc := "RSB-A2 300ep at effective bs2048 via 4×512 accum — the A2 to run on a 4-GPU box" },
+  { name := "a1",           cfg := resnet50ImagenetConfigA1,
+    out := "generated_resnet50_imagenet_a1.py",
+    desc := "RSB-A1 600ep at effective bs2048 (80.4% target); 2× the A2 wall clock" },
   { name := "adam-probe",   cfg := resnet50ImagenetConfigAdamProbe,
     out := "generated_resnet50_imagenet_adamprobe.py",
     desc := "A3 optimizer probe: AdamW + no-weight-decay on norm/bias" }

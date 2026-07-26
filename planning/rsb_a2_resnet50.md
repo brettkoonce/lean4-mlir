@@ -28,7 +28,54 @@ design batch via grad-accum (eff bs2048); the saga is in memory `project_r50_a3_
 | `short` | RSB-A3 100ep | 512 | LAMB starved at bs512 (→40.8%); kept as the naive baseline |
 | `rsb-faithful` | RSB-A3 100ep | eff 2048 (512×4 grad-accum) | **the 76.66% run**; LAMB's design batch on 4×16GB |
 | `true-2048` | RSB-A3 100ep | real 2048 (no accum) | needs ~80GB; removes the Ghost-BN approximation. NOT yet run |
+| `a2-accum` | RSB-A2 300ep | eff 2048 (512×4 grad-accum) | A2's counterpart to `rsb-faithful` — the A2 to run on a 4-GPU box |
+| `a1` | RSB-A1 600ep | eff 2048 (512×4 grad-accum) | 80.4% target; = `a2-accum` + 600ep / wd0.01 / mixup0.2 |
 | `adam-probe` | A3 diagnostic | 512 | AdamW+wd-skip; used to confirm LAMB was the culprit |
+
+### A2 / A1 cost on a 4-GPU box (measured 2026-07-25)
+
+`default` (A2 @ bs512) is the same starved-LAMB regime that gave A3 40.8%, so A2/A1
+should be run at effective bs2048. `a2-accum` and `a1` do that. Measured on
+4× 4060 Ti, `scripts/step_probe.py` (compute only — excludes the tf.data pipeline):
+
+| config | ms/step | peak | min/epoch | wall clock |
+|---|---|---|---|---|
+| A2 @ bs512 (`default`) | 358 | 7.41 GiB | 14.9 | 74.7 hr / 300ep |
+| A2 @ eff 2048 (`a2-accum`) | 1427 | 7.59 GiB | 14.9 | 74.3 hr / 300ep |
+| A1 @ eff 2048 (`a1`) | 1427 | 7.59 GiB | 14.9 | **148.6 hr / 600ep** |
+
+Accumulation is per-epoch free: 4× the step time at 1/4 the steps. Peak is
+unchanged from bs512, so **no big-memory card is needed** — unlike `a2-true-2048`
+(~160 GB). Re-measured under a 12 GB budget (`MEM_FRACTION=0.548`): identical
+7.41/7.59 GiB and 360/1427 ms — no rematerialization pressure, so this fits a
+12 GB card (4070 / 3060) with ~1 GiB spare.
+
+**Input-bound caveat.** This doc's own A2 figure is ~458 ms/step on 4× 4060 Ti vs
+the 358 measured here — a 28% pipeline tax, far above the ~10% seen on ConvNeXt-T.
+RSB-A2 has the heaviest CPU-side pipeline in the repo (geometric RandAugment +
+3× repeated-aug + Mixup/CutMix). Faster GPUs do not shrink that floor, so a
+faster card converts more of the run to input-bound and realizes less than its
+FLOPs ratio.
+
+**4× RTX 4070 estimate** (29.15 TFLOPS / 504 GB/s vs the 4060 Ti's 22.06 / 288 —
+1.32× compute, 1.75× bandwidth; spec-derived, not benchmarked):
+
+| tier | compute-bound best case | with the input floor | 
+|---|---|---|
+| A2 (300ep) | ~56 hr | ~77 hr |
+| A1 (600ep) | ~113 hr | ~155 hr |
+
+So A2 ≈ 2.5–3.5 days, A1 ≈ 5–6.5 days.
+
+**Accuracy expectation.** Anchor on the measured −1.4 pt A3 gap (76.66 vs 78.1),
+not the paper headline: A2 → **~78.4%** (paper 79.8), A1 → **~79.0%** (paper 80.4),
+±0.5. Two risks the A3 validation did *not* cover: repeated augmentation is ON for
+A2/A1 (`n0` for A3) and ours is a stream-level approximation of timm's index-level
+RASampler; and the −1.4 pt attribution (BN regime / LAMB micro-details / bf16) is a
+single data point at one tier.
+
+**Disk.** A1 at 600 epochs with `LEAN_MLIR_CKPT_EVERY=1` writes 600 × 102 MB ≈ 61 GB
+of `.bin` weights. Set `LEAN_MLIR_KEEP_BIN`.
 
 **PAPER-FAITHFUL (matches timm):**
 - Optimizer LAMB at its design batch (eff/real bs2048), lr 0.008@2048, cosine + 5ep warmup.
