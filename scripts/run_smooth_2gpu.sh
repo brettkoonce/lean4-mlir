@@ -1,7 +1,7 @@
 #!/bin/bash
 # Randomized-smoothing certify across BOTH gfx1100 GPUs (HIP_VISIBLE_DEVICES pins each stream).
 # GPU0: cifar-smooth (heaviest single job). GPU1: mnist-cnn-smooth then mnist-mlp-smooth.
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 export PATH=$PWD/.venv/bin:$PATH
 export IREE_BACKEND=rocm
 

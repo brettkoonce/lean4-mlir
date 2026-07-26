@@ -19,7 +19,7 @@
 # tags its own artifacts, see NetSpec.buildTag). Drop to `EPOCHS=3` for a smoke.
 
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 DATA="${1:-data/brats}"
 EPOCHS="${2:-10}"

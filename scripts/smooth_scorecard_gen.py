@@ -43,7 +43,7 @@ def csv_path(slug: str) -> Path:
         return archived
     sys.exit(f"missing smooth_{slug}_scorecard.csv in {RUNS} or {RUNS_ARCHIVE} — "
              f"the committed copies live in the archive; re-run "
-             f"./run_smooth_scorecard.sh only if you want a fresh protocol run")
+             f"./scripts/run_smooth_scorecard.sh only if you want a fresh protocol run")
 
 
 def tail_check(n: int, k: int, a: int) -> bool:

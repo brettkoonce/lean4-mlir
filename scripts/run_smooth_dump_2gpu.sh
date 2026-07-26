@@ -2,7 +2,7 @@
 # Re-run MNIST/CIFAR smoothing with the per-image radius dump (→ runs/smooth_<slug>_radii.csv),
 # split across both gfx1100 GPUs (distinct slugs ⇒ distinct vmfb, safe to run concurrently).
 # Deterministic seeds ⇒ numbers match the committed tightened run; this just also dumps the CSVs.
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 export PATH=$PWD/.venv/bin:$PATH
 export IREE_BACKEND=rocm
 

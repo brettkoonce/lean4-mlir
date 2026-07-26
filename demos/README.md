@@ -26,7 +26,7 @@ verbatim as the contracting path) + a UNet decoder, on MSD Task01_BrainTumour:
 ./download_brats.sh
 python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
         --size 224 --seed 0            # same patient split as data/brats
-./run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU
+./scripts/run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU
 lake exe brats-predict net=r34 arm=scratch,r34 out.ppm
 ```
 

@@ -9,7 +9,7 @@
 #   * contrast: the absolute-position `nano` model CAN'T even load at a new length.
 #
 # The heavy 8K TinyStories config (flash + rope + no-pos, ~29M params) is
-# ./run_tinystories_8k.sh once data/tinystories/{train,val}.bin exist — same
+# ./scripts/run_tinystories_8k.sh once data/tinystories/{train,val}.bin exist — same
 # codegen, just bigger; this script proves the mechanism cheaply.
 #
 # First run bootstraps the full Lean→MLIR→IREE→CUDA pipeline (elan + iree +

@@ -4,7 +4,7 @@
 # rounds up to 79*128), alpha=0.001. The per-image (count, n) columns land in the CSV
 # and feed scripts/smooth_scorecard_gen.py -> kernel tail-check corpus.
 # GPU0: cifar-smooth. GPU1: mnist-cnn-smooth then mnist-mlp-smooth.
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 export PATH=$PWD/.venv/bin:$PATH
 export IREE_BACKEND=rocm
 export SMOOTH_SIGMA_MILLI=500

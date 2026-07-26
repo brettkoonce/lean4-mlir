@@ -26,7 +26,7 @@
 set -u
 
 # ── config (override via env) ────────────────────────────────────────────────
-REPO="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 JAX_DIR="$REPO/jax"
 VENV_PY="${VENV_PY:-/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/python}"
 PY="${PY:-.lake/build/generated_vit_tiny_imagenet.py}"      # relative to JAX_DIR

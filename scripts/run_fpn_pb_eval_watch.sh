@@ -9,7 +9,7 @@
 # objectness DYNAMIC RANGE (every e12 logit sat in [-2.7, -1.2], AUC 0.742), so
 # watch the logit spread and AUC, not just recall.
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 PFX=.lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone_
 PY=/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/python3

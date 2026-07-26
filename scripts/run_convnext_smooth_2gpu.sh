@@ -2,7 +2,7 @@
 # ConvNeXt-T (Imagenette 224²) randomized-smoothing certify, split across both gfx1100 GPUs.
 # Same net on both GPUs ⇒ shared vmfb path, so the compileVmfb cache (skip-if-fresh) must be warm
 # first (it is — pre-built); both processes then only READ the cached vmfb. σ split per GPU.
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 export PATH=$PWD/.venv/bin:$PATH
 export IREE_BACKEND=rocm
 export SMOOTH_EPOCHS=8 SMOOTH_EVAL_BATCHES=4 SMOOTH_N=2000 SMOOTH_MAXCERT=20

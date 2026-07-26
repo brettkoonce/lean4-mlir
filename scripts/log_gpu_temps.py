@@ -6,7 +6,7 @@ correlated with epochs and the 30-min pauses. Junction temp + sclk are the
 throttle tells; power near TBP + util 100% = compute-bound, low power despite
 util 100% = likely input/augmentation-bound.
 
-    nohup python3 log_gpu_temps.py runs/gpu_temps.csv 30 > /dev/null 2>&1 &
+    nohup python3 scripts/log_gpu_temps.py runs/gpu_temps.csv 30 > /dev/null 2>&1 &
 """
 import json, subprocess, sys, time, datetime, os
 

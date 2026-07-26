@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 export PATH=$PWD/.venv/bin:$PATH
 export IREE_BACKEND=rocm
 echo "=== mnist-mlp-smooth $(date) ===" 

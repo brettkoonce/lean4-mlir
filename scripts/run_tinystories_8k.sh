@@ -23,7 +23,7 @@
 #
 # Usage: ./run_tinystories_8k.sh [steps=12000] [batch=8] [lr_x10000=30]
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 export PATH="$PWD/.venv/bin:$PATH"
 export IREE_BACKEND=cuda
 export IREE_CHIP="${IREE_CHIP:-sm_80}"     # A100 = sm_80; H100 = sm_90

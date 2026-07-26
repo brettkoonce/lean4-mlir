@@ -3,7 +3,7 @@
 # interaction? GPU0 = σ=0 (pure SGD, no noise). GPU1 = σ=0.10 (moderate noise). Few epochs —
 # the collapse was immediate, so 3 epochs distinguishes "training" (natural acc >> 10%) from
 # "constant" (natural acc ≈ 10%). vmfb is cached, so both share the GPUs safely.
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 export PATH=$PWD/.venv/bin:$PATH
 export IREE_BACKEND=rocm
 export SMOOTH_EPOCHS=3 SMOOTH_EVAL_BATCHES=4 SMOOTH_N=500 SMOOTH_MAXCERT=15

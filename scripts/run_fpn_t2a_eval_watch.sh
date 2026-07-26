@@ -12,7 +12,7 @@ set -u
 # FPN_TOWER MUST be set on the infer call: it selects the spec, and hence the
 # checkpoint prefix. Without it, infer silently evaluates the tower=0 arm's
 # checkpoint and reports THAT arm's numbers for every epoch.
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 PFX=.lake/build/resnet_34___fpn_detector_448_wcls_pb_tower4__visdrone_
 PY=/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/python3
