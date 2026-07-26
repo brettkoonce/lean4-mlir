@@ -17,7 +17,7 @@ A says "the float numbers are within budget of the proven `ℝ` graph"; closing 
 IREE reads *is* that proven graph." Neither needs new architecture.
 
 Reference style/state: `planning/floatbridge_certificate_gaps.md` (the TRUSTED/MEASURED/PROVEN
-ledger), `planning/floatbridge_descent_pass.md`, `planning/floatbridge_descent_cnn.md`.
+ledger), `planning/archive/floatbridge_descent_pass.md`, `planning/archive/floatbridge_descent_cnn.md`.
 
 ---
 

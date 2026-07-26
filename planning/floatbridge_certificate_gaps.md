@@ -104,15 +104,15 @@ or already-bounded so subnormals there don't propagate error. **Effort: small–
 clean, architecture-agnostic, converts a caveat into a lemma.** New file `*SubnormalBridge.lean`
 or a section in `FloatBridge.lean`.
 
-## 3. Descent, not just closeness — the scientific punchline (§3.5)  ✅ DONE (2026-06-25)  → log: `planning/floatbridge_descent_pass.md` + `floatbridge_descent_cnn.md`
+## 3. Descent, not just closeness — the scientific punchline (§3.5)  ✅ DONE (2026-06-25)  → log: `planning/archive/floatbridge_descent_pass.md` + `archive/floatbridge_descent_cnn.md`
 
 **The gap.** Everything past the deployed MNIST/CNN nets is *closeness*
 (`|float − real| ≤ budget`). The headline "a rounded training step still **decreases the
 loss**" needs the per-layer float-fusion. Closeness says "the float net computes ~the real
 gradient"; descent says "it provably trains."
 
-**Where it stands (verified 2026-06-25; full logs in `planning/floatbridge_descent_pass.md`
-+ `floatbridge_descent_cnn.md`).** Pattern = one master theorem (`linear_float_sgd_descends`,
+**Where it stands (verified 2026-06-25; full logs in `planning/archive/floatbridge_descent_pass.md`
++ `archive/floatbridge_descent_cnn.md`).** Pattern = one master theorem (`linear_float_sgd_descends`,
 η *proven* not assumed) + a per-rung float grad-close as the η source. **CLOSED end-to-end for
 every deployed-shallow-net parameter:**
 - **linear** + the **entire MLP** — output/hidden/input
@@ -159,7 +159,7 @@ the deployed-accuracy story tight. **Effort: small Lean.** A `floatClose_bnEval`
 
 ## 5. Honesty pass (cross-cutting, do alongside whichever above)  ✅ DONE (2026-06-25)
 
-**Delivered:** `planning/floatbridge_honesty_pass.md` — a claim-by-claim tier ledger (PROVEN/
+**Delivered:** `planning/archive/floatbridge_honesty_pass.md` — a claim-by-claim tier ledger (PROVEN/
 MEASURED/TRUSTED) of the float-bridge headlines with 7 flags + recommended rewordings (author's
 call on the actual README edits). Headlines: F1 disambiguate "loss-descent *step*" (certified
 update, all nets) from "the loss provably *decreases*" (linear end-to-end; MLP/CNN per-layer;
@@ -190,7 +190,7 @@ and it's what makes a skeptical reviewer trust the *proven* parts.
    `cnn_conv{1,2}_float_sgd_descends` / `cnn_conv{1,2}_bias_float_sgd_descends` (+ numeric
    capstones `mnist_cnn_conv{W,b}_step_float_budget`). The honest stop at deep nets / the joint
    step is open BY DESIGN (no `*_sgd_descends` exists for any deep net).
-5. ~~**§5 honesty pass**~~ ✅ DONE — `planning/floatbridge_honesty_pass.md` (7 flags; key: F1
+5. ~~**§5 honesty pass**~~ ✅ DONE — `planning/archive/floatbridge_honesty_pass.md` (7 flags; key: F1
    "loss-descent step"≠"loss decreases", F2 cite `linear_float_sgd_descends`, F3/F4 promote
    kernel/subnormals to their true tiers). Re-run before any writeup/submission — **the F1 line
    should now read "every parameter of the deployed linear / MLP / CNN nets provably decreases

@@ -3,8 +3,8 @@
 **Scope.** This doc is about *one* thing: closing **R4 — printer faithfulness**
 — the last trusted surface in the verified-codegen story, for the full
 classification tour **MNIST linear (ch 2) → ViT (ch 10)**. It is the deepest
-and only *research-grade* item in `planning/validation_sweep.md` (everything
-else there is done). Predecessors: `validation_sweep.md` (the completed book
+and only *research-grade* item in `planning/archive/validation_sweep.md` (everything
+else there is done). Predecessors: `archive/validation_sweep.md` (the completed book
 sweep), `verified_codegen.md` (the pipeline design).
 
 ---
@@ -201,7 +201,7 @@ a finite, in-progress theorem.
 
 ## Start here
 
-1. Read this + `validation_sweep.md` ("Extending…" section) + `verified_codegen.md`.
+1. Read this + `archive/validation_sweep.md` ("Extending…" section) + `verified_codegen.md`.
 2. **Step 0 (consolidate):** route the ch 2–3 renderers through the existing
    `Hlo` AST so the printer is `pretty ∘ emit`; nothing else changes.
 3. **Stage A:** add `Proofs/Hlo/{Syntax,Denote}.lean` for the elementwise +

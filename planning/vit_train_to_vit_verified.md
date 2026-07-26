@@ -297,4 +297,4 @@ striking distance of the unverified runner; the delta (if any) attributed.
 | CE head proof to generalize | `lossCot_eq_softmax_sub_onehot`, `softmaxCE_grad` |
 | axiom audit (add new theorems here) | `tests/AuditAxioms.lean` |
 | loader-free GPU parity check | `scripts/render_parity.py` |
-| prior context | `planning/vit_close.md`, `planning/verified_vit.md`, `planning/verified_train_step.md` |
+| prior context | `planning/vit_close.md`, `planning/archive/verified_vit.md`, `planning/verified_train_step.md` |

@@ -54,7 +54,7 @@ parity, restore the committed file byte-identical — it must NEVER change). Eac
 ## What's still open (program-wide, all pre-existing)
 
 - ~~**MobileNetV2** (ch7) — the live frontier.~~ ✅ **FULLY closed (C+A+B+D)**, see
-  `planning/mobilenetv2_close.md`. **ResNet-34 too** (`planning/resnet34_close.md`).
+  `planning/mobilenetv2_close.md`. **ResNet-34 too** (`planning/archive/resnet34_close.md`).
 - ~~The render-close → **total-loss-gradient** fold (`pdiv G = Back.denote`, the `mlp_*_total_loss_grad`
   analogue) — the conv chain is pinned (`CnnChainClose`) but not yet folded to `∂loss/∂θ`.~~ ✅ **DONE**
   (2026-06-09): `LeanMlir/Proofs/ConvLossFold.lean` — the general conv/depthwise `= ∂loss/∂θ` fold
