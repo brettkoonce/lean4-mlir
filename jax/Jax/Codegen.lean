@@ -2512,6 +2512,22 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "            os.remove(_old)\n" ++
   "        except OSError:\n" ++
   "            pass\n\n" ++
+  "def _prune_bin_ckpts(base):\n" ++
+  "    \"\"\"Keep only the newest LEAN_MLIR_KEEP_BIN (default 0 = keep everything)\n" ++
+  "    <base>_e{N}.bin weight files. Off by default so existing runs are unchanged;\n" ++
+  "    set it for the big nets, where an every-epoch 300-epoch run would otherwise\n" ++
+  "    write ~100 GB of weights (ViT-B and ConvNeXt-B are ~340 MB per .bin).\"\"\"\n" ++
+  "    import glob\n" ++
+  "    keep = int(os.environ.get('LEAN_MLIR_KEEP_BIN', '0'))\n" ++
+  "    if keep <= 0:\n" ++
+  "        return\n" ++
+  "    paths = glob.glob(f'{base}_e*.bin')\n" ++
+  "    paths.sort(key=lambda p: int(p.rsplit('_e', 1)[1].split('.bin')[0]))\n" ++
+  "    for _old in paths[:-keep]:\n" ++
+  "        try:\n" ++
+  "            os.remove(_old)\n" ++
+  "        except OSError:\n" ++
+  "            pass\n\n" ++
   "def load_train_state(path, template):\n" ++
   "    d = np.load(path)\n" ++
   "    n = len(jax.tree.leaves(template))\n" ++
@@ -2774,7 +2790,8 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   "            _ckpt_path = f'{_ckpt_base}_e{epoch+1}.bin'\n" ++
   "            params_to_file(" ++ (if cfg.useEMA then "ema_params" else "params") ++ ", _ckpt_path)\n" ++
   "            save_train_state(f'{_ckpt_base}_e{epoch+1}.state.npz', " ++ stateTuple ++ ", _global_step)\n" ++
-  "            _prune_state_ckpts(_ckpt_base)\n\n" ++
+  "            _prune_state_ckpts(_ckpt_base)\n" ++
+  "            _prune_bin_ckpts(_ckpt_base)\n\n" ++
   "    # Final save (always, if LEAN_MLIR_PARAMS_OUT was set).\n" ++
   "    _ckpt_base = os.environ.get('LEAN_MLIR_PARAMS_OUT')\n" ++
   "    if _ckpt_base:\n" ++

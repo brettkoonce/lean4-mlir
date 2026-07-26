@@ -16,7 +16,9 @@ import jax, jax.numpy as jnp
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
-GEN = ".lake/build/generated_convnext_tiny_imagenet.py"
+# Defaults to the Tiny trainer; set GEN to point at any other generated
+# module (e.g. the S/B variants) — the eval code below is arch-agnostic.
+GEN = os.environ.get("GEN", ".lake/build/generated_convnext_tiny_imagenet.py")
 CKPT = os.environ.get("CKPT", "/home/skoonce/convnext_tiny_imagenet_bf16.bin")
 BATCH = int(os.environ.get("BATCH", "250"))   # 50000 % 250 == 0, but we don't rely on it
 
