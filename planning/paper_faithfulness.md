@@ -7,6 +7,9 @@ faithfulness. Last full audit: **2026-07-07** (fresh per-net audit, code as grou
 
 - Config lives in `jax/Main<Net>Imagenet.lean`; aug/optimizer/BN codegen in `jax/Jax/Codegen.lean`.
 - R50 has a deeper writeup in `planning/rsb_a2_resnet50.md` → "FIDELITY LEDGER".
+- **Per-net deviation diffs (what exactly differs, and by how much): `planning/recipe_fidelity_diffs.md`** — audited 2026-07-27 from the emitted Python,
+  with the LAMB items checked against timm source. Supersedes the per-net objection
+  column below for detail; that column stays as the one-line summary.
 - Run logistics / supervisors / the older per-net audit: `planning/jax_imagenet_sweep.md`
   (its "Paper-faithfulness deltas" section is SUPERSEDED by this doc — kept for run history).
 - **Scope:** the 6 full-ImageNet paper-target trainers below. The newer variants
