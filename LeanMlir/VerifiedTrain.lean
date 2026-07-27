@@ -125,7 +125,7 @@ def mkSession (mlirPath outVmfb : String) : IO IreeSession := do
     -- reference — see planning/xla_pjrt_ladder.md §8, rung 3.
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     let vmfbPath := if outVmfb.endsWith ".vmfb"
-                    then outVmfb.dropRight 5 ++ s!"_{target}.vmfb" else outVmfb
+                    then (outVmfb.dropEnd 5).toString ++ s!"_{target}.vmfb" else outVmfb
     compileVmfb mlirPath vmfbPath
     IreeSession.create vmfbPath
 
