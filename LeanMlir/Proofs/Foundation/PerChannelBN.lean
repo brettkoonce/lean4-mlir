@@ -306,6 +306,47 @@ noncomputable def reassocBack (oc h w : Nat) :
     Vec (oc * (h * w)) → Vec (oc * h * w) :=
   fun y k => y (reassocBackIdx oc h w k)
 
+-- ════════════════════════════════════════════════════════════════
+-- § Inference-time BN: the same affine map, with the statistics frozen
+-- ════════════════════════════════════════════════════════════════
+
+/-! Training BN computes μ/σ² from the activation it is normalizing; inference BN consumes
+**frozen** statistics (the driver's EMA'd running mean/var) and is therefore a plain affine
+map — pointwise in the activation, with no reduction at all. That is exactly why an eval
+forward built on it is class-batch-independent: an example's logits do not depend on which
+other examples share its batch.
+
+The chain below mirrors `bnForward → bnPerChannelMat → bnPerChannelFlat → bnPerChannelTensor3`
+one-for-one, so the eval op drops into the same layout bridge as the training op. -/
+
+/-- **Inference BN on one channel's `m` activations**: `yᵢ = γ · (xᵢ − μ) · (var + ε)^(−1/2) + β`,
+    with `μ`/`var` supplied rather than computed from `x`. The `bnForward` peer — note it takes
+    `x` pointwise, where `bnForward` reduces over all of `x` to get its own μ/σ². -/
+noncomputable def bnEvalForward (m : Nat) (ε γ β μ v : ℝ) (x : Vec m) : Vec m :=
+  fun i => γ * ((x i - μ) * (1 / Real.sqrt (v + ε))) + β
+
+/-- **Per-channel inference BN (Mat layout)** — row `c` gets channel `c`'s frozen stats. -/
+noncomputable def bnPerChannelEvalMat (oc m : Nat) (ε : ℝ) (γ β μ v : Vec oc) :
+    Mat oc m → Mat oc m :=
+  fun A => fun c => bnEvalForward m ε (γ c) (β c) (μ c) (v c) (A c)
+
+/-- **Per-channel inference BN (flat layout)** — the `bnPerChannelFlat` peer. -/
+noncomputable def bnPerChannelEvalFlat (oc m : Nat) (ε : ℝ) (γ β μ v : Vec oc) :
+    Vec (oc * m) → Vec (oc * m) :=
+  fun x => Mat.flatten (bnPerChannelEvalMat oc m ε γ β μ v (Mat.unflatten x))
+
+/-- **Per-channel inference BN (Tensor3 layout)** — the `bnPerChannelTensor3` peer, through
+    the same `reassoc` bridge. This is what `SHlo.bnPerChannelEvalF` denotes. -/
+noncomputable def bnPerChannelEvalTensor3 (oc h w : Nat) (ε : ℝ) (γ β μ v : Vec oc) :
+    Vec (oc * h * w) → Vec (oc * h * w) :=
+  reassocBack oc h w ∘ (bnPerChannelEvalFlat oc (h * w) ε γ β μ v) ∘ reassocFwd oc h w
+
+/-- **Inference BN is differentiable everywhere** — it is affine in `x`, so unlike the
+    training BN this needs no `0 < ε` hypothesis: `ε` only enters the constant scale factor. -/
+theorem bnEvalForward_differentiable (m : Nat) (ε γ β μ v : ℝ) :
+    Differentiable ℝ (bnEvalForward m ε γ β μ v) := by
+  unfold bnEvalForward; fun_prop
+
 /-- The rendered **per-channel γ gradient**: `dγ_c = Σ_{s} dy_(c,s) · x̂_(c,s)` (the
     `reduce` over batch/spatial of `dy·x̂` in `cifarBnTrainStepStructured`'s `bnParamGradPC`).
     `x̂` is recomputed from the saved BN input `v` (the conv output). Lives here (not

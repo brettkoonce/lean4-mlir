@@ -127,7 +127,6 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "tests" ]; then
   echo "── tests/ (hand-written emitters) ──"
   export PATH="$PWD/.venv/bin:$PATH"   # tests/* also try iree-compile
   for f in \
-    tests/TestResnet34Fwd.lean \
     tests/TestResnet34Train.lean \
     tests/TestMobilenetV2Fwd.lean \
     tests/TestMobilenetV2Train.lean \

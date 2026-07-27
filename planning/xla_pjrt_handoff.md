@@ -67,7 +67,7 @@ trainer had a train/eval skew:
 | `resnet34_train_step.mlir` | `Proofs/…/ResNet34Render.lean` (certified) | **per-example**, reduce `[2,3]`, n = H·W = 12544 |
 | `resnet34_fwd.mlir` *(was)* | `tests/TestResnet34Fwd.lean` (hand-written) | **batch**, reduce `[0,2,3]`, n = B·H·W = 401408 |
 | `resnet34_adam_train_step.mlir` | `tests/TestResnet34Train.lean` | batch, 401408 |
-| `resnet34_fwd_eval.mlir` | `tests/TestResnet34Fwd.lean` | affine, running stats |
+| `resnet34_fwd_eval.mlir` | `tests/TestResnet34Fwd.lean` | affine, running stats (correct — see §2a-bis) |
 
 So `resnet34-verified` (SGD) trained a per-channel **per-example** net and scored it with **batch**
 statistics. Measured: on one shared (θ, x) the two forwards disagree at **rel 1.13** on
@@ -89,8 +89,8 @@ tree at the start of this session.
   is now literally the forward the trainer differentiates.
 - `BFwd` carries its own `xin`, and the backward takes the block record instead of a separately
   passed input name — the forward/backward pairing can no longer be miswired at the call site.
-- `tests/TestResnet34Fwd.lean` no longer writes `resnet34_fwd.mlir` (its `_fwd_eval` half is
-  unchanged, byte-verified).
+- `tests/TestResnet34Fwd.lean` no longer writes `resnet34_fwd.mlir` (and is deleted outright in
+  §2a-bis, once `_fwd_eval` moved too).
 - `scripts/regen_verified_mlir.sh` — the missing canonical regeneration entry point, with two
   audits: duplicate writers, and *forward ⊂ train-step prefix*.
 - `lean_exe resnet34-fwd-tie` (`tests/TestResnet34FwdTie.lean`) — feeds two renders the same
@@ -109,11 +109,46 @@ renderer — verified byte-identical for `vit_fwd`, so they are redundant, not d
 that own hand-written emitters (convnext, efficientnet, mobilenetv2, resnet34 train steps) are
 the ones that can drift.
 
-`resnet34_fwd_eval` specifically needs a **new verified op** — the proven kit has no
-running-stats/affine BN, only the batch-statistic `bnPerChannelF`. That means a
-`bnPerChannelEvalF` constructor + `toToks`/`serializeToks` case + `den` + a `rfl` faithfulness
-theorem (the serializer is simpler than `bnPerChannelF`'s — no reduce), and a `r34FwdChain`
-parameterised by which BN op it emits. Tractable, but it is new proof-kit surface, not a move.
+### 2a-bis. `resnet34_fwd_eval` — new proof-kit op ✅ DONE
+
+The kit had no running-stats/affine BN, only the batch-statistic `bnPerChannelF`. Added
+**`bnPerChannelEvalF`** — the frozen-statistics BN, `γ·(x−μ)·rsqrt(var+ε)+β` with μ/var arriving
+as graph inputs. No reduction, so it is pointwise in the activation; that is the formal content of
+"eval is class-batch-independent". Forward-only by design — eval has no backward.
+
+Math (`Proofs/Foundation/PerChannelBN.lean`) mirrors the training chain one-for-one:
+`bnEvalForward → bnPerChannelEvalMat → bnPerChannelEvalFlat → bnPerChannelEvalTensor3`, through
+the same `reassoc` bridge. Being affine in `x`, it is differentiable with **no `0 < ε`
+hypothesis** — ε only enters a constant scale factor.
+
+Wired at all eight sites: `SHlo` constructor, `den`, the `rfl` faithfulness theorem, `Raw`,
+`skel`, `Tok`, `toToks`, `emitTok`. `r34FwdChain` now takes an `R34Bn` mode (`.train` / `.eval`),
+so all three renders come from one chain.
+
+Result — `verified_mlir/resnet34_fwd_eval.mlir` now renders as `pretty(provenGraph)`:
+
+- 219 inputs, **arg types identical in order** to the retired render, all 72 stat names identical
+  (only the stem bias moves `%sb`→`%sbi`, positional).
+- **Ties the retired hand-written render EXACTLY — max rel diff 0.0** on non-degenerate logits
+  (`resnet34-fwd-tie --eval`). Unlike `_fwd`, this one was always the right function; it is now
+  certified rather than trusted. So this change is behaviour-preserving for the AdamW drivers.
+- `resnet34_train_step.mlir` and `resnet34_fwd.mlir` both came back **byte-identical** after the
+  BN-mode refactor.
+- `tests/TestResnet34Fwd.lean` is deleted — with both artifacts moved it wrote nothing.
+
+**Gotcha this cost time:** `LeanMlir/Proofs/Codegen/StableHLOParse.lean` is under the **`Certs`**
+lib, *not* the default target. A plain `lake build` passes while the R4 `roundtrip` theorem
+(`parse (toToks (skel a)) = some (skel a)`, quantified over **all** `SHlo`) is missing a case for
+your new op. Adding an `SHlo` constructor means **`lake build Certs`** as well — two edits there:
+a `parseStack` case and a `parse_toToks` induction case.
+
+**Still open:** `@resnet34_fwd_eval` is the eval partner of `resnet34_adam_train_step.mlir`, which
+is *still* the hand-written batch-BN render in `tests/TestResnet34Train.lean`. The eval forward is
+now certified while the train step it partners is not — that asymmetry is the Adam half of §2a
+(`emitAdamV` in `LeanMlir/ViTRender.lean`), untouched.
+
+**Still `tests/`-rendered:** `mobilenetv2_fwd{,_eval}`, `efficientnet_fwd{,_eval}`,
+`convnext_fwd`. Same recipe applies; `bnPerChannelEvalF` now exists for their `_fwd_eval` halves.
 
 ---
 

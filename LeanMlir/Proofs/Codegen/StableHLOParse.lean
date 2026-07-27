@@ -100,6 +100,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.bnPerChannelF g b eps oc h w e :: st)
   | .bnPerChannelBack g x eps oc h w :: ts, e :: st =>
       parseStack ts (.bnPerChannelBack g x eps oc h w e :: st)
+  | .bnPerChannelEvalF g b mu var eps oc h w :: ts, e :: st =>
+      parseStack ts (.bnPerChannelEvalF g b mu var eps oc h w e :: st)
   | .depthwiseF w b c h w' kH kW :: ts, e :: st =>
       parseStack ts (.depthwiseF w b c h w' kH kW e :: st)
   | .depthwiseBack w c h w' kH kW :: ts, e :: st =>
@@ -192,6 +194,7 @@ theorem parseStack_toToks (r : Raw) :
   | flatConvStride4F w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | bnPerChannelF g b eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | bnPerChannelBack g x eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | bnPerChannelEvalF g b mu var eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseBack w c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseStridedF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl

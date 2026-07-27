@@ -14,11 +14,14 @@ Both paths must be the same `@resnet34_fwd` signature (147 inputs — `%x` then 
 not here.
 
     lake build resnet34-fwd-tie
-    .lake/build/bin/resnet34-fwd-tie <refRender.mlir> <newRender.mlir>
+    .lake/build/bin/resnet34-fwd-tie [--eval] <refRender.mlir> <newRender.mlir>
 
-Defaults to comparing `verified_mlir/resnet34_fwd.mlir` against itself (a self-tie smoke test).
-Exits non-zero if the renders disagree, or if the comparison is **degenerate** — all-zero or
-non-finite logits agree trivially and prove nothing.
+`--eval` ties `@resnet34_fwd_eval` instead: 219 inputs (the 146 params plus 72 running-stat
+inputs, μ/var interleaved per BN layer in `bnChannels` order) and running-stats BN.
+
+Defaults to comparing the artifact against itself (a self-tie smoke test). Exits non-zero if the
+renders disagree, or if the comparison is **degenerate** — all-zero or non-finite logits agree
+trivially and prove nothing.
 -/
 
 /-- The driver's own init (`VerifiedTrain.mkParam`, which is private): He(fan-in) weights,
@@ -34,13 +37,17 @@ private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray 
     F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
 
 def main (args : List String) : IO Unit := do
-  let (pathA, pathB) := match args with
+  let isEval := args.contains "--eval"
+  let paths  := args.filter (· != "--eval")
+  let slug   := if isEval then "resnet34_fwd_eval" else "resnet34_fwd"
+  let dflt   := s!"verified_mlir/{slug}.mlir"
+  let (pathA, pathB) := match paths with
     | a :: b :: _ => (a, b)
-    | [a]         => (a, "verified_mlir/resnet34_fwd.mlir")
-    | []          => ("verified_mlir/resnet34_fwd.mlir", "verified_mlir/resnet34_fwd.mlir")
+    | [a]         => (a, dflt)
+    | []          => (dflt, dflt)
   let net := resnet34Verified.toNet
   let bs  := 32                        -- the baked batch of the committed render
-  IO.println s!"resnet34_fwd tie: A={pathA}  B={pathB}"
+  IO.println s!"@{slug} tie: A={pathA}  B={pathB}"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), bs {bs}, backend {← IreeSession.backendName}"
 
   -- ── one deterministic (θ, x) both renders see ──
@@ -49,14 +56,29 @@ def main (args : List String) : IO Unit := do
   for (dims, kind) in net.specs do
     parts := parts.push (← mkParam sd dims kind)
     sd := sd + 1
-  let params := F32.concat parts
+  let mut params := F32.concat parts
+  -- eval BN consumes frozen per-channel stats, appended after the params in `bnChannels` order,
+  -- μ then var per layer. μ is centred noise; var must be POSITIVE (rsqrt) and must vary — a
+  -- constant var would let a broadcast bug pass unnoticed.
+  let mut shapes := net.shapesBA
+  if isEval then
+    let mut stats : Array ByteArray := #[]
+    let mut ss := 5000
+    for c in net.bnChannels do
+      stats := stats.push (← F32.heInit ss.toUSize c.toUSize 0.30)                        -- μ
+      stats := stats.push (← F32.scaleShift (← F32.heInit (ss+1).toUSize c.toUSize 0.20)
+                               1.0 1.0)                                                   -- var ≈ 1 ± 0.2
+      ss := ss + 2
+    params := F32.concat (#[params] ++ stats)
+    shapes := packShapes (net.paramShapes ++
+                net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[])
+    IO.println s!"  + {net.bnChannels.size} BN layers → {net.bnChannels.foldl (· + 2 * ·) 0} running-stat floats"
   let x ← F32.heInit 987654 (bs * net.d0).toUSize 1.0
-  let shapes := net.shapesBA
-  let xsh    := net.xShape bs
+  let xsh := net.xShape bs
 
   let runOne (path tag : String) : IO ByteArray := do
-    let sess ← mkSession path s!".lake/build/r34_fwd_tie_{tag}.vmfb"
-    IreeSession.forwardF32 sess "m.resnet34_fwd" params shapes x xsh
+    let sess ← mkSession path s!".lake/build/r34_{slug}_tie_{tag}.vmfb"
+    IreeSession.forwardF32 sess s!"m.{slug}" params shapes x xsh
       bs.toUSize net.nClasses.toUSize
   let la ← runOne pathA "a"
   let lb ← runOne pathB "b"

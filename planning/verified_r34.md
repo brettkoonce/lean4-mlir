@@ -357,8 +357,12 @@ DATA=/home/skoonce/lean/claude_max/lean4-jax/data           # mnist + cifar-10/ 
 - `LeanMlir/Proofs/StableHLOParse.lean` — parser cases for all ch6 ops (incl. B8b).
 - `tests/TestPerChannelBn.lean` — **B8b** standalone render + iree-compile check
   (`@perchannel_bn_fwd`/`@perchannel_bn_back`, both compile to ROCm gfx1100).
-- `tests/TestResnet34Fwd.lean` — **B9a** full ResNet-34 forward renderer (run via
-  `lake env lean …`, writes `verified_mlir/resnet34_fwd.mlir`, iree-compiles).
+- ~~`tests/TestResnet34Fwd.lean`~~ — **B9a** full ResNet-34 forward renderer. **RETIRED
+  2026-07-27** (`planning/xla_pjrt_handoff.md` §2a): both `resnet34_fwd.mlir` and
+  `resnet34_fwd_eval.mlir` now render from `LeanMlir/Proofs/Codegen/ResNet34Render.lean` as
+  `pretty(provenGraph)`. Its `_fwd` render was found to normalise BN over the **batch** where the
+  certified train step normalises **per example** — a genuine train/eval skew, not a rewrite of
+  the same function. Its `_fwd_eval` render tied to the new one **exactly** (rel 0.0).
 - `tests/TestResnet34Train.lean` — **B9b** full train-step renderer (data-driven `Blk`
   list + `allParams`; fwd/back fragment helpers; writes `verified_mlir/resnet34_train_step.mlir`).
 - `LeanMlir/IreeRuntime.lean` — `ResnetLayout` (26 params, ch6-A) + **`ResNet34Layout`**

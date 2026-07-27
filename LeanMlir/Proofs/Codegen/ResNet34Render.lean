@@ -55,17 +55,43 @@ structure BBack where
 -- § Block forward
 -- ════════════════════════════════════════════════════════════════
 
+/-- Which BatchNorm a forward render emits. Everything else about the two forwards is identical,
+    which is exactly why they share one chain rather than two hand-kept-in-sync copies. -/
+inductive R34Bn where
+  /-- **Training**: statistics reduced out of the activation (`bnPerChannelF` — per channel, per
+      example, over `H·W`). What `resnet34_train_step.mlir` differentiates. -/
+  | train
+  /-- **Inference**: frozen per-channel running stats arriving as graph inputs `%{p}mu`/`%{p}var`
+      (`bnPerChannelEvalF`). The eval partner of a *batch*-statistic train step, whose EMA'd
+      batch mean/var are exactly these per-channel scalars. -/
+  | eval
+deriving DecidableEq, Repr
+
+/-- One BN site. `statP` is the running-stat input prefix (`%{statP}mu` / `%{statP}var`), used
+    only in `.eval` mode; in `.train` mode the stats are reduced out of `xin` and `statP` is
+    ignored. Every R34 BN site is spatially square, so one `hh` suffices. -/
+private def bnSite (B oc hh : Nat) (mode : R34Bn) (epsStr gName btName statP xin : String) :
+    StateM Nat (String × String) := do
+  let zc  : Vec oc := fun _ => 0
+  let zin : Vec (oc*hh*hh) := fun _ => 0
+  match mode with
+  | .train => pretty B (.bnPerChannelF (oc := oc) (h := hh) (w := hh)
+                          gName btName epsStr 0 zc zc (.operand xin zin))
+  | .eval  => pretty B (.bnPerChannelEvalF (oc := oc) (h := hh) (w := hh)
+                          gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc
+                          (.operand xin zin))
+
 /-- Identity block forward: `conv1→BN1→relu1→conv2→BN2→(+x)→relu`. `c` channels, `hh×ww` spatial. -/
-private def idFwd (B c hh : Nat) (epsStr p xName : String) : StateM Nat BFwd := do
+private def idFwd (B c hh : Nat) (mode : R34Bn) (epsStr p xName : String) : StateM Nat BFwd := do
   let ww := hh
   let zc  : Vec c := fun _ => 0
   let zk  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
   let zin : Vec (c*hh*ww) := fun _ => 0
   let (cC1, nC1) ← pretty B (.flatConvF (ic := c) (oc := c) (h := hh) (w := ww) s!"%{p}W1" s!"%{p}b1" zk zc (.operand xName zin))
-  let (cN1, nN1) ← pretty B (.bnPerChannelF (oc := c) (h := hh) (w := ww) s!"%{p}g1" s!"%{p}bt1" epsStr 0 zc zc (.operand nC1 zin))
+  let (cN1, nN1) ← bnSite B c hh mode epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
   let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zin))
   let (cC2, nC2) ← pretty B (.flatConvF (ic := c) (oc := c) (h := hh) (w := ww) s!"%{p}W2" s!"%{p}b2" zk zc (.operand nR1 zin))
-  let (cN2, nN2) ← pretty B (.bnPerChannelF (oc := c) (h := hh) (w := ww) s!"%{p}g2" s!"%{p}bt2" epsStr 0 zc zc (.operand nC2 zin))
+  let (cN2, nN2) ← bnSite B c hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
   let (cA,  nA)  ← pretty B (.addV (.operand nN2 zin) (.operand xName zin))
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zin))
   pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cA ++ cO, xin := xName,
@@ -73,7 +99,7 @@ private def idFwd (B c hh : Nat) (epsStr p xName : String) : StateM Nat BFwd := 
 
 /-- Downsample block forward: strided `conv1→BN1→relu1→conv2→BN2` body + strided projection
     `convp→BNp` skip, `add`, `relu`. `cin→c` channels, input `2hh×2ww`, output `hh×ww`. -/
-private def downFwd (B cin c hh : Nat) (epsStr p xName : String) : StateM Nat BFwd := do
+private def downFwd (B cin c hh : Nat) (mode : R34Bn) (epsStr p xName : String) : StateM Nat BFwd := do
   let ww := hh
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
@@ -81,12 +107,12 @@ private def downFwd (B cin c hh : Nat) (epsStr p xName : String) : StateM Nat BF
   let zinS : Vec (cin*(2*hh)*(2*ww)) := fun _ => 0
   let zout : Vec (c*hh*ww) := fun _ => 0
   let (cC1, nC1) ← pretty B (.flatConvStridedF (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}W1" s!"%{p}b1" zk1 zc (.operand xName zinS))
-  let (cN1, nN1) ← pretty B (.bnPerChannelF (oc := c) (h := hh) (w := ww) s!"%{p}g1" s!"%{p}bt1" epsStr 0 zc zc (.operand nC1 zout))
+  let (cN1, nN1) ← bnSite B c hh mode epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
   let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zout))
   let (cC2, nC2) ← pretty B (.flatConvF (ic := c) (oc := c) (h := hh) (w := ww) s!"%{p}W2" s!"%{p}b2" zk2 zc (.operand nR1 zout))
-  let (cN2, nN2) ← pretty B (.bnPerChannelF (oc := c) (h := hh) (w := ww) s!"%{p}g2" s!"%{p}bt2" epsStr 0 zc zc (.operand nC2 zout))
+  let (cN2, nN2) ← bnSite B c hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
   let (cCp, nCp) ← pretty B (.flatConvStridedF (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}Wp" s!"%{p}bp" zk1 zc (.operand xName zinS))
-  let (cNp, nNp) ← pretty B (.bnPerChannelF (oc := c) (h := hh) (w := ww) s!"%{p}gp" s!"%{p}btp" epsStr 0 zc zc (.operand nCp zout))
+  let (cNp, nNp) ← bnSite B c hh mode epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}np" nCp
   let (cA,  nA)  ← pretty B (.addV (.operand nN2 zout) (.operand nNp zout))
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zout))
   pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cCp ++ cNp ++ cA ++ cO, xin := xName,
@@ -193,8 +219,29 @@ def r34SigList (nClasses : Nat) : List (String × String) :=
   downSig "d4" 256 512 ++ idSig "s4b0" 512 ++ idSig "s4b1" 512 ++
   [("%Wd", ty [512, nClasses]), ("%bd", ty [nClasses])]
 
+/-- **The 72 running-stat inputs** — 36 BN layers × (μ, var), each `[oc]`, in BN-forward order:
+    stem, then per identity block `n1 n2`, per downsample block `n1 n2 np`. This is exactly the
+    order `VerifiedNet.bnChannels` is listed in, which is how the driver packs `runningBnStats`
+    (`bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]])`) — μ and var interleaved per layer,
+    NOT all-μ-then-all-var. Appended after the 146 params, so `@resnet34_fwd_eval` takes
+    1 + 146 + 72 = 219 inputs. -/
+def r34StatSigList : List (String × String) :=
+  let bn (p : String) (oc : Nat) : List (String × String) :=
+    [(s!"%{p}mu", ty [oc]), (s!"%{p}var", ty [oc])]
+  let idB (p : String) (c : Nat) := bn s!"{p}n1" c ++ bn s!"{p}n2" c
+  let downB (p : String) (c : Nat) := bn s!"{p}n1" c ++ bn s!"{p}n2" c ++ bn s!"{p}np" c
+  bn "stn" 64 ++
+  idB "s1b0" 64 ++ idB "s1b1" 64 ++ idB "s1b2" 64 ++
+  downB "d2" 128 ++ idB "s2b0" 128 ++ idB "s2b1" 128 ++ idB "s2b2" 128 ++
+  downB "d3" 256 ++ idB "s3b0" 256 ++ idB "s3b1" 256 ++ idB "s3b2" 256 ++
+    idB "s3b3" 256 ++ idB "s3b4" 256 ++
+  downB "d4" 512 ++ idB "s4b0" 512 ++ idB "s4b1" 512
+
+-- 36 BN layers ⇒ 72 stat inputs, matching resnet34Verified.bnChannels.size.
+#guard r34StatSigList.length == 72
+
 -- ════════════════════════════════════════════════════════════════
--- § The shared forward chain (both renders emit this, so they cannot disagree)
+-- § The shared forward chain (all three renders emit this, so they cannot disagree)
 -- ════════════════════════════════════════════════════════════════
 
 /-- Every SSA name the ResNet-34 forward produces. `resnet34FwdFaithfulV` returns just `logits`;
@@ -215,33 +262,33 @@ set_option maxRecDepth 1000000 in
     a strided downsample block) → GAP(7×7) → dense(512→`nClasses`). Every emitted line is `pretty`
     of a verified `SHlo` node. BN is the **batch-statistic** `bnPerChannelF` — this is the training
     forward; the running-stats eval forward is a separate render. -/
-private def r34FwdChain (B nClasses : Nat) (epsStr : String) : StateM Nat R34Fwd := do
+private def r34FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String) : StateM Nat R34Fwd := do
   -- ═══ stem: 7×7/s2 conv → BN → relu → maxpool ═══
   let zx   : Vec (3*224*224) := fun _ => 0
   let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
   let z64  : Vec 64 := fun _ => 0
   let z112 : Vec (64*112*112) := fun _ => 0
   let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := 112) (w := 112) "%sW" "%sbi" zSk z64 (.operand "%x" zx))
-  let (cStn, nStn) ← pretty B (.bnPerChannelF (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
+  let (cStn, nStn) ← bnSite B 64 112 mode epsStr "%sg" "%sbt" "stn" nStc
   let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
   let (cStp, nStp) ← pretty B (.maxPoolF (c := 64) (h := 56) (w := 56) (.operand nStr z112))
   -- ═══ 16 blocks ═══
-  let f1  ← idFwd   B 64 56 epsStr "s1b0" nStp
-  let f2  ← idFwd   B 64 56 epsStr "s1b1" f1.o
-  let f3  ← idFwd   B 64 56 epsStr "s1b2" f2.o
-  let f4  ← downFwd B 64 128 28 epsStr "d2" f3.o
-  let f5  ← idFwd   B 128 28 epsStr "s2b0" f4.o
-  let f6  ← idFwd   B 128 28 epsStr "s2b1" f5.o
-  let f7  ← idFwd   B 128 28 epsStr "s2b2" f6.o
-  let f8  ← downFwd B 128 256 14 epsStr "d3" f7.o
-  let f9  ← idFwd   B 256 14 epsStr "s3b0" f8.o
-  let f10 ← idFwd   B 256 14 epsStr "s3b1" f9.o
-  let f11 ← idFwd   B 256 14 epsStr "s3b2" f10.o
-  let f12 ← idFwd   B 256 14 epsStr "s3b3" f11.o
-  let f13 ← idFwd   B 256 14 epsStr "s3b4" f12.o
-  let f14 ← downFwd B 256 512 7 epsStr "d4" f13.o
-  let f15 ← idFwd   B 512 7 epsStr "s4b0" f14.o
-  let f16 ← idFwd   B 512 7 epsStr "s4b1" f15.o
+  let f1  ← idFwd   B 64 56 mode epsStr "s1b0" nStp
+  let f2  ← idFwd   B 64 56 mode epsStr "s1b1" f1.o
+  let f3  ← idFwd   B 64 56 mode epsStr "s1b2" f2.o
+  let f4  ← downFwd B 64 128 28 mode epsStr "d2" f3.o
+  let f5  ← idFwd   B 128 28 mode epsStr "s2b0" f4.o
+  let f6  ← idFwd   B 128 28 mode epsStr "s2b1" f5.o
+  let f7  ← idFwd   B 128 28 mode epsStr "s2b2" f6.o
+  let f8  ← downFwd B 128 256 14 mode epsStr "d3" f7.o
+  let f9  ← idFwd   B 256 14 mode epsStr "s3b0" f8.o
+  let f10 ← idFwd   B 256 14 mode epsStr "s3b1" f9.o
+  let f11 ← idFwd   B 256 14 mode epsStr "s3b2" f10.o
+  let f12 ← idFwd   B 256 14 mode epsStr "s3b3" f11.o
+  let f13 ← idFwd   B 256 14 mode epsStr "s3b4" f12.o
+  let f14 ← downFwd B 256 512 7 mode epsStr "d4" f13.o
+  let f15 ← idFwd   B 512 7 mode epsStr "s4b0" f14.o
+  let f16 ← idFwd   B 512 7 mode epsStr "s4b1" f15.o
   -- ═══ head: GAP(7×7) → dense(512→nClasses) ═══
   let zL   : Vec (512*7*7) := fun _ => 0
   let z512 : Vec 512 := fun _ => 0
@@ -269,10 +316,33 @@ def resnet34FwdFaithfulV (B nClasses : Nat) (epsStr : String) : String :=
   let sigList := r34SigList nClasses
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let F : R34Fwd := (r34FwdChain B nClasses epsStr).run' 0
+  let F : R34Fwd := (r34FwdChain B nClasses .train epsStr).run' 0
   "module @m {\n" ++
   s!"  func.func @resnet34_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-34 forward: every line is pretty(verified AST node) ──\n" ++
+  F.code ++
+  s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
+set_option maxRecDepth 1000000 in
+/-- **`@resnet34_fwd_eval` rendered ENTIRELY from the verified AST** — the inference forward, with
+    every BN site consuming frozen per-channel running stats (`bnPerChannelEvalF`) instead of
+    reducing statistics out of its activation. Same net, same 146 params in the same order, plus
+    the 72 stat inputs of `r34StatSigList`: **219 inputs**, returning logits `[B, nClasses]`.
+
+    This is the eval partner of a **batch**-statistic train step, whose EMA'd batch mean/var are
+    exactly these per-channel scalars — i.e. of `resnet34_adam_train_step.mlir`, which is still a
+    hand-written render in `tests/TestResnet34Train.lean`. So the eval forward is now certified
+    while the train step it partners is not; that asymmetry is the remaining §2a work, not a
+    property of this render. -/
+def resnet34FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) : String :=
+  let sigList := r34SigList nClasses ++ r34StatSigList
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+    String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
+  let F : R34Fwd := (r34FwdChain B nClasses .eval epsStr).run' 0
+  "module @m {\n" ++
+  s!"  func.func @resnet34_fwd_eval({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // ── ResNet-34 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
   F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -289,7 +359,7 @@ set_option maxRecDepth 1000000 in
 def resnet34TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) : String :=
   let go : StateM Nat String := do
     -- ═══ forward: stem → 16 blocks → GAP → dense (the SAME chain `resnet34FwdFaithfulV` emits) ═══
-    let F ← r34FwdChain B nClasses epsStr
+    let F ← r34FwdChain B nClasses .train epsStr
     let blk := F.blocks
     let zx   : Vec (3*224*224) := fun _ => 0
     let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
@@ -373,3 +443,9 @@ end Proofs.StableHLO
 -- emitter in `tests/TestResnet34Fwd.lean`; that copy is retired.
 #eval IO.FS.writeFile "verified_mlir/resnet34_fwd.mlir"
   (Proofs.StableHLO.resnet34FwdFaithfulV 32 10 "1.0e-05")
+
+-- Regenerate `verified_mlir/resnet34_fwd_eval.mlir` (what the AdamW drivers eval with once the
+-- running BN stats are threaded) from the same chain in `.eval` mode. Previously rendered by the
+-- hand-written emitter in `tests/TestResnet34Fwd.lean`; that copy is retired.
+#eval IO.FS.writeFile "verified_mlir/resnet34_fwd_eval.mlir"
+  (Proofs.StableHLO.resnet34FwdEvalFaithfulV 32 10 "1.0e-05")

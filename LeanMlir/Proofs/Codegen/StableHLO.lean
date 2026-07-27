@@ -285,6 +285,13 @@ inductive SHlo : Nat → Type where
                                                            : SHlo (oc*h*w) → SHlo (oc*h*w)
   | bnPerChannelBack {oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
       (x : Vec (oc*h*w))                                   : SHlo (oc*h*w) → SHlo (oc*h*w)
+  -- INFERENCE per-channel BN: the same affine map with the statistics FROZEN — μ/var arrive as
+  -- graph inputs (`muName`/`varName`, the driver's EMA'd running stats) instead of being reduced
+  -- out of the activation. No reduction ⇒ pointwise ⇒ an example's logits do not depend on which
+  -- other examples share its batch. Denotes `bnPerChannelEvalTensor3`. Forward-only: eval has no
+  -- backward, so there is deliberately no `bnPerChannelEvalBack`.
+  | bnPerChannelEvalF {oc h w : Nat} (gName bName muName varName epsStr : String) (ε : ℝ)
+      (γ β μ var : Vec oc)                                 : SHlo (oc*h*w) → SHlo (oc*h*w)
   -- Chapter 6 (MobileNetV2): depthwise conv forward (`stablehlo.convolution` with
   -- `feature_group_count = c` and a `[c, 1, kH, kW]` kernel — one filter per channel,
   -- no cross-channel mixing) and its input-VJP (the SAME-pad reversed-kernel depthwise
@@ -854,6 +861,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       bnPerChannelTensor3 oc h w ε γ β (den e)
   | _, .bnPerChannelBack (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
       bnPerChannelTensor3_grad_input oc h w ε γ x (den e)
+  | _, .bnPerChannelEvalF (oc := oc) (h := h) (w := w) _ _ _ _ _ ε γ β μ var e =>
+      bnPerChannelEvalTensor3 oc h w ε γ β μ var (den e)
   | _, .depthwiseF _ _ W b e => depthwiseFlat W b (den e)
   | _, .depthwiseBack _ W b v e => (depthwiseFlat_has_vjp W b).backward v (den e)
   | _, .depthwiseStridedF _ _ W b e => depthwiseStride2Flat W b (den e)
@@ -1276,6 +1285,14 @@ theorem bnBack_faithful {n : Nat} (gN xN es : String) (ε γ β : ℝ) (hε : 0 
 @[simp] theorem bnPerChannelF_faithful {oc h w : Nat} (gN bN es : String) (ε : ℝ)
     (γ β : Vec oc) (e : SHlo (oc*h*w)) :
     den (.bnPerChannelF gN bN es ε γ β e) = bnPerChannelTensor3 oc h w ε γ β (den e) := rfl
+
+/-- **Inference per-channel BN forward faithfulness.** The 4-D reshape + affine
+    `γ·(x−μ)·rsqrt(var+ε)+β` with rank-1 μ/var/γ/β (`dims=[1]`) denotes the proven
+    `bnPerChannelEvalTensor3` (PerChannelBN.lean). (`rfl`, so kept out of the axiom audit.) -/
+@[simp] theorem bnPerChannelEvalF_faithful {oc h w : Nat} (gN bN muN varN es : String) (ε : ℝ)
+    (γ β μ var : Vec oc) (e : SHlo (oc*h*w)) :
+    den (.bnPerChannelEvalF gN bN muN varN es ε γ β μ var e)
+      = bnPerChannelEvalTensor3 oc h w ε γ β μ var (den e) := rfl
 
 /-- **Per-channel BN backward faithfulness.** The block-diagonal three-term graph
     (per-channel, reducing over the spatial axes) denotes the proven per-channel BN
@@ -2187,6 +2204,7 @@ inductive Raw where
   | flatConvStride4F (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | bnPerChannelF    (g b eps : String) (oc h w : Nat) : Raw → Raw
   | bnPerChannelBack (g x eps : String) (oc h w : Nat) : Raw → Raw
+  | bnPerChannelEvalF (g b mu var eps : String) (oc h w : Nat) : Raw → Raw
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
@@ -2308,6 +2326,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .bnPerChannelF gN bN es oc h w (skel e)
   | _, .bnPerChannelBack (oc := oc) (h := h) (w := w) gN xN es _ _ _ e =>
       .bnPerChannelBack gN xN es oc h w (skel e)
+  | _, .bnPerChannelEvalF (oc := oc) (h := h) (w := w) gN bN muN varN es _ _ _ _ _ e =>
+      .bnPerChannelEvalF gN bN muN varN es oc h w (skel e)
   | _, .depthwiseF (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
       .depthwiseF wN bN c h w kH kW (skel e)
   | _, .depthwiseBack (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
@@ -2432,6 +2452,7 @@ inductive Tok where
   | flatConvStride4F (w b : String) (ic oc h w' kH kW : Nat) : Tok
   | bnPerChannelF    (g b eps : String) (oc h w : Nat) : Tok
   | bnPerChannelBack (g x eps : String) (oc h w : Nat) : Tok
+  | bnPerChannelEvalF (g b mu var eps : String) (oc h w : Nat) : Tok
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Tok
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Tok
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Tok
@@ -2505,6 +2526,7 @@ def toToks : Raw → List Tok
   | .flatConvStride4F w b ic oc h w' kH kW e => toToks e ++ [.flatConvStride4F w b ic oc h w' kH kW]
   | .bnPerChannelF g b eps oc h w e => toToks e ++ [.bnPerChannelF g b eps oc h w]
   | .bnPerChannelBack g x eps oc h w e => toToks e ++ [.bnPerChannelBack g x eps oc h w]
+  | .bnPerChannelEvalF g b mu var eps oc h w e => toToks e ++ [.bnPerChannelEvalF g b mu var eps oc h w]
   | .depthwiseF w b c h w' kH kW e => toToks e ++ [.depthwiseF w b c h w' kH kW]
   | .depthwiseBack w c h w' kH kW e => toToks e ++ [.depthwiseBack w c h w' kH kW]
   | .depthwiseStridedF w b c h w' kH kW e => toToks e ++ [.depthwiseStridedF w b c h w' kH kW]
@@ -3079,6 +3101,28 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
         s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,oc,h,w]}\n" ++
         s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+        s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {gx} = stablehlo.multiply {xhat}, {gb} : {ty [B,oc,h,w]}\n" ++
+        s!"    {ob} = stablehlo.add {gx}, {bb} : {ty [B,oc,h,w]}\n" ++
+        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
+  | .bnPerChannelEvalF gN bN muN varN epsStr oc h w, r :: st => do
+      -- INFERENCE per-channel BatchNorm: reshape to [B,oc,h,w], then the affine map
+      -- γ·(x − μ)·rsqrt(var + ε) + β with μ/var/γ/β all rank-1 `[oc]` graph inputs
+      -- (broadcast dims=[1]). No reduce and no normalizer constant — that is the whole
+      -- difference from `bnPerChannelF`, and why eval is class-batch-independent.
+      let xn ← fresh; let mub ← fresh; let xc ← fresh; let vb ← fresh; let ep ← fresh
+      let ve ← fresh; let istd ← fresh; let xhat ← fresh; let gb ← fresh; let bb ← fresh
+      let gx ← fresh; let ob ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {mub} = stablehlo.broadcast_in_dim {muN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {xc} = stablehlo.subtract {xn}, {mub} : {ty [B,oc,h,w]}\n" ++
+        s!"    {vb} = stablehlo.broadcast_in_dim {varN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,oc,h,w]}\n" ++
+        s!"    {ve} = stablehlo.add {vb}, {ep} : {ty [B,oc,h,w]}\n" ++
         s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
         s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
         s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
