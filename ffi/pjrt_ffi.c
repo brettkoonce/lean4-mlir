@@ -53,6 +53,7 @@ struct iree_ffi_session_t {
   PJRT_LoadedExecutable* exe;
   char* entry;      // original func name, before the @main rename
   int num_outputs;  // from the compiled executable — used by the G4 guard
+  int replicas;     // what THIS graph was compiled for (see session_create)
 };
 
 // Presence marker. `lean_iree_backend_name` in iree_lean_ffi.c dlsym()s this to
@@ -231,12 +232,18 @@ iree_ffi_session_t* iree_ffi_session_create(const char* path) {
   cc.struct_size = PJRT_Client_Compile_Args_STRUCT_SIZE;
   cc.client = g_client;
   cc.program = &prog;
+  // Replica count is PER GRAPH, not per process. A module with no cross-replica
+  // op computes the same thing at any replica count and is only ever invoked
+  // single-device (the eval forward is exactly this), so compile it for one
+  // replica — otherwise Execute rejects it with "Attempted to execute with 1
+  // argument lists when local device count is 2".
+  int reps = (g_replicas > 1 && strstr(mlir, "all_reduce")) ? g_replicas : 1;
   size_t optlen = 0;
-  const unsigned char* optbuf = pjrt_compile_options_for(g_replicas, &optlen);
+  const unsigned char* optbuf = pjrt_compile_options_for(reps, &optlen);
   if (!optbuf) {
     fprintf(stderr, "[pjrt_ffi] no compile options for %d replicas "
                     "(regenerate ffi/pjrt_compile_options.h with that count)\n",
-            g_replicas);
+            reps);
     free(mlir); free(entry); return NULL;
   }
   cc.compile_options = (const char*)optbuf;
@@ -275,8 +282,9 @@ iree_ffi_session_t* iree_ffi_session_create(const char* path) {
   s->exe = cc.executable;
   s->entry = entry;
   s->num_outputs = num_outputs;
+  s->replicas = reps;
   fprintf(stderr, "[pjrt_ffi] compiled %s (@%s, %d outputs, %d replica%s) in %.0f ms\n",
-          path, entry, num_outputs, g_replicas, g_replicas == 1 ? "" : "s", compile_ms);
+          path, entry, num_outputs, reps, reps == 1 ? "" : "s", compile_ms);
   return s;
 }
 
@@ -327,6 +335,12 @@ int iree_ffi_invoke_f32(
   if (!entry_matches(fn_name, sess->entry)) {
     fprintf(stderr, "[pjrt_ffi] entry mismatch: session holds @%s, caller asked for '%s'\n",
             sess->entry, fn_name);
+    return 1;
+  }
+  if (sess->replicas != 1) {
+    fprintf(stderr,
+            "[pjrt_ffi] @%s was compiled for %d replicas; use the data-parallel "
+            "invoke, not the single-device one\n", sess->entry, sess->replicas);
     return 1;
   }
 
@@ -496,11 +510,11 @@ int pjrt_ffi_invoke_f32_dp(
   if (!sess || !sess->exe) return 1;
   if (n_replicas < 1) return 1;
 
-  if (n_replicas != g_replicas) {
+  if (n_replicas != sess->replicas) {
     fprintf(stderr,
-            "[pjrt_ffi] DP invoke asked for %d replicas but the session was "
-            "compiled for %d (set PJRT_REPLICAS before the first session)\n",
-            n_replicas, g_replicas);
+            "[pjrt_ffi] DP invoke asked for %d replicas but @%s was compiled for "
+            "%d (does the graph contain an all_reduce? is PJRT_REPLICAS set?)\n",
+            n_replicas, sess->entry, sess->replicas);
     return 1;
   }
   if (!entry_matches(fn_name, sess->entry)) {

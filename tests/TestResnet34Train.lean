@@ -17,6 +17,11 @@ Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestResnet34Train.lean
 
 open Proofs Proofs.StableHLO
 
+-- Data-parallel replica count for the AdamW render. 1 = single device, emitted
+-- text byte-identical to before; N > 1 inserts a cross-replica all_reduce(add)/N
+-- on every parameter gradient (planning/xla_pjrt_ladder.md §10-11).
+private def REPLICAS : Nat := 1
+
 private def BS : Nat := 32
 private def EPS : String := "1.0e-5"
 private def LR : String := "0.1"
@@ -417,7 +422,7 @@ private def bnLayers : List (String × Nat × Nat) :=
 private def trainStepAdamSched : String :=
   let body := renderBody adamCot
   let updParts := allParams.map (fun (nm, gr, ds) =>
-    ViTRender.emitAdamV ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
+    ViTRender.emitAdamVDP ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm REPLICAS)
   let upd := String.join (updParts.map (·.1))
   let thetaN := updParts.map (·.2.1)
   let mN := updParts.map (·.2.2.1)
