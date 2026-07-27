@@ -15,9 +15,18 @@ parametric skeleton `Proofs.resnet34_has_vjp_at` (depth = a `List.length`, folde
 
 The model is the `resnet34Verified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNets`); its
 derived 146-param layout is kernel-`#guard`ed against the audited `ResNet34Layout`. Trains
-on `verified_mlir/resnet34_{train_step,fwd}.mlir` (rendered by tests/TestResnet34*) through
-the packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, per-channel BN, He-init,
-mean-loss SGD lr=0.1). NB eval uses batch stats (per-example instance-norm BN); EMA out of scope.
+on `verified_mlir/resnet34_{train_step,fwd}.mlir` — **both** rendered by
+`LeanMlir/Proofs/Codegen/ResNet34Render.lean` as `pretty(provenGraph)` — through the
+packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, per-channel BN, He-init,
+mean-loss SGD lr=0.1).
+
+BN here is **per-channel, per-example** (μ/σ over `H·W`, reduce `[2,3]`) — instance-norm-shaped,
+not batch-norm. That makes train and eval the same function, so no running stats are needed and
+`resnet34_fwd.mlir` is a byte-prefix of `resnet34_train_step.mlir`. Until 2026-07-27 the forward
+was a separate hand-written render that normalised over the **batch** (reduce `[0,2,3]`,
+n = B·H·W), i.e. eval scored a different function than training optimised; see
+`planning/xla_pjrt_handoff.md` §2a. (The AdamW sibling `resnet34-verified-adam` is the true
+batch-norm path, and evals through `@resnet34_fwd_eval` with EMA'd running stats.)
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/resnet34-verified data`
 -/

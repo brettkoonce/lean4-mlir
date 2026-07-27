@@ -56,7 +56,68 @@ Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`,
 
 ## 2. Next up
 
-### 2a. Move the imagenette `_fwd` renders from `tests/` into `Proofs/` ▶ IN FLIGHT
+### 2a. Move the imagenette `_fwd` renders from `tests/` into `Proofs/` — R34 ✅ DONE, and it found a real bug
+
+**Status 2026-07-27 (later).** `resnet34_fwd` is moved. Doing it surfaced that the two writers
+were not two spellings of one function — **they were two different functions**, and the SGD
+trainer had a train/eval skew:
+
+| artifact | writer | BN |
+|---|---|---|
+| `resnet34_train_step.mlir` | `Proofs/…/ResNet34Render.lean` (certified) | **per-example**, reduce `[2,3]`, n = H·W = 12544 |
+| `resnet34_fwd.mlir` *(was)* | `tests/TestResnet34Fwd.lean` (hand-written) | **batch**, reduce `[0,2,3]`, n = B·H·W = 401408 |
+| `resnet34_adam_train_step.mlir` | `tests/TestResnet34Train.lean` | batch, 401408 |
+| `resnet34_fwd_eval.mlir` | `tests/TestResnet34Fwd.lean` | affine, running stats |
+
+So `resnet34-verified` (SGD) trained a per-channel **per-example** net and scored it with **batch**
+statistics. Measured: on one shared (θ, x) the two forwards disagree at **rel 1.13** on
+non-degenerate logits (`|logit|max` 2.86) — not a rounding difference, a different function.
+
+Worse, `resnet34_train_step.mlir` *itself* has the same split across its two writers: the
+`tests/` writer renders it at 401408 (batch), the `Proofs/` writer at 12544 (per-example).
+Whichever ran last decided what the trainer optimised. That is what had clobbered the working
+tree at the start of this session.
+
+**What landed:**
+
+- `resnet34FwdFaithfulV` in `LeanMlir/Proofs/Codegen/ResNet34Render.lean`, plus a shared
+  `r34FwdChain` / `r34SigList` that the forward *and* the train step both render from. The
+  train-step artifact came back **byte-identical to the committed one**, which is what proves the
+  refactor changed nothing it shouldn't.
+- `verified_mlir/resnet34_fwd.mlir` is now a **byte-identical 1106-line prefix** of
+  `verified_mlir/resnet34_train_step.mlir`, ending exactly where the loss cotangent begins. Eval
+  is now literally the forward the trainer differentiates.
+- `BFwd` carries its own `xin`, and the backward takes the block record instead of a separately
+  passed input name — the forward/backward pairing can no longer be miswired at the call site.
+- `tests/TestResnet34Fwd.lean` no longer writes `resnet34_fwd.mlir` (its `_fwd_eval` half is
+  unchanged, byte-verified).
+- `scripts/regen_verified_mlir.sh` — the missing canonical regeneration entry point, with two
+  audits: duplicate writers, and *forward ⊂ train-step prefix*.
+- `lean_exe resnet34-fwd-tie` (`tests/TestResnet34FwdTie.lean`) — feeds two renders the same
+  (θ, x) and compares logits, refusing a degenerate all-zero/non-finite agreement.
+
+**Open decision for the reader:** R34-SGD now normalises per-example everywhere. That is the
+certified semantics (`bnPerChannelTensor3`, tied in `SpecVJP` to `resnet34Forward_full_pc`), and
+per-channel-per-example BN is why train == eval with no running stats. But it is *not* textbook
+ResNet batch-norm, and any published `resnet34-verified` accuracy came from the skewed pairing.
+Re-measure before quoting — this folds naturally into the verified-path table re-run.
+
+**Still `tests/`-rendered, in the original §2a scope:** `mobilenetv2_fwd{,_eval}`,
+`efficientnet_fwd{,_eval}`, `convnext_fwd`, `resnet34_fwd_eval`. `vit_fwd`/`vit_train_step`/
+`cifar8_train_step` also have two writers, but those `tests/` files *delegate* to the `Proofs/`
+renderer — verified byte-identical for `vit_fwd`, so they are redundant, not divergent. The four
+that own hand-written emitters (convnext, efficientnet, mobilenetv2, resnet34 train steps) are
+the ones that can drift.
+
+`resnet34_fwd_eval` specifically needs a **new verified op** — the proven kit has no
+running-stats/affine BN, only the batch-statistic `bnPerChannelF`. That means a
+`bnPerChannelEvalF` constructor + `toToks`/`serializeToks` case + `den` + a `rfl` faithfulness
+theorem (the serializer is simpler than `bnPerChannelF`'s — no reduce), and a `r34FwdChain`
+parameterised by which BN op it emits. Tractable, but it is new proof-kit surface, not a move.
+
+---
+
+#### Original scope notes (kept — the analysis that set this up)
 
 The provenance audit (`xla_pjrt_ladder.md` §8, and the tables below) found the
 repo splits cleanly along an axis nobody chose deliberately:
@@ -96,14 +157,17 @@ Watch out for:
   `tests/TestResnet34Train.lean:464`; also convnext, efficientnet, mobilenetv2,
   cifar8, and both vit files). Whoever runs last wins, silently. Moving a render
   is a good moment to add the diff check.
+  → *Now audited by `scripts/regen_verified_mlir.sh check`; still 7, because the fix is
+  per-net. Three are benign delegators; four own independent emitters.*
 - `LeanMlir/Proofs/Codegen/ViTRender.lean` is the existing **drift guard** — it
   renders the same forward via `pretty` of the proven graph. Copy that pattern.
+  → *Verified: the two `vit_fwd.mlir` writers do agree byte-for-byte.*
 - `vit_adam_train_step.mlir` is written by the **trainer app itself** at run time
   (`apps/imagenette/MainViTVerifiedAdam.lean:31`) — unique lifecycle, don't be
   surprised by it.
 - **There is no canonical regeneration entry point.** No lake target or script
   rebuilds `verified_mlir/`; two `lakefile.lean` comments describe it in prose.
-  Worth adding while you are in here.
+  Worth adding while you are in here. → *Added: `scripts/regen_verified_mlir.sh`.*
 
 ### 2b. R34 on 2 GPUs ✅ RUNS — 1.46×, and the shortfall is diagnosed
 

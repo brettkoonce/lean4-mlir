@@ -1,17 +1,23 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
 
-/-! # B9a — full ResNet-34 forward renderer + `iree-compile` validation
+/-! # B9a — ResNet-34 **eval** forward renderer (running-stats BN) + `iree-compile` validation
 
-Programmatic StableHLO for a real ResNet-34 forward (IMAGENETTE 3×224×224 input —
+Programmatic StableHLO for the ResNet-34 *inference* forward (IMAGENETTE 3×224×224 input —
 the paper's native ImageNet resolution): 7×7 stride-2 stem (3→64, 224→112) → 2×2
 maxpool (112→56) → 4 stages of basic blocks `[3,4,6,3]` at channels `64/128/256/512`
 (stages 2–4 open with a strided downsample block, 56→28→14→7) → global-average-pool →
-dense(512→10). Every fragment is the same StableHLO the VERIFIED per-op emitters
-produce (conv, stride-2 conv — incl. the 7×7 stem, per-channel BN = bnPerChannelF/Back,
-relu, maxpool, GAP, dense); this de-risks the whole 34-layer forward on `iree-compile`
-before wiring the train step. (The 7×7 stride-2 stem reuses the proven strided-conv
-identity `flatConvStride2 = decimate2 ∘ (stride-1 SAME conv)`, kernel-general.)
+dense(512→10), with **affine BN consuming per-layer running mean/var** rather than
+batch statistics. This is the eval partner of the Adam train step
+(`tests/TestResnet34Train.lean`), which trains with true batch-norm and EMAs its batch
+stats out through passthrough slots.
+
+**`@resnet34_fwd` no longer lives here** (`planning/xla_pjrt_handoff.md` §2a). It is rendered by
+`LeanMlir/Proofs/Codegen/ResNet34Render.lean` as `pretty(provenGraph)`, sharing its forward chain
+with the certified train step — its body is a byte-identical prefix of
+`verified_mlir/resnet34_train_step.mlir`. The hand-written copy that used to be here computed a
+**different function**: true batch-norm (reduce over `[0,2,3]`, n = B·H·W) where the certified
+train step normalises **per example** (reduce over `[2,3]`, n = H·W). See the §2a notes.
 
 Naming: helper `o` is a bare prefix; the helper's result SSA is `%{o}`, its
 intermediates `%{o}…`. All value inputs carry a leading `%`.
@@ -49,27 +55,6 @@ private def convStem (o x w bnm : String) (oc ic Hin Win Hout Wout : Nat) : Stri
   s!"    %{o}bb = stablehlo.broadcast_in_dim {bnm}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hout,Wout]}\n" ++
   s!"    %{o} = stablehlo.add %{o}c, %{o}bb : {ty [BS,oc,Hout,Wout]}\n"
 
-/-- Per-channel BatchNorm forward (4-D), reduce μ/var over spatial `[2,3]`, rank-1
-    γ/β `dims=[1]`. The bnPerChannelF op pattern, kept 4-D. Result SSA = `%{o}`. -/
-private def bnPC (o x g bt : String) (oc Hh Ww m : Nat) : String :=
-  s!"    %{o}nf = stablehlo.constant dense<{BS*m}.0> : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}ep = stablehlo.constant dense<{EPS}> : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}smr = stablehlo.reduce({x} init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
-  s!"    %{o}sm = stablehlo.broadcast_in_dim %{o}smr, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}mu = stablehlo.divide %{o}sm, %{o}nf : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}xc = stablehlo.subtract {x}, %{o}mu : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}sq = stablehlo.multiply %{o}xc, %{o}xc : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}vsr = stablehlo.reduce(%{o}sq init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n" ++
-  s!"    %{o}vs = stablehlo.broadcast_in_dim %{o}vsr, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}vr = stablehlo.divide %{o}vs, %{o}nf : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}ve = stablehlo.add %{o}vr, %{o}ep : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}istd = stablehlo.rsqrt %{o}ve : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}xh = stablehlo.multiply %{o}xc, %{o}istd : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}gb = stablehlo.broadcast_in_dim {g}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}btb = stablehlo.broadcast_in_dim {bt}, dims = [1] : ({ty [oc]}) -> {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o}gx = stablehlo.multiply %{o}xh, %{o}gb : {ty [BS,oc,Hh,Ww]}\n" ++
-  s!"    %{o} = stablehlo.add %{o}gx, %{o}btb : {ty [BS,oc,Hh,Ww]}\n"
-
 private def relu (o x : String) (oc Hh Ww : Nat) : String :=
   s!"    %{o}z = stablehlo.constant dense<0.0> : {ty [BS,oc,Hh,Ww]}\n" ++
   s!"    %{o} = stablehlo.maximum {x}, %{o}z : {ty [BS,oc,Hh,Ww]}\n"
@@ -85,45 +70,6 @@ private def maxpool (o x : String) (c Hh Ww : Nat) : String :=
 
 private def addOp (o a b : String) (oc Hh Ww : Nat) : String :=
   s!"    %{o} = stablehlo.add {a}, {b} : {ty [BS,oc,Hh,Ww]}\n"
-
--- ── blocks ──
-
-/-- Identity basic block: `relu(BN(conv(relu(BN(conv x)))) + x)`, channels `c` @ `Hh×Ww`. -/
-private def idBlock (p x : String) (c Hh Ww : Nat) : String × String :=
-  let m := Hh*Ww
-  let code :=
-    conv s!"{p}c1" x s!"%{p}W1" s!"%{p}b1" c c Hh Ww Hh Ww 1 ++
-    bnPC s!"{p}n1" s!"%{p}c1" s!"%{p}g1" s!"%{p}bt1" c Hh Ww m ++
-    relu s!"{p}r1" s!"%{p}n1" c Hh Ww ++
-    conv s!"{p}c2" s!"%{p}r1" s!"%{p}W2" s!"%{p}b2" c c Hh Ww Hh Ww 1 ++
-    bnPC s!"{p}n2" s!"%{p}c2" s!"%{p}g2" s!"%{p}bt2" c Hh Ww m ++
-    addOp s!"{p}a" s!"%{p}n2" x c Hh Ww ++
-    relu s!"{p}o" s!"%{p}a" c Hh Ww
-  (code, s!"%{p}o")
-
-/-- Strided downsample block `c→oc`, `2Hh×2Ww → Hh×Ww`:
-    `relu(BN(conv₃ₓ₃(relu(BN(conv₂ₛ x)))) + BN(proj₂ₛ x))`. -/
-private def downBlock (p x : String) (c oc Hh Ww : Nat) : String × String :=
-  let m := Hh*Ww; let Hin := 2*Hh; let Win := 2*Ww
-  let code :=
-    conv s!"{p}c1" x s!"%{p}W1" s!"%{p}b1" oc c Hin Win Hh Ww 2 ++
-    bnPC s!"{p}n1" s!"%{p}c1" s!"%{p}g1" s!"%{p}bt1" oc Hh Ww m ++
-    relu s!"{p}r1" s!"%{p}n1" oc Hh Ww ++
-    conv s!"{p}c2" s!"%{p}r1" s!"%{p}W2" s!"%{p}b2" oc oc Hh Ww Hh Ww 1 ++
-    bnPC s!"{p}n2" s!"%{p}c2" s!"%{p}g2" s!"%{p}bt2" oc Hh Ww m ++
-    conv s!"{p}cp" x s!"%{p}Wp" s!"%{p}bp" oc c Hin Win Hh Ww 2 ++
-    bnPC s!"{p}np" s!"%{p}cp" s!"%{p}gp" s!"%{p}btp" oc Hh Ww m ++
-    addOp s!"{p}a" s!"%{p}n2" s!"%{p}np" oc Hh Ww ++
-    relu s!"{p}o" s!"%{p}a" oc Hh Ww
-  (code, s!"%{p}o")
-
-/-- `n` identity blocks chained, names `{base}b0..b{n-1}`. -/
-private def idChain (base x : String) (n c Hh Ww : Nat) : String × String := Id.run do
-  let mut code := ""; let mut cur := x
-  for i in [:n] do
-    let (c2, out) := idBlock s!"{base}b{i}" cur c Hh Ww
-    code := code ++ c2; cur := out
-  return (code, cur)
 
 -- ── parameter-signature generators (must mirror the body's names + types) ──
 
@@ -214,37 +160,6 @@ private def gapDense (o x : String) (c nC Hh Ww : Nat) : String :=
 
 -- ── whole net ──
 
-private def resnet34Fwd : String := Id.run do
-  -- 7×7 stride-2 stem (3→64, 224→112) + 2×2 maxpool (112→56); downsamples 56→28→14→7
-  let stemCode :=
-    s!"    %xr = stablehlo.reshape %x : ({ty [BS,150528]}) -> {ty [BS,3,224,224]}\n" ++
-    convStem "stc" "%xr" "%sW" "%sb" 64 3 224 224 112 112 ++
-    bnPC "stn" "%stc" "%sg" "%sbt" 64 112 112 (112*112) ++
-    relu "str" "%stn" 64 112 112 ++
-    maxpool "stp" "%str" 64 112 112
-  let (s1, o1) := idChain "s1" "%stp" 3 64 56 56
-  let (d2, o2) := downBlock "d2" o1 64 128 28 28
-  let (s2, o2b) := idChain "s2" o2 3 128 28 28
-  let (d3, o3) := downBlock "d3" o2b 128 256 14 14
-  let (s3, o3b) := idChain "s3" o3 5 256 14 14
-  let (d4, o4) := downBlock "d4" o3b 256 512 7 7
-  let (s4, o4b) := idChain "s4" o4 2 512 7 7
-  let tail := gapDense "out" o4b 512 10 7 7
-  let body :=
-    "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    stemCode ++ s1 ++ d2 ++ s2 ++ d3 ++ s3 ++ d4 ++ s4 ++ tail
-  let sig : List String :=
-    ["%x: " ++ ty [BS,150528]]
-    ++ [s!"%sW: {ty [64,3,7,7]}", s!"%sb: {ty [64]}"] ++ bnSig "s" 64
-    ++ idChainSig "s1" 3 64
-    ++ downBlockSig "d2" 64 128 ++ idChainSig "s2" 3 128
-    ++ downBlockSig "d3" 128 256 ++ idChainSig "s3" 5 256
-    ++ downBlockSig "d4" 256 512 ++ idChainSig "s4" 2 512
-    ++ [s!"%Wd: {ty [512,10]}", s!"%bd: {ty [10]}"]
-  let argSig := String.intercalate ", " sig
-  return "module @m {\n" ++ s!"  func.func @resnet34_fwd({argSig}) -> {ty [BS,10]} " ++ "{\n" ++
-    body ++ s!"    return %out : {ty [BS,10]}\n" ++ "  }\n}\n"
-
 /-- `@resnet34_fwd_eval` — the eval forward with affine running-stats BN. Same params as
     `@resnet34_fwd`, plus per-BN-layer `%{p}mu`/`%{p}var` `[oc]` inputs in BN forward order
     (the driver passes `θ ++ runningBnStats`). Returns logits `[BS,10]`. -/
@@ -293,16 +208,15 @@ private def tryCompile (src dst label : String) : IO Unit := do
     else IO.println s!"{label} iree-compile OK → {src}"
   catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
 
+-- NOTE: `verified_mlir/resnet34_fwd.mlir` is deliberately NOT written here — it belongs to
+-- `LeanMlir/Proofs/Codegen/ResNet34Render.lean` (§2a). Adding a second writer back would
+-- re-open the silent last-writer-wins clobber this file used to cause.
 def main : IO Unit := do
   IO.FS.createDirAll "verified_mlir"
   IO.FS.createDirAll ".lake/build"
-  let mlir := resnet34Fwd
-  IO.println s!"rendered @resnet34_fwd (BS={BS}): {mlir.length} chars"
-  IO.FS.writeFile "verified_mlir/resnet34_fwd.mlir" mlir
   let evalMlir := resnet34FwdEval
   IO.println s!"rendered @resnet34_fwd_eval (BS={BS}): {evalMlir.length} chars"
   IO.FS.writeFile "verified_mlir/resnet34_fwd_eval.mlir" evalMlir
-  tryCompile "verified_mlir/resnet34_fwd.mlir" ".lake/build/resnet34_fwd_v.vmfb" "fwd"
   tryCompile "verified_mlir/resnet34_fwd_eval.mlir" ".lake/build/resnet34_fwd_eval_v.vmfb" "fwd_eval"
 
 #eval main

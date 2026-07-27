@@ -1329,7 +1329,9 @@ lean_exe «cifar8w-bn-ablation» where
   moreLinkArgs := ireeLink
 
 -- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
--- VERIFIED-rendered StableHLO (tests/TestResnet34{Train,Fwd}.lean); 146 params.
+-- VERIFIED-rendered StableHLO; 146 params. Train step AND eval forward both come from
+-- LeanMlir/Proofs/Codegen/ResNet34Render.lean (pretty(provenGraph)); regenerate with
+-- scripts/regen_verified_mlir.sh.
 lean_exe «resnet34-verified» where
   root := `apps.imagenette.MainResnet34Verified
   moreLinkArgs := ireeLink
@@ -1352,6 +1354,14 @@ lean_exe «resnet34-verified-adam» where
     BN running stats, and the regime the 20-40x measurements came from. -/
 lean_exe «resnet34-verified-adam-xla» where
   root := `apps.imagenette.MainResnet34VerifiedAdamXla
+  moreLinkArgs := xlaLink
+
+/-- Migration guard for the §2a `_fwd` move: feeds two renders of `@resnet34_fwd` the same θ and x
+    and compares logits. The two emitters differ textually by construction, so a numeric tie is the
+    only meaningful check. XLA-linked — it compiles the module in-process, so this is seconds
+    rather than the multi-minute 224² `iree-compile`. -/
+lean_exe «resnet34-fwd-tie» where
+  root := `tests.TestResnet34FwdTie
   moreLinkArgs := xlaLink
 
 -- ch7 C4: small MobileNetV2 (inverted-residual blocks: depthwise conv + relu6 +

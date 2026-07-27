@@ -29,9 +29,12 @@ open Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
-/-- Saved forward SSA names a block's backward + SGD passes reference. -/
+/-- Saved forward SSA names a block's backward + SGD passes reference. `xin` is carried by the
+    forward itself so the backward never has to re-derive which block fed which — the wiring the
+    train step reads back is the wiring the forward emitted. -/
 structure BFwd where
   code : String
+  xin : String       -- block input (the merged dx flows back to this)
   o  : String        -- block output (post-relu)
   a  : String        -- pre-output-relu sum (the add result)
   c1 : String        -- conv1 output (= BN1 input)
@@ -39,6 +42,7 @@ structure BFwd where
   r1 : String        -- relu1 output (= conv2 input activation)
   c2 : String        -- conv2 output (= BN2 input)
   cp : String        -- projection conv output (downsample only; "" for identity)
+deriving Inhabited
 
 /-- Backward result: code, the dx cotangent to the previous block, and the block's param-update
     output SSA names in func-arg order. -/
@@ -64,7 +68,7 @@ private def idFwd (B c hh : Nat) (epsStr p xName : String) : StateM Nat BFwd := 
   let (cN2, nN2) ← pretty B (.bnPerChannelF (oc := c) (h := hh) (w := ww) s!"%{p}g2" s!"%{p}bt2" epsStr 0 zc zc (.operand nC2 zin))
   let (cA,  nA)  ← pretty B (.addV (.operand nN2 zin) (.operand xName zin))
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zin))
-  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cA ++ cO,
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cA ++ cO, xin := xName,
          o := nO, a := nA, c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, cp := "" }
 
 /-- Downsample block forward: strided `conv1→BN1→relu1→conv2→BN2` body + strided projection
@@ -85,17 +89,18 @@ private def downFwd (B cin c hh : Nat) (epsStr p xName : String) : StateM Nat BF
   let (cNp, nNp) ← pretty B (.bnPerChannelF (oc := c) (h := hh) (w := ww) s!"%{p}gp" s!"%{p}btp" epsStr 0 zc zc (.operand nCp zout))
   let (cA,  nA)  ← pretty B (.addV (.operand nN2 zout) (.operand nNp zout))
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zout))
-  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cCp ++ cNp ++ cA ++ cO,
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cCp ++ cNp ++ cA ++ cO, xin := xName,
          o := nO, a := nA, c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, cp := nCp }
 
 -- ════════════════════════════════════════════════════════════════
 -- § Block backward + param SGD (the cotangent fans through, then sums at the skip)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Identity block backward + 8 param SGD ops. `dyName` = cotangent of the block output;
-    `xName` = block input. The skip is identity, so the merged dx sums (body dx) + (masked cot). -/
-private def idBackSgd (B c hh : Nat) (epsStr lrStr p xName : String) (f : BFwd) (dyName : String) :
+/-- Identity block backward + 8 param SGD ops. `dyName` = cotangent of the block output; the block
+    input comes from `f.xin`. The skip is identity, so the merged dx sums (body dx) + (masked cot). -/
+private def idBackSgd (B c hh : Nat) (epsStr lrStr p : String) (f : BFwd) (dyName : String) :
     StateM Nat BBack := do
+  let xName := f.xin
   let ww := hh
   let zc  : Vec c := fun _ => 0
   let zk  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
@@ -124,8 +129,9 @@ private def idBackSgd (B c hh : Nat) (epsStr lrStr p xName : String) (f : BFwd) 
 
 /-- Downsample block backward + 12 param SGD ops. The skip is a strided projection conv+BN, so
     the merged dx (at the `2hh×2ww` input) sums (strided body dx) + (strided projection dx). -/
-private def downBackSgd (B cin c hh : Nat) (epsStr lrStr p xName : String) (f : BFwd) (dyName : String) :
+private def downBackSgd (B cin c hh : Nat) (epsStr lrStr p : String) (f : BFwd) (dyName : String) :
     StateM Nat BBack := do
+  let xName := f.xin
   let ww := hh
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
@@ -175,6 +181,102 @@ private def downSig (p : String) (cin c : Nat) : List (String × String) :=
    (s!"%{p}W2", ty [c,c,3,3]), (s!"%{p}b2", ty [c]), (s!"%{p}g2", ty [c]), (s!"%{p}bt2", ty [c]),
    (s!"%{p}Wp", ty [c,cin,3,3]), (s!"%{p}bp", ty [c]), (s!"%{p}gp", ty [c]), (s!"%{p}btp", ty [c])]
 
+/-- **The 146 ResNet-34 parameters in `net.paramShapes` (= func-arg) order**, names + types.
+    The forward, the eval forward and the train step all take their signature from here, so the
+    arity/type/order contract the driver relies on cannot drift between renders. -/
+def r34SigList (nClasses : Nat) : List (String × String) :=
+  [("%sW", ty [64,3,7,7]), ("%sbi", ty [64]), ("%sg", ty [64]), ("%sbt", ty [64])] ++
+  idSig "s1b0" 64 ++ idSig "s1b1" 64 ++ idSig "s1b2" 64 ++
+  downSig "d2" 64 128 ++ idSig "s2b0" 128 ++ idSig "s2b1" 128 ++ idSig "s2b2" 128 ++
+  downSig "d3" 128 256 ++ idSig "s3b0" 256 ++ idSig "s3b1" 256 ++ idSig "s3b2" 256 ++
+    idSig "s3b3" 256 ++ idSig "s3b4" 256 ++
+  downSig "d4" 256 512 ++ idSig "s4b0" 512 ++ idSig "s4b1" 512 ++
+  [("%Wd", ty [512, nClasses]), ("%bd", ty [nClasses])]
+
+-- ════════════════════════════════════════════════════════════════
+-- § The shared forward chain (both renders emit this, so they cannot disagree)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Every SSA name the ResNet-34 forward produces. `resnet34FwdFaithfulV` returns just `logits`;
+    the train step additionally consumes the stem and per-block names on the way back. -/
+structure R34Fwd where
+  code   : String        -- stem → 16 blocks → GAP → dense, in emission order
+  stc    : String        -- stem conv output (= stem BN input)
+  stn    : String        -- stem BN output (= stem relu pre-activation)
+  str    : String        -- stem relu output (= maxpool input)
+  stp    : String        -- maxpool output (= block-1 input)
+  blocks : Array BFwd    -- the 16 block forwards, in forward order
+  gap    : String        -- global-average-pool output
+  logits : String        -- dense output
+
+set_option maxRecDepth 1000000 in
+/-- **The full ResNet-34 `[3,4,6,3]` forward as `pretty` of the verified AST.** 7×7/s2 stem
+    (3→64, 224→112) → 2×2 maxpool (→56) → stages 64/128/256/512 at 56/28/14/7 (stages 2–4 open with
+    a strided downsample block) → GAP(7×7) → dense(512→`nClasses`). Every emitted line is `pretty`
+    of a verified `SHlo` node. BN is the **batch-statistic** `bnPerChannelF` — this is the training
+    forward; the running-stats eval forward is a separate render. -/
+private def r34FwdChain (B nClasses : Nat) (epsStr : String) : StateM Nat R34Fwd := do
+  -- ═══ stem: 7×7/s2 conv → BN → relu → maxpool ═══
+  let zx   : Vec (3*224*224) := fun _ => 0
+  let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
+  let z64  : Vec 64 := fun _ => 0
+  let z112 : Vec (64*112*112) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := 112) (w := 112) "%sW" "%sbi" zSk z64 (.operand "%x" zx))
+  let (cStn, nStn) ← pretty B (.bnPerChannelF (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
+  let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
+  let (cStp, nStp) ← pretty B (.maxPoolF (c := 64) (h := 56) (w := 56) (.operand nStr z112))
+  -- ═══ 16 blocks ═══
+  let f1  ← idFwd   B 64 56 epsStr "s1b0" nStp
+  let f2  ← idFwd   B 64 56 epsStr "s1b1" f1.o
+  let f3  ← idFwd   B 64 56 epsStr "s1b2" f2.o
+  let f4  ← downFwd B 64 128 28 epsStr "d2" f3.o
+  let f5  ← idFwd   B 128 28 epsStr "s2b0" f4.o
+  let f6  ← idFwd   B 128 28 epsStr "s2b1" f5.o
+  let f7  ← idFwd   B 128 28 epsStr "s2b2" f6.o
+  let f8  ← downFwd B 128 256 14 epsStr "d3" f7.o
+  let f9  ← idFwd   B 256 14 epsStr "s3b0" f8.o
+  let f10 ← idFwd   B 256 14 epsStr "s3b1" f9.o
+  let f11 ← idFwd   B 256 14 epsStr "s3b2" f10.o
+  let f12 ← idFwd   B 256 14 epsStr "s3b3" f11.o
+  let f13 ← idFwd   B 256 14 epsStr "s3b4" f12.o
+  let f14 ← downFwd B 256 512 7 epsStr "d4" f13.o
+  let f15 ← idFwd   B 512 7 epsStr "s4b0" f14.o
+  let f16 ← idFwd   B 512 7 epsStr "s4b1" f15.o
+  -- ═══ head: GAP(7×7) → dense(512→nClasses) ═══
+  let zL   : Vec (512*7*7) := fun _ => 0
+  let z512 : Vec 512 := fun _ => 0
+  let zWd  : Mat 512 nClasses := fun _ _ => 0
+  let zNC  : Vec nClasses := fun _ => 0
+  let (cGap, nGap) ← pretty B (.gapF (c := 512) (h := 7) (w := 7) (.operand f16.o zL))
+  let (cLog, nLog) ← pretty B (denseF "%Wd" "%bd" zWd zNC (.operand nGap z512))
+  pure { code := cStc ++ cStn ++ cStr ++ cStp ++
+           f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
+           f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++
+           f16.code ++ cGap ++ cLog,
+         stc := nStc, stn := nStn, str := nStr, stp := nStp,
+         blocks := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16],
+         gap := nGap, logits := nLog }
+
+set_option maxRecDepth 1000000 in
+/-- **`@resnet34_fwd` rendered ENTIRELY from the verified AST** — the Chapter-5 peer of the
+    train-step render, sharing its forward chain and its 146-parameter signature. Takes `%x` plus
+    the 146 params in `net.paramShapes` order (147 inputs) and returns logits `[B, nClasses]`.
+
+    This replaces the independent hand-written string emitter in `tests/TestResnet34Fwd.lean`:
+    the forward the driver evals is now the same graph the train step differentiates, by
+    construction rather than by inspection. -/
+def resnet34FwdFaithfulV (B nClasses : Nat) (epsStr : String) : String :=
+  let sigList := r34SigList nClasses
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+    String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
+  let F : R34Fwd := (r34FwdChain B nClasses epsStr).run' 0
+  "module @m {\n" ++
+  s!"  func.func @resnet34_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // ── ResNet-34 forward: every line is pretty(verified AST node) ──\n" ++
+  F.code ++
+  s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net renderer
 -- ════════════════════════════════════════════════════════════════
@@ -186,77 +288,52 @@ set_option maxRecDepth 1000000 in
     certified. Stem 7×7/s2 (3→64, 224→112), maxpool→56, stages 64/128/256/512 at 56/28/14/7. -/
 def resnet34TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) : String :=
   let go : StateM Nat String := do
-    -- ═══ stem: 7×7/s2 conv → BN → relu → maxpool ═══
+    -- ═══ forward: stem → 16 blocks → GAP → dense (the SAME chain `resnet34FwdFaithfulV` emits) ═══
+    let F ← r34FwdChain B nClasses epsStr
+    let blk := F.blocks
     let zx   : Vec (3*224*224) := fun _ => 0
     let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
     let z64  : Vec 64 := fun _ => 0
-    let z112 : Vec (64*112*112) := fun _ => 0
     let z56  : Vec (64*56*56) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := 112) (w := 112) "%sW" "%sbi" zSk z64 (.operand "%x" zx))
-    let (cStn, nStn) ← pretty B (.bnPerChannelF (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
-    let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
-    let (cStp, nStp) ← pretty B (.maxPoolF (c := 64) (h := 56) (w := 56) (.operand nStr z112))
-    -- ═══ forward: 16 blocks ═══
-    let f1  ← idFwd   B 64 56 epsStr "s1b0" nStp
-    let f2  ← idFwd   B 64 56 epsStr "s1b1" f1.o
-    let f3  ← idFwd   B 64 56 epsStr "s1b2" f2.o
-    let f4  ← downFwd B 64 128 28 epsStr "d2" f3.o
-    let f5  ← idFwd   B 128 28 epsStr "s2b0" f4.o
-    let f6  ← idFwd   B 128 28 epsStr "s2b1" f5.o
-    let f7  ← idFwd   B 128 28 epsStr "s2b2" f6.o
-    let f8  ← downFwd B 128 256 14 epsStr "d3" f7.o
-    let f9  ← idFwd   B 256 14 epsStr "s3b0" f8.o
-    let f10 ← idFwd   B 256 14 epsStr "s3b1" f9.o
-    let f11 ← idFwd   B 256 14 epsStr "s3b2" f10.o
-    let f12 ← idFwd   B 256 14 epsStr "s3b3" f11.o
-    let f13 ← idFwd   B 256 14 epsStr "s3b4" f12.o
-    let f14 ← downFwd B 256 512 7 epsStr "d4" f13.o
-    let f15 ← idFwd   B 512 7 epsStr "s4b0" f14.o
-    let f16 ← idFwd   B 512 7 epsStr "s4b1" f15.o
-    -- ═══ head: GAP(7×7) → dense(512→nClasses) → softmax-CE cotangent ═══
-    let zL   : Vec (512*7*7) := fun _ => 0
     let z512 : Vec 512 := fun _ => 0
     let zWd  : Mat 512 nClasses := fun _ _ => 0
     let zNC  : Vec nClasses := fun _ => 0
-    let (cGap, nGap) ← pretty B (.gapF (c := 512) (h := 7) (w := 7) (.operand f16.o zL))
-    let (cLog, nLog) ← pretty B (denseF "%Wd" "%bd" zWd zNC (.operand nGap z512))
-    let (cDy,  nDy)  ← pretty B (.sub (.softmaxDiv (.expe (.operand nLog zNC))) (.operand "%onehot" zNC))
+    -- ═══ softmax-CE cotangent ═══
+    let (cDy,  nDy)  ← pretty B (.sub (.softmaxDiv (.expe (.operand F.logits zNC))) (.operand "%onehot" zNC))
     -- ═══ head backward: dense input-grad → GAP-back, dense W/b SGD ═══
     let (cDg,  nDg)  ← pretty B (.dotOut "%Wd" zWd (.operand nDy zNC))
     let (cDgi, nDgi) ← pretty B (.gapBack (c := 512) (h := 7) (w := 7) (.operand nDg z512))
-    let (cWd, nWd) ← pretty B (.weightSgd nGap "%Wd" lrStr z512 zWd 0 (.operand nDy zNC))
+    let (cWd, nWd) ← pretty B (.weightSgd F.gap "%Wd" lrStr z512 zWd 0 (.operand nDy zNC))
     let (cbd, nbd) ← pretty B (.biasSgd "%bd" lrStr zNC 0 (.operand nDy zNC))
-    -- ═══ backward: 16 blocks reversed (cotangent threads from nDgi) ═══
-    let b16 ← idBackSgd   B 512 7 epsStr lrStr "s4b1" f15.o f16 nDgi
-    let b15 ← idBackSgd   B 512 7 epsStr lrStr "s4b0" f14.o f15 b16.dx
-    let b14 ← downBackSgd B 256 512 7 epsStr lrStr "d4" f13.o f14 b15.dx
-    let b13 ← idBackSgd   B 256 14 epsStr lrStr "s3b4" f12.o f13 b14.dx
-    let b12 ← idBackSgd   B 256 14 epsStr lrStr "s3b3" f11.o f12 b13.dx
-    let b11 ← idBackSgd   B 256 14 epsStr lrStr "s3b2" f10.o f11 b12.dx
-    let b10 ← idBackSgd   B 256 14 epsStr lrStr "s3b1" f9.o f10 b11.dx
-    let b9  ← idBackSgd   B 256 14 epsStr lrStr "s3b0" f8.o f9 b10.dx
-    let b8  ← downBackSgd B 128 256 14 epsStr lrStr "d3" f7.o f8 b9.dx
-    let b7  ← idBackSgd   B 128 28 epsStr lrStr "s2b2" f6.o f7 b8.dx
-    let b6  ← idBackSgd   B 128 28 epsStr lrStr "s2b1" f5.o f6 b7.dx
-    let b5  ← idBackSgd   B 128 28 epsStr lrStr "s2b0" f4.o f5 b6.dx
-    let b4  ← downBackSgd B 64 128 28 epsStr lrStr "d2" f3.o f4 b5.dx
-    let b3  ← idBackSgd   B 64 56 epsStr lrStr "s1b2" f2.o f3 b4.dx
-    let b2  ← idBackSgd   B 64 56 epsStr lrStr "s1b1" f1.o f2 b3.dx
-    let b1  ← idBackSgd   B 64 56 epsStr lrStr "s1b0" nStp f1 b2.dx
+    -- ═══ backward: 16 blocks reversed (cotangent threads from nDgi); each block's input comes
+    --     from its own `BFwd.xin`, so forward and backward cannot be mispaired ═══
+    let b16 ← idBackSgd   B 512 7 epsStr lrStr "s4b1" blk[15]! nDgi
+    let b15 ← idBackSgd   B 512 7 epsStr lrStr "s4b0" blk[14]! b16.dx
+    let b14 ← downBackSgd B 256 512 7 epsStr lrStr "d4" blk[13]! b15.dx
+    let b13 ← idBackSgd   B 256 14 epsStr lrStr "s3b4" blk[12]! b14.dx
+    let b12 ← idBackSgd   B 256 14 epsStr lrStr "s3b3" blk[11]! b13.dx
+    let b11 ← idBackSgd   B 256 14 epsStr lrStr "s3b2" blk[10]! b12.dx
+    let b10 ← idBackSgd   B 256 14 epsStr lrStr "s3b1" blk[9]! b11.dx
+    let b9  ← idBackSgd   B 256 14 epsStr lrStr "s3b0" blk[8]! b10.dx
+    let b8  ← downBackSgd B 128 256 14 epsStr lrStr "d3" blk[7]! b9.dx
+    let b7  ← idBackSgd   B 128 28 epsStr lrStr "s2b2" blk[6]! b8.dx
+    let b6  ← idBackSgd   B 128 28 epsStr lrStr "s2b1" blk[5]! b7.dx
+    let b5  ← idBackSgd   B 128 28 epsStr lrStr "s2b0" blk[4]! b6.dx
+    let b4  ← downBackSgd B 64 128 28 epsStr lrStr "d2" blk[3]! b5.dx
+    let b3  ← idBackSgd   B 64 56 epsStr lrStr "s1b2" blk[2]! b4.dx
+    let b2  ← idBackSgd   B 64 56 epsStr lrStr "s1b1" blk[1]! b3.dx
+    let b1  ← idBackSgd   B 64 56 epsStr lrStr "s1b0" blk[0]! b2.dx
     -- ═══ stem backward: maxpool-back → relu-back → BN-back, then stem param SGD ═══
     let zSt112 : Vec (64*112*112) := fun _ => 0
-    let (cDmp, nDmp) ← pretty B (.maxPoolBack (c := 64) (h := 56) (w := 56) nStr zSt112 (.operand b1.dx z56))
-    let (cDsr, nDsr) ← pretty B (.selectPos nStn zSt112 (.operand nDmp zSt112))
-    let (cDsn, nDsn) ← pretty B (.bnPerChannelBack (oc := 64) (h := 112) (w := 112) "%sg" nStc epsStr 0 z64 zSt112 (.operand nDsr zSt112))
+    let (cDmp, nDmp) ← pretty B (.maxPoolBack (c := 64) (h := 56) (w := 56) F.str zSt112 (.operand b1.dx z56))
+    let (cDsr, nDsr) ← pretty B (.selectPos F.stn zSt112 (.operand nDmp zSt112))
+    let (cDsn, nDsn) ← pretty B (.bnPerChannelBack (oc := 64) (h := 112) (w := 112) "%sg" F.stc epsStr 0 z64 zSt112 (.operand nDsr zSt112))
     let (csW, nsW) ← pretty B (.convStridedWeightSgd "%x" "%sW" lrStr z64 zx zSk 0 (.operand nDsn zSt112))
     let (csb, nsb) ← pretty B (.convStridedBiasSgd "%sbi" lrStr zSk zx z64 0 (.operand nDsn zSt112))
-    let (csg, nsg) ← pretty B (.bnGammaSgd "%sg" nStc epsStr lrStr 0 z64 zSt112 0 (.operand nDsr zSt112))
+    let (csg, nsg) ← pretty B (.bnGammaSgd "%sg" F.stc epsStr lrStr 0 z64 zSt112 0 (.operand nDsr zSt112))
     let (cst, nst) ← pretty B (.bnBetaSgd "%sbt" lrStr z64 0 (.operand nDsr zSt112))
     -- ═══ assemble body + return (146 outputs in func-arg order: stem, blocks fwd-order, dense) ═══
-    let fwdCode := cStc ++ cStn ++ cStr ++ cStp ++
-      f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
-      f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++ f16.code ++
-      cGap ++ cLog ++ cDy
+    let fwdCode := F.code ++ cDy
     let bwdCode := cDg ++ cDgi ++ cWd ++ cbd ++
       b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
       b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++ b2.code ++ b1.code ++
@@ -266,28 +343,13 @@ def resnet34TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) : Stri
       b1.names ++ b2.names ++ b3.names ++ b4.names ++ b5.names ++ b6.names ++ b7.names ++ b8.names ++
       b9.names ++ b10.names ++ b11.names ++ b12.names ++ b13.names ++ b14.names ++ b15.names ++ b16.names ++
       [nWd, nbd]
-    let outTypes : List String :=
-      (([("%sW", ty [64,3,7,7]), ("%sbi", ty [64]), ("%sg", ty [64]), ("%sbt", ty [64])] :
-          List (String × String)) ++
-        idSig "s1b0" 64 ++ idSig "s1b1" 64 ++ idSig "s1b2" 64 ++
-        downSig "d2" 64 128 ++ idSig "s2b0" 128 ++ idSig "s2b1" 128 ++ idSig "s2b2" 128 ++
-        downSig "d3" 128 256 ++ idSig "s3b0" 256 ++ idSig "s3b1" 256 ++ idSig "s3b2" 256 ++
-          idSig "s3b3" 256 ++ idSig "s3b4" 256 ++
-        downSig "d4" 256 512 ++ idSig "s4b0" 512 ++ idSig "s4b1" 512 ++
-        [("%Wd", ty [512, nClasses]), ("%bd", ty [nClasses])]).map (·.2)
+    let outTypes : List String := (r34SigList nClasses).map (·.2)
     pure <|
       "    // ── ResNet-34 train step: every line is pretty(verified AST node) ──\n" ++
       fwdCode ++ bwdCode ++
       s!"    return {String.intercalate ", " outNames} : {String.intercalate ", " outTypes}\n"
   -- func signature: %x, all 146 params, %onehot
-  let sigList : List (String × String) :=
-    [("%sW", ty [64,3,7,7]), ("%sbi", ty [64]), ("%sg", ty [64]), ("%sbt", ty [64])] ++
-    idSig "s1b0" 64 ++ idSig "s1b1" 64 ++ idSig "s1b2" 64 ++
-    downSig "d2" 64 128 ++ idSig "s2b0" 128 ++ idSig "s2b1" 128 ++ idSig "s2b2" 128 ++
-    downSig "d3" 128 256 ++ idSig "s3b0" 256 ++ idSig "s3b1" 256 ++ idSig "s3b2" 256 ++
-      idSig "s3b3" 256 ++ idSig "s3b4" 256 ++
-    downSig "d4" 256 512 ++ idSig "s4b0" 512 ++ idSig "s4b1" 512 ++
-    [("%Wd", ty [512, nClasses]), ("%bd", ty [nClasses])]
+  let sigList : List (String × String) := r34SigList nClasses
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}")) ++
     s!", %onehot: {ty [B, nClasses]}"
@@ -305,3 +367,9 @@ end Proofs.StableHLO
 -- committed Imagenette batch), nClasses=10, ε=1e-5, lr = 0.1/32 = 0.003125 (mean-loss equiv).
 #eval IO.FS.writeFile "verified_mlir/resnet34_train_step.mlir"
   (Proofs.StableHLO.resnet34TrainStepFaithfulV 32 10 "1.0e-05" "0.003125")
+
+-- Regenerate `verified_mlir/resnet34_fwd.mlir` (what MainResnet34Verified evals with) from the
+-- SAME forward chain, at the same B/nClasses/ε. Previously rendered by an independent hand-written
+-- emitter in `tests/TestResnet34Fwd.lean`; that copy is retired.
+#eval IO.FS.writeFile "verified_mlir/resnet34_fwd.mlir"
+  (Proofs.StableHLO.resnet34FwdFaithfulV 32 10 "1.0e-05")
