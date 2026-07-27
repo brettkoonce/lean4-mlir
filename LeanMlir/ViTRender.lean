@@ -553,6 +553,47 @@ def emitAdamV (θ g m v : String) (ds : List Nat) (t : String) : String × Strin
     s!"    %adnew{t} = stablehlo.subtract %adsub{t}, %adwdp{t} : {T}\n"
   (s, s!"%adnew{t}", s!"%admn{t}", s!"%advn{t}")
 
+/-- Cross-replica gradient mean: `all_reduce(add)` over `replicas` devices, then
+    divide by `replicas`. Emitted BEFORE the optimizer consumes the gradient, so
+    every replica applies an identical update and the parameter copies stay in
+    lockstep with no host round trip.
+
+    At `replicas = 1` this emits **nothing** and returns the gradient unchanged, so
+    single-device renders stay byte-identical.
+
+    Syntax validated end to end by `ffi/test_pjrt_allreduce.c`. Note the absence of
+    `use_global_device_ids`: setting it requires a positive `channel_id`, and for a
+    plain cross-replica reduce it is not wanted (planning/xla_pjrt_ladder.md §11). -/
+def emitGradAllReduce (g : String) (ds : List Nat) (t : String) (replicas : Nat) : String × String :=
+  if replicas ≤ 1 then ("", g) else
+  let T := ty ds
+  let grp := String.intercalate ", " ((List.range replicas).map toString)
+  let lbrace := "{"
+  let rbrace := "}"
+  let s :=
+    s!"    %arsum{t} = \"stablehlo.all_reduce\"({g}) ({lbrace}\n" ++
+    s!"    ^bb0(%ara{t}: tensor<f32>, %arb{t}: tensor<f32>):\n" ++
+    s!"      %aradd{t} = stablehlo.add %ara{t}, %arb{t} : tensor<f32>\n" ++
+    s!"      stablehlo.return %aradd{t} : tensor<f32>\n" ++
+    s!"    {rbrace}) {lbrace} replica_groups = dense<[[{grp}]]> : tensor<1x{replicas}xi64> {rbrace} : ({T}) -> {T}\n" ++
+    s!"    %arn{t} = stablehlo.constant dense<{replicas}.0> : {T}\n" ++
+    s!"    %armean{t} = stablehlo.divide %arsum{t}, %arn{t} : {T}\n"
+  (s, s!"%armean{t}")
+
+/-- `emitAdamV` with the gradient first averaged across `replicas` devices — the
+    data-parallel AdamW update. `replicas = 1` is exactly `emitAdamV`.
+
+    The proofs are untouched: each replica evaluates the *same* tied graph at the
+    batch size it was rendered for, and the collective averages gradients of that
+    function over disjoint equal batches (planning/xla_pjrt_ladder.md §10.4).
+    Prefer SCALING the global batch over splitting it — that keeps BatchNorm's
+    group size, and therefore the tie, unchanged. -/
+def emitAdamVDP (θ g m v : String) (ds : List Nat) (t : String)
+    (replicas : Nat := 1) : String × String × String × String :=
+  let (arS, gAvg) := emitGradAllReduce g ds t replicas
+  let (s, thNew, mNew, vNew) := emitAdamV θ gAvg m v ds t
+  (arS ++ s, thNew, mNew, vNew)
+
 /-- `@vit_train_step_adam` — the SGD train step's optimizer swapped for AdamW.
     Same forward/backward/softmax-CE cotangent as `vitTrainStepModule`; the per-
     param SGD `θ−lr·dθ` is replaced by `emitAdamV` (so the func also takes the

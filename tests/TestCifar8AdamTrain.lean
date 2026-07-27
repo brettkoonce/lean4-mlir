@@ -27,6 +27,12 @@ Run (renders both .mlir): `lake env lean tests/TestCifar8AdamTrain.lean`
 open Proofs Proofs.StableHLO
 
 -- ── concrete cifar8 dims (match CnnRender.lean's faithful render: [16,16,32,32], 32→2) ──
+-- Data-parallel replica count for the Adam renders. 1 = single device and the
+-- emitted text is byte-identical to before; N > 1 inserts a cross-replica
+-- all_reduce(add)/N on every parameter gradient before the AdamW update
+-- (ViTRender.emitAdamVDP, planning/xla_pjrt_ladder.md §10-11).
+private def REPLICAS : Nat := 1
+
 private def B : Nat := 128
 private def IC : Nat := 3
 private def C1 : Nat := 16
@@ -241,7 +247,7 @@ private def params : List (String × String × List Nat) :=
     `%lr`/`%bc1`/`%bc2` signature, returning `[θ'|m'|v'|loss|bc1|bc2]`. -/
 private def cifar8AdamTrainStep : String :=
   let updParts := params.map (fun (nm, gr, ds) =>
-    ViTRender.emitAdamV ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
+    ViTRender.emitAdamVDP ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm REPLICAS)
   let upd := String.join (updParts.map (·.1))
   let thetaN := updParts.map (·.2.1)
   let mN := updParts.map (·.2.2.1)
@@ -446,7 +452,7 @@ private def paramsBn (d1 : Nat := D1) : List (String × String × List Nat) :=
 private def cifar8BnAdamTrainStep (d1 : Nat := D1)
     (fname : String := "cifar8_bn_adam_train_step") : String :=
   let updParts := (paramsBn d1).map (fun (nm, gr, ds) =>
-    ViTRender.emitAdamV ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm)
+    ViTRender.emitAdamVDP ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm REPLICAS)
   let upd := String.join (updParts.map (·.1))
   let thetaN := updParts.map (·.2.1)
   let mN := updParts.map (·.2.2.1)
