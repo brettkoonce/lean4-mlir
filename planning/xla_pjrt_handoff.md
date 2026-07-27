@@ -203,7 +203,50 @@ Two gotchas worth keeping:
   `pretty` has no CSE, so passing the gradient subtree to all three ops would emit three copies of
   every conv-weight-gradient convolution.
 
-**Still open — R34.** Needs four more gradient ops (`convStridedWeightGrad`,
+### 2a-quater. Batch-BN at R34 scale — scoped, and it exposes a den/emit gap ▶ NEXT
+
+Decision (2026-07-27): keep the AdamW trainer's **batch-BN** semantics rather than moving it to
+the per-example chain, i.e. build batch-BN at R34 scale in the proven kit. Scoping it turned up
+something that has to be fixed first, because it is the same defect.
+
+**`bnBatchF`'s emitter discards the proof-side batch `N`.** It emits
+`dense<{B*h*w}>` + `reduce [0,2,3]`, where `B` is `pretty`'s runtime batch — the `N` in
+`[_N, oc, h, w]` is literally an underscore. Meanwhile `den_bnBatchF` says
+`den (.bnBatchF …) = bnBatchLA N oc h w …`. Measured with a probe:
+
+- rendering one `bnBatchF` node at `N := 32` and at `N := 1`, both with `pretty 32`, gives
+  **byte-identical text**;
+- `N := 32` elaborates and renders fine — `dense<512.0>` (= 32·4·4), `reduce [0,2,3]`. There is
+  no type-level blowup at `N = B`.
+
+`EfficientNetRender.lean` instantiates **every** batched op at `N := 1` and renders at `B := 32`.
+So its `den` describes batch-norm over a batch of **one** — which is just per-example per-channel
+BN, `bnBatchLA 1 oc h w ≡ bnPerChannelTensor3` — while the emitted MLIR normalises over **32**.
+The faithfulness theorems are all true; they are true *about a different function than the one
+that runs*. That is the real content of the "batched emit" blocker in the planning notes: not a
+missing op, a mis-instantiated one.
+
+**So the job is: instantiate the batched chain at `N := B`.** That makes the denotation say what
+the emitter does, and it is what a genuine batch-BN R34 needs anyway. Concretely:
+
+| piece | status |
+|---|---|
+| `batchOp .conv` / `.convStrided` / `.gap` / `.dense` | ✅ exist |
+| `bnBatchF`, `bnBatchBack`, `gapBackBatched`, `conv{,Strided}BackBatched` | ✅ exist |
+| relu / `selectPos` / `addV` / `sub` | ✅ index-agnostic — pointwise, so they work at the batched index unchanged |
+| loss cotangent | ✅ `softmaxRowF (m := B) (n := nClasses)` (EfficientNet uses `m := 1`) |
+| **batched maxPool fwd + back** | ❌ **missing** — R34's stem pools 2×2; EfficientNet downsamples with strided convs, which is why these were never needed |
+| **batched conv-bias param grad** | ❌ **missing** — there is `convWeightSgdB`/`convStridedWeightSgdB` but no bias peer |
+| **un-fused `*GradB`** for AdamW | ❌ **missing** — the `*SgdB` family is fused (`θ − lr·g`), same problem §2a-ter solved for the per-example ops |
+
+Order of work: (1) re-instantiate EfficientNet's render at `N := B` and confirm its artifact is
+unchanged — that alone closes the den/emit gap and is the cheapest possible check of the whole
+idea; (2) add batched maxPool fwd/back + the conv-bias param grad; (3) un-fuse the `*SgdB` family
+into `*GradB` the way §2a-ter did; (4) render `resnet34_adam_train_step` batched at `N := B := 32`
+and tie it numerically against the committed artifact, which should be **exact**, since the
+emitted text is what already runs.
+
+**Still open — R34 (per-example route, now not taken).** Needs four more gradient ops (`convStridedWeightGrad`,
 `convStridedBiasGrad`, `bnGammaGrad`, `bnBetaGrad` — same trimming recipe) **and, first, an answer
 to the BN question in §2a**: `resnet34_adam_train_step.mlir` is batch-BN, while the proven R34
 chain is per-example. Rendering it from `Proofs/` as-is would change the AdamW trainer's BN
