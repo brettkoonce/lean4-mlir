@@ -96,11 +96,32 @@ sys.exit(rc)
 PY
 }
 
+# ── the silent-emit-failure audit ──
+# `emitTok` ends in a catch-all that emits `// MALFORMED token stream`, and the batched
+# tags fall back to `// ... render TODO`. Both are COMMENTS: a missing emit case does not
+# fail the Lean build, does not fail iree-compile (the op is simply absent), and shows up
+# only as a wrong numeric result much later. Adding an SHlo op without its `emitTok` case
+# is the documented way to hit this, so it is checked here rather than remembered.
+check_no_malformed() {
+  echo "── silent-emit audit (MALFORMED / render TODO) ──"
+  local hits
+  hits="$(grep -rln 'MALFORMED\|render TODO' verified_mlir/ 2>/dev/null || true)"
+  if [ -n "$hits" ]; then
+    echo "  ✖ emit fell through to a catch-all in:"
+    echo "$hits" | sed 's/^/      /'
+    return 1
+  fi
+  echo "  OK — no artifact contains a catch-all emit marker"
+  return 0
+}
+
 if [ "$WHAT" = "check" ]; then
   rc=0
   check_writers || rc=1
   echo
   check_fwd_prefix || rc=1
+  echo
+  check_no_malformed || rc=1
   exit $rc
 fi
 
@@ -149,6 +170,8 @@ echo
 check_writers || true
 echo
 check_fwd_prefix || true
+echo
+check_no_malformed || true
 echo
 echo "── git diff verified_mlir/ (should be empty) ──"
 git diff --stat verified_mlir/ || true

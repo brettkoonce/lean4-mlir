@@ -83,9 +83,20 @@ def batchSlice (N a : Nat) (v : Vec (N * a)) (n : Fin N) : Vec a :=
 
 /-- **A batch-separable EfficientNet op**, shape-indexed by per-example in/out
     length. The descriptor carried by `SHlo.batchOp`; its `denOp` is the proven
-    per-example forward, lifted by `batchMap`. (swish/sigmoid/relu/addV are
-    pointwise, so they need no descriptor — the existing tokens already denote
-    them block-diagonally at the batched index `N·(c·h·w)`.) -/
+    per-example forward, lifted by `batchMap`.
+
+    **On the pointwise ops.** An earlier note here said swish/sigmoid/relu/addV
+    "need no descriptor — the existing tokens already denote them block-diagonally
+    at the batched index `N·(c·h·w)`". The *denotation* half of that is true and the
+    *emit* half is false, and the difference is what pinned the batched renderers at
+    `N := 1`. `SHlo.swishF`'s token carries only the SHlo index `n` and emits
+    `tensor<B×n>`, i.e. it reads the index as a PER-EXAMPLE width; a descriptor-less
+    pointwise node at the batched index `N·s` therefore emits `tensor<B×(N·s)>`,
+    which does not even typecheck against its own operand. Giving the pointwise ops
+    descriptors separates the two numbers — `N` (batch, denotation) from `n`
+    (per-example width, emit) — which is what lets a whole graph sit at `N := B`
+    where the batch-coupled `den`s (`bnBatchF`, the `*SgdB` family) are honest.
+    The per-example renderers keep the descriptor-less tokens unchanged. -/
 inductive BatchableOp : Nat → Nat → Type where
   | conv {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*h*w) (oc*h*w)
@@ -100,6 +111,22 @@ inductive BatchableOp : Nat → Nat → Type where
   | gap {c h w : Nat}                                      : BatchableOp (c*h*w) c
   | seBlock {c h w r : Nat} (w1Name b1Name w2Name b2Name : String)
       (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) : BatchableOp (c*h*w) (c*h*w)
+  -- Pointwise activation, as a descriptor (see the note above). `n` is the
+  -- per-example width the emit uses; `den` is `batchMap N (swish n)`, which for a
+  -- pointwise map is the pointwise map itself — so `N` is denotationally free here
+  -- and the descriptor exists purely to keep the emit width off the SHlo index.
+  | swish {n : Nat}                                        : BatchableOp n n
+  -- NOTE: the pointwise activation VJPs (`swishBack`/`sigmoidBack`) are deliberately
+  -- NOT here. `BatchableOp` lifts a FIXED function across examples, and their
+  -- backward `fun x dy i => dy i * deriv (x i)` depends on the saved pre-activation,
+  -- which varies per example — `batchMap N` of it would denote "every example shares
+  -- one saved activation", which is not what the emit computes. They get their own
+  -- `SHlo` constructors (`swishBackB`/`sigmoidBackB`) carrying the WHOLE-BATCH `x`.
+  -- Row ops: `m`/`rows` is the per-example ROW count (ViT tokens; 1 logit row for a
+  -- classifier head), NOT the batch — it was always emitted as a real inner
+  -- dimension. The descriptor form exists so the batch can move to `N`.
+  | softmaxRow {m n : Nat}                                 : BatchableOp (m*n) (m*n)
+  | denseRowBack {rows a c : Nat} (wName : String) (W : Mat a c) : BatchableOp (rows*c) (rows*a)
 
 -- ════════════════════════════════════════════════════════════════
 -- § StableHLO-subset AST — denotable AND renderable
@@ -183,6 +210,12 @@ inductive SHlo : Nat → Type where
   -- subtree in BOTH operands, so the graph stays a tree. `gapF` reduces the
   -- spatial axes (`reduce add over [2,3]`, ÷h·w), `Vec (c*h*w) → Vec c`.
   | addV       {n : Nat}                                        : SHlo n → SHlo n → SHlo n
+  -- The BATCHED peers of `addV`/`sub`: same pointwise `den`, but the per-example
+  -- emit width `n` is separated from the batch `N` so the node can sit in a graph
+  -- indexed at `N·n` (where the batch-coupled `den`s are honest). The unbatched
+  -- ctors above stay exactly as they were for the per-example renderers.
+  | addVB      {N n : Nat}                                      : SHlo (N*n) → SHlo (N*n) → SHlo (N*n)
+  | subB       {N n : Nat}                                      : SHlo (N*n) → SHlo (N*n) → SHlo (N*n)
   | gapF       {c h w : Nat}                                    : SHlo (c*h*w) → SHlo c
   -- GAP backward (VJP): per-channel cotangent broadcast over H×W, /(h·w).
   | gapBack    {c h w : Nat}                                    : SHlo c → SHlo (c*h*w)
@@ -328,6 +361,16 @@ inductive SHlo : Nat → Type where
   -- `sigmoid` / `sigmoid_has_vjp` (EfficientNet.lean).
   | sigmoidF     {n : Nat}                                      : SHlo n → SHlo n
   | sigmoidBack  {n : Nat} (xName : String) (x : Vec n)         : SHlo n → SHlo n
+  -- The BATCHED peers of `swishBack`/`sigmoidBack`. Identical `den` — the SAME
+  -- pointwise VJP over the whole batch — but the index is split into the batch `N`
+  -- and the per-example emit width `n`, so these can sit in a graph indexed at `N·n`
+  -- (where the batch-coupled `den`s are honest) while still emitting `tensor<B×n>`.
+  -- `x` is the WHOLE-BATCH saved pre-activation, `Vec (N*n)`: it is what the emitted
+  -- `xName` holds at runtime, and it is why these are not `BatchableOp` descriptors
+  -- (`batchMap N` lifts a fixed function, so it would share one example's saved
+  -- activation across the batch — a different, wrong, function).
+  | swishBackB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
+  | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   -- Chapter 8 (ConvNeXt): GELU forward (tanh approximation,
   -- `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))`, via `stablehlo.tanh`) and its
   -- input-VJP (`dy · gelu'(x)`, closed form from the tanh-approx derivative).
@@ -788,6 +831,9 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .dense _ _ W bias => dense W bias
   | _, _, .gap (c := c) (h := h) (w := w) => globalAvgPoolFlat c h w
   | _, _, .seBlock (h := h) (w := w) _ _ _ _ W₁ b₁ W₂ b₂ => seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂
+  | _, _, .swish (n := n) => swish n
+  | _, _, .softmaxRow (m := m) (n := n) => rowSoftmaxFlat m n
+  | _, _, .denseRowBack (rows := rows) (a := a) (c := c) _ W => rowDenseBackFlat rows a c W
 
 /-- **True batch-norm at the network's left-assoc `[N,C,H,W]` flat index.** The
     proven `bnBatchTensor4` (typed at `N·(oc·(h·w))`) conjugated by the `mul_assoc`
@@ -902,6 +948,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .bnF (n := n) _ _ _ ε γ β e => bnForward n ε γ β (den e)
   | _, .bnBack (n := n) _ _ _ ε γ x e => bn_grad_input n ε γ x (den e)
   | _, .addV a b       => fun j => den a j + den b j
+  | _, .addVB a b      => fun j => den a j + den b j
+  | _, .subB a b       => fun j => den a j - den b j
   | _, .gapF (c := c) (h := h) (w := w) e => globalAvgPoolFlat c h w (den e)
   | _, .gapBack (c := c) (h := h) (w := w) e =>
       (globalAvgPoolFlat_has_vjp c h w).backward (fun _ => 0) (den e)
@@ -933,6 +981,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .swishBack (n := n) _ x e => (swish_has_vjp n).backward x (den e)
   | _, .sigmoidF (n := n) e => sigmoid n (den e)
   | _, .sigmoidBack (n := n) _ x e => (sigmoid_has_vjp n).backward x (den e)
+  | _, .swishBackB (N := N) (n := n) _ x e => (swish_has_vjp (N*n)).backward x (den e)
+  | _, .sigmoidBackB (N := N) (n := n) _ x e => (sigmoid_has_vjp (N*n)).backward x (den e)
   | _, .geluF (n := n) e => gelu n (den e)
   | _, .geluBack (n := n) _ x e => (gelu_has_vjp n).backward x (den e)
   | _, .layerScaleF (n := n) _ γ e => layerScale γ (den e)
@@ -1050,6 +1100,42 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
     (W₁ : Mat c r) (β₁ : Vec r) (W₂ : Mat r c) (β₂ : Vec c) (e : SHlo (N * (c*h*w))) :
     den (.batchOp (N := N) (.seBlock (h := h) (w := w) w1 b1 w2 b2 W₁ β₁ W₂ β₂) e)
       = batchMap N (seBlockFull (h := h) (w := w) W₁ β₁ W₂ β₂) (den e) := rfl
+@[simp] theorem den_batchOp_swish {N n : Nat} (e : SHlo (N * n)) :
+    den (.batchOp (N := N) (.swish (n := n)) e) = batchMap N (swish n) (den e) := rfl
+
+/-- **Pointwise maps are `batchMap`-free.** Lifting an elementwise map across `N` examples IS the
+    elementwise map at the batched index `N·n`. This is why moving the pointwise nodes onto
+    descriptors was denotation-preserving, and it is the half of that claim the artifact cannot
+    witness: the render is value-independent, so a descriptor with the wrong `den` emits the same
+    bytes. Cf. `swishBackB`/`sigmoidBackB`, which are NOT descriptors precisely because their
+    backward is not of this shape — it reads a per-example saved activation. -/
+theorem batchMap_pointwise {N n : Nat} (g : ℝ → ℝ) (v : Vec (N * n)) :
+    batchMap N (fun (x : Vec n) i => g (x i)) v = fun idx => g (v idx) := by
+  funext idx
+  simp only [batchMap]
+  exact congrArg g (congrArg v (Equiv.apply_symm_apply finProdFinEquiv idx))
+
+/-- The descriptor form of swish denotes exactly what the descriptor-less `swishF` denoted at the
+    same index — the batched graph computes the same function, only the emit width now travels
+    separately from the batch. -/
+theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
+    den (.batchOp (N := N) (.swish (n := n)) e) = den (.swishF e) :=
+  batchMap_pointwise swishScalar (den e)
+@[simp] theorem den_batchOp_softmaxRow {N m n : Nat} (e : SHlo (N * (m*n))) :
+    den (.batchOp (N := N) (.softmaxRow (m := m) (n := n)) e)
+      = batchMap N (rowSoftmaxFlat m n) (den e) := rfl
+@[simp] theorem den_batchOp_denseRowBack {N rows a c : Nat} (wN : String) (W : Mat a c)
+    (e : SHlo (N * (rows*c))) :
+    den (.batchOp (N := N) (.denseRowBack (rows := rows) wN W) e)
+      = batchMap N (rowDenseBackFlat rows a c W) (den e) := rfl
+@[simp] theorem den_swishBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
+    den (.swishBackB xN x e) = (swish_has_vjp (N*n)).backward x (den e) := rfl
+@[simp] theorem den_sigmoidBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
+    den (.sigmoidBackB xN x e) = (sigmoid_has_vjp (N*n)).backward x (den e) := rfl
+@[simp] theorem den_addVB {N n : Nat} (a b : SHlo (N*n)) :
+    den (.addVB a b) = fun j => den a j + den b j := rfl
+@[simp] theorem den_subB {N n : Nat} (a b : SHlo (N*n)) :
+    den (.subB a b) = fun j => den a j - den b j := rfl
 @[simp] theorem den_bnBatchF {N oc h w : Nat} (gN bN es : String) (ε : ℝ) (γ β : Vec oc)
     (e : SHlo (N * (oc*h*w))) :
     den (.bnBatchF gN bN es ε γ β e) = bnBatchLA N oc h w ε γ β (den e) := rfl
@@ -2413,6 +2499,11 @@ inductive Raw where
   -- is the BatchableOp variant ("conv"/"depthwise"/"seBlock"/…) for forward ops or
   -- the backward op name; this is what lets `emitTok` reconstruct real StableHLO.
   | batched    (tag : String) (names : List String) (info : List Nat) : Raw → Raw
+  -- The BINARY peer of `batched`, for the pointwise two-operand ops (`addV`/`sub`)
+  -- at the batched index. Same reason as the unary descriptors: their
+  -- descriptor-less tokens read the emit width off the SHlo index, so they cannot
+  -- sit at `N·n`. `info` is `[N, n]`; the emit uses `n`, like every batched tag.
+  | batched2   (tag : String) (names : List String) (info : List Nat) : Raw → Raw → Raw
 deriving DecidableEq, Repr, Inhabited
 
 /-- The `(tag, names, info)` skeleton descriptor of a batched per-example op — the
@@ -2431,6 +2522,9 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   | .gap (c := c) (h := h) (w := w) => ("gap", [], [N, c, h, w])
   | .seBlock (c := c) (h := h) (w := w) (r := r) w1 b1 w2 b2 _ _ _ _ =>
       ("seBlock", [w1, b1, w2, b2], [N, c, h, w, r])
+  | .swish (n := n) => ("swish", [], [N, n])
+  | .softmaxRow (m := m) (n := n) => ("softmaxRow", [], [N, m, n])
+  | .denseRowBack (rows := rows) (a := a) (c := c) wN _ => ("denseRowBackP", [wN], [N, rows, a, c])
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
     index; keeps op structure, shapes, leaf names). -/
@@ -2475,6 +2569,10 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .bnF gN bN es _ _ _ e => .bnF gN bN es k (skel e)
   | k, .bnBack gN xN es _ _ _ e => .bnBack gN xN es k (skel e)
   | k, .addV a b              => .addV k (skel a) (skel b)
+  | _, .swishBackB (N := N) (n := n) xN _ e => .batched "swishBackP" [xN] [N, n] (skel e)
+  | _, .sigmoidBackB (N := N) (n := n) xN _ e => .batched "sigmoidBackP" [xN] [N, n] (skel e)
+  | _, .addVB (N := N) (n := n) a b => .batched2 "addV" [] [N, n] (skel a) (skel b)
+  | _, .subB (N := N) (n := n) a b  => .batched2 "sub" [] [N, n] (skel a) (skel b)
   | _, .gapF (c := c) (h := h) (w := w) e => .gapF c h w (skel e)
   | _, .gapBack (c := c) (h := h) (w := w) e => .gapBack c h w (skel e)
   | _, .broadcastBack (c := c) (h := h) (w := w) e => .broadcastBack c h w (skel e)
@@ -2684,6 +2782,7 @@ inductive Tok where
   | rowScaleF  (g : String) (m n : Nat)    : Tok
   | rowBiasF   (b : String) (m n : Nat)    : Tok
   | batched    (tag : String) (names : List String) (info : List Nat) : Tok
+  | batched2   (tag : String) (names : List String) (info : List Nat) : Tok
 deriving DecidableEq, Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
@@ -2769,6 +2868,7 @@ def toToks : Raw → List Tok
   | .rowScaleF g m n e    => toToks e ++ [.rowScaleF g m n]
   | .rowBiasF b m n e     => toToks e ++ [.rowBiasF b m n]
   | .batched tag names info e   => toToks e ++ [.batched tag names info]
+  | .batched2 tag names info a b => toToks a ++ toToks b ++ [.batched2 tag names info]
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -4000,6 +4100,51 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {gb} = stablehlo.broadcast_in_dim {gate}, dims = [0, 1] : ({ty [B,c]}) -> {ty [B,c,h,w]}\n" ++
             s!"    {se} = stablehlo.multiply {xr}, {gb} : {ty [B,c,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {se} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+      | "swish", [], [_N, n] => do
+          -- Pointwise swish at the BATCHED index: byte-for-byte the `.swishF` emit,
+          -- except the width comes from the descriptor's per-example `n` rather than
+          -- from the SHlo index (which here is `N·n`). `_N` is discarded for the same
+          -- reason every batched tag discards it — the runtime batch is `B`.
+          let s ← fresh; let o ← fresh
+          pure (s!"    {s} = stablehlo.logistic {r} : {ty [B,n]}\n" ++
+                s!"    {o} = stablehlo.multiply {r}, {s} : {ty [B,n]}\n", o :: st)
+      | "swishBackP", [x], [_N, n] => do
+          -- byte-for-byte `.swishBack`'s emit, width from the descriptor's `n`.
+          let s ← fresh; let one ← fresh; let om ← fresh; let xom ← fresh
+          let inr ← fresh; let sp ← fresh; let o ← fresh
+          pure (s!"    {s} = stablehlo.logistic {x} : {ty [B,n]}\n" ++
+                s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
+                s!"    {om} = stablehlo.subtract {one}, {s} : {ty [B,n]}\n" ++
+                s!"    {xom} = stablehlo.multiply {x}, {om} : {ty [B,n]}\n" ++
+                s!"    {inr} = stablehlo.add {one}, {xom} : {ty [B,n]}\n" ++
+                s!"    {sp} = stablehlo.multiply {s}, {inr} : {ty [B,n]}\n" ++
+                s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
+      | "sigmoidBackP", [x], [_N, n] => do
+          -- byte-for-byte `.sigmoidBack`'s emit, width from the descriptor's `n`.
+          let s ← fresh; let one ← fresh; let om ← fresh; let sp ← fresh; let o ← fresh
+          pure (s!"    {s} = stablehlo.logistic {x} : {ty [B,n]}\n" ++
+                s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
+                s!"    {om} = stablehlo.subtract {one}, {s} : {ty [B,n]}\n" ++
+                s!"    {sp} = stablehlo.multiply {s}, {om} : {ty [B,n]}\n" ++
+                s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
+      | "softmaxRow", [], [_N, m, n] => do
+          -- byte-for-byte `.softmaxRowF`'s emit. `m` is rows PER EXAMPLE (it always
+          -- was); the batch is `_N` on the proof side and `B` in the emit.
+          let xn ← fresh; let z ← fresh; let e ← fresh; let s ← fresh; let sb ← fresh
+          let dv ← fresh; let o ← fresh
+          pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {e} = stablehlo.exponential {xn} : {ty [B,m,n]}\n" ++
+            s!"    {s} = stablehlo.reduce({e} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+            s!"    {sb} = stablehlo.broadcast_in_dim {s}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+            s!"    {dv} = stablehlo.divide {e}, {sb} : {ty [B,m,n]}\n" ++
+            s!"    {o} = stablehlo.reshape {dv} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+      | "denseRowBackP", [wN], [_N, rows, a, c] => do
+          -- byte-for-byte `.denseRowBack`'s emit; `rows` is per-example rows.
+          let dn ← fresh; let dg ← fresh; let o ← fresh
+          pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B, rows*c]}) -> {ty [B,rows,c]}\n" ++
+            s!"    {dg} = stablehlo.dot_general {dn}, {wN}, contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({ty [B,rows,c]}, {ty [a,c]}) -> {ty [B,rows,a]}\n" ++
+            s!"    {o} = stablehlo.reshape {dg} : ({ty [B,rows,a]}) -> {ty [B, rows*a]}\n", o :: st)
       | "bnBatch", [gN, bN, es], [_N, oc, h, w] => do
           let xr ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh
           let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh
@@ -4389,6 +4534,17 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {o} = stablehlo.reshape {dv} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
       | _, _, _ =>
           pure (s!"    // [EfficientNet Item B] batched {tag} {names} {info} — backward render TODO\n", r :: st)
+  | .batched2 tag _names info, b :: a :: st =>
+      -- Pointwise binary ops at the batched index. Byte-for-byte the `.addV`/`.sub`
+      -- emits; the width is `info`'s per-example `n`, not the SHlo index `N·n`.
+      match tag, info with
+      | "addV", [_N, n] => do
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.add {a}, {b} : {ty [B,n]}\n", o :: st)
+      | "sub", [_N, n] => do
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.subtract {a}, {b} : {ty [B,n]}\n", o :: st)
+      | _, _ => pure (s!"    // MALFORMED batched2 {tag} {info}\n", a :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/

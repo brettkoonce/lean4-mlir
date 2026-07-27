@@ -13,7 +13,7 @@ batch-norm**, which couples the batch — so the whole net lives at the **batche
 params**. The fused `batchOp seBlock` / `seBackBatched` give the forward value + the SE *input*
 cotangent but NOT the SE param grads, so the renderer **un-fuses** SE: it keeps the fused `seBlock`
 for the forward `out` and ADDITIONALLY emits the un-fused gate subnet `s = batchOp gap → e1 = batchOp
-dense W₁ → z = swishF → e2 = batchOp dense W₂` (only to expose `s/e1/z/e2`); the SE param grads chain
+dense W₁ → z = batchOp swish → e2 = batchOp dense W₂` (only to expose `s/e1/z/e2`); the SE param grads chain
 `seReduceB → sigmoidBack(e2) → denseWeightSgdB/denseBiasSgdB (W₂) → denseRowBack(W₂) → swishBack(e1)
 → denseWeightSgdB/denseBiasSgdB (W₁)`, and `dx` reuses the fused `seBackBatched`. Activations
 are **swish** (smooth, no relu6 kink), the head GAP-back uses the batched `gapBackBatched`.
@@ -25,11 +25,42 @@ open Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
-/-! The renderer builds the SHlo graph at the **single-batch-unit** index `N=1` (so the per-example
-pointwise ops `swishF`/`sigmoidF` emit `[B, c·h·w]`), while the emit's `B` parameter supplies the real
-batch dimension — the `batchOp`/`bnBatch*`/param-SGD emits read their per-example dims from `info`
-and `B` from the emit, ignoring the (=1) `N` in the type. So every `(N := 1)` below is the SHlo
-batch-unit; `pretty B` carries the actual batch. -/
+/-! ## The batched index: why every `N` below is `B`, not 1
+
+This renderer used to build the graph at the **batch-unit** index `N = 1` and let `pretty B` supply
+the real batch. That was a disclosed convention, and it was sound for the ops where the batch is a
+*parallel* index — `batchOp`'s `den` is `batchMap N (denOp op)`, which at `N = 1` is the per-example
+op, exactly what the emit applies across the batch. It was **not** sound for the ops where the batch
+is a *reduction* axis, and there are ten of those in this graph: `bnBatchF` and `bnBatchBack` reduce
+μ/var over `[0,2,3]`, and the whole `*SgdB` param family (`bnGammaSgdB`, `bnBetaSgdB`,
+`dense{Weight,Bias}SgdB`, `conv{,Strided}WeightSgdB`, `depthwise{,Strided}WeightSgdB`) sums the
+per-example gradient over `Fin N`. At `N = 1` each of those `den`s describes a ONE-EXAMPLE function
+while the emitted text reduces over all `B` — the node and its render were different functions, the
+op-level form of the two-writers bug.
+
+The fix is to put the whole graph at `N := B`, where those `den`s are honest. What blocked that was
+not the batch-coupled ops (their emitters discard `N` and use `B`, so they render identically at any
+`N`) but the *pointwise* ones: `swishF`/`swishBack`/`sigmoidBack`/`addV`/`sub` carry only the SHlo
+index and emit `tensor<B×n>` from it, so at the batched index `N·s` they emit `tensor<B×(N·s)>` —
+which does not even typecheck against its own operand. Hence the batched forms, which all separate
+the batch `N` from the per-example emit width `n`:
+
+* `BatchableOp.swish`/`softmaxRow`/`denseRowBack` — descriptors, `den = batchMap N (denOp op)`.
+  Sound because what they lift is a FIXED function: swish and row-softmax carry no data, and
+  `denseRowBack` carries `W`, a parameter shared by every example.
+* `swishBackB`/`sigmoidBackB` — their own constructors, NOT descriptors, because their VJP
+  `fun x dy i => dy i * deriv (x i)` depends on the saved pre-activation, which varies per example.
+  `batchMap N` of that would denote "every example shares one example's activation". They carry the
+  whole-batch `x : Vec (N*n)` instead — which is what the emitted `xName` actually holds.
+* `addVB`/`subB` — pointwise binary, via the binary `batched2` tag.
+
+`softmaxRow`'s `m` and `denseRowBack`'s `rows` are NOT the batch — they are rows per example (ViT
+uses `m := 197` tokens; a classifier head has one logit row), and they stay 1 here.
+
+The artifact is byte-identical across this change, which is what proves the EMIT side
+behaviour-preserving. It cannot witness the `den` side — the render is value-independent, so a
+descriptor holding the wrong saved activation would render exactly the same bytes. That half is
+carried by the `rfl` faithfulness theorems in `StableHLO.lean`. -/
 
 /-- Saved forward SSA names a block's backward + SGD passes reference. -/
 structure EFwd where
@@ -63,18 +94,18 @@ structure EBack where
 private def seFwd (B c hh r : Nat) (p drName : String) :
     StateM Nat (String × String × String × String × String × String) := do
   let ww := hh
-  let zChw : Vec (1 * (c * hh * ww)) := fun _ => 0
-  let zCc  : Vec (1 * c) := fun _ => 0
-  let zRr  : Vec (1 * r) := fun _ => 0
+  let zChw : Vec (B * (c * hh * ww)) := fun _ => 0
+  let zCc  : Vec (B * c) := fun _ => 0
+  let zRr  : Vec (B * r) := fun _ => 0
   let zW1  : Mat c r := fun _ _ => 0
   let zb1  : Vec r := fun _ => 0
   let zW2  : Mat r c := fun _ _ => 0
   let zb2  : Vec c := fun _ => 0
-  let (cS,  nS)  ← pretty B (.batchOp (N := 1) (.gap (c := c) (h := hh) (w := ww)) (.operand drName zChw))
-  let (cE1, nE1) ← pretty B (.batchOp (N := 1) (.dense s!"%{p}zW1" s!"%{p}zb1" zW1 zb1) (.operand nS zCc))
-  let (cZ,  nZ)  ← pretty B (.swishF (.operand nE1 zRr))
-  let (cE2, nE2) ← pretty B (.batchOp (N := 1) (.dense s!"%{p}zW2" s!"%{p}zb2" zW2 zb2) (.operand nZ zRr))
-  let (cSe, nSe) ← pretty B (.batchOp (N := 1)
+  let (cS,  nS)  ← pretty B (.batchOp (N := B) (.gap (c := c) (h := hh) (w := ww)) (.operand drName zChw))
+  let (cE1, nE1) ← pretty B (.batchOp (N := B) (.dense s!"%{p}zW1" s!"%{p}zb1" zW1 zb1) (.operand nS zCc))
+  let (cZ,  nZ)  ← pretty B (.batchOp (.swish) (.operand nE1 zRr))
+  let (cE2, nE2) ← pretty B (.batchOp (N := B) (.dense s!"%{p}zW2" s!"%{p}zb2" zW2 zb2) (.operand nZ zRr))
+  let (cSe, nSe) ← pretty B (.batchOp (N := B)
       (.seBlock (h := hh) (w := ww) s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2" zW1 zb1 zW2 zb2)
       (.operand drName zChw))
   pure (cS ++ cE1 ++ cZ ++ cE2 ++ cSe, nS, nE1, nZ, nE2, nSe)
@@ -85,23 +116,28 @@ private def seFwd (B c hh r : Nat) (p drName : String) :
 private def seBack (B c hh r : Nat) (lrStr p drName sName e1Name zName e2Name seCot : String) :
     StateM Nat (String × String × List String) := do
   let ww := hh
-  let zChw : Vec (1 * (c * hh * ww)) := fun _ => 0
-  let zCc  : Vec (1 * c) := fun _ => 0
-  let zRr  : Vec (1 * r) := fun _ => 0
+  let zChw : Vec (B * (c * hh * ww)) := fun _ => 0
+  let zCc  : Vec (B * c) := fun _ => 0
+  let zRr  : Vec (B * r) := fun _ => 0
+  -- The SE gate is ONE row per example, so the row ops sit at `rows = 1` and their
+  -- index is `B·(1·c)` rather than `B·c`. Same vector, non-defeq type (`1 * c` does
+  -- not reduce for a variable `c`), so the leaf needs its own placeholder; the emit
+  -- is unaffected — `1 * c` evaluates to `c` when the render runs.
+  let zCc1 : Vec (B * (1 * c)) := fun _ => 0
   let zW1  : Mat c r := fun _ _ => 0
   let zb1  : Vec r := fun _ => 0
   let zW2  : Mat r c := fun _ _ => 0
   let zb2  : Vec c := fun _ => 0
-  let (cDx, nDx) ← pretty B (.seBackBatched (N := 1) (c := c) (h := hh) (w := ww)
+  let (cDx, nDx) ← pretty B (.seBackBatched (N := B) (c := c) (h := hh) (w := ww)
       s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2" drName zW1 zb1 zW2 zb2 zChw (.operand seCot zChw))
-  let (cDg, nDg) ← pretty B (.seReduceB (N := 1) (c := c) (h := hh) (w := ww) drName zChw (.operand seCot zChw))
-  let (cE2c, nE2c) ← pretty B (.sigmoidBack (n := 1 * c) e2Name zCc (.operand nDg zCc))
-  let (cW2, nW2) ← pretty B (.denseWeightSgdB (N := 1) (a := r) (c := c) zName s!"%{p}zW2" lrStr zRr zW2 0 (.operand nE2c zCc))
-  let (cb2, nb2) ← pretty B (.denseBiasSgdB (N := 1) (c := c) s!"%{p}zb2" lrStr zb2 0 (.operand nE2c zCc))
-  let (cDz, nDz) ← pretty B (.denseRowBack (N := 1) (a := r) (c := c) s!"%{p}zW2" zW2 (.operand nE2c zCc))
-  let (cE1c, nE1c) ← pretty B (.swishBack (n := 1 * r) e1Name zRr (.operand nDz zRr))
-  let (cW1, nW1) ← pretty B (.denseWeightSgdB (N := 1) (a := c) (c := r) sName s!"%{p}zW1" lrStr zCc zW1 0 (.operand nE1c zRr))
-  let (cb1, nb1) ← pretty B (.denseBiasSgdB (N := 1) (c := r) s!"%{p}zb1" lrStr zb1 0 (.operand nE1c zRr))
+  let (cDg, nDg) ← pretty B (.seReduceB (N := B) (c := c) (h := hh) (w := ww) drName zChw (.operand seCot zChw))
+  let (cE2c, nE2c) ← pretty B (.sigmoidBackB e2Name (fun _ => 0) (.operand nDg zCc))
+  let (cW2, nW2) ← pretty B (.denseWeightSgdB (N := B) (a := r) (c := c) zName s!"%{p}zW2" lrStr zRr zW2 0 (.operand nE2c zCc))
+  let (cb2, nb2) ← pretty B (.denseBiasSgdB (N := B) (c := c) s!"%{p}zb2" lrStr zb2 0 (.operand nE2c zCc))
+  let (cDz, nDz) ← pretty B (.batchOp (.denseRowBack (rows := 1) (a := r) (c := c) s!"%{p}zW2" zW2) (.operand nE2c zCc1))
+  let (cE1c, nE1c) ← pretty B (.swishBackB e1Name (fun _ => 0) (.operand nDz zRr))
+  let (cW1, nW1) ← pretty B (.denseWeightSgdB (N := B) (a := c) (c := r) sName s!"%{p}zW1" lrStr zCc zW1 0 (.operand nE1c zRr))
+  let (cb1, nb1) ← pretty B (.denseBiasSgdB (N := B) (c := r) s!"%{p}zb1" lrStr zb1 0 (.operand nE1c zRr))
   pure (cDx ++ cDg ++ cE2c ++ cW2 ++ cb2 ++ cDz ++ cE1c ++ cW1 ++ cb1, nDx, [nW1, nb1, nW2, nb2])
 
 -- ════════════════════════════════════════════════════════════════
@@ -113,23 +149,23 @@ private def seBack (B c hh r : Nat) (lrStr p drName sName e1Name zName e2Name se
     residual (caller adds the `addV` for residual blocks). -/
 private def eFwdBody (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : StateM Nat EFwd := do
   let ww := hh
-  let zIn  : Vec (1 * (ic * hh * ww)) := fun _ => 0
-  let zMid : Vec (1 * (mid * hh * ww)) := fun _ => 0
-  let zOut : Vec (1 * (oc * hh * ww)) := fun _ => 0
+  let zIn  : Vec (B * (ic * hh * ww)) := fun _ => 0
+  let zMid : Vec (B * (mid * hh * ww)) := fun _ => 0
+  let zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
   let zKe  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
   let zKp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel mid kd kd := fun _ _ _ => 0
   let zVm  : Vec mid := fun _ => 0
   let zVo  : Vec oc := fun _ => 0
-  let (cEc, nEc) ← pretty B (.batchOp (N := 1) (.conv (h := hh) (w := ww) s!"%{p}eW" s!"%{p}eb" zKe zVm) (.operand xName zIn))
-  let (cEn, nEn) ← pretty B (.bnBatchF (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}eg" s!"%{p}ebt" epsStr 0 zVm zVm (.operand nEc zMid))
-  let (cEr, nEr) ← pretty B (.swishF (.operand nEn zMid))
-  let (cDc, nDc) ← pretty B (.batchOp (N := 1) (.depthwise (h := hh) (w := ww) s!"%{p}dW" s!"%{p}db" zDk zVm) (.operand nEr zMid))
-  let (cDn, nDn) ← pretty B (.bnBatchF (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" s!"%{p}dbt" epsStr 0 zVm zVm (.operand nDc zMid))
-  let (cDr, nDr) ← pretty B (.swishF (.operand nDn zMid))
+  let (cEc, nEc) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}eW" s!"%{p}eb" zKe zVm) (.operand xName zIn))
+  let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}eg" s!"%{p}ebt" epsStr 0 zVm zVm (.operand nEc zMid))
+  let (cEr, nEr) ← pretty B (.batchOp (.swish) (.operand nEn zMid))
+  let (cDc, nDc) ← pretty B (.batchOp (N := B) (.depthwise (h := hh) (w := ww) s!"%{p}dW" s!"%{p}db" zDk zVm) (.operand nEr zMid))
+  let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" s!"%{p}dbt" epsStr 0 zVm zVm (.operand nDc zMid))
+  let (cDr, nDr) ← pretty B (.batchOp (.swish) (.operand nDn zMid))
   let (cSe, nS, nE1, nZ, nE2, nSe) ← seFwd B mid hh r p nDr
-  let (cPc, nPc) ← pretty B (.batchOp (N := 1) (.conv (h := hh) (w := ww) s!"%{p}pW" s!"%{p}pb" zKp zVo) (.operand nSe zMid))
-  let (cPn, nPn) ← pretty B (.bnBatchF (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" s!"%{p}pbt" epsStr 0 zVo zVo (.operand nPc zOut))
+  let (cPc, nPc) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}pW" s!"%{p}pb" zKp zVo) (.operand nSe zMid))
+  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" s!"%{p}pbt" epsStr 0 zVo zVo (.operand nPc zOut))
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cSe ++ cPc ++ cPn,
          o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr,
          se := nSe, s := nS, e1 := nE1, z := nZ, e2 := nE2, pc := nPc }
@@ -137,8 +173,8 @@ private def eFwdBody (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : Sta
 /-- **Residual stride-1 MBConv forward** (ic = oc): body + `addV` skip. -/
 private def eFwd (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : StateM Nat EFwd := do
   let f ← eFwdBody B ic mid oc hh kd r epsStr p xName
-  let zOut : Vec (1 * (oc * hh * hh)) := fun _ => 0
-  let (cA, nA) ← pretty B (.addV (.operand f.o zOut) (.operand xName zOut))
+  let zOut : Vec (B * (oc * hh * hh)) := fun _ => 0
+  let (cA, nA) ← pretty B (.addVB (.operand f.o zOut) (.operand xName zOut))
   pure { f with code := f.code ++ cA, o := nA }
 
 /-- **No-skip stride-1 MBConv forward** (ic ≠ oc, b9/b16): body, output = project-BN out. -/
@@ -149,24 +185,24 @@ private def eFwdNoSkip (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : S
     `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
 private def eFwdStrided (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : StateM Nat EFwd := do
   let ww := hh
-  let zIn  : Vec (1 * (ic * (2*hh) * (2*ww))) := fun _ => 0
-  let zMidH : Vec (1 * (mid * (2*hh) * (2*ww))) := fun _ => 0
-  let zMid : Vec (1 * (mid * hh * ww)) := fun _ => 0
-  let zOut : Vec (1 * (oc * hh * ww)) := fun _ => 0
+  let zIn  : Vec (B * (ic * (2*hh) * (2*ww))) := fun _ => 0
+  let zMidH : Vec (B * (mid * (2*hh) * (2*ww))) := fun _ => 0
+  let zMid : Vec (B * (mid * hh * ww)) := fun _ => 0
+  let zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
   let zKe  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
   let zKp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel mid kd kd := fun _ _ _ => 0
   let zVm  : Vec mid := fun _ => 0
   let zVo  : Vec oc := fun _ => 0
-  let (cEc, nEc) ← pretty B (.batchOp (N := 1) (.conv (h := 2*hh) (w := 2*ww) s!"%{p}eW" s!"%{p}eb" zKe zVm) (.operand xName zIn))
-  let (cEn, nEn) ← pretty B (.bnBatchF (N := 1) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eg" s!"%{p}ebt" epsStr 0 zVm zVm (.operand nEc zMidH))
-  let (cEr, nEr) ← pretty B (.swishF (.operand nEn zMidH))
-  let (cDc, nDc) ← pretty B (.batchOp (N := 1) (.depthwiseStrided (h := hh) (w := ww) s!"%{p}dW" s!"%{p}db" zDk zVm) (.operand nEr zMidH))
-  let (cDn, nDn) ← pretty B (.bnBatchF (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" s!"%{p}dbt" epsStr 0 zVm zVm (.operand nDc zMid))
-  let (cDr, nDr) ← pretty B (.swishF (.operand nDn zMid))
+  let (cEc, nEc) ← pretty B (.batchOp (N := B) (.conv (h := 2*hh) (w := 2*ww) s!"%{p}eW" s!"%{p}eb" zKe zVm) (.operand xName zIn))
+  let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eg" s!"%{p}ebt" epsStr 0 zVm zVm (.operand nEc zMidH))
+  let (cEr, nEr) ← pretty B (.batchOp (.swish) (.operand nEn zMidH))
+  let (cDc, nDc) ← pretty B (.batchOp (N := B) (.depthwiseStrided (h := hh) (w := ww) s!"%{p}dW" s!"%{p}db" zDk zVm) (.operand nEr zMidH))
+  let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" s!"%{p}dbt" epsStr 0 zVm zVm (.operand nDc zMid))
+  let (cDr, nDr) ← pretty B (.batchOp (.swish) (.operand nDn zMid))
   let (cSe, nS, nE1, nZ, nE2, nSe) ← seFwd B mid hh r p nDr
-  let (cPc, nPc) ← pretty B (.batchOp (N := 1) (.conv (h := hh) (w := ww) s!"%{p}pW" s!"%{p}pb" zKp zVo) (.operand nSe zMid))
-  let (cPn, nPn) ← pretty B (.bnBatchF (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" s!"%{p}pbt" epsStr 0 zVo zVo (.operand nPc zOut))
+  let (cPc, nPc) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}pW" s!"%{p}pb" zKp zVo) (.operand nSe zMid))
+  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" s!"%{p}pbt" epsStr 0 zVo zVo (.operand nPc zOut))
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cSe ++ cPc ++ cPn,
          o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr,
          se := nSe, s := nS, e1 := nE1, z := nZ, e2 := nE2, pc := nPc }
@@ -175,18 +211,18 @@ private def eFwdStrided (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : 
     1×1 (ic→oc)-bn. NO expand, NO skip. `ec/en` unused; `er` = block input (= depthwise input). -/
 private def eFwdNoExp (B ic oc hh kd r : Nat) (epsStr p xName : String) : StateM Nat EFwd := do
   let ww := hh
-  let zIn  : Vec (1 * (ic * hh * ww)) := fun _ => 0
-  let zOut : Vec (1 * (oc * hh * ww)) := fun _ => 0
+  let zIn  : Vec (B * (ic * hh * ww)) := fun _ => 0
+  let zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
   let zKp  : Kernel4 oc ic 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel ic kd kd := fun _ _ _ => 0
   let zVi  : Vec ic := fun _ => 0
   let zVo  : Vec oc := fun _ => 0
-  let (cDc, nDc) ← pretty B (.batchOp (N := 1) (.depthwise (h := hh) (w := ww) s!"%{p}dW" s!"%{p}db" zDk zVi) (.operand xName zIn))
-  let (cDn, nDn) ← pretty B (.bnBatchF (N := 1) (oc := ic) (h := hh) (w := ww) s!"%{p}dg" s!"%{p}dbt" epsStr 0 zVi zVi (.operand nDc zIn))
-  let (cDr, nDr) ← pretty B (.swishF (.operand nDn zIn))
+  let (cDc, nDc) ← pretty B (.batchOp (N := B) (.depthwise (h := hh) (w := ww) s!"%{p}dW" s!"%{p}db" zDk zVi) (.operand xName zIn))
+  let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := ic) (h := hh) (w := ww) s!"%{p}dg" s!"%{p}dbt" epsStr 0 zVi zVi (.operand nDc zIn))
+  let (cDr, nDr) ← pretty B (.batchOp (.swish) (.operand nDn zIn))
   let (cSe, nS, nE1, nZ, nE2, nSe) ← seFwd B ic hh r p nDr
-  let (cPc, nPc) ← pretty B (.batchOp (N := 1) (.conv (h := hh) (w := ww) s!"%{p}pW" s!"%{p}pb" zKp zVo) (.operand nSe zIn))
-  let (cPn, nPn) ← pretty B (.bnBatchF (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" s!"%{p}pbt" epsStr 0 zVo zVo (.operand nPc zOut))
+  let (cPc, nPc) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}pW" s!"%{p}pb" zKp zVo) (.operand nSe zIn))
+  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" s!"%{p}pbt" epsStr 0 zVo zVo (.operand nPc zOut))
   pure { code := cDc ++ cDn ++ cDr ++ cSe ++ cPc ++ cPn,
          o := nPn, ec := xName, en := xName, er := xName, dc := nDc, dn := nDn, dr := nDr,
          se := nSe, s := nS, e1 := nE1, z := nZ, e2 := nE2, pc := nPc }
@@ -200,41 +236,41 @@ private def eFwdNoExp (B ic oc hh kd r : Nat) (epsStr p xName : String) : StateM
 private def eBackBody (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String)
     (f : EFwd) (dyName : String) : StateM Nat EBack := do
   let ww := hh
-  let zInF  : Vec (1 * (ic * hh * ww)) := fun _ => 0
-  let zMidF : Vec (1 * (mid * hh * ww)) := fun _ => 0
-  let zMidB : Vec (1 * (mid * (hh * ww))) := fun _ => 0
-  let zOutF : Vec (1 * (oc * hh * ww)) := fun _ => 0
-  let zOutB : Vec (1 * (oc * (hh * ww))) := fun _ => 0
+  let zInF  : Vec (B * (ic * hh * ww)) := fun _ => 0
+  let zMidF : Vec (B * (mid * hh * ww)) := fun _ => 0
+  let zMidB : Vec (B * (mid * (hh * ww))) := fun _ => 0
+  let zOutF : Vec (B * (oc * hh * ww)) := fun _ => 0
+  let zOutB : Vec (B * (oc * (hh * ww))) := fun _ => 0
   let zKe  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
   let zKp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel mid kd kd := fun _ _ _ => 0
   let zVm  : Vec mid := fun _ => 0
   let zVo  : Vec oc := fun _ => 0
   -- project: BN back (cot at project conv out) → 1×1 conv back (cot at SE out)
-  let (cPbn, nPbn) ← pretty B (.bnBatchBack (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr 0 zVo zOutB (.operand dyName zOutB))
-  let (cPdr, nPdr) ← pretty B (.convBackBatched (N := 1) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}pW" zKp zVo (.operand nPbn zOutF))
-  let (cgp, ngp) ← pretty B (.bnGammaSgdB (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr lrStr 0 zVo zOutB 0 (.operand dyName zOutB))
-  let (ctp, ntp) ← pretty B (.bnBetaSgdB (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pbt" lrStr zVo 0 (.operand dyName zOutB))
-  let (cWp, nWp) ← pretty B (.convWeightSgdB (N := 1) (ic := mid) (oc := oc) (h := hh) (w := ww) f.se s!"%{p}pW" lrStr zVo zMidF zKp 0 (.operand nPbn zOutF))
-  let (cbp, nbp) ← pretty B (.bnBetaSgdB (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pb" lrStr zVo 0 (.operand nPbn zOutB))
+  let (cPbn, nPbn) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr 0 zVo zOutB (.operand dyName zOutB))
+  let (cPdr, nPdr) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}pW" zKp zVo (.operand nPbn zOutF))
+  let (cgp, ngp) ← pretty B (.bnGammaSgdB (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr lrStr 0 zVo zOutB 0 (.operand dyName zOutB))
+  let (ctp, ntp) ← pretty B (.bnBetaSgdB (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pbt" lrStr zVo 0 (.operand dyName zOutB))
+  let (cWp, nWp) ← pretty B (.convWeightSgdB (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) f.se s!"%{p}pW" lrStr zVo zMidF zKp 0 (.operand nPbn zOutF))
+  let (cbp, nbp) ← pretty B (.bnBetaSgdB (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pb" lrStr zVo 0 (.operand nPbn zOutB))
   -- SE back (dx at depthwise-swish out) + 4 SE param grads
   let (cSe, nDxSe, seNames) ← seBack B mid hh r lrStr p f.dr f.s f.e1 f.z f.e2 nPdr
   -- depthwise: swish mask (cot at dw-BN out) → BN back (cot at dw conv out) → conv back (cot at expand-swish out)
-  let (cDsw, nDsw) ← pretty B (.swishBack (n := 1 * (mid * hh * ww)) f.dn zMidF (.operand nDxSe zMidF))
-  let (cDbn, nDbn) ← pretty B (.bnBatchBack (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr 0 zVm zMidB (.operand nDsw zMidB))
-  let (cDer, nDer) ← pretty B (.depthwiseBackBatched (N := 1) (c := mid) (h := hh) (w := ww) s!"%{p}dW" zDk zVm (.operand nDbn zMidF))
-  let (cgd, ngd) ← pretty B (.bnGammaSgdB (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr lrStr 0 zVm zMidB 0 (.operand nDsw zMidB))
-  let (ctd, ntd) ← pretty B (.bnBetaSgdB (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}dbt" lrStr zVm 0 (.operand nDsw zMidB))
-  let (cWd, nWd) ← pretty B (.depthwiseWeightSgdB (N := 1) (c := mid) (h := hh) (w := ww) f.er s!"%{p}dW" lrStr zVm zMidF zDk 0 (.operand nDbn zMidF))
-  let (cbd, nbd) ← pretty B (.bnBetaSgdB (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}db" lrStr zVm 0 (.operand nDbn zMidB))
+  let (cDsw, nDsw) ← pretty B (.swishBackB f.dn (fun _ => 0) (.operand nDxSe zMidF))
+  let (cDbn, nDbn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr 0 zVm zMidB (.operand nDsw zMidB))
+  let (cDer, nDer) ← pretty B (.depthwiseBackBatched (N := B) (c := mid) (h := hh) (w := ww) s!"%{p}dW" zDk zVm (.operand nDbn zMidF))
+  let (cgd, ngd) ← pretty B (.bnGammaSgdB (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr lrStr 0 zVm zMidB 0 (.operand nDsw zMidB))
+  let (ctd, ntd) ← pretty B (.bnBetaSgdB (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}dbt" lrStr zVm 0 (.operand nDsw zMidB))
+  let (cWd, nWd) ← pretty B (.depthwiseWeightSgdB (N := B) (c := mid) (h := hh) (w := ww) f.er s!"%{p}dW" lrStr zVm zMidF zDk 0 (.operand nDbn zMidF))
+  let (cbd, nbd) ← pretty B (.bnBetaSgdB (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}db" lrStr zVm 0 (.operand nDbn zMidB))
   -- expand: swish mask (cot at expand-BN out) → BN back → 1×1 conv back (cot at block input)
-  let (cEsw, nEsw) ← pretty B (.swishBack (n := 1 * (mid * hh * ww)) f.en zMidF (.operand nDer zMidF))
-  let (cEbn, nEbn) ← pretty B (.bnBatchBack (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}eg" f.ec epsStr 0 zVm zMidB (.operand nEsw zMidB))
-  let (cExb, nExb) ← pretty B (.convBackBatched (N := 1) (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%{p}eW" zKe zVm (.operand nEbn zMidF))
-  let (cge, nge) ← pretty B (.bnGammaSgdB (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}eg" f.ec epsStr lrStr 0 zVm zMidB 0 (.operand nEsw zMidB))
-  let (cte, nte) ← pretty B (.bnBetaSgdB (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}ebt" lrStr zVm 0 (.operand nEsw zMidB))
-  let (cWe, nWe) ← pretty B (.convWeightSgdB (N := 1) (ic := ic) (oc := mid) (h := hh) (w := ww) xName s!"%{p}eW" lrStr zVm zInF zKe 0 (.operand nEbn zMidF))
-  let (cbe, nbe) ← pretty B (.bnBetaSgdB (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}eb" lrStr zVm 0 (.operand nEbn zMidB))
+  let (cEsw, nEsw) ← pretty B (.swishBackB f.en (fun _ => 0) (.operand nDer zMidF))
+  let (cEbn, nEbn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}eg" f.ec epsStr 0 zVm zMidB (.operand nEsw zMidB))
+  let (cExb, nExb) ← pretty B (.convBackBatched (N := B) (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%{p}eW" zKe zVm (.operand nEbn zMidF))
+  let (cge, nge) ← pretty B (.bnGammaSgdB (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}eg" f.ec epsStr lrStr 0 zVm zMidB 0 (.operand nEsw zMidB))
+  let (cte, nte) ← pretty B (.bnBetaSgdB (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}ebt" lrStr zVm 0 (.operand nEsw zMidB))
+  let (cWe, nWe) ← pretty B (.convWeightSgdB (N := B) (ic := ic) (oc := mid) (h := hh) (w := ww) xName s!"%{p}eW" lrStr zVm zInF zKe 0 (.operand nEbn zMidF))
+  let (cbe, nbe) ← pretty B (.bnBetaSgdB (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}eb" lrStr zVm 0 (.operand nEbn zMidB))
   let names := [nWe, nbe, nge, nte, nWd, nbd, ngd, ntd] ++ seNames ++ [nWp, nbp, ngp, ntp]
   pure { code := cPbn ++ cPdr ++ cgp ++ ctp ++ cWp ++ cbp ++ cSe ++
                  cDsw ++ cDbn ++ cDer ++ cgd ++ ctd ++ cWd ++ cbd ++
@@ -245,8 +281,8 @@ private def eBackBody (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String
 private def eBack (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String)
     (f : EFwd) (dyName : String) : StateM Nat EBack := do
   let b ← eBackBody B ic mid oc hh kd r epsStr lrStr p xName f dyName
-  let zIn : Vec (1 * (ic * hh * hh)) := fun _ => 0
-  let (cDx, nDx) ← pretty B (.addV (.operand b.dx zIn) (.operand dyName zIn))
+  let zIn : Vec (B * (ic * hh * hh)) := fun _ => 0
+  let (cDx, nDx) ← pretty B (.addVB (.operand b.dx zIn) (.operand dyName zIn))
   pure { b with code := b.code ++ cDx, dx := nDx }
 
 /-- **No-skip stride-1 MBConv backward** (ic ≠ oc, b9/b16): body, dx = expand-conv-back directly. -/
@@ -259,43 +295,43 @@ private def eBackNoSkip (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : Stri
 private def eBackStrided (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String)
     (f : EFwd) (dyName : String) : StateM Nat EBack := do
   let ww := hh
-  let zInF  : Vec (1 * (ic * (2*hh) * (2*ww))) := fun _ => 0
-  let zMidHF : Vec (1 * (mid * (2*hh) * (2*ww))) := fun _ => 0
-  let zMidHB : Vec (1 * (mid * ((2*hh) * (2*ww)))) := fun _ => 0
-  let zMidF : Vec (1 * (mid * hh * ww)) := fun _ => 0
-  let zMidB : Vec (1 * (mid * (hh * ww))) := fun _ => 0
-  let zOutF : Vec (1 * (oc * hh * ww)) := fun _ => 0
-  let zOutB : Vec (1 * (oc * (hh * ww))) := fun _ => 0
+  let zInF  : Vec (B * (ic * (2*hh) * (2*ww))) := fun _ => 0
+  let zMidHF : Vec (B * (mid * (2*hh) * (2*ww))) := fun _ => 0
+  let zMidHB : Vec (B * (mid * ((2*hh) * (2*ww)))) := fun _ => 0
+  let zMidF : Vec (B * (mid * hh * ww)) := fun _ => 0
+  let zMidB : Vec (B * (mid * (hh * ww))) := fun _ => 0
+  let zOutF : Vec (B * (oc * hh * ww)) := fun _ => 0
+  let zOutB : Vec (B * (oc * (hh * ww))) := fun _ => 0
   let zKe  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
   let zKp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel mid kd kd := fun _ _ _ => 0
   let zVm  : Vec mid := fun _ => 0
   let zVo  : Vec oc := fun _ => 0
   -- project (at hh)
-  let (cPbn, nPbn) ← pretty B (.bnBatchBack (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr 0 zVo zOutB (.operand dyName zOutB))
-  let (cPdr, nPdr) ← pretty B (.convBackBatched (N := 1) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}pW" zKp zVo (.operand nPbn zOutF))
-  let (cgp, ngp) ← pretty B (.bnGammaSgdB (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr lrStr 0 zVo zOutB 0 (.operand dyName zOutB))
-  let (ctp, ntp) ← pretty B (.bnBetaSgdB (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pbt" lrStr zVo 0 (.operand dyName zOutB))
-  let (cWp, nWp) ← pretty B (.convWeightSgdB (N := 1) (ic := mid) (oc := oc) (h := hh) (w := ww) f.se s!"%{p}pW" lrStr zVo zMidF zKp 0 (.operand nPbn zOutF))
-  let (cbp, nbp) ← pretty B (.bnBetaSgdB (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pb" lrStr zVo 0 (.operand nPbn zOutB))
+  let (cPbn, nPbn) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr 0 zVo zOutB (.operand dyName zOutB))
+  let (cPdr, nPdr) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}pW" zKp zVo (.operand nPbn zOutF))
+  let (cgp, ngp) ← pretty B (.bnGammaSgdB (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr lrStr 0 zVo zOutB 0 (.operand dyName zOutB))
+  let (ctp, ntp) ← pretty B (.bnBetaSgdB (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pbt" lrStr zVo 0 (.operand dyName zOutB))
+  let (cWp, nWp) ← pretty B (.convWeightSgdB (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) f.se s!"%{p}pW" lrStr zVo zMidF zKp 0 (.operand nPbn zOutF))
+  let (cbp, nbp) ← pretty B (.bnBetaSgdB (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pb" lrStr zVo 0 (.operand nPbn zOutB))
   -- SE back (at hh)
   let (cSe, nDxSe, seNames) ← seBack B mid hh r lrStr p f.dr f.s f.e1 f.z f.e2 nPdr
   -- depthwise (swish + BN at hh, strided conv-back upsamples to 2hh)
-  let (cDsw, nDsw) ← pretty B (.swishBack (n := 1 * (mid * hh * ww)) f.dn zMidF (.operand nDxSe zMidF))
-  let (cDbn, nDbn) ← pretty B (.bnBatchBack (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr 0 zVm zMidB (.operand nDsw zMidB))
-  let (cDer, nDer) ← pretty B (.depthwiseStridedBackBatched (N := 1) (c := mid) (h := hh) (w := ww) s!"%{p}dW" zDk zVm (.operand nDbn zMidF))
-  let (cgd, ngd) ← pretty B (.bnGammaSgdB (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr lrStr 0 zVm zMidB 0 (.operand nDsw zMidB))
-  let (ctd, ntd) ← pretty B (.bnBetaSgdB (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}dbt" lrStr zVm 0 (.operand nDsw zMidB))
-  let (cWd, nWd) ← pretty B (.depthwiseStridedWeightSgdB (N := 1) (c := mid) (h := hh) (w := ww) f.er s!"%{p}dW" lrStr zVm zMidHF zDk 0 (.operand nDbn zMidF))
-  let (cbd, nbd) ← pretty B (.bnBetaSgdB (N := 1) (oc := mid) (h := hh) (w := ww) s!"%{p}db" lrStr zVm 0 (.operand nDbn zMidB))
+  let (cDsw, nDsw) ← pretty B (.swishBackB f.dn (fun _ => 0) (.operand nDxSe zMidF))
+  let (cDbn, nDbn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr 0 zVm zMidB (.operand nDsw zMidB))
+  let (cDer, nDer) ← pretty B (.depthwiseStridedBackBatched (N := B) (c := mid) (h := hh) (w := ww) s!"%{p}dW" zDk zVm (.operand nDbn zMidF))
+  let (cgd, ngd) ← pretty B (.bnGammaSgdB (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr lrStr 0 zVm zMidB 0 (.operand nDsw zMidB))
+  let (ctd, ntd) ← pretty B (.bnBetaSgdB (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}dbt" lrStr zVm 0 (.operand nDsw zMidB))
+  let (cWd, nWd) ← pretty B (.depthwiseStridedWeightSgdB (N := B) (c := mid) (h := hh) (w := ww) f.er s!"%{p}dW" lrStr zVm zMidHF zDk 0 (.operand nDbn zMidF))
+  let (cbd, nbd) ← pretty B (.bnBetaSgdB (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}db" lrStr zVm 0 (.operand nDbn zMidB))
   -- expand (at 2hh)
-  let (cEsw, nEsw) ← pretty B (.swishBack (n := 1 * (mid * (2*hh) * (2*ww))) f.en zMidHF (.operand nDer zMidHF))
-  let (cEbn, nEbn) ← pretty B (.bnBatchBack (N := 1) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eg" f.ec epsStr 0 zVm zMidHB (.operand nEsw zMidHB))
-  let (cExb, nExb) ← pretty B (.convBackBatched (N := 1) (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eW" zKe zVm (.operand nEbn zMidHF))
-  let (cge, nge) ← pretty B (.bnGammaSgdB (N := 1) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eg" f.ec epsStr lrStr 0 zVm zMidHB 0 (.operand nEsw zMidHB))
-  let (cte, nte) ← pretty B (.bnBetaSgdB (N := 1) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}ebt" lrStr zVm 0 (.operand nEsw zMidHB))
-  let (cWe, nWe) ← pretty B (.convWeightSgdB (N := 1) (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) xName s!"%{p}eW" lrStr zVm zInF zKe 0 (.operand nEbn zMidHF))
-  let (cbe, nbe) ← pretty B (.bnBetaSgdB (N := 1) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eb" lrStr zVm 0 (.operand nEbn zMidHB))
+  let (cEsw, nEsw) ← pretty B (.swishBackB f.en (fun _ => 0) (.operand nDer zMidHF))
+  let (cEbn, nEbn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eg" f.ec epsStr 0 zVm zMidHB (.operand nEsw zMidHB))
+  let (cExb, nExb) ← pretty B (.convBackBatched (N := B) (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eW" zKe zVm (.operand nEbn zMidHF))
+  let (cge, nge) ← pretty B (.bnGammaSgdB (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eg" f.ec epsStr lrStr 0 zVm zMidHB 0 (.operand nEsw zMidHB))
+  let (cte, nte) ← pretty B (.bnBetaSgdB (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}ebt" lrStr zVm 0 (.operand nEsw zMidHB))
+  let (cWe, nWe) ← pretty B (.convWeightSgdB (N := B) (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) xName s!"%{p}eW" lrStr zVm zInF zKe 0 (.operand nEbn zMidHF))
+  let (cbe, nbe) ← pretty B (.bnBetaSgdB (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eb" lrStr zVm 0 (.operand nEbn zMidHB))
   let names := [nWe, nbe, nge, nte, nWd, nbd, ngd, ntd] ++ seNames ++ [nWp, nbp, ngp, ntp]
   pure { code := cPbn ++ cPdr ++ cgp ++ ctp ++ cWp ++ cbp ++ cSe ++
                  cDsw ++ cDbn ++ cDer ++ cgd ++ ctd ++ cWd ++ cbd ++
@@ -307,31 +343,31 @@ private def eBackStrided (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : Str
 private def eBackNoExp (B ic oc hh kd r : Nat) (epsStr lrStr p xName : String)
     (f : EFwd) (dyName : String) : StateM Nat EBack := do
   let ww := hh
-  let zInF  : Vec (1 * (ic * hh * ww)) := fun _ => 0
-  let zInB  : Vec (1 * (ic * (hh * ww))) := fun _ => 0
-  let zOutF : Vec (1 * (oc * hh * ww)) := fun _ => 0
-  let zOutB : Vec (1 * (oc * (hh * ww))) := fun _ => 0
+  let zInF  : Vec (B * (ic * hh * ww)) := fun _ => 0
+  let zInB  : Vec (B * (ic * (hh * ww))) := fun _ => 0
+  let zOutF : Vec (B * (oc * hh * ww)) := fun _ => 0
+  let zOutB : Vec (B * (oc * (hh * ww))) := fun _ => 0
   let zKp  : Kernel4 oc ic 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel ic kd kd := fun _ _ _ => 0
   let zVi  : Vec ic := fun _ => 0
   let zVo  : Vec oc := fun _ => 0
   -- project
-  let (cPbn, nPbn) ← pretty B (.bnBatchBack (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr 0 zVo zOutB (.operand dyName zOutB))
-  let (cPdr, nPdr) ← pretty B (.convBackBatched (N := 1) (ic := ic) (oc := oc) (h := hh) (w := ww) s!"%{p}pW" zKp zVo (.operand nPbn zOutF))
-  let (cgp, ngp) ← pretty B (.bnGammaSgdB (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr lrStr 0 zVo zOutB 0 (.operand dyName zOutB))
-  let (ctp, ntp) ← pretty B (.bnBetaSgdB (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pbt" lrStr zVo 0 (.operand dyName zOutB))
-  let (cWp, nWp) ← pretty B (.convWeightSgdB (N := 1) (ic := ic) (oc := oc) (h := hh) (w := ww) f.se s!"%{p}pW" lrStr zVo zInF zKp 0 (.operand nPbn zOutF))
-  let (cbp, nbp) ← pretty B (.bnBetaSgdB (N := 1) (oc := oc) (h := hh) (w := ww) s!"%{p}pb" lrStr zVo 0 (.operand nPbn zOutB))
+  let (cPbn, nPbn) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr 0 zVo zOutB (.operand dyName zOutB))
+  let (cPdr, nPdr) ← pretty B (.convBackBatched (N := B) (ic := ic) (oc := oc) (h := hh) (w := ww) s!"%{p}pW" zKp zVo (.operand nPbn zOutF))
+  let (cgp, ngp) ← pretty B (.bnGammaSgdB (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" f.pc epsStr lrStr 0 zVo zOutB 0 (.operand dyName zOutB))
+  let (ctp, ntp) ← pretty B (.bnBetaSgdB (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pbt" lrStr zVo 0 (.operand dyName zOutB))
+  let (cWp, nWp) ← pretty B (.convWeightSgdB (N := B) (ic := ic) (oc := oc) (h := hh) (w := ww) f.se s!"%{p}pW" lrStr zVo zInF zKp 0 (.operand nPbn zOutF))
+  let (cbp, nbp) ← pretty B (.bnBetaSgdB (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pb" lrStr zVo 0 (.operand nPbn zOutB))
   -- SE back (on ic channels)
   let (cSe, nDxSe, seNames) ← seBack B ic hh r lrStr p f.dr f.s f.e1 f.z f.e2 nPdr
   -- depthwise (on ic channels)
-  let (cDsw, nDsw) ← pretty B (.swishBack (n := 1 * (ic * hh * ww)) f.dn zInF (.operand nDxSe zInF))
-  let (cDbn, nDbn) ← pretty B (.bnBatchBack (N := 1) (oc := ic) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr 0 zVi zInB (.operand nDsw zInB))
-  let (cDxb, nDxb) ← pretty B (.depthwiseBackBatched (N := 1) (c := ic) (h := hh) (w := ww) s!"%{p}dW" zDk zVi (.operand nDbn zInF))
-  let (cgd, ngd) ← pretty B (.bnGammaSgdB (N := 1) (oc := ic) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr lrStr 0 zVi zInB 0 (.operand nDsw zInB))
-  let (ctd, ntd) ← pretty B (.bnBetaSgdB (N := 1) (oc := ic) (h := hh) (w := ww) s!"%{p}dbt" lrStr zVi 0 (.operand nDsw zInB))
-  let (cWd, nWd) ← pretty B (.depthwiseWeightSgdB (N := 1) (c := ic) (h := hh) (w := ww) xName s!"%{p}dW" lrStr zVi zInF zDk 0 (.operand nDbn zInF))
-  let (cbd, nbd) ← pretty B (.bnBetaSgdB (N := 1) (oc := ic) (h := hh) (w := ww) s!"%{p}db" lrStr zVi 0 (.operand nDbn zInB))
+  let (cDsw, nDsw) ← pretty B (.swishBackB f.dn (fun _ => 0) (.operand nDxSe zInF))
+  let (cDbn, nDbn) ← pretty B (.bnBatchBack (N := B) (oc := ic) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr 0 zVi zInB (.operand nDsw zInB))
+  let (cDxb, nDxb) ← pretty B (.depthwiseBackBatched (N := B) (c := ic) (h := hh) (w := ww) s!"%{p}dW" zDk zVi (.operand nDbn zInF))
+  let (cgd, ngd) ← pretty B (.bnGammaSgdB (N := B) (oc := ic) (h := hh) (w := ww) s!"%{p}dg" f.dc epsStr lrStr 0 zVi zInB 0 (.operand nDsw zInB))
+  let (ctd, ntd) ← pretty B (.bnBetaSgdB (N := B) (oc := ic) (h := hh) (w := ww) s!"%{p}dbt" lrStr zVi 0 (.operand nDsw zInB))
+  let (cWd, nWd) ← pretty B (.depthwiseWeightSgdB (N := B) (c := ic) (h := hh) (w := ww) xName s!"%{p}dW" lrStr zVi zInF zDk 0 (.operand nDbn zInF))
+  let (cbd, nbd) ← pretty B (.bnBetaSgdB (N := B) (oc := ic) (h := hh) (w := ww) s!"%{p}db" lrStr zVi 0 (.operand nDbn zInB))
   let names := [nWd, nbd, ngd, ntd] ++ seNames ++ [nWp, nbp, ngp, ntp]
   pure { code := cPbn ++ cPdr ++ cgp ++ ctp ++ cWp ++ cbp ++ cSe ++
                  cDsw ++ cDbn ++ cDxb ++ cgd ++ ctd ++ cWd ++ cbd,
@@ -379,14 +415,14 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     (funcName : String := "efficientnet_train_step") : String :=
   let go : StateM Nat String := do
     -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → bn → swish ═══
-    let zx   : Vec (1 * (3*224*224)) := fun _ => 0
+    let zx   : Vec (B * (3*224*224)) := fun _ => 0
     let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
     let z32  : Vec 32 := fun _ => 0
-    let z112F : Vec (1 * (32*112*112)) := fun _ => 0
-    let z112B : Vec (1 * (32*(112*112))) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.batchOp (N := 1) (.convStrided (h := 112) (w := 112) "%sW" "%sb" zSk z32) (.operand "%x" zx))
-    let (cStn, nStn) ← pretty B (.bnBatchF (N := 1) (oc := 32) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z32 z32 (.operand nStc z112F))
-    let (cStr, nStr) ← pretty B (.swishF (.operand nStn z112F))
+    let z112F : Vec (B * (32*112*112)) := fun _ => 0
+    let z112B : Vec (B * (32*(112*112))) := fun _ => 0
+    let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStrided (h := 112) (w := 112) "%sW" "%sb" zSk z32) (.operand "%x" zx))
+    let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 32) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z32 z32 (.operand nStc z112F))
+    let (cStr, nStr) ← pretty B (.batchOp (.swish) (.operand nStn z112F))
     -- ═══ forward: 16 MBConv blocks ═══
     let f1  ← eFwdNoExp   B 32      16 112 3  8 epsStr "b1"  nStr
     let f2  ← eFwdStrided B 16  96  24  56 3  4 epsStr "b2"  f1.o
@@ -405,34 +441,38 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     let f15 ← eFwd        B 192 1152 192 7 5 48 epsStr "b15" f14.o
     let f16 ← eFwdNoSkip  B 192 1152 320 7 3 48 epsStr "b16" f15.o
     -- ═══ head: 1×1 conv (320→1280) → bn → swish → GAP → dense → softmax-CE cot ═══
-    let z7F   : Vec (1 * (320*7*7)) := fun _ => 0
+    let z7F   : Vec (B * (320*7*7)) := fun _ => 0
     let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
     let z1280 : Vec 1280 := fun _ => 0
-    let zH7F  : Vec (1 * (1280*7*7)) := fun _ => 0
-    let zH7B  : Vec (1 * (1280*(7*7))) := fun _ => 0
-    let z1280c : Vec (1 * 1280) := fun _ => 0
+    let zH7F  : Vec (B * (1280*7*7)) := fun _ => 0
+    let zH7B  : Vec (B * (1280*(7*7))) := fun _ => 0
+    let z1280c : Vec (B * 1280) := fun _ => 0
     let zWd   : Mat 1280 nClasses := fun _ _ => 0
     let zNC   : Vec nClasses := fun _ => 0
-    let zNCb  : Vec (1 * nClasses) := fun _ => 0
-    let (cHc, nHc) ← pretty B (.batchOp (N := 1) (.conv (h := 7) (w := 7) "%hW" "%hb" zHk z1280) (.operand f16.o z7F))
-    let (cHn, nHn) ← pretty B (.bnBatchF (N := 1) (oc := 1280) (h := 7) (w := 7) "%hg" "%hbt" epsStr 0 z1280 z1280 (.operand nHc zH7F))
-    let (cHr, nHr) ← pretty B (.swishF (.operand nHn zH7F))
-    let (cGap, nGap) ← pretty B (.batchOp (N := 1) (.gap (c := 1280) (h := 7) (w := 7)) (.operand nHr zH7F))
-    let (cLog, nLog) ← pretty B (.batchOp (N := 1) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z1280c))
-    let (cSm, nSm) ← pretty B (.softmaxRowF (m := 1) (n := nClasses) (.operand nLog zNCb))
-    let (cDy, nDy) ← pretty B (.sub (.operand nSm zNCb) (.operand "%onehot" zNCb))
+    -- `zNCb` is the ROW-indexed logit leaf (`rows = 1`, so `B·(1·nClasses)`) that the
+    -- softmax / row-back / sub nodes sit at; `zNCp` is the same vector at the plain
+    -- batched index `B·nClasses` that the two param-SGD nodes want. See `zCc1`.
+    let zNCb  : Vec (B * (1 * nClasses)) := fun _ => 0
+    let zNCp  : Vec (B * nClasses) := fun _ => 0
+    let (cHc, nHc) ← pretty B (.batchOp (N := B) (.conv (h := 7) (w := 7) "%hW" "%hb" zHk z1280) (.operand f16.o z7F))
+    let (cHn, nHn) ← pretty B (.bnBatchF (N := B) (oc := 1280) (h := 7) (w := 7) "%hg" "%hbt" epsStr 0 z1280 z1280 (.operand nHc zH7F))
+    let (cHr, nHr) ← pretty B (.batchOp (.swish) (.operand nHn zH7F))
+    let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7)) (.operand nHr zH7F))
+    let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z1280c))
+    let (cSm, nSm) ← pretty B (.batchOp (.softmaxRow (m := 1) (n := nClasses)) (.operand nLog zNCb))
+    let (cDy, nDy) ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
     -- ═══ head backward: dense back → GAP back → swish mask → bn back → 1×1 conv back ═══
-    let (cDgi, nDgi) ← pretty B (.denseRowBack (N := 1) (a := 1280) (c := nClasses) "%Wd" zWd (.operand nDy zNCb))
-    let (cWfc, nWfc) ← pretty B (.denseWeightSgdB (N := 1) (a := 1280) (c := nClasses) nGap "%Wd" lrStr z1280c zWd 0 (.operand nDy zNCb))
-    let (cbfc, nbfc) ← pretty B (.denseBiasSgdB (N := 1) (c := nClasses) "%bd" lrStr zNC 0 (.operand nDy zNCb))
-    let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := 1) (c := 1280) (h := 7) (w := 7) (.operand nDgi z1280c))
-    let (cHsw, nHsw) ← pretty B (.swishBack (n := 1 * (1280*7*7)) nHn zH7F (.operand nDgp zH7F))
-    let (cHbn, nHbn) ← pretty B (.bnBatchBack (N := 1) (oc := 1280) (h := 7) (w := 7) "%hg" nHc epsStr 0 z1280 zH7B (.operand nHsw zH7B))
-    let (cHxb, nHxb) ← pretty B (.convBackBatched (N := 1) (ic := 320) (oc := 1280) (h := 7) (w := 7) "%hW" zHk z1280 (.operand nHbn zH7F))
-    let (cgh, ngh) ← pretty B (.bnGammaSgdB (N := 1) (oc := 1280) (h := 7) (w := 7) "%hg" nHc epsStr lrStr 0 z1280 zH7B 0 (.operand nHsw zH7B))
-    let (cth, nth) ← pretty B (.bnBetaSgdB (N := 1) (oc := 1280) (h := 7) (w := 7) "%hbt" lrStr z1280 0 (.operand nHsw zH7B))
-    let (cWh, nWh) ← pretty B (.convWeightSgdB (N := 1) (ic := 320) (oc := 1280) (h := 7) (w := 7) f16.o "%hW" lrStr z1280 z7F zHk 0 (.operand nHbn zH7F))
-    let (cbh, nbh) ← pretty B (.bnBetaSgdB (N := 1) (oc := 1280) (h := 7) (w := 7) "%hb" lrStr z1280 0 (.operand nHbn zH7B))
+    let (cDgi, nDgi) ← pretty B (.batchOp (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
+    let (cWfc, nWfc) ← pretty B (.denseWeightSgdB (N := B) (a := 1280) (c := nClasses) nGap "%Wd" lrStr z1280c zWd 0 (.operand nDy zNCp))
+    let (cbfc, nbfc) ← pretty B (.denseBiasSgdB (N := B) (c := nClasses) "%bd" lrStr zNC 0 (.operand nDy zNCp))
+    let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 1280) (h := 7) (w := 7) (.operand nDgi z1280c))
+    let (cHsw, nHsw) ← pretty B (.swishBackB nHn (fun _ => 0) (.operand nDgp zH7F))
+    let (cHbn, nHbn) ← pretty B (.bnBatchBack (N := B) (oc := 1280) (h := 7) (w := 7) "%hg" nHc epsStr 0 z1280 zH7B (.operand nHsw zH7B))
+    let (cHxb, nHxb) ← pretty B (.convBackBatched (N := B) (ic := 320) (oc := 1280) (h := 7) (w := 7) "%hW" zHk z1280 (.operand nHbn zH7F))
+    let (cgh, ngh) ← pretty B (.bnGammaSgdB (N := B) (oc := 1280) (h := 7) (w := 7) "%hg" nHc epsStr lrStr 0 z1280 zH7B 0 (.operand nHsw zH7B))
+    let (cth, nth) ← pretty B (.bnBetaSgdB (N := B) (oc := 1280) (h := 7) (w := 7) "%hbt" lrStr z1280 0 (.operand nHsw zH7B))
+    let (cWh, nWh) ← pretty B (.convWeightSgdB (N := B) (ic := 320) (oc := 1280) (h := 7) (w := 7) f16.o "%hW" lrStr z1280 z7F zHk 0 (.operand nHbn zH7F))
+    let (cbh, nbh) ← pretty B (.bnBetaSgdB (N := B) (oc := 1280) (h := 7) (w := 7) "%hb" lrStr z1280 0 (.operand nHbn zH7B))
     -- ═══ backward: 16 blocks reversed (cotangent threads from nHxb) ═══
     let b16 ← eBackNoSkip  B 192 1152 320 7 3 48 epsStr lrStr "b16" f15.o f16 nHxb
     let b15 ← eBack        B 192 1152 192 7 5 48 epsStr lrStr "b15" f14.o f15 b16.dx
@@ -451,12 +491,12 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     let b2  ← eBackStrided B 16  96  24  56 3  4 epsStr lrStr "b2"  f1.o  f2  b3.dx
     let b1  ← eBackNoExp   B 32      16 112 3  8 epsStr lrStr "b1"  nStr  f1  b2.dx
     -- ═══ stem backward: swish mask → bn back, then stem param SGD (NO conv-back past %x) ═══
-    let (cDsr, nDsr) ← pretty B (.swishBack (n := 1 * (32*112*112)) nStn z112F (.operand b1.dx z112F))
-    let (cDsn, nDsn) ← pretty B (.bnBatchBack (N := 1) (oc := 32) (h := 112) (w := 112) "%sg" nStc epsStr 0 z32 z112B (.operand nDsr z112B))
-    let (csW, nsW) ← pretty B (.convStridedWeightSgdB (N := 1) (ic := 3) (oc := 32) (h := 112) (w := 112) "%x" "%sW" lrStr z32 zx zSk 0 (.operand nDsn z112F))
-    let (csb, nsb) ← pretty B (.bnBetaSgdB (N := 1) (oc := 32) (h := 112) (w := 112) "%sb" lrStr z32 0 (.operand nDsn z112B))
-    let (csg, nsg) ← pretty B (.bnGammaSgdB (N := 1) (oc := 32) (h := 112) (w := 112) "%sg" nStc epsStr lrStr 0 z32 z112B 0 (.operand nDsr z112B))
-    let (cst, nst) ← pretty B (.bnBetaSgdB (N := 1) (oc := 32) (h := 112) (w := 112) "%sbt" lrStr z32 0 (.operand nDsr z112B))
+    let (cDsr, nDsr) ← pretty B (.swishBackB nStn (fun _ => 0) (.operand b1.dx z112F))
+    let (cDsn, nDsn) ← pretty B (.bnBatchBack (N := B) (oc := 32) (h := 112) (w := 112) "%sg" nStc epsStr 0 z32 z112B (.operand nDsr z112B))
+    let (csW, nsW) ← pretty B (.convStridedWeightSgdB (N := B) (ic := 3) (oc := 32) (h := 112) (w := 112) "%x" "%sW" lrStr z32 zx zSk 0 (.operand nDsn z112F))
+    let (csb, nsb) ← pretty B (.bnBetaSgdB (N := B) (oc := 32) (h := 112) (w := 112) "%sb" lrStr z32 0 (.operand nDsn z112B))
+    let (csg, nsg) ← pretty B (.bnGammaSgdB (N := B) (oc := 32) (h := 112) (w := 112) "%sg" nStc epsStr lrStr 0 z32 z112B 0 (.operand nDsr z112B))
+    let (cst, nst) ← pretty B (.bnBetaSgdB (N := B) (oc := 32) (h := 112) (w := 112) "%sbt" lrStr z32 0 (.operand nDsr z112B))
     -- ═══ assemble (params in func-arg order: stem, blocks fwd-order, head, dense) ═══
     let fwdCode := cStc ++ cStn ++ cStr ++
       f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++

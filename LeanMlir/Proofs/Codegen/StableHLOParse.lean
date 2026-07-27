@@ -150,6 +150,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .headSliceF N heads d hIdx :: ts, e :: st => parseStack ts (.headSliceF N heads d hIdx e :: st)
   | .headPadF N heads d hIdx :: ts, e :: st => parseStack ts (.headPadF N heads d hIdx e :: st)
   | .batched tag names info :: ts, e :: st => parseStack ts (.batched tag names info e :: st)
+  | .batched2 tag names info :: ts, b :: a :: st =>
+      parseStack ts (.batched2 tag names info a b :: st)
   | _ :: _, _                    => none  -- stack underflow / malformed
 
 /-- Parse a full token stream back to a single graph. -/
@@ -249,6 +251,8 @@ theorem parseStack_toToks (r : Raw) :
   | headSliceF N heads d hIdx e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | headPadF N heads d hIdx e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | batched tag names info e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | batched2 tag names info a b iha ihb =>
+      intro ts st; simp only [toToks, List.append_assoc, iha, ihb]; rfl
 
 /-- **Serialization round-trip.** `parse` recovers any skeleton from its
     postorder token stream. -/

@@ -21,6 +21,7 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Two threads, in order:
 | `01724c3` | `cifar8_adam_train_step` from the proven graph |
 | `7faa7fb` | the strided + BN un-fused param gradients |
 | `345c9ea`, `f72903f` | batch-BN-at-R34-scale scoping (§2b) |
+| *uncommitted* | §2b step 1: the batched pointwise forms; EfficientNet renders at `N := B` |
 
 ---
 
@@ -125,7 +126,7 @@ and every `_adam_train_step` except cifar8. Of the 7 remaining double-writers, t
 byte-identical for `vit_fwd` — so they are redundant, not divergent. The four that own independent
 emitters (convnext, efficientnet, mobilenetv2, resnet34 train steps) can drift.
 
-### 2b. Batch-BN at R34 scale ▶ NEXT — and it is also a den/emit fix
+### 2b. Batch-BN at R34 scale ▶ step 1 DONE — and it is also a den/emit fix
 
 Decision: keep the AdamW trainer's **batch-BN** semantics rather than moving R34-Adam onto the
 per-example chain. Scoping that turned up the thing to fix first, because it is the same defect.
@@ -139,21 +140,58 @@ per-example chain. Scoping that turned up the thing to fix first, because it is 
 - `N := 32` elaborates and renders correctly (`dense<512.0>` = 32·4·4, `reduce [0,2,3]`). **No
   type-level blowup at `N = B`** — so this is a re-instantiation, not a rewrite.
 
-`EfficientNetRender.lean` instantiates every batched op at `N := 1` and renders at `B := 32`. Its
-module docstring says so outright (*"every `(N := 1)` below is the SHlo batch-unit; `pretty B`
-carries the actual batch"*), so this is a **disclosed convention, not a hidden defect** — but it
-does not carry uniformly, and the split falls exactly on the op R34 needs:
+`EfficientNetRender.lean` instantiated every batched op at `N := 1` and rendered at `B := 32`. Its
+module docstring said so outright, so this was a **disclosed convention, not a hidden defect** — but
+it did not carry uniformly, and the split falls exactly on the ops R34 needs:
 
 - **Parallel-index ops — sound.** `den (.batchOp …) = batchMap N (denOp op)`; at `N = 1` that is
-  the per-example op, which is what the emitter applies across the batch. Pointwise ops
-  (`swishF`, `reluF`, `selectPos`, `addV`) are index-agnostic for the same reason. `N` is free.
-- **The four BN ops — not sound.** `bnBatchF`, `bnBatchBack`, `bnGammaSgdB`, `bnBetaSgdB` reduce
-  **across** the batch; their `den`s are over `N*(h*w)`. At `N = 1` that is per-example, while the
-  emitter reduces over `B*h*w`. Here the batch is a reduction axis, not a parallel index, so `N` is
-  *not* free and `N = 1` denotes a different function than the one that runs.
+  the per-example op, which is what the emitter applies across the batch. `N` is free.
+- **Batch-reduction ops — not sound.** Their `den`s reduce **across** the batch, so at `N = 1` they
+  describe a ONE-EXAMPLE function while the emitter reduces over all `B`.
 
-That is the real content of the "batched emit" blocker in the planning notes: not a missing op, and
-not an undisclosed one — a convention sound for the parallel ops and silently wrong for four.
+**The gap set is ten ops, not four.** The earlier scoping named only `bnBatchF`, `bnBatchBack`,
+`bnGammaSgdB`, `bnBetaSgdB`. But the whole `*SgdB` param family has the same defect — every one of
+them is `θ − lr · ∑ n : Fin N, (per-example grad on batchSlice n)`, and every one of their emitters
+discards `N` and contracts the runtime batch instead (`dot_general` over dim 0, `reduce [0]`, or the
+transpose-trick wgrad). So add `denseWeightSgdB`, `denseBiasSgdB`, `convWeightSgdB`,
+`convStridedWeightSgdB`, `depthwiseWeightSgdB`, `depthwiseStridedWeightSgdB`.
+
+**Step 1 is done: `EfficientNetRender` now renders at `N := B`, byte-identical.** All ten `den`s are
+now honest. But the plan's framing of step 1 as a one-line re-instantiation was **wrong**, and the
+reason is worth keeping:
+
+> The single-node probe (one `bnBatchF` at `N := 1` and `N := 32` emitting identical text) was
+> right about the batch-coupled ops and did not generalise to a graph. The **pointwise** ops
+> (`swishF`, `swishBack`, `sigmoidBack`, `addV`, `sub`) carry only the SHlo index and emit
+> `tensor<B×n>` from it, so at the batched index `N·s` they emit `tensor<B×(N·s)>` — a type that
+> does not even match their own operand. Measured on the whole net: re-instantiating at `N := B`
+> left the graph structure byte-identical (same ops, same order, same SSA numbering) and changed
+> **597 of 7466 lines**, every one a pointwise op's trailing dim inflated 32×.
+
+So step 1 cost seven new codegen forms rather than a `sed`. All of them separate the batch `N` from
+the per-example emit width `n`, and all are reusable for R34:
+
+| form | kind | why |
+|---|---|---|
+| `BatchableOp.swish`, `.softmaxRow`, `.denseRowBack` | descriptors | what they lift is a *fixed* function (no data, or a shared `W`) |
+| `swishBackB`, `sigmoidBackB` | own `SHlo` ctors | see the trap below |
+| `addVB`, `subB` | own ctors, via a new binary `batched2` Raw/Tok tag | `batchOp` is unary |
+
+**The trap, which cost a wrong commit's worth of time and would not have been caught by the
+artifact.** `BatchableOp` lifts a fixed function by `batchMap N`, so a descriptor **must not carry
+batch-varying data**. `swishBack`/`sigmoidBack` look pointwise but their VJP is
+`fun x dy i => dy i * deriv (x i)` — it depends on the saved pre-activation, which differs per
+example. As descriptors their `den` would say *every example shares one example's activation*.
+The byte-identical artifact **cannot** witness this: the render is value-independent (`skel` erases
+values), so the wrong descriptor renders exactly the same bytes. Only the `rfl` faithfulness
+theorem does. Any op carrying a saved activation needs its own constructor holding the
+**whole-batch** `x : Vec (N*n)` — which is what the emitted `xName` holds at runtime anyway.
+**`selectPos` is the same shape, so R34's relu backward hits this too.**
+
+`scripts/regen_verified_mlir.sh check` grew a third audit for the related silent-failure mode: the
+emit catch-alls (`// MALFORMED token stream`, `// … render TODO`) are *comments*, so a missing
+`emitTok` case fails nothing — not the Lean build, not iree-compile — and surfaces only as a wrong
+number much later.
 
 **Inventory for a batched R34:**
 
@@ -169,13 +207,22 @@ not an undisclosed one — a convention sound for the parallel ops and silently 
 
 **Order of work:**
 
-1. Re-instantiate EfficientNet's render at `N := B` and confirm its artifact is **byte-identical**.
-   That alone closes the den/emit gap and is the cheapest possible check of the whole idea.
-   (97 `(N := 1)` occurrences and 42 `1 * (` placeholder types in `EfficientNetRender.lean`.)
-2. Add batched maxPool fwd/back + the conv-bias param grad.
-3. Un-fuse the `*SgdB` family into `*GradB`, the way §2a did for the per-example ops.
-4. Render `resnet34_adam_train_step` batched at `N := B := 32` and tie it numerically against the
+1. ~~Re-instantiate EfficientNet's render at `N := B`~~ ✅ **DONE** — `verified_mlir/`
+   `efficientnet_train_step.mlir` is byte-identical, all ten `den`s honest, full
+   `lake build Proofs Certs Codegen` green (the parser round-trip included — `batched2` needed a
+   `parseStack` case and a `parse_toToks` induction case).
+2. **▶ NEXT: the R34 pointwise forms.** `reluF` → a `BatchableOp.relu` descriptor; `selectPos` →
+   its own `selectPosB` ctor carrying the whole-batch `x` (the trap above — it is `swishBack`'s
+   shape, not `swish`'s). `addVB`/`subB` already exist.
+3. Add batched maxPool fwd/back + the conv-bias param grad.
+4. Un-fuse the `*SgdB` family into `*GradB`, the way §2a did for the per-example ops.
+5. Render `resnet34_adam_train_step` batched at `N := B := 32` and tie it numerically against the
    committed artifact. It should be **exact** — the emitted text is what already runs.
+
+Cheapest sanity check for any of these, learned from step 1: render the *whole net* at both `N`
+values into temp files and `diff` them, and separately `diff` with all `tensor<…>` annotations
+stripped. Structure-identical + types-differ localises the breakage to the exact op family in one
+pass; a single-node probe does not.
 
 The per-example route is *not* being taken, but if it is ever revisited: it needs no new ops
 (§2a's eight gradients cover it), and its consequences are that the AdamW trainer's BN semantics
@@ -267,6 +314,15 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   case in `StableHLOParse.lean`. Grep an existing op (`bnPerChannelF`) as the template. Note
   `serializeToks` just folds `emitTok`; the case goes in `emitTok`, which **ends in a catch-all
   emitting `// MALFORMED token stream`**, so a missing case there is silent, not an error.
+  (`scripts/regen_verified_mlir.sh check` now greps the artifacts for that marker.)
+- **A `BatchableOp` descriptor is the four-site version of that** — constructor, `denOp`,
+  `batchOpDescr`, `emitTok` — because `skel`/`Raw`/`Tok`/`toToks`/`parseStack`/`parse_toToks` all
+  route through the generic `.batched` tag already. Prefer it. **But a descriptor may only carry
+  batch-INVARIANT data**: `den` is `batchMap N (denOp op)`, which lifts one *fixed* function across
+  the batch. A shared weight is fine (`denseRowBack`'s `W`); a saved per-example activation is not
+  (`swishBack`, `sigmoidBack`, `selectPos`) — those need their own constructor holding the
+  whole-batch `x : Vec (N*n)`. Nothing in the render catches the mistake; see §2b.
+- **Binary batched ops go through `batched2`**, added for `addVB`/`subB`. `batchOp` is unary.
 - **`%sc` / `%sa` / `%sb` / `%sd` are reserved SSA names.** `maxPoolBack`'s `select_and_scatter`
   emitter hardcodes them as region block arguments, so a top-level constant of the same name is a
   *redefinition* parse error — and it surfaces only at XLA compile time, not in Lean.
