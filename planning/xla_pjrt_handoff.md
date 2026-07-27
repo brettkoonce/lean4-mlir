@@ -150,6 +150,48 @@ now certified while the train step it partners is not — that asymmetry is the 
 **Still `tests/`-rendered:** `mobilenetv2_fwd{,_eval}`, `efficientnet_fwd{,_eval}`,
 `convnext_fwd`. Same recipe applies; `bnPerChannelEvalF` now exists for their `_fwd_eval` halves.
 
+### 2a-ter. The Adam half — optimizer ops ✅ DONE, whole-net renders still open
+
+§2a's finding was that *"the dividing line is Adam, not the net"*: `emitAdamV` lives in
+`LeanMlir/ViTRender.lean` as a hand-written String emitter, is only ever called from `tests/`, and
+so every `_adam_train_step.mlir` for every net sat outside the proven kit. The structural reason
+turned out to be that **every param op in the kit fuses gradient and update** (`convWeightSgd`,
+`weightSgd`, `bnGammaSgd`, …, all `θ − lr·g`). Adam needs the gradient *itself*, three times over
+(θ', m', v'), and there were no gradient-only ops and no optimizer ops at all.
+
+**Added — 7 ops.** Four param gradients un-fused from their SGD peers (`weightGrad`, `biasGrad`,
+`convWeightGrad`, `convBiasGrad`), and three shape-generic AdamW ops (`adamMNextF`, `adamVNextF`,
+`adamWParamF`) whose child expression is the gradient and which carry θ/m/v as name+value fields,
+exactly as the `*Sgd` ops carry their param. Three ops rather than one because `SHlo` is
+single-result while an AdamW step produces the triple `Proofs.adamWStep` returns.
+
+Both halves of the trust boundary are now closed, and they were closed by *different* means:
+
+- **Denotation** — `adamW_triple_faithful` : `(den adamWParamF, den adamMNextF, den adamVNextF)
+  = Proofs.adamWStep β₁ β₂ ε lr wd bc₁ bc₂ θ m v (den e)`, by `rfl`. The ℝ optimizer and its
+  invariants (`adamVNext_nonneg`, `adam_denom_pos`) were already proven in `AdamStep.lean`;
+  they had no op to attach to. Still no descent claim — Adam is not monotone (AMSGrad).
+- **Emission** — `tests/TestAdamOpTie.lean`: `adamWParamF` emits `emitAdamV`'s **exact 26-op
+  sequence**, and the two moment ops are contiguous runs of it. `emitAdamV`'s docstring claim
+  ("op-for-op the coordinate formula `Proofs.adamWParam`") is now checked, not asserted.
+- **Consistency** — four `*Sgd_eq_grad` theorems (`rfl`): `den (xSgd …) = θ − lr · den (xGrad …)`.
+  Un-fusing the update did not quietly change the gradient.
+
+**What remains for a whole-net Adam render.** The ops are the reusable part; each net still needs
+its train step assembled from them. Two obstacles, in order:
+
+1. **`cifar8` is the clean next target** — 8 convs + 3 denses, **no BN**, so the four gradient ops
+   above are exactly what it needs and there is no BN fork. The work is signature plumbing:
+   `(x, θ×22, m×22, v×22, 9 scalar `tensor<f32>` args, onehot) → (θ'×22, m'×22, v'×22)`, i.e. 66
+   outputs, against `Proofs/Codegen/CnnRender.lean`'s existing `cifar8` forward/backward.
+2. **R34 needs four more gradient ops** (`convStridedWeightGrad`, `convStridedBiasGrad`,
+   `bnGammaGrad`, `bnBetaGrad` — same trimming recipe) **and, first, an answer to the BN
+   question in §2a**: `resnet34_adam_train_step.mlir` is batch-BN, while the proven R34 chain is
+   per-example. Rendering it from `Proofs/` as-is would change the AdamW trainer's BN semantics
+   the way the `_fwd` fix changed the SGD trainer's. The alternative — a batch-BN R34 in the
+   proven kit — needs `bnBatchF` plus **batched param-grads**, which
+   `planning/` already records as the open EfficientNet blocker.
+
 ---
 
 #### Original scope notes (kept — the analysis that set this up)

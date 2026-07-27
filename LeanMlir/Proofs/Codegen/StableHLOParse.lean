@@ -102,6 +102,16 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.bnPerChannelBack g x eps oc h w e :: st)
   | .bnPerChannelEvalF g b mu var eps oc h w :: ts, e :: st =>
       parseStack ts (.bnPerChannelEvalF g b mu var eps oc h w e :: st)
+  | .weightGrad x m n :: ts, e :: st => parseStack ts (.weightGrad x m n e :: st)
+  | .biasGrad n :: ts, e :: st => parseStack ts (.biasGrad n e :: st)
+  | .convWeightGrad x ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.convWeightGrad x ic oc h w' kH kW e :: st)
+  | .convBiasGrad ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.convBiasGrad ic oc h w' kH kW e :: st)
+  | .adamMNextF m b1 ob1 ds :: ts, e :: st => parseStack ts (.adamMNextF m b1 ob1 ds e :: st)
+  | .adamVNextF v b2 ob2 ds :: ts, e :: st => parseStack ts (.adamVNextF v b2 ob2 ds e :: st)
+  | .adamWParamF θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd ds :: ts, e :: st =>
+      parseStack ts (.adamWParamF θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd ds e :: st)
   | .depthwiseF w b c h w' kH kW :: ts, e :: st =>
       parseStack ts (.depthwiseF w b c h w' kH kW e :: st)
   | .depthwiseBack w c h w' kH kW :: ts, e :: st =>
@@ -195,6 +205,14 @@ theorem parseStack_toToks (r : Raw) :
   | bnPerChannelF g b eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | bnPerChannelBack g x eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | bnPerChannelEvalF g b mu var eps oc h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | weightGrad x m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | biasGrad n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | convWeightGrad x ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | convBiasGrad ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | adamMNextF m b1 ob1 ds e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | adamVNextF v b2 ob2 ds e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | adamWParamF θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd ds e ih =>
+      intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseBack w c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseStridedF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
