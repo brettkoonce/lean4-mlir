@@ -29,6 +29,13 @@ private def n : Nat := 12
 private def rows : Nat := 3
 private def a : Nat := 5
 private def c : Nat := 7
+-- pool dims (input is 2h×2w) and conv dims for the bias-grad cases
+private def pc : Nat := 2
+private def ph : Nat := 3
+private def ic : Nat := 2
+private def oc : Nat := 3
+private def ch : Nat := 4
+private def kk : Nat := 3
 
 private def render (g : StateM Nat (String × String)) : String := (g.run' 0).1
 
@@ -68,7 +75,39 @@ private def cases : List (String × String × String) :=
      render (pretty BS (.denseRowBack (N := rows) (a := a) (c := c) "%W" zW (.operand "%x" zr))),
      render (pretty BS (.batchOp (N := BS)
                           (.denseRowBack (rows := rows) (a := a) (c := c) "%W" zW)
-                          (.operand "%x" zrb)))) ]
+                          (.operand "%x" zrb))))
+  ] ++
+  -- ── step 3: max-pool + the conv bias param grads ──
+  (let zp   : Vec (pc*(2*ph)*(2*ph)) := fun _ => 0
+   let zpb  : Vec (BS*(pc*(2*ph)*(2*ph))) := fun _ => 0
+   let zq   : Vec (pc*ph*ph) := fun _ => 0
+   let zqb  : Vec (BS*(pc*ph*ph)) := fun _ => 0
+   let zK   : Kernel4 oc ic kk kk := fun _ _ _ _ => 0
+   let zT   : Tensor3 ic ch ch := fun _ _ _ => 0
+   let zXb  : Vec (BS*(ic*ch*ch)) := fun _ => 0
+   let zS   : Vec (ic*(2*ch)*(2*ch)) := fun _ => 0
+   let zSb  : Vec (BS*(ic*(2*ch)*(2*ch))) := fun _ => 0
+   let zB   : Vec oc := fun _ => 0
+   let zdy  : Vec (oc*ch*ch) := fun _ => 0
+   let zdyb : Vec (BS*(oc*ch*ch)) := fun _ => 0
+   [ ("maxPool",
+      render (pretty BS (.maxPoolF (c := pc) (h := ph) (w := ph) (.operand "%x" zp))),
+      render (pretty BS (.batchOp (N := BS) (.maxPool (c := pc) (h := ph) (w := ph))
+                           (.operand "%x" zpb))))
+   , ("maxPoolBack",
+      render (pretty BS (.maxPoolBack (c := pc) (h := ph) (w := ph) "%s" zp (.operand "%x" zq))),
+      render (pretty BS (.maxPoolBackB (c := pc) (h := ph) (w := ph) "%s" zpb
+                           (.operand "%x" zqb))))
+   , ("convBiasSgd",
+      render (pretty BS (.convBiasSgd (h := ch) (w := ch) "%b" "0.05" zK zT zB 0
+                           (.operand "%x" zdy))),
+      render (pretty BS (.convBiasSgdB (h := ch) (w := ch) "%b" "0.05" zK zXb zB 0
+                           (.operand "%x" zdyb))))
+   , ("convStridedBiasSgd",
+      render (pretty BS (.convStridedBiasSgd (h := ch) (w := ch) "%b" "0.05" zK zS zB 0
+                           (.operand "%x" zdy))),
+      render (pretty BS (.convStridedBiasSgdB (h := ch) (w := ch) "%b" "0.05" zK zSb zB 0
+                           (.operand "%x" zdyb)))) ])
 
 /-- Fail loudly. NOT `IO.Process.exit 1`: under `#eval` the elaborator buffers the eval's output
     and prints it only after the eval returns, so `exit` kills the process with **every diagnostic

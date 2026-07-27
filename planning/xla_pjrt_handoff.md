@@ -215,15 +215,22 @@ number much later.
    ctor, whole-batch `x` — it is `swishBack`'s shape, not `swish`'s). With `addVB`/`subB` from
    step 1, R34's whole pointwise set is covered. Ties: `den_batchOp_relu_eq_reluF`,
    `selectPosB_faithful`.
-3. **▶ NEXT: batched maxPool fwd/back + the conv-bias param grad.** maxPool is a `BatchableOp`
-   descriptor (no saved data in the forward); **`maxPoolBack` is not** — it carries the saved input
-   for `select_and_scatter`, so it needs its own ctor, and watch the reserved `%sc`/`%sa`/`%sb`/`%sd`
-   SSA names (§4).
-4. Un-fuse the `*SgdB` family into `*GradB`, the way §2a did for the per-example ops.
+3. ~~Batched maxPool fwd/back + the conv-bias param grad~~ ✅ **DONE** — `BatchableOp.maxPool`
+   (descriptor), `maxPoolBackB` (own ctor: it routes `dy` to the saved input's window argmax, so
+   per-example data), `convBiasSgdB` + `convStridedBiasSgdB`. The bias grad is stride-INDEPENDENT
+   (`Σ_{batch,spatial} dy`), so both bias ops `skel` to ONE Raw and share an emit case — the
+   established `convStridedBiasSgd`-aliases-`convBiasSgd` pattern; only `den` differs. Also added
+   **`batchMapAux`**, the "batchMap with per-example auxiliary data" combinator that `maxPoolBackB`
+   needs and `seBackBatched` had inlined — it is the shape every saved-activation backward takes,
+   and naming it makes the descriptor restriction legible.
+4. **▶ NEXT: un-fuse the `*SgdB` family into `*GradB`**, the way §2a did for the per-example ops.
+   That is what hands AdamW a gradient instead of a fused `θ − lr·g`; §2a's note applies verbatim
+   — the fusion, not Adam, was the blocker. Peers needed for R34: `conv{,Strided}WeightGradB`,
+   `conv{,Strided}BiasGradB`, `bnGammaGradB`, `bnBetaGradB`.
 5. Render `resnet34_adam_train_step` batched at `N := B := 32` and tie it numerically against the
    committed artifact. It should be **exact** — the emitted text is what already runs.
 
-**`tests/TestBatchedEmitTie.lean`** pins all nine batched forms against their per-example peers,
+**`tests/TestBatchedEmitTie.lean`** pins all thirteen batched forms against their per-example peers,
 byte-for-byte, one case each. Add a case with every new batched form in steps 3–4 — it is what
 catches an emitter that reads its width off the SHlo index again. The tie was verified to actually
 fail by deliberately breaking `relu`'s emit case. Note it fails via `throw`, not

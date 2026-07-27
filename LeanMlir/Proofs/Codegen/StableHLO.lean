@@ -81,6 +81,21 @@ noncomputable def batchMap (N : Nat) {a b : Nat} (f : Vec a → Vec b) :
 def batchSlice (N a : Nat) (v : Vec (N * a)) (n : Fin N) : Vec a :=
   fun i => v (finProdFinEquiv (n, i))
 
+/-- **Per-example block-apply with per-example AUXILIARY data.** `batchMap` lifts one *fixed*
+    function across the batch; this lifts a family indexed by each example's own saved value —
+    example `n` is handed `batchSlice n aux`, not the whole `aux` and not example 0's.
+
+    Every batched backward that recomputes from a saved forward activation has this shape, and
+    that is exactly why such ops cannot be `BatchableOp` descriptors: a descriptor's
+    `batchMap N (denOp op)` would apply ONE example's saved value to all `N`. Cf. `swishBackB`,
+    `sigmoidBackB`, `selectPosB` (pointwise, so they take the whole-batch `x` directly) and
+    `seBackBatched` (which inlines this shape). -/
+noncomputable def batchMapAux (N : Nat) {s a b : Nat} (f : Vec s → Vec a → Vec b)
+    (aux : Vec (N * s)) : Vec (N * a) → Vec (N * b) :=
+  fun x idx =>
+    let p := finProdFinEquiv.symm idx
+    f (batchSlice N s aux p.1) (batchSlice N a x p.1) p.2
+
 /-- **A batch-separable EfficientNet op**, shape-indexed by per-example in/out
     length. The descriptor carried by `SHlo.batchOp`; its `denOp` is the proven
     per-example forward, lifted by `batchMap`.
@@ -119,6 +134,11 @@ inductive BatchableOp : Nat → Nat → Type where
   -- ReLU forward, the ResNet-34 peer of `swish`. Same story: pointwise, carries no
   -- data, so `batchMap N` of it is itself and `N` is denotationally free.
   | relu {n : Nat}                                         : BatchableOp n n
+  -- 2×2 max-pool FORWARD (ResNet-34's stem). A descriptor: the forward carries no saved
+  -- value, so `batchMap N maxPoolFlat` is exactly per-example pooling across the batch.
+  -- Its BACKWARD is `maxPoolBackB`, not a descriptor — it routes `dy` to the saved input's
+  -- window argmax, which is per-example data.
+  | maxPool {c h w : Nat}                                  : BatchableOp (c*(2*h)*(2*w)) (c*h*w)
   -- NOTE: the pointwise activation VJPs (`swishBack`/`sigmoidBack`/`selectPos`) are
   -- deliberately NOT here. `BatchableOp` lifts a FIXED function across examples, and
   -- their backward depends on the saved pre-activation, which varies per example —
@@ -377,6 +397,21 @@ inductive SHlo : Nat → Type where
   -- The BATCHED peer of `selectPos` (ResNet-34's ReLU backward mask). Same `den`, but
   -- `x` is the WHOLE-BATCH saved pre-activation, for the reason spelled out on
   -- `BatchableOp`: the mask is per-example data, so this cannot be a descriptor.
+  -- Batched 2×2 max-pool BACKWARD. `x` is the WHOLE-BATCH saved pre-pool input; `den` is
+  -- `batchMapAux`, which hands example `n` its OWN slice of `x` (a `batchMap` descriptor would
+  -- hand every example one example's input). Conditional (no window ties), like the unbatched op.
+  | maxPoolBackB {N c h w : Nat} (xName : String) (x : Vec (N*(c*(2*h)*(2*w)))) :
+      SHlo (N*(c*h*w)) → SHlo (N*(c*(2*h)*(2*w)))
+  -- Batched conv BIAS param-SGD, the peers of `conv{,Strided}WeightSgdB`: `b − lr·Σ_n dβ_n`,
+  -- the same shared-parameter batch sum the rest of the `*SgdB` family takes. The bias grad is
+  -- stride-INDEPENDENT (`Σ_{batch,spatial} dy`), so both `skel` to ONE Raw — the emitted text is
+  -- identical and only `den` differs, exactly as `convStridedBiasSgd` aliases `convBiasSgd`.
+  | convBiasSgdB {N ic oc h w kH kW : Nat} (bName lrStr : String)
+      (W : Kernel4 oc ic kH kW) (x : Vec (N * (ic * h * w))) (b : Vec oc) (lr : ℝ)
+                                                          : SHlo (N * (oc * h * w)) → SHlo oc
+  | convStridedBiasSgdB {N ic oc h w kH kW : Nat} (bName lrStr : String)
+      (W : Kernel4 oc ic kH kW) (x : Vec (N * (ic * (2*h) * (2*w)))) (b : Vec oc) (lr : ℝ)
+                                                          : SHlo (N * (oc * h * w)) → SHlo oc
   | selectPosB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   | swishBackB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
@@ -842,6 +877,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .seBlock (h := h) (w := w) _ _ _ _ W₁ b₁ W₂ b₂ => seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂
   | _, _, .swish (n := n) => swish n
   | _, _, .relu (n := n) => relu n
+  | _, _, .maxPool (c := c) (h := h) (w := w) => maxPoolFlat c h w
   | _, _, .softmaxRow (m := m) (n := n) => rowSoftmaxFlat m n
   | _, _, .denseRowBack (rows := rows) (a := a) (c := c) _ W => rowDenseBackFlat rows a c W
 
@@ -991,6 +1027,16 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .swishBack (n := n) _ x e => (swish_has_vjp n).backward x (den e)
   | _, .sigmoidF (n := n) e => sigmoid n (den e)
   | _, .sigmoidBack (n := n) _ x e => (sigmoid_has_vjp n).backward x (den e)
+  | _, .maxPoolBackB (N := N) (c := c) (h := h) (w := w) _ x e =>
+      batchMapAux N (maxPoolBackFlat c h w) x (den e)
+  | _, .convBiasSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ W x b lr e =>
+      fun o => b o - lr * ∑ n : Fin N,
+        (conv2d_bias_grad_has_vjp W (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward b
+          (batchSlice N (oc*h*w) (den e) n) o
+  | _, .convStridedBiasSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ W x b lr e =>
+      fun o => b o - lr * ∑ n : Fin N,
+        (flatConvStride2_bias_grad_has_vjp W (batchSlice N (ic*(2*h)*(2*w)) x n)).backward b
+          (batchSlice N (oc*h*w) (den e) n) o
   | _, .selectPosB _ x e => fun i => if x i > 0 then den e i else 0
   | _, .swishBackB (N := N) (n := n) _ x e => (swish_has_vjp (N*n)).backward x (den e)
   | _, .sigmoidBackB (N := N) (n := n) _ x e => (sigmoid_has_vjp (N*n)).backward x (den e)
@@ -1141,6 +1187,12 @@ theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
       = batchMap N (rowDenseBackFlat rows a c W) (den e) := rfl
 @[simp] theorem den_batchOp_relu {N n : Nat} (e : SHlo (N * n)) :
     den (.batchOp (N := N) (.relu (n := n)) e) = batchMap N (relu n) (den e) := rfl
+@[simp] theorem den_batchOp_maxPool {N c h w : Nat} (e : SHlo (N * (c*(2*h)*(2*w)))) :
+    den (.batchOp (N := N) (.maxPool (c := c) (h := h) (w := w)) e)
+      = batchMap N (maxPoolFlat c h w) (den e) := rfl
+@[simp] theorem den_maxPoolBackB {N c h w : Nat} (xN : String) (x : Vec (N*(c*(2*h)*(2*w))))
+    (e : SHlo (N*(c*h*w))) :
+    den (.maxPoolBackB xN x e) = batchMapAux N (maxPoolBackFlat c h w) x (den e) := rfl
 @[simp] theorem den_selectPosB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.selectPosB xN x e) = fun i => if x i > 0 then den e i else 0 := rfl
 @[simp] theorem den_swishBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
@@ -2555,6 +2607,7 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
       ("seBlock", [w1, b1, w2, b2], [N, c, h, w, r])
   | .swish (n := n) => ("swish", [], [N, n])
   | .relu (n := n) => ("relu", [], [N, n])
+  | .maxPool (c := c) (h := h) (w := w) => ("maxPool", [], [N, c, h, w])
   | .softmaxRow (m := m) (n := n) => ("softmaxRow", [], [N, m, n])
   | .denseRowBack (rows := rows) (a := a) (c := c) wN _ => ("denseRowBackP", [wN], [N, rows, a, c])
 
@@ -2601,6 +2654,12 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .bnF gN bN es _ _ _ e => .bnF gN bN es k (skel e)
   | k, .bnBack gN xN es _ _ _ e => .bnBack gN xN es k (skel e)
   | k, .addV a b              => .addV k (skel a) (skel b)
+  | _, .maxPoolBackB (N := N) (c := c) (h := h) (w := w) xN _ e =>
+      .batched "maxPoolBackP" [xN] [N, c, h, w] (skel e)
+  | _, .convBiasSgdB (N := N) (oc := oc) (h := h) (w := w) bN lrS _ _ _ _ e =>
+      .batched "convBiasSgd" [bN, lrS] [N, oc, h, w] (skel e)
+  | _, .convStridedBiasSgdB (N := N) (oc := oc) (h := h) (w := w) bN lrS _ _ _ _ e =>
+      .batched "convBiasSgd" [bN, lrS] [N, oc, h, w] (skel e)
   | _, .selectPosB (N := N) (n := n) xN _ e => .batched "selectPosP" [xN] [N, n] (skel e)
   | _, .swishBackB (N := N) (n := n) xN _ e => .batched "swishBackP" [xN] [N, n] (skel e)
   | _, .sigmoidBackB (N := N) (n := n) xN _ e => .batched "sigmoidBackP" [xN] [N, n] (skel e)
@@ -4146,6 +4205,50 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           let z ← fresh; let o ← fresh
           pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
                 s!"    {o} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n", o :: st)
+      | "maxPool", [], [_N, c, h, w] => do
+          -- byte-for-byte `.maxPoolF`'s emit; dims from the descriptor, batch from `B`.
+          let xn ← fresh; let ninf ← fresh; let pp ← fresh; let o ← fresh
+          pure (
+            s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
+            s!"    {ninf} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+            s!"    {pp} = \"stablehlo.reduce_window\"({xn}, {ninf}) (" ++ "{\n" ++
+            "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
+            "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
+            "        stablehlo.return %pm : tensor<f32>\n" ++
+            "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+            s!" : ({ty [B,c,2*h,2*w]}, tensor<f32>) -> {ty [B,c,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {pp} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+      | "maxPoolBackP", [xN], [_N, c, h, w] => do
+          -- byte-for-byte `.maxPoolBack`'s emit. NOTE the region block arguments %sa/%sb/%sc/%sd
+          -- are HARDCODED here, so they are reserved SSA names: a top-level value of the same
+          -- name is a redefinition error, and it only surfaces at XLA compile time.
+          let xr ← fresh; let dr ← fresh; let z ← fresh; let scn ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {scn} = \"stablehlo.select_and_scatter\"({xr}, {dr}, {z}) (" ++ "{\n" ++
+            "      ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):\n" ++
+            "        %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+            "        stablehlo.return %sge : tensor<i1>\n" ++
+            "    }, " ++ "{\n" ++
+            "      ^bb0(%sc: tensor<f32>, %sd: tensor<f32>):\n" ++
+            "        %ss = stablehlo.add %sc, %sd : tensor<f32>\n" ++
+            "        stablehlo.return %ss : tensor<f32>\n" ++
+            "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+            s!" : ({ty [B,c,2*h,2*w]}, {ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,2*h,2*w]}\n" ++
+            s!"    {o} = stablehlo.reshape {scn} : ({ty [B,c,2*h,2*w]}) -> {ty [B, c*(2*h)*(2*w)]}\n", o :: st)
+      | "convBiasSgd", [bN, lrS], [_N, oc, h, w] => do
+          -- byte-for-byte `.convBiasSgd`'s emit. Stride-independent, so the strided peer
+          -- shares this case (both `skel` to the same Raw).
+          let dr ← fresh; let z ← fresh; let g ← fresh; let lB ← fresh; let sB ← fresh; let o ← fresh
+          pure (
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {g} = stablehlo.reduce({dr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {lB} = stablehlo.constant dense<{lrS}> : {ty [oc]}\n" ++
+            s!"    {sB} = stablehlo.multiply {g}, {lB} : {ty [oc]}\n" ++
+            s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [oc]}\n", o :: st)
       | "selectPosP", [x], [_N, n] => do
           -- byte-for-byte `.selectPos`'s emit, width from the descriptor's `n`.
           let z ← fresh; let msk ← fresh; let o ← fresh
