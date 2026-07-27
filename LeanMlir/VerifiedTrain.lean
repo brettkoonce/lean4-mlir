@@ -389,13 +389,25 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- LEAN_MLIR_MAX_STEPS: that name already means "time a step window then exit"
   -- in this driver (the benchmark's `attn` anchor), and it returns before the
   -- param dump. See planning/xla_pjrt_ladder.md §3.
-  let nbFull := nTrain / bs
+  -- LEAN_MLIR_REPLICAS: data-parallel device count. The graph is rendered at the
+  -- PER-REPLICA batch (cfg.batchSize), so one step consumes `bs * replicas`
+  -- images and the shim splits them. Eval stays single-device at `bs`, because
+  -- the forward graph is rendered at that batch. See planning/xla_pjrt_ladder.md §10.
+  -- LEAN_MLIR_SKIP_EVAL: skip the per-epoch eval pass. Needed for G2 runs that
+  -- change the train batch, because the forward graph is rendered at its own
+  -- fixed batch and would reject a mismatched one.
+  let skipEval := (← IO.getEnv "LEAN_MLIR_SKIP_EVAL").isSome
+  let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
+  let gbs := bs * replicas
+  let nbFull := nTrain / gbs
   let nb := match (← IO.getEnv "LEAN_MLIR_G2_STEPS").bind (·.toNat?) with
     | some n => min n nbFull
     | none   => nbFull
   let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
   if hasBn then IO.println s!"  running-stats BN: {net.bnChannels.size} layers, {nBnStats} stat floats → eval via @{net.slug}_fwd_eval"
+  if replicas > 1 then
+    IO.println s!"  DATA-PARALLEL: {replicas} replicas x bs {bs} = global batch {gbs}, {nb} steps/epoch"
   (← IO.getStdout).flush
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes ++ #[#[], #[], #[]]
                                 ++ (if hasBn then bnStatShapes else #[]))
@@ -505,20 +517,24 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
       if hasBn then
         pbuf ← F32.blit pbuf (3 * net.nParams + 3).toUSize runningBnStats 0 nBnStats.toUSize
       let augSeed := (ep * nb + bi + 1).toUSize
-      let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * bs) bs trainPix
+      let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * gbs) gbs trainPix
       -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
       -- lives in the data pipeline, not the network): Imagenette = random crop
       -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
       -- MNIST = none.
       let xb ← match net.data with
         | .imagenette =>
-            let c ← if crop then F32.randomCrop xbRaw bs.toUSize 3 256 256 224 224 augSeed
+            let c ← if crop then F32.randomCrop xbRaw gbs.toUSize 3 256 256 224 224 augSeed
                     else pure xbRaw
-            F32.randomHFlip c bs.toUSize 3 224 224 (augSeed + 7777)
-        | .cifar => F32.randomHFlip xbRaw bs.toUSize 3 32 32 augSeed
+            F32.randomHFlip c gbs.toUSize 3 224 224 (augSeed + 7777)
+        | .cifar => F32.randomHFlip xbRaw gbs.toUSize 3 32 32 augSeed
         | _ => pure xbRaw
-      let yb := if synth then curLbl else F32.sliceLabels curLbl (bi * bs) bs
-      let out ← IreeSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb bs.toUSize d0.toUSize nc.toUSize
+      let yb := if synth then curLbl else F32.sliceLabels curLbl (bi * gbs) gbs
+      let out ← if replicas > 1
+        then IreeSession.mlpTrainStepVDP tsSess tsFn xb pbuf adamShapes yb
+               gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize
+        else IreeSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb
+               bs.toUSize d0.toUSize nc.toUSize
       -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']
       let stepLoss := F32.read out (3 * net.nParams).toUSize
       epochLossSum := epochLossSum + stepLoss
@@ -557,7 +573,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     let evalParams := if hasBn then F32.concat #[thetaCur, runningBnStats] else thetaCur
     let evalShapes := if hasBn then fwdEvalShapes else fwdShapes
     let mut correct := 0
-    for bi in [0:nbt] do
+    for bi in [0:(if skipEval then 0 else nbt)] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
       let logits ← IreeSession.forwardF32 evalSess evalFn evalParams evalShapes
                       xb xShape bs.toUSize nc.toUSize

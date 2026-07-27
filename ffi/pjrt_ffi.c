@@ -43,6 +43,11 @@ static const PJRT_Api* g_api = NULL;
 static PJRT_Client* g_client = NULL;
 static PJRT_Device* g_device = NULL;
 static int g_client_refs = 0;
+// $PJRT_REPLICAS: how many devices this process drives. 1 = single-device, the
+// default and the only mode the IREE-compatible entry points support. >1 selects
+// matching num_replicas compile options and enables pjrt_ffi_invoke_f32_dp.
+static int g_replicas = 1;
+static PJRT_Device* g_devices[8];
 
 struct iree_ffi_session_t {
   PJRT_LoadedExecutable* exe;
@@ -123,6 +128,25 @@ static int ensure_client(void) {
   }
   g_device = da.addressable_devices[0];
   g_client_refs = 1;
+
+  {
+    const char* e = getenv("PJRT_REPLICAS");
+    g_replicas = e ? atoi(e) : 1;
+    if (g_replicas < 1) g_replicas = 1;
+    if ((size_t)g_replicas > da.num_addressable_devices) {
+      fprintf(stderr,
+              "[pjrt_ffi] PJRT_REPLICAS=%d but only %zu device(s) are addressable "
+              "(is HIP_VISIBLE_DEVICES restricting them?)\n",
+              g_replicas, da.num_addressable_devices);
+      return 1;
+    }
+    if (g_replicas > (int)(sizeof(g_devices)/sizeof(g_devices[0]))) {
+      fprintf(stderr, "[pjrt_ffi] PJRT_REPLICAS=%d exceeds the compiled-in max\n",
+              g_replicas);
+      return 1;
+    }
+    for (int i = 0; i < g_replicas; i++) g_devices[i] = da.addressable_devices[i];
+  }
 
   fprintf(stderr, "[pjrt_ffi] XLA backend: PJRT %d.%d, %zu device(s)\n",
           g_api->pjrt_api_version.major_version,
@@ -207,8 +231,16 @@ iree_ffi_session_t* iree_ffi_session_create(const char* path) {
   cc.struct_size = PJRT_Client_Compile_Args_STRUCT_SIZE;
   cc.client = g_client;
   cc.program = &prog;
-  cc.compile_options = (const char*)kPjrtCompileOptions;
-  cc.compile_options_size = kPjrtCompileOptionsSize;
+  size_t optlen = 0;
+  const unsigned char* optbuf = pjrt_compile_options_for(g_replicas, &optlen);
+  if (!optbuf) {
+    fprintf(stderr, "[pjrt_ffi] no compile options for %d replicas "
+                    "(regenerate ffi/pjrt_compile_options.h with that count)\n",
+            g_replicas);
+    free(mlir); free(entry); return NULL;
+  }
+  cc.compile_options = (const char*)optbuf;
+  cc.compile_options_size = optlen;
   // XLA JITs here — ONCE PER SESSION, i.e. once per process, not per step. The
   // training loop below only calls Execute on the result. IREE amortizes the
   // equivalent cost across runs via a cached .vmfb, so this shows up as a fixed
@@ -243,8 +275,8 @@ iree_ffi_session_t* iree_ffi_session_create(const char* path) {
   s->exe = cc.executable;
   s->entry = entry;
   s->num_outputs = num_outputs;
-  fprintf(stderr, "[pjrt_ffi] compiled %s (@%s, %d outputs) in %.0f ms\n",
-          path, entry, num_outputs, compile_ms);
+  fprintf(stderr, "[pjrt_ffi] compiled %s (@%s, %d outputs, %d replica%s) in %.0f ms\n",
+          path, entry, num_outputs, g_replicas, g_replicas == 1 ? "" : "s", compile_ms);
   return s;
 }
 
@@ -428,6 +460,186 @@ cleanup:
     }
   free(in);
   free(out);
+  return rc;
+}
+
+// ─── data-parallel invoke ──────────────────────────────────────────────────
+//
+// Exported ONLY by this shim. `iree_lean_ffi.c` reaches it through a WEAK
+// reference, so the IREE build — which has no such symbol — simply never calls
+// it, and `iree_ffi.h` stays unchanged.
+//
+// Contract: the caller passes ONE logical batch of size `n_replicas * b`.
+// `shard_mask[i] != 0` means input i is split along its outermost dimension
+// (replica r gets rows [r*b, (r+1)*b)); 0 means the buffer is replicated to every
+// replica. Parameters are replicated, x and the labels are sharded.
+//
+// Outputs are read back from replica 0 ONLY. That is correct precisely because
+// the emitted graph all-reduces every gradient before the optimizer consumes it
+// (ViTRender.emitAdamVDP), so all replicas compute identical updated parameters.
+// If that collective were ever missing, the replicas would silently diverge and
+// this would quietly return replica 0's private answer — hence the check below
+// that the executable really was compiled for `n_replicas`.
+int pjrt_ffi_invoke_f32_dp(
+    iree_ffi_session_t* sess,
+    const char* fn_name,
+    int n_replicas,
+    int n_inputs,
+    const int32_t* input_ranks,
+    const int64_t* input_dims_flat,
+    const float* const* input_data,
+    const unsigned char* shard_mask,
+    int n_outputs,
+    const int64_t* output_totals,
+    float* const* output_data) {
+
+  if (!sess || !sess->exe) return 1;
+  if (n_replicas < 1) return 1;
+
+  if (n_replicas != g_replicas) {
+    fprintf(stderr,
+            "[pjrt_ffi] DP invoke asked for %d replicas but the session was "
+            "compiled for %d (set PJRT_REPLICAS before the first session)\n",
+            n_replicas, g_replicas);
+    return 1;
+  }
+  if (!entry_matches(fn_name, sess->entry)) {
+    fprintf(stderr, "[pjrt_ffi] entry mismatch: session holds @%s, caller asked '%s'\n",
+            sess->entry, fn_name);
+    return 1;
+  }
+  // G4, unchanged by data parallelism.
+  if (sess->num_outputs >= 0 && sess->num_outputs != n_outputs) {
+    fprintf(stderr,
+            "[pjrt_ffi] G4 VIOLATION: @%s returns %d outputs, caller supplied %d\n",
+            sess->entry, sess->num_outputs, n_outputs);
+    return 1;
+  }
+
+  int rc = 0;
+  PJRT_Buffer** in = (PJRT_Buffer**)calloc((size_t)n_replicas * n_inputs, sizeof(*in));
+  PJRT_Buffer** out = (PJRT_Buffer**)calloc((size_t)n_replicas * n_outputs, sizeof(*out));
+  PJRT_Buffer* const** arglists = (PJRT_Buffer* const**)calloc(n_replicas, sizeof(*arglists));
+  PJRT_Buffer*** outlists = (PJRT_Buffer***)calloc(n_replicas, sizeof(*outlists));
+  PJRT_Event** h2d = (PJRT_Event**)calloc((size_t)n_replicas * n_inputs, sizeof(*h2d));
+  int64_t rdims[8];
+
+  // Host -> device, per replica. All transfers issued before any is awaited.
+  for (int rep = 0; rep < n_replicas && !rc; rep++) {
+    int off = 0;
+    for (int i = 0; i < n_inputs; i++) {
+      int rank = input_ranks[i];
+      const int64_t* d = &input_dims_flat[off];
+      if (rank > (int)(sizeof(rdims)/sizeof(rdims[0]))) {
+        fprintf(stderr, "[pjrt_ffi] input %d rank %d exceeds max\n", i, rank);
+        rc = 2; break;
+      }
+      size_t elems = 1;
+      for (int k = 0; k < rank; k++) { rdims[k] = d[k]; elems *= (size_t)d[k]; }
+
+      const float* src = input_data[i];
+      if (shard_mask && shard_mask[i]) {
+        if (rank == 0 || d[0] % n_replicas != 0) {
+          fprintf(stderr,
+                  "[pjrt_ffi] input %d marked sharded but outer dim %lld is not "
+                  "divisible by %d replicas\n",
+                  i, rank ? (long long)d[0] : -1LL, n_replicas);
+          rc = 2; break;
+        }
+        rdims[0] = d[0] / n_replicas;
+        src = input_data[i] + (size_t)rep * (elems / (size_t)n_replicas);
+      }
+
+      PJRT_Client_BufferFromHostBuffer_Args a = {0};
+      a.struct_size = PJRT_Client_BufferFromHostBuffer_Args_STRUCT_SIZE;
+      a.client = g_client;
+      a.data = src;
+      a.type = PJRT_Buffer_Type_F32;
+      a.dims = rdims;
+      a.num_dims = (size_t)rank;
+      a.host_buffer_semantics =
+          PJRT_HostBufferSemantics_kImmutableUntilTransferCompletes;
+      a.device = g_devices[rep];
+      if (check(g_api->PJRT_Client_BufferFromHostBuffer(&a), "BufferFromHostBuffer(dp)")) {
+        rc = 2; break;
+      }
+      in[(size_t)rep * n_inputs + i] = a.buffer;
+      h2d[(size_t)rep * n_inputs + i] = a.done_with_host_buffer;
+      off += rank;
+    }
+  }
+  for (int k = 0; k < n_replicas * n_inputs; k++)
+    if (h2d[k] && await_event(h2d[k], "h2d(dp)")) rc = 2;
+  if (rc) goto cleanup;
+
+  for (int rep = 0; rep < n_replicas; rep++) {
+    arglists[rep] = &in[(size_t)rep * n_inputs];
+    outlists[rep] = &out[(size_t)rep * n_outputs];
+  }
+
+  {
+    PJRT_ExecuteOptions eo = {0};
+    eo.struct_size = PJRT_ExecuteOptions_STRUCT_SIZE;
+    PJRT_LoadedExecutable_Execute_Args ea = {0};
+    ea.struct_size = PJRT_LoadedExecutable_Execute_Args_STRUCT_SIZE;
+    ea.executable = sess->exe;
+    ea.options = &eo;
+    ea.argument_lists = arglists;
+    ea.num_devices = (size_t)n_replicas;
+    ea.num_args = (size_t)n_inputs;
+    ea.output_lists = outlists;
+    if (check(g_api->PJRT_LoadedExecutable_Execute(&ea), "Execute(dp)")) { rc = 3; goto cleanup; }
+  }
+
+  // Device -> host from replica 0 only (all replicas hold the same result).
+  {
+    PJRT_Event** d2h = (PJRT_Event**)calloc((size_t)n_outputs, sizeof(*d2h));
+    for (int i = 0; i < n_outputs; i++) {
+      size_t want = (size_t)output_totals[i] * sizeof(float);
+      PJRT_Buffer_ToHostBuffer_Args q = {0};
+      q.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
+      q.src = out[i];
+      q.dst = NULL;
+      if (check(g_api->PJRT_Buffer_ToHostBuffer(&q), "ToHostBuffer(dp size)")) { rc = 4; break; }
+      if (q.dst_size != want) {
+        fprintf(stderr,
+                "[pjrt_ffi] output %d size mismatch: graph %zu bytes, caller %zu\n",
+                i, q.dst_size, want);
+        rc = 4; break;
+      }
+      PJRT_Buffer_ToHostBuffer_Args a = {0};
+      a.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
+      a.src = out[i];
+      a.dst = output_data[i];
+      a.dst_size = want;
+      if (check(g_api->PJRT_Buffer_ToHostBuffer(&a), "ToHostBuffer(dp)")) { rc = 4; break; }
+      d2h[i] = a.event;
+    }
+    for (int i = 0; i < n_outputs; i++)
+      if (d2h[i] && await_event(d2h[i], "d2h(dp)")) rc = 4;
+    free(d2h);
+  }
+
+  if (trace_enabled())
+    fprintf(stderr, "[pjrt_ffi] @%s ok (%d replicas, %d in, %d out)\n",
+            sess->entry, n_replicas, n_inputs, n_outputs);
+
+cleanup:
+  for (int k = 0; k < n_replicas * n_inputs; k++)
+    if (in[k]) {
+      PJRT_Buffer_Destroy_Args d = {0};
+      d.struct_size = PJRT_Buffer_Destroy_Args_STRUCT_SIZE;
+      d.buffer = in[k];
+      g_api->PJRT_Buffer_Destroy(&d);
+    }
+  for (int k = 0; k < n_replicas * n_outputs; k++)
+    if (out[k]) {
+      PJRT_Buffer_Destroy_Args d = {0};
+      d.struct_size = PJRT_Buffer_Destroy_Args_STRUCT_SIZE;
+      d.buffer = out[k];
+      g_api->PJRT_Buffer_Destroy(&d);
+    }
+  free(in); free(out); free(arglists); free(outlists); free(h2d);
   return rc;
 }
 

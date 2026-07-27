@@ -164,6 +164,21 @@ opaque linearTrainStepV
   (x : @& ByteArray) (W0 : @& ByteArray) (b0 : @& ByteArray) (y : @& ByteArray)
   (batch : USize) (d0 : USize) (d1 : USize) : IO ByteArray
 
+/-- Data-parallel `@<slug>_train_step`: same packed-params protocol as
+    `mlpTrainStepV`, but `batch` is the GLOBAL batch and the XLA shim splits x and
+    the labels across `replicas` devices while replicating the parameters. The
+    emitted graph all-reduces every gradient before the optimizer consumes it
+    (`ViTRender.emitAdamVDP`), so all replicas produce identical parameters and
+    the result is read back from replica 0.
+
+    Only the XLA shim exports the underlying entry point; on the IREE build this
+    raises rather than silently running single-device. -/
+@[extern "lean_iree_mlp_train_step_v_dp"]
+opaque mlpTrainStepVDP
+  (sess : @& IreeSession) (fnName : @& String)
+  (x : @& ByteArray) (params : @& ByteArray) (shapes : @& ByteArray) (y : @& ByteArray)
+  (batch : USize) (d0 : USize) (d3 : USize) (replicas : USize) : IO ByteArray
+
 /-- Drive the **verified-renderer** `@mlp_train_step`
     (`StableHLO.mlpTrainStepText`) through the generic IREE invoke. `params` is
     the packed f32 weights (sliced per `shapes`, same layout as `forwardF32`);
