@@ -562,6 +562,19 @@ inductive SHlo : Nat → Type where
                                                      : SHlo (oc*h*w) → SHlo (oc*ic*kH*kW)
   | convBiasGrad   {ic oc h w kH kW : Nat}
       (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w) (b : Vec oc) : SHlo (oc*h*w) → SHlo oc
+  -- The strided + BN peers, same trimming. `convStridedBiasGrad`'s `skel` aliases
+  -- `convBiasGrad`'s Raw for the same reason `convStridedBiasSgd` aliases `convBiasSgd`'s: the
+  -- bias grad is stride-INDEPENDENT (`Σ_{batch,spatial} dy`), so the emitted text is identical
+  -- and only `den` differs.
+  | convStridedWeightGrad {ic oc h w kH kW : Nat} (xName : String)
+      (b : Vec oc) (x : Vec (ic*(2*h)*(2*w))) (W : Kernel4 oc ic kH kW)
+                                                     : SHlo (oc*h*w) → SHlo (oc*ic*kH*kW)
+  | convStridedBiasGrad   {ic oc h w kH kW : Nat}
+      (W : Kernel4 oc ic kH kW) (x : Vec (ic*(2*h)*(2*w))) (b : Vec oc)
+                                                     : SHlo (oc*h*w) → SHlo oc
+  | bnGammaGrad {oc h w : Nat} (vName epsStr : String) (ε : ℝ) (v : Vec (oc*h*w))
+                                                     : SHlo (oc*h*w) → SHlo oc
+  | bnBetaGrad  {oc h w : Nat}                       : SHlo (oc*h*w) → SHlo oc
   -- ══ ADAM / ADAMW, shape-generic ══
   -- The child expression is the GRADIENT; θ/m/v ride as name+value fields exactly as the
   -- `*Sgd` ops carry their param. Three ops because `SHlo` is single-result while one AdamW
@@ -817,6 +830,13 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .convWeightGrad _ b x W e =>
       (conv2d_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e)
   | _, .convBiasGrad W x b e => (conv2d_bias_grad_has_vjp W x).backward b (den e)
+  | _, .convStridedWeightGrad _ b x W e =>
+      (flatConvStride2_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e)
+  | _, .convStridedBiasGrad W x b e => (flatConvStride2_bias_grad_has_vjp W x).backward b (den e)
+  | _, .bnGammaGrad (oc := oc) (h := h) (w := w) _ _ ε v e =>
+      bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e))
+  | _, .bnBetaGrad (oc := oc) (h := h) (w := w) e =>
+      bnPerChannel_grad_beta oc (h*w) (reassocFwd oc h w (den e))
   -- AdamW: the proven ℝ optimizer (AdamStep.lean) applied to the child's gradient.
   | _, .adamMNextF _ _ _ _ β₁ m e => adamMNext β₁ m (den e)
   | _, .adamVNextF _ _ _ _ β₂ v e => adamVNext β₂ v (den e)
@@ -1372,6 +1392,29 @@ quietly change the gradient, and anything already proven about a `*Sgd` output t
     (e : SHlo (oc*h*w)) (o : Fin oc) :
     den (.convBiasSgd bN lrS W x b lr e) o
       = b o - lr * den (.convBiasGrad W x b e) o := rfl
+
+/-! The strided + BN peers, same shape: `den (xSgd …) = θ − lr · den (xGrad …)`, all `rfl`. -/
+
+@[simp] theorem convStridedWeightSgd_eq_grad {ic oc h w kH kW : Nat} (xN wN lrS : String)
+    (b : Vec oc) (x : Vec (ic*(2*h)*(2*w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
+    (e : SHlo (oc*h*w)) (idx : Fin (oc*ic*kH*kW)) :
+    den (.convStridedWeightSgd xN wN lrS b x W lr e) idx
+      = Kernel4.flatten W idx - lr * den (.convStridedWeightGrad xN b x W e) idx := rfl
+
+@[simp] theorem convStridedBiasSgd_eq_grad {ic oc h w kH kW : Nat} (bN lrS : String)
+    (W : Kernel4 oc ic kH kW) (x : Vec (ic*(2*h)*(2*w))) (b : Vec oc) (lr : ℝ)
+    (e : SHlo (oc*h*w)) (o : Fin oc) :
+    den (.convStridedBiasSgd bN lrS W x b lr e) o
+      = b o - lr * den (.convStridedBiasGrad W x b e) o := rfl
+
+@[simp] theorem bnGammaSgd_eq_grad {oc h w : Nat} (gN vN es lrS : String) (ε : ℝ) (γ : Vec oc)
+    (v : Vec (oc*h*w)) (lr : ℝ) (e : SHlo (oc*h*w)) (c : Fin oc) :
+    den (.bnGammaSgd gN vN es lrS ε γ v lr e) c
+      = γ c - lr * den (.bnGammaGrad vN es ε v e) c := rfl
+
+@[simp] theorem bnBetaSgd_eq_grad {oc h w : Nat} (bN lrS : String) (β : Vec oc) (lr : ℝ)
+    (e : SHlo (oc*h*w)) (c : Fin oc) :
+    den (.bnBetaSgd bN lrS β lr e) c = β c - lr * den (.bnBetaGrad (h := h) (w := w) e) c := rfl
 
 /-- **AdamW first-moment faithfulness** — `m' = β₁·m + (1−β₁)·g`, the proven `adamMNext`. -/
 @[simp] theorem adamMNextF_faithful {n : Nat} (mN b1N ob1N : String) (ds : List Nat)
@@ -2330,6 +2373,9 @@ inductive Raw where
   | biasGrad (n : Nat) : Raw → Raw
   | convWeightGrad (x : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | convBiasGrad (ic oc h w' kH kW : Nat) : Raw → Raw
+  | convStridedWeightGrad (x : String) (ic oc h w' kH kW : Nat) : Raw → Raw
+  | bnGammaGrad (v eps : String) (oc h w' : Nat) : Raw → Raw
+  | bnBetaGrad (oc h w' : Nat) : Raw → Raw
   | adamMNextF (m b1 ob1 : String) (ds : List Nat) : Raw → Raw
   | adamVNextF (v b2 ob2 : String) (ds : List Nat) : Raw → Raw
   | adamWParamF (θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd : String) (ds : List Nat) : Raw → Raw
@@ -2462,6 +2508,13 @@ def skel : {k : Nat} → SHlo k → Raw
       .convWeightGrad xN ic oc h w kH kW (skel e)
   | _, .convBiasGrad (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ _ _ e =>
       .convBiasGrad ic oc h w kH kW (skel e)
+  | _, .convStridedWeightGrad (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
+      .convStridedWeightGrad xN ic oc h w kH kW (skel e)
+  -- aliases convBiasGrad's Raw: the bias grad is stride-independent, so the text is identical
+  | _, .convStridedBiasGrad (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ _ _ e =>
+      .convBiasGrad ic oc h w kH kW (skel e)
+  | _, .bnGammaGrad (oc := oc) (h := h) (w := w) vN es _ _ e => .bnGammaGrad vN es oc h w (skel e)
+  | _, .bnBetaGrad (oc := oc) (h := h) (w := w) e => .bnBetaGrad oc h w (skel e)
   | _, .adamMNextF mN b1N ob1N ds _ _ e => .adamMNextF mN b1N ob1N ds (skel e)
   | _, .adamVNextF vN b2N ob2N ds _ _ e => .adamVNextF vN b2N ob2N ds (skel e)
   | _, .adamWParamF θN mN vN b1N ob1N b2N ob2N bc1N bc2N lrN epsN wdN ds
@@ -2596,6 +2649,9 @@ inductive Tok where
   | biasGrad (n : Nat) : Tok
   | convWeightGrad (x : String) (ic oc h w' kH kW : Nat) : Tok
   | convBiasGrad (ic oc h w' kH kW : Nat) : Tok
+  | convStridedWeightGrad (x : String) (ic oc h w' kH kW : Nat) : Tok
+  | bnGammaGrad (v eps : String) (oc h w' : Nat) : Tok
+  | bnBetaGrad (oc h w' : Nat) : Tok
   | adamMNextF (m b1 ob1 : String) (ds : List Nat) : Tok
   | adamVNextF (v b2 ob2 : String) (ds : List Nat) : Tok
   | adamWParamF (θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd : String) (ds : List Nat) : Tok
@@ -2677,6 +2733,9 @@ def toToks : Raw → List Tok
   | .biasGrad n e => toToks e ++ [.biasGrad n]
   | .convWeightGrad x ic oc h w' kH kW e => toToks e ++ [.convWeightGrad x ic oc h w' kH kW]
   | .convBiasGrad ic oc h w' kH kW e => toToks e ++ [.convBiasGrad ic oc h w' kH kW]
+  | .convStridedWeightGrad x ic oc h w' kH kW e => toToks e ++ [.convStridedWeightGrad x ic oc h w' kH kW]
+  | .bnGammaGrad v eps oc h w' e => toToks e ++ [.bnGammaGrad v eps oc h w']
+  | .bnBetaGrad oc h w' e => toToks e ++ [.bnBetaGrad oc h w']
   | .adamMNextF m b1 ob1 ds e => toToks e ++ [.adamMNextF m b1 ob1 ds]
   | .adamVNextF v b2 ob2 ds e => toToks e ++ [.adamVNextF v b2 ob2 ds]
   | .adamWParamF θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd ds e =>
@@ -3292,6 +3351,59 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
         s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
         s!"    {o} = stablehlo.reduce({dr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n",
+        o :: st)
+  | .convStridedWeightGrad xN ic oc h w kH kW, r :: st => do
+      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
+      let raw ← fresh; let o ← fresh
+      pure (
+        s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
+        s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,2*h,2*w]}\n" ++
+        s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,2*h,2*w]}) -> {ty [ic,B,2*h,2*w]}\n" ++
+        s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,2*h,2*w]}) -> {ty [oc,B,2*h,2*w]}\n" ++
+        s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+        s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,2*h,2*w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+        s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n",
+        o :: st)
+  | .bnGammaGrad vN epsStr oc h w, r :: st => do
+      -- dγ_c = Σ_{b,h,w} dy·x̂, with x̂ recomputed from the saved BN input {vN} (μ/var over
+      -- the spatial axes [2,3] — per-channel, per-example, as `bnPerChannelF` normalises).
+      let z ← fresh; let xr ← fresh; let nf ← fresh; let ep ← fresh
+      let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+      let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+      let xhat ← fresh; let dyr ← fresh; let p ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {xr} = stablehlo.reshape {vN} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,oc,h,w]}\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,oc,h,w]}\n" ++
+        s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc]}\n" ++
+        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,oc,h,w]}\n" ++
+        s!"    {xc} = stablehlo.subtract {xr}, {mu} : {ty [B,oc,h,w]}\n" ++
+        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,oc,h,w]}\n" ++
+        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc]}\n" ++
+        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,oc]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,oc,h,w]}\n" ++
+        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+        s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {p} = stablehlo.multiply {dyr}, {xhat} : {ty [B,oc,h,w]}\n" ++
+        s!"    {o} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n",
+        o :: st)
+  | .bnBetaGrad oc h w, r :: st => do
+      -- dβ_c = Σ_{b,h,w} dy — needs no x̂.
+      let z ← fresh; let dyr ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+        s!"    {o} = stablehlo.reduce({dyr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n",
         o :: st)
   -- ══ ADAMW: op-for-op `Proofs.adamMNext` / `adamVNext` / `adamWParam`, matching the
   --    hand-written `ViTRender.emitAdamV` block it replaces. Scalar hyperparameters are

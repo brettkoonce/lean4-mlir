@@ -108,6 +108,10 @@ def parseStack : List Tok → List Raw → Option (List Raw)
       parseStack ts (.convWeightGrad x ic oc h w' kH kW e :: st)
   | .convBiasGrad ic oc h w' kH kW :: ts, e :: st =>
       parseStack ts (.convBiasGrad ic oc h w' kH kW e :: st)
+  | .convStridedWeightGrad x ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.convStridedWeightGrad x ic oc h w' kH kW e :: st)
+  | .bnGammaGrad v eps oc h w' :: ts, e :: st => parseStack ts (.bnGammaGrad v eps oc h w' e :: st)
+  | .bnBetaGrad oc h w' :: ts, e :: st => parseStack ts (.bnBetaGrad oc h w' e :: st)
   | .adamMNextF m b1 ob1 ds :: ts, e :: st => parseStack ts (.adamMNextF m b1 ob1 ds e :: st)
   | .adamVNextF v b2 ob2 ds :: ts, e :: st => parseStack ts (.adamVNextF v b2 ob2 ds e :: st)
   | .adamWParamF θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd ds :: ts, e :: st =>
@@ -209,6 +213,9 @@ theorem parseStack_toToks (r : Raw) :
   | biasGrad n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | convWeightGrad x ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | convBiasGrad ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | convStridedWeightGrad x ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | bnGammaGrad v eps oc h w' e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | bnBetaGrad oc h w' e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | adamMNextF m b1 ob1 ds e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | adamVNextF v b2 ob2 ds e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | adamWParamF θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd ds e ih =>
