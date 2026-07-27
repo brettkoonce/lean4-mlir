@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNets
+import apps.imagenette.Resnet34AdamCommon
 
 /-! # `resnet34-verified-adam` — train ResNet-34 with the VERIFIED-rendered **AdamW** step
 
@@ -21,13 +21,4 @@ Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/resnet34-verified-adam data` (load
 `data/imagenette`).
 -/
 
--- Matches MainResnetTrain.lean's `resnet34Config`: 80 epochs, bs 32, AdamW lr 1e-3 / wd 1e-4,
--- cosine + 3-epoch warmup, label smoothing 0.1, augment.
-def resnet34AdamConfig : VerifiedConfig where
-  epochs    := 80
-  batchSize := 32
-
-def main (argv : List String) : IO Unit :=
-  -- baseLR 1e-3, β₁ .9, β₂ .999, 3-epoch linear warmup then cosine decay (resnet34Config).
-  resnet34Verified.toNet.trainAdamSched resnet34AdamConfig
-    (argv.head?.getD "data") 0.001 0.9 0.999 3
+def main (argv : List String) : IO Unit := runResnet34Adam argv

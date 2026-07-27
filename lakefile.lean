@@ -950,7 +950,8 @@ extern_lib libireeffi pkg := do
 -- ═══════════════════════════════════════════════════════════════════
 
 private def ireeLink : Array String :=
-  #["-L", "./ffi", "-liree_ffi", "-Wl,-rpath,./ffi", "-Wl,--allow-shlib-undefined"]
+  #["-L", "./ffi", "-liree_ffi", "-ldl", "-Wl,-rpath,./ffi",
+    "-Wl,--allow-shlib-undefined"]
 
 lean_exe «resnet34-train» where
   root := `apps.baselines.MainResnetTrain
@@ -1032,9 +1033,39 @@ lean_exe «mnist-linear-train» where
 -- Trains MNIST-linear on the VERIFIED-rendered StableHLO
 -- (`verified_mlir/`, = Proofs.StableHLO.linearTrainStepModuleV) through the
 -- real Lean/IREE FFI. See MainMnistLinearVerified.lean.
+/-- Shared body of the verified linear trainer, imported by BOTH the IREE and
+    XLA executables so their config cannot drift (which would invalidate the G2
+    comparison). Needs its own lib target: `apps/` modules are otherwise only
+    reachable as executable roots, and an import of one would not get built. -/
+lean_lib «LinearVerifiedCommon» where
+  srcDir := "."
+  roots := #[`apps.mnist.LinearVerifiedCommon]
+
 lean_exe «mnist-linear-verified» where
   root := `apps.mnist.MainMnistLinearVerified
   moreLinkArgs := ireeLink
+
+-- ═══════════════════════════════════════════════════════════════════
+-- XLA/PJRT backend (planning/xla_pjrt_ladder.md)
+--
+-- Same Lean root, same verified_mlir/*.mlir, same §1a ties — the ONLY change is
+-- which trusted lowerer consumes the emitted StableHLO. `libpjrt_ffi.so` exports
+-- the identical C surface as `libiree_ffi.so`, so nothing above the shim moves.
+--
+-- Build the shim first (it is not built by lake — it only needs libc + dlopen):
+--   gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+-- ═══════════════════════════════════════════════════════════════════
+
+private def xlaLink : Array String :=
+  #["-L", "./ffi", "-lpjrt_ffi", "-ldl", "-Wl,-rpath,./ffi",
+    "-Wl,--allow-shlib-undefined"]
+
+/-- Rung 0 of the XLA ladder: the Chapter-2 linear classifier, trained on the
+    verified-rendered StableHLO through XLA instead of IREE. Compare against
+    `mnist-linear-verified` (gate G2 — same params, not just same forward). -/
+lean_exe «mnist-linear-verified-xla» where
+  root := `apps.mnist.MainMnistLinearVerifiedXla
+  moreLinkArgs := xlaLink
 
 -- Phase-3 PGD adversarial attack on the verified linear net (planning/robustness.md):
 -- the attack's input gradient is the proven dx=(softmax-onehot)·Wᵀ VJP, run via IREE.
@@ -1116,9 +1147,22 @@ lean_exe «mnist-linear-e4m3-verified» where
 
 -- Chapter 3: trains the MNIST MLP on the VERIFIED-rendered StableHLO
 -- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepText).
+/-- Shared body of the verified MLP trainer — imported by BOTH the IREE and XLA
+    executables so their config and He-init seed cannot drift. -/
+lean_lib «MlpVerifiedCommon» where
+  srcDir := "."
+  roots := #[`apps.mnist.MlpVerifiedCommon]
+
 lean_exe «mnist-mlp-verified» where
   root := `apps.mnist.MainMnistMlpVerified
   moreLinkArgs := ireeLink
+
+/-- Rung 1 of the XLA ladder (`planning/xla_pjrt_ladder.md`): depth + multiple
+    param tensors via the packed-params path, and the first rung with He init.
+    Compare against `mnist-mlp-verified` for gate G2. -/
+lean_exe «mnist-mlp-verified-xla» where
+  root := `apps.mnist.MainMnistMlpVerifiedXla
+  moreLinkArgs := xlaLink
 
 -- Width-parametric MNIST MLP: `mnist-mlp-grid <d₁> <d₂> [epochs]` renders + trains
 -- the 784→d₁→d₂→10 MLP on the faithful verified StableHLO (the size-sweep demo).
@@ -1148,9 +1192,21 @@ lean_exe «mnist-mlp-e4m3-verified» where
 
 -- Chapter 4: trains the MNIST CNN on the VERIFIED-rendered StableHLO
 -- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepText).
+/-- Shared body of the verified CNN trainer — imported by BOTH the IREE and XLA
+    executables so their config and He-init seed cannot drift. -/
+lean_lib «CnnVerifiedCommon» where
+  srcDir := "."
+  roots := #[`apps.mnist.CnnVerifiedCommon]
+
 lean_exe «mnist-cnn-verified» where
   root := `apps.mnist.MainMnistCnnVerified
   moreLinkArgs := ireeLink
+
+/-- The first CONVOLUTIONAL graph on the XLA ladder — where IREE's ~1%-of-peak
+    conv codegen actually bites, unlike the dense-only rungs 0-1. -/
+lean_exe «mnist-cnn-verified-xla» where
+  root := `apps.mnist.MainMnistCnnVerifiedXla
+  moreLinkArgs := xlaLink
 
 -- Chapter 4 (low precision): fp8 (E4M3) CNN training on the SAME verified StableHLO.
 -- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
@@ -1193,15 +1249,37 @@ lean_exe «cifar8-bn-verified» where
 -- cifar8 (no BN) Adam peer: the proof-rendered fwd/bwd/param-grads with the SGD update
 -- swapped for AdamW (ViTRender.emitAdamV) + packed [θ|m|v] + runtime lr/bc threading via
 -- trainAdamSched. Render: tests/TestCifar8AdamTrain.lean. BN/noBN × SGD/Adam ablation.
+lean_lib «Cifar8AdamCommon» where
+  srcDir := "."
+  roots := #[`apps.cifar.Cifar8AdamCommon]
+
 lean_exe «cifar8-verified-adam» where
   root := `apps.cifar.MainCifar8VerifiedAdam
   moreLinkArgs := ireeLink
 
+/-- The no-BN control for rung 2 — same driver/hyperparameters as
+    `cifar8-bn-verified-adam-xla`, differing only by BatchNorm. -/
+lean_exe «cifar8-verified-adam-xla» where
+  root := `apps.cifar.MainCifar8VerifiedAdamXla
+  moreLinkArgs := xlaLink
+
 -- cifar8 + per-channel BN Adam peer (38 params incl. 8× BN γ/β). Same as above with BN.
 -- Render: tests/TestCifar8AdamTrain.lean.
+/-- Shared body of the CIFAR-8 BN + AdamW trainer — imported by BOTH the IREE and
+    XLA executables so their schedule, seed, and hyperparameters cannot drift. -/
+lean_lib «Cifar8BnAdamCommon» where
+  srcDir := "."
+  roots := #[`apps.cifar.Cifar8BnAdamCommon]
+
 lean_exe «cifar8-bn-verified-adam» where
   root := `apps.cifar.MainCifar8BnVerifiedAdam
   moreLinkArgs := ireeLink
+
+/-- Rung 2 of the XLA ladder (`planning/xla_pjrt_ladder.md`): Adam moments and
+    runtime lr/bc₁/bc₂ scalars, i.e. the first RANK-0 tensor inputs. -/
+lean_exe «cifar8-bn-verified-adam-xla» where
+  root := `apps.cifar.MainCifar8BnVerifiedAdamXla
+  moreLinkArgs := xlaLink
 
 -- cifar8 Nesterov-momentum SGD peers (v←μv+∇, θ←θ−lr(μv+∇), μ=0.9): same proof-rendered body +
 -- emitMomentum, driven by trainAdamSched variant "mom" (reuses [θ|m|v] packing + cosine+warmup lr).
@@ -1260,9 +1338,21 @@ lean_exe «resnet34-verified» where
 -- downsamples) with the SGD update swapped for AdamW (ViTRender.emitAdamV) + packed θ|m|v + runtime
 -- lr/bc threading via trainAdamSched. Recipe matches the reference (lr 1e-3, wd 1e-4, cosine+warmup
 -- 3, label-smoothing 0.1). Render: tests/TestResnet34Train.lean.
+/-- Shared body of the verified R34 + AdamW Imagenette trainer — imported by BOTH
+    the IREE and XLA executables so their schedule and seed cannot drift. -/
+lean_lib «Resnet34AdamCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.Resnet34AdamCommon]
+
 lean_exe «resnet34-verified-adam» where
   root := `apps.imagenette.MainResnet34VerifiedAdam
   moreLinkArgs := ireeLink
+
+/-- Rung 3 of the XLA ladder (`planning/xla_pjrt_ladder.md`): full scale at 224²,
+    BN running stats, and the regime the 20-40x measurements came from. -/
+lean_exe «resnet34-verified-adam-xla» where
+  root := `apps.imagenette.MainResnet34VerifiedAdamXla
+  moreLinkArgs := xlaLink
 
 -- ch7 C4: small MobileNetV2 (inverted-residual blocks: depthwise conv + relu6 +
 -- per-channel BN) trained on VERIFIED-rendered StableHLO

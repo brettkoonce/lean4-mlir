@@ -2663,3 +2663,60 @@ LEAN_EXPORT lean_obj_res lean_f32_fpn_hflip(
     lean_ctor_set(tup, 1, out_tgt);
     return lean_io_result_mk_ok(tup);
 }
+
+// ============================================================
+// In-place step-buffer patching (planning/xla_pjrt_ladder.md §8).
+//
+// The Adam driver's step buffer is laid out [theta|m|v | lr,bc1,bc2 | bn stats],
+// and the train step RETURNS the same layout ([theta'|m'|v' | loss,_,_ | bn']).
+// That means the output buffer can be reused as the next step's input, patching
+// only the 3 scalars and the BN region — instead of rebuilding the whole blob
+// with F32.concat and slicing it back out with .extract, which at ResNet-34
+// scale is two 272 MB host memcpys every step (~36 ms, measured).
+//
+// Both helpers take ownership of the destination and mutate it when unshared,
+// falling back to a copy otherwise so behaviour never silently depends on a
+// refcount.
+// ============================================================
+
+static lean_object* f32_sarray_exclusive(lean_obj_arg ba) {
+    if (lean_is_exclusive(ba)) return ba;
+    size_t n = lean_sarray_size(ba);
+    lean_object* out = lean_alloc_sarray(1, n, n);
+    memcpy(lean_sarray_cptr(out), lean_sarray_cptr(ba), n);
+    lean_dec(ba);
+    return out;
+}
+
+// Write three consecutive f32 values starting at float index `idx`.
+LEAN_EXPORT lean_obj_res lean_f32_write3(
+        lean_obj_arg ba, size_t idx, double a, double b, double c, lean_obj_arg w) {
+    (void)w;
+    lean_object* arr = f32_sarray_exclusive(ba);
+    size_t n = lean_sarray_size(arr) / 4;
+    if (idx + 3 > n) {
+        return lean_io_result_mk_error(lean_mk_io_user_error(
+            lean_mk_string("F32.write3: index out of range")));
+    }
+    float* p = (float*)lean_sarray_cptr(arr);
+    p[idx] = (float)a; p[idx + 1] = (float)b; p[idx + 2] = (float)c;
+    return lean_io_result_mk_ok(arr);
+}
+
+// Copy `count` f32 values from src[srcOff..] into dst[dstOff..], in place.
+LEAN_EXPORT lean_obj_res lean_f32_blit(
+        lean_obj_arg dst, size_t dst_off,
+        b_lean_obj_arg src, size_t src_off, size_t count, lean_obj_arg w) {
+    (void)w;
+    lean_object* arr = f32_sarray_exclusive(dst);
+    size_t nd = lean_sarray_size(arr) / 4;
+    size_t ns = lean_sarray_size(src) / 4;
+    if (dst_off + count > nd || src_off + count > ns) {
+        return lean_io_result_mk_error(lean_mk_io_user_error(
+            lean_mk_string("F32.blit: range out of bounds")));
+    }
+    float* d = (float*)lean_sarray_cptr(arr);
+    const float* s = (const float*)lean_sarray_cptr(src);
+    memcpy(d + dst_off, s + src_off, count * sizeof(float));
+    return lean_io_result_mk_ok(arr);
+}

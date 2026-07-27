@@ -11,6 +11,19 @@
 #include <stdio.h>
 #include "iree_ffi.h"
 
+// ---- Which backend shim is linked? ----
+// `libiree_ffi.so` and `libpjrt_ffi.so` export the same symbols; only the latter
+// defines `pjrt_ffi_marker`. A weak reference resolves to it when the XLA shim is
+// on the link line and stays NULL otherwise, so the Lean driver can pick the
+// right setup path (iree-compile to .vmfb vs. hand the .mlir to XLA) without an
+// env var that could disagree with the binary. See planning/xla_pjrt_ladder.md.
+extern void pjrt_ffi_marker(void) __attribute__((weak));
+
+LEAN_EXPORT lean_obj_res lean_iree_backend_name(lean_obj_arg world) {
+  (void)world;
+  return lean_io_result_mk_ok(lean_mk_string(pjrt_ffi_marker ? "xla" : "iree"));
+}
+
 // ---- External class for IreeSession ----
 static lean_external_class* g_iree_session_class = NULL;
 

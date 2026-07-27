@@ -12,9 +12,20 @@ instance : Nonempty IreeSession := IreeSessionPointed.property
 
 namespace IreeSession
 
-/-- Load a `.vmfb` bytecode module onto the default CUDA device. -/
+/-- Load a `.vmfb` bytecode module onto the default CUDA device.
+
+    On the **XLA backend** (`libpjrt_ffi.so`) the argument is instead the
+    `.mlir` source — XLA compiles the StableHLO in-process, so there is no
+    separate `iree-compile` step. Use `VerifiedNet.mkSession` rather than
+    calling this directly; it picks the right path per `backendName`. -/
 @[extern "lean_iree_session_create"]
 opaque create (path : @& String) : IO IreeSession
+
+/-- `"iree"` or `"xla"` — which shim this binary was linked against. Detected by
+    probing for a symbol only `libpjrt_ffi.so` defines, so it cannot disagree
+    with the linked library. See `planning/xla_pjrt_ladder.md`. -/
+@[extern "lean_iree_backend_name"]
+opaque backendName : IO String
 
 /-- Run MNIST-MLP forward pass. Shapes are fixed:
     `x` is `batch×784`, `W0` is `784×512`, `b0` is `512`,

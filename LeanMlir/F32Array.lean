@@ -41,6 +41,20 @@ opaque addGaussianTiled (base : @& ByteArray) (off d0 m : USize)
 @[extern "lean_f32_perturb_unit"]
 opaque perturbUnit (base : @& ByteArray) (off d0 : USize) (r : Float) (seed : USize) : IO ByteArray
 
+/-- Write three consecutive f32 values starting at float index `idx`, **in place**
+    when the array is unshared (it copies otherwise, so the result never depends
+    on a refcount). Used to patch the `lr`/`bc₁`/`bc₂` slots of the Adam step
+    buffer without rebuilding it — see `planning/xla_pjrt_ladder.md` §8. -/
+@[extern "lean_f32_write3"]
+opaque write3 (ba : ByteArray) (idx : USize) (a b c : Float) : IO ByteArray
+
+/-- Copy `count` f32 values from `src[srcOff..]` into `dst[dstOff..]`, **in place**
+    when `dst` is unshared. Used to patch the BN running-stat region of the Adam
+    step buffer. -/
+@[extern "lean_f32_blit"]
+opaque blit (dst : ByteArray) (dstOff : USize) (src : @& ByteArray)
+  (srcOff count : USize) : IO ByteArray
+
 /-- Concatenate multiple ByteArrays. Fast (memcpy per chunk). -/
 def concat (arrays : Array ByteArray) : ByteArray := Id.run do
   let mut out : ByteArray := .empty

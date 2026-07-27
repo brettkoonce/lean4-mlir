@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNets
+import apps.mnist.LinearVerifiedCommon
 
 /-! # `mnist-linear-verified` — train MNIST on the VERIFIED-rendered codegen
 
@@ -17,9 +17,12 @@ verified `@linear_fwd` via `IreeSession.forwardF32`.
 The model is expressed as a `VerifiedNetSpec` (a single dense layer) — the same
 readable layer list whose **math VJP is proven** in `LeanMlir/Proofs/Foundation/SpecVJP.lean`
 (`linearVerified_has_vjp`). Unlike the other verified trainers, the linear model
-keeps a bespoke `main`: its train step uses the 2-argument `linearTrainStepV` FFI
-(separate `W0`/`b0`, zero-init) rather than the packed-params `mlpTrainStepV` the
-shared `VerifiedNet.train` driver expects. Every dimension is read from the spec.
+keeps a bespoke entry point: its train step uses the 2-argument `linearTrainStepV`
+FFI (separate `W0`/`b0`, zero-init) rather than the packed-params `mlpTrainStepV`
+the shared `VerifiedNet.train` driver expects. Every dimension is read from the spec.
+
+The body is shared with the XLA build (`mnist-linear-verified-xla`); see
+`apps/mnist/LinearVerifiedCommon.lean` and `planning/xla_pjrt_ladder.md`.
 
 Regenerate the `verified_mlir/*.mlir` with
 `lake env lean LeanMlir/Proofs/Codegen/StableHLO.lean`.
@@ -27,13 +30,4 @@ Regenerate the `verified_mlir/*.mlir` with
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mnist-linear-verified data`
 -/
 
-/-- The model `linearVerified` (a single dense 784→10) lives in `LeanMlir.VerifiedNets`
-    so this trainer and the `Proofs.SpecVJP` VJP theorem share one object. -/
-def linearConfig : VerifiedConfig where
-  epochs    := 12
-  batchSize := 128
-
--- The train loop lives in the driver (`VerifiedNet.trainLinear`); linear uses the
--- 2-argument `linearTrainStepV` FFI rather than the packed-params path the other nets use.
-def main (argv : List String) : IO Unit :=
-  linearVerified.trainLinear linearConfig (argv.head?.getD "data")
+def main (argv : List String) : IO Unit := runLinearVerified argv

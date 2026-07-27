@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNets
+import apps.cifar.Cifar8AdamCommon
 
 /-! # `cifar8-verified-adam` — the deeper 8-conv CIFAR-10 CNN (no BN) trained with **AdamW**
 
@@ -17,10 +17,4 @@ ablation.
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8-verified-adam data`
 -/
 
-def cifar8AdamConfig : VerifiedConfig where
-  epochs    := 40
-  batchSize := 128
-
-def main (argv : List String) : IO Unit :=
-  -- baseLR 1e-3, β₁ .9, β₂ .999, 3-epoch linear warmup then cosine decay.
-  cifar8Verified.toNet.trainAdamSched cifar8AdamConfig (argv.head?.getD "data") 0.001 0.9 0.999 3
+def main (argv : List String) : IO Unit := runCifar8Adam argv

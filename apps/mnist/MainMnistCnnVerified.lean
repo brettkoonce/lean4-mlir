@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNets
+import apps.mnist.CnnVerifiedCommon
 
 /-! # `mnist-cnn-verified` — train the MNIST CNN on the VERIFIED-rendered codegen
 
@@ -16,13 +16,11 @@ readable layer list whose **math VJP is proven** in `LeanMlir/Proofs/Foundation/
 (`cnnVerified_has_vjp_at`, folded through conv→relu→conv→relu→maxpool→dense→…). It trains
 through the packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, He-init, 4-D kernels).
 
-Real path: Lean loop → IreeRuntime FFI → in-process IREE → GPU.
+Real path: Lean loop → IreeRuntime FFI → in-process IREE → GPU. The body is shared
+with the XLA build (`mnist-cnn-verified-xla`); see `apps/mnist/CnnVerifiedCommon.lean`
+and `planning/xla_pjrt_ladder.md`.
+
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mnist-cnn-verified data`
 -/
 
-def cnnConfig : VerifiedConfig where
-  epochs    := 10
-  batchSize := 128
-
-def main (argv : List String) : IO Unit :=
-  cnnVerified.train cnnConfig (argv.head?.getD "data")
+def main (argv : List String) : IO Unit := runCnnVerified argv

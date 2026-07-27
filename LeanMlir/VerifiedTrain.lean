@@ -104,6 +104,31 @@ private def compileVmfb (mlirPath outPath : String) : IO Unit := do
   if r.exitCode != 0 then
     throw (IO.userError s!"iree-compile failed:\n{r.stderr.take 2000}")
 
+/-- Open a session for one Lean-emitted graph, on whichever backend this binary
+    was linked against (`planning/xla_pjrt_ladder.md`).
+
+    * **IREE** — `iree-compile` the `.mlir` to `outVmfb`, then load that.
+    * **XLA** — hand the `.mlir` straight to PJRT; XLA compiles it in-process,
+      so `outVmfb` is never produced.
+
+    Both consume the *same* `verified_mlir/*.mlir` — the emitter, the NetSpec,
+    and the §1a ties are identical. Only the trusted lowerer differs. -/
+def mkSession (mlirPath outVmfb : String) : IO IreeSession := do
+  if (← IreeSession.backendName) == "xla" then
+    IO.println s!"  xla/pjrt {mlirPath}"
+    IreeSession.create mlirPath
+  else
+    -- Scope the .vmfb by IREE target. `compileVmfb` reuses any existing file that
+    -- is newer than the .mlir, so a shared path lets an `IREE_BACKEND=rocm`
+    -- artifact be picked up by an `IREE_BACKEND=llvm-cpu` run (and vice versa).
+    -- That matters now that llvm-cpu is used as an independent numerical
+    -- reference — see planning/xla_pjrt_ladder.md §8, rung 3.
+    let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
+    let vmfbPath := if outVmfb.endsWith ".vmfb"
+                    then outVmfb.dropRight 5 ++ s!"_{target}.vmfb" else outVmfb
+    compileVmfb mlirPath vmfbPath
+    IreeSession.create vmfbPath
+
 /-- Init one parameter from its `(dims, initKind)` spec: He(fan-in) weights (kind 0;
     fan-in = `ic·kH·kW` for a rank-4 conv kernel, `in` for a rank-2 dense matrix),
     γ = 1 (kind 1), β / bias = 0 (kind 2). -/
@@ -188,20 +213,26 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
-  IO.println net.blurb
-  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  IO.println (if (← IreeSession.backendName) == "xla"
+              then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
+  let tsSess  ← mkSession s!"verified_mlir/{net.slug}_train_step.mlir"
+                          s!".lake/build/{net.slug}_ts_v.vmfb"
+  let fwdSess ← mkSession s!"verified_mlir/{net.slug}_fwd.mlir"
+                          s!".lake/build/{net.slug}_fwd_v.vmfb"
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     if synth then mkSynthData net.data d0 bs else loadData net.data d0 dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} ({net.specs.size} params, {net.nParams} floats), mean-loss SGD lr={cfg.lr}, He init{if synth then " [SYNTH]" else ""}"
   (← IO.getStdout).flush
-  let nb  := nTrain / bs
+  -- LEAN_MLIR_MAX_STEPS caps batches per epoch. Needed to run gate G2 at small
+  -- N: over a full run, ReLU branch flips amplify f32 noise, so a large final
+  -- divergence is ambiguous between chaos and a plumbing bug. Diffing at 1 / 10
+  -- / 100 steps separates them — see planning/xla_pjrt_ladder.md §8.
+  let nbFull := nTrain / bs
+  let nb := match (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?) with
+    | some n => min n nbFull
+    | none   => nbFull
   let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
   let shapes := net.shapesBA
   let xShape := net.xShape bs
@@ -244,6 +275,14 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     let epMs := (← IO.monoMsNow) - tEp0
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}% ({epMs}ms)"
     (← IO.getStdout).flush
+  -- Gate G2 (`planning/xla_pjrt_ladder.md` §3): dump the packed params so the IREE
+  -- and XLA builds can be diffed tensor-for-tensor. He init runs in Lean from a
+  -- fixed seed, so both backends start byte-identical without extra work.
+  match ← IO.getEnv "LEAN_MLIR_DUMP_PARAMS" with
+  | some path =>
+      IO.FS.writeBinFile path params
+      IO.println s!"  wrote final params ({params.size} bytes) → {path}"
+  | none => pure ()
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."
 
 /-- **AdamW training driver** — threads the first/second moment buffers as a single
@@ -325,7 +364,8 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
-  IO.println net.blurb
+  IO.println (if (← IreeSession.backendName) == "xla"
+              then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
   -- Running-stats BN: when `bnChannels` is non-empty the adam train step carries per-layer batch
   -- mean/var out in passthrough slots (so #out=#in), the driver EMAs them into `runningBnStats`,
   -- and eval uses `<slug>_fwd_eval.mlir` (affine BN with the running stats) — class-batch-independent
@@ -333,22 +373,26 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let hasBn := !net.bnChannels.isEmpty
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
-  let tsVmfb  := s!".lake/build/{net.slug}_{variant}_ts.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  let fwdEvalVmfb := s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_{variant}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"             fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
-  let fwdEvalSess ← if hasBn then do
-      compileVmfb s!"verified_mlir/{net.slug}_fwd_eval.mlir" fwdEvalVmfb
-      IreeSession.create fwdEvalVmfb
+  let tsSess  ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
+                          s!".lake/build/{net.slug}_{variant}_ts.vmfb"
+  let fwdSess ← mkSession s!"verified_mlir/{net.slug}_fwd.mlir"
+                          s!".lake/build/{net.slug}_fwd_v.vmfb"
+  let fwdEvalSess ← if hasBn then
+      mkSession s!"verified_mlir/{net.slug}_fwd_eval.mlir"
+                s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
     else pure fwdSess
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     if synth then mkSynthData net.data d0 bs else loadData net.data d0 dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
-  let nb  := nTrain / bs
+  -- LEAN_MLIR_G2_STEPS caps batches per epoch for gate G2. Deliberately NOT
+  -- LEAN_MLIR_MAX_STEPS: that name already means "time a step window then exit"
+  -- in this driver (the benchmark's `attn` anchor), and it returns before the
+  -- param dump. See planning/xla_pjrt_ladder.md §3.
+  let nbFull := nTrain / bs
+  let nb := match (← IO.getEnv "LEAN_MLIR_G2_STEPS").bind (·.toNat?) with
+    | some n => min n nbFull
+    | none   => nbFull
   let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
   if hasBn then IO.println s!"  running-stats BN: {net.bnChannels.size} layers, {nBnStats} stat floats → eval via @{net.slug}_fwd_eval"
@@ -365,7 +409,21 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   for spec in net.specs do
     parts := parts.push (← mkParam seed spec.1 spec.2)
     seed := seed + 1
-  let theta := F32.concat parts
+  -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit
+  -- vector of exact L2 norm r, before any training. This is the CONDITIONING
+  -- probe for gate G2 (planning/xla_pjrt_ladder.md §8, rung 3): if an r that is
+  -- f32-epsilon-sized relative to ||theta|| moves the resulting gradient about as
+  -- much as the IREE/XLA disagreement does, then that disagreement is what
+  -- ill-conditioning predicts, not evidence of a wrong backend.
+  let theta0 := F32.concat parts
+  -- Value is read in units of 1e-9 (no String.toFloat? in this toolchain), so
+  -- LEAN_MLIR_PERTURB_R=15990 means an L2 displacement of 1.599e-5.
+  let theta ← match (← IO.getEnv "LEAN_MLIR_PERTURB_R").bind (·.toNat?) with
+    | some n => do
+        let r := n.toFloat * 1e-9
+        IO.println s!"  ▸ PERTURBED init: theta += r*u with ||r*u||_2 = {r}"
+        F32.perturbUnit theta0 0 net.nParams.toUSize r 12345
+    | none   => pure theta0
   let zeros ← F32.const net.nParams.toUSize 0.0
   let mut thetamv := F32.concat #[theta, zeros, zeros]
   let mvBytes := 3 * net.nParams * 4
@@ -374,12 +432,20 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- then 0.1). Reset per process — washed out well before the per-epoch eval (mom 0.1).
   let mut runningBnStats ← F32.const nBnStats.toUSize 0.0
   let mut bnFirst := true
+  -- The reusable step buffer: [theta|m|v | lr,bc1,bc2 | bn stats]. Built once here
+  -- and thereafter carried forward from each step's output (see the inner loop).
+  let mut pbuf : ByteArray := .empty
   let totalSteps := (cfg.epochs * nb).toFloat
   let warmSteps := (warmupEpochs * nb).toFloat
   -- Auto checkpoint/resume: each epoch writes [θ|m|v] + the next-epoch counter;
   -- on startup, resume from the latest checkpoint if present (survives reaps).
   -- Delete `.lake/build/<slug>_adam_ckpt.bin{,.epoch}` to start fresh.
-  let ckptPath := s!".lake/build/{net.slug}_{variant}_ckpt.bin"
+  -- Checkpoint path is BACKEND-SCOPED. Without the suffix an XLA run would happily
+  -- resume from an IREE checkpoint (and vice versa), silently fusing two
+  -- trajectories into one and making any G2/G3 comparison meaningless — while
+  -- looking completely normal on screen. See planning/xla_pjrt_ladder.md §3.
+  let backend ← IreeSession.backendName
+  let ckptPath := s!".lake/build/{net.slug}_{variant}_ckpt{if backend == "xla" then "_xla" else ""}.bin"
   let epPath := ckptPath ++ ".epoch"
   let mut startEpoch := 0
   if (← System.FilePath.pathExists ckptPath) && (← System.FilePath.pathExists epPath) then
@@ -403,7 +469,17 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let probeWarm := 8
   let mut probePrev := 0
   let mut probeTimes : Array Nat := #[]
-  for ep in [startEpoch:cfg.epochs] do
+  -- LEAN_MLIR_MAX_EPOCHS: same opt-in cap as `VerifiedNet.train` (absent → full run).
+  let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
+    | some n => min n cfg.epochs
+    | none   => cfg.epochs
+  -- Build the reusable step buffer once, AFTER any checkpoint resume has settled
+  -- `thetamv`. The scalar slots are filled per step; the BN region per step too.
+  let scalarSlots ← F32.const 3 0.0
+  pbuf := if hasBn
+          then F32.concat #[thetamv, scalarSlots, runningBnStats]
+          else F32.concat #[thetamv, scalarSlots]
+  for ep in [startEpoch:nEpochs] do
     let mut epochLossSum := 0.0
     let mut lastLr := 0.0
     -- Per-epoch Fisher-Yates shuffle (the reference does this; the data is
@@ -419,9 +495,15 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
                  else baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (gstep - warmSteps) / (totalSteps - warmSteps)))
       let bc1 := 1.0 - Float.exp (gstep * Float.log β1)
       let bc2 := 1.0 - Float.exp (gstep * Float.log β2)
-      let tail := F32.concat #[← F32.const (1 : USize) lrt, ← F32.const (1 : USize) bc1, ← F32.const (1 : USize) bc2]
-      -- BN nets append the (ignored) stat-in passthrough slots; the step writes batch stats out.
-      let params := if hasBn then F32.concat #[thetamv, tail, runningBnStats] else F32.concat #[thetamv, tail]
+      -- Patch the reusable step buffer in place instead of rebuilding it. `pbuf`
+      -- is [theta|m|v | lr,bc1,bc2 | bn stats] and the train step returns that
+      -- exact layout, so the previous output IS the next input once the 3
+      -- scalars and the BN region are refreshed. Rebuilding it with F32.concat
+      -- (and slicing [theta|m|v] back out afterwards) cost two 272 MB host
+      -- memcpys per step at R34 scale — see planning/xla_pjrt_ladder.md §8.
+      pbuf ← F32.write3 pbuf (3 * net.nParams).toUSize lrt bc1 bc2
+      if hasBn then
+        pbuf ← F32.blit pbuf (3 * net.nParams + 3).toUSize runningBnStats 0 nBnStats.toUSize
       let augSeed := (ep * nb + bi + 1).toUSize
       let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * bs) bs trainPix
       -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
@@ -436,7 +518,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
         | .cifar => F32.randomHFlip xbRaw bs.toUSize 3 32 32 augSeed
         | _ => pure xbRaw
       let yb := if synth then curLbl else F32.sliceLabels curLbl (bi * bs) bs
-      let out ← IreeSession.mlpTrainStepV tsSess tsFn xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
+      let out ← IreeSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb bs.toUSize d0.toUSize nc.toUSize
       -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']
       let stepLoss := F32.read out (3 * net.nParams).toUSize
       epochLossSum := epochLossSum + stepLoss
@@ -444,12 +526,13 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
       if bi < 3 || bi % 100 == 0 then
         IO.println s!"  step {bi}/{nb}: loss={stepLoss}"
         (← IO.getStdout).flush
-      thetamv := out.extract 0 mvBytes
       -- EMA the batch BN stats (in the passthrough slots after [θ'|m'|v'|loss|bc1|bc2]).
+      -- This slice is small (nBnStats floats), unlike the [θ|m|v] prefix.
       if hasBn then
         let batchBn := out.extract ((3 * net.nParams + 3) * 4) ((3 * net.nParams + 3 + nBnStats) * 4)
         runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.1)
         bnFirst := false
+      pbuf := out   -- no copy: the output buffer becomes the next step's input
       -- ms/step probe: start the clock past warmup, report + exit at the cap.
       match probeSteps with
       | some ps =>
@@ -465,6 +548,8 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
             return ()
       | none => pure ()
     IO.println s!"Epoch {ep + 1}/{cfg.epochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
+    -- One 272 MB copy per EPOCH (for eval + checkpoint), not per step.
+    thetamv := pbuf.extract 0 mvBytes
     let thetaCur := thetamv.extract 0 pBytes
     -- BN nets eval through `@<slug>_fwd_eval` with the running stats appended; others use `@<slug>_fwd`.
     let evalSess := if hasBn then fwdEvalSess else fwdSess
@@ -485,6 +570,14 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     (← IO.getStdout).flush
     IO.FS.writeBinFile ckptPath thetamv
     IO.FS.writeFile epPath (toString (ep + 1))
+  -- Gate G2 (`planning/xla_pjrt_ladder.md` §3). Dumps the whole [θ|m|v] blob, so
+  -- the Adam moments are compared too, not just the weights — a moment buffer
+  -- that silently failed to thread would still let θ look plausible.
+  match ← IO.getEnv "LEAN_MLIR_DUMP_PARAMS" with
+  | some path =>
+      IO.FS.writeBinFile path thetamv
+      IO.println s!"  wrote final [θ|m|v] ({thetamv.size} bytes) → {path}"
+  | none => pure ()
   IO.println s!"done (trained {net.name} with AdamW + cosine/warmup via packed threading)."
 
 /-- Train driver for the **2-parameter linear** path (Chapter 1). The verified
@@ -496,13 +589,15 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses
-  IO.println net.blurb
-  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  -- The blurbs name IREE because every net used to. Only this path is
+  -- backend-agnostic so far, so correct it here rather than rewriting ~30
+  -- strings for nets that have not been ported (xla_pjrt_ladder.md §2).
+  IO.println (if (← IreeSession.backendName) == "xla"
+              then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
+  let tsSess  ← mkSession s!"verified_mlir/{net.slug}_train_step.mlir"
+                          s!".lake/build/{net.slug}_ts_v.vmfb"
+  let fwdSess ← mkSession s!"verified_mlir/{net.slug}_fwd.mlir"
+                          s!".lake/build/{net.slug}_fwd_v.vmfb"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
     loadData net.data d0 dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
@@ -544,6 +639,15 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
     let epMs := (← IO.monoMsNow) - tEp0
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}% ({epMs}ms)"
     (← IO.getStdout).flush
+  -- Gate G2 (`planning/xla_pjrt_ladder.md` §3): dump the final parameters so the
+  -- IREE and XLA builds can be diffed tensor-for-tensor. Equal accuracy is a
+  -- summary statistic, not a tie — this is the actual comparison.
+  match ← IO.getEnv "LEAN_MLIR_DUMP_PARAMS" with
+  | some path =>
+      let final := W0 ++ b0
+      IO.FS.writeBinFile path final
+      IO.println s!"  wrote final params ({final.size} bytes) → {path}"
+  | none => pure ()
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."
 
 /-- Phase-3 PGD-step kernel for the linear classifier (`planning/robustness.md`).
