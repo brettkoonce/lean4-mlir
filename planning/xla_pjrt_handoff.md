@@ -211,13 +211,25 @@ number much later.
    `efficientnet_train_step.mlir` is byte-identical, all ten `den`s honest, full
    `lake build Proofs Certs Codegen` green (the parser round-trip included — `batched2` needed a
    `parseStack` case and a `parse_toToks` induction case).
-2. **▶ NEXT: the R34 pointwise forms.** `reluF` → a `BatchableOp.relu` descriptor; `selectPos` →
-   its own `selectPosB` ctor carrying the whole-batch `x` (the trap above — it is `swishBack`'s
-   shape, not `swish`'s). `addVB`/`subB` already exist.
-3. Add batched maxPool fwd/back + the conv-bias param grad.
+2. ~~The R34 pointwise forms~~ ✅ **DONE** — `BatchableOp.relu` (descriptor) and `selectPosB` (own
+   ctor, whole-batch `x` — it is `swishBack`'s shape, not `swish`'s). With `addVB`/`subB` from
+   step 1, R34's whole pointwise set is covered. Ties: `den_batchOp_relu_eq_reluF`,
+   `selectPosB_faithful`.
+3. **▶ NEXT: batched maxPool fwd/back + the conv-bias param grad.** maxPool is a `BatchableOp`
+   descriptor (no saved data in the forward); **`maxPoolBack` is not** — it carries the saved input
+   for `select_and_scatter`, so it needs its own ctor, and watch the reserved `%sc`/`%sa`/`%sb`/`%sd`
+   SSA names (§4).
 4. Un-fuse the `*SgdB` family into `*GradB`, the way §2a did for the per-example ops.
 5. Render `resnet34_adam_train_step` batched at `N := B := 32` and tie it numerically against the
    committed artifact. It should be **exact** — the emitted text is what already runs.
+
+**`tests/TestBatchedEmitTie.lean`** pins all nine batched forms against their per-example peers,
+byte-for-byte, one case each. Add a case with every new batched form in steps 3–4 — it is what
+catches an emitter that reads its width off the SHlo index again. The tie was verified to actually
+fail by deliberately breaking `relu`'s emit case. Note it fails via `throw`, not
+`IO.Process.exit 1`: under `#eval` the elaborator buffers output and prints it only after the eval
+returns, so `exit` discards **every** diagnostic and you get a bare non-zero status. Several older
+`tests/*.lean` use the `exit` form and fail blind.
 
 Cheapest sanity check for any of these, learned from step 1: render the *whole net* at both `N`
 values into temp files and `diff` them, and separately `diff` with all `tensor<…>` annotations

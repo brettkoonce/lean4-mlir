@@ -116,12 +116,17 @@ inductive BatchableOp : Nat → Nat → Type where
   -- pointwise map is the pointwise map itself — so `N` is denotationally free here
   -- and the descriptor exists purely to keep the emit width off the SHlo index.
   | swish {n : Nat}                                        : BatchableOp n n
-  -- NOTE: the pointwise activation VJPs (`swishBack`/`sigmoidBack`) are deliberately
-  -- NOT here. `BatchableOp` lifts a FIXED function across examples, and their
-  -- backward `fun x dy i => dy i * deriv (x i)` depends on the saved pre-activation,
-  -- which varies per example — `batchMap N` of it would denote "every example shares
-  -- one saved activation", which is not what the emit computes. They get their own
-  -- `SHlo` constructors (`swishBackB`/`sigmoidBackB`) carrying the WHOLE-BATCH `x`.
+  -- ReLU forward, the ResNet-34 peer of `swish`. Same story: pointwise, carries no
+  -- data, so `batchMap N` of it is itself and `N` is denotationally free.
+  | relu {n : Nat}                                         : BatchableOp n n
+  -- NOTE: the pointwise activation VJPs (`swishBack`/`sigmoidBack`/`selectPos`) are
+  -- deliberately NOT here. `BatchableOp` lifts a FIXED function across examples, and
+  -- their backward depends on the saved pre-activation, which varies per example —
+  -- `batchMap N` of it would denote "every example shares one saved activation", which
+  -- is not what the emit computes. `swishBack`/`sigmoidBack` are `dy i * deriv (x i)`;
+  -- `selectPos` is `if x i > 0 then dy i else 0`, the same shape. They get their own
+  -- `SHlo` constructors (`swishBackB`/`sigmoidBackB`/`selectPosB`) carrying the
+  -- WHOLE-BATCH `x`.
   -- Row ops: `m`/`rows` is the per-example ROW count (ViT tokens; 1 logit row for a
   -- classifier head), NOT the batch — it was always emitted as a real inner
   -- dimension. The descriptor form exists so the batch can move to `N`.
@@ -369,6 +374,10 @@ inductive SHlo : Nat → Type where
   -- `xName` holds at runtime, and it is why these are not `BatchableOp` descriptors
   -- (`batchMap N` lifts a fixed function, so it would share one example's saved
   -- activation across the batch — a different, wrong, function).
+  -- The BATCHED peer of `selectPos` (ResNet-34's ReLU backward mask). Same `den`, but
+  -- `x` is the WHOLE-BATCH saved pre-activation, for the reason spelled out on
+  -- `BatchableOp`: the mask is per-example data, so this cannot be a descriptor.
+  | selectPosB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   | swishBackB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   -- Chapter 8 (ConvNeXt): GELU forward (tanh approximation,
@@ -832,6 +841,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .gap (c := c) (h := h) (w := w) => globalAvgPoolFlat c h w
   | _, _, .seBlock (h := h) (w := w) _ _ _ _ W₁ b₁ W₂ b₂ => seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂
   | _, _, .swish (n := n) => swish n
+  | _, _, .relu (n := n) => relu n
   | _, _, .softmaxRow (m := m) (n := n) => rowSoftmaxFlat m n
   | _, _, .denseRowBack (rows := rows) (a := a) (c := c) _ W => rowDenseBackFlat rows a c W
 
@@ -981,6 +991,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .swishBack (n := n) _ x e => (swish_has_vjp n).backward x (den e)
   | _, .sigmoidF (n := n) e => sigmoid n (den e)
   | _, .sigmoidBack (n := n) _ x e => (sigmoid_has_vjp n).backward x (den e)
+  | _, .selectPosB _ x e => fun i => if x i > 0 then den e i else 0
   | _, .swishBackB (N := N) (n := n) _ x e => (swish_has_vjp (N*n)).backward x (den e)
   | _, .sigmoidBackB (N := N) (n := n) _ x e => (sigmoid_has_vjp (N*n)).backward x (den e)
   | _, .geluF (n := n) e => gelu n (den e)
@@ -1128,6 +1139,10 @@ theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
     (e : SHlo (N * (rows*c))) :
     den (.batchOp (N := N) (.denseRowBack (rows := rows) wN W) e)
       = batchMap N (rowDenseBackFlat rows a c W) (den e) := rfl
+@[simp] theorem den_batchOp_relu {N n : Nat} (e : SHlo (N * n)) :
+    den (.batchOp (N := N) (.relu (n := n)) e) = batchMap N (relu n) (den e) := rfl
+@[simp] theorem den_selectPosB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
+    den (.selectPosB xN x e) = fun i => if x i > 0 then den e i else 0 := rfl
 @[simp] theorem den_swishBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.swishBackB xN x e) = (swish_has_vjp (N*n)).backward x (den e) := rfl
 @[simp] theorem den_sigmoidBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
@@ -1279,6 +1294,22 @@ theorem reluF_faithful {k : Nat} (e : SHlo k) : den (.reluF e) = relu k (den e) 
 theorem selectPos_faithful {k : Nat} (s : String) (x : Vec k) (hx : ∀ i, x i ≠ 0)
     (e : SHlo k) :
     den (.selectPos s x e) = (relu_has_vjp_at k x hx).backward (den e) := rfl
+
+/-- The `relu` descriptor denotes exactly what the descriptor-less `reluF` denoted at the same
+    index: the batched graph computes the same function, only the emit width now travels
+    separately from the batch. The ResNet-34 peer of `den_batchOp_swish_eq_swishF`. -/
+theorem den_batchOp_relu_eq_reluF {N n : Nat} (e : SHlo (N * n)) :
+    den (.batchOp (N := N) (.relu (n := n)) e) = den (.reluF e) := by
+  rw [reluF_faithful]
+  exact batchMap_pointwise (fun y => if y > 0 then y else 0) (den e)
+
+/-- **Batched ReLU backward faithfulness.** `selectPosB` denotes the same proven
+    `relu_has_vjp_at` backward as `selectPos`, now over the whole batch — which is what the
+    emitted `xName` holds. This is the statement that would be FALSE had `selectPos` been made
+    a `BatchableOp` descriptor (that `den` would apply one example's mask to all `N`). -/
+theorem selectPosB_faithful {N n : Nat} (s : String) (x : Vec (N*n)) (hx : ∀ i, x i ≠ 0)
+    (e : SHlo (N*n)) :
+    den (.selectPosB s x e) = (relu_has_vjp_at (N*n) x hx).backward (den e) := rfl
 
 /-- **ReLU6 forward faithfulness.** `min(max(·,0),6)` denotes the proven `relu6`
     (MobileNetV2.lean). (`rfl` — `relu6` is defined as exactly this clamp.) -/
@@ -2523,6 +2554,7 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   | .seBlock (c := c) (h := h) (w := w) (r := r) w1 b1 w2 b2 _ _ _ _ =>
       ("seBlock", [w1, b1, w2, b2], [N, c, h, w, r])
   | .swish (n := n) => ("swish", [], [N, n])
+  | .relu (n := n) => ("relu", [], [N, n])
   | .softmaxRow (m := m) (n := n) => ("softmaxRow", [], [N, m, n])
   | .denseRowBack (rows := rows) (a := a) (c := c) wN _ => ("denseRowBackP", [wN], [N, rows, a, c])
 
@@ -2569,6 +2601,7 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .bnF gN bN es _ _ _ e => .bnF gN bN es k (skel e)
   | k, .bnBack gN xN es _ _ _ e => .bnBack gN xN es k (skel e)
   | k, .addV a b              => .addV k (skel a) (skel b)
+  | _, .selectPosB (N := N) (n := n) xN _ e => .batched "selectPosP" [xN] [N, n] (skel e)
   | _, .swishBackB (N := N) (n := n) xN _ e => .batched "swishBackP" [xN] [N, n] (skel e)
   | _, .sigmoidBackB (N := N) (n := n) xN _ e => .batched "sigmoidBackP" [xN] [N, n] (skel e)
   | _, .addVB (N := N) (n := n) a b => .batched2 "addV" [] [N, n] (skel a) (skel b)
@@ -4108,6 +4141,17 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           let s ← fresh; let o ← fresh
           pure (s!"    {s} = stablehlo.logistic {r} : {ty [B,n]}\n" ++
                 s!"    {o} = stablehlo.multiply {r}, {s} : {ty [B,n]}\n", o :: st)
+      | "relu", [], [_N, n] => do
+          -- byte-for-byte `.reluF`'s emit, width from the descriptor's `n`.
+          let z ← fresh; let o ← fresh
+          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
+                s!"    {o} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n", o :: st)
+      | "selectPosP", [x], [_N, n] => do
+          -- byte-for-byte `.selectPos`'s emit, width from the descriptor's `n`.
+          let z ← fresh; let msk ← fresh; let o ← fresh
+          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
+            s!"    {msk} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
+            s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
       | "swishBackP", [x], [_N, n] => do
           -- byte-for-byte `.swishBack`'s emit, width from the descriptor's `n`.
           let s ← fresh; let one ← fresh; let om ← fresh; let xom ← fresh
