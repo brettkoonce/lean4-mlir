@@ -220,11 +220,23 @@ something that has to be fixed first, because it is the same defect.
   no type-level blowup at `N = B`.
 
 `EfficientNetRender.lean` instantiates **every** batched op at `N := 1` and renders at `B := 32`.
-So its `den` describes batch-norm over a batch of **one** — which is just per-example per-channel
-BN, `bnBatchLA 1 oc h w ≡ bnPerChannelTensor3` — while the emitted MLIR normalises over **32**.
-The faithfulness theorems are all true; they are true *about a different function than the one
-that runs*. That is the real content of the "batched emit" blocker in the planning notes: not a
-missing op, a mis-instantiated one.
+Its module docstring states this deliberately: *"every `(N := 1)` below is the SHlo batch-unit;
+`pretty B` carries the actual batch"*. So this is a disclosed convention, not a hidden defect —
+but it does not carry uniformly, and the split is exactly along the op R34 needs:
+
+- **Parallel-index ops — convention sound.** `den (.batchOp …) = batchMap N (denOp op)`, and at
+  `N = 1` that is just the per-example op, which is what the emitter applies across the batch.
+  Pointwise ops (`swishF`, `reluF`, `selectPos`, `addV`) are index-agnostic for the same reason.
+  Here the batch really is a parallel repetition and `N` is free.
+- **BN family — convention does NOT carry.** `bnBatchF`, `bnBatchBack`, `bnGammaSgdB`,
+  `bnBetaSgdB` reduce **across** the batch: their `den`s are over `N*(h*w)`
+  (`bnBatchLA N`, `bnPerChannel_grad_gamma oc (N*(h*w))`, …). At `N = 1` that is `h*w`, i.e.
+  per-example — while the emitter reduces `[0,2,3]` over `B*h*w`. For these the batch is a
+  reduction axis, not a parallel index, so `N` is *not* free and `N = 1` denotes a different
+  function than the one that runs.
+
+That is the real content of the "batched emit" blocker: not a missing op, and not an undisclosed
+one — a convention that is sound for the parallel ops and silently wrong for the four BN ops.
 
 **So the job is: instantiate the batched chain at `N := B`.** That makes the denotation say what
 the emitter does, and it is what a genuine batch-BN R34 needs anyway. Concretely:
