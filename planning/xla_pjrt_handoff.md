@@ -177,20 +177,40 @@ Both halves of the trust boundary are now closed, and they were closed by *diffe
 - **Consistency** — four `*Sgd_eq_grad` theorems (`rfl`): `den (xSgd …) = θ − lr · den (xGrad …)`.
   Un-fusing the update did not quietly change the gradient.
 
-**What remains for a whole-net Adam render.** The ops are the reusable part; each net still needs
-its train step assembled from them. Two obstacles, in order:
+**First whole-net Adam render: `cifar8` ✅ DONE.** `cifar8AdamTrainStepFaithfulV` in
+`Proofs/Codegen/CnnRender.lean` — same forward/backward as `cifar8TrainStepFaithfulV`, with the 22
+fused SGD ops replaced by 22 un-fused gradients each feeding the three AdamW ops. Chosen because
+cifar8 is 8 convs + 3 denses with **no BN**, so the four new gradient ops are exactly what it needs
+and no BN fork arises.
 
-1. **`cifar8` is the clean next target** — 8 convs + 3 denses, **no BN**, so the four gradient ops
-   above are exactly what it needs and there is no BN fork. The work is signature plumbing:
-   `(x, θ×22, m×22, v×22, 9 scalar `tensor<f32>` args, onehot) → (θ'×22, m'×22, v'×22)`, i.e. 66
-   outputs, against `Proofs/Codegen/CnnRender.lean`'s existing `cifar8` forward/backward.
-2. **R34 needs four more gradient ops** (`convStridedWeightGrad`, `convStridedBiasGrad`,
-   `bnGammaGrad`, `bnBetaGrad` — same trimming recipe) **and, first, an answer to the BN
-   question in §2a**: `resnet34_adam_train_step.mlir` is batch-BN, while the proven R34 chain is
-   per-example. Rendering it from `Proofs/` as-is would change the AdamW trainer's BN semantics
-   the way the `_fwd` fix changed the SGD trainer's. The alternative — a batch-BN R34 in the
-   proven kit — needs `bnBatchF` plus **batched param-grads**, which
-   `planning/` already records as the open EfficientNet blocker.
+- Signature reproduces the packed `trainAdamSched` protocol **exactly** — 71 inputs, 69 outputs,
+  identical names *and* types in order:
+  `(x, θ×22, m×22, v×22, %lr, %bc1, %bc2, onehot) → (θ'×22, m'×22, v'×22, loss, bc1, bc2)`.
+- **Ties the retired hand-written render EXACTLY** — all **158577** returned floats bit-identical,
+  every one non-zero (`.lake/build/bin/cifar8-adam-tie`). Behaviour-preserving.
+- Two lines stay outside the proven surface, marked in the emitted text: the report-only scalar
+  `%loss` (the kit has no rank-0 loss op, and it feeds no parameter) and the `%bc` passthroughs.
+  The mean-loss `1/B` **is** proven — it is `scaleF`, not hand-written. Unlike the SGD render it
+  cannot be folded into `lr`, because `lr` is a runtime scalar here.
+
+Two gotchas worth keeping:
+- **`%sc`/`%sa`/`%sb`/`%sd` are reserved SSA names.** `maxPoolBack`'s `select_and_scatter` emitter
+  hardcodes them as region block arguments, so a top-level constant of the same name is a
+  *redefinition* parse error — and it only surfaces at XLA compile time, not in Lean. Hence
+  `%lzero`. (`tests/TestResnet34TrainPC.lean:84` records the same trap for the stem bias.)
+- **Conv biases had to be renamed `%cb1…%cb8`**: `%b1` is β₁ in the Adam constant block.
+- Emit each gradient **once** and let θ'/m'/v' read it back by SSA name (`.operand gradSSA`).
+  `pretty` has no CSE, so passing the gradient subtree to all three ops would emit three copies of
+  every conv-weight-gradient convolution.
+
+**Still open — R34.** Needs four more gradient ops (`convStridedWeightGrad`,
+`convStridedBiasGrad`, `bnGammaGrad`, `bnBetaGrad` — same trimming recipe) **and, first, an answer
+to the BN question in §2a**: `resnet34_adam_train_step.mlir` is batch-BN, while the proven R34
+chain is per-example. Rendering it from `Proofs/` as-is would change the AdamW trainer's BN
+semantics the way the `_fwd` fix changed the SGD trainer's, and would need the `REPLICAS` knob
+moved out of `tests/` too. The alternative — a batch-BN R34 in the proven kit — needs `bnBatchF`
+plus **batched param-grads**, which `planning/` already records as the open EfficientNet blocker.
+`mobilenetv2`/`efficientnet`/`convnext`/`vit` Adam steps are untouched.
 
 ---
 

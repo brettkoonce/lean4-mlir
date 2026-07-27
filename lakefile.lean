@@ -1364,6 +1364,12 @@ lean_exe «resnet34-fwd-tie» where
   root := `tests.TestResnet34FwdTie
   moreLinkArgs := xlaLink
 
+/-- §2a-ter guard: one AdamW step through two renders of `@cifar8_adam_train_step`, same packed
+    `[θ|m|v|lr|bc1|bc2]`, every returned float compared. -/
+lean_exe «cifar8-adam-tie» where
+  root := `tests.TestCifar8AdamTie
+  moreLinkArgs := xlaLink
+
 -- ch7 C4: small MobileNetV2 (inverted-residual blocks: depthwise conv + relu6 +
 -- per-channel BN) trained on VERIFIED-rendered StableHLO
 -- (tests/TestMobilenetV2{Train,Fwd}.lean); 30 params.

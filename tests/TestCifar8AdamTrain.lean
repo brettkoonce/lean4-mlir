@@ -604,9 +604,13 @@ private def tryCompile (src dst label : String) : IO Unit := do
 def main : IO Unit := do
   IO.FS.createDirAll "verified_mlir"
   IO.FS.createDirAll ".lake/build"
-  let mlir := cifar8AdamTrainStep
-  IO.println s!"rendered cifar8 AdamW train step: {mlir.length} chars, {params.length} params"
-  IO.FS.writeFile "verified_mlir/cifar8_adam_train_step.mlir" mlir
+  -- NOTE: `verified_mlir/cifar8_adam_train_step.mlir` is no longer written here. It renders from
+  -- `LeanMlir/Proofs/Codegen/CnnRender.lean` as pretty(provenGraph), with the optimizer now the
+  -- proven `adamWParamF`/`adamMNextF`/`adamVNextF` rather than `ViTRender.emitAdamV`
+  -- (planning/xla_pjrt_handoff.md §2a-ter). The two renders tie EXACTLY — all 158577 returned
+  -- floats bit-identical, `.lake/build/bin/cifar8-adam-tie`. `cifar8AdamTrainStep` below is kept
+  -- as the reference the tie was measured against; adding a second writer back would re-open the
+  -- silent last-writer-wins clobber §2a is about.
   let bmlir := cifar8BnAdamTrainStep D1 "cifar8_bn_adam_train_step"
   IO.println s!"rendered cifar8_bn AdamW train step: {bmlir.length} chars, {(paramsBn D1).length} params"
   IO.FS.writeFile "verified_mlir/cifar8_bn_adam_train_step.mlir" bmlir
