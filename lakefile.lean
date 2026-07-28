@@ -1401,6 +1401,22 @@ lean_exe «vit-adam-tie» where
   root := `tests.TestViTAdamTie
   moreLinkArgs := ireeLink
 
+/-- EfficientNet-B0 AdamW step-3 gate: one AdamW step through two renders of
+    `@efficientnet_adam_train_step` — the hand-written emitter in `tests/TestEfficientNetTrain.lean`
+    vs `pretty(provenGraph)` — same packed `[θ|m|v|lr,bc1,bc2|bn stats]`, every returned float
+    compared.
+
+    **Stronger than `vit-adam-tie`, because EfficientNet has BatchNorm.** The 98 returned batch
+    statistics (μ/σ² of all 49 BN inputs) depend on the forward alone, so the `bnstat` region pins
+    the whole forward chain BIT-EXACTLY and separates a forward disagreement from a backward one in
+    one run. `%loss` is still gated, but as a cross-check rather than the only forward evidence.
+
+    **ireeLink, not xlaLink**, for `vit-adam-tie`'s reason: `efficientnet-verified-adam` is an IREE
+    binary, and a tie must run on the backend the trainer actually uses. -/
+lean_exe «efficientnet-adam-tie» where
+  root := `tests.TestEfficientNetAdamTie
+  moreLinkArgs := ireeLink
+
 /-- §2d.1 gate on the bs256 re-render: feed it 8 identical copies of one bs32 batch. Batch-BN
     statistics and the mean-CE cotangent are then exactly the bs32 render's, so all 68M returned
     floats must AGREE — an exact known-answer check, not a tolerance argument. -/

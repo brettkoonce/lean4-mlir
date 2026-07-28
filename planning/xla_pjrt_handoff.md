@@ -29,6 +29,10 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `4af61ff` | `bnBatchMeanB`/`bnBatchVarB` — the BN running stats |
 | `2618ba4` | **`ResNet34RenderB.lean`** — the batched R34 AdamW train step |
 | `b856deb` | the numeric tie: **forward bit-exact, backward norm-rel 1e-6** |
+| — | *↓ the AdamW-scorecard thread — ViT, then EfficientNet (§2e), 2026-07-28* |
+| `16fa0f5`, `70b2da3`, `21a09c3` | ViT AdamW: certified render, DP variant, the MIOpen blocker |
+| `1119b4f`, `c96bd36` | the depthwise weight gradients — EfficientNet's last blockers |
+| *(this change)* | **EfficientNet AdamW**: `enetBackAll`, the certified render, the bit-exact tie, the swap |
 
 ---
 
@@ -79,10 +83,14 @@ LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
 # regenerate + audit verified_mlir/  (the canonical entry point; did not exist before §2a)
 scripts/regen_verified_mlir.sh          # or `check` to audit without writing
 
-# the render ties (§2a, §2b). The R34 AdamW one needs a GPU; the rest are CPU-only.
-lake env lean tests/TestBatchedEmitTie.lean            # 13 emit ties + 8 grad-prefix checks
+# the render ties (§2a, §2b, §2e). The AdamW ones need a GPU; TestBatchedEmitTie is CPU-only.
+lake env lean tests/TestBatchedEmitTie.lean            # 13 emit ties + 16 grad-prefix checks
 lake build resnet34-adam-tie && .lake/build/bin/resnet34-adam-tie
 lake build cifar8-adam-tie   && .lake/build/bin/cifar8-adam-tie
+# EfficientNet (§2e) — IREE, not XLA, because efficientnet-verified-adam is an IREE binary
+git show c96bd36:verified_mlir/efficientnet_adam_train_step.mlir > /tmp/retired.mlir
+lake build efficientnet-adam-tie && IREE_BACKEND=rocm .lake/build/bin/efficientnet-adam-tie \
+  /tmp/retired.mlir verified_mlir/efficientnet_adam_train_step.mlir
 
 # the step-time bench (§2b-bis). Takes both paths so it can be run in either compile order,
 # which is the control for the ~2.1 s first-compile-in-process cost.
@@ -152,6 +160,11 @@ preserving.
 - Tie harnesses: `resnet34-fwd-tie [--eval]`, `cifar8-adam-tie`. Both refuse a degenerate
   all-zero/non-finite agreement rather than reporting a green tie.
 
+*The paragraph below is the **snapshot when §2a closed**, kept because it is what the later sections
+are measured against. Current state: the writer audit is at **0** (§2a-quinquies), and the AdamW
+scorecard is **4 of 6** — cifar8 §2a, resnet34 §2b-ter, vit §2a-quinquies-follow-on, efficientnet
+§2e; `convnext` and `mobilenetv2` remain.*
+
 **Still `tests/`-rendered:** `mobilenetv2_fwd{,_eval}`, `efficientnet_fwd{,_eval}`, `convnext_fwd`,
 and every `_adam_train_step` except cifar8 **and resnet34** (§2b-ter). Counting writers across all
 50 artifacts: **21 `Proofs/`-only, 22 `tests/`-only, 4 contested.**
@@ -159,7 +172,7 @@ and every `_adam_train_step` except cifar8 **and resnet34** (§2b-ter). Counting
 The `tests/`-only 22 include four whole-net AdamW renders with **live drivers** —
 `vit-verified-adam`, `convnext-verified-adam`, `efficientnet-verified-adam`,
 `mobilenetv2-verified-adam` all train on hand-written bytes. So the AdamW scorecard is
-**3 of 6 certified** (cifar8 §2a, resnet34 §2b-ter, vit §2a-quinquies-follow-on).
+**2 of 6 certified**.
 
 **The double-writers were 7; they are now 4** — see §2a-quater. The four that remain
 (`convnext`/`efficientnet`/`mobilenetv2`/`resnet34` **SGD** train steps) each own an independent
@@ -294,11 +307,12 @@ Traps that still apply to anyone touching these files:
   something else. Do not let mnv2's noisiness set your expectations for the other three.
 - `scripts/regen_verified_mlir.sh check` is the scoreboard: **0**, and it should stay there.
 
-### Then, separately: the four uncertified whole-net AdamW renders
+### Then, separately: the remaining uncertified whole-net AdamW renders
 
 Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convnext`,
 `efficientnet`, `mobilenetv2` `_adam_train_step` are hand-written with **live drivers**
-(`*-verified-adam`), so the AdamW scorecard is 2 of 6. From what §2b cost at R34 scale:
+(`*-verified-adam`). Two remain — `convnext` and `mobilenetv2` — so the AdamW scorecard is **4 of
+6**. From what §2b cost at R34 scale:
 
 - **ViT is cheapest, but "only the AdamW tail is missing" was WRONG** — corrected 2026-07-28 by
   measurement. The tail is the *done* part: `emitAdamV` is a proven op family and
@@ -489,45 +503,106 @@ Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convn
     Render it from the *same* smoothed chain the cotangent implies.
   - ViT has **no BN**, so unlike R34 there is no `bnstat` region to pin the forward bit-exactly.
     Gate on the gradient (`m`) and the loss, and expect the same limitation the SGD ties have.
-- **EfficientNet is next, and its gradient blockers are now DONE.** It already renders at `N := B`
-  and came back byte-identical through the §2b move. Scoping corrected by measurement (enumerate
-  every `*Sgd` op each renderer uses, check for a `*Grad` peer — EfficientNet 2 missing, mnv2 4,
-  ConvNeXt 5):
-  - it needs **two** ops, not "`depthwise{,Strided}WeightGradB` plus a depthwise bias peer" — the
-    depthwise convs are followed by BN, so the bias is folded and has no update op. Both are
-    **built and gated** (`depthwiseWeightGradB`, `depthwiseStridedWeightGradB`;
-    `TestBatchedEmitTie` is now 13 emit ties + **16** grad-prefix checks).
-  - mnv2 does **not** come free after this: EfficientNet's are the batched `*SgdB`/`*GradB`
-    constructors, mnv2's are the per-example ones, plus mnv2 needs two bias peers. Near-identical
-    emit logic, so fast — not free.
-
-  **The cotangent gap is measured and is the SAME SHAPE as ViT's**, so the ViT machinery transfers
-  with no new ops:
-
-  | | certified SGD render | hand-written AdamW |
-  |---|---|---|
-  | cross-entropy | plain `softmax − onehot` | **label-smoothed** α = 0.1 (`%lsa` 0.1, `%lsaik` 0.01) |
-  | batch mean | folded into lr (0.05) | **explicit** `divide %dyr, dense<32.0>` |
-
-  Use `shiftB`/`divConstB` at `N := 1` exactly as `vitBackAll`'s `smooth` parameter does (they emit
-  at `ty [B,n]` and ignore `N`, and are pointwise so the §2b `N := 1` hazard does not apply).
-
-  **Remaining work, in ViT's order.** (1) Thread an `adam : Bool` through the backward — here that
-  is ~6 functions (`eBackBody`, `eBack`, `eBackNoSkip`, `eBackStrided`, `eBackNoExp`, `seBack`), all
-  of which already take `lrStr`; gate it by `efficientnet_train_step.mlir` coming back
-  byte-identical, as `vit_train_step.mlir` did at every step. (2) Assemble
-  `efficientnetAdamTrainStepFaithful` with `adamOne`/`adamConstsB` copied from `ResNet34RenderB`.
-  (3) Tie and swap.
-
-  **EfficientNet's tie will be STRONGER than ViT's**: it has BN, so the returned batch statistics
-  give a `bnstat` region that pins the forward **bit-exactly** — the gate ViT could not have, and
-  the one that makes `%loss` a cross-check rather than the only forward evidence.
+- **EfficientNet ✅ DONE 2026-07-28 — the AdamW scorecard is 4 of 6.** See §2e below; the tie came
+  back **bit-exact on all 12,166,117 returned floats**.
 - **MobileNetV2** needs those same depthwise gradients, so it comes free-ish after EfficientNet.
 - **ConvNeXt** carries the 4 even-kernel gaps from its §1a tie; check whether they touch the
   backward before scoping.
 
 The R34 playbook that worked: un-fuse the gradients → render AdamW from the proven ops → numeric
 tie against the hand-written render → bench → swap and retire in one change.
+
+### 2e. EfficientNet-B0 AdamW ✅ DONE — scorecard 3 of 6 → **4**, and the tie is BIT-EXACT
+
+Done 2026-07-28, in the R34/ViT order: un-fuse → one shared backward → assemble → tie → swap.
+`verified_mlir/efficientnet_adam_train_step.mlir` is now written by
+`Proofs/Codegen/EfficientNetRender.lean`'s `efficientnetAdamTrainStepFaithful`, and that `#eval` is
+its **only** writer. `efficientnet-verified-adam` needed **no change** — it resolves the path from
+the net slug, so taking over the canonical name *is* the swap.
+
+**Step 1 — `enetBackAll`, one traversal, two tails.** `adam : Bool` threads through the six backward
+functions the plan named (`seBack`, `eBackBody`, `eBack`, `eBackNoSkip`, `eBackStrided`,
+`eBackNoExp`) plus the head and stem tails, which had to come out of
+`efficientnetTrainStepFaithfulV` into a shared `enetBackAll` — the `vitBackAll` shape. The ~20 leaf
+sites dispatch through six small helpers (`bnG`, `bnBt`, `convW1`, `dwW`, `dwWS`, `dnW`, `dnB`).
+**`efficientnet_train_step.mlir` came back byte-identical (md5 `f17aef2c…`)** at every step, which
+is what proves the refactor inert.
+
+*Worth keeping:* `bnBt` covers **every conv bias in the net** as well as BN β, because
+`Σ_{batch,spatial} dy` *is* a conv bias gradient. That reuse is why the scoping note "EfficientNet
+needs no depthwise bias peer" holds — the depthwise convs are followed by BN, so their bias is
+folded, and `bnBetaGradB` serves the rest.
+
+**Step 2 — the render.** Two things differ from the SGD render and both are load-bearing:
+
+| | certified SGD render | AdamW render |
+|---|---|---|
+| cross-entropy | plain `softmax − onehot` | **label-smoothed** α = 0.1, composed `scaleB → addVB → shiftB → divConstB` |
+| batch mean | folded into lr (0.05 ⇒ effective 1.6) | **explicit** `divConstB "32.0"` |
+| BN running stats | none | **98 outputs** — `bnBatchMeanB`/`bnBatchVarB` per BN layer |
+
+No new ops were needed. The BN stat layout is derived from the **same forward traversal that
+computes them** (each `EFwd` carries its own `bns` list) rather than from an independent 49-entry
+table — a misaligned stat slot is silent, since the arities still match and the wrong layer's
+statistics simply flow into the wrong `@efficientnet_fwd_eval` slot.
+
+| | hand-written | certified |
+|---|---|---|
+| entry / arity | `@efficientnet_adam_train_step`, 889 in / 887 out | **same** |
+| arg + return TYPES, in order | | **identical** ✅ (only the 98 unused BN slot names differ) |
+| emitted `stablehlo` ops | 10,421 | 17,545 (1.68×) |
+| `// MALFORMED` | 0 | 0 ✅ |
+
+The 1.68× is exactly R34's ratio, which §2b-bis measured to cost **nothing** after optimisation.
+
+**Step 3 — `tests/TestEfficientNetAdamTie.lean` → `lake build efficientnet-adam-tie`.** One AdamW
+step, all **12,166,117** returned floats:
+
+| check | result |
+|---|---|
+| interface vs the retired render | 889 in / 887 out, arg+return types positionally identical ✅ |
+| A-vs-A determinism floor | **bit-exact 12166117/12166117** ✅ |
+| **forward** (`bnstat` = batch μ/var of all 49 BN inputs) | **BIT-EXACT 42016/42016** ✅ |
+| **`%loss`** | **BIT-EXACT** ✅ |
+| **gradient (`m`)** | **BIT-EXACT**, 0/262 params above 1e-4 ✅ |
+| θ, `v` | bit-exact ✅ |
+
+**Bit-exact, not 1e-6 — and the reason is the backend, so do not generalise it.** This tie links
+**IREE** (`efficientnet-verified-adam` is an IREE binary, same as `vit-adam-tie`), where the
+pipeline is deterministic; R34's ≤2e-6 spread is XLA autotuning picking different convolution
+algorithms across processes (§3). A bit-exact result here does not predict a bit-exact one on XLA.
+
+**Three negative controls, because a tie that reports bit-exact everywhere has to be shown capable
+of failing.** All three were rendered from the same renderer with one thing perturbed:
+
+| control | perturbation | result |
+|---|---|---|
+| A | cotangent α 0.1 → 0.11 | gradient gate **fires** at 2.6e-3, 112/262 params; forward stays bit-exact |
+| B | BN ε 1e-5 → 1e-4 (forward) | forward gate **fires** — `bnstat` bit-exact only **76/42016**, and those 76 are the stem BN, the one layer upstream of any ε effect |
+| C | `%loss` constant 0.9 → 0.8 | loss gate **fires** at 0.1 with every other region bit-exact |
+
+Control A is also a clean re-demonstration of §3's rule: on a wrong gradient **θ reported norm-rel
+0.000000** while `m` moved 2.6e-3. A θ-based gate would have passed it.
+
+#### ⚠ A trap this thread found in the tie harnesses — it produced a false PASS
+
+`mkSession`/`compileVmfb` reuse any existing `.vmfb` **newer than the `.mlir`**. The cache key is
+the *output* path and an mtime, not the source. So running a tie twice with different candidates
+under the same tag silently reuses the **first** candidate's binary and reports the second as a
+perfect match. That is exactly what happened while building control B above: it printed
+`(cached vmfb)` and reproduced control A's numbers to the digit, for a render that had never been
+compiled.
+
+`efficientnet-adam-tie` now **deletes the target `.vmfb` (both the bare and the `_$IREE_BACKEND`
+scoped name) before every compile**. `resnet34-adam-tie`, `vit-adam-tie`, `sgd-render-tie` and
+`cifar8-adam-tie` still have the hazard — it only bites when the same binary is run more than once
+with different arguments, which is precisely what running a negative control looks like. Their
+committed results are not in doubt (each compiled fresh into an empty `.lake/build`), but **check
+for `(cached vmfb)` in the output before believing any re-run.**
+
+**Not done, deliberately: there is no data-parallel EfficientNet render.** R34 (§2b-quater) and ViT
+have one; this does not. An ungated DP render is clobber surface without a claim behind it — ViT's
+is still unexecutable on this box.
 
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
@@ -982,6 +1057,22 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   bit-identical for a single step), which is what turns "the difference is 1e-6" from an assertion
   into a measurement. And report **per region**: in `resnet34-adam-tie`, `bnstat` depends only on
   the forward, so it separates a forward disagreement from a backward one in one run.
+- **A tie harness must DELETE its `.vmfb` before compiling.** `mkSession` → `compileVmfb` reuses any
+  existing output file **newer than the `.mlir`**: the cache key is the output path plus an mtime,
+  never the source. So running the same tie binary twice with different candidates under the same
+  tag silently reuses the FIRST candidate's binary and reports the second as a perfect match —
+  observed while building §2e's negative controls, where it reproduced the previous control's
+  numbers to the digit for a render that had never been compiled. `efficientnet-adam-tie` deletes
+  both the bare and the `_$IREE_BACKEND`-scoped path first; **`resnet34-adam-tie`, `vit-adam-tie`,
+  `sgd-render-tie` and `cifar8-adam-tie` still have the hazard.** It only bites on a re-run with
+  different arguments — which is exactly what running a control looks like. Grep the output for
+  `(cached vmfb)` before believing any re-run.
+- **Prove a green tie can go red.** A tie that reports bit-exact everywhere is indistinguishable
+  from a harness comparing a buffer with itself. §2e ran three controls off the same renderer with
+  one thing perturbed each — cotangent, BN ε, `%loss` constant — and checked that the *matching*
+  gate fired while the others stayed exact. That also localises what each gate is actually sensitive
+  to: the ε control left exactly 76/42016 statistics bit-exact, and those 76 are the stem BN, the
+  one layer upstream of the perturbation.
 
 **Runtime / PJRT**
 
@@ -1048,9 +1139,9 @@ the graph that was proven* — it does not mean the emitter is verified. The `To
 lexing stays audited-but-trusted, which is why every move in §2a and §2b is backed by a numeric tie
 against what it replaced, not by the faithfulness theorem alone.
 
-Three places currently emit text that is **not** `pretty` of an AST node, and all say so in the
+Four places currently emit text that is **not** `pretty` of an AST node, and all say so in the
 emitted output: `cifar8_adam_train_step`'s report-only scalar `%loss` and its `%bc` passthroughs,
-and `resnet34_adam_train_step_b`'s `%loss`. **That last one shipped wrong** — plain CE instead of
+and the `resnet34`/`vit`/`efficientnet` AdamW renders' `%loss`. **The R34 one shipped wrong** — plain CE instead of
 the smoothed CE its own cotangent implies — and only the numeric tie found it, because nothing on a
 gradient path touches it and no theorem covers it. Treat every such carve-out as unverified text
 that needs its own numeric check, not as a harmless annotation.
