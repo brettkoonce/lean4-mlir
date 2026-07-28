@@ -637,6 +637,17 @@ inductive SHlo : Nat → Type where
   | denseWeightGradB {N a c : Nat} (xName : String) (x : Vec (N * a))
                                                           : SHlo (N * c) → SHlo (a * c)
   | denseBiasGradB   {N c : Nat}                          : SHlo (N * c) → SHlo c
+  -- ══ BN running statistics: the batch μ and var a batch-BN train step must hand back so the
+  --    host can EMA them into the eval forward's frozen stats. `bnBatchF` is ONE node and does
+  --    not surface its internal μ/var — a hand-written emitter can reach into its own fragment
+  --    for them (that is what `tests/TestResnet34Train.lean` does with `%{p}smr`/`%{p}vsr`), but
+  --    `pretty`'s intermediates are counter-named and not addressable. So they are their own ops,
+  --    self-contained recomputes from the BN input, like every batched backward here.
+  --    `den` is the SAME `bnMean`/`bnVar` that `bnBatchTensor4` normalises by — via `bnchwFwd`,
+  --    the `[N,C,H,W] → [C, N·H·W]` reindex — so the returned stats are by construction the
+  --    statistics the forward used, not a separately-derived approximation of them. ══
+  | bnBatchMeanB {N oc h w : Nat}                         : SHlo (N * (oc * (h * w))) → SHlo oc
+  | bnBatchVarB  {N oc h w : Nat}                         : SHlo (N * (oc * (h * w))) → SHlo oc
   -- ViT per-token (rowwise) dense W/b SGD — the `denseRowF` partners. SAME `den` as
   -- `denseWeightSgdB`/`denseBiasSgdB` (Σ over the N rows), but a 3D `[B,N,·]` token-matrix EMIT
   -- (the weight grad contracts batch×tokens `[0,1]x[0,1]`; the bias reduces `[0,1]`), vs the enet
@@ -1014,6 +1025,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       Mat.flatten (fun i j => ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
   | _, .denseBiasGradB (N := N) (c := c) e =>
       fun j => ∑ n : Fin N, batchSlice N c (den e) n j
+  | _, .bnBatchMeanB (N := N) (oc := oc) (h := h) (w := w) e =>
+      fun c => bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c)
+  | _, .bnBatchVarB (N := N) (oc := oc) (h := h) (w := w) e =>
+      fun c => bnVar (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c)
   | _, .rowDenseWeightSgd (N := N) (a := a) (c := c) _ _ _ x W lr e =>
       Mat.flatten (fun i j => W i j - lr * ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
   | _, .rowDenseBiasSgd (N := N) (c := c) _ _ b lr e =>
@@ -1238,6 +1253,12 @@ theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
       = batchMap N (rowDenseBackFlat rows a c W) (den e) := rfl
 @[simp] theorem den_batchOp_relu {N n : Nat} (e : SHlo (N * n)) :
     den (.batchOp (N := N) (.relu (n := n)) e) = batchMap N (relu n) (den e) := rfl
+@[simp] theorem den_bnBatchMeanB {N oc h w : Nat} (e : SHlo (N * (oc * (h * w)))) :
+    den (.bnBatchMeanB e)
+      = fun c => bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c) := rfl
+@[simp] theorem den_bnBatchVarB {N oc h w : Nat} (e : SHlo (N * (oc * (h * w)))) :
+    den (.bnBatchVarB e)
+      = fun c => bnVar (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den e)) c) := rfl
 @[simp] theorem den_batchOp_maxPool {N c h w : Nat} (e : SHlo (N * (c*(2*h)*(2*w)))) :
     den (.batchOp (N := N) (.maxPool (c := c) (h := h) (w := w)) e)
       = batchMap N (maxPoolFlat c h w) (den e) := rfl
@@ -2893,6 +2914,10 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "denseWeightGrad" [xN] [N, a, c] (skel e)
   | _, .denseBiasGradB (N := N) (c := c) e =>
       .batched "denseBiasGrad" [] [N, c] (skel e)
+  | _, .bnBatchMeanB (N := N) (oc := oc) (h := h) (w := w) e =>
+      .batched "bnBatchMean" [] [N, oc, h, w] (skel e)
+  | _, .bnBatchVarB (N := N) (oc := oc) (h := h) (w := w) e =>
+      .batched "bnBatchVar" [] [N, oc, h, w] (skel e)
   | _, .rowDenseWeightSgd (N := N) (a := a) (c := c) xN wN lrS _ _ _ e =>
       .batched "rowDenseWeightSgd" [xN, wN, lrS] [N, a, c] (skel e)
   | _, .rowDenseBiasSgd (N := N) (c := c) bN lrS _ _ e =>
@@ -4488,6 +4513,33 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           pure (
             s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
             s!"    {o} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [0] : ({ty [B,c]}, tensor<f32>) -> {ty [c]}\n", o :: st)
+      | "bnBatchMean", [], [_N, oc, h, w] => do
+          -- μ_c = reduce[0,2,3](x) / (B·h·w). Numerically the `%{p}bnmu` the hand-written
+          -- emitter divides out of its own BN fragment's `smr`.
+          let xr ← fresh; let z ← fresh; let nf ← fresh; let smr ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {nf} = stablehlo.constant dense<{B*h*w}.0> : {ty [oc]}\n" ++
+            s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {o} = stablehlo.divide {smr}, {nf} : {ty [oc]}\n", o :: st)
+      | "bnBatchVar", [], [_N, oc, h, w] => do
+          -- var_c = reduce[0,2,3]((x−μ)²) / (B·h·w), μ recomputed inline — the biased (÷n)
+          -- variance `bnVar` uses, matching `%{p}bnvar`.
+          let xr ← fresh; let z ← fresh; let nfb ← fresh; let smr ← fresh; let sm ← fresh
+          let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh; let nf ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {nfb} = stablehlo.constant dense<{B*h*w}.0> : {ty [B,oc,h,w]}\n" ++
+            s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {mu} = stablehlo.divide {sm}, {nfb} : {ty [B,oc,h,w]}\n" ++
+            s!"    {xc} = stablehlo.subtract {xr}, {mu} : {ty [B,oc,h,w]}\n" ++
+            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,oc,h,w]}\n" ++
+            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {nf} = stablehlo.constant dense<{B*h*w}.0> : {ty [oc]}\n" ++
+            s!"    {o} = stablehlo.divide {vsr}, {nf} : {ty [oc]}\n", o :: st)
       | "bnBatch", [gN, bN, es], [_N, oc, h, w] => do
           let xr ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh
           let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh

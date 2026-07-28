@@ -233,9 +233,38 @@ number much later.
    `bnGammaGrad`'s `[2,3]` — the two are different functions, as §2a found at whole-net scale.*
    **Still missing (not R34's, so out of step-4 scope): `depthwise{,Strided}WeightGradB` and a
    depthwise bias peer** — EfficientNet needs those whenever its Adam render is done.
-5. **▶ NEXT: render `resnet34_adam_train_step` batched at `N := B := 32`** and tie it numerically
-   against the committed artifact. It should be **exact** — the emitted text is what already runs.
-   Every op it needs now exists; this step is renderer work, not kit work.
+5. **▶ IN PROGRESS: render `resnet34_adam_train_step` batched at `N := B := 32`.** The kit is now
+   complete for it — the last gap was the **BN running statistics**, closed by `bnBatchMeanB` /
+   `bnBatchVarB`. `bnBatchF` is ONE node and does not surface its internal μ/var; the hand-written
+   emitter reaches into its own fragment for `%{p}smr`/`%{p}vsr`, which `pretty` structurally
+   cannot do (intermediates are counter-named and unaddressable). Their `den` is the same
+   `bnMean`/`bnVar` that `bnBatchTensor4` normalises by, so the stats handed back are the ones the
+   forward used, by construction.
+
+   **Correction to this step's premise.** It said *"it should be exact — the emitted text is what
+   already runs"*. That is **wrong**, and it matters for how the tie is built. Reading the target
+   `verified_mlir/resnet34_adam_train_step.mlir` (5713 `stablehlo` ops, 515 in / 513 out):
+
+   - SSA names are tagged (`%s1b0c`, `%d2bnmu`), not `pretty`'s counter — so a **byte** tie was
+     never possible. Expected.
+   - Less expected: the **op sequence differs too**, so even the SSA-name-independent verb-sequence
+     tie (`tests/TestAdamOpTie.lean`'s `verbs` trick) will not match. The AdamW cotangent has
+     **label smoothing α = 0.1** and an in-graph `%loss` hand-fused directly in `[B,10]`, while the
+     kit's `softmaxRow` descriptor emits `reshape → exp → reduce → broadcast → divide → reshape`.
+     Same function, different graph.
+
+   ⇒ **The tie must be numeric**: compile both, run on identical inputs, compare all 513 outputs —
+   the `cifar8-adam-tie` pattern, and it needs a GPU. Budget for that, not for a text diff.
+
+   Interface to match: **515 in** = `%x` + 146 θ + 146 m + 146 v + 3 scalars (`%lr`, `%bc1`,
+   `%bc2`) + 72 BN-stat passthroughs + `%onehot`; **513 out** = 146 θ' + 146 m' + 146 v' +
+   loss/bc1/bc2 + 72 stats. β₁/β₂/ε/wd are baked constants (0.9 / 0.999 / 1e-8 / 1e-4).
+
+   Open decision before writing the renderer: the label-smoothed cotangent has to be composed from
+   kit ops (`softmaxRow` + `subB` + a scale/add pair), which changes the emitted text — *or* get a
+   fused `labelSmoothCotB` op so the render stays close to what runs. The first is more honest to
+   the kit; the second keeps the diff readable. Either way `%loss` stays report-only and outside
+   the AST, exactly as `cifar8_adam_train_step`'s does (§5).
 
 **`tests/TestBatchedEmitTie.lean`** has two sections: thirteen batched forms tied to their
 per-example peers byte-for-byte, and eight un-fused `*GradB` renders checked to be byte-PREFIXES of
