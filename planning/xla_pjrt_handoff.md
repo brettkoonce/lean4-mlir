@@ -63,6 +63,69 @@ weight-gradient carve-outs** (§5).
 *The MobileNetV2 write-up below (§2f) is kept because its scoping correction — that mnv2 was
 R34-shaped, not EfficientNet-shaped — is the reusable lesson, not because anything is owed.*
 
+---
+
+## 0b. ▶ Per-net leftovers — read this before a training run
+
+Written 2026-07-28 at the end of the AdamW thread. **Nothing here blocks the scorecard**; it is what
+is *not* done on each of the four large nets, ordered by what would bite first.
+
+### ⚠ The two things to do before trusting a long run
+
+1. **MobileNetV2 and ConvNeXt have NO training run on their current artifacts.** Both were swapped
+   today and the evidence for both is **graph-level only** — a bit-exact tie plus a successful
+   `iree-compile`. R34's swap (§2b-ter) included a `LEAN_MLIR_G2_STEPS=40` smoke showing the loss
+   descend; that was not done here. ConvNeXt is the larger unknown of the two, because **both** its
+   artifacts changed (`convnext_train_step` AND `convnext_adam_train_step`), not just the AdamW one.
+   A short smoke on each is cheap and is the gap between "computes the same function" and "trains".
+2. **Only EfficientNet is validated end to end.** It has a 3-epoch XLA-vs-IREE agreement run, a
+   2-GPU descent run, and measured wall clock (80 ep ≈ 1 h 35 m on XLA). If you want a long run to
+   just work, start there.
+
+### Per net
+
+| | AdamW certified | data-parallel | `-xla` trainer | forward artifact | run on current bytes |
+|---|---|---|---|---|---|
+| **EfficientNet** | ✅ | ✅ **best-gated** (exact identity on the real net, 2 GPUs) | ✅ | ⚠ `tests/`-rendered | ✅ 3 epochs + 2-GPU |
+| **MobileNetV2** | ✅ | ⚠ renderer supports `replicas`, **no artifact** | ❌ IREE only | ⚠ `tests/`-rendered | ❌ **none** |
+| **ConvNeXt** | ✅ (all 180) | ❌ **no `replicas` support at all** | ❌ IREE only | ⚠ `tests/`-rendered | ❌ **none** |
+| **ViT** | ✅ | ⛔ render exists, **numerically ungated** | ❌ (and XLA is blocked) | ✅ `Proofs/` | IREE single-GPU |
+
+**MobileNetV2** — no smoke-train (above); no `mobilenetv2_adamdp_train_step.mlir` (the renderer takes
+`replicas` and `mnv2AdamVariant` returns `adamdp`, but no `#eval` writes it, and there is no
+`mobilenetv2-dp-check`); no `-xla` target, which matters because XLA was **4.6×** IREE on
+EfficientNet; `mobilenetv2_fwd{,_eval}` still `tests/`-rendered; and
+`MainMobilenetV2Verified.lean:19` still documents itself as *"mean-loss SGD lr=0.3"* against a
+sum-loss graph (effective 9.6) — a docstring fix, the number is tuned and trains.
+
+**ConvNeXt** — no smoke-train on either changed artifact (above); **no DP path whatsoever**, the
+only large net with none; no `-xla` target; `convnext_fwd` still `tests/`-rendered (there is no
+`_fwd_eval` and should not be — LayerNorm means train == eval); and the scalar-LN γ/β render as
+`tensor<1xf32>` where the committed signature says `tensor<f32>`.
+
+**ViT** — the one with a *hard* blocker. Its DP render is numerically ungated because the graph will
+not execute on this box: `miopenStatusUnknownError` in the patch-embed weight-grad convolution. Both
+obvious hypotheses are **refuted** (the 209×209 shape runs fine standalone in JAX; memory is not it
+— a genuine OOM gives a clean `RESOURCE_EXHAUSTED`). The leading unconfirmed hypothesis is that XLA
+fuses the `stablehlo.pad` into the conv as `rhs_dilation = 16`, a different MIOpen call than either
+probe makes. To settle it: dump post-optimisation HLO via the §4 throwaway-shim recipe (`XLA_FLAGS`
+is inert here) and read the `convolution` descriptor. **No bug filed and none should be** until
+there is a self-contained repro. `vit-dp-check` is written and will pass the moment the graph runs —
+run it on ares. Everything else on ViT is the cleanest of the four: it is the **only** net whose
+forward artifacts are all `Proofs/`-rendered.
+
+### Cross-cutting
+
+* **The `.vmfb` false-PASS hazard is still live in four harnesses** — `resnet34-adam-tie`,
+  `vit-adam-tie`, `cifar8-adam-tie`, `sgd-render-tie` (§4). `efficientnet`/`convnext`/`mobilenetv2`
+  delete first. It only bites on a re-run with different arguments, which is exactly what running a
+  control looks like. Grep for `(cached vmfb)`.
+* **Five forward artifacts are still hand-written** — `mobilenetv2_fwd{,_eval}`,
+  `efficientnet_fwd{,_eval}`, `convnext_fwd`. That is the §2a *provenance* axis, not the
+  double-writer axis (the audit is at one-writer-each). It is one class of work, not five.
+
+---
+
 The four gates every one of these swaps passed:
 
 1. the SGD artifact re-renders **byte-identical** after the `adam : Bool` threading — ⚠ this one
