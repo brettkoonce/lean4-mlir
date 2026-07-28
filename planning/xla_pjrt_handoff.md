@@ -905,12 +905,71 @@ output on a net with no BN), gradient magnitude ≤ 4× the reorder control, and
 control's. Verified to fail on both controls: the cotangent perturbation fires the **spread** gate,
 a `%loss`-constant perturbation fires the **loss** gate.
 
-**Claim ceiling.** ConvNeXt keeps its two documented weight-grad gaps — the stem 4×4/s4 patchify and
-the even-kernel 2×2/s2 downsample, neither of which has a VJP-cert `SHlo` op — and those stay
-hand-written. But the SGD render also hand-wrote the *update* for exactly those params (the `sgd`
-helper); this render replaces it with the proven AdamW triple. So for `psW` and the three `d{i}W`
-the tier moves from *hand-written gradient + hand-written update* to *hand-written gradient +
-certified update*, and the other 176 params are `pretty(AST)` end to end. A strict improvement.
+**Claim ceiling.** ConvNeXt keeps two documented weight-grad gaps — the stem 4×4/s4 patchify
+(`psW`) and the even-kernel 2×2/s2 downsample (`d1W`/`d2W`/`d3W`) — which stay hand-written. But the
+SGD render also hand-wrote the *update* for exactly those params (the `sgd` helper); this render
+replaces it with the proven AdamW triple. So for those four the tier moves from *hand-written
+gradient + hand-written update* to *hand-written gradient + certified update*, and the other 176
+params are `pretty(AST)` end to end. A strict improvement.
+
+> ✅ **BOTH GAPS CLOSED 2026-07-28 — ConvNeXt is now `pretty(AST)` for all 180 params.** The
+> paragraph above is the pre-closure state, kept because the *diagnosis* is the reusable part. What
+> was done, and the gate, is at the end of this note.
+>
+> ⚠ **These two gaps were NOT the same kind of thing, and this section used to say they were**
+> ("neither of which has a VJP-cert `SHlo` op"). Measured:
+>
+> * **`psW` (4×4/s4) is a real CERT gap.** `flatConvStride4` (forward, `StridedConv.lean:243`) and
+>   `flatConvStride4_has_vjp` (the INPUT grad, `:262`) both exist; **`flatConvStride4_weight_grad_has_vjp`
+>   does not.** Its construction is already spelled out by the stride-2 sibling at `:141` —
+>   `vjp_comp` of `conv2d_weight_grad_has_vjp` with `decimateFlat` — and the extra piece stride-4
+>   needs, `decimateOddFlat_has_vjp`, exists at `:226`.
+> * **The downsample is NOT a cert gap.** `flatConvStride2_weight_grad_has_vjp {ic oc h w kH kW}` is
+>   **kernel-generic** (no parity assumption — it is `vjp_comp (conv2d_weight_grad_has_vjp)
+>   decimateFlat`), and so is the `SHlo` op `convStridedWeightGrad`. The downsample's forward AND
+>   input-grad already use certified ops at 2×2 (`ConvNeXtRender.lean:111`/`:116`), so
+>   `flatConvStride2` at an even kernel is already trusted in this very render. **The blocker is the
+>   EMITTER**, which hardcodes symmetric SAME padding `pad = [[pH,pH],[pW,pW]]`, `pH = (kH-1)/2`.
+>   Rendered both cases at input 8×8 → output 4×4:
+>
+>   | kernel | emitted pad | conv result | declared type | |
+>   |---|---|---|---|---|
+>   | 3×3 | `[[1,1],[1,1]]` | 3×3 | `2x3x3x3` | ✅ |
+>   | **2×2** | `[[0,0],[0,0]]` | **1×1** | **`2x3x2x2`** | ❌ **type-invalid MLIR** |
+>
+>   At `kH = 2`, `(2−1)/2 = 0` in Nat division. Even kernels need ASYMMETRIC padding, which that form
+>   cannot express; the hand-written `downWGrad` sidesteps it by omitting the trailing
+>   `high = [0,0,1,1]` pad (cotangent to `2h−1`, not `2h`), after which a VALID conv yields 2×2.
+>   So closing it is EMIT-side only — the `den` side is already covered.
+>
+> **The latent trap this closed:** `convStridedWeightGrad` at an even kernel typechecked in Lean and
+> denoted correctly, so nothing in the proof layer stopped someone using it at `kH = 2`; it failed
+> only at `iree-compile`. Loud rather than silent, but the "emitted is not verified" pattern again.
+>
+> **▶ What was built.**
+> * **`StableHLO.sWGradGeom (k s)`** — the odd/even window geometry, shared by all FOUR strided
+>   weight-grad emitters (`convStridedWeight{Grad,Sgd}`, per-example and batched) so they cannot
+>   drift. Odd is *provably* the old inline formula, and that is measured: **every existing artifact
+>   came back byte-identical** (R34, EfficientNet and mnv2 are all odd-kernel — 1, 3, 7).
+>   ConvNeXt's `d{i}W` then moved onto the existing `.convStridedWeightGrad`. **No new cert.**
+> * **`flatConvStride4_weight_grad_has_vjp`** (`StridedConv.lean`) — the genuinely missing one, plus
+>   a `_correct` peer. Two `vjp_comp` steps over `conv2d_weight_grad_has_vjp` and the two
+>   decimations, mirroring the stride-2 sibling; compiled first try, **3-axiom clean**. It backs the
+>   new **`.convStride4WeightGrad`** `SHlo` op (ctor + `den` + `skel` on the generic `.batched` tag +
+>   `emitTok` + faithfulness theorem — the four-site route), and `psW` is wired to it.
+> * `patchWGrad`, `downWGrad`, `rs4` and the old `sgd` helper are **deleted**, not left dormant
+>   (§2b-quater). Verified byte-inert: the artifact md5 is unchanged across the deletion.
+>
+> **▶ The gate — `convnext-adam-tie`, previously committed hand-written render vs the fully
+> certified one.** BIT-EXACT on all **83,434,629** returned floats: θ, `m`, `v` each
+> 27,811,542/27,811,542, `%loss` 3/3, **spread 0/180** against a reorder control that disturbs 5,
+> and a bit-exact A-vs-A floor. Bit-exact means the new emitters compute *literally the same
+> convolutions* as the hand-written ones. (Run twice — the artifact was rewritten mid-run the first
+> time by an inert dead-code deletion, so it was re-run against the settled bytes rather than
+> reasoned about.)
+>
+> **Claim now:** "ConvNeXt's AdamW render is certified" — the two-weight-gradient-gaps caveat is
+> retired. `%loss` remains report-only and outside the AST, as on every net.
 
 ### 2f. ▶ The last AdamW render — MobileNetV2. Scoped by measurement; ConvNeXt went first ✅
 
@@ -1743,11 +1802,18 @@ the graph that was proven* — it does not mean the emitter is verified. The `To
 lexing stays audited-but-trusted, which is why every move in §2a and §2b is backed by a numeric tie
 against what it replaced, not by the faithfulness theorem alone.
 
-ConvNeXt additionally keeps two **weight-gradient** gaps that no other net has — the stem 4×4/s4
-patchify and the even-kernel 2×2/s2 downsample, neither of which has a VJP-cert `SHlo` op — so its
-render is `pretty(AST)` for 176 of 180 params and *hand-written gradient + certified update* for the
-other four (§2f-bis). Say "ConvNeXt's AdamW render is certified except for two documented
-weight-gradient gaps", not "ConvNeXt is certified".
+**ConvNeXt's two weight-gradient gaps are CLOSED (2026-07-28)** — the stem 4×4/s4 patchify (`psW`)
+and the even-kernel 2×2/s2 downsample (`d1W`/`d2W`/`d3W`). Its render is now `pretty(AST)` for
+**all 180 params**, licensed by a bit-exact `convnext-adam-tie` against the previously committed
+hand-written render (83,434,629 floats, spread 0/180). The old caveat — "certified except for two
+documented weight-gradient gaps" — is retired.
+
+**They were different kinds of gap, and an earlier version of this paragraph said they were the
+same** ("neither of which has a VJP-cert `SHlo` op"), which overstated the second by a lot. `psW`
+needed a genuinely missing cert (`flatConvStride4_weight_grad_has_vjp`, now built and 3-axiom
+clean); the downsample's cert and `SHlo` op both already existed and were kernel-generic, and only
+the emitter's symmetric-SAME-padding formula could not spell an even kernel. §2f-bis has the
+measurement and what was built.
 
 Four places currently emit text that is **not** `pretty` of an AST node, and all say so in the
 emitted output: `cifar8_adam_train_step`'s report-only scalar `%loss` and its `%bc` passthroughs,

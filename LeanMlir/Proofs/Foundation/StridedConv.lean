@@ -278,4 +278,45 @@ noncomputable def flatConvStride4_has_vjp {ic oc h w kH kW : Nat}
   exact vjp_comp _ _ s1_diff (decimateFlat_differentiable oc h w)
     s1_vjp (decimateFlat_has_vjp oc h w)
 
+/-- **Stride-4 conv weight-VJP.** The kernel-side peer of `flatConvStride4_has_vjp`, and the
+    stride-4 analogue of `flatConvStride2_weight_grad_has_vjp`: the same
+    `decimateFlat ∘ decimateOddFlat ∘ conv` composition viewed as a function of the *kernel*
+    (input `x` fixed), so the weight-grad is `conv2d_weight_grad` run on the twice-zero-upsampled
+    cotangent. Two `vjp_comp` steps over the proven stride-1 weight-VJP and the two decimation
+    VJPs — no new mathematics, only the composition the stride-2 sibling already does once.
+
+    This is the cert that ConvNeXt's 4×4/s4 patchify stem (`psW`) was missing: its forward
+    (`flatConvStride4`) and input-VJP (`flatConvStride4_has_vjp`) were already proven, so the stem's
+    weight gradient was the last hand-written emitter in that render. -/
+noncomputable def flatConvStride4_weight_grad_has_vjp {ic oc h w kH kW : Nat}
+    (b : Vec oc) (x : Vec (ic * (2 * (2 * h)) * (2 * (2 * w)))) :
+    HasVJP (fun v : Vec (oc * ic * kH * kW) =>
+      flatConvStride4 (Kernel4.unflatten v) b x) :=
+  let f : Vec (oc * ic * kH * kW) → Vec (oc * (2 * (2 * h)) * (2 * (2 * w))) :=
+    fun v => Tensor3.flatten (conv2d (Kernel4.unflatten v) b (Tensor3.unflatten x))
+  let hf_diff : Differentiable ℝ f :=
+    conv2d_weight_differentiable (h := 2 * (2 * h)) (w := 2 * (2 * w)) b (Tensor3.unflatten x)
+  let hf_vjp : HasVJP f :=
+    conv2d_weight_grad_has_vjp (h := 2 * (2 * h)) (w := 2 * (2 * w)) b (Tensor3.unflatten x)
+  let s1_diff : Differentiable ℝ (decimateOddFlat oc (2 * h) (2 * w) ∘ f) :=
+    (decimateOddFlat_differentiable oc (2 * h) (2 * w)).comp hf_diff
+  let s1_vjp : HasVJP (decimateOddFlat oc (2 * h) (2 * w) ∘ f) :=
+    vjp_comp f (decimateOddFlat oc (2 * h) (2 * w)) hf_diff
+      (decimateOddFlat_differentiable oc (2 * h) (2 * w)) hf_vjp
+      (decimateOddFlat_has_vjp oc (2 * h) (2 * w))
+  show HasVJP (decimateFlat oc h w ∘ (decimateOddFlat oc (2 * h) (2 * w) ∘ f)) from
+  vjp_comp _ (decimateFlat oc h w) s1_diff (decimateFlat_differentiable oc h w)
+    s1_vjp (decimateFlat_has_vjp oc h w)
+
+/-- **Stride-4 conv weight-VJP correctness** (ℝ-headline): backward = the `pdiv`-Jacobian of the
+    stride-4 conv in its kernel. The peer of `flatConvStride2_weight_grad_has_vjp_correct`. -/
+theorem flatConvStride4_weight_grad_has_vjp_correct {ic oc h w kH kW : Nat}
+    (b : Vec oc) (x : Vec (ic * (2 * (2 * h)) * (2 * (2 * w))))
+    (v : Vec (oc * ic * kH * kW)) (dy : Vec (oc * h * w)) (i : Fin (oc * ic * kH * kW)) :
+    (flatConvStride4_weight_grad_has_vjp b x).backward v dy i
+      = ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+            flatConvStride4 (Kernel4.unflatten v') b x) v i j * dy j :=
+  (flatConvStride4_weight_grad_has_vjp b x).correct v dy i
+
 end Proofs

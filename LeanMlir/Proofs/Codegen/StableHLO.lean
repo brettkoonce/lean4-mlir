@@ -712,6 +712,16 @@ inductive SHlo : Nat → Type where
   | convStridedWeightGrad {ic oc h w kH kW : Nat} (xName : String)
       (b : Vec oc) (x : Vec (ic*(2*h)*(2*w))) (W : Kernel4 oc ic kH kW)
                                                      : SHlo (oc*h*w) → SHlo (oc*ic*kH*kW)
+  -- The STRIDE-4 weight gradient — ConvNeXt's 4×4/s4 patchify stem (`psW`), the last
+  -- hand-written weight grad in that render. `flatConvStride4` (forward) and
+  -- `flatConvStride4_has_vjp` (input) were already proven; this op's `den` is the matching
+  -- `flatConvStride4_weight_grad_has_vjp`, which is two `vjp_comp` steps over the stride-1
+  -- weight-VJP and the two decimations. Exercised only at 4×4 (nothing else in the kit is
+  -- stride-4) and gated numerically by `convnext-adam-tie`, not by an emit-prefix case — there is
+  -- no fused `convStride4WeightSgd` peer to be a prefix OF.
+  | convStride4WeightGrad {ic oc h w kH kW : Nat} (xName : String)
+      (b : Vec oc) (x : Vec (ic*(2*(2*h))*(2*(2*w)))) (W : Kernel4 oc ic kH kW)
+                                                     : SHlo (oc*h*w) → SHlo (oc*ic*kH*kW)
   | convStridedBiasGrad   {ic oc h w kH kW : Nat}
       (W : Kernel4 oc ic kH kW) (x : Vec (ic*(2*h)*(2*w))) (b : Vec oc)
                                                      : SHlo (oc*h*w) → SHlo oc
@@ -1032,6 +1042,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .convBiasGrad W x b e => (conv2d_bias_grad_has_vjp W x).backward b (den e)
   | _, .convStridedWeightGrad _ b x W e =>
       (flatConvStride2_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e)
+  | _, .convStride4WeightGrad _ b x W e =>
+      (flatConvStride4_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e)
   | _, .convStridedBiasGrad W x b e => (flatConvStride2_bias_grad_has_vjp W x).backward b (den e)
   | _, .bnGammaGrad (oc := oc) (h := h) (w := w) _ _ ε v e =>
       bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e))
@@ -1885,6 +1897,16 @@ to `adamWParamF` instead of to the SGD tail — the fusion was the blocker, neve
     (e : SHlo (oc*h*w)) (idx : Fin (oc*ic*kH*kW)) :
     den (.convStridedWeightSgd xN wN lrS b x W lr e) idx
       = Kernel4.flatten W idx - lr * den (.convStridedWeightGrad xN b x W e) idx := rfl
+
+/-- **Stride-4 weight-gradient faithfulness** (ConvNeXt's patchify stem). `den` IS the proven
+    `flatConvStride4_weight_grad_has_vjp` backward. There is no fused `convStride4WeightSgd` peer —
+    nothing but ConvNeXt's stem is stride-4, and its AdamW render consumes the un-fused gradient
+    directly — so this, not a `*Sgd_eq_grad` statement, is what pins the op's `den`. -/
+@[simp] theorem convStride4WeightGrad_faithful {ic oc h w kH kW : Nat} (xN : String)
+    (b : Vec oc) (x : Vec (ic*(2*(2*h))*(2*(2*w)))) (W : Kernel4 oc ic kH kW)
+    (e : SHlo (oc*h*w)) :
+    den (.convStride4WeightGrad xN b x W e)
+      = (flatConvStride4_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e) := rfl
 
 @[simp] theorem convStridedBiasSgd_eq_grad {ic oc h w kH kW : Nat} (bN lrS : String)
     (W : Kernel4 oc ic kH kW) (x : Vec (ic*(2*h)*(2*w))) (b : Vec oc) (lr : ℝ)
@@ -3069,6 +3091,9 @@ def skel : {k : Nat} → SHlo k → Raw
       .convBiasGrad ic oc h w kH kW (skel e)
   | _, .convStridedWeightGrad (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
       .convStridedWeightGrad xN ic oc h w kH kW (skel e)
+  -- rides the generic `.batched` tag (the four-site route, §4) — no new Raw/Tok/parse case.
+  | _, .convStride4WeightGrad (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
+      .batched "convStride4WeightGrad" [xN] [ic, oc, h, w, kH, kW] (skel e)
   -- aliases convBiasGrad's Raw: the bias grad is stride-independent, so the text is identical
   | _, .convStridedBiasGrad (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ _ _ e =>
       .convBiasGrad ic oc h w kH kW (skel e)
@@ -3396,6 +3421,32 @@ def toToks : Raw → List Tok
   | .rowBiasF b m n e     => toToks e ++ [.rowBiasF b m n]
   | .batched tag names info e   => toToks e ++ [.batched tag names info]
   | .batched2 tag names info a b => toToks a ++ toToks b ++ [.batched2 tag names info]
+
+/-- **Stride-2 weight-gradient window geometry — odd AND even kernels.** Returns
+    `(up, ext, lo, hi)` for one spatial axis: `up` is the trailing zero row of the
+    decimate-backward upsample, `ext` the resulting cotangent extent, and `[lo, hi]` the
+    correlation's padding.
+
+    The strided weight grad zero-upsamples the cotangent onto the stride-1 grid (the `decimate`
+    backward) and then correlates the saved input against it VALID-style, so the result is `kH×kW`.
+    For an **odd** kernel the upsample carries a trailing zero row (`up = 1`, extent `2s`) and the
+    correlation pads symmetrically by `p = (k−1)/2`. That is the committed spelling for the 1×1, 3×3
+    and 7×7 kernels every other net uses, and it is reproduced here **byte-identically** — the odd
+    branch is exactly the old inline formula.
+
+    For an **even** kernel `p = (k−1)/2` floors to `k/2 − 1`, so a symmetric pad emits a result one
+    short of `k`. Measured at `k = 2`, input 8×8 → output 4×4: it declared `2x3x2x2` against a
+    convolution yielding `1x1` — **type-invalid MLIR**, which is why ConvNeXt's 2×2/s2 downsample
+    weight grad was hand-written (`ConvNeXtRender.downWGrad`) rather than using this op. The fix is
+    the same asymmetry `convStridedBack` already applies on the input-VJP: drop the trailing zero
+    row (extent `2s−1`) and pad `[p, k−2−p]`.
+
+    Output width is `ext_padded − ext + 1 = (2s + lo + hi) − ext + 1`:
+    `k=1 → (1, 2s, 0, 0) ⇒ 1`; `k=3 → (1, 2s, 1, 1) ⇒ 3`; `k=7 → (1, 2s, 3, 3) ⇒ 7`;
+    `k=2 → (0, 2s−1, 0, 0) ⇒ 2`; `k=4 → (0, 2s−1, 1, 1) ⇒ 4`. -/
+private def sWGradGeom (k s : Nat) : Nat × Nat × Nat × Nat :=
+  let p := (k - 1) / 2
+  if k % 2 == 1 then (1, 2 * s, p, p) else (0, 2 * s - 1, p, k - 2 - p)
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -3853,21 +3904,23 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       -- to h×w, zero-upsample dy (interior+high=1 → 2h×2w, the decimate-backward), then the
       -- SAME transpose-trick stride-1 weight-grad conv as `convWeightSgd` on the 2h×2w grid →
       -- [oc,ic,kH,kW], then θ' = θ − lr·dW. Same op text as `TestResnet34Train.convWGradStrided`.
-      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      -- `sWGradGeom` is the odd/even split; odd reproduces the old inline formula byte-for-byte.
+      let (upH, extH, loH, hiH) := sWGradGeom kH h
+      let (upW, extW, loW, hiW) := sWGradGeom kW w
       let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
       let raw ← fresh; let g ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
       pure (
         s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
         s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
         s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-        s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,2*h,2*w]}\n" ++
+        s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, {upH}, {upW}], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,extH,extW]}\n" ++
         s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,2*h,2*w]}) -> {ty [ic,B,2*h,2*w]}\n" ++
-        s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,2*h,2*w]}) -> {ty [oc,B,2*h,2*w]}\n" ++
+        s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,extH,extW]}) -> {ty [oc,B,extH,extW]}\n" ++
         s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
         "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{loH}, {hiH}], [{loW}, {hiW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
         "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
-        s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,2*h,2*w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+        s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,extH,extW]}) -> {ty [ic,oc,kH,kW]}\n" ++
         s!"    {g} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n" ++
         s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [oc,ic,kH,kW]}\n" ++
         s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [oc,ic,kH,kW]}\n" ++
@@ -3980,21 +4033,24 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {o} = stablehlo.reduce({dr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n",
         o :: st)
   | .convStridedWeightGrad xN ic oc h w kH kW, r :: st => do
-      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      -- `sWGradGeom` is the odd/even split; at odd kernels it reproduces the old inline
+      -- `pH = (kH-1)/2` formula byte-for-byte.
+      let (upH, extH, loH, hiH) := sWGradGeom kH h
+      let (upW, extW, loW, hiW) := sWGradGeom kW w
       let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
       let raw ← fresh; let o ← fresh
       pure (
         s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
         s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
         s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-        s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,2*h,2*w]}\n" ++
+        s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, {upH}, {upW}], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,extH,extW]}\n" ++
         s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,2*h,2*w]}) -> {ty [ic,B,2*h,2*w]}\n" ++
-        s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,2*h,2*w]}) -> {ty [oc,B,2*h,2*w]}\n" ++
+        s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,extH,extW]}) -> {ty [oc,B,extH,extW]}\n" ++
         s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
         "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{loH}, {hiH}], [{loW}, {hiW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
         "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
-        s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,2*h,2*w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+        s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,extH,extW]}) -> {ty [ic,oc,kH,kW]}\n" ++
         s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n",
         o :: st)
   | .bnGammaGrad vN epsStr oc h w, r :: st => do
@@ -4762,21 +4818,51 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!" : ({ty [ic,B,h,w]}, {ty [oc,B,h,w]}) -> {ty [ic,oc,kH,kW]}\n" ++
             s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
       | "convStridedWeightGrad", [xN], [_N, ic, oc, h, w, kH, kW] => do
-          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          -- odd/even split via `sWGradGeom`; odd is byte-for-byte the old inline formula.
+          let (upH, extH, loH, hiH) := sWGradGeom kH h
+          let (upW, extW, loW, hiW) := sWGradGeom kW w
           let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
           let raw ← fresh; let o ← fresh
           pure (
             s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
             s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,2*h,2*w]}\n" ++
+            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, {upH}, {upW}], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,extH,extW]}\n" ++
             s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,2*h,2*w]}) -> {ty [ic,B,2*h,2*w]}\n" ++
-            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,2*h,2*w]}) -> {ty [oc,B,2*h,2*w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,extH,extW]}) -> {ty [oc,B,extH,extW]}\n" ++
             s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
             "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{loH}, {hiH}], [{loW}, {hiW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
             "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
-            s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,2*h,2*w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,extH,extW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
+      | "convStride4WeightGrad", [xN], [ic, oc, h, w, kH, kW] => do
+          -- ConvNeXt's 4×4/s4 patchify weight grad. `flatConvStride4` decimates TWICE, so the
+          -- cotangent is zero-upsampled with `interior = 3` (extent `4h−3`, no trailing row) and
+          -- correlated VALID-style against the saved input at `4h`, giving `kH×kW`.
+          -- The window offset: the stride-1 SAME conv is read at position `4i+1`, so a tap `kh`
+          -- lands at `x[4i + 1 + kh − p]` with `p = (kH−1)/2` — hence `lo = p − 1`, and
+          -- `hi = kH − 3 − p` makes the result exactly `kH` wide. At the 4×4 stem `p = 1`, so
+          -- `[[0,0]]` and extent `4h−3` — byte-for-byte `ConvNeXtRender.patchWGrad`'s geometry.
+          -- Nothing else in the kit is stride-4; this is exercised only at 4×4.
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let extH := 4 * h - 3; let extW := 4 * w - 3
+          let loH := pH - 1; let hiH := kH - 3 - pH
+          let loW := pW - 1; let hiW := kW - 3 - pW
+          let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh
+          let dt ← fresh; let raw ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(4*h)*(4*w)]}) -> {ty [B,ic,4*h,4*w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 0, 0], interior = [0, 0, 3, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,extH,extW]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,4*h,4*w]}) -> {ty [ic,B,4*h,4*w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,extH,extW]}) -> {ty [oc,B,extH,extW]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{loH}, {hiH}], [{loW}, {hiW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [ic,B,4*h,4*w]}, {ty [oc,B,extH,extW]}) -> {ty [ic,oc,kH,kW]}\n" ++
             s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
       | "convBiasGrad", [], [_N, oc, h, w] => do
           let dr ← fresh; let z ← fresh; let o ← fresh
@@ -5244,21 +5330,23 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [oc,ic,kH,kW]}\n", o :: st)
       | "convStridedWeightSgd", [xN, wN, lrS], [_N, ic, oc, h, w, kH, kW] => do
           -- stem 3×3 s2 weight: zero-upsample dy to 2h×2w then the transpose-trick wgrad.
-          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          -- odd/even split via `sWGradGeom`; odd is byte-for-byte the old inline formula.
+          let (upH, extH, loH, hiH) := sWGradGeom kH h
+          let (upW, extW, loW, hiW) := sWGradGeom kW w
           let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
           let raw ← fresh; let g ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
           pure (
             s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
             s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,2*h,2*w]}\n" ++
+            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, {upH}, {upW}], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,extH,extW]}\n" ++
             s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,2*h,2*w]}) -> {ty [ic,B,2*h,2*w]}\n" ++
-            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,2*h,2*w]}) -> {ty [oc,B,2*h,2*w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,extH,extW]}) -> {ty [oc,B,extH,extW]}\n" ++
             s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
             "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{loH}, {hiH}], [{loW}, {hiW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
             "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
-            s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,2*h,2*w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,extH,extW]}) -> {ty [ic,oc,kH,kW]}\n" ++
             s!"    {g} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n" ++
             s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [oc,ic,kH,kW]}\n" ++
             s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [oc,ic,kH,kW]}\n" ++

@@ -10,9 +10,19 @@ ops). Adapted from the committed emitter `tests/TestConvNeXtTTrainPC.lean`: its 
 cotangent chain were already `pretty(SHlo)`; here the hand-written param-GRAD strings are replaced by
 the SHlo param-SGD ops, which BUNDLE the gradient + SGD wrap into one op (producing the updated param).
 
-Two documented residuals (the only non-`render(provenGraph)` pieces):
-* the **stem 4×4/s4 weight** (`psW`) stays a hand-written `patchWGrad`+SGD — there is no stride-4
-  weight-grad VJP yet (`flatConvStride4_weight_grad_has_vjp` would be a 4th op + new proof);
+**The two weight-gradient residuals are CLOSED (2026-07-28); all 180 params are now SHlo ops.**
+They were never the same kind of gap:
+* the **stem 4×4/s4 weight** (`psW`) needed a genuinely missing cert. `flatConvStride4` (forward)
+  and `flatConvStride4_has_vjp` (input) already existed; `flatConvStride4_weight_grad_has_vjp` is
+  new — two `vjp_comp` steps over the stride-1 weight-VJP and the two decimations, mirroring the
+  stride-2 sibling. It backs the new `.convStride4WeightGrad` op.
+* the **2×2/s2 downsample** (`d{i}W`) needed NO new cert.
+  `flatConvStride2_weight_grad_has_vjp` is kernel-generic and `.convStridedWeightGrad` already
+  existed; the blocker was purely emit-side — `(kH−1)/2` symmetric SAME padding floors to 0 at
+  `kH = 2` and emitted a 1×1 convolution against a declared 2×2 result, i.e. type-invalid MLIR.
+  `StableHLO.sWGradGeom` splits odd/even (odd byte-for-byte unchanged) and the site is now certified.
+
+One documented residual remains:
 * the **scalar-LN γ/β** params render as `tensor<1xf32>` (since the ops output `SHlo 1`), a func-sig
   change vs the committed `tensor<f32>` (the trainer regenerates against this sig).
 
@@ -38,40 +48,22 @@ private def zV {n : Nat} : Vec n := fun _ => 0
 private def zM {a b : Nat} : Mat a b := fun _ _ => 0
 private def zT {c h w : Nat} : Tensor3 c h w := fun _ _ _ => 0
 
--- ── hand-emitted stem-weight grad (the 4×4/s4 patchify — the one documented gap) + SGD wrap ──
-private def rs4 (o flatN : String) (Cc Hh Ww : Nat) : String :=
-  s!"    {o} = stablehlo.reshape {flatN} : ({ty [cBS, Cc*Hh*Ww]}) -> {ty [cBS,Cc,Hh,Ww]}\n"
+-- ── The two hand-written weight-grad emitters that used to live here (`rs4`, `patchWGrad`
+--    for the 4×4/s4 patchify stem, `downWGrad` for the even-kernel 2×2/s2 downsample) are
+--    DELETED, not left dormant — a retired emitter that can still be called is one more
+--    thing to drift (§2b-quater). Both are now certified `SHlo` ops:
+--      * `psW` → `.convStride4WeightGrad`, `den` = the NEW `flatConvStride4_weight_grad_has_vjp`;
+--      * `d{i}W` → `.convStridedWeightGrad` at 2×2, which needed no new cert at all — only
+--        `StableHLO.sWGradGeom`, the emitter's odd/even padding split.
+--    Recover from `git show 5920848:LeanMlir/Proofs/Codegen/ConvNeXtRender.lean` if needed.
 
-private def patchWGrad (o dyFlat : String) : String :=
-  rs4 s!"{o}xi" "%x" 3 224 224 ++ rs4 s!"{o}di" dyFlat 96 56 56 ++
-  s!"    {o}u = stablehlo.pad {o}di, %sc, low = [0, 0, 0, 0], high = [0, 0, 0, 0], interior = [0, 0, 3, 3] : ({ty [cBS,96,56,56]}, tensor<f32>) -> {ty [cBS,96,221,221]}\n" ++
-  s!"    {o}xt = stablehlo.transpose {o}xi, dims = [1, 0, 2, 3] : ({ty [cBS,3,224,224]}) -> {ty [3,cBS,224,224]}\n" ++
-  s!"    {o}dt = stablehlo.transpose {o}u, dims = [1, 0, 2, 3] : ({ty [cBS,96,221,221]}) -> {ty [96,cBS,221,221]}\n" ++
-  s!"    {o}raw = stablehlo.convolution({o}xt, {o}dt)\n" ++
-  "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-  "      window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
-  "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
-  s!" : ({ty [3,cBS,224,224]}, {ty [96,cBS,221,221]}) -> {ty [3,96,4,4]}\n" ++
-  s!"    {o} = stablehlo.transpose {o}raw, dims = [1, 0, 2, 3] : ({ty [3,96,4,4]}) -> {ty [96,3,4,4]}\n"
-
-private def sgd (nm t : String) : String :=
+/-- The SGD update wrap for ConvNeXt's stem weight, taking the gradient's SSA name explicitly.
+    (Its predecessor `sgd` read a hardcoded `%d{nm}`, which only worked for the hand-written
+    emitters that chose that name; the certified `SHlo` ops emit a fresh `%vN`. Deleted with them.) -/
+private def sgdOf (gradN nm t : String) : String :=
   s!"    %{nm}l = stablehlo.constant dense<{cLR}> : {t}\n" ++
-  s!"    %{nm}s = stablehlo.multiply %d{nm}, %{nm}l : {t}\n" ++
+  s!"    %{nm}s = stablehlo.multiply {gradN}, %{nm}l : {t}\n" ++
   s!"    %{nm}n = stablehlo.subtract %{nm}, %{nm}s : {t}\n"
-
-/-- 2×2/s2 downsample weight-grad (the committed even-kernel `convDownWGrad` formulation). Hand-written
-    — the even-kernel strided weight grad has no matching VJP-cert SHlo op (the 2nd documented gap). -/
-private def downWGrad (o inFlat dyFlat : String) (ci co h2 : Nat) : String :=
-  rs4 s!"{o}xi" inFlat ci (2*h2) (2*h2) ++ rs4 s!"{o}di" dyFlat co h2 h2 ++
-  s!"    {o}u = stablehlo.pad {o}di, %sc, low = [0, 0, 0, 0], high = [0, 0, 0, 0], interior = [0, 0, 1, 1] : ({ty [cBS,co,h2,h2]}, tensor<f32>) -> {ty [cBS,co,2*h2-1,2*h2-1]}\n" ++
-  s!"    {o}xt = stablehlo.transpose {o}xi, dims = [1, 0, 2, 3] : ({ty [cBS,ci,2*h2,2*h2]}) -> {ty [ci,cBS,2*h2,2*h2]}\n" ++
-  s!"    {o}dt = stablehlo.transpose {o}u, dims = [1, 0, 2, 3] : ({ty [cBS,co,2*h2-1,2*h2-1]}) -> {ty [co,cBS,2*h2-1,2*h2-1]}\n" ++
-  s!"    {o}raw = stablehlo.convolution({o}xt, {o}dt)\n" ++
-  "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-  "      window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
-  "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
-  s!" : ({ty [ci,cBS,2*h2,2*h2]}, {ty [co,cBS,2*h2-1,2*h2-1]}) -> {ty [ci,co,2,2]}\n" ++
-  s!"    {o} = stablehlo.transpose {o}raw, dims = [1, 0, 2, 3] : ({ty [ci,co,2,2]}) -> {ty [co,ci,2,2]}\n"
 
 -- ── captured forward names per ConvNeXt block ──
 private structure FNames where
@@ -165,10 +157,16 @@ private def blockParamSgd (adam : Bool) (pfx : String) (b : FNames)
 
 private def downParamSgd (adam : Bool) (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat) :
     StateM Nat (String × List (String × String)) := do
-  -- dXb (channel-sum) + dXng/dXnbt (SHlo ln ops); dXW HAND-WRITTEN (the even-kernel gap).
-  -- That hand-written weight grad stays hand-written in both modes — but note that in `adam` mode
-  -- its SGD wrap is REPLACED by the proven AdamW triple, so the param it feeds moves from
-  -- "hand-written gradient + hand-written update" to "hand-written gradient + certified update".
+  -- dXb (channel-sum) + dXng/dXnbt + dXW: ALL FOUR are now SHlo ops.
+  --
+  -- **`dXW` used to be the hand-written `downWGrad` — the "even-kernel gap".** It was never a
+  -- missing certificate: `flatConvStride2_weight_grad_has_vjp {ic oc h w kH kW}` is kernel-generic
+  -- (no parity assumption — it is `vjp_comp (conv2d_weight_grad_has_vjp) decimateFlat`), and this
+  -- block's forward and input-VJP already used certified ops at 2×2. The blocker was that
+  -- `convStridedWeightGrad`'s EMITTER hardcoded symmetric SAME padding `[[p,p]]` with
+  -- `p = (kH−1)/2`, which floors to 0 at `kH = 2` and emitted a 1×1 convolution against a declared
+  -- 2×2 result — type-invalid MLIR. `StableHLO.sWGradGeom` now splits odd/even (odd byte-for-byte
+  -- unchanged), so this call site is certified like every other.
   let (cB, nB) ← if adam then
       pretty cBS (.convStridedBiasGrad (zK : Kernel4 co ci 2 2) (zV : Vec (ci*(2*h2)*(2*h2))) (zV : Vec co) (.operand dy zV))
     else pretty cBS (.convStridedBiasSgd s!"%{pfx}b" cLR (zK : Kernel4 co ci 2 2) (zV : Vec (ci*(2*h2)*(2*h2))) (zV : Vec co) 0 (.operand dy zV))
@@ -178,11 +176,15 @@ private def downParamSgd (adam : Bool) (pfx downLn downIn cot_n dy : String) (ci
   let (cNb, nNb) ← if adam then
       pretty cBS (.lnBetaGrad (n := ci*(2*h2)*(2*h2)) (.operand cot_n (zV : Vec (ci*(2*h2)*(2*h2)))))
     else pretty cBS (.lnBetaSgd s!"%{pfx}nbt" cLR (zV : Vec 1) 0 (.operand cot_n (zV : Vec (ci*(2*h2)*(2*h2)))))
-  let wgrad := downWGrad s!"%d{pfx}W" downLn dy ci co h2
-  let wcode := if adam then wgrad else wgrad ++ sgd s!"{pfx}W" (ty [co, ci, 2, 2])
+  let (wcode, nW) ← if adam then
+      pretty cBS (.convStridedWeightGrad (ic := ci) (oc := co) (h := h2) (w := h2) (kH := 2) (kW := 2)
+        downLn (zV : Vec co) (zV : Vec (ci*(2*h2)*(2*h2))) (zK : Kernel4 co ci 2 2)
+        (.operand dy (zV : Vec (co*h2*h2))))
+    else pretty cBS (.convStridedWeightSgd (ic := ci) (oc := co) (h := h2) (w := h2) (kH := 2) (kW := 2)
+        downLn s!"%{pfx}W" cLR (zV : Vec co) (zV : Vec (ci*(2*h2)*(2*h2))) (zK : Kernel4 co ci 2 2) 0
+        (.operand dy (zV : Vec (co*h2*h2))))
   pure (cB ++ cNg ++ cNb ++ wcode,
-    [(s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb),
-     (s!"{pfx}W", if adam then s!"%d{pfx}W" else s!"%{pfx}Wn"), (s!"{pfx}b", nB)])
+    [(s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb), (s!"{pfx}W", nW), (s!"{pfx}b", nB)])
 
 -- ── full param signature (committed forward order), name + SHAPE ──
 /-! Shapes are `List Nat` rather than rendered `tensor<…>` strings because the AdamW render needs
@@ -306,12 +308,21 @@ private def convNextBackAll (adam : Bool) (smooth : Option (String × String × 
         let (code, cot_n, cot_x) ← bwdDown s!"d{si-1}" dy (downIn[si-1]!) ci c h2
         let (pcode, pairs) ← downParamSgd adam s!"d{si-1}" (downLn[si-1]!) (downIn[si-1]!) cot_n dy ci c h2
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_x
-    -- stem: psb via convBiasSgd (channel-sum, correct); psW hand-written (the stride-4 gap) + SGD
+    -- stem: psb via convBiasSgd (channel-sum), psW via the certified stride-4 weight grad.
+    -- `psW` WAS the last hand-written weight gradient in this render (`patchWGrad`, "the stride-4
+    -- gap"). It is now `.convStride4WeightGrad`, whose `den` is the proven
+    -- `flatConvStride4_weight_grad_has_vjp` — the cert that was genuinely missing, unlike the
+    -- downsample's (see `downParamSgd`). In `adam` mode the update is the proven AdamW triple; the
+    -- SGD path still wraps it in the hand-written `sgd` helper, so SGD is certified-gradient +
+    -- hand-written-update there.
     let (cPsb, nPsb) ← if adam then
         pretty cBS (.convBiasGrad (zK : Kernel4 96 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec 96) (.operand dy zV))
       else pretty cBS (.convBiasSgd "%psb" cLR (zK : Kernel4 96 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec 96) 0 (.operand dy zV))
-    bwd := bwd ++ patchWGrad "%dpsW" dy ++ (if adam then "" else sgd "psW" (ty [96,3,4,4])) ++ cPsb
-    updMap := updMap ++ [("psW", if adam then "%dpsW" else "%psWn"), ("psb", nPsb)]
+    let (cPsW, nPsW) ← pretty cBS (.convStride4WeightGrad (ic := 3) (oc := 96) (h := 56) (w := 56)
+      (kH := 4) (kW := 4) "%x" (zV : Vec 96) (zV : Vec (3*(2*(2*56))*(2*(2*56))))
+      (zK : Kernel4 96 3 4 4) (.operand dy (zV : Vec (96*56*56))))
+    bwd := bwd ++ cPsW ++ (if adam then "" else sgdOf nPsW "psW" (ty [96,3,4,4])) ++ cPsb
+    updMap := updMap ++ [("psW", if adam then nPsW else "%psWn"), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)
 
 set_option maxRecDepth 8000 in
@@ -377,13 +388,15 @@ set_option maxRecDepth 8000 in
     (180 θ', 180 m', 180 v', `%loss`/`%bc1`/`%bc2`) — positionally identical to the hand-written
     render, so `trainAdamSched`'s packed `[θ|m|v]` protocol is unchanged.
 
-    **What this does and does not certify.** ConvNeXt keeps two documented weight-grad gaps — the
-    stem 4×4/s4 patchify (`patchWGrad`) and the even-kernel 2×2/s2 downsample (`downWGrad`), neither
-    of which has a VJP-cert `SHlo` op — and those stay hand-written here. But the SGD render also
-    hand-wrote the *update* for exactly those two params (the `sgd` helper); this render replaces it
-    with the proven triple. So for `psW` and the three `d{i}W` the tier moves from *hand-written
-    gradient + hand-written update* to *hand-written gradient + certified update*, and for the other
-    176 params it is `pretty(AST)` end to end. That is a strict improvement, not a lateral move. -/
+    **What this certifies.** As of 2026-07-28 **all 180 params are `pretty(AST)` end to end** —
+    the two weight-grad gaps this render used to carry (the stem 4×4/s4 patchify and the even-kernel
+    2×2/s2 downsample) are closed, by a new cert (`flatConvStride4_weight_grad_has_vjp`) and an
+    emit-side odd/even padding split (`StableHLO.sWGradGeom`) respectively. Licensed by
+    `convnext-adam-tie` against the previously committed hand-written render: **bit-exact on all
+    83,434,629 returned floats**, spread 0/180, against a bit-exact A-vs-A floor.
+
+    Still outside the AST here, and unchanged: `%loss` (report-only, no gradient path) and the
+    scalar-LN `tensor<1xf32>` signature note above. -/
 def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     (funcName : String := "convnext_adam_train_step") : String := Id.run do
   let (body, gradMap, nSm) := (convNextBackAll true (some (alphaStr, negAlphaKStr, bStr))).run' 0
