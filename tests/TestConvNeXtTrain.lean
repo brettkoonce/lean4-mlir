@@ -2,19 +2,36 @@ import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.ViTRender
 import LeanMlir.Types
 
-/-! # ch9 N5 — ConvNeXt-T train-step renderer (faithful [3,3,9,3] config) + iree
+/-! # ch9 N5 — ConvNeXt-T **AdamW** train-step renderer (faithful [3,3,9,3] config) + iree
 
-Full single-batch SGD train step for the ConvNeXt-T forward of TestConvNeXtFwd.lean,
-on Imagenette 224². Data-driven over the [3,3,9,3] @ [96,192,384,768] architecture,
-threading spatial dims forward AND reverse. Each fragment is the StableHLO of a
-proven-faithful per-op emitter (GELU `geluF`/`geluBack`, LN = global scalar BN
-`bnF`/`bnBack`, layerScale, depthwise 7×7, 1×1 convs, even-kernel strided patchify/
-downsample with the hand-verified transposed backward, residual, GAP, dense).
+Renders `verified_mlir/convnext_adam_train_step.mlir`, the artifact `convnext-verified-adam` trains
+on, from the ConvNeXt-T forward of TestConvNeXtFwd.lean on Imagenette 224². Data-driven over the
+[3,3,9,3] @ [96,192,384,768] architecture, threading spatial dims forward AND reverse. Each fragment
+is the StableHLO of a proven-faithful per-op emitter (GELU `geluF`/`geluBack`, LN = global scalar BN
+`bnF`/`bnBack`, layerScale, depthwise 7×7, 1×1 convs, even-kernel strided patchify/downsample with
+the hand-verified transposed backward, residual, GAP, dense); the AdamW tail is `ViTRender.emitAdamV`.
 
 Backward threads in reverse: softmax-CE cotangent → dense+GAP → head-LN → [stage4
 blocks → down2 → stage3 blocks → down1 → stage2 blocks → down0 → stage1 blocks] →
 patchify weight-grad. Block backward: addV fan-in → layerScale → project → gelu →
 expand → LN → depthwise → +skip.
+
+**The SGD `@convnext_train_step` render that used to live here is retired (§2a-quinquies).** Its
+only writer is now the `#eval` in `LeanMlir/Proofs/Codegen/ConvNeXtRender.lean`
+(`convNextTrainStepFaithfulV`), which is what `convnext-verified` has been training on all along —
+so the retirement changed no bytes and no behaviour, it removed a last-writer-wins clobber hazard.
+
+Before deleting it the two emitters were **numerically tied**, which is the whole reason to run such
+a tie while both still exist (`lake build sgd-render-tie`, handoff §2a-quinquies):
+
+    sgd-render-tie convnext <Proofs render> 0.1 <tests render> 0.1
+    → 27,811,542 gradient coordinates, max|gA−gB| = 0.0 — BIT-EXACT, all 180 params,
+      against a bit-exact A-vs-A determinism floor.
+
+So the two structurally different emitters (4483 vs 3590 lines) computed the *same* gradient to the
+last bit, and the deletion is provably lossless. Recover it from
+`git show c992a94:tests/TestConvNeXtTrain.lean` if ever wanted. (EfficientNet's peer tie did **not**
+pass — see `tests/TestEfficientNetTrain.lean`.)
 
 Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestConvNeXtTrain.lean
 -/
@@ -24,7 +41,6 @@ open Proofs Proofs.StableHLO
 private def BS : Nat := 32
 private def IMG : Nat := 224
 private def EPS : String := "1.0e-6"
-private def LR : String := "0.1"
 
 -- ════════════ forward fragments ════════════
 
@@ -336,16 +352,11 @@ private def allParams : List (String × String × List Nat) := Id.run do
                ("Wd", "%dWd", [768,10]), ("bd", "%dbd", [10])]
   return ps
 
-private def sgd (θ dθ ty' : String) : String :=
-  s!"    %{θ}l = stablehlo.constant dense<{LR}> : {ty'}\n" ++
-  s!"    %{θ}s = stablehlo.multiply {dθ}, %{θ}l : {ty'}\n" ++
-  s!"    %{θ}n = stablehlo.subtract %{θ}, %{θ}s : {ty'}\n"
-
 -- ════════════ whole train step ════════════
 
-/-- The forward + backward body, SHARED by the SGD (`trainStep`) and AdamW (`trainStepAdamSched`)
-    renders. `cot` is spliced between forward and backward; it must define `%dy` (the cotangent the
-    backward reads) — and `%loss` for the Adam path. -/
+/-- The forward + backward body. `cot` is spliced between forward and backward; it must define
+    `%dy` (the cotangent the backward reads) and `%loss`. Kept parameterised by `cot` because it
+    used to be shared with the SGD render that lived here; `adamCot` is now its only caller. -/
 private def renderBody (cot : String) : String := Id.run do
   let mut fwd := "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n"
     ++ s!"    %xr = stablehlo.reshape %x : ({ty [BS,3*IMG*IMG]}) -> {ty [BS,3,IMG,IMG]}\n"
@@ -399,27 +410,6 @@ private def renderBody (cot : String) : String := Id.run do
     ++ patchifyWGrad "psdW" "%xr" d 3 96 56 56 4
     ++ convBiasGrad "psdb" d 96 56 56
   return fwd ++ cot ++ bwd
-
-/-- SGD loss cotangent dy = (softmax(logits) − onehot) / B. -/
-private def sgdCot : String :=
-  s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n"
-  ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
-  ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
-  ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
-  ++ s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
-  ++ s!"    %bnc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n"
-  ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"
-
-private def trainStep : String :=
-  let body := renderBody sgdCot
-  -- SGD + signature/return from the single param list
-  let upd := String.join (allParams.map (fun (nm, gr, ds) => sgd nm gr (ty ds)))
-  let argSig := String.intercalate ", "
-    (("%x: " ++ ty [BS,3*IMG*IMG]) :: allParams.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}") ++ ["%onehot: " ++ ty [BS,10]])
-  let retTyL := String.intercalate ", " (allParams.map (fun (_, _, ds) => ty ds))
-  let retVals := String.intercalate ", " (allParams.map (fun (nm, _, _) => s!"%{nm}n"))
-  "module @m {\n" ++ s!"  func.func @convnext_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
-    body ++ upd ++ s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
 
 -- ════════════ AdamW scheduled train step (loss-curve parity with the convnext reference) ════════════
 
@@ -503,17 +493,21 @@ private def tryCompile (src dst label : String) : IO Unit := do
 def main : IO Unit := do
   IO.FS.createDirAll "verified_mlir"
   IO.FS.createDirAll ".lake/build"
-  -- Render + write BOTH artifacts first, then compile (so a missing iree-compile can't abort
-  -- before the AdamW artifact is written).
-  let mlir := trainStep
-  IO.println s!"rendered ConvNeXt-T train step (BS={BS}, [3,3,9,3]): {mlir.length} chars, {allParams.length} params"
-  IO.FS.writeFile "verified_mlir/convnext_train_step.mlir" mlir
+  -- Render + write first, then compile (so a missing iree-compile can't abort before the artifact
+  -- is written). This file writes ONE artifact: the AdamW train step.
   let amlir := trainStepAdamSched
-  IO.println s!"rendered ConvNeXt-T AdamW-sched train step: {amlir.length} chars"
+  IO.println s!"rendered ConvNeXt-T AdamW-sched train step: {amlir.length} chars, {allParams.length} params"
   IO.FS.writeFile "verified_mlir/convnext_adam_train_step.mlir" amlir
-  -- SGD smoke (the committed train step; verifies the shared `renderBody`).
-  tryCompile "verified_mlir/convnext_train_step.mlir" ".lake/build/convnext_train_step_v.vmfb" "SGD"
   -- AdamW scheduled train step — the artifact `convnext-verified-adam` trains on.
   tryCompile "verified_mlir/convnext_adam_train_step.mlir" "/tmp/convnext_adam_ts.vmfb" "AdamW"
+  -- SGD smoke on the COMMITTED bytes. This file no longer renders them: their only writer is
+  -- `LeanMlir/Proofs/Codegen/ConvNeXtRender.lean`. Fail loudly if they are missing rather than
+  -- quietly recreating them, which is the behaviour that made this a double-writer.
+  let sgdPath := "verified_mlir/convnext_train_step.mlir"
+  if !(← System.FilePath.pathExists sgdPath) then
+    throw (IO.userError s!"{sgdPath} missing — it is written by \
+LeanMlir/Proofs/Codegen/ConvNeXtRender.lean; run `lake build LeanMlir.Proofs.Codegen.ConvNeXtRender` \
+first")
+  tryCompile sgdPath ".lake/build/convnext_train_step_v.vmfb" "SGD (committed bytes, not re-rendered)"
 
 #eval main

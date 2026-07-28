@@ -190,61 +190,109 @@ The lesson worth keeping: *"currently byte-identical" is not a property that mai
 redundant writer costs nothing until someone edits one of the two — which is precisely how
 `resnet34_train_step` (§2a) and `resnet34_adam_train_step` (§2b-ter) went wrong.
 
-### 2a-quinquies. ▶ NEXT: the last four double-writers
+### 2a-quinquies. The last four double-writers ✅ DONE — the audit is at 0
 
-**Start here in a fresh session.** All four are SGD `_train_step` artifacts whose `tests/` writer
-owns an *independent* emitter. Measured 2026-07-28 — every claim below is a measurement, not a
-reading of the code:
+Done 2026-07-28. `scripts/regen_verified_mlir.sh check` now reports **"OK — 50 artifacts, one writer
+each"**. All four were SGD `_train_step` artifacts whose `tests/` writer owned an *independent*
+emitter:
 
-| artifact | `Proofs/` writer | `tests/` writer (line) | interface (in/out) | forked? |
+| artifact | `Proofs/` writer | retired `tests/` writer | interface (in/out) | tie result |
 |---|---|---|---|---|
-| `convnext_train_step` | `ConvNeXtRender.lean:254` | `TestConvNeXtTrain.lean:510` | **182/180 both** | yes — 3959 vs 3066 ops |
-| `efficientnet_train_step` | `EfficientNetRender.lean:534` | `TestEfficientNetTrain.lean:543` | **264/262 both** | yes — 7022 vs 3811 ops |
-| `mobilenetv2_train_step` | `MobileNetV2Render.lean:577` | `TestMobilenetV2Train.lean:369` | **212/210 vs 84/82** | yes — different ARITY |
-| `resnet34_train_step` | `ResNet34Render.lean:438` | `TestResnet34Train.lean:397` | — | yes — per-example vs batch BN (§2a) |
+| `convnext_train_step` | `ConvNeXtRender.lean:254` | `TestConvNeXtTrain.lean` | **182/180 both** | ✅ **gradient BIT-EXACT** |
+| `efficientnet_train_step` | `EfficientNetRender.lean:534` | `TestEfficientNetTrain.lean` | **264/262 both** | ❌ **FAILED — different function** |
+| `mobilenetv2_train_step` | `MobileNetV2Render.lean:577` | `TestMobilenetV2Train.lean` | **212/210 vs 84/82** | n/a — different ARITY |
+| `resnet34_train_step` | `ResNet34Render.lean:438` | `TestResnet34Train.lean` | — | n/a — per-example vs batch BN (§2a) |
 
-**The single most useful fact: the committed bytes are already the `Proofs/` render for all four.**
-Verified by `lake build` (which runs the `Proofs/` `#eval`s) leaving `verified_mlir/` git-clean. So
-the certified render is what every trainer runs *today*, and **retiring the `tests/` emitters is a
-zero-behaviour-change cleanup** — it removes a clobber hazard, it does not swap anything. That is a
-much smaller job than §2b-ter was, and it is why this is the next thing to do rather than the
-AdamW work below.
+**The committed bytes were already the `Proofs/` render for all four**, so the retirement changed no
+bytes and no behaviour: every artifact's md5 is unchanged, and `verified_mlir/` stays git-clean
+through a full `lake build` and through elaborating all four edited files. It removed clobber
+hazards; it swapped nothing.
 
-Each `tests/` emitter produces a *structurally different* graph (diffs do not collapse when
-`tensor<…>` types and SSA names are stripped — 2605 / 5048 / 5165 residual diff lines), and the
-`Proofs/` renders are consistently **larger** (mnv2 4.5×) for the §2b reason: `pretty` has no CSE
-and the batched ops are self-contained recomputes. §2b-bis measured that to cost **nothing** at run
-time, so size is not an argument for keeping the hand-written ones.
+Each file was reduced to the §2a-quater shape rather than deleted outright — the `iree-compile`
+smoke **stays**, now reading the *committed* bytes instead of re-rendering them, and throwing if
+they are missing. That is the part `lake build` genuinely cannot do (it needs the compiler on PATH),
+and all four smokes were run green with `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm`. Group B
+(`TestConvNeXtTrain`, `TestEfficientNetTrain`) keeps its AdamW render, which is still that
+artifact's sole writer. Side benefit: the mnv2 smoke now compiles the **full** 212/210 render
+instead of the reduced 84/82 one it used to write.
 
-**Two groups, because the `tests/` files have different other jobs:**
+#### The tie harness — `tests/TestSgdRenderTie.lean` → `lake build sgd-render-tie`
 
-*Group A — retire the file outright.* Each writes **only** the contested artifact (checked):
-- `tests/TestResnet34Train.lean` — its AdamW half was already removed in §2b-ter, so the SGD write
-  is all that is left; removing it empties the file.
-- `tests/TestMobilenetV2Train.lean` — the mnv2 AdamW render lives in a *different* file
-  (`TestMobilenetV2TrainPC.lean`), so nothing else is lost.
+```bash
+.lake/build/bin/sgd-render-tie <slug> <pathA> <lrA> <pathB> <lrB>
+```
 
-*Group B — split like §2b-ter, keep the AdamW half.* Each is also the **sole** writer of its
-`_adam_train_step`, which has no certified peer yet:
-- `tests/TestConvNeXtTrain.lean` → also writes `convnext_adam_train_step.mlir`
-- `tests/TestEfficientNetTrain.lean` → also writes `efficientnet_adam_train_step.mlir`
+Adapted from `TestResnet34AdamTie.lean`, with **two changes that matter for an SGD render**:
 
-**Do this before deleting, for convnext and efficientnet only:** their interfaces are positionally
-identical, so an R34-style numeric tie is possible and cheap — copy `tests/TestResnet34AdamTie.lean`,
-which already does interface check → per-region compare → degeneracy guards. It either confirms the
-two emitters agree (and the deletion is provably lossless) or surfaces a §2a-class bug, which is
-exactly what the R34 tie did. **You lose the ability to run that comparison once the emitter is
-gone**, so run it first. For mnv2 and resnet34 no tie is possible or meaningful: mnv2's two renders
-have different arity (they are not two spellings of one function), and resnet34's fork is the
-documented per-example-vs-batch BN semantic split that disagrees at rel 1.13.
+1. **It compares the recovered gradient `g = (θ − θ')/lr`, not `θ'`.** An SGD train step returns
+   `θ' = θ − lr·g` and *nothing else* — no loss, no BN stats, 180 in / 180 out. Comparing `θ'`
+   directly is close to meaningless: `θ'` is dominated by `θ`, the **same input on both sides**, so
+   a wholly wrong gradient still lands within `lr·|g| / |θ|` of a match. Recovering `g` removes the
+   shared term exactly.
+2. **The lr is passed per side and is not defaulted** — because the two emitters do not always agree
+   on it (see below), and a wrong lr silently rescales one side of the comparison.
 
-Traps, all of which cost time this session:
-- **Elaborating any of these files rewrites the artifact.** Always `git diff verified_mlir/` after,
-  and `git checkout --` to restore. This is how `resnet34_train_step` flipped md5 twice today.
+The gate is **per-parameter** norm-relative (`max|gA−gB| / max|gA|` within each parameter): a global
+denominator would hide a whole small-gradient layer under the largest layer's scale, and a
+per-coordinate ratio is meaningless on a near-zero gradient entry (§3). It runs **A against itself
+first** (skippable with `TIE_SKIP_AA=1`) — bit-exact on both nets, so any A-vs-B difference is
+graph-attributable, not backend noise.
+
+**What it does NOT establish, unlike the R34 AdamW tie:** there is no forward-only output here (the
+R34 one gates on `bnstat`, the batch μ/var of all 36 BN inputs), so a forward disagreement and a
+backward one both land in `g` and cannot be separated. The gradient is still a strong forward check
+— a mis-wiring at layer k perturbs every layer ≥ k and the cotangent reaching every layer < k — but
+say "the two emitters compute the same gradient", not "the same forward".
+
+**ConvNeXt: bit-exact.** 27,811,542 gradient coordinates, `max|gA−gB| = 0.0`, 0/180 parameters
+disagreeing, against a bit-exact A-vs-A floor. Two structurally different emitters (4483 vs 3590
+lines) computing the identical gradient to the last bit ⇒ that deletion is *provably* lossless.
+
+#### ▶ EfficientNet's tie FAILED — and it is a real divergence, not a tolerance argument
+
+All 262 parameters disagreed at norm-relative **0.96875 = 31/32 exactly** — the signature of
+`g_tests = g_Proofs / 32`. Root-caused in the emitted text, not inferred from the number:
+
+| | loss cotangent | baked lr | effective lr on the MEAN loss |
+|---|---|---|---|
+| committed (`Proofs/`) | **sum**-CE — `subtract %v1794, %onehot` straight into `dot_general` | 0.05 | 0.05 × 32 = **1.6** |
+| retired (`tests/`) | **mean**-CE — `%bnc = dense<32.0>` then `divide %dyr, %bnc` | 0.1 | **0.1** |
+
+So `tests/TestEfficientNetTrain.lean` was a live instance of the `RenderCifar8Sgd02` hazard
+(§2a-quater): a `tests/` writer that, on elaboration, silently replaced a committed certified
+artifact with **different hyperparameters** — a 16× smaller effective step. Deleting it is strictly
+a fix, and the tie is what made the divergence visible.
+
+**The convention split it exposed — checked, and BENIGN.** The same probe over all committed SGD
+renders shows two of them are off the house convention:
+
+| committed render | cotangent | lr | effective mean-loss lr | |
+|---|---|---|---|---|
+| `resnet34_train_step` | sum-CE | 0.003125 = 0.1/32 | **0.1** | ✅ the "r34 convention" — mean folded into lr |
+| `vit_train_step` | sum-CE | 0.003125 | **0.1** | ✅ same |
+| `convnext_train_step` | mean-CE (÷32) | 0.1 | **0.1** | ✅ same effective value, spelled differently |
+| `efficientnet_train_step` | sum-CE | 0.05 | **1.6** | ⚠️ 32× the apparent lr |
+| `mobilenetv2_train_step` | sum-CE | 0.3 | **9.6** | ⚠️ and `MainMobilenetV2Verified.lean:19` documents itself as *"mean-loss SGD lr=0.3"* |
+
+**These are tuned values, not a 32× slip** — settled from the existing 80-epoch runs, no re-run
+needed. `runs/efficientnet_verified_crop_gpu1.log` goes 40.6% → **87.81%** and
+`runs/mobilenetv2_verified_crop_gpu0.log` 32.9% → **86.89%**, matching README's 87.58 / 87.09. Both
+descend smoothly from epoch 1. (BN makes a net scale-invariant in its weights, so a large *nominal*
+lr is not the same thing as a large step.)
+
+What is left is therefore a **documentation** inconsistency, not a defect:
+`MainMobilenetV2Verified.lean:19` describes itself as *"mean-loss SGD lr=0.3"* when its graph is
+sum-loss at 0.3 — 32× apart in what a reader would compute. Same for EfficientNet, which documents
+no lr at all. Worth one line in each docstring stating the convention and the effective value; not
+worth changing a number that demonstrably trains.
+
+Traps that still apply to anyone touching these files:
+- **Elaborating a `tests/` render file can rewrite an artifact.** Always `git diff verified_mlir/`
+  after. The four SGD writers are gone, but the AdamW writers in Group B remain.
 - **mnv2 fails loudly, the others silently.** A clobbered mnv2 artifact has the wrong *arity*, so
   the driver refuses it; convnext/efficientnet/resnet34 clobbers produce a runnable graph computing
   something else. Do not let mnv2's noisiness set your expectations for the other three.
-- `scripts/regen_verified_mlir.sh check` is the scoreboard: **4 today, 0 when this is done.**
+- `scripts/regen_verified_mlir.sh check` is the scoreboard: **0**, and it should stay there.
 
 ### Then, separately: the four uncertified whole-net AdamW renders
 

@@ -2,9 +2,10 @@ import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.ViTRender
 import LeanMlir.Types
 
-/-! # E6 — EfficientNet-B0 train-step renderer (faithful [t,c,n,s,k] config) + iree
+/-! # E6 — EfficientNet-B0 **AdamW** train-step renderer (faithful [t,c,n,s,k] config) + iree
 
-Full single-batch SGD train step for the EfficientNet-B0 forward of TestEfficientNetFwd.lean
+Renders `verified_mlir/efficientnet_adam_train_step.mlir`, the artifact `efficientnet-verified-adam`
+trains on, from the EfficientNet-B0 forward of TestEfficientNetFwd.lean
 — all-swish, batch norm (E5), the real B0 stage spec (16 MBConv layers, channels
 [16,24,40,80,112,192,320], kernels [3,3,5,3,5,5,3], expand [1,6,6,6,6,6,6] with the MBConv1
 no-expand first stage), on Imagenette 224² (native B0 resolution, stem stride 2, 224→7).
@@ -17,6 +18,35 @@ expand-back (their dx is the depthwise input-grad directly); the B0 [t,c,n,s,k] 
 with repeats. Every fragment is the StableHLO of a proven-faithful per-op emitter (swish,
 sigmoid, batch-norm 3-term backward, depthwise k×k stride-1/2 — the op is kernel-general,
 convs, residual, GAP, dense); SE mirrors `seGate`/`seBlock`/`broadcastFlat` (gradcheck-validated).
+The AdamW tail is `ViTRender.emitAdamV`.
+
+**The SGD `@efficientnet_train_step` render that used to live here is retired (§2a-quinquies).** Its
+only writer is now the `#eval` in `LeanMlir/Proofs/Codegen/EfficientNetRender.lean`
+(`efficientnetTrainStepFaithfulV 32 10 "1.0e-5" "0.05"`), which is what `efficientnet-verified` has
+been training on all along — so the retirement changed no bytes and no behaviour.
+
+**The numeric tie run before deleting it FAILED, and that is the finding, not a problem with the
+deletion.** The two emitters were never two spellings of one function:
+
+| | loss cotangent | baked lr | effective lr on the MEAN loss |
+|---|---|---|---|
+| committed (`Proofs/`) | **sum**-CE — `softmax − onehot` straight into `dot_general` | 0.05 | 0.05 × 32 = **1.6** |
+| retired (here) | **mean**-CE — `divide %dyr, dense<32.0>` | 0.1 | **0.1** |
+
+`sgd-render-tie efficientnet <Proofs> 0.05 <tests> 0.1` reported all 262 parameters disagreeing at
+norm-relative **0.96875 = 31/32** — the exact signature of `g_tests = g_Proofs / 32` — against a
+bit-exact A-vs-A determinism floor. So this file was a live instance of the `RenderCifar8Sgd02`
+hazard (§2a-quater): a `tests/` writer that, on elaboration, silently replaced a committed certified
+artifact with **different hyperparameters** — here a 16× smaller effective step. Deleting it is
+strictly a fix.
+
+On the convention itself: the house style (`resnet34_train_step`, `vit_train_step`) is sum-CE with
+the mean folded into lr, lr = 0.003125 = 0.1/32, and `convnext_train_step` reaches the same
+effective 0.1 by spelling the mean explicitly. This render sits at an effective **1.6** — which is
+a *tuned* value, not a slip: `runs/efficientnet_verified_crop_gpu1.log` descends 40.6% → **87.81%**
+over 80 epochs, matching README's 87.58%. Leave the number alone; it is only the absence of a
+stated convention that misleads. Recover this emitter from
+`git show c992a94:tests/TestEfficientNetTrain.lean`.
 
 Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestEfficientNetTrain.lean
 -/
@@ -26,7 +56,6 @@ open Proofs Proofs.StableHLO
 private def BS : Nat := 32      -- 224² B0 is memory-heavy; small batch
 private def IMG : Nat := 224    -- Imagenette resolution (B0 native, stem stride 2 → 112)
 private def EPS : String := "1.0e-5"
-private def LR : String := "0.1"
 
 -- ════════════ forward fragments ════════════
 
@@ -309,11 +338,6 @@ private def mbconvBack (p dy xin : String) (ic mid oc Hin s r k : Nat) : String 
 
 -- ════════════ EfficientNet-B0 config + data-driven params ════════════
 
-private def sgd (θ dθ ty' : String) : String :=
-  s!"    %{θ}l = stablehlo.constant dense<{LR}> : {ty'}\n" ++
-  s!"    %{θ}s = stablehlo.multiply {dθ}, %{θ}l : {ty'}\n" ++
-  s!"    %{θ}n = stablehlo.subtract %{θ}, %{θ}s : {ty'}\n"
-
 private def stages : List (Nat × Nat × Nat × Nat × Nat) :=
   [(1, 16,  1, 1, 3), (6, 24,  2, 2, 3), (6, 40,  2, 2, 5), (6, 80,  3, 2, 3),
    (6, 112, 3, 1, 5), (6, 192, 4, 2, 5), (6, 320, 1, 1, 3)]
@@ -353,9 +377,9 @@ private def allParams : List (String × String × List Nat) :=
       ("hg", "%dhndg", [1280]), ("hbt", "%dhndb", [1280])]
   ++ [("Wd", "%dWd", [1280,10]), ("bd", "%dbd", [10])]
 
-/-- The forward + backward body, SHARED by the SGD (`trainStep`) and AdamW (`trainStepAdamSched`)
-    renders. `cot` is spliced between forward and backward; it must define `%dy` (the cotangent the
-    backward reads) — and `%loss` for the Adam path. -/
+/-- The forward + backward body. `cot` is spliced between forward and backward; it must define
+    `%dy` (the cotangent the backward reads) and `%loss`. Kept parameterised by `cot` because it
+    used to be shared with the SGD render that lived here; `adamCot` is now its only caller. -/
 private def renderBody (cot : String) : String := Id.run do
   -- ── forward: stem (3→32, stride 1) → B0 blocks → head (320→1280) → GAP → dense ──
   let mut fwd := "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n"
@@ -411,27 +435,6 @@ private def renderBody (cot : String) : String := Id.run do
     ++ convBiasGrad "dsb" "%dstn" 32 sH sH
     ++ conv3WGradStrided "dsW" "%xr" "%dstn" 3 32 sH sH
   return fwd ++ cot ++ bwd
-
-/-- SGD loss cotangent dy = (softmax(logits) − onehot) / B. -/
-private def sgdCot : String :=
-  s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n"
-  ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
-  ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
-  ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
-  ++ s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
-  ++ s!"    %bnc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n"
-  ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"
-
-private def trainStep : String :=
-  let body := renderBody sgdCot
-  -- ── SGD + signature/return, all from the single param list ──
-  let upd := String.join (allParams.map (fun (nm, gr, ds) => sgd nm gr (ty ds)))
-  let argSig := String.intercalate ", "
-    (("%x: " ++ ty [BS,3*IMG*IMG]) :: allParams.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}") ++ ["%onehot: " ++ ty [BS,10]])
-  let retTyL := String.intercalate ", " (allParams.map (fun (_, _, ds) => ty ds))
-  let retVals := String.intercalate ", " (allParams.map (fun (nm, _, _) => s!"%{nm}n"))
-  "module @m {\n" ++ s!"  func.func @efficientnet_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
-    body ++ upd ++ s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
 
 -- ════════════ AdamW scheduled train step (loss-curve parity with efficientnet-train) ════════════
 
@@ -536,18 +539,24 @@ private def tryCompile (src dst label : String) : IO Unit := do
 def main : IO Unit := do
   IO.FS.createDirAll "verified_mlir"
   IO.FS.createDirAll ".lake/build"
-  -- Render + write BOTH artifacts first, then compile (so a missing iree-compile can't abort
-  -- before the AdamW artifact is written).
-  let mlir := trainStep
-  IO.println s!"rendered EfficientNet-B0 train step (BS={BS}, {blocks.length} MBConv layers): {mlir.length} chars, {allParams.length} params"
-  IO.FS.writeFile "verified_mlir/efficientnet_train_step.mlir" mlir
+  -- Render + write first, then compile (so a missing iree-compile can't abort before the artifact
+  -- is written). This file writes ONE artifact: the AdamW train step.
   let amlir := trainStepAdamSched
-  IO.println s!"rendered EfficientNet-B0 AdamW-sched train step: {amlir.length} chars"
+  IO.println s!"rendered EfficientNet-B0 AdamW-sched train step (BS={BS}, {blocks.length} MBConv \
+layers): {amlir.length} chars, {allParams.length} params"
   IO.println s!"  bnChannels ({bnChannelsList.length} layers): {bnChannelsList}"
   IO.FS.writeFile "verified_mlir/efficientnet_adam_train_step.mlir" amlir
-  -- SGD smoke (the committed train step; verifies the shared `renderBody`).
-  tryCompile "verified_mlir/efficientnet_train_step.mlir" ".lake/build/efficientnet_train_step_v.vmfb" "SGD"
   -- AdamW scheduled train step — the artifact `efficientnet-verified-adam` trains on.
   tryCompile "verified_mlir/efficientnet_adam_train_step.mlir" "/tmp/efficientnet_adam_ts.vmfb" "AdamW"
+  -- SGD smoke on the COMMITTED bytes. This file no longer renders them: their only writer is
+  -- `LeanMlir/Proofs/Codegen/EfficientNetRender.lean`. Fail loudly if they are missing rather than
+  -- quietly recreating them — recreating them is what made this a double-writer, and the two
+  -- renders were NOT the same function (see the header: sum-CE lr 0.05 vs mean-CE lr 0.1).
+  let sgdPath := "verified_mlir/efficientnet_train_step.mlir"
+  if !(← System.FilePath.pathExists sgdPath) then
+    throw (IO.userError s!"{sgdPath} missing — it is written by \
+LeanMlir/Proofs/Codegen/EfficientNetRender.lean; run \
+`lake build LeanMlir.Proofs.Codegen.EfficientNetRender` first")
+  tryCompile sgdPath ".lake/build/efficientnet_train_step_v.vmfb" "SGD (committed bytes, not re-rendered)"
 
 #eval main

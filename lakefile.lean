@@ -1379,6 +1379,15 @@ lean_exe «resnet34-adam-tie» where
   root := `tests.TestResnet34AdamTie
   moreLinkArgs := xlaLink
 
+/-- §2a-quinquies guard: one SGD step through two renders of `@<slug>_train_step` — the `tests/`
+    emitter vs `pretty(provenGraph)` — on one shared θ, comparing the recovered GRADIENT
+    `(θ − θ')/lr` rather than θ' (θ' is dominated by the shared θ, so it hides a wrong gradient).
+    The lr is per side because the two emitters do not always agree on it. Run BEFORE deleting a
+    `tests/` emitter: afterwards the comparison no longer exists. -/
+lean_exe «sgd-render-tie» where
+  root := `tests.TestSgdRenderTie
+  moreLinkArgs := xlaLink
+
 /-- §2b-quater gate: the collective's SEMANTICS, checked where they can be. cifar8 has no BN, so
     2×128 + all_reduce must equal 1×256 to fp rounding. Needs two GPUs and the XLA backend. -/
 lean_exe «cifar8-dp-check» where
