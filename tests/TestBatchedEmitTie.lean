@@ -70,6 +70,15 @@ private def cases : List (String × String × String) :=
   , ("selectPos",
      render (pretty BS (.selectPos "%s" zv (.operand "%x" zv))),
      render (pretty BS (.selectPosB "%s" zvb (.operand "%x" zvb))))
+  -- ── MobileNetV2's activation (§2f). `relu6` is a descriptor (pointwise, carries nothing);
+  --    `selectMid` is NOT (the two-sided mask reads the saved per-example pre-activation), so it
+  --    gets its own `selectMidB` holding the whole-batch `x`. Same split as relu/selectPos. ──
+  , ("relu6",
+     render (pretty BS (.relu6F (.operand "%x" zv))),
+     render (pretty BS (.batchOp (N := BS) (.relu6 (n := n)) (.operand "%x" zvb))))
+  , ("selectMid",
+     render (pretty BS (.selectMid "%s" zv (.operand "%x" zv))),
+     render (pretty BS (.selectMidB "%s" zvb (.operand "%x" zvb))))
   , ("addV",
      render (pretty BS (.addV (.operand "%x" zv) (.operand "%y" zv))),
      render (pretty BS (.addVB (.operand "%x" zvb) (.operand "%y" zvb))))
@@ -244,6 +253,32 @@ private def gradPrefixCases : List (String × String × String) :=
      render (pretty BS (.depthwiseBiasSgd (c := oc) (h := ch) (w := ch) (kH := kk) (kW := kk)
                           "%b" "0.05" (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
                           (fun _ _ _ => 0 : Tensor3 oc ch ch) zB 0
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))))
+  -- ── the MobileNetV2 two (§2f): the BATCHED depthwise bias grads. There is no fused
+  --    `depthwise{,Strided}BiasSgdB` peer to check against — `MobileNetV2RenderB` is AdamW-only,
+  --    like `ResNet34RenderB` — so both are checked against the PER-EXAMPLE fused op, which is
+  --    sound precisely because the bias grad's emit is batch-, stride- and kernel-independent
+  --    (`Σ_{batch,spatial} dy`) and all three constructors alias ONE emitter. If that aliasing ever
+  --    stops holding, these two cases go red. ──
+  , ("depthwiseBiasGradB",
+     render (pretty BS (.depthwiseBiasGradB (N := BS) (c := oc) (h := ch) (w := ch)
+                          (kH := kk) (kW := kk)
+                          (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
+                          (fun _ => 0 : Vec (BS*(oc*ch*ch))) zB
+                          (.operand "%x" (fun _ => 0 : Vec (BS*(oc*ch*ch)))))),
+     render (pretty BS (.depthwiseBiasSgd (c := oc) (h := ch) (w := ch) (kH := kk) (kW := kk)
+                          "%b" "0.05" (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
+                          (fun _ _ _ => 0 : Tensor3 oc ch ch) zB 0
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))))
+  , ("depthwiseStridedBiasGradB",
+     render (pretty BS (.depthwiseStridedBiasGradB (N := BS) (c := oc) (h := ch) (w := ch)
+                          (kH := kk) (kW := kk)
+                          (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
+                          (fun _ => 0 : Vec (BS*(oc*(2*ch)*(2*ch)))) zB
+                          (.operand "%x" (fun _ => 0 : Vec (BS*(oc*ch*ch)))))),
+     render (pretty BS (.depthwiseStridedBiasSgd (c := oc) (h := ch) (w := ch) (kH := kk) (kW := kk)
+                          "%b" "0.05" (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
+                          (fun _ => 0 : Vec (oc*(2*ch)*(2*ch))) zB 0
                           (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))))
   , ("lnGammaGrad",
      render (pretty BS (.lnGammaGrad (n := oc*ch*ch) "%a" "1.0e-6" 0

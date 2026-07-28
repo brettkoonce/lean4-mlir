@@ -134,6 +134,10 @@ inductive BatchableOp : Nat → Nat → Type where
   -- ReLU forward, the ResNet-34 peer of `swish`. Same story: pointwise, carries no
   -- data, so `batchMap N` of it is itself and `N` is denotationally free.
   | relu {n : Nat}                                         : BatchableOp n n
+  -- ReLU6 forward, MobileNetV2's activation (§2f). Same story a third time: a pointwise clamp
+  -- to [0,6] carrying no data, so `batchMap N` of it is itself and `N` is denotationally free.
+  -- Its BACKWARD is `selectMidB`, deliberately NOT a descriptor — see the note below.
+  | relu6 {n : Nat}                                        : BatchableOp n n
   -- 2×2 max-pool FORWARD (ResNet-34's stem). A descriptor: the forward carries no saved
   -- value, so `batchMap N maxPoolFlat` is exactly per-example pooling across the batch.
   -- Its BACKWARD is `maxPoolBackB`, not a descriptor — it routes `dy` to the saved input's
@@ -413,6 +417,12 @@ inductive SHlo : Nat → Type where
       (W : Kernel4 oc ic kH kW) (x : Vec (N * (ic * (2*h) * (2*w)))) (b : Vec oc) (lr : ℝ)
                                                           : SHlo (N * (oc * h * w)) → SHlo oc
   | selectPosB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
+  -- MobileNetV2's ReLU6 backward mask (§2f), the batched peer of `selectMid` and the exact
+  -- `selectPosB` shape one kink up: `if 0 < x i ∧ x i < 6 then dy i else 0` reads the saved
+  -- pre-activation, which is PER-EXAMPLE data — so this is an own constructor holding the
+  -- WHOLE-BATCH `x`, not a `BatchableOp` descriptor beside `relu6`. A descriptor here would
+  -- denote "every example shares example 0's mask", which is not what the emit computes.
+  | selectMidB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   | swishBackB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   -- Chapter 8 (ConvNeXt): GELU forward (tanh approximation,
@@ -733,6 +743,18 @@ inductive SHlo : Nat → Type where
   | depthwiseStridedWeightGradB {N c h w kH kW : Nat} (xName : String)
       (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
                                                      : SHlo (N * (c * h * w)) → SHlo (c * kH * kW)
+  -- The depthwise BIAS gradients (§2f) — MobileNetV2's, not EfficientNet's: enet's depthwise convs
+  -- are followed by BN so the bias is folded, mnv2's are not. Like every bias grad in the kit the
+  -- emitted text is `Σ_{batch,spatial} dy` and therefore STRIDE-INDEPENDENT, so both `skel` to the
+  -- SAME Raw as ConvNeXt's per-example `depthwiseBiasGrad` — character-identical to `convBiasGrad`
+  -- and `bnBetaGrad` too. NO new emitter, no new Raw/Tok/parse case; only `den` differs, exactly as
+  -- `convStridedBiasGradB` aliases `convBiasGradB`.
+  | depthwiseBiasGradB {N c h w kH kW : Nat}
+      (W : DepthwiseKernel c kH kW) (x : Vec (N * (c * h * w))) (b : Vec c)
+                                                     : SHlo (N * (c * h * w)) → SHlo c
+  | depthwiseStridedBiasGradB {N c h w kH kW : Nat}
+      (W : DepthwiseKernel c kH kW) (x : Vec (N * (c * (2 * h) * (2 * w)))) (b : Vec c)
+                                                     : SHlo (N * (c * h * w)) → SHlo c
   -- ══ The CONVNEXT family, un-fused the same way — the last five between ConvNeXt-T and a
   --    certified AdamW render (§2f). Three of them are plain reductions; the two depthwise ones
   --    are the PER-EXAMPLE peers of the `*GradB` pair above (ConvNeXt renders at the per-example
@@ -962,6 +984,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .seBlock (h := h) (w := w) _ _ _ _ W₁ b₁ W₂ b₂ => seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂
   | _, _, .swish (n := n) => swish n
   | _, _, .relu (n := n) => relu n
+  | _, _, .relu6 (n := n) => relu6 n
   | _, _, .maxPool (c := c) (h := h) (w := w) => maxPoolFlat c h w
   | _, _, .softmaxRow (m := m) (n := n) => rowSoftmaxFlat m n
   | _, _, .denseRowBack (rows := rows) (a := a) (c := c) _ W => rowDenseBackFlat rows a c W
@@ -1130,6 +1153,16 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun idx => ∑ n : Fin N,
         (depthwiseStride2_weight_grad_has_vjp b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
           (Tensor3.flatten W) (batchSlice N (c*h*w) (den e) n) idx
+  -- The depthwise bias grads: the shared-parameter batch sum every `*GradB` takes, `Σ_n dβ_n`.
+  -- Same shape as `convBiasGradB`/`convStridedBiasGradB` one row up, with the depthwise VJP certs.
+  | _, .depthwiseBiasGradB (N := N) (c := c) (h := h) (w := w) W x b e =>
+      fun o => ∑ n : Fin N,
+        (depthwise_bias_grad_has_vjp W (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward b
+          (batchSlice N (c*h*w) (den e) n) o
+  | _, .depthwiseStridedBiasGradB (N := N) (c := c) (h := h) (w := w) W x b e =>
+      fun o => ∑ n : Fin N,
+        (depthwiseStride2_bias_grad_has_vjp W (batchSlice N (c*(2*h)*(2*w)) x n)).backward b
+          (batchSlice N (c*h*w) (den e) n) o
   | _, .reluF e        => fun i => max (den e i) 0
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
   | _, .relu6F e       => fun i => min (max (den e i) 0) 6
@@ -1185,6 +1218,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         (flatConvStride2_bias_grad_has_vjp W (batchSlice N (ic*(2*h)*(2*w)) x n)).backward b
           (batchSlice N (oc*h*w) (den e) n) o
   | _, .selectPosB _ x e => fun i => if x i > 0 then den e i else 0
+  | _, .selectMidB _ x e => fun i => if 0 < x i ∧ x i < 6 then den e i else 0
   | _, .swishBackB (N := N) (n := n) _ x e => (swish_has_vjp (N*n)).backward x (den e)
   | _, .sigmoidBackB (N := N) (n := n) _ x e => (sigmoid_has_vjp (N*n)).backward x (den e)
   | _, .geluF (n := n) e => gelu n (den e)
@@ -1354,6 +1388,8 @@ theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
     den (.maxPoolBackB xN x e) = batchMapAux N (maxPoolBackFlat c h w) x (den e) := rfl
 @[simp] theorem den_selectPosB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.selectPosB xN x e) = fun i => if x i > 0 then den e i else 0 := rfl
+@[simp] theorem den_selectMidB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
+    den (.selectMidB xN x e) = fun i => if 0 < x i ∧ x i < 6 then den e i else 0 := rfl
 @[simp] theorem den_swishBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.swishBackB xN x e) = (swish_has_vjp (N*n)).backward x (den e) := rfl
 @[simp] theorem den_sigmoidBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
@@ -1533,6 +1569,24 @@ theorem selectPosB_faithful {N n : Nat} (s : String) (x : Vec (N*n)) (hx : ∀ i
 theorem selectMid_faithful {k : Nat} (s : String) (x : Vec k)
     (h_smooth : ∀ i, x i ≠ 0 ∧ x i ≠ 6) (e : SHlo k) :
     den (.selectMid s x e) = (relu6_has_vjp_at k x h_smooth).backward (den e) := rfl
+
+/-- **Batched ReLU6 forward faithfulness (§2f).** The `relu6` descriptor at the batched index
+    denotes exactly `relu6F`'s per-example clamp applied across the batch — the MobileNetV2 peer
+    of `den_batchOp_relu_eq_reluF`. This is the statement that keeps the emit width off the SHlo
+    index: at `N := B` the descriptor emits `tensor<B×n>`, not `tensor<B×(N·n)>`. -/
+theorem den_batchOp_relu6_eq_relu6F {N n : Nat} (e : SHlo (N * n)) :
+    den (.batchOp (N := N) (.relu6 (n := n)) e) = den (.relu6F e) := by
+  rw [relu6F_faithful]
+  exact batchMap_pointwise (fun y => min (max y 0) 6) (den e)
+
+/-- **Batched ReLU6 backward faithfulness.** `selectMidB` denotes the same proven
+    `relu6_has_vjp_at` backward as `selectMid`, now over the whole batch — which is what the
+    emitted `xName` holds. FALSE had `selectMid` been made a `BatchableOp` descriptor beside
+    `relu6` (that `den` would apply one example's two-sided mask to all `N`). Note the smoothness
+    hypothesis is TWO-sided (`x ≠ 0 ∧ x ≠ 6`), unlike `selectPosB_faithful`'s `x ≠ 0`. -/
+theorem selectMidB_faithful {N n : Nat} (s : String) (x : Vec (N*n))
+    (h_smooth : ∀ i, x i ≠ 0 ∧ x i ≠ 6) (e : SHlo (N*n)) :
+    den (.selectMidB s x e) = (relu6_has_vjp_at (N*n) x h_smooth).backward (den e) := rfl
 
 /-- A dense forward layer graph: `broadcast(bias) + dot_general(·, W)`. -/
 def denseF {a c : Nat} (wN bN : String) (W : Mat a c) (bias : Vec c) (e : SHlo a) : SHlo c :=
@@ -1745,6 +1799,31 @@ quietly change the gradient, and anything already proven about a `*Sgd` output t
     (e : SHlo (N*(c*h*w))) (idx : Fin (c*kH*kW)) :
     den (.depthwiseStridedWeightSgdB xN wN lrS b x W lr e) idx
       = Tensor3.flatten W idx - lr * den (.depthwiseStridedWeightGradB xN b x W e) idx := rfl
+
+/-! ### The depthwise BIAS gradients (§2f, MobileNetV2)
+
+`MobileNetV2RenderB` is AdamW-only, like `ResNet34RenderB` — mnv2's SGD render stays at the
+per-example index, so there is deliberately no fused `depthwise{,Strided}BiasSgdB` peer and hence
+no `*SgdB_eq_grad` statement to make. What pins these two ops instead is that `den` IS the
+shared-parameter batch sum of the proven per-example depthwise bias VJP, which is what the emitted
+`reduce … [0, 2, 3]` computes. The emit side is covered separately by the byte-PREFIX case in
+`tests/TestBatchedEmitTie.lean` against the per-example fused `depthwiseBiasSgd`. -/
+
+@[simp] theorem depthwiseBiasGradB_faithful {N c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (x : Vec (N*(c*h*w))) (b : Vec c)
+    (e : SHlo (N*(c*h*w))) (o : Fin c) :
+    den (.depthwiseBiasGradB W x b e) o
+      = ∑ n : Fin N,
+          (depthwise_bias_grad_has_vjp W (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward b
+            (batchSlice N (c*h*w) (den e) n) o := rfl
+
+@[simp] theorem depthwiseStridedBiasGradB_faithful {N c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (x : Vec (N*(c*(2*h)*(2*w)))) (b : Vec c)
+    (e : SHlo (N*(c*h*w))) (o : Fin c) :
+    den (.depthwiseStridedBiasGradB W x b e) o
+      = ∑ n : Fin N,
+          (depthwiseStride2_bias_grad_has_vjp W (batchSlice N (c*(2*h)*(2*w)) x n)).backward b
+            (batchSlice N (c*h*w) (den e) n) o := rfl
 
 /-! ## The ConvNeXt five — same statement, the last `*Sgd`/`*Grad` pairs the kit was missing (§2f)
 
@@ -2895,6 +2974,7 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
       ("seBlock", [w1, b1, w2, b2], [N, c, h, w, r])
   | .swish (n := n) => ("swish", [], [N, n])
   | .relu (n := n) => ("relu", [], [N, n])
+  | .relu6 (n := n) => ("relu6", [], [N, n])
   | .maxPool (c := c) (h := h) (w := w) => ("maxPool", [], [N, c, h, w])
   | .softmaxRow (m := m) (n := n) => ("softmaxRow", [], [N, m, n])
   | .denseRowBack (rows := rows) (a := a) (c := c) wN _ => ("denseRowBackP", [wN], [N, rows, a, c])
@@ -2949,6 +3029,7 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .convStridedBiasSgdB (N := N) (oc := oc) (h := h) (w := w) bN lrS _ _ _ _ e =>
       .batched "convBiasSgd" [bN, lrS] [N, oc, h, w] (skel e)
   | _, .selectPosB (N := N) (n := n) xN _ e => .batched "selectPosP" [xN] [N, n] (skel e)
+  | _, .selectMidB (N := N) (n := n) xN _ e => .batched "selectMidP" [xN] [N, n] (skel e)
   | _, .swishBackB (N := N) (n := n) xN _ e => .batched "swishBackP" [xN] [N, n] (skel e)
   | _, .sigmoidBackB (N := N) (n := n) xN _ e => .batched "sigmoidBackP" [xN] [N, n] (skel e)
   | _, .addVB (N := N) (n := n) a b => .batched2 "addV" [] [N, n] (skel a) (skel b)
@@ -3119,6 +3200,14 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "depthwiseWeightGrad" [xN] [N, c, h, w, kH, kW] (skel e)
   | _, .depthwiseStridedWeightGradB (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
       .batched "depthwiseStridedWeightGrad" [xN] [N, c, h, w, kH, kW] (skel e)
+  -- Both depthwise BIAS grads alias ConvNeXt's per-example `depthwiseBiasGrad` Raw — the bias
+  -- gradient is `Σ_{batch,spatial} dy`, stride-independent AND kernel-independent, so one emitter
+  -- serves all three. `N` is dropped for the same reason every batched tag drops it: the runtime
+  -- batch is `B`. This is the aliasing route, so there is nothing to add in `emitTok`.
+  | _, .depthwiseBiasGradB (c := c) (h := h) (w := w) (kH := kH) (kW := kW) _ _ _ e =>
+      .batched "depthwiseBiasGrad" [] [c, h, w, kH, kW] (skel e)
+  | _, .depthwiseStridedBiasGradB (c := c) (h := h) (w := w) (kH := kH) (kW := kW) _ _ _ e =>
+      .batched "depthwiseBiasGrad" [] [c, h, w, kH, kW] (skel e)
   -- The ConvNeXt five ride the generic `.batched` Raw/Tok tag, so they need no new
   -- `Raw`/`Tok`/`toToks`/`parseStack`/`parse_toToks` cases — the four-site route (§4).
   --
@@ -4551,6 +4640,13 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           let z ← fresh; let o ← fresh
           pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
                 s!"    {o} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n", o :: st)
+      | "relu6", [], [_N, n] => do
+          -- byte-for-byte `.relu6F`'s emit, width from the descriptor's `n`.
+          let z ← fresh; let six ← fresh; let mx ← fresh; let o ← fresh
+          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
+                s!"    {six} = stablehlo.constant dense<6.0> : {ty [B,n]}\n" ++
+                s!"    {mx} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n" ++
+                s!"    {o} = stablehlo.minimum {mx}, {six} : {ty [B,n]}\n", o :: st)
       | "maxPool", [], [_N, c, h, w] => do
           -- byte-for-byte `.maxPoolF`'s emit; dims from the descriptor, batch from `B`.
           let xn ← fresh; let ninf ← fresh; let pp ← fresh; let o ← fresh
@@ -4600,6 +4696,17 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           let z ← fresh; let msk ← fresh; let o ← fresh
           pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
             s!"    {msk} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
+            s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
+      | "selectMidP", [x], [_N, n] => do
+          -- byte-for-byte `.selectMid`'s emit, width from the ctor's `n`. Two-sided kink, so
+          -- two compares AND-ed — unlike `selectPosP`'s single GT.
+          let z ← fresh; let six ← fresh; let g0 ← fresh; let l6 ← fresh
+          let msk ← fresh; let o ← fresh
+          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
+            s!"    {six} = stablehlo.constant dense<6.0> : {ty [B,n]}\n" ++
+            s!"    {g0} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
+            s!"    {l6} = stablehlo.compare LT, {x}, {six} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
+            s!"    {msk} = stablehlo.and {g0}, {l6} : {tyI1 [B,n]}\n" ++
             s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
       | "swishBackP", [x], [_N, n] => do
           -- byte-for-byte `.swishBack`'s emit, width from the descriptor's `n`.

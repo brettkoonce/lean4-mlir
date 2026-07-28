@@ -56,9 +56,17 @@ Read, in order: **§2f** (the scoping and the decision), **§2e** (the playbook 
 times: un-fuse → one shared traversal → assemble → tie → swap), **§2b** (what the batched-index move
 actually cost on R34), then **§3/§4/§5** before trusting any number or writing any gate.
 
+**Scoped by measurement 2026-07-28 — read the new §2f subsection before anything else.** mnv2 is
+**R34-shaped, not EfficientNet-shaped**: its SGD render is per-example BN, so the batched AdamW
+render goes in a **new `MobileNetV2RenderB.lean`** and `MobileNetV2Render.lean` is not touched. Four
+ops are missing (`BatchableOp.relu6`, `selectMidB`, `depthwiseBias{,Strided}GradB`) — one more than
+originally scoped, and two of them need **no new emitter code**.
+
 The four gates that every one of these swaps passed, and which mnv2's must too:
 
-1. the SGD artifact re-renders **byte-identical** after the `adam : Bool` threading;
+1. the SGD artifact re-renders **byte-identical** after the `adam : Bool` threading — ⚠ **does not
+   transfer literally to mnv2**, which threads nothing; there it degrades to "`git diff
+   verified_mlir/mobilenetv2_train_step.mlir` is empty". See §2f;
 2. the interface matches the hand-written render **positionally** (arity + arg/return types);
 3. a numeric tie with an **A-vs-A determinism floor**, gated per region, that is **verified to fail**
    on a deliberately perturbed render — see §2f-bis for why a green tie you have not tried to break
@@ -938,15 +946,101 @@ choice.** The certified SGD render and the AdamW trainer are two different funct
   `mobilenetv2-verified-adam` computes, voids its published accuracy, and (as §2b-quater notes for
   R34) makes train == eval so `bnChannels` goes empty and `@mobilenetv2_fwd_eval` loses its caller.
 
-**What (a) needs, measured.** Most of the batched kit exists from §2b/§2e. mnv2 additionally needs:
+#### ▶ Scoped by measurement 2026-07-28 — mnv2 is **R34-shaped, not EfficientNet-shaped**
 
-| missing | why enet did not need it |
-|---|---|
-| a batched **`relu6`** | enet is all-swish; `relu6F` has no `BatchableOp` descriptor yet |
-| **`depthwiseBiasGradB`**, **`depthwiseStridedBiasGradB`** | enet's depthwise convs are followed by BN, so the bias is folded and has no update op — mnv2's are not |
+The instruction above to "follow §2e's playbook" (thread `adam : Bool` through ONE renderer, both
+artifacts out of one file) **does not transfer**, and the BN reduce-dim census is why:
 
-`depthwise{,Strided}WeightGradB` already exist (§2e), and the per-example `depthwise{Weight,Bias}Grad`
-landed with ConvNeXt (§2f-bis) — check whether those help before writing new ones.
+| renderer's SGD artifact | `reduce[2,3]` | `reduce[0,2,3]` | `rsqrt` | BN world |
+|---|---|---|---|---|
+| `efficientnet_train_step` | 81 | 539 | 147 (= 49×3) | **batch** |
+| `resnet34_train_step` | 289 | 108 (= 36×3) | 108 | **per-example** |
+| `mobilenetv2_train_step` | **417** | 156 (= 52×3) | **156** | **per-example** |
+
+EfficientNet's SGD render was *already* batch-BN, which is the only reason §2b's `N := B` move came
+back byte-identical there and one file could serve both tails. **mnv2's SGD render is per-example**,
+so re-instantiating `MobileNetV2Render.lean` at `N := B` changes `mobilenetv2_train_step.mlir`'s
+bytes *and its function* — voiding the 80-epoch SGD log (`runs/mobilenetv2_verified_crop_gpu0.log`,
+86.89%). That is the §2a two-worlds trap a second time, and taking the enet shape walks into it.
+
+**So the batched AdamW render goes in a NEW `MobileNetV2RenderB.lean`**, exactly like
+`ResNet34RenderB.lean`, leaving `MobileNetV2Render.lean` untouched. Two consequences:
+
+- **Gate 1 changes meaning.** "the SGD artifact re-renders byte-identical after the `adam : Bool`
+  threading" (§0) was written from the enet/convnext playbook. Here there is no threading, so the
+  gate degrades to *"`git diff verified_mlir/mobilenetv2_train_step.mlir` is empty"* — strictly
+  weaker, because nothing forces the two renderers to stay in step. Note it as such; and §2b-ter's
+  hazard applies, a second file writing a sibling artifact is exactly how R34's SGD render still
+  gets clobbered today.
+- **The fused `*SgdB` tail is NOT needed.** `ResNet34RenderB.lean` is AdamW-only (three `#eval`s,
+  all `_adam*`), so the new file needs only the un-fused `adam := true` gradients. Do not build
+  `depthwise{,Strided}BiasSgdB`.
+
+**Verified target interface:** `@mobilenetv2_adam_train_step`, **739 in / 737 out**, **210 params**,
+**52 BN layers**, 104 running-stat slots in *and* out. The arithmetic closes exactly —
+`210×3 + x + lr + bc1 + bc2 + onehot + 104 = 739` and `630 + loss + bc1 + bc2 + 104 = 737` — so a
+slot-count mistake shows up as an arity error rather than silently. (The 212/210 in §2a-quinquies is
+the **SGD** train step; the AdamW render has 210 params.)
+
+**What (a) needs, measured — four ops, and two of them are free.** Every one of mnv2's 12 `*Sgd` ops
+and all its forward/backward ops were enumerated against existing batched peers:
+
+| missing | route | cost |
+|---|---|---|
+| **`BatchableOp.relu6`** (11 uses) | 4-site descriptor — ctor, `denOp`, `batchOpDescr`, `emitTok`. Pointwise and batch-INVARIANT so a descriptor is legal; template is `.relu` at `StableHLO.lean:136/964/2897/4549` | small |
+| **`selectMidB`** (11 uses) | ⚠ **the original scope missed this.** relu6's backward mask carries the saved per-example `x`, so per §4 it *cannot* be a descriptor — own ctor riding `.batched "selectMidP"`, template `selectPosB` (`:415/1187/1521/2951`, emit `:4598`) | small |
+| **`depthwiseBiasGradB`** | **zero new emitter code** — see below | proof-side only |
+| **`depthwiseStridedBiasGradB`** | **zero new emitter code** | proof-side only |
+
+**Why the two bias grads are free.** `convBiasGrad` (`:4674`), `bnBetaGrad` (`:4705`) and ConvNeXt's
+`depthwiseBiasGrad` (`:5201`) emit **character-identical text** modulo SSA freshness —
+`reshape (B, c*h*w) → (B,c,h,w)`, `constant dense<0.0>`, `reduce add across dimensions = [0, 2, 3]`.
+`convStridedBiasGradB` already aliases `convBiasGradB`'s tag (`:3071`/`:3073`), and
+`StableHLOParse.lean` handles `.batched` generically. So each is **ctor + `den` + `skel` +
+`*SgdB_eq_grad` theorem + a `TestBatchedEmitTie` case** — no `Raw`/`Tok`/`toToks`/`emitTok`/
+`parseStack`/`parse_toToks` work at all. That is §2f-bis's `depthwiseWeightGrad` aliasing route.
+
+#### ✅ Step 1 DONE 2026-07-28 — all four ops built, gated, and verified to fail
+
+`lake build Proofs Certs Codegen` green; `verified_mlir/` **unmodified** (no tracked artifact
+changed, checked before and after); all four new theorems **3-axiom clean** (`propext`,
+`Classical.choice`, `Quot.sound`). **UNCOMMITTED.**
+
+| op | sites touched | theorem |
+|---|---|---|
+| `BatchableOp.relu6` | ctor, `denOp`, `batchOpDescr`, `emitTok` (4) | `den_batchOp_relu6_eq_relu6F` |
+| `selectMidB` | ctor, `den`, `skel`, `emitTok` (4) + `den_selectMidB` simp | `selectMidB_faithful` (two-sided hyp) |
+| `depthwiseBiasGradB` | ctor, `den`, `skel` (3) — **no `emitTok`** | `depthwiseBiasGradB_faithful` |
+| `depthwiseStridedBiasGradB` | ctor, `den`, `skel` (3) — **no `emitTok`** | `depthwiseStridedBiasGradB_faithful` |
+
+`tests/TestBatchedEmitTie.lean` is now **15 emit ties + 23 grad-prefix checks** (was 13 + 21).
+
+**The aliasing claim is confirmed empirically, not just by reading the emitters.** All six bias
+gradients — `convBiasGradB`, `convStridedBiasGradB`, `bnBetaGradB`, ConvNeXt's per-example
+`depthwiseBiasGrad`, and both new ones — render to **exactly 280 of 444 bytes** of their fused peer.
+Both new ones are checked against the *per-example* fused `depthwise{,Strided}BiasSgd`, since
+`MobileNetV2RenderB` is AdamW-only and no batched fused peer exists.
+
+**Both new guard groups were verified to go red**, per §4's "prove a green tie can go red":
+
+| control | perturbation | result |
+|---|---|---|
+| A | `relu6` batched emit clamps to `5.0` instead of `6.0` | **`✖ relu6`** fires alone; all 14 other emit ties stay green |
+| B | `depthwiseStridedBiasGradB` skels to an unmatched tag | **`✖ … is NOT a prefix`** fires — i.e. the prefix check *does* catch the silent `// MALFORMED` fallthrough §4 warns about, and `depthwiseBiasGradB` stayed green beside it |
+
+**Everything else already exists** — `bnBatchF`/`bnBatchBack`, `bnBatchMeanB`/`bnBatchVarB`, all four
+`*BackBatched` convs, `gapBackBatched`, `addVB`/`subB`, the `scaleB → addVB → shiftB → divConstB`
+smoothing chain, `depthwise{,Strided}WeightGradB`, and
+`BatchableOp.{conv,convStrided,depthwise,depthwiseStrided,gap,softmaxRow,denseRowBack}`. mnv2's head
+must move `expe`/`softmaxDiv`/`dotOut` → `softmaxRow`/`denseRowBack`, as enet's did.
+
+**A `den`-vs-emit observation, flagged not fixed.** mnv2 and ConvNeXt both use *per-example-typed*
+param-gradient ops (`convBiasGrad`, `depthwiseBiasGrad`, `bnBetaGrad`) whose emitters reduce over
+`[0, 2, 3]` — contracting the runtime batch. That is the same shape §2b named as "the second kind".
+It is benign for the emitted text (summing per-example gradients over a batch *is* the batch
+gradient) and it is precisely why the depthwise bias grads come free here. But if §2b's honesty
+argument is meant to cover the per-example renders too, `ConvNeXtRender.lean:138-164`
+(`blockParamSgd`) is in the same position. A decision, not a defect.
 
 **Traps specific to mnv2, all already paid for elsewhere:**
 
