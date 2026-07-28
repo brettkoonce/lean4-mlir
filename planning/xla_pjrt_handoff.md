@@ -327,12 +327,40 @@ Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convn
   `lake build`, and remember an unmatched `.batched` name falls through to `// MALFORMED` **silently**
   — which is what the prefix test is there to catch.
 
-  **Remaining: steps 2–3.** Write `vitAdamTrainStepFaithful` in `Proofs/Codegen/ViTRender.lean`
-  (mirror `vitTrainStepRenderV`, emit `*Grad` + the AdamW triple instead of the fused `*Sgd`), then
-  numeric-tie it against the driver-emitted hand-written render and swap. `sgd-render-tie` does not
-  apply (that one is for SGD renders); copy `TestResnet34AdamTie.lean`, whose packed `[θ|m|v]`
-  protocol is what `trainAdamSched` already uses. ViT has no BN, so unlike R34 there is no `bnstat`
-  region to pin the forward — gate on the gradient (`m`) and the loss, per §3.
+  **✅ Step 2a done — one backward traversal, two tails.** `vitBackAll (lrStr) (adam : Bool)` in
+  `Proofs/Codegen/ViTRender.lean` is the shared depth-12 backward: it returns one SSA per parameter
+  in func-arg order — the *updated param* at `adam := false`, the *un-fused gradient* at `true`. The
+  ~20 leaf sites dispatch through two small helpers (`rdW`/`rdB`) plus inline `if adam`. Duplicating
+  the traversal instead would have been the double-writer disease one level down, in code.
+  **`vit_train_step.mlir` came back byte-identical (md5 `f57aff00…`)**, which is what proves the
+  refactor inert. `vitParamSig` was added as the single source for the 200 `(name, shape)` pairs —
+  the arg signature, the return types, and the `%<nm>m`/`%<nm>v` moment slots.
+
+  **▶ Step 2b — the cotangent gap, measured not assumed.** The two renders' loss cotangents are
+  **different functions**, so a certified render built on `vitBackAll` as-is would not tie:
+
+  | | certified SGD render | hand-written AdamW (what `vit-verified-adam` trains on) |
+  |---|---|---|
+  | cross-entropy | plain `softmax − onehot` | **label-smoothed**, α = 0.1: `+α·onehot`, then `−α/K` (`%lsa` 0.1, `%lsaik` 0.01) |
+  | batch mean | folded into lr (0.003125 = 0.1/32) | **explicit** `divide %dyr, dense<32.0>` |
+
+  So step 2b needs the smoothing chain at the ViT **per-example** index (`Vec 10`, emitted
+  `tensor<32x10>`). R34 got exactly this in §2b as `softmaxRow → subB → scaleB → addVB → shiftB →
+  divConstB`, but those are the **batched** forms; check which per-example peers already exist
+  (`.scaleF` and `.addV` do) and add the missing shift / divide-by-constant. Two ops at most, same
+  `.batched`-tag recipe as the six above.
+
+  Then: assemble `vitAdamTrainStepFaithful` (605 in / 603 out — `%x`, 200 θ, 200 m, 200 v, `%lr`,
+  `%bc1`, `%bc2`, `%onehot` → 200 θ', 200 m', 200 v', loss, bc1, bc2; the hand-written arg ORDER is
+  positionally identical to `vitParamSig`, only the names differ), copy `adamOne`/`adamConstsB` from
+  `ResNet34RenderB.lean`, and tie.
+
+  **Two traps for step 2b/3, both already paid for elsewhere:**
+  - `%loss` is report-only and on no gradient path, so **no theorem covers it** — this is precisely
+    where §2b shipped plain CE against a smoothed-CE cotangent and only the numeric tie caught it.
+    Render it from the *same* smoothed chain the cotangent implies.
+  - ViT has **no BN**, so unlike R34 there is no `bnstat` region to pin the forward bit-exactly.
+    Gate on the gradient (`m`) and the loss, and expect the same limitation the SGD ties have.
 - **EfficientNet is next** — it already renders at `N := B` and came back byte-identical through the
   §2b move, but its AdamW render needs `depthwise{,Strided}WeightGradB` plus a depthwise bias peer
   (real kit work, ~4 new forms × the 4-site `BatchableOp` recipe).
