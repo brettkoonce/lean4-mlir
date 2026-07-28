@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Architectures.ViTMultiHead
+import LeanMlir.ViTRender
 
 /-! # ViT-Tiny train step rendered from the verified AST (the §1 render) — FORWARD portion
 
@@ -429,16 +430,24 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
     into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are
     runtime `tensor<f32>` args, so one render serves the whole cosine+warmup schedule. Mirrors
     `ResNet34RenderB.adamOne`, minus the replica collective (ViT has no DP render yet). -/
-private def vitAdamOne (nm : String) (ds : List Nat) (gradSSA : String) :
+private def vitAdamOne (nm : String) (ds : List Nat) (gradSSA : String) (replicas : Nat) :
     StateM Nat (String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
-  let gr : SHlo n := .operand gradSSA z
+  -- At `replicas > 1` the gradient is averaged across devices first. **That collective is a TRUSTED
+  -- CARVE-OUT** — emitted text, not `pretty` of an AST node, so it sits outside every faithfulness
+  -- theorem here, exactly as in §2b-quater. The `den` side does not shift: the AdamW triple consumes
+  -- the averaged gradient as an `.operand` just as it consumed the raw one. Claim ceiling is §5's —
+  -- *the gradient averaging is a proven identity; the collective implementing it is trusted, exactly
+  -- like the lowerer.* At `replicas ≤ 1` this emits NOTHING, which is the cheap self-check that the
+  -- insertion is inert (the single-device render re-renders byte-identical).
+  let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
+  let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty vBS (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
   let (cV, nV) ← pretty vBS (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
   let (cT, nT) ← pretty vBS (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
                     "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
-  pure (cM ++ cV ++ cT, nT, nM, nV)
+  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
 
 /-- β₁/β₂/ε/wd as graph constants — the ViT-Tiny AdamW recipe (`vitTinyConfig`: lr 3e-4, wd 1e-4). -/
 private def vitAdamConsts : String :=
@@ -462,7 +471,8 @@ private def vitAdamConsts : String :=
     (200 θ', 200 m', 200 v', `%loss`/`%bc1`/`%bc2`) — positionally identical to the hand-written
     render, so `trainAdamSched`'s packed `[θ|m|v]` protocol is unchanged. -/
 def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
-    (alphaStr negAlphaKStr : String := "0.100000") (bStr : String := "32.0") : String :=
+    (alphaStr negAlphaKStr : String := "0.100000") (bStr : String := "32.0")
+    (replicas : Nat := 1) : String :=
   let go : StateM Nat String := do
     let (code, gradNames, nSm) ← vitBackAll "0.0" true (some (alphaStr, negAlphaKStr, bStr))
     -- one triple per parameter, in func-arg order
@@ -472,7 +482,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     let mut vN : List String := []
     for i in [0:vitParamSig.length] do
       let (nm, ds) := vitParamSig[i]!
-      let (c, nT, nM, nV) ← vitAdamOne nm ds (gradNames[i]!)
+      let (c, nT, nM, nV) ← vitAdamOne nm ds (gradNames[i]!) replicas
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
     -- `%loss` is REPORT-ONLY and on no gradient path, so NO theorem covers it — §2b shipped plain
@@ -498,7 +508,14 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     let retVals := thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"]
     let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
     pure <|
-      "    // ── ViT-Tiny depth-12 AdamW train step: gradients + optimizer are pretty(AST) ──\n" ++
+      (if replicas <= 1 then
+        "    // ── ViT-Tiny depth-12 AdamW train step: gradients + optimizer are pretty(AST) ──\n"
+       else
+        "    // ── ViT-Tiny depth-12 AdamW train step, DATA-PARALLEL over " ++ toString replicas ++
+        " replicas ──\n" ++
+        "    // The gradients and the AdamW triple are pretty(verified AST). The per-parameter\n" ++
+        "    // all_reduce(add)/N between them is NOT — it is a TRUSTED CARVE-OUT, emitted text\n" ++
+        "    // outside every faithfulness theorem, exactly like the lowerer (handoff §5).\n") ++
       code ++ vitAdamConsts ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let pSig := String.intercalate ", " (vitParamSig.map (fun (nm, ds) => s!"%{nm}: {ty ds}"))
@@ -543,3 +560,19 @@ end Proofs.StableHLO
 -- Literal α = 0.1, −α/K = −0.01 (K = 10), batch 32 — `vitTinyConfig`'s label smoothing + mean.
 #eval IO.FS.writeFile "verified_mlir/vit_adam_train_step.mlir"
   (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adam_train_step" "0.100000" "-0.010000" "32.0")
+
+-- The DATA-PARALLEL render, the ViT peer of `resnet34_adamdp_train_step` (§2b-quater): the same
+-- graph plus one `all_reduce(add)/N` per parameter gradient before its AdamW triple. Selected at
+-- run time by `LEAN_MLIR_VARIANT=adamdp`, and `2` must match `PJRT_REPLICAS` because the graph
+-- bakes `replica_groups`. Rendering to its OWN path is what stops the §2a race in which producing
+-- a DP render meant editing a knob and clobbering the single-device artifact the trainer runs.
+--
+-- **NOT RUNNABLE ON THIS BOX, and not gated above 1 replica.** Collectives live on the XLA/PJRT
+-- path, but the ViT graph fails there in the patch-embed weight-grad convolution
+-- (`miopenStatusUnknownError`) — which is why `vit-adam-tie` links IREE — and `vit-verified-adam`
+-- is itself an IREE binary, where the shim refuses the DP entry point rather than silently running
+-- single-device. What IS checked: the `replicas = 1` re-render is byte-identical (so the insertion
+-- is provably inert), the collective count, and the emitted syntax. The 2-GPU numeric gate that
+-- §2b-quater ran for R34 has no equivalent here yet.
+#eval IO.FS.writeFile "verified_mlir/vit_adamdp_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamdp_train_step" "0.100000" "-0.010000" "32.0" 2)

@@ -389,8 +389,34 @@ Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convn
   patch-embed weight-grad convolution with `miopenStatusUnknownError` (this box is MIOpen-conv-weak
   — see the ROCm note). A tie should run on the backend the trainer actually uses regardless.
 
-  Remaining ViT gap: no data-parallel variant. `ResNet34RenderB` grew `replicas` in §2b-quater; the
-  same `emitGradAllReduce` insertion would work here, and `vitAdamOne` is the place for it.
+  **The data-parallel variant ✅ rendered and gated as far as this box allows.**
+  `vitAdamTrainStepFaithful` now takes `(replicas : Nat := 1)` and
+  `verified_mlir/vit_adamdp_train_step.mlir` is its own artifact (`LEAN_MLIR_VARIANT=adamdp`,
+  entry `@vit_adamdp_train_step`) — rendering to its own path is what stops the §2a race where
+  producing a DP render meant editing a knob and clobbering the artifact the trainer runs.
+
+  | gate | result |
+  |---|---|
+  | `replicas = 1` re-render vs the committed artifact | **byte-identical** — the insertion is provably inert ✅ |
+  | collectives emitted | **200**, one per parameter ✅ |
+  | syntax | `all_reduce(add)` over `[[0,1]]`, **no `use_global_device_ids`** (§4), then `/2.0` ✅ |
+  | carve-out declared in the emitted output | yes, at `replicas > 1` ✅ |
+  | `// MALFORMED` | 0 ✅ |
+  | **2 GPUs, 2 replicas** | ⛔ **not run — see below** |
+
+  **⛔ Named gap: the ViT DP render cannot be executed on this box, so it is UNGATED numerically.**
+  Collectives live on the XLA/PJRT path, and the ViT AdamW graph was *measured* to fail there —
+  `miopenStatusUnknownError` in the patch-embed weight-grad convolution (the dilated
+  `interior = [0,0,15,15]` one), which is why `vit-adam-tie` links IREE. The DP render contains the
+  identical convolution, so it is not expected to run either; that specific render is untested
+  rather than measured-failing. And `vit-verified-adam` is an IREE binary, where the shim refuses
+  the DP entry point outright rather than silently running single-device.
+
+  So this is **strictly weaker than R34's §2b-quater**, which had a 2-GPU descent run plus the
+  cifar8 exact decomposition gate behind it. Do not describe ViT multi-GPU as working. What is
+  established is that the emitted text is the same collective R34 uses, inserted at the same place,
+  and provably inert at one replica. To finish it: run on a box whose conv library handles the
+  patch-embed weight-grad (ares), or route that one convolution differently.
 
   Why the gap below was worth recording — the two cotangents WERE different functions, so a render
   built on `vitBackAll` without `smooth` would have failed the tie in a way that looks like a bug in
