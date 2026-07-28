@@ -708,6 +708,23 @@ inductive SHlo : Nat → Type where
   | bnGammaGrad {oc h w : Nat} (vName epsStr : String) (ε : ℝ) (v : Vec (oc*h*w))
                                                      : SHlo (oc*h*w) → SHlo oc
   | bnBetaGrad  {oc h w : Nat}                       : SHlo (oc*h*w) → SHlo oc
+  -- The TRANSFORMER family, un-fused the same way. §2a did the CNN ops above, which is why the
+  -- AdamW scorecard stalled at cifar8 + resnet34: ViT's backward spends every gradient inside a
+  -- `*Sgd` op, so there was nothing to hand `adamWParamF`. Each of these is its `*Sgd` peer with
+  -- the const-lr / multiply / subtract tail cut off, so the emitted text is a byte PREFIX of the
+  -- fused op's (checked in `tests/TestBatchedEmitTie.lean`) and `den` differs by exactly
+  -- `θ − lr · ·` (`rfl`, the `*Sgd_eq_grad` theorems).
+  | rowDenseWeightGrad {N a c : Nat} (xName : String) (x : Vec (N * a))
+                                                     : SHlo (N * c) → SHlo (a * c)
+  | rowDenseBiasGrad   {N c : Nat}                   : SHlo (N * c) → SHlo c
+  | veclnGammaGrad {N D : Nat} (xName epsStr : String) (ε : ℝ) (x : Vec (N*D))
+                                                     : SHlo (N*D) → SHlo D
+  | patchEmbedWeightGrad {ic H W P N D : Nat} (xName : String) (x : Vec (ic*H*W))
+                                                     : SHlo ((N+1)*D) → SHlo (D*ic*P*P)
+  | patchEmbedBiasGrad {N c : Nat}                   : SHlo ((N+1)*c) → SHlo c
+  -- pos KEEPS the (N+1) token axis (its Jacobian is the identity), so unlike the bias grads this
+  -- one is shape-preserving — the same reason `posEmbedSgd` is 2D where the bias updates are 1D.
+  | posEmbedGrad {N D : Nat}                         : SHlo ((N+1)*D) → SHlo ((N+1)*D)
   -- ══ ADAM / ADAMW, shape-generic ══
   -- The child expression is the GRADIENT; θ/m/v ride as name+value fields exactly as the
   -- `*Sgd` ops carry their param. Three ops because `SHlo` is single-result while one AdamW
@@ -1000,6 +1017,14 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun i => b i - lr * ∑ p : Fin N, batchSlice (N+1) c (den e) p.succ i
   | _, .posEmbedSgd (N := N) (D := D) _ _ pos lr e =>
       fun i => Mat.flatten pos i - lr * (den e) i
+  | _, .veclnGammaGrad (N := N) (D := D) _ _ ε x e =>
+      fun k => ∑ r : Fin N,
+        Mat.unflatten (den e) r k * layerNormForward D ε 1 0 (Mat.unflatten x r) k
+  | _, .patchEmbedWeightGrad (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ x e =>
+      fun idx => patchEmbedWeightGradFlat ic H W P N D x (den e) idx
+  | _, .patchEmbedBiasGrad (N := N) (c := c) e =>
+      fun i => ∑ p : Fin N, batchSlice (N+1) c (den e) p.succ i
+  | _, .posEmbedGrad e => fun i => (den e) i
   | _, .bnGammaSgdB (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
         bnPerChannel_grad_gamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
@@ -1045,6 +1070,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       Mat.flatten (fun i j => W i j - lr * ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
   | _, .rowDenseBiasSgd (N := N) (c := c) _ _ b lr e =>
       fun j => b j - lr * ∑ n : Fin N, batchSlice N c (den e) n j
+  | _, .rowDenseWeightGrad (N := N) (a := a) (c := c) _ x e =>
+      Mat.flatten (fun i j => ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
+  | _, .rowDenseBiasGrad (N := N) (c := c) e =>
+      fun j => ∑ n : Fin N, batchSlice N c (den e) n j
   | _, .convWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ b x W lr e =>
       fun idx => Kernel4.flatten W idx - lr * ∑ n : Fin N,
         (conv2d_weight_grad_has_vjp b (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward
@@ -1635,6 +1664,40 @@ quietly change the gradient, and anything already proven about a `*Sgd` output t
     (lr : ℝ) (e : SHlo n) (idx : Fin (m*n)) :
     den (.weightSgd xN wN lrS x W lr e) idx
       = Mat.flatten W idx - lr * den (.weightGrad xN x e) idx := rfl
+
+/-! The TRANSFORMER peers of the same statement — the ViT family §2a left fused, which is why
+`vit_adam_train_step` had no certified render until these existed. Same `rfl` discipline. -/
+
+@[simp] theorem rowDenseWeightSgd_eq_grad {N a c : Nat} (xN wN lrS : String) (x : Vec (N*a))
+    (W : Mat a c) (lr : ℝ) (e : SHlo (N*c)) (idx : Fin (a*c)) :
+    den (.rowDenseWeightSgd xN wN lrS x W lr e) idx
+      = Mat.flatten W idx - lr * den (.rowDenseWeightGrad xN x e) idx := rfl
+
+@[simp] theorem rowDenseBiasSgd_eq_grad {N c : Nat} (bN lrS : String) (b : Vec c) (lr : ℝ)
+    (e : SHlo (N*c)) (j : Fin c) :
+    den (.rowDenseBiasSgd bN lrS b lr e) j = b j - lr * den (.rowDenseBiasGrad e) j := rfl
+
+@[simp] theorem veclnGammaSgd_eq_grad {N D : Nat} (gN xN esS lrS : String) (ε : ℝ) (x : Vec (N*D))
+    (γ : Vec D) (lr : ℝ) (e : SHlo (N*D)) (k : Fin D) :
+    den (.veclnGammaSgd gN xN esS lrS ε x γ lr e) k
+      = γ k - lr * den (.veclnGammaGrad xN esS ε x e) k := rfl
+
+@[simp] theorem patchEmbedWeightSgd_eq_grad {ic H W P N D : Nat} (wN xN lrS : String)
+    (x : Vec (ic*H*W)) (Wp : Kernel4 D ic P P) (lr : ℝ) (e : SHlo ((N+1)*D))
+    (idx : Fin (D*ic*P*P)) :
+    den (.patchEmbedWeightSgd wN xN lrS x Wp lr e) idx
+      = Kernel4.flatten Wp idx
+        - lr * den (.patchEmbedWeightGrad (N := N) xN x e) idx := rfl
+
+@[simp] theorem patchEmbedBiasSgd_eq_grad {N c : Nat} (bN lrS : String) (b : Vec c) (lr : ℝ)
+    (e : SHlo ((N+1)*c)) (i : Fin c) :
+    den (.patchEmbedBiasSgd bN lrS b lr e) i
+      = b i - lr * den (.patchEmbedBiasGrad (N := N) e) i := rfl
+
+@[simp] theorem posEmbedSgd_eq_grad {N D : Nat} (pN lrS : String) (pos : Mat (N+1) D) (lr : ℝ)
+    (e : SHlo ((N+1)*D)) (i : Fin ((N+1)*D)) :
+    den (.posEmbedSgd pN lrS pos lr e) i
+      = Mat.flatten pos i - lr * den (.posEmbedGrad e) i := rfl
 
 @[simp] theorem biasSgd_eq_grad {n : Nat} (bN lrS : String) (b : Vec n) (lr : ℝ)
     (e : SHlo n) (j : Fin n) :
@@ -2947,6 +3010,21 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "patchEmbedBiasSgd" [bN, lrS] [N, c] (skel e)
   | _, .posEmbedSgd (N := N) (D := D) pN lrS _ _ e =>
       .batched "posEmbedSgd" [pN, lrS] [N, D] (skel e)
+  -- The un-fused transformer peers. They ride the same generic `.batched` tag (so `Raw`/`Tok`/
+  -- `toToks`/`parseStack`/`parse_toToks` need no new cases), carrying only the operands the
+  -- gradient actually reads — no param name, no lr.
+  | _, .rowDenseWeightGrad (N := N) (a := a) (c := c) xN _ e =>
+      .batched "rowDenseWeightGrad" [xN] [N, a, c] (skel e)
+  | _, .rowDenseBiasGrad (N := N) (c := c) e =>
+      .batched "rowDenseBiasGrad" [] [N, c] (skel e)
+  | _, .patchEmbedBiasGrad (N := N) (c := c) e =>
+      .batched "patchEmbedBiasGrad" [] [N, c] (skel e)
+  | _, .posEmbedGrad (N := N) (D := D) e =>
+      .batched "posEmbedGrad" [] [N, D] (skel e)
+  | _, .veclnGammaGrad (N := N) (D := D) xN es _ _ e =>
+      .batched "veclnGammaGrad" [xN, es] [N, D] (skel e)
+  | _, .patchEmbedWeightGrad (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) xN _ e =>
+      .batched "patchEmbedWeightGrad" [xN] [ic, H, W, P, N, D] (skel e)
   | _, .convWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
       .batched "convWeightSgd" [xN, wN, lrS] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convStridedWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
@@ -4859,6 +4937,80 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {lP} = stablehlo.constant dense<{lrS}> : {ty [N+1,D]}\n" ++
             s!"    {sP} = stablehlo.multiply {dP}, {lP} : {ty [N+1,D]}\n" ++
             s!"    {o} = stablehlo.subtract {pN}, {sP} : {ty [N+1,D]}\n", o :: st)
+      -- ── the un-fused transformer gradients ─────────────────────────────────────────────────
+      -- Each is its `*Sgd` peer above with the trailing `constant lr / multiply / subtract` cut
+      -- off, so the emitted text is a byte PREFIX of the fused one. `tests/TestBatchedEmitTie.lean`
+      -- checks exactly that, which is the emit-side twin of the `*Sgd_eq_grad` theorems.
+      | "rowDenseWeightGrad", [xN], [N, a, c] => do
+          let xn ← fresh; let dn ← fresh; let dW ← fresh
+          pure (
+            s!"    {xn} = stablehlo.reshape {xN} : ({ty [B, N*a]}) -> {ty [B,N,a]}\n" ++
+            s!"    {dn} = stablehlo.reshape {r} : ({ty [B, N*c]}) -> {ty [B,N,c]}\n" ++
+            s!"    {dW} = stablehlo.dot_general {xn}, {dn}, contracting_dims = [0, 1] x [0, 1], precision = [DEFAULT, DEFAULT] : ({ty [B,N,a]}, {ty [B,N,c]}) -> {ty [a,c]}\n", dW :: st)
+      | "rowDenseBiasGrad", [], [N, c] => do
+          let z ← fresh; let dn ← fresh; let dB ← fresh
+          pure (
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {dn} = stablehlo.reshape {r} : ({ty [B, N*c]}) -> {ty [B,N,c]}\n" ++
+            s!"    {dB} = stablehlo.reduce({dn} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,N,c]}, tensor<f32>) -> {ty [c]}\n", dB :: st)
+      | "patchEmbedBiasGrad", [], [N, c] => do
+          let z ← fresh; let dr ← fresh; let dsl ← fresh; let dB ← fresh
+          pure (
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, (N+1)*c]}) -> {ty [B, N+1, c]}\n" ++
+            s!"    {dsl} = stablehlo.slice {dr} [0:{B}, 1:{N+1}, 0:{c}] : ({ty [B,N+1,c]}) -> {ty [B,N,c]}\n" ++
+            s!"    {dB} = stablehlo.reduce({dsl} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,N,c]}, tensor<f32>) -> {ty [c]}\n", dB :: st)
+      | "posEmbedGrad", [], [N, D] => do
+          let z ← fresh; let dr ← fresh; let dP ← fresh
+          pure (
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, (N+1)*D]}) -> {ty [B, N+1, D]}\n" ++
+            s!"    {dP} = stablehlo.reduce({dr} init: {z}) applies stablehlo.add across dimensions = [0] : ({ty [B,N+1,D]}, tensor<f32>) -> {ty [N+1,D]}\n", dP :: st)
+      | "veclnGammaGrad", [xN, epsStr], [N, D] => do
+          let x3 ← fresh; let d3 ← fresh
+          let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh; let sm ← fresh
+          let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh; let vs ← fresh
+          let vr ← fresh; let ve ← fresh; let istd ← fresh; let xh ← fresh; let p ← fresh
+          let dg ← fresh
+          pure (
+            s!"    {x3} = stablehlo.reshape {xN} : ({ty [B, N*D]}) -> {ty [B,N,D]}\n" ++
+            s!"    {d3} = stablehlo.reshape {r} : ({ty [B, N*D]}) -> {ty [B,N,D]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {nf} = stablehlo.constant dense<{D}.0> : {ty [B,N,D]}\n" ++
+            s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,N,D]}\n" ++
+            s!"    {smr} = stablehlo.reduce({x3} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,N,D]}, tensor<f32>) -> {ty [B,N]}\n" ++
+            s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,N]}) -> {ty [B,N,D]}\n" ++
+            s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,N,D]}\n" ++
+            s!"    {xc} = stablehlo.subtract {x3}, {mu} : {ty [B,N,D]}\n" ++
+            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,N,D]}\n" ++
+            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,N,D]}, tensor<f32>) -> {ty [B,N]}\n" ++
+            s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,N]}) -> {ty [B,N,D]}\n" ++
+            s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,N,D]}\n" ++
+            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,N,D]}\n" ++
+            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,N,D]}\n" ++
+            s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,N,D]}\n" ++
+            s!"    {p} = stablehlo.multiply {d3}, {xh} : {ty [B,N,D]}\n" ++
+            s!"    {dg} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,N,D]}, tensor<f32>) -> {ty [D]}\n", dg :: st)
+      | "patchEmbedWeightGrad", [xN], [ic, H, W, P, N, D] => do
+          let ph := H / P; let pw := W / P
+          let dilH := H - (P - 1); let dilW := W - (P - 1)
+          let zc ← fresh; let dtr ← fresh; let dsl ← fresh; let drs ← fresh; let dy3 ← fresh
+          let u ← fresh; let xt ← fresh; let dt ← fresh; let raw ← fresh; let dw ← fresh
+          pure (
+            s!"    {zc} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {dtr} = stablehlo.reshape {r} : ({ty [B, (N+1)*D]}) -> {ty [B, N+1, D]}\n" ++
+            s!"    {dsl} = stablehlo.slice {dtr} [0:{B}, 1:{N+1}, 0:{D}] : ({ty [B,N+1,D]}) -> {ty [B,N,D]}\n" ++
+            s!"    {drs} = stablehlo.reshape {dsl} : ({ty [B,N,D]}) -> {ty [B,ph,pw,D]}\n" ++
+            s!"    {dy3} = stablehlo.transpose {drs}, dims = [0, 3, 1, 2] : ({ty [B,ph,pw,D]}) -> {ty [B,D,ph,pw]}\n" ++
+            s!"    {u} = stablehlo.pad {dy3}, {zc}, low = [0, 0, 0, 0], high = [0, 0, 0, 0], interior = [0, 0, {P-1}, {P-1}] : ({ty [B,D,ph,pw]}, tensor<f32>) -> {ty [B,D,dilH,dilW]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xN}, dims = [1, 0, 2, 3] : ({ty [B,ic,H,W]}) -> {ty [ic,B,H,W]}\n" ++
+            s!"    {dt} = stablehlo.transpose {u}, dims = [1, 0, 2, 3] : ({ty [B,D,dilH,dilW]}) -> {ty [D,B,dilH,dilW]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            "      window = {stride = [1, 1], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [ic,B,H,W]}, {ty [D,B,dilH,dilW]}) -> {ty [ic,D,P,P]}\n" ++
+            s!"    {dw} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,D,P,P]}) -> {ty [D,ic,P,P]}\n", dw :: st)
       | "convWeightSgd", [xN, wN, lrS], [_N, ic, oc, h, w, kH, kW] => do
           -- conv weight update via the transpose-trick wgrad (batch as the conv
           -- contraction), then W' = W − lr·dW. Same text as the per-example convWeightSgd.

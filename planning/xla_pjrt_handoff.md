@@ -300,8 +300,39 @@ Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convn
 `efficientnet`, `mobilenetv2` `_adam_train_step` are hand-written with **live drivers**
 (`*-verified-adam`), so the AdamW scorecard is 2 of 6. From what §2b cost at R34 scale:
 
-- **ViT is likely cheapest** — `vit_fwd`/`vit_train_step` already render from `Proofs/`, so only the
-  AdamW tail is missing, and `emitAdamV` is already a proven op family (§2a).
+- **ViT is cheapest, but "only the AdamW tail is missing" was WRONG** — corrected 2026-07-28 by
+  measurement. The tail is the *done* part: `emitAdamV` is a proven op family and
+  `adamW_triple_faithful` closes the denotation side (§2a). What was actually missing is that **§2a
+  un-fused only the CNN gradient family**; ViT's certified backward spends every gradient inside a
+  `*Sgd` op, so there was nothing to hand `adamWParamF`. Six ops were needed, now **built and
+  gated** (see below). Two further facts worth knowing before picking this up:
+  - `verified_mlir/vit_adam_train_step.mlir` is written by **`apps/imagenette/MainViTVerifiedAdam.lean:31`
+    — the driver itself, at startup**, from the hand-written `LeanMlir/ViTRender.lean`. That is a
+    third writer pattern, distinct from the `tests/` double-writers §2a-quinquies retired: the
+    committed bytes are not authoritative because every run overwrites them. The swap therefore also
+    means *stopping the driver writing*, so the `Proofs/` `#eval` becomes the sole writer.
+  - the audit reports one writer for it today only because the driver is not a `tests/` file; do not
+    read that as "clean".
+
+  **✅ Step 1 done — the six transformer gradients are un-fused.** In `Proofs/Codegen/StableHLO.lean`:
+  `rowDenseWeightGrad`, `rowDenseBiasGrad` (also carries the vector-LN β), `veclnGammaGrad`,
+  `patchEmbedWeightGrad`, `patchEmbedBiasGrad`, `posEmbedGrad`. Each has a `*Sgd_eq_grad` theorem
+  (`den (xSgd …) = θ − lr · den (xGrad …)`, all `rfl`) and all six are byte-PREFIXES of their fused
+  peers — `tests/TestBatchedEmitTie.lean` is now **13 emit ties + 14 grad-prefix checks**.
+
+  Cheaper than the §2a eight, because all six ride the generic **`.batched`** tag: constructor,
+  `den`, the `skel` line, the `emitTok` case, the theorem, the test case — no new `Raw`/`Tok`/
+  `toToks`/`parseStack`/`parse_toToks`. Prefer that route (the memory note about 10 sites applies
+  only to ops needing their own tag). Verify with `lake build Proofs Certs Codegen`, never bare
+  `lake build`, and remember an unmatched `.batched` name falls through to `// MALFORMED` **silently**
+  — which is what the prefix test is there to catch.
+
+  **Remaining: steps 2–3.** Write `vitAdamTrainStepFaithful` in `Proofs/Codegen/ViTRender.lean`
+  (mirror `vitTrainStepRenderV`, emit `*Grad` + the AdamW triple instead of the fused `*Sgd`), then
+  numeric-tie it against the driver-emitted hand-written render and swap. `sgd-render-tie` does not
+  apply (that one is for SGD renders); copy `TestResnet34AdamTie.lean`, whose packed `[θ|m|v]`
+  protocol is what `trainAdamSched` already uses. ViT has no BN, so unlike R34 there is no `bnstat`
+  region to pin the forward — gate on the gradient (`m`) and the loss, per §3.
 - **EfficientNet is next** — it already renders at `N := B` and came back byte-identical through the
   §2b move, but its AdamW render needs `depthwise{,Strided}WeightGradB` plus a depthwise bias peer
   (real kit work, ~4 new forms × the 4-site `BatchableOp` recipe).

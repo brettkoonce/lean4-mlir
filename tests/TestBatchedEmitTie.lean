@@ -36,6 +36,15 @@ private def ic : Nat := 2
 private def oc : Nat := 3
 private def ch : Nat := 4
 private def kk : Nat := 3
+-- ViT-shaped stand-ins for the transformer gradient cases: `tk` tokens (so the token axis is
+-- `tk+1` with CLS), `dm` model dim, `pp × pp` patches over a `pi × pH × pW` image. `pH/pp = 2` and
+-- `pW/pp = 2` gives tk = 4 patch tokens, which is what makes the patch-embed shapes consistent.
+private def tk : Nat := 4
+private def dm : Nat := 6
+private def pp : Nat := 2
+private def pi : Nat := 3
+private def pH : Nat := 4
+private def pW : Nat := 4
 
 private def render (g : StateM Nat (String × String)) : String := (g.run' 0).1
 
@@ -154,7 +163,45 @@ private def gradPrefixCases : List (String × String × String) :=
      render (pretty BS (.denseWeightSgdB "%a" "%W" "0.05" zda zWd 0 (.operand "%x" zdc))))
   , ("denseBiasGradB",
      render (pretty BS (.denseBiasGradB (N := BS) (.operand "%x" zdc))),
-     render (pretty BS (.denseBiasSgdB "%b" "0.05" (fun _ => 0 : Vec c) 0 (.operand "%x" zdc)))) ]
+     render (pretty BS (.denseBiasSgdB "%b" "0.05" (fun _ => 0 : Vec c) 0 (.operand "%x" zdc))))
+  -- ── the TRANSFORMER family (§2a-quinquies follow-on: the ViT AdamW render needs these) ──
+  -- Small stand-in shapes: `tk` tokens, `dm` model dim, `pp` patch, on a `pi × pH × pW` image.
+  -- The property under test is textual, so the numbers only have to be consistent.
+  , ("rowDenseWeightGrad",
+     render (pretty BS (.rowDenseWeightGrad (N := tk) (a := a) (c := c) "%h"
+                          (fun _ => 0 : Vec (tk*a)) (.operand "%x" (fun _ => 0 : Vec (tk*c))))),
+     render (pretty BS (.rowDenseWeightSgd (N := tk) (a := a) (c := c) "%h" "%W" "0.05"
+                          (fun _ => 0 : Vec (tk*a)) (fun _ _ => 0 : Mat a c) 0
+                          (.operand "%x" (fun _ => 0 : Vec (tk*c))))))
+  , ("rowDenseBiasGrad",
+     render (pretty BS (.rowDenseBiasGrad (N := tk) (c := c) (.operand "%x" (fun _ => 0 : Vec (tk*c))))),
+     render (pretty BS (.rowDenseBiasSgd (N := tk) (c := c) "%b" "0.05" (fun _ => 0 : Vec c) 0
+                          (.operand "%x" (fun _ => 0 : Vec (tk*c))))))
+  , ("veclnGammaGrad",
+     render (pretty BS (.veclnGammaGrad (N := tk) (D := dm) "%h" "1.0e-5" 0
+                          (fun _ => 0 : Vec (tk*dm)) (.operand "%x" (fun _ => 0 : Vec (tk*dm))))),
+     render (pretty BS (.veclnGammaSgd (N := tk) (D := dm) "%g" "%h" "1.0e-5" "0.05" 0
+                          (fun _ => 0 : Vec (tk*dm)) (fun _ => 0 : Vec dm) 0
+                          (.operand "%x" (fun _ => 0 : Vec (tk*dm))))))
+  , ("patchEmbedBiasGrad",
+     render (pretty BS (.patchEmbedBiasGrad (N := tk) (c := c)
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*c))))),
+     render (pretty BS (.patchEmbedBiasSgd (N := tk) (c := c) "%b" "0.05" (fun _ => 0 : Vec c) 0
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*c))))))
+  , ("posEmbedGrad",
+     render (pretty BS (.posEmbedGrad (N := tk) (D := dm)
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm))))),
+     render (pretty BS (.posEmbedSgd (N := tk) (D := dm) "%p" "0.05"
+                          (fun _ _ => 0 : Mat (tk+1) dm) 0
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm))))))
+  , ("patchEmbedWeightGrad",
+     render (pretty BS (.patchEmbedWeightGrad (ic := pi) (H := pH) (W := pW) (P := pp)
+                          (N := tk) (D := dm) "%img" (fun _ => 0 : Vec (pi*pH*pW))
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm))))),
+     render (pretty BS (.patchEmbedWeightSgd (ic := pi) (H := pH) (W := pW) (P := pp)
+                          (N := tk) (D := dm) "%W" "%img" "0.05" (fun _ => 0 : Vec (pi*pH*pW))
+                          (fun _ _ _ _ => 0 : Kernel4 dm pi pp pp) 0
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm)))))) ]
 
 /-- Fail loudly. NOT `IO.Process.exit 1`: under `#eval` the elaborator buffers the eval's output
     and prints it only after the eval returns, so `exit` kills the process with **every diagnostic
