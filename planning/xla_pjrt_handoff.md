@@ -1,11 +1,11 @@
 # xla_pjrt_handoff.md — where the XLA/PJRT work stands, and what to do next
 
-**Written 2026-07-27; rewritten same day after the codegen-provenance thread.** Handoff for a
-fresh session. The full history, gate definitions, and every measurement live in
+**Written 2026-07-27; rewritten 2026-07-28 after the batched-index thread (§2b) closed.** Handoff
+for a fresh session. The full history, gate definitions, and every measurement live in
 `planning/xla_pjrt_ladder.md`; this file is the short version — state, next moves, and the things
 that cost time to learn the first time.
 
-Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Two threads, in order:
+Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 | commit | what |
 |---|---|
@@ -21,7 +21,14 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Two threads, in order:
 | `01724c3` | `cifar8_adam_train_step` from the proven graph |
 | `7faa7fb` | the strided + BN un-fused param gradients |
 | `345c9ea`, `f72903f` | batch-BN-at-R34-scale scoping (§2b) |
-| *uncommitted* | §2b step 1: the batched pointwise forms; EfficientNet renders at `N := B` |
+| — | *↓ the batched-index thread (§2b), 2026-07-28* |
+| `a56eab4` | EfficientNet renders at `N := B`; 7 batched pointwise/row forms |
+| `828875f` | batched ReLU forms; `tests/TestBatchedEmitTie.lean` |
+| `79f2a65` | batched max-pool + conv bias grads; `batchMapAux` |
+| `ce9c1df` | un-fuse the batched `*SgdB` family into `*GradB` (8 ops) |
+| `4af61ff` | `bnBatchMeanB`/`bnBatchVarB` — the BN running stats |
+| `2618ba4` | **`ResNet34RenderB.lean`** — the batched R34 AdamW train step |
+| `b856deb` | the numeric tie: **forward bit-exact, backward norm-rel 1e-6** |
 
 ---
 
@@ -48,6 +55,12 @@ exact: 1×256 vs 2×128+all_reduce agree on the gradient to **1.015e-06**.
 there) `resnet34_train_step`. The optimizer itself is now a proven op family rather than a
 hand-written string emitter. See §2a.
 
+**The batched renderers are honest** (§2b). EfficientNet and the new batch-BN ResNet-34 AdamW train
+step both sit at the batched index `N := B`, so the ten batch-*reducing* `den`s describe what the
+emitted text actually computes. `ResNet34RenderB.lean` → `resnet34_adam_train_step_b.mlir` **ties
+the hand-written render numerically**: forward bit-exact, backward norm-relative 1e-6. It is not yet
+what the trainer runs — see §2b.
+
 ### Running it
 
 ```bash
@@ -61,6 +74,11 @@ LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 .lake/build/bin/resnet34-verified-adam-xla 
 
 # regenerate + audit verified_mlir/  (the canonical entry point; did not exist before §2a)
 scripts/regen_verified_mlir.sh          # or `check` to audit without writing
+
+# the render ties (§2a, §2b). The R34 AdamW one needs a GPU; the rest are CPU-only.
+lake env lean tests/TestBatchedEmitTie.lean            # 13 emit ties + 8 grad-prefix checks
+lake build resnet34-adam-tie && .lake/build/bin/resnet34-adam-tie
+lake build cifar8-adam-tie   && .lake/build/bin/cifar8-adam-tie
 ```
 
 Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`,
@@ -126,210 +144,100 @@ and every `_adam_train_step` except cifar8. Of the 7 remaining double-writers, t
 byte-identical for `vit_fwd` — so they are redundant, not divergent. The four that own independent
 emitters (convnext, efficientnet, mobilenetv2, resnet34 train steps) can drift.
 
-### 2b. Batch-BN at R34 scale ▶ step 1 DONE — and it is also a den/emit fix
+`resnet34_adam_train_step` has a certified replacement ready but **not yet swapped in** — §2b.
 
-Decision: keep the AdamW trainer's **batch-BN** semantics rather than moving R34-Adam onto the
-per-example chain. Scoping that turned up the thing to fix first, because it is the same defect.
+### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
-**`bnBatchF`'s emitter discards the proof-side batch `N`.** It emits `dense<{B*h*w}>` +
-`reduce [0,2,3]` off `pretty`'s runtime batch — `N` is an underscore in the pattern — while
-`den_bnBatchF` says `den = bnBatchLA N oc h w`. Probed:
+Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving
+R34-Adam onto the per-example chain. The result is
+`LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` → `verified_mlir/resnet34_adam_train_step_b.mlir`,
+the first whole-net batch-BN AdamW render out of the proven kit, **numerically tied** to the
+hand-written one.
 
-- one `bnBatchF` node at `N := 32` and at `N := 1`, both under `pretty 32`, emit **byte-identical
-  text**;
-- `N := 32` elaborates and renders correctly (`dense<512.0>` = 32·4·4, `reduce [0,2,3]`). **No
-  type-level blowup at `N = B`** — so this is a re-instantiation, not a rewrite.
+**The defect this closed.** `pretty B` renders a graph whose SHlo index is the *per-example* width
+and whose emitted tensors are `[B, index]`. For ops where the batch is a **parallel** index that is
+sound at any `N` — `den (.batchOp …) = batchMap N (denOp op)`, and at `N = 1` that is the
+per-example op the emitter applies across the batch. For ops where the batch is a **reduction axis**
+it is not: at `N = 1` their `den` describes a ONE-EXAMPLE function while the emitted text reduces
+over all `B`. **Ten ops in these graphs are of the second kind**, not the four originally scoped:
+`bnBatchF`, `bnBatchBack`, `bnGammaSgdB`, `bnBetaSgdB`, **and the whole `*SgdB` param family**
+(`dense{Weight,Bias}SgdB`, `conv{,Strided}WeightSgdB`, `depthwise{,Strided}WeightSgdB` — each
+`θ − lr·∑ n : Fin N, …` against an emitter that contracts the runtime batch). Moving the graphs to
+`N := B` makes all ten honest.
 
-`EfficientNetRender.lean` instantiated every batched op at `N := 1` and rendered at `B := 32`. Its
-module docstring said so outright, so this was a **disclosed convention, not a hidden defect** — but
-it did not carry uniformly, and the split falls exactly on the ops R34 needs:
+**What it cost, and why the original estimate was wrong.** The plan called step 1 a one-line
+re-instantiation, on the strength of a single-node probe: one `bnBatchF` at `N := 1` and `N := 32`
+emits byte-identical text. That was true and did not generalise. The **pointwise** ops read their
+emit width off the SHlo index, so at index `N·s` they emit `tensor<B×(N·s)>` — a type that does not
+match their own operand. Measured on the whole EfficientNet: re-instantiating left the graph
+structure byte-identical (same ops, same order, same SSA numbering) and changed **597 of 7466
+lines**, every one a pointwise trailing dim inflated 32×. So it cost **20 new codegen forms**, all
+of which separate the batch `N` from the per-example emit width `n`:
 
-- **Parallel-index ops — sound.** `den (.batchOp …) = batchMap N (denOp op)`; at `N = 1` that is
-  the per-example op, which is what the emitter applies across the batch. `N` is free.
-- **Batch-reduction ops — not sound.** Their `den`s reduce **across** the batch, so at `N = 1` they
-  describe a ONE-EXAMPLE function while the emitter reduces over all `B`.
-
-**The gap set is ten ops, not four.** The earlier scoping named only `bnBatchF`, `bnBatchBack`,
-`bnGammaSgdB`, `bnBetaSgdB`. But the whole `*SgdB` param family has the same defect — every one of
-them is `θ − lr · ∑ n : Fin N, (per-example grad on batchSlice n)`, and every one of their emitters
-discards `N` and contracts the runtime batch instead (`dot_general` over dim 0, `reduce [0]`, or the
-transpose-trick wgrad). So add `denseWeightSgdB`, `denseBiasSgdB`, `convWeightSgdB`,
-`convStridedWeightSgdB`, `depthwiseWeightSgdB`, `depthwiseStridedWeightSgdB`.
-
-**Step 1 is done: `EfficientNetRender` now renders at `N := B`, byte-identical.** All ten `den`s are
-now honest. But the plan's framing of step 1 as a one-line re-instantiation was **wrong**, and the
-reason is worth keeping:
-
-> The single-node probe (one `bnBatchF` at `N := 1` and `N := 32` emitting identical text) was
-> right about the batch-coupled ops and did not generalise to a graph. The **pointwise** ops
-> (`swishF`, `swishBack`, `sigmoidBack`, `addV`, `sub`) carry only the SHlo index and emit
-> `tensor<B×n>` from it, so at the batched index `N·s` they emit `tensor<B×(N·s)>` — a type that
-> does not even match their own operand. Measured on the whole net: re-instantiating at `N := B`
-> left the graph structure byte-identical (same ops, same order, same SSA numbering) and changed
-> **597 of 7466 lines**, every one a pointwise op's trailing dim inflated 32×.
-
-So step 1 cost seven new codegen forms rather than a `sed`. All of them separate the batch `N` from
-the per-example emit width `n`, and all are reusable for R34:
-
-| form | kind | why |
-|---|---|---|
-| `BatchableOp.swish`, `.softmaxRow`, `.denseRowBack` | descriptors | what they lift is a *fixed* function (no data, or a shared `W`) |
-| `swishBackB`, `sigmoidBackB` | own `SHlo` ctors | see the trap below |
-| `addVB`, `subB` | own ctors, via a new binary `batched2` Raw/Tok tag | `batchOp` is unary |
-
-**The trap, which cost a wrong commit's worth of time and would not have been caught by the
-artifact.** `BatchableOp` lifts a fixed function by `batchMap N`, so a descriptor **must not carry
-batch-varying data**. `swishBack`/`sigmoidBack` look pointwise but their VJP is
-`fun x dy i => dy i * deriv (x i)` — it depends on the saved pre-activation, which differs per
-example. As descriptors their `den` would say *every example shares one example's activation*.
-The byte-identical artifact **cannot** witness this: the render is value-independent (`skel` erases
-values), so the wrong descriptor renders exactly the same bytes. Only the `rfl` faithfulness
-theorem does. Any op carrying a saved activation needs its own constructor holding the
-**whole-batch** `x : Vec (N*n)` — which is what the emitted `xName` holds at runtime anyway.
-**`selectPos` is the same shape, so R34's relu backward hits this too.**
-
-`scripts/regen_verified_mlir.sh check` grew a third audit for the related silent-failure mode: the
-emit catch-alls (`// MALFORMED token stream`, `// … render TODO`) are *comments*, so a missing
-`emitTok` case fails nothing — not the Lean build, not iree-compile — and surfaces only as a wrong
-number much later.
-
-**Inventory for a batched R34:**
-
-| piece | status |
+| forms | kind |
 |---|---|
-| `batchOp .conv` / `.convStrided` / `.gap` / `.dense` | ✅ exist |
-| `bnBatchF`, `bnBatchBack`, `gapBackBatched`, `conv{,Strided}BackBatched` | ✅ exist |
-| relu / `selectPos` / `addV` / `sub` | ✅ index-agnostic, work unchanged |
-| loss cotangent | ✅ `softmaxRowF (m := B) (n := nClasses)` (EfficientNet uses `m := 1`) |
-| **batched maxPool fwd + back** | ❌ missing — R34's stem pools 2×2; EfficientNet downsamples with strided convs, so these were never needed |
-| **batched conv-bias param grad** | ❌ missing — `conv{,Strided}WeightSgdB` exist, no bias peer |
-| **un-fused `*GradB`** | ❌ missing — the `*SgdB` family is fused, the same problem §2a solved for the per-example ops |
+| `BatchableOp.swish` `.relu` `.maxPool` `.softmaxRow` `.denseRowBack` | descriptors (4 sites each) |
+| `swishBackB` `sigmoidBackB` `selectPosB` `maxPoolBackB` | own ctors — they carry per-example saved data |
+| `addVB` `subB` | own ctors via the new binary `batched2` Raw/Tok tag |
+| `scaleB` `shiftB` `divConstB` | pointwise affine-by-a-literal (the cotangent pieces) |
+| `conv{,Strided}{Weight,Bias}GradB`, `bnGammaGradB`, `bnBetaGradB`, `denseWeight/BiasGradB` | the un-fused `*GradB` peers of §2a's eight |
+| `convBiasSgdB` `convStridedBiasSgdB`, `bnBatchMeanB` `bnBatchVarB` | the missing fused bias grads + BN running stats |
 
-**Order of work:**
+plus **`batchMapAux`**, the "batchMap with per-example auxiliary data" combinator — the shape every
+saved-activation backward takes, and the thing that makes the descriptor restriction legible.
 
-1. ~~Re-instantiate EfficientNet's render at `N := B`~~ ✅ **DONE** — `verified_mlir/`
-   `efficientnet_train_step.mlir` is byte-identical, all ten `den`s honest, full
-   `lake build Proofs Certs Codegen` green (the parser round-trip included — `batched2` needed a
-   `parseStack` case and a `parse_toToks` induction case).
-2. ~~The R34 pointwise forms~~ ✅ **DONE** — `BatchableOp.relu` (descriptor) and `selectPosB` (own
-   ctor, whole-batch `x` — it is `swishBack`'s shape, not `swish`'s). With `addVB`/`subB` from
-   step 1, R34's whole pointwise set is covered. Ties: `den_batchOp_relu_eq_reluF`,
-   `selectPosB_faithful`.
-3. ~~Batched maxPool fwd/back + the conv-bias param grad~~ ✅ **DONE** — `BatchableOp.maxPool`
-   (descriptor), `maxPoolBackB` (own ctor: it routes `dy` to the saved input's window argmax, so
-   per-example data), `convBiasSgdB` + `convStridedBiasSgdB`. The bias grad is stride-INDEPENDENT
-   (`Σ_{batch,spatial} dy`), so both bias ops `skel` to ONE Raw and share an emit case — the
-   established `convStridedBiasSgd`-aliases-`convBiasSgd` pattern; only `den` differs. Also added
-   **`batchMapAux`**, the "batchMap with per-example auxiliary data" combinator that `maxPoolBackB`
-   needs and `seBackBatched` had inlined — it is the shape every saved-activation backward takes,
-   and naming it makes the descriptor restriction legible.
-4. ~~Un-fuse the `*SgdB` family into `*GradB`~~ ✅ **DONE** — eight of them, the batched peers of
-   §2a's per-example eight: `conv{,Strided}WeightGradB`, `conv{,Strided}BiasGradB`, `bnGammaGradB`,
-   `bnBetaGradB`, `denseWeight/BiasGradB` (R34's head uses `weightSgd`/`biasSgd`, whose batched
-   peers are the `dense*SgdB` pair — same emitted text). All eight `*SgdB_eq_grad` theorems are
-   `rfl`. **AdamW now has a gradient to consume at the batched index**, which was the actual
-   blocker; §2a's note applies verbatim — the fusion, never Adam.
-   *Note `bnGammaGradB`'s emit recomputes x̂ over `[0,2,3]` (batch BN), NOT the per-example
-   `bnGammaGrad`'s `[2,3]` — the two are different functions, as §2a found at whole-net scale.*
-   **Still missing (not R34's, so out of step-4 scope): `depthwise{,Strided}WeightGradB` and a
-   depthwise bias peer** — EfficientNet needs those whenever its Adam render is done.
-5. **▶ IN PROGRESS: render `resnet34_adam_train_step` batched at `N := B := 32`.** The kit is now
-   complete for it — the last gap was the **BN running statistics**, closed by `bnBatchMeanB` /
-   `bnBatchVarB`. `bnBatchF` is ONE node and does not surface its internal μ/var; the hand-written
-   emitter reaches into its own fragment for `%{p}smr`/`%{p}vsr`, which `pretty` structurally
-   cannot do (intermediates are counter-named and unaddressable). Their `den` is the same
-   `bnMean`/`bnVar` that `bnBatchTensor4` normalises by, so the stats handed back are the ones the
-   forward used, by construction.
+**Artifacts:** `efficientnet_train_step.mlir` came back **byte-identical** through the whole move,
+which is what proves it behaviour-preserving. `resnet34_adam_train_step_b.mlir` is new.
 
-   **Correction to this step's premise.** It said *"it should be exact — the emitted text is what
-   already runs"*. That is **wrong**, and it matters for how the tie is built. Reading the target
-   `verified_mlir/resnet34_adam_train_step.mlir` (5713 `stablehlo` ops, 515 in / 513 out):
+#### The R34 tie — passed, and it caught a bug
 
-   - SSA names are tagged (`%s1b0c`, `%d2bnmu`), not `pretty`'s counter — so a **byte** tie was
-     never possible. Expected.
-   - Less expected: the **op sequence differs too**, so even the SSA-name-independent verb-sequence
-     tie (`tests/TestAdamOpTie.lean`'s `verbs` trick) will not match. The AdamW cotangent has
-     **label smoothing α = 0.1** and an in-graph `%loss` hand-fused directly in `[B,10]`, while the
-     kit's `softmaxRow` descriptor emits `reshape → exp → reduce → broadcast → divide → reshape`.
-     Same function, different graph.
+`lake build resnet34-adam-tie && .lake/build/bin/resnet34-adam-tie` (XLA/PJRT, 7900 XTX, one step,
+all **68,040,737** returned floats):
 
-   ⇒ **The tie must be numeric**: compile both, run on identical inputs, compare all 513 outputs —
-   the `cifar8-adam-tie` pattern, and it needs a GPU. Budget for that, not for a text diff.
+| check | result |
+|---|---|
+| interface vs the hand-written artifact | 515 in / 513 out, all types positionally identical ✅ |
+| structural ops (conv 107, transpose 143, reverse 35, pad 13, `reduce_window` 1, `select_and_scatter` 1, sqrt 146, dot_general 3) | exact match ✅ |
+| **forward** (`bnstat` = batch μ/var of all 36 BN inputs) | **BIT-EXACT 17024/17024** ✅ |
+| **loss** | bit-exact 3/3 ✅ |
+| **backward** (θ/m/v) | **norm-rel 1–2e-6** ✅ |
 
-   Interface to match: **515 in** = `%x` + 146 θ + 146 m + 146 v + 3 scalars (`%lr`, `%bc1`,
-   `%bc2`) + 72 BN-stat passthroughs + `%onehot`; **513 out** = 146 θ' + 146 m' + 146 v' +
-   loss/bc1/bc2 + 72 stats. β₁/β₂/ε/wd are baked constants (0.9 / 0.999 / 1e-8 / 1e-4).
+The backward figure has **run-to-run spread**: four of five runs report 1e-6, one reported 2e-6, on
+identical binaries and artifacts. The forward stayed bit-exact `17024/17024` in every run. Most
+likely XLA autotuning picking a different convolution algorithm between processes — note this does
+NOT contradict §3's "bit-identical for a single step", which is about repeated execution *within*
+a process, and which the A-vs-A run confirms. Quote the tie as **≤ 2e-6**, not as a fixed number;
+the 1e-4 gate has 50× headroom either way.
 
-   **The renderer is built** — `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean`, writing
-   `verified_mlir/resnet34_adam_train_step_b.mlir`. The cotangent is **composed from kit ops**
-   (`softmaxRow → subB → scaleB → addVB → shiftB → divConstB`, α = 0.1) rather than fused, which
-   is the honest choice for a §2b whose whole point is `den` honesty. `%loss` stays report-only and
-   outside the AST, as `cifar8_adam_train_step`'s does (§5). Three more small ops were needed:
-   `scaleB`/`shiftB`/`divConstB`. **`divConstB` emits a real `divide` on purpose** — the caller
-   divides by the batch, and `x * (1/B)` is only bit-equal to `x / B` when `B` is a power of two,
-   so `scaleB (1/B)` would silently break the bs192 render §2d wants.
+**The gate is deliberately not per-coordinate relative** — see §3: R34's gradient does not reproduce
+to better than ~6e-3 per-coordinate even XLA-vs-XLA under a sub-ULP nudge, so a 1e-4 per-coordinate
+gate fails a *correct* render by 60×. Here per-coordinate max rel is **0.32** while max|a−b| is
+below 1e-6; that number is noise. The two gates that mean something: the **forward must be
+bit-exact** (`bnstat` pins stem, every block and every BN, so a real mis-wiring is a hard failure
+rather than a tolerance argument), and the backward must agree **norm-relative** (max|a−b|/max|a|).
+The harness runs A against itself first — **bit-exact on all 68M outputs** — so any A-vs-B
+difference is graph-attributable, never backend noise. Without that baseline the 1e-6 is an
+assertion, not a measurement.
 
-   Status — **TIED ✅** (`lake build resnet34-adam-tie && .lake/build/bin/resnet34-adam-tie`, XLA/
-   PJRT on a 7900 XTX, one step, all 68,040,737 returned floats compared):
+**The tie caught a real bug:** the first render computed PLAIN cross-entropy for `%loss` instead of
+the SMOOTHED one its own cotangent implies. 0.28% loss disagreement against an otherwise
+bit-identical forward. `%loss` is report-only, on no gradient path, so no proof in the repo could
+have seen it — it would have surfaced as a training curve that quietly failed to match the
+reference. It is exactly the hand-written non-AST carve-out §5 flags.
 
-   | check | result |
-   |---|---|
-   | interface vs the committed artifact | **515 in / 513 out, all types positionally identical** ✅ |
-   | structural ops (conv/transpose/reverse/pad/reduce_window/select_and_scatter/sqrt/dot_general) | **exact match** ✅ |
-   | `iree-compile` (llvm-cpu) | **exit 0**, 430 KB vmfb ✅ |
-   | **forward** (`bnstat` = batch μ/var of all 36 BN inputs) | **BIT-EXACT, 17024/17024** ✅ |
-   | **loss** | **bit-exact 3/3** ✅ |
-   | **backward** (θ/m/v) | **norm-rel 1e-6** ✅ |
+#### ▶ What is left here
 
-   **The gate is not per-coordinate relative, and that matters.** §3 already establishes that R34's
-   gradient does not reproduce to better than ~6e-3 per-coordinate even XLA-vs-XLA under a sub-ULP
-   nudge; a 1e-4 per-coordinate gate fails a *correct* render by 60×, because it is dominated by
-   near-zero gradient entries where a sub-ULP absolute difference is a huge ratio. Here the
-   per-coordinate max rel is **0.32** while max|a−b| is below 1e-6 — that number is noise, not
-   signal. The two gates that mean something: the **forward must be bit-exact** (`bnstat` pins the
-   whole chain — stem, every block, every BN — so any real mis-wiring is a hard failure, not a
-   tolerance argument), and the backward must agree **norm-relative** (max|a−b| / max|a|).
-
-   Run A against itself first: **bit-exact on all 68M outputs**. So XLA is deterministic for a
-   single step (as §3 says), and any A-vs-B difference is attributable to the graph, never to the
-   backend. That baseline is what makes the 1e-6 meaningful.
-
-   **The tie caught a real bug.** The first render computed PLAIN cross-entropy for `%loss` instead
-   of the SMOOTHED one the cotangent implies
-   (`−(1/B)·Σ[(1−α)·Σ onehot·log sm + (α/K)·Σ log sm]`) — a 0.28% loss disagreement against an
-   otherwise bit-identical forward. It is on no gradient path, so no proof in the repo could have
-   seen it, and it would have shown up only as a training curve that quietly failed to match the
-   reference. `%loss` is exactly the hand-written, non-AST carve-out §5 flags; this is what that
-   warning is for.
-
-   **It is ~1.7× the ops** (10005 vs 5971), and the reason is worth knowing before anyone reads
-   that as a defect: `pretty` has no CSE (§4), and the batched backward ops are *self-contained
-   recomputes* — `bnBatchF`, `bnBatchBack` and `bnGammaGradB` each rebuild x̂ from the saved BN
-   input, so `rsqrt` is 108 = 36 layers × 3 where the hand-written render saves `%{p}xh` once and
-   reuses it. Plus 621 reshapes from the batched ops' `[B, c·h·w] ↔ [B,c,h,w]` round-trips.
-   XLA's CSE should collapse most of it — the recomputes are identical subgraphs on identical
-   inputs — but **that is an assumption, not a measurement**; measure before quoting a step time.
-
-   It still writes a **separate path** from `resnet34_adam_train_step.mlir`. The tie now passes, so
-   the swap is **unblocked but not done** — it changes what the AdamW trainer actually runs, and
-   two things should be settled first: (a) measure a step, since the render is 1.7× the ops and the
-   XLA-CSE assumption above is untested; (b) retire the `tests/` writer in the same change, or the
-   §2a two-writers race just moves to the new file.
-
-**`tests/TestBatchedEmitTie.lean`** has two sections: thirteen batched forms tied to their
-per-example peers byte-for-byte, and eight un-fused `*GradB` renders checked to be byte-PREFIXES of
-their fused `*SgdB` peers (the tail being exactly the const-lr/multiply/subtract SGD update — the
-emit-side twin of the `*SgdB_eq_grad` theorems). Add a case for every new batched form — it is what
-catches an emitter that reads its width off the SHlo index again. The tie was verified to actually
-fail by deliberately breaking `relu`'s emit case. Note it fails via `throw`, not
-`IO.Process.exit 1`: under `#eval` the elaborator buffers output and prints it only after the eval
-returns, so `exit` discards **every** diagnostic and you get a bare non-zero status. Several older
-`tests/*.lean` use the `exit` form and fail blind.
-
-Cheapest sanity check for any of these, learned from step 1: render the *whole net* at both `N`
-values into temp files and `diff` them, and separately `diff` with all `tensor<…>` annotations
-stripped. Structure-identical + types-differ localises the breakage to the exact op family in one
-pass; a single-node probe does not.
+1. **Measure a step.** The render is **1.7× the ops** (10005 vs 5971): `pretty` has no CSE (§4) and
+   the batched backward ops are *self-contained recomputes* — `bnBatchF`, `bnBatchBack` and
+   `bnGammaGradB` each rebuild x̂ from the saved BN input, so `rsqrt` is 108 = 36 layers × 3 where
+   the hand-written render saves `%{p}xh` once. Plus 621 reshapes from the `[B,c·h·w] ↔ [B,c,h,w]`
+   round-trips. **XLA CSE should collapse most of it — identical subgraphs on identical inputs —
+   but that is an assumption, nobody has measured it.** Do this before quoting a step time.
+2. **Then swap the driver**, and **retire `tests/TestResnet34Train.lean`'s AdamW writer in the same
+   change** — otherwise the §2a two-writers race just moves to the new file. The tie unblocks this;
+   it changes what actually trains, so it wants the measurement first.
+3. **EfficientNet's own Adam render** still needs `depthwise{,Strided}WeightGradB` and a depthwise
+   bias peer. Out of R34's scope, so not built.
 
 The per-example route is *not* being taken, but if it is ever revisited: it needs no new ops
 (§2a's eight gradients cover it), and its consequences are that the AdamW trainer's BN semantics
@@ -365,9 +273,14 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
 
 ### 2d. Then, in value order
 
+0. **Finish §2b's tail first** — measure a step of `resnet34_adam_train_step_b.mlir`, then swap the
+   driver onto it and retire the `tests/` AdamW writer in the same change. It is the cheapest
+   remaining item, it is already tied, and leaving it half-done leaves two writers in the tree.
 1. **bs256 re-render + measure.** Batch is worth **1.8×** on this net (5.06 → 2.87 ms/img from
    bs32 → bs256, measured), it is a one-line `BS` edit, and bs256 **fits** on a 7900 XTX. Needed
-   for ImageNet anyway.
+   for ImageNet anyway. Note the batched renderer takes `B` as a parameter, so a bs256 render is a
+   one-line change there too — and `divConstB` already emits a real `divide`, so a non-power-of-two
+   batch is safe (bs192 would silently break under a `× 1/B` formulation).
 2. **Rung 4** — the FPN detector, and the 35.5× headline nobody has verified end to end.
 3. **Device-resident parameters.** Two rounds of transfer work are already done (batching:
    256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains is smaller than it
@@ -392,6 +305,13 @@ same box, same net, synthetic data, `jax/scripts/jax_r34_bf16_bench.py 256`).
 which is why the 1-step gate is sound — but three runs of the same binary at the same seed gave
 epoch-1 val accuracy of 43.21 / 46.80 / 47.29%. Run determinism controls **at the scale you care
 about**; a 1-step check is necessary, not sufficient.
+
+**Refinement of that (2026-07-28, §2b tie).** "Bit-identical for a single step" holds *within* a
+process — two executables compiled and run in one process agree to the bit, which the R34 tie's
+A-vs-A run confirms on all 68M outputs. **Across processes it is not quite bit-stable**: repeated
+runs of the same tie binary on the same artifacts gave a backward norm-relative difference of 1e-6
+four times and 2e-6 once. Forward stayed bit-exact every time. Presumably autotuning. So gate with
+headroom and quote a bound, not a value.
 
 **R34's raw G2 number (gradient rel 5.20e-02) is not a defect.** The gradient does not reproduce to
 better than ~6e-3 against the *same backend* under a sub-ULP nudge, so a 1e-4 gate fails XLA-vs-XLA
@@ -438,6 +358,28 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
 - **Two writers for one artifact is a silent last-writer-wins race.** Run
   `scripts/regen_verified_mlir.sh check` before trusting anything in `verified_mlir/`.
 
+**Guards, and how to use them**
+
+- **`tests/TestBatchedEmitTie.lean`** — two sections: thirteen batched forms tied byte-for-byte to
+  their per-example peers, and eight un-fused `*GradB` renders checked to be byte-PREFIXES of their
+  fused `*SgdB` peers (the tail being exactly the const-lr/multiply/subtract update — the emit-side
+  twin of the `*SgdB_eq_grad` theorems). **Add a case for every new batched form**; it is what
+  catches an emitter that reads its width off the SHlo index again. It was verified to actually fail
+  by deliberately breaking `relu`'s emit case.
+- **A `#eval`-based test must fail via `throw`, not `IO.Process.exit 1`.** Under `#eval` the
+  elaborator buffers the eval's output and prints it only after the eval returns, so `exit` discards
+  **every** diagnostic — you get a bare non-zero status and no idea what broke. Flushing does not
+  help. `tests/TestAdamOpTie.lean` and `tests/TestCifar8AdamTie.lean` still use the `exit` form and
+  fail blind.
+- **Fastest way to localise a render disagreement**: render the *whole net* both ways into temp
+  files and `diff`; then `diff` again with all `tensor<…>` annotations stripped. Structure-identical
+  + types-differ pins the breakage to one op family in a single pass. A single-node probe does not —
+  that is exactly how §2b's step 1 was mis-estimated.
+- **In a numeric tie, run A against itself first.** It establishes the determinism floor (XLA is
+  bit-identical for a single step), which is what turns "the difference is 1e-6" from an assertion
+  into a measurement. And report **per region**: in `resnet34-adam-tie`, `bnstat` depends only on
+  the forward, so it separates a forward disagreement from a backward one in one run.
+
 **Runtime / PJRT**
 
 - **`use_global_device_ids` must NOT be set** on `stablehlo.all_reduce`. It needs a positive
@@ -476,7 +418,19 @@ BatchNorm group at the size it was tied at, so the BN caveat never arises (§10.
 
 And on the renders: `pretty(provenGraph)` means the committed bytes are the certified render *of
 the graph that was proven* — it does not mean the emitter is verified. The `Tok → StableHLO-text`
-lexing stays audited-but-trusted, which is why every move in §2a is backed by a numeric tie against
-what it replaced, not by the faithfulness theorem alone. Two places currently emit text that is
-**not** `pretty` of an AST node, and both say so in the emitted output: `cifar8_adam_train_step`'s
-report-only scalar `%loss` and its `%bc` passthroughs.
+lexing stays audited-but-trusted, which is why every move in §2a and §2b is backed by a numeric tie
+against what it replaced, not by the faithfulness theorem alone.
+
+Three places currently emit text that is **not** `pretty` of an AST node, and all say so in the
+emitted output: `cifar8_adam_train_step`'s report-only scalar `%loss` and its `%bc` passthroughs,
+and `resnet34_adam_train_step_b`'s `%loss`. **That last one shipped wrong** — plain CE instead of
+the smoothed CE its own cotangent implies — and only the numeric tie found it, because nothing on a
+gradient path touches it and no theorem covers it. Treat every such carve-out as unverified text
+that needs its own numeric check, not as a harmless annotation.
+
+A note on what the §2b tie does and does not establish. It says the batched render computes what the
+hand-written render computes — forward to the bit, backward to norm-relative 1e-6. It does **not**
+say either one is the mathematically intended net; that comes from the `den` side (the faithfulness
+theorems, now honest at `N := B`) and from the layer-level VJP oracle in §3. The two halves are
+independent, and both are needed: the artifact cannot witness a wrong `den` (the render is
+value-independent), and the theorems cannot witness a wrong emitter.
