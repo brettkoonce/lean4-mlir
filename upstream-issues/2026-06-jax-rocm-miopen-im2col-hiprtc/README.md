@@ -1,11 +1,96 @@
 # MIOpen conv on gfx1100 (ROCm 7.2.0): the im2col/hiprtc crash no longer reproduces — what remains
 
-**Status: NOT FILED — headline bug not reproducible.** Re-verified 2026-06-24.
+**Status: NOT FILED — but REPRODUCED 2026-07-28, reversing the 06-24 conclusion.**
+The `get_global_id` hiprtc compile error is **back and deterministic** given the right
+graph shape; see the 07-28 section immediately below, which supersedes the 06-24
+"not reproducible" finding. The 06-24 text is kept intact underneath because its
+controls are still valid and still useful.
+
+*(Original 06-24 status line, now superseded:)* Re-verified 2026-06-24.
 The `get_global_id` hiprtc compile crash this doc was opened to chase does **not**
 reproduce on the current stack. Conv nets run; the residue is a *performance*
 fallback (ResNet-34 ~2× the reference ms/step) plus a latent *no-workspace*
 limitation in MIOpen's GEMM solver. Nothing here is worth an upstream filing as-is.
 The original mid-investigation hypothesis is preserved at the bottom for history.
+
+---
+
+## ⭐⭐ UPDATE 2026-07-28 — it DOES reproduce; the trigger is a *fused* pad+conv
+
+The 06-24 re-verification concluded the `get_global_id` error was gone. That conclusion was
+reached by forcing a **cold compile of the im2col kernel in isolation**, which does succeed.
+It does not follow that every path that builds that kernel succeeds — and one does not.
+
+**Deterministic reproducer: `repro_pad_conv_fused.py`** (~20 lines of JAX, no ViT).
+
+```
+MIOpen(HIP): Warning [BuildHip] .../MIOpenIm2d2Col.cpp:298:19:
+    error: use of undeclared identifier 'get_global_id'
+  298 |     index_t tid = get_global_id(0);
+.../MIOpenIm2d2Col.cpp:326:16:
+    error: use of undeclared identifier 'get_global_size'
+2 errors generated when compiling for gfx1100.
+MIOpen Error: hipoc_program.cpp:299: Code object build failed. Source: MIOpenIm2d2Col.cpp
+-> JaxRuntimeError: INTERNAL: Failed to enqueue convolution on stream: miopenStatusUnknownError
+```
+
+### What makes it fire
+
+An interior-dilated `pad` **fused into the convolution in the same jit**:
+
+```python
+u  = lax.pad(dy, 0.0, ((0,0,0),(0,0,0),(0,0,15),(0,0,15)))   # interior dilation
+xt = jnp.transpose(x, (1,0,2,3)); dt = jnp.transpose(u, (1,0,2,3))
+lax.conv_general_dilated(xt, dt, (1,1), ((0,0),(0,0)), (1,1), (1,1), dn)
+```
+`x : f32[32,3,224,224]`, `dy : f32[32,192,14,14]` — a 16×16/s16 patch-embed weight gradient.
+
+**The fusion is load-bearing.** Materialise the dilated 209×209 filter first and hand it to a
+standalone conv (`repro_control_standalone_conv.py`) and it **runs fine** — XLA picks a
+different algorithm. Fusing selects the im2col path, which is the broken one. That is very
+likely why 06-24 could not reproduce it: an isolated kernel build is not the failing path.
+
+### Controls — two plausible causes ruled out by measurement
+
+| hypothesis | verdict | script |
+|---|---|---|
+| the 209×209 filter is a shape MIOpen rejects | **refuted** — same conv succeeds standalone | `repro_control_standalone_conv.py` |
+| memory pressure / allocation failure in disguise | **refuted** — succeeds under 12 GiB ballast; a real OOM gives a clean `RESOURCE_EXHAUSTED: Out of memory while trying to allocate 14.00GiB` | `repro_control_memory.py` |
+
+### Is this fixable by installing an OpenCL runtime?
+
+**No — and it is not an end-user library gap.** `get_global_id` / `get_global_size` are OpenCL
+work-item builtins, but nothing here is *running* OpenCL: hiprtc is failing to compile
+MIOpen's own embedded kernel source. An OpenCL ICD/runtime is not on that path and would not
+be consulted. MIOpen shares these kernel sources between its OpenCL and HIP backends and
+supplies a compatibility header that `#define`s the builtins to HIP equivalents — and 06-24
+*proved that shim can be in scope on this box*, because the cold isolated compile succeeds.
+
+So the shim exists and works; it is simply **not in scope for the compile this particular
+solver path triggers**. That makes it a MIOpen-side build-flags / kernel-selection defect, not
+a missing dependency. (Which specific flag or solver differs is not yet established — that is
+the next thing to pin down, and the obvious lever is `MIOPEN_ENABLE_LOGGING=1
+MIOPEN_LOG_LEVEL=6` on the failing repro to capture the exact compile invocation.)
+
+### Relationship to the 06-24 workspace finding
+
+Both are real and they are **different failures that share the `miopenStatusUnknownError`
+status code**, which is why they were conflated. 06-24's `GemmFwdRest` "0 provided, 301056
+required" workspace refusal reproduces via the immediate API; this one is a source-compile
+failure reached through XLA. The 06-24 note attributed the ViT patch-embed symptom to the
+workspace refusal — on this evidence, at least this instance of it is the compile error.
+
+### Impact
+
+Blocks the ViT-Tiny AdamW graph on XLA/PJRT entirely (IREE runs the identical graph fine),
+which leaves the project's data-parallel gate unrunnable on this box. See
+`planning/xla_pjrt_handoff.md`.
+
+### Where to file
+
+MIOpen (`ROCm/MIOpen`) — the failing source file is theirs; the XLA/ROCm lowering is only the
+trigger. Worth pinning the exact compile invocation first (see above) so the report names the
+flag rather than just the symptom.
 
 ---
 

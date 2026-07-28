@@ -15,6 +15,7 @@ the workaround for each is documented in the relevant folder's README.
 | folder | upstream | status |
 |---|---|---|
 | [`2026-06-iree-cuda-fp8-nvptx-lowering/`](2026-06-iree-cuda-fp8-nvptx-lowering/) | iree-org/iree (to file) | f8E4M3FN/E5M2 don't lower on CUDA/NVPTX (`unrealized_conversion_cast` i8↔f8); CPU + fp32 OK. Repros on rc20260428 **and** rc20260623. |
+| [`2026-06-jax-rocm-miopen-im2col-hiprtc/`](2026-06-jax-rocm-miopen-im2col-hiprtc/) | ROCm/MIOpen (to file) | `MIOpenIm2d2Col.cpp` fails to hiprtc-compile (`get_global_id` undeclared) → `miopenStatusUnknownError`. **Reproduced 2026-07-28**, reversing the 06-24 "not reproducible" call: the trigger is an interior-dilated `pad` **fused into** the conv; standalone it works. 20-line repro. |
 
 ## Fixed upstream
 
