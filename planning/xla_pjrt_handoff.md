@@ -190,6 +190,80 @@ The lesson worth keeping: *"currently byte-identical" is not a property that mai
 redundant writer costs nothing until someone edits one of the two — which is precisely how
 `resnet34_train_step` (§2a) and `resnet34_adam_train_step` (§2b-ter) went wrong.
 
+### 2a-quinquies. ▶ NEXT: the last four double-writers
+
+**Start here in a fresh session.** All four are SGD `_train_step` artifacts whose `tests/` writer
+owns an *independent* emitter. Measured 2026-07-28 — every claim below is a measurement, not a
+reading of the code:
+
+| artifact | `Proofs/` writer | `tests/` writer (line) | interface (in/out) | forked? |
+|---|---|---|---|---|
+| `convnext_train_step` | `ConvNeXtRender.lean:254` | `TestConvNeXtTrain.lean:510` | **182/180 both** | yes — 3959 vs 3066 ops |
+| `efficientnet_train_step` | `EfficientNetRender.lean:534` | `TestEfficientNetTrain.lean:543` | **264/262 both** | yes — 7022 vs 3811 ops |
+| `mobilenetv2_train_step` | `MobileNetV2Render.lean:577` | `TestMobilenetV2Train.lean:369` | **212/210 vs 84/82** | yes — different ARITY |
+| `resnet34_train_step` | `ResNet34Render.lean:438` | `TestResnet34Train.lean:397` | — | yes — per-example vs batch BN (§2a) |
+
+**The single most useful fact: the committed bytes are already the `Proofs/` render for all four.**
+Verified by `lake build` (which runs the `Proofs/` `#eval`s) leaving `verified_mlir/` git-clean. So
+the certified render is what every trainer runs *today*, and **retiring the `tests/` emitters is a
+zero-behaviour-change cleanup** — it removes a clobber hazard, it does not swap anything. That is a
+much smaller job than §2b-ter was, and it is why this is the next thing to do rather than the
+AdamW work below.
+
+Each `tests/` emitter produces a *structurally different* graph (diffs do not collapse when
+`tensor<…>` types and SSA names are stripped — 2605 / 5048 / 5165 residual diff lines), and the
+`Proofs/` renders are consistently **larger** (mnv2 4.5×) for the §2b reason: `pretty` has no CSE
+and the batched ops are self-contained recomputes. §2b-bis measured that to cost **nothing** at run
+time, so size is not an argument for keeping the hand-written ones.
+
+**Two groups, because the `tests/` files have different other jobs:**
+
+*Group A — retire the file outright.* Each writes **only** the contested artifact (checked):
+- `tests/TestResnet34Train.lean` — its AdamW half was already removed in §2b-ter, so the SGD write
+  is all that is left; removing it empties the file.
+- `tests/TestMobilenetV2Train.lean` — the mnv2 AdamW render lives in a *different* file
+  (`TestMobilenetV2TrainPC.lean`), so nothing else is lost.
+
+*Group B — split like §2b-ter, keep the AdamW half.* Each is also the **sole** writer of its
+`_adam_train_step`, which has no certified peer yet:
+- `tests/TestConvNeXtTrain.lean` → also writes `convnext_adam_train_step.mlir`
+- `tests/TestEfficientNetTrain.lean` → also writes `efficientnet_adam_train_step.mlir`
+
+**Do this before deleting, for convnext and efficientnet only:** their interfaces are positionally
+identical, so an R34-style numeric tie is possible and cheap — copy `tests/TestResnet34AdamTie.lean`,
+which already does interface check → per-region compare → degeneracy guards. It either confirms the
+two emitters agree (and the deletion is provably lossless) or surfaces a §2a-class bug, which is
+exactly what the R34 tie did. **You lose the ability to run that comparison once the emitter is
+gone**, so run it first. For mnv2 and resnet34 no tie is possible or meaningful: mnv2's two renders
+have different arity (they are not two spellings of one function), and resnet34's fork is the
+documented per-example-vs-batch BN semantic split that disagrees at rel 1.13.
+
+Traps, all of which cost time this session:
+- **Elaborating any of these files rewrites the artifact.** Always `git diff verified_mlir/` after,
+  and `git checkout --` to restore. This is how `resnet34_train_step` flipped md5 twice today.
+- **mnv2 fails loudly, the others silently.** A clobbered mnv2 artifact has the wrong *arity*, so
+  the driver refuses it; convnext/efficientnet/resnet34 clobbers produce a runnable graph computing
+  something else. Do not let mnv2's noisiness set your expectations for the other three.
+- `scripts/regen_verified_mlir.sh check` is the scoreboard: **4 today, 0 when this is done.**
+
+### Then, separately: the four uncertified whole-net AdamW renders
+
+Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convnext`,
+`efficientnet`, `mobilenetv2` `_adam_train_step` are hand-written with **live drivers**
+(`*-verified-adam`), so the AdamW scorecard is 2 of 6. From what §2b cost at R34 scale:
+
+- **ViT is likely cheapest** — `vit_fwd`/`vit_train_step` already render from `Proofs/`, so only the
+  AdamW tail is missing, and `emitAdamV` is already a proven op family (§2a).
+- **EfficientNet is next** — it already renders at `N := B` and came back byte-identical through the
+  §2b move, but its AdamW render needs `depthwise{,Strided}WeightGradB` plus a depthwise bias peer
+  (real kit work, ~4 new forms × the 4-site `BatchableOp` recipe).
+- **MobileNetV2** needs those same depthwise gradients, so it comes free-ish after EfficientNet.
+- **ConvNeXt** carries the 4 even-kernel gaps from its §1a tie; check whether they touch the
+  backward before scoping.
+
+The R34 playbook that worked: un-fuse the gradients → render AdamW from the proven ops → numeric
+tie against the hand-written render → bench → swap and retire in one change.
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving
@@ -469,10 +543,11 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
 
 ### 2d. Then, in value order
 
-0. ~~**Finish §2b's tail**~~ ✅ **DONE** — measured (§2b-bis: no cost) and swapped (§2b-ter: the
-   trainer runs the certified render). What it left behind: **decide the data-parallel render's
-   fate** (§2b-ter — certified R34 still cannot emit collectives, so multi-GPU runs an uncertified
-   emitter on its own `_dp.mlir` path). Cheap to decide, and it is the only loose end in this thread.
+0. ~~**Finish §2b's tail**~~ ✅ **DONE** — measured (§2b-bis: no cost), swapped (§2b-ter), multi-GPU
+   brought onto the certified renderer and gated (§2b-quater). This thread is closed.
+0b. **▶ The last four double-writers — §2a-quinquies.** Zero-behaviour-change cleanup: the committed
+   bytes are *already* the certified render for all four, so this only removes clobber hazards.
+   Cheapest remaining item by a wide margin, and it takes the audit to 0.
 1. **bs256 re-render + measure.** Batch is worth **1.8×** on this net (5.06 → 2.87 ms/img from
    bs32 → bs256, measured), it is a one-line `BS` edit, and bs256 **fits** on a 7900 XTX. Needed
    for ImageNet anyway. Note the batched renderer takes `B` as a parameter, so a bs256 render is a
