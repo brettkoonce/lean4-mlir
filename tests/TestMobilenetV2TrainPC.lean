@@ -15,9 +15,18 @@ r34/enet, see `planning/mnv2_verified.md`). The reference uses TRUE batch-norm (
 `[0,2,3]`), but the SHlo `.bnBatchF` token has no `pretty`/emit case, so giving mnv2 batch-norm trades
 away its proof-rendered-BN property: BN forward+backward become hand-emitted flat↔NCHW fragments
 (reshape is a buffer no-op), like the existing hand-emitted gap-backward and conv/depthwise grads.
-`bnB` saves x̂/istd/nf/γb + the `[oc]` batch sums; `bnBackB` reuses them and folds dγ/dβ. The adam
-step also carries per-layer batch mean/var out in passthrough slots (running-stats BN eval — see
-`bnLayers` + `mobilenetv2Verified.bnChannels` + `@mobilenetv2_fwd_eval`).
+`bnB` saves x̂/istd/nf/γb + the `[oc]` batch sums; `bnBackB` reuses them and folds dγ/dβ.
+
+**The AdamW emitter that used to live here is RETIRED (§2f).** `verified_mlir/mobilenetv2_adam_train_step.mlir`
+is now written solely by `Proofs/Codegen/MobileNetV2RenderB.lean` as `pretty(provenGraph)`, licensed
+by a numeric tie against these very bytes (`mobilenetv2-adam-tie`: forward BIT-EXACT on all 52 BN
+layers' batch statistics, `%loss` bit-exact, gradient bit-exact, spread 0/210, over all 6,795,329
+returned floats — and verified to fail on three perturbed renders). What remains here is the SGD
+render plus an `iree-compile` smoke that READS the committed AdamW bytes. Recover the retired
+emitter (`adamParams`, `adamConsts`, `adamCot`, `bnLayers`, `trainStepAdamSched` — the running-stats
+BN passthrough layout included) from `git show 75a9f8e:tests/TestMobilenetV2TrainPC.lean` if ever
+needed; do NOT repoint it at the artifact, since a second emitter that can write is exactly the
+last-writer-wins race §2a found.
 
 Full-paper MobileNetV2 (17 inverted-residual blocks, 210 param tensors / ~2.25M scalars) — the layout
 `mobilenetv2Verified.toSpecs` / `MobileNetV2Layout.specs` (#guard-locked) the verified-adam driver
@@ -243,8 +252,10 @@ private def blockSgd (p : String) (ic mid oc : Nat) : String :=
   sgd s!"%{p}pW" s!"%{p}dpW" (ty [oc,mid,1,1]) ++ sgd s!"%{p}pb" s!"%{p}dpb" (ty [oc]) ++
   sgd s!"%{p}pg" s!"%{p}dpndg" (ty [oc]) ++ sgd s!"%{p}pbt" s!"%{p}dpndb" (ty [oc])
 
-/-- The proof-rendered fwd + backward-cotangent-chain + hand param grads, SHARED by the SGD
-    (`trainStep`) and AdamW (`trainStepAdamSched`) renders. The softmax `sm` `[BS,10]` is captured
+/-- The proof-rendered fwd + backward-cotangent-chain + hand param grads. It was SHARED by the SGD
+    (`trainStep`) and AdamW (`trainStepAdamSched`) renders; the AdamW one is retired (§2f), so only
+    `trainStep` uses it now — the `cot` parameter is kept because it is what made the sharing work
+    and re-adding a second caller must not mean re-deriving it. The softmax `sm` `[BS,10]` is captured
     and handed to `cot`, which emits the loss cotangent (and must define `%dy` in scope — plus
     `%loss` for the Adam path). Everything downstream (dense param grads, dense-back) reads `%dy`. -/
 private def renderBody (cot : String → String) : String := Id.run do
@@ -350,118 +361,9 @@ private def trainStep : String := Id.run do
     body ++ stemSgd ++ blkSgd ++ headSgd ++ denseSgd ++
     s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
 
--- ════════════ AdamW scheduled train step (loss-curve parity with mobilenet-v2-train) ════════════
-
-/-- (paramName, gradName, dims) for all 210 param tensors, in `allParams` order (= `net.specs` order).
-    Drives the per-param AdamW update and the packed `[θ|m|v]` signature. The grad names match
-    those emitted by `renderBody`'s param-grad section (`%{p}d…` per block, `%d…` for stem/head/dense). -/
-private def adamParams : List (String × String × List Nat) :=
-  [("%sW", "%dsW", [32,3,3,3]), ("%sb", "%dsb", [32]), ("%sg", "%dstndg", [32]), ("%sbt", "%dstndb", [32])]
-  ++ (blocks.map (fun (p, ic, mid, oc, _, _) =>
-       (if mid == ic then [] else
-        [(s!"%{p}eW", s!"%{p}deW", [mid,ic,1,1]), (s!"%{p}eb", s!"%{p}deb", [mid]),
-         (s!"%{p}eg", s!"%{p}dendg", [mid]), (s!"%{p}ebt", s!"%{p}dendb", [mid])]) ++
-       [(s!"%{p}dW", s!"%{p}ddW", [mid,1,3,3]), (s!"%{p}db", s!"%{p}ddb", [mid]),
-        (s!"%{p}dg", s!"%{p}ddndg", [mid]), (s!"%{p}dbt", s!"%{p}ddndb", [mid]),
-        (s!"%{p}pW", s!"%{p}dpW", [oc,mid,1,1]), (s!"%{p}pb", s!"%{p}dpb", [oc]),
-        (s!"%{p}pg", s!"%{p}dpndg", [oc]), (s!"%{p}pbt", s!"%{p}dpndb", [oc])])).flatten
-  ++ [("%hW", "%dhW", [1280,320,1,1]), ("%hb", "%dhb", [1280]), ("%hg", "%dhndg", [1280]), ("%hbt", "%dhndb", [1280]),
-      ("%Wd", "%dWd", [1280,10]), ("%bd", "%dbd", [10])]
-
-/-- β₁/β₂/ε/wd baked (the mnv2 reference recipe); `%lr`/`%bc1`/`%bc2` arrive as runtime args. -/
-private def adamConsts : String :=
-  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
-  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
-  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
-  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
-  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
-
-/-- AdamW loss cotangent with label smoothing α=0.1 (off-class mass α/K, K=10), plus the in-graph
-    smoothed-CE loss `%loss` for logging — same mechanism as `ViTRender.vitTrainStepModuleAdamSched`.
-    Defines `%dy` (the cotangent the backward chain reads) and `%loss`. -/
-private def adamCot (sm : String) : String :=
-  let ls : Float := 0.1
-  let lsK : Float := ls / 10.0
-  s!"    %dyr0 = stablehlo.subtract {sm}, %onehot : {ty [BS,10]}\n" ++
-  s!"    %lsa = stablehlo.constant dense<{ls}> : {ty [BS,10]}\n" ++
-  s!"    %lsaoh = stablehlo.multiply %lsa, %onehot : {ty [BS,10]}\n" ++
-  s!"    %dyr1 = stablehlo.add %dyr0, %lsaoh : {ty [BS,10]}\n" ++
-  s!"    %lsaik = stablehlo.constant dense<{lsK}> : {ty [BS,10]}\n" ++
-  s!"    %dyr = stablehlo.subtract %dyr1, %lsaik : {ty [BS,10]}\n" ++
-  s!"    %dy = stablehlo.divide %dyr, %bsc : {ty [BS,10]}\n" ++
-  s!"    %llog = stablehlo.log {sm} : {ty [BS,10]}\n" ++
-  s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [BS,10]}\n" ++
-  s!"    %t1s = stablehlo.reduce(%ohll init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n" ++
-  s!"    %lls = stablehlo.reduce(%llog init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n" ++
-  s!"    %omac = stablehlo.constant dense<{1.0 - ls}> : {ty [BS]}\n" ++
-  s!"    %aKc = stablehlo.constant dense<{lsK}> : {ty [BS]}\n" ++
-  s!"    %lt1 = stablehlo.multiply %omac, %t1s : {ty [BS]}\n" ++
-  s!"    %lt2 = stablehlo.multiply %aKc, %lls : {ty [BS]}\n" ++
-  s!"    %lpe = stablehlo.add %lt1, %lt2 : {ty [BS]}\n" ++
-  s!"    %lsum2 = stablehlo.reduce(%lpe init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS]}, tensor<f32>) -> tensor<f32>\n" ++
-  s!"    %lbfc = stablehlo.constant dense<{BS}.0> : tensor<f32>\n" ++
-  s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
-  s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
-
-/-- BN layers (forward-BN prefix, channels, H·W) in forward order — the running-stats layout shared
-    by the train-step batch-stat outputs, the driver's `runningBnStats` buffer, and
-    `@mobilenetv2_fwd_eval` inputs. The forward `bnB` saves `%{prefix}smr`/`%{prefix}vsr` (`[oc]` batch
-    sums over `[0,2,3]`). Must match `mobilenetv2Verified.bnChannels` and `TestMobilenetV2Fwd`'s eval
-    stat order. -/
-private def bnLayers : List (String × Nat × Nat) :=
-  ("stn", 32, 112*112) ::
-  (blocks.flatMap (fun (p, ic, mid, oc, s, Hin) =>
-    let Hout := Hin / s
-    -- t=1 (mid=ic): NO expand-BN
-    (if mid == ic then [] else [(s!"{p}en", mid, Hin*Hin)]) ++
-    [(s!"{p}dn", mid, Hout*Hout), (s!"{p}pn", oc, Hout*Hout)]))
-  ++ [("hn", 1280, 7*7)]
-
-/-- `@mobilenetv2_adam_train_step` — the proof-rendered (BN now hand-emitted) fwd/bwd/param-grads
-    with the SGD update swapped for `ViTRender.emitAdamV` and the `[θ|m|v]` + scalar-tail packed
-    signature the generic `VerifiedNet.trainAdamSched` driver expects, EXTENDED with per-BN-layer
-    batch mean/var carried out in passthrough slots (running-stats BN; the func also takes matching
-    dummy `[oc]` inputs so `#outputs = #inputs`):
-    `(x, θ×210, m×210, v×210, lr, bc1, bc2, μ/var×52, onehot) → (θ'×210, m'×210, v'×210, loss, bc1, bc2, μ/var×52)`.
-    `lr`/`bc1`/`bc2` runtime; `bc1`/`bc2` + the stat-in slots pass through unchanged. -/
-private def trainStepAdamSched : String :=
-  let body  := renderBody adamCot
-  let names := adamParams.map (fun (nm, _, _) => nm)
-  let dims  := adamParams.map (fun (_, _, ds) => ds)
-  let updParts := adamParams.map (fun (nm, gr, ds) =>
-    ViTRender.emitAdamV nm gr (nm ++ "m") (nm ++ "v") ds (String.ofList (nm.toList.drop 1)))
-  let upd := String.join (updParts.map (·.1))
-  let thetaN := updParts.map (·.2.1)
-  let mN := updParts.map (·.2.2.1)
-  let vN := updParts.map (·.2.2.2)
-  let psig := String.intercalate ", " ((names.zip dims).map (fun (nm, ds) => s!"{nm}: {ty ds}"))
-  let msig := String.intercalate ", " ((names.zip dims).map (fun (nm, ds) => s!"{nm}m: {ty ds}"))
-  let vsig := String.intercalate ", " ((names.zip dims).map (fun (nm, ds) => s!"{nm}v: {ty ds}"))
-  -- Per-BN-layer batch mean/var = smr/(BS·H·W), vsr/(BS·H·W). Carried out in passthrough slots
-  -- (the func also takes 2 dummy `[oc]` inputs per layer so #outputs = #inputs for the generic FFI).
-  let statIn := String.intercalate ", " (bnLayers.flatMap (fun (p, oc, _) =>
-    [s!"%{p}mui: {ty [oc]}", s!"%{p}vari: {ty [oc]}"]))
-  let statCode := String.join (bnLayers.map (fun (p, oc, hw) =>
-    s!"    %{p}bnnf = stablehlo.constant dense<{BS*hw}.0> : {ty [oc]}\n" ++
-    s!"    %{p}bnmu = stablehlo.divide %{p}smr, %{p}bnnf : {ty [oc]}\n" ++
-    s!"    %{p}bnvar = stablehlo.divide %{p}vsr, %{p}bnnf : {ty [oc]}\n"))
-  let statOutNames := bnLayers.flatMap (fun (p, _, _) => [s!"%{p}bnmu", s!"%{p}bnvar"])
-  let statOutTy := bnLayers.flatMap (fun (_, oc, _) => [ty [oc], ty [oc]])
-  let argSig := ("%x: " ++ ty [BS,150528]) ++ ", " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, " ++ statIn ++ ", %onehot: " ++ ty [BS,10]
-  let allDims := dims ++ dims ++ dims
-  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statOutTy)
-  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"] ++ statOutNames)
-  "module @m {\n" ++ s!"  func.func @mobilenetv2_adam_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
-    "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    s!"    %bsc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n" ++
-    adamConsts ++
-    body ++ upd ++ statCode ++
-    s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
-
-/-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH (the render +
-    write already happened, so the artifact exists regardless). -/
+/-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH. For the SGD render
+    the write already happened; for AdamW the artifact is the COMMITTED one, checked to exist by
+    `main` before this is called. -/
 private def tryCompile (src dst label : String) : IO Unit := do
   try
     let cargs ← ireeCompileArgs src dst
@@ -472,17 +374,20 @@ private def tryCompile (src dst label : String) : IO Unit := do
 
 def main : IO Unit := do
   IO.FS.createDirAll "/tmp/mnv2pc"
-  -- Render + write BOTH artifacts first, then compile — so a missing iree-compile can't abort
-  -- before the AdamW artifact is written.
+  -- The SGD render still writes, but to /tmp — it has never owned a `verified_mlir/` path.
   let mlir := trainStep
   IO.println s!"rendered structured MobileNetV2 train step: {mlir.length} chars"
   IO.FS.writeFile "/tmp/mnv2pc/train_step.mlir" mlir
-  let amlir := trainStepAdamSched
-  IO.println s!"rendered MobileNetV2 AdamW-sched train step: {amlir.length} chars"
-  IO.FS.writeFile "verified_mlir/mobilenetv2_adam_train_step.mlir" amlir
-  -- SGD smoke (swap-compatible with the committed train step; verifies the shared `renderBody`).
   tryCompile "/tmp/mnv2pc/train_step.mlir" "/tmp/mnv2pc/train_step.vmfb" "SGD"
-  -- AdamW scheduled train step — the artifact `mobilenetv2-verified-adam` trains on.
-  tryCompile "verified_mlir/mobilenetv2_adam_train_step.mlir" "/tmp/mnv2pc/adam_train_step.vmfb" "AdamW"
+  -- AdamW: this file's emitter is RETIRED (§2f). `Proofs/Codegen/MobileNetV2RenderB.lean` is now
+  -- the sole writer of `verified_mlir/mobilenetv2_adam_train_step.mlir`, so the smoke reads the
+  -- COMMITTED bytes instead of re-rendering them — that is the part `lake build` genuinely cannot
+  -- do, since it needs `iree-compile` on PATH. It THROWS if the artifact is missing rather than
+  -- quietly recreating it, which is what turned this file back into a double writer before.
+  let adamPath := "verified_mlir/mobilenetv2_adam_train_step.mlir"
+  if !(← System.FilePath.pathExists adamPath) then
+    throw (IO.userError s!"{adamPath} is missing. This file no longer renders it — regenerate with \
+`lake build LeanMlir.Proofs.Codegen.MobileNetV2RenderB` (or scripts/regen_verified_mlir.sh).")
+  tryCompile adamPath "/tmp/mnv2pc/adam_train_step.vmfb" "AdamW"
 
 #eval main

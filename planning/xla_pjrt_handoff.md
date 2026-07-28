@@ -37,36 +37,39 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `0978cd9`, `3620569`, `9349541` | the DP bench: 1.75× on-GPU, bs128 (1.50×, 93% DP efficiency), and the loader correction |
 | `e872ca1` | scoping the last two — ConvNeXt first, and mnv2's real task named |
 | `b94e8e9`, `283bb2d` | **ConvNeXt AdamW**: five ops, the render, the conditioning finding, the spread gate, the swap |
+| — | *↓ the MobileNetV2 thread (§2f), 2026-07-28 — the last net* |
+| `205cd87` | the four batched-index ops: `BatchableOp.relu6`, `selectMidB`, `depthwiseBias{,Strided}GradB` |
+| `75a9f8e` | `MobileNetV2RenderB.lean` + the tie — **bit-exact**, three controls fire |
+| *(this)* | **the swap — the AdamW scorecard is 6 of 6** |
 
 ---
 
-## 0. ▶ START HERE — the one thing left is **MobileNetV2**
+## 0. ▶ START HERE — the AdamW scorecard is **6 of 6**. This thread is CLOSED.
 
-Everything else in this file is done. The AdamW scorecard is **5 of 6** — cifar8, resnet34, vit,
-efficientnet, convnext all train on `pretty(provenGraph)` and the writer audit is at 0.
+Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2** all train on
+`pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
+audit reports one writer per artifact. There is no "next AdamW render".
 
-**The task is "MobileNetV2 at the batched index", NOT "MobileNetV2 AdamW".** Scoping it as the
-latter is how the estimate goes wrong, and §2f has the measurement behind that name. The short
-version: `MobileNetV2Render.lean` renders at the **per-example** index while the artifact
-`mobilenetv2-verified-adam` actually trains on is **batch BN** — the R34 §2a two-worlds situation,
-live. Resolving it is the §2b batched-index move, which was the most expensive and most badly
-mis-estimated step in this whole thread.
+**What is left in this file is §2d's value-ordered list**, none of it on the AdamW track:
+rung 4 (the FPN detector), **device-resident parameters** (two independent multi-GPU measurements
+point at it — §2c's 1.46× on R34 and §2e-ter's 13–16% per-step DP overhead on EfficientNet), and the
+executable cache. Read §2d before picking one.
 
-Read, in order: **§2f** (the scoping and the decision), **§2e** (the playbook that worked three
-times: un-fuse → one shared traversal → assemble → tie → swap), **§2b** (what the batched-index move
-actually cost on R34), then **§3/§4/§5** before trusting any number or writing any gate.
+Two named gaps stay open and should be quoted whenever the DP renders are described: **ViT's DP
+render does not execute on this box** (`miopenStatusUnknownError` in the patch-embed weight-grad
+convolution — refuted as a shape or memory problem, see §2a's ViT block), and **ConvNeXt keeps two
+weight-gradient carve-outs** (§5).
 
-**Scoped by measurement 2026-07-28 — read the new §2f subsection before anything else.** mnv2 is
-**R34-shaped, not EfficientNet-shaped**: its SGD render is per-example BN, so the batched AdamW
-render goes in a **new `MobileNetV2RenderB.lean`** and `MobileNetV2Render.lean` is not touched. Four
-ops are missing (`BatchableOp.relu6`, `selectMidB`, `depthwiseBias{,Strided}GradB`) — one more than
-originally scoped, and two of them need **no new emitter code**.
+*The MobileNetV2 write-up below (§2f) is kept because its scoping correction — that mnv2 was
+R34-shaped, not EfficientNet-shaped — is the reusable lesson, not because anything is owed.*
 
-The four gates that every one of these swaps passed, and which mnv2's must too:
+The four gates every one of these swaps passed:
 
-1. the SGD artifact re-renders **byte-identical** after the `adam : Bool` threading — ⚠ **does not
-   transfer literally to mnv2**, which threads nothing; there it degrades to "`git diff
-   verified_mlir/mobilenetv2_train_step.mlir` is empty". See §2f;
+1. the SGD artifact re-renders **byte-identical** after the `adam : Bool` threading — ⚠ this one
+   **did not transfer to mnv2**, which threads nothing (§2f); there it degraded to "`git diff
+   verified_mlir/mobilenetv2_train_step.mlir` is empty", which is strictly weaker because nothing
+   forces the two renderers to stay in step. If a seventh net is ever added, check which shape it
+   is BEFORE assuming the enet playbook applies;
 2. the interface matches the hand-written render **positionally** (arity + arg/return types);
 3. a numeric tie with an **A-vs-A determinism floor**, gated per region, that is **verified to fail**
    on a deliberately perturbed render — see §2f-bis for why a green tie you have not tried to break
@@ -94,9 +97,11 @@ exact: 1×256 vs 2×128+all_reduce agree on the gradient to **1.015e-06**.
 **Speed, R34/Imagenette bs32:** IREE 1702 → XLA **162 ms/step** (10.5×); 52.5 s/epoch. Within
 **1.04×** of hand-written JAX per step at bs32, but see §3.
 
-**The AdamW scorecard is 5 of 6** — `cifar8`, `resnet34`, `vit`, `efficientnet` and `convnext`
-train on `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail. Only
-`mobilenetv2` remains (§0, §2f). The writer audit reports **one writer per artifact**.
+**The AdamW scorecard is 6 of 6** — `cifar8`, `resnet34`, `vit`, `efficientnet`, `convnext` and
+`mobilenetv2` all train on `pretty(provenGraph)`, each swap licensed by a numeric tie that was
+verified to fail. The writer audit reports **one writer per artifact**. Every whole-net AdamW
+render in the repo is now certified; the hand-written emitters are retired to `iree-compile`
+smokes that read the committed bytes.
 
 **Four artifacts moved from `tests/` into `Proofs/Codegen/`** and now render as
 `pretty(provenGraph)` — `resnet34_fwd`, `resnet34_fwd_eval`, `cifar8_adam_train_step`, and (already
@@ -140,6 +145,12 @@ lake build efficientnet-adam-tie && IREE_BACKEND=rocm .lake/build/bin/efficientn
 git show b94e8e9:verified_mlir/convnext_adam_train_step.mlir > /tmp/retired_cnx.mlir
 lake build convnext-adam-tie && IREE_BACKEND=rocm .lake/build/bin/convnext-adam-tie \
   /tmp/retired_cnx.mlir verified_mlir/convnext_adam_train_step.mlir
+# MobileNetV2 (§2f) — IREE. Gates bnstat (52 BN layers ⇒ the forward is pinned bit-exactly),
+# %loss, gradient magnitude AND spread. Deletes its .vmfb before every compile, so re-runs with
+# different candidates are safe (unlike resnet34/vit/cifar8/sgd-render — see §4).
+git show 75a9f8e:verified_mlir/mobilenetv2_adam_train_step.mlir > /tmp/retired_mnv2.mlir
+lake build mobilenetv2-adam-tie && IREE_BACKEND=rocm .lake/build/bin/mobilenetv2-adam-tie \
+  /tmp/retired_mnv2.mlir verified_mlir/mobilenetv2_adam_train_step.mlir
 
 # the step-time bench (§2b-bis). Takes both paths so it can be run in either compile order,
 # which is the control for the ~2.1 s first-compile-in-process cost.
@@ -368,10 +379,10 @@ Traps that still apply to anyone touching these files:
 
 ### The four uncertified whole-net AdamW renders — ✅ three done, mnv2 left
 
-*This section is the ViT thread, written when four AdamW renders were hand-written. Three are now
-certified: **ViT** below, **EfficientNet** §2e, **ConvNeXt** §2f-bis. The scorecard is **5 of 6** and
-only **mobilenetv2** remains — see §0 and §2f, not this section, for what to do about it. Kept
-because the ViT write-up below is where the shared-traversal playbook was worked out.*
+*This section is the ViT thread, written when four AdamW renders were hand-written. **All four are
+now certified**: **ViT** below, **EfficientNet** §2e, **ConvNeXt** §2f-bis, **MobileNetV2** §2f —
+the scorecard is **6 of 6** and nothing is owed. Kept because the ViT write-up below is where the
+shared-traversal playbook was worked out.*
 
 Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convnext`,
 `efficientnet`, `mobilenetv2` `_adam_train_step` were hand-written with **live drivers**
@@ -1111,15 +1122,39 @@ spread signature — a different function is GLOBAL (111 and 131 of 210) where t
 stem BN's own μ/var — 64 of the 34112 slots — are structurally upstream of any ε effect. 80 stayed
 exact, so 16 further slots coincided numerically; that residue was not investigated.)
 
-#### ▶ What is left on mnv2
+#### ✅ Step 5 DONE 2026-07-28 — the swap. **The AdamW scorecard is 6 of 6.**
 
-1. **The swap** — take over the canonical name, retire `tests/TestMobilenetV2TrainPC.lean`'s AdamW
-   writer to smoke-only, delete `…_b.mlir`, re-run the audit and confirm
-   `git diff verified_mlir/mobilenetv2_train_step.mlir` is still empty (the weakened gate 1).
-   Post-swap, re-run `mobilenetv2-adam-tie` with the retired render (recover it from git) as argv[1]
-   against the new canonical bytes, exactly as §2b-ter did for R34.
-2. Optionally a **smoke-train** (`LEAN_MLIR_G2_STEPS`) to see the loss descend on the swapped
-   artifact, as R34's swap did.
+`verified_mlir/mobilenetv2_adam_train_step.mlir` is now written by
+`Proofs/Codegen/MobileNetV2RenderB.lean`'s `#eval`, and that is its **only** writer. The driver
+needed **no change at all** — it resolves the path from the net slug, so taking over the canonical
+name *is* the swap. `…_b.mlir` is deleted; the bytes now at the canonical path are byte-identical
+to the `_b.mlir` render that passed the tie (checked before deleting).
+
+Gates run for the swap, in order:
+
+| gate | result |
+|---|---|
+| regenerated canonical == the tied `_b.mlir` | **byte-identical** ✅ (md5 `9e8280d5…`, retired was `73e425ad…`) |
+| `mobilenetv2-adam-tie` retired-render vs new canonical | forward **BIT-EXACT** 34112/34112, `%loss` bit-exact, gradient **bit-exact**, spread 0/210 ✅ |
+| gate 1 (weakened) — SGD artifact | `mobilenetv2_train_step.mlir` untouched ✅ |
+| elaborating the retired `tests/TestMobilenetV2TrainPC.lean` | rewrites **nothing**; canonical md5 unchanged ✅ |
+| `regen_verified_mlir.sh check` | **55 artifacts, one writer each**, no MALFORMED ✅ |
+| `iree-compile` smoke on the certified bytes | **OK** ✅ (both SGD and AdamW smokes green) |
+| `lake build Proofs Certs Codegen` | clean ✅ |
+
+**The retirement went further than repointing, following §2b-quater.** The hand-written AdamW
+emitter in `tests/TestMobilenetV2TrainPC.lean` (`adamParams`, `adamConsts`, `adamCot`, `bnLayers`,
+`trainStepAdamSched` — 110 lines) is **deleted**, not left dormant: a second emitter that can write
+is one more thing to drift, and this net's own history is the argument. Recover it from
+`git show 75a9f8e:tests/TestMobilenetV2TrainPC.lean` if ever needed. The SGD `trainStep` and the
+shared `renderBody` are untouched, and the file keeps both `iree-compile` smokes — the AdamW one now
+reads the *committed* bytes and **throws** if they are missing rather than recreating them.
+
+**Not run: a smoke-train.** R34's swap (§2b-ter) included `LEAN_MLIR_G2_STEPS=40` showing the loss
+descend on the swapped artifact. That was not done here. The evidence that stands in its place is
+strictly graph-level — a bit-exact tie plus a successful `iree-compile` — so if you want end-to-end
+confirmation that the swapped artifact *trains*, that run is still owed. It is cheap
+(`mobilenetv2-verified-adam` with a small step budget) and worth doing before quoting new accuracy.
 
 **Everything else already exists** — `bnBatchF`/`bnBatchBack`, `bnBatchMeanB`/`bnBatchVarB`, all four
 `*BackBatched` convs, `gapBackBatched`, `addVB`/`subB`, the `scaleB → addVB → shiftB → divConstB`
@@ -1434,8 +1469,9 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
 
 0. ~~**Finish §2b's tail**~~ ✅ **DONE** — measured (§2b-bis: no cost), swapped (§2b-ter), multi-GPU
    brought onto the certified renderer and gated (§2b-quater). This thread is closed.
-0a. **▶ MobileNetV2 at the batched index — §2f.** The last AdamW render; takes the scorecard to
-   6 of 6. Read §0.
+0a. ~~**MobileNetV2 at the batched index — §2f.**~~ ✅ **DONE 2026-07-28 — the scorecard is 6 of 6.**
+   Four ops, a new `MobileNetV2RenderB.lean` (mnv2 is R34-shaped, not enet-shaped), a bit-exact tie
+   with three firing controls, and the swap. The AdamW track is closed.
 0b. ~~**The last four double-writers — §2a-quinquies.**~~ ✅ DONE Zero-behaviour-change cleanup: the committed
    bytes are *already* the certified render for all four, so this only removes clobber hazards.
    Cheapest remaining item by a wide margin, and it takes the audit to 0.

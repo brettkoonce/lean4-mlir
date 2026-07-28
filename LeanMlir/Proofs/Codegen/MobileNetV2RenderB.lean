@@ -768,25 +768,26 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
 
 end Proofs.StableHLO
 
--- The batched (`N := B`) MobileNetV2 AdamW train step as `pretty(provenGraph)`. B=32,
--- nClasses=10, ε=1e-5.
+-- Regenerate `verified_mlir/mobilenetv2_adam_train_step.mlir` — the batched (`N := B`) MobileNetV2
+-- AdamW train step as `pretty(provenGraph)`. B=32, nClasses=10, ε=1e-5. **This is the artifact
+-- `mobilenetv2-verified-adam` trains on**, and this `#eval` is its ONLY writer.
 --
--- **It renders to its OWN `…_b.mlir` path deliberately.** The canonical
--- `verified_mlir/mobilenetv2_adam_train_step.mlir` — the artifact `mobilenetv2-verified-adam`
--- trains on — is still owned by the hand-written emitter in `tests/TestMobilenetV2TrainPC.lean`,
--- and two writers for one artifact is the silent last-writer-wins race §2a found. This is the same
--- staging §2b-ter used for ResNet-34: render beside the incumbent, tie against it, and only then
--- take over the canonical name and retire the other writer in one change.
+-- It rendered to a separate `…_b.mlir` while the hand-written emitter in
+-- `tests/TestMobilenetV2TrainPC.lean` still owned this path — two writers for one artifact is the
+-- last-writer-wins race §2a found. The swap happened (§2f) once the gates were in:
 --
--- Gates still owed before that swap (handoff §0):
---   * the numeric tie — `bnstat` forward region (52 BN layers pin it bit-exactly), `%loss`, and the
---     gradient gated on SPREAD as well as magnitude against a reorder control (§2f-bis);
---   * that tie verified to FAIL on a deliberately perturbed render;
---   * `git diff verified_mlir/mobilenetv2_train_step.mlir` empty (the weakened gate 1, §2f);
---   * `scripts/regen_verified_mlir.sh check` still one-writer-each afterwards.
--- The tie must link IREE: `mobilenetv2-verified-adam` is an `ireeLink` binary, like
--- `efficientnet-verified-adam` and `vit-verified-adam`.
-#eval IO.FS.writeFile "verified_mlir/mobilenetv2_adam_train_step_b.mlir"
+--   * the numeric tie (`mobilenetv2-adam-tie`, IREE) — forward BIT-EXACT on all 52 BN layers'
+--     batch statistics, `%loss` bit-exact, gradient bit-exact, spread 0/210, over all 6,795,329
+--     returned floats, against a bit-exact A-vs-A determinism floor;
+--   * that tie VERIFIED TO FAIL, three ways: a perturbed cotangent fires the gradient gate
+--     (spread 111/210) with the forward still bit-exact, a perturbed BN ε fires the forward gate
+--     (`bnstat` exact only 80/34112), and a perturbed `%loss` constant fires the loss gate with
+--     every other region bit-exact.
+--
+-- The driver needed no change: it resolves the path from the net slug, so taking over the
+-- canonical name IS the swap. `…_b.mlir` is deleted; the bytes now at this path are byte-identical
+-- to the `_b.mlir` render that passed the tie (checked before deleting).
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2_adam_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 32 10 "1.0e-5")
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
