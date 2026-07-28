@@ -260,11 +260,35 @@ number much later.
    `%bc2`) + 72 BN-stat passthroughs + `%onehot`; **513 out** = 146 θ' + 146 m' + 146 v' +
    loss/bc1/bc2 + 72 stats. β₁/β₂/ε/wd are baked constants (0.9 / 0.999 / 1e-8 / 1e-4).
 
-   Open decision before writing the renderer: the label-smoothed cotangent has to be composed from
-   kit ops (`softmaxRow` + `subB` + a scale/add pair), which changes the emitted text — *or* get a
-   fused `labelSmoothCotB` op so the render stays close to what runs. The first is more honest to
-   the kit; the second keeps the diff readable. Either way `%loss` stays report-only and outside
-   the AST, exactly as `cifar8_adam_train_step`'s does (§5).
+   **The renderer is built** — `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean`, writing
+   `verified_mlir/resnet34_adam_train_step_b.mlir`. The cotangent is **composed from kit ops**
+   (`softmaxRow → subB → scaleB → addVB → shiftB → divConstB`, α = 0.1) rather than fused, which
+   is the honest choice for a §2b whose whole point is `den` honesty. `%loss` stays report-only and
+   outside the AST, as `cifar8_adam_train_step`'s does (§5). Three more small ops were needed:
+   `scaleB`/`shiftB`/`divConstB`. **`divConstB` emits a real `divide` on purpose** — the caller
+   divides by the batch, and `x * (1/B)` is only bit-equal to `x / B` when `B` is a power of two,
+   so `scaleB (1/B)` would silently break the bs192 render §2d wants.
+
+   Status — **rendered, validated, not yet tied**:
+
+   | check | result |
+   |---|---|
+   | interface vs the committed artifact | **515 in / 513 out, all types positionally identical** ✅ |
+   | structural ops (conv/transpose/reverse/pad/reduce_window/select_and_scatter/sqrt/dot_general) | **exact match** ✅ |
+   | `iree-compile` (llvm-cpu) | **exit 0**, 430 KB vmfb ✅ |
+   | numeric tie vs the committed artifact | ⛔ **NOT RUN** — needs a GPU |
+
+   **It is ~1.7× the ops** (10005 vs 5971), and the reason is worth knowing before anyone reads
+   that as a defect: `pretty` has no CSE (§4), and the batched backward ops are *self-contained
+   recomputes* — `bnBatchF`, `bnBatchBack` and `bnGammaGradB` each rebuild x̂ from the saved BN
+   input, so `rsqrt` is 108 = 36 layers × 3 where the hand-written render saves `%{p}xh` once and
+   reuses it. Plus 621 reshapes from the batched ops' `[B, c·h·w] ↔ [B,c,h,w]` round-trips.
+   XLA's CSE should collapse most of it — the recomputes are identical subgraphs on identical
+   inputs — but **that is an assumption, not a measurement**; measure before quoting a step time.
+
+   It writes a **separate path** from `resnet34_adam_train_step.mlir` on purpose. That file is what
+   the AdamW driver runs today off the hand-written emitter; pointing a second writer at it before
+   the numeric tie passes is exactly the last-writer-wins race §2a found. Swap only after the tie.
 
 **`tests/TestBatchedEmitTie.lean`** has two sections: thirteen batched forms tied to their
 per-example peers byte-for-byte, and eight un-fused `*GradB` renders checked to be byte-PREFIXES of

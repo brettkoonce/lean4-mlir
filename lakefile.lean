@@ -53,7 +53,8 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.StableHLO,
              -- the renderers the verified-render drift guard re-elaborates
              `LeanMlir.Proofs.Codegen.MlpRender, `LeanMlir.Proofs.Codegen.CnnRender,
-             `LeanMlir.Proofs.Codegen.ResNet34Render, `LeanMlir.Proofs.Codegen.AdamRender,
+             `LeanMlir.Proofs.Codegen.ResNet34Render, `LeanMlir.Proofs.Codegen.ResNet34RenderB,
+             `LeanMlir.Proofs.Codegen.AdamRender,
              `LeanMlir.Proofs.Codegen.MobileNetV2Render,
              `LeanMlir.Proofs.Codegen.EfficientNetRender,
              `LeanMlir.Proofs.Codegen.ConvNeXtRender, `LeanMlir.Proofs.Codegen.ViTRender]
