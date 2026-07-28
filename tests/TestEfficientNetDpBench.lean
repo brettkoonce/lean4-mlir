@@ -49,6 +49,19 @@ private def opCount (path : String) : IO Nat := do
   let s ← IO.FS.readFile path
   pure ((s.splitOn "stablehlo.").length - 1)
 
+/-- Read the entry-point name and the baked batch off a render: `func.func @NAME(%x: tensor<BxD…`.
+    Both are properties of the artifact, so reading them beats assuming them — it lets one bench
+    compare renders at different `B` (the bs128 pair, §2e-quater) with no new argument, and it
+    cannot silently invoke the wrong entry. -/
+private def entryAndBatch (path : String) : IO (String × Nat) := do
+  let s ← IO.FS.readFile path
+  let some i := (s.splitOn "func.func @")[1]? | throw (IO.userError s!"{path}: no `func.func @`")
+  let name := (i.takeWhile (· != '(')).trimAscii.toString
+  let some rest := (i.splitOn "%x: tensor<")[1]? | throw (IO.userError s!"{path}: no %x operand")
+  let bstr := (rest.takeWhile (· != 'x')).toString
+  let some b := bstr.toNat? | throw (IO.userError s!"{path}: batch {bstr} is not a number")
+  pure (name, b)
+
 /-- min / median / mean of a sample, in ms. -/
 private def stats (xs : Array Float) : Float × Float × Float :=
   let s := xs.qsort (· < ·)
@@ -57,21 +70,35 @@ private def stats (xs : Array Float) : Float × Float × Float :=
   (s[0]!, s[n / 2]!, mean)
 
 def main (args : List String) : IO Unit := do
-  let rounds := match args with | r :: _ => r.toNat! | [] => 20
+  let dfltA := "verified_mlir/efficientnet_adam_train_step.mlir"
+  let dfltB := "verified_mlir/efficientnet_adamdp_train_step.mlir"
+  let (pathA, pathB, rounds) := match args with
+    | a :: b :: r :: _ => (a, b, r.toNat!)
+    | [a, b]           => (a, b, 20)
+    | [a]              => (dfltA, dfltB, a.toNat!)
+    | []               => (dfltA, dfltB, 20)
   let warmup := 3
   let net := efficientnetVerified.toNet
-  let bs := 32                                   -- the baked per-replica batch
   let replicas := 2
-  let pathA := "verified_mlir/efficientnet_adam_train_step.mlir"
-  let pathB := "verified_mlir/efficientnet_adamdp_train_step.mlir"
+  -- Entry name and per-replica batch are read OFF each artifact rather than assumed, so this bench
+  -- also compares renders at different `B` (§2e-quater's bs128 pair) with no new argument.
+  let (fnA, bsA) ← entryAndBatch pathA
+  let (fnB, bsB) ← entryAndBatch pathB
+  -- Side B is data-parallel only if it actually contains collectives; otherwise this is a plain
+  -- single-device A-vs-B comparison (e.g. bs32 vs bs128 on one GPU) and the invoke must not ask
+  -- for replicas it was not compiled for — the shim refuses that outright.
+  let bIsDP := ((← IO.FS.readFile pathB).splitOn "stablehlo.all_reduce").length > 1
+  let repB := if bIsDP then replicas else 1
+  let imgPerStepA := bsA
+  let imgPerStepB := bsB * repB
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let opsA ← opCount pathA
   let opsB ← opCount pathB
-  IO.println "EfficientNet-B0 AdamW data-parallel step-time bench"
-  IO.println s!"  A = {pathA}  (1 replica, bs {bs}, {opsA} stablehlo ops)"
-  IO.println s!"  B = {pathB}  ({replicas} replicas, global {bs * replicas}, {opsB} ops \
-— the extra {opsB - opsA} are the {net.specs.size} collectives)"
+  IO.println "EfficientNet-B0 AdamW step-time bench"
+  IO.println s!"  A = {pathA}  (@{fnA}, 1 replica, bs {bsA} = {imgPerStepA} img/step, {opsA} ops)"
+  IO.println s!"  B = {pathB}  (@{fnB}, {repB} replica(s), bs {bsB} = {imgPerStepB} img/step, \
+{opsB} ops{if bIsDP then s!" — the extra {opsB - opsA} are the {net.specs.size} collectives" else ""})"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats = {net.nParams * 3 * 4 / 1048576} \
 MiB of [θ|m|v] per replica per step), {net.bnChannels.size} BN layers, \
 backend {← IreeSession.backendName}"
@@ -94,19 +121,20 @@ backend {← IreeSession.backendName}"
   let pbuf := F32.concat #[θ, m, v, tail, bnIn]
   let shapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
                             ++ #[#[], #[], #[]] ++ bnStatShapes)
-  let x1 ← F32.heInit 555 (bs * net.d0).toUSize 1.0
-  let x2 := F32.concat #[x1, x1]
-  let mut y1 : ByteArray := .empty
-  for i in [0:bs] do
-    y1 := y1.push (UInt8.ofNat (i % net.nClasses)); y1 := y1.push 0
-    y1 := y1.push 0; y1 := y1.push 0
-  let y2 := y1 ++ y1
+  let mkXY (b : Nat) : IO (ByteArray × ByteArray) := do
+    let x ← F32.heInit 555 (b * net.d0).toUSize 1.0
+    let mut y : ByteArray := .empty
+    for i in [0:b] do
+      y := y.push (UInt8.ofNat (i % net.nClasses)); y := y.push 0; y := y.push 0; y := y.push 0
+    pure (x, y)
+  let (x1, y1) ← mkXY imgPerStepA
+  let (x2, y2) ← mkXY imgPerStepB
 
   IO.println "  compiling A (1 replica)…"; (← IO.getStdout).flush
   let ca0 ← IO.monoMsNow
   let sessA ← mkSession pathA ".lake/build/enet_dp_bench_a.vmfb"
   let compA := (← IO.monoMsNow) - ca0
-  IO.println s!"  compiling B ({replicas} replicas)…"; (← IO.getStdout).flush
+  IO.println s!"  compiling B ({repB} replica(s))…"; (← IO.getStdout).flush
   let cb0 ← IO.monoMsNow
   let sessB ← mkSession pathB ".lake/build/enet_dp_bench_b.vmfb"
   let compB := (← IO.monoMsNow) - cb0
@@ -114,15 +142,19 @@ backend {← IreeSession.backendName}"
 
   let stepA : IO Nat := do
     let t0 ← IO.monoMsNow
-    let out ← IreeSession.mlpTrainStepV sessA "m.efficientnet_adam_train_step" x1 pbuf shapes y1
-      bs.toUSize net.d0.toUSize net.nClasses.toUSize
+    let out ← IreeSession.mlpTrainStepV sessA s!"m.{fnA}" x1 pbuf shapes y1
+      imgPerStepA.toUSize net.d0.toUSize net.nClasses.toUSize
     let t1 ← IO.monoMsNow
     if out.size == 0 then throw (IO.userError "empty step output (A)")
     pure (t1 - t0)
   let stepB : IO Nat := do
     let t0 ← IO.monoMsNow
-    let out ← IreeSession.mlpTrainStepVDP sessB "m.efficientnet_adamdp_train_step" x2 pbuf shapes y2
-      (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
+    let out ← if bIsDP then
+        IreeSession.mlpTrainStepVDP sessB s!"m.{fnB}" x2 pbuf shapes y2
+          imgPerStepB.toUSize net.d0.toUSize net.nClasses.toUSize repB.toUSize
+      else
+        IreeSession.mlpTrainStepV sessB s!"m.{fnB}" x2 pbuf shapes y2
+          imgPerStepB.toUSize net.d0.toUSize net.nClasses.toUSize
     let t1 ← IO.monoMsNow
     if out.size == 0 then throw (IO.userError "empty step output (B)")
     pure (t1 - t0)
@@ -141,36 +173,41 @@ backend {← IreeSession.backendName}"
 
   let (minA, medA, meanA) := stats msA
   let (minB, medB, meanB) := stats msB
-  let imgA := minA / bs.toFloat
-  let imgB := minB / (bs * replicas).toFloat
+  let imgA := minA / imgPerStepA.toFloat
+  let imgB := minB / imgPerStepB.toFloat
   IO.println "  ── ms/step ──"
-  IO.println s!"    A (1 GPU, bs {bs}):            min {minA}  median {medA}  mean {meanA}"
-  IO.println s!"    B ({replicas} GPU, global {bs*replicas}):     min {minB}  median {medB}  mean {meanB}"
+  IO.println s!"    A ({imgPerStepA} img): min {minA}  median {medA}  mean {meanA}"
+  IO.println s!"    B ({imgPerStepB} img): min {minB}  median {medB}  mean {meanB}"
   IO.println "  ── ms/image (min) ──"
   IO.println s!"    A = {imgA}   B = {imgB}"
   IO.println "  ── verdict ──"
-  IO.println s!"    THROUGHPUT = {(imgA / imgB)}× on {replicas} GPUs (perfect scaling = {replicas.toFloat}×)"
-  IO.println s!"    parallel efficiency = {(100.0 * imgA / imgB / replicas.toFloat)}%"
+  IO.println s!"    THROUGHPUT = {(imgA / imgB)}× for B over A"
+  if bIsDP then
+    IO.println s!"    on {repB} GPUs, perfect scaling = {repB.toFloat}× ⇒ parallel efficiency \
+{(100.0 * imgA / imgB / repB.toFloat)}%"
   -- The right decomposition, and NOT the textbook Amdahl one. Each replica of B does exactly the
   -- work A does — 32 images — so with zero DP overhead B's ms/STEP would EQUAL A's, at twice the
   -- images. The whole cost of going data-parallel is therefore the step-time excess `T_B − T_A`,
   -- not some serial fraction of A. (An Amdahl form written as `2·T_B/T_A − 1` assumes B halves A's
   -- work, which is the wrong model here and returns >100% nonsense.)
-  let ovhMs := minB - minA
-  let ovhPct := 100.0 * ovhMs / minA
-  -- What has to cross the bus that a single-device step does not: the all-reduce exchanges the
-  -- whole gradient (one float per parameter) between replicas, and the host pushes [θ|m|v] to the
-  -- SECOND replica too because parameters are host-resident (§2c).
-  let gradMiB := net.nParams.toFloat * 4.0 / 1048576.0
-  let paramMiB := net.nParams.toFloat * 3.0 * 4.0 / 1048576.0
-  IO.println s!"    DP overhead = {ovhMs} ms/step = {ovhPct}% of the 1-GPU step"
-  IO.println s!"    extra bytes it covers ≈ {gradMiB} MiB all-reduced + {paramMiB} MiB [θ|m|v] \
-pushed to replica 2  ⇒ ≈ {((gradMiB + paramMiB) / 1024.0 / (ovhMs / 1000.0))} GiB/s effective"
-  IO.println s!"    ceiling if that overhead stayed FIXED as replicas grow: \
-{(replicas.toFloat * minA / minB)}× now, \
-{(4.0 * minA / (minA + ovhMs))}× at 4 replicas"
-  IO.println "    Parameters are host-resident (§2c), so the [θ|m|v] push is per-replica and grows\n\
-    with the replica count. Device-resident parameters (§2d.3) is the lever that removes it.\n\
-    NOTE this is the ON-GPU number: inputs are synthetic and in-process. An end-to-end training\n\
-    run also pays the data loader, which does NOT halve with replicas and therefore dominates the\n\
-    ratio — measured 1.23× end-to-end against 1.77× here. Quote whichever you mean, and say which."
+  -- The right decomposition for the DP comparison, and NOT the textbook Amdahl one. Each replica
+  -- of B does exactly the work A does, so with zero DP overhead B's ms/STEP would EQUAL A's at
+  -- twice the images. The whole cost of going data-parallel is the step-time excess `T_B − T_A`.
+  -- (An Amdahl form `2·T_B/T_A − 1` assumes B halves A's work, which is the wrong model here and
+  -- returns >100% nonsense.) It only means anything when the two sides share a per-replica batch.
+  if bIsDP && bsA == bsB then
+    let ovhMs := minB - minA
+    -- What has to cross the bus that a single-device step does not: the all-reduce exchanges the
+    -- whole gradient (one float per parameter) between replicas, and the host pushes [θ|m|v] to
+    -- the SECOND replica too, because parameters are host-resident (§2c).
+    let gradMiB := net.nParams.toFloat * 4.0 / 1048576.0
+    let paramMiB := net.nParams.toFloat * 3.0 * 4.0 / 1048576.0
+    IO.println s!"    DP overhead = {ovhMs} ms/step = {(100.0 * ovhMs / minA)}% of the 1-GPU step"
+    IO.println s!"    extra bytes it covers ≈ {gradMiB} MiB all-reduced + {paramMiB} MiB [θ|m|v] \
+pushed to replica {repB}  ⇒ ≈ {((gradMiB + paramMiB) / 1024.0 / (ovhMs / 1000.0))} GiB/s effective"
+    IO.println "    Parameters are host-resident (§2c), so the [θ|m|v] push is per-replica and grows"
+    IO.println "    with the replica count. Device-resident parameters (§2d.3) removes it."
+  IO.println "    NOTE this is the ON-GPU number: inputs are synthetic and in-process. An"
+  IO.println "    end-to-end training run also pays the data loader, which does NOT shrink with"
+  IO.println "    replicas and therefore dominates the ratio — measured 1.43× end-to-end at bs32"
+  IO.println "    against 1.75× here. Quote whichever you mean, and say which (§2e-ter)."

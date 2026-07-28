@@ -713,16 +713,66 @@ you add — which is the whole reason the crude first measurement read 1.23×. A
 is a fixed cost of roughly 16–19 s per Imagenette epoch. Fixing it would take the 2-GPU epoch from
 54 s toward ~36 s, which is a bigger win than anything left on the GPU side of this net.
 
-#### Memory: **4.7 GiB working set**, and why `rocm-smi` says 19
+#### 2e-quater. bs128 — **1.50× from batch alone, and DP scales BETTER**; 2.78× combined
 
-Peak VRAM sampled during training: **18.7–19.0 GiB per GPU under XLA/PJRT**, but that is *not* the
-model. `ffi/pjrt_ffi.c:38` documents it — *"each StreamExecutor GPU client reserves ~19 GB for its
-BFC allocator"* — i.e. XLA pre-reserves ~78% of the card at client creation regardless of what the
-graph needs. The same net on IREE, which does not pre-reserve, peaks at **4.67 GiB**.
+`enetAdamVariant` now takes `(B, replicas)` like `r34AdamVariant`, and two more artifacts render
+from the same function: `efficientnet_adam128_train_step.mlir` and
+`efficientnet_adamdp128_train_step.mlir` (`LEAN_MLIR_VARIANT=adam128`/`adamdp128`, plus the new
+`LEAN_MLIR_BATCH=128`). **Structurally the re-render is a no-op** — identical at 17,545 ops
+(18,855 with the 262 collectives), same op profile; only tensor dimensions and the mean-CE divisor
+(32.0 → 128.0) move. `B = 32` stays unsuffixed so the committed artifacts keep their names and
+bytes, and both bs32 artifacts re-render byte-identical through the change.
 
-So EfficientNet-B0 + AdamW at bs 32 is a **~4.7 GiB** job on a 24 GiB card. Batch is baked into the
-render (`efficientnetAdamTrainStepFaithful 32 …`), not a runtime knob, so raising it means a
-re-render to its own path exactly as §2d.1 did for R34 — and there is clearly headroom to try.
+| config | ms/step (min) | **ms/image** | vs bs32 1-GPU |
+|---|---|---|---|
+| bs 32, 1 GPU | 209–212 | 6.53–6.59 | 1.00× |
+| bs 32 × 2, global 64 | 238–243 | 3.72–3.80 | 1.72–1.77× |
+| **bs 128, 1 GPU** | 559 | **4.37** | **1.50×** |
+| **bs 128 × 2, global 256** | 601 | **2.35** | **2.78×** |
+
+Two things worth carrying:
+
+* **Batch alone buys 1.50×** on one GPU (6.53 → 4.37 ms/image). Same mechanism as R34's §2d.1
+  1.78×: the ~46 MiB `[θ|m|v]` host↔device round-trip is paid *per step*, so 4× the batch amortises
+  it over 4× the images. The transfer is not faster, it is paid less often per image.
+* **Data-parallel scales BETTER at the larger batch, not worse** — 93% parallel efficiency against
+  88% at bs32, and the DP overhead falls from 13.7% to **7.5%** of a step. The absolute overhead
+  *rises* (29 → 42 ms, since the same 62 MiB crosses the bus either way) but the step it hides in is
+  2.7× longer. That is the opposite of the usual expectation and it is the argument for pairing
+  multi-GPU with a large batch rather than treating them as independent knobs.
+
+**⚠ This is a throughput result, not a training result.** 80 epochs at global 256 is 36 steps/epoch
+= 2,880 optimizer updates, against 23,600 at bs32 — **8× fewer**, at an unscaled LR. §5's standing
+advice applies: prefer *scaling* the global batch with the LR recipe to match, and do not read these
+ms/image numbers as "the same run, faster". Nothing here has been trained to convergence at bs128.
+
+**Projected epochs** (on-GPU steps + the measured ~16–19 s serial loader): bs128 1 GPU ≈ 41 s + data
+≈ **58 s**; bs128 × 2 ≈ 22 s + data ≈ **40 s**. At that point the loader is nearly **half** the
+2-GPU epoch — it was 34% at bs32 — so §2e-ter's conclusion sharpens: on this net the data path is
+now the dominant lever, ahead of device-resident parameters.
+
+#### Memory: **4.7 GiB at bs32, 17.3 GiB at bs128** — and why `rocm-smi` says 19
+
+Peak VRAM sampled during training reads **18.7–19.0 GiB per GPU under XLA/PJRT at every batch**,
+which is the tell that it is *not* the model. `ffi/pjrt_ffi.c:38` documents it — *"each
+StreamExecutor GPU client reserves ~19 GB for its BFC allocator"* — i.e. XLA pre-reserves ~78% of
+the card at client creation regardless of what the graph needs, so the figure is pinned to the
+reservation and carries no information. **Never quote it as a memory requirement.** Measure on IREE,
+which does not pre-reserve:
+
+| batch | working set | share of the 23.98 GiB card |
+|---|---|---|
+| 32 | **4.67 GiB** | 19% |
+| 128 | **17.30 GiB** | 72% |
+
+4× the batch costs 3.7× the memory — close to linear, because activations dominate and only the
+~140 MiB of `[θ|m|v]` is fixed. **That makes bs128 the practical ceiling on a 7900 XTX**: bs256
+extrapolates to ~30 GiB and will not fit. (XLA ran bs128 inside its 19 GiB reservation, so its
+planner is at least as tight as IREE's.)
+
+Batch is baked into the render, not a runtime dimension, so each one is its own artifact —
+`LEAN_MLIR_BATCH` selects the batch and **must match the variant**, or the first invoke is a shape
+error. The eval forwards are still bs32, so anything else needs `LEAN_MLIR_SKIP_EVAL=1`.
 
 Claim ceiling is unchanged from §5: the graph is *certified gradient → trusted collective →
 certified AdamW*. What is new is that the collective's semantics are now pinned by an exact

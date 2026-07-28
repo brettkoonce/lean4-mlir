@@ -758,16 +758,19 @@ private def enetAdamConsts : String :=
   "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
   "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
 
-/-- The driver's **variant slug** for a given replica count: the artifact is
+/-- The driver's **variant slug** for a given `(B, replicas)`: the artifact is
     `verified_mlir/efficientnet_<variant>_train_step.mlir`, the entry point is
     `@efficientnet_<variant>_train_step`, and `LEAN_MLIR_VARIANT` selects it.
 
     All three must agree, or the shim refuses the call outright ("entry mismatch") rather than
     running the wrong graph — which is exactly what it did the first time R34's DP render kept the
     single-device name (§2b-quater). Deriving the name here is what stops it drifting from the
-    `#eval` paths below; the `#guard`s at the bottom pin those literal paths against this function. -/
-def enetAdamVariant (replicas : Nat) : String :=
-  if replicas ≤ 1 then "adam" else "adamdp"
+    `#eval` paths below; the `#guard`s at the bottom pin those literal paths against this function.
+
+    `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes.
+    Same convention as `r34AdamVariant`. -/
+def enetAdamVariant (B replicas : Nat) : String :=
+  (if replicas ≤ 1 then "adam" else "adamdp") ++ (if B == 32 then "" else toString B)
 
 set_option maxRecDepth 4000000 in
 /-- **EfficientNet-B0 AdamW train step rendered from the verified AST.** The certified peer of the
@@ -887,7 +890,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch"). `enetAdamVariant` is the single source for the name, the
   -- artifact path and `LEAN_MLIR_VARIANT`.
-  let fname := s!"efficientnet_{enetAdamVariant replicas}_train_step"
+  let fname := s!"efficientnet_{enetAdamVariant B replicas}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -940,7 +943,26 @@ end Proofs.StableHLO
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" 2)
 
+-- The **bs128** pair (handoff §2e-quater), single-device and 2-replica. `B` is a true parameter of
+-- the renderer, so this is the whole change: the graph structure is identical and only the tensor
+-- dimensions and the mean-CE divisor (32.0 → 128.0) move. At 2 replicas this is a GLOBAL batch of
+-- 256, the batch ImageNet wants.
+--
+-- They render to their OWN paths, so the artifacts the trainer runs today are untouched and the
+-- §2e tie/DP-gate baselines stay valid. Select with `LEAN_MLIR_VARIANT=adam128` / `adamdp128` and
+-- `LEAN_MLIR_BATCH=128`. **The eval forwards are still bs32**, so train with `LEAN_MLIR_SKIP_EVAL=1`
+-- or re-render them — the same caveat §2d.1 carries for R34's bs256.
+#eval IO.FS.writeFile "verified_mlir/efficientnet_adam128_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 128 10 "1.0e-5"
+    "0.100000" "-0.010000" "128.0")
+
+#eval IO.FS.writeFile "verified_mlir/efficientnet_adamdp128_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 128 10 "1.0e-5"
+    "0.100000" "-0.010000" "128.0" 2)
+
 -- Pin the two literal artifact paths above against the name the renderer actually emits. If a
 -- variant is renamed this fails at `lake build` instead of at run time as an "entry mismatch".
-#guard Proofs.StableHLO.enetAdamVariant 1 == "adam"
-#guard Proofs.StableHLO.enetAdamVariant 2 == "adamdp"
+#guard Proofs.StableHLO.enetAdamVariant 32 1 == "adam"
+#guard Proofs.StableHLO.enetAdamVariant 32 2 == "adamdp"
+#guard Proofs.StableHLO.enetAdamVariant 128 1 == "adam128"
+#guard Proofs.StableHLO.enetAdamVariant 128 2 == "adamdp128"

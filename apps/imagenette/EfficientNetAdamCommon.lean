@@ -33,8 +33,16 @@ def efficientnetAdamConfig : VerifiedConfig where
       collective is a **declared trusted carve-out** (handoff §5) and the render says so in its own
       output banner. Pair it with `LEAN_MLIR_REPLICAS=N PJRT_REPLICAS=N` and `HIP_VISIBLE_DEVICES`
       unset; it needs the XLA build, because collectives only exist on the PJRT path and the IREE
-      shim refuses the DP entry point outright rather than silently running single-device. -/
+      shim refuses the DP entry point outright rather than silently running single-device.
+
+    `LEAN_MLIR_BATCH` overrides the batch, and **must match the batch the selected variant was
+    rendered at** — the batch is baked into the graph, not a runtime dimension, so a mismatch is a
+    shape error at the first invoke rather than something that silently limps. The pairs that exist:
+    `adam`/`adamdp` at 32, `adam128`/`adamdp128` at 128 (§2e-quater). **The eval forwards are still
+    rendered at bs32**, so anything other than 32 needs `LEAN_MLIR_SKIP_EVAL=1` or re-rendered
+    forwards — the same caveat §2d.1 carries for R34's bs256. -/
 def runEfficientNetAdam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
-  efficientnetVerified.toNet.trainAdamSched efficientnetAdamConfig
+  let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD efficientnetAdamConfig.batchSize
+  efficientnetVerified.toNet.trainAdamSched { efficientnetAdamConfig with batchSize := bs }
     (argv.head?.getD "data") 0.001 0.9 0.999 3 variant
