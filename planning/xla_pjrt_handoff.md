@@ -88,7 +88,11 @@ lake build cifar8-adam-tie   && .lake/build/bin/cifar8-adam-tie
 # which is the control for the ~2.1 s first-compile-in-process cost.
 lake build resnet34-adam-bench
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-adam-bench \
-  verified_mlir/resnet34_adam_train_step.mlir verified_mlir/resnet34_adam_train_step_b.mlir 20
+  verified_mlir/resnet34_adam_train_step.mlir verified_mlir/resnet34_adam_train_step.mlir 20
+
+# the data-parallel semantics gate (§2b-quater). Needs TWO GPUs.
+unset HIP_VISIBLE_DEVICES
+lake build cifar8-dp-check && PJRT_REPLICAS=2 .lake/build/bin/cifar8-dp-check
 ```
 
 Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`,
@@ -359,14 +363,37 @@ Gates run:
 | syntax | `all_reduce(add)` over `[[0,1]]`, **no `use_global_device_ids`** (§4), then `/2.0` ✅ |
 | 2 GPUs, 2 replicas | compiles at 2 replicas, runs, loss descends in both runs — **2.34 → 2.00** at 30 steps/epoch, **2.58 → 2.22** at 10 ✅ |
 
-**Still owed: the cifar8 exact decomposition check.** cifar8 has no BN, so 1×256 vs 2×128 must
-agree to ~1e-6 (§2c measured 1.015e-06 with the *hand-written* emitter). That is the only gate that
-pins the collective's *semantics* rather than its syntax and plumbing, and it has **not** been re-run
-against the certified insertion. It needs `cifar8AdamTrainStepFaithfulV` to take the same `replicas`
-parameter (`adamTail` in `CnnRender.lean`, 22 call sites) plus a B=256 render to compare against.
-Cheap, and it is the next thing to do in this thread. Until then the collective's correctness rests
-on `emitGradAllReduce` being the *same function* already validated end-to-end by
-`ffi/test_pjrt_allreduce.c` and by §2c's 2-GPU run — which is an argument, not a measurement.
+#### The cifar8 exact gate ✅ — the collective's semantics, pinned
+
+`tests/TestCifar8DpCheck.lean` → `lake build cifar8-dp-check`. cifar8 has **no BN**, so the loss is a
+plain mean over examples and the decomposition is an identity:
+`(1/2)[(1/128)Σ_A + (1/128)Σ_B] = (1/256)Σ_{A∪B}`. A correct DP step must therefore reproduce the
+single-device step at the global batch. `cifar8AdamTrainStepFaithfulV` now takes the same trailing
+`replicas` parameter, so both sides come from one renderer:
+
+| | region | norm-rel |
+|---|---|---|
+| **1×256 vs 2×128 + all_reduce** | gradient (`m`) | **2e-6** ✅ |
+| | `θ` | 0 (bit-exact 52441/52858) |
+| | `v` | 1e-6 |
+| | `%loss` | 1.6e-3 — **not gated, and correctly so** |
+
+The `%loss` gap is the check working, not failing: the DP render computes loss per replica (÷128)
+and it is read back from replica 0, so it is that half's mean. **That it differs is independent
+evidence the sharding is real** — if both replicas saw the same data it would match exactly. Sharding
+real + gradients matching ⇒ the collective genuinely combined both halves.
+
+**The gate was verified to fail**, two ways:
+
+- *collective removed* → never reaches the numbers; the shim's replica-count guard refuses first:
+  *"DP invoke asked for 2 replicas but … was compiled for 1 (does the graph contain an all_reduce?)"*
+- *collective present but wrong* (`%arn` divisor 2.0 → 1.0, i.e. sum not mean) → **`m` norm-rel
+  0.96** against a passing 2e-6. Five and a half orders of separation from the gate.
+
+That second control also confirms §3's rule empirically: on the same broken render **θ moved only
+2.7e-4 while `m` moved 0.96**. A θ-based gate would have passed a 2× gradient error.
+
+`replicas = 1` re-renders `cifar8_adam_train_step.mlir` byte-identical, same self-check as R34.
 
 **A guard earned its keep:** the first DP render kept the entry name `@resnet34_adam_train_step`
 while the driver asked for `@resnet34_adamdp_train_step`, and the shim's entry-name check refused

@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.ViTRender
 
 /-! # CNN + CIFAR render half — conv train-step text as a name-threaded render of proven graphs
 
@@ -900,15 +901,24 @@ def cifar8TrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrS
     outputs read it back by SSA name (`.operand gradSSA`), so `θ'`/`m'`/`v'` share one
     gradient subgraph rather than three copies of it. Returns `(code, θ', m', v')` — the
     triple `Proofs.adamWStep` returns, and the triple `adamW_triple_faithful` denotes. -/
-private def adamTail (B n : Nat) (pName : String) (ds : List Nat) (gradSSA : String) :
+private def adamTail (B replicas n : Nat) (pName : String) (ds : List Nat) (gradSSA : String) :
     StateM Nat (String × String × String × String) := do
   let z : Vec n := fun _ => 0
+  -- At `replicas > 1`, average the gradient across devices first. Trusted carve-out, same as
+  -- ResNet34RenderB's (handoff §2b-quater, §5). cifar8 is where that carve-out gets its EXACT
+  -- gate: no BatchNorm, so the loss is a plain mean over examples and the batch decomposition
+  --   (1/2)[(1/B)Σ_A + (1/B)Σ_B] = (1/2B)Σ_{A∪B}
+  -- holds identically — 2×B with the collective must equal 1×2B to fp rounding. R34 cannot be
+  -- checked this way: BN normalises per replica, so there N×b ≠ 1×(N·b) BY DESIGN.
+  -- `pName` is "%W1"; the collective's SSA tag must not carry the '%'. `String.drop` returns a
+  -- `String.Slice` on this toolchain (Lean 4.32), hence the explicit `.toString`.
+  let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds (pName.drop 1).toString replicas
   let (cT, nT) ← pretty B (SHlo.adamWParamF pName s!"{pName}m" s!"{pName}v"
       "%b1" "%ob1" "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds
-      0 0 0 0 0 0 0 z z z (.operand gradSSA z))
-  let (cM, nM) ← pretty B (SHlo.adamMNextF s!"{pName}m" "%b1" "%ob1" ds 0 z (.operand gradSSA z))
-  let (cV, nV) ← pretty B (SHlo.adamVNextF s!"{pName}v" "%b2" "%ob2" ds 0 z (.operand gradSSA z))
-  pure (cT ++ cM ++ cV, nT, nM, nV)
+      0 0 0 0 0 0 0 z z z (.operand gAvg z))
+  let (cM, nM) ← pretty B (SHlo.adamMNextF s!"{pName}m" "%b1" "%ob1" ds 0 z (.operand gAvg z))
+  let (cV, nV) ← pretty B (SHlo.adamVNextF s!"{pName}v" "%b2" "%ob2" ds 0 z (.operand gAvg z))
+  pure (arS ++ cT ++ cM ++ cV, nT, nM, nV)
 
 set_option maxRecDepth 8000 in
 /-- **cifar8 AdamW train step rendered ENTIRELY from the verified AST** — the optimizer half of
@@ -935,7 +945,9 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4)
     (W₉ : Mat (c4*h*w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1) (ba : Vec d1)
     (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))) : String :=
+    (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))))
+    -- Trailing + defaulted so every existing positional call site is unchanged.
+    (replicas : Nat := 1) : String :=
   let s4h := 2*h; let s4w := 2*w
   let s3h := 2*s4h; let s3w := 2*s4w
   let s2h := 2*s3h; let s2w := 2*s3w
@@ -1015,49 +1027,49 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (cDhc1, nDhc1) ← pretty B (.selectPos nHc1 zS1c1 (.operand nDac1 zS1c1))
     -- ═══ per param: un-fused gradient, then the three proven AdamW outputs ═══
     let (gW1, sW1) ← pretty B (SHlo.convWeightGrad "%x" b₁ zTW1 W₁ (.operand nDhc1 zS1c1))
-    let (aW1, tW1, mW1, vW1) ← adamTail B (c1*ic*kH*kW) "%W1" [c1,ic,kH,kW] sW1
+    let (aW1, tW1, mW1, vW1) ← adamTail B replicas (c1*ic*kH*kW) "%W1" [c1,ic,kH,kW] sW1
     let (gb1, sb1) ← pretty B (SHlo.convBiasGrad W₁ zTW1 b₁ (.operand nDhc1 zS1c1))
-    let (ab1, tb1, mb1, vb1) ← adamTail B c1 "%cb1" [c1] sb1
+    let (ab1, tb1, mb1, vb1) ← adamTail B replicas c1 "%cb1" [c1] sb1
     let (gW2, sW2) ← pretty B (SHlo.convWeightGrad nAc1 b₂ zTW2 W₂ (.operand nDhc2 zS1c1))
-    let (aW2, tW2, mW2, vW2) ← adamTail B (c1*c1*kH*kW) "%W2" [c1,c1,kH,kW] sW2
+    let (aW2, tW2, mW2, vW2) ← adamTail B replicas (c1*c1*kH*kW) "%W2" [c1,c1,kH,kW] sW2
     let (gb2, sb2) ← pretty B (SHlo.convBiasGrad W₂ zTW2 b₂ (.operand nDhc2 zS1c1))
-    let (ab2, tb2, mb2, vb2) ← adamTail B c1 "%cb2" [c1] sb2
+    let (ab2, tb2, mb2, vb2) ← adamTail B replicas c1 "%cb2" [c1] sb2
     let (gW3, sW3) ← pretty B (SHlo.convWeightGrad nPool1 b₃ zTW3 W₃ (.operand nDhc3 zS2c2))
-    let (aW3, tW3, mW3, vW3) ← adamTail B (c2*c1*kH*kW) "%W3" [c2,c1,kH,kW] sW3
+    let (aW3, tW3, mW3, vW3) ← adamTail B replicas (c2*c1*kH*kW) "%W3" [c2,c1,kH,kW] sW3
     let (gb3, sb3) ← pretty B (SHlo.convBiasGrad W₃ zTW3 b₃ (.operand nDhc3 zS2c2))
-    let (ab3, tb3, mb3, vb3) ← adamTail B c2 "%cb3" [c2] sb3
+    let (ab3, tb3, mb3, vb3) ← adamTail B replicas c2 "%cb3" [c2] sb3
     let (gW4, sW4) ← pretty B (SHlo.convWeightGrad nAc3 b₄ zTW4 W₄ (.operand nDhc4 zS2c2))
-    let (aW4, tW4, mW4, vW4) ← adamTail B (c2*c2*kH*kW) "%W4" [c2,c2,kH,kW] sW4
+    let (aW4, tW4, mW4, vW4) ← adamTail B replicas (c2*c2*kH*kW) "%W4" [c2,c2,kH,kW] sW4
     let (gb4, sb4) ← pretty B (SHlo.convBiasGrad W₄ zTW4 b₄ (.operand nDhc4 zS2c2))
-    let (ab4, tb4, mb4, vb4) ← adamTail B c2 "%cb4" [c2] sb4
+    let (ab4, tb4, mb4, vb4) ← adamTail B replicas c2 "%cb4" [c2] sb4
     let (gW5, sW5) ← pretty B (SHlo.convWeightGrad nPool2 b₅ zTW5 W₅ (.operand nDhc5 zS3c3))
-    let (aW5, tW5, mW5, vW5) ← adamTail B (c3*c2*kH*kW) "%W5" [c3,c2,kH,kW] sW5
+    let (aW5, tW5, mW5, vW5) ← adamTail B replicas (c3*c2*kH*kW) "%W5" [c3,c2,kH,kW] sW5
     let (gb5, sb5) ← pretty B (SHlo.convBiasGrad W₅ zTW5 b₅ (.operand nDhc5 zS3c3))
-    let (ab5, tb5, mb5, vb5) ← adamTail B c3 "%cb5" [c3] sb5
+    let (ab5, tb5, mb5, vb5) ← adamTail B replicas c3 "%cb5" [c3] sb5
     let (gW6, sW6) ← pretty B (SHlo.convWeightGrad nAc5 b₆ zTW6 W₆ (.operand nDhc6 zS3c3))
-    let (aW6, tW6, mW6, vW6) ← adamTail B (c3*c3*kH*kW) "%W6" [c3,c3,kH,kW] sW6
+    let (aW6, tW6, mW6, vW6) ← adamTail B replicas (c3*c3*kH*kW) "%W6" [c3,c3,kH,kW] sW6
     let (gb6, sb6) ← pretty B (SHlo.convBiasGrad W₆ zTW6 b₆ (.operand nDhc6 zS3c3))
-    let (ab6, tb6, mb6, vb6) ← adamTail B c3 "%cb6" [c3] sb6
+    let (ab6, tb6, mb6, vb6) ← adamTail B replicas c3 "%cb6" [c3] sb6
     let (gW7, sW7) ← pretty B (SHlo.convWeightGrad nPool3 b₇ zTW7 W₇ (.operand nDhc7 zS4c4))
-    let (aW7, tW7, mW7, vW7) ← adamTail B (c4*c3*kH*kW) "%W7" [c4,c3,kH,kW] sW7
+    let (aW7, tW7, mW7, vW7) ← adamTail B replicas (c4*c3*kH*kW) "%W7" [c4,c3,kH,kW] sW7
     let (gb7, sb7) ← pretty B (SHlo.convBiasGrad W₇ zTW7 b₇ (.operand nDhc7 zS4c4))
-    let (ab7, tb7, mb7, vb7) ← adamTail B c4 "%cb7" [c4] sb7
+    let (ab7, tb7, mb7, vb7) ← adamTail B replicas c4 "%cb7" [c4] sb7
     let (gW8, sW8) ← pretty B (SHlo.convWeightGrad nAc7 b₈ zTW8 W₈ (.operand nDhc8 zS4c4))
-    let (aW8, tW8, mW8, vW8) ← adamTail B (c4*c4*kH*kW) "%W8" [c4,c4,kH,kW] sW8
+    let (aW8, tW8, mW8, vW8) ← adamTail B replicas (c4*c4*kH*kW) "%W8" [c4,c4,kH,kW] sW8
     let (gb8, sb8) ← pretty B (SHlo.convBiasGrad W₈ zTW8 b₈ (.operand nDhc8 zS4c4))
-    let (ab8, tb8, mb8, vb8) ← adamTail B c4 "%cb8" [c4] sb8
+    let (ab8, tb8, mb8, vb8) ← adamTail B replicas c4 "%cb8" [c4] sb8
     let (gW9, sW9) ← pretty B (SHlo.weightGrad nPool4 zPc4 (.operand nDy9 zD1))
-    let (aW9, tW9, mW9, vW9) ← adamTail B (flat*d1) "%W9" [flat,d1] sW9
+    let (aW9, tW9, mW9, vW9) ← adamTail B replicas (flat*d1) "%W9" [flat,d1] sW9
     let (gb9, sb9) ← pretty B (SHlo.biasGrad (n := d1) (.operand nDy9 zD1))
-    let (ab9, tb9, mb9, vb9) ← adamTail B d1 "%b9" [d1] sb9
+    let (ab9, tb9, mb9, vb9) ← adamTail B replicas d1 "%b9" [d1] sb9
     let (gWa, sWa) ← pretty B (SHlo.weightGrad nA9 zD1 (.operand nDyA zD1))
-    let (aWa, tWa, mWa, vWa) ← adamTail B (d1*d1) "%Wa" [d1,d1] sWa
+    let (aWa, tWa, mWa, vWa) ← adamTail B replicas (d1*d1) "%Wa" [d1,d1] sWa
     let (gba, sba) ← pretty B (SHlo.biasGrad (n := d1) (.operand nDyA zD1))
-    let (aba, tba, mba, vba) ← adamTail B d1 "%ba" [d1] sba
+    let (aba, tba, mba, vba) ← adamTail B replicas d1 "%ba" [d1] sba
     let (gWb, sWb) ← pretty B (SHlo.weightGrad nAa zD1 (.operand nDy zNC))
-    let (aWb, tWb, mWb, vWb) ← adamTail B (d1*nClasses) "%Wb" [d1,nClasses] sWb
+    let (aWb, tWb, mWb, vWb) ← adamTail B replicas (d1*nClasses) "%Wb" [d1,nClasses] sWb
     let (gbb, sbb) ← pretty B (SHlo.biasGrad (n := nClasses) (.operand nDy zNC))
-    let (abb, tbb, mbb, vbb) ← adamTail B nClasses "%bb" [nClasses] sbb
+    let (abb, tbb, mbb, vbb) ← adamTail B replicas nClasses "%bb" [nClasses] sbb
     -- ═══ report-only scalar loss — OUTSIDE the proven surface, does not feed the update ═══
     let lossCode :=
       "    // ── report-only scalar loss (NOT pretty(AST): the kit has no rank-0 loss op; it\n" ++
@@ -1116,8 +1128,13 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     ty [flat,d1], ty [d1], ty [d1,d1], ty [d1], ty [d1,nClasses], ty [nClasses]]
   let retTy := String.intercalate ", " (pTy ++ pTy ++ pTy) ++ ", tensor<f32>, tensor<f32>, tensor<f32>"
   let inner : String := go.run' 0
+  -- Entry name tracks the driver's `{slug}_{variant}_train_step` convention (see ResNet34RenderB:
+  -- a mismatch here is refused by the shim as "entry mismatch", not silently mis-run).
+  let fname := if replicas ≤ 1 then "cifar8_adam_train_step" else "cifar8_adamdp_train_step"
+  let msfx := sfx "m"
+  let vsfx := sfx "v"
   "module @m {\n" ++
-  s!"  func.func @cifar8_adam_train_step(%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, {pSig}, {sfx "m"}, {sfx "v"}, %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,nClasses]}) -> ({retTy}) " ++ "{\n" ++
+  s!"  func.func @{fname}(%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, {pSig}, {msfx}, {vsfx}, %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,nClasses]}) -> ({retTy}) " ++ "{\n" ++
   inner ++
   "  }\n}\n"
 
@@ -1352,6 +1369,34 @@ end Proofs.StableHLO
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ => 0))
+
+-- ── the data-parallel exact gate (handoff §2b-quater) ────────────────────────────────────────
+-- cifar8 has NO BatchNorm, so the batch decomposition is an identity and 2 replicas × B=128 with
+-- an all_reduce'd gradient must equal 1 device × B=256 to fp rounding. That is the ONLY check
+-- that pins the collective's SEMANTICS rather than its syntax; R34 cannot be checked this way
+-- (BN normalises per replica). Driven by `cifar8-dp-check`.
+--
+-- 1/256 = 0.00390625 and 1/128 = 0.0078125 are both exact in binary32, so the loss scaling
+-- contributes no rounding of its own to the comparison.
+#eval IO.FS.writeFile "verified_mlir/cifar8_adam256_train_step.mlir"
+  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 256 3 16 16 32 32 2 2 64 10 3 3
+    "0.00390625" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0))
+
+#eval IO.FS.writeFile "verified_mlir/cifar8_adamdp_train_step.mlir"
+  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+    "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) (replicas := 2))
 
 #eval IO.FS.writeFile "verified_mlir/cifar8_train_step.mlir"
   (Proofs.StableHLO.cifar8TrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3 "0.00078125"

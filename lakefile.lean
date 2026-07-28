@@ -1379,6 +1379,12 @@ lean_exe «resnet34-adam-tie» where
   root := `tests.TestResnet34AdamTie
   moreLinkArgs := xlaLink
 
+/-- §2b-quater gate: the collective's SEMANTICS, checked where they can be. cifar8 has no BN, so
+    2×128 + all_reduce must equal 1×256 to fp rounding. Needs two GPUs and the XLA backend. -/
+lean_exe «cifar8-dp-check» where
+  root := `tests.TestCifar8DpCheck
+  moreLinkArgs := xlaLink
+
 /-- §2b tail: step-time bench for the same two renders the tie compares. The batched render is
     1.68× the emitted ops (10014 vs 5971) because `pretty` has no CSE and the batched backward ops
     are self-contained recomputes; the open question is whether XLA's own CSE collapses that. Both
