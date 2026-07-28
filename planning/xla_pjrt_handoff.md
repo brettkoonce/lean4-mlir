@@ -29,10 +29,42 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `4af61ff` | `bnBatchMeanB`/`bnBatchVarB` — the BN running stats |
 | `2618ba4` | **`ResNet34RenderB.lean`** — the batched R34 AdamW train step |
 | `b856deb` | the numeric tie: **forward bit-exact, backward norm-rel 1e-6** |
-| — | *↓ the AdamW-scorecard thread — ViT, then EfficientNet (§2e), 2026-07-28* |
+| — | *↓ the AdamW-scorecard thread, 2026-07-28 — ViT, EfficientNet (§2e), ConvNeXt (§2f-bis)* |
 | `16fa0f5`, `70b2da3`, `21a09c3` | ViT AdamW: certified render, DP variant, the MIOpen blocker |
 | `1119b4f`, `c96bd36` | the depthwise weight gradients — EfficientNet's last blockers |
-| *(this change)* | **EfficientNet AdamW**: `enetBackAll`, the certified render, the bit-exact tie, the swap |
+| `b496fa1` | **EfficientNet AdamW**: `enetBackAll`, the certified render, the bit-exact tie, the swap |
+| `b84ae09` | EfficientNet **data-parallel** — gated by the exact identity on the real net, on 2 GPUs |
+| `0978cd9`, `3620569`, `9349541` | the DP bench: 1.75× on-GPU, bs128 (1.50×, 93% DP efficiency), and the loader correction |
+| `e872ca1` | scoping the last two — ConvNeXt first, and mnv2's real task named |
+| `b94e8e9`, `283bb2d` | **ConvNeXt AdamW**: five ops, the render, the conditioning finding, the spread gate, the swap |
+
+---
+
+## 0. ▶ START HERE — the one thing left is **MobileNetV2**
+
+Everything else in this file is done. The AdamW scorecard is **5 of 6** — cifar8, resnet34, vit,
+efficientnet, convnext all train on `pretty(provenGraph)` and the writer audit is at 0.
+
+**The task is "MobileNetV2 at the batched index", NOT "MobileNetV2 AdamW".** Scoping it as the
+latter is how the estimate goes wrong, and §2f has the measurement behind that name. The short
+version: `MobileNetV2Render.lean` renders at the **per-example** index while the artifact
+`mobilenetv2-verified-adam` actually trains on is **batch BN** — the R34 §2a two-worlds situation,
+live. Resolving it is the §2b batched-index move, which was the most expensive and most badly
+mis-estimated step in this whole thread.
+
+Read, in order: **§2f** (the scoping and the decision), **§2e** (the playbook that worked three
+times: un-fuse → one shared traversal → assemble → tie → swap), **§2b** (what the batched-index move
+actually cost on R34), then **§3/§4/§5** before trusting any number or writing any gate.
+
+The four gates that every one of these swaps passed, and which mnv2's must too:
+
+1. the SGD artifact re-renders **byte-identical** after the `adam : Bool` threading;
+2. the interface matches the hand-written render **positionally** (arity + arg/return types);
+3. a numeric tie with an **A-vs-A determinism floor**, gated per region, that is **verified to fail**
+   on a deliberately perturbed render — see §2f-bis for why a green tie you have not tried to break
+   is not evidence;
+4. after the swap: regenerated canonical == the tied bytes, `regen_verified_mlir.sh check` still at
+   one-writer-each, and elaborating the retired test file rewrites nothing.
 
 ---
 
@@ -53,6 +85,10 @@ exact: 1×256 vs 2×128+all_reduce agree on the gradient to **1.015e-06**.
 
 **Speed, R34/Imagenette bs32:** IREE 1702 → XLA **162 ms/step** (10.5×); 52.5 s/epoch. Within
 **1.04×** of hand-written JAX per step at bs32, but see §3.
+
+**The AdamW scorecard is 5 of 6** — `cifar8`, `resnet34`, `vit`, `efficientnet` and `convnext`
+train on `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail. Only
+`mobilenetv2` remains (§0, §2f). The writer audit reports **one writer per artifact**.
 
 **Four artifacts moved from `tests/` into `Proofs/Codegen/`** and now render as
 `pretty(provenGraph)` — `resnet34_fwd`, `resnet34_fwd_eval`, `cifar8_adam_train_step`, and (already
@@ -91,6 +127,11 @@ lake build cifar8-adam-tie   && .lake/build/bin/cifar8-adam-tie
 git show c96bd36:verified_mlir/efficientnet_adam_train_step.mlir > /tmp/retired.mlir
 lake build efficientnet-adam-tie && IREE_BACKEND=rocm .lake/build/bin/efficientnet-adam-tie \
   /tmp/retired.mlir verified_mlir/efficientnet_adam_train_step.mlir
+# ConvNeXt (§2f-bis). Runs its OWN reorder control and gates spread as well as magnitude; pass a
+# perturbed render as argv[2] to see it go red, and TIE_XSEED / TIE_REVERSE for the probes.
+git show b94e8e9:verified_mlir/convnext_adam_train_step.mlir > /tmp/retired_cnx.mlir
+lake build convnext-adam-tie && IREE_BACKEND=rocm .lake/build/bin/convnext-adam-tie \
+  /tmp/retired_cnx.mlir verified_mlir/convnext_adam_train_step.mlir
 
 # the step-time bench (§2b-bis). Takes both paths so it can be run in either compile order,
 # which is the control for the ~2.1 s first-compile-in-process cost.
@@ -317,12 +358,16 @@ Traps that still apply to anyone touching these files:
   something else. Do not let mnv2's noisiness set your expectations for the other three.
 - `scripts/regen_verified_mlir.sh check` is the scoreboard: **0**, and it should stay there.
 
-### Then, separately: the remaining uncertified whole-net AdamW renders
+### The four uncertified whole-net AdamW renders — ✅ three done, mnv2 left
+
+*This section is the ViT thread, written when four AdamW renders were hand-written. Three are now
+certified: **ViT** below, **EfficientNet** §2e, **ConvNeXt** §2f-bis. The scorecard is **5 of 6** and
+only **mobilenetv2** remains — see §0 and §2f, not this section, for what to do about it. Kept
+because the ViT write-up below is where the shared-traversal playbook was worked out.*
 
 Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convnext`,
-`efficientnet`, `mobilenetv2` `_adam_train_step` are hand-written with **live drivers**
-(`*-verified-adam`). Two remain — `convnext` and `mobilenetv2` — so the AdamW scorecard is **4 of
-6**. From what §2b cost at R34 scale:
+`efficientnet`, `mobilenetv2` `_adam_train_step` were hand-written with **live drivers**
+(`*-verified-adam`). From what §2b cost at R34 scale:
 
 - **ViT is cheapest, but "only the AdamW tail is missing" was WRONG** — corrected 2026-07-28 by
   measurement. The tail is the *done* part: `emitAdamV` is a proven op family and
@@ -848,7 +893,7 @@ helper); this render replaces it with the proven AdamW triple. So for `psW` and 
 the tier moves from *hand-written gradient + hand-written update* to *hand-written gradient +
 certified update*, and the other 176 params are `pretty(AST)` end to end. A strict improvement.
 
-### 2f. The last two AdamW renders — scoped by measurement, and **ConvNeXt first** ✅ ConvNeXt DONE
+### 2f. ▶ The last AdamW render — MobileNetV2. Scoped by measurement; ConvNeXt went first ✅
 
 Scoped 2026-07-28 by enumerating every `*Sgd` op each renderer uses and checking for a `*Grad` peer,
 then checking two things that decide the order.
@@ -876,22 +921,48 @@ needed neither, because its depthwise convs are followed by BN so the bias is fo
 **So the honest name for the mnv2 task is "MobileNetV2 at the batched index", not "MobileNetV2
 AdamW".** Scoping it as the latter is how the estimate goes wrong again.
 
-**ConvNeXt has no such fork**, and three further things make it the better next move:
+**ConvNeXt had no such fork** — done, §2f-bis. Its param-SGD was already separate from the
+cotangent traversal, three of its five missing ops were plain reductions, and its SGD tie was
+already gradient-bit-exact, which is why it went first.
 
-* its param-SGD is **already separate** from the cotangent traversal, so `adam` threads through one
-  site rather than needing the `enetBackAll`-style extraction enet and ViT both required;
-* three of its five missing ops (`lnGammaGrad`, `lnBetaGrad`, `layerScaleChGammaGrad`) are plain
-  reductions — the cheapest kind of `*Grad` peer;
-* its SGD tie (§2a-quinquies) came back **gradient BIT-EXACT** across two structurally different
-  emitters, so the emitter is known-good before any of this starts.
+#### ▶ The MobileNetV2 work order
 
-**Two things to be honest about up front.** (1) ConvNeXt has **no BN**, so its tie is ViT-grade —
-gradient + `%loss`, with no `bnstat` region to pin the forward bit-exactly. (2) `ConvNeXtRender.lean`
-is **not fully `pretty(AST)` today**: `patchWGrad` (stride-4 stem weight grad) and `downWGrad`
-(even-kernel 2×2/s2 weight grad) are hand-written because neither has a VJP-cert `SHlo` op, and
-`sgd` is a hand-written update emitter. Those two gaps stay. But that third one is an *argument for*
-doing this: the param update is already outside the AST, so replacing it with the proven
-`adamMNextF`/`adamVNextF`/`adamWParamF` triple **raises** the tier rather than holding it.
+**Decide the semantics first — everything else follows from it, and it is the only irreversible
+choice.** The certified SGD render and the AdamW trainer are two different functions today
+(per-example BN vs batch BN). Two ways out, and R34 has already paid for one of them:
+
+* **(a) move mnv2 to the batched index `N := B`** — what §2b did for R34. Keeps the trainer's
+  semantics, so the accuracy story and the 80-epoch logs stay valid. This is the recommended one,
+  and it is what "MobileNetV2 at the batched index" means.
+* **(b) move the trainer onto the per-example chain** — cheaper in codegen, but it changes what
+  `mobilenetv2-verified-adam` computes, voids its published accuracy, and (as §2b-quater notes for
+  R34) makes train == eval so `bnChannels` goes empty and `@mobilenetv2_fwd_eval` loses its caller.
+
+**What (a) needs, measured.** Most of the batched kit exists from §2b/§2e. mnv2 additionally needs:
+
+| missing | why enet did not need it |
+|---|---|
+| a batched **`relu6`** | enet is all-swish; `relu6F` has no `BatchableOp` descriptor yet |
+| **`depthwiseBiasGradB`**, **`depthwiseStridedBiasGradB`** | enet's depthwise convs are followed by BN, so the bias is folded and has no update op — mnv2's are not |
+
+`depthwise{,Strided}WeightGradB` already exist (§2e), and the per-example `depthwise{Weight,Bias}Grad`
+landed with ConvNeXt (§2f-bis) — check whether those help before writing new ones.
+
+**Traps specific to mnv2, all already paid for elsewhere:**
+
+* **mnv2 fails LOUDLY where the others fail silently** (§2a-quinquies): a clobbered mnv2 artifact has
+  the wrong *arity*, so the driver refuses it. Do not let that set your expectations for the rest.
+* its `_train_step` docstring (`MainMobilenetV2Verified.lean:19`) says *"mean-loss SGD lr=0.3"* while
+  the graph is **sum-loss at 0.3** — an effective 9.6. That is a **tuned** value, not a slip
+  (`runs/mobilenetv2_verified_crop_gpu0.log` 32.9% → 86.89%, matching README's 87.09). Leave the
+  number alone; it is only the docstring that misleads.
+* the §2b `N := 1` hazard is the whole point of this task — re-read §2b's list of which ops are
+  batch-*reducing* before assuming a re-instantiation is a one-liner. It was not, twice.
+
+**Its tie will be enet-grade, which is the good case**: mnv2 has 52 BN layers, so the returned batch
+statistics give a `bnstat` region that pins the forward **bit-exactly**. Derive those stat slots from
+the traversal that computes them, never from a parallel table (§2e — a misaligned slot is silent).
+And gate the **spread** as well as the magnitude (§2f-bis).
 
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
@@ -1176,7 +1247,9 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
 
 0. ~~**Finish §2b's tail**~~ ✅ **DONE** — measured (§2b-bis: no cost), swapped (§2b-ter), multi-GPU
    brought onto the certified renderer and gated (§2b-quater). This thread is closed.
-0b. **▶ The last four double-writers — §2a-quinquies.** Zero-behaviour-change cleanup: the committed
+0a. **▶ MobileNetV2 at the batched index — §2f.** The last AdamW render; takes the scorecard to
+   6 of 6. Read §0.
+0b. ~~**The last four double-writers — §2a-quinquies.**~~ ✅ DONE Zero-behaviour-change cleanup: the committed
    bytes are *already* the certified render for all four, so this only removes clobber hazards.
    Cheapest remaining item by a wide margin, and it takes the audit to 0.
 1. ~~**bs256 re-render + measure.**~~ ✅ **DONE 2026-07-28 — 1.78×, gated.** See §2d.1 below.
@@ -1446,6 +1519,12 @@ And on the renders: `pretty(provenGraph)` means the committed bytes are the cert
 the graph that was proven* — it does not mean the emitter is verified. The `Tok → StableHLO-text`
 lexing stays audited-but-trusted, which is why every move in §2a and §2b is backed by a numeric tie
 against what it replaced, not by the faithfulness theorem alone.
+
+ConvNeXt additionally keeps two **weight-gradient** gaps that no other net has — the stem 4×4/s4
+patchify and the even-kernel 2×2/s2 downsample, neither of which has a VJP-cert `SHlo` op — so its
+render is `pretty(AST)` for 176 of 180 params and *hand-written gradient + certified update* for the
+other four (§2f-bis). Say "ConvNeXt's AdamW render is certified except for two documented
+weight-gradient gaps", not "ConvNeXt is certified".
 
 Four places currently emit text that is **not** `pretty` of an AST node, and all say so in the
 emitted output: `cifar8_adam_train_step`'s report-only scalar `%loss` and its `%bc` passthroughs,
