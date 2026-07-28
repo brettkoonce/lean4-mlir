@@ -45,6 +45,7 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `17413f0` | docs(handoff): §0b per-net leftovers |
 | — | *↓ the forward-artifact thread (§2g), 2026-07-28 — the last five* |
 | *(this)* | **all five `_fwd` artifacts certified; `mobilenetv2_fwd` was the wrong BN world** |
+| *(this)* | §2h: the `-xla` trainer plan, de-risked — mnv2/ConvNeXt backward graphs RUN on XLA, ViT's SGD one does not |
 
 ---
 
@@ -54,10 +55,11 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
 audit reports one writer per artifact. There is no "next AdamW render".
 
-**What is left in this file is §2d's value-ordered list**, none of it on the AdamW track:
-rung 4 (the FPN detector), **device-resident parameters** (two independent multi-GPU measurements
-point at it — §2c's 1.46× on R34 and §2e-ter's 13–16% per-step DP overhead on EfficientNet), and the
-executable cache. Read §2d before picking one.
+**What is left in this file is §2d's value-ordered list**, none of it on the AdamW track: the
+**`-xla` trainers for mnv2 / ConvNeXt / ViT** (§2h — scoped and de-risked 2026-07-28, and the
+cheapest real win on the list), rung 4 (the FPN detector), **device-resident parameters** (two
+independent multi-GPU measurements point at it — §2c's 1.46× on R34 and §2e-ter's 13–16% per-step DP
+overhead on EfficientNet), and the executable cache. Read §2d before picking one.
 
 **The five forward artifacts are certified too, as of 2026-07-28 — §2g.** `convnext_fwd`,
 `efficientnet_fwd{,_eval}` and `mobilenetv2_fwd{,_eval}` now render `pretty(provenGraph)` off the
@@ -104,9 +106,9 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 | | AdamW certified | data-parallel | `-xla` trainer | forward artifact | run on current bytes |
 |---|---|---|---|---|---|
 | **EfficientNet** | ✅ | ✅ **best-gated** (exact identity on the real net, 2 GPUs) | ✅ | ✅ `Proofs/` (§2g) | ✅ 3 epochs + 2-GPU |
-| **MobileNetV2** | ✅ | ⚠ renderer supports `replicas`, **no artifact** | ❌ IREE only | ✅ `Proofs/` (§2g — **BN skew fixed**) | ❌ **none** |
-| **ConvNeXt** | ✅ (all 180) | ❌ **no `replicas` support at all** | ❌ IREE only | ✅ `Proofs/` (§2g) | ❌ **none** |
-| **ViT** | ✅ | ⛔ render exists, **numerically ungated** | ❌ (and XLA is blocked) | ✅ `Proofs/` | IREE single-GPU |
+| **MobileNetV2** | ✅ | ⚠ renderer supports `replicas`, **no artifact** | ❌ IREE only (**§2h — clear, measured**) | ✅ `Proofs/` (§2g — **BN skew fixed**) | ❌ **none** |
+| **ConvNeXt** | ✅ (all 180) | ❌ **no `replicas` support at all** | ❌ IREE only (**§2h — clear, measured**) | ✅ `Proofs/` (§2g) | ❌ **none** |
+| **ViT** | ✅ | ⛔ render exists, **numerically ungated** | ⛔ **blocked** — MIOpen, and it hits SGD too (§2h) | ✅ `Proofs/` | IREE single-GPU |
 
 **MobileNetV2** — no smoke-train (above); no `mobilenetv2_adamdp_train_step.mlir` (the renderer takes
 `replicas` and `mnv2AdamVariant` returns `adamdp`, but no `#eval` writes it, and there is no
@@ -125,7 +127,9 @@ scalar-LN γ/β render as `tensor<1xf32>` where the committed signature says `te
 **ViT** — the one with a *hard* blocker. Its DP render is numerically ungated because the graph will
 not execute on this box: `miopenStatusUnknownError` in the patch-embed weight-grad convolution. Both
 obvious hypotheses are **refuted** (the 209×209 shape runs fine standalone in JAX; memory is not it
-— a genuine OOM gives a clean `RESOURCE_EXHAUSTED`). The leading unconfirmed hypothesis is that XLA
+— a genuine OOM gives a clean `RESOURCE_EXHAUSTED`). **Measured 2026-07-28: the SGD train step fails
+identically**, so this is not an AdamW-render problem — it is in every ViT graph with a backward,
+and a self-contained repro can start from the much smaller `vit_train_step.mlir` (§2h). The leading unconfirmed hypothesis is that XLA
 fuses the `stablehlo.pad` into the conv as `rhs_dilation = 16`, a different MIOpen call than either
 probe makes. To settle it: dump post-optimisation HLO via the §4 throwaway-shim recipe (`XLA_FLAGS`
 is inert here) and read the `convolution` descriptor. **No bug filed and none should be** until
@@ -1450,6 +1454,105 @@ layer k perturbs every logit) but it is not the AdamW ties' 12M-float comparison
 "the two renders compute the same logits", not "the same intermediates". The prefix audit is what
 covers the intermediates, and only for the `.train` artifacts.
 
+### 2h. ▶ NEXT SESSION — the `-xla` trainers for mnv2, ConvNeXt and ViT. Scoped by measurement
+
+**Two of the three are unblocked and mechanical; the third is not, and the difference was measured
+on 2026-07-28 rather than assumed.** Read this before starting: the whole point of scoping it was
+to find out which nets are ViT-shaped.
+
+#### Why it is worth doing
+
+* **Speed.** XLA is **4.6× IREE** on EfficientNet (§2e-quinquies: 71 s/epoch vs 354 s; 80 epochs
+  1 h 35 m vs 7 h 50 m). `mobilenetv2-verified-adam` and `convnext-verified-adam` are IREE-only
+  today, so every long run on those two nets is paying that factor. Re-measure per net rather than
+  assuming 4.6× — it is one net's number, on a net that is depthwise-convolution-heavy.
+* **Multi-GPU is only reachable this way.** Collectives exist on the PJRT path only; the IREE shim
+  refuses a DP entry point outright. ConvNeXt has no `replicas` support in its renderer at all and
+  mnv2 has support but no artifact (§0b), so DP is a *later* step for both — but it is unreachable
+  without the `-xla` binary first.
+* **§0b's first open item gets cheap.** mnv2 and ConvNeXt have **no training run at all** on their
+  current artifacts — the evidence for both swaps is graph-level. The smoke-train that closes that
+  gap is the natural first use of the new binary, at 4.6×-ish less wall clock.
+
+#### ✅ The risk was measured, and mnv2 + ConvNeXt are CLEAR
+
+The obvious worry was ViT's blocker generalising: `miopenStatusUnknownError` in a strided-conv
+**weight gradient**. ConvNeXt has a structurally similar op — the 4×4/s4 patchify weight grad
+(`convStride4WeightGrad`, §2f-bis), whose cotangent dilates to a large filter exactly as ViT's
+16×16/s16 does. So both backward graphs were run on XLA/PJRT before any plumbing was written, using
+`sgd-render-tie` (which is `xlaLink`) as an A-vs-A probe:
+
+| net | XLA compile | execute | A-vs-A gradient |
+|---|---|---|---|
+| **ConvNeXt** `@convnext_train_step` (180 params) | 6.6 s | ✅ **runs** | bit-exact, 0/180 disagree |
+| **MobileNetV2** `@mobilenetv2_train_step` (210 params) | 3.0 s | ✅ **runs** | **bit-exact 2253738/2253738** |
+| **ViT** `@vit_train_step` (200 params) | ✅ compiles | ⛔ **`miopenStatusUnknownError`** | — |
+
+**So ConvNeXt is NOT ViT-shaped**: its stride-4 patchify weight gradient runs fine on this box's
+MIOpen, which further narrows the ViT blocker to that one 16×16/s16 patch-embed shape rather than
+to strided weight gradients as a class. mnv2 was never at risk (its depthwise weight grads are
+EfficientNet's, which §2e-bis already runs on XLA), and now it is measured rather than argued.
+
+**New ViT fact, and it changes the repro:** the **SGD** train step fails *identically*. The blocker
+is therefore **not AdamW-specific** — it is in every ViT graph carrying a backward, since both
+renders contain the same two convolutions. A minimal repro needs no AdamW machinery at all, which
+makes the §2a "no bug filed until there is a self-contained repro" bar materially easier to clear:
+start from `vit_train_step.mlir` (202 in / 200 out, 2 convolutions) and cut down.
+
+(`sgd-render-tie` now accepts `vit` in its `netBySlug` so this probe is repeatable — one line, and
+ViT's train step is already the `(x, θ, onehot) → θ'` shape that harness drives.)
+
+#### The recipe — 3 files + 2 lakefile entries per net, and NO driver change
+
+`VerifiedNet.trainAdamSched` already takes `(variant : String := "adam")` and already picks its
+banner off `IreeSession.backendName`; checkpoints and `.vmfb` paths are already backend- AND
+variant-scoped (§4). **Nothing in `LeanMlir/` needs to change.** Copy the shape of
+`apps/imagenette/EfficientNetAdamCommon.lean` (48 lines) exactly:
+
+1. **`apps/imagenette/<Net>AdamCommon.lean`** — the config + a `run<Net>Adam (argv) : IO Unit`,
+   moved verbatim out of the existing main. Lake requires a distinct root module per executable, so
+   this exists to stop the two binaries drifting: *"drift in `epochs`, `batchSize`, the seed, or any
+   AdamW hyperparameter would quietly invalidate any cross-backend comparison."* Keep each net's own
+   numbers — mnv2/ConvNeXt are baseLR 1e-3 with 3-epoch warmup, ViT is 3e-4 with 5.
+2. **`Main<Net>VerifiedAdam.lean`** — reduced to `def main (argv) := run<Net>Adam argv`.
+3. **`Main<Net>VerifiedAdamXla.lean`** — the same one line, plus the docstring naming the backend.
+4. **lakefile**: the existing `lean_exe` keeps `ireeLink`; the new `<net>-verified-adam-xla` gets
+   `xlaLink` and the new root.
+
+**Thread `variant` while you are in there.** `MainMobilenetV2VerifiedAdam.lean` and
+`MainConvNeXtVerifiedAdam.lean` call `trainAdamSched … 3` and never pass a variant, so they cannot
+select anything but `adam`. EfficientNet's common reads `LEAN_MLIR_VARIANT` (and `LEAN_MLIR_BATCH`);
+copy that, or the DP step later needs the file edited again. ViT's main additionally throws if its
+artifact is missing — keep that.
+
+#### Gates
+
+| gate | why |
+|---|---|
+| `lake build <net>-verified-adam` still builds and its behaviour is unchanged | the refactor must be inert; the IREE binary is the reference |
+| a short `LEAN_MLIR_G2_STEPS=…` run on **both** binaries, same seed, agreeing to fp noise | this is the §2e-bis IREE-vs-XLA agreement check, and it is what makes "second trusted lowerer" mean something |
+| loss descends on the XLA binary | closes §0b item 1 for that net, which is owed anyway |
+| marginal-epoch wall clock, `(T₃ − T₁)/2` | **never** wall-clock-minus-compile — that has produced a wrong ratio twice in this thread (§2e-ter) |
+
+Expect the IREE-vs-XLA agreement to be *close but not bit-exact*: §2e's ties are bit-exact **because
+IREE's pipeline is deterministic**, while XLA autotunes convolution algorithms across processes
+(§3). Quote a bound, not a value.
+
+#### Order, and what is NOT in scope
+
+**mnv2 first** — it is the cheapest (its config is already the simplest), it is measured clear, and
+it has a loud failure mode (a wrong artifact has the wrong arity, so the driver refuses it —
+§2a-quinquies). **ConvNeXt second.** **ViT last and expect not to finish it**: the plumbing is 30
+lines and can be written and committed, but the binary cannot be *run* on this box until the MIOpen
+convolution is resolved (dump post-optimisation HLO via §4's throwaway-shim recipe — `XLA_FLAGS` is
+inert here — and read the `convolution` descriptor; or run on ares). **Do not describe a ViT `-xla`
+target as working on the strength of it compiling.**
+
+Not in scope, and each is its own step afterwards: the **DP renders** (ConvNeXt's renderer has no
+`replicas` parameter at all; mnv2's has one but no `#eval` writes the artifact and there is no
+`mobilenetv2-dp-check`), and re-measuring the published accuracies — which mnv2 owes anyway for an
+unrelated reason (§2g: it was scored through the wrong forward).
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving
@@ -1740,6 +1843,12 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
    bytes are *already* the certified render for all four, so this only removes clobber hazards.
    Cheapest remaining item by a wide margin, and it takes the audit to 0.
 1. ~~**bs256 re-render + measure.**~~ ✅ **DONE 2026-07-28 — 1.78×, gated.** See §2d.1 below.
+1b. **The `-xla` trainers for mnv2 / ConvNeXt / ViT — §2h.** Newly scoped by measurement: mnv2 and
+   ConvNeXt are **clear** (both backward graphs run on XLA, bit-exact A-vs-A), ViT is **blocked** on
+   the MIOpen patch-embed weight-grad — and that blocker is now known to hit its SGD graph too, so
+   it is not AdamW-specific. Worth ~4.6× wall clock on two nets that are IREE-only today, and it is
+   the prerequisite for ever giving them a DP path. Cheap: 3 small files + 2 lakefile entries per
+   net, no driver change.
 2. **Rung 4** — the FPN detector, and the 35.5× headline nobody has verified end to end.
 3. **Device-resident parameters.** Two rounds of transfer work are already done (batching:
    256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains is smaller than it

@@ -62,8 +62,12 @@ private def netBySlug (slug : String) : IO VerifiedNetSpec :=
   | "efficientnet" => pure efficientnetVerified
   | "mobilenetv2"  => pure mobilenetv2Verified
   | "resnet34"     => pure resnet34Verified
+  -- ViT is here so the XLA/MIOpen patch-embed blocker (handoff §2a) can be probed on the SGD
+  -- graph, which carries the SAME two convolutions as the AdamW one. Its train step is the same
+  -- (x, θ, onehot) -> θ' shape this harness drives: 202 in / 200 out.
+  | "vit"          => pure vitVerified
   | _ => throw (IO.userError
-      s!"unknown net slug '{slug}' — expected convnext | efficientnet | mobilenetv2 | resnet34")
+      s!"unknown net slug '{slug}' — expected convnext | efficientnet | mobilenetv2 | resnet34 | vit")
 
 def main (args : List String) : IO Unit := do
   let (slug, pathA, lrAs, pathB, lrBs) ← match args with
