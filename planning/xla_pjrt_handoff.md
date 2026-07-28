@@ -772,7 +772,83 @@ Claim ceiling is unchanged from §5: the graph is *certified gradient → truste
 certified AdamW*. What is new is that the collective's semantics are now pinned by an exact
 known-answer check **on the net itself**, not on a no-BN proxy.
 
-### 2f. ▶ The last two AdamW renders — scoped by measurement, and **ConvNeXt first**
+### 2f-bis. ConvNeXt-T AdamW ✅ DONE — scorecard 4 of 6 → **5**, and a gate lesson
+
+Done 2026-07-28, following §2e's playbook. `verified_mlir/convnext_adam_train_step.mlir` is now
+written by `Proofs/Codegen/ConvNeXtRender.lean`'s `#eval`, its only writer; the hand-written emitter
+in `tests/TestConvNeXtTrain.lean` is retired to smoke-only. The driver needed no change.
+
+**Step 1 — five ops.** `depthwiseWeightGrad`, `depthwiseBiasGrad`, `lnGammaGrad`, `lnBetaGrad`,
+`layerScaleChGammaGrad`, each with a `*Sgd_eq_grad` `rfl` theorem and a byte-PREFIX case
+(`TestBatchedEmitTie` is now 13 emit ties + **21** grad-prefix checks). All ride the generic
+`.batched` tag — the four-site route. `depthwiseWeightGrad` deliberately **aliases the batched op's
+tag**, distinguished by ARITY (five nats vs six): the emitted text is identical because that emitter
+ignores its `N`, so only `den` differs — the same aliasing `convStridedBiasGrad` does against
+`convBiasGrad`. The prefix guard paid for itself immediately: `depthwiseBiasGrad` emitted its zero
+constant *before* the reshape where the fused op does it after — equivalent MLIR, not a prefix.
+
+**Step 2 — the threading was as cheap as §2f predicted.** ConvNeXt's param tails were already
+factored out of the cotangent traversal, so `adam` goes through `blockParamSgd`/`downParamSgd` and
+`bwdBlock` is untouched. `convnext_train_step.mlir` re-renders **byte-identical**. Interface: 545 in
+/ 543 out, arg *and* return types positionally identical — and here even the parameter names agree.
+10,407 emitted ops against 7,488.
+
+#### ▶ The gate lesson: this tie is where an absolute bound would have been wrong, AND where the
+obvious fix would have passed a real bug
+
+The first run failed: `%loss` bit-exact, 179 of 180 parameter gradients bit-exact, and **one**
+parameter — `s3b2lg`, the last block's per-channel layer-scale γ — off at norm-rel 6.9e-3.
+
+*Not the change.* Both certified renders (SGD and AdamW) compute the identical chain for it, so the
+un-fusing is inert; the disagreement is against the hand-written emitter and predates this work.
+
+*Not a formula difference either.* Three probes:
+
+| probe | result | reading |
+|---|---|---|
+| three input seeds | max abs err pinned at 3.2e-4 while values move; `Σ\|b\|/Σ\|a\|` = 1.00054 / 0.99987 / 0.99993 | straddles 1 ⇒ no consistent bias |
+| sign flips | **0/768** | not a sign/formula error |
+| cancellation | `\|Σa\|/Σ\|a\|` = 0.094 across channels, worse within one | a cancelling reduce |
+
+`lg` is **the only parameter in the block whose gradient reads a forward VALUE** (the project
+output) rather than a cotangent — everything else reads `g`, `n`, `d` or a cotangent. So a tiny
+forward difference lands only there, amplified by the cancellation.
+
+**The control that settles it.** Run the reference render against **itself** on the same batch in
+reversed row order. Every gradient here sums over the batch, so that is semantics-preserving as real
+arithmetic but changes the accumulation order:
+
+| | gradient norm-rel | params disturbed |
+|---|---|---|
+| TEST — certified vs hand-written | 0.003772 | **1**/180 |
+| CONTROL — hand-written vs itself, batch reversed | 0.003690 | **6**/180 |
+
+The two emitters agree **better** than the reference agrees with itself under a reordering that
+cannot change the answer. So the gate is calibrated against the control (`≤ 4×`), never absolute —
+§2d.1's rule, now with a second net behind it.
+
+**But the obvious fix is not enough, and this is the part worth keeping.** With only that magnitude
+gate, a **deliberately perturbed cotangent** (α 0.1 → 0.11) **PASSES**: it lands at 9.1e-3, under
+4 × 0.00369 = 1.48e-2. What separates them is not magnitude but **spread** — it disturbs **178/180**
+parameters where the reorder control disturbs 6, and where the real tie disturbs 1:
+
+> Floating-point conditioning is **local** to the ill-conditioned op. A different function is
+> **global**. Gate the spread as well as the magnitude, or a control-relative bound will wave a real
+> cotangent bug through.
+
+The harness therefore gates three things: `%loss` (absolute, 1e-4 — it is the only forward-only
+output on a net with no BN), gradient magnitude ≤ 4× the reorder control, and gradient spread ≤ the
+control's. Verified to fail on both controls: the cotangent perturbation fires the **spread** gate,
+a `%loss`-constant perturbation fires the **loss** gate.
+
+**Claim ceiling.** ConvNeXt keeps its two documented weight-grad gaps — the stem 4×4/s4 patchify and
+the even-kernel 2×2/s2 downsample, neither of which has a VJP-cert `SHlo` op — and those stay
+hand-written. But the SGD render also hand-wrote the *update* for exactly those params (the `sgd`
+helper); this render replaces it with the proven AdamW triple. So for `psW` and the three `d{i}W`
+the tier moves from *hand-written gradient + hand-written update* to *hand-written gradient +
+certified update*, and the other 176 params are `pretty(AST)` end to end. A strict improvement.
+
+### 2f. The last two AdamW renders — scoped by measurement, and **ConvNeXt first** ✅ ConvNeXt DONE
 
 Scoped 2026-07-28 by enumerating every `*Sgd` op each renderer uses and checking for a `*Grad` peer,
 then checking two things that decide the order.
@@ -1272,6 +1348,13 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   files and `diff`; then `diff` again with all `tensor<…>` annotations stripped. Structure-identical
   + types-differ pins the breakage to one op family in a single pass. A single-node probe does not —
   that is exactly how §2b's step 1 was mis-estimated.
+- **Gate the SPREAD, not just the magnitude.** §2f-bis: ConvNeXt's layer-scale γ gradient is a
+  cancelling reduce that does not reproduce to 1e-4 against *any* reordering, so the gradient gate
+  has to be relative to a reorder control. But a control-relative MAGNITUDE gate alone **passes a
+  deliberately perturbed cotangent** — measured, α 0.1 → 0.11 lands under 4× the control. What
+  separates them is how many parameters move: the perturbation disturbs 178/180 where the control
+  disturbs 6 and the real tie disturbs 1. Floating-point conditioning is LOCAL to the
+  ill-conditioned op; a different function is GLOBAL.
 - **In a numeric tie, run A against itself first.** It establishes the determinism floor (XLA is
   bit-identical for a single step), which is what turns "the difference is 1e-6" from an assertion
   into a measurement. And report **per region**: in `resnet34-adam-tie`, `bnstat` depends only on

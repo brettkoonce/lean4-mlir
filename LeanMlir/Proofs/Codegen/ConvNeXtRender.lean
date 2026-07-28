@@ -451,9 +451,21 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/convnext_train_step.mlir"
   (Proofs.StableHLO.convNextTrainStepFaithfulV "convnext_train_step")
 
--- The **AdamW** train step. Renders to `…_b.mlir` while the hand-written emitter in
--- `tests/TestConvNeXtTrain.lean` still owns the canonical path — two writers for one artifact is
--- the last-writer-wins race §2a found. The swap happens after the numeric tie (§2e's playbook).
+-- The **AdamW** train step — **the artifact `convnext-verified-adam` trains on**, and from
+-- 2026-07-28 this `#eval` is its ONLY writer. The hand-written emitter in
+-- `tests/TestConvNeXtTrain.lean` is retired; that file now only iree-compiles the committed bytes.
 -- Literals: α = 0.1, −α/K = −0.01 (K = 10), batch 32.
-#eval IO.FS.writeFile "verified_mlir/convnext_adam_train_step_b.mlir"
+--
+-- The swap was licensed by `lake build convnext-adam-tie` (one AdamW step, all 83,434,629 returned
+-- floats): `%loss` BIT-EXACT, 179 of 180 parameter gradients bit-exact, and the one that differs —
+-- `s3b2lg`, the last block's layer-scale γ — agrees BETTER than this render does with itself under
+-- a semantics-preserving batch reversal. That γ gradient is a cancelling reduce (|Σ|/Σ|·| ≈ 0.09)
+-- and does not reproduce to 1e-4 against ANY reordering, so the gate is calibrated against that
+-- control rather than an absolute bound, and gates the SPREAD as well as the magnitude — a
+-- cotangent perturbation clears the magnitude gate while disturbing 178/180 params. To re-run:
+--
+--   git show b94e8e9:verified_mlir/convnext_adam_train_step.mlir > /tmp/retired.mlir
+--   IREE_BACKEND=rocm .lake/build/bin/convnext-adam-tie /tmp/retired.mlir \
+--     verified_mlir/convnext_adam_train_step.mlir
+#eval IO.FS.writeFile "verified_mlir/convnext_adam_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0")
