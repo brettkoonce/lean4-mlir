@@ -404,13 +404,33 @@ Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convn
   | `// MALFORMED` | 0 ✅ |
   | **2 GPUs, 2 replicas** | ⛔ **not run — see below** |
 
-  **⛔ Named gap: the ViT DP render cannot be executed on this box, so it is UNGATED numerically.**
-  Collectives live on the XLA/PJRT path, and the ViT AdamW graph was *measured* to fail there —
-  `miopenStatusUnknownError` in the patch-embed weight-grad convolution (the dilated
-  `interior = [0,0,15,15]` one), which is why `vit-adam-tie` links IREE. The DP render contains the
-  identical convolution, so it is not expected to run either; that specific render is untested
-  rather than measured-failing. And `vit-verified-adam` is an IREE binary, where the shim refuses
-  the DP entry point outright rather than silently running single-device.
+  **⛔ Named gap: the ViT DP render cannot be executed on this box — MEASURED on 2 GPUs, not
+  inferred.** `tests/TestViTDpCheck.lean` → `lake build vit-dp-check` was written and run
+  (`unset HIP_VISIBLE_DEVICES && PJRT_REPLICAS=2`). Result:
+
+  * the graph **compiles fine** — XLA accepts it, 603 outputs, 29 s, with both devices visible. So
+    this is not a malformed render or a bad collective;
+  * it dies at **execution**, `miopenStatusUnknownError`, *"Failed to enqueue convolution on
+    stream"*;
+  * and it dies on the **single-device** step, before the DP invoke is ever reached. The blocker is
+    therefore the convolution, and **has nothing to do with the collective or the replica count** —
+    two GPUs cannot help.
+
+  The suspect is the patch-embed weight-grad convolution: the dilated `interior = [0,0,15,15]`,
+  209×209 one, which is an unusual shape for MIOpen (this box is MIOpen-conv-weak; ROCm is the
+  *transformer* box for GEMMs, not for convs). That is a hypothesis about *which* conv — the
+  measured fact is only that a convolution fails to enqueue. `vit-adam-tie` links IREE for the same
+  reason, and there the identical graph runs fine, which is what localises this to the XLA/MIOpen
+  path rather than to the render.
+
+  `vit-verified-adam` is an IREE binary besides, where the shim refuses the DP entry point outright
+  rather than silently running single-device.
+
+  **The gate is written and will pass the moment the graph runs.** `vit-dp-check` uses an identity
+  R34 could never use: ViT has **no BatchNorm**, so giving both replicas the *same* batch makes
+  `all_reduce(add)/2` the identity, and the DP step must reproduce the single-device step exactly —
+  the cifar8-grade exact check (§2b-quater), on the real net rather than a proxy. Run it on ares, or
+  after rerouting that convolution.
 
   So this is **strictly weaker than R34's §2b-quater**, which had a 2-GPU descent run plus the
   cifar8 exact decomposition gate behind it. Do not describe ViT multi-GPU as working. What is

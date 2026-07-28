@@ -1408,6 +1408,13 @@ lean_exe «resnet34-batch-check» where
   root := `tests.TestResnet34BatchCheck
   moreLinkArgs := xlaLink
 
+/-- ViT DP gate: ViT has no BN, so giving both replicas the SAME batch makes `all_reduce(add)/2`
+    the identity — the data-parallel step must reproduce the single-device one exactly. Needs two
+    GPUs and the XLA backend. -/
+lean_exe «vit-dp-check» where
+  root := `tests.TestViTDpCheck
+  moreLinkArgs := xlaLink
+
 /-- §2b-quater gate: the collective's SEMANTICS, checked where they can be. cifar8 has no BN, so
     2×128 + all_reduce must equal 1×256 to fp rounding. Needs two GPUs and the XLA backend. -/
 lean_exe «cifar8-dp-check» where
