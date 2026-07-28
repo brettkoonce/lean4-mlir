@@ -669,7 +669,26 @@ norm-rel **0.246** against a passing 3.3e-8, seven orders of separation. It also
 on a real net: the same broken render moved **θ by only 7e-6** while `m` moved 0.246, and `bnstat`
 stayed bit-exact — a θ-based gate would have passed a 2× gradient error outright.
 
-#### 2e-ter. The throughput bench — **1.75× on-GPU, 1.43× end-to-end**, and the gap IS the data loader
+#### 2e-quinquies. Wall clock — **80 epochs ≈ 1 h 35 m on XLA**, and how to measure an epoch
+
+Marginal epoch, `(T₃ − T₁)/2`, which cancels compile, the one-time dataset load and startup:
+
+| | marginal epoch | 80 epochs |
+|---|---|---|
+| XLA, 1 GPU, bs 32, train + eval | **71.1 s** | **≈ 1 h 35 m** |
+| XLA, 1 GPU, bs 32, train only | 65.8 s | ≈ 1 h 28 m |
+| XLA, 2 GPU, global 64, train only | 39.5 s | ≈ 53 m |
+| IREE, 1 GPU, bs 32, train + eval | 354 s | ≈ 7 h 50 m |
+
+Eval costs **5.3 s/epoch** (3925 images at bs 32 through `@efficientnet_fwd_eval`). **XLA is 4.6×
+IREE** on this net, so use the `-xla` binary. Cross-check: `runs/efficientnet_verified_crop_gpu1.log`
+ran 8 h 30 m for 80 epochs on IREE with mobilenetv2 training concurrently on the other GPU —
+consistent with 7 h 50 m solo.
+
+**Always take the marginal difference, not wall-clock-minus-compile.** The latter still carries the
+~7–12 s dataset load and produced a wrong DP ratio twice in this thread (§2e-ter).
+
+#### 2e-ter. The throughput bench — **1.75× on-GPU, 1.67× end-to-end**
 
 `tests/TestEfficientNetDpBench.lean` → `lake build efficientnet-dp-bench`. **This supersedes the
 ~1.23× first quoted here**, which came from two short end-to-end runs and was contaminated by data
@@ -698,58 +717,33 @@ replica count is per-GRAPH, §2c.) Two runs, 20 and 30 rounds, on 2× 7900 XTX:
 nonsense, because it models B as halving A's work. B does not: each replica does A's work, on twice
 the data. The cost of going data-parallel is the step-time excess `T_B − T_A`, full stop.
 
-**End-to-end, with the real loader: 1.43×** — a full Imagenette epoch (no eval, wall clock minus the
-shim's reported compile): 1 GPU 295 steps = **77.9 s**; 2 GPU 147 steps at global 64 = **54.3 s**.
+**End-to-end, with the real loader: 1.67×.** ⚠ **This corrects a 1.43× first recorded here**, which
+was measured as *total wall clock minus compile* on a single run and therefore still carried the
+**one-time dataset load** — Imagenette is read from disk once and expanded to ~7.45 GiB of f32 in
+host RAM, ~7–12 s. The right measurement is the **marginal** epoch, `(T₃ − T₁)/2`, which cancels
+compile, dataset load and process startup exactly:
 
-**The gap between 1.75× and 1.43× is the data path, measured:**
-
-| | on-GPU ms/img | end-to-end ms/img | **loader share** |
+| | marginal epoch (train only) | on-GPU part | **host overhead** |
 |---|---|---|---|
-| 1 GPU | 6.53 | 8.25 | 1.7 ms = **21%** |
-| 2 GPU | 3.80 | 5.77 | 2.0 ms = **34%** |
+| 1 GPU, bs 32 | **65.8 s** | 295 × 209 ms = 61.7 s | 4.1 s = **6.3%** |
+| 2 GPU, global 64 | **39.5 s** | 147 × 238 ms = 35.0 s | 4.5 s = **11.3%** |
 
-The loader is serial and does **not** shrink with replicas, so it takes a larger bite the more GPUs
-you add — which is the whole reason the crude first measurement read 1.23×. At ~1.7–2.0 ms/image it
-is a fixed cost of roughly 16–19 s per Imagenette epoch. Fixing it would take the 2-GPU epoch from
-54 s toward ~36 s, which is a bigger win than anything left on the GPU side of this net.
+**So the loader is NOT the dominant lever, and the earlier "21% / 34%" figures here were wrong** —
+they were one-time dataset loading misattributed to per-step work. The real per-epoch host cost is
+**~4.1–4.5 s and roughly constant**, which is what it should be: it is proportional to images, not
+to GPU count, so it takes a larger *share* of the shorter 2-GPU epoch (6.3% → 11.3%) without
+growing. That constant is also the entire gap between the on-GPU 1.75× and the end-to-end 1.67×.
 
-#### 2e-quater. bs128 — **1.50× from batch alone, and DP scales BETTER**; 2.78× combined
+**What that 4.3 s actually is** — no disk I/O; the dataset is resident. Per epoch,
+`F32.shuffle` Fisher-Yates over the whole ~7.45 GiB array (in place: the pristine copy used to stay
+live and leak one training set per epoch, see the comment at `VerifiedTrain.lean:471`). Per step,
+`sliceImages` → `randomCrop` 256²→224² → `randomHFlip`, about **64 MB of host memcpy per bs32
+step**, all of it serial with the GPU — there is no prefetch and no overlap. At ~4.3 s per 9469
+images that pipeline is running at roughly 4 GB/s, which is unremarkable but not pathological.
 
-`enetAdamVariant` now takes `(B, replicas)` like `r34AdamVariant`, and two more artifacts render
-from the same function: `efficientnet_adam128_train_step.mlir` and
-`efficientnet_adamdp128_train_step.mlir` (`LEAN_MLIR_VARIANT=adam128`/`adamdp128`, plus the new
-`LEAN_MLIR_BATCH=128`). **Structurally the re-render is a no-op** — identical at 17,545 ops
-(18,855 with the 262 collectives), same op profile; only tensor dimensions and the mean-CE divisor
-(32.0 → 128.0) move. `B = 32` stays unsuffixed so the committed artifacts keep their names and
-bytes, and both bs32 artifacts re-render byte-identical through the change.
-
-| config | ms/step (min) | **ms/image** | vs bs32 1-GPU |
-|---|---|---|---|
-| bs 32, 1 GPU | 209–212 | 6.53–6.59 | 1.00× |
-| bs 32 × 2, global 64 | 238–243 | 3.72–3.80 | 1.72–1.77× |
-| **bs 128, 1 GPU** | 559 | **4.37** | **1.50×** |
-| **bs 128 × 2, global 256** | 601 | **2.35** | **2.78×** |
-
-Two things worth carrying:
-
-* **Batch alone buys 1.50×** on one GPU (6.53 → 4.37 ms/image). Same mechanism as R34's §2d.1
-  1.78×: the ~46 MiB `[θ|m|v]` host↔device round-trip is paid *per step*, so 4× the batch amortises
-  it over 4× the images. The transfer is not faster, it is paid less often per image.
-* **Data-parallel scales BETTER at the larger batch, not worse** — 93% parallel efficiency against
-  88% at bs32, and the DP overhead falls from 13.7% to **7.5%** of a step. The absolute overhead
-  *rises* (29 → 42 ms, since the same 62 MiB crosses the bus either way) but the step it hides in is
-  2.7× longer. That is the opposite of the usual expectation and it is the argument for pairing
-  multi-GPU with a large batch rather than treating them as independent knobs.
-
-**⚠ This is a throughput result, not a training result.** 80 epochs at global 256 is 36 steps/epoch
-= 2,880 optimizer updates, against 23,600 at bs32 — **8× fewer**, at an unscaled LR. §5's standing
-advice applies: prefer *scaling* the global batch with the LR recipe to match, and do not read these
-ms/image numbers as "the same run, faster". Nothing here has been trained to convergence at bs128.
-
-**Projected epochs** (on-GPU steps + the measured ~16–19 s serial loader): bs128 1 GPU ≈ 41 s + data
-≈ **58 s**; bs128 × 2 ≈ 22 s + data ≈ **40 s**. At that point the loader is nearly **half** the
-2-GPU epoch — it was 34% at bs32 — so §2e-ter's conclusion sharpens: on this net the data path is
-now the dominant lever, ahead of device-resident parameters.
+Worth doing eventually (overlapping it would recover ~6% single-GPU, ~11% at two), but **it is not
+where the time is**, and this is the second time in this thread that a wall-clock-minus-compile
+measurement has produced a wrong ratio. Use the marginal-epoch difference.
 
 #### Memory: **4.7 GiB at bs32, 17.3 GiB at bs128** — and why `rocm-smi` says 19
 
@@ -1042,7 +1036,7 @@ one, so **re-measure before quoting these**. 3 epochs of Imagenette across both 
 host-resident, so each step pushes the full 272 MB `[θ|m|v]` to *every* replica. Compute halves
 while transfer doubles. **Device-resident parameters is a prerequisite for multi-GPU scaling, not
 an independent optimisation** — this measurement is the evidence, and §2e-ter is a second,
-independent one: EfficientNet reaches **1.75× on-GPU** but only **1.43× end-to-end**, and the
+independent one: EfficientNet reaches **1.75× on-GPU** and **1.67× end-to-end**, and the
 13–16% per-step DP overhead it measures is dominated by the `[θ|m|v]` push to the second replica.
 
 It learns: val 36.4 / 41.9 / **49.4%** over three epochs — but see §3, those numbers predate the
@@ -1070,8 +1064,9 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
    256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains is smaller than it
    looks — see §3. **Two independent multi-GPU measurements now point here** (§2c 1.46× on R34,
    §2e-ter's measured 13–16% per-step DP overhead on EfficientNet, most of it the `[θ|m|v]` push to
-   the second replica), so it is the highest-value structural item left. **But on EfficientNet the
-   data loader is now the bigger lever** — 21% of a 1-GPU epoch and 34% of a 2-GPU one (§2e-ter).
+   the second replica), so it is the highest-value structural item left. (On EfficientNet the data loader is
+   NOT competitive with this: measured at only 6.3% of a 1-GPU epoch and 11.3% of a 2-GPU one,
+   §2e-ter — an earlier claim here that it dominated was a measurement artefact.)
 4. **Executable cache** (`PJRT_Executable_Serialize` / `DeserializeAndLoad`). Worth **0.1%** on an
    R34 training run and **53%** on the MNIST-MLP demo: a dev-loop and CI win, not throughput.
 
