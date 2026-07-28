@@ -109,7 +109,7 @@ LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
   .lake/build/bin/efficientnet-verified-adam-xla data
 
 # the DP throughput bench (§2e-ter). Interleaved, min statistic, SYNTHETIC inputs so the loader is
-# out of it — an end-to-end run measures a DIFFERENT thing (1.43× vs 1.75×) and both are reported.
+# out of it — an end-to-end run measures a DIFFERENT thing (1.67× vs 1.75×) and both are reported.
 lake build efficientnet-dp-bench && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-bench 30
 ```
 
